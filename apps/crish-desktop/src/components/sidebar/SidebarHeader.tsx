@@ -86,8 +86,15 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = React.memo(
 
     return (
       <>
-        <header className={styles.sidebarHeaderBar} role="banner">
-          <div className={styles.sidebarHeaderLeft}>
+        <header
+          className={styles.sidebarHeaderBar}
+          role="banner"
+          data-tauri-drag-region
+        >
+          <div
+            className={styles.sidebarHeaderLeft}
+            data-tauri-drag-region="false"
+          >
             {onToggle && (
               <IconButton
                 size="md"
@@ -98,12 +105,17 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = React.memo(
                 aria-controls="crish-sidebar"
                 data-testid="sidebar-header-toggle"
                 className="sidebar-toggle-btn"
+                data-tauri-drag-region="false"
                 onClick={onToggle}
                 icon={<IconSidebarLeft size={16} aria-hidden="true" />}
               />
             )}
           </div>
-          <div className={styles.sidebarHeaderRight} data-testid="sidebar-header-extra">
+          <div
+            className={styles.sidebarHeaderRight}
+            data-testid="sidebar-header-extra"
+            data-tauri-drag-region
+          >
             {/* 用户预留扩展区：可在右侧添加其他按钮与信息 */}
           </div>
         </header>

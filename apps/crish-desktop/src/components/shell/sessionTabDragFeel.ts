@@ -2,18 +2,27 @@
  * 会话 Tab 拖手感纯函数（参考 DragController 常量）。
  *
  * 布局引擎仍走产品 shell / BinaryTree；这里只钉阈值、插入滞后、叶面 22% 分区。
+ * 几何与动效数值一律来自 utils/tabStripGeometry 与 utils/motionTokens 单一来源。
  */
 
-export const SESSION_TAB_DRAG_THRESHOLD_L1 = 4;
-export const SESSION_TAB_INDICATOR_W = 150;
-export const SESSION_TAB_INDICATOR_H = 26;
-export const SESSION_TAB_SHIFT_GAP = 4;
+import {
+  DRAG_THRESHOLD_PX,
+  INDICATOR_H_PX,
+  INDICATOR_W_PX,
+  TAB_GAP_PX,
+} from '../../utils/tabStripGeometry';
+import { DURATION_FAST_MS, DURATION_MICRO_MS, EASE_EMPHASIZED } from '../../utils/motionTokens';
+
+export const SESSION_TAB_DRAG_THRESHOLD_L1 = DRAG_THRESHOLD_PX;
+export const SESSION_TAB_INDICATOR_W = INDICATOR_W_PX;
+export const SESSION_TAB_INDICATOR_H = INDICATOR_H_PX;
+export const SESSION_TAB_SHIFT_GAP = TAB_GAP_PX;
 export const SESSION_TAB_INSERT_HYSTERESIS = 1 / 3;
 /** 叶面边缘占比。与 Demo DragController `_handleWorkspaceMove`（rx<0.22 / >0.78）同一数值。 */
 export const SESSION_PANE_EDGE = 0.22;
-export const SESSION_TAB_STRIP_SHIFT_MS = 180;
-export const SESSION_TAB_STRIP_SHIFT_EASE = 'cubic-bezier(.2,0,0,1)';
-export const SESSION_TAB_INDICATOR_GEOM_MS = 120;
+export const SESSION_TAB_STRIP_SHIFT_MS = DURATION_FAST_MS;
+export const SESSION_TAB_STRIP_SHIFT_EASE = EASE_EMPHASIZED;
+export const SESSION_TAB_INDICATOR_GEOM_MS = DURATION_MICRO_MS;
 
 export type PaneDropRegion = 'left' | 'right' | 'top' | 'bottom' | 'center';
 

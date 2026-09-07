@@ -29,6 +29,8 @@ export const AppTopBar: React.FC<AppTopBarProps> = React.memo(
       window.dispatchEvent(new CustomEvent('open-cheatsheet'));
     }, [onShowCheatsheet]);
 
+    const clearanceWidth = isMacDesktop ? 106 : 52;
+
     return (
       <header
         className={`${styles.topBar} app-top-bar`}
@@ -39,8 +41,8 @@ export const AppTopBar: React.FC<AppTopBarProps> = React.memo(
         <div
           className={styles.headerClearance}
           style={{
-            width: isMacDesktop ? 106 : 52,
-            minWidth: isMacDesktop ? 106 : 52,
+            width: clearanceWidth,
+            minWidth: clearanceWidth,
           }}
           aria-hidden="true"
         />

@@ -29,6 +29,7 @@ import {
   exceedsSessionTabDragThresholdL1,
   paneDropIndicatorRect,
 } from './sessionTabDragFeel';
+import { EASE_EMPHASIZED } from '../../utils/motionTokens';
 import type { CollectedStripData } from './sessionTabDragDom';
 
 export interface StartSessionDragArgs {
@@ -58,10 +59,10 @@ const NOOP_DRAG: UseSessionTabDragResult = {
 };
 
 const INDICATOR_GEOM_TRANSITION = [
-  `left ${SESSION_TAB_INDICATOR_GEOM_MS}ms cubic-bezier(.2,0,0,1)`,
-  `top ${SESSION_TAB_INDICATOR_GEOM_MS}ms cubic-bezier(.2,0,0,1)`,
-  `width ${SESSION_TAB_INDICATOR_GEOM_MS}ms cubic-bezier(.2,0,0,1)`,
-  `height ${SESSION_TAB_INDICATOR_GEOM_MS}ms cubic-bezier(.2,0,0,1)`,
+  `left ${SESSION_TAB_INDICATOR_GEOM_MS}ms ${EASE_EMPHASIZED}`,
+  `top ${SESSION_TAB_INDICATOR_GEOM_MS}ms ${EASE_EMPHASIZED}`,
+  `width ${SESSION_TAB_INDICATOR_GEOM_MS}ms ${EASE_EMPHASIZED}`,
+  `height ${SESSION_TAB_INDICATOR_GEOM_MS}ms ${EASE_EMPHASIZED}`,
   'border-radius 100ms ease',
   'opacity 80ms ease',
 ].join(', ');

@@ -406,7 +406,12 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
         role="region"
         aria-label={`${viewRegistry.getTitle('chat', chatCtx)} 面板`}
       >
-        <PaneHeader leaf={leaf} isActive={isActive} isChat />
+        <PaneHeader
+          leaf={leaf}
+          isActive={isActive}
+          isChat
+          isTopRow={edges.isTopRow}
+        />
         <div
           ref={leafBodyRef}
           className={styles.leafBody}

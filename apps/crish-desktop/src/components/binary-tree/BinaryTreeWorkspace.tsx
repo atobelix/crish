@@ -11,7 +11,7 @@
  * 3. sash / sessionTabIndicator / 面板 resize
  */
 
-import React, { useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   useLayoutTreeStore,
   flattenTree,
@@ -22,6 +22,7 @@ import {
 import { useTreeResize } from '../../hooks/useTreeResize';
 import { useTreePanelEvents } from '../../hooks/useTreePanelEvents';
 import { useChatPanelSync } from '../../hooks/useChatPanelSync';
+import { readTokenMs, DURATION_FAST_MS } from '../../utils/motionTokens';
 import { AppErrorBoundary } from '../AppErrorBoundary';
 import { TreeLeafPanel } from './TreeLeafPanel';
 import { TreeResizeSash, flatBranchEqual } from './TreeResizeSash';
@@ -191,6 +192,40 @@ export const BinaryTreeWorkspace: React.FC<BinaryTreeWorkspaceProps> =
 
     const { startResize, resizingBranchId } = resizeController;
 
+    // 叶子几何过渡门控：仅树结构变更（叶/分支集合变化）时短暂开启，
+    // 窗口 resize 等纯 rect 变化不启用，杜绝整树橡皮筋滞后
+    const structureSignature = React.useMemo(
+      () =>
+        `${panels.map((p) => p.leafId).join('|')}#${branches
+          .map((b) => b.branchId)
+          .join('|')}`,
+      [panels, branches]
+    );
+    const [structureAnimating, setStructureAnimating] = useState(false);
+    const prevStructureRef = React.useRef(structureSignature);
+    const structureTimerRef = React.useRef<number | null>(null);
+    useEffect(() => {
+      if (prevStructureRef.current === structureSignature) return;
+      prevStructureRef.current = structureSignature;
+      setStructureAnimating(true);
+      if (structureTimerRef.current != null) {
+        window.clearTimeout(structureTimerRef.current);
+      }
+      const ms = readTokenMs('--transition-fast', DURATION_FAST_MS) * 2;
+      structureTimerRef.current = window.setTimeout(() => {
+        structureTimerRef.current = null;
+        setStructureAnimating(false);
+      }, ms);
+    }, [structureSignature]);
+    useEffect(
+      () => () => {
+        if (structureTimerRef.current != null) {
+          window.clearTimeout(structureTimerRef.current);
+        }
+      },
+      []
+    );
+
     return (
       <div className={styles.section} data-tree-workspace="true">
         <AppErrorBoundary compact>
@@ -198,6 +233,9 @@ export const BinaryTreeWorkspace: React.FC<BinaryTreeWorkspaceProps> =
             ref={canvasRef}
             className={`${styles.canvas} ${styles.treeBody}`}
             data-tree-canvas="true"
+            data-structure-animating={
+              structureAnimating ? 'true' : undefined
+            }
             role="group"
             aria-label="二叉树布局画布"
           >

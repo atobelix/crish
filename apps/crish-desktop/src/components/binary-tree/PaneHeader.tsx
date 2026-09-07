@@ -1,36 +1,60 @@
 /**
- * PaneHeader — 窗格专属独立标签栏（高度严格锁定 36px）
+ * PaneHeader — 窗格专属独立标签栏（高度锁定 var(--header-height)）
  *
  * 核心契约：
  * 1. 物理嵌套于 TreeLeafPanel 内部，充当卡片岛屿外置头顶；
  * 2. 无论单窗格还是多分屏，与下方内容卡片严格 1:1 同宽、左对齐；
  * 3. 只承载本叶 leaf.tabs 会话标签；工具标签在抽屉头；
- * 4. 支持横向滚轮重定向与 Smart Pinning 智能固定加号。
+ * 4. 支持横向滚轮重定向与 Smart Pinning 双态加号（随流位 + 溢出固定位）。
  * 条带只画已发送成功的真会话；未提交的新对话不占标签。
  * 禁止复活 ChatHeader / UnitSessionTabStrip / GlobalSessionTabBar。
+ *
+ * 动效与交互单一真理路径：
+ * - 入场 = @starting-style + transition，零 JS 状态，首轮挂载经 data-booted 门控；
+ * - 离场 = [data-leaving] 目标态 + transitionend(flex-basis) 驱动 removeTab，
+ *   保险丝按真实 computed 时长 ×3 兜底；
+ * - 等宽锁定仅经 --tab-item-width 单变量通道；
+ * - 窗口拖拽 = 阈值门控 startDragging 单通道；标签拖拽换位走 SessionTabDragContext；
+ * - 关闭量测在事件派发期内同步完成，几何数学在 paneHeaderGeometry（可穷举测试）。
  */
 
-import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react';
-import { Plus, X } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Plus } from 'lucide-react';
 import type { LayoutLeaf } from '../../store/types';
 import { useSessionStore, useLayoutStore } from '../../store/storeAccess';
 import { useLayoutTreeStore, collectLeaves } from '../../store/layout-tree';
 import { getCompositionRoot } from '../../app/compositionRoot';
 import { isPendingDraft, mintDraftSessionId } from '../../store/draftSession';
 import { useSessionTabDrag } from '../shell/SessionTabDragContext';
+import {
+  exceedsSessionTabDragThresholdL1,
+} from '../shell/sessionTabDragFeel';
+import {
+  CLOSE_HIT_PAD_PX,
+  DRAG_THRESHOLD_PX,
+  TAB_GAP_PX,
+  TAB_HEIGHT_PX,
+  TAB_WIDTH_MAX_PX,
+  TAB_WIDTH_MIN_PX,
+} from '../../utils/tabStripGeometry';
+import { DURATION_FAST_MS, readTransitionMs } from '../../utils/motionTokens';
+import { useNonPassiveWheel } from '../../hooks/useNonPassiveWheel';
+import { useTablistKeyboard } from '../../hooks/useTablistKeyboard';
+import { ResizeObserverManager } from '../../services/ResizeObserverManager';
+import {
+  computeCloseLockWidth,
+  computeNaturalTabWidth,
+  nextAvailableNeighborId,
+  type LeafSessionTab,
+} from './paneHeaderGeometry';
+import { PaneTabItem } from './PaneTabItem';
 import styles from './PaneHeader.module.css';
 
 export interface PaneHeaderProps {
   leaf: LayoutLeaf;
   isActive: boolean;
   isChat: boolean;
-}
-
-/** 本叶条带成员：维 01 SessionTab 形状（含草稿） */
-interface LeafSessionTab {
-  tabId: string;
-  sessionId: string;
-  title?: string;
+  isTopRow?: boolean;
 }
 
 /** 维 03 门面：两实参 activateTab / addTab / removeTab */
@@ -61,48 +85,23 @@ function readActiveTabId(leaf: LayoutLeaf): string {
   return typeof id === 'string' ? id : '';
 }
 
-/** 关 active 时的邻居：优先左邻，否则右邻（与维 02 removeTab 一致），排除已在离场中的标签 */
-function nextAvailableNeighborId(
-  tabs: LeafSessionTab[],
-  closingTabId: string,
-  closingIds: Set<string>
-): string | null {
-  const alive = tabs.filter(
-    (t) => t.tabId === closingTabId || !closingIds.has(t.tabId)
-  );
-  if (alive.length <= 1) return null;
-  const idx = alive.findIndex((t) => t.tabId === closingTabId);
-  if (idx < 0) return null;
-  const neighbor = idx > 0 ? alive[idx - 1] : alive[idx + 1];
-  return neighbor?.tabId ?? null;
-}
-
-const TAB_LEAVE_MS = 220;
-const DEFAULT_TAB_WIDTH = 240;
-const MIN_TAB_WIDTH = 28;
-const TAB_GAP = 4;
-// 叉号中心相对标签右边缘距离：右 padding 6px + 按钮 18px 半宽 9px = 15px
-const CLOSE_BTN_RIGHT_OFFSET = 15;
-
 export const PaneHeader: React.FC<PaneHeaderProps> = React.memo(
-  ({ leaf, isActive, isChat }) => {
+  ({ leaf, isActive, isChat, isTopRow = true }) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const [containerWidth, setContainerWidth] = useState(0);
-    const [hasOverflow, setHasOverflow] = useState(false);
-    const [closingTabIds, setClosingTabIds] = useState<Set<string>>(() => new Set());
-    const [enteringTabIds, setEnteringTabIds] = useState<Set<string>>(() => new Set());
-    const leaveTimersRef = useRef<Map<string, number>>(new Map());
-    const enterTimersRef = useRef<Map<string, number>>(new Map());
-    const knownTabIdsRef = useRef<Set<string>>(new Set());
-    const isInitialMountRef = useRef(true);
+    const [booted, setBooted] = useState(false);
+    const closingIdsRef = useRef<Set<string>>(new Set());
+    const [closingTabIds, setClosingTabIds] = useState<Set<string>>(
+      () => new Set()
+    );
+    const fuseTimersRef = useRef<Map<string, number>>(new Map());
+    const pendingActivateRafsRef = useRef<number[]>([]);
     const [lockedTabWidth, setLockedTabWidth] = useState<number | null>(null);
-    const isHoveringRef = useRef(false);
 
     const { startSessionDrag } = useSessionTabDrag();
     const sessionsById = useSessionStore((s) => s.sessionsById);
 
     const chatMainSurface = useLayoutStore((s) => s.chatMainSurface) ?? 'chat';
-    const setChatMainSurface = useLayoutStore((s) => s.setChatMainSurface);
     const leavesCount = useLayoutTreeStore(
       (s) => collectLeaves(s.tree.root).length
     );
@@ -130,36 +129,10 @@ export const PaneHeader: React.FC<PaneHeaderProps> = React.memo(
         : [];
     }, [leaf.id, leaf.tabs, isMultiPane]);
 
-    // 监听新标签入场，触发自然生长动画（首轮挂载不重播，后续新增时平滑生长）
+    // 入场动画门控：首轮挂载后的首个副作用之后才允许 @starting-style 生效
     useEffect(() => {
-      const currentIds = new Set(visibleTabs.map((t) => t.tabId));
-      if (isInitialMountRef.current) {
-        isInitialMountRef.current = false;
-        knownTabIdsRef.current = currentIds;
-        return;
-      }
-      const newIds = [...currentIds].filter((id) => !knownTabIdsRef.current.has(id));
-      newIds.forEach((id) => knownTabIdsRef.current.add(id));
-
-      if (newIds.length > 0) {
-        setEnteringTabIds((prev) => new Set([...prev, ...newIds]));
-        newIds.forEach((id) => {
-          const timer = window.setTimeout(() => {
-            setEnteringTabIds((prev) => {
-              const next = new Set(prev);
-              next.delete(id);
-              return next;
-            });
-            enterTimersRef.current.delete(id);
-          }, 190);
-          enterTimersRef.current.set(id, timer);
-        });
-      }
-
-      knownTabIdsRef.current.forEach((id) => {
-        if (!currentIds.has(id)) knownTabIdsRef.current.delete(id);
-      });
-    }, [visibleTabs]);
+      setBooted(true);
+    }, []);
 
     const activeTabId = readActiveTabId(leaf);
     const activeSessionId = useSessionStore((s) => s.activeSessionId);
@@ -174,84 +147,84 @@ export const PaneHeader: React.FC<PaneHeaderProps> = React.memo(
       setLockedTabWidth(null);
     }, []);
 
-    const handleHeaderMouseEnter = useCallback(() => {
-      isHoveringRef.current = true;
-    }, []);
-
     const handleHeaderMouseLeave = useCallback(
       (e: React.MouseEvent) => {
-        const nextTarget = e.relatedTarget;
+        const headerEl =
+          containerRef.current?.closest('[data-pane-header="true"]') ||
+          (e.currentTarget as HTMLElement).closest('[data-pane-header="true"]') ||
+          (e.currentTarget as HTMLElement);
+
+        // 如果顶栏仍处于物理 :hover 态，说明指针仍在顶部区域内部，忽略子节点卸载引发的伪离开事件
         if (
-          nextTarget &&
-          typeof Node !== 'undefined' &&
-          nextTarget instanceof Node
+          typeof headerEl.matches === 'function' &&
+          headerEl.matches(':hover')
         ) {
-          const headerEl =
-            containerRef.current?.closest('[data-pane-header="true"]') ||
-            e.currentTarget;
+          return;
+        }
+
+        const nextTarget = e.relatedTarget;
+        if (nextTarget && nextTarget instanceof Node) {
           if (headerEl.contains(nextTarget)) {
             return;
           }
         }
-        isHoveringRef.current = false;
+        // 双重物理保险：如果事件带有真实指针坐标，且坐标仍在顶部条带矩形内部，绝不误清
+        if (
+          typeof e.clientX === 'number' &&
+          typeof e.clientY === 'number' &&
+          e.clientX > 0 &&
+          e.clientY > 0
+        ) {
+          const rect = headerEl.getBoundingClientRect();
+          if (
+            e.clientX >= rect.left &&
+            e.clientX <= rect.right &&
+            e.clientY >= rect.top &&
+            e.clientY <= rect.bottom
+          ) {
+            return;
+          }
+        }
         clearLockedWidth();
       },
       [clearLockedWidth]
     );
 
+    // 组件卸载：清保险丝计时与未决的邻居激活帧
     useEffect(
       () => () => {
-        leaveTimersRef.current.forEach((t) => window.clearTimeout(t));
-        leaveTimersRef.current.clear();
-        enterTimersRef.current.forEach((t) => window.clearTimeout(t));
-        enterTimersRef.current.clear();
+        fuseTimersRef.current.forEach((t) => window.clearTimeout(t));
+        fuseTimersRef.current.clear();
+        pendingActivateRafsRef.current.forEach((id) => cancelAnimationFrame(id));
+        pendingActivateRafsRef.current = [];
       },
       []
     );
 
-    // 智能固定加号（Smart Pinning）与容器宽度监听
+    // 容器宽度监听（统一接入 ResizeObserverManager 批处理）
     useEffect(() => {
       const el = containerRef.current;
       if (!el) return;
 
       const checkMetrics = () => {
-        const overflow = el.scrollWidth > el.clientWidth + 2;
-        setHasOverflow(overflow);
         setContainerWidth(el.clientWidth);
       };
 
       checkMetrics();
 
-      let ro: ResizeObserver | null = null;
-      if (typeof ResizeObserver !== 'undefined') {
-        ro = new ResizeObserver(checkMetrics);
-        ro.observe(el);
-      }
+      const ro = ResizeObserverManager.getInstance();
+      ro.observe(el, checkMetrics);
 
       return () => {
-        ro?.disconnect();
+        ro.unobserve(el, checkMetrics);
       };
     }, [visibleTabs.length]);
 
-    // 严格等宽基准宽度计算：有空余时标准 240px，空间紧缩时全员严格同比例均分压缩，严禁溢出视野
-    const naturalTabWidth = useMemo(() => {
-      const count = visibleTabs.length;
-      if (count <= 0 || containerWidth <= 0) {
-        return DEFAULT_TAB_WIDTH;
-      }
-      const nonTabSpace = 36;
-      const available = Math.max(0, containerWidth - nonTabSpace);
-      const totalNeeded = count * DEFAULT_TAB_WIDTH + (count - 1) * TAB_GAP;
-      if (totalNeeded <= available) {
-        return DEFAULT_TAB_WIDTH;
-      }
-      const fitted = Math.floor((available - (count - 1) * TAB_GAP) / count);
-      return Math.max(MIN_TAB_WIDTH, fitted);
-    }, [visibleTabs.length, containerWidth]);
+    const effectiveTabWidth =
+      lockedTabWidth ??
+      computeNaturalTabWidth(visibleTabs.length, containerWidth);
 
-    const effectiveTabWidth = lockedTabWidth ?? naturalTabWidth;
-
-    const handleWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
+    const handleWheel = useCallback((e: WheelEvent) => {
       const el = containerRef.current;
       if (!el) return;
       if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
@@ -260,133 +233,152 @@ export const PaneHeader: React.FC<PaneHeaderProps> = React.memo(
       }
     }, []);
 
+    useNonPassiveWheel(containerRef, handleWheel);
+
+    const handleTablistKeyDown = useTablistKeyboard(containerRef, {
+      tabSelector: '[role="tab"]',
+      readTabId: (el) => el.getAttribute('data-tab-id'),
+      onActivate: (tabId) => {
+        if (!closingIdsRef.current.has(tabId)) {
+          sessionShell().activateTab(leaf.id, tabId);
+        }
+      },
+    });
+
     const handleTabClick = useCallback(
       (tab: LeafSessionTab) => {
-        if (closingTabIds.has(tab.tabId)) return;
+        if (closingIdsRef.current.has(tab.tabId)) return;
         sessionShell().activateTab(leaf.id, tab.tabId);
       },
-      [closingTabIds, leaf.id]
+      [leaf.id]
+    );
+
+    const finalizeClose = useCallback(
+      (tabId: string) => {
+        if (!closingIdsRef.current.has(tabId)) return;
+        closingIdsRef.current.delete(tabId);
+        setClosingTabIds(new Set(closingIdsRef.current));
+        const fuse = fuseTimersRef.current.get(tabId);
+        if (fuse != null) {
+          window.clearTimeout(fuse);
+          fuseTimersRef.current.delete(tabId);
+        }
+        sessionShell().removeTab(leaf.id, tabId);
+      },
+      [leaf.id]
     );
 
     const handleTabClose = useCallback(
       (e: React.MouseEvent, tab: LeafSessionTab) => {
         e.stopPropagation();
-        if (closingTabIds.has(tab.tabId)) return;
+        if (closingIdsRef.current.has(tab.tabId)) return;
 
         const tabs = visibleTabs;
         const currentActive = readActiveTabId(leaf);
-        // 关的是本叶 active 且还有邻居：立刻切邻居，优先右邻（正好滑到光标下）
+        // 关的是本叶 active 且还有邻居：先算邻居，延后两帧再切——
+        // 条带离场首帧先行绘制，内容面切换与条带动画不同帧争抢主线程
         if (tab.tabId === currentActive && tabs.length > 1) {
           const nextActiveId = nextAvailableNeighborId(
             tabs,
             tab.tabId,
-            closingTabIds
+            closingIdsRef.current
           );
           if (nextActiveId) {
-            sessionShell().activateTab(leaf.id, nextActiveId);
+            const raf1 = requestAnimationFrame(() => {
+              const raf2 = requestAnimationFrame(() => {
+                sessionShell().activateTab(leaf.id, nextActiveId);
+                pendingActivateRafsRef.current = pendingActivateRafsRef.current.filter(
+                  (id) => id !== raf2
+                );
+              });
+              pendingActivateRafsRef.current.push(raf2);
+            });
+            pendingActivateRafsRef.current.push(raf1);
           }
         }
 
         // 当前存活（尚未处于离场中）的标签列表
-        const currentAlive = tabs.filter((t) => !closingTabIds.has(t.tabId));
-        const closingIndex = currentAlive.findIndex((t) => t.tabId === tab.tabId);
-        // 是否删的是最右端标签（右侧已经没有其它标签可供向左补位）
-        const isRightmost = closingIndex >= 0 && closingIndex === currentAlive.length - 1;
+        const currentAlive = tabs.filter(
+          (t) => !closingIdsRef.current.has(t.tabId)
+        );
+        const closingIndex = currentAlive.findIndex(
+          (t) => t.tabId === tab.tabId
+        );
+        const isRightmost =
+          closingIndex >= 0 && closingIndex === currentAlive.length - 1;
         const remainingCount = currentAlive.length - 1;
 
-        const measureWidth = (target: EventTarget | null) => {
-          const tabEl = (target as HTMLElement | null)?.closest?.('[role="tab"]') as HTMLElement | null;
-          const w = tabEl?.getBoundingClientRect().width || tabEl?.offsetWidth;
-          return w && w > 0 ? Math.round(w) : effectiveTabWidth;
-        };
+        // 量测必须在事件派发期内同步完成（DOM 读数与 currentTarget 只在派发期可靠）
+        const tabEl = (e.currentTarget as HTMLElement).closest(
+          '[role="tab"]'
+        ) as HTMLElement | null;
+        const rectWidth = tabEl?.getBoundingClientRect().width || 0;
+        const measuredWidth =
+          rectWidth > 0
+            ? Math.round(rectWidth)
+            : Math.round(tabEl?.offsetWidth || 0) || effectiveTabWidth;
 
         if (remainingCount > 0) {
-          if (!isRightmost) {
-            // 分支 A：右侧还有存活标签，右邻标签等宽平移补位，叉号自动落在鼠标光标下
-            setLockedTabWidth((prev) => (prev != null && prev > 0 ? prev : measureWidth(e.currentTarget)));
+          const containerEl = containerRef.current;
+          const containerRect = containerEl?.getBoundingClientRect();
+          const listEl = containerEl?.querySelector(
+            `.${styles.tabsList}`
+          ) as HTMLElement | null;
+          const listRect = listEl?.getBoundingClientRect();
+          const baseLeft =
+            listRect && listRect.left > 0
+              ? listRect.left
+              : containerRect?.left || 0;
+          const mouseXInContainer =
+            containerRect && e.clientX > 0
+              ? e.clientX - baseLeft + (containerEl?.scrollLeft || 0)
+              : null;
+          const lockWidth = computeCloseLockWidth({
+            isRightmost,
+            remainingCount,
+            mouseXInContainer,
+            measuredWidth,
+          });
+          if (isRightmost) {
+            // 分支 B：末尾摘除后无右邻补位，几何已变，必须整体覆盖锁宽重新对齐光标
+            setLockedTabWidth(lockWidth);
           } else {
-            // 分支 B：删的是末尾标签（右侧已无标签可向左补位）
-            const containerEl = containerRef.current;
-            const containerRect = containerEl?.getBoundingClientRect();
-            const mouseXInContainer =
-              containerRect && e.clientX > 0
-                ? e.clientX - containerRect.left + (containerEl?.scrollLeft || 0)
-                : null;
-
-            if (mouseXInContainer != null && mouseXInContainer > 0) {
-              const neededWidth =
-                (mouseXInContainer +
-                  CLOSE_BTN_RIGHT_OFFSET -
-                  (remainingCount - 1) * TAB_GAP) /
-                remainingCount;
-
-              if (neededWidth <= DEFAULT_TAB_WIDTH) {
-                setLockedTabWidth(Math.max(MIN_TAB_WIDTH, Math.round(neededWidth)));
-              } else {
-                setLockedTabWidth(DEFAULT_TAB_WIDTH);
-              }
-            } else {
-              setLockedTabWidth((prev) => (prev != null && prev > 0 ? prev : measureWidth(e.currentTarget)));
-            }
+            // 分支 A：连击保宽，仅首次锁定取实测值
+            setLockedTabWidth((prev) =>
+              prev != null && prev > 0 ? prev : lockWidth
+            );
           }
         } else {
           clearLockedWidth();
         }
 
-        setClosingTabIds((prev) => new Set(prev).add(tab.tabId));
+        closingIdsRef.current.add(tab.tabId);
+        setClosingTabIds(new Set(closingIdsRef.current));
 
-        const timerId = window.setTimeout(() => {
-          sessionShell().removeTab(leaf.id, tab.tabId);
-          setClosingTabIds((prev) => {
-            const next = new Set(prev);
-            next.delete(tab.tabId);
-            return next;
-          });
-          leaveTimersRef.current.delete(tab.tabId);
-        }, TAB_LEAVE_MS);
-
-        leaveTimersRef.current.set(tab.tabId, timerId);
-      },
-      [closingTabIds, effectiveTabWidth, leaf, visibleTabs, clearLockedWidth]
-    );
-
-    const handleMouseDown = useCallback(
-      (e: React.MouseEvent, tab: LeafSessionTab) => {
-        if (e.button === 1) {
-          e.preventDefault();
-          e.stopPropagation();
-          handleTabClose(e, tab);
+        // 保险丝：transitionend 万一丢失，按真实 computed 时长 ×3 兜底摘除
+        if (tabEl) {
+          const ms = readTransitionMs(tabEl, 'flex-basis') || DURATION_FAST_MS;
+          const fuse = window.setTimeout(() => finalizeClose(tab.tabId), ms * 3);
+          fuseTimersRef.current.set(tab.tabId, fuse);
         }
       },
-      [handleTabClose]
+      [visibleTabs, leaf, effectiveTabWidth, clearLockedWidth, finalizeClose]
     );
-
-    const handleAuxClick = useCallback(
-      (e: React.MouseEvent, tab: LeafSessionTab) => {
-        if (e.button === 1) {
-          e.preventDefault();
-          e.stopPropagation();
-          handleTabClose(e, tab);
-        }
-      },
-      [handleTabClose]
-    );
-
-    const handleHeaderPointerDown = useCallback((e: React.PointerEvent) => {
-      if (e.button !== 0) return;
-      const target = e.target as HTMLElement;
-      if (target.closest?.('button') || target.closest?.('[role="tab"]')) {
-        return;
-      }
-      void import('@tauri-apps/api/window')
-        .then((w) => w.getCurrentWindow().startDragging())
-        .catch(() => {});
-    }, []);
 
     const handleNewTab = useCallback(() => {
       clearLockedWidth();
       sessionShell().addTab(leaf.id);
     }, [clearLockedWidth, leaf.id]);
+
+    const handleLeaveTransitionEnd = useCallback(
+      (e: React.TransitionEvent<HTMLDivElement>, tab: LeafSessionTab) => {
+        if (e.target !== e.currentTarget) return;
+        if (e.propertyName !== 'flex-basis') return;
+        if (!closingIdsRef.current.has(tab.tabId)) return;
+        finalizeClose(tab.tabId);
+      },
+      [finalizeClose]
+    );
 
     if (!isChat) {
       return null;
@@ -397,36 +389,37 @@ export const PaneHeader: React.FC<PaneHeaderProps> = React.memo(
         <div
           className={styles.paneHeader}
           data-pane-header="true"
-          data-tauri-drag-region
-          onPointerDown={handleHeaderPointerDown}
+          data-top-row={isTopRow ? 'true' : undefined}
+          data-tauri-drag-region={isTopRow ? '' : undefined}
         />
       );
     }
 
     return (
       <div
-        className={`${styles.paneHeader} ${hasOverflow ? styles.hasOverflow : ''}`}
+        className={styles.paneHeader}
         data-pane-header="true"
-        data-tauri-drag-region
-        onPointerDown={handleHeaderPointerDown}
-        onMouseEnter={handleHeaderMouseEnter}
+        data-top-row={isTopRow ? 'true' : undefined}
+        data-tauri-drag-region={isTopRow ? '' : undefined}
         onMouseLeave={handleHeaderMouseLeave}
       >
         <div
           ref={containerRef}
-          className={`${styles.tabsContainer} ${lockedTabWidth != null ? styles.isLocked : ''}`}
+          className={styles.tabsContainer}
           style={
             {
+              '--tab-height': `${TAB_HEIGHT_PX}px`,
+              '--tab-gap': `${TAB_GAP_PX}px`,
+              '--tab-width-max': `${TAB_WIDTH_MAX_PX}px`,
+              '--tab-width-min': `${TAB_WIDTH_MIN_PX}px`,
+              '--tab-close-hit-pad': `${CLOSE_HIT_PAD_PX}px`,
               '--tab-item-width': `${effectiveTabWidth}px`,
-              ...(lockedTabWidth != null
-                ? { '--tab-locked-width': `${lockedTabWidth}px` }
-                : {}),
             } as React.CSSProperties
           }
           data-locked={lockedTabWidth != null ? 'true' : 'false'}
-          onMouseEnter={handleHeaderMouseEnter}
+          data-booted={booted ? 'true' : 'false'}
           onMouseLeave={handleHeaderMouseLeave}
-          onWheel={handleWheel}
+          onKeyDown={handleTablistKeyDown}
           onDoubleClick={(e) => {
             if (
               e.target === containerRef.current ||
@@ -447,63 +440,29 @@ export const PaneHeader: React.FC<PaneHeaderProps> = React.memo(
                 ? sessionsById[tab.sessionId]
                 : undefined;
               const title = session?.title || tab.title || '新对话';
-              const isLeaving = closingTabIds.has(tab.tabId);
-              const isEntering = enteringTabIds.has(tab.tabId);
 
               return (
-                <div
+                <PaneTabItem
                   key={tab.tabId}
-                  className={`${styles.tabItem} ${isSelected ? styles.tabItemActive : ''} ${isLeaving ? styles.tabItemLeaving : ''} ${isEntering ? styles.tabItemEntering : ''}`}
-                  data-tauri-drag-region="false"
-                  onClick={() => handleTabClick(tab)}
-                  onMouseDown={(e) => handleMouseDown(e, tab)}
-                  onAuxClick={(e) => handleAuxClick(e, tab)}
-                  onPointerDown={(e) => {
-                    if (e.button === 0) {
-                      e.stopPropagation();
-                      startSessionDrag(leaf.id, tab.tabId, title, e);
-                    }
-                  }}
-                  role="tab"
-                  aria-selected={isSelected}
-                  aria-label={title}
-                  data-tab-id={tab.tabId}
-                  data-session-id={tab.sessionId || undefined}
-                >
-                  <div className={styles.tabItemInner}>
-                    <span className={styles.tabTitle}>{title}</span>
-                    <button
-                      type="button"
-                      className={styles.tabCloseBtn}
-                      onClick={(e) => handleTabClose(e, tab)}
-                      aria-label={`关闭 ${title}`}
-                    >
-                      <X size={10} strokeWidth={2.2} />
-                    </button>
-                  </div>
-                </div>
+                  tab={tab}
+                  title={title}
+                  isSelected={isSelected}
+                  isLeaving={closingTabIds.has(tab.tabId)}
+                  onSelect={handleTabClick}
+                  onClose={handleTabClose}
+                  onDragStart={(e, t) => startSessionDrag(leaf.id, t.tabId, title, e)}
+                  onLeaveTransitionEnd={handleLeaveTransitionEnd}
+                />
               );
             })}
           </div>
 
           <button
             type="button"
-            className={`${styles.newTabBtn} ${styles.inFlow}`}
-            data-tauri-drag-region="false"
+            className={styles.newTabBtn}
             onClick={handleNewTab}
             aria-label="新对话"
-          >
-            <Plus size={13} strokeWidth={2} />
-          </button>
-        </div>
-
-        <div className={styles.fixedCluster} data-tauri-drag-region="false">
-          <button
-            type="button"
-            className={`${styles.newTabBtn} ${styles.pinned}`}
             data-tauri-drag-region="false"
-            onClick={handleNewTab}
-            aria-label="新对话"
           >
             <Plus size={13} strokeWidth={2} />
           </button>

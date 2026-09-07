@@ -2,16 +2,21 @@
  * LeafToolTabStrip：标签行长在外壳灰底上，不跟着卡片走。
  * 对齐参考里的 .tree-pane-header —— 透明底、无下边框，
  * 视觉分界完全交给下方 .leafBody 卡片的发丝边框。
+ *
+ * 动效单一真理路径（与 PaneHeader 同一契约，见 PaneHeader.module.css 头注）：
+ * 时长/缓动引用 tokens.css；入场 @starting-style；离场 [data-leaving] + transitionend；
+ * 本条带唯一参与动画的布局属性是 max-width（内容自适应标签的尺寸驱动属性）；
+ * 几何数值由组件根节点注入 custom properties（utils/tabStripGeometry 单一来源）。
  */
 
 .container {
   display: flex;
   flex-direction: column;
   width: 100%;
-  height: 38px;
-  min-height: 38px;
-  max-height: 38px;
-  flex: 0 0 38px;
+  height: var(--header-height);
+  min-height: var(--header-height);
+  max-height: var(--header-height);
+  flex: 0 0 var(--header-height);
   flex-shrink: 0;
   background: var(--bg-card, #ffffff);
   position: relative;
@@ -19,6 +24,9 @@
   user-select: none;
   box-sizing: border-box;
   border-bottom: none;
+  /* 原生 app-region 遮蔽：与 PaneHeader 同一刚性要求（见其头注） */
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
 }
 
 .container.isEmpty {
@@ -28,17 +36,17 @@
   flex: 1 1 0%;
 }
 
-/* Row 1: Tab Strip (38px 严格对齐左侧 chatTopHeader) */
+/* Row 1: Tab Strip（高度与叶头 / 全局顶栏同源） */
 .header {
   display: flex;
   flex-direction: row;
   flex-wrap: nowrap;
   align-items: center;
   justify-content: space-between;
-  height: 38px;
-  min-height: 38px;
-  max-height: 38px;
-  flex: 0 0 38px;
+  height: var(--header-height);
+  min-height: var(--header-height);
+  max-height: var(--header-height);
+  flex: 0 0 var(--header-height);
   padding: 0 10px;
   box-sizing: border-box;
   border-bottom: none;
@@ -52,11 +60,19 @@
   user-select: none;
 }
 
+/* 顶行最右叶子：抽屉处于右上角时让出窗口控制三键空间，macOS 让出交通灯/问号 */
+:global([data-top-row="true"][data-right-edge="true"]) .header {
+  padding-right: var(--edge-reserve-right-win);
+}
+:global([data-platform="macos"]) :global([data-top-row="true"][data-right-edge="true"]) .header {
+  padding-right: var(--edge-reserve-right-macos);
+}
+
 /* Tabs Track：复刻参考 .side-panel-tabs-track（横向滚动 + 滚动条全隐） */
 .tabsTrack {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--tab-gap);
   min-width: 0;
   flex: 1 1 auto;
   height: 100%;
@@ -70,7 +86,7 @@
 .tabsList {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--tab-gap);
   height: 100%;
   flex-shrink: 0;
 }
@@ -81,15 +97,15 @@
   align-items: center;
   justify-content: space-between;
   gap: 6px;
-  height: 28px;
-  min-height: 28px;
-  max-height: 28px;
-  max-width: 140px;
+  height: var(--tab-height);
+  min-height: var(--tab-height);
+  max-height: var(--tab-height);
+  max-width: var(--tool-tab-width-max);
   min-width: 0;
   flex: 0 0 auto;
   padding: 0 6px 0 8px;
   border: 1px solid transparent;
-  border-radius: var(--radius-lg, 8px);
+  border-radius: var(--radius-lg);
   background: transparent;
   color: var(--text-secondary);
   font-size: var(--font-size-xs-plus, 12px);
@@ -100,15 +116,17 @@
   box-sizing: border-box;
   user-select: none;
   overflow: hidden;
+  transform-origin: left center;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
   transition:
-    background-color var(--transition-micro, 120ms) ease,
-    color var(--transition-micro, 120ms) ease,
-    border-color var(--transition-micro, 120ms) ease,
-    max-width 220ms cubic-bezier(0.16, 1, 0.3, 1),
-    padding 220ms cubic-bezier(0.16, 1, 0.3, 1),
-    margin 220ms cubic-bezier(0.16, 1, 0.3, 1),
-    opacity 180ms ease,
-    transform 140ms cubic-bezier(0.2, 0, 0, 1);
+    background-color var(--duration-micro) var(--ease-standard),
+    color var(--duration-micro) var(--ease-standard),
+    border-color var(--duration-micro) var(--ease-standard),
+    box-shadow var(--duration-micro) var(--ease-standard),
+    max-width var(--duration-normal) var(--ease-standard),
+    opacity var(--duration-fast) var(--ease-standard),
+    margin-right var(--duration-normal) var(--ease-standard);
 }
 
 .tab:hover {
@@ -122,6 +140,30 @@
   font-weight: 500;
   border-color: var(--border-color);
   box-shadow: var(--shadow-sm);
+}
+
+/* 入场：@starting-style 首帧以左侧实际落地位置为锚点展开，无纵向浮动漂移；首轮挂载由 data-booted 关闭。
+ * 左侧锚点稳固不动，标签向右水平撑开，加号同步平稳向后位移 */
+@starting-style {
+  .container[data-booted='true'] .tab {
+    max-width: 0;
+    opacity: 0;
+  }
+}
+
+/* 离场：内容先行快隐（100ms），壳体随后收拢（200ms）；负 margin 精确抵消
+ * 自身右侧 gap，后序标签与加号整体平滑往前位移，零收尾跳变 */
+.tab[data-leaving='true'] {
+  transition:
+    max-width var(--duration-normal) var(--ease-standard),
+    opacity var(--duration-micro) var(--ease-standard),
+    margin-right var(--duration-normal) var(--ease-standard);
+  max-width: 0;
+  opacity: 0;
+  margin-right: calc(-1 * var(--tab-gap));
+  border-color: transparent;
+  box-shadow: none;
+  pointer-events: none;
 }
 
 .tabIcon {
@@ -158,7 +200,7 @@
   height: 16px;
   min-width: 16px;
   border: none;
-  border-radius: var(--radius-xs, 2px);
+  border-radius: var(--radius-xs);
   background: transparent;
   color: var(--text-tertiary);
   padding: 0;
@@ -167,10 +209,9 @@
   flex-shrink: 0;
   opacity: 0.65;
   transition:
-    opacity var(--transition-micro, 120ms) ease,
-    background-color var(--transition-micro, 120ms) ease,
-    color var(--transition-micro, 120ms) ease,
-    transform var(--transition-micro, 120ms) ease;
+    opacity var(--duration-micro) var(--ease-standard),
+    background-color var(--duration-micro) var(--ease-standard),
+    color var(--duration-micro) var(--ease-standard);
 }
 
 .tab:hover .tabCloseBtn {
@@ -181,59 +222,20 @@
   opacity: 1;
   background: var(--tint-hover);
   color: var(--text-primary);
-  transform: scale(1.08);
 }
 
 .tabCloseBtn:active {
-  transform: scale(0.92);
+  background: var(--tint-active, hsl(0 0% 0% / 0.12));
 }
 
-/* Animations */
-.isEntering {
-  animation: sideTabSlideIn 220ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-
-.isLeaving {
-  max-width: 0;
-  min-width: 0;
-  padding-left: 0;
-  padding-right: 0;
-  margin-left: 0;
-  margin-right: -4px;
-  opacity: 0;
-  transform: scale(0.88) translateX(-4px);
-  pointer-events: none;
-  border-color: transparent;
-  box-shadow: none;
-}
-
-@keyframes sideTabSlideIn {
-  from {
-    opacity: 0;
-    transform: scale(0.92) translateX(-6px);
-    max-width: 0;
-    padding-left: 0;
-    padding-right: 0;
-    margin-right: -4px;
-  }
-  to {
-    opacity: 1;
-    transform: scale(1) translateX(0);
-    max-width: 140px;
-    padding-left: 7px;
-    padding-right: 4px;
-    margin-right: 0;
-  }
-}
-
-/* Add Buttons: in-flow and pinned (28px height, 8px radius) */
+/* Add Buttons: in-flow and pinned（双态加号：随流位 + 溢出固定位，尺寸同标签高） */
 .addBtn {
-  width: 28px;
-  height: 28px;
-  min-width: 28px;
-  flex: 0 0 28px;
+  width: var(--tab-height);
+  height: var(--tab-height);
+  min-width: var(--tab-height);
+  flex: 0 0 var(--tab-height);
   padding: 0;
-  border-radius: var(--radius-lg, 8px);
+  border-radius: var(--radius-lg);
   border: 1px solid transparent;
   background: transparent;
   display: inline-flex;
@@ -242,13 +244,12 @@
   color: var(--text-secondary);
   cursor: pointer;
   transition:
-    background-color var(--transition-micro, 120ms) ease,
-    color var(--transition-micro, 120ms) ease,
-    opacity 160ms cubic-bezier(0.16, 1, 0.3, 1),
-    transform 160ms cubic-bezier(0.16, 1, 0.3, 1),
-    width 160ms cubic-bezier(0.16, 1, 0.3, 1),
-    min-width 160ms cubic-bezier(0.16, 1, 0.3, 1),
-    margin 160ms cubic-bezier(0.16, 1, 0.3, 1);
+    background-color var(--duration-micro) var(--ease-standard),
+    color var(--duration-micro) var(--ease-standard),
+    opacity var(--duration-fast) var(--ease-standard),
+    width var(--duration-normal) var(--ease-standard),
+    min-width var(--duration-normal) var(--ease-standard),
+    margin var(--duration-normal) var(--ease-standard);
 }
 
 .addBtn:hover {
@@ -256,12 +257,19 @@
   color: var(--text-primary);
 }
 
+.addBtn:active {
+  background: var(--tint-active, hsl(0 0% 0% / 0.09));
+}
+
+.inFlow {
+  margin-left: 2px;
+}
+
 .addBtn.pinned {
   opacity: 0;
   width: 0;
   min-width: 0;
   flex: 0 0 0px;
-  transform: scale(0.85);
   pointer-events: none;
   overflow: hidden;
   margin: 0;
@@ -269,10 +277,9 @@
 
 .hasOverflow .addBtn.pinned {
   opacity: 1;
-  width: 28px;
-  min-width: 28px;
-  flex: 0 0 28px;
-  transform: scale(1);
+  width: var(--tab-height);
+  min-width: var(--tab-height);
+  flex: 0 0 var(--tab-height);
   pointer-events: auto;
   margin-right: 2px;
 }
@@ -294,20 +301,20 @@
   display: flex;
   align-items: center;
   gap: 2px;
-  padding-left: 4px;
-  /* 叶上坞开关钉在抽屉右上 28×28 + right 10px，本簇把加号/最大化让到它左边 */
-  padding-right: 38px;
+  padding-left: var(--tab-gap);
+  /* 叶上坞开关钉在抽屉右上（--leaf-corner-btn-* 三元组），本簇把加号/最大化让到它左边 */
+  padding-right: calc(var(--leaf-corner-btn-size) + var(--leaf-corner-btn-inset));
   height: 100%;
   position: relative;
   z-index: var(--z-sticky, 2);
 }
 
 .sideBtn {
-  width: 28px;
-  height: 28px;
-  min-width: 28px;
+  width: var(--tab-height);
+  height: var(--tab-height);
+  min-width: var(--tab-height);
   padding: 0;
-  border-radius: var(--radius-lg, 8px);
+  border-radius: var(--radius-lg);
   border: none;
   background: transparent;
   display: inline-flex;
@@ -317,9 +324,8 @@
   cursor: pointer;
   flex-shrink: 0;
   transition:
-    background-color var(--transition-micro, 120ms) ease,
-    color var(--transition-micro, 120ms) ease,
-    transform var(--transition-micro, 120ms) ease;
+    background-color var(--duration-micro) var(--ease-standard),
+    color var(--duration-micro) var(--ease-standard);
 }
 
 .sideBtn:hover {
@@ -328,12 +334,7 @@
 }
 
 .sideBtn:active {
-  transform: scale(0.94);
-}
-
-.btnMaximize {
-  width: 26px;
-  height: 26px;
+  background: var(--tint-active, hsl(0 0% 0% / 0.09));
 }
 
 /* Row 2: Action / Navigation Toolbar (32px Height) */
@@ -371,7 +372,7 @@
   width: 26px;
   height: 26px;
   min-width: 26px;
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-sm);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -381,9 +382,8 @@
   color: var(--text-secondary);
   padding: 0;
   transition:
-    background-color var(--transition-micro, 120ms) ease,
-    color var(--transition-micro, 120ms) ease,
-    transform var(--transition-micro, 120ms) ease;
+    background-color var(--duration-micro) var(--ease-standard),
+    color var(--duration-micro) var(--ease-standard);
 }
 
 .toolbarBtn:hover:not(:disabled) {
@@ -392,7 +392,7 @@
 }
 
 .toolbarBtn:active:not(:disabled) {
-  transform: scale(0.94);
+  background: var(--tint-active, hsl(0 0% 0% / 0.09));
 }
 
 .toolbarBtn:disabled {
@@ -403,7 +403,7 @@
 /* Centered Launcher Hub Component (Empty State: 0 Tabs) */
 .launcherHubWrapper {
   position: absolute;
-  top: 38px;
+  top: var(--header-height);
   left: 0;
   right: 0;
   bottom: 0;
@@ -424,7 +424,7 @@
   flex-direction: column;
   align-items: stretch;
   gap: 8px;
-  animation: launcherHubFadeIn 200ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: launcherHubFadeIn var(--duration-normal) var(--ease-emphasized) forwards;
 }
 
 @keyframes launcherHubFadeIn {
@@ -459,10 +459,10 @@
   box-sizing: border-box;
   width: 100%;
   transition:
-    background-color var(--transition-micro, 120ms) ease,
-    border-color var(--transition-micro, 120ms) ease,
-    transform var(--transition-micro, 120ms) ease,
-    box-shadow var(--transition-micro, 120ms) ease;
+    background-color var(--duration-micro) var(--ease-standard),
+    border-color var(--duration-micro) var(--ease-standard),
+    transform var(--duration-micro) var(--ease-standard),
+    box-shadow var(--duration-micro) var(--ease-standard);
 }
 
 .launcherCard:hover {
@@ -488,8 +488,8 @@
   flex-shrink: 0;
   color: var(--text-secondary);
   transition:
-    color var(--transition-micro, 120ms) ease,
-    background-color var(--transition-micro, 120ms) ease;
+    color var(--duration-micro) var(--ease-standard),
+    background-color var(--duration-micro) var(--ease-standard);
 }
 
 .launcherCard:hover .launcherCardIconBox {
@@ -543,7 +543,7 @@
   border-radius: 50%;
   background-color: var(--color-success, #10b981);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-success, #10b981) 25%, transparent);
-  animation: activePortPulse 2s infinite ease-in-out;
+  animation: activePortPulse var(--transition-pulse) infinite;
 }
 
 @keyframes activePortPulse {
@@ -563,8 +563,8 @@
   margin-left: auto;
   opacity: 0.6;
   transition:
-    transform var(--transition-micro, 120ms) ease,
-    opacity var(--transition-micro, 120ms) ease;
+    transform var(--duration-micro) var(--ease-standard),
+    opacity var(--duration-micro) var(--ease-standard);
 }
 
 .activePortCard:hover .activePortArrow {

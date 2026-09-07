@@ -223,7 +223,6 @@ describe('LeafToolTabStrip 纯标签化、手势交互与状态机极限压测 (
     });
 
     it('断言 3.2：鼠标中键 (auxClick button=1) 点击多 Tab 时触发关闭', () => {
-      vi.useFakeTimers();
       const onCloseTab = vi.fn();
       const leaf = { tabs: ['files', 'diff'], activeTab: 'files' };
       const { container } = render(
@@ -238,18 +237,16 @@ describe('LeafToolTabStrip 纯标签化、手势交互与状态机极限压测 (
         new MouseEvent('auxclick', { bubbles: true, cancelable: true, button: 1 })
       );
 
-      expect(diffTab.className).toContain('isLeaving');
+      // 离场走 [data-leaving] 单轨标记
+      expect(diffTab.getAttribute('data-leaving')).toBe('true');
 
-      act(() => {
-        vi.advanceTimersByTime(250);
-      });
+      // 离场 transition 到位后由 transitionend(max-width) 驱动摘除
+      fireEvent.transitionEnd(diffTab, { propertyName: 'max-width' });
 
       expect(onCloseTab).toHaveBeenCalledWith('diff');
-      vi.useRealTimers();
     });
 
     it('断言 3.3：单 Tab 时鼠标中键点击触发关闭', () => {
-      vi.useFakeTimers();
       const onCloseTab = vi.fn();
       const leaf = { tabs: ['files'], activeTab: 'files' };
       const { container } = render(
@@ -262,12 +259,9 @@ describe('LeafToolTabStrip 纯标签化、手势交互与状态机极限压测 (
         new MouseEvent('auxclick', { bubbles: true, cancelable: true, button: 1 })
       );
 
-      act(() => {
-        vi.advanceTimersByTime(250);
-      });
+      fireEvent.transitionEnd(filesTab, { propertyName: 'max-width' });
 
       expect(onCloseTab).toHaveBeenCalledWith('files');
-      vi.useRealTimers();
     });
 
     it('断言 3.4：横向滚轮滑动 (handleTrackWheel) 将 deltaY 转换为 scrollLeft 并 preventDefault', () => {
@@ -289,33 +283,30 @@ describe('LeafToolTabStrip 纯标签化、手势交互与状态机极限压测 (
       expect(track.scrollLeft).toBe(50);
     });
 
-    it('断言 3.5：新增 Tab 触发 isEntering 动画类并在 220ms 后自动清除', () => {
-      vi.useFakeTimers();
+    it('断言 3.5：新增 Tab 走 @starting-style 揭幕单轨，data-booted 置位且无入场类状态', () => {
       const leaf1 = { tabs: ['files'], activeTab: 'files' };
       const { container, rerender } = render(<LeafToolTabStrip leafId="tool-leaf-1" sessionId="sess-b" sessionTabId="tab-sess" tabs={leaf1.tabs} activeTab={leaf1.activeTab} />);
+
+      // 首轮挂载后 booted 置位（首轮不重播入场动画由 CSS 门控保证）
+      const strip = container.querySelector('[data-leaf-tool-tab-strip="true"]')!;
+      expect(strip.getAttribute('data-booted')).toBe('true');
 
       const leaf2 = { tabs: ['files', 'terminal'], activeTab: 'terminal' };
       rerender(<LeafToolTabStrip leafId="tool-leaf-1" sessionId="sess-b" sessionTabId="tab-sess" tabs={leaf2.tabs} activeTab={leaf2.activeTab} />);
 
+      // 新标签仅渲染新节点：无 JS 入场状态、无离场标记
       const terminalTab = container.querySelector('[data-tab-id="terminal"]');
-      expect(terminalTab?.className).toContain('isEntering');
-
-      act(() => {
-        vi.advanceTimersByTime(250);
-      });
-
-      expect(terminalTab?.className).not.toContain('isEntering');
-      vi.useRealTimers();
+      expect(terminalTab).toBeTruthy();
+      expect(terminalTab!.getAttribute('data-leaving')).toBeNull();
     });
   });
 
   describe('4. Tab 关闭极端状态机与级联防误销毁 (Tab Close Animation & State Machine)', () => {
     it('断言 4.1：关闭激活 Tab (index 0) 零延迟切换至后一个相邻 Tab (index 1)', () => {
-      vi.useFakeTimers();
       const onSelectTab = vi.fn();
       const onCloseTab = vi.fn();
       const leaf = { tabs: ['files', 'diff', 'terminal'], activeTab: 'files' };
-      const { getByLabelText } = render(
+      const { getByLabelText, container } = render(
         <LeafToolTabStrip
           leafId="tool-leaf-1"
           sessionId="sess-b"
@@ -333,20 +324,18 @@ describe('LeafToolTabStrip 纯标签化、手势交互与状态机极限压测 (
       // 零延迟切换至后一个相邻 Tab
       expect(onSelectTab).toHaveBeenCalledWith('diff');
 
-      act(() => {
-        vi.advanceTimersByTime(250);
-      });
+      // 离场 transition 到位后由 transitionend(max-width) 驱动摘除
+      const filesTab = container.querySelector('[data-tab-id="files"]')!;
+      fireEvent.transitionEnd(filesTab, { propertyName: 'max-width' });
 
       expect(onCloseTab).toHaveBeenCalledWith('files');
-      vi.useRealTimers();
     });
 
     it('断言 4.2：关闭末尾激活 Tab 零延迟切换至前一个相邻 Tab', () => {
-      vi.useFakeTimers();
       const onSelectTab = vi.fn();
       const onCloseTab = vi.fn();
       const leaf = { tabs: ['files', 'diff'], activeTab: 'diff' };
-      const { getByLabelText } = render(
+      const { getByLabelText, container } = render(
         <LeafToolTabStrip
           leafId="tool-leaf-1"
           sessionId="sess-b"
@@ -364,20 +353,17 @@ describe('LeafToolTabStrip 纯标签化、手势交互与状态机极限压测 (
       // 零延迟切换至前一个相邻 Tab
       expect(onSelectTab).toHaveBeenCalledWith('files');
 
-      act(() => {
-        vi.advanceTimersByTime(250);
-      });
+      const diffTab = container.querySelector('[data-tab-id="diff"]')!;
+      fireEvent.transitionEnd(diffTab, { propertyName: 'max-width' });
 
       expect(onCloseTab).toHaveBeenCalledWith('diff');
-      vi.useRealTimers();
     });
 
     it('断言 4.3：关闭非激活 Tab 不改变当前激活 Tab', () => {
-      vi.useFakeTimers();
       const onSelectTab = vi.fn();
       const onCloseTab = vi.fn();
       const leaf = { tabs: ['files', 'diff', 'terminal'], activeTab: 'files' };
-      const { getByLabelText } = render(
+      const { getByLabelText, container } = render(
         <LeafToolTabStrip
           leafId="tool-leaf-1"
           sessionId="sess-b"
@@ -395,19 +381,16 @@ describe('LeafToolTabStrip 纯标签化、手势交互与状态机极限压测 (
       // 不切换激活 Tab
       expect(onSelectTab).not.toHaveBeenCalled();
 
-      act(() => {
-        vi.advanceTimersByTime(250);
-      });
+      const terminalTab = container.querySelector('[data-tab-id="terminal"]')!;
+      fireEvent.transitionEnd(terminalTab, { propertyName: 'max-width' });
 
       expect(onCloseTab).toHaveBeenCalledWith('terminal');
-      vi.useRealTimers();
     });
 
     it('断言 4.4：重复连续快速点击同一 Tab 的关闭按钮，被 closingTabIds 防重拦截', () => {
-      vi.useFakeTimers();
       const onCloseTab = vi.fn();
       const leaf = { tabs: ['files', 'diff'], activeTab: 'files' };
-      const { getByLabelText } = render(
+      const { getByLabelText, container } = render(
         <LeafToolTabStrip leafId="tool-leaf-1" sessionId="sess-b" sessionTabId="tab-sess" tabs={leaf.tabs} activeTab={leaf.activeTab} onCloseTab={onCloseTab} />
       );
 
@@ -416,35 +399,35 @@ describe('LeafToolTabStrip 纯标签化、手势交互与状态机极限压测 (
       fireEvent.click(closeFilesBtn);
       fireEvent.click(closeFilesBtn);
 
-      act(() => {
-        vi.advanceTimersByTime(250);
-      });
+      const filesTab = container.querySelector('[data-tab-id="files"]')!;
+      fireEvent.transitionEnd(filesTab, { propertyName: 'max-width' });
 
       // 仅触发一次真实关闭
       expect(onCloseTab).toHaveBeenCalledTimes(1);
       expect(onCloseTab).toHaveBeenCalledWith('files');
-      vi.useRealTimers();
     });
 
-    it('断言 4.5：并发关闭多个 Tab，各自计时器独立触发且无竞态冲突', () => {
-      vi.useFakeTimers();
+    it('断言 4.5：并发关闭多个 Tab，各自 transitionend 独立触发且无竞态冲突', () => {
       const onCloseTab = vi.fn();
       const leaf = { tabs: ['files', 'diff', 'terminal'], activeTab: 'files' };
-      const { getByLabelText } = render(
+      const { getByLabelText, container } = render(
         <LeafToolTabStrip leafId="tool-leaf-1" sessionId="sess-b" sessionTabId="tab-sess" tabs={leaf.tabs} activeTab={leaf.activeTab} onCloseTab={onCloseTab} />
       );
 
       fireEvent.click(getByLabelText('关闭 diff'));
       fireEvent.click(getByLabelText('关闭 terminal'));
 
-      act(() => {
-        vi.advanceTimersByTime(250);
-      });
-
+      // 各自的 transitionend 互不取消
+      const diffTab = container.querySelector('[data-tab-id="diff"]')!;
+      fireEvent.transitionEnd(diffTab, { propertyName: 'max-width' });
       expect(onCloseTab).toHaveBeenCalledWith('diff');
+      expect(onCloseTab).not.toHaveBeenCalledWith('terminal');
+
+      const terminalTab = container.querySelector('[data-tab-id="terminal"]')!;
+      fireEvent.transitionEnd(terminalTab, { propertyName: 'max-width' });
+
       expect(onCloseTab).toHaveBeenCalledWith('terminal');
       expect(onCloseTab).toHaveBeenCalledTimes(2);
-      vi.useRealTimers();
     });
 
     it('断言 4.6：空态（0 个 Tab）时渲染 Launcher Hub 居中卡片组，点击卡片打开对应工具', () => {
@@ -484,10 +467,9 @@ describe('LeafToolTabStrip 纯标签化、手势交互与状态机极限压测 (
     });
 
     it('断言 4.7：关闭唯一 Tab 成功触发 onCloseTab 且在无外部回调时自动折叠 SessionTab dock', () => {
-      vi.useFakeTimers();
       const onCloseTab = vi.fn();
       const leaf = { tabs: ['files'], activeTab: 'files' };
-      const { getByLabelText } = render(
+      const { getByLabelText, container } = render(
         <LeafToolTabStrip
           leafId="tool-leaf-1"
           sessionId="sess-b"
@@ -501,12 +483,10 @@ describe('LeafToolTabStrip 纯标签化、手势交互与状态机极限压测 (
       const closeFilesBtn = getByLabelText('关闭 files');
       fireEvent.click(closeFilesBtn);
 
-      act(() => {
-        vi.advanceTimersByTime(250);
-      });
+      const filesTab = container.querySelector('[data-tab-id="files"]')!;
+      fireEvent.transitionEnd(filesTab, { propertyName: 'max-width' });
 
       expect(onCloseTab).toHaveBeenCalledWith('files');
-      vi.useRealTimers();
     });
   });
 
@@ -536,7 +516,6 @@ describe('LeafToolTabStrip 纯标签化、手势交互与状态机极限压测 (
     });
 
     it('断言 5.2：极限并发压测 (50 次高频 Tab 切换与关闭交互)，无死锁与内存状态异常', () => {
-      vi.useFakeTimers();
       const onSelectTab = vi.fn();
       const onCloseTab = vi.fn();
       const leaf = { tabs: ['files', 'diff', 'terminal', 'preview'], activeTab: 'files' };
@@ -561,12 +540,10 @@ describe('LeafToolTabStrip 纯标签化、手势交互与状态机极限压测 (
 
       // 关闭 Tab
       fireEvent.click(getByLabelText('关闭 diff'));
-      act(() => {
-        vi.advanceTimersByTime(250);
-      });
+      const diffTab = container.querySelector('[data-tab-id="diff"]')!;
+      fireEvent.transitionEnd(diffTab, { propertyName: 'max-width' });
 
       expect(onCloseTab).toHaveBeenCalledWith('diff');
-      vi.useRealTimers();
     });
   });
 });

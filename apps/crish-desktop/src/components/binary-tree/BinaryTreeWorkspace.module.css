@@ -71,11 +71,15 @@
   /*
    * 叶子只是几何容器，本身不铺色也不描边。
    * 视觉上的「小矩形」由 .leafBody 承担，叶子透出外壳灰底充当留白。
+   * 几何过渡仅在 data-structure-animating 门控下启用（树结构变更短暂开启），
+   * 窗口 resize 等纯 rect 变化零过渡，杜绝整树橡皮筋。
    */
   background: transparent;
   border-radius: 0;
   isolation: isolate;
-  /*                */
+}
+
+.canvas[data-structure-animating='true'] .leaf {
   transition:
     top var(--transition-fast),
     left var(--transition-fast),
@@ -89,11 +93,11 @@
  */
 .topSidePanelBtn {
   position: absolute;
-  top: 41px;
-  right: 10px;
-  width: 28px;
-  height: 28px;
-  min-width: 28px;
+  top: calc(var(--header-height) + var(--leaf-corner-btn-gap));
+  right: var(--leaf-corner-btn-inset);
+  width: var(--leaf-corner-btn-size);
+  height: var(--leaf-corner-btn-size);
+  min-width: var(--leaf-corner-btn-size);
   border-radius: var(--radius-md, 6px);
   display: inline-flex;
   align-items: center;
@@ -178,6 +182,9 @@
   z-index: var(--z-resizer, 110);
   background: transparent;
   touch-action: none;
+}
+
+.canvas[data-structure-animating='true'] .sash {
   transition:
     top var(--transition-fast),
     left var(--transition-fast);
@@ -326,7 +333,7 @@
   margin-top: 0;
   background: var(--bg-card, #ffffff);
   border: 1px solid var(--border-subtle, hsl(0 0% 0% / 0.08));
-  border-radius: var(--radius-lg, 10px);
+  border-radius: var(--radius-lg);
   box-shadow:
     0 1px 3px hsl(0 0% 0% / 0.03),
     0 4px 12px hsl(0 0% 0% / 0.02);

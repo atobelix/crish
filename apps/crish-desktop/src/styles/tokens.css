@@ -74,19 +74,11 @@ html[data-theme='light'] {
      ========================================================================== */
 
   /* --- 1. 二元色彩与灰度系统 (Binary Optical Color System) --- */
-  /* 未激活态滑块：自然半透明中性灰 (~18% text-primary)，清晰可见，杜绝近白发丝隐形 (SSOT) */
-  --scrollbar-thumb-bg: color-mix(
-    in srgb,
-    var(--text-primary, #111827) 18%,
-    transparent
-  );
+  /* 未激活态滑块：微调至 10.0% 灰度 (H=30 S=2% L=90%)，物理像素 #e6e6e5，确保浅色底板清晰可见 (SSOT) */
+  --scrollbar-thumb-bg: #e6e6e5;
 
-  /* 激活态滑块：Hover 与 Active 加深至 ~34%，触感沉着明确 */
-  --scrollbar-thumb-active: color-mix(
-    in srgb,
-    var(--text-primary, #111827) 34%,
-    transparent
-  );
+  /* 激活态滑块：黄色/色相饱和度绝对不动 (H=30 S=2%)，灰度下调至 21.8% (L=78%)，物理像素 #c8c7c6，差值严格死锁约 12% */
+  --scrollbar-thumb-active: #c8c7c6;
 
   /* 轨道背景：完全透明，消除轨道占位边缘对内容的侵入感 */
   --scrollbar-track-bg: transparent;
@@ -105,13 +97,13 @@ html[data-theme='light'] {
     transparent
   );
 
-  /* --- 2. 四级宽度 Token 体系 (Four-Tier Width System，包含 2px 左右防误触间距) --- */
-  --scrollbar-width-xs: 6px; /* 超细纤薄型：滑块净宽 4px */
-  --scrollbar-width-sm: 8px; /* 紧凑型：滑块净宽 4px + 边距 */
-  --scrollbar-width-md: 10px; /* 标准默认型 (SSOT)：总宽 10px，左右透明挤压各 2px，滑块净宽 6px 胶囊舒适 */
-  --scrollbar-width-lg: 12px; /* 宽屏大视口型：总宽 12px，滑块净宽 8px */
+  /* --- 2. 四级宽度 Token 体系 (Four-Tier Width System，包含 2px 右侧防误触间距) --- */
+  --scrollbar-width-xs: 6px; /* 超细纤薄型：滑块净宽 4px + 2px 边距 */
+  --scrollbar-width-sm: 7px; /* 紧凑型：滑块净宽 5px + 2px 边距 */
+  --scrollbar-width-md: 9px; /* 标准默认型 (SSOT)：滑块净宽 7px + 2px 边距，告别 4px 过细 */
+  --scrollbar-width-lg: 11px; /* 宽屏大视口型：滑块净宽 9px + 2px 边距 */
 
-  /* 全局默认滑块宽度映射：未指定时默认走标准 md (10px 总宽，6px 净宽) */
+  /* 全局默认滑块宽度映射：未指定时默认走标准 md (9px 总宽，7px 净宽) */
   --scrollbar-width: var(--scrollbar-width-md);
   --scrollbar-thumb-width: var(--scrollbar-width);
 
@@ -406,18 +398,29 @@ html[data-theme='light'] {
   /* Materials & Animations */
   --bg-glass: var(--bg-elevated);
   --backdrop-blur: none;
-  --transition-spring-layout: cubic-bezier(0.16, 1, 0.3, 1) 220ms;
+  /*
+   * 缓动正典二元组：standard 服务色彩/透明度常规过渡，emphasized 服务几何位移（快出型）。
+   * 全仓 transition/animation 的曲线只允许引用这两个名字（或下方别名）；组件文件禁止内联 cubic-bezier。
+   */
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-emphasized: cubic-bezier(0.16, 1, 0.3, 1);
+  /* 历史缓动名 → 正典别名（零消费者，仅保留名字不丢失） */
+  --ease-in-out: var(--ease-standard);
+  --easing-enter: var(--ease-emphasized);
+  --easing-exit: var(--ease-standard);
+  --easing-emphasized: var(--ease-emphasized);
+  --transition-spring-layout: var(--ease-emphasized) 220ms;
   --transition-micro: 100ms ease-out;
-  --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
-  --transition-smooth: 300ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-fast: 150ms var(--ease-standard);
+  --transition-smooth: 300ms var(--ease-standard);
   /* Toast 入场：无过冲（y≤1）；旧值 y2=1.275 会越过停点再回 */
-  --transition-enter: 400ms cubic-bezier(0.16, 1, 0.3, 1);
-  --transition-exit: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-enter: 400ms var(--ease-emphasized);
+  --transition-exit: 250ms var(--ease-standard);
   --transition-spring: 500ms cubic-bezier(0.175, 0.885, 0.32, 1.275);
-  --transition-popover-enter: cubic-bezier(0.16, 1, 0.3, 1) 180ms;
+  --transition-popover-enter: var(--ease-emphasized) 180ms;
   --transition-popover-exit: cubic-bezier(0.4, 0, 1, 1) 120ms;
-  --transition-modal-enter: cubic-bezier(0.16, 1, 0.3, 1) 220ms;
-  --transition-accordion: cubic-bezier(0.16, 1, 0.3, 1) 220ms;
+  --transition-modal-enter: var(--ease-emphasized) 220ms;
+  --transition-accordion: var(--ease-emphasized) 220ms;
   --transition-press: 80ms ease-out;
   --transition-skeleton: 1.5s ease-in-out;
   --transition-spin: 0.8s linear;
@@ -433,9 +436,6 @@ html[data-theme='light'] {
   --duration-slow: 300ms;
   --duration-enter: 200ms;
   --duration-exit: 150ms;
-  --easing-enter: cubic-bezier(0.16, 1, 0.3, 1);
-  --easing-exit: cubic-bezier(0.4, 0, 0.2, 1);
-  --easing-emphasized: cubic-bezier(0.32, 0.72, 0, 1);
 
   /*             /     CJK     fontStore        */
   --font-sans:
@@ -458,6 +458,18 @@ html[data-theme='light'] {
   --item-font-size: var(--font-size-base);
 
   --header-height: 36px;
+  /*
+   * 壳几何让位 token：顶行叶头为悬浮壳层控件让出的空间，单一出处。
+   * --leaf-corner-btn-* 三元组共同描述叶右上浮动坞开关（28px 按钮 + 10px 边距 + 5px 头高间隙），
+   * 消费方一律用 calc 组合，禁止重写数字。
+   */
+  --edge-reserve-left: 52px;
+  --edge-reserve-left-macos: 106px;
+  --edge-reserve-right-win: 144px;
+  --edge-reserve-right-macos: 38px;
+  --leaf-corner-btn-size: 28px;
+  --leaf-corner-btn-inset: 10px;
+  --leaf-corner-btn-gap: 5px;
   --sidebar-width: 260px; /* overridden by JS constants at runtime */
   --settings-sidebar-width: 240px;
 
@@ -679,7 +691,6 @@ html[data-theme='light'] {
 
 
   --opacity-disabled: 0.5;
-  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
 
   /*       ?
    * xs =   /chip sm =          =   ?   lg =    CTA */

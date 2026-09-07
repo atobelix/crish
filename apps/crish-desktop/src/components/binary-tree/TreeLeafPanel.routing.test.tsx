@@ -402,7 +402,7 @@ describe('TreeLeafPanel 真实路由分发与 Props 透传 (Task 1)', () => {
       },
     });
 
-    const { getByLabelText } = render(
+    const { getByLabelText, container } = render(
       <TreeLeafPanel
         leaf={leaf}
         rect={{ x: 0, y: 0, width: 1, height: 1 }}
@@ -414,9 +414,9 @@ describe('TreeLeafPanel 真实路由分发与 Props 透传 (Task 1)', () => {
     const closeBtn = getByLabelText('关闭 文件');
     fireEvent.click(closeBtn);
 
-    act(() => {
-      vi.advanceTimersByTime(250);
-    });
+    // 离场 transition 到位后由 transitionend(max-width) 驱动摘除（不再使用定时器）
+    const filesTab = container.querySelector('[data-tool-tab-id="files"]')!;
+    fireEvent.transitionEnd(filesTab, { propertyName: 'max-width' });
 
     expect(updateLeafDockSpy).toHaveBeenCalledWith('chat-leaf-close-last', {
       collapsed: true,

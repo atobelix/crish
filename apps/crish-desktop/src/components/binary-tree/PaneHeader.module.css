@@ -1,12 +1,19 @@
 /**
  * PaneHeader.module.css — 独立窗格标签栏高精 CSS 模块
- * 规范完全对标 reference/chat-composer-component/css/composer.css
+ *
+ * 动效单一真理路径（与 tabStripMotionContract 守卫测试联动）：
+ * 1. 时长/缓动全部引用 tokens.css（--duration-* / --ease-*），禁止内联毫秒与 cubic-bezier；
+ * 2. 入场 = @starting-style + transition，零 JS 状态；首轮挂载经容器 data-booted 门控关闭；
+ * 3. 离场 = [data-leaving] 目标态 + transitionend 驱动摘除；负 margin-right 精确抵消
+ * 4. 尺寸动画由 flex-basis / width / max-width 同步平滑驱动，根除内部元素跳变与截断；
+ * 5. 等宽锁定仅经 --tab-item-width 单变量通道，禁止 !important 覆盖块。
+ * 几何数值来自 utils/tabStripGeometry，由组件根节点注入 custom properties。
  */
 
 .paneHeader {
-  height: 36px;
-  min-height: 36px;
-  max-height: 36px;
+  height: var(--header-height);
+  min-height: var(--header-height);
+  max-height: var(--header-height);
   background: transparent;
   display: flex;
   align-items: center;
@@ -19,29 +26,27 @@
   position: relative;
   z-index: 5;
   overflow: hidden;
-  -webkit-app-region: drag;
-  app-region: drag;
   pointer-events: auto;
 }
 
-/* 声明式避让规则 */
-/* 顶行最左叶子：在侧栏收起时让出 52px 悬浮按钮空间（macOS 下 106px） */
+/* 声明式避让规则：让位值来自壳几何 token（tokens.css --edge-reserve-*） */
+/* 顶行最左叶子：侧栏收起时让出悬浮按钮空间（macOS 106px） */
 :global([data-top-row="true"][data-left-edge="true"]) .paneHeader {
   padding-left: 0px;
 }
 :global([data-sidebar-collapsed="true"]) :global([data-top-row="true"][data-left-edge="true"]) .paneHeader {
-  padding-left: 52px;
+  padding-left: var(--edge-reserve-left);
 }
 :global([data-platform="macos"]:not([data-fullscreen="true"])) :global([data-sidebar-collapsed="true"]) :global([data-top-row="true"][data-left-edge="true"]) .paneHeader {
-  padding-left: 106px;
+  padding-left: var(--edge-reserve-left-macos);
 }
 
-/* 顶行最右叶子：在 Windows 下让出 112px 窗口控制三键空间 */
+/* 顶行最右叶子：Windows 让出窗口控制三键空间，macOS 让出交通灯 */
 :global([data-top-row="true"][data-right-edge="true"]) .paneHeader {
-  padding-right: 112px;
+  padding-right: var(--edge-reserve-right-win);
 }
 :global([data-platform="macos"]) :global([data-top-row="true"][data-right-edge="true"]) .paneHeader {
-  padding-right: 38px;
+  padding-right: var(--edge-reserve-right-macos);
 }
 
 .tabsContainer {
@@ -53,16 +58,14 @@
   overflow-x: hidden;
   overflow-y: hidden;
   scrollbar-width: none;
-  gap: 4px;
+  gap: var(--tab-gap);
   padding-left: 2px;
-  -webkit-app-region: drag;
-  app-region: drag;
 }
 
 .tabsList {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--tab-gap);
   height: 100%;
   flex: 0 0 auto;
   min-width: 0;
@@ -70,21 +73,21 @@
   app-region: no-drag;
 }
 
-/* 单个会话/工具标签项 (28px 严格对标侧栏胶囊卡片，8px 圆角，绝对等宽严格锁定) */
+/* 单个会话标签项：28px 高、8px 圆角、绝对等宽严格锁定 */
 .tabItem {
-  height: 28px;
-  min-height: 28px;
-  max-height: 28px;
-  width: var(--tab-item-width, 240px);
-  max-width: var(--tab-item-width, 240px);
+  height: var(--tab-height);
+  min-height: var(--tab-height);
+  max-height: var(--tab-height);
+  width: var(--tab-item-width, var(--tab-width-max));
+  max-width: var(--tab-item-width, var(--tab-width-max));
   min-width: 0;
-  flex: 0 0 var(--tab-item-width, 240px);
+  flex: 0 0 var(--tab-item-width, var(--tab-width-max));
   display: inline-flex;
   align-items: center;
   padding: 0;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: var(--radius-lg, 8px);
+  border-radius: var(--radius-lg);
   font-size: var(--font-size-xs-plus, 12.5px);
   font-weight: 400;
   color: var(--text-secondary, #666666);
@@ -93,22 +96,26 @@
   box-sizing: border-box;
   user-select: none;
   overflow: hidden;
+  transform-origin: left center;
+  transition:
+    background var(--duration-micro) var(--ease-standard),
+    color var(--duration-micro) var(--ease-standard),
+    border-color var(--duration-micro) var(--ease-standard),
+    box-shadow var(--duration-micro) var(--ease-standard),
+    flex-basis var(--duration-normal) var(--ease-standard),
+    width var(--duration-normal) var(--ease-standard),
+    max-width var(--duration-normal) var(--ease-standard),
+    opacity var(--duration-fast) var(--ease-standard),
+    margin-right var(--duration-normal) var(--ease-standard);
   -webkit-app-region: no-drag;
   app-region: no-drag;
-  transition: background var(--dur-fast, 120ms) var(--ease-default, ease-out),
-              color var(--dur-fast, 120ms) var(--ease-default, ease-out),
-              border-color var(--dur-fast, 120ms) var(--ease-default, ease-out),
-              box-shadow var(--dur-fast, 120ms) var(--ease-default, ease-out),
-              width 140ms cubic-bezier(0.2, 0, 0, 1),
-              max-width 140ms cubic-bezier(0.2, 0, 0, 1),
-              flex-basis 140ms cubic-bezier(0.2, 0, 0, 1);
 }
 
-/* 标签内部固定尺寸容器：揭幕式展开，文字与关闭按钮不挤压变形，拒绝膨胀充气感 */
+/* 标签内部容器：自适应外壳宽度流动，尺寸伸缩时关闭按钮平滑跟随；离场时保持原宽不挤压文字 */
 .tabItemInner {
-  width: var(--tab-item-width, 240px);
-  min-width: var(--tab-item-width, 240px);
-  max-width: var(--tab-item-width, 240px);
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   height: 100%;
   display: flex;
   align-items: center;
@@ -117,20 +124,6 @@
   padding: 0 6px 0 10px;
   box-sizing: border-box;
   flex-shrink: 0;
-}
-
-/* 关闭缓冲锁定态：连续关闭期间锁定宽度，防止向右放大位移，实现原地连击关闭 */
-.tabsContainer[data-locked="true"] .tabItem:not(.tabItemLeaving) {
-  width: var(--tab-locked-width, 240px) !important;
-  max-width: var(--tab-locked-width, 240px) !important;
-  min-width: 0 !important;
-  flex: 0 0 var(--tab-locked-width, 240px) !important;
-}
-
-.tabsContainer[data-locked="true"] .tabItem:not(.tabItemLeaving) .tabItemInner {
-  width: var(--tab-locked-width, 240px) !important;
-  min-width: var(--tab-locked-width, 240px) !important;
-  max-width: var(--tab-locked-width, 240px) !important;
 }
 
 .tabItem:hover:not(.tabItemActive) {
@@ -154,56 +147,38 @@
   box-shadow: 0 2px 5px color-mix(in srgb, var(--shadow-color, hsl(35 5% 11%)) 8%, transparent), 0 1px 1.5px color-mix(in srgb, var(--shadow-color, hsl(35 5% 11%)) 4%, transparent);
 }
 
-/* 入场生长动画：自然舒展、无膨胀充气感（纯净槽位展开与柔和淡入） */
-@keyframes tabGrowIn {
-  0% {
+/* 入场：@starting-style 首帧以左侧实际落地位置为锚点展开，无纵向浮动漂移；首轮挂载由 data-booted 关闭。
+ * 左侧锚点稳固不动，标签向右水平撑开，加号同步平稳向后位移 */
+@starting-style {
+  .tabsContainer[data-booted='true'] .tabItem {
+    flex-basis: 0;
     width: 0;
     max-width: 0;
-    min-width: 0;
-    flex-basis: 0px;
-    opacity: 0;
-  }
-  100% {
-    width: var(--tab-item-width, 240px);
-    max-width: var(--tab-item-width, 240px);
-    min-width: 0;
-    flex-basis: var(--tab-item-width, 240px);
-    opacity: 1;
-  }
-}
-
-.tabItemEntering {
-  animation: tabGrowIn 160ms cubic-bezier(0.2, 0, 0, 1) forwards;
-  will-change: width, max-width, flex-basis, opacity;
-}
-
-/* 自然消失动画：内容瞬间淡隐，尺寸平滑收拢，邻居顺畅靠拢 */
-@keyframes tabShrinkOut {
-  0% {
-    width: var(--tab-item-width, 240px);
-    max-width: var(--tab-item-width, 240px);
-    min-width: 0;
-    flex-basis: var(--tab-item-width, 240px);
-    opacity: 1;
-  }
-  100% {
-    width: 0;
-    max-width: 0;
-    min-width: 0;
-    flex-basis: 0px;
     opacity: 0;
   }
 }
 
-.tabItem.tabItemLeaving {
-  animation: tabShrinkOut 160ms cubic-bezier(0.2, 0, 0, 1) forwards !important;
-  pointer-events: none !important;
-  overflow: hidden !important;
+/* 离场：内容先行快隐（100ms），壳体随后平稳收拢（200ms）；负 margin 精确抵消
+ * 自身右侧 gap，后序标签与加号整体平滑往前位移，与存活标签扩宽生长全周期完全同频（200ms standard 曲线） */
+.tabItem[data-leaving='true'] {
+  transition:
+    flex-basis var(--duration-normal) var(--ease-standard),
+    width var(--duration-normal) var(--ease-standard),
+    max-width var(--duration-normal) var(--ease-standard),
+    opacity var(--duration-micro) var(--ease-standard),
+    margin-right var(--duration-normal) var(--ease-standard);
+  flex-basis: 0;
+  width: 0;
+  max-width: 0;
+  opacity: 0;
+  margin-right: calc(-1 * var(--tab-gap));
+  pointer-events: none;
+  overflow: hidden;
 }
 
-.tabItem.tabItemLeaving .tabItemInner {
-  opacity: 0 !important;
-  transition: opacity 60ms ease-out !important;
+.tabItem[data-leaving='true'] .tabItemInner {
+  opacity: 0;
+  transition: opacity var(--duration-micro) var(--ease-standard);
 }
 
 .tabTitle {
@@ -218,7 +193,7 @@
   width: 18px;
   height: 18px;
   min-width: 18px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -229,16 +204,16 @@
   padding: 0;
   opacity: 0.45;
   position: relative;
-  transition: background var(--dur-fast, 120ms), opacity var(--dur-fast, 120ms), color var(--dur-fast, 120ms), transform var(--dur-fast, 120ms);
+  transition: background var(--duration-micro) var(--ease-standard), opacity var(--duration-micro) var(--ease-standard), color var(--duration-micro) var(--ease-standard);
 }
 
 .tabCloseBtn::before {
   content: '';
   position: absolute;
-  top: -4px;
-  bottom: -4px;
-  left: -4px;
-  right: -4px;
+  top: calc(-1 * var(--tab-close-hit-pad));
+  bottom: calc(-1 * var(--tab-close-hit-pad));
+  left: calc(-1 * var(--tab-close-hit-pad));
+  right: calc(-1 * var(--tab-close-hit-pad));
 }
 
 .tabItem:hover .tabCloseBtn {
@@ -257,17 +232,17 @@
 }
 
 .tabCloseBtn:active {
-  background: var(--tint-active, rgba(0, 0, 0, 0.12));
+  background: var(--tint-active, hsl(0 0% 0% / 0.12));
 }
 
-/* 新建标签按钮（加号）- 28px × 28px / 8px 圆角 */
+/* 新建标签按钮（加号）：28px 与标签同高、8px 圆角，纯流式紧贴末尾标签 */
 .newTabBtn {
-  width: 28px;
-  height: 28px;
-  min-width: 28px;
-  flex: 0 0 28px;
+  width: var(--tab-height);
+  height: var(--tab-height);
+  min-width: var(--tab-height);
+  flex: 0 0 var(--tab-height);
   padding: 0;
-  border-radius: var(--radius-lg, 8px);
+  border-radius: var(--radius-lg);
   border: 1px solid transparent;
   background: transparent;
   display: inline-flex;
@@ -275,15 +250,14 @@
   justify-content: center;
   color: var(--text-secondary);
   cursor: pointer;
+  margin-left: 2px;
   -webkit-app-region: no-drag;
   app-region: no-drag;
-  transition: background var(--dur-fast, 120ms) var(--ease-default, ease-out),
-              color var(--dur-fast, 120ms) var(--ease-default, ease-out),
-              opacity 160ms var(--ease-default, ease-out),
-              transform 120ms var(--ease-default, ease-out),
-              width 160ms var(--ease-default, ease-out),
-              min-width 160ms var(--ease-default, ease-out),
-              margin 160ms var(--ease-default, ease-out);
+  transition:
+    background var(--duration-micro) var(--ease-standard),
+    color var(--duration-micro) var(--ease-standard),
+    border-color var(--duration-micro) var(--ease-standard),
+    box-shadow var(--duration-micro) var(--ease-standard);
 }
 
 .newTabBtn:hover {
@@ -294,53 +268,5 @@
 }
 
 .newTabBtn:active {
-  transform: scale(0.92);
-  background: rgba(0, 0, 0, 0.09);
-}
-
-.inFlow {
-  margin-left: 2px;
-}
-
-.pinned {
-  opacity: 0;
-  width: 0;
-  min-width: 0;
-  flex: 0 0 0px;
-  transform: scale(0.85);
-  pointer-events: none;
-  overflow: hidden;
-  margin: 0;
-}
-
-.hasOverflow .pinned {
-  opacity: 1;
-  width: 26px;
-  min-width: 26px;
-  flex: 0 0 26px;
-  transform: scale(1);
-  pointer-events: auto;
-  margin-right: 4px;
-}
-
-.hasOverflow .inFlow {
-  opacity: 0;
-  pointer-events: none;
-  width: 0;
-  min-width: 0;
-  flex: 0 0 0px;
-  margin: 0;
-  overflow: hidden;
-}
-
-.fixedCluster {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding-left: 2px;
-  position: relative;
-  z-index: 6;
-  -webkit-app-region: no-drag;
-  app-region: no-drag;
+  background: var(--tint-active, hsl(0 0% 0% / 0.09));
 }
