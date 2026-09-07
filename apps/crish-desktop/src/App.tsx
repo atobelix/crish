@@ -171,7 +171,9 @@ function App() {
           跳转到主要内容
         </a>
 
-        <AppTopBar onShowCheatsheet={() => setShowCheatsheet(true)} />
+        <AppTopBar
+          onShowCheatsheet={() => setShowCheatsheet(true)}
+        />
 
         <main
           id="crish-main"

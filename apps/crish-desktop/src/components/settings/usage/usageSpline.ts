@@ -46,11 +46,16 @@ export function normalizeModelRatio(rawVal: number): number {
 }
 
 /**
- * 格式化百分比
+ * 格式化百分比（audit-repair-202609 · T23 更名定语义）：
+ * 入参为 **0~100 的百分数**（与 ModelDistributionSection 的 rawRatio 口径
+ * 一致）；历史函数名 formatPercentage 暗示 0~1 比例入参（内部 ×100），
+ * 与现调用链相反，纯靠约定维护——更名消除语义换轨。
  */
-export function formatPercentage(ratio: number): string {
-  const norm = normalizeModelRatio(ratio);
-  return `${(norm * 100).toFixed(1)}%`;
+export function formatPercentValue(percent: number): string {
+  if (typeof percent !== 'number' || !Number.isFinite(percent) || percent <= 0) {
+    return '0.0%';
+  }
+  return `${percent.toFixed(1)}%`;
 }
 
 export interface ModelColorTheme {

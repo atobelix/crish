@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import net from 'node:net';
+import { PREVIEW_BRIDGE_SCRIPT } from './dev-server/previewBridgeScript';
 import { Readable } from 'node:stream';
 import { createRequire } from 'node:module';
 
@@ -253,6 +254,21 @@ function probePort(port: number, timeoutMs = 50): Promise<boolean> {
   });
 }
 
+/**
+ * 同源校验（audit-repair-202609 T18）：dev server 本地工具端点仅允许同源
+ * 请求。浏览器对同源 fetch 通常不发 Origin 头——缺省放行；携带 Origin 头
+ * （跨源 fetch / 表单 / iframe）时，其 host 必须与请求 host 一致。
+ */
+function isSameOriginRequest(req: IncomingMessage): boolean {
+  const origin = req.headers.origin;
+  if (!origin) return true;
+  try {
+    return new URL(origin).host === (req.headers.host || '');
+  } catch {
+    return false;
+  }
+}
+
 function crishActivePortsPlugin(): Plugin {
   return {
     name: 'crish-active-ports',
@@ -263,12 +279,11 @@ function crishActivePortsPlugin(): Plugin {
             next();
             return;
           }
-          if (req.method === 'OPTIONS') {
-            res.statusCode = 204;
-            res.setHeader('Access-Control-Allow-Origin', '*');
-            res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-            res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-            res.end();
+          // audit-repair-202609 T18：仅限同源访问——消费方（PreviewCard）与
+          // 端点同源，无需 CORS；跨源请求一律 403，防外部网页驱动 dev server。
+          if (!isSameOriginRequest(req)) {
+            res.statusCode = 403;
+            res.end('Forbidden: cross-origin requests are not allowed');
             return;
           }
           if (req.method !== 'GET') {
@@ -292,7 +307,6 @@ function crishActivePortsPlugin(): Plugin {
 
           res.statusCode = 200;
           res.setHeader('Content-Type', 'application/json');
-          res.setHeader('Access-Control-Allow-Origin', '*');
           res.setHeader('Cache-Control', 'no-store');
           res.end(JSON.stringify(activePorts));
         }
@@ -307,7 +321,7 @@ function crishActivePortsPlugin(): Plugin {
  * 拦截 GET /__crish_preview_proxy?url=<targetUrl>
  */
 function crishPreviewProxyPlugin(): Plugin {
-  let envDispatcher: any = undefined;
+  let envDispatcher: unknown = undefined;
   try {
     const req = createRequire(import.meta.url);
     // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -322,6 +336,12 @@ function crishPreviewProxyPlugin(): Plugin {
     // 运行环境无 undici 或加载失败时平滑降级为默认出站
   }
 
+  // 出站伪装 UA（audit-repair-202609 T18）：常量集中 + 注明约束——
+  // 部分站点拒绝无 UA/非常规 UA 的服务端请求，伪装值本身是反爬现实，
+  // 不随构建变化。
+  const PROXY_USER_AGENT =
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36';
+
   return {
     name: 'crish-preview-proxy',
     configureServer(server) {
@@ -333,12 +353,11 @@ function crishPreviewProxyPlugin(): Plugin {
             return;
           }
 
-          if (req.method === 'OPTIONS') {
-            res.statusCode = 204;
-            res.setHeader('Access-Control-Allow-Origin', '*');
-            res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
-            res.setHeader('Access-Control-Allow-Headers', '*');
-            res.end();
+          // T18：仅限同源（iframe 与宿主同源加载代理页，无需 CORS）；
+          // 跨源一律 403，杜绝 dev server 被本机任意网页当 SSRF 中继使用。
+          if (!isSameOriginRequest(req)) {
+            res.statusCode = 403;
+            res.end('Forbidden: cross-origin requests are not allowed');
             return;
           }
 
@@ -380,30 +399,32 @@ function crishPreviewProxyPlugin(): Plugin {
           if (!/^https?:\/\//i.test(targetUrl)) {
             res.statusCode = 400;
             res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-            res.setHeader('Access-Control-Allow-Origin', '*');
             res.end('url parameter must be a valid http or https URL');
             return;
           }
 
           try {
             const fetchHeaders: Record<string, string> = {
-              'User-Agent':
-                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
+              'User-Agent': PROXY_USER_AGENT,
               Accept:
                 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
               'Accept-Language': 'en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7',
             };
 
-            const init: RequestInit & { dispatcher?: any } = {
+            // dispatcher 为 undici 专有属性（Node fetch 运行时支持，TS lib
+            // 类型不识别）——envDispatcher 未知类型经窄化断言传入
+            const init = {
               method: req.method,
               headers: fetchHeaders,
               redirect: 'follow',
               ...(envDispatcher ? { dispatcher: envDispatcher } : {}),
-            };
+            } as RequestInit;
 
             const upstream = await fetch(targetUrl, init);
 
-            // 清洗阻断头：剔除 XFO / CSP / 长度与压缩头（Node fetch 会自动解压）
+            // 清洗阻断头（T18：追加 set-cookie——目标站 cookie 不得写入
+            // 应用 origin 的 cookie jar）：剔除 XFO / CSP / 长度与压缩头
+            //（Node fetch 会自动解压）
             for (const [key, value] of upstream.headers.entries()) {
               const lower = key.toLowerCase();
               if (
@@ -411,6 +432,7 @@ function crishPreviewProxyPlugin(): Plugin {
                 lower === 'content-security-policy' ||
                 lower === 'content-security-policy-report-only' ||
                 lower === 'frame-options' ||
+                lower === 'set-cookie' ||
                 lower === 'content-encoding' ||
                 lower === 'content-length' ||
                 lower === 'transfer-encoding' ||
@@ -422,7 +444,6 @@ function crishPreviewProxyPlugin(): Plugin {
               res.setHeader(key, value);
             }
 
-            res.setHeader('Access-Control-Allow-Origin', '*');
             res.statusCode = upstream.status;
 
             const contentType = upstream.headers.get('content-type') || '';
@@ -432,184 +453,7 @@ function crishPreviewProxyPlugin(): Plugin {
               const finalUrl = upstream.url || targetUrl;
               const rawHtml = await upstream.text();
               const baseTag = `<base href="${finalUrl.replace(/"/g, '&quot;')}">`;
-              const bridgeScript = `<script id="__conex_preview_bridge">
-(function() {
-  if (window.__CONEX_PREVIEW_BRIDGE__) return;
-  window.__CONEX_PREVIEW_BRIDGE__ = true;
-
-  var inspectorActive = false;
-  var hoveredEl = null;
-
-  function toRect(el) {
-    var r = el.getBoundingClientRect();
-    return {
-      x: Math.round(r.x * 100) / 100,
-      y: Math.round(r.y * 100) / 100,
-      width: Math.round(r.width * 100) / 100,
-      height: Math.round(r.height * 100) / 100
-    };
-  }
-
-  function computeSelector(el) {
-    if (!el || el.nodeType !== 1) return '';
-    if (el.id) return '#' + el.id;
-    var tag = el.tagName.toLowerCase();
-    if (el.className && typeof el.className === 'string') {
-      var classes = el.className.trim().split(/\\s+/).filter(Boolean);
-      if (classes.length) return tag + '.' + classes.slice(0, 2).join('.');
-    }
-    return tag;
-  }
-
-  function getComputedStyles(el) {
-    var cs = window.getComputedStyle(el);
-    return {
-      display: cs.display || '',
-      position: cs.position || '',
-      color: cs.color || '',
-      backgroundColor: cs.backgroundColor || '',
-      fontSize: cs.fontSize || '',
-      margin: cs.margin || '',
-      padding: cs.padding || ''
-    };
-  }
-
-  window.addEventListener('message', function(e) {
-    try {
-      if (!e.data || e.data.source !== 'crish-preview-host') return;
-      if (e.data.type === 'INSPECT_TOGGLE') {
-        inspectorActive = Boolean(e.data.payload && e.data.payload.enabled);
-        if (!inspectorActive) {
-          hoveredEl = null;
-        }
-      }
-    } catch (_) {}
-  });
-
-  window.addEventListener('pointermove', function(e) {
-    if (!inspectorActive) return;
-    try {
-      var el = document.elementFromPoint(e.clientX, e.clientY);
-      if (!el || el === hoveredEl || el === document.documentElement || el === document.body) return;
-      hoveredEl = el;
-      var sel = computeSelector(el);
-      var rect = toRect(el);
-      if (window.parent && window.parent !== window) {
-        window.parent.postMessage({
-          source: 'crish-preview-inspector',
-          type: 'INSPECT_HOVER',
-          payload: {
-            tagName: el.tagName.toLowerCase(),
-            selector: sel,
-            rect: rect
-          }
-        }, '*');
-      }
-    } catch (_) {}
-  }, true);
-
-  window.addEventListener('keydown', function(e) {
-    if (!inspectorActive) return;
-    if (e.key === 'Escape') {
-      inspectorActive = false;
-      hoveredEl = null;
-      try {
-        if (window.parent && window.parent !== window) {
-          window.parent.postMessage({
-            source: 'crish-preview-inspector',
-            type: 'INSPECT_TOGGLE',
-            payload: { enabled: false }
-          }, '*');
-        }
-      } catch (_) {}
-    }
-  }, true);
-
-  try {
-    if (window.parent && window.parent !== window) {
-      window.parent.postMessage({
-        source: 'crish-preview-inspector',
-        type: 'INSPECT_READY',
-        payload: {}
-      }, '*');
-    }
-  } catch (_) {}
-
-  document.addEventListener('click', function(e) {
-    if (inspectorActive) {
-      e.preventDefault();
-      e.stopPropagation();
-      try {
-        var el = e.target;
-        if (!el || el.nodeType !== 1) return;
-        var tag = el.tagName.toLowerCase();
-        var id = el.id || null;
-        var classes = (typeof el.className === 'string' ? el.className.trim().split(/\\s+/).filter(Boolean) : []);
-        var attrs = {};
-        for (var i = 0; i < el.attributes.length; i++) {
-          var a = el.attributes[i];
-          attrs[a.name] = a.value;
-        }
-        var bestSelector = computeSelector(el);
-        var rect = toRect(el);
-        var computedStyles = getComputedStyles(el);
-        var outer = el.outerHTML || '';
-        var outerSnippet = outer.length > 500 ? outer.slice(0, 500) + '...' : outer;
-        var text = (el.textContent || '').trim().slice(0, 200);
-
-        if (window.parent && window.parent !== window) {
-          window.parent.postMessage({
-            source: 'crish-preview-inspector',
-            type: 'INSPECT_SELECT',
-            payload: {
-              tagName: tag,
-              id: id,
-              classes: classes,
-              attributes: attrs,
-              bestSelector: bestSelector,
-              xpath: '//' + tag,
-              rect: rect,
-              computedStyles: computedStyles,
-              outerHtmlSnippet: outerSnippet,
-              textContent: text
-            }
-          }, '*');
-        }
-      } catch (_) {}
-      return;
-    }
-
-    try {
-      var a = e.target;
-      while (a && a.tagName !== 'A') {
-        a = a.parentElement;
-      }
-      if (a && a.href && window.parent && window.parent !== window) {
-        var href = a.href;
-        if (href.startsWith('http://') || href.startsWith('https://')) {
-          e.preventDefault();
-          window.parent.postMessage({ type: 'preview:navigate', href: href }, '*');
-        }
-      }
-    } catch (_) {}
-  }, true);
-  document.addEventListener('submit', function(e) {
-    try {
-      var form = e.target;
-      if (form && form.tagName === 'FORM' && window.parent && window.parent !== window) {
-        var action = form.action || window.location.href;
-        if ((form.method || 'GET').toUpperCase() === 'GET') {
-          var formData = new FormData(form);
-          var params = new URLSearchParams(formData);
-          var fullUrl = action + (action.indexOf('?') === -1 ? '?' : '&') + params.toString();
-          e.preventDefault();
-          window.parent.postMessage({ type: 'preview:navigate', href: fullUrl }, '*');
-        }
-      }
-    } catch (_) {}
-  }, true);
-})();
-</script>`;
+              const bridgeScript = PREVIEW_BRIDGE_SCRIPT;
               const injection = `${baseTag}\n${bridgeScript}`;
 
               let injectedHtml: string;
@@ -649,7 +493,9 @@ function crishPreviewProxyPlugin(): Plugin {
               res.end(injectedHtml);
             } else {
               if (upstream.body) {
-                const stream = Readable.fromWeb(upstream.body as any);
+                const stream = Readable.fromWeb(
+                  upstream.body as unknown as Parameters<typeof Readable.fromWeb>[0]
+                );
                 stream.on('error', () => {
                   if (!res.headersSent) {
                     res.statusCode = 502;
@@ -666,7 +512,6 @@ function crishPreviewProxyPlugin(): Plugin {
             if (!res.headersSent) {
               res.statusCode = 502;
               res.setHeader('Content-Type', 'text/html; charset=utf-8');
-              res.setHeader('Access-Control-Allow-Origin', '*');
               res.end(
                 `<!DOCTYPE html><html><head><meta charset="utf-8"><title>代理访问异常</title></head><body style="font-family:sans-serif;padding:2rem;color:#444;"><h3>无法加载外部网站</h3><p>${msg}</p><p>URL: <code>${targetUrl}</code></p></body></html>`
               );

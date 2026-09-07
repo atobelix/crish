@@ -35,6 +35,8 @@
 | `npm run check:conflict-markers` | 冲突标记残留扫描 |
 | `npm run check:css-encoding` | CSS 编码契约 |
 | `npm run check:convergence` | 前端收敛检查 |
+| `npm run check:input-guard` | 输入框四态防倒退 + binary-tree 条带动效单轨守卫（幽灵 token / 布局属性 keyframes 拦截） |
+| `npm run check:ui-layer` | 前端分层解耦检查 |
 | `npm run check:swallowed-errors-frontend` | 前端吞错审计 |
 
 ## E2E 与专项

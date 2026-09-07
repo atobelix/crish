@@ -3,7 +3,7 @@ import {
   clampViewportX,
   computeDecimatedTicks,
   formatCost,
-  formatPercentage,
+  formatPercentValue,
   formatTokens,
   getAreaSplinePath,
   getModelColor,
@@ -41,11 +41,11 @@ describe('usageSpline 纯数学与几何插值库', () => {
       expect(normalizeModelRatio(150)).toBe(1.0);
     });
 
-    it('formatPercentage 百分比格式化防二次放大', () => {
-      expect(formatPercentage(0)).toBe('0.0%');
-      expect(formatPercentage(0.5)).toBe('0.5%'); // 0.5% 小模型
-      expect(formatPercentage(100)).toBe('100.0%');
-      expect(formatPercentage(35.73)).toBe('35.7%'); // 修复 3573.3% 暴涨 Bug
+    it('formatPercentValue 百分数格式化（入参 0~100，T23 定语义）', () => {
+      expect(formatPercentValue(0)).toBe('0.0%');
+      expect(formatPercentValue(0.5)).toBe('0.5%'); // 0.5% 小模型
+      expect(formatPercentValue(100)).toBe('100.0%');
+      expect(formatPercentValue(35.73)).toBe('35.7%'); // 修复 3573.3% 暴涨 Bug
     });
 
     it('getModelColor 正确映射语义配色且避免撞色与索引偏置错误', () => {

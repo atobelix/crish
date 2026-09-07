@@ -148,12 +148,12 @@ export const EditablePriceRow: React.FC<EditablePriceRowProps> = ({
             </Button>
           )}
           <IconButton
+            aria-label={`删除 ${row.model}`}
             variant="ghost"
             size="sm"
-            icon={<Lucide.Trash2 size={14} />}
             tooltip="删除该模型单价"
-            aria-label={`删除 ${row.model}`}
             onClick={onDelete}
+            icon={<Lucide.Trash2 size={14} />}
           />
         </div>
       </div>

@@ -35,7 +35,6 @@ const BUILTIN_IDS = [
   'diff',
   'runtime',
   'agent',
-  'browser',
   'flow-dag',
   'file-viewer',
 ] as const;
@@ -180,7 +179,7 @@ describe('08 包边界（绿 ≠ 打开完成 ≠ 关 EL ≠ 独立软件已拆�
     expect(desktop.name).toBe('@crish/crish-desktop');
   });
 
-  it('registerBuiltInViews 源码：11 槽、无 registerView(note)、名单不含 note id', () => {
+  it('registerBuiltInViews 源码：10 槽、无 registerView(note)、名单不含 note id', () => {
     const src = readFileSync(
       join(
         REPO_ROOT,
@@ -192,18 +191,18 @@ describe('08 包边界（绿 ≠ 打开完成 ≠ 关 EL ≠ 独立软件已拆�
     expect(src).not.toMatch(/id:\s*['"]note['"]/);
     expect(src).not.toMatch(/['"]note['"]\s*:/);
     expect(src).not.toMatch(/factories\s*(?:\[\s*['"]note['"]\s*\]|\.note\b)/);
-    expect(src).not.toMatch(/第\s*12|12\s*个内置|12\s*含\s*note/);
-    expect(src).toMatch(/全部 11 个/);
+    expect(src).not.toMatch(/第\s*11|11\s*个内置|11\s*含\s*note/);
+    expect(src).toMatch(/全部 10 个/);
 
     const ids = [...src.matchAll(/^\s*id:\s*['"]([^'"]+)['"]/gm)].map(
       (m) => m[1]
     );
     expect(ids).toEqual([...BUILTIN_IDS]);
-    expect(ids).toHaveLength(11);
+    expect(ids).toHaveLength(10);
     expect(ids).not.toContain('note');
   });
 
-  it('builtinViewFactories 键仍是 11 内置；登记器不焊激活 / 死 CTA / 裸 IPC', () => {
+  it('builtinViewFactories 键仍是 10 内置；登记器不焊激活 / 死 CTA / 裸 IPC', () => {
     const main = readFileSync(
       join(REPO_ROOT, 'apps/crish-desktop/src/main.tsx'),
       'utf8'

@@ -2,14 +2,9 @@ import { useToast } from '../../services/toast/ToastContext';
 import React from 'react';
 import * as Lucide from 'lucide-react';
 import { revealSkillPath, type DesktopSkill, type SkillActivation } from '../../api/skillsApi';
-import { Button, SegmentedControl, Tooltip } from '../ui';
+import { Button, MarkdownDocumentView, SegmentedControl, Tooltip } from '../ui';
 import styles from './SkillsSettingsTab.module.css';
 import { ACTIVATION_OPTIONS, scopeGroupLabel } from './useSkillsSettingsState';
-import {
-  normalizeCodeBlockIndent,
-  rematerializeMarkdownHtml,
-} from '../../api/codeBlockIndent';
-import { useSettingsField } from '../../store/storeAccess';
 
 interface SkillDetailPreviewProps {
   selected: DesktopSkill | null;
@@ -22,7 +17,7 @@ interface SkillDetailPreviewProps {
   setActivation: (skill: DesktopSkill, activation: SkillActivation) => Promise<void>;
   showRaw: boolean;
   setShowRaw: React.Dispatch<React.SetStateAction<boolean>>;
-  previewHtml: string;
+  previewHtml?: string;
 }
 
 export const SkillDetailPreview: React.FC<SkillDetailPreviewProps> = ({
@@ -36,13 +31,12 @@ export const SkillDetailPreview: React.FC<SkillDetailPreviewProps> = ({
   setActivation,
   showRaw,
   setShowRaw,
-  previewHtml,
+  previewHtml: _previewHtml,
 }) => {
   const { showToast } = useToast();
-  const codeIndent = useSettingsField((s) =>
-    normalizeCodeBlockIndent(s.appSettings?.markdown?.codeBlockIndent)
-  );
-  const previewHtmlIndented = rematerializeMarkdownHtml(previewHtml, codeIndent);
+  const skillContent = selected
+    ? `# ${selected.name}\n\n> ${selected.description}\n\n${selected.content || '_（无正文）_'}`
+    : '';
   return (
     <section className={`${styles.skillsDetail} ${styles.skillsDetailCoverContent} skills-detail`} aria-label="技能预览">
       {!selected ? (
@@ -153,10 +147,16 @@ export const SkillDetailPreview: React.FC<SkillDetailPreviewProps> = ({
             </pre>
           ) : (
             <div
-              className={`${styles.skillsPreview} ${styles.skillsPreviewCoverContent} skills-preview md-rendered msg-assistant-text`}
-              dangerouslySetInnerHTML={{ __html: previewHtmlIndented }}
+              className={`${styles.skillsPreview} ${styles.skillsPreviewCoverContent} skills-preview`}
               aria-label="技能预览"
-            />
+            >
+              <MarkdownDocumentView
+                content={skillContent}
+                filePath={selected.filePath}
+                variant="document"
+                emptyPlaceholder="暂无技能正文"
+              />
+            </div>
           )}
         </>
       )}

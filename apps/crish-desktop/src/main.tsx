@@ -54,7 +54,12 @@ const builtinViewFactories: ViewFactoryMap = {
   preview: () =>
     lazy(() =>
       import('./components/workspace/PreviewCard').then((m) => ({
-        default: () => <m.PreviewCard />,
+        // T20：透传 resolver 的 params.target——`preview:<url>` 带目标打开
+        default: (ctx: ViewRenderContext) => (
+          <m.PreviewCard
+            initialTarget={(ctx?.params?.target as string | undefined) ?? null}
+          />
+        ),
       }))
     ),
   overview: () =>

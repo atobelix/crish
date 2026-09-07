@@ -2,7 +2,7 @@
  * 笔记叶工厂（核心装配宿主）：Master-Detail 响应式装配 + 多笔记状态机闭环。
  * 宿主保持 flex-direction: column，内部嵌套水平行容器 workspaceRow：抽屉在左，主面板在右且绑定 key={activeDocId}。
  */
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createProductStrictHydrateTransport } from '../../components/note-paper/hydrateProjection';
 import { NotePaperStrictPanel } from '../../components/note-paper/NotePaperStrictPanel';
 import { NoteSidebarDrawer } from '../../components/note-paper/NoteSidebarDrawer';
@@ -48,10 +48,23 @@ export function NoteLeafHost(ctx: ViewRenderContext): React.ReactElement {
 
   const resolution = resolveNotePaperDoc(ctx, recent);
 
+  // 面板待落盘冲刷器注册（T8）：面板持有 pending 差量，宿主把冲刷器交给文档
+  // 管理器，切换 / 新建文档前先冲刷，杜绝编辑丢失。
+  const panelFlushRef = useRef<(() => Promise<void>) | null>(null);
+  const registerPendingFlush = useCallback(
+    (flush: (() => Promise<void>) | null) => {
+      panelFlushRef.current = flush;
+    },
+    []
+  );
+  const flushPendingDraft = useCallback(async (): Promise<void> => {
+    await panelFlushRef.current?.();
+  }, []);
+
   // 接入多笔记综合管理状态机（防乱序、脏刷盘、冷启动自愈）
   const docManager = useNoteDocumentManager({
-    wsId: (ctx as { workspaceId?: string }).workspaceId || 'default',
     initialDocId: explicit || resolution.docId,
+    flushPendingDraft,
   });
 
   const activeDocId = docManager.activeDocId || resolution.docId;
@@ -135,6 +148,7 @@ export function NoteLeafHost(ctx: ViewRenderContext): React.ReactElement {
             onCreateDoc={() => void docManager.createDocument()}
             onRenameTitle={(title) => void docManager.renameDocument(activeDocId, title)}
             applyOps={paper.applyOps}
+            registerPendingFlush={registerPendingFlush}
             onBlockChange={(_id, _text) => {
               docManager.touchDocument(activeDocId);
             }}

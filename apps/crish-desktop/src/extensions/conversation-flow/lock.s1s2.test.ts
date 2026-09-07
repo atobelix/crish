@@ -34,7 +34,6 @@ const BUILTIN_IDS = [
   'diff',
   'runtime',
   'agent',
-  'browser',
   'flow-dag',
   'file-viewer',
 ] as const;
@@ -140,8 +139,6 @@ function makeState(overrides: Record<string, unknown> = {}) {
     engineHint: null,
     needsKeySetup: false,
     onEmptySurface: false,
-    showScrollToBottom: false,
-    scrollToBottom: vi.fn(),
     inPlanMode: false,
     planApproved: false,
     setPlanApproved: vi.fn(),
@@ -260,17 +257,17 @@ describe('S1/S2 契约锁', () => {
     expect(guarded?.[1]).toMatch(/activateConversationFlow\s*\(/);
   });
 
-  it('内置 view 仍 11 个，无 note / conversation-flow 第 12 内置', () => {
+  it('内置 view 仍 10 个，无 note / conversation-flow 第 11 内置', () => {
     const registrar = readFileSync(
       join(DESKTOP_SRC, 'services/view-registry/registerBuiltInViews.tsx'),
       'utf8'
     );
     const ids = registrarIds(registrar);
     expect(ids).toEqual([...BUILTIN_IDS]);
-    expect(ids).toHaveLength(11);
+    expect(ids).toHaveLength(10);
     expect(ids).not.toContain('note');
     expect(ids).not.toContain('conversation-flow');
-    expect(registrar).toMatch(/全部 11 个/);
+    expect(registrar).toMatch(/全部 10 个/);
     expect(registrar).not.toMatch(/id:\s*['"]note['"]/);
     expect(registrar).not.toMatch(/id:\s*['"]conversation-flow['"]/);
 

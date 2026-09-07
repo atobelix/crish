@@ -24,6 +24,10 @@ const STRIP = join(
   DIR,
   '../../components/binary-tree/LeafToolTabStrip.tsx'
 );
+const TOOL_BTN = join(
+  DIR,
+  '../../components/binary-tree/ToolTabAddButton.tsx'
+);
 const TREE_LEAF = join(
   DIR,
   '../../components/binary-tree/TreeLeafPanel.tsx'
@@ -43,6 +47,7 @@ describe('07 · 坞头 chat-open-note 源码钉（≠ 真壳到达绿 · ≠ 打
   const toolsSrc = readUtf8(TOOLS);
   const chromeSrc = readUtf8(CHROME);
   const stripSrc = readUtf8(STRIP);
+  const toolBtnSrc = readUtf8(TOOL_BTN);
   const treeSrc = readUtf8(TREE_LEAF);
   const openToolSrc = readUtf8(OPEN_TOOL);
   const arriveSrc = readUtf8(ARRIVE);
@@ -80,7 +85,7 @@ describe('07 · 坞头 chat-open-note 源码钉（≠ 真壳到达绿 · ≠ 打
 
   it('打开走 openToolInSession + note，不点 open-note-paper-strict', () => {
     expect(stripSrc).toMatch(/openToolInSession\(\s*sessionId,\s*pid\s*\)/);
-    expect(stripSrc).toMatch(/openPanel\(pid\)/);
+    expect(toolBtnSrc).toMatch(/openPanel\(pid\)/);
     expect(chromeSrc).toMatch(/openToolInSession\(/);
     expect(openToolSrc).toMatch(
       /export function openToolInSession\(\s*sessionId:\s*string,\s*panelId:\s*string/

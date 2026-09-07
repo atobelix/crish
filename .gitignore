@@ -397,6 +397,8 @@ apps/agent-workbench/src-tauri/gen/*
 !scripts/ensure-dev-ports.mjs
 # 输入框四态体系刚性防倒退门禁必须入库
 !scripts/check-input-guardrails.mjs
+# Markdown 样式与 Token 合规门禁必须入库
+!scripts/check-markdown-style-compliance.mjs
 # markdown-editor 测试资产放行（本区 *.txt/*.json/*.mjs 忽略规则在 267 行白名单之后，须在此显式放行）
 !reference/markdown-editor/tests/cmspec/spec.txt
 !reference/markdown-editor/tests/cmspec/examples.json

@@ -77,6 +77,7 @@ export type {
   CardState,
   CardGroupState,
   ColumnState,
+  ContextStateMetadata,
   DiffChange,
   FileDiff,
   MessageContextInjection,

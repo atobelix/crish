@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import type { UsageModelBreakdownItem } from '../../../api/usageContracts';
 import {
-  formatPercentage,
+  formatPercentValue,
   formatTokens,
   getModelColor,
   normalizeModelRatio,
@@ -257,7 +257,7 @@ export const ModelDistributionSection: React.FC<ModelDistributionSectionProps> =
                         {formatTokens(item.tokens)}
                       </span>
                       <span className={styles.capsulePctTag}>
-                        {formatPercentage(item.rawRatio)}
+                        {formatPercentValue(item.rawRatio)}
                       </span>
                     </div>
                   </div>

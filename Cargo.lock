@@ -1478,6 +1478,7 @@ dependencies = [
  "conex-search",
  "conex-telemetry",
  "conex-types",
+ "conex-workspace-store",
  "dirs",
  "encoding_rs",
  "fs2",
@@ -1486,6 +1487,7 @@ dependencies = [
  "hex",
  "libc",
  "memmap2",
+ "miniz_oxide 0.8.9",
  "orchestrator",
  "portable-pty",
  "rcgen",
@@ -1515,6 +1517,7 @@ dependencies = [
  "url",
  "windows-sys 0.61.2",
  "x509-parser",
+ "zeroize",
 ]
 
 [[package]]
