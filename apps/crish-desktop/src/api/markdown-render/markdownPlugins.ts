@@ -23,8 +23,12 @@ import { processListBlocks } from './markdownListBlocks';
 import { extractCodeFences } from './markdownCodeFence';
 
 // re-export 子模块公共符号（保持消费方 import 路径不变）
-export { applyInline } from './markdownInlineFormat';
-export { visualIndent } from './markdownInlineFormat';
+export {
+  applyInline,
+  visualIndent,
+  GFM_EMOJI_MAP,
+  translateGfmEmoji,
+} from './markdownInlineFormat';
 export {
   matchListItem,
   isIndentedContinuation,
@@ -51,7 +55,11 @@ export function parseMarkdownToHtmlUncached(raw: string): string {
   );
   if (!text) return '';
 
-  text = text.replace(/^[ \t]*([-*_])\1{2,}[ \t]*$/gm, '');
+  // 若输入仅由空行与水平分割线组成（如 "---" / "***" / "___"），按 nullish-like blank 返回空
+  if (!text.replace(/^[ \t]*([-*_])(?:[ \t]*\1){2,}[ \t]*$/gm, '').trim()) {
+    return '';
+  }
+
   text = text.replace(/\n{3,}/g, '\n\n');
 
   const extractedFences = extractCodeFences(text);
@@ -61,6 +69,12 @@ export function parseMarkdownToHtmlUncached(raw: string): string {
   const extracted = extractTables(text);
   text = extracted.text;
   const tables = extracted.tables;
+
+  // 恢复标准 <hr class="md-hr" />：在代码块与表格保护之后转换，避免误伤
+  text = text.replace(
+    /^[ \t]*([-*_])(?:[ \t]*\1){2,}[ \t]*$/gm,
+    '\n\n<hr class="md-hr" />\n\n'
+  );
 
   const inlines: string[] = [];
   const pushInline = (htmlFrag: string) => {
@@ -132,6 +146,7 @@ export function parseMarkdownToHtmlUncached(raw: string): string {
       const t = line.trim();
       if (
         t.startsWith('<img ') ||
+        t.startsWith('<hr') ||
         t.startsWith('%%FENCE') ||
         t.startsWith('%%TABLE') ||
         t.startsWith('%%INLINE')
@@ -150,7 +165,6 @@ export function parseMarkdownToHtmlUncached(raw: string): string {
     return `<h${level} class="md-h${level}">${content}</h${level}>`;
   });
 
-  html = html.replace(/^---+$/gm, '');
   html = processListBlocks(html);
 
   html = html.replace(/%%FENCE(\d+)%%/g, (_, i) => fences[Number(i)] || '');
@@ -197,6 +211,7 @@ export function parseMarkdownToHtmlUncached(raw: string): string {
       const inner = t.replace(/\n/g, '<br />');
       return `<p class="md-p">${inner}</p>`;
     })
+    .filter(Boolean)
     .join('\n');
 
   return html;

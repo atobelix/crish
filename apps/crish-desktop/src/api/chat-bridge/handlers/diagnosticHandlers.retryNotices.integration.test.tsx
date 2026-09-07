@@ -63,8 +63,6 @@ function ribbonProps(activeSessionId: string | null) {
       localHasKey: false,
       onOpenModelSettings: () => {},
       onOpenModelDropdown: () => {},
-      showScrollToBottom: false,
-      onScrollToBottom: () => {},
       runNotice: null,
       onDismissRunNotice: () => {},
     },

@@ -53,17 +53,17 @@ describe('Zero-FOUC & Startup Theme SSOT Test Suite', () => {
     expect(resultTheme).toBe('dark');
     expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
     expect(document.documentElement.classList.contains('theme-dark')).toBe(true);
-    expect(document.documentElement.style.getPropertyValue('--bg-primary')).toBe('#1b1b1b');
-    expect(document.documentElement.style.getPropertyValue('--bg-secondary')).toBe('#242424');
-    expect(document.documentElement.style.getPropertyValue('--bg-tertiary')).toBe('#1e1e1e');
+    expect(document.documentElement.style.getPropertyValue('--bg-primary')).toBe('#1f1f1f');
+    expect(document.documentElement.style.getPropertyValue('--bg-secondary')).toBe('#191919');
+    expect(document.documentElement.style.getPropertyValue('--bg-tertiary')).toBe('#161616');
   });
 
   it('SSOT-04: dark-cozy 与 warm-gray 官方预设满足 WCAG 单真源契约', () => {
     const darkCozy = SKIN_PRESETS['dark-cozy'];
     expect(darkCozy).toBeDefined();
-    expect(darkCozy.bgPrimary).toBe('#1b1b1b');
-    expect(darkCozy.bgSecondary).toBe('#242424');
-    expect(darkCozy.bgTertiary).toBe('#1e1e1e');
+    expect(darkCozy.bgPrimary).toBe('#1f1f1f');
+    expect(darkCozy.bgSecondary).toBe('#191919');
+    expect(darkCozy.bgTertiary).toBe('#161616');
     expect(darkCozy.textPrimary).toBe('#dddddd');
 
     const warmGray = SKIN_PRESETS['warm-gray'];

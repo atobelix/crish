@@ -56,7 +56,10 @@ export async function createStreamSession(
 
   try {
     const ready = await transport.waitUntilConnected(1_500);
-    if (isRunDead(state)) return;
+    if (isRunDead(state)) {
+      cleanupStreamState(state);
+      return;
+    }
     if (!ready || !transport.isReady()) {
       logInternalError(
         'stream-start-refuse-direct',
@@ -71,6 +74,10 @@ export async function createStreamSession(
       return;
     }
 
+    if (isRunDead(state)) {
+      cleanupStreamState(state);
+      return;
+    }
     state.unsub = transport.onMessage(onMessage);
     callbacks.onThought('正在处理…');
 
@@ -155,13 +162,57 @@ export async function createStreamSession(
       /* swallow-ok: 历史加载失败不阻塞 run */
     }
 
-    if (isRunDead(state)) return;
+    if (isRunDead(state)) {
+      cleanupStreamState(state);
+      return;
+    }
 
     // I1-α②：取走暂存 context-state（会话寻址——仅消费绑定本会话或未绑定
-    // 的暂存，跨会话串扰根除）→ run-task 下发 → 队列去重注入；取走即清空
+    // 的暂存，跨会话串扰根除）→ run-task 下发 → 队列去重注入；取走即清空。
+    // 纪律：消息发送前无论变动几次均不显示不注入；仅在正式发消息时顺带携带注入
     const contextState = (
       await import('../provider-profiles/contextStatePending')
     ).takePendingContextState(safeSessionId);
+
+    if (contextState) {
+      try {
+        const { contextInjectionDispatcher } = await import(
+          '../contextInjectionDispatcher'
+        );
+        const { readContextStateSnapshot } = await import(
+          '../provider-profiles/contextStatePending'
+        );
+        const snapshot = readContextStateSnapshot();
+        const rawText = typeof contextState === 'string' ? contextState : contextState?.text || '';
+        const model = (typeof contextState === 'object' && contextState?.model) || snapshot.model || undefined;
+        const profile = (typeof contextState === 'object' && contextState?.profile) || snapshot.profile || undefined;
+        const permission = (typeof contextState === 'object' && contextState?.permission) || snapshot.permission || undefined;
+        const thinking = (typeof contextState === 'object' && contextState?.thinking) || snapshot.thinking || undefined;
+
+        contextInjectionDispatcher.inject(safeSessionId, {
+          kind: 'workspace_env',
+          title: '上下文状态切换',
+          summary: rawText,
+          status: 'injected',
+          source: 'system_event',
+          content: rawText,
+          metadata: {
+            mode: 'context-state',
+            ...(model ? { model } : {}),
+            ...(profile ? { profile } : {}),
+            ...(permission ? { permission } : {}),
+            ...(thinking ? { thinking } : {}),
+          },
+        });
+      } catch {
+        /* swallow-ok: 提示卡片注入失败不阻断 run 核心调用 */
+      }
+    }
+
+    if (isRunDead(state)) {
+      cleanupStreamState(state);
+      return;
+    }
 
     await startRunTask(transport, {
       runId,
@@ -171,7 +222,7 @@ export async function createStreamSession(
       ...(cwd ? { cwd } : {}),
       ...(mcpDisabledTools ? { mcpDisabledTools } : {}),
       ...(reasoningEffort ? { reasoningEffort } : {}),
-      ...(contextState ? { contextState } : {}),
+      ...(contextState ? { contextState: contextState.text } : {}),
       ...(options?.content?.length ? { content: options.content } : {}),
       ...(hasImages ? { hasImages: true } : {}),
       ...(options?.attachments?.length

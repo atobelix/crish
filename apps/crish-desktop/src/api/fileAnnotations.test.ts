@@ -9,17 +9,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   addPendingFileAnnotation,
+  removePendingFileAnnotation,
   countPendingFileAnnotations,
   formatAnnotationsForModel,
   resetFileAnnotationsForTest,
   takePendingFileAnnotations,
 } from './fileAnnotations';
-
-vi.mock('./contextInjectionDispatcher', () => ({
-  contextInjectionDispatcher: {
-    inject: vi.fn(() => 'inj-test'),
-  },
-}));
+import { sessionRuntimeRegistry } from './SessionRuntimeRegistry';
 
 const ann = (text: string) => ({
   path: 'C:/repo/src/a.ts',
@@ -27,9 +23,11 @@ const ann = (text: string) => ({
   text,
 });
 
-describe('fileAnnotations 会话隔离', () => {
+describe('fileAnnotations 会话隔离与附件协同', () => {
   beforeEach(() => {
     resetFileAnnotationsForTest();
+    sessionRuntimeRegistry.remove('sess-a');
+    sessionRuntimeRegistry.remove('sess-b');
     vi.clearAllMocks();
   });
 
@@ -61,25 +59,24 @@ describe('fileAnnotations 会话隔离', () => {
     warn.mockRestore();
   });
 
-  it('添加瞬间派发 file_context 可见卡片（一次注入，内容为 wire 文本）', async () => {
-    const { contextInjectionDispatcher } = await import(
-      './contextInjectionDispatcher'
-    );
-    const inject = contextInjectionDispatcher.inject as ReturnType<
-      typeof vi.fn
-    >;
+  it('添加瞬间挂载至会话附件区（作为附件展示供用户自由删除）', () => {
+    const created = addPendingFileAnnotation(ann('批注内容'), {
+      targetSessionId: 'sess-a',
+    });
+    expect(created).not.toBeNull();
 
-    addPendingFileAnnotation(ann('批注内容'), { targetSessionId: 'sess-a' });
+    // 验证同步写入 sessionRuntimeRegistry attachments
+    const atts = sessionRuntimeRegistry.get('sess-a').attachments;
+    expect(atts).toHaveLength(1);
+    expect(atts[0]?.name).toContain('批注 · a.ts');
+    expect(atts[0]?.annotation?.id).toBe(created!.id);
+    expect(atts[0]?.annotation?.comment).toBe('批注内容');
 
-    expect(inject).toHaveBeenCalledTimes(1);
-    const payload = inject.mock.calls[0]?.[1] as {
-      kind: string;
-      content: string;
-      targetPaths?: string[];
-    };
-    expect(payload.kind).toBe('file_context');
-    expect(payload.content).toContain('批注内容');
-    expect(payload.targetPaths).toEqual(['C:/repo/src/a.ts']);
+    // 用户在附件区删除批注
+    const removed = removePendingFileAnnotation(created!.id, 'sess-a');
+    expect(removed).toBe(true);
+    expect(countPendingFileAnnotations('sess-a')).toBe(0);
+    expect(sessionRuntimeRegistry.get('sess-a').attachments).toHaveLength(0);
   });
 
   it('formatAnnotationsForModel 单一来源：空列表返回空串', () => {

@@ -428,7 +428,6 @@ export async function noteDocumentCreate(
 ): Promise<NoteDocumentCreateResult> {
   const res = await invokeTyped<NoteDocumentCreateResult>('note_document_create', {
     title: params.title,
-    initialMarkdown: params.initialMarkdown,
   });
   if (res.status === 'ok') return res.data;
   const reason = res.status === 'error' ? res.message : 'command_missing';

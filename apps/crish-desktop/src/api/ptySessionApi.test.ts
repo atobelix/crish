@@ -366,4 +366,35 @@ describe('PTY Output History Ring Buffer', () => {
     expect(history.length).toBe(1);
     expect(history[0].length).toBe(PTY_HISTORY_MAX_BYTES);
   });
+
+  it('trims oversized CJK chunk to UTF-8 byte limit without over-retaining (T28)', () => {
+    // CJK 每码点 3 UTF-8 字节：300KB 的 UTF-8 ≈ 10 万码点（UTF-16 仅 10 万
+    // 码元）。旧实现按 UTF-16 slice(-262144) 会整段保留（约 300KB UTF-8），
+    // 修正后必须真正裁到 ≤ 256KB 字节。
+    const cjk = '中'.repeat(100 * 1024); // ≈ 307200 UTF-8 字节
+    recordPtyOutputHistory('pty-cjk-huge', cjk);
+
+    const history = getPtyOutputHistory('pty-cjk-huge');
+    expect(history.length).toBe(1);
+    const bytes = new TextEncoder().encode(history[0]).length;
+    expect(bytes).toBeLessThanOrEqual(PTY_HISTORY_MAX_BYTES);
+    expect(bytes).toBeGreaterThan(PTY_HISTORY_MAX_BYTES - 4); // 恰好贴上限
+    expect(history[0].charCodeAt(0)).toBe('中'.charCodeAt(0));
+  });
+
+  it('never splits surrogate pairs when trimming astral content (T28)', () => {
+    // emoji（U+1F600）每码点 4 字节 + 前置 ASCII：验证截断起点不落在代理对中间
+    const pad = 'x'.repeat(PTY_HISTORY_MAX_BYTES - 3);
+    const chunk = pad + '👍'.repeat(100); // 超限且尾部全为 4 字节码点
+    recordPtyOutputHistory('pty-emoji-huge', chunk);
+
+    const history = getPtyOutputHistory('pty-emoji-huge');
+    const trimmed = history[0];
+    const bytes = new TextEncoder().encode(trimmed).length;
+    expect(bytes).toBeLessThanOrEqual(PTY_HISTORY_MAX_BYTES);
+    // 首字符不得是孤立低位代理（0xDC00-0xDFFF）
+    const first = trimmed.charCodeAt(0);
+    const isLoneLowSurrogate = first >= 0xdc00 && first <= 0xdfff;
+    expect(isLoneLowSurrogate).toBe(false);
+  });
 });

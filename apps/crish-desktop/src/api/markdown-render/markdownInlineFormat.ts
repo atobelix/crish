@@ -17,19 +17,102 @@ export function visualIndent(ws: string): number {
   return n;
 }
 
+/** GFM Emoji 字典单一真相源（与 Rust lookup_gfm_emoji 100% 保持镜像同步） */
+export const GFM_EMOJI_MAP: Readonly<Record<string, string>> = Object.freeze({
+  // 状态与检查（工程高频）
+  white_check_mark: '✅',
+  heavy_check_mark: '✔️',
+  check: '✓',
+  x: '❌',
+  negative_squared_cross_mark: '❎',
+  ballot_box_with_check: '☑️',
+  warning: '⚠️',
+  rotating_light: '🚨',
+  stop_sign: '🛑',
+  exclamation: '❗',
+  question: '❓',
+  bulb: '💡',
+  bug: '🐛',
+  wrench: '🔧',
+  gear: '⚙️',
+  package: '📦',
+  rocket: '🚀',
+  tada: '🎉',
+  sparkles: '✨',
+  fire: '🔥',
+  zap: '⚡',
+  memo: '📝',
+  pencil: '📝',
+  pencil2: '✏️',
+  bookmark: '🔖',
+  link: '🔗',
+  lock: '🔒',
+  unlock: '🔓',
+  info: 'ℹ️',
+
+  // 反馈与评审
+  '+1': '👍',
+  thumbsup: '👍',
+  '-1': '👎',
+  thumbsdown: '👎',
+  heart: '❤️',
+  star: '⭐',
+  star2: '🌟',
+  '100': '💯',
+  eyes: '👀',
+  speech_balloon: '💬',
+
+  // 状态圆圈指示器
+  white_circle: '⚪',
+  black_circle: '⚫',
+  red_circle: '🔴',
+  blue_circle: '🔵',
+  large_blue_circle: '🔵',
+  green_circle: '🟢',
+  yellow_circle: '🟡',
+
+  // 箭头与方向
+  arrow_right: '➡️',
+  arrow_left: '⬅️',
+  arrow_up: '⬆️',
+  arrow_down: '⬇️',
+  soon: '🔜',
+  top: '🔝',
+
+  // 设备与环境
+  computer: '💻',
+  hourglass: '⌛',
+  hourglass_flowing_sand: '⏳',
+  apple: '🍎',
+  penguin: '🐧',
+});
+
+const GFM_EMOJI_RE = /:([a-z0-9_+-]{1,32}):/g;
+
+/** 将文本中的 GFM Emoji 短代码转义为 Unicode 字符 */
+export function translateGfmEmoji(text: string): string {
+  if (!text || !text.includes(':')) return text;
+  return text.replace(GFM_EMOJI_RE, (match, key: string) => GFM_EMOJI_MAP[key] ?? match);
+}
+
 /**
- * 纯文本段行内格式：code 占位保护后再 bold/italic，最后 CJK wbr。
+ * 纯文本段行内格式：code 占位保护后再 GFM Emoji、bold/italic，最后 CJK wbr。
  * 不处理 HTML 标签；由 applyInline 按标签外文本切分调用。
  */
 function formatMarkdownTextSegment(text: string): string {
   if (!text) return '';
   const codes: string[] = [];
+  // 1. 保护行内代码（确保 `code` 内的文本不被误转义）
   let s = text.replace(/`([^`\n]+)`/g, (_, code: string) => {
     const i = codes.length;
     codes.push(`<code class="md-inline-code">${code}</code>`);
     return `%%CODE${i}%%`;
   });
-  // 粗体先于斜体；斜体仅同行、非空，避免未闭合 * 吞掉整段
+
+  // 2. GFM Emoji 短代码转义（行内代码已保护为 %%CODE%%）
+  s = translateGfmEmoji(s);
+
+  // 3. 粗体先于斜体；斜体仅同行、非空，避免未闭合 * 吞掉整段
   s = s.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
   // 斜体：开口 * 后不能是空白（否则与「* 列表项」冲突，会吞掉列表标记并留下残片）
   s = s.replace(
@@ -42,7 +125,11 @@ function formatMarkdownTextSegment(text: string): string {
       return `<em>${inner}</em>`;
     }
   );
+
+  // 4. 还原行内代码
   s = s.replace(/%%CODE(\d+)%%/g, (_, i) => codes[Number(i)] || '');
+
+  // 5. CJK 智能断字
   return wrapCjkTextSegment(s);
 }
 

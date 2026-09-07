@@ -119,6 +119,22 @@ export function buildHistoryMessages(
     )
       continue;
     if (excludeId && msg.id === excludeId) continue;
+    // 纯状态载体或无内容 assistant 消息不送入 LLM 历史，防止提供商 400 校验拦截
+    if (
+      msg.sender === 'assistant' &&
+      !(msg.text || '').trim() &&
+      !(msg.thinking || '').trim() &&
+      (!msg.toolCalls || msg.toolCalls.length === 0)
+    ) {
+      continue;
+    }
+    // 空文本 user 消息不送入 LLM 历史，防止模型服务 400 Bad Request
+    if (
+      msg.sender === 'user' &&
+      !(msg.text || '').trim()
+    ) {
+      continue;
+    }
     const entry: HistoryMessage = {
       id: msg.id,
       sender: msg.sender,

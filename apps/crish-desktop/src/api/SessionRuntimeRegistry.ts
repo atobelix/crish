@@ -16,6 +16,7 @@ import type { QueuedMessage } from '../hooks/chat-stream/types';
 export interface Attachment {
   id: string;
   name: string;
+  path?: string;
   mime?: string;
   dataUrl?: string;
   text?: string;

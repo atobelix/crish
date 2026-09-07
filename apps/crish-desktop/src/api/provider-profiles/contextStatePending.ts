@@ -57,18 +57,35 @@ function readThinkingLevel(): string {
 }
 
 /**
- * 生成 context-state 快照文本（纯函数，可测）。
+ * 获取当前状态快照的结构化字段
+ */
+export function readContextStateSnapshot(): {
+  model: string;
+  profile: string;
+  permission: string;
+  thinking: string;
+} {
+  return {
+    model: readActiveModelId(),
+    profile: readActiveProfileId(),
+    permission: getPermissionMode(),
+    thinking: readThinkingLevel(),
+  };
+}
+
+/**
+ * 生成 context-state 快照纯数据与文本（纯函数，可测）。
  *
  * 文本形态：「当前已切换到模型 {model}（服务商 {profile}）。权限模式：
  * {permission}。思考档位：{thinking}。」——逐段可省略（读不到/空则跳过
- * 该段），模型为空时整体返回空串（无可注入的状态告知）。
+ * 该段），模型为空时整体返回 null（无可注入的状态告知）。
  */
-export function buildContextStateText(): string {
+export function buildContextStateSnapshot(): Omit<ContextStatePayload, 'sessionId'> | null {
   const model = readActiveModelId();
   const profile = readActiveProfileId();
   const permission = getPermissionMode();
   const thinking = readThinkingLevel();
-  if (!model && !profile) return '';
+  if (!model && !profile) return null;
   const parts: string[] = [];
   if (model) {
     parts.push(
@@ -81,39 +98,88 @@ export function buildContextStateText(): string {
   if (thinking && thinking !== 'default' && thinking !== 'off') {
     parts.push(`思考档位：${thinking}`);
   }
-  return parts.join('。') + '。';
+  const text = parts.join('。') + '。';
+  return {
+    model,
+    ...(profile ? { profile } : {}),
+    ...(permission ? { permission } : {}),
+    ...(thinking ? { thinking } : {}),
+    text,
+  };
 }
 
-/** 会话寻址暂存载荷（sessionId 空 = 未绑定会话，任意下一 run 可消费） */
-interface ContextStateStash {
+/** 生成 context-state 快照文本（兼容旧接口） */
+export function buildContextStateText(): string {
+  return buildContextStateSnapshot()?.text || '';
+}
+
+/** 会话寻址暂存结构化载荷（SSOT 单一真理源） */
+export interface ContextStatePayload {
   sessionId: string;
+  model: string;
+  profile?: string;
+  permission?: string;
+  thinking?: string;
   text: string;
 }
 
-function readStash(): ContextStateStash | null {
+/** 会话隔离签名记录表（sessionId -> lastSignature） */
+const lastRecordedSignaturesBySession = new Map<string, string>();
+
+function getSessionStashKey(sessionId: string): string {
+  const safeId = (sessionId || '').trim() || '__global__';
+  return `${PENDING_CONTEXT_STATE_KEY}:${safeId}`;
+}
+
+function readStash(sessionId?: string): ContextStatePayload | null {
   try {
-    const raw = localStorage.getItem(PENDING_CONTEXT_STATE_KEY);
+    let raw: string | null = null;
+    if (sessionId) {
+      const key = getSessionStashKey(sessionId);
+      raw = localStorage.getItem(key);
+    }
+    if (!raw) {
+      raw = localStorage.getItem(PENDING_CONTEXT_STATE_KEY);
+    }
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as ContextStateStash;
-    if (typeof parsed?.text === 'string') return parsed;
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed.text === 'string') {
+      return {
+        sessionId: typeof parsed.sessionId === 'string' ? parsed.sessionId : '',
+        model: typeof parsed.model === 'string' ? parsed.model : '',
+        ...(parsed.profile ? { profile: String(parsed.profile) } : {}),
+        ...(parsed.permission ? { permission: String(parsed.permission) } : {}),
+        ...(parsed.thinking ? { thinking: String(parsed.thinking) } : {}),
+        text: parsed.text,
+      };
+    }
     // 旧版纯文本载荷兼容：视为未绑定会话
-    return { sessionId: '', text: raw };
+    return { sessionId: '', model: '', text: raw };
   } catch {
     return null;
   }
 }
 
-function writeStash(stash: ContextStateStash): void {
+function writeStash(stash: ContextStatePayload): void {
   try {
-    localStorage.setItem(PENDING_CONTEXT_STATE_KEY, JSON.stringify(stash));
+    const json = JSON.stringify(stash);
+    localStorage.setItem(PENDING_CONTEXT_STATE_KEY, json);
+    if (stash.sessionId) {
+      const key = getSessionStashKey(stash.sessionId);
+      localStorage.setItem(key, json);
+    }
   } catch {
     /* swallow-ok: 暂存失败不影响状态切换本身 */
   }
 }
 
-function clearStash(): void {
+function clearStash(sessionId?: string): void {
   try {
     localStorage.removeItem(PENDING_CONTEXT_STATE_KEY);
+    if (sessionId) {
+      const key = getSessionStashKey(sessionId);
+      localStorage.removeItem(key);
+    }
   } catch {
     /* swallow-ok */
   }
@@ -121,46 +187,72 @@ function clearStash(): void {
 
 /**
  * 产生器入口：在 emitUiEvent('profiles-changed') 处调用——生成当前
- * 状态快照文本，向活跃会话派发 workspace_env 可见卡片，并按会话寻址
- * 暂存（状态未变化则保持既有暂存；失败静默——感知注入是尽力而为面，
- * 不阻断状态切换本身）。
+ * 状态快照结构化载荷，并按会话寻址暂存（状态未变化则保持既有暂存；
+ * 失败静默——感知注入是尽力而为面，不阻断状态切换本身）。
  */
 export function recordPendingContextState(): void {
   try {
-    const text = buildContextStateText();
-    if (!text) return;
-    // 模块级去重：文本与上次一致 → 不重新写入（编辑 profile 列表但
-    // 活动模型/权限/档位未变时不产生注入；切换后重复 emit 也幂等）
-    if (text === lastRecordedSignature) return;
-    lastRecordedSignature = text;
-
+    const snapshot = buildContextStateSnapshot();
+    if (!snapshot) return;
+    const text = snapshot.text;
     const sid = useSessionStore.getState().activeSessionId || '';
-    // 模型切换仅作为后台状态暂存，随下次请求带给引擎，绝不向主对话流注入任何卡片
-    writeStash({ sessionId: sid, text });
+    // 会话级去重：文本与当前会话上次一致 → 不重新写入
+    const lastSig = lastRecordedSignaturesBySession.get(sid);
+    if (text === lastSig) return;
+    lastRecordedSignaturesBySession.set(sid, text);
+
+    // 发送前绝不提前显示也不注入系统上下文：无论用户变动多少次模型/权限，
+    // 仅暂存最新状态，直到用户正式发送消息时才由 streamSession 顺带携带注入
+    writeStash({
+      sessionId: sid,
+      model: snapshot.model,
+      ...(snapshot.profile ? { profile: snapshot.profile } : {}),
+      ...(snapshot.permission ? { permission: snapshot.permission } : {}),
+      ...(snapshot.thinking ? { thinking: snapshot.thinking } : {}),
+      text,
+    });
   } catch {
     /* swallow-ok: 记录失败不影响状态切换本身 */
   }
 }
 
 /**
- * 取走暂存的 context-state 文本（ConnectionLifecycle 发起 run-task 时
+ * 取走暂存的 context-state 结构化数据（ConnectionLifecycle 发起 run-task 时
  * 调用）——取走即清空；仅当暂存绑定会话为空或与当前会话一致时消费
  * （跨会话串扰根除：会话 A 产生的状态告知不会被会话 B 的 run 取走）。
  */
-export function takePendingContextState(currentSessionId?: string | null): string | undefined {
-  const stash = readStash();
+export function takePendingContextState(
+  currentSessionId?: string | null
+): ContextStatePayload | undefined {
+  const sid = (currentSessionId || '').trim();
+  let stash = readStash(sid);
+  // 如果会话刚从草稿晋升，尝试读取草稿暂存
+  if (!stash && sid) {
+    stash = readStash('__pending_draft__');
+  }
   if (!stash) return undefined;
-  if (stash.sessionId && stash.sessionId !== (currentSessionId || '')) {
+  if (
+    stash.sessionId &&
+    stash.sessionId !== sid &&
+    stash.sessionId !== '__pending_draft__'
+  ) {
     // 绑定他会话：本次不消费，保留快照供目标会话消费
     return undefined;
   }
   // 匹配成功才消费并清除暂存
-  clearStash();
-  return stash.text;
+  clearStash(sid);
+  if (stash.sessionId === '__pending_draft__') {
+    clearStash('__pending_draft__');
+  }
+  return stash;
 }
 
 /** 测试重置（去重签名与暂存键） */
 export function resetPendingContextStateForTest(): void {
-  lastRecordedSignature = undefined;
-  clearStash();
+  lastRecordedSignaturesBySession.clear();
+  try {
+    localStorage.removeItem(PENDING_CONTEXT_STATE_KEY);
+  } catch {
+    /* swallow-ok */
+  }
 }

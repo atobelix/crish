@@ -25,7 +25,8 @@ export interface NoteDocumentListResult {
 
 export interface NoteDocumentCreateParams {
   title?: string;
-  initialMarkdown?: string;
+  // audit-repair-202609 T10：砍除 initial_markdown——内容初始化唯一路径为
+  // note_document_apply_md（正规 md→blocks 事务），直插单块属伪实现。
 }
 
 export interface NoteDocumentCreateResult {

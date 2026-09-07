@@ -12,8 +12,8 @@
  */
 
 import { useSessionStore } from '../store/sessionStore';
-import { contextInjectionDispatcher } from './contextInjectionDispatcher';
-import { estimateTextTokens } from '../utils/tokenEstimator';
+import { sessionRuntimeRegistry, type Attachment } from './SessionRuntimeRegistry';
+import type { ChatAttachment } from '../hooks/chat-stream/types';
 
 export type PendingFileAnnotation = {
   id: string;
@@ -25,6 +25,8 @@ export type PendingFileAnnotation = {
 
 /** 单会话批注上限（防误触刷屏；与旧全局池口径一致） */
 const PENDING_ANNOTATIONS_LIMIT = 20;
+
+export const DRAFT_SESSION_KEY = '__composer_draft_session__';
 
 /** 会话隔离暂存池（sessionId → 待发送批注，最新在前） */
 const pendingBySession = new Map<string, PendingFileAnnotation[]>();
@@ -40,15 +42,19 @@ function notifyChanged(): void {
   }
 }
 
-/** 解析目标会话：显式指定优先，缺省回落活跃会话（无会话上下文的调用点） */
+/** 解析目标会话：显式指定优先；缺省未传时回落活跃会话或草稿会话（避免草稿态批注静默丢弃） */
 function resolveSessionId(explicit?: string | null): string {
+  if (explicit === '') return '';
   if (typeof explicit === 'string' && explicit.trim()) return explicit.trim();
   try {
-    return useSessionStore.getState().activeSessionId || '';
+    const active = useSessionStore.getState().activeSessionId;
+    return active && active.trim() ? active.trim() : DRAFT_SESSION_KEY;
   } catch {
-    return '';
+    return DRAFT_SESSION_KEY;
   }
 }
+
+
 
 /** 路径短名（卡片标题展示用：取末段文件名） */
 function shortName(path: string): string {
@@ -70,7 +76,7 @@ export function addPendingFileAnnotation(
     return null;
   }
   const a: PendingFileAnnotation = {
-    id: `ann-${Date.now().toString(36)}`,
+    id: `ann-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
     path: input.path,
     selectedText: input.selectedText.trim().slice(0, 2000),
     text: input.text.trim(),
@@ -80,21 +86,125 @@ export function addPendingFileAnnotation(
   pendingBySession.set(sid, [a, ...list].slice(0, PENDING_ANNOTATIONS_LIMIT));
   notifyChanged();
 
-  // 添加瞬间即派发 file_context 可见卡片（被动直接注入，零 AI 轮次）；
-  // 卡片正文 = wire 注入文本（formatAnnotationsForModel 单一来源）
-  const content = formatAnnotationsForModel([a]);
-  contextInjectionDispatcher.inject(sid, {
-    kind: 'file_context',
-    title: `📎 文件批注：${shortName(a.path)}`,
-    summary: a.text.length > 80 ? `${a.text.slice(0, 80)}…` : a.text,
-    status: 'injected',
-    source: 'user_mention',
-    content,
-    tokenEstimate: estimateTextTokens(content),
-    targetPaths: [a.path],
-    metadata: { annotationId: a.id },
+  // 作为附件放入输入框附件区，用户可自由查看与删除；绝不在对话流注入退步的 injection-row-head
+  const fileName = shortName(input.path);
+  const snippet = a.text.length > 20 ? `${a.text.slice(0, 20)}…` : a.text;
+  const attachName = `批注 · ${fileName} (${snippet})`;
+  const chatAttachment: ChatAttachment = {
+    id: a.id,
+    name: attachName,
+    path: a.path,
+    text: `【代码选区批注: ${a.path}】\n选中内容:\n${a.selectedText}\n批注:\n${a.text}`,
+    mime: 'text/x-annotation',
+    annotation: {
+      id: a.id,
+      selectedText: a.selectedText,
+      comment: a.text,
+    },
+  };
+
+  const runtime = sessionRuntimeRegistry.get(sid);
+  const existing = (runtime.attachments ?? []) as ChatAttachment[];
+  sessionRuntimeRegistry.save(sid, {
+    attachments: [
+      ...existing.filter((x) => x.name !== attachName && x.annotation?.id !== a.id),
+      chatAttachment,
+    ] as Attachment[],
   });
+
+  try {
+    window.dispatchEvent(
+      new CustomEvent('crish-attachments-changed', {
+        detail: { sessionId: sid, attachment: chatAttachment },
+      })
+    );
+  } catch {
+    /* swallow-ok */
+  }
+
   return a;
+}
+
+/** 删除指定待发送批注（用户在输入框附件区删除时触发） */
+export function removePendingFileAnnotation(
+  id: string,
+  sessionId?: string | null
+): boolean {
+  const sid = resolveSessionId(sessionId);
+  if (!sid) return false;
+  const list = pendingBySession.get(sid);
+  if (!list) return false;
+  const next = list.filter((a) => a.id !== id);
+  if (next.length === list.length) return false;
+  if (next.length === 0) {
+    pendingBySession.delete(sid);
+  } else {
+    pendingBySession.set(sid, next);
+  }
+
+  // 同步清退 sessionRuntimeRegistry 对应的 attachment
+  const runtime = sessionRuntimeRegistry.get(sid);
+  const existing = (runtime.attachments ?? []) as ChatAttachment[];
+  const nextAtts = existing.filter(
+    (att) => att.annotation?.id !== id && att.id !== id
+  );
+  if (nextAtts.length !== existing.length) {
+    sessionRuntimeRegistry.save(sid, {
+      attachments: nextAtts as Attachment[],
+    });
+    try {
+      window.dispatchEvent(
+        new CustomEvent('crish-attachments-changed', {
+          detail: { sessionId: sid },
+        })
+      );
+    } catch {
+      /* swallow-ok */
+    }
+  }
+
+  notifyChanged();
+  return true;
+}
+
+/** 更新待发送批注的评论内容（用户在输入框悬浮卡片中编辑时触发） */
+export function updatePendingFileAnnotationComment(
+  id: string,
+  newComment: string,
+  sessionId?: string | null
+): boolean {
+  const sid = resolveSessionId(sessionId);
+  if (!sid) return false;
+  const list = pendingBySession.get(sid);
+  if (list) {
+    const item = list.find((a) => a.id === id);
+    if (item) {
+      item.text = newComment.trim();
+    }
+  }
+
+  const runtime = sessionRuntimeRegistry.get(sid);
+  const existing = (runtime.attachments ?? []) as ChatAttachment[];
+  const target = existing.find((att) => att.annotation?.id === id || att.id === id);
+  if (target && target.annotation) {
+    target.annotation.comment = newComment;
+    target.text = `【代码选区批注: ${target.path || target.name}】\n选中内容:\n${target.annotation.selectedText}\n批注:\n${newComment}`;
+    sessionRuntimeRegistry.save(sid, {
+      attachments: [...existing] as Attachment[],
+    });
+    try {
+      window.dispatchEvent(
+        new CustomEvent('crish-attachments-changed', {
+          detail: { sessionId: sid, attachment: target },
+        })
+      );
+    } catch {
+      /* swallow-ok */
+    }
+    notifyChanged();
+    return true;
+  }
+  return false;
 }
 
 export function countPendingFileAnnotations(sessionId?: string | null): number {
@@ -109,7 +219,26 @@ export function takePendingFileAnnotations(
   if (!sid) return [];
   const list = pendingBySession.get(sid) ?? [];
   pendingBySession.delete(sid);
-  if (list.length) notifyChanged();
+  if (list.length) {
+    const runtime = sessionRuntimeRegistry.get(sid);
+    const existing = (runtime.attachments ?? []) as ChatAttachment[];
+    const nextAtts = existing.filter((att) => !att.annotation);
+    if (nextAtts.length !== existing.length) {
+      sessionRuntimeRegistry.save(sid, {
+        attachments: nextAtts as Attachment[],
+      });
+      try {
+        window.dispatchEvent(
+          new CustomEvent('crish-attachments-changed', {
+            detail: { sessionId: sid },
+          })
+        );
+      } catch {
+        /* swallow-ok */
+      }
+    }
+    notifyChanged();
+  }
   return list;
 }
 

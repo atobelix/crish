@@ -121,8 +121,10 @@ export async function listDirectory(dirPath?: string): Promise<FsDirEntry[]> {
 
 /** 首屏预览行数；长文件可再分段加载 */
 export const FILE_PREVIEW_CHUNK_LINES = 400;
-/** 后端硬上限对齐 fs_commands MAX_TEXT_FILE_LINES */
-export const FILE_PREVIEW_MAX_LINES = 1000000;
+/** 后端硬上限对齐 fs_commands 安全最大行数 */
+export const FILE_PREVIEW_MAX_LINES = 20000;
+/** 虚拟化代码与文档预览全量预算（解除 400 行截断手铐，直连虚拟 DOM） */
+export const FILE_PREVIEW_CODE_BUDGET = FILE_PREVIEW_MAX_LINES;
 
 /**
  * 下一段预览行预算（纯函数，供 UI 与单测共用）。
@@ -146,6 +148,9 @@ export async function readTextFile(
 ): Promise<FsReadResult> {
   if (!filePath) throw new Error('路径为空');
   const path = resolveWorkspacePath(filePath);
+  if (!path) {
+    throw new Error(`文件不在当前工作区内: ${filePath}`);
+  }
   const lines = Math.max(1, Math.min(FILE_PREVIEW_MAX_LINES, Math.floor(maxLines)));
 
   const res = await invokeResult<{
@@ -268,16 +273,27 @@ export function isMarkdownFilename(name: string): boolean {
   return /\.(md|markdown|mdx)$/i.test(name || '');
 }
 
-/** 简易 CSV / TSV → 行列（预览用） */
+/** 简易 CSV / TSV → 行列（预览用，游标惰性扫描前 maxRows 行，杜绝全量 split） */
 export function parseCsvPreview(text: string, maxRows = 80): string[][] {
-  const lines = text.split(/\r?\n/).filter((l, i, a) => i < a.length - 1 || l.trim());
   const rows: string[][] = [];
-  for (const line of lines.slice(0, maxRows)) {
-    if (line.includes('\t') && !line.includes(',')) {
-      rows.push(line.split('\t').map((c) => c.trim()));
-    } else {
-      rows.push(splitCsvLine(line));
+  let start = 0;
+  const len = (text || '').length;
+
+  while (start < len && rows.length < maxRows) {
+    let end = text.indexOf('\n', start);
+    if (end === -1) end = len;
+
+    let line = text.substring(start, end);
+    if (line.endsWith('\r')) line = line.slice(0, -1);
+
+    if (start + line.length < len || line.trim()) {
+      if (line.includes('\t') && !line.includes(',')) {
+        rows.push(line.split('\t').map((c) => c.trim()));
+      } else {
+        rows.push(splitCsvLine(line));
+      }
     }
+    start = end + 1;
   }
   return rows;
 }
@@ -313,6 +329,8 @@ function splitCsvLine(line: string): string[] {
 export {
   type PendingFileAnnotation,
   addPendingFileAnnotation,
+  removePendingFileAnnotation,
+  updatePendingFileAnnotationComment,
   countPendingFileAnnotations,
   takePendingFileAnnotations,
   formatAnnotationsForModel,

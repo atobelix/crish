@@ -5,6 +5,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { loadEngineConfig } from './engineConfig';
+import { logger } from '../services/LoggerService';
 
 const request = vi.fn();
 const waitUntilConnected = vi.fn();
@@ -33,7 +34,7 @@ describe('loadEngineConfig（config_get 读面，T-F 06 T2.6）', () => {
   });
 
   it('not_connected → 日志 + null（不抛）', async () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {});
     waitUntilConnected.mockResolvedValue(false);
     await expect(loadEngineConfig()).resolves.toBeNull();
     expect(warn).toHaveBeenCalled();
@@ -41,7 +42,7 @@ describe('loadEngineConfig（config_get 读面，T-F 06 T2.6）', () => {
   });
 
   it('命令缺失/报错 → 日志 + null（不抛）', async () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {});
     waitUntilConnected.mockResolvedValue(true);
     request.mockRejectedValue(new Error('Tauri command not available: config_get'));
     await expect(loadEngineConfig()).resolves.toBeNull();

@@ -40,6 +40,19 @@ export function timelineSignature(msg: SessionMessage): string {
       }
       return { t: 'thought', c: b.content || '', turn: b.turnIndex };
     }
+    if (b.type === 'context_injection') {
+      const inj = b.injection;
+      return {
+        t: b.type,
+        id: b.id,
+        s: inj?.status,
+        m: (inj?.metadata?.mode as string) || '',
+        mod: (inj?.metadata?.model as string) || '',
+        th: (inj?.metadata?.thinking as string) || '',
+        ti: inj?.title || '',
+        su: inj?.summary || '',
+      };
+    }
     return { t: b.type, id: b.id };
   });
 
@@ -54,12 +67,16 @@ export function timelineSignature(msg: SessionMessage): string {
     st: tc.startedAt,
   }));
 
-  // 注入项投影：id:status:tokenEstimate 编入签名——注入状态跃迁（pending→injected）
-  // 或 token 估算变化精确失效局部缓存；纯文本流式帧不含本字段，保持 memo 稳定命中。
+  // 注入项投影：id:status:tokenEstimate 及 metadata 编入签名——注入状态跃迁或原地更新精确失效局部缓存
   const injProj = (msg.injections || []).map((inj) => ({
     id: inj.id,
     s: inj.status,
     te: inj.tokenEstimate ?? 0,
+    m: (inj.metadata?.mode as string) || '',
+    mod: (inj.metadata?.model as string) || '',
+    th: (inj.metadata?.thinking as string) || '',
+    ti: inj.title || '',
+    su: inj.summary || '',
   }));
 
   const hasExplicitText = blocks.some(

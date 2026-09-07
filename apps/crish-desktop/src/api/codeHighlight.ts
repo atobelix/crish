@@ -149,8 +149,40 @@ export function highlightCode(code: string, langHint?: string): string {
     html = escapeHtml(raw);
   }
 
-  highlightCache.set(cacheKey, html);
+  if (raw.length <= 500) {
+    highlightCache.set(cacheKey, html);
+  }
   return html;
+}
+
+const MAX_HIGHLIGHT_LINE_CHARS = 1500;
+const HARD_DISABLE_HIGHLIGHT_CHARS = 4000;
+
+/**
+ * 语法高亮安全盾（HighlightShield）
+ * 1. 超过 4,000 字符彻底短路转义，杜绝 highlight.js 正则灾难性回溯 (ReDoS)；
+ * 2. 1,500 ~ 4,000 字符切片混合着色；
+ * 3. 极速转义，彻底免疫单行 JSON/min.js 死锁。
+ */
+export function highlightCodeSafe(rawCode: string, langOrFilePath?: string): string {
+  if (!rawCode) return '';
+  const len = rawCode.length;
+
+  if (len > HARD_DISABLE_HIGHLIGHT_CHARS) {
+    return escapeHtml(rawCode);
+  }
+
+  const lang = (langOrFilePath || '').includes('.')
+    ? langFromFilename(langOrFilePath || '')
+    : langOrFilePath;
+
+  if (len > MAX_HIGHLIGHT_LINE_CHARS) {
+    const head = rawCode.slice(0, MAX_HIGHLIGHT_LINE_CHARS);
+    const tail = rawCode.slice(MAX_HIGHLIGHT_LINE_CHARS);
+    return highlightCode(head, lang) + escapeHtml(tail);
+  }
+
+  return highlightCode(rawCode, lang);
 }
 
 function escapeHtml(s: string): string {

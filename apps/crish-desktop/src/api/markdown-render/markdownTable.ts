@@ -3,7 +3,7 @@
  */
 
 import { escapeHtml } from '../markdownRenderLite';
-import { wrapCjkTextSegment } from './markdownSanitizer';
+import { applyInline } from './markdownInlineFormat';
 
 export function isTableSepLine(line: string): boolean {
   // | --- | :---: | ---: | 或 ---|---（至少两列分隔，避免把 --- 水平线当表）
@@ -92,38 +92,6 @@ function normalizeAlignments(
     out.push(aligns[i] ?? 'left');
   }
   return out;
-}
-
-function formatMarkdownTextSegment(text: string): string {
-  if (!text) return '';
-  const codes: string[] = [];
-  let s = text.replace(/`([^`\n]+)`/g, (_, code: string) => {
-    const i = codes.length;
-    codes.push(`<code class="md-inline-code">${code}</code>`);
-    return `%%CODE${i}%%`;
-  });
-  s = s.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
-  s = s.replace(
-    /(?<!\*)\*(?!\s)([^*\n]+?)(?<!\s)\*(?!\*)/g,
-    (full, inner: string) => {
-      const t = inner.trim();
-      if (!t || t.length > 80) return full;
-      if (/\s{2,}/.test(inner)) return full;
-      return `<em>${inner}</em>`;
-    }
-  );
-  s = s.replace(/%%CODE(\d+)%%/g, (_, i) => codes[Number(i)] || '');
-  return wrapCjkTextSegment(s);
-}
-
-function applyInline(html: string): string {
-  if (!html) return '';
-  return html.replace(
-    /(^|>)([^<]*)/g,
-    (_full, prefix: string, text: string) => {
-      return prefix + formatMarkdownTextSegment(text);
-    }
-  );
 }
 
 /**

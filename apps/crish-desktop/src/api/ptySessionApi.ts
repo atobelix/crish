@@ -101,16 +101,8 @@ export function recordPtyOutputHistory(ptyId: string, data: string): void {
     if (entry.chunks.length === 1 && entry.totalBytes > PTY_HISTORY_MAX_BYTES) {
       const single = entry.chunks[0];
       if (!single) break;
-      let trimmed = single.slice(-PTY_HISTORY_MAX_BYTES);
-      if (
-        trimmed.length > 0 &&
-        trimmed.charCodeAt(0) >= 0xdc00 &&
-        trimmed.charCodeAt(0) <= 0xdfff
-      ) {
-        trimmed = trimmed.slice(1);
-      }
-      entry.chunks[0] = trimmed;
-      entry.totalBytes = getChunkBytes(trimmed);
+      entry.chunks[0] = trimToUtf8ByteLimit(single, PTY_HISTORY_MAX_BYTES);
+      entry.totalBytes = getChunkBytes(entry.chunks[0]);
       break;
     }
     const oldest = entry.chunks.shift();
@@ -122,6 +114,27 @@ export function recordPtyOutputHistory(ptyId: string, data: string): void {
   if (entry.totalBytes < 0) {
     entry.totalBytes = 0;
   }
+}
+
+/**
+ * 字节感知的单 chunk 尾部截断（audit-repair-202609 T28）：
+ * 保留最新 `limit` 个 UTF-8 字节，从后按码点回退找最大合法后缀。
+ * 修正历史实现的两处缺陷——① totalBytes 按 UTF-8 字节计但旧截断按 UTF-16
+ * 码元 slice（CJK 场景裁后仍可能超上限）；② 截断点可能劈开代理对。
+ * TextEncoder 将孤立代理对编码为 U+FFFD（3 字节），按码点累计天然无劈裂。
+ */
+function trimToUtf8ByteLimit(input: string, limit: number): string {
+  if (!textEncoder || getChunkBytes(input) <= limit) return input;
+  const points = Array.from(input);
+  let acc = 0;
+  let startIdx = points.length; // 指向保留后缀的起点
+  for (let i = points.length - 1; i >= 0; i--) {
+    const bytes = textEncoder.encode(points[i]).length;
+    if (acc + bytes > limit) break;
+    acc += bytes;
+    startIdx = i;
+  }
+  return points.slice(startIdx).join('');
 }
 
 /** 返回该 ptyId 的历史 chunks 快照 */

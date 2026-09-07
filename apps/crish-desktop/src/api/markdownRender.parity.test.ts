@@ -172,4 +172,95 @@ describe('markdown fixture parity (D0 completed-message)', () => {
     const asyncHtml = await parseMarkdownToHtmlAsync(md);
     expect(asyncHtml).toBe(syncHtml);
   });
+
+  it('GFM Emoji: converts :white_check_mark: and :x: to Unicode emoji, preserves raw text in code fences and inline code', async () => {
+    const md = [
+      '状态通过: :white_check_mark:，状态阻断: :x:',
+      '',
+      '`:white_check_mark:` 内联代码应保留生文本',
+      '',
+      '```bash',
+      'echo ":white_check_mark:" && echo ":x:"',
+      '```',
+    ].join('\n');
+
+    const syncHtml = parseMarkdownToHtml(md);
+
+    // 1. 正文文本中的 GFM Emoji 必须转为原生 Unicode 符号
+    expect(syncHtml).toContain('状态通过: ✅，状态阻断: ❌');
+    expect(syncHtml).not.toContain('状态通过: :white_check_mark:');
+    expect(syncHtml).not.toContain('状态阻断: :x:');
+
+    // 2. 行内代码与代码围栏内必须严格保留生文本短代码，不得转义为 emoji
+    expect(syncHtml).toContain('<code class="md-inline-code">:white_check_mark:</code>');
+    expect(syncHtml).toContain('md-code-block');
+    expect(syncHtml).toContain(':white_check_mark:');
+    expect(syncHtml).toContain(':x:');
+
+    // 提取代码块内部，断言保留了 raw text
+    const codeFenceMatch = syncHtml.match(/<code class="language-bash">([\s\S]*?)<\/code>/);
+    expect(codeFenceMatch).toBeTruthy();
+    expect(codeFenceMatch![1]).toContain(':white_check_mark:');
+    expect(codeFenceMatch![1]).toContain(':x:');
+    expect(codeFenceMatch![1]).not.toContain('✅');
+    expect(codeFenceMatch![1]).not.toContain('❌');
+
+    // 3. Worker 异步降级路径与同步输出严格一致 (byte-for-byte)
+    mockTauriMissing('core_md_render');
+    scheduleSpy.mockImplementation(
+      async (_ch: string, _t: string, payload: { raw?: string }) =>
+        parseMarkdownToHtml(payload.raw ?? ''),
+    );
+    clearMarkdownHtmlCache();
+    const asyncHtml = await parseMarkdownToHtmlAsync(md);
+    expect(asyncHtml).toBe(syncHtml);
+  });
+
+  it('GFM Table: short row homogenization automatically pads missing cells with empty <td> and wraps in md-table-wrap', async () => {
+    const md = [
+      '| 模块名称 | 状态 | 备注 | 负责人 |',
+      '| :--- | :---: | ---: | --- |',
+      '| 核心排版 | :white_check_mark: | 已完成 | Alice |',
+      '| 样式合规 | :white_check_mark: |', // 缺失后两列（第 3、4 列）
+      '| 遗留问题 |', // 缺失后三列（第 2、3、4 列）
+    ].join('\n');
+
+    const syncHtml = parseMarkdownToHtml(md);
+
+    // 1. 外层必须包裹 md-table-wrap 容器
+    expect(syncHtml).toContain('class="md-table-wrap"');
+    expect(syncHtml).toContain('<table class="md-table">');
+    expect(syncHtml).toMatch(/<div class="md-table-wrap"[^>]*><table class="md-table">/);
+
+    // 2. 表头必须有 4 列
+    expect(countSubstr(syncHtml, '<th class="md-th"')).toBe(4);
+    expect(syncHtml).toContain('模块名称');
+    expect(syncHtml).toContain('状态');
+    expect(syncHtml).toContain('备注');
+    expect(syncHtml).toContain('负责人');
+
+    // 3. 短行齐次化：表体共有 3 行，每行必须对齐到 4 列，缺失的列必须补齐空 <td>
+    // 3 行 * 4 列 = 12 个 <td>
+    const tdCount = countSubstr(syncHtml, '<td class="md-td"');
+    expect(tdCount, '全量单元格必须补齐到 4 列 * 3 行 = 12 个 td').toBe(12);
+
+    // 验证短行自动补齐的空 <td> 标签
+    expect(syncHtml).toContain('<td class="md-td"></td>');
+    // 验证对齐属性保留且内容为空
+    expect(syncHtml).toContain('<td class="md-td" style="text-align:right"></td>');
+
+    // 4. 单元格内部 Emoji 与文本正常解析
+    expect(syncHtml).toContain('<td class="md-td" style="text-align:center">✅</td>');
+    expect(syncHtml).toContain('<td class="md-td">Alice</td>');
+
+    // 5. Worker 异步降级路径与同步输出严格一致 (byte-for-byte)
+    mockTauriMissing('core_md_render');
+    scheduleSpy.mockImplementation(
+      async (_ch: string, _t: string, payload: { raw?: string }) =>
+        parseMarkdownToHtml(payload.raw ?? ''),
+    );
+    clearMarkdownHtmlCache();
+    const asyncHtml = await parseMarkdownToHtmlAsync(md);
+    expect(asyncHtml).toBe(syncHtml);
+  });
 });
