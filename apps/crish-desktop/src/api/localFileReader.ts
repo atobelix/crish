@@ -1,12 +1,11 @@
 /**
- * 本地文件读取适配层：在桌面环境下支持读取外部拖拽或选择的文件绝对路径
- * - 支持图片转 Base64 dataUrl（供前端高保真缩略图与多模态模型投递）
- * - 支持文本内容读取（代码/文档）
+ * 本地文件读取适配层：支持本机绝对路径与工作区相对路径，经受控 convertFileSrc 读盘。
+ * 禁止经 shell 拼路径读盘作为产品路径；用户选择或拖拽的外部文件经受控 convertFileSrc 读取。
  */
 
-import { invokeResult } from './tauriInvoke';
-import { downscaleDataUrlIfNeeded, readBlobAsDataURL } from './imageProcessing';
 import { convertFileSrc } from '@tauri-apps/api/core';
+import { downscaleDataUrlIfNeeded, readBlobAsDataURL } from './imageProcessing';
+import { isAbsoluteFsPath, getWorkspacePath } from './workspaceFsApi';
 
 export function getMimeFromPath(filePath: string): string {
   const lower = filePath.toLowerCase();
@@ -29,107 +28,79 @@ export function getMimeFromPath(filePath: string): string {
   return 'application/octet-stream';
 }
 
+const TEXT_READ_BYTE_CAP = 512_000;
+
 /**
- * 尝试将本地路径的图片文件读取为 dataUrl（自动降采样超大图）
+ * 规范化并校验本地文件路径（空路径/非法字符优雅抛错）。
+ * 支持系统任意目录的绝对路径（放行外部目录，不设工作区拦截），以及工作区相对路径。
  */
-export async function readLocalImageAsDataUrl(
-  filePath: string
-): Promise<string | null> {
-  const path = (filePath || '').trim();
-  if (!path) return null;
-
-  const mime = getMimeFromPath(path);
-
-  // 1. 首选通道：Tauri convertFileSrc + 原生 fetch blob
-  try {
-    const assetUrl = convertFileSrc(path);
-    if (assetUrl) {
-      const res = await fetch(assetUrl);
-      if (res.ok) {
-        const blob = await res.blob();
-        const rawDataUrl = await readBlobAsDataURL(blob);
-        if (rawDataUrl) {
-          return await downscaleDataUrlIfNeeded(rawDataUrl, mime);
-        }
-      }
-    }
-  } catch {
-    /* fallback to secondary reading */
+export function resolveLocalPath(filePath: string): string {
+  const raw = (filePath || '').trim();
+  if (!raw) {
+    throw new Error('文件路径为空');
   }
-
-  // 2. 兜底通道：桌面 shell 读取
-  const isWin =
-    typeof navigator !== 'undefined' &&
-    /Win/i.test(navigator.userAgent || navigator.platform || '');
-
-  try {
-    const escaped = path.replace(/'/g, "''");
-    const cmd = isWin
-      ? `[Convert]::ToBase64String([System.IO.File]::ReadAllBytes('${escaped}'))`
-      : `base64 < ${JSON.stringify(path)}`;
-
-    const res = await invokeResult<{ stdout?: string }>('workbench_run_shell', {
-      request: { command: cmd },
-    });
-
-    if (res.status === 'ok' && res.data?.stdout) {
-      const b64 = res.data.stdout.replace(/\s+/g, '');
-      if (b64) {
-        const rawDataUrl = `data:${mime};base64,${b64}`;
-        return await downscaleDataUrlIfNeeded(rawDataUrl, mime);
-      }
-    }
-  } catch {
-    /* swallow-ok: 外部读取失败降级 */
+  if (raw.includes('\0')) {
+    throw new Error(`非法本地文件路径: ${filePath}`);
   }
-
-  return null;
+  if (isAbsoluteFsPath(raw)) {
+    return raw;
+  }
+  const norm = raw.replace(/\\/g, '/');
+  if (/(^|\/)\.\.($|\/)/.test(norm)) {
+    throw new Error(`非法相对路径组件: ${filePath}`);
+  }
+  const workspaceRoot = getWorkspacePath()?.trim();
+  if (workspaceRoot) {
+    const rel = raw.replace(/^\.[\\/]/, '');
+    const sep = workspaceRoot.includes('\\') ? '\\' : '/';
+    return `${workspaceRoot.replace(/[\\/]+$/, '')}${sep}${rel}`;
+  }
+  return raw;
 }
 
 /**
- * 尽力读取本地文本内容（上限 512KB）
+ * 本地资源抓取：接收任意绝对路径或工作区相对路径。
+ * 绝对路径直接转为 asset:// 协议 URL 并通过 fetch 读取。
+ * 若 fetch 失败（如文件不存在或 404），抛出明确错误 `读取本地文件失败 (${res.status}): ${filePath}`。
  */
-export async function readLocalTextBestEffort(
-  filePath: string
-): Promise<string | null> {
-  const path = (filePath || '').trim();
-  if (!path) return null;
-
-  // 1. 首选通道：Tauri convertFileSrc + fetch text
-  try {
-    const assetUrl = convertFileSrc(path);
-    if (assetUrl) {
-      const res = await fetch(assetUrl);
-      if (res.ok) {
-        const text = await res.text();
-        return text.slice(0, 512_000);
-      }
-    }
-  } catch {
-    /* fallback */
+export async function fetchLocalAsset(filePath: string): Promise<Response> {
+  const resolved = resolveLocalPath(filePath);
+  const assetUrl = convertFileSrc(resolved);
+  if (!assetUrl) {
+    throw new Error(`无法解析本地资源 URL: ${filePath}`);
   }
-
-  // 2. 兜底通道：桌面 shell Get-Content 读取（规范 PowerShell cmdlet）
-  const isWin =
-    typeof navigator !== 'undefined' &&
-    /Win/i.test(navigator.userAgent || navigator.platform || '');
-
-  try {
-    const escaped = path.replace(/'/g, "''");
-    const cmd = isWin
-      ? `Get-Content -LiteralPath '${escaped}' -Raw -Encoding utf8`
-      : `head -c 512000 ${JSON.stringify(path)}`;
-
-    const res = await invokeResult<{ stdout?: string }>('workbench_run_shell', {
-      request: { command: cmd },
-    });
-
-    if (res.status === 'ok' && typeof res.data?.stdout === 'string') {
-      return res.data.stdout;
-    }
-  } catch {
-    /* swallow-ok: 文本读取失败降级 */
+  const res = await fetch(assetUrl);
+  if (!res.ok) {
+    throw new Error(`读取本地文件失败 (${res.status}): ${filePath}`);
   }
+  return res;
+}
 
-  return null;
+/** 保持原有导出兼容 */
+export const fetchWorkspaceAsset = fetchLocalAsset;
+
+/**
+ * 将本地图片读取为 dataUrl（自动降采样超大图）。
+ * 接收绝对路径（支持工作区外）或相对路径，空路径/非法路径/读失败优雅抛错。
+ */
+export async function readLocalImageAsDataUrl(filePath: string): Promise<string> {
+  const resolved = resolveLocalPath(filePath);
+  const mime = getMimeFromPath(resolved);
+  const res = await fetchLocalAsset(filePath);
+  const blob = await res.blob();
+  const rawDataUrl = await readBlobAsDataURL(blob);
+  if (!rawDataUrl) {
+    throw new Error(`图片转 dataUrl 失败: ${filePath}`);
+  }
+  return await downscaleDataUrlIfNeeded(rawDataUrl, mime);
+}
+
+/**
+ * 读取本地文本（上限 512KB）。
+ * 接收绝对路径（支持工作区外）或相对路径，空路径/非法路径/读失败优雅抛错。
+ */
+export async function readLocalTextBestEffort(filePath: string): Promise<string> {
+  const res = await fetchLocalAsset(filePath);
+  const text = await res.text();
+  return text.slice(0, TEXT_READ_BYTE_CAP);
 }

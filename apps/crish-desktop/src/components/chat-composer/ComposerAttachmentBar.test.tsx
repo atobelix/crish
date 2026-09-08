@@ -71,15 +71,72 @@ describe('ComposerAttachmentBar（S4 附件卡）', () => {
     expect(onOpenPath).not.toHaveBeenCalled();
   });
 
-  it('无 onOpenPath 时回落 openFileInPanel', () => {
-    openFileInPanel.mockClear();
+  it('优先消费 thumbnailUrl 并渲染正方形缩略图', () => {
     render(
       <ComposerAttachmentBar
-        attachments={[{ name: 'lib.rs' }]}
+        attachments={[
+          {
+            name: 'photo.png',
+            dataUrl: 'data:image/png;base64,rawdata',
+            thumbnailUrl: 'data:image/webp;base64,thumbdata',
+            status: 'ready',
+          },
+        ]}
         onRemoveAttachment={() => undefined}
       />
     );
-    fireEvent.click(screen.getByText('lib.rs'));
-    expect(openFileInPanel).toHaveBeenCalledWith('lib.rs');
+    const img = screen.getByRole('img');
+    expect(img.getAttribute('src')).toBe('data:image/webp;base64,thumbdata');
+    expect(img.getAttribute('alt')).toBe('photo.png');
+  });
+
+  it('展示解析与上传进度徽标及边框 SVG', () => {
+    render(
+      <ComposerAttachmentBar
+        attachments={[
+          {
+            name: 'large_data.csv',
+            status: 'parsing',
+            progress: 36,
+          },
+          {
+            name: 'uploading_cat.png',
+            dataUrl: 'data:image/png;base64,cat',
+            status: 'parsing',
+            progress: 38,
+          },
+        ]}
+        onRemoveAttachment={() => undefined}
+      />
+    );
+    const badges = screen.getAllByText(/3[68]%/);
+    expect(badges).toHaveLength(2);
+    expect(screen.getByLabelText('上传解析进度 36%')).toBeTruthy();
+    expect(screen.getByLabelText('上传解析进度 38%')).toBeTruthy();
+    const svgs = document.querySelectorAll('svg rect[stroke-dashoffset]');
+    expect(svgs.length).toBe(2);
+  });
+
+  it('渲染选区批注卡片带引用图标与格式规范', () => {
+    render(
+      <ComposerAttachmentBar
+        attachments={[
+          {
+            name: 'main.rs',
+            path: 'src/main.rs',
+            annotation: {
+              id: 'ann-1',
+              selectedText: 'fn main() {}',
+              comment: '重构入口',
+            },
+          },
+        ]}
+        onRemoveAttachment={() => undefined}
+      />
+    );
+    const card = screen.getByTestId('composer-attach-card');
+    expect(card.getAttribute('data-attach-kind')).toBe('annotation');
+    expect(screen.getByText('批注')).toBeTruthy();
+    expect(screen.getByText('main.rs')).toBeTruthy();
   });
 });

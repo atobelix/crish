@@ -38,6 +38,15 @@
   display: none;
 }
 
+.composerNoticeZone {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  position: relative;
+  z-index: var(--z-base);
+  margin-bottom: 6px;
+}
+
 /* ==========================================================================
    Layer 1: 浮动权限审批条（Floating Permission Approval Bar）
    ========================================================================== */
@@ -622,46 +631,51 @@
   position: relative;
   z-index: var(--z-base);
   display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 8px;
-  background: transparent;
-  border: 1px solid var(--border-color);
-  border-radius: calc(
-    var(--composer-radius-outer, 24px) - var(--composer-pad-y, 8px)
-  );
-
+  flex-direction: column;
+  justify-content: space-between;
+  width: var(--composer-attach-card-size, 58px);
+  height: var(--composer-attach-card-size, 58px);
+  padding: 6px;
+  background: var(--composer-attach-card-bg, var(--bg-card, #ffffff));
+  border: var(--composer-attach-card-border, 1px solid var(--border-subtle));
+  border-radius: var(--composer-attach-card-radius, 12px);
   cursor: pointer;
   user-select: none;
-  transition: border-color var(--transition-fast, 120ms ease);
-  height: 24px;
   box-sizing: border-box;
-  max-width: 190px;
+  max-width: var(--composer-attach-card-size, 58px);
   flex-shrink: 0;
-  overflow: visible;
-  font-size: 12px;
-  color: var(--text-primary);
+  overflow: hidden;
+  box-shadow: none;
+  transition:
+    border-color var(--transition-fast, 120ms ease),
+    background-color var(--transition-fast, 120ms ease);
 }
 
 .fileCard:hover,
 .attachChip:hover,
 .attachChip:focus-visible {
-  background: transparent;
-  border-color: var(--border-color);
+  border-color: var(--composer-attach-card-hover-border, var(--border-color));
+  background: color-mix(in srgb, var(--text-primary) 1.5%, var(--bg-card));
+  box-shadow: none;
   outline: none;
   z-index: var(--z-popover);
 }
 
 .attachChipImage {
-  width: 28px;
-  height: 28px;
+  width: var(--composer-attach-card-size, 58px);
+  height: var(--composer-attach-card-size, 58px);
+  max-width: var(--composer-attach-card-size, 58px);
   padding: 0;
-  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
-  max-width: 28px;
-  border-radius: calc(
-    var(--composer-radius-outer, 24px) - var(--composer-pad-y, 8px)
-  );
+  background: var(--bg-primary);
+  border: var(--composer-attach-card-border, 1px solid var(--border-subtle));
+  border-radius: var(--composer-attach-card-radius, 12px);
   box-sizing: border-box;
+  position: relative;
+  box-shadow: none;
+}
+
+.attachChipImage:hover {
+  border-color: var(--composer-attach-card-hover-border, var(--border-color));
 }
 
 .fileThumbnail,
@@ -669,9 +683,7 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
-  border-radius: calc(
-    var(--composer-radius-outer, 24px) - var(--composer-pad-y, 8px) - 1px
-  );
+  border-radius: inherit;
   display: block;
   flex-shrink: 0;
   background: var(--bg-primary);
@@ -679,33 +691,36 @@
 
 .fileIcon,
 .attachIconBox {
-  width: 16px;
-  height: 16px;
-  display: inline-flex;
+  width: 20px;
+  height: 20px;
+  display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   flex-shrink: 0;
   background: transparent;
   color: var(--text-secondary);
 }
 
 .attachIcon {
-  width: 14px;
-  height: 14px;
+  width: 20px;
+  height: 20px;
   flex-shrink: 0;
 }
 
 .fileName,
 .attachName {
-  font-size: 12px;
+  font-size: var(--composer-attach-name-size, 11px);
   font-weight: 500;
-  color: var(--text-primary);
+  color: var(--composer-attach-name-color, var(--text-secondary));
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  min-width: 0;
-  display: inline-flex;
-  align-items: center;
+  width: 100%;
+  max-width: 100%;
+  line-height: 1.25;
+  display: block;
+  box-sizing: border-box;
+  text-align: left;
 }
 
 .annotationTag {
@@ -723,32 +738,83 @@
   flex-shrink: 0;
 }
 
+.attachProgressBadge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1px 4px;
+  border-radius: var(--radius-full, 9999px);
+  background: transparent;
+  color: var(--composer-attach-progress-color, var(--accent-primary, #10b981));
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  pointer-events: none;
+  z-index: 3;
+  font-variant-numeric: tabular-nums;
+  transition: opacity var(--transition-fast, 120ms ease);
+}
+
+.attachProgressBadgeImage {
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  color: #ffffff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+
+.attachProgressBorder {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.attachProgressBorder rect {
+  transition: stroke-dashoffset 200ms ease;
+}
+
+.fileCard:hover .attachProgressBadge,
+.attachChip:hover .attachProgressBadge {
+  opacity: 0;
+}
+
 .fileRemove,
 .attachRemove {
   position: absolute;
-  top: -2px;
-  right: -2px;
-  width: 16px;
-  height: 16px;
-  background: var(--color-error);
-  color: var(--text-on-brand, white);
+  top: 3px;
+  right: 3px;
+  width: var(--composer-attach-remove-size, 18px);
+  height: var(--composer-attach-remove-size, 18px);
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   opacity: 0;
-  transform: scale(0.7);
+  transform: scale(0.85);
   pointer-events: none;
-  transition: opacity 140ms cubic-bezier(0.16, 1, 0.3, 1),
-    transform 140ms cubic-bezier(0.16, 1, 0.3, 1),
-    background 140ms cubic-bezier(0.16, 1, 0.3, 1);
-  z-index: var(--z-popover);
-  border: none;
+  background: var(--composer-attach-remove-bg, rgba(255, 255, 255, 0.72));
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--composer-attach-remove-border, color-mix(in srgb, var(--border-color) 70%, transparent));
+  color: var(--text-primary);
   padding: 0;
   box-shadow: none;
   filter: none;
   outline: none;
+  transition:
+    opacity 140ms cubic-bezier(0.16, 1, 0.3, 1),
+    transform 140ms cubic-bezier(0.16, 1, 0.3, 1),
+    background-color 140ms cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 140ms cubic-bezier(0.16, 1, 0.3, 1),
+    color 140ms cubic-bezier(0.16, 1, 0.3, 1);
+  z-index: var(--z-popover);
 }
 
 /* 扩展无缝命中区，防止鼠标从卡片边界移动向叉号时失焦 */
@@ -762,9 +828,9 @@
 
 .fileRemove svg,
 .attachRemove svg {
-  width: 8px;
-  height: 8px;
-  stroke-width: 2.5;
+  width: 10px;
+  height: 10px;
+  stroke-width: 2.2;
 }
 
 .fileCard:hover .fileRemove,
@@ -780,10 +846,12 @@
   pointer-events: auto !important;
 }
 
+/* 单一真理源统一 Hover：正红色稍弱一点（不混合黑色），纯白叉号，清透干净，全卡片类型绝对统一样式 */
 .fileRemove:hover,
 .attachRemove:hover {
-  background: color-mix(in srgb, var(--color-error) 85%, black 15%) !important;
-  color: var(--text-on-brand, white) !important;
+  background: hsl(0 78% 54%) !important;
+  border-color: transparent !important;
+  color: #ffffff !important;
 }
 
 /* ==========================================================================
@@ -1004,11 +1072,11 @@
    ========================================================================== */
 
 .composerCard {
-  /* 同心几何标尺：外圆角 = 内边距 + 内圆角 (Ro = P + Ri) */
-  --composer-radius-inner: 16px;
-  --composer-pad-y: 8px;
-  --composer-pad-x: 12px;
-  --composer-radius-outer: calc(var(--composer-radius-inner) + var(--composer-pad-y));
+  /* 同心几何标尺：外圆角 = 内边距 + 内圆角 (Ro = P + Ri = 6 + 14 = 20px) */
+  --composer-radius-inner: 14px;
+  --composer-pad-y: 6px;
+  --composer-pad-x: 6px;
+  --composer-radius-outer: calc(var(--composer-radius-inner) + var(--composer-pad-x));
   position: relative;
   z-index: var(--z-dock);
   display: flex;
@@ -1018,14 +1086,14 @@
   box-sizing: border-box;
   padding: var(--composer-pad-y) var(--composer-pad-x);
   border: 1px solid var(--border-color);
-  border-radius: var(--composer-radius-outer, 24px);
+  border-radius: var(--composer-radius-outer, 20px);
   background: var(--composer-bg, var(--bg-composer, var(--bg-elevated)));
   box-shadow: none;
   transition: border-color var(--transition-fast, 120ms ease);
 }
 
 .composerCard.isMultiline {
-  padding: 8px 12px 6px 12px;
+  padding: 8px 6px 6px 6px;
 }
 
 .composerCard:has(.attachStrip),
@@ -1078,10 +1146,10 @@
   grid-area: left-ctrl;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   flex-shrink: 0;
   position: relative;
-  height: 32px;
+  height: 28px;
 }
 
 .fieldSlot {
@@ -1094,7 +1162,7 @@
   display: flex;
   align-items: center;
   flex-shrink: 0;
-  height: 32px;
+  height: 28px;
 }
 
 .actionRight {
@@ -1103,19 +1171,19 @@
   align-items: center;
   flex-shrink: 0;
   justify-self: end;
-  height: 32px;
-  gap: 8px;
+  height: 28px;
+  gap: 6px;
 }
 
-/* ---- Plus Button (32x32 正圆按钮，无边框，轻柔微光) ---- */
+/* ---- Plus Button (28x28 正圆按钮，同心几何标尺) ---- */
 .plusBtn {
   background: var(--tint-hover, color-mix(in srgb, var(--text-primary) 3.5%, transparent));
   border: none;
   cursor: pointer;
-  width: 32px;
-  height: 32px;
-  min-width: 32px;
-  max-width: 32px;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  max-width: 28px;
   padding: 0;
   border-radius: 50%;
   color: var(--text-primary);
@@ -1143,10 +1211,10 @@
   stroke-width: 1.75;
 }
 
-/* ---- Action Circle Button (Voice / Stats) (32x32 正圆按钮) ---- */
+/* ---- Action Circle Button (Voice / Stats) (28x28 正圆按钮) ---- */
 .actionCircleBtn {
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   border: none;
   background: var(--bg-surface, color-mix(in srgb, var(--bg-secondary) 50%, var(--bg-elevated)));
@@ -1186,7 +1254,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 32px;
+  height: 28px;
   width: 0;
   min-width: 0;
   padding: 0;
@@ -1216,13 +1284,15 @@
 .sendBtnCircle.active,
 .sendCircle[data-send-active='1'],
 .sendCircle:not(:disabled) {
-  width: 32px;
-  min-width: 32px;
+  width: 28px !important;
+  min-width: 28px !important;
+  max-width: 28px !important;
+  height: 28px !important;
   margin-left: 6px;
   opacity: 1;
   transform: scale(1);
   pointer-events: auto;
-  box-shadow: 0 2px 6px color-mix(in srgb, var(--brand) 25%, transparent);
+  box-shadow: none !important;
 }
 
 .sendBtnCircle.active:hover,
@@ -1240,9 +1310,9 @@
 .sendBtnCircle svg,
 .sendCircle svg {
   display: block;
-  width: 16px;
-  height: 16px;
-  stroke-width: 2.5;
+  width: 14px;
+  height: 14px;
+  stroke-width: 2.4;
   color: var(--text-on-brand, white);
   stroke: currentColor;
   flex-shrink: 0;
@@ -1250,8 +1320,10 @@
 }
 
 .stopCircleBtn {
-  width: 32px;
-  height: 32px;
+  width: 28px !important;
+  height: 28px !important;
+  min-width: 28px !important;
+  max-width: 28px !important;
   border-radius: 50%;
   background: transparent;
   color: var(--text-secondary);

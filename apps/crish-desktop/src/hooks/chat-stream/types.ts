@@ -1,13 +1,25 @@
 import type { Dispatch, SetStateAction } from 'react';
 import type { StreamRequestOptions } from '../../api/chatApi';
 
+export interface ImageMeta {
+  width: number;
+  height: number;
+  size: number;
+  mime: string;
+}
+
 export type ChatAttachment = {
   id?: string;
   name: string;
   path?: string;
   text?: string;
   dataUrl?: string;
+  thumbnailUrl?: string;
   mime?: string;
+  isImage?: boolean;
+  imageMeta?: ImageMeta;
+  status?: 'parsing' | 'ready' | 'error';
+  progress?: number;
   annotation?: {
     id: string;
     selectedText: string;

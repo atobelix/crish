@@ -247,6 +247,10 @@ export const AnnotationChipItem: React.FC<AnnotationChipItemProps> = React.memo(
             }
           }}
         >
+          <span className={`${styles.fileIcon} ${styles.attachIconBox} file-icon`} aria-hidden>
+            <Lucide.MessageSquareQuote size={20} className={styles.attachIcon} />
+          </span>
+
           <span className={`${styles.fileName} ${styles.attachName} file-name`}>
             <span>批注</span>
             <span className={styles.dotSep}>·</span>
@@ -341,6 +345,121 @@ export const AnnotationChipItem: React.FC<AnnotationChipItemProps> = React.memo(
 
 AnnotationChipItem.displayName = 'AnnotationChipItem';
 
+interface RegularChipItemProps {
+  attachment: ChatAttachment;
+  kind: AttachKind;
+  onRemove: (id: string) => void;
+  onOpenPreview: (a: ChatAttachment) => void;
+}
+
+const RegularChipItem: React.FC<RegularChipItemProps> = React.memo(
+  ({ attachment: a, kind, onRemove, onOpenPreview }) => {
+    const [thumbError, setThumbError] = useState(false);
+    const thumbSrc = a.thumbnailUrl || a.dataUrl;
+    const hasThumb = Boolean(thumbSrc) && !thumbError;
+    const isParsing =
+      a.status === 'parsing' ||
+      (typeof a.progress === 'number' && a.progress < 100);
+    const progressVal =
+      typeof a.progress === 'number' ? Math.round(a.progress) : 0;
+    const removeId = a.id || a.name;
+
+    return (
+      <Tooltip content={a.name}>
+        <span
+          role="listitem"
+          tabIndex={0}
+          data-testid="composer-attach-card"
+          data-attach-kind={kind}
+          data-file-type={kind}
+          data-file-name={a.name}
+          data-file-open-path={a.path || a.name}
+          className={`${styles.fileCard} ${styles.attachChip} file-card ${hasThumb ? `${styles.attachChipImage} type-image` : ''}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onOpenPreview(a);
+          }}
+          onAuxClick={(e) => {
+            if (e.button !== 1) return;
+            e.preventDefault();
+            e.stopPropagation();
+            onRemove(removeId);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              onOpenPreview(a);
+            }
+          }}
+        >
+          {hasThumb ? (
+            <img
+              src={thumbSrc}
+              alt={a.name}
+              onError={() => setThumbError(true)}
+              className={`${styles.fileThumbnail} ${styles.attachThumb} file-thumbnail`}
+            />
+          ) : (
+            <span className={`${styles.fileIcon} ${styles.attachIconBox} file-icon`} aria-hidden>
+              <FileFormatIcon fileName={a.name} size={20} className={styles.attachIcon} />
+            </span>
+          )}
+
+          {hasThumb ? null : (
+            <span className={`${styles.fileName} ${styles.attachName} file-name`}>
+              {a.name}
+            </span>
+          )}
+
+          {isParsing && (
+            <>
+              <svg
+                className={styles.attachProgressBorder}
+                viewBox="0 0 58 58"
+                aria-hidden
+              >
+                <rect
+                  x="1"
+                  y="1"
+                  width="56"
+                  height="56"
+                  rx="11"
+                  fill="none"
+                  stroke="var(--composer-attach-progress-color, var(--accent-primary, #10b981))"
+                  strokeWidth="2"
+                  pathLength="100"
+                  strokeDasharray="100"
+                  strokeDashoffset={100 - (progressVal || 25)}
+                />
+              </svg>
+              <span
+                className={`${styles.attachProgressBadge} ${hasThumb ? styles.attachProgressBadgeImage : ''}`}
+                aria-label={`上传解析进度 ${progressVal}%`}
+              >
+                {progressVal > 0 ? `${progressVal}%` : '…'}
+              </span>
+            </>
+          )}
+
+          <button
+            type="button"
+            className={`${styles.fileRemove} ${styles.attachRemove} file-remove chat-attach-remove`}
+            aria-label={`移除附件 ${a.name}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              onRemove(removeId);
+            }}
+          >
+            <Lucide.X size={10} strokeWidth={2.2} aria-hidden />
+          </button>
+        </span>
+      </Tooltip>
+    );
+  }
+);
+
+RegularChipItem.displayName = 'RegularChipItem';
+
 export const ComposerAttachmentBar: React.FC<ComposerAttachmentBarProps> = ({
   attachments,
   onRemoveAttachment,
@@ -351,8 +470,19 @@ export const ComposerAttachmentBar: React.FC<ComposerAttachmentBarProps> = ({
   if (attachments.length === 0) return null;
 
   const openPreview = (a: ChatAttachment) => {
-    if (a.dataUrl && (!a.path || a.path === a.name)) {
-      window.open(a.dataUrl, '_blank');
+    if (a.path && a.path !== a.name) {
+      const open = onOpenPath ?? openFileInPanel;
+      open(a.path.trim());
+      return;
+    }
+    if (a.dataUrl) {
+      const win = typeof window !== 'undefined' ? window.open('', '_blank') : null;
+      if (win) {
+        win.document.write(
+          `<!DOCTYPE html><html><head><title>${a.name}</title><style>body{margin:0;display:flex;align-items:center;justify-content:center;height:100vh;background:#111;}img{max-width:95vw;max-height:95vh;object-fit:contain;}</style></head><body><img src="${a.dataUrl}" alt="${a.name}"/></body></html>`
+        );
+        win.document.close();
+      }
       return;
     }
     const targetPath = (a.path || a.name || '').trim();
@@ -370,7 +500,6 @@ export const ComposerAttachmentBar: React.FC<ComposerAttachmentBarProps> = ({
       {attachments.map((a, index) => {
         const kind = attachKind(a);
         const itemKey = a.id || (a.annotation ? a.annotation.id : `${a.path || a.name}_${index}`);
-        const removeId = a.id || a.name;
         if (kind === 'annotation' && a.annotation) {
           return (
             <AnnotationChipItem
@@ -387,67 +516,14 @@ export const ComposerAttachmentBar: React.FC<ComposerAttachmentBarProps> = ({
           );
         }
 
-        const hasThumb = Boolean(a.dataUrl);
-
         return (
-          <Tooltip key={itemKey} content={a.name}>
-            <span
-              role="listitem"
-              tabIndex={0}
-              data-testid="composer-attach-card"
-              data-attach-kind={kind}
-              data-file-type={kind}
-              data-file-name={a.name}
-              data-file-open-path={a.path || a.name}
-              className={`${styles.fileCard} ${styles.attachChip} file-card ${hasThumb ? `${styles.attachChipImage} type-image` : ''}`}
-              onClick={(e) => {
-                e.stopPropagation();
-                openPreview(a);
-              }}
-              onAuxClick={(e) => {
-                if (e.button !== 1) return;
-                e.preventDefault();
-                e.stopPropagation();
-                onRemoveAttachment(removeId);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  openPreview(a);
-                }
-              }}
-            >
-              {hasThumb ? (
-                <img
-                  src={a.dataUrl}
-                  alt={a.name}
-                  className={`${styles.fileThumbnail} ${styles.attachThumb} file-thumbnail`}
-                />
-              ) : (
-                <span className={`${styles.fileIcon} ${styles.attachIconBox} file-icon`} aria-hidden>
-                  <FileFormatIcon fileName={a.name} size={14} className={styles.attachIcon} />
-                </span>
-              )}
-
-              {hasThumb ? null : (
-                <span className={`${styles.fileName} ${styles.attachName} file-name`}>
-                  {a.name}
-                </span>
-              )}
-
-              <button
-                type="button"
-                className={`${styles.fileRemove} ${styles.attachRemove} file-remove chat-attach-remove`}
-                aria-label={`移除附件 ${a.name}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onRemoveAttachment(removeId);
-                }}
-              >
-                <Lucide.X size={10} strokeWidth={2.2} aria-hidden />
-              </button>
-            </span>
-          </Tooltip>
+          <RegularChipItem
+            key={itemKey}
+            attachment={a}
+            kind={kind}
+            onRemove={onRemoveAttachment}
+            onOpenPreview={openPreview}
+          />
         );
       })}
     </div>

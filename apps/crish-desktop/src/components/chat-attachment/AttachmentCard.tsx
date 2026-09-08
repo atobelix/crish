@@ -1,9 +1,10 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import * as Lucide from 'lucide-react';
 import styles from './AttachmentCard.module.css';
 import { Tooltip } from '../ui';
 import { FileFormatIcon } from '../../assets/icons';
 import { convertFileSrc } from '@tauri-apps/api/core';
-import { assertWorkspacePath, isAbsoluteFsPath } from '../../api/workspaceFsApi';
+import { isAbsoluteFsPath } from '../../api/workspaceFsApi';
 import type { SessionMessage } from '../../store/types';
 
 export interface AttachmentItem {
@@ -15,12 +16,25 @@ export interface AttachmentItem {
   dataUrl?: string;
   alt?: string;
   isImage?: boolean;
+  missing?: boolean;
+  error?: boolean;
 }
 
 export interface AttachmentCardProps {
   item: AttachmentItem;
   onClick?: (item: AttachmentItem) => void;
   className?: string;
+}
+
+/**
+ * 格式化附件文件大小显示
+ */
+export function formatAttachmentSize(bytes?: number): string {
+  if (typeof bytes !== 'number' || isNaN(bytes) || bytes <= 0) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
 }
 
 /**
@@ -76,6 +90,7 @@ export function normalizeMessageAttachments(
 }
 
 export function isImageAttachmentItem(item: AttachmentItem): boolean {
+  if (item.isImage === false) return false;
   if (item.isImage) return true;
   if (item.mime && item.mime.startsWith('image/')) return true;
   const target = item.name || item.path || '';
@@ -95,12 +110,7 @@ export function resolveCardImageSrc(item: AttachmentItem): string {
     return source;
   }
   if (isAbsoluteFsPath(source)) {
-    try {
-      const safe = assertWorkspacePath(source);
-      return convertFileSrc(safe);
-    } catch {
-      return '';
-    }
+    return convertFileSrc(source);
   }
   return source;
 }
@@ -118,14 +128,40 @@ export const AttachmentCard: React.FC<AttachmentCardProps> = React.memo(
       () => (isImage ? resolveCardImageSrc(item) : ''),
       [isImage, item]
     );
-    const kindBadge = useMemo(
+
+    const [imgError, setImgError] = useState(false);
+
+    useEffect(() => {
+      setImgError(false);
+    }, [item.path, item.dataUrl]);
+
+    const extBadge = useMemo(
       () => getFileKindBadge(item.name || item.path || ''),
       [item.name, item.path]
     );
 
+    const sizeText = useMemo(
+      () => formatAttachmentSize(item.size),
+      [item.size]
+    );
+
+    const isItemMissing = Boolean(item.missing || item.error);
+    const isImageMissing = isImage && (imgError || !imgSrc || isItemMissing);
+
     const tooltipContent = useMemo(() => {
+      if (isImage) {
+        if (isImageMissing) {
+          return '[图片无法加载] 本地文件已被移动或删除';
+        }
+        return item.name || item.path || '图片';
+      }
+      if (isItemMissing) {
+        return item.name || item.path
+          ? `[文件失效] ${item.name || item.path}`
+          : '[文件无法访问] 本地文件已被移动或删除';
+      }
       return item.path || item.name || '附件';
-    }, [item.path, item.name]);
+    }, [isImage, isImageMissing, isItemMissing, item.name, item.path]);
 
     // 核心拦截（MIN-01）：阻断点击冒泡，严禁意外触发气泡折叠
     const handleClick = useCallback(
@@ -147,35 +183,99 @@ export const AttachmentCard: React.FC<AttachmentCardProps> = React.memo(
       [onClick, item]
     );
 
+    // 图片模式 (Image Mode - 58×58)
+    if (isImage) {
+      if (isImageMissing) {
+        return (
+          <Tooltip content={tooltipContent}>
+            <div
+              role="button"
+              tabIndex={0}
+              aria-label={
+                item.name || item.path
+                  ? `附件失效: ${item.name || item.path}`
+                  : '图片无法加载'
+              }
+              className={`${styles.attachmentCard} ${styles.cardImageMode} ${styles.missingCard} ${className || ''}`}
+              onClick={handleClick}
+              onKeyDown={handleKeyDown}
+              data-testid="attachment-card-58"
+            >
+              <Lucide.ImageOff size={20} className={styles.missingIcon} />
+              <span className={styles.missingBadge}>失效</span>
+            </div>
+          </Tooltip>
+        );
+      }
+
+      return (
+        <Tooltip content={tooltipContent}>
+          <div
+            role="button"
+            tabIndex={0}
+            aria-label={
+              item.name || item.path
+                ? `附件: ${item.name || item.path}`
+                : '附件卡片'
+            }
+            className={`${styles.attachmentCard} ${styles.cardImageMode} ${className || ''}`}
+            onClick={handleClick}
+            onKeyDown={handleKeyDown}
+            data-testid="attachment-card-58"
+          >
+            <div className={styles.imageBox}>
+              <img
+                src={imgSrc}
+                onError={() => setImgError(true)}
+                alt={item.name || item.alt || '图片预览'}
+                className={styles.imagePreview}
+                loading="lazy"
+              />
+            </div>
+          </div>
+        </Tooltip>
+      );
+    }
+
+    // 文件/文档模式 (Document/File Mode - 48~52px 高度, 160~220px 宽度横向微卡片)
+    const displayName =
+      item.name || (item.path ? item.path.split(/[\\/]/).pop() : '') || '附件';
+
     return (
       <Tooltip content={tooltipContent}>
         <div
           role="button"
           tabIndex={0}
-          aria-label={item.name || item.path ? `附件: ${item.name || item.path}` : '附件卡片'}
-          className={`${styles.attachmentCard} ${isImage ? styles.cardImageMode : ''} ${className || ''}`}
+          aria-label={
+            item.name || item.path
+              ? `附件: ${item.name || item.path}`
+              : '附件卡片'
+          }
+          className={`${styles.attachmentCard} ${styles.fileCardHorizontal} ${isItemMissing ? styles.missingCard : ''} ${className || ''}`}
           onClick={handleClick}
           onKeyDown={handleKeyDown}
           data-testid="attachment-card-58"
         >
-          {isImage && imgSrc ? (
-            <div className={styles.imageBox}>
-              <img
-                src={imgSrc}
-                alt={item.alt || item.name || '图片预览'}
-                className={styles.imagePreview}
-                loading="lazy"
-              />
-            </div>
-          ) : (
-            <div className={styles.fileBox}>
+          <div className={styles.fileIconBox}>
+            {isItemMissing ? (
+              <Lucide.FileQuestion size={18} className={styles.missingIcon} />
+            ) : (
               <FileFormatIcon
                 fileName={item.name || item.path || ''}
-                size={22}
+                size={20}
               />
-              <span className={styles.badge}>{kindBadge}</span>
-            </div>
-          )}
+            )}
+          </div>
+          <div className={`${styles.fileInfoCol} ${styles.fileInfo}`}>
+            <span
+              className={`${styles.fileName} ${styles.fileNameText} ${isItemMissing ? styles.fileNameMissing : ''}`}
+            >
+              {item.name || displayName}
+            </span>
+            <span className={`${styles.fileMeta} ${styles.fileMetaText}`}>
+              {extBadge} {sizeText ? `· ${sizeText}` : ''}
+            </span>
+          </div>
         </div>
       </Tooltip>
     );

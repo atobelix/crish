@@ -81,6 +81,8 @@ export type TiptapComposerFieldProps = ComposerFieldProps & {
   baseSlashCommands?: ReadonlyArray<{ cmd: string; desc: string }>;
   /** 宿主文件选择链（编辑器拖放直达） */
   onFilesSelected?: (files: File[]) => void | Promise<void>;
+  /** 宿主文件粘贴链（编辑器剪贴板文件直达） */
+  onPasteFiles?: (files: File[]) => void | Promise<void>;
   /** 提及候选人（@ 触发；未接入宿主候选人源时留空兜底） */
   mentionCandidates?: ReadonlyArray<MentionCandidate>;
   /** 落地面态（session-empty 走 5% 焦点混色特例） */
@@ -119,6 +121,7 @@ export const TiptapComposerField: React.FC<TiptapComposerFieldProps> = ({
   skillSlashCommands,
   baseSlashCommands,
   onFilesSelected,
+  onPasteFiles,
   mentionCandidates,
   emptyKind,
   hideSendControls = false,
@@ -234,6 +237,27 @@ export const TiptapComposerField: React.FC<TiptapComposerFieldProps> = ({
     [onFilesSelected]
   );
 
+  const callbacksRef = useRef<{
+    onPasteFiles?: (files: File[]) => void | Promise<void>;
+  }>({
+    onPasteFiles,
+  });
+
+  useEffect(() => {
+    callbacksRef.current.onPasteFiles = onPasteFiles;
+  }, [onPasteFiles]);
+
+  const handlePasteFiles = useCallback(
+    (files: File[]) => {
+      if (callbacksRef.current.onPasteFiles) {
+        void callbacksRef.current.onPasteFiles(files);
+      } else if (onFilesSelected) {
+        void onFilesSelected(files);
+      }
+    },
+    [onFilesSelected]
+  );
+
   // ── 定向注入响应：草稿模板命中活跃会话后聚焦并全选首个占位符 ───────────────
   useEffect(() => {
     if (!draftInjectionTick) return;
@@ -303,6 +327,7 @@ export const TiptapComposerField: React.FC<TiptapComposerFieldProps> = ({
         onCompositionChange={setIsComposing}
         onDropFiles={handleDropFiles}
         onPasteImage={handlePasteImage}
+        onPasteFiles={onPasteFiles ? handlePasteFiles : undefined}
         slashExtraItems={slashExtraItems}
         mentionCandidates={mentionCandidates}
         containerRef={containerRef}

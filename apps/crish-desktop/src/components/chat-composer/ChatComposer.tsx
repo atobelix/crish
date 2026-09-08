@@ -41,6 +41,15 @@ import { ComposerFusedTrigger } from './ComposerFusedTrigger';
 import { removePendingFileAnnotation } from '../../api/workspaceFsApi';
 import { ComposerSendControls } from './ComposerSendControls';
 import { useComposerMultiline } from './useComposerMultiline';
+import { useComposerHiddenFileInputProps } from '../../api/modelVisionSupport';
+import {
+  ComposerNoticeBar,
+  type ComposerNotice,
+} from './ComposerNoticeBar';
+import { useComposerNotice } from './useComposerNotice';
+import { useComposerEmptyKind } from './useComposerEmptyKind';
+import { useComposerProtectedSend } from './useComposerProtectedSend';
+import { InputFieldErrorBoundary } from './InputFieldErrorBoundary';
 
 export type { ComposerFieldProps } from './composerTypes';
 export { ComposerField, STOP_TOOLTIP } from './ComposerField';
@@ -62,26 +71,6 @@ const TiptapComposerFieldLazy = React.lazy(() =>
   }))
 );
 
-/** 富文本输入装配失败兜底边界：捕获 lazy 加载 / 渲染错误 → 通知宿主切 textarea */
-class InputFieldErrorBoundary extends React.Component<
-  { onFail: () => void; children?: React.ReactNode },
-  { failed: boolean }
-> {
-  state: { failed: boolean } = { failed: false };
-
-  static getDerivedStateFromError(): { failed: boolean } {
-    return { failed: true };
-  }
-
-  componentDidCatch(): void {
-    this.props.onFail();
-  }
-
-  render(): React.ReactNode {
-    if (this.state.failed) return null;
-    return this.props.children;
-  }
-}
 
 export type ChatComposerProps = {
   chatInput: string;
@@ -139,6 +128,12 @@ export type ChatComposerProps = {
   handleUndoDraft?: () => void;
   /** 定向注入信号 tick，驱动编辑器占位符聚焦 */
   draftInjectionTick?: number;
+  /** 剪贴板文件粘贴接管（从桌面/资源管理器复制文件直接 Ctrl+V 入队） */
+  onPasteFiles?: (files: File[]) => void | Promise<void>;
+  /** 输入框上方状态/错误提示条（极细浅描边通白背景，叹号hover，复制，反馈，关闭） */
+  notice?: ComposerNotice | null;
+  onDismissNotice?: () => void;
+  onNoticeFeedback?: () => void;
 };
 
 export const ChatComposer: React.FC<ChatComposerProps> = ({
@@ -149,6 +144,10 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
   filteredCommands,
   loadSkillSlash,
   onPasteImage,
+  onPasteFiles,
+  notice: noticeProp,
+  onDismissNotice,
+  onNoticeFeedback,
   onSend,
   onStop,
   onForceStop,
@@ -192,29 +191,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
   /** F1-γ：富文本装配失败（lazy 加载 / 渲染抛错）后永久回落 textarea 分支 */
   const [richTextFailed, setRichTextFailed] = useState(false);
 
-  // 落地面态（RL-01 特例）：宿主未透传 emptyKind 时，从 DOM 祖先 data-empty-kind
-  // （chatBody）读取；会话在空态/消息态间切换时经 MutationObserver 同步，
-  // 保证 session-empty 落地面走 5% 焦点混色而非标准 6%。
-  const [emptyKind, setEmptyKind] = useState<string | undefined>(
-    emptyKindProp ?? undefined
-  );
-  useEffect(() => {
-    if (emptyKindProp !== undefined && emptyKindProp !== null) return;
-    const root = wrapperRef.current;
-    if (!root) return;
-    const read = () => {
-      const el = root.closest('[data-empty-kind]');
-      setEmptyKind(el?.getAttribute('data-empty-kind') ?? undefined);
-    };
-    read();
-    const observed = root.closest('[data-main-surface]') ?? root;
-    const mo = new MutationObserver(read);
-    mo.observe(observed, {
-      attributes: true,
-      attributeFilter: ['data-empty-kind'],
-    });
-    return () => mo.disconnect();
-  }, [emptyKindProp]);
+  const emptyKind = useComposerEmptyKind(emptyKindProp, wrapperRef);
 
   const focusComposerTextarea = useCallback(() => {
     const root = fieldContainerRef.current;
@@ -227,6 +204,13 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
       el.focus();
     }
   }, []);
+
+  const hiddenFileInputProps = useComposerHiddenFileInputProps(
+    async (files) => {
+      await onFilesSelected(files);
+      requestAnimationFrame(focusComposerTextarea);
+    }
+  );
 
   const handleRemoveAttachment = useCallback(
     (identifier: string) => {
@@ -268,33 +252,12 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
     [onOpenPath]
   );
 
-  // 草稿原子保护：在前置校验失败或 IPC 发送未成功时，自动将已发送的内容原地回填至输入框
-  const handleProtectedSend = useCallback(async () => {
-    const rawInput = chatInput;
-    if (!rawInput.trim() && attachments.length === 0) return;
-
-    try {
-      await Promise.resolve(onSend());
-    } catch (err) {
-      console.warn('[ChatComposer] send failed, restoring draft:', err);
-      if (rawInput) {
-        setChatInput(rawInput);
-        try {
-          const { getCompositionRoot } =
-            await import('../../app/compositionRoot');
-          const root = getCompositionRoot();
-          const activeSessionId =
-            root.session.getActiveSessionId?.() ??
-            root.session.getState().activeSessionId;
-          if (activeSessionId) {
-            root.session.getState().setComposerDraft(activeSessionId, rawInput);
-          }
-        } catch {
-          /* swallow-ok: 草稿持久化失败不阻断回填 */
-        }
-      }
-    }
-  }, [attachments.length, chatInput, onSend, setChatInput]);
+  const handleProtectedSend = useComposerProtectedSend({
+    chatInput,
+    setChatInput,
+    attachments,
+    onSend,
+  });
 
   // ── F1-γ 核心输入契约（canonical）：富文本 / textarea 共用同一契约对象 ───────
   const fieldContract = useMemo<ComposerFieldProps>(
@@ -368,11 +331,18 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
             baseSlashCommands={filteredCommands}
             emptyKind={emptyKind}
             onFilesSelected={onFilesSelected}
+            onPasteFiles={onPasteFiles}
           />
         </React.Suspense>
       </InputFieldErrorBoundary>
     );
   };
+
+  const { effectiveNotice, handleDismissNotice } = useComposerNotice({
+    attachments,
+    noticeProp,
+    onDismissNotice,
+  });
 
   const hasFloatLayer = Boolean(
     permissionBarNode ||
@@ -410,6 +380,17 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
               (planProgressProps ? (
                 <ComposerPlanProgressBar {...planProgressProps} />
               ) : null)}
+          </div>
+        ) : null}
+
+        {/* 输入框上方精致提示条（极细浅描边通白背景，叹号hover详情，复制，反馈，关闭） */}
+        {effectiveNotice ? (
+          <div className={styles.composerNoticeZone} data-composer-notice-zone="">
+            <ComposerNoticeBar
+              notice={effectiveNotice}
+              onDismiss={handleDismissNotice}
+              onFeedback={onNoticeFeedback}
+            />
           </div>
         ) : null}
 
@@ -541,18 +522,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
 
           <input
             ref={fileInputRef as React.RefObject<HTMLInputElement>}
-            type="file"
-            multiple
-            aria-hidden
-            tabIndex={-1}
-            style={{ display: 'none' }}
-            onChange={async (e) => {
-              const files = Array.from(e.target.files || []);
-              e.target.value = '';
-              if (!files.length) return;
-              await onFilesSelected(files);
-              requestAnimationFrame(focusComposerTextarea);
-            }}
+            {...hiddenFileInputProps}
           />
         </div>
       </ComposerDropHost>

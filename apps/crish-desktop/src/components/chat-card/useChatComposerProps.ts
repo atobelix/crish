@@ -29,7 +29,8 @@ export function useChatComposerProps(options: UseChatComposerPropsOptions) {
     skillCommandsEnabled } = useSlashMenu({ chatInput });
 
   const { attachments, setAttachments, fileInputRef,
-    handleFilesSelected, handlePathsSelected, handlePickFiles, handlePasteImage } =
+    handleFilesSelected, handlePathsSelected, handleDroppedFiles, handlePickFiles,
+    handlePasteImage, handlePasteFiles } =
     useChatAttachments({ activeSessionId });
 
   const send = useChatSend({
@@ -70,8 +71,8 @@ export function useChatComposerProps(options: UseChatComposerPropsOptions) {
     slashMenuOpen, setSlashMenuOpen, slashSelectedIndex,
     setSlashSelectedIndex, filteredCommands, loadSkillSlash,
     attachments, setAttachments, fileInputRef, handleFilesSelected,
-    handlePathsSelected, handlePickFiles,
-    handlePasteImage,
+    handlePathsSelected, handleDroppedFiles, handlePickFiles,
+    handlePasteImage, handlePasteFiles,
     canSend: send.canSend, showPlusMenu: send.showPlusMenu,
     setShowPlusMenu: send.setShowPlusMenu,
     runNotice: send.runNotice, setRunNotice: send.setRunNotice,

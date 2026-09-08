@@ -88,10 +88,14 @@ fn full_context() -> (AnthropicRequestOptions, RequestBuildContext<'static>) {
         Arc::new(tool_result_message("call_1", "文件内容：hello", false)),
     ];
     let messages: &'static [Arc<AgentMessage>] = Box::leak(messages.into_boxed_slice());
+    let mut thinking_map = indexmap::IndexMap::new();
+    thinking_map.insert("High".to_string(), "4096".to_string());
     let opts = AnthropicRequestOptions {
         model: Some("claude-sonnet-4.5".to_string()),
-        max_tokens: Some(4096),
+        max_tokens: Some(8192),
         reasoning_effort: Some(ReasoningEffort::High),
+        thinking_format: Some(crate::models::catalog_types::ThinkingFormat::Anthropic),
+        thinking_map: Some(thinking_map),
         ..AnthropicRequestOptions::default()
     };
     let context = RequestBuildContext {
@@ -246,13 +250,18 @@ fn thinking_intensity_off_omits_thinking() {
 
 #[test]
 fn explicit_thinking_budget_override() {
+    // plans/04 §2.2：预算只来自字典数字（≥1024），禁止魔法刻度兜底
     let mut messages: Vec<Arc<AgentMessage>> = vec![Arc::new(user_message("深度分析"))];
     let msgs: &'static [Arc<AgentMessage>] =
         Box::leak(std::mem::take(&mut messages).into_boxed_slice());
+    let mut thinking_map = indexmap::IndexMap::new();
+    thinking_map.insert("High".to_string(), "16000".to_string());
     let opts = AnthropicRequestOptions {
         model: Some("claude-3-7-sonnet".to_string()),
-        thinking_budget: Some(16000),
-        max_tokens: Some(20000),
+        thinking_format: Some(crate::models::catalog_types::ThinkingFormat::Anthropic),
+        thinking_map: Some(thinking_map),
+        reasoning_effort: Some(ReasoningEffort::High),
+        max_tokens: Some(20096),
         ..AnthropicRequestOptions::default()
     };
     let context = RequestBuildContext {
@@ -264,7 +273,7 @@ fn explicit_thinking_budget_override() {
     let body = build_anthropic_request_body(&opts, &context);
     assert_eq!(body["thinking"]["type"], "enabled");
     assert_eq!(body["thinking"]["budget_tokens"], 16000);
-    // 16000 + 4096 = 20096 > 20000 -> 自动抬升至 20096
+    // 16000 + 4096 = 20096 → 自动抬升
     assert_eq!(body["max_tokens"], 20096);
 }
 

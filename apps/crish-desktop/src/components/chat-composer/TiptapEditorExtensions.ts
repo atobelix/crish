@@ -22,6 +22,10 @@ import { openFileInPanel } from '../../api/filePanelOpener';
 import { serializeToMarkdown } from './serialization/markdownSerializer';
 import { isImeComposition, resolveTiptapKeydown } from './TiptapKeymap';
 import { readCodeBlockIndent } from '../../api/codeBlockIndent';
+import {
+  activeModelAcceptsImage,
+  notifyImageIntakeBlocked,
+} from '../../api/modelVisionSupport';
 import type { SlashCommandItem, MentionCandidate } from './composerTypes';
 import styles from './TiptapEditorField.module.css';
 
@@ -32,6 +36,32 @@ import styles from './TiptapEditorField.module.css';
  */
 export const SERIALIZE_WARN_CHARS = 50000;
 
+/**
+ * §7.2 Tiptap HTML 粘贴 DOMPurify 契约（命名常量防配置回退）。
+ * ALLOW_UNKNOWN_PROTOCOLS:false 显式锁定；勿简化掉该键。
+ */
+export const TIPTAP_PASTE_DOMPURIFY_CONFIG = {
+  FORBID_TAGS: [
+    'script',
+    'style',
+    'iframe',
+    'object',
+    'embed',
+    'form',
+    'link',
+    'meta',
+    'img',
+    'video',
+    'audio',
+    'source',
+    'input',
+    'button',
+    'textarea',
+  ],
+  FORBID_ATTR: ['style', 'onerror', 'onload', 'onclick'],
+  ALLOW_UNKNOWN_PROTOCOLS: false as const,
+};
+
 /** 编辑器运行期回调（宿主经 ref 桥接，装配不重建） */
 export interface TiptapEditorCallbacks {
   onSendMarkdown?: (markdown: string) => void;
@@ -39,6 +69,7 @@ export interface TiptapEditorCallbacks {
   onCompositionChange?: (isComposing: boolean) => void;
   onDropFiles?: (files: File[]) => void;
   onPasteImage?: (file: File, event: ClipboardEvent) => void;
+  onPasteFiles?: (files: File[]) => void | Promise<void>;
   onOversizeWarning?: (charCount: number) => void;
 }
 
@@ -287,46 +318,57 @@ export function buildTiptapEditorOptions(bridge: TiptapEditorBridge) {
         const clipboardData = event.clipboardData;
         if (!clipboardData) return false;
 
-        // 1. 图片粘贴 → 转交适配层（宿主附件链），不落入编辑器
-        const items = clipboardData.items;
-        if (items && items.length > 0) {
-          for (let idx = 0; idx < items.length; idx++) {
-            const item = items.item ? items.item(idx) : items[idx];
-            if (item && item.type.startsWith('image/')) {
-              const file = item.getAsFile();
-              if (file) {
-                event.preventDefault();
-                bridge.callbacksRef.current.onPasteImage?.(file, event);
-                return true;
-              }
+        // 1. 优先提取剪贴板里的所有文件对象（操作系统复制的文件、截图等）
+        const files: File[] = [];
+        if (clipboardData.files && clipboardData.files.length > 0) {
+          for (let idx = 0; idx < clipboardData.files.length; idx++) {
+            const file = clipboardData.files.item
+              ? clipboardData.files.item(idx)
+              : clipboardData.files[idx];
+            if (file) files.push(file);
+          }
+        } else if (clipboardData.items && clipboardData.items.length > 0) {
+          for (let idx = 0; idx < clipboardData.items.length; idx++) {
+            const item = clipboardData.items.item
+              ? clipboardData.items.item(idx)
+              : clipboardData.items[idx];
+            if (
+              item &&
+              (item.kind === 'file' || typeof item.getAsFile === 'function')
+            ) {
+              const file = item.getAsFile?.();
+              if (file) files.push(file);
             }
           }
+        }
+
+        if (files.length > 0) {
+          event.preventDefault();
+          const allImages = files.every(
+            (f) => Boolean(f.type && f.type.startsWith('image/'))
+          );
+          if (allImages) {
+            if (!activeModelAcceptsImage()) {
+              notifyImageIntakeBlocked();
+              return true;
+            }
+          }
+
+          if (bridge.callbacksRef.current.onPasteFiles) {
+            void bridge.callbacksRef.current.onPasteFiles(files);
+          } else if (bridge.callbacksRef.current.onPasteImage && allImages && files[0]) {
+            bridge.callbacksRef.current.onPasteImage(files[0], event);
+          } else if (bridge.callbacksRef.current.onDropFiles) {
+            bridge.callbacksRef.current.onDropFiles(files);
+          }
+          return true;
         }
 
         // 2. HTML 粘贴 → DOMPurify 清洗后以安全 HTML 插入（防 XSS 注入）
         const html = clipboardData.getData('text/html');
         if (html) {
           event.preventDefault();
-          const cleaned = DOMPurify.sanitize(html, {
-            FORBID_TAGS: [
-              'script',
-              'style',
-              'iframe',
-              'object',
-              'embed',
-              'form',
-              'link',
-              'meta',
-              'img',
-              'video',
-              'audio',
-              'source',
-              'input',
-              'button',
-              'textarea',
-            ],
-            FORBID_ATTR: ['style', 'onerror', 'onload', 'onclick'],
-          });
+          const cleaned = DOMPurify.sanitize(html, TIPTAP_PASTE_DOMPURIFY_CONFIG);
           view.pasteHTML(cleaned);
           return true;
         }

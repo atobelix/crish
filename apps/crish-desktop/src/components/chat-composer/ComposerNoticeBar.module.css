@@ -1,0 +1,192 @@
+/**
+ * ComposerNoticeBar: 输入框上方精致提示条组件样式
+ * 严格对齐 AGENTS.md §13（无纯黑边框、微变焦点、对比度克制）与 §14（色彩 Token 规范）
+ */
+
+.noticeBar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  max-height: 36px;
+  box-sizing: border-box;
+  padding: 6px 12px;
+  border-radius: var(--radius-md, 8px);
+  border: 1px solid var(--border-subtle);
+  background-color: #ffffff;
+  color: var(--text-primary);
+  font-size: 12px;
+  user-select: none;
+  transition: background-color 0.18s ease, border-color 0.18s ease;
+}
+
+/* 深色模式底色 */
+:global(html[data-theme='dark']) .noticeBar {
+  background-color: var(--bg-card);
+}
+
+/* --- 类型特定样式 --- */
+
+/* 1. info 类型 */
+.noticeBar.info {
+  border-color: color-mix(in srgb, var(--color-info, #3b82f6) 20%, var(--border-subtle));
+}
+
+.noticeBar.info .icon {
+  color: var(--color-info, #3b82f6);
+}
+
+/* 2. warning 类型 */
+.noticeBar.warning {
+  border-color: color-mix(in srgb, var(--color-warning, #f59e0b) 25%, var(--border-subtle));
+}
+
+.noticeBar.warning .icon {
+  color: var(--color-warning, #f59e0b);
+}
+
+/* 3. error 类型 */
+.noticeBar.error {
+  border: 1px solid color-mix(in srgb, var(--error-color, #ef4444) 25%, var(--border-subtle));
+  background-color: color-mix(in srgb, var(--error-color, #ef4444) 4%, hsl(0 0% 100%));
+}
+
+:global(html[data-theme='dark']) .noticeBar.error {
+  border-color: color-mix(in srgb, var(--error-color, #ef4444) 30%, var(--border-subtle));
+  background-color: color-mix(in srgb, var(--error-color, #ef4444) 6%, var(--bg-card));
+}
+
+.noticeBar.error .icon {
+  color: var(--error-color, #ef4444);
+}
+
+/* --- 子元素样式 --- */
+
+.icon {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.message {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-primary);
+}
+
+/* 叹号详情徽标 */
+.detailBadge {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border-radius: var(--radius-full, 9999px);
+  border: 1px solid color-mix(in srgb, var(--border-color) 80%, transparent);
+  background-color: transparent;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  font-family: inherit;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.detailBadge:hover {
+  background-color: var(--tint-hover, color-mix(in srgb, var(--text-primary) 5%, transparent));
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+
+.detailBadge:active {
+  background-color: var(--tint-active, color-mix(in srgb, var(--text-primary) 8%, transparent));
+}
+
+.detailBadge:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
+}
+
+/* 极简 ghost 扁平操作按钮（复制与反馈） */
+.copyBtn,
+.feedbackBtn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 6px;
+  border: none;
+  border-radius: var(--radius-sm, 4px);
+  background-color: transparent;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  font-family: inherit;
+  font-weight: 500;
+  line-height: 1;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.copyBtn:hover,
+.feedbackBtn:hover {
+  background-color: var(--tint-hover, color-mix(in srgb, var(--text-primary) 5%, transparent));
+  color: var(--text-primary);
+}
+
+.copyBtn:active,
+.feedbackBtn:active {
+  background-color: var(--tint-active, color-mix(in srgb, var(--text-primary) 8%, transparent));
+}
+
+.copyBtn:focus-visible,
+.feedbackBtn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
+}
+
+.btnIcon {
+  flex-shrink: 0;
+}
+
+/* 关闭/删除按钮 */
+.dismissBtn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  margin-left: 2px;
+  border: none;
+  border-radius: var(--radius-sm, 4px);
+  background-color: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.dismissBtn:hover {
+  background-color: var(--tint-hover, color-mix(in srgb, var(--text-primary) 5%, transparent));
+  color: var(--text-primary);
+}
+
+.dismissBtn:active {
+  background-color: var(--tint-active, color-mix(in srgb, var(--text-primary) 8%, transparent));
+}
+
+.dismissBtn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
+}

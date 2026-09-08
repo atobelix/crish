@@ -9,6 +9,16 @@ import React, { useRef, useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 
+const acceptsImageMock = vi.hoisted(() => vi.fn(() => true));
+vi.mock('../../api/modelVisionSupport', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../../api/modelVisionSupport')>();
+  return {
+    ...actual,
+    activeModelAcceptsImage: () => acceptsImageMock(),
+  };
+});
+
 vi.mock('../../app/compositionRoot', () => ({
   getCompositionRoot: () => ({
     session: {

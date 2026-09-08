@@ -1,15 +1,10 @@
 /* ==========================================================================
-   58×58 原子附件卡片体系 (AttachmentCard.module.css)
-   严格遵守 AGENTS.md §13（无黑微变）、§14（色彩规范）及反过度设计红线
+   原子附件卡片体系 (AttachmentCard.module.css)
+   支持 58×58 图片原子卡片与 48~52px 横向文件微卡片
+   严格遵守 AGENTS.md §13（无黑微变、柔软焦点环）、§14（色彩规范）及反过度设计红线
    ========================================================================== */
 
 .attachmentCard {
-  width: 58px;
-  height: 58px;
-  min-width: 58px;
-  min-height: 58px;
-  max-width: 58px;
-  max-height: 58px;
   border-radius: var(--radius-lg, 10px);
   border: 1px solid var(--border-subtle);
   background: var(--bg-card, hsl(0 0% 100%));
@@ -17,9 +12,6 @@
   overflow: hidden;
   cursor: pointer;
   position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   transition: border-color var(--transition-fast, 0.15s) ease,
               background var(--transition-fast, 0.15s) ease,
               box-shadow var(--transition-fast, 0.15s) ease;
@@ -42,8 +34,30 @@
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-color, hsl(160 84% 36%)) 30%, transparent);
 }
 
+/* --------------------------------------------------------------------------
+   图片卡片模式 (Image Mode - 58×58)
+   -------------------------------------------------------------------------- */
 .cardImageMode {
+  width: 58px;
+  height: 58px;
+  min-width: 58px;
+  min-height: 58px;
+  max-width: 58px;
+  max-height: 58px;
   padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 兼容未加 fileCardHorizontal 且非图片卡片时的保底 58×58 尺寸 */
+.attachmentCard:not(.fileCardHorizontal) {
+  width: 58px;
+  height: 58px;
+  min-width: 58px;
+  min-height: 58px;
+  max-width: 58px;
+  max-height: 58px;
 }
 
 .imageBox {
@@ -64,6 +78,126 @@
   display: block;
 }
 
+/* --------------------------------------------------------------------------
+   优雅失效 / 丢失态 (Missing Card)
+   -------------------------------------------------------------------------- */
+.missingCard {
+  border: 1px dashed color-mix(in srgb, var(--border-color, hsl(0 0% 80%)) 85%, var(--text-tertiary, hsl(0 0% 60%)) 15%);
+  background: var(--bg-subtle, hsl(0 0% 96%));
+  cursor: pointer;
+}
+
+.missingCard:hover {
+  background: color-mix(in srgb, var(--text-primary) 2.5%, var(--bg-subtle, hsl(0 0% 96%)));
+}
+
+.cardImageMode.missingCard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+
+.fileCardHorizontal.missingCard {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.missingIcon {
+  color: var(--text-tertiary, hsl(0 0% 55%));
+  opacity: 0.8;
+  flex-shrink: 0;
+}
+
+.missingBadge {
+  font-size: var(--font-size-nano, 9px);
+  font-weight: var(--font-weight-medium, 500);
+  line-height: 1;
+  color: var(--text-tertiary, hsl(0 0% 55%));
+  letter-spacing: 0.02em;
+}
+
+/* --------------------------------------------------------------------------
+   文档 / 文件横向微卡片模式 (Document/File Mode - 48~52px 高度, 160~220px 宽度)
+   -------------------------------------------------------------------------- */
+.fileCardHorizontal {
+  width: auto;
+  min-width: 160px;
+  max-width: 220px;
+  height: 50px;
+  min-height: 48px;
+  max-height: 52px;
+  padding: 6px 10px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+}
+
+.fileIconBox {
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  max-width: 28px;
+  max-height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: var(--radius-md, 6px);
+  background: var(--bg-subtle, hsl(0 0% 95%));
+}
+
+.fileInfoCol,
+.fileInfo {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  min-width: 0;
+  flex: 1;
+  gap: 2px;
+  overflow: hidden;
+}
+
+.fileName,
+.fileNameText {
+  font-size: var(--font-size-sm, 12px);
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--text-primary);
+  line-height: 1.3;
+  width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+}
+
+.fileNameMissing {
+  color: var(--text-tertiary, hsl(0 0% 60%));
+  text-decoration: line-through;
+  opacity: 0.75;
+}
+
+.fileMeta,
+.fileMetaText {
+  font-size: var(--font-size-nano, 10px);
+  font-weight: var(--font-weight-normal, 400);
+  font-family: var(--font-mono, monospace);
+  color: var(--text-tertiary);
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: 0.02em;
+}
+
+/* 兼容历史 .fileBox 与 .badge 类名防回潮 */
 .fileBox {
   width: 100%;
   height: 100%;

@@ -79,6 +79,7 @@ export const TiptapEditorField = React.forwardRef<
       onCompositionChange,
       onDropFiles,
       onPasteImage,
+      onPasteFiles,
       onOversizeWarning,
       ariaLabel,
       ariaExpanded,
@@ -127,6 +128,7 @@ export const TiptapEditorField = React.forwardRef<
       onCompositionChange,
       onDropFiles,
       onPasteImage,
+      onPasteFiles,
       onOversizeWarning,
     });
     /** R-08：大文档警告已发标记（回落阈值以下后重置，避免每帧 spam） */
@@ -155,6 +157,7 @@ export const TiptapEditorField = React.forwardRef<
         onCompositionChange,
         onDropFiles,
         onPasteImage,
+        onPasteFiles,
         onOversizeWarning,
       };
     }, [
@@ -163,6 +166,7 @@ export const TiptapEditorField = React.forwardRef<
       onCompositionChange,
       onDropFiles,
       onPasteImage,
+      onPasteFiles,
       onOversizeWarning,
     ]);
 

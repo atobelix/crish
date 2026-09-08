@@ -144,6 +144,7 @@ export interface TiptapEditorFieldProps {
   onCompositionChange?: (isComposing: boolean) => void;
   onDropFiles?: (files: File[]) => void;
   onPasteImage?: (file: File, event: ClipboardEvent) => void;
+  onPasteFiles?: (files: File[]) => void | Promise<void>;
   /** 无障碍标签（透传至可编辑根节点） */
   ariaLabel?: string;
   /** 斜杠弹层 combobox 链（对齐 ComposerField 语义） */

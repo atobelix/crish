@@ -1,130 +1,314 @@
 /**
- * 模型视觉多模态能力判定（SSOT 权威判定模块）
- * 依据 docs/model-capability/surveys/01-主流模型多源权威数据全景调研.md 与 catalog.json
+ * 模型视觉多模态判定（生产只信 live catalog `modalities.input`）
  *
- * 判别优先级：
- * 1. 用户显式配置或探针扫描的 ModelMeta.capabilities?.image（首要最高真源）
- * 2. 外部 YAML 字典镜像 modelsCatalogStore 的 capabilities?.image
- * 3. 基于全球主流模型全景调研字典的模式规则精准匹配
- * 4. 默认保守返回 false（避免盲目发送 image_url 导致纯文本 API 抛 400 崩溃）
+ * - isModelVisionSupported / 入口守卫只走 modelAcceptsInput(providerId, modelId, 'image')
+ * - providerId 缺失、store 未加载、找不到模型、modalities 缺省 → false
+ * - 禁止正则猜视觉、禁止 capabilities.image、禁止无 provider 全局兜底
+ * - 原生文件选择器不再对 accept 施加硬过滤，允许挂载图片/复杂文档，由提示条感知并预警
  */
 
-import { getModelMeta } from './modelCatalogMeta';
-import { findCatalogModel } from './modelsCatalogStore';
+import { useEffect, useState, type ChangeEvent } from 'react';
+import { modelAcceptsInput } from './modelsCatalogLive';
+import { modelsCatalogStore } from './modelsCatalogStore';
+import { getActiveModelId, getActiveProfileId } from './providerProfiles';
+import { onUiEvent } from './uiEvents';
+import { toast } from '../services/toast/ToastContext';
+
+export const VISION_IMAGE_BLOCKED_TOAST = '当前模型不支持图片输入';
 
 /**
- * 确定具备视觉多模态图像理解能力的知名模型族特征匹配正则
+ * 历史用于隐藏 file input 的 accept 列表（现已解耦，不再对原生选择器施加硬过滤）。
+ * 保留导出以兼容存量引用。
  */
-const VISION_MODEL_PATTERNS: RegExp[] = [
-  // Google: 全部 Gemini 家族与 Gemma 视觉版
-  /^gemini(-|\/)/i,
-  /gemma-4-(31b|26b)/i,
+export const COMPOSER_NON_IMAGE_FILE_ACCEPT =
+  '.txt,.md,.markdown,.json,.ts,.tsx,.js,.jsx,.css,.html,.py,.rs,.go,.java,.c,.cpp,.h,.yml,.yaml,.toml,.xml,.csv,.log,.sh,.ps1,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx';
 
-  // Anthropic: Claude 3+ 全系 (3, 3.5, 3.7, 4, 5)
-  /claude-(3|3\.5|3-5|3\.7|3-7|sonnet|opus|haiku|fable)/i,
+const IMAGE_NAME_RE = /\.(png|jpe?g|gif|webp|bmp|svg)$/i;
+const COMPLEX_DOC_EXT_RE = /\.(pdf|docx?|pptx?|xlsx?)$/i;
 
-  // OpenAI: GPT-4o, GPT-4-turbo, GPT-4.1, GPT-5, o1 (除 o1-mini / o1-preview 外)
-  /gpt-4o/i,
-  /gpt-4-turbo/i,
-  /gpt-4\.[1-9]/i,
-  /gpt-5/i,
-  /^o1(?!(?:-mini|-preview))/i,
-
-  // Meta: Muse 全系与 Llama 3.2 Vision
-  /muse-(spark|glimmer|image)/i,
-  /llama-3\.2-(11b|90b)-vision/i,
-
-  // 阿里通义: Qwen-VL, Qwen2-VL, Qwen2.5-VL
-  /qwen.*-vl/i,
-
-  // 智谱: GLM-4V, GLM-5V, GLM-V
-  /glm-(4v|5v|.*-v)/i,
-
-  // 月之暗面 Kimi: 视觉版
-  /kimi-.*(vl|vision|code)/i,
-
-  // xAI: Grok Vision
-  /grok.*-vision/i,
-
-  // Mistral: Pixtral 全系
-  /pixtral/i,
-
-  // 阶跃星辰: Step 视觉版
-  /step-(1v|1\.5v|2v|3\.7)/i,
-
-  // 百度千帆: ERNIE 4.5/5.0 VL
-  /ernie-.*vl/i,
-
-  // 通用视觉关键词标识
-  /(?:^|[-_/])(vision|vl|multimodal)(?:[-_/]|$)/i,
-];
-
-/**
- * 明确不支持视觉的纯文本/代码专属模型（负向阻断）
- */
-const NON_VISION_MODEL_PATTERNS: RegExp[] = [
-  // DeepSeek: 纯文本模型
-  /deepseek-(chat|coder|reasoner|r1|v3)/i,
-
-  // OpenAI: 历史纯文本与轻量推理
-  /gpt-3\.5/i,
-  /o1-mini/i,
-  /o1-preview/i,
-
-  // 阿里通义: 纯文本
-  /qwen-(plus|turbo|max|long|coder)/i,
-
-  // 智谱: 纯文本
-  /glm-(4|4-air|4-flash|4-plus|5)(?!v)/i,
-
-  // Llama 纯文本版
-  /llama-3(\.1|\.3)?-(8b|70b|405b)/i,
-
-  // Mistral 纯文本
-  /mistral-(large|medium|small)/i,
-  /codestral/i,
-];
-
-/**
- * 判定指定模型是否支持图像多模态输入（统一真源）
- * @param modelId 模型唯一标识（如 gpt-4o, deepseek-chat, gemini-2.5-flash）
- * @param profileId 可选的服务商档案标识
- */
 export function isModelVisionSupported(
   modelId: string,
-  profileId?: string | null
+  providerId?: string | null
 ): boolean {
-  const rawModel = (modelId || '').trim();
-  if (!rawModel) return false;
+  const pid = (providerId || '').trim();
+  const mid = (modelId || '').trim();
+  if (!pid || !mid) return false;
+  return modelAcceptsInput(pid, mid, 'image');
+}
 
-  // 1. 优先读取用户在设置或通过探针探测的明确能力配置
-  if (profileId) {
-    const meta = getModelMeta(profileId, rawModel);
-    if (meta?.capabilities?.image !== undefined) {
-      return Boolean(meta.capabilities.image);
-    }
-  }
+export function activeModelAcceptsImage(): boolean {
+  return isModelVisionSupported(
+    getActiveModelId() || '',
+    getActiveProfileId()
+  );
+}
 
-  // 2. 检查外部模型字典 models.yaml 的镜像定义
-  const spec = findCatalogModel(rawModel);
-  if (spec?.capabilities?.image !== undefined) {
-    return Boolean(spec.capabilities.image);
-  }
+/** catalog 已加载且当前模型不接受 image 时，才剥已挂图片（避免水合前误删） */
+export function shouldStripImagesForActiveModel(): boolean {
+  return (
+    modelsCatalogStore.getState().loaded === true &&
+    !activeModelAcceptsImage()
+  );
+}
 
-  // 3. 负向白名单优先排除明确的纯文本模型
-  for (const nonPattern of NON_VISION_MODEL_PATTERNS) {
-    if (nonPattern.test(rawModel)) {
-      return false;
-    }
-  }
+export function notifyImageIntakeBlocked(): void {
+  toast.show(VISION_IMAGE_BLOCKED_TOAST);
+}
 
-  // 4. 正向规则精准匹配知名视觉模型族
-  for (const pattern of VISION_MODEL_PATTERNS) {
-    if (pattern.test(rawModel)) {
+export function isImageIntakeFile(file: File): boolean {
+  return (
+    (file.type || '').startsWith('image/') || IMAGE_NAME_RE.test(file.name || '')
+  );
+}
+
+export function isImageChatAttachment(a: {
+  dataUrl?: string;
+  imageMeta?: unknown;
+  thumbnailUrl?: string;
+  mime?: string;
+  name?: string;
+  path?: string;
+}): boolean {
+  if (a.dataUrl || a.imageMeta || a.thumbnailUrl) return true;
+  if (typeof a.mime === 'string' && a.mime.startsWith('image/')) return true;
+  return IMAGE_NAME_RE.test(a.name || '') || IMAGE_NAME_RE.test(a.path || '');
+}
+
+/**
+ * 判断附件是否为复杂文档（PDF, Office 等）。
+ */
+export function isComplexDocChatAttachment(a: {
+  mime?: string;
+  name?: string;
+  path?: string;
+}): boolean {
+  if (typeof a.mime === 'string') {
+    const m = a.mime.toLowerCase();
+    if (
+      m.includes('pdf') ||
+      m.includes('word') ||
+      m.includes('excel') ||
+      m.includes('powerpoint') ||
+      m.includes('officedocument')
+    ) {
       return true;
     }
   }
+  return (
+    COMPLEX_DOC_EXT_RE.test(a.name || '') ||
+    COMPLEX_DOC_EXT_RE.test(a.path || '')
+  );
+}
 
-  // 5. 保守策略：未知模型默认不支持视觉，防止发送 image_url 导致第三方服务商报错 400
-  return false;
+export type AttachmentLike = {
+  mime?: string;
+  name?: string;
+  path?: string;
+  dataUrl?: string;
+  imageMeta?: unknown;
+  thumbnailUrl?: string;
+};
+
+/**
+ * 检测附件列表中是否含有图片或复杂文档
+ */
+export function hasVisionOrDocumentAttachments(
+  attachments: AttachmentLike[]
+): { hasImage: boolean; hasComplexDoc: boolean } {
+  let hasImage = false;
+  let hasComplexDoc = false;
+  for (const a of attachments) {
+    if (isImageChatAttachment(a)) {
+      hasImage = true;
+    }
+    if (isComplexDocChatAttachment(a)) {
+      hasComplexDoc = true;
+    }
+  }
+  return { hasImage, hasComplexDoc };
+}
+
+export interface ModelVisionWarningInfo {
+  hasWarning: boolean;
+  warningText: string | null;
+  unsupportedKinds: ('image' | 'complex_doc')[];
+}
+
+/**
+ * 针对挂载的附件列表与当前（或指定）模型，计算视觉/多模态支持警告文案。
+ * 若模型支持视觉或未挂载图片/复杂文档，返回 null；
+ * 若模型不支持视觉且挂载了图片或复杂文档，返回明确的提示条警告文案。
+ */
+export function getModelVisionWarning(
+  attachments: AttachmentLike[],
+  modelId?: string | null,
+  providerId?: string | null
+): string | null {
+  if (!attachments || attachments.length === 0) return null;
+
+  const targetModelId = modelId !== undefined ? modelId : getActiveModelId();
+  const targetProviderId =
+    providerId !== undefined ? providerId : getActiveProfileId();
+
+  if (isModelVisionSupported(targetModelId || '', targetProviderId)) {
+    return null;
+  }
+
+  const { hasImage, hasComplexDoc } =
+    hasVisionOrDocumentAttachments(attachments);
+
+  if (hasImage && hasComplexDoc) {
+    return '当前模型不支持多模态视觉与复杂文档解析，发送时可能无法理解附件内容';
+  }
+  if (hasImage) {
+    return '当前模型不支持图片输入，请切换至支持视觉的多模态模型';
+  }
+  if (hasComplexDoc) {
+    return '当前模型不支持复杂文档解析，请切换至支持文档/视觉的模型或转换为纯文本';
+  }
+
+  return null;
+}
+
+export function getModelVisionWarningInfo(
+  attachments: AttachmentLike[],
+  modelId?: string | null,
+  providerId?: string | null
+): ModelVisionWarningInfo {
+  const warningText = getModelVisionWarning(attachments, modelId, providerId);
+  const unsupportedKinds: ('image' | 'complex_doc')[] = [];
+  if (warningText) {
+    const { hasImage, hasComplexDoc } =
+      hasVisionOrDocumentAttachments(attachments);
+    if (hasImage) unsupportedKinds.push('image');
+    if (hasComplexDoc) unsupportedKinds.push('complex_doc');
+  }
+  return {
+    hasWarning: Boolean(warningText),
+    warningText,
+    unsupportedKinds,
+  };
+}
+
+export type VisionWarningListener = (warning: string | null) => void;
+
+const visionWarningListeners = new Set<VisionWarningListener>();
+
+/**
+ * 广播视觉警告文案事件（用于向输入框上方提示条或状态栏分发通知）
+ */
+export function notifyVisionWarning(warning: string | null): void {
+  for (const listener of Array.from(visionWarningListeners)) {
+    try {
+      listener(warning);
+    } catch {
+      // 忽略单个监听器异常
+    }
+  }
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(
+      new CustomEvent('crish-model-vision-warning', { detail: { warning } })
+    );
+  }
+}
+
+/**
+ * 订阅视觉警告事件通知
+ */
+export function onVisionWarning(listener: VisionWarningListener): () => void {
+  visionWarningListeners.add(listener);
+  return () => {
+    visionWarningListeners.delete(listener);
+  };
+}
+
+/**
+ * React Hook：响应式获取当前挂载附件在当前模型下的视觉警告文案
+ */
+export function useModelVisionWarning(
+  attachments: AttachmentLike[]
+): string | null {
+  const [, setRev] = useState(0);
+  useEffect(() => {
+    const bump = () => setRev((n) => n + 1);
+    const offModel = onUiEvent('model-changed', bump);
+    const offCatalog = onUiEvent('models-catalog-changed', bump);
+    return () => {
+      offModel();
+      offCatalog();
+    };
+  }, []);
+
+  return getModelVisionWarning(attachments);
+}
+
+/**
+ * 保护选文件列表（向后兼容保留纯函数）：
+ * 若外部调用方仍需主动过滤非视觉文件，可调用此函数。
+ */
+export function guardComposerFileSelection(files: File[]): File[] {
+  if (!files.length) return files;
+  if (activeModelAcceptsImage()) return files;
+  const kept = files.filter((f) => !isImageIntakeFile(f));
+  if (kept.length !== files.length) notifyImageIntakeBlocked();
+  return kept;
+}
+
+export function useActiveModelAcceptsImage(): boolean {
+  const [, setRev] = useState(0);
+  useEffect(() => {
+    const bump = () => setRev((n) => n + 1);
+    const offModel = onUiEvent('model-changed', bump);
+    const offCatalog = onUiEvent('models-catalog-changed', bump);
+    return () => {
+      offModel();
+      offCatalog();
+    };
+  }, []);
+  return activeModelAcceptsImage();
+}
+
+/**
+ * 隐藏 file input 的 props 生成器。
+ * 规范：取消 COMPOSER_NON_IMAGE_FILE_ACCEPT 对原生文件选择器的硬过滤限制（不再强制排除图片），
+ * 允许用户选择包含图片在内的任意文件，多模态不匹配时交由提示条感知并预警。
+ */
+export function useComposerHiddenFileInputProps(
+  onFiles: (files: File[]) => void | Promise<void>
+): {
+  type: 'file';
+  multiple: true;
+  accept?: string;
+  'aria-hidden': true;
+  tabIndex: number;
+  style: { display: 'none' };
+  'data-image-intake': 'on' | 'off';
+  onChange: (e: ChangeEvent<HTMLInputElement>) => void;
+} {
+  const acceptsImage = useActiveModelAcceptsImage();
+  const props: {
+    type: 'file';
+    multiple: true;
+    accept?: string;
+    'aria-hidden': true;
+    tabIndex: number;
+    style: { display: 'none' };
+    'data-image-intake': 'on' | 'off';
+    onChange: (e: ChangeEvent<HTMLInputElement>) => void;
+  } = {
+    type: 'file',
+    multiple: true,
+    'aria-hidden': true,
+    tabIndex: -1,
+    style: { display: 'none' },
+    'data-image-intake': acceptsImage ? 'on' : 'off',
+    onChange: (e) => {
+      const raw = Array.from(e.target.files || []);
+      e.target.value = '';
+      if (!raw.length) return;
+      void Promise.resolve(onFiles(raw));
+    },
+  };
+  // 不再设置 props.accept = COMPOSER_NON_IMAGE_FILE_ACCEPT
+  return props;
 }

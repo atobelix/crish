@@ -69,7 +69,7 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
           dragDepthRef.current = 0;
           const files = Array.from(e.dataTransfer?.files ?? []);
           if (files.length > 0) {
-            void state.composerProps.handleFilesSelected(files);
+            void state.composerProps.handleDroppedFiles(files);
           }
         }
       };
@@ -87,9 +87,10 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
       <ChatComposer
         {...state.composerProps}
         onPasteImage={state.composerProps.handlePasteImage}
+        onPasteFiles={state.composerProps.handlePasteFiles}
         onStop={state.composerProps.handleStopGeneration}
         onForceStop={state.composerProps.handleForceCancelGeneration}
-        onFilesSelected={state.composerProps.handleFilesSelected}
+        onFilesSelected={state.composerProps.handleDroppedFiles}
         onPickFiles={state.composerProps.handlePickFiles}
         onOpenPath={state.openPathInFilesPanel}
         isProcessing={state.isProcessing}
@@ -236,7 +237,7 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
             setIsDragOver(false);
             const files = Array.from(e.dataTransfer.files ?? []);
             if (files.length > 0) {
-              void state.composerProps.handleFilesSelected(files);
+              void state.composerProps.handleDroppedFiles(files);
             }
           }}
         >
