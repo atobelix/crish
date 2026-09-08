@@ -67,6 +67,7 @@ pub fn build_chat_completions_request_body(
             "thinking",
             "generation_config",
             "effort",
+            "enable_thinking",
         ] {
             body.remove(key);
         }
@@ -102,12 +103,21 @@ pub fn build_chat_completions_request_body(
     // messages：先映射既有 wire 消息（to_chat_messages 保持纯函数），
     // 再 post-pass 施加断点（P2 §3.1.3：纯后处理，与映射解耦；plan 全 false
     // → 请求字节与未施加时完全一致）
+    let reasoning_mode = opts.reasoning_content.unwrap_or(ReasoningContentMode::Omit);
     let mut wire = to_chat_messages(
         context.system_prompt.as_deref(),
         context.messages,
-        opts.reasoning_content.unwrap_or(ReasoningContentMode::Omit),
+        reasoning_mode,
         context.wire_mode,
     );
+
+    // 出站清洗保障（代理兼容模式 / Omit 模式）：
+    // 彻底清除历史 assistant 消息中的 reasoning_content，杜绝第三方代理因未定义字段报 400
+    if reasoning_mode == ReasoningContentMode::Omit {
+        for msg in &mut wire {
+            msg.reasoning_content = None;
+        }
+    }
     // Explicit 机制断点：policy.breakpoints 为 Some（机制启用位，cache.rs
     // T-13b 产出）时，按请求形态（tools 数 / system / messages 锚点存在性）
     // 经 allocate_breakpoints 落地具体锚点（P2 §3.1.2：层级 tools→system→

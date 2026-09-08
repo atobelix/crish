@@ -779,3 +779,254 @@ fn parse_usage_non_object_returns_none() {
     assert!(parse_usage(Some(&json!([1, 2]))).is_none());
     assert!(parse_usage(Some(&json!({ "total_tokens": 1 }))).is_some());
 }
+
+// ── TU-04 回归单测：5 级思考字段回退探测链与字段零丢失保证 ──
+
+#[test]
+fn thought_delta_five_stage_fallback_chain_complete() {
+    // 优先级严格对齐：reasoning_content -> reasoning -> thinking -> thinking_delta -> thought
+    // 1. 全部存在时，reasoning_content 胜出
+    let events = parse_all(vec![&delta_frame(
+        json!({
+            "reasoning_content": "lvl1",
+            "reasoning": "lvl2",
+            "thinking": "lvl3",
+            "thinking_delta": "lvl4",
+            "thought": "lvl5"
+        }),
+        Value::Null,
+    )]);
+    assert_eq!(
+        events[0],
+        ProviderStreamEvent::ThoughtDelta {
+            text: "lvl1".into(),
+            redacted: None,
+        }
+    );
+
+    // 2. 缺 reasoning_content 时，reasoning 胜出
+    let events = parse_all(vec![&delta_frame(
+        json!({
+            "reasoning": "lvl2",
+            "thinking": "lvl3",
+            "thinking_delta": "lvl4",
+            "thought": "lvl5"
+        }),
+        Value::Null,
+    )]);
+    assert_eq!(
+        events[0],
+        ProviderStreamEvent::ThoughtDelta {
+            text: "lvl2".into(),
+            redacted: None,
+        }
+    );
+
+    // 3. 缺 reasoning_content 与 reasoning 时，thinking 胜出
+    let events = parse_all(vec![&delta_frame(
+        json!({
+            "thinking": "lvl3",
+            "thinking_delta": "lvl4",
+            "thought": "lvl5"
+        }),
+        Value::Null,
+    )]);
+    assert_eq!(
+        events[0],
+        ProviderStreamEvent::ThoughtDelta {
+            text: "lvl3".into(),
+            redacted: None,
+        }
+    );
+
+    // 4. 缺前三级时，thinking_delta 胜出
+    let events = parse_all(vec![&delta_frame(
+        json!({
+            "thinking_delta": "lvl4",
+            "thought": "lvl5"
+        }),
+        Value::Null,
+    )]);
+    assert_eq!(
+        events[0],
+        ProviderStreamEvent::ThoughtDelta {
+            text: "lvl4".into(),
+            redacted: None,
+        }
+    );
+
+    // 5. 仅剩 thought 时，thought 胜出
+    let events = parse_all(vec![&delta_frame(
+        json!({
+            "thought": "lvl5"
+        }),
+        Value::Null,
+    )]);
+    assert_eq!(
+        events[0],
+        ProviderStreamEvent::ThoughtDelta {
+            text: "lvl5".into(),
+            redacted: None,
+        }
+    );
+}
+
+#[test]
+fn thought_delta_each_field_individually_captured() {
+    let fields = [
+        ("reasoning_content", "think_rc"),
+        ("reasoning", "think_r"),
+        ("thinking", "think_t"),
+        ("thinking_delta", "think_td"),
+        ("thought", "think_th"),
+    ];
+    for (field, expected_val) in fields {
+        let events = parse_all(vec![&delta_frame(
+            json!({ field: expected_val }),
+            Value::Null,
+        )]);
+        let thoughts: Vec<&str> = events
+            .iter()
+            .filter_map(|e| match e {
+                ProviderStreamEvent::ThoughtDelta { text, .. } => Some(text.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(thoughts, vec![expected_val], "字段 {field} 必须被捕获为 ThoughtDelta");
+    }
+}
+
+#[test]
+fn thought_delta_streaming_sequence_zero_loss() {
+    // 连续推理增量帧序列：按序产出，零丢失
+    let events = parse_all(vec![
+        &delta_frame(json!({ "reasoning_content": "第一步：" }), Value::Null),
+        &delta_frame(json!({ "reasoning_content": "分析问题；" }), Value::Null),
+        &delta_frame(json!({ "reasoning_content": "第二步：得出结论。" }), Value::Null),
+        &delta_frame(json!({ "content": "最终答案是42。" }), Value::Null),
+        &delta_frame(json!({}), json!("stop")),
+    ]);
+
+    let thoughts: Vec<&str> = events
+        .iter()
+        .filter_map(|e| match e {
+            ProviderStreamEvent::ThoughtDelta { text, .. } => Some(text.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(thoughts, vec!["第一步：", "分析问题；", "第二步：得出结论。"]);
+
+    let texts: Vec<&str> = events
+        .iter()
+        .filter_map(|e| match e {
+            ProviderStreamEvent::TextDelta { text } => Some(text.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(texts, vec!["最终答案是42。"]);
+
+    assert_eq!(
+        stop_of(&events),
+        &ProviderStreamEvent::Stop {
+            reason: StopReason::Stop,
+            error: None,
+            error_kind: None,
+            usage: None,
+        }
+    );
+}
+
+#[test]
+fn thought_delta_nested_object_variants_supported() {
+    // 兼容嵌套对象思考方言：{ text: ... } / { content: ... } / { delta: ... }
+    let events1 = parse_all(vec![&delta_frame(
+        json!({ "thinking": { "text": "嵌套思考文本" } }),
+        Value::Null,
+    )]);
+    assert_eq!(
+        events1[0],
+        ProviderStreamEvent::ThoughtDelta {
+            text: "嵌套思考文本".into(),
+            redacted: None,
+        }
+    );
+
+    let events2 = parse_all(vec![&delta_frame(
+        json!({ "reasoning": { "content": "嵌套推理内容" } }),
+        Value::Null,
+    )]);
+    assert_eq!(
+        events2[0],
+        ProviderStreamEvent::ThoughtDelta {
+            text: "嵌套推理内容".into(),
+            redacted: None,
+        }
+    );
+
+    let events3 = parse_all(vec![&delta_frame(
+        json!({ "thought": { "delta": "嵌套思考增量" } }),
+        Value::Null,
+    )]);
+    assert_eq!(
+        events3[0],
+        ProviderStreamEvent::ThoughtDelta {
+            text: "嵌套思考增量".into(),
+            redacted: None,
+        }
+    );
+}
+
+#[test]
+fn thought_delta_in_message_when_delta_is_none() {
+    // 非流式格式混入流式：无 delta，由 choice.message 携带思考与正文
+    let data = serde_json::to_string(&json!({
+        "choices": [{
+            "index": 0,
+            "message": {
+                "reasoning_content": "先思考一下",
+                "content": "回答内容",
+            },
+            "finish_reason": "stop",
+        }],
+    }))
+    .expect("序列化");
+
+    let events = parse_all(vec![&data]);
+    let thoughts: Vec<&str> = events
+        .iter()
+        .filter_map(|e| match e {
+            ProviderStreamEvent::ThoughtDelta { text, .. } => Some(text.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(thoughts, vec!["先思考一下"]);
+
+    let texts: Vec<&str> = events
+        .iter()
+        .filter_map(|e| match e {
+            ProviderStreamEvent::TextDelta { text } => Some(text.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(texts, vec!["回答内容"]);
+}
+
+#[test]
+fn thought_delta_empty_or_whitespace_only_ignored() {
+    // 空思考字段不产生 ThoughtDelta 事件
+    let events = parse_all(vec![&delta_frame(
+        json!({
+            "reasoning_content": "",
+            "reasoning": "",
+            "thinking": "",
+            "thinking_delta": "",
+            "thought": ""
+        }),
+        Value::Null,
+    )]);
+    let thoughts: Vec<&ProviderStreamEvent> = events
+        .iter()
+        .filter(|e| matches!(e, ProviderStreamEvent::ThoughtDelta { .. }))
+        .collect();
+    assert!(thoughts.is_empty(), "全空字段不得产出 ThoughtDelta");
+}

@@ -14,25 +14,22 @@ use crate::request::messages::{
     system_prompt_as_user_prefix, to_responses_input_items, ReasoningContentMode,
 };
 use crate::request::tools::{to_responses_tool, to_responses_tool_choice, ToolChoice};
+use crate::request::vendor::{normalize_reasoning_effort, ThinkingIntensity};
 
-/// 构建 Responses API 请求体（DEEPCHECK-05 #10：Responses 轨协议补全）
+/// 构建 Responses API 请求体（DEEPCHECK-05 #10：Responses 轨协议补全；Wave 2 TU-02 全量贯通）
 ///
-/// Responses 轨与 chat 轨的 wire 差异（对齐 DeepSeek Responses API 官方兼容矩阵，
-/// api-docs.deepseek.com/guides/responses_api——该 API 为 OpenAI Responses 形状）：
+/// Responses 轨与 chat 轨的 wire 差异（对齐 OpenAI Responses 协议与 DeepSeek Responses API 官方兼容矩阵）：
 /// - `input`（input items 数组，经 [to_responses_input_items] 映射）替代 `messages`；
 /// - system prompt → 顶层 `instructions`（Responses 原生首 system 语义；wire_mode=
 ///   user-prefix 时改写为首条 user input item，保持 [RequestBuildContext] 语义）；
 /// - `max_output_tokens` 替代 `max_tokens`（忽略 chat 侧 opts.max_tokens_field）；
 /// - tools / tool_choice 走 Responses 原生形状（[to_responses_tool] /
 ///   [to_responses_tool_choice]，strict:false——02 §二.6:279-313 既有实现）；
-/// - **不注入 stream_options**：DeepSeek 官方不受支持（静默忽略）；Responses 终态
-///   `response.completed` 恒携带完整 usage（chat 轨 include_usage 是 chat 语义）；
+/// - **不注入 stream_options**：Responses 终态 `response.completed` 恒携带完整 usage；
 /// - **不注入任何 chat 形状缓存字段**：prompt_cache_key / prompt_cache_retention /
-///   prompt_cache_options 对 /responses 属无效载荷（DEEPCHECK-05 #10 原文判定）；
-///   DeepSeek 官方不受支持且缓存自动管理（Context Caching，零参数），OpenAI 系
-///   store / background_store 原生缓存语义留待后续阶段（Responses 轨缓存矩阵）；
-/// - reasoning_effort / thinking_intensity / vendor：chat 专有注入面，Responses 轨
-///   忽略（engine 侧恒 None，无行为差异；未来经 `reasoning:{effort}` 接线）。
+///   prompt_cache_options 对 /responses 属无效载荷；
+/// - **思考参数注入**：当配置了 `thinking_intensity` 或 `reasoning_effort` 时，向请求体注入 Responses 原生
+///   `reasoning: { effort: "..." }` 字段；严禁注入 Chat 专有的 `reasoning_effort` / `messages` 等键。
 pub fn build_responses_request_body(
     opts: &ChatCompletionsRequestOptions,
     context: &RequestBuildContext,
@@ -84,6 +81,26 @@ pub fn build_responses_request_body(
     // max_output_tokens：Responses 原生字段名（opts.max_tokens_field 为 chat 侧字段名）
     if let Some(max_tokens) = opts.max_tokens {
         body.insert("max_output_tokens".to_string(), json!(max_tokens));
+    }
+
+    // 思考推理参数组装：Responses API 原生 reasoning 格式 {"reasoning": {"effort": "..."}}
+    // 优先读取 thinking_intensity，未配置时读取 reasoning_effort；
+    // 严禁注入 Chat 专有的扁平 reasoning_effort 键
+    let resolved_effort: Option<&str> = if let Some(intensity) = opts.thinking_intensity {
+        match intensity {
+            ThinkingIntensity::Off => None,
+            ThinkingIntensity::Minimal => Some("minimal"),
+            ThinkingIntensity::Low => Some("low"),
+            ThinkingIntensity::Medium => Some("medium"),
+            ThinkingIntensity::High | ThinkingIntensity::Xhigh => Some("high"),
+            ThinkingIntensity::Max => Some("max"),
+        }
+    } else {
+        opts.reasoning_effort.and_then(normalize_reasoning_effort)
+    };
+
+    if let Some(effort) = resolved_effort {
+        body.insert("reasoning".to_string(), json!({ "effort": effort }));
     }
 
     if !context.tools.is_empty() {

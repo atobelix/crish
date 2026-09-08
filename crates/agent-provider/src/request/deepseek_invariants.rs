@@ -378,3 +378,165 @@ fn deepseek_matrix_drives_injection_decision_to_none() {
         );
     }
 }
+
+// ════════════════════════════════════════════════════════════════════════
+// 不变量 4：第三方代理网关出站历史消息清洗（彻底剥离 reasoning_content 杜绝 400）
+// ════════════════════════════════════════════════════════════════════════
+
+/// 出站历史消息清洗纯函数：剥离历史 Assistant 中的 Thought 块与 reasoning_content 元数据
+fn sanitize_outbound_messages_for_proxy(messages: &mut [AgentMessage]) {
+    for msg in messages.iter_mut() {
+        if msg.role == AgentMessageRole::Assistant {
+            msg.blocks
+                .retain(|b| !matches!(b, AgentMessageBlock::Thought { .. }));
+            if let Some(Value::Object(map)) = &mut msg.metadata {
+                map.remove("thought");
+                map.remove("reasoning_content");
+            }
+        }
+    }
+}
+
+#[test]
+fn deepseek_proxy_outbound_sanitizes_history_reasoning_content() {
+    // 构造真实多轮交互历史：包含用户提问、带思考与工具调用的 Assistant、工具返回、带思考的最终回答
+    let mut messages: Vec<AgentMessage> = vec![
+        user_msg("分析这个项目的架构"),
+        AgentMessage {
+            id: "m-asst-1".to_string(),
+            role: AgentMessageRole::Assistant,
+            created_at: "2026-01-01T00:00:01Z".to_string(),
+            blocks: vec![
+                AgentMessageBlock::Thought {
+                    text: "内部深度推理：用户需要分析架构，先调用工具检查 Cargo.toml".to_string(),
+                    redacted: None,
+                },
+                text_block("我将首先检查 Cargo.toml 文件以了解项目结构。"),
+                AgentMessageBlock::ToolCall(ToolCallBlock {
+                    id: "call_ds_init".to_string(),
+                    tool_name: "read_file".to_string(),
+                    input: json!({ "path": "Cargo.toml" }),
+                }),
+            ],
+            metadata: Some(json!({
+                "thought": "内部深度推理：用户需要分析架构，先调用工具检查 Cargo.toml",
+                "reasoning_content": "内部深度推理：用户需要分析架构，先调用工具检查 Cargo.toml",
+                "custom_trace_id": "trace-12345"
+            })),
+            client_message_id: None,
+            content: None,
+        },
+        tool_result_msg(),
+        AgentMessage {
+            id: "m-asst-2".to_string(),
+            role: AgentMessageRole::Assistant,
+            created_at: "2026-01-01T00:00:03Z".to_string(),
+            blocks: vec![
+                AgentMessageBlock::Thought {
+                    text: "Cargo.toml 内容已获取，准备给出最终总结".to_string(),
+                    redacted: None,
+                },
+                text_block("项目采用标准的 Workspace 拓扑结构。"),
+            ],
+            metadata: Some(json!({
+                "reasoning_content": "Cargo.toml 内容已获取，准备给出最终总结"
+            })),
+            client_message_id: None,
+            content: None,
+        },
+        user_msg("请继续详细展开"),
+    ];
+
+    // 执行出站历史消息清洗管线
+    sanitize_outbound_messages_for_proxy(&mut messages);
+
+    // 1. 断言：所有 Assistant 消息中 Thought 块被彻底剔除
+    for msg in &messages {
+        if msg.role == AgentMessageRole::Assistant {
+            assert!(
+                msg.blocks
+                    .iter()
+                    .all(|b| !matches!(b, AgentMessageBlock::Thought { .. })),
+                "清洗后 Assistant 消息不得残留任何 Thought 块：{:?}",
+                msg.blocks
+            );
+            // 元数据中的 thought 与 reasoning_content 必须彻底移除
+            if let Some(meta) = &msg.metadata {
+                assert!(meta.get("thought").is_none(), "元数据中 thought 必须被清洗");
+                assert!(
+                    meta.get("reasoning_content").is_none(),
+                    "元数据中 reasoning_content 必须被清洗"
+                );
+            }
+        }
+    }
+
+    // 2. 断言：非 Thought 内容（Text 文本、ToolCall 结构）以及非 Assistant 消息必须完整保留
+    assert_eq!(messages.len(), 5);
+    assert_eq!(messages[0].role, AgentMessageRole::User);
+    assert_eq!(messages[1].role, AgentMessageRole::Assistant);
+    assert_eq!(messages[1].blocks.len(), 2); // Text + ToolCall (Thought 已被剔除)
+    assert!(matches!(&messages[1].blocks[0], AgentMessageBlock::Text { text } if text.contains("检查 Cargo.toml")));
+    assert!(matches!(&messages[1].blocks[1], AgentMessageBlock::ToolCall(_)));
+    assert_eq!(messages[2].role, AgentMessageRole::Tool);
+    assert_eq!(messages[3].role, AgentMessageRole::Assistant);
+    assert_eq!(messages[3].blocks.len(), 1); // 仅剩 Text
+    assert!(matches!(&messages[3].blocks[0], AgentMessageBlock::Text { text } if text.contains("Workspace")));
+
+    // 3. 断言 Wire 序列化出站结果：在代理模式 (ReasoningContentMode::Omit) 下，序列化出来的 JSON 绝无 reasoning_content 键
+    let wire_messages = to_chat_messages(
+        Some("系统提示词"),
+        &messages,
+        ReasoningContentMode::Omit,
+        SystemPromptWireMode::NativeSystemRole,
+    );
+    for wire_msg in &wire_messages {
+        let val = wire_msg.to_value();
+        assert!(
+            val.get("reasoning_content").is_none(),
+            "经出站清洗的消息序列化为 Wire 时绝不能包含 reasoning_content 键（防止第三方网关 400）：{val}"
+        );
+    }
+
+    // 4. 断言完整端到端请求体：发往第三方代理网关的请求体 messages 中 100% 干净
+    let arc_messages: Vec<Arc<AgentMessage>> = messages.into_iter().map(Arc::new).collect();
+    let context = RequestBuildContext {
+        system_prompt: Some("系统提示词".to_string()),
+        messages: &arc_messages,
+        tools: vec![tool("read_file")],
+        wire_mode: SystemPromptWireMode::NativeSystemRole,
+    };
+    let opts = ChatCompletionsRequestOptions {
+        model: Some("deepseek-v4-pro".to_string()),
+        reasoning_content: Some(ReasoningContentMode::Omit),
+        cache: None,
+        ..ChatCompletionsRequestOptions::default()
+    };
+    let body = build_chat_completions_request_body(&opts, &context);
+    assert_no_cache_control_key(&body);
+    let body_messages = body["messages"].as_array().expect("messages 数组必须存在");
+    for msg in body_messages {
+        assert!(
+            msg.get("reasoning_content").is_none(),
+            "请求体中任意 message 均不得包含 reasoning_content 键：{msg}"
+        );
+    }
+
+    // 5. 对照验证：官方直连模式 (ReasoningContentMode::Require) 下，带 tool_calls 的回合仍然遵循官方规范生成 reasoning_content
+    let direct_wire = to_chat_messages(
+        None,
+        &arc_messages,
+        ReasoningContentMode::Require,
+        SystemPromptWireMode::NativeSystemRole,
+    );
+    let tool_call_asst = direct_wire
+        .iter()
+        .find(|m| m.role == "assistant" && !m.tool_calls.is_empty())
+        .expect("必须找到带 tool_calls 的 assistant 消息");
+    let val = tool_call_asst.to_value();
+    assert!(
+        val.get("reasoning_content").is_some(),
+        "官方直连模式下工具调用轮次仍须带 reasoning_content 空串兜底：{val}"
+    );
+    assert_eq!(val["reasoning_content"], "");
+}

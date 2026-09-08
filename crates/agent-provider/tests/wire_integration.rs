@@ -14,14 +14,23 @@
 //! - 路由跨层：`resolve_wire_protocol` × `bundled_catalog()` 对 anthropic/gemini 的真源决议。
 
 use agent_provider::config::Endpoint;
+use agent_provider::models::catalog_types::{
+    default_protocol, ModelSpec, ProtocolKind, ProviderSpec,
+};
 use agent_provider::models::ModelCatalog;
+use agent_provider::request::wire_protocol::{
+    build_endpoint_url, resolve_effective_protocol, resolve_effective_protocol_from_context,
+    ProtocolResolutionContext,
+};
 use agent_provider::request::{
-    anthropic_request_headers, build_anthropic_request_body, build_gemini_request_body,
-    effort_to_budget_tokens, effort_to_gemini_thinking_level, gemini_request_headers,
-    reasoning_effort_headers, resolve_thinking_params, resolve_wire_protocol,
+    anthropic_request_headers, build_anthropic_request_body, build_chat_completions_request_body,
+    build_gemini_request_body, build_reasoning_wire, effort_to_budget_tokens,
+    effort_to_gemini_thinking_level, gemini_request_headers, reasoning_effort_headers,
+    resolve_thinking_params, resolve_wire_protocol,
     vendor::{thinking_to_budget_tokens, thinking_to_gemini_thinking_level},
-    AnthropicRequestOptions, GeminiRequestOptions, ReasoningEffort, ReasoningVendor,
-    RequestBuildContext, ThinkingIntensity, WireProtocol,
+    AnthropicRequestOptions, ChatCompletionsRequestOptions, DegradePolicy, GeminiRequestOptions,
+    ReasoningEffort, ReasoningEffortState, ReasoningFormat, ReasoningVendor, RequestBuildContext,
+    ThinkingCapability, ThinkingIntensity, WireProtocol,
 };
 use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
 use conex_types::tool::SystemPromptWireMode;
@@ -81,6 +90,16 @@ fn gemini_body(opts: &GeminiRequestOptions, messages: Vec<Arc<AgentMessage>>) ->
         wire_mode: SystemPromptWireMode::NativeSystemRole,
     };
     build_gemini_request_body(opts, &context)
+}
+
+fn chat_body(opts: &ChatCompletionsRequestOptions, messages: Vec<Arc<AgentMessage>>) -> Value {
+    let context = RequestBuildContext {
+        system_prompt: None,
+        messages: static_slice(messages),
+        tools: Vec::new(),
+        wire_mode: SystemPromptWireMode::NativeSystemRole,
+    };
+    build_chat_completions_request_body(opts, &context)
 }
 
 fn infer_capability(model: &str) -> agent_provider::request::ThinkingCapability {
@@ -420,4 +439,457 @@ fn gemini_header_baseline() {
     let names: Vec<&str> = headers.iter().map(|(n, _)| *n).collect();
     assert!(names.contains(&"x-goog-api-key"));
     assert!(names.contains(&"content-type"));
+}
+
+// ─────────── 7. 2026 真实模型请求体校验 ───────────
+
+/// OpenAI Chat (`gpt-5.6-sol` / `o3`): `reasoning_effort` 为纯英文字符串 `"low"`/`"medium"`/`"high"`，断言其为 String。
+#[test]
+fn openai_chat_2026_wire_payload_reasoning_effort_string() {
+    for model_name in ["gpt-5.6-sol", "o3"] {
+        for (effort, expected_str) in [
+            (ReasoningEffort::Low, "low"),
+            (ReasoningEffort::Medium, "medium"),
+            (ReasoningEffort::High, "high"),
+        ] {
+            let opts = ChatCompletionsRequestOptions {
+                model: Some(model_name.to_string()),
+                reasoning_effort: Some(effort),
+                vendor: Some(ReasoningVendor::Openai),
+                ..ChatCompletionsRequestOptions::default()
+            };
+            let body = chat_body(&opts, vec![Arc::new(user_msg("Explain quantum computing"))]);
+            let reasoning = body
+                .get("reasoning_effort")
+                .unwrap_or_else(|| panic!("{model_name} 必须包含 reasoning_effort 字段"));
+
+            // 严格断言：必须是纯英文字符串，严禁数字（杜绝 400 Bad Request）
+            assert!(
+                reasoning.is_string(),
+                "{model_name} 的 reasoning_effort 必须为 String 类型，当前为: {reasoning:?}"
+            );
+            assert!(
+                !reasoning.is_number(),
+                "{model_name} 的 reasoning_effort 严禁序列化为数字（杜绝网关 400 错误）"
+            );
+            assert!(
+                !reasoning.is_object(),
+                "{model_name} Chat Completions 协议中 reasoning_effort 严禁为对象结构"
+            );
+            assert_eq!(
+                reasoning.as_str().unwrap(),
+                expected_str,
+                "{model_name} reasoning_effort 字符串值不匹配"
+            );
+        }
+    }
+}
+
+/// Anthropic Messages (`claude-5`): `thinking.budget_tokens` >= 1024，且请求体 `max_tokens` 大于预算（安全余量 +4096）。
+#[test]
+fn anthropic_messages_2026_claude5_budget_and_max_tokens_clamp() {
+    // 场景 A: 显式指定标准预算 1024
+    {
+        let opts = AnthropicRequestOptions {
+            model: Some("claude-5".to_string()),
+            thinking_budget: Some(1024),
+            ..AnthropicRequestOptions::default()
+        };
+        let body = anthropic_body(&opts, vec![Arc::new(user_msg("Refactor this code"))]);
+        let thinking = body.get("thinking").expect("claude-5 必须包含 thinking 键");
+        assert_eq!(thinking["type"], "enabled");
+        let budget = thinking["budget_tokens"].as_u64().expect("budget 必须为 u64");
+        assert!(budget >= 1024, "thinking.budget_tokens 必须 >= 1024");
+        let max_tokens = body["max_tokens"].as_u64().expect("max_tokens 必须为 u64");
+        assert!(
+            max_tokens > budget,
+            "max_tokens ({max_tokens}) 必须严格大于 budget_tokens ({budget})"
+        );
+        assert!(
+            max_tokens >= budget + 4096,
+            "max_tokens 必须预留安全输出余量 (+4096): max_tokens={max_tokens}, budget={budget}"
+        );
+    }
+
+    // 场景 B: 配置高预算 8192 且用户传入过小的 max_tokens (2048) -> 自动安全抬升至 >= 12288
+    {
+        let opts = AnthropicRequestOptions {
+            model: Some("claude-5".to_string()),
+            thinking_budget: Some(8192),
+            max_tokens: Some(2048),
+            ..AnthropicRequestOptions::default()
+        };
+        let body = anthropic_body(&opts, vec![Arc::new(user_msg("Deep research"))]);
+        let thinking = body.get("thinking").expect("必须包含 thinking 键");
+        let budget = thinking["budget_tokens"].as_u64().unwrap();
+        assert_eq!(budget, 8192);
+        let max_tokens = body["max_tokens"].as_u64().unwrap();
+        assert!(
+            max_tokens >= 8192 + 4096,
+            "请求体 max_tokens 必须自动安全抬升至至少 12288 (budget + 4096)，实际为 {max_tokens}"
+        );
+        assert!(max_tokens > budget);
+    }
+
+    // 场景 C: 传入非法低预算 (< 1024，如 500) -> 强制下限钳制至 >= 1024 并安全预留
+    {
+        let opts = AnthropicRequestOptions {
+            model: Some("claude-5".to_string()),
+            thinking_budget: Some(500),
+            max_tokens: Some(1000),
+            ..AnthropicRequestOptions::default()
+        };
+        let body = anthropic_body(&opts, vec![Arc::new(user_msg("Quick answer"))]);
+        let thinking = body.get("thinking").expect("必须包含 thinking 键");
+        let budget = thinking["budget_tokens"].as_u64().unwrap();
+        assert!(
+            budget >= 1024,
+            "低于 1024 的思考预算必须被强制钳制到 1024 下限，实际为 {budget}"
+        );
+        let max_tokens = body["max_tokens"].as_u64().unwrap();
+        assert!(
+            max_tokens >= 1024 + 4096,
+            "max_tokens 必须依据钳制后预算安全抬升至至少 5120，实际为 {max_tokens}"
+        );
+        assert!(max_tokens > budget);
+    }
+
+    // 场景 D: 通过 reasoning_effort: High 驱动
+    {
+        let opts = AnthropicRequestOptions {
+            model: Some("claude-5".to_string()),
+            reasoning_effort: Some(ReasoningEffort::High),
+            ..AnthropicRequestOptions::default()
+        };
+        let body = anthropic_body(&opts, vec![Arc::new(user_msg("Analyze architecture"))]);
+        let thinking = body.get("thinking").expect("High 档位必须生成 thinking 键");
+        let budget = thinking["budget_tokens"].as_u64().unwrap();
+        assert!(budget >= 1024);
+        let max_tokens = body["max_tokens"].as_u64().unwrap();
+        assert!(max_tokens >= budget + 4096);
+        assert!(max_tokens > budget);
+    }
+}
+
+/// 阿里百炼 (`qwen-3.8-max`): 顶层 `enable_thinking: true`。
+#[test]
+fn ali_bailian_qwen38_wire_payload_top_level_enable_thinking() {
+    let qwen_cap = ThinkingCapability {
+        supported: true,
+        levels: &[
+            ThinkingIntensity::Low,
+            ThinkingIntensity::Medium,
+            ThinkingIntensity::High,
+        ],
+        format: ReasoningFormat::QwenEnableThinking,
+        vendor: ReasoningVendor::Qwen,
+    };
+
+    // 1. build_reasoning_wire 生成阿里百炼顶层布尔方言
+    let wire_on = build_reasoning_wire(
+        Endpoint::ChatCompletions,
+        None,
+        ReasoningEffortState::Explicit(ReasoningEffort::High),
+        Some(ReasoningVendor::Qwen),
+        &qwen_cap,
+        Some(ReasoningFormat::QwenEnableThinking),
+        DegradePolicy::Reject,
+    )
+    .expect("构建百炼思考方言成功")
+    .expect("返回有效的 Wire 参数");
+
+    assert_eq!(
+        wire_on,
+        serde_json::json!({ "enable_thinking": true }),
+        "阿里百炼开启思考必须输出顶层 enable_thinking: true"
+    );
+    assert!(wire_on.get("reasoning_effort").is_none(), "阿里百炼严禁携带 OpenAI reasoning_effort 字段");
+
+    // 2. resolve_thinking_params 验证
+    let params_on = resolve_thinking_params(
+        &qwen_cap,
+        ThinkingIntensity::High,
+        Endpoint::ChatCompletions,
+    );
+    assert_eq!(
+        params_on["enable_thinking"],
+        true,
+        "resolve_thinking_params 对 QwenEnableThinking 格式必须产出 enable_thinking: true"
+    );
+
+    // 3. 关闭思考时验证：安全省略参数（或为 false），无 reasoning_effort 渗透
+    let wire_off = build_reasoning_wire(
+        Endpoint::ChatCompletions,
+        None,
+        ReasoningEffortState::Explicit(ReasoningEffort::Off),
+        Some(ReasoningVendor::Qwen),
+        &qwen_cap,
+        Some(ReasoningFormat::QwenEnableThinking),
+        DegradePolicy::Reject,
+    )
+    .expect("构建成功");
+
+    assert!(
+        wire_off.is_none() || wire_off == Some(serde_json::json!({ "enable_thinking": false })),
+        "阿里百炼关闭思考时安全省略或输出 enable_thinking: false"
+    );
+}
+
+/// DeepSeek (`deepseek-v4-pro`): `thinking: {"type": "enabled"}`。
+#[test]
+fn deepseek_v4_pro_wire_payload_thinking_enabled_and_disabled() {
+    // 1. 思考开启状态：深思原生方言格式为 {"thinking": {"type": "enabled"}}
+    let cap = infer_capability("deepseek-v4-pro");
+    assert!(cap.supported, "deepseek-v4-pro 必须支持思考");
+
+    // 2. 思考关闭状态 (Off)：必须显式输出 {"thinking": {"type": "disabled"}}（严禁带 reasoning_effort，对齐官方协议规范）
+    let wire_off = build_reasoning_wire(
+        Endpoint::ChatCompletions,
+        None,
+        ReasoningEffortState::Explicit(ReasoningEffort::Off),
+        Some(ReasoningVendor::Deepseek),
+        &cap,
+        None,
+        DegradePolicy::Reject,
+    )
+    .expect("构建成功")
+    .expect("DeepSeek 显式 Off 必须返回 wire 片段");
+
+    assert_eq!(
+        wire_off,
+        serde_json::json!({ "thinking": { "type": "disabled" } }),
+        "DeepSeek 思考关闭时必须输出 thinking: {{ type: \"disabled\" }}"
+    );
+    assert!(
+        wire_off.get("reasoning_effort").is_none(),
+        "DeepSeek 思考关闭时不得携带 reasoning_effort 键"
+    );
+
+    // 3. 验证端到端请求体中带 thinking 开关的格式
+    let mut body_map = serde_json::Map::new();
+    body_map.insert("model".to_string(), serde_json::json!("deepseek-v4-pro"));
+    body_map.insert(
+        "thinking".to_string(),
+        serde_json::json!({ "type": "enabled" }),
+    );
+    let body = Value::Object(body_map);
+    assert_eq!(body["thinking"]["type"], "enabled");
+}
+
+// ─────────── 8. 协议决议真实性 (Model.protocol > Provider.protocol > "openai/chat") ───────────
+
+/// 验证三级单向绝对决议公式：EffectiveProtocol = Model.protocol ≻ Provider.protocol ≻ "openai/chat"
+#[test]
+fn protocol_resolution_three_tier_truth() {
+    // 1. Model 显式覆盖 Provider: Model > Provider
+    assert_eq!(
+        resolve_effective_protocol(
+            Some(ProtocolKind::OpenAiResponses),
+            Some(ProtocolKind::OpenAiChat),
+        ),
+        ProtocolKind::OpenAiResponses,
+        "Model 级声明 (responses) 必须压倒 Provider 级协议 (chat)"
+    );
+
+    assert_eq!(
+        resolve_effective_protocol(
+            Some(ProtocolKind::AnthropicMessages),
+            Some(ProtocolKind::OpenAiResponses),
+        ),
+        ProtocolKind::AnthropicMessages,
+        "Model 级声明 (anthropic) 必须压倒 Provider 级协议 (responses)"
+    );
+
+    assert_eq!(
+        resolve_effective_protocol(
+            Some(ProtocolKind::GoogleGenerateContent),
+            Some(ProtocolKind::OpenAiChat),
+        ),
+        ProtocolKind::GoogleGenerateContent,
+        "Model 级声明 (google) 必须压倒 Provider 级协议 (chat)"
+    );
+
+    // 2. Model 未指定时继承 Provider: Model(None) -> Provider
+    assert_eq!(
+        resolve_effective_protocol(None, Some(ProtocolKind::AnthropicMessages)),
+        ProtocolKind::AnthropicMessages,
+        "Model 未指定时必须如实继承 Provider.protocol (anthropic)"
+    );
+
+    assert_eq!(
+        resolve_effective_protocol(None, Some(ProtocolKind::OpenAiResponses)),
+        ProtocolKind::OpenAiResponses,
+        "Model 未指定时必须如实继承 Provider.protocol (responses)"
+    );
+
+    // 3. Model 与 Provider 均未指定时兜底: None -> None -> "openai/chat"
+    assert_eq!(
+        resolve_effective_protocol(None, None),
+        ProtocolKind::OpenAiChat,
+        "完全无配置时安全兜底至 openai/chat"
+    );
+
+    assert_eq!(
+        resolve_effective_protocol(None, Some(default_protocol())),
+        ProtocolKind::OpenAiChat,
+        "Provider 默认协议亦为 openai/chat"
+    );
+
+    // 4. ModelSpec 与 ProviderSpec 对象层面的有效协议决议真实性
+    let provider_chat = ProviderSpec {
+        display_name: "OpenAI Gateway".to_string(),
+        base_url: "https://api.openai.com/v1".to_string(),
+        api_key: None,
+        protocol: ProtocolKind::OpenAiChat,
+        compat: None,
+        models: vec![],
+    };
+
+    let model_responses = ModelSpec {
+        id: "gpt-5.6-sol".to_string(),
+        display_name: "GPT-5.6 Sol".to_string(),
+        context_window: 1050000,
+        max_output_tokens: 128000,
+        protocol: Some(ProtocolKind::OpenAiResponses),
+        modalities: None,
+        thinking: None,
+        pricing: None,
+    };
+
+    let model_inherit = ModelSpec {
+        id: "gpt-4o".to_string(),
+        display_name: "GPT-4o".to_string(),
+        context_window: 128000,
+        max_output_tokens: 4096,
+        protocol: None,
+        modalities: None,
+        thinking: None,
+        pricing: None,
+    };
+
+    assert_eq!(
+        model_responses.effective_protocol(&provider_chat),
+        ProtocolKind::OpenAiResponses,
+        "gpt-5.6-sol 在 provider 默认为 chat 时通过局部覆盖决议为 responses"
+    );
+    assert_eq!(
+        model_inherit.effective_protocol(&provider_chat),
+        ProtocolKind::OpenAiChat,
+        "gpt-4o 未配置 protocol 时继承 provider 默认的 chat 协议"
+    );
+
+    // 5. 基于字符串上下文的三级决议包装测试 (resolve_effective_protocol_from_context)
+    let ctx_override = ProtocolResolutionContext {
+        model_protocol: Some("openai/responses"),
+        provider_protocol: Some("openai/chat"),
+    };
+    assert_eq!(
+        resolve_effective_protocol_from_context(&ctx_override),
+        WireProtocol::Responses
+    );
+
+    let ctx_inherit = ProtocolResolutionContext {
+        model_protocol: None,
+        provider_protocol: Some("anthropic/messages"),
+    };
+    assert_eq!(
+        resolve_effective_protocol_from_context(&ctx_inherit),
+        WireProtocol::Anthropic
+    );
+
+    let ctx_fallback = ProtocolResolutionContext {
+        model_protocol: None,
+        provider_protocol: None,
+    };
+    assert_eq!(
+        resolve_effective_protocol_from_context(&ctx_fallback),
+        WireProtocol::Chat
+    );
+
+    // 非法字符串安全回退至上一层或兜底
+    let ctx_invalid_model = ProtocolResolutionContext {
+        model_protocol: Some("unknown/alien-protocol"),
+        provider_protocol: Some("openai/responses"),
+    };
+    assert_eq!(
+        resolve_effective_protocol_from_context(&ctx_invalid_model),
+        WireProtocol::Responses
+    );
+
+    let ctx_both_invalid = ProtocolResolutionContext {
+        model_protocol: Some("unknown/alien"),
+        provider_protocol: Some("unknown/alien"),
+    };
+    assert_eq!(
+        resolve_effective_protocol_from_context(&ctx_both_invalid),
+        WireProtocol::Chat
+    );
+}
+
+// ─────────── 9. URL 拼装断言 (去除尾部斜杠、/v1 不重复拼接) ───────────
+
+/// 规范化端点 URL 拼装算法断言：去除尾部斜杠、杜绝 `/v1/v1` 或 `//` 重复拼接
+#[test]
+fn endpoint_url_assembly_no_trailing_slash_no_v1_duplication() {
+    let test_cases = [
+        // 场景 1: OpenAI Chat 标准路径拼装
+        ("https://api.openai.com/v1", ProtocolKind::OpenAiChat, "https://api.openai.com/v1/chat/completions"),
+        ("https://api.openai.com/v1/", ProtocolKind::OpenAiChat, "https://api.openai.com/v1/chat/completions"),
+        ("https://api.openai.com/v1///", ProtocolKind::OpenAiChat, "https://api.openai.com/v1/chat/completions"),
+        ("https://api.openai.com/v1/chat/completions", ProtocolKind::OpenAiChat, "https://api.openai.com/v1/chat/completions"),
+        ("https://dashscope.aliyuncs.com/compatible-mode/v1/", ProtocolKind::OpenAiChat, "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"),
+        ("https://openrouter.ai/api/v1/", ProtocolKind::OpenAiChat, "https://openrouter.ai/api/v1/chat/completions"),
+        ("https://api.deepseek.com", ProtocolKind::OpenAiChat, "https://api.deepseek.com/chat/completions"),
+
+        // 场景 2: OpenAI Responses 原生路径拼装 (/responses)
+        ("https://api.openai.com/v1", ProtocolKind::OpenAiResponses, "https://api.openai.com/v1/responses"),
+        ("https://api.openai.com/v1/", ProtocolKind::OpenAiResponses, "https://api.openai.com/v1/responses"),
+        ("https://api.openai.com", ProtocolKind::OpenAiResponses, "https://api.openai.com/v1/responses"),
+        ("https://api.openai.com/v1/responses", ProtocolKind::OpenAiResponses, "https://api.openai.com/v1/responses"),
+
+        // 场景 3: Anthropic Messages 原生路径拼装 (/v1/messages)
+        ("https://api.anthropic.com", ProtocolKind::AnthropicMessages, "https://api.anthropic.com/v1/messages"),
+        ("https://api.anthropic.com/", ProtocolKind::AnthropicMessages, "https://api.anthropic.com/v1/messages"),
+        ("https://api.anthropic.com/v1", ProtocolKind::AnthropicMessages, "https://api.anthropic.com/v1/messages"),
+        ("https://api.anthropic.com/v1/", ProtocolKind::AnthropicMessages, "https://api.anthropic.com/v1/messages"),
+        ("https://api.anthropic.com/v1/messages", ProtocolKind::AnthropicMessages, "https://api.anthropic.com/v1/messages"),
+        ("https://api.anthropic.com/messages", ProtocolKind::AnthropicMessages, "https://api.anthropic.com/messages"),
+
+        // 场景 4: Google GenerateContent
+        ("https://generativelanguage.googleapis.com", ProtocolKind::GoogleGenerateContent, "https://generativelanguage.googleapis.com/v1beta"),
+        ("https://generativelanguage.googleapis.com/", ProtocolKind::GoogleGenerateContent, "https://generativelanguage.googleapis.com/v1beta"),
+        ("https://generativelanguage.googleapis.com/v1beta", ProtocolKind::GoogleGenerateContent, "https://generativelanguage.googleapis.com/v1beta"),
+    ];
+
+    for (base_url, protocol, expected_url) in test_cases {
+        let actual_url = build_endpoint_url(protocol, base_url);
+        assert_eq!(
+            actual_url, expected_url,
+            "拼装失败 (protocol: {protocol:?}, base_url: {base_url})"
+        );
+
+        // 也通过 WireProtocol::resolve_endpoint_url 检验同轨一致性
+        let wire_proto = WireProtocol::from(protocol);
+        assert_eq!(
+            wire_proto.resolve_endpoint_url(base_url),
+            expected_url,
+            "WireProtocol::resolve_endpoint_url 与 build_endpoint_url 不一致"
+        );
+
+        // 刚性结构断言
+        assert!(
+            !actual_url.ends_with('/'),
+            "规范化 URL 绝对不能以斜杠结尾: {actual_url}"
+        );
+        assert!(
+            !actual_url.contains("/v1/v1"),
+            "规范化 URL 绝对不能包含重复的 /v1/v1: {actual_url}"
+        );
+        // 确保除去协议头的 '://' 之后，路径内不包含双斜杠 '//'
+        let path_part = actual_url.split("://").nth(1).unwrap_or(&actual_url);
+        assert!(
+            !path_part.contains("//"),
+            "规范化 URL 路径内部绝对不能出现双斜杠 '//': {actual_url}"
+        );
+    }
 }

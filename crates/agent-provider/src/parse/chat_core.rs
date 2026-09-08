@@ -106,12 +106,12 @@ impl ChatCompletionsParser {
         // 4. delta 内容（02 §2.2 步骤 4）
         let delta = choice.get("delta").and_then(Value::as_object);
         if let Some(delta) = delta {
-            // thought 优先级：reasoning_content → reasoning → thinking → thinking_delta → thought（02 §1.4）
-            if let Some(thought) = non_empty_string(delta.get("reasoning_content"))
-                .or_else(|| non_empty_string(delta.get("reasoning")))
-                .or_else(|| non_empty_string(delta.get("thinking")))
-                .or_else(|| non_empty_string(delta.get("thinking_delta")))
-                .or_else(|| non_empty_string(delta.get("thought")))
+            // thought 5 级优先级探测链：reasoning_content → reasoning → thinking → thinking_delta → thought（02 §1.4）
+            if let Some(thought) = extract_thought_string(delta.get("reasoning_content"))
+                .or_else(|| extract_thought_string(delta.get("reasoning")))
+                .or_else(|| extract_thought_string(delta.get("thinking")))
+                .or_else(|| extract_thought_string(delta.get("thinking_delta")))
+                .or_else(|| extract_thought_string(delta.get("thought")))
             {
                 events.push(ProviderStreamEvent::ThoughtDelta {
                     text: thought.to_owned(),
@@ -150,8 +150,19 @@ impl ChatCompletionsParser {
                     }
                 }
             }
-            // 无 delta 时 message.content 兜底正文（对齐 runtime:provider-openai-chat.ts:128-130）
+            // 无 delta 时 message 兜底思考与正文（对齐 runtime:provider-openai-chat.ts:128-130）
             if delta.is_none() {
+                if let Some(thought) = extract_thought_string(message.get("reasoning_content"))
+                    .or_else(|| extract_thought_string(message.get("reasoning")))
+                    .or_else(|| extract_thought_string(message.get("thinking")))
+                    .or_else(|| extract_thought_string(message.get("thinking_delta")))
+                    .or_else(|| extract_thought_string(message.get("thought")))
+                {
+                    events.push(ProviderStreamEvent::ThoughtDelta {
+                        text: thought.to_owned(),
+                        redacted: None,
+                    });
+                }
                 if let Some(text) = non_empty_string(message.get("content")) {
                     let extracted = self.tag_extractor.push_text(text);
                     events.extend(extracted);
@@ -234,4 +245,23 @@ impl ChatCompletionsParser {
         self.terminated = true;
         Ok(events)
     }
+}
+
+/// 提取非空思考文本，兼顾纯字符串与常见嵌套对象（{ "text": "..." } 等变体）
+fn extract_thought_string(val: Option<&Value>) -> Option<&str> {
+    let val = val?;
+    if let Some(s) = val.as_str() {
+        if !s.is_empty() {
+            return Some(s);
+        }
+    } else if let Some(obj) = val.as_object() {
+        for key in &["text", "content", "delta"] {
+            if let Some(s) = obj.get(*key).and_then(Value::as_str) {
+                if !s.is_empty() {
+                    return Some(s);
+                }
+            }
+        }
+    }
+    None
 }

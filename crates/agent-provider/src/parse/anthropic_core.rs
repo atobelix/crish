@@ -127,12 +127,14 @@ impl AnthropicParser {
         }
 
         match event_type {
-            // usage 初始分片（message.usage，67-74）
+            // usage 初始分片（message.usage，67-74；或顶层 usage）
             "message_start" => {
                 if let Some(message) = payload.get("message").and_then(Value::as_object) {
                     if let Some(usage) = parse_anthropic_usage(message.get("usage")) {
                         self.usage = Some(usage);
                     }
+                } else if let Some(usage) = parse_anthropic_usage(payload.get("usage")) {
+                    self.usage = Some(usage);
                 }
             }
             // content_block_start：注册 tool_use pending（按 index）或跳过 thinking（76-94）
@@ -176,7 +178,16 @@ impl AnthropicParser {
                     || delta.get("thinking").is_some_and(Value::is_string)
                 {
                     // thought-delta 不标 redacted（02 §1.4：Anthropic 不标）
-                    if let Some(text) = non_empty_string(delta.get("thinking")) {
+                    let thinking_text = non_empty_string(delta.get("thinking"))
+                        .or_else(|| non_empty_string(delta.get("thought")))
+                        .or_else(|| {
+                            if delta_type == "thinking_delta" {
+                                non_empty_string(delta.get("text"))
+                            } else {
+                                None
+                            }
+                        });
+                    if let Some(text) = thinking_text {
                         self.emitted_content = true;
                         events.push(ProviderStreamEvent::ThoughtDelta {
                             text: text.to_owned(),
@@ -220,13 +231,29 @@ impl AnthropicParser {
                     }
                 }
                 // message_start 带 input_tokens，message_delta 通常只带 output_tokens → 合并（169-175）
-                if let Some(delta_usage) = parse_anthropic_usage(payload.get("usage")) {
+                let delta_usage = parse_anthropic_usage(payload.get("usage")).or_else(|| {
+                    payload
+                        .get("message")
+                        .and_then(Value::as_object)
+                        .and_then(|msg| parse_anthropic_usage(msg.get("usage")))
+                });
+                if let Some(delta_usage) = delta_usage {
                     self.usage = Some(merge_anthropic_usage(self.usage.as_ref(), &delta_usage));
                 }
             }
             // message_stop → 终态（177-180）
             "message_stop" => {
                 self.saw_message_stop = true;
+                // 部分网关/代理在 message_stop 上携带 usage 或 message.usage
+                let stop_usage = parse_anthropic_usage(payload.get("usage")).or_else(|| {
+                    payload
+                        .get("message")
+                        .and_then(Value::as_object)
+                        .and_then(|msg| parse_anthropic_usage(msg.get("usage")))
+                });
+                if let Some(delta_usage) = stop_usage {
+                    self.usage = Some(merge_anthropic_usage(self.usage.as_ref(), &delta_usage));
+                }
             }
             // 无 type 或未知事件：代理噪声忽略（182）
             _ => {}

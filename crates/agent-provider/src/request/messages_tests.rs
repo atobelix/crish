@@ -1094,6 +1094,7 @@ fn deepseek_compat() -> WireCompat<'static> {
         model: Some("deepseek-chat"),
         base_url: Some("https://api.deepseek.com"),
         supports_reasoning: true,
+        thinking_format: None,
     }
 }
 
@@ -1203,6 +1204,7 @@ fn non_deepseek_does_not_force_reasoning_content_key() {
         model: Some("gpt-5"),
         base_url: Some("https://api.openai.com"),
         supports_reasoning: true,
+        thinking_format: None,
     };
     let messages = to_chat_messages_with_compat(
         None,
@@ -1274,6 +1276,7 @@ fn developer_role_openrouter_anthropic_prefix_reasoning_uses_developer() {
         model: Some("anthropic/claude-sonnet-4"),
         base_url: Some("https://openrouter.ai/api/v1"),
         supports_reasoning: true,
+        thinking_format: None,
     };
     let messages = to_chat_messages_with_compat(
         Some("系统提示"),
@@ -1296,6 +1299,7 @@ fn developer_role_openai_prefix_reasoning_uses_developer() {
         model: Some("openai/gpt-5"),
         base_url: Some("https://openrouter.ai/api/v1"),
         supports_reasoning: true,
+        thinking_format: None,
     };
     let messages = to_chat_messages_with_compat(
         Some("系统提示"),
@@ -1317,6 +1321,7 @@ fn developer_role_not_reasoning_or_not_openrouter_uses_system() {
             model: Some("anthropic/claude-sonnet-4"),
             base_url: Some("https://openrouter.ai/api/v1"),
             supports_reasoning: false,
+            thinking_format: None,
         },
         // 非 openrouter（anthropic 官方）
         WireCompat {
@@ -1324,6 +1329,7 @@ fn developer_role_not_reasoning_or_not_openrouter_uses_system() {
             model: Some("claude-sonnet-4"),
             base_url: Some("https://api.anthropic.com"),
             supports_reasoning: true,
+            thinking_format: None,
         },
         // 非前缀模型（openrouter + reasoning 但 meta-llama 前缀）
         WireCompat {
@@ -1331,6 +1337,7 @@ fn developer_role_not_reasoning_or_not_openrouter_uses_system() {
             model: Some("meta-llama/llama-3-70b"),
             base_url: Some("https://openrouter.ai/api/v1"),
             supports_reasoning: true,
+            thinking_format: None,
         },
         // 缺省 compat（全 None → supports_reasoning=false）
         WireCompat::default(),
@@ -1357,6 +1364,7 @@ fn developer_role_not_reasoning_or_not_openrouter_uses_system() {
             model: Some("anthropic/claude-sonnet-4"),
             base_url: Some("https://openrouter.ai/api/v1"),
             supports_reasoning: true,
+            thinking_format: None,
         },
     );
     assert_eq!(messages[0].role, "user");
@@ -1364,19 +1372,25 @@ fn developer_role_not_reasoning_or_not_openrouter_uses_system() {
 
 #[test]
 fn wire_compat_deepseek_inference() {
-    // WireCompat::is_deepseek：vendor / base_url 命中 deepseek（lowercase）
+    // WireCompat::is_deepseek：vendor / thinking_format 命中 deepseek（精确判定，无 URL 盲猜）
     assert!(WireCompat {
         vendor: Some("deepseek"),
         ..WireCompat::default()
     }
     .is_deepseek());
     assert!(WireCompat {
-        base_url: Some("https://api.deepseek.com"),
+        vendor: Some("DeepSeek"),
         ..WireCompat::default()
     }
     .is_deepseek());
     assert!(WireCompat {
-        base_url: Some("https://API.DEEPSEEK.COM/v1"),
+        thinking_format: Some("deepseek"),
+        ..WireCompat::default()
+    }
+    .is_deepseek());
+    // URL 盲猜已被彻底废除：仅带 base_url 但无 vendor/thinking_format 声明时不再盲猜
+    assert!(!WireCompat {
+        base_url: Some("https://api.deepseek.com"),
         ..WireCompat::default()
     }
     .is_deepseek());

@@ -89,7 +89,9 @@ impl ResponsesParser {
         match event_type {
             // 正文增量（151-158）
             "response.output_text.delta" => {
-                if let Some(delta) = non_empty_string(payload.get("delta")) {
+                if let Some(delta) = non_empty_string(payload.get("delta"))
+                    .or_else(|| non_empty_string(payload.get("text")))
+                {
                     events.push(ProviderStreamEvent::TextDelta {
                         text: delta.to_owned(),
                     });
@@ -99,7 +101,9 @@ impl ResponsesParser {
             "response.reasoning_summary_text.delta"
             | "response.reasoning_text.delta"
             | "response.reasoning.delta" => {
-                if let Some(delta) = non_empty_string(payload.get("delta")) {
+                if let Some(delta) = non_empty_string(payload.get("delta"))
+                    .or_else(|| non_empty_string(payload.get("text")))
+                {
                     events.push(ProviderStreamEvent::ThoughtDelta {
                         text: delta.to_owned(),
                         redacted: Some(true),
@@ -139,13 +143,14 @@ impl ResponsesParser {
                 }
             }
             // 终态映射（199-211、381-388）
-            "response.completed" | "response.failed" | "response.incomplete" => {
+            "response.completed" | "response.failed" | "response.incomplete" | "response.done" => {
                 self.saw_terminal = true;
                 let response_payload = payload.get("response").and_then(Value::as_object);
-                // 终态帧的 usage 覆盖式更新
-                if let Some(usage) =
-                    response_payload.and_then(|response| parse_usage(response.get("usage")))
-                {
+                // 终态帧的 usage 覆盖式更新（优先 response.usage，其次顶层 usage）
+                let terminal_usage = response_payload
+                    .and_then(|response| parse_usage(response.get("usage")))
+                    .or_else(|| parse_usage(payload.get("usage")));
+                if let Some(usage) = terminal_usage {
                     self.usage = Some(usage);
                 }
                 let terminal = response_payload.unwrap_or(payload);

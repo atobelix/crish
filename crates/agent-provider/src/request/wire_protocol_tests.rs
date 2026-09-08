@@ -289,3 +289,297 @@ fn hyphen_model_follows_original_exact_lookup() {
         "横线键精确命中 mode，独立于归一路径",
     );
 }
+
+// ── TU-01: 三级协议决议与端点 URL 规范化测试 ──
+
+use crate::models::catalog_types::ProtocolKind;
+
+#[test]
+fn test_resolve_effective_protocol_three_tier_inheritance() {
+    // 场景 1: Model.protocol 显式覆盖 Provider.protocol
+    assert_eq!(
+        resolve_effective_protocol(
+            Some(ProtocolKind::OpenAiResponses),
+            Some(ProtocolKind::OpenAiChat),
+        ),
+        ProtocolKind::OpenAiResponses,
+        "Model 协议应直接覆盖 Provider 协议"
+    );
+
+    assert_eq!(
+        resolve_effective_protocol(
+            Some(ProtocolKind::AnthropicMessages),
+            Some(ProtocolKind::OpenAiChat),
+        ),
+        ProtocolKind::AnthropicMessages,
+        "Model 级 AnthropicMessages 覆盖 Provider 级 OpenAiChat"
+    );
+
+    assert_eq!(
+        resolve_effective_protocol(
+            Some(ProtocolKind::GoogleGenerateContent),
+            Some(ProtocolKind::AnthropicMessages),
+        ),
+        ProtocolKind::GoogleGenerateContent,
+        "Model 级 GoogleGenerateContent 覆盖 Provider 级 AnthropicMessages"
+    );
+
+    // 场景 2: Model 未配置 (None)，继承 Provider.protocol
+    assert_eq!(
+        resolve_effective_protocol(None, Some(ProtocolKind::AnthropicMessages)),
+        ProtocolKind::AnthropicMessages,
+        "Model 缺省时必须严格继承 Provider 协议"
+    );
+
+    assert_eq!(
+        resolve_effective_protocol(None, Some(ProtocolKind::OpenAiResponses)),
+        ProtocolKind::OpenAiResponses,
+        "Model 缺省时必须严格继承 Provider 协议"
+    );
+
+    assert_eq!(
+        resolve_effective_protocol(None, Some(ProtocolKind::GoogleGenerateContent)),
+        ProtocolKind::GoogleGenerateContent,
+        "Model 缺省时必须严格继承 Provider 协议"
+    );
+
+    // 场景 3: Model 与 Provider 均未指定 (None, None)，全局安全兜底 OpenAiChat
+    assert_eq!(
+        resolve_effective_protocol(None, None),
+        ProtocolKind::OpenAiChat,
+        "双缺省时必须严格兜底至 ProtocolKind::OpenAiChat"
+    );
+}
+
+#[test]
+fn test_resolve_effective_protocol_from_context() {
+    let ctx_override = ProtocolResolutionContext {
+        model_protocol: Some("openai/responses"),
+        provider_protocol: Some("openai/chat"),
+    };
+    assert_eq!(
+        resolve_effective_protocol_from_context(&ctx_override),
+        WireProtocol::Responses
+    );
+
+    let ctx_inherit = ProtocolResolutionContext {
+        model_protocol: None,
+        provider_protocol: Some("anthropic/messages"),
+    };
+    assert_eq!(
+        resolve_effective_protocol_from_context(&ctx_inherit),
+        WireProtocol::Anthropic
+    );
+
+    let ctx_fallback = ProtocolResolutionContext {
+        model_protocol: None,
+        provider_protocol: None,
+    };
+    assert_eq!(
+        resolve_effective_protocol_from_context(&ctx_fallback),
+        WireProtocol::Chat
+    );
+}
+
+#[test]
+fn test_wire_protocol_protocol_kind_bidirectional_conversion() {
+    // ProtocolKind -> WireProtocol
+    assert_eq!(WireProtocol::from(ProtocolKind::OpenAiChat), WireProtocol::Chat);
+    assert_eq!(WireProtocol::from(ProtocolKind::OpenAiResponses), WireProtocol::Responses);
+    assert_eq!(WireProtocol::from(ProtocolKind::AnthropicMessages), WireProtocol::Anthropic);
+    assert_eq!(WireProtocol::from(ProtocolKind::GoogleGenerateContent), WireProtocol::Gemini);
+
+    // WireProtocol -> ProtocolKind
+    assert_eq!(ProtocolKind::from(WireProtocol::Chat), ProtocolKind::OpenAiChat);
+    assert_eq!(ProtocolKind::from(WireProtocol::Responses), ProtocolKind::OpenAiResponses);
+    assert_eq!(ProtocolKind::from(WireProtocol::Anthropic), ProtocolKind::AnthropicMessages);
+    assert_eq!(ProtocolKind::from(WireProtocol::Gemini), ProtocolKind::GoogleGenerateContent);
+
+    // Helper methods
+    assert_eq!(WireProtocol::Chat.protocol_kind(), ProtocolKind::OpenAiChat);
+    assert_eq!(WireProtocol::from_protocol_kind(ProtocolKind::OpenAiResponses), WireProtocol::Responses);
+    assert_eq!(WireProtocol::Chat.wire_name(), "openai/chat");
+    assert_eq!(WireProtocol::Responses.wire_name(), "openai/responses");
+    assert_eq!(WireProtocol::Anthropic.wire_name(), "anthropic/messages");
+    assert_eq!(WireProtocol::Gemini.wire_name(), "google/generate-content");
+
+    // from_raw_str
+    assert_eq!(WireProtocol::from_raw_str("openai/chat"), Some(WireProtocol::Chat));
+    assert_eq!(WireProtocol::from_raw_str("chat"), Some(WireProtocol::Chat));
+    assert_eq!(WireProtocol::from_raw_str("OPENAI/RESPONSES"), Some(WireProtocol::Responses));
+    assert_eq!(WireProtocol::from_raw_str("anthropic/messages"), Some(WireProtocol::Anthropic));
+    assert_eq!(WireProtocol::from_raw_str("gemini"), Some(WireProtocol::Gemini));
+    assert_eq!(WireProtocol::from_raw_str("unknown-proto"), None);
+}
+
+#[test]
+fn test_build_endpoint_url_anthropic_messages() {
+    let p = ProtocolKind::AnthropicMessages;
+    // 1. 无 /v1 基础路径
+    assert_eq!(
+        build_endpoint_url(p, "https://api.anthropic.com"),
+        "https://api.anthropic.com/v1/messages"
+    );
+    // 2. 带尾部斜杠
+    assert_eq!(
+        build_endpoint_url(p, "https://api.anthropic.com/"),
+        "https://api.anthropic.com/v1/messages"
+    );
+    assert_eq!(
+        build_endpoint_url(p, "https://api.anthropic.com///"),
+        "https://api.anthropic.com/v1/messages"
+    );
+    // 3. 已包含 /v1
+    assert_eq!(
+        build_endpoint_url(p, "https://api.anthropic.com/v1"),
+        "https://api.anthropic.com/v1/messages"
+    );
+    assert_eq!(
+        build_endpoint_url(p, "https://api.anthropic.com/v1/"),
+        "https://api.anthropic.com/v1/messages"
+    );
+    // 4. 包含完整 /v1/messages 或 /messages
+    assert_eq!(
+        build_endpoint_url(p, "https://api.anthropic.com/v1/messages"),
+        "https://api.anthropic.com/v1/messages"
+    );
+    assert_eq!(
+        build_endpoint_url(p, "https://api.anthropic.com/v1/messages/"),
+        "https://api.anthropic.com/v1/messages"
+    );
+    assert_eq!(
+        build_endpoint_url(p, "https://custom.gateway.internal/messages"),
+        "https://custom.gateway.internal/messages"
+    );
+}
+
+#[test]
+fn test_build_endpoint_url_openai_responses() {
+    let p = ProtocolKind::OpenAiResponses;
+    // 1. 无 /v1 基础路径（自动规范化追加 /v1/responses）
+    assert_eq!(
+        build_endpoint_url(p, "https://api.openai.com"),
+        "https://api.openai.com/v1/responses"
+    );
+    assert_eq!(
+        build_endpoint_url(p, "https://api.openai.com/"),
+        "https://api.openai.com/v1/responses"
+    );
+    // 2. 已包含 /v1
+    assert_eq!(
+        build_endpoint_url(p, "https://api.openai.com/v1"),
+        "https://api.openai.com/v1/responses"
+    );
+    assert_eq!(
+        build_endpoint_url(p, "https://api.openai.com/v1/"),
+        "https://api.openai.com/v1/responses"
+    );
+    // 3. 已包含 /responses
+    assert_eq!(
+        build_endpoint_url(p, "https://api.openai.com/v1/responses"),
+        "https://api.openai.com/v1/responses"
+    );
+    assert_eq!(
+        build_endpoint_url(p, "https://api.openai.com/v1/responses/"),
+        "https://api.openai.com/v1/responses"
+    );
+    assert_eq!(
+        build_endpoint_url(p, "https://api.deepseek.com/responses"),
+        "https://api.deepseek.com/responses"
+    );
+}
+
+#[test]
+fn test_build_endpoint_url_openai_chat() {
+    let p = ProtocolKind::OpenAiChat;
+    // 1. 带 /v1 后缀
+    assert_eq!(
+        build_endpoint_url(p, "https://api.openai.com/v1"),
+        "https://api.openai.com/v1/chat/completions"
+    );
+    assert_eq!(
+        build_endpoint_url(p, "https://api.openai.com/v1/"),
+        "https://api.openai.com/v1/chat/completions"
+    );
+    // 2. 阿里百炼等兼容网关路径
+    assert_eq!(
+        build_endpoint_url(p, "https://dashscope.aliyuncs.com/compatible-mode/v1"),
+        "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
+    );
+    assert_eq!(
+        build_endpoint_url(p, "https://dashscope.aliyuncs.com/compatible-mode/v1/"),
+        "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
+    );
+    // 3. DeepSeek / 第三方直出根路径
+    assert_eq!(
+        build_endpoint_url(p, "https://api.deepseek.com"),
+        "https://api.deepseek.com/chat/completions"
+    );
+    assert_eq!(
+        build_endpoint_url(p, "https://api.deepseek.com/"),
+        "https://api.deepseek.com/chat/completions"
+    );
+    // 4. 幂等：已包含 /chat/completions
+    assert_eq!(
+        build_endpoint_url(p, "https://api.openai.com/v1/chat/completions"),
+        "https://api.openai.com/v1/chat/completions"
+    );
+    assert_eq!(
+        build_endpoint_url(p, "https://api.openai.com/v1/chat/completions/"),
+        "https://api.openai.com/v1/chat/completions"
+    );
+    // 5. 绝对无 // 或 /v1/v1
+    let url = build_endpoint_url(p, "https://api.openai.com/v1/");
+    assert!(!url.contains("//chat"));
+    assert!(!url.contains("/v1/v1"));
+}
+
+#[test]
+fn test_build_endpoint_url_google_generate_content() {
+    let p = ProtocolKind::GoogleGenerateContent;
+    assert_eq!(
+        build_endpoint_url(p, "https://generativelanguage.googleapis.com"),
+        "https://generativelanguage.googleapis.com/v1beta"
+    );
+    assert_eq!(
+        build_endpoint_url(p, "https://generativelanguage.googleapis.com/"),
+        "https://generativelanguage.googleapis.com/v1beta"
+    );
+    assert_eq!(
+        build_endpoint_url(p, "https://generativelanguage.googleapis.com/v1beta"),
+        "https://generativelanguage.googleapis.com/v1beta"
+    );
+    assert_eq!(
+        build_endpoint_url(p, "https://generativelanguage.googleapis.com/v1beta/"),
+        "https://generativelanguage.googleapis.com/v1beta"
+    );
+}
+
+#[test]
+fn test_wire_protocol_resolve_endpoint_url_method() {
+    assert_eq!(
+        WireProtocol::Chat.resolve_endpoint_url("https://api.openai.com/v1"),
+        "https://api.openai.com/v1/chat/completions"
+    );
+    assert_eq!(
+        WireProtocol::Responses.resolve_endpoint_url("https://api.openai.com/v1"),
+        "https://api.openai.com/v1/responses"
+    );
+    assert_eq!(
+        WireProtocol::Anthropic.resolve_endpoint_url("https://api.anthropic.com"),
+        "https://api.anthropic.com/v1/messages"
+    );
+    // 测试别名常量的调用
+    assert_eq!(
+        WireProtocol::OpenAiChat.resolve_endpoint_url("https://api.deepseek.com"),
+        "https://api.deepseek.com/chat/completions"
+    );
+    assert_eq!(
+        WireProtocol::OpenAiResponses.resolve_endpoint_url("https://api.openai.com"),
+        "https://api.openai.com/v1/responses"
+    );
+    assert_eq!(
+        WireProtocol::AnthropicMessages.resolve_endpoint_url("https://api.anthropic.com/v1/"),
+        "https://api.anthropic.com/v1/messages"
+    );
+}

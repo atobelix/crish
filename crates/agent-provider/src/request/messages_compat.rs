@@ -7,7 +7,13 @@
 //!   [empty_content_wire_value]），保持「判定是纯函数消费，不是领域层逻辑」——
 //!   不向 [AgentMessage] / 会话状态注入任何合成内容（INV-07 领域真实性）。
 //!
+//! 2026 统一重构（TU-03）：
+//! - 彻底删除 `is_deepseek` 中的 `url.contains("deepseek")` 字符串盲猜；
+//! - 改为精确根据 `vendor == "deepseek"` 或配置中的 `compat.thinking_format == "deepseek"` 判定。
+//!
 //! SR-06e · 拆分 · ≠ EL：独立新子模块（[messages.rs] 经 `#[path]` 接线）。
+
+#![allow(dead_code)]
 
 use conex_types::message::AgentMessage;
 
@@ -27,19 +33,46 @@ pub struct WireCompat<'a> {
     pub vendor: Option<&'a str>,
     /// 模型名（[resolve_developer_role] 的 `anthropic/`|`openai/` 前缀判定）
     pub model: Option<&'a str>,
-    /// base_url（DeepSeek 判定与 developer role 的 openrouter 判定）
+    /// base_url（developer role 的 openrouter 判定）
     pub base_url: Option<&'a str>,
     /// 是否支持 reasoning（developer role 判定的三要素之一）
     pub supports_reasoning: bool,
+    /// 思考方言格式配置（如 "deepseek"）
+    pub thinking_format: Option<&'a str>,
 }
 
 impl<'a> WireCompat<'a> {
-    /// DeepSeek 厂商推断：vendor 名或 base_url 含 `"deepseek"`（逐字节确定，
-    /// 与 R1 compat 纯函数同口径 lowercase）。`None` 入参 → `false`（默认轨）。
+    /// 从供应商/模型及 CompatSpec 构造 WireCompat
+    pub fn from_compat(
+        vendor: Option<&'a str>,
+        model: Option<&'a str>,
+        base_url: Option<&'a str>,
+        supports_reasoning: bool,
+        compat: Option<&'a crate::models::catalog_types::CompatSpec>,
+    ) -> Self {
+        let thinking_format = compat.and_then(|c| c.thinking_format).map(|tf| match tf {
+            crate::models::catalog_types::ThinkingFormat::OpenAi => "openai",
+            crate::models::catalog_types::ThinkingFormat::DeepSeek => "deepseek",
+            crate::models::catalog_types::ThinkingFormat::Qwen => "qwen",
+            crate::models::catalog_types::ThinkingFormat::Zai => "zai",
+            crate::models::catalog_types::ThinkingFormat::Anthropic => "anthropic",
+            crate::models::catalog_types::ThinkingFormat::Gemini => "gemini",
+        });
+        Self {
+            vendor,
+            model,
+            base_url,
+            supports_reasoning,
+            thinking_format,
+        }
+    }
+
+    /// DeepSeek 厂商推断：精确由 vendor == "deepseek" 或 compat.thinking_format == "deepseek" 决定。
+    /// 彻底废除基于 URL 子串的模糊盲猜（url.contains("deepseek") 已被彻底根除）。
     pub fn is_deepseek(&self) -> bool {
-        let vendor = self.vendor.unwrap_or("").to_ascii_lowercase();
-        let url = self.base_url.unwrap_or("").to_ascii_lowercase();
-        vendor.contains("deepseek") || url.contains("deepseek")
+        let vendor = self.vendor.unwrap_or("").trim();
+        let format = self.thinking_format.unwrap_or("").trim();
+        vendor.eq_ignore_ascii_case("deepseek") || format.eq_ignore_ascii_case("deepseek")
     }
 }
 
@@ -82,5 +115,124 @@ pub fn deepseek_tool_call_reasoning(
         Some(String::new())
     } else {
         Some(thought)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_is_deepseek_exact_vendor_and_format() {
+        // vendor == "deepseek" (case insensitive)
+        assert!(WireCompat {
+            vendor: Some("deepseek"),
+            ..WireCompat::default()
+        }
+        .is_deepseek());
+
+        assert!(WireCompat {
+            vendor: Some("DeepSeek"),
+            ..WireCompat::default()
+        }
+        .is_deepseek());
+
+        // thinking_format == "deepseek"
+        assert!(WireCompat {
+            thinking_format: Some("deepseek"),
+            ..WireCompat::default()
+        }
+        .is_deepseek());
+
+        assert!(WireCompat {
+            thinking_format: Some("DEEPSEEK"),
+            ..WireCompat::default()
+        }
+        .is_deepseek());
+
+        // base_url containing deepseek MUST NOT trigger is_deepseek (url substring guess removed)
+        assert!(!WireCompat {
+            base_url: Some("https://api.deepseek.com"),
+            ..WireCompat::default()
+        }
+        .is_deepseek());
+
+        assert!(!WireCompat {
+            base_url: Some("https://API.DEEPSEEK.COM/v1"),
+            ..WireCompat::default()
+        }
+        .is_deepseek());
+
+        // Default WireCompat must not be deepseek
+        assert!(!WireCompat::default().is_deepseek());
+
+        // Non-deepseek vendor
+        assert!(!WireCompat {
+            vendor: Some("openai"),
+            base_url: Some("https://api.openai.com"),
+            ..WireCompat::default()
+        }
+        .is_deepseek());
+    }
+
+    #[test]
+    fn test_deepseek_tool_call_reasoning_passback() {
+        use conex_types::message::AgentMessageBlock;
+
+        let compat_ds = WireCompat {
+            vendor: Some("deepseek"),
+            ..WireCompat::default()
+        };
+        let compat_non_ds = WireCompat {
+            vendor: Some("openai"),
+            ..WireCompat::default()
+        };
+
+        let msg_with_thought = AgentMessage {
+            id: "msg1".into(),
+            role: conex_types::message::AgentMessageRole::Assistant,
+            created_at: "2026-09-07T00:00:00Z".into(),
+            blocks: vec![AgentMessageBlock::Thought {
+                text: "thinking...".into(),
+                redacted: None,
+            }],
+            metadata: None,
+            client_message_id: None,
+            content: None,
+        };
+
+        let msg_empty = AgentMessage {
+            id: "msg2".into(),
+            role: conex_types::message::AgentMessageRole::Assistant,
+            created_at: "2026-09-07T00:00:00Z".into(),
+            blocks: vec![],
+            metadata: None,
+            client_message_id: None,
+            content: None,
+        };
+
+        // DeepSeek with tool call and thought -> Some("thinking...")
+        assert_eq!(
+            deepseek_tool_call_reasoning(&compat_ds, true, &msg_with_thought),
+            Some("thinking...".to_string())
+        );
+
+        // DeepSeek with tool call without thought -> Some("") fallback
+        assert_eq!(
+            deepseek_tool_call_reasoning(&compat_ds, true, &msg_empty),
+            Some("".to_string())
+        );
+
+        // DeepSeek without tool call -> None (does not force)
+        assert_eq!(
+            deepseek_tool_call_reasoning(&compat_ds, false, &msg_with_thought),
+            None
+        );
+
+        // Non-DeepSeek with tool call -> None
+        assert_eq!(
+            deepseek_tool_call_reasoning(&compat_non_ds, true, &msg_with_thought),
+            None
+        );
     }
 }
