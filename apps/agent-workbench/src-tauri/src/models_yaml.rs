@@ -12,6 +12,7 @@
 //! - 校验错误携带行/列号，经 `CoreError::InvalidInput` 或结构化诊断透传前端；
 //! - schema `deny_unknown_fields`：拼错字段名直接报错，不留静默死字段。
 
+use agent_provider::migration::{ConfigMigrationManager, MigrationStatus};
 use conex_types::CoreError;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -398,9 +399,34 @@ fn diagnostic_to_core_error(diag: &ModelsYamlDiagnostic) -> CoreError {
 
 // ===== 内部实现（路径注入，供单测）=====
 
-/// 读取：缺文件播种 → 返回 content + 解析产物（解析失败不吞 content，编辑器可修复）
+/// 读取：缺文件播种 → 存量自动升级迁移 → 返回 content + 解析产物（解析失败不吞 content，编辑器可修复）
 fn read_models_yaml_at(path: &Path, template: &str) -> Result<ReadModelsYamlResult, CoreError> {
     let (content, seeded) = if path.exists() {
+        // 若目标文件存在，在解析前先调用 ConfigMigrationManager::ensure_migrated 安全检查与升级
+        match ConfigMigrationManager::ensure_migrated(path) {
+            Ok(MigrationStatus::MigratedSuccessfully {
+                backup_path,
+                provider_count,
+                model_count,
+            }) => {
+                tracing::info!(
+                    backup = %backup_path.display(),
+                    providers = provider_count,
+                    models = model_count,
+                    "[models.yaml] 存量旧版配置自动升级迁移成功，已转换为 v2 树状架构"
+                );
+            }
+            Ok(MigrationStatus::AlreadyUpToDate) => {
+                // 已是最新版配置，继续正常流程
+            }
+            Err(err) => {
+                tracing::warn!(
+                    error = %err,
+                    path = %path.display(),
+                    "[models.yaml] 存量迁移检查未执行（可能格式错误或部分损坏），保留原始文件供解析器诊断"
+                );
+            }
+        }
         (std::fs::read_to_string(path).map_err(|e| CoreError::Io(e.to_string()))?, false)
     } else {
         conex_fs::atomic_write_file(path, template.as_bytes())
@@ -639,6 +665,69 @@ providers:
         let res = save_models_yaml_at(&path, sample_yaml()).expect("父目录缺失应自动创建");
         assert!(path.exists());
         assert!(res.models.is_empty());
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn read_auto_migrates_legacy_flat_yaml_to_v2_tree() {
+        let dir = temp_dir("migration");
+        let path = dir.join(MODELS_YAML_FILENAME);
+
+        let legacy_yaml = r#"
+schema_version: 1
+models:
+  - id: "deepseek-chat"
+    name: "DeepSeek V3"
+    vendor: "deepseek"
+    baseUrl: "https://api.deepseek.com"
+    contextWindow: 65536
+    maxTokens: 8192
+    reasoning: false
+  - id: "deepseek-reasoner"
+    name: "DeepSeek R1"
+    vendor: "deepseek"
+    baseUrl: "https://api.deepseek.com"
+    contextWindow: 131072
+    maxTokens: 32768
+    reasoning: true
+"#;
+        std::fs::write(&path, legacy_yaml).expect("写入旧版扁平配置");
+
+        let res = read_models_yaml_at(&path, sample_yaml()).expect("读取旧版文件应成功升级迁移");
+        assert!(!res.seeded, "已存在的文件不属于播种");
+        assert!(res.parse_error.is_none(), "迁移后解析不应报错");
+        assert_eq!(res.version, Some(2), "迁移后版本必须为 2");
+
+        let providers = res.providers.expect("迁移后必须包含 providers 树状结构");
+        assert!(providers.contains_key("deepseek"), "必须按 vendor 聚类生成 deepseek 供应商");
+        let deepseek = &providers["deepseek"];
+        assert_eq!(deepseek.models.len(), 2, "deepseek 供应商下必须包含 2 个模型");
+
+        // 验证展平模型列表
+        assert_eq!(res.models.len(), 2);
+        assert!(res.models.iter().any(|m| m.model == "deepseek-chat"));
+        assert!(res.models.iter().any(|m| m.model == "deepseek-reasoner"));
+
+        // 验证磁盘内容已实际更新为 v2
+        let disk_content = std::fs::read_to_string(&path).expect("读取落盘内容");
+        assert!(disk_content.contains("version: 2"));
+        assert!(disk_content.contains("providers:"));
+        assert_eq!(disk_content, res.content, "返回的 content 必须与落盘内容一致");
+
+        // 验证是否生成了物理时间戳备份文件 (.bak)
+        let bak_exists = std::fs::read_dir(&dir)
+            .expect("读取目录")
+            .filter_map(|e| e.ok())
+            .any(|e| e.path().to_string_lossy().contains(".bak"));
+        assert!(bak_exists, "自动升级时必须生成时间戳物理备份 .bak 文件");
+
+        // 幂等性验证：二次读取时已是最新版，不应重复备份或修改
+        let second = read_models_yaml_at(&path, sample_yaml()).expect("二次读取");
+        assert!(!second.seeded);
+        assert_eq!(second.content, res.content);
+        assert_eq!(second.version, Some(2));
+        assert_eq!(second.models.len(), 2);
 
         std::fs::remove_dir_all(&dir).ok();
     }

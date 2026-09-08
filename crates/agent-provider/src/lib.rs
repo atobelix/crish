@@ -13,14 +13,18 @@
 //! - [retry]（B2.7）：指数退避重试器与 provider_stream 高层封装（02 §六.7-8）
 //! - [consume]（B2.8）：流事件消费聚合 + stopReason 生成（02 §一.3、§五.12、§六.12；01 D6）
 //! - [models]（P3）：厂商/模型层数据目录（模型元数据 + 内置表 + 多级兜底查询）
+//! - [migration]：存量 models.yaml 无损平滑自动迁移引擎
+//! - [pricing]：四维双币微元定点计费引擎 (Micros Pricing Engine)
 
 pub mod config;
 pub mod consume;
 pub mod credentials;
 pub mod error;
 pub mod events;
+pub mod migration;
 pub mod models;
 pub mod parse;
+pub mod pricing;
 pub mod request;
 pub mod retry;
 pub mod sse;
