@@ -18,17 +18,28 @@ vi.mock('../../../api/workspaceFsApi', async (importOriginal) => {
   };
 });
 
-describe('FileBreadcrumb 面包屑与多级下钻状态机', () => {
+describe('FileBreadcrumb 面包屑与多级下钻状态机（单轨无损清洗）', () => {
   afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
+  });
+
+  // 刚性负向断言：FileBreadcrumbProps 不存在 cwd 属性声明
+  it('[NEG-01] FileBreadcrumbProps 不存在 cwd 属性声明', () => {
+    const props = {
+      root: 'c:/Software/conex',
+      selected: null,
+      view: 'browse' as const,
+      onNavigate: vi.fn(),
+      onOpenFile: vi.fn(),
+    };
+    expect((props as Record<string, unknown>).cwd).toBeUndefined();
   });
 
   it('根芯片正确渲染项目文件夹名而非硬编码的“项目”', () => {
     const { container } = render(
       <FileBreadcrumb
         root="c:/Software/conex"
-        cwd="c:/Software/conex"
         selected={null}
         view="browse"
         onNavigate={vi.fn()}
@@ -49,7 +60,6 @@ describe('FileBreadcrumb 面包屑与多级下钻状态机', () => {
     const { getByRole, findByText } = render(
       <FileBreadcrumb
         root="c:/Software/conex"
-        cwd="c:/Software/conex"
         selected={null}
         view="browse"
         onNavigate={vi.fn()}
@@ -79,7 +89,6 @@ describe('FileBreadcrumb 面包屑与多级下钻状态机', () => {
     const { getByRole, findByText, queryByText } = render(
       <FileBreadcrumb
         root="c:/Software/conex"
-        cwd="c:/Software/conex"
         selected={null}
         view="browse"
         onNavigate={vi.fn()}
@@ -87,20 +96,16 @@ describe('FileBreadcrumb 面包屑与多级下钻状态机', () => {
       />
     );
 
-    // 1. 打开根浮层
     fireEvent.click(getByRole('button', { name: 'conex' }));
     const appsItem = await findByText('apps');
     expect(appsItem).toBeTruthy();
     expect(await findByText('packages')).toBeTruthy();
 
-    // 2. 点击子文件夹 apps -> 触发原地展开
     fireEvent.click(appsItem);
 
-    // 3. 断言浮层依然存在，渲染了下一级子内容 crish-desktop，且兄弟节点 packages 依然常驻可见
     expect(await findByText('crish-desktop')).toBeTruthy();
     expect(queryByText('packages')).toBeTruthy();
 
-    // 4. 再次点击 apps -> 原地折叠子树
     fireEvent.click(appsItem);
     await waitFor(() => {
       expect(queryByText('crish-desktop')).toBeNull();
@@ -118,7 +123,6 @@ describe('FileBreadcrumb 面包屑与多级下钻状态机', () => {
     const { getByRole, findByText, queryByText } = render(
       <FileBreadcrumb
         root="c:/Software/conex"
-        cwd="c:/Software/conex"
         selected={null}
         view="browse"
         onNavigate={vi.fn()}
@@ -146,7 +150,6 @@ describe('FileBreadcrumb 面包屑与多级下钻状态机', () => {
     const { getByRole, getByLabelText, queryByRole } = render(
       <FileBreadcrumb
         root="c:/Software/conex"
-        cwd="c:/Software/conex"
         selected={null}
         view="browse"
         onNavigate={onNavigate}
@@ -175,7 +178,6 @@ describe('FileBreadcrumb 面包屑与多级下钻状态机', () => {
     const { getByRole, getByPlaceholderText, queryByRole } = render(
       <FileBreadcrumb
         root="c:/Software/conex"
-        cwd="c:/Software/conex"
         selected={null}
         view="browse"
         onNavigate={onNavigate}
@@ -203,7 +205,6 @@ describe('FileBreadcrumb 面包屑与多级下钻状态机', () => {
     const { getByRole, findByText, queryByRole } = render(
       <FileBreadcrumb
         root="c:/Software/conex"
-        cwd="c:/Software/conex"
         selected={null}
         view="browse"
         onNavigate={onNavigate}
@@ -225,7 +226,6 @@ describe('FileBreadcrumb 面包屑与多级下钻状态机', () => {
     const { container, getByLabelText } = render(
       <FileBreadcrumb
         root="c:/Software/conex"
-        cwd="c:/Software/conex/src"
         selected="c:/Software/conex/src/index.ts"
         view="detail"
         dirty={true}
@@ -244,7 +244,6 @@ describe('FileBreadcrumb 面包屑与多级下钻状态机', () => {
     const { queryByLabelText, container } = render(
       <FileBreadcrumb
         root="c:/Software/conex"
-        cwd="c:/Software/conex/src"
         selected="c:/Software/conex/src/index.ts"
         view="detail"
         dirty={false}
@@ -261,7 +260,6 @@ describe('FileBreadcrumb 面包屑与多级下钻状态机', () => {
     const { container } = render(
       <FileBreadcrumb
         root="c:/Software/conex"
-        cwd="c:/Software/conex/apps/crish-desktop/src"
         selected="c:/Software/conex/apps/crish-desktop/src/App.tsx"
         view="detail"
         onNavigate={vi.fn()}
@@ -280,7 +278,6 @@ describe('FileBreadcrumb 面包屑与多级下钻状态机', () => {
     const { container } = render(
       <FileBreadcrumb
         root=""
-        cwd=""
         selected={null}
         view="browse"
         onNavigate={vi.fn()}
@@ -301,7 +298,6 @@ describe('FileBreadcrumb 面包屑与多级下钻状态机', () => {
     const { getByRole, getByPlaceholderText, findByText, queryByText } = render(
       <FileBreadcrumb
         root="c:/Software/conex"
-        cwd="c:/Software/conex"
         selected={null}
         view="browse"
         onNavigate={vi.fn()}
@@ -335,7 +331,6 @@ describe('FileBreadcrumb 面包屑与多级下钻状态机', () => {
       <div>
         <FileBreadcrumb
           root="c:/Software/conex"
-          cwd="c:/Software/conex"
           selected={null}
           view="browse"
           onNavigate={vi.fn()}
@@ -348,17 +343,14 @@ describe('FileBreadcrumb 面包屑与多级下钻状态机', () => {
     const chip = getByRole('button', { name: 'conex' });
     const focusSpy = vi.spyOn(chip, 'focus');
 
-    // 1. 打开浮层
     fireEvent.click(chip);
     expect(await findByRole('listbox')).toBeTruthy();
 
-    // 2. 点击外部区域 -> 浮层关闭，但绝不强夺焦点到 chip
     focusSpy.mockClear();
     fireEvent.mouseDown(document.body);
     expect(queryByRole('listbox')).toBeNull();
     expect(focusSpy).not.toHaveBeenCalled();
 
-    // 3. 重新打开浮层，按 Escape 键 -> 浮层关闭并恢复焦点
     fireEvent.click(chip);
     expect(await findByRole('listbox')).toBeTruthy();
     fireEvent.keyDown(window, { key: 'Escape' });

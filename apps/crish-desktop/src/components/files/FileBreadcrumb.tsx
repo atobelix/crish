@@ -73,9 +73,8 @@ interface FlyoutState {
   filter: string;
 }
 
-interface FileBreadcrumbProps {
+export interface FileBreadcrumbProps {
   root: string;
-  cwd: string;
   selected: string | null;
   view: ViewMode;
   dirty?: boolean;
@@ -85,7 +84,6 @@ interface FileBreadcrumbProps {
 
 export const FileBreadcrumb = React.memo(function FileBreadcrumb({
   root,
-  cwd,
   selected,
   view,
   dirty,
@@ -102,10 +100,11 @@ export const FileBreadcrumb = React.memo(function FileBreadcrumb({
     return root.split(/[\\/]/).filter(Boolean).pop() || '项目';
   }, [root]);
 
+  // 单轨面包屑推导：无 cwd，依据当前选中的 selected 或 root 进行层级推导
   const breadcrumbs: BreadcrumbItem[] = useMemo(() => {
     if (!root) return [];
-    const dir = view === 'detail' && selected ? pathDirname(selected) || root : cwd || root;
-    const rel = pathRelativeToRoot(dir, root);
+    const targetDir = selected ? (view === 'detail' ? pathDirname(selected) : selected) : root;
+    const rel = pathRelativeToRoot(targetDir || root, root);
     const items: BreadcrumbItem[] = [{ label: rootLabel, path: root }];
     if (rel && rel !== '.') {
       let acc = root;
@@ -122,7 +121,7 @@ export const FileBreadcrumb = React.memo(function FileBreadcrumb({
       });
     }
     return items;
-  }, [cwd, root, rootLabel, selected, view]);
+  }, [root, rootLabel, selected, view]);
 
   const loadDir = useCallback(
     async (path: string) => listDirectory(resolveWorkspacePath(path)),

@@ -1,10 +1,11 @@
-import React, { useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import styles from './FilesCard.module.css';
 import { Button, Tooltip } from '../ui';
 import { Folder, X } from 'lucide-react';
 import { ChevronDownIcon, ChevronRightIcon, FileFormatIcon } from '../../assets/icons';
 import { useVirtualScroll } from '../../hooks/useVirtualScroll';
-import type { TreeNode } from './FileSearchFilter';
+import { isSameFsPath } from '../../api/workspaceFsApi';
+import type { TreeNode } from './hooks/useFileNavigation';
 
 function TreeFileIcon({ name }: { name: string }) {
   return <FileFormatIcon fileName={name} size={14} className={styles.filesRowIco} />;
@@ -18,7 +19,6 @@ function formatSize(n: number): string {
 
 export interface FileTreeViewProps {
   root?: string;
-  cwd?: string;
   flatTree: TreeNode[];
   selected: string | null;
   expanded: Record<string, unknown>;
@@ -39,42 +39,44 @@ const ITEM_HEIGHT = 28;
 
 export const FileTreeView: React.FC<FileTreeViewProps> = React.memo(
   function FileTreeView({
-    root,
-    cwd: _cwd,
+    root: _root,
     flatTree,
     selected,
     expanded,
     loading,
     error,
     filter,
+    filterMode: _filterMode,
     gitStatusMap,
     onSelect,
     onToggleExpand,
     onDoubleClick,
+    onFilterChange: _onFilterChange,
+    onFilterModeToggle: _onFilterModeToggle,
     onErrorDismiss,
   }) {
     const ids = useMemo(() => flatTree.map((e) => e.path), [flatTree]);
+
+    // 真实 Hook 契约对齐：参数名为 fallbackHeight 与 overscan，返回值包含 visibleRange
     const { visibleRange, containerRef, onScroll, totalHeight } =
       useVirtualScroll({
         ids,
         itemCount: flatTree.length,
         fallbackHeight: ITEM_HEIGHT,
+        overscan: 4,
       });
 
     const { startIndex, endIndex } = visibleRange;
 
+    // 真实渲染切片严谨包含最后一项（endIndex + 1 闭区间）
     const visibleItems = useMemo(() => {
       return flatTree.slice(startIndex, endIndex + 1);
     }, [flatTree, startIndex, endIndex]);
 
-    const rootName = useMemo(() => {
-      if (!root) return '工作区';
-      return root.split(/[\\/]/).filter(Boolean).pop() || '工作区';
-    }, [root]);
+    const [pulseTarget, setPulseTarget] = useState<string | null>(null);
+    const prevSelectedRef = useRef<string | null>(null);
 
-    // F7-F35：ARIA tree pattern 键盘漫游——焦点在可见行间移动；
-    // 目标行未渲染（虚拟窗口外）时 no-op（与 Tab 行为一致，等待滚动后可达）
-    const focusTreeRow = React.useCallback(
+    const focusTreeRow = useCallback(
       (targetIndex: number) => {
         containerRef.current
           ?.querySelector<HTMLElement>(`[data-tree-index="${targetIndex}"]`)
@@ -83,9 +85,99 @@ export const FileTreeView: React.FC<FileTreeViewProps> = React.memo(
       [containerRef]
     );
 
-    // F7-F35：行级键盘处理——↑↓ 漫游、Home/End 跳首尾、
-    // → 展开目录、← 折叠目录、Enter 选中（原语义保持）
-    const handleRowKeyDown = React.useCallback(
+    // 核心时序闭环：W3C 原生 scrollend 停泊守护与脉冲高亮挂载（CRIT-04 & MIN-05）
+    useEffect(() => {
+      if (!selected || !containerRef.current) {
+        prevSelectedRef.current = selected;
+        return;
+      }
+
+      const targetIndex = flatTree.findIndex((n) => isSameFsPath(n.path, selected));
+      if (targetIndex === -1) {
+        return;
+      }
+
+      const isNewSelection =
+        !prevSelectedRef.current || !isSameFsPath(prevSelectedRef.current, selected);
+      prevSelectedRef.current = selected;
+
+      if (!isNewSelection) return;
+
+      const container = containerRef.current;
+      const viewHeight = container.clientHeight;
+      if (viewHeight <= 0) return;
+
+      const itemTop = targetIndex * ITEM_HEIGHT;
+      const itemBottom = itemTop + ITEM_HEIGHT;
+      const currentScrollTop = container.scrollTop;
+      const maxScrollTop = Math.max(0, totalHeight - viewHeight);
+
+      const isAtTopBoundary = currentScrollTop === 0 && targetIndex === 0;
+      const isAtBottomBoundary =
+        currentScrollTop >= maxScrollTop && targetIndex === flatTree.length - 1;
+
+      // MIN-05 极限矮视口（< 56px）非空判定
+      const isInView =
+        isAtTopBoundary ||
+        isAtBottomBoundary ||
+        (viewHeight >= 2 * ITEM_HEIGHT
+          ? itemTop >= currentScrollTop + ITEM_HEIGHT &&
+            itemBottom <= currentScrollTop + viewHeight - ITEM_HEIGHT
+          : itemTop >= currentScrollTop && itemBottom <= currentScrollTop + viewHeight);
+
+      let pulseTimer: number | null = null;
+      let cleanupScrollEnd: (() => void) | null = null;
+
+      const triggerFocusAndPulse = () => {
+        setPulseTarget(selected);
+        pulseTimer = window.setTimeout(() => {
+          setPulseTarget(null);
+        }, 1400);
+        focusTreeRow(targetIndex);
+        requestAnimationFrame(() => {
+          focusTreeRow(targetIndex);
+        });
+      };
+
+      if (!isInView) {
+        const rawScrollTop = itemTop - Math.floor((viewHeight - ITEM_HEIGHT) / 2);
+        const targetScrollTop = Math.min(maxScrollTop, Math.max(0, rawScrollTop));
+
+        let settled = false;
+        const onScrollEnd = () => {
+          if (settled) return;
+          settled = true;
+          container.removeEventListener('scrollend', onScrollEnd);
+          window.clearTimeout(fallbackTimer);
+          requestAnimationFrame(() => {
+            triggerFocusAndPulse();
+          });
+        };
+
+        container.addEventListener('scrollend', onScrollEnd, { once: true });
+        container.scrollTo({
+          top: targetScrollTop,
+          behavior: 'smooth',
+        });
+
+        // 350ms 双重保险优雅降级兜底守卫
+        const fallbackTimer = window.setTimeout(onScrollEnd, 350);
+        cleanupScrollEnd = () => {
+          container.removeEventListener('scrollend', onScrollEnd);
+          window.clearTimeout(fallbackTimer);
+        };
+      } else {
+        triggerFocusAndPulse();
+      }
+
+      return () => {
+        if (pulseTimer != null) window.clearTimeout(pulseTimer);
+        cleanupScrollEnd?.();
+      };
+    }, [selected, flatTree, focusTreeRow, containerRef, totalHeight]);
+
+    // ARIA tree pattern 键盘漫游
+    const handleRowKeyDown = useCallback(
       (e: React.KeyboardEvent, idx: number, node: TreeNode) => {
         if (e.key === 'Enter') {
           e.preventDefault();
@@ -131,12 +223,10 @@ export const FileTreeView: React.FC<FileTreeViewProps> = React.memo(
         ref={containerRef}
         onScroll={onScroll}
         role="tree"
-        aria-label="文件树"
+        aria-label="工作区文件树"
         style={{ overflowY: 'auto', position: 'relative' }}
       >
-
-
-        {loading ? (
+        {loading && flatTree.length === 0 ? (
           <div className={`${styles.filesEmpty} ${styles.filesEmptyCompact}`}>
             加载中…
           </div>
@@ -162,7 +252,7 @@ export const FileTreeView: React.FC<FileTreeViewProps> = React.memo(
                 style={{
                   position: 'sticky',
                   top: 0,
-                  zIndex: 'var(--z-pinned-bar)',
+                  zIndex: 'var(--z-sticky, 10)', // 修正虚构 Token，对齐正典
                 }}
               >
                 <span className={styles.filesInlineErrText}>{error}</span>
@@ -179,6 +269,7 @@ export const FileTreeView: React.FC<FileTreeViewProps> = React.memo(
                 </Tooltip>
               </div>
             ) : null}
+
             <div
               style={{
                 height: `${totalHeight}px`,
@@ -189,11 +280,14 @@ export const FileTreeView: React.FC<FileTreeViewProps> = React.memo(
               {visibleItems.map((e, index) => {
                 const globalIdx = startIndex + index;
                 const top = globalIdx * ITEM_HEIGHT;
+                const isSelected = Boolean(selected && isSameFsPath(e.path, selected));
+                const isPulse = Boolean(pulseTarget && isSameFsPath(e.path, pulseTarget));
+
                 return (
                   <div
                     key={e.path}
                     data-tree-index={globalIdx}
-                    className={`${styles.filesRow} ${selected === e.path ? styles.isSelected : ''}`}
+                    className={`${styles.filesRow} ${isSelected ? styles.isSelected : ''} ${isPulse ? (styles.isSelectedPulse || 'isSelectedPulse') : ''}`}
                     style={{
                       position: 'absolute',
                       top: `${top}px`,
@@ -206,10 +300,9 @@ export const FileTreeView: React.FC<FileTreeViewProps> = React.memo(
                     }}
                     onClick={() => onSelect(e.path, e.isDir)}
                     onDoubleClick={() => onDoubleClick(e.path, e.isDir)}
-                    // F7-F35：树形语义——treeitem + 层级/展开态/选中态
                     role="treeitem"
                     aria-level={e.depth + 1}
-                    aria-selected={selected === e.path}
+                    aria-selected={isSelected}
                     aria-expanded={
                       e.isDir
                         ? expanded[e.path]
@@ -217,7 +310,7 @@ export const FileTreeView: React.FC<FileTreeViewProps> = React.memo(
                           : 'false'
                         : undefined
                     }
-                    tabIndex={0}
+                    tabIndex={isSelected ? 0 : -1}
                     onKeyDown={(ev) => handleRowKeyDown(ev, globalIdx, e)}
                   >
                     <Button

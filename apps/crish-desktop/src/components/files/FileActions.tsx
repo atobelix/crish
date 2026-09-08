@@ -45,9 +45,8 @@ function getOpenerIcon(op: HostOpener, size = 14) {
 const OPEN_WITH_LABEL = '选择打开方式';
 const MORE_ACTIONS_LABEL = '更多操作';
 
-interface FileActionsProps {
+export interface FileActionsProps {
   selected: string | null;
-  cwd?: string;
   root?: string;
   view: ViewMode;
   canEdit: boolean;
@@ -71,7 +70,6 @@ interface FileActionsProps {
 
 export const FileActions = React.memo(function FileActions({
   selected,
-  cwd,
   root,
   view,
   canEdit,
@@ -92,7 +90,8 @@ export const FileActions = React.memo(function FileActions({
   onMdModeChange,
   onCopyPath,
 }: FileActionsProps) {
-  const targetPath = selected || cwd || root || null;
+  // 单轨收敛：仅凭 selected 与 root 推导目标路径，彻底切断对 cwd 的引用
+  const targetPath = selected || root || null;
 
   const handleOpenDefault = () => {
     if (selected)

@@ -5,7 +5,7 @@
   min-height: 0;
   min-width: 0;
   overflow: hidden;
-  background: var(--bg-card, #ffffff);
+  background: var(--bg-card, hsl(0 0% 100%));
   color: var(--text-primary);
   /*                                                           ?preview-browser container */
   container-type: inline-size;
@@ -43,7 +43,7 @@
   border-top: none;
   border-bottom: 1px solid var(--hairline, var(--border-subtle));
   flex-shrink: 0;
-  background: var(--bg-card, #ffffff);
+  background: var(--bg-card, hsl(0 0% 100%));
   box-sizing: border-box;
   overflow: visible;
   position: relative;
@@ -272,7 +272,7 @@
   padding: var(--space-2, 8px);
   border-radius: var(--radius-xl, 12px);
   border: 1px solid var(--border-subtle);
-  background: var(--bg-elevated, #ffffff);
+  background: var(--bg-elevated, hsl(0 0% 100%));
   box-shadow: var(--shadow-lg);
   overscroll-behavior: contain;
   white-space: normal;
@@ -287,7 +287,7 @@
   margin-bottom: var(--space-1_5, 6px);
   border-radius: var(--radius-lg, 8px);
   border: 1px solid var(--border-subtle);
-  background: var(--bg-card, #ffffff);
+  background: var(--bg-card, hsl(0 0% 100%));
   color: var(--text-tertiary);
   flex-shrink: 0;
 }
@@ -425,7 +425,7 @@
   padding: 3px var(--card-header-pad-x, 8px);
   border-bottom: 1px solid var(--hairline, var(--border-subtle));
   flex-shrink: 0;
-  background: var(--bg-card, #ffffff);
+  background: var(--bg-card, hsl(0 0% 100%));
   min-height: var(--control-height-sm, 28px);
   box-sizing: border-box;
 }
@@ -447,6 +447,11 @@
   flex-shrink: 0;
 }
 
+.filesContextActions button,
+.filesContextActions :global(.button) {
+  box-shadow: none !important;
+}
+
 .filesSoftBtn {
   display: inline-flex;
   align-items: center;
@@ -462,16 +467,19 @@
   font-family: inherit;
   cursor: pointer;
   box-sizing: border-box;
+  box-shadow: none !important;
 }
 
 .filesSoftBtn:hover:not(:disabled) {
   background: var(--bg-hover);
   color: var(--text-primary);
+  box-shadow: none !important;
 }
 
 .filesSoftBtn:disabled {
   opacity: 0.4;
   cursor: default;
+  box-shadow: none !important;
 }
 
 .filesSoftBtnEmphasis {
@@ -479,10 +487,12 @@
   border-color: var(--border-color);
   color: var(--text-primary);
   font-weight: var(--font-weight-normal);
+  box-shadow: none !important;
 }
 
 .filesSoftBtnEmphasis:hover:not(:disabled) {
   background: var(--bg-hover);
+  box-shadow: none !important;
 }
 
 .filesBody {
@@ -491,6 +501,9 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  position: relative;
+  isolation: isolate;
+  z-index: var(--z-base, 0);
 }
 
 .filesBodySplit {
@@ -529,7 +542,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: var(--bg-card, #ffffff);
+  background: var(--bg-card, hsl(0 0% 100%));
 }
 
 .filesDetailBody {
@@ -541,7 +554,7 @@
   flex-direction: column;
   overflow: hidden;
   position: relative;
-  background: var(--bg-card, #ffffff);
+  background: var(--bg-card, hsl(0 0% 100%));
 }
 
 .filesCodeViewerWrap {
@@ -580,7 +593,7 @@
   width: 7px;
   margin: 0 -3px;
   cursor: col-resize;
-  z-index: 10;
+  z-index: 1;
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
@@ -599,8 +612,8 @@
 
 .filesSplitResizer:hover::after,
 .filesSplitResizer.isResizing::after {
-  background: var(--accent-color, #2563eb);
-  box-shadow: 0 0 4px color-mix(in srgb, var(--accent-color, #2563eb) 40%, transparent);
+  background: var(--accent-color, hsl(160 84% 36%));
+  box-shadow: 0 0 4px color-mix(in srgb, var(--accent-color, hsl(160 84% 36%)) 40%, transparent);
 }
 
 /* 窄屏自适应 (< 440px) */
@@ -707,7 +720,7 @@
   font-size: var(--font-size-xs, 12px);
   font-weight: var(--font-weight-semibold, 600);
   color: var(--text-primary);
-  background: var(--bg-card, #ffffff);
+  background: var(--bg-card, hsl(0 0% 100%));
   border-bottom: 1px solid var(--hairline, var(--border-subtle));
   user-select: none;
   cursor: pointer;
@@ -967,3 +980,24 @@
   color: var(--text-primary);
 }
 
+/* ─────────────────────────────────────────────────────────────────────────
+   3. Emerald 标杆翡翠绿 1.4s 呼吸脉冲动画（MIN-02）
+   ───────────────────────────────────────────────────────────────────────── */
+@keyframes fileRowPulse {
+  0% {
+    background: color-mix(in srgb, var(--accent-color, hsl(160 84% 36%)) 24%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-color, hsl(160 84% 36%)) 40%, transparent);
+  }
+  50% {
+    background: color-mix(in srgb, var(--accent-color, hsl(160 84% 36%)) 12%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-color, hsl(160 84% 36%)) 20%, transparent);
+  }
+  100% {
+    background: transparent;
+    box-shadow: inset 0 0 0 1px transparent;
+  }
+}
+
+.isSelectedPulse {
+  animation: fileRowPulse 1.4s cubic-bezier(0.2, 0, 0, 1) forwards;
+}

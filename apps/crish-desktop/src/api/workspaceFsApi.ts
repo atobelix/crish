@@ -7,6 +7,7 @@ import { getWorkspacePath } from './projectStore';
 export { getWorkspacePath };
 export { openPathDefault } from './hostOpenersApi';
 import { invokeResult } from './tauriInvoke';
+import { countTextLines } from './countTextLines';
 
 export type FsDirEntry = {
   name: string;
@@ -84,16 +85,37 @@ export function resolveWorkspacePath(path: string): string {
     return p;
   }
   const root = getFsRoot().trim();
-  if (!root) return p;
+  // §0.1 / F1：无工作区根时相对路径不得放行（与绝对路径无根对称硬失败）
+  if (!root) return '';
   // 去掉前导 ./ 或 .\
   const rel = p.replace(/^\.[\\/]/, '');
   return joinPath(root, rel);
 }
 
-/** 传给 Tauri 的工作区根（绝对路径） */
-function workspaceRootArg(): string | undefined {
-  const root = getFsRoot().trim();
-  return root || undefined;
+/** 经 resolveWorkspacePath 校验后的工作区路径（空/越界不可构造） */
+export type ResolvedPath = string & { readonly __brand: 'ResolvedPath' };
+
+/**
+ * 硬失败版路径沙箱：空串、越界、非法组件一律 throw。
+ * 读/写/asset URL / 本地读盘入口应只接受本函数返回值。
+ */
+export function assertWorkspacePath(path: string, label = '路径'): ResolvedPath {
+  const raw = (path || '').trim();
+  if (!raw) {
+    throw new Error(`${label}为空`);
+  }
+  const resolved = resolveWorkspacePath(raw);
+  if (!resolved) {
+    throw new Error(`文件不在当前工作区内: ${path}`);
+  }
+  return resolved as ResolvedPath;
+}
+
+/** 是否已解析为工作区内路径（不抛错；供 UI 分支） */
+export function isInsideWorkspace(path: string): boolean {
+  const raw = (path || '').trim();
+  if (!raw) return false;
+  return Boolean(resolveWorkspacePath(raw));
 }
 
 export async function listDirectory(dirPath?: string): Promise<FsDirEntry[]> {
@@ -101,10 +123,10 @@ export async function listDirectory(dirPath?: string): Promise<FsDirEntry[]> {
   const path = resolveWorkspacePath(dirPath || root);
   if (!path) throw new Error('未打开项目工作区，请先选择项目');
 
-  const res = await invokeResult<{ items?: Array<Record<string, unknown>> }>('workbench_list_directory', {
-    path,
-    workspaceRoot: workspaceRootArg(),
-  });
+  const res = await invokeResult<{ items?: Array<Record<string, unknown>> }>(
+    'workbench_list_directory',
+    { path }
+  );
 
   if (res.status === 'ok' && res.data?.items) {
     return res.data.items.map((it) => ({
@@ -146,11 +168,7 @@ export async function readTextFile(
   filePath: string,
   maxLines = FILE_PREVIEW_CHUNK_LINES,
 ): Promise<FsReadResult> {
-  if (!filePath) throw new Error('路径为空');
-  const path = resolveWorkspacePath(filePath);
-  if (!path) {
-    throw new Error(`文件不在当前工作区内: ${filePath}`);
-  }
+  const path = assertWorkspacePath(filePath);
   const lines = Math.max(1, Math.min(FILE_PREVIEW_MAX_LINES, Math.floor(maxLines)));
 
   const res = await invokeResult<{
@@ -161,14 +179,13 @@ export async function readTextFile(
   }>('workbench_read_file_content', {
     path,
     maxLines: lines,
-    workspaceRoot: workspaceRootArg(),
   });
 
   if (res.status === 'ok' && typeof res.data?.content === 'string') {
     const lineCount =
       res.data.lineCount ??
       res.data.line_count ??
-      res.data.content.split('\n').length;
+      countTextLines(res.data.content);
     return {
       content: res.data.content,
       lineCount,
@@ -191,12 +208,12 @@ export async function writeTextFile(
   content: string,
   overwrite = false,
 ): Promise<void> {
-  const path = resolveWorkspacePath(filePath);
+  if (!filePath) throw new Error('路径为空');
+  const path = assertWorkspacePath(filePath);
   const res = await invokeResult('workbench_write_file_content', {
     path,
     content,
     overwrite,
-    workspaceRoot: workspaceRootArg(),
   });
   if (res.status === 'ok') return;
   if (res.status === 'error') throw new Error(res.message);
@@ -205,8 +222,9 @@ export async function writeTextFile(
 
 /** 资源 URL（图片 / PDF 内嵌预览） */
 export async function toAssetUrl(filePath: string): Promise<string | null> {
+  if (!filePath) throw new Error('路径为空');
   if (filePath.startsWith('http://') || filePath.startsWith('https://')) return filePath;
-  const path = resolveWorkspacePath(filePath);
+  const path = assertWorkspacePath(filePath);
   try {
     const mod = await import('@tauri-apps/api/core').catch(() => null);
     if (mod && typeof (mod as { convertFileSrc?: (p: string) => string }).convertFileSrc === 'function') {
@@ -220,9 +238,10 @@ export async function toAssetUrl(filePath: string): Promise<string | null> {
 
 /** 在系统资源管理器中显示 */
 export async function revealInOs(filePath: string): Promise<void> {
+  const path = assertWorkspacePath(filePath);
   const res = await invokeResult('workbench_open_host_target', {
     openerId: 'system-file-manager',
-    target: { type: 'path', path: filePath },
+    target: { type: 'path', path },
   });
   if (res.status === 'ok') return;
   if (res.status === 'error') throw new Error(res.message);
@@ -247,6 +266,151 @@ export function pathRelativeToRoot(full: string, root: string): string {
     return rel || '.';
   }
   return full;
+}
+
+/**
+ * 跨平台文件系统路径规范化纯函数（SSOT 核心算法）：
+ * 1. 空值与空白防御：输入为 null/undefined/空串/纯空格时，恒定返回 ''；
+ * 2. 分隔符统一：将所有 Windows 反斜杠 '\' 统一转换为标准正斜杠 '/'；
+ * 3. UNC 路径保护与连续斜杠压缩：
+ *    - 若路径以 '//' 开头且不以 '///' 开头，识别为 UNC 路径，保留前导 '//'，后续连续重复斜杠压缩为单斜杠；
+ *    - 其它非 UNC 路径，所有连续重复斜杠统一压缩为单斜杠 '/'；
+ * 4. 栈代数消解冗余点号段与相对父级段（/./ 与 /../ 杜绝目录穿越）：
+ *    - 对绝对路径前缀（Windows 盘符根、UNC 根、POSIX 根）建立防逃逸边界，.. 到顶后不越界回退；
+ * 5. Windows 驱动器盘符标准化（严格遵从 HB-16 与 00-master-plan 铁律）：
+ *    - 若路径匹配 '^[a-zA-Z]:(\/|$)'，强制将驱动器盘符转换为小写（如 'C:' -> 'c:/', 'C:/' -> 'c:/', 'D:\repo' -> 'd:/repo'）；
+ * 6. 消除非根路径末尾多余斜杠：
+ *    - 根路径（'/'、'//'、'^[a-z]:\/$'）保留其末尾斜杠；其余非根路径一律剔除末尾多余正斜杠 '/'；
+ * 7. 严格幂等性：恒满足 toCanonicalFsPath(toCanonicalFsPath(p)) === toCanonicalFsPath(p)。
+ */
+export function toCanonicalFsPath(path: string): string {
+  const p = (path || '').trim();
+  if (!p) return '';
+
+  // 1. 统一正反斜杠为 '/'
+  let norm = p.replace(/\\/g, '/');
+
+  // 2. 识别 UNC 路径并压缩重复斜杠
+  const isUnc = norm.startsWith('//') && !norm.startsWith('///');
+  if (isUnc) {
+    norm = '//' + norm.slice(2).replace(/\/+/g, '/');
+  } else {
+    norm = norm.replace(/\/+/g, '/');
+  }
+
+  // 3. 提取前缀并进行相对段栈解析消解（/./ 与 /../ 杜绝目录穿越）
+  const isAbsolutePosix = norm.startsWith('/') && !isUnc;
+  const isWindowsDrive = /^[a-zA-Z]:(\/|$)/.test(norm);
+
+  let prefix = '';
+  let pathBody = norm;
+
+  if (isUnc) {
+    prefix = '//';
+    pathBody = norm.slice(2);
+  } else if (isWindowsDrive) {
+    const colonIdx = norm.indexOf(':');
+    const drive = norm.slice(0, colonIdx).toLowerCase();
+    prefix = `${drive}:/`;
+    pathBody = norm.slice(colonIdx + 1).replace(/^\/+/, '');
+  } else if (isAbsolutePosix) {
+    prefix = '/';
+    pathBody = norm.slice(1);
+  }
+
+  const rawSegments = pathBody.split('/');
+  const stack: string[] = [];
+
+  for (const seg of rawSegments) {
+    if (!seg || seg === '.') continue;
+    if (seg === '..') {
+      if (stack.length > 0 && stack[stack.length - 1] !== '..') {
+        stack.pop();
+      } else if (!prefix) {
+        stack.push('..');
+      }
+      // 拥有绝对路径前缀时，.. 到顶后直接丢弃，防止越界逃逸
+    } else {
+      stack.push(seg);
+    }
+  }
+
+  norm = prefix ? prefix + stack.join('/') : stack.join('/');
+
+  // 4. Windows 盘符小写标准化补强（若前面未走 isWindowsDrive 分支）
+  norm = norm.replace(/^([a-zA-Z]):(\/|$)/, (_, drive: string, rest: string) => {
+    return `${drive.toLowerCase()}:${rest || '/'}`;
+  });
+
+  // 5. 消除非根路径末尾多余斜杠（保留 'c:/'、'/'、'//'）
+  const isRoot = norm === '/' || norm === '//' || /^[a-z]:\/$/i.test(norm);
+  if (norm.length > 1 && norm.endsWith('/') && !isRoot) {
+    norm = norm.slice(0, -1);
+  }
+
+  return norm;
+}
+
+/**
+ * 跨平台路径等值比对（考虑 Windows 文件系统大小写不敏感与斜杠异构）
+ */
+export function isSameFsPath(pathA: string | null | undefined, pathB: string | null | undefined): boolean {
+  if (!pathA || !pathB) return false;
+  return toCanonicalFsPath(pathA).toLowerCase() === toCanonicalFsPath(pathB).toLowerCase();
+}
+
+/**
+ * 纯函数：根据目标文件/目录路径与工作区根路径，推导从顶层直属子目录到目标父目录的有序祖先链（自上而下顺序）
+ *
+ * 边界与安全规则：
+ * 1. 目标或工作区根为空时返回空数组；
+ * 2. 目标包含未消解遍历段（..）时直接阻断返回空数组；
+ * 3. 严格前缀判定：必须以 rootPrefix（如 'c:/work/'）开头，坚决拒绝兄弟前缀（如 'c:/work-extra'）；
+ * 4. 目标与工作区根相同、或目标是根的直属子文件时，返回空数组；
+ * 5. 返回的祖先数组不包含根自身，不包含目标自身，严格按照自顶向下的物理层级排序。
+ */
+export function getAncestorDirPaths(targetPath: string, rootPath: string): string[] {
+  const canonTarget = toCanonicalFsPath(targetPath);
+  const canonRoot = toCanonicalFsPath(rootPath);
+
+  if (!canonTarget || !canonRoot) return [];
+
+  // 坚决阻断包含未消解遍历段的恶意逃逸
+  if (/(^|\/)\.\.($|\/)/.test(canonTarget)) {
+    return [];
+  }
+
+  const normRootLower = canonRoot.toLowerCase();
+  const normTargetLower = canonTarget.toLowerCase();
+
+  // 安全前缀：杜绝 c:/work 与 c:/work-extra 兄弟前缀假碰撞
+  const rootPrefix = normRootLower.endsWith('/') ? normRootLower : normRootLower + '/';
+
+  if (!normTargetLower.startsWith(rootPrefix) || normTargetLower === normRootLower) {
+    return [];
+  }
+
+  const ancestors: string[] = [];
+  let curr = pathDirname(canonTarget);
+
+  while (curr) {
+    const currCanon = toCanonicalFsPath(curr);
+    const currLower = currCanon.toLowerCase();
+
+    // 终止判定：抵达工作区根或已收敛至根以上
+    if (currLower === normRootLower || currLower === normRootLower.replace(/\/+$/, '') || currLower.length <= normRootLower.length) {
+      break;
+    }
+
+    ancestors.unshift(currCanon);
+    const next = pathDirname(currCanon);
+    if (next === currCanon) {
+      break;
+    }
+    curr = next;
+  }
+
+  return ancestors;
 }
 
 export function detectFileKind(name: string): 'text' | 'image' | 'pdf' | 'table' | 'binary' {

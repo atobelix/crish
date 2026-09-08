@@ -1,10 +1,11 @@
 import { createElement, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getWorkspacePath } from '../../../api/projectStore';
 import {
+  assertWorkspacePath,
   listDirectory,
-  pathDirname,
-  pathRelativeToRoot,
   resolveWorkspacePath,
+  toCanonicalFsPath,
+  getAncestorDirPaths,
   type FsDirEntry,
 } from '../../../api/workspaceFsApi';
 import { fetchGitStatus, type GitStatusFile } from '../../../api/gitApi';
@@ -14,8 +15,8 @@ import { useConfirmGate } from '../../../hooks/useConfirmGate';
 export type TreeNode = FsDirEntry & { depth: number };
 
 export function useFileNavigation(getIsDirty?: () => boolean) {
+  // 1. 核心状态：树根永久锚定在工作区根路径，全域彻底物理删除 cwd 与 setCwd（CRIT-06）
   const [root, setRoot] = useState(() => getWorkspacePath());
-  const [cwd, setCwd] = useState(root || '');
   const [entries, setEntries] = useState<FsDirEntry[]>([]);
   const [expanded, setExpanded] = useState<Record<string, FsDirEntry[]>>({});
   const [loading, setLoading] = useState(false);
@@ -23,143 +24,184 @@ export function useFileNavigation(getIsDirty?: () => boolean) {
   const [filter, setFilter] = useState('');
   const [filterMode, setFilterMode] = useState(false);
   const [gitStatusMap, setGitStatusMap] = useState<Record<string, string>>({});
+
   const getIsDirtyRef = useRef(getIsDirty);
   getIsDirtyRef.current = getIsDirty;
-  // window.confirm → ConfirmDialog Promise 桥（批次 4.1，04-detail §2.1.1）；
-  // hook 不直接渲染，渲染物经返回值交给宿主（FilesCard）挂载
+
   const [confirmGate, renderConfirmGate] = useConfirmGate();
 
-  const loadDir = useCallback(async (path: string) => listDirectory(resolveWorkspacePath(path)), []);
-
-  const refresh = useCallback(
-    async (dir?: string) => {
-      const r = getWorkspacePath();
-      setRoot(r);
-      const path = resolveWorkspacePath(dir || cwd || r || '');
-      if (!path) {
-        setError('请先选择项目工作区');
-        setEntries([]);
-        return;
-      }
-      setLoading(true);
-      setError('');
-      try {
-        setEntries(await loadDir(path));
-        setCwd(path);
-        setExpanded({});
-      } catch (e) {
-        setError(e instanceof Error ? e.message : String(e));
-        setEntries([]);
-      } finally {
-        setLoading(false);
-      }
-    },
-    [cwd, loadDir],
+  const loadDir = useCallback(
+    async (path: string) => listDirectory(resolveWorkspacePath(path)),
+    []
   );
 
+  // 2. 纯单轨刷新：无参函数，永久且仅刷新根目录条目（彻底根除旧岛伪参数 _ignoredDir）
+  const refresh = useCallback(async (): Promise<void> => {
+    const r = getWorkspacePath();
+    setRoot(r);
+    const rootPath = resolveWorkspacePath(r || '');
+    if (!rootPath) {
+      setError('请先选择项目工作区');
+      setEntries([]);
+      return;
+    }
+    setLoading(true);
+    setError('');
+    try {
+      const rawEntries = await loadDir(rootPath);
+      setEntries(
+        rawEntries.map((it) => ({
+          ...it,
+          path: toCanonicalFsPath(it.path),
+        }))
+      );
+      setExpanded({});
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      setEntries([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [loadDir]);
+
+  // 3. 目录展开/折叠切换
   const toggleExpand = useCallback(
-    async (dirPath: string, e: React.MouseEvent) => {
-      e.stopPropagation();
-      if (expanded[dirPath]) {
+    async (dirPath: string, e?: React.MouseEvent) => {
+      e?.stopPropagation();
+      const canonicalDirPath = toCanonicalFsPath(dirPath);
+      if (!canonicalDirPath) return;
+
+      if (expanded[canonicalDirPath]) {
         setExpanded((prev) => {
           const next = { ...prev };
-          delete next[dirPath];
+          delete next[canonicalDirPath];
           return next;
         });
         return;
       }
+
       try {
-        const list = await loadDir(dirPath);
-        setExpanded((prev) => ({ ...prev, [dirPath]: list }));
+        const list = await loadDir(canonicalDirPath);
+        const canonicalList = list.map((it) => ({
+          ...it,
+          path: toCanonicalFsPath(it.path),
+        }));
+        setExpanded((prev) => ({ ...prev, [canonicalDirPath]: canonicalList }));
         setError('');
       } catch (err) {
-        setError(err instanceof Error ? err.message : '展开失败');
+        setError(err instanceof Error ? err.message : '展开目录失败');
       }
     },
-    [expanded, loadDir],
+    [expanded, loadDir]
   );
 
-  const goUp = useCallback(() => {
-    if (!cwd || (root && cwd === root)) return;
-    const parent = pathDirname(cwd);
-    if (parent && parent !== cwd) {
-      void refresh(parent);
-    }
-  }, [cwd, root, refresh]);
-
+  // 4. 定位与级联展开目标路径（反截肢异常回写，根治 CRIT-03）
   const revealPath = useCallback(
-    async (filePath: string) => {
+    async (filePath: string): Promise<boolean> => {
       const r = getWorkspacePath();
       if (r) setRoot(r);
       const effectiveRoot = r || root;
-      if (!effectiveRoot) return;
+      if (!effectiveRoot || !filePath?.trim()) return false;
 
-      const normalizedPath = resolveWorkspacePath(filePath);
-      const normalizedRoot = resolveWorkspacePath(effectiveRoot);
-
-      // 检查文件是否位于工作区内
-      const rel = pathRelativeToRoot(normalizedPath, normalizedRoot);
-      const isInside =
-        rel && rel !== '.' && !rel.startsWith('..') && !rel.includes(':');
-
-      if (!isInside) {
-        // 工作区外部文件：回退为加载其父目录
-        const parent = pathDirname(normalizedPath);
-        if (parent) await refresh(parent);
-        return;
+      let resolvedTarget: string;
+      try {
+        resolvedTarget = assertWorkspacePath(filePath);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : '文件不在当前工作区内');
+        return false;
       }
 
-      // 如果当前树并未锚定在工作区根节点，或条目为空，重置并拉取工作区全量根节点
-      if (cwd !== normalizedRoot || entries.length === 0) {
+      const normTarget = toCanonicalFsPath(resolvedTarget);
+      const normRoot = toCanonicalFsPath(effectiveRoot);
+
+      const targetLower = normTarget.toLowerCase();
+      const rootLower = normRoot.toLowerCase();
+      const rootPrefix = rootLower.endsWith('/') ? rootLower : rootLower + '/';
+
+      const isInside = targetLower.startsWith(rootPrefix) || targetLower === rootLower;
+      if (!isInside) {
+        setError('文件不在当前工作区内');
+        return false;
+      }
+
+      const ancestors = getAncestorDirPaths(normTarget, normRoot);
+
+      // 根目录缺失时优先拉取根目录条目
+      if (entries.length === 0) {
         try {
-          const rootEntries = await loadDir(normalizedRoot);
-          setEntries(rootEntries);
-          setCwd(normalizedRoot);
-        } catch {
-          /* ignore */
+          const rootEntries = await loadDir(normRoot);
+          setEntries(
+            rootEntries.map((e) => ({
+              ...e,
+              path: toCanonicalFsPath(e.path),
+            }))
+          );
+        } catch (e) {
+          setError(e instanceof Error ? e.message : '读取项目根目录失败');
+          return false;
         }
       }
 
-      // 沿路径向下逐层级联收集所有祖先目录
-      const parentDir = pathDirname(normalizedPath);
-      const ancestors: string[] = [];
-      let curr = parentDir;
-      const normRootLower = normalizedRoot.toLowerCase().replace(/\\/g, '/');
-      while (curr) {
-        const currLower = curr.toLowerCase().replace(/\\/g, '/');
-        if (
-          currLower === normRootLower ||
-          currLower.length <= normRootLower.length
-        )
-          break;
-        ancestors.unshift(curr);
-        curr = pathDirname(curr);
+      if (ancestors.length === 0) {
+        return true;
       }
 
-      // 逐级异步拉取并注入 expanded 缓存，保持树结构完整展开
-      if (ancestors.length > 0) {
-        const toLoad = ancestors.filter((p) => !expanded[p]);
-        if (toLoad.length > 0) {
-          const results: Record<string, FsDirEntry[]> = {};
-          for (const p of toLoad) {
-            try {
-              results[p] = await loadDir(p);
-            } catch {
-              /* ignore */
-            }
+      const toLoad = ancestors.filter((dir) => !expanded[dir]);
+      if (toLoad.length > 0) {
+        const results: Record<string, FsDirEntry[]> = {};
+        const failureReasons: string[] = [];
+
+        const settledResults = await Promise.allSettled(
+          toLoad.map(async (dir) => {
+            const list = await loadDir(dir);
+            return {
+              dir,
+              items: list.map((it) => ({
+                ...it,
+                path: toCanonicalFsPath(it.path),
+              })),
+            };
+          })
+        );
+
+        for (const res of settledResults) {
+          if (res.status === 'fulfilled') {
+            results[res.value.dir] = res.value.items;
+          } else {
+            const reason =
+              res.reason instanceof Error ? res.reason.message : String(res.reason);
+            failureReasons.push(reason);
           }
+        }
+
+        if (Object.keys(results).length > 0) {
           setExpanded((prev) => ({ ...prev, ...results }));
         }
+
+        // 核心修复（CRIT-03）：严禁静默吞咽异常！
+        if (failureReasons.length > 0) {
+          setError(`部分祖先目录无法展开: ${failureReasons.join('; ')}`);
+          if (Object.keys(results).length === 0) {
+            return false;
+          }
+        }
       }
+
+      return true;
     },
-    [root, cwd, entries.length, expanded, loadDir, refresh]
+    [root, entries.length, expanded, loadDir]
   );
 
+  // 5. 平铺虚拟树（加入符号链接防环与递归深度上限熔断，根除 MIN-04）
   const flatTree: TreeNode[] = useMemo(() => {
     const q = filter.trim().toLowerCase();
     const out: TreeNode[] = [];
+    const visitedPaths = new Set<string>();
+    const MAX_DEPTH = 32;
+
     const walk = (list: FsDirEntry[], depth: number) => {
-      // 智能自然排序：1. 文件夹优先；2. 业务目录优先于 . 或 -- 前缀的内部噪音目录；3. 拼写自然排序
+      if (depth > MAX_DEPTH) return;
+
       const sorted = [...list].sort((a, b) => {
         if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
         const aNoise = a.name.startsWith('.') || a.name.startsWith('--');
@@ -170,11 +212,20 @@ export function useFileNavigation(getIsDirty?: () => boolean) {
           sensitivity: 'base',
         });
       });
+
       for (const e of sorted) {
         out.push({ ...e, depth });
-        if (e.isDir && expanded[e.path]) walk(expanded[e.path] ?? [], depth + 1);
+        const canonicalPath = toCanonicalFsPath(e.path);
+        if (e.isDir && expanded[canonicalPath]) {
+          if (!visitedPaths.has(canonicalPath)) {
+            visitedPaths.add(canonicalPath);
+            walk(expanded[canonicalPath] ?? [], depth + 1);
+            visitedPaths.delete(canonicalPath);
+          }
+        }
       }
     };
+
     walk(entries, 0);
     if (!q) return out;
     return out.filter((n) => n.name.toLowerCase().includes(q));
@@ -213,11 +264,29 @@ export function useFileNavigation(getIsDirty?: () => boolean) {
   }, [isDirty, confirmGate]);
 
   return {
-    root, cwd, entries, expanded, loading, error, filter, filterMode, gitStatusMap,
-    loadDir, refresh, toggleExpand, revealPath, goUp,
-    setFilter, setFilterMode, setError, setCwd, setExpanded, setEntries, setLoading, flatTree,
-    isDirty, confirmNavigation,
+    root,
+    entries,
+    expanded,
+    loading,
+    error,
+    filter,
+    filterMode,
+    gitStatusMap,
+    loadDir,
+    refresh,
+    toggleExpand,
+    revealPath,
+    setFilter,
+    setFilterMode,
+    setError,
+    setExpanded,
+    setEntries,
+    setLoading,
+    flatTree,
+    isDirty,
+    confirmNavigation,
+    confirmGate,
+    renderConfirmGate,
     confirmGateView: renderConfirmGate(createElement(ConfirmDialog)),
   };
-
 }

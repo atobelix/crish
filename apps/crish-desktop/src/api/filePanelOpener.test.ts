@@ -88,7 +88,7 @@ describe('pathFromFileOpenClickTarget', () => {
 });
 
 describe('openFileInPanel', () => {
-  it('代码路径只调 file-viewer opener，不派 files 事件', () => {
+  it('[CRIT-01] 代码路径仍进 file-viewer 宿主，且无条件派发 crish-open-file 广播并暂存 pendingOpenPath', () => {
     const opener = vi.fn();
     registerFileViewerOpener(opener);
     const ev = vi.fn();
@@ -98,8 +98,12 @@ describe('openFileInPanel', () => {
     expect(host).toBe('file-viewer');
     expect(opener).toHaveBeenCalledTimes(1);
     expect(opener.mock.calls[0]?.[0].replace(/\\/g, '/')).toMatch(/src\/app\.ts$/);
-    expect(ev).not.toHaveBeenCalled();
-    expect(takePendingOpenPath()).toBeNull();
+    // CRIT-01：广播与 pendingOpenPath 无条件先行，绝不被宿主分流截断
+    expect(ev).toHaveBeenCalledTimes(1);
+    const dispatched = ev.mock.calls[0]?.[0] as CustomEvent<{ path: string }>;
+    expect(dispatched.type).toBe('crish-open-file');
+    expect(dispatched.detail.path.replace(/\\/g, '/')).toMatch(/src\/app\.ts$/);
+    expect(takePendingOpenPath()?.replace(/\\/g, '/')).toMatch(/src\/app\.ts$/);
 
     window.removeEventListener('crish-open-file', ev);
   });

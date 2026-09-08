@@ -98,7 +98,11 @@ export function pathFromFileOpenClickTarget(
 
 /**
  * 在 files / file-viewer 叶打开工作区路径。
- * 不挂 Notebook、不写 persist、不往 document.body 挂预览根。
+ *
+ * 核心修复（CRIT-01）：
+ * 1. 无条件设置 pendingOpenPath 并向 window 派发 'crish-open-file' 事件；
+ * 2. 独立分流处理右侧预览呈现；
+ * 3. 彻底根除因 fileViewerOpener 提前 return 导致左侧目录树完全伪连通的核弹级 Bug。
  */
 export function openFileInPanel(
   filePath: string,
@@ -110,16 +114,19 @@ export function openFileInPanel(
   const path = resolveWorkspacePath(trimmed);
   if (!path) return null;
 
+  // 1. 无条件激活左侧主目录树的联动定位链路（SSOT 广播）
+  pendingOpenPath = path;
+  window.dispatchEvent(
+    new CustomEvent('crish-open-file', { detail: { path } })
+  );
+
+  // 2. 独立分流处理右侧预览呈现
   const host = resolveFilePreviewHost(path, mode);
   if (host === 'file-viewer' && fileViewerOpener) {
     fileViewerOpener(path, mode);
     return host;
   }
 
-  pendingOpenPath = path;
-  window.dispatchEvent(
-    new CustomEvent('crish-open-file', { detail: { path } })
-  );
   return 'files';
 }
 

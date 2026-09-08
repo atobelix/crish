@@ -1,0 +1,91 @@
+/* ==========================================================================
+   58×58 原子附件卡片体系 (AttachmentCard.module.css)
+   严格遵守 AGENTS.md §13（无黑微变）、§14（色彩规范）及反过度设计红线
+   ========================================================================== */
+
+.attachmentCard {
+  width: 58px;
+  height: 58px;
+  min-width: 58px;
+  min-height: 58px;
+  max-width: 58px;
+  max-height: 58px;
+  border-radius: var(--radius-lg, 10px);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card, hsl(0 0% 100%));
+  box-sizing: border-box;
+  overflow: hidden;
+  cursor: pointer;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color var(--transition-fast, 0.15s) ease,
+              background var(--transition-fast, 0.15s) ease,
+              box-shadow var(--transition-fast, 0.15s) ease;
+  user-select: none;
+  -webkit-user-select: none;
+  flex-shrink: 0;
+}
+
+/* 柔和 Hover 态：边框加深控制在 5-10%，背景混入 2.5% 文本色，严禁纯黑边框 (AGENTS.md §13) */
+.attachmentCard:hover {
+  border-color: var(--border-color);
+  background: color-mix(in srgb, var(--text-primary) 2.5%, var(--bg-card, hsl(0 0% 100%)));
+  box-shadow: var(--shadow-sm);
+}
+
+/* 柔软焦点态：AGENTS.md §13 铁律，加深对比度严格限制在 10% 以内，绝不使用实心粗黑外环 */
+.attachmentCard:focus-visible {
+  outline: none;
+  border-color: var(--accent-color, hsl(160 84% 36%));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-color, hsl(160 84% 36%)) 30%, transparent);
+}
+
+.cardImageMode {
+  padding: 0;
+}
+
+.imageBox {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-subtle, hsl(0 0% 96%));
+}
+
+.imagePreview {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  display: block;
+}
+
+.fileBox {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  box-sizing: border-box;
+  gap: 2px;
+}
+
+.badge {
+  font-size: var(--font-size-nano, 9px);
+  font-weight: var(--font-weight-heavy, 700);
+  font-family: var(--font-mono, monospace);
+  color: var(--text-tertiary);
+  max-width: 48px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}

@@ -2,12 +2,10 @@ import { useToast } from '../../services/toast/ToastContext';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import styles from './FilesCard.module.css';
 import { Button, Tooltip } from '../ui';
-import { CornerLeftUp, RotateCw, Search, X } from 'lucide-react';
+import { RotateCw, Search, X } from 'lucide-react';
 import {
   countPendingFileAnnotations,
-  getWorkspacePath,
   openPathDefault,
-  pathDirname,
   resolveWorkspacePath,
   takePendingOpenPath,
 } from '../../api/workspaceFsApi';
@@ -24,8 +22,6 @@ interface FilesCardProps {
   initialPath?: string | null;
 }
 
-// 无名称图标按钮文案（同源约定）：aria-label 与 Tooltip content 同引用，禁止两处各写
-const PARENT_DIR_LABEL = '上级目录';
 const REFRESH_LABEL = '刷新';
 const FILES_SPLIT_RATIO_KEY = 'crish:files-list-ratio';
 
@@ -143,25 +139,13 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(
     );
 
 
-    const handleRefresh = useCallback(
-      async (dir?: string) => {
-        if (!(await nav.confirmNavigation())) return;
-        preview.resetPreview();
-        preview.setView('browse');
-        preview.setSelected(null);
-        preview.clearActionHint();
-        await nav.refresh(dir);
-      },
-      [nav, preview]
-    );
-
-    const handleGoUp = useCallback(async () => {
+    const handleRefresh = useCallback(async () => {
       if (!(await nav.confirmNavigation())) return;
+      preview.resetPreview();
       preview.setView('browse');
       preview.setSelected(null);
       preview.clearActionHint();
-      nav.setError('');
-      nav.goUp();
+      await nav.refresh();
     }, [nav, preview]);
 
     const handleFileSelect = useCallback(
@@ -177,20 +161,22 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(
       [nav, handleOpenFile]
     );
 
+    // 纠偏 L180-L186：文件夹双击严格收敛为 toggleExpand，绝不下钻刷新
     const handleFileDoubleClick = useCallback(
       (path: string, isDir: boolean) => {
-        if (isDir) void handleRefresh(path);
+        if (isDir) void nav.toggleExpand(path);
         else void handleOpenFile(path);
       },
-      [handleRefresh, handleOpenFile]
+      [nav, handleOpenFile]
     );
 
+    // 纠偏 L190：使用 nav.root，彻底消除 nav.cwd 死锁
     const handleCopyPath = useCallback(
       (mode: 'abs' | 'rel') => {
-        preview.copyPath(preview.selected || nav.cwd, nav.root, mode);
+        preview.copyPath(preview.selected || nav.root, nav.root, mode);
         showToast(mode === 'abs' ? '绝对路径已复制' : '相对路径已复制');
       },
-      [preview, nav, showToast]
+      [preview, nav.root, showToast]
     );
 
     const handleNavigate = useCallback(
@@ -199,16 +185,7 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(
         preview.resetPreview();
         preview.clearActionHint();
         nav.setError('');
-        void nav.refresh(path);
-      },
-      [nav, preview]
-    );
-
-    const handleRefreshDir = useCallback(
-      async (path: string) => {
-        if (!(await nav.confirmNavigation())) return;
-        preview.resetPreview();
-        void nav.refresh(path);
+        void nav.revealPath(path);
       },
       [nav, preview]
     );
@@ -221,13 +198,12 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(
       }
     }, [preview.selected]);
 
+    // 纠偏 L227：切除 nav.setCwd，仅执行状态重置与刷新
     useEffect(() => {
       const onProject = () => {
-        const r = getWorkspacePath();
-        nav.setCwd(r || '');
         preview.setView('browse');
         preview.setSelected(null);
-        void nav.refresh(r || undefined);
+        void nav.refresh();
       };
       window.addEventListener('crish-project-changed', onProject);
       return () =>
@@ -286,18 +262,6 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(
         {preview.confirmGateView}
         <div className={`${styles.filesCard} chat-side-panel`} data-file-preview-host="files">
           <div className={`${styles.filesBar} side-panel-toolbar`} role="toolbar" aria-label="文件导航">
-            <Tooltip content={PARENT_DIR_LABEL}>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className={styles.filesNavBtn}
-                aria-label={PARENT_DIR_LABEL}
-                disabled={!nav.cwd || nav.cwd === nav.root}
-                onClick={handleGoUp}
-                icon={<CornerLeftUp size={14} />}
-              />
-            </Tooltip>
             <Tooltip content={REFRESH_LABEL}>
               <Button
                 type="button"
@@ -313,7 +277,6 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(
             {!noRoot ? (
               <FileBreadcrumb
                 root={nav.root}
-                cwd={nav.cwd}
                 selected={preview.selected}
                 view={preview.view}
                 dirty={preview.dirty}
@@ -388,7 +351,6 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(
             {!noRoot ? (
               <FileActions
                 selected={preview.selected}
-                cwd={nav.cwd}
                 root={nav.root}
                 view={preview.view}
                 canEdit={preview.canEdit}
@@ -463,9 +425,9 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(
                 } as React.CSSProperties
               }
             >
+              {/* 彻底切除 cwd 传参（原 L468） */}
               <FileTreeView
                 root={nav.root}
-                cwd={nav.cwd}
                 flatTree={nav.flatTree}
                 selected={preview.selected}
                 expanded={nav.expanded}

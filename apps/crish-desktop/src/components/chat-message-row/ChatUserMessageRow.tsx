@@ -1,5 +1,5 @@
 import { useToast } from '../../services/toast/ToastContext';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import styles from './ChatMessageRow.module.css';
 import { Tooltip } from '../ui';
 import type { SessionMessage } from '../../store/types';
@@ -13,10 +13,13 @@ import {
   userBubbleExpandAria,
 } from './chatMessageRowUtils';
 import { UserMessageActionsBar } from './MessageActionsBar';
-import { FileFormatIcon } from '../../assets/icons';
 import { openFileInPanel } from '../../api/filePanelOpener';
-import { convertFileSrc } from '@tauri-apps/api/core';
-import { isAbsoluteFsPath } from '../../api/workspaceFsApi';
+import { resolveWorkspacePath } from '../../api/workspaceFsApi';
+import {
+  AttachmentCard,
+  normalizeMessageAttachments,
+  type AttachmentItem,
+} from '../chat-attachment/AttachmentCard';
 
 export type ChatUserMessageRowProps = {
   msg: SessionMessage;
@@ -53,8 +56,7 @@ function userRowPropsEqual(
     prev.virtualScrollManager === next.virtualScrollManager &&
     prev.onOpenPath === next.onOpenPath &&
     prev.msg.images === next.msg.images &&
-    prev.msg.attachments === next.msg.attachments &&
-    true
+    prev.msg.attachments === next.msg.attachments
   );
 }
 
@@ -74,42 +76,57 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
   void _messageIndex;
   const { showToast } = useToast();
   const isLong = isUserBubbleLong(msg.text);
+  // 真实签名：userBubbleDisplayText 仅接收 2 个参数 (text, isExpanded)
   const displayText = userBubbleDisplayText(msg.text, isExpanded);
   const [copied, setCopied] = useState(false);
   const copiedTimer = useRef<number | null>(null);
+
+  // 真实签名：messageRowAriaLabel 接收单对象入参
   const rowAria = messageRowAriaLabel({
     role: 'user',
     isPinned,
     status: msg.status,
   });
 
-  const images = msg.images ?? [];
-  const nonImageAttachments = (msg.attachments ?? []).filter(
-    (a) => !a.dataUrl && (!a.mime || !a.mime.startsWith('image/'))
+  // 单轨归一化提取并去重
+  const allCardItems = useMemo<AttachmentItem[]>(
+    () => normalizeMessageAttachments(msg.attachments, msg.images),
+    [msg.attachments, msg.images]
   );
-  const hasImages = images.length > 0;
-  const hasAttachments = nonImageAttachments.length > 0;
 
   const handleOpenPath = useCallback(
-    (path: string) => {
-      if (!path) return;
-      if (onOpenPath) {
-        onOpenPath(path);
+    (filePath: string) => {
+      if (!filePath) return;
+      const trimmed = filePath.trim();
+      if (!trimmed) return;
+      // F2 残留防护：data:/blob:/http(s) 非本地打开目标，禁止盲传区外绝对 source
+      if (/^(data:|blob:|https?:)/i.test(trimmed)) {
+        showToast('该附件无工作区路径可打开');
         return;
       }
-      openFileInPanel(path);
+      if (onOpenPath) {
+        onOpenPath(trimmed);
+        return;
+      }
+      const safe = resolveWorkspacePath(trimmed);
+      if (!safe) {
+        showToast('文件不在当前工作区内');
+        return;
+      }
+      openFileInPanel(safe);
     },
-    [onOpenPath]
+    [onOpenPath, showToast]
   );
 
-  useEffect(
-    () => () => {
-      if (copiedTimer.current != null) window.clearTimeout(copiedTimer.current);
-    },
-    []
-  );
+  useEffect(() => {
+    return () => {
+      if (copiedTimer.current != null) {
+        window.clearTimeout(copiedTimer.current);
+      }
+    };
+  }, []);
 
-  // Skip while message is still processing; RO owns live height. Invalidate on settle / text edits.
+  // 虚拟滚动高度同步与失效通知
   useEffect(() => {
     if (msg.status === 'processing') return;
     virtualScrollManager?.invalidateActual(msg.id);
@@ -122,6 +139,13 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
     virtualScrollManager,
   ]);
 
+  const rowRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!virtualScrollManager || !rowRef.current) return;
+    const h = rowRef.current.offsetHeight;
+    if (h > 0) virtualScrollManager.setActual(msg.id, h);
+  });
+
   const handleCopy = useCallback(() => {
     const text = msg.text || '';
     if (!text) return;
@@ -131,12 +155,14 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
         return;
       }
       setCopied(true);
-      if (copiedTimer.current != null) window.clearTimeout(copiedTimer.current);
+      if (copiedTimer.current != null) {
+        window.clearTimeout(copiedTimer.current);
+      }
       copiedTimer.current = window.setTimeout(() => setCopied(false), 1200);
     });
   }, [msg.text, showToast]);
 
-  const retractHandler = isLastUser ? onRetract : undefined;
+  const retractHandler = isLastUser && onRetract ? onRetract : undefined;
 
   const toggleExpand = useCallback(() => {
     if (isLong) {
@@ -157,17 +183,24 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
     [isLong, msg.id, onToggleExpand]
   );
 
+  const hasAttachmentCards = allCardItems.length > 0;
+  // 核心判定：无文本且非排队态时，空气泡彻底销毁为 null（NEG-06）
+  const hasTextContent = Boolean(displayText && displayText.trim()) || msg.status === 'queued';
+
   return (
     <div
+      ref={rowRef}
       className={`${styles.row} ${styles.rowUser} msg-row msg-row-user${isSearchHit ? ` ${styles.searchHit} msg-search-hit` : ''}${isPinned ? ` ${styles.isPinned}` : ''}`}
       data-testid="chat-user-message-row"
       data-msg-id={msg.id}
       data-role="user"
       data-pinned={isPinned ? 'true' : undefined}
+      data-session-user-row
       role="article"
       aria-label={rowAria}
     >
       <div className={styles.userStack}>
+        {/* 固定徽标 */}
         {isPinned ? (
           <Tooltip content="已固定">
             <span className={styles.pinBadge} aria-hidden="true">
@@ -176,86 +209,50 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
             </span>
           </Tooltip>
         ) : null}
-        <div
-          className={styles.userBubble}
-          onClick={toggleExpand}
-          onKeyDown={onBubbleKeyDown}
-          style={{
-            cursor: isLong ? 'pointer' : 'default',
-          }}
-          role={isLong ? 'button' : undefined}
-          tabIndex={isLong ? 0 : undefined}
-          aria-expanded={isLong ? isExpanded : undefined}
-          aria-label={isLong ? userBubbleExpandAria(isExpanded) : undefined}
-        >
-          {hasImages ? (
-            <div className={styles.userImages} data-testid="user-images-gallery">
-              {images.map((img) => {
-                const imgSrc =
-                  img.resolvedUrl ||
-                  (img.source?.startsWith('data:') ||
-                  img.source?.startsWith('blob:') ||
-                  img.source?.startsWith('http')
-                    ? img.source
-                    : isAbsoluteFsPath(img.source)
-                      ? convertFileSrc(img.source)
-                      : img.source);
-                return (
-                  <Tooltip
-                    key={img.id || img.source}
-                    content={img.alt || '查看图片'}
-                  >
-                    <div
-                      className={styles.userImageWrapper}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleOpenPath(img.source);
-                      }}
-                    >
-                      <img
-                        src={imgSrc}
-                        alt={img.alt || '图片附件'}
-                        className={styles.userImage}
-                        loading="lazy"
-                      />
-                    </div>
-                  </Tooltip>
-                );
-              })}
-            </div>
-          ) : null}
 
-          {hasAttachments ? (
-            <div
-              className={styles.userAttachments}
-              data-testid="user-attachments-strip"
-            >
-              {nonImageAttachments.map((a) => (
-                <Tooltip key={a.name} content={a.path || a.name}>
-                  <span
-                    className={styles.userAttachmentChip}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (a.path && a.path.trim()) {
-                        handleOpenPath(a.path.trim());
-                      } else {
-                        showToast('该附件无关联本地物理路径');
-                      }
-                    }}
-                  >
-                    <FileFormatIcon fileName={a.name} size={14} />
-                    <span className={styles.userAttachmentName}>{a.name}</span>
-                  </span>
-                </Tooltip>
-              ))}
-            </div>
-          ) : null}
+        {/* 1. 上方：独立 58×58 附件卡片横排流（CRIT-07：width: 100% 彻底消除 49.3% 几何衰减） */}
+        {hasAttachmentCards ? (
+          <div
+            className={styles.userAttachmentStrip}
+            data-testid="user-attachment-strip"
+            role="list"
+            aria-label={`附件列表，共 ${allCardItems.length} 个`}
+          >
+            {allCardItems.map((item, idx) => (
+              <AttachmentCard
+                key={item.id || item.path || `${item.name}-${idx}`}
+                item={item}
+                onClick={(it) => {
+                  if (it.path) handleOpenPath(it.path);
+                  else showToast('该附件无物理路径可打开');
+                }}
+              />
+            ))}
+          </div>
+        ) : null}
 
-          {displayText ? displayText : null}
-          {msg.status === 'queued' && (
-            <span className={styles.queued}>排队中</span>
-          )}
-        </div>
+        {/* 2. 下方：独立文本气泡（【核心断言 NEG-06】：纯附件无文本时在 DOM 中严格销毁为 null） */}
+        {hasTextContent ? (
+          <div
+            className={`${styles.userBubble} ${isLong ? styles.userBubbleExpandable : ''}`}
+            onClick={toggleExpand}
+            onKeyDown={onBubbleKeyDown}
+            style={{
+              cursor: isLong ? 'pointer' : 'default',
+            }}
+            role={isLong ? 'button' : undefined}
+            tabIndex={isLong ? 0 : undefined}
+            aria-expanded={isLong ? isExpanded : undefined}
+            aria-label={isLong ? userBubbleExpandAria(isExpanded) : undefined}
+          >
+            {displayText}
+            {msg.status === 'queued' ? (
+              <span className={styles.queued}>排队中</span>
+            ) : null}
+          </div>
+        ) : null}
+
+        {/* 3. 底部悬浮操作栏 */}
         <UserMessageActionsBar
           timestamp={msg.timestamp}
           isPinned={isPinned}
@@ -274,3 +271,5 @@ export const ChatUserMessageRow = React.memo(
   ChatUserMessageRowInner,
   userRowPropsEqual
 );
+
+ChatUserMessageRow.displayName = 'ChatUserMessageRow';
