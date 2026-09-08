@@ -23,6 +23,8 @@ use super::messages::ReasoningContentMode;
 use super::tools::{ToolChoice, ToolDefinition};
 use super::vendor::{ReasoningEffort, ReasoningEffortFormat, ReasoningVendor, ThinkingIntensity};
 
+#[path = "vendor/dialect.rs"]
+pub mod dialect;
 #[path = "build_chat.rs"]
 mod build_chat;
 #[path = "build_responses.rs"]
@@ -30,6 +32,7 @@ mod build_responses;
 
 pub use build_chat::build_chat_completions_request_body;
 pub use build_responses::{affinity_http_headers, build_responses_request_body};
+pub use dialect::{assemble_thinking_dialect, DialectBuildOptions, ThinkingDialectFormat};
 
 #[cfg(test)]
 #[path = "build_cache_tests.rs"]
@@ -91,7 +94,14 @@ pub struct ChatCompletionsRequestOptions {
     /// cache 键——compactObject 等价，无缓存配置时请求字节与现状逐字节一致；
     /// DeepSeek 等自动缓存厂商由 build_cache_policy 归 None，整个参数组不出现）
     pub cache: Option<CachePolicy>,
+    /// 用户在 models.yaml 中为该模型配置的思考拍平映射字典（IndexMap<String, String>）
+    pub thinking_map: Option<indexmap::IndexMap<String, String>>,
+    /// 显式配置的思考方言组装格式
+    pub thinking_format: Option<crate::models::catalog_types::ThinkingFormat>,
 }
+
+/// Responses API 请求构建选项（对齐 ChatCompletionsRequestOptions 统一契约）
+pub type ResponsesRequestOptions = ChatCompletionsRequestOptions;
 
 /// 请求构建上下文（对齐 RequestBuildContext 的 request 字段子集）
 ///

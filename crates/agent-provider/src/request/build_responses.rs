@@ -8,13 +8,13 @@
 use conex_types::tool::SystemPromptWireMode;
 use serde_json::{json, Map, Value};
 
+use super::dialect::{self, assemble_thinking_dialect, DialectBuildOptions, ThinkingDialectFormat};
 use super::{ChatCompletionsRequestOptions, RequestBuildContext};
 use crate::request::cache::CachePolicy;
 use crate::request::messages::{
     system_prompt_as_user_prefix, to_responses_input_items, ReasoningContentMode,
 };
 use crate::request::tools::{to_responses_tool, to_responses_tool_choice, ToolChoice};
-use crate::request::vendor::{normalize_reasoning_effort, ThinkingIntensity};
 
 /// 构建 Responses API 请求体（DEEPCHECK-05 #10：Responses 轨协议补全；Wave 2 TU-02 全量贯通）
 ///
@@ -84,23 +84,46 @@ pub fn build_responses_request_body(
     }
 
     // 思考推理参数组装：Responses API 原生 reasoning 格式 {"reasoning": {"effort": "..."}}
-    // 优先读取 thinking_intensity，未配置时读取 reasoning_effort；
-    // 严禁注入 Chat 专有的扁平 reasoning_effort 键
-    let resolved_effort: Option<&str> = if let Some(intensity) = opts.thinking_intensity {
-        match intensity {
-            ThinkingIntensity::Off => None,
-            ThinkingIntensity::Minimal => Some("minimal"),
-            ThinkingIntensity::Low => Some("low"),
-            ThinkingIntensity::Medium => Some("medium"),
-            ThinkingIntensity::High | ThinkingIntensity::Xhigh => Some("high"),
-            ThinkingIntensity::Max => Some("max"),
+    // 100% 由 assemble_thinking_dialect 正式产出（严格接入思考方言装配器，支持拍平字典映射）
+    let effective_effort: Option<dialect::ReasoningEffort> = if let Some(intensity) = opts.thinking_intensity {
+        Some(intensity.into())
+    } else if let Some(effort) = opts.reasoning_effort {
+        match effort {
+            crate::request::vendor::ReasoningEffort::Off => Some(dialect::ReasoningEffort::Off),
+            crate::request::vendor::ReasoningEffort::Auto => None,
+            other => Some(other.into()),
         }
     } else {
-        opts.reasoning_effort.and_then(normalize_reasoning_effort)
+        None
     };
 
-    if let Some(effort) = resolved_effort {
-        body.insert("reasoning".to_string(), json!({ "effort": effort }));
+    if let Some(effort) = effective_effort {
+        let format = opts
+            .thinking_format
+            .map(|tf| match tf {
+                crate::models::catalog_types::ThinkingFormat::DeepSeek => {
+                    ThinkingDialectFormat::DeepSeekNative
+                }
+                crate::models::catalog_types::ThinkingFormat::Qwen => {
+                    ThinkingDialectFormat::QwenBailianBoolean
+                }
+                _ => ThinkingDialectFormat::OpenAiResponsesNested,
+            })
+            .unwrap_or(ThinkingDialectFormat::OpenAiResponsesNested);
+        let dialect_opts = DialectBuildOptions {
+            effort,
+            format,
+            max_output_tokens: opts.max_tokens.unwrap_or(64000),
+            thinking_map: opts.thinking_map.as_ref(),
+        };
+        let (thinking_val, _) = assemble_thinking_dialect(&dialect_opts);
+        if let Some(val) = thinking_val {
+            if let Some(obj) = val.as_object() {
+                for (k, v) in obj {
+                    body.insert(k.clone(), v.clone());
+                }
+            }
+        }
     }
 
     if !context.tools.is_empty() {
@@ -130,5 +153,39 @@ pub fn affinity_http_headers(policy: Option<&CachePolicy>) -> Vec<(&'static str,
     match policy.and_then(|p| p.affinity_header.as_ref()) {
         Some((name, value)) => vec![(*name, value.clone())],
         None => Vec::new(),
+    }
+}
+
+#[cfg(test)]
+mod responses_dialect_wiring_tests {
+    use super::*;
+    use crate::models::catalog_types::ThinkingFormat;
+    use indexmap::IndexMap;
+
+    #[test]
+    fn test_responses_dialect_thinking_map_driven() {
+        let mut map = IndexMap::new();
+        map.insert("Medium".to_string(), "custom-resp-wire".to_string());
+
+        let opts = ChatCompletionsRequestOptions {
+            model: Some("gpt-5-responses".to_string()),
+            reasoning_effort: Some(crate::request::vendor::ReasoningEffort::Medium),
+            thinking_map: Some(map),
+            ..ChatCompletionsRequestOptions::default()
+        };
+        let body = build_responses_request_body(&opts, &RequestBuildContext::default());
+        assert_eq!(body["reasoning"], json!({ "effort": "custom-resp-wire" }));
+    }
+
+    #[test]
+    fn test_responses_dialect_deepseek_native() {
+        let opts = ChatCompletionsRequestOptions {
+            model: Some("deepseek-reasoner".to_string()),
+            reasoning_effort: Some(crate::request::vendor::ReasoningEffort::High),
+            thinking_format: Some(ThinkingFormat::DeepSeek),
+            ..ChatCompletionsRequestOptions::default()
+        };
+        let body = build_responses_request_body(&opts, &RequestBuildContext::default());
+        assert_eq!(body["thinking"], json!({ "type": "enabled" }));
     }
 }

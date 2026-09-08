@@ -436,6 +436,11 @@
 }
 
 .mrdCfgFooter {
+  position: sticky;
+  bottom: -12px;
+  background: var(--surface-primary);
+  backdrop-filter: blur(8px);
+  z-index: 10;
   display: flex;
   align-items: center;
   justify-content: space-between;

@@ -2,631 +2,16 @@
 //!
 //! 权威参考依据：docs/provider-model-unification/plans/05-全量立体验证、存量自动迁移与防回潮门禁计划.md §4.1 ~ §4.2
 //! 覆盖计费微元、协议单向继承、思考白名单、防溢出、时间戳备份、并发 RCU 热重载与容灾快照。
+//! 100% 直连 agent_provider 真实生产模块（pricing, migration, models::catalog_types, request::wire_protocol）。
+
 use std::sync::Arc;
 
-// =============================================================================
-// 计费引擎模块 (Pricing Module) - 纯 u64/u128 定点微元防溢出计量 (Plan 05 §3.5)
-// =============================================================================
-pub mod pricing {
-    use serde::{Deserialize, Serialize};
-
-    /// 货币枚举
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-    #[serde(rename_all = "UPPERCASE")]
-    pub enum Currency {
-        Cny,
-        Usd,
-    }
-
-    impl Currency {
-        pub fn symbol(&self) -> &'static str {
-            match self {
-                Currency::Cny => "¥",
-                Currency::Usd => "$",
-            }
-        }
-    }
-
-    /// 计量单元枚举
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-    #[serde(rename_all = "snake_case")]
-    pub enum PricingUnit {
-        Per1mTokens,
-        PerImage,
-        PerRequest,
-    }
-
-    /// 阶梯计费配置
-    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-    #[serde(rename_all = "camelCase")]
-    pub struct PricingTier {
-        pub input_tokens_above: u64,
-        pub input: f64,
-        pub output: f64,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        pub cache_read: Option<f64>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        pub cache_write: Option<f64>,
-    }
-
-    /// 模型四价计费定义
-    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-    #[serde(rename_all = "camelCase")]
-    pub struct ModelPricing {
-        pub currency: Currency,
-        pub unit: PricingUnit,
-        pub input: f64,
-        pub output: f64,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        pub cache_read: Option<f64>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        pub cache_write: Option<f64>,
-        #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        pub tiers: Vec<PricingTier>,
-    }
-
-    /// 定点微元账目明细
-    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-    #[serde(rename_all = "camelCase")]
-    pub struct CostBreakdown {
-        pub currency: Currency,
-        pub input_micros: u64,
-        pub output_micros: u64,
-        pub cache_read_micros: u64,
-        pub cache_write_micros: u64,
-        pub total_micros: u64,
-        pub formatted_total: String,
-        pub is_free: bool,
-    }
-
-    pub struct PricingEngine;
-
-    impl PricingEngine {
-        /// 计算单次调用的四维双币微元账目
-        pub fn calculate_cost(
-            pricing_opt: &Option<ModelPricing>,
-            prompt_tokens: u64,
-            completion_tokens: u64,
-            cache_read_tokens: u64,
-            cache_write_tokens: u64,
-        ) -> Option<CostBreakdown> {
-            let pricing = pricing_opt.as_ref()?;
-
-            // 显式免费模型判断
-            if pricing.input == 0.0
-                && pricing.output == 0.0
-                && pricing.cache_read.unwrap_or(0.0) == 0.0
-                && pricing.cache_write.unwrap_or(0.0) == 0.0
-            {
-                return Some(CostBreakdown {
-                    currency: pricing.currency,
-                    input_micros: 0,
-                    output_micros: 0,
-                    cache_read_micros: 0,
-                    cache_write_micros: 0,
-                    total_micros: 0,
-                    formatted_total: "免费".to_string(),
-                    is_free: true,
-                });
-            }
-
-            // 分支 1：按张计费模式 (PerImage)
-            if pricing.unit == PricingUnit::PerImage {
-                let image_count = completion_tokens;
-                let rate_micros_per_image = Self::f64_to_micros(pricing.output);
-                let total_micros = (image_count as u128 * rate_micros_per_image as u128) as u64;
-
-                return Some(CostBreakdown {
-                    currency: pricing.currency,
-                    input_micros: 0,
-                    output_micros: total_micros,
-                    cache_read_micros: 0,
-                    cache_write_micros: 0,
-                    total_micros,
-                    formatted_total: Self::format_micros(total_micros, pricing.currency),
-                    is_free: false,
-                });
-            }
-
-            // 分支 2：按百万 Token 计费模式 (Per1mTokens)
-            let mut active_input_rate = pricing.input;
-            let mut active_output_rate = pricing.output;
-            let mut active_cache_read_rate = pricing.cache_read.unwrap_or(0.0);
-            let mut active_cache_write_rate = pricing.cache_write.unwrap_or(0.0);
-
-            // 检索阶梯计费（按照门槛倒序匹配）
-            if !pricing.tiers.is_empty() {
-                let mut sorted_tiers = pricing.tiers.clone();
-                sorted_tiers.sort_by(|a, b| b.input_tokens_above.cmp(&a.input_tokens_above));
-                for tier in sorted_tiers {
-                    if prompt_tokens >= tier.input_tokens_above {
-                        active_input_rate = tier.input;
-                        active_output_rate = tier.output;
-                        if let Some(cr) = tier.cache_read {
-                            active_cache_read_rate = cr;
-                        }
-                        if let Some(cw) = tier.cache_write {
-                            active_cache_write_rate = cw;
-                        }
-                        break;
-                    }
-                }
-            }
-
-            // 扣除已命中缓存的普通输入 Tokens (防异常越界 saturating_sub)
-            let non_cached_prompt_tokens = prompt_tokens.saturating_sub(cache_read_tokens);
-
-            let input_micros = Self::tokens_to_micros(non_cached_prompt_tokens, active_input_rate);
-            let output_micros = Self::tokens_to_micros(completion_tokens, active_output_rate);
-            let cache_read_micros = Self::tokens_to_micros(cache_read_tokens, active_cache_read_rate);
-            let cache_write_micros = Self::tokens_to_micros(cache_write_tokens, active_cache_write_rate);
-
-            let total_micros = input_micros
-                .saturating_add(output_micros)
-                .saturating_add(cache_read_micros)
-                .saturating_add(cache_write_micros);
-
-            Some(CostBreakdown {
-                currency: pricing.currency,
-                input_micros,
-                output_micros,
-                cache_read_micros,
-                cache_write_micros,
-                total_micros,
-                formatted_total: Self::format_micros(total_micros, pricing.currency),
-                is_free: false,
-            })
-        }
-
-        /// 将费率 (元/1M Tokens) 转换为微元并与 Token 数量定点乘算
-        #[inline]
-        fn tokens_to_micros(tokens: u64, rate_per_1m: f64) -> u64 {
-            if tokens == 0 || rate_per_1m <= 0.0 {
-                return 0;
-            }
-            let rate_micros = Self::f64_to_micros(rate_per_1m);
-            // 使用 u128 防止大 Token 数相乘溢出，加 500_000 实现严格四舍五入
-            let product = (tokens as u128) * (rate_micros as u128);
-            let result = (product + 500_000) / 1_000_000;
-            result.min(u64::MAX as u128) as u64
-        }
-
-        /// 浮点数四舍五入转为微元整数 (1.00 -> 1_000_000)
-        #[inline]
-        fn f64_to_micros(val: f64) -> u64 {
-            (val * 1_000_000.0).round() as u64
-        }
-
-        /// 格式化微元为带符号的货币字符串
-        pub fn format_micros(micros: u64, currency: Currency) -> String {
-            let symbol = currency.symbol();
-            if micros == 0 {
-                return format!("{}0.0000", symbol);
-            }
-
-            let whole = micros / 1_000_000;
-            let fraction = micros % 1_000_000;
-
-            // 如果金额极小（小于 0.001 元即小于 1000 微元），展示 6 位小数以反映微元差异
-            if micros < 1_000 {
-                format!("{}{}.{:06}", symbol, whole, fraction)
-            } else {
-                // 常规金额截取/四舍五入到 4 位小数
-                let fraction_4 = (fraction + 50) / 100; // 6位转4位四舍五入
-                format!("{}{}.{:04}", symbol, whole, fraction_4)
-            }
-        }
-    }
-}
-
-// =============================================================================
-// 模型拓扑与协议继承模块 (Models Config Module) (Plan 05 §2.1 & §4.1)
-// =============================================================================
-pub mod models_config {
-    use super::pricing::ModelPricing;
-    use serde::{Deserialize, Serialize};
-    use std::collections::HashMap;
-
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-    #[serde(rename_all = "lowercase")]
-    pub enum Modality {
-        Text,
-        Image,
-        Audio,
-        Video,
-    }
-
-    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
-    pub struct ModalitiesConfig {
-        #[serde(default)]
-        pub input: Vec<Modality>,
-        #[serde(default)]
-        pub output: Vec<Modality>,
-    }
-
-    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
-    #[serde(rename_all = "camelCase")]
-    pub struct ProviderCompat {
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub thinking_format: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub supports_developer_role: Option<bool>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub max_tokens_field: Option<String>,
-    }
-
-    fn default_context_window() -> u64 {
-        131072
-    }
-
-    fn default_max_output() -> u64 {
-        8192
-    }
-
-    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-    #[serde(rename_all = "camelCase")]
-    pub struct ModelSpec {
-        pub id: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub display_name: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub protocol: Option<String>,
-        #[serde(default = "default_context_window")]
-        pub context_window: u64,
-        #[serde(default = "default_max_output")]
-        pub max_output_tokens: u64,
-        #[serde(default)]
-        pub modalities: ModalitiesConfig,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub thinking: Option<HashMap<String, String>>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub pricing: Option<ModelPricing>,
-    }
-
-    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-    #[serde(rename_all = "camelCase")]
-    pub struct ProviderSpec {
-        pub display_name: String,
-        pub base_url: String,
-        pub protocol: String,
-        #[serde(default)]
-        pub compat: ProviderCompat,
-        #[serde(default)]
-        pub headers: HashMap<String, String>,
-        #[serde(default)]
-        pub models: Vec<ModelSpec>,
-    }
-
-    impl ProviderSpec {
-        /// 协议单向继承与显式局部覆盖断言核心：
-        /// 当模型未声明 protocol 时，强制继承供应商全局 protocol
-        pub fn resolve_model_protocol<'a>(&'a self, model: &'a ModelSpec) -> &'a str {
-            model.protocol.as_deref().unwrap_or(&self.protocol)
-        }
-    }
-
-    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-    pub struct ModelsConfig {
-        #[serde(default)]
-        pub providers: HashMap<String, ProviderSpec>,
-    }
-}
-
-// =============================================================================
-// 存量无损自动迁移模块 (Migration Module) (Plan 05 §2.3)
-// =============================================================================
-pub mod migration {
-    use serde::{Deserialize, Serialize};
-    use serde_json::Value;
-    use std::collections::BTreeMap;
-    use std::fs;
-    use std::path::{Path, PathBuf};
-    use std::time::{SystemTime, UNIX_EPOCH};
-    use thiserror::Error;
-
-    #[derive(Error, Debug)]
-    pub enum MigrationError {
-        #[error("文件 I/O 异常: {0}")]
-        Io(#[from] std::io::Error),
-        #[error("YAML 序列化/反序列化失败: {0}")]
-        Yaml(#[from] serde_yaml::Error),
-        #[error("备份校验失败: 备份文件大小不匹配 (原始: {expected}B, 实际: {actual}B)")]
-        BackupVerificationFailed { expected: u64, actual: u64 },
-        #[error("迁移完整性校验未通过: 原始模型数 {original} 与迁移后模型数 {migrated} 不一致")]
-        LossyMigrationDetected { original: usize, migrated: usize },
-        #[error("目标路径非法或不存在: {0}")]
-        InvalidPath(String),
-    }
-
-    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-    pub enum MigrationStatus {
-        AlreadyUpToDate,
-        MigratedSuccessfully {
-            backup_path: PathBuf,
-            provider_count: usize,
-            model_count: usize,
-        },
-    }
-
-    pub struct ConfigMigrationManager;
-
-    fn format_timestamp_now() -> String {
-        let duration = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default();
-        let secs = duration.as_secs();
-
-        // 简易公历转换，生成 %Y%m%d_%H%M%S 规范格式
-        let days = (secs / 86400) as i64;
-        let rem_secs = (secs % 86400) as u32;
-        let hours = rem_secs / 3600;
-        let minutes = (rem_secs % 3600) / 60;
-        let seconds = rem_secs % 60;
-
-        let z = days + 719468;
-        let era = (if z >= 0 { z } else { z - 146096 }) / 146097;
-        let doe = (z - era * 146097) as u32;
-        let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
-        let y = yoe as i64 + era * 400;
-        let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-        let mp = (5 * doy + 2) / 153;
-        let d = doy - (153 * mp + 2) / 5 + 1;
-        let m = if mp < 10 { mp + 3 } else { mp - 9 };
-        let year = if m <= 2 { y + 1 } else { y };
-
-        format!(
-            "{:04}{:02}{:02}_{:02}{:02}{:02}",
-            year, m, d, hours, minutes, seconds
-        )
-    }
-
-    impl ConfigMigrationManager {
-        /// 检测并执行自动升级迁移
-        pub fn ensure_migrated(config_path: &Path) -> Result<MigrationStatus, MigrationError> {
-            if !config_path.exists() {
-                return Ok(MigrationStatus::AlreadyUpToDate);
-            }
-
-            let raw_content = fs::read_to_string(config_path)?;
-            if raw_content.trim().is_empty() {
-                return Ok(MigrationStatus::AlreadyUpToDate);
-            }
-
-            let parsed_value: Value = serde_yaml::from_str(&raw_content)?;
-
-            // 判定规则：根对象包含 "models" 数组且不包含有效的 "providers" 对象时，触发迁移
-            let needs_migration = parsed_value.get("providers").is_none()
-                && parsed_value
-                    .get("models")
-                    .and_then(|v| v.as_array())
-                    .is_some();
-
-            if !needs_migration {
-                return Ok(MigrationStatus::AlreadyUpToDate);
-            }
-
-            // 步骤 1: 物理备份并严格校验大小
-            let backup_path = Self::create_disaster_backup(config_path)?;
-
-            // 步骤 2: 纯逻辑内存数据重构聚类
-            let (migrated_yaml_value, total_migrated_models) =
-                Self::transform_flat_to_tree(&parsed_value)?;
-
-            // 步骤 3: 完整性无损断言
-            let original_model_count = parsed_value
-                .get("models")
-                .and_then(|v| v.as_array())
-                .map(|arr| arr.len())
-                .unwrap_or(0);
-
-            if original_model_count != total_migrated_models {
-                return Err(MigrationError::LossyMigrationDetected {
-                    original: original_model_count,
-                    migrated: total_migrated_models,
-                });
-            }
-
-            // 步骤 4: 写入临时影子文件
-            let tmp_path = config_path.with_extension("yaml.tmp");
-            let migrated_yaml_str = serde_yaml::to_string(&migrated_yaml_value)?;
-            fs::write(&tmp_path, &migrated_yaml_str)?;
-
-            // 步骤 5: 原子重命名覆盖目标文件
-            fs::rename(&tmp_path, config_path)?;
-
-            let provider_count = migrated_yaml_value
-                .get("providers")
-                .and_then(|v| v.as_object())
-                .map(|obj| obj.len())
-                .unwrap_or(0);
-
-            Ok(MigrationStatus::MigratedSuccessfully {
-                backup_path,
-                provider_count,
-                model_count: total_migrated_models,
-            })
-        }
-
-        /// 创建带时间戳的防灾物理备份
-        fn create_disaster_backup(source: &Path) -> Result<PathBuf, MigrationError> {
-            let metadata = fs::metadata(source)?;
-            let original_size = metadata.len();
-
-            let timestamp = format_timestamp_now();
-            let file_stem = source
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .unwrap_or("models");
-            let ext = source.extension().and_then(|s| s.to_str()).unwrap_or("yaml");
-            let backup_file_name = format!("{}.{}.bak.{}", file_stem, timestamp, ext);
-            let backup_path = source.with_file_name(backup_file_name);
-
-            fs::copy(source, &backup_path)?;
-
-            // 严格验证备份文件体积
-            let backup_size = fs::metadata(&backup_path)?.len();
-            if backup_size != original_size {
-                let _ = fs::remove_file(&backup_path);
-                return Err(MigrationError::BackupVerificationFailed {
-                    expected: original_size,
-                    actual: backup_size,
-                });
-            }
-
-            Ok(backup_path)
-        }
-
-        /// 将扁平一维数组聚类升级为树状结构
-        fn transform_flat_to_tree(old: &Value) -> Result<(Value, usize), MigrationError> {
-            use serde_json::json;
-            let mut providers_map: BTreeMap<String, Value> = BTreeMap::new();
-            let mut total_models = 0usize;
-
-            if let Some(models_array) = old.get("models").and_then(|v| v.as_array()) {
-                for m in models_array {
-                    total_models += 1;
-                    let vendor = m
-                        .get("vendor")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("custom")
-                        .trim()
-                        .to_lowercase();
-
-                    let vendor_key = if vendor.is_empty() {
-                        "custom".to_string()
-                    } else {
-                        vendor
-                    };
-
-                    let base_url = m
-                        .get("baseUrl")
-                        .and_then(|v| v.as_str())
-                        .map(|s| s.to_string())
-                        .unwrap_or_else(|| Self::default_base_url_for_vendor(&vendor_key));
-
-                    let default_protocol = Self::infer_protocol_for_vendor(&vendor_key);
-                    let default_compat = Self::infer_compat_for_vendor(&vendor_key);
-
-                    let provider_entry =
-                        providers_map.entry(vendor_key.clone()).or_insert_with(|| {
-                            json!({
-                                "displayName": Self::format_vendor_display_name(&vendor_key),
-                                "baseUrl": base_url,
-                                "protocol": default_protocol,
-                                "compat": default_compat,
-                                "headers": {},
-                                "models": []
-                            })
-                        });
-
-                    let model_id = m
-                        .get("id")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("unknown-model");
-                    let display_name = m.get("name").or_else(|| m.get("displayName")).cloned();
-                    let context_window =
-                        m.get("contextWindow").cloned().unwrap_or(json!(131072));
-                    let max_output = m
-                        .get("maxTokens")
-                        .or_else(|| m.get("maxOutputTokens"))
-                        .cloned()
-                        .unwrap_or(json!(8192));
-
-                    let mut thinking_map = serde_json::Map::new();
-                    if let Some(reasoning) = m.get("reasoning").and_then(|v| v.as_bool()) {
-                        if reasoning {
-                            thinking_map.insert("Low".to_string(), json!("low"));
-                            thinking_map.insert("Medium".to_string(), json!("medium"));
-                            thinking_map.insert("High".to_string(), json!("high"));
-                        }
-                    }
-
-                    let mut model_spec = json!({
-                        "id": model_id,
-                        "displayName": display_name,
-                        "contextWindow": context_window,
-                        "maxOutputTokens": max_output,
-                        "modalities": {
-                            "input": ["text"],
-                            "output": ["text"]
-                        }
-                    });
-
-                    if !thinking_map.is_empty() {
-                        model_spec["thinking"] = Value::Object(thinking_map);
-                    }
-
-                    provider_entry["models"]
-                        .as_array_mut()
-                        .expect("models 必须为数组")
-                        .push(model_spec);
-                }
-            }
-
-            let result = json!({
-                "schema_version": 2,
-                "providers": providers_map
-            });
-
-            Ok((result, total_models))
-        }
-
-        fn default_base_url_for_vendor(vendor: &str) -> String {
-            match vendor {
-                "deepseek" => "https://api.deepseek.com".to_string(),
-                "qwen" => "https://dashscope.aliyuncs.com/compatible-mode/v1".to_string(),
-                "openai" => "https://api.openai.com/v1".to_string(),
-                "anthropic" => "https://api.anthropic.com".to_string(),
-                "google" => "https://generativelanguage.googleapis.com".to_string(),
-                _ => "https://api.openai.com/v1".to_string(),
-            }
-        }
-
-        fn infer_protocol_for_vendor(vendor: &str) -> &'static str {
-            match vendor {
-                "anthropic" => "anthropic/messages",
-                "google" => "google/generate-content",
-                _ => "openai/chat",
-            }
-        }
-
-        fn infer_compat_for_vendor(vendor: &str) -> Value {
-            use serde_json::json;
-            match vendor {
-                "deepseek" => json!({
-                    "thinkingFormat": "deepseek",
-                    "supportsDeveloperRole": false,
-                    "maxTokensField": "max_tokens"
-                }),
-                "qwen" => json!({
-                    "thinkingFormat": "qwen_enable_thinking",
-                    "supportsDeveloperRole": false,
-                    "maxTokensField": "max_tokens"
-                }),
-                "openai" => json!({
-                    "thinkingFormat": "openai",
-                    "supportsDeveloperRole": true,
-                    "maxTokensField": "max_completion_tokens"
-                }),
-                _ => json!({}),
-            }
-        }
-
-        fn format_vendor_display_name(vendor: &str) -> String {
-            match vendor {
-                "deepseek" => "DeepSeek 官方".to_string(),
-                "qwen" => "阿里云百炼".to_string(),
-                "openai" => "OpenAI 官方".to_string(),
-                "anthropic" => "Anthropic 官方".to_string(),
-                "google" => "Google AI".to_string(),
-                "moonshot" => "月之暗面 Kimi".to_string(),
-                "zhipu" => "智谱 BigModel".to_string(),
-                "ollama" => "Ollama 本地".to_string(),
-                _ => vendor.to_string(),
-            }
-        }
-    }
-}
+use agent_provider::migration::{ConfigMigrationManager, MigrationError, MigrationStatus};
+use agent_provider::models::catalog_types::*;
+use agent_provider::pricing::{
+    CostBreakdown, Currency, ModelPricing, PricingEngine, PricingTier, PricingUnit,
+};
+use agent_provider::request::wire_protocol::{build_endpoint_url, WireProtocol};
 
 // =============================================================================
 // 无锁 RCU 抽象封装 (Case 13 支撑)
@@ -660,11 +45,7 @@ impl<T> ArcSwap<T> {
 // =============================================================================
 #[cfg(test)]
 mod devil_tests {
-    use super::migration::{ConfigMigrationManager, MigrationStatus};
-    use super::models_config::*;
-    use super::pricing::*;
-    use super::ArcSwap;
-    use std::collections::HashMap;
+    use super::*;
     use std::fs;
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::Arc;
@@ -687,7 +68,7 @@ mod devil_tests {
         };
 
         // 场景：输入 200,000 tokens，其中 150,000 命中缓存读取，50,000 为首次缓存写入
-        let cost = PricingEngine::calculate_cost(
+        let cost: CostBreakdown = PricingEngine::calculate_cost(
             &Some(pricing),
             200_000,
             10_000,  // 输出 10,000
@@ -794,15 +175,17 @@ providers:
     protocol: openai/chat
     models:
       - id: gpt-5.6-turbo
+        displayName: GPT-5.6 Turbo
         contextWindow: 128000
         maxOutputTokens: 8192
       - id: gpt-5.6-sol
+        displayName: GPT-5.6 Sol
         protocol: openai/responses
         contextWindow: 1050000
         maxOutputTokens: 128000
 "#;
-        let config: ModelsConfig = serde_yaml::from_str(yaml).unwrap();
-        let prov = config.providers.get("openai").unwrap();
+        let config: UnifiedModelsConfig = serde_yaml::from_str(yaml).unwrap();
+        let prov = config.find_provider("openai").unwrap();
 
         // 验证未声明 protocol 的模型自动继承
         let m1 = prov
@@ -810,13 +193,15 @@ providers:
             .iter()
             .find(|m| m.id == "gpt-5.6-turbo")
             .unwrap();
-        assert_eq!(m1.protocol.as_deref(), None);
-        assert_eq!(prov.resolve_model_protocol(m1), "openai/chat");
+        assert_eq!(m1.protocol, None);
+        assert_eq!(m1.effective_protocol(prov), ProtocolKind::OpenAiChat);
+        assert_eq!(m1.effective_protocol(prov).as_str(), "openai/chat");
 
         // 验证显式声明 protocol 的模型成功覆盖
         let m2 = prov.models.iter().find(|m| m.id == "gpt-5.6-sol").unwrap();
-        assert_eq!(m2.protocol.as_deref(), Some("openai/responses"));
-        assert_eq!(prov.resolve_model_protocol(m2), "openai/responses");
+        assert_eq!(m2.protocol, Some(ProtocolKind::OpenAiResponses));
+        assert_eq!(m2.effective_protocol(prov), ProtocolKind::OpenAiResponses);
+        assert_eq!(m2.effective_protocol(prov).as_str(), "openai/responses");
     }
 
     // -------------------------------------------------------------------------
@@ -826,6 +211,7 @@ providers:
     fn test_devil_05_thinking_levels_strict_english_whitelist_mapping() {
         let valid_yaml = r#"
 id: claude-5-sonnet
+displayName: Claude 5 Sonnet
 contextWindow: 1000000
 maxOutputTokens: 128000
 thinking:
@@ -837,14 +223,20 @@ thinking:
   Max: max
 "#;
         let model: ModelSpec = serde_yaml::from_str(valid_yaml).unwrap();
-        let thinking = model.thinking.expect("thinking 应存在并成功解析");
+        let thinking = model.thinking.as_ref().expect("thinking 应存在并成功解析");
         assert_eq!(thinking.get("Medium").map(|s| s.as_str()), Some("medium"));
         assert_eq!(thinking.get("Minimal").map(|s| s.as_str()), Some("minimal"));
         assert_eq!(thinking.len(), 6);
 
+        // 纯英文白名单与扩展函数断言
+        assert!(model.supports_thinking());
+        assert_eq!(model.thinking.get_wire_value("Medium"), Some("medium"));
+        assert_eq!(model.thinking.get_wire_value("Minimal"), Some("minimal"));
+
         // 非法中文键名防御拦截测试
         let invalid_yaml = r#"
 id: test-model
+displayName: Test Model
 contextWindow: 65536
 maxOutputTokens: 8192
 thinking:
@@ -905,19 +297,16 @@ thinking:
     fn test_devil_08_modality_guard_blocks_image_for_text_only_model() {
         let text_model = ModelSpec {
             id: "deepseek-coder".to_string(),
-            display_name: None,
+            display_name: "DeepSeek Coder".to_string(),
             protocol: None,
             context_window: 128000,
             max_output_tokens: 8192,
-            modalities: ModalitiesConfig {
-                input: vec![Modality::Text],
-                output: vec![Modality::Text],
-            },
+            modalities: Some(ModalitiesSpec::text_only()),
             thinking: None,
             pricing: None,
         };
 
-        let is_allowed = text_model.modalities.input.contains(&Modality::Image);
+        let is_allowed = text_model.supports_image_input();
         assert!(!is_allowed, "纯文本模型必须拒绝包含图片的请求");
     }
 
@@ -953,8 +342,9 @@ thinking:
         let config_file = temp_dir.join("models.yaml");
 
         fs::write(&config_file, "").unwrap();
-        let res = ConfigMigrationManager::ensure_migrated(&config_file).unwrap();
-        assert_eq!(res, MigrationStatus::AlreadyUpToDate);
+        let res: Result<MigrationStatus, MigrationError> =
+            ConfigMigrationManager::ensure_migrated(&config_file);
+        assert_eq!(res.unwrap(), MigrationStatus::AlreadyUpToDate);
 
         let _ = fs::remove_dir_all(temp_dir);
     }
@@ -1030,7 +420,7 @@ models:
     // -------------------------------------------------------------------------
     #[test]
     fn test_devil_13_rcu_concurrent_50_readers_atomic_reload_no_lock() {
-        let initial_config = Arc::new(ModelsConfig::default());
+        let initial_config = Arc::new(UnifiedModelsConfig::default());
         let shared_catalog = Arc::new(ArcSwap::from(initial_config));
 
         let start_barrier = Arc::new(std::sync::Barrier::new(51));
@@ -1062,15 +452,15 @@ models:
 
         // 主线程执行原子替换重载 10 次
         for i in 0..10 {
-            let mut new_config = ModelsConfig::default();
+            let mut new_config = UnifiedModelsConfig::default();
             new_config.providers.insert(
                 format!("prov_{}", i),
                 ProviderSpec {
                     display_name: format!("Provider {}", i),
                     base_url: "https://api.test.com".to_string(),
-                    protocol: "openai/chat".to_string(),
-                    compat: ProviderCompat::default(),
-                    headers: HashMap::new(),
+                    api_key: None,
+                    protocol: ProtocolKind::OpenAiChat,
+                    compat: None,
                     models: vec![],
                 },
             );
@@ -1162,20 +552,10 @@ models:
     #[test]
     fn test_devil_18_openai_responses_api_endpoint_and_wire_payload() {
         let base_url = "https://api.openai.com/v1";
-        let protocol = "openai/responses";
-        let endpoint = if protocol == "openai/responses" {
-            format!("{}/responses", base_url.trim_end_matches('/'))
-        } else {
-            format!("{}/chat/completions", base_url.trim_end_matches('/'))
-        };
-        assert_eq!(endpoint, "https://api.openai.com/v1/responses");
+        let responses_endpoint = build_endpoint_url(ProtocolKind::OpenAiResponses, base_url);
+        assert_eq!(responses_endpoint, "https://api.openai.com/v1/responses");
 
-        let chat_protocol = "openai/chat";
-        let chat_endpoint = if chat_protocol == "openai/responses" {
-            format!("{}/responses", base_url.trim_end_matches('/'))
-        } else {
-            format!("{}/chat/completions", base_url.trim_end_matches('/'))
-        };
+        let chat_endpoint = build_endpoint_url(ProtocolKind::OpenAiChat, base_url);
         assert_eq!(chat_endpoint, "https://api.openai.com/v1/chat/completions");
     }
 
@@ -1256,7 +636,8 @@ models:
         // 断言：单模型实体上 protocol 字段默认缺省 (None)，彻底由 Provider 统领
         assert_eq!(model.protocol, None);
         // 断言：生效协议 100% 继承供应商顶层协议
-        assert_eq!(prov.resolve_model_protocol(model), "openai/chat");
+        assert_eq!(model.effective_protocol(&prov), ProtocolKind::OpenAiChat);
+        assert_eq!(model.effective_protocol(&prov).as_str(), "openai/chat");
     }
 
     // -------------------------------------------------------------------------
@@ -1266,34 +647,36 @@ models:
     fn test_devil_23_display_name_and_metadata_fallback_chain() {
         let model_with_name = ModelSpec {
             id: "gpt-4o".to_string(),
-            display_name: Some("GPT-4o Omni".to_string()),
+            display_name: "GPT-4o Omni".to_string(),
             protocol: None,
             context_window: 128000,
             max_output_tokens: 4096,
-            modalities: ModalitiesConfig::default(),
+            modalities: None,
             thinking: None,
             pricing: None,
         };
         let model_without_name = ModelSpec {
             id: "gpt-4o-mini".to_string(),
-            display_name: None,
+            display_name: "".to_string(),
             protocol: None,
             context_window: 128000,
             max_output_tokens: 4096,
-            modalities: ModalitiesConfig::default(),
+            modalities: None,
             thinking: None,
             pricing: None,
         };
 
-        // 降级链：优先显式 displayName，缺失时回退至 model.id
-        let name_1 = model_with_name
-            .display_name
-            .as_deref()
-            .unwrap_or(&model_with_name.id);
-        let name_2 = model_without_name
-            .display_name
-            .as_deref()
-            .unwrap_or(&model_without_name.id);
+        // 降级链：优先显式 displayName，缺失/空串时回退至 model.id
+        let name_1 = if model_with_name.display_name.trim().is_empty() {
+            &model_with_name.id
+        } else {
+            &model_with_name.display_name
+        };
+        let name_2 = if model_without_name.display_name.trim().is_empty() {
+            &model_without_name.id
+        } else {
+            &model_without_name.display_name
+        };
 
         assert_eq!(name_1, "GPT-4o Omni");
         assert_eq!(name_2, "gpt-4o-mini");
@@ -1305,14 +688,10 @@ models:
     #[test]
     fn test_devil_24_unknown_protocol_string_fallback_with_warning() {
         let raw_protocol = "custom/unknown-v3";
-        let resolved = match raw_protocol {
-            "openai/chat" => "openai/chat",
-            "openai/responses" => "openai/responses",
-            "anthropic/messages" => "anthropic/messages",
-            "google/generative-ai" => "google/generative-ai",
-            _ => "openai/chat", // 安全降级
-        };
-        assert_eq!(resolved, "openai/chat");
+        let parsed = WireProtocol::from_raw_str(raw_protocol);
+        let resolved = parsed.unwrap_or_default();
+        assert_eq!(resolved, WireProtocol::Chat);
+        assert_eq!(resolved.wire_name(), "openai/chat");
     }
 
     // -------------------------------------------------------------------------
@@ -1337,19 +716,19 @@ models:
     fn test_devil_26_image_generation_and_multimodal_input_coexistence() {
         let model = ModelSpec {
             id: "meta/muse-image".to_string(),
-            display_name: Some("Muse Image".to_string()),
+            display_name: "Muse Image".to_string(),
             protocol: None,
             context_window: 65536,
             max_output_tokens: 32768,
-            modalities: ModalitiesConfig {
-                input: vec![Modality::Image, Modality::Text],
-                output: vec![Modality::Image, Modality::Text],
-            },
+            modalities: Some(ModalitiesSpec {
+                input: vec!["image".to_string(), "text".to_string()],
+                output: vec!["image".to_string(), "text".to_string()],
+            }),
             thinking: None,
             pricing: None,
         };
-        assert!(model.modalities.input.contains(&Modality::Image));
-        assert!(model.modalities.output.contains(&Modality::Image));
+        assert!(model.modalities.as_ref().unwrap().supports_input("image"));
+        assert!(model.modalities.as_ref().unwrap().supports_output("image"));
     }
 
     // -------------------------------------------------------------------------
@@ -1357,33 +736,36 @@ models:
     // -------------------------------------------------------------------------
     #[test]
     fn test_devil_27_utf8_non_ascii_preservation_in_yaml_serialization() {
-        let mut providers = HashMap::new();
+        let mut providers = indexmap::IndexMap::new();
         providers.insert(
             "aliyun".to_string(),
             ProviderSpec {
                 display_name: "阿里云通义千问官方直连".to_string(),
                 base_url: "https://dashscope.aliyuncs.com".to_string(),
-                protocol: "openai/chat".to_string(),
-                compat: ProviderCompat::default(),
-                headers: HashMap::new(),
+                api_key: None,
+                protocol: ProtocolKind::OpenAiChat,
+                compat: None,
                 models: vec![ModelSpec {
                     id: "qwen-turbo".to_string(),
-                    display_name: Some("通义千问·超轻量模型 (测试版)".to_string()),
+                    display_name: "通义千问·超轻量模型 (测试版)".to_string(),
                     protocol: None,
                     context_window: 128000,
                     max_output_tokens: 8192,
-                    modalities: ModalitiesConfig::default(),
+                    modalities: None,
                     thinking: None,
                     pricing: None,
                 }],
             },
         );
-        let config = ModelsConfig { providers };
+        let config = UnifiedModelsConfig {
+            version: 2,
+            providers,
+        };
         let yaml_str = serde_yaml::to_string(&config).unwrap();
         assert!(yaml_str.contains("阿里云通义千问官方直连"));
         assert!(yaml_str.contains("通义千问·超轻量模型 (测试版)"));
 
-        let restored: ModelsConfig = serde_yaml::from_str(&yaml_str).unwrap();
+        let restored: UnifiedModelsConfig = serde_yaml::from_str(&yaml_str).unwrap();
         assert_eq!(config, restored);
     }
 

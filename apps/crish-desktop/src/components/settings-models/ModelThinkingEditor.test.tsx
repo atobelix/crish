@@ -112,19 +112,15 @@ describe('ModelThinkingEditor (思考档位纯英文 TitleCase 与拍平映射)'
     expect(onChange).toHaveBeenCalledWith({ ...STANDARD_THINKING_PRESET });
   });
 
-  it('切换总开关：触发 onEnabledChange', () => {
-    const onEnabledChange = vi.fn();
+  it('不再渲染内嵌总开关：思考启闭由外层统一控制', () => {
     render(
       <ModelThinkingEditor
         enabled={true}
-        onEnabledChange={onEnabledChange}
         thinkingMap={{ Low: 'low' }}
         onChange={vi.fn()}
       />
     );
 
-    const switchBtn = screen.getByRole('switch');
-    fireEvent.click(switchBtn);
-    expect(onEnabledChange).toHaveBeenCalledWith(false);
+    expect(screen.queryByRole('switch')).toBeNull();
   });
 });

@@ -635,3 +635,155 @@ fn test_multi_tier_descending_matching() {
     assert_eq!(c3.input_micros, 1_500_000);
 }
 
+// -------------------------------------------------------------------------
+// 测试: 基础价格为 0 但配置了阶梯费率时，绝不被短路误判为全免
+// -------------------------------------------------------------------------
+#[test]
+fn test_base_price_zero_with_tiers_not_short_circuited_as_free() {
+    let pricing = ModelPricing {
+        currency: Currency::Cny,
+        unit: PricingUnit::Per1mTokens,
+        input: 0.0,
+        output: 0.0,
+        cache_read: None,
+        cache_write: None,
+        tiers: vec![
+            PricingTier {
+                input_tokens_above: 32_768,
+                input: 4.0,
+                output: 12.0,
+                cache_read: Some(0.5),
+                cache_write: None,
+            },
+        ],
+    };
+
+    // 场景 1：用量超过 32,768 门槛，应当命中阶梯计费，绝不能因为基础价格为 0 而短路误判为免费
+    let cost = PricingEngine::calculate_cost(
+        &Some(pricing.clone()),
+        100_000,
+        20_000,
+        0,
+        0,
+    )
+    .expect("计费应成功");
+
+    assert!(!cost.is_free, "命中收费阶梯时绝不得标记为 is_free");
+    assert_ne!(cost.formatted_total, "免费");
+    // 100,000 * 4.0 / 1M = 400,000 micros (¥0.4000)
+    // 20,000 * 12.0 / 1M = 240,000 micros (¥0.2400)
+    // Total = 640,000 micros (¥0.6400)
+    assert_eq!(cost.input_micros, 400_000);
+    assert_eq!(cost.output_micros, 240_000);
+    assert_eq!(cost.total_micros, 640_000);
+    assert_eq!(cost.formatted_total, "¥0.6400");
+
+    // 场景 2：用量未达到 32,768 门槛，在免费区间内，费用为 0
+    let free_tier_cost = PricingEngine::calculate_cost(
+        &Some(pricing),
+        10_000,
+        1_000,
+        0,
+        0,
+    )
+    .expect("免费区间计费应成功");
+    assert_eq!(free_tier_cost.total_micros, 0);
+    assert_eq!(free_tier_cost.formatted_total, "¥0.0000");
+}
+
+// -------------------------------------------------------------------------
+// 测试: u64::MAX 极端 Token 数量定点饱和截断，防止回绕为极小随机值
+// -------------------------------------------------------------------------
+#[test]
+fn test_u64_max_extreme_token_saturation_anti_wrapping() {
+    let pricing = ModelPricing {
+        currency: Currency::Usd,
+        unit: PricingUnit::Per1mTokens,
+        input: 100.0,
+        output: 100.0,
+        cache_read: None,
+        cache_write: None,
+        tiers: vec![],
+    };
+
+    let extreme_tokens = u64::MAX;
+    let cost = PricingEngine::calculate_cost(
+        &Some(pricing),
+        extreme_tokens,
+        extreme_tokens,
+        0,
+        0,
+    )
+    .expect("极端大数计算应成功");
+
+    // u64::MAX * 100.0 / 1M 的结果远远超过 u64::MAX，必须饱和截断在 u64::MAX，不能回绕为极小随机值
+    assert_eq!(cost.input_micros, u64::MAX);
+    assert_eq!(cost.output_micros, u64::MAX);
+    assert_eq!(cost.total_micros, u64::MAX);
+    assert!(!cost.is_free);
+
+    // 单独验证 tokens_to_micros 饱和截断
+    let micros = PricingEngine::tokens_to_micros(u64::MAX, 100.0);
+    assert_eq!(micros, u64::MAX);
+
+    // 验证 PerImage 大数饱和截断
+    let img_pricing = ModelPricing {
+        currency: Currency::Usd,
+        unit: PricingUnit::PerImage,
+        input: 0.0,
+        output: 100.0,
+        cache_read: None,
+        cache_write: None,
+        tiers: vec![],
+    };
+    let img_cost = PricingEngine::calculate_cost(
+        &Some(img_pricing),
+        0,
+        u64::MAX,
+        0,
+        0,
+    )
+    .expect("按张极端大数计算应成功");
+    assert_eq!(img_cost.output_micros, u64::MAX);
+    assert_eq!(img_cost.total_micros, u64::MAX);
+}
+
+// -------------------------------------------------------------------------
+// 测试: CostBreakdown 与 PricingEngine 的便捷辅助构造与 Usage 结算方法
+// -------------------------------------------------------------------------
+#[test]
+fn test_cost_breakdown_helper_methods_and_usage() {
+    use crate::events::ProviderUsage;
+
+    let pricing = ModelPricing {
+        currency: Currency::Cny,
+        unit: PricingUnit::Per1mTokens,
+        input: 2.0,
+        output: 6.0,
+        cache_read: Some(0.2),
+        cache_write: Some(1.0),
+        tiers: vec![],
+    };
+
+    let usage = ProviderUsage {
+        prompt_tokens: Some(50_000),
+        completion_tokens: Some(10_000),
+        cache_read_tokens: Some(20_000),
+        cache_write_tokens: Some(5_000),
+        ..Default::default()
+    };
+
+    let cost1 = PricingEngine::calculate_cost_from_usage(&Some(pricing.clone()), &usage).unwrap();
+    let cost2 = CostBreakdown::from_usage(&Some(pricing), &usage).unwrap();
+    assert_eq!(cost1, cost2);
+    // non-cached = 30k * 2.0 = 60,000 micros
+    // output = 10k * 6.0 = 60,000 micros
+    // read = 20k * 0.2 = 4,000 micros
+    // write = 5k * 1.0 = 5,000 micros
+    // total = 129,000 micros
+    assert_eq!(cost1.total_micros, 129_000);
+
+    let free_breakdown = CostBreakdown::free(Currency::Cny);
+    assert!(free_breakdown.is_free);
+    assert_eq!(free_breakdown.formatted_total, "免费");
+}

@@ -9,10 +9,11 @@
 
 /** AI 网络通信协议方言（全系统强类型枚举，禁止自由字符串） */
 export type ModelProtocol =
-  | 'openai/chat'          // 标准 OpenAI Chat Completions 兼容协议 (/v1/chat/completions)
-  | 'openai/responses'     // OpenAI 2025/2026 Responses 原生协议 (/v1/responses)
-  | 'anthropic/messages'   // Anthropic Claude Messages 原生协议 (/v1/messages)
-  | 'google/interactions'; // Google Gemini 3.x Interactions 原生协议 (/v1beta/interactions)
+  | 'openai/chat'              // 标准 OpenAI Chat Completions 兼容协议 (/v1/chat/completions)
+  | 'openai/responses'         // OpenAI 2025/2026 Responses 原生协议 (/v1/responses)
+  | 'anthropic/messages'       // Anthropic Claude Messages 原生协议 (/v1/messages)
+  | 'google/generate-content'  // Google Gemini 原生 GenerateContent 协议 (/v1beta/models/{model}:streamGenerateContent)
+  | 'google/interactions';     // 兼容别名：Google Gemini 3.x Interactions 原生协议 (/v1beta/interactions)
 
 /** 思考推理标准纯英文 TitleCase 显示名白名单 */
 export type ThinkingLevelTitle =
@@ -132,6 +133,8 @@ export interface ModelSpec {
   protocol?: ModelProtocol;
   /** 真实上下文物理窗口总容量（Tokens），彻底告别 128K 假上限 */
   contextWindow?: number;
+  /** 上下文长度别名（与 contextWindow 互通），杜绝旧代码读到 undefined */
+  contextLength?: number;
   /** 单次请求最大生成输出 Token 上限 */
   maxOutputTokens?: number;
   /**
@@ -153,6 +156,8 @@ export interface ModelSpec {
     video?: boolean;
     reasoning?: boolean;
   };
+  /** 兼容性方言矩阵配置 */
+  compat?: ProviderCompatConfig;
 }
 
 /** 供应商兼容性与请求体方言调整参数 */

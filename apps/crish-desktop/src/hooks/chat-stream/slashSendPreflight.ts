@@ -30,18 +30,14 @@ import {
 import { GRILL_ME_PROMPT } from '../../prompts';
 import { sessionDraftManager } from '../../api/draft/sessionDraftManager';
 import {
-  dispatchGoalModeCard,
-  dispatchGrillMeCard,
-  dispatchSkillContextCard,
-} from './slashContextCards';
-import {
   buildWorkflowAssistantContext,
-  dispatchWorkflowAssistantCard,
   WORKFLOW_CREATE_TEMPLATE,
 } from '../../api/workflow-api/workflowAssistantCard';
 import { buildMultimodalFromAttachments } from './multimodal';
 import { isModelVisionSupported } from '../../api/modelVisionSupport';
 import { getActiveModelId, getActiveProfileId } from '../../api/providerProfiles';
+import { modelsCatalogStore } from '../../api/modelsCatalogStore';
+import { getModelMeta } from '../../api/modelCatalogMeta';
 import { canStreamLocalSession } from './helpers';
 import { getSessionById } from '../../store/sessionStore';
 import { generateMessageId } from '../../utils/generateMessageId';
@@ -52,11 +48,42 @@ import type { ChatContentPart, StreamRequestOptions } from '../../api/chatApi';
 
 import { toast } from '../../services/toast/ToastContext';
 
+/**
+ * 判定指定模型是否支持图像多模态输入（优先读取 modalities.input 契约）
+ */
+export function checkModelVisionSupport(
+  modelId: string,
+  profileId?: string | null
+): boolean {
+  const rawModel = (modelId || '').trim();
+  if (!rawModel) return false;
+  const normModel = rawModel.toLowerCase();
+  const state = modelsCatalogStore.getState();
+
+  const entry = profileId
+    ? state.modelIndex.get(`${profileId.trim().toLowerCase()}::${normModel}`)
+    : undefined;
+  const input =
+    entry?.model?.modalities?.input ??
+    state.globalModelIndex.get(normModel)?.[0]?.model?.modalities?.input;
+  if (Array.isArray(input)) return input.includes('image');
+
+  if (profileId) {
+    const meta = getModelMeta(profileId, rawModel);
+    if (Array.isArray(meta?.modalities?.input)) {
+      return meta.modalities.input.includes('image');
+    }
+  }
+
+  return isModelVisionSupported(rawModel, profileId);
+}
+
 export interface PreflightCheckOptions {
   rawInput: string;
   activeSessionId?: string | null;
   wsId: string;
   attachments: ChatAttachment[];
+
   skillCommandsEnabled?: boolean;
   needsKeySetup?: boolean;
   needsModelSetup?: boolean;
@@ -119,6 +146,19 @@ export async function runPreflightChecks(
     return { status: 'abort' };
   }
 
+  // 多模态输入刚性拦截守卫：当前模型若不支持视觉输入且存在图片附件，坚决阻断发送
+  const activeModel = (getActiveModelId() || '').trim();
+  const activeProfileId = getActiveProfileId();
+  const hasImage = attachments.some(
+    (a) => Boolean(a.dataUrl || a.imageMeta || a.mime?.startsWith('image/'))
+  );
+  if (hasImage && !checkModelVisionSupport(activeModel, activeProfileId)) {
+    const errorMsg = '当前模型不支持图片输入，请移除图片或切换至多模态视觉模型';
+    showToast(errorMsg);
+    setPickerInlineError(errorMsg);
+    return { status: 'abort' };
+  }
+
   const slash = resolveSlashCommand(rawInput);
 
   if (isNavigationSlash(slash.kind)) {
@@ -164,20 +204,9 @@ export async function runPreflightChecks(
         mode: 'safe_seed',
         metadata: { source: 'slash_command', title: '/schedule 编排模板' },
       });
-      dispatchWorkflowAssistantCard(
-        sid,
-        getWorkspacePath() || '',
-        'slash_command'
-      );
       return { status: 'handled' };
     }
-    // 带参：助手卡片可见派发 + wire 投影文本随消息下发（模型按卡片指令进入编排对齐）
-    dispatchWorkflowAssistantCard(
-      activeSessionId || '',
-      getWorkspacePath() || '',
-      'slash_command',
-      restText
-    );
+    // 带参：wire 投影文本随消息下发（模型按编排指令对齐；无空壳 dispatch）
     return {
       status: 'proceed',
       slash,
@@ -223,12 +252,6 @@ export async function runPreflightChecks(
       displayText = resolved.rest
         ? `/skill:${resolved.skill.name} ${resolved.rest}`
         : `使用技能：${resolved.skill.name}`;
-      // 技能上下文可见卡片（WYSIWYG：卡片正文 = wire 注入文本，单一来源）
-      dispatchSkillContextCard(
-        activeSessionId || '',
-        resolved.skill,
-        modelText
-      );
     } catch (e) {
       setChatInput('');
       setSlashMenuOpen(false);
@@ -351,24 +374,15 @@ export function assembleChatPayload(opts: AssembleChatPayloadOptions): {
       gm.maxIterations ?? GOAL_DEFAULT_MAX_ITERATIONS,
       gm.tasks
     );
-    // 首次进入目标模式：派发可见目标卡片（后续轮次经 goalModeContinuation
-    // 续期 wire 前缀，不重复派卡刷屏）
-    dispatchGoalModeCard(
-      sessionId,
-      goalText,
-      directive,
-      gm.maxIterations ?? GOAL_DEFAULT_MAX_ITERATIONS
-    );
+    // 目标模式：wire 前缀写入 modelText（后续轮次经 goalModeContinuation 续期）
     modelText = `${directive}${goalText}`;
   }
 
   if (slash.kind === 'grill-me') {
     setPermissionMode('plan');
     displayText = `/grill-me ${slash.topic}`;
-    // 需求对齐模式可见卡片（WYSIWYG：卡片正文 = wire 注入文本，单一来源；
-    // GRILL_ME_PREFIX 隐式前缀已清退——slash-prefixes.ts 物理删除）
+    // 需求对齐：wire 文本 = GRILL_ME_PROMPT（隐式前缀已清退）
     const rendered = GRILL_ME_PROMPT.render({ topic: slash.topic });
-    dispatchGrillMeCard(sessionId, slash.topic, rendered);
     modelText = rendered;
   }
 
@@ -382,13 +396,15 @@ export function assembleChatPayload(opts: AssembleChatPayloadOptions): {
 
   const activeModel = (getActiveModelId() || '').trim();
   const activeProfileId = getActiveProfileId();
-  const isVisionSupported = isModelVisionSupported(activeModel, activeProfileId);
-  const hasImage = attachments.some((a) => Boolean(a.dataUrl));
+  const isVisionSupported = checkModelVisionSupport(activeModel, activeProfileId);
+  const hasImage = attachments.some(
+    (a) => Boolean(a.dataUrl || a.imageMeta || a.mime?.startsWith('image/'))
+  );
 
   if (hasImage && !isVisionSupported) {
-    toast.show(
-      '当前模型不支持图片视觉理解，图片已作为源数据引用传递；如需分析图片，建议切换至多模态模型。'
-    );
+    const errorMsg = '当前模型不支持图片输入，请移除图片或切换至多模态视觉模型';
+    toast.show(errorMsg);
+    throw new Error(errorMsg);
   }
 
   const { promptAttachBlock, streamOptions } = buildMultimodalFromAttachments(

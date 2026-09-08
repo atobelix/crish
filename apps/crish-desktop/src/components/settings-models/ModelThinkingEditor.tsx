@@ -1,6 +1,6 @@
 import React, { useCallback, useMemo } from 'react';
 import * as Lucide from 'lucide-react';
-import { Button, Input, Switch, Tooltip } from '../ui';
+import { Button, Input, Tooltip } from '../ui';
 import styles from './ModelsSettingsTab.module.css';
 
 export const STANDARD_THINKING_PRESET: Record<string, string> = {
@@ -12,21 +12,21 @@ export const STANDARD_THINKING_PRESET: Record<string, string> = {
 };
 
 export interface ModelThinkingEditorProps {
-  enabled: boolean;
-  onEnabledChange: (enabled: boolean) => void;
+  enabled?: boolean;
+  onEnabledChange?: (enabled: boolean) => void;
   thinkingMap: Record<string, string>;
   onChange: (nextMap: Record<string, string>) => void;
 }
 
 /**
  * 拍平的思考强度配置编辑器：
- * - 简单开关控制思考能力开启/关闭
  * - 纯英文 TitleCase 显示名与底层 Wire 值映射表（如 Low -> low, Medium -> medium, High -> high）
+ * - 思考能力由外层能力矩阵单源控制，内部呈现纯粹档位映射表
  * - 支持动态增删行与一键恢复预填推荐
  */
 export const ModelThinkingEditor: React.FC<ModelThinkingEditorProps> = ({
-  enabled,
-  onEnabledChange,
+  enabled = true,
+  onEnabledChange: _onEnabledChange,
   thinkingMap,
   onChange,
 }) => {
@@ -90,16 +90,13 @@ export const ModelThinkingEditor: React.FC<ModelThinkingEditorProps> = ({
         <span className={styles.mrdSubSectionTitle}>
           <Lucide.BrainCircuit
             size={13}
-            style={{ color: 'var(--brand, #10b981)' }}
+            style={{ color: 'var(--brand, hsl(160 84% 39%))' }}
           />
           思考推理 (Thinking / Reasoning)
         </span>
-        <Switch
-          size="sm"
-          checked={enabled}
-          label={enabled ? '已开启' : '已关闭'}
-          onCheckedChange={onEnabledChange}
-        />
+        <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
+          UI 显示名 ⇄ Wire 参数映射表
+        </span>
       </div>
 
       {enabled && (

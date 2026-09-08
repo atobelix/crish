@@ -107,7 +107,7 @@ pub enum ProtocolKind {
     #[serde(rename = "anthropic/messages")]
     AnthropicMessages,
     /// Google 原生 GenerateContent 协议 (/v1beta/models/{model}:streamGenerateContent)
-    #[serde(rename = "google/generate-content")]
+    #[serde(rename = "google/generate-content", alias = "google/interactions")]
     GoogleGenerateContent,
 }
 
@@ -533,5 +533,16 @@ mod tests {
 
         // 模型局部协议覆盖生效
         assert_eq!(model.effective_protocol(&provider), ProtocolKind::OpenAiResponses);
+    }
+
+    #[test]
+    fn test_google_protocol_alias() {
+        let json_direct = r#""google/generate-content""#;
+        let proto1: ProtocolKind = serde_json::from_str(json_direct).expect("反序列化 google/generate-content 成功");
+        assert_eq!(proto1, ProtocolKind::GoogleGenerateContent);
+
+        let json_alias = r#""google/interactions""#;
+        let proto2: ProtocolKind = serde_json::from_str(json_alias).expect("反序列化 google/interactions 兼容别名成功");
+        assert_eq!(proto2, ProtocolKind::GoogleGenerateContent);
     }
 }

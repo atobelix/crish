@@ -6,6 +6,7 @@
  * - 故障防御：三态分派、单飞复用、自动向后兼容与结构化诊断
  */
 
+import { stringify as yamlStringify } from 'yaml';
 import { invokeTyped } from './tauriInvoke';
 import type {
   ModelsYamlTree,
@@ -149,13 +150,108 @@ export async function readModelsYamlIpc(): Promise<IpcResult<ReadModelsYamlWire>
 }
 
 /**
+ * 将 ModelsYamlTree 规范化并序列化为纯净的 v2 树状 YAML 文本。
+ * 彻底铲除手拼 flat models: 列表的降级逻辑，完整保留供应商与模型的全部配置属性与方言。
+ */
+export function serializeModelsYamlTree(tree: ModelsYamlTree): string {
+  const cleanProviders: Record<string, any> = {};
+
+  for (const [vendorId, provider] of Object.entries(tree.providers || {})) {
+    // 归一化协议方言：将兼容别名 google/interactions 归一化为标准的 google/generate-content
+    const normProviderProtocol =
+      provider.protocol === 'google/interactions'
+        ? 'google/generate-content'
+        : provider.protocol;
+
+    const cleanModels = (provider.models || []).map((m) => {
+      const modelProtocol =
+        m.protocol === 'google/interactions'
+          ? 'google/generate-content'
+          : m.protocol;
+
+      const cleanModel: Record<string, any> = {
+        id: m.id,
+      };
+
+      if (m.displayName) cleanModel.displayName = m.displayName;
+      if (modelProtocol) cleanModel.protocol = modelProtocol;
+      if (m.contextWindow != null) cleanModel.contextWindow = m.contextWindow;
+      else if (m.contextLength != null) cleanModel.contextWindow = m.contextLength;
+      if (m.maxOutputTokens != null) cleanModel.maxOutputTokens = m.maxOutputTokens;
+      if (m.thinking) cleanModel.thinking = m.thinking;
+      if (m.modalities) cleanModel.modalities = m.modalities;
+      if (m.capabilities) cleanModel.capabilities = m.capabilities;
+      if (m.compat) cleanModel.compat = m.compat;
+
+      if (m.pricing) {
+        cleanModel.pricing = {
+          currency: m.pricing.currency || 'USD',
+          ...(m.pricing.unit ? { unit: m.pricing.unit } : {}),
+          ...(m.pricing.input != null
+            ? { input: m.pricing.input }
+            : m.pricing.inputPerMTok != null
+              ? { input: m.pricing.inputPerMTok }
+              : {}),
+          ...(m.pricing.output != null
+            ? { output: m.pricing.output }
+            : m.pricing.outputPerMTok != null
+              ? { output: m.pricing.outputPerMTok }
+              : {}),
+          ...(m.pricing.cacheRead != null
+            ? { cacheRead: m.pricing.cacheRead }
+            : m.pricing.cacheReadPerMTok != null
+              ? { cacheRead: m.pricing.cacheReadPerMTok }
+              : {}),
+          ...(m.pricing.cacheWrite != null
+            ? { cacheWrite: m.pricing.cacheWrite }
+            : m.pricing.cacheWritePerMTok != null
+              ? { cacheWrite: m.pricing.cacheWritePerMTok }
+              : {}),
+          ...(m.pricing.perImage != null
+            ? { perImage: m.pricing.perImage }
+            : m.pricing.perImageCost != null
+              ? { perImage: m.pricing.perImageCost }
+              : {}),
+          ...(m.pricing.tiers ? { tiers: m.pricing.tiers } : {}),
+        };
+      }
+
+      if (m.enabled !== undefined) cleanModel.enabled = m.enabled;
+
+      return cleanModel;
+    });
+
+    cleanProviders[vendorId] = {
+      displayName: provider.displayName,
+      baseUrl: provider.baseUrl,
+      protocol: normProviderProtocol,
+      ...(provider.apiKey ? { apiKey: provider.apiKey } : {}),
+      ...(provider.apiKeyRef ? { apiKeyRef: provider.apiKeyRef } : {}),
+      ...(provider.compat ? { compat: provider.compat } : {}),
+      ...(provider.headers ? { headers: provider.headers } : {}),
+      ...(provider.proxyUrl ? { proxyUrl: provider.proxyUrl } : {}),
+      ...(provider.enabled !== undefined ? { enabled: provider.enabled } : {}),
+      ...(provider.order !== undefined ? { order: provider.order } : {}),
+      models: cleanModels,
+    };
+  }
+
+  const payload = {
+    version: 2,
+    providers: cleanProviders,
+  };
+
+  return yamlStringify(payload);
+}
+
+/**
  * 将整棵模型树原子写入 models.yaml
- * 优先调用 models_yaml_write，缺失时兼容退回 workbench_save_models_yaml
+ * 必须且只写入纯净的 v2 树状结构，若后端报错则向上抛出标准异常供 UI 弹窗，绝不擅自将 v2 降级为残疾 v1！
  */
 export async function writeModelsYamlIpc(
   tree: ModelsYamlTree
 ): Promise<{ ok: boolean; error?: string }> {
-  // 1. 优先调用 models_yaml_write
+  // 1. 优先调用 models_yaml_write（若环境支持，保证测试桩与未来原生树状命令兼容）
   const res = await invokeTyped<{ success: boolean; writtenPath?: string }>('models_yaml_write', {
     tree,
   });
@@ -168,48 +264,12 @@ export async function writeModelsYamlIpc(
     return { ok: false, error: res.message };
   }
 
-  // 2. 若 models_yaml_write 命令未注册，回退尝试序列化后写入 workbench_save_models_yaml
-  const flatModels: any[] = [];
-  for (const [vendorId, provider] of Object.entries(tree.providers || {})) {
-    for (const m of provider.models || []) {
-      flatModels.push({
-        model: m.id,
-        vendor: vendorId,
-        vendorDisplayName: provider.displayName,
-        displayName: m.displayName || m.id,
-        contextWindow: m.contextWindow,
-        maxOutputTokens: m.maxOutputTokens,
-        protocol: m.protocol || provider.protocol,
-        capabilities: m.capabilities,
-        pricing: m.pricing
-          ? {
-              inputPerMTok: m.pricing.input,
-              outputPerMTok: m.pricing.output,
-              cacheReadPerMTok: m.pricing.cacheRead,
-              cacheWritePerMTok: m.pricing.cacheWrite,
-              currency: m.pricing.currency,
-              billingUnit: m.pricing.unit === 'per_image' ? 'per_image' : 'token',
-            }
-          : undefined,
-      });
-    }
-  }
-
-  // 简单 YAML 拼装保证兼容
-  const lines: string[] = ['models:'];
-  for (const m of flatModels) {
-    lines.push(`  - model: "${m.model}"`);
-    lines.push(`    vendor: "${m.vendor}"`);
-    if (m.vendorDisplayName) lines.push(`    vendorDisplayName: "${m.vendorDisplayName}"`);
-    if (m.displayName) lines.push(`    displayName: "${m.displayName}"`);
-    if (m.contextWindow != null) lines.push(`    contextWindow: ${m.contextWindow}`);
-    if (m.maxOutputTokens != null) lines.push(`    maxOutputTokens: ${m.maxOutputTokens}`);
-    if (m.protocol) lines.push(`    protocol: "${m.protocol}"`);
-  }
-
-  const fallbackRes = await invokeTyped<{ path: string; models: any[] }>(
+  // 2. 若 models_yaml_write 未注册（生产 Tauri 环境），调用 workbench_save_models_yaml
+  // 严格保存纯净 v2 树状结构，彻底铲除手拼平铺列表降级自毁代码！
+  const yamlContent = serializeModelsYamlTree(tree);
+  const fallbackRes = await invokeTyped<{ path: string; models?: any[] }>(
     'workbench_save_models_yaml',
-    { content: lines.join('\n') + '\n' }
+    { content: yamlContent }
   );
 
   if (fallbackRes.status === 'ok') {
@@ -218,7 +278,10 @@ export async function writeModelsYamlIpc(
 
   return {
     ok: false,
-    error: fallbackRes.status === 'missing' ? 'models_yaml_write 命令不可用' : fallbackRes.message,
+    error:
+      fallbackRes.status === 'missing'
+        ? 'workbench_save_models_yaml 命令不可用'
+        : fallbackRes.message,
   };
 }
 

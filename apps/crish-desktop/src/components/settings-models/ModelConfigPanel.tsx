@@ -149,7 +149,7 @@ export const ModelConfigPanel: React.FC<{
                 height: '20px',
                 padding: '0 6px',
                 fontSize: '11px',
-                color: 'var(--brand, #10b981)',
+                color: 'var(--brand, hsl(160 84% 39%))',
               }}
               icon={<Lucide.Sparkles size={11} />}
             >
@@ -291,14 +291,9 @@ export const ModelConfigPanel: React.FC<{
           </Button>
           <Button
             type="button"
-            variant="secondary"
+            variant="primary"
             size="sm"
             onClick={saveConfig}
-            style={{
-              background: 'var(--brand, #10b981)',
-              color: '#fff',
-              border: 'none',
-            }}
           >
             保存
           </Button>

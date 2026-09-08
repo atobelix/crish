@@ -208,6 +208,45 @@ impl CostBreakdown {
     pub fn total_as_f64(&self) -> f64 {
         self.total_micros as f64 / 1_000_000.0
     }
+
+    /// 构造权威显式全免账单明细
+    pub fn free(currency: Currency) -> Self {
+        Self {
+            currency,
+            input_micros: 0,
+            output_micros: 0,
+            cache_read_micros: 0,
+            cache_write_micros: 0,
+            total_micros: 0,
+            formatted_total: "免费".to_string(),
+            is_free: true,
+        }
+    }
+
+    /// 根据 Token 用量与模型定价直接生成权威 CostBreakdown（会话流结算入口）
+    pub fn from_usage(
+        pricing_opt: &Option<ModelPricing>,
+        usage: &crate::events::ProviderUsage,
+    ) -> Option<Self> {
+        PricingEngine::calculate_cost_from_usage(pricing_opt, usage)
+    }
+
+    /// 根据详细 Token 计数与模型定价直接生成权威 CostBreakdown
+    pub fn calculate(
+        pricing_opt: &Option<ModelPricing>,
+        prompt_tokens: u64,
+        completion_tokens: u64,
+        cache_read_tokens: u64,
+        cache_write_tokens: u64,
+    ) -> Option<Self> {
+        PricingEngine::calculate_cost(
+            pricing_opt,
+            prompt_tokens,
+            completion_tokens,
+            cache_read_tokens,
+            cache_write_tokens,
+        )
+    }
 }
 
 impl Default for CostBreakdown {
@@ -241,29 +280,22 @@ impl PricingEngine {
     ) -> Option<CostBreakdown> {
         let pricing = pricing_opt.as_ref()?;
 
-        // 显式免费模型判断：所有四项费率均为 0.0
-        if pricing.input == 0.0
+        // 显式免费模型判断：必须且仅当不存在阶梯计费且所有四项费率均为 0.0 时，才允许短路返回全免
+        if pricing.tiers.is_empty()
+            && pricing.input == 0.0
             && pricing.output == 0.0
             && pricing.cache_read.unwrap_or(0.0) == 0.0
             && pricing.cache_write.unwrap_or(0.0) == 0.0
         {
-            return Some(CostBreakdown {
-                currency: pricing.currency,
-                input_micros: 0,
-                output_micros: 0,
-                cache_read_micros: 0,
-                cache_write_micros: 0,
-                total_micros: 0,
-                formatted_total: "免费".to_string(),
-                is_free: true,
-            });
+            return Some(CostBreakdown::free(pricing.currency));
         }
 
         // 分支 1：按张计费模式 (PerImage)
         if pricing.unit == PricingUnit::PerImage {
             let image_count = completion_tokens;
             let rate_micros_per_image = Self::f64_to_micros(pricing.output);
-            let total_micros = (image_count as u128 * rate_micros_per_image as u128) as u64;
+            let product = (image_count as u128) * (rate_micros_per_image as u128);
+            let total_micros = product.min(u64::MAX as u128) as u64;
 
             return Some(CostBreakdown {
                 currency: pricing.currency,
@@ -362,9 +394,46 @@ impl PricingEngine {
         )
     }
 
+    /// 基于 ProviderUsage 与 ModelPricing 计算费用（会话流结算权威入口）
+    pub fn calculate_cost_from_usage(
+        pricing_opt: &Option<ModelPricing>,
+        usage: &crate::events::ProviderUsage,
+    ) -> Option<CostBreakdown> {
+        let prompt_tokens = usage.prompt_tokens.unwrap_or(0);
+        let completion_tokens = usage.completion_tokens.unwrap_or(0);
+        let cache_read_tokens = usage.cache_read_tokens.unwrap_or(0);
+        let cache_write_tokens = usage.cache_write_tokens.unwrap_or(0);
+        Self::calculate_cost(
+            pricing_opt,
+            prompt_tokens,
+            completion_tokens,
+            cache_read_tokens,
+            cache_write_tokens,
+        )
+    }
+
+    /// 基于 ProviderUsage 与 ModelPricingSpec 计算费用（与 catalog_types 无缝互操作）
+    pub fn calculate_cost_from_usage_spec(
+        spec_opt: &Option<crate::models::catalog_types::ModelPricingSpec>,
+        usage: &crate::events::ProviderUsage,
+    ) -> Option<CostBreakdown> {
+        let prompt_tokens = usage.prompt_tokens.unwrap_or(0);
+        let completion_tokens = usage.completion_tokens.unwrap_or(0);
+        let cache_read_tokens = usage.cache_read_tokens.unwrap_or(0);
+        let cache_write_tokens = usage.cache_write_tokens.unwrap_or(0);
+        Self::calculate_cost_from_spec(
+            spec_opt,
+            prompt_tokens,
+            completion_tokens,
+            cache_read_tokens,
+            cache_write_tokens,
+        )
+    }
+
     /// 将费率 (元/1M Tokens) 转换为微元并与 Token 数量定点乘算
     ///
-    /// 使用 u128 防止大 Token 数相乘溢出，加 500_000 实现严格四舍五入除以 1_000_000
+    /// 使用 u128 防止大 Token 数相乘溢出，加 500_000 实现严格四舍五入除以 1_000_000，
+    /// 并在转换为 u64 时使用饱和截断 .min(u64::MAX as u128)，彻底消灭强制 as u64 导致的回绕溢出。
     #[inline]
     pub fn tokens_to_micros(tokens: u64, rate_per_1m: f64) -> u64 {
         if tokens == 0 || !rate_per_1m.is_finite() || rate_per_1m <= 0.0 {
@@ -372,7 +441,9 @@ impl PricingEngine {
         }
         let rate_micros = Self::f64_to_micros(rate_per_1m);
         let product = (tokens as u128) * (rate_micros as u128);
-        ((product + 500_000) / 1_000_000) as u64
+        let rounded = product.saturating_add(500_000);
+        let result = rounded / 1_000_000;
+        result.min(u64::MAX as u128) as u64
     }
 
     /// 浮点数四舍五入转为微元整数 (1.00 -> 1_000_000)
@@ -381,7 +452,12 @@ impl PricingEngine {
         if !val.is_finite() || val <= 0.0 {
             return 0;
         }
-        (val * 1_000_000.0).round() as u64
+        let rounded = (val * 1_000_000.0).round();
+        if rounded >= (u64::MAX as f64) {
+            u64::MAX
+        } else {
+            rounded as u64
+        }
     }
 
     /// 格式化微元为带符号的货币字符串

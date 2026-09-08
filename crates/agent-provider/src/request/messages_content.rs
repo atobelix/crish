@@ -15,7 +15,12 @@ use conex_types::message::AgentMessage;
 use conex_types::tool::ToolOutput;
 use serde_json::{json, Map, Value};
 
+use crate::error::ProviderError;
+
 use super::{ChatContent, ChatContentPart};
+
+#[allow(dead_code)]
+pub type Content = ChatContent;
 
 /// systemPromptAsUserPrefix（对齐 `model:openai-request-build.ts:71-73`）
 pub fn system_prompt_as_user_prefix(system_prompt: &str) -> String {
@@ -259,6 +264,92 @@ pub(crate) fn responses_input_part(part: &ChatContentPart) -> Value {
                 part.insert("detail".to_string(), json!(detail));
             }
             Value::Object(part)
+        }
+    }
+}
+
+/// 校验消息内容所包含的模态是否为当前模型所支持。
+///
+/// 当 `supports_image == false` 且内容中含有 `ImageUrl` 块时，
+/// 立即返回 `ProviderError::InvalidRequest("模型不支持图片多模态输入")`，
+/// 防止盲发到纯文本端点触发上游 400 崩溃。
+#[allow(dead_code)]
+pub fn ensure_content_modalities(
+    content: &Content,
+    supports_image: bool,
+) -> Result<(), ProviderError> {
+    if supports_image {
+        return Ok(());
+    }
+
+    if let ChatContent::Parts(parts) = content {
+        for part in parts {
+            if matches!(part, ChatContentPart::ImageUrl { .. }) {
+                return Err(ProviderError::InvalidRequest {
+                    status: None,
+                    message: "模型不支持图片多模态输入".to_string(),
+                });
+            }
+        }
+    }
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_ensure_content_modalities_text_only() {
+        let content = Content::Text("hello world".to_string());
+        assert!(ensure_content_modalities(&content, false).is_ok());
+        assert!(ensure_content_modalities(&content, true).is_ok());
+    }
+
+    #[test]
+    fn test_ensure_content_modalities_text_parts() {
+        let content = Content::Parts(vec![ChatContentPart::Text {
+            text: "only text".to_string(),
+            cache_control: None,
+        }]);
+        assert!(ensure_content_modalities(&content, false).is_ok());
+        assert!(ensure_content_modalities(&content, true).is_ok());
+    }
+
+    #[test]
+    fn test_ensure_content_modalities_image_supported() {
+        let content = Content::Parts(vec![
+            ChatContentPart::Text {
+                text: "here is an image".to_string(),
+                cache_control: None,
+            },
+            ChatContentPart::ImageUrl {
+                url: "https://example.com/test.png".to_string(),
+                detail: Some("auto".to_string()),
+            },
+        ]);
+        assert!(ensure_content_modalities(&content, true).is_ok());
+    }
+
+    #[test]
+    fn test_ensure_content_modalities_image_unsupported_fails() {
+        let content = Content::Parts(vec![
+            ChatContentPart::Text {
+                text: "here is an image".to_string(),
+                cache_control: None,
+            },
+            ChatContentPart::ImageUrl {
+                url: "https://example.com/test.png".to_string(),
+                detail: None,
+            },
+        ]);
+        let err = ensure_content_modalities(&content, false).unwrap_err();
+        match err {
+            ProviderError::InvalidRequest { message, .. } => {
+                assert_eq!(message, "模型不支持图片多模态输入");
+            }
+            other => panic!("unexpected error variant: {:?}", other),
         }
     }
 }

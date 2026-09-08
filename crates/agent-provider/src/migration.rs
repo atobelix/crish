@@ -160,12 +160,8 @@ impl ConfigMigrationManager {
 
         fs::write(&tmp_path, &migrated_yaml_str)?;
 
-        // 步骤 5: 原子重命名覆盖目标文件
-        if let Err(_e) = fs::rename(&tmp_path, config_path) {
-            // Windows 平台容灾：若目标已存在导致 rename 失败，先移除原目标再 rename
-            let _ = fs::remove_file(config_path);
-            fs::rename(&tmp_path, config_path)?;
-        }
+        // 步骤 5: 原子重命名覆盖目标文件（Windows 3 阶段防丢失容灾替换）
+        Self::atomic_replace(&tmp_path, config_path)?;
 
         tracing::info!(
             "[Migration] 迁移原子完成！已将 {} 个模型聚类至树状供应商主体",
@@ -218,6 +214,41 @@ impl ConfigMigrationManager {
         }
 
         Ok(backup_path)
+    }
+
+    /// 安全替换目标文件，消除 Windows 平台先删后移的物理丢失崩溃窗口
+    pub fn atomic_replace(tmp_path: &Path, target: &Path) -> Result<(), MigrationError> {
+        // 先尝试直接原子重命名（Unix 或目标不存在时直接成功）
+        if fs::rename(tmp_path, target).is_ok() {
+            return Ok(());
+        }
+
+        // Windows 3 阶段安全替换：
+        // 阶段 1：先将原目标安全改名为临时暂存文件 .roll.bak（绝不在改名前删除目标）
+        let pid = std::process::id();
+        let target_name = target
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("models.yaml");
+        let roll_bak_path = target.with_file_name(format!("{}.{}.roll.bak", target_name, pid));
+
+        if roll_bak_path.exists() {
+            let _ = fs::remove_file(&roll_bak_path);
+        }
+
+        fs::rename(target, &roll_bak_path)?;
+
+        // 阶段 2：将新文件重命名为目标路径
+        if let Err(rename_err) = fs::rename(tmp_path, target) {
+            // 提交失败时执行原子回滚，将 .roll.bak 恢复至目标路径
+            let _ = fs::rename(&roll_bak_path, target);
+            let _ = fs::remove_file(tmp_path);
+            return Err(MigrationError::Io(rename_err));
+        }
+
+        // 阶段 3：成功提交后清理临时暂存文件
+        let _ = fs::remove_file(&roll_bak_path);
+        Ok(())
     }
 
     /// 获取本地时间戳字符串 (%Y%m%d_%H%M%S)
@@ -311,6 +342,15 @@ impl ConfigMigrationManager {
                     }
                 }
 
+                // 若旧模型持有 providerHeaders/provider_headers，且 Provider 尚未设置 headers，迁移至 Provider
+                if let Some(prov_headers) = m.get("providerHeaders").or_else(|| m.get("provider_headers")) {
+                    if let Some(prov_obj) = provider_entry.as_object_mut() {
+                        if !prov_obj.contains_key("headers") {
+                            prov_obj.insert("headers".to_string(), prov_headers.clone());
+                        }
+                    }
+                }
+
                 // 提取模型核心参数
                 let model_id = m
                     .get("id")
@@ -361,8 +401,25 @@ impl ConfigMigrationManager {
                 let modalities = if let Some(existing_mod) = m.get("modalities") {
                     existing_mod.clone()
                 } else {
+                    let mut input_mods = vec![json!("text")];
+                    let has_img = m.get("capabilities")
+                        .and_then(|c| c.get("image"))
+                        .and_then(|v| v.as_bool())
+                        .or_else(|| m.get("image").and_then(|v| v.as_bool()))
+                        .unwrap_or(false);
+                    let has_vid = m.get("capabilities")
+                        .and_then(|c| c.get("video"))
+                        .and_then(|v| v.as_bool())
+                        .or_else(|| m.get("video").and_then(|v| v.as_bool()))
+                        .unwrap_or(false);
+                    if has_img {
+                        input_mods.push(json!("image"));
+                    }
+                    if has_vid {
+                        input_mods.push(json!("video"));
+                    }
                     json!({
-                        "input": ["text"],
+                        "input": input_mods,
                         "output": ["text"]
                     })
                 };
@@ -376,6 +433,31 @@ impl ConfigMigrationManager {
 
                 if !thinking_map.is_empty() {
                     model_spec_map.insert("thinking".to_string(), Value::Object(thinking_map));
+                }
+
+                // 补全模型 capabilities 迁移（tools, image, video）
+                let mut caps_map = match m.get("capabilities").and_then(|c| c.as_object()) {
+                    Some(obj) => obj.clone(),
+                    None => serde_json::Map::new(),
+                };
+                if let Some(tools) = m.get("tools").and_then(|v| v.as_bool()) {
+                    caps_map.entry("tools".to_string()).or_insert_with(|| json!(tools));
+                }
+                if let Some(image) = m.get("image").and_then(|v| v.as_bool()) {
+                    caps_map.entry("image".to_string()).or_insert_with(|| json!(image));
+                }
+                if let Some(video) = m.get("video").and_then(|v| v.as_bool()) {
+                    caps_map.entry("video".to_string()).or_insert_with(|| json!(video));
+                }
+                if !caps_map.is_empty() {
+                    model_spec_map.insert("capabilities".to_string(), Value::Object(caps_map));
+                } else if let Some(raw_caps) = m.get("capabilities") {
+                    model_spec_map.insert("capabilities".to_string(), raw_caps.clone());
+                }
+
+                // 保留模型级 headers
+                if let Some(headers) = m.get("headers") {
+                    model_spec_map.insert("headers".to_string(), headers.clone());
                 }
 
                 // 若原模型已有价格定义，予以保留
@@ -393,6 +475,17 @@ impl ConfigMigrationManager {
                     .and_then(|v| v.as_array_mut())
                 {
                     models_list.push(Value::Object(model_spec_map));
+                }
+            }
+        }
+
+        // 若根对象中包含顶层全局 headers，为尚未配置 headers 的 Provider 予以保留补齐
+        if let Some(global_headers) = old.get("headers") {
+            for prov in providers_map.values_mut() {
+                if let Some(prov_obj) = prov.as_object_mut() {
+                    if !prov_obj.contains_key("headers") {
+                        prov_obj.insert("headers".to_string(), global_headers.clone());
+                    }
                 }
             }
         }
@@ -483,3 +576,115 @@ impl ConfigMigrationManager {
 #[cfg(test)]
 #[path = "migration_tests.rs"]
 mod migration_tests;
+
+#[cfg(test)]
+mod migration_hardening_tests {
+    use super::*;
+
+    #[test]
+    fn test_capabilities_and_headers_migration_retention() {
+        let legacy_json = json!({
+            "schema_version": 1,
+            "headers": {
+                "X-Global-Key": "global-secret"
+            },
+            "models": [
+                {
+                    "id": "custom-vision-model",
+                    "vendor": "custom-ai",
+                    "providerHeaders": {
+                        "X-Vendor-Auth": "Bearer token123"
+                    },
+                    "headers": {
+                        "X-Model-Direct": "model-opt"
+                    },
+                    "capabilities": {
+                        "tools": true,
+                        "image": true,
+                        "video": false
+                    }
+                },
+                {
+                    "id": "flat-tools-model",
+                    "vendor": "custom-ai",
+                    "tools": true
+                }
+            ]
+        });
+
+        let (migrated, total_models) =
+            ConfigMigrationManager::transform_flat_to_tree(&legacy_json).expect("迁移转换应当成功");
+        assert_eq!(total_models, 2);
+
+        let providers = migrated.get("providers").and_then(|v| v.as_object()).unwrap();
+        let provider = providers.get("custom-ai").expect("custom-ai 供应商存在");
+
+        // 验证供应商级 headers
+        let prov_headers = provider.get("headers").expect("供应商级 headers 存在");
+        assert_eq!(
+            prov_headers.get("X-Vendor-Auth").and_then(|v| v.as_str()),
+            Some("Bearer token123")
+        );
+
+        let models = provider.get("models").and_then(|v| v.as_array()).unwrap();
+        let m1 = models
+            .iter()
+            .find(|m| m.get("id").and_then(|v| v.as_str()) == Some("custom-vision-model"))
+            .unwrap();
+
+        // 验证模型级 headers
+        let m1_headers = m1.get("headers").expect("模型级 headers 存在");
+        assert_eq!(
+            m1_headers.get("X-Model-Direct").and_then(|v| v.as_str()),
+            Some("model-opt")
+        );
+
+        // 验证 capabilities (tools, image, video) 完整迁移
+        let caps = m1.get("capabilities").expect("capabilities 存在");
+        assert_eq!(caps.get("tools").and_then(|v| v.as_bool()), Some(true));
+        assert_eq!(caps.get("image").and_then(|v| v.as_bool()), Some(true));
+        assert_eq!(caps.get("video").and_then(|v| v.as_bool()), Some(false));
+
+        // 验证 modalities 自动补齐含 image
+        let modalities = m1.get("modalities").expect("modalities 存在");
+        let input_mods: Vec<String> = modalities
+            .get("input")
+            .and_then(|v| v.as_array())
+            .unwrap()
+            .iter()
+            .filter_map(|v| v.as_str().map(|s| s.to_string()))
+            .collect();
+        assert!(input_mods.contains(&"image".to_string()));
+
+        let m2 = models
+            .iter()
+            .find(|m| m.get("id").and_then(|v| v.as_str()) == Some("flat-tools-model"))
+            .unwrap();
+        let m2_caps = m2.get("capabilities").expect("flat-tools-model capabilities 存在");
+        assert_eq!(m2_caps.get("tools").and_then(|v| v.as_bool()), Some(true));
+    }
+
+    #[test]
+    fn test_atomic_replace_clean_commit_and_cleanup() {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "conex_atomic_replace_test_{}_{}",
+            std::process::id(),
+            ConfigMigrationManager::current_local_timestamp()
+        ));
+        let _ = fs::create_dir_all(&temp_dir);
+
+        let target_path = temp_dir.join("models.yaml");
+        let tmp_path = temp_dir.join("models.yaml.tmp");
+
+        fs::write(&target_path, "old: 1").unwrap();
+        fs::write(&tmp_path, "new: 2").unwrap();
+
+        ConfigMigrationManager::atomic_replace(&tmp_path, &target_path).expect("原子替换应当成功");
+
+        assert!(!tmp_path.exists(), "临时文件必须已被移动");
+        let content = fs::read_to_string(&target_path).unwrap();
+        assert_eq!(content, "new: 2");
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+}

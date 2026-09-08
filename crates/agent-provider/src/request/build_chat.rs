@@ -9,7 +9,10 @@ use serde_json::{json, Map, Value};
 
 use crate::config::Endpoint;
 
-use super::{ChatCompletionsRequestOptions, RequestBuildContext};
+use super::dialect::{self, assemble_thinking_dialect, DialectBuildOptions, ThinkingDialectFormat};
+use super::{
+    ChatCompletionsRequestOptions, ReasoningEffort, ReasoningVendor, RequestBuildContext,
+};
 use crate::request::cache::{
     allocate_breakpoints, apply_cache_controls, retention_wire_value, BreakpointPlan,
     CacheMechanism,
@@ -43,35 +46,108 @@ pub fn build_chat_completions_request_body(
         body.insert(field.as_str().to_string(), json!(value));
     }
 
-    // reasoning 字段（vendor 分支；02 §五 #2）
-    if let Some(reasoning) = reasoning_effort_object(
-        Endpoint::ChatCompletions,
-        opts.model.as_deref().unwrap_or(""),
-        opts.reasoning_effort,
-        opts.reasoning_effort_format,
-        opts.vendor,
-    ) {
-        merge_object(&mut body, &reasoning);
-    }
-
-    // 01 D5：per-request thinkingIntensity 优先注入，清除 legacy reasoning 字段
-    // （对齐 `model:provider-openai-class.ts:551-585`：统一模块注入/覆盖/清空，
-    // 消除 budgetDifficulty 语义混淆；"effort" 为 G7 自适应思考的顶层档位字段，
-    // 一并清除防止 legacy 注入残留）
-    if let Some(intensity) = opts.thinking_intensity {
-        let capability = infer_thinking_capability(opts.model.as_deref().unwrap_or(""));
-        let params = resolve_thinking_params(&capability, intensity, Endpoint::ChatCompletions);
-        for key in [
-            "reasoning_effort",
-            "reasoning",
-            "thinking",
-            "generation_config",
-            "effort",
-            "enable_thinking",
-        ] {
-            body.remove(key);
+    // ── 思考推理参数组装：正式接入 assemble_thinking_dialect（彻底废除优先查 MODEL_SERIES_CAPABILITIES）──
+    let effective_effort: Option<dialect::ReasoningEffort> = if let Some(intensity) = opts.thinking_intensity {
+        Some(intensity.into())
+    } else if let Some(effort) = opts.reasoning_effort {
+        match effort {
+            ReasoningEffort::Off => Some(dialect::ReasoningEffort::Off),
+            ReasoningEffort::Auto => None,
+            other => Some(other.into()),
         }
-        merge_object(&mut body, &params);
+    } else {
+        None
+    };
+
+    if opts.thinking_format.is_some() || opts.thinking_map.is_some() {
+        // 显式配置驱动：100% 由 assemble_thinking_dialect 产出，彻底拔除模型名启发式盲猜
+        if let Some(effort) = effective_effort {
+            let dialect_opts = DialectBuildOptions {
+                effort,
+                format: opts
+                    .thinking_format
+                    .map(ThinkingDialectFormat::from)
+                    .unwrap_or(ThinkingDialectFormat::OpenAiEffort),
+                max_output_tokens: opts.max_tokens.unwrap_or(64000),
+                thinking_map: opts.thinking_map.as_ref(),
+            };
+            let (thinking_val, elevated_tokens) = assemble_thinking_dialect(&dialect_opts);
+            if let Some(val) = thinking_val {
+                merge_object(&mut body, &val);
+            }
+            if let Some(elevated) = elevated_tokens {
+                if let (Some(field), Some(cur_max)) = (opts.max_tokens_field, opts.max_tokens) {
+                    body.insert(field.as_str().to_string(), json!(cur_max.max(elevated)));
+                }
+            }
+        }
+    } else {
+        // 兜底分支：未显式配置 thinking_format / thinking_map 时的兼容处理
+        if let Some(vendor) = opts.vendor {
+            if vendor == ReasoningVendor::Anthropic {
+                if let Some(reasoning) = reasoning_effort_object(
+                    Endpoint::ChatCompletions,
+                    opts.model.as_deref().unwrap_or(""),
+                    opts.reasoning_effort,
+                    opts.reasoning_effort_format,
+                    opts.vendor,
+                ) {
+                    merge_object(&mut body, &reasoning);
+                }
+            } else if let Some(effort) = effective_effort {
+                let dialect_opts = DialectBuildOptions {
+                    effort,
+                    format: ThinkingDialectFormat::OpenAiEffort,
+                    max_output_tokens: opts.max_tokens.unwrap_or(64000),
+                    thinking_map: None,
+                };
+                let (thinking_val, _) = assemble_thinking_dialect(&dialect_opts);
+                if let Some(val) = thinking_val {
+                    merge_object(&mut body, &val);
+                }
+            }
+        } else if let Some(effort) = effective_effort {
+            let dialect_opts = DialectBuildOptions {
+                effort,
+                format: ThinkingDialectFormat::OpenAiEffort,
+                max_output_tokens: opts.max_tokens.unwrap_or(64000),
+                thinking_map: None,
+            };
+            let (thinking_val, _) = assemble_thinking_dialect(&dialect_opts);
+            if let Some(val) = thinking_val {
+                merge_object(&mut body, &val);
+            }
+        }
+
+        // 兼容存量 thinkingIntensity（针对未配置 format 的 Anthropic / Gemini / 自适应模型）
+        if let Some(intensity) = opts.thinking_intensity {
+            let capability = infer_thinking_capability(opts.model.as_deref().unwrap_or(""));
+            if capability.supported {
+                let params = resolve_thinking_params(&capability, intensity, Endpoint::ChatCompletions);
+                for key in [
+                    "reasoning_effort",
+                    "reasoning",
+                    "thinking",
+                    "generation_config",
+                    "effort",
+                    "enable_thinking",
+                ] {
+                    body.remove(key);
+                }
+                merge_object(&mut body, &params);
+            } else {
+                for key in [
+                    "reasoning_effort",
+                    "reasoning",
+                    "thinking",
+                    "generation_config",
+                    "effort",
+                    "enable_thinking",
+                ] {
+                    body.remove(key);
+                }
+            }
+        }
     }
 
     // ── P2 步骤 3（T-15）：缓存顶层字段注入（compactObject：None 一律省略）──
@@ -191,5 +267,76 @@ fn merge_object(body: &mut Map<String, Value>, extra: &Value) {
         for (key, value) in obj {
             body.insert(key.clone(), value.clone());
         }
+    }
+}
+
+#[cfg(test)]
+mod dialect_wiring_tests {
+    use super::*;
+    use crate::models::catalog_types::ThinkingFormat;
+    use indexmap::IndexMap;
+
+    #[test]
+    fn test_anti_dead_feature_flattened_thinking_map_driven() {
+        // 断言 2（Anti-Dead-Feature Gate）：当传入 thinking 拍平字典映射时，生成的 JSON 请求体中 reasoning_effort 必须严格由字典驱动
+        let mut map = IndexMap::new();
+        map.insert("Low".to_string(), "custom-low-wire".to_string());
+        map.insert("High".to_string(), "custom-high-wire".to_string());
+
+        let opts = ChatCompletionsRequestOptions {
+            model: Some("custom-model".to_string()),
+            reasoning_effort: Some(ReasoningEffort::High),
+            thinking_map: Some(map),
+            ..ChatCompletionsRequestOptions::default()
+        };
+        let body = build_chat_completions_request_body(&opts, &RequestBuildContext::default());
+        assert_eq!(body["reasoning_effort"], "custom-high-wire");
+    }
+
+    #[test]
+    fn test_unknown_model_zero_degradation_deepseek_native() {
+        // 断言 3（未知模型零降级零崩溃断言）：虚构模型名称 + thinkingFormat: "deepseek"
+        let opts = ChatCompletionsRequestOptions {
+            model: Some("custom-proxy/unicorn-reasoner".to_string()),
+            reasoning_effort: Some(ReasoningEffort::High),
+            thinking_format: Some(ThinkingFormat::DeepSeek),
+            ..ChatCompletionsRequestOptions::default()
+        };
+        let body = build_chat_completions_request_body(&opts, &RequestBuildContext::default());
+        assert_eq!(body["thinking"], json!({ "type": "enabled" }));
+        assert!(body.get("reasoning_effort").is_none());
+    }
+
+    #[test]
+    fn test_unknown_model_deepseek_native_disabled_when_off() {
+        let opts = ChatCompletionsRequestOptions {
+            model: Some("custom-proxy/unicorn-reasoner".to_string()),
+            reasoning_effort: Some(ReasoningEffort::Off),
+            thinking_format: Some(ThinkingFormat::DeepSeek),
+            ..ChatCompletionsRequestOptions::default()
+        };
+        let body = build_chat_completions_request_body(&opts, &RequestBuildContext::default());
+        assert_eq!(body["thinking"], json!({ "type": "disabled" }));
+    }
+
+    #[test]
+    fn test_unknown_model_qwen_bailian_boolean() {
+        let opts_on = ChatCompletionsRequestOptions {
+            model: Some("my-gateway/qwen-omni".to_string()),
+            reasoning_effort: Some(ReasoningEffort::Medium),
+            thinking_format: Some(ThinkingFormat::Qwen),
+            ..ChatCompletionsRequestOptions::default()
+        };
+        let body_on = build_chat_completions_request_body(&opts_on, &RequestBuildContext::default());
+        assert_eq!(body_on["enable_thinking"], true);
+
+        let opts_off = ChatCompletionsRequestOptions {
+            model: Some("my-gateway/qwen-omni".to_string()),
+            reasoning_effort: Some(ReasoningEffort::Off),
+            thinking_format: Some(ThinkingFormat::Qwen),
+            ..ChatCompletionsRequestOptions::default()
+        };
+        let body_off = build_chat_completions_request_body(&opts_off, &RequestBuildContext::default());
+        assert_eq!(body_off["enable_thinking"], false);
     }
 }

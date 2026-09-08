@@ -27,12 +27,13 @@ use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-use super::reject::{DegradePolicy, ReasoningEffortState, ReasoningReject};
-use super::vendor_wire::normalize_reasoning_effort;
-use super::{
-    ReasoningEffort as LegacyReasoningEffort, ReasoningFormat, ReasoningVendor, ThinkingCapability,
-};
 use crate::config::Endpoint;
+use crate::request::vendor::{
+    effort_to_budget_tokens, effort_to_gemini_thinking_level, normalize_reasoning_effort,
+    resolve_reasoning_level, DegradePolicy, ReasoningEffort as LegacyReasoningEffort,
+    ReasoningEffortState, ReasoningFormat, ReasoningReject, ReasoningVendor, ThinkingCapability,
+    ThinkingIntensity,
+};
 
 /// 2026 标准化思考强度等级（纯英文白名单，无中文污染）
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -135,6 +136,20 @@ impl From<LegacyReasoningEffort> for ReasoningEffort {
             LegacyReasoningEffort::High => Self::High,
             LegacyReasoningEffort::Xhigh => Self::XHigh,
             LegacyReasoningEffort::Max => Self::Max,
+        }
+    }
+}
+
+impl From<ThinkingIntensity> for ReasoningEffort {
+    fn from(intensity: ThinkingIntensity) -> Self {
+        match intensity {
+            ThinkingIntensity::Off => Self::Off,
+            ThinkingIntensity::Minimal => Self::Minimal,
+            ThinkingIntensity::Low => Self::Low,
+            ThinkingIntensity::Medium => Self::Medium,
+            ThinkingIntensity::High => Self::High,
+            ThinkingIntensity::Xhigh => Self::XHigh,
+            ThinkingIntensity::Max => Self::Max,
         }
     }
 }
@@ -326,7 +341,7 @@ pub fn build_reasoning_wire(
     }
 
     // 1. T4.1 三态 → 待发送档位（拒绝/省略/降级收敛于此）。
-    let active = match super::resolve_reasoning_level(effort, capability, policy)? {
+    let active = match resolve_reasoning_level(effort, capability, policy)? {
         Some(level) => level,
         None => return Ok(None),
     };
@@ -340,6 +355,13 @@ pub fn build_reasoning_wire(
     Ok(Some(dialect_wire(
         endpoint, active, &wire, capability, format,
     )))
+}
+
+fn adaptive_effort_wire(effort: LegacyReasoningEffort) -> &'static str {
+    match effort {
+        LegacyReasoningEffort::Minimal => "low",
+        other => other.as_str(),
+    }
 }
 
 fn dialect_wire(
@@ -363,7 +385,7 @@ fn dialect_wire(
         }),
         F::ThinkingAdaptive => json!({
             "thinking": { "type": "adaptive", "display": "summarized" },
-            "effort": super::adaptive_effort_wire(effort),
+            "effort": adaptive_effort_wire(effort),
         }),
         F::ThinkingLevel => json!({
             "generation_config": { "thinking_level": level_for(effort) },
@@ -390,11 +412,11 @@ fn vocabulary_vendor(
 }
 
 fn budget_for(effort: LegacyReasoningEffort) -> u64 {
-    super::effort_to_budget_tokens(effort)
+    effort_to_budget_tokens(effort)
 }
 
 fn level_for(effort: LegacyReasoningEffort) -> &'static str {
-    super::effort_to_gemini_thinking_level(effort)
+    effort_to_gemini_thinking_level(effort)
 }
 
 #[cfg(test)]
