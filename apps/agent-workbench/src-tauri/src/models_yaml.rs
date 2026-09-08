@@ -32,6 +32,8 @@ pub enum ModelsYamlProtocol {
     OpenAiResponses,
     #[serde(rename = "anthropic/messages")]
     AnthropicMessages,
+    #[serde(rename = "google/generate-content")]
+    GoogleGenerateContent,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -103,8 +105,98 @@ pub struct ModelsYamlModel {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct ModelsYamlFile {
+#[serde(rename_all = "camelCase")]
+pub struct ModelsYamlPricingV2 {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub currency: Option<ModelsYamlCurrency>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unit: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_read: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_write: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub per_image: Option<f64>,
+    // 兼容 v1 命名
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input_per_m_tok: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output_per_m_tok: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_read_per_m_tok: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_write_per_m_tok: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub billing_unit: Option<ModelsYamlBillingUnit>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub per_image_cost: Option<f64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelsYamlModelV2 {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub protocol: Option<ModelsYamlProtocol>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context_window: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_output_tokens: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thinking: Option<serde_yaml::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pricing: Option<ModelsYamlPricingV2>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub modalities: Option<serde_yaml::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capabilities: Option<ModelsYamlCapabilities>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub compat: Option<serde_yaml::Value>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelsYamlProviderV2 {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base_url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub protocol: Option<ModelsYamlProtocol>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub api_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub headers: Option<std::collections::BTreeMap<String, String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub compat: Option<serde_yaml::Value>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub models: Vec<ModelsYamlModelV2>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UnifiedModelsYamlFile {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub providers: Option<std::collections::BTreeMap<String, ModelsYamlProviderV2>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub models: Option<Vec<ModelsYamlModel>>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ParsedModelsYaml {
+    pub version: Option<u32>,
+    pub providers: Option<std::collections::BTreeMap<String, ModelsYamlProviderV2>>,
     pub models: Vec<ModelsYamlModel>,
 }
 
@@ -131,6 +223,10 @@ pub struct ReadModelsYamlResult {
     pub seeded: bool,
     /// 磁盘内容解析失败时的诊断（content 原样返回，编辑器可修复后保存）
     pub parse_error: Option<ModelsYamlDiagnostic>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub providers: Option<std::collections::BTreeMap<String, ModelsYamlProviderV2>>,
 }
 
 #[derive(Debug, Serialize)]
@@ -147,6 +243,10 @@ pub struct ValidateModelsYamlResult {
 pub struct SaveModelsYamlResult {
     pub path: String,
     pub models: Vec<ModelsYamlModel>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub providers: Option<std::collections::BTreeMap<String, ModelsYamlProviderV2>>,
 }
 
 // ===== 路径解析 =====
@@ -165,10 +265,10 @@ fn models_yaml_path() -> Result<PathBuf, CoreError> {
 
 // ===== 解析与校验 =====
 
-/// 解析 + 语义校验（model/vendor 非空、model 全表唯一）。
+/// 解析 + 语义校验（支持 v2 树状与 v1 扁平结构）。
 /// 失败返回结构化诊断（serde_yaml 错误透传行/列号）。
-fn parse_models_yaml(content: &str) -> Result<Vec<ModelsYamlModel>, ModelsYamlDiagnostic> {
-    let file: ModelsYamlFile = match serde_yaml::from_str(content) {
+fn parse_models_yaml(content: &str) -> Result<ParsedModelsYaml, ModelsYamlDiagnostic> {
+    let file: UnifiedModelsYamlFile = match serde_yaml::from_str(content) {
         Ok(f) => f,
         Err(err) => {
             let (line, column) = err
@@ -183,32 +283,103 @@ fn parse_models_yaml(content: &str) -> Result<Vec<ModelsYamlModel>, ModelsYamlDi
         }
     };
 
-    let mut seen: std::collections::HashSet<&str> = std::collections::HashSet::new();
-    for entry in &file.models {
-        if entry.model.trim().is_empty() {
-            return Err(ModelsYamlDiagnostic {
-                line: None,
-                column: None,
-                message: "存在 model 为空的条目".into(),
-            });
-        }
-        if entry.vendor.trim().is_empty() {
-            return Err(ModelsYamlDiagnostic {
-                line: None,
-                column: None,
-                message: format!("模型 {} 缺少 vendor", entry.model),
-            });
-        }
-        if !seen.insert(entry.model.as_str()) {
-            return Err(ModelsYamlDiagnostic {
-                line: None,
-                column: None,
-                message: format!("model 条目重复: {}", entry.model),
-            });
-        }
-    }
+    if let Some(providers) = file.providers {
+        let mut flattened_models = Vec::new();
+        let mut seen_models = std::collections::HashSet::new();
 
-    Ok(file.models)
+        for (provider_id, provider) in &providers {
+            if provider_id.trim().is_empty() {
+                return Err(ModelsYamlDiagnostic {
+                    line: None,
+                    column: None,
+                    message: "存在供应商标识为空的条目".into(),
+                });
+            }
+            for m in &provider.models {
+                let model_id = m.id.as_deref().or(m.model.as_deref()).unwrap_or("");
+                if model_id.trim().is_empty() {
+                    return Err(ModelsYamlDiagnostic {
+                        line: None,
+                        column: None,
+                        message: format!("供应商 {provider_id} 存在 ID 为空的模型"),
+                    });
+                }
+                let key = format!("{provider_id}::{model_id}");
+                if !seen_models.insert(key) {
+                    return Err(ModelsYamlDiagnostic {
+                        line: None,
+                        column: None,
+                        message: format!("供应商 {provider_id} 中模型 ID 重复: {model_id}"),
+                    });
+                }
+
+                let pricing = m.pricing.as_ref().map(|p| ModelsYamlPricing {
+                    input_per_m_tok: p.input.or(p.input_per_m_tok),
+                    output_per_m_tok: p.output.or(p.output_per_m_tok),
+                    cache_read_per_m_tok: p.cache_read.or(p.cache_read_per_m_tok),
+                    cache_write_per_m_tok: p.cache_write.or(p.cache_write_per_m_tok),
+                    billing_unit: p.billing_unit,
+                    per_image_cost: p.per_image.or(p.per_image_cost),
+                    currency: p.currency,
+                });
+
+                flattened_models.push(ModelsYamlModel {
+                    model: model_id.to_string(),
+                    vendor: provider_id.clone(),
+                    vendor_display_name: provider.display_name.clone(),
+                    display_name: m.display_name.clone(),
+                    context_window: m.context_window,
+                    max_output_tokens: m.max_output_tokens,
+                    protocol: m.protocol.or(provider.protocol),
+                    capabilities: m.capabilities.clone(),
+                    pricing,
+                });
+            }
+        }
+
+        Ok(ParsedModelsYaml {
+            version: file.version.or(Some(2)),
+            providers: Some(providers),
+            models: flattened_models,
+        })
+    } else if let Some(models) = file.models {
+        let mut seen = std::collections::HashSet::new();
+        for entry in &models {
+            if entry.model.trim().is_empty() {
+                return Err(ModelsYamlDiagnostic {
+                    line: None,
+                    column: None,
+                    message: "存在 model 为空的条目".into(),
+                });
+            }
+            if entry.vendor.trim().is_empty() {
+                return Err(ModelsYamlDiagnostic {
+                    line: None,
+                    column: None,
+                    message: format!("模型 {} 缺少 vendor", entry.model),
+                });
+            }
+            if !seen.insert(entry.model.as_str()) {
+                return Err(ModelsYamlDiagnostic {
+                    line: None,
+                    column: None,
+                    message: format!("model 条目重复: {}", entry.model),
+                });
+            }
+        }
+        Ok(ParsedModelsYaml {
+            version: file.version,
+            providers: None,
+            models,
+        })
+    } else {
+        // 空文件、仅含注释、或 version: 2 单行（符合默认空供应商规范）
+        Ok(ParsedModelsYaml {
+            version: file.version.or(Some(2)),
+            providers: Some(std::collections::BTreeMap::new()),
+            models: Vec::new(),
+        })
+    }
 }
 
 /// 诊断 → `CoreError::InvalidInput`（保存面唯一错误通道，行/列写入消息文本）
@@ -237,9 +408,9 @@ fn read_models_yaml_at(path: &Path, template: &str) -> Result<ReadModelsYamlResu
         (template.to_string(), true)
     };
 
-    let (models, parse_error) = match parse_models_yaml(&content) {
-        Ok(models) => (models, None),
-        Err(diag) => (Vec::new(), Some(diag)),
+    let (models, version, providers, parse_error) = match parse_models_yaml(&content) {
+        Ok(parsed) => (parsed.models, parsed.version, parsed.providers, None),
+        Err(diag) => (Vec::new(), None, None, Some(diag)),
     };
 
     Ok(ReadModelsYamlResult {
@@ -249,6 +420,8 @@ fn read_models_yaml_at(path: &Path, template: &str) -> Result<ReadModelsYamlResu
         template: template.to_string(),
         seeded,
         parse_error,
+        version,
+        providers,
     })
 }
 
@@ -270,14 +443,20 @@ fn validate_models_yaml_content(content: &str) -> ValidateModelsYamlResult {
     }
 }
 
-/// 保存：先校验（fail-closed）→ conex-fs 原子写
+/// 保存：先校验（fail-closed）→ conex-fs 原子写 → 触发协议层热重载
 fn save_models_yaml_at(path: &Path, content: &str) -> Result<SaveModelsYamlResult, CoreError> {
-    let models = parse_models_yaml(content).map_err(|diag| diagnostic_to_core_error(&diag))?;
+    let parsed = parse_models_yaml(content).map_err(|diag| diagnostic_to_core_error(&diag))?;
     conex_fs::atomic_write_file(path, content.as_bytes())
         .map_err(|e| CoreError::Io(format!("写入 models.yaml 失败: {e}")))?;
+
+    // 触发协议层运行时目录热重载
+    crate::engine_provider::protocol::reload_live_catalog();
+
     Ok(SaveModelsYamlResult {
         path: path.display().to_string(),
-        models,
+        models: parsed.models,
+        version: parsed.version,
+        providers: parsed.providers,
     })
 }
 
@@ -330,14 +509,27 @@ mod tests {
 
     #[test]
     fn template_parses_and_is_wellformed() {
-        let models = parse_models_yaml(sample_yaml()).expect("内置模板必须可解析");
-        assert!(!models.is_empty(), "模板不应为空");
-        let ids: std::collections::HashSet<&str> =
-            models.iter().map(|m| m.model.as_str()).collect();
-        assert_eq!(ids.len(), models.len(), "模板 model 必须唯一");
-        for m in &models {
-            assert!(!m.vendor.trim().is_empty(), "{} 缺少 vendor", m.model);
-        }
+        let parsed = parse_models_yaml(sample_yaml()).expect("内置模板必须可解析");
+        assert!(parsed.models.is_empty(), "默认模板必须保持干干净净的空 providers，不带任何默认垃圾");
+        assert_eq!(parsed.version, Some(2));
+        assert!(parsed.providers.as_ref().map(|p| p.is_empty()).unwrap_or(false));
+
+        let populated = r#"
+version: 2
+providers:
+  deepseek:
+    displayName: "DeepSeek"
+    baseUrl: "https://api.deepseek.com"
+    protocol: "openai/chat"
+    models:
+      - id: "deepseek-v4-pro"
+        displayName: "DeepSeek V4 Pro"
+        contextWindow: 1048576
+"#;
+        let res = parse_models_yaml(populated).expect("v2 树状结构必须可解析");
+        assert_eq!(res.models.len(), 1);
+        assert_eq!(res.models[0].model, "deepseek-v4-pro");
+        assert_eq!(res.models[0].vendor, "deepseek");
     }
 
     #[test]
@@ -349,7 +541,7 @@ mod tests {
         assert!(first.seeded);
         assert!(path.exists(), "播种后文件必须落盘");
         assert!(first.parse_error.is_none());
-        assert!(!first.models.is_empty());
+        assert!(first.models.is_empty(), "默认空播种模型列表必须为空");
         assert_eq!(first.content, sample_yaml());
 
         // 第二次读取：不重复播种（幂等），内容一致
@@ -410,6 +602,12 @@ mod tests {
     }
 
     #[test]
+    fn validate_accepts_v2_empty_providers() {
+        let res = validate_models_yaml_content("version: 2\nproviders: {}\n");
+        assert!(res.valid, "version: 2, providers: {{}} 是绝对最高规范的默认合法态");
+    }
+
+    #[test]
     fn save_roundtrip_and_atomic_rejects_invalid() {
         let dir = temp_dir("save");
         let path = dir.join(MODELS_YAML_FILENAME);
@@ -417,7 +615,7 @@ mod tests {
         // 合法保存：内容一致
         let saved = save_models_yaml_at(&path, sample_yaml()).expect("合法内容应保存成功");
         assert_eq!(std::fs::read_to_string(&path).unwrap(), sample_yaml());
-        assert!(!saved.models.is_empty());
+        assert!(saved.models.is_empty());
         assert!(saved.path.ends_with(MODELS_YAML_FILENAME));
 
         // 非法保存：报错且原文件不被破坏
@@ -440,7 +638,7 @@ mod tests {
         let path = dir.join("nested").join(MODELS_YAML_FILENAME);
         let res = save_models_yaml_at(&path, sample_yaml()).expect("父目录缺失应自动创建");
         assert!(path.exists());
-        assert!(!res.models.is_empty());
+        assert!(res.models.is_empty());
 
         std::fs::remove_dir_all(&dir).ok();
     }

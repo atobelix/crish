@@ -62,7 +62,13 @@ export const ComposerFusedTrigger: React.FC<ComposerFusedTriggerProps> = ({
   const modelMeta = activeProfile ? getModelMeta(activeProfile.id, modelId) : null;
   const current = modelMeta?.defaultThinkingLevel || stored || 'default';
   const currentLabel = levelLabel(current);
-  const options = thinkingLevelOptionsFor(resolveCatalogEfforts(modelId));
+  const efforts = resolveCatalogEfforts(modelId);
+  const options = thinkingLevelOptionsFor(efforts);
+  const isThinkingModel = Boolean(
+    modelMeta?.capabilities?.reasoning ||
+    (modelMeta?.thinking && Object.keys(modelMeta.thinking).length > 0) ||
+    (efforts?.offered && efforts.offered.length > 0)
+  );
 
   const selectLevel = useCallback(async (value: string) => {
     const prev = getAppSettings();
@@ -96,26 +102,27 @@ export const ComposerFusedTrigger: React.FC<ComposerFusedTriggerProps> = ({
       data-catalog-tick={tick}
     >
       {children ? <div className={styles.left}>{children}</div> : null}
-      {children ? <span className={styles.divider} aria-hidden /> : null}
-      <div className={styles.right}>
-        <Tooltip
-          content={`思考档位：${currentLabel}`}
-          disabled={open}
-          side="top"
-        >
-          <button
-            ref={btnRef}
-            type="button"
-            className={`${styles.thinkBtn} ${open ? styles.isOpen : ''}`}
-            aria-haspopup="menu"
-            aria-expanded={open}
-            aria-label={`思考档位：${currentLabel}`}
-            data-testid="composer-thinking-trigger"
-            onClick={() => toggleExclusiveMenu(open, setOpen, btnRef.current)}
+      {isThinkingModel && children ? <span className={styles.divider} aria-hidden /> : null}
+      {isThinkingModel && (
+        <div className={styles.right}>
+          <Tooltip
+            content={`思考档位：${currentLabel}`}
+            disabled={open}
+            side="top"
           >
-            <span>{currentLabel}</span>
-          </button>
-        </Tooltip>
+            <button
+              ref={btnRef}
+              type="button"
+              className={`${styles.thinkBtn} ${open ? styles.isOpen : ''}`}
+              aria-haspopup="menu"
+              aria-expanded={open}
+              aria-label={`思考档位：${currentLabel}`}
+              data-testid="composer-thinking-trigger"
+              onClick={() => toggleExclusiveMenu(open, setOpen, btnRef.current)}
+            >
+              <span>{currentLabel}</span>
+            </button>
+          </Tooltip>
         {open ? (
           <Menu
             openState={{
@@ -155,6 +162,7 @@ export const ComposerFusedTrigger: React.FC<ComposerFusedTriggerProps> = ({
           />
         ) : null}
       </div>
+      )}
     </div>
   );
 };

@@ -1,16 +1,25 @@
-import React from 'react';
+import React, { useCallback, useMemo } from 'react';
 import * as Lucide from 'lucide-react';
 import type { ModelMeta } from '../../api/modelCatalog';
-import {
-  thinkingLevelOptionsFor,
-  resolveCatalogEfforts,
-} from '../../api/thinkingGear';
-import { Button, Select, Tooltip, Input } from '../ui';
+import { Button, Input } from '../ui';
 import { CapEditor } from './CapEditor';
+import { ModelModalitiesEditor } from './ModelModalitiesEditor';
+import {
+  ModelThinkingEditor,
+  STANDARD_THINKING_PRESET,
+} from './ModelThinkingEditor';
+import { ModelPricingEditor } from './ModelPricingEditor';
 import type { CfgDraft } from './useModelProfilesState';
+import { findAutofillModel } from '../../services/modelsAutofillBaseline';
 import styles from './ModelsSettingsTab.module.css';
 
-/** 模型行展开配置子面板：展示名称 / 上下文长度 / 能力矩阵 / 测试与保存 */
+/**
+ * 模型行展开配置子面板（人体工学瘦身与多模态重构）：
+ * - 物理剔除协议选择器（跟随服务商总协议）
+ * - modalities 多模态配置一等公民（input: text/image/audio/video/file; output: text/image/audio）
+ * - 拍平的纯英文 TitleCase -> Wire 值思考映射表与开关
+ * - 四维选填价格（CNY/USD 双币切换，留空优雅静默）
+ */
 export const ModelConfigPanel: React.FC<{
   modelId: string;
   cfgDraft: CfgDraft;
@@ -25,58 +34,128 @@ export const ModelConfigPanel: React.FC<{
   modelId: m,
   cfgDraft,
   setCfgDraft,
-  meta,
-  tKey,
-  testBusy,
-  runTest,
+  meta: _meta,
+  tKey: _tKey,
+  testBusy: _testBusy,
+  runTest: _runTest,
   closeConfig,
   saveConfig,
 }) => {
-  const thinkingOptions = React.useMemo(() => {
-    const catalogOpts = thinkingLevelOptionsFor(resolveCatalogEfforts(m));
-    const standards = [
-      { value: 'default', label: '默认 (系统自适应)' },
-      { value: 'high', label: '高 (深度思考)' },
-      { value: 'medium', label: '中等思考' },
-      { value: 'low', label: '轻量思考' },
-      { value: 'minimal', label: '微弱思考' },
-      { value: 'xhigh', label: '超高思考' },
-      { value: 'max', label: '极限思考' },
-    ];
-    // 合并标准选项与目录推导选项，去重
-    const merged = [...standards];
-    for (const opt of catalogOpts) {
-      if (!merged.some((x) => x.value === opt.value)) {
-        merged.push({ value: opt.value, label: opt.label });
-      }
-    }
-    if (
-      cfgDraft.thinkingLevel &&
-      !merged.some((x) => x.value === cfgDraft.thinkingLevel)
-    ) {
-      merged.push({
-        value: cfgDraft.thinkingLevel,
-        label: cfgDraft.thinkingLevel,
-      });
-    }
-    return merged;
-  }, [m, cfgDraft.thinkingLevel]);
+  // 智能预填基准参数动作
+  const handleAutofill = useCallback(() => {
+    const baseline = findAutofillModel(m);
+    if (!baseline) return;
 
-  const protocolOptions = React.useMemo(() => [
-    { id: 'inherit', value: '', label: '跟随服务商默认协议' },
-    { id: 'openai/chat', value: 'openai/chat', label: 'OpenAI Chat (/v1/chat/completions)' },
-    { id: 'openai/responses', value: 'openai/responses', label: 'OpenAI Responses (/responses)' },
-    { id: 'anthropic/messages', value: 'anthropic/messages', label: 'Anthropic Messages (/v1/messages)' },
-  ], []);
+    setCfgDraft((prev) => {
+      if (!prev) return null;
+      const nextModalities = baseline.modalities || {
+        input: ['text', 'image'],
+        output: ['text'],
+      };
+      const thinkingEnabled = Boolean(
+        baseline.thinking && Object.keys(baseline.thinking).length > 0
+      );
+      const thinkingMap = baseline.thinking || STANDARD_THINKING_PRESET;
+
+      const pricing = baseline.pricing
+        ? {
+            currency: baseline.pricing.currency || 'USD',
+            input:
+              baseline.pricing.input !== undefined
+                ? String(baseline.pricing.input)
+                : '',
+            output:
+              baseline.pricing.output !== undefined
+                ? String(baseline.pricing.output)
+                : '',
+            cacheRead:
+              baseline.pricing.cacheRead !== undefined
+                ? String(baseline.pricing.cacheRead)
+                : '',
+            cacheWrite:
+              baseline.pricing.cacheWrite !== undefined
+                ? String(baseline.pricing.cacheWrite)
+                : '',
+          }
+        : prev.pricing;
+
+      return {
+        ...prev,
+        displayName: baseline.displayName || prev.displayName || m,
+        contextLength: baseline.contextWindow
+          ? String(baseline.contextWindow)
+          : prev.contextLength,
+        maxOutputTokens: baseline.maxOutputTokens
+          ? String(baseline.maxOutputTokens)
+          : prev.maxOutputTokens,
+        modalities: nextModalities,
+        thinkingEnabled,
+        thinkingMap,
+        pricing,
+        caps: {
+          ...prev.caps,
+          image: nextModalities.input.includes('image'),
+          video: nextModalities.input.includes('video'),
+          reasoning: thinkingEnabled,
+        },
+      };
+    });
+  }, [m, setCfgDraft]);
+
+  // 多模态列表安全保底
+  const modalities = useMemo(() => {
+    return (
+      cfgDraft.modalities || {
+        input: ['text', 'image'],
+        output: ['text'],
+      }
+    );
+  }, [cfgDraft.modalities]);
+
+  const pricing = useMemo(() => {
+    return (
+      cfgDraft.pricing || {
+        currency: 'USD' as const,
+        input: '',
+        output: '',
+        cacheRead: '',
+        cacheWrite: '',
+      }
+    );
+  }, [cfgDraft.pricing]);
 
   return (
     <div
       className={`${styles.modelConfigPanel} mrd-model-cfg`}
       onClick={(e) => e.stopPropagation()}
     >
+      {/* ── 1. 基础配置：展示别名 + 智能预填 / 上下文长度 / 最大输出 Token ── */}
       <div className={`${styles.mrdCfgFields} mrd-cfg-fields`}>
         <label className={`${styles.mrdCfgLabel} mrd-cfg-label`}>
-          <span>展示名称</span>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+            }}
+          >
+            <span>展示名称</span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={handleAutofill}
+              style={{
+                height: '20px',
+                padding: '0 6px',
+                fontSize: '11px',
+                color: 'var(--brand, #10b981)',
+              }}
+              icon={<Lucide.Sparkles size={11} />}
+            >
+              智能预填
+            </Button>
+          </div>
           <Input
             size="sm"
             value={cfgDraft.displayName}
@@ -89,7 +168,7 @@ export const ModelConfigPanel: React.FC<{
           />
         </label>
         <label className={`${styles.mrdCfgLabel} mrd-cfg-label`}>
-          <span>上下文长度</span>
+          <span>上下文长度 (Tokens)</span>
           <Input
             size="sm"
             value={cfgDraft.contextLength}
@@ -114,58 +193,90 @@ export const ModelConfigPanel: React.FC<{
             }
           />
         </label>
-        <div className={`${styles.mrdCfgLabel} mrd-cfg-label`}>
-          <span>思考强度</span>
-          <Select
-            size="sm"
-            value={cfgDraft.thinkingLevel || 'default'}
-            onChange={(val) =>
-              setCfgDraft((d) => (d ? { ...d, thinkingLevel: val } : null))
-            }
-            options={thinkingOptions.map((opt) => ({
-              id: opt.value,
-              value: opt.value,
-              label: opt.label,
-            }))}
-          />
-        </div>
-        <div className={`${styles.mrdCfgLabel} mrd-cfg-label`}>
-          <span>调用协议</span>
-          <Select
-            size="sm"
-            value={cfgDraft.protocol || ''}
-            onChange={(val) =>
-              setCfgDraft((d) =>
-                d
-                  ? {
-                      ...d,
-                      protocol:
-                        (val as 'openai/chat' | 'openai/responses' | 'anthropic/messages') ||
-                        undefined,
-                    }
-                  : null
-              )
-            }
-            options={protocolOptions}
-          />
-        </div>
       </div>
+
+      {/* ── 2. 多模态矩阵 (Modalities - 一等公民) ── */}
+      <ModelModalitiesEditor
+        modalities={modalities}
+        onChange={(next) =>
+          setCfgDraft((d) => (d ? { ...d, modalities: next } : null))
+        }
+        onSyncCaps={(capsPatch) =>
+          setCfgDraft((d) =>
+            d ? { ...d, caps: { ...d.caps, ...capsPatch } } : null
+          )
+        }
+      />
+
+      {/* ── 3. 拍平思考强度配置 (TitleCase -> Wire 参数映射表，非思考模型彻底隐藏) ── */}
+      {cfgDraft.thinkingEnabled && (
+        <ModelThinkingEditor
+          enabled={cfgDraft.thinkingEnabled}
+          onEnabledChange={(en) =>
+            setCfgDraft((d) =>
+              d
+                ? {
+                    ...d,
+                    thinkingEnabled: en,
+                    caps: { ...d.caps, reasoning: en },
+                  }
+                : null
+            )
+          }
+          thinkingMap={cfgDraft.thinkingMap || STANDARD_THINKING_PRESET}
+          onChange={(map) =>
+            setCfgDraft((d) => (d ? { ...d, thinkingMap: map } : null))
+          }
+        />
+      )}
+
+      {/* ── 4. 四维选填价格 (双币切换与优雅静默) ── */}
+      <ModelPricingEditor
+        pricing={pricing}
+        onChange={(p) =>
+          setCfgDraft((d) => (d ? { ...d, pricing: p } : null))
+        }
+      />
+
+      {/* ── 5. 底部操作栏：能力开关与保存 (绝对首屏可见，无需滚动) ── */}
       <div className={`${styles.mrdCfgFooter} mrd-cfg-footer`}>
         <div className={`${styles.mrdCapGroup} mrd-cap-group`}>
           <CapEditor
             caps={cfgDraft.caps}
             onCapChange={(key, checked) =>
-              setCfgDraft((d) =>
-                d
-                  ? {
-                      ...d,
-                      caps: {
-                        ...d.caps,
-                        [key]: checked,
-                      },
-                    }
-                  : null
-              )
+              setCfgDraft((d) => {
+                if (!d) return null;
+                const nextCaps = { ...d.caps, [key]: checked };
+                const currentInputs = d.modalities?.input || ['text'];
+                let nextInputs = [...currentInputs];
+                if (key === 'image') {
+                  const has = nextInputs.includes('image');
+                  if (checked && !has) nextInputs.push('image');
+                  else if (!checked && has) nextInputs = nextInputs.filter((x) => x !== 'image');
+                } else if (key === 'video') {
+                  const has = nextInputs.includes('video');
+                  if (checked && !has) nextInputs.push('video');
+                  else if (!checked && has) nextInputs = nextInputs.filter((x) => x !== 'video');
+                }
+                return {
+                  ...d,
+                  caps: nextCaps,
+                  modalities: {
+                    input: nextInputs,
+                    output: d.modalities?.output || ['text'],
+                  },
+                  ...(key === 'reasoning'
+                    ? {
+                        thinkingEnabled: checked,
+                        thinkingMap: checked
+                          ? d.thinkingMap && Object.keys(d.thinkingMap).length > 0
+                            ? d.thinkingMap
+                            : STANDARD_THINKING_PRESET
+                          : d.thinkingMap,
+                      }
+                    : {}),
+                };
+              })
             }
           />
         </div>

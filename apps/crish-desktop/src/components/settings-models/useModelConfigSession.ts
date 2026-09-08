@@ -14,6 +14,11 @@ import { getModelMeta } from '../../api/modelCatalog';
 import { applyMetaForModel, type ConfigDraft } from './modelsIpcHelpers';
 import { type ProviderProfile } from '../../api/providerProfiles';
 import { modelMetaRevision, settingsObjectId } from './modelProfilesHelpers';
+import { resolveModelPrice } from '../../api/pricingStore';
+import {
+  findAutofillModel,
+  getAutofillModelSpec,
+} from '../../services/modelsAutofillBaseline';
 
 export interface ModelConfigSessionArgs {
   selected: ProviderProfile | null;
@@ -54,6 +59,77 @@ export function useModelConfigSession(args: ModelConfigSessionArgs) {
       editSessionConsumer.open(objectId);
       setManualOpen(false);
       setConfigOpenId(model);
+
+      const autofill =
+        getAutofillModelSpec(model, selected.id) || findAutofillModel(model);
+      const existingPrice = meta.pricing || resolveModelPrice(model);
+
+      // 默认多模态配置 (用户最高指示：modalities: input: ["text", "image"], output: ["text"] 必须有)
+      const modalities = meta.modalities ||
+        autofill?.modalities || {
+          input: ['text', 'image'],
+          output: ['text'],
+        };
+
+      // 拍平思考配置
+      let thinkingEnabled = false;
+      let thinkingMap: Record<string, string> = {
+        Low: 'low',
+        Medium: 'medium',
+        High: 'high',
+      };
+      if (meta.thinking && Object.keys(meta.thinking).length > 0) {
+        thinkingEnabled = true;
+        thinkingMap = { ...meta.thinking };
+      } else if (
+        autofill?.thinking &&
+        Object.keys(autofill.thinking).length > 0
+      ) {
+        thinkingEnabled = true;
+        thinkingMap = { ...autofill.thinking };
+      } else if (meta.capabilities?.reasoning) {
+        thinkingEnabled = true;
+      }
+
+      // 四维选填价格 (100% 选填，留空优雅静默)
+      const currency =
+        existingPrice?.currency || autofill?.pricing?.currency || 'USD';
+      const pricing = existingPrice
+        ? {
+            currency: (existingPrice.currency || 'USD') as 'USD' | 'CNY',
+            input:
+              (existingPrice as any).input !== undefined
+                ? String((existingPrice as any).input)
+                : (existingPrice as any).inputPerMTok !== undefined
+                  ? String((existingPrice as any).inputPerMTok)
+                  : '',
+            output:
+              (existingPrice as any).output !== undefined
+                ? String((existingPrice as any).output)
+                : (existingPrice as any).outputPerMTok !== undefined
+                  ? String((existingPrice as any).outputPerMTok)
+                  : '',
+            cacheRead:
+              (existingPrice as any).cacheRead !== undefined
+                ? String((existingPrice as any).cacheRead)
+                : (existingPrice as any).cacheReadPerMTok !== undefined
+                  ? String((existingPrice as any).cacheReadPerMTok)
+                  : '',
+            cacheWrite:
+              (existingPrice as any).cacheWrite !== undefined
+                ? String((existingPrice as any).cacheWrite)
+                : (existingPrice as any).cacheWritePerMTok !== undefined
+                  ? String((existingPrice as any).cacheWritePerMTok)
+                  : '',
+          }
+        : {
+            currency: currency as 'USD' | 'CNY',
+            input: '',
+            output: '',
+            cacheRead: '',
+            cacheWrite: '',
+          };
+
       setCfgDraft({
         displayName: meta.displayName || '',
         contextLength:
@@ -62,15 +138,23 @@ export function useModelConfigSession(args: ModelConfigSessionArgs) {
           meta.maxOutputTokens != null ? String(meta.maxOutputTokens) : '',
         caps: {
           tools: Boolean(meta.capabilities?.tools),
-          image: Boolean(meta.capabilities?.image),
-          video: Boolean(meta.capabilities?.video),
-          reasoning: Boolean(meta.capabilities?.reasoning),
+          image: Boolean(
+            meta.capabilities?.image ?? modalities.input.includes('image')
+          ),
+          video: Boolean(
+            meta.capabilities?.video ?? modalities.input.includes('video')
+          ),
+          reasoning: Boolean(meta.capabilities?.reasoning ?? thinkingEnabled),
         },
         thinkingLevel: meta.defaultThinkingLevel || 'default',
         protocol: meta.protocol,
+        modalities,
+        thinkingEnabled,
+        thinkingMap,
+        pricing,
       });
     },
-    [selected, setManualOpen, setConfigOpenId, setCfgDraft],
+    [selected, setManualOpen, setConfigOpenId, setCfgDraft]
   );
 
   const closeConfig = useCallback(() => {

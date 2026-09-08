@@ -31,6 +31,35 @@ use agent_provider::sse::SseFrame;
 
 use super::EngineProviderConfig;
 
+/// 运行时动态模型目录快照（支持热重载，避免编译期静态死锁）
+static LIVE_CATALOG: std::sync::RwLock<Option<std::sync::Arc<ModelCatalog>>> =
+    std::sync::RwLock::new(None);
+
+/// 获取当前运行时模型目录快照（优先读取 `~/.conex/models.yaml`）
+#[allow(dead_code)]
+pub(crate) fn live_catalog() -> std::sync::Arc<ModelCatalog> {
+    if let Ok(guard) = LIVE_CATALOG.read() {
+        if let Some(cat) = guard.as_ref() {
+            return std::sync::Arc::clone(cat);
+        }
+    }
+    let mut guard = LIVE_CATALOG.write().unwrap_or_else(|p| p.into_inner());
+    if let Some(cat) = guard.as_ref() {
+        return std::sync::Arc::clone(cat);
+    }
+    let cat = std::sync::Arc::new(ModelCatalog::load_user_catalog_or_default());
+    *guard = Some(std::sync::Arc::clone(&cat));
+    cat
+}
+
+/// 重新加载运行时模型目录（当 models.yaml 保存或外部变更时调用）
+pub(crate) fn reload_live_catalog() {
+    let cat = std::sync::Arc::new(ModelCatalog::load_user_catalog_or_default());
+    if let Ok(mut guard) = LIVE_CATALOG.write() {
+        *guard = Some(cat);
+    }
+}
+
 /// 内置模型目录单例（T-23：Responses 支持判定用）
 ///
 /// catalog.json 编译期打包（include_str!，无运行时 IO）；OnceLock 保证进程内只

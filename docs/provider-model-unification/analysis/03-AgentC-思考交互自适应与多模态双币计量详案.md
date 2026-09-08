@@ -1,16 +1,16 @@
 # 供应商与模型能力全线接通重构 — 思考交互自适应与多模态双币计量详案 (03-AGENT-C)
 
-> **战役工作区**：`docs/provider-model-unification/`  
-> **文档位置**：`docs/provider-model-unification/analysis/03-AgentC-思考交互自适应与多模态双币计量详案.md`  
-> **方案角色**：`Thinking-Interaction-Lead`（思考交互与多模态架构师）  
-> **负责攻坚议题**：  
-> - **【议题 C】思考推理（Thinking/Reasoning）全协议方言与 UI 深度自适应**  
-> - **【议题 D】多模态能力、上下文截断与双币计量结算体系**  
-> **制定基准**：  
-> - `docs/provider-model-unification/00-供应商与模型能力全线接通重构总纲.md`  
-> - `docs/model-capability/surveys/01-主流模型多源权威数据全景调研.md`  
-> - `reference/pi/packages/coding-agent/docs/models.md`  
-> - `reference/pi/packages/ai/src/types.ts`  
+> **战役工作区**：`docs/provider-model-unification/`
+> **文档位置**：`docs/provider-model-unification/analysis/03-AgentC-思考交互自适应与多模态双币计量详案.md`
+> **方案角色**：`Thinking-Interaction-Lead`（思考交互与多模态架构师）
+> **负责攻坚议题**：
+> - **【议题 C】思考推理（Thinking/Reasoning）全协议方言与 UI 深度自适应**
+> - **【议题 D】多模态能力、上下文截断与双币计量结算体系**
+> **制定基准**：
+> - `docs/provider-model-unification/00-供应商与模型能力全线接通重构总纲.md`
+> - `docs/model-capability/surveys/01-主流模型多源权威数据全景调研.md`
+> - `reference/pi/packages/coding-agent/docs/models.md`
+> - `reference/pi/packages/ai/src/types.ts`
 > **方案体量**：严格执行 **≥ 1,000 行** 深度工业级方案编制标准，字字珠玑、穷举细节，杜绝假大空与未完成 TODO。
 
 ---
@@ -85,44 +85,44 @@
 └───────────────────┴───────────────────────────────────┴───────────────────────────────┘
 ```
 
-1. **二元对立的“布尔值”死锁**：  
+1. **二元对立的“布尔值”死锁**：
    在现有数据契约中，一个模型是否支持思考仅由 `reasoning: true / false` 标识。然而，以 OpenAI GPT-5.6 / o3-pro、Anthropic Claude Fable 5.1 / Opus 5、Google Gemini 3.8 Flash、DeepSeek V4、阿里 Qwen 3.8 Max 为代表的现代推理大模型，其思考能力早已进化为**多档位连续调节**（`minimal`, `low`, `medium`, `high`, `xhigh`, `max`）。单一布尔值导致无法在 UI 上为用户呈现细粒度的推理控制。
-2. **强制思考（Mandatory Thinking）支持完全缺位**：  
+2. **强制思考（Mandatory Thinking）支持完全缺位**：
    根据官方全景调研（`01-主流模型多源权威数据全景调研.md`），诸如 `meta/muse-spark-1.3`、`moonshotai/kimi-k3`、`anthropic/claude-fable-5.1`、`google/gemini-3.8-flash` 等旗舰模型，在底层设计上就是“Always-on Reasoning（强制思考）”，API 层面根本不接受禁用思考的指令。而在 Conex 现有前端中，下拉菜单依然固定提供“关闭思考 (Off)”选项。用户一旦选中并发送，直接导致上游端点返回 HTTP 400 Bad Request（如 Anthropic 报错 `adaptive thinking cannot be disabled for this model`，Kimi 报错 `reasoning_effort cannot be none`），用户体验极度恶劣。
-3. **UI 胶囊空间浪费与视觉污染**：  
+3. **UI 胶囊空间浪费与视觉污染**：
    在对话界面的输入框（Composer）顶部，现存逻辑并未根据当前选中模型的 `thinking.enabled` 状态进行自适应布局。即使用户选择了一个普通的无思考能力模型（如 `deepseek-chat` 或 `llama3.1:8b`），思考控制胶囊仍然以灰显、占位或残缺形式常驻在输入区上方，挤占宝贵的内容输入垂直空间。
-4. **思考 Token 预算失控（Token Starvation）**：  
+4. **思考 Token 预算失控（Token Starvation）**：
    在使用 Anthropic 的 `budget_tokens` 或开源/vLLM 的 `thinking_token_budget` 方言时，现有 Rust 引擎未实现思考预算与总 `max_output_tokens` 之间的动态安全钳制。当用户将思考预算设得过高时，模型在思考阶段耗尽了全部的生成 Token 额度，导致最终的回答文本直接为空（`stopReason: length`），造成严重雪崩。
 
 ---
 
 ### 1.2 多模态（Multimodal）输入输出能力割裂与假支持现状
 
-1. **盲目假定支持图片**：  
+1. **盲目假定支持图片**：
    现有前端在拖拽上传文件时，仅粗暴判断扩展名是否为 `.png / .jpg`，并未向下嗅探当前激活模型的能力真源 `input: ["text", "image", ...]`。当用户在使用纯文本模型（如 `deepseek-v4-flash` 文本版）时拖入截图，前端欣然接受并组装出包含 `type: "image"` 的 Payload 发给 Rust 内核。Rust 内核透传给上游后触发 `400 Bad Request: Model does not support image input`。
-2. **全模态（Video / Audio / PDF）彻底失明**：  
+2. **全模态（Video / Audio / PDF）彻底失明**：
    现代前沿模型如 `google/gemini-3.8-flash` 原生支持音频与超长视频输入，`anthropic/claude-sonnet-5` 原生支持文档级 PDF 解析。现有 Conex 系统完全没有多模态矩阵建模，无法向用户开放音频流与文档级直接上传。
-3. **多模态输出（生图/编辑）模型无处安放**：  
+3. **多模态输出（生图/编辑）模型无处安放**：
    调研库中包含大量图像输出模型，如 `google/gemini-3.1-flash-image` (Nano Banana 2)、`bytedance-seed/seedream-5-0-pro`、`openai/gpt-image-2`、`x-ai/grok-imagine-image-2.0`。它们既能接受 text/image 输入，又能直接输出 image。Conex 当前的消息协议只支持接收文本流和 ToolCall，彻底阻断了文生图/图生图的原生交互可能。
 
 ---
 
 ### 1.3 上下文窗口写死与子代理超载雪崩根因
 
-1. **编译期硬编码 `KNOWN_CONTEXT` 假真源**：  
+1. **编译期硬编码 `KNOWN_CONTEXT` 假真源**：
    在 Rust 内核的会话管理模块中，上下文窗口大小竟然被锁定在一个写死的常量映射表中（如默认将所有非知名模型判定为 128,000）。当用户在 `models.yaml` 中配置了百万级上下文模型（如 Gemini 3.8 Flash 的 1,048,576 tokens，或 Grok 4.20 的 2,000,000 tokens）时，Rust 内核由于静态写死，在历史上下文达到约 100K 时就过早触发了激进的上下文修剪算法，导致模型巨大的百万 Token 潜能被活活扼杀。
-2. **子代理（Subagent）上下文配额无差别挤压**：  
+2. **子代理（Subagent）上下文配额无差别挤压**：
    主 Agent 调度子 Agent 时，无法感知子 Agent 所绑定模型的 `contextWindow` 与 `maxOutputTokens`。如果子 Agent 使用了一个轻量模型（如 `gpt-5.4-nano`，maxOutputTokens 仅 16K），而主 Agent 强行塞入 100K 的上下文 prompt，子 Agent 将立刻由于输出超限或上下文溢出而崩溃死锁，进而导致主会话等待超时。
 
 ---
 
 ### 1.4 单币种与硬编码计费导致的全球化与国内站适配崩溃
 
-1. **货币单一（美元中心主义）与汇率死锁**：  
+1. **货币单一（美元中心主义）与汇率死锁**：
    目前系统的用量账单仅支持美元（USD / `$`）。但根据调研，国内主流厂商（阿里云百炼、智谱 BigModel、月之暗面 Kimi、火山引擎等）在中国站均实行严格的**人民币（CNY / `¥`）独立标准刊例价**，例如百炼 Qwen3.8-Max 国内站标准价为 `¥12 / 1M`，国际站为 `$2 / 1M`。如果系统强行用单一美元并试图用浮动汇率折算，将造成严重的账单精度误差与财务合规问题。
-2. **价格非选填导致的强迫症干扰与“0元”噪音**：  
+2. **价格非选填导致的强迫症干扰与“0元”噪音**：
    现有前端在未配置模型单价时，要么在设置页面提示验证失败（强迫用户去网上查价格填写），要么在会话界面强行显示 `$0.0000` 或 `¥0.00`。对于自建 Ollama、vLLM 或企业私有网关用户，这种“0元”提示不仅毫无意义，而且造成了严重的视觉污染。必须确立：**价格是 100% 选填的**，未填价格时系统应静默跳过费用计算并隐藏费用胶囊。
-3. **阶梯计费（Tiered Pricing）与按张计费（Per-Image）无法表达**：  
+3. **阶梯计费（Tiered Pricing）与按张计费（Per-Image）无法表达**：
    OpenAI 对 GPT-5.6 Sol / Terra 实施了基于总输入量的双阶梯计费（超过 272K Tokens 采用更高费率）；而生图模型（Seedream、Qwen Image 3 等）采用按张收费（如 `¥0.20 / 张`）。现有 Conex 计费模型仅支持简单的线性乘法，导致复杂计费模型全线算错。
 
 ---
@@ -141,9 +141,9 @@ export type ThinkingLevelMap = Partial<Record<ModelThinkingLevel, string | null>
 ```
 
 #### 关键机制复盘：
-1. **纯英文 7 档严格白名单**：  
+1. **纯英文 7 档严格白名单**：
    pi-ai 彻底放弃了带有主观色彩的本地化词汇，定义了全行业通用的 7 档标准：`minimal`, `low`, `medium`, `high`, `xhigh`, `max`，以及全局关闭态 `off`。
-2. **优雅的三态映射（Tristate Map）语义**：  
+2. **优雅的三态映射（Tristate Map）语义**：
    `thinkingLevelMap` 是一个极具扩展性的设计：
    - **`string` 映射**：若配置了 `"high": "high"` 或 `"high": "extended"`，表示该模型支持此档位，并显式指定发往 Wire 协议的底层参数字符串；
    - **`null` 映射**：若配置为 `null`，表示**该档位被显式禁用**。系统在生成 UI 菜单时会自动跳过该档位；
@@ -567,13 +567,13 @@ export interface ActiveThinkingState {
 
 为杜绝任何序列化歧义，必须设立严格的**不变性校验断言（Invariant Validation）**，在 Rust 加载 `models.yaml` 时执行：
 
-1. **Mandatory 一致性校验**：  
+1. **Mandatory 一致性校验**：
    若 `thinking.mandatory == true`，则必须满足：
    $$\text{levels.get}(\text{Off}) \equiv \text{None} \quad \text{或} \quad \text{levels.get}(\text{Off}) == \text{Some(None)}$$
    即禁止在标记了 `mandatory: true` 的同时给 `"off"` 配置一个合法的 wire 字符串。
-2. **默认级别有效性校验**：  
+2. **默认级别有效性校验**：
    `thinking.default_level` 所指定的档位，在 `levels` 映射表中不得显式映射为 `null`。若被显式禁用，Rust 解析器在装配阶段必须按降序回退到第一个可用的非空档位（`medium` $\to$ `high` $\to$ `low` $\to$ `minimal`）。
-3. **上下文边界约束**：  
+3. **上下文边界约束**：
    $$\text{maxOutputTokens} \le \text{contextWindow}$$
    任何 `max_output_tokens` 大于 `context_window` 的模型规格在加载时直接拒绝并报错拦截。
 
@@ -1175,7 +1175,7 @@ pub fn calculate_tiered_cost(
     // 3. 计算单项明细 (按百万元 1M tokens 换算)
     let prompt_cost = (raw_usage.input_tokens as f64 / 1_000_000.0) * selected_rates.input * discount_multiplier;
     let completion_cost = (raw_usage.output_tokens as f64 / 1_000_000.0) * selected_rates.output * discount_multiplier;
-    
+
     let cache_read_rate = selected_rates.cache_read.unwrap_or(0.0);
     let cache_read_cost = (raw_usage.cache_read_tokens as f64 / 1_000_000.0) * cache_read_rate * discount_multiplier;
 
@@ -1445,75 +1445,75 @@ pub fn migrate_legacy_model_config(legacy_json: &serde_json::Value) -> serde_jso
 
 ### 8.2 多模态与 Payload 组装测试用例集 (TC-MULTI-01 ~ TC-MULTI-06)
 
-1. **TC-MULTI-01 (纯文本模型拖入图片拦截)**：  
-   - 输入：当前模型 `inputModalities: ["text"]`，用户向 Composer 拖入 `test.png`；  
+1. **TC-MULTI-01 (纯文本模型拖入图片拦截)**：
+   - 输入：当前模型 `inputModalities: ["text"]`，用户向 Composer 拖入 `test.png`；
    - 断言：UI 阻止上传并给出明确 Tooltip 提示，Payload 校验拒绝组装。
-2. **TC-MULTI-02 (视觉模型图片 Base64 组装)**：  
-   - 输入：`inputModalities: ["text", "image"]`，拖入 PNG 图片；  
+2. **TC-MULTI-02 (视觉模型图片 Base64 组装)**：
+   - 输入：`inputModalities: ["text", "image"]`，拖入 PNG 图片；
    - 断言：正确提取 MIME 类型，组装出合法 `type: "image"` 块。
-3. **TC-MULTI-03 (全模态音频与 PDF 组装)**：  
-   - 输入：当前模型为 `gemini-3.8-flash`，同时传入 text、mp3 与 pdf；  
+3. **TC-MULTI-03 (全模态音频与 PDF 组装)**：
+   - 输入：当前模型为 `gemini-3.8-flash`，同时传入 text、mp3 与 pdf；
    - 断言：生成规范的 multi-part 结构体，无模态丢弃。
-4. **TC-MULTI-04 (生图输出响应流解析)**：  
-   - 输入：模型输出 SSE 流中返回 base64 图像块；  
+4. **TC-MULTI-04 (生图输出响应流解析)**：
+   - 输入：模型输出 SSE 流中返回 base64 图像块；
    - 断言：前端流式渲染器正确拦截并将其渲染为图片预览卡片，不当做纯文本乱码打印。
-5. **TC-MULTI-05 (超大图片体积溢出拦截)**：  
-   - 输入：拖入单张 35MB 4K 未压缩图片；  
+5. **TC-MULTI-05 (超大图片体积溢出拦截)**：
+   - 输入：拖入单张 35MB 4K 未压缩图片；
    - 断言：客户端抛出 `PayloadTooLarge` 错误，禁止向网络发送造成 OOM。
-6. **TC-MULTI-06 (模态矩阵反序列化缺省兜底)**：  
-   - 输入：YAML 中未写 `inputModalities`；  
+6. **TC-MULTI-06 (模态矩阵反序列化缺省兜底)**：
+   - 输入：YAML 中未写 `inputModalities`；
    - 断言：serde 自动填充默认值 `["text"]`，杜绝空指针。
 
 ---
 
 ### 8.3 双币计量与错峰结算测试用例集 (TC-COST-01 ~ TC-COST-08)
 
-1. **TC-COST-01 (人民币独立定价核算)**：  
-   - 输入：Qwen3.8-Max 国内站定价 `currency: CNY`，input: 12.0，output: 36.0；输入 100K，输出 10K；  
+1. **TC-COST-01 (人民币独立定价核算)**：
+   - 输入：Qwen3.8-Max 国内站定价 `currency: CNY`，input: 12.0，output: 36.0；输入 100K，输出 10K；
    - 断言：费用为 $100K \times 12/1M + 10K \times 36/1M = 1.20 + 0.36 = ¥1.5600$。
-2. **TC-COST-02 (美元国际站定价核算)**：  
-   - 输入：Claude Sonnet 5 国际站定价 `currency: USD`，input: 2.0，output: 10.0；  
+2. **TC-COST-02 (美元国际站定价核算)**：
+   - 输入：Claude Sonnet 5 国际站定价 `currency: USD`，input: 2.0，output: 10.0；
    - 断言：结算结果显示为 `$0.0340`，前缀为 `$`。
-3. **TC-COST-03 (价格缺失静默选填)**：  
-   - 输入：本地 Ollama 模型，`pricing: null`；  
+3. **TC-COST-03 (价格缺失静默选填)**：
+   - 输入：本地 Ollama 模型，`pricing: null`；
    - 断言：`calculate_tiered_cost` 返回 `None`，UI 完全不展示费用徽标。
-4. **TC-COST-04 (阶梯计费阈值命中)**：  
-   - 输入：GPT-5.6 Sol 阶梯阈值 `inputTokensAbove: 272000`；单次输入 300K tokens；  
+4. **TC-COST-04 (阶梯计费阈值命中)**：
+   - 输入：GPT-5.6 Sol 阶梯阈值 `inputTokensAbove: 272000`；单次输入 300K tokens；
    - 断言：计费费率自动切换为第二阶梯费率，整单按新费率计算。
-5. **TC-COST-05 (错峰时段 5 折自动折算)**：  
-   - 输入：DeepSeek 开启 `supportsOffPeakDiscount: true`，当前为北京时间周日（错峰）；  
+5. **TC-COST-05 (错峰时段 5 折自动折算)**：
+   - 输入：DeepSeek 开启 `supportsOffPeakDiscount: true`，当前为北京时间周日（错峰）；
    - 断言：输出金额自动应用 0.5 系数，账单标明包含错峰优惠。
-6. **TC-COST-06 (按张计费模型结算)**：  
-   - 输入：Seedream 文生图模型，`unit: per_image`，output: 0.22；生成 2 张图片；  
+6. **TC-COST-06 (按张计费模型结算)**：
+   - 输入：Seedream 文生图模型，`unit: per_image`，output: 0.22；生成 2 张图片；
    - 断言：结算金额为 `¥0.44`。
-7. **TC-COST-07 (缓存命中读取极致低价结算)**：  
-   - 输入：Claude 缓存读取价为普通输入的 1/10；  
+7. **TC-COST-07 (缓存命中读取极致低价结算)**：
+   - 输入：Claude 缓存读取价为普通输入的 1/10；
    - 断言：Cache Read Tokens 正确应用 0.1x 费率，无遗漏统计。
-8. **TC-COST-08 (货币符号展示与国际化隔离)**：  
-   - 输入：CNY 与 USD 混合模型切换；  
+8. **TC-COST-08 (货币符号展示与国际化隔离)**：
+   - 输入：CNY 与 USD 混合模型切换；
    - 断言：账单符号随当前模型立即自适应变更为 `¥` 或 `$`，禁止符号混淆。
 
 ---
 
 ### 8.4 上下文截断与子代理预算测试用例集 (TC-CTX-01 ~ TC-CTX-06)
 
-1. **TC-CTX-01 (百万上下文真实释放)**：  
-   - 输入：配置 `contextWindow: 1048576`；会话历史达到 500K tokens；  
+1. **TC-CTX-01 (百万上下文真实释放)**：
+   - 输入：配置 `contextWindow: 1048576`；会话历史达到 500K tokens；
    - 断言：不发生任何激进截断，完整向 API 投递 500K 上下文。
-2. **TC-CTX-02 (紧贴上限自适应滑动截断)**：  
-   - 输入：总窗口 128K，maxOutput 16K；当前历史 120K；  
+2. **TC-CTX-02 (紧贴上限自适应滑动截断)**：
+   - 输入：总窗口 128K，maxOutput 16K；当前历史 120K；
    - 断言：自动截断最早的 2 轮对话，保留 System Prompt 与最新消息，确保发送量 $\le 110K$。
-3. **TC-CTX-03 (子代理预留配额裁剪)**：  
-   - 输入：子代理需要 16K 输出预算；  
+3. **TC-CTX-03 (子代理预留配额裁剪)**：
+   - 输入：子代理需要 16K 输出预算；
    - 断言：滑动窗口安全预算额外扣减 16K，防止子代理执行期间撞墙。
-4. **TC-CTX-04 (System Prompt 不变性保护)**：  
-   - 输入：即使历史消息被全部截断；  
+4. **TC-CTX-04 (System Prompt 不变性保护)**：
+   - 输入：即使历史消息被全部截断；
    - 断言：System Prompt 必须绝对保留在第一位置，禁止丢失核心设定。
-5. **TC-CTX-05 (ToolResult 关联原子性保护)**：  
-   - 输入：ToolCall 与 ToolResult 处于截断边界；  
+5. **TC-CTX-05 (ToolResult 关联原子性保护)**：
+   - 输入：ToolCall 与 ToolResult 处于截断边界；
    - 断言：两者作为原子组同时保留或同时截断，禁止出现孤立的 ToolResult 导致上游 400。
-6. **TC-CTX-06 (maxOutputTokens 超过 contextWindow 阻断)**：  
-   - 输入：YAML 中错误填写 maxOutput 200K，context 100K；  
+6. **TC-CTX-06 (maxOutputTokens 超过 contextWindow 阻断)**：
+   - 输入：YAML 中错误填写 maxOutput 200K，context 100K；
    - 断言：加载期校验立即报错，拒绝启动非法配置。
 
 ---

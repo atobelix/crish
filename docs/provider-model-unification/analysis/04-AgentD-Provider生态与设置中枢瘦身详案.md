@@ -1,16 +1,16 @@
 # 供应商生态拓扑、凭证全生命周期与设置中枢人体工学瘦身详案 (04-EPIC-A-E-AGENT-D)
 
-> **文档标识**：`04-AgentD-Provider生态与设置中枢瘦身详案.md`  
-> **所属战役工作区**：`docs/provider-model-unification/analysis/`  
-> **专项编制专家**：Provider UI Specialist（服务商生态与交互中枢专家 · Agent-D）  
-> **负责攻坚议题**：  
-> - **【议题 A】Provider 拓扑结构、凭据生命周期与动态发现体系**  
-> - **【议题 E】前端状态中枢重构、界面人体工学瘦身与全量立体验证**  
-> **基准权威参考文档**：  
-> 1. `docs/provider-model-unification/00-供应商与模型能力全线接通重构总纲.md`  
-> 2. `docs/model-capability/surveys/01-主流模型多源权威数据全景调研.md`  
-> 3. `reference/pi/packages/coding-agent/docs/models.md`  
-> 4. `reference/pi/packages/ai/src/types.ts`  
+> **文档标识**：`04-AgentD-Provider生态与设置中枢瘦身详案.md`
+> **所属战役工作区**：`docs/provider-model-unification/analysis/`
+> **专项编制专家**：Provider UI Specialist（服务商生态与交互中枢专家 · Agent-D）
+> **负责攻坚议题**：
+> - **【议题 A】Provider 拓扑结构、凭据生命周期与动态发现体系**
+> - **【议题 E】前端状态中枢重构、界面人体工学瘦身与全量立体验证**
+> **基准权威参考文档**：
+> 1. `docs/provider-model-unification/00-供应商与模型能力全线接通重构总纲.md`
+> 2. `docs/model-capability/surveys/01-主流模型多源权威数据全景调研.md`
+> 3. `reference/pi/packages/coding-agent/docs/models.md`
+> 4. `reference/pi/packages/ai/src/types.ts`
 > **执行硬性指标**：工业级方案规范、严格遵守千行铁律（≥ 1,000 行）、全类型完备性契约、生产级算法伪代码与真实 Wire JSON 对比、八大模块无缩水闭环。
 
 ---
@@ -1782,7 +1782,7 @@ describe('前端状态中枢与单模型抽屉瘦身逻辑断言', () => {
 
   it('验证单模型抽屉剥离协议后，修改 Provider 总协议能瞬时级联刷新所有子模型', () => {
     const store = useModelsCatalogStore();
-    
+
     // 初始化树状模型结构
     store.rootConfig = {
       version: '2.0',

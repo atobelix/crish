@@ -1,16 +1,16 @@
 # 供应商与模型能力全线接通重构 — 专项深度方案分析（Agent-A 详案）
 
-> **方案代号**：`01-AgentA-Provider拓扑与内核协议打通详案`  
-> **责任架构师**：Core Topology Architect（内核架构与拓扑专家）  
-> **攻坚领域**：  
-> - **【议题 A】Provider 拓扑结构、凭据生命周期与动态发现体系**  
-> - **【议题 B】AI 通信协议路由、请求方言与内核执行链条全线打通**  
-> **权威基准**：  
-> - `docs/provider-model-unification/00-供应商与模型能力全线接通重构总纲.md`  
-> - `docs/model-capability/surveys/01-主流模型多源权威数据全景调研.md`  
-> - `reference/pi/packages/coding-agent/docs/models.md`  
-> - `reference/pi/packages/ai/src/types.ts`  
-> **目标真源**：`~/.conex/models.yaml` 树状绝对唯一真源（Single Source of Truth, SSOT）  
+> **方案代号**：`01-AgentA-Provider拓扑与内核协议打通详案`
+> **责任架构师**：Core Topology Architect（内核架构与拓扑专家）
+> **攻坚领域**：
+> - **【议题 A】Provider 拓扑结构、凭据生命周期与动态发现体系**
+> - **【议题 B】AI 通信协议路由、请求方言与内核执行链条全线打通**
+> **权威基准**：
+> - `docs/provider-model-unification/00-供应商与模型能力全线接通重构总纲.md`
+> - `docs/model-capability/surveys/01-主流模型多源权威数据全景调研.md`
+> - `reference/pi/packages/coding-agent/docs/models.md`
+> - `reference/pi/packages/ai/src/types.ts`
+> **目标真源**：`~/.conex/models.yaml` 树状绝对唯一真源（Single Source of Truth, SSOT）
 > **版本**：v1.0.0-PROPOSAL
 
 ---

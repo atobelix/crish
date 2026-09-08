@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button, Input } from '../ui';
+import { Button, Input, Select } from '../ui';
 import {
   saveProfileBaseUrl,
   upsertProfile,
@@ -88,6 +88,51 @@ export const ProviderProfileForm: React.FC<{
             保存
           </Button>
         </div>
+      </div>
+      <div className={`${styles.mrdField} mrd-field`}>
+        <label className={`${styles.mrdFieldLabel} mrd-field-label`}>
+          <span>首要通信协议 (Default Protocol)</span>
+          <span
+            style={{
+              fontSize: '11px',
+              color: 'var(--text-tertiary)',
+              marginLeft: '8px',
+              fontWeight: 'normal',
+            }}
+          >
+            (该服务商下属模型默认继承此协议)
+          </span>
+        </label>
+        <Select
+          size="sm"
+          value={selected.protocol || 'openai/chat'}
+          onChange={(val) => {
+            upsertProfile({
+              ...selected,
+              protocol:
+                (val as 'openai/chat' | 'openai/responses' | 'anthropic/messages') ||
+                undefined,
+            });
+            refresh();
+          }}
+          options={[
+            {
+              id: 'openai/chat',
+              value: 'openai/chat',
+              label: 'OpenAI Chat (/v1/chat/completions)',
+            },
+            {
+              id: 'openai/responses',
+              value: 'openai/responses',
+              label: 'OpenAI Responses (/responses)',
+            },
+            {
+              id: 'anthropic/messages',
+              value: 'anthropic/messages',
+              label: 'Anthropic Messages (/v1/messages)',
+            },
+          ]}
+        />
       </div>
     </div>
   );

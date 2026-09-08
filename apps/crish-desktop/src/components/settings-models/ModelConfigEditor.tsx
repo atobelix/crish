@@ -135,17 +135,15 @@ export const ModelConfigEditor: React.FC<ModelConfigEditorProps> = ({
             />
 
             {/* Credentials */}
-            {pc.selected.id.startsWith('custom-') && (
-              <ProviderProfileForm
-                selected={pc.selected}
-                hasKeySelected={pc.hasKeySelected}
-                keyDraft={pc.keyDraft}
-                setKeyDraft={pc.setKeyDraft}
-                saveKey={pc.saveKey}
-                notify={pc.notify}
-                refresh={pc.refresh}
-              />
-            )}
+            <ProviderProfileForm
+              selected={pc.selected}
+              hasKeySelected={pc.hasKeySelected}
+              keyDraft={pc.keyDraft}
+              setKeyDraft={pc.setKeyDraft}
+              saveKey={pc.saveKey}
+              notify={pc.notify}
+              refresh={pc.refresh}
+            />
           </div>
 
           {/* ─────────────────────────────────────────────────────────────

@@ -1,14 +1,14 @@
 # 供应商与模型能力全线接通重构 — 专项深度方案分析 (05-AgentE)
 
-> **文档编号**：`05-AgentE`  
-> **方案名称**：双币计量结算体系、多模态上下文预算与前端状态中枢全量立体验证详案  
-> **工作区归属**：`docs/provider-model-unification/analysis/`  
-> **角色定位**：Integration Gate Auditor（集成审计与测试门禁专家）  
-> **负责攻坚议题**：  
-> - **【议题 D】多模态能力、上下文截断与双币计量结算体系**  
-> - **【议题 E】前端状态中枢重构、界面人体工学瘦身与全量立体验证**  
-> **指定唯一输出路径**：`docs/provider-model-unification/analysis/05-AgentE-双币结算模型与端到端测试门禁详案.md`  
-> **对标权威基准**：`@earendil-works/pi-ai` 规范、`docs/model-capability/surveys/01-主流模型多源权威数据全景调研.md`、`00-供应商与模型能力全线接通重构总纲.md`  
+> **文档编号**：`05-AgentE`
+> **方案名称**：双币计量结算体系、多模态上下文预算与前端状态中枢全量立体验证详案
+> **工作区归属**：`docs/provider-model-unification/analysis/`
+> **角色定位**：Integration Gate Auditor（集成审计与测试门禁专家）
+> **负责攻坚议题**：
+> - **【议题 D】多模态能力、上下文截断与双币计量结算体系**
+> - **【议题 E】前端状态中枢重构、界面人体工学瘦身与全量立体验证**
+> **指定唯一输出路径**：`docs/provider-model-unification/analysis/05-AgentE-双币结算模型与端到端测试门禁详案.md`
+> **对标权威基准**：`@earendil-works/pi-ai` 规范、`docs/model-capability/surveys/01-主流模型多源权威数据全景调研.md`、`00-供应商与模型能力全线接通重构总纲.md`
 > **质量红线指标**：全文代码与方案详实完备，严格遵守 ≥1,000 行要求，拒绝大话套话与 TODO 遗留。
 
 ---
@@ -964,7 +964,7 @@ impl TokenClampEngine {
     ) -> SubagentBudgetAllocation {
         // 1. 父上下文剩余安全容量
         let parent_remaining = parent_model.context_window.saturating_sub(parent_consumed_tokens);
-        
+
         // 2. 子模型物理上下文与最大生成上限
         let sub_context = subagent_model.context_window;
         let sub_max_output = subagent_model.max_output_tokens;
@@ -1420,7 +1420,7 @@ providers:
 "#;
         let config: ModelsConfig = serde_yaml::from_str(yaml_input).expect("反序列化失败");
         assert_eq!(config.providers.len(), 1);
-        
+
         let ds = config.providers.get("deepseek").unwrap();
         assert_eq!(ds.protocol, "openai/chat");
         assert_eq!(ds.models.len(), 1);
@@ -1428,7 +1428,7 @@ providers:
         let model = &ds.models[0];
         assert_eq!(model.id, "deepseek-v4-flash");
         assert_eq!(model.context_window, 1048576);
-        
+
         let pricing = model.pricing.as_ref().unwrap();
         assert_eq!(pricing.currency, Currency::Cny);
         assert_eq!(pricing.input, 3.0);
@@ -1570,7 +1570,7 @@ providers:
 
         // 父模型已消耗 200,000 tokens，剩余 800,000
         let budget = TokenClampEngine::allocate_subagent_budget(&parent, &child, 200_000);
-        
+
         // 子模型上限 131,072，70% 容量为 91,750
         // 父模型剩余 800,000 的 80% 为 640,000
         // 故子 Prompt 预算应被子自身容量严格钳制在 91,750

@@ -613,3 +613,141 @@
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
 }
+
+/* ── 9. 多模态、拍平思考与四维价格人体工学样式 ── */
+.mrdSubSection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2, 8px);
+  padding: 8px 10px;
+  background: hsl(var(--surface-secondary-raw, 220 14% 96%) / 0.35);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--button-radius, 6px);
+}
+
+:global(html[data-theme='dark']) .mrdSubSection {
+  background: hsl(var(--surface-secondary-raw, 220 14% 12%) / 0.4);
+}
+
+.mrdSubSectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2, 8px);
+}
+
+.mrdSubSectionTitle {
+  font-size: var(--font-size-xs, 12px);
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mrdModalityRows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mrdModalityRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+}
+
+.mrdModalityLabel {
+  font-size: 11px;
+  color: var(--text-secondary);
+  min-width: 62px;
+  flex-shrink: 0;
+}
+
+.mrdModalityChips {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.mrdModalityChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-family: var(--font-mono, monospace);
+  font-weight: 500;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+  color: var(--text-tertiary);
+  cursor: pointer;
+  user-select: none;
+  transition: all 120ms ease;
+}
+
+.mrdModalityChip:hover {
+  background: var(--tint-hover);
+  color: var(--text-primary);
+  border-color: color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
+}
+
+.mrdModalityChipActive {
+  background: color-mix(in srgb, var(--brand, #10b981) 12%, transparent);
+  border-color: color-mix(in srgb, var(--brand, #10b981) 40%, transparent);
+  color: var(--brand, #10b981);
+}
+
+.mrdThinkingTable {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 4px;
+}
+
+.mrdThinkingRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr 28px;
+  gap: 6px;
+  align-items: center;
+}
+
+.mrdPricingGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: var(--space-2, 8px);
+  margin-top: 4px;
+}
+
+.mrdCurrencyToggle {
+  display: inline-flex;
+  border: 1px solid var(--border-subtle);
+  border-radius: 5px;
+  overflow: hidden;
+  background: var(--bg-card);
+}
+
+.mrdCurrencyBtn {
+  padding: 1px 7px;
+  font-size: 11px;
+  font-weight: 500;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.mrdCurrencyBtn:hover {
+  color: var(--text-primary);
+  background: var(--tint-hover);
+}
+
+.mrdCurrencyBtnActive {
+  background: color-mix(in srgb, var(--brand, #10b981) 15%, transparent);
+  color: var(--brand, #10b981);
+  font-weight: 600;
+}

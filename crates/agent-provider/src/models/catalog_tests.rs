@@ -1508,3 +1508,74 @@ fn t11_empty_tier_map_is_none() {
     assert_eq!(empty_obj.thinking_tiers, None, "空对象 → None");
     assert!(empty_obj.offered_levels().is_empty());
 }
+
+/// 默认空白目录（无任何供应商）与多级安全降级断言
+#[test]
+fn empty_catalog_has_no_entries_and_lookups_gracefully_degrade() {
+    let cat = ModelCatalog::empty();
+    assert_eq!(cat.version(), 0);
+    assert!(cat.entries.is_empty());
+    assert_eq!(cat.lookup("deepseek", "deepseek-v4-flash"), None);
+    assert_eq!(cat.context_window_for("deepseek", "deepseek-v4-flash"), None);
+    assert_eq!(cat.max_output_for("deepseek", "deepseek-v4-flash"), None);
+    assert_eq!(cat.input_price_for("deepseek", "deepseek-v4-flash"), None);
+    assert!(!cat.supports_prompt_caching_for("deepseek", "deepseek-v4-flash"));
+    assert!(!cat.supports_responses_for("deepseek", "deepseek-v4-flash"));
+}
+
+/// 解析纯净的 version: 2, providers: {} 初始态
+#[test]
+fn yaml_empty_providers_parses_to_empty_catalog() {
+    let cat = ModelCatalog::from_yaml_str("version: 2\nproviders: {}\n")
+        .expect("解析空供应商必须成功");
+    assert!(cat.entries.is_empty());
+    assert_eq!(cat.version(), 1);
+
+    let empty_yaml = ModelCatalog::from_yaml_str("").expect("空字符串内容必须安全解析");
+    assert!(empty_yaml.entries.is_empty());
+}
+
+/// 解析 v2 树状结构并正确构建运行时模型目录条目
+#[test]
+fn yaml_v2_tree_populates_entries_and_capabilities() {
+    let yaml = r#"
+version: 2
+providers:
+  deepseek:
+    displayName: "DeepSeek"
+    baseUrl: "https://api.deepseek.com"
+    protocol: "openai/chat"
+    models:
+      - id: "deepseek-v4-pro"
+        displayName: "DeepSeek V4 Pro"
+        contextWindow: 1048576
+        maxOutputTokens: 8192
+        thinking:
+          low: "low"
+          high: "high"
+        pricing:
+          currency: "USD"
+          unit: "per_1M"
+          input: 0.14
+          output: 0.28
+          cacheRead: 0.014
+          cacheWrite: 0.14
+        modalities:
+          image: true
+"#;
+    let cat = ModelCatalog::from_yaml_str(yaml).expect("v2 树状 YAML 必须解析成功");
+    assert_eq!(cat.entries.len(), 1);
+
+    let entry = cat.lookup("deepseek", "deepseek-v4-pro").expect("必须命中条目");
+    assert_eq!(entry.model, "deepseek-v4-pro");
+    assert_eq!(entry.vendor, "deepseek");
+    assert_eq!(entry.context_window, Some(1048576));
+    assert_eq!(entry.max_output_tokens, Some(8192));
+    assert_eq!(entry.input_price, Some(0.14));
+    assert_eq!(entry.output_price, Some(0.28));
+    assert_eq!(entry.cache_read_price, Some(0.014));
+    assert_eq!(entry.cache_write_price, Some(0.14));
+    assert!(entry.supports_reasoning);
+    assert!(entry.supports_vision);
+    assert_eq!(entry.wire_effort_for("high"), Some("high"));
+}

@@ -1,11 +1,11 @@
 # AI 通信协议路由、请求方言与思考推理全线打通详案 (02-AGENT-B)
 
-> **战役工作区**：`docs/provider-model-unification/analysis/`  
-> **责任角色**：Protocol Dialect Engineer（协议方言与执行工程师）  
+> **战役工作区**：`docs/provider-model-unification/analysis/`
+> **责任角色**：Protocol Dialect Engineer（协议方言与执行工程师）
 > **核心负责议题**：
 > - **【议题 B】AI 通信协议路由、请求方言与内核执行链条全线打通**
-> - **【议题 C】思考推理（Thinking/Reasoning）全协议方言与 UI 深度自适应**  
-> **基准与对标**：`@earendil-works/pi-ai` 工业级权威实现、`docs/model-capability/surveys/01-主流模型多源权威数据全景调研.md`、`00-供应商与模型能力全线接通重构总纲.md`  
+> - **【议题 C】思考推理（Thinking/Reasoning）全协议方言与 UI 深度自适应**
+> **基准与对标**：`@earendil-works/pi-ai` 工业级权威实现、`docs/model-capability/surveys/01-主流模型多源权威数据全景调研.md`、`00-供应商与模型能力全线接通重构总纲.md`
 > **方案体量规范**：深度技术设计，严格执行 ≥1,000 行技术硬指标，包含 Rust/TS 强类型契约、11 大方言 Wire JSON 报文、状态转移机、代码落地点及魔鬼测试矩阵。
 
 ---
@@ -135,7 +135,7 @@ flowchart TD
     Kernel_Static --> Kernel_Dialect
     Kernel_Dialect --> Kernel_Wire
     Kernel_Wire --> Kernel_NoClamp
-    
+
     UI_Capsule -.-> Store_Flat
     UI_Mandatory -.-> Store_Flat
     UI_Hardcoded -.-> Store_Flat
@@ -1296,7 +1296,7 @@ crates/
    ```rust
    // 废除历史静态全局变量：
    // pub static BUNDLED_CATALOG: Lazy<Catalog> = ...;
-   
+
    // 替换为基于 RCU 的动态单例：
    pub static GLOBAL_CATALOG: Lazy<Arc<LiveModelCatalog>> = Lazy::new(|| {
        let path = get_models_yaml_path();
@@ -1305,7 +1305,7 @@ crates/
        instance.clone().start_fs_watcher(path);
        instance
    });
-   
+
    pub fn get_live_catalog() -> Arc<RootModelsConfig> {
        GLOBAL_CATALOG.load()
    }
@@ -1334,16 +1334,16 @@ crates/
    ) -> Result<ExecutionResult, SessionError> {
        // 1. 获取全局原子快照
        let catalog = catalog::get_live_catalog();
-       
+
        // 2. 状态机决议
        let plan = resolve_effective_protocol(&catalog, provider_id, model_id)?;
-       
+
        // 3. 思考档位与预算动态计算
        let thinking_ui = resolve_thinking_controls(&plan.thinking_spec, user_thinking_level);
        let clamped_budget = plan.thinking_spec.token_budgets.as_ref().map(|b| {
            clamp_thinking_budget(b.medium.unwrap_or(4096), plan.max_output_tokens, plan.context_window, session.current_tokens())
        });
-       
+
        // 4. 派发网络请求
        network_dispatcher::dispatch(plan, thinking_ui.wire_value.as_deref(), clamped_budget).await
    }
@@ -1425,7 +1425,7 @@ models:
 ```rust
 pub fn migrate_legacy_v1_to_v2(legacy_yaml: &str) -> Result<RootModelsConfig, MigrationError> {
     let raw: serde_yaml::Value = serde_yaml::from_str(legacy_yaml)?;
-    
+
     // 检查是否包含顶层 providers，如果已有则直接解析
     if raw.get("providers").is_some() {
         return Ok(serde_yaml::from_value(raw)?);
@@ -1536,7 +1536,7 @@ providers:
         maxOutputTokens: 128000
 "#;
         let config: RootModelsConfig = serde_yaml::from_str(yaml).unwrap();
-        
+
         // 1. gpt-4o 继承 provider 的 openai/chat
         let plan_4o = resolve_effective_protocol(&config, "openai", "gpt-4o").unwrap();
         assert_eq!(plan_4o.protocol, ProtocolType::OpenAiChat);
@@ -1633,5 +1633,5 @@ providers:
 ```
 
 ---
-> **方案编制结论**：  
+> **方案编制结论**：
 > 本方案严格锁定以 Provider 为顶层主体的树状架构，彻底攻克了通信协议路由死锁、11 大思考方言割裂、强制思考 400 报错、UI 空间浪费与静态 catalog 假真源难题。通过 Rust 内核无锁 RCU 原子替换与前端人体工学瘦身，为 Conex 构建了高可用、工业级、具备绝对架构优雅度的协议与思考推理基石。
