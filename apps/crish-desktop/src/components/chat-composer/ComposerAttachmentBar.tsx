@@ -76,18 +76,22 @@ const RegularChipItem: React.FC<RegularChipItemProps> = React.memo(
         dataUrl: a.dataUrl,
         isImage: a.isImage,
       });
+    const thumbCandidate = a.thumbnailUrl || a.dataUrl;
     const thumbSrc = isImg
-      ? a.thumbnailUrl ||
-        a.dataUrl ||
-        (a.path
-          ? resolveCardImageSrc({
-              name: a.name,
-              path: a.path,
-              mime: a.mime,
-              dataUrl: a.dataUrl,
-              isImage: true,
-            })
-          : undefined)
+      ? thumbCandidate &&
+        (thumbCandidate.startsWith('data:') ||
+          thumbCandidate.startsWith('blob:') ||
+          thumbCandidate.startsWith('asset:') ||
+          thumbCandidate.startsWith('http://') ||
+          thumbCandidate.startsWith('https://'))
+        ? thumbCandidate
+        : resolveCardImageSrc({
+            name: a.name,
+            path: a.path || thumbCandidate,
+            mime: a.mime,
+            dataUrl: thumbCandidate,
+            isImage: true,
+          })
       : undefined;
     const hasThumb = Boolean(thumbSrc) && !thumbError;
     const isParsing =

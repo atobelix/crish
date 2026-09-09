@@ -108,10 +108,18 @@ vi.mock('../../api/providerProfiles', () => ({
   anyProfileHasKey: () => false,
 }));
 
+const capturedAllComposers: ChatComposerProps[] = [];
+
 vi.mock('../chat-composer/ChatComposer', () => ({
   ChatComposer: (props: ChatComposerProps) => {
     capturedComposerProps.current = props;
-    return <div data-testid="transferred-chat-composer" data-editing={props.isEditingMessage ? 'true' : 'false'} />;
+    capturedAllComposers.push(props);
+    return (
+      <div
+        data-testid={props.isEditingMessage ? 'edit-chat-composer' : 'main-chat-composer'}
+        data-editing={props.isEditingMessage ? 'true' : 'false'}
+      />
+    );
   },
 }));
 
@@ -129,17 +137,18 @@ vi.mock('../chat-message-list/ChatMessageList', () => ({
   },
 }));
 
-describe('ChatCard 100% 单实例 ChatComposer 转移与就地编辑闭环测试', () => {
-  it('默认状态：底部渲染唯一定位 composerElement，消息列表无编辑转移', () => {
+describe('ChatCard 底部输入框常驻与原位消息编辑独立流测试', () => {
+  it('默认状态：底部渲染 mainComposerElement，消息列表无原位编辑组件', () => {
+    capturedAllComposers.length = 0;
     render(<ChatCard handleGlobalTabClick={vi.fn()} />);
 
     expect(capturedWrapperProps.current?.composerElement).not.toBeNull();
     expect(capturedStreamProps.current?.composer.editingMessageId).toBeNull();
     expect(capturedStreamProps.current?.composer.composerElement).toBeNull();
-    expect(capturedComposerProps.current?.isEditingMessage).toBe(false);
   });
 
-  it('触发就地编辑：底部 ChatComposerWrapper 置空，单实例转移至目标消息流，暂存并填入草稿', async () => {
+  it('触发就地编辑：底部 ChatComposerWrapper 持续保持渲染（主输入框不消失），消息流呼出独立 editComposer', async () => {
+    capturedAllComposers.length = 0;
     render(<ChatCard handleGlobalTabClick={vi.fn()} />);
 
     const targetUserMsg = {
@@ -155,37 +164,36 @@ describe('ChatCard 100% 单实例 ChatComposer 转移与就地编辑闭环测试
       capturedStreamProps.current?.composer.onStartEditMessage?.(targetUserMsg);
     });
 
-    // 1) 验证输入框已填入目标消息内容与附件
-    expect(mockState.composerProps.setChatInput).toHaveBeenCalledWith('这是历史提问的文本');
-    expect(mockState.composerProps.setAttachments).toHaveBeenCalledWith(
+    // 1) 核心断言：底部输入框持续常驻，绝不置空消失！
+    expect(capturedWrapperProps.current?.composerElement).not.toBeNull();
+
+    // 2) 核心断言：消息流获得专属 editComposerElement
+    expect(capturedStreamProps.current?.composer.editingMessageId).toBe('target-user-msg-99');
+    expect(capturedStreamProps.current?.composer.composerElement).not.toBeNull();
+
+    // 3) 验证编辑输入框已初始载入目标消息的内容与附件
+    const editProps = capturedAllComposers.find((p) => p.isEditingMessage);
+    expect(editProps).toBeDefined();
+    expect(editProps?.chatInput).toBe('这是历史提问的文本');
+    expect(editProps?.attachments).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ path: 'c:/Software/image.png' }),
       ])
     );
+    expect(editProps?.onCancelEdit).toBeDefined();
 
-    // 2) 核心断言：底部输入框严格为 null（消除双输入框并存）
-    expect(capturedWrapperProps.current?.composerElement).toBeNull();
-
-    // 3) 核心断言：消息流获得唯一单实例 composerElement
-    expect(capturedStreamProps.current?.composer.editingMessageId).toBe('target-user-msg-99');
-    expect(capturedStreamProps.current?.composer.composerElement).not.toBeNull();
-
-    // 4) 核心断言：ChatComposer 处于编辑态且接收 onCancelEdit 回调
-    expect(capturedComposerProps.current?.isEditingMessage).toBe(true);
-    expect(capturedComposerProps.current?.onCancelEdit).toBeDefined();
-
-    // 5) 点击取消编辑：恢复之前底部草稿，composerElement 归位到底部
+    // 4) 点击取消编辑（叉号 / Esc）：消息流原位编辑框收起，底部输入框依然持续常驻
     await act(async () => {
-      capturedComposerProps.current?.onCancelEdit?.();
+      editProps?.onCancelEdit?.();
     });
 
-    expect(mockState.composerProps.setChatInput).toHaveBeenCalledWith('底部的草稿输入');
     expect(capturedWrapperProps.current?.composerElement).not.toBeNull();
     expect(capturedStreamProps.current?.composer.editingMessageId).toBeNull();
     expect(capturedStreamProps.current?.composer.composerElement).toBeNull();
   });
 
-  it('编辑提交：触发 handleEditMessageAndResend 并退出编辑态归位到底部', async () => {
+  it('编辑提交：触发 handleEditMessageAndResend 并退出编辑态，底部输入框持续保持', async () => {
+    capturedAllComposers.length = 0;
     render(<ChatCard handleGlobalTabClick={vi.fn()} />);
 
     const targetUserMsg = {
@@ -199,21 +207,23 @@ describe('ChatCard 100% 单实例 ChatComposer 转移与就地编辑闭环测试
       capturedStreamProps.current?.composer.onStartEditMessage?.(targetUserMsg);
     });
 
-    expect(capturedComposerProps.current?.isEditingMessage).toBe(true);
+    const editProps = capturedAllComposers.find((p) => p.isEditingMessage);
+    expect(editProps).toBeDefined();
 
     // 触发编辑状态下的 onSend
     await act(async () => {
-      capturedComposerProps.current?.onSend?.();
+      editProps?.onSend?.();
     });
 
     expect(mockState.handleEditMessageAndResend).toHaveBeenCalledWith(
       'msg-to-save',
-      '底部的草稿输入',
+      '待保存文本',
       expect.anything()
     );
 
-    // 提交后归位
+    // 提交后退出编辑态，底部输入框持续常驻
     expect(capturedWrapperProps.current?.composerElement).not.toBeNull();
     expect(capturedStreamProps.current?.composer.editingMessageId).toBeNull();
+    expect(capturedStreamProps.current?.composer.composerElement).toBeNull();
   });
 });

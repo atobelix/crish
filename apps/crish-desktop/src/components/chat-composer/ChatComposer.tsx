@@ -66,9 +66,7 @@ export type { ComposerFusedTriggerProps } from './ComposerFusedTrigger';
 
 /** 富文本输入（默认主路）：React.lazy 软接，装配失败回落 textarea（F1-γ） */
 const TiptapComposerFieldLazy = React.lazy(() =>
-  import('./TiptapComposerField').then((m) => ({
-    default: m.TiptapComposerField,
-  }))
+  import('./TiptapComposerField').then((m) => ({ default: m.TiptapComposerField }))
 );
 
 
@@ -217,9 +215,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
       root?.querySelector?.('textarea.composer-textarea') ??
       root?.querySelector?.('textarea') ??
       root?.querySelector?.('[contenteditable="true"]');
-    if (el instanceof HTMLElement) {
-      el.focus();
-    }
+    if (el instanceof HTMLElement) el.focus();
   }, []);
 
   const hiddenFileInputProps = useComposerHiddenFileInputProps(
@@ -522,14 +518,17 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
                   </Tooltip>
                 ) : null)}
               {isEditingMessage && onCancelEdit ? (
-                <button
-                  type="button"
-                  className={styles.cancelEditBtn}
-                  onClick={onCancelEdit}
-                  data-testid="composer-cancel-edit-btn"
-                >
-                  取消
-                </button>
+                <Tooltip content="取消编辑 (Esc)">
+                  <button
+                    type="button"
+                    className={styles.cancelEditBtn}
+                    onClick={onCancelEdit}
+                    data-testid="composer-cancel-edit-btn"
+                    aria-label="取消编辑"
+                  >
+                    <Lucide.X size={16} aria-hidden />
+                  </button>
+                </Tooltip>
               ) : null}
               <ComposerSendControls
                 appearance="circle"

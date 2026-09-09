@@ -1234,10 +1234,11 @@
 }
 
 .cancelEditBtn {
+  width: 28px;
   height: 28px;
-  padding: 0 10px;
+  min-width: 28px;
+  padding: 0;
   border-radius: var(--radius-md, 6px);
-  font-size: var(--font-size-xs, 12px);
   color: var(--text-secondary);
   background: transparent;
   border: 1px solid var(--border-subtle);
@@ -1247,7 +1248,7 @@
   justify-content: center;
   transition: all var(--transition-fast, 120ms ease);
   user-select: none;
-  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .cancelEditBtn:hover {

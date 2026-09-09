@@ -85,13 +85,11 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
     }, [state.composerProps]);
 
     const [editingMessageId, setEditingMessageId] = React.useState<string | null>(null);
-    const preEditDraftRef = React.useRef<{
-      chatInput: string;
-      attachments: ChatAttachment[];
-    }>({
-      chatInput: '',
-      attachments: [],
-    });
+    const [editChatInput, setEditChatInput] = React.useState<string>('');
+    const [editAttachments, setEditAttachments] = React.useState<ChatAttachment[]>([]);
+    const [editIsComposing, setEditIsComposing] = React.useState<boolean>(false);
+    const [editShowPlusMenu, setEditShowPlusMenu] = React.useState<boolean>(false);
+    const editFileInputRef = React.useRef<HTMLInputElement | null>(null);
 
     React.useEffect(() => {
       setEditingMessageId(null);
@@ -99,17 +97,13 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
 
     const handleStartEditMessage = React.useCallback(
       (targetMsg: SessionMessage) => {
-        preEditDraftRef.current = {
-          chatInput: state.composerProps.chatInput,
-          attachments: [...state.composerProps.attachments],
-        };
         setEditingMessageId(targetMsg.id);
-        state.composerProps.setChatInput(targetMsg.text || '');
+        setEditChatInput(targetMsg.text || '');
         const cards = normalizeMessageAttachments(
           targetMsg.attachments,
           targetMsg.images
         );
-        state.composerProps.setAttachments(
+        setEditAttachments(
           cards.map((item) => ({
             id:
               item.id ||
@@ -118,6 +112,7 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
             path: item.path,
             mime: item.mime,
             dataUrl: item.dataUrl,
+            thumbnailUrl: item.dataUrl,
             isImage: item.isImage,
             size: item.size,
             status: 'ready' as const,
@@ -125,27 +120,51 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
           }))
         );
       },
-      [state.composerProps]
+      []
     );
 
     const handleCancelEditMessage = React.useCallback(() => {
-      state.composerProps.setChatInput(preEditDraftRef.current.chatInput);
-      state.composerProps.setAttachments(preEditDraftRef.current.attachments);
       setEditingMessageId(null);
-    }, [state.composerProps]);
+      setEditChatInput('');
+      setEditAttachments([]);
+    }, []);
 
     const handleSaveEditMessage = React.useCallback(async () => {
       if (!editingMessageId) return;
       const targetId = editingMessageId;
-      const newText = state.composerProps.chatInput;
-      const newAttachments = state.composerProps.attachments;
+      const newText = editChatInput;
+      const newAttachments = editAttachments;
       setEditingMessageId(null);
+      setEditChatInput('');
+      setEditAttachments([]);
       await state.handleEditMessageAndResend(targetId, newText, newAttachments);
-    }, [editingMessageId, state]);
+    }, [editingMessageId, editChatInput, editAttachments, state]);
 
-    // R2-5 B1（P1-12 聚合）：ChatComposer 主要 props 经 spread 传递；
-    // on* 命名差异字段（handle* → on*）保持显式映射（消除 30 字段逐项拆包）
-    const composerElement = (
+    const handleEditDroppedFiles = React.useCallback(async (files: File[]) => {
+      const mapped = files.map((f) => ({
+        id: `att-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        name: f.name,
+        mime: f.type,
+        size: f.size,
+        path: (f as { path?: string }).path,
+        status: 'ready' as const,
+        progress: 100,
+      }));
+      setEditAttachments((prev) => [...prev, ...mapped]);
+    }, []);
+
+    const modelBadgeNode = state.showModelPicker ? (
+      <ModelBadgePicker
+        engineModel={state.engineModel}
+        activeProfileId={state.activeProfileId}
+        needsModelSetup={state.needsModelSetup}
+        showModelDropdown={state.showModelDropdown}
+        setShowModelDropdown={state.setShowModelDropdown}
+      />
+    ) : null;
+
+    // 底部主输入框：持续常驻，草稿状态完全独立保全
+    const mainComposerElement = (
       <ChatComposer
         {...state.composerProps}
         onPasteImage={state.composerProps.handlePasteImage}
@@ -160,22 +179,40 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
         onPermissionChange={(m) => {
           state.setPermissionMode(m);
         }}
-        isEditingMessage={Boolean(editingMessageId)}
-        onCancelEdit={editingMessageId ? handleCancelEditMessage : undefined}
-        onSend={editingMessageId ? handleSaveEditMessage : state.composerProps.onSend}
-        rightActions={
-          state.showModelPicker ? (
-            <ModelBadgePicker
-              engineModel={state.engineModel}
-              activeProfileId={state.activeProfileId}
-              needsModelSetup={state.needsModelSetup}
-              showModelDropdown={state.showModelDropdown}
-              setShowModelDropdown={state.setShowModelDropdown}
-            />
-          ) : null
-        }
+        rightActions={modelBadgeNode}
       />
     );
+
+    // 原位编辑输入框：在被编辑用户消息行原位呼出，具备独立输入/附件态与叉号取消
+    const editComposerElement = editingMessageId ? (
+      <ChatComposer
+        chatInput={editChatInput}
+        setChatInput={setEditChatInput}
+        isComposing={editIsComposing}
+        setIsComposing={setEditIsComposing}
+        filteredCommands={state.composerProps.filteredCommands}
+        loadSkillSlash={state.composerProps.loadSkillSlash}
+        onPasteImage={state.composerProps.handlePasteImage}
+        onPasteFiles={state.composerProps.handlePasteFiles}
+        onSend={handleSaveEditMessage}
+        onStop={state.composerProps.handleStopGeneration}
+        canSend={Boolean(editChatInput.trim() || editAttachments.length > 0)}
+        isProcessing={state.isProcessing}
+        attachments={editAttachments}
+        setAttachments={setEditAttachments}
+        fileInputRef={editFileInputRef}
+        onFilesSelected={handleEditDroppedFiles}
+        onPickFiles={state.composerProps.handlePickFiles}
+        onOpenPath={state.openPathInFilesPanel}
+        showPlusMenu={editShowPlusMenu}
+        setShowPlusMenu={setEditShowPlusMenu}
+        permissionMode={state.permissionMode}
+        onPermissionChange={(m) => state.setPermissionMode(m)}
+        isEditingMessage={true}
+        onCancelEdit={handleCancelEditMessage}
+        rightActions={modelBadgeNode}
+      />
+    ) : null;
 
     // R2-5 B3（P1-12 聚合）：ChatStatusRibbons 专属字段分组 + 派生上移（案甲）——
     // ① localHasKey 上移（模块级调用稳定）② onOpenTerminal/onOpenDiff 闭包上移
@@ -239,7 +276,7 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
         editingMessageId,
         onStartEditMessage: handleStartEditMessage,
         onCancelEditMessage: handleCancelEditMessage,
-        composerElement: editingMessageId ? composerElement : null,
+        composerElement: editComposerElement,
       },
       generation: {
         onRegenerate: state.handleRegenerate,
@@ -371,7 +408,7 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
           <ChatComposerWrapper
             mainSurface={state.mainSurface}
             emptyKind={state.emptyKind}
-            composerElement={editingMessageId ? null : composerElement}
+            composerElement={mainComposerElement}
             ribbons={ribbons}
             runNotice={state.composerProps.runNotice}
             onDismissRunNotice={() => state.composerProps.setRunNotice(null)}
