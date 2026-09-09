@@ -211,6 +211,7 @@ export function normalizeProviderProfile(
     id: id || 'unknown',
     name,
     baseUrl: typeof p.baseUrl === 'string' ? p.baseUrl.trim() : '',
+    protocol: p.protocol,
     models: normalizeModelIds(p.models),
     hasKey: profileHasKey(p),
     enabled: p.enabled !== false,
@@ -413,3 +414,9 @@ export function pickDefaultModelId(
 ): string | null {
   return pickDefaultModelSelection(profiles, opts)?.model ?? null;
 }
+
+/**
+ * 该供应商是否已配置凭据（凭据壳 hasKey / apiKey 字面）。
+ * 对话选择器用它判定「可用」：未配置的 yaml 预置壳不占列表，
+ * 避免选择后 activateProfileModel 报 profile_not_found。
+ */

@@ -289,4 +289,17 @@ describe('useComposerMultiline 状态机与交互优化', () => {
 
     expect(result.current).toBe(true);
   });
+
+  it('enabled 为 false 时直接锁定多行态（默认折行卡片），短文本亦返回 true 且不触发测宽', () => {
+    const layoutRef = { current: null };
+    const { result } = renderHook(() =>
+      useComposerMultiline({
+        text: 'hello',
+        hasAttachments: false,
+        layoutRef,
+        enabled: false,
+      })
+    );
+    expect(result.current).toBe(true);
+  });
 });

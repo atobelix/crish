@@ -31,6 +31,8 @@ import type {
   ComposerSendApi,
   ComposerPermissionBarProps,
   ComposerPlanProgressBarProps,
+  ChatComposerProps,
+  ComposerLayoutVariant,
 } from './composerTypes';
 import { ComposerAttachmentBar } from './ComposerAttachmentBar';
 import { ComposerPermissionBar } from './ComposerPermissionBar';
@@ -51,92 +53,22 @@ import { useComposerEmptyKind } from './useComposerEmptyKind';
 import { useComposerProtectedSend } from './useComposerProtectedSend';
 import { InputFieldErrorBoundary } from './InputFieldErrorBoundary';
 
-export type { ComposerFieldProps } from './composerTypes';
+export type {
+  ComposerFieldProps,
+  ChatComposerProps,
+  ComposerLayoutVariant,
+};
 export { ComposerField, STOP_TOOLTIP } from './ComposerField';
-export { ComposerPermissionBar } from './ComposerPermissionBar';
-export type { ComposerPermissionBarProps } from './ComposerPermissionBar';
-export { ComposerPlanProgressBar } from './ComposerPlanProgressBar';
-export type { ComposerPlanProgressBarProps } from './ComposerPlanProgressBar';
-export { ComposerAttachmentBar } from './ComposerAttachmentBar';
-export type { ComposerAttachmentBarProps } from './ComposerAttachmentBar';
-export { ComposerSendControls } from './ComposerSendControls';
-export type { ComposerSendControlsProps } from './ComposerSendControls';
-export { ComposerFusedTrigger } from './ComposerFusedTrigger';
-export type { ComposerFusedTriggerProps } from './ComposerFusedTrigger';
+export { ComposerPermissionBar, type ComposerPermissionBarProps } from './ComposerPermissionBar';
+export { ComposerPlanProgressBar, type ComposerPlanProgressBarProps } from './ComposerPlanProgressBar';
+export { ComposerAttachmentBar, type ComposerAttachmentBarProps } from './ComposerAttachmentBar';
+export { ComposerSendControls, type ComposerSendControlsProps } from './ComposerSendControls';
+export { ComposerFusedTrigger, type ComposerFusedTriggerProps } from './ComposerFusedTrigger';
 
 /** 富文本输入（默认主路）：React.lazy 软接，装配失败回落 textarea（F1-γ） */
 const TiptapComposerFieldLazy = React.lazy(() =>
   import('./TiptapComposerField').then((m) => ({ default: m.TiptapComposerField }))
 );
-
-
-export type ChatComposerProps = {
-  chatInput: string;
-  setChatInput: (v: string) => void;
-  isComposing: boolean;
-  setIsComposing: (v: boolean) => void;
-  /** 宿主斜杠菜单状态（ChatCard 契约保留；tiptap 菜单接管后暂不消费） */
-  slashMenuOpen?: boolean;
-  setSlashMenuOpen?: (v: boolean) => void;
-  slashSelectedIndex?: number;
-  setSlashSelectedIndex?: React.Dispatch<React.SetStateAction<number>>;
-  /** 宿主斜杠命令（base + skill，已按输入前缀过滤；桥入 tiptap 菜单） */
-  filteredCommands: Array<{ cmd: string; desc: string }>;
-  loadSkillSlash: () => void | Promise<void>;
-  onPasteImage: (e: React.ClipboardEvent) => void;
-  onSend: () => void;
-  /** 默认 Stop = L2 cooperative_stop（单击） */
-  onStop: () => void;
-  /** 强制取消 = L3 force_cancel（Shift+点击 / 长按，二次确认后由 ComposerField 调用） */
-  onForceStop?: () => void;
-  canSend: boolean;
-  isProcessing: boolean;
-  attachments: ChatAttachment[];
-  setAttachments: React.Dispatch<React.SetStateAction<ChatAttachment[]>>;
-  fileInputRef: React.RefObject<HTMLInputElement | null>;
-  onFilesSelected: (files: File[]) => void | Promise<void>;
-  onPickFiles?: () => void | Promise<void>;
-  /** 点附件 / 文件 mention → files / file-viewer 叶；不传则不接线 */
-  onOpenPath?: (filePath: string) => void;
-  showPlusMenu: boolean;
-  setShowPlusMenu: (v: boolean) => void;
-  permissionMode: PermissionMode;
-  onPermissionChange: (m: PermissionMode) => void;
-  onCloseSiblingMenus?: () => void;
-  rightActions?: React.ReactNode;
-  className?: string;
-  queuedMessages?: QueuedMessage[];
-  onSendQueuedNow?: (id: string) => void;
-  onEditQueued?: (id: string) => void;
-  onDeleteQueued?: (id: string) => void;
-  /** 落地面态（session-empty）；未传时从 DOM 祖先 data-empty-kind 感知 */
-  emptyKind?: string | null;
-  /** Layer 1: 权限审批条节点或属性 */
-  permissionBarNode?: React.ReactNode;
-  permissionBarProps?: ComposerPermissionBarProps;
-  /** Layer 2: 目标/计划进度条节点或属性 */
-  planProgressNode?: React.ReactNode;
-  planProgressProps?: ComposerPlanProgressBarProps;
-  /** 右侧统计/语音按键自定义或显示开关 */
-  voiceStatsButton?: React.ReactNode;
-  showVoiceStatsButton?: boolean;
-  /** 草稿撤销：当前会话是否存在可撤销的外部模板覆盖（sessionDraftManager） */
-  hasUndo?: boolean;
-  /** 草稿撤销动作（原位无损恢复） */
-  handleUndoDraft?: () => void;
-  /** 定向注入信号 tick，驱动编辑器占位符聚焦 */
-  draftInjectionTick?: number;
-  /** 剪贴板文件粘贴接管（从桌面/资源管理器复制文件直接 Ctrl+V 入队） */
-  onPasteFiles?: (files: File[]) => void | Promise<void>;
-  /** 输入框上方状态/错误提示条（极细浅描边通白背景，叹号hover，复制，反馈，关闭） */
-  notice?: ComposerNotice | null;
-  onDismissNotice?: () => void;
-  onNoticeFeedback?: () => void;
-  /** 是否处于消息就地编辑态 */
-  isEditingMessage?: boolean;
-  /** 取消就地编辑回调 */
-  onCancelEdit?: () => void;
-};
 
 export const ChatComposer: React.FC<ChatComposerProps> = ({
   chatInput,
@@ -184,6 +116,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
   draftInjectionTick,
   isEditingMessage = false,
   onCancelEdit,
+  layoutVariant = 'multiline',
 }) => {
   const plusMenuId = useId();
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -321,11 +254,15 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
     ]
   );
 
-  const isMultiline = useComposerMultiline({
+  const multilineFromHook = useComposerMultiline({
     text: chatInput,
     hasAttachments: attachments.length > 0,
     layoutRef,
+    enabled: layoutVariant === 'adaptive' && !isEditingMessage,
   });
+
+  const isMultiline =
+    !isEditingMessage && layoutVariant === 'adaptive' ? multilineFromHook : true;
 
   /**
    * 统一输入区装配：默认主路 = TiptapComposerField（React.lazy 软接 + Suspense，

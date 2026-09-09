@@ -36,8 +36,9 @@ export function useComposerMultiline(opts: {
   text: string;
   hasAttachments?: boolean;
   layoutRef: React.RefObject<HTMLElement | null>;
+  enabled?: boolean;
 }): boolean {
-  const { text, hasAttachments = false, layoutRef } = opts;
+  const { text, hasAttachments = false, layoutRef, enabled = true } = opts;
   const [multiline, setMultiline] = useState(
     () => hasAttachments || text.includes('\n')
   );
@@ -50,6 +51,7 @@ export function useComposerMultiline(opts: {
   const lockedUntilRef = useRef<number>(0);
 
   const measure = useCallback(() => {
+    if (!enabled) return;
     if (hasAttachments || text.includes('\n')) {
       setMultiline(true);
       return;
@@ -141,9 +143,10 @@ export function useComposerMultiline(opts: {
       }
       setMultiline(nextState);
     }
-  }, [hasAttachments, layoutRef, text]);
+  }, [enabled, hasAttachments, layoutRef, text]);
 
   useLayoutEffect(() => {
+    if (!enabled) return;
     measure();
     const el = layoutRef.current;
     if (!el) return;
@@ -192,7 +195,7 @@ export function useComposerMultiline(opts: {
         ro.disconnect();
       }
     };
-  }, [layoutRef, measure]);
+  }, [enabled, layoutRef, measure]);
 
-  return multiline;
+  return enabled ? multiline : true;
 }
