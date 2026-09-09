@@ -162,28 +162,35 @@ export function useSlashSend(
     // 7. 保存草稿快照
     saveDraftSnapshot(sessionId, rawInput);
 
+    const isImageAttachment = (a: ChatAttachment) =>
+      Boolean(
+        a.dataUrl ||
+          (a.mime && a.mime.startsWith('image/')) ||
+          /\.(png|jpe?g|gif|webp|svg|bmp|ico|avif)$/i.test(a.name || a.path || '')
+      );
+
     const userImages: import('../../store/types').MessageImageRef[] =
       activeAttachments
-        .filter((a) =>
-          Boolean(a.dataUrl || (a.mime && a.mime.startsWith('image/')))
-        )
+        .filter(isImageAttachment)
         .map((a, idx) => ({
           id: `img-${userMsgId}-${idx}`,
-          source: a.dataUrl || a.path || a.name,
-          kind: (a.dataUrl ? 'data' : 'local') as 'data' | 'local',
-          resolvedUrl: a.dataUrl,
+          source: a.path || a.dataUrl || a.name,
+          kind: (a.dataUrl && !a.path ? 'data' : 'local') as 'data' | 'local',
+          resolvedUrl: a.thumbnailUrl || a.dataUrl,
           mime: a.mime || 'image/png',
           alt: a.name,
         }));
 
     const userAttachments: import('../../store/types').SessionMessageAttachment[] =
-      activeAttachments.map((a) => ({
-        name: a.name,
-        path: a.path,
-        mime: a.mime,
-        text: a.text,
-        dataUrl: a.dataUrl,
-      }));
+      activeAttachments
+        .filter((a) => !isImageAttachment(a))
+        .map((a) => ({
+          name: a.name,
+          path: a.path,
+          mime: a.mime,
+          text: a.text,
+          dataUrl: a.dataUrl,
+        }));
 
     // 8. 消息入库与派发
     if (isFollowUp) {

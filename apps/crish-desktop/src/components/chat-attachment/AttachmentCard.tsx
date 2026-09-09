@@ -4,7 +4,11 @@ import styles from './AttachmentCard.module.css';
 import { Tooltip } from '../ui';
 import { FileFormatIcon } from '../../assets/icons';
 import { convertFileSrc } from '@tauri-apps/api/core';
-import { isAbsoluteFsPath } from '../../api/workspaceFsApi';
+import {
+  getWorkspacePath,
+  isAbsoluteFsPath,
+  resolveWorkspacePath,
+} from '../../api/workspaceFsApi';
 import type { SessionMessage } from '../../store/types';
 
 export interface AttachmentItem {
@@ -48,6 +52,19 @@ export function normalizeMessageAttachments(
   const result: AttachmentItem[] = [];
   const seenFingerprints = new Set<string>();
 
+  // 预建 images 映射，供 attachments 中的图片项回填 resolvedUrl
+  const imageMap = new Map<string, NonNullable<SessionMessage['images']>[number]>();
+  if (Array.isArray(images)) {
+    for (const img of images) {
+      const k1 = (img.source || '').trim().toLowerCase();
+      if (k1) imageMap.set(k1, img);
+      const k2 = (img.alt || '').trim().toLowerCase();
+      if (k2) imageMap.set(k2, img);
+      const name = (img.source.split(/[\\/]/).pop() || '').trim().toLowerCase();
+      if (name) imageMap.set(name, img);
+    }
+  }
+
   // 1. 优先提取显式附件 (msg.attachments)
   if (Array.isArray(attachments)) {
     for (const a of attachments) {
@@ -55,12 +72,24 @@ export function normalizeMessageAttachments(
       if (key) {
         seenFingerprints.add(key);
       }
+      const pathKey = (a.path || '').trim().toLowerCase();
+      const nameKey = (a.name || '').trim().toLowerCase();
+      const matchedImg =
+        (pathKey ? imageMap.get(pathKey) : undefined) ||
+        (nameKey ? imageMap.get(nameKey) : undefined);
+      const isImg =
+        Boolean(a.dataUrl) ||
+        Boolean(matchedImg) ||
+        (a.mime && a.mime.startsWith('image/')) ||
+        /\.(png|jpe?g|gif|webp|svg|bmp|ico|avif)$/i.test(a.name || a.path || '');
+
       result.push({
         name: a.name,
-        path: a.path,
-        mime: a.mime,
-        size: (a as { size?: number }).size,
-        dataUrl: a.dataUrl,
+        path: a.path || matchedImg?.source,
+        mime: a.mime || matchedImg?.mime,
+        size: (a as { size?: number }).size || matchedImg?.byteSize,
+        dataUrl: a.dataUrl || matchedImg?.resolvedUrl,
+        isImage: isImg,
       });
     }
   }
@@ -68,8 +97,9 @@ export function normalizeMessageAttachments(
   // 2. 融合图片数据 (msg.images)，去重防回潮
   if (Array.isArray(images)) {
     for (const img of images) {
-      const key = (img.source || '').trim().toLowerCase();
-      if (key && seenFingerprints.has(key)) {
+      const key = (img.source || img.alt || '').trim().toLowerCase();
+      const fileName = (img.source.split(/[\\/]/).pop() || '').trim().toLowerCase();
+      if ((key && seenFingerprints.has(key)) || (fileName && seenFingerprints.has(fileName))) {
         continue; // 命中指纹，剔除重复
       }
       if (key) {
@@ -98,19 +128,36 @@ export function isImageAttachmentItem(item: AttachmentItem): boolean {
 }
 
 export function resolveCardImageSrc(item: AttachmentItem): string {
-  if (item.dataUrl) return item.dataUrl;
-  const source = item.path || '';
+  if (item.dataUrl && (item.dataUrl.startsWith('data:') || item.dataUrl.startsWith('blob:'))) {
+    return item.dataUrl;
+  }
+  const source = (item.path || '').trim();
   if (!source) return '';
+  if (source.startsWith('content:')) {
+    return '';
+  }
   if (
     source.startsWith('data:') ||
     source.startsWith('blob:') ||
     source.startsWith('http://') ||
-    source.startsWith('https://')
+    source.startsWith('https://') ||
+    source.startsWith('asset://')
   ) {
     return source;
   }
   if (isAbsoluteFsPath(source)) {
     return convertFileSrc(source);
+  }
+  // 相对路径通过工作区解析为绝对路径
+  const resolved = resolveWorkspacePath(source);
+  if (resolved && isAbsoluteFsPath(resolved)) {
+    return convertFileSrc(resolved);
+  }
+  const workspaceRoot = getWorkspacePath()?.trim();
+  if (workspaceRoot) {
+    const sep = workspaceRoot.includes('\\') ? '\\' : '/';
+    const abs = `${workspaceRoot.replace(/[\\/]+$/, '')}${sep}${source.replace(/^\.[\\/]/, '')}`;
+    return convertFileSrc(abs);
   }
   return source;
 }

@@ -20,6 +20,9 @@ vi.mock('@tauri-apps/api/core', () => ({
 // Mock workspaceFsApi
 vi.mock('../../../api/workspaceFsApi', () => ({
   isAbsoluteFsPath: (p: string) => p.startsWith('/') || /^[a-zA-Z]:[/\\]/.test(p),
+  resolveWorkspacePath: (p: string) =>
+    p.startsWith('/') || /^[a-zA-Z]:[/\\]/.test(p) ? p : `/mock-workspace/${p}`,
+  getWorkspacePath: () => '/mock-workspace',
 }));
 
 describe('AttachmentCard 组件规范套件', () => {
@@ -278,6 +281,23 @@ describe('AttachmentCard 组件规范套件', () => {
       expect(resolveCardImageSrc({ dataUrl })).toBe(dataUrl);
       expect(resolveCardImageSrc({ path: httpUrl })).toBe(httpUrl);
     });
+
+    it('拦截虚拟 content: hash 线索，严禁向 img.src 传递伪协议（防止原生破图）', () => {
+      expect(resolveCardImageSrc({ path: 'content:abc12345:1024' })).toBe('');
+      // 若携带真实 dataUrl，则优先返回真实 dataUrl
+      expect(
+        resolveCardImageSrc({
+          path: 'content:abc12345:1024',
+          dataUrl: 'data:image/png;base64,realdata',
+        })
+      ).toBe('data:image/png;base64,realdata');
+    });
+
+    it('相对路径自动解析工作区路径并转为 asset:// 协议', () => {
+      expect(resolveCardImageSrc({ path: 'images/logo.png' })).toBe(
+        'asset:///mock-workspace/images/logo.png'
+      );
+    });
   });
 
   describe('7. 辅助计算函数', () => {
@@ -310,6 +330,23 @@ describe('AttachmentCard 组件规范套件', () => {
       expect(items[0].name).toBe('query.sql');
       expect(items[1].name).toBe('图表');
       expect(items[1].isImage).toBe(true);
+    });
+
+    it('同名图片附件自动关联 images 中的 resolvedUrl，避免图片数据丢失', () => {
+      const items = normalizeMessageAttachments(
+        [{ name: 'photo.png', path: 'C:/Pictures/photo.png' }],
+        [
+          {
+            id: 'img-photo',
+            source: 'C:/Pictures/photo.png',
+            resolvedUrl: 'data:image/png;base64,preservedThumbnail',
+          },
+        ]
+      );
+      expect(items.length).toBe(1);
+      expect(items[0].name).toBe('photo.png');
+      expect(items[0].dataUrl).toBe('data:image/png;base64,preservedThumbnail');
+      expect(items[0].isImage).toBe(true);
     });
   });
 });

@@ -14,7 +14,7 @@ import {
 } from './chatMessageRowUtils';
 import { UserMessageActionsBar } from './MessageActionsBar';
 import { openFileInPanel } from '../../api/filePanelOpener';
-import { resolveWorkspacePath } from '../../api/workspaceFsApi';
+import { isAbsoluteFsPath, resolveWorkspacePath } from '../../api/workspaceFsApi';
 import {
   AttachmentCard,
   normalizeMessageAttachments,
@@ -109,11 +109,19 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
         return;
       }
       const safe = resolveWorkspacePath(trimmed);
-      if (!safe) {
-        showToast('文件不在当前工作区内');
+      if (safe) {
+        openFileInPanel(safe);
         return;
       }
-      openFileInPanel(safe);
+      if (isAbsoluteFsPath(trimmed)) {
+        void import('../../api/hostOpenersApi').then(({ openPathDefault }) => {
+          openPathDefault(trimmed).catch(() => {
+            showToast('无法打开该文件');
+          });
+        });
+        return;
+      }
+      showToast('文件不在当前工作区内');
     },
     [onOpenPath, showToast]
   );
@@ -223,8 +231,22 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
                 key={item.id || item.path || `${item.name}-${idx}`}
                 item={item}
                 onClick={(it) => {
-                  if (it.path) handleOpenPath(it.path);
-                  else showToast('该附件无物理路径可打开');
+                  if (it.path) {
+                    handleOpenPath(it.path);
+                  } else if (
+                    it.dataUrl &&
+                    (it.dataUrl.startsWith('data:') ||
+                      it.dataUrl.startsWith('blob:'))
+                  ) {
+                    const w = window.open('');
+                    if (w) {
+                      w.document.write(
+                        `<img src="${it.dataUrl}" style="max-width:100%;height:auto;display:block;margin:auto;" />`
+                      );
+                    }
+                  } else {
+                    showToast('该附件无物理路径可打开');
+                  }
                 }}
               />
             ))}

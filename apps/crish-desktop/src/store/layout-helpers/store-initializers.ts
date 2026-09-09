@@ -83,21 +83,32 @@ export function sanitizeTokenUsage(
       inputMax: base.inputMax,
       output: base.output,
       outputMax: base.outputMax,
+      costStatus: base.costStatus,
       cost: base.cost,
     };
   }
   const cacheRead = optionalNonNegative(raw.cacheRead, base.cacheRead);
   const cacheWrite = optionalNonNegative(raw.cacheWrite, base.cacheWrite);
   const savedCost = optionalNonNegative(raw.savedCost, base.savedCost);
+  const costStatus =
+    raw.costStatus === 'priced' ||
+    raw.costStatus === 'free' ||
+    raw.costStatus === 'unpriced'
+      ? raw.costStatus
+      : base.costStatus;
   return {
     input: Math.max(0, finiteNumber(raw.input, base.input)),
     inputMax: Math.max(1, finiteNumber(raw.inputMax, base.inputMax)),
     output: Math.max(0, finiteNumber(raw.output, base.output)),
     outputMax: Math.max(1, finiteNumber(raw.outputMax, base.outputMax)),
+    costStatus,
     cost: Math.max(0, finiteNumber(raw.cost, base.cost)),
     ...(cacheRead !== undefined && { cacheRead }),
     ...(cacheWrite !== undefined && { cacheWrite }),
     ...(savedCost !== undefined && { savedCost }),
+    ...(raw.currency ? { currency: raw.currency } : {}),
+    ...(raw.costMicros !== undefined ? { costMicros: raw.costMicros } : {}),
+    ...(raw.formattedCost ? { formattedCost: raw.formattedCost } : {}),
   };
 }
 
