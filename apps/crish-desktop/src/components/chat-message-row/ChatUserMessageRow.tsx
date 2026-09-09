@@ -20,7 +20,6 @@ import {
   normalizeMessageAttachments,
   type AttachmentItem,
 } from '../chat-attachment/AttachmentCard';
-import { InPlaceUserMessageEditor } from './InPlaceUserMessageEditor';
 import type { ChatAttachment } from '../../hooks/useChatStream';
 
 export type ChatUserMessageRowProps = {
@@ -33,7 +32,13 @@ export type ChatUserMessageRowProps = {
   /** 会话最后一条 user：挂消息级撤回（用户锁：入口在对话里，不在 composer） */
   isLastUser?: boolean;
   onRetract?: () => void;
-  /** 就地编辑并重新发送（替代粗暴撤回回退到底部的跳变交互） */
+  /** 就地编辑消息模式（受控，由父级 composerElement 驱动） */
+  isEditing?: boolean;
+  onStartEdit?: () => void;
+  onCancelEdit?: () => void;
+  /** 100% 复用的 ChatComposer 组件节点（单实例转移） */
+  composerElement?: React.ReactNode;
+  /** 向后兼容保留 */
   onEditMessageAndResend?: (
     targetMsgId: string,
     newText: string,
@@ -56,6 +61,10 @@ function userRowPropsEqual(
     prev.isPinned === next.isPinned &&
     prev.isSearchHit === next.isSearchHit &&
     prev.isExpanded === next.isExpanded &&
+    prev.isEditing === next.isEditing &&
+    prev.composerElement === next.composerElement &&
+    prev.onStartEdit === next.onStartEdit &&
+    prev.onCancelEdit === next.onCancelEdit &&
     prev.onToggleExpand === next.onToggleExpand &&
     prev.onTogglePin === next.onTogglePin &&
     prev.isLastUser === next.isLastUser &&
@@ -78,19 +87,19 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
   onTogglePin,
   isLastUser = false,
   onRetract,
-  onEditMessageAndResend,
+  isEditing = false,
+  onStartEdit,
+  onCancelEdit: _onCancelEdit,
+  composerElement,
+  onEditMessageAndResend: _onEditMessageAndResend,
   messageIndex: _messageIndex,
   virtualScrollManager,
   onOpenPath,
 }) => {
   void _messageIndex;
+  void _onCancelEdit;
+  void _onEditMessageAndResend;
   const { showToast } = useToast();
-  const [isEditing, setIsEditing] = useState(false);
-  const [isSubmittingEdit, setIsSubmittingEdit] = useState(false);
-
-  useEffect(() => {
-    setIsEditing(false);
-  }, [msg.id, msg.text]);
 
   const isLong = isUserBubbleLong(msg.text);
   // 真实签名：userBubbleDisplayText 仅接收 2 个参数 (text, isExpanded)
@@ -212,48 +221,11 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
   // 核心判定：无文本且非排队态时，空气泡彻底销毁为 null（NEG-06）
   const hasTextContent = Boolean(displayText && displayText.trim()) || msg.status === 'queued';
 
-  const editableAttachments = useMemo<ChatAttachment[]>(() => {
-    return allCardItems.map((item) => ({
-      id: item.id,
-      name: item.name || '附件',
-      path: item.path,
-      mime: item.mime,
-      dataUrl: item.dataUrl,
-      isImage: item.isImage,
-      size: item.size,
-      status: 'ready' as const,
-      progress: 100,
-    }));
-  }, [allCardItems]);
+  const isEditingRow = Boolean(isEditing && composerElement);
 
-  const handleStartEdit = useCallback(() => {
-    setIsEditing(true);
+  useEffect(() => {
     virtualScrollManager?.invalidateActual(msg.id);
-  }, [msg.id, virtualScrollManager]);
-
-  const handleCancelEdit = useCallback(() => {
-    setIsEditing(false);
-    virtualScrollManager?.invalidateActual(msg.id);
-  }, [msg.id, virtualScrollManager]);
-
-  const handleEditSubmit = useCallback(
-    async (newText: string, newAttachments: ChatAttachment[]) => {
-      if (!onEditMessageAndResend) {
-        setIsEditing(false);
-        return;
-      }
-      setIsSubmittingEdit(true);
-      try {
-        await onEditMessageAndResend(msg.id, newText, newAttachments);
-        setIsEditing(false);
-      } catch {
-        showToast('编辑发送失败');
-      } finally {
-        setIsSubmittingEdit(false);
-      }
-    },
-    [onEditMessageAndResend, msg.id, showToast]
-  );
+  }, [isEditingRow, virtualScrollManager, msg.id]);
 
   return (
     <div
@@ -267,7 +239,10 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
       role="article"
       aria-label={rowAria}
     >
-      <div className={styles.userStack}>
+      <div
+        className={`${styles.userStack}${isEditingRow ? ` ${styles.userStackEditing}` : ''}`}
+        data-editing={isEditingRow ? 'true' : undefined}
+      >
         {/* 固定徽标 */}
         {isPinned ? (
           <Tooltip content="已固定">
@@ -278,54 +253,17 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
           </Tooltip>
         ) : null}
 
-        {isEditing ? (
-          <InPlaceUserMessageEditor
-            initialText={msg.text || ''}
-            initialAttachments={editableAttachments}
-            onCancel={handleCancelEdit}
-            onSubmit={handleEditSubmit}
-            onHeightChange={() => virtualScrollManager?.invalidateActual(msg.id)}
-            isSubmitting={isSubmittingEdit}
-          />
+        {isEditingRow ? (
+          <div
+            className={styles.rowComposerHost}
+            data-testid="in-place-user-editor"
+          >
+            {composerElement}
+          </div>
         ) : (
           <>
-            {/* 1. 上方：独立 58×58 附件卡片横排流（CRIT-07：width: 100% 彻底消除 49.3% 几何衰减） */}
-            {hasAttachmentCards ? (
-              <div
-                className={styles.userAttachmentStrip}
-                data-testid="user-attachment-strip"
-                role="list"
-                aria-label={`附件列表，共 ${allCardItems.length} 个`}
-              >
-                {allCardItems.map((item, idx) => (
-                  <AttachmentCard
-                    key={item.id || item.path || `${item.name}-${idx}`}
-                    item={item}
-                    onClick={(it) => {
-                      if (it.path) {
-                        handleOpenPath(it.path);
-                      } else if (
-                        it.dataUrl &&
-                        (it.dataUrl.startsWith('data:') ||
-                          it.dataUrl.startsWith('blob:'))
-                      ) {
-                        const w = window.open('');
-                        if (w) {
-                          w.document.write(
-                            `<img src="${it.dataUrl}" style="max-width:100%;height:auto;display:block;margin:auto;" />`
-                          );
-                        }
-                      } else {
-                        showToast('该附件无物理路径可打开');
-                      }
-                    }}
-                  />
-                ))}
-              </div>
-            ) : null}
-
-            {/* 2. 下方：独立文本气泡（【核心断言 NEG-06】：纯附件无文本时在 DOM 中严格销毁为 null） */}
-            {hasTextContent ? (
+            {/* 统一类输入框卡片：内嵌顶部附件卡片横排流 + 底部正文文本 */}
+            {hasAttachmentCards || hasTextContent ? (
               <div
                 className={`${styles.userBubble} ${isLong ? styles.userBubbleExpandable : ''}`}
                 onClick={toggleExpand}
@@ -338,9 +276,50 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
                 aria-expanded={isLong ? isExpanded : undefined}
                 aria-label={isLong ? userBubbleExpandAria(isExpanded) : undefined}
               >
-                {displayText}
-                {msg.status === 'queued' ? (
-                  <span className={styles.queued}>排队中</span>
+                {/* 1. 顶部：内嵌 58×58 附件卡片横排流 */}
+                {hasAttachmentCards ? (
+                  <div
+                    className={styles.userAttachmentStrip}
+                    data-testid="user-attachment-strip"
+                    role="list"
+                    aria-label={`附件列表，共 ${allCardItems.length} 个`}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {allCardItems.map((item, idx) => (
+                      <AttachmentCard
+                        key={item.id || item.path || `${item.name}-${idx}`}
+                        item={item}
+                        onClick={(it) => {
+                          if (it.path) {
+                            handleOpenPath(it.path);
+                          } else if (
+                            it.dataUrl &&
+                            (it.dataUrl.startsWith('data:') ||
+                              it.dataUrl.startsWith('blob:'))
+                          ) {
+                            const w = window.open('');
+                            if (w) {
+                              w.document.write(
+                                `<img src="${it.dataUrl}" style="max-width:100%;height:auto;display:block;margin:auto;" />`
+                              );
+                            }
+                          } else {
+                            showToast('该附件无物理路径可打开');
+                          }
+                        }}
+                      />
+                    ))}
+                  </div>
+                ) : null}
+
+                {/* 2. 底部：正文文本 */}
+                {hasTextContent ? (
+                  <div className={styles.userBubbleText}>
+                    {displayText}
+                    {msg.status === 'queued' ? (
+                      <span className={styles.queued}>排队中</span>
+                    ) : null}
+                  </div>
                 ) : null}
               </div>
             ) : null}
@@ -353,7 +332,7 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
               onCopy={handleCopy}
               onTogglePin={() => onTogglePin(msg.id)}
               onRetract={retractHandler}
-              onEdit={onEditMessageAndResend ? handleStartEdit : undefined}
+              onEdit={onStartEdit}
               alwaysVisible={Boolean(retractHandler)}
             />
           </>

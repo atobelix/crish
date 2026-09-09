@@ -134,6 +134,10 @@ export type ChatComposerProps = {
   notice?: ComposerNotice | null;
   onDismissNotice?: () => void;
   onNoticeFeedback?: () => void;
+  /** 是否处于消息就地编辑态 */
+  isEditingMessage?: boolean;
+  /** 取消就地编辑回调 */
+  onCancelEdit?: () => void;
 };
 
 export const ChatComposer: React.FC<ChatComposerProps> = ({
@@ -180,6 +184,8 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
   hasUndo,
   handleUndoDraft,
   draftInjectionTick,
+  isEditingMessage = false,
+  onCancelEdit,
 }) => {
   const plusMenuId = useId();
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -187,6 +193,17 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
   const plusBtnRef = useRef<HTMLButtonElement>(null);
   const layoutRef = useRef<HTMLDivElement>(null);
   const sendApiRef = useRef<ComposerSendApi | null>(null);
+
+  const handleHostKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (isEditingMessage && onCancelEdit && e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        onCancelEdit();
+      }
+    },
+    [isEditingMessage, onCancelEdit]
+  );
 
   /** F1-γ：富文本装配失败（lazy 加载 / 渲染抛错）后永久回落 textarea 分支 */
   const [richTextFailed, setRichTextFailed] = useState(false);
@@ -358,6 +375,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
         className={`${styles.composerWrapper}${className ? ` ${className}` : ''}`}
         data-input-field={richTextFailed ? 'textarea' : 'rich-text'}
         onClick={handleFileOpenClick}
+        onKeyDown={handleHostKeyDown}
         onDropFiles={(files) => {
           void onFilesSelected(files);
         }}
@@ -503,6 +521,16 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
                     </button>
                   </Tooltip>
                 ) : null)}
+              {isEditingMessage && onCancelEdit ? (
+                <button
+                  type="button"
+                  className={styles.cancelEditBtn}
+                  onClick={onCancelEdit}
+                  data-testid="composer-cancel-edit-btn"
+                >
+                  取消
+                </button>
+              ) : null}
               <ComposerSendControls
                 appearance="circle"
                 canSend={canSend}

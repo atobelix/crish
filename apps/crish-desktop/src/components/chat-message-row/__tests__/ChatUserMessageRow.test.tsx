@@ -62,7 +62,7 @@ describe('ChatUserMessageRow 全新解耦与物理删除立体验证套件', () 
     onOpenPath: vi.fn(),
   };
 
-  it('[NEG-06] 纯附件模式：必须渲染 userAttachmentStrip 与 58x58 卡片，且空气泡 userBubble 必须从 DOM 中彻底销毁为 null', () => {
+  it('[NEG-06] 纯附件模式：类输入框卡片内必须渲染 userAttachmentStrip 与 58x58 卡片，且正文 userBubbleText 彻底为 null', () => {
     const msg = createMockUserMessage({
       text: '', // 纯附件无文本内容
       attachments: [
@@ -75,16 +75,20 @@ describe('ChatUserMessageRow 全新解耦与物理删除立体验证套件', () 
       <ChatUserMessageRow {...defaultProps} msg={msg} />
     );
 
-    // 1) 验证卡片横排流已挂载
-    const strip = container.querySelector('[data-testid="user-attachment-strip"]');
+    // 1) 验证类输入框卡片已挂载
+    const bubble = container.querySelector(`.${styles.userBubble}`);
+    expect(bubble).not.toBeNull();
+
+    // 2) 验证卡片横排流内嵌在卡片内挂载
+    const strip = bubble?.querySelector('[data-testid="user-attachment-strip"]');
     expect(strip).not.toBeNull();
 
-    // 2) 验证渲染了 2 张 58x58 原子卡片
+    // 3) 验证渲染了 2 张 58x58 原子卡片
     const cards = container.querySelectorAll('[data-testid="attachment-card-58"]');
     expect(cards.length).toBe(2);
 
-    // 3) 核心负向断言：空气泡彻底为 null（零渲染，绝无空背景壳）
-    expect(container.querySelector(`.${styles.userBubble}`)).toBeNull();
+    // 4) 核心负向断言：纯附件时正文文本节点为 null
+    expect(container.querySelector(`.${styles.userBubbleText}`)).toBeNull();
   });
 
   it('纯文本模式：必须渲染 userBubble，且 userAttachmentStrip 严禁挂载在 DOM 中', () => {
@@ -107,7 +111,7 @@ describe('ChatUserMessageRow 全新解耦与物理删除立体验证套件', () 
     expect(container.querySelector('[data-testid="user-attachment-strip"]')).toBeNull();
   });
 
-  it('图文混排模式：上方必须渲染独立卡片流，下方必须渲染独立文本气泡，且二者为平级兄弟节点', () => {
+  it('图文混排模式：类输入框卡片内部上方必须渲染内嵌卡片流，下方渲染正文文本', () => {
     const msg = createMockUserMessage({
       text: '请看附件中的配置',
       attachments: [{ name: 'config.json', path: 'c:/Software/conex/config.json' }],
@@ -117,21 +121,23 @@ describe('ChatUserMessageRow 全新解耦与物理删除立体验证套件', () 
       <ChatUserMessageRow {...defaultProps} msg={msg} />
     );
 
-    const strip = container.querySelector('[data-testid="user-attachment-strip"]');
     const bubble = container.querySelector(`.${styles.userBubble}`);
-
-    expect(strip).not.toBeNull();
     expect(bubble).not.toBeNull();
 
-    // 验证兄弟层级：卡片流必须在文本气泡上方
-    const stack = container.querySelector(`.${styles.userStack}`);
-    expect(stack).not.toBeNull();
-    const children = Array.from(stack?.children || []);
+    const strip = bubble?.querySelector('[data-testid="user-attachment-strip"]');
+    const text = bubble?.querySelector(`.${styles.userBubbleText}`);
+
+    expect(strip).not.toBeNull();
+    expect(text).not.toBeNull();
+    expect(text?.textContent).toContain('请看附件中的配置');
+
+    // 验证同构卡片内部层级：卡片流必须在文本正文上方
+    const children = Array.from(bubble?.children || []);
     const stripIndex = children.indexOf(strip as Element);
-    const bubbleIndex = children.indexOf(bubble as Element);
+    const textIndex = children.indexOf(text as Element);
 
     expect(stripIndex).toBeGreaterThanOrEqual(0);
-    expect(bubbleIndex).toBeGreaterThan(stripIndex);
+    expect(textIndex).toBeGreaterThan(stripIndex);
   });
 
   it('[NEG-02 & NEG-03] 死亡 CSS 与旧药丸彻底绝迹断言：DOM 树与源文件中绝对不得残留旧类名', () => {
@@ -234,8 +240,8 @@ describe('ChatUserMessageRow 全新解耦与物理删除立体验证套件', () 
     expect(bubble?.textContent).toContain('排队中');
   });
 
-  it('就地编辑交互：点击编辑按钮呼出 InPlaceUserMessageEditor，点击取消还原原气泡', () => {
-    const onEditMessageAndResend = vi.fn();
+  it('就地编辑交互：点击编辑按钮触发 onStartEdit 回调', () => {
+    const onStartEdit = vi.fn();
     const msg = createMockUserMessage({
       text: '这是待编辑的原消息内容',
       attachments: [{ name: 'doc.pdf', path: 'c:/Software/conex/doc.pdf' }],
@@ -245,11 +251,11 @@ describe('ChatUserMessageRow 全新解耦与物理删除立体验证套件', () 
       <ChatUserMessageRow
         {...defaultProps}
         msg={msg}
-        onEditMessageAndResend={onEditMessageAndResend}
+        onStartEdit={onStartEdit}
       />
     );
 
-    // 默认展示气泡
+    // 默认展示类输入框卡片
     expect(container.querySelector(`.${styles.userBubble}`)).not.toBeNull();
     expect(container.querySelector('[data-testid="in-place-user-editor"]')).toBeNull();
 
@@ -258,67 +264,39 @@ describe('ChatUserMessageRow 全新解耦与物理删除立体验证套件', () 
     expect(editBtn).not.toBeNull();
     fireEvent.click(editBtn!);
 
-    // 呼出就地编辑器
-    const editor = container.querySelector('[data-testid="in-place-user-editor"]');
-    expect(editor).not.toBeNull();
-    const textarea = editor?.querySelector('textarea');
-    expect(textarea?.value).toBe('这是待编辑的原消息内容');
-
-    // 点击取消
-    const cancelBtn = Array.from(editor?.querySelectorAll('button') || []).find(
-      (b) => b.textContent?.trim() === '取消'
-    );
-    expect(cancelBtn).toBeDefined();
-    fireEvent.click(cancelBtn!);
-
-    // 还原原气泡
-    expect(container.querySelector('[data-testid="in-place-user-editor"]')).toBeNull();
-    expect(container.querySelector(`.${styles.userBubble}`)).not.toBeNull();
-    expect(onEditMessageAndResend).not.toHaveBeenCalled();
+    expect(onStartEdit).toHaveBeenCalledTimes(1);
   });
 
-  it('就地编辑交互：修改文本并点击“保存并重新发送”，正确调用 onEditMessageAndResend', async () => {
-    const onEditMessageAndResend = vi.fn().mockResolvedValue(undefined);
+  it('就地编辑交互：isEditing 为 true 时直接挂载外部单实例 composerElement', () => {
     const msg = createMockUserMessage({
-      text: '原始提问',
-      attachments: [{ name: 'data.json', path: 'c:/Software/conex/data.json' }],
+      text: '这是正在编辑的消息',
     });
 
-    const { container } = render(
+    const { container, rerender } = render(
       <ChatUserMessageRow
         {...defaultProps}
         msg={msg}
-        onEditMessageAndResend={onEditMessageAndResend}
+        isEditing={true}
+        composerElement={<div data-testid="transferred-composer">100% 复用的 ChatComposer</div>}
       />
     );
 
-    // 点击编辑按钮呼出编辑器
-    const editBtn = container.querySelector('[data-testid="message-edit"]');
-    fireEvent.click(editBtn!);
+    // 挂载单实例 composerElement
+    const editorHost = container.querySelector('[data-testid="in-place-user-editor"]');
+    expect(editorHost).not.toBeNull();
+    expect(container.querySelector('[data-testid="transferred-composer"]')).not.toBeNull();
+    expect(container.querySelector(`.${styles.userBubble}`)).toBeNull();
 
-    const editor = container.querySelector('[data-testid="in-place-user-editor"]');
-    expect(editor).not.toBeNull();
-
-    // 修改输入内容
-    const textarea = editor?.querySelector('textarea');
-    fireEvent.change(textarea!, { target: { value: '更新后的修改提问' } });
-
-    // 点击保存并重新发送
-    const sendBtn = Array.from(editor?.querySelectorAll('button') || []).find((b) =>
-      b.textContent?.includes('保存并重新发送')
+    // 取消编辑后恢复展示气泡
+    rerender(
+      <ChatUserMessageRow
+        {...defaultProps}
+        msg={msg}
+        isEditing={false}
+      />
     );
-    expect(sendBtn).toBeDefined();
-    await act(async () => {
-      fireEvent.click(sendBtn!);
-    });
 
-    expect(onEditMessageAndResend).toHaveBeenCalledTimes(1);
-    expect(onEditMessageAndResend).toHaveBeenCalledWith(
-      'user-msg-1',
-      '更新后的修改提问',
-      expect.arrayContaining([
-        expect.objectContaining({ name: 'data.json' }),
-      ])
-    );
+    expect(container.querySelector('[data-testid="in-place-user-editor"]')).toBeNull();
+    expect(container.querySelector(`.${styles.userBubble}`)).not.toBeNull();
   });
 });

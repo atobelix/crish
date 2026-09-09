@@ -38,12 +38,20 @@ export interface ChatMessageListProjectPickerProps {
   onProjectChanged: () => void;
 }
 
-/** Composer 交互域（输入设置/后续发送收敛为单一子对象） */
+/** Composer 交互域（输入设置/后续发送/就地编辑收敛为单一子对象） */
 export interface ChatMessageListComposerProps {
   onSetChatInput: (text: string) => void;
   onSendFollowUp?: (prompt: string) => void;
   handleFillFollowUp?: (prompt: string) => void;
   handleSendFollowUp?: (prompt: string) => void;
+  /** 当前处于就地编辑态的用户消息 ID */
+  editingMessageId?: string | null;
+  /** 触发就地编辑消息 */
+  onStartEditMessage?: (msg: SessionMessage) => void;
+  /** 取消就地编辑消息 */
+  onCancelEditMessage?: () => void;
+  /** 单实例转移的 ChatComposer 组件节点 */
+  composerElement?: React.ReactNode;
 }
 
 /** 生成操作域（重生成/分支收敛为单一子对象） */

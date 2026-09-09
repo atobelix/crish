@@ -398,6 +398,7 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
             messageMatchesSearch(msg, searchHighlightQuery);
 
           if (msg.sender === 'user') {
+            const isThisMsgEditing = composer?.editingMessageId === msg.id;
             return (
               <AppErrorBoundary key={msg.id} variant="minimal" title="消息出错">
                 <div data-vindex={msg.id}>
@@ -410,6 +411,14 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
                     onTogglePin={togglePin}
                     isLastUser={msg.id === lastUserId}
                     onRetract={onRetract}
+                    isEditing={isThisMsgEditing}
+                    onStartEdit={
+                      composer?.onStartEditMessage
+                        ? () => composer.onStartEditMessage?.(msg)
+                        : undefined
+                    }
+                    onCancelEdit={composer?.onCancelEditMessage}
+                    composerElement={isThisMsgEditing ? composer?.composerElement : undefined}
                     onEditMessageAndResend={onEditMessageAndResend}
                     messageIndex={virtualIndex}
                     virtualScrollManager={manager}

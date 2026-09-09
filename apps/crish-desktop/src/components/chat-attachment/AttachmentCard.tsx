@@ -146,18 +146,17 @@ export function resolveCardImageSrc(item: AttachmentItem): string {
     return source;
   }
   if (isAbsoluteFsPath(source)) {
-    return convertFileSrc(source);
+    return convertFileSrc(source.replace(/\\/g, '/'));
   }
   // 相对路径通过工作区解析为绝对路径
   const resolved = resolveWorkspacePath(source);
   if (resolved && isAbsoluteFsPath(resolved)) {
-    return convertFileSrc(resolved);
+    return convertFileSrc(resolved.replace(/\\/g, '/'));
   }
   const workspaceRoot = getWorkspacePath()?.trim();
   if (workspaceRoot) {
-    const sep = workspaceRoot.includes('\\') ? '\\' : '/';
-    const abs = `${workspaceRoot.replace(/[\\/]+$/, '')}${sep}${source.replace(/^\.[\\/]/, '')}`;
-    return convertFileSrc(abs);
+    const abs = `${workspaceRoot.replace(/[\\/]+$/, '/')}/${source.replace(/^\.[\\/]/, '')}`;
+    return convertFileSrc(abs.replace(/\\/g, '/'));
   }
   return source;
 }

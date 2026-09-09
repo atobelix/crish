@@ -14,6 +14,9 @@ import { ChatComposerWrapper } from './ChatComposerWrapper';
 import { openSettings, patchSession } from '../../api/storeAccess';
 import { hasFiles } from '../chat-composer/ComposerDropHost';
 import * as Lucide from 'lucide-react';
+import { normalizeMessageAttachments } from '../chat-attachment/AttachmentCard';
+import type { SessionMessage } from '../../store/types';
+import type { ChatAttachment } from '../../hooks/useChatStream';
 
 const ScheduledTasksPanel = lazy(() =>
   import('../settings/ScheduledTasksPanel').then((m) => ({
@@ -81,6 +84,65 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
       };
     }, [state.composerProps]);
 
+    const [editingMessageId, setEditingMessageId] = React.useState<string | null>(null);
+    const preEditDraftRef = React.useRef<{
+      chatInput: string;
+      attachments: ChatAttachment[];
+    }>({
+      chatInput: '',
+      attachments: [],
+    });
+
+    React.useEffect(() => {
+      setEditingMessageId(null);
+    }, [state.activeSessionId]);
+
+    const handleStartEditMessage = React.useCallback(
+      (targetMsg: SessionMessage) => {
+        preEditDraftRef.current = {
+          chatInput: state.composerProps.chatInput,
+          attachments: [...state.composerProps.attachments],
+        };
+        setEditingMessageId(targetMsg.id);
+        state.composerProps.setChatInput(targetMsg.text || '');
+        const cards = normalizeMessageAttachments(
+          targetMsg.attachments,
+          targetMsg.images
+        );
+        state.composerProps.setAttachments(
+          cards.map((item) => ({
+            id:
+              item.id ||
+              `att-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            name: item.name || '附件',
+            path: item.path,
+            mime: item.mime,
+            dataUrl: item.dataUrl,
+            isImage: item.isImage,
+            size: item.size,
+            status: 'ready' as const,
+            progress: 100,
+          }))
+        );
+      },
+      [state.composerProps]
+    );
+
+    const handleCancelEditMessage = React.useCallback(() => {
+      state.composerProps.setChatInput(preEditDraftRef.current.chatInput);
+      state.composerProps.setAttachments(preEditDraftRef.current.attachments);
+      setEditingMessageId(null);
+    }, [state.composerProps]);
+
+    const handleSaveEditMessage = React.useCallback(async () => {
+      if (!editingMessageId) return;
+      const targetId = editingMessageId;
+      const newText = state.composerProps.chatInput;
+      const newAttachments = state.composerProps.attachments;
+      setEditingMessageId(null);
+      await state.handleEditMessageAndResend(targetId, newText, newAttachments);
+    }, [editingMessageId, state]);
+
     // R2-5 B1（P1-12 聚合）：ChatComposer 主要 props 经 spread 传递；
     // on* 命名差异字段（handle* → on*）保持显式映射（消除 30 字段逐项拆包）
     const composerElement = (
@@ -98,6 +160,9 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
         onPermissionChange={(m) => {
           state.setPermissionMode(m);
         }}
+        isEditingMessage={Boolean(editingMessageId)}
+        onCancelEdit={editingMessageId ? handleCancelEditMessage : undefined}
+        onSend={editingMessageId ? handleSaveEditMessage : state.composerProps.onSend}
         rightActions={
           state.showModelPicker ? (
             <ModelBadgePicker
@@ -171,6 +236,10 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
       composer: {
         onSetChatInput: state.composerProps.setChatInput,
         onSendFollowUp: state.handleSendFollowUp,
+        editingMessageId,
+        onStartEditMessage: handleStartEditMessage,
+        onCancelEditMessage: handleCancelEditMessage,
+        composerElement: editingMessageId ? composerElement : null,
       },
       generation: {
         onRegenerate: state.handleRegenerate,
@@ -302,7 +371,7 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
           <ChatComposerWrapper
             mainSurface={state.mainSurface}
             emptyKind={state.emptyKind}
-            composerElement={composerElement}
+            composerElement={editingMessageId ? null : composerElement}
             ribbons={ribbons}
             runNotice={state.composerProps.runNotice}
             onDismissRunNotice={() => state.composerProps.setRunNotice(null)}
