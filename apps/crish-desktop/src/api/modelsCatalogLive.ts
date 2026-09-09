@@ -131,10 +131,11 @@ export function resolveThinkingHandoff(
     return unsupportedHandoff(providerId, modelId);
   }
 
+  // 已存档选项命中直接使用；未存档时跳过 'Off'，选首个非 Off 项（避免总默认到关闭思考）
   const hit =
     selectedTitle != null && Object.hasOwn(thinking, selectedTitle)
       ? selectedTitle
-      : entries[0]![0];
+      : (entries.find(([k]) => k.toLowerCase() !== 'off')?.[0] ?? entries[0]![0]);
 
   const provider = getLiveProvider(providerId);
   const thinkingFormat = (provider?.compat ?? spec.compat)?.thinkingFormat;

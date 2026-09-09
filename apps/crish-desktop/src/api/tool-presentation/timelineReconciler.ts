@@ -80,7 +80,7 @@ export function sanitizeTimelineTurnIndex(raw: unknown): number {
  * 核心设计：
  * 1. 以 `${cleanTurn}:${type}:${id}` 为三元组槽位；
  * 2. 更新对应槽位内容，并 100% 保留已有未被覆盖的历史 thought 与 tool_call 块（orphan blocks 永不丢失）；
- * 3. 排序约束：按 cleanTurn 升序，同 turn 内部按 [Thought_k] (1) -> [ToolCalls_k] (2) -> [Text_k] (3) 确定性因果序排序。
+ * 3. 严格按流式到达的插入顺序输出——禁止任何 type 排序；真实时间线顺序即为唯一权威。
  */
 export function reconcileAssistantMessageBlocks(
   existingBlocks: MessageTimelineBlock[] | undefined,
@@ -98,7 +98,7 @@ export function reconcileAssistantMessageBlocks(
     }
   }
 
-  // 2. 融合 incoming blocks
+  // 2. 融合 incoming blocks（严格保持 incoming 插入顺序，即流式到达顺序）
   if (incomingBlocks && incomingBlocks.length > 0) {
     for (const b of incomingBlocks) {
       const cleanTurn = sanitizeTimelineTurnIndex(b.turnIndex);
@@ -112,21 +112,15 @@ export function reconcileAssistantMessageBlocks(
     }
   }
 
-  // 3. 追加未被覆盖的历史工具与思考块（100% 永久保全历史 orphan 思考块与工具块）
+  // 3. 追加未被覆盖的历史工具与思考块（orphan 块追加到末尾，保持相对顺序）
   for (const [, orphan] of existingMap) {
     if (orphan.type === 'tool_call' || orphan.type === 'thought') {
       result.push(orphan);
     }
   }
 
-  // 4. 按轮次与确定性因果序排序：[Thought_k] (1) -> [ToolCalls_k] (2) -> [Text_k] (3)
-  const order: Record<string, number> = { thought: 1, tool_call: 2, text: 3 };
-  return result.sort((a, b) => {
-    const turnA = sanitizeTimelineTurnIndex(a.turnIndex);
-    const turnB = sanitizeTimelineTurnIndex(b.turnIndex);
-    if (turnA !== turnB) return turnA - turnB;
-    return (order[a.type] ?? 9) - (order[b.type] ?? 9);
-  });
+  // 严格按插入顺序（流式到达顺序）返回，不做任何 type/turn 重排序
+  return result;
 }
 
 /**

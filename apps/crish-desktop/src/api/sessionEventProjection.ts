@@ -270,6 +270,17 @@ export function projectEventsToMessages(events: unknown[]): {
       const a = ensureAssistant(ts);
       if (b.type === 'thought') {
         a.thinking = (a.thinking || '') + t;
+        // 同步维护 blocks 中的思考块（支持多轮思考卡片复现）
+        if (!a.blocks) a.blocks = [];
+        const thoughtKey = `thought-turn-0`;
+        const existingIdx = a.blocks.findIndex(
+          (bl) => bl.type === 'thought' && bl.id === thoughtKey
+        );
+        if (existingIdx >= 0) {
+          a.blocks[existingIdx]!.content = a.thinking;
+        } else {
+          a.blocks.push({ type: 'thought', id: thoughtKey, content: a.thinking, turnIndex: 0 });
+        }
       } else {
         a.text = (a.text || '') + t;
         if (!a.blocks) a.blocks = [];

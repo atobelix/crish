@@ -130,6 +130,72 @@ pub fn parse_scanned_models(body: &serde_json::Value, profile_id: &str) -> Vec<S
     scanned
 }
 
+#[derive(Debug, Clone)]
+struct ProbeTarget {
+    display_name: String,
+    base_url: String,
+    endpoint_type: String,
+    model_to_test: String,
+}
+
+fn resolve_probe_target(
+    profile_id: &str,
+    requested_model: Option<&str>,
+) -> Result<ProbeTarget, (u16, String)> {
+    let state = load_profiles_config();
+    let live = crate::engine_provider::protocol::live_catalog();
+
+    let state_profile = state.profiles.get(profile_id);
+    let live_provider = live.tree.providers.get(profile_id);
+
+    if state_profile.is_none() && live_provider.is_none() {
+        return Err((404, format!("未找到服务商配置 [{profile_id}]")));
+    }
+
+    let display_name = live_provider
+        .and_then(|p| p.display_name.clone())
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| profile_id.to_string());
+
+    let base_url = live_provider
+        .and_then(|p| p.base_url.clone())
+        .or_else(|| state_profile.and_then(|p| p.base_url.clone()))
+        .filter(|s| !s.trim().is_empty());
+
+    let base_url = match base_url {
+        Some(u) => u.trim().trim_end_matches('/').to_string(),
+        None => {
+            return Err((400, format!("服务商 [{display_name}] 未配置 Base URL 地址")));
+        }
+    };
+
+    let endpoint_type = live_provider
+        .map(|p| match p.protocol {
+            agent_provider::models::ProtocolKind::AnthropicMessages => "anthropic".to_string(),
+            agent_provider::models::ProtocolKind::GoogleGenerateContent => "gemini".to_string(),
+            agent_provider::models::ProtocolKind::OpenAiResponses => "responses".to_string(),
+            _ => "chat-completions".to_string(),
+        })
+        .or_else(|| state_profile.and_then(|p| p.endpoint.clone()))
+        .unwrap_or_else(|| "chat-completions".to_string());
+
+    let model_to_test = requested_model
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(ToString::to_string)
+        .or_else(|| live_provider.and_then(|p| p.models.first().map(|m| m.id.clone())))
+        .or_else(|| state_profile.and_then(|p| p.model.clone()))
+        .or_else(|| state_profile.and_then(|p| p.models.first().cloned()))
+        .unwrap_or_else(|| "deepseek-chat".to_string());
+
+    Ok(ProbeTarget {
+        display_name,
+        base_url,
+        endpoint_type,
+        model_to_test,
+    })
+}
+
 /// 原生探活核心逻辑
 pub async fn probe_ping_core(req: ProbePingRequest) -> ProbePingResult {
     let profile_id = req.profile_id.trim();
@@ -142,60 +208,45 @@ pub async fn probe_ping_core(req: ProbePingRequest) -> ProbePingResult {
         };
     }
 
-    let state = load_profiles_config();
-    let profile = match state.profiles.get(profile_id) {
-        Some(p) => p.clone(),
-        None => {
+    let target = match resolve_probe_target(profile_id, req.model.as_deref()) {
+        Ok(t) => t,
+        Err((code, err)) => {
             return ProbePingResult {
                 ok: false,
                 latency_ms: None,
-                status_code: Some(404),
-                error: Some(format!("未找到服务商配置 [{profile_id}]")),
+                status_code: Some(code),
+                error: Some(err),
             };
         }
     };
 
-    let base_url = match profile
-        .base_url
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-    {
-        Some(url) => url.trim_end_matches('/'),
-        None => {
-            return ProbePingResult {
-                ok: false,
-                latency_ms: None,
-                status_code: Some(400),
-                error: Some("服务商未配置 Base URL 地址".to_string()),
-            };
-        }
-    };
-
-    // 读取 DPAPI 密钥
+    // 读取 DPAPI 密钥（若 DPAPI 缺失，支持回退到 live_catalog 中的配置密钥）
     let api_key = match read_profile_key(profile_id) {
-        Ok(Some(k)) if !k.trim().is_empty() => k.trim().to_string(),
-        _ => {
+        Ok(Some(k)) if !k.trim().is_empty() => Some(k.trim().to_string()),
+        _ => crate::engine_provider::protocol::live_catalog()
+            .tree
+            .providers
+            .get(profile_id)
+            .and_then(|p| p.api_key.clone())
+            .filter(|k| !k.trim().is_empty()),
+    };
+
+    let api_key = match api_key {
+        Some(k) => k,
+        None => {
             return ProbePingResult {
                 ok: false,
                 latency_ms: None,
                 status_code: Some(401),
-                error: Some("未配置 API Key，请先输入密钥并保存".to_string()),
+                error: Some(format!(
+                    "服务商 [{}] 未配置 API Key，请先输入密钥并保存",
+                    target.display_name
+                )),
             };
         }
     };
 
-    let model_to_test = req
-        .model
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(ToString::to_string)
-        .or_else(|| profile.model.clone())
-        .or_else(|| profile.models.first().cloned())
-        .unwrap_or_else(|| "deepseek-chat".to_string());
-
-    let timeout_duration = Duration::from_millis(req.timeout_ms.unwrap_or(5000));
+    let timeout_duration = Duration::from_millis(req.timeout_ms.unwrap_or(15000));
     let client = match reqwest::Client::builder().timeout(timeout_duration).build() {
         Ok(c) => c,
         Err(e) => {
@@ -208,14 +259,12 @@ pub async fn probe_ping_core(req: ProbePingRequest) -> ProbePingResult {
         }
     };
 
-    let endpoint_type = profile.endpoint.as_deref().unwrap_or("chat-completions");
-    let req_builder = match endpoint_type {
+    let req_builder = match target.endpoint_type.as_str() {
         "anthropic" => {
-            let url = if base_url.ends_with("/v1/messages") {
-                base_url.to_string()
-            } else {
-                format!("{base_url}/v1/messages")
-            };
+            let url = agent_provider::request::build_endpoint_url(
+                agent_provider::models::ProtocolKind::AnthropicMessages,
+                &target.base_url,
+            );
             let mut headers = HeaderMap::new();
             if let Ok(val) = HeaderValue::from_str(&api_key) {
                 headers.insert("x-api-key", val);
@@ -223,15 +272,18 @@ pub async fn probe_ping_core(req: ProbePingRequest) -> ProbePingResult {
             headers.insert("anthropic-version", HeaderValue::from_static("2023-06-01"));
             headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
             let body = serde_json::json!({
-                "model": model_to_test,
+                "model": target.model_to_test,
                 "messages": [{"role": "user", "content": "hi"}],
                 "max_tokens": 1
             });
             client.post(url).headers(headers).json(&body)
         }
         "gemini" => {
-            let url =
-                format!("{base_url}/v1beta/models/{model_to_test}:generateContent?key={api_key}");
+            let base_url = target.base_url.trim_end_matches('/');
+            let url = format!(
+                "{base_url}/v1beta/models/{}:generateContent?key={api_key}",
+                target.model_to_test
+            );
             let body = serde_json::json!({
                 "contents": [{"parts": [{"text": "hi"}]}],
                 "generationConfig": {"maxOutputTokens": 1}
@@ -243,18 +295,17 @@ pub async fn probe_ping_core(req: ProbePingRequest) -> ProbePingResult {
         }
         _ => {
             // 默认 OpenAI / DeepSeek / ChatCompletions
-            let url = if base_url.ends_with("/chat/completions") {
-                base_url.to_string()
-            } else {
-                format!("{base_url}/chat/completions")
-            };
+            let url = agent_provider::request::build_endpoint_url(
+                agent_provider::models::ProtocolKind::OpenAiChat,
+                &target.base_url,
+            );
             let mut headers = HeaderMap::new();
             if let Ok(val) = HeaderValue::from_str(&format!("Bearer {api_key}")) {
                 headers.insert(AUTHORIZATION, val);
             }
             headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
             let body = serde_json::json!({
-                "model": model_to_test,
+                "model": target.model_to_test,
                 "messages": [{"role": "user", "content": "hi"}],
                 "max_tokens": 1
             });
@@ -263,11 +314,32 @@ pub async fn probe_ping_core(req: ProbePingRequest) -> ProbePingResult {
     };
 
     let started = Instant::now();
-    match req_builder.send().await {
+    let retry_clone = req_builder.try_clone();
+    let resp_res = match req_builder.send().await {
+        Ok(resp) if resp.status().as_u16() == 429 => {
+            if let Some(retry) = retry_clone {
+                tokio::time::sleep(Duration::from_millis(1500)).await;
+                retry.send().await
+            } else {
+                Ok(resp)
+            }
+        }
+        other => other,
+    };
+
+    match resp_res {
         Ok(resp) => {
             let latency_ms = started.elapsed().as_millis() as u64;
             let status_code = resp.status().as_u16();
             if resp.status().is_success() {
+                ProbePingResult {
+                    ok: true,
+                    latency_ms: Some(latency_ms),
+                    status_code: Some(status_code),
+                    error: None,
+                }
+            } else if status_code == 429 {
+                // HTTP 429 表明网络已连通、Base URL 与 API Key 均鉴权通过，仅触发服务商 TPM/RPM 限流
                 ProbePingResult {
                     ok: true,
                     latency_ms: Some(latency_ms),
@@ -323,46 +395,42 @@ pub async fn probe_scan_models_core(
         };
     }
 
-    let state = load_profiles_config();
-    let profile = match state.profiles.get(profile_id) {
-        Some(p) => p.clone(),
-        None => {
+    let target = match resolve_probe_target(profile_id, None) {
+        Ok(t) => t,
+        Err((_code, err)) => {
             return ProbeScanResult {
                 ok: false,
                 models: vec![],
-                error: Some(format!("未找到服务商配置 [{profile_id}]")),
-            };
-        }
-    };
-
-    let base_url = match profile
-        .base_url
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-    {
-        Some(url) => url.trim_end_matches('/'),
-        None => {
-            return ProbeScanResult {
-                ok: false,
-                models: vec![],
-                error: Some("服务商未配置 Base URL 地址".to_string()),
+                error: Some(err),
             };
         }
     };
 
     let api_key = match read_profile_key(profile_id) {
-        Ok(Some(k)) if !k.trim().is_empty() => k.trim().to_string(),
-        _ => {
+        Ok(Some(k)) if !k.trim().is_empty() => Some(k.trim().to_string()),
+        _ => crate::engine_provider::protocol::live_catalog()
+            .tree
+            .providers
+            .get(profile_id)
+            .and_then(|p| p.api_key.clone())
+            .filter(|k| !k.trim().is_empty()),
+    };
+
+    let api_key = match api_key {
+        Some(k) => k,
+        None => {
             return ProbeScanResult {
                 ok: false,
                 models: vec![],
-                error: Some("未配置 API Key，请先保存密钥后再扫描".to_string()),
+                error: Some(format!(
+                    "服务商 [{}] 未配置 API Key，请先保存密钥后再扫描",
+                    target.display_name
+                )),
             };
         }
     };
 
-    let timeout_duration = Duration::from_millis(req.timeout_ms.unwrap_or(8000));
+    let timeout_duration = Duration::from_millis(req.timeout_ms.unwrap_or(15000));
     let client = match reqwest::Client::builder().timeout(timeout_duration).build() {
         Ok(c) => c,
         Err(e) => {
@@ -374,11 +442,13 @@ pub async fn probe_scan_models_core(
         }
     };
 
-    let endpoint_type = profile.endpoint.as_deref().unwrap_or("chat-completions");
-    let req_builder = match endpoint_type {
+    let req_builder = match target.endpoint_type.as_str() {
         "anthropic" => {
-            let url = if base_url.ends_with("/v1/models") {
+            let base_url = target.base_url.trim_end_matches('/');
+            let url = if base_url.ends_with("/v1/models") || base_url.ends_with("/models") {
                 base_url.to_string()
+            } else if base_url.ends_with("/v1") {
+                format!("{base_url}/models")
             } else {
                 format!("{base_url}/v1/models")
             };
@@ -388,12 +458,18 @@ pub async fn probe_scan_models_core(
                 .header("anthropic-version", "2023-06-01")
         }
         "gemini" => {
+            let base_url = target.base_url.trim_end_matches('/');
             let url = format!("{base_url}/v1beta/models?key={api_key}");
             client.get(url)
         }
         _ => {
+            let base_url = target.base_url.trim_end_matches('/');
             let url = if base_url.ends_with("/models") {
                 base_url.to_string()
+            } else if base_url.ends_with("/v1") {
+                format!("{base_url}/models")
+            } else if base_url.ends_with("openai.com") || base_url.contains("sensenova.cn") {
+                format!("{base_url}/v1/models")
             } else {
                 format!("{base_url}/models")
             };
@@ -466,17 +542,24 @@ pub async fn probe_scan_models_core(
 
     // 2. 更新 profile-config.json 中的 models 映射
     let mut state = load_profiles_config();
-    if let Some(p) = state.profiles.get_mut(profile_id) {
-        let mut changed = false;
-        for m in &scanned_entries {
-            if !p.models.contains(&m.model) {
-                p.models.push(m.model.clone());
-                changed = true;
-            }
+    let p = state.profiles.entry(profile_id.to_string()).or_insert_with(|| {
+        crate::config::profile::ProfileConfig {
+            base_url: Some(target.base_url.clone()),
+            endpoint: Some(target.endpoint_type.clone()),
+            model: Some(target.model_to_test.clone()),
+            stream: Some(true),
+            models: vec![],
         }
-        if changed {
-            let _ = state.save();
+    });
+    let mut changed = false;
+    for m in &scanned_entries {
+        if !p.models.contains(&m.model) {
+            p.models.push(m.model.clone());
+            changed = true;
         }
+    }
+    if changed {
+        let _ = state.save();
     }
 
     ProbeScanResult {
@@ -773,5 +856,25 @@ mod tests {
             std::env::remove_var("CRISH_WORKBENCH_CONFIG_DIR");
         }
         let _ = std::fs::remove_dir_all(&test_dir);
+    }
+
+    #[test]
+    fn resolve_probe_target_prefers_live_provider_catalog() {
+        let yaml = r#"
+version: 2
+providers:
+  test-sensenova:
+    displayName: senseNova
+    baseUrl: https://token.sensenova.cn/v1
+    protocol: openai/chat
+    models:
+      - id: deepseek-v4-flash
+"#;
+        crate::engine_provider::protocol::reload_live_catalog_from_yaml_str(yaml).unwrap();
+        let target = resolve_probe_target("test-sensenova", None).expect("target should resolve");
+        assert_eq!(target.display_name, "senseNova");
+        assert_eq!(target.base_url, "https://token.sensenova.cn/v1");
+        assert_eq!(target.model_to_test, "deepseek-v4-flash");
+        assert_eq!(target.endpoint_type, "chat-completions");
     }
 }

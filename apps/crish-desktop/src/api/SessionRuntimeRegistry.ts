@@ -5,6 +5,7 @@
  * 职责：
  * - diffFiles：按会话隔离的 diff 状态
  * - attachments：按会话隔离的附件
+ * - thinkingTitle：本会话思考档位 Title（yaml 字典 key）；不进 yaml / SessionState
  * - chatMainSurface：主面板视图模式
  * - fileCompareModes：文件对比模式
  * - scrollPosition / lastActivePanelTab：UI 恢复
@@ -12,6 +13,7 @@
 
 import type { FileDiff } from '../store/types';
 import type { QueuedMessage } from '../hooks/chat-stream/types';
+import { emitUiEvent } from './uiEvents';
 
 export interface Attachment {
   id: string;
@@ -33,6 +35,12 @@ export interface SessionRuntimeState {
   fileCompareModes: Record<string, 'split' | 'unified'>;
   scrollPosition: number;
   lastActivePanelTab: string | null;
+  /**
+   * 本会话选中的思考档位 Title（yaml `thinking` 字典 key）。
+   * 与 attachments 同级；不进 yaml、不进 SessionState 消息库。
+   * `null` = 未选 / 切到非思考模型已清空。
+   */
+  thinkingTitle?: string | null;
 }
 
 class SessionRuntimeRegistry {
@@ -88,6 +96,7 @@ class SessionRuntimeRegistry {
       state.attachments = [];
       state.queuedMessages = [];
       state.fileCompareModes = {};
+      state.thinkingTitle = null;
     }
     this.states.delete(sessionId);
     this.refCounts.delete(sessionId);
@@ -176,9 +185,79 @@ class SessionRuntimeRegistry {
       fileCompareModes: {},
       scrollPosition: 0,
       lastActivePanelTab: null,
+      thinkingTitle: null,
     };
   }
 }
 
 /** 全局单例 */
 export const sessionRuntimeRegistry = new SessionRuntimeRegistry();
+
+/**
+ * 写入本会话思考档位 Title。只碰 runtime，不写 yaml / SessionState。
+ * 空 sessionId 为 no-op，避免落幽灵槽。
+ * 写入后广播 `thinking-title-changed`，Picker 与 Composer 胶囊订阅同步。
+ */
+export function setSessionThinkingTitle(
+  sessionId: string,
+  title: string | null,
+): void {
+  if (!sessionId) return;
+  sessionRuntimeRegistry.save(sessionId, { thinkingTitle: title });
+  emitUiEvent('thinking-title-changed', { sessionId });
+}
+
+/**
+ * 读取本会话思考档位 Title。未创建 runtime 或空 sessionId → `null`。
+ * 只读已有槽，不因查询新建/挤出其它会话。
+ */
+export function getSessionThinkingTitle(sessionId: string): string | null {
+  if (!sessionId) return null;
+  if (!sessionRuntimeRegistry.exists(sessionId)) return null;
+  return sessionRuntimeRegistry.get(sessionId).thinkingTitle ?? null;
+}
+
+// ── 跨会话、按模型持久化的思考档位（localStorage） ───────────────────────────
+
+/** localStorage 键名：按提供者 + 模型 ID 存档用户选择的思考强度 */
+function modelThinkingPrefKey(providerId: string, modelId: string): string {
+  return `conex:model-thinking-pref:${providerId}:${modelId}`;
+}
+
+/**
+ * 持久化用户为某模型选择的思考档位 Title 到 localStorage。
+ * 跨会话保留，下次打开同模型时恢复。
+ */
+export function saveModelThinkingPref(
+  providerId: string,
+  modelId: string,
+  title: string | null,
+): void {
+  if (!providerId || !modelId) return;
+  try {
+    const key = modelThinkingPrefKey(providerId, modelId);
+    if (title == null) {
+      localStorage.removeItem(key);
+    } else {
+      localStorage.setItem(key, title);
+    }
+  } catch {
+    // localStorage 不可用时静默跳过
+  }
+}
+
+/**
+ * 读取用户为某模型选择的思考档位 Title（来自 localStorage）。
+ * 未存档 → `null`。
+ */
+export function loadModelThinkingPref(
+  providerId: string,
+  modelId: string,
+): string | null {
+  if (!providerId || !modelId) return null;
+  try {
+    return localStorage.getItem(modelThinkingPrefKey(providerId, modelId));
+  } catch {
+    return null;
+  }
+}

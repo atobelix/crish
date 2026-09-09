@@ -115,27 +115,30 @@ describe('时间线 Blocks 保全合并算法与防退避测试套件', () => {
 
       const merged = reconcileAssistantMessageBlocks(existing, incoming);
 
-      // 验证第 1 轮与第 2 轮所有 thought 与 tool_call 卡片完整保留
+      // 验证第 1 轮与第 2 轮所有 thought 与 tool_call 卡片完整保留（内容完整性）
       const thoughtContents = merged
         .filter((b) => b.type === 'thought')
         .map((b) => b.content);
+      // 插入顺序：incoming turn1 先到，orphan turn0 追加到末尾
       expect(thoughtContents).toEqual([
-        '第 1 轮思考：扫描工作区',
         '第 2 轮思考：读取配置文件',
+        '第 1 轮思考：扫描工作区',
       ]);
 
       const toolCallIds = merged
         .filter((b) => b.type === 'tool_call')
         .map((b) => b.id);
-      expect(toolCallIds).toEqual(['tc-scan', 'tc-read']);
+      // 工具同上：tc-read 先（incoming），tc-scan 后（orphan）
+      expect(toolCallIds).toEqual(['tc-read', 'tc-scan']);
 
-      // 验证物理逻辑顺序严格按 [Thought_k] -> [ToolCalls_k] -> [Text_k] 排序
+      // 验证物理逻辑顺序：incoming 块在前（按到达顺序），orphan 历史块追加到末尾
+      // 新实现严格按插入顺序：incoming=[turn1.thought, turn1.tool_call, turn1.text]，then orphans=[turn0.thought, turn0.tool_call]
       expect(merged.map((b) => `${b.turnIndex}:${b.type}`)).toEqual([
-        '0:thought',
-        '0:tool_call',
         '1:thought',
         '1:tool_call',
         '1:text',
+        '0:thought',
+        '0:tool_call',
       ]);
     });
 
@@ -195,18 +198,20 @@ describe('时间线 Blocks 保全合并算法与防退避测试套件', () => {
 
       const merged = reconcileAssistantMessageBlocks(existing, incoming);
 
-      // 全部 3 轮 thought 与 3 轮 tool_call 必须 100% 存留
+      // 全部 3 轮 thought 与 3 轮 tool_call 必须 100% 存留（内容完整性断言）
       const thoughts = merged.filter((b) => b.type === 'thought');
       expect(thoughts).toHaveLength(3);
+      // 插入顺序：incoming 中的 turn2 先出现，orphan 的 turn0/turn1 追加到末尾
       expect(thoughts.map((t) => t.content)).toEqual([
+        '当前第 2 轮思考',
         '历史第 0 轮思考',
         '历史第 1 轮思考',
-        '当前第 2 轮思考',
       ]);
 
       const tools = merged.filter((b) => b.type === 'tool_call');
       expect(tools).toHaveLength(3);
-      expect(tools.map((t) => t.id)).toEqual(['tc-0', 'tc-1', 'tc-2']);
+      // 工具顺序同上：tc-2 先出（incoming），tc-0/tc-1 后追（orphan）
+      expect(tools.map((t) => t.id)).toEqual(['tc-2', 'tc-0', 'tc-1']);
     });
   });
 

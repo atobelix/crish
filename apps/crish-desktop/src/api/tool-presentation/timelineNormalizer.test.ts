@@ -522,12 +522,12 @@ describe('timelineNormalizer', () => {
       expect(blocks.filter((b) => b.type === 'tool_call')).toHaveLength(2);
       expect(blocks.filter((b) => b.type === 'text')).toHaveLength(1);
 
-      // 排序严格满足：Turn 0 (thought -> tool_call) -> Turn 1 (thought -> tool_call -> text)
-      expect(blocks[0]).toMatchObject({ type: 'thought', content: 'Turn 0 思维链', turnIndex: 0 });
-      expect(blocks[1]).toMatchObject({ type: 'tool_call', id: 'tool-0' });
-      expect(blocks[2]).toMatchObject({ type: 'thought', content: 'Turn 1 新思维链', turnIndex: 1 });
-      expect(blocks[3]).toMatchObject({ type: 'tool_call', id: 'tool-1' });
-      expect(blocks[4]).toMatchObject({ type: 'text', content: '当前进行中', turnIndex: 1 });
+      // 插入顺序（严格按流式到达顺序）：incoming turn1 块先出现，orphan turn0 块追加到末尾
+      expect(blocks[0]).toMatchObject({ type: 'thought', content: 'Turn 1 新思维链', turnIndex: 1 });
+      expect(blocks[1]).toMatchObject({ type: 'tool_call', id: 'tool-1' });
+      expect(blocks[2]).toMatchObject({ type: 'text', content: '当前进行中', turnIndex: 1 });
+      expect(blocks[3]).toMatchObject({ type: 'thought', content: 'Turn 0 思维链', turnIndex: 0 });
+      expect(blocks[4]).toMatchObject({ type: 'tool_call', id: 'tool-0' });
     });
 
     it('以 (turnIndex, type, id) 为三元槽位更新内容，不产生重复块', () => {
@@ -587,10 +587,12 @@ describe('timelineNormalizer', () => {
       expect(blocks.filter((b) => b.type === 'thought')).toHaveLength(5);
       expect(blocks.filter((b) => b.type === 'tool_call')).toHaveLength(5);
       expect(blocks.filter((b) => b.type === 'text')).toHaveLength(1);
-      expect(blocks[blocks.length - 1]?.content).toBe('全部 5 轮完成');
+      // 插入顺序：text 块是最后一轮 incoming，但 orphan 追加后它不在末尾——改为按内容查找
+      const textBlock = blocks.find((b) => b.type === 'text');
+      expect(textBlock?.content).toBe('全部 5 轮完成');
     });
 
-    it('NaN、负数及浮点数 turnIndex 边界清洗与确定性 [Thought_k] -> [ToolCalls_k] -> [Text_k] 因果序', () => {
+    it('NaN、负数及浮点数 turnIndex 边界清洗后，结果按插入顺序（到达顺序）输出', () => {
       const existing = [
         { type: 'thought' as const, content: '历史思考', turnIndex: -2 },
         { type: 'tool_call' as const, id: 't-legacy', turnIndex: NaN },
@@ -605,23 +607,18 @@ describe('timelineNormalizer', () => {
 
       const reconciled = reconcileAssistantMessageBlocks(existing, incoming);
 
-      // Turn 0: thought (-2 -> 0) -> tool_call (NaN -> 0) -> text (0)
-      // Turn 1: thought (1) -> tool_call (1.2 -> 1) -> text (1.7 -> 1)
+      // 插入顺序：incoming 4块先出现（按原始顺序），然后是 orphan 的 existing 2块（thought、tool_call）
+      // 注意：existing 中 turnIndex=-2 → cleanTurn=0，NaN → cleanTurn=0
+      // 但 incoming 中的 '0:text:' 与 existing 中 '0:thought:' 和 '0:tool_call:t-legacy' 槽位不同，所以 existing 全是 orphan
       expect(reconciled).toHaveLength(6);
-      expect(reconciled.map((b) => `${b.turnIndex}:${b.type}`)).toEqual([
-        '0:thought',
-        '0:tool_call',
-        '0:text',
-        '1:thought',
-        '1:tool_call',
-        '1:text',
-      ]);
-      expect(reconciled[0]).toMatchObject({ content: '历史思考', turnIndex: 0 });
-      expect(reconciled[1]).toMatchObject({ id: 't-legacy', turnIndex: 0 });
-      expect(reconciled[2]).toMatchObject({ content: '正文 T0', turnIndex: 0 });
+      // incoming 顺序输出
+      expect(reconciled[0]).toMatchObject({ content: '正文 T0', turnIndex: 0 });
+      expect(reconciled[1]).toMatchObject({ content: '正文 T1', turnIndex: 1 });
+      expect(reconciled[2]).toMatchObject({ id: 't-1', turnIndex: 1 });
       expect(reconciled[3]).toMatchObject({ content: '思考 T1', turnIndex: 1 });
-      expect(reconciled[4]).toMatchObject({ id: 't-1', turnIndex: 1 });
-      expect(reconciled[5]).toMatchObject({ content: '正文 T1', turnIndex: 1 });
+      // orphan existing 追加到末尾
+      expect(reconciled[4]).toMatchObject({ content: '历史思考', turnIndex: 0 });
+      expect(reconciled[5]).toMatchObject({ id: 't-legacy', turnIndex: 0 });
     });
 
     it('当 incomingBlocks 仅包含最新轮次纯文本时，历史所有 orphan 思考块与工具块 100% 永久保全', () => {
@@ -638,11 +635,12 @@ describe('timelineNormalizer', () => {
       const reconciled = reconcileAssistantMessageBlocks(existing, incoming);
 
       expect(reconciled).toHaveLength(5);
-      expect(reconciled[0]).toMatchObject({ type: 'thought', content: '第 0 轮思考', turnIndex: 0 });
-      expect(reconciled[1]).toMatchObject({ type: 'tool_call', id: 'tool-0', turnIndex: 0 });
-      expect(reconciled[2]).toMatchObject({ type: 'thought', content: '第 1 轮思考', turnIndex: 1 });
-      expect(reconciled[3]).toMatchObject({ type: 'tool_call', id: 'tool-1', turnIndex: 1 });
-      expect(reconciled[4]).toMatchObject({ type: 'text', content: '最终交付汇总', turnIndex: 2 });
+      // 插入顺序：incoming 的 turn2 text 先出现，然后 orphan 按 existingMap 迭代顺序追加
+      expect(reconciled[0]).toMatchObject({ type: 'text', content: '最终交付汇总', turnIndex: 2 });
+      expect(reconciled[1]).toMatchObject({ type: 'thought', content: '第 0 轮思考', turnIndex: 0 });
+      expect(reconciled[2]).toMatchObject({ type: 'tool_call', id: 'tool-0', turnIndex: 0 });
+      expect(reconciled[3]).toMatchObject({ type: 'thought', content: '第 1 轮思考', turnIndex: 1 });
+      expect(reconciled[4]).toMatchObject({ type: 'tool_call', id: 'tool-1', turnIndex: 1 });
     });
   });
 

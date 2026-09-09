@@ -116,7 +116,36 @@ export function buildAgentStreamCallbacks(
     },
     onThought: (t: string) =>
       pa((m) => {
+        // 同步更新 m.thinking（向下兼容 fallback 渲染）
         m.thinking = t;
+        // 同时维护 m.blocks 中的思考块，支持多轮独立思考卡片交错展示
+        if (!m.blocks) m.blocks = [];
+        // 取当前活跃轮次（由 turnIndex 字段跟踪，默认 0）
+        const currentTurn: number =
+          typeof (m as { _activeTurnIndex?: unknown })._activeTurnIndex === 'number'
+            ? (m as { _activeTurnIndex?: number })._activeTurnIndex!
+            : 0;
+        const thoughtKey = `thought-turn-${currentTurn}`;
+        const existingIdx = m.blocks.findIndex(
+          (b) => b.type === 'thought' && b.id === thoughtKey
+        );
+        if (existingIdx >= 0) {
+          // 同轮次就地更新（流式追加）
+          m.blocks[existingIdx] = {
+            ...m.blocks[existingIdx]!,
+            content: t,
+            isStreaming: true,
+          };
+        } else {
+          // 新轮次：追加新思考块（严格保持到达顺序）
+          m.blocks.push({
+            type: 'thought',
+            id: thoughtKey,
+            content: t,
+            turnIndex: currentTurn,
+            isStreaming: true,
+          });
+        }
       }),
     onChunk: (c: string) =>
       pa((m) => {
@@ -228,6 +257,14 @@ export function buildAgentStreamCallbacks(
       pa((m) => {
         m.status = 'completed';
         if (m.thinking === '正在处理…') m.thinking = '';
+        // 收口所有流式思考块（isStreaming → false）
+        if (m.blocks) {
+          for (const b of m.blocks) {
+            if (b.type === 'thought' && b.isStreaming) {
+              b.isStreaming = false;
+            }
+          }
+        }
       });
       const localRunId = getLocalRunId();
       patchSessionAgent(parentSessionId, agentId, {
