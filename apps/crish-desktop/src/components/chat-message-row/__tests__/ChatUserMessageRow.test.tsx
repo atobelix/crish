@@ -25,6 +25,7 @@ vi.mock('../../../api/workspaceFsApi', () => ({
   assertWorkspacePath: (p: string) => p,
   resolveWorkspacePath: (p: string) => p,
   isAbsoluteFsPath: (p: string) => p.startsWith('/') || /^[a-zA-Z]:[/\\]/.test(p),
+  registerFileViewerOpener: vi.fn(),
 }));
 
 // Mock Tauri convertFileSrc

@@ -9,22 +9,13 @@
  * - 点击文件名/卡片在右侧打开该文件（openFileInPanel / onOpenPath）。
  */
 import React, { useState } from 'react';
-import * as Lucide from 'lucide-react';
 import styles from './ChatComposer.module.css';
-import { Tooltip } from '../ui';
-import { FileFormatIcon } from '../../assets/icons';
 import type { ChatAttachment } from '../../hooks/useChatStream';
 import { openFileInPanel } from '../../api/filePanelOpener';
 import {
-  formatAttachmentSize,
-  getFileKindBadge,
+  AttachmentCard,
   isImageAttachmentItem,
-  resolveCardImageSrc,
 } from '../chat-attachment/AttachmentCard';
-import {
-  useActiveModelAcceptsImage,
-  isComplexDocChatAttachment,
-} from '../../api/modelVisionSupport';
 
 export interface ComposerAttachmentBarProps {
   attachments: ChatAttachment[];
@@ -60,188 +51,6 @@ export function attachKind(a: ChatAttachment): AttachKind {
 }
 
 import { AnnotationChipItem } from './AnnotationChipItem';
-
-interface RegularChipItemProps {
-  attachment: ChatAttachment;
-  kind: AttachKind;
-  onRemove: (id: string) => void;
-  onOpenPreview: (a: ChatAttachment) => void;
-}
-
-const RegularChipItem: React.FC<RegularChipItemProps> = React.memo(
-  ({ attachment: a, kind, onRemove, onOpenPreview }) => {
-    const [thumbError, setThumbError] = useState(false);
-    const isImg =
-      kind === 'image' ||
-      isImageAttachmentItem({
-        name: a.name,
-        path: a.path,
-        mime: a.mime,
-        dataUrl: a.dataUrl,
-        isImage: a.isImage,
-      });
-    const thumbCandidate = a.thumbnailUrl || a.dataUrl;
-    const thumbSrc = isImg
-      ? thumbCandidate &&
-        (thumbCandidate.startsWith('data:') ||
-          thumbCandidate.startsWith('blob:') ||
-          thumbCandidate.startsWith('asset:') ||
-          thumbCandidate.startsWith('http://') ||
-          thumbCandidate.startsWith('https://'))
-        ? thumbCandidate
-        : resolveCardImageSrc({
-            name: a.name,
-            path: a.path || thumbCandidate,
-            mime: a.mime,
-            dataUrl: thumbCandidate,
-            isImage: true,
-          })
-      : undefined;
-    const hasThumb = Boolean(thumbSrc) && !thumbError;
-    const isParsing =
-      a.status === 'parsing' ||
-      (typeof a.progress === 'number' && a.progress < 100);
-    const progressVal =
-      typeof a.progress === 'number' ? Math.round(a.progress) : 0;
-    const removeId = a.id || a.name;
-
-    const extBadge = getFileKindBadge(a.name || a.path || '');
-    const sizeText = formatAttachmentSize((a as { size?: number }).size);
-
-    const acceptsImage = useActiveModelAcceptsImage();
-    const warnText = React.useMemo(() => {
-      if (acceptsImage) return null;
-      if (isImg) {
-        return '当前模型不支持多模态视觉解析，发送时可能无法理解此图片内容';
-      }
-      if (isComplexDocChatAttachment(a)) {
-        return '当前模型不支持复杂文档解析，发送时可能无法理解此文档内容';
-      }
-      return null;
-    }, [acceptsImage, isImg, a]);
-
-    return (
-      <Tooltip content={warnText ? `${a.name}（⚠️ ${warnText}）` : a.name}>
-        <span
-          role="listitem"
-          tabIndex={0}
-          data-testid="composer-attach-card"
-          data-attach-kind={kind}
-          data-file-type={kind}
-          data-file-name={a.name}
-          data-file-open-path={a.path || a.name}
-          className={`${styles.fileCard} ${styles.attachChip} file-card ${
-            isImg
-              ? `${styles.attachChipImage} type-image`
-              : `${styles.fileCardHorizontal}`
-          }`}
-          onClick={(e) => {
-            e.stopPropagation();
-            onOpenPreview(a);
-          }}
-          onAuxClick={(e) => {
-            if (e.button !== 1) return;
-            e.preventDefault();
-            e.stopPropagation();
-            onRemove(removeId);
-          }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
-              onOpenPreview(a);
-            }
-          }}
-        >
-          {/* 左上角橙色感叹号：当前模型不支持视觉/复杂文档时就地预警 */}
-          {warnText ? (
-            <Tooltip content={warnText}>
-              <span
-                className={`${styles.attachWarnBadge} attach-warn-badge`}
-                data-testid="composer-attach-warn-badge"
-                aria-label={warnText}
-                onClick={(e) => e.stopPropagation()}
-              >
-                <Lucide.AlertCircle size={12} strokeWidth={2.4} aria-hidden="true" />
-              </span>
-            </Tooltip>
-          ) : null}
-          {isImg ? (
-            hasThumb ? (
-              <img
-                src={thumbSrc}
-                alt={a.name}
-                onError={() => setThumbError(true)}
-                className={`${styles.fileThumbnail} ${styles.attachThumb} file-thumbnail`}
-              />
-            ) : (
-              <span className={`${styles.fileIcon} ${styles.attachIconBox} file-icon`} aria-hidden>
-                <Lucide.ImageOff size={20} className={styles.attachIcon} />
-              </span>
-            )
-          ) : (
-            <>
-              <span className={`${styles.fileIcon} ${styles.fileIconBox} file-icon`} aria-hidden>
-                <FileFormatIcon fileName={a.name || a.path || ''} size={20} className={styles.attachIcon} />
-              </span>
-              <span className={`${styles.fileInfoCol} ${styles.fileInfo}`}>
-                <span className={`${styles.fileName} ${styles.attachName} file-name`}>
-                  {a.name}
-                </span>
-                <span className={styles.fileMeta}>
-                  {extBadge}{sizeText ? ` · ${sizeText}` : ''}
-                </span>
-              </span>
-            </>
-          )}
-
-          {isParsing && (
-            <>
-              <svg
-                className={styles.attachProgressBorder}
-                viewBox="0 0 58 58"
-                aria-hidden
-              >
-                <rect
-                  x="1"
-                  y="1"
-                  width="56"
-                  height="56"
-                  rx="11"
-                  fill="none"
-                  stroke="var(--composer-attach-progress-color, var(--accent-primary, #10b981))"
-                  strokeWidth="2"
-                  pathLength="100"
-                  strokeDasharray="100"
-                  strokeDashoffset={100 - (progressVal || 25)}
-                />
-              </svg>
-              <span
-                className={`${styles.attachProgressBadge} ${isImg ? styles.attachProgressBadgeImage : ''}`}
-                aria-label={`上传解析进度 ${progressVal}%`}
-              >
-                {progressVal > 0 ? `${progressVal}%` : '…'}
-              </span>
-            </>
-          )}
-
-          <button
-            type="button"
-            className={`${styles.fileRemove} ${styles.attachRemove} file-remove chat-attach-remove`}
-            aria-label={`移除附件 ${a.name}`}
-            onClick={(e) => {
-              e.stopPropagation();
-              onRemove(removeId);
-            }}
-          >
-            <Lucide.X size={10} strokeWidth={2.2} aria-hidden />
-          </button>
-        </span>
-      </Tooltip>
-    );
-  }
-);
-
-RegularChipItem.displayName = 'RegularChipItem';
 
 export const ComposerAttachmentBar: React.FC<ComposerAttachmentBarProps> = ({
   attachments,
@@ -299,13 +108,44 @@ export const ComposerAttachmentBar: React.FC<ComposerAttachmentBarProps> = ({
           );
         }
 
+        const isImg =
+          kind === 'image' ||
+          isImageAttachmentItem({
+            name: a.name,
+            path: a.path,
+            mime: a.mime,
+            dataUrl: a.dataUrl,
+            isImage: a.isImage,
+          });
+
+        const removeId = a.id || a.name;
+
         return (
-          <RegularChipItem
+          <AttachmentCard
             key={itemKey}
-            attachment={a}
+            item={{
+              id: a.id,
+              name: a.name,
+              path: a.path,
+              mime: a.mime,
+              size: (a as { size?: number }).size,
+              dataUrl: a.dataUrl,
+              thumbnailUrl: a.thumbnailUrl,
+              isImage: isImg,
+              status: a.status,
+              progress: a.progress,
+            }}
             kind={kind}
-            onRemove={onRemoveAttachment}
-            onOpenPreview={openPreview}
+            testId="composer-attach-card"
+            onClick={() => openPreview(a)}
+            onRemove={() => onRemoveAttachment(removeId)}
+            onAuxClick={(e) => {
+              if (e.button === 1) {
+                e.preventDefault();
+                e.stopPropagation();
+                onRemoveAttachment(removeId);
+              }
+            }}
           />
         );
       })}

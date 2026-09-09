@@ -36,19 +36,33 @@
 
 /* --------------------------------------------------------------------------
 /* --------------------------------------------------------------------------
-   图片卡片模式 (Image Mode - 图片直接展示模式)
+   图片卡片模式 (Image Mode - 统一 58×58 原子卡片规格)
+   彻底废除旧式 360×260 大图展开模式，与输入框同构，防止形态跳变
    -------------------------------------------------------------------------- */
-.cardImageMode {
-  width: auto;
-  height: auto;
-  min-width: 58px;
-  min-height: 58px;
-  max-width: min(100%, 360px);
-  max-height: 260px;
+.cardImageMode,
+.attachChipImage {
+  width: var(--composer-attach-card-size, 58px);
+  height: var(--composer-attach-card-size, 58px);
+  min-width: var(--composer-attach-card-size, 58px);
+  min-height: var(--composer-attach-card-size, 58px);
+  max-width: var(--composer-attach-card-size, 58px);
+  max-height: var(--composer-attach-card-size, 58px);
   padding: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  border-radius: var(--composer-attach-card-radius, 12px);
+  background: var(--bg-primary);
+  border: var(--composer-attach-card-border, 1px solid var(--border-subtle));
+  position: relative;
+  overflow: hidden;
+  box-sizing: border-box;
+  box-shadow: none;
+}
+
+.cardImageMode:hover,
+.attachChipImage:hover {
+  border-color: var(--composer-attach-card-hover-border, var(--border-color));
 }
 
 /* 兼容未加 fileCardHorizontal 且非图片卡片时的保底 58×58 尺寸 */
@@ -62,27 +76,27 @@
 }
 
 .imageBox {
-  width: auto;
-  height: auto;
-  max-width: min(100%, 360px);
-  max-height: 260px;
+  width: 100%;
+  height: 100%;
   overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--bg-subtle, hsl(0 0% 96%));
+  background: var(--bg-primary);
   border-radius: inherit;
 }
 
-.imagePreview {
-  width: auto;
-  height: auto;
-  max-width: min(100%, 360px);
-  max-height: 260px;
-  object-fit: contain;
+.imagePreview,
+.fileThumbnail,
+.attachThumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
   object-position: center;
   display: block;
   border-radius: inherit;
+  flex-shrink: 0;
+  background: var(--bg-primary);
 }
 
 /* --------------------------------------------------------------------------
@@ -208,6 +222,93 @@
   overflow: hidden;
   text-overflow: ellipsis;
   letter-spacing: 0.02em;
+}
+
+/* --------------------------------------------------------------------------
+   预警角标 (Warn Badge - 模型不支持视觉/复杂文档时左上角橙色感叹号)
+   -------------------------------------------------------------------------- */
+.attachWarnBadge {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: var(--radius-full, 9999px);
+  background: color-mix(in srgb, hsl(38, 95%, 50%) 20%, var(--bg-elevated, #fff));
+  border: 1px solid color-mix(in srgb, hsl(38, 95%, 50%) 60%, transparent);
+  color: hsl(38, 95%, 44%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  z-index: var(--z-dock, 10);
+  cursor: help;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  pointer-events: auto;
+}
+
+/* --------------------------------------------------------------------------
+   右上角删除/移除按钮 (Remove Button)
+   -------------------------------------------------------------------------- */
+.fileRemove,
+.attachRemove {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: var(--radius-full, 9999px);
+  border: none;
+  background: color-mix(in srgb, var(--bg-elevated) 85%, transparent);
+  color: var(--text-tertiary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  z-index: var(--z-dock, 10);
+  backdrop-filter: blur(4px);
+  transition:
+    background-color var(--transition-fast, 120ms ease),
+    color var(--transition-fast, 120ms ease),
+    transform var(--transition-fast, 120ms ease);
+}
+
+.fileRemove:hover,
+.attachRemove:hover {
+  background: var(--sem-error, #ef4444);
+  color: var(--text-on-accent, #ffffff);
+  transform: scale(1.08);
+}
+
+/* --------------------------------------------------------------------------
+   上传 / 解析进度边框与百分比角标
+   -------------------------------------------------------------------------- */
+.attachProgressBorder {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.attachProgressBadge {
+  position: absolute;
+  bottom: 3px;
+  right: 3px;
+  font-size: 9px;
+  font-weight: 600;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.65);
+  color: #fff;
+  line-height: 1;
+  z-index: 6;
+}
+
+.attachProgressBadgeImage {
+  bottom: 3px;
+  right: 3px;
 }
 
 /* 兼容历史 .fileBox 与 .badge 类名防回潮 */

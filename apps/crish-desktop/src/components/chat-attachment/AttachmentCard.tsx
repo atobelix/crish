@@ -9,6 +9,10 @@ import {
   isAbsoluteFsPath,
   resolveWorkspacePath,
 } from '../../api/workspaceFsApi';
+import {
+  useActiveModelAcceptsImage,
+  isComplexDocChatAttachment,
+} from '../../api/modelVisionSupport';
 import type { SessionMessage } from '../../store/types';
 
 export interface AttachmentItem {
@@ -18,6 +22,9 @@ export interface AttachmentItem {
   mime?: string;
   size?: number;
   dataUrl?: string;
+  thumbnailUrl?: string;
+  status?: string;
+  progress?: number;
   alt?: string;
   isImage?: boolean;
   missing?: boolean;
@@ -27,6 +34,13 @@ export interface AttachmentItem {
 export interface AttachmentCardProps {
   item: AttachmentItem;
   onClick?: (item: AttachmentItem) => void;
+  onRemove?: (item: AttachmentItem) => void;
+  onAuxClick?: (e: React.MouseEvent, item: AttachmentItem) => void;
+  warnText?: string | null;
+  progress?: number;
+  status?: string;
+  kind?: string;
+  testId?: string;
   className?: string;
 }
 
@@ -128,10 +142,11 @@ export function isImageAttachmentItem(item: AttachmentItem): boolean {
 }
 
 export function resolveCardImageSrc(item: AttachmentItem): string {
-  if (item.dataUrl && (item.dataUrl.startsWith('data:') || item.dataUrl.startsWith('blob:'))) {
-    return item.dataUrl;
+  const candidate = item.thumbnailUrl || item.dataUrl;
+  if (candidate && (candidate.startsWith('data:') || candidate.startsWith('blob:') || candidate.startsWith('asset:') || candidate.startsWith('http:') || candidate.startsWith('https:'))) {
+    return candidate;
   }
-  const source = (item.path || '').trim();
+  const source = (item.path || candidate || '').trim();
   if (!source) return '';
   if (source.startsWith('content:')) {
     return '';
@@ -168,7 +183,18 @@ export function getFileKindBadge(nameOrPath: string): string {
 }
 
 export const AttachmentCard: React.FC<AttachmentCardProps> = React.memo(
-  ({ item, onClick, className }) => {
+  ({
+    item,
+    onClick,
+    onRemove,
+    onAuxClick,
+    warnText: warnTextProp,
+    progress: progressProp,
+    status: statusProp,
+    kind: kindProp,
+    testId,
+    className,
+  }) => {
     const isImage = useMemo(() => isImageAttachmentItem(item), [item]);
     const imgSrc = useMemo(
       () => (isImage ? resolveCardImageSrc(item) : ''),
@@ -179,7 +205,7 @@ export const AttachmentCard: React.FC<AttachmentCardProps> = React.memo(
 
     useEffect(() => {
       setImgError(false);
-    }, [item.path, item.dataUrl]);
+    }, [item.path, item.dataUrl, item.thumbnailUrl]);
 
     const extBadge = useMemo(
       () => getFileKindBadge(item.name || item.path || ''),
@@ -194,20 +220,52 @@ export const AttachmentCard: React.FC<AttachmentCardProps> = React.memo(
     const isItemMissing = Boolean(item.missing || item.error);
     const isImageMissing = isImage && (imgError || !imgSrc || isItemMissing);
 
-    const tooltipContent = useMemo(() => {
+    const acceptsImage = useActiveModelAcceptsImage();
+    const warnText = useMemo(() => {
+      if (warnTextProp !== undefined) return warnTextProp;
+      if (acceptsImage) return null;
       if (isImage) {
-        if (isImageMissing) {
-          return '[图片无法加载] 本地文件已被移动或删除';
-        }
-        return item.name || item.path || '图片';
+        return '当前模型不支持多模态视觉解析，发送时可能无法理解此图片内容';
       }
-      if (isItemMissing) {
-        return item.name || item.path
+      if (
+        isComplexDocChatAttachment({
+          name: item.name,
+          path: item.path,
+          mime: item.mime,
+        })
+      ) {
+        return '当前模型不支持复杂文档解析，发送时可能无法理解此文档内容';
+      }
+      return null;
+    }, [warnTextProp, acceptsImage, isImage, item.name, item.path, item.mime]);
+
+    const effectiveStatus = statusProp || item.status;
+    const effectiveProgress =
+      typeof progressProp === 'number' ? progressProp : item.progress;
+    const isParsing =
+      effectiveStatus === 'parsing' ||
+      (typeof effectiveProgress === 'number' && effectiveProgress < 100);
+    const progressVal =
+      typeof effectiveProgress === 'number'
+        ? Math.round(effectiveProgress)
+        : 0;
+
+    const tooltipContent = useMemo(() => {
+      const baseName = isImage
+        ? isImageMissing
+          ? '[图片无法加载] 本地文件已被移动或删除'
+          : item.name || item.path || '图片'
+        : isItemMissing
+        ? item.name || item.path
           ? `[文件失效] ${item.name || item.path}`
-          : '[文件无法访问] 本地文件已被移动或删除';
+          : '[文件无法访问] 本地文件已被移动或删除'
+        : item.name || item.path || '附件';
+
+      if (warnText) {
+        return `${baseName}（⚠️ ${warnText}）`;
       }
-      return item.path || item.name || '附件';
-    }, [isImage, isImageMissing, isItemMissing, item.name, item.path]);
+      return baseName;
+    }, [isImage, isImageMissing, isItemMissing, item.name, item.path, warnText]);
 
     // 核心拦截（MIN-01）：阻断点击冒泡，严禁意外触发气泡折叠
     const handleClick = useCallback(
@@ -229,7 +287,24 @@ export const AttachmentCard: React.FC<AttachmentCardProps> = React.memo(
       [onClick, item]
     );
 
-    // 图片模式 (Image Mode - 58×58)
+    const handleAuxClick = useCallback(
+      (e: React.MouseEvent) => {
+        if (onAuxClick) {
+          onAuxClick(e, item);
+        } else if (e.button === 1 && onRemove) {
+          e.preventDefault();
+          e.stopPropagation();
+          onRemove(item);
+        }
+      },
+      [onAuxClick, onRemove, item]
+    );
+
+    const defaultTestId = onRemove ? 'composer-attach-card' : 'attachment-card-58';
+    const resolvedTestId = testId || defaultTestId;
+    const kind = kindProp || (isImage ? 'image' : 'file');
+
+    // 图片模式 (Image Mode - 统一 58×58)
     if (isImage) {
       if (isImageMissing) {
         return (
@@ -242,13 +317,43 @@ export const AttachmentCard: React.FC<AttachmentCardProps> = React.memo(
                   ? `附件失效: ${item.name || item.path}`
                   : '图片无法加载'
               }
-              className={`${styles.attachmentCard} ${styles.cardImageMode} ${styles.missingCard} ${className || ''}`}
+              className={`${styles.attachmentCard} ${styles.cardImageMode} ${styles.attachChipImage} ${styles.missingCard} file-card type-image ${className || ''}`}
               onClick={handleClick}
               onKeyDown={handleKeyDown}
-              data-testid="attachment-card-58"
+              onAuxClick={handleAuxClick}
+              data-testid={resolvedTestId}
+              data-attach-kind={kind}
+              data-file-type={kind}
+              data-file-name={item.name}
+              data-file-open-path={item.path || item.name}
             >
+              {warnText ? (
+                <Tooltip content={warnText}>
+                  <span
+                    className={`${styles.attachWarnBadge} attach-warn-badge`}
+                    data-testid="composer-attach-warn-badge"
+                    aria-label={warnText}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <Lucide.AlertCircle size={12} strokeWidth={2.4} aria-hidden="true" />
+                  </span>
+                </Tooltip>
+              ) : null}
               <Lucide.ImageOff size={20} className={styles.missingIcon} />
               <span className={styles.missingBadge}>失效</span>
+              {onRemove ? (
+                <button
+                  type="button"
+                  className={`${styles.fileRemove} ${styles.attachRemove} file-remove chat-attach-remove`}
+                  aria-label={`移除附件 ${item.name || '图片'}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRemove(item);
+                  }}
+                >
+                  <Lucide.X size={10} strokeWidth={2.2} aria-hidden />
+                </button>
+              ) : null}
             </div>
           </Tooltip>
         );
@@ -264,20 +369,79 @@ export const AttachmentCard: React.FC<AttachmentCardProps> = React.memo(
                 ? `附件: ${item.name || item.path}`
                 : '附件卡片'
             }
-            className={`${styles.attachmentCard} ${styles.cardImageMode} ${className || ''}`}
+            className={`${styles.attachmentCard} ${styles.cardImageMode} ${styles.attachChipImage} file-card type-image ${className || ''}`}
             onClick={handleClick}
             onKeyDown={handleKeyDown}
-            data-testid="attachment-card-58"
+            onAuxClick={handleAuxClick}
+            data-testid={resolvedTestId}
+            data-attach-kind={kind}
+            data-file-type={kind}
+            data-file-name={item.name}
+            data-file-open-path={item.path || item.name}
           >
+            {warnText ? (
+              <Tooltip content={warnText}>
+                <span
+                  className={`${styles.attachWarnBadge} attach-warn-badge`}
+                  data-testid="composer-attach-warn-badge"
+                  aria-label={warnText}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <Lucide.AlertCircle size={12} strokeWidth={2.4} aria-hidden="true" />
+                </span>
+              </Tooltip>
+            ) : null}
             <div className={styles.imageBox}>
               <img
                 src={imgSrc}
                 onError={() => setImgError(true)}
                 alt={item.name || item.alt || '图片预览'}
-                className={styles.imagePreview}
+                className={`${styles.imagePreview} ${styles.fileThumbnail} ${styles.attachThumb} file-thumbnail`}
                 loading="lazy"
               />
             </div>
+            {isParsing && (
+              <>
+                <svg
+                  className={styles.attachProgressBorder}
+                  viewBox="0 0 58 58"
+                  aria-hidden
+                >
+                  <rect
+                    x="1"
+                    y="1"
+                    width="56"
+                    height="56"
+                    rx="11"
+                    fill="none"
+                    stroke="var(--composer-attach-progress-color, var(--accent-primary, #10b981))"
+                    strokeWidth="2"
+                    pathLength="100"
+                    strokeDasharray="100"
+                    strokeDashoffset={100 - (progressVal || 25)}
+                  />
+                </svg>
+                <span
+                  className={`${styles.attachProgressBadge} ${styles.attachProgressBadgeImage}`}
+                  aria-label={`上传解析进度 ${progressVal}%`}
+                >
+                  {progressVal > 0 ? `${progressVal}%` : '…'}
+                </span>
+              </>
+            )}
+            {onRemove ? (
+              <button
+                type="button"
+                className={`${styles.fileRemove} ${styles.attachRemove} file-remove chat-attach-remove`}
+                aria-label={`移除附件 ${item.name || '图片'}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRemove(item);
+                }}
+              >
+                <Lucide.X size={10} strokeWidth={2.2} aria-hidden />
+              </button>
+            ) : null}
           </div>
         </Tooltip>
       );
@@ -297,24 +461,42 @@ export const AttachmentCard: React.FC<AttachmentCardProps> = React.memo(
               ? `附件: ${item.name || item.path}`
               : '附件卡片'
           }
-          className={`${styles.attachmentCard} ${styles.fileCardHorizontal} ${isItemMissing ? styles.missingCard : ''} ${className || ''}`}
+          className={`${styles.attachmentCard} ${styles.fileCardHorizontal} file-card ${isItemMissing ? styles.missingCard : ''} ${className || ''}`}
           onClick={handleClick}
           onKeyDown={handleKeyDown}
-          data-testid="attachment-card-58"
+          onAuxClick={handleAuxClick}
+          data-testid={resolvedTestId}
+          data-attach-kind={kind}
+          data-file-type={kind}
+          data-file-name={item.name}
+          data-file-open-path={item.path || item.name}
         >
-          <div className={styles.fileIconBox}>
+          {warnText ? (
+            <Tooltip content={warnText}>
+              <span
+                className={`${styles.attachWarnBadge} attach-warn-badge`}
+                data-testid="composer-attach-warn-badge"
+                aria-label={warnText}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <Lucide.AlertCircle size={12} strokeWidth={2.4} aria-hidden="true" />
+              </span>
+            </Tooltip>
+          ) : null}
+          <div className={`${styles.fileIconBox} ${styles.fileIcon} file-icon`}>
             {isItemMissing ? (
               <Lucide.FileQuestion size={18} className={styles.missingIcon} />
             ) : (
               <FileFormatIcon
                 fileName={item.name || item.path || ''}
                 size={20}
+                className={styles.attachIcon}
               />
             )}
           </div>
           <div className={`${styles.fileInfoCol} ${styles.fileInfo}`}>
             <span
-              className={`${styles.fileName} ${styles.fileNameText} ${isItemMissing ? styles.fileNameMissing : ''}`}
+              className={`${styles.fileName} ${styles.fileNameText} ${styles.attachName} file-name ${isItemMissing ? styles.fileNameMissing : ''}`}
             >
               {item.name || displayName}
             </span>
@@ -322,6 +504,48 @@ export const AttachmentCard: React.FC<AttachmentCardProps> = React.memo(
               {extBadge} {sizeText ? `· ${sizeText}` : ''}
             </span>
           </div>
+          {isParsing && (
+            <>
+              <svg
+                className={styles.attachProgressBorder}
+                viewBox="0 0 58 58"
+                aria-hidden
+              >
+                <rect
+                  x="1"
+                  y="1"
+                  width="56"
+                  height="56"
+                  rx="11"
+                  fill="none"
+                  stroke="var(--composer-attach-progress-color, var(--accent-primary, #10b981))"
+                  strokeWidth="2"
+                  pathLength="100"
+                  strokeDasharray="100"
+                  strokeDashoffset={100 - (progressVal || 25)}
+                />
+              </svg>
+              <span
+                className={styles.attachProgressBadge}
+                aria-label={`上传解析进度 ${progressVal}%`}
+              >
+                {progressVal > 0 ? `${progressVal}%` : '…'}
+              </span>
+            </>
+          )}
+          {onRemove ? (
+            <button
+              type="button"
+              className={`${styles.fileRemove} ${styles.attachRemove} file-remove chat-attach-remove`}
+              aria-label={`移除附件 ${item.name || displayName}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                onRemove(item);
+              }}
+            >
+              <Lucide.X size={10} strokeWidth={2.2} aria-hidden />
+            </button>
+          ) : null}
         </div>
       </Tooltip>
     );

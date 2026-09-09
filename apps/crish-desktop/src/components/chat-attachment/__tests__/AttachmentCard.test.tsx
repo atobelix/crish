@@ -23,6 +23,7 @@ vi.mock('../../../api/workspaceFsApi', () => ({
   resolveWorkspacePath: (p: string) =>
     p.startsWith('/') || /^[a-zA-Z]:[/\\]/.test(p) ? p : `/mock-workspace/${p}`,
   getWorkspacePath: () => '/mock-workspace',
+  registerFileViewerOpener: vi.fn(),
 }));
 
 describe('AttachmentCard 组件规范套件', () => {
@@ -270,7 +271,9 @@ describe('AttachmentCard 组件规范套件', () => {
       const winPath = 'C:\\Users\\User\\Pictures\\avatar.png';
       const posixPath = '/var/data/uploads/chart.webp';
 
-      expect(resolveCardImageSrc({ path: winPath })).toBe(`asset://${winPath}`);
+      expect(resolveCardImageSrc({ path: winPath })).toBe(
+        `asset://${winPath.replace(/\\/g, '/')}`
+      );
       expect(resolveCardImageSrc({ path: posixPath })).toBe(`asset://${posixPath}`);
     });
 
