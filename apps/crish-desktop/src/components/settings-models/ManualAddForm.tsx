@@ -6,8 +6,9 @@ import { CapEditor } from './CapEditor';
 import {
   searchCatalogModels,
   ensureModelsCatalogLoaded,
-  type CatalogModelSpec,
 } from '../../api/modelsCatalogStore';
+import { getLiveModel } from '../../api/modelsCatalogLive';
+import { canonicalizeProtocol } from '../../api/modelsDraftMap';
 import { useModelsCatalogVersion } from '../../hooks/useModelsCatalogVersion';
 import { formatContextLabel } from '../../api/modelCatalogPure';
 import type { AddDraft } from './useModelProfilesState';
@@ -25,6 +26,10 @@ export const ManualAddForm: React.FC<{
   runScan?: () => Promise<void>;
   scanBusy?: boolean;
   providerVendor?: string;
+  /** 探针在线模型列表（建议源，非内置字典） */
+  scannedModels?: string[];
+  /** 该供应商已配置模型（与探针并集） */
+  existingModels?: string[];
 }> = ({
   addDraft,
   setAddDraft,
@@ -33,6 +38,8 @@ export const ManualAddForm: React.FC<{
   runScan,
   scanBusy,
   providerVendor,
+  scannedModels = [],
+  existingModels = [],
 }) => {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const inputContainerRef = useRef<HTMLDivElement | null>(null);
@@ -47,11 +54,42 @@ export const ManualAddForm: React.FC<{
   // 字典镜像版本变化（重载/重置）驱动联想重算
   const catalogVersion = useModelsCatalogVersion();
 
-  // 搜索匹配字典模型（限定 8 条以保持紧凑）
+  // 用户裁决 #1：建议列表来自「当前获取到的模型列表」（探针在线结果 ∪ 该供应商
+  // 已配置模型），不再以内置预置字典为主源。仅当在线列表为空时回退字典建议，
+  // 避免手填裸 id 后能力空白。
+  const onlineIds = useMemo(() => {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const id of [...scannedModels, ...existingModels]) {
+      const k = id.trim().toLowerCase();
+      if (id.trim() && !seen.has(k)) {
+        seen.add(k);
+        out.push(id.trim());
+      }
+    }
+    return out;
+  }, [scannedModels, existingModels]);
+
   const suggestions = useMemo(() => {
-    return searchCatalogModels(addDraft.modelId, providerVendor).slice(0, 8);
+    const kw = addDraft.modelId.trim().toLowerCase();
+    if (onlineIds.length > 0) {
+      const matched = kw
+        ? onlineIds.filter(
+            (id) =>
+              id.toLowerCase().includes(kw) ||
+              (getLiveModel(providerVendor ?? '', id)?.displayName || '')
+                .toLowerCase()
+                .includes(kw)
+          )
+        : onlineIds;
+      return matched.slice(0, 8);
+    }
+    // 在线列表为空（未探测/未配置）→ 字典建议兜底
+    return searchCatalogModels(addDraft.modelId, providerVendor)
+      .map((m) => m.model)
+      .slice(0, 8);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- catalogVersion 仅作重算信号
-  }, [addDraft.modelId, providerVendor, catalogVersion]);
+  }, [addDraft.modelId, onlineIds, providerVendor, catalogVersion]);
 
   // 更新浮层相对于视口的准确定位
   const updateDropdownPos = () => {
@@ -95,21 +133,27 @@ export const ManualAddForm: React.FC<{
     return () => document.removeEventListener('mousedown', handleOutsideClick);
   }, []);
 
-  const handleSelectSuggestion = (spec: CatalogModelSpec) => {
+  const handleSelectSuggestion = (id: string) => {
+    const live = getLiveModel(providerVendor ?? '', id);
     setAddDraft((prev) => ({
       ...prev,
-      modelId: spec.model,
-      displayName: spec.displayName ?? '',
-      contextLength: spec.contextWindow != null ? String(spec.contextWindow) : prev.contextLength,
-      maxOutputTokens:
-        spec.maxOutputTokens != null ? String(spec.maxOutputTokens) : prev.maxOutputTokens,
+      modelId: id,
+      displayName: live?.displayName ?? id,
+      contextLength: live?.contextWindow != null ? String(live.contextWindow) : prev.contextLength,
+      // 能力位：已配置模型从 live spec；否则保留 prev（后续 addModel 走字典预填选项）
       caps: {
-        tools: Boolean(spec.capabilities?.tools ?? prev.caps.tools),
-        image: Boolean(spec.capabilities?.image ?? prev.caps.image),
-        video: Boolean(spec.capabilities?.video ?? prev.caps.video),
-        reasoning: Boolean(spec.capabilities?.reasoning ?? prev.caps.reasoning),
+        tools: Boolean(live?.capabilities?.tools ?? prev.caps.tools),
+        image: Boolean(
+          live?.capabilities?.image ?? live?.modalities?.input?.includes('image') ?? prev.caps.image
+        ),
+        video: Boolean(
+          live?.capabilities?.video ?? live?.modalities?.input?.includes('video') ?? prev.caps.video
+        ),
+        reasoning: Boolean(
+          live?.capabilities?.reasoning ?? (live?.thinking && Object.keys(live.thinking).length > 0) ?? prev.caps.reasoning
+        ),
       },
-      protocol: spec.protocol,
+      protocol: live?.protocol ? canonicalizeProtocol(live.protocol) : prev.protocol,
     }));
     setShowSuggestions(false);
   };
@@ -196,9 +240,12 @@ export const ManualAddForm: React.FC<{
               }}
               onMouseDown={(e) => e.stopPropagation()}
             >
-              {suggestions.map((item) => (
+              {suggestions.map((id) => {
+                const live = getLiveModel(providerVendor ?? '', id);
+                const name = live?.displayName || id;
+                return (
                 <div
-                  key={item.model}
+                  key={id}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -212,14 +259,14 @@ export const ManualAddForm: React.FC<{
                   }}
                   onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-subtle)')}
                   onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-                  onClick={() => handleSelectSuggestion(item)}
+                  onClick={() => handleSelectSuggestion(id)}
                 >
                   <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
                     <span style={{ fontFamily: 'var(--font-mono, monospace)', fontWeight: 500, color: 'var(--text-primary)' }}>
-                      {item.model}
+                      {id}
                     </span>
                     <span style={{ fontSize: '11px', color: 'var(--text-tertiary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {item.displayName}
+                      {name}
                     </span>
                   </div>
                   <span
@@ -233,10 +280,11 @@ export const ManualAddForm: React.FC<{
                       flexShrink: 0,
                     }}
                   >
-                    {item.contextWindow != null ? formatContextLabel(item.contextWindow) : ''}
+                    {live?.contextWindow != null ? formatContextLabel(live.contextWindow) : ''}
                   </span>
                 </div>
-              ))}
+                );
+              })}
             </div>,
             document.body
           )}

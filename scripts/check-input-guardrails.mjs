@@ -1229,9 +1229,11 @@ export function scanTsxForBespokeInputs(dir, targetErrors = errors) {
       while ((tagMatch = tagRegex.exec(content)) !== null) {
         const tagAttributes = tagMatch[1] || '';
 
-        // 忽略非文本控件（文件上传、单选、复选框、隐藏域）
+        // 忽略非文本控件（文件上传、单选、复选框、隐藏域、颜色选择、滑块）
         if (
-          /type=['"](?:checkbox|radio|file|hidden)['"]/i.test(tagAttributes)
+          /type=['"](?:checkbox|radio|file|hidden|color|range)['"]/i.test(
+            tagAttributes
+          )
         ) {
           continue;
         }
@@ -1336,6 +1338,7 @@ const isDirectRun = process.argv[1] && (
   import.meta.url.endsWith(process.argv[1].replace(/\\/g, '/')) ||
   fileURLToPath(import.meta.url) === path.resolve(process.argv[1])
 );
+
 
 if (isDirectRun) {
   const resultErrors = runGuardrails();

@@ -28,7 +28,7 @@ describe('100% 纯 HSL 数学公式驱动调色板与亮度微调阶梯规范', 
     expect(warmGray.bgElevated).toBe('hsl(0 0% 100%)');
     expect(warmGray.shellChromeBg).toBe('hsl(35 8% 92.1%)');
     expect(warmGray.borderColor).toBe('hsl(35 10% 86%)');
-    expect(warmGray.borderSubtle).toBe('hsl(35 8% 91%)');
+    expect(warmGray.borderSubtle).toBe('hsl(30 6% 93.8%)');
     expect(warmGray.mixColor).toBe('hsl(35 40% 30%)');
   });
 

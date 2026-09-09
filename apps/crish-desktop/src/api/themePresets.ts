@@ -33,7 +33,7 @@ export const SKIN_PRESETS: Record<string, SkinPreset> = {
     textPrimary: '#111111',
     textSecondary: '#555555',
     borderColor: 'hsl(35 10% 86%)',
-    borderSubtle: 'hsl(35 8% 91%)',
+    borderSubtle: 'hsl(30 6% 93.8%)',
     mixColor: 'hsl(35 40% 30%)',
   },
   'cream': {

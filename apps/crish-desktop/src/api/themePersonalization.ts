@@ -234,7 +234,7 @@ export function applyPersonalization(p: PersonalizationSettings, activeTheme: 'd
       bgElevated = 'hsl(0 0% 100%)';
       shellChromeBg = `hsl(35 8% ${lSecondary}%)`;
       borderColor = 'hsl(35 10% 86%)';
-      borderSubtle = 'hsl(35 8% 91%)';
+      borderSubtle = 'hsl(30 6% 93.8%)';
     } else if (adjust !== 0) {
       if (isDarkPreset) {
         if (adjust > 0) {

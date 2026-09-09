@@ -115,7 +115,7 @@
   /* DIM-01 §1.3: 统一类输入框卡片结构，5.5% 灰度混入保持气泡底色，消除图文分离 */
   background: color-mix(in srgb, var(--text-primary) 5.5%, var(--bg-card));
   color: var(--text-primary);
-  border: 1px solid color-mix(in srgb, var(--border-color) 80%, transparent);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-xl, 16px);
   padding: 10px 14px;
   font-size: var(--font-size-base, 14px);
@@ -185,12 +185,12 @@
 .userMeta {
   display: flex;
   align-items: center;
-  gap: 0;
-  min-height: 22px;
-  margin-top: var(--space-1_5, 6px);
+  gap: 2px;
+  min-height: 28px;
+  margin-top: var(--space-1, 4px);
   opacity: 0;
-  transition: opacity var(--transition-fast);
-  padding-right: var(--space-0_5);
+  transition: opacity var(--transition-fast, 150ms ease);
+  padding-right: var(--space-0_5, 2px);
 }
 
 .userStack:hover .userMeta {
@@ -203,11 +203,12 @@
 }
 
 .time {
-  font-size: var(--font-size-xs);
+  font-size: 11px;
   font-weight: var(--font-weight-normal);
-  color: var(--text-tertiary);
-  margin-right: var(--space-1);
+  color: color-mix(in srgb, var(--text-primary) 45%, transparent);
+  margin-right: 4px;
   font-variant-numeric: tabular-nums;
+  user-select: none;
 }
 
 .assistantBody {
@@ -786,27 +787,32 @@
 }
 
 .iconBtn {
-  width: 22px;
-  height: 22px;
+  width: 28px;
+  height: 28px;
   border: none;
   background: transparent;
-  border-radius: var(--radius-md);
-  color: var(--text-tertiary);
+  border-radius: var(--button-radius, 7px);
+  color: color-mix(in srgb, var(--text-primary) 45%, transparent);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   padding: 0;
+  -webkit-appearance: none;
+  appearance: none;
+  transform: none;
+  transition: color var(--transition-micro, 100ms) ease-out;
 }
 
 .iconBtn svg {
-  width: 13px;
-  height: 13px;
+  width: 14px;
+  height: 14px;
 }
 
 .iconBtn:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
+  background: transparent;
+  color: color-mix(in srgb, var(--text-primary) 60%, transparent);
+  transform: none;
 }
 
 /* 消息流撤回：ui/Button ghost + 7px，关 UA / 果冻，hover 只走 Button ::before */
@@ -833,33 +839,18 @@
   padding: 0;
 }
 
-.pinBadge {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  align-self: flex-start;
-  font-size: var(--font-size-xxs);
-  line-height: var(--line-height-none);
-  color: var(--text-tertiary);
-  margin-bottom: var(--space-1);
-  padding: 2px 7px;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  border: var(--hairline-width, 1px) solid
-    var(--hairline, var(--border-subtle, var(--border-color)));
-}
-
-.rowUser .pinBadge {
-  align-self: flex-end;
+.userBubblePinned {
+  background: color-mix(in srgb, var(--user-bubble-pin-color, #f59e0b) 6%, var(--bg-card)) !important;
+  border-color: color-mix(in srgb, var(--user-bubble-pin-color, #f59e0b) 26%, var(--border-color)) !important;
 }
 
 .iconBtn.isPinnedActive {
-  color: var(--text-primary);
+  color: var(--active-pin-color, #f59e0b);
   opacity: 1;
 }
 
 .iconBtn.isCopied {
-  color: var(--text-primary);
+  color: color-mix(in srgb, var(--text-primary) 85%, transparent);
   opacity: 1;
 }
 
@@ -965,4 +956,106 @@
   background-size: 200% 100%;
   animation: skeleton-shimmer var(--transition-skeleton) infinite;
   margin-bottom: var(--space-1_5);
+}
+
+/* ─── 固定颜色选择器悬浮浮层 ─── */
+.pinPickerWrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.pinPickerPopover {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  background: var(--bg-card, #ffffff);
+  border: 1px solid color-mix(in srgb, var(--border-color) 80%, transparent);
+  border-radius: var(--radius-md, 8px);
+  box-shadow: 0 4px 14px -2px rgba(0, 0, 0, 0.12), 0 2px 6px -1px rgba(0, 0, 0, 0.08);
+  z-index: var(--z-dropdown, 100);
+  animation: pinPickerFadeIn 140ms cubic-bezier(0.16, 1, 0.3, 1);
+  white-space: nowrap;
+}
+
+@keyframes pinPickerFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(3px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.pinColorDot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255, 255, 255, 0.85);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--border-color) 70%, transparent);
+  cursor: pointer;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 120ms ease, box-shadow 120ms ease;
+  box-sizing: border-box;
+}
+
+.pinColorDot:hover {
+  transform: scale(1.18);
+  box-shadow: 0 0 0 1px var(--text-primary), 0 2px 5px rgba(0, 0, 0, 0.15);
+}
+
+.pinColorDot.isSelected {
+  box-shadow: 0 0 0 2px var(--text-primary);
+  transform: scale(1.12);
+}
+
+.pinCustomColorBtn {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255, 255, 255, 0.85);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--border-color) 70%, transparent);
+  background: conic-gradient(
+    from 0deg,
+    #f43f5e,
+    #f59e0b,
+    #10b981,
+    #0ea5e9,
+    #8b5cf6,
+    #f43f5e
+  );
+  cursor: pointer;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 120ms ease, box-shadow 120ms ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.pinCustomColorBtn:hover {
+  transform: scale(1.18);
+  box-shadow: 0 0 0 1px var(--text-primary), 0 2px 5px rgba(0, 0, 0, 0.15);
+}
+
+.pinCustomColorInput {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+  padding: 0;
+  border: none;
 }

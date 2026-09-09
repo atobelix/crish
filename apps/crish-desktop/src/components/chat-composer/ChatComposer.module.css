@@ -1170,7 +1170,7 @@
   width: 100%;
   box-sizing: border-box;
   padding: var(--composer-pad-y) var(--composer-pad-x);
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--composer-radius-outer, 20px);
   background: var(--composer-bg, var(--bg-composer, var(--bg-elevated)));
   box-shadow: none;
@@ -1189,7 +1189,7 @@
 .composerCard:focus-within {
   border-color: color-mix(
     in srgb,
-    var(--border-color) 94%,
+    var(--border-subtle) 94%,
     var(--text-primary) 6%
   );
   box-shadow: none;
@@ -1200,7 +1200,7 @@
 .composerCard[data-empty-kind='session-empty']:focus-within {
   border-color: color-mix(
     in srgb,
-    var(--border-color) 95%,
+    var(--border-subtle) 95%,
     var(--text-primary) 5%
   );
 }
