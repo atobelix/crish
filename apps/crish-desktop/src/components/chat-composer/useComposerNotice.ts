@@ -1,6 +1,5 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useMemo, useCallback } from 'react';
 import type { ChatAttachment } from '../../hooks/useChatStream';
-import { useModelVisionWarning } from '../../api/modelVisionSupport';
 import type { ComposerNotice } from './ComposerNoticeBar';
 
 export interface UseComposerNoticeOptions {
@@ -15,45 +14,23 @@ export interface UseComposerNoticeResult {
 }
 
 /**
- * 封装输入框上方提示条派发与模型视觉警告生命周期：
- * - 监听模型切换/附件变化并派发视觉告警
- * - 支持用户手动关闭本条告警并在变更后解除屏蔽
- * - 统一聚合 noticeProp 与视觉告警
+ * 封装输入框上方提示条派发：
+ * - 聚合外部 noticeProp（如网络降级、系统错误等）；
+ * - 多模态/视觉附件警告已下沉至各附件卡片左上角橙色感叹号气泡展示，避免上方提示条常驻挤占空间。
  */
 export function useComposerNotice({
-  attachments,
+  attachments: _attachments,
   noticeProp,
   onDismissNotice,
 }: UseComposerNoticeOptions): UseComposerNoticeResult {
-  const visionWarning = useModelVisionWarning(attachments);
-  const [dismissedNoticeKey, setDismissedNoticeKey] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (visionWarning && dismissedNoticeKey && dismissedNoticeKey !== visionWarning) {
-      setDismissedNoticeKey(null);
-    }
-  }, [visionWarning, dismissedNoticeKey]);
-
   const effectiveNotice = useMemo<ComposerNotice | null>(() => {
     if (noticeProp) return noticeProp;
-    if (visionWarning && dismissedNoticeKey !== visionWarning) {
-      return {
-        id: `vision-${visionWarning}`,
-        type: 'warning',
-        message: visionWarning,
-        detail:
-          '当前选中的模型不支持输入图像或复杂文档直接解析。建议切换至具备视觉/多模态能力的大模型，或将文档转为纯文本后再行发送。',
-      };
-    }
     return null;
-  }, [noticeProp, visionWarning, dismissedNoticeKey]);
+  }, [noticeProp]);
 
   const handleDismissNotice = useCallback(() => {
-    if (effectiveNotice?.message) {
-      setDismissedNoticeKey(effectiveNotice.message);
-    }
     onDismissNotice?.();
-  }, [effectiveNotice, onDismissNotice]);
+  }, [onDismissNotice]);
 
   return {
     effectiveNotice,

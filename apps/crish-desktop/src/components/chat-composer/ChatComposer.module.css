@@ -842,6 +842,33 @@
   opacity: 0;
 }
 
+.attachWarnBadge {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: var(--composer-attach-remove-size, 18px);
+  height: var(--composer-attach-remove-size, 18px);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-warning, var(--warning-color));
+  background: var(--color-warning-bg, color-mix(in srgb, var(--color-warning, var(--warning-color)) 15%, var(--bg-card)));
+  border: 1px solid var(--color-warning-border, color-mix(in srgb, var(--color-warning, var(--warning-color)) 35%, transparent));
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  cursor: help;
+  z-index: var(--z-popover);
+  box-shadow: none;
+  pointer-events: auto;
+  transition: transform 140ms ease, background-color 140ms ease;
+}
+
+.attachWarnBadge:hover {
+  transform: scale(1.08);
+  background: var(--color-warning-bg, color-mix(in srgb, var(--color-warning, var(--warning-color)) 25%, var(--bg-card)));
+}
+
 .fileRemove,
 .attachRemove {
   position: absolute;

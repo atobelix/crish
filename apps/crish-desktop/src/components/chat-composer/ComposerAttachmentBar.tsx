@@ -21,6 +21,10 @@ import {
   isImageAttachmentItem,
   resolveCardImageSrc,
 } from '../chat-attachment/AttachmentCard';
+import {
+  useActiveModelAcceptsImage,
+  isComplexDocChatAttachment,
+} from '../../api/modelVisionSupport';
 
 export interface ComposerAttachmentBarProps {
   attachments: ChatAttachment[];
@@ -104,8 +108,20 @@ const RegularChipItem: React.FC<RegularChipItemProps> = React.memo(
     const extBadge = getFileKindBadge(a.name || a.path || '');
     const sizeText = formatAttachmentSize((a as { size?: number }).size);
 
+    const acceptsImage = useActiveModelAcceptsImage();
+    const warnText = React.useMemo(() => {
+      if (acceptsImage) return null;
+      if (isImg) {
+        return '当前模型不支持多模态视觉解析，发送时可能无法理解此图片内容';
+      }
+      if (isComplexDocChatAttachment(a)) {
+        return '当前模型不支持复杂文档解析，发送时可能无法理解此文档内容';
+      }
+      return null;
+    }, [acceptsImage, isImg, a]);
+
     return (
-      <Tooltip content={a.name}>
+      <Tooltip content={warnText ? `${a.name}（⚠️ ${warnText}）` : a.name}>
         <span
           role="listitem"
           tabIndex={0}
@@ -136,6 +152,19 @@ const RegularChipItem: React.FC<RegularChipItemProps> = React.memo(
             }
           }}
         >
+          {/* 左上角橙色感叹号：当前模型不支持视觉/复杂文档时就地预警 */}
+          {warnText ? (
+            <Tooltip content={warnText}>
+              <span
+                className={`${styles.attachWarnBadge} attach-warn-badge`}
+                data-testid="composer-attach-warn-badge"
+                aria-label={warnText}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <Lucide.AlertCircle size={12} strokeWidth={2.4} aria-hidden="true" />
+              </span>
+            </Tooltip>
+          ) : null}
           {isImg ? (
             hasThumb ? (
               <img

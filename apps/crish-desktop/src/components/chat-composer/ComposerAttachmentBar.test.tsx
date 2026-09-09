@@ -11,6 +11,7 @@ const openFileInPanel = vi.fn();
 
 vi.mock('../../api/filePanelOpener', () => ({
   openFileInPanel: (...args: unknown[]) => openFileInPanel(...args),
+  registerFileViewerOpener: vi.fn(),
 }));
 
 describe('ComposerAttachmentBar（S4 附件卡）', () => {
@@ -170,5 +171,28 @@ describe('ComposerAttachmentBar（S4 附件卡）', () => {
     expect(cards[1]?.className).toMatch(/fileCardHorizontal/);
     expect(cards[1]?.querySelector('.file-name')?.textContent).toBe('presentation.pptx');
     expect(screen.getByText(/PPTX/)).toBeTruthy();
+  });
+
+  it('模型无视觉能力时，图片与复杂文档在卡片左上角渲染橙色感叹号预警角标', () => {
+    render(
+      <ComposerAttachmentBar
+        attachments={[
+          {
+            name: 'photo.png',
+            dataUrl: 'data:image/png;base64,photo',
+            status: 'ready',
+          },
+          {
+            name: 'code.ts',
+            path: '/src/code.ts',
+            status: 'ready',
+          },
+        ]}
+        onRemoveAttachment={() => undefined}
+      />
+    );
+    const warnBadges = screen.getAllByTestId('composer-attach-warn-badge');
+    expect(warnBadges).toHaveLength(1);
+    expect(warnBadges[0]?.getAttribute('aria-label')).toContain('当前模型不支持多模态视觉解析');
   });
 });
