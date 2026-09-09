@@ -1095,6 +1095,7 @@ fn deepseek_compat() -> WireCompat<'static> {
         base_url: Some("https://api.deepseek.com"),
         supports_reasoning: true,
         thinking_format: None,
+        supports_developer_role: false,
     }
 }
 
@@ -1205,6 +1206,7 @@ fn non_deepseek_does_not_force_reasoning_content_key() {
         base_url: Some("https://api.openai.com"),
         supports_reasoning: true,
         thinking_format: None,
+        supports_developer_role: false,
     };
     let messages = to_chat_messages_with_compat(
         None,
@@ -1270,13 +1272,15 @@ fn deepseek_plain_thinking_round_keeps_thought_not_forced() {
 
 #[test]
 fn developer_role_openrouter_anthropic_prefix_reasoning_uses_developer() {
-    // G5-a（T2.3）：openrouter + anthropic/ 前缀模型 + reasoning → role:"developer"
+    // G5-a（T2.3，plans/04 §2.4）：yaml 显式声明 developer role → role:"developer"
+    // （不再走 openrouter URL / 模型前缀启发式；supports_developer_role 是唯一开关）
     let compat = WireCompat {
         vendor: Some("openrouter"),
         model: Some("anthropic/claude-sonnet-4"),
         base_url: Some("https://openrouter.ai/api/v1"),
         supports_reasoning: true,
         thinking_format: None,
+        supports_developer_role: true,
     };
     let messages = to_chat_messages_with_compat(
         Some("系统提示"),
@@ -1294,12 +1298,14 @@ fn developer_role_openrouter_anthropic_prefix_reasoning_uses_developer() {
 
 #[test]
 fn developer_role_openai_prefix_reasoning_uses_developer() {
+    // 同上：supports_developer_role=true → developer（与 vendor/前缀无关）
     let compat = WireCompat {
         vendor: Some("openrouter"),
         model: Some("openai/gpt-5"),
         base_url: Some("https://openrouter.ai/api/v1"),
         supports_reasoning: true,
         thinking_format: None,
+        supports_developer_role: true,
     };
     let messages = to_chat_messages_with_compat(
         Some("系统提示"),
@@ -1313,15 +1319,26 @@ fn developer_role_openai_prefix_reasoning_uses_developer() {
 
 #[test]
 fn developer_role_not_reasoning_or_not_openrouter_uses_system() {
-    // 其余（非 reasoning / 非 openrouter / 非前缀模型）→ role:"system"
+    // 未显式声明 supports_developer_role（含 openrouter+前缀+reasoning 组合）→
+    // role:"system"（yaml 驱动，URL / 前缀启发式已从生产路径拆除）
     let cases: Vec<WireCompat<'static>> = vec![
-        // 非 reasoning（supports_reasoning=false，即便 openrouter+anthropic 前缀）
+        // 未声明 developer role（即便 openrouter+anthropic 前缀+reasoning）
+        WireCompat {
+            vendor: Some("openrouter"),
+            model: Some("anthropic/claude-sonnet-4"),
+            base_url: Some("https://openrouter.ai/api/v1"),
+            supports_reasoning: true,
+            thinking_format: None,
+            supports_developer_role: false,
+        },
+        // 非 reasoning（supports_reasoning=false）
         WireCompat {
             vendor: Some("openrouter"),
             model: Some("anthropic/claude-sonnet-4"),
             base_url: Some("https://openrouter.ai/api/v1"),
             supports_reasoning: false,
             thinking_format: None,
+            supports_developer_role: false,
         },
         // 非 openrouter（anthropic 官方）
         WireCompat {
@@ -1330,14 +1347,7 @@ fn developer_role_not_reasoning_or_not_openrouter_uses_system() {
             base_url: Some("https://api.anthropic.com"),
             supports_reasoning: true,
             thinking_format: None,
-        },
-        // 非前缀模型（openrouter + reasoning 但 meta-llama 前缀）
-        WireCompat {
-            vendor: Some("openrouter"),
-            model: Some("meta-llama/llama-3-70b"),
-            base_url: Some("https://openrouter.ai/api/v1"),
-            supports_reasoning: true,
-            thinking_format: None,
+            supports_developer_role: false,
         },
         // 缺省 compat（全 None → supports_reasoning=false）
         WireCompat::default(),
@@ -1365,6 +1375,7 @@ fn developer_role_not_reasoning_or_not_openrouter_uses_system() {
             base_url: Some("https://openrouter.ai/api/v1"),
             supports_reasoning: true,
             thinking_format: None,
+            supports_developer_role: true,
         },
     );
     assert_eq!(messages[0].role, "user");
@@ -1436,4 +1447,70 @@ fn compat_entry_is_byte_identical_to_legacy_entry_on_default() {
         legacy, compat,
         "缺省 compat 与既有入口 wire 投影必须逐字节一致"
     );
+}
+
+#[test]
+fn assistant_with_tool_call_and_result_blocks_emits_both_on_wire() {
+    // 历史水合兜底（OpenAI/TokenHub 400001 根因修复）：
+    // 当 assistant 消息内同时携带 ToolCall 与 ToolResult 块时，
+    // wire 层必须保证 assistant 消息后立即发出对应的 role: "tool" 消息。
+    let msgs = vec![
+        user_msg(vec![text_block("查看文件")]),
+        assistant_msg(vec![
+            text_block("我来查看"),
+            tool_call_block("call_read_1", "read_file", json!({ "path": "a.txt" })),
+            tool_result_block("call_read_1", ToolOutput::text("file content")),
+        ]),
+        user_msg(vec![text_block("谢谢")]),
+    ];
+    let wire = to_chat_messages(
+        None,
+        &msgs,
+        ReasoningContentMode::Omit,
+        SystemPromptWireMode::NativeSystemRole,
+    );
+    assert_eq!(wire.len(), 4);
+    assert_eq!(wire[0].role, "user");
+    assert_eq!(wire[1].role, "assistant");
+    assert_eq!(wire[1].tool_calls.len(), 1);
+    assert_eq!(wire[1].tool_calls[0]["id"], "call_read_1");
+    // tool 消息必须紧随 assistant 出现
+    assert_eq!(wire[2].role, "tool");
+    assert_eq!(wire[2].tool_call_id.as_deref(), Some("call_read_1"));
+    assert_eq!(
+        wire[2].content,
+        Some(ChatContent::Text("file content".to_string()))
+    );
+    // 新用户消息在 tool 消息后正常到达
+    assert_eq!(wire[3].role, "user");
+}
+
+
+
+#[test]
+fn responses_api_assistant_with_tool_call_and_result_blocks() {
+    let msgs = vec![
+        assistant_msg(vec![
+            text_block("查看文件"),
+            tool_call_block("call_read_1", "read_file", json!({ "path": "a.txt" })),
+            tool_result_block("call_read_1", ToolOutput::text("file content")),
+        ]),
+        user_msg(vec![text_block("谢谢")]),
+    ];
+    let items = to_responses_input_items(
+        &msgs,
+        ReasoningContentMode::Omit,
+        SystemPromptWireMode::NativeSystemRole,
+    );
+    let types: Vec<&str> = items
+        .iter()
+        .filter_map(|i| i.get("type").and_then(|t| t.as_str()))
+        .collect();
+    assert_eq!(
+        types,
+        vec!["message", "function_call", "function_call_output", "message"]
+    );
+    assert_eq!(items[1]["call_id"], "call_read_1");
+    assert_eq!(items[2]["call_id"], "call_read_1");
+    assert_eq!(items[2]["output"], "file content");
 }

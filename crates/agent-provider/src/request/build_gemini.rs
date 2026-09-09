@@ -27,11 +27,14 @@ use conex_compaction::clean_output::{clean_output, CleanupOptions};
 use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
 use serde_json::{json, Map, Value};
 
-use super::messages::{stringify_tool_output, strip_inline_data_urls};
+use super::messages::{stringify_tool_output, user_message_content, ChatContent, ChatContentPart};
 use super::schema::canonicalize_schema;
 use super::tools::{ToolChoice, ToolDefinition};
-use super::vendor::{thinking_to_gemini_thinking_level, ThinkingIntensity};
+use super::vendor::{ReasoningEffort, ThinkingIntensity};
 use super::RequestBuildContext;
+use crate::request::build::dialect::{
+    self, assemble_thinking_dialect, DialectBuildOptions, ThinkingDialectFormat,
+};
 
 /// Gemini 请求构建选项（对齐 chat 轨 [super::ChatCompletionsRequestOptions] 的 Gemini 子集；
 /// 只携带 Gemini generateContent 语义字段，排除 chat 专有注入面）
@@ -42,9 +45,14 @@ pub struct GeminiRequestOptions {
     pub temperature: Option<f64>,
     /// Gemini `maxOutputTokens`（generateContent 原生字段名）
     pub max_output_tokens: Option<u64>,
-    /// 01 D5：thinkingIntensity 透传（off → 不含 thinking 相关键；其余档位 →
-    /// `generationConfig.thinking_level`）
+    /// 01 D5：thinkingIntensity 透传（off → 不含 thinking 相关键）
     pub thinking_intensity: Option<ThinkingIntensity>,
+    /// reasoning effort（思考键经 dialect 换算；off/auto → 不注入）
+    pub reasoning_effort: Option<ReasoningEffort>,
+    /// 用户在 models.yaml 中配置的思考拍平映射（TitleCase → wire）
+    pub thinking_map: Option<indexmap::IndexMap<String, String>>,
+    /// 显式配置的思考方言组装格式（思考键只来自 dialect）
+    pub thinking_format: Option<crate::models::catalog_types::ThinkingFormat>,
     pub tool_choice: Option<ToolChoice>,
 }
 
@@ -77,7 +85,7 @@ pub fn build_gemini_request_body(
     let contents = to_gemini_contents(context.messages);
     body.insert("contents".to_string(), json!(contents));
 
-    // generationConfig（camelCase）：maxOutputTokens / temperature / thinking_level
+    // generationConfig（camelCase）：maxOutputTokens / temperature / thinkingConfig
     let mut generation = Map::new();
     if let Some(max_output_tokens) = opts.max_output_tokens {
         generation.insert("maxOutputTokens".to_string(), json!(max_output_tokens));
@@ -85,14 +93,14 @@ pub fn build_gemini_request_body(
     if let Some(temperature) = opts.temperature {
         generation.insert("temperature".to_string(), json!(temperature));
     }
-    // 01 D5：thinkingIntensity 透传。off → 不注入任何 thinking 相关键；
-    // 启用 → generationConfig.thinking_level（复用 vendor 线值换算）
-    if let Some(intensity) = opts.thinking_intensity {
-        if intensity != ThinkingIntensity::Off {
-            generation.insert(
-                "thinking_level".to_string(),
-                json!(thinking_to_gemini_thinking_level(intensity)),
-            );
+    // thinking 键只来自 assemble_thinking_dialect（GeminiThinkingConfig，map 值
+    // 原样；plans/04 §2.2——禁止 thinking_to_gemini_thinking_level 把 Max 折 high）
+    if let (Some(thinking_val), _) = gemini_thinking_dialect(opts) {
+        if let Some(inner) = thinking_val
+            .get("generationConfig")
+            .and_then(|v| v.get("thinkingConfig"))
+        {
+            generation.insert("thinkingConfig".to_string(), inner.clone());
         }
     }
     if !generation.is_empty() {
@@ -172,11 +180,14 @@ fn to_gemini_contents<M: BorrowMessage>(messages: &[M]) -> Vec<Value> {
         let msg = msg.borrow_message();
         match msg.role {
             AgentMessageRole::User => {
-                let parts = text_parts(&msg.text());
-                if parts.is_empty() {
-                    continue;
-                }
-                contents.push(gemini_content("user", parts));
+                // 多模态：metadata.contentParts 含图 → inline_data / fileData part；
+                // 否则纯文本（plans/04 §4.2——禁止把 data URL 剥成 [image] 文本丢图）
+                let content = user_message_content(msg);
+                let parts: Vec<Value> = match &content {
+                    ChatContent::Text(text) => text_parts(text),
+                    ChatContent::Parts(parts) => parts.iter().map(gemini_user_part).collect(),
+                };
+                push_gemini_content(&mut contents, "user", parts);
             }
             AgentMessageRole::Assistant => {
                 let mut parts: Vec<Value> = Vec::new();
@@ -205,36 +216,15 @@ fn to_gemini_contents<M: BorrowMessage>(messages: &[M]) -> Vec<Value> {
                         _ => {}
                     }
                 }
-                if parts.is_empty() {
-                    continue;
-                }
-                contents.push(gemini_content("model", parts));
+                push_gemini_content(&mut contents, "model", parts);
+
+                // 历史水合兜底：若 assistant 消息同体携带 ToolResult 块（hydrate.rs）
+                let tool_parts = tool_result_gemini_parts(msg);
+                push_gemini_content(&mut contents, "user", tool_parts);
             }
             AgentMessageRole::Tool => {
-                let mut parts: Vec<Value> = Vec::new();
-                for block in &msg.blocks {
-                    if let AgentMessageBlock::ToolResult {
-                        tool_name, output, ..
-                    } = block
-                    {
-                        // T-34（R-J）：wire 投影面统一清洗（与 chat 轨 tool 消息同口径，
-                        // 确定性 + 幂等）
-                        let cleaned = clean_output(
-                            &stringify_tool_output(output),
-                            &CleanupOptions::default(),
-                        );
-                        parts.push(json!({
-                            "functionResponse": {
-                                "name": tool_name,
-                                "response": tool_response_value(&cleaned.cleaned),
-                            }
-                        }));
-                    }
-                }
-                if parts.is_empty() {
-                    continue;
-                }
-                contents.push(gemini_content("user", parts));
+                let parts = tool_result_gemini_parts(msg);
+                push_gemini_content(&mut contents, "user", parts);
             }
             AgentMessageRole::System => {
                 // system 消息并入 systemInstruction（append_system_instruction 处理）
@@ -244,19 +234,112 @@ fn to_gemini_contents<M: BorrowMessage>(messages: &[M]) -> Vec<Value> {
     contents
 }
 
+fn tool_result_gemini_parts(msg: &AgentMessage) -> Vec<Value> {
+    let mut parts: Vec<Value> = Vec::new();
+    for block in &msg.blocks {
+        if let AgentMessageBlock::ToolResult {
+            tool_name, output, ..
+        } = block
+        {
+            // T-34（R-J）：wire 投影面统一清洗（与 chat 轨 tool 消息同口径，
+            // 确定性 + 幂等）
+            let cleaned = clean_output(
+                &stringify_tool_output(output),
+                &CleanupOptions::default(),
+            );
+            parts.push(json!({
+                "functionResponse": {
+                    "name": tool_name,
+                    "response": tool_response_value(&cleaned.cleaned),
+                }
+            }));
+        }
+    }
+    parts
+}
+
+fn push_gemini_content(contents: &mut Vec<Value>, role: &str, parts: Vec<Value>) {
+    if parts.is_empty() {
+        return;
+    }
+    if role == "user" && contents.last().is_some_and(|c| c["role"] == "user") {
+        if let Some(last_msg) = contents.last_mut() {
+            if let Some(last_parts) = last_msg.get_mut("parts").and_then(|p| p.as_array_mut()) {
+                last_parts.extend(parts);
+                return;
+            }
+        }
+    }
+    contents.push(gemini_content(role, parts));
+}
+
 /// Gemini content 载体：`{role, parts}`
 fn gemini_content(role: &str, parts: Vec<Value>) -> Value {
     json!({ "role": role, "parts": parts })
 }
 
-/// user 文本 → Gemini text parts（清洗 inline data url，对齐 user_message_content 语义）
+/// user 文本 → Gemini text parts（清洗 inline data url 占位，对齐既有语义）
 fn text_parts(text: &str) -> Vec<Value> {
-    let cleaned = strip_inline_data_urls(text).trim().to_string();
+    let cleaned = text.trim().to_string();
     if cleaned.is_empty() {
         Vec::new()
     } else {
         vec![json!({ "text": cleaned })]
     }
+}
+
+/// Gemini user part：text → `{text}`；image_url → `inline_data`（data URL）/
+/// `file_data`（https URL），禁止只发 `[图片附件]` 文本备注（plans/04 §0.1 #6）。
+fn gemini_user_part(part: &ChatContentPart) -> Value {
+    match part {
+        ChatContentPart::Text { text, .. } => json!({ "text": text }),
+        ChatContentPart::ImageUrl { url, .. } => {
+            if let Some((mime, data)) = split_data_url(url) {
+                json!({ "inline_data": { "mime_type": mime, "data": data } })
+            } else {
+                json!({ "file_data": { "file_uri": url } })
+            }
+        }
+    }
+}
+
+/// `data:image/<mime>;base64,<payload>` → (mime, base64 payload)；非 data URL → None
+fn split_data_url(url: &str) -> Option<(String, String)> {
+    let rest = url.strip_prefix("data:")?;
+    let (mime, payload) = rest.split_once(";base64,")?;
+    if mime.is_empty() || payload.is_empty() {
+        return None;
+    }
+    Some((mime.to_string(), payload.to_string()))
+}
+
+/// Gemini 思考键组装（plans/04 §2.2）：`thinking_format != gemini`（含未声明）→
+/// 不注入（fail-closed）；effort 经 dialect 换算；map 值原样进
+/// `generationConfig.thinkingConfig`。
+fn gemini_thinking_dialect(opts: &GeminiRequestOptions) -> (Option<Value>, Option<u64>) {
+    if opts.thinking_format != Some(crate::models::catalog_types::ThinkingFormat::Gemini) {
+        return (None, None);
+    }
+    let dialect_effort: Option<dialect::ReasoningEffort> =
+        if let Some(effort) = opts.reasoning_effort {
+            match effort {
+                ReasoningEffort::Off | ReasoningEffort::Auto => None,
+                other => Some(other.into()),
+            }
+        } else {
+            opts.thinking_intensity
+                .filter(|i| *i != ThinkingIntensity::Off)
+                .map(Into::into)
+        };
+    let Some(effort) = dialect_effort else {
+        return (None, None);
+    };
+    assemble_thinking_dialect(&DialectBuildOptions {
+        effort,
+        format: ThinkingDialectFormat::GeminiThinkingConfig,
+        max_output_tokens: opts.max_output_tokens.unwrap_or(64_000),
+        thinking_map: opts.thinking_map.as_ref(),
+    })
 }
 
 /// ToolDefinition → Gemini functionDeclarations 条目（参数单点规范化）

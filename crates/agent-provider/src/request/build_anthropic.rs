@@ -43,11 +43,17 @@ use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
 use serde_json::{json, Map, Value};
 
 use super::cache::allocate_breakpoints;
-use super::messages::{sanitize_tool_call_id, stringify_tool_output, WIRE_CONTINUATION_NOTE};
+use super::messages::{
+    sanitize_tool_call_id, stringify_tool_output, user_message_content, ChatContent,
+    ChatContentPart, WIRE_CONTINUATION_NOTE,
+};
 use super::schema::canonicalize_schema;
 use super::tools::ToolChoice;
-use super::vendor::{effort_to_budget_tokens, thinking_to_budget_tokens, ReasoningEffort};
+use super::vendor::ReasoningEffort;
 use super::{RequestBuildContext, ThinkingIntensity};
+use crate::request::build::dialect::{
+    self, assemble_thinking_dialect, DialectBuildOptions, ThinkingDialectFormat,
+};
 
 /// anthropic.messages 接口显式版本头
 pub const ANTHROPIC_VERSION: &str = "2023-06-01";
@@ -68,6 +74,10 @@ pub struct AnthropicRequestOptions {
     pub thinking_intensity: Option<ThinkingIntensity>,
     /// 显式下发的精确 Token 预算（1024 ~ 64000）
     pub thinking_budget: Option<u64>,
+    /// 用户在 models.yaml 中配置的思考拍平映射（TitleCase → wire）
+    pub thinking_map: Option<indexmap::IndexMap<String, String>>,
+    /// 显式配置的思考方言组装格式（思考键只来自 dialect）
+    pub thinking_format: Option<crate::models::catalog_types::ThinkingFormat>,
     pub tool_choice: Option<ToolChoice>,
     /// 显式 PromptCache 策略
     pub cache: Option<super::cache::CachePolicy>,
@@ -122,32 +132,16 @@ pub fn build_anthropic_request_body(
     }
 
     // 2. thinking 参数与 max_tokens 自动安全抬升 (max_tokens >= budget + 4096)
-    let thinking_obj = anthropic_thinking_object(opts);
+    //    思考键只来自 assemble_thinking_dialect（AnthropicBudget：用户字典数字或
+    //    fail-closed；plans/04 §3/§7.3——已删除 anthropic_thinking_object /
+    //    effort_to_budget_tokens 魔法刻度生产调用）
+    let (thinking_obj, budget) = anthropic_thinking_dialect(opts);
     if let Some(thinking) = thinking_obj {
-        body.insert("thinking".to_string(), thinking);
+        // dialect 输出为 `{"thinking": {...}}` 顶层包裹，取内层对象注入
+        if let Some(inner) = thinking.get("thinking") {
+            body.insert("thinking".to_string(), inner.clone());
+        }
     }
-
-    let budget = if let Some(explicit_budget) = opts.thinking_budget {
-        if explicit_budget > 0 {
-            Some(explicit_budget.max(1024))
-        } else {
-            None
-        }
-    } else if let Some(intensity) = opts.thinking_intensity {
-        if intensity != ThinkingIntensity::Off {
-            Some(thinking_to_budget_tokens(intensity).max(1024))
-        } else {
-            None
-        }
-    } else if let Some(effort) = opts.reasoning_effort {
-        if !matches!(effort, ReasoningEffort::Off | ReasoningEffort::Auto) {
-            Some(effort_to_budget_tokens(effort).max(1024))
-        } else {
-            None
-        }
-    } else {
-        None
-    };
 
     let min_max_tokens = budget.map(|b| b.saturating_add(4096)).unwrap_or(2048);
     let final_max_tokens = match opts.max_tokens {
@@ -181,10 +175,7 @@ pub fn build_anthropic_request_body(
                         canonicalize_schema(&tool.effective_input_schema()),
                     );
                     if bp_plan.tools && (idx + 1 == tool_count) {
-                        map.insert(
-                            "cache_control".to_string(),
-                            json!({ "type": "ephemeral" }),
-                        );
+                        map.insert("cache_control".to_string(), json!({ "type": "ephemeral" }));
                     }
                     Value::Object(map)
                 })
@@ -214,10 +205,7 @@ fn inject_last_message_cache_control(messages: &mut [Value]) {
                 if let Some(content) = msg.get_mut("content").and_then(|c| c.as_array_mut()) {
                     if let Some(last_block) = content.last_mut() {
                         if let Some(obj) = last_block.as_object_mut() {
-                            obj.insert(
-                                "cache_control".to_string(),
-                                json!({ "type": "ephemeral" }),
-                            );
+                            obj.insert("cache_control".to_string(), json!({ "type": "ephemeral" }));
                             break;
                         }
                     }
@@ -249,8 +237,12 @@ pub fn build_anthropic_headers(
         betas.push("prompt-caching-2024-07-31");
     }
     if opts.thinking_budget.is_some()
-        || opts.thinking_intensity.is_some_and(|i| i != ThinkingIntensity::Off)
-        || opts.reasoning_effort.is_some_and(|e| !matches!(e, ReasoningEffort::Off | ReasoningEffort::Auto))
+        || opts
+            .thinking_intensity
+            .is_some_and(|i| i != ThinkingIntensity::Off)
+        || opts
+            .reasoning_effort
+            .is_some_and(|e| !matches!(e, ReasoningEffort::Off | ReasoningEffort::Auto))
     {
         betas.push("interleaved-thinking-2025-05-14");
     }
@@ -271,32 +263,51 @@ fn build_system_prompt_string(system_prompt: Option<&str>) -> Option<String> {
         .map(str::to_string)
 }
 
-/// thinking 参数（对齐 pi-ai buildParams 的 budget-based 形态）；
-/// 优先使用显式 thinking_budget，次选 intensity / effort 换算；
-/// effort/intensity 均为 None 或 off → None（不注入 `thinking` 键）
-fn anthropic_thinking_object(opts: &AnthropicRequestOptions) -> Option<Value> {
-    let budget = if let Some(explicit_budget) = opts.thinking_budget {
-        if explicit_budget == 0 {
-            return None;
-        }
-        explicit_budget.max(1024)
-    } else if let Some(intensity) = opts.thinking_intensity {
-        if intensity == ThinkingIntensity::Off {
-            return None;
-        }
-        thinking_to_budget_tokens(intensity).max(1024)
-    } else if let Some(effort) = opts.reasoning_effort {
-        if matches!(effort, ReasoningEffort::Off | ReasoningEffort::Auto) {
-            return None;
-        }
-        effort_to_budget_tokens(effort).max(1024)
-    } else {
-        return None;
+/// thinking 参数（对齐 pi-ai buildParams 的 budget-based 形态；plans/04 §3）
+///
+/// 思考键唯一入口 = [assemble_thinking_dialect]（`AnthropicBudget`）：
+/// - `thinking_format != Anthropic`（含未声明）→ 不注入（fail-closed，§2.3）；
+/// - effort 为 None / off / auto → 不注入；
+/// - 预算只来自用户字典 `High: "16384"` 等（≥1024）；值 `adaptive` →
+///   `{"type":"adaptive"}`；不可解析 → 不注入（不降级到魔法刻度）。
+///
+/// 返回值第二项 = 供 max_tokens 自动抬升的预算（dialect 产出的 budget_tokens）。
+fn anthropic_thinking_dialect(
+    opts: &AnthropicRequestOptions,
+) -> (Option<Value>, Option<u64>) {
+    if opts.thinking_format
+        != Some(crate::models::catalog_types::ThinkingFormat::Anthropic)
+    {
+        return (None, None);
+    }
+    // effort：reasoning_effort 优先，thinking_intensity 兜底（off/auto → 不注入）
+    let dialect_effort: Option<dialect::ReasoningEffort> =
+        if let Some(effort) = opts.reasoning_effort {
+            match effort {
+                ReasoningEffort::Off | ReasoningEffort::Auto => None,
+                other => Some(other.into()),
+            }
+        } else {
+            opts.thinking_intensity
+                .filter(|i| *i != ThinkingIntensity::Off)
+                .map(Into::into)
+        };
+    let Some(effort) = dialect_effort else {
+        return (None, None);
     };
-    Some(json!({
-        "type": "enabled",
-        "budget_tokens": budget,
-    }))
+    let (thinking_obj, _) = assemble_thinking_dialect(&DialectBuildOptions {
+        effort,
+        format: ThinkingDialectFormat::AnthropicBudget,
+        max_output_tokens: DEFAULT_ANTHROPIC_MAX_OUTPUT,
+        thinking_map: opts.thinking_map.as_ref(),
+    });
+    // budget = dialect 产出的 budget_tokens（供 max_tokens 自动抬升；非 elevated）
+    let budget = thinking_obj
+        .as_ref()
+        .and_then(|t| t.get("thinking"))
+        .and_then(|t| t.get("budget_tokens"))
+        .and_then(Value::as_u64);
+    (thinking_obj, budget)
 }
 
 /// tool_choice：Anthropic 官方形状 `{type: "auto"|"any"|"tool", name?}`；
@@ -342,13 +353,17 @@ fn to_anthropic_messages(context: &RequestBuildContext) -> Vec<Value> {
             }
             AgentMessageRole::Assistant => {
                 let content = assistant_anthropic_content(message);
-                if content.is_empty() {
-                    continue;
+                if !content.is_empty() {
+                    push_alternating(
+                        &mut result,
+                        &json!({ "role": "assistant", "content": content }),
+                    );
                 }
-                push_alternating(
-                    &mut result,
-                    &json!({ "role": "assistant", "content": content }),
-                );
+                // 历史水合兜底：若 assistant 消息同体携带 ToolResult 块（hydrate.rs）
+                let tool_results = tool_result_anthropic_content(message);
+                if !tool_results.is_empty() {
+                    push_alternating(&mut result, &json!({ "role": "user", "content": tool_results }));
+                }
             }
             AgentMessageRole::Tool => {
                 let content = tool_result_anthropic_content(message);
@@ -367,10 +382,22 @@ fn to_anthropic_messages(context: &RequestBuildContext) -> Vec<Value> {
 
 /// 交替约束投影：向 result 追加一条 wire 消息，仅当该消息为 assistant 且会破坏
 /// Anthropic 交替铁律时前置 user 占位——(a) 首条即 assistant（空首条须为 user）；
-/// (b) 上一条已是 assistant。user 消息（含 tool_result 的 user 角色）天然满足
-/// 交替，不触发占位。
+/// (b) 上一条已是 assistant。
+/// 当连续两条均为 user 消息时（如工具响应后紧跟新用户提问），将其 content 数组合并，
+/// 满足 Anthropic wire user/assistant 严格交替铁律。
 fn push_alternating(result: &mut Vec<Value>, message: &Value) {
     let next_role = message["role"].as_str().unwrap_or_default();
+    if next_role == "user" && result.last().is_some_and(|m| m["role"] == "user") {
+        if let Some(last_msg) = result.last_mut() {
+            if let (Some(last_arr), Some(next_arr)) = (
+                last_msg.get_mut("content").and_then(|c| c.as_array_mut()),
+                message.get("content").and_then(|c| c.as_array()),
+            ) {
+                last_arr.extend(next_arr.iter().cloned());
+                return;
+            }
+        }
+    }
     let needs_user_prefix = next_role == "assistant"
         && (result.is_empty() || result.last().is_some_and(|m| m["role"] == "assistant"));
     if needs_user_prefix {
@@ -379,16 +406,60 @@ fn push_alternating(result: &mut Vec<Value>, message: &Value) {
     result.push(message.clone());
 }
 
-/// user 消息 content 块数组（text 块；带 thinking 时不适用）
+/// user 消息 content 块数组（text / image 块；图像来自 metadata.contentParts——
+/// plans/04 §4.2：视觉模型图进 Anthropic image source 块，禁止只发 `[图片附件]`
+/// 文本备注）
 fn user_anthropic_content(message: &AgentMessage) -> Vec<Value> {
-    message
-        .blocks
-        .iter()
-        .filter_map(|block| match block {
-            AgentMessageBlock::Text { text } => Some(json!({ "type": "text", "text": text })),
-            _ => None,
+    let content = user_message_content(message);
+    match content {
+        ChatContent::Text(text) => {
+            if text.trim().is_empty() {
+                Vec::new()
+            } else {
+                vec![json!({ "type": "text", "text": text })]
+            }
+        }
+        ChatContent::Parts(parts) => parts.iter().filter_map(anthropic_user_part).collect(),
+    }
+}
+
+/// ChatContentPart → Anthropic content 块（text → text；image_url → image source）
+fn anthropic_user_part(part: &ChatContentPart) -> Option<Value> {
+    match part {
+        ChatContentPart::Text { text, .. } => {
+            if text.trim().is_empty() {
+                None
+            } else {
+                Some(json!({ "type": "text", "text": text }))
+            }
+        }
+        ChatContentPart::ImageUrl { url, .. } => Some(anthropic_image_source(url)),
+    }
+}
+
+/// image_url → Anthropic image source 块：data URL → base64 source；否则 url source
+fn anthropic_image_source(url: &str) -> Value {
+    if let Some((mime, data)) = split_data_url(url) {
+        json!({
+            "type": "image",
+            "source": { "type": "base64", "media_type": mime, "data": data },
         })
-        .collect()
+    } else {
+        json!({
+            "type": "image",
+            "source": { "type": "url", "url": url },
+        })
+    }
+}
+
+/// `data:image/<mime>;base64,<payload>` → (mime, base64 payload)；非 data URL → None
+fn split_data_url(url: &str) -> Option<(String, String)> {
+    let rest = url.strip_prefix("data:")?;
+    let (mime, payload) = rest.split_once(";base64,")?;
+    if mime.is_empty() || payload.is_empty() {
+        return None;
+    }
+    Some((mime.to_string(), payload.to_string()))
 }
 
 /// tool 消息 → user content 的 `tool_result` 块（Anthropic 官方语义）

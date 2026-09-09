@@ -38,7 +38,8 @@ mod messages_content;
 
 pub(crate) use messages_content::responses_input_content;
 pub use messages_content::{
-    normalize_content_parts, sanitize_tool_call_id, stringify_tool_output, strip_inline_data_urls,
+    ensure_content_modalities, ensure_outbound_modalities, normalize_content_parts,
+    sanitize_tool_call_id, stringify_tool_output, strip_inline_data_urls,
     system_prompt_as_user_prefix, thought_content, user_message_content,
 };
 // G5-compat 序列化消费辅助（R2 T2.2/T2.3）：WireCompat 上下文 + 模型级判定
@@ -273,6 +274,7 @@ pub fn to_chat_messages_with_compat<M: Borrow<AgentMessage>>(
             result.push(system_prompt_message(prompt, wire_mode, compat));
         }
     }
+
     for message_ref in messages {
         let message = message_ref.borrow();
         match message.role {
@@ -287,18 +289,7 @@ pub fn to_chat_messages_with_compat<M: Borrow<AgentMessage>>(
                         // T-34（R-J）：wire 投影面统一清洗（默认 CleanupOptions；
                         // 确定性 + 幂等——历史回放与新增同路径；消息本体 raw 不变，
                         // 落库/事件/工具返回不受影响，评审 02 §3.4 / 00-plan §8.2）
-                        let cleaned = clean_output(
-                            &stringify_tool_output(output),
-                            &CleanupOptions::default(),
-                        );
-                        result.push(ChatMessage {
-                            role: "tool".to_string(),
-                            content: Some(ChatContent::Text(cleaned.cleaned)),
-                            tool_call_id: Some(sanitize_tool_call_id(tool_call_id)),
-                            reasoning_content: None,
-                            tool_calls: Vec::new(),
-                            cache_control: None,
-                        });
+                        result.push(tool_result_chat_message(tool_call_id, output));
                     }
                 }
             }
@@ -308,16 +299,30 @@ pub fn to_chat_messages_with_compat<M: Borrow<AgentMessage>>(
                     .blocks
                     .iter()
                     .filter_map(|block| match block {
-                        AgentMessageBlock::ToolCall(call) => Some(json!({
-                            // P1 C2：id 消毒 + arguments canonical 序列化（键序确定，
-                            // 防御 provider 回传 wire JSON 的键序依赖；幂等保证历史不回改）
-                            "id": sanitize_tool_call_id(&call.id),
-                            "type": "function",
-                            "function": {
-                                "name": call.tool_name,
-                                "arguments": canonical_json_string(&call.input),
-                            },
-                        })),
+                        AgentMessageBlock::ToolCall(call) => {
+                            let tool_name = call.tool_name.trim();
+                            if tool_name.is_empty() {
+                                return None;
+                            }
+                            let raw_id = sanitize_tool_call_id(&call.id);
+                            let id = if raw_id.trim().is_empty() {
+                                format!("call_{tool_name}")
+                            } else {
+                                raw_id
+                            };
+                            let mut args = canonical_json_string(&call.input);
+                            if args.trim().is_empty() {
+                                args = "{}".to_string();
+                            }
+                            Some(json!({
+                                "id": id,
+                                "type": "function",
+                                "function": {
+                                    "name": tool_name,
+                                    "arguments": args,
+                                },
+                            }))
+                        }
                         _ => None,
                     })
                     .collect();
@@ -338,7 +343,11 @@ pub fn to_chat_messages_with_compat<M: Borrow<AgentMessage>>(
                     // 其余（非 DeepSeek / 纯思考轮）→ 沿用既有 mode 语义（不改写）
                     None => reasoning,
                 };
-                if content.is_empty() && tool_calls.is_empty() && reasoning.is_none() {
+                let has_tool_results = message
+                    .blocks
+                    .iter()
+                    .any(|b| matches!(b, AgentMessageBlock::ToolResult { .. }));
+                if content.is_empty() && tool_calls.is_empty() && reasoning.is_none() && !has_tool_results {
                     continue;
                 }
 
@@ -357,18 +366,35 @@ pub fn to_chat_messages_with_compat<M: Borrow<AgentMessage>>(
                     }
                 }
 
-                result.push(ChatMessage {
-                    role: "assistant".to_string(),
-                    content: if content.is_empty() {
-                        None
-                    } else {
-                        Some(ChatContent::Text(content))
-                    },
-                    tool_call_id: None,
-                    reasoning_content: reasoning,
-                    tool_calls,
-                    cache_control: None,
-                });
+                if !content.is_empty() || !tool_calls.is_empty() || reasoning.is_some() {
+                    result.push(ChatMessage {
+                        role: "assistant".to_string(),
+                        content: if content.is_empty() {
+                            None
+                        } else {
+                            Some(ChatContent::Text(content))
+                        },
+                        tool_call_id: None,
+                        reasoning_content: reasoning,
+                        tool_calls,
+                        cache_control: None,
+                    });
+                }
+
+                // 历史水合兜底（OpenAI/TokenHub wire 铁律）：
+                // 前端历史水合后的 assistant 消息可能同体携带 ToolResult 块（hydrate.rs），
+                // 必须紧随 assistant 消息后立即发出对应的 tool 消息，保证 wire 上
+                // 每个 tool_call_id 都有对应的 role: "tool" 结果，否则 TokenHub/OpenAI 400001 报非法请求。
+                for block in &message.blocks {
+                    if let AgentMessageBlock::ToolResult {
+                        tool_call_id,
+                        output,
+                        ..
+                    } = block
+                    {
+                        result.push(tool_result_chat_message(tool_call_id, output));
+                    }
+                }
             }
             AgentMessageRole::System => {
                 result.push(system_prompt_message(&message.text(), wire_mode, compat));
@@ -386,6 +412,29 @@ pub fn to_chat_messages_with_compat<M: Borrow<AgentMessage>>(
         }
     }
     result
+}
+
+fn tool_result_chat_message(
+    tool_call_id: &str,
+    output: &conex_types::tool::ToolOutput,
+) -> ChatMessage {
+    let cleaned = clean_output(
+        &stringify_tool_output(output),
+        &CleanupOptions::default(),
+    );
+    let text = if cleaned.cleaned.is_empty() {
+        "(no output)".to_string()
+    } else {
+        cleaned.cleaned
+    };
+    ChatMessage {
+        role: "tool".to_string(),
+        content: Some(ChatContent::Text(text)),
+        tool_call_id: Some(sanitize_tool_call_id(tool_call_id)),
+        reasoning_content: None,
+        tool_calls: Vec::new(),
+        cache_control: None,
+    }
 }
 
 /// toResponsesInputItems（DEEPCHECK-05 #10：Responses 轨协议补全）
@@ -413,6 +462,7 @@ pub fn to_responses_input_items<M: Borrow<AgentMessage>>(
     wire_mode: SystemPromptWireMode,
 ) -> Vec<Value> {
     let mut result: Vec<Value> = Vec::new();
+
     for message_ref in messages {
         let message = message_ref.borrow();
         match message.role {
@@ -429,10 +479,15 @@ pub fn to_responses_input_items<M: Borrow<AgentMessage>>(
                             &stringify_tool_output(output),
                             &CleanupOptions::default(),
                         );
+                        let text = if cleaned.cleaned.is_empty() {
+                            "(no output)".to_string()
+                        } else {
+                            cleaned.cleaned
+                        };
                         result.push(json!({
                             "type": "function_call_output",
                             "call_id": sanitize_tool_call_id(tool_call_id),
-                            "output": cleaned.cleaned,
+                            "output": text,
                         }));
                     }
                 }
@@ -451,7 +506,11 @@ pub fn to_responses_input_items<M: Borrow<AgentMessage>>(
                 // 不随轨传递）
                 let reasoning = reasoning_content_object(message, reasoning_content_mode)
                     .filter(|thought| !thought.is_empty());
-                if content.is_empty() && !has_tool_call && reasoning.is_none() {
+                let has_tool_results = message
+                    .blocks
+                    .iter()
+                    .any(|b| matches!(b, AgentMessageBlock::ToolResult { .. }));
+                if content.is_empty() && !has_tool_call && reasoning.is_none() && !has_tool_results {
                     continue;
                 }
 
@@ -482,11 +541,48 @@ pub fn to_responses_input_items<M: Borrow<AgentMessage>>(
                 }
                 for block in &message.blocks {
                     if let AgentMessageBlock::ToolCall(call) = block {
+                        let tool_name = call.tool_name.trim();
+                        if tool_name.is_empty() {
+                            continue;
+                        }
+                        let raw_id = sanitize_tool_call_id(&call.id);
+                        let id = if raw_id.trim().is_empty() {
+                            format!("call_{tool_name}")
+                        } else {
+                            raw_id
+                        };
+                        let mut args = canonical_json_string(&call.input);
+                        if args.trim().is_empty() {
+                            args = "{}".to_string();
+                        }
                         result.push(json!({
                             "type": "function_call",
-                            "call_id": sanitize_tool_call_id(&call.id),
-                            "name": call.tool_name,
-                            "arguments": canonical_json_string(&call.input),
+                            "call_id": id,
+                            "name": tool_name,
+                            "arguments": args,
+                        }));
+                    }
+                }
+                for block in &message.blocks {
+                    if let AgentMessageBlock::ToolResult {
+                        tool_call_id,
+                        output,
+                        ..
+                    } = block
+                    {
+                        let cleaned = clean_output(
+                            &stringify_tool_output(output),
+                            &CleanupOptions::default(),
+                        );
+                        let text = if cleaned.cleaned.is_empty() {
+                            "(no output)".to_string()
+                        } else {
+                            cleaned.cleaned
+                        };
+                        result.push(json!({
+                            "type": "function_call_output",
+                            "call_id": sanitize_tool_call_id(tool_call_id),
+                            "output": text,
                         }));
                     }
                 }

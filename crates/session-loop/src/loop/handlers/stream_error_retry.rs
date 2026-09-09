@@ -41,7 +41,7 @@ pub(crate) const PROVIDER_FAIL_THRESHOLD: u32 = 6;
 /// - 其余（5xx/Timeout/Network）纯退避，钳到 `min(8s, 剩余预算)`
 ///   （分类器只对 429 解析 Retry-After，error.rs:248-251 只 429，
 ///   故非 429 携带 retry_after 时经 8s 上限自然等价于不消费）；
-/// - 最终再钳剩余预算（60s 总预算 - 已用墙钟）。
+/// - 最终再钳剩余预算（普通 60s / RateLimit 180s 总预算 - 已用墙钟）。
 pub(crate) fn retry_delay_ms(
     cfg: &RetryBackoffConfig,
     kind: ProviderErrorKind,
@@ -95,7 +95,9 @@ pub(crate) async fn transient_retry(
     // （壳层读 session_meta 键 provider_fail_streak 注入；None = 未配置熔断
     // 不启用，向后兼容现状）
     if state
-        .options.retry.provider_fail_streak
+        .options
+        .retry
+        .provider_fail_streak
         .is_some_and(|s| s >= PROVIDER_FAIL_THRESHOLD)
     {
         tracing::warn!(
@@ -106,7 +108,16 @@ pub(crate) async fn transient_retry(
         );
         return fatal_provider_error(state, classified);
     }
-    let limit = state.options.retry.transient_retry_limit;
+    let is_rate_limit = classified.kind == ProviderErrorKind::RateLimit;
+    // RateLimit / RPM 限制放宽尝试上限至 10 次（用户裁决：上限是尝试十次，0 时显式禁用不重试）
+    let configured_limit = state.options.retry.transient_retry_limit;
+    let limit = if configured_limit == 0 {
+        0
+    } else if is_rate_limit {
+        configured_limit.max(10)
+    } else {
+        configured_limit
+    };
     if state.transient_retries < limit {
         // 预算起点惰性初始化（规则 R1：首次瞬态错误时；fresh run 归零，
         // loop/mod.rs run 起始同批）
@@ -131,7 +142,6 @@ pub(crate) async fn transient_retry(
                     // 预算耗尽（规则 R3/R4）：不进重试直接 fatal，不消耗次数
                     None => return fatal_provider_error(state, classified),
                 },
-                // retry_backoff = None：现状立即重试（无退避、无预算、无 sleep）
                 None => Duration::ZERO,
             },
         };
@@ -237,4 +247,3 @@ pub(crate) fn emit_length_escalation_diagnostic(
         },
     });
 }
-
