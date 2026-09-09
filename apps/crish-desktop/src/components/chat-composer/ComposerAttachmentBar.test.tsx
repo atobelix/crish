@@ -139,4 +139,36 @@ describe('ComposerAttachmentBar（S4 附件卡）', () => {
     expect(screen.getByText('批注')).toBeTruthy();
     expect(screen.getByText('main.rs')).toBeTruthy();
   });
+
+  it('图片附件展示为纯圆角缩略图无文件名，非图片附件展示为横向微卡片', () => {
+    const { container } = render(
+      <ComposerAttachmentBar
+        attachments={[
+          {
+            name: 'cat.png',
+            dataUrl: 'data:image/png;base64,cat',
+            status: 'ready',
+          },
+          {
+            name: 'presentation.pptx',
+            path: '/path/to/presentation.pptx',
+            status: 'ready',
+          },
+        ]}
+        onRemoveAttachment={() => undefined}
+      />
+    );
+    const cards = screen.getAllByTestId('composer-attach-card');
+    expect(cards).toHaveLength(2);
+
+    // 图片卡片：包含纯图样式，不包含文本文件名节点
+    expect(cards[0]?.className).toMatch(/attachChipImage/);
+    expect(cards[0]?.querySelector('.attachName')).toBeNull();
+    expect(cards[0]?.querySelector('img')).toBeTruthy();
+
+    // 文档卡片：包含横向微卡片样式，包含文件名与格式徽标
+    expect(cards[1]?.className).toMatch(/fileCardHorizontal/);
+    expect(cards[1]?.querySelector('.file-name')?.textContent).toBe('presentation.pptx');
+    expect(screen.getByText(/PPTX/)).toBeTruthy();
+  });
 });

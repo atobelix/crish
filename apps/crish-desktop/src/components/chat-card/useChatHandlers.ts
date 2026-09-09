@@ -7,6 +7,7 @@ import { generateMessageId } from '../../utils/generateMessageId';
 import { getTransport } from '../../api/transport';
 import { backfillFromBoundaryText } from '../../hooks/chat-stream/slashSendDraftManager';
 import { useEphemeralChatStore } from '../../store/ephemeralChatStore';
+import type { ChatAttachment } from '../../hooks/useChatStream';
 
 export interface UseChatHandlersOptions {
   wsId: string;
@@ -20,6 +21,11 @@ export interface UseChatHandlersOptions {
     sessionIdOverride?: string,
     streamOptions?: { clientMessageId?: string }
   ) => void;
+  handleSendChat?: (
+    isInsert?: boolean,
+    textOverride?: string,
+    attachmentsOverride?: ChatAttachment[]
+  ) => Promise<void>;
 }
 
 export function useChatHandlers({
@@ -29,6 +35,7 @@ export function useChatHandlers({
   handleStopGeneration,
   setChatInput,
   runStreamingAssistant,
+  handleSendChat,
 }: UseChatHandlersOptions) {
   const lastRetryTimeRef = useRef<Record<string, number>>({});
 
@@ -91,15 +98,17 @@ export function useChatHandlers({
     });
   }, [activeSessionId]);
 
-  // ── R1 撤回：引擎入口 + 回填消费 ──
+  // ── R1 撤回与就地编辑：引擎入口 + 回填消费 ──
   // 用户锁：入口在消息流（最后一条 user / 正在生成的助手行），不在 composer 页脚。
   // 流式中同样可撤。withdrawMessage action 本体保留（send-failure 乐观回滚 / regenerate）。
+  const suppressRetractBackfillRef = useRef(false);
 
   // timeline-truncate 消费端派发的回填事件 → setChatInput + setComposerDraft
   //（数据源 = boundary user 节点 text，不依赖 draft 快照）
   useEffect(() => {
     return onUiEvent('retract-backfill', ({ sessionId, text }) => {
       if (!sessionId || !text) return;
+      if (suppressRetractBackfillRef.current) return;
       backfillFromBoundaryText(sessionId, text, setChatInput);
     });
   }, [setChatInput]);
@@ -132,6 +141,48 @@ export function useChatHandlers({
       toast.show(`撤回失败：${msg}`);
     }
   }, [activeSessionId]);
+
+  // 消息就地编辑重发（替代粗暴撤回回退到底部输入框的交互）
+  const handleEditMessageAndResend = useCallback(
+    async (
+      targetMessageId: string,
+      newText: string,
+      newAttachments: ChatAttachment[]
+    ) => {
+      const sid = activeSessionId;
+      if (!sid || sid.startsWith('__pending')) {
+        toast.show('当前无可用会话，无法编辑重发');
+        return;
+      }
+      handleStopGeneration();
+      suppressRetractBackfillRef.current = true;
+
+      try {
+        const transport = getTransport();
+        await transport.send('core_session_retract', {
+          sessionId: sid,
+          targetMessageId,
+        });
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.warn(`[handleEditMessageAndResend] core_session_retract failed: ${msg}`);
+      } finally {
+        setTimeout(() => {
+          suppressRetractBackfillRef.current = false;
+        }, 800);
+      }
+
+      // 从 store 中安全移除该节点（若还残留在时间线）
+      const session = getCompositionRoot().session.getState();
+      session.withdrawMessage(wsId, sid, targetMessageId);
+
+      // 以新文本和新附件重新启动流式会话发送
+      if (handleSendChat) {
+        await handleSendChat(false, newText, newAttachments);
+      }
+    },
+    [activeSessionId, handleStopGeneration, wsId, handleSendChat]
+  );
 
   const handleRegenerate = useCallback(
     (userText: string, assistantMsgId: string) => {
@@ -202,5 +253,6 @@ export function useChatHandlers({
     handleRegenerate,
     handleBranch,
     handleRetract,
+    handleEditMessageAndResend,
   };
 }

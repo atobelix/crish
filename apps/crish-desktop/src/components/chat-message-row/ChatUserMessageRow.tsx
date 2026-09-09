@@ -20,6 +20,8 @@ import {
   normalizeMessageAttachments,
   type AttachmentItem,
 } from '../chat-attachment/AttachmentCard';
+import { InPlaceUserMessageEditor } from './InPlaceUserMessageEditor';
+import type { ChatAttachment } from '../../hooks/useChatStream';
 
 export type ChatUserMessageRowProps = {
   msg: SessionMessage;
@@ -31,6 +33,12 @@ export type ChatUserMessageRowProps = {
   /** 会话最后一条 user：挂消息级撤回（用户锁：入口在对话里，不在 composer） */
   isLastUser?: boolean;
   onRetract?: () => void;
+  /** 就地编辑并重新发送（替代粗暴撤回回退到底部的跳变交互） */
+  onEditMessageAndResend?: (
+    targetMsgId: string,
+    newText: string,
+    newAttachments: ChatAttachment[]
+  ) => Promise<void>;
   messageIndex: number;
   virtualScrollManager: VirtualScrollManager | null;
   onOpenPath?: (filePath: string) => void;
@@ -52,6 +60,7 @@ function userRowPropsEqual(
     prev.onTogglePin === next.onTogglePin &&
     prev.isLastUser === next.isLastUser &&
     prev.onRetract === next.onRetract &&
+    prev.onEditMessageAndResend === next.onEditMessageAndResend &&
     prev.messageIndex === next.messageIndex &&
     prev.virtualScrollManager === next.virtualScrollManager &&
     prev.onOpenPath === next.onOpenPath &&
@@ -69,12 +78,20 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
   onTogglePin,
   isLastUser = false,
   onRetract,
+  onEditMessageAndResend,
   messageIndex: _messageIndex,
   virtualScrollManager,
   onOpenPath,
 }) => {
   void _messageIndex;
   const { showToast } = useToast();
+  const [isEditing, setIsEditing] = useState(false);
+  const [isSubmittingEdit, setIsSubmittingEdit] = useState(false);
+
+  useEffect(() => {
+    setIsEditing(false);
+  }, [msg.id, msg.text]);
+
   const isLong = isUserBubbleLong(msg.text);
   // 真实签名：userBubbleDisplayText 仅接收 2 个参数 (text, isExpanded)
   const displayText = userBubbleDisplayText(msg.text, isExpanded);
@@ -195,6 +212,49 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
   // 核心判定：无文本且非排队态时，空气泡彻底销毁为 null（NEG-06）
   const hasTextContent = Boolean(displayText && displayText.trim()) || msg.status === 'queued';
 
+  const editableAttachments = useMemo<ChatAttachment[]>(() => {
+    return allCardItems.map((item) => ({
+      id: item.id,
+      name: item.name || '附件',
+      path: item.path,
+      mime: item.mime,
+      dataUrl: item.dataUrl,
+      isImage: item.isImage,
+      size: item.size,
+      status: 'ready' as const,
+      progress: 100,
+    }));
+  }, [allCardItems]);
+
+  const handleStartEdit = useCallback(() => {
+    setIsEditing(true);
+    virtualScrollManager?.invalidateActual(msg.id);
+  }, [msg.id, virtualScrollManager]);
+
+  const handleCancelEdit = useCallback(() => {
+    setIsEditing(false);
+    virtualScrollManager?.invalidateActual(msg.id);
+  }, [msg.id, virtualScrollManager]);
+
+  const handleEditSubmit = useCallback(
+    async (newText: string, newAttachments: ChatAttachment[]) => {
+      if (!onEditMessageAndResend) {
+        setIsEditing(false);
+        return;
+      }
+      setIsSubmittingEdit(true);
+      try {
+        await onEditMessageAndResend(msg.id, newText, newAttachments);
+        setIsEditing(false);
+      } catch {
+        showToast('编辑发送失败');
+      } finally {
+        setIsSubmittingEdit(false);
+      }
+    },
+    [onEditMessageAndResend, msg.id, showToast]
+  );
+
   return (
     <div
       ref={rowRef}
@@ -218,72 +278,86 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
           </Tooltip>
         ) : null}
 
-        {/* 1. 上方：独立 58×58 附件卡片横排流（CRIT-07：width: 100% 彻底消除 49.3% 几何衰减） */}
-        {hasAttachmentCards ? (
-          <div
-            className={styles.userAttachmentStrip}
-            data-testid="user-attachment-strip"
-            role="list"
-            aria-label={`附件列表，共 ${allCardItems.length} 个`}
-          >
-            {allCardItems.map((item, idx) => (
-              <AttachmentCard
-                key={item.id || item.path || `${item.name}-${idx}`}
-                item={item}
-                onClick={(it) => {
-                  if (it.path) {
-                    handleOpenPath(it.path);
-                  } else if (
-                    it.dataUrl &&
-                    (it.dataUrl.startsWith('data:') ||
-                      it.dataUrl.startsWith('blob:'))
-                  ) {
-                    const w = window.open('');
-                    if (w) {
-                      w.document.write(
-                        `<img src="${it.dataUrl}" style="max-width:100%;height:auto;display:block;margin:auto;" />`
-                      );
-                    }
-                  } else {
-                    showToast('该附件无物理路径可打开');
-                  }
-                }}
-              />
-            ))}
-          </div>
-        ) : null}
-
-        {/* 2. 下方：独立文本气泡（【核心断言 NEG-06】：纯附件无文本时在 DOM 中严格销毁为 null） */}
-        {hasTextContent ? (
-          <div
-            className={`${styles.userBubble} ${isLong ? styles.userBubbleExpandable : ''}`}
-            onClick={toggleExpand}
-            onKeyDown={onBubbleKeyDown}
-            style={{
-              cursor: isLong ? 'pointer' : 'default',
-            }}
-            role={isLong ? 'button' : undefined}
-            tabIndex={isLong ? 0 : undefined}
-            aria-expanded={isLong ? isExpanded : undefined}
-            aria-label={isLong ? userBubbleExpandAria(isExpanded) : undefined}
-          >
-            {displayText}
-            {msg.status === 'queued' ? (
-              <span className={styles.queued}>排队中</span>
+        {isEditing ? (
+          <InPlaceUserMessageEditor
+            initialText={msg.text || ''}
+            initialAttachments={editableAttachments}
+            onCancel={handleCancelEdit}
+            onSubmit={handleEditSubmit}
+            onHeightChange={() => virtualScrollManager?.invalidateActual(msg.id)}
+            isSubmitting={isSubmittingEdit}
+          />
+        ) : (
+          <>
+            {/* 1. 上方：独立 58×58 附件卡片横排流（CRIT-07：width: 100% 彻底消除 49.3% 几何衰减） */}
+            {hasAttachmentCards ? (
+              <div
+                className={styles.userAttachmentStrip}
+                data-testid="user-attachment-strip"
+                role="list"
+                aria-label={`附件列表，共 ${allCardItems.length} 个`}
+              >
+                {allCardItems.map((item, idx) => (
+                  <AttachmentCard
+                    key={item.id || item.path || `${item.name}-${idx}`}
+                    item={item}
+                    onClick={(it) => {
+                      if (it.path) {
+                        handleOpenPath(it.path);
+                      } else if (
+                        it.dataUrl &&
+                        (it.dataUrl.startsWith('data:') ||
+                          it.dataUrl.startsWith('blob:'))
+                      ) {
+                        const w = window.open('');
+                        if (w) {
+                          w.document.write(
+                            `<img src="${it.dataUrl}" style="max-width:100%;height:auto;display:block;margin:auto;" />`
+                          );
+                        }
+                      } else {
+                        showToast('该附件无物理路径可打开');
+                      }
+                    }}
+                  />
+                ))}
+              </div>
             ) : null}
-          </div>
-        ) : null}
 
-        {/* 3. 底部悬浮操作栏 */}
-        <UserMessageActionsBar
-          timestamp={msg.timestamp}
-          isPinned={isPinned}
-          copied={copied}
-          onCopy={handleCopy}
-          onTogglePin={() => onTogglePin(msg.id)}
-          onRetract={retractHandler}
-          alwaysVisible={Boolean(retractHandler)}
-        />
+            {/* 2. 下方：独立文本气泡（【核心断言 NEG-06】：纯附件无文本时在 DOM 中严格销毁为 null） */}
+            {hasTextContent ? (
+              <div
+                className={`${styles.userBubble} ${isLong ? styles.userBubbleExpandable : ''}`}
+                onClick={toggleExpand}
+                onKeyDown={onBubbleKeyDown}
+                style={{
+                  cursor: isLong ? 'pointer' : 'default',
+                }}
+                role={isLong ? 'button' : undefined}
+                tabIndex={isLong ? 0 : undefined}
+                aria-expanded={isLong ? isExpanded : undefined}
+                aria-label={isLong ? userBubbleExpandAria(isExpanded) : undefined}
+              >
+                {displayText}
+                {msg.status === 'queued' ? (
+                  <span className={styles.queued}>排队中</span>
+                ) : null}
+              </div>
+            ) : null}
+
+            {/* 3. 底部悬浮操作栏 */}
+            <UserMessageActionsBar
+              timestamp={msg.timestamp}
+              isPinned={isPinned}
+              copied={copied}
+              onCopy={handleCopy}
+              onTogglePin={() => onTogglePin(msg.id)}
+              onRetract={retractHandler}
+              onEdit={onEditMessageAndResend ? handleStartEdit : undefined}
+              alwaysVisible={Boolean(retractHandler)}
+            />
+          </>
+        )}
       </div>
     </div>
   );

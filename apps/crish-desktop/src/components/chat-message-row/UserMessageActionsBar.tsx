@@ -1,5 +1,5 @@
 import React from 'react';
-import { Check, Copy, Pin, PinOff } from 'lucide-react';
+import { Check, Copy, Pencil, Pin, PinOff } from 'lucide-react';
 import styles from './ChatMessageRow.module.css';
 import { Button, Tooltip } from '../ui';
 import { formatMsgTime, pinToggleLabels } from './chatMessageRowUtils';
@@ -15,6 +15,8 @@ export interface UserMessageActionsBarProps {
   onTogglePin: () => void;
   /** 最后一条 user：挂撤回（引擎仍定位 last user） */
   onRetract?: () => void;
+  /** 就地编辑入口 */
+  onEdit?: () => void;
   /** 带撤回时元栏常显，避免 hover 才找得到 */
   alwaysVisible?: boolean;
 }
@@ -26,6 +28,7 @@ export const UserMessageActionsBar: React.FC<UserMessageActionsBarProps> = ({
   onCopy,
   onTogglePin,
   onRetract,
+  onEdit,
   alwaysVisible = false,
 }) => {
   const pinLabels = pinToggleLabels(isPinned);
@@ -45,6 +48,20 @@ export const UserMessageActionsBar: React.FC<UserMessageActionsBarProps> = ({
           icon={copied ? <Check size={14} /> : <Copy size={14} />}
         />
       </Tooltip>
+      {onEdit ? (
+        <Tooltip content="编辑消息">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className={`${styles.iconBtn} ${styles.editBtn}`}
+            data-testid="message-edit"
+            aria-label="编辑消息"
+            onClick={onEdit}
+            icon={<Pencil size={14} aria-hidden />}
+          />
+        </Tooltip>
+      ) : null}
       {onRetract ? <RetractActionButton onRetract={onRetract} /> : null}
       <Tooltip content={pinLabels.title}>
         <Button

@@ -1,3 +1,4 @@
+import { isBlockedExecutablePath } from '../../api/blockedExecutableExtensions';
 import { useCallback, useEffect } from 'react';
 import { onUiEvent } from '../../api/uiEvents';
 import {
@@ -14,6 +15,7 @@ import {
 import { toast } from '../../services/toast/ToastContext';
 import { getCompositionRoot } from '../../app/compositionRoot';
 import { getActiveProjectId } from '../../api/projectStore';
+import type { ChatAttachment } from '../../hooks/useChatStream';
 import { useChatHandlers } from './useChatHandlers';
 
 interface ComposerPropsLike {
@@ -26,9 +28,10 @@ interface ComposerPropsLike {
     streamOptions?: { clientMessageId?: string }
   ) => void;
   handleSendChat: (
-    queued: boolean,
-    prompt?: string
-  ) => void;
+    isInsert?: boolean,
+    textOverride?: string,
+    attachmentsOverride?: ChatAttachment[]
+  ) => Promise<void>;
 }
 
 export interface UseChatSessionActionsOptions {
@@ -48,6 +51,11 @@ export interface UseChatSessionActionsResult {
   handleRegenerate: (userText: string, assistantMsgId: string) => void;
   handleBranch: () => void;
   handleRetract: () => Promise<void>;
+  handleEditMessageAndResend: (
+    targetMsgId: string,
+    newText: string,
+    newAttachments: ChatAttachment[]
+  ) => Promise<void>;
   handleExportMarkdown: () => void;
   handleCreateSessionFromEmpty: () => void;
   handleProjectChanged: () => void;
@@ -82,8 +90,8 @@ export function useChatSessionActions({
       return;
     }
 
-    // 安全红线：禁止通过聊天界面文件直链拉起可执行二进制程序（防御 RCE）
-    if (/\.(exe|bat|cmd|msi|ps1|vbs|com|sh|bin)$/i.test(trimmed)) {
+    // 安全红线：可执行后缀拦截 SSOT（§4.3）
+    if (isBlockedExecutablePath(trimmed)) {
       toast.show('出于安全保护，禁止直接运行可执行文件');
       return;
     }
@@ -156,6 +164,7 @@ export function useChatSessionActions({
     handleRegenerate,
     handleBranch,
     handleRetract,
+    handleEditMessageAndResend,
     handleExportMarkdown,
   } = useChatHandlers({
     wsId,
@@ -164,6 +173,7 @@ export function useChatSessionActions({
     handleStopGeneration: composerProps.handleStopGeneration,
     setChatInput: composerProps.setChatInput,
     runStreamingAssistant: composerProps.runStreamingAssistant,
+    handleSendChat: composerProps.handleSendChat,
   });
 
   const handleCreateSessionFromEmpty = useCallback(() => {
@@ -204,6 +214,7 @@ export function useChatSessionActions({
     handleRegenerate,
     handleBranch,
     handleRetract,
+    handleEditMessageAndResend,
     handleExportMarkdown,
     handleCreateSessionFromEmpty,
     handleProjectChanged,

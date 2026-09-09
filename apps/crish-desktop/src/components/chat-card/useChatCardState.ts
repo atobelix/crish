@@ -127,6 +127,7 @@ export function useChatCardState({
     handleRegenerate: sessionActions.handleRegenerate,
     handleBranch: sessionActions.handleBranch,
     handleRetract: sessionActions.handleRetract,
+    handleEditMessageAndResend: sessionActions.handleEditMessageAndResend,
     handleExportMarkdown: sessionActions.handleExportMarkdown,
     approvalState: approval.approvalState,
     openDiffInRightPanel: diffPanel.openDiffInRightPanel,

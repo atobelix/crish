@@ -18,6 +18,7 @@ import { ChevronDown, Pin, PinOff } from 'lucide-react';
 import {
   registerActiveVsm,
   unregisterActiveVsm,
+  useLayoutStore,
 } from '../../store/storeAccess';
 import { useUndoWithScrollAnchor } from './useUndoWithScrollAnchor';
 import { FlowScrubber } from './FlowScrubber';
@@ -72,6 +73,7 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
   const dismissedFollowUps = interaction?.dismissedFollowUps ?? {};
   const handleDismissFollowUp = interaction?.handleDismissFollowUp ?? (() => {});
   const handleMarkdownClick = interaction?.handleMarkdownClick ?? (() => {});
+  // 缺真实 toolStackProps 时不伪装审批可用：回调保持 undefined，由 CompactToolRow 显式不可用
   const fallbackToolStackProps = useMemo<
     import('../chat-tool-call/ChatToolCallBlock').ChatToolStackSharedProps
   >(
@@ -85,8 +87,6 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
         onOpenDiff: navigation?.onOpenDiff ?? (() => {}),
         onOpenPath: navigation?.onOpenPath,
         onOpenTerminal: navigation?.onOpenTerminal,
-        onApprovalAllow: () => {},
-        onApprovalDeny: () => {},
       },
     }),
     [
@@ -104,7 +104,8 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
 
   const onBranch = generation?.onBranch ?? (() => {});
   const onRetract = generation?.onRetract;
-  const handleRegenerateRow = generation?.handleRegenerateRow ?? (() => {});
+  const onEditMessageAndResend = generation?.onEditMessageAndResend;
+  const handleRegenerateRow = generation?.handleRegenerateRow;
 
   const handleFillFollowUp = composer?.handleFillFollowUp ?? (() => {});
   const onSendFollowUp = composer?.onSendFollowUp;
@@ -123,12 +124,19 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
   const observedTopRef = useRef<number>(0);
   const [showFloorButton, setShowFloorButton] = useState<boolean>(false);
 
+  const uiSize = useLayoutStore((s) => s.uiSize);
+
   useEffect(() => {
     clearHeights();
     isAtBottomRef.current = true;
     setIsAtBottom(true);
     setShowFloorButton(false);
   }, [activeSessionId, clearHeights]);
+
+  // 字号/UI Token 变更：失效缓存高度并重测（与 VirtualPlainCodeViewer 同纪律）
+  useEffect(() => {
+    clearHeights();
+  }, [uiSize, clearHeights]);
 
   useEffect(() => {
     registerActiveVsm(activeSessionId, manager);
@@ -402,6 +410,7 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
                     onTogglePin={togglePin}
                     isLastUser={msg.id === lastUserId}
                     onRetract={onRetract}
+                    onEditMessageAndResend={onEditMessageAndResend}
                     messageIndex={virtualIndex}
                     virtualScrollManager={manager}
                     onOpenPath={onOpenPath}
@@ -460,11 +469,13 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
         {activeSessionId && (
           <EphemeralStatusSlot
             sessionId={activeSessionId}
-            onRetry={(_promptText) => {
-              if (lastAssistantId) {
-                handleRegenerateRow(lastAssistantId);
-              }
-            }}
+            onRetry={
+              generation?.handleRegenerateRow && lastAssistantId
+                ? () => {
+                    generation.handleRegenerateRow!(lastAssistantId);
+                  }
+                : undefined
+            }
           />
         )}
         </div>

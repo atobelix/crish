@@ -913,3 +913,71 @@
   animation: skeleton-shimmer var(--transition-skeleton) infinite;
   margin-bottom: var(--space-1_5);
 }
+
+/* --------------------------------------------------------------------------
+   用户消息就地编辑卡片 (In-Place User Message Editor)
+   -------------------------------------------------------------------------- */
+.inPlaceEditor {
+  width: 100%;
+  min-width: 320px;
+  max-width: 560px;
+  box-sizing: border-box;
+  background: var(--bg-card, #ffffff);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl, 14px);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-shadow: none;
+  transition: border-color var(--transition-fast, 120ms ease);
+}
+
+.inPlaceEditor:focus-within {
+  border-color: color-mix(in srgb, var(--border-color) 88%, var(--text-primary) 12%);
+}
+
+.inPlaceEditorTextarea {
+  width: 100%;
+  min-height: 48px;
+  max-height: 260px;
+  border: none;
+  outline: none;
+  background: transparent;
+  resize: none;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-primary);
+  padding: 0;
+  box-sizing: border-box;
+}
+
+.inPlaceEditorTextarea::placeholder {
+  color: var(--text-tertiary);
+}
+
+.inPlaceEditorFooter {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 6px;
+  border-top: 1px solid color-mix(in srgb, var(--border-subtle) 60%, transparent);
+}
+
+.inPlaceEditorActions {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+
+.inPlaceEditorCancelBtn {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.inPlaceEditorSendBtn {
+  font-size: 12px;
+}

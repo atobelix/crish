@@ -636,7 +636,7 @@
   width: var(--composer-attach-card-size, 58px);
   height: var(--composer-attach-card-size, 58px);
   padding: 6px;
-  background: var(--composer-attach-card-bg, var(--bg-card, #ffffff));
+  background: var(--composer-attach-card-bg, var(--bg-card, hsl(0 0% 100%)));
   border: var(--composer-attach-card-border, 1px solid var(--border-subtle));
   border-radius: var(--composer-attach-card-radius, 12px);
   cursor: pointer;
@@ -738,6 +738,64 @@
   flex-shrink: 0;
 }
 
+/* --------------------------------------------------------------------------
+   文档 / 文件横向微卡片模式 (Document/File Mode - 对齐 AttachmentCard 序号 1 规范)
+   -------------------------------------------------------------------------- */
+.fileCard.fileCardHorizontal,
+.attachChip.fileCardHorizontal {
+  width: auto;
+  min-width: 160px;
+  max-width: 220px;
+  height: 50px;
+  min-height: 48px;
+  max-height: 52px;
+  padding: 6px 10px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+}
+
+.fileCardHorizontal .fileIconBox {
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  max-width: 28px;
+  max-height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: var(--radius-md, 6px);
+  background: var(--bg-subtle, hsl(0 0% 95%));
+}
+
+.fileCardHorizontal .fileInfoCol,
+.fileCardHorizontal .fileInfo {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  min-width: 0;
+  flex: 1;
+  gap: 2px;
+  overflow: hidden;
+}
+
+.fileCardHorizontal .fileMeta {
+  font-size: 10px;
+  font-weight: var(--font-weight-medium, 500);
+  line-height: 1;
+  color: var(--text-tertiary, hsl(0 0% 55%));
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
+}
+
 .attachProgressBadge {
   position: absolute;
   top: 4px;
@@ -748,22 +806,22 @@
   padding: 1px 4px;
   border-radius: var(--radius-full, 9999px);
   background: transparent;
-  color: var(--composer-attach-progress-color, var(--accent-primary, #10b981));
+  color: var(--composer-attach-progress-color, var(--accent-primary, hsl(160 84% 39%)));
   font-size: 11px;
   font-weight: 600;
   line-height: 1;
   pointer-events: none;
-  z-index: 3;
+  z-index: var(--z-dock);
   font-variant-numeric: tabular-nums;
   transition: opacity var(--transition-fast, 120ms ease);
 }
 
 .attachProgressBadgeImage {
-  background: rgba(0, 0, 0, 0.55);
+  background: hsl(0 0% 0% / 0.55);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
-  color: #ffffff;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+  color: hsl(0 0% 100%);
+  text-shadow: 0 1px 2px hsl(0 0% 0% / 0.6);
 }
 
 .attachProgressBorder {
@@ -772,7 +830,7 @@
   width: 100%;
   height: 100%;
   pointer-events: none;
-  z-index: 2;
+  z-index: var(--z-base);
 }
 
 .attachProgressBorder rect {
@@ -799,10 +857,10 @@
   opacity: 0;
   transform: scale(0.85);
   pointer-events: none;
-  background: var(--composer-attach-remove-bg, rgba(255, 255, 255, 0.72));
+  background: var(--composer-attach-remove-bg, hsl(0 0% 100% / 0.72));
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
-  border: 1px solid var(--composer-attach-remove-border, color-mix(in srgb, var(--border-color) 70%, transparent));
+  border: 1px solid var(--composer-attach-remove-border, var(--border-subtle));
   color: var(--text-primary);
   padding: 0;
   box-shadow: none;
@@ -851,7 +909,7 @@
 .attachRemove:hover {
   background: hsl(0 78% 54%) !important;
   border-color: transparent !important;
-  color: #ffffff !important;
+  color: hsl(0 0% 100%) !important;
 }
 
 /* ==========================================================================
@@ -1049,7 +1107,7 @@
   border-radius: var(--ann-radius-inner);
   border: none;
   background: var(--brand);
-  color: var(--text-on-brand, var(--bg-card));
+  color: var(--text-on-accent);
   font-size: 11px;
   font-weight: 500;
   cursor: pointer;
@@ -1267,7 +1325,7 @@
   border: none;
   cursor: pointer;
   background: var(--brand);
-  color: var(--text-on-brand, white);
+  color: var(--text-on-accent);
   flex-shrink: 0;
   font-size: 0;
   line-height: 1;
@@ -1313,7 +1371,7 @@
   width: 14px;
   height: 14px;
   stroke-width: 2.4;
-  color: var(--text-on-brand, white);
+  color: var(--text-on-accent);
   stroke: currentColor;
   flex-shrink: 0;
   margin: auto;

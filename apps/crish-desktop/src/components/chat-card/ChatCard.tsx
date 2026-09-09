@@ -176,6 +176,7 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
         onRegenerate: state.handleRegenerate,
         onBranch: state.handleBranch,
         onRetract: state.handleRetract,
+        onEditMessageAndResend: state.handleEditMessageAndResend,
       },
       approval: {
         approvalBusy: state.approvalState.approvalBusy,

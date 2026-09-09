@@ -13,6 +13,7 @@ export type {
   ChatNarrativeRenderTools,
   ChatNarrativeRenderToolsArgs,
 } from '../chat-message/narrativeRenderSlots';
+import type { ChatAttachment } from '../../hooks/useChatStream';
 
 /** 消息列表数据域（展示消息/全量消息/agents/会话ID/过滤开关收敛为单一子对象） */
 export interface ChatMessageListMessagesProps {
@@ -52,6 +53,12 @@ export interface ChatMessageListGenerationProps {
   /** 撤回上一条 user（消息流入口；引擎 core_session_retract）。流式中可用。 */
   onRetract?: () => void;
   handleRegenerateRow?: (assistantMsgId: string) => void;
+  /** 就地编辑 user 消息并重新发送 */
+  onEditMessageAndResend?: (
+    targetMsgId: string,
+    newText: string,
+    newAttachments: ChatAttachment[]
+  ) => Promise<void>;
 }
 
 /** 审批操作域（忙态/待审消息/允许/拒绝/批审/批拒收敛为单一子对象） */

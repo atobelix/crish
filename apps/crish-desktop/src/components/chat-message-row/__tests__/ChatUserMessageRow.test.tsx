@@ -3,7 +3,7 @@ import React from 'react';
 import fs from 'fs';
 import path from 'path';
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, cleanup, fireEvent } from '@testing-library/react';
+import { render, cleanup, fireEvent, act } from '@testing-library/react';
 import { ChatUserMessageRow } from '../ChatUserMessageRow';
 import type { SessionMessage } from '../../../store/types';
 import styles from '../ChatMessageRow.module.css';
@@ -232,5 +232,93 @@ describe('ChatUserMessageRow 全新解耦与物理删除立体验证套件', () 
     const bubble = container.querySelector(`.${styles.userBubble}`);
     expect(bubble).not.toBeNull();
     expect(bubble?.textContent).toContain('排队中');
+  });
+
+  it('就地编辑交互：点击编辑按钮呼出 InPlaceUserMessageEditor，点击取消还原原气泡', () => {
+    const onEditMessageAndResend = vi.fn();
+    const msg = createMockUserMessage({
+      text: '这是待编辑的原消息内容',
+      attachments: [{ name: 'doc.pdf', path: 'c:/Software/conex/doc.pdf' }],
+    });
+
+    const { container } = render(
+      <ChatUserMessageRow
+        {...defaultProps}
+        msg={msg}
+        onEditMessageAndResend={onEditMessageAndResend}
+      />
+    );
+
+    // 默认展示气泡
+    expect(container.querySelector(`.${styles.userBubble}`)).not.toBeNull();
+    expect(container.querySelector('[data-testid="in-place-user-editor"]')).toBeNull();
+
+    // 点击编辑按钮
+    const editBtn = container.querySelector('[data-testid="message-edit"]');
+    expect(editBtn).not.toBeNull();
+    fireEvent.click(editBtn!);
+
+    // 呼出就地编辑器
+    const editor = container.querySelector('[data-testid="in-place-user-editor"]');
+    expect(editor).not.toBeNull();
+    const textarea = editor?.querySelector('textarea');
+    expect(textarea?.value).toBe('这是待编辑的原消息内容');
+
+    // 点击取消
+    const cancelBtn = Array.from(editor?.querySelectorAll('button') || []).find(
+      (b) => b.textContent?.trim() === '取消'
+    );
+    expect(cancelBtn).toBeDefined();
+    fireEvent.click(cancelBtn!);
+
+    // 还原原气泡
+    expect(container.querySelector('[data-testid="in-place-user-editor"]')).toBeNull();
+    expect(container.querySelector(`.${styles.userBubble}`)).not.toBeNull();
+    expect(onEditMessageAndResend).not.toHaveBeenCalled();
+  });
+
+  it('就地编辑交互：修改文本并点击“保存并重新发送”，正确调用 onEditMessageAndResend', async () => {
+    const onEditMessageAndResend = vi.fn().mockResolvedValue(undefined);
+    const msg = createMockUserMessage({
+      text: '原始提问',
+      attachments: [{ name: 'data.json', path: 'c:/Software/conex/data.json' }],
+    });
+
+    const { container } = render(
+      <ChatUserMessageRow
+        {...defaultProps}
+        msg={msg}
+        onEditMessageAndResend={onEditMessageAndResend}
+      />
+    );
+
+    // 点击编辑按钮呼出编辑器
+    const editBtn = container.querySelector('[data-testid="message-edit"]');
+    fireEvent.click(editBtn!);
+
+    const editor = container.querySelector('[data-testid="in-place-user-editor"]');
+    expect(editor).not.toBeNull();
+
+    // 修改输入内容
+    const textarea = editor?.querySelector('textarea');
+    fireEvent.change(textarea!, { target: { value: '更新后的修改提问' } });
+
+    // 点击保存并重新发送
+    const sendBtn = Array.from(editor?.querySelectorAll('button') || []).find((b) =>
+      b.textContent?.includes('保存并重新发送')
+    );
+    expect(sendBtn).toBeDefined();
+    await act(async () => {
+      fireEvent.click(sendBtn!);
+    });
+
+    expect(onEditMessageAndResend).toHaveBeenCalledTimes(1);
+    expect(onEditMessageAndResend).toHaveBeenCalledWith(
+      'user-msg-1',
+      '更新后的修改提问',
+      expect.arrayContaining([
+        expect.objectContaining({ name: 'data.json' }),
+      ])
+    );
   });
 });

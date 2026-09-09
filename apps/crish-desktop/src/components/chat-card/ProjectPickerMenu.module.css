@@ -43,7 +43,7 @@
   background: transparent;
   color: var(--text-tertiary);
   cursor: pointer;
-  border-radius: var(--radius-sm, 6px);
+  border-radius: var(--radius-sm, var(--button-radius, 6px));
   width: 20px;
   height: 20px;
   display: flex;
