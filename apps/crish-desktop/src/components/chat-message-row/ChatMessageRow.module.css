@@ -82,7 +82,7 @@
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  max-width: min(70.2%, 560px);
+  max-width: min(85%, 720px);
   min-width: min-content;
   gap: var(--space-1_5, 6px);
 }
@@ -96,13 +96,19 @@
 .userAttachmentStrip {
   display: flex;
   flex-direction: row;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   justify-content: flex-start;
   align-items: center;
-  gap: var(--space-2, 8px);
+  gap: 8px;
   width: 100%;
-  max-width: 100%; /* CRIT-07：彻底切除 49.3% 二次衰减，撑满父级 userStack */
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
   box-sizing: border-box;
+  padding: 2px 0;
 }
 
 .userBubble {
@@ -119,7 +125,7 @@
   overflow-wrap: break-word;
   box-shadow: none;
   width: fit-content;
-  max-width: min(70.2%, 560px);
+  max-width: min(85%, 720px);
   min-width: min-content;
   box-sizing: border-box;
   display: flex;
