@@ -15,6 +15,10 @@
  * - `INSPECT_SELECT.xpath` 为**真实位置 XPath**（子索引轴），非历史伪实现
  *   的 `'//' + tag`。
  *
+ * ## §4.1 安全
+ * - 桥 → 宿主 postMessage 使用明确 TARGET_ORIGIN（禁 `*`）
+ * - 宿主 → 桥 message 校验 event.origin
+ *
  * 本模块导出字符串常量，vite.config.ts 直接内联注入；纯字符串可被单测
  * 断言关键监听与消息形状（无 DOM 依赖）。
  */
@@ -25,6 +29,21 @@ export const PREVIEW_BRIDGE_SCRIPT = `<script id="${PREVIEW_BRIDGE_SCRIPT_ID}">
 (function() {
   if (window.__CONEX_PREVIEW_BRIDGE__) return;
   window.__CONEX_PREVIEW_BRIDGE__ = true;
+
+  // §4.1：明确 targetOrigin，禁止 postMessage(..., '*')
+  // 同源代理下 location.origin === 宿主 origin；优先 document.referrer
+  function resolveParentTargetOrigin() {
+    try {
+      if (document.referrer) return new URL(document.referrer).origin;
+    } catch (_) {}
+    return window.location.origin;
+  }
+  var TARGET_ORIGIN = resolveParentTargetOrigin();
+
+  function postToParent(payload) {
+    if (!window.parent || window.parent === window) return;
+    window.parent.postMessage(payload, TARGET_ORIGIN);
+  }
 
   var inspectorActive = false;
   var hoveredEl = null;
@@ -89,6 +108,7 @@ export const PREVIEW_BRIDGE_SCRIPT = `<script id="${PREVIEW_BRIDGE_SCRIPT_ID}">
 
   window.addEventListener('message', function(e) {
     try {
+      if (e.origin !== TARGET_ORIGIN && e.origin !== window.location.origin) return;
       if (!e.data || e.data.source !== 'crish-preview-host') return;
       if (e.data.type === 'INSPECT_TOGGLE') {
         inspectorActive = Boolean(e.data.payload && e.data.payload.enabled);
@@ -107,17 +127,15 @@ export const PREVIEW_BRIDGE_SCRIPT = `<script id="${PREVIEW_BRIDGE_SCRIPT_ID}">
       hoveredEl = el;
       var sel = computeSelector(el);
       var rect = toRect(el);
-      if (window.parent && window.parent !== window) {
-        window.parent.postMessage({
-          source: 'crish-preview-inspector',
-          type: 'INSPECT_HOVER',
-          payload: {
-            tagName: el.tagName.toLowerCase(),
-            selector: sel,
-            rect: rect
-          }
-        }, '*');
-      }
+      postToParent({
+        source: 'crish-preview-inspector',
+        type: 'INSPECT_HOVER',
+        payload: {
+          tagName: el.tagName.toLowerCase(),
+          selector: sel,
+          rect: rect
+        }
+      });
     } catch (_) {}
   }, true);
 
@@ -127,25 +145,21 @@ export const PREVIEW_BRIDGE_SCRIPT = `<script id="${PREVIEW_BRIDGE_SCRIPT_ID}">
       inspectorActive = false;
       hoveredEl = null;
       try {
-        if (window.parent && window.parent !== window) {
-          window.parent.postMessage({
-            source: 'crish-preview-inspector',
-            type: 'INSPECT_TOGGLE',
-            payload: { enabled: false }
-          }, '*');
-        }
+        postToParent({
+          source: 'crish-preview-inspector',
+          type: 'INSPECT_TOGGLE',
+          payload: { enabled: false }
+        });
       } catch (_) {}
     }
   }, true);
 
   try {
-    if (window.parent && window.parent !== window) {
-      window.parent.postMessage({
-        source: 'crish-preview-inspector',
-        type: 'INSPECT_READY',
-        payload: {}
-      }, '*');
-    }
+    postToParent({
+      source: 'crish-preview-inspector',
+      type: 'INSPECT_READY',
+      payload: {}
+    });
   } catch (_) {}
 
   document.addEventListener('click', function(e) {
@@ -170,24 +184,22 @@ export const PREVIEW_BRIDGE_SCRIPT = `<script id="${PREVIEW_BRIDGE_SCRIPT_ID}">
         var outerSnippet = outer.length > 500 ? outer.slice(0, 500) + '...' : outer;
         var text = (el.textContent || '').trim().slice(0, 200);
 
-        if (window.parent && window.parent !== window) {
-          window.parent.postMessage({
-            source: 'crish-preview-inspector',
-            type: 'INSPECT_SELECT',
-            payload: {
-              tagName: tag,
-              id: id,
-              classes: classes,
-              attributes: attrs,
-              bestSelector: bestSelector,
-              xpath: computeXPath(el),
-              rect: rect,
-              computedStyles: computedStyles,
-              outerHtmlSnippet: outerSnippet,
-              textContent: text
-            }
-          }, '*');
-        }
+        postToParent({
+          source: 'crish-preview-inspector',
+          type: 'INSPECT_SELECT',
+          payload: {
+            tagName: tag,
+            id: id,
+            classes: classes,
+            attributes: attrs,
+            bestSelector: bestSelector,
+            xpath: computeXPath(el),
+            rect: rect,
+            computedStyles: computedStyles,
+            outerHtmlSnippet: outerSnippet,
+            textContent: text
+          }
+        });
       } catch (_) {}
       return;
     }
@@ -197,11 +209,11 @@ export const PREVIEW_BRIDGE_SCRIPT = `<script id="${PREVIEW_BRIDGE_SCRIPT_ID}">
       while (a && a.tagName !== 'A') {
         a = a.parentElement;
       }
-      if (a && a.href && window.parent && window.parent !== window) {
+      if (a && a.href) {
         var href = a.href;
         if (href.startsWith('http://') || href.startsWith('https://')) {
           e.preventDefault();
-          window.parent.postMessage({ type: 'preview:navigate', href: href }, '*');
+          postToParent({ type: 'preview:navigate', href: href });
         }
       }
     } catch (_) {}
@@ -209,14 +221,14 @@ export const PREVIEW_BRIDGE_SCRIPT = `<script id="${PREVIEW_BRIDGE_SCRIPT_ID}">
   document.addEventListener('submit', function(e) {
     try {
       var form = e.target;
-      if (form && form.tagName === 'FORM' && window.parent && window.parent !== window) {
+      if (form && form.tagName === 'FORM') {
         var action = form.action || window.location.href;
         if ((form.method || 'GET').toUpperCase() === 'GET') {
           var formData = new FormData(form);
           var params = new URLSearchParams(formData);
           var fullUrl = action + (action.indexOf('?') === -1 ? '?' : '&') + params.toString();
           e.preventDefault();
-          window.parent.postMessage({ type: 'preview:navigate', href: fullUrl }, '*');
+          postToParent({ type: 'preview:navigate', href: fullUrl });
         }
       }
     } catch (_) {}

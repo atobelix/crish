@@ -9,11 +9,11 @@ import { describe, expect, it } from 'vitest';
 import {
   PREVIEW_BRIDGE_SCRIPT,
   PREVIEW_BRIDGE_SCRIPT_ID,
-} from './previewBridgeScript';
+} from '../../../dev-server/previewBridgeScript';
 import {
   CRISH_PREVIEW_HOST_SOURCE,
   CRISH_PREVIEW_INSPECTOR_SOURCE,
-} from '../src/components/workspace/previewProtocol';
+} from './previewProtocol';
 
 describe('previewBridgeScript 契约', () => {
   it('脚本以唯一 script id 防重复注入', () => {
@@ -58,4 +58,21 @@ describe('previewBridgeScript 契约', () => {
     expect(PREVIEW_BRIDGE_SCRIPT).toContain("type: 'preview:navigate'");
     expect(PREVIEW_BRIDGE_SCRIPT).toContain("document.addEventListener('submit'");
   });
+
+  it('§4.1：postMessage 使用明确 TARGET_ORIGIN，禁止 \'*\' 目标', () => {
+    expect(PREVIEW_BRIDGE_SCRIPT).toContain('var TARGET_ORIGIN = resolveParentTargetOrigin()');
+    expect(PREVIEW_BRIDGE_SCRIPT).toContain(
+      'window.parent.postMessage(payload, TARGET_ORIGIN)'
+    );
+    expect(PREVIEW_BRIDGE_SCRIPT).toContain('postToParent(');
+    const runtime = PREVIEW_BRIDGE_SCRIPT.replace(/\/\*[\s\S]*?\*\//g, '').replace(
+      /\/\/.*$/gm,
+      ''
+    );
+    expect(runtime).not.toMatch(/postMessage\([^)]*,\s*'\*'\s*\)/);
+    expect(PREVIEW_BRIDGE_SCRIPT).toContain(
+      'e.origin !== TARGET_ORIGIN && e.origin !== window.location.origin'
+    );
+  });
+
 });
