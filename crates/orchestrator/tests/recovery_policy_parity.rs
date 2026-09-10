@@ -14,8 +14,14 @@ use std::time::Duration;
 /// base 750ms / max 8000ms / total 60000ms / max_retries 0
 #[test]
 fn defaults_match_retry_policy() {
-    assert_eq!(RECOVERY_BASE_DELAY_MS, 750, "base_delay 镜像值应与 retry.rs 750 一致");
-    assert_eq!(RECOVERY_MAX_DELAY_MS, 8_000, "max_delay 镜像值应与 retry.rs 8000 一致");
+    assert_eq!(
+        RECOVERY_BASE_DELAY_MS, 750,
+        "base_delay 镜像值应与 retry.rs 750 一致"
+    );
+    assert_eq!(
+        RECOVERY_MAX_DELAY_MS, 8_000,
+        "max_delay 镜像值应与 retry.rs 8000 一致"
+    );
     assert_eq!(
         RECOVERY_TOTAL_BUDGET_MS, 60_000,
         "total_budget 镜像值应与 retry.rs 60000 一致"
@@ -24,7 +30,10 @@ fn defaults_match_retry_policy() {
     assert_eq!(policy.base_delay_ms, RECOVERY_BASE_DELAY_MS);
     assert_eq!(policy.max_delay_ms, RECOVERY_MAX_DELAY_MS);
     assert_eq!(policy.total_budget_ms, RECOVERY_TOTAL_BUDGET_MS);
-    assert_eq!(policy.max_retries, 0, "max_retries 镜像 retry.rs 默认 0（显式开启才重试）");
+    assert_eq!(
+        policy.max_retries, 0,
+        "max_retries 镜像 retry.rs 默认 0（显式开启才重试）"
+    );
 }
 
 /// 退避序列：镜像 retry.rs `retry_delay_ms`（base * 2^(attempt-1) 钳 max_delay）

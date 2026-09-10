@@ -16,12 +16,12 @@
 //! 对外 API，保持 crate::flow_graph::FlowGraph 等路径不 break。三子模块
 //! 为唯一真源，门面内无重复实现。
 
+#[path = "flow_graph_advance.rs"]
+pub mod advance;
 #[path = "flow_graph_model.rs"]
 pub mod model;
 #[path = "flow_graph_scheduler.rs"]
 pub mod scheduler;
-#[path = "flow_graph_advance.rs"]
-pub mod advance;
 
 pub use model::{
     FailStrategy, FlowDeclaration, FlowGraph, FlowGraphError, FlowNode, FlowNodeId,
@@ -33,4 +33,3 @@ pub use scheduler::{
     FLOW_DECLARATION_KEY, FLOW_MAX_CONCURRENT_KEY, FLOW_MAX_SIBLINGS_KEY, FLOW_ON_FAILED_KEY,
     FLOW_RELEASED_KEY, FLOW_RESERVED_KEY, FLOW_STATE_KEY,
 };
-

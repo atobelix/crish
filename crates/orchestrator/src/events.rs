@@ -28,9 +28,9 @@ use session_loop::{is_retraction_evacuation_event, SessionFreezeRegistry};
 
 use crate::blocks::persist_compression_block;
 use crate::normalize::normalize_envelope;
-use conex_shared::time::now_iso_utc;
 use crate::persist::{SessionSequencer, Store, StoreError};
 use crate::run::{map_outcome_to_terminal, RunError, RunHandle, EVENT_STORE_WRITE_FAILED_REASON};
+use conex_shared::time::now_iso_utc;
 
 /// 冻结护栏拒绝的 StoreError kind（T06.5.8 映射面未知 kind 兜底
 /// store.write_failed + metadata.kind=retraction_freeze；判定走
@@ -1492,11 +1492,7 @@ mod tests {
         let err = queue.push("s1", message_end()).await.unwrap_err();
         assert_eq!(err.error.kind, "reserve_sequence");
         assert_eq!(err.sequence, 1, "失败错误携带上次成功号，不是本地 +1");
-        assert_eq!(
-            queue.next_sequence(),
-            2,
-            "取号失败不得推进本地镜像"
-        );
+        assert_eq!(queue.next_sequence(), 2, "取号失败不得推进本地镜像");
 
         // 终态：首次 reserve 再失败一次，重试走 store 取到 2
         wrapped

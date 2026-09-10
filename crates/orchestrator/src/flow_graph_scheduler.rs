@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 use agent_tools::tools::subagent::{
     check_recursion_guard, RecursionGuardConfig, RecursionGuardRejection, RecursionGuardSnapshot,
-    SubagentState, SubagentSpawner, DEFAULT_RECURSION_GUARD,
+    SubagentSpawner, SubagentState, DEFAULT_RECURSION_GUARD,
 };
 use conex_db::LocalDb;
 use conex_types::SessionAgent;
@@ -319,7 +319,9 @@ pub(crate) fn read_meta_strategy(meta: &dyn FlowMetaStore) -> Result<FailStrateg
 }
 
 /// 读取可配预算与综合节点开关（缺失 = DEFAULT_RECURSION_GUARD / true）
-pub(crate) fn read_meta_config(meta: &dyn FlowMetaStore) -> Result<(usize, usize, bool), FlowError> {
+pub(crate) fn read_meta_config(
+    meta: &dyn FlowMetaStore,
+) -> Result<(usize, usize, bool), FlowError> {
     let default = DEFAULT_RECURSION_GUARD;
     let max_siblings = read_meta_usize(meta, FLOW_MAX_SIBLINGS_KEY, default.max_siblings)?;
     let max_concurrent = read_meta_usize(meta, FLOW_MAX_CONCURRENT_KEY, default.max_concurrent)?;

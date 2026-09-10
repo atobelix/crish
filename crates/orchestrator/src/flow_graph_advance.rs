@@ -47,15 +47,13 @@ fn cached_declaration_order(
 ) -> Arc<HashMap<FlowNodeId, usize>> {
     // 快路径：尝试命中
     {
-        let cache = declaration_order_cache()
-            .lock()
-            .unwrap_or_else(|e| {
-                tracing::error!(
-                    target: "orchestrator",
-                    "declaration_order_cache 锁中毒，已恢复"
-                );
-                e.into_inner()
-            });
+        let cache = declaration_order_cache().lock().unwrap_or_else(|e| {
+            tracing::error!(
+                target: "orchestrator",
+                "declaration_order_cache 锁中毒，已恢复"
+            );
+            e.into_inner()
+        });
         if let Some(cached) = cache.get(session_id) {
             if cached.ids.len() == graph.len()
                 && cached
@@ -77,15 +75,13 @@ fn cached_declaration_order(
         .collect();
     let arc = Arc::new(map);
     let ids = graph.nodes().iter().map(|n| n.id.clone()).collect();
-    let mut cache = declaration_order_cache()
-        .lock()
-        .unwrap_or_else(|e| {
-            tracing::error!(
-                target: "orchestrator",
-                "declaration_order_cache 锁中毒，已恢复"
-            );
-            e.into_inner()
-        });
+    let mut cache = declaration_order_cache().lock().unwrap_or_else(|e| {
+        tracing::error!(
+            target: "orchestrator",
+            "declaration_order_cache 锁中毒，已恢复"
+        );
+        e.into_inner()
+    });
     cache.insert(
         session_id.to_string(),
         CachedDeclarationOrder {
