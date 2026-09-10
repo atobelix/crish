@@ -79,11 +79,7 @@ mod tests {
         ContextAttachmentKind, ContextAttachmentPayload, TruncationInfo,
     };
 
-    fn make_attachment(
-        title: &str,
-        tokens: u32,
-        text: Option<&str>,
-    ) -> ContextAttachmentPayload {
+    fn make_attachment(title: &str, tokens: u32, text: Option<&str>) -> ContextAttachmentPayload {
         ContextAttachmentPayload {
             id: format!("att_{}", title),
             kind: ContextAttachmentKind::TerminalLog,

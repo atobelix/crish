@@ -353,7 +353,11 @@ async fn consecutive_empty_responses_end_with_stop_after_budget_exhausted() {
 async fn steering_disabled_empty_response_stops_without_steering() {
     let provider = TestProvider::new(vec![ProviderStreamEvent::stop(StopReason::Stop)]);
     let loop_ = loop_with(provider, vec![]);
-    let mut loop_ = loop_.with_options({ let mut o: SessionLoopOptions = SessionLoopOptions::default(); o.hooks.steering_enabled = false; o });
+    let mut loop_ = loop_.with_options({
+        let mut o: SessionLoopOptions = SessionLoopOptions::default();
+        o.hooks.steering_enabled = false;
+        o
+    });
 
     let outcome = loop_.run(user("回答")).await;
 
@@ -408,7 +412,11 @@ async fn steering_disabled_prepare_turn_skips_evaluation() {
     ]);
     let tool = Arc::new(TestTool::with_error("fail", "boom"));
     let loop_ = loop_with(provider, vec![tool]);
-    let mut loop_ = loop_.with_options({ let mut o: SessionLoopOptions = SessionLoopOptions::default(); o.hooks.steering_enabled = false; o });
+    let mut loop_ = loop_.with_options({
+        let mut o: SessionLoopOptions = SessionLoopOptions::default();
+        o.hooks.steering_enabled = false;
+        o
+    });
 
     let outcome = loop_.run(user("执行")).await;
 
@@ -532,7 +540,11 @@ async fn idempotency_enabled_deduplicates_across_runs() {
     ]);
     let tool = Arc::new(TestTool::new("echo", serde_json::json!({"ok": true})));
     let loop_ = loop_with(provider, vec![tool.clone()]);
-    let mut loop_ = loop_.with_options({ let mut o: SessionLoopOptions = SessionLoopOptions::default(); o.tool_exec.idempotency_enabled = true; o });
+    let mut loop_ = loop_.with_options({
+        let mut o: SessionLoopOptions = SessionLoopOptions::default();
+        o.tool_exec.idempotency_enabled = true;
+        o
+    });
 
     let first = loop_.run(user("执行")).await;
     assert_eq!(first.reason, AgentEndReason::Stop);
@@ -1084,8 +1096,11 @@ async fn reasoning_effort_options_injects_through_product_path() {
         ProviderStreamEvent::text("思考档位链路"),
         ProviderStreamEvent::stop(StopReason::Stop),
     ]));
-    let mut loop_ =
-        loop_with_arc(provider_handle.clone(), vec![]).with_options({ let mut o: SessionLoopOptions = SessionLoopOptions::default(); o.hooks.reasoning_effort = Some(ReasoningEffort::High); o });
+    let mut loop_ = loop_with_arc(provider_handle.clone(), vec![]).with_options({
+        let mut o: SessionLoopOptions = SessionLoopOptions::default();
+        o.hooks.reasoning_effort = Some(ReasoningEffort::High);
+        o
+    });
     let outcome = loop_.run(user("请求")).await;
     assert_eq!(outcome.reason, AgentEndReason::Stop);
     assert!(outcome.error.is_none());
@@ -1472,7 +1487,11 @@ async fn transient_retry_limit_zero_fails_immediately() {
         .with_error(classified(ProviderErrorKind::RateLimit)),
     );
     let mut loop_ = loop_with_arc(provider_handle.clone(), vec![]);
-    loop_ = loop_.with_options({ let mut o: SessionLoopOptions = SessionLoopOptions::default(); o.retry.transient_retry_limit = 0; o });
+    loop_ = loop_.with_options({
+        let mut o: SessionLoopOptions = SessionLoopOptions::default();
+        o.retry.transient_retry_limit = 0;
+        o
+    });
 
     let outcome = loop_.run(user("你好")).await;
 
@@ -1502,7 +1521,11 @@ async fn length_upgrade_limit_zero_fails_immediately() {
         .with_error(classified(ProviderErrorKind::ContextLengthExceeded)),
     );
     let mut loop_ = loop_with_arc(provider_handle.clone(), vec![]);
-    loop_ = loop_.with_options({ let mut o: SessionLoopOptions = SessionLoopOptions::default(); o.retry.length_upgrade_limit = 0; o });
+    loop_ = loop_.with_options({
+        let mut o: SessionLoopOptions = SessionLoopOptions::default();
+        o.retry.length_upgrade_limit = 0;
+        o
+    });
 
     let outcome = loop_.run(user("你好")).await;
 
@@ -1681,7 +1704,11 @@ async fn turn_pair_invariant_transient_fatal_no_retry() {
         .with_error(classified(ProviderErrorKind::RateLimit)),
     );
     let mut loop_ = loop_with_arc(provider_handle.clone(), vec![]);
-    loop_ = loop_.with_options({ let mut o: SessionLoopOptions = SessionLoopOptions::default(); o.retry.transient_retry_limit = 0; o });
+    loop_ = loop_.with_options({
+        let mut o: SessionLoopOptions = SessionLoopOptions::default();
+        o.retry.transient_retry_limit = 0;
+        o
+    });
 
     let outcome = loop_.run(user("你好")).await;
 
@@ -1736,11 +1763,15 @@ async fn provider_request_anchored_carries_turn_model_and_precedes_delta() {
     ]);
     let mut loop_ = loop_with(provider, vec![]);
     // 注入缓存测量配置 → 模型名经 cache_tracker 装配面进入锚点载荷
-    loop_ = loop_.with_options({ let mut o: SessionLoopOptions = SessionLoopOptions::default(); o.cache.cache_tracking = Some(session_loop::CacheTrackingConfig {
+    loop_ = loop_.with_options({
+        let mut o: SessionLoopOptions = SessionLoopOptions::default();
+        o.cache.cache_tracking = Some(session_loop::CacheTrackingConfig {
             provider: "deepseek".to_string(),
             model: "deepseek-v4-flash".to_string(),
             ttl_seconds: 60,
-        }); o });
+        });
+        o
+    });
 
     let outcome = loop_.run(user("验证")).await;
     assert_eq!(outcome.reason, AgentEndReason::Stop);
@@ -2346,4 +2377,3 @@ async fn control_intent_emits_enqueued_and_consumed() {
         "consumed 同样携带 reason"
     );
 }
-

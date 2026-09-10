@@ -348,4 +348,3 @@ impl AgentSessionLoop {
         }
     }
 }
-

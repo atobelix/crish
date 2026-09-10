@@ -169,7 +169,9 @@ pub(crate) async fn maybe_compact_preflight(state: &mut LoopState) -> bool {
     let Some(policy) = state.compaction.compaction_policy.clone() else {
         return false;
     };
-    if state.compaction.compactions_this_run >= state.options.compaction.max_auto_compactions_per_run {
+    if state.compaction.compactions_this_run
+        >= state.options.compaction.max_auto_compactions_per_run
+    {
         return false;
     }
     // 快照锁定（与 streaming 同一入口；预检发生在首次 build_request 之前，
@@ -231,7 +233,9 @@ pub(crate) async fn maybe_compact_user_boundary(state: &mut LoopState) -> bool {
         maybe_retry_pending_summary(state);
         return false;
     }
-    if state.compaction.compactions_this_run >= state.options.compaction.max_auto_compactions_per_run {
+    if state.compaction.compactions_this_run
+        >= state.options.compaction.max_auto_compactions_per_run
+    {
         // 计数封顶 → 不压缩（与预检共享单 run 计数，边界压缩后预检自然
         // 跳过）；被动补摘要**不受压缩计数约束**（不压缩对话、不消耗
         // 计数——仅补摘要的被动触发面）
@@ -269,12 +273,13 @@ pub(crate) async fn compact_with_llm_guard(
     policy: &conex_compaction::CompactionPolicy,
     info: &CompactionTriggerInfo,
 ) -> bool {
-    let stub_policy =
-        if state.options.compaction.compact_allow_stub_fallback || !state.options.compaction.compact_require_llm {
-            StubPolicy::StubAllowed
-        } else {
-            StubPolicy::LlmRequired
-        };
+    let stub_policy = if state.options.compaction.compact_allow_stub_fallback
+        || !state.options.compaction.compact_require_llm
+    {
+        StubPolicy::StubAllowed
+    } else {
+        StubPolicy::LlmRequired
+    };
     let engine = CompactionEngine::new(0);
     let plan = engine.compact_agent_messages_with_stub_policy(
         &state.conversation,
@@ -754,7 +759,9 @@ impl CompactionRuntime {
             overflow_llm_unavailable: false,
             // 缓存测量面（P5 S2 / T-36）：构造期从 options 派生一次
             // （with_options / run() 起始由 loop/mod.rs 同步刷新与复位）
-            cache_tracker: crate::cache_tracker::build_tracker(options.cache.cache_tracking.as_ref()),
+            cache_tracker: crate::cache_tracker::build_tracker(
+                options.cache.cache_tracking.as_ref(),
+            ),
             // 摘要后台调度（T-33）：构造期从 options 派生（None = 生产缺省
             // 退避参数；测试注入快速序列）；run 起始不复位（单飞句柄跨 run
             // 保留——存活任务阻塞新 spawn，会话级单飞语义在 loop 实例内成立）
@@ -782,4 +789,3 @@ impl BudgetState {
         }
     }
 }
-

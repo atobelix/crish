@@ -38,7 +38,9 @@ pub(crate) async fn handle(
         // [super::stream_error::MAX_LENGTH_UPGRADES] 计——阶梯封顶 32768，
         // 配置放大不得触发翻倍溢出）
         let upgrade_limit = state
-            .options.retry.length_upgrade_limit
+            .options
+            .retry
+            .length_upgrade_limit
             .min(super::stream_error::MAX_LENGTH_UPGRADES);
         if state.length_upgrades < upgrade_limit {
             state.length_upgrades += 1;
@@ -218,4 +220,3 @@ mod tests {
         );
     }
 }
-

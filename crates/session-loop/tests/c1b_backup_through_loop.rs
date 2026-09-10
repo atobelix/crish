@@ -53,7 +53,11 @@ async fn write_file_through_loop_lands_crish_trash_snapshot() {
     //（run_launch.rs:605 同构造）+ cwd = 工作区根（中间件快照回退基准）
     let options = SessionLoopOptions::default()
         .with_tool_middleware(vec![Arc::new(BackupMiddleware::with_defaults(None))]);
-    let options = { let mut o = options; o.tool_exec.cwd = Some(ws.path_str()); o };
+    let options = {
+        let mut o = options;
+        o.tool_exec.cwd = Some(ws.path_str());
+        o
+    };
 
     let mut registry = ToolRegistry::new();
     register_builtin_tools(&mut registry).expect("内置工具注册失败");
@@ -144,4 +148,3 @@ async fn empty_response_still_steered_with_shell_injection() {
         "空响应必须触发 runtime-steering（壳层注入 steering 生效）"
     );
 }
-

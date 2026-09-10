@@ -53,17 +53,15 @@ pub fn truncate_text_head_tail(
     let tail_str: String = raw_text.chars().skip(total_chars - tail_limit).collect();
 
     let omitted_chars = total_chars - head_limit - tail_limit;
-    let omitted_lines = total_lines.saturating_sub(
-        head_str.lines().count() + tail_str.lines().count(),
-    );
+    let omitted_lines =
+        total_lines.saturating_sub(head_str.lines().count() + tail_str.lines().count());
 
     let separator = format!(
         "\n\n... [! 警告：{}内容过长已触发安全截断：已省略中间 {} 行 / {} 字符] ...\n\n",
         kind_label, omitted_lines, omitted_chars
     );
 
-    let mut result =
-        String::with_capacity(head_str.len() + separator.len() + tail_str.len());
+    let mut result = String::with_capacity(head_str.len() + separator.len() + tail_str.len());
     result.push_str(&head_str);
     result.push_str(&separator);
     result.push_str(&tail_str);
@@ -207,6 +205,10 @@ mod tests {
         assert_eq!(info.injected_lines, result.lines().count());
         assert_eq!(info.truncation_strategy, "head-tail");
         // 尾部关键信息必须原样保留在结果末尾
-        assert!(result.ends_with(&raw.chars().skip(raw.chars().count() - 7).collect::<String>()));
+        assert!(result.ends_with(
+            &raw.chars()
+                .skip(raw.chars().count() - 7)
+                .collect::<String>()
+        ));
     }
 }

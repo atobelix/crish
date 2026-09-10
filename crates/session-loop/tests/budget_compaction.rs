@@ -115,7 +115,13 @@ async fn preflight_compaction_triggers_and_broadcasts_events() {
         Box::new(ArcTestProvider(provider.clone())),
         Arc::new(ToolRegistry::new()),
     )
-    .with_options({ let mut o: SessionLoopOptions = SessionLoopOptions::default(); o.assembly.context_budget = Some(default_budget()); o.compaction.compaction_policy = Some(default_policy()); o.compaction.compact_allow_stub_fallback = true; o })
+    .with_options({
+        let mut o: SessionLoopOptions = SessionLoopOptions::default();
+        o.assembly.context_budget = Some(default_budget());
+        o.compaction.compaction_policy = Some(default_policy());
+        o.compaction.compact_allow_stub_fallback = true;
+        o
+    })
     .with_initial_conversation_arc(big_conversation());
 
     let outcome = loop_.run(user("继续")).await;
@@ -184,7 +190,12 @@ async fn max_tokens_clamped_by_estimate_without_compaction() {
         Box::new(ArcTestProvider(provider.clone())),
         Arc::new(ToolRegistry::new()),
     )
-    .with_options({ let mut o: SessionLoopOptions = SessionLoopOptions::default(); o.assembly.context_budget = Some(default_budget()); o.compaction.compaction_policy = None; o })
+    .with_options({
+        let mut o: SessionLoopOptions = SessionLoopOptions::default();
+        o.assembly.context_budget = Some(default_budget());
+        o.compaction.compaction_policy = None;
+        o
+    })
     .with_initial_conversation_arc(big_conversation());
 
     let outcome = loop_.run(user_long()).await;
@@ -227,7 +238,12 @@ async fn max_tokens_not_clamped_below_floor() {
         Box::new(ArcTestProvider(provider.clone())),
         Arc::new(ToolRegistry::new()),
     )
-    .with_options({ let mut o: SessionLoopOptions = SessionLoopOptions::default(); o.assembly.context_budget = Some(tiny_budget); o.compaction.compaction_policy = None; o })
+    .with_options({
+        let mut o: SessionLoopOptions = SessionLoopOptions::default();
+        o.assembly.context_budget = Some(tiny_budget);
+        o.compaction.compaction_policy = None;
+        o
+    })
     .with_initial_conversation_arc(big_conversation());
 
     let outcome = loop_.run(user("继续")).await;
@@ -253,7 +269,12 @@ async fn preflight_skipped_under_threshold_in_full_run() {
         Box::new(ArcTestProvider(provider.clone())),
         Arc::new(ToolRegistry::new()),
     )
-    .with_options({ let mut o: SessionLoopOptions = SessionLoopOptions::default(); o.assembly.context_budget = Some(default_budget()); o.compaction.compaction_policy = Some(default_policy()); o });
+    .with_options({
+        let mut o: SessionLoopOptions = SessionLoopOptions::default();
+        o.assembly.context_budget = Some(default_budget());
+        o.compaction.compaction_policy = Some(default_policy());
+        o
+    });
     // 无历史对话：单条用户消息估算 ≈ 10 token，远低于 47616 阈值
     let outcome = loop_.run(user("你好")).await;
     assert_eq!(outcome.reason, AgentEndReason::Stop);
@@ -273,4 +294,3 @@ async fn preflight_skipped_under_threshold_in_full_run() {
         Some(session_loop::r#loop::DEFAULT_MAX_TOKENS)
     );
 }
-

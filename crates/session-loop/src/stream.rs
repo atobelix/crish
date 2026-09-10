@@ -294,8 +294,11 @@ impl Aggregate {
                 tool_name,
                 input,
             } => {
+                let id = id
+                    .filter(|s| !s.trim().is_empty())
+                    .unwrap_or_else(|| format!("call_{}", self.tool_calls.len()));
                 self.tool_calls.push(ToolCallBlock {
-                    id: id.unwrap_or_else(|| format!("call_{}", self.tool_calls.len())),
+                    id,
                     tool_name,
                     input,
                 });
@@ -944,7 +947,10 @@ mod tests {
             ],
             false,
         );
-        assert!(result.response.is_message(), "纯思考流必须产出 Message，不得被判定为 Empty");
+        assert!(
+            result.response.is_message(),
+            "纯思考流必须产出 Message，不得被判定为 Empty"
+        );
         assert_eq!(result.response.text(), "");
         assert_eq!(result.stop_reason(), Some(ConsumeStopReason::Stop));
         assert_eq!(result.metadata["thought"], "纯思考深度分析1纯思考深度分析2");
@@ -960,12 +966,16 @@ mod tests {
     #[test]
     fn abort_with_only_thought_keeps_partial_message() {
         let result = consume(
-            vec![
-                ProviderStreamEvent::thought("流中被 abort 的思考片段", None),
-            ],
+            vec![ProviderStreamEvent::thought(
+                "流中被 abort 的思考片段",
+                None,
+            )],
             true,
         );
-        assert!(result.response.is_message(), "仅有思考内容时 abort 必须保留为 Message");
+        assert!(
+            result.response.is_message(),
+            "仅有思考内容时 abort 必须保留为 Message"
+        );
         assert_eq!(result.response.text(), "");
         assert_eq!(result.stop_reason(), Some(ConsumeStopReason::Aborted));
         assert_eq!(result.metadata["aborted"], true);
@@ -987,7 +997,10 @@ mod tests {
             ],
             false,
         );
-        assert!(result.response.is_message(), "有思考内容且发生 error stop 时必须产出 Message");
+        assert!(
+            result.response.is_message(),
+            "有思考内容且发生 error stop 时必须产出 Message"
+        );
         assert_eq!(result.metadata["thought"], "思考到一半发生错误");
         assert_eq!(result.metadata["providerError"], "网络连接重置");
         assert_eq!(result.metadata["providerErrorKind"], "timeout");

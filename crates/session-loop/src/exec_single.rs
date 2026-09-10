@@ -283,9 +283,7 @@ impl ToolExecutor {
             .run_pre_checks(tool.as_ref(), call, ctx, &mw_ctx, abort)
             .await;
         let exec_input = match pre {
-            PreExecOutcome::Aborted => {
-                return (Self::cancelled_result(call, 0), Vec::new())
-            }
+            PreExecOutcome::Aborted => return (Self::cancelled_result(call, 0), Vec::new()),
             PreExecOutcome::Blocked(reason) => {
                 return (Self::blocked_result(call, reason), Vec::new())
             }
@@ -298,7 +296,16 @@ impl ToolExecutor {
         let guard = self.idempotency.clone();
         let start = std::time::Instant::now();
         let outcome = self
-            .race_execution(tool.as_ref(), exec_input.clone(), &tool_ctx, &exec_ctx, guard.as_ref().map(|v| v.as_ref()), &policy, options.timeout, abort)
+            .race_execution(
+                tool.as_ref(),
+                exec_input.clone(),
+                &tool_ctx,
+                &exec_ctx,
+                guard.as_ref().map(|v| v.as_ref()),
+                &policy,
+                options.timeout,
+                abort,
+            )
             .await;
         let duration_ms = start.elapsed().as_millis() as u64;
         let occurred_at_ms = conex_shared::time::unix_millis() as u64;
@@ -314,7 +321,16 @@ impl ToolExecutor {
             return (r, recorded);
         }
         self.handle_execution_outcome(
-            outcome, tool.as_ref(), call, ctx, &mw_ctx, exec_input, attempt, duration_ms, occurred_at_ms, recorded,
+            outcome,
+            tool.as_ref(),
+            call,
+            ctx,
+            &mw_ctx,
+            exec_input,
+            attempt,
+            duration_ms,
+            occurred_at_ms,
+            recorded,
         )
         .await
     }
@@ -356,7 +372,13 @@ impl ToolExecutor {
         options: &ToolBatchOptions,
         abort: Option<&crate::safe_point::AbortSignal>,
         approval: &Option<Arc<dyn ApprovalGate>>,
-    ) -> (ToolContext, Option<Arc<ApprovalChannel>>, ToolExecutionContext, ExecutorContext, AbortToken) {
+    ) -> (
+        ToolContext,
+        Option<Arc<ApprovalChannel>>,
+        ToolExecutionContext,
+        ExecutorContext,
+        AbortToken,
+    ) {
         let exec_ctx = ExecutorContext {
             run_id: ctx.run_id.clone(),
             session_id: ctx.session_id.clone(),
@@ -418,7 +440,10 @@ impl ToolExecutor {
         abort: Option<&crate::safe_point::AbortSignal>,
     ) -> PreExecOutcome {
         let initial = call.input.clone();
-        let after_mw = match self.run_middleware_before(tool, initial, mw_ctx, abort).await {
+        let after_mw = match self
+            .run_middleware_before(tool, initial, mw_ctx, abort)
+            .await
+        {
             Ok(v) => v,
             Err(e) => return e,
         };
@@ -452,10 +477,16 @@ impl ToolExecutor {
                     }
                 }
                 Ok(Ok(BeforeExecuteResult::Block { reason })) => {
-                    return Err(PreExecOutcome::Blocked(format!("被中间件 {} 阻止：{reason}", m.name())));
+                    return Err(PreExecOutcome::Blocked(format!(
+                        "被中间件 {} 阻止：{reason}",
+                        m.name()
+                    )));
                 }
                 Ok(Err(e)) => {
-                    return Err(PreExecOutcome::Blocked(format!("中间件 {} 前置钩子错误：{e}", m.name())));
+                    return Err(PreExecOutcome::Blocked(format!(
+                        "中间件 {} 前置钩子错误：{e}",
+                        m.name()
+                    )));
                 }
                 Err(_elapsed) => {
                     return Err(PreExecOutcome::Blocked(format!(
@@ -475,7 +506,9 @@ impl ToolExecutor {
         ctx: &ToolExecCtx,
         input: Value,
     ) -> Option<String> {
-        let Some(hooks) = &self.hooks else { return None };
+        let Some(hooks) = &self.hooks else {
+            return None;
+        };
         let event = HookEvent::ToolPre {
             session_id: ctx.session_id.clone(),
             tool_name: call.tool_name.clone(),
@@ -497,13 +530,33 @@ impl ToolExecutor {
         policy: &ToolExecutionPolicy,
         timeout: std::time::Duration,
         abort: Option<&crate::safe_point::AbortSignal>,
-    ) -> Option<Result<Result<agent_tools::executor::ToolResult, ToolError>, tokio::time::error::Elapsed>> {
+    ) -> Option<
+        Result<Result<agent_tools::executor::ToolResult, ToolError>, tokio::time::error::Elapsed>,
+    > {
         let exec_input_clone = exec_input.clone();
         let execute = async move {
             if let Some(g) = guard {
-                execute_stream_with_output_policy(tool, exec_input_clone, tool_ctx, exec_ctx, Some(g), policy, None).await
+                execute_stream_with_output_policy(
+                    tool,
+                    exec_input_clone,
+                    tool_ctx,
+                    exec_ctx,
+                    Some(g),
+                    policy,
+                    None,
+                )
+                .await
             } else {
-                execute_stream_with_output_policy(tool, exec_input_clone, tool_ctx, exec_ctx, None, policy, None).await
+                execute_stream_with_output_policy(
+                    tool,
+                    exec_input_clone,
+                    tool_ctx,
+                    exec_ctx,
+                    None,
+                    policy,
+                    None,
+                )
+                .await
             }
         };
         match abort {
@@ -518,7 +571,12 @@ impl ToolExecutor {
 
     async fn handle_execution_outcome(
         &self,
-        outcome: Option<Result<Result<agent_tools::executor::ToolResult, ToolError>, tokio::time::error::Elapsed>>,
+        outcome: Option<
+            Result<
+                Result<agent_tools::executor::ToolResult, ToolError>,
+                tokio::time::error::Elapsed,
+            >,
+        >,
         tool: &dyn agent_tools::definition::Tool,
         call: &ToolBatchCall,
         ctx: &ToolExecCtx,
@@ -542,7 +600,11 @@ impl ToolExecutor {
                     &call.id,
                     &call.tool_name,
                     ToolErrorKind::Timeout,
-                    format!("tool {} timed out after {:?}", call.tool_name, std::time::Duration::from_millis(duration_ms)),
+                    format!(
+                        "tool {} timed out after {:?}",
+                        call.tool_name,
+                        std::time::Duration::from_millis(duration_ms)
+                    ),
                     duration_ms,
                 );
                 r.attempt = attempt;
@@ -552,16 +614,46 @@ impl ToolExecutor {
             }
             Some(Ok(Ok(tool_result))) => {
                 if tool_result.deduplicated {
-                    self.handle_dedup_success(tool_result, call, ctx, exec_input, attempt, occurred_at_ms, recorded)
-                        .await
+                    self.handle_dedup_success(
+                        tool_result,
+                        call,
+                        ctx,
+                        exec_input,
+                        attempt,
+                        occurred_at_ms,
+                        recorded,
+                    )
+                    .await
                 } else {
-                    self.handle_success_with_middleware(tool, call, ctx, mw_ctx, tool_result, exec_input, attempt, duration_ms, occurred_at_ms, recorded)
-                        .await
+                    self.handle_success_with_middleware(
+                        tool,
+                        call,
+                        ctx,
+                        mw_ctx,
+                        tool_result,
+                        exec_input,
+                        attempt,
+                        duration_ms,
+                        occurred_at_ms,
+                        recorded,
+                    )
+                    .await
                 }
             }
             Some(Ok(Err(err))) => {
-                self.handle_error_branch(tool, call, ctx, mw_ctx, err, exec_input, attempt, duration_ms, occurred_at_ms, recorded)
-                    .await
+                self.handle_error_branch(
+                    tool,
+                    call,
+                    ctx,
+                    mw_ctx,
+                    err,
+                    exec_input,
+                    attempt,
+                    duration_ms,
+                    occurred_at_ms,
+                    recorded,
+                )
+                .await
             }
         }
     }
@@ -608,7 +700,9 @@ impl ToolExecutor {
         occurred_at_ms: u64,
         recorded: Vec<ToolEvent>,
     ) -> (ClassifiedToolResult, Vec<ToolEvent>) {
-        let final_output = self.apply_on_result_chain(tool, &exec_input, tool_result.output, mw_ctx).await;
+        let final_output = self
+            .apply_on_result_chain(tool, &exec_input, tool_result.output, mw_ctx)
+            .await;
         if let Some(hooks) = &self.hooks {
             let _ = hooks
                 .dispatch(&HookEvent::ToolPost {
@@ -671,7 +765,8 @@ impl ToolExecutor {
         occurred_at_ms: u64,
         recorded: Vec<ToolEvent>,
     ) -> (ClassifiedToolResult, Vec<ToolEvent>) {
-        self.apply_on_error_chain(tool, &exec_input, &err, mw_ctx).await;
+        self.apply_on_error_chain(tool, &exec_input, &err, mw_ctx)
+            .await;
         if let Some(hooks) = &self.hooks {
             let _ = hooks
                 .dispatch(&HookEvent::ToolPost {
@@ -761,7 +856,10 @@ impl ToolExecutor {
         };
         match verdict {
             PermissionVerdict::Deny => (denied_result(call, options), extra),
-            PermissionVerdict::Allow => self.retry_after_allow(call, ctx, options, abort, approval, extra).await,
+            PermissionVerdict::Allow => {
+                self.retry_after_allow(call, ctx, options, abort, approval, extra)
+                    .await
+            }
             PermissionVerdict::NeedsApproval => {
                 self.handle_retry_needs_approval(call, ctx, options, abort, approval, extra)
                     .await
@@ -825,7 +923,13 @@ impl ToolExecutor {
         .await
         {
             ApprovalWaitOutcome::Cancelled => (
-                ClassifiedToolResult::error(&call.id, &call.tool_name, ToolErrorKind::Cancelled, "aborted", 0),
+                ClassifiedToolResult::error(
+                    &call.id,
+                    &call.tool_name,
+                    ToolErrorKind::Cancelled,
+                    "aborted",
+                    0,
+                ),
                 extra_mut,
             ),
             ApprovalWaitOutcome::Decision(ApprovalDecision::Approved) => {

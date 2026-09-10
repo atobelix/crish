@@ -90,4 +90,3 @@ pub(crate) async fn handle(state: &mut LoopState) -> Result<HandlerOutcome, Loop
     dispatch(state, E::SteeringComplete)?;
     Ok(HandlerOutcome::continue_run())
 }
-

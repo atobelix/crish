@@ -256,7 +256,11 @@ async fn consume_classify(
                 assistant_message_id,
                 text.clone(),
                 tool_calls.clone(),
-                state.options.tool_exec.assistant_client_message_id.as_deref(),
+                state
+                    .options
+                    .tool_exec
+                    .assistant_client_message_id
+                    .as_deref(),
             );
             // 收口轨（T09.1 双轨）：message-start → message-delta* →
             // message-end（01 §五.6 序列契约；实时轨已单独发射，此处保证
@@ -614,11 +618,7 @@ fn build_assistant_message(
     }
     // 兜底：若 thoughtBlocks 为空或未产出 thought 块，但 metadata.thought 存在非空文本
     if !has_thought_block {
-        if let Some(thought_text) = consumed
-            .metadata
-            .get("thought")
-            .and_then(|v| v.as_str())
-        {
+        if let Some(thought_text) = consumed.metadata.get("thought").and_then(|v| v.as_str()) {
             if !thought_text.is_empty() {
                 blocks.push(AgentMessageBlock::Thought {
                     text: thought_text.to_string(),

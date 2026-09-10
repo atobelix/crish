@@ -138,7 +138,9 @@ impl AgentSessionLoop {
         // 写路径互斥注册表（I4-M3）：显式注入 → 复用 tool_ctx 既有 →
         // 按根新建（会话级，与工作区根同源——工具执行面与 ESC 判定器
         // 共享同一实例）
-        let registry = options.assembly.write_claims
+        let registry = options
+            .assembly
+            .write_claims
             .clone()
             .or_else(|| self.tool_ctx.write_claims.clone())
             .unwrap_or_else(|| Arc::new(WritePathRegistry::new(&self.session_id, &root)));
@@ -208,7 +210,9 @@ impl AgentSessionLoop {
         let _ = self
             .tool_executor
             .with_middleware(options.tool_exec.tool_middleware.clone());
-        let _ = self.tool_executor.with_hooks(options.tool_exec.hooks.clone());
+        let _ = self
+            .tool_executor
+            .with_hooks(options.tool_exec.hooks.clone());
         self
     }
 
@@ -394,6 +398,3 @@ impl AgentSessionLoop {
         self
     }
 }
-
-
-

@@ -47,7 +47,11 @@ pub(crate) async fn length_ladder(
     if state.abort_signal.is_aborted() {
         return streaming_aborted(state);
     }
-    let limit = state.options.retry.length_upgrade_limit.min(MAX_LENGTH_UPGRADES);
+    let limit = state
+        .options
+        .retry
+        .length_upgrade_limit
+        .min(MAX_LENGTH_UPGRADES);
     if state.length_upgrades < limit {
         state.length_upgrades += 1;
         let max_tokens_before = state.max_tokens;
@@ -140,12 +144,13 @@ pub(crate) async fn compression_ladder(
     // E2 F1 L3：LLM 摘要强制——豁免（compact_allow_stub_fallback /
     // !compact_require_llm 任一放行）→ StubAllowed 降级 stub；默认
     // LlmRequired → 无 Summarizer/摘要失败不落 stub、标记 llm_unavailable
-    let stub_policy =
-        if state.options.compaction.compact_allow_stub_fallback || !state.options.compaction.compact_require_llm {
-            conex_compaction::compaction::StubPolicy::StubAllowed
-        } else {
-            conex_compaction::compaction::StubPolicy::LlmRequired
-        };
+    let stub_policy = if state.options.compaction.compact_allow_stub_fallback
+        || !state.options.compaction.compact_require_llm
+    {
+        conex_compaction::compaction::StubPolicy::StubAllowed
+    } else {
+        conex_compaction::compaction::StubPolicy::LlmRequired
+    };
     let mut plan = engine.compact_agent_messages_with_stub_policy(
         &state.conversation,
         budget_tokens as usize,
@@ -229,4 +234,3 @@ pub(crate) async fn compression_ladder(
 // 第二次必然再次 PayloadTooLarge，属「假恢复」。P4 §3.5（T-34）以**真实
 // 压缩阶梯**恢复：压缩对话（请求体真实变化）后重试一次，受
 // [MAX_OVERFLOW_COMPRESSION_RETRIES] 约束——不恢复旧的计数式假恢复。
-

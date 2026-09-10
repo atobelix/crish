@@ -1302,4 +1302,3 @@ mod tests {
         assert_eq!(sig, full, "压缩后应全量重算（增量锚点已失效）");
     }
 }
-

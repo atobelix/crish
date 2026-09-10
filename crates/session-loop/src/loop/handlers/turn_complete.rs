@@ -82,7 +82,9 @@ pub(crate) async fn handle(state: &mut LoopState) -> Result<HandlerOutcome, Loop
     // 4. lifecycle turn.end 钩子的 stop 建议（01 §2.9 步骤 5 / 遗留问题 3：
     //    与 shouldStopAfterTurn 合并时以此为准）
     let stop_suggested = state
-        .options.hooks.turn_end_hook
+        .options
+        .hooks
+        .turn_end_hook
         .as_ref()
         .map(|hook| {
             hook.on_turn_end(&TurnEndContext {
@@ -163,7 +165,9 @@ pub(crate) async fn handle(state: &mut LoopState) -> Result<HandlerOutcome, Loop
 
     // 6. shouldStopAfterTurn 兼容层（无 turn_end_hook 时生效；01 遗留问题 3）
     let should_stop = state
-        .options.hooks.should_stop_after_turn
+        .options
+        .hooks
+        .should_stop_after_turn
         .as_ref()
         .map(|hook| {
             hook.on_turn_end(&TurnEndContext {
@@ -197,4 +201,3 @@ pub(crate) async fn handle(state: &mut LoopState) -> Result<HandlerOutcome, Loop
     dispatch(state, E::ShouldStop)?;
     Ok(HandlerOutcome::end(EndDecision::stop(state)))
 }
-

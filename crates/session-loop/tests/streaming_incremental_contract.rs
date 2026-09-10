@@ -614,9 +614,7 @@ async fn pure_thought_stream_commits_assistant_message() {
         ProviderStreamEvent::thought("纯思考链内容分析", None),
         ProviderStreamEvent::stop(StopReason::Stop),
     ]);
-    let outcome = loop_with(Box::new(provider))
-        .run(user("纯思考测试"))
-        .await;
+    let outcome = loop_with(Box::new(provider)).run(user("纯思考测试")).await;
 
     assert_eq!(outcome.reason, AgentEndReason::Stop);
     let assistant_msg = outcome

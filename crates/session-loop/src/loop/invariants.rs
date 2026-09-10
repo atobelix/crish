@@ -42,15 +42,22 @@ fn test_state(options: SessionLoopOptions) -> LoopState {
 
 /// 带预算/策略的最小配置（窗口 1 万、阈值 = window - reserve = 8000）
 fn budgeted_options() -> SessionLoopOptions {
-    { let mut o: SessionLoopOptions = SessionLoopOptions::default(); o.assembly.context_budget = Some(ContextBudget {
+    {
+        let mut o: SessionLoopOptions = SessionLoopOptions::default();
+        o.assembly.context_budget = Some(ContextBudget {
             context_window: 10_000,
             reserve_tokens: 2_000,
             safety_tokens: 100,
-        }); o.compaction.compaction_policy = Some(CompactionPolicy {
+        });
+        o.compaction.compaction_policy = Some(CompactionPolicy {
             keep_recent_tokens: 2_000,
             min_recent_turns: 1,
             ..Default::default()
-        }); o.compaction.max_auto_compactions_per_run = 1; o.compaction.compact_allow_stub_fallback = true; o }
+        });
+        o.compaction.max_auto_compactions_per_run = 1;
+        o.compaction.compact_allow_stub_fallback = true;
+        o
+    }
 }
 
 /// 超阈值对话：10 条消息 × 5000 字（CJK 逐字符 ≈ 5000 token）≈ 5 万 token
@@ -346,4 +353,3 @@ fn i6_estimate_consumes_input_total_without_redouble() {
         "input_total 直接消费（Included 口径：prompt 已含缓存，不得再叠加 read+write）"
     );
 }
-

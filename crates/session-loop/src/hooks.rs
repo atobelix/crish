@@ -693,11 +693,12 @@ impl HookRegistry {
         timeout_ms: Option<u64>,
     ) -> InvokeResult {
         match timeout_ms {
-            Some(ms) => match tokio::time::timeout(Duration::from_millis(ms), handler.handle(event)).await
-            {
-                Ok(res) => InvokeResult::Completed(res),
-                Err(_) => InvokeResult::TimedOut(ms),
-            },
+            Some(ms) => {
+                match tokio::time::timeout(Duration::from_millis(ms), handler.handle(event)).await {
+                    Ok(res) => InvokeResult::Completed(res),
+                    Err(_) => InvokeResult::TimedOut(ms),
+                }
+            }
             None => InvokeResult::Completed(handler.handle(event).await),
         }
     }
@@ -1395,33 +1396,91 @@ mod tests {
     /// error.occurred / model.* / subagent.* 收到事件且载荷可读
     fn new_variant_events() -> Vec<HookEvent> {
         vec![
-            HookEvent::SessionStart { session_id: "s1".into() },
-            HookEvent::SessionEnd { session_id: "s1".into() },
-            HookEvent::TurnStart { session_id: "s1".into(), turn_index: 1 },
-            HookEvent::ToolError { session_id: "s1".into(), tool_name: "x".into(), error: "boom".into() },
-            HookEvent::ContextCompactStart { session_id: "s1".into(), trigger: "threshold".into(), tokens_before: 100 },
-            HookEvent::ContextCompactEnd { session_id: "s1".into(), aborted: false, kept_message_count: 5, compaction_id: "c1".into() },
-            HookEvent::ErrorOccurred { session_id: "s1".into(), error: "boom".into(), retryable: false },
-            HookEvent::ModelBeforeRequest { session_id: "s1".into(), provider_id: Some("deepseek".into()), model: Some("v4".into()) },
-            HookEvent::ModelAfterResponse { session_id: "s1".into(), provider_id: None, model: None, ok: true },
-            HookEvent::SubagentStart { parent_session_id: "p1".into(), subagent_session_id: "a1".into(), role: Some("researcher".into()) },
-            HookEvent::SubagentEnd { parent_session_id: "p1".into(), subagent_session_id: "a1".into(), reason: Some("completed".into()) },
+            HookEvent::SessionStart {
+                session_id: "s1".into(),
+            },
+            HookEvent::SessionEnd {
+                session_id: "s1".into(),
+            },
+            HookEvent::TurnStart {
+                session_id: "s1".into(),
+                turn_index: 1,
+            },
+            HookEvent::ToolError {
+                session_id: "s1".into(),
+                tool_name: "x".into(),
+                error: "boom".into(),
+            },
+            HookEvent::ContextCompactStart {
+                session_id: "s1".into(),
+                trigger: "threshold".into(),
+                tokens_before: 100,
+            },
+            HookEvent::ContextCompactEnd {
+                session_id: "s1".into(),
+                aborted: false,
+                kept_message_count: 5,
+                compaction_id: "c1".into(),
+            },
+            HookEvent::ErrorOccurred {
+                session_id: "s1".into(),
+                error: "boom".into(),
+                retryable: false,
+            },
+            HookEvent::ModelBeforeRequest {
+                session_id: "s1".into(),
+                provider_id: Some("deepseek".into()),
+                model: Some("v4".into()),
+            },
+            HookEvent::ModelAfterResponse {
+                session_id: "s1".into(),
+                provider_id: None,
+                model: None,
+                ok: true,
+            },
+            HookEvent::SubagentStart {
+                parent_session_id: "p1".into(),
+                subagent_session_id: "a1".into(),
+                role: Some("researcher".into()),
+            },
+            HookEvent::SubagentEnd {
+                parent_session_id: "p1".into(),
+                subagent_session_id: "a1".into(),
+                reason: Some("completed".into()),
+            },
         ]
     }
 
     #[tokio::test]
     async fn new_variant_payloads_are_delivered() {
         let registry = HookRegistry::new();
-        let spy = Arc::new(PayloadSpy { seen: Arc::new(std::sync::Mutex::new(Vec::new())) });
+        let spy = Arc::new(PayloadSpy {
+            seen: Arc::new(std::sync::Mutex::new(Vec::new())),
+        });
         let kinds = [
-            HookEventKind::SessionStart, HookEventKind::SessionEnd, HookEventKind::TurnStart,
-            HookEventKind::ToolError, HookEventKind::ContextCompactStart, HookEventKind::ContextCompactEnd,
-            HookEventKind::ErrorOccurred, HookEventKind::ModelBeforeRequest, HookEventKind::ModelAfterResponse,
-            HookEventKind::SubagentStart, HookEventKind::SubagentEnd,
+            HookEventKind::SessionStart,
+            HookEventKind::SessionEnd,
+            HookEventKind::TurnStart,
+            HookEventKind::ToolError,
+            HookEventKind::ContextCompactStart,
+            HookEventKind::ContextCompactEnd,
+            HookEventKind::ErrorOccurred,
+            HookEventKind::ModelBeforeRequest,
+            HookEventKind::ModelAfterResponse,
+            HookEventKind::SubagentStart,
+            HookEventKind::SubagentEnd,
         ];
-        for kind in kinds { registry.register_observe(kind, HookFailStrategy::Swallow, Arc::clone(&spy) as Arc<dyn HookHandler>); }
+        for kind in kinds {
+            registry.register_observe(
+                kind,
+                HookFailStrategy::Swallow,
+                Arc::clone(&spy) as Arc<dyn HookHandler>,
+            );
+        }
         let events = new_variant_events();
-        for event in &events { registry.dispatch(event).await.unwrap(); }
+        for event in &events {
+            registry.dispatch(event).await.unwrap();
+        }
         let seen = spy.seen.lock().unwrap();
         assert_eq!(seen.len(), events.len(), "全部新变体必须送达对应 handler");
     }
