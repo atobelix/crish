@@ -14,6 +14,7 @@ import {
   type ScrubberTick,
 } from './flowScrubberModel';
 import { DEFAULT_PIN_COLOR } from '../chat-message-row/colorPickerUtils';
+import { Tooltip } from '../ui';
 
 export interface FlowScrubberProps {
   messages: SessionMessage[];
@@ -57,6 +58,7 @@ const FlowScrubberInner: React.FC<FlowScrubberProps> = ({
 
   const scroller = scrollerRef.current;
   const flowOn = isConversationFlowOn(scroller);
+  void Tooltip;
 
   const onJump = useCallback(
     (id: string) => {

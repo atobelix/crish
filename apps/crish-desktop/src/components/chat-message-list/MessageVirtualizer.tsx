@@ -222,6 +222,44 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
     [pinnedItems]
   );
 
+  // 物理输入同步拦截器 (Capture 阶段立即解锁吸底，杜绝任何 ResizeObserver / LayoutEffect 争抢拉回)
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      // 用户滚轮向上滚动（deltaY < 0），在事件捕获阶段同步立即解除吸底
+      if (e.deltaY < 0) {
+        isAtBottomRef.current = false;
+        setIsAtBottom(false);
+      }
+    };
+
+    let touchStartY = 0;
+    const handleTouchStart = (e: TouchEvent) => {
+      touchStartY = e.touches[0]?.clientY ?? 0;
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      const currentY = e.touches[0]?.clientY ?? 0;
+      // 手指往下滑动（currentY > touchStartY），内容往上滚，同步立即解除吸底
+      if (currentY > touchStartY) {
+        isAtBottomRef.current = false;
+        setIsAtBottom(false);
+      }
+    };
+
+    el.addEventListener('wheel', handleWheel, { capture: true, passive: true });
+    el.addEventListener('touchstart', handleTouchStart, { capture: true, passive: true });
+    el.addEventListener('touchmove', handleTouchMove, { capture: true, passive: true });
+
+    return () => {
+      el.removeEventListener('wheel', handleWheel, { capture: true });
+      el.removeEventListener('touchstart', handleTouchStart, { capture: true });
+      el.removeEventListener('touchmove', handleTouchMove, { capture: true });
+    };
+  }, [containerRef]);
+
   const handleScroll = useCallback<React.UIEventHandler<HTMLDivElement>>(
     (e) => {
       vs.onScroll(e);
@@ -236,27 +274,14 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
       const distanceToBottom = Math.max(0, maxScrollTop - currentScrollTop);
       const isPhysicallyAtBottom = distanceToBottom <= SCROLL_FLOOR_EPSILON;
 
-      // 2. 检测地表收缩钳位（Floor Clamping）防误杀
-      const previousTop = observedTopRef.current;
-      const isShrinkingDownwards = currentScrollTop < previousTop;
-
       if (isPhysicallyAtBottom) {
         if (!isAtBottomRef.current) {
           isAtBottomRef.current = true;
           setIsAtBottom(true);
         }
         setShowFloorButton(false);
-      } else if (isShrinkingDownwards && isAtBottomRef.current) {
-        // 关键拦截：高度骤降引发的被动回落，只要偏差在容差内，保持吸底
-        if (distanceToBottom <= SCROLL_FLOOR_EPSILON) {
-          setShowFloorButton(false);
-        } else {
-          isAtBottomRef.current = false;
-          setIsAtBottom(false);
-          setShowFloorButton(distanceToBottom > SCROLL_BOTTOM_THRESHOLD);
-        }
       } else {
-        if (isAtBottomRef.current && distanceToBottom > SCROLL_FLOOR_EPSILON) {
+        if (isAtBottomRef.current) {
           isAtBottomRef.current = false;
           setIsAtBottom(false);
         }
@@ -307,16 +332,16 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
         data-virtual-scroll="true"
         data-chat-scroll-container=""
         data-testid="chat-scroll-container"
+        style={{ overflowAnchor: 'none' }}
         onClick={handleMarkdownClick}
         onScroll={handleScroll}
       >
-        <div className={styles.listInner} data-chat-list-inner="">
+        <div className={styles.listInner} data-chat-list-inner="" style={{ overflowAnchor: 'none' }}>
 
 
         <div
-          hidden
           data-vsm-spacer=""
-          style={{ height: startOffset, flexShrink: 0 }}
+          style={{ height: startOffset, flexShrink: 0, overflowAnchor: 'none' }}
           aria-hidden
         />
 
@@ -402,11 +427,11 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
         })}
 
         <div
-          hidden
           data-vsm-spacer=""
           style={{
             height: Math.max(0, estimatedTotalHeight - endOffset),
             flexShrink: 0,
+            overflowAnchor: 'none',
           }}
           aria-hidden
         />

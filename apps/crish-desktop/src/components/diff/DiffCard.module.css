@@ -181,6 +181,7 @@
   background: var(--bg-card);
   overflow-x: hidden;
   overflow-y: auto;
+  overflow-anchor: none;
   overscroll-behavior: auto;
   flex: 1 1 auto;
   border-right: none;
@@ -268,8 +269,65 @@
 }
 
 /* --------------------------------------------------------------------------
- * 4. 子域 A：折叠 Chevron 按钮与语义化状态徽章
+ * 4. 子域 A：折叠 Chevron 与状态字母单槽位融合（交互态平滑切换）
  * -------------------------------------------------------------------------- */
+.fileNodeToggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  min-width: 16px;
+  padding: 0;
+  margin: 0 8px 0 0;
+  border: none;
+  border-radius: var(--radius-sm, 4px);
+  background: transparent;
+  cursor: pointer;
+  outline: none;
+  flex-shrink: 0;
+}
+
+.fileNodeToggle .statusBadge {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 1;
+  pointer-events: none;
+  transition: opacity var(--transition-micro, 80ms) ease;
+}
+
+.fileNodeToggle .chevronIcon {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity var(--transition-micro, 80ms) ease,
+    transform var(--transition-fast, 120ms) cubic-bezier(0.2, 0, 1),
+    color var(--transition-fast, 120ms);
+}
+
+/* hover 状态或键盘焦点态：字母隐去，展开折叠 Chevron 显现 */
+.fileRow:hover .fileNodeToggle .statusBadge,
+.fileNodeToggle:focus-visible .statusBadge {
+  opacity: 0;
+}
+
+.fileRow:hover .fileNodeToggle .chevronIcon,
+.fileNodeToggle:focus-visible .chevronIcon {
+  opacity: 1;
+  color: var(--text-secondary);
+}
+
+.fileRow:hover .fileNodeToggle .chevronIcon.expanded,
+.fileNodeToggle:focus-visible .chevronIcon.expanded {
+  color: var(--text-primary);
+}
+
+/* 兼容保留纯 chevronBtn 基础类 */
 .chevronBtn {
   display: inline-flex;
   align-items: center;
@@ -292,7 +350,7 @@
   height: 14px;
   color: var(--text-tertiary);
   transition:
-    transform var(--transition-fast, 120ms) cubic-bezier(0.2, 0, 0, 1),
+    transform var(--transition-fast, 120ms) cubic-bezier(0.2, 0, 1),
     color var(--transition-fast, 120ms);
 }
 
@@ -319,28 +377,24 @@
   font-size: 10px;
   font-weight: 600;
   line-height: 1;
-  border-radius: var(--radius-sm, 4px);
+  background: transparent;
   user-select: none;
 }
 
 .statusBadge.mod {
   color: var(--filetree-badge-mod-fg, hsl(32 95% 30%));
-  background-color: var(--filetree-badge-mod-bg, hsl(38 92% 50% / 0.12));
 }
 
 .statusBadge.add {
   color: var(--filetree-badge-add-fg, hsl(142 71% 28%));
-  background-color: var(--filetree-badge-add-bg, hsl(142 71% 45% / 0.12));
 }
 
 .statusBadge.del {
   color: var(--filetree-badge-del-fg, hsl(0 75% 38%));
-  background-color: var(--filetree-badge-del-bg, hsl(0 84% 60% / 0.12));
 }
 
 .statusBadge.ren {
   color: var(--filetree-badge-renamed-fg, hsl(270 60% 36%));
-  background-color: var(--filetree-badge-renamed-bg, hsl(270 60% 50% / 0.12));
 }
 
 /* --------------------------------------------------------------------------
@@ -447,13 +501,13 @@
 }
 
 .statAdd {
-  color: var(--diff-add-fg);
-  font-weight: 500;
+  color: var(--text-secondary);
+  font-weight: 400;
 }
 
 .statDel {
-  color: var(--diff-del-fg);
-  font-weight: 500;
+  color: var(--text-secondary);
+  font-weight: 400;
 }
 
 .statNeutral {
@@ -625,7 +679,7 @@
   flex-direction: column;
   box-sizing: border-box;
   transition: max-height var(--transition-normal, 180ms) cubic-bezier(0.2, 0, 0, 1);
-  overflow-anchor: auto;
+  overflow-anchor: none;
 }
 
 /* 纯源码模式专用视口容器 (BUG-B05: 解除 520px 截断) */
@@ -1098,6 +1152,7 @@
     padding: 0 8px;
   }
 
+  .fileNodeToggle,
   .statusBadge {
     margin-right: 4px;
   }

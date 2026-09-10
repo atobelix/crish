@@ -515,6 +515,7 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  overflow-anchor: none;
   padding: 2px 0 6px;
 }
 
@@ -553,6 +554,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  overflow-anchor: none;
   position: relative;
   background: var(--bg-card, hsl(0 0% 100%));
 }

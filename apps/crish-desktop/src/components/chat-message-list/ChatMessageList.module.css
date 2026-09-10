@@ -23,10 +23,11 @@
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
+  overflow-anchor: none;
   position: relative;
 }
 
-/*       footer .chatCol   max-width /    padding */
+/* 消息列居中容器 */
 .listInner {
   width: 100%;
   max-width: min(var(--chat-col-max, 760px), 100%);
@@ -35,15 +36,17 @@
   padding: 48px 20px 16px;
   box-sizing: border-box;
   min-width: 0;
+  overflow-anchor: none;
 }
 
 /* 纯净垂直节奏体系（DEF-13）：彻底消除相邻兄弟选择器与外部 margin 黑洞。
    行垂直间距全面收敛为消息行内部盒模型（.row padding-bottom: 16px / .rowCarrier padding-bottom: 4px），
    保证 DOM Physical Height (offsetHeight) 与 VSM 实测高度 100% 恒等，杜绝切片卸载时 1600px 累积高度蒸发与视口跳跃。 */
 
-/* 虚拟化 Spacer 保持几何占位但通过 hidden 属性隐藏 */
+/* 虚拟化 Spacer 保持几何占位但彻底关闭滚动锚定 */
 [data-vsm-spacer] {
   display: block;
+  overflow-anchor: none;
 }
 
 .pinnedBar {

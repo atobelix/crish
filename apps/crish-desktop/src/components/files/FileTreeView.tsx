@@ -224,7 +224,7 @@ export const FileTreeView: React.FC<FileTreeViewProps> = React.memo(
         onScroll={onScroll}
         role="tree"
         aria-label="工作区文件树"
-        style={{ overflowY: 'auto', position: 'relative' }}
+        style={{ overflowY: 'auto', position: 'relative', overflowAnchor: 'none' }}
       >
         {loading && flatTree.length === 0 ? (
           <div className={`${styles.filesEmpty} ${styles.filesEmptyCompact}`}>

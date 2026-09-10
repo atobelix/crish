@@ -130,3 +130,23 @@
 [class*='dialogBody'] {
   scrollbar-gutter: auto;
 }
+
+/* ==========================================================================
+ * 全局虚拟滚动与动态内容视口：封死 Blink 原生 Scroll Anchoring
+ * 虚拟滚动由前端算法统一管理物理偏移与可见切片，严禁浏览器 Scroll Anchoring 介入
+ * 介入会导致向上滚动时被 Blink 误判为上方内容插入并自动下拽回弹死锁。
+ * ========================================================================== */
+[data-virtual-scroll="true"],
+[data-chat-scroll-container],
+[data-chat-list-inner],
+[data-vsm-spacer],
+[role="tree"],
+[class*='scrollParent'],
+[class*='plainScrollParent'],
+[class*='flatFileList'],
+[class*='filesList'],
+[class*='filesDetailBody'],
+[class*='toolSectionContent'] {
+  overflow-anchor: none !important;
+}
+

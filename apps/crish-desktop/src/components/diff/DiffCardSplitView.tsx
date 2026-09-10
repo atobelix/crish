@@ -138,7 +138,7 @@ export const DiffCardSplitView: React.FC<DiffCardSplitViewProps> = ({
         className={styles.scrollParent}
         onScroll={onScroll}
         tabIndex={0}
-        style={{ position: 'relative', overflowY: 'auto', overflowX: 'hidden', outline: 'none' }}
+        style={{ position: 'relative', overflowY: 'auto', overflowX: 'hidden', outline: 'none', overflowAnchor: 'none' }}
       >
         <div
           style={{
