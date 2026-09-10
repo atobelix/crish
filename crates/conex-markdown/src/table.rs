@@ -66,7 +66,11 @@ pub fn is_table_sep_line(line: &str) -> bool {
     }
     let core = t.strip_prefix('|').unwrap_or(t);
     let core = core.strip_suffix('|').unwrap_or(core);
-    let cells: Vec<&str> = core.split('|').map(|c| c.trim()).filter(|c| !c.is_empty()).collect();
+    let cells: Vec<&str> = core
+        .split('|')
+        .map(|c| c.trim())
+        .filter(|c| !c.is_empty())
+        .collect();
     if cells.len() < 2 {
         return false;
     }

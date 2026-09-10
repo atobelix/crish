@@ -9,9 +9,8 @@ use regex::Regex;
 /// 控制符 / BOM / 零宽 / bidi 覆盖字符, smuggle `javascript:` 等危险 scheme。
 const SMUGGLE_CHARS: &str = "\u{0000}-\u{001f}\u{007f}\u{00ad}\u{200b}-\u{200f}\u{2028}\u{2029}\u{202a}-\u{202e}\u{2060}-\u{2064}\u{feff}";
 
-static SMUGGLE_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(&format!("[{}]", SMUGGLE_CHARS)).expect("valid smuggle regex")
-});
+static SMUGGLE_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(&format!("[{}]", SMUGGLE_CHARS)).expect("valid smuggle regex"));
 
 static HAS_WHITESPACE_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"[\s\u{00a0}\u{3000}]").expect("valid whitespace regex"));
@@ -26,11 +25,13 @@ static ANY_SCHEME_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"(?i)^[a-z][a-z0-9+.-]*:").expect("valid scheme regex"));
 
 static DATA_IMAGE_RASTER_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?i)^data:image/(png|jpe?g|gif|webp|avif|bmp)[;,]").expect("valid data image regex")
+    Regex::new(r"(?i)^data:image/(png|jpe?g|gif|webp|avif|bmp)[;,]")
+        .expect("valid data image regex")
 });
 
-static JS_VBSCRIPT_DATA_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(?i)^(javascript|vbscript|data):").expect("valid unsafe scheme regex"));
+static JS_VBSCRIPT_DATA_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"(?i)^(javascript|vbscript|data):").expect("valid unsafe scheme regex")
+});
 
 static WIN_DRIVE_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"^[A-Za-z]:[\\/]").expect("valid windows drive regex"));
@@ -39,7 +40,8 @@ static PROJECT_PREFIX_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"^(apps|packages|src|docs)/").expect("valid project prefix regex"));
 
 static CODE_EXT_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?i)\.(ts|tsx|js|jsx|css|md|json|rs|py|toml|yml|yaml)$").expect("valid code ext regex")
+    Regex::new(r"(?i)\.(ts|tsx|js|jsx|css|md|json|rs|py|toml|yml|yaml)$")
+        .expect("valid code ext regex")
 });
 
 /// CJK 范围 (含扩展 A/兼容) — 仅用于 wrap_cjk_text_segment 内部 regex 字符类。
@@ -184,8 +186,15 @@ pub fn is_safe_img_src(url: &str) -> bool {
 pub fn is_local_path_ref(s: &str) -> bool {
     let variants = url_safety_variants(s);
     let fallback = sanitize_url_candidate(s);
-    let t_owned = variants.first().cloned().unwrap_or_else(|| fallback.clone());
-    let t = if t_owned.is_empty() { fallback.as_str() } else { t_owned.as_str() };
+    let t_owned = variants
+        .first()
+        .cloned()
+        .unwrap_or_else(|| fallback.clone());
+    let t = if t_owned.is_empty() {
+        fallback.as_str()
+    } else {
+        t_owned.as_str()
+    };
     if t.is_empty() {
         return false;
     }
@@ -201,11 +210,7 @@ pub fn is_local_path_ref(s: &str) -> bool {
     if WIN_DRIVE_RE.is_match(t) {
         return true;
     }
-    if t.starts_with('/')
-        || t.starts_with("~/")
-        || t.starts_with("./")
-        || t.starts_with("../")
-    {
+    if t.starts_with('/') || t.starts_with("~/") || t.starts_with("./") || t.starts_with("../") {
         return true;
     }
     if PROJECT_PREFIX_RE.is_match(t) {
@@ -261,7 +266,8 @@ pub fn link_destination_url(raw: &str) -> String {
         dest = dest[1..].trim().to_string();
     }
     // url "title" / url 'title'
-    let titled_re = Lazy::new(|| Regex::new(r#"^(\S+)\s+["'][\s\S]*["']\s*$"#).expect("valid titled regex"));
+    let titled_re =
+        Lazy::new(|| Regex::new(r#"^(\S+)\s+["'][\s\S]*["']\s*$"#).expect("valid titled regex"));
     if let Some(caps) = titled_re.captures(&dest) {
         return caps.get(1).map(|m| m.as_str().to_string()).unwrap_or(dest);
     }
@@ -269,10 +275,7 @@ pub fn link_destination_url(raw: &str) -> String {
     if !dest.chars().any(|c| c.is_whitespace()) {
         return dest;
     }
-    dest.split_whitespace()
-        .next()
-        .unwrap_or(&dest)
-        .to_string()
+    dest.split_whitespace().next().unwrap_or(&dest).to_string()
 }
 
 #[cfg(test)]
@@ -281,7 +284,10 @@ mod tests {
 
     #[test]
     fn sanitize_strips_zero_width() {
-        assert_eq!(sanitize_url_candidate("java\u{200b}script:x"), "javascript:x");
+        assert_eq!(
+            sanitize_url_candidate("java\u{200b}script:x"),
+            "javascript:x"
+        );
     }
 
     #[test]

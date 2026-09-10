@@ -81,9 +81,7 @@ pub fn escape_html_plain(s: &str) -> String {
 /// 缓存键: `lang:code`,缓存命中直接返回。
 pub fn highlight_code(code: &str, lang: Option<&str>) -> String {
     let raw = code.replace("\r\n", "\n");
-    let lang_norm = lang
-        .map(normalize_lang)
-        .unwrap_or_default();
+    let lang_norm = lang.map(normalize_lang).unwrap_or_default();
 
     let cache_key = format!("{}:{}", lang_norm, raw);
     if let Some(cached) = highlight_cache().get(&cache_key) {
@@ -112,8 +110,7 @@ fn render_with_syntect(
     syntax: &'static syntect::parsing::SyntaxReference,
 ) -> Result<String, String> {
     let ss = &*SYNTAX_SET;
-    let mut generator =
-        ClassedHTMLGenerator::new_with_class_style(syntax, ss, ClassStyle::Spaced);
+    let mut generator = ClassedHTMLGenerator::new_with_class_style(syntax, ss, ClassStyle::Spaced);
     for line in syntect::util::LinesWithEndings::from(code) {
         generator
             .parse_html_for_line_which_includes_newline(line)

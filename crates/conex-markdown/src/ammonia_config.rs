@@ -17,10 +17,48 @@ fn build_ammonia() -> Builder<'static> {
 
     // 允许的标签(覆盖 markdown 全部输出 + 高亮 span + 表格)
     b.add_tags([
-        "a", "abbr", "b", "blockquote", "br", "code", "del", "div", "em", "h1", "h2", "h3", "h4",
-        "h5", "h6", "hr", "i", "img", "kbd", "li", "mark", "ol", "p", "pre", "q", "s", "small",
-        "span", "strong", "sub", "sup", "table", "tbody", "td", "tfoot", "th", "thead", "tr",
-        "u", "ul", "wbr", "button",
+        "a",
+        "abbr",
+        "b",
+        "blockquote",
+        "br",
+        "code",
+        "del",
+        "div",
+        "em",
+        "h1",
+        "h2",
+        "h3",
+        "h4",
+        "h5",
+        "h6",
+        "hr",
+        "i",
+        "img",
+        "kbd",
+        "li",
+        "mark",
+        "ol",
+        "p",
+        "pre",
+        "q",
+        "s",
+        "small",
+        "span",
+        "strong",
+        "sub",
+        "sup",
+        "table",
+        "tbody",
+        "td",
+        "tfoot",
+        "th",
+        "thead",
+        "tr",
+        "u",
+        "ul",
+        "wbr",
+        "button",
     ]);
 
     // 全局允许 class — 我们生成的 class 都是已知安全的(md-*, hljs-*, language-*)
@@ -29,7 +67,10 @@ fn build_ammonia() -> Builder<'static> {
     // 各标签的额外属性
     b.add_tag_attributes("a", ["href", "target", "rel", "title"]);
     b.add_tag_attributes("img", ["src", "alt", "loading", "width", "height", "title"]);
-    b.add_tag_attributes("button", ["type", "data-path", "title", "aria-label", "disabled"]);
+    b.add_tag_attributes(
+        "button",
+        ["type", "data-path", "title", "aria-label", "disabled"],
+    );
     b.add_tag_attributes("span", ["data-lang", "aria-label", "title"]);
     b.add_tag_attributes("div", ["data-lang", "role", "aria-label", "title"]);
     b.add_tag_attributes("ol", ["start", "reversed"]);

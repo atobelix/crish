@@ -30,7 +30,8 @@ const RE_ROUND_SUMMARY_EN: &str = r"(?:Round|Session|Turn)\s+summary";
 static MULTI_BLANK_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"\n{3,}").expect("valid multi blank regex"));
 static THOUGHT_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"^(正在思考中[….\s]{0,50}|正在处理[….\s]{0,50}){1,50}").expect("valid thought regex")
+    Regex::new(r"^(正在思考中[….\s]{0,50}|正在处理[….\s]{0,50}){1,50}")
+        .expect("valid thought regex")
 });
 
 // 思考占位 / "本轮总结" 标题行由 strip_thought_placeholders 手写处理,不依赖此 regex。
@@ -131,9 +132,8 @@ impl Renderer {
         // 不启用 ENABLE_SMART_PUNCTUATION:
         // JS 实现是自研 regex parser,不做 smart quote / em-dash 转换;
         // 启用会破坏 byte-for-byte 兼容(如 `"` → `"`/`"` 导致 `&quot;` 期望落空)。
-        let options = Options::ENABLE_TABLES
-            | Options::ENABLE_TASKLISTS
-            | Options::ENABLE_STRIKETHROUGH;
+        let options =
+            Options::ENABLE_TABLES | Options::ENABLE_TASKLISTS | Options::ENABLE_STRIKETHROUGH;
         let parser = Parser::new_ext(text, options);
 
         for event in parser {
@@ -181,7 +181,9 @@ impl Renderer {
             Tag::Strong => self.output.push_str("<strong>"),
             Tag::Strikethrough => self.output.push_str("<del>"),
             Tag::Link { dest_url, .. } => self.start_link(&dest_url),
-            Tag::Image { dest_url, title, .. } => self.start_image(&dest_url, &title),
+            Tag::Image {
+                dest_url, title, ..
+            } => self.start_image(&dest_url, &title),
             Tag::Table(alignments) => self.start_table(alignments),
             Tag::TableHead => self.start_table_head(),
             Tag::TableRow => self.start_table_row(),
@@ -236,8 +238,10 @@ impl Renderer {
 
     fn handle_inline_code(&mut self, code: &str) {
         let escaped = escape_html(code);
-        self.output
-            .push_str(&format!("<code class=\"md-inline-code\">{}</code>", escaped));
+        self.output.push_str(&format!(
+            "<code class=\"md-inline-code\">{}</code>",
+            escaped
+        ));
     }
 
     fn handle_html(&mut self, html: &str) {
@@ -248,9 +252,7 @@ impl Renderer {
         // (JS 实现仅放行行首 `<img ` 的块级行,列表项内的 `<img>` 不是块级行)。
         let in_list_or_heading =
             !self.list_stack.is_empty() || self.current_heading_level.is_some();
-        if !in_list_or_heading
-            && (trimmed.starts_with("<img") || trimmed.starts_with("<IMG"))
-        {
+        if !in_list_or_heading && (trimmed.starts_with("<img") || trimmed.starts_with("<IMG")) {
             // ammonia 单独清理此 `<img>` 标签: strip onerror 等危险属性。
             // 不对全量输出做 ammonia(见 render()),以保留 escape 实体的 byte-for-byte 兼容。
             let sanitized = ammonia_config::sanitize(html);
@@ -308,7 +310,8 @@ impl Renderer {
             new_out.push_str(&self.output[end..]);
             // 插入 task box
             if checked {
-                new_out.push_str("<span class=\"md-task-box checked\" aria-checked=\"true\"></span>");
+                new_out
+                    .push_str("<span class=\"md-task-box checked\" aria-checked=\"true\"></span>");
             } else {
                 new_out.push_str("<span class=\"md-task-box\" aria-checked=\"false\"></span>");
             }
@@ -397,7 +400,11 @@ impl Renderer {
     fn flush_fence(&mut self) {
         if let Some(fence) = self.fence.take() {
             let html = if self.stream_mode {
-                build_code_fence_html_streaming(&fence.buffer, &fence.lang, fence.file_path.as_deref())
+                build_code_fence_html_streaming(
+                    &fence.buffer,
+                    &fence.lang,
+                    fence.file_path.as_deref(),
+                )
             } else {
                 build_code_fence_html(&fence.buffer, &fence.lang, fence.file_path.as_deref())
             };
@@ -436,8 +443,7 @@ impl Renderer {
                 ListKind::Ordered => "ol",
                 ListKind::Unordered => "ul",
             };
-            self.output
-                .push_str(&format!("</{}>", tag));
+            self.output.push_str(&format!("</{}>", tag));
         }
     }
 
@@ -461,7 +467,8 @@ impl Renderer {
             Some(ListKind::Ordered) => "md-li md-ol-item",
             _ => "md-li",
         };
-        self.output.push_str(&format!("<li class=\"{}\">", li_class));
+        self.output
+            .push_str(&format!("<li class=\"{}\">", li_class));
     }
 
     fn end_item(&mut self) {
@@ -545,7 +552,10 @@ impl Renderer {
     // ── 表格 ────────────────────────────────────────────────────
 
     fn start_table(&mut self, alignments: Vec<pulldown_cmark::Alignment>) {
-        let aligns: Vec<Align> = alignments.iter().map(|a| Align::from_pulldown(*a)).collect();
+        let aligns: Vec<Align> = alignments
+            .iter()
+            .map(|a| Align::from_pulldown(*a))
+            .collect();
         let col_count = aligns.len();
         self.table = Some(TableState {
             alignments: aligns,
@@ -564,11 +574,7 @@ impl Renderer {
         // header-only 表格: pulldown-cmark 不输出 tbody 行事件,
         // 但测试契约要求 <tbody></tbody> 占位。
         // 有 body 行时: start_table_row 已开 <tbody>,这里闭 </tbody>。
-        let needs_empty_tbody = self
-            .table
-            .as_ref()
-            .map(|t| !t.has_body)
-            .unwrap_or(false);
+        let needs_empty_tbody = self.table.as_ref().map(|t| !t.has_body).unwrap_or(false);
         if needs_empty_tbody {
             self.output.push_str("<tbody></tbody>");
         } else {
@@ -617,7 +623,11 @@ impl Renderer {
         if let Some(t) = &mut self.table {
             if !t.in_thead {
                 while t.cell_index < t.col_count {
-                    let align = t.alignments.get(t.cell_index).copied().unwrap_or(Align::Left);
+                    let align = t
+                        .alignments
+                        .get(t.cell_index)
+                        .copied()
+                        .unwrap_or(Align::Left);
                     let align_attr = table_cell_align_attr(align);
                     self.output
                         .push_str(&format!("<td class=\"md-td\"{}></td>", align_attr));
@@ -631,7 +641,13 @@ impl Renderer {
 
     fn start_table_cell(&mut self) {
         let (is_head, align) = match &self.table {
-            Some(t) => (t.in_thead, t.alignments.get(t.cell_index).copied().unwrap_or(Align::Left)),
+            Some(t) => (
+                t.in_thead,
+                t.alignments
+                    .get(t.cell_index)
+                    .copied()
+                    .unwrap_or(Align::Left),
+            ),
             None => (false, Align::Left),
         };
         let align_attr = table_cell_align_attr(align);
@@ -755,7 +771,10 @@ pub fn strip_thought_placeholders(text: &str) -> String {
     let after_thought = THOUGHT_RE.replace_all(&soft_trimmed, "").to_string();
 
     // 2. 剥"本轮总结" 类标题行(中英)
-    let zh_pat = format!(r"(?m)^#{{1,6}}\s*{}\s*[:：·.\-—–]*\s*$", RE_ROUND_SUMMARY_ZH);
+    let zh_pat = format!(
+        r"(?m)^#{{1,6}}\s*{}\s*[:：·.\-—–]*\s*$",
+        RE_ROUND_SUMMARY_ZH
+    );
     let re_zh_h = Regex::new(&zh_pat).expect("valid zh heading regex");
     let after_zh_h = re_zh_h.replace_all(&after_thought, "").to_string();
 
@@ -778,7 +797,10 @@ pub fn strip_thought_placeholders(text: &str) -> String {
     let after_zh_bar = re_zh_bar.replace_all(&after_zh_br, "").to_string();
 
     // 英文 Round/Session/Turn summary
-    let en_h_pat = format!(r"(?im)^#{{1,6}}\s*{}\s*[:：·.\-—–]*\s*$", RE_ROUND_SUMMARY_EN);
+    let en_h_pat = format!(
+        r"(?im)^#{{1,6}}\s*{}\s*[:：·.\-—–]*\s*$",
+        RE_ROUND_SUMMARY_EN
+    );
     let re_en_h = Regex::new(&en_h_pat).expect("valid en heading regex");
     let after_en_h = re_en_h.replace_all(&after_zh_bar, "").to_string();
 
@@ -794,7 +816,9 @@ pub fn strip_thought_placeholders(text: &str) -> String {
     let after_en_bar = re_en_bar.replace_all(&after_en_b, "").to_string();
 
     // 压缩 3+ 空行为 2 空
-    let compact = MULTI_BLANK_RE.replace_all(&after_en_bar, "\n\n").to_string();
+    let compact = MULTI_BLANK_RE
+        .replace_all(&after_en_bar, "\n\n")
+        .to_string();
 
     soft_trim_markdown(&compact)
 }
@@ -876,8 +900,8 @@ fn post_process_void_elements(html: &str) -> String {
     // Rust `regex` crate 不支持 look-around,故用字符类替代 `(?![a-zA-Z])`:
     // `<img>` (空)、`<img/>`、`<img src=...>` 均匹配;`<image>` 等不匹配。
     // `(?:[^a-zA-Z>][^>]*)?` 允许 `<img>` 紧接 `>` 的情形(可选组为空)。
-    let img_re = IMG_RE
-        .get_or_init(|| Regex::new(r"<img(?:[^a-zA-Z>][^>]*)?>").expect("valid img regex"));
+    let img_re =
+        IMG_RE.get_or_init(|| Regex::new(r"<img(?:[^a-zA-Z>][^>]*)?>").expect("valid img regex"));
 
     // <br> → <br />
     let s = br_re.replace_all(html, "<br />").to_string();
@@ -1126,6 +1150,10 @@ fn build_code_fence_html_shell(lang: &str, file_path: Option<&str>, inner: Strin
 
 // ── GFM Emoji 短代码转义 ────────────────────────────────────────
 
+/// AGENTS §21 / SCOUT §7.3：GFM emoji 短码翻译默认关闭（与 JS `GFM_EMOJI_SHORTCODES_DEFAULT` 对齐）。
+/// 若产品日后坚持短码，两端须共读同一默认；禁止仅一端开启。
+pub const GFM_EMOJI_SHORTCODES_DEFAULT: bool = false;
+
 /// GFM Emoji 短代码核心字典映射（编译期常量跳转表）
 #[inline(always)]
 pub fn lookup_gfm_emoji(name: &str) -> Option<&'static str> {
@@ -1197,9 +1225,18 @@ pub fn lookup_gfm_emoji(name: &str) -> Option<&'static str> {
     }
 }
 
-/// 将文本中的 GFM Emoji 短代码转义为 Unicode 字符。
-/// 保证 O(N) 复杂度，无短代码时零内存拷贝。
+/// 将文本中的 GFM Emoji 短代码转义为 Unicode 字符（受默认开关约束）。
+/// 默认关闭，对齐 AGENTS §21；显式开启请用 [`translate_gfm_emoji_with`]。
 pub fn translate_gfm_emoji(text: &str) -> String {
+    translate_gfm_emoji_with(text, GFM_EMOJI_SHORTCODES_DEFAULT)
+}
+
+/// 将文本中的 GFM Emoji 短代码转义为 Unicode 字符。
+/// `enabled=false` 时原样返回；保证 O(N) 复杂度，无短代码时零额外分配路径。
+pub fn translate_gfm_emoji_with(text: &str, enabled: bool) -> String {
+    if !enabled {
+        return text.to_string();
+    }
     // 快速启发式路径：如果不含冒号，直接借用
     if !text.contains(':') {
         return text.to_string();
@@ -1225,7 +1262,12 @@ pub fn translate_gfm_emoji(text: &str) -> String {
                     }
                     break;
                 }
-                if !(b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_' || b == b'+' || b == b'-') {
+                if !(b.is_ascii_lowercase()
+                    || b.is_ascii_digit()
+                    || b == b'_'
+                    || b == b'+'
+                    || b == b'-')
+                {
                     break;
                 }
                 j += 1;
@@ -1260,15 +1302,47 @@ mod tests {
     use super::*;
 
     #[test]
-    fn gfm_emoji_translation_and_lookup() {
-        assert_eq!(translate_gfm_emoji("hello :white_check_mark: world"), "hello ✅ world");
-        assert_eq!(translate_gfm_emoji(":x:"), "❌");
-        assert_eq!(translate_gfm_emoji("no emoji here"), "no emoji here");
-        assert_eq!(translate_gfm_emoji("http://foo.bar"), "http://foo.bar");
-        assert_eq!(translate_gfm_emoji(":::"), ":::");
-        assert_eq!(translate_gfm_emoji(":unknown_code:"), ":unknown_code:");
-        assert_eq!(translate_gfm_emoji(":rocket::tada:"), "🚀🎉");
-        assert_eq!(translate_gfm_emoji("中文:rocket:测试"), "中文🚀测试");
+    fn gfm_emoji_shortcodes_default_is_off() {
+        assert!(!GFM_EMOJI_SHORTCODES_DEFAULT);
+        // 默认 API / 渲染路径保留短码文本，不插入 Unicode Emoji
+        assert_eq!(
+            translate_gfm_emoji("hello :white_check_mark: world"),
+            "hello :white_check_mark: world"
+        );
+        assert_eq!(translate_gfm_emoji(":rocket::tada:"), ":rocket::tada:");
+        let html = render_markdown("Status: :white_check_mark: and :rocket:");
+        assert!(html.contains(":white_check_mark:"));
+        assert!(html.contains(":rocket:"));
+        assert!(!html.contains("✅"));
+        assert!(!html.contains("🚀"));
+    }
+
+    #[test]
+    fn gfm_emoji_translation_and_lookup_when_enabled() {
+        assert_eq!(
+            translate_gfm_emoji_with("hello :white_check_mark: world", true),
+            "hello ✅ world"
+        );
+        assert_eq!(translate_gfm_emoji_with(":x:", true), "❌");
+        assert_eq!(
+            translate_gfm_emoji_with("no emoji here", true),
+            "no emoji here"
+        );
+        assert_eq!(
+            translate_gfm_emoji_with("http://foo.bar", true),
+            "http://foo.bar"
+        );
+        assert_eq!(translate_gfm_emoji_with(":::", true), ":::");
+        assert_eq!(
+            translate_gfm_emoji_with(":unknown_code:", true),
+            ":unknown_code:"
+        );
+        assert_eq!(translate_gfm_emoji_with(":rocket::tada:", true), "🚀🎉");
+        assert_eq!(
+            translate_gfm_emoji_with("中文:rocket:测试", true),
+            "中文🚀测试"
+        );
+        assert_eq!(translate_gfm_emoji_with(":rocket:", false), ":rocket:");
         assert_eq!(lookup_gfm_emoji("fire"), Some("🔥"));
         assert_eq!(lookup_gfm_emoji("nonexistent"), None);
     }

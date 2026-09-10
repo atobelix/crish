@@ -3,9 +3,7 @@
 //! 这是 Rust markdown 渲染层的契约。任何输出变更必须先更新这里。
 //! HTML 输出必须 byte-for-byte 兼容现有 CSS 选择器。
 
-use conex_markdown::{
-    clear_cache, highlight_code, render_markdown, strip_thought_placeholders,
-};
+use conex_markdown::{clear_cache, highlight_code, render_markdown, strip_thought_placeholders};
 
 /// 计算字符串中某个子串出现的次数(非正则)。
 fn count_substr(s: &str, needle: &str) -> usize {
@@ -258,7 +256,9 @@ fn strips_reinforced_benlun_zongjie_variants() {
         "**Round summary**",
         "Round summary:",
     ];
-    let noise_re = regex::Regex::new(r"(?i)本轮|本回合|Round\s+summary|Session\s+summary|Turn\s+summary").unwrap();
+    let noise_re =
+        regex::Regex::new(r"(?i)本轮|本回合|Round\s+summary|Session\s+summary|Turn\s+summary")
+            .unwrap();
     for line in &variants {
         let stripped = strip_thought_placeholders(&format!("{}\n\n保留正文", line));
         assert!(
@@ -416,7 +416,10 @@ fn nests_ordered_list_under_unordered_parent() {
     let html = render_markdown("- parent\n  1. one\n  2. two\n- sibling\n");
     assert!(html.contains("md-ol-nested"));
     assert_eq!(count_substr(&html, "<li"), 4);
-    assert_match(&html, r#"<li class="md-li">parent<ol class="md-ol md-ol-nested">"#);
+    assert_match(
+        &html,
+        r#"<li class="md-li">parent<ol class="md-ol md-ol-nested">"#,
+    );
 }
 
 #[test]
@@ -573,7 +576,10 @@ fn inserts_wbr_between_cjk_and_latin_for_narrow_wrap() {
 fn pure_cjk_runs_do_not_insert_wbr_in_table_cells_or_paragraphs() {
     setup();
     let long = "这是一段很长的中文用于测试窄屏表格单元格断行效果如何";
-    let cjk_count = long.chars().filter(|c| ('\u{4e00}'..='\u{9fff}').contains(c)).count();
+    let cjk_count = long
+        .chars()
+        .filter(|c| ('\u{4e00}'..='\u{9fff}').contains(c))
+        .count();
     assert!(cjk_count > 10);
     let para = render_markdown(long);
     assert!(!para.contains("<wbr>"));
@@ -938,9 +944,28 @@ fn highlights_all_supported_languages_without_panic() {
     setup();
     // 对每种支持的语言调用 highlight_code, 至少不 panic 且返回非空 HTML
     let langs = [
-        "javascript", "typescript", "json", "xml", "html", "css", "python", "rust",
-        "bash", "markdown", "sql", "yaml", "go", "java", "c", "cpp", "diff", "ruby",
-        "php", "swift", "kotlin", "dart",
+        "javascript",
+        "typescript",
+        "json",
+        "xml",
+        "html",
+        "css",
+        "python",
+        "rust",
+        "bash",
+        "markdown",
+        "sql",
+        "yaml",
+        "go",
+        "java",
+        "c",
+        "cpp",
+        "diff",
+        "ruby",
+        "php",
+        "swift",
+        "kotlin",
+        "dart",
     ];
     for lang in &langs {
         let html = highlight_code("code snippet", Some(lang));
@@ -1125,27 +1150,50 @@ fn italic_does_not_eat_list_markers() {
 // ── GFM Emoji shortcodes ─────────────────────────────────────
 
 #[test]
-fn translates_gfm_emoji_in_various_markdown_elements() {
+fn default_render_preserves_gfm_emoji_shortcodes() {
     setup();
+    assert!(!conex_markdown::GFM_EMOJI_SHORTCODES_DEFAULT);
+
     let html = render_markdown("Status: :white_check_mark: and :x: and :rocket:");
-    assert!(html.contains("Status: ✅ and ❌ and 🚀"));
+    assert!(html.contains("Status: :white_check_mark: and :x: and :rocket:"));
+    assert!(!html.contains("✅"));
+    assert!(!html.contains("❌"));
+    assert!(!html.contains("🚀"));
 
     let table = render_markdown("| 任务 | 结果 |\n| --- | --- |\n| 单元测试 | :white_check_mark: 通过 |\n| 门禁 | :warning: 告警 |\n");
-    assert!(table.contains("✅ 通过"));
-    assert!(table.contains("⚠️ 告警"));
+    assert!(table.contains(":white_check_mark: 通过"));
+    assert!(table.contains(":warning: 告警"));
+    assert!(!table.contains("✅"));
+    assert!(!table.contains("⚠️"));
 
     let list = render_markdown("- :tada: 完成发布\n- :bug: 待修问题\n");
-    assert!(list.contains("🎉 完成发布"));
-    assert!(list.contains("🐛 待修问题"));
+    assert!(list.contains(":tada: 完成发布"));
+    assert!(list.contains(":bug: 待修问题"));
+    assert!(!list.contains("🎉"));
+    assert!(!list.contains("🐛"));
 
     let heading = render_markdown("# :bulb: 架构设计\n");
-    assert!(heading.contains("💡 架构设计"));
+    assert!(heading.contains(":bulb: 架构设计"));
+    assert!(!heading.contains("💡"));
+}
+
+#[test]
+fn translate_gfm_emoji_with_enabled_still_works() {
+    assert_eq!(
+        conex_markdown::translate_gfm_emoji_with("Status: :rocket:", true),
+        "Status: 🚀"
+    );
+    assert_eq!(
+        conex_markdown::translate_gfm_emoji_with("Status: :rocket:", false),
+        "Status: :rocket:"
+    );
 }
 
 #[test]
 fn does_not_translate_emoji_in_code_blocks_or_inline_code() {
     setup();
-    let inline = render_markdown("Inline code `:white_check_mark:` and `:x:` should remain untouched");
+    let inline =
+        render_markdown("Inline code `:white_check_mark:` and `:x:` should remain untouched");
     assert!(inline.contains("<code class=\"md-inline-code\">:white_check_mark:</code>"));
     assert!(inline.contains("<code class=\"md-inline-code\">:x:</code>"));
     assert!(!inline.contains("✅"));
@@ -1160,12 +1208,20 @@ fn does_not_translate_emoji_in_code_blocks_or_inline_code() {
 
 #[test]
 fn exports_lookup_and_translate_gfm_emoji_directly() {
-    assert_eq!(conex_markdown::lookup_gfm_emoji("white_check_mark"), Some("✅"));
+    assert_eq!(
+        conex_markdown::lookup_gfm_emoji("white_check_mark"),
+        Some("✅")
+    );
     assert_eq!(conex_markdown::lookup_gfm_emoji("x"), Some("❌"));
     assert_eq!(conex_markdown::lookup_gfm_emoji("unknown_code"), None);
 
+    // 默认关闭：公开 translate_gfm_emoji 不插入 Emoji
     assert_eq!(
         conex_markdown::translate_gfm_emoji("测试 :white_check_mark: 与 :x:"),
+        "测试 :white_check_mark: 与 :x:"
+    );
+    assert_eq!(
+        conex_markdown::translate_gfm_emoji_with("测试 :white_check_mark: 与 :x:", true),
         "测试 ✅ 与 ❌"
     );
 }

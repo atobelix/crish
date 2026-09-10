@@ -19,11 +19,12 @@ pub mod renderer;
 pub mod sanitizer;
 pub mod table;
 
+pub use highlight::{clear_cache, highlight_code};
 pub use renderer::{
     lookup_gfm_emoji, render_markdown, render_markdown_batch, render_markdown_stream,
-    strip_thought_placeholders, translate_gfm_emoji,
+    strip_thought_placeholders, translate_gfm_emoji, translate_gfm_emoji_with,
+    GFM_EMOJI_SHORTCODES_DEFAULT,
 };
-pub use highlight::{clear_cache, highlight_code};
 
 /// 输入长度上限:超过截断(5MB),避免恶意长输入拖垮渲染线程,杜绝100KB~256KB文件静默截断。
 pub const MAX_MARKDOWN_INPUT: usize = 5 * 1024 * 1024;
