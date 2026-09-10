@@ -43,11 +43,15 @@
     "startup:warm": "npx tsx tests/startup/measure-warm-start.ts",
     "check:workbench": "npm --workspace @crish/agent-workbench run cli:check",
     "typecheck": "tsc --noEmit -p apps/crish-desktop/tsconfig.app.json && tsc --noEmit -p apps/crish-desktop/tsconfig.node.json && tsc --noEmit -p apps/agent-workbench/tsconfig.json && tsc --noEmit -p packages/shared-types && tsc --noEmit -p packages/shared-utils",
-    "check:desktop": "npm run check:convergence && npm --workspace @crish/crish-desktop run typecheck && npm run check:ui-layer && npm run check:line-counts && npm run check:input-guard && npm run check:swallowed-errors-frontend",
+    "check:desktop": "npm run check:convergence && npm --workspace @crish/crish-desktop run typecheck && npm run check:ui-layer && npm run check:line-counts && npm run check:input-guard && npm run check:markdown-style && npm run check:no-pseudo-dispatch && npm run check:blocked-executable-ssot && npm run check:no-nonvision-dataurl && npm run check:swallowed-errors-frontend && npm run check:sec6-note-drain-entropy",
     "check:convergence": "node scripts/check-frontend-convergence.mjs",
     "check:ui-layer": "node scripts/check-ui-layer.mjs",
     "check:line-counts": "node scripts/check-line-counts.mjs --all",
     "check:input-guard": "node scripts/check-input-guardrails.mjs",
+    "check:markdown-style": "node scripts/check-markdown-style-compliance.mjs",
+    "check:no-pseudo-dispatch": "node scripts/check-no-pseudo-dispatch.mjs",
+    "check:blocked-executable-ssot": "node scripts/check-blocked-executable-ssot.mjs",
+    "check:no-nonvision-dataurl": "node scripts/check-no-nonvision-dataurl.mjs",
     "check:conflict-markers": "node scripts/check-conflict-markers.mjs",
     "check:swallowed-errors-frontend": "node scripts/check-swallowed-errors-frontend.mjs --report",
     "check:css-encoding": "node scripts/check-css-encoding.mjs --whitelist-dirty-check",
@@ -72,7 +76,8 @@
     "lint:depcruise": "depcruise --config .dependency-cruiser.cjs packages apps",
     "check:all": "npm run typecheck && npm run lint:all && npm run test:coverage",
     "format": "prettier --check .",
-    "format:write": "prettier --write ."
+    "format:write": "prettier --write .",
+    "check:sec6-note-drain-entropy": "node scripts/check-sec6-note-drain-entropy.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.21.0",

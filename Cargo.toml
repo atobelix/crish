@@ -98,3 +98,4 @@ uuid = "1"
 # Criterion 基准（PE-09 T09.7：仅 dev-dependency，不进常规测试路径；
 # 依赖增量按 PE-10 修订指令 2 由本任务落声明）
 criterion = "0.5"
+indexmap = { version = "2", features = ["serde"] }
