@@ -1,136 +1,89 @@
-.retryContainer {
-  margin: var(--space-2, 8px) 0;
-  padding: var(--space-2, 8px) var(--space-3, 12px);
-  background: hsl(38 92% 50% / 0.06);
-  border: 1px solid hsl(38 92% 50% / 0.2);
-  border-radius: var(--radius-md, 8px);
+.retryRow {
+  color: var(--text-tertiary);
   font-size: var(--font-size-sm, 12px);
-  color: var(--text-primary);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2, 8px);
-  position: relative;
-  overflow: hidden;
+  line-height: 20px;
+  margin: var(--space-1, 4px) 0;
+  user-select: none;
 }
 
-/* 扫光动效 */
-.retryContainer::after {
+.retrySummary {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 2px 0;
+  gap: 6px;
+  border-radius: var(--radius-sm, 3px);
+  color: inherit;
+  cursor: pointer;
+  list-style: none;
+}
+
+.retrySummary::-webkit-details-marker {
+  display: none;
+}
+
+.retrySummary::after {
+  width: 5px;
+  height: 5px;
+  border-right: 1.5px solid currentcolor;
+  border-bottom: 1.5px solid currentcolor;
   content: '';
-  position: absolute;
-  top: 0;
-  left: -100%;
-  width: 60%;
-  height: 100%;
+  opacity: 0.7;
+  transform: rotate(-45deg);
+  transition: transform 120ms ease;
+  margin-left: 2px;
+}
+
+.retrySummary:hover {
+  color: var(--text-secondary);
+}
+
+.retryRow[open] .retrySummary::after {
+  transform: rotate(45deg);
+}
+
+.retryText {
+  color: inherit;
+}
+
+.retryRow[data-active] .retryText {
   background: linear-gradient(
     90deg,
-    transparent 0%,
-    hsl(38 92% 50% / 0.08) 50%,
-    transparent 100%
+    var(--text-tertiary) 0%,
+    var(--text-tertiary) 40%,
+    var(--text-primary) 50%,
+    var(--text-tertiary) 60%,
+    var(--text-tertiary) 100%
   );
-  animation: retry-shimmer 2.4s ease-in-out infinite;
-  pointer-events: none;
+  background-position: 100% 50%;
+  background-size: 200% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  animation: retry-shimmer 1.8s ease-in-out infinite;
 }
 
 @keyframes retry-shimmer {
-  0% { transform: translateX(-100%); }
-  100% { transform: translateX(350%); }
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
 }
 
-.headerRow {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2, 8px);
-}
-
-.statusGroup {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2, 8px);
-  font-weight: var(--font-weight-medium, 500);
-}
-
-.spinner {
-  width: 14px;
-  height: 14px;
-  color: #f59e0b;
-  animation: spin 1.2s linear infinite;
-}
-
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-.countdownBadge {
-  font-family: var(--font-mono, monospace);
+.retryDetails {
+  display: grid;
+  gap: 2px;
+  margin-top: 3px;
+  padding-left: 12px;
+  overflow-wrap: anywhere;
   font-size: var(--font-size-micro, 11px);
-  color: #d97706;
-  background: hsl(38 92% 50% / 0.12);
-  padding: 1px 6px;
-  border-radius: var(--radius-sm, 4px);
-}
-
-.actionsGroup {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2, 8px);
-}
-
-.btnRetryNow {
-  background: hsl(38 92% 50% / 0.15);
-  border: 1px solid hsl(38 92% 50% / 0.3);
-  color: #d97706;
-  padding: 2px 8px;
-  border-radius: var(--radius-sm, 4px);
-  cursor: pointer;
-  font-size: var(--font-size-micro, 11px);
-  font-weight: 500;
-  transition: all 0.15s ease;
-}
-
-.btnRetryNow:hover {
-  background: hsl(38 92% 50% / 0.25);
-  border-color: hsl(38 92% 50% / 0.45);
-}
-
-.btnCancel {
-  background: transparent;
-  border: 1px solid var(--border-color);
   color: var(--text-tertiary);
-  padding: 2px 8px;
-  border-radius: var(--radius-sm, 4px);
-  cursor: pointer;
-  font-size: var(--font-size-micro, 11px);
-  transition: all 0.15s ease;
+  line-height: 18px;
 }
 
-.btnCancel:hover {
+.retryDetailLabel {
   color: var(--text-secondary);
-  border-color: var(--text-tertiary);
-}
-
-.detailsFold {
-  font-size: var(--font-size-micro, 11px);
-  color: var(--text-secondary);
-  cursor: pointer;
-}
-
-.detailsSummary {
-  outline: none;
-  user-select: none;
-  color: var(--text-tertiary);
-}
-
-.detailsSummary:hover {
-  color: var(--text-secondary);
-}
-
-.detailsContent {
-  margin-top: var(--space-1, 4px);
-  padding: var(--space-1, 4px) var(--space-2, 8px);
-  background: hsl(0 0% 0% / 0.03);
-  border-radius: var(--radius-sm, 4px);
-  font-family: var(--font-mono, monospace);
-  word-break: break-all;
+  margin-right: 4px;
 }

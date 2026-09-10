@@ -26,6 +26,7 @@ import {
 import { WorkingStatusIndicator } from '../chat-message-row/WorkingStatusIndicator';
 import { ModelRetryNode } from '../chat-message-row/ModelRetryNode';
 import { TurnErrorNode } from '../chat-message-row/TurnErrorNode';
+import { TurnProcessNodeView } from './TurnProcessNodeView';
 import { useEphemeralChatStore } from '../../store/ephemeralChatStore';
 import { useSessionStore } from '../../store/sessionStore';
 
@@ -60,6 +61,7 @@ interface ProcessItemRendererProps {
   renderTools?: ReturnType<typeof useNarrativeRenderSlots>['renderTools'];
   toolStackProps?: ChatToolStackSharedProps;
   streamPhase?: number;
+  hasFinalAnswer?: boolean;
   isStreamingText?: boolean;
   streamingTextContent?: string;
 }
@@ -75,6 +77,7 @@ const ProcessItemRenderer: React.FC<ProcessItemRendererProps> = React.memo(
     renderTools,
     toolStackProps,
     streamPhase,
+    hasFinalAnswer,
     isStreamingText,
     streamingTextContent,
   }) {
@@ -146,8 +149,8 @@ const ProcessItemRenderer: React.FC<ProcessItemRendererProps> = React.memo(
     }
     if (item.kind === 'tools') {
       const itemsToPass = streamPhase ? [...item.items] : item.items;
-      if (renderTools && toolStackProps) {
-        return (
+      const toolsContent =
+        renderTools && toolStackProps ? (
           <React.Fragment key={item.key}>
             {renderTools({
               items: itemsToPass,
@@ -155,16 +158,29 @@ const ProcessItemRenderer: React.FC<ProcessItemRendererProps> = React.memo(
               toolStackProps,
             })}
           </React.Fragment>
-        );
-      }
-      return toolStackProps ? (
-        <MessageToolCallsSection
+        ) : toolStackProps ? (
+          <MessageToolCallsSection
+            key={item.key}
+            items={itemsToPass}
+            msgId={msgId}
+            toolStackProps={toolStackProps}
+          />
+        ) : null;
+
+      if (!toolsContent) return null;
+
+      return (
+        <TurnProcessNodeView
           key={item.key}
-          items={itemsToPass}
           msgId={msgId}
-          toolStackProps={toolStackProps}
+          items={[item]}
+          isTurnLive={isThinkingMsg || status === 'processing'}
+          hasFinalAnswer={Boolean(hasFinalAnswer)}
+          turnStatus={status}
+          renderChildren={() => toolsContent}
+          streamPhase={streamPhase}
         />
-      ) : null;
+      );
     }
     if (item.kind === 'injection') {
       if (isContextStateInjection(item.injection)) {
@@ -210,7 +226,10 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
       (!displayMsg.toolCalls || displayMsg.toolCalls.length === 0)
     );
 
-    const inFlowRetry = ephemeralStatus?.retryState;
+    const inFlowRetry =
+      (isThinkingMsg || msg.status === 'processing')
+        ? ephemeralStatus?.retryState
+        : undefined;
     const isErrorMsg = msg.status === 'error';
     const errorDetail = msg.errorDetail;
 
@@ -414,6 +433,7 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
             renderTools={renderTools}
             toolStackProps={toolStackProps}
             streamPhase={streamPhaseRef.current}
+            hasFinalAnswer={Boolean(displayMsg.text?.trim() || streamText?.trim())}
             isStreamingText={streaming && idx === streamingTextIndex}
             streamingTextContent={
               msg.streamTextOffset &&

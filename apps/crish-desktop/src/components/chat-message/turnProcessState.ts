@@ -36,8 +36,20 @@ export interface TurnProcessFoldingState {
 
 export interface ProcessMetrics {
   toolCount: number;
+  subagentCount?: number;
+  messageCount?: number;
   thoughtCount: number;
   durationMs: number;
+}
+
+export function isSubagentToolName(name?: string): boolean {
+  if (!name) return false;
+  return (
+    name.includes('subagent') ||
+    name === 'invoke_subagent' ||
+    name === 'run_subagent' ||
+    name === 'wait_subagents'
+  );
 }
 
 /**
@@ -47,11 +59,12 @@ export function countProcessMetrics(
   items?: AssistantTimelineItem[] | null
 ): ProcessMetrics {
   let toolCount = 0;
+  let subagentCount = 0;
   let thoughtCount = 0;
   let durationMs = 0;
 
   if (!Array.isArray(items)) {
-    return { toolCount, thoughtCount, durationMs };
+    return { toolCount, subagentCount, thoughtCount, durationMs };
   }
 
   for (const item of items) {
@@ -60,9 +73,19 @@ export function countProcessMetrics(
       for (const t of item.items) {
         if (!t) continue;
         if (t.kind === 'single') {
-          toolCount += 1;
+          if (isSubagentToolName(t.tc?.name)) {
+            subagentCount += 1;
+          } else {
+            toolCount += 1;
+          }
         } else if (t.kind === 'group' && Array.isArray(t.tools)) {
-          toolCount += t.tools.length;
+          for (const g of t.tools) {
+            if (isSubagentToolName(g?.name)) {
+              subagentCount += 1;
+            } else {
+              toolCount += 1;
+            }
+          }
         }
       }
     } else if (item.kind === 'thought') {
@@ -73,7 +96,7 @@ export function countProcessMetrics(
     }
   }
 
-  return { toolCount, thoughtCount, durationMs };
+  return { toolCount, subagentCount, thoughtCount, durationMs };
 }
 
 /**

@@ -43,13 +43,23 @@
   font-size: var(--font-size-sm, 13px);
   line-height: 24px;
   color: var(--text-secondary);
+  opacity: 0.4;
   text-align: left;
-  transition: color var(--transition-fast, 150ms ease);
+  transition:
+    opacity var(--transition-fast, 150ms ease),
+    color var(--transition-fast, 150ms ease);
 }
 
-.reasoningRow:hover {
+.reasoningRow:hover,
+.reasoningRow:focus-visible {
+  opacity: 1;
   color: var(--text-primary);
   background: transparent;
+}
+
+.reasoningContainer.isLive .reasoningRow,
+.reasoningContainer[data-live='true'] .reasoningRow {
+  opacity: 0.85;
 }
 
 /* Conex §13 双层微弱焦点软环规范（对比度上限约 10%） */
@@ -229,6 +239,13 @@
   overflow: visible;
   height: auto;
   max-height: none;
+  opacity: 0.4;
+  transition: opacity var(--transition-fast, 150ms ease);
+}
+
+.reasoningBody:hover,
+.reasoningBody:focus-within {
+  opacity: 1;
 }
 
 .reasoningActions {

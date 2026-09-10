@@ -13,6 +13,7 @@ import styles from './TimelineThoughtSection.module.css';
 import { StreamingMarkdownView } from './StreamingMarkdownView';
 import { Priority } from '../../workers';
 import { ThinkingTimer } from './ThinkingTimer';
+import { extractFirstLine, extractLatestLine } from './ReasoningRow';
 
 export interface TimelineThoughtSectionProps {
   content: string;
@@ -46,6 +47,11 @@ export const TimelineThoughtSection: React.FC<TimelineThoughtSectionProps> = ({
       ? `已思考 · ${durationLabel}`
       : '已思考';
 
+  const displaySummary = useMemo(() => {
+    if (!content) return '';
+    return isLive ? extractLatestLine(content) : extractFirstLine(content);
+  }, [content, isLive]);
+
   return (
     <div
       className={`${styles.thoughtTimelineSection} ${isLive ? styles.isLive : ''} ${isOpen ? styles.isOpen : ''}`}
@@ -59,9 +65,24 @@ export const TimelineThoughtSection: React.FC<TimelineThoughtSectionProps> = ({
         tabIndex={0}
         aria-expanded={isOpen}
       >
+        <span className={styles.thoughtIcon} aria-hidden>
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M7.5 0.5l1.5 5 5 1.5-5 1.5-1.5 5-1.5-5-5-1.5 5-1.5 1.5-5z M13 10l0.8 2.2 2.2 0.8-2.2 0.8-0.8 2.2-0.8-2.2-2.2-0.8 2.2-0.8 0.8-2.2z" />
+          </svg>
+        </span>
+
         <span className={styles.thoughtTitle}>
           {titleText}
         </span>
+
+        {displaySummary ? (
+          <>
+            <span className={styles.thoughtDotSeparator} aria-hidden>·</span>
+            <span className={styles.thoughtSummary}>
+              {displaySummary}
+            </span>
+          </>
+        ) : null}
 
         {isLive ? (
           <ThinkingTimer isLive />

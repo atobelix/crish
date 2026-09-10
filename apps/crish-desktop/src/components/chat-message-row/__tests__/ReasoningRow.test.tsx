@@ -262,4 +262,22 @@ describe('DIM-03 §1.1: 24px ReasoningRow 极简思考行流式追踪与扫光�
       expect(TimelineThoughtSection).toBe(ReasoningRow);
     });
   });
+
+  describe('七、40% 灰度次度降噪规范断言', () => {
+    it('触发按钮与展开面板挂载标准 class 并契约支持次度呈现', () => {
+      const { container } = render(
+        <ReasoningRow
+          content="测试思考内容"
+          isOpen={true}
+        />
+      );
+
+      const btn = screen.getByRole('button', { name: '思考过程' });
+      expect(btn.className).toContain('reasoningRow');
+
+      const body = container.querySelector('[data-testid="reasoning-body"]');
+      expect(body).not.toBeNull();
+      expect(body?.className).toContain('reasoningBody');
+    });
+  });
 });

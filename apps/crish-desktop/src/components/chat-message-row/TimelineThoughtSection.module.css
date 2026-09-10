@@ -25,23 +25,27 @@
   font-size: var(--font-size-sm, 13px);
   line-height: 1.5;
   color: var(--text-secondary);
+  opacity: 0.4;
   text-align: left;
   box-sizing: border-box;
   user-select: none;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
-  transition: color var(--transition-fast, 150ms ease);
+  transition:
+    opacity var(--transition-fast, 150ms ease),
+    color var(--transition-fast, 150ms ease);
 }
 
-.thoughtHeaderBtn:hover {
+.thoughtHeaderBtn:hover,
+.thoughtHeaderBtn:focus-visible {
   color: var(--text-primary);
+  opacity: 1;
   background: transparent;
 }
 
-.thoughtHeaderBtn:focus-visible {
-  outline: none;
-  color: var(--text-primary);
+.thoughtTimelineSection.isLive .thoughtHeaderBtn {
+  opacity: 0.85;
 }
 
 .thoughtTimelineSection.isLive .thoughtTitle {
@@ -53,6 +57,36 @@
   font-weight: 400;
   color: inherit;
   flex: 0 0 auto;
+  pointer-events: none;
+}
+
+.thoughtIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  margin-right: 4px;
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.thoughtDotSeparator {
+  margin: 0 4px;
+  color: var(--text-tertiary);
+  opacity: 0.6;
+  flex-shrink: 0;
+}
+
+.thoughtSummary {
+  display: inline-block;
+  color: var(--text-tertiary);
+  font-size: var(--font-size-xs, 12px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 480px;
+  flex: 0 1 auto;
   pointer-events: none;
 }
 
@@ -128,6 +162,11 @@
 }
 
 .thoughtAccordion[data-expanded='true'] .thoughtAccordionInner {
+  opacity: 0.4;
+  transition: opacity var(--transition-fast, 150ms ease);
+}
+
+.thoughtAccordion[data-expanded='true'] .thoughtAccordionInner:hover {
   opacity: 1;
 }
 
