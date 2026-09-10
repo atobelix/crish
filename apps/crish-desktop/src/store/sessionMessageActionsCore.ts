@@ -217,9 +217,20 @@ export function createSessionMessageActionsCore<T extends SessionStoreSlice>(
           msg.blocks = msg.blocks.filter((b) => b.type !== 'text');
         }
         const segment = text.length >= offset ? text.slice(offset) : text;
-        const lastBlock = msg.blocks[msg.blocks.length - 1];
-        if (lastBlock && lastBlock.type === 'text') {
-          lastBlock.content = segment;
+        // 定位是否已有可承接当前段落的最新 text 块（位于最后工具调用之后，或全块无工具）
+        const lastToolIdx = msg.blocks.map((b) => b.type).lastIndexOf('tool_call');
+        let targetTextIdx = -1;
+        for (let i = msg.blocks.length - 1; i >= 0; i--) {
+          if (msg.blocks[i]?.type === 'text') {
+            if (lastToolIdx === -1 || i > lastToolIdx) {
+              targetTextIdx = i;
+            }
+            break;
+          }
+        }
+
+        if (targetTextIdx >= 0) {
+          msg.blocks[targetTextIdx]!.content = segment;
         } else if (segment.length > 0) {
           msg.blocks.push({ type: 'text' as const, content: segment });
         }

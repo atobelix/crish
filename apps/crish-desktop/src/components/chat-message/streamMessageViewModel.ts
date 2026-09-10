@@ -97,7 +97,8 @@ export interface StreamMessageViewModel {
 const EMPTY_STREAM_BODY: {
   text: string | undefined;
   tools: Record<string, StreamToolLive> | undefined;
-} = { text: undefined, tools: undefined };
+  thinking: string | undefined;
+} = { text: undefined, tools: undefined, thinking: undefined };
 
 /**
  * 流式 view model 装配纯受控挂载点。
@@ -108,25 +109,36 @@ export function useStreamMessageViewModel(
   msg: SessionMessage,
   sessionId: string | undefined
 ): StreamMessageViewModel {
-  const { text: streamText, tools: streamTools } = useStreamingStore(
+  const {
+    text: streamText,
+    tools: streamTools,
+    thinking: streamThinking,
+  } = useStreamingStore(
     useShallow((s) => {
       if (!sessionId) return EMPTY_STREAM_BODY;
       const e = s.byKey[streamStoreKey(sessionId, msg.id)];
       if (!e) return EMPTY_STREAM_BODY;
-      return { text: e.text, tools: e.tools };
+      return { text: e.text, tools: e.tools, thinking: e.thinking };
     })
   );
 
   const merged = useMemo(() => {
     let next: SessionMessage = msg;
-    if (streamText != null && streamText !== msg.text) {
-      next = applyStreamTextToMessage(next, streamText);
+    if (
+      streamThinking != null &&
+      streamThinking.trim() !== '' &&
+      streamThinking !== msg.thinking
+    ) {
+      next = { ...next, thinking: streamThinking };
     }
     if (streamTools) {
       next = applyStreamToolsToMessage(next, streamTools);
     }
+    if (streamText != null && streamText !== msg.text) {
+      next = applyStreamTextToMessage(next, streamText);
+    }
     return next;
-  }, [msg, streamText, streamTools]);
+  }, [msg, streamText, streamTools, streamThinking]);
 
   return { msg: merged, streamText };
 }

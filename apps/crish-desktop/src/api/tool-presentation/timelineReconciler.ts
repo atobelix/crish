@@ -144,26 +144,45 @@ export function normalizeAssistantTimeline(
     for (const tt of msg.thinkingTurns) {
       const cleanTurn = sanitizeTimelineTurnIndex(tt.turnIndex);
       if (tt.content?.trim() && !existingThoughtTurns.has(cleanTurn)) {
-        blocks.push({
+        const thoughtBlock: MessageTimelineBlock = {
           type: 'thought',
           content: tt.content,
           turnIndex: cleanTurn,
           durationMs: tt.durationMs,
           id: tt.id,
+        };
+        // 严格保持自然因果时序：思考必然发生在同轮次正文或工具之前
+        const insertIdx = blocks.findIndex((b) => {
+          const bTurn = sanitizeTimelineTurnIndex(b.turnIndex);
+          return (
+            bTurn > cleanTurn || (bTurn === cleanTurn && b.type !== 'thought')
+          );
         });
+        if (insertIdx >= 0) {
+          blocks.splice(insertIdx, 0, thoughtBlock);
+        } else {
+          blocks.push(thoughtBlock);
+        }
       }
     }
   } else if (
     (msg.thinking || '').trim() &&
     !blocks.some((b) => b.type === 'thought')
   ) {
-    blocks.push({
+    const thoughtBlock: MessageTimelineBlock = {
       type: 'thought',
       content: msg.thinking || '',
       turnIndex: 0,
       durationMs: msg.thinkingTime ? msg.thinkingTime * 1000 : undefined,
       id: 'thought-legacy',
-    });
+    };
+    // 关键：思考必然在首个正文块之前发生，绝不追加到正文之后
+    const firstTextIdx = blocks.findIndex((b) => b.type === 'text');
+    if (firstTextIdx >= 0) {
+      blocks.splice(firstTextIdx, 0, thoughtBlock);
+    } else {
+      blocks.unshift(thoughtBlock);
+    }
   }
 
   const alignedBlocks = alignToolCallBlocks(blocks, tools);

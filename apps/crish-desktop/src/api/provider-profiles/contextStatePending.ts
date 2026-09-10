@@ -15,18 +15,16 @@
  * 向活跃会话派发 workspace_env 可见卡片（所见即所知）。引擎侧
  * group_id=context-state 去重与 run-task contextState 参数保持不变。
  *
- * 去重双保险：模块级 lastRecordedSignature（文本未变化不覆盖暂存，防
+ * 去重双保险：会话级 lastRecordedSignaturesBySession（文本未变化不覆盖暂存，防
  * 「编辑 profile 列表也注入」噪音）+ 引擎侧 group_id 去重。
  */
 
-import { getPermissionMode, getAppSettings } from '../storeAccess';
+import { getPermissionMode } from '../storeAccess';
 import { useSessionStore } from '../../store/sessionStore';
+import { getSessionThinkingTitle } from '../SessionRuntimeRegistry';
 
 /** 暂存键（取走即清空；载荷为 { sessionId, text } 会话寻址 JSON） */
 export const PENDING_CONTEXT_STATE_KEY = 'crish_pending_context_state_v1';
-
-/** 上一次记录的快照签名（模块级去重：状态未变化不重新写入） */
-let lastRecordedSignature: string | undefined;
 
 /** 读活动模型 id（直读 localStorage，与 profileStore 同键；不反向
  * import profileStore——避免产生器 ↔ profileStore 循环依赖） */
@@ -47,10 +45,12 @@ function readActiveProfileId(): string {
   }
 }
 
-/** 读思考档位（settings 同步面；经 storeAccess 封装，禁直连 store） */
+/** 读本会话思考档位 Title（yaml 字典 key）。无则空串，调用方省略该段。 */
 function readThinkingLevel(): string {
   try {
-    return String(getAppSettings()?.defaultThinkingLevel || '').trim();
+    const sid = useSessionStore.getState().activeSessionId || '';
+    const title = getSessionThinkingTitle(sid);
+    return typeof title === 'string' ? title.trim() : '';
   } catch {
     return '';
   }
@@ -95,9 +95,7 @@ export function buildContextStateSnapshot(): Omit<ContextStatePayload, 'sessionI
     );
   }
   if (permission) parts.push(`权限模式：${permission}`);
-  if (thinking && thinking !== 'default' && thinking !== 'off') {
-    parts.push(`思考档位：${thinking}`);
-  }
+  if (thinking) parts.push(`思考档位：${thinking}`);
   const text = parts.join('。') + '。';
   return {
     model,
@@ -244,6 +242,13 @@ export function takePendingContextState(
   if (stash.sessionId === '__pending_draft__') {
     clearStash('__pending_draft__');
   }
+  // 消费完成后清空会话已记录签名，允许后续切回相同模型时能重新触发提示
+  lastRecordedSignaturesBySession.delete(sid);
+  if (stash.sessionId) {
+    lastRecordedSignaturesBySession.delete(stash.sessionId);
+  }
+  lastRecordedSignaturesBySession.delete('');
+  lastRecordedSignaturesBySession.delete('__pending_draft__');
   return stash;
 }
 

@@ -26,6 +26,7 @@ import {
   loadModelThinkingPref,
   saveModelThinkingPref,
 } from '../../api/SessionRuntimeRegistry';
+import { recordPendingContextState } from '../../api/provider-profiles/contextStatePending';
 import { useModelsCatalogVersion } from '../../hooks/useModelsCatalogVersion';
 import { useSessionStore } from '../../store/sessionStore';
 
@@ -126,6 +127,11 @@ export const ComposerFusedTrigger: React.FC<ComposerFusedTriggerProps> = ({
       setSessionThinkingTitle(sessionId, title);
       // 跨会话持久化：按模型存档用户选择，重启后可恢复
       saveModelThinkingPref(providerId, modelId, title);
+      try {
+        recordPendingContextState();
+      } catch {
+        /* swallow-ok */
+      }
       setTitleEpoch((n) => n + 1);
       setOpen(false);
     },

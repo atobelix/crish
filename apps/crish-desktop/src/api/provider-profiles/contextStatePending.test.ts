@@ -13,29 +13,40 @@ import {
   resetPendingContextStateForTest,
   takePendingContextState,
 } from './contextStatePending';
+import { useSessionStore } from '../../store/sessionStore';
+import {
+  sessionRuntimeRegistry,
+  setSessionThinkingTitle,
+} from '../SessionRuntimeRegistry';
 
 vi.mock('../storeAccess', () => ({
   getPermissionMode: () => 'ask',
-  getAppSettings: () => ({ defaultThinkingLevel: 'high' }),
+  getAppSettings: () => ({ defaultThinkingLevel: 'medium' }),
 }));
 
 describe('contextStatePending（I1-α② context-state 产生器）', () => {
   beforeEach(() => {
     localStorage.clear();
     resetPendingContextStateForTest();
+    sessionRuntimeRegistry.clearAll();
+    useSessionStore.setState({ activeSessionId: 'sess-ctx' });
   });
 
   afterEach(() => {
     resetPendingContextStateForTest();
+    sessionRuntimeRegistry.clearAll();
+    useSessionStore.setState({ activeSessionId: '' });
   });
 
-  it('buildContextStateText：模型 + 服务商 + 权限 + 思考档位全量快照文本', () => {
+  it('buildContextStateText：模型 + 服务商 + 权限 + 会话 thinkingTitle', () => {
     localStorage.setItem('crish_active_model_id', 'deepseek-v4-flash');
     localStorage.setItem('crish_active_profile_id', 'p1');
+    setSessionThinkingTitle('sess-ctx', 'High');
     const text = buildContextStateText();
     expect(text).toContain('当前已切换到模型 deepseek-v4-flash（服务商 p1）');
     expect(text).toContain('权限模式：ask');
-    expect(text).toContain('思考档位：high');
+    expect(text).toContain('思考档位：High');
+    expect(text).not.toContain('思考档位：medium');
   });
 
   it('buildContextStateText：无活动模型/服务商 → 空串（无可注入状态告知）', () => {
@@ -44,17 +55,18 @@ describe('contextStatePending（I1-α② context-state 产生器）', () => {
 
   it('record → take：暂存后取走即清空（本次 run 消费后不重复注入，携带结构化字段）', () => {
     localStorage.setItem('crish_active_model_id', 'deepseek-v4-flash');
+    setSessionThinkingTitle('sess-ctx', 'High');
     recordPendingContextState();
     expect(localStorage.getItem(PENDING_CONTEXT_STATE_KEY)).toContain(
       '当前已切换到模型 deepseek-v4-flash'
     );
-    const taken = takePendingContextState();
+    const taken = takePendingContextState('sess-ctx');
     expect(taken).toBeDefined();
     expect(taken?.model).toBe('deepseek-v4-flash');
     expect(taken?.permission).toBe('ask');
-    expect(taken?.thinking).toBe('high');
+    expect(taken?.thinking).toBe('High');
     expect(taken?.text).toContain('当前已切换到模型 deepseek-v4-flash');
-    expect(takePendingContextState()).toBeUndefined();
+    expect(takePendingContextState('sess-ctx')).toBeUndefined();
     expect(localStorage.getItem(PENDING_CONTEXT_STATE_KEY)).toBeNull();
   });
 
@@ -72,7 +84,7 @@ describe('contextStatePending（I1-α② context-state 产生器）', () => {
     recordPendingContextState();
     localStorage.setItem('crish_active_model_id', 'm2');
     recordPendingContextState();
-    const taken = takePendingContextState();
+    const taken = takePendingContextState('sess-ctx');
     expect(taken?.model).toBe('m2');
     expect(taken?.text).toContain('m2');
     expect(taken?.text).not.toContain('m1');
@@ -81,15 +93,44 @@ describe('contextStatePending（I1-α② context-state 产生器）', () => {
   it('结构化暂存载荷包含全部必要字段：model, profile, permission, thinking, text', () => {
     localStorage.setItem('crish_active_model_id', 'qwen-2.5-max');
     localStorage.setItem('crish_active_profile_id', 'aliyun');
+    setSessionThinkingTitle('sess-ctx', 'High');
     recordPendingContextState();
-    const taken = takePendingContextState();
+    const taken = takePendingContextState('sess-ctx');
     expect(taken).toEqual({
-      sessionId: '',
+      sessionId: 'sess-ctx',
       model: 'qwen-2.5-max',
       profile: 'aliyun',
       permission: 'ask',
-      thinking: 'high',
-      text: '当前已切换到模型 qwen-2.5-max（服务商 aliyun）。权限模式：ask。思考档位：high。',
+      thinking: 'High',
+      text: '当前已切换到模型 qwen-2.5-max（服务商 aliyun）。权限模式：ask。思考档位：High。',
     });
+  });
+
+  it('无会话 thinkingTitle → 省略思考档位段（不读 defaultThinkingLevel）', () => {
+    localStorage.setItem('crish_active_model_id', 'qwen-2.5-max');
+    localStorage.setItem('crish_active_profile_id', 'aliyun');
+    const text = buildContextStateText();
+    expect(text).toContain('当前已切换到模型 qwen-2.5-max（服务商 aliyun）');
+    expect(text).toContain('权限模式：ask');
+    expect(text).not.toContain('思考档位');
+  });
+
+  it('yaml key Off 仍写入思考档位段（显式关闭 ≠ 省略）', () => {
+    localStorage.setItem('crish_active_model_id', 'qwen-2.5-max');
+    setSessionThinkingTitle('sess-ctx', 'Off');
+    expect(buildContextStateText()).toContain('思考档位：Off');
+  });
+
+  it('takePendingContextState 消费后清理签名缓存：再次切回同一模型能够重新记录并暂存', () => {
+    localStorage.setItem('crish_active_model_id', 'deepseek-chat');
+    recordPendingContextState();
+    const taken1 = takePendingContextState('sess-ctx');
+    expect(taken1?.model).toBe('deepseek-chat');
+
+    // 此时暂存已消费且签名缓存已清空，用户再次切回或记录同一模型
+    recordPendingContextState();
+    const taken2 = takePendingContextState('sess-ctx');
+    expect(taken2?.model).toBe('deepseek-chat');
+    expect(taken2?.text).toContain('deepseek-chat');
   });
 });

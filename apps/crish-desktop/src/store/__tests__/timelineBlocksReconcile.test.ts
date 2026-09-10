@@ -485,4 +485,66 @@ describe('时间线 Blocks 保全合并算法与防退避测试套件', () => {
       expect(aligned[1]).toEqual({ type: 'tool_call', id: 'injected-tool' });
     });
   });
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // 5. 因果先后时序与 updateMessageText 防正文克隆验证
+  // ──────────────────────────────────────────────────────────────────────────
+  describe('因果先后时序与 updateMessageText 防正文克隆验证', () => {
+    it('normalizeAssistantTimeline 从 msg.thinking 补偿思考块时，严格放置在首个 text 块之前，绝不追加到正文之后', () => {
+      const msg = makeMessage({
+        id: 'msg-causal-order',
+        sender: 'assistant',
+        text: '这是完整的回答正文',
+        thinking: '这是先前的思考过程',
+        blocks: [{ type: 'text', content: '这是完整的回答正文' }],
+      });
+
+      const normalized = normalizeAssistantTimeline(msg);
+      expect(normalized.blocks).toHaveLength(2);
+      expect(normalized.blocks![0]).toMatchObject({
+        type: 'thought',
+        content: '这是先前的思考过程',
+      });
+      expect(normalized.blocks![1]).toMatchObject({
+        type: 'text',
+        content: '这是完整的回答正文',
+      });
+    });
+
+    it('updateMessageText 在 blocks 存在 thought 等非 text 块时多次触发，严格就地更新正文块，绝不重复追加', () => {
+      seedSession([
+        makeMessage({
+          id: MSG_ID,
+          sender: 'assistant',
+          text: '',
+          thinking: '思考中…',
+          blocks: [
+            { type: 'thought', content: '思考完成', turnIndex: 0 },
+          ],
+        }),
+      ]);
+      const store = useSessionStore.getState();
+
+      // 第一次写入正文（流式进行中）
+      store.updateMessageText(SESS_ID, MSG_ID, '你好，我是 AI 助手。');
+      let currentMsg = useSessionStore.getState().sessionsById[SESS_ID]?.messages.find((m) => m.id === MSG_ID);
+      expect(currentMsg?.blocks?.filter((b) => b.type === 'text')).toHaveLength(1);
+
+      // 第二次写入正文（尾帧收口或清理占位符）
+      store.updateMessageText(SESS_ID, MSG_ID, '你好，我是 AI 助手。有什么我可以帮你的吗？');
+      currentMsg = useSessionStore.getState().sessionsById[SESS_ID]?.messages.find((m) => m.id === MSG_ID);
+      expect(currentMsg?.blocks?.filter((b) => b.type === 'text')).toHaveLength(1);
+      expect(currentMsg?.blocks?.find((b) => b.type === 'text')?.content).toBe(
+        '你好，我是 AI 助手。有什么我可以帮你的吗？'
+      );
+
+      // 第三次重复触发相同文本写入（模拟幂等与收口多次触发）
+      store.updateMessageText(SESS_ID, MSG_ID, '你好，我是 AI 助手。有什么我可以帮你的吗？');
+      currentMsg = useSessionStore.getState().sessionsById[SESS_ID]?.messages.find((m) => m.id === MSG_ID);
+      expect(currentMsg?.blocks?.filter((b) => b.type === 'text')).toHaveLength(1);
+
+      // 整体结构：thought 必然在 text 之前
+      expect(currentMsg?.blocks?.map((b) => b.type)).toEqual(['thought', 'text']);
+    });
+  });
 });
