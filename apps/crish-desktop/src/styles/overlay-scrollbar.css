@@ -17,15 +17,26 @@
 ::-webkit-scrollbar-thumb {
   background: var(--tint-scrollbar-thumb);
   background-clip: padding-box;
-  border-right: 2px solid transparent; /* 右侧留出 2px 物理安全空隙，防误触，滑块净宽 8px 饱满舒适 */
+  border-right: var(--scrollbar-track-safe-gap, 2px) solid transparent; /* 右侧留出 2px 物理安全空隙，防误触，滑块净宽 8px 饱满舒适 */
   border-radius: var(--radius-full);
+}
+
+::-webkit-scrollbar-thumb:horizontal {
+  border-bottom: var(--scrollbar-track-safe-gap, 2px) solid transparent; /* 底部留出 2px 物理安全空隙，防误触，滑块净高 8px 饱满舒适 */
+  border-right: none;
 }
 
 ::-webkit-scrollbar-thumb:hover,
 ::-webkit-scrollbar-thumb:active {
   background: var(--scrollbar-thumb-active);
   background-clip: padding-box;
-  border-right: 2px solid transparent;
+  border-right: var(--scrollbar-track-safe-gap, 2px) solid transparent;
+}
+
+::-webkit-scrollbar-thumb:horizontal:hover,
+::-webkit-scrollbar-thumb:horizontal:active {
+  border-bottom: var(--scrollbar-track-safe-gap, 2px) solid transparent;
+  border-right: none;
 }
 
 /* 上下端点大圆角贝塞尔三角按钮：三个角均采用 Q 贝塞尔平滑圆角，与默认滚动条严格保持 10% 相同灰度 */
@@ -63,10 +74,39 @@
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 9 6'%3E%3Cpath d='M 4.0 4.6 Q 4.5 5.5 5.0 4.6 L 8.1 1.1 Q 8.6 0.4 7.8 0.4 L 1.2 0.4 Q 0.4 0.4 0.9 1.1 Z' fill='%23c8c7c6'/%3E%3C/svg%3E");
 }
 
-::-webkit-scrollbar-button:horizontal {
-  display: none;
-  width: 0;
-  height: 0;
+/* 左右端点大圆角贝塞尔三角按钮：与上下端点圆角贝塞尔严格保持同构与 10% 灰度 */
+::-webkit-scrollbar-button:horizontal:start:decrement {
+  display: block;
+  width: 12px;
+  background-color: transparent;
+  background-repeat: no-repeat;
+  background-position: center center;
+  background-size: 6px 8px;
+  background-clip: padding-box;
+  border-bottom: 2px solid transparent;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 6 9'%3E%3Cpath d='M 1.4 4.5 Q 0.5 4.0 1.4 3.5 L 4.9 0.4 Q 5.6 -0.1 5.6 0.7 L 5.6 7.3 Q 5.6 8.1 4.9 7.6 Z' fill='%23e6e6e5'/%3E%3C/svg%3E");
+}
+
+::-webkit-scrollbar-button:horizontal:end:increment {
+  display: block;
+  width: 12px;
+  background-color: transparent;
+  background-repeat: no-repeat;
+  background-position: center center;
+  background-size: 6px 8px;
+  background-clip: padding-box;
+  border-bottom: 2px solid transparent;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 6 9'%3E%3Cpath d='M 4.6 4.5 Q 5.5 4.0 4.6 3.5 L 1.1 0.4 Q 0.4 -0.1 0.4 0.7 L 0.4 7.3 Q 0.4 8.1 1.1 7.6 Z' fill='%23e6e6e5'/%3E%3C/svg%3E");
+}
+
+::-webkit-scrollbar-button:horizontal:start:decrement:hover,
+::-webkit-scrollbar-button:horizontal:start:decrement:active {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 6 9'%3E%3Cpath d='M 1.4 4.5 Q 0.5 4.0 1.4 3.5 L 4.9 0.4 Q 5.6 -0.1 5.6 0.7 L 5.6 7.3 Q 5.6 8.1 4.9 7.6 Z' fill='%23c8c7c6'/%3E%3C/svg%3E");
+}
+
+::-webkit-scrollbar-button:horizontal:end:increment:hover,
+::-webkit-scrollbar-button:horizontal:end:increment:active {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 6 9'%3E%3Cpath d='M 4.6 4.5 Q 5.5 4.0 4.6 3.5 L 1.1 0.4 Q 0.4 -0.1 0.4 0.7 L 0.4 7.3 Q 0.4 8.1 1.1 7.6 Z' fill='%23c8c7c6'/%3E%3C/svg%3E");
 }
 
 ::-webkit-scrollbar-corner {

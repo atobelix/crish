@@ -40,6 +40,11 @@
   align-items: flex-end;
 }
 
+.rowUser[data-editing='true'],
+.rowUser:has(.userStackEditing) {
+  align-items: stretch;
+}
+
 .rowAssistant {
   align-items: flex-start;
   max-width: min(var(--chat-col-max, 760px), 100%);
@@ -84,13 +89,12 @@
   align-items: flex-end;
   max-width: min(85%, 720px);
   min-width: min-content;
-  gap: var(--space-1_5, 6px);
 }
 
 .userStackEditing {
   width: 100%;
-  max-width: min(85%, 720px);
-  align-items: flex-end;
+  max-width: 100%;
+  align-items: stretch;
 }
 
 .userAttachmentStrip {
@@ -113,9 +117,9 @@
 
 .userBubble {
   /* DIM-01 §1.3: 统一类输入框卡片结构，5.5% 灰度混入保持气泡底色，消除图文分离 */
-  background: color-mix(in srgb, var(--text-primary) 5.5%, var(--bg-card));
+  background: color-mix(in srgb, var(--text-primary) 3.9%, var(--bg-card));
   color: var(--text-primary);
-  border: 1px solid var(--border-subtle);
+  border: none;
   border-radius: var(--radius-xl, 16px);
   padding: 10px 14px;
   font-size: var(--font-size-base, 14px);
@@ -165,8 +169,8 @@
 
 .rowComposerHost {
   width: 100%;
-  min-width: 320px;
-  max-width: min(100%, 720px);
+  min-width: 0;
+  max-width: 100%;
   box-sizing: border-box;
   animation: editComposerFadeIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -244,100 +248,6 @@
 .planApproveChip:hover {
   background: var(--bg-hover);
   border-color: var(--border-color);
-}
-
-.followupRow {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-1_5);
-  margin: var(--space-2_5, 10px) 0 var(--space-1, 4px);
-  max-width: 100%;
-  min-width: 0;
-}
-
-.followupChips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.followupChip {
-  display: inline-flex;
-  align-items: stretch;
-  max-width: 100%;
-  border: var(--hairline-width, 1px) solid
-    var(--hairline-strong, var(--border-color));
-  border-radius: var(--radius-sm);
-  background: transparent;
-  overflow: hidden;
-}
-
-.followupChip:hover {
-  background: var(--bg-hover);
-  border-color: var(--border-color);
-}
-
-.followupChipMain {
-  appearance: none;
-  border: none;
-  background: transparent;
-  padding: 5px 10px 5px 12px;
-  font-size: var(--font-size-xs);
-  font-family: inherit;
-  font-weight: var(--font-weight-medium, 500);
-  color: var(--text-secondary);
-  cursor: pointer;
-  line-height: var(--line-height-compact);
-  max-width: 220px;
-  text-align: left;
-}
-
-.followupChipMain:hover {
-  color: var(--text-primary);
-}
-
-.followupChipLabel {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.followupChipSend {
-  appearance: none;
-  border: none;
-  border-left: var(--hairline-width, 1px) solid var(--border-subtle);
-  background: transparent;
-  padding: 0 9px;
-  color: var(--text-tertiary);
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.followupChipSend:hover {
-  color: var(--text-primary);
-  background: color-mix(in srgb, var(--bg-hover) 80%, transparent);
-}
-
-.followupChipMain:focus-visible,
-.followupChipSend:focus-visible,
-.followupDismiss:focus-visible {
-  outline: none;
-  box-shadow: var(--focus-ring);
-}
-
-.followupDismiss {
-  flex: 0 0 auto;
-  opacity: 0.55;
-  margin-top: var(--space-0_5);
-}
-
-.followupDismiss:hover {
-  opacity: 1;
 }
 
 .streamingMarkdownRoot {
@@ -673,6 +583,7 @@
 .assistantText :global(.md-code-copy) {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: var(--space-1, 4px);
   height: 22px;
   padding: 0 var(--space-2, 8px);
@@ -684,12 +595,32 @@
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm, 4px);
   cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  line-height: 1;
+  user-select: none;
   opacity: 0;
   transition:
     opacity var(--transition-fast, 150ms ease),
     background-color var(--transition-fast, 150ms ease),
     color var(--transition-fast, 150ms ease),
     border-color var(--transition-fast, 150ms ease);
+}
+
+.assistantText :global(.md-code-copy::before) {
+  content: '';
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  background-color: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z'/%3E%3Cpath d='M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z'/%3E%3C/svg%3E") no-repeat center / contain;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z'/%3E%3Cpath d='M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z'/%3E%3C/svg%3E") no-repeat center / contain;
+}
+
+.assistantText :global(.md-code-copy.is-copied::before) {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill-rule='evenodd' d='M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill-rule='evenodd' d='M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z'/%3E%3C/svg%3E");
 }
 
 /* 兼容无 .md-code-actions 外壳的旧结构降级绝对定位 */
@@ -840,12 +771,12 @@
 }
 
 .userBubblePinned {
-  background: color-mix(in srgb, var(--user-bubble-pin-color, #f59e0b) 6%, var(--bg-card)) !important;
-  border-color: color-mix(in srgb, var(--user-bubble-pin-color, #f59e0b) 26%, var(--border-color)) !important;
+  background: color-mix(in srgb, var(--user-bubble-pin-color, #10b981) 6%, var(--bg-card)) !important;
+  border-color: color-mix(in srgb, var(--user-bubble-pin-color, #10b981) 26%, var(--border-color)) !important;
 }
 
 .iconBtn.isPinnedActive {
-  color: var(--active-pin-color, #f59e0b);
+  color: var(--active-pin-color, #10b981);
   opacity: 1;
 }
 
@@ -965,21 +896,35 @@
   align-items: center;
 }
 
+.iconBtn.isPinnedActive {
+  color: var(--active-pin-color, #10b981);
+}
+
+.iconBtn.isPinnedActive:hover {
+  color: var(--active-pin-color, #10b981);
+  background-color: color-mix(in srgb, var(--active-pin-color, #10b981) 12%, transparent);
+}
+
 .pinPickerPopover {
-  position: absolute;
-  bottom: calc(100% + 6px);
-  right: 0;
+  position: fixed;
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 6px;
-  padding: 5px 8px;
+  padding: 5px;
   background: var(--bg-card, #ffffff);
-  border: 1px solid color-mix(in srgb, var(--border-color) 80%, transparent);
-  border-radius: var(--radius-md, 8px);
-  box-shadow: 0 4px 14px -2px rgba(0, 0, 0, 0.12), 0 2px 6px -1px rgba(0, 0, 0, 0.08);
-  z-index: var(--z-dropdown, 100);
+  border: 1px solid color-mix(in srgb, var(--border-color) 75%, transparent);
+  border-radius: var(--radius-full, 9999px);
+  box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.12), 0 2px 6px -1px rgba(0, 0, 0, 0.06);
+  z-index: var(--z-dropdown, 1000);
   animation: pinPickerFadeIn 140ms cubic-bezier(0.16, 1, 0.3, 1);
   white-space: nowrap;
+}
+
+.pinPickerPopover.pinPickerExpanded {
+  border-radius: 16px;
+  padding: 8px;
+  width: 196px;
+  gap: 8px;
 }
 
 @keyframes pinPickerFadeIn {
@@ -993,11 +938,17 @@
   }
 }
 
+.pinColorsRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
 .pinColorDot {
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
-  border: 1.5px solid rgba(255, 255, 255, 0.85);
+  border: 1.5px solid rgba(255, 255, 255, 0.95);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--border-color) 70%, transparent);
   cursor: pointer;
   padding: 0;
@@ -1018,20 +969,20 @@
   transform: scale(1.12);
 }
 
-.pinCustomColorBtn {
-  width: 16px;
-  height: 16px;
+.pinCustomToggleBtn {
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
-  border: 1.5px solid rgba(255, 255, 255, 0.85);
+  border: 1.5px solid rgba(255, 255, 255, 0.95);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--border-color) 70%, transparent);
   background: conic-gradient(
-    from 0deg,
-    #f43f5e,
-    #f59e0b,
-    #10b981,
-    #0ea5e9,
-    #8b5cf6,
-    #f43f5e
+    #f43f5e 0deg,
+    #f59e0b 60deg,
+    #10b981 120deg,
+    #0ea5e9 180deg,
+    #8b5cf6 240deg,
+    #ec4899 300deg,
+    #f43f5e 360deg
   );
   cursor: pointer;
   padding: 0;
@@ -1039,23 +990,162 @@
   align-items: center;
   justify-content: center;
   transition: transform 120ms ease, box-shadow 120ms ease;
-  position: relative;
-  overflow: hidden;
+  box-sizing: border-box;
+  flex-shrink: 0;
 }
 
-.pinCustomColorBtn:hover {
+.pinCustomToggleBtn:hover {
   transform: scale(1.18);
   box-shadow: 0 0 0 1px var(--text-primary), 0 2px 5px rgba(0, 0, 0, 0.15);
 }
 
-.pinCustomColorInput {
-  position: absolute;
-  top: 0;
-  left: 0;
+.pinCustomToggleBtn.isSelected {
+  box-shadow: 0 0 0 2px var(--text-primary);
+  transform: scale(1.12);
+}
+
+.pinCustomPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
   width: 100%;
-  height: 100%;
-  opacity: 0;
+  animation: pinPickerFadeIn 120ms ease;
+}
+
+.pinCustomPanel .pinColorsRow {
+  width: 100%;
+  justify-content: space-between;
+}
+
+.pinSatValPalette {
+  position: relative;
+  width: 100%;
+  height: 84px;
+  border-radius: 8px;
+  cursor: crosshair;
+  touch-action: none;
+  background:
+    linear-gradient(to bottom, transparent, #000000),
+    linear-gradient(to right, #ffffff, var(--palette-pure-hue, #10b981));
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.pinSatValHandle {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid #ffffff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  box-sizing: border-box;
+}
+
+.pinHueSlider {
+  width: 100%;
+  height: 8px;
+  border-radius: var(--radius-full, 9999px);
+  appearance: none;
+  -webkit-appearance: none;
+  outline: none;
+  background: linear-gradient(
+    to right,
+    #ff0000 0%,
+    #ffff00 17%,
+    #00ff00 33%,
+    #00ffff 50%,
+    #0000ff 67%,
+    #ff00ff 83%,
+    #ff0000 100%
+  );
   cursor: pointer;
-  padding: 0;
+  margin: 0;
+}
+
+.pinHueSlider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 2px solid var(--text-primary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  cursor: pointer;
+  transition: transform 100ms ease;
+}
+
+.pinHueSlider::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+}
+
+.pinCustomBottomRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 8px;
+}
+
+.pinResetBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 8px;
+  background: var(--tint-hover);
   border: none;
+  border-radius: var(--radius-full, 9999px);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background-color var(--transition-fast, 120ms ease),
+              color var(--transition-fast, 120ms ease);
+}
+
+.pinResetBtn:hover {
+  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  color: var(--text-primary);
+}
+
+.pinCustomValueRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 2px 7px 2px 4px;
+  background: var(--tint-hover);
+  border: none;
+  border-radius: var(--radius-full, 9999px);
+  box-sizing: border-box;
+}
+
+.pinCustomPreviewDot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  flex-shrink: 0;
+}
+
+.pinCustomHexInput {
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-primary);
+  line-height: 1;
+  letter-spacing: 0.5px;
+  background: transparent;
+  border: none;
+  outline: none;
+  padding: 0;
+  width: 54px;
+}
+
+.pinCustomHexInput::placeholder {
+  color: var(--text-tertiary);
 }

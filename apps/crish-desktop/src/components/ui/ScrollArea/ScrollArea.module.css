@@ -38,12 +38,25 @@
 .viewport {
   width: 100%;
   height: 100%;
-  overflow-y: auto;
-  overflow-x: hidden;
   box-sizing: border-box;
   outline: none;
   scrollbar-width: none;
   overflow-anchor: none;
+}
+
+.viewportVertical {
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.viewportHorizontal {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.viewportBoth {
+  overflow-x: auto;
+  overflow-y: auto;
 }
 
 .content {
@@ -67,6 +80,25 @@
 }
 
 .stepperTrackColumn.visible {
+  opacity: 1;
+}
+
+/* 三段式水平底栏：绝对定位悬浮于容器内侧底端，严格保留 2px 物理透明隔离间隙 */
+.stepperTrackRow {
+  position: absolute;
+  bottom: 2px;
+  height: var(--scrollbar-width);
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  pointer-events: auto;
+  opacity: 0;
+  transition: opacity 160ms cubic-bezier(0.16, 1, 0.3, 1);
+  z-index: 2;
+  user-select: none;
+}
+
+.stepperTrackRow.visible {
   opacity: 1;
 }
 
@@ -150,5 +182,55 @@
 }
 
 .thumbIndicator.dragging {
+  cursor: grabbing;
+}
+
+/* 水平端点步进按钮 */
+.leftButton,
+.rightButton {
+  width: var(--scrollbar-button-height, 8px);
+  height: var(--scrollbar-width);
+  min-width: 8px;
+}
+
+/* 水平方向物理隔离带 */
+.safeGapHorizontal {
+  width: var(--scrollbar-track-safe-gap, 2px);
+  height: 100%;
+  flex-shrink: 0;
+}
+
+/* 独立水平滑行轨道 */
+.isolatedTrackHorizontal {
+  position: relative;
+  flex: 1;
+  height: 100%;
+  background: var(--scrollbar-track-bg, transparent);
+  overflow: hidden;
+}
+
+/* 水平轨道内滑块 */
+.thumbIndicatorHorizontal {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  border-radius: var(--scrollbar-thumb-radius, var(--radius-full, 9999px));
+  background: var(--scrollbar-thumb-bg);
+  transition: background 120ms ease;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+  will-change: transform;
+  transform: translate3d(0, 0, 0);
+}
+
+.thumbIndicatorHorizontal:hover,
+.thumbIndicatorHorizontal:active,
+.thumbIndicatorHorizontal.dragging {
+  background: var(--scrollbar-thumb-active);
+}
+
+.thumbIndicatorHorizontal.dragging {
   cursor: grabbing;
 }

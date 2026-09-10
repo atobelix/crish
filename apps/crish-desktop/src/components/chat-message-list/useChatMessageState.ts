@@ -11,6 +11,7 @@ import { pinSnippet } from './useScrollAnchor';
 // getSnapshot to return the same reference when the underlying data hasn't changed).
 const EMPTY_PINNED_IDS: string[] = [];
 const EMPTY_PINNED_ITEMS: PinnedItem[] = [];
+const EMPTY_PINNED_COLORS: Record<string, string> = {};
 
 /**
  * Build pin-bar items from pinned ids + full session messages.
@@ -141,6 +142,9 @@ export function useChatMessageState({
   const pinnedMessageIds = useSessionStore(
     (s) => s.sessionsById[activeSessionId]?.pinnedMessageIds ?? EMPTY_PINNED_IDS
   );
+  const pinnedMessageColors = useSessionStore(
+    (s) => s.sessionsById[activeSessionId]?.pinnedMessageColors ?? EMPTY_PINNED_COLORS
+  );
   const pinnedIdSet = useMemo(
     () => new Set(pinnedMessageIds),
     [pinnedMessageIds]
@@ -158,12 +162,15 @@ export function useChatMessageState({
   const pinnedItems = pinnedItemsRef.current;
 
   const togglePin = useCallback(
-    (messageId: string) => {
+    (messageId: string, color?: string) => {
       if (!activeSessionId) return;
-      if (pinnedIdSet.has(messageId)) {
+      if (color) {
+        // 显式指定颜色（来自调色盘点击或滑块微调）：始终应用该颜色固定，绝不意外反转为解除固定
+        pinMessage(activeSessionId, messageId, color);
+      } else if (pinnedIdSet.has(messageId)) {
         unpinMessage(activeSessionId, messageId);
       } else {
-        pinMessage(activeSessionId, messageId);
+        pinMessage(activeSessionId, messageId, '#10b981');
       }
     },
     [activeSessionId, pinnedIdSet, pinMessage, unpinMessage]
@@ -197,7 +204,15 @@ export function useChatMessageState({
           copyBtn.closest('.md-code-block')?.querySelector('pre')?.textContent ?? '';
         if (!text) return;
         void navigator.clipboard.writeText(text).then(
-          () => {},
+          () => {
+            copyBtn.classList.add('is-copied');
+            const originalText = copyBtn.textContent;
+            copyBtn.textContent = '已复制';
+            window.setTimeout(() => {
+              copyBtn.classList.remove('is-copied');
+              copyBtn.textContent = originalText || '复制';
+            }, 1500);
+          },
           () => toast.show('复制失败')
         );
         return;
@@ -317,6 +332,7 @@ export function useChatMessageState({
     setDismissedFollowUps,
     sessionAllMessages,
     pinnedItems,
+    pinnedColors: pinnedMessageColors,
     togglePin,
     handleMarkdownClick,
     onToggleExpandUser,

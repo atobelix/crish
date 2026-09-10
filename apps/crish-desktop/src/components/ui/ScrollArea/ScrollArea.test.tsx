@@ -9,11 +9,13 @@ import styles from './ScrollArea.module.css';
 describe('ScrollArea Atomic Component (UI Layer Red Team Test Suite)', () => {
   let originalClientHeight: PropertyDescriptor | undefined;
   let originalScrollHeight: PropertyDescriptor | undefined;
+  let originalClientWidth: PropertyDescriptor | undefined;
+  let originalScrollWidth: PropertyDescriptor | undefined;
 
   beforeEach(() => {
     vi.useFakeTimers();
 
-    // 保存并增强 JSDOM HTMLElement.prototype 几何取值器，为视口提供真实排版基准 (高 200px, 内容 1000px)
+    // 保存并增强 JSDOM HTMLElement.prototype 几何取值器，为视口提供真实排版基准
     originalClientHeight = Object.getOwnPropertyDescriptor(
       HTMLElement.prototype,
       'clientHeight'
@@ -21,6 +23,14 @@ describe('ScrollArea Atomic Component (UI Layer Red Team Test Suite)', () => {
     originalScrollHeight = Object.getOwnPropertyDescriptor(
       HTMLElement.prototype,
       'scrollHeight'
+    );
+    originalClientWidth = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      'clientWidth'
+    );
+    originalScrollWidth = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      'scrollWidth'
     );
 
     Object.defineProperty(HTMLElement.prototype, 'clientHeight', {
@@ -58,6 +68,44 @@ describe('ScrollArea Atomic Component (UI Layer Red Team Test Suite)', () => {
       },
       set(this: HTMLElement, val: number) {
         (this as unknown as { _customScrollHeight?: number })._customScrollHeight = val;
+      },
+    });
+
+    Object.defineProperty(HTMLElement.prototype, 'clientWidth', {
+      configurable: true,
+      get(this: HTMLElement) {
+        if ((this as unknown as { _customClientWidth?: number })._customClientWidth !== undefined) {
+          return (this as unknown as { _customClientWidth: number })._customClientWidth;
+        }
+        if (
+          this.getAttribute('role') === 'region' ||
+          (typeof this.className === 'string' && this.className.includes(styles.viewport))
+        ) {
+          return 300;
+        }
+        return originalClientWidth?.get ? originalClientWidth.get.call(this) : 0;
+      },
+      set(this: HTMLElement, val: number) {
+        (this as unknown as { _customClientWidth?: number })._customClientWidth = val;
+      },
+    });
+
+    Object.defineProperty(HTMLElement.prototype, 'scrollWidth', {
+      configurable: true,
+      get(this: HTMLElement) {
+        if ((this as unknown as { _customScrollWidth?: number })._customScrollWidth !== undefined) {
+          return (this as unknown as { _customScrollWidth: number })._customScrollWidth;
+        }
+        if (
+          this.getAttribute('role') === 'region' ||
+          (typeof this.className === 'string' && this.className.includes(styles.viewport))
+        ) {
+          return 1200;
+        }
+        return originalScrollWidth?.get ? originalScrollWidth.get.call(this) : 0;
+      },
+      set(this: HTMLElement, val: number) {
+        (this as unknown as { _customScrollWidth?: number })._customScrollWidth = val;
       },
     });
 
@@ -111,6 +159,12 @@ describe('ScrollArea Atomic Component (UI Layer Red Team Test Suite)', () => {
     }
     if (originalScrollHeight) {
       Object.defineProperty(HTMLElement.prototype, 'scrollHeight', originalScrollHeight);
+    }
+    if (originalClientWidth) {
+      Object.defineProperty(HTMLElement.prototype, 'clientWidth', originalClientWidth);
+    }
+    if (originalScrollWidth) {
+      Object.defineProperty(HTMLElement.prototype, 'scrollWidth', originalScrollWidth);
     }
   });
 
@@ -501,5 +555,115 @@ describe('ScrollArea Atomic Component (UI Layer Red Team Test Suite)', () => {
     });
     expect(screen.getByLabelText('Scroll Up')).toBeInTheDocument();
     expect(screen.getByLabelText('Scroll Down')).toBeInTheDocument();
+  });
+
+  it('TC-SA-11: orientation=\'horizontal\' 基础渲染与向左向右 40px 步进', () => {
+    const handleRef = createRef<ScrollAreaHandle>();
+    const { container } = render(
+      <ScrollArea
+        ref={handleRef}
+        orientation="horizontal"
+        showButtons={true}
+        stepSize={40}
+        data-testid="sa-h"
+      >
+        <div style={{ width: '1200px' }}>Wide Content</div>
+      </ScrollArea>
+    );
+
+    const vp = handleRef.current?.getViewport();
+    if (!vp) throw new Error('Viewport not found');
+
+    // 1. 验证横向专属容器与类名
+    expect(vp.className).toContain(styles.viewportHorizontal);
+    expect(container.querySelector(`.${styles.stepperTrackRow}`)).toBeInTheDocument();
+    expect(container.querySelector(`.${styles.stepperTrackColumn}`)).not.toBeInTheDocument();
+
+    const leftBtn = screen.getByLabelText('Scroll Left');
+    const rightBtn = screen.getByLabelText('Scroll Right');
+    expect(leftBtn).toBeInTheDocument();
+    expect(rightBtn).toBeInTheDocument();
+
+    const scrollToSpy = vi.spyOn(vp, 'scrollTo');
+
+    // 2. 点击向右步进按钮
+    fireEvent.pointerDown(rightBtn, { button: 0 });
+    expect(scrollToSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ left: 40, behavior: 'smooth' })
+    );
+
+    // 3. 模拟滚动后向左步进
+    vp.scrollLeft = 100;
+    fireEvent.pointerDown(leftBtn, { button: 0 });
+    expect(scrollToSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ left: 60, behavior: 'smooth' })
+    );
+  });
+
+  it('TC-SA-12: orientation=\'both\' 双轴共存与右下角安全避让', () => {
+    const { container } = render(
+      <ScrollArea
+        orientation="both"
+        showButtons={true}
+        type="always"
+        data-testid="sa-both"
+      >
+        <div style={{ width: '1200px', height: '1000px' }}>Dual Axis Content</div>
+      </ScrollArea>
+    );
+
+    const trackCol = container.querySelector(`.${styles.stepperTrackColumn}`) as HTMLElement;
+    const trackRow = container.querySelector(`.${styles.stepperTrackRow}`) as HTMLElement;
+
+    // 垂直侧柱与水平底栏必须同时挂载
+    expect(trackCol).toBeInTheDocument();
+    expect(trackRow).toBeInTheDocument();
+
+    // 验证双轴右下角避让间隙
+    // thickness=9, safeGap=2, cornerOffset=11. trackMargin=2.
+    // effectiveBottom = 2 + 11 = 13px, effectiveRight = 2 + 11 = 13px
+    expect(trackCol.style.bottom).toBe('13px');
+    expect(trackRow.style.right).toBe('13px');
+  });
+
+  it('TC-SA-13: 水平滑块鼠标拖拽 (W3C Pointer Capture) 与 scrollLeft 联动', () => {
+    const handleRef = createRef<ScrollAreaHandle>();
+    const { container } = render(
+      <ScrollArea
+        ref={handleRef}
+        orientation="horizontal"
+        type="always"
+        data-testid="sa-drag-h"
+      >
+        <div style={{ width: '1200px' }}>Wide Content</div>
+      </ScrollArea>
+    );
+
+    const vp = handleRef.current?.getViewport();
+    if (!vp) throw new Error('Viewport not found');
+
+    const thumbX = container.querySelector(`.${styles.thumbIndicatorHorizontal}`) as HTMLElement;
+    expect(thumbX).toBeInTheDocument();
+
+    // 触发 pointerDown 启动拖拽
+    fireEvent.pointerDown(thumbX, {
+      button: 0,
+      pointerId: 2,
+      clientX: 50,
+    });
+    expect(thumbX.setPointerCapture).toHaveBeenCalledWith(2);
+
+    // 触发 pointerMove 拖拽 100px
+    fireEvent.pointerMove(thumbX, {
+      pointerId: 2,
+      clientX: 150,
+    });
+    expect(vp.scrollLeft).toBeGreaterThan(0);
+
+    // 触发 pointerUp 释放拖拽
+    fireEvent.pointerUp(thumbX, {
+      pointerId: 2,
+    });
+    expect(thumbX.releasePointerCapture).toHaveBeenCalledWith(2);
   });
 });

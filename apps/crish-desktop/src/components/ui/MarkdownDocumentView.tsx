@@ -1,6 +1,7 @@
 import React, { useCallback, useRef } from 'react';
 import { Priority } from '../../workers';
 import { useAsyncMarkdownHtml } from '../../api/markdownRenderAsync';
+import { isSafeHref, sanitizeUrlCandidate } from '../../api/markdown-render/markdownSanitizer';
 import { VirtualPlainCodeViewer } from '../diff/VirtualPlainCodeViewer';
 import { ScrollArea } from './ScrollArea';
 
@@ -59,15 +60,22 @@ export function parsePathAndLocation(rawPath: string): ParsedPathTarget {
   return { cleanPath: s, line, col };
 }
 
+/** 与 isSafeHref 一致的外链 scheme 判定（大小写不敏感） */
+function isExternalNavigableHref(url: string): boolean {
+  return /^https?:\/\//i.test(url) || /^mailto:/i.test(url);
+}
+
 /**
- * 安全调用外部系统浏览器打开链接，杜绝 WebView2 内部跳转
+ * 安全调用外部系统浏览器打开链接，杜绝 WebView2 内部跳转。
+ * 唯一入口：sanitizeUrlCandidate → isSafeHref → http(s)/mailto。
  */
 function openExternalUrl(url: string): void {
-  const trimmed = (url || '').trim();
-  if (!trimmed) return;
+  const sanitized = sanitizeUrlCandidate(url);
+  if (!sanitized) return;
+  if (!isSafeHref(sanitized) || !isExternalNavigableHref(sanitized)) return;
 
   if (typeof window !== 'undefined') {
-    window.open(trimmed, '_blank', 'noopener,noreferrer');
+    window.open(sanitized, '_blank', 'noopener,noreferrer');
   }
 }
 
@@ -214,20 +222,34 @@ export const MarkdownDocumentView: React.FC<MarkdownDocumentViewProps> = React.m
         return;
       }
 
-      // 3.3 拦截外部超链接 (<a class="md-a"> 与普通外链)
+      // 3.3 外链导航单轨：sanitizeUrlCandidate + isSafeHref（禁止大小写敏感 startsWith 启发式）
       const anchor = target.closest('a');
       if (anchor instanceof HTMLAnchorElement) {
         const href = anchor.getAttribute('href');
-        if (
-          href &&
-          (href.startsWith('http://') ||
-            href.startsWith('https://') ||
-            href.startsWith('mailto:'))
-        ) {
+        if (href == null) return;
+
+        const sanitized = sanitizeUrlCandidate(href);
+        if (!sanitized) {
           e.preventDefault();
           e.stopPropagation();
-          void openExternalUrl(href);
+          return;
         }
+
+        if (isExternalNavigableHref(sanitized)) {
+          e.preventDefault();
+          e.stopPropagation();
+          if (isSafeHref(sanitized)) {
+            openExternalUrl(sanitized);
+          }
+          return;
+        }
+
+        // 未知/危险绝对 scheme：禁止落入 WebView 默认导航
+        if (/^[a-z][a-z0-9+.-]*:/i.test(sanitized) && !isSafeHref(sanitized)) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+        // 相对路径 / #锚点：保持既有默认行为（不外开）
       }
     }, []);
 
@@ -261,6 +283,7 @@ export const MarkdownDocumentView: React.FC<MarkdownDocumentViewProps> = React.m
           <ScrollArea
             size="sm"
             type="hover"
+            orientation="both"
             onScroll={onScroll}
             className="md-document-scroll-root"
             style={{ width: '100%', height: '100%', flex: 1, minHeight: 0 }}
@@ -370,6 +393,7 @@ export const MarkdownDocumentView: React.FC<MarkdownDocumentViewProps> = React.m
           <ScrollArea
             size="sm"
             type="hover"
+            orientation="both"
             onScroll={onScroll}
             className="md-document-scroll-root"
             style={{ width: '100%', height: '100%', flex: 1, minHeight: 0 }}
@@ -417,6 +441,7 @@ export const MarkdownDocumentView: React.FC<MarkdownDocumentViewProps> = React.m
         <ScrollArea
           size="sm"
           type="hover"
+          orientation="both"
           onScroll={onScroll}
           className="md-document-scroll-root"
           style={{ width: '100%', height: '100%', flex: 1, minHeight: 0 }}
