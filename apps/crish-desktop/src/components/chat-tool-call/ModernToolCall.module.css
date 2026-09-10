@@ -505,11 +505,11 @@
 }
 
 .diffStatAdd {
-  color: var(--color-success);
+  color: var(--diff-add-fg);
 }
 
 .diffStatDel {
-  color: var(--color-error);
+  color: var(--diff-del-fg);
 }
 
 .approvalCodePreview {
@@ -657,6 +657,14 @@
   overflow-y: visible;
 }
 
+.diffCard.embeddedDiffCard,
+.gitDiffCard.embeddedDiffCard {
+  border: none;
+  border-radius: 0;
+  margin: 0;
+  background: transparent;
+}
+
 .diffCardHeader,
 .gitDiffCardHeader {
   display: flex;
@@ -731,16 +739,16 @@
 .gitDiffAdd {
   padding: 1px 6px;
   border-radius: var(--radius-xs, 4px);
-  background: color-mix(in srgb, var(--color-success) 12%, transparent);
-  color: var(--color-success);
+  background: var(--diff-add-bg);
+  color: var(--diff-add-fg);
 }
 
 .diffStatDel,
 .gitDiffDel {
   padding: 1px 6px;
   border-radius: var(--radius-xs, 4px);
-  background: color-mix(in srgb, var(--color-error) 12%, transparent);
-  color: var(--color-error);
+  background: var(--diff-del-bg);
+  color: var(--diff-del-fg);
 }
 
 .diffActions {
@@ -831,13 +839,13 @@
 .diffLineRow.addition,
 .gitDiffLineRow.addition,
 .addition {
-  background-color: color-mix(in srgb, var(--color-success) 8%, transparent);
+  background-color: var(--diff-add-bg);
 }
 
 .diffLineRow.deletion,
 .gitDiffLineRow.deletion,
 .deletion {
-  background-color: color-mix(in srgb, var(--color-error) 8%, transparent);
+  background-color: var(--diff-del-bg);
 }
 
 .diffGutterCol,
@@ -866,12 +874,12 @@
 
 .addition .diffSignCol,
 .gitDiffLineRow.addition .lineNumCol {
-  color: var(--color-success);
+  color: var(--diff-add-fg);
 }
 
 .deletion .diffSignCol,
 .gitDiffLineRow.deletion .lineNumCol {
-  color: var(--color-error);
+  color: var(--diff-del-fg);
 }
 
 .diffLineContent,
@@ -889,12 +897,12 @@
 
 .addition .diffLineContent,
 .gitDiffLineRow.addition .lineContent {
-  color: color-mix(in srgb, var(--color-success) 80%, var(--text-primary) 20%);
+  color: var(--diff-add-fg);
 }
 
 .deletion .diffLineContent,
 .gitDiffLineRow.deletion .lineContent {
-  color: color-mix(in srgb, var(--color-error) 80%, var(--text-primary) 20%);
+  color: var(--diff-del-fg);
 }
 
 .diffMoreIndicator,

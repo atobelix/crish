@@ -1,19 +1,25 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Copy,
   Check,
   Download,
-  AlertTriangle,
   Terminal,
-  CheckCircle2,
 } from 'lucide-react';
 import styles from './ChatToolCallBlock.module.css';
 import { Button, Tooltip } from '../ui';
 import type { FileDiff } from '../../store/types';
 import { ToolCallDiffPreview } from './ToolCallDiffPreview';
+import {
+  parseFileStatOutput,
+  parseReadFileOutput,
+  parseGrepSearchOutput,
+  parseListDirOutput,
+  formatJsonIfApplicable,
+} from './toolOutputParser';
 
 export interface ToolCallOutputPaneProps {
   toolId?: string;
+  name?: string;
   output?: string;
   rawOutput?: string;
   status?: string;
@@ -23,12 +29,14 @@ export interface ToolCallOutputPaneProps {
   isTruncated?: boolean;
   totalLines?: number;
   totalBytes?: number;
+  isSingleCard?: boolean;
   onOpenDiff?: (diff: FileDiff) => void;
   onOpenTerminal?: () => void;
 }
 
 export const ToolCallOutputPane: React.FC<ToolCallOutputPaneProps> = ({
   toolId,
+  name,
   output = '',
   rawOutput,
   status = 'success',
@@ -38,6 +46,7 @@ export const ToolCallOutputPane: React.FC<ToolCallOutputPaneProps> = ({
   isTruncated = false,
   totalLines = 0,
   totalBytes = 0,
+  isSingleCard = false,
   onOpenDiff,
   onOpenTerminal,
 }) => {
@@ -48,10 +57,65 @@ export const ToolCallOutputPane: React.FC<ToolCallOutputPaneProps> = ({
   const hasImages = Boolean(images && images.length > 0);
   const emptyBody = !output && !hasDiffs && !hasImages;
 
+  // 极简结构化解析
+  const fileStat = useMemo(() => parseFileStatOutput(output), [output]);
+  const readFile = useMemo(
+    () => parseReadFileOutput(output, name),
+    [output, name]
+  );
+  const grepSearch = useMemo(
+    () => parseGrepSearchOutput(output, name),
+    [output, name]
+  );
+  const listDir = useMemo(
+    () => parseListDirOutput(output, name),
+    [output, name]
+  );
+
+  const metaExtra = useMemo(() => {
+    if (fileStat) {
+      return `${fileStat.kindZh} · ${fileStat.sizeStr.split(' ')[0]}`;
+    }
+    if (readFile) {
+      const parts: string[] = [];
+      if (readFile.startLine !== undefined && readFile.endLine !== undefined) {
+        parts.push(`L${readFile.startLine}–${readFile.endLine}`);
+      }
+      if (readFile.totalLines) {
+        parts.push(`共 ${readFile.totalLines} 行`);
+      }
+      return parts.join(' · ');
+    }
+    if (grepSearch && !grepSearch.isEmpty) {
+      const parts: string[] = [];
+      if (grepSearch.matchCount !== undefined) {
+        parts.push(`${grepSearch.matchCount} 处匹配`);
+      }
+      if (grepSearch.visitedFiles !== undefined) {
+        parts.push(`扫描 ${grepSearch.visitedFiles} 文件`);
+      }
+      return parts.join(' · ');
+    }
+    return '';
+  }, [fileStat, readFile, grepSearch]);
+
+  const formattedOutput = useMemo(
+    () => formatJsonIfApplicable(output),
+    [output]
+  );
+
+  // 仅在非单卡模式（有“输出”标签）或存在明确状态标记（执行失败/执行中）时才渲染独立 header 行
+  const showHeader = useMemo(() => {
+    if (isError || isRunning) return true;
+    if (!isSingleCard) return true;
+    return false;
+  }, [isError, isRunning, isSingleCard]);
+
   const handleCopy = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (output) {
-      void navigator.clipboard.writeText(output);
+    const textToCopy = readFile?.code || formattedOutput;
+    if (textToCopy) {
+      void navigator.clipboard.writeText(textToCopy);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }
@@ -59,7 +123,7 @@ export const ToolCallOutputPane: React.FC<ToolCallOutputPaneProps> = ({
 
   const handleDownloadLog = (e: React.MouseEvent) => {
     e.stopPropagation();
-    const content = rawOutput || output;
+    const content = rawOutput || formattedOutput;
     if (!content) return;
     const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
@@ -76,27 +140,65 @@ export const ToolCallOutputPane: React.FC<ToolCallOutputPaneProps> = ({
       aria-label="工具执行输出"
       data-tool-id={toolId}
     >
-      <header className={styles.toolSectionHeader}>
-        <div className={styles.toolSectionTitleGroup}>
-          <span
-            className={`${styles.toolSectionBadge} ${styles.toolSectionBadgeOutput}`}
-          >
-            📤 输出
-          </span>
-          <span className={styles.toolSectionMeta}>
-            {isRunning ? (
-              <span className={styles.runningTag}>⏳ 执行中…</span>
-            ) : isError ? (
-              <span className={styles.errorTag}>✕ 执行失败</span>
-            ) : (
-              <span className={styles.successTag}>✓ 执行成功</span>
-            )}
-            {durationStr ? ` · ${durationStr}` : ''}
-            {totalLines > 0 ? ` · ${totalLines} 行` : ''}
-            {totalBytes > 0 ? ` · ${(totalBytes / 1024).toFixed(1)} KB` : ''}
-          </span>
-        </div>
-        <div className={styles.toolSectionActions}>
+      {showHeader ? (
+        <header className={styles.toolSectionHeader}>
+          <div className={styles.toolSectionTitleGroup}>
+            {!isSingleCard ? (
+              <span
+                className={`${styles.toolSectionBadge} ${styles.toolSectionBadgeOutput}`}
+              >
+                输出
+              </span>
+            ) : null}
+            <span className={styles.toolSectionMeta}>
+              {isRunning ? (
+                <span className={styles.runningTag}>执行中</span>
+              ) : isError ? (
+                <span className={styles.errorTag}>执行失败</span>
+              ) : null}
+              {!isSingleCard && metaExtra ? ` · ${metaExtra}` : ''}
+              {!isSingleCard && durationStr ? ` · ${durationStr}` : ''}
+            </span>
+          </div>
+          <div className={styles.toolSectionActions}>
+            {isTruncated ? (
+              <Tooltip content="下载完整日志文件 (.log)">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className={styles.toolSectionActionBtn}
+                  onClick={handleDownloadLog}
+                  icon={<Download size={12} />}
+                >
+                  下载日志
+                </Button>
+              </Tooltip>
+            ) : null}
+            {!emptyBody && formattedOutput && !hasDiffs && (!fileStat || !isSingleCard) ? (
+              <Tooltip content={copied ? '已复制！' : '复制完整输出'}>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className={styles.toolSectionActionBtn}
+                  onClick={handleCopy}
+                  icon={
+                    copied ? (
+                      <Check size={12} className={styles.copiedIcon} />
+                    ) : (
+                      <Copy size={12} />
+                    )
+                  }
+                >
+                  {copied ? '已复制' : '复制'}
+                </Button>
+              </Tooltip>
+            ) : null}
+          </div>
+        </header>
+      ) : isSingleCard && !fileStat && !emptyBody && formattedOutput && !hasDiffs ? (
+        <div className={styles.toolFloatingActions}>
           {isTruncated ? (
             <Tooltip content="下载完整日志文件 (.log)">
               <Button
@@ -111,35 +213,24 @@ export const ToolCallOutputPane: React.FC<ToolCallOutputPaneProps> = ({
               </Button>
             </Tooltip>
           ) : null}
-          {!emptyBody && output ? (
-            <Tooltip content={copied ? '已复制！' : '复制完整输出'}>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className={styles.toolSectionActionBtn}
-                onClick={handleCopy}
-                icon={
-                  copied ? (
-                    <Check size={12} className={styles.copiedIcon} />
-                  ) : (
-                    <Copy size={12} />
-                  )
-                }
-              >
-                {copied ? '已复制' : '复制'}
-              </Button>
-            </Tooltip>
-          ) : null}
-        </div>
-      </header>
-
-      {isError ? (
-        <div className={styles.diagnosticBanner}>
-          <AlertTriangle size={14} className={styles.diagIcon} aria-hidden />
-          <span className={styles.diagText}>
-            执行遇到异常中断，详情见下方 Stderr / 输出日志
-          </span>
+          <Tooltip content={copied ? '已复制！' : '复制完整输出'}>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className={styles.toolSectionActionBtn}
+              onClick={handleCopy}
+              icon={
+                copied ? (
+                  <Check size={12} className={styles.copiedIcon} />
+                ) : (
+                  <Copy size={12} />
+                )
+              }
+            >
+              {copied ? '已复制' : '复制'}
+            </Button>
+          </Tooltip>
         </div>
       ) : null}
 
@@ -150,6 +241,7 @@ export const ToolCallOutputPane: React.FC<ToolCallOutputPaneProps> = ({
                 key={d.filePath}
                 diff={d}
                 onOpenDiff={onOpenDiff}
+                className={styles.embeddedDiffCard}
               />
             ))
           : null}
@@ -168,21 +260,90 @@ export const ToolCallOutputPane: React.FC<ToolCallOutputPaneProps> = ({
           </div>
         ) : null}
 
-        {emptyBody ? (
+        {emptyBody || (grepSearch && grepSearch.isEmpty) || (listDir && listDir.isEmpty) ? (
           <div className={styles.emptyOutputBlock}>
-            <CheckCircle2 size={13} className={styles.emptySuccessIcon} />
-            <span>执行成功，无返回内容</span>
+            <span>
+              {grepSearch && grepSearch.isEmpty
+                ? '（未找到匹配项）'
+                : listDir && listDir.isEmpty
+                  ? '（空目录）'
+                  : '（无输出）'}
+            </span>
           </div>
         ) : null}
 
-        {!emptyBody && output ? (
-          <pre className={styles.toolOutputCode}>{output}</pre>
+        {!emptyBody && !hasDiffs ? (
+          fileStat ? (
+            <div className={styles.fileStatCard}>
+              <div className={styles.fileStatRow}>
+                <div className={styles.fileStatTitle}>{fileStat.path}</div>
+                {isSingleCard ? (
+                  <Tooltip content={copied ? '已复制！' : '复制文件信息'}>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className={styles.toolSectionActionBtn}
+                      onClick={handleCopy}
+                      icon={
+                        copied ? (
+                          <Check size={12} className={styles.copiedIcon} />
+                        ) : (
+                          <Copy size={12} />
+                        )
+                      }
+                    >
+                      {copied ? '已复制' : '复制'}
+                    </Button>
+                  </Tooltip>
+                ) : null}
+              </div>
+              <div className={styles.fileStatMeta}>
+                <span>{fileStat.kindZh}</span>
+                <span className={styles.fileStatDot}>·</span>
+                <span>{fileStat.sizeStr}</span>
+                <span className={styles.fileStatDot}>·</span>
+                <span>{fileStat.readonly ? '只读' : '可读写'}</span>
+                <span className={styles.fileStatDot}>·</span>
+                <span>{fileStat.mtimeStr}</span>
+              </div>
+            </div>
+          ) : readFile ? (
+            <div className={styles.readFileContainer}>
+              <pre className={styles.toolOutputCode}>{readFile.code}</pre>
+              {readFile.remainingLines ? (
+                <div className={styles.codeMetaNotice}>
+                  … 剩余 {readFile.remainingLines} 行未显示
+                </div>
+              ) : null}
+            </div>
+          ) : grepSearch && !grepSearch.isEmpty ? (
+            <div className={styles.grepMatchList}>
+              {grepSearch.matches.map((m, idx) => (
+                <div key={idx} className={styles.grepMatchRow}>
+                  <span className={styles.grepLineFull}>{m.filePath ? <span className={styles.grepMatchLoc}>{m.filePath}{m.line ? `:${m.line}:` : ':'}</span> : null}<span className={styles.grepMatchText}>{m.text}</span></span>
+                </div>
+              ))}
+            </div>
+          ) : listDir && !listDir.isEmpty ? (
+            <div className={styles.dirList}>
+              {listDir.items.map((item, idx) => (
+                <div key={idx} className={styles.dirListItem}>
+                  <span className={item.isDir ? styles.dirListIsDir : undefined}>
+                    {item.isDir ? `/${item.name}` : item.name}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : formattedOutput ? (
+            <pre className={styles.toolOutputCode}>{formattedOutput}</pre>
+          ) : null
         ) : null}
 
         {isTruncated ? (
           <div className={styles.outputTruncatedBar}>
             <span className={styles.truncNotice}>
-              ⚠️ 输出已超过 2000 行 / 256KB 保护门限，行内仅保留轻量视口
+              输出已超过 2000 行 / 256KB 保护门限，行内仅保留轻量视口
             </span>
             {onOpenTerminal ? (
               <Button

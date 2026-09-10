@@ -29,8 +29,7 @@ describe('DIM-05 两段式结构化分栏容器与大输出保护测试套件', 
         />
       );
 
-      expect(screen.getByText('📥 输入')).toBeDefined();
-      expect(screen.getByText('命令行指令')).toBeDefined();
+      expect(screen.getByText('输入')).toBeDefined();
       expect(screen.getByText('$')).toBeDefined();
       expect(screen.getByText('npm run test:coverage')).toBeDefined();
       expect(screen.getByText('工作目录:')).toBeDefined();
@@ -52,8 +51,7 @@ describe('DIM-05 两段式结构化分栏容器与大输出保护测试套件', 
         />
       );
 
-      expect(screen.getByText('📥 输入')).toBeDefined();
-      expect(screen.getByText('入参配置')).toBeDefined();
+      expect(screen.getByText('输入')).toBeDefined();
       expect(screen.getByText('AbsolutePath')).toBeDefined();
       expect(screen.getByText('C:/Software/conex/src/App.tsx')).toBeDefined();
       expect(screen.getByText('StartLine')).toBeDefined();
@@ -81,8 +79,8 @@ describe('DIM-05 两段式结构化分栏容器与大输出保护测试套件', 
     });
   });
 
-  describe('2. ToolCallOutputPane 📤 输出区测试', () => {
-    it('成功状态应渲染耗时、行数并展示输出正文', () => {
+  describe('2. ToolCallOutputPane 输出区测试', () => {
+    it('成功状态应渲染耗时并展示输出正文', () => {
       render(
         <ToolCallOutputPane
           toolId="t-out-1"
@@ -94,14 +92,12 @@ describe('DIM-05 两段式结构化分栏容器与大输出保护测试套件', 
         />
       );
 
-      expect(screen.getByText('📤 输出')).toBeDefined();
-      expect(screen.getByText(/✓ 执行成功/)).toBeDefined();
+      expect(screen.getByText('输出')).toBeDefined();
       expect(screen.getByText(/1.4s/)).toBeDefined();
-      expect(screen.getByText(/2 行/)).toBeDefined();
       expect(screen.getByText(/Tests passed successfully/)).toBeDefined();
     });
 
-    it('执行失败时应展示诊断横幅 AlertTriangle', () => {
+    it('执行失败时应展示执行失败标签并直接呈现错误内容', () => {
       render(
         <ToolCallOutputPane
           toolId="t-out-err"
@@ -110,10 +106,7 @@ describe('DIM-05 两段式结构化分栏容器与大输出保护测试套件', 
         />
       );
 
-      expect(screen.getByText(/✕ 执行失败/)).toBeDefined();
-      expect(
-        screen.getByText(/执行遇到异常中断，详情见下方 Stderr \/ 输出日志/)
-      ).toBeDefined();
+      expect(screen.getByText(/执行失败/)).toBeDefined();
       expect(
         screen.getByText('Error: Module not found: ./nonexistent')
       ).toBeDefined();
@@ -124,7 +117,34 @@ describe('DIM-05 两段式结构化分栏容器与大输出保护测试套件', 
         <ToolCallOutputPane toolId="t-out-empty" output="" status="success" />
       );
 
-      expect(screen.getByText('执行成功，无返回内容')).toBeDefined();
+      expect(screen.getByText('（无输出）')).toBeDefined();
+    });
+
+    it('具有 diffs 时应仅渲染 diff 预览，不重复输出 raw diff 文本', () => {
+      render(
+        <ToolCallOutputPane
+          toolId="t-out-diff"
+          output="--- a/file.ts\n+++ b/file.ts\n@@ -1 +1 @@"
+          status="success"
+          diffs={[
+            {
+              filePath: 'file.ts',
+              chunks: [
+                {
+                  oldStart: 1,
+                  oldLines: 1,
+                  newStart: 1,
+                  newLines: 1,
+                  lines: ['-old', '+new'],
+                },
+              ],
+            },
+          ]}
+        />
+      );
+
+      expect(screen.getByText('file.ts')).toBeDefined();
+      expect(screen.queryByText(/--- a\/file\.ts/)).toBeNull();
     });
 
     it('大输出保护 (RUL-05) 截断时应展示下载日志与终端检查器按钮', () => {
@@ -179,11 +199,11 @@ describe('DIM-05 两段式结构化分栏容器与大输出保护测试套件', 
       expect(root?.getAttribute('role')).toBe('region');
 
       // 验证输入区存在
-      expect(screen.getByText('📥 输入')).toBeDefined();
+      expect(screen.getByText('输入')).toBeDefined();
       expect(screen.getByText('cargo test')).toBeDefined();
 
       // 验证输出区存在
-      expect(screen.getByText('📤 输出')).toBeDefined();
+      expect(screen.getByText('输出')).toBeDefined();
       expect(screen.getByText(/1.5s/)).toBeDefined();
       expect(
         screen.getByText('test result: ok. 10 passed; 0 failed')
@@ -210,6 +230,31 @@ describe('DIM-05 两段式结构化分栏容器与大输出保护测试套件', 
         screen.getByText(new RegExp(`已截断显示前 ${TOOL_OUTPUT_LINE_CAP} 行`))
       ).toBeDefined();
       expect(screen.getByText('下载日志')).toBeDefined();
+    });
+
+    it('Grep / Find 等检索类工具直接呈现单一输出矩形，不强制展示输入区', () => {
+      const tc = {
+        id: 'tc-grep-1',
+        name: 'grep_search',
+        arguments: JSON.stringify({
+          Query: '战役工作区',
+          SearchPath: 'docs/',
+        }),
+        output: 'docs/arch.md:10:战役工作区规范',
+        status: 'success',
+      };
+
+      const { container } = render(
+        <ToolCallOutput tc={tc} bodyId="body-grep-1" />
+      );
+
+      // 输入与冗余输出标签均被省略，直接呈现纯粹单一矩形结果
+      expect(screen.queryByText('输入')).toBeNull();
+      expect(screen.queryByText('输出')).toBeNull();
+      expect(screen.getByText('docs/arch.md:10:战役工作区规范')).toBeDefined();
+      // 根节点应用单矩形适配样式
+      const root = container.querySelector('#body-grep-1');
+      expect(root?.className).toContain('toolResultBodySingle');
     });
   });
 });

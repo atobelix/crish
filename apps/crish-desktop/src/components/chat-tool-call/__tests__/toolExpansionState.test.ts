@@ -547,9 +547,9 @@ describe('toolExpansionState — 工具卡片原地替换与展开防抖测试�
       const toggleFn = vi.fn();
       const tc: MessageToolCall = {
         id: 'tool-toggle',
-        name: 'read_file',
+        name: 'run_command',
         status: 'success',
-        arguments: JSON.stringify({ AbsolutePath: 'doc.md' }),
+        arguments: JSON.stringify({ CommandLine: 'npm test' }),
         output: 'line 1\nline 2',
       };
 

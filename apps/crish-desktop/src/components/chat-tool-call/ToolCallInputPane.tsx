@@ -85,6 +85,53 @@ export const ToolCallInputPane: React.FC<ToolCallInputPaneProps> = ({
     [parsedArgs.primaryTarget, argumentsStr]
   );
 
+  if (shellTool) {
+    return (
+      <section
+        className={`${styles.toolSection} ${styles.toolSectionInput} ${styles.toolSectionShellSingleLine}`}
+        aria-label="终端命令输入"
+        data-tool-id={toolId}
+      >
+        <div className={styles.terminalSingleLineRow}>
+          <div className={styles.terminalLine}>
+            <span className={styles.terminalPrompt} aria-hidden>
+              $
+            </span>
+            <pre className={styles.toolResultPreCmd}>{commandDisplay}</pre>
+          </div>
+          <div className={styles.terminalLineEndSlot}>
+            {parsedArgs.props.cwd ? (
+              <span
+                className={styles.terminalCwdBadge}
+                title={String(parsedArgs.props.cwd)}
+              >
+                ({String(parsedArgs.props.cwd)})
+              </span>
+            ) : null}
+            <Tooltip content={copied ? '已复制！' : '复制完整命令'}>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className={styles.toolSectionActionBtn}
+                onClick={handleCopy}
+                icon={
+                  copied ? (
+                    <Check size={12} className={styles.copiedIcon} />
+                  ) : (
+                    <Copy size={12} />
+                  )
+                }
+              >
+                {copied ? '已复制' : '复制'}
+              </Button>
+            </Tooltip>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section
       className={`${styles.toolSection} ${styles.toolSectionInput}`}
@@ -93,13 +140,10 @@ export const ToolCallInputPane: React.FC<ToolCallInputPaneProps> = ({
     >
       <header className={styles.toolSectionHeader}>
         <div className={styles.toolSectionTitleGroup}>
-          <span className={styles.toolSectionBadge}>📥 输入</span>
-          <span className={styles.toolSectionKind}>
-            {shellTool ? '命令行指令' : '入参配置'}
-          </span>
+          <span className={styles.toolSectionBadge}>输入</span>
         </div>
         <div className={styles.toolSectionActions}>
-          {hasProps && !shellTool ? (
+          {hasProps ? (
             <Tooltip
               content={
                 viewMode === 'formatted' ? '查看原始 JSON' : '查看结构化表'
@@ -124,11 +168,7 @@ export const ToolCallInputPane: React.FC<ToolCallInputPaneProps> = ({
               />
             </Tooltip>
           ) : null}
-          <Tooltip
-            content={
-              copied ? '已复制！' : shellTool ? '复制完整命令' : '复制入参 JSON'
-            }
-          >
+          <Tooltip content={copied ? '已复制！' : '复制入参 JSON'}>
             <Button
               type="button"
               variant="ghost"
@@ -150,24 +190,7 @@ export const ToolCallInputPane: React.FC<ToolCallInputPaneProps> = ({
       </header>
 
       <div className={styles.toolSectionContent}>
-        {shellTool ? (
-          <div className={styles.toolCommandBlock}>
-            <div className={styles.terminalLine}>
-              <span className={styles.terminalPrompt} aria-hidden>
-                $
-              </span>
-              <pre className={styles.toolResultPreCmd}>{commandDisplay}</pre>
-            </div>
-            {parsedArgs.props.cwd ? (
-              <div className={styles.toolMetaParam}>
-                <span className={styles.toolMetaKey}>工作目录:</span>
-                <span className={styles.toolMetaVal}>
-                  {String(parsedArgs.props.cwd)}
-                </span>
-              </div>
-            ) : null}
-          </div>
-        ) : viewMode === 'raw' || !hasProps ? (
+        {viewMode === 'raw' || !hasProps ? (
           <pre className={styles.toolInputCode}>{rawDisplay}</pre>
         ) : (
           <div className={styles.toolKeyValueTable}>

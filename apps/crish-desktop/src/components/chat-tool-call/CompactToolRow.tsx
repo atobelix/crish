@@ -92,29 +92,46 @@ export const CompactToolRow: React.FC<CompactToolRowProps> = ({
     const tech =
       techFull && techFull !== summary ? techFull : toolCommandPreview(tc, 72);
     const mid = msgId || pendingApprovalMsgId;
+    const approvalWired = Boolean(onApprovalAllow && onApprovalDeny);
     return (
       <div
         key={rowKey}
         className={`${styles.toolRow} ${styles.toolRowApproval} ${styles.isPending} tool-row tool-row-approval is-pending`}
         data-tool-id={tc.id}
+        data-approval-wired={approvalWired ? 'true' : 'false'}
       >
-        <ApprovalAskCard
-          msgId={mid ?? ''}
-          toolId={tc.id}
-          summary={summary}
-          cmd={tech && tech !== summary ? tech : techFull || undefined}
-          busy={approvalBusy}
-          riskMeta={tc.approvalMeta}
-          onAllow={() => {
-            if (tc.id && mid) onApprovalAllow?.(tc.id, mid, false);
-          }}
-          onAllowRemember={() => {
-            if (tc.id && mid) onApprovalAllow?.(tc.id, mid, true);
-          }}
-          onDeny={() => {
-            if (tc.id && mid) onApprovalDeny?.(tc.id, mid);
-          }}
-        />
+        {approvalWired ? (
+          <ApprovalAskCard
+            msgId={mid ?? ''}
+            toolId={tc.id}
+            summary={summary}
+            cmd={tech && tech !== summary ? tech : techFull || undefined}
+            busy={approvalBusy}
+            riskMeta={tc.approvalMeta}
+            onAllow={() => {
+              if (tc.id && mid) onApprovalAllow!(tc.id, mid, false);
+            }}
+            onAllowRemember={() => {
+              if (tc.id && mid) onApprovalAllow!(tc.id, mid, true);
+            }}
+            onDeny={() => {
+              if (tc.id && mid) onApprovalDeny!(tc.id, mid);
+            }}
+          />
+        ) : (
+          <div
+            role="status"
+            aria-live="polite"
+            data-testid="approval-unavailable"
+            style={{
+              padding: '8px 10px',
+              fontSize: 'var(--font-size-xs)',
+              color: 'var(--text-secondary)',
+            }}
+          >
+            审批操作不可用（未接入真实回调）
+          </div>
+        )}
       </div>
     );
   }

@@ -171,18 +171,20 @@ describe('ChatToolStack V1-γ 折叠单源渲染', () => {
       const head = container.querySelector('.tool-row-head');
       expect(head).not.toBeNull();
 
-      // 验证人类友好动作「读取文件」
-      expect(container.textContent).toContain('读取文件');
+      // 验证人类友好动作「读取」
+      expect(container.textContent).toContain('读取');
       // 验证核心参数「main.ts」
       expect(container.textContent).toContain('main.ts');
       // 验证存在分隔圆点
       expect(container.querySelector('[aria-hidden="true"]')).not.toBeNull();
-      // 验证存在极简折叠指示符
+      // 验证展开折叠符号已被净化（不产生每一行的视觉噪音）
       const chevron = container.querySelector('svg.lucide-chevron-right');
-      expect(chevron).not.toBeNull();
+      expect(chevron).toBeNull();
+      // 验证文件读取工具默认不可展开（点击路径超链接直接导流至右侧栏检视）
+      expect(head?.classList.contains('tool-row-head-static')).toBe(true);
     });
 
-    it('Shell 执行命令工具：渲染「执行命令」与命令行核心参数', () => {
+    it('Shell 执行命令工具：渲染「终端」与命令行核心参数', () => {
       const { container } = render(
         <ChatToolStack
           items={[
@@ -199,7 +201,7 @@ describe('ChatToolStack V1-γ 折叠单源渲染', () => {
         />
       );
 
-      expect(container.textContent).toContain('执行命令');
+      expect(container.textContent).toContain('终端');
       expect(container.textContent).toContain('cargo test --workspace');
       // 运行态指标验证
       const runningRow = container.querySelector('.is-running');
