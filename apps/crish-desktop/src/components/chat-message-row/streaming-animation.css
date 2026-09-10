@@ -123,10 +123,13 @@ html[data-perf-tier='eco'] .conex-streaming-caret {
 
 /* ==========================================================================
    5. 封口块视口裁剪与自适应围限 (Zero-CLS)
+   注意：外层 MessageVirtualizer 已具备行级虚拟滚动；
+   封口块必须保持 content-visibility: visible，严禁使用 content-visibility: auto，
+   否则在 Chromium 中会导致出入视口时发生数千像素的假高坍塌与暴增，引发滚动条时长时短与脱节。
    ========================================================================== */
 
 .md-block-sealed {
-  content-visibility: auto;
+  content-visibility: visible;
   contain-intrinsic-size: auto var(--stream-table-intrinsic-h, 320px);
   contain: layout style paint;
 }

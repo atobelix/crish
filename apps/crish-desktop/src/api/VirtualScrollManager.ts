@@ -32,6 +32,15 @@ export function estimateTimelineMessageHeight(msg: SessionMessage): number {
     return 24;
   }
 
+  // 用户消息：气泡紧凑，单行约 44px，长文按字数折行 + 附件高度
+  if (msg.sender === 'user') {
+    const len = msg.text?.length || 0;
+    const textHeight = Math.max(24, Math.ceil(len / 35) * 20);
+    const attachCount = (msg.attachments?.length || 0) + (msg.images?.length || 0);
+    const attachHeight = attachCount > 0 ? attachCount * 44 : 0;
+    return Math.min(Math.max(textHeight + attachHeight + 20, 44), 1000);
+  }
+
   let h = 48; // Base Row Padding + Actions
   const blocks = msg.blocks || [];
 
@@ -48,7 +57,7 @@ export function estimateTimelineMessageHeight(msg: SessionMessage): number {
         h += 40;
       } else if (b.type === 'text') {
         const len = b.content?.length || 0;
-        h += Math.max(32, Math.ceil(len / 40) * 20);
+        h += Math.max(32, Math.ceil(len / 60) * 22);
       }
     }
   } else {
@@ -57,10 +66,10 @@ export function estimateTimelineMessageHeight(msg: SessionMessage): number {
     if (msg.toolCalls?.length) h += msg.toolCalls.length * 52;
     if (msg.injections?.length) h += msg.injections.length * 40;
     const len = msg.text?.length || 0;
-    h += Math.max(48, Math.ceil(len / 40) * 20);
+    h += Math.max(48, Math.ceil(len / 60) * 22);
   }
 
-  return Math.min(Math.max(h, 100), 4000);
+  return Math.min(Math.max(h, 50), 6000);
 }
 
 export class VirtualScrollManager {
@@ -156,6 +165,45 @@ export class VirtualScrollManager {
    */
   getActualHeight(id: string): number | null {
     return this.heightsById.get(id)?.actual ?? null;
+  }
+
+  /** 判断某项是否已有实测高度 (actual != null) */
+  hasActualHeight(id: string): boolean {
+    return this.heightsById.get(id)?.actual != null;
+  }
+
+  /**
+   * 批量预先灌入高度预估值（对尚未实测 actual 的项生效）。
+   * 一次性批量更新 BIT 树，杜绝 120px 粗估导致的 1700px 视口坍塌与滚动条时长时短。
+   */
+  preloadEstimates(estimates: Array<{ id: string; height: number }>): boolean {
+    if (!Array.isArray(estimates) || estimates.length === 0) return false;
+    let anyChanged = false;
+    for (const { id, height } of estimates) {
+      if (!id || typeof height !== 'number' || !Number.isFinite(height) || height <= 0) {
+        continue;
+      }
+      const entry = this.heightsById.get(id);
+      if (entry) {
+        if (entry.actual != null) continue; // 实测已有，绝不覆盖
+        if (entry.estimated === height) continue;
+        entry.estimated = height;
+      } else {
+        this.heightsById.set(id, { estimated: height, actual: null });
+      }
+
+      const idx = this.idToIndexMap.get(id);
+      if (idx !== undefined && idx >= 0 && idx < this.currentHeights.length) {
+        const oldH = this.currentHeights[idx]!;
+        const delta = height - oldH;
+        if (Math.abs(delta) > 0.0001) {
+          this.currentHeights[idx] = height;
+          this.bitAdd(idx + 1, delta);
+          anyChanged = true;
+        }
+      }
+    }
+    return anyChanged;
   }
 
   /** 返回当前 order 副本 */

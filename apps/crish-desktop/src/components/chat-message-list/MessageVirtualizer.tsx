@@ -12,7 +12,10 @@ import { messageMatchesSearch } from '../../api/sessionSearch';
 import { ChatUserMessageRow } from '../chat-message-row/ChatMessageRow';
 import { StreamingAssistantRow } from './StreamingAssistantRow';
 import { useVirtualScroll } from '../../hooks/useVirtualScroll';
-import { MESSAGE_ESTIMATED_ROW_HEIGHT } from '../../api/VirtualScrollManager';
+import {
+  MESSAGE_ESTIMATED_ROW_HEIGHT,
+  estimateTimelineMessageHeight,
+} from '../../api/VirtualScrollManager';
 import {
   registerActiveVsm,
   unregisterActiveVsm,
@@ -110,7 +113,7 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
   const vs = useVirtualScroll({
     ids: msgIds,
     itemCount: messages.length,
-    overscan: 6,
+    overscan: 8,
     fallbackHeight: MESSAGE_ESTIMATED_ROW_HEIGHT,
   });
   const { containerRef, setActual, clearHeights, manager } = vs;
@@ -164,16 +167,6 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
             setActual(msgId, measuredHeight);
           }
         }
-        if (isAtBottomRef.current) {
-          const c = containerRef.current;
-          if (c) {
-            const maxScroll = Math.max(0, c.scrollHeight - c.clientHeight);
-            if (c.scrollTop < maxScroll) {
-              c.scrollTop = maxScroll;
-              observedTopRef.current = maxScroll;
-            }
-          }
-        }
       });
     }
     const ro = roRef.current;
@@ -205,14 +198,29 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
     };
   }, []);
 
-  // 首帧就把 id 序写入 VSM，避免只靠 layout effect 时测试/首屏 visibleRange 为空
-  vs.manager.syncOrder(msgIds);
+  // 仅在 messages 发生引用变化时灌入预估高度，杜绝每次虚拟滚动时对 1500+ 项重复遍历
+  useMemo(() => {
+    vs.manager.syncOrder(msgIds);
+    const unmeasuredEstimates: Array<{ id: string; height: number }> = [];
+    for (const m of messages) {
+      if (!vs.manager.hasActualHeight(m.id)) {
+        unmeasuredEstimates.push({
+          id: m.id,
+          height: estimateTimelineMessageHeight(m),
+        });
+      }
+    }
+    if (unmeasuredEstimates.length > 0) {
+      vs.manager.preloadEstimates(unmeasuredEstimates);
+    }
+  }, [messages, msgIds, vs.manager]);
+
   const { startIndex, endIndex, startOffset, estimatedTotalHeight } =
     vs.manager.computeVisibleRange(
       vs.scrollTop,
       vs.viewportHeight,
       messages.length,
-      6
+      8
     );
   const endOffset = vs.manager.getOffset(endIndex);
   const totalHeight = vs.manager.getTotalHeight(messages.length);
@@ -249,14 +257,24 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
       }
     };
 
+    const handlePointerDown = (e: PointerEvent) => {
+      // 若用户点击在滚动条轨道/滑块区域（offsetX >= clientWidth），立即解锁吸底
+      if (e.offsetX >= el.clientWidth - 20) {
+        isAtBottomRef.current = false;
+        setIsAtBottom(false);
+      }
+    };
+
     el.addEventListener('wheel', handleWheel, { capture: true, passive: true });
     el.addEventListener('touchstart', handleTouchStart, { capture: true, passive: true });
     el.addEventListener('touchmove', handleTouchMove, { capture: true, passive: true });
+    el.addEventListener('pointerdown', handlePointerDown, { capture: true, passive: true });
 
     return () => {
       el.removeEventListener('wheel', handleWheel, { capture: true });
       el.removeEventListener('touchstart', handleTouchStart, { capture: true });
       el.removeEventListener('touchmove', handleTouchMove, { capture: true });
+      el.removeEventListener('pointerdown', handlePointerDown, { capture: true });
     };
   }, [containerRef]);
 
@@ -315,7 +333,11 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
     if (!container) return;
     const maxScroll = Math.max(0, container.scrollHeight - container.clientHeight);
     if (Math.abs(container.scrollTop - maxScroll) > SCROLL_FLOOR_EPSILON) {
-      container.scrollTop = maxScroll;
+      try {
+        container.scrollTop = maxScroll;
+      } catch {
+        // jsdom mock 保护（如缺少 writable 的 defineProperty）
+      }
       observedTopRef.current = maxScroll;
     }
   }, [messages, totalHeight, containerRef]);

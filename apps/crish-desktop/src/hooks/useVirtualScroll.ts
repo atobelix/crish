@@ -82,21 +82,24 @@ export function useVirtualScroll(
   }, []);
 
   const ids = options.ids;
-  if (ids) {
+  const prevIdsRef = useRef<string[] | undefined>(undefined);
+  if (ids && ids !== prevIdsRef.current) {
+    prevIdsRef.current = ids;
     manager.syncOrder(ids);
   }
 
   useLayoutEffect(() => {
-    if (ids) {
+    if (ids && ids !== prevIdsRef.current) {
+      prevIdsRef.current = ids;
       manager.syncOrder(ids);
     }
   }, [manager, ids]);
 
   useEffect(() => {
     return () => {
-      if (rafRef.current != null) {
-        cancelAnimationFrame(rafRef.current);
-        rafRef.current = null;
+      if (actualRafRef.current != null) {
+        cancelAnimationFrame(actualRafRef.current);
+        actualRafRef.current = null;
       }
     };
   }, []);
@@ -119,17 +122,8 @@ export function useVirtualScroll(
     [manager, itemCount, actualTick],
   );
 
-  const rafRef = useRef<number | null>(null);
-  const latestScrollTopRef = useRef(0);
-
   const onScroll = useCallback<React.UIEventHandler<HTMLDivElement>>((e) => {
-    latestScrollTopRef.current = e.currentTarget.scrollTop;
-    if (rafRef.current == null) {
-      rafRef.current = requestAnimationFrame(() => {
-        rafRef.current = null;
-        setScrollTop(latestScrollTopRef.current);
-      });
-    }
+    setScrollTop(e.currentTarget.scrollTop);
   }, []);
 
   const syncOrder = useCallback(
@@ -155,14 +149,19 @@ export function useVirtualScroll(
       if (actualRafRef.current == null) {
         actualRafRef.current = requestAnimationFrame(() => {
           actualRafRef.current = null;
-          let changed = false;
+          let significantChanged = false;
           for (const [msgId, h] of pendingActualRef.current) {
-            changed = manager.setActual(msgId, h) || changed;
+            const oldActual = manager.getActualHeight(msgId);
+            const oldHeight = oldActual ?? manager.getHeight(msgId);
+            const delta = Math.abs(h - oldHeight);
+            const changed = manager.setActual(msgId, h);
+            // 显著变化（>4px）才触发全量重算；微小几何微调（≤4px）静默修正 BIT 树，消除滚动掉帧
+            if (changed && delta > 4) {
+              significantChanged = true;
+            }
           }
           pendingActualRef.current.clear();
-          // rAF flush 全为同值（未变更）→ 不调 setActualTick：
-          // 完成态稳定行不触发 visibleRange/totalHeight 全列表重算
-          if (changed) {
+          if (significantChanged) {
             setActualTick((t) => t + 1);
           }
         });
