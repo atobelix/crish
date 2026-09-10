@@ -5,6 +5,7 @@ import { createHash } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import net from 'node:net';
 import { PREVIEW_BRIDGE_SCRIPT } from './dev-server/previewBridgeScript';
+import { isSameOriginRequest } from './dev-server/sameOriginRequest';
 import { Readable } from 'node:stream';
 import { createRequire } from 'node:module';
 
@@ -254,20 +255,7 @@ function probePort(port: number, timeoutMs = 50): Promise<boolean> {
   });
 }
 
-/**
- * 同源校验（audit-repair-202609 T18）：dev server 本地工具端点仅允许同源
- * 请求。浏览器对同源 fetch 通常不发 Origin 头——缺省放行；携带 Origin 头
- * （跨源 fetch / 表单 / iframe）时，其 host 必须与请求 host 一致。
- */
-function isSameOriginRequest(req: IncomingMessage): boolean {
-  const origin = req.headers.origin;
-  if (!origin) return true;
-  try {
-    return new URL(origin).host === (req.headers.host || '');
-  } catch {
-    return false;
-  }
-}
+/** 同源校验：见 ./dev-server/sameOriginRequest.ts（§4.1 正式策略，禁缺 Origin 即放行） */
 
 function crishActivePortsPlugin(): Plugin {
   return {

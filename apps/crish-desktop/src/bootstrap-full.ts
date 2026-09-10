@@ -14,12 +14,23 @@ export async function bootstrapFull(): Promise<void> {
     // 2. 运行时模型目录快照（DEEPCHECK-02 P0：catalog_get 接线；Rust 目录真源
     //    → 前端四指标定价 + 思考档位单源（T5.2b 描述接口 offered）；invoke 失败
     //    内部降级静态表 / 提供方默认，恒不抛）
+    // 本维可不删；生产思考 UI 不得等它们、不得读它们（独立分支，不挡 yaml 水合）
     (async () => {
       const { fetchCatalogSnapshot } = await import('./api/modelCatalog');
       await fetchCatalogSnapshot();
       const { fetchDescribeEffortsSnapshot } =
         await import('./api/thinkingGear');
       await fetchDescribeEffortsSnapshot();
+    })(),
+
+    // 3. yaml 镜像水合（plans/03 §3.5 / §3.6#15）：主界面不打开设置也能列出 yaml 模型
+    (async () => {
+      const { ensureModelsCatalogLoaded } = await import(
+        './api/modelsCatalogStore'
+      );
+      await ensureModelsCatalogLoaded().catch(() => {
+        /* 失败：store 空树 + lastError + catalog-changed；Picker 空列表，不得回落 LS 种子。 */
+      });
     })(),
   ]);
 

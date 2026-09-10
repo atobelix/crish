@@ -21,9 +21,10 @@
   <body>
     <div id="root">
       <!-- 单图标启动加载屏：多主题自适应 (React createRoot 准备就绪后自动替换) -->
+      <!-- §4.2：仅外层非交互标题带挂 drag-region；SVG/子节点不再叠挂，避免吞点击 -->
       <div class="app-initial-loader" id="skel-app" data-tauri-drag-region>
-        <div class="app-loader-icon-card" data-tauri-drag-region>
-          <svg class="app-loader-svg" data-tauri-drag-region viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+        <div class="app-loader-icon-card">
+          <svg class="app-loader-svg" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
             <ellipse class="app-loader-green-dot" cx="100" cy="35" rx="16" ry="16" />
             <g class="app-loader-lines">
               <path d="M 100 118 L 28 118" />
@@ -35,7 +36,7 @@
             </g>
           </svg>
         </div>
-        <div class="app-loader-caption" data-tauri-drag-region>
+        <div class="app-loader-caption">
           <span class="app-loader-spinner-bar"></span>
           <span>Crish Workstation</span>
         </div>
