@@ -85,7 +85,8 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 480px;
+  min-width: 0;
+  max-width: min(560px, calc(100% - 110px));
   flex: 0 1 auto;
   pointer-events: none;
 }

@@ -291,13 +291,19 @@ export function createSessionMessageActionsCore<T extends SessionStoreSlice>(
             };
           }
         } else if (thinking.trim()) {
-          msg.blocks.push({
-            type: 'thought',
+          const firstTextIdx = msg.blocks.findIndex((b) => b.type === 'text');
+          const newBlock = {
+            type: 'thought' as const,
             id: thoughtKey,
             content: thinking,
             turnIndex: cleanTurn,
             isStreaming: true,
-          });
+          };
+          if (firstTextIdx >= 0) {
+            msg.blocks.splice(firstTextIdx, 0, newBlock);
+          } else {
+            msg.blocks.push(newBlock);
+          }
         }
         rebindSessionById(state, sessionId, hit.session);
       }),

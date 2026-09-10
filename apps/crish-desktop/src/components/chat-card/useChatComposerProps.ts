@@ -5,6 +5,7 @@ import { useChatAttachments } from './useChatAttachments';
 import { useChatQueue } from './useChatQueue';
 import { useChatSend } from './useChatSend';
 import { settleStaleSessionProcessingMessages } from '../../hooks/chat-stream/helpers';
+import { useStreamingStore } from '../../store/streamingStore';
 
 export interface UseChatComposerPropsOptions {
   wsId: string;
@@ -53,7 +54,12 @@ export function useChatComposerProps(options: UseChatComposerPropsOptions) {
       // 只要用户手动点击发送，先无条件清扫任何孤儿 processing / queued 状态
       settleStaleSessionProcessingMessages(sid, false);
     }
-    if (queueMode && isProcessing) {
+    // 检查是否有真实底层流在进行：若无活动流缓冲，绝不排队
+    const hasLiveStream = sid
+      ? Object.keys(useStreamingStore.getState().byKey).some((k) => k.startsWith(`${sid}::`))
+      : false;
+
+    if (queueMode && isProcessing && hasLiveStream) {
       const text = chatInput;
       enqueueMessage(text, attachments);
       void import('../../app/compositionRoot').then(

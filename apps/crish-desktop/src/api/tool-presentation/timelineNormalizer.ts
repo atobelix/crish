@@ -192,7 +192,7 @@ export function buildAssistantTimeline(
       if (!items.some((i) => i.kind === 'text') && (msg.text || '').trim()) {
         pushParsedText(msg.text || '', undefined, msg.status === 'processing', items, thi, xi);
       }
-      return items;
+      return enforceThoughtBeforeText(items);
     }
 
     // 历史无 blocks 消息兼容降级：按 injections -> thoughts -> tools -> text 顺序列出
@@ -209,11 +209,37 @@ export function buildAssistantTimeline(
     if ((msg.text || '').trim()) {
       pushParsedText(msg.text || '', undefined, msg.status === 'processing', items, thi, xi);
     }
-    return items;
+    return enforceThoughtBeforeText(items);
   } catch {
     if ((msg.text || '').trim()) {
       return [{ kind: 'text', content: msg.text || '', key: 'text-fallback' }];
     }
     return [];
   }
+}
+
+/**
+ * 物理因果时序守卫：同一轮次内（或未指定轮次时），思考（thought）必定先于正文（text）产生，
+ * 严禁因底层 blocks 乱序将同轮次 thought 排在 text 之后。
+ */
+function enforceThoughtBeforeText(
+  items: AssistantTimelineItem[]
+): AssistantTimelineItem[] {
+  const result = [...items];
+  for (let i = 0; i < result.length; i++) {
+    const cur = result[i]!;
+    if (cur.kind !== 'thought') continue;
+    const curTurn = cur.turnIndex ?? 0;
+    // 寻找在此 thought 之前、但 turnIndex >= curTurn 的首个 text 块
+    const misplacedTextIdx = result.findIndex(
+      (it, idx) =>
+        idx < i && it.kind === 'text' && (it.turnIndex ?? 0) >= curTurn
+    );
+    if (misplacedTextIdx !== -1) {
+      // 将此 thought 移到该 text 块之前
+      result.splice(i, 1);
+      result.splice(misplacedTextIdx, 0, cur);
+    }
+  }
+  return result;
 }

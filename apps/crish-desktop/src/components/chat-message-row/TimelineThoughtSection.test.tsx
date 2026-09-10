@@ -14,7 +14,8 @@ describe('TimelineThoughtSection', () => {
       />
     );
 
-    expect(screen.getByText('已思考 · 2.4秒')).toBeDefined();
+    expect(screen.getByText('思考')).toBeDefined();
+    expect(screen.getAllByText('这是简短的思考过程').length).toBeGreaterThanOrEqual(1);
     expect(screen.queryByText(/共.*字/)).toBeNull();
     expect(screen.queryByRole('button', { name: /查看完整思考链/i })).toBeNull();
   });
@@ -24,7 +25,8 @@ describe('TimelineThoughtSection', () => {
       <TimelineThoughtSection content="正在思考下一步工具调用" isLive={true} />
     );
 
-    expect(screen.getByText('思考中')).toBeDefined();
+    expect(screen.getByText('正在思考')).toBeDefined();
+    expect(screen.getAllByText('正在思考下一步工具调用').length).toBeGreaterThanOrEqual(1);
     expect(container.querySelector('[class*="thoughtLiveDot"]')).toBeNull();
   });
 

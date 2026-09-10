@@ -2,10 +2,10 @@
 .container {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-2, 8px);
+  gap: var(--space-1_5, 6px);
   height: 24px;
   line-height: 24px;
-  padding: 0 var(--space-2, 8px);
+  padding: 0 var(--space-1, 4px);
   border-radius: var(--radius-sm, 4px);
   user-select: none;
   font-family: inherit;
@@ -15,6 +15,14 @@
   transition: opacity 0.2s ease-out;
 }
 
+.workingMode {
+  margin: 2px 0 6px;
+}
+
+.initialMode {
+  margin: 0;
+}
+
 .pulseDot {
   width: 6px;
   height: 6px;
@@ -22,6 +30,7 @@
   background: #10b981;
   box-shadow: 0 0 6px hsl(158 64% 52% / 0.6);
   animation: pulse-ring 1.6s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  flex-shrink: 0;
 }
 
 @keyframes pulse-ring {
@@ -42,9 +51,15 @@
   letter-spacing: 0.01em;
 }
 
+.separator {
+  color: var(--text-tertiary);
+  opacity: 0.6;
+}
+
 .timer {
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: var(--font-size-micro, 11px);
   color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
   opacity: 0.85;
 }

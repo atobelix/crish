@@ -94,6 +94,11 @@
   overflow-wrap: break-word;
 }
 
+.workingSlot {
+  width: 100%;
+  margin: 2px 0 4px;
+}
+
 .compactAnswer {
   margin-top: var(--space-2, 8px);
 }

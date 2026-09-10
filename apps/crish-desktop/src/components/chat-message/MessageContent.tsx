@@ -218,12 +218,39 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
       useCallback((s) => s.statusBySession[sessionId], [sessionId])
     );
 
-    const isWorking = Boolean(
-      msg.status === 'processing' &&
-      !displayMsg.text?.trim() &&
-      !streamText?.trim() &&
-      !displayMsg.thinking?.trim() &&
-      (!displayMsg.toolCalls || displayMsg.toolCalls.length === 0)
+    const isLiveTurn = Boolean(msg.status === 'processing' || isThinkingMsg);
+
+    const hasThoughtContent = Boolean(
+      (displayMsg.thinking && displayMsg.thinking.trim()) ||
+      (displayMsg.thinkingTurns && displayMsg.thinkingTurns.some((tt) => tt.content?.trim() || tt.isStreaming))
+    );
+
+    const hasTextContent = Boolean(
+      displayMsg.text?.trim() ||
+      streamText?.trim()
+    );
+
+    const hasToolContent = Boolean(
+      displayMsg.toolCalls && displayMsg.toolCalls.length > 0
+    );
+
+    const isInitialWaiting = Boolean(
+      isLiveTurn &&
+      !hasThoughtContent &&
+      !hasTextContent &&
+      !hasToolContent
+    );
+
+    const isThinkingLive = Boolean(
+      isThinkingMsg &&
+      !hasTextContent &&
+      hasThoughtContent
+    );
+
+    const isWorkingAfterThought = Boolean(
+      isLiveTurn &&
+      !isInitialWaiting &&
+      !isThinkingLive
     );
 
     const inFlowRetry =
@@ -343,6 +370,14 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
       return -1;
     }, [linearItems]);
 
+    // 定位最后思考块索引，用于将正文流式输出期的工作中指示器精准锚定在思考下方
+    const lastThoughtIndex = useMemo(() => {
+      for (let i = linearItems.length - 1; i >= 0; i--) {
+        if (linearItems[i]!.kind === 'thought') return i;
+      }
+      return -1;
+    }, [linearItems]);
+
     // 定位可承接流式打字的正文块索引：
     // 必须位于工具调用之后（或全时间线无工具调用），严禁将后置流式总结反向注入到工具调用之前的历史前置文本块中
     const streamingTextIndex = useMemo(() => {
@@ -361,10 +396,13 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
     if (!linearItems.length) {
       const fallback = stripThoughtPlaceholders(displayMsg.text || streamText || '');
       if (!fallback.trim() && !streaming) {
-        if (isWorking) {
+        if (isInitialWaiting || isWorkingAfterThought) {
           return (
             <div className={`${styles.contentText} ${className || ''}`}>
-              <WorkingStatusIndicator startTime={msg.timestamp} />
+              <WorkingStatusIndicator
+                startTime={msg.timestamp}
+                mode={isInitialWaiting ? 'initial' : 'working'}
+              />
             </div>
           );
         }
@@ -388,6 +426,11 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
       }
       return (
         <div className={`${styles.contentText} ${className || ''}`}>
+          {isWorkingAfterThought && (
+            <div className={styles.workingSlot}>
+              <WorkingStatusIndicator mode="working" />
+            </div>
+          )}
           <StreamingMarkdownView
             text={fallback}
             isStreaming={streaming}
@@ -421,30 +464,41 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
 
     return (
       <div className={`${styles.assistantTimelineStream} ${className || ''}`}>
+        {isWorkingAfterThought && lastThoughtIndex === -1 && (
+          <div className={styles.workingSlot}>
+            <WorkingStatusIndicator mode="working" />
+          </div>
+        )}
         {linearItems.map((item, idx) => (
-          <ProcessItemRenderer
-            key={item.key}
-            item={item}
-            msgId={msg.id}
-            status={msg.status}
-            isThinkingMsg={isThinkingMsg}
-            thoughtDefaultOpen={thoughtDefaultOpen}
-            renderThought={renderThought}
-            renderTools={renderTools}
-            toolStackProps={toolStackProps}
-            streamPhase={streamPhaseRef.current}
-            hasFinalAnswer={Boolean(displayMsg.text?.trim() || streamText?.trim())}
-            isStreamingText={streaming && idx === streamingTextIndex}
-            streamingTextContent={
-              msg.streamTextOffset &&
-              msg.streamTextOffset > 0 &&
-              streamText &&
-              streamText.length >= msg.streamTextOffset &&
-              streamingTextIndex > 0
-                ? streamText.slice(msg.streamTextOffset)
-                : streamText
-            }
-          />
+          <React.Fragment key={item.key}>
+            <ProcessItemRenderer
+              item={item}
+              msgId={msg.id}
+              status={msg.status}
+              isThinkingMsg={isThinkingMsg}
+              thoughtDefaultOpen={thoughtDefaultOpen}
+              renderThought={renderThought}
+              renderTools={renderTools}
+              toolStackProps={toolStackProps}
+              streamPhase={streamPhaseRef.current}
+              hasFinalAnswer={Boolean(displayMsg.text?.trim() || streamText?.trim())}
+              isStreamingText={streaming && idx === streamingTextIndex}
+              streamingTextContent={
+                msg.streamTextOffset &&
+                msg.streamTextOffset > 0 &&
+                streamText &&
+                streamText.length >= msg.streamTextOffset &&
+                streamingTextIndex > 0
+                  ? streamText.slice(msg.streamTextOffset)
+                  : streamText
+              }
+            />
+            {isWorkingAfterThought && item.kind === 'thought' && idx === lastThoughtIndex && (
+              <div className={styles.workingSlot}>
+                <WorkingStatusIndicator mode="working" />
+              </div>
+            )}
+          </React.Fragment>
         ))}
         {streaming && streamingTextIndex === -1 && streamText && (
           <div className={styles.contentText}>
@@ -462,7 +516,6 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
             />
           </div>
         )}
-        {isWorking && <WorkingStatusIndicator startTime={msg.timestamp} />}
         {inFlowRetry && (
           <ModelRetryNode
             retryState={inFlowRetry}

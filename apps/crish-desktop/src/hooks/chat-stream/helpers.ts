@@ -214,6 +214,17 @@ export function commitStreamToSession(
     clear?: boolean;
   }
 ): string {
+  if (options?.commitThinking !== false) {
+    const thinking = getStreamThinking(sessionId, messageId);
+    if (thinking != null && thinking !== '') {
+      const msg = getSessionById(sessionId)?.messages?.find(
+        (m: SessionMessage) => m.id === messageId
+      );
+      if (msg?.thinking !== thinking) {
+        updateMessageThinking(sessionId, messageId, thinking);
+      }
+    }
+  }
   if (options?.commitTools !== false) {
     commitStreamToolsToSession(sessionId, messageId);
   }
@@ -226,17 +237,6 @@ export function commitStreamToSession(
     );
     if (msg?.text !== text) {
       updateMessageText(sessionId, messageId, text);
-    }
-  }
-  if (options?.commitThinking !== false) {
-    const thinking = getStreamThinking(sessionId, messageId);
-    if (thinking != null && thinking !== '') {
-      const msg = getSessionById(sessionId)?.messages?.find(
-        (m: SessionMessage) => m.id === messageId
-      );
-      if (msg?.thinking !== thinking) {
-        updateMessageThinking(sessionId, messageId, thinking);
-      }
     }
   }
   // 2. 关键时序闭环：严禁同步 clearStream()！

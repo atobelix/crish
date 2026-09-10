@@ -42,10 +42,10 @@ export const TimelineThoughtSection: React.FC<TimelineThoughtSectionProps> = ({
   }, [durationMs]);
 
   const titleText = isLive
-    ? '思考中'
-    : durationLabel
-      ? `已思考 · ${durationLabel}`
-      : '已思考';
+    ? '正在思考'
+    : turnIndex != null && turnIndex > 0
+      ? `第 ${turnIndex + 1} 阶段思考`
+      : '思考';
 
   const displaySummary = useMemo(() => {
     if (!content) return '';
@@ -64,6 +64,7 @@ export const TimelineThoughtSection: React.FC<TimelineThoughtSectionProps> = ({
         role="button"
         tabIndex={0}
         aria-expanded={isOpen}
+        title={durationLabel ? `思考耗时 ${durationLabel}` : undefined}
       >
         <span className={styles.thoughtIcon} aria-hidden>
           <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor">
@@ -82,10 +83,6 @@ export const TimelineThoughtSection: React.FC<TimelineThoughtSectionProps> = ({
               {displaySummary}
             </span>
           </>
-        ) : null}
-
-        {isLive ? (
-          <ThinkingTimer isLive />
         ) : null}
 
         <span
