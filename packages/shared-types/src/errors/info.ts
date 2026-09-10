@@ -789,8 +789,10 @@ export const CRISH_ERROR_REGISTRY: Readonly<
   'telemetry.trace_lost': {
     code: 'telemetry.trace_lost',
     title: 'Trace 丢失',
-    category: 'transient',
-    retryable: true,
+    // Trace 已丢失不可恢复：retryable 与 action 对齐为 permanent/none
+    //（原 transient/retryable=true + action.none 自相矛盾，与 Rust 注册表同步）
+    category: 'permanent',
+    retryable: false,
     public: false,
     action: 'action.telemetry.none',
   },

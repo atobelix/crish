@@ -432,3 +432,85 @@ fn build_with_tool_result_message() {
     assert_eq!(messages[1]["tool_call_id"], "call_1");
     assert_eq!(messages[1]["content"], "文件内容");
 }
+
+// ── 轨G P2：max_tokens 缺省不硬抬升 64000 ──
+
+#[test]
+fn max_tokens_none_omits_field_and_budget_not_clamped_to_64000() {
+    // 无 max_tokens + AnthropicBudget 大预算：请求体省略 max_tokens 字段，
+    // budget 不被发明的 64000 上限钳到 59904。
+    let mut thinking_map = IndexMap::new();
+    thinking_map.insert("High".to_string(), "32000".to_string());
+    let opts = ChatCompletionsRequestOptions {
+        model: Some("claude-sonnet-4-5".to_string()),
+        reasoning_effort: Some(ReasoningEffort::High),
+        thinking_format: Some(ThinkingFormat::Anthropic),
+        thinking_map: Some(thinking_map),
+        // max_tokens / max_tokens_field 均缺省
+        ..ChatCompletionsRequestOptions::default()
+    };
+    let body = build_chat_completions_request_body(&opts, &RequestBuildContext::default());
+    assert!(
+        body.get("max_tokens").is_none() && body.get("max_completion_tokens").is_none(),
+        "无 max_tokens 时不得发明 64000 写入请求体：{body}"
+    );
+    let budget = body["thinking"]["budget_tokens"]
+        .as_u64()
+        .expect("thinking.budget_tokens");
+    assert_eq!(
+        budget, 32000,
+        "无已知上限时 budget 应保底取用户字典值，不得按 64000-4096 钳制"
+    );
+}
+
+#[test]
+fn max_tokens_some_still_clamps_budget_with_known_cap() {
+    // 有显式 max_tokens：预算仍按物理上限安全余量钳制（防回归）
+    let mut thinking_map = IndexMap::new();
+    thinking_map.insert("High".to_string(), "32000".to_string());
+    let opts = ChatCompletionsRequestOptions {
+        model: Some("claude-sonnet-4-5".to_string()),
+        reasoning_effort: Some(ReasoningEffort::High),
+        thinking_format: Some(ThinkingFormat::Anthropic),
+        thinking_map: Some(thinking_map),
+        max_tokens: Some(8192),
+        max_tokens_field: Some(MaxTokensField::MaxTokens),
+        ..ChatCompletionsRequestOptions::default()
+    };
+    let body = build_chat_completions_request_body(&opts, &RequestBuildContext::default());
+    let budget = body["thinking"]["budget_tokens"].as_u64().unwrap();
+    assert_eq!(budget, 4096, "预算受 8192-4096 钳制");
+    assert!(
+        body["max_tokens"].as_u64().unwrap() >= budget + 4096,
+        "max_tokens 须抬升至 budget+4096"
+    );
+}
+
+// ── 轨G P2：ReasoningEffortFormat 字段已删，永不进请求体 ──
+
+#[test]
+fn reasoning_effort_format_field_removed_never_enters_body() {
+    // ChatCompletionsRequestOptions 已无 reasoning_effort_format 字段；
+    // 无论 thinking 配置如何，请求体不得出现该键（编译期字段删除 + wire 钉死）。
+    let mut thinking_map = IndexMap::new();
+    thinking_map.insert("Medium".to_string(), "medium".to_string());
+    let opts = ChatCompletionsRequestOptions {
+        model: Some("gpt-5.6-sol".to_string()),
+        reasoning_effort: Some(ReasoningEffort::Medium),
+        thinking_format: Some(ThinkingFormat::OpenAi),
+        thinking_map: Some(thinking_map),
+        ..ChatCompletionsRequestOptions::default()
+    };
+    let body = build_chat_completions_request_body(&opts, &RequestBuildContext::default());
+    assert_eq!(body["reasoning_effort"], "medium");
+    for banned in [
+        "reasoning_effort_format",
+        "reasoningEffortFormat",
+        "effort_format",
+    ] {
+        assert!(
+            body.get(banned).is_none(),
+            "请求体不得含遗留 reasoning_effort_format 键 {banned}"
+        );
+    }
+}

@@ -25,6 +25,7 @@ import {
 import {
   normalizeAssistantTimeline,
 } from '../api/toolPresentation';
+import { DEFAULT_PIN_COLOR } from '../utils/pinColor';
 import type { MessageCacheState } from '@crish/shared-types';
 
 export { reconcileAssistantMessageBlocks } from '../api/toolPresentation';
@@ -184,7 +185,7 @@ export function createSessionMessageActionsTools<T extends SessionStoreSlice>(
           sess.pinnedMessageIds.push(messageId);
           changed = true;
         }
-        const pinColor = color || '#10b981';
+        const pinColor = color || DEFAULT_PIN_COLOR;
         if (!sess.pinnedMessageColors) sess.pinnedMessageColors = {};
         if (sess.pinnedMessageColors[messageId] !== pinColor) {
           sess.pinnedMessageColors[messageId] = pinColor;

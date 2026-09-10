@@ -1,18 +1,19 @@
 //! vendor 机制与思考透传（任务书 B2.6；02-provider-semantics.md §五 #2/#3、§一.4；01 D5）
 //!
-//! - [infer_reasoning_vendor]：baseUrl/model 关键字推断 · [reasoning_effort_object]：vendor 分支
-//!   原生 reasoning 字段 · [reasoning_effort_headers_for_model]：anthropic-beta 头
-//!   （仅 anthropic + 非 off/auto；adaptive 跳过，G7/G6-b）
-//! - [resolve_thinking_params]：thinkingIntensity 透传（01 D5，对齐 shared:thinking-intensity.ts）
-//! - G7 自适应思考（Opus 4.7+ / Sonnet 5+）：`thinking{type:"adaptive",display:"summarized"}` + effort
+//! - [infer_reasoning_vendor]：baseUrl/model 关键字推断（vendor 路由，非思考能力猜测）
+//! - 档位换算纯函数（[vendor_wire]：normalize / budget_tokens / gemini thinking_level）
+//! - [resolve_reasoning_level]：请求面档位白名单拒绝校验（R4 T4.1，三态+开关）
+//!
+//! SSOT（轨A 净清）：出站思考键唯一入口 = `assemble_thinking_dialect`
+//! （`request/vendor/dialect.rs`，四个 builder 共用）。已物理删除旧双轨入口：
+//! `reasoning_effort_object` / `resolve_thinking_params` / `build_reasoning_wire` /
+//! `reasoning_effort_headers*` / `is_adaptive_thinking_model`——无生产调用者，
+//! 且 `infer_thinking_capability`（模型名前缀猜思考能力）已标 deprecated。
+//! 自适应思考由 yaml 字典值 `High: "adaptive"` 经 dialect 表达，不触 MODEL_SERIES。
 //!
 //! SR-06e · 拆分 · ≠ EL：门面文件。实现域拆分（测试旁挂 vendor_tests.rs）：
-//! [vendor_capability] 系列能力映射 · [vendor_wire] wire 换算 · [reject] R4 T4.1 拒绝校验（三态+开关）·
-//! [dialect] R4 T4.2 模型级改名 + T4.5 开关/嵌套方言与 deepseek off disabled。
-
-use serde_json::{json, Value};
-
-use crate::config::Endpoint;
+//! [vendor_capability] 系列能力映射（deprecated）· [vendor_wire] wire 换算 ·
+//! [reject] R4 T4.1 拒绝校验（三态+开关）。
 
 #[path = "vendor/reject.rs"]
 mod reject;
@@ -24,15 +25,13 @@ mod vendor_wire;
 // dialect 单模块（plans/04 §3.2）：只由 `build.rs` 的 `pub mod dialect` 编译，
 // 本模块不再声明第二个 `#[path]` 副本——四个 builder 共用同一
 // `assemble_thinking_dialect`，杜绝双份类型与双实现漂移。
-pub use crate::request::build::dialect::{build_reasoning_wire, resolve_wire_spelling_with_tiers};
 pub use reject::{resolve_reasoning_level, DegradePolicy, ReasoningEffortState, ReasoningReject};
+#[allow(deprecated)]
 pub use vendor_capability::infer_thinking_capability;
 pub use vendor_wire::{
     effort_to_budget_tokens, effort_to_gemini_thinking_level, normalize_reasoning_effort,
     thinking_to_budget_tokens, thinking_to_gemini_thinking_level,
 };
-
-use vendor_wire::{adaptive_effort_wire, is_adaptive_thinking_model};
 
 /// reasoning vendor（对齐 `shared:thinking-intensity.ts` 的 ReasoningVendor）
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -93,18 +92,6 @@ impl ReasoningEffort {
             Self::Max => "max",
         }
     }
-}
-
-/// reasoningEffortFormat（auto/responses/chat-completions/none）
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum ReasoningEffortFormat {
-    /// 按 endpoint 推断（保持向后兼容）
-    #[default]
-    Auto,
-    Responses,
-    ChatCompletions,
-    /// 不发送任何 reasoning 参数
-    None,
 }
 
 /// thinking 强度档位（对齐 ThinkingIntensity；01 D5 透传）
@@ -215,110 +202,15 @@ pub fn infer_reasoning_vendor(base_url: Option<&str>, model: Option<&str>) -> Re
     ReasoningVendor::Auto
 }
 
-/// reasoningEffortObject（对齐 `model:openai-request-build.ts:214-270`；02 §五 #2 取 model 行为）。
-///
-/// 显式 vendor（非 auto）优先按 vendor 原生格式生成：openai（responses→`reasoning.effort` /
-/// chat→`reasoning_effort`）、anthropic（旧代际 `thinking{enabled,budget_tokens}`、新代际 adaptive
-/// 经 [is_adaptive_thinking_model]）、deepseek/qwen/glm/kimi（`reasoning_effort`）、
-/// gemini（`generation_config.thinking_level`）。
-/// off/auto 或 format=none → None。本函数为**无模型级档位载体**兼容入口（T4.2 改名经
-/// [build_reasoning_wire] / [resolve_wire_spelling_with_tiers] 消费）；显式档位越能力由 R4 T4.1
-/// [resolve_reasoning_level] 独立拒绝路径承载，本函数保持系列级映射、不静默改档位集外档。
-pub fn reasoning_effort_object(
-    endpoint: Endpoint,
-    model: &str,
-    effort: Option<ReasoningEffort>,
-    format: Option<ReasoningEffortFormat>,
-    vendor: Option<ReasoningVendor>,
-) -> Option<Value> {
-    let wire_effort = effort.and_then(normalize_reasoning_effort)?;
-    if format == Some(ReasoningEffortFormat::None) {
-        return None;
-    }
-    let resolved_vendor = vendor.unwrap_or(ReasoningVendor::Auto);
-    if resolved_vendor != ReasoningVendor::Auto {
-        return match resolved_vendor {
-            ReasoningVendor::Openai => {
-                if endpoint == Endpoint::Responses {
-                    Some(json!({ "reasoning": { "effort": wire_effort } }))
-                } else {
-                    Some(json!({ "reasoning_effort": wire_effort }))
-                }
-            }
-            ReasoningVendor::Anthropic => {
-                if is_adaptive_thinking_model(model) {
-                    Some(json!({
-                        "thinking": { "type": "adaptive", "display": "summarized" },
-                        "effort": adaptive_effort_wire(effort.unwrap_or(ReasoningEffort::Medium)),
-                    }))
-                } else {
-                    Some(json!({
-                        "thinking": {
-                            "type": "enabled",
-                            "budget_tokens": effort_to_budget_tokens(effort.unwrap_or(ReasoningEffort::Medium)),
-                        }
-                    }))
-                }
-            }
-            ReasoningVendor::Deepseek
-            | ReasoningVendor::Qwen
-            | ReasoningVendor::Glm
-            | ReasoningVendor::Kimi => Some(json!({ "reasoning_effort": wire_effort })),
-            ReasoningVendor::Gemini => Some(json!({
-                "generation_config": {
-                    "thinking_level": effort_to_gemini_thinking_level(
-                        effort.unwrap_or(ReasoningEffort::High),
-                    ),
-                }
-            })),
-            ReasoningVendor::Auto => unreachable!("auto 已在上方分支处理"),
-        };
-    }
-    // auto：按 format/endpoint 推断（保持向后兼容）
-    let resolved_format = format.unwrap_or(ReasoningEffortFormat::Auto);
-    if matches!(resolved_format, ReasoningEffortFormat::Responses)
-        || (resolved_format == ReasoningEffortFormat::Auto && endpoint == Endpoint::Responses)
-    {
-        return Some(json!({ "reasoning": { "effort": wire_effort } }));
-    }
-    if matches!(resolved_format, ReasoningEffortFormat::ChatCompletions)
-        || (resolved_format == ReasoningEffortFormat::Auto && endpoint == Endpoint::ChatCompletions)
-    {
-        return Some(json!({ "reasoning_effort": wire_effort }));
-    }
-    None
-}
-
-/// reasoning-effort 相关请求头（对齐 `model:openai-request-build.ts:190-199`；02 §五 #3）。
-/// 兼容 2 参签名（无模型上下文，按旧代际语义）；adaptive 跳过由
-/// [reasoning_effort_headers_for_model] 承载（G6-b / T4.4）。
-pub fn reasoning_effort_headers(
-    vendor: Option<ReasoningVendor>,
-    effort: Option<ReasoningEffort>,
-) -> Option<(&'static str, &'static str)> {
-    reasoning_effort_headers_for_model("", vendor, effort)
-}
-
-/// model-aware anthropic-beta 头（G6-b / T4.4）：adaptive 代际（[is_adaptive_thinking_model]）
-/// → None（对齐 pi-ai anthropic-messages.js:641 forceAdaptive 跳过）；旧代际 + 活跃档 → 返头。
-pub fn reasoning_effort_headers_for_model(
-    model: &str,
-    vendor: Option<ReasoningVendor>,
-    effort: Option<ReasoningEffort>,
-) -> Option<(&'static str, &'static str)> {
-    let active = effort.is_some_and(|e| !matches!(e, ReasoningEffort::Off | ReasoningEffort::Auto));
-    if vendor == Some(ReasoningVendor::Anthropic) && active && !is_adaptive_thinking_model(model) {
-        Some(("anthropic-beta", "interleaved-thinking-2025-05-14"))
-    } else {
-        None
-    }
-}
+/// reasoning-effort 相关请求头的旧入口已物理删除（轨A SSOT）：
+/// 生产 anthropic-beta 头由壳层 `headers.rs` 按显式档位判定（不触 MODEL_SERIES），
+/// 自适应思考由 yaml 字典值 `"adaptive"` 经 `assemble_thinking_dialect` 表达。
 
 /// 归一化思考强度（对齐 `shared:thinking-intensity.ts:182-200`）：off/不支持 → None；
 /// 档位缺失降级（xhigh→high、minimal→low、其余取最大支持档位）。
 ///
-/// 注意（R4 T4.1）：保留为**降级钳制**辅助，供 [DegradePolicy::AllowDegrade] 与既有
-/// 01 D5 调用方（[resolve_thinking_params]）使用；默认拒绝语义走 [resolve_reasoning_level]。
+/// 注意（R4 T4.1）：保留为**降级钳制**辅助，供 [DegradePolicy::AllowDegrade] 使用；
+/// 默认拒绝语义走 [resolve_reasoning_level]。
 pub fn normalize_thinking_intensity(
     intensity: ThinkingIntensity,
     capability: &ThinkingCapability,
@@ -346,51 +238,6 @@ pub fn normalize_thinking_intensity(
         };
     }
     Some(intensity)
-}
-
-/// resolveThinkingParams（对齐 `shared:thinking-intensity.ts:264-312`；01 D5 透传）；
-/// off / 不支持思考的模型 → 空对象。
-pub fn resolve_thinking_params(
-    capability: &ThinkingCapability,
-    intensity: ThinkingIntensity,
-    endpoint: Endpoint,
-) -> Value {
-    let Some(active) = normalize_thinking_intensity(intensity, capability) else {
-        return json!({});
-    };
-    match capability.format {
-        ReasoningFormat::ReasoningEffort => {
-            if capability.vendor == ReasoningVendor::Openai && endpoint == Endpoint::Responses {
-                json!({ "reasoning": { "effort": active.as_str() } })
-            } else {
-                json!({ "reasoning_effort": active.as_str() })
-            }
-        }
-        ReasoningFormat::ThinkingBudget => json!({
-            "thinking": {
-                "type": "enabled",
-                "budget_tokens": thinking_to_budget_tokens(active),
-            }
-        }),
-        ReasoningFormat::ThinkingAdaptive => json!({
-            "thinking": { "type": "adaptive", "display": "summarized" },
-            "effort": active.as_str(),
-        }),
-        ReasoningFormat::ThinkingLevel => json!({
-            "generation_config": {
-                "thinking_level": thinking_to_gemini_thinking_level(active),
-            }
-        }),
-        ReasoningFormat::QwenEnableThinking => json!({ "enable_thinking": true }),
-        ReasoningFormat::ZaiThinking => json!({
-            "thinking": { "type": "enabled", "clear_thinking": false },
-            "reasoning_effort": active.as_str(),
-        }),
-        ReasoningFormat::OpenRouterReasoning => {
-            json!({ "reasoning": { "effort": active.as_str() } })
-        }
-        ReasoningFormat::None => json!({}),
-    }
 }
 
 #[cfg(test)]

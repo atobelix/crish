@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pin, PinOff } from 'lucide-react';
-import { Tooltip } from '../ui';
 import type { SessionMessage } from '../../store/types';
 import type { VirtualScrollManager } from '../../api/VirtualScrollManager';
 import styles from './FlowScrubber.module.css';
@@ -14,6 +13,7 @@ import {
   wheelDeltaY,
   type ScrubberTick,
 } from './flowScrubberModel';
+import { DEFAULT_PIN_COLOR } from '../chat-message-row/colorPickerUtils';
 
 export interface FlowScrubberProps {
   messages: SessionMessage[];
@@ -41,9 +41,6 @@ const FlowScrubberInner: React.FC<FlowScrubberProps> = ({
   pinnedColors,
   onTogglePin,
 }) => {
-  // 保持 ui 模块契约引用
-  void Tooltip;
-
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const tickRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
   const enterTimerRef = useRef<number | null>(null);
@@ -263,8 +260,8 @@ const FlowScrubberInner: React.FC<FlowScrubberProps> = ({
   const hasPinned = Boolean(pinnedIdSet && pinnedIdSet.size > 0);
   const firstPinColor =
     hasPinned && pinnedColors && Object.values(pinnedColors).length > 0
-      ? Object.values(pinnedColors)[0] || '#10b981'
-      : '#10b981';
+      ? Object.values(pinnedColors)[0] || DEFAULT_PIN_COLOR
+      : DEFAULT_PIN_COLOR;
 
   return (
     <div
@@ -294,7 +291,7 @@ const FlowScrubberInner: React.FC<FlowScrubberProps> = ({
             (() => {
               // 铁律：固定功能仅针对用户消息，AI 助手消息无固定功能
               const isPinned = Boolean(pinnedIdSet?.has(seg.tick.id));
-              const pinColor = pinnedColors?.[seg.tick.id] || '#10b981';
+              const pinColor = pinnedColors?.[seg.tick.id] || DEFAULT_PIN_COLOR;
 
               const tickStyle = isPinned
                 ? ({ '--tick-pin-color': pinColor } as React.CSSProperties)
@@ -348,7 +345,7 @@ const FlowScrubberInner: React.FC<FlowScrubberProps> = ({
         (() => {
           const hoveredTick = activeHover.tick;
           const isCurrentPinned = Boolean(pinnedIdSet?.has(hoveredTick.id));
-          const currentPinColor = pinnedColors?.[hoveredTick.id] || '#10b981';
+          const currentPinColor = pinnedColors?.[hoveredTick.id] || DEFAULT_PIN_COLOR;
 
           return (
             <div

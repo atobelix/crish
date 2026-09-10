@@ -20,23 +20,17 @@
 //! 4. 代理出站历史消息清洗 `sanitize_outbound_messages_for_proxy`：彻底剥离 assistant 中的
 //!    Thought 块，防止第三方中转代理因未定义字段报 HTTP 400 错误。
 //!
-//! 兼容层：保留历史 `build_reasoning_wire` 与 `resolve_wire_spelling_with_tiers` 契约，
-//! 供既有测试与 S7 删除前过渡；生产四轨思考键唯一入口 = [assemble_thinking_dialect]。
+//! SSOT（轨A）：生产四轨思考键唯一入口 = [assemble_thinking_dialect]。
+//! 旧兼容层 `build_reasoning_wire` / `resolve_wire_spelling_with_tiers` 已物理删除
+//! （无生产调用者；模型级 wire 改名经 yaml thinking 字典 value 直达）。
 
-use std::collections::BTreeMap;
-
-use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-use crate::config::Endpoint;
-use crate::request::vendor::{
-    effort_to_budget_tokens, effort_to_gemini_thinking_level, normalize_reasoning_effort,
-    resolve_reasoning_level, DegradePolicy, ReasoningEffort as LegacyReasoningEffort,
-    ReasoningEffortState, ReasoningFormat, ReasoningReject, ReasoningVendor, ThinkingCapability,
-    ThinkingIntensity,
-};
+use crate::request::vendor::{ReasoningEffort as LegacyReasoningEffort, ThinkingIntensity};
+
+use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
 
 /// 2026 标准化思考强度等级（纯英文白名单，无中文污染）
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -192,6 +186,9 @@ impl From<crate::models::catalog_types::ThinkingFormat> for ThinkingDialectForma
 pub struct DialectBuildOptions<'a> {
     pub effort: ReasoningEffort,
     pub format: ThinkingDialectFormat,
+    /// 模型物理输出上限（仅 AnthropicBudget 预算余量钳制消费）。
+    /// `None`/`0` = 无已知上限：**不发明 64000 兜底**，预算只保底 ≥1024，
+    /// 抬升建议 = budget+4096（调用方仅在自身已有显式 max_tokens 时才写请求体）。
     pub max_output_tokens: u64,
     /// 用户在 models.yaml 中配置的 thinking 拍平 Key-Value 字典映射
     pub thinking_map: Option<&'a IndexMap<String, String>>,
@@ -262,16 +259,19 @@ pub fn assemble_thinking_dialect(opts: &DialectBuildOptions<'_>) -> (Option<Valu
                 return (None, None);
             };
             let raw_budget = parsed_budget.max(1024);
-            // 安全余量钳制：不能超过模型物理上限的一半，且至少预留 4096 tokens
-            let max_cap = if opts.max_output_tokens > 0 {
-                opts.max_output_tokens
+            // 安全余量钳制：仅当调用方提供已知物理上限（>0）时才钳；
+            // 无上限（0/None 语义）→ 不发明 64000 兜底，只保底 ≥1024。
+            let (safe_budget, elevated_max_tokens) = if opts.max_output_tokens > 0 {
+                let max_cap = opts.max_output_tokens;
+                let safe = raw_budget.min(max_cap.saturating_sub(4096)).max(1024);
+                let elevated = safe.saturating_add(4096).min(max_cap.max(safe + 4096));
+                (safe, Some(elevated))
             } else {
-                64000
+                // 无已知上限：预算照用户字典值（≥1024），抬升建议 = budget+4096
+                // （build_chat 仅在 opts.max_tokens 为 Some 时才把 elevated 写进请求体）
+                let safe = raw_budget.max(1024);
+                (safe, Some(safe.saturating_add(4096)))
             };
-            let safe_budget = raw_budget.min(max_cap.saturating_sub(4096)).max(1024);
-            let elevated_max_tokens = safe_budget
-                .saturating_add(4096)
-                .min(max_cap.max(safe_budget + 4096));
             (
                 Some(json!({
                     "thinking": {
@@ -279,7 +279,7 @@ pub fn assemble_thinking_dialect(opts: &DialectBuildOptions<'_>) -> (Option<Valu
                         "budget_tokens": safe_budget
                     }
                 })),
-                Some(elevated_max_tokens),
+                elevated_max_tokens,
             )
         }
         ThinkingDialectFormat::DeepSeekNative => {
@@ -340,122 +340,6 @@ pub fn sanitize_outbound_messages(raw_messages: &[AgentMessage]) -> Vec<AgentMes
     let mut cloned = raw_messages.to_vec();
     sanitize_outbound_messages_for_proxy(&mut cloned);
     cloned
-}
-
-// ── 兼容层：供既有 vendor.rs 调用的历史实现 ──
-
-/// 模型级 wire 拼写改名（T4.2 / G6-a）：档位载体（档位 → Option<wire 拼写>）命中提供档
-/// → 返回改名/同名 wire 拼写；隐藏档（None 值）与未收录档 → 回落系列级换算。
-pub fn resolve_wire_spelling_with_tiers(
-    effort: LegacyReasoningEffort,
-    tiers: Option<&BTreeMap<String, Option<String>>>,
-) -> Option<String> {
-    if let Some(map) = tiers {
-        if let Some(wire) = map.get(effort.as_str()) {
-            return wire.clone();
-        }
-    }
-    normalize_reasoning_effort(effort).map(str::to_owned)
-}
-
-/// 构建 vendor 原生思考 wire（R4 T4.1+T4.2+T4.5 一体化协调入口）。
-pub fn build_reasoning_wire(
-    endpoint: Endpoint,
-    tiers: Option<&BTreeMap<String, Option<String>>>,
-    effort: ReasoningEffortState,
-    vendor: Option<ReasoningVendor>,
-    capability: &ThinkingCapability,
-    dialect: Option<ReasoningFormat>,
-    policy: DegradePolicy,
-) -> Result<Option<Value>, ReasoningReject> {
-    // 0. deepseek 方言 off 显式 disabled：早退（无 effort wire）。
-    if matches!(
-        effort,
-        ReasoningEffortState::Explicit(LegacyReasoningEffort::Off)
-    ) && matches!(
-        vocabulary_vendor(vendor, capability),
-        ReasoningVendor::Deepseek
-    ) {
-        return Ok(Some(json!({ "thinking": { "type": "disabled" } })));
-    }
-
-    // 1. T4.1 三态 → 待发送档位（拒绝/省略/降级收敛于此）。
-    let active = match resolve_reasoning_level(effort, capability, policy)? {
-        Some(level) => level,
-        None => return Ok(None),
-    };
-
-    // 2. T4.2 模型级 wire 改名（未命中回落系列级）。
-    let wire = resolve_wire_spelling_with_tiers(active, tiers)
-        .ok_or_else(|| ReasoningReject::hidden_tier(active))?;
-
-    // 3. T4.5 方言分派。
-    let format = dialect.unwrap_or(capability.format);
-    Ok(Some(dialect_wire(
-        endpoint, active, &wire, capability, format,
-    )))
-}
-
-fn adaptive_effort_wire(effort: LegacyReasoningEffort) -> &'static str {
-    match effort {
-        LegacyReasoningEffort::Minimal => "low",
-        other => other.as_str(),
-    }
-}
-
-fn dialect_wire(
-    endpoint: Endpoint,
-    effort: LegacyReasoningEffort,
-    wire: &str,
-    capability: &ThinkingCapability,
-    format: ReasoningFormat,
-) -> Value {
-    use ReasoningFormat as F;
-    match format {
-        F::ReasoningEffort => {
-            if capability.vendor == ReasoningVendor::Openai && endpoint == Endpoint::Responses {
-                json!({ "reasoning": { "effort": wire } })
-            } else {
-                json!({ "reasoning_effort": wire })
-            }
-        }
-        F::ThinkingBudget => json!({
-            "thinking": { "type": "enabled", "budget_tokens": budget_for(effort) },
-        }),
-        F::ThinkingAdaptive => json!({
-            "thinking": { "type": "adaptive", "display": "summarized" },
-            "effort": adaptive_effort_wire(effort),
-        }),
-        F::ThinkingLevel => json!({
-            "generation_config": { "thinking_level": level_for(effort) },
-        }),
-        F::QwenEnableThinking => {
-            json!({ "enable_thinking": !matches!(effort, LegacyReasoningEffort::Off) })
-        }
-        F::ZaiThinking => json!({
-            "thinking": { "type": "enabled", "clear_thinking": false },
-            "reasoning_effort": wire,
-        }),
-        F::OpenRouterReasoning => json!({ "reasoning": { "effort": wire } }),
-        F::None => json!({}),
-    }
-}
-
-fn vocabulary_vendor(
-    vendor: Option<ReasoningVendor>,
-    capability: &ThinkingCapability,
-) -> ReasoningVendor {
-    vendor
-        .filter(|v| *v != ReasoningVendor::Auto)
-        .unwrap_or(capability.vendor)
-}
-
-fn budget_for(effort: LegacyReasoningEffort) -> u64 {
-    effort_to_budget_tokens(effort)
-}
-
-fn level_for(effort: LegacyReasoningEffort) -> &'static str {
-    effort_to_gemini_thinking_level(effort)
 }
 
 #[cfg(test)]
@@ -564,6 +448,27 @@ mod tests {
         // 预算受上限钳制：8192 - 4096 = 4096
         assert_eq!(budget, 4096);
         assert_eq!(elevated_tokens, Some(8192));
+    }
+
+    #[test]
+    fn test_anthropic_budget_zero_max_output_tokens_no_invented_64000() {
+        // 轨G P2：max_output_tokens=0（无已知上限）→ 不发明 64000 兜底，
+        // budget 保底取用户字典值，elevated = budget+4096。
+        let mut map = IndexMap::new();
+        map.insert("High".to_string(), "32000".to_string());
+        let opts = DialectBuildOptions {
+            effort: ReasoningEffort::High,
+            format: ThinkingDialectFormat::AnthropicBudget,
+            max_output_tokens: 0,
+            thinking_map: Some(&map),
+        };
+        let (val, elevated) = assemble_thinking_dialect(&opts);
+        let budget = val.unwrap()["thinking"]["budget_tokens"].as_u64().unwrap();
+        assert_eq!(
+            budget, 32000,
+            "无上限时不得按 64000-4096 钳制到 59904"
+        );
+        assert_eq!(elevated, Some(32000 + 4096));
     }
 
     #[test]

@@ -94,6 +94,118 @@ let inflightLoadPromise: Promise<boolean> | null = null;
 
 const WRITE_BEFORE_LOAD_ERROR = '模型目录尚未成功加载，拒绝写盘以免覆盖用户文件';
 
+// ── 写串行队列（单飞 save + 最新 tree coalesce）────────────────────────────────
+//
+// 语义（文档化裁决）：
+// 1. 同一时刻最多一个 in-flight save IPC；
+// 2. save 在途时，后到的 updateTree 乐观更新内存后 coalesce 为「最新 tree」，
+//    等当前 save 结束后由 drain 循环补一次 save（并发双写 → 磁盘只落最新）；
+// 3. 失败回滚：save 被拒绝且无更新 tree 顶替时，内存原子回滚到本批次首个
+//    乐观更新之前的快照（batchBaseSnapshot），并打 WRITE_REJECTED lastError；
+// 4. drain 经 queueMicrotask 延迟启动，保证同一 tick 内连续两次 updateTree
+//    能 coalesce 成一次 save（而不是各自抢跑 IPC）。
+
+type WriteResult = { ok: boolean; error?: string };
+type WriteWaiter = { resolve: (r: WriteResult) => void };
+
+let saveInFlight = false;
+let drainScheduled = false;
+let queuedTree: ModelsYamlTree | null = null;
+let queuedWaiters: WriteWaiter[] = [];
+/** 本批次（未成功落盘的乐观更新链）起点快照，失败时整体回滚用 */
+let batchBaseSnapshot: ModelsCatalogState | null = null;
+
+function resetWriteQueueForTesting(): void {
+  saveInFlight = false;
+  drainScheduled = false;
+  queuedTree = null;
+  queuedWaiters = [];
+  batchBaseSnapshot = null;
+}
+
+function applyOptimisticTree(newTree: ModelsYamlTree): void {
+  const { providerMap, modelIndex, globalModelIndex } = buildIndexes(newTree);
+  state = {
+    ...state,
+    tree: newTree,
+    providerMap,
+    modelIndex,
+    globalModelIndex,
+    version: state.version + 1,
+    lastError: null,
+  };
+  notify();
+}
+
+function scheduleDrain(): void {
+  if (drainScheduled || saveInFlight) return;
+  drainScheduled = true;
+  queueMicrotask(() => {
+    drainScheduled = false;
+    void drainWriteQueue();
+  });
+}
+
+async function drainWriteQueue(): Promise<void> {
+  if (saveInFlight) return;
+  saveInFlight = true;
+  try {
+    while (queuedTree) {
+      const treeToSave = queuedTree;
+      const waiters = queuedWaiters;
+      const baseForRollback = batchBaseSnapshot;
+      queuedTree = null;
+      queuedWaiters = [];
+
+      let writeRes: { ok: boolean; error?: string };
+      try {
+        writeRes = await writeModelsYamlIpc(treeToSave);
+      } catch (e) {
+        writeRes = {
+          ok: false,
+          error: e instanceof Error ? e.message : String(e),
+        };
+      }
+      if (!writeRes.ok) {
+        // 无更新 tree 顶替时回滚到批次基线；有则保留 base 给下一轮（整条未确认链共享锚点）
+        if (state.tree === treeToSave && baseForRollback) {
+          state = {
+            ...baseForRollback,
+            lastError: {
+              kind: 'WRITE_REJECTED',
+              message: writeRes.error || '写入磁盘被拒绝',
+            },
+          };
+          notify();
+          batchBaseSnapshot = null;
+        }
+        for (const w of waiters) w.resolve({ ok: false, error: writeRes.error });
+      } else {
+        // 成功：磁盘已与 treeToSave 一致。
+        // 若还有排队 tree，下一轮回滚锚点设为「已落盘 treeToSave 的干净镜像」
+        // （不含排队者的乐观更新——失败时可精确回退到磁盘现状）。
+        if (queuedTree) {
+          const cleanIndexes = buildIndexes(treeToSave);
+          batchBaseSnapshot = {
+            ...state,
+            tree: treeToSave,
+            providerMap: cleanIndexes.providerMap,
+            modelIndex: cleanIndexes.modelIndex,
+            globalModelIndex: cleanIndexes.globalModelIndex,
+            lastError: null,
+          };
+        } else {
+          batchBaseSnapshot = null;
+        }
+        for (const w of waiters) w.resolve({ ok: true });
+        emitUiEvent('models-catalog-changed', undefined);
+      }
+    }
+  } finally {
+    saveInFlight = false;
+  }
+}
+
 /** 读 IPC 成功载荷：只认 providers 对象。data.tree 无论有没有都不得当成功源。 */
 interface ModelsYamlReadPayload {
   path?: string;
@@ -197,6 +309,7 @@ export const modelsCatalogStore = {
     };
     listeners.clear();
     inflightLoadPromise = null;
+    resetWriteQueueForTesting();
   },
 
   async ensureLoaded(force = false): Promise<boolean> {
@@ -244,39 +357,29 @@ export const modelsCatalogStore = {
     }
   },
 
-  async updateTree(newTree: ModelsYamlTree): Promise<{ ok: boolean; error?: string }> {
+  /**
+   * 写入口：乐观更新内存 + 经单飞写队列 coalesce 落盘。
+   * 并发双写时后到请求 coalesce 为最新 tree，最终磁盘与内存一致。
+   */
+  async updateTree(newTree: ModelsYamlTree): Promise<WriteResult> {
     const refused = refuseWriteIfNotLoaded();
     if (refused) return refused;
 
-    const prevSnapshot = state;
-    const { providerMap, modelIndex, globalModelIndex } = buildIndexes(newTree);
-
-    state = {
-      ...state,
-      tree: newTree,
-      providerMap,
-      modelIndex,
-      globalModelIndex,
-      version: state.version + 1,
-      lastError: null,
-    };
-    notify();
-
-    const writeRes = await writeModelsYamlIpc(newTree);
-    if (!writeRes.ok) {
-      state = {
-        ...prevSnapshot,
-        lastError: {
-          kind: 'WRITE_REJECTED',
-          message: writeRes.error || '写入磁盘被拒绝',
-        },
-      };
-      notify();
-      return { ok: false, error: writeRes.error };
+    // 批次回滚锚点：仅在完全空闲（无排队 tree、无 in-flight save）时取当前快照。
+    // in-flight / 排队链保持既有锚点（整条未确认链共享同一回滚目标）；
+    // 成功落盘且仍有排队时，由 drain 将锚点更新为「已落盘 tree 的干净镜像」。
+    if (!queuedTree && !saveInFlight) {
+      batchBaseSnapshot = state;
     }
 
-    emitUiEvent('models-catalog-changed', undefined);
-    return { ok: true };
+    applyOptimisticTree(newTree);
+
+    return new Promise<WriteResult>((resolve) => {
+      // coalesce：最新 tree 覆盖先前排队者；所有 waiter 共享下一次 save 的结果
+      queuedTree = newTree;
+      queuedWaiters.push({ resolve });
+      scheduleDrain();
+    });
   },
 
   async addProvider(providerId: string, provider: ProviderSpec): Promise<{ ok: boolean; error?: string }> {

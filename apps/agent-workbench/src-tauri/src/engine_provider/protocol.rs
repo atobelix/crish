@@ -6,7 +6,7 @@
 //!
 //! - [effective_protocol]：生效配置 → 四协议中的一种（model 级 mode 单一真源）。
 //! - [provider_url] / [chat_provider_url]：按协议选择端点；
-//! - [http_parser_for]：按协议选择解析器；
+//! - [http_parser_for_protocol]：按显式协议选择解析器；
 //! - [HttpStreamParser]：解析器四态（chat / responses / anthropic / gemini）。
 //! - [bundled_catalog] / [responses_supported] / [effective_context_window]：
 //!   内置模型目录查询面（既有位置搬移，语义不变）。
@@ -244,7 +244,9 @@ pub(crate) fn catalog_request_profile(
 ///
 /// - 文件缺失：诚实空树 + 空目录（`parse_error = None`），**不是** `catalog.json`；
 /// - 解析失败：保持上一份成功快照；从未成功过则返回 [LiveModels::parse_failed]
-///   显式错误态（`parse_error = Some`），**不写入**槽位，禁止把坏文件装成 empty tree 当真源。
+///   显式错误态（`parse_error = Some`），**并安装进槽位**——禁止把坏文件装成
+///   empty tree 当真源，但失败快照同样要缓存，避免每请求重复读盘直到文件修好；
+///   下一次 [reload_live_catalog] 成功时覆盖失败快照。
 ///
 /// S4 必须把 `request_options` 的 catalog 从 [bundled_catalog] 换成本函数；
 /// 本维不改该调用点，不得宣称出站已通。
@@ -263,7 +265,11 @@ pub(crate) fn live_catalog() -> Arc<LiveModels> {
     adopt_load_result(&mut guard, LiveModels::load_user())
 }
 
-/// 成功才写入 LIVE_CATALOG；失败返回显式错误态且不安装。
+/// 成功或失败都写入 LIVE_CATALOG。
+///
+/// 失败写入 [LiveModels::parse_failed] 快照（`parse_error = Some`），调用方仍能
+/// 与 empty tree 区分；安装失败快照是为了避免首次坏文件后每请求重复 load_user。
+/// [reload_live_catalog] 成功路径会覆盖失败快照。
 fn adopt_load_result(
     slot: &mut Option<Arc<LiveModels>>,
     result: Result<LiveModels, String>,
@@ -277,9 +283,11 @@ fn adopt_load_result(
         Err(err) => {
             tracing::warn!(
                 target: "engine_provider",
-                "读取 ~/.conex/models.yaml 失败，不把空 providers 当作已加载: {err}"
+                "读取 ~/.conex/models.yaml 失败，安装 parse_failed 快照（不把空 providers 当作已加载，也不重复读盘）: {err}"
             );
-            Arc::new(LiveModels::parse_failed(err))
+            let failed_arc = Arc::new(LiveModels::parse_failed(err));
+            *slot = Some(Arc::clone(&failed_arc));
+            failed_arc
         }
     }
 }
@@ -355,6 +363,9 @@ pub(crate) fn max_tokens_field(config: &EngineProviderConfig) -> MaxTokensField 
 /// Provider.protocol ≻ openai/chat`，全部来自 live yaml；lookup 未命中 →
 /// openai/chat（fail-closed）。URL / 端点字段不再参与协议决议
 /// （plans/04 §2.1/§2.3）。
+/// 生产路径已改走 `stream()` 顶层单次 profile → `profile.protocol`；
+/// 本函数保留为测试面入口。
+#[cfg(test)]
 pub(crate) fn effective_protocol(config: &EngineProviderConfig) -> WireProtocol {
     catalog_request_profile(config).protocol
 }
@@ -425,13 +436,6 @@ pub(crate) fn effective_context_window(config: &EngineProviderConfig) -> Option<
         .and_then(|window| u32::try_from(window).ok())
 }
 
-/// 端点解析器（按协议选择，URL/body/parser 同轨；DEEPCHECK-05 #10 修复）
-///
-/// 由 [effective_protocol] 决策后委派给 [http_parser_for_protocol]。
-pub(crate) fn http_parser_for(config: &EngineProviderConfig) -> HttpStreamParser {
-    http_parser_for_protocol(effective_protocol(config))
-}
-
 /// 按显式协议选择解析器（chat → ChatCompletions，responses → Responses，
 /// anthropic → Anthropic，gemini → Gemini）。四者同一帧处理接口，为
 /// URL/body/parser 三件套一致性的纯决策入口。
@@ -479,12 +483,21 @@ impl HttpStreamParser {
     }
 }
 
+/// 进程级 LIVE_CATALOG 为共享静态：live_catalog_tests 与
+/// engine_provider_tests 必须共用同一把锁串行安装夹具。
+#[cfg(test)]
+pub(crate) static LIVE_CATALOG_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 #[cfg(test)]
 mod live_catalog_tests {
     use super::*;
-    use std::sync::Mutex;
+    use std::sync::MutexGuard;
 
-    static LIVE_TEST_LOCK: Mutex<()> = Mutex::new(());
+    fn lock_live() -> MutexGuard<'static, ()> {
+        LIVE_CATALOG_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner())
+    }
 
     fn acme_yaml() -> &'static str {
         r#"
@@ -522,9 +535,7 @@ providers:
 
     #[test]
     fn live_catalog_find_acme_think_keeps_titlecase_thinking_and_image_input() {
-        let _guard = LIVE_TEST_LOCK
-            .lock()
-            .unwrap_or_else(|poison| poison.into_inner());
+        let _guard = lock_live();
         install_acme();
         let live = live_catalog();
         let spec = live
@@ -551,9 +562,7 @@ providers:
 
     #[test]
     fn live_catalog_parse_failure_keeps_previous_snapshot() {
-        let _guard = LIVE_TEST_LOCK
-            .lock()
-            .unwrap_or_else(|poison| poison.into_inner());
+        let _guard = lock_live();
         install_acme();
         let err = reload_live_catalog_from_yaml_str("providers: [not-a-map]");
         assert!(err.is_err(), "坏 yaml 必须失败，不得吞成空 providers");
@@ -565,9 +574,7 @@ providers:
 
     #[test]
     fn live_catalog_empty_providers_is_honest_empty_tree() {
-        let _guard = LIVE_TEST_LOCK
-            .lock()
-            .unwrap_or_else(|poison| poison.into_inner());
+        let _guard = lock_live();
         reload_live_catalog_from_yaml_str("version: 2\nproviders: {}\n")
             .expect("诚实空树必须解析成功");
         assert!(
@@ -579,9 +586,7 @@ providers:
 
     #[test]
     fn live_catalog_unique_model_fills_engine_slots() {
-        let _guard = LIVE_TEST_LOCK
-            .lock()
-            .unwrap_or_else(|poison| poison.into_inner());
+        let _guard = lock_live();
         install_acme();
         let slots = slots_for_unique_model(&live_catalog(), "acme-think");
         assert_eq!(slots.provider_id.as_deref(), Some("acme"));
@@ -622,9 +627,7 @@ providers:
 
     #[test]
     fn live_catalog_multi_hit_or_miss_leaves_slots_none() {
-        let _guard = LIVE_TEST_LOCK
-            .lock()
-            .unwrap_or_else(|poison| poison.into_inner());
+        let _guard = lock_live();
         let yaml = r#"
 version: 2
 providers:
@@ -656,9 +659,7 @@ providers:
 
     #[test]
     fn load_provider_endpoint_calls_live_catalog_without_inventing_slots() {
-        let _guard = LIVE_TEST_LOCK
-            .lock()
-            .unwrap_or_else(|poison| poison.into_inner());
+        let _guard = lock_live();
         reload_live_catalog_from_yaml_str("version: 2\nproviders: {}\n").expect("空树");
         // 三件套缺失时返回 None；调用本身证明 live_catalog 已非 dead_code。
         let _ = super::super::load_provider_endpoint();
@@ -668,11 +669,9 @@ providers:
     }
 
     #[test]
-    fn live_catalog_first_parse_failure_is_explicit_error_not_installed() {
-        let _guard = LIVE_TEST_LOCK
-            .lock()
-            .unwrap_or_else(|poison| poison.into_inner());
-        {
+    fn live_catalog_first_parse_failure_installs_snapshot_no_repeat_io() {
+        let _guard = lock_live();
+        let installed = {
             let mut slot = LIVE_CATALOG
                 .write()
                 .unwrap_or_else(|poison| poison.into_inner());
@@ -683,8 +682,25 @@ providers:
                 failed.tree.providers.is_empty(),
                 "错误态 tree 为空，但靠 parse_error 区分"
             );
-            assert!(slot.is_none(), "首次坏文件不得安装成 empty tree 当真源快照");
-        }
+            let installed = slot
+                .as_ref()
+                .expect("首次失败必须安装 parse_failed 快照，避免每请求重复 load_user")
+                .clone();
+            assert!(
+                Arc::ptr_eq(&failed, &installed),
+                "返回值与槽位须为同一 Arc（失败快照已安装）"
+            );
+            installed
+        };
+        // 第二次 live_catalog() 命中已安装的失败快照，不触发新的 load_user
+        // （若重新读盘，Arc 指针必不同）。
+        let second = live_catalog();
+        assert!(
+            Arc::ptr_eq(&installed, &second),
+            "第二次 live_catalog() 不得重新读盘，须复用已安装的失败快照"
+        );
+        assert_eq!(second.parse_error.as_deref(), Some("语法失败: bad"));
+        // 成功路径覆盖失败快照
         reload_live_catalog_from_yaml_str(acme_yaml()).expect("成功解析仍可安装");
         let live = live_catalog();
         assert!(live.parse_error.is_none());
@@ -693,9 +709,7 @@ providers:
 
     #[test]
     fn live_catalog_parses_yaml_missing_display_name() {
-        let _guard = LIVE_TEST_LOCK
-            .lock()
-            .unwrap_or_else(|poison| poison.into_inner());
+        let _guard = lock_live();
         let yaml = r#"
 version: 2
 providers:

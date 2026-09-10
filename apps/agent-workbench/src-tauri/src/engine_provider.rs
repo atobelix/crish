@@ -175,15 +175,15 @@ impl HttpProviderCall {
     }
 
     /// chat-completions 请求选项（模型 / max_tokens 透传；思考字典与方言来自
-    /// 出站剖面 [protocol::catalog_request_profile]（plans/04 §1.3）——每次
-    /// `live_catalog().find(provider_id, model)` 现查，禁止 `..Default` 清空
-    /// 后再走前缀表；缓存键只来自 yaml compat 声明，无声明 → None）。
+    /// 出站剖面 [protocol::catalog_request_profile]（plans/04 §1.3）——由调用方
+    /// 传入单次查询的 profile，禁止本函数内再查；缓存键只来自 yaml compat
+    /// 声明，无声明 → None）。
     pub(crate) fn request_options(
         &self,
         request: &ProviderRequest<'_>,
+        profile: &protocol::CatalogRequestProfile,
     ) -> ChatCompletionsRequestOptions {
-        let profile = protocol::catalog_request_profile(&self.config);
-        let cache = cache_policy_from_profile(&profile);
+        let cache = cache_policy_from_profile(profile);
         ChatCompletionsRequestOptions {
             model: Some(self.config.model.clone()),
             stream: Some(self.config.stream),
@@ -191,13 +191,24 @@ impl HttpProviderCall {
             max_tokens_field: Some(profile.max_tokens_field),
             reasoning_effort: request.reasoning_effort.map(thinking::to_provider_effort),
             reasoning_content: Some(profile.reasoning_content),
-            thinking_map: profile.thinking_map,
+            thinking_map: profile.thinking_map.clone(),
             thinking_format: profile.thinking_format,
             supports_reasoning: profile.supports_reasoning,
-            compat: profile.compat,
+            compat: profile.compat.clone(),
             cache,
             ..ChatCompletionsRequestOptions::default()
         }
+    }
+
+    /// 测试面便捷包装：内部创建 profile 后委派 [request_options]
+    /// （测试不需要手动管理 profile 生命周期）。
+    #[cfg(test)]
+    pub(crate) fn request_options_auto(
+        &self,
+        request: &ProviderRequest<'_>,
+    ) -> ChatCompletionsRequestOptions {
+        let profile = protocol::catalog_request_profile(&self.config);
+        self.request_options(request, &profile)
     }
 
     /// 请求体构建（DEEPCHECK-05 #10 修复：body 与 endpoint 同轨分流）
@@ -222,13 +233,14 @@ impl HttpProviderCall {
     /// AnthropicRequestOptions；gemini → GeminiRequestOptions；chat/responses →
     /// 既有 [request_options]/[request_body]。思考字典与方言来自同一剖面
     /// （plans/04 §3.1：四条出站都走 `assemble_thinking_dialect`）。
+    /// `profile` 由调用方传入单次查询结果，禁止本函数内再查。
     pub(crate) fn request_body_for(
         &self,
         protocol: WireProtocol,
         request: &ProviderRequest<'_>,
+        profile: &protocol::CatalogRequestProfile,
     ) -> serde_json::Value {
         let context = self.build_context(request);
-        let profile = protocol::catalog_request_profile(&self.config);
         match protocol {
             WireProtocol::Anthropic => {
                 let options = AnthropicRequestOptions {
@@ -236,7 +248,7 @@ impl HttpProviderCall {
                     stream: Some(self.config.stream),
                     max_tokens: request.max_tokens.map(u64::from),
                     reasoning_effort: request.reasoning_effort.map(thinking::to_provider_effort),
-                    thinking_map: profile.thinking_map,
+                    thinking_map: profile.thinking_map.clone(),
                     thinking_format: profile.thinking_format,
                     ..Default::default()
                 };
@@ -247,21 +259,32 @@ impl HttpProviderCall {
                     model: Some(self.config.model.clone()),
                     max_output_tokens: request.max_tokens.map(u64::from),
                     reasoning_effort: request.reasoning_effort.map(thinking::to_provider_effort),
-                    thinking_map: profile.thinking_map,
+                    thinking_map: profile.thinking_map.clone(),
                     thinking_format: profile.thinking_format,
                     ..Default::default()
                 };
                 build_gemini_request_body(&options, &context)
             }
             WireProtocol::Chat => {
-                let options = self.request_options(request);
+                let options = self.request_options(request, profile);
                 build_chat_completions_request_body(&options, &context)
             }
             WireProtocol::Responses => {
-                let options = self.request_options(request);
+                let options = self.request_options(request, profile);
                 build_responses_request_body(&options, &context)
             }
         }
+    }
+
+    /// 测试面便捷包装：内部创建 profile 后委派 [request_body_for]
+    #[cfg(test)]
+    pub(crate) fn request_body_for_auto(
+        &self,
+        protocol: WireProtocol,
+        request: &ProviderRequest<'_>,
+    ) -> serde_json::Value {
+        let profile = protocol::catalog_request_profile(&self.config);
+        self.request_body_for(protocol, request, &profile)
     }
 
     /// 请求构建上下文（消息 0 深拷贝借用，PE-09 T09.3 阶段 1）
@@ -301,17 +324,22 @@ impl HttpProviderCall {
         &self,
         policy: Option<&agent_provider::request::cache::CachePolicy>,
     ) -> Vec<(String, String)> {
-        headers::request_headers_for(&self.config, WireProtocol::Chat, policy, None, None)
+        let profile = protocol::catalog_request_profile(&self.config);
+        headers::request_headers_for(&self.config, WireProtocol::Chat, policy, None, None, &profile)
     }
 
     /// 组装完整请求头（四轨同轨；会话亲和头族 seam T3.5 注入 session_id）。
+    /// `profile` 由调用方传入单次查询结果，禁止本函数内再查。
     pub(crate) fn request_headers_for(
         &self,
         protocol: WireProtocol,
         request: &ProviderRequest<'_>,
+        profile: &protocol::CatalogRequestProfile,
     ) -> Vec<(String, String)> {
         let policy = match protocol {
-            WireProtocol::Chat | WireProtocol::Responses => self.request_options(request).cache,
+            WireProtocol::Chat | WireProtocol::Responses => {
+                self.request_options(request, profile).cache
+            }
             WireProtocol::Anthropic | WireProtocol::Gemini => None,
         };
         headers::request_headers_for(
@@ -320,7 +348,19 @@ impl HttpProviderCall {
             policy.as_ref(),
             request.reasoning_effort.map(thinking::to_provider_effort),
             request.session_id.as_deref(),
+            profile,
         )
+    }
+
+    /// 测试面便捷包装：内部创建 profile 后委派 [request_headers_for]
+    #[cfg(test)]
+    pub(crate) fn request_headers_for_auto(
+        &self,
+        protocol: WireProtocol,
+        request: &ProviderRequest<'_>,
+    ) -> Vec<(String, String)> {
+        let profile = protocol::catalog_request_profile(&self.config);
+        self.request_headers_for(protocol, request, &profile)
     }
 }
 
@@ -350,8 +390,9 @@ impl ProviderCall for HttpProviderCall {
             return Err(to_modality_reject(err));
         }
 
-        // 4. 构建请求体（四轨同轨：body/URL/parser 同以 profile.protocol 为键）
-        let body = self.request_body_for(protocol, request);
+        // 4. 构建请求体（四轨同轨：body/URL/parser 同以 profile.protocol 为键；
+        //    profile 以参数传入，单次查询）
+        let body = self.request_body_for(protocol, request, &profile);
         let url = protocol::provider_url_for(&self.config, protocol);
 
         // 5. HTTP 请求（共享连接池；tokio::select! 强打断竞速）
@@ -363,7 +404,7 @@ impl ProviderCall for HttpProviderCall {
         });
 
         let mut request_builder = self.client.post(&url);
-        for (name, value) in self.request_headers_for(protocol, request) {
+        for (name, value) in self.request_headers_for(protocol, request, &profile) {
             request_builder = request_builder.header(name, value);
         }
 
@@ -448,7 +489,9 @@ impl ProviderCall for HttpProviderCall {
         let frames = stream_frames(response, read_options, abort_handle);
         let state = HttpStreamState {
             frames,
-            parser: http_parser_for(&self.config),
+            // 解析器按已查好的 profile.protocol 选择（单次查询，禁止再走
+            // effective_protocol → catalog_request_profile 二次 lookup）
+            parser: http_parser_for_protocol(protocol),
             pending: VecDeque::new(),
             finished: false,
         };

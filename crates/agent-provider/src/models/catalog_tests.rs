@@ -1592,6 +1592,34 @@ providers:
     );
 }
 
+/// 轨G P2 钉死：yaml 树投影把 vendor 折叠为 provider_id（通道即厂商折叠语义）。
+/// 若未来恢复独立 vendor 字段，本测试必须同步改（禁止单点解折叠）。
+#[test]
+fn yaml_projection_folds_vendor_into_provider_id() {
+    let yaml = r#"
+version: 2
+providers:
+  dashscope:
+    protocol: openai/chat
+    models:
+      - id: qwen-max
+        contextWindow: 32768
+"#;
+    let cat = ModelCatalog::from_yaml_str(yaml).expect("yaml");
+    let entry = cat.lookup("dashscope", "qwen-max").expect("entry");
+    assert_eq!(entry.provider, "dashscope");
+    assert_eq!(
+        entry.vendor, "dashscope",
+        "yaml 投影折叠语义：vendor 恒等于 provider_id"
+    );
+    assert_eq!(entry.id.as_deref(), Some("dashscope::qwen-max"));
+    assert_eq!(
+        ModelCatalogEntry::key(&entry.vendor, &entry.model),
+        "dashscope::qwen-max",
+        "catalog key 以折叠后的 vendor 组键"
+    );
+}
+
 /// TitleCase thinking + modalities.input 含 image；禁止小写归一、禁止 bool modalities 生产投影
 #[test]
 fn from_yaml_str_keeps_titlecase_thinking_and_input_modalities() {

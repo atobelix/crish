@@ -15,8 +15,8 @@
 
 use agent_provider::migration::{ConfigMigrationManager, MigrationStatus};
 use agent_provider::models::{
-    CompatSpec, CurrencyKind, ModalitiesSpec, ModelPricingSpec, ModelSpec, ProtocolKind,
-    ProviderSpec, UnifiedModelsConfig, YamlParseError,
+    CompatSpec, CurrencyKind, ModalitiesSpec, ModelPricingSpec, ModelSpec, PricingTier,
+    ProtocolKind, ProviderSpec, UnifiedModelsConfig, YamlParseError,
 };
 use conex_types::CoreError;
 use indexmap::IndexMap;
@@ -34,13 +34,6 @@ const DEFAULT_MODELS_YAML: &str = include_str!("models.default.yaml");
 /// 与内核 `ProtocolKind` 同一枚举：写出 `google/generate-content`，读可认 `google/interactions`。
 pub type ModelsYamlProtocol = ProtocolKind;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ModelsYamlBillingUnit {
-    Token,
-    PerImage,
-}
-
 /// 与内核 `CurrencyKind` 同构（写出 `USD` / `CNY`）。
 pub type ModelsYamlCurrency = CurrencyKind;
 
@@ -55,50 +48,6 @@ pub struct ModelsYamlCapabilities {
     pub video: bool,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub reasoning: bool,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct ModelsYamlPricing {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub input_per_m_tok: Option<f64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub output_per_m_tok: Option<f64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub cache_read_per_m_tok: Option<f64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub cache_write_per_m_tok: Option<f64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub billing_unit: Option<ModelsYamlBillingUnit>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub per_image_cost: Option<f64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub currency: Option<ModelsYamlCurrency>,
-}
-
-/// lossy 扁平投影（v1 / 调试）：不含 thinking、modalities、compat、供应商 baseUrl/apiKey/headers。
-/// 禁止任何新代码把它当思考或模态真源；真源只在 `providers` 树。
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct ModelsYamlModel {
-    /// 模型标识（必填，全表唯一）
-    pub model: String,
-    /// 供应商标识（必填）
-    pub vendor: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub vendor_display_name: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub display_name: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub context_window: Option<u64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub max_output_tokens: Option<u64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub protocol: Option<ModelsYamlProtocol>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub capabilities: Option<ModelsYamlCapabilities>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub pricing: Option<ModelsYamlPricing>,
 }
 
 /// v2 价格 DTO：从内核 `ModelPricingSpec` 投影。旧键只在 `UnifiedModelsConfig::from_yaml_str` 读边界认一次。
@@ -142,6 +91,9 @@ pub struct ModelsYamlPricingV2 {
         alias = "per_image_cost"
     )]
     pub per_image: Option<f64>,
+    /// 阶梯计费（与内核 `ModelPricingSpec.tiers` 同构）。空列表写出跳过。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tiers: Vec<PricingTier>,
 }
 
 /// v2 模型节点：与 §4.1 / `ModelSpec` serde 同构（yaml 侧字段可缺省，不发明 128K）。
@@ -203,7 +155,6 @@ pub struct ModelsYamlProviderV2 {
 pub struct ParsedModelsYaml {
     pub version: Option<u32>,
     pub providers: Option<IndexMap<String, ModelsYamlProviderV2>>,
-    pub models: Vec<ModelsYamlModel>,
 }
 
 // ===== IPC 结果 DTO =====
@@ -222,8 +173,6 @@ pub struct ModelsYamlDiagnostic {
 pub struct ReadModelsYamlResult {
     pub path: String,
     pub content: String,
-    /// lossy 扁平投影，禁止生产消费（无 thinking/modalities/baseUrl/apiKey）。真源是 `providers`。
-    pub models: Vec<ModelsYamlModel>,
     /// 内置模板原文（「恢复标准模版」单一来源）
     pub template: String,
     /// 本次读取是否触发了播种
@@ -250,8 +199,6 @@ pub struct ValidateModelsYamlResult {
 #[serde(rename_all = "camelCase")]
 pub struct SaveModelsYamlResult {
     pub path: String,
-    /// lossy 扁平投影，禁止生产消费。镜像校验请读 `providers`。
-    pub models: Vec<ModelsYamlModel>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub version: Option<u32>,
     /// 与 §4.1 树同构的 v2 providers（camelCase）。
@@ -295,18 +242,13 @@ fn parse_models_yaml(content: &str) -> Result<ParsedModelsYaml, ModelsYamlDiagno
 }
 
 fn project_unified_to_parsed(tree: &UnifiedModelsConfig) -> ParsedModelsYaml {
-    let mut flattened_models = Vec::new();
     let mut providers = IndexMap::new();
     for (provider_id, provider) in &tree.providers {
-        for model in &provider.models {
-            flattened_models.push(flatten_model_lossy(provider_id, provider, model));
-        }
         providers.insert(provider_id.clone(), project_provider_v2(provider));
     }
     ParsedModelsYaml {
         version: Some(tree.version),
         providers: Some(providers),
-        models: flattened_models,
     }
 }
 
@@ -346,33 +288,7 @@ fn project_pricing_v2(pricing: &ModelPricingSpec) -> ModelsYamlPricingV2 {
         cache_read: pricing.cache_read,
         cache_write: pricing.cache_write,
         per_image: pricing.per_image,
-    }
-}
-
-/// lossy 投影：只填扁平身份与旧价键，不拷 thinking/modalities/compat/baseUrl/apiKey。
-fn flatten_model_lossy(
-    provider_id: &str,
-    provider: &ProviderSpec,
-    model: &ModelSpec,
-) -> ModelsYamlModel {
-    ModelsYamlModel {
-        model: model.id.clone(),
-        vendor: provider_id.to_string(),
-        vendor_display_name: provider.display_name.clone(),
-        display_name: model.display_name.clone(),
-        context_window: model.context_window,
-        max_output_tokens: model.max_output_tokens,
-        protocol: Some(model.effective_protocol(provider)),
-        capabilities: None,
-        pricing: model.pricing.as_ref().map(|p| ModelsYamlPricing {
-            input_per_m_tok: Some(p.input),
-            output_per_m_tok: Some(p.output),
-            cache_read_per_m_tok: p.cache_read,
-            cache_write_per_m_tok: p.cache_write,
-            billing_unit: None,
-            per_image_cost: p.per_image,
-            currency: Some(p.currency),
-        }),
+        tiers: pricing.tiers.clone(),
     }
 }
 
@@ -431,15 +347,14 @@ fn read_models_yaml_at(path: &Path, template: &str) -> Result<ReadModelsYamlResu
         (template.to_string(), true)
     };
 
-    let (models, version, providers, parse_error) = match parse_models_yaml(&content) {
-        Ok(parsed) => (parsed.models, parsed.version, parsed.providers, None),
-        Err(diag) => (Vec::new(), None, None, Some(diag)),
+    let (version, providers, parse_error) = match parse_models_yaml(&content) {
+        Ok(parsed) => (parsed.version, parsed.providers, None),
+        Err(diag) => (None, None, Some(diag)),
     };
 
     Ok(ReadModelsYamlResult {
         path: path.display().to_string(),
         content,
-        models,
         template: template.to_string(),
         seeded,
         parse_error,
@@ -477,7 +392,6 @@ fn save_models_yaml_at(path: &Path, content: &str) -> Result<SaveModelsYamlResul
 
     Ok(SaveModelsYamlResult {
         path: path.display().to_string(),
-        models: parsed.models,
         version: parsed.version,
         providers: parsed.providers,
     })
@@ -535,16 +449,15 @@ mod tests {
     #[test]
     fn template_parses_and_is_wellformed() {
         let parsed = parse_models_yaml(sample_yaml()).expect("内置模板必须可解析");
+        assert_eq!(parsed.version, Some(2));
         assert!(
-            parsed.models.is_empty(),
+            parsed
+                .providers
+                .as_ref()
+                .map(|p| p.is_empty())
+                .unwrap_or(false),
             "默认模板必须保持干干净净的空 providers，不带任何默认垃圾"
         );
-        assert_eq!(parsed.version, Some(2));
-        assert!(parsed
-            .providers
-            .as_ref()
-            .map(|p| p.is_empty())
-            .unwrap_or(false));
 
         let populated = r#"
 version: 2
@@ -559,9 +472,10 @@ providers:
         contextWindow: 1048576
 "#;
         let res = parse_models_yaml(populated).expect("v2 树状结构必须可解析");
-        assert_eq!(res.models.len(), 1);
-        assert_eq!(res.models[0].model, "deepseek-v4-pro");
-        assert_eq!(res.models[0].vendor, "deepseek");
+        let providers = res.providers.expect("必须返回 providers 树");
+        let deepseek = providers.get("deepseek").expect("deepseek 供应商必须存在");
+        assert_eq!(deepseek.models.len(), 1);
+        assert_eq!(deepseek.models[0].id.as_deref(), Some("deepseek-v4-pro"));
     }
 
     #[test]
@@ -573,7 +487,14 @@ providers:
         assert!(first.seeded);
         assert!(path.exists(), "播种后文件必须落盘");
         assert!(first.parse_error.is_none());
-        assert!(first.models.is_empty(), "默认空播种模型列表必须为空");
+        assert!(
+            first
+                .providers
+                .as_ref()
+                .map(|p| p.is_empty())
+                .unwrap_or(false),
+            "默认空播种 providers 树必须为空"
+        );
         assert_eq!(first.content, sample_yaml());
 
         // 第二次读取：不重复播种（幂等），内容一致
@@ -594,7 +515,6 @@ providers:
         let res = read_models_yaml_at(&path, sample_yaml()).expect("损坏文件也必须返回 content");
         assert!(!res.seeded);
         assert!(res.parse_error.is_some(), "必须携带结构化诊断");
-        assert!(res.models.is_empty(), "解析失败时镜像必须为空，不得毒化");
         assert!(
             res.providers.is_none(),
             "解析失败必须 providers=None，禁止吞成空配置成功"
@@ -677,7 +597,14 @@ providers:
         // 合法保存：内容一致
         let saved = save_models_yaml_at(&path, sample_yaml()).expect("合法内容应保存成功");
         assert_eq!(std::fs::read_to_string(&path).unwrap(), sample_yaml());
-        assert!(saved.models.is_empty());
+        assert!(
+            saved
+                .providers
+                .as_ref()
+                .map(|p| p.is_empty())
+                .unwrap_or(false),
+            "默认模板保存后 providers 树必须为空"
+        );
         assert!(saved.path.ends_with(MODELS_YAML_FILENAME));
 
         // 非法保存：报错且原文件不被破坏
@@ -700,7 +627,12 @@ providers:
         let path = dir.join("nested").join(MODELS_YAML_FILENAME);
         let res = save_models_yaml_at(&path, sample_yaml()).expect("父目录缺失应自动创建");
         assert!(path.exists());
-        assert!(res.models.is_empty());
+        assert!(
+            res.providers
+                .as_ref()
+                .map(|p| p.is_empty())
+                .unwrap_or(false)
+        );
 
         std::fs::remove_dir_all(&dir).ok();
     }
@@ -735,7 +667,10 @@ models:
         assert!(res.parse_error.is_none(), "迁移后解析不应报错");
         assert_eq!(res.version, Some(2), "迁移后版本必须为 2");
 
-        let providers = res.providers.expect("迁移后必须包含 providers 树状结构");
+        let providers = res
+            .providers
+            .as_ref()
+            .expect("迁移后必须包含 providers 树状结构");
         assert!(
             providers.contains_key("deepseek"),
             "必须按 vendor 聚类生成 deepseek 供应商"
@@ -747,10 +682,15 @@ models:
             "deepseek 供应商下必须包含 2 个模型"
         );
 
-        // 验证展平模型列表
-        assert_eq!(res.models.len(), 2);
-        assert!(res.models.iter().any(|m| m.model == "deepseek-chat"));
-        assert!(res.models.iter().any(|m| m.model == "deepseek-reasoner"));
+        // 验证 providers 树内模型身份
+        let model_ids: Vec<_> = deepseek
+            .models
+            .iter()
+            .filter_map(|m| m.id.as_deref())
+            .collect();
+        assert_eq!(model_ids.len(), 2);
+        assert!(model_ids.contains(&"deepseek-chat"));
+        assert!(model_ids.contains(&"deepseek-reasoner"));
 
         // 验证磁盘内容已实际更新为 v2
         let disk_content = std::fs::read_to_string(&path).expect("读取落盘内容");
@@ -773,7 +713,14 @@ models:
         assert!(!second.seeded);
         assert_eq!(second.content, res.content);
         assert_eq!(second.version, Some(2));
-        assert_eq!(second.models.len(), 2);
+        let second_providers = second.providers.expect("二次读取必须有 providers");
+        assert_eq!(
+            second_providers
+                .get("deepseek")
+                .map(|p| p.models.len())
+                .unwrap_or(0),
+            2
+        );
 
         std::fs::remove_dir_all(&dir).ok();
     }
@@ -855,11 +802,6 @@ providers:
             .expect("save 必须返回 providers 树");
         assert_acme_provider_tree(saved_providers);
 
-        // 扁平 models 即使仍返回，也只是 lossy 身份投影，不得当 thinking 真源
-        assert_eq!(saved.models.len(), 1);
-        assert_eq!(saved.models[0].model, "acme-think");
-        assert_eq!(saved.models[0].vendor, "acme");
-
         let read = read_models_yaml_at(&path, sample_yaml()).expect("再读必须成功");
         assert!(read.parse_error.is_none());
         let read_providers = read.providers.as_ref().expect("read 必须返回 providers 树");
@@ -904,7 +846,6 @@ providers:
                 .unwrap_or(false),
             "空文件 providers=Some({{}})"
         );
-        assert!(parsed.models.is_empty());
 
         let comments_only = parse_models_yaml("# 仅注释\n").expect("仅注释视为空树");
         assert!(comments_only
@@ -1022,5 +963,206 @@ providers:
                 .map(String::as_str),
             Some("low")
         );
+    }
+
+    // ===== V2 DTO ↔ 内核 ModelSpec/ProviderSpec serde 往返锁同步 =====
+
+    /// 满载 `ModelSpec`：覆盖 thinking / modalities / pricing（含 tiers）/ compat / 协议覆盖。
+    fn full_kernel_model() -> ModelSpec {
+        let mut thinking = IndexMap::new();
+        thinking.insert("Off".to_string(), "off".to_string());
+        thinking.insert("Low".to_string(), "low".to_string());
+        thinking.insert("High".to_string(), "high".to_string());
+        ModelSpec {
+            id: "kernel-model".to_string(),
+            display_name: Some("Kernel Model".to_string()),
+            context_window: Some(200_000),
+            max_output_tokens: Some(65_536),
+            protocol: Some(ProtocolKind::AnthropicMessages),
+            compat: Some(CompatSpec {
+                thinking_format: Some(agent_provider::models::ThinkingFormat::Anthropic),
+                supports_developer_role: Some(false),
+                max_tokens_field: Some(agent_provider::models::MaxTokensField::MaxTokens),
+                cache_control_format: Some(agent_provider::models::CacheControlFormat::Anthropic),
+            }),
+            modalities: Some(ModalitiesSpec {
+                input: vec![
+                    "text".to_string(),
+                    "image".to_string(),
+                    "video".to_string(),
+                ],
+                output: vec!["text".to_string()],
+            }),
+            thinking: Some(thinking),
+            pricing: Some(ModelPricingSpec {
+                currency: CurrencyKind::Cny,
+                input: 4.0,
+                output: 12.0,
+                cache_read: Some(0.8),
+                cache_write: Some(4.0),
+                per_image: None,
+                tiers: vec![PricingTier {
+                    input_tokens_above: 256_000,
+                    input: 6.0,
+                    output: 18.0,
+                    cache_read: Some(1.2),
+                    cache_write: None,
+                }],
+            }),
+        }
+    }
+
+    /// 满载 `ProviderSpec`：headers / compat / apiKey / 协议 + 两个模型（含满载模型）。
+    fn full_kernel_provider() -> ProviderSpec {
+        let mut headers = IndexMap::new();
+        headers.insert("HTTP-Referer".to_string(), "https://example.invalid".to_string());
+        headers.insert("X-Title".to_string(), "Conex Workbench".to_string());
+        let minimal = ModelSpec {
+            id: "kernel-min".to_string(),
+            display_name: None,
+            context_window: None,
+            max_output_tokens: None,
+            protocol: None,
+            compat: None,
+            modalities: None,
+            thinking: None,
+            pricing: None,
+        };
+        ProviderSpec {
+            display_name: Some("Kernel Provider".to_string()),
+            base_url: Some("https://api.example.invalid/v1".to_string()),
+            api_key: Some("$KERNEL_API_KEY".to_string()),
+            headers: Some(headers),
+            protocol: ProtocolKind::OpenAiResponses,
+            compat: Some(CompatSpec {
+                thinking_format: Some(agent_provider::models::ThinkingFormat::Gemini),
+                supports_developer_role: Some(true),
+                max_tokens_field: Some(agent_provider::models::MaxTokensField::MaxCompletionTokens),
+                cache_control_format: None,
+            }),
+            models: vec![full_kernel_model(), minimal],
+        }
+    }
+
+    /// 内核 `ModelSpec` serde → V2 DTO：thinking / modalities / pricing（含 tiers）/ compat 不丢字段。
+    #[test]
+    fn v2_model_serde_roundtrips_kernel_model_spec() {
+        let model = full_kernel_model();
+        let json = serde_json::to_value(&model).expect("序列化内核 ModelSpec");
+        let dto: ModelsYamlModelV2 =
+            serde_json::from_value(json.clone()).expect("反序列化到 V2 Model DTO");
+
+        assert_eq!(dto.id.as_deref(), Some(model.id.as_str()));
+        assert_eq!(dto.model, None, "写出侧不得回灌只读别名 model");
+        assert_eq!(dto.display_name, model.display_name);
+        assert_eq!(dto.protocol, model.protocol);
+        assert_eq!(dto.context_window, model.context_window);
+        assert_eq!(dto.max_output_tokens, model.max_output_tokens);
+        assert_eq!(dto.thinking, model.thinking, "thinking 字典不得丢");
+        assert_eq!(dto.modalities, model.modalities, "modalities 不得丢");
+        assert_eq!(dto.compat, model.compat, "compat 不得丢");
+
+        let kernel_pricing = model.pricing.as_ref().expect("夹具必须有 pricing");
+        let dto_pricing = dto.pricing.as_ref().expect("pricing 不得丢");
+        assert_eq!(dto_pricing.currency, Some(kernel_pricing.currency));
+        assert_eq!(dto_pricing.input, Some(kernel_pricing.input));
+        assert_eq!(dto_pricing.output, Some(kernel_pricing.output));
+        assert_eq!(dto_pricing.cache_read, kernel_pricing.cache_read);
+        assert_eq!(dto_pricing.cache_write, kernel_pricing.cache_write);
+        assert_eq!(dto_pricing.per_image, kernel_pricing.per_image);
+        assert_eq!(
+            dto_pricing.tiers, kernel_pricing.tiers,
+            "pricing.tiers（阶梯计费）不得在 V2 DTO 丢失"
+        );
+
+        // project 与「内核 serialize → V2 deserialize」等价（锁同步投影无漂移）
+        let projected = project_model_v2(&model);
+        assert_eq!(
+            projected, dto,
+            "project_model_v2 必须与内核 ModelSpec serde 反序列化结果同构"
+        );
+
+        // 写出键：只发 SSOT 键，禁发旧键
+        let out = serde_json::to_value(&projected).expect("序列化 V2 Model DTO");
+        assert_eq!(out["id"], "kernel-model");
+        assert!(out.get("model").is_none(), "写出不得包含只读别名 model");
+        assert!(out.get("contextLength").is_none(), "写出不得发旧键 contextLength");
+        assert_eq!(out["contextWindow"], 200_000);
+        assert_eq!(out["maxOutputTokens"], 65_536);
+        assert_eq!(out["thinking"]["High"], "high");
+        assert_eq!(out["modalities"]["input"][1], "image");
+        assert_eq!(out["compat"]["thinkingFormat"], "anthropic");
+        assert_eq!(out["pricing"]["currency"], "CNY");
+        assert_eq!(out["pricing"]["input"], 4.0);
+        assert_eq!(out["pricing"]["tiers"][0]["inputTokensAbove"], 256_000);
+        assert_eq!(out["pricing"]["tiers"][0]["input"], 6.0);
+        assert!(out["pricing"].get("inputPerMTok").is_none());
+        assert!(json["id"].is_string(), "内核写出 id 必为字符串");
+    }
+
+    /// 内核 `ProviderSpec` serde → V2 DTO：headers / baseUrl / apiKey / compat / models 不丢。
+    #[test]
+    fn v2_provider_serde_roundtrips_kernel_provider_spec() {
+        let provider = full_kernel_provider();
+        let json = serde_json::to_value(&provider).expect("序列化内核 ProviderSpec");
+        let dto: ModelsYamlProviderV2 =
+            serde_json::from_value(json).expect("反序列化到 V2 Provider DTO");
+
+        assert_eq!(dto.display_name, provider.display_name);
+        assert_eq!(dto.base_url, provider.base_url);
+        assert_eq!(dto.protocol, Some(provider.protocol));
+        assert_eq!(dto.api_key, provider.api_key);
+        assert_eq!(dto.headers, provider.headers, "headers 不得丢");
+        assert_eq!(dto.compat, provider.compat, "provider.compat 不得丢");
+        assert_eq!(dto.models.len(), provider.models.len());
+
+        let projected = project_provider_v2(&provider);
+        assert_eq!(
+            projected, dto,
+            "project_provider_v2 必须与内核 ProviderSpec serde 反序列化结果同构"
+        );
+
+        // 满载模型子树字段在 IPC 投影后仍完整
+        let full = &projected.models[0];
+        assert_eq!(full.thinking.as_ref().map(|t| t.len()), Some(3));
+        assert_eq!(full.modalities.as_ref().map(|m| m.input.len()), Some(3));
+        let tiers = full
+            .pricing
+            .as_ref()
+            .map(|p| p.tiers.clone())
+            .unwrap_or_default();
+        assert_eq!(tiers.len(), 1, "tiers 在 provider→model 投影链路上不得丢");
+        assert_eq!(tiers[0].input_tokens_above, 256_000);
+
+        // 稀疏模型：全 None 字段写出跳过（不发明占位）
+        let sparse_json = serde_json::to_value(&projected.models[1]).expect("序列化稀疏模型");
+        assert_eq!(sparse_json["id"], "kernel-min");
+        assert!(sparse_json.get("displayName").is_none());
+        assert!(sparse_json.get("thinking").is_none());
+        assert!(sparse_json.get("modalities").is_none());
+        assert!(sparse_json.get("pricing").is_none());
+        assert!(sparse_json.get("compat").is_none());
+    }
+
+    /// pricing 无 tiers 时 V2 写出跳过 tiers 键（空数组不当有值字段）。
+    #[test]
+    fn v2_pricing_skips_empty_tiers_on_write() {
+        let pricing = ModelPricingSpec {
+            currency: CurrencyKind::Usd,
+            input: 1.0,
+            output: 2.0,
+            cache_read: None,
+            cache_write: None,
+            per_image: None,
+            tiers: vec![],
+        };
+        let dto = project_pricing_v2(&pricing);
+        let json = serde_json::to_value(&dto).expect("序列化 pricing");
+        assert!(
+            json.get("tiers").is_none(),
+            "空 tiers 不得写出（与内核 ModelPricingSpec 同构）"
+        );
+        assert_eq!(json["input"], 1.0);
+        assert_eq!(json["currency"], "USD");
     }
 }

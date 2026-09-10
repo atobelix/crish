@@ -3,10 +3,12 @@ export interface PinColorOption {
   value: string;
 }
 
-export const DEFAULT_PIN_COLOR = '#10b981';
+// 钉选默认色 SSOT 迁至 utils/pinColor（store / 组件共用，防 reverse 依赖）
+export { DEFAULT_PIN_COLOR } from '../../utils/pinColor';
+import { DEFAULT_PIN_COLOR } from '../../utils/pinColor';
 
 export const PRESET_PIN_COLORS: PinColorOption[] = [
-  { label: '翡翠绿', value: '#10b981' },
+  { label: '翡翠绿', value: DEFAULT_PIN_COLOR },
   { label: '晴空蓝', value: '#0ea5e9' },
   { label: '珊瑚红', value: '#f43f5e' },
   { label: '琥珀金', value: '#f59e0b' },

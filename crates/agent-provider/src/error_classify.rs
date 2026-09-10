@@ -98,7 +98,74 @@ pub(super) fn detect_long_rate_limit_lock(lower: &str) -> bool {
     false
 }
 
-/// 从错误文本中尝试提取短时重试等待秒数（毫秒）
+/// 单位分类结果（用于 extract_seconds_from_text）
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum WaitUnit {
+    /// 毫秒：不转换
+    Ms,
+    /// 秒：原值即秒
+    Sec,
+    /// 分钟：×60
+    Min,
+}
+
+/// 从数字后的字符串识别等待时长单位（优先长 token，避免 "ms" 被 "m" 吞）。
+/// 返回 None 表示「无显式单位」或「未知单位 token」——调用方各自处理。
+fn parse_wait_unit(after_num: &str) -> Option<WaitUnit> {
+    let rest = after_num.trim_start();
+    // 中文单位（若存在）
+    if rest.starts_with("毫秒") {
+        return Some(WaitUnit::Ms);
+    }
+    if rest.starts_with("分钟") || rest.starts_with("分") {
+        return Some(WaitUnit::Min);
+    }
+    if rest.starts_with("秒") {
+        return Some(WaitUnit::Sec);
+    }
+    // 英文：优先长 token，再短缩写
+    if rest.starts_with("milliseconds") || rest.starts_with("millisecond") {
+        return Some(WaitUnit::Ms);
+    }
+    if rest.starts_with("minutes") || rest.starts_with("minute") {
+        return Some(WaitUnit::Min);
+    }
+    if rest.starts_with("seconds") || rest.starts_with("second") {
+        return Some(WaitUnit::Sec);
+    }
+    if rest.starts_with("ms") {
+        return Some(WaitUnit::Ms);
+    }
+    if rest.starts_with("min") {
+        return Some(WaitUnit::Min);
+    }
+    if rest.starts_with("sec") {
+        return Some(WaitUnit::Sec);
+    }
+    if rest.starts_with('s') {
+        return Some(WaitUnit::Sec);
+    }
+    None
+}
+
+/// 判断数字后的剩余串是否为「纯无单位」（空白/标点/句尾），而非未知单位 token。
+fn is_bare_after_number(after_num: &str) -> bool {
+    let rest = after_num.trim_start();
+    rest.is_empty()
+        || rest
+            .chars()
+            .next()
+            .map(|c| !(c.is_ascii_alphabetic() || c == '毫' || c == '秒' || c == '分'))
+            .unwrap_or(true)
+}
+
+/// 从错误文本中尝试提取短时重试等待时长（毫秒）。
+///
+/// 策略：
+/// 1. 在 "try again in " / "retry after " / "wait " / "retry in " / "after " 锚点后取数字；
+/// 2. 优先按显式单位换算：ms 不转换，s 不转换，min ×60（再 ×1000 转 ms）；
+/// 3. 纯数字无单位 → 保留历史契约「视为秒」（已由单测钉死）；
+/// 4. 有未知单位 token → 不猜测，返回 None（避免 "5 hours" 被当成 5 秒）。
 pub(super) fn extract_seconds_from_text(lower: &str) -> Option<u64> {
     for anchor in &["try again in ", "retry after ", "wait ", "retry in ", "after "] {
         if let Some(idx) = lower.find(anchor) {
@@ -107,9 +174,26 @@ pub(super) fn extract_seconds_from_text(lower: &str) -> Option<u64> {
                 .chars()
                 .take_while(|c| c.is_ascii_digit() || *c == '.')
                 .collect();
-            if let Ok(secs) = num_str.parse::<f64>() {
-                if secs > 0.0 && secs <= 300.0 {
-                    return Some((secs * 1000.0) as u64);
+            if let Ok(n) = num_str.parse::<f64>() {
+                if n > 0.0 {
+                    let after_num = &slice[num_str.len()..];
+                    // 转换为毫秒（上限 300_000 ms = 300 s）
+                    let ms: f64 = match parse_wait_unit(after_num) {
+                        Some(WaitUnit::Ms) => n,
+                        Some(WaitUnit::Sec) => n * 1000.0,
+                        Some(WaitUnit::Min) => n * 60.0 * 1000.0,
+                        None => {
+                            // 无显式单位 → 视为秒；未知单位 token → 不猜测，返回 None
+                            if is_bare_after_number(after_num) {
+                                n * 1000.0
+                            } else {
+                                continue;
+                            }
+                        }
+                    };
+                    if ms > 0.0 && ms <= 300_000.0 {
+                        return Some(ms as u64);
+                    }
                 }
             }
         }
@@ -119,7 +203,7 @@ pub(super) fn extract_seconds_from_text(lower: &str) -> Option<u64> {
 
 
 /// payload 过大消息（:372-377）：先排除 4130 系列码（Anthropic 的 "model version 4130"
-/// 是服务端错误码而非 HTTP 413），再匹配 payload 过大字样（含裸 "413"）
+/// 是服务端错误码而非 HTTP 413），再匹配 payload 过大字样（含整词 "413"，不匹配 "4130" 等）
 pub(super) fn looks_like_payload_too_large_message(lower: &str) -> bool {
     if lower.contains("4130") {
         return false;
@@ -129,10 +213,10 @@ pub(super) fn looks_like_payload_too_large_message(lower: &str) -> bool {
         "request_too_large",
         "entity too large",
         "request exceeds the maximum size",
-        "413",
     ]
     .iter()
     .any(|pattern| lower.contains(pattern))
+        || contains_word(lower, "413")
 }
 
 /// 5xx 状态码集合（覆盖全部 500..=599，含 529 Overloaded 及 Cloudflare 52x 错误）
@@ -168,17 +252,18 @@ pub(super) fn detect_timeout_message(lower: &str) -> bool {
 }
 
 /// network 字样（:304-314）：econnreset|enotfound|econnrefused|fetch failed|network|socket hang up
+/// "network" 改为整词匹配，避免 "internetwork" / "networking123" 等误伤
 pub(super) fn detect_network_message(lower: &str) -> bool {
     [
         "econnreset",
         "enotfound",
         "econnrefused",
         "fetch failed",
-        "network",
         "socket hang up",
     ]
     .iter()
     .any(|pattern| lower.contains(pattern))
+        || contains_word(lower, "network")
 }
 
 /// Cloudflare 质询（:390-407 消息部分）：cf_chl|challenge-platform|just a moment|enable javascript

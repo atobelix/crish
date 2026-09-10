@@ -14,6 +14,7 @@
 
 import { stringify as yamlStringify } from 'yaml';
 import { invokeTyped } from './tauriInvoke';
+import { normalizeProtocol, normalizeThinkingFormat } from './modelsNormalize';
 import type {
   ModelsYamlTree,
   ReadModelsYamlWire,
@@ -21,54 +22,16 @@ import type {
   SaveModelsYamlWire,
   ProviderSpec,
   ModelSpec,
-  ModelProtocol,
   PricingConfig,
   ProviderCompatConfig,
-  ThinkingWireFormat,
 } from './modelsCatalogTypes';
 
 export type IpcResult<T> =
   | { ok: true; data: T }
   | { ok: false; kind: 'MISSING' | 'IPC_ERROR' | 'PARSE_ERROR'; error: string };
 
-const CANONICAL_PROTOCOLS: ReadonlySet<string> = new Set([
-  'openai/chat',
-  'openai/responses',
-  'anthropic/messages',
-  'google/generate-content',
-]);
-
-const CANONICAL_THINKING_FORMATS: ReadonlySet<string> = new Set([
-  'openai',
-  'qwen',
-  'deepseek',
-  'anthropic',
-  'gemini',
-  'zai',
-  'custom',
-]);
-
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return value != null && typeof value === 'object' && !Array.isArray(value);
-}
-
-/** 读/写边界：旧协议字面量单向归一为规范名 */
-function normalizeProtocol(raw: unknown): ModelProtocol | undefined {
-  if (raw === 'google/interactions') return 'google/generate-content';
-  if (typeof raw === 'string' && CANONICAL_PROTOCOLS.has(raw)) {
-    return raw as ModelProtocol;
-  }
-  return undefined;
-}
-
-/** 读/写边界：thinkingFormat 旧名单向归一为内核序列化名 */
-function normalizeThinkingFormat(raw: unknown): ThinkingWireFormat | undefined {
-  if (raw === 'google') return 'gemini';
-  if (raw === 'qwen_enable_thinking') return 'qwen';
-  if (typeof raw === 'string' && CANONICAL_THINKING_FORMATS.has(raw)) {
-    return raw as ThinkingWireFormat;
-  }
-  return undefined;
 }
 
 function normalizeCompat(compat: ProviderCompatConfig | undefined): ProviderCompatConfig | undefined {
@@ -120,7 +83,8 @@ function normalizeProviders(raw: Record<string, ProviderSpec>): Record<string, P
       ...provider,
       displayName: provider.displayName || id,
       baseUrl: typeof provider.baseUrl === 'string' ? provider.baseUrl : '',
-      protocol: (protocol ?? provider.protocol) as ModelProtocol,
+      // 归一失败（IPC 载荷漂移/非法字面量）回退 openai/chat，禁止 cast 未校验字符串
+      protocol: protocol ?? 'openai/chat',
       compat: normalizeCompat(provider.compat),
       models: Array.isArray(provider.models) ? provider.models.map(normalizeModel) : [],
     };
@@ -137,6 +101,26 @@ function serializeCompat(compat: ProviderCompatConfig | undefined): Record<strin
   return out;
 }
 
+/**
+ * 序列化阶梯档（与内核 `PricingTier` serde 同构）。
+ * 写出键钉死：inputTokensAbove / input / output / cacheRead? / cacheWrite?。
+ * 禁止写出 inputCost / outputCost 等 TS 历史别名。
+ */
+function serializeTiers(
+  tiers: NonNullable<PricingConfig['tiers']>
+): Record<string, unknown>[] {
+  return tiers.map((tier) => {
+    const out: Record<string, unknown> = {
+      inputTokensAbove: tier.inputTokensAbove,
+      input: tier.input,
+      output: tier.output,
+    };
+    if (tier.cacheRead != null) out.cacheRead = tier.cacheRead;
+    if (tier.cacheWrite != null) out.cacheWrite = tier.cacheWrite;
+    return out;
+  });
+}
+
 function serializePricing(pricing: PricingConfig): Record<string, unknown> {
   const input = pickPrice(pricing.input, pricing.inputPerMTok);
   const output = pickPrice(pricing.output, pricing.outputPerMTok);
@@ -151,6 +135,10 @@ function serializePricing(pricing: PricingConfig): Record<string, unknown> {
   if (cacheRead != null) out.cacheRead = cacheRead;
   if (cacheWrite != null) out.cacheWrite = cacheWrite;
   if (perImage != null) out.perImage = perImage;
+  // 非空 tiers 必须写出（UI 改价保存不得丢阶梯）；空数组与 undefined 均跳过
+  if (Array.isArray(pricing.tiers) && pricing.tiers.length > 0) {
+    out.tiers = serializeTiers(pricing.tiers);
+  }
   return out;
 }
 
@@ -284,56 +272,4 @@ export async function writeModelsYamlIpc(
     error:
       res.status === 'missing' ? 'workbench_save_models_yaml 命令不可用' : res.message,
   };
-}
-
-// ── 300ms 智能防抖写入 ────────────────────────────────────────────────────────
-
-let debounceTimer: ReturnType<typeof setTimeout> | null = null;
-let pendingSaveTree: ModelsYamlTree | null = null;
-let pendingCallbacks: Array<(ok: boolean, err?: string) => void> = [];
-
-/**
- * 300ms 智能防抖写盘封装
- */
-export function debounceSaveModelsYaml(
-  tree: ModelsYamlTree,
-  onSaveResult?: (ok: boolean, err?: string) => void
-): void {
-  pendingSaveTree = tree;
-  if (onSaveResult) {
-    pendingCallbacks.push(onSaveResult);
-  }
-
-  if (debounceTimer) {
-    clearTimeout(debounceTimer);
-  }
-
-  debounceTimer = setTimeout(async () => {
-    debounceTimer = null;
-    if (!pendingSaveTree) return;
-
-    const target = pendingSaveTree;
-    const callbacks = [...pendingCallbacks];
-    pendingSaveTree = null;
-    pendingCallbacks = [];
-
-    const res = await writeModelsYamlIpc(target);
-    for (const cb of callbacks) {
-      try {
-        cb(res.ok, res.error);
-      } catch (err) {
-        console.error('[debounceSaveModelsYaml] 回调异常:', err);
-      }
-    }
-  }, 300);
-}
-
-/**
- * 热重载由写成功后的 ensureLoaded(true) 驱动（YAML 弹窗已如此）。
- * Rust 不广播 yaml 热重载事件；本函数为 no-op，避免半截死接线。
- */
-export function setupModelsYamlHotReloadListener(
-  _onReload?: () => Promise<void> | void
-): () => void {
-  return () => {};
 }

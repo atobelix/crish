@@ -785,6 +785,13 @@ fn project_model_entry(
     entry.api_model = Some(model.id.clone());
     entry.id = Some(format!("{provider_id}::{}", model.id));
     entry.provider = provider_id.to_string();
+    // 折叠语义（轨G P2 · 文档化钉死）：yaml 树投影**故意**把 vendor 折叠为
+    // provider_id——v2 models.yaml 以 provider 通道为第一公民，不做
+    // 「官方厂商 vs 通道」二分（那是 catalog.json 源的字段模型）。
+    // 消费方（catalog key / override 合并 / UI 费率表）统一以 provider_id
+    // 作 vendor 位；若未来要恢复独立字段，须同步改 ProjectModelEntry 全链路
+    // 与 catalog_override 合并规则，禁止单点解折叠。见 catalog_tests
+    // `yaml_projection_folds_vendor_into_provider_id`。
     entry.vendor = provider_id.to_string();
     entry.context_window = model.context_window;
     entry.max_output_tokens = model.max_output_tokens;

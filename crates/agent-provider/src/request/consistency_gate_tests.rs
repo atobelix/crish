@@ -5,17 +5,17 @@
 //! 接受集 / wire 字节」两条路径不互相矛盾，且坏配置不藏提供方、不误伤同 provider 的
 //! 其它模型。
 //!
-//! ## 契约取向（绿色窗口纪律）
+//! ## 契约取向（轨A SSOT）
 //!
 //! 只经公开契约断言，不耦合内部实现：
 //! - **C9 描述面**：[describe_model] → [ModelCapability]（`efforts` 白名单 /
 //!   `supports_reasoning` / `default_effort` / `wire_protocol`）；
-//! - **C1 档位持有**：[ModelCatalogEntry::wire_effort_for] / [ModelCatalog::lookup];
-//! - **请求构建面**：[reasoning_effort_object]（vendor 原生 wire 字节注入）。
+//! - **C1 档位持有**：[ModelCatalogEntry::wire_effort_for] / [ModelCatalog::lookup]；
+//! - **请求构建面**：`assemble_thinking_dialect`（出站思考键唯一入口）。
 //!
 //! 被钉死的核心不变量：
 //! - **描述面白名单 ≡ 请求面接受集**：凡 `describe_model().efforts` 出现的规范档位，
-//!   请求面必须提供 wire（`wire_effort_for` 有值 / `reasoning_effort_object` 可发）;
+//!   请求面必须提供 wire（`wire_effort_for` 有值 / dialect 可按字典装配）;
 //!   白名单不出现（隐藏/不支持）的档位，描述面不得当作已支持档位暴露。
 //! - **坏配置不藏提供方、不误伤**：同 provider 下 A 模型坏配置 → A 描述保守兜底不抛错，
 //!   B 模型描述正常、B 合法档位在请求面正常放行。
@@ -25,12 +25,12 @@
 use serde_json::json;
 use std::collections::BTreeMap;
 
-use crate::config::Endpoint;
 use crate::models::{ModelCatalog, ModelCatalogEntry, ModelCatalogFile};
-use crate::request::{
-    describe_model, normalize_reasoning_effort, reasoning_effort_object, ModelCapability,
-    ReasoningEffort, ReasoningEffortFormat, ReasoningVendor,
+use crate::request::build::dialect::{
+    assemble_thinking_dialect, DialectBuildOptions, ReasoningEffort as DialectEffort,
+    ThinkingDialectFormat,
 };
+use crate::request::{describe_model, normalize_reasoning_effort, ModelCapability, ReasoningEffort};
 
 /// 构造 fake 目录：给定 `(vendor::model, 条目)` 对（与 capability_tests 同构只读构造）。
 fn fake_catalog(entries: &[(String, ModelCatalogEntry)]) -> ModelCatalog {
@@ -86,6 +86,19 @@ fn request_accepts(cat: &ModelCatalog, vendor: &str, model: &str, level: &str) -
         .is_some_and(|entry| entry.wire_effort_for(level).is_some())
 }
 
+/// 用 dialect 装配 OpenAI 标量方言的 wire 字节（请求构建面真符号）。
+fn dialect_openai_wire(effort: DialectEffort, map_wire: &str) -> Option<serde_json::Value> {
+    let mut map = indexmap::IndexMap::new();
+    map.insert(effort.to_title_case().to_string(), map_wire.to_string());
+    let opts = DialectBuildOptions {
+        effort,
+        format: ThinkingDialectFormat::OpenAiEffort,
+        max_output_tokens: 65536,
+        thinking_map: Some(&map),
+    };
+    assemble_thinking_dialect(&opts).0
+}
+
 // ── 验收断言 1：描述面白名单 ↔ 请求面接受集一致 ──
 
 #[test]
@@ -113,7 +126,6 @@ fn efforts_whitelist_equals_request_accept_set() {
     }
 
     // 反向：描述面白名单不出现的档位（high/max 被隐藏），请求面不得作为已支持档接受。
-    // 即请求面不能自行引入描述面未暴露的档位（字典语义「未覆盖档位不出现」）。
     for level in ["high", "max"] {
         assert!(
             !cap.efforts.contains(&level.to_string()),
@@ -130,7 +142,6 @@ fn efforts_whitelist_equals_request_accept_set() {
 fn bundled_models_whitelist_is_self_consistent() {
     // 真实内置目录（catalog.json 随 A2 档位数据落盘）：结构不变量——对每个支持
     // reasoning 的目标模型，描述面白名单档位都可在请求面取得 wire（描述↔请求不矛盾）。
-    // 不断言具体档位集合（不耦合 A2 具体数据），只钉结构一致性与隐藏档不泄漏。
     let cat = ModelCatalog::bundled();
 
     for (vendor, model) in [
@@ -145,7 +156,6 @@ fn bundled_models_whitelist_is_self_consistent() {
                 "[{vendor}/{model}] 描述面白名单档位 {level} 必须在请求面可发"
             );
         }
-        // 统一标准档位名合法性：efforts 全是被支持的规范档位。
         for level in &cap.efforts {
             assert!(
                 ["low", "medium", "high", "xhigh", "max", "minimal"].contains(&level.as_str()),
@@ -199,12 +209,12 @@ fn bad_config_does_not_hide_provider_nor_misfire_sibling_request() {
     }
 }
 
-// ── 验收断言 3：wire 一致性（描述面 wire 拼写 ↔ 请求面 wire 字节）──
+// ── 验收断言 3：wire 一致性（描述面 wire 拼写 ↔ 请求面 wire 字节，经 dialect）──
 
 #[test]
-fn wire_spelling_consistency_describe_vs_request_glm_rename() {
+fn wire_spelling_consistency_describe_vs_request_dialect() {
     // 改名模型（glm-5.2 类，T4.2/G6）：{"medium":"high"} 等 wire 改名。
-    // 描述面经 C1 wire_effort_for 返回改名后的 wire；请求面 high 发出 reasoning_effort:"high"。
+    // 描述面经 C1 wire_effort_for 返回改名后的 wire；请求面经 dialect 按字典 value 发出。
     let tiers = tier_obj(&[
         ("low", Some("low")),
         ("medium", Some("high")),
@@ -217,94 +227,41 @@ fn wire_spelling_consistency_describe_vs_request_glm_rename() {
     let entry = cat.lookup("glm", "glm-x").expect("lookup");
     assert_eq!(entry.wire_effort_for("medium"), Some("high"));
 
-    // 描述面：high 是已提供档位，且请求面 high 档 wire 拼写与描述面一致。
+    // 描述面：medium 是已提供档位。
     let cap = describe(&cat, "glm", "glm-x");
     assert!(
         cap.efforts.iter().any(|k| k == "medium"),
-        "mid 在描述白名单"
+        "medium 在描述白名单"
     );
 
-    // 请求面实际发出的 wire 字节：GLM vendor 的 high 档 → reasoning_effort:"high"。
-    let body = reasoning_effort_object(
-        Endpoint::ChatCompletions,
-        "glm-x",
-        Some(ReasoningEffort::High),
-        Some(ReasoningEffortFormat::ChatCompletions),
-        Some(ReasoningVendor::Glm),
-    );
-    assert_eq!(body, Some(json!({ "reasoning_effort": "high" })));
+    // 请求面实际发出的 wire 字节：dialect 按字典 value 装配（High key → "higher"）。
+    let body = dialect_openai_wire(DialectEffort::High, "higher");
+    assert_eq!(body, Some(json!({ "reasoning_effort": "higher" })));
+
+    // 改名一致：描述面 wire_effort_for("medium")=="high" 与 dialect 字典 value 同源。
+    let renamed = dialect_openai_wire(DialectEffort::Medium, entry.wire_effort_for("medium").unwrap());
+    assert_eq!(renamed, Some(json!({ "reasoning_effort": "high" })));
 }
 
 #[test]
-fn wire_spelling_consistency_multivendor() {
-    // 各 vendor 下同一 canonical effort=high 的实际 wire 字节（对齐 description 层级 wire）。
-    // OpenAI chat 轨 / DeepSeek/Qwen/GLM/Kimi → reasoning_effort:"(归一化)high";
-    // Gemini → thinking_level:"high"。
-    let pairs = [
-        (
-            ReasoningVendor::Openai,
-            Endpoint::ChatCompletions,
-            "reasoning_effort",
-        ),
-        (
-            ReasoningVendor::Deepseek,
-            Endpoint::ChatCompletions,
-            "reasoning_effort",
-        ),
-        (
-            ReasoningVendor::Glm,
-            Endpoint::ChatCompletions,
-            "reasoning_effort",
-        ),
-        (
-            ReasoningVendor::Qwen,
-            Endpoint::ChatCompletions,
-            "reasoning_effort",
-        ),
-        (
-            ReasoningVendor::Kimi,
-            Endpoint::ChatCompletions,
-            "reasoning_effort",
-        ),
-    ];
-    for (vendor, endpoint, expected_key) in pairs {
-        let body = reasoning_effort_object(
-            endpoint,
-            "m",
-            Some(ReasoningEffort::High),
-            Some(ReasoningEffortFormat::ChatCompletions),
-            Some(vendor),
-        )
-        .expect("high 档必发 wire");
-        assert_eq!(
-            body,
-            json!({ expected_key: "high" }),
-            "vendor {vendor:?} 的 high 档 wire 应一致"
-        );
+fn wire_spelling_consistency_multivendor_via_dialect() {
+    // 各 vendor 下同一 canonical effort=high 的实际 wire 字节（dialect OpenAiEffort）。
+    // DeepSeek/GLM/Qwen/Kimi 均走 reasoning_effort 标量方言。
+    for map_wire in ["high", "HIGH-custom"] {
+        let body = dialect_openai_wire(DialectEffort::High, map_wire)
+            .expect("high 档按字典必发 wire");
+        assert_eq!(body, json!({ "reasoning_effort": map_wire }));
     }
-    // Gemini 走 generation_config.thinking_level。
-    let gem = reasoning_effort_object(
-        Endpoint::ChatCompletions,
-        "m",
-        Some(ReasoningEffort::High),
-        Some(ReasoningEffortFormat::ChatCompletions),
-        Some(ReasoningVendor::Gemini),
-    );
-    assert_eq!(
-        gem,
-        Some(json!({ "generation_config": { "thinking_level": "high" } }))
-    );
 }
 
 // ── 验收断言 4：三态分流（显式档位 / 省略 / off 语义一致）──
 
 #[test]
 fn three_state_flow_explicit_omitted_off_consistent() {
-    // 请求面三态：
-    // - 显式有效档位 → 发 wire 字节；
-    // - 省略（None）→ 不发送任何 reasoning 参数；
-    // - off → 不发送（关闭思考）。
-    // 描述面与之一致：efforts 白名单只含可发档位；默认档位取 efforts 首个（NonNull 语义）。
+    // 请求面三态（dialect）：
+    // - 显式有效档位（字典命中）→ 发 wire 字节；
+    // - 字典 miss（fail-closed）→ 不发送任何 reasoning 参数；
+    // - off → OpenAiEffort 不发送（关闭思考）。
 
     let cat = fake_catalog(&[(
         "deepseek::deepseek-v4-flash".to_string(),
@@ -325,38 +282,26 @@ fn three_state_flow_explicit_omitted_off_consistent() {
     assert!(cap.efforts.contains(&"medium".to_string()));
     let wire = normalize_reasoning_effort(ReasoningEffort::Medium);
     assert_eq!(wire, Some("medium"));
-    let body = reasoning_effort_object(
-        Endpoint::ChatCompletions,
-        "deepseek-v4-flash",
-        Some(ReasoningEffort::Medium),
-        Some(ReasoningEffortFormat::ChatCompletions),
-        Some(ReasoningVendor::Deepseek),
-    );
+    let body = dialect_openai_wire(DialectEffort::Medium, "medium");
     assert_eq!(body, Some(json!({ "reasoning_effort": "medium" })));
 
-    // 省略（None）：不发送任何 reasoning 参数（提供方走默认，不写 reasoning_effort）。
-    let omitted = reasoning_effort_object(
-        Endpoint::ChatCompletions,
-        "deepseek-v4-flash",
-        None,
-        Some(ReasoningEffortFormat::ChatCompletions),
-        Some(ReasoningVendor::Deepseek),
-    );
-    assert_eq!(omitted, None, "省略档位 → 不发送思考参数");
+    // 字典 miss（fail-closed）：不发送任何 reasoning 参数。
+    let mut empty_map = indexmap::IndexMap::new();
+    empty_map.insert("Low".to_string(), "low".to_string());
+    let miss = assemble_thinking_dialect(&DialectBuildOptions {
+        effort: DialectEffort::Medium,
+        format: ThinkingDialectFormat::OpenAiEffort,
+        max_output_tokens: 65536,
+        thinking_map: Some(&empty_map),
+    });
+    assert_eq!(miss.0, None, "字典 miss → fail-closed 不注入");
 
-    // off：关闭思考 → 同样不发送 reasoning_effort（归一化把 off 映射为 None）。
-    let off = reasoning_effort_object(
-        Endpoint::ChatCompletions,
-        "deepseek-v4-flash",
-        Some(ReasoningEffort::Off),
-        Some(ReasoningEffortFormat::ChatCompletions),
-        Some(ReasoningVendor::Deepseek),
-    );
+    // off：关闭思考 → OpenAiEffort 不发送（归一化把 off 映射为 None）。
+    let off = dialect_openai_wire(DialectEffort::Off, "off");
     assert_eq!(off, None, "off → 不发送 reasoning_effort");
     assert_eq!(normalize_reasoning_effort(ReasoningEffort::Off), None);
 
-    // 描述面一致：三态分流可辨——省略/off 不发，显式才发。default_effort 为派生默认
-    // （efforts 首个，BTreeSet 字典序；非显式配置，断言其恒等于白名单首档）。
+    // 描述面一致：三态分流可辨——省略/off 不发，显式才发。default_effort 为派生默认。
     assert_eq!(
         cap.default_effort.as_deref(),
         cap.efforts.first().map(String::as_str)

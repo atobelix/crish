@@ -28,6 +28,19 @@ export interface ReadinessCheckResult {
   guidance?: ReadinessGuidance;
 }
 
+/**
+ * 引擎连接等待超时（bootstrap / ensureEngineConnected 主路径）。
+ * SSOT：streamSession 发送门与本模块 ensureEngineConnected 共同引用，禁止再散落魔数。
+ */
+export const ENGINE_CONNECT_TIMEOUT_MS = 20_000;
+
+/**
+ * 发送路径瞬时就绪门超时（streamSession start 前 waitUntilConnected）。
+ * 与 ENGINE_CONNECT_TIMEOUT_MS 同源分场景导出：发送路径用短窗快速拒绝，
+ * 而非挂起 20s；数值不同是场景裁决，不是漂移。
+ */
+export const ENGINE_SEND_GATE_TIMEOUT_MS = 1_500;
+
 /** 动态重置就绪状态机（当收到配置变更或后端事件时调用） */
 export function resetReadiness(): void {
   const transport = getTransport();
@@ -132,13 +145,16 @@ export async function checkEngineReadyRealtime(
       {},
       { timeoutMs }
     );
-  } catch {
-    /* swallow-ok: 查询失败放行，避免双重报错 */
+  } catch (e) {
+    // fail-closed：core_get_status 抛错不得 ok:true 放行（旧 fail-open 会绕过配置阻断）。
+    // 至少降级为 retryable_wait；域按错误分类，无法分类时按 S1（核心未就绪）。
+    logInternalError('checkEngineReadyRealtime', e);
+    const domain = classifyErrorDomain(e) ?? 'S1';
     return {
-      ok: true,
-      state: 'ok',
-      domain: null,
-      guidance: { action: 'none', message: '' },
+      ok: false,
+      state: 'retryable_wait',
+      domain,
+      guidance: { action: 'wait', message: domainUserMessage(domain) },
     };
   }
   const domain = classifyErrorDomain(status);
@@ -177,7 +193,7 @@ export async function ensureEngineConnected(): Promise<{
   ensureReadinessSync();
   const transport = getTransport();
   try {
-    const ready = await transport.waitUntilConnected(20_000);
+    const ready = await transport.waitUntilConnected(ENGINE_CONNECT_TIMEOUT_MS);
     if (!ready) {
       return {
         ok: false,

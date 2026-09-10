@@ -11,6 +11,7 @@ import {
   userBubbleDisplayText,
   userBubbleExpandAria,
 } from './chatMessageRowUtils';
+import { DEFAULT_PIN_COLOR } from '../../utils/pinColor';
 import { UserMessageActionsBar } from './MessageActionsBar';
 import { openFileInPanel } from '../../api/filePanelOpener';
 import { isAbsoluteFsPath, resolveWorkspacePath } from '../../api/workspaceFsApi';
@@ -265,7 +266,8 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
                   cursor: isLong ? 'pointer' : 'default',
                   ...(isPinned
                     ? ({
-                        '--user-bubble-pin-color': pinnedColor || '#10b981',
+                        '--user-bubble-pin-color':
+                          pinnedColor || DEFAULT_PIN_COLOR,
                       } as React.CSSProperties)
                     : {}),
                 }}

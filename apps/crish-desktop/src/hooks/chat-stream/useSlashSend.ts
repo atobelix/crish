@@ -28,6 +28,10 @@ import {
   enqueueFollowUpMessage,
   flushContextStateBeforeSend,
 } from './slashSendQueueHelper';
+import {
+  sanitizeAttachmentForPersist,
+  sanitizeImageRefForPersist,
+} from '../../api/attachmentPersistSanitize';
 import { runPreflightChecks, assembleChatPayload } from './slashSendPreflight';
 import { useEphemeralChatStore } from '../../store/ephemeralChatStore';
 
@@ -170,28 +174,16 @@ export function useSlashSend(
           /\.(png|jpe?g|gif|webp|svg|bmp|ico|avif)$/i.test(a.name || a.path || '')
       );
 
+    // 落盘走脱敏 SSOT：禁止绝对路径 / dataUrl 本体进消息持久化
     const userImages: import('../../store/types').MessageImageRef[] =
       activeAttachments
         .filter(isImageAttachment)
-        .map((a, idx) => ({
-          id: `img-${userMsgId}-${idx}`,
-          source: a.path || a.dataUrl || a.name,
-          kind: (a.dataUrl && !a.path ? 'data' : 'local') as 'data' | 'local',
-          resolvedUrl: a.thumbnailUrl || a.dataUrl,
-          mime: a.mime || 'image/png',
-          alt: a.name,
-        }));
+        .map((a, idx) => sanitizeImageRefForPersist(a, `img-${userMsgId}-${idx}`));
 
     const userAttachments: import('../../store/types').SessionMessageAttachment[] =
       activeAttachments
         .filter((a) => !isImageAttachment(a))
-        .map((a) => ({
-          name: a.name,
-          path: a.path,
-          mime: a.mime,
-          text: a.text,
-          dataUrl: a.dataUrl,
-        }));
+        .map((a) => sanitizeAttachmentForPersist(a));
 
     // 8. 消息入库与派发
     if (isFollowUp) {

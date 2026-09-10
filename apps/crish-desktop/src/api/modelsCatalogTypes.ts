@@ -85,14 +85,22 @@ export interface ModalityMatrix {
   output: string[];
 }
 
-/** 阶梯长度超额费率区间契约 */
+/**
+ * 阶梯长度超额费率区间契约（与内核 `PricingTier` serde 同构）。
+ * 磁盘 / IPC 写出键：inputTokensAbove / input / output / cacheRead? / cacheWrite?。
+ * 禁止发明 inputCost / outputCost 等别名键。
+ */
 export interface PricingTier {
-  /** 上下文阈值起始点（如 inputTokensAbove: 256000） */
+  /** 上下文阈值起始点（如 inputTokensAbove: 256000）；达到门槛触发本档 */
   inputTokensAbove: number;
   /** 该阈值以上的输入单价 (每 1M Tokens) */
-  inputCost: number;
+  input: number;
   /** 该阈值以上的输出单价 (每 1M Tokens) */
-  outputCost: number;
+  output: number;
+  /** 阶梯缓存读取单价 (每 1M Tokens，可选) */
+  cacheRead?: number;
+  /** 阶梯缓存写入单价 (每 1M Tokens，可选) */
+  cacheWrite?: number;
 }
 
 /**

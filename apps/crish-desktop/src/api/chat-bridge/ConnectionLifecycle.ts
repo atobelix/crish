@@ -27,6 +27,8 @@ export {
   resolveSendThinkingFields,
   checkEngineReadyRealtime,
   ensureEngineConnected,
+  ENGINE_CONNECT_TIMEOUT_MS,
+  ENGINE_SEND_GATE_TIMEOUT_MS,
 } from './readiness';
 
 export {

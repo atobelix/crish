@@ -18,6 +18,15 @@ describe('blockedExecutableExtensions SSOT', () => {
       'com',
       'sh',
       'bin',
+      'scr',
+      'pif',
+      'hta',
+      'jse',
+      'vbe',
+      'wsf',
+      'wsh',
+      'msc',
+      'jar',
     ]);
   });
 
@@ -25,6 +34,17 @@ describe('blockedExecutableExtensions SSOT', () => {
     expect(isBlockedExecutablePath('C:\\tmp\\run.exe')).toBe(true);
     expect(isBlockedExecutablePath('/tmp/run.sh')).toBe(true);
     expect(isBlockedExecutablePath('scripts/setup.ps1:12')).toBe(true);
+    // Windows 可执行变体（E1）
+    expect(isBlockedExecutablePath('C:\\tmp\\setup.scr')).toBe(true);
+    expect(isBlockedExecutablePath('C:\\tmp\\proxy.pif')).toBe(true);
+    expect(isBlockedExecutablePath('C:\\tmp\\page.hta')).toBe(true);
+    expect(isBlockedExecutablePath('C:\\tmp\\drop.jse')).toBe(true);
+    expect(isBlockedExecutablePath('C:\\tmp\\drop.vbe')).toBe(true);
+    expect(isBlockedExecutablePath('C:\\tmp\\wrap.wsf')).toBe(true);
+    expect(isBlockedExecutablePath('C:\\tmp\\wrap.wsh')).toBe(true);
+    expect(isBlockedExecutablePath('C:\\tmp\\console.msc')).toBe(true);
+    expect(isBlockedExecutablePath('C:\\tmp\\lib.jar')).toBe(true);
+    expect(isBlockedExecutablePath('C:\\tmp\\setup.SCR')).toBe(true);
     expect(isBlockedExecutablePath('readme.md')).toBe(false);
     expect(isBlockedExecutablePath('archive.tar.gz')).toBe(false);
     expect(extensionOfPath('a.b.CMD')).toBe('cmd');

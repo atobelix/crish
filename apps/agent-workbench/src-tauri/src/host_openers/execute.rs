@@ -248,8 +248,10 @@ fn open_with_shortcut(
 // 「函数级 allow + 理由」），理由详见文件头安全模型。
 /// §4.3 可执行后缀拦截 SSOT（与前端 `blockedExecutableExtensions.ts` 对齐；
 /// 门禁 `scripts/check-blocked-executable-ssot.mjs` 静态校验两边一致）。
-const BLOCKED_EXECUTABLE_EXTENSIONS: &[&str] =
-    &["exe", "bat", "cmd", "msi", "ps1", "vbs", "com", "sh", "bin"];
+const BLOCKED_EXECUTABLE_EXTENSIONS: &[&str] = &[
+    "exe", "bat", "cmd", "msi", "ps1", "vbs", "com", "sh", "bin", "scr", "pif", "hta", "jse",
+    "vbe", "wsf", "wsh", "msc", "jar",
+];
 
 fn extension_of_path(path: &str) -> Option<&str> {
     let base = path.rsplit(['/', '\\']).next().unwrap_or(path);
@@ -606,6 +608,16 @@ mod tests {
             "c.sh",
             "d.bin",
             "scripts/run.ps1:12",
+            // Windows 可执行变体（E1）
+            "e.scr",
+            "f.pif",
+            "g.hta",
+            "h.jse",
+            "i.vbe",
+            "j.wsf",
+            "k.wsh",
+            "l.msc",
+            "m.jar",
         ] {
             let res = open_path_with_default_app(name.to_string());
             assert!(res.is_err(), "executable suffix must be blocked: {name}");

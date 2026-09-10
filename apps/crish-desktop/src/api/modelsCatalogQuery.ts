@@ -13,12 +13,18 @@ import type {
   ModelSpec,
   ModelsCatalogState,
 } from './modelsCatalogTypes';
+import { normalizeProtocol } from './modelsNormalize';
 
+/**
+ * 兼容层门面协议联合（规范名 SSOT）。
+ * Google 协议只允许写出规范名 generate-content；旧 interactions 名
+ * 仅为 IPC 读边界归一输入，禁止出现在本门面的投影/写出值中。
+ */
 export type CatalogModelProtocol =
   | 'openai/chat'
   | 'openai/responses'
   | 'anthropic/messages'
-  | 'google/interactions';
+  | 'google/generate-content';
 
 export interface CatalogModelSpec {
   model: string;
@@ -27,7 +33,11 @@ export interface CatalogModelSpec {
   displayName?: string;
   /** 真实物理上下文窗口总容量（Tokens），规范标准命名 */
   contextWindow?: number;
-  /** 上下文长度别名（与 contextWindow 互通），杜绝历史代码读到 undefined */
+  /**
+   * 上下文长度只读镜像（→ contextWindow）。
+   * enumerable:false：禁止进入投影 / JSON.stringify / serialize；
+   * 兼容 getter 仅保留读路径，旧代码读 spec.contextLength 不再拿到 undefined。
+   */
   contextLength?: number;
   maxOutputTokens?: number;
   protocol?: CatalogModelProtocol;
@@ -37,13 +47,18 @@ export interface CatalogModelSpec {
     video?: boolean;
     reasoning?: boolean;
   };
+  /**
+   * 计价投影：只产出规范字段（与 PricingConfig 写出键同构）。
+   * 旧名 inputPerMTok / outputPerMTok / … 属读边界别名，禁止出现在本投影中；
+   * 历史消费方（getPresetPricingList / ModelPrice）在各自门面层做映射。
+   */
   pricing?: {
-    inputPerMTok?: number;
-    outputPerMTok?: number;
-    cacheReadPerMTok?: number;
-    cacheWritePerMTok?: number;
+    input?: number;
+    output?: number;
+    cacheRead?: number;
+    cacheWrite?: number;
     billingUnit?: 'token' | 'per_image';
-    perImageCost?: number;
+    perImage?: number;
     currency?: 'USD' | 'CNY';
   };
 }
@@ -70,32 +85,35 @@ export function modelToCatalogSpec(
   const windowVal = m.contextWindow ?? m.contextLength;
   let _contextWindow: number | undefined = windowVal;
 
+  // 读边界归一：IPC 旧名单向映到规范名；
+  // normalizeProtocol 运行时只返回规范名（类型面含读边界旧名，此处收窄到门面联合）。
+  // 门面投影只产出规范名，禁止反向写回旧名。
+  const rawProtocol = m.protocol ?? provider.protocol;
+  const protocol = normalizeProtocol(rawProtocol) as CatalogModelProtocol | undefined;
+
   const spec: CatalogModelSpec = {
     model: m.id,
     vendor: providerId,
     vendorDisplayName: provider.displayName,
     displayName: m.displayName || m.id,
     maxOutputTokens: m.maxOutputTokens,
-    protocol: (
-      (m.protocol || provider.protocol) === 'google/generate-content'
-        ? 'google/interactions'
-        : (m.protocol || provider.protocol)
-    ) as CatalogModelProtocol,
+    protocol,
     capabilities: m.capabilities,
     pricing: m.pricing
       ? {
-          inputPerMTok: m.pricing.input ?? m.pricing.inputPerMTok,
-          outputPerMTok: m.pricing.output ?? m.pricing.outputPerMTok,
-          cacheReadPerMTok: m.pricing.cacheRead ?? m.pricing.cacheReadPerMTok,
-          cacheWritePerMTok: m.pricing.cacheWrite ?? m.pricing.cacheWritePerMTok,
+          // 读边界：规范键优先，旧名别名兜底归一；投影只产出规范键
+          input: m.pricing.input ?? m.pricing.inputPerMTok,
+          output: m.pricing.output ?? m.pricing.outputPerMTok,
+          cacheRead: m.pricing.cacheRead ?? m.pricing.cacheReadPerMTok,
+          cacheWrite: m.pricing.cacheWrite ?? m.pricing.cacheWritePerMTok,
           billingUnit: m.pricing.unit === 'per_image' ? 'per_image' : 'token',
           currency: m.pricing.currency,
-          perImageCost: m.pricing.perImage ?? m.pricing.perImageCost,
+          perImage: m.pricing.perImage ?? m.pricing.perImageCost,
         }
       : undefined,
   };
 
-  // 双向 getter/setter 别名联动，无论是读取还是更新 contextWindow 或 contextLength 均完全对称
+  // 双向 getter/setter 别名联动（内存态对称更新；contextWindow 保持 enumerable 进投影）
   Object.defineProperty(spec, 'contextWindow', {
     get() {
       return _contextWindow;
@@ -107,6 +125,7 @@ export function modelToCatalogSpec(
     configurable: true,
   });
 
+  // contextLength：只读兼容镜像，enumerable:false 禁止 serialize / 投影
   Object.defineProperty(spec, 'contextLength', {
     get() {
       return _contextWindow;
@@ -114,7 +133,7 @@ export function modelToCatalogSpec(
     set(val: number | undefined) {
       _contextWindow = val;
     },
-    enumerable: true,
+    enumerable: false,
     configurable: true,
   });
 
@@ -197,7 +216,9 @@ export function searchCatalogModels(query: string, vendor?: string): CatalogMode
 }
 
 /**
- * 获取预设价格列表（供兼容层或历史消费方调用）
+ * 获取预设价格列表（兼容门面：返回 ModelPrice 旧字段名，供 EditablePriceRow 等历史消费方）。
+ * 内部从 CatalogModelSpec 规范字段映射到 *PerMTok 旧名——旧名仅在此门面出现，
+ * 禁止 serialize / 写盘。
  */
 export function getPresetPricingList(): Array<{
   model: string;
@@ -209,13 +230,13 @@ export function getPresetPricingList(): Array<{
 }> {
   return listCatalogModels().map((m) => ({
     model: m.model,
-    inputPerMTok: m.pricing?.inputPerMTok ?? 0,
-    outputPerMTok: m.pricing?.outputPerMTok ?? 0,
-    ...(m.pricing?.cacheReadPerMTok !== undefined && {
-      cacheReadPerMTok: m.pricing.cacheReadPerMTok,
+    inputPerMTok: m.pricing?.input ?? 0,
+    outputPerMTok: m.pricing?.output ?? 0,
+    ...(m.pricing?.cacheRead !== undefined && {
+      cacheReadPerMTok: m.pricing.cacheRead,
     }),
-    ...(m.pricing?.cacheWritePerMTok !== undefined && {
-      cacheWritePerMTok: m.pricing.cacheWritePerMTok,
+    ...(m.pricing?.cacheWrite !== undefined && {
+      cacheWritePerMTok: m.pricing.cacheWrite,
     }),
     ...(m.pricing?.billingUnit && { billingUnit: m.pricing.billingUnit }),
   }));

@@ -3,10 +3,8 @@
  * 不写 apiKey。缺 protocol 写出 openai/chat（M15）。运行时不按 URL 猜协议。
  */
 import { ensureLsImported } from '../../api/modelsLsImport';
-import {
-  canonicalizeProtocol,
-  draftToModelPatch,
-} from '../../api/modelsDraftMap';
+import { draftToModelPatch } from '../../api/modelsDraftMap';
+import { normalizeProtocol } from '../../api/modelsNormalize';
 import {
   modelsCatalogStore,
   selectProvider,
@@ -39,14 +37,14 @@ export const YAML_PROTOCOL_SELECT_OPTIONS = [
 export function toYamlProtocol(
   raw: string | undefined | null
 ): ModelProtocol | undefined {
-  return canonicalizeProtocol(raw);
+  return normalizeProtocol(raw);
 }
 
 /** 供应商保存：缺 protocol 写出 openai/chat（M15）。 */
 export function protocolForProviderWrite(
   raw: string | undefined | null
 ): ModelProtocol {
-  return canonicalizeProtocol(raw) ?? DEFAULT_YAML_PROTOCOL;
+  return normalizeProtocol(raw) ?? DEFAULT_YAML_PROTOCOL;
 }
 
 export async function prepareCatalogWrite(): Promise<

@@ -7,8 +7,8 @@
  */
 
 import { modelsCatalogStore } from './modelsCatalogStore';
+import { normalizeProtocol } from './modelsNormalize';
 import type {
-  ModelProtocol,
   ModelSpec,
   ModelsYamlTree,
   ModalityMatrix,
@@ -22,13 +22,6 @@ export const LS_IMPORT_FLAG_VERSION = 1;
 const PROFILES_KEY = 'crish_provider_profiles_v1';
 const META_KEY = 'crish_model_meta_v1';
 const PRICES_KEY = 'crish_model_prices_v1';
-
-const CANONICAL_PROTOCOLS: ReadonlySet<string> = new Set([
-  'openai/chat',
-  'openai/responses',
-  'anthropic/messages',
-  'google/generate-content',
-]);
 
 export type LsImportResult = { ok: boolean; error?: string };
 
@@ -352,12 +345,6 @@ function pricingFrom(
   if (cacheWrite != null) out.cacheWrite = cacheWrite;
   if (perImage != null) out.perImage = perImage;
   return out;
-}
-
-function normalizeProtocol(raw: unknown): ModelProtocol | undefined {
-  if (raw === 'google/interactions') return 'google/generate-content';
-  if (typeof raw === 'string' && CANONICAL_PROTOCOLS.has(raw)) return raw as ModelProtocol;
-  return undefined;
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

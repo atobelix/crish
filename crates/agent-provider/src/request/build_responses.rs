@@ -119,7 +119,10 @@ pub fn build_responses_request_body(
         let dialect_opts = DialectBuildOptions {
             effort,
             format,
-            max_output_tokens: opts.max_tokens.unwrap_or(64000),
+            // 0 = 无已知上限：dialect 不发明 64000 兜底（轨G P2，对齐 build_chat）。
+            // 仅当 opts.max_tokens 已为 Some 时才写请求体 max_output_tokens 字段
+            // （见上方 max_output_tokens 分支）；None 时请求体省略该字段，跟随协议缺省。
+            max_output_tokens: opts.max_tokens.unwrap_or(0),
             thinking_map: opts.thinking_map.as_ref(),
         };
         let (thinking_val, _) = assemble_thinking_dialect(&dialect_opts);
@@ -207,5 +210,53 @@ mod responses_dialect_wiring_tests {
         };
         let body = build_responses_request_body(&opts, &RequestBuildContext::default());
         assert_eq!(body["thinking"], json!({ "type": "enabled" }));
+    }
+
+    #[test]
+    fn test_responses_max_tokens_none_omits_field_and_no_invented_64000() {
+        // 轨G P2：无 max_tokens 时请求体省略 max_output_tokens（跟随协议缺省），
+        // 且 dialect 不发明 64000 兜底（对齐 build_chat 的 unwrap_or(0) 契约）。
+        let mut map = IndexMap::new();
+        map.insert("Medium".to_string(), "medium".to_string());
+        let opts = ChatCompletionsRequestOptions {
+            model: Some("gpt-5-responses".to_string()),
+            reasoning_effort: Some(crate::request::vendor::ReasoningEffort::Medium),
+            thinking_format: Some(ThinkingFormat::OpenAi),
+            thinking_map: Some(map),
+            // max_tokens 缺省 → 不得发明 64000
+            ..ChatCompletionsRequestOptions::default()
+        };
+        let body = build_responses_request_body(&opts, &RequestBuildContext::default());
+        assert!(
+            body.get("max_output_tokens").is_none(),
+            "无 max_tokens 时不得发明 64000 写入 max_output_tokens：{body}"
+        );
+        assert!(
+            body.get("max_tokens").is_none(),
+            "Responses 轨不得出现 max_tokens：{body}"
+        );
+        // 思考注入不受影响（与 max_output_tokens 解耦）
+        assert_eq!(body["reasoning"], json!({ "effort": "medium" }));
+    }
+
+    #[test]
+    fn test_responses_max_tokens_some_emits_field() {
+        // 有显式 max_tokens：按协议原生字段名写入（防回归）
+        let mut map = IndexMap::new();
+        map.insert("Medium".to_string(), "medium".to_string());
+        let opts = ChatCompletionsRequestOptions {
+            model: Some("gpt-5-responses".to_string()),
+            reasoning_effort: Some(crate::request::vendor::ReasoningEffort::Medium),
+            thinking_format: Some(ThinkingFormat::OpenAi),
+            thinking_map: Some(map),
+            max_tokens: Some(2048),
+            ..ChatCompletionsRequestOptions::default()
+        };
+        let body = build_responses_request_body(&opts, &RequestBuildContext::default());
+        assert_eq!(
+            body["max_output_tokens"], 2048,
+            "显式 max_tokens 须写入 max_output_tokens"
+        );
+        assert_eq!(body["reasoning"], json!({ "effort": "medium" }));
     }
 }

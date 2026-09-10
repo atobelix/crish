@@ -241,6 +241,16 @@ export interface MessageImageRef {
   originToolCallId?: string;
   /** 字节大小（用于配额展示/日志；可能缺省） */
   byteSize?: number;
+  /**
+   * 工作区外绝对路径已脱敏为 basename。
+   * 只读展示用；不可反解为完整本机路径。
+   */
+  pathRedacted?: boolean;
+  /**
+   * dataUrl 内容哈希线索（非加密，仅稳定对照/去重）。
+   * 刻意不含 dataUrl 本体；不得回写进 prompt。
+   */
+  contentHint?: string;
 }
 
 /**
@@ -290,6 +300,10 @@ export interface MessageImageRef {
   width?: number;
   /** 图片高度（可选，用于布局） */
   height?: number;
+  /** 工作区外绝对路径已脱敏为 basename（只读展示） */
+  pathRedacted?: boolean;
+  /** dataUrl 内容哈希线索（非加密；不含 dataUrl 本体） */
+  contentHint?: string;
 }
 
 /** 消息附件（用户发送的图片/文本/代码/文件） */
@@ -299,6 +313,8 @@ export interface SessionMessageAttachment {
   mime?: string;
   text?: string;
   dataUrl?: string;
+  /** 工作区外绝对路径已脱敏为 basename（只读展示；新写路径必脱敏） */
+  pathRedacted?: boolean;
 }
 
 /** 助手消息上的单次工具调用（含可选 diff / 审批元数据） */

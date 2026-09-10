@@ -6,6 +6,7 @@ import { assistantCopyText } from '../../api/toolPresentation';
 import type { ChatToolStackSharedProps } from '../chat-tool-call/ChatToolCallBlock';
 import type { PinnedItem } from './MessageVirtualizer';
 import { pinSnippet } from './useScrollAnchor';
+import { DEFAULT_PIN_COLOR } from '../chat-message-row/colorPickerUtils';
 
 // Stable references for selector fallbacks (React 19 useSyncExternalStore requires
 // getSnapshot to return the same reference when the underlying data hasn't changed).
@@ -170,7 +171,7 @@ export function useChatMessageState({
       } else if (pinnedIdSet.has(messageId)) {
         unpinMessage(activeSessionId, messageId);
       } else {
-        pinMessage(activeSessionId, messageId, '#10b981');
+        pinMessage(activeSessionId, messageId, DEFAULT_PIN_COLOR);
       }
     },
     [activeSessionId, pinnedIdSet, pinMessage, unpinMessage]

@@ -9,7 +9,7 @@
 //! **≠ EL**；禁删既有测试（测试资产保护铁律 §9）；禁重派 SR-04。
 
 use super::*;
-use agent_provider::request::cache::{CacheKey, CacheMechanism};
+use agent_provider::request::cache::CacheMechanism;
 use conex_compaction::Summarizer;
 use conex_types::ContextBudget;
 use session_loop::provider::ProviderStreamItem;
@@ -288,7 +288,7 @@ fn build_context_passes_system_prompt_and_is_stable() {
     );
 
     // 稳定性：相同设置下两次构建请求体字节一致（同进程对比）
-    let options = call.request_options(&request);
+    let options = call.request_options_auto(&request);
     let body_a = build_chat_completions_request_body(&options, &context_a);
     let body_b = build_chat_completions_request_body(&options, &context_b);
     assert_eq!(body_a.to_string(), body_b.to_string());
@@ -403,7 +403,7 @@ fn request_options_wires_build_cache_policy() {
         reqwest::Client::new(),
         live_config("acme", "acme-cache"),
     );
-    let options = acme.request_options(&request);
+    let options = acme.request_options_auto(&request);
     let policy = options.cache.expect("yaml 声明应注入缓存策略");
     assert_eq!(policy.mechanism, CacheMechanism::Explicit);
 
@@ -412,9 +412,9 @@ fn request_options_wires_build_cache_policy() {
         reqwest::Client::new(),
         live_config("deepseek", "deepseek-chat"),
     );
-    assert!(deepseek.request_options(&request).cache.is_none());
+    assert!(deepseek.request_options_auto(&request).cache.is_none());
     let body = build_chat_completions_request_body(
-        &deepseek.request_options(&request),
+        &deepseek.request_options_auto(&request),
         &deepseek.build_context(&request),
     );
     assert!(body.get("prompt_cache_key").is_none());
@@ -423,7 +423,7 @@ fn request_options_wires_build_cache_policy() {
 
     // 未命中 / 无 provider_id → None（fail-closed，不猜 URL）
     let ollama = test_provider_call("llama-3.1");
-    assert!(ollama.request_options(&request).cache.is_none());
+    assert!(ollama.request_options_auto(&request).cache.is_none());
 }
 
 /// 发送层基础请求头：yaml `providers.*.headers` 声明随请求发出（M16）；
@@ -450,7 +450,7 @@ fn request_headers_merges_affinity_header() {
         reqwest::Client::new(),
         live_config("acme", "acme-cache"),
     );
-    let options = acme.request_options(&request);
+    let options = acme.request_options_auto(&request);
     let headers = acme.request_headers(options.cache.as_ref());
     assert!(headers.iter().any(|(name, _)| name == "Authorization"));
     assert!(
@@ -471,7 +471,7 @@ fn request_headers_merges_affinity_header() {
         reqwest::Client::new(),
         live_config("deepseek", "deepseek-chat"),
     );
-    let headers = deepseek.request_headers(deepseek.request_options(&request).cache.as_ref());
+    let headers = deepseek.request_headers(deepseek.request_options_auto(&request).cache.as_ref());
     assert!(headers.iter().any(|(name, _)| name == "Authorization"));
     assert!(
         !headers.iter().any(|(name, _)| name.starts_with("x-")),
@@ -667,7 +667,7 @@ fn request_body_dispatches_by_rail() {
         reqwest::Client::new(),
         responses_config("deepseek-v4-flash", Endpoint::Responses),
     );
-    let options = responses_call.request_options(&request);
+    let options = responses_call.request_options_auto(&request);
     let context = responses_call.build_context(&request);
     let body = responses_call.request_body(&options, &context);
     assert_eq!(body["model"], "deepseek-v4-flash");
@@ -692,7 +692,7 @@ fn request_body_dispatches_by_rail() {
 
     // chat 轨：body 保持 chat 形状（既有路径字节不变）
     let chat_call = test_provider_call("deepseek-v4-flash");
-    let options = chat_call.request_options(&request);
+    let options = chat_call.request_options_auto(&request);
     let context = chat_call.build_context(&request);
     let body = chat_call.request_body(&options, &context);
     assert_eq!(body["model"], "deepseek-v4-flash");
@@ -1445,17 +1445,20 @@ fn sample_stats(warm_until_ms: Option<u64>, missed_tokens: u64) -> RunCacheStats
     }
 }
 
-/// T-40：装配缓存跟踪配置——provider / model 取生效配置、TTL 走
-/// P3 路由表（DeepSeek 300s）；未知厂商 → ttl 0（不提示不阻塞）
+/// T-40：装配缓存跟踪配置——vendor 从 live 灌槽取、TTL 走 live 优先
+/// 路由（live miss → bundled 回退）；无 live 槽位 → ttl 0（不猜厂商）
 #[test]
 fn cache_tracking_config_resolves_provider_model_ttl() {
-    let deepseek = responses_config("deepseek-v4-flash", Endpoint::ChatCompletions);
+    install_live_fixture();
+    // vendor/provider_id 由 live 灌槽（load_provider_endpoint 同源）
+    let deepseek = live_config("deepseek", "deepseek-v4-flash");
     let config = build_cache_tracking_config(&deepseek);
     assert_eq!(config.provider, "deepseek");
     assert_eq!(config.model, "deepseek-v4-flash");
+    // live 树投影无 cacheTtl 声明 → 回退 bundled（deepseek-v4-flash: "5m" → 300s）
     assert_eq!(config.ttl_seconds, 300, "DeepSeek 自动前缀缓存 TTL 300s");
 
-    // 未知厂商（无关键字网关）→ 保守全关（TTL 0 = 不提示不阻塞）
+    // 无 live 槽位（vendor/provider_id 均 None）→ fail-closed 保守全关
     let gateway = EngineProviderConfig {
         base_url: "https://gw.example.com/v1/".to_string(),
         api_key: "k".to_string(),
@@ -1526,13 +1529,13 @@ fn cold_cache_warning_fires_after_warm_until() {
 #[test]
 fn waste_alert_emitted_above_threshold_with_honest_attribution() {
     // 显式 USD 单价（引擎微元口径）：input 0.14 / cacheRead 0.0028
-    let pricing = agent_provider::pricing::ModelPricing {
+    let pricing = agent_provider::models::catalog_types::ModelPricingSpec {
         currency: agent_provider::pricing::Currency::Usd,
-        unit: agent_provider::pricing::PricingUnit::Per1mTokens,
         input: 0.14,
         output: 0.28,
         cache_read: Some(0.0028),
         cache_write: Some(0.0),
+        per_image: None,
         tiers: vec![],
     };
     let below = sample_stats(Some(61_000), WARN_MISSED_TOKENS - 1);
@@ -1587,13 +1590,13 @@ fn waste_alert_emitted_above_threshold_with_honest_attribution() {
 /// cacheRead 1.25 = 11.25/1M）：10_000 token → $0.1125 ≥ $0.1
 #[test]
 fn waste_alert_fires_on_cost_threshold_alone() {
-    let pricing = agent_provider::pricing::ModelPricing {
+    let pricing = agent_provider::models::catalog_types::ModelPricingSpec {
         currency: agent_provider::pricing::Currency::Usd,
-        unit: agent_provider::pricing::PricingUnit::Per1mTokens,
         input: 12.5,
         output: 12.5,
         cache_read: Some(1.25),
         cache_write: Some(1.25),
+        per_image: None,
         tiers: vec![],
     };
     // token 阈值以下（10_000 < 20_000）但金额超 $0.1 → 必须预警

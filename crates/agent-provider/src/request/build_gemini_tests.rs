@@ -304,6 +304,45 @@ fn generation_config_and_thinking_absent_when_no_fields() {
     );
 }
 
+#[test]
+fn max_output_tokens_none_omits_field_and_no_invented_64000() {
+    // 轨G P2：无 max_output_tokens 时 generationConfig 省略 maxOutputTokens
+    // （跟随协议缺省），且 dialect 不发明 64000 兜底（对齐 build_chat 的 unwrap_or(0) 契约）。
+    let messages: Vec<Arc<AgentMessage>> = vec![Arc::new(user_msg("hi"))];
+    let mut budget_map = indexmap::IndexMap::new();
+    budget_map.insert("High".to_string(), "32000".to_string());
+    let opts = GeminiRequestOptions {
+        thinking_format: Some(crate::models::catalog_types::ThinkingFormat::Gemini),
+        thinking_map: Some(budget_map),
+        reasoning_effort: Some(ReasoningEffort::High),
+        // max_output_tokens 缺省 → 不得发明 64000
+        ..GeminiRequestOptions::default()
+    };
+    let body = build_gemini_request_body(&opts, &context_for(&messages));
+    let generation = body["generationConfig"].as_object().expect("generationConfig");
+    assert!(
+        !generation.contains_key("maxOutputTokens"),
+        "无 max_output_tokens 时不得发明 64000 写入 maxOutputTokens：{generation:?}"
+    );
+    // 思考预算来自用户字典原样（32000），不得被发明的 64000 钳制
+    assert_eq!(
+        body["generationConfig"]["thinkingConfig"]["thinkingBudget"], 32000,
+        "无已知上限时 thinkingBudget 应取用户字典值"
+    );
+}
+
+#[test]
+fn max_output_tokens_some_emits_field() {
+    // 有显式 max_output_tokens：按 generationConfig.maxOutputTokens 写入（防回归）
+    let messages: Vec<Arc<AgentMessage>> = vec![Arc::new(user_msg("hi"))];
+    let opts = GeminiRequestOptions {
+        max_output_tokens: Some(1024),
+        ..GeminiRequestOptions::default()
+    };
+    let body = build_gemini_request_body(&opts, &context_for(&messages));
+    assert_eq!(body["generationConfig"]["maxOutputTokens"], 1024);
+}
+
 // ── 工具：functionDeclarations + toolConfig ──
 
 #[test]

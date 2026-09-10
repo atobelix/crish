@@ -65,17 +65,3 @@ export interface ConfigDraft {
     cacheWrite?: string;
   };
 }
-
-/**
- * 废止 gravestone：禁止 LocalStorage setter 与价表写入。
- * 生产写核是 modelsCatalogStore.updateModel，见 useModelConfigSession.saveConfig。
- */
-export function applyMetaForModel(
-  _profileId: string,
-  _modelId: string,
-  _draft: ConfigDraft
-): never {
-  throw new Error(
-    'applyMetaForModel 已废止：配置真源为 modelsCatalogStore.updateModel，禁止 LocalStorage setter'
-  );
-}

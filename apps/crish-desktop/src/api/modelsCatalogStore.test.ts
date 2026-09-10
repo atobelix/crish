@@ -150,6 +150,12 @@ function savedYaml(saveImpl: ReturnType<typeof vi.fn>): string {
   return args?.content ?? '';
 }
 
+function lastSavedYaml(saveImpl: ReturnType<typeof vi.fn>): string {
+  const calls = saveImpl.mock.calls;
+  const args = calls[calls.length - 1]?.[0] as { content?: string } | undefined;
+  return args?.content ?? '';
+}
+
 async function loadProviders(providers: Record<string, ProviderSpec>): Promise<void> {
   mockReadOk(providers);
   mockSaveOk();
@@ -763,7 +769,7 @@ describe('独立四维双币结算与阶梯费率', () => {
         output: 12.0,
         cacheRead: 0.80,
         tiers: [
-          { inputTokensAbove: 256_000, inputCost: 6.0, outputCost: 18.0 },
+          { inputTokensAbove: 256_000, input: 6.0, output: 18.0 },
         ],
       },
     });
@@ -841,6 +847,100 @@ describe('IPC 韧性：写盘失败自动回滚至 Last-Known-Good 快照', () =
   });
 });
 
+describe('写串行队列：并发双写 coalesce + 单飞 save', () => {
+  beforeEach(async () => {
+    modelsCatalogStore.resetForTesting();
+    await loadProviders(ACME_PROVIDERS);
+  });
+
+  it('同一 tick 连续两次 updateTree：coalesce 为最新 tree，save IPC 只打一次，磁盘与内存一致', async () => {
+    const saveImpl = mockSaveOk();
+
+    // 不 await，连续触发两次写——drain 经 microtask 延迟启动，后到覆盖先前排队 tree
+    const p1 = modelsCatalogStore.updateProvider('acme', { displayName: 'First' });
+    const p2 = modelsCatalogStore.updateProvider('acme', { displayName: 'Second' });
+    const [r1, r2] = await Promise.all([p1, p2]);
+
+    expect(r1.ok).toBe(true);
+    expect(r2.ok).toBe(true);
+    // 单飞 save + coalesce：磁盘只落一次最新 tree
+    expect(saveImpl).toHaveBeenCalledTimes(1);
+    expect(selectProvider('acme')?.displayName).toBe('Second');
+    // 磁盘内容与内存一致（serialize 含 Second，不含 First）
+    const content = savedYaml(saveImpl);
+    expect(content).toContain('Second');
+    expect(content).not.toContain('First');
+    expect(modelsCatalogStore.getState().tree.providers.acme?.displayName).toBe('Second');
+  });
+
+  it('串行 await 两次写：各自落盘，最终磁盘与内存均为最后一次结果', async () => {
+    const saveImpl = mockSaveOk();
+
+    const r1 = await modelsCatalogStore.updateProvider('acme', { displayName: 'Alpha' });
+    const r2 = await modelsCatalogStore.updateProvider('acme', { displayName: 'Beta' });
+
+    expect(r1.ok).toBe(true);
+    expect(r2.ok).toBe(true);
+    expect(saveImpl).toHaveBeenCalledTimes(2);
+    expect(selectProvider('acme')?.displayName).toBe('Beta');
+    // 最后一次 save 的内容为 Beta（savedYaml 只看第一次调用）
+    const content = lastSavedYaml(saveImpl);
+    expect(content).toContain('Beta');
+  });
+
+  it('in-flight save 失败且有排队 tree：后续 save 接管，不回滚到失败前中间态', async () => {
+    // 第一次 save 挂起在 gate 上（真 in-flight），第二次 update 在途排队
+    let call = 0;
+    let releaseFirst: (() => void) | null = null;
+    const firstGate = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    mockTauriCommand('workbench_save_models_yaml', async () => {
+      call += 1;
+      if (call === 1) {
+        await firstGate;
+        throw new Error('disk full');
+      }
+      return { path: CATALOG_PATH };
+    });
+
+    const p1 = modelsCatalogStore.updateProvider('acme', { displayName: 'WillFail' });
+    // 冲刷 microtask：drain 启动并进入第一次 save 的 await（挂在 firstGate）
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // 第一次 save 仍 in-flight，此时排队第二次（最新 tree）
+    const p2 = modelsCatalogStore.updateProvider('acme', { displayName: 'WillSucceed' });
+
+    // 释放第一次 save → 抛错 → writeModelsYamlIpc 转 ok:false
+    releaseFirst!();
+
+    const [r1, r2] = await Promise.all([p1, p2]);
+
+    // 第一次失败、第二次成功：2 次 save，内存最终 = WillSucceed
+    expect(call).toBe(2);
+    expect(r1.ok).toBe(false);
+    expect(r2.ok).toBe(true);
+    expect(selectProvider('acme')?.displayName).toBe('WillSucceed');
+    expect(modelsCatalogStore.getState().tree.providers.acme?.displayName).toBe('WillSucceed');
+  });
+
+  it('单次写失败：回滚到批次基线快照并标记 WRITE_REJECTED', async () => {
+    const before = modelsCatalogStore.getState();
+    mockTauriError('workbench_save_models_yaml', 'read-only fs');
+
+    const res = await modelsCatalogStore.updateProvider('acme', { displayName: 'Doomed' });
+    expect(res.ok).toBe(false);
+
+    const after = modelsCatalogStore.getState();
+    expect(after.tree).toEqual(before.tree);
+    expect(after.providerMap.get('acme')?.displayName).toBe('Acme');
+    expect(after.lastError?.kind).toBe('WRITE_REJECTED');
+    expect(after.lastError?.message).toBe('read-only fs');
+  });
+});
+
 describe('魔鬼边界用例 (Devil Edge Cases)', () => {
   beforeEach(async () => {
     modelsCatalogStore.resetForTesting();
@@ -860,6 +960,8 @@ describe('魔鬼边界用例 (Devil Edge Cases)', () => {
     const fallbackCtx = selectEffectiveContextWindow('nonexistent_provider', 'ghost_model');
     expect(fallbackCtx).toBeUndefined();
 
+    // selectEffectiveProtocol 的 'openai/chat' 兜底仅是 UI 展示占位，
+    // 不是出站真源；禁止把该 fallback 灌回序列化 / IPC 写出路径。
     const fallbackProto = selectEffectiveProtocol('nonexistent_provider', 'ghost_model');
     expect(fallbackProto).toBe('openai/chat');
   });

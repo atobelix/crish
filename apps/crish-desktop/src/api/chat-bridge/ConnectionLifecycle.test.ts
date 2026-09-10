@@ -15,6 +15,7 @@ import {
   resolveContextWindow,
   resolveSendThinkingFields,
   estimateTextTokens,
+  ENGINE_CONNECT_TIMEOUT_MS,
 } from './ConnectionLifecycle';
 import { ApprovalFlowMachine } from '../approvalFlowMachine';
 import type { StreamCallbacks } from '../chatApi';
@@ -545,7 +546,9 @@ describe('ConnectionLifecycle（Tauri IPC 版）', () => {
     it('核心就绪 → ok:true（waitUntilConnected 即 core_get_status 轮询）', async () => {
       const res = await ensureEngineConnected();
       expect(res.ok).toBe(true);
-      expect(fakeTransport.waitUntilConnected).toHaveBeenCalledWith(20_000);
+      expect(fakeTransport.waitUntilConnected).toHaveBeenCalledWith(
+        ENGINE_CONNECT_TIMEOUT_MS
+      );
     });
 
     it('核心未就绪 → ok:false + S1 域文案（差异化：不再是恒 network 文案）', async () => {
@@ -610,12 +613,26 @@ describe('ConnectionLifecycle（Tauri IPC 版）', () => {
       });
     });
 
-    it('查询失败 → 放行（ok:true，不阻塞发送；真实错误由 createStreamSession 兜底）', async () => {
+    it('查询失败 → fail-closed 降级（ok:false + retryable_wait，禁止放行绕过配置阻断）', async () => {
       fakeTransport.request.mockRejectedValue(
         new Error('Tauri command not available: core_get_status')
       );
       const res = await checkEngineReadyRealtime();
-      expect(res).toMatchObject({ ok: true, domain: null, state: 'ok' });
+      // 'Tauri command not available: core_get_status' → S7；无法分类时回退 S1
+      expect(res.ok).toBe(false);
+      expect(res.state).toBe('retryable_wait');
+      expect(res.domain).not.toBeNull();
+      expect(res.guidance?.action).toBe('wait');
+    });
+
+    it('查询失败且错误无法分类 → 回退 S1（核心未就绪），仍不放行', async () => {
+      fakeTransport.request.mockRejectedValue(new Error('boom'));
+      const res = await checkEngineReadyRealtime();
+      expect(res).toMatchObject({
+        ok: false,
+        state: 'retryable_wait',
+        domain: 'S1',
+      });
     });
   });
 

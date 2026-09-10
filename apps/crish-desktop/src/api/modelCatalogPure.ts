@@ -11,7 +11,7 @@ import type {
   PickDefaultCatalogOpts,
   UsableCatalogOpts,
 } from './modelCatalogTypes';
-import { findAutofillModel } from './modelsAutofillBaseline';
+import { AUTOFILL_BASELINE_2026, findAutofillModel } from './modelsAutofillBaseline';
 
 /**
  * Unicode 安全 trim（中文/全角空格）：NFC 后去首尾空白（含 \u3000）。
@@ -252,7 +252,24 @@ export function isEmptyCatalog(
   );
 }
 
-const contextLengthCache = new Map<string, number | undefined>();
+/**
+ * 模块级缓存：key = `${baselineVersion}:${model}`。
+ * 钉入 autofill 基线 version，热更/替换基线后旧条目自动失配；
+ * 配合 resetContextLengthCache() 供 store 热更后显式清空。
+ */
+let contextLengthCache = new Map<string, number | undefined>();
+
+function contextCacheKey(model: string): string {
+  return `${AUTOFILL_BASELINE_2026.version}:${model}`;
+}
+
+/**
+ * 清空 contextLength 缓存。autofill 基线热更 / HMR / 测试重置后调用，
+ * 避免 guessContextLength 返回陈旧窗口值。
+ */
+export function resetContextLengthCache(): void {
+  contextLengthCache = new Map();
+}
 
 /**
  * 彻底废除 KNOWN_CONTEXT 128K 假上限硬编码与正则盲猜。
@@ -261,15 +278,16 @@ const contextLengthCache = new Map<string, number | undefined>();
  */
 export function guessContextLength(model: string): number | undefined {
   if (!model) return undefined;
-  if (contextLengthCache.has(model)) {
-    return contextLengthCache.get(model);
+  const key = contextCacheKey(model);
+  if (contextLengthCache.has(key)) {
+    return contextLengthCache.get(key);
   }
   const autofill = findAutofillModel(model);
   const result =
     typeof autofill?.contextWindow === 'number' && autofill.contextWindow > 0
       ? autofill.contextWindow
       : undefined;
-  contextLengthCache.set(model, result);
+  contextLengthCache.set(key, result);
   return result;
 }
 

@@ -5,13 +5,13 @@ use super::*;
 // -------------------------------------------------------------------------
 #[test]
 fn test_deepseek_2026_real_pricing() {
-    let pricing = ModelPricing {
-        currency: Currency::Cny,
-        unit: PricingUnit::Per1mTokens,
+    let pricing = ModelPricingSpec {
+        currency: CurrencyKind::Cny,
         input: 3.00,
         output: 12.00,
         cache_read: Some(0.10),
         cache_write: None,
+        per_image: None,
         tiers: vec![],
     };
 
@@ -31,7 +31,7 @@ fn test_deepseek_2026_real_pricing() {
     // cache_write_micros = 0
     // output_micros = 20,000 * 12.00 / 1M = 240,000 micros (¥0.2400)
     // total_micros = 60,000 + 8,000 + 0 + 240,000 = 308,000 micros (¥0.3080)
-    assert_eq!(cost.currency, Currency::Cny);
+    assert_eq!(cost.currency, CurrencyKind::Cny);
     assert_eq!(cost.input_micros, 60_000);
     assert_eq!(cost.cache_read_micros, 8_000);
     assert_eq!(cost.cache_write_micros, 0);
@@ -47,13 +47,13 @@ fn test_deepseek_2026_real_pricing() {
 // -------------------------------------------------------------------------
 #[test]
 fn test_claude_5_real_pricing() {
-    let pricing = ModelPricing {
-        currency: Currency::Usd,
-        unit: PricingUnit::Per1mTokens,
+    let pricing = ModelPricingSpec {
+        currency: CurrencyKind::Usd,
         input: 5.00,
         output: 25.00,
         cache_read: Some(0.50),
         cache_write: Some(6.25),
+        per_image: None,
         tiers: vec![],
     };
 
@@ -67,7 +67,7 @@ fn test_claude_5_real_pricing() {
     // cache_write_micros = 50,000 * 6.25 / 1M = 312,500 micros ($0.3125)
     // output_micros = 10,000 * 25.00 / 1M = 250,000 micros ($0.2500)
     // total_micros = 250,000 + 75,000 + 312,500 + 250,000 = 887,500 micros ($0.8875)
-    assert_eq!(cost.currency, Currency::Usd);
+    assert_eq!(cost.currency, CurrencyKind::Usd);
     assert_eq!(cost.input_micros, 250_000);
     assert_eq!(cost.cache_read_micros, 75_000);
     assert_eq!(cost.cache_write_micros, 312_500);
@@ -83,13 +83,13 @@ fn test_claude_5_real_pricing() {
 // -------------------------------------------------------------------------
 #[test]
 fn test_ultra_long_393k_context_large_token_anti_overflow() {
-    let pricing = ModelPricing {
-        currency: Currency::Cny,
-        unit: PricingUnit::Per1mTokens,
+    let pricing = ModelPricingSpec {
+        currency: CurrencyKind::Cny,
         input: 10.0,
         output: 30.0,
         cache_read: None,
         cache_write: None,
+        per_image: None,
         tiers: vec![],
     };
 
@@ -112,13 +112,13 @@ fn test_ultra_long_393k_context_large_token_anti_overflow() {
 
     // 极端大数测试：500,000,000 tokens (5亿 tokens) 单价 $100.0/1M
     // 验证 u128 宽位计算不发生溢出 panic
-    let huge_pricing = ModelPricing {
-        currency: Currency::Usd,
-        unit: PricingUnit::Per1mTokens,
+    let huge_pricing = ModelPricingSpec {
+        currency: CurrencyKind::Usd,
         input: 100.0,
         output: 100.0,
         cache_read: None,
         cache_write: None,
+        per_image: None,
         tiers: vec![],
     };
     let huge_cost =
@@ -139,12 +139,6 @@ fn test_ultra_long_393k_context_large_token_anti_overflow() {
 fn test_unconfigured_pricing_returns_silent_none() {
     let cost = PricingEngine::calculate_cost(&None, 10_000, 2_000, 0, 0);
     assert!(cost.is_none(), "未配置价格必须绝对静默返回 None");
-
-    let cost_from_spec = PricingEngine::calculate_cost_from_spec(&None, 10_000, 2_000, 0, 0);
-    assert!(
-        cost_from_spec.is_none(),
-        "Spec 未配置价格必须绝对静默返回 None"
-    );
 }
 
 // -------------------------------------------------------------------------
@@ -153,13 +147,13 @@ fn test_unconfigured_pricing_returns_silent_none() {
 #[test]
 fn test_devil_01_cache_read_write_exact_micros_deduction() {
     // 测试 Claude 3.7 / 5 官方计费：输入 $3.00, 缓存写 $3.75, 缓存读 $0.30
-    let pricing = ModelPricing {
-        currency: Currency::Usd,
-        unit: PricingUnit::Per1mTokens,
+    let pricing = ModelPricingSpec {
+        currency: CurrencyKind::Usd,
         input: 3.00,
         output: 15.00,
         cache_read: Some(0.30),
         cache_write: Some(3.75),
+        per_image: None,
         tiers: vec![],
     };
 
@@ -191,35 +185,35 @@ fn test_devil_01_cache_read_write_exact_micros_deduction() {
 // -------------------------------------------------------------------------
 #[test]
 fn test_devil_02_dual_currency_formatting_and_isolation() {
-    let cny_pricing = ModelPricing {
-        currency: Currency::Cny,
-        unit: PricingUnit::Per1mTokens,
+    let cny_pricing = ModelPricingSpec {
+        currency: CurrencyKind::Cny,
         input: 2.0,
         output: 6.0,
         cache_read: None,
         cache_write: None,
+        per_image: None,
         tiers: vec![],
     };
-    let usd_pricing = ModelPricing {
-        currency: Currency::Usd,
-        unit: PricingUnit::Per1mTokens,
+    let usd_pricing = ModelPricingSpec {
+        currency: CurrencyKind::Usd,
         input: 2.0,
         output: 6.0,
         cache_read: None,
         cache_write: None,
+        per_image: None,
         tiers: vec![],
     };
 
     let cost_cny = PricingEngine::calculate_cost(&Some(cny_pricing), 10_000, 5_000, 0, 0).unwrap();
     let cost_usd = PricingEngine::calculate_cost(&Some(usd_pricing), 10_000, 5_000, 0, 0).unwrap();
 
-    assert_eq!(cost_cny.currency, Currency::Cny);
+    assert_eq!(cost_cny.currency, CurrencyKind::Cny);
     assert!(cost_cny.formatted_total.starts_with('¥'));
-    assert_eq!(cost_usd.currency, Currency::Usd);
+    assert_eq!(cost_usd.currency, CurrencyKind::Usd);
     assert!(cost_usd.formatted_total.starts_with('$'));
 
     // 极小额度展示 6 位小数测试 (500 micros = 0.000500)
-    let micro_cny = PricingEngine::format_micros(500, Currency::Cny);
+    let micro_cny = PricingEngine::format_micros(500, CurrencyKind::Cny);
     assert_eq!(micro_cny, "¥0.000500");
 }
 
@@ -228,13 +222,13 @@ fn test_devil_02_dual_currency_formatting_and_isolation() {
 // -------------------------------------------------------------------------
 #[test]
 fn test_devil_03_ultra_long_393k_output_u64_anti_overflow() {
-    let pricing = ModelPricing {
-        currency: Currency::Cny,
-        unit: PricingUnit::Per1mTokens,
+    let pricing = ModelPricingSpec {
+        currency: CurrencyKind::Cny,
         input: 10.0,
         output: 30.0,
         cache_read: None,
         cache_write: None,
+        per_image: None,
         tiers: vec![],
     };
 
@@ -270,13 +264,13 @@ fn test_devil_06_unconfigured_pricing_returns_silent_none() {
 // -------------------------------------------------------------------------
 #[test]
 fn test_devil_07_tiered_pricing_exact_threshold_boundary_ge() {
-    let pricing = ModelPricing {
-        currency: Currency::Cny,
-        unit: PricingUnit::Per1mTokens,
+    let pricing = ModelPricingSpec {
+        currency: CurrencyKind::Cny,
         input: 2.0,
         output: 8.0,
         cache_read: None,
         cache_write: None,
+        per_image: None,
         tiers:         vec![PricingTier {
             input_tokens_above: 262_144,
             input: 4.0, // 达到门槛翻倍
@@ -297,13 +291,13 @@ fn test_devil_07_tiered_pricing_exact_threshold_boundary_ge() {
 // -------------------------------------------------------------------------
 #[test]
 fn test_devil_09_image_generation_per_image_micros_pricing() {
-    let pricing = ModelPricing {
-        currency: Currency::Cny,
-        unit: PricingUnit::PerImage,
+    let pricing = ModelPricingSpec {
+        currency: CurrencyKind::Cny,
         input: 0.0,
-        output: 0.20, // 每张 ¥0.20
+        output: 0.0,
         cache_read: None,
         cache_write: None,
+        per_image: Some(0.20), // 每张 ¥0.20（费率显式在 per_image 字段）
         tiers: vec![],
     };
 
@@ -319,13 +313,13 @@ fn test_devil_09_image_generation_per_image_micros_pricing() {
 // -------------------------------------------------------------------------
 #[test]
 fn test_devil_19_explicit_zero_price_marked_as_free_not_silent() {
-    let zero_pricing = ModelPricing {
-        currency: Currency::Cny,
-        unit: PricingUnit::Per1mTokens,
+    let zero_pricing = ModelPricingSpec {
+        currency: CurrencyKind::Cny,
         input: 0.0,
         output: 0.0,
         cache_read: None,
         cache_write: None,
+        per_image: None,
         tiers: vec![],
     };
     let cost = PricingEngine::calculate_cost(&Some(zero_pricing), 1000, 500, 0, 0).unwrap();
@@ -347,8 +341,8 @@ fn test_devil_20_multi_agent_cross_currency_billing_session_aggregation() {
     // Agent 2: OpenAI (USD)
     session_usd_micros += 12_000;
 
-    let formatted_cny = PricingEngine::format_micros(session_cny_micros, Currency::Cny);
-    let formatted_usd = PricingEngine::format_micros(session_usd_micros, Currency::Usd);
+    let formatted_cny = PricingEngine::format_micros(session_cny_micros, CurrencyKind::Cny);
+    let formatted_usd = PricingEngine::format_micros(session_usd_micros, CurrencyKind::Usd);
 
     assert_eq!(formatted_cny, "¥0.0500");
     assert_eq!(formatted_usd, "$0.0120");
@@ -369,7 +363,7 @@ fn test_floating_point_precision_losslessness() {
     let micro_sum = micro_a + micro_b;
     assert_eq!(micro_sum, 300_000);
     assert_eq!(
-        PricingEngine::format_micros(micro_sum, Currency::Usd),
+        PricingEngine::format_micros(micro_sum, CurrencyKind::Usd),
         "$0.3000"
     );
 }
@@ -379,13 +373,13 @@ fn test_floating_point_precision_losslessness() {
 // -------------------------------------------------------------------------
 #[test]
 fn test_cache_read_exceeds_prompt_tokens_saturating() {
-    let pricing = ModelPricing {
-        currency: Currency::Usd,
-        unit: PricingUnit::Per1mTokens,
+    let pricing = ModelPricingSpec {
+        currency: CurrencyKind::Usd,
         input: 2.0,
         output: 4.0,
         cache_read: Some(0.2),
         cache_write: None,
+        per_image: None,
         tiers: vec![],
     };
 
@@ -402,25 +396,23 @@ fn test_cache_read_exceeds_prompt_tokens_saturating() {
 #[test]
 fn test_formatting_carry_rounding() {
     // 999_960 微元，四舍五入到4位小数进位为 1.0000
-    let formatted = PricingEngine::format_micros(999_960, Currency::Usd);
+    let formatted = PricingEngine::format_micros(999_960, CurrencyKind::Usd);
     assert_eq!(formatted, "$1.0000");
 
     // 0 微元
-    let formatted_zero = PricingEngine::format_micros(0, Currency::Cny);
+    let formatted_zero = PricingEngine::format_micros(0, CurrencyKind::Cny);
     assert_eq!(formatted_zero, "¥0.0000");
 
     // 1 微元 (<1000 微元展示 6 位小数)
-    let formatted_one = PricingEngine::format_micros(1, Currency::Cny);
+    let formatted_one = PricingEngine::format_micros(1, CurrencyKind::Cny);
     assert_eq!(formatted_one, "¥0.000001");
 }
 
 // -------------------------------------------------------------------------
-// 测试: 与 ModelPricingSpec 和 CurrencyKind 的无缝互操作
+// 测试: 引擎直接消费 ModelPricingSpec（SSOT 收敛后无中间 DTO）
 // -------------------------------------------------------------------------
 #[test]
 fn test_catalog_types_model_pricing_spec_interop() {
-    use crate::models::catalog_types::{CurrencyKind, ModelPricingSpec};
-
     let spec = ModelPricingSpec {
         currency: CurrencyKind::Cny,
         input: 3.0,
@@ -431,14 +423,14 @@ fn test_catalog_types_model_pricing_spec_interop() {
         tiers: Vec::new(),
     };
 
-    let cost = PricingEngine::calculate_cost_from_spec(&Some(spec), 100_000, 10_000, 50_000, 0)
-        .expect("Spec 计费应成功");
+    let cost =
+        PricingEngine::calculate_cost(&Some(spec), 100_000, 10_000, 50_000, 0).expect("Spec 计费应成功");
 
     // non_cached_prompt = 50_000 * 3.0 = 150_000 micros
     // cache_read = 50_000 * 0.1 = 5_000 micros
     // output = 10_000 * 9.0 = 90_000 micros
     // total = 245_000 micros
-    assert_eq!(cost.currency, Currency::Cny);
+    assert_eq!(cost.currency, CurrencyKind::Cny);
     assert_eq!(cost.input_micros, 150_000);
     assert_eq!(cost.cache_read_micros, 5_000);
     assert_eq!(cost.output_micros, 90_000);
@@ -447,17 +439,17 @@ fn test_catalog_types_model_pricing_spec_interop() {
 }
 
 // -------------------------------------------------------------------------
-// 测试: Serde JSON 序列化与反序列化
+// 测试: Serde JSON 序列化与反序列化（ModelPricingSpec 为唯一计费 DTO）
 // -------------------------------------------------------------------------
 #[test]
 fn test_serde_roundtrip() {
-    let pricing = ModelPricing {
-        currency: Currency::Usd,
-        unit: PricingUnit::Per1mTokens,
+    let pricing = ModelPricingSpec {
+        currency: CurrencyKind::Usd,
         input: 3.0,
         output: 15.0,
         cache_read: Some(0.3),
         cache_write: Some(3.75),
+        per_image: None,
         tiers: vec![PricingTier {
             input_tokens_above: 100_000,
             input: 2.5,
@@ -468,7 +460,7 @@ fn test_serde_roundtrip() {
     };
 
     let json_str = serde_json::to_string(&pricing).unwrap();
-    let deserialized: ModelPricing = serde_json::from_str(&json_str).unwrap();
+    let deserialized: ModelPricingSpec = serde_json::from_str(&json_str).unwrap();
     assert_eq!(pricing, deserialized);
 
     let cost = PricingEngine::calculate_cost(&Some(pricing), 50_000, 10_000, 0, 0).unwrap();
@@ -478,54 +470,61 @@ fn test_serde_roundtrip() {
 }
 
 // -------------------------------------------------------------------------
-// 测试: ModelPricingSpec 双向无缝互转测试 (含普通模型与按张生图)
+// 测试: SSOT 收敛后按张计费费率显式来自 per_image 字段
+// （不再借用 output 字段做 input=0/output=per_img 隐式编码，无信息损失）
 // -------------------------------------------------------------------------
 #[test]
-fn test_bidirectional_model_pricing_spec_conversion() {
-    use crate::models::catalog_types::{CurrencyKind, ModelPricingSpec};
-
-    // 1. 普通 Token 模型互转
-    let original_spec = ModelPricingSpec {
-        currency: CurrencyKind::Usd,
-        input: 2.5,
-        output: 10.0,
-        cache_read: Some(0.25),
-        cache_write: Some(3.0),
+fn test_per_image_rate_explicit_not_output_encoded() {
+    // 即使 input/output 被误配了 Token 费率，按张计费也只认 per_image 费率
+    let image_spec = ModelPricingSpec {
+        currency: CurrencyKind::Cny,
+        input: 5.0,
+        output: 7.0,
+        cache_read: None,
+        cache_write: None,
+        per_image: Some(0.20),
         tiers: Vec::new(),
-        per_image: None,
     };
-    let pricing: ModelPricing = original_spec.clone().into();
-    assert_eq!(pricing.currency, Currency::Usd);
-    assert_eq!(pricing.unit, PricingUnit::Per1mTokens);
-    assert_eq!(pricing.input, 2.5);
-    assert_eq!(pricing.output, 10.0);
+    let cost = PricingEngine::calculate_cost(&Some(image_spec), 1_000_000, 3, 0, 0).unwrap();
+    // 3 张 × ¥0.20 = ¥0.60 = 600,000 micros（绝不是 output 7.0 或 Token 口径）
+    assert_eq!(cost.total_micros, 600_000);
+    assert_eq!(cost.formatted_total, "¥0.6000");
+    assert_eq!(cost.input_micros, 0, "按张计费不产生输入段费用");
+}
 
-    let converted_back: ModelPricingSpec = pricing.into();
-    assert_eq!(converted_back.currency, CurrencyKind::Usd);
-    assert_eq!(converted_back.input, 2.5);
-    assert_eq!(converted_back.output, 10.0);
-    assert_eq!(converted_back.cache_read, Some(0.25));
-    assert_eq!(converted_back.cache_write, Some(3.0));
-    assert_eq!(converted_back.per_image, None);
-
-    // 2. 按张生图模型互转
+// -------------------------------------------------------------------------
+// 测试: 免费短路判定必须考虑 per_image 费率
+// （纯生图模型 input/output 常为 0、费率在 per_image——不得被误判为全免）
+// -------------------------------------------------------------------------
+#[test]
+fn test_free_shortcut_considers_per_image_rate() {
+    // input/output 全 0 但 per_image 有费率 → 绝不能短路判全免
     let image_spec = ModelPricingSpec {
         currency: CurrencyKind::Cny,
         input: 0.0,
         output: 0.0,
         cache_read: None,
         cache_write: None,
-        tiers: Vec::new(),
         per_image: Some(0.20),
+        tiers: Vec::new(),
     };
-    let img_pricing: ModelPricing = image_spec.clone().into();
-    assert_eq!(img_pricing.currency, Currency::Cny);
-    assert_eq!(img_pricing.unit, PricingUnit::PerImage);
-    assert_eq!(img_pricing.output, 0.20);
+    let cost = PricingEngine::calculate_cost(&Some(image_spec), 0, 3, 0, 0).unwrap();
+    assert!(!cost.is_free, "有 per_image 费率时绝不得标记为免费");
+    assert_eq!(cost.total_micros, 600_000);
 
-    let img_back_spec: ModelPricingSpec = img_pricing.into();
-    assert_eq!(img_back_spec.currency, CurrencyKind::Cny);
-    assert_eq!(img_back_spec.per_image, Some(0.20));
+    // per_image 显式 0.0 + 四价 0 + 无阶梯 → 显式全免
+    let free_image_spec = ModelPricingSpec {
+        currency: CurrencyKind::Cny,
+        input: 0.0,
+        output: 0.0,
+        cache_read: None,
+        cache_write: None,
+        per_image: Some(0.0),
+        tiers: Vec::new(),
+    };
+    let free_cost = PricingEngine::calculate_cost(&Some(free_image_spec), 0, 3, 0, 0).unwrap();
+    assert!(free_cost.is_free);
+    assert_eq!(free_cost.formatted_total, "免费");
 }
 
 // -------------------------------------------------------------------------
@@ -546,22 +545,17 @@ fn test_nan_and_infinity_defense() {
 }
 
 // -------------------------------------------------------------------------
-// 测试: Default 默认值契约
+// 测试: Default 默认值契约（币种 SSOT = CurrencyKind）
 // -------------------------------------------------------------------------
 #[test]
 fn test_default_trait_implementations() {
-    let def_curr = Currency::default();
-    assert_eq!(def_curr, Currency::Usd);
+    let def_curr = CurrencyKind::default();
+    assert_eq!(def_curr, CurrencyKind::Usd);
     assert_eq!(def_curr.symbol(), "$");
     assert_eq!(def_curr.code(), "USD");
-
-    let def_unit = PricingUnit::default();
-    assert_eq!(def_unit, PricingUnit::Per1mTokens);
-
-    let def_pricing = ModelPricing::default();
-    assert_eq!(def_pricing.currency, Currency::Usd);
-    assert_eq!(def_pricing.unit, PricingUnit::Per1mTokens);
-    assert_eq!(def_pricing.input, 0.0);
+    // 兼容别名路径：pricing::Currency 与 CurrencyKind 同一类型
+    let alias_curr = Currency::default();
+    assert_eq!(alias_curr, CurrencyKind::Usd);
 
     let def_breakdown = CostBreakdown::default();
     assert_eq!(def_breakdown.total_micros, 0);
@@ -569,36 +563,17 @@ fn test_default_trait_implementations() {
 }
 
 // -------------------------------------------------------------------------
-// 测试: 按次 (PerRequest) 计费模式
-// -------------------------------------------------------------------------
-#[test]
-fn test_per_request_pricing_unit() {
-    let pricing = ModelPricing {
-        currency: Currency::Usd,
-        unit: PricingUnit::PerRequest,
-        input: 0.005,
-        output: 0.005,
-        cache_read: None,
-        cache_write: None,
-        tiers: vec![],
-    };
-    let cost = PricingEngine::calculate_cost(&Some(pricing), 500, 100, 0, 0).unwrap();
-    assert_eq!(cost.total_micros, 5_000);
-    assert_eq!(cost.formatted_total, "$0.0050");
-}
-
-// -------------------------------------------------------------------------
 // 测试: 多阶梯阶梯倒序匹配验证
 // -------------------------------------------------------------------------
 #[test]
 fn test_multi_tier_descending_matching() {
-    let pricing = ModelPricing {
-        currency: Currency::Cny,
-        unit: PricingUnit::Per1mTokens,
+    let pricing = ModelPricingSpec {
+        currency: CurrencyKind::Cny,
         input: 1.0,
         output: 2.0,
         cache_read: None,
         cache_write: None,
+        per_image: None,
         tiers:         vec![
             PricingTier {
                 input_tokens_above: 100_000,
@@ -635,13 +610,13 @@ fn test_multi_tier_descending_matching() {
 // -------------------------------------------------------------------------
 #[test]
 fn test_base_price_zero_with_tiers_not_short_circuited_as_free() {
-    let pricing = ModelPricing {
-        currency: Currency::Cny,
-        unit: PricingUnit::Per1mTokens,
+    let pricing = ModelPricingSpec {
+        currency: CurrencyKind::Cny,
         input: 0.0,
         output: 0.0,
         cache_read: None,
         cache_write: None,
+        per_image: None,
         tiers:         vec![PricingTier {
             input_tokens_above: 32_768,
             input: 4.0,
@@ -677,13 +652,13 @@ fn test_base_price_zero_with_tiers_not_short_circuited_as_free() {
 // -------------------------------------------------------------------------
 #[test]
 fn test_u64_max_extreme_token_saturation_anti_wrapping() {
-    let pricing = ModelPricing {
-        currency: Currency::Usd,
-        unit: PricingUnit::Per1mTokens,
+    let pricing = ModelPricingSpec {
+        currency: CurrencyKind::Usd,
         input: 100.0,
         output: 100.0,
         cache_read: None,
         cache_write: None,
+        per_image: None,
         tiers: vec![],
     };
 
@@ -702,13 +677,13 @@ fn test_u64_max_extreme_token_saturation_anti_wrapping() {
     assert_eq!(micros, u64::MAX);
 
     // 验证 PerImage 大数饱和截断
-    let img_pricing = ModelPricing {
-        currency: Currency::Usd,
-        unit: PricingUnit::PerImage,
+    let img_pricing = ModelPricingSpec {
+        currency: CurrencyKind::Usd,
         input: 0.0,
-        output: 100.0,
+        output: 0.0,
         cache_read: None,
         cache_write: None,
+        per_image: Some(100.0),
         tiers: vec![],
     };
     let img_cost = PricingEngine::calculate_cost(&Some(img_pricing), 0, u64::MAX, 0, 0)
@@ -724,13 +699,13 @@ fn test_u64_max_extreme_token_saturation_anti_wrapping() {
 fn test_cost_breakdown_helper_methods_and_usage() {
     use crate::events::ProviderUsage;
 
-    let pricing = ModelPricing {
-        currency: Currency::Cny,
-        unit: PricingUnit::Per1mTokens,
+    let pricing = ModelPricingSpec {
+        currency: CurrencyKind::Cny,
         input: 2.0,
         output: 6.0,
         cache_read: Some(0.2),
         cache_write: Some(1.0),
+        per_image: None,
         tiers: vec![],
     };
 
@@ -752,7 +727,7 @@ fn test_cost_breakdown_helper_methods_and_usage() {
     // total = 129,000 micros
     assert_eq!(cost1.total_micros, 129_000);
 
-    let free_breakdown = CostBreakdown::free(Currency::Cny);
+    let free_breakdown = CostBreakdown::free(CurrencyKind::Cny);
     assert!(free_breakdown.is_free);
     assert_eq!(free_breakdown.formatted_total, "免费");
 }

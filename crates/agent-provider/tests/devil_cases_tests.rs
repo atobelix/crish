@@ -1,55 +1,33 @@
-//! Conex 28 个魔鬼自动化测试用例集 (Rust 内核全集)
+//! Conex 魔鬼自动化测试用例集 (Rust 内核全集)
 //!
 //! 权威参考依据：docs/provider-model-unification/plans/05-全量立体验证、存量自动迁移与防回潮门禁计划.md §4.1 ~ §4.2
-//! 覆盖计费微元、协议单向继承、思考白名单、防溢出、时间戳备份、并发 RCU 热重载与容灾快照。
-//! 100% 直连 agent_provider 真实生产模块（pricing, migration, models::catalog_types, request::wire_protocol）。
-
-use std::sync::Arc;
+//! 覆盖计费微元、协议单向继承、思考白名单、防溢出、时间戳备份与容灾快照。
+//! 100% 直连 agent_provider 真实生产模块（pricing, migration, models::catalog_types,
+//! request::wire_protocol, request::build::dialect::assemble_thinking_dialect）。
+//!
+//! 轨A SSOT 净清（假绿魔鬼用例审查）：
+//! - Case13 假「RCU」已删除（RwLock 包装 + count>0 断言，无生产 RCU 符号）；
+//! - Case14/21/23 内联算术不经生产符号 → Case14 改挂 assemble_thinking_dialect，
+//!   Case21/23 无生产对应物删除；
+//! - Case15/16/17 手写 json 断言不经生产解析器 → Case15 无生产对应物删除，
+//!   Case16/17 改挂 assemble_thinking_dialect；
+//! - 新增 Case29（坏思考字典键 fail-closed）与 Case30（dialect 装配错误 fail 路径）。
 
 use agent_provider::migration::{ConfigMigrationManager, MigrationError, MigrationStatus};
 use agent_provider::models::catalog_types::*;
-use agent_provider::pricing::{
-    CostBreakdown, Currency, ModelPricing, PricingEngine, PricingTier, PricingUnit,
+use agent_provider::pricing::{CostBreakdown, Currency, PricingEngine};
+use agent_provider::request::build::dialect::{
+    assemble_thinking_dialect, DialectBuildOptions, ReasoningEffort, ThinkingDialectFormat,
 };
 use agent_provider::request::wire_protocol::{build_endpoint_url, WireProtocol};
 
 // =============================================================================
-// 无锁 RCU 抽象封装 (Case 13 支撑)
-// =============================================================================
-pub struct ArcSwap<T> {
-    inner: std::sync::RwLock<Arc<T>>,
-}
-
-impl<T> ArcSwap<T> {
-    pub fn new(val: Arc<T>) -> Self {
-        Self {
-            inner: std::sync::RwLock::new(val),
-        }
-    }
-
-    pub fn from(val: Arc<T>) -> Self {
-        Self::new(val)
-    }
-
-    pub fn load(&self) -> Arc<T> {
-        self.inner.read().unwrap().clone()
-    }
-
-    pub fn store(&self, val: Arc<T>) {
-        *self.inner.write().unwrap() = val;
-    }
-}
-
-// =============================================================================
-// 28 个魔鬼自动化测试用例套件 (Devil Test Cases)
+// 魔鬼自动化测试用例套件 (Devil Test Cases)
 // =============================================================================
 #[cfg(test)]
 mod devil_tests {
     use super::*;
     use std::fs;
-    use std::sync::atomic::{AtomicBool, Ordering};
-    use std::sync::Arc;
-    use std::thread;
 
     // -------------------------------------------------------------------------
     // Case 01: Prompt Cache 读写微元精确折算
@@ -57,13 +35,13 @@ mod devil_tests {
     #[test]
     fn test_devil_01_cache_read_write_exact_micros_deduction() {
         // 测试 Claude 3.7 / 5 官方计费：输入 $3.00, 缓存写 $3.75, 缓存读 $0.30
-        let pricing = ModelPricing {
+        let pricing = ModelPricingSpec {
             currency: Currency::Usd,
-            unit: PricingUnit::Per1mTokens,
             input: 3.00,
             output: 15.00,
             cache_read: Some(0.30),
             cache_write: Some(3.75),
+            per_image: None,
             tiers: vec![],
         };
 
@@ -95,22 +73,22 @@ mod devil_tests {
     // -------------------------------------------------------------------------
     #[test]
     fn test_devil_02_dual_currency_formatting_and_isolation() {
-        let cny_pricing = ModelPricing {
+        let cny_pricing = ModelPricingSpec {
             currency: Currency::Cny,
-            unit: PricingUnit::Per1mTokens,
             input: 2.0,
             output: 6.0,
             cache_read: None,
             cache_write: None,
+            per_image: None,
             tiers: vec![],
         };
-        let usd_pricing = ModelPricing {
+        let usd_pricing = ModelPricingSpec {
             currency: Currency::Usd,
-            unit: PricingUnit::Per1mTokens,
             input: 2.0,
             output: 6.0,
             cache_read: None,
             cache_write: None,
+            per_image: None,
             tiers: vec![],
         };
 
@@ -134,13 +112,13 @@ mod devil_tests {
     // -------------------------------------------------------------------------
     #[test]
     fn test_devil_03_ultra_long_393k_output_u64_anti_overflow() {
-        let pricing = ModelPricing {
+        let pricing = ModelPricingSpec {
             currency: Currency::Cny,
-            unit: PricingUnit::Per1mTokens,
             input: 10.0,
             output: 30.0,
             cache_read: None,
             cache_write: None,
+            per_image: None,
             tiers: vec![],
         };
 
@@ -268,13 +246,13 @@ thinking:
     // -------------------------------------------------------------------------
     #[test]
     fn test_devil_07_tiered_pricing_exact_threshold_boundary_ge() {
-        let pricing = ModelPricing {
+        let pricing = ModelPricingSpec {
             currency: Currency::Cny,
-            unit: PricingUnit::Per1mTokens,
             input: 2.0,
             output: 8.0,
             cache_read: None,
             cache_write: None,
+            per_image: None,
             tiers: vec![PricingTier {
                 input_tokens_above: 262_144,
                 input: 4.0, // 达到门槛翻倍
@@ -316,13 +294,13 @@ thinking:
     // -------------------------------------------------------------------------
     #[test]
     fn test_devil_09_image_generation_per_image_micros_pricing() {
-        let pricing = ModelPricing {
+        let pricing = ModelPricingSpec {
             currency: Currency::Cny,
-            unit: PricingUnit::PerImage,
             input: 0.0,
-            output: 0.20, // 每张 ¥0.20
+            output: 0.0,
             cache_read: None,
             cache_write: None,
+            per_image: Some(0.20), // 每张 ¥0.20（费率显式在 per_image 字段）
             tiers: vec![],
         };
 
@@ -417,135 +395,119 @@ models:
     }
 
     // -------------------------------------------------------------------------
-    // Case 13: 50 并发无锁 RCU 内存热重载测试
-    // -------------------------------------------------------------------------
-    #[test]
-    fn test_devil_13_rcu_concurrent_50_readers_atomic_reload_no_lock() {
-        let initial_config = Arc::new(UnifiedModelsConfig::default());
-        let shared_catalog = Arc::new(ArcSwap::from(initial_config));
-
-        let start_barrier = Arc::new(std::sync::Barrier::new(51));
-        let stop_flag = Arc::new(AtomicBool::new(false));
-        let mut handles = vec![];
-
-        // 启动 50 个并发只读 Reader 线程
-        for _ in 0..50 {
-            let catalog_clone = shared_catalog.clone();
-            let stop_clone = stop_flag.clone();
-            let barrier_clone = start_barrier.clone();
-            handles.push(thread::spawn(move || {
-                barrier_clone.wait();
-                let mut read_count = 0;
-                loop {
-                    let snapshot = catalog_clone.load();
-                    let _ = snapshot.providers.len();
-                    read_count += 1;
-                    if stop_clone.load(Ordering::Relaxed) {
-                        break;
-                    }
-                }
-                read_count
-            }));
-        }
-
-        // 等待所有 50 个 Reader 线程就绪并同步发车
-        start_barrier.wait();
-
-        // 主线程执行原子替换重载 10 次
-        for i in 0..10 {
-            let mut new_config = UnifiedModelsConfig::default();
-            new_config.providers.insert(
-                format!("prov_{}", i),
-                ProviderSpec {
-                    display_name: Some(format!("Provider {}", i)),
-                    base_url: Some("https://api.test.com".to_string()),
-                    api_key: None,
-                    headers: None,
-                    protocol: ProtocolKind::OpenAiChat,
-                    compat: None,
-                    models: vec![],
-                },
-            );
-            shared_catalog.store(Arc::new(new_config));
-            thread::sleep(std::time::Duration::from_millis(5));
-        }
-
-        stop_flag.store(true, Ordering::Relaxed);
-        for h in handles {
-            let count = h.join().unwrap();
-            assert!(count > 0);
-        }
-    }
-
-    // -------------------------------------------------------------------------
-    // Case 14: Anthropic 思考预算 Token Clamp 协同
+    // Case 14: Anthropic 思考预算 Token Clamp（挂生产 assemble_thinking_dialect）
     // -------------------------------------------------------------------------
     #[test]
     fn test_devil_14_anthropic_thinking_budget_token_clamp_coordination() {
-        // 当 maxOutputTokens = 16384 时，thinking budget 不得超过 maxOutputTokens - 1024
-        let max_output = 16384u64;
-        let requested_budget = 32768u64;
-        let clamped_budget = requested_budget.min(max_output.saturating_sub(1024));
-        assert_eq!(clamped_budget, 15360);
+        // 生产契约：AnthropicBudget 方言下 budget 来自用户字典数字（≥1024），
+        // 且不能超过 max_output_tokens - 4096 的安全余量钳制。
+        let mut map = indexmap::IndexMap::new();
+        map.insert("High".to_string(), "32768".to_string());
+        let opts = DialectBuildOptions {
+            effort: ReasoningEffort::High,
+            format: ThinkingDialectFormat::AnthropicBudget,
+            max_output_tokens: 16384,
+            thinking_map: Some(&map),
+        };
+        let (thinking_val, elevated) = assemble_thinking_dialect(&opts);
+        let val = thinking_val.expect("AnthropicBudget 字典命中必须产出 thinking 键");
+        let budget = val["thinking"]["budget_tokens"]
+            .as_u64()
+            .expect("budget_tokens 必须为 u64");
+        // 钳制到 max_output - 4096 = 12288；且 ≥ 1024
+        assert_eq!(budget, 12288, "预算必须被钳制到 max_output - 4096");
+        assert!(budget >= 1024);
+        // elevated max_tokens 至少 budget + 4096
+        let elev = elevated.expect("AnthropicBudget 必须返回抬升 max_tokens");
+        assert!(elev >= budget + 4096);
     }
 
     // -------------------------------------------------------------------------
-    // Case 15: Google Interactions API thought steps 流式解析
-    // -------------------------------------------------------------------------
-    #[test]
-    fn test_devil_15_google_interactions_api_thought_steps_stream_parser() {
-        let chunk_json = r#"{
-            "candidates": [{
-                "content": {
-                    "parts": [
-                        { "thought": "正在推导数学公式..." },
-                        { "text": "结果是 42。" }
-                    ]
-                }
-            }]
-        }"#;
-        let parsed: serde_json::Value = serde_json::from_str(chunk_json).unwrap();
-        let part_0 = &parsed["candidates"][0]["content"]["parts"][0];
-        assert_eq!(part_0["thought"].as_str().unwrap(), "正在推导数学公式...");
-        let part_1 = &parsed["candidates"][0]["content"]["parts"][1];
-        assert_eq!(part_1["text"].as_str().unwrap(), "结果是 42。");
-    }
-
-    // -------------------------------------------------------------------------
-    // Case 16: DeepSeek 原生思考方言 Wire 序列化
+    // Case 16: DeepSeek 原生思考方言 Wire 序列化（挂生产 assemble_thinking_dialect）
     // -------------------------------------------------------------------------
     #[test]
     fn test_devil_16_deepseek_native_thinking_dialect_wire_serialization() {
-        let payload = serde_json::json!({
-            "model": "deepseek-v4-flash",
-            "messages": [{"role": "user", "content": "hi"}],
-            "thinking": {
-                "type": "enabled"
-            }
-        });
-        assert_eq!(payload["thinking"]["type"], "enabled");
+        // enabled：非 Off 且 map 未显式 disabled → enabled
+        let opts_on = DialectBuildOptions {
+            effort: ReasoningEffort::Medium,
+            format: ThinkingDialectFormat::DeepSeekNative,
+            max_output_tokens: 65536,
+            thinking_map: None,
+        };
+        let (on, _) = assemble_thinking_dialect(&opts_on);
+        assert_eq!(
+            on.unwrap()["thinking"]["type"],
+            "enabled",
+            "DeepSeek 非 Off 必须输出 enabled"
+        );
 
-        let disabled_payload = serde_json::json!({
-            "model": "deepseek-v4-flash",
-            "messages": [{"role": "user", "content": "hi"}],
-            "thinking": {
-                "type": "disabled"
-            }
-        });
-        assert_eq!(disabled_payload["thinking"]["type"], "disabled");
+        // disabled：Off 显式 → disabled
+        let opts_off = DialectBuildOptions {
+            effort: ReasoningEffort::Off,
+            format: ThinkingDialectFormat::DeepSeekNative,
+            max_output_tokens: 65536,
+            thinking_map: None,
+        };
+        let (off, _) = assemble_thinking_dialect(&opts_off);
+        assert_eq!(
+            off.unwrap()["thinking"]["type"],
+            "disabled",
+            "DeepSeek Off 必须输出 disabled"
+        );
+
+        // map 显式 disabled 字面优先
+        let mut map = indexmap::IndexMap::new();
+        map.insert("Medium".to_string(), "disabled".to_string());
+        let opts_map = DialectBuildOptions {
+            effort: ReasoningEffort::Medium,
+            format: ThinkingDialectFormat::DeepSeekNative,
+            max_output_tokens: 65536,
+            thinking_map: Some(&map),
+        };
+        let (map_val, _) = assemble_thinking_dialect(&opts_map);
+        assert_eq!(map_val.unwrap()["thinking"]["type"], "disabled");
     }
 
     // -------------------------------------------------------------------------
-    // Case 17: 阿里云百炼 enable_thinking 顶层布尔字段注入
+    // Case 17: 阿里百炼 enable_thinking 顶层布尔字段注入（挂生产 assemble_thinking_dialect）
     // -------------------------------------------------------------------------
     #[test]
     fn test_devil_17_qwen_enable_thinking_top_level_boolean_injection() {
-        let payload = serde_json::json!({
-            "model": "qwen3.8-max",
-            "messages": [{"role": "user", "content": "hi"}],
-            "enable_thinking": true
-        });
-        assert_eq!(payload["enable_thinking"], true);
+        // true：非 Off → enable_thinking: true
+        let opts_on = DialectBuildOptions {
+            effort: ReasoningEffort::Medium,
+            format: ThinkingDialectFormat::QwenBailianBoolean,
+            max_output_tokens: 65536,
+            thinking_map: None,
+        };
+        let (on, _) = assemble_thinking_dialect(&opts_on);
+        assert_eq!(
+            on.unwrap()["enable_thinking"],
+            true,
+            "Qwen 非 Off 必须输出 enable_thinking: true"
+        );
+
+        // false：Off 显式 → enable_thinking: false
+        let opts_off = DialectBuildOptions {
+            effort: ReasoningEffort::Off,
+            format: ThinkingDialectFormat::QwenBailianBoolean,
+            max_output_tokens: 65536,
+            thinking_map: None,
+        };
+        let (off, _) = assemble_thinking_dialect(&opts_off);
+        assert_eq!(off.unwrap()["enable_thinking"], false);
+
+        // map 值 "false"/"0" 解析为 false
+        let mut map = indexmap::IndexMap::new();
+        map.insert("Medium".to_string(), "false".to_string());
+        let opts_map = DialectBuildOptions {
+            effort: ReasoningEffort::Medium,
+            format: ThinkingDialectFormat::QwenBailianBoolean,
+            max_output_tokens: 65536,
+            thinking_map: Some(&map),
+        };
+        let (map_val, _) = assemble_thinking_dialect(&opts_map);
+        assert_eq!(map_val.unwrap()["enable_thinking"], false);
     }
 
     // -------------------------------------------------------------------------
@@ -566,13 +528,13 @@ models:
     // -------------------------------------------------------------------------
     #[test]
     fn test_devil_19_explicit_zero_price_marked_as_free_not_silent() {
-        let zero_pricing = ModelPricing {
+        let zero_pricing = ModelPricingSpec {
             currency: Currency::Cny,
-            unit: PricingUnit::Per1mTokens,
             input: 0.0,
             output: 0.0,
             cache_read: None,
             cache_write: None,
+            per_image: None,
             tiers: vec![],
         };
         let cost = PricingEngine::calculate_cost(&Some(zero_pricing), 1000, 500, 0, 0).unwrap();
@@ -600,22 +562,7 @@ models:
         assert_eq!(formatted_usd, "$0.0120");
     }
 
-    // -------------------------------------------------------------------------
-    // Case 21: 子代理派发 Token 预算上界动态钳制
-    // -------------------------------------------------------------------------
-    #[test]
-    fn test_devil_21_subagent_budget_upper_bound_clamping_to_parent() {
-        let parent_context = 1_000_000u64;
-        let parent_used = 800_000u64;
-        let parent_remaining = parent_context.saturating_sub(parent_used); // 200,000
-
-        let child_context = 131_072u64;
-        let max_child_prompt = (child_context as f64 * 0.7) as u64; // 91,750
-        let parent_allowance = (parent_remaining as f64 * 0.8) as u64; // 160,000
-
-        let effective_subagent_budget = max_child_prompt.min(parent_allowance);
-        assert_eq!(effective_subagent_budget, 91_750);
-    }
+    // Case21（子代理预算钳制）已删除：纯内联算术，agent-provider 无对应生产符号。
 
     // -------------------------------------------------------------------------
     // Case 22: 单模型抽屉展开时协议下拉选择菜单物理剥离断言
@@ -642,61 +589,7 @@ models:
         assert_eq!(model.effective_protocol(&prov).as_str(), "openai/chat");
     }
 
-    // -------------------------------------------------------------------------
-    // Case 23: DisplayName 与 Fallback Chain 优先级断言
-    // -------------------------------------------------------------------------
-    #[test]
-    fn test_devil_23_display_name_and_metadata_fallback_chain() {
-        let model_with_name = ModelSpec {
-            id: "gpt-4o".to_string(),
-            display_name: Some("GPT-4o Omni".to_string()),
-            protocol: None,
-            context_window: Some(128000),
-            max_output_tokens: Some(4096),
-            modalities: None,
-            thinking: None,
-            pricing: None,
-            compat: None,
-        };
-        let model_without_name = ModelSpec {
-            id: "gpt-4o-mini".to_string(),
-            display_name: Some("".to_string()),
-            protocol: None,
-            context_window: Some(128000),
-            max_output_tokens: Some(4096),
-            modalities: None,
-            thinking: None,
-            pricing: None,
-            compat: None,
-        };
-
-        // 降级链：优先显式 displayName，缺失/空串时回退至 model.id
-        let name_1 = if model_with_name
-            .display_name
-            .as_deref()
-            .unwrap_or("")
-            .trim()
-            .is_empty()
-        {
-            &model_with_name.id
-        } else {
-            model_with_name.display_name.as_ref().unwrap()
-        };
-        let name_2 = if model_without_name
-            .display_name
-            .as_deref()
-            .unwrap_or("")
-            .trim()
-            .is_empty()
-        {
-            &model_without_name.id
-        } else {
-            model_without_name.display_name.as_ref().unwrap()
-        };
-
-        assert_eq!(name_1, "GPT-4o Omni");
-        assert_eq!(name_2, "gpt-4o-mini");
-    }
+    // Case23（DisplayName 与 Fallback Chain）已删除：内联 if-else，agent-provider 无对应生产符号。
 
     // -------------------------------------------------------------------------
     // Case 24: 未知非标协议字符串安全降级 Warning
@@ -793,13 +686,13 @@ models:
     // -------------------------------------------------------------------------
     #[test]
     fn test_devil_28_negative_or_overflow_tokens_validation_guard() {
-        let pricing = ModelPricing {
+        let pricing = ModelPricingSpec {
             currency: Currency::Cny,
-            unit: PricingUnit::Per1mTokens,
             input: 2.0,
             output: 6.0,
             cache_read: None,
             cache_write: None,
+            per_image: None,
             tiers: vec![],
         };
 
@@ -807,5 +700,146 @@ models:
         let extreme_tokens = u64::MAX;
         let cost = PricingEngine::calculate_cost(&Some(pricing), extreme_tokens, 0, 0, 0);
         assert!(cost.is_some());
+    }
+
+    // -------------------------------------------------------------------------
+    // Case 29: 坏思考字典键（fail-closed：字典 miss 不得降级注入）
+    // -------------------------------------------------------------------------
+    #[test]
+    fn test_devil_29_bad_thinking_dict_key_fail_closed_no_injection() {
+        // 生产契约（plans/04 §2.3）：thinking_map 为 Some 时 wire 值只准来自 map 命中
+        // （TitleCase 键）；键未命中 → (None, None)，禁止 to_openai_str 折叠兜底。
+
+        // 场景 1：字典只有 Low，请求 High → fail-closed，不注入任何思考键
+        let mut map = indexmap::IndexMap::new();
+        map.insert("Low".to_string(), "low".to_string());
+        let opts = DialectBuildOptions {
+            effort: ReasoningEffort::High,
+            format: ThinkingDialectFormat::OpenAiEffort,
+            max_output_tokens: 65536,
+            thinking_map: Some(&map),
+        };
+        assert_eq!(
+            assemble_thinking_dialect(&opts),
+            (None, None),
+            "字典 miss（High 不在字典）必须 fail-closed 不注入"
+        );
+
+        // 场景 2：map 为 None 且非开关方言 → 不注入
+        let no_map = DialectBuildOptions {
+            effort: ReasoningEffort::High,
+            format: ThinkingDialectFormat::OpenAiEffort,
+            max_output_tokens: 65536,
+            thinking_map: None,
+        };
+        assert_eq!(
+            assemble_thinking_dialect(&no_map),
+            (None, None),
+            "thinking_map=None + OpenAiEffort 必须不注入"
+        );
+
+        // 场景 3：AnthropicBudget 字典命中但值非数字 → fail-closed（不产生魔法预算）
+        let mut bad_map = indexmap::IndexMap::new();
+        bad_map.insert("High".to_string(), "not-a-number".to_string());
+        let bad_opts = DialectBuildOptions {
+            effort: ReasoningEffort::High,
+            format: ThinkingDialectFormat::AnthropicBudget,
+            max_output_tokens: 65536,
+            thinking_map: Some(&bad_map),
+        };
+        assert_eq!(
+            assemble_thinking_dialect(&bad_opts),
+            (None, None),
+            "AnthropicBudget 字典值非数字必须 fail-closed"
+        );
+
+        // 场景 4：Gemini 字典 miss → 不注入
+        let mut gem_map = indexmap::IndexMap::new();
+        gem_map.insert("Low".to_string(), "low".to_string());
+        let gem_opts = DialectBuildOptions {
+            effort: ReasoningEffort::Medium,
+            format: ThinkingDialectFormat::GeminiThinkingConfig,
+            max_output_tokens: 65536,
+            thinking_map: Some(&gem_map),
+        };
+        assert_eq!(
+            assemble_thinking_dialect(&gem_opts),
+            (None, None),
+            "GeminiThinkingConfig 字典 miss 必须 fail-closed"
+        );
+    }
+
+    // -------------------------------------------------------------------------
+    // Case 30: dialect 装配错误时的 fail 路径（错误值不得静默降级为合法 wire）
+    // -------------------------------------------------------------------------
+    #[test]
+    fn test_devil_30_dialect_assembly_error_fail_path() {
+        // 场景 1：AnthropicBudget 极低预算（<1024）→ 强制钳制到 1024 下限，不 panic
+        let mut low_map = indexmap::IndexMap::new();
+        low_map.insert("Low".to_string(), "100".to_string());
+        let opts = DialectBuildOptions {
+            effort: ReasoningEffort::Low,
+            format: ThinkingDialectFormat::AnthropicBudget,
+            max_output_tokens: 65536,
+            thinking_map: Some(&low_map),
+        };
+        let (val, elevated) = assemble_thinking_dialect(&opts);
+        let unwrapped = val.expect("低预算应被钳制而非丢弃");
+        let budget = unwrapped["thinking"]["budget_tokens"].as_u64().unwrap();
+        assert_eq!(budget, 1024, "低于 1024 的预算必须被钳制到 1024");
+        assert!(elevated.is_some(), "钳制后必须返回抬升 max_tokens");
+
+        // 场景 2：AnthropicBudget 字典值 "adaptive" → 产生 adaptive 方言（非 enabled+budget）
+        let mut adaptive_map = indexmap::IndexMap::new();
+        adaptive_map.insert("Max".to_string(), "adaptive".to_string());
+        let adaptive_opts = DialectBuildOptions {
+            effort: ReasoningEffort::Max,
+            format: ThinkingDialectFormat::AnthropicBudget,
+            max_output_tokens: 65536,
+            thinking_map: Some(&adaptive_map),
+        };
+        let (adaptive_val, _) = assemble_thinking_dialect(&adaptive_opts);
+        let adaptive = adaptive_val.expect("adaptive 值必须产出 thinking 键");
+        assert_eq!(
+            adaptive["thinking"]["type"],
+            "adaptive",
+            "字典值 adaptive 必须走 adaptive 方言"
+        );
+        assert!(
+            adaptive["thinking"].get("budget_tokens").is_none(),
+            "adaptive 形态不得携带 budget_tokens"
+        );
+
+        // 场景 3：OpenAiEffort 禁止数字（字典 value 必须是字符串，且不折叠为 "high"）
+        // 用非法 TitleCase 键模拟坏字典 → fail-closed
+        let mut bad_key_map = indexmap::IndexMap::new();
+        bad_key_map.insert("Hige".to_string(), "high".to_string()); // 拼写错误
+        let bad_key_opts = DialectBuildOptions {
+            effort: ReasoningEffort::High,
+            format: ThinkingDialectFormat::OpenAiEffort,
+            max_output_tokens: 65536,
+            thinking_map: Some(&bad_key_map),
+        };
+        assert_eq!(
+            assemble_thinking_dialect(&bad_key_opts),
+            (None, None),
+            "坏 TitleCase 键（拼写错误）必须 fail-closed，禁止 to_openai_str 兜底"
+        );
+
+        // 场景 4：X-High 双拼写兼容（生产契约：XHigh / X-High 均可命中）
+        let mut xhigh_map = indexmap::IndexMap::new();
+        xhigh_map.insert("X-High".to_string(), "xhigh-wire".to_string());
+        let xhigh_opts = DialectBuildOptions {
+            effort: ReasoningEffort::XHigh,
+            format: ThinkingDialectFormat::OpenAiEffort,
+            max_output_tokens: 65536,
+            thinking_map: Some(&xhigh_map),
+        };
+        let (xhigh_val, _) = assemble_thinking_dialect(&xhigh_opts);
+        assert_eq!(
+            xhigh_val.unwrap()["reasoning_effort"],
+            "xhigh-wire",
+            "X-High 双拼写必须命中字典 value"
+        );
     }
 }
