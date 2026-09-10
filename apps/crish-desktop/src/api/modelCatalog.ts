@@ -40,6 +40,7 @@ export {
   formatLastTestLabel,
   isEmptyCatalog,
   guessContextLength,
+  resetContextLengthCache,
   formatContextLabel,
   formatContextLabelZh,
 } from './modelCatalogPure';

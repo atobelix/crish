@@ -243,17 +243,28 @@ describe('ensureLsImported（一次性 LS→yaml）', () => {
   });
 
   it('完成标记已在 → 第二次零读配置键', async () => {
+    // 第一次：真实导入写完成标记（随后验证短路行为）
     seedFullLs();
-    localStorage.setItem(LS_IMPORT_FLAG_KEY, JSON.stringify({ done: true, version: 1 }));
     mockReadOk({});
-    const saveImpl = mockSaveOk();
-    const getItemSpy = vi.spyOn(localStorage, 'getItem');
+    const saveFirst = mockSaveOk();
+    const first = await ensureLsImported();
+    expect(first).toEqual({ ok: true });
+    expect(flagRaw()).toBeTruthy();
+
+    // 第二次：仅短路读 flag，不得再碰三把配置键 / save
+    // jsdom 下 getItem 在 Storage.prototype，实例 spy 拦不到（见 modelCatalogMeta.test.ts 同款适配）
+    const getItemSpy =
+      typeof Storage !== 'undefined'
+        ? vi.spyOn(Storage.prototype, 'getItem')
+        : vi.spyOn(localStorage, 'getItem');
+    const saveSecond = mockSaveOk();
 
     const res = await ensureLsImported();
     expect(res).toEqual({ ok: true });
-    expect(saveImpl).not.toHaveBeenCalled();
+    expect(saveFirst).toHaveBeenCalledTimes(1);
+    expect(saveSecond).not.toHaveBeenCalled();
 
-    const readKeys = getItemSpy.mock.calls.map((call) => call[0]);
+    const readKeys = getItemSpy.mock.calls.map((call) => String(call[0]));
     expect(readKeys).toContain(LS_IMPORT_FLAG_KEY);
     expect(readKeys).not.toContain(PROFILES_KEY);
     expect(readKeys).not.toContain(META_KEY);
