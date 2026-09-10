@@ -16,7 +16,6 @@ import {
 } from '../../api/workflowApi';
 import { useSessionStore } from '../../store/sessionStore';
 import { sessionDraftManager } from '../../api/draft/sessionDraftManager';
-import { dispatchWorkflowAssistantCard } from '../../api/workflow-api/workflowAssistantCard';
 import { closeSettings } from '../../store/storeAccess';
 import styles from './SettingsScheduleTab.module.css';
 import { Button, SegmentedControl } from '../ui';
@@ -40,7 +39,7 @@ const CREATE_PATH_OPTIONS = [
 ];
 
 export const SettingsScheduleTab: React.FC<Props> = ({ _onBlockingOverlayChange }) => {
-  const { showToast: _showToast } = useToast();
+  const { showToast } = useToast();
   const state = useWorkflowsState({
     surface: 'settings',
     workspacePath: getWorkspacePath() || '',
@@ -118,13 +117,10 @@ export const SettingsScheduleTab: React.FC<Props> = ({ _onBlockingOverlayChange 
         mode: 'safe_seed',
         metadata: { source: 'settings_tab', title: '定时任务对话创建' },
       });
-      dispatchWorkflowAssistantCard(
-        targetSid,
-        workspacePath,
-        'schedule_panel'
-      );
+      showToast('已填入定时任务对话创建提示，请返回对话补全');
     } else {
       console.warn('[SettingsScheduleTab] 无活跃会话，跳过草稿注入');
+      showToast('无活跃会话，无法注入创建提示');
     }
     setCreateMode('none');
     closeSettings();

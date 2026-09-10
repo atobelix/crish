@@ -24,7 +24,7 @@ import { useLayoutStore } from '../../store/layoutStore';
 import { useSessionStore } from '../../store/sessionStore';
 import { getWorkspacePath } from '../../api/projectStore';
 import { sessionDraftManager } from '../../api/draft/sessionDraftManager';
-import { dispatchWorkflowAssistantCard, WORKFLOW_CREATE_TEMPLATE } from '../../api/workflow-api/workflowAssistantCard';
+import { WORKFLOW_CREATE_TEMPLATE } from '../../api/workflow-api/workflowAssistantCard';
 import styles from './ScheduledTasksPanel.module.css';
 import { Button, Tooltip, Menu } from '../ui';
 import type { SelectOptionItem } from '../ui';
@@ -132,14 +132,8 @@ export const ScheduledTasksPanel: React.FC<Props> = ({ onBackToChat }) => {
       mode: 'safe_seed',
       metadata: { source: 'schedule_panel', title: '定时任务编排模版' },
     });
-    // 对话流可见助手卡片（被动直接注入，取代旧 addMessage 纯文本引导——
-    // 卡片正文 = 助手指令的 wire 投影文本，WYSIWYG 单一来源）
-    dispatchWorkflowAssistantCard(
-      activeSid,
-      getWorkspacePath() || '',
-      'schedule_panel'
-    );
-
+    // 真实反馈：模板已 safe_seed 注入输入框（无空壳 dispatch）
+    showToast('已填入定时任务编排模板，请在对话中补全后发送');
     onBackToChat?.();
   };
 

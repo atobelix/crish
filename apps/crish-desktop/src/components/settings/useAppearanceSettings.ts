@@ -37,7 +37,7 @@ export type ThemeId = 'default' | 'dark';
 const DEFAULT_PERSONALIZATION: PersonalizationSettings = {
   skin: 'warm-gray',
   customBg: '#f4f3f0',
-  customFg: '#111111',
+  customFg: '#1a1a1a',
   fontSizeAdjust: 0,
   themeBrightnessAdjust: 0,
   themeBrightnessVibrant: false,

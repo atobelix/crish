@@ -17,7 +17,6 @@ interface SkillDetailPreviewProps {
   setActivation: (skill: DesktopSkill, activation: SkillActivation) => Promise<void>;
   showRaw: boolean;
   setShowRaw: React.Dispatch<React.SetStateAction<boolean>>;
-  previewHtml?: string;
 }
 
 export const SkillDetailPreview: React.FC<SkillDetailPreviewProps> = ({
@@ -31,7 +30,6 @@ export const SkillDetailPreview: React.FC<SkillDetailPreviewProps> = ({
   setActivation,
   showRaw,
   setShowRaw,
-  previewHtml: _previewHtml,
 }) => {
   const { showToast } = useToast();
   const skillContent = selected

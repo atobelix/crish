@@ -120,7 +120,6 @@ export function useSkillsSettingsState() {
     handleAiCreateSkill: editor.handleAiCreateSkill,
     showRaw: editor.showRaw,
     setShowRaw: editor.setShowRaw,
-    previewHtml: editor.previewHtml,
     selectedSlash: editor.selectedSlash,
     copySlashCommand: editor.copySlashCommand,
     moreOpen: editor.moreOpen,

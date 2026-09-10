@@ -41,9 +41,6 @@ vi.mock('../../api/projectStore', async (importOriginal) => {
   };
 });
 
-vi.mock('../../api/markdownRender', () => ({
-  parseMarkdownToHtml: vi.fn((md) => `<p>${md}</p>`),
-}));
 
 vi.mock('../../api/clientApi', () => ({
   clientApi: {

@@ -6,8 +6,8 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 const listWorkflowsMock = vi.hoisted(() => vi.fn(async () => []));
 const closeSettingsMock = vi.hoisted(() => vi.fn());
 const injectSeedMock = vi.hoisted(() => vi.fn());
-const dispatchCardMock = vi.hoisted(() => vi.fn(() => 'inj-test-1'));
 const emitUiEventMock = vi.hoisted(() => vi.fn());
+const showToastMock = vi.hoisted(() => vi.fn());
 
 vi.mock('../../api/workflowApi', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../api/workflowApi')>();
@@ -58,13 +58,17 @@ vi.mock('../../api/draft/sessionDraftManager', () => ({
 }));
 
 vi.mock('../../api/workflow-api/workflowAssistantCard', () => ({
-  dispatchWorkflowAssistantCard: (...args: unknown[]) =>
-    dispatchCardMock(...args),
   WORKFLOW_CREATE_TEMPLATE: '/schedule 模板',
 }));
 
 vi.mock('../../api/uiEvents', () => ({
   emitUiEvent: (...args: unknown[]) => emitUiEventMock(...args),
+}));
+
+
+vi.mock('../../services/toast/ToastContext', () => ({
+  useToast: () => ({ showToast: (...args: unknown[]) => showToastMock(...args) }),
+  toast: { show: (...args: unknown[]) => showToastMock(...args) },
 }));
 
 import { SettingsScheduleTab } from './SettingsScheduleTab';
@@ -150,13 +154,29 @@ describe('SettingsScheduleTab I4 死皮拉回', () => {
     };
     expect(payload.targetSessionId).toBe('sess-target-1');
     expect(payload.content).toMatch(/定时任务/);
-    // 可见助手卡片同步派发（维度五 TC-WG-01）
-    expect(dispatchCardMock).toHaveBeenCalledTimes(1);
-    expect(dispatchCardMock.mock.calls[0]?.[0]).toBe('sess-target-1');
+    // 伪连通 dispatch 已拆除：safe_seed + 真实 toast 反馈
+    expect(showToastMock).toHaveBeenCalled();
+    expect(String(showToastMock.mock.calls[0]?.[0])).toMatch(/填入|对话/);
     expect(closeSettingsMock).toHaveBeenCalled();
 
     await waitFor(() => {
       expect(emitUiEventMock).toHaveBeenCalledWith('open-chat');
     });
+  });
+
+  it('无活跃会话时不注入草稿并 toast 明示失败', async () => {
+    const storeMod = await import('../../store/sessionStore');
+    vi.spyOn(storeMod.useSessionStore, 'getState').mockReturnValue({
+      ...storeMod.useSessionStore.getState(),
+      activeSessionId: null,
+    } as ReturnType<typeof storeMod.useSessionStore.getState>);
+
+    render(<SettingsScheduleTab />);
+    fireEvent.click(await screen.findByRole('button', { name: '新建' }));
+    fireEvent.click(screen.getByRole('radio', { name: '用对话创建（推荐）' }));
+
+    expect(injectSeedMock).not.toHaveBeenCalled();
+    expect(showToastMock).toHaveBeenCalled();
+    expect(String(showToastMock.mock.calls[0]?.[0])).toMatch(/无活跃会话/);
   });
 });

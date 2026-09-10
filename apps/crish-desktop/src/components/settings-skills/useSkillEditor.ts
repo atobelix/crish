@@ -1,9 +1,8 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { toast } from '../../services/toast/ToastContext';
 import { createProjectSkill, type DesktopSkill } from '../../api/skillsApi';
 import { skillStableId } from '../../api/skillId';
 import { getWorkspacePath } from '../../api/projectStore';
-import { parseMarkdownToHtml } from '../../api/markdownRender';
 import { useSessionStore } from '../../store/sessionStore';
 import { sessionDraftManager } from '../../api/draft/sessionDraftManager';
 import { emitUiEvent } from '../../api/uiEvents';
@@ -95,12 +94,6 @@ export function useSkillEditor(deps: UseSkillEditorDeps, api: SharedSkillApi) {
     }
   };
 
-  const previewHtml = useMemo(() => {
-    if (!deps.selected) return '';
-    if (showRaw) return '';
-    const md = `# ${deps.selected.name}\n\n> ${deps.selected.description}\n\n${deps.selected.content || '_（无正文）_'}`;
-    return parseMarkdownToHtml(md);
-  }, [deps.selected, showRaw]);
 
   const selectedSlash = deps.selected
     ? skillSlashCmd(deps.selected.name)
@@ -118,7 +111,6 @@ export function useSkillEditor(deps: UseSkillEditorDeps, api: SharedSkillApi) {
     handleAiCreateSkill,
     showRaw,
     setShowRaw,
-    previewHtml,
     selectedSlash,
     copySlashCommand,
     moreOpen,

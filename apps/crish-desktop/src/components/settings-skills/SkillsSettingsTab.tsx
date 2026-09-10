@@ -67,7 +67,6 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onBlockingOverlayChange: _o
     scopeSelectOptions,
     filtered,
     grouped,
-    previewHtml,
     selectedSlash,
     batchEnableCount,
     batchDisableCount,
@@ -244,7 +243,6 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onBlockingOverlayChange: _o
           setActivation={setActivation}
           showRaw={showRaw}
           setShowRaw={setShowRaw}
-          previewHtml={previewHtml}
         />
       </div>
     </SettingsPage>
