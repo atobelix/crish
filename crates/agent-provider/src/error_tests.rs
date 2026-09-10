@@ -202,9 +202,27 @@ fn row9_rate_limit() {
         "rate limit exceeded",
         "RateLimitReached",
         "too many requests",
+        "requests per minute exceeded (RPM limit)",
     ] {
         let error = classify(None, Some(body), None);
         assert_eq!(error.kind(), Kind::RateLimit, "body: {body}");
+    }
+
+    // 短周期 RPM 错误提取秒数（自愈可重试）
+    let error = classify(None, Some("Rate limit reached. Please try again in 5.5s."), None);
+    assert_eq!(error.kind(), Kind::RateLimit);
+    assert_eq!(error.retry_after(), Some(Duration::from_millis(5500)));
+
+    // 长周期锁定（hours / days / tomorrow / 超过3分钟）快速判定为 Quota，直接打回
+    for long_lock_body in [
+        "Rate limit exceeded. Try again in 2 hours.",
+        "Daily limit reached. Resets tomorrow.",
+        "Usage limit exceeded. Please wait 15 minutes.",
+        "24h quota reached.",
+    ] {
+        let error = classify(Some(429), Some(long_lock_body), None);
+        assert_eq!(error.kind(), Kind::Quota, "long lock should fast-fail as Quota: {long_lock_body}");
+        assert!(!error.is_retryable());
     }
 }
 

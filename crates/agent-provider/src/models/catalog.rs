@@ -25,6 +25,8 @@ use serde::de::Visitor;
 use serde::{Deserialize, Deserializer, Serialize};
 use thiserror::Error;
 
+use super::catalog_types::{ModelSpec, ProtocolKind, ProviderSpec, UnifiedModelsConfig};
+
 #[path = "catalog_override.rs"]
 mod catalog_override;
 #[path = "catalog_price.rs"]
@@ -122,8 +124,12 @@ pub struct ModelCatalogEntry {
     pub provider: String,
     /// 官方厂商（转售场景区分通道价与官方直连价；决定缓存行为矩阵取哪个 vendor）
     pub vendor: String,
-    /// 协议模式："chat" | "responses" | "both"
+    /// 协议模式："chat" | "responses" | "both"（catalog.json 历史字段）。
+    /// yaml 投影**不得**把 `openai/chat` 等协议字面量塞进本字段糊弄。
     pub mode: Option<String>,
+    /// yaml 树投影保留的生效协议字面量（`openai/chat` / `google/generate-content` 等）。
+    /// 热路径应优先 `LiveModels.find` → `ModelSpec.protocol`；本字段仅供既有 lookup 不丢字面量。
+    pub protocol: Option<String>,
     /// 计价币种：USD / CNY（必填语义由校验层钉死，禁止隐式）
     pub currency: Option<String>,
     /// 计价单位（v2 唯一值 "per_1M"）
@@ -364,9 +370,18 @@ impl ModelCatalog {
         Some(home.join(".conex").join("models.yaml"))
     }
 
-    /// 从 YAML 字符串动态构建运行时模型目录快照（支持 v2 树状结构与 v1 扁平结构）。
+    /// 从 YAML 字符串构建运行时模型目录快照。
+    ///
+    /// 与 [LiveModels::from_yaml_str] / [UnifiedModelsConfig::from_yaml_str] 同一套 v2 解析：
+    /// 先得到树，再投影本目录。禁止第二套 `DynamicYamlModalities` 解析器。
     pub fn from_yaml_str(yaml_str: &str) -> Result<Self, String> {
-        parse_yaml_to_catalog(yaml_str)
+        Ok(LiveModels::from_yaml_str(yaml_str)?.catalog)
+    }
+
+    /// 从已解析的 v2 树投影目录（不重新解析 yaml）。
+    pub fn from_unified(tree: &UnifiedModelsConfig) -> Result<Self, String> {
+        tree.validate()?;
+        Ok(project_unified_to_catalog(tree))
     }
 
     /// 从文件路径动态读取并构建运行时模型目录快照。
@@ -377,24 +392,22 @@ impl ModelCatalog {
     }
 
     /// 从用户主目录 `~/.conex/models.yaml` 动态构建运行时模型目录快照：
-    /// - 若文件不存在，返回纯净空目录 [Self::empty]（零垃圾供应商，释放纯净初始态）；
-    /// - 若文件存在，动态解析构建运行时快照。
+    /// - 文件缺失 / 无法解析主目录 → `Ok` 诚实空目录（不是 `catalog.json`）；
+    /// - 文件存在但语法/结构失败 → `Err`（禁止吞成空目录冒充「用户配置了空 providers」）。
     pub fn load_user_catalog() -> Result<Self, String> {
-        let Some(path) = Self::resolve_models_yaml_path() else {
-            return Ok(Self::empty());
-        };
-        if !path.exists() {
-            return Ok(Self::empty());
-        }
-        Self::from_yaml_file(&path)
+        Ok(LiveModels::load_user()?.catalog)
     }
 
-    /// 便捷：安全加载用户真源目录，任何失败均回退为空目录，杜绝崩溃。
-    pub fn load_user_catalog_or_default() -> Self {
-        Self::load_user_catalog().unwrap_or_else(|err| {
-            tracing::warn!("读取 ~/.conex/models.yaml 异常，回退至空目录: {err}");
-            Self::empty()
-        })
+    /// 加载用户真源目录（函数名历史遗留：曾 fail-open 把坏文件吞成空目录）。
+    ///
+    /// 现行行为与 [Self::load_user_catalog] 相同：
+    /// - 文件缺失 → `Ok(empty)`
+    /// - 解析失败 → `Err`
+    ///
+    /// α-3 `live_catalog` / `reload_live_catalog` 在 `Err` 时必须保持上一份成功快照，
+    /// 不得把本函数的错误当成空配置写入 `LIVE_CATALOG`。
+    pub fn load_user_catalog_or_default() -> Result<Self, String> {
+        Self::load_user_catalog()
     }
 
     /// 动态原子更新运行时目录快照（单调递增版本号）。
@@ -674,258 +687,153 @@ fn strip_version_suffix(probe: &str) -> Option<String> {
     Some(base.to_owned())
 }
 
-// ==============================================================================
-// 动态 YAML 解析器（支持 v2 树状与 v1 扁平，驱动运行时真源）
-// ==============================================================================
-
-#[derive(Debug, Deserialize)]
-#[allow(dead_code)]
-struct DynamicYamlRoot {
-    #[serde(default)]
-    pub version: Option<u32>,
-    #[serde(default)]
-    pub providers: Option<BTreeMap<String, DynamicYamlProvider>>,
-    #[serde(default)]
-    pub models: Option<Vec<DynamicYamlModelV1>>,
+/// yaml 树 + 扁平目录投影。α-3 `live_catalog()` 应持有本结构，而不是只持有目录。
+///
+/// - `tree` 是第一公民（与 IPC `providers` 同构）
+/// - `catalog` 是丢失信息的 lookup 投影，供既有价格/窗口 API
+/// - `find` 按 `(provider_id, model_id)` 精确命中 `ModelSpec`，不做后缀/`*`/跨厂商 `[0]`
+/// - `parse_error`：显式错误态。`None` = 诚实空树或成功快照；`Some` = 解析失败，
+///   **不得**把空 `providers` 当成「用户清空了配置」。
+///
+/// 加载失败时调用方必须保持上一份成功快照，禁止把 `Err` 写成空 `providers`。
+#[derive(Debug, Clone)]
+pub struct LiveModels {
+    pub tree: UnifiedModelsConfig,
+    pub catalog: ModelCatalog,
+    pub parse_error: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[allow(dead_code)]
-struct DynamicYamlProvider {
-    pub display_name: Option<String>,
-    pub base_url: Option<String>,
-    pub protocol: Option<String>,
-    pub api_key: Option<String>,
-    #[serde(default)]
-    pub models: Vec<DynamicYamlModelV2>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[allow(dead_code)]
-struct DynamicYamlModelV2 {
-    pub id: Option<String>,
-    pub model: Option<String>,
-    pub display_name: Option<String>,
-    pub protocol: Option<String>,
-    pub context_window: Option<u64>,
-    pub max_output_tokens: Option<u64>,
-    pub thinking: Option<serde_yaml::Value>,
-    pub pricing: Option<DynamicYamlPricing>,
-    pub modalities: Option<DynamicYamlModalities>,
-    pub capabilities: Option<DynamicYamlCapabilities>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[allow(dead_code)]
-struct DynamicYamlModelV1 {
-    pub model: String,
-    pub vendor: String,
-    pub vendor_display_name: Option<String>,
-    pub display_name: Option<String>,
-    pub context_window: Option<u64>,
-    pub max_output_tokens: Option<u64>,
-    pub protocol: Option<String>,
-    pub thinking: Option<serde_yaml::Value>,
-    pub pricing: Option<DynamicYamlPricing>,
-    pub capabilities: Option<DynamicYamlCapabilities>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct DynamicYamlPricing {
-    pub currency: Option<String>,
-    pub unit: Option<String>,
-    pub input: Option<f64>,
-    pub output: Option<f64>,
-    pub cache_read: Option<f64>,
-    pub cache_write: Option<f64>,
-    pub input_per_m_tok: Option<f64>,
-    pub output_per_m_tok: Option<f64>,
-    pub cache_read_per_m_tok: Option<f64>,
-    pub cache_write_per_m_tok: Option<f64>,
-}
-
-#[derive(Debug, Deserialize)]
-struct DynamicYamlModalities {
-    #[serde(default)]
-    pub image: bool,
-    #[serde(default)]
-    pub video: bool,
-    #[serde(default)]
-    pub audio: bool,
-}
-
-#[derive(Debug, Deserialize)]
-struct DynamicYamlCapabilities {
-    #[serde(default)]
-    pub tools: bool,
-    #[serde(default)]
-    pub image: bool,
-    #[serde(default)]
-    pub video: bool,
-    #[serde(default)]
-    pub reasoning: bool,
-}
-
-fn parse_thinking_value(val: &serde_yaml::Value) -> Option<TierEffortMap> {
-    match val {
-        serde_yaml::Value::Mapping(map) => {
-            let mut tier_map = BTreeMap::new();
-            for (k, v) in map {
-                let key = match k {
-                    serde_yaml::Value::String(s) => s.clone(),
-                    serde_yaml::Value::Number(n) => n.to_string(),
-                    _ => continue,
-                };
-                let wire = match v {
-                    serde_yaml::Value::String(s) => Some(s.clone()),
-                    serde_yaml::Value::Null => None,
-                    _ => Some(key.clone()),
-                };
-                tier_map.insert(key, wire);
-            }
-            if tier_map.is_empty() { None } else { Some(tier_map) }
+impl LiveModels {
+    /// 诚实空树 + 空目录（文件缺失）。不是 `catalog.json`。`parse_error` 为 None。
+    pub fn empty() -> Self {
+        Self {
+            tree: UnifiedModelsConfig::default(),
+            catalog: ModelCatalog::empty(),
+            parse_error: None,
         }
-        serde_yaml::Value::Sequence(seq) => {
-            let mut tier_map = BTreeMap::new();
-            for item in seq {
-                if let serde_yaml::Value::String(s) = item {
-                    tier_map.insert(s.clone(), Some(s.clone()));
-                }
-            }
-            if tier_map.is_empty() { None } else { Some(tier_map) }
+    }
+
+    /// 首次解析失败的显式错误态：tree 为空但 `parse_error` 为 Some。
+    /// 调用方必须据此区分「没有配置」与「坏文件」，禁止安装成成功快照。
+    pub fn parse_failed(message: impl Into<String>) -> Self {
+        Self {
+            tree: UnifiedModelsConfig::default(),
+            catalog: ModelCatalog::empty(),
+            parse_error: Some(message.into()),
         }
-        serde_yaml::Value::Bool(true) => {
-            let mut tier_map = BTreeMap::new();
-            tier_map.insert("default".to_string(), Some("default".to_string()));
-            Some(tier_map)
+    }
+
+    /// yaml → 树 + 投影。与 IPC 同一套 [UnifiedModelsConfig::from_yaml_str]。
+    pub fn from_yaml_str(yaml_str: &str) -> Result<Self, String> {
+        Self::from_unified(UnifiedModelsConfig::from_yaml_str(yaml_str)?)
+    }
+
+    pub fn from_unified(tree: UnifiedModelsConfig) -> Result<Self, String> {
+        tree.validate()?;
+        let catalog = project_unified_to_catalog(&tree);
+        Ok(Self {
+            tree,
+            catalog,
+            parse_error: None,
+        })
+    }
+
+    pub fn from_yaml_file(path: impl AsRef<std::path::Path>) -> Result<Self, String> {
+        let content = std::fs::read_to_string(path.as_ref())
+            .map_err(|e| format!("读取 models.yaml 失败: {e}"))?;
+        Self::from_yaml_str(&content)
+    }
+
+    /// 读 `~/.conex/models.yaml`：缺失 → 空树；解析失败 → Err。
+    pub fn load_user() -> Result<Self, String> {
+        let Some(path) = ModelCatalog::resolve_models_yaml_path() else {
+            return Ok(Self::empty());
+        };
+        if !path.exists() {
+            return Ok(Self::empty());
         }
-        _ => None,
+        Self::from_yaml_file(&path)
+    }
+
+    pub fn find(&self, provider_id: &str, model_id: &str) -> Option<&ModelSpec> {
+        self.tree.find_model(provider_id, model_id)
     }
 }
 
-fn parse_yaml_to_catalog(yaml_str: &str) -> Result<ModelCatalog, String> {
-    let root: DynamicYamlRoot = serde_yaml::from_str(yaml_str)
-        .map_err(|e| format!("解析 models.yaml 语法失败: {e}"))?;
-
+/// 从 v2 树投影 [ModelCatalog]。thinking 键保持 TitleCase；modalities 走 `{input,output}`。
+fn project_unified_to_catalog(tree: &UnifiedModelsConfig) -> ModelCatalog {
     let mut entries = BTreeMap::new();
-
-    if let Some(providers) = root.providers {
-        for (provider_id, provider) in providers {
-            let prov_proto = provider.protocol.as_deref();
-            for m in provider.models {
-                let model_id = m.id.or(m.model).unwrap_or_default();
-                if model_id.trim().is_empty() {
-                    continue;
-                }
-                let mut entry = ModelCatalogEntry::default();
-                entry.model = model_id.clone();
-                entry.api_model = Some(model_id.clone());
-                entry.id = Some(format!("{provider_id}::{model_id}"));
-                entry.provider = provider_id.clone();
-                entry.vendor = provider_id.clone();
-                entry.context_window = m.context_window;
-                entry.max_output_tokens = m.max_output_tokens;
-
-                let proto = m.protocol.as_deref().or(prov_proto);
-                if let Some(p) = proto {
-                    entry.mode = Some(p.to_string());
-                    entry.supports_responses = p.contains("responses");
-                }
-
-                if let Some(p) = m.pricing {
-                    entry.currency = p.currency;
-                    entry.unit = p.unit.or_else(|| Some("per_1M".to_string()));
-                    entry.input_price = p.input.or(p.input_per_m_tok);
-                    entry.output_price = p.output.or(p.output_per_m_tok);
-                    entry.cache_read_price = p.cache_read.or(p.cache_read_per_m_tok);
-                    entry.cache_write_price = p.cache_write.or(p.cache_write_per_m_tok);
-                    entry.cache_write_free = entry.cache_write_price == Some(0.0);
-                    entry.supports_prompt_caching =
-                        entry.cache_read_price.is_some() || entry.cache_write_price.is_some();
-                }
-
-                if let Some(th) = &m.thinking {
-                    entry.thinking_tiers = parse_thinking_value(th);
-                    entry.supports_reasoning = entry.thinking_tiers.is_some();
-                    entry.supports_reasoning_effort = entry.supports_reasoning;
-                }
-
-                if let Some(cap) = m.capabilities {
-                    entry.supports_function_calling = cap.tools;
-                    entry.supports_vision = cap.image;
-                    entry.supports_video_input = cap.video;
-                    if cap.reasoning {
-                        entry.supports_reasoning = true;
-                    }
-                }
-
-                if let Some(mods) = m.modalities {
-                    if mods.image { entry.supports_vision = true; }
-                    if mods.video { entry.supports_video_input = true; }
-                    if mods.audio { entry.supports_audio_input = true; }
-                }
-
-                entries.insert(ModelCatalogEntry::key(&provider_id, &model_id), entry);
-            }
-        }
-    } else if let Some(models) = root.models {
-        for m in models {
-            if m.model.trim().is_empty() || m.vendor.trim().is_empty() {
-                continue;
-            }
-            let mut entry = ModelCatalogEntry::default();
-            entry.model = m.model.clone();
-            entry.api_model = Some(m.model.clone());
-            entry.id = Some(format!("{}::{}", m.vendor, m.model));
-            entry.provider = m.vendor.clone();
-            entry.vendor = m.vendor.clone();
-            entry.context_window = m.context_window;
-            entry.max_output_tokens = m.max_output_tokens;
-
-            if let Some(p) = &m.protocol {
-                entry.mode = Some(p.clone());
-                entry.supports_responses = p.contains("responses");
-            }
-
-            if let Some(p) = m.pricing {
-                entry.currency = p.currency;
-                entry.unit = p.unit.or_else(|| Some("per_1M".to_string()));
-                entry.input_price = p.input.or(p.input_per_m_tok);
-                entry.output_price = p.output.or(p.output_per_m_tok);
-                entry.cache_read_price = p.cache_read.or(p.cache_read_per_m_tok);
-                entry.cache_write_price = p.cache_write.or(p.cache_write_per_m_tok);
-                entry.cache_write_free = entry.cache_write_price == Some(0.0);
-                entry.supports_prompt_caching =
-                    entry.cache_read_price.is_some() || entry.cache_write_price.is_some();
-            }
-
-            if let Some(th) = &m.thinking {
-                entry.thinking_tiers = parse_thinking_value(th);
-                entry.supports_reasoning = entry.thinking_tiers.is_some();
-                entry.supports_reasoning_effort = entry.supports_reasoning;
-            }
-
-            if let Some(cap) = m.capabilities {
-                entry.supports_function_calling = cap.tools;
-                entry.supports_vision = cap.image;
-                entry.supports_video_input = cap.video;
-                if cap.reasoning {
-                    entry.supports_reasoning = true;
-                }
-            }
-
-            entries.insert(ModelCatalogEntry::key(&m.vendor, &m.model), entry);
+    for (provider_id, provider) in &tree.providers {
+        for model in &provider.models {
+            let entry = project_model_entry(provider_id, provider, model);
+            entries.insert(ModelCatalogEntry::key(provider_id, &model.id), entry);
         }
     }
-
-    Ok(ModelCatalog {
+    ModelCatalog {
         entries,
         version: 1,
-    })
+    }
+}
+
+fn project_model_entry(
+    provider_id: &str,
+    provider: &ProviderSpec,
+    model: &ModelSpec,
+) -> ModelCatalogEntry {
+    let mut entry = ModelCatalogEntry::default();
+    entry.model = model.id.clone();
+    entry.api_model = Some(model.id.clone());
+    entry.id = Some(format!("{provider_id}::{}", model.id));
+    entry.provider = provider_id.to_string();
+    entry.vendor = provider_id.to_string();
+    entry.context_window = model.context_window;
+    entry.max_output_tokens = model.max_output_tokens;
+
+    let proto = model.effective_protocol(provider);
+    entry.protocol = Some(proto.as_str().to_string());
+    entry.supports_responses = proto == ProtocolKind::OpenAiResponses;
+
+    if let Some(pricing) = &model.pricing {
+        entry.currency = Some(pricing.currency.code().to_string());
+        entry.input_price = Some(pricing.input);
+        entry.output_price = Some(pricing.output);
+        entry.cache_read_price = pricing.cache_read;
+        entry.cache_write_price = pricing.cache_write;
+        entry.cache_write_free = entry.cache_write_price == Some(0.0);
+        entry.supports_prompt_caching =
+            entry.cache_read_price.is_some() || entry.cache_write_price.is_some();
+    }
+
+    if let Some(thinking) = &model.thinking {
+        if !thinking.is_empty() {
+            let mut tiers = BTreeMap::new();
+            for (key, wire) in thinking {
+                tiers.insert(key.clone(), Some(wire.clone()));
+            }
+            entry.thinking_tiers = Some(tiers);
+            entry.supports_reasoning = true;
+            entry.supports_reasoning_effort = true;
+        }
+    }
+
+    if let Some(mods) = &model.modalities {
+        entry.input_modalities = Some(mods.input.clone());
+        entry.output_modalities = Some(mods.output.clone());
+        entry.supports_vision = mods.supports_input("image");
+        entry.supports_video_input = mods.supports_input("video");
+        entry.supports_audio_input = mods.supports_input("audio");
+        entry.supports_pdf_input = mods.supports_input("pdf") || mods.supports_input("file");
+        entry.supports_audio_output = mods.supports_output("audio");
+    }
+
+    let compat = model.compat.as_ref().or(provider.compat.as_ref());
+    if let Some(compat) = compat {
+        entry.thinking_format = compat
+            .thinking_format
+            .map(|format| format.as_str().to_string());
+    }
+
+    entry
 }
 
 #[cfg(test)]

@@ -11,6 +11,7 @@ use super::*;
 use crate::request::cache::{CacheMechanism, CacheRetention, TtlBucket};
 use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
 use conex_types::tool::ToolOutput;
+use indexmap::IndexMap;
 use serde_json::json;
 use std::sync::Arc;
 
@@ -204,10 +205,13 @@ fn responses_body_cache_policy_never_injected() {
 
 #[test]
 fn responses_body_omits_chat_specific_fields() {
-    // reasoning_effort / thinking_intensity：转换为 Responses 原生 reasoning 格式，Chat 专有扁平字段不注入
+    // 显式 format + 字典 → Responses 原生 reasoning；Chat 专有扁平字段不注入
+    let mut thinking_map = IndexMap::new();
+    thinking_map.insert("Medium".to_string(), "medium".to_string());
     let opts = ChatCompletionsRequestOptions {
-        reasoning_effort: Some(ReasoningEffort::High),
-        thinking_intensity: Some(ThinkingIntensity::Medium),
+        reasoning_effort: Some(ReasoningEffort::Medium),
+        thinking_format: Some(crate::models::catalog_types::ThinkingFormat::OpenAi),
+        thinking_map: Some(thinking_map),
         model: Some("claude-opus-4-7".to_string()),
         ..ChatCompletionsRequestOptions::default()
     };
@@ -236,14 +240,20 @@ fn responses_body_omits_chat_specific_fields() {
 #[test]
 fn responses_body_wire_contract_input_instructions_max_output_tokens_and_reasoning() {
     // TU-02: 验证包含 input 与 instructions，不含 messages；包含 max_output_tokens；开启思考时包含 reasoning: { effort: "medium" }
+    let mut thinking_map = IndexMap::new();
+    thinking_map.insert("Medium".to_string(), "medium".to_string());
     let opts = ChatCompletionsRequestOptions {
         model: Some("openai/gpt-5.6-sol".to_string()),
         stream: Some(true),
         max_tokens: Some(4096),
         reasoning_effort: Some(ReasoningEffort::Medium),
+        thinking_format: Some(crate::models::catalog_types::ThinkingFormat::OpenAi),
+        thinking_map: Some(thinking_map),
         ..ChatCompletionsRequestOptions::default()
     };
-    let messages: Vec<Arc<AgentMessage>> = vec![Arc::new(user_message("Explain quantum computing in simple terms"))];
+    let messages: Vec<Arc<AgentMessage>> = vec![Arc::new(user_message(
+        "Explain quantum computing in simple terms",
+    ))];
     let context = RequestBuildContext {
         system_prompt: Some("You are a helpful research assistant.".to_string()),
         messages: &messages,
@@ -253,8 +263,14 @@ fn responses_body_wire_contract_input_instructions_max_output_tokens_and_reasoni
     let body = build_responses_request_body(&opts, &context);
 
     // 1. 验证包含 input 与 instructions，绝不包含 Chat 专有的 messages 键或无效的 stream_options
-    assert_eq!(body["instructions"], "You are a helpful research assistant.");
-    assert!(body.get("input").is_some(), "Responses 请求体必须包含 input 数组");
+    assert_eq!(
+        body["instructions"],
+        "You are a helpful research assistant."
+    );
+    assert!(
+        body.get("input").is_some(),
+        "Responses 请求体必须包含 input 数组"
+    );
     let input = body["input"].as_array().expect("input 必须是数组");
     assert_eq!(input.len(), 1);
     assert_eq!(
@@ -265,16 +281,28 @@ fn responses_body_wire_contract_input_instructions_max_output_tokens_and_reasoni
             "content": "Explain quantum computing in simple terms"
         })
     );
-    assert!(body.get("messages").is_none(), "Responses 轨严禁注入 messages 键");
-    assert!(body.get("stream_options").is_none(), "Responses 轨严禁注入 stream_options 键");
+    assert!(
+        body.get("messages").is_none(),
+        "Responses 轨严禁注入 messages 键"
+    );
+    assert!(
+        body.get("stream_options").is_none(),
+        "Responses 轨严禁注入 stream_options 键"
+    );
 
     // 2. 验证包含 max_output_tokens 替代 max_tokens
     assert_eq!(body["max_output_tokens"], 4096);
-    assert!(body.get("max_tokens").is_none(), "Responses 轨严禁出现 max_tokens 键");
+    assert!(
+        body.get("max_tokens").is_none(),
+        "Responses 轨严禁出现 max_tokens 键"
+    );
 
     // 3. 验证当开启思考时包含 reasoning: { effort: "medium" }
     assert_eq!(body["reasoning"], json!({ "effort": "medium" }));
-    assert!(body.get("reasoning_effort").is_none(), "Responses 轨严禁出现 Chat 专有扁平 reasoning_effort 键");
+    assert!(
+        body.get("reasoning_effort").is_none(),
+        "Responses 轨严禁出现 Chat 专有扁平 reasoning_effort 键"
+    );
 }
 
 #[test]
@@ -287,7 +315,10 @@ fn responses_body_thinking_off_omits_reasoning() {
     };
     let context = RequestBuildContext::default();
     let body1 = build_responses_request_body(&opts_effort_off, &context);
-    assert!(body1.get("reasoning").is_none(), "Off 档位不得注入 reasoning 键");
+    assert!(
+        body1.get("reasoning").is_none(),
+        "Off 档位不得注入 reasoning 键"
+    );
 
     let opts_intensity_off = ChatCompletionsRequestOptions {
         model: Some("gpt-5.6-sol".to_string()),
@@ -295,5 +326,8 @@ fn responses_body_thinking_off_omits_reasoning() {
         ..ChatCompletionsRequestOptions::default()
     };
     let body2 = build_responses_request_body(&opts_intensity_off, &context);
-    assert!(body2.get("reasoning").is_none(), "Off 档位不得注入 reasoning 键");
+    assert!(
+        body2.get("reasoning").is_none(),
+        "Off 档位不得注入 reasoning 键"
+    );
 }

@@ -7,21 +7,16 @@
 
 use serde_json::{json, Map, Value};
 
-use crate::config::Endpoint;
-
 use super::dialect::{self, assemble_thinking_dialect, DialectBuildOptions, ThinkingDialectFormat};
-use super::{
-    ChatCompletionsRequestOptions, ReasoningEffort, ReasoningVendor, RequestBuildContext,
-};
+use super::{ChatCompletionsRequestOptions, ReasoningEffort, RequestBuildContext};
 use crate::request::cache::{
     allocate_breakpoints, apply_cache_controls, retention_wire_value, BreakpointPlan,
     CacheMechanism,
 };
-use crate::request::messages::{to_chat_messages, ChatMessage, ReasoningContentMode};
-use crate::request::tools::{to_cache_aware_tool, to_chat_tool_choice, ToolChoice};
-use crate::request::vendor::{
-    infer_thinking_capability, reasoning_effort_object, resolve_thinking_params,
+use crate::request::messages::{
+    to_chat_messages_with_compat, ChatMessage, ReasoningContentMode, WireCompat,
 };
+use crate::request::tools::{to_cache_aware_tool, to_chat_tool_choice, ToolChoice};
 
 /// 构建 chat-completions 请求体（compactObject 等价：None 字段一律省略，02 §二.6:132）
 pub fn build_chat_completions_request_body(
@@ -46,28 +41,29 @@ pub fn build_chat_completions_request_body(
         body.insert(field.as_str().to_string(), json!(value));
     }
 
-    // ── 思考推理参数组装：正式接入 assemble_thinking_dialect（彻底废除优先查 MODEL_SERIES_CAPABILITIES）──
-    let effective_effort: Option<dialect::ReasoningEffort> = if let Some(intensity) = opts.thinking_intensity {
-        Some(intensity.into())
-    } else if let Some(effort) = opts.reasoning_effort {
-        match effort {
-            ReasoningEffort::Off => Some(dialect::ReasoningEffort::Off),
-            ReasoningEffort::Auto => None,
-            other => Some(other.into()),
-        }
-    } else {
-        None
-    };
+    // ── 思考推理参数组装：唯一入口 assemble_thinking_dialect（plans/04 §7.1）──
+    // 显式 thinking_format 才组装；无 format → 不写任何思考键（fail-closed；
+    // 非法档位由 host 侧 validate_reasoning_effort 在 HTTP 前拒绝）。已删除
+    // 原 84-150 兜底枝（infer_thinking_capability / reasoning_effort_object /
+    // resolve_thinking_params），产品默认永远不进兜底。
+    let effective_effort: Option<dialect::ReasoningEffort> =
+        if let Some(intensity) = opts.thinking_intensity {
+            Some(intensity.into())
+        } else if let Some(effort) = opts.reasoning_effort {
+            match effort {
+                ReasoningEffort::Off => Some(dialect::ReasoningEffort::Off),
+                ReasoningEffort::Auto => None,
+                other => Some(other.into()),
+            }
+        } else {
+            None
+        };
 
-    if opts.thinking_format.is_some() || opts.thinking_map.is_some() {
-        // 显式配置驱动：100% 由 assemble_thinking_dialect 产出，彻底拔除模型名启发式盲猜
-        if let Some(effort) = effective_effort {
+    if let Some(effort) = effective_effort {
+        if let Some(format) = opts.thinking_format.map(ThinkingDialectFormat::from) {
             let dialect_opts = DialectBuildOptions {
                 effort,
-                format: opts
-                    .thinking_format
-                    .map(ThinkingDialectFormat::from)
-                    .unwrap_or(ThinkingDialectFormat::OpenAiEffort),
+                format,
                 max_output_tokens: opts.max_tokens.unwrap_or(64000),
                 thinking_map: opts.thinking_map.as_ref(),
             };
@@ -78,73 +74,6 @@ pub fn build_chat_completions_request_body(
             if let Some(elevated) = elevated_tokens {
                 if let (Some(field), Some(cur_max)) = (opts.max_tokens_field, opts.max_tokens) {
                     body.insert(field.as_str().to_string(), json!(cur_max.max(elevated)));
-                }
-            }
-        }
-    } else {
-        // 兜底分支：未显式配置 thinking_format / thinking_map 时的兼容处理
-        if let Some(vendor) = opts.vendor {
-            if vendor == ReasoningVendor::Anthropic {
-                if let Some(reasoning) = reasoning_effort_object(
-                    Endpoint::ChatCompletions,
-                    opts.model.as_deref().unwrap_or(""),
-                    opts.reasoning_effort,
-                    opts.reasoning_effort_format,
-                    opts.vendor,
-                ) {
-                    merge_object(&mut body, &reasoning);
-                }
-            } else if let Some(effort) = effective_effort {
-                let dialect_opts = DialectBuildOptions {
-                    effort,
-                    format: ThinkingDialectFormat::OpenAiEffort,
-                    max_output_tokens: opts.max_tokens.unwrap_or(64000),
-                    thinking_map: None,
-                };
-                let (thinking_val, _) = assemble_thinking_dialect(&dialect_opts);
-                if let Some(val) = thinking_val {
-                    merge_object(&mut body, &val);
-                }
-            }
-        } else if let Some(effort) = effective_effort {
-            let dialect_opts = DialectBuildOptions {
-                effort,
-                format: ThinkingDialectFormat::OpenAiEffort,
-                max_output_tokens: opts.max_tokens.unwrap_or(64000),
-                thinking_map: None,
-            };
-            let (thinking_val, _) = assemble_thinking_dialect(&dialect_opts);
-            if let Some(val) = thinking_val {
-                merge_object(&mut body, &val);
-            }
-        }
-
-        // 兼容存量 thinkingIntensity（针对未配置 format 的 Anthropic / Gemini / 自适应模型）
-        if let Some(intensity) = opts.thinking_intensity {
-            let capability = infer_thinking_capability(opts.model.as_deref().unwrap_or(""));
-            if capability.supported {
-                let params = resolve_thinking_params(&capability, intensity, Endpoint::ChatCompletions);
-                for key in [
-                    "reasoning_effort",
-                    "reasoning",
-                    "thinking",
-                    "generation_config",
-                    "effort",
-                    "enable_thinking",
-                ] {
-                    body.remove(key);
-                }
-                merge_object(&mut body, &params);
-            } else {
-                for key in [
-                    "reasoning_effort",
-                    "reasoning",
-                    "thinking",
-                    "generation_config",
-                    "effort",
-                    "enable_thinking",
-                ] {
-                    body.remove(key);
                 }
             }
         }
@@ -176,15 +105,23 @@ pub fn build_chat_completions_request_body(
         }
     }
 
-    // messages：先映射既有 wire 消息（to_chat_messages 保持纯函数），
-    // 再 post-pass 施加断点（P2 §3.1.3：纯后处理，与映射解耦；plan 全 false
-    // → 请求字节与未施加时完全一致）
+    // messages：先映射既有 wire 消息（with_compat 生产入口——带真 WireCompat，
+    // 不再灌 `WireCompat::default()`；plans/04 §3.3），再 post-pass 施加断点
+    // （P2 §3.1.3：纯后处理，与映射解耦；plan 全 false → 请求字节与未施加时完全一致）
     let reasoning_mode = opts.reasoning_content.unwrap_or(ReasoningContentMode::Omit);
-    let mut wire = to_chat_messages(
+    let wire_compat = WireCompat::from_compat(
+        opts.vendor.map(|v| v.as_str()),
+        opts.model.as_deref(),
+        None, // 不再传 base_url 给启发式（plans/04 §3.3）
+        opts.supports_reasoning,
+        opts.compat.as_ref(),
+    );
+    let mut wire = to_chat_messages_with_compat(
         context.system_prompt.as_deref(),
         context.messages,
         reasoning_mode,
         context.wire_mode,
+        wire_compat,
     );
 
     // 出站清洗保障（代理兼容模式 / Omit 模式）：
@@ -286,6 +223,7 @@ mod dialect_wiring_tests {
         let opts = ChatCompletionsRequestOptions {
             model: Some("custom-model".to_string()),
             reasoning_effort: Some(ReasoningEffort::High),
+            thinking_format: Some(ThinkingFormat::OpenAi),
             thinking_map: Some(map),
             ..ChatCompletionsRequestOptions::default()
         };
@@ -327,7 +265,8 @@ mod dialect_wiring_tests {
             thinking_format: Some(ThinkingFormat::Qwen),
             ..ChatCompletionsRequestOptions::default()
         };
-        let body_on = build_chat_completions_request_body(&opts_on, &RequestBuildContext::default());
+        let body_on =
+            build_chat_completions_request_body(&opts_on, &RequestBuildContext::default());
         assert_eq!(body_on["enable_thinking"], true);
 
         let opts_off = ChatCompletionsRequestOptions {
@@ -336,7 +275,8 @@ mod dialect_wiring_tests {
             thinking_format: Some(ThinkingFormat::Qwen),
             ..ChatCompletionsRequestOptions::default()
         };
-        let body_off = build_chat_completions_request_body(&opts_off, &RequestBuildContext::default());
+        let body_off =
+            build_chat_completions_request_body(&opts_off, &RequestBuildContext::default());
         assert_eq!(body_off["enable_thinking"], false);
     }
 }

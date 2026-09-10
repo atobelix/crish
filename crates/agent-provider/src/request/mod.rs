@@ -37,6 +37,7 @@ mod deepseek_invariants;
 #[cfg(test)]
 mod consistency_gate_tests;
 
+pub use attachment_wire::{strip_ansi_codes, wrap_safe_cdata};
 pub use build::{
     build_chat_completions_request_body, build_responses_request_body, build_system_prompt,
     resolve_endpoint, ChatCompletionsRequestOptions, MaxTokensField, RequestBuildContext,
@@ -56,10 +57,11 @@ pub use cache::{
 pub use capability::{describe_model, ModelCapability};
 pub use compat::{empty_content_wire_value, resolve_developer_role, resolve_max_tokens_field};
 pub use messages::{
-    stringify_tool_output, system_prompt_as_user_prefix, to_chat_messages,
+    ensure_content_modalities, ensure_outbound_modalities, stringify_tool_output,
+    system_prompt_as_user_prefix, to_chat_messages, to_chat_messages_with_compat,
     to_responses_input_items, ChatContent, ChatContentPart, ChatMessage, ReasoningContentMode,
+    WireCompat,
 };
-pub use attachment_wire::{strip_ansi_codes, wrap_safe_cdata};
 pub use schema::{canonical_json_string, canonicalize_schema};
 pub use tools::{
     default_input_schema, to_chat_tool_choice, to_openai_tool, to_responses_tool,
@@ -74,4 +76,4 @@ pub use vendor::{
     ReasoningEffortState, ReasoningFormat, ReasoningReject, ReasoningVendor, ThinkingCapability,
     ThinkingIntensity, NO_THINKING,
 };
-pub use wire_protocol::{resolve_wire_protocol, WireProtocol};
+pub use wire_protocol::{build_endpoint_url, resolve_wire_protocol, WireProtocol};

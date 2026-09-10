@@ -132,7 +132,18 @@ impl From<crate::models::catalog_types::ModelPricingSpec> for ModelPricing {
             output,
             cache_read: spec.cache_read,
             cache_write: spec.cache_write,
-            tiers: Vec::new(),
+            // plans/05 T5.1：必须拷贝阶梯（spec 真没有才为空；禁止静默清空）
+            tiers: spec
+                .tiers
+                .into_iter()
+                .map(|t| PricingTier {
+                    input_tokens_above: t.input_tokens_above,
+                    input: t.input,
+                    output: t.output,
+                    cache_read: t.cache_read,
+                    cache_write: t.cache_write,
+                })
+                .collect(),
         }
     }
 }
@@ -157,6 +168,17 @@ impl From<ModelPricing> for crate::models::catalog_types::ModelPricingSpec {
             cache_read: p.cache_read,
             cache_write: p.cache_write,
             per_image,
+            tiers: p
+                .tiers
+                .into_iter()
+                .map(|t| crate::models::catalog_types::PricingTier {
+                    input_tokens_above: t.input_tokens_above,
+                    input: t.input,
+                    output: t.output,
+                    cache_read: t.cache_read,
+                    cache_write: t.cache_write,
+                })
+                .collect(),
         }
     }
 }
@@ -357,7 +379,8 @@ impl PricingEngine {
         let input_micros = Self::tokens_to_micros(non_cached_prompt_tokens, active_input_rate);
         let output_micros = Self::tokens_to_micros(completion_tokens, active_output_rate);
         let cache_read_micros = Self::tokens_to_micros(cache_read_tokens, active_cache_read_rate);
-        let cache_write_micros = Self::tokens_to_micros(cache_write_tokens, active_cache_write_rate);
+        let cache_write_micros =
+            Self::tokens_to_micros(cache_write_tokens, active_cache_write_rate);
 
         let total_micros = input_micros
             .saturating_add(output_micros)

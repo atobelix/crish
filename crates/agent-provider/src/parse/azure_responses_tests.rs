@@ -108,13 +108,17 @@ fn azure_text_and_reasoning_deltas_delegate_to_core() {
     let thought = events
         .iter()
         .filter_map(|event| match event {
-            ProviderStreamEvent::ThoughtDelta {
-                text, redacted, ..
-            } => Some((text.as_str(), *redacted)),
+            ProviderStreamEvent::ThoughtDelta { text, redacted, .. } => {
+                Some((text.as_str(), *redacted))
+            }
             _ => None,
         })
         .collect::<Vec<_>>();
-    assert_eq!(thought, vec![("在想", Some(true))], "azure reasoning 同 responses 标 redacted");
+    assert_eq!(
+        thought,
+        vec![("在想", Some(true))],
+        "azure reasoning 同 responses 标 redacted"
+    );
     assert_eq!(
         stop_of(&events),
         &ProviderStreamEvent::Stop {
@@ -183,7 +187,10 @@ fn azure_terminal_usage_map_and_cache_breakdown() {
     .expect("序列化");
     let events = parse_all(vec![&data]);
     let stop = stop_of(&events);
-    let ProviderStreamEvent::Stop { usage: Some(usage), .. } = stop else {
+    let ProviderStreamEvent::Stop {
+        usage: Some(usage), ..
+    } = stop
+    else {
         panic!("期望携带 usage 的 stop：{stop:?}");
     };
     // 原始上报值保留（C14：prompt 不做减法改写）
@@ -205,10 +212,16 @@ fn azure_terminal_usage_map_and_cache_breakdown() {
         .expect("帧处理");
     parser.finish().expect("流结束");
     let breakdown = parser.cache_breakdown().expect("应可归一");
-    assert_eq!(breakdown.miss, 50, "净输入 = prompt - cache_read - cache_write");
+    assert_eq!(
+        breakdown.miss, 50,
+        "净输入 = prompt - cache_read - cache_write"
+    );
     assert_eq!(breakdown.read, 40);
     assert_eq!(breakdown.write, 10);
-    assert_eq!(breakdown.input_total, 100, "Included 轨 input_total = prompt");
+    assert_eq!(
+        breakdown.input_total, 100,
+        "Included 轨 input_total = prompt"
+    );
 }
 
 /// 顶层 usage（非 response 嵌套，azure 可能前置帧携带）→ 覆盖式收敛
@@ -226,12 +239,20 @@ fn azure_top_level_usage_override_later_frame_wins() {
         "usage": { "input_tokens": 60, "output_tokens": 10, "total_tokens": 70 },
     }))
     .expect("序列化");
-    let events = parse_all(vec![&first, &second, &terminal_frame("response.completed", "completed")]);
+    let events = parse_all(vec![
+        &first,
+        &second,
+        &terminal_frame("response.completed", "completed"),
+    ]);
     match stop_of(&events) {
         ProviderStreamEvent::Stop {
             usage: Some(usage), ..
         } => {
-            assert_eq!(usage.prompt_tokens, Some(60), "后到覆盖式优先（OpenAI 覆盖式）");
+            assert_eq!(
+                usage.prompt_tokens,
+                Some(60),
+                "后到覆盖式优先（OpenAI 覆盖式）"
+            );
             assert_eq!(usage.total_tokens, Some(70));
         }
         other => panic!("期望携带 usage 的 stop，得到：{other:?}"),
@@ -295,7 +316,10 @@ fn azure_stream_without_terminal_event_errors() {
             ..
         } => {
             assert!(
-                error.as_deref().unwrap_or("").contains("terminal response event"),
+                error
+                    .as_deref()
+                    .unwrap_or("")
+                    .contains("terminal response event"),
                 "无终态帧应报 invalid-stream：{error:?}"
             );
         }

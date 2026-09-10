@@ -1,24 +1,27 @@
-//! crates/agent-provider/src/request/vendor/dialect.rs
-//!
 //! 2026 最新模型思考推理方言转换与出站历史消息清洗管线。
 //! 严格落地 thinking 拍平 Key-Value 契约 (`IndexMap<String, String>`)。
 //!
 //! 核心设计契约：
 //! 1. 纯英文白名单思考等级 `ReasoningEffort`（TitleCase 到 Wire 参数映射，无中文污染）；
 //! 2. 四大主流思考方言装配器 `assemble_thinking_dialect`：
-//!    - `OpenAiEffort`: 产生 `{"reasoning_effort": "low"|"medium"|"high"}`（必须是纯字符串，严禁数字！）；
-//!    - `OpenAiResponsesNested`: 产生 `{"reasoning": {"effort": str}}`；
-//!    - `AnthropicBudget`: 产生 `{"thinking": {"type": "enabled", "budget_tokens": N}}`，保证预算 >= 1024，
-//!      且自动安全余量钳制（建议 max_tokens 自动提升 +4096）；
-//!    - `DeepSeekNative`: `{"thinking": {"type": "enabled"}}`（当 effort 为 Off 时为 `{"thinking": {"type": "disabled"}}`）；
-//!    - `QwenBailianBoolean`: 产生 `{"enable_thinking": true|false}`；
-//! 3. 优先读取用户配置在 `ModelSpec.thinking` 中的拍平键值对映射；
-//! 4. 代理出站历史消息清洗 `sanitize_outbound_messages_for_proxy`：彻底剥离 assistant 中的 Thought 块，
-//!    防止第三方中转代理因未定义字段报 HTTP 400 错误。
+//!    - `OpenAiEffort`: 产生 `{"reasoning_effort": "<wire>"}`（必须是纯字符串，严禁数字！）；
+//!    - `OpenAiResponsesNested`: 产生 `{"reasoning": {"effort": "<wire>"}}`；
+//!    - `AnthropicBudget`: 产生 `{"thinking": {"type": "enabled", "budget_tokens": N}}`（N 来自
+//!      用户字典 parse，≥1024；值为 `adaptive` → `{"type": "adaptive"}`）；
+//!    - `DeepSeekNative`: `{"thinking": {"type": "enabled"|"disabled"}}`（map 值若是
+//!      `enabled`/`disabled` 用字面，否则非 Off → enabled）；
+//!    - `QwenBailianBoolean`: `{"enable_thinking": true|false}`（map 值 `"true"/"false"/"1"/"0"`
+//!      解析，否则非 Off → true）；
+//!    - `GeminiThinkingConfig`: 并入 `generationConfig.thinkingConfig.thinkingLevel`（map 值原样，
+//!      数值字符串走 `thinkingBudget`）；
+//! 3. wire 值只来自用户配置在 `ModelSpec.thinking` 中的拍平键值对映射
+//!    （`thinking_map` 为 `Some` 时**只准**用 map 命中值；禁止 `to_openai_str` 折叠兜底；
+//!    map 为 `None` → 不注入思考键，除 DeepSeek/Qwen 显式 Off → disabled/false）。
+//! 4. 代理出站历史消息清洗 `sanitize_outbound_messages_for_proxy`：彻底剥离 assistant 中的
+//!    Thought 块，防止第三方中转代理因未定义字段报 HTTP 400 错误。
 //!
-//! 兼容层：保留历史 `build_reasoning_wire` 与 `resolve_wire_spelling_with_tiers` 契约，供既有调用链平滑演进。
-
-#![allow(dead_code)]
+//! 兼容层：保留历史 `build_reasoning_wire` 与 `resolve_wire_spelling_with_tiers` 契约，
+//! 供既有测试与 S7 删除前过渡；生产四轨思考键唯一入口 = [assemble_thinking_dialect]。
 
 use std::collections::BTreeMap;
 
@@ -65,7 +68,7 @@ impl ReasoningEffort {
     /// 解析 TitleCase 纯英文键（如 "Minimal", "Low", "Medium", "High", "X-High", "Max"）
     pub fn from_title_case(key: &str) -> Option<Self> {
         match key.trim() {
-            "Off" | "off" => Some(Self::Off),
+            "Off" | "off" | "None" | "none" | "Disabled" | "disabled" => Some(Self::Off),
             "Minimal" | "minimal" => Some(Self::Minimal),
             "Low" | "low" => Some(Self::Low),
             "Medium" | "medium" => Some(Self::Medium),
@@ -157,9 +160,9 @@ impl From<ThinkingIntensity> for ReasoningEffort {
 /// 思考方言格式类型
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ThinkingDialectFormat {
-    /// OpenAI 标准标量 (reasoning_effort: "low" | "medium" | "high")
+    /// OpenAI 标准标量 (reasoning_effort: "<wire>")
     OpenAiEffort,
-    /// OpenAI Responses 嵌套格式 (reasoning: { effort: "medium" })
+    /// OpenAI Responses 嵌套格式 (reasoning: { effort: "<wire>" })
     OpenAiResponsesNested,
     /// Anthropic 预算制格式 (thinking: { type: "enabled", budget_tokens: N })
     AnthropicBudget,
@@ -167,6 +170,8 @@ pub enum ThinkingDialectFormat {
     DeepSeekNative,
     /// 阿里百炼顶层布尔 (enable_thinking: true | false)
     QwenBailianBoolean,
+    /// Gemini 原生思考 (generationConfig.thinkingConfig.thinkingLevel / thinkingBudget)
+    GeminiThinkingConfig,
 }
 
 impl From<crate::models::catalog_types::ThinkingFormat> for ThinkingDialectFormat {
@@ -177,7 +182,7 @@ impl From<crate::models::catalog_types::ThinkingFormat> for ThinkingDialectForma
             crate::models::catalog_types::ThinkingFormat::Qwen => Self::QwenBailianBoolean,
             crate::models::catalog_types::ThinkingFormat::Zai => Self::DeepSeekNative,
             crate::models::catalog_types::ThinkingFormat::Anthropic => Self::AnthropicBudget,
-            crate::models::catalog_types::ThinkingFormat::Gemini => Self::OpenAiEffort,
+            crate::models::catalog_types::ThinkingFormat::Gemini => Self::GeminiThinkingConfig,
         }
     }
 }
@@ -197,6 +202,14 @@ pub struct DialectBuildOptions<'a> {
 /// 返回值：
 /// - `Option<Value>`: 注入请求体的思考参数 JSON 对象
 /// - `Option<u64>`: 建议自动向上抬升的 max_tokens（主要供 Anthropic 预算余量钳制使用）
+///
+/// 生产契约（plans/04 §2.3）：
+/// - `thinking_map` 为 `Some`：wire 值**只准**来自 map 命中（TitleCase 键；
+///   XHigh 兼容 `XHigh` / `X-High` 双拼写）。键未命中 → `(None, None)`
+///   （fail-closed；非法档位在 validate 已拒，本函数不降级、不用
+///   `to_openai_str` 当 map 的 fallback 键）。
+/// - `thinking_map` 为 `None`：不注入思考键；唯一例外是 DeepSeek / Qwen 的
+///   显式 Off → disabled / false（且仅当 format 已显式声明）。
 pub fn assemble_thinking_dialect(opts: &DialectBuildOptions<'_>) -> (Option<Value>, Option<u64>) {
     if opts.effort == ReasoningEffort::Off {
         match opts.format {
@@ -210,7 +223,8 @@ pub fn assemble_thinking_dialect(opts: &DialectBuildOptions<'_>) -> (Option<Valu
         }
     }
 
-    // 优先从用户自定义 thinking 拍平映射中获取 wire 字符串
+    // wire 值只来自用户字典（TitleCase 键；XHigh 兼容双拼写）。
+    // 禁止 `.or_else(|| opts.effort.to_openai_str())` 折叠兜底。
     let custom_wire_val = opts.thinking_map.and_then(|map| {
         map.get(opts.effort.to_title_case())
             .or_else(|| {
@@ -220,43 +234,41 @@ pub fn assemble_thinking_dialect(opts: &DialectBuildOptions<'_>) -> (Option<Valu
                     None
                 }
             })
-            .or_else(|| map.get(opts.effort.as_str()))
-            .or_else(|| {
-                opts.effort
-                    .to_openai_str()
-                    .and_then(|key| map.get(key))
-            })
     });
 
     match opts.format {
         ThinkingDialectFormat::OpenAiEffort => {
-            let str_val = custom_wire_val
-                .map(|s| s.as_str())
-                .or_else(|| opts.effort.to_openai_str())
-                .unwrap_or("medium");
+            let Some(str_val) = custom_wire_val else {
+                return (None, None);
+            };
             (Some(json!({ "reasoning_effort": str_val })), None)
         }
         ThinkingDialectFormat::OpenAiResponsesNested => {
-            let str_val = custom_wire_val
-                .map(|s| s.as_str())
-                .or_else(|| opts.effort.to_openai_str())
-                .unwrap_or("medium");
+            let Some(str_val) = custom_wire_val else {
+                return (None, None);
+            };
             (Some(json!({ "reasoning": { "effort": str_val } })), None)
         }
         ThinkingDialectFormat::AnthropicBudget => {
-            let parsed_custom_budget = custom_wire_val.and_then(|s| s.parse::<u64>().ok());
-            let raw_budget = parsed_custom_budget
-                .or_else(|| opts.effort.to_anthropic_budget())
-                .unwrap_or(8192);
+            let Some(wire) = custom_wire_val else {
+                return (None, None);
+            };
+            // 值为 adaptive → { type: "adaptive" }（Opus 4.7+ 新代际）
+            if wire == "adaptive" {
+                return (Some(json!({ "thinking": { "type": "adaptive" } })), None);
+            }
+            // 预算只来自用户字典数字（≥1024）；禁止 effort_to_budget_tokens 魔法刻度
+            let Some(parsed_budget) = wire.parse::<u64>().ok() else {
+                return (None, None);
+            };
+            let raw_budget = parsed_budget.max(1024);
             // 安全余量钳制：不能超过模型物理上限的一半，且至少预留 4096 tokens
             let max_cap = if opts.max_output_tokens > 0 {
                 opts.max_output_tokens
             } else {
                 64000
             };
-            let safe_budget = raw_budget
-                .min(max_cap.saturating_sub(4096))
-                .max(1024);
+            let safe_budget = raw_budget.min(max_cap.saturating_sub(4096)).max(1024);
             let elevated_max_tokens = safe_budget
                 .saturating_add(4096)
                 .min(max_cap.max(safe_budget + 4096));
@@ -271,10 +283,36 @@ pub fn assemble_thinking_dialect(opts: &DialectBuildOptions<'_>) -> (Option<Valu
             )
         }
         ThinkingDialectFormat::DeepSeekNative => {
-            (Some(json!({ "thinking": { "type": "enabled" } })), None)
+            // map 值若是 enabled/disabled 用字面，否则非 Off → enabled
+            let type_val: &str = match custom_wire_val.map(String::as_str) {
+                Some("enabled") => "enabled",
+                Some("disabled") => "disabled",
+                _ => "enabled",
+            };
+            (Some(json!({ "thinking": { "type": type_val } })), None)
         }
         ThinkingDialectFormat::QwenBailianBoolean => {
-            (Some(json!({ "enable_thinking": true })), None)
+            // map 值 "true"/"false"/"1"/"0" 解析，否则非 Off → true
+            let enabled = match custom_wire_val.map(String::as_str) {
+                Some("false") | Some("0") => false,
+                _ => true,
+            };
+            (Some(json!({ "enable_thinking": enabled })), None)
+        }
+        ThinkingDialectFormat::GeminiThinkingConfig => {
+            let Some(wire) = custom_wire_val else {
+                return (None, None);
+            };
+            // map 值原样（"HIGH" / "high" / 用户自定义）；数值字符串走 thinkingBudget
+            let thinking_config = if let Ok(budget) = wire.parse::<u64>() {
+                json!({ "thinkingBudget": budget })
+            } else {
+                json!({ "thinkingLevel": wire })
+            };
+            (
+                Some(json!({ "generationConfig": { "thinkingConfig": thinking_config } })),
+                None,
+            )
         }
     }
 }
@@ -331,12 +369,13 @@ pub fn build_reasoning_wire(
     policy: DegradePolicy,
 ) -> Result<Option<Value>, ReasoningReject> {
     // 0. deepseek 方言 off 显式 disabled：早退（无 effort wire）。
-    if matches!(effort, ReasoningEffortState::Explicit(LegacyReasoningEffort::Off))
-        && matches!(
-            vocabulary_vendor(vendor, capability),
-            ReasoningVendor::Deepseek
-        )
-    {
+    if matches!(
+        effort,
+        ReasoningEffortState::Explicit(LegacyReasoningEffort::Off)
+    ) && matches!(
+        vocabulary_vendor(vendor, capability),
+        ReasoningVendor::Deepseek
+    ) {
         return Ok(Some(json!({ "thinking": { "type": "disabled" } })));
     }
 
@@ -425,14 +464,38 @@ mod tests {
 
     #[test]
     fn test_reasoning_effort_conversions() {
-        assert_eq!(ReasoningEffort::from_title_case("Off"), Some(ReasoningEffort::Off));
-        assert_eq!(ReasoningEffort::from_title_case("Minimal"), Some(ReasoningEffort::Minimal));
-        assert_eq!(ReasoningEffort::from_title_case("Low"), Some(ReasoningEffort::Low));
-        assert_eq!(ReasoningEffort::from_title_case("Medium"), Some(ReasoningEffort::Medium));
-        assert_eq!(ReasoningEffort::from_title_case("High"), Some(ReasoningEffort::High));
-        assert_eq!(ReasoningEffort::from_title_case("XHigh"), Some(ReasoningEffort::XHigh));
-        assert_eq!(ReasoningEffort::from_title_case("X-High"), Some(ReasoningEffort::XHigh));
-        assert_eq!(ReasoningEffort::from_title_case("Max"), Some(ReasoningEffort::Max));
+        assert_eq!(
+            ReasoningEffort::from_title_case("Off"),
+            Some(ReasoningEffort::Off)
+        );
+        assert_eq!(
+            ReasoningEffort::from_title_case("Minimal"),
+            Some(ReasoningEffort::Minimal)
+        );
+        assert_eq!(
+            ReasoningEffort::from_title_case("Low"),
+            Some(ReasoningEffort::Low)
+        );
+        assert_eq!(
+            ReasoningEffort::from_title_case("Medium"),
+            Some(ReasoningEffort::Medium)
+        );
+        assert_eq!(
+            ReasoningEffort::from_title_case("High"),
+            Some(ReasoningEffort::High)
+        );
+        assert_eq!(
+            ReasoningEffort::from_title_case("XHigh"),
+            Some(ReasoningEffort::XHigh)
+        );
+        assert_eq!(
+            ReasoningEffort::from_title_case("X-High"),
+            Some(ReasoningEffort::XHigh)
+        );
+        assert_eq!(
+            ReasoningEffort::from_title_case("Max"),
+            Some(ReasoningEffort::Max)
+        );
         assert_eq!(ReasoningEffort::from_title_case("Unknown"), None);
 
         assert_eq!(ReasoningEffort::Off.to_title_case(), "Off");
@@ -453,11 +516,13 @@ mod tests {
 
     #[test]
     fn test_openai_effort_never_produces_numbers() {
+        let mut map = IndexMap::new();
+        map.insert("High".to_string(), "high".to_string());
         let opts = DialectBuildOptions {
             effort: ReasoningEffort::High,
             format: ThinkingDialectFormat::OpenAiEffort,
             max_output_tokens: 65536,
-            thinking_map: None,
+            thinking_map: Some(&map),
         };
         let (val, _) = assemble_thinking_dialect(&opts);
         let unwrapped = val.unwrap();
@@ -467,11 +532,13 @@ mod tests {
 
     #[test]
     fn test_openai_responses_nested() {
+        let mut map = IndexMap::new();
+        map.insert("Medium".to_string(), "medium".to_string());
         let opts = DialectBuildOptions {
             effort: ReasoningEffort::Medium,
             format: ThinkingDialectFormat::OpenAiResponsesNested,
             max_output_tokens: 65536,
-            thinking_map: None,
+            thinking_map: Some(&map),
         };
         let (val, _) = assemble_thinking_dialect(&opts);
         let unwrapped = val.unwrap();
@@ -481,11 +548,14 @@ mod tests {
 
     #[test]
     fn test_anthropic_budget_clamping() {
+        // 预算只来自用户字典数字（≥1024）；钳制逻辑保持
+        let mut map = IndexMap::new();
+        map.insert("High".to_string(), "16384".to_string());
         let opts = DialectBuildOptions {
-            effort: ReasoningEffort::High, // 请求 16384 tokens
+            effort: ReasoningEffort::High, // 字典 16384 tokens
             format: ThinkingDialectFormat::AnthropicBudget,
             max_output_tokens: 8192, // 模型物理上限较小
-            thinking_map: None,
+            thinking_map: Some(&map),
         };
         let (val, elevated_tokens) = assemble_thinking_dialect(&opts);
         let unwrapped = val.unwrap();
@@ -498,11 +568,13 @@ mod tests {
 
     #[test]
     fn test_anthropic_budget_elevation_assertion_3_2() {
+        let mut map = IndexMap::new();
+        map.insert("Medium".to_string(), "8192".to_string());
         let opts = DialectBuildOptions {
-            effort: ReasoningEffort::Medium, // 8192 tokens
+            effort: ReasoningEffort::Medium, // 字典 8192 tokens
             format: ThinkingDialectFormat::AnthropicBudget,
             max_output_tokens: 65536,
-            thinking_map: None,
+            thinking_map: Some(&map),
         };
         let (val, elevated_tokens) = assemble_thinking_dialect(&opts);
         let unwrapped = val.unwrap();
@@ -510,6 +582,80 @@ mod tests {
         assert_eq!(budget, 8192);
         assert!(elevated_tokens.unwrap() >= 12288);
         assert_eq!(elevated_tokens, Some(12288));
+    }
+
+    #[test]
+    fn test_anthropic_adaptive_from_map_value() {
+        let mut map = IndexMap::new();
+        map.insert("Max".to_string(), "adaptive".to_string());
+        let opts = DialectBuildOptions {
+            effort: ReasoningEffort::Max,
+            format: ThinkingDialectFormat::AnthropicBudget,
+            max_output_tokens: 65536,
+            thinking_map: Some(&map),
+        };
+        let (val, _) = assemble_thinking_dialect(&opts);
+        assert_eq!(val.unwrap()["thinking"]["type"], "adaptive");
+    }
+
+    #[test]
+    fn test_gemini_thinking_config_preserves_map_literal() {
+        // W7 语义：map 值原样进 thinkingConfig.thinkingLevel（"HIGH" 不折 "high"）
+        let mut map = IndexMap::new();
+        map.insert("High".to_string(), "HIGH".to_string());
+        let opts = DialectBuildOptions {
+            effort: ReasoningEffort::High,
+            format: ThinkingDialectFormat::GeminiThinkingConfig,
+            max_output_tokens: 65536,
+            thinking_map: Some(&map),
+        };
+        let (val, _) = assemble_thinking_dialect(&opts);
+        let unwrapped = val.unwrap();
+        assert_eq!(
+            unwrapped["generationConfig"]["thinkingConfig"]["thinkingLevel"],
+            "HIGH"
+        );
+    }
+
+    #[test]
+    fn test_gemini_thinking_config_numeric_goes_budget() {
+        let mut map = IndexMap::new();
+        map.insert("High".to_string(), "16384".to_string());
+        let opts = DialectBuildOptions {
+            effort: ReasoningEffort::High,
+            format: ThinkingDialectFormat::GeminiThinkingConfig,
+            max_output_tokens: 65536,
+            thinking_map: Some(&map),
+        };
+        let (val, _) = assemble_thinking_dialect(&opts);
+        let unwrapped = val.unwrap();
+        assert_eq!(
+            unwrapped["generationConfig"]["thinkingConfig"]["thinkingBudget"],
+            16384
+        );
+    }
+
+    #[test]
+    fn test_map_miss_or_none_fails_closed_no_key() {
+        // 字典有、当前 TitleCase 键缺 → (None, None)（validate 已拒；不降级）
+        let mut map = IndexMap::new();
+        map.insert("Low".to_string(), "low".to_string());
+        let opts = DialectBuildOptions {
+            effort: ReasoningEffort::High,
+            format: ThinkingDialectFormat::OpenAiEffort,
+            max_output_tokens: 65536,
+            thinking_map: Some(&map),
+        };
+        assert_eq!(assemble_thinking_dialect(&opts), (None, None));
+
+        // map 为 None → 不注入思考键（OpenAiEffort 等非开关方言）
+        let no_map = DialectBuildOptions {
+            effort: ReasoningEffort::High,
+            format: ThinkingDialectFormat::OpenAiEffort,
+            max_output_tokens: 65536,
+            thinking_map: None,
+        };
+        assert_eq!(assemble_thinking_dialect(&no_map), (None, None));
     }
 
     #[test]
@@ -626,7 +772,9 @@ mod tests {
             .blocks
             .iter()
             .all(|b| !matches!(b, AgentMessageBlock::Thought { .. })));
-        assert!(matches!(&asst.blocks[0], AgentMessageBlock::Text { text } if text == "Here is the response"));
+        assert!(
+            matches!(&asst.blocks[0], AgentMessageBlock::Text { text } if text == "Here is the response")
+        );
         assert!(matches!(&asst.blocks[1], AgentMessageBlock::ToolCall(_)));
 
         // Metadata must have thought and reasoning_content stripped

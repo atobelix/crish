@@ -7,8 +7,10 @@
 use super::test_common::*;
 use super::*;
 
+use crate::models::catalog_types::ThinkingFormat;
 use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
 use conex_types::tool::ToolOutput;
+use indexmap::IndexMap;
 use serde_json::json;
 use std::sync::Arc;
 
@@ -47,6 +49,8 @@ fn build_system_prompt_none_passes_through() {
 
 #[test]
 fn body_shape_with_all_fields() {
+    let mut thinking_map = IndexMap::new();
+    thinking_map.insert("Low".to_string(), "low".to_string());
     let opts = ChatCompletionsRequestOptions {
         model: Some("gpt-4o".to_string()),
         stream: Some(true),
@@ -55,6 +59,8 @@ fn body_shape_with_all_fields() {
         max_tokens: Some(2048),
         max_tokens_field: Some(MaxTokensField::MaxTokens),
         reasoning_effort: Some(ReasoningEffort::Low),
+        thinking_format: Some(ThinkingFormat::OpenAi),
+        thinking_map: Some(thinking_map),
         ..ChatCompletionsRequestOptions::default()
     };
     let messages: Vec<Arc<AgentMessage>> = vec![Arc::new(user_message("你好"))];
@@ -162,8 +168,13 @@ fn tool_choice_explicit_function() {
 
 #[test]
 fn reasoning_effort_vendor_auto_injects_reasoning_effort() {
+    // plans/04 §7.1：显式 thinking_format + 字典 → 思考键只来自 dialect
+    let mut thinking_map = IndexMap::new();
+    thinking_map.insert("High".to_string(), "high".to_string());
     let opts = ChatCompletionsRequestOptions {
         reasoning_effort: Some(ReasoningEffort::High),
+        thinking_format: Some(ThinkingFormat::OpenAi),
+        thinking_map: Some(thinking_map),
         ..base_opts()
     };
     let body = build_chat_completions_request_body(&opts, &RequestBuildContext::default());
@@ -171,42 +182,66 @@ fn reasoning_effort_vendor_auto_injects_reasoning_effort() {
 }
 
 #[test]
-fn thinking_intensity_overrides_legacy_reasoning_fields() {
-    // 01 D5：thinkingIntensity 提供时清除 legacy 字段并注入 vendor 原生参数
+fn thinking_format_driven_shapes_per_format() {
+    // 显式 format 驱动：deepseek → thinking{type:enabled}（map 字面 enabled/disabled
+    // 优先生效）；anthropic → budget；gemini → thinkingConfig（Map 值为准，禁止折叠）。
+    // 无 format → 不注入。
+    let mut deepseek_map = IndexMap::new();
+    deepseek_map.insert("High".to_string(), "disabled".to_string());
     let opts = ChatCompletionsRequestOptions {
         reasoning_effort: Some(ReasoningEffort::High),
-        thinking_intensity: Some(ThinkingIntensity::Medium),
         model: Some("deepseek-reasoner".to_string()),
-        ..ChatCompletionsRequestOptions::default()
-    };
-    let body = build_chat_completions_request_body(&opts, &RequestBuildContext::default());
-    // legacy reasoning_effort=high 被 thinkingIntensity 清除后重新注入 medium
-    assert_eq!(
-        body["reasoning_effort"], "medium",
-        "deepseek → reasoning_effort"
-    );
-
-    let opts = ChatCompletionsRequestOptions {
-        thinking_intensity: Some(ThinkingIntensity::High),
-        model: Some("claude-sonnet-4".to_string()),
+        thinking_format: Some(ThinkingFormat::DeepSeek),
+        thinking_map: Some(deepseek_map),
         ..ChatCompletionsRequestOptions::default()
     };
     let body = build_chat_completions_request_body(&opts, &RequestBuildContext::default());
     assert_eq!(
         body["thinking"],
-        json!({ "type": "enabled", "budget_tokens": 4096 })
+        json!({ "type": "disabled" }),
+        "map 字面 disabled 优先生效（非 Off 也按字典）"
     );
 
+    let mut anthropic_map = IndexMap::new();
+    anthropic_map.insert("High".to_string(), "16384".to_string());
     let opts = ChatCompletionsRequestOptions {
-        thinking_intensity: Some(ThinkingIntensity::Xhigh),
-        model: Some("gemini-2.5-flash".to_string()),
+        reasoning_effort: Some(ReasoningEffort::High),
+        model: Some("claude-sonnet-4".to_string()),
+        thinking_format: Some(ThinkingFormat::Anthropic),
+        thinking_map: Some(anthropic_map),
         ..ChatCompletionsRequestOptions::default()
     };
     let body = build_chat_completions_request_body(&opts, &RequestBuildContext::default());
     assert_eq!(
-        body["generation_config"],
-        json!({ "thinking_level": "high" })
+        body["thinking"],
+        json!({ "type": "enabled", "budget_tokens": 16384 })
     );
+
+    let mut gemini_map = IndexMap::new();
+    gemini_map.insert("High".to_string(), "HIGH".to_string());
+    let opts = ChatCompletionsRequestOptions {
+        reasoning_effort: Some(ReasoningEffort::High),
+        model: Some("gemini-2.5-flash".to_string()),
+        thinking_format: Some(ThinkingFormat::Gemini),
+        thinking_map: Some(gemini_map),
+        ..ChatCompletionsRequestOptions::default()
+    };
+    let body = build_chat_completions_request_body(&opts, &RequestBuildContext::default());
+    assert_eq!(
+        body["generationConfig"],
+        json!({ "thinkingConfig": { "thinkingLevel": "HIGH" } })
+    );
+
+    // 无 format → 不写任何思考键（fail-closed）
+    let opts = ChatCompletionsRequestOptions {
+        reasoning_effort: Some(ReasoningEffort::High),
+        model: Some("unknown-model".to_string()),
+        ..ChatCompletionsRequestOptions::default()
+    };
+    let body = build_chat_completions_request_body(&opts, &RequestBuildContext::default());
+    for key in ["reasoning_effort", "thinking", "generationConfig"] {
+        assert!(body.get(key).is_none(), "{key} 不应出现：{body}");
+    }
 }
 
 #[test]
@@ -237,105 +272,98 @@ fn thinking_intensity_unsupported_model_injects_nothing() {
 
 #[test]
 fn vendor_anthropic_effort_injects_thinking_budget() {
+    // plans/04 §2.2：Anthropic 预算只来自字典数字（≥1024），禁止魔法刻度
+    let mut thinking_map = IndexMap::new();
+    thinking_map.insert("High".to_string(), "16384".to_string());
     let opts = ChatCompletionsRequestOptions {
         reasoning_effort: Some(ReasoningEffort::High),
         vendor: Some(ReasoningVendor::Anthropic),
+        thinking_format: Some(ThinkingFormat::Anthropic),
+        thinking_map: Some(thinking_map),
         ..base_opts()
     };
     let body = build_chat_completions_request_body(&opts, &RequestBuildContext::default());
     assert_eq!(
         body["thinking"],
-        json!({ "type": "enabled", "budget_tokens": 4096 })
+        json!({ "type": "enabled", "budget_tokens": 16384 })
     );
 }
 
-// ── G7：Anthropic 自适应思考（Opus 4.7+ / Sonnet 5+）──
+// ── G7 收敛：自适应思考经字典值表达（plans/04 §2.2：`High: "adaptive"`）──
 
 #[test]
 fn adaptive_anthropic_thinking_intensity_injects_adaptive_shape() {
-    // G7：新代际 thinkingIntensity → thinking{type:adaptive,display:summarized} + effort
+    // 字典值 "adaptive" → thinking{type:"adaptive"}（不折 budget 表）
+    let mut thinking_map = IndexMap::new();
+    thinking_map.insert("High".to_string(), "adaptive".to_string());
     let opts = ChatCompletionsRequestOptions {
         thinking_intensity: Some(ThinkingIntensity::High),
         model: Some("claude-opus-4-7".to_string()),
+        thinking_format: Some(ThinkingFormat::Anthropic),
+        thinking_map: Some(thinking_map),
         ..ChatCompletionsRequestOptions::default()
     };
     let body = build_chat_completions_request_body(&opts, &RequestBuildContext::default());
-    assert_eq!(
-        body["thinking"],
-        json!({ "type": "adaptive", "display": "summarized" })
-    );
-    assert_eq!(body["effort"], "high");
+    assert_eq!(body["thinking"], json!({ "type": "adaptive" }));
     assert!(
         body["thinking"].get("budget_tokens").is_none(),
         "adaptive 形态不带 budget_tokens"
     );
-
-    let opts = ChatCompletionsRequestOptions {
-        thinking_intensity: Some(ThinkingIntensity::Max),
-        model: Some("claude-sonnet-5".to_string()),
-        ..ChatCompletionsRequestOptions::default()
-    };
-    let body = build_chat_completions_request_body(&opts, &RequestBuildContext::default());
-    assert_eq!(
-        body["thinking"],
-        json!({ "type": "adaptive", "display": "summarized" })
-    );
-    assert_eq!(body["effort"], "max");
 }
 
 #[test]
 fn adaptive_anthropic_legacy_effort_injects_adaptive_shape() {
-    // 新代际 + 显式 anthropic vendor：adaptive + display summarized + effort
+    // 字典值 adaptive（Max 档）→ {type:"adaptive"}
+    let mut thinking_map = IndexMap::new();
+    thinking_map.insert("Max".to_string(), "adaptive".to_string());
     let opts = ChatCompletionsRequestOptions {
-        reasoning_effort: Some(ReasoningEffort::Xhigh),
+        reasoning_effort: Some(ReasoningEffort::Max),
         vendor: Some(ReasoningVendor::Anthropic),
         model: Some("claude-opus-4-7".to_string()),
+        thinking_format: Some(ThinkingFormat::Anthropic),
+        thinking_map: Some(thinking_map),
         ..ChatCompletionsRequestOptions::default()
     };
     let body = build_chat_completions_request_body(&opts, &RequestBuildContext::default());
-    assert_eq!(
-        body["thinking"],
-        json!({ "type": "adaptive", "display": "summarized" })
-    );
-    assert_eq!(body["effort"], "xhigh");
-    assert!(
-        body["thinking"].get("budget_tokens").is_none(),
-        "adaptive 形态不带 budget_tokens"
-    );
+    assert_eq!(body["thinking"], json!({ "type": "adaptive" }));
 
-    // 旧代际行为不变：enabled+budget_tokens、无顶层 effort
+    // 字典数字 → enabled + budget_tokens（同一 builder，值决定形态）
+    let mut thinking_map = IndexMap::new();
+    thinking_map.insert("High".to_string(), "16384".to_string());
     let opts = ChatCompletionsRequestOptions {
         reasoning_effort: Some(ReasoningEffort::High),
         vendor: Some(ReasoningVendor::Anthropic),
         model: Some("claude-opus-4-6".to_string()),
+        thinking_format: Some(ThinkingFormat::Anthropic),
+        thinking_map: Some(thinking_map),
         ..ChatCompletionsRequestOptions::default()
     };
     let body = build_chat_completions_request_body(&opts, &RequestBuildContext::default());
     assert_eq!(
         body["thinking"],
-        json!({ "type": "enabled", "budget_tokens": 4096 })
+        json!({ "type": "enabled", "budget_tokens": 16384 })
     );
-    assert!(body.get("effort").is_none(), "旧代际不注入顶层 effort");
 }
 
 #[test]
 fn adaptive_legacy_effort_cleared_by_thinking_intensity() {
-    // thinkingIntensity 覆盖时，legacy 注入的顶层 effort 必须被清除
+    // thinkingIntensity 覆盖：intensity 优先生效（legacy effort 不再注入）
+    let mut thinking_map = IndexMap::new();
+    thinking_map.insert("Medium".to_string(), "adaptive".to_string());
     let opts = ChatCompletionsRequestOptions {
         reasoning_effort: Some(ReasoningEffort::Max),
         vendor: Some(ReasoningVendor::Anthropic),
         thinking_intensity: Some(ThinkingIntensity::Medium),
         model: Some("claude-opus-4-7".to_string()),
+        thinking_format: Some(ThinkingFormat::Anthropic),
+        thinking_map: Some(thinking_map),
         ..ChatCompletionsRequestOptions::default()
     };
     let body = build_chat_completions_request_body(&opts, &RequestBuildContext::default());
     assert_eq!(
         body["thinking"],
-        json!({ "type": "adaptive", "display": "summarized" })
-    );
-    assert_eq!(
-        body["effort"], "medium",
-        "thinkingIntensity 覆盖后 effort 应为新档位"
+        json!({ "type": "adaptive" }),
+        "intensity=Medium → 字典 Medium 值 adaptive"
     );
 }
 

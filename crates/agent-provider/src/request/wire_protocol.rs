@@ -142,7 +142,9 @@ pub fn resolve_effective_protocol(
 }
 
 /// 基于字符串上下文的三级协议决议包装函数
-pub fn resolve_effective_protocol_from_context(ctx: &ProtocolResolutionContext<'_>) -> WireProtocol {
+pub fn resolve_effective_protocol_from_context(
+    ctx: &ProtocolResolutionContext<'_>,
+) -> WireProtocol {
     let model_proto = ctx
         .model_protocol
         .and_then(WireProtocol::from_raw_str)
@@ -187,6 +189,10 @@ pub fn build_endpoint_url(protocol: ProtocolKind, base_url: &str) -> String {
         ProtocolKind::OpenAiChat => {
             if trimmed_base.ends_with("/chat/completions") {
                 trimmed_base.to_string()
+            } else if trimmed_base.ends_with("/v1") {
+                format!("{trimmed_base}/chat/completions")
+            } else if trimmed_base.contains("sensenova.cn") || trimmed_base.ends_with("openai.com") {
+                format!("{trimmed_base}/v1/chat/completions")
             } else {
                 format!("{trimmed_base}/chat/completions")
             }

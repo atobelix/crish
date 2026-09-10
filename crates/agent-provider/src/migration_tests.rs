@@ -94,8 +94,8 @@ models:
     fs::write(&config_path, legacy_yaml).expect("写入旧版配置成功");
     let original_bytes = fs::metadata(&config_path).unwrap().len();
 
-    let status = ConfigMigrationManager::ensure_migrated(&config_path)
-        .expect("旧版配置迁移必须成功");
+    let status =
+        ConfigMigrationManager::ensure_migrated(&config_path).expect("旧版配置迁移必须成功");
 
     // 1. 状态与备份校验
     match status {
@@ -120,7 +120,10 @@ models:
                 "备份文件名必须包含 .bak. 时间戳标记"
             );
             assert_eq!(model_count, 6, "迁移后模型数必须为 6");
-            assert_eq!(provider_count, 5, "供应商聚类总数必须为 5 (deepseek, qwen, openai, anthropic, custom)");
+            assert_eq!(
+                provider_count, 5,
+                "供应商聚类总数必须为 5 (deepseek, qwen, openai, anthropic, custom)"
+            );
         }
         MigrationStatus::AlreadyUpToDate => panic!("初次运行旧版配置不应返回 AlreadyUpToDate"),
     }
@@ -131,54 +134,125 @@ models:
 
     // 3. 验证迁移后的树状 YAML 结构与字段保真度
     let migrated_str = fs::read_to_string(&config_path).expect("读取迁移后文件");
-    let v2_value: serde_json::Value = serde_yaml::from_str(&migrated_str).expect("有效 YAML 反序列化");
+    let v2_value: serde_json::Value =
+        serde_yaml::from_str(&migrated_str).expect("有效 YAML 反序列化");
 
-    assert_eq!(v2_value.get("schema_version").and_then(|v| v.as_u64()), Some(2));
+    assert_eq!(
+        v2_value.get("schema_version").and_then(|v| v.as_u64()),
+        Some(2)
+    );
     assert_eq!(v2_value.get("version").and_then(|v| v.as_u64()), Some(2));
 
-    let providers = v2_value.get("providers").and_then(|v| v.as_object()).expect("providers 对象");
+    let providers = v2_value
+        .get("providers")
+        .and_then(|v| v.as_object())
+        .expect("providers 对象");
     assert_eq!(providers.len(), 5);
 
     // 4. 验证 DeepSeek 供应商及其下属模型
     let ds = providers.get("deepseek").expect("deepseek 供应商存在");
-    assert_eq!(ds.get("baseUrl").and_then(|v| v.as_str()), Some("https://api.deepseek.com"));
-    assert_eq!(ds.get("protocol").and_then(|v| v.as_str()), Some("openai/chat"));
     assert_eq!(
-        ds.get("compat").and_then(|c| c.get("thinkingFormat")).and_then(|v| v.as_str()),
+        ds.get("baseUrl").and_then(|v| v.as_str()),
+        Some("https://api.deepseek.com")
+    );
+    assert_eq!(
+        ds.get("protocol").and_then(|v| v.as_str()),
+        Some("openai/chat")
+    );
+    assert_eq!(
+        ds.get("compat")
+            .and_then(|c| c.get("thinkingFormat"))
+            .and_then(|v| v.as_str()),
         Some("deepseek")
     );
 
-    let ds_models = ds.get("models").and_then(|v| v.as_array()).expect("deepseek 模型数组");
+    let ds_models = ds
+        .get("models")
+        .and_then(|v| v.as_array())
+        .expect("deepseek 模型数组");
     assert_eq!(ds_models.len(), 2);
 
-    let ds_chat = ds_models.iter().find(|m| m.get("id").and_then(|v| v.as_str()) == Some("deepseek-chat")).unwrap();
-    assert_eq!(ds_chat.get("displayName").and_then(|v| v.as_str()), Some("DeepSeek V3"));
-    assert_eq!(ds_chat.get("contextWindow").and_then(|v| v.as_u64()), Some(65536));
-    assert_eq!(ds_chat.get("maxOutputTokens").and_then(|v| v.as_u64()), Some(8192));
-    assert!(ds_chat.get("thinking").is_none(), "非思考模型必须省略 thinking 字段");
+    let ds_chat = ds_models
+        .iter()
+        .find(|m| m.get("id").and_then(|v| v.as_str()) == Some("deepseek-chat"))
+        .unwrap();
+    assert_eq!(
+        ds_chat.get("displayName").and_then(|v| v.as_str()),
+        Some("DeepSeek V3")
+    );
+    assert_eq!(
+        ds_chat.get("contextWindow").and_then(|v| v.as_u64()),
+        Some(65536)
+    );
+    assert_eq!(
+        ds_chat.get("maxOutputTokens").and_then(|v| v.as_u64()),
+        Some(8192)
+    );
+    assert!(
+        ds_chat.get("thinking").is_none(),
+        "非思考模型必须省略 thinking 字段"
+    );
     let modalities = ds_chat.get("modalities").expect("多模态规格补齐");
-    assert_eq!(modalities.get("input").and_then(|v| v.as_array()).unwrap().len(), 1);
-    assert_eq!(modalities.get("output").and_then(|v| v.as_array()).unwrap().len(), 1);
+    assert_eq!(
+        modalities
+            .get("input")
+            .and_then(|v| v.as_array())
+            .unwrap()
+            .len(),
+        1
+    );
+    assert_eq!(
+        modalities
+            .get("output")
+            .and_then(|v| v.as_array())
+            .unwrap()
+            .len(),
+        1
+    );
 
-    let ds_reasoner = ds_models.iter().find(|m| m.get("id").and_then(|v| v.as_str()) == Some("deepseek-reasoner")).unwrap();
-    assert_eq!(ds_reasoner.get("contextWindow").and_then(|v| v.as_u64()), Some(131072));
-    assert_eq!(ds_reasoner.get("maxOutputTokens").and_then(|v| v.as_u64()), Some(32768));
-    let thinking = ds_reasoner.get("thinking").and_then(|v| v.as_object()).expect("思考模型拍平字典");
+    let ds_reasoner = ds_models
+        .iter()
+        .find(|m| m.get("id").and_then(|v| v.as_str()) == Some("deepseek-reasoner"))
+        .unwrap();
+    assert_eq!(
+        ds_reasoner.get("contextWindow").and_then(|v| v.as_u64()),
+        Some(131072)
+    );
+    assert_eq!(
+        ds_reasoner.get("maxOutputTokens").and_then(|v| v.as_u64()),
+        Some(32768)
+    );
+    let thinking = ds_reasoner
+        .get("thinking")
+        .and_then(|v| v.as_object())
+        .expect("思考模型拍平字典");
     assert_eq!(thinking.get("Low").and_then(|v| v.as_str()), Some("low"));
-    assert_eq!(thinking.get("Medium").and_then(|v| v.as_str()), Some("medium"));
+    assert_eq!(
+        thinking.get("Medium").and_then(|v| v.as_str()),
+        Some("medium")
+    );
     assert_eq!(thinking.get("High").and_then(|v| v.as_str()), Some("high"));
 
     // 5. 验证 OpenAI 供应商与 apiKey 迁移
     let openai = providers.get("openai").expect("openai 供应商存在");
-    assert_eq!(openai.get("apiKey").and_then(|v| v.as_str()), Some("sk-proj-test123456"));
     assert_eq!(
-        openai.get("compat").and_then(|c| c.get("thinkingFormat")).and_then(|v| v.as_str()),
+        openai.get("apiKey").and_then(|v| v.as_str()),
+        Some("sk-proj-test123456")
+    );
+    assert_eq!(
+        openai
+            .get("compat")
+            .and_then(|c| c.get("thinkingFormat"))
+            .and_then(|v| v.as_str()),
         Some("openai")
     );
 
     // 6. 验证 Anthropic 供应商与协议继承
     let anthropic = providers.get("anthropic").expect("anthropic 供应商存在");
-    assert_eq!(anthropic.get("protocol").and_then(|v| v.as_str()), Some("anthropic/messages"));
+    assert_eq!(
+        anthropic.get("protocol").and_then(|v| v.as_str()),
+        Some("anthropic/messages")
+    );
     let claude_model = anthropic
         .get("models")
         .and_then(|v| v.as_array())
@@ -186,12 +260,25 @@ models:
         .iter()
         .find(|m| m.get("id").and_then(|v| v.as_str()) == Some("claude-3-5-sonnet"))
         .unwrap();
-    assert!(claude_model.get("thinking").is_some(), "capabilities.reasoning 思考模型正常转换");
+    assert!(
+        claude_model.get("thinking").is_some(),
+        "capabilities.reasoning 思考模型正常转换"
+    );
 
     // 7. 验证 custom 默认聚类
     let custom = providers.get("custom").expect("custom 供应商存在");
-    assert_eq!(custom.get("protocol").and_then(|v| v.as_str()), Some("openai/chat"));
-    assert_eq!(custom.get("models").and_then(|v| v.as_array()).unwrap().len(), 1);
+    assert_eq!(
+        custom.get("protocol").and_then(|v| v.as_str()),
+        Some("openai/chat")
+    );
+    assert_eq!(
+        custom
+            .get("models")
+            .and_then(|v| v.as_array())
+            .unwrap()
+            .len(),
+        1
+    );
 
     // 8. 强类型契约反序列化校验（保证与 catalog_types 完全契约对齐）
     let catalog_config: crate::models::catalog_types::UnifiedModelsConfig =
@@ -318,7 +405,10 @@ fn test_invalid_yaml_syntax_returns_error_and_preserves_file() {
 
     // 验证原文件未被破坏覆盖
     let content = fs::read_to_string(&config_path).unwrap();
-    assert_eq!(content, broken_yaml, "发生语法解析异常时必须 100% 保持原文件不动");
+    assert_eq!(
+        content, broken_yaml,
+        "发生语法解析异常时必须 100% 保持原文件不动"
+    );
 }
 
 #[test]
@@ -339,7 +429,12 @@ models:
     fs::write(&config_path, legacy_yaml).unwrap();
 
     let status = ConfigMigrationManager::ensure_migrated(&config_path).unwrap();
-    if let MigrationStatus::MigratedSuccessfully { model_count, provider_count, .. } = status {
+    if let MigrationStatus::MigratedSuccessfully {
+        model_count,
+        provider_count,
+        ..
+    } = status
+    {
         assert_eq!(model_count, 3);
         assert_eq!(provider_count, 2);
     } else {
@@ -419,7 +514,9 @@ fn test_protocol_and_compat_inference_for_all_vendors() {
 
     let oai_compat = ConfigMigrationManager::infer_compat_for_vendor("openai");
     assert_eq!(
-        oai_compat.get("supportsDeveloperRole").and_then(|v| v.as_bool()),
+        oai_compat
+            .get("supportsDeveloperRole")
+            .and_then(|v| v.as_bool()),
         Some(true)
     );
     assert_eq!(
@@ -454,7 +551,10 @@ models:
     let unified: crate::models::catalog_types::UnifiedModelsConfig =
         serde_yaml::from_str(&content).expect("与 catalog_types 强类型契约无缝对齐");
 
-    let prov = unified.providers.get("custom").expect("custom provider 存在");
+    let prov = unified
+        .providers
+        .get("custom")
+        .expect("custom provider 存在");
     let model = prov.models.first().expect("model 存在");
     assert_eq!(model.id, "special-model");
     assert_eq!(
@@ -463,7 +563,10 @@ models:
     );
     assert!(model.pricing.is_some(), "pricing 规格定义完整保留");
     let pricing = model.pricing.as_ref().unwrap();
-    assert_eq!(pricing.currency, crate::models::catalog_types::CurrencyKind::Usd);
+    assert_eq!(
+        pricing.currency,
+        crate::models::catalog_types::CurrencyKind::Usd
+    );
     assert_eq!(pricing.input, 5.0);
     assert_eq!(pricing.output, 15.0);
     assert_eq!(pricing.cache_read, Some(0.5));

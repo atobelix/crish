@@ -33,8 +33,14 @@ fn is_legacy_max_tokens_gateway(vendor: &str, base_url: &str) -> bool {
 
     // 优先基于显式配置的 vendor 判定，避免写死 URL 包含
     match vendor_name.as_str() {
-        "chutes" | "moonshot" | "moonshotai" | "moonshotai-cn" | "cloudflare-ai-gateway"
-        | "together" | "nvidia" | "ant-ling" => return true,
+        "chutes"
+        | "moonshot"
+        | "moonshotai"
+        | "moonshotai-cn"
+        | "cloudflare-ai-gateway"
+        | "together"
+        | "nvidia"
+        | "ant-ling" => return true,
         _ => {}
     }
 
@@ -153,7 +159,9 @@ pub fn resolve_developer_role(
     }
     let url = base_url.to_ascii_lowercase();
     let vendor_name = vendor.to_ascii_lowercase();
-    let is_openrouter = vendor_name == "openrouter" || vendor_name.contains("openrouter") || url.contains("openrouter");
+    let is_openrouter = vendor_name == "openrouter"
+        || vendor_name.contains("openrouter")
+        || url.contains("openrouter");
     if !is_openrouter {
         return false;
     }

@@ -243,10 +243,7 @@ fn wire_protocol_as_str_is_stable() {
 /// → 返回其 mode（Gemini），不落 chat 兜底。
 #[test]
 fn dotted_model_normalizes_to_hyphen_key_gemini() {
-    let catalog = fake_catalog(&[(
-        "acme::gemini-2-5-pro".into(),
-        entry(Some("gemini"), false),
-    )]);
+    let catalog = fake_catalog(&[("acme::gemini-2-5-pro".into(), entry(Some("gemini"), false))]);
     assert_eq!(
         resolve_wire_protocol(&catalog, "acme", "gemini-2.5-pro", None),
         WireProtocol::Gemini,
@@ -284,7 +281,12 @@ fn dotted_model_without_hyphen_key_falls_back_to_chat() {
 fn hyphen_model_follows_original_exact_lookup() {
     let catalog = fake_catalog(&[("acme::gemini-2-5-pro".into(), entry(Some("gemini"), false))]);
     assert_eq!(
-        resolve_wire_protocol(&catalog, "acme", "gemini-2-5-pro", Some(Endpoint::Responses)),
+        resolve_wire_protocol(
+            &catalog,
+            "acme",
+            "gemini-2-5-pro",
+            Some(Endpoint::Responses)
+        ),
         WireProtocol::Gemini,
         "横线键精确命中 mode，独立于归一路径",
     );
@@ -384,31 +386,70 @@ fn test_resolve_effective_protocol_from_context() {
 #[test]
 fn test_wire_protocol_protocol_kind_bidirectional_conversion() {
     // ProtocolKind -> WireProtocol
-    assert_eq!(WireProtocol::from(ProtocolKind::OpenAiChat), WireProtocol::Chat);
-    assert_eq!(WireProtocol::from(ProtocolKind::OpenAiResponses), WireProtocol::Responses);
-    assert_eq!(WireProtocol::from(ProtocolKind::AnthropicMessages), WireProtocol::Anthropic);
-    assert_eq!(WireProtocol::from(ProtocolKind::GoogleGenerateContent), WireProtocol::Gemini);
+    assert_eq!(
+        WireProtocol::from(ProtocolKind::OpenAiChat),
+        WireProtocol::Chat
+    );
+    assert_eq!(
+        WireProtocol::from(ProtocolKind::OpenAiResponses),
+        WireProtocol::Responses
+    );
+    assert_eq!(
+        WireProtocol::from(ProtocolKind::AnthropicMessages),
+        WireProtocol::Anthropic
+    );
+    assert_eq!(
+        WireProtocol::from(ProtocolKind::GoogleGenerateContent),
+        WireProtocol::Gemini
+    );
 
     // WireProtocol -> ProtocolKind
-    assert_eq!(ProtocolKind::from(WireProtocol::Chat), ProtocolKind::OpenAiChat);
-    assert_eq!(ProtocolKind::from(WireProtocol::Responses), ProtocolKind::OpenAiResponses);
-    assert_eq!(ProtocolKind::from(WireProtocol::Anthropic), ProtocolKind::AnthropicMessages);
-    assert_eq!(ProtocolKind::from(WireProtocol::Gemini), ProtocolKind::GoogleGenerateContent);
+    assert_eq!(
+        ProtocolKind::from(WireProtocol::Chat),
+        ProtocolKind::OpenAiChat
+    );
+    assert_eq!(
+        ProtocolKind::from(WireProtocol::Responses),
+        ProtocolKind::OpenAiResponses
+    );
+    assert_eq!(
+        ProtocolKind::from(WireProtocol::Anthropic),
+        ProtocolKind::AnthropicMessages
+    );
+    assert_eq!(
+        ProtocolKind::from(WireProtocol::Gemini),
+        ProtocolKind::GoogleGenerateContent
+    );
 
     // Helper methods
     assert_eq!(WireProtocol::Chat.protocol_kind(), ProtocolKind::OpenAiChat);
-    assert_eq!(WireProtocol::from_protocol_kind(ProtocolKind::OpenAiResponses), WireProtocol::Responses);
+    assert_eq!(
+        WireProtocol::from_protocol_kind(ProtocolKind::OpenAiResponses),
+        WireProtocol::Responses
+    );
     assert_eq!(WireProtocol::Chat.wire_name(), "openai/chat");
     assert_eq!(WireProtocol::Responses.wire_name(), "openai/responses");
     assert_eq!(WireProtocol::Anthropic.wire_name(), "anthropic/messages");
     assert_eq!(WireProtocol::Gemini.wire_name(), "google/generate-content");
 
     // from_raw_str
-    assert_eq!(WireProtocol::from_raw_str("openai/chat"), Some(WireProtocol::Chat));
+    assert_eq!(
+        WireProtocol::from_raw_str("openai/chat"),
+        Some(WireProtocol::Chat)
+    );
     assert_eq!(WireProtocol::from_raw_str("chat"), Some(WireProtocol::Chat));
-    assert_eq!(WireProtocol::from_raw_str("OPENAI/RESPONSES"), Some(WireProtocol::Responses));
-    assert_eq!(WireProtocol::from_raw_str("anthropic/messages"), Some(WireProtocol::Anthropic));
-    assert_eq!(WireProtocol::from_raw_str("gemini"), Some(WireProtocol::Gemini));
+    assert_eq!(
+        WireProtocol::from_raw_str("OPENAI/RESPONSES"),
+        Some(WireProtocol::Responses)
+    );
+    assert_eq!(
+        WireProtocol::from_raw_str("anthropic/messages"),
+        Some(WireProtocol::Anthropic)
+    );
+    assert_eq!(
+        WireProtocol::from_raw_str("gemini"),
+        Some(WireProtocol::Gemini)
+    );
     assert_eq!(WireProtocol::from_raw_str("unknown-proto"), None);
 }
 
@@ -528,7 +569,20 @@ fn test_build_endpoint_url_openai_chat() {
         build_endpoint_url(p, "https://api.openai.com/v1/chat/completions/"),
         "https://api.openai.com/v1/chat/completions"
     );
-    // 5. 绝对无 // 或 /v1/v1
+    // 5. SenseNova / 商汤日日新裸域名与带 /v1 自动对齐
+    assert_eq!(
+        build_endpoint_url(p, "https://token.sensenova.cn"),
+        "https://token.sensenova.cn/v1/chat/completions"
+    );
+    assert_eq!(
+        build_endpoint_url(p, "https://token.sensenova.cn/"),
+        "https://token.sensenova.cn/v1/chat/completions"
+    );
+    assert_eq!(
+        build_endpoint_url(p, "https://token.sensenova.cn/v1"),
+        "https://token.sensenova.cn/v1/chat/completions"
+    );
+    // 6. 绝对无 // 或 /v1/v1
     let url = build_endpoint_url(p, "https://api.openai.com/v1/");
     assert!(!url.contains("//chat"));
     assert!(!url.contains("/v1/v1"));

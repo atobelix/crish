@@ -83,33 +83,39 @@ pub fn build_responses_request_body(
         body.insert("max_output_tokens".to_string(), json!(max_tokens));
     }
 
-    // 思考推理参数组装：Responses API 原生 reasoning 格式 {"reasoning": {"effort": "..."}}
-    // 100% 由 assemble_thinking_dialect 正式产出（严格接入思考方言装配器，支持拍平字典映射）
-    let effective_effort: Option<dialect::ReasoningEffort> = if let Some(intensity) = opts.thinking_intensity {
-        Some(intensity.into())
-    } else if let Some(effort) = opts.reasoning_effort {
-        match effort {
-            crate::request::vendor::ReasoningEffort::Off => Some(dialect::ReasoningEffort::Off),
-            crate::request::vendor::ReasoningEffort::Auto => None,
-            other => Some(other.into()),
-        }
-    } else {
-        None
-    };
+    // 思考推理参数组装：Responses API 原生 reasoning 格式 {"reasoning": {"effort": "<wire>"}}
+    // 100% 由 assemble_thinking_dialect 正式产出。format 决议（plans/04 §7.3）：
+    // openai → OpenAiResponsesNested；deepseek / qwen 显式方言原样；anthropic /
+    // gemini / zai 与 responses 协议冲突或无 format → fail-closed 不注入
+    // （禁止 `_ => OpenAiResponsesNested` 把 Anthropic/Gemini 折进 nested）。
+    let effective_effort: Option<dialect::ReasoningEffort> =
+        if let Some(intensity) = opts.thinking_intensity {
+            Some(intensity.into())
+        } else if let Some(effort) = opts.reasoning_effort {
+            match effort {
+                crate::request::vendor::ReasoningEffort::Off => Some(dialect::ReasoningEffort::Off),
+                crate::request::vendor::ReasoningEffort::Auto => None,
+                other => Some(other.into()),
+            }
+        } else {
+            None
+        };
 
-    if let Some(effort) = effective_effort {
-        let format = opts
-            .thinking_format
-            .map(|tf| match tf {
-                crate::models::catalog_types::ThinkingFormat::DeepSeek => {
-                    ThinkingDialectFormat::DeepSeekNative
-                }
-                crate::models::catalog_types::ThinkingFormat::Qwen => {
-                    ThinkingDialectFormat::QwenBailianBoolean
-                }
-                _ => ThinkingDialectFormat::OpenAiResponsesNested,
-            })
-            .unwrap_or(ThinkingDialectFormat::OpenAiResponsesNested);
+    let responses_format = opts.thinking_format.and_then(|tf| match tf {
+        crate::models::catalog_types::ThinkingFormat::OpenAi => {
+            Some(ThinkingDialectFormat::OpenAiResponsesNested)
+        }
+        crate::models::catalog_types::ThinkingFormat::DeepSeek => {
+            Some(ThinkingDialectFormat::DeepSeekNative)
+        }
+        crate::models::catalog_types::ThinkingFormat::Qwen => {
+            Some(ThinkingDialectFormat::QwenBailianBoolean)
+        }
+        // Anthropic / Gemini / Zai 方言与 responses 协议冲突 → 不注入思考键
+        _ => None,
+    });
+
+    if let (Some(effort), Some(format)) = (effective_effort, responses_format) {
         let dialect_opts = DialectBuildOptions {
             effort,
             format,
@@ -170,11 +176,25 @@ mod responses_dialect_wiring_tests {
         let opts = ChatCompletionsRequestOptions {
             model: Some("gpt-5-responses".to_string()),
             reasoning_effort: Some(crate::request::vendor::ReasoningEffort::Medium),
+            thinking_format: Some(ThinkingFormat::OpenAi),
             thinking_map: Some(map),
             ..ChatCompletionsRequestOptions::default()
         };
         let body = build_responses_request_body(&opts, &RequestBuildContext::default());
         assert_eq!(body["reasoning"], json!({ "effort": "custom-resp-wire" }));
+    }
+
+    #[test]
+    fn test_responses_dialect_anthropic_format_conflict_fails_closed() {
+        // plans/04 §7.3：anthropic 方言与 responses 协议冲突 → 不注入思考键
+        let opts = ChatCompletionsRequestOptions {
+            model: Some("gpt-5-responses".to_string()),
+            reasoning_effort: Some(crate::request::vendor::ReasoningEffort::High),
+            thinking_format: Some(ThinkingFormat::Anthropic),
+            ..ChatCompletionsRequestOptions::default()
+        };
+        let body = build_responses_request_body(&opts, &RequestBuildContext::default());
+        assert!(body.get("reasoning").is_none(), "冲突必须 fail-closed");
     }
 
     #[test]

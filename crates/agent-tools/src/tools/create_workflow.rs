@@ -354,7 +354,10 @@ mod tests {
         assert_eq!(input.interval_minutes, None);
         assert_eq!(input.cron_expression, None);
         assert_eq!(input.cwd.as_deref(), Some("C:/work/conex"));
-        assert_eq!(input.enabled, None, "enabled 缺省透传 None（引擎按 true 兜底）");
+        assert_eq!(
+            input.enabled, None,
+            "enabled 缺省透传 None（引擎按 true 兜底）"
+        );
         // 输出信封：workflowId / name / nextRunAt / text 摘要
         assert_eq!(out["workflowId"], "cron-0");
         assert_eq!(out["name"], "每日巡检");
@@ -419,10 +422,7 @@ mod tests {
         let ctx = create_mock_tool_context();
         // 未接线环境返回 common.unsupported（不 panic）
         let err = tool
-            .execute(
-                &ctx,
-                serde_json::json!({ "name": "巡检", "prompt": "p" }),
-            )
+            .execute(&ctx, serde_json::json!({ "name": "巡检", "prompt": "p" }))
             .await
             .unwrap_err();
         assert_eq!(err.code(), "common.unsupported");
@@ -441,10 +441,7 @@ mod tests {
         assert_eq!(err.code(), "tool.invalid_input");
         // 空 name → tool.invalid_input
         let err = tool
-            .execute(
-                &ctx,
-                serde_json::json!({ "name": "  ", "prompt": "p" }),
-            )
+            .execute(&ctx, serde_json::json!({ "name": "  ", "prompt": "p" }))
             .await
             .unwrap_err();
         assert_eq!(err.code(), "tool.invalid_input");

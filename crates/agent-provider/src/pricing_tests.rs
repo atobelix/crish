@@ -58,14 +58,8 @@ fn test_claude_5_real_pricing() {
     };
 
     // 场景：总输入 200,000 tokens，其中 150,000 命中缓存读取，50,000 为首次缓存写入；输出 10,000 tokens
-    let cost = PricingEngine::calculate_cost(
-        &Some(pricing),
-        200_000,
-        10_000,
-        150_000,
-        50_000,
-    )
-    .expect("计费应成功");
+    let cost = PricingEngine::calculate_cost(&Some(pricing), 200_000, 10_000, 150_000, 50_000)
+        .expect("计费应成功");
 
     // 未命中普通输入 = 200,000 - 150,000 = 50,000 tokens
     // input_micros = 50,000 * 5.00 / 1M = 250,000 micros ($0.2500)
@@ -127,14 +121,9 @@ fn test_ultra_long_393k_context_large_token_anti_overflow() {
         cache_write: None,
         tiers: vec![],
     };
-    let huge_cost = PricingEngine::calculate_cost(
-        &Some(huge_pricing),
-        500_000_000,
-        500_000_000,
-        0,
-        0,
-    )
-    .expect("大数计算不应溢出");
+    let huge_cost =
+        PricingEngine::calculate_cost(&Some(huge_pricing), 500_000_000, 500_000_000, 0, 0)
+            .expect("大数计算不应溢出");
 
     // 500M * 100 / 1M = 50,000 元 = 50,000,000,000 micros
     assert_eq!(huge_cost.input_micros, 50_000_000_000);
@@ -152,7 +141,10 @@ fn test_unconfigured_pricing_returns_silent_none() {
     assert!(cost.is_none(), "未配置价格必须绝对静默返回 None");
 
     let cost_from_spec = PricingEngine::calculate_cost_from_spec(&None, 10_000, 2_000, 0, 0);
-    assert!(cost_from_spec.is_none(), "Spec 未配置价格必须绝对静默返回 None");
+    assert!(
+        cost_from_spec.is_none(),
+        "Spec 未配置价格必须绝对静默返回 None"
+    );
 }
 
 // -------------------------------------------------------------------------
@@ -285,7 +277,7 @@ fn test_devil_07_tiered_pricing_exact_threshold_boundary_ge() {
         output: 8.0,
         cache_read: None,
         cache_write: None,
-        tiers: vec![PricingTier {
+        tiers:         vec![PricingTier {
             input_tokens_above: 262_144,
             input: 4.0, // 达到门槛翻倍
             output: 16.0,
@@ -376,7 +368,10 @@ fn test_floating_point_precision_losslessness() {
     let micro_b = PricingEngine::f64_to_micros(0.2);
     let micro_sum = micro_a + micro_b;
     assert_eq!(micro_sum, 300_000);
-    assert_eq!(PricingEngine::format_micros(micro_sum, Currency::Usd), "$0.3000");
+    assert_eq!(
+        PricingEngine::format_micros(micro_sum, Currency::Usd),
+        "$0.3000"
+    );
 }
 
 // -------------------------------------------------------------------------
@@ -433,16 +428,11 @@ fn test_catalog_types_model_pricing_spec_interop() {
         cache_read: Some(0.1),
         cache_write: Some(0.0),
         per_image: None,
+        tiers: Vec::new(),
     };
 
-    let cost = PricingEngine::calculate_cost_from_spec(
-        &Some(spec),
-        100_000,
-        10_000,
-        50_000,
-        0,
-    )
-    .expect("Spec 计费应成功");
+    let cost = PricingEngine::calculate_cost_from_spec(&Some(spec), 100_000, 10_000, 50_000, 0)
+        .expect("Spec 计费应成功");
 
     // non_cached_prompt = 50_000 * 3.0 = 150_000 micros
     // cache_read = 50_000 * 0.1 = 5_000 micros
@@ -501,6 +491,7 @@ fn test_bidirectional_model_pricing_spec_conversion() {
         output: 10.0,
         cache_read: Some(0.25),
         cache_write: Some(3.0),
+        tiers: Vec::new(),
         per_image: None,
     };
     let pricing: ModelPricing = original_spec.clone().into();
@@ -524,6 +515,7 @@ fn test_bidirectional_model_pricing_spec_conversion() {
         output: 0.0,
         cache_read: None,
         cache_write: None,
+        tiers: Vec::new(),
         per_image: Some(0.20),
     };
     let img_pricing: ModelPricing = image_spec.clone().into();
@@ -543,7 +535,10 @@ fn test_bidirectional_model_pricing_spec_conversion() {
 fn test_nan_and_infinity_defense() {
     assert_eq!(PricingEngine::tokens_to_micros(100_000, f64::NAN), 0);
     assert_eq!(PricingEngine::tokens_to_micros(100_000, f64::INFINITY), 0);
-    assert_eq!(PricingEngine::tokens_to_micros(100_000, f64::NEG_INFINITY), 0);
+    assert_eq!(
+        PricingEngine::tokens_to_micros(100_000, f64::NEG_INFINITY),
+        0
+    );
     assert_eq!(PricingEngine::tokens_to_micros(100_000, -5.0), 0);
     assert_eq!(PricingEngine::f64_to_micros(f64::NAN), 0);
     assert_eq!(PricingEngine::f64_to_micros(f64::INFINITY), 0);
@@ -604,7 +599,7 @@ fn test_multi_tier_descending_matching() {
         output: 2.0,
         cache_read: None,
         cache_write: None,
-        tiers: vec![
+        tiers:         vec![
             PricingTier {
                 input_tokens_above: 100_000,
                 input: 2.0,
@@ -647,26 +642,18 @@ fn test_base_price_zero_with_tiers_not_short_circuited_as_free() {
         output: 0.0,
         cache_read: None,
         cache_write: None,
-        tiers: vec![
-            PricingTier {
-                input_tokens_above: 32_768,
-                input: 4.0,
-                output: 12.0,
-                cache_read: Some(0.5),
-                cache_write: None,
-            },
-        ],
+        tiers:         vec![PricingTier {
+            input_tokens_above: 32_768,
+            input: 4.0,
+            output: 12.0,
+            cache_read: Some(0.5),
+            cache_write: None,
+        }],
     };
 
     // 场景 1：用量超过 32,768 门槛，应当命中阶梯计费，绝不能因为基础价格为 0 而短路误判为免费
-    let cost = PricingEngine::calculate_cost(
-        &Some(pricing.clone()),
-        100_000,
-        20_000,
-        0,
-        0,
-    )
-    .expect("计费应成功");
+    let cost = PricingEngine::calculate_cost(&Some(pricing.clone()), 100_000, 20_000, 0, 0)
+        .expect("计费应成功");
 
     assert!(!cost.is_free, "命中收费阶梯时绝不得标记为 is_free");
     assert_ne!(cost.formatted_total, "免费");
@@ -679,14 +666,8 @@ fn test_base_price_zero_with_tiers_not_short_circuited_as_free() {
     assert_eq!(cost.formatted_total, "¥0.6400");
 
     // 场景 2：用量未达到 32,768 门槛，在免费区间内，费用为 0
-    let free_tier_cost = PricingEngine::calculate_cost(
-        &Some(pricing),
-        10_000,
-        1_000,
-        0,
-        0,
-    )
-    .expect("免费区间计费应成功");
+    let free_tier_cost = PricingEngine::calculate_cost(&Some(pricing), 10_000, 1_000, 0, 0)
+        .expect("免费区间计费应成功");
     assert_eq!(free_tier_cost.total_micros, 0);
     assert_eq!(free_tier_cost.formatted_total, "¥0.0000");
 }
@@ -707,14 +688,8 @@ fn test_u64_max_extreme_token_saturation_anti_wrapping() {
     };
 
     let extreme_tokens = u64::MAX;
-    let cost = PricingEngine::calculate_cost(
-        &Some(pricing),
-        extreme_tokens,
-        extreme_tokens,
-        0,
-        0,
-    )
-    .expect("极端大数计算应成功");
+    let cost = PricingEngine::calculate_cost(&Some(pricing), extreme_tokens, extreme_tokens, 0, 0)
+        .expect("极端大数计算应成功");
 
     // u64::MAX * 100.0 / 1M 的结果远远超过 u64::MAX，必须饱和截断在 u64::MAX，不能回绕为极小随机值
     assert_eq!(cost.input_micros, u64::MAX);
@@ -736,14 +711,8 @@ fn test_u64_max_extreme_token_saturation_anti_wrapping() {
         cache_write: None,
         tiers: vec![],
     };
-    let img_cost = PricingEngine::calculate_cost(
-        &Some(img_pricing),
-        0,
-        u64::MAX,
-        0,
-        0,
-    )
-    .expect("按张极端大数计算应成功");
+    let img_cost = PricingEngine::calculate_cost(&Some(img_pricing), 0, u64::MAX, 0, 0)
+        .expect("按张极端大数计算应成功");
     assert_eq!(img_cost.output_micros, u64::MAX);
     assert_eq!(img_cost.total_micros, u64::MAX);
 }

@@ -143,7 +143,8 @@ async fn azure_error_frame_classified() {
     })
     .await;
 
-    let output = common::fetch_sse(server.addr, "/openai/v1/responses", json!({ "input": "x" })).await;
+    let output =
+        common::fetch_sse(server.addr, "/openai/v1/responses", json!({ "input": "x" })).await;
     let events = events_from_output(&output);
     let stop = events
         .iter()
@@ -185,7 +186,8 @@ async fn azure_incomplete_terminal_maps_to_length() {
     })
     .await;
 
-    let output = common::fetch_sse(server.addr, "/openai/v1/responses", json!({ "input": "x" })).await;
+    let output =
+        common::fetch_sse(server.addr, "/openai/v1/responses", json!({ "input": "x" })).await;
     let result = consume(events_from_output(&output), false);
 
     assert!(result.response.is_message());

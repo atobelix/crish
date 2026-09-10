@@ -11,7 +11,9 @@
 //!
 //! 门面（request/messages.rs）re-export 公开符号，对外路径不变。
 
-use conex_types::message::AgentMessage;
+use std::borrow::Borrow;
+
+use conex_types::message::{AgentMessage, AgentMessageRole};
 use conex_types::tool::ToolOutput;
 use serde_json::{json, Map, Value};
 
@@ -273,7 +275,6 @@ pub(crate) fn responses_input_part(part: &ChatContentPart) -> Value {
 /// 当 `supports_image == false` 且内容中含有 `ImageUrl` 块时，
 /// 立即返回 `ProviderError::InvalidRequest("模型不支持图片多模态输入")`，
 /// 防止盲发到纯文本端点触发上游 400 崩溃。
-#[allow(dead_code)]
 pub fn ensure_content_modalities(
     content: &Content,
     supports_image: bool,
@@ -293,6 +294,23 @@ pub fn ensure_content_modalities(
         }
     }
 
+    Ok(())
+}
+
+/// 出站多模态守卫（plans/04 §4.1 唯一挂载点）：对每条 user 消息取
+/// `user_message_content`（已读 `metadata.contentParts`），交给
+/// [ensure_content_modalities] 校验。纯文本模型带图 → 错误在 HTTP 前
+/// 返回，禁止静默剥图只发文本。
+pub fn ensure_outbound_modalities<M: Borrow<AgentMessage>>(
+    messages: &[M],
+    supports_image: bool,
+) -> Result<(), ProviderError> {
+    for message_ref in messages {
+        let message = message_ref.borrow();
+        if message.role == AgentMessageRole::User {
+            ensure_content_modalities(&user_message_content(message), supports_image)?;
+        }
+    }
     Ok(())
 }
 

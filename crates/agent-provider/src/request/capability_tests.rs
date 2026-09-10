@@ -174,7 +174,10 @@ fn illegal_tiers_declaration_is_conservative_not_throw() {
     let cat = fake_catalog(&[("deepseek::deepseek-v4-bad".to_string(), entry_a)]);
 
     let cap_a = describe(&cat, "deepseek", "deepseek-v4-bad");
-    assert!(!cap_a.supports_reasoning, "全隐藏档 → 保守不支持（无系列兜底）");
+    assert!(
+        !cap_a.supports_reasoning,
+        "全隐藏档 → 保守不支持（无系列兜底）"
+    );
     assert!(cap_a.efforts.is_empty());
 }
 

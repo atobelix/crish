@@ -15,7 +15,7 @@
 
 use agent_provider::config::Endpoint;
 use agent_provider::models::catalog_types::{
-    default_protocol, ModelSpec, ProtocolKind, ProviderSpec,
+    default_protocol, ModelSpec, ProtocolKind, ProviderSpec, ThinkingFormat,
 };
 use agent_provider::models::ModelCatalog;
 use agent_provider::request::wire_protocol::{
@@ -119,9 +119,22 @@ fn anthropic_effort_tier_produces_enabled_thinking() {
         ReasoningEffort::Xhigh,
         ReasoningEffort::Max,
     ] {
+        let mut thinking_map = indexmap::IndexMap::new();
+        let effort_key = match effort {
+            ReasoningEffort::Minimal => "Minimal",
+            ReasoningEffort::Low => "Low",
+            ReasoningEffort::Medium => "Medium",
+            ReasoningEffort::High => "High",
+            ReasoningEffort::Xhigh => "X-High",
+            ReasoningEffort::Max => "Max",
+            _ => "Medium",
+        };
+        thinking_map.insert(effort_key.to_string(), effort_to_budget_tokens(effort).to_string());
         let opts = AnthropicRequestOptions {
             model: Some("claude-sonnet-4-5".to_string()),
             reasoning_effort: Some(effort),
+            thinking_format: Some(ThinkingFormat::Anthropic),
+            thinking_map: Some(thinking_map),
             ..AnthropicRequestOptions::default()
         };
         let body = anthropic_body(&opts, vec![Arc::new(user_msg("hi"))]);
@@ -151,9 +164,22 @@ fn anthropic_intensity_tier_produces_thinking_or_omits_on_off() {
         ThinkingIntensity::Xhigh,
         ThinkingIntensity::Max,
     ] {
+        let mut thinking_map = indexmap::IndexMap::new();
+        let key = match intensity {
+            ThinkingIntensity::Minimal => "Minimal",
+            ThinkingIntensity::Low => "Low",
+            ThinkingIntensity::Medium => "Medium",
+            ThinkingIntensity::High => "High",
+            ThinkingIntensity::Xhigh => "X-High",
+            ThinkingIntensity::Max => "Max",
+            _ => "Medium",
+        };
+        thinking_map.insert(key.to_string(), thinking_to_budget_tokens(intensity).to_string());
         let opts = AnthropicRequestOptions {
             model: Some("claude-sonnet-4-5".to_string()),
             thinking_intensity: Some(intensity),
+            thinking_format: Some(ThinkingFormat::Anthropic),
+            thinking_map: Some(thinking_map),
             ..AnthropicRequestOptions::default()
         };
         let body = anthropic_body(&opts, vec![Arc::new(user_msg("hi"))]);
@@ -169,6 +195,7 @@ fn anthropic_intensity_tier_produces_thinking_or_omits_on_off() {
     let opts = AnthropicRequestOptions {
         model: Some("claude-sonnet-4-5".to_string()),
         thinking_intensity: Some(ThinkingIntensity::Off),
+        thinking_format: Some(ThinkingFormat::Anthropic),
         ..AnthropicRequestOptions::default()
     };
     let body = anthropic_body(&opts, vec![Arc::new(user_msg("hi"))]);
@@ -247,7 +274,7 @@ fn anthropic_beta_header_for_explicit_effort_only() {
 
 // ─────────── 3. gemini 思考档位链路 ───────────
 
-/// thinkingIntensity → `generationConfig.thinking_level`，与 vendor 换算同值。
+/// thinkingIntensity → `generationConfig.thinkingConfig.thinkingLevel`，与 vendor 换算同值。
 #[test]
 fn gemini_intensity_maps_to_generation_config_thinking_level() {
     for intensity in [
@@ -256,15 +283,28 @@ fn gemini_intensity_maps_to_generation_config_thinking_level() {
         ThinkingIntensity::Medium,
         ThinkingIntensity::High,
     ] {
+        let expected = thinking_to_gemini_thinking_level(intensity);
+        let mut thinking_map = indexmap::IndexMap::new();
+        let key = match intensity {
+            ThinkingIntensity::Minimal => "Minimal",
+            ThinkingIntensity::Low => "Low",
+            ThinkingIntensity::Medium => "Medium",
+            ThinkingIntensity::High => "High",
+            ThinkingIntensity::Xhigh => "X-High",
+            ThinkingIntensity::Max => "Max",
+            _ => "Medium",
+        };
+        thinking_map.insert(key.to_string(), expected.to_string());
         let opts = GeminiRequestOptions {
             model: Some("gemini-2.5-pro".to_string()),
             thinking_intensity: Some(intensity),
+            thinking_format: Some(ThinkingFormat::Gemini),
+            thinking_map: Some(thinking_map),
             ..GeminiRequestOptions::default()
         };
         let body = gemini_body(&opts, vec![Arc::new(user_msg("hi"))]);
-        let expected = thinking_to_gemini_thinking_level(intensity);
         assert_eq!(
-            body["generationConfig"]["thinking_level"], expected,
+            body["generationConfig"]["thinkingConfig"]["thinkingLevel"], expected,
             "intensity {intensity:?} 必须与 vendor 换算一致"
         );
     }
@@ -452,10 +492,16 @@ fn openai_chat_2026_wire_payload_reasoning_effort_string() {
             (ReasoningEffort::Medium, "medium"),
             (ReasoningEffort::High, "high"),
         ] {
+            let mut map = indexmap::IndexMap::new();
+            map.insert("Low".to_string(), "low".to_string());
+            map.insert("Medium".to_string(), "medium".to_string());
+            map.insert("High".to_string(), "high".to_string());
             let opts = ChatCompletionsRequestOptions {
                 model: Some(model_name.to_string()),
                 reasoning_effort: Some(effort),
                 vendor: Some(ReasoningVendor::Openai),
+                thinking_format: Some(ThinkingFormat::OpenAi),
+                thinking_map: Some(map),
                 ..ChatCompletionsRequestOptions::default()
             };
             let body = chat_body(&opts, vec![Arc::new(user_msg("Explain quantum computing"))]);
@@ -490,15 +536,21 @@ fn openai_chat_2026_wire_payload_reasoning_effort_string() {
 fn anthropic_messages_2026_claude5_budget_and_max_tokens_clamp() {
     // 场景 A: 显式指定标准预算 1024
     {
+        let mut map = indexmap::IndexMap::new();
+        map.insert("Medium".to_string(), "1024".to_string());
         let opts = AnthropicRequestOptions {
             model: Some("claude-5".to_string()),
-            thinking_budget: Some(1024),
+            reasoning_effort: Some(ReasoningEffort::Medium),
+            thinking_format: Some(ThinkingFormat::Anthropic),
+            thinking_map: Some(map),
             ..AnthropicRequestOptions::default()
         };
         let body = anthropic_body(&opts, vec![Arc::new(user_msg("Refactor this code"))]);
         let thinking = body.get("thinking").expect("claude-5 必须包含 thinking 键");
         assert_eq!(thinking["type"], "enabled");
-        let budget = thinking["budget_tokens"].as_u64().expect("budget 必须为 u64");
+        let budget = thinking["budget_tokens"]
+            .as_u64()
+            .expect("budget 必须为 u64");
         assert!(budget >= 1024, "thinking.budget_tokens 必须 >= 1024");
         let max_tokens = body["max_tokens"].as_u64().expect("max_tokens 必须为 u64");
         assert!(
@@ -513,10 +565,14 @@ fn anthropic_messages_2026_claude5_budget_and_max_tokens_clamp() {
 
     // 场景 B: 配置高预算 8192 且用户传入过小的 max_tokens (2048) -> 自动安全抬升至 >= 12288
     {
+        let mut map = indexmap::IndexMap::new();
+        map.insert("High".to_string(), "8192".to_string());
         let opts = AnthropicRequestOptions {
             model: Some("claude-5".to_string()),
-            thinking_budget: Some(8192),
+            reasoning_effort: Some(ReasoningEffort::High),
             max_tokens: Some(2048),
+            thinking_format: Some(ThinkingFormat::Anthropic),
+            thinking_map: Some(map),
             ..AnthropicRequestOptions::default()
         };
         let body = anthropic_body(&opts, vec![Arc::new(user_msg("Deep research"))]);
@@ -533,10 +589,14 @@ fn anthropic_messages_2026_claude5_budget_and_max_tokens_clamp() {
 
     // 场景 C: 传入非法低预算 (< 1024，如 500) -> 强制下限钳制至 >= 1024 并安全预留
     {
+        let mut map = indexmap::IndexMap::new();
+        map.insert("Low".to_string(), "500".to_string());
         let opts = AnthropicRequestOptions {
             model: Some("claude-5".to_string()),
-            thinking_budget: Some(500),
+            reasoning_effort: Some(ReasoningEffort::Low),
             max_tokens: Some(1000),
+            thinking_format: Some(ThinkingFormat::Anthropic),
+            thinking_map: Some(map),
             ..AnthropicRequestOptions::default()
         };
         let body = anthropic_body(&opts, vec![Arc::new(user_msg("Quick answer"))]);
@@ -556,9 +616,13 @@ fn anthropic_messages_2026_claude5_budget_and_max_tokens_clamp() {
 
     // 场景 D: 通过 reasoning_effort: High 驱动
     {
+        let mut map = indexmap::IndexMap::new();
+        map.insert("High".to_string(), "4096".to_string());
         let opts = AnthropicRequestOptions {
             model: Some("claude-5".to_string()),
             reasoning_effort: Some(ReasoningEffort::High),
+            thinking_format: Some(ThinkingFormat::Anthropic),
+            thinking_map: Some(map),
             ..AnthropicRequestOptions::default()
         };
         let body = anthropic_body(&opts, vec![Arc::new(user_msg("Analyze architecture"))]);
@@ -603,7 +667,10 @@ fn ali_bailian_qwen38_wire_payload_top_level_enable_thinking() {
         serde_json::json!({ "enable_thinking": true }),
         "阿里百炼开启思考必须输出顶层 enable_thinking: true"
     );
-    assert!(wire_on.get("reasoning_effort").is_none(), "阿里百炼严禁携带 OpenAI reasoning_effort 字段");
+    assert!(
+        wire_on.get("reasoning_effort").is_none(),
+        "阿里百炼严禁携带 OpenAI reasoning_effort 字段"
+    );
 
     // 2. resolve_thinking_params 验证
     let params_on = resolve_thinking_params(
@@ -612,8 +679,7 @@ fn ali_bailian_qwen38_wire_payload_top_level_enable_thinking() {
         Endpoint::ChatCompletions,
     );
     assert_eq!(
-        params_on["enable_thinking"],
-        true,
+        params_on["enable_thinking"], true,
         "resolve_thinking_params 对 QwenEnableThinking 格式必须产出 enable_thinking: true"
     );
 
@@ -737,9 +803,10 @@ fn protocol_resolution_three_tier_truth() {
 
     // 4. ModelSpec 与 ProviderSpec 对象层面的有效协议决议真实性
     let provider_chat = ProviderSpec {
-        display_name: "OpenAI Gateway".to_string(),
-        base_url: "https://api.openai.com/v1".to_string(),
+        display_name: Some("OpenAI Gateway".to_string()),
+        base_url: Some("https://api.openai.com/v1".to_string()),
         api_key: None,
+        headers: None,
         protocol: ProtocolKind::OpenAiChat,
         compat: None,
         models: vec![],
@@ -747,24 +814,26 @@ fn protocol_resolution_three_tier_truth() {
 
     let model_responses = ModelSpec {
         id: "gpt-5.6-sol".to_string(),
-        display_name: "GPT-5.6 Sol".to_string(),
-        context_window: 1050000,
-        max_output_tokens: 128000,
+        display_name: Some("GPT-5.6 Sol".to_string()),
+        context_window: Some(1050000),
+        max_output_tokens: Some(128000),
         protocol: Some(ProtocolKind::OpenAiResponses),
         modalities: None,
         thinking: None,
         pricing: None,
+        compat: None,
     };
 
     let model_inherit = ModelSpec {
         id: "gpt-4o".to_string(),
-        display_name: "GPT-4o".to_string(),
-        context_window: 128000,
-        max_output_tokens: 4096,
+        display_name: Some("GPT-4o".to_string()),
+        context_window: Some(128000),
+        max_output_tokens: Some(4096),
         protocol: None,
         modalities: None,
         thinking: None,
         pricing: None,
+        compat: None,
     };
 
     assert_eq!(
@@ -833,32 +902,109 @@ fn protocol_resolution_three_tier_truth() {
 fn endpoint_url_assembly_no_trailing_slash_no_v1_duplication() {
     let test_cases = [
         // 场景 1: OpenAI Chat 标准路径拼装
-        ("https://api.openai.com/v1", ProtocolKind::OpenAiChat, "https://api.openai.com/v1/chat/completions"),
-        ("https://api.openai.com/v1/", ProtocolKind::OpenAiChat, "https://api.openai.com/v1/chat/completions"),
-        ("https://api.openai.com/v1///", ProtocolKind::OpenAiChat, "https://api.openai.com/v1/chat/completions"),
-        ("https://api.openai.com/v1/chat/completions", ProtocolKind::OpenAiChat, "https://api.openai.com/v1/chat/completions"),
-        ("https://dashscope.aliyuncs.com/compatible-mode/v1/", ProtocolKind::OpenAiChat, "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"),
-        ("https://openrouter.ai/api/v1/", ProtocolKind::OpenAiChat, "https://openrouter.ai/api/v1/chat/completions"),
-        ("https://api.deepseek.com", ProtocolKind::OpenAiChat, "https://api.deepseek.com/chat/completions"),
-
+        (
+            "https://api.openai.com/v1",
+            ProtocolKind::OpenAiChat,
+            "https://api.openai.com/v1/chat/completions",
+        ),
+        (
+            "https://api.openai.com/v1/",
+            ProtocolKind::OpenAiChat,
+            "https://api.openai.com/v1/chat/completions",
+        ),
+        (
+            "https://api.openai.com/v1///",
+            ProtocolKind::OpenAiChat,
+            "https://api.openai.com/v1/chat/completions",
+        ),
+        (
+            "https://api.openai.com/v1/chat/completions",
+            ProtocolKind::OpenAiChat,
+            "https://api.openai.com/v1/chat/completions",
+        ),
+        (
+            "https://dashscope.aliyuncs.com/compatible-mode/v1/",
+            ProtocolKind::OpenAiChat,
+            "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+        ),
+        (
+            "https://openrouter.ai/api/v1/",
+            ProtocolKind::OpenAiChat,
+            "https://openrouter.ai/api/v1/chat/completions",
+        ),
+        (
+            "https://api.deepseek.com",
+            ProtocolKind::OpenAiChat,
+            "https://api.deepseek.com/chat/completions",
+        ),
         // 场景 2: OpenAI Responses 原生路径拼装 (/responses)
-        ("https://api.openai.com/v1", ProtocolKind::OpenAiResponses, "https://api.openai.com/v1/responses"),
-        ("https://api.openai.com/v1/", ProtocolKind::OpenAiResponses, "https://api.openai.com/v1/responses"),
-        ("https://api.openai.com", ProtocolKind::OpenAiResponses, "https://api.openai.com/v1/responses"),
-        ("https://api.openai.com/v1/responses", ProtocolKind::OpenAiResponses, "https://api.openai.com/v1/responses"),
-
+        (
+            "https://api.openai.com/v1",
+            ProtocolKind::OpenAiResponses,
+            "https://api.openai.com/v1/responses",
+        ),
+        (
+            "https://api.openai.com/v1/",
+            ProtocolKind::OpenAiResponses,
+            "https://api.openai.com/v1/responses",
+        ),
+        (
+            "https://api.openai.com",
+            ProtocolKind::OpenAiResponses,
+            "https://api.openai.com/v1/responses",
+        ),
+        (
+            "https://api.openai.com/v1/responses",
+            ProtocolKind::OpenAiResponses,
+            "https://api.openai.com/v1/responses",
+        ),
         // 场景 3: Anthropic Messages 原生路径拼装 (/v1/messages)
-        ("https://api.anthropic.com", ProtocolKind::AnthropicMessages, "https://api.anthropic.com/v1/messages"),
-        ("https://api.anthropic.com/", ProtocolKind::AnthropicMessages, "https://api.anthropic.com/v1/messages"),
-        ("https://api.anthropic.com/v1", ProtocolKind::AnthropicMessages, "https://api.anthropic.com/v1/messages"),
-        ("https://api.anthropic.com/v1/", ProtocolKind::AnthropicMessages, "https://api.anthropic.com/v1/messages"),
-        ("https://api.anthropic.com/v1/messages", ProtocolKind::AnthropicMessages, "https://api.anthropic.com/v1/messages"),
-        ("https://api.anthropic.com/messages", ProtocolKind::AnthropicMessages, "https://api.anthropic.com/messages"),
-
+        (
+            "https://api.anthropic.com",
+            ProtocolKind::AnthropicMessages,
+            "https://api.anthropic.com/v1/messages",
+        ),
+        (
+            "https://api.anthropic.com/",
+            ProtocolKind::AnthropicMessages,
+            "https://api.anthropic.com/v1/messages",
+        ),
+        (
+            "https://api.anthropic.com/v1",
+            ProtocolKind::AnthropicMessages,
+            "https://api.anthropic.com/v1/messages",
+        ),
+        (
+            "https://api.anthropic.com/v1/",
+            ProtocolKind::AnthropicMessages,
+            "https://api.anthropic.com/v1/messages",
+        ),
+        (
+            "https://api.anthropic.com/v1/messages",
+            ProtocolKind::AnthropicMessages,
+            "https://api.anthropic.com/v1/messages",
+        ),
+        (
+            "https://api.anthropic.com/messages",
+            ProtocolKind::AnthropicMessages,
+            "https://api.anthropic.com/messages",
+        ),
         // 场景 4: Google GenerateContent
-        ("https://generativelanguage.googleapis.com", ProtocolKind::GoogleGenerateContent, "https://generativelanguage.googleapis.com/v1beta"),
-        ("https://generativelanguage.googleapis.com/", ProtocolKind::GoogleGenerateContent, "https://generativelanguage.googleapis.com/v1beta"),
-        ("https://generativelanguage.googleapis.com/v1beta", ProtocolKind::GoogleGenerateContent, "https://generativelanguage.googleapis.com/v1beta"),
+        (
+            "https://generativelanguage.googleapis.com",
+            ProtocolKind::GoogleGenerateContent,
+            "https://generativelanguage.googleapis.com/v1beta",
+        ),
+        (
+            "https://generativelanguage.googleapis.com/",
+            ProtocolKind::GoogleGenerateContent,
+            "https://generativelanguage.googleapis.com/v1beta",
+        ),
+        (
+            "https://generativelanguage.googleapis.com/v1beta",
+            ProtocolKind::GoogleGenerateContent,
+            "https://generativelanguage.googleapis.com/v1beta",
+        ),
     ];
 
     for (base_url, protocol, expected_url) in test_cases {

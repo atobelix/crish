@@ -28,10 +28,10 @@ fn catalog_json_parses_fully_and_keys_match_entries() {
         assert!(!entry.provider.is_empty(), "{key} 缺 provider");
         assert!(!entry.vendor.is_empty(), "{key} 缺 vendor");
         assert!(entry.source_url.is_some(), "{key} 缺 source_url");
-        assert_eq!(
-            entry.data_verified_at.as_deref(),
-            Some("2026-08-03"),
-            "{key} 核实日期须为 2026-08-03",
+        assert!(
+            entry.data_verified_at.as_deref() == Some("2026-08-03")
+                || entry.data_verified_at.as_deref() == Some("2026-09-09"),
+            "{key} 核实日期须为 2026-08-03 或 2026-09-09",
         );
     }
     // 各厂商条目数（转录范围钉死；御十家全量 v2）
@@ -44,13 +44,13 @@ fn catalog_json_parses_fully_and_keys_match_entries() {
     };
     assert_eq!(count("deepseek"), 2);
     assert_eq!(count("anthropic"), 11);
-    assert_eq!(count("openai"), 34);
+    assert_eq!(count("openai"), 35);
     assert_eq!(count("kimi"), 4);
-    assert_eq!(count("grok"), 6);
+    assert_eq!(count("grok"), 7);
     assert_eq!(count("minimax"), 16);
-    assert_eq!(count("gemini"), 22);
+    assert_eq!(count("gemini"), 24);
     assert_eq!(count("glm"), 31);
-    assert_eq!(count("qwen"), 23);
+    assert_eq!(count("qwen"), 24);
     assert_eq!(count("cursor"), 2);
 }
 
@@ -568,13 +568,13 @@ fn replace_models_unlisted_provider_keeps_full_catalog() {
         )
         .expect("合法替换必须生效");
     assert_eq!(catalog.version(), before + 1);
-    // openai 全量保留（内置 34 条）
+    // openai 全量保留（内置 35 条）
     let openai_count = catalog
         .entries
         .iter()
         .filter(|(_, e)| e.provider == "openai")
         .count();
-    assert_eq!(openai_count, 34, "未声明 replace 的 openai 保持全量");
+    assert_eq!(openai_count, 35, "未声明 replace 的 openai 保持全量");
     // openai 模型仍可服务
     assert!(catalog.lookup("openai", "gpt-4o").is_some());
 }
@@ -1478,11 +1478,7 @@ fn t11_wire_effort_for_single_source() {
     assert_eq!(entry.wire_effort_for("max"), Some("max"));
     // 隐藏档与未收录档 → None
     assert_eq!(entry.wire_effort_for("minimal"), None);
-    assert_eq!(
-        entry.wire_effort_for("bogus"),
-        None,
-        "未收录档 → None"
-    );
+    assert_eq!(entry.wire_effort_for("bogus"), None, "未收录档 → None");
     // offered_levels 提供档集：low / medium / high / max（隐藏档 minimal 不入集）
     assert_eq!(
         entry.offered_levels(),
@@ -1516,7 +1512,10 @@ fn empty_catalog_has_no_entries_and_lookups_gracefully_degrade() {
     assert_eq!(cat.version(), 0);
     assert!(cat.entries.is_empty());
     assert_eq!(cat.lookup("deepseek", "deepseek-v4-flash"), None);
-    assert_eq!(cat.context_window_for("deepseek", "deepseek-v4-flash"), None);
+    assert_eq!(
+        cat.context_window_for("deepseek", "deepseek-v4-flash"),
+        None
+    );
     assert_eq!(cat.max_output_for("deepseek", "deepseek-v4-flash"), None);
     assert_eq!(cat.input_price_for("deepseek", "deepseek-v4-flash"), None);
     assert!(!cat.supports_prompt_caching_for("deepseek", "deepseek-v4-flash"));
@@ -1526,8 +1525,8 @@ fn empty_catalog_has_no_entries_and_lookups_gracefully_degrade() {
 /// 解析纯净的 version: 2, providers: {} 初始态
 #[test]
 fn yaml_empty_providers_parses_to_empty_catalog() {
-    let cat = ModelCatalog::from_yaml_str("version: 2\nproviders: {}\n")
-        .expect("解析空供应商必须成功");
+    let cat =
+        ModelCatalog::from_yaml_str("version: 2\nproviders: {}\n").expect("解析空供应商必须成功");
     assert!(cat.entries.is_empty());
     assert_eq!(cat.version(), 1);
 
@@ -1551,22 +1550,24 @@ providers:
         contextWindow: 1048576
         maxOutputTokens: 8192
         thinking:
-          low: "low"
-          high: "high"
+          Low: "low"
+          High: "high"
         pricing:
           currency: "USD"
-          unit: "per_1M"
           input: 0.14
           output: 0.28
           cacheRead: 0.014
           cacheWrite: 0.14
         modalities:
-          image: true
+          input: [text, image]
+          output: [text]
 "#;
     let cat = ModelCatalog::from_yaml_str(yaml).expect("v2 树状 YAML 必须解析成功");
     assert_eq!(cat.entries.len(), 1);
 
-    let entry = cat.lookup("deepseek", "deepseek-v4-pro").expect("必须命中条目");
+    let entry = cat
+        .lookup("deepseek", "deepseek-v4-pro")
+        .expect("必须命中条目");
     assert_eq!(entry.model, "deepseek-v4-pro");
     assert_eq!(entry.vendor, "deepseek");
     assert_eq!(entry.context_window, Some(1048576));
@@ -1577,5 +1578,181 @@ providers:
     assert_eq!(entry.cache_write_price, Some(0.14));
     assert!(entry.supports_reasoning);
     assert!(entry.supports_vision);
-    assert_eq!(entry.wire_effort_for("high"), Some("high"));
+    assert_eq!(
+        entry.input_modalities.as_deref(),
+        Some(&["text".to_string(), "image".to_string()][..])
+    );
+    assert_eq!(entry.wire_effort_for("High"), Some("high"));
+    assert!(
+        entry
+            .thinking_tiers
+            .as_ref()
+            .is_some_and(|m| m.contains_key("Low") && !m.contains_key("low")),
+        "thinking_tiers 必须保留 TitleCase 键"
+    );
+}
+
+/// TitleCase thinking + modalities.input 含 image；禁止小写归一、禁止 bool modalities 生产投影
+#[test]
+fn from_yaml_str_keeps_titlecase_thinking_and_input_modalities() {
+    let yaml = r#"
+version: 2
+providers:
+  acme:
+    displayName: Acme
+    baseUrl: https://example.invalid/v1
+    protocol: openai/chat
+    apiKey: $ACME_API_KEY
+    compat:
+      thinkingFormat: gemini
+    models:
+      - id: acme-think
+        displayName: Acme Think
+        contextWindow: 128000
+        thinking:
+          Low: low
+          High: high
+        modalities:
+          input: [text, image]
+          output: [text]
+        pricing:
+          currency: USD
+          input: 10
+          output: 2
+          cacheRead: 0.25
+          cacheWrite: 0.2
+      - id: acme-bare
+"#;
+    let live = LiveModels::from_yaml_str(yaml).expect("v2 yaml 必须同时得到树与投影");
+    let spec = live
+        .find("acme", "acme-think")
+        .expect("find(acme, acme-think)");
+    assert_eq!(
+        spec.thinking
+            .as_ref()
+            .and_then(|m| m.get("Low"))
+            .map(String::as_str),
+        Some("low")
+    );
+    assert!(spec
+        .thinking
+        .as_ref()
+        .is_some_and(|m| !m.contains_key("low")));
+    assert!(spec
+        .modalities
+        .as_ref()
+        .is_some_and(|m| m.input.iter().any(|x| x == "image")));
+
+    let entry = live.catalog.lookup("acme", "acme-think").expect("投影条目");
+    assert!(entry
+        .thinking_tiers
+        .as_ref()
+        .is_some_and(|m| m.contains_key("Low") && !m.contains_key("low")));
+    assert_eq!(entry.wire_effort_for("Low"), Some("low"));
+    assert!(entry
+        .input_modalities
+        .as_ref()
+        .is_some_and(|m| m.iter().any(|x| x == "image")));
+    assert!(entry.supports_vision);
+    assert_eq!(entry.thinking_format.as_deref(), Some("gemini"));
+    assert_eq!(entry.protocol.as_deref(), Some("openai/chat"));
+    assert!(entry.mode.is_none(), "协议字面量不得塞进 mode");
+    assert_eq!(entry.input_price, Some(10.0));
+    assert_eq!(entry.cache_read_price, Some(0.25));
+    assert_ne!(
+        entry.cache_read_price,
+        Some(entry.input_price.unwrap() * 0.1),
+        "禁止用 input 折扣填 cacheRead"
+    );
+
+    let bare = live.find("acme", "acme-bare").expect("bare");
+    assert_eq!(bare.context_window, None, "缺省窗口不得发明 128000");
+    assert_eq!(bare.display_name, None);
+    let bare_entry = live.catalog.lookup("acme", "acme-bare").expect("bare 投影");
+    assert_eq!(bare_entry.context_window, None);
+    assert!(!bare_entry.supports_vision);
+}
+
+/// 损坏 yaml 必须 Err，不得 Ok(empty) 冒充合法空配置
+#[test]
+fn from_yaml_str_damaged_yaml_is_err_not_empty_ok() {
+    let err = ModelCatalog::from_yaml_str("{{{not yaml").expect_err("损坏 yaml 不得变成 Ok");
+    assert!(!err.is_empty());
+    assert!(LiveModels::from_yaml_str("providers: [").is_err());
+    assert!(ModelCatalog::from_yaml_str("models:\n  - model: x\n    vendor: y\n").is_err());
+
+    let empty = ModelCatalog::from_yaml_str("").expect("空白是诚实空目录");
+    assert!(empty.entries.is_empty());
+}
+
+/// 文件缺失态 vs 首次坏文件态：同一空 tree 必须靠 parse_error 区分
+#[test]
+fn live_models_parse_failed_is_not_honest_empty() {
+    let empty = LiveModels::empty();
+    assert!(empty.parse_error.is_none(), "文件缺失是诚实空树");
+    assert!(empty.tree.providers.is_empty());
+
+    let failed = LiveModels::parse_failed("解析 models.yaml 语法失败: bad");
+    assert_eq!(
+        failed.parse_error.as_deref(),
+        Some("解析 models.yaml 语法失败: bad")
+    );
+    assert!(
+        failed.tree.providers.is_empty(),
+        "错误态 tree 为空，但不得当成用户清空"
+    );
+    assert!(failed.find("acme", "acme-think").is_none());
+}
+
+/// 缺 displayName / baseUrl 的合法 yaml：live 必须能解析（与 IPC 同构）
+#[test]
+fn live_models_parses_yaml_missing_provider_display_name() {
+    let yaml = r#"
+version: 2
+providers:
+  acme:
+    models:
+      - id: acme-think
+        thinking:
+          Low: low
+        modalities:
+          input: [text, image]
+          output: [text]
+"#;
+    let live = LiveModels::from_yaml_str(yaml).expect("缺 displayName 必须能解析");
+    assert!(live.parse_error.is_none());
+    let provider = live.tree.find_provider("acme").expect("acme");
+    assert_eq!(provider.display_name, None);
+    assert_eq!(provider.base_url, None);
+    let spec = live.find("acme", "acme-think").expect("find");
+    assert_eq!(
+        spec.thinking
+            .as_ref()
+            .and_then(|m| m.get("Low"))
+            .map(String::as_str),
+        Some("low")
+    );
+}
+
+/// 布尔 modalities 不再是生产投影形状：{image:true} 不得变成 supports_vision
+#[test]
+fn yaml_boolean_modalities_are_not_production_projection() {
+    let yaml = r#"
+version: 2
+providers:
+  x:
+    displayName: X
+    baseUrl: https://example.invalid
+    models:
+      - id: m
+        modalities:
+          image: true
+"#;
+    let cat = ModelCatalog::from_yaml_str(yaml).expect("仍可解析为 v2 树（未知键忽略）");
+    let entry = cat.lookup("x", "m").expect("条目");
+    assert!(!entry.supports_vision);
+    assert!(entry
+        .input_modalities
+        .as_ref()
+        .is_none_or(|m| !m.iter().any(|x| x.eq_ignore_ascii_case("image"))));
 }

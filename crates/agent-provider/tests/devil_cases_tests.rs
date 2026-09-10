@@ -297,13 +297,14 @@ thinking:
     fn test_devil_08_modality_guard_blocks_image_for_text_only_model() {
         let text_model = ModelSpec {
             id: "deepseek-coder".to_string(),
-            display_name: "DeepSeek Coder".to_string(),
+            display_name: Some("DeepSeek Coder".to_string()),
             protocol: None,
-            context_window: 128000,
-            max_output_tokens: 8192,
+            context_window: Some(128000),
+            max_output_tokens: Some(8192),
             modalities: Some(ModalitiesSpec::text_only()),
             thinking: None,
             pricing: None,
+            compat: None,
         };
 
         let is_allowed = text_model.supports_image_input();
@@ -456,9 +457,10 @@ models:
             new_config.providers.insert(
                 format!("prov_{}", i),
                 ProviderSpec {
-                    display_name: format!("Provider {}", i),
-                    base_url: "https://api.test.com".to_string(),
+                    display_name: Some(format!("Provider {}", i)),
+                    base_url: Some("https://api.test.com".to_string()),
                     api_key: None,
+                    headers: None,
                     protocol: ProtocolKind::OpenAiChat,
                     compat: None,
                     models: vec![],
@@ -647,35 +649,49 @@ models:
     fn test_devil_23_display_name_and_metadata_fallback_chain() {
         let model_with_name = ModelSpec {
             id: "gpt-4o".to_string(),
-            display_name: "GPT-4o Omni".to_string(),
+            display_name: Some("GPT-4o Omni".to_string()),
             protocol: None,
-            context_window: 128000,
-            max_output_tokens: 4096,
+            context_window: Some(128000),
+            max_output_tokens: Some(4096),
             modalities: None,
             thinking: None,
             pricing: None,
+            compat: None,
         };
         let model_without_name = ModelSpec {
             id: "gpt-4o-mini".to_string(),
-            display_name: "".to_string(),
+            display_name: Some("".to_string()),
             protocol: None,
-            context_window: 128000,
-            max_output_tokens: 4096,
+            context_window: Some(128000),
+            max_output_tokens: Some(4096),
             modalities: None,
             thinking: None,
             pricing: None,
+            compat: None,
         };
 
         // 降级链：优先显式 displayName，缺失/空串时回退至 model.id
-        let name_1 = if model_with_name.display_name.trim().is_empty() {
+        let name_1 = if model_with_name
+            .display_name
+            .as_deref()
+            .unwrap_or("")
+            .trim()
+            .is_empty()
+        {
             &model_with_name.id
         } else {
-            &model_with_name.display_name
+            model_with_name.display_name.as_ref().unwrap()
         };
-        let name_2 = if model_without_name.display_name.trim().is_empty() {
+        let name_2 = if model_without_name
+            .display_name
+            .as_deref()
+            .unwrap_or("")
+            .trim()
+            .is_empty()
+        {
             &model_without_name.id
         } else {
-            &model_without_name.display_name
+            model_without_name.display_name.as_ref().unwrap()
         };
 
         assert_eq!(name_1, "GPT-4o Omni");
@@ -716,16 +732,17 @@ models:
     fn test_devil_26_image_generation_and_multimodal_input_coexistence() {
         let model = ModelSpec {
             id: "meta/muse-image".to_string(),
-            display_name: "Muse Image".to_string(),
+            display_name: Some("Muse Image".to_string()),
             protocol: None,
-            context_window: 65536,
-            max_output_tokens: 32768,
+            context_window: Some(65536),
+            max_output_tokens: Some(32768),
             modalities: Some(ModalitiesSpec {
                 input: vec!["image".to_string(), "text".to_string()],
                 output: vec!["image".to_string(), "text".to_string()],
             }),
             thinking: None,
             pricing: None,
+            compat: None,
         };
         assert!(model.modalities.as_ref().unwrap().supports_input("image"));
         assert!(model.modalities.as_ref().unwrap().supports_output("image"));
@@ -740,20 +757,22 @@ models:
         providers.insert(
             "aliyun".to_string(),
             ProviderSpec {
-                display_name: "阿里云通义千问官方直连".to_string(),
-                base_url: "https://dashscope.aliyuncs.com".to_string(),
+                display_name: Some("阿里云通义千问官方直连".to_string()),
+                base_url: Some("https://dashscope.aliyuncs.com".to_string()),
                 api_key: None,
+                headers: None,
                 protocol: ProtocolKind::OpenAiChat,
                 compat: None,
                 models: vec![ModelSpec {
                     id: "qwen-turbo".to_string(),
-                    display_name: "通义千问·超轻量模型 (测试版)".to_string(),
+                    display_name: Some("通义千问·超轻量模型 (测试版)".to_string()),
                     protocol: None,
-                    context_window: 128000,
-                    max_output_tokens: 8192,
+                    context_window: Some(128000),
+                    max_output_tokens: Some(8192),
                     modalities: None,
                     thinking: None,
                     pricing: None,
+                    compat: None,
                 }],
             },
         );

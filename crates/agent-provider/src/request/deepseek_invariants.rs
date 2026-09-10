@@ -476,12 +476,19 @@ fn deepseek_proxy_outbound_sanitizes_history_reasoning_content() {
     assert_eq!(messages[0].role, AgentMessageRole::User);
     assert_eq!(messages[1].role, AgentMessageRole::Assistant);
     assert_eq!(messages[1].blocks.len(), 2); // Text + ToolCall (Thought 已被剔除)
-    assert!(matches!(&messages[1].blocks[0], AgentMessageBlock::Text { text } if text.contains("检查 Cargo.toml")));
-    assert!(matches!(&messages[1].blocks[1], AgentMessageBlock::ToolCall(_)));
+    assert!(
+        matches!(&messages[1].blocks[0], AgentMessageBlock::Text { text } if text.contains("检查 Cargo.toml"))
+    );
+    assert!(matches!(
+        &messages[1].blocks[1],
+        AgentMessageBlock::ToolCall(_)
+    ));
     assert_eq!(messages[2].role, AgentMessageRole::Tool);
     assert_eq!(messages[3].role, AgentMessageRole::Assistant);
     assert_eq!(messages[3].blocks.len(), 1); // 仅剩 Text
-    assert!(matches!(&messages[3].blocks[0], AgentMessageBlock::Text { text } if text.contains("Workspace")));
+    assert!(
+        matches!(&messages[3].blocks[0], AgentMessageBlock::Text { text } if text.contains("Workspace"))
+    );
 
     // 3. 断言 Wire 序列化出站结果：在代理模式 (ReasoningContentMode::Omit) 下，序列化出来的 JSON 绝无 reasoning_content 键
     let wire_messages = to_chat_messages(

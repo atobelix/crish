@@ -189,8 +189,8 @@ impl GeminiParser {
                                     .filter(|value| !value.is_null())
                                     .or_else(|| {
                                         function_call
-                                             .get("arguments")
-                                             .filter(|value| !value.is_null())
+                                            .get("arguments")
+                                            .filter(|value| !value.is_null())
                                     }),
                             );
                             let id = string_field(function_call.get("id"))

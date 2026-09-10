@@ -13,11 +13,11 @@
 //! 7. 完整性与零丢失校验：断言迁移前后模型数量严格相等，且每个模型 ID 均完整迁移，否则报错 LossyMigrationDetected；
 //! 8. 原子影子落盘：先写入临时文件 .yaml.tmp，校验成功后原子替换目标文件。
 
+use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
-use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -98,10 +98,14 @@ impl ConfigMigrationManager {
 
         // 步骤 1: 物理备份并校验大小
         let backup_path = Self::create_disaster_backup(config_path)?;
-        tracing::info!("[Migration] 原始物理配置已建立安全防灾备份: {:?}", backup_path);
+        tracing::info!(
+            "[Migration] 原始物理配置已建立安全防灾备份: {:?}",
+            backup_path
+        );
 
         // 步骤 2: 纯逻辑内存数据重构聚类
-        let (migrated_yaml_value, total_migrated_models) = Self::transform_flat_to_tree(&parsed_value)?;
+        let (migrated_yaml_value, total_migrated_models) =
+            Self::transform_flat_to_tree(&parsed_value)?;
 
         // 步骤 3: 完整性无损断言
         let original_model_count = parsed_value
@@ -120,7 +124,10 @@ impl ConfigMigrationManager {
         // 验证所有原始模型 ID 均完整迁移至 providers 下属 models，一个不漏
         if let Some(original_models) = parsed_value.get("models").and_then(|v| v.as_array()) {
             let mut migrated_ids = std::collections::HashSet::new();
-            if let Some(prov_map) = migrated_yaml_value.get("providers").and_then(|v| v.as_object()) {
+            if let Some(prov_map) = migrated_yaml_value
+                .get("providers")
+                .and_then(|v| v.as_object())
+            {
                 for prov in prov_map.values() {
                     if let Some(models) = prov.get("models").and_then(|v| v.as_array()) {
                         for m in models {
@@ -187,15 +194,22 @@ impl ConfigMigrationManager {
         let original_size = metadata.len();
 
         let timestamp = Self::current_local_timestamp();
-        let file_stem = source.file_stem().and_then(|s| s.to_str()).unwrap_or("models");
-        let ext = source.extension().and_then(|s| s.to_str()).unwrap_or("yaml");
+        let file_stem = source
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("models");
+        let ext = source
+            .extension()
+            .and_then(|s| s.to_str())
+            .unwrap_or("yaml");
         let backup_file_name = format!("{}.{}.bak.{}", file_stem, timestamp, ext);
         let mut backup_path = source.with_file_name(&backup_file_name);
 
         if backup_path.exists() {
             let mut counter = 1;
             while backup_path.exists() {
-                let backup_file_name = format!("{}.{}_{}.bak.{}", file_stem, timestamp, counter, ext);
+                let backup_file_name =
+                    format!("{}.{}_{}.bak.{}", file_stem, timestamp, counter, ext);
                 backup_path = source.with_file_name(backup_file_name);
                 counter += 1;
             }
@@ -343,7 +357,10 @@ impl ConfigMigrationManager {
                 }
 
                 // 若旧模型持有 providerHeaders/provider_headers，且 Provider 尚未设置 headers，迁移至 Provider
-                if let Some(prov_headers) = m.get("providerHeaders").or_else(|| m.get("provider_headers")) {
+                if let Some(prov_headers) = m
+                    .get("providerHeaders")
+                    .or_else(|| m.get("provider_headers"))
+                {
                     if let Some(prov_obj) = provider_entry.as_object_mut() {
                         if !prov_obj.contains_key("headers") {
                             prov_obj.insert("headers".to_string(), prov_headers.clone());
@@ -391,7 +408,9 @@ impl ConfigMigrationManager {
                     thinking_map.insert("Low".to_string(), json!("low"));
                     thinking_map.insert("Medium".to_string(), json!("medium"));
                     thinking_map.insert("High".to_string(), json!("high"));
-                } else if let Some(existing_thinking) = m.get("thinking").and_then(|v| v.as_object()) {
+                } else if let Some(existing_thinking) =
+                    m.get("thinking").and_then(|v| v.as_object())
+                {
                     for (k, v) in existing_thinking {
                         thinking_map.insert(k.clone(), v.clone());
                     }
@@ -402,12 +421,14 @@ impl ConfigMigrationManager {
                     existing_mod.clone()
                 } else {
                     let mut input_mods = vec![json!("text")];
-                    let has_img = m.get("capabilities")
+                    let has_img = m
+                        .get("capabilities")
                         .and_then(|c| c.get("image"))
                         .and_then(|v| v.as_bool())
                         .or_else(|| m.get("image").and_then(|v| v.as_bool()))
                         .unwrap_or(false);
-                    let has_vid = m.get("capabilities")
+                    let has_vid = m
+                        .get("capabilities")
                         .and_then(|c| c.get("video"))
                         .and_then(|v| v.as_bool())
                         .or_else(|| m.get("video").and_then(|v| v.as_bool()))
@@ -441,13 +462,19 @@ impl ConfigMigrationManager {
                     None => serde_json::Map::new(),
                 };
                 if let Some(tools) = m.get("tools").and_then(|v| v.as_bool()) {
-                    caps_map.entry("tools".to_string()).or_insert_with(|| json!(tools));
+                    caps_map
+                        .entry("tools".to_string())
+                        .or_insert_with(|| json!(tools));
                 }
                 if let Some(image) = m.get("image").and_then(|v| v.as_bool()) {
-                    caps_map.entry("image".to_string()).or_insert_with(|| json!(image));
+                    caps_map
+                        .entry("image".to_string())
+                        .or_insert_with(|| json!(image));
                 }
                 if let Some(video) = m.get("video").and_then(|v| v.as_bool()) {
-                    caps_map.entry("video".to_string()).or_insert_with(|| json!(video));
+                    caps_map
+                        .entry("video".to_string())
+                        .or_insert_with(|| json!(video));
                 }
                 if !caps_map.is_empty() {
                     model_spec_map.insert("capabilities".to_string(), Value::Object(caps_map));
@@ -616,7 +643,10 @@ mod migration_hardening_tests {
             ConfigMigrationManager::transform_flat_to_tree(&legacy_json).expect("迁移转换应当成功");
         assert_eq!(total_models, 2);
 
-        let providers = migrated.get("providers").and_then(|v| v.as_object()).unwrap();
+        let providers = migrated
+            .get("providers")
+            .and_then(|v| v.as_object())
+            .unwrap();
         let provider = providers.get("custom-ai").expect("custom-ai 供应商存在");
 
         // 验证供应商级 headers
@@ -660,7 +690,9 @@ mod migration_hardening_tests {
             .iter()
             .find(|m| m.get("id").and_then(|v| v.as_str()) == Some("flat-tools-model"))
             .unwrap();
-        let m2_caps = m2.get("capabilities").expect("flat-tools-model capabilities 存在");
+        let m2_caps = m2
+            .get("capabilities")
+            .expect("flat-tools-model capabilities 存在");
         assert_eq!(m2_caps.get("tools").and_then(|v| v.as_bool()), Some(true));
     }
 

@@ -892,7 +892,11 @@ fn thought_delta_each_field_individually_captured() {
                 _ => None,
             })
             .collect();
-        assert_eq!(thoughts, vec![expected_val], "字段 {field} 必须被捕获为 ThoughtDelta");
+        assert_eq!(
+            thoughts,
+            vec![expected_val],
+            "字段 {field} 必须被捕获为 ThoughtDelta"
+        );
     }
 }
 
@@ -902,7 +906,10 @@ fn thought_delta_streaming_sequence_zero_loss() {
     let events = parse_all(vec![
         &delta_frame(json!({ "reasoning_content": "第一步：" }), Value::Null),
         &delta_frame(json!({ "reasoning_content": "分析问题；" }), Value::Null),
-        &delta_frame(json!({ "reasoning_content": "第二步：得出结论。" }), Value::Null),
+        &delta_frame(
+            json!({ "reasoning_content": "第二步：得出结论。" }),
+            Value::Null,
+        ),
         &delta_frame(json!({ "content": "最终答案是42。" }), Value::Null),
         &delta_frame(json!({}), json!("stop")),
     ]);
@@ -914,7 +921,10 @@ fn thought_delta_streaming_sequence_zero_loss() {
             _ => None,
         })
         .collect();
-    assert_eq!(thoughts, vec!["第一步：", "分析问题；", "第二步：得出结论。"]);
+    assert_eq!(
+        thoughts,
+        vec!["第一步：", "分析问题；", "第二步：得出结论。"]
+    );
 
     let texts: Vec<&str> = events
         .iter()

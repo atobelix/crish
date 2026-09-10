@@ -64,7 +64,9 @@ impl ToolCallCollector {
 
     /// 是否已捕获到至少一个具名调用（RU-08/09 判定用，02 §五 #5/#6）
     pub fn has_named_calls(&self) -> bool {
-        self.pending.values().any(|pending| pending.name.is_some())
+        self.pending.values().any(|pending| {
+            pending.name.as_deref().is_some_and(|n| !n.trim().is_empty())
+        })
     }
 
     /// 当前 pending 总数
@@ -99,14 +101,18 @@ impl ToolCallCollector {
                 name: None,
                 arguments_text: String::new(),
             });
-        // id 覆盖式（02 §2.3:101）
+        // id 覆盖式（02 §2.3:101；忽略空串，防止后续 delta 的 id: "" 覆盖真实 id）
         if let Some(id) = string_field(record.get("id")) {
-            entry.id = id.to_owned();
+            if !id.trim().is_empty() {
+                entry.id = id.to_owned();
+            }
         }
-        // 标准结构：function.name 覆盖式 / function.arguments 追加式
+        // 标准结构：function.name 覆盖式 / function.arguments 追加式（忽略空 name）
         if let Some(function) = record.get("function").and_then(Value::as_object) {
             if let Some(name) = string_field(function.get("name")) {
-                entry.name = Some(name.to_owned());
+                if !name.trim().is_empty() {
+                    entry.name = Some(name.to_owned());
+                }
             }
             if let Some(arguments) = string_field(function.get("arguments")) {
                 entry.arguments_text.push_str(arguments);
@@ -117,7 +123,9 @@ impl ToolCallCollector {
             if let Some(name) = string_field(record.get("function_name"))
                 .or_else(|| string_field(record.get("name")))
             {
-                entry.name = Some(name.to_owned());
+                if !name.trim().is_empty() {
+                    entry.name = Some(name.to_owned());
+                }
             }
         }
         if let Some(arguments) = string_field(record.get("arguments")) {
@@ -133,13 +141,21 @@ impl ToolCallCollector {
         let pending_len = pending.len();
         let mut calls = Vec::new();
         let mut diagnostics = Vec::new();
-        for pending in pending.into_values() {
-            match pending.name {
-                Some(name) => calls.push(ToolCall {
-                    id: Some(pending.id),
-                    tool_name: name,
-                    input: parse_arguments(&pending.arguments_text),
-                }),
+        for (index, pending) in pending {
+            let valid_name = pending.name.filter(|n| !n.trim().is_empty());
+            match valid_name {
+                Some(name) => {
+                    let id = if pending.id.trim().is_empty() {
+                        format!("call_{index}")
+                    } else {
+                        pending.id
+                    };
+                    calls.push(ToolCall {
+                        id: Some(id),
+                        tool_name: name,
+                        input: parse_arguments(&pending.arguments_text),
+                    });
+                }
                 None => diagnostics.push(ProviderDiagnostic {
                     phase: ProviderDiagnosticPhase::InvalidToolCall,
                     reason: Some("function.name missing in streamed tool_call".to_string()),
@@ -187,8 +203,12 @@ pub fn parse_arguments(input: &str) -> Value {
 pub fn parse_full_tool_call(raw: &Value) -> Option<ToolCall> {
     let record = raw.as_object()?;
     let function = record.get("function")?.as_object()?;
-    let name = function.get("name")?.as_str()?;
+    let name = function.get("name")?.as_str()?.trim();
+    if name.is_empty() {
+        return None;
+    }
     let id = string_field(record.get("id"))
+        .filter(|s| !s.trim().is_empty())
         .map(str::to_owned)
         .unwrap_or_else(|| format!("call_{name}"));
     let arguments_text = string_field(function.get("arguments")).unwrap_or("{}");

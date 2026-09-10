@@ -966,10 +966,16 @@ mod tests {
             ],
             false,
         );
-        assert!(result.response.is_message(), "纯思考流必须产出 Message，不得被判定为 Empty");
+        assert!(
+            result.response.is_message(),
+            "纯思考流必须产出 Message，不得被判定为 Empty"
+        );
         assert_eq!(result.response.text(), "");
         assert_eq!(result.stop_reason(), Some(ConsumeStopReason::Stop));
-        assert_eq!(result.metadata["thought"], "深度思考内容片段1深度思考内容片段2");
+        assert_eq!(
+            result.metadata["thought"],
+            "深度思考内容片段1深度思考内容片段2"
+        );
         let blocks = result.metadata["thoughtBlocks"].as_array().unwrap();
         assert_eq!(blocks.len(), 2);
         assert_eq!(blocks[0]["text"], "深度思考内容片段1");
@@ -981,13 +987,11 @@ mod tests {
     /// abort 发生在纯思考流中 → 保留思考内容，stopReason=aborted（partial salvage）
     #[test]
     fn abort_with_only_thought_keeps_partial_message() {
-        let result = consume(
-            vec![
-                thought_delta("流中被 abort 的思考片段", None),
-            ],
-            true,
+        let result = consume(vec![thought_delta("流中被 abort 的思考片段", None)], true);
+        assert!(
+            result.response.is_message(),
+            "仅有思考内容时 abort 必须保留为 Message"
         );
-        assert!(result.response.is_message(), "仅有思考内容时 abort 必须保留为 Message");
         assert_eq!(result.response.text(), "");
         assert_eq!(result.stop_reason(), Some(ConsumeStopReason::Aborted));
         assert_eq!(result.metadata["aborted"], true);
@@ -1004,7 +1008,10 @@ mod tests {
             ],
             false,
         );
-        assert!(result.response.is_message(), "有思考内容且发生 error stop 时必须产出 Message");
+        assert!(
+            result.response.is_message(),
+            "有思考内容且发生 error stop 时必须产出 Message"
+        );
         assert_eq!(result.metadata["thought"], "思考到一半发生错误");
         assert_eq!(result.metadata["providerError"], "网络异常中断");
     }

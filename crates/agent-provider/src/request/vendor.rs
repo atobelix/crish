@@ -14,8 +14,6 @@ use serde_json::{json, Value};
 
 use crate::config::Endpoint;
 
-#[path = "vendor/dialect.rs"]
-mod dialect;
 #[path = "vendor/reject.rs"]
 mod reject;
 #[path = "vendor_capability.rs"]
@@ -23,7 +21,10 @@ mod vendor_capability;
 #[path = "vendor_wire.rs"]
 mod vendor_wire;
 
-pub use dialect::{build_reasoning_wire, resolve_wire_spelling_with_tiers};
+// dialect 单模块（plans/04 §3.2）：只由 `build.rs` 的 `pub mod dialect` 编译，
+// 本模块不再声明第二个 `#[path]` 副本——四个 builder 共用同一
+// `assemble_thinking_dialect`，杜绝双份类型与双实现漂移。
+pub use crate::request::build::dialect::{build_reasoning_wire, resolve_wire_spelling_with_tiers};
 pub use reject::{resolve_reasoning_level, DegradePolicy, ReasoningEffortState, ReasoningReject};
 pub use vendor_capability::infer_thinking_capability;
 pub use vendor_wire::{

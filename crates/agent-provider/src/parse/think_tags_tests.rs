@@ -4,10 +4,7 @@ use super::*;
 use crate::events::ProviderStreamEvent;
 use crate::sse::frame::SseFrame;
 
-fn extract_all(
-    extractor: &mut StreamingTagExtractor,
-    chunks: &[&str],
-) -> Vec<ProviderStreamEvent> {
+fn extract_all(extractor: &mut StreamingTagExtractor, chunks: &[&str]) -> Vec<ProviderStreamEvent> {
     let mut events = Vec::new();
     for chunk in chunks {
         events.extend(extractor.push_text(chunk));
@@ -32,10 +29,7 @@ fn extract_pieces_all(
 #[test]
 fn test_standard_single_chunk() {
     let mut extractor = StreamingTagExtractor::default();
-    let events = extract_all(
-        &mut extractor,
-        &["<think>Hello thinking</think>World text"],
-    );
+    let events = extract_all(&mut extractor, &["<think>Hello thinking</think>World text"]);
     assert_eq!(
         events,
         vec![
@@ -55,8 +49,8 @@ fn test_standard_single_chunk() {
 fn test_extreme_token_fragmentation() {
     let mut extractor = StreamingTagExtractor::default();
     let chunks = &[
-        "<", "t", "h", "i", "n", "k", ">", "P", "l", "a", "n", " ", "A", "<", "/", "t", "h",
-        "i", "n", "k", ">", "A", "n", "s", "w", "e", "r",
+        "<", "t", "h", "i", "n", "k", ">", "P", "l", "a", "n", " ", "A", "<", "/", "t", "h", "i",
+        "n", "k", ">", "A", "n", "s", "w", "e", "r",
     ];
     let events = extract_all(&mut extractor, chunks);
 
@@ -395,8 +389,10 @@ fn test_push_chunk_and_push_text_parity() {
     let pieces = extract_pieces_all(&mut ext1, chunks);
     let events = extract_all(&mut ext2, chunks);
 
-    let mapped_events: Vec<ProviderStreamEvent> =
-        pieces.into_iter().map(ExtractedPiece::into_stream_event).collect();
+    let mapped_events: Vec<ProviderStreamEvent> = pieces
+        .into_iter()
+        .map(ExtractedPiece::into_stream_event)
+        .collect();
     assert_eq!(mapped_events, events);
 }
 
@@ -495,16 +491,14 @@ fn test_gemini_parser_streaming_thought_tag_extraction() {
     let mut parser = GeminiParser::new();
     let mut events = Vec::new();
 
-    let frames = vec![
-        serde_json::json!({
-            "candidates": [{
-                "content": {
-                    "parts": [{ "text": "<thought>Analyzing step by step</thought>Gemini solution" }]
-                },
-                "finishReason": "STOP"
-            }]
-        }),
-    ];
+    let frames = vec![serde_json::json!({
+        "candidates": [{
+            "content": {
+                "parts": [{ "text": "<thought>Analyzing step by step</thought>Gemini solution" }]
+            },
+            "finishReason": "STOP"
+        }]
+    })];
 
     for payload in frames {
         let frame = SseFrame {
@@ -560,7 +554,10 @@ fn test_mismatched_close_tag_not_hijacking_thinking() {
         })
         .collect();
 
-    assert_eq!(thoughts, "Thinking with </thought> and </thinking> embedded");
+    assert_eq!(
+        thoughts,
+        "Thinking with </thought> and </thinking> embedded"
+    );
     assert_eq!(texts, "Final Answer");
 }
 
@@ -623,7 +620,12 @@ fn test_thinking_tag_with_mismatched_close_tags() {
 fn test_multibyte_utf8_across_chunks() {
     let mut extractor = StreamingTagExtractor::default();
     let chunks = &[
-        "<thi", "nk>思考：", "Rust 🦀 深度", "推理 ∑(x_i)</th", "ink>正文：", "完成！🎯",
+        "<thi",
+        "nk>思考：",
+        "Rust 🦀 深度",
+        "推理 ∑(x_i)</th",
+        "ink>正文：",
+        "完成！🎯",
     ];
     let events = extract_all(&mut extractor, chunks);
 
@@ -694,4 +696,3 @@ fn test_unclosed_thinking_stream_at_eof() {
         }]
     );
 }
-

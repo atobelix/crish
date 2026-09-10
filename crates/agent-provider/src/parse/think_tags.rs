@@ -175,11 +175,15 @@ impl StreamingTagExtractor {
         if !self.lookahead_buf.is_empty() {
             match self.state {
                 TagState::MatchingOpen | TagState::Text => {
-                    pieces.push(ExtractedPiece::Text(std::mem::take(&mut self.lookahead_buf)));
+                    pieces.push(ExtractedPiece::Text(std::mem::take(
+                        &mut self.lookahead_buf,
+                    )));
                     self.state = TagState::Text;
                 }
                 TagState::MatchingClose | TagState::Thinking => {
-                    pieces.push(ExtractedPiece::Thought(std::mem::take(&mut self.lookahead_buf)));
+                    pieces.push(ExtractedPiece::Thought(std::mem::take(
+                        &mut self.lookahead_buf,
+                    )));
                     self.state = TagState::Thinking;
                 }
             }
@@ -225,7 +229,11 @@ impl StreamingTagExtractor {
             }
 
             // 2. 属于某开标签的前缀
-            if self.tags.iter().any(|t| t.open.starts_with(&self.lookahead_buf)) {
+            if self
+                .tags
+                .iter()
+                .any(|t| t.open.starts_with(&self.lookahead_buf))
+            {
                 self.state = TagState::MatchingOpen;
                 return;
             }
@@ -259,7 +267,9 @@ impl StreamingTagExtractor {
 
             if exact_match {
                 if !current_thought_batch.is_empty() {
-                    pieces.push(ExtractedPiece::Thought(std::mem::take(current_thought_batch)));
+                    pieces.push(ExtractedPiece::Thought(std::mem::take(
+                        current_thought_batch,
+                    )));
                 }
                 self.lookahead_buf.clear();
                 self.state = TagState::Text;
@@ -274,7 +284,9 @@ impl StreamingTagExtractor {
                     .get(idx)
                     .is_some_and(|t| t.close.starts_with(&self.lookahead_buf))
             } else {
-                self.tags.iter().any(|t| t.close.starts_with(&self.lookahead_buf))
+                self.tags
+                    .iter()
+                    .any(|t| t.close.starts_with(&self.lookahead_buf))
             };
 
             if is_prefix {

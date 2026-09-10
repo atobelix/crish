@@ -240,20 +240,35 @@ fn temperature_in_generation_config() {
 #[test]
 fn thinking_level_when_enabled() {
     let messages: Vec<Arc<AgentMessage>> = vec![Arc::new(user_msg("hi"))];
+    // W7：map 值原样进 thinkingConfig.thinkingLevel（"HIGH" 不折 "high"）
+    let mut high_map = indexmap::IndexMap::new();
+    high_map.insert("High".to_string(), "HIGH".to_string());
     let opts = GeminiRequestOptions {
-        thinking_intensity: Some(ThinkingIntensity::High),
+        thinking_format: Some(crate::models::catalog_types::ThinkingFormat::Gemini),
+        thinking_map: Some(high_map),
+        reasoning_effort: Some(ReasoningEffort::High),
         ..GeminiRequestOptions::default()
     };
     let body = build_gemini_request_body(&opts, &context_for(&messages));
-    assert_eq!(body["generationConfig"]["thinking_level"], "high");
+    assert_eq!(
+        body["generationConfig"]["thinkingConfig"]["thinkingLevel"],
+        "HIGH"
+    );
 
-    // 中档 → medium
+    // 中档 → map 值 medium
+    let mut medium_map = indexmap::IndexMap::new();
+    medium_map.insert("Medium".to_string(), "medium".to_string());
     let opts = GeminiRequestOptions {
-        thinking_intensity: Some(ThinkingIntensity::Medium),
+        thinking_format: Some(crate::models::catalog_types::ThinkingFormat::Gemini),
+        thinking_map: Some(medium_map),
+        reasoning_effort: Some(ReasoningEffort::Medium),
         ..GeminiRequestOptions::default()
     };
     let body = build_gemini_request_body(&opts, &context_for(&messages));
-    assert_eq!(body["generationConfig"]["thinking_level"], "medium");
+    assert_eq!(
+        body["generationConfig"]["thinkingConfig"]["thinkingLevel"],
+        "medium"
+    );
 }
 
 #[test]

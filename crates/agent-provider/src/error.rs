@@ -27,8 +27,9 @@ mod error_classify;
 
 use error_classify::{
     contains_abort_words, detect_auth_message, detect_context_length_exceeded,
-    detect_network_message, detect_quota_message, detect_rate_limit_message, detect_server_message,
-    detect_timeout_message, is_server_status, looks_like_gateway_challenge,
+    detect_long_rate_limit_lock, detect_network_message, detect_quota_message,
+    detect_rate_limit_message, detect_server_message, detect_timeout_message,
+    extract_seconds_from_text, is_server_status, looks_like_gateway_challenge,
     looks_like_payload_too_large_message,
 };
 
@@ -241,7 +242,11 @@ pub fn classify_provider_error(
     }
     // 8. HTTP 429 → rate-limit + Retry-After（:192-199）
     if status == Some(429) {
-        let retry_after = parse_retry_after_ms(retry_after_header, SystemTime::now());
+        if detect_long_rate_limit_lock(&lower) {
+            return ProviderError::Quota { status };
+        }
+        let retry_after = parse_retry_after_ms(retry_after_header, SystemTime::now())
+            .or_else(|| extract_seconds_from_text(&lower).map(Duration::from_millis));
         return ProviderError::RateLimit {
             status,
             retry_after,
@@ -278,9 +283,13 @@ pub fn classify_provider_error(
         return ProviderError::Quota { status };
     }
     if detect_rate_limit_message(&lower) {
+        if detect_long_rate_limit_lock(&lower) {
+            return ProviderError::Quota { status };
+        }
+        let retry_after = extract_seconds_from_text(&lower).map(Duration::from_millis);
         return ProviderError::RateLimit {
             status,
-            retry_after: None,
+            retry_after,
         };
     }
     if looks_like_payload_too_large_message(&lower) {

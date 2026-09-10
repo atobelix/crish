@@ -23,12 +23,12 @@ use super::messages::ReasoningContentMode;
 use super::tools::{ToolChoice, ToolDefinition};
 use super::vendor::{ReasoningEffort, ReasoningEffortFormat, ReasoningVendor, ThinkingIntensity};
 
-#[path = "vendor/dialect.rs"]
-pub mod dialect;
 #[path = "build_chat.rs"]
 mod build_chat;
 #[path = "build_responses.rs"]
 mod build_responses;
+#[path = "vendor/dialect.rs"]
+pub mod dialect;
 
 pub use build_chat::build_chat_completions_request_body;
 pub use build_responses::{affinity_http_headers, build_responses_request_body};
@@ -98,6 +98,12 @@ pub struct ChatCompletionsRequestOptions {
     pub thinking_map: Option<indexmap::IndexMap<String, String>>,
     /// 显式配置的思考方言组装格式
     pub thinking_format: Option<crate::models::catalog_types::ThinkingFormat>,
+    /// 是否支持思考（WireCompat 入参：developer role 判定三要素之一；
+    /// 来自出站剖面 `thinking_map` 非空）
+    pub supports_reasoning: bool,
+    /// 兼容规格（WireCompat 入参：thinking_format / supports_developer_role /
+    /// max_tokens_field / cacheControlFormat；模型 ≻ 供应商合并）
+    pub compat: Option<crate::models::catalog_types::CompatSpec>,
 }
 
 /// Responses API 请求构建选项（对齐 ChatCompletionsRequestOptions 统一契约）

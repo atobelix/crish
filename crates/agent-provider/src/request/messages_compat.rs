@@ -13,11 +13,8 @@
 //!
 //! SR-06e · 拆分 · ≠ EL：独立新子模块（[messages.rs] 经 `#[path]` 接线）。
 
-#![allow(dead_code)]
-
 use conex_types::message::AgentMessage;
 
-use super::super::compat::resolve_developer_role;
 use super::messages_content::thought_content;
 
 /// wire 消息序列化 compat 上下文（G5-a/G5-b · T2.2/T2.3；R2 消息序列化消费面）
@@ -33,12 +30,16 @@ pub struct WireCompat<'a> {
     pub vendor: Option<&'a str>,
     /// 模型名（[resolve_developer_role] 的 `anthropic/`|`openai/` 前缀判定）
     pub model: Option<&'a str>,
-    /// base_url（developer role 的 openrouter 判定）
+    /// base_url（developer role 的 openrouter 判定；生产已不再传，恒 None）
     pub base_url: Option<&'a str>,
     /// 是否支持 reasoning（developer role 判定的三要素之一）
     pub supports_reasoning: bool,
     /// 思考方言格式配置（如 "deepseek"）
     pub thinking_format: Option<&'a str>,
+    /// 显式 developer role 支持（yaml `compat.supportsDeveloperRole`；优先于
+    /// 旧 openrouter 启发式——plans/04 §2.4「resolve_developer_role_from_compat，
+    /// 缺省 false」）
+    pub supports_developer_role: bool,
 }
 
 impl<'a> WireCompat<'a> {
@@ -64,6 +65,9 @@ impl<'a> WireCompat<'a> {
             base_url,
             supports_reasoning,
             thinking_format,
+            supports_developer_role: compat
+                .and_then(|c| c.supports_developer_role)
+                .unwrap_or(false),
         }
     }
 
@@ -76,19 +80,13 @@ impl<'a> WireCompat<'a> {
     }
 }
 
-/// system 消息 wire 角色（G5-a · T2.3）：[resolve_developer_role] 返回真 →
-/// `"developer"`，否则 `"system"`（chat 轨 NativeSystemRole 分支消费；
-/// user-prefix 分支由调用方恒置 `"user"` 不参与本判定）。
-///
-/// 缺省 [WireCompat]（supports_reasoning=false → 恒 `false`）时恒返回
-/// `"system"`，与既有字节一致。判定是纯函数消费，不属地领域层。
+/// system 消息 wire 角色（G5-a · T2.3）：yaml 显式声明 developer role →
+/// `"developer"`，否则恒 `"system"`（plans/04 §2.4「resolve_developer_role_
+/// from_compat，缺省 false」——生产不再走 openrouter / o 系列 URL 启发式，
+/// 旧 [resolve_developer_role] 保留给 S7 删除面）。user-prefix 分支由调用方
+/// 恒置 `"user"` 不参与本判定。
 pub fn resolve_system_role(compat: &WireCompat<'_>) -> &'static str {
-    if resolve_developer_role(
-        compat.vendor.unwrap_or(""),
-        compat.model.unwrap_or(""),
-        compat.base_url.unwrap_or(""),
-        compat.supports_reasoning,
-    ) {
+    if compat.supports_developer_role {
         "developer"
     } else {
         "system"

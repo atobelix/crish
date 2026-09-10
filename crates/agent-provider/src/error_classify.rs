@@ -51,13 +51,72 @@ pub(super) fn detect_quota_message(lower: &str) -> bool {
         || lower.contains("out of credits")
 }
 
-/// rate limit 消息字样（:249-255）：rate.?limit|too many requests
+/// rate limit 消息字样（:249-255）：rate.?limit|too many requests|rpm|tpm
 pub(super) fn detect_rate_limit_message(lower: &str) -> bool {
     lower.contains("ratelimit")
         || lower.contains("rate limit")
         || lower.contains("rate-limit")
         || lower.contains("too many requests")
+        || lower.contains("rpm")
+        || lower.contains("tpm")
+        || lower.contains("requests per minute")
+        || lower.contains("tokens per minute")
 }
+
+/// 判定是否包含长周期限流/配额锁定的字样（hours/days/tomorrow/minute 等，无法通过短时瞬态重试自愈）
+pub(super) fn detect_long_rate_limit_lock(lower: &str) -> bool {
+    if lower.contains("hour")
+        || lower.contains("day")
+        || lower.contains("tomorrow")
+        || lower.contains("24h")
+        || lower.contains("12h")
+    {
+        return true;
+    }
+    // 检查明确的长等待分钟数（先排除 "per minute" 速率单位）
+    let clean = lower.replace("per minute", "").replace("per min", "");
+    for anchor in &["try again in ", "wait ", "retry after ", "retry in "] {
+        if let Some(idx) = clean.find(anchor) {
+            let slice = &clean[idx + anchor.len()..];
+            let num_str: String = slice
+                .chars()
+                .take_while(|c| c.is_ascii_digit())
+                .collect();
+            if let Ok(mins) = num_str.parse::<u32>() {
+                if slice.contains("min") || slice.contains("minute") {
+                    return mins >= 3;
+                }
+            }
+        }
+    }
+    // 若文案包含等待若干分钟字样
+    if (clean.contains("minutes") || clean.contains("mins"))
+        && (clean.contains("wait") || clean.contains("retry"))
+    {
+        return true;
+    }
+    false
+}
+
+/// 从错误文本中尝试提取短时重试等待秒数（毫秒）
+pub(super) fn extract_seconds_from_text(lower: &str) -> Option<u64> {
+    for anchor in &["try again in ", "retry after ", "wait ", "retry in ", "after "] {
+        if let Some(idx) = lower.find(anchor) {
+            let slice = &lower[idx + anchor.len()..];
+            let num_str: String = slice
+                .chars()
+                .take_while(|c| c.is_ascii_digit() || *c == '.')
+                .collect();
+            if let Ok(secs) = num_str.parse::<f64>() {
+                if secs > 0.0 && secs <= 300.0 {
+                    return Some((secs * 1000.0) as u64);
+                }
+            }
+        }
+    }
+    None
+}
+
 
 /// payload 过大消息（:372-377）：先排除 4130 系列码（Anthropic 的 "model version 4130"
 /// 是服务端错误码而非 HTTP 413），再匹配 payload 过大字样（含裸 "413"）
