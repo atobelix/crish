@@ -227,13 +227,41 @@ export function projectEventsToMessages(events: unknown[]): {
         rekeyAssistantIfStable(messages, a, id);
         // message-end 为终态；后续 partial 不得经 merge 回退
         a.status = 'completed';
-        if (thought) a.thinking = thought;
+        const turnIndex =
+          typeof event.turnIndex === 'number' ? event.turnIndex : 0;
+        if (thought) {
+          a.thinking = thought;
+          if (!a.thinkingTurns) a.thinkingTurns = [];
+          const thoughtKey = `thought-turn-${turnIndex}`;
+          const ttIdx = a.thinkingTurns.findIndex((tt) => tt.turnIndex === turnIndex);
+          if (ttIdx >= 0) {
+            a.thinkingTurns[ttIdx]!.content = thought;
+          } else {
+            a.thinkingTurns.push({
+              turnIndex,
+              content: thought,
+              id: thoughtKey,
+            });
+          }
+          if (!a.blocks) a.blocks = [];
+          const blkIdx = a.blocks.findIndex(
+            (b) => b.type === 'thought' && (b.id === thoughtKey || b.turnIndex === turnIndex)
+          );
+          if (blkIdx >= 0) {
+            a.blocks[blkIdx]!.content = thought;
+          } else {
+            a.blocks.push({
+              type: 'thought',
+              id: thoughtKey,
+              content: thought,
+              turnIndex,
+            });
+          }
+        }
         if (text) {
           // G4 / 04 §5.2-5：按 turnIndex 分段——同 turn 幂等覆盖（终态权威，
           // 亦覆盖 delta 累积碎片），跨 turn 追加新段（reload 后多轮文本
           // 完整）；旧载荷（无 turnIndex）按 0 处理，单段路径与旧行为一致
-          const turnIndex =
-            typeof event.turnIndex === 'number' ? event.turnIndex : 0;
           const st = turnTextByMessage.get(a.id) ?? { turnIndex: -1, text: '' };
           if (turnIndex === st.turnIndex) {
             st.text = text;
@@ -248,7 +276,7 @@ export function projectEventsToMessages(events: unknown[]): {
           if (!a.blocks) a.blocks = [];
           const last = a.blocks[a.blocks.length - 1];
           if (last?.type === 'text') last.content = text;
-          else a.blocks.push({ type: 'text', content: text });
+          else a.blocks.push({ type: 'text', content: text, turnIndex });
           a.streamTextOffset = text.length;
         }
       }

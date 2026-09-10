@@ -3,6 +3,7 @@
  */
 
 import type { MessageToolCall } from '../../store/layoutStore';
+import { isEditToolName } from '../toolFeedbackDiff';
 
 /** git shortstat 摘要行 */
 export function parseGitShortstat(
@@ -57,6 +58,10 @@ export function isDiffMetaPlusMinusLine(line: string): boolean {
 export function toolDiffLineStats(
   tc: MessageToolCall
 ): { add: number; del: number } | null {
+  // 只有在实际编辑/修改文件时才需要显示差异变化，只读查看命令绝不显示差异
+  if (!isEditToolName(tc.name)) {
+    return null;
+  }
   let add = 0;
   let del = 0;
   if (tc.diffs?.length) {

@@ -26,6 +26,8 @@ import {
   normalizeAssistantTimeline,
   reconcileAssistantMessageBlocks,
 } from '../../api/tool-presentation/timelineNormalizer';
+import { parseSessionMessage } from '../../api/session-persistence/sessionHydrationMessages';
+import { projectEventsToMessages } from '../../api/sessionEventProjection';
 
 function makeToolCall(
   partial: Partial<MessageToolCall> &
@@ -545,6 +547,148 @@ describe('时间线 Blocks 保全合并算法与防退避测试套件', () => {
 
       // 整体结构：thought 必然在 text 之前
       expect(currentMsg?.blocks?.map((b) => b.type)).toEqual(['thought', 'text']);
+    });
+
+    it('normalizeAssistantTimeline 自动自愈因历史缺陷误置于工具之后的 thought-legacy 块并移回首位', () => {
+      const msg = makeMessage({
+        id: 'msg-legacy-heal',
+        sender: 'assistant',
+        toolCalls: [
+          makeToolCall({ id: 'tc-1', name: 'cmd-1', status: 'success' }),
+          makeToolCall({ id: 'tc-2', name: 'cmd-2', status: 'success' }),
+        ],
+        blocks: [
+          { type: 'tool_call', id: 'tc-1', turnIndex: 0 },
+          { type: 'tool_call', id: 'tc-2', turnIndex: 0 },
+          { type: 'thought', id: 'thought-legacy', content: '旧版误置的思考', turnIndex: 0 },
+          { type: 'text', content: '最终回复正文', turnIndex: 0 },
+        ],
+      });
+
+      const normalized = normalizeAssistantTimeline(msg);
+      expect(normalized.blocks?.map((b) => b.type)).toEqual([
+        'thought',
+        'tool_call',
+        'tool_call',
+        'text',
+      ]);
+      expect(normalized.blocks?.[0]?.content).toBe('旧版误置的思考');
+    });
+
+    it('parseSessionMessage 在持久化重水合时不丢弃 thought 与 context_injection 块，并保留 thinkingTurns', () => {
+      const raw = {
+        id: 'msg-hydrate-test',
+        sender: 'assistant',
+        timestamp: Date.now(),
+        text: '回复正文',
+        thinking: '第二轮思考',
+        blocks: [
+          { type: 'thought', id: 'thought-turn-0', content: '第一轮思考', turnIndex: 0 },
+          { type: 'tool_call', id: 't-1', turnIndex: 0 },
+          { type: 'thought', id: 'thought-turn-1', content: '第二轮思考', turnIndex: 1 },
+          { type: 'text', content: '回复正文', turnIndex: 1 },
+        ],
+      };
+
+      const parsed = parseSessionMessage(raw);
+      expect(parsed?.blocks).toHaveLength(4);
+      expect(parsed?.blocks?.map((b) => b.type)).toEqual([
+        'thought',
+        'tool_call',
+        'thought',
+        'text',
+      ]);
+      expect(parsed?.thinkingTurns).toHaveLength(2);
+      expect(parsed?.thinkingTurns?.[0]?.content).toBe('第一轮思考');
+      expect(parsed?.thinkingTurns?.[1]?.content).toBe('第二轮思考');
+    });
+
+    it('projectEventsToMessages 投影多轮 message-end 与工具事件，严格输出交错时间线零丢失', () => {
+      const events = [
+        {
+          sequence: 1,
+          type: 'runtime-event',
+          payload: {
+            event: {
+              type: 'message-end',
+              turnIndex: 1,
+              runId: 'r1',
+              message: {
+                role: 'assistant',
+                clientMessageId: 'asst-1',
+                blocks: [
+                  { type: 'thought', text: '分析代码结构' },
+                  { type: 'text', text: '我来查看文件：' },
+                ],
+              },
+            },
+          },
+        },
+        {
+          sequence: 2,
+          type: 'runtime-event',
+          payload: {
+            event: {
+              type: 'tool-start',
+              call: { id: 'call-1', name: 'read_file', args: '{}' },
+              turnIndex: 1,
+            },
+          },
+        },
+        {
+          sequence: 3,
+          type: 'runtime-event',
+          payload: {
+            event: {
+              type: 'tool-end',
+              result: { id: 'call-1', text: '文件内容', isError: false },
+            },
+          },
+        },
+        {
+          sequence: 4,
+          type: 'runtime-event',
+          payload: {
+            event: {
+              type: 'message-end',
+              turnIndex: 2,
+              runId: 'r1',
+              message: {
+                role: 'assistant',
+                clientMessageId: 'asst-1',
+                blocks: [
+                  { type: 'thought', text: '文件已读取完毕，正在给出结论' },
+                  { type: 'text', text: '分析完成，结果如下。' },
+                ],
+              },
+            },
+          },
+        },
+      ];
+
+      const { messages } = projectEventsToMessages(events);
+      expect(messages).toHaveLength(1);
+      const asst = messages[0]!;
+      expect(asst.blocks?.map((b) => b.type)).toEqual([
+        'thought',
+        'text',
+        'tool_call',
+        'thought',
+        'text',
+      ]);
+      expect(asst.thinkingTurns).toHaveLength(2);
+      expect(asst.thinkingTurns?.[0]?.content).toBe('分析代码结构');
+      expect(asst.thinkingTurns?.[1]?.content).toBe('文件已读取完毕，正在给出结论');
+
+      // 验证渲染视图 timeline 自然交错
+      const timeline = buildAssistantTimeline(asst);
+      expect(timeline.map((t) => t.kind)).toEqual([
+        'thought',
+        'text',
+        'tools',
+        'thought',
+        'text',
+      ]);
     });
   });
 });

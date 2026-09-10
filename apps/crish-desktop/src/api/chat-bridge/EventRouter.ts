@@ -167,6 +167,7 @@ export class EventRouter {
       const turn = eventTurn ?? rawTurn;
       if (turn !== null) {
         this.currentTurnIndex = turn;
+        this.state.activeTurnIndex = turn;
       }
       dispatchEvent(this.env, envelope);
       return;

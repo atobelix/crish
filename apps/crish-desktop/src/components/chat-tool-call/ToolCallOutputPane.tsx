@@ -16,6 +16,7 @@ import {
   parseListDirOutput,
   formatJsonIfApplicable,
 } from './toolOutputParser';
+import { isEditToolName } from '../../api/toolFeedbackDiff';
 
 export interface ToolCallOutputPaneProps {
   toolId?: string;
@@ -53,7 +54,7 @@ export const ToolCallOutputPane: React.FC<ToolCallOutputPaneProps> = ({
   const [copied, setCopied] = useState(false);
   const isError = status === 'error';
   const isRunning = status === 'running';
-  const hasDiffs = Boolean(diffs && diffs.length > 0);
+  const hasDiffs = Boolean(diffs && diffs.length > 0 && isEditToolName(name || ''));
   const hasImages = Boolean(images && images.length > 0);
   const emptyBody = !output && !hasDiffs && !hasImages;
 

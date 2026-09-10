@@ -129,17 +129,76 @@ export function parseSessionMessage(raw: unknown): SessionMessage | null {
     for (const b of o.blocks) {
       if (!b || typeof b !== 'object') continue;
       const bo = b as Record<string, unknown>;
+      const bTurn =
+        typeof bo.turnIndex === 'number' && Number.isFinite(bo.turnIndex)
+          ? bo.turnIndex
+          : undefined;
       if (bo.type === 'text') {
         blocks.push({
           type: 'text',
           content: typeof bo.content === 'string' ? bo.content : '',
+          ...(bTurn !== undefined ? { turnIndex: bTurn } : {}),
         });
       } else if (bo.type === 'tool_call') {
         const bid = typeof bo.id === 'string' ? bo.id : undefined;
-        blocks.push({ type: 'tool_call', ...(bid !== undefined ? { id: bid } : {}) });
+        blocks.push({
+          type: 'tool_call',
+          ...(bid !== undefined ? { id: bid } : {}),
+          ...(bTurn !== undefined ? { turnIndex: bTurn } : {}),
+        });
+      } else if (bo.type === 'thought') {
+        const bid = typeof bo.id === 'string' ? bo.id : undefined;
+        const dur =
+          typeof bo.durationMs === 'number' && Number.isFinite(bo.durationMs)
+            ? bo.durationMs
+            : undefined;
+        blocks.push({
+          type: 'thought',
+          content: typeof bo.content === 'string' ? bo.content : '',
+          ...(bid !== undefined ? { id: bid } : {}),
+          ...(bTurn !== undefined ? { turnIndex: bTurn } : {}),
+          ...(dur !== undefined ? { durationMs: dur } : {}),
+          ...(typeof bo.isStreaming === 'boolean'
+            ? { isStreaming: bo.isStreaming }
+            : {}),
+          ...(typeof bo.isHistoricalCollapsed === 'boolean'
+            ? { isHistoricalCollapsed: bo.isHistoricalCollapsed }
+            : {}),
+          ...(typeof bo.redacted === 'boolean' ? { redacted: bo.redacted } : {}),
+        });
+      } else if (bo.type === 'context_injection') {
+        const bid = typeof bo.id === 'string' ? bo.id : undefined;
+        blocks.push({
+          type: 'context_injection',
+          ...(bid !== undefined ? { id: bid } : {}),
+          ...(bo.injection ? { injection: bo.injection as any } : {}),
+          ...(bTurn !== undefined ? { turnIndex: bTurn } : {}),
+        });
       }
     }
     if (blocks.length) msg.blocks = blocks;
+  }
+
+  if (Array.isArray(o.thinkingTurns) && o.thinkingTurns.length) {
+    msg.thinkingTurns = o.thinkingTurns
+      .filter((tt): tt is Record<string, unknown> => Boolean(tt && typeof tt === 'object'))
+      .map((tt) => ({
+        turnIndex: typeof tt.turnIndex === 'number' ? tt.turnIndex : 0,
+        content: typeof tt.content === 'string' ? tt.content : '',
+        ...(typeof tt.id === 'string' ? { id: tt.id } : {}),
+        ...(typeof tt.durationMs === 'number' ? { durationMs: tt.durationMs } : {}),
+        ...(typeof tt.isStreaming === 'boolean' ? { isStreaming: tt.isStreaming } : {}),
+      }));
+  } else if (msg.blocks) {
+    const derived = msg.blocks
+      .filter((b) => b.type === 'thought' && (b.content || '').trim())
+      .map((b) => ({
+        turnIndex: b.turnIndex ?? 0,
+        content: b.content || '',
+        ...(b.id ? { id: b.id } : {}),
+        ...(b.durationMs !== undefined ? { durationMs: b.durationMs } : {}),
+      }));
+    if (derived.length) msg.thinkingTurns = derived;
   }
 
   return msg;

@@ -93,7 +93,7 @@ export function buildAssistantTimeline(
     const toolsById = new Map(tools.map((t) => [t.id, t]));
     const injections = msg.injections || [];
     const injectionsById = new Map(injections.map((inj) => [inj.id, inj]));
-    const blocks = msg.blocks || [];
+    let blocks = msg.blocks || [];
     const items: AssistantTimelineItem[] = [];
     let toolBuf: MessageToolCall[] = [];
     let ti = 0;
@@ -110,6 +110,16 @@ export function buildAssistantTimeline(
     };
 
     if (blocks.length > 0) {
+      // 历史误置 thought-legacy 自愈：若存在旧版缺陷生成的 thought-legacy 且落在工具调用之后，移回首位
+      const legacyIdx = blocks.findIndex(
+        (b) => b.type === 'thought' && b.id === 'thought-legacy'
+      );
+      if (legacyIdx > 0) {
+        blocks = blocks.slice();
+        const [legacy] = blocks.splice(legacyIdx, 1);
+        blocks.unshift(legacy!);
+      }
+
       const usedTools = new Set<string>();
       const usedInjections = new Set<string>();
       if (!blocks.some((b) => b.type === 'thought')) {

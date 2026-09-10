@@ -214,9 +214,21 @@ export function createToolPatchQueue(opts: {
     // 确保思考块必然处于该工具块之前，绝不发生事后重排颠倒
     const currentLiveThinking = getStreamThinking(sid, assistantMsgId);
     if (currentLiveThinking && currentLiveThinking.trim()) {
+      const msg = getSessionById(sid)?.messages?.find(
+        (m) => m.id === assistantMsgId
+      );
+      const lastThought =
+        msg?.thinkingTurns?.[msg.thinkingTurns.length - 1] ||
+        msg?.blocks?.filter((b) => b.type === 'thought').pop();
+      const activeTurn = lastThought?.turnIndex ?? 0;
       getCompositionRoot()
         .session.getState()
-        .updateMessageThinking(sid, assistantMsgId, currentLiveThinking);
+        .updateMessageThinking(
+          sid,
+          assistantMsgId,
+          currentLiveThinking,
+          activeTurn
+        );
     }
     // Durable text snapshot before tool so blocks/streamTextOffset interleave correctly.
     snapshotStreamTextToSession(sid, assistantMsgId, readStreamedFullText());

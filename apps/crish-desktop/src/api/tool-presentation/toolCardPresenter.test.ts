@@ -508,6 +508,40 @@ describe('DIM-05 / Batch 3 工具卡片语义化与防逃逸测试套件', () =>
       expect(toolHasDiffStat(tc)).toBe(true);
     });
 
+    it('toolDiffLineStats 刚性阻断非编辑类工具（如 run_command, git diff, view_file）的差异统计', () => {
+      // 终端只读查看 git diff，即便输出包含 diff 内容和 shortstat，也绝不显示差异徽标
+      const gitDiffCall: MessageToolCall = {
+        id: 't-git-diff',
+        name: 'run_command',
+        arguments: JSON.stringify({ CommandLine: 'git diff HEAD~1' }),
+        output: ' 1 file changed, 10 insertions(+), 5 deletions(-)\n@@ -1,5 +1,10 @@\n+test line',
+        status: 'success',
+      };
+      expect(toolDiffLineStats(gitDiffCall)).toBeNull();
+      expect(toolHasDiffStat(gitDiffCall)).toBe(false);
+
+      // 查看文件只读探查
+      const viewFileCall: MessageToolCall = {
+        id: 't-view',
+        name: 'view_file',
+        arguments: JSON.stringify({ AbsolutePath: '/foo/bar.ts' }),
+        output: '--- a/foo\n+++ b/foo\n+added',
+        status: 'success',
+      };
+      expect(toolDiffLineStats(viewFileCall)).toBeNull();
+      expect(toolHasDiffStat(viewFileCall)).toBe(false);
+
+      // 真编辑工具（如 write_to_file）正常支持输出解析
+      const writeCall: MessageToolCall = {
+        id: 't-write',
+        name: 'write_to_file',
+        output: ' 2 files changed, 8 insertions(+), 1 deletion(-)',
+        status: 'success',
+      };
+      expect(toolDiffLineStats(writeCall)).toEqual({ add: 8, del: 1 });
+      expect(toolHasDiffStat(writeCall)).toBe(true);
+    });
+
     it('toolRowTone 正确映射视觉状态', () => {
       expect(toolRowTone('running')).toBe('running');
       expect(toolRowTone('error')).toBe('error');

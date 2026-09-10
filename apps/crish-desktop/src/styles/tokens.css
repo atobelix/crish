@@ -237,18 +237,18 @@ html[data-theme='light'] {
   --accent-hover: hsl(35, 16%, 22%); /*      */
   --accent-soft: hsl(35, 12%, 93.5%); /*      */
 
-  --accent-orange: oklch(0.74 0.17 75); /* 金黄琥珀，基准 #f0b100，鲜艳纯净不刺眼 */
-  --accent-orange-light: oklch(0.74 0.17 75 / 0.08);
-  --accent-green: oklch(0.60 0.17 152); /* 纯净翡翠翠绿，基准 #00b478 / #4b984f，通透不刺眼 */
-  --accent-green-hover: oklch(0.54 0.17 152);
-  --accent-green-light: oklch(0.60 0.17 152 / 0.08);
-  --accent-green-soft: oklch(0.60 0.17 152 / 0.12);
-  --accent-green-muted: oklch(0.60 0.17 152 / 0.20);
-  --status-online: oklch(0.60 0.17 152);
-  --accent-red: oklch(0.58 0.21 27.5); /* 纯净温暖朱红，基准 #de4931，鲜艳不刺眼 */
-  --accent-red-light: oklch(0.58 0.21 27.5 / 0.08);
-  --accent-blue: oklch(0.58 0.18 250); /* 纯净天蓝，鲜艳纯正，不与文字/墨色混浊 */
-  --accent-blue-light: oklch(0.58 0.18 250 / 0.08);
+  --accent-orange: oklch(0.78 0.16 80); /* 金黄琥珀，基准 #f0b100，鲜艳纯净不刺眼 */
+  --accent-orange-light: oklch(0.78 0.16 80 / 0.08);
+  --accent-green: oklch(0.65 0.15 155); /* 纯净翡翠翠绿，基准 #00b478 / #4b984f，通透不刺眼 */
+  --accent-green-hover: oklch(0.58 0.15 155);
+  --accent-green-light: oklch(0.65 0.15 155 / 0.08);
+  --accent-green-soft: oklch(0.65 0.15 155 / 0.14);
+  --accent-green-muted: oklch(0.65 0.15 155 / 0.22);
+  --status-online: oklch(0.65 0.15 155);
+  --accent-red: oklch(0.61 0.19 31.8); /* 纯净温暖朱红，基准 #de4931，鲜艳不刺眼 */
+  --accent-red-light: oklch(0.61 0.19 31.8 / 0.08);
+  --accent-blue: oklch(0.65 0.18 245); /* 纯净天蓝，鲜艳纯正，不与文字/墨色混浊 */
+  --accent-blue-light: oklch(0.65 0.18 245 / 0.08);
   --accent-violet: hsl(258, 90%, 66%);
   --accent-violet-light: hsl(258, 40%, 97%);
   --accent-primary: #10b981;
@@ -261,51 +261,35 @@ html[data-theme='light'] {
   --chart-color-2: var(--accent-chart-in);
   --text-on-accent: #ffffff;
 
-  /* semantic color roles */
-  /* 浅色对比度：--color-success 取 --ui-text-success（#2f9e44，3.45:1 ≥ 3:1）；
-     --text-success 取 --text-success-strong（#46724c，5.57:1 ≥ 4.5:1）——
-     回指 accent-green（2.19:1）会让成功态文字/徽标前景在浅底上不可读 */
-  --color-success: var(--ui-text-success);
+  /* semantic color roles (纯净 OKLCH 直通，零混浊 dirty mix) */
+  --color-success: var(--accent-green);
   --color-success-bg: var(--accent-green-light);
   --color-success-border: var(--accent-green-muted);
   --color-warning: var(--accent-orange);
   --color-warning-bg: var(--accent-orange-light);
-  --color-warning-border: color-mix(
-    in srgb,
-    var(--accent-orange) 25%,
-    transparent
-  );
+  --color-warning-border: oklch(0.78 0.16 80 / 0.25);
   --color-error: var(--accent-red);
   --color-error-bg: var(--accent-red-light);
-  --color-error-border: color-mix(in srgb, var(--accent-red) 25%, transparent);
+  --color-error-border: oklch(0.61 0.19 31.8 / 0.25);
   --color-info: var(--accent-blue);
   --color-info-bg: var(--accent-blue-light);
-  --color-info-border: color-mix(in srgb, var(--accent-blue) 25%, transparent);
+  --color-info-border: oklch(0.65 0.18 245 / 0.25);
 
   /* legacy/semantic aliases used across modules (prefer --color-* going forward) */
   --danger-color: var(--color-error);
   --accent-danger: var(--color-error);
   --warning-color: var(--color-warning);
 
-  /*       --text-danger/--text-success      /        --color-*      */
   --text-danger: var(--color-error);
-  --text-success: var(--text-success-strong);
-  /*         08     3/5 WCAG AA     4.5:1
-   *   /    --accent-orange/--accent-green
-   * --text-warning-strong #c2410c light   4.55:1 accent-orange   1.85:1
-   * --text-success-strong #46724c light   4.92:1 ChangesSection +N     */
-  --text-warning-strong: #c2410c;
-  --text-success-strong: #46724c;
-  /*              --text-on-accent                 */
+  --text-success: var(--color-success);
+  --text-warning-strong: var(--accent-orange);
+  --text-success-strong: var(--color-success);
   --text-on-danger: #ffffff;
-  /*                  fallback            */
-  --ui-text-success: #2f9e44;
-  --ui-text-danger: #e03131;
-  /*    6.1       ui-text-muted         #868e96    2.94:1   #757d85   3.69:1 */
+  --ui-text-success: var(--color-success);
+  --ui-text-danger: var(--color-error);
   --ui-text-muted: var(--text-tertiary);
-  --ui-text-info: #1971c2;
-  /*    6.1       08     6  WARN    #e8590c    3.09:1       --text-warning-strong 4.55:1  */
-  --ui-text-warning: var(--text-warning-strong);
+  --ui-text-info: var(--color-info);
+  --ui-text-warning: var(--color-warning);
   --ui-text-primary: inherit;
 
   /* Windows caption close (shared by app top bar + inset chrome) */

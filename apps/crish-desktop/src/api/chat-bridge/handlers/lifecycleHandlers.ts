@@ -9,6 +9,7 @@
 import { surfaceStreamFailure } from '../BridgeErrorPolicy';
 import type { EngineEnvelope } from './eventParser';
 import type { HandlerEnv } from './handlerEnv';
+import { sanitizeTurnIndex } from './messageHandlers';
 
 export function onAgentStart(
   _env: HandlerEnv,
@@ -60,10 +61,17 @@ export function onAgentEnd(
 }
 
 export function onTurnStart(
-  _env: HandlerEnv,
-  _envelope: EngineEnvelope<'turn-start'>
+  env: HandlerEnv,
+  envelope: EngineEnvelope<'turn-start'>
 ): void {
-  // turn-start 暂无 UI 语义：显式空实现
+  const { state } = env;
+  const rawTurn =
+    ('turnIndex' in envelope.event
+      ? (envelope.event as { turnIndex?: unknown }).turnIndex
+      : undefined) ?? envelope.raw.turnIndex;
+  if (rawTurn !== undefined && rawTurn !== null) {
+    state.activeTurnIndex = sanitizeTurnIndex(rawTurn);
+  }
 }
 
 export function onTurnEnd(

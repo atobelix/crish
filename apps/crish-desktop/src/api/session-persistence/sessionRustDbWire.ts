@@ -23,6 +23,7 @@ import {
   parseSessionMessage,
   safeParseJson,
 } from './sessionHydration';
+import { normalizeAssistantTimeline } from '../toolPresentation';
 import type { SessionIndexEntry } from './sessionPersistenceTypes';
 
 // ── Rust 侧类型（serde camelCase 反序列化产物） ─────────────────────────────
@@ -284,7 +285,9 @@ export function fromRustSessionMessages(
   const out: SessionMessage[] = [];
   for (const r of list) {
     const m = fromRustSessionMessage(r);
-    if (m) out.push(m);
+    if (m) {
+      out.push(m.sender === 'assistant' ? normalizeAssistantTimeline(m) : m);
+    }
   }
   return out;
 }

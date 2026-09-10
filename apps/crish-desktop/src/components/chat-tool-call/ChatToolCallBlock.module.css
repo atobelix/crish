@@ -410,12 +410,12 @@
 }
 
 .diffStatsAdd {
-  color: var(--color-success);
+  color: var(--diff-add-fg);
   margin-right: 4px;
 }
 
 .diffStatsDel {
-  color: var(--color-error);
+  color: var(--diff-del-fg);
 }
 
 /*        V1-          inspect /        group  */
