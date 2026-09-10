@@ -15,7 +15,7 @@ use agent_provider::request::{
     anthropic_request_headers, gemini_request_headers, ReasoningEffort, WireProtocol,
 };
 
-use super::protocol::catalog_request_profile;
+use super::protocol::CatalogRequestProfile;
 use super::EngineProviderConfig;
 
 /// 按协议组装请求头（URL/body/parser/head 同轨）。
@@ -25,12 +25,15 @@ use super::EngineProviderConfig;
 /// [reasoning_effort_headers] 语义）。gemini 轨携带 [gemini_request_headers]
 /// （x-goog-api-key）。chat/responses 轨走 Authorization + 亲和头
 /// （[affinity_headers_for]）+ yaml 声明的供应商头（无声明不发 DeepSeek 头，M16）。
+///
+/// `profile` 由调用方传入单次查询结果，禁止本函数内再查 [catalog_request_profile]。
 pub(crate) fn request_headers_for(
     config: &EngineProviderConfig,
     protocol: WireProtocol,
     policy: Option<&CachePolicy>,
     explicit_effort: Option<ReasoningEffort>,
     _session_id: Option<&str>,
+    profile: &CatalogRequestProfile,
 ) -> Vec<(String, String)> {
     let owned = |headers: Vec<(&'static str, String)>| {
         headers
@@ -65,9 +68,9 @@ pub(crate) fn request_headers_for(
             }
             // M16：yaml providers.*.headers 声明的亲和/遥测头；无声明零追加。
             // 禁止无条件 `x-deepseek-harness-session-id`（plans/04 §2.4）。
-            if let Some(declared) = catalog_request_profile(config).headers {
+            if let Some(declared) = &profile.headers {
                 for (name, value) in declared {
-                    headers.push((name, value));
+                    headers.push((name.clone(), value.clone()));
                 }
             }
             headers
