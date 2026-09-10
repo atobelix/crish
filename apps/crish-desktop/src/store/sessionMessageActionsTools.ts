@@ -155,20 +155,42 @@ export function createSessionMessageActionsTools<T extends SessionStoreSlice>(
         if (opts?.errorDetail) {
           hit.message.errorDetail = opts.errorDetail;
         }
+        if (status !== 'processing') {
+          if (hit.message.blocks) {
+            for (const b of hit.message.blocks) {
+              if (b.isStreaming) b.isStreaming = false;
+            }
+          }
+          if (hit.message.thinkingTurns) {
+            for (const tt of hit.message.thinkingTurns) {
+              if (tt.isStreaming) tt.isStreaming = false;
+            }
+          }
+        }
         rebindSessionById(state, sessionId, hit.session);
       }),
 
-    pinMessage: (sessionId, messageId) =>
+    pinMessage: (sessionId, messageId, color) =>
       set((state) => {
         const sess = getSessionForWrite(state, sessionId);
         if (!sess) return;
         if (!getMessageById(sess.messages, messageId)) return;
         if (!sess.pinnedMessageIds) sess.pinnedMessageIds = [];
+        let changed = false;
         if (
           !sess.pinnedMessageIds.includes(messageId) &&
           sess.pinnedMessageIds.length < MAX_MESSAGES_PER_SESSION
         ) {
           sess.pinnedMessageIds.push(messageId);
+          changed = true;
+        }
+        const pinColor = color || '#10b981';
+        if (!sess.pinnedMessageColors) sess.pinnedMessageColors = {};
+        if (sess.pinnedMessageColors[messageId] !== pinColor) {
+          sess.pinnedMessageColors[messageId] = pinColor;
+          changed = true;
+        }
+        if (changed) {
           rebindSessionById(state, sessionId, sess);
         }
       }),
@@ -181,6 +203,12 @@ export function createSessionMessageActionsTools<T extends SessionStoreSlice>(
         if (next.length === sess.pinnedMessageIds.length) return;
         sess.pinnedMessageIds = next;
         if (sess.pinnedMessageIds.length === 0) delete sess.pinnedMessageIds;
+        if (sess.pinnedMessageColors?.[messageId]) {
+          delete sess.pinnedMessageColors[messageId];
+          if (Object.keys(sess.pinnedMessageColors).length === 0) {
+            delete sess.pinnedMessageColors;
+          }
+        }
         rebindSessionById(state, sessionId, sess);
       }),
 

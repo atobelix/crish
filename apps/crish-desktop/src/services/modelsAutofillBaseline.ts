@@ -72,6 +72,88 @@ export function findAutofillProvider(idOrName: string): ProviderSpec | null {
   return found ? clone(found) : null;
 }
 
+/** 提取规范分词（小写、字母数字按分隔符切分） */
+export function tokenizeModelIdentifier(id: string): string[] {
+  return id
+    .toLowerCase()
+    .replace(/[_\.\/-]/g, ' ')
+    .replace(/([a-z])([0-9])/gi, '$1 $2')
+    .replace(/([0-9])([a-z])/gi, '$1 $2')
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
+/**
+ * 变体与最近邻相似度打分（纯函数）：
+ * - 前缀与包含奖励
+ * - 数字/版本一致性强校验（版本不一致大幅扣分，防止 1.2 冒充 1.3）
+ * - 核心 token 覆盖率
+ * - 长度惩罚
+ */
+function scoreModelCandidate(
+  queryBare: string,
+  candidateBare: string,
+  queryTokens: string[],
+  candidateTokens: string[]
+): number {
+  if (queryBare === candidateBare) return 10000;
+
+  // 提取文本词元与数字词元
+  const queryWords = queryTokens.filter((t) => !/^\d+(\.\d+)?$/.test(t));
+  const candWords = candidateTokens.filter((t) => !/^\d+(\.\d+)?$/.test(t));
+  let wordMatches = 0;
+  for (const cw of candWords) {
+    if (queryWords.includes(cw)) wordMatches++;
+  }
+
+  const isPrefix =
+    queryBare.startsWith(candidateBare) ||
+    queryBare.startsWith(`${candidateBare}-`) ||
+    candidateBare.startsWith(queryBare) ||
+    candidateBare.startsWith(`${queryBare}-`);
+
+  // 如果没有任何文字词元重合且互不为前缀，判定为无关模型，直接排除（防止跨厂商纯数字重合误判）
+  if (wordMatches === 0 && !isPrefix) {
+    return 0;
+  }
+
+  let score = 0;
+  if (queryBare.startsWith(candidateBare) || queryBare.startsWith(`${candidateBare}-`)) {
+    score += 500;
+  } else if (candidateBare.startsWith(queryBare) || candidateBare.startsWith(`${queryBare}-`)) {
+    score += 300;
+  }
+
+  // 提取数字/版本 tokens
+  const queryNums = queryTokens.filter((t) => /^\d+(\.\d+)?$/.test(t));
+  const candNums = candidateTokens.filter((t) => /^\d+(\.\d+)?$/.test(t));
+  let numMatchCount = 0;
+  let numMismatchCount = 0;
+  for (const qn of queryNums) {
+    if (candNums.includes(qn)) numMatchCount++;
+    else numMismatchCount++;
+  }
+  for (const cn of candNums) {
+    if (!queryNums.includes(cn)) numMismatchCount++;
+  }
+  score += numMatchCount * 120;
+  score -= numMismatchCount * 150;
+
+  // 词元覆盖度
+  let tokenMatches = 0;
+  for (const ct of candidateTokens) {
+    if (queryTokens.includes(ct)) tokenMatches++;
+  }
+  const tokenCoverage = candidateTokens.length > 0 ? tokenMatches / candidateTokens.length : 0;
+  score += Math.round(tokenCoverage * 200);
+
+  // 长度差异轻微惩罚
+  const lenDiff = Math.abs(queryBare.length - candidateBare.length);
+  score -= Math.min(lenDiff * 2, 80);
+
+  return score;
+}
+
 /** 供应商作用域限定的模型规格检索器 */
 export function findAutofillModelSpec(providerId: string, modelId: string): ModelSpec | undefined {
   if (!providerId || !modelId) return undefined;
@@ -81,12 +163,30 @@ export function findAutofillModelSpec(providerId: string, modelId: string): Mode
     Object.values(AUTOFILL_BASELINE_2026.providers).find((x) => x.displayName.toLowerCase() === normPId);
   if (!p) return (findAutofillModel(modelId) as ModelSpec) ?? undefined;
 
-  const low = modelId.trim().toLowerCase(), norm = normalizeModelId(low);
-  const matched = p.models.find((m) => {
-    const ml = m.id.toLowerCase();
-    return ml === low || extractBareModelId(ml) === low || normalizeModelId(ml) === norm;
-  });
-  return matched ? clone(matched) : (findAutofillModel(modelId) as ModelSpec) ?? undefined;
+  const low = modelId.trim().toLowerCase(), bare = extractBareModelId(low);
+  const norm = normalizeModelId(bare), can = toCanonicalModelId(bare);
+  const queryTokens = tokenizeModelIdentifier(bare);
+
+  let bestCandidate: ModelSpec | null = null;
+  let bestScore = 50;
+
+  for (const m of p.models) {
+    const ml = m.id.toLowerCase(), mb = extractBareModelId(ml);
+    const mn = normalizeModelId(mb), mc = toCanonicalModelId(mb);
+
+    if (ml === low || mb === low || mb === bare || mn === norm || mc === can) {
+      return clone(m);
+    }
+
+    const candTokens = tokenizeModelIdentifier(mb);
+    const s = scoreModelCandidate(norm, mn, queryTokens, candTokens);
+    if (s > bestScore) {
+      bestScore = s;
+      bestCandidate = m;
+    }
+  }
+
+  return bestCandidate ? clone(bestCandidate) : (findAutofillModel(modelId) as ModelSpec) ?? undefined;
 }
 
 export const getAutofillModelSpec = findAutofillModelSpec;
@@ -102,23 +202,27 @@ export function findAutofillModel(id: string, providerId?: string): (ModelSpec &
 
   const low = raw.toLowerCase(), bare = extractBareModelId(low);
   const norm = normalizeModelId(bare), can = toCanonicalModelId(bare);
+  const queryTokens = tokenizeModelIdentifier(bare);
 
-  let bestMatch: ModelSpec | null = null;
+  let bestCandidate: ModelSpec | null = null;
+  let bestScore = 50;
+
   for (const provider of Object.values(AUTOFILL_BASELINE_2026.providers)) {
     for (const model of provider.models) {
       const ml = model.id.toLowerCase(), mb = extractBareModelId(ml);
       const mn = normalizeModelId(mb), mc = toCanonicalModelId(mb);
 
       if (ml === low || mb === low || mb === bare || mn === norm || mc === can) return clone(model);
-      if (
-        !bestMatch &&
-        (mb.includes(bare) || bare.includes(mb) || mn.includes(norm) || norm.includes(mn) || mc.includes(can) || can.includes(mc))
-      ) {
-        bestMatch = model;
+
+      const candTokens = tokenizeModelIdentifier(mb);
+      const s = scoreModelCandidate(norm, mn, queryTokens, candTokens);
+      if (s > bestScore) {
+        bestScore = s;
+        bestCandidate = model;
       }
     }
   }
-  return bestMatch ? clone(bestMatch) : null;
+  return bestCandidate ? clone(bestCandidate) : null;
 }
 
 /** 自动补全建议列表生成（供输入框下拉联想使用） */

@@ -74,6 +74,27 @@ describe('narrativeRenderers', () => {
     expect(container.querySelector('pre')).toBeNull();
   });
 
+  it('运行中的 Purpose 默认展开动作行，终态仍只显示摘要', () => {
+    const msg = twoInspectMsg();
+    const running = {
+      ...msg,
+      toolCalls: [{ ...msg.toolCalls![0], status: 'running' as const }],
+    };
+    const { container } = render(
+      <>
+        {renderNarrativeTools({
+          items: [{ kind: 'single', tc: running.toolCalls![0] }],
+          msgId: running.id,
+          toolStackProps: stubStack(),
+          messages: [running],
+        })}
+      </>
+    );
+    expect(container.querySelector('[data-purpose-status="running"]')).not.toBeNull();
+    expect(container.querySelector('[data-flow-expanded="true"]')).not.toBeNull();
+    expect(container.querySelector('[data-flow-action]')).not.toBeNull();
+  });
+
   it('Context 注入后画 Purpose / Thinking；缺省槽不画', () => {
     const msg = twoInspectMsg();
     const slots = createNarrativeRenderers([msg]);

@@ -35,7 +35,9 @@ export function PurposeBlock({
   parentSessionId,
   onOpenPath,
   onOpenNote,
-  defaultOpen = false,
+  // 运行中的目的需要把正在发生的动作直接露出来；终态仍保持摘要行，
+  // 用户可以按需展开历史步骤。这与 DeepSeek harness 的 streaming flow 一致。
+  defaultOpen = purpose.status === 'running',
 }: PurposeBlockProps): ReactElement {
   const [open, setOpen] = useState(defaultOpen);
   const n = purpose.actions.length;
@@ -46,6 +48,7 @@ export function PurposeBlock({
       className={styles.purpose}
       data-flow-purpose={purpose.id}
       data-purpose-count={n}
+      data-purpose-status={purpose.status}
       data-derived="frontend"
       data-flow-expanded={open ? 'true' : 'false'}
       role="group"

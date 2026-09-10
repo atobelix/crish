@@ -3,8 +3,8 @@
 .stack {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  margin: 2px 0;
+  gap: 1px;
+  margin: 4px 0 6px;
 }
 
 .purpose,
@@ -17,6 +17,16 @@
   min-width: 0;
   color: var(--text-secondary);
   font-size: var(--font-size-sm);
+}
+
+/* 目的行是过程时间线的分组摘要：运行时保留动作，终态只占一行。 */
+.purpose[data-purpose-status='running'] .primary {
+  color: var(--text-primary);
+}
+
+.purpose[data-purpose-status='error'] .primary,
+.purpose[data-purpose-status='partial'] .primary {
+  color: var(--color-error);
 }
 
 /* 流内 Task 根：对齐 listInner 列宽。禁竖轨 ::after、禁绿勾墙 */
@@ -108,6 +118,11 @@
   color: var(--text-tertiary);
 }
 
+.kindSeparator {
+  flex: 0 0 auto;
+  color: var(--text-tertiary);
+}
+
 .actions {
   display: flex;
   flex-direction: column;
@@ -130,15 +145,26 @@
 .chip {
   flex: 0 0 auto;
   margin: 0;
-  padding: 4px 8px;
-  border: 1px solid var(--border-subtle);
+  padding: 4px 4px;
+  border: 1px solid transparent;
   border-radius: var(--radius-sm, 6px);
-  background: color-mix(in srgb, var(--bg-secondary) 80%, transparent);
+  background: transparent;
   box-shadow: none;
   color: var(--text-secondary);
   font: inherit;
   font-size: var(--font-size-xs, var(--font-size-sm));
   cursor: pointer;
+}
+
+/* 失败状态留在对应动作行，不升级成打断整段对话的大红色卡片。 */
+.action[data-flow-action-status='error'] .primary,
+.action[data-flow-action-status='error'] .meta,
+.action[data-flow-action-status='error'] .pathBtn {
+  color: var(--color-error);
+}
+
+.action[data-flow-action-status='error'] .pulse {
+  background: var(--color-error);
 }
 
 .pathBtn:hover,

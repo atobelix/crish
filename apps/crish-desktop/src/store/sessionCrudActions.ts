@@ -49,6 +49,7 @@ import {
   appendInjectionToMessage,
   findInjectionMountTarget,
   isContextStateCarrierMessage,
+  isContextStateInjection,
   makeInjectionCarrierMessage,
 } from './sessionInjectionMount';
 
@@ -409,7 +410,13 @@ export function createSessionCrudActions<T extends SessionStoreSlice>(
         if (!sess) return;
         if (!sess.messages) sess.messages = [];
 
-        const target = findInjectionMountTarget(sess.messages);
+        const isState = isContextStateInjection(injection);
+        const lastMsg = sess.messages[sess.messages.length - 1];
+        const target = isState
+          ? isContextStateCarrierMessage(lastMsg)
+            ? lastMsg
+            : undefined
+          : findInjectionMountTarget(sess.messages);
         if (target) {
           appendInjectionToMessage(target, injection);
           if (injection.metadata?.mode === 'context-state') {

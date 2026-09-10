@@ -732,6 +732,8 @@ export interface SessionState {
   messages: SessionMessage[];
   /** 本会话固定的消息 id 列表（置顶快捷跳转） */
   pinnedMessageIds?: string[];
+  /** 本会话固定消息对应的自定义/预设颜色映射（messageId -> hex color） */
+  pinnedMessageColors?: Record<string, string>;
   /** 本会话拉起的协作 agent 列表（侧栏嵌套展示） */
   agents?: SessionAgent[];
   /** 引擎事件游标（H2 水合 / H3 增量） */

@@ -14,6 +14,7 @@ import { clearMessageSnapshots } from './messageSnapshotsBridge';
 import { useTerminalStore } from './terminalStore';
 import { getShellReadApi } from './workspace-shell/shellReadBridge';
 import { useEphemeralChatStore } from './ephemeralChatStore';
+import { clearWorkflowConfirmSignaturesForSession } from '../api/workflow-api/workflowConfirmSignatures';
 
 export const SessionCoordinator = {
   /**
@@ -43,6 +44,9 @@ export const SessionCoordinator = {
 
     // 5. 清理 ephemeralChatStore 中的内存瞬态状态，杜绝内存泄漏
     useEphemeralChatStore.getState().clearEphemeralStatus(id);
+
+    // 6. §5.3：清理 WorkflowConfirm 按会话分桶的确认签名
+    clearWorkflowConfirmSignaturesForSession(id);
 
     return removed;
   },

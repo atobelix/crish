@@ -237,12 +237,66 @@ export function createSessionMessageActionsCore<T extends SessionStoreSlice>(
         rebindSessionById(state, sessionId, hit.session);
       }),
 
-    updateMessageThinking: (sessionId, messageId, thinking) =>
+    updateMessageThinking: (sessionId, messageId, thinking, turnIndex = 0) =>
       set((state) => {
         const hit = getSessionMessage(state, sessionId, messageId);
         if (!hit) return;
-        if (hit.message.thinking === thinking) return;
-        hit.message.thinking = thinking;
+        const msg = hit.message;
+        msg.thinking = thinking;
+        if (!msg.blocks) msg.blocks = [];
+        if (!msg.thinkingTurns) msg.thinkingTurns = [];
+
+        const cleanTurn =
+          typeof turnIndex === 'number' && Number.isFinite(turnIndex)
+            ? Math.max(0, Math.floor(turnIndex))
+            : 0;
+        const thoughtKey = `thought-turn-${cleanTurn}`;
+
+        // 1. 同步维护 thinkingTurns（持久化与重水合权威源）
+        const ttIdx = msg.thinkingTurns.findIndex(
+          (tt) => tt.turnIndex === cleanTurn
+        );
+        if (ttIdx >= 0) {
+          msg.thinkingTurns[ttIdx] = {
+            ...msg.thinkingTurns[ttIdx]!,
+            content: thinking,
+            isStreaming: true,
+          };
+        } else if (thinking.trim()) {
+          msg.thinkingTurns.push({
+            turnIndex: cleanTurn,
+            content: thinking,
+            id: thoughtKey,
+            isStreaming: true,
+          });
+        }
+
+        // 2. 严格按物理因果时间线维护 blocks
+        const existingBlockIdx = msg.blocks.findIndex(
+          (b) =>
+            b.type === 'thought' &&
+            (b.id === thoughtKey || b.turnIndex === cleanTurn)
+        );
+        if (existingBlockIdx >= 0) {
+          if (!thinking.trim()) {
+            msg.blocks.splice(existingBlockIdx, 1);
+          } else {
+            msg.blocks[existingBlockIdx] = {
+              ...msg.blocks[existingBlockIdx]!,
+              content: thinking,
+              turnIndex: cleanTurn,
+              isStreaming: true,
+            };
+          }
+        } else if (thinking.trim()) {
+          msg.blocks.push({
+            type: 'thought',
+            id: thoughtKey,
+            content: thinking,
+            turnIndex: cleanTurn,
+            isStreaming: true,
+          });
+        }
         rebindSessionById(state, sessionId, hit.session);
       }),
   };

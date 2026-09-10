@@ -176,7 +176,8 @@ export interface SessionActions {
   updateMessageThinking: (
     sessionId: string,
     messageId: string,
-    thinking: string
+    thinking: string,
+    turnIndex?: number
   ) => void;
   addMessageToolCall: (
     sessionId: string,
@@ -205,7 +206,7 @@ export interface SessionActions {
     toolCallId: string,
     patch: Partial<MessageToolCall>
   ) => void;
-  pinMessage: (sessionId: string, messageId: string) => void;
+  pinMessage: (sessionId: string, messageId: string, color?: string) => void;
   unpinMessage: (sessionId: string, messageId: string) => void;
   /**
    * 项目 → sessions.folder 镜像 rebind（D5 收敛点，唯一写路径）。

@@ -65,7 +65,7 @@ export function ActionRow({
     ? toolHumanLabel(tool)
     : [action.verb, action.objectLabel].filter(Boolean).join(' · ');
   const kindPrefix =
-    action.kind === 'skill' ? 'Skill' : action.kind === 'mcp' ? 'MCP' : '';
+    action.kind === 'skill' ? 'Skill' : action.kind === 'mcp' ? 'MCP' : '工具调用';
   const meta = [
     statusMeta(action.status),
     action.parallelGroupId ? '并行' : '',
@@ -82,6 +82,7 @@ export function ActionRow({
       className={styles.action}
       data-flow-action={action.id}
       data-flow-action-kind={action.kind}
+      data-flow-action-status={action.status}
       data-derived="frontend"
       data-flow-expanded={open ? 'true' : 'false'}
     >
@@ -98,9 +99,10 @@ export function ActionRow({
           {action.status === 'running' ? (
             <span className={styles.pulse} aria-hidden />
           ) : null}
-          {kindPrefix ? (
-            <span className={styles.kindPrefix}>{kindPrefix}</span>
-          ) : null}
+          <span className={styles.kindPrefix}>{kindPrefix}</span>
+          <span className={styles.kindSeparator} aria-hidden>
+            ·
+          </span>
           <span className={styles.primary}>{human || action.verb}</span>
           {meta ? <span className={styles.meta}>{meta}</span> : null}
         </button>

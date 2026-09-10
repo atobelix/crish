@@ -74,7 +74,7 @@ describe('modelsAutofillBaseline - 2026 官方权威智能预填库', () => {
     expect(model).not.toBeNull();
     expect(model?.id).toBe('gpt-5.6-sol');
     expect(model?.displayName).toBe('GPT-5.6 Sol');
-    expect(model?.contextWindow).toBe(272_000);
+    expect(model?.contextWindow).toBe(1_000_000);
     expect(model?.maxOutputTokens).toBe(65_536);
     expect(model?.modalities).toEqual({
       input: ['text', 'image', 'audio'],
@@ -143,10 +143,33 @@ describe('modelsAutofillBaseline - 2026 官方权威智能预填库', () => {
     expect(model?.pricing).toEqual({
       currency: 'USD',
       unit: 'per_1m_tokens',
-      input: 1.50,
-      output: 7.50,
-      cacheRead: 0.15,
+      input: 0.75,
+      output: 3.75,
+      cacheRead: 0.075,
     });
+  });
+
+  it('应当智能识别变体模型并自动匹配最接近的基础模型 (如 Muse Spark 1.3 contributor / claude-3-5-sonnet-20241022)', () => {
+    // 带有 contributor 修饰词的变体模型匹配至 Muse Spark 1.3
+    const museVar = findAutofillModel('Muse Spark 1.3 contributor');
+    expect(museVar).not.toBeNull();
+    expect(museVar?.id).toBe('meta/muse-spark-1.3');
+    expect(museVar?.displayName).toBe('Meta: Muse Spark 1.3');
+
+    // 带有日期版本的 Claude Sonnet 变体匹配至 Claude 3.5 Sonnet
+    const sonnetVar = findAutofillModel('claude-3-5-sonnet-20241022');
+    expect(sonnetVar).not.toBeNull();
+    expect(sonnetVar?.id).toBe('anthropic/claude-3-5-sonnet');
+
+    // 带有日期版本的 GPT-4o 变体匹配至 GPT-4o
+    const gptVar = findAutofillModel('gpt-4o-2024-11-20');
+    expect(gptVar).not.toBeNull();
+    expect(gptVar?.id).toBe('openai/gpt-4o');
+
+    // 新增 Mistral 厂商模型匹配
+    const mistral = findAutofillModel('mistral-medium-3.5');
+    expect(mistral).not.toBeNull();
+    expect(mistral?.id).toBe('mistral/mistral-medium-3.5');
   });
 
   it('应当精确匹配 Kimi K3 与 Meta Muse Spark 1.3', () => {
