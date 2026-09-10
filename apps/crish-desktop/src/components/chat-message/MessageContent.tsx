@@ -1,24 +1,15 @@
-import React, { useMemo, useRef, useCallback } from 'react';
+import React, { useState, useMemo, useRef, useCallback } from 'react';
 import { useNarrativeRenderSlots } from './narrativeRenderSlots';
 import styles from './MessageContent.module.css';
 import type { SessionMessage } from '../../store/types';
 import type { ChatToolStackSharedProps } from '../chat-tool-call/ChatToolCallBlock';
 import {
   buildAssistantTimelineCached,
-  extractImageRefs,
   type AssistantTimelineItem,
 } from '../../api/toolPresentation';
 import { stripThoughtPlaceholders } from '../../api/markdownRenderLite';
 import { Priority } from '../../workers';
-import { MessageToolCallsSection } from '../chat-message-row/MessageToolCallsSection';
 import { StreamingMarkdownView } from '../chat-message-row/StreamingMarkdownView';
-import { WorkflowConfirmCard } from '../workflow-confirm/WorkflowConfirmCard';
-import {
-  extractWorkflowConfirmPayload,
-  stripWorkflowConfirmFence,
-} from '../../api/workflow-api/workflowConfirm';
-import { TimelineThoughtSection } from '../chat-message-row/TimelineThoughtSection';
-import { ContextStateNotice } from './ContextStateNotice';
 import {
   isContextStateInjection,
   formatContextStateDisplayText,
@@ -26,10 +17,12 @@ import {
 import { WorkingStatusIndicator } from '../chat-message-row/WorkingStatusIndicator';
 import { ModelRetryNode } from '../chat-message-row/ModelRetryNode';
 import { TurnErrorNode } from '../chat-message-row/TurnErrorNode';
-import { TurnProcessNodeView } from './TurnProcessNodeView';
+import { TurnProcessNodeView, countProcessMetrics } from './TurnProcessNodeView';
 import { useEphemeralChatStore } from '../../store/ephemeralChatStore';
 import { useSessionStore } from '../../store/sessionStore';
 
+
+import { ProcessItemRenderer } from './ProcessItemRenderer';
 
 export interface MessageContentProps {
   /**
@@ -48,156 +41,6 @@ export interface MessageContentProps {
   toolStackProps?: ChatToolStackSharedProps;
   className?: string;
 }
-
-const STREAM_IMAGE_MAX = 8;
-
-interface ProcessItemRendererProps {
-  item: AssistantTimelineItem;
-  msgId: string;
-  status: SessionMessage['status'];
-  isThinkingMsg: boolean;
-  thoughtDefaultOpen: boolean;
-  renderThought?: ReturnType<typeof useNarrativeRenderSlots>['renderThought'];
-  renderTools?: ReturnType<typeof useNarrativeRenderSlots>['renderTools'];
-  toolStackProps?: ChatToolStackSharedProps;
-  streamPhase?: number;
-  hasFinalAnswer?: boolean;
-  isStreamingText?: boolean;
-  streamingTextContent?: string;
-}
-
-const ProcessItemRenderer: React.FC<ProcessItemRendererProps> = React.memo(
-  function ProcessItemRenderer({
-    item,
-    msgId,
-    status,
-    isThinkingMsg,
-    thoughtDefaultOpen,
-    renderThought,
-    renderTools,
-    toolStackProps,
-    streamPhase,
-    hasFinalAnswer,
-    isStreamingText,
-    streamingTextContent,
-  }) {
-    if (item.kind === 'thought') {
-      if (renderThought) {
-        return (
-          <React.Fragment key={item.key}>
-            {renderThought({
-              content: item.content,
-              isLive: item.isLive ?? isThinkingMsg,
-              durationMs: item.durationMs,
-              turnIndex: item.turnIndex,
-              messageId: msgId,
-              defaultOpen: thoughtDefaultOpen,
-            })}
-          </React.Fragment>
-        );
-      }
-      return (
-        <TimelineThoughtSection
-          key={item.key}
-          content={item.content}
-          isLive={item.isLive ?? isThinkingMsg}
-          durationMs={item.durationMs}
-          turnIndex={item.turnIndex}
-          messageId={msgId}
-          defaultExpanded={thoughtDefaultOpen}
-        />
-      );
-    }
-    if (item.kind === 'text') {
-      const rawText =
-        isStreamingText && streamingTextContent != null
-          ? streamingTextContent
-          : item.content || '';
-      const bodyText = stripThoughtPlaceholders(rawText);
-      if (!bodyText.trim() && !isStreamingText) return null;
-      const confirmPayload = extractWorkflowConfirmPayload(bodyText);
-      const displayText = confirmPayload
-        ? stripWorkflowConfirmFence(bodyText)
-        : bodyText;
-      const imgs = extractImageRefs(bodyText);
-      return (
-        <div key={item.key} className={styles.contentText}>
-          <StreamingMarkdownView
-            text={displayText}
-            isStreaming={Boolean(isStreamingText)}
-            priority={status === 'processing' ? Priority.Normal : Priority.High}
-            messageId={msgId}
-          />
-          {confirmPayload ? (
-            <WorkflowConfirmCard payload={confirmPayload} />
-          ) : null}
-          {imgs.length > 0 && (
-            <div className={styles.inlineImages}>
-              {imgs.map((src) => (
-                <img
-                  key={src}
-                  src={src}
-                  alt=""
-                  className={styles.mdImg}
-                  loading="lazy"
-                />
-              ))}
-            </div>
-          )}
-        </div>
-      );
-    }
-    if (item.kind === 'tools') {
-      const itemsToPass = streamPhase ? [...item.items] : item.items;
-      const toolsContent =
-        renderTools && toolStackProps ? (
-          <React.Fragment key={item.key}>
-            {renderTools({
-              items: itemsToPass,
-              msgId,
-              toolStackProps,
-            })}
-          </React.Fragment>
-        ) : toolStackProps ? (
-          <MessageToolCallsSection
-            key={item.key}
-            items={itemsToPass}
-            msgId={msgId}
-            toolStackProps={toolStackProps}
-          />
-        ) : null;
-
-      if (!toolsContent) return null;
-
-      return (
-        <TurnProcessNodeView
-          key={item.key}
-          msgId={msgId}
-          items={[item]}
-          isTurnLive={isThinkingMsg || status === 'processing'}
-          hasFinalAnswer={Boolean(hasFinalAnswer)}
-          turnStatus={status}
-          renderChildren={() => toolsContent}
-          streamPhase={streamPhase}
-        />
-      );
-    }
-    if (item.kind === 'injection') {
-      if (isContextStateInjection(item.injection)) {
-        return (
-          <ContextStateNotice
-            key={item.key}
-            rowKey={item.key}
-            injection={item.injection}
-          />
-        );
-      }
-      return null;
-    }
-    return null;
-  }
-);
-ProcessItemRenderer.displayName = 'ProcessItemRenderer';
 
 export const MessageContent: React.FC<MessageContentProps> = React.memo(
   ({
@@ -396,13 +239,15 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
     if (!linearItems.length) {
       const fallback = stripThoughtPlaceholders(displayMsg.text || streamText || '');
       if (!fallback.trim() && !streaming) {
-        if (isInitialWaiting || isWorkingAfterThought) {
+        if (isInitialWaiting || isWorkingAfterThought || isLiveTurn) {
           return (
             <div className={`${styles.contentText} ${className || ''}`}>
-              <WorkingStatusIndicator
-                startTime={msg.timestamp}
-                mode={isInitialWaiting ? 'initial' : 'working'}
-              />
+              <div className={styles.topProcessHeader} data-testid="top-live-header">
+                <WorkingStatusIndicator
+                  startTime={msg.timestamp}
+                  mode="initial"
+                />
+              </div>
             </div>
           );
         }
@@ -462,16 +307,54 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
       );
     }
 
+    const [isProcessExpanded, setIsProcessExpanded] = useState(true);
+    const processMetrics = useMemo(
+      () => countProcessMetrics(linearItems),
+      [linearItems]
+    );
+    const hasProcessMetrics = Boolean(
+      processMetrics.toolCount > 0 ||
+      (processMetrics.subagentCount ?? 0) > 0 ||
+      (processMetrics.thoughtCount ?? 0) > 0
+    );
+
     return (
       <div className={`${styles.assistantTimelineStream} ${className || ''}`}>
+        {/* 顶层唯一常驻态与全轮次唯一分割线 */}
+        {isLiveTurn ? (
+          <div className={styles.topProcessHeader} data-testid="top-live-header">
+            <WorkingStatusIndicator
+              startTime={msg.timestamp}
+              mode="initial"
+            />
+          </div>
+        ) : hasProcessMetrics ? (
+          <div className={styles.topProcessHeader} data-testid="top-summary-header">
+            <TurnProcessNodeView
+              msgId={msg.id}
+              items={linearItems}
+              isTurnLive={false}
+              hasFinalAnswer={Boolean(displayMsg.text?.trim() || streamText?.trim())}
+              turnStatus={msg.status}
+              isExpanded={isProcessExpanded}
+              onToggleExpand={() => setIsProcessExpanded((prev) => !prev)}
+              renderChildren={() => null}
+            />
+          </div>
+        ) : null}
+
         {isWorkingAfterThought && lastThoughtIndex === -1 && (
           <div className={styles.workingSlot}>
             <WorkingStatusIndicator mode="working" />
           </div>
         )}
-        {linearItems.map((item, idx) => (
-          <React.Fragment key={item.key}>
-            <ProcessItemRenderer
+        {linearItems.map((item, idx) => {
+          if (!isProcessExpanded && (item.kind === 'tools' || item.kind === 'thought')) {
+            return null;
+          }
+          return (
+            <React.Fragment key={item.key}>
+              <ProcessItemRenderer
               item={item}
               msgId={msg.id}
               status={msg.status}
@@ -499,7 +382,8 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
               </div>
             )}
           </React.Fragment>
-        ))}
+        );
+      })}
         {streaming && streamingTextIndex === -1 && streamText && (
           <div className={styles.contentText}>
             <StreamingMarkdownView

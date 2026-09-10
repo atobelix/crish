@@ -99,7 +99,12 @@ export function createSessionMessageActionsTools<T extends SessionStoreSlice>(
             (b) => b.type === 'tool_call' && b.id === toolCall.id
           )
         ) {
-          msg.blocks.push({ type: 'tool_call' as const, id: toolCall.id });
+          msg.blocks.push({
+            type: 'tool_call' as const,
+            id: toolCall.id,
+            startTime: toolCall.startedAt || Date.now(),
+            durationMs: toolCall.durationMs || 0,
+          });
         }
         rebindSessionById(state, sessionId, hit.session);
       }),
@@ -115,6 +120,12 @@ export function createSessionMessageActionsTools<T extends SessionStoreSlice>(
         const effective = sanitizeToolCallUpdates(tc, updates);
         if (!toolCallPatchHasChanges(tc, effective)) return;
         applyMessageToolCallPatch(tc, effective);
+        if (tc.durationMs != null && msg.blocks) {
+          const b = msg.blocks.find((blk) => blk.type === 'tool_call' && blk.id === tc.id);
+          if (b) {
+            b.durationMs = tc.durationMs;
+          }
+        }
         rebindSessionById(state, sessionId, hit.session);
       }),
 

@@ -59,7 +59,9 @@ function pushParsedText(
   isStreaming: boolean,
   items: AssistantTimelineItem[],
   thi: { val: number },
-  xi: { val: number }
+  xi: { val: number },
+  startTime?: number,
+  durationMs?: number
 ): void {
   const parsed = parseInlineThoughtAndTextSafely(text, turnIndex, isStreaming);
   for (const p of parsed) {
@@ -69,6 +71,8 @@ function pushParsedText(
         content: p.content,
         turnIndex: p.turnIndex,
         isStreaming: p.isStreaming,
+        startTime,
+        durationMs,
         key: `thought-${thi.val++}`,
       });
     } else {
@@ -76,6 +80,8 @@ function pushParsedText(
         kind: 'text',
         content: p.content,
         turnIndex: p.turnIndex,
+        startTime,
+        durationMs,
         key: `text-${xi.val++}`,
       });
     }
@@ -104,7 +110,15 @@ export function buildAssistantTimeline(
       if (!toolBuf.length) return;
       const rendered = buildToolRenderItems(toolBuf);
       if (rendered.length) {
-        items.push({ kind: 'tools', items: rendered, key: `tools-${ti++}` });
+        const firstStartedAt = toolBuf.find((t) => t.startedAt != null)?.startedAt;
+        const totalDuration = toolBuf.reduce((acc, t) => acc + (t.durationMs || 0), 0);
+        items.push({
+          kind: 'tools',
+          items: rendered,
+          key: `tools-${ti++}`,
+          startTime: firstStartedAt,
+          durationMs: totalDuration > 0 ? totalDuration : undefined,
+        });
       }
       toolBuf = [];
     };
@@ -136,6 +150,8 @@ export function buildAssistantTimeline(
               key: `injection-${inj.id}`,
               injection: inj,
               turnIndex: b.turnIndex,
+              startTime: b.startTime,
+              durationMs: b.durationMs,
             });
             usedInjections.add(inj.id);
           }
@@ -148,6 +164,7 @@ export function buildAssistantTimeline(
               content: thoughtContent,
               id: b.id,
               turnIndex: b.turnIndex,
+              startTime: b.startTime,
               durationMs: b.durationMs,
               isStreaming: b.isStreaming,
               isHistoricalCollapsed: b.isHistoricalCollapsed,
@@ -158,7 +175,16 @@ export function buildAssistantTimeline(
           flushTools();
           const c = b.content || '';
           if (c.trim() || b.isStreaming) {
-            pushParsedText(c, b.turnIndex, Boolean(b.isStreaming), items, thi, xi);
+            pushParsedText(
+              c,
+              b.turnIndex,
+              Boolean(b.isStreaming),
+              items,
+              thi,
+              xi,
+              b.startTime,
+              b.durationMs
+            );
           }
         } else if (b.type === 'tool_call' && b.id) {
           const tc = toolsById.get(b.id);
@@ -229,11 +255,12 @@ function enforceThoughtBeforeText(
   for (let i = 0; i < result.length; i++) {
     const cur = result[i]!;
     if (cur.kind !== 'thought') continue;
-    const curTurn = cur.turnIndex ?? 0;
-    // 寻找在此 thought 之前、但 turnIndex >= curTurn 的首个 text 块
+    const curTurn = cur.turnIndex;
+    // 只有在两块明确指定且处于同一显式轮次时才校准时序；绝不跨步越界重排
+    if (curTurn == null) continue;
     const misplacedTextIdx = result.findIndex(
       (it, idx) =>
-        idx < i && it.kind === 'text' && (it.turnIndex ?? 0) >= curTurn
+        idx < i && it.kind === 'text' && it.turnIndex === curTurn
     );
     if (misplacedTextIdx !== -1) {
       // 将此 thought 移到该 text 块之前

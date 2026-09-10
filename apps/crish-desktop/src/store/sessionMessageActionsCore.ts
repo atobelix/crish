@@ -231,10 +231,20 @@ export function createSessionMessageActionsCore<T extends SessionStoreSlice>(
           }
         }
 
+        const now = Date.now();
         if (targetTextIdx >= 0) {
-          msg.blocks[targetTextIdx]!.content = segment;
+          const target = msg.blocks[targetTextIdx]!;
+          target.content = segment;
+          if (target.startTime) {
+            target.durationMs = Math.max(0, now - target.startTime);
+          }
         } else if (segment.length > 0) {
-          msg.blocks.push({ type: 'text' as const, content: segment });
+          msg.blocks.push({
+            type: 'text' as const,
+            content: segment,
+            startTime: now,
+            durationMs: 0,
+          });
         }
         rebindSessionById(state, sessionId, hit.session);
       }),
@@ -253,16 +263,19 @@ export function createSessionMessageActionsCore<T extends SessionStoreSlice>(
             ? Math.max(0, Math.floor(turnIndex))
             : 0;
         const thoughtKey = `thought-turn-${cleanTurn}`;
+        const now = Date.now();
 
         // 1. 同步维护 thinkingTurns（持久化与重水合权威源）
         const ttIdx = msg.thinkingTurns.findIndex(
           (tt) => tt.turnIndex === cleanTurn
         );
         if (ttIdx >= 0) {
+          const existingTt = msg.thinkingTurns[ttIdx]!;
           msg.thinkingTurns[ttIdx] = {
-            ...msg.thinkingTurns[ttIdx]!,
+            ...existingTt,
             content: thinking,
             isStreaming: true,
+            durationMs: existingTt.durationMs ?? Math.max(0, now - (msg.timestamp || now)),
           };
         } else if (thinking.trim()) {
           msg.thinkingTurns.push({
@@ -270,6 +283,7 @@ export function createSessionMessageActionsCore<T extends SessionStoreSlice>(
             content: thinking,
             id: thoughtKey,
             isStreaming: true,
+            durationMs: 0,
           });
         }
 
@@ -283,24 +297,31 @@ export function createSessionMessageActionsCore<T extends SessionStoreSlice>(
           if (!thinking.trim()) {
             msg.blocks.splice(existingBlockIdx, 1);
           } else {
+            const eb = msg.blocks[existingBlockIdx]!;
+            const sTime = eb.startTime || now;
             msg.blocks[existingBlockIdx] = {
-              ...msg.blocks[existingBlockIdx]!,
+              ...eb,
               content: thinking,
               turnIndex: cleanTurn,
+              startTime: sTime,
+              durationMs: Math.max(0, now - sTime),
               isStreaming: true,
             };
           }
         } else if (thinking.trim()) {
-          const firstTextIdx = msg.blocks.findIndex((b) => b.type === 'text');
           const newBlock = {
             type: 'thought' as const,
             id: thoughtKey,
             content: thinking,
             turnIndex: cleanTurn,
+            startTime: now,
+            durationMs: 0,
             isStreaming: true,
           };
-          if (firstTextIdx >= 0) {
-            msg.blocks.splice(firstTextIdx, 0, newBlock);
+          // 物理时序保证：按真实发生时间追加到末端，严禁将新步骤思考逆向插入历史步骤的 text 之前
+          const lastBlock = msg.blocks[msg.blocks.length - 1];
+          if (lastBlock && lastBlock.type === 'text' && !lastBlock.content?.trim()) {
+            msg.blocks.splice(msg.blocks.length - 1, 0, newBlock);
           } else {
             msg.blocks.push(newBlock);
           }

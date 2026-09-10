@@ -16,6 +16,7 @@ export type TimelineThoughtItem = {
   content: string;
   id?: string;
   turnIndex?: number;
+  startTime?: number;
   durationMs?: number;
   isLive?: boolean;
   isStreaming?: boolean;
@@ -27,6 +28,8 @@ export type TimelineTextItem = {
   content: string;
   key: string;
   turnIndex?: number;
+  startTime?: number;
+  durationMs?: number;
   isFinal?: boolean;
 };
 
@@ -35,6 +38,8 @@ export type TimelineToolsItem = {
   items: ToolRenderItem[];
   key: string;
   turnIndex?: number;
+  startTime?: number;
+  durationMs?: number;
 };
 
 /** 可见上下文注入卡片时间线项（Prompt 注入管线 · 维度二） */
@@ -43,6 +48,8 @@ export type TimelineInjectionItem = {
   key: string;
   injection: MessageContextInjection;
   turnIndex?: number;
+  startTime?: number;
+  durationMs?: number;
 };
 
 export type AssistantTimelineItem =

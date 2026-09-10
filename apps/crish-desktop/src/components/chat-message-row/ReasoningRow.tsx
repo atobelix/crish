@@ -219,11 +219,9 @@ export const ReasoningRow: React.FC<ReasoningRowProps> = ({
         ) : (
           <>
             <span className={styles.durationBadge}>
-              {durationText
-                ? (turnIndex != null ? `第 ${turnIndex + 1} 阶段 · ${durationText}` : durationText)
-                : (turnIndex != null ? `第 ${turnIndex + 1} 阶段思考` : '已思考')}
+              {durationText || '已思考'}
             </span>
-            {displaySummary ? (
+            {!isExpanded && displaySummary ? (
               <>
                 <span className={styles.dotSeparator} aria-hidden>·</span>
                 <span className={styles.reasoningSummary}>

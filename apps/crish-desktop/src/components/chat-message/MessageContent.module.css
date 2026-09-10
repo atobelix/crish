@@ -17,7 +17,7 @@
   margin: 0;
   background: transparent;
   border: none;
-  border-bottom: 0.5px solid var(--border-subtle);
+  border-bottom: none;
   cursor: pointer;
   text-align: left;
   box-sizing: border-box;
@@ -117,4 +117,17 @@
   border: var(--hairline-width, 1px) solid var(--hairline, var(--border-subtle));
   object-fit: contain;
   background: var(--bg-secondary);
+}
+
+.topProcessHeader {
+  width: 100%;
+  box-sizing: border-box;
+  border-bottom: 0.5px solid var(--border-subtle);
+  padding-bottom: 4px;
+  margin-bottom: var(--space-2, 8px);
+}
+
+.toolsTimelineItem {
+  width: 100%;
+  box-sizing: border-box;
 }

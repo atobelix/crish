@@ -20,6 +20,47 @@ describe('TimelineThoughtSection', () => {
     expect(screen.queryByRole('button', { name: /查看完整思考链/i })).toBeNull();
   });
 
+  it('思考没有第几阶段这一说：即便 turnIndex > 0 也永远展示“思考”', () => {
+    render(
+      <TimelineThoughtSection
+        content="后续步骤思考"
+        durationMs={1500}
+        turnIndex={3}
+      />
+    );
+    expect(screen.getByText('思考')).toBeDefined();
+    expect(screen.queryByText(/第.*阶段/)).toBeNull();
+  });
+
+  it('展开态下头部单行不展示摘要内容，避免与正文首句重复', () => {
+    const { container } = render(
+      <TimelineThoughtSection
+        content="首句思考内容详细展开"
+        defaultExpanded={true}
+      />
+    );
+    // 头部 button 内部不包含 thoughtSummary
+    const headerBtn = container.querySelector('[class*="thoughtHeaderBtn"]');
+    expect(headerBtn?.querySelector('[class*="thoughtSummary"]')).toBeNull();
+  });
+
+  it('系统性记录起始时间与持续时间并在 DOM 与 tooltip 透出', () => {
+    const now = 1757512345678;
+    const { container } = render(
+      <TimelineThoughtSection
+        content="计时测试"
+        startTime={now}
+        durationMs={2800}
+      />
+    );
+    const section = container.querySelector('[data-kind="thought"]');
+    expect(section).toHaveAttribute('data-start-time', String(now));
+    expect(section).toHaveAttribute('data-duration-ms', '2800');
+    const headerBtn = container.querySelector('[class*="thoughtHeaderBtn"]');
+    expect(headerBtn?.getAttribute('title')).toContain('开始时间:');
+    expect(headerBtn?.getAttribute('title')).toContain('耗时: 2.8秒');
+  });
+
   it('实时思考中展示流式文案，无呼吸绿点', () => {
     const { container } = render(
       <TimelineThoughtSection content="正在思考下一步工具调用" isLive={true} />

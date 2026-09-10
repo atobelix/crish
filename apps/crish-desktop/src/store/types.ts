@@ -494,6 +494,8 @@ export interface MessageTimelineBlock {
   content?: string;
   /** 关联的轮次索引 (0-based) */
   turnIndex?: number;
+  /** 起始时间（epoch ms） */
+  startTime?: number;
   /** 思考/执行耗时（毫秒） */
   durationMs?: number;
   /** 是否处于流式中 */

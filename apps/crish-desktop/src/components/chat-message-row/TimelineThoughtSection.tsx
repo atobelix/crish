@@ -22,14 +22,16 @@ export interface TimelineThoughtSectionProps {
   turnIndex?: number;
   messageId?: string;
   defaultExpanded?: boolean;
+  startTime?: number;
 }
 
 export const TimelineThoughtSection: React.FC<TimelineThoughtSectionProps> = ({
   content,
   isLive = false,
   durationMs,
-  turnIndex,
+  turnIndex: _turnIndex,
   defaultExpanded,
+  startTime,
 }) => {
   const [isOpen, setIsOpen] = useState(defaultExpanded ?? isLive);
 
@@ -41,22 +43,37 @@ export const TimelineThoughtSection: React.FC<TimelineThoughtSectionProps> = ({
     return null;
   }, [durationMs]);
 
-  const titleText = isLive
-    ? '正在思考'
-    : turnIndex != null && turnIndex > 0
-      ? `第 ${turnIndex + 1} 阶段思考`
-      : '思考';
+  // 思考没有第几阶段这一说，统一为“思考”与“正在思考”
+  const titleText = isLive ? '正在思考' : '思考';
 
   const displaySummary = useMemo(() => {
     if (!content) return '';
     return isLive ? extractLatestLine(content) : extractFirstLine(content);
   }, [content, isLive]);
 
+  const timeTooltip = useMemo(() => {
+    const parts: string[] = [];
+    if (startTime != null && startTime > 0) {
+      const d = new Date(startTime);
+      const timeStr = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}.${String(d.getMilliseconds()).padStart(3, '0')}`;
+      parts.push(`开始时间: ${timeStr}`);
+    }
+    if (durationLabel) {
+      parts.push(`耗时: ${durationLabel}`);
+    }
+    return parts.length ? parts.join(' | ') : undefined;
+  }, [startTime, durationLabel]);
+
+  // 展开后单行头部不再显示摘要内容，避免与展开正文首句重复
+  const showSummary = !isOpen && Boolean(displaySummary);
+
   return (
     <div
       className={`${styles.thoughtTimelineSection} ${isLive ? styles.isLive : ''} ${isOpen ? styles.isOpen : ''}`}
       data-kind="thought"
       data-live={isLive ? 'true' : undefined}
+      data-start-time={startTime}
+      data-duration-ms={durationMs}
     >
       <div
         className={styles.thoughtHeaderBtn}
@@ -64,7 +81,7 @@ export const TimelineThoughtSection: React.FC<TimelineThoughtSectionProps> = ({
         role="button"
         tabIndex={0}
         aria-expanded={isOpen}
-        title={durationLabel ? `思考耗时 ${durationLabel}` : undefined}
+        title={timeTooltip}
       >
         <span className={styles.thoughtIcon} aria-hidden>
           <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor">
@@ -76,7 +93,7 @@ export const TimelineThoughtSection: React.FC<TimelineThoughtSectionProps> = ({
           {titleText}
         </span>
 
-        {displaySummary ? (
+        {showSummary ? (
           <>
             <span className={styles.thoughtDotSeparator} aria-hidden>·</span>
             <span className={styles.thoughtSummary}>

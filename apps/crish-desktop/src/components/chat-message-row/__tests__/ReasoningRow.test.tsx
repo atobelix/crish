@@ -163,7 +163,7 @@ describe('DIM-03 §1.1: 24px ReasoningRow 极简思考行流式追踪与扫光�
       expect(cssContent).toMatch(/font-variant-numeric:\s*tabular-nums/);
     });
 
-    it('多阶段思考轮次展示第 N 阶段思考与耗时', () => {
+    it('多阶段思考轮次统一展示思考与耗时（无第 N 阶段）', () => {
       render(
         <ReasoningRow
           content="阶段推理总结"
@@ -173,7 +173,7 @@ describe('DIM-03 §1.1: 24px ReasoningRow 极简思考行流式追踪与扫光�
         />
       );
 
-      expect(screen.getByText(/第 2 阶段 · 已思考 2.5s/)).toBeDefined();
+      expect(screen.getByText('已思考 2.5s')).toBeDefined();
       expect(screen.getByText('阶段推理总结')).toBeDefined();
     });
 

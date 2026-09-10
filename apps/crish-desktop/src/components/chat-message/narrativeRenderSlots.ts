@@ -18,6 +18,7 @@ export interface ChatNarrativeRenderThoughtArgs {
   isLive?: boolean;
   durationMs?: number;
   turnIndex?: number;
+  startTime?: number;
   messageId?: string;
   /** 设置 hideThinkingBlock=false 时为 true（默认展开） */
   defaultOpen?: boolean;

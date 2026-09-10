@@ -60,11 +60,12 @@ export function countProcessMetrics(
 ): ProcessMetrics {
   let toolCount = 0;
   let subagentCount = 0;
+  let messageCount = 0;
   let thoughtCount = 0;
   let durationMs = 0;
 
   if (!Array.isArray(items)) {
-    return { toolCount, subagentCount, thoughtCount, durationMs };
+    return { toolCount, subagentCount, messageCount, thoughtCount, durationMs };
   }
 
   for (const item of items) {
@@ -93,10 +94,12 @@ export function countProcessMetrics(
       if (typeof item.durationMs === 'number' && item.durationMs > 0) {
         durationMs += item.durationMs;
       }
+    } else if (item.kind === 'text' && (item.content || '').trim()) {
+      messageCount += 1;
     }
   }
 
-  return { toolCount, subagentCount, thoughtCount, durationMs };
+  return { toolCount, subagentCount, messageCount, thoughtCount, durationMs };
 }
 
 /**
