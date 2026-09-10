@@ -86,37 +86,74 @@ export const ModelThinkingEditor: React.FC<ModelThinkingEditorProps> = ({
 
   return (
     <div className={styles.mrdSubSection}>
-      <div className={styles.mrdSubSectionHeader}>
-        <span className={styles.mrdSubSectionTitle}>
-          <Lucide.BrainCircuit
-            size={13}
-            style={{ color: 'var(--brand, hsl(160 84% 39%))' }}
-          />
-          思考推理 (Thinking / Reasoning)
-        </span>
-        <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
-          UI 显示名 ⇄ Wire 参数映射表
-        </span>
-      </div>
+      <label className={styles.mrdFieldLabel}>思考推理</label>
 
       {enabled && (
         <div className={styles.mrdThinkingTable}>
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: '1fr 1fr 28px',
+              gridTemplateColumns: '1fr 1fr 48px',
               gap: '6px',
+              alignItems: 'center',
               fontSize: '11px',
               color: 'var(--text-tertiary)',
               paddingBottom: '2px',
             }}
           >
-            <span>UI 显示名 (TitleCase)</span>
-            <span>Wire 参数值</span>
-            <span />
+            <span>界面档位名称</span>
+            <span>API参数值</span>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'flex-end',
+                gap: '2px',
+              }}
+            >
+              <Tooltip content="添加档位">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="xs"
+                  onClick={handleAddRow}
+                  style={{
+                    padding: '0 3px',
+                    height: '20px',
+                    color: 'var(--text-tertiary)',
+                  }}
+                  icon={<Lucide.Plus size={12} />}
+                  aria-label="添加档位"
+                />
+              </Tooltip>
+              <Tooltip content="重置推荐档位">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="xs"
+                  onClick={handleResetPresets}
+                  style={{
+                    padding: '0 3px',
+                    height: '20px',
+                    color: 'var(--text-tertiary)',
+                  }}
+                  icon={<Lucide.RotateCcw size={12} />}
+                  aria-label="重置推荐档位"
+                />
+              </Tooltip>
+            </div>
           </div>
           {rows.map(([lbl, val]) => (
-            <div key={lbl} className={styles.mrdThinkingRow}>
+            <div
+              key={lbl}
+              className={styles.mrdThinkingRow}
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr 48px',
+                gap: '6px',
+                alignItems: 'center',
+              }}
+            >
               <Input
                 size="sm"
                 value={lbl}
@@ -129,47 +166,25 @@ export const ModelThinkingEditor: React.FC<ModelThinkingEditorProps> = ({
                 placeholder="如 low / high"
                 onChange={(e) => handleUpdateValue(lbl, e.target.value)}
               />
-              <Tooltip content="删除档位">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => handleDeleteRow(lbl)}
-                  style={{
-                    padding: '0',
-                    height: '26px',
-                    color: 'var(--text-tertiary)',
-                  }}
-                  icon={<Lucide.Trash2 size={12} />}
-                />
-              </Tooltip>
+              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <Tooltip content="删除档位">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    aria-label="删除档位"
+                    onClick={() => handleDeleteRow(lbl)}
+                    style={{
+                      padding: '0 4px',
+                      height: '26px',
+                      color: 'var(--text-tertiary)',
+                    }}
+                    icon={<Lucide.Trash2 size={12} />}
+                  />
+                </Tooltip>
+              </div>
             </div>
           ))}
-          <div style={{ display: 'flex', gap: '6px', marginTop: '4px' }}>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={handleAddRow}
-              style={{ fontSize: '11px', height: '22px' }}
-              icon={<Lucide.Plus size={11} />}
-            >
-              添加档位
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={handleResetPresets}
-              style={{
-                fontSize: '11px',
-                height: '22px',
-                color: 'var(--text-secondary)',
-              }}
-            >
-              重置推荐档位
-            </Button>
-          </div>
         </div>
       )}
     </div>

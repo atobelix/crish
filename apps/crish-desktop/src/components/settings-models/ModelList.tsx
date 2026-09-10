@@ -3,26 +3,27 @@ import * as Lucide from 'lucide-react';
 import {
   getActiveModelId,
   getActiveProfileId,
-  removeModelFromProfile,
+  clearActiveModelId,
 } from '../../api/providerProfiles';
-import {
-  formatContextLabel,
-  formatModelDisplayName,
-  getModelMeta,
-  setModelEnabled,
-} from '../../api/modelCatalog';
+import { formatContextLabel } from '../../api/modelCatalogPure';
+import { getModelMeta } from '../../api/modelCatalog';
+import { modelsCatalogStore } from '../../api/modelsCatalogStore';
+import { getLiveModel } from '../../api/modelsCatalogLive';
 import { Button, Switch, Tooltip } from '../ui';
 import { ModelConfigPanel } from './ModelConfigPanel';
 import type { CfgDraft } from './useModelProfilesState';
+import {
+  defaultLocalMutation,
+  prepareCatalogWrite,
+} from './catalogWriteGate';
 import styles from './ModelsSettingsTab.module.css';
 
-// 无名称图标按钮文案（同源约定）：aria-label 与 Tooltip content 同引用，禁止两处各写
 const CONFIGURE_LABEL = '配置';
 const DELETE_LABEL = '删除';
 
 /**
- * 模型条目列表：行内启用开关（ui/Switch，T11 基座合入后已替换私有自绘开关）、
- * 配置 / 删除、展开配置子面板与空态。
+ * 模型条目列表：启用/删除走 store yaml 核；展示读 getLiveModel。
+ * lastTest 仍来自连通性探测（非配置真源）。
  */
 export const ModelList: React.FC<{
   providerId: string;
@@ -34,10 +35,12 @@ export const ModelList: React.FC<{
   setCfgDraft: React.Dispatch<React.SetStateAction<CfgDraft | null>>;
   openConfigFor: (model: string) => void;
   closeConfig: () => void;
-  saveConfig: () => void;
+  saveConfig: () => void | Promise<void>;
   runTest: (model: string) => Promise<void>;
   testBusy: string | null;
   refresh: () => void;
+  notify?: (ok: boolean, msg: string) => void;
+  runAsLocalMutation?: <T>(fn: () => Promise<T> | T) => Promise<T>;
 }> = ({
   providerId,
   modelsList,
@@ -51,13 +54,17 @@ export const ModelList: React.FC<{
   saveConfig,
   runTest,
   testBusy,
-  refresh,
+  refresh: _refresh,
+  notify = () => {},
+  runAsLocalMutation = defaultLocalMutation,
 }) => {
   return (
     <div className={`${styles.mrdModelList} mrd-model-list`}>
       {modelsList.map((m) => {
-        const meta = getModelMeta(providerId, m);
-        const off = meta.enabled === false;
+        const model = getLiveModel(providerId, m);
+        // lastTest 是连通性探测结果，不是 modalities/thinking/pricing 真源
+        const lastTest = getModelMeta(providerId, m).lastTest;
+        const off = model?.enabled === false;
         const tKey = `${providerId}::${m}`;
         const isLive =
           getActiveProfileId() === providerId && getActiveModelId() === m;
@@ -65,7 +72,7 @@ export const ModelList: React.FC<{
         const display =
           expanded && cfgDraft?.displayName?.trim()
             ? cfgDraft.displayName.trim()
-            : formatModelDisplayName(providerId, m, meta);
+            : (model?.displayName?.trim() || m);
         const liveCtxVal =
           expanded && cfgDraft
             ? (() => {
@@ -73,11 +80,24 @@ export const ModelList: React.FC<{
                   cfgDraft.contextLength.replace(/[^\d]/g, ''),
                   10
                 );
-                return Number.isFinite(n) && n > 0 ? n : meta.contextLength;
+                return Number.isFinite(n) && n > 0 ? n : model?.contextWindow;
               })()
-            : meta.contextLength;
+            : model?.contextWindow;
         const liveCtxLabel = formatContextLabel(liveCtxVal);
         const showCtx = liveCtxLabel && liveCtxLabel !== '—';
+        const hasTools = Boolean(model?.capabilities?.tools);
+        const hasImage = Boolean(
+          model?.modalities?.input?.includes('image') ||
+            model?.capabilities?.image
+        );
+        const hasVideo = Boolean(
+          model?.modalities?.input?.includes('video') ||
+            model?.capabilities?.video
+        );
+        const hasReasoning = Boolean(
+          (model?.thinking && Object.keys(model.thinking).length > 0) ||
+            model?.capabilities?.reasoning
+        );
 
         return (
           <div
@@ -107,7 +127,7 @@ export const ModelList: React.FC<{
                       {liveCtxLabel}
                     </span>
                   )}
-                  {meta.capabilities?.tools && (
+                  {hasTools && (
                     <span
                       className={`${styles.mrdCapTag} mrd-cap-tag`}
                       aria-label="支持工具调用"
@@ -115,7 +135,7 @@ export const ModelList: React.FC<{
                       <Lucide.Wrench size={10} />
                     </span>
                   )}
-                  {meta.capabilities?.image && (
+                  {hasImage && (
                     <span
                       className={`${styles.mrdCapTag} mrd-cap-tag`}
                       aria-label="支持图片理解"
@@ -123,7 +143,7 @@ export const ModelList: React.FC<{
                       <Lucide.Image size={10} />
                     </span>
                   )}
-                  {meta.capabilities?.video && (
+                  {hasVideo && (
                     <span
                       className={`${styles.mrdCapTag} mrd-cap-tag`}
                       aria-label="支持视频理解"
@@ -131,7 +151,7 @@ export const ModelList: React.FC<{
                       <Lucide.Video size={10} />
                     </span>
                   )}
-                  {meta.capabilities?.reasoning && (
+                  {hasReasoning && (
                     <span
                       className={`${styles.mrdCapTag} mrd-cap-tag`}
                       aria-label="支持思考"
@@ -142,11 +162,11 @@ export const ModelList: React.FC<{
                 </div>
               </div>
               <div className={`${styles.mrdModelActions} mrd-model-actions`}>
-                {meta.lastTest && (
+                {lastTest && (
                   <Tooltip
                     content={
-                      meta.lastTest.error ||
-                      (meta.lastTest.ok ? '连通性正常' : '连通性异常')
+                      lastTest.error ||
+                      (lastTest.ok ? '连通性正常' : '连通性异常')
                     }
                   >
                     <span
@@ -157,22 +177,22 @@ export const ModelList: React.FC<{
                         borderRadius: '4px',
                         userSelect: 'none',
                         lineHeight: '16px',
-                        background: meta.lastTest.ok
+                        background: lastTest.ok
                           ? 'color-mix(in srgb, var(--accent-green, #10b981) 12%, transparent)'
                           : 'color-mix(in srgb, var(--accent-red, #ef4444) 12%, transparent)',
-                        color: !meta.lastTest.ok
+                        color: !lastTest.ok
                           ? 'var(--accent-red, #ef4444)'
-                          : (meta.lastTest.latencyMs || 0) < 400
+                          : (lastTest.latencyMs || 0) < 400
                             ? 'var(--accent-green, #10b981)'
-                            : (meta.lastTest.latencyMs || 0) < 1200
+                            : (lastTest.latencyMs || 0) < 1200
                               ? 'var(--accent-orange, #f59e0b)'
                               : 'var(--accent-red, #ef4444)',
                       }}
                     >
-                      {meta.lastTest.ok
-                        ? `${meta.lastTest.latencyMs}ms`
-                        : meta.lastTest.error?.includes('超时') ||
-                            meta.lastTest.error?.includes('timeout')
+                      {lastTest.ok
+                        ? `${lastTest.latencyMs}ms`
+                        : lastTest.error?.includes('超时') ||
+                            lastTest.error?.includes('timeout')
                           ? '超时'
                           : '失败'}
                     </span>
@@ -214,8 +234,28 @@ export const ModelList: React.FC<{
                     checked={!off}
                     aria-label={off ? '启用模型' : '停用模型'}
                     onCheckedChange={(checked) => {
-                      setModelEnabled(providerId, m, checked);
-                      refresh();
+                      void runAsLocalMutation(async () => {
+                        const ready = await prepareCatalogWrite();
+                        if (!ready.ok) {
+                          notify(false, ready.error);
+                          return;
+                        }
+                        try {
+                          const res = await modelsCatalogStore.updateModel(
+                            providerId,
+                            m,
+                            { enabled: checked }
+                          );
+                          if (!res.ok) {
+                            notify(false, res.error || '启用状态保存失败');
+                          }
+                        } catch (e) {
+                          notify(
+                            false,
+                            e instanceof Error ? e.message : String(e)
+                          );
+                        }
+                      });
                     }}
                   />
                 </Tooltip>
@@ -254,9 +294,35 @@ export const ModelList: React.FC<{
                     }}
                     onClick={(e) => {
                       e.stopPropagation();
-                      removeModelFromProfile(providerId, m);
-                      if (configOpenId === m) closeConfig();
-                      refresh();
+                      void runAsLocalMutation(async () => {
+                        const ready = await prepareCatalogWrite();
+                        if (!ready.ok) {
+                          notify(false, ready.error);
+                          return;
+                        }
+                        try {
+                          const res = await modelsCatalogStore.removeModel(
+                            providerId,
+                            m
+                          );
+                          if (!res.ok) {
+                            notify(false, res.error || '删除失败');
+                            return;
+                          }
+                          if (configOpenId === m) closeConfig();
+                          if (
+                            getActiveProfileId() === providerId &&
+                            getActiveModelId() === m
+                          ) {
+                            clearActiveModelId();
+                          }
+                        } catch (err) {
+                          notify(
+                            false,
+                            err instanceof Error ? err.message : String(err)
+                          );
+                        }
+                      });
                     }}
                     icon={<Lucide.Trash2 size={13} />}
                   />
@@ -264,13 +330,17 @@ export const ModelList: React.FC<{
               </div>
             </div>
 
-            {/* Expanded config sub-panel */}
             {expanded && cfgDraft && (
               <ModelConfigPanel
                 modelId={m}
                 cfgDraft={cfgDraft}
                 setCfgDraft={setCfgDraft}
-                meta={meta}
+                meta={{
+                  profileId: providerId,
+                  model: m,
+                  enabled: !off,
+                  displayName: display,
+                }}
                 tKey={tKey}
                 testBusy={testBusy}
                 runTest={runTest}

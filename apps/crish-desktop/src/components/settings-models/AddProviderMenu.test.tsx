@@ -89,4 +89,21 @@ describe('AddProviderMenu（ui/Menu 基座）', () => {
       'settings-select-trigger'
     );
   });
+
+  it('传入 onAddDirect 时渲染 Split Button：点击主按钮直接触发添加', () => {
+    const onAddDirect = vi.fn();
+    render(
+      <AddProviderMenu
+        addOpen={false}
+        setAddOpen={vi.fn()}
+        onAddTemplate={vi.fn()}
+        onAddPreset={vi.fn()}
+        onAddDirect={onAddDirect}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '添加服务商' }));
+    expect(onAddDirect).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: '更多添加选项' })).toBeInTheDocument();
+  });
 });

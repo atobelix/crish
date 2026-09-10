@@ -26,6 +26,7 @@ export interface ProviderConfigGroup {
   saveKey: () => Promise<void>;
   refresh: () => void;
   notify: (ok: boolean, text: string) => void;
+  runAsLocalMutation: <T>(fn: () => Promise<T> | T) => Promise<T>;
   setProfiles: (profiles: ProviderProfile[]) => void;
   setSelectedId: (id: string | null) => void;
 }
@@ -59,9 +60,11 @@ export interface CapConfigGroup {
   setCfgDraft: React.Dispatch<React.SetStateAction<CfgDraft | null>>;
   openConfigFor: (model: string) => void;
   closeConfig: () => void;
-  saveConfig: () => void;
+  saveConfig: () => void | Promise<void>;
   runTest: (model: string) => Promise<void>;
   testBusy: string | null;
+  notify: (ok: boolean, text: string) => void;
+  runAsLocalMutation: <T>(fn: () => Promise<T> | T) => Promise<T>;
 }
 
 interface ModelConfigEditorProps {
@@ -143,6 +146,7 @@ export const ModelConfigEditor: React.FC<ModelConfigEditorProps> = ({
               saveKey={pc.saveKey}
               notify={pc.notify}
               refresh={pc.refresh}
+              runAsLocalMutation={pc.runAsLocalMutation}
             />
           </div>
 
@@ -183,6 +187,8 @@ export const ModelConfigEditor: React.FC<ModelConfigEditorProps> = ({
                 runScan={mc.runScan}
                 scanBusy={mc.scanBusy}
                 providerVendor={pc.selected?.id.startsWith('custom-') ? undefined : pc.selected?.id}
+                scannedModels={mc.scannedModelsList}
+                existingModels={mc.modelsList}
               />
             )}
           </div>
@@ -223,6 +229,8 @@ export const ModelConfigEditor: React.FC<ModelConfigEditorProps> = ({
               runTest={cc.runTest}
               testBusy={cc.testBusy}
               refresh={pc.refresh}
+              notify={cc.notify}
+              runAsLocalMutation={cc.runAsLocalMutation}
             />
           </div>
 
@@ -232,7 +240,7 @@ export const ModelConfigEditor: React.FC<ModelConfigEditorProps> = ({
             onClose={() => mc.setScanModalOpen(false)}
             providerName={pc.selectedLabel}
             scannedModels={mc.scannedModelsList}
-            existingModels={pc.selected.models}
+            existingModels={mc.modelsList}
             onConfirm={mc.confirmScannedModels}
           />
         </div>

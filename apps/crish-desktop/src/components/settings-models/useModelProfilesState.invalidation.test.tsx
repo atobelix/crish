@@ -1,17 +1,20 @@
 // @vitest-environment jsdom
 /**
- * R2-a ④ 设置页失效订阅组件测（详案 §1.1-④ / 02-总计划 R2-a）：
- * - 外部 profiles 变更（profiles-changed）→ 无未保存草稿直接 refresh 重载；
- * - 有未保存 cfgDraft → 提示 + 编辑会话 invalidate（不静默覆盖、不静默刷新）；
- * - saveConfig rev 核对（CT-01）：外部已变更 → 拒绝陈旧覆盖；
- * - openConfigFor 挂编辑会话（open(objectId, baseRev)）。
+ * R2-a ④ / T2-7：设置页失效订阅。
+ * 外部失效事件源从 profiles-changed 扩到 models-catalog-changed。
+ * CT-01 与成功保存的完成句是 yaml 文本，不是 setter spy。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, renderHook } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
+import { parse as parseYaml } from 'yaml';
 import { emitUiEvent } from '../../api/uiEvents';
+import { mockTauriCommand } from '../../test-setup';
+import { modelsCatalogStore } from '../../api/modelsCatalogStore';
+import type { ProviderSpec } from '../../api/modelsCatalogTypes';
 import { useModelProfilesState } from './useModelProfilesState';
 import type { ProviderProfile } from '../../api/providerProfiles';
-import type { ModelMeta } from '../../api/modelCatalog';
+
+const CATALOG_PATH = 'C:\\Users\\tester\\.conex\\models.yaml';
 
 const mocks = vi.hoisted(() => ({
   open: vi.fn(),
@@ -59,20 +62,18 @@ vi.mock('../../api/providerProfiles', async (importOriginal) => {
   };
 });
 
+// 旧岛 getModelMeta 仅作打开草稿过渡；CT-01 / 保存成功不得靠它当完成句。
 vi.mock('../../api/modelCatalog', () => ({
   getModelMeta: mocks.getModelMeta,
   MODEL_CAPABILITY_OPTIONS: [
     { key: 'tools', label: '工具调用' },
-    { key: 'vision', label: '视觉' },
+    { key: 'image', label: '图片' },
     { key: 'reasoning', label: '思考' },
   ],
   scanProviderModels: vi.fn(async () => ({
     ok: true,
     models: ['gpt-4o-mini'],
   })),
-  setModelCapability: vi.fn(),
-  setModelContextLength: vi.fn(),
-  setModelDisplayName: vi.fn(),
   testProviderModel: vi.fn(async () => ({ ok: true, latencyMs: 120 })),
 }));
 
@@ -89,33 +90,100 @@ const PROFILE_UPDATED: ProviderProfile = {
   models: ['gpt-4o', 'gpt-4o-mini'],
 };
 
-const BASE_META: ModelMeta = {
-  profileId: 'preset-openai',
-  model: 'gpt-4o',
-  displayName: 'GPT-4o',
-  enabled: true,
-  contextLength: 128000,
-  capabilities: { tools: true },
+const CATALOG_PROVIDERS: Record<string, ProviderSpec> = {
+  'preset-openai': {
+    displayName: 'OpenAI 兼容',
+    baseUrl: 'https://api.openai.com/v1',
+    protocol: 'openai/chat',
+    models: [
+      {
+        id: 'gpt-4o',
+        displayName: 'GPT-4o',
+        contextWindow: 128000,
+        maxOutputTokens: 16384,
+        enabled: true,
+        capabilities: { tools: true },
+        thinking: { Low: 'low', High: 'high' },
+        modalities: { input: ['text'], output: ['text'] },
+        pricing: {
+          currency: 'USD',
+          input: 2.5,
+          output: 10,
+          cacheRead: 0.25,
+          cacheWrite: 0.5,
+        },
+      },
+    ],
+  },
 };
 
-let currentProfiles: ProviderProfile[];
-let currentMeta: ModelMeta;
+function lastSavedYaml(saveImpl: ReturnType<typeof vi.fn>): string {
+  const last = saveImpl.mock.calls[saveImpl.mock.calls.length - 1]?.[0] as
+    | { content?: string }
+    | undefined;
+  return last?.content ?? '';
+}
 
-describe('useModelProfilesState 失效订阅（R2-a ④）', () => {
-  beforeEach(() => {
+function parseGpt4o(content: string): Record<string, unknown> | undefined {
+  const doc = parseYaml(content) as {
+    providers?: Record<
+      string,
+      { models?: Array<Record<string, unknown>> }
+    >;
+  };
+  return doc.providers?.['preset-openai']?.models?.find((m) => m.id === 'gpt-4o');
+}
+
+async function awaitSave(fn: () => unknown): Promise<void> {
+  await act(async () => {
+    const ret = fn();
+    await Promise.resolve(ret);
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+}
+
+let currentProfiles: ProviderProfile[];
+let saveImpl: ReturnType<typeof vi.fn>;
+
+describe('useModelProfilesState 失效订阅（R2-a ④ / T2-7）', () => {
+  beforeEach(async () => {
     currentProfiles = [PROFILE];
-    currentMeta = { ...BASE_META };
     mocks.loadProfiles.mockImplementation(() => currentProfiles);
-    mocks.getModelMeta.mockImplementation(() => ({ ...currentMeta }));
+    mocks.getModelMeta.mockImplementation(() => ({
+      profileId: 'preset-openai',
+      model: 'gpt-4o',
+      displayName: 'GPT-4o',
+      enabled: true,
+      contextLength: 128000,
+      capabilities: { tools: true },
+    }));
     mocks.open.mockClear();
     mocks.commit.mockClear();
     mocks.invalidate.mockClear();
     mocks.isOpen.mockClear();
     mocks.toastShow.mockClear();
+
+    modelsCatalogStore.resetForTesting();
+    localStorage.setItem(
+      'crish_models_ls_import_v1',
+      JSON.stringify({ done: true, version: 1 })
+    );
+    mockTauriCommand('workbench_read_models_yaml', () => ({
+      path: CATALOG_PATH,
+      content: '',
+      template: '',
+      seeded: false,
+      parseError: null,
+      providers: structuredClone(CATALOG_PROVIDERS),
+    }));
+    saveImpl = vi.fn((_args: unknown) => ({ path: CATALOG_PATH }));
+    mockTauriCommand('workbench_save_models_yaml', saveImpl);
+    await modelsCatalogStore.ensureLoaded(true);
   });
 
   afterEach(() => {
-    vi.restoreAllMocks();
+    modelsCatalogStore.resetForTesting();
   });
 
   it('外部 profiles 变更且无未保存草稿 → 直接 refresh 重载（不提示）', () => {
@@ -123,7 +191,6 @@ describe('useModelProfilesState 失效订阅（R2-a ④）', () => {
 
     expect(result.current.profiles.map((p) => p.id)).toEqual(['preset-openai']);
 
-    // 模拟其它 tab/窗口/Rust 端落盘（无未保存草稿）
     currentProfiles = [PROFILE_UPDATED];
     act(() => {
       emitUiEvent('profiles-changed');
@@ -137,14 +204,13 @@ describe('useModelProfilesState 失效订阅（R2-a ④）', () => {
     expect(mocks.invalidate).not.toHaveBeenCalled();
   });
 
-  it('外部变更且有未保存 cfgDraft → 提示 + 编辑会话 invalidate，不静默覆盖/不静默刷新', () => {
+  it('外部 profiles-changed 且有未保存 cfgDraft → 提示 + invalidate，不静默覆盖', () => {
     const { result } = renderHook(() => useModelProfilesState());
 
     act(() => {
       result.current.openConfigFor('gpt-4o');
     });
     expect(result.current.cfgDraft).not.toBeNull();
-    // openConfigFor 挂编辑会话：open(objectId)（设置 rev 为本地签名不进会话）
     expect(mocks.open).toHaveBeenCalledWith('preset-openai::gpt-4o');
 
     currentProfiles = [PROFILE_UPDATED];
@@ -161,33 +227,80 @@ describe('useModelProfilesState 失效订阅（R2-a ④）', () => {
       'preset-openai::gpt-4o',
       'external'
     );
-    // 不静默覆盖：草稿保留、列表不强制刷新
     expect(result.current.cfgDraft).not.toBeNull();
   });
 
-  it('saveConfig rev 核对（CT-01）：外部已变更 rev 不符 → 拒绝陈旧覆盖', () => {
+  it('外部 models-catalog-changed 且有未保存 cfgDraft → 提示 + invalidate（事件源扩到目录变更）', () => {
     const { result } = renderHook(() => useModelProfilesState());
 
     act(() => {
       result.current.openConfigFor('gpt-4o');
-      // 保存前编辑草稿
+    });
+    expect(result.current.cfgDraft).not.toBeNull();
+
+    act(() => {
+      emitUiEvent('models-catalog-changed');
+    });
+
+    expect(mocks.toastShow).toHaveBeenCalledWith(
+      '配置已被外部修改，请确认后重载或丢弃草稿',
+      undefined,
+      { type: 'error' }
+    );
+    expect(mocks.invalidate).toHaveBeenCalledWith(
+      'preset-openai::gpt-4o',
+      'external'
+    );
+    expect(result.current.cfgDraft).not.toBeNull();
+  });
+
+  it('外部 models-catalog-changed 且无未保存草稿 → 不提示、不 invalidate', () => {
+    const { result } = renderHook(() => useModelProfilesState());
+    expect(result.current.cfgDraft).toBeNull();
+
+    act(() => {
+      emitUiEvent('models-catalog-changed');
+    });
+
+    expect(mocks.toastShow).not.toHaveBeenCalled();
+    expect(mocks.invalidate).not.toHaveBeenCalled();
+  });
+
+  it('saveConfig CT-01：外部 yaml/store 已变更 rev 不符 → 拒绝陈旧覆盖，不写草稿进 yaml', async () => {
+    const { result } = renderHook(() => useModelProfilesState());
+
+    act(() => {
+      result.current.openConfigFor('gpt-4o');
       result.current.setCfgDraft({
-        displayName: 'GPT-4o 改',
+        displayName: 'GPT-4o 陈旧草稿',
         contextLength: '130000',
-        caps: { tools: true, vision: false, reasoning: false },
+        caps: { tools: true, image: false, video: false, reasoning: true },
+        thinkingEnabled: true,
+        thinkingMap: { Low: 'low', CustomUltra: 'stale_wire' },
+        modalities: { input: ['text', 'image'], output: ['text'] },
+        pricing: {
+          currency: 'CNY',
+          input: '0.99',
+          output: '2.8',
+          cacheRead: '0.08',
+          cacheWrite: '0.2',
+        },
       });
     });
 
-    // 外部变更：model meta 被其它窗口改写（rev 漂移）
-    currentMeta = {
-      ...BASE_META,
-      contextLength: 200000,
-      displayName: 'GPT-4o（外部改）',
-    };
-
-    act(() => {
-      result.current.saveConfig();
+    saveImpl.mockClear();
+    await act(async () => {
+      await modelsCatalogStore.updateModel('preset-openai', 'gpt-4o', {
+        contextWindow: 200000,
+        displayName: 'GPT-4o（外部改）',
+      });
     });
+    const callsAfterExternal = saveImpl.mock.calls.length;
+    expect(parseGpt4o(lastSavedYaml(saveImpl))?.displayName).toBe(
+      'GPT-4o（外部改）'
+    );
+
+    await awaitSave(() => result.current.saveConfig());
 
     expect(mocks.toastShow).toHaveBeenCalledWith(
       '配置已被外部修改，保存已取消，请重新确认',
@@ -198,31 +311,63 @@ describe('useModelProfilesState 失效订阅（R2-a ④）', () => {
       'preset-openai::gpt-4o',
       'external'
     );
-    // applyMetaForModel 路径（modelCatalog setters）不触发——陈旧草稿未整体覆盖
+    expect(mocks.commit).not.toHaveBeenCalled();
     expect(result.current.cfgDraft).not.toBeNull();
+    expect(saveImpl.mock.calls.length).toBe(callsAfterExternal);
+    expect(lastSavedYaml(saveImpl)).not.toContain('GPT-4o 陈旧草稿');
+    expect(lastSavedYaml(saveImpl)).not.toContain('stale_wire');
   });
 
-  it('saveConfig rev 一致 → 正常保存并 commit 编辑会话（推进 rev）', () => {
+  it('saveConfig rev 一致 → yaml 含 thinking/modalities/cacheRead 并 commit', async () => {
     const { result } = renderHook(() => useModelProfilesState());
 
     act(() => {
       result.current.openConfigFor('gpt-4o');
       result.current.setCfgDraft({
         displayName: 'GPT-4o 正常改',
-        contextLength: '130000',
-        caps: { tools: true, vision: false, reasoning: false },
+        contextLength: '200000',
+        maxOutputTokens: '16384',
+        caps: { tools: true, image: true, video: false, reasoning: true },
+        thinkingEnabled: true,
+        thinkingMap: { Low: 'low', CustomUltra: 'ultra_wire' },
+        modalities: { input: ['text', 'image'], output: ['text'] },
+        pricing: {
+          currency: 'CNY',
+          input: '0.99',
+          output: '2.8',
+          cacheRead: '0.08',
+          cacheWrite: '0.2',
+        },
       });
     });
 
-    act(() => {
-      result.current.saveConfig();
+    saveImpl.mockClear();
+    await awaitSave(() => result.current.saveConfig());
+
+    await waitFor(() => {
+      expect(lastSavedYaml(saveImpl)).toContain('ultra_wire');
     });
 
-    // commit(objectId) 已调用（会话提交关闭；CT-01 核对在本地 rev 比对完成）
+    const content = lastSavedYaml(saveImpl);
+    expect(content).toContain('thinking:');
+    expect(content).toContain('modalities:');
+    expect(content).toContain('cacheRead:');
+    expect(content).not.toContain('inputPerMTok');
+    expect(content).not.toContain('contextLength:');
+    expect(content).not.toContain('defaultThinkingLevel');
+
+    const node = parseGpt4o(content);
+    expect(node?.displayName).toBe('GPT-4o 正常改');
+    expect(node?.thinking).toEqual({ Low: 'low', CustomUltra: 'ultra_wire' });
+    expect(node?.modalities).toEqual({
+      input: ['text', 'image'],
+      output: ['text'],
+    });
+    expect((node?.pricing as { cacheRead?: number })?.cacheRead).toBe(0.08);
+    expect(node?.contextWindow).toBe(200000);
+
     expect(mocks.commit).toHaveBeenCalledWith('preset-openai::gpt-4o');
     expect(mocks.toastShow).not.toHaveBeenCalled();
-    // 保存后重开配置（新会话 + 新本地 rev）
-    expect(mocks.open).toHaveBeenCalledTimes(2);
   });
 
   it('closeConfig → 编辑会话 external 失效 + 草稿清空', () => {

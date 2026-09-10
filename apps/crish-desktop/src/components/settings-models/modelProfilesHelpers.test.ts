@@ -1,7 +1,14 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import type { ProviderProfile } from '../../api/providerProfiles';
+import { mockTauriCommand } from '../../test-setup';
+import {
+  modelsCatalogStore,
+  selectModel,
+} from '../../api/modelsCatalogStore';
+import type { ModelSpec, ProviderSpec } from '../../api/modelsCatalogTypes';
 import {
   foldSettingsProfiles,
+  modelSpecRevision,
   pickSettingsSelectedId,
   resolveSettingsSelectedId,
 } from './modelProfilesHelpers';
@@ -75,5 +82,95 @@ describe('modelProfilesHelpers 设置列表折叠', () => {
     expect(pickSettingsSelectedId(folded, raw, null, 'gone')).toBe(
       'opencode-go'
     );
+  });
+});
+
+describe('modelSpecRevision（CT-01 签 ModelSpec 全字段）', () => {
+  const PROVIDER_ID = 'acme';
+  const MODEL_ID = 'acme-think';
+  const BASE_MODEL: ModelSpec = {
+    id: MODEL_ID,
+    displayName: 'Acme Think',
+    contextWindow: 128000,
+    maxOutputTokens: 8192,
+    enabled: true,
+    protocol: 'openai/chat',
+    capabilities: { tools: true },
+    thinking: { Low: 'low', High: 'high' },
+    modalities: { input: ['text', 'image'], output: ['text'] },
+    pricing: {
+      currency: 'CNY',
+      input: 0.99,
+      output: 2.8,
+      cacheRead: 0.08,
+      cacheWrite: 0.2,
+    },
+  };
+  const PROVIDERS: Record<string, ProviderSpec> = {
+    [PROVIDER_ID]: {
+      displayName: 'Acme',
+      baseUrl: 'https://example.invalid/v1',
+      protocol: 'openai/chat',
+      models: [BASE_MODEL],
+    },
+  };
+
+  function revisionOf(providerId: string, modelId: string): string {
+    const model = selectModel(providerId, modelId);
+    expect(model, 'store 必须已有该 ModelSpec').toBeTruthy();
+    return modelSpecRevision(model!);
+  }
+
+  beforeEach(async () => {
+    modelsCatalogStore.resetForTesting();
+    mockTauriCommand('workbench_read_models_yaml', () => ({
+      path: 'C:\\Users\\tester\\.conex\\models.yaml',
+      content: '',
+      template: '',
+      seeded: false,
+      parseError: null,
+      providers: structuredClone(PROVIDERS),
+    }));
+    mockTauriCommand('workbench_save_models_yaml', () => ({
+      path: 'C:\\Users\\tester\\.conex\\models.yaml',
+    }));
+    await modelsCatalogStore.ensureLoaded(true);
+    expect(selectModel(PROVIDER_ID, MODEL_ID)?.thinking?.Low).toBe('low');
+  });
+
+  it('签名至少含 displayName/contextWindow/thinking/modalities/pricing', () => {
+    const rev = revisionOf(PROVIDER_ID, MODEL_ID);
+    expect(rev).toContain('Acme Think');
+    expect(rev).toContain('128000');
+    expect(rev).toMatch(/Low/);
+    expect(rev).toMatch(/image/);
+    expect(rev).toMatch(/0\.08|cacheRead/);
+  });
+
+  it('thinking / modalities / pricing.cacheRead 变化会改 rev（外部改这些字段不得盲签一致）', async () => {
+    const before = revisionOf(PROVIDER_ID, MODEL_ID);
+
+    await modelsCatalogStore.updateModel(PROVIDER_ID, MODEL_ID, {
+      thinking: { Low: 'low', CustomUltra: 'ultra_wire' },
+    });
+    expect(revisionOf(PROVIDER_ID, MODEL_ID)).not.toBe(before);
+
+    const afterThinking = revisionOf(PROVIDER_ID, MODEL_ID);
+    await modelsCatalogStore.updateModel(PROVIDER_ID, MODEL_ID, {
+      modalities: { input: ['text'], output: ['text'] },
+    });
+    expect(revisionOf(PROVIDER_ID, MODEL_ID)).not.toBe(afterThinking);
+
+    const afterMod = revisionOf(PROVIDER_ID, MODEL_ID);
+    await modelsCatalogStore.updateModel(PROVIDER_ID, MODEL_ID, {
+      pricing: {
+        currency: 'CNY',
+        input: 0.99,
+        output: 2.8,
+        cacheRead: 0.99,
+        cacheWrite: 0.2,
+      },
+    });
+    expect(revisionOf(PROVIDER_ID, MODEL_ID)).not.toBe(afterMod);
   });
 });

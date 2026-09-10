@@ -25,9 +25,9 @@ describe('ModelThinkingEditor (思考档位纯英文 TitleCase 与拍平映射)'
       />
     );
 
-    expect(screen.getByText(/思考推理 \(Thinking \/ Reasoning\)/)).toBeInTheDocument();
-    expect(screen.getByText('UI 显示名 (TitleCase)')).toBeInTheDocument();
-    expect(screen.getByText('Wire 参数值')).toBeInTheDocument();
+    expect(screen.getByText('思考推理')).toBeInTheDocument();
+    expect(screen.getByText('界面档位名称')).toBeInTheDocument();
+    expect(screen.getByText('API参数值')).toBeInTheDocument();
 
     expect(screen.getByDisplayValue('Off')).toBeInTheDocument();
     expect(screen.getByDisplayValue('off')).toBeInTheDocument();
@@ -81,7 +81,7 @@ describe('ModelThinkingEditor (思考档位纯英文 TitleCase 与拍平映射)'
       />
     );
 
-    const deleteBtns = screen.getAllByRole('button', { name: '' });
+    const deleteBtns = screen.getAllByRole('button', { name: '删除档位' });
     fireEvent.click(deleteBtns[0]);
 
     expect(onChange).toHaveBeenCalledWith({
@@ -101,14 +101,14 @@ describe('ModelThinkingEditor (思考档位纯英文 TitleCase 与拍平映射)'
     );
 
     // 点击添加档位
-    fireEvent.click(screen.getByText('添加档位'));
+    fireEvent.click(screen.getByRole('button', { name: '添加档位' }));
     expect(onChange).toHaveBeenCalledWith({
       Custom: 'custom',
       Custom1: 'custom1',
     });
 
     // 点击重置推荐档位
-    fireEvent.click(screen.getByText('重置推荐档位'));
+    fireEvent.click(screen.getByRole('button', { name: '重置推荐档位' }));
     expect(onChange).toHaveBeenCalledWith({ ...STANDARD_THINKING_PRESET });
   });
 

@@ -1,5 +1,4 @@
 import React, { useCallback } from 'react';
-import * as Lucide from 'lucide-react';
 import styles from './ModelsSettingsTab.module.css';
 
 export const ALL_INPUT_MODALITIES = [
@@ -13,11 +12,11 @@ export const ALL_INPUT_MODALITIES = [
 export const ALL_OUTPUT_MODALITIES = ['text', 'image', 'audio'] as const;
 
 export const MODALITY_LABELS: Record<string, string> = {
-  text: 'text (文本)',
-  image: 'image (图像)',
-  audio: 'audio (音频)',
-  video: 'video (视频)',
-  file: 'file (文件/PDF)',
+  text: '文本',
+  image: '图片',
+  audio: '音频',
+  video: '视频',
+  file: '文档/文件',
 };
 
 export interface ModelModalitiesEditorProps {
@@ -32,6 +31,7 @@ export interface ModelModalitiesEditorProps {
 /**
  * 多模态矩阵编辑器（一等公民）：
  * 紧凑直观地勾选/反选输入与输出模态标签，支持 text/image/audio/video/file 等。
+ * 保底每项至少选中 1 个模态（禁止置空）。
  */
 export const ModelModalitiesEditor: React.FC<ModelModalitiesEditorProps> = ({
   modalities,
@@ -42,6 +42,10 @@ export const ModelModalitiesEditor: React.FC<ModelModalitiesEditorProps> = ({
     (mod: string) => {
       const current = modalities.input || ['text', 'image'];
       const exists = current.includes(mod);
+      // 保底每项至少选一个（禁止全部取消）
+      if (exists && current.length <= 1) {
+        return;
+      }
       const nextInputs = exists
         ? current.filter((x) => x !== mod)
         : [...current, mod];
@@ -65,6 +69,10 @@ export const ModelModalitiesEditor: React.FC<ModelModalitiesEditorProps> = ({
     (mod: string) => {
       const current = modalities.output || ['text'];
       const exists = current.includes(mod);
+      // 保底每项至少选一个（禁止全部取消）
+      if (exists && current.length <= 1) {
+        return;
+      }
       const nextOutputs = exists
         ? current.filter((x) => x !== mod)
         : [...current, mod];
@@ -78,17 +86,8 @@ export const ModelModalitiesEditor: React.FC<ModelModalitiesEditorProps> = ({
   );
 
   return (
-    <div className={styles.mrdSubSection}>
-      <div className={styles.mrdSubSectionHeader}>
-        <span className={styles.mrdSubSectionTitle}>
-          <Lucide.Layers size={13} style={{ color: 'var(--brand, #10b981)' }} />
-          多模态支持 (Modalities)
-        </span>
-        <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
-          input: [{modalities.input.join(', ')}], output: [
-          {modalities.output.join(', ')}]
-        </span>
-      </div>
+    <div className={styles.mrdModalitySection}>
+      <label className={styles.mrdFieldLabel}>多模态支持</label>
       <div className={styles.mrdModalityRows}>
         <div className={styles.mrdModalityRow}>
           <span className={styles.mrdModalityLabel}>输入模态:</span>
@@ -99,13 +98,13 @@ export const ModelModalitiesEditor: React.FC<ModelModalitiesEditorProps> = ({
                 <button
                   key={mod}
                   type="button"
+                  aria-pressed={active}
                   className={`${styles.mrdModalityChip} ${
                     active ? styles.mrdModalityChipActive : ''
                   }`}
                   onClick={() => toggleInput(mod)}
                 >
-                  {active ? <Lucide.Check size={10} /> : null}
-                  <span>{MODALITY_LABELS[mod] || mod}</span>
+                  {MODALITY_LABELS[mod] || mod}
                 </button>
               );
             })}
@@ -120,13 +119,13 @@ export const ModelModalitiesEditor: React.FC<ModelModalitiesEditorProps> = ({
                 <button
                   key={mod}
                   type="button"
+                  aria-pressed={active}
                   className={`${styles.mrdModalityChip} ${
                     active ? styles.mrdModalityChipActive : ''
                   }`}
                   onClick={() => toggleOutput(mod)}
                 >
-                  {active ? <Lucide.Check size={10} /> : null}
-                  <span>{MODALITY_LABELS[mod] || mod}</span>
+                  {MODALITY_LABELS[mod] || mod}
                 </button>
               );
             })}

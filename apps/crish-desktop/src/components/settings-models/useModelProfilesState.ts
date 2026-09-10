@@ -1,7 +1,6 @@
 import { toast } from '../../services/toast/ToastContext';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  addModelToProfile,
   createCustomProfile,
   findProfileByDisplayName,
   getActiveModelId,
@@ -13,9 +12,10 @@ import {
   saveProfileKey,
   type ProviderProfile,
 } from '../../api/providerProfiles';
-import { getModelMeta } from '../../api/modelCatalog';
+import { modelsCatalogStore } from '../../api/modelsCatalogStore';
+import { getLiveModel, getLiveProvider } from '../../api/modelsCatalogLive';
+import { useModelsCatalogVersion } from '../../hooks/useModelsCatalogVersion';
 import {
-  applyMetaForModel,
   emptyAddDraft,
   type AddModelDraft,
   type ConfigDraft,
@@ -34,6 +34,10 @@ import {
 } from './modelProfilesHelpers';
 import { useModelConfigSession } from './useModelConfigSession';
 import { useModelProviderActions } from './useModelProviderActions';
+import {
+  addDraftToModelInput,
+  ensureProviderShell,
+} from './catalogWriteGate';
 
 export type AddDraft = AddModelDraft;
 export type CfgDraft = ConfigDraft;
@@ -46,6 +50,7 @@ export {
 };
 
 export function useModelProfilesState() {
+  const catalogVersion = useModelsCatalogVersion();
   const [profiles, setProfilesState] = useState<ProviderProfile[]>(() =>
     foldSettingsProfiles(loadProfiles())
   );
@@ -146,11 +151,10 @@ export function useModelProfilesState() {
   }, [setProfiles]);
 
   useEffect(() => {
-    return onUiEvent('profiles-changed', () => {
+    const onExternal = () => {
       if (localMutationRef.current) return;
       const st = externalChangeStateRef.current;
       if (st.hasUnsaved) {
-        // 有未保存草稿：提示用户，不静默覆盖；编辑会话失效（挂起面）
         notify(false, '配置已被外部修改，请确认后重载或丢弃草稿');
         if (st.configOpenId && st.profileId) {
           editSessionConsumer.invalidate(
@@ -160,9 +164,14 @@ export function useModelProfilesState() {
         }
         return;
       }
-      // 无未保存草稿：直接重载最新配置
       refresh();
-    });
+    };
+    const offProfiles = onUiEvent('profiles-changed', onExternal);
+    const offCatalog = onUiEvent('models-catalog-changed', onExternal);
+    return () => {
+      offProfiles();
+      offCatalog();
+    };
   }, [refresh, notify]);
 
   const selected = useMemo(() => {
@@ -271,8 +280,57 @@ export function useModelProfilesState() {
     });
   };
 
+  const addCustomProvider = useCallback(
+    async (params: {
+      name: string;
+      format: 'openai' | 'anthropic';
+      baseUrl?: string;
+      apiKey?: string;
+    }) => {
+      return await runAsLocalMutation(async () => {
+        const trimmedName = params.name.trim();
+        const defaultUrl = DEFAULT_PROVIDER_BASE_URLS[params.format] || '';
+        const finalUrl = (params.baseUrl?.trim() || defaultUrl).trim();
+
+        const p = createCustomProfile({
+          name:
+            trimmedName ||
+            (params.format === 'openai' ? 'OpenAI 格式' : 'Anthropic 格式'),
+          ...(finalUrl ? { baseUrl: finalUrl } : {}),
+          models: [],
+        });
+        refresh();
+        setSelectedIdState(p.id);
+        setAddOpen(false);
+
+        const protocol =
+          params.format === 'anthropic' ? 'anthropic/messages' : 'openai/chat';
+        const shell = await ensureProviderShell({
+          providerId: p.id,
+          displayName: p.name,
+          baseUrl: p.baseUrl,
+          protocol,
+        });
+        if (!shell.ok) notify(false, shell.error || '写入服务商失败');
+
+        if (params.apiKey?.trim()) {
+          const keyRes = await saveProfileKey(p.id, params.apiKey.trim());
+          if (!keyRes.ok) {
+            notify(false, `API Key 保存失败: ${keyRes.error || '未知错误'}`);
+          } else {
+            notify(true, '服务商已添加，正在自动扫描可用模型...');
+            void runScan();
+          }
+        }
+        refresh();
+        return p;
+      });
+    },
+    [refresh, runAsLocalMutation, notify, runScan]
+  );
+
   const addFromTemplate = (format: 'openai' | 'anthropic') => {
-    void runAsLocalMutation(() => {
+    void runAsLocalMutation(async () => {
       const p = createCustomProfile({
         name: format === 'openai' ? 'OpenAI 格式' : 'Anthropic 格式',
         ...(DEFAULT_PROVIDER_BASE_URLS[format] !== undefined && {
@@ -283,17 +341,34 @@ export function useModelProfilesState() {
       refresh();
       setSelectedIdState(p.id);
       setAddOpen(false);
+      const shell = await ensureProviderShell({
+        providerId: p.id,
+        displayName: p.name,
+        baseUrl: p.baseUrl,
+        protocol: format === 'anthropic' ? 'anthropic/messages' : 'openai/chat',
+      });
+      if (!shell.ok) notify(false, shell.error || '写入服务商失败');
     });
   };
 
   const addFromPreset = (preset: PresetProvider) => {
-    void runAsLocalMutation(() => {
+    void runAsLocalMutation(async () => {
       const raw = loadProfiles();
       const existing = findProfileByDisplayName(raw, preset.name);
       if (existing) {
         setProfiles(raw);
         setSelectedIdState(existing.id);
         setAddOpen(false);
+        const shell = await ensureProviderShell({
+          providerId: existing.id,
+          displayName: existing.name,
+          baseUrl: existing.baseUrl,
+          protocol:
+            preset.format === 'anthropic'
+              ? 'anthropic/messages'
+              : existing.protocol,
+        });
+        if (!shell.ok) notify(false, shell.error || '写入服务商失败');
         return;
       }
       const p = createCustomProfile({
@@ -304,6 +379,14 @@ export function useModelProfilesState() {
       setProfiles(loadProfiles());
       setSelectedIdState(p.id);
       setAddOpen(false);
+      const shell = await ensureProviderShell({
+        providerId: p.id,
+        displayName: p.name,
+        baseUrl: p.baseUrl,
+        protocol:
+          preset.format === 'anthropic' ? 'anthropic/messages' : 'openai/chat',
+      });
+      if (!shell.ok) notify(false, shell.error || '写入服务商失败');
     });
   };
 
@@ -315,51 +398,53 @@ export function useModelProfilesState() {
       return;
     }
     const snap = { ...addDraft };
-    void runAsLocalMutation(() => {
-      addModelToProfile(selected.id, id);
-      applyMetaForModel(selected.id, id, snap);
-      refresh();
+    void runAsLocalMutation(async () => {
+      const shell = await ensureProviderShell({
+        providerId: selected.id,
+        displayName: selected.name,
+        baseUrl: selected.baseUrl,
+        protocol: selected.protocol,
+      });
+      if (!shell.ok) {
+        notify(false, shell.error || '写入服务商失败');
+        return;
+      }
+      try {
+        const res = await modelsCatalogStore.addModel(
+          selected.id,
+          addDraftToModelInput(id, snap)
+        );
+        if (!res.ok) {
+          notify(false, res.error || '添加模型失败');
+          return;
+        }
+      } catch (e) {
+        notify(false, e instanceof Error ? e.message : String(e));
+        return;
+      }
       setAddDraft(emptyAddDraft());
       setManualOpen(false);
+      await openConfigFor(id);
     });
-
-    window.setTimeout(() => {
-      const meta = getModelMeta(selected.id, id);
-      // R2-a ④：cfgDraft 挂编辑会话（open；设置 rev 为本地签名，
-      // 不进会话数值 rev——CT-01 核对在 saveConfig 本地比对）
-      editSessionConsumer.open(settingsObjectId(selected.id, id));
-      setConfigOpenId(id);
-      setCfgDraft({
-        displayName: meta.displayName || snap.displayName || '',
-        contextLength:
-          meta.contextLength != null
-            ? String(meta.contextLength)
-            : snap.contextLength || '',
-        caps: {
-          tools: Boolean(meta.capabilities?.tools),
-          image: Boolean(meta.capabilities?.image),
-          video: Boolean(meta.capabilities?.video),
-          reasoning: Boolean(meta.capabilities?.reasoning),
-        },
-      });
-    }, 0);
   };
 
+  // 列表/过滤只读 live 树（含停用，供开关再启用）。凭据壳 models[] 不当能力源。
   const modelsList = useMemo(() => {
     if (!selected) return [] as string[];
-    const list = normalizeModelIds(selected.models);
+    const list = (getLiveProvider(selected.id)?.models ?? []).map((m) => m.id);
     const q = modelFilter.trim().toLowerCase();
     if (!q) return list;
     return list.filter((m) => {
-      const meta = getModelMeta(selected.id, m);
-      const name = (meta.displayName || '').toLowerCase();
+      const live = getLiveModel(selected.id, m);
+      const name = (live?.displayName || '').toLowerCase();
       return m.toLowerCase().includes(q) || name.includes(q);
     });
-  }, [selected, modelFilter]);
+  }, [selected, modelFilter, catalogVersion]);
 
-  const modelsCount = selected?.models
-    ? (normalizeModelIds(selected.models) || []).length
-    : 0;
+  const modelsCount = useMemo(() => {
+    if (!selected) return 0;
+    return getLiveProvider(selected.id)?.models?.length ?? 0;
+  }, [selected, catalogVersion]);
   const selectedLabel = selected ? profileDisplayLabel(selected) : '';
   const hasKeySelected = selected ? profileHasKey(selected) : false;
 
@@ -394,8 +479,10 @@ export function useModelProfilesState() {
     setConfirmDeleteId,
     refresh,
     notify,
+    runAsLocalMutation,
     saveKey,
     addFromTemplate,
+    addCustomProvider,
     addFromPreset,
     handleManualAdd,
     openConfigFor,

@@ -21,15 +21,23 @@ describe('ModelModalitiesEditor (多模态矩阵一等公民)', () => {
       />
     );
 
-    expect(screen.getByText(/多模态支持 \(Modalities\)/)).toBeInTheDocument();
+    expect(screen.getByText(/多模态支持/)).toBeInTheDocument();
     expect(screen.getByText('输入模态:')).toBeInTheDocument();
     expect(screen.getByText('输出模态:')).toBeInTheDocument();
 
+    // 用户裁决 #4：模态标签为纯中文（去中英混杂）
+    const labelMap: Record<string, string> = {
+      text: '文本',
+      image: '图片',
+      audio: '音频',
+      video: '视频',
+      file: '文档/文件',
+    };
     for (const mod of ALL_INPUT_MODALITIES) {
-      expect(screen.getAllByText(new RegExp(mod)).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(new RegExp(labelMap[mod])).length).toBeGreaterThan(0);
     }
     for (const mod of ALL_OUTPUT_MODALITIES) {
-      expect(screen.getAllByText(new RegExp(mod)).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(new RegExp(labelMap[mod])).length).toBeGreaterThan(0);
     }
   });
 
@@ -101,5 +109,29 @@ describe('ModelModalitiesEditor (多模态矩阵一等公民)', () => {
       input: ['text'],
       output: ['text', 'image'],
     });
+  });
+
+  it('保底每项至少选一个：仅剩1个模态时点击不触发取消（输入与输出均受控）', () => {
+    const onChange = vi.fn();
+    const modalities = {
+      input: ['text'],
+      output: ['text'],
+    };
+    render(
+      <ModelModalitiesEditor
+        modalities={modalities}
+        onChange={onChange}
+      />
+    );
+
+    const inputSection = screen.getByText('输入模态:').parentElement!;
+    const inputBtn = inputSection.querySelectorAll('button')[0]!; // text is 1st
+    fireEvent.click(inputBtn);
+    expect(onChange).not.toHaveBeenCalled();
+
+    const outputSection = screen.getByText('输出模态:').parentElement!;
+    const outputBtn = outputSection.querySelectorAll('button')[0]!; // text is 1st
+    fireEvent.click(outputBtn);
+    expect(onChange).not.toHaveBeenCalled();
   });
 });

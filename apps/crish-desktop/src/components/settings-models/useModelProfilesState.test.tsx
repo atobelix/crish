@@ -1,7 +1,19 @@
 // @vitest-environment jsdom
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { renderHook, act } from '@testing-library/react';
+import { renderHook, act, waitFor } from '@testing-library/react';
+import { parse as parseYaml } from 'yaml';
+import { mockTauriCommand } from '../../test-setup';
+import { modelsCatalogStore } from '../../api/modelsCatalogStore';
+import type { ProviderSpec } from '../../api/modelsCatalogTypes';
 import { emptyAddDraft, PRESETS, useModelProfilesState } from './useModelProfilesState';
+
+const HOOK_SRC = readFileSync(
+  join(dirname(fileURLToPath(import.meta.url)), 'useModelProfilesState.ts'),
+  'utf8'
+);
 
 const toastShow = vi.hoisted(() => vi.fn());
 const profileMocks = vi.hoisted(() => {
@@ -52,21 +64,93 @@ vi.mock('../../api/modelCatalog', () => ({
   getModelMeta: vi.fn(() => ({ displayName: 'GPT-4o', contextLength: 128000, capabilities: { tools: true } })),
   MODEL_CAPABILITY_OPTIONS: [
     { key: 'tools', label: '工具调用' },
-    { key: 'vision', label: '视觉' },
+    { key: 'image', label: '图片' },
+    { key: 'video', label: '视频' },
     { key: 'reasoning', label: '思考' },
   ],
   scanProviderModels: vi.fn(async () => ({ ok: true, models: ['gpt-4o-mini'] })),
+  testProviderModel: vi.fn(async () => ({ ok: true, latencyMs: 120 })),
+  // 旧岛 setter 仅作 no-op 防当前过渡期 throw；禁止当作保存成功断言
   setModelCapability: vi.fn(),
   setModelContextLength: vi.fn(),
   setModelDisplayName: vi.fn(),
-  testProviderModel: vi.fn(async () => ({ ok: true, latencyMs: 120 })),
+  setModelMaxOutputTokens: vi.fn(),
+  setModelThinkingLevel: vi.fn(),
+  setModelProtocol: vi.fn(),
+  setModelModalities: vi.fn(),
+  setModelThinking: vi.fn(),
+  setModelPricing: vi.fn(),
+  setModelEnabled: vi.fn(),
 }));
 
+const CATALOG_PATH = 'C:\\Users\\tester\\.conex\\models.yaml';
+
+const CATALOG_PROVIDERS: Record<string, ProviderSpec> = {
+  'preset-openai': {
+    displayName: 'OpenAI 兼容',
+    baseUrl: 'https://api.openai.com/v1',
+    protocol: 'openai/chat',
+    models: [
+      {
+        id: 'gpt-4o',
+        displayName: 'GPT-4o',
+        contextWindow: 128000,
+        capabilities: { tools: true },
+        thinking: { Low: 'low' },
+        modalities: { input: ['text'], output: ['text'] },
+      },
+    ],
+  },
+  'opencode-go': {
+    displayName: 'OpenCode Go 订阅',
+    baseUrl: 'https://opencode.ai/zen/go/v1',
+    protocol: 'openai/chat',
+    models: [{ id: 'deepseek-v4-flash', displayName: 'DeepSeek V4 Flash' }],
+  },
+  'preset-opencode-go': {
+    displayName: 'OpenCode Go 订阅',
+    baseUrl: 'https://opencode.ai/zen/go/v1',
+    protocol: 'openai/chat',
+    models: [],
+  },
+  'opencode-zen': {
+    displayName: 'OpenCode Zen 订阅',
+    baseUrl: 'https://opencode.ai/zen/v1',
+    protocol: 'openai/chat',
+    models: [],
+  },
+};
+
+function lastSavedYaml(saveImpl: ReturnType<typeof vi.fn>): string {
+  const last = saveImpl.mock.calls[saveImpl.mock.calls.length - 1]?.[0] as
+    | { content?: string }
+    | undefined;
+  return last?.content ?? '';
+}
+
 describe('useModelProfilesState', () => {
-  beforeEach(() => {
+  let saveImpl: ReturnType<typeof vi.fn>;
+
+  beforeEach(async () => {
     profileMocks.loadProfiles.mockReturnValue([profileMocks.OPENAI]);
     profileMocks.createCustomProfile.mockClear();
     sessionStorage.removeItem('crish_models_selected_profile_v1');
+    modelsCatalogStore.resetForTesting();
+    localStorage.setItem(
+      'crish_models_ls_import_v1',
+      JSON.stringify({ done: true, version: 1 })
+    );
+    mockTauriCommand('workbench_read_models_yaml', () => ({
+      path: CATALOG_PATH,
+      content: '',
+      template: '',
+      seeded: false,
+      parseError: null,
+      providers: structuredClone(CATALOG_PROVIDERS),
+    }));
+    saveImpl = vi.fn((_args: unknown) => ({ path: CATALOG_PATH }));
+    mockTauriCommand('workbench_save_models_yaml', saveImpl);
+    await modelsCatalogStore.ensureLoaded(true);
   });
 
   it('initializes with expected default values', () => {
@@ -78,19 +162,23 @@ describe('useModelProfilesState', () => {
     expect(result.current.addDraft).toEqual(emptyAddDraft());
   });
 
-  it('allows adding profile from preset', () => {
+  it('allows adding profile from preset', async () => {
     profileMocks.createCustomProfile.mockClear();
     const { result } = renderHook(() => useModelProfilesState());
 
-    act(() => {
+    await act(async () => {
       result.current.addFromPreset(PRESETS[0]);
+      await Promise.resolve();
+      await Promise.resolve();
     });
 
     expect(profileMocks.createCustomProfile).toHaveBeenCalledTimes(1);
-    expect(result.current.selectedId).toBe('custom-123');
+    await waitFor(() => {
+      expect(result.current.selectedId).toBe('custom-123');
+    });
   });
 
-  it('添加同名预设绑定已有行，不 createCustomProfile', () => {
+  it('添加同名预设绑定已有行，不 createCustomProfile', async () => {
     const seed = {
       id: 'opencode-go',
       name: 'OpenCode Go 订阅',
@@ -101,8 +189,10 @@ describe('useModelProfilesState', () => {
     profileMocks.createCustomProfile.mockClear();
     const { result } = renderHook(() => useModelProfilesState());
 
-    act(() => {
+    await act(async () => {
       result.current.addFromPreset(PRESETS[0]);
+      await Promise.resolve();
+      await Promise.resolve();
     });
 
     expect(profileMocks.createCustomProfile).not.toHaveBeenCalled();
@@ -169,7 +259,7 @@ describe('useModelProfilesState', () => {
     sessionStorage.removeItem('crish_models_selected_profile_v1');
   });
 
-  it('已有种子+拷贝时添加同名预设不 create、列表仍一行', () => {
+  it('已有种子+拷贝时添加同名预设不 create、列表仍一行', async () => {
     const seed = {
       id: 'opencode-go',
       name: 'OpenCode Go 订阅',
@@ -191,8 +281,10 @@ describe('useModelProfilesState', () => {
     const { result } = renderHook(() => useModelProfilesState());
     expect(result.current.profiles).toHaveLength(1);
 
-    act(() => {
+    await act(async () => {
       result.current.addFromPreset(PRESETS[0]);
+      await Promise.resolve();
+      await Promise.resolve();
     });
 
     expect(profileMocks.createCustomProfile).not.toHaveBeenCalled();
@@ -226,5 +318,135 @@ describe('useModelProfilesState', () => {
     expect(toastShow).toHaveBeenCalledWith('保存失败：x', undefined, {
       type: 'error',
     });
+  });
+
+  it('手填新模型再保存改价：yaml 先有该 id，再有新 pricing.cacheRead', async () => {
+    const { result } = renderHook(() => useModelProfilesState());
+
+    act(() => {
+      result.current.setAddDraft({
+        modelId: 'new-flash',
+        displayName: 'New Flash',
+        contextLength: '64000',
+        caps: { tools: true, image: false, video: false, reasoning: false },
+      });
+    });
+
+    saveImpl.mockClear();
+    await act(async () => {
+      result.current.handleManualAdd();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(lastSavedYaml(saveImpl)).toContain('new-flash');
+    });
+
+    await waitFor(() => {
+      expect(result.current.configOpenId).toBe('new-flash');
+    });
+
+    act(() => {
+      result.current.setCfgDraft({
+        displayName: 'New Flash',
+        contextLength: '64000',
+        caps: { tools: true, image: false, video: false, reasoning: false },
+        pricing: {
+          currency: 'CNY',
+          input: '1.1',
+          output: '2.2',
+          cacheRead: '0.07',
+          cacheWrite: '0.3',
+        },
+      });
+    });
+
+    await act(async () => {
+      const ret = result.current.saveConfig();
+      await Promise.resolve(ret);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(lastSavedYaml(saveImpl)).toContain('cacheRead:');
+    });
+
+    const doc = parseYaml(lastSavedYaml(saveImpl)) as {
+      providers?: Record<string, { models?: Array<Record<string, unknown>> }>;
+    };
+    const node = doc.providers?.['preset-openai']?.models?.find(
+      (m) => m.id === 'new-flash'
+    );
+    expect(node).toBeTruthy();
+    expect((node?.pricing as { cacheRead?: number })?.cacheRead).toBe(0.07);
+    expect((node?.pricing as { input?: number })?.input).toBe(1.1);
+  });
+
+  it('modelsList 读 live 树，不读凭据壳 models[] 幽灵 id', () => {
+    const prevModels = profileMocks.OPENAI.models;
+    profileMocks.OPENAI.models = ['gpt-4o', 'ghost-from-ls'];
+    try {
+      const { result } = renderHook(() => useModelProfilesState());
+      expect(result.current.modelsList).toEqual(['gpt-4o']);
+      expect(result.current.modelsList).not.toContain('ghost-from-ls');
+    } finally {
+      profileMocks.OPENAI.models = prevModels;
+    }
+  });
+
+  it('停用模型仍留在设置列表（开关可再启用），过滤读 live displayName', async () => {
+    await modelsCatalogStore.updateModel('preset-openai', 'gpt-4o', {
+      enabled: false,
+      displayName: '旗舰四代',
+    });
+    const { result } = renderHook(() => useModelProfilesState());
+    expect(result.current.modelsList).toContain('gpt-4o');
+
+    act(() => {
+      result.current.setModelFilter('旗舰');
+    });
+    expect(result.current.modelsList).toContain('gpt-4o');
+
+    act(() => {
+      result.current.setModelFilter('metaonly-should-miss');
+    });
+    expect(result.current.modelsList).toEqual([]);
+  });
+
+  it('扫描差集：新 id 追加在末尾；已有节点 thinking 不被空草稿覆盖', async () => {
+    const { result } = renderHook(() => useModelProfilesState());
+
+    saveImpl.mockClear();
+    await act(async () => {
+      result.current.confirmScannedModels(['gpt-4o', 'gpt-4o-mini']);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(lastSavedYaml(saveImpl)).toContain('gpt-4o-mini');
+    });
+
+    const doc = parseYaml(lastSavedYaml(saveImpl)) as {
+      providers?: Record<string, { models?: Array<Record<string, unknown>> }>;
+    };
+    const models = doc.providers?.['preset-openai']?.models ?? [];
+    expect(models.map((m) => m.id)).toEqual(['gpt-4o', 'gpt-4o-mini']);
+    expect(models[0]?.thinking).toEqual({ Low: 'low' });
+    expect(models[0]?.modalities).toEqual({
+      input: ['text'],
+      output: ['text'],
+    });
+  });
+
+  it('读侧源码：列表/过滤走 selectModel，不把 getModelMeta 当配置', () => {
+    expect(HOOK_SRC).toMatch(/\buseModelsCatalogVersion\b/);
+    expect(HOOK_SRC).toMatch(/\bgetLiveProvider\b/);
+    expect(HOOK_SRC).toMatch(/\bgetLiveModel\b/);
+    expect(HOOK_SRC).not.toMatch(/\bgetModelMeta\s*\(/);
+    expect(HOOK_SRC).not.toMatch(/\buseModelMetaTick\b/);
   });
 });

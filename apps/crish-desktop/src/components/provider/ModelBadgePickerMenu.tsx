@@ -1,5 +1,6 @@
 import React, {
   useCallback,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -8,25 +9,23 @@ import * as Lucide from 'lucide-react';
 import styles from './ModelBadgePickerMenu.module.css';
 
 import { activateProfileModel } from '../../api/providerProfiles';
-import { useModelMetaTick } from '../../hooks/useModelMetaTick';
 import {
-  formatModelDisplayName,
-  getModelMeta,
-  listPickerProfiles,
-} from '../../api/modelCatalog';
+  getLiveModel,
+  listLivePickerEntries,
+  listThinkingOptions,
+  resolveThinkingHandoff,
+} from '../../api/modelsCatalogLive';
+import { useModelsCatalogVersion } from '../../hooks/useModelsCatalogVersion';
 import { openSettings } from '../../api/storeAccess';
 import { Menu, Tooltip } from '../ui';
-import { useSettingsStore } from '../../store/settingsStore';
+import { getActiveProfileId } from '../../api/provider-profiles/profileActiveSelection';
+import { profileHasConfiguredKey } from '../../api/providerProfiles';
+import { useSessionStore } from '../../store/sessionStore';
 import {
-  getAppSettings,
-  setAppSettings,
-} from '../../api/store-access/settingsAccess';
-import { clientApi } from '../../api/clientApi';
-import {
-  THINKING_LEVEL_LABELS,
-  thinkingLevelOptionsFor,
-  resolveCatalogEfforts,
-} from '../../api/thinkingGear';
+  getSessionThinkingTitle,
+  setSessionThinkingTitle,
+} from '../../api/SessionRuntimeRegistry';
+import { groupLivePickerEntries } from './ModelBadgePickerMenu.data';
 
 export type Props = {
   activeModel?: string | null;
@@ -48,87 +47,94 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
 }) => {
   const [keyword, setKeyword] = useState('');
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [, setThinkingEpoch] = useState(0);
   const panelRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  const storedThinking = useSettingsStore(
-    (s) => s.appSettings?.defaultThinkingLevel ?? 'default'
+  const catalogVersion = useModelsCatalogVersion();
+  const sessionId = useSessionStore((s) => s.activeSessionId);
+
+  const providerId = getActiveProfileId() ?? '';
+  const modelId = activeModel || '';
+
+  // 只列「可用」供应商：yaml 带 apiKey 或凭据壳带 key（未配置的预置壳不占列表，
+  // 避免选择器出现从未配置过的供应商导致切换 profile_not_found）
+  // 只列「可用」供应商：yaml 带 apiKey 或凭据壳带 key（未配置的预置壳不占列表，
+  // 避免选择后 activateProfileModel 报 profile_not_found）
+  const entries = useMemo(
+    () =>
+      listLivePickerEntries().filter((e) => {
+        const yamlKey = e.provider.apiKey;
+        if (yamlKey && yamlKey.trim()) return true;
+        return profileHasConfiguredKey(e.providerId);
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [catalogVersion],
   );
 
-  // 元数据变更信号：设置页开关切换后本面板即时重过滤
-  const metaTick = useModelMetaTick();
+  const filteredGroups = useMemo(
+    () => groupLivePickerEntries(entries, keyword),
+    [entries, keyword],
+  );
 
-  const profiles = useMemo(() => {
-    return listPickerProfiles().filter((p) => p.enabled !== false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- metaTick 仅作重算信号
-  }, [metaTick]);
+  const selectedSpec = useMemo(
+    () => (providerId && modelId ? getLiveModel(providerId, modelId) : undefined),
+    [providerId, modelId, catalogVersion],
+  );
 
-  const filteredGroups = useMemo(() => {
-    const kw = keyword.trim().toLowerCase();
-    const groups: {
-      profileId: string;
-      profileName: string;
-      models: { id: string; name: string }[];
-    }[] = [];
+  const thinkingOptions = useMemo(
+    () => (providerId && modelId ? listThinkingOptions(providerId, modelId) : []),
+    [providerId, modelId, catalogVersion],
+  );
 
-    for (const p of profiles) {
-      const models = (p.models || [])
-        .filter((m) => getModelMeta(p.id, m).enabled !== false)
-        .map((m) => ({ id: m, name: formatModelDisplayName(p.id, m) }));
+  const selectedTitle = getSessionThinkingTitle(sessionId);
+  const handoff = useMemo(
+    () => resolveThinkingHandoff(providerId, modelId, selectedTitle),
+    [providerId, modelId, selectedTitle, catalogVersion],
+  );
 
-      if (!kw) {
-        if (models.length > 0) {
-          groups.push({
-            profileId: p.id,
-            profileName: p.name || p.id,
-            models,
-          });
-        }
-      } else {
-        const matchesProfile = p.name.toLowerCase().includes(kw);
-        const matchingModels = models.filter(
-          (m) =>
-            matchesProfile ||
-            m.id.toLowerCase().includes(kw) ||
-            m.name.toLowerCase().includes(kw)
-        );
-        if (matchingModels.length > 0) {
-          groups.push({
-            profileId: p.id,
-            profileName: p.name || p.id,
-            models: matchingModels,
-          });
-        }
-      }
+  const showThinking = thinkingOptions.length > 0 && Boolean(selectedSpec);
+
+  useEffect(() => {
+    if (!sessionId || !providerId || !modelId || !selectedSpec) return;
+    if (!handoff.supported) {
+      if (selectedTitle != null) setSessionThinkingTitle(sessionId, null);
+      return;
     }
-    return groups;
-  }, [profiles, keyword, metaTick]);
+    if (handoff.selectedTitle !== selectedTitle) {
+      setSessionThinkingTitle(sessionId, handoff.selectedTitle);
+    }
+  }, [sessionId, providerId, modelId, selectedSpec, handoff, selectedTitle]);
 
   const handleSelectModel = useCallback(
-    async (profileId: string, modelId: string) => {
+    async (profileId: string, nextModelId: string) => {
       try {
-        await activateProfileModel(profileId, modelId);
+        await activateProfileModel(profileId, nextModelId);
       } catch (err) {
         console.error('activateProfileModel failed:', err);
+      }
+      const nextOptions = listThinkingOptions(profileId, nextModelId);
+      if (nextOptions.length === 0) {
+        setSessionThinkingTitle(sessionId, null);
+      } else if (
+        selectedTitle &&
+        !nextOptions.some((o) => o.title === selectedTitle)
+      ) {
+        setSessionThinkingTitle(sessionId, nextOptions[0]!.title);
       }
       onOpenChange?.(false);
       onClose();
     },
-    [onOpenChange, onClose]
+    [onOpenChange, onClose, sessionId, selectedTitle],
   );
 
-  const handleSelectThinking = useCallback(async (value: string) => {
-    const prev = getAppSettings();
-    setAppSettings({
-      ...(prev ?? {}),
-      defaultThinkingLevel: value,
-    });
-    try {
-      await clientApi.updateSettings({ defaultThinkingLevel: value });
-    } catch {
-      /* swallow-ok */
-    }
-  }, []);
+  const handleSelectThinking = useCallback(
+    (title: string) => {
+      setSessionThinkingTitle(sessionId, title);
+      setThinkingEpoch((n) => n + 1);
+    },
+    [sessionId],
+  );
 
   const handleOpenSettings = useCallback(() => {
     openSettings('models');
@@ -136,13 +142,9 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
     onClose();
   }, [onOpenChange, onClose]);
 
-  const currentThinkingDisplay = useMemo(() => {
-    // 档位标签单源 = thinkingGear（default → 『默认』），不在此硬编码文案
-    if (!storedThinking || storedThinking === 'default') {
-      return THINKING_LEVEL_LABELS['default'] ?? '默认';
-    }
-    return THINKING_LEVEL_LABELS[storedThinking] ?? storedThinking;
-  }, [storedThinking]);
+  const currentThinkingDisplay = handoff.supported
+    ? handoff.selectedTitle
+    : '';
 
   if (!open) return null;
 
@@ -225,54 +227,55 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
           )}
         </div>
 
-        <div className={styles.divider} />
-
-        {/* 底部高级选项（折叠手风琴包含思考强度） */}
-        <div className={styles.advancedSection}>
-          <button
-            type="button"
-            className={styles.advancedTrigger}
-            aria-expanded={showAdvanced}
-            onClick={() => setShowAdvanced((v) => !v)}
-          >
-            <span>高级选项</span>
-            <Lucide.ChevronDown
-              size={13}
-              className={`${styles.advancedChevron} ${showAdvanced ? styles.rotated : ''}`}
-            />
-          </button>
-          {showAdvanced ? (
-            <div className={styles.advancedContent}>
-              <div className={styles.thinkingSection}>
-                <div className={styles.thinkingHeader}>
-                  <span className={styles.thinkingTitle}>思考强度</span>
-                  <span className={styles.thinkingValue}>{currentThinkingDisplay}</span>
+        {showThinking ? (
+          <>
+            <div className={styles.divider} />
+            <div className={styles.advancedSection}>
+              <button
+                type="button"
+                className={styles.advancedTrigger}
+                aria-expanded={showAdvanced}
+                onClick={() => setShowAdvanced((v) => !v)}
+              >
+                <span>高级选项</span>
+                <Lucide.ChevronDown
+                  size={13}
+                  className={`${styles.advancedChevron} ${showAdvanced ? styles.rotated : ''}`}
+                />
+              </button>
+              {showAdvanced ? (
+                <div className={styles.advancedContent}>
+                  <div className={styles.thinkingSection}>
+                    <div className={styles.thinkingHeader}>
+                      <span className={styles.thinkingTitle}>思考强度</span>
+                      <span className={styles.thinkingValue}>
+                        {currentThinkingDisplay}
+                      </span>
+                    </div>
+                    <div className={styles.thinkingTrack}>
+                      {thinkingOptions.map((o) => {
+                        const isActive =
+                          handoff.supported &&
+                          handoff.selectedTitle === o.title;
+                        return (
+                          <button
+                            key={o.title}
+                            type="button"
+                            data-testid={`thinking-option-${o.title}`}
+                            className={`${styles.thinkingPill} ${isActive ? styles.activePill : ''}`}
+                            onClick={() => handleSelectThinking(o.title)}
+                          >
+                            {o.title}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
-                {/* 档位单源 = thinkingGear（catalog 描述接口白名单 + 默认项）；
-                    删除了 THINKING_PILLS 硬编码数组与 'High' 谎报（模型能力战役 v2） */}
-                <div className={styles.thinkingTrack}>
-                  {thinkingLevelOptionsFor(resolveCatalogEfforts(activeModel ?? '')).map(
-                    (o) => {
-                      const isActive =
-                        storedThinking === o.value ||
-                        (!storedThinking && o.isProviderDefault);
-                      return (
-                        <button
-                          key={o.value}
-                          type="button"
-                          className={`${styles.thinkingPill} ${isActive ? styles.activePill : ''}`}
-                          onClick={() => handleSelectThinking(o.value)}
-                        >
-                          {o.label}
-                        </button>
-                      );
-                    }
-                  )}
-                </div>
-              </div>
+              ) : null}
             </div>
-          ) : null}
-        </div>
+          </>
+        ) : null}
       </div>
     </Menu>
   );

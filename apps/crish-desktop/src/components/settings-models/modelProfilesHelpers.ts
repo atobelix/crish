@@ -3,14 +3,14 @@
  *
  * - settingsObjectId：设置表单「编辑会话」对象 id（profileId::model，与
  *   modelCatalog metaKey 同形，跨 profile 隔离，避免 model id 裸串撞车）。
- * - modelMetaRevision：CT-01 对齐的模型配置 rev——可编辑字段
- *   （displayName/contextLength/caps）的稳定序列化签名。openConfigFor 时
- *   捕获为编辑会话 baseRev；saveConfig 保存前重算比对——外部已变更（rev
- *   不符）→ 拒绝陈旧覆盖（不静默 LWW）。
+ * - modelSpecRevision：CT-01 对齐的模型配置 rev——对 ModelSpec 可编辑字段
+ *   的稳定 JSON 签名（实现见 api/modelsDraftMap.modelSpecRevision）。
+ *   来源是 store 节点，不是 getModelMeta。openConfigFor 时捕获为编辑会话
+ *   baseRev；saveConfig 保存前重算比对——外部已变更（rev 不符）→ 拒绝陈旧
+ *   覆盖（不静默 LWW）。
  * - foldSettingsProfiles / pickSettingsSelectedId：设置列表与 picker 同一
  *   展示名折叠；已选 id 被同名胜者吃掉时改绑胜者。
  */
-import { getModelMeta } from '../../api/modelCatalog';
 import {
   findProfileByDisplayName,
   foldProfilesByDisplayName,
@@ -18,19 +18,10 @@ import {
   type ProviderProfile,
 } from '../../api/providerProfiles';
 
+export { modelSpecRevision } from '../../api/modelsDraftMap';
+
 export function settingsObjectId(profileId: string, model: string): string {
   return `${profileId}::${model}`;
-}
-
-export function modelMetaRevision(profileId: string, model: string): string {
-  const meta = getModelMeta(profileId, model);
-  return JSON.stringify([
-    meta.displayName ?? '',
-    meta.contextLength ?? null,
-    meta.capabilities?.tools ?? false,
-    meta.capabilities?.image ?? false,
-    meta.capabilities?.reasoning ?? false,
-  ]);
 }
 
 /** 设置页服务商列表：同展示名只留一行（含停用）。与 picker 共用 fold。 */

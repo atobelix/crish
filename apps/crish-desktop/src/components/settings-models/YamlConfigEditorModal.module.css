@@ -35,9 +35,9 @@
 .yamlDropdownMenu {
   min-width: 220px;
   padding: 6px;
-  background: var(--bg-card, #ffffff);
-  border: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.08));
-  border-radius: var(--radius-lg, 8px);
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg, 0 10px 25px -5px rgba(0, 0, 0, 0.1));
 }
 
@@ -87,7 +87,7 @@
 }
 
 .modalTitleIcon {
-  color: var(--brand-primary, #0066cc);
+  color: var(--brand-primary);
 }
 
 .dirtyDot {
@@ -155,8 +155,8 @@
   height: 60vh;
   min-height: 380px;
   position: relative;
-  background: var(--bg-card, #ffffff);
-  border-bottom: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.08));
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border-subtle);
   overflow: hidden;
 }
 
@@ -296,7 +296,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  color: var(--success-color, #10b981);
+  color: var(--color-success);
   font-size: 12px;
   font-weight: 500;
 }

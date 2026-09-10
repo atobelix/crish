@@ -195,7 +195,7 @@
   padding: 0 10px;
   font-size: var(--font-size-xs, 12px);
   font-weight: var(--font-weight-medium, 500);
-  border-radius: var(--button-radius, 7px);
+  border-radius: var(--button-radius);
   cursor: pointer;
   transition: all var(--transition-fast);
 }
@@ -277,7 +277,9 @@
   flex-direction: column;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg, 8px);
-  overflow: hidden;
+  /* plans/06 E4：sticky 包含块 = 真实滚动容器 .mrdModelListScroll；
+     overflow:hidden 会把 footer 的 sticky 截断在中间祖先里 */
+  overflow: visible;
   background: transparent;
 }
 
@@ -407,7 +409,7 @@
   width: 100%;
   margin-top: 10px;
   padding: 12px 14px;
-  border-radius: var(--button-radius, 7px);
+  border-radius: var(--button-radius);
   border: 1px solid var(--border-subtle);
   background: color-mix(in srgb, var(--text-primary) 1.5%, var(--bg-card));
   display: flex;
@@ -436,11 +438,11 @@
 }
 
 .mrdCfgFooter {
+  /* plans/06 E4：sticky 吸附真实滚动容器底（包含块已修，无魔术补偿）；
+     真底色落 --bg-card，禁止幽灵 --surface-primary 与 bottom:-12px */
   position: sticky;
-  bottom: -12px;
-  background: var(--surface-primary);
-  backdrop-filter: blur(8px);
-  z-index: 10;
+  bottom: 0;
+  background: var(--bg-card, hsl(0 0% 100%));
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -532,7 +534,7 @@
   height: 28px;
   padding: 0 8px;
   border: none;
-  border-radius: var(--button-radius, 7px);
+  border-radius: var(--button-radius);
   background: transparent;
   color: var(--text-primary);
   font-size: var(--font-size-sm, 13px);
@@ -562,7 +564,7 @@
   gap: 8px;
   border: 1px solid var(--border-color);
   background: var(--bg-card);
-  border-radius: var(--button-radius, 7px);
+  border-radius: var(--button-radius);
   padding: 0 10px;
   height: var(--control-height-sm, 28px);
   min-height: var(--control-height-sm, 28px);
@@ -619,35 +621,133 @@
   to { transform: rotate(360deg); }
 }
 
-/* ── 9. 多模态、拍平思考与四维价格人体工学样式 ── */
-.mrdSubSection {
+/* ── 4.1 连接与凭据高级卡片折叠栏 ── */
+.credentialsContainer {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2, 8px);
-  padding: 8px 10px;
-  background: hsl(var(--surface-secondary-raw, 220 14% 96%) / 0.35);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--button-radius, 6px);
+  background: var(--bg-card);
+  border: 1px solid hsl(30 4.8% 91.8%);
+  border-radius: var(--button-radius, 8px);
+  overflow: hidden;
+  transition: border-color var(--transition-fast), background-color var(--transition-fast);
 }
 
-:global(html[data-theme='dark']) .mrdSubSection {
-  background: hsl(var(--surface-secondary-raw, 220 14% 12%) / 0.4);
+.credentialsContainer:hover {
+  border-color: hsl(30 4.8% 91.8%);
 }
 
-.mrdSubSectionHeader {
+.credentialsHeader {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-2, 8px);
+  padding: 8px 12px;
+  cursor: pointer;
+  user-select: none;
+  background: transparent;
+  transition: background-color var(--transition-fast);
 }
 
-.mrdSubSectionTitle {
+.credentialsHeader:hover {
+  background-color: hsl(30 4.8% 91.8% / 0.35);
+}
+
+.credentialsHeaderLeft {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.credentialsChevron {
+  color: var(--text-tertiary);
+  transition: color var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.credentialsHeader:hover .credentialsChevron {
+  color: var(--text-primary);
+}
+
+.credentialsTitle {
   font-size: var(--font-size-xs, 12px);
   font-weight: var(--font-weight-medium, 500);
   color: var(--text-primary);
-  display: flex;
+  letter-spacing: var(--letter-spacing-tight);
+}
+
+.credentialsHeaderRight {
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
+}
+
+.credentialsStatusConfigured {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  background: hsl(30 4.8% 91.8% / 0.5);
+  padding: 2px 8px;
+  border-radius: var(--radius-full, 9999px);
+  font-weight: var(--font-weight-normal, 400);
+}
+
+.credentialsStatusUnconfigured {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  background: hsl(30 4.8% 91.8% / 0.5);
+  padding: 2px 8px;
+  border-radius: var(--radius-full, 9999px);
+  font-weight: var(--font-weight-normal, 400);
+}
+
+.credentialsStatusDotActive {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background-color: var(--brand, hsl(160 84% 39%));
+  flex-shrink: 0;
+}
+
+.credentialsStatusDotMuted {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background-color: var(--text-tertiary);
+  opacity: 0.5;
+  flex-shrink: 0;
+}
+
+.credentialsBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3, 12px);
+  padding: 12px;
+  border-top: 1px solid hsl(30 4.8% 91.8%);
+  background: var(--bg-card);
+}
+
+.mrdRequiredStar {
+  color: var(--text-danger);
+  margin-left: 2px;
+}
+
+.mrdKeyInputWrapper {
+  flex: 1;
+  min-width: 0;
+}
+
+.mrdKeySaveBtn {
+  flex-shrink: 0;
+}
+
+/* ── 9. 多模态、拍平思考与四维价格人体工学样式 ── */
+.mrdModalitySection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1_5, 6px);
 }
 
 .mrdModalityRows {
@@ -674,36 +774,60 @@
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 5px;
+  gap: var(--space-1_5, 6px);
 }
 
 .mrdModalityChip {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 2px 7px;
-  border-radius: 4px;
-  font-size: 11px;
-  font-family: var(--font-mono, monospace);
-  font-weight: 500;
-  border: 1px solid var(--border-subtle);
-  background: var(--bg-card);
-  color: var(--text-tertiary);
+  justify-content: center;
+  padding: 3px 12px;
+  border-radius: var(--radius-full, 9999px);
+  font-size: var(--font-size-xs, 12px);
+  font-weight: var(--font-weight-normal, 400);
+  border: none;
+  outline: none;
+  box-shadow: none;
+  background: var(--tint-hover);
+  color: var(--text-secondary);
   cursor: pointer;
   user-select: none;
-  transition: all 120ms ease;
+  transition: background-color var(--transition-fast), color var(--transition-fast);
 }
 
 .mrdModalityChip:hover {
-  background: var(--tint-hover);
+  background: var(--tint-active);
   color: var(--text-primary);
-  border-color: color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
 }
 
 .mrdModalityChipActive {
-  background: color-mix(in srgb, var(--brand, #10b981) 12%, transparent);
-  border-color: color-mix(in srgb, var(--brand, #10b981) 40%, transparent);
-  color: var(--brand, #10b981);
+  background: var(--brand, hsl(160 84% 39%));
+  color: #ffffff;
+  font-weight: var(--font-weight-medium, 500);
+}
+
+.mrdModalityChipActive:hover {
+  background: color-mix(in srgb, var(--brand, hsl(160 84% 39%)) 88%, #000000);
+  color: #ffffff;
+}
+
+.mrdSubSection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2, 8px);
+}
+
+.mrdSubSectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.mrdSubSectionTitle {
+  font-size: var(--font-size-xs, 12px);
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--text-primary);
 }
 
 .mrdThinkingTable {

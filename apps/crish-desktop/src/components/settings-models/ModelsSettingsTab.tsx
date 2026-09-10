@@ -7,7 +7,7 @@ import { useToast } from '../../services/toast/ToastContext';
  * 2. 支持一键打开内置轻量双层代码编辑器弹窗 (YamlConfigEditorModal)；
  * 3. 支持调起外部系统编辑器 (VS Code/Cursor/Zed/记事本等) 与资源管理器定位；
  * 4. 落实审计 1：同厂商自愈降级与置空引导，严禁跨服务商隐式静默切模；
- * 5. 接入 useModelMetaTick 响应式驱动，联动 ModelsCascadeSelect 即时重绘。
+ * 5. 挂载 ensureLsImported + ensureModelsCatalogLoaded；列表/协议读 store。
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import * as Lucide from 'lucide-react';
@@ -16,13 +16,13 @@ import {
   clearActiveModelId,
   type ProviderProfile,
 } from '../../api/providerProfiles';
-import { getModelMeta } from '../../api/modelCatalog';
 import {
   ensureModelsCatalogLoaded,
   getModelsCatalogPath,
 } from '../../api/modelsCatalogStore';
+import { getLiveModel, getLiveProvider } from '../../api/modelsCatalogLive';
+import { ensureLsImported } from '../../api/modelsLsImport';
 import { useModelsCatalogVersion } from '../../hooks/useModelsCatalogVersion';
-import { useModelMetaTick } from '../../hooks/useModelMetaTick';
 import {
   listHostOpeners,
   openPathDefault,
@@ -53,12 +53,18 @@ type Props = {
   _onBlockingOverlayChange?: (open: boolean) => void;
 };
 
+/** live 树中存在且 enabled !== false。缺节点视为未启用（删除后必须自愈）。 */
+export function isLiveModelEnabled(profileId: string, model: string): boolean {
+  const spec = getLiveModel(profileId, model);
+  return spec != null && spec.enabled !== false;
+}
+
 /**
  * 停用模型后的活动模型自愈解析器（落实审计 1，严禁跨厂商静默切换）
  */
 export function resolveActiveModelAfterMetaChange(
   currentActive: { profileId: string; model: string } | null,
-  profiles: readonly ProviderProfile[],
+  _profiles: readonly ProviderProfile[],
   isModelEnabled: (profileId: string, model: string) => boolean
 ): { nextActive: { profileId: string; model: string } | null; selfHealed: boolean } {
   if (!currentActive || !currentActive.profileId || !currentActive.model) {
@@ -71,8 +77,10 @@ export function resolveActiveModelAfterMetaChange(
   }
 
   // 2. 当前活动模型已被停用！仅在【同服务商】内部寻找下一个已启用的模型
-  const currentProfile = profiles.find((p) => p.id === currentActive.profileId);
-  const sameProviderNext = currentProfile?.models.find((m) => {
+  const storeIds = (getLiveProvider(currentActive.profileId)?.models ?? []).map(
+    (m) => m.id
+  );
+  const sameProviderNext = storeIds.find((m) => {
     if (m === currentActive.model) return false;
     return isModelEnabled(currentActive.profileId, m);
   });
@@ -96,12 +104,110 @@ export const AddProviderMenu: React.FC<{
   setAddOpen: (v: boolean) => void;
   onAddTemplate: (format: 'openai' | 'anthropic') => void;
   onAddPreset: (preset: PresetProvider) => void;
-}> = ({ addOpen, setAddOpen, onAddTemplate, onAddPreset }) => {
+  onAddDirect?: () => void;
+}> = ({ addOpen, setAddOpen, onAddTemplate, onAddPreset, onAddDirect }) => {
+  const handleTemplateClick = (format: 'openai' | 'anthropic') => {
+    onAddTemplate(format);
+    setAddOpen(false);
+  };
+
+  const handlePresetClick = (preset: PresetProvider) => {
+    onAddPreset(preset);
+    setAddOpen(false);
+  };
+
   const menuOptions: SelectOptionItem[] = [
-    { id: 'openai', label: 'OpenAI 格式', onClick: () => onAddTemplate('openai') },
-    { id: 'anthropic', label: 'Anthropic 格式', onClick: () => onAddTemplate('anthropic') },
-    ...PRESETS.map((pr) => ({ id: pr.id, label: pr.name, onClick: () => onAddPreset(pr) })),
+    {
+      id: 'openai',
+      label: 'OpenAI 格式',
+      onClick: () => handleTemplateClick('openai'),
+    },
+    {
+      id: 'anthropic',
+      label: 'Anthropic 格式',
+      onClick: () => handleTemplateClick('anthropic'),
+    },
+    ...PRESETS.map((pr) => ({
+      id: pr.id,
+      label: pr.name,
+      onClick: () => handlePresetClick(pr),
+    })),
   ];
+
+  const menuContent = (
+    <div role="menu" aria-label="添加服务商">
+      <div className={styles.addMenuTitle}>接口类型</div>
+      <Button
+        bare
+        type="button"
+        role="menuitem"
+        className={styles.addMenuOption}
+        onClick={() => handleTemplateClick('openai')}
+      >
+        OpenAI 格式
+      </Button>
+      <Button
+        bare
+        type="button"
+        role="menuitem"
+        className={styles.addMenuOption}
+        onClick={() => handleTemplateClick('anthropic')}
+      >
+        Anthropic 格式
+      </Button>
+
+      <div className={`${styles.addMenuTitle} ${styles.addMenuTitleGap}`}>常用服务</div>
+      {PRESETS.map((pr) => (
+        <Button
+          bare
+          key={pr.id}
+          type="button"
+          role="menuitem"
+          className={styles.addMenuOption}
+          onClick={() => handlePresetClick(pr)}
+        >
+          {pr.name}
+        </Button>
+      ))}
+    </div>
+  );
+
+  // 若提供了 onAddDirect，使用组合 Split Button（主按钮直接创建入编，右侧下拉箭头提供快速预设）
+  if (onAddDirect) {
+    return (
+      <div className={yamlStyles.configButtonCombo}>
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          className={styles.addServiceBtn}
+          aria-label="添加服务商"
+          icon={<Lucide.Plus size={13} style={{ opacity: 0.75 }} aria-hidden />}
+          onClick={onAddDirect}
+        >
+          添加服务商
+        </Button>
+        <Menu
+          openState={{ open: addOpen, onOpenChange: setAddOpen }}
+          position={{ align: 'end', side: 'bottom', sideOffset: 4 }}
+          options={menuOptions}
+          panel={{ contentClassName: styles.addProviderMenu }}
+          trigger={
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className={yamlStyles.configMenuTrigger}
+              aria-label="更多添加选项"
+              icon={<Lucide.ChevronDown size={13} aria-hidden />}
+            />
+          }
+        >
+          {menuContent}
+        </Menu>
+      </div>
+    );
+  }
 
   return (
     <Menu
@@ -122,41 +228,7 @@ export const AddProviderMenu: React.FC<{
         </Button>
       }
     >
-      <div role="menu" aria-label="添加服务商">
-        <div className={styles.addMenuTitle}>接口类型</div>
-        <Button
-          bare
-          type="button"
-          role="menuitem"
-          className={styles.addMenuOption}
-          onClick={() => onAddTemplate('openai')}
-        >
-          OpenAI 格式
-        </Button>
-        <Button
-          bare
-          type="button"
-          role="menuitem"
-          className={styles.addMenuOption}
-          onClick={() => onAddTemplate('anthropic')}
-        >
-          Anthropic 格式
-        </Button>
-
-        <div className={`${styles.addMenuTitle} ${styles.addMenuTitleGap}`}>常用服务</div>
-        {PRESETS.map((pr) => (
-          <Button
-            bare
-            key={pr.id}
-            type="button"
-            role="menuitem"
-            className={styles.addMenuOption}
-            onClick={() => onAddPreset(pr)}
-          >
-            {pr.name}
-          </Button>
-        ))}
-      </div>
+      {menuContent}
     </Menu>
   );
 };
@@ -171,13 +243,18 @@ export const ModelsSettingsTab: React.FC<Props> = ({ _onBlockingOverlayChange })
     manualOpen, setManualOpen, addDraft, setAddDraft,
     cfgDraft, setCfgDraft, editingName, setEditingName,
     nameDraft, setNameDraft, confirmDeleteId, setConfirmDeleteId,
-    refresh, notify, saveKey, addFromTemplate, addFromPreset,
+    refresh, notify, runAsLocalMutation, saveKey, addFromTemplate, addCustomProvider, addFromPreset,
     handleManualAdd, openConfigFor, closeConfig, saveConfig,
     runTest, runScan, runCheck,
     scanModalOpen, setScanModalOpen, scannedModelsList, confirmScannedModels,
     modelsList, modelsCount,
     selectedLabel, hasKeySelected, activeProfileId, globalActiveModelId,
   } = useModelProfilesState();
+
+  // 点击加号直接创建空白服务商并进入右侧配置界面（无冗余中间弹窗）
+  const handleDirectAdd = useCallback(async () => {
+    await addCustomProvider({ name: '', format: 'openai', baseUrl: '' });
+  }, [addCustomProvider]);
 
   // ── YAML 编辑器与打开方式状态 ──────────────────────────────────────────
   const [yamlEditorOpen, setYamlEditorOpen] = useState(false);
@@ -188,9 +265,12 @@ export const ModelsSettingsTab: React.FC<Props> = ({ _onBlockingOverlayChange })
   const catalogVersion = useModelsCatalogVersion();
   const configFilePath = getModelsCatalogPath();
 
-  // 挂载即确保字典镜像就绪（真源 = ~/.conex/models.yaml；扫描确认/联想预填依赖）
+  // 进入设置即一次性导入 LS → yaml，再加载字典镜像（单飞，幂等）
   useEffect(() => {
-    void ensureModelsCatalogLoaded();
+    void (async () => {
+      await ensureLsImported();
+      await ensureModelsCatalogLoaded();
+    })();
   }, []);
 
   // 扫描外部可用编辑器
@@ -216,9 +296,7 @@ export const ModelsSettingsTab: React.FC<Props> = ({ _onBlockingOverlayChange })
     };
   }, []);
 
-  // ── 审计 1 落实：同厂商自愈降级与置空引导（metaTick 驱动）──────────────
-  // tick = modelCatalogMeta 写路径广播（useModelMetaTick），开关切换后本 effect 即时重跑
-  const metaTick = useModelMetaTick();
+  // 停用后同厂商自愈：enabled 读 live 树，不读 getModelMeta；tick = catalogVersion
   useEffect(() => {
     if (!activeProfileId || !globalActiveModelId) return;
 
@@ -230,7 +308,7 @@ export const ModelsSettingsTab: React.FC<Props> = ({ _onBlockingOverlayChange })
     const { nextActive, selfHealed } = resolveActiveModelAfterMetaChange(
       currentActive,
       profiles,
-      (pId, m) => getModelMeta(pId, m).enabled !== false
+      isLiveModelEnabled
     );
 
     if (selfHealed) {
@@ -242,7 +320,7 @@ export const ModelsSettingsTab: React.FC<Props> = ({ _onBlockingOverlayChange })
         notify(false, `当前服务商已无可用模型，请手动选择`);
       }
     }
-  }, [metaTick, profiles, activeProfileId, globalActiveModelId, notify]);
+  }, [catalogVersion, profiles, activeProfileId, globalActiveModelId, notify]);
 
   // 调起指定外部编辑器
   const handleOpenExternal = useCallback(
@@ -425,6 +503,7 @@ export const ModelsSettingsTab: React.FC<Props> = ({ _onBlockingOverlayChange })
           setAddOpen={setAddOpen}
           onAddTemplate={addFromTemplate}
           onAddPreset={addFromPreset}
+          onAddDirect={handleDirectAdd}
         />
       </div>
     </div>
@@ -468,7 +547,7 @@ export const ModelsSettingsTab: React.FC<Props> = ({ _onBlockingOverlayChange })
             selected, profiles, selectedLabel, hasKeySelected,
             editingName, nameDraft, setNameDraft, setEditingName,
             confirmDeleteId, setConfirmDeleteId, keyDraft, setKeyDraft,
-            saveKey, refresh, notify, setProfiles, setSelectedId,
+            saveKey, refresh, notify, runAsLocalMutation, setProfiles, setSelectedId,
           }}
           modelConfig={{
             runCheck, runScan, checkBusy, scanBusy,
@@ -480,6 +559,7 @@ export const ModelsSettingsTab: React.FC<Props> = ({ _onBlockingOverlayChange })
           capConfig={{
             configOpenId, cfgDraft, setCfgDraft,
             openConfigFor, closeConfig, saveConfig, runTest, testBusy,
+            notify, runAsLocalMutation,
           }}
         />
       </div>

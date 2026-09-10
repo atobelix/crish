@@ -6,7 +6,8 @@ import {
   upsertProfile,
   type ProviderProfile,
 } from '../../api/providerProfiles';
-import { Button, Input, Tooltip } from '../ui';
+import { modelsCatalogStore } from '../../api/modelsCatalogStore';
+import { Button, Input, Switch, Tooltip } from '../ui';
 
 /**
  * 详情头部：重命名标题 / 启用状态按钮 / 自定义服务商删除确认组。
@@ -61,9 +62,13 @@ export const ProfileHeader: React.FC<{
             value={nameDraft}
             autoFocus
             onChange={(e) => setNameDraft(e.target.value)}
-            onBlur={() => {
-              if (nameDraft.trim() && nameDraft.trim() !== selected.name) {
-                upsertProfile({ ...selected, name: nameDraft.trim() });
+            onBlur={async () => {
+              const trimmed = nameDraft.trim();
+              if (trimmed && trimmed !== selected.name) {
+                upsertProfile({ ...selected, name: trimmed });
+                await modelsCatalogStore.updateProvider(selected.id, {
+                  displayName: trimmed,
+                });
                 refresh();
               }
               setEditingName(false);
@@ -124,38 +129,6 @@ export const ProfileHeader: React.FC<{
             {selectedLabel}
           </h3>
         )}
-
-        <Button
-          type="button"
-          size="sm"
-          style={{
-            height: '24px',
-            padding: '0 8px',
-            fontSize: '12px',
-            fontWeight: 500,
-            borderRadius: '6px',
-            border:
-              selected.enabled !== false
-                ? '1px solid color-mix(in srgb, var(--color-active) 30%, transparent)'
-                : '1px solid var(--border-subtle)',
-            background:
-              selected.enabled !== false
-                ? 'color-mix(in srgb, var(--color-active) 12%, transparent)'
-                : 'var(--tint-hover)',
-            color:
-              selected.enabled !== false
-                ? 'var(--color-active)'
-                : 'var(--text-tertiary)',
-            cursor: 'pointer',
-            transition: 'all 0.15s ease',
-          }}
-          onClick={() => {
-            setProfileEnabled(selected.id, selected.enabled === false);
-            refresh();
-          }}
-        >
-          {selected.enabled !== false ? '已启用' : '已停用'}
-        </Button>
       </div>
 
       <div
@@ -237,6 +210,24 @@ export const ProfileHeader: React.FC<{
             )}
           </div>
         )}
+
+        <Tooltip
+          content={
+            selected.enabled !== false
+              ? '已启用（点击停用服务商）'
+              : '已停用（点击启用服务商）'
+          }
+        >
+          <Switch
+            size="sm"
+            checked={selected.enabled !== false}
+            aria-label={selected.enabled !== false ? '停用服务商' : '启用服务商'}
+            onCheckedChange={(checked) => {
+              setProfileEnabled(selected.id, checked);
+              refresh();
+            }}
+          />
+        </Tooltip>
       </div>
     </div>
   );

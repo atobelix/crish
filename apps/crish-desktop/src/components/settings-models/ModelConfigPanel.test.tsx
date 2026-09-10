@@ -15,9 +15,11 @@ const dummyMeta = {
 function PanelWrapper({
   initialThinkingEnabled = false,
   modelId = 'deepseek-v4-pro',
+  saveConfig = vi.fn(),
 }: {
   initialThinkingEnabled?: boolean;
   modelId?: string;
+  saveConfig?: () => void;
 }) {
   const [cfgDraft, setCfgDraft] = useState<CfgDraft | null>({
     displayName: 'DeepSeek V4 Pro',
@@ -63,7 +65,7 @@ function PanelWrapper({
       testBusy={null}
       runTest={vi.fn()}
       closeConfig={vi.fn()}
-      saveConfig={vi.fn()}
+      saveConfig={saveConfig}
     />
   );
 }
@@ -83,39 +85,47 @@ describe('ModelConfigPanel (人体工学瘦身与协议彻底剔除)', () => {
     render(<PanelWrapper initialThinkingEnabled={false} />);
 
     // 当 thinkingEnabled 为 false 时，思考配置区域彻底隐藏
-    expect(screen.queryByText(/思考推理 \(Thinking \/ Reasoning\)/)).not.toBeInTheDocument();
-    expect(screen.queryByText('UI 显示名 (TitleCase)')).not.toBeInTheDocument();
+    expect(screen.queryByText('思考推理')).not.toBeInTheDocument();
+    expect(screen.queryByText('界面档位名称')).not.toBeInTheDocument();
   });
 
   it('【最高指令 2】思考模型正常渲染纯英文 TitleCase 拍平映射表', () => {
     render(<PanelWrapper initialThinkingEnabled={true} />);
 
     // 思考模型渲染思考配置区域
-    expect(screen.getByText(/思考推理 \(Thinking \/ Reasoning\)/)).toBeInTheDocument();
-    expect(screen.getByText('UI 显示名 (TitleCase)')).toBeInTheDocument();
+    expect(screen.getByText('思考推理')).toBeInTheDocument();
+    expect(screen.getByText('界面档位名称')).toBeInTheDocument();
     expect(screen.getByDisplayValue('Off')).toBeInTheDocument();
     expect(screen.getByDisplayValue('Max')).toBeInTheDocument();
   });
 
-  it('在能力开关处开启「推理」：动态呼出思考强度配置区域', () => {
+  it('能力矩阵统一（用户裁决 #2/#3）：无独立「推理」开关；四维计费不再渲染在抽屉', () => {
     render(<PanelWrapper initialThinkingEnabled={false} />);
 
-    expect(screen.queryByText(/思考推理 \(Thinking \/ Reasoning\)/)).not.toBeInTheDocument();
-
-    // 找到「推理」开关并点击
-    const reasoningSwitch = screen.getByRole('switch', { name: /推理/ });
-    fireEvent.click(reasoningSwitch);
-
-    // 思考区域应立即渲染出现
-    expect(screen.getByText(/思考推理 \(Thinking \/ Reasoning\)/)).toBeInTheDocument();
-    expect(screen.getByText('UI 显示名 (TitleCase)')).toBeInTheDocument();
+    // 推理由思考编辑器承载，不再有独立的 capabilities 推理开关
+    expect(screen.queryByRole('switch', { name: /推理/ })).not.toBeInTheDocument();
+    // 四维计费移出抽屉（在用量配置单价里配置）
+    expect(screen.queryByText(/四维计费/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/缓存读取/)).not.toBeInTheDocument();
+    // 模态矩阵仍在（能力真源 = modalities）
+    expect(screen.getByText(/多模态支持/)).toBeInTheDocument();
   });
 
-  it('多模态矩阵与四维选填价格正常渲染在首屏', () => {
+  it('多模态矩阵正常渲染在首屏（能力矩阵统一后）', () => {
     render(<PanelWrapper initialThinkingEnabled={false} />);
 
-    expect(screen.getByText(/多模态支持 \(Modalities\)/)).toBeInTheDocument();
-    expect(screen.getByText(/四维计费 \(选填 · 留空优雅静默\)/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '保存' })).toBeInTheDocument();
+    expect(screen.getByText(/多模态支持/)).toBeInTheDocument();
+    // 计费区域已移除（用量页配置），首屏更干净
+    expect(screen.queryByText(/四维计费/)).not.toBeInTheDocument();
+  });
+
+  it('保存按钮可达（浅渲染只测 a11y；yaml 落盘在 useModelConfigSession 测）', () => {
+    const saveConfig = vi.fn();
+    render(<PanelWrapper saveConfig={saveConfig} />);
+
+    const saveBtn = screen.getByRole('button', { name: '保存' });
+    expect(saveBtn).toBeInTheDocument();
+    fireEvent.click(saveBtn);
+    expect(saveConfig).toHaveBeenCalledTimes(1);
   });
 });
