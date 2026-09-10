@@ -5,14 +5,10 @@
 
 use std::io::Read;
 
-use conex_telemetry::{FileConfig, init_default};
+use conex_telemetry::{init_default, FileConfig};
 
 fn temp_log_dir(tag: &str) -> std::path::PathBuf {
-    let dir = std::env::temp_dir().join(format!(
-        "crish-telemetry-{}-{}",
-        tag,
-        std::process::id()
-    ));
+    let dir = std::env::temp_dir().join(format!("crish-telemetry-{}-{}", tag, std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("临时目录创建应成功");
     dir
@@ -62,9 +58,11 @@ fn init_with_file_config_creates_daily_log_with_content() {
         })
         .expect("应存在 testwork.*.log 文件");
     assert!(
-        entries
-            .iter()
-            .all(|p| !p.file_name().and_then(|n| n.to_str()).unwrap_or("").starts_with("other.")),
+        entries.iter().all(|p| !p
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("")
+            .starts_with("other.")),
         "幂等：二次调用不得创建 other.*.log"
     );
 

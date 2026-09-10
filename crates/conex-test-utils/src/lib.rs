@@ -49,10 +49,13 @@ impl TempWorkspace {
     /// 新建临时工作区目录（前缀区分测试场景；目录名含进程号防并发冲突）
     pub fn new(prefix: &str) -> Self {
         let id = COUNTER.fetch_add(1, Ordering::Relaxed);
-        let path = std::env::temp_dir().join(format!("conex_test_{prefix}_{id}_{}", std::process::id()));
+        let path =
+            std::env::temp_dir().join(format!("conex_test_{prefix}_{id}_{}", std::process::id()));
         std::fs::create_dir_all(&path).expect("创建临时工作区失败");
         // 环境变量兜底：CONEX_TEST_KEEP=1 时全局保留（排查失败现场）
-        let keep = std::env::var("CONEX_TEST_KEEP").map(|v| v == "1").unwrap_or(false);
+        let keep = std::env::var("CONEX_TEST_KEEP")
+            .map(|v| v == "1")
+            .unwrap_or(false);
         Self { path, keep }
     }
 
@@ -202,7 +205,10 @@ mod tests {
         // 目录整体复制（保留相对结构）
         ws.copy_fixture(&fixture_root.path().join("nested"), "copied");
         assert_eq!(ws.read_file("copied/inner.txt"), "内层内容");
-        assert_eq!(ws.read_file("copied/inner.txt"), fixture_root.read_file("nested/inner.txt"));
+        assert_eq!(
+            ws.read_file("copied/inner.txt"),
+            fixture_root.read_file("nested/inner.txt")
+        );
     }
 
     #[test]

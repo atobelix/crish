@@ -6,10 +6,7 @@
 use conex_telemetry::install_panic_hook_with_crash_dir;
 
 fn temp_dir() -> std::path::PathBuf {
-    let dir = std::env::temp_dir().join(format!(
-        "crish-telemetry-nocrash-{}",
-        std::process::id()
-    ));
+    let dir = std::env::temp_dir().join(format!("crish-telemetry-nocrash-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     dir
 }

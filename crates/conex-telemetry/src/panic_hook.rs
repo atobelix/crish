@@ -75,10 +75,7 @@ fn record_crash_marker(file_name: String) {
 /// 读取最近崩溃标记（壳层 `core_get_status.lastCrash` 读出面；进程内
 /// 尚无 panic 或未指定崩溃目录时 = None）。
 pub fn last_crash_marker() -> Option<CrashMarker> {
-    CRASH_MARKER
-        .lock()
-        .map(|slot| slot.clone())
-        .unwrap_or(None)
+    CRASH_MARKER.lock().map(|slot| slot.clone()).unwrap_or(None)
 }
 
 /// 清空崩溃标记（测试隔离用；生产路径不调用——崩溃台账是累积事实源）。
@@ -134,10 +131,7 @@ pub fn install_panic_hook_with_crash_dir(crash_dir: Option<PathBuf>) {
             );
 
             // stderr 兜底：无 subscriber 时仍可见。
-            eprintln!(
-                "thread '{}' panicked at {}:\n{}",
-                thread, location, payload
-            );
+            eprintln!("thread '{}' panicked at {}:\n{}", thread, location, payload);
 
             // 崩溃文件（T04.1-3）：panic 现场独立落盘 + 崩溃标记（T5-1b：
             // 写成功后把文件名/时刻记入进程内台账，壳层 core_get_status
@@ -288,7 +282,8 @@ mod tests {
             std::process::id(),
             timestamp_key()
         ));
-        let file_name = write_crash_file(&dir, "boom", "a.rs:1:1", "main").expect("写崩溃文件应成功");
+        let file_name =
+            write_crash_file(&dir, "boom", "a.rs:1:1", "main").expect("写崩溃文件应成功");
         assert!(file_name.starts_with("crash-"), "文件名前缀 crash-");
         assert!(file_name.ends_with(".log"), "文件名后缀 .log");
         assert!(dir.join(&file_name).exists(), "文件真实落盘");

@@ -7,10 +7,8 @@
 fn init_with_uncreatable_dir_degrades_gracefully() {
     // 构造一个「父路径是文件」的目录：create_dir_all 必然失败
     // （Windows 与 Unix 通用，路径/权限无关）。
-    let blocker = std::env::temp_dir().join(format!(
-        "crish-telemetry-blocker-{}",
-        std::process::id()
-    ));
+    let blocker =
+        std::env::temp_dir().join(format!("crish-telemetry-blocker-{}", std::process::id()));
     std::fs::write(&blocker, b"x").expect("写入阻塞文件");
 
     let bad_dir = blocker.join("logs"); // 文件之下不可能再建目录

@@ -8,10 +8,7 @@
 use conex_telemetry::install_panic_hook_with_crash_dir;
 
 fn temp_dir() -> std::path::PathBuf {
-    let dir = std::env::temp_dir().join(format!(
-        "crish-telemetry-crash-{}",
-        std::process::id()
-    ));
+    let dir = std::env::temp_dir().join(format!("crish-telemetry-crash-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     dir
 }
@@ -55,9 +52,11 @@ fn panic_writes_crash_file_with_message() {
         entries.len()
     );
     assert!(
-        entries
-            .iter()
-            .all(|p| p.file_name().and_then(|n| n.to_str()).unwrap_or("").starts_with("crash-")),
+        entries.iter().all(|p| p
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("")
+            .starts_with("crash-")),
         "文件应命名为 crash-YYYYMMDD-HHMMSS-<thread>.log"
     );
 
@@ -77,5 +76,8 @@ fn panic_writes_crash_file_with_message() {
     );
     assert!(all_content.contains("thread:"), "应含 thread 字段");
     assert!(all_content.contains("location:"), "应含 location 字段");
-    assert!(all_content.contains("panic_message:"), "应含 panic_message 字段");
+    assert!(
+        all_content.contains("panic_message:"),
+        "应含 panic_message 字段"
+    );
 }

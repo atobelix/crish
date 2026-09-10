@@ -356,7 +356,11 @@ mod tests {
         assert!(!out.contains(TOKEN_HEX64));
         assert!(!out.contains(PAIR_DISPLAY));
         assert!(!out.contains(KEY_SK));
-        assert_eq!(out.matches("<redacted>").count(), 3, "三处敏感形态应各打码一次：{out}");
+        assert_eq!(
+            out.matches("<redacted>").count(),
+            3,
+            "三处敏感形态应各打码一次：{out}"
+        );
         assert!(out.contains("连接注册"), "非敏感中文正文必须原样保留");
     }
 

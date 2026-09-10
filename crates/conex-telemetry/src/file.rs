@@ -97,7 +97,8 @@ impl DailyFileWriter {
         if part == 0 {
             self.dir.join(format!("{}.{}.log", self.prefix, today))
         } else {
-            self.dir.join(format!("{}.{}.{}.log", self.prefix, today, part))
+            self.dir
+                .join(format!("{}.{}.{}.log", self.prefix, today, part))
         }
     }
 }
@@ -521,10 +522,7 @@ mod tests {
             "截断后不超过上限：{}",
             content.len()
         );
-        assert!(
-            content.ends_with(b"...\n"),
-            "超长行应带省略号并保留换行"
-        );
+        assert!(content.ends_with(b"...\n"), "超长行应带省略号并保留换行");
     }
 
     /// 短行不截断（行为不回归）
@@ -758,11 +756,7 @@ mod tests {
             joined.contains("锁中毒"),
             "应捕获锁中毒 error 日志：\n{joined}"
         );
-        assert_eq!(
-            file_layer_recovery_count(),
-            before + 1,
-            "毒化恢复计数应 +1"
-        );
+        assert_eq!(file_layer_recovery_count(), before + 1, "毒化恢复计数应 +1");
         let _ = fs::remove_dir_all(&dir);
     }
 
@@ -779,7 +773,8 @@ mod tests {
         let writer = DailyFileWriter::new(blocker.clone(), "workbench".to_string());
         let before = file_layer_recovery_count();
 
-        let (sinks, lines) = with_capture(|| (0..3).map(|_| writer.make_writer()).collect::<Vec<_>>());
+        let (sinks, lines) =
+            with_capture(|| (0..3).map(|_| writer.make_writer()).collect::<Vec<_>>());
 
         assert!(
             sinks.iter().all(|s| matches!(s, FileSink::Null)),

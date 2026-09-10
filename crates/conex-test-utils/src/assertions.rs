@@ -38,7 +38,10 @@ pub fn assert_message_delta_concatenation(deltas: &[AgentEvent], final_text: &st
         .iter()
         .map(|event| match event {
             AgentEvent::MessageDelta { block, .. } => block_text(block),
-            other => panic!("拼接断言只接受 message-delta 事件，实际 {}", other.type_name()),
+            other => panic!(
+                "拼接断言只接受 message-delta 事件，实际 {}",
+                other.type_name()
+            ),
         })
         .collect();
     assert_eq!(&joined, final_text, "delta 正文拼接 == 全文（T2 收敛性）");
@@ -93,7 +96,9 @@ where
     T: PartialEq + std::fmt::Debug,
 {
     let found = needle.is_empty()
-        || haystack.windows(needle.len()).any(|window| window == needle);
+        || haystack
+            .windows(needle.len())
+            .any(|window| window == needle);
     assert!(found, "序列应含子序列 {needle:?}，实际：{haystack:?}");
 }
 

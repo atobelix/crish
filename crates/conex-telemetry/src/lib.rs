@@ -30,7 +30,7 @@ pub mod subscriber;
 pub use crash::catch_unwind;
 pub use file::{cleanup_logs, FileConfig, LogRetention};
 pub use panic_hook::{
-    install_panic_hook, install_panic_hook_with_crash_dir, last_crash_marker, CrashMarker,
-    reset_crash_marker,
+    install_panic_hook, install_panic_hook_with_crash_dir, last_crash_marker, reset_crash_marker,
+    CrashMarker,
 };
 pub use subscriber::{current_level, init_default};

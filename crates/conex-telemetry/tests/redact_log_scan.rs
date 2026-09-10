@@ -57,7 +57,10 @@ fn redact_log_scan_e2e() {
     // 全链路打码：逐行 redact_text 后扫描零命中（T-06 核心断言）
     let redacted: Vec<String> = log.iter().map(|line| redact_text(line)).collect();
     for line in &redacted {
-        assert!(scan_sensitive(line).is_empty(), "打码后不得残留敏感形态：{line}");
+        assert!(
+            scan_sensitive(line).is_empty(),
+            "打码后不得残留敏感形态：{line}"
+        );
     }
 
     // 允许形态保留：12 hex 前缀（铁律允许）与无敏感形态行不得被误伤
@@ -116,11 +119,18 @@ fn event_stream_snapshot_scan_no_key_forms() {
         scan_sensitive(&redacted).is_empty(),
         "事件流快照打码后不得残留密钥形态：{redacted}"
     );
-    assert!(!redacted.contains("sk-"), "打码后不得含 sk- 前缀：{redacted}");
-    assert!(!redacted.contains("CXN-"), "打码后不得含 CXN- 前缀：{redacted}");
+    assert!(
+        !redacted.contains("sk-"),
+        "打码后不得含 sk- 前缀：{redacted}"
+    );
+    assert!(
+        !redacted.contains("CXN-"),
+        "打码后不得含 CXN- 前缀：{redacted}"
+    );
 
     // 打码不破坏 JSON 结构（占位在引号内，仍是合法字符串值）
-    let parsed: serde_json::Value = serde_json::from_str(&redacted).expect("打码后快照仍须是合法 JSON");
+    let parsed: serde_json::Value =
+        serde_json::from_str(&redacted).expect("打码后快照仍须是合法 JSON");
     assert_eq!(parsed[0]["type"], "session.event", "非敏感字段必须原样保留");
 }
 

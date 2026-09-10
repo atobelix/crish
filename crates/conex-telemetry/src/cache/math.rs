@@ -110,7 +110,8 @@ impl CacheBreakdownMath {
         self.write = self.write.saturating_add(other.write);
         self.miss = self.miss.saturating_add(other.miss);
         self.input_total = self.input_total.saturating_add(other.input_total);
-        self.hit_ratio = (self.input_total != 0).then(|| self.read as f64 / self.input_total as f64);
+        self.hit_ratio =
+            (self.input_total != 0).then(|| self.read as f64 / self.input_total as f64);
         self.write_ratio =
             (self.input_total != 0).then(|| self.write as f64 / self.input_total as f64);
     }
@@ -120,7 +121,12 @@ impl CacheBreakdownMath {
 mod tests {
     use super::*;
 
-    fn scalars(prompt: u64, read: u64, write: u64, accounting: CacheAccountingKind) -> CacheUsageScalars {
+    fn scalars(
+        prompt: u64,
+        read: u64,
+        write: u64,
+        accounting: CacheAccountingKind,
+    ) -> CacheUsageScalars {
         CacheUsageScalars {
             prompt,
             read,
@@ -197,8 +203,10 @@ mod tests {
     #[test]
     fn add_assign_accumulates_multi_turn() {
         // 同一 run 两个 turn 的 usage 逐项累加，派生占比按聚合值重算
-        let mut acc = CacheBreakdownMath::from_usage(scalars(100, 70, 10, CacheAccountingKind::Included));
-        let turn2 = CacheBreakdownMath::from_usage(scalars(100, 80, 5, CacheAccountingKind::Included));
+        let mut acc =
+            CacheBreakdownMath::from_usage(scalars(100, 70, 10, CacheAccountingKind::Included));
+        let turn2 =
+            CacheBreakdownMath::from_usage(scalars(100, 80, 5, CacheAccountingKind::Included));
         acc.add_assign(&turn2);
         assert_eq!(acc.read, 150);
         assert_eq!(acc.write, 15);
@@ -210,7 +218,8 @@ mod tests {
 
     #[test]
     fn add_assign_empty_turn_is_noop() {
-        let mut acc = CacheBreakdownMath::from_usage(scalars(100, 70, 10, CacheAccountingKind::Included));
+        let mut acc =
+            CacheBreakdownMath::from_usage(scalars(100, 70, 10, CacheAccountingKind::Included));
         let empty = CacheBreakdownMath::from_usage(scalars(0, 0, 0, CacheAccountingKind::Included));
         acc.add_assign(&empty);
         assert_eq!(acc.read, 70);

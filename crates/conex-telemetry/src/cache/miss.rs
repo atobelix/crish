@@ -205,45 +205,72 @@ mod tests {
     #[test]
     fn detect_miss_above_floor_returns_missed() {
         // 上轮与本轮同为 10000，缓存读 8000 → miss 2000
-        assert_eq!(MissDetector::detect_miss(10000, 10000, 8000, NOISE_FLOOR_TOKENS), Some(2000));
+        assert_eq!(
+            MissDetector::detect_miss(10000, 10000, 8000, NOISE_FLOOR_TOKENS),
+            Some(2000)
+        );
     }
 
     #[test]
     fn detect_miss_uses_min_of_prev_and_cur() {
         // 本轮提示变小（压缩）：取较小值 5000 - 3000 = 2000，miss 不虚高
-        assert_eq!(MissDetector::detect_miss(10000, 5000, 3000, NOISE_FLOOR_TOKENS), Some(2000));
+        assert_eq!(
+            MissDetector::detect_miss(10000, 5000, 3000, NOISE_FLOOR_TOKENS),
+            Some(2000)
+        );
         // 反向：上轮小本轮大，同样取 5000 作上界
-        assert_eq!(MissDetector::detect_miss(5000, 10000, 3000, NOISE_FLOOR_TOKENS), Some(2000));
+        assert_eq!(
+            MissDetector::detect_miss(5000, 10000, 3000, NOISE_FLOOR_TOKENS),
+            Some(2000)
+        );
     }
 
     #[test]
     fn detect_miss_at_noise_floor_is_ignored() {
         // missed 恰好等于地板 1024 → 不计（"以下不计"含等号）
-        assert_eq!(MissDetector::detect_miss(10000, 10000, 8976, NOISE_FLOOR_TOKENS), None);
+        assert_eq!(
+            MissDetector::detect_miss(10000, 10000, 8976, NOISE_FLOOR_TOKENS),
+            None
+        );
     }
 
     #[test]
     fn detect_miss_just_above_floor_counts() {
         // missed = 1025 > 1024 → 计
-        assert_eq!(MissDetector::detect_miss(10000, 10000, 8975, NOISE_FLOOR_TOKENS), Some(1025));
+        assert_eq!(
+            MissDetector::detect_miss(10000, 10000, 8975, NOISE_FLOOR_TOKENS),
+            Some(1025)
+        );
     }
 
     #[test]
     fn detect_miss_zero_read_reports_full_prompt() {
-        assert_eq!(MissDetector::detect_miss(10000, 10000, 0, NOISE_FLOOR_TOKENS), Some(10000));
+        assert_eq!(
+            MissDetector::detect_miss(10000, 10000, 0, NOISE_FLOOR_TOKENS),
+            Some(10000)
+        );
     }
 
     #[test]
     fn detect_miss_negative_returns_none() {
         // 本轮 read 高于上界（异常上报）→ 负值 → None
-        assert_eq!(MissDetector::detect_miss(10000, 10000, 12000, NOISE_FLOOR_TOKENS), None);
+        assert_eq!(
+            MissDetector::detect_miss(10000, 10000, 12000, NOISE_FLOOR_TOKENS),
+            None
+        );
     }
 
     #[test]
     fn detect_miss_full_hit_is_zero_and_ignored() {
         // read 恰好等于上界 → missed 0 → 不计
-        assert_eq!(MissDetector::detect_miss(10000, 10000, 10000, NOISE_FLOOR_TOKENS), None);
-        assert_eq!(MissDetector::detect_miss(10000, 8000, 8000, NOISE_FLOOR_TOKENS), None);
+        assert_eq!(
+            MissDetector::detect_miss(10000, 10000, 10000, NOISE_FLOOR_TOKENS),
+            None
+        );
+        assert_eq!(
+            MissDetector::detect_miss(10000, 8000, 8000, NOISE_FLOOR_TOKENS),
+            None
+        );
     }
 
     #[test]
@@ -306,9 +333,15 @@ mod tests {
         // idle 恰好等于 TTL（idle >= ttl × 1000）→ Expired
         let prev = sig(1, 1, vec![1]);
         let cur = sig(1, 1, vec![1]);
-        assert_eq!(classify(Some(&prev), &cur, 60_000, 60, false, false), MissReason::Expired);
+        assert_eq!(
+            classify(Some(&prev), &cur, 60_000, 60, false, false),
+            MissReason::Expired
+        );
         // idle 差 1ms 未超 TTL → 继续向下判定（本场景无其他变化 → Unknown）
-        assert_eq!(classify(Some(&prev), &cur, 59_999, 60, false, false), MissReason::Unknown);
+        assert_eq!(
+            classify(Some(&prev), &cur, 59_999, 60, false, false),
+            MissReason::Unknown
+        );
     }
 
     #[test]
@@ -316,7 +349,10 @@ mod tests {
         // ttl_secs == 0（TTL 未知）→ 不判 Expired
         let prev = sig(1, 1, vec![1]);
         let cur = sig(1, 1, vec![1]);
-        assert_eq!(classify(Some(&prev), &cur, 10_000_000, 0, false, false), MissReason::Unknown);
+        assert_eq!(
+            classify(Some(&prev), &cur, 10_000_000, 0, false, false),
+            MissReason::Unknown
+        );
     }
 
     #[test]
@@ -391,16 +427,28 @@ mod tests {
     fn classify_unknown_when_unchanged() {
         let prev = sig(1, 1, vec![1, 2, 3]);
         let cur = sig(1, 1, vec![1, 2, 3, 4]); // 纯追加不算前缀被改
-        assert_eq!(classify(Some(&prev), &cur, 1_000, 60, false, false), MissReason::Unknown);
+        assert_eq!(
+            classify(Some(&prev), &cur, 1_000, 60, false, false),
+            MissReason::Unknown
+        );
     }
 
     #[test]
     fn classify_no_baseline_never_reports_harness() {
         // 无基线（跨会话/压缩后）：不判前缀类，只可能 Expired/切换/Unknown
         let cur = sig(1, 1, vec![1]);
-        assert_eq!(classify(None, &cur, 1_000, 60, false, false), MissReason::Unknown);
-        assert_eq!(classify(None, &cur, 1_000, 60, true, false), MissReason::ModelSwitch);
-        assert_eq!(classify(None, &cur, 10_000_000, 60, false, false), MissReason::Expired);
+        assert_eq!(
+            classify(None, &cur, 1_000, 60, false, false),
+            MissReason::Unknown
+        );
+        assert_eq!(
+            classify(None, &cur, 1_000, 60, true, false),
+            MissReason::ModelSwitch
+        );
+        assert_eq!(
+            classify(None, &cur, 10_000_000, 60, false, false),
+            MissReason::Expired
+        );
     }
 
     // ── detect（基线 + 粘性）──

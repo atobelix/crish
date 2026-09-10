@@ -31,8 +31,8 @@ pub mod signature;
 pub use cold::{cold_cache_check, is_cold, warm_until, ColdCacheWarning};
 pub use math::{CacheAccountingKind, CacheBreakdownMath, CacheUsageScalars};
 pub use miss::{
-    classify, MissDetector, MissReason, BREAK_MIN_TOKENS, BREAK_PCT,
-    LOW_HIT_RATIO_PCT, NOISE_FLOOR_TOKENS, WARN_MISSED_COST_USD, WARN_MISSED_TOKENS,
+    classify, MissDetector, MissReason, BREAK_MIN_TOKENS, BREAK_PCT, LOW_HIT_RATIO_PCT,
+    NOISE_FLOOR_TOKENS, WARN_MISSED_COST_USD, WARN_MISSED_TOKENS,
 };
 pub use signature::{
     prefix_diff_index, CacheBaseline, PrefixDiff, PrefixDiffKind, RequestSignature,
