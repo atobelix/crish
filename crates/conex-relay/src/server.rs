@@ -112,9 +112,10 @@ async fn handle_connection(
         .await
         .context("WebSocket upgrade failed")?;
 
-    let ticket_str = extracted_ticket.ok_or_else(|| anyhow::anyhow!("Ticket missing after upgrade"))?;
-    let claims = TicketClaims::verify(&ticket_str, &secret)
-        .context("Ticket verification failed")?;
+    let ticket_str =
+        extracted_ticket.ok_or_else(|| anyhow::anyhow!("Ticket missing after upgrade"))?;
+    let claims =
+        TicketClaims::verify(&ticket_str, &secret).context("Ticket verification failed")?;
 
     let host_id = if claims.role == "host" {
         claims.device_id.clone()

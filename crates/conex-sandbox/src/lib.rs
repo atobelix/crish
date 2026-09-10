@@ -107,7 +107,8 @@ pub mod gatekeeper {
                 .any(|s| s.class == crate::semantics::CommandClass::Dangerous)
                 || analysis.overall_class == crate::semantics::CommandClass::Dangerous
                 || analysis.has_indirect_delete
-                || (analysis.overall_class == crate::semantics::CommandClass::Indirect && !analysis.delete_targets.is_empty())
+                || (analysis.overall_class == crate::semantics::CommandClass::Indirect
+                    && !analysis.delete_targets.is_empty())
             {
                 return GatekeeperResult::RequiresApproval;
             }
@@ -545,15 +546,51 @@ mod tests {
     #[test]
     fn test_powershell_call_operator_and_indirect_remediation_matrix() {
         let exploits = [
-            ("& cmd /c rmdir /s /q D:\\old", GatekeeperResult::RequiresApproval, true),
-            ("& 'cmd' /c rmdir /s /q D:\\old", GatekeeperResult::RequiresApproval, true),
-            ("& \"cmd.exe\" /c rmdir /s /q D:\\old", GatekeeperResult::RequiresApproval, true),
-            ("& bash -c 'rm -rf /tmp/test'", GatekeeperResult::RequiresApproval, true),
-            ("& bash -c 'rm /tmp/x'", GatekeeperResult::RequiresApproval, true),
-            ("& pwsh -Command \"Remove-Item -Recurse -Force D:\\data\"", GatekeeperResult::RequiresApproval, true),
-            ("& cmd /c Remove-Item D:\\file.txt", GatekeeperResult::RequiresApproval, true),
-            ("Invoke-Command -ScriptBlock { Remove-Item -Recurse D:\\old }", GatekeeperResult::RequiresApproval, true),
-            ("icm -ScriptBlock { rm /tmp/x }", GatekeeperResult::RequiresApproval, true),
+            (
+                "& cmd /c rmdir /s /q D:\\old",
+                GatekeeperResult::RequiresApproval,
+                true,
+            ),
+            (
+                "& 'cmd' /c rmdir /s /q D:\\old",
+                GatekeeperResult::RequiresApproval,
+                true,
+            ),
+            (
+                "& \"cmd.exe\" /c rmdir /s /q D:\\old",
+                GatekeeperResult::RequiresApproval,
+                true,
+            ),
+            (
+                "& bash -c 'rm -rf /tmp/test'",
+                GatekeeperResult::RequiresApproval,
+                true,
+            ),
+            (
+                "& bash -c 'rm /tmp/x'",
+                GatekeeperResult::RequiresApproval,
+                true,
+            ),
+            (
+                "& pwsh -Command \"Remove-Item -Recurse -Force D:\\data\"",
+                GatekeeperResult::RequiresApproval,
+                true,
+            ),
+            (
+                "& cmd /c Remove-Item D:\\file.txt",
+                GatekeeperResult::RequiresApproval,
+                true,
+            ),
+            (
+                "Invoke-Command -ScriptBlock { Remove-Item -Recurse D:\\old }",
+                GatekeeperResult::RequiresApproval,
+                true,
+            ),
+            (
+                "icm -ScriptBlock { rm /tmp/x }",
+                GatekeeperResult::RequiresApproval,
+                true,
+            ),
             ("& cmd /c rm -rf /", GatekeeperResult::Blocked, true),
             ("& cmd.exe /c format D:", GatekeeperResult::Blocked, false),
         ];
@@ -570,7 +607,10 @@ mod tests {
                 );
             }
             let res = gate.check_command(cmd, &[]);
-            assert_eq!(res, expected_gate, "命令 {cmd} 的 Gatekeeper 判定结果不符合预期, 实际语义: {sem:?}");
+            assert_eq!(
+                res, expected_gate,
+                "命令 {cmd} 的 Gatekeeper 判定结果不符合预期, 实际语义: {sem:?}"
+            );
         }
     }
 }

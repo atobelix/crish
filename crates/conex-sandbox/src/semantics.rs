@@ -181,7 +181,9 @@ fn analyze_depth(command_line: &str, depth: usize) -> SemanticAnalysis {
 
         // 间接执行内层递归与删除形态标记（bash -c 'rm x' / & cmd /c rmdir / xargs rm 等——
         // 外层命令无法安全解析内层目标，命令面据此拦截 + 引导，防包裹绕过）
-        if INDIRECT_COMMANDS.contains(&normalized.as_str()) || segment.class == CommandClass::Indirect {
+        if INDIRECT_COMMANDS.contains(&normalized.as_str())
+            || segment.class == CommandClass::Indirect
+        {
             let inner = analyze_indirect_depth(&seg, depth + 1);
             if inner.overall_class == CommandClass::DeleteShape || inner.has_indirect_delete {
                 has_indirect_delete = true;
@@ -189,7 +191,9 @@ fn analyze_depth(command_line: &str, depth: usize) -> SemanticAnalysis {
             if inner.overall_class == CommandClass::Redline {
                 segment.class = CommandClass::Redline;
             }
-            if inner.overall_class == CommandClass::Dangerous && segment.class != CommandClass::Redline {
+            if inner.overall_class == CommandClass::Dangerous
+                && segment.class != CommandClass::Redline
+            {
                 segment.class = CommandClass::Dangerous;
             }
             for t in inner.delete_targets {
@@ -793,7 +797,9 @@ fn scan_ps_command_tokens(command: &str, args: &[String]) -> Option<CommandClass
             if inner_analysis.overall_class == CommandClass::Dangerous {
                 return Some(CommandClass::Dangerous);
             }
-            if inner_analysis.overall_class == CommandClass::DeleteShape || inner_analysis.has_indirect_delete {
+            if inner_analysis.overall_class == CommandClass::DeleteShape
+                || inner_analysis.has_indirect_delete
+            {
                 return Some(CommandClass::Indirect);
             }
             return Some(CommandClass::Indirect);

@@ -106,7 +106,11 @@ impl SessionOps for MockSession {
     }
 
     fn current_tab(&self) -> Result<SessionRef, ToolError> {
-        Ok(self.active.lock().unwrap_or_else(|p| p.into_inner()).clone())
+        Ok(self
+            .active
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .clone())
     }
 
     fn tab_session(&self, tab_id: &str) -> Option<SessionRef> {

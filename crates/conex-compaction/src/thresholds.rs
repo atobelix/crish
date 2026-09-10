@@ -233,9 +233,8 @@ pub fn parse_iso8601_epoch_ms(value: &str) -> Option<i64> {
     if bytes[13] != b':' || bytes[16] != b':' {
         return None;
     }
-    let num = |start: usize, len: usize| -> Option<i64> {
-        value.get(start..start + len)?.parse().ok()
-    };
+    let num =
+        |start: usize, len: usize| -> Option<i64> { value.get(start..start + len)?.parse().ok() };
     let year = num(0, 4)?;
     let month = num(5, 2)?;
     let day = num(8, 2)?;
@@ -286,8 +285,7 @@ pub(crate) fn days_from_civil(year: i64, month: u32, day: u32) -> Option<i64> {
     let year = if month <= 2 { year - 1 } else { year };
     let era = (if year >= 0 { year } else { year - 399 }) / 400;
     let year_of_era = year - era * 400;
-    let day_of_year: i64 = (153 * i64::from(if month > 2 { month - 3 } else { month + 9 }) + 2)
-        / 5
+    let day_of_year: i64 = (153 * i64::from(if month > 2 { month - 3 } else { month + 9 }) + 2) / 5
         + i64::from(day)
         - 1;
     let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;

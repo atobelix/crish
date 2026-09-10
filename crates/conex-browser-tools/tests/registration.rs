@@ -24,7 +24,11 @@ fn registry_with(config: conex_browser_tools::BrowserToolsConfig) -> ToolRegistr
 #[test]
 fn registration_count_and_names_exact() {
     let registry = registry_with(empty_config());
-    assert_eq!(registry.len(), 24, "工具族应恰好注册 24 个（23 + browser_evaluate，P1-C2）");
+    assert_eq!(
+        registry.len(),
+        24,
+        "工具族应恰好注册 24 个（23 + browser_evaluate，P1-C2）"
+    );
     let mut names: Vec<String> = registry
         .list()
         .iter()
@@ -56,7 +60,11 @@ fn registration_skips_pre_registered_same_name() {
         .register_runtime(Arc::new(FakeTool::new("browser_navigate")))
         .expect("预注册");
     register_browser_tools(&mut registry, empty_config()).expect("注册应成功（同名跳过）");
-    assert_eq!(registry.len(), 24, "预注册同名被跳过，注册数保持 24（23 + evaluate）");
+    assert_eq!(
+        registry.len(),
+        24,
+        "预注册同名被跳过，注册数保持 24（23 + evaluate）"
+    );
     // 既有工具未被覆盖
     let pre = registry.get("browser_navigate").expect("可查得");
     assert_eq!(pre.definition().description, "预注册替身");

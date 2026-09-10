@@ -147,7 +147,8 @@ async fn per_tab_version_isolation_in_requests() {
         .await;
     h.mock.assert_recorded("snapshot:capture tab=T2");
     // 版本推进（note_action_done）只作用目标标签
-    h.run_ok("browser_switch_tab", json!({ "tab_id": "T2" })).await;
+    h.run_ok("browser_switch_tab", json!({ "tab_id": "T2" }))
+        .await;
     h.mock.assert_recorded("bump:T2");
 }
 
@@ -161,7 +162,11 @@ async fn max_tabs_limit_blocks_new_tab_without_injection() {
     let err = h
         .run_err("browser_new_tab", json!({ "url": "https://x.example/" }))
         .await;
-    assert_eq!(err.code(), "tool.browser.tab_limit_exceeded", "错误码：{err}");
+    assert_eq!(
+        err.code(),
+        "tool.browser.tab_limit_exceeded",
+        "错误码：{err}"
+    );
     assert!(err.to_string().contains("MAX_TABS=2"), "应携带上限：{err}");
     let injected = h
         .mock
@@ -172,7 +177,8 @@ async fn max_tabs_limit_blocks_new_tab_without_injection() {
     assert_eq!(injected, 0, "超限时 createTarget 零注入");
 
     // 关闭一个（T2）→ 可再开（注入计数 1）
-    h.run_ok("browser_close_tab", json!({ "tab_id": "T2" })).await;
+    h.run_ok("browser_close_tab", json!({ "tab_id": "T2" }))
+        .await;
     let out = h
         .run_ok("browser_new_tab", json!({ "url": "https://x.example/" }))
         .await;
@@ -212,7 +218,8 @@ async fn destroyed_tab_actions_return_node_gone() {
     let h = harness();
 
     // 关闭 T2（路由表移除）
-    h.run_ok("browser_close_tab", json!({ "tab_id": "T2" })).await;
+    h.run_ok("browser_close_tab", json!({ "tab_id": "T2" }))
+        .await;
 
     // 动作（click）→ node_gone，零派发（execute_action 不被调用）
     let err = h
@@ -220,7 +227,10 @@ async fn destroyed_tab_actions_return_node_gone() {
         .await;
     assert_eq!(err.code(), "tool.browser.node_gone", "错误码：{err}");
     assert!(
-        !h.mock.calls().iter().any(|c| c.starts_with("action:tab=T2")),
+        !h.mock
+            .calls()
+            .iter()
+            .any(|c| c.starts_with("action:tab=T2")),
         "已销毁标签不得派发动作"
     );
 
@@ -252,8 +262,10 @@ async fn sense_tools_route_per_tab() {
 
     // get_url/get_title 显式 T2
     h.run_ok("browser_get_url", json!({ "tab_id": "T2" })).await;
-    h.run_ok("browser_get_title", json!({ "tab_id": "T2" })).await;
-    h.mock.assert_recorded("browser:Target.getTargetInfo {\"targetId\":\"T2\"}");
+    h.run_ok("browser_get_title", json!({ "tab_id": "T2" }))
+        .await;
+    h.mock
+        .assert_recorded("browser:Target.getTargetInfo {\"targetId\":\"T2\"}");
 
     // screenshot 按 tab_id 路由到对应会话
     h.run_ok("browser_screenshot", json!({ "tab_id": "T2" }))
@@ -269,7 +281,8 @@ async fn sense_tools_route_per_tab() {
     h.mock.assert_recorded("wait:Text(\"你好\")");
 
     // 失效标签 → node_gone
-    h.run_ok("browser_close_tab", json!({ "tab_id": "T2" })).await;
+    h.run_ok("browser_close_tab", json!({ "tab_id": "T2" }))
+        .await;
     let err = h
         .run_err("browser_get_url", json!({ "tab_id": "T2" }))
         .await;

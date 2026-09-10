@@ -73,7 +73,10 @@ impl Tool for ClickTool {
 
     async fn execute(&self, tctx: &ToolContext, args: Value) -> Result<Value, ToolError> {
         let ops = exec::run_browser_action(tctx, "browser_click", &self.ctx.session).await?;
-        helpers::reject_unknown(&args, &["tab_id", "ref", "button", "double_click", "modifiers"])?;
+        helpers::reject_unknown(
+            &args,
+            &["tab_id", "ref", "button", "double_click", "modifiers"],
+        )?;
         let tab_id = optional_tab_id(&args)?;
         let index = helpers::require_u64(&args, "ref")?;
         let button =
@@ -166,10 +169,7 @@ impl Tool for TypeTool {
 
     async fn execute(&self, tctx: &ToolContext, args: Value) -> Result<Value, ToolError> {
         let ops = exec::run_browser_action(tctx, "browser_type", &self.ctx.session).await?;
-        helpers::reject_unknown(
-            &args,
-            &["tab_id", "ref", "text", "submit_key", "delay_ms"],
-        )?;
+        helpers::reject_unknown(&args, &["tab_id", "ref", "text", "submit_key", "delay_ms"])?;
         let tab_id = optional_tab_id(&args)?;
         let index = helpers::require_u64(&args, "ref")?;
         let text = helpers::require_string(&args, "text")?;

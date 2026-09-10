@@ -143,8 +143,7 @@ fn compact_under_budget_returns_original() {
             None,
         ),
     ];
-    let plan =
-        engine.compact_agent_messages(&messages, 10_000, &CompactionPolicy::default(), None);
+    let plan = engine.compact_agent_messages(&messages, 10_000, &CompactionPolicy::default(), None);
     assert_eq!(plan.messages.len(), messages.len());
     assert_eq!(
         plan.messages
@@ -198,8 +197,7 @@ fn compact_keeps_system_and_recent_with_placeholder() {
             None,
         ),
     ];
-    let keep =
-        count_agent_message_tokens(&messages[3]) + count_agent_message_tokens(&messages[4]);
+    let keep = count_agent_message_tokens(&messages[3]) + count_agent_message_tokens(&messages[4]);
     let policy = CompactionPolicy {
         keep_recent_tokens: keep,
         min_recent_turns: 1,
@@ -271,8 +269,7 @@ fn compact_placeholder_uses_dropped_count() {
             None,
         ),
     ];
-    let keep =
-        count_agent_message_tokens(&messages[3]) + count_agent_message_tokens(&messages[4]);
+    let keep = count_agent_message_tokens(&messages[3]) + count_agent_message_tokens(&messages[4]);
     let policy = CompactionPolicy {
         keep_recent_tokens: keep,
         min_recent_turns: 1,
@@ -510,8 +507,7 @@ fn compact_uses_summarizer_and_iterative_merge() {
             Ok(summary_doc_json("合并 2 条丢弃消息"))
         }
     }
-    let keep =
-        count_agent_message_tokens(&messages[3]) + count_agent_message_tokens(&messages[4]);
+    let keep = count_agent_message_tokens(&messages[3]) + count_agent_message_tokens(&messages[4]);
     let policy = CompactionPolicy {
         keep_recent_tokens: keep,
         min_recent_turns: 1,
@@ -595,8 +591,7 @@ fn compact_summarizer_error_falls_back_to_stub() {
             Err("provider error".to_string())
         }
     }
-    let keep =
-        count_agent_message_tokens(&messages[2]) + count_agent_message_tokens(&messages[3]);
+    let keep = count_agent_message_tokens(&messages[2]) + count_agent_message_tokens(&messages[3]);
     let policy = CompactionPolicy {
         keep_recent_tokens: keep,
         min_recent_turns: 1,
@@ -652,8 +647,7 @@ fn compact_summary_capped_by_max_summary_tokens() {
             None,
         ),
     ];
-    let keep =
-        count_agent_message_tokens(&messages[2]) + count_agent_message_tokens(&messages[3]);
+    let keep = count_agent_message_tokens(&messages[2]) + count_agent_message_tokens(&messages[3]);
     let policy = CompactionPolicy {
         keep_recent_tokens: keep,
         min_recent_turns: 1,
@@ -770,8 +764,7 @@ fn critical_line_hard_compression_deterministic_placeholder() {
             None,
         ),
     ];
-    let keep =
-        count_agent_message_tokens(&messages[3]) + count_agent_message_tokens(&messages[4]);
+    let keep = count_agent_message_tokens(&messages[3]) + count_agent_message_tokens(&messages[4]);
     let policy = CompactionPolicy {
         keep_recent_tokens: keep,
         min_recent_turns: 1,
@@ -825,8 +818,7 @@ fn regular_line_ai_summary_document_into_conversation() {
             None,
         ),
     ];
-    let keep =
-        count_agent_message_tokens(&messages[2]) + count_agent_message_tokens(&messages[3]);
+    let keep = count_agent_message_tokens(&messages[2]) + count_agent_message_tokens(&messages[3]);
     let policy = CompactionPolicy {
         keep_recent_tokens: keep,
         min_recent_turns: 1,
@@ -905,8 +897,7 @@ fn system_never_compressed_on_ai_path() {
             None,
         ),
     ];
-    let keep =
-        count_agent_message_tokens(&messages[3]) + count_agent_message_tokens(&messages[4]);
+    let keep = count_agent_message_tokens(&messages[3]) + count_agent_message_tokens(&messages[4]);
     let policy = CompactionPolicy {
         keep_recent_tokens: keep,
         min_recent_turns: 1,

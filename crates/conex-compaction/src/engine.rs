@@ -2,9 +2,7 @@
 
 use std::sync::Arc;
 
-use conex_types::{
-    AgentMessage, AgentMessageBlock, AgentMessageRole, CompactionResult, Message,
-};
+use conex_types::{AgentMessage, AgentMessageBlock, AgentMessageRole, CompactionResult, Message};
 
 use crate::cut_point::find_cut_point_inner;
 use crate::plan::{
@@ -42,10 +40,7 @@ impl CompactionEngine {
         }
 
         // Pre-compute token counts once (#5: avoid repeated count_tokens calls)
-        let token_counts: Vec<usize> = messages
-            .iter()
-            .map(|m| count_tokens(&m.content))
-            .collect();
+        let token_counts: Vec<usize> = messages.iter().map(|m| count_tokens(&m.content)).collect();
 
         let total_tokens: usize = token_counts.iter().sum();
 
@@ -365,8 +360,7 @@ impl CompactionEngine {
         // StubAllowed → 中性 stub（R-C 永不改写，state=awaiting；
         // 原文不保留，保守语义）；LlmRequired → 放弃压缩（E2 F1，
         // llm_unavailable=true，禁止纯丢弃式线性压缩）
-        let dropped_slice: Vec<AgentMessage> =
-            dropped_arcs.iter().map(|m| (**m).clone()).collect();
+        let dropped_slice: Vec<AgentMessage> = dropped_arcs.iter().map(|m| (**m).clone()).collect();
         let stub = || {
             truncate_summary(
                 &stub_placeholder(&block_id, dropped_ids.len(), generation),
@@ -391,12 +385,7 @@ impl CompactionEngine {
                             false,
                         ),
                         Err(_) if stub_policy == StubPolicy::LlmRequired => {
-                            return llm_blocked_plan(
-                                messages,
-                                cut,
-                                &dropped_ids,
-                                tokens_before,
-                            );
+                            return llm_blocked_plan(messages, cut, &dropped_ids, tokens_before);
                         }
                         Err(_) => (stub(), false, false),
                     }
@@ -418,9 +407,7 @@ impl CompactionEngine {
         // 组装：system + 链全查（按原始顺序）+ 新摘要 + 保留段（T-08）
         let mut result: Vec<Arc<AgentMessage>> = messages[..cut]
             .iter()
-            .filter(|m| {
-                m.role == AgentMessageRole::System || m.id.starts_with("compacted-summary")
-            })
+            .filter(|m| m.role == AgentMessageRole::System || m.id.starts_with("compacted-summary"))
             .cloned()
             .collect();
         result.push(Arc::new(AgentMessage {
@@ -477,9 +464,7 @@ impl CompactionEngine {
         let kept_ids: Vec<String> = result.iter().map(|m| m.id.clone()).collect();
         let first_kept_id = result
             .iter()
-            .find(|m| {
-                m.role != AgentMessageRole::System && !m.id.starts_with("compacted-summary")
-            })
+            .find(|m| m.role != AgentMessageRole::System && !m.id.starts_with("compacted-summary"))
             .map(|m| m.id.clone());
 
         CompactionPlan {

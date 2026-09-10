@@ -50,10 +50,7 @@ impl AllowAllPolicy {
 
     /// 当前周期令牌（引擎侧取消/测试断言用）。
     pub fn abort_token(&self) -> CancellationToken {
-        self.abort
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .clone()
+        self.abort.lock().unwrap_or_else(|p| p.into_inner()).clone()
     }
 
     /// 急停旗（引擎侧置位/测试断言用）。
@@ -145,7 +142,11 @@ mod tests {
         }
     }
 
-    fn setup() -> (Arc<AllowAllPolicy>, Arc<FakeChannel>, Arc<Mutex<Vec<String>>>) {
+    fn setup() -> (
+        Arc<AllowAllPolicy>,
+        Arc<FakeChannel>,
+        Arc<Mutex<Vec<String>>>,
+    ) {
         let sent = Arc::new(Mutex::new(Vec::new()));
         let policy = Arc::new(AllowAllPolicy::new(
             Arc::new(AtomicBool::new(false)),
@@ -159,10 +160,7 @@ mod tests {
     }
 
     /// 组装 sender（命令面全过统一发送层）。
-    fn sender(
-        policy: Arc<AllowAllPolicy>,
-        channel: Arc<FakeChannel>,
-    ) -> CommandSender {
+    fn sender(policy: Arc<AllowAllPolicy>, channel: Arc<FakeChannel>) -> CommandSender {
         CommandSender::new(channel, policy)
     }
 
@@ -187,7 +185,11 @@ mod tests {
     async fn idempotent_never_short_circuits() {
         let (policy, channel, sent) = setup();
         let sender = sender(policy, channel);
-        let key = IdKey::new(None, "Page.navigate", &serde_json::json!({ "url": "https://e.com" }));
+        let key = IdKey::new(
+            None,
+            "Page.navigate",
+            &serde_json::json!({ "url": "https://e.com" }),
+        );
         let out = sender
             .execute(
                 Command::new("Page.navigate")
@@ -211,7 +213,9 @@ mod tests {
             .expect_err("急停应拒绝新命令");
         assert!(matches!(
             err,
-            CdpError::Cancelled { reason: conex_browser::cdp::error::CancelReason::EmergencyStop }
+            CdpError::Cancelled {
+                reason: conex_browser::cdp::error::CancelReason::EmergencyStop
+            }
         ));
         assert!(sent.lock().unwrap_or_else(|p| p.into_inner()).is_empty());
     }
@@ -228,7 +232,8 @@ mod tests {
         let token = policy.abort_token();
         let sender = sender(policy, hang_channel);
         let task = tokio::spawn(async move {
-            sender.execute(Command::new("Page.navigate").params(serde_json::json!({ "url": "x" })))
+            sender
+                .execute(Command::new("Page.navigate").params(serde_json::json!({ "url": "x" })))
                 .await
         });
         // 等命令进入传输段（挂起中）
@@ -237,7 +242,9 @@ mod tests {
         let err = task.await.expect("任务失败").expect_err("应被取消");
         assert!(matches!(
             err,
-            CdpError::Cancelled { reason: conex_browser::cdp::error::CancelReason::Aborted }
+            CdpError::Cancelled {
+                reason: conex_browser::cdp::error::CancelReason::Aborted
+            }
         ));
     }
 

@@ -184,14 +184,12 @@ impl SessionRegistry {
         let mut empty_rooms = Vec::new();
 
         for (id, room) in rooms.iter_mut() {
-            let host_stale = room
-                .host
-                .as_ref()
-                .map_or(false, |h| now.duration_since(h.last_active) > HEARTBEAT_TIMEOUT);
-            let client_stale = room
-                .client
-                .as_ref()
-                .map_or(false, |c| now.duration_since(c.last_active) > HEARTBEAT_TIMEOUT);
+            let host_stale = room.host.as_ref().map_or(false, |h| {
+                now.duration_since(h.last_active) > HEARTBEAT_TIMEOUT
+            });
+            let client_stale = room.client.as_ref().map_or(false, |c| {
+                now.duration_since(c.last_active) > HEARTBEAT_TIMEOUT
+            });
 
             if host_stale {
                 room.host = None;
@@ -214,7 +212,10 @@ impl SessionRegistry {
     /// 获取统计快照
     pub async fn stats(&self) -> (usize, u64) {
         let rooms = self.rooms.read().await;
-        (rooms.len(), self.total_forwarded_frames.load(Ordering::Relaxed))
+        (
+            rooms.len(),
+            self.total_forwarded_frames.load(Ordering::Relaxed),
+        )
     }
 }
 
@@ -231,14 +232,21 @@ mod tests {
         let (client_tx, _client_rx) = mpsc::channel(64);
 
         // Host 加入房间
-        let (_, host_token) = registry.join_room(room_id, "host", "device_pc", host_tx).await;
+        let (_, host_token) = registry
+            .join_room(room_id, "host", "device_pc", host_tx)
+            .await;
         assert_eq!(registry.stats().await.0, 1);
 
         // Client 加入房间 -> Host 应该收到 PeerJoined 通知
-        let (_, client_token) = registry.join_room(room_id, "client", "device_phone", client_tx).await;
+        let (_, client_token) = registry
+            .join_room(room_id, "client", "device_phone", client_tx)
+            .await;
         assert_eq!(host_token, client_token);
 
-        let notice = host_rx.recv().await.expect("Host should receive PeerJoined");
+        let notice = host_rx
+            .recv()
+            .await
+            .expect("Host should receive PeerJoined");
         assert_eq!(notice.frame_type, FrameType::PeerJoined);
 
         // Client 盲转发一条加密数据帧给 Host
@@ -249,7 +257,10 @@ mod tests {
             .await
             .expect("Forwarding must succeed");
 
-        let received = host_rx.recv().await.expect("Host should receive forwarded frame");
+        let received = host_rx
+            .recv()
+            .await
+            .expect("Host should receive forwarded frame");
         assert_eq!(received.frame_type, FrameType::RelayData);
         assert_eq!(received.payload, test_payload);
 
@@ -263,4 +274,3 @@ mod tests {
         assert_eq!(registry.stats().await.0, 0);
     }
 }
-

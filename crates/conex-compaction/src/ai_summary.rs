@@ -138,8 +138,7 @@ pub fn is_degenerate_summary(text: &str, min_chars: usize) -> bool {
 /// （COMPACTION-01 P1-C：引擎契约单轨 JSON 后，短而完整的 JSON 文档
 /// （如超短会话）不得被字符下限误杀）。
 pub fn is_acceptable_summary(text: &str, min_chars: usize) -> bool {
-    !is_degenerate_summary(text, min_chars)
-        || validate_summary_document(text, usize::MAX).is_ok()
+    !is_degenerate_summary(text, min_chars) || validate_summary_document(text, usize::MAX).is_ok()
 }
 
 // ── 退化重试护栏（02 Top 3：空/过短 = 瞬态，重试 N 次后降级）──
@@ -403,9 +402,8 @@ mod tests {
 
     use super::{
         build_summarize_prompt, compaction_event_details, covers_up_to_turn_for_dropped,
-        is_acceptable_summary, is_degenerate_summary, retry_allowed,
-        summarize_with_guard, RetryGuardSummarizer,
-        SummaryOutcome, SummaryRetryPolicy,
+        is_acceptable_summary, is_degenerate_summary, retry_allowed, summarize_with_guard,
+        RetryGuardSummarizer, SummaryOutcome, SummaryRetryPolicy,
     };
     use crate::compaction::{CompactionEngine, CompactionPolicy, Summarizer};
 

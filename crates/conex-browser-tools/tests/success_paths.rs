@@ -39,8 +39,7 @@ fn harness(upload_enabled: bool) -> Harness {
     // 门禁注入确定性解析器（注入位：BrowserToolsConfig.gate，lib.rs:91）；
     // 空白名单 + 解析到公网 = 公共域名放行，保留段 IP 字面量仍阻断
     config.gate = Some(Arc::new(
-        MvpDomainGate::with_resolver(&[], &[], Arc::new(AlwaysPublicResolver))
-            .expect("门禁构造"),
+        MvpDomainGate::with_resolver(&[], &[], Arc::new(AlwaysPublicResolver)).expect("门禁构造"),
     ));
     register_browser_tools(&mut registry, config).expect("注册成功");
     Harness {
@@ -145,14 +144,18 @@ async fn new_tab_gate_and_create() {
 #[tokio::test]
 async fn close_and_switch_tab_by_target_id() {
     let h = harness(true);
-    let out = h.run_ok("browser_close_tab", json!({ "tab_id": "T2" })).await;
+    let out = h
+        .run_ok("browser_close_tab", json!({ "tab_id": "T2" }))
+        .await;
     assert_eq!(out["closedTabId"], "T2");
     assert_eq!(out["remainingTabs"], 1, "T2 关闭后剩 T1");
     h.mock
         .assert_recorded("browser:Target.closeTarget {\"targetId\":\"T2\"}");
 
     let h = harness(true);
-    let out = h.run_ok("browser_switch_tab", json!({ "tab_id": "T1" })).await;
+    let out = h
+        .run_ok("browser_switch_tab", json!({ "tab_id": "T1" }))
+        .await;
     assert_eq!(out["tabId"], "T1");
     assert_eq!(out["url"], "https://a.example/after");
     h.mock
@@ -653,7 +656,10 @@ async fn malicious_strings_are_contained() {
 async fn evaluate_capability_disabled_denies_zero_commands() {
     let h = harness(false); // evaluate 默认关（SensitiveCapabilities 默认）
     let err = h
-        .run_err("browser_evaluate", json!({ "expression": "__crish_read.text('#a')" }))
+        .run_err(
+            "browser_evaluate",
+            json!({ "expression": "__crish_read.text('#a')" }),
+        )
         .await;
     assert_eq!(err.code(), "tool.browser.capability_disabled");
     // 零 CDP 命令（能力位检查先于任何执行）
@@ -669,8 +675,7 @@ async fn evaluate_input_validation() {
     let mut config = mock_config(&mock, true);
     config.sensitive.evaluate = true;
     config.gate = Some(Arc::new(
-        MvpDomainGate::with_resolver(&[], &[], Arc::new(AlwaysPublicResolver))
-            .expect("门禁构造"),
+        MvpDomainGate::with_resolver(&[], &[], Arc::new(AlwaysPublicResolver)).expect("门禁构造"),
     ));
     register_browser_tools(&mut registry, config).expect("注册成功");
     let ctx = create_mock_tool_context();

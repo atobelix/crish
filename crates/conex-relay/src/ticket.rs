@@ -67,8 +67,10 @@ impl TicketClaims {
         }
 
         // 解码 Payload
-        let json_bytes = base64_decode(payload_b64).context("Failed to base64 decode ticket payload")?;
-        let claims: Self = serde_json::from_slice(&json_bytes).context("Failed to parse ticket JSON")?;
+        let json_bytes =
+            base64_decode(payload_b64).context("Failed to base64 decode ticket payload")?;
+        let claims: Self =
+            serde_json::from_slice(&json_bytes).context("Failed to parse ticket JSON")?;
 
         if !claims.is_valid() {
             bail!("Ticket has expired (exp: {})", claims.exp);
@@ -213,7 +215,8 @@ mod tests {
         let token = claims.sign(TEST_SECRET).expect("Signing must succeed");
         assert!(token.contains('.'));
 
-        let verified = TicketClaims::verify(&token, TEST_SECRET).expect("Verification must succeed");
+        let verified =
+            TicketClaims::verify(&token, TEST_SECRET).expect("Verification must succeed");
         assert_eq!(claims, verified);
     }
 
@@ -236,7 +239,10 @@ mod tests {
     /// T15：篡改 payload / 签名必须验证失败（恒定时间比较不放过时序侧信道）
     #[test]
     fn test_ticket_tamper_rejected() {
-        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
         let claims = TicketClaims {
             account_id: "user-1".to_string(),
             device_id: "dev-1".to_string(),

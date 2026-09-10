@@ -80,11 +80,8 @@ pub struct CompactionPlan {
 /// `existing` 为既有摘要文本（跨压缩轮次迭代合并，P4 §3.4.3）。
 pub trait Summarizer: Send + Sync {
     /// 对丢弃消息生成结构化摘要；Err 时调用方回退 L1 静态占位符
-    fn summarize(
-        &self,
-        dropped: &[AgentMessage],
-        existing: Option<&str>,
-    ) -> Result<String, String>;
+    fn summarize(&self, dropped: &[AgentMessage], existing: Option<&str>)
+        -> Result<String, String>;
 }
 
 /// 摘要 stub 策略（E2 F1：LLM 摘要强制，禁止「纯丢弃式」线性压缩）

@@ -89,7 +89,9 @@ impl Tool for EvaluateTool {
             Some(tid) => session
                 .tab_session(tid)
                 .map(|r| r.session.clone())
-                .ok_or_else(|| error::node_gone(format!("browser_evaluate：标签 {tid} 不存在或已关闭")))?,
+                .ok_or_else(|| {
+                    error::node_gone(format!("browser_evaluate：标签 {tid} 不存在或已关闭"))
+                })?,
             None => session
                 .current_tab()
                 .map(|r| r.session.clone())

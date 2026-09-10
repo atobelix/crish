@@ -126,9 +126,7 @@ pub trait SessionOps: Send + Sync {
     /// 默认实现：活动标签兜底（仅当 tab_id == 活动标签时命中）——引擎侧
     /// LazySessionOps 未接线 per-tab 路由前的兼容降级。
     fn tab_session(&self, tab_id: &str) -> Option<SessionRef> {
-        self.current_tab()
-            .ok()
-            .filter(|r| r.target_id == tab_id)
+        self.current_tab().ok().filter(|r| r.target_id == tab_id)
     }
     /// 显式切换活动标签（P1：Target.activateTarget 无 SessionAttached 事件，
     /// 引擎活动槽必须显式更新）。Err = 目标标签无会话（node_gone 语义）。
@@ -162,7 +160,10 @@ pub trait SessionOps: Send + Sync {
             .to_string();
         for (method, params) in [
             (PAGE_ENABLE, json!({})),
-            (PAGE_SET_LIFECYCLE_EVENTS_ENABLED, json!({ "enabled": true })),
+            (
+                PAGE_SET_LIFECYCLE_EVENTS_ENABLED,
+                json!({ "enabled": true }),
+            ),
             (RUNTIME_ENABLE, json!({})),
             (DOM_ENABLE, json!({})),
             (NETWORK_ENABLE, json!({})),
@@ -277,12 +278,15 @@ impl RealSession {
     /// 目标标签会话解析（per-tab 路由；无会话 = 标签已关闭/未 attach →
     /// TargetClosed，14 §5.1 目标过期语义）。
     fn session_of(&self, tab_id: &str) -> Result<String, ActionError> {
-        self.session.tab_session(tab_id).map(|r| r.session).ok_or_else(|| {
-            ActionError::new(
-                ActionErrorKind::TargetClosed,
-                format!("标签 {tab_id} 不存在或已关闭（无可用会话）"),
-            )
-        })
+        self.session
+            .tab_session(tab_id)
+            .map(|r| r.session)
+            .ok_or_else(|| {
+                ActionError::new(
+                    ActionErrorKind::TargetClosed,
+                    format!("标签 {tab_id} 不存在或已关闭（无可用会话）"),
+                )
+            })
     }
 
     /// 惰性构建目标标签的动作执行器（复用共享快照管理器与注入门禁；
@@ -290,7 +294,11 @@ impl RealSession {
     ///
     /// G-12：断线重连后同标签换新会话，缓存中旧执行器绑定死会话——
     /// 绑定比对不中即丢弃重建（O(1) 精确守卫，事件清理之外的兜底）。
-    fn executor_for(&self, tab_id: &str, session: &str) -> Result<Arc<ActionExecutor>, ActionError> {
+    fn executor_for(
+        &self,
+        tab_id: &str,
+        session: &str,
+    ) -> Result<Arc<ActionExecutor>, ActionError> {
         // G-12：首次构建前挂载断线清理任务（惰性；断线前无执行器则无需清理）
         self.ensure_executor_cleaner();
         let mut guard = self.executors.lock().unwrap_or_else(|p| p.into_inner());
@@ -301,9 +309,8 @@ impl RealSession {
             // 绑定会话已变（重连/换绑）→ 陈旧执行器丢弃，按新会话重建
             guard.remove(tab_id);
         }
-        let ops: Arc<dyn PageOps> = Arc::new(
-            BrowserPageOps::new(self.session.clone()).with_session(session.to_string()),
-        );
+        let ops: Arc<dyn PageOps> =
+            Arc::new(BrowserPageOps::new(self.session.clone()).with_session(session.to_string()));
         let store: Arc<dyn SnapshotStore> = Arc::new(ToolSnapshotStore {
             session: self.session.clone(),
             snapshots: self.snapshots.clone(),
@@ -364,7 +371,6 @@ async fn executor_cleaner_loop(
     }
 }
 
-
 #[async_trait]
 impl SessionOps for RealSession {
     fn executor(&self, session: &str) -> Option<Arc<conex_browser::action::ActionExecutor>> {
@@ -412,14 +418,23 @@ impl SessionOps for RealSession {
     async fn attach_tab(&self, target_id: &str) -> Result<SessionRef, ToolError> {
         // 确定性路径：BrowserSession::attach_tab 完成 attach + enable + 路由/
         // 活动槽登记（不等 attachedToTarget 事件，无事件竞态）
-        self.session.attach_tab(target_id).await.map_err(|e| match e {
-            conex_browser::BrowserError::Cdp(inner) => error::map_cdp_error("attach_tab", inner),
-            other => ToolError::execution_failed("browser_new_tab", format!("新标签 attach 失败：{other}")),
-        })
+        self.session
+            .attach_tab(target_id)
+            .await
+            .map_err(|e| match e {
+                conex_browser::BrowserError::Cdp(inner) => {
+                    error::map_cdp_error("attach_tab", inner)
+                }
+                other => ToolError::execution_failed(
+                    "browser_new_tab",
+                    format!("新标签 attach 失败：{other}"),
+                ),
+            })
     }
 
     fn note_action_done(&self, tab_id: &str) {
-        self.session.bump(&tab_id.to_string(), VersionReason::ActionDone);
+        self.session
+            .bump(&tab_id.to_string(), VersionReason::ActionDone);
     }
 
     async fn send_page(
@@ -728,9 +743,9 @@ impl NetworkBuffer {
                         method,
                         ..
                     }) => buffer.push_request(&request_id, &url, &method),
-                    Ok(BrowserEvent::NetworkDone {
-                        request_id, ok, ..
-                    }) => buffer.mark_done(&request_id, ok),
+                    Ok(BrowserEvent::NetworkDone { request_id, ok, .. }) => {
+                        buffer.mark_done(&request_id, ok)
+                    }
                     Ok(_) => {}
                     Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}
                     Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
@@ -833,7 +848,10 @@ mod tests {
                 blind_zone: BlindZoneStats::default(),
             },
         };
-        assert!(is_password_element(&doc, 7), "集合成员必须判定为密码输入目标");
+        assert!(
+            is_password_element(&doc, 7),
+            "集合成员必须判定为密码输入目标"
+        );
         assert!(!is_password_element(&doc, 8), "非集合成员不得误判");
         assert!(!is_password_element(&doc, 0), "backend=0（不存在）不得误判");
     }
@@ -895,7 +913,10 @@ mod tests {
         {
             let guard = registry.lock().unwrap_or_else(|p| p.into_inner());
             assert!(guard.is_empty(), "断线后执行器缓存必须整体清空");
-            assert!(guard.get("T1").is_none(), "旧执行器（绑定死会话）查找不得命中");
+            assert!(
+                guard.get("T1").is_none(),
+                "旧执行器（绑定死会话）查找不得命中"
+            );
         }
 
         // 重连期重复 ConnectionLost 信号 → 幂等再清

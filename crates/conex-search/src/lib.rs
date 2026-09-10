@@ -125,7 +125,12 @@ pub mod search {
     use conex_types::FileHit;
 
     /// Search paths using fuzzy matching, returning top-N hits sorted by score.
-    pub fn search_files(query: &str, paths: &[String], limit: usize, matcher: &FuzzyMatcher) -> Vec<FileHit> {
+    pub fn search_files(
+        query: &str,
+        paths: &[String],
+        limit: usize,
+        matcher: &FuzzyMatcher,
+    ) -> Vec<FileHit> {
         if query.is_empty() || paths.is_empty() || limit == 0 {
             return vec![];
         }
@@ -164,7 +169,12 @@ pub mod search {
     }
 
     /// Parallel version: splits paths into chunks and searches concurrently using thread::scope.
-    pub fn search_files_parallel(query: &str, paths: &[String], limit: usize, matcher: &FuzzyMatcher) -> Vec<FileHit> {
+    pub fn search_files_parallel(
+        query: &str,
+        paths: &[String],
+        limit: usize,
+        matcher: &FuzzyMatcher,
+    ) -> Vec<FileHit> {
         if query.is_empty() || paths.is_empty() || limit == 0 {
             return vec![];
         }
@@ -180,9 +190,7 @@ pub mod search {
         let all_hits: Vec<FileHit> = std::thread::scope(|s| {
             let handles: Vec<_> = paths
                 .chunks(chunk_size)
-                .map(|chunk| {
-                    s.spawn(move || search_files(query, chunk, limit, matcher))
-                })
+                .map(|chunk| s.spawn(move || search_files(query, chunk, limit, matcher)))
                 .collect();
 
             handles
@@ -202,7 +210,16 @@ pub mod search {
 pub mod walker {
     use ignore::WalkBuilder;
 
-    const SKIP_DIRS: &[&str] = &[".git", "node_modules", "dist", "build", ".next", ".turbo", ".cache", "target"];
+    const SKIP_DIRS: &[&str] = &[
+        ".git",
+        "node_modules",
+        "dist",
+        "build",
+        ".next",
+        ".turbo",
+        ".cache",
+        "target",
+    ];
 
     /// Build a directory index of file paths, respecting .gitignore and skipping common non-source dirs.
     pub fn build_directory_index(dir: &str) -> Vec<String> {
@@ -342,7 +359,10 @@ mod tests {
         // match_indices 必须是原始文件名坐标，不得越界
         for hit in &hits {
             let filename_len = hit.path.rsplit(['/', '\\']).next().unwrap().chars().count();
-            assert!(hit.match_indices.iter().all(|&i| i < filename_len), "越界坐标: {hit:?}");
+            assert!(
+                hit.match_indices.iter().all(|&i| i < filename_len),
+                "越界坐标: {hit:?}"
+            );
             assert!(hit.score > 0);
         }
     }
@@ -396,7 +416,9 @@ mod tests {
     #[test]
     fn parallel_search_matches_sequential() {
         let matcher = FuzzyMatcher::new(false);
-        let paths: Vec<String> = (0..200).map(|i| format!("module_{i}/component_{i}.tsx")).collect();
+        let paths: Vec<String> = (0..200)
+            .map(|i| format!("module_{i}/component_{i}.tsx"))
+            .collect();
         let sequential = search_files("comp", &paths, 10, &matcher);
         let parallel = search_files_parallel("comp", &paths, 10, &matcher);
         // Both should find results
@@ -420,6 +442,8 @@ mod tests {
         // Should contain Cargo.toml
         assert!(files.iter().any(|f| f.ends_with("Cargo.toml")));
         // Should contain src/lib.rs
-        assert!(files.iter().any(|f| f.ends_with("src/lib.rs") || f.ends_with("src\\lib.rs")));
+        assert!(files
+            .iter()
+            .any(|f| f.ends_with("src/lib.rs") || f.ends_with("src\\lib.rs")));
     }
 }

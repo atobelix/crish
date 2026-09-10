@@ -499,22 +499,30 @@ mod tests {
         let g = gate(&[], &[]);
         assert!(g.check("https://any-public.example/").is_ok());
         // 解析到内网段 → 阻断
-        let g = gate_with_resolver(&[], &[], Arc::new(MultiIpResolver(vec![
-            "192.168.1.99".parse().unwrap(),
-        ])));
+        let g = gate_with_resolver(
+            &[],
+            &[],
+            Arc::new(MultiIpResolver(vec!["192.168.1.99".parse().unwrap()])),
+        );
         let reason = denied(&g, "https://internal.example/").expect("应阻断");
         assert!(reason.contains("SSRF"), "说明：{reason}");
         // 解析到回环（非 localhost 主机名）→ 阻断（恶意 DNS 指向本机）
-        let g = gate_with_resolver(&[], &[], Arc::new(MultiIpResolver(vec![
-            "127.0.0.1".parse().unwrap(),
-        ])));
+        let g = gate_with_resolver(
+            &[],
+            &[],
+            Arc::new(MultiIpResolver(vec!["127.0.0.1".parse().unwrap()])),
+        );
         let reason = denied(&g, "https://evil.example/").expect("应阻断");
         assert!(reason.contains("SSRF"), "说明：{reason}");
         // 多地址：任一命中保留段即阻断（DNS 多 A 记录场景）
-        let g = gate_with_resolver(&[], &[], Arc::new(MultiIpResolver(vec![
-            "93.184.216.34".parse().unwrap(),
-            "10.0.0.1".parse().unwrap(),
-        ])));
+        let g = gate_with_resolver(
+            &[],
+            &[],
+            Arc::new(MultiIpResolver(vec![
+                "93.184.216.34".parse().unwrap(),
+                "10.0.0.1".parse().unwrap(),
+            ])),
+        );
         assert!(
             denied(&g, "https://mixed.example/").is_some(),
             "多地址含内网即阻断"
@@ -529,13 +537,15 @@ mod tests {
         let reason = denied(&g, "https://no-such-host.invalid/").expect("fail-closed 应阻断");
         assert!(reason.contains("fail-closed"), "说明：{reason}");
         // 可配 fail-open：解析失败放行（解析成功命中内网仍阻断）
-        let g = gate_with_resolver(&[], &[], Arc::new(FailingResolver))
-            .with_fail_closed_resolve(false);
+        let g =
+            gate_with_resolver(&[], &[], Arc::new(FailingResolver)).with_fail_closed_resolve(false);
         assert!(g.check("https://no-such-host.invalid/").is_ok());
         // fail-open 不影响解析成功的阻断面
-        let g = gate_with_resolver(&[], &[], Arc::new(MultiIpResolver(vec![
-            "10.0.0.1".parse().unwrap(),
-        ])))
+        let g = gate_with_resolver(
+            &[],
+            &[],
+            Arc::new(MultiIpResolver(vec!["10.0.0.1".parse().unwrap()])),
+        )
         .with_fail_closed_resolve(false);
         assert!(denied(&g, "https://internal.example/").is_some());
     }
@@ -544,9 +554,11 @@ mod tests {
     /// 假 resolver 解析到内网，但白名单命中 → 放行。
     #[test]
     fn allowlist_explicit_trust_skips_lookup() {
-        let g = gate_with_resolver(&["trusted.example"], &[], Arc::new(MultiIpResolver(vec![
-            "10.0.0.1".parse().unwrap(),
-        ])));
+        let g = gate_with_resolver(
+            &["trusted.example"],
+            &[],
+            Arc::new(MultiIpResolver(vec!["10.0.0.1".parse().unwrap()])),
+        );
         assert!(
             g.check("https://trusted.example/").is_ok(),
             "白名单显式信任跳过解析校验"
