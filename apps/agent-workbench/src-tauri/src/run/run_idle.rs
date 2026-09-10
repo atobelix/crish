@@ -1245,6 +1245,9 @@ pub(crate) mod idle_resume {
             // I1-α②：续 run 不产生 context-state（状态切换告知仅由前端
             // 用户提交边界携带；引擎自主续 run 无状态切换语义）
             context_state: None,
+            // plans/04 §4.2：续 run 无多模态 content（引擎自主行为，纯文本）
+            content: None,
+            has_images: None,
         };
         if let Err(error) = run_task_impl(Arc::clone(&state), options).await {
             tracing::warn!(

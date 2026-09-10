@@ -379,6 +379,9 @@ impl SubagentSpawnerImpl {
                             // I1-α②：子代理 run 不产生 context-state 注入
                             //（状态切换告知仅主会话用户提交边界携带）
                             context_state: None,
+                            // plans/04 §4.2：子代理 run 无多模态 content
+                            content: None,
+                            has_images: None,
                         })
                         .await
                 }

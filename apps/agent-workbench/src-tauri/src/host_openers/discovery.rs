@@ -135,8 +135,8 @@ fn categorize_file_path(path: &str) -> FileCategory {
         .to_ascii_lowercase();
     match ext.as_str() {
         "md" | "txt" | "markdown" | "mdown" | "json" | "yaml" | "yml" | "toml" | "ini" | "xml"
-        | "html" | "css" | "js" | "jsx" | "ts" | "tsx" | "rs" | "py" | "go" | "c" | "cpp"
-        | "h" | "hpp" | "cs" | "java" | "sh" | "bash" | "zsh" | "fish" | "sql" | "env" => {
+        | "html" | "css" | "js" | "jsx" | "ts" | "tsx" | "rs" | "py" | "go" | "c" | "cpp" | "h"
+        | "hpp" | "cs" | "java" | "sh" | "bash" | "zsh" | "fish" | "sql" | "env" => {
             FileCategory::TextOrCode
         }
         "png" | "jpg" | "jpeg" | "gif" | "webp" | "bmp" | "ico" | "svg" | "tiff" | "tif" => {

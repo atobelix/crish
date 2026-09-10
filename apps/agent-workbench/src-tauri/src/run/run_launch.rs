@@ -141,13 +141,13 @@ pub(crate) fn resolve_run_workspace_root(cwd: Option<&str>) -> PathBuf {
 /// 一致，向后兼容（旧前端未发字段时行为与现状逐字节一致）。
 pub(crate) fn parse_reasoning_effort(wire: &str) -> Option<session_loop::ReasoningEffort> {
     match wire.trim().to_ascii_lowercase().as_str() {
-        "off" => Some(session_loop::ReasoningEffort::Off),
+        "off" | "none" | "disabled" | "false" | "0" => Some(session_loop::ReasoningEffort::Off),
         "auto" => Some(session_loop::ReasoningEffort::Auto),
         "minimal" => Some(session_loop::ReasoningEffort::Minimal),
         "low" => Some(session_loop::ReasoningEffort::Low),
         "medium" => Some(session_loop::ReasoningEffort::Medium),
         "high" => Some(session_loop::ReasoningEffort::High),
-        "xhigh" => Some(session_loop::ReasoningEffort::Xhigh),
+        "xhigh" | "x-high" => Some(session_loop::ReasoningEffort::Xhigh),
         "max" => Some(session_loop::ReasoningEffort::Max),
         _ => None,
     }
@@ -163,6 +163,8 @@ mod tests {
     #[test]
     fn reasoning_effort_parse_covers_all_levels_and_fails_open() {
         assert_eq!(parse_reasoning_effort("off"), Some(ReasoningEffort::Off));
+        assert_eq!(parse_reasoning_effort("none"), Some(ReasoningEffort::Off));
+        assert_eq!(parse_reasoning_effort("disabled"), Some(ReasoningEffort::Off));
         assert_eq!(parse_reasoning_effort("auto"), Some(ReasoningEffort::Auto));
         assert_eq!(
             parse_reasoning_effort("minimal"),
@@ -178,11 +180,19 @@ mod tests {
             parse_reasoning_effort("xhigh"),
             Some(ReasoningEffort::Xhigh)
         );
+        assert_eq!(
+            parse_reasoning_effort("x-high"),
+            Some(ReasoningEffort::Xhigh)
+        );
         assert_eq!(parse_reasoning_effort("max"), Some(ReasoningEffort::Max));
         // 大小写 / 空白宽容
         assert_eq!(
             parse_reasoning_effort("  High "),
             Some(ReasoningEffort::High)
+        );
+        assert_eq!(
+            parse_reasoning_effort(" Disabled "),
+            Some(ReasoningEffort::Off)
         );
         // 未知 / 空 → None（引擎默认档位，不阻断 run，向后兼容）
         assert_eq!(parse_reasoning_effort("ultra"), None);
@@ -255,6 +265,14 @@ pub struct RunTaskOptions {
     /// 用户提交边界注入时间线（详案 I1-α② 注入载体契约）。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context_state: Option<String>,
+    /// 多模态 content 桥（plans/04 §4.2）：OpenAI 形 parts（`type: image_url`
+    /// 等），写入用户消息 `metadata.contentParts`。None = 纯文本 run。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content: Option<serde_json::Value>,
+    /// 是否带图（`content` 仅在 `hasImages == true` 时进入消息元数据，
+    /// 避免纯文本 parts 重复载荷）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub has_images: Option<bool>,
 }
 
 #[tauri::command]
@@ -309,6 +327,11 @@ pub(crate) async fn run_task_impl(
     let system_prompt = options.system_prompt;
     let history = options.history;
     let context_window = options.context_window;
+    // plans/04 §4.2：多模态 content 桥（hasImages 时把 OpenAI 形 parts 写入
+    // 用户消息 metadata.contentParts；先于下方 SessionLoopOptions 遮蔽取出）
+    let content_parts = options
+        .content
+        .filter(|_| options.has_images == Some(true));
     // T-D-13：子代理 run 装配配置（None = 普通 run，装配行为与现状一致）
     let subagent_config = options.subagent_config;
     // T-D-14：父 run 归属（审批裁决者路由 + spawner 侧 run 注册表——先于
@@ -698,7 +721,14 @@ pub(crate) async fn run_task_impl(
         o.assembly.system_prompt =
             assemble_system_prompt_with_stages(&state, &session_id, system_prompt);
         o.assembly.context_budget = context_budget;
-        o.retry.retry_backoff = retry_backoff;
+        o.retry.retry_backoff = retry_backoff.or_else(|| {
+            Some(session_loop::r#loop::RetryBackoffConfig {
+                base_ms: None,
+                max_ms: None,
+                total_budget_ms: Some(180_000),
+            })
+        });
+        o.retry.transient_retry_limit = 10;
         o.retry.provider_fail_streak = provider_fail_streak;
         o.tool_exec.tool_middleware = vec![Arc::new(BackupMiddleware::with_defaults(None))];
         o.assembly.parent_run_id = parent_run_id.clone();
@@ -728,9 +758,13 @@ pub(crate) async fn run_task_impl(
             .map(|mode| PermissionMode::from_engine_str(Some(mode))),
         ..ToolBatchOptions::default()
     };
-    // 用户消息（clientMessageId 透传，03 §5.3-4）
-    let message =
-        crate::engine::user_message(&prompt.unwrap_or_default(), client_message_id.as_deref());
+    // 用户消息（clientMessageId 透传，03 §5.3-4；多模态 content 桥——
+    // plans/04 §4.2：hasImages 时把 OpenAI 形 parts 写入 metadata.contentParts）
+    let message = crate::engine::user_message_with_content(
+        &prompt.unwrap_or_default(),
+        client_message_id.as_deref(),
+        content_parts,
+    );
 
     // ── I1-α②（扩展点 A）：context-state 感知注入 ─────────────────
     // 前端 provider-profiles 状态切换产生器（emitUiEvent('profiles-changed')

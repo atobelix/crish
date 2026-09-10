@@ -234,6 +234,13 @@ impl ApiConfigStore {
             .or_else(|| first_env_value(model_env_var_names()))
     }
 
+    fn effective_provider_id(&self) -> Option<String> {
+        if let Some(context) = self.active_profile_context() {
+            return Some(context.provider_id);
+        }
+        self.profile_state.active_profile_id.clone()
+    }
+
     // ── 写入 ──
 
     fn save_non_secret_config(&mut self) -> Result<(), String> {
@@ -461,6 +468,10 @@ pub(crate) fn effective_api_base_url() -> Option<String> {
 
 pub(crate) fn effective_model() -> Option<String> {
     with_store(|store| store.effective_model()).unwrap_or(None)
+}
+
+pub(crate) fn effective_provider_id() -> Option<String> {
+    with_store(|store| store.effective_provider_id()).unwrap_or(None)
 }
 
 pub(crate) fn effective_provider_endpoint() -> String {

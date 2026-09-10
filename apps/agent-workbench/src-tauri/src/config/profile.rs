@@ -88,6 +88,7 @@ impl PersistedProfileState {
 /// 解析出的活跃 profile 生效上下文（引擎 provider 三件套 + 端点/流式）。
 #[derive(Debug, Clone)]
 pub(crate) struct ActiveProviderContext {
+    pub(crate) provider_id: String,
     pub(crate) base_url: String,
     pub(crate) api_key: String,
     pub(crate) model: String,
@@ -185,6 +186,7 @@ pub(crate) fn resolve_active_context(
         .and_then(normalize_provider_endpoint)
         .unwrap_or_else(|| "chat-completions".to_string());
     Ok(Some(ActiveProviderContext {
+        provider_id: active.to_string(),
         base_url,
         api_key,
         model,

@@ -158,8 +158,7 @@ pub(crate) struct EngineHandle {
     /// 面同 ContinuityChannelBoard 范式——装配期注入空绑定占位（工具返回
     /// common.unsupported），main.rs setup ⑧c WorkflowCommandState 创建后
     /// 经 [Self::workflow_creation_channel] 取走并 bind 生产转正）
-    workflow_creation_channel:
-        Arc<crate::workflow_commands::WorkflowCreationChannelBinding>,
+    workflow_creation_channel: Arc<crate::workflow_commands::WorkflowCreationChannelBinding>,
     // T-D-13 精简：spawner 字段冗余（全仓无读取方，A8 D3）——实际
     // spawner 由 CoreRunState::finalize_subagent_spawner 自管，构造参数
     // 保留经 BuiltinToolConfig.subagent_spawner 注入 run_subagent 工具
@@ -270,9 +269,8 @@ impl EngineHandle {
         let continuity = Arc::new(ContinuityChannelBoard::new());
         // 维度五（05 详案 §2.4 路径 A）：create_workflow 工具通道延迟绑定
         // 占位——main.rs setup ⑧c 注入 WorkflowBackend 后生产转正
-        let workflow_creation_channel = Arc::new(
-            crate::workflow_commands::WorkflowCreationChannelBinding::new(),
-        );
+        let workflow_creation_channel =
+            Arc::new(crate::workflow_commands::WorkflowCreationChannelBinding::new());
         let terminal_stream = Arc::new(EventStreamBroadcast::new());
         let wait_channel = Arc::new(WaitChannel::new(
             Arc::clone(&dispatch_store) as Arc<dyn WaitStore>,
@@ -1017,13 +1015,12 @@ pub(crate) fn cold_cache_warning_event(
 /// `missed_cost ≥ $0.1` 才打扰——`WARN_MISSED_COST_USD` 与 token 阈值
 /// 并列为触发条件，pi interactive-mode.ts:3499 口径）。
 ///
-/// 实现说明：
-/// - 浪费金额 `missed_cost_usd = missed_tokens × (inputPrice - cacheReadPrice) / 1M`
-///   （pi cache-stats.ts:73-89 口径），价格取 bundled_catalog 基础四价
-///   （2026-08-09 接线：P3 价格已入库，DEEPCHECK-05 #5 消除"数据齐备但
-///   零消费"；tieredPricing 长档匹配归演进项 P1，不在此计算）；
-/// - 价格缺失（未知厂商 / 未收录模型）或 input ≤ cacheRead → 金额 None，
-///   仅 token 阈值判定（诚实兜底，不估算）；
+/// 实现说明（plans/05 §3.6）：
+/// - 浪费金额只来自 **live yaml 单价 × 引擎微元**（禁止 `bundled_catalog` 取价）：
+///   `diff_micros = tokens_to_micros(missed, input) − tokens_to_micros(missed, cacheRead)`；
+///   事件字段名是 `missed_cost_usd`——**仅当币种为 USD 时填充**（CNY → None，
+///   不撒谎）；取价键 = 缓存跟踪的 provider 串（与 yaml `providers.<id>` 同值
+///   才命中；miss → None，仅 token 阈值判定）；
 /// - run 级聚合无法还原逐 miss 归因与空闲时长 → attribution Unknown /
 ///   idle_ms 0（诚实兜底，宁缺勿误报——浪费量本身是实测值非估算）；
 ///   逐 miss 归因的 in-loop 发射（streaming.rs `consume_cache_usage` 处）
@@ -1032,18 +1029,20 @@ pub(crate) fn waste_alert_event(
     session_id: &str,
     stats: &RunCacheStats,
     model_changed: bool,
-    vendor: &str,
-    model: &str,
+    pricing: Option<&agent_provider::pricing::ModelPricing>,
 ) -> Option<AgentEvent> {
-    let catalog = bundled_catalog();
-    let input_price = catalog.input_price_for(vendor, model);
-    let cache_read_price = catalog.cache_read_price_for(vendor, model);
-    let missed_cost_usd = match (input_price, cache_read_price) {
-        (Some(input), Some(read)) if input > read => {
-            Some(stats.missed_tokens as f64 * (input - read) / 1_000_000.0)
+    let missed_cost_usd = pricing.and_then(|p| {
+        if p.currency != agent_provider::pricing::Currency::Usd {
+            return None;
         }
-        _ => None,
-    };
+        let input_micros =
+            agent_provider::pricing::PricingEngine::tokens_to_micros(stats.missed_tokens, p.input);
+        let read_micros = agent_provider::pricing::PricingEngine::tokens_to_micros(
+            stats.missed_tokens,
+            p.cache_read.unwrap_or(0.0),
+        );
+        Some(input_micros.saturating_sub(read_micros) as f64 / 1_000_000.0)
+    });
     let over_token_threshold = stats.missed_tokens >= WARN_MISSED_TOKENS;
     let over_cost_threshold = missed_cost_usd.map_or(false, |c| c >= WARN_MISSED_COST_USD);
     if !over_token_threshold && !over_cost_threshold {
@@ -1629,9 +1628,15 @@ impl SessionLoopProducer {
                 .cache_tracking
                 .as_ref()
                 .map_or(("auto", ""), |c| (c.provider.as_str(), c.model.as_str()));
-            if let Some(alert) =
-                waste_alert_event(&self.session_id, stats, model_switched, vendor, model)
-            {
+            // plans/05 §3.6：浪费金额用同一份 live 单价（取价键 = 缓存跟踪
+            // provider 串，与 yaml providers 键同值才命中；miss → None）
+            let pricing = crate::live_pricing::live_model_pricing(vendor, model);
+            if let Some(alert) = waste_alert_event(
+                &self.session_id,
+                stats,
+                model_switched,
+                pricing.as_ref(),
+            ) {
                 if let Some(sink) = &self.delta_sink {
                     sink.push(alert);
                 }

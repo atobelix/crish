@@ -744,16 +744,11 @@ mod tests {
             c
         };
 
-        let mut child = pair
-            .slave
-            .spawn_command(cmd)
-            .expect("spawn failed");
+        let mut child = pair.slave.spawn_command(cmd).expect("spawn failed");
         drop(pair.slave);
 
         std::thread::sleep(std::time::Duration::from_millis(1200));
-        let status = child
-            .try_wait()
-            .expect("try_wait failed");
+        let status = child.try_wait().expect("try_wait failed");
         assert!(
             status.is_none(),
             "drop slave 后子进程不得退出（HPCON 应仍由 master 保活）: {status:?}"

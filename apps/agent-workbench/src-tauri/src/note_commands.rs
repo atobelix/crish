@@ -75,22 +75,22 @@ fn err_outcome(err: NoteBackendError) -> JsonValue {
 
 #[path = "note_commands_apply.rs"]
 mod note_commands_apply;
+#[path = "note_commands_document.rs"]
+mod note_commands_document;
 #[path = "note_commands_hydrate.rs"]
 mod note_commands_hydrate;
 #[path = "note_commands_mirror.rs"]
 mod note_commands_mirror;
-#[path = "note_commands_document.rs"]
-mod note_commands_document;
 
 // 公开 API 保持：main.rs `command_registry!` 引用的命令路径不变
 pub use note_commands_apply::{
     note_apply_ops, note_document_apply_md, note_redo_text, note_send_to_note, note_undo_text,
 };
-pub use note_commands_hydrate::{note_document_hydrate, note_document_recent, note_query_blocks};
-pub use note_commands_mirror::{note_detect_mirror_drift, note_import_mirror_proposal};
 pub use note_commands_document::{
     note_document_create, note_document_delete, note_document_list, note_document_rename,
 };
+pub use note_commands_hydrate::{note_document_hydrate, note_document_recent, note_query_blocks};
+pub use note_commands_mirror::{note_detect_mirror_drift, note_import_mirror_proposal};
 // SR-06f 拆分补完：tauri 宏生成的 invoke 包装符号（`__cmd__*`）与命令名
 // 常量（`__tauri_command_name_*`）随命令定义于三个子模块，`generate_handler!`
 // 从注册路径（main.rs command_registry! 的 `note_commands::*`）所在模块
@@ -102,6 +102,12 @@ pub use note_commands_apply::{
     __tauri_command_name_note_document_apply_md, __tauri_command_name_note_redo_text,
     __tauri_command_name_note_send_to_note, __tauri_command_name_note_undo_text,
 };
+pub use note_commands_document::{
+    __cmd__note_document_create, __cmd__note_document_delete, __cmd__note_document_list,
+    __cmd__note_document_rename, __tauri_command_name_note_document_create,
+    __tauri_command_name_note_document_delete, __tauri_command_name_note_document_list,
+    __tauri_command_name_note_document_rename,
+};
 pub use note_commands_hydrate::{
     __cmd__note_document_hydrate, __cmd__note_document_recent, __cmd__note_query_blocks,
     __tauri_command_name_note_document_hydrate, __tauri_command_name_note_document_recent,
@@ -111,12 +117,6 @@ pub use note_commands_mirror::{
     __cmd__note_detect_mirror_drift, __cmd__note_import_mirror_proposal,
     __tauri_command_name_note_detect_mirror_drift,
     __tauri_command_name_note_import_mirror_proposal,
-};
-pub use note_commands_document::{
-    __cmd__note_document_create, __cmd__note_document_delete, __cmd__note_document_list,
-    __cmd__note_document_rename, __tauri_command_name_note_document_create,
-    __tauri_command_name_note_document_delete, __tauri_command_name_note_document_list,
-    __tauri_command_name_note_document_rename,
 };
 
 /// 命令层同步 smoke 助手（测试 / 非 Tauri 路径）：apply 后返回结果。

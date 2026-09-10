@@ -642,14 +642,7 @@ pub async fn handle_ws_upgrade(State(state): State<ServerState>, request: Reques
         .unwrap_or_else(|| conex_telemetry::redact::redact_token(&token));
     let token_clone = token.clone();
     ws.on_upgrade(move |socket| {
-        handle_socket(
-            socket,
-            state,
-            token_hash,
-            label,
-            false,
-            Some(token_clone),
-        )
+        handle_socket(socket, state, token_hash, label, false, Some(token_clone))
     })
 }
 
@@ -667,14 +660,7 @@ async fn upgrade_pairing(request: Request, state: ServerState) -> Response {
     let pairing_id = MSG_COUNTER.fetch_add(1, Ordering::Relaxed);
     let token_hash = auth::sha256_hex(format!("pairing-pending:{pairing_id}").as_bytes());
     ws.on_upgrade(move |socket| {
-        handle_socket(
-            socket,
-            state,
-            token_hash,
-            "pairing".to_string(),
-            true,
-            None,
-        )
+        handle_socket(socket, state, token_hash, "pairing".to_string(), true, None)
     })
 }
 
@@ -1057,7 +1043,11 @@ async fn handle_text(text: String, ctx: &ConnCtx) -> Action {
     if has_auth_nonce {
         let now = now_ms();
         let mut hasher = Sha256::new();
-        hasher.update(serde_json::to_string(&envelope.body).unwrap_or_default().as_bytes());
+        hasher.update(
+            serde_json::to_string(&envelope.body)
+                .unwrap_or_default()
+                .as_bytes(),
+        );
         let body_hash: [u8; 32] = hasher.finalize().into();
 
         let check = ctx.state.nonce_guard().check_and_record(
@@ -1069,10 +1059,7 @@ async fn handle_text(text: String, ctx: &ConnCtx) -> Action {
         );
         match check {
             auth::NonceCheckResult::Valid => {}
-            auth::NonceCheckResult::IdempotentRetry {
-                status: _,
-                body: _,
-            } => {
+            auth::NonceCheckResult::IdempotentRetry { status: _, body: _ } => {
                 // 弱网重传完全同构，放行幂等处理
             }
             auth::NonceCheckResult::ReplayDetected => {
@@ -1144,7 +1131,8 @@ async fn handle_text(text: String, ctx: &ConnCtx) -> Action {
             Action::Continue
         }
         MessageKind::Remote(cmd) => {
-            handle_remote_command_frame(cmd.as_str(), envelope.body, envelope.msg_id.as_str(), ctx).await
+            handle_remote_command_frame(cmd.as_str(), envelope.body, envelope.msg_id.as_str(), ctx)
+                .await
         }
         MessageKind::Error => {
             // 对端错误帧：记录（不关闭，宽容）
@@ -1174,10 +1162,7 @@ async fn handle_remote_command_frame(
     ctx: &ConnCtx,
 ) -> Action {
     let Some(backend) = ctx.state.backend() else {
-        let err_body = ErrorBody::new(
-            DeviceErrorCode::Internal,
-            "API backend not initialized",
-        );
+        let err_body = ErrorBody::new(DeviceErrorCode::Internal, "API backend not initialized");
         let res = conex_types::device::commands::CommandResult::failure(msg_id, err_body);
         return send_envelope(ctx, MessageKind::Result(cmd.to_string()), res).await;
     };
@@ -1204,19 +1189,16 @@ async fn handle_remote_command_frame(
             .await
         }
         "listPendingApprovals" => {
-            // 契约宽容：缺省参数 unwrap_or_default（与原实现一致）
-            let params = serde_json::from_value::<
-                conex_types::device::commands::ListPendingApprovalsParams,
-            >(params_val)
-            .unwrap_or_default();
+            // Null / 缺参 → 合法空对象，避免 run_remote_command 二次反序列化恒 CmdInvalid
+            let params_val = normalize_list_pending_approvals_params(params_val);
             let be = backend.clone();
             run_remote_command(
                 "listPendingApprovals",
                 msg_id,
-                serde_json::Value::Null,
-                move |_p: conex_types::device::commands::ListPendingApprovalsParams| {
+                params_val,
+                move |p: conex_types::device::commands::ListPendingApprovalsParams| {
                     let be = be.clone();
-                    async move { be.list_pending_approvals(params).await }
+                    async move { be.list_pending_approvals(p).await }
                 },
             )
             .await
@@ -1782,6 +1764,16 @@ fn token_from_request(uri: &Uri, headers: &HeaderMap) -> Option<String> {
 /// Mutex 锁（中毒自愈，跟随 auth.rs 先例）
 fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+/// listPendingApprovals 空参契约：JSON `null` 视为 `{}`，避免 serde 对 struct
+/// 反序列化恒失败 → CmdInvalid（F3 防回潮）。
+fn normalize_list_pending_approvals_params(params_val: Value) -> Value {
+    if params_val.is_null() {
+        serde_json::json!({})
+    } else {
+        params_val
+    }
 }
 
 #[cfg(test)]
@@ -3555,5 +3547,37 @@ mod tests {
         assert_eq!(err.code, DeviceErrorCode::AuthStale);
 
         let _ = ws.close(None).await;
+    }
+
+    /// F3：listPendingApprovals 空参契约——Null/`{}` 不得恒 CmdInvalid
+    #[test]
+    fn list_pending_approvals_null_and_empty_object_contract() {
+        use conex_types::device::commands::ListPendingApprovalsParams;
+
+        // 裸 Null 对 struct 反序列化失败（记录为何必须 normalize）
+        let bare_null = serde_json::from_value::<ListPendingApprovalsParams>(Value::Null);
+        assert!(
+            bare_null.is_err(),
+            "裸 Null 必须无法直接反序列化为 ListPendingApprovalsParams"
+        );
+
+        // normalize(Null) → {} → 成功（防回潮恒 CmdInvalid）
+        let normalized = normalize_list_pending_approvals_params(Value::Null);
+        assert_eq!(normalized, serde_json::json!({}));
+        let from_null: ListPendingApprovalsParams =
+            serde_json::from_value(normalized).expect("Null→{} 必须可反序列化");
+        assert_eq!(from_null.after_sequence, None);
+
+        // 直接 {} 成功
+        let from_empty: ListPendingApprovalsParams =
+            serde_json::from_value(serde_json::json!({})).expect("{} 必须可反序列化");
+        assert_eq!(from_empty.after_sequence, None);
+
+        // 非空对象透传
+        let with_seq =
+            normalize_list_pending_approvals_params(serde_json::json!({ "afterSequence": 42u64 }));
+        let parsed: ListPendingApprovalsParams =
+            serde_json::from_value(with_seq).expect("带 afterSequence 必须可反序列化");
+        assert_eq!(parsed.after_sequence, Some(42));
     }
 }

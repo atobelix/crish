@@ -82,9 +82,8 @@ mod dpapi {
             ));
         }
 
-        let slice = unsafe {
-            std::slice::from_raw_parts(out_blob.pb_data, out_blob.cb_data as usize)
-        };
+        let slice =
+            unsafe { std::slice::from_raw_parts(out_blob.pb_data, out_blob.cb_data as usize) };
         let result = slice.to_vec();
 
         unsafe {
@@ -127,9 +126,8 @@ mod dpapi {
             ));
         }
 
-        let slice = unsafe {
-            std::slice::from_raw_parts(out_blob.pb_data, out_blob.cb_data as usize)
-        };
+        let slice =
+            unsafe { std::slice::from_raw_parts(out_blob.pb_data, out_blob.cb_data as usize) };
         let result = slice.to_vec();
 
         unsafe {
@@ -259,7 +257,9 @@ mod tests {
         let store = SecureCredentialStore::new(temp_dir.clone());
 
         let raw_token = "crish-refresh-token-secure-secret-xyz-987654321";
-        store.save_refresh_token(raw_token).expect("Save must succeed");
+        store
+            .save_refresh_token(raw_token)
+            .expect("Save must succeed");
 
         let loaded = store.load_refresh_token().expect("Load must succeed");
         assert_eq!(loaded, Some(raw_token.to_string()));
@@ -274,18 +274,23 @@ mod tests {
     /// T13：通用命名密文 roundtrip（write/read/delete + 路径注入拒绝）
     #[test]
     fn test_named_secret_roundtrip() {
-        let temp_dir = std::env::temp_dir().join(format!("crish_test_auth_n_{}", std::process::id()));
+        let temp_dir =
+            std::env::temp_dir().join(format!("crish_test_auth_n_{}", std::process::id()));
         let store = SecureCredentialStore::new(temp_dir.clone());
 
         let payload = b"{\"id\":\"u1\"}";
-        store.write_secret("user_session", payload).expect("write must succeed");
+        store
+            .write_secret("user_session", payload)
+            .expect("write must succeed");
         let loaded = store
             .read_secret("user_session")
             .expect("read must succeed")
             .expect("secret must exist");
         assert_eq!(loaded, payload);
 
-        store.delete_secret("user_session").expect("delete must succeed");
+        store
+            .delete_secret("user_session")
+            .expect("delete must succeed");
         assert!(store.read_secret("user_session").unwrap().is_none());
 
         // 路径注入拒绝
@@ -300,9 +305,12 @@ mod tests {
     #[test]
     fn test_unix_permissions() {
         use std::os::unix::fs::PermissionsExt;
-        let temp_dir = std::env::temp_dir().join(format!("crish_test_auth_p_{}", std::process::id()));
+        let temp_dir =
+            std::env::temp_dir().join(format!("crish_test_auth_p_{}", std::process::id()));
         let store = SecureCredentialStore::new(temp_dir.clone());
-        store.save_refresh_token("perm-check-token").expect("save must succeed");
+        store
+            .save_refresh_token("perm-check-token")
+            .expect("save must succeed");
 
         let auth_dir = temp_dir.join("auth");
         let file_mode = fs::metadata(auth_dir.join("user_refresh.sec"))

@@ -22,12 +22,8 @@ mod platform {
         CreateCompatibleDC, DeleteDC, DeleteObject, GetDIBits, GetObjectW, BITMAP, BITMAPINFO,
         BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS,
     };
-    use windows_sys::Win32::UI::Shell::{
-        SHGetFileInfoW, SHFILEINFOW, SHGFI_ICON, SHGFI_SMALLICON,
-    };
-    use windows_sys::Win32::UI::WindowsAndMessaging::{
-        DestroyIcon, GetIconInfo, HICON, ICONINFO,
-    };
+    use windows_sys::Win32::UI::Shell::{SHGetFileInfoW, SHFILEINFOW, SHGFI_ICON, SHGFI_SMALLICON};
+    use windows_sys::Win32::UI::WindowsAndMessaging::{DestroyIcon, GetIconInfo, HICON, ICONINFO};
 
     // 全局内存级图标缓存（路径规范化 -> Data URL），避免打开菜单时重复 Win32 I/O
     static ICON_CACHE: RwLock<Option<HashMap<PathBuf, String>>> = RwLock::new(None);
@@ -122,7 +118,8 @@ mod platform {
             if offset + 2 > data.len() {
                 return None;
             }
-            let id_list_size = u16::from_le_bytes(data[offset..offset + 2].try_into().ok()?) as usize;
+            let id_list_size =
+                u16::from_le_bytes(data[offset..offset + 2].try_into().ok()?) as usize;
             offset += 2 + id_list_size;
         }
         if (flags & 0x02) != 0 {
@@ -138,7 +135,8 @@ mod platform {
             let header_size = u32::from_le_bytes(link_info[4..8].try_into().ok()?) as usize;
             // 优先读取 Unicode 绝对路径 (Offset 0x1C)
             if header_size >= 36 {
-                let unicode_offset = u32::from_le_bytes(link_info[28..32].try_into().ok()?) as usize;
+                let unicode_offset =
+                    u32::from_le_bytes(link_info[28..32].try_into().ok()?) as usize;
                 if unicode_offset < link_info_size {
                     let bytes = &link_info[unicode_offset..link_info_size];
                     let u16s: Vec<u16> = bytes

@@ -685,6 +685,7 @@ mod integration_tests {
             endpoint: Endpoint::ChatCompletions,
             stream: true,
             extra: std::collections::BTreeMap::new(),
+            ..Default::default()
         };
         // 参数位置 unsized coercion:Arc<HttpProviderCall> → Arc<dyn ProviderCall>
         state.engine().inject_provider_for_test(provider, config);
@@ -712,6 +713,8 @@ mod integration_tests {
             max_stalled_rounds: None,
             reasoning_effort: None,
             context_state: None,
+            content: None,
+            has_images: None,
         }
     }
 
@@ -821,6 +824,7 @@ mod integration_tests {
                 endpoint: Endpoint::ChatCompletions,
                 stream: true,
                 extra: std::collections::BTreeMap::new(),
+                ..Default::default()
             },
         );
         let (state, db) = run_state_with_http_provider(Arc::new(provider), &server.base_url("/v1"));
@@ -876,6 +880,7 @@ mod integration_tests {
                 endpoint: Endpoint::ChatCompletions,
                 stream: true,
                 extra: std::collections::BTreeMap::new(),
+                ..Default::default()
             },
         );
         let (state, db) = run_state_with_http_provider(Arc::new(provider), &server.base_url("/v1"));
@@ -920,6 +925,7 @@ mod integration_tests {
                 endpoint: Endpoint::ChatCompletions,
                 stream: true,
                 extra: std::collections::BTreeMap::new(),
+                ..Default::default()
             },
         );
         let (state, db) = run_state_with_http_provider(Arc::new(provider), &server.base_url("/v1"));
@@ -978,6 +984,7 @@ mod integration_tests {
                 endpoint: Endpoint::ChatCompletions,
                 stream: true,
                 extra: std::collections::BTreeMap::new(),
+                ..Default::default()
             },
         );
         let (state, db) = run_state_with_http_provider(Arc::new(provider), &server.base_url("/v1"));

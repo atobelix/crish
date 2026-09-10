@@ -421,6 +421,10 @@ pub struct RunUsage {
     /// 缓存温暖截止（epoch ms；前端据此驱动冷缓存提示；None = 无 TTL 数据）
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub warm_until_ms: Option<u64>,
+    /// 引擎微元账（plans/05 T5.3：唯一算费入口 = PricingEngine；None = 未定价）。
+    /// 与引擎 `CostBreakdown` 同形（serde camelCase），前端只渲染。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cost: Option<agent_provider::pricing::CostBreakdown>,
 }
 
 impl RunUsage {
@@ -435,7 +439,10 @@ impl RunUsage {
     ///   `input_total == 0` → None。
     /// T-40 轮末合并已兑现：CoreRunState::run_usage 消费（core_run_commands.rs
     /// get_run_usage 回退路径 + 测试），E1 过期 allow 已删除（13-T5 核销）。
-    pub fn from_run_cache_stats(stats: RunCacheStats) -> Option<RunUsage> {
+    pub fn from_run_cache_stats(
+        stats: RunCacheStats,
+        pricing: Option<&agent_provider::pricing::ModelPricing>,
+    ) -> Option<RunUsage> {
         if stats.sample_count == 0 {
             return None;
         }
@@ -444,6 +451,15 @@ impl RunUsage {
             .saturating_add(stats.cache_read_tokens)
             .saturating_add(stats.cache_write_tokens);
         let ratio = |part: u64| (input_total != 0).then(|| part as f64 / input_total as f64);
+        // 唯一算费入口：PricingEngine 微元（扣 cache_read、不扣 cache_write；
+        // pricing None → cost None = 未定价，不是 0）
+        let cost = agent_provider::pricing::PricingEngine::calculate_cost(
+            &pricing.cloned(),
+            stats.prompt_tokens,
+            stats.completion_tokens,
+            stats.cache_read_tokens,
+            stats.cache_write_tokens,
+        );
         Some(RunUsage {
             prompt_tokens: stats.prompt_tokens,
             completion_tokens: stats.completion_tokens,
@@ -456,6 +472,7 @@ impl RunUsage {
             write_ratio: ratio(stats.cache_write_tokens),
             missed_tokens: Some(stats.missed_tokens),
             warm_until_ms: stats.warm_until_ms,
+            cost,
         })
     }
 }
@@ -1461,7 +1478,7 @@ mod tests {
     /// writeRatio 按 C9 恒等式重算（input_total = miss + read + write）
     #[test]
     fn run_usage_from_cache_stats_maps_all_fields() {
-        let usage = RunUsage::from_run_cache_stats(usage_stats()).expect("有样本必须映射");
+        let usage = RunUsage::from_run_cache_stats(usage_stats(), None).expect("有样本必须映射");
         assert_eq!(usage.prompt_tokens, 1_000);
         assert_eq!(usage.completion_tokens, 50);
         assert_eq!(usage.total_tokens, 1_050);
@@ -1499,7 +1516,7 @@ mod tests {
             sample_count: 0,
             ..Default::default()
         };
-        assert!(RunUsage::from_run_cache_stats(stats).is_none());
+        assert!(RunUsage::from_run_cache_stats(stats, None).is_none());
     }
 
     /// T-40：input_total == 0（无任何输入侧数据）→ hitRatio / writeRatio
@@ -1516,10 +1533,96 @@ mod tests {
             sample_count: 1,
             ..Default::default()
         };
-        let usage = RunUsage::from_run_cache_stats(stats).expect("有样本必须映射");
+        let usage = RunUsage::from_run_cache_stats(stats, None).expect("有样本必须映射");
         assert_eq!(usage.cache_read_tokens, Some(0));
         assert_eq!(usage.hit_ratio, None, "input_total == 0 → 占比隐藏");
         assert_eq!(usage.write_ratio, None);
         assert_eq!(usage.warm_until_ms, None);
+    }
+
+    /// T5.6 宿主入账测（plans/05 §7.2）：live 单价 + 固定 usage →
+    /// `RunUsage.cost.formatted_total` 等于引擎手算；改价再 settle 字符串变；
+    /// 未定价 → cost None；四价 0 无阶梯 → 免费；CNY → ¥。
+    #[test]
+    fn run_usage_cost_equals_pricing_engine_and_three_states() {
+        use agent_provider::pricing::{Currency, ModelPricing, PricingUnit};
+        let stats = usage_stats();
+        let pricing = ModelPricing {
+            currency: Currency::Usd,
+            unit: PricingUnit::Per1mTokens,
+            input: 3.0,
+            output: 9.0,
+            cache_read: Some(0.1),
+            cache_write: Some(0.0),
+            tiers: vec![],
+        };
+        // prompt=1_000 / cache_read=800 → 输入段 200×3/1M=0.0006 + 输出 50×9/1M=0.00045
+        // + cache_read 800×0.1/1M=0.00008 → 0.00113 → 引擎格式化 "$0.001130"
+        let usage = RunUsage::from_run_cache_stats(stats.clone(), Some(&pricing))
+            .expect("有定价必须出账");
+        let engine_cost = agent_provider::pricing::PricingEngine::calculate_cost(
+            &Some(pricing.clone()),
+            stats.prompt_tokens,
+            stats.completion_tokens,
+            stats.cache_read_tokens,
+            stats.cache_write_tokens,
+        )
+        .expect("引擎必须出账");
+        assert_eq!(
+            usage.cost.as_ref().map(|c| c.formatted_total.clone()),
+            Some(engine_cost.formatted_total.clone()),
+            "宿主账必须与引擎字符串字节一致"
+        );
+
+        // 改价（input 3.0 → 30.0）→ 字符串变，token 字段不变
+        let mut priced2 = pricing.clone();
+        priced2.input = 30.0;
+        let usage2 = RunUsage::from_run_cache_stats(stats.clone(), Some(&priced2))
+            .expect("改价后必须出账");
+        assert_ne!(
+            usage2.cost.as_ref().map(|c| c.formatted_total.clone()),
+            usage.cost.as_ref().map(|c| c.formatted_total.clone()),
+            "改 live 单价后 formatted_total 必须变"
+        );
+        assert_eq!(usage2.prompt_tokens, usage.prompt_tokens, "token 不变");
+
+        // 未定价 → cost None（不是 0）
+        let unpriced = RunUsage::from_run_cache_stats(stats.clone(), None).expect("有样本");
+        assert!(unpriced.cost.is_none(), "无定价 → cost None");
+
+        // 四价 0 无阶梯 → 免费
+        let free = ModelPricing {
+            currency: Currency::Usd,
+            unit: PricingUnit::Per1mTokens,
+            input: 0.0,
+            output: 0.0,
+            cache_read: None,
+            cache_write: None,
+            tiers: vec![],
+        };
+        let free_usage =
+            RunUsage::from_run_cache_stats(stats.clone(), Some(&free)).expect("有样本");
+        let free_cost = free_usage.cost.expect("免费模型必须出账");
+        assert!(free_cost.is_free);
+        assert_eq!(free_cost.formatted_total, "免费");
+
+        // CNY → ¥ 前缀（无硬编码 $）
+        let cny = ModelPricing {
+            currency: Currency::Cny,
+            unit: PricingUnit::Per1mTokens,
+            input: 3.0,
+            output: 9.0,
+            cache_read: None,
+            cache_write: None,
+            tiers: vec![],
+        };
+        let cny_usage = RunUsage::from_run_cache_stats(stats, Some(&cny)).expect("有样本");
+        assert!(
+            cny_usage
+                .cost
+                .as_ref()
+                .is_some_and(|c| c.formatted_total.starts_with('¥')),
+            "CNY 账必须带 ¥ 前缀"
+        );
     }
 }

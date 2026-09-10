@@ -637,11 +637,7 @@ pub(crate) struct WorkflowCreationChannelBinding {
 impl std::fmt::Debug for WorkflowCreationChannelBinding {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // 绑定内含 AppHandle / WorkflowBackend，均非稳定调试面——只披露绑定状态
-        let bound = self
-            .inner
-            .lock()
-            .map(|g| g.is_some())
-            .unwrap_or(false);
+        let bound = self.inner.lock().map(|g| g.is_some()).unwrap_or(false);
         f.debug_struct("WorkflowCreationChannelBinding")
             .field("bound", &bound)
             .finish()
@@ -658,10 +654,7 @@ impl WorkflowCreationChannelBinding {
 
     /// 生产绑定（main.rs setup：workflow_state 创建后取 backend + AppHandle）
     pub(crate) fn bind(&self, backend: Arc<WorkflowBackend>, app: tauri::AppHandle) {
-        let mut guard = self
-            .inner
-            .lock()
-            .unwrap_or_else(|e| e.into_inner());
+        let mut guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         *guard = Some(BoundWorkflowBackend { backend, app });
     }
 }
@@ -676,9 +669,7 @@ impl Default for WorkflowCreationChannelBinding {
 /// [WorkflowScheduleWire::parse] 复用既有校验链；timezone 仅展示语义——
 /// 工具未提供时落 "local" 占位，前端列表按 IANA 校验失败回退本机时区展示，
 /// 调度真源始终按本机时区计算）
-fn workflow_schedule_wire_json(
-    input: &agent_tools::WorkflowCreateInput,
-) -> serde_json::Value {
+fn workflow_schedule_wire_json(input: &agent_tools::WorkflowCreateInput) -> serde_json::Value {
     match input.schedule_type.as_str() {
         "daily" => serde_json::json!({
             "type": "daily",
@@ -705,10 +696,7 @@ impl agent_tools::WorkflowCreationChannel for WorkflowCreationChannelBinding {
         input: agent_tools::WorkflowCreateInput,
     ) -> Result<agent_tools::WorkflowCreateOutput, agent_tools::WorkflowCreateError> {
         let bound = {
-            let guard = self
-                .inner
-                .lock()
-                .unwrap_or_else(|e| e.into_inner());
+            let guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());
             match guard.as_ref() {
                 Some(b) => BoundWorkflowBackend {
                     backend: Arc::clone(&b.backend),
@@ -733,7 +721,9 @@ impl agent_tools::WorkflowCreationChannel for WorkflowCreationChannelBinding {
                 input.enabled.unwrap_or(true),
             )
             .await
-            .map_err(|e: CoreError| agent_tools::WorkflowCreateError::InvalidInput(e.to_string()))?;
+            .map_err(|e: CoreError| {
+                agent_tools::WorkflowCreateError::InvalidInput(e.to_string())
+            })?;
 
         // 全域状态广播（05 详案 §2.5）：工具路径与 IPC 命令路径共用同一
         // 发射 helper，前端 useWorkflowsState 监听后刷新列表
@@ -757,11 +747,7 @@ impl agent_tools::WorkflowCreationChannel for WorkflowCreationChannelBinding {
 
 /// workflow 全域事件发射 helper（唯一发射面：IPC 命令路径与工具通道路径
 /// 共用；发射失败仅留痕不阻断注册主流程——事件是通知面，不是落盘面）
-pub(crate) fn emit_workflow_event(
-    app: &tauri::AppHandle,
-    event: &str,
-    payload: serde_json::Value,
-) {
+pub(crate) fn emit_workflow_event(app: &tauri::AppHandle, event: &str, payload: serde_json::Value) {
     use tauri::Emitter;
     if let Err(e) = app.emit(event, payload) {
         tracing::warn!(target: "workflow", "workflow 事件发射失败（{event}）：{e}");

@@ -654,6 +654,9 @@ impl ApiBackend for CoreStateBackend {
             // I1-α②：远程 run 不携带 context-state（状态切换告知仅
             // 桌面前端用户提交边界下发）
             context_state: None,
+            // plans/04 §4.2：远程 run 不携带多模态 content（无桌面附件通道）
+            content: None,
+            has_images: None,
         };
         let response = run_task_impl(Arc::clone(&self.core), options)
             .await
@@ -1298,6 +1301,7 @@ mod tests {
             endpoint: Endpoint::ChatCompletions,
             stream: true,
             extra: std::collections::BTreeMap::new(),
+            ..Default::default()
         };
         state.engine().inject_provider_for_test(routed, config);
         state.run_restore().await;
@@ -1761,6 +1765,7 @@ mod tests {
             endpoint: Endpoint::ChatCompletions,
             stream: true,
             extra: std::collections::BTreeMap::new(),
+            ..Default::default()
         };
         state.engine().inject_provider_for_test(routed, config);
         state.run_restore().await;

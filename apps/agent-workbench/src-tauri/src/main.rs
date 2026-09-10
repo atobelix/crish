@@ -52,10 +52,13 @@ mod core_error;
 mod core_event_bridge;
 mod core_query_commands;
 mod core_run_commands;
+// 计费取价适配（plans/05 T5.2：唯一取价源 = live yaml 投影）
+mod live_pricing;
 // R1 撤回命令（统一输入流收敛战役；命令面独立于 run/ 目录——I1-β 并行
 // 位在改 run_idle/run_launch/engine_build，避免争写）
 mod dev_mcp;
 mod engine;
+pub(crate) use engine::engine_provider;
 mod fs_commands;
 mod git;
 mod host_openers;
@@ -337,7 +340,10 @@ command_registry![
     ("auth_refresh_token", auth_commands::auth_refresh_token),
     ("auth_list_devices", auth_commands::auth_list_devices),
     ("auth_revoke_device", auth_commands::auth_revoke_device),
-    ("auth_get_relay_ticket", auth_commands::auth_get_relay_ticket),
+    (
+        "auth_get_relay_ticket",
+        auth_commands::auth_get_relay_ticket
+    ),
     // ── 会话持久化（B，§2.2）──
     ("list_sessions", session_commands::list_sessions),
     ("load_session_body", session_commands::load_session_body),
@@ -477,18 +483,9 @@ command_registry![
     ("note_undo_text", note_commands::note_undo_text),
     ("note_redo_text", note_commands::note_redo_text),
     ("note_document_list", note_commands::note_document_list),
-    (
-        "note_document_create",
-        note_commands::note_document_create
-    ),
-    (
-        "note_document_rename",
-        note_commands::note_document_rename
-    ),
-    (
-        "note_document_delete",
-        note_commands::note_document_delete
-    ),
+    ("note_document_create", note_commands::note_document_create),
+    ("note_document_rename", note_commands::note_document_rename),
+    ("note_document_delete", note_commands::note_document_delete),
     // ── D4a 命令面：子代理显式恢复与关闭（D4 §3.1/§3.2/§3.5）。
     //    Tauri 宏约束：命令函数须以模块限定路径注册（裸标识符路径触发
     //    generate_handler! 的 `__cmd__<name>` 宏命名冲突），故命令壳定义

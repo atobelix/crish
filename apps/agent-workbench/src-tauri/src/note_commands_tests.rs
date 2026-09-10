@@ -654,7 +654,10 @@ async fn note_document_lifecycle_ipc_roundtrip() {
     })
     .await
     .unwrap();
-    assert_eq!(apply_res["ok"], true, "新建文档首笔编辑必须成功提交不触发 CAS 冲突: {apply_res}");
+    assert_eq!(
+        apply_res["ok"], true,
+        "新建文档首笔编辑必须成功提交不触发 CAS 冲突: {apply_res}"
+    );
     assert_eq!(apply_res["applied"], 1);
     assert_eq!(apply_res["rev"], 1, "首笔编辑成功后 rev 必须前进至 1");
 
@@ -684,4 +687,3 @@ async fn note_document_lifecycle_ipc_roundtrip() {
 
     let _ = std::fs::remove_dir_all(dir);
 }
-

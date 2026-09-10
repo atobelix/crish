@@ -14,7 +14,7 @@ use std::sync::Arc;
 
 use agent_provider::config::Endpoint;
 use agent_provider::events::ProviderStreamEvent as WireEvent;
-use agent_provider::request::{describe_model, WireProtocol};
+use agent_provider::request::WireProtocol;
 use agent_provider::sse::SseFrame;
 use conex_types::error::ProviderErrorKind;
 use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
@@ -30,11 +30,76 @@ fn config(base_url: &str, model: &str, endpoint: Endpoint) -> EngineProviderConf
         endpoint,
         stream: true,
         extra: BTreeMap::new(),
+        ..Default::default()
     }
 }
 
 fn call_for(base_url: &str, model: &str, endpoint: Endpoint) -> HttpProviderCall {
     HttpProviderCall::new(reqwest::Client::new(), config(base_url, model, endpoint))
+}
+
+/// 安装 live yaml 综合夹具（plans/04：协议 / thinking 字典 / compat / headers
+/// 全部从 yaml 长出，禁止 URL / 前缀启发式）。
+fn install_live_fixture() {
+    protocol::reload_live_catalog_from_yaml_str(
+        r#"
+version: 2
+providers:
+  acme:
+    displayName: Acme
+    baseUrl: "https://api.acme.test/v1"
+    protocol: "openai/chat"
+    compat:
+      thinkingFormat: openai
+      maxTokensField: max_completion_tokens
+    headers:
+      x-acme-affinity: "acme-1"
+    models:
+      - id: acme-think
+        thinking:
+          High: "high"
+  deepseek:
+    displayName: DeepSeek
+    baseUrl: "https://api.deepseek.com/v1"
+    protocol: "openai/chat"
+    models:
+      - id: deepseek-v4-flash
+        thinking:
+          High: "high"
+          Low: "low"
+          Max: "max"
+      - id: deepseek-v4
+        protocol: "openai/responses"
+        thinking:
+          High: "high"
+  anthropic:
+    displayName: Anthropic
+    baseUrl: "https://api.anthropic.com"
+    protocol: "anthropic/messages"
+    compat:
+      thinkingFormat: anthropic
+    models:
+      - id: claude-sonnet-4
+        thinking:
+          High: "16384"
+"#,
+    )
+    .expect("live 综合夹具必须解析成功");
+}
+
+/// 指向 live 夹具的配置（provider_id = yaml providers 键；base_url 占位——
+/// 协议/思考/字段名不依赖 URL）。
+fn live_config(provider_id: &str, model: &str) -> EngineProviderConfig {
+    EngineProviderConfig {
+        base_url: "https://placeholder.invalid".to_string(),
+        api_key: "k-test".to_string(),
+        model: model.to_string(),
+        endpoint: Endpoint::ChatCompletions,
+        stream: true,
+        extra: BTreeMap::new(),
+        provider_id: Some(provider_id.to_string()),
+        ..Default::default()
+    }
 }
 
 /// 单条 user 消息会话
@@ -207,33 +272,36 @@ fn chat_and_responses_rails_preserved() {
 
 // ── 验收 3：思考档位（series 级）消费 ─────────────────────────────
 
-/// 生效协议由配置推导（单一真源）：同一配置下 URL/body/parser 同轨。
-/// chat/responses 两态经 [effective_protocol] 推导可真跑；anthropic/gemini 为
-/// model 级 mode 强路由（catalog mode，测试侧经显式协议 dispatch 断言）。
+/// 生效协议由 live yaml 推导（单一真源）：`Model.protocol ≻ Provider.protocol ≻
+/// openai/chat`；lookup 未命中 → chat（fail-closed）。URL / 端点字段不参与。
 #[test]
 fn effective_protocol_keeps_url_body_parser_in_rail() {
-    // responses 配置（deepseek-v4-flash + Responses 端点）：协议推导 + URL + parser 一致
-    let resp = call_for(
-        "https://api.deepseek.com/v1",
-        "deepseek-v4-flash",
-        Endpoint::Responses,
+    install_live_fixture();
+    // responses 配置（deepseek-v4 模型级 protocol openai/responses）
+    let resp = HttpProviderCall::new(
+        reqwest::Client::new(),
+        live_config("deepseek", "deepseek-v4"),
     );
     assert_eq!(effective_protocol(&resp.config), WireProtocol::Responses);
-    // 未收录模型（deepseek-custom + Responses 端点）保守降级 chat（既有语义）
-    let unknown = call_for(
-        "https://api.deepseek.com/v1",
-        "deepseek-custom",
-        Endpoint::Responses,
-    );
-    assert_eq!(effective_protocol(&unknown.config), WireProtocol::Chat);
-
-    // chat 配置（deepseek + ChatCompletions 端点）→ chat
-    let chat = call_for(
-        "https://api.deepseek.com/v1",
-        "deepseek-v4",
-        Endpoint::ChatCompletions,
+    // chat 配置（deepseek-v4-flash 继承供应商 openai/chat）
+    let chat = HttpProviderCall::new(
+        reqwest::Client::new(),
+        live_config("deepseek", "deepseek-v4-flash"),
     );
     assert_eq!(effective_protocol(&chat.config), WireProtocol::Chat);
+    // 未命中模型 / 无 provider_id → 保守 chat（fail-closed，禁止 URL 猜）
+    let unknown = call_for(
+        "https://api.anthropic.com",
+        "claude-anything",
+        Endpoint::ChatCompletions,
+    );
+    assert_eq!(effective_protocol(&unknown.config), WireProtocol::Chat);
+    // anthropic / gemini 模型级路由 → 对应轨
+    let anthropic = HttpProviderCall::new(
+        reqwest::Client::new(),
+        live_config("anthropic", "claude-sonnet-4"),
+    );
+    assert_eq!(effective_protocol(&anthropic.config), WireProtocol::Anthropic);
 
     // 显式协议 dispatch 与协议一致：anthropic / gemini 的 URL/body/parser 同轨
     for protocol in [WireProtocol::Anthropic, WireProtocol::Gemini] {
@@ -252,17 +320,27 @@ fn effective_protocol_keeps_url_body_parser_in_rail() {
     }
 }
 
-/// anthropic 轨 + Some(High) → body 含 thinking.budget_tokens
+/// anthropic 轨 + Some(High) → body 含 thinking.budget_tokens（预算来自 yaml
+/// 字典数字，禁止魔法刻度）
 #[test]
 fn thinking_high_on_anthropic_rail_emits_budget_tokens() {
-    let call = call_for(
-        "https://api.anthropic.com",
-        "claude-sonnet-4",
-        Endpoint::ChatCompletions,
+    install_live_fixture();
+    let call = HttpProviderCall::new(
+        reqwest::Client::new(),
+        live_config("anthropic", "claude-sonnet-4"),
     );
     let protocol = WireProtocol::Anthropic;
     let messages = vec![user_msg("你好")];
-    let request = single_user_request(&messages, Some(LoopEffort::High));
+    // max_tokens 放宽到 30000：budget 16384 不被物理上限钳制（单用户请求
+    // 默认 1024 会触发 max_cap-4096 钳制）
+    let request = ProviderRequest {
+        messages: &messages,
+        tools: Vec::new(),
+        max_tokens: Some(30_000),
+        system_prompt: Some("你是助手。"),
+        session_id: None,
+        reasoning_effort: Some(LoopEffort::High),
+    };
     let body = call.request_body_for(protocol, &request);
     assert!(
         body.get("thinking").is_some(),
@@ -272,16 +350,16 @@ fn thinking_high_on_anthropic_rail_emits_budget_tokens() {
     let budget = body["thinking"]["budget_tokens"]
         .as_u64()
         .expect("budget_tokens 应为整数");
-    assert!(budget > 0, "budget_tokens 应 > 0，实际 {budget}");
+    assert_eq!(budget, 16384, "预算 = yaml 字典 High 值：{body}");
 }
 
-/// chat 轨 + Some(High) → body 含 reasoning_effort 字段
+/// chat 轨 + Some(High) → body 含 reasoning_effort 字段（值 = yaml 字典 wire）
 #[test]
 fn thinking_high_on_chat_rail_emits_reasoning_effort() {
-    let call = call_for(
-        "https://api.example.com/v1",
-        "gpt-5",
-        Endpoint::ChatCompletions,
+    install_live_fixture();
+    let call = HttpProviderCall::new(
+        reqwest::Client::new(),
+        live_config("acme", "acme-think"),
     );
     let protocol = WireProtocol::Chat;
     let messages = vec![user_msg("你好")];
@@ -289,7 +367,7 @@ fn thinking_high_on_chat_rail_emits_reasoning_effort() {
     let body = call.request_body_for(protocol, &request);
     assert_eq!(
         body["reasoning_effort"], "high",
-        "chat 轨思考档位应写入 reasoning_effort：{body}"
+        "chat 轨思考档位应写入 reasoning_effort（字典值）：{body}"
     );
 }
 
@@ -397,75 +475,76 @@ fn request_with_session<'a>(
 
 // ── 验收 T3.5：会话亲和头族 seam（G1-e） ─────────────────────────
 
-/// 请求头（chat 轨）在 session_id 非空时注入会话亲和头；为空不注入。
-/// 断言经真实 `request_headers_for`（thread request.session_id）。
+/// 请求头（chat 轨）：yaml `providers.*.headers` 声明的头随请求发出；
+/// 无条件全局 DeepSeek 头已删除（M16，plans/04 §2.4）。
 #[test]
 fn session_head_injected_when_session_id_present() {
-    let call = call_for(
-        "https://api.example.com/v1",
-        "gpt-5",
-        Endpoint::ChatCompletions,
-    );
+    install_live_fixture();
     let messages = vec![user_msg("你好")];
 
-    // 非空 session_id → 注入 x-deepseek-harness-session-id
+    // acme 声明 x-acme-affinity → 随请求发出（session_id 非空）
+    let call = HttpProviderCall::new(
+        reqwest::Client::new(),
+        live_config("acme", "acme-think"),
+    );
     let request = request_with_session(&messages, Some("ses-123"));
     let headers = call.request_headers_for(WireProtocol::Chat, &request);
     assert!(
         headers
             .iter()
-            .any(|(name, value)| *name == "x-deepseek-harness-session-id" && value == "ses-123"),
-        "session_id 非空应注入会话亲和头：{headers:?}"
+            .any(|(name, value)| name == "x-acme-affinity" && value == "acme-1"),
+        "yaml 声明的亲和头应注入：{headers:?}"
     );
-
-    // None → 不注入（对齐 options.sessionId !== undefined 守卫）
-    let request = request_with_session(&messages, None);
-    let headers = call.request_headers_for(WireProtocol::Chat, &request);
     assert!(
         !headers
             .iter()
-            .any(|(name, _)| *name == "x-deepseek-harness-session-id"),
-        "session_id 为空不得注入会话亲和头：{headers:?}"
+            .any(|(name, _)| name == "x-deepseek-harness-session-id"),
+        "不得无条件注入 x-deepseek-harness-session-id（M16）：{headers:?}"
     );
 
-    // 空白串也视为不注入（trim 守卫）
-    let request = request_with_session(&messages, Some("   "));
-    let headers = call.request_headers_for(WireProtocol::Chat, &request);
+    // 未声明供应商（deepseek）→ 零 x-* 追加头（无声明不发）
+    let call = HttpProviderCall::new(
+        reqwest::Client::new(),
+        live_config("deepseek", "deepseek-v4-flash"),
+    );
+    let headers = call.request_headers_for(
+        WireProtocol::Chat,
+        &request_with_session(&messages, Some("ses-123")),
+    );
     assert!(
         !headers
             .iter()
-            .any(|(name, _)| *name == "x-deepseek-harness-session-id"),
-        "空白 session_id 不得注入会话亲和头"
+            .any(|(name, _)| name.starts_with("x-")),
+        "未声明供应商不得注入任何 x-* 头：{headers:?}"
     );
 }
 
-/// 既有亲和头（Grok → x-grok-conv-id）与会话亲和头族可并存（seam 不破坏既有）。
+/// yaml 声明头与 Authorization 并存；无条件 DeepSeek 头绝不再出现。
 #[test]
 fn session_head_coexists_with_grok_affinity_header() {
-    // Grok 由 model 前缀推断（catalog 真源；base_url 占位 api.example.com）
-    let call = call_for(
-        "https://api.example.com/v1",
-        "grok-4.5",
-        Endpoint::ChatCompletions,
+    install_live_fixture();
+    let call = HttpProviderCall::new(
+        reqwest::Client::new(),
+        live_config("acme", "acme-think"),
     );
     let messages = vec![user_msg("你好")];
     let request = request_with_session(&messages, Some("ses-abc"));
     let headers = call.request_headers_for(WireProtocol::Chat, &request);
 
-    // 会话亲和头族注入
+    // yaml 声明的亲和头注入
     assert!(
-        headers
-            .iter()
-            .any(|(name, value)| *name == "x-deepseek-harness-session-id" && value == "ses-abc"),
-        "Grok 轨应注入会话亲和头"
+        headers.iter().any(|(name, _)| name == "x-acme-affinity"),
+        "yaml 声明头必须注入：{headers:?}"
     );
-    // 既有 x-grok-conv-id 保留（cache 亲和头）
+    // 全局 DeepSeek 头绝不再出现
     assert!(
-        headers.iter().any(|(name, _)| *name == "x-grok-conv-id"),
-        "Grok 既有 x-grok-conv-id 必须保留：{headers:?}"
+        !headers
+            .iter()
+            .any(|(name, _)| name == "x-deepseek-harness-session-id"),
+        "无条件 DeepSeek 头已删除（M16）：{headers:?}"
     );
     // Authorization 恒在
-    assert!(headers.iter().any(|(name, _)| *name == "Authorization"));
+    assert!(headers.iter().any(|(name, _)| name == "Authorization"));
 }
 
 // ── 验收 T3.6：maxTokensField 消费接线（M3 / C5） ─────────────────
@@ -494,64 +573,62 @@ fn session_heads_never_in_request_body() {
     );
 }
 
-/// moonshot 配置 → chat 请求体用 `max_tokens` 字段（C5 旧式网关轨）。
+/// 无 compat.maxTokensField 声明 → chat 请求体用 `max_tokens`（协议缺省，
+/// plans/04 §1.2 #7；禁止 URL / o 系列启发式）。
 #[test]
 fn max_tokens_field_moonshot_uses_max_tokens() {
-    let call = call_for(
-        "https://api.moonshot.cn/v1",
-        "kimi-k2",
-        Endpoint::ChatCompletions,
+    install_live_fixture();
+    // deepseek-v4-flash 无 maxTokensField 声明 → 缺省 max_tokens
+    let call = HttpProviderCall::new(
+        reqwest::Client::new(),
+        live_config("deepseek", "deepseek-v4-flash"),
     );
     let messages = vec![user_msg("你好")];
     let request = single_user_request(&messages, None);
     let body = call.request_body_for(WireProtocol::Chat, &request);
-    assert_eq!(body["max_tokens"], 1024, "moonshot 写 max_tokens：{body}");
+    assert_eq!(body["max_tokens"], 1024, "缺省写 max_tokens：{body}");
     assert!(
         body.get("max_completion_tokens").is_none(),
-        "moonshot 不得写 max_completion_tokens：{body}"
+        "缺省不得写 max_completion_tokens：{body}"
     );
 }
 
-/// openai.com / o 系列模型 → chat 请求体用 `max_completion_tokens` 字段。
+/// yaml `compat.maxTokensField: max_completion_tokens` → chat 请求体用
+/// `max_completion_tokens`（只信 yaml 声明，禁止 URL / 模型名猜）。
 #[test]
 fn max_tokens_field_openai_o_series_uses_max_completion_tokens() {
+    install_live_fixture();
     let messages = vec![user_msg("你好")];
 
-    // 官方 openai.com baseUrl
-    let official = call_for(
-        "https://api.openai.com/v1",
-        "gpt-5",
-        Endpoint::ChatCompletions,
+    // acme 声明 maxTokensField: max_completion_tokens → 写 max_completion_tokens
+    let call = HttpProviderCall::new(
+        reqwest::Client::new(),
+        live_config("acme", "acme-think"),
     );
-    let body = official.request_body_for(WireProtocol::Chat, &single_user_request(&messages, None));
+    let body = call.request_body_for(WireProtocol::Chat, &single_user_request(&messages, None));
     assert_eq!(
         body["max_completion_tokens"], 1024,
-        "openai.com 写 max_completion_tokens：{body}"
+        "yaml 声明写 max_completion_tokens：{body}"
     );
     assert!(
         body.get("max_tokens").is_none(),
-        "official 不得写 max_tokens：{body}"
+        "yaml 声明后不得写 max_tokens：{body}"
     );
 
-    // o 系列模型名（baseUrl 占位非 openai.com）
-    let o_series = call_for(
-        "https://api.example.com/v1",
+    // 未命中模型 / 无 provider_id → 缺省 max_tokens（fail-closed）
+    let unknown = call_for(
+        "https://api.openai.com/v1",
         "o4-mini",
         Endpoint::ChatCompletions,
     );
-    let body2 =
-        o_series.request_body_for(WireProtocol::Chat, &single_user_request(&messages, None));
+    let body2 = unknown.request_body_for(WireProtocol::Chat, &single_user_request(&messages, None));
     assert_eq!(
-        body2["max_completion_tokens"], 1024,
-        "o 系列写 max_completion_tokens：{body2}"
-    );
-    assert!(
-        body2.get("max_tokens").is_none(),
-        "o 系列不得写 max_tokens：{body2}"
+        body2["max_tokens"], 1024,
+        "无 yaml 声明写 max_tokens（禁止 o 系列猜）：{body2}"
     );
 }
 
-/// 默认 openai-compatible（deepseek 等）→ chat 请求体用 `max_tokens`（字节兼容）。
+/// 默认 openai-compatible → chat 请求体用 `max_tokens`（字节兼容）。
 #[test]
 fn max_tokens_field_default_uses_max_tokens() {
     let call = call_for(
@@ -606,36 +683,32 @@ fn stop_error_kind_passes_through_to_loop_event() {
 
 // ── 战役 I4 · R5 B-1：请求面思考档位拒绝接线（网络 I/O 前）──────────
 
-/// 拒绝接线的数据源（describe_model C9）权威性抽查：deepseek-v4-flash 目录
-/// `thinkingTiers` 提供 high/low/max（调研文档 SSOT：max/high/low 可自由开关；
-/// medium 不在档位集）→ 描述面白名单仅含 high/low/max。
+/// 请求面校验白名单 = live yaml thinking 字典 TitleCase 键（plans/04 §1.4）：
+/// deepseek-v4-flash 夹具提供 High/Low/Max → 合法档位放行，medium 越白名单拒绝。
 #[test]
 fn describe_model_whitelist_for_deepseek_v4_flash_is_narrow() {
-    let call = call_for(
-        "https://api.deepseek.com/v1",
-        "deepseek-v4-flash",
-        Endpoint::ChatCompletions,
+    install_live_fixture();
+    let call = HttpProviderCall::new(
+        reqwest::Client::new(),
+        live_config("deepseek", "deepseek-v4-flash"),
     );
-    let cap = describe_model(
-        bundled_catalog(),
-        catalog_vendor(&call.config),
-        &call.config.model,
-        Some(call.config.endpoint),
+    let profile = protocol::catalog_request_profile(&call.config);
+    assert!(profile.supports_reasoning, "夹具字典非空 → 支持 reasoning");
+    assert_eq!(
+        profile.thinking_map.as_ref().map(|m| m.keys().cloned().collect::<Vec<_>>()),
+        Some(vec!["High".to_string(), "Low".to_string(), "Max".to_string()])
     );
-    assert!(cap.supports_reasoning, "deepseek-v4-flash 支持 reasoning");
-    assert_eq!(cap.efforts, vec!["high".to_string(), "low".to_string(), "max".to_string()]);
-    assert!(cap.efforts.iter().any(|e| e == "high"));
 
-    // 合法档位放行；越白名单档位（medium/minimal）拒绝。
+    // 合法档位放行；越白名单档位（medium）拒绝。
     assert!(
-        thinking::validate_reasoning_effort(&call.config, Some(LoopEffort::High)).is_ok(),
-        "high 在 deepseek-v4-flash 白名单应放行"
+        thinking::validate_reasoning_effort(&profile, Some(LoopEffort::High)).is_ok(),
+        "high 在字典白名单应放行"
     );
     assert!(
-        thinking::validate_reasoning_effort(&call.config, Some(LoopEffort::Low)).is_ok(),
-        "low 在 deepseek-v4-flash 白名单应放行（调研 SSOT：max/high/low 可自由开关）"
+        thinking::validate_reasoning_effort(&profile, Some(LoopEffort::Low)).is_ok(),
+        "low 在字典白名单应放行"
     );
-    let rejected = thinking::validate_reasoning_effort(&call.config, Some(LoopEffort::Medium));
+    let rejected = thinking::validate_reasoning_effort(&profile, Some(LoopEffort::Medium));
     match rejected {
         Err(err) => {
             assert_eq!(
@@ -649,25 +722,28 @@ fn describe_model_whitelist_for_deepseek_v4_flash_is_narrow() {
                 err.message
             );
         }
-        Ok(()) => panic!("medium 不在 deepseek-v4-flash 白名单，应拒绝"),
+        Ok(()) => panic!("medium 不在字典白名单，应拒绝"),
     }
 }
 
-/// 显式档位超出模型能力白名单 → `stream()` 返回流前 `Err`（分类错误），
+/// 显式档位超出 yaml 字典白名单 → `stream()` 返回流前 `Err`（分类错误），
 /// **HTTP 请求未发出**（base_url 指向必然连接失败的端口；若校验未提前 return，
 /// 此处会得到 reqwest 连接错误而非我们的 InvalidRequest）。
 #[tokio::test]
 async fn out_of_whitelist_effort_rejected_before_http() {
-    // 用 deepseek-v4-flash（白名单 high/low/max）+ 越档 medium + 死端口 URL：
-    // 错误必须在请求发送前由拒绝校验返回，证明网络 I/O 未发生。
-    let config = EngineProviderConfig {
-        base_url: "http://127.0.0.1:1".to_string(),
-        api_key: "k-test".to_string(),
-        model: "deepseek-v4-flash".to_string(),
-        endpoint: Endpoint::ChatCompletions,
-        stream: true,
-        extra: BTreeMap::new(),
-    };
+        install_live_fixture();
+        // 夹具字典 High/Low/Max + 越档 medium + 死端口 URL：
+        // 错误必须在请求发送前由拒绝校验返回，证明网络 I/O 未发生。
+        let config = EngineProviderConfig {
+            base_url: "http://127.0.0.1:1".to_string(),
+            api_key: "k-test".to_string(),
+            model: "deepseek-v4-flash".to_string(),
+            endpoint: Endpoint::ChatCompletions,
+            stream: true,
+            extra: BTreeMap::new(),
+            provider_id: Some("deepseek".to_string()),
+            ..Default::default()
+        };
     let call = HttpProviderCall::new(reqwest::Client::new(), config);
     let messages = vec![user_msg("你好")];
     let request = single_user_request(&messages, Some(LoopEffort::Medium));
@@ -692,14 +768,15 @@ async fn out_of_whitelist_effort_rejected_before_http() {
 /// （省略即不发送，保留提供方默认）。
 #[test]
 fn omitted_effort_passes_validation_and_omits_thinking_param() {
-    // 校验面：省略（None）→ Ok（放行到构建/HTTP，不发送思考参数）。
-    let call = call_for(
-        "https://api.deepseek.com/v1",
-        "deepseek-v4-flash",
-        Endpoint::ChatCompletions,
+    install_live_fixture();
+    let call = HttpProviderCall::new(
+        reqwest::Client::new(),
+        live_config("deepseek", "deepseek-v4-flash"),
     );
+    let profile = protocol::catalog_request_profile(&call.config);
+    // 校验面：省略（None）→ Ok（放行到构建/HTTP，不发送思考参数）。
     assert!(
-        thinking::validate_reasoning_effort(&call.config, None).is_ok(),
+        thinking::validate_reasoning_effort(&profile, None).is_ok(),
         "省略档位不应被拒绝"
     );
     // 请求体：None → 不写入 reasoning_effort（省略即不发送思考参数）。
@@ -714,17 +791,18 @@ fn omitted_effort_passes_validation_and_omits_thinking_param() {
 /// 合法显式档位 → 校验放行，请求体写入对应思考参数（白名单内直发不降级）。
 #[test]
 fn in_whitelist_effort_passes_and_emits_reasoning_param() {
-    let call = call_for(
-        "https://api.deepseek.com/v1",
-        "deepseek-v4-flash",
-        Endpoint::ChatCompletions,
+    install_live_fixture();
+    let call = HttpProviderCall::new(
+        reqwest::Client::new(),
+        live_config("deepseek", "deepseek-v4-flash"),
     );
-    // 校验面：high 在 deepseek-v4-flash 白名单 → 放行。
+    let profile = protocol::catalog_request_profile(&call.config);
+    // 校验面：high 在 yaml 字典白名单 → 放行。
     assert!(
-        thinking::validate_reasoning_effort(&call.config, Some(LoopEffort::High)).is_ok(),
-        "white-list 内档位应放行"
+        thinking::validate_reasoning_effort(&profile, Some(LoopEffort::High)).is_ok(),
+        "字典白名单内档位应放行"
     );
-    // 请求体：high → reasoning_effort:"high"（白名单内直发，不降级）。
+    // 请求体：high → reasoning_effort:"high"（字典值直发，不降级）。
     let messages = vec![user_msg("你好")];
     let body = call.request_body_for(
         WireProtocol::Chat,
@@ -732,6 +810,6 @@ fn in_whitelist_effort_passes_and_emits_reasoning_param() {
     );
     assert_eq!(
         body["reasoning_effort"], "high",
-        "白名单内 high 档应写入 reasoning_effort：{body}"
+        "字典内 high 档应写入 reasoning_effort：{body}"
     );
 }

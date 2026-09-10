@@ -98,28 +98,20 @@ fn user_message_carries_client_message_id() {
     assert!(user_message("hi", None).client_message_id.is_none());
 }
 
-/// 端点路径：chat-completions（00 D3）/ responses
+/// 端点路径：chat-completions（00 D3）/ responses（plans/04：协议只来自
+/// live yaml，端点字段不再参与决议）
 #[test]
 fn provider_url_respects_endpoint() {
-    let base = EngineProviderConfig {
-        base_url: "https://api.example.com/v1/".to_string(),
-        api_key: "k".to_string(),
-        model: "m".to_string(),
-        endpoint: Endpoint::ChatCompletions,
-        stream: true,
-        extra: BTreeMap::new(),
-    };
+    install_live_fixture();
+    let chat = live_config("deepseek", "deepseek-chat");
     assert_eq!(
-        provider_url(&base),
-        "https://api.example.com/v1/chat/completions"
+        provider_url(&chat),
+        "https://placeholder.invalid/v1/chat/completions"
     );
-    let responses = EngineProviderConfig {
-        endpoint: Endpoint::Responses,
-        ..base
-    };
+    let responses = live_config("deepseek", "deepseek-v4-flash");
     assert_eq!(
         provider_url(&responses),
-        "https://api.example.com/v1/responses"
+        "https://placeholder.invalid/v1/responses"
     );
 }
 
@@ -192,8 +184,60 @@ fn test_provider_call(model: &str) -> HttpProviderCall {
         endpoint: Endpoint::ChatCompletions,
         stream: true,
         extra: BTreeMap::new(),
+        ..Default::default()
     };
     HttpProviderCall::new(client, config)
+}
+
+/// 安装 live yaml 综合夹具（plans/04：协议 / thinking / contextWindow / headers /
+/// cacheControlFormat 全部从 yaml 长出，禁止 URL / 前缀启发式）。
+fn install_live_fixture() {
+    protocol::reload_live_catalog_from_yaml_str(
+        r#"
+version: 2
+providers:
+  deepseek:
+    displayName: DeepSeek
+    baseUrl: "https://api.deepseek.com/v1"
+    protocol: "openai/chat"
+    compat:
+      thinkingFormat: deepseek
+    models:
+      - id: deepseek-v4-flash
+        protocol: "openai/responses"
+        contextWindow: 1000000
+        thinking:
+          High: "high"
+      - id: deepseek-chat
+        thinking:
+          High: "high"
+  acme:
+    displayName: Acme
+    baseUrl: "https://api.acme.test/v1"
+    protocol: "openai/chat"
+    headers:
+      x-acme-affinity: "acme-1"
+    models:
+      - id: acme-cache
+        compat:
+          cacheControlFormat: anthropic
+"#,
+    )
+    .expect("engine_tests live 夹具必须解析成功");
+}
+
+/// 指向 live 夹具的配置（provider_id = yaml providers 键）
+fn live_config(provider_id: &str, model: &str) -> EngineProviderConfig {
+    EngineProviderConfig {
+        base_url: "https://placeholder.invalid/v1/".to_string(),
+        api_key: "k".to_string(),
+        model: model.to_string(),
+        endpoint: Endpoint::ChatCompletions,
+        stream: true,
+        extra: BTreeMap::new(),
+        provider_id: Some(provider_id.to_string()),
+        ..Default::default()
+    }
 }
 
 /// 构造单条 user 消息的会话（验证 system 前置与请求体字节稳定）
@@ -259,11 +303,15 @@ fn build_context_passes_system_prompt_and_is_stable() {
     assert_eq!(first["content"], "你是助手，使用中文回答。");
 }
 
-/// reasoning_content 模式按 vendor 判定（P1 C3 唯一实现）：
-/// DeepSeek → Require（键存在性，空串兜底）；其余厂商 → Omit
+/// reasoning_content 模式按 live yaml `compat.thinkingFormat` 判定（plans/04
+/// §1.2 #9）：DeepSeek → Require（键存在性，空串兜底）；其余 / 未命中 → Omit
 #[test]
 fn reasoning_content_mode_follows_vendor() {
-    let deepseek = test_provider_call("deepseek-chat");
+    install_live_fixture();
+    let deepseek = HttpProviderCall::new(
+        reqwest::Client::new(),
+        live_config("deepseek", "deepseek-chat"),
+    );
     assert_eq!(
         deepseek.reasoning_content_mode(),
         ReasoningContentMode::Require
@@ -272,7 +320,7 @@ fn reasoning_content_mode_follows_vendor() {
     let openai = test_provider_call("gpt-4o");
     assert_eq!(openai.reasoning_content_mode(), ReasoningContentMode::Omit);
 
-    // base_url 含 deepseek 关键字同样判定（infer_reasoning_vendor 双通道）
+    // 未命中（fail-closed）→ Omit（禁止 URL / 前缀猜）
     let mut config = EngineProviderConfig {
         base_url: "https://deepseek.example.com/v1/".to_string(),
         api_key: "k".to_string(),
@@ -280,43 +328,35 @@ fn reasoning_content_mode_follows_vendor() {
         endpoint: Endpoint::ChatCompletions,
         stream: true,
         extra: BTreeMap::new(),
+        provider_id: Some("deepseek".to_string()),
+        ..Default::default()
     };
     let call = HttpProviderCall::new(reqwest::Client::new(), config.clone());
-    assert_eq!(call.reasoning_content_mode(), ReasoningContentMode::Require);
+    assert_eq!(
+        call.reasoning_content_mode(),
+        ReasoningContentMode::Omit,
+        "lookup 未命中必须 fail-closed，禁止 URL 猜 deepseek"
+    );
 
-    // 未知厂商 → Auto → Omit（现状保持）
-    config.base_url = "https://unknown.example.com/v1/".to_string();
-    config.model = "custom-model".to_string();
+    config.provider_id = None;
     let call = HttpProviderCall::new(reqwest::Client::new(), config);
     assert_eq!(call.reasoning_content_mode(), ReasoningContentMode::Omit);
 }
 
 // ── DEEPCHECK-06 P0：生效模型窗口解析（子代理预算入站数据源）──────
 
-/// 生效模型窗口：catalog 条目命中 → 窗口值透传（vendor 经
-/// [infer_vendor] 双通道——model 前缀判定，覆盖目录厂商）；版本后缀
-/// 逐级剥离命中基础条目；目录缺失（未知模型 / Auto 厂商）→ None
-/// （不臆造窗口，与主会话 catalog 兜底失败行为一致）
+/// 生效模型窗口：live yaml `contextWindow` 精确命中 → 窗口透传；
+/// 未命中 / 无 provider_id → None（不臆造窗口）
 #[test]
 fn effective_context_window_resolves_from_bundled_catalog() {
-    // 产品默认模型 deepseek-v4-flash：目录条目窗口 1M
-    let deepseek = test_provider_call("deepseek-v4-flash");
+    install_live_fixture();
+    let deepseek = live_config("deepseek", "deepseek-v4-flash");
     assert_eq!(
-        effective_context_window(&deepseek.config),
+        effective_context_window(&deepseek),
         Some(1_000_000),
-        "deepseek-v4-flash 应命中 catalog 窗口"
+        "deepseek-v4-flash 应命中 live 窗口"
     );
-    // 版本后缀模型（strip_version_suffix 路径）：deepseek-v4-flash-0731
-    let dated = test_provider_call("deepseek-v4-flash-0731");
-    assert_eq!(
-        effective_context_window(&dated.config),
-        Some(1_000_000),
-        "版本后缀应逐级剥离命中基础条目"
-    );
-    // Grok（目录厂商，模型前缀判定）：窗口 500K
-    let grok = test_provider_call("grok-4.5");
-    assert_eq!(effective_context_window(&grok.config), Some(500_000));
-    // 未知模型（Auto 厂商）→ None（不臆造窗口）
+    // 未命中模型 → None
     let unknown = test_provider_call("llama-3.1");
     assert_eq!(effective_context_window(&unknown.config), None);
 }
@@ -338,18 +378,12 @@ fn session_request<'a>(
     }
 }
 
-/// request_options 组装 cache：engine.rs 只调用 build_cache_policy（C2 唯一
-/// 运行时判定/消费入口），能力判定收敛在其内部（catalog = bundled_catalog()
-/// 真源路径，T-23 单例；无 catalog 时兜底内置保守表）
-///
-/// 断言（P2 §5.1/§5.3）：
-/// - DeepSeek：build_cache_policy 归 None → 请求体不含任何 cache 键
-///   （省略行为测试钉死，对齐 deepseek-reasonix-cache-analysis.md:111-112）；
-/// - Key 机制（gpt-4o）+ 会话 ID → 注入 prompt_cache_key（码点钳 64）；
-/// - Key 机制无会话 ID → 不注入（无键无路由对象）；
-/// - 未知/本地厂商 → 保守全关。
+/// request_options 组装 cache：只来自 yaml `compat.cacheControlFormat` 声明
+/// （plans/04 §1.3/§2.4）——`anthropic` → 显式断点机制；无声明 → None
+/// （请求体不含任何 cache 键，禁止 bundled_catalog + base_url 猜能力）
 #[test]
 fn request_options_wires_build_cache_policy() {
+    install_live_fixture();
     let user = AgentMessage {
         id: "user-1".to_string(),
         role: AgentMessageRole::User,
@@ -364,8 +398,20 @@ fn request_options_wires_build_cache_policy() {
     let messages = vec![Arc::new(user)];
     let request = session_request(&messages, Some("ses-abc"));
 
-    // DeepSeek：省略整个 cache 参数组（机制 Auto + omit 恒 true）
-    let deepseek = test_provider_call("deepseek-v4");
+    // acme-cache 声明 cacheControlFormat: anthropic → 显式断点机制
+    let acme = HttpProviderCall::new(
+        reqwest::Client::new(),
+        live_config("acme", "acme-cache"),
+    );
+    let options = acme.request_options(&request);
+    let policy = options.cache.expect("yaml 声明应注入缓存策略");
+    assert_eq!(policy.mechanism, CacheMechanism::Explicit);
+
+    // 无声明（deepseek-chat）→ 整体 None，请求体零 cache 键
+    let deepseek = HttpProviderCall::new(
+        reqwest::Client::new(),
+        live_config("deepseek", "deepseek-chat"),
+    );
     assert!(deepseek.request_options(&request).cache.is_none());
     let body = build_chat_completions_request_body(
         &deepseek.request_options(&request),
@@ -375,30 +421,16 @@ fn request_options_wires_build_cache_policy() {
     assert!(body.get("prompt_cache_retention").is_none());
     assert!(body.get("prompt_cache_options").is_none());
 
-    // Key 机制（gpt-4o）+ 会话 ID → 注入缓存策略与 wire 键
-    let openai = test_provider_call("gpt-4o");
-    let options = openai.request_options(&request);
-    let policy = options.cache.clone().expect("Key 机制应注入缓存策略");
-    assert_eq!(policy.mechanism, CacheMechanism::Key);
-    assert_eq!(policy.cache_key, Some(CacheKey("ses-abc".to_string())));
-    let body = build_chat_completions_request_body(&options, &openai.build_context(&request));
-    assert_eq!(body["prompt_cache_key"], "ses-abc");
-
-    // Key 机制无会话 ID → 无键可发，整体不注入（session_id? 短路）
-    let no_session = session_request(&messages, None);
-    assert!(openai.request_options(&no_session).cache.is_none());
-
-    // 未知/本地厂商（base_url 无关键字 + model 前缀未命中）→ 保守全关
+    // 未命中 / 无 provider_id → None（fail-closed，不猜 URL）
     let ollama = test_provider_call("llama-3.1");
     assert!(ollama.request_options(&request).cache.is_none());
 }
 
-/// G1 遗留 1：发送层基础请求头合并亲和头（affinity_http_headers 消费点）。
-/// Grok + 会话 ID → x-grok-conv-id 出现（值 = 会话 ID，与 cache_key 同源
-/// 前 64 码点）；其他厂商（OpenAI / DeepSeek / 未知）与无会话 → 不出现；
-/// Authorization 恒在（既有固定头不受影响）。
+/// 发送层基础请求头：yaml `providers.*.headers` 声明随请求发出（M16）；
+/// 无条件 x-deepseek-harness-session-id 已删除；Authorization 恒在。
 #[test]
 fn request_headers_merges_affinity_header() {
+    install_live_fixture();
     let user = AgentMessage {
         id: "user-1".to_string(),
         role: AgentMessageRole::User,
@@ -413,33 +445,38 @@ fn request_headers_merges_affinity_header() {
     let messages = vec![Arc::new(user)];
     let request = session_request(&messages, Some("ses-abc"));
 
-    // Grok（catalog 真源路径）：x-grok-conv-id 随基础请求头出现
-    let grok = test_provider_call("grok-4.5");
-    let options = grok.request_options(&request);
-    let headers = grok.request_headers(options.cache.as_ref());
-    assert!(headers.iter().any(|(name, _)| name == &"Authorization"));
+    // acme 声明 x-acme-affinity → 随请求发出
+    let acme = HttpProviderCall::new(
+        reqwest::Client::new(),
+        live_config("acme", "acme-cache"),
+    );
+    let options = acme.request_options(&request);
+    let headers = acme.request_headers(options.cache.as_ref());
+    assert!(headers.iter().any(|(name, _)| name == "Authorization"));
     assert!(
         headers
             .iter()
-            .any(|(name, value)| name == &"x-grok-conv-id" && value == "ses-abc"),
-        "Grok 应注入 x-grok-conv-id"
+            .any(|(name, value)| name == "x-acme-affinity" && value == "acme-1"),
+        "yaml 声明头应注入：{headers:?}"
+    );
+    assert!(
+        !headers
+            .iter()
+            .any(|(name, _)| name == "x-deepseek-harness-session-id"),
+        "无条件 DeepSeek 头已删除（M16）：{headers:?}"
     );
 
-    // 无会话 ID → 无亲和头（仅 Authorization）
-    let no_session = session_request(&messages, None);
-    let headers = grok.request_headers(grok.request_options(&no_session).cache.as_ref());
-    assert!(headers.iter().any(|(name, _)| name == &"Authorization"));
-    assert!(!headers.iter().any(|(name, _)| name == &"x-grok-conv-id"));
-
-    // 其他厂商（OpenAI / DeepSeek / 未知）：亲和头不出现
-    for model in ["gpt-4o", "deepseek-v4", "llama-3.1"] {
-        let call = test_provider_call(model);
-        let headers = call.request_headers(call.request_options(&request).cache.as_ref());
-        assert!(
-            !headers.iter().any(|(name, _)| name == &"x-grok-conv-id"),
-            "{model} 不应注入 x-grok-conv-id"
-        );
-    }
+    // 未声明供应商 → 仅 Authorization
+    let deepseek = HttpProviderCall::new(
+        reqwest::Client::new(),
+        live_config("deepseek", "deepseek-chat"),
+    );
+    let headers = deepseek.request_headers(deepseek.request_options(&request).cache.as_ref());
+    assert!(headers.iter().any(|(name, _)| name == "Authorization"));
+    assert!(
+        !headers.iter().any(|(name, _)| name.starts_with("x-")),
+        "未声明供应商零 x-* 头：{headers:?}"
+    );
 }
 
 /// 捕获请求的测试 provider（session_id 注入断言用）
@@ -498,70 +535,36 @@ fn responses_config(model: &str, endpoint: Endpoint) -> EngineProviderConfig {
         endpoint,
         stream: true,
         extra: BTreeMap::new(),
+        ..Default::default()
     }
 }
 
-/// provider_url 按目录 supports_responses 判定端点（P3 ⑤ 验收 3）：
-/// - deepseek-v4-flash → 允许 responses（/responses）；
-/// - 版本后缀 deepseek-v4-flash-0731（官方版本号）经 lookup 多级兜底同样允许；
-/// - deepseek-v4-pro → 不支持 → 拒绝 responses 并降级 chat-completions；
-/// - deepseek 前缀内未收录模型 → 保守视为不支持 → 同样降级；
-/// - 未知厂商（baseUrl/model 无关键字）→ 保留现状走 /responses（不臆断）；
-/// - chat-completions 端点不受判定影响（原路径保持）。
+/// provider_url 按 live yaml 模型级 protocol 判定端点（plans/04 §2.3）：
+/// openai/responses → /v1/responses；openai/chat（继承）→ /chat/completions；
+/// lookup 未命中 → fail-closed chat（禁止 URL / 目录 supports_responses 猜）。
 #[test]
 fn provider_url_gates_responses_by_catalog_support() {
-    // v4-flash：目录 supportsResponses=true → 保持 /responses
-    let flash = responses_config("deepseek-v4-flash", Endpoint::Responses);
+    install_live_fixture();
+    // v4-flash：yaml 模型级 protocol openai/responses → /v1/responses
+    let flash = live_config("deepseek", "deepseek-v4-flash");
     assert_eq!(
         provider_url(&flash),
-        "https://api.deepseek.com/v1/responses",
-        "v4-flash 应允许 responses 端点"
+        "https://placeholder.invalid/v1/responses",
+        "v4-flash 应走 responses 端点"
     );
-
-    // 版本后缀兜底：DeepSeek-V4-Flash-0731 命中内置 v4-flash 条目
-    let flash_0731 = responses_config("deepseek-v4-flash-0731", Endpoint::Responses);
+    // deepseek-chat（继承供应商 openai/chat）→ chat-completions
+    let chat = live_config("deepseek", "deepseek-chat");
     assert_eq!(
-        provider_url(&flash_0731),
-        "https://api.deepseek.com/v1/responses",
-        "版本后缀模型应经 lookup 兜底命中 v4-flash"
+        provider_url(&chat),
+        "https://placeholder.invalid/v1/chat/completions",
+        "chat 轨应走 chat-completions 端点"
     );
-
-    // v4-pro：官方尚未支持 Responses（2026 年 8 月初加入）→ 降级 chat-completions
-    let pro = responses_config("deepseek-v4-pro", Endpoint::Responses);
-    assert_eq!(
-        provider_url(&pro),
-        "https://api.deepseek.com/v1/chat/completions",
-        "v4-pro 应拒绝 responses 并降级 chat-completions"
-    );
-
-    // deepseek 前缀内未收录模型 → 保守视为不支持 → 降级
-    let unknown = responses_config("deepseek-custom", Endpoint::Responses);
+    // 未命中模型（fail-closed）→ 保守降级 chat，禁止 URL 猜
+    let unknown = responses_config("deepseek-v4-pro", Endpoint::Responses);
     assert_eq!(
         provider_url(&unknown),
         "https://api.deepseek.com/v1/chat/completions",
-        "未收录模型应保守降级"
-    );
-
-    // 未知厂商（无关键字网关）→ 目录无数据 → 保留现状走 /responses
-    let gateway = EngineProviderConfig {
-        base_url: "https://gw.example.com/v1/".to_string(),
-        api_key: "k".to_string(),
-        model: "m".to_string(),
-        endpoint: Endpoint::Responses,
-        stream: true,
-        extra: BTreeMap::new(),
-    };
-    assert_eq!(
-        provider_url(&gateway),
-        "https://gw.example.com/v1/responses",
-        "未知厂商不应臆断降级"
-    );
-
-    // chat-completions 端点恒不受判定影响
-    let chat = responses_config("deepseek-v4-pro", Endpoint::ChatCompletions);
-    assert_eq!(
-        provider_url(&chat),
-        "https://api.deepseek.com/v1/chat/completions"
+        "未命中模型应保守降级 chat"
     );
 }
 
@@ -595,6 +598,7 @@ fn responses_supported_follows_catalog_entry() {
         endpoint: Endpoint::Responses,
         stream: true,
         extra: BTreeMap::new(),
+        ..Default::default()
     };
     assert!(responses_supported(&gateway));
 }
@@ -627,6 +631,7 @@ fn responses_endpoint_active_follows_catalog_and_endpoint() {
         endpoint: Endpoint::Responses,
         stream: true,
         extra: BTreeMap::new(),
+        ..Default::default()
     };
     assert!(responses_endpoint_active(&gateway));
 }
@@ -765,6 +770,7 @@ async fn responses_stream_end_to_end_over_mock_sse() {
         r#"data: {"type":"response.completed","response":{"status":"completed","usage":{"input_tokens":100,"output_tokens":20,"total_tokens":120,"input_tokens_details":{"cached_tokens":50}}}}"#,
     ];
     let server = ResponsesMockServer::start(frames).await;
+    install_live_fixture();
     let config = EngineProviderConfig {
         base_url: server.base_url(),
         api_key: "k".to_string(),
@@ -772,12 +778,10 @@ async fn responses_stream_end_to_end_over_mock_sse() {
         endpoint: Endpoint::Responses,
         stream: true,
         extra: BTreeMap::new(),
+        provider_id: Some("deepseek".to_string()),
+        ..Default::default()
     };
-    // 未知主机判定：base_url 无关键字 → Auto → responses 保留（不依赖 catalog 命中）
-    assert!(
-        responses_endpoint_active(&config),
-        "mock 网关应走 responses 轨"
-    );
+    // 协议来自 live yaml（deepseek-v4-flash 模型级 openai/responses）
     let call = HttpProviderCall::new(reqwest::Client::new(), config);
 
     let user = AgentMessage {
@@ -1086,6 +1090,7 @@ fn summary_config(base_url: String, model: &str) -> EngineProviderConfig {
         endpoint: Endpoint::ChatCompletions,
         stream: false,
         extra: BTreeMap::new(),
+        ..Default::default()
     }
 }
 
@@ -1458,6 +1463,7 @@ fn cache_tracking_config_resolves_provider_model_ttl() {
         endpoint: Endpoint::ChatCompletions,
         stream: true,
         extra: BTreeMap::new(),
+        ..Default::default()
     };
     let config = build_cache_tracking_config(&gateway);
     assert_eq!(config.provider, "auto");
@@ -1519,13 +1525,23 @@ fn cold_cache_warning_fires_after_warm_until() {
 /// run 聚合；触发时 attribution 诚实兜底 Unknown + wire 形状 + 金额实测
 #[test]
 fn waste_alert_emitted_above_threshold_with_honest_attribution() {
+    // 显式 USD 单价（引擎微元口径）：input 0.14 / cacheRead 0.0028
+    let pricing = agent_provider::pricing::ModelPricing {
+        currency: agent_provider::pricing::Currency::Usd,
+        unit: agent_provider::pricing::PricingUnit::Per1mTokens,
+        input: 0.14,
+        output: 0.28,
+        cache_read: Some(0.0028),
+        cache_write: Some(0.0),
+        tiers: vec![],
+    };
     let below = sample_stats(Some(61_000), WARN_MISSED_TOKENS - 1);
     assert!(
-        waste_alert_event("s1", &below, false, "deepseek", "deepseek-v4-flash").is_none(),
+        waste_alert_event("s1", &below, false, Some(&pricing)).is_none(),
         "低于阈值不打扰"
     );
     let over = sample_stats(Some(61_000), WARN_MISSED_TOKENS);
-    let event = waste_alert_event("s1", &over, true, "deepseek", "deepseek-v4-flash")
+    let event = waste_alert_event("s1", &over, true, Some(&pricing))
         .expect("达到阈值必须预警");
     match event {
         AgentEvent::CacheWasteAlert {
@@ -1540,9 +1556,8 @@ fn waste_alert_emitted_above_threshold_with_honest_attribution() {
             assert_eq!(attribution, MissAttribution::Unknown);
             assert_eq!(missed_tokens, WARN_MISSED_TOKENS);
             assert!(model_changed);
-            // 金额 = 20_000 × (0.14 - 0.0028)/1M = 0.002744（deepseek-v4-flash
-            // 官方四价，catalog.json）
-            let cost = missed_cost_usd.expect("价格已入库必须给出金额");
+            // 金额 = 引擎微元差：20_000 × (0.14 − 0.0028)/1M = 0.002744
+            let cost = missed_cost_usd.expect("USD 单价必须给出金额");
             assert!((cost - 0.002744).abs() < 1e-9, "金额口径偏差：{cost}");
         }
         other => panic!("期望 CacheWasteAlert，得到 {other:?}"),
@@ -1553,10 +1568,10 @@ fn waste_alert_emitted_above_threshold_with_honest_attribution() {
     assert_eq!(value["attribution"], "unknown");
     assert_eq!(value["missedTokens"], WARN_MISSED_TOKENS);
     assert!(value.get("missed_tokens").is_none(), "不得出现 snake_case");
-    // 价格缺失（未知厂商）→ 金额 None，仅 token 阈值判定（诚实兜底不估算）
+    // 无定价（未知厂商）→ 金额 None，仅 token 阈值判定（诚实兜底不估算）
     let unknown = sample_stats(Some(61_000), WARN_MISSED_TOKENS);
-    let event = waste_alert_event("s1", &unknown, false, "auto", "custom-model")
-        .expect("token 阈值已超，未知厂商也应预警");
+    let event = waste_alert_event("s1", &unknown, false, None)
+        .expect("token 阈值已超，也应预警");
     match event {
         AgentEvent::CacheWasteAlert {
             missed_cost_usd, ..
@@ -1568,14 +1583,22 @@ fn waste_alert_emitted_above_threshold_with_honest_attribution() {
 }
 
 /// 金额阈值独立触发（2026-08-09 接线 WARN_MISSED_COST_USD）：token 低于
-/// 20_000 但估算金额 ≥ $0.1 → 仍预警（pi 双阈值 or 语义）。用高差价
-/// USD 模型 gpt-5.5-cyber（input 12.5 - cacheRead 1.25 = 11.25/1M）：
-/// 10_000 token → $0.1125 ≥ $0.1
+/// 20_000 但估算金额 ≥ $0.1 → 仍预警。用高差价 USD 模型（input 12.5 −
+/// cacheRead 1.25 = 11.25/1M）：10_000 token → $0.1125 ≥ $0.1
 #[test]
 fn waste_alert_fires_on_cost_threshold_alone() {
+    let pricing = agent_provider::pricing::ModelPricing {
+        currency: agent_provider::pricing::Currency::Usd,
+        unit: agent_provider::pricing::PricingUnit::Per1mTokens,
+        input: 12.5,
+        output: 12.5,
+        cache_read: Some(1.25),
+        cache_write: Some(1.25),
+        tiers: vec![],
+    };
     // token 阈值以下（10_000 < 20_000）但金额超 $0.1 → 必须预警
     let stats = sample_stats(Some(61_000), 10_000);
-    let event = waste_alert_event("s1", &stats, false, "openai", "gpt-5.5-cyber")
+    let event = waste_alert_event("s1", &stats, false, Some(&pricing))
         .expect("金额阈值单独触发");
     match event {
         AgentEvent::CacheWasteAlert {
@@ -1591,7 +1614,7 @@ fn waste_alert_fires_on_cost_threshold_alone() {
     }
     // 对照：同模型 token 更低且金额不足（如 1_000 token → $0.01125）→ 不预警
     let low = sample_stats(Some(61_000), 1_000);
-    assert!(waste_alert_event("s1", &low, false, "openai", "gpt-5.5-cyber").is_none());
+    assert!(waste_alert_event("s1", &low, false, Some(&pricing)).is_none());
 }
 
 /// T-40：模型切换检测——上一 run model ≠ 当前 model；无上一 run
@@ -3840,6 +3863,7 @@ mod s3_hotspot_tests {
             endpoint: agent_provider::config::Endpoint::ChatCompletions,
             stream: true,
             extra: BTreeMap::new(),
+            ..Default::default()
         };
         let call = HttpProviderCall::new(reqwest::Client::new(), config).with_abort_signal(signal);
         assert!(call.abort_signal.is_some());

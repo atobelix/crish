@@ -6,17 +6,14 @@
 //!
 //! 契约登记：session-loop `ReasoningEffort` 与 agent-provider `ReasoningEffort`
 //! 变体集/字面完全一致（`off/auto/minimal/low/medium/high/xhigh/max`），本模块
-//! 提供逐变体映射；gemini 轨 builder 用 `thinking_intensity`（[ThinkingIntensity]），
-//! 由 [effort_to_intensity] 换算。
+//! 提供逐变体映射；四轨思考键统一由出站剖面 + dialect 产出（plans/04 §3）。
 
-use agent_provider::request::{
-    describe_model, ReasoningEffort, ReasoningReject, ThinkingIntensity,
-};
+use agent_provider::request::build::dialect::ReasoningEffort as DialectEffort;
+use agent_provider::request::{ReasoningEffort, ReasoningReject};
 use conex_types::error::ProviderErrorKind;
 use conex_types::response::ClassifiedStreamError;
 
-use super::protocol::{bundled_catalog, catalog_vendor};
-use super::EngineProviderConfig;
+use super::protocol::CatalogRequestProfile;
 
 /// session-loop 思考档位 → agent-provider reasoning effort（逐变体映射，
 /// 变体集/字面一致，纯转发）。
@@ -35,40 +32,25 @@ pub(crate) fn to_provider_effort(
     }
 }
 
-/// session-loop 思考档位 → gemini thinking intensity（gemini 轨 builder 消费
-/// [ThinkingIntensity]；逐变体映射，变体集一致）。
-pub(crate) fn effort_to_intensity(
-    effort: session_loop::provider::ReasoningEffort,
-) -> ThinkingIntensity {
-    match effort {
-        session_loop::provider::ReasoningEffort::Off => ThinkingIntensity::Off,
-        session_loop::provider::ReasoningEffort::Auto => ThinkingIntensity::Medium,
-        session_loop::provider::ReasoningEffort::Minimal => ThinkingIntensity::Minimal,
-        session_loop::provider::ReasoningEffort::Low => ThinkingIntensity::Low,
-        session_loop::provider::ReasoningEffort::Medium => ThinkingIntensity::Medium,
-        session_loop::provider::ReasoningEffort::High => ThinkingIntensity::High,
-        session_loop::provider::ReasoningEffort::Xhigh => ThinkingIntensity::Xhigh,
-        session_loop::provider::ReasoningEffort::Max => ThinkingIntensity::Max,
-    }
-}
-
-/// 请求面思考档位拒绝校验（战役 I4 · R5 B-1 接线）。
+/// 请求面思考档位拒绝校验（战役 I4 · R5 B-1 接线；plans/04 §1.4）。
 ///
-/// 数据源 = [describe_model]（C9，模型级白名单，合并 catalog `offered_levels` 与
-/// 系列级能力表，坏配置不藏同 provider 其它模型）。C17 语义（DegradePolicy 默认
+/// 数据源 = 出站剖面 [CatalogRequestProfile] 的 `thinking_map`（yaml 字典
+/// TitleCase 键白名单，经 `ReasoningEffort::from_title_case` 归一比较——禁止
+/// 拿小写 `"high"` 撞 yaml `"High"` 误杀）。C17 语义（DegradePolicy 默认
 /// Reject，不降级不改写）：
 ///
 /// - `effort = None`（省略）→ `Ok(())`（不发送思考参数，保留提供方默认）；
 /// - 显式档位为 off / auto → `Ok(())`（关闭/默认思考，不发送、不进能力校验）；
-/// - 显式档位在模型能力白名单内 → `Ok(())`（直发不降级）；
-/// - 显式档位不在能力白名单（或模型不支持 reasoning）→ `Err`：已分类流前错误
-///   [ClassifiedStreamError]（kind = [ProviderErrorKind::InvalidRequest]，文案含
+/// - 无 `thinking` 字典 + 显式档位（非 off/auto）→ `Err`（模型声明不支持思考）；
+/// - 显式档位在字典白名单内 → `Ok(())`（直发不降级）；
+/// - 显式档位不在字典 → `Err`：已分类流前错误 [ClassifiedStreamError]
+///   （kind = [ProviderErrorKind::InvalidRequest]，文案含
 ///   [ReasoningReject::UNSUPPORTED_TAG] 语义标签）。
 ///
 /// 由 [crate::engine_provider::HttpProviderCall::stream] 在 HTTP I/O 之前调用——
 /// 错误在请求发送前返回，满足「请求面不支持的档位在网络 I/O 前拒绝」。
 pub(crate) fn validate_reasoning_effort(
-    config: &EngineProviderConfig,
+    profile: &CatalogRequestProfile,
     effort: Option<session_loop::provider::ReasoningEffort>,
 ) -> Result<(), ClassifiedStreamError> {
     let Some(sl_effort) = effort else {
@@ -83,17 +65,14 @@ pub(crate) fn validate_reasoning_effort(
     ) {
         return Ok(());
     }
-    let capability = describe_model(
-        bundled_catalog(),
-        catalog_vendor(config),
-        &config.model,
-        Some(config.endpoint),
-    );
-    let in_whitelist = capability.supports_reasoning
-        && capability
-            .efforts
-            .iter()
-            .any(|e| e == provider_effort.as_str());
+    // 白名单 = yaml thinking 字典的 TitleCase 键（归一比较：键拼写 High /
+    // XHigh / X-High 均可命中对应档位）。
+    let Some(map) = profile.thinking_map.as_ref() else {
+        return Err(reject_to_classified(provider_effort));
+    };
+    let in_whitelist = map.keys().any(|title| {
+        DialectEffort::from_title_case(title) == Some(provider_effort.into())
+    });
     if in_whitelist {
         Ok(())
     } else {

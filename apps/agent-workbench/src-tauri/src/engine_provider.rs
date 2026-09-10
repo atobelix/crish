@@ -33,19 +33,25 @@ use std::time::Duration;
 
 use agent_provider::config::Endpoint;
 use agent_provider::error::{classify_provider_error, source_from_reqwest_error};
-use agent_provider::request::{
-    build_anthropic_request_body, build_cache_policy, build_chat_completions_request_body,
-    build_gemini_request_body, build_responses_request_body, infer_reasoning_vendor,
-    AnthropicRequestOptions, ChatCompletionsRequestOptions, GeminiRequestOptions,
-    ReasoningContentMode, ReasoningVendor, RequestBuildContext,
-    ToolDefinition as WireToolDefinition, WireProtocol,
+use agent_provider::models::{
+    CacheControlFormat, ProtocolKind, ThinkingFormat,
 };
+use agent_provider::request::{
+    build_anthropic_request_body, build_chat_completions_request_body, build_gemini_request_body,
+    build_responses_request_body, ensure_outbound_modalities, AnthropicRequestOptions,
+    BreakpointPlan, CacheMechanism, CachePolicy, CacheRetention, ChatCompletionsRequestOptions,
+    GeminiRequestOptions, RequestBuildContext, ToolDefinition as WireToolDefinition, TtlBucket,
+    WireProtocol,
+};
+#[cfg(test)]
+use agent_provider::request::ReasoningContentMode;
 use agent_provider::sse::{AbortFlag, StreamDiagnosticContext, StreamReadOptions};
 use agent_provider::transport::stream_frames;
 use async_trait::async_trait;
 use conex_types::error::ProviderErrorKind;
 use conex_types::response::ClassifiedStreamError;
 use conex_types::tool::SystemPromptWireMode;
+use indexmap::IndexMap;
 use session_loop::provider::{ProviderCall, ProviderEventStream, ProviderRequest};
 
 #[path = "engine_provider/timestamp.rs"]
@@ -60,7 +66,15 @@ const DEFAULT_IDLE_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// 生效的 provider 配置（EngineHandle 加载；baseUrl/model/apiKey 三件套齐备
 /// 即可发起调用，25-ipc-contract-audit.md:101）
-#[derive(Debug, Clone)]
+///
+/// S1 槽位（vendor/protocol/thinking_map/thinking_format/provider_id）由
+/// [load_provider_endpoint] 从 [protocol::live_catalog] 唯一命中灌入。
+/// `provider_id` 为空（None）表示引擎未就绪于 I-LOOKUP；本维只灌槽，
+/// 不改 env 发请求。S4 的 `request_options` 每次 live lookup，禁止
+/// `..Default::default()` 清空后再走前缀表——槽位字段保留给 S7 删除面
+/// （当前仅测试面直读断言；热路径不再消费，避免当作过期副本）。
+#[derive(Debug, Clone, Default)]
+#[allow(dead_code)]
 pub(crate) struct EngineProviderConfig {
     /// 服务端基础地址
     pub base_url: String,
@@ -74,10 +88,24 @@ pub(crate) struct EngineProviderConfig {
     pub stream: bool,
     /// 厂商私有参数透传（R2 工作台配置面恒空表；T-23/R3 后经此处注入）
     pub extra: BTreeMap<String, serde_json::Value>,
+    /// yaml 供应商标识（唯一模型命中时 = providers 键；禁止前缀表猜测）
+    pub vendor: Option<String>,
+    /// yaml 生效协议（模型覆盖 ∨ 供应商默认）
+    pub protocol: Option<ProtocolKind>,
+    /// yaml 思考字典（TitleCase → wire），与 `ModelSpec.thinking` 同型
+    pub thinking_map: Option<IndexMap<String, String>>,
+    /// yaml `compat.thinkingFormat`
+    pub thinking_format: Option<ThinkingFormat>,
+    /// I-LOOKUP 键；空 = 引擎未就绪于 lookup（M13 本维不改 env 发请求）
+    pub provider_id: Option<String>,
 }
 
 /// 从 config 模块的 effective_* 源加载生效配置（engine.rs:169-179 等价）
 /// 源 = `crate::config::effective_*`；三件套任一缺失 → None（引擎降级未就绪）。
+///
+/// 槽位从 [protocol::live_catalog] 灌入：模型 id 唯一命中才填
+/// provider_id/protocol/thinking_map/thinking_format/vendor；多命中或零命中
+/// 全为 None（fail-closed）。
 pub(crate) fn load_provider_endpoint() -> Option<EngineProviderConfig> {
     let base_url = crate::config::effective_api_base_url()?;
     let api_key = crate::config::effective_api_key()?;
@@ -88,6 +116,13 @@ pub(crate) fn load_provider_endpoint() -> Option<EngineProviderConfig> {
     let endpoint = Endpoint::parse(&crate::config::effective_provider_endpoint())
         .unwrap_or(Endpoint::ChatCompletions);
     let stream = crate::config::effective_provider_stream();
+    let provider_id = crate::config::effective_provider_id();
+    let slots = slots_for_model(
+        &live_catalog(),
+        provider_id.as_deref(),
+        Some(&base_url),
+        &model,
+    );
     Some(EngineProviderConfig {
         base_url,
         api_key,
@@ -95,6 +130,11 @@ pub(crate) fn load_provider_endpoint() -> Option<EngineProviderConfig> {
         endpoint,
         stream,
         extra: BTreeMap::new(),
+        vendor: slots.vendor,
+        protocol: slots.protocol,
+        thinking_map: slots.thinking_map,
+        thinking_format: slots.thinking_format,
+        provider_id: slots.provider_id.or(provider_id),
     })
 }
 
@@ -134,30 +174,27 @@ impl HttpProviderCall {
         self
     }
 
-    /// chat-completions 请求选项（模型 / max_tokens 透传；思考档位 series 级
-    /// 消费经 [thinking::to_provider_effort]；maxTokensField 经
-    /// [protocol::max_tokens_field]（T3.6/C5）；None 思考档位不携带字节）。
-    /// `reasoning_content`：DeepSeek 恒 Require，其余厂商 Omit。
+    /// chat-completions 请求选项（模型 / max_tokens 透传；思考字典与方言来自
+    /// 出站剖面 [protocol::catalog_request_profile]（plans/04 §1.3）——每次
+    /// `live_catalog().find(provider_id, model)` 现查，禁止 `..Default` 清空
+    /// 后再走前缀表；缓存键只来自 yaml compat 声明，无声明 → None）。
     pub(crate) fn request_options(
         &self,
         request: &ProviderRequest<'_>,
     ) -> ChatCompletionsRequestOptions {
-        // catalog = bundled_catalog()（T-23 OnceLock 单例）；overrides 走
-        // config.extra.cache 通道（R2 恒空表 → None，见 EngineProviderConfig.extra）。
-        let cache = build_cache_policy(
-            Some(bundled_catalog()),
-            Some(&self.config.base_url),
-            Some(&self.config.model),
-            request.session_id.as_deref(),
-            self.config.extra.get("cache"),
-        );
+        let profile = protocol::catalog_request_profile(&self.config);
+        let cache = cache_policy_from_profile(&profile);
         ChatCompletionsRequestOptions {
             model: Some(self.config.model.clone()),
             stream: Some(self.config.stream),
             max_tokens: request.max_tokens.map(u64::from),
-            max_tokens_field: Some(protocol::max_tokens_field(&self.config)),
+            max_tokens_field: Some(profile.max_tokens_field),
             reasoning_effort: request.reasoning_effort.map(thinking::to_provider_effort),
-            reasoning_content: Some(self.reasoning_content_mode()),
+            reasoning_content: Some(profile.reasoning_content),
+            thinking_map: profile.thinking_map,
+            thinking_format: profile.thinking_format,
+            supports_reasoning: profile.supports_reasoning,
+            compat: profile.compat,
             cache,
             ..ChatCompletionsRequestOptions::default()
         }
@@ -165,14 +202,16 @@ impl HttpProviderCall {
 
     /// 请求体构建（DEEPCHECK-05 #10 修复：body 与 endpoint 同轨分流）
     ///
-    /// responses 轨生效（[responses_endpoint_active]）→ responses wire 形状；
-    /// 否则 → chat-completions 形状（既有路径，字节与 P2 前逐字节一致）。
+    /// responses 轨生效（[protocol::responses_endpoint_active]）→ responses
+    /// wire 形状；否则 → chat-completions 形状。**仅测试面使用**——生产四轨
+    /// 走 [request_body_for]（以剖面协议为准，不再回读端点启发式）。
+    #[cfg(test)]
     pub(crate) fn request_body(
         &self,
         options: &ChatCompletionsRequestOptions,
         context: &RequestBuildContext<'_>,
     ) -> serde_json::Value {
-        if responses_endpoint_active(&self.config) {
+        if protocol::responses_endpoint_active(&self.config) {
             build_responses_request_body(options, context)
         } else {
             build_chat_completions_request_body(options, context)
@@ -181,13 +220,15 @@ impl HttpProviderCall {
 
     /// 按 wire 协议构建请求体（四轨同轨；R3 T3.2）。anthropic → 原生
     /// AnthropicRequestOptions；gemini → GeminiRequestOptions；chat/responses →
-    /// 既有 [request_options]/[request_body]。思考档位经 [thinking] 换算。
+    /// 既有 [request_options]/[request_body]。思考字典与方言来自同一剖面
+    /// （plans/04 §3.1：四条出站都走 `assemble_thinking_dialect`）。
     pub(crate) fn request_body_for(
         &self,
         protocol: WireProtocol,
         request: &ProviderRequest<'_>,
     ) -> serde_json::Value {
         let context = self.build_context(request);
+        let profile = protocol::catalog_request_profile(&self.config);
         match protocol {
             WireProtocol::Anthropic => {
                 let options = AnthropicRequestOptions {
@@ -195,6 +236,8 @@ impl HttpProviderCall {
                     stream: Some(self.config.stream),
                     max_tokens: request.max_tokens.map(u64::from),
                     reasoning_effort: request.reasoning_effort.map(thinking::to_provider_effort),
+                    thinking_map: profile.thinking_map,
+                    thinking_format: profile.thinking_format,
                     ..Default::default()
                 };
                 build_anthropic_request_body(&options, &context)
@@ -203,14 +246,20 @@ impl HttpProviderCall {
                 let options = GeminiRequestOptions {
                     model: Some(self.config.model.clone()),
                     max_output_tokens: request.max_tokens.map(u64::from),
-                    thinking_intensity: request.reasoning_effort.map(thinking::effort_to_intensity),
+                    reasoning_effort: request.reasoning_effort.map(thinking::to_provider_effort),
+                    thinking_map: profile.thinking_map,
+                    thinking_format: profile.thinking_format,
                     ..Default::default()
                 };
                 build_gemini_request_body(&options, &context)
             }
-            WireProtocol::Chat | WireProtocol::Responses => {
+            WireProtocol::Chat => {
                 let options = self.request_options(request);
-                self.request_body(&options, &context)
+                build_chat_completions_request_body(&options, &context)
+            }
+            WireProtocol::Responses => {
+                let options = self.request_options(request);
+                build_responses_request_body(&options, &context)
             }
         }
     }
@@ -237,14 +286,12 @@ impl HttpProviderCall {
         }
     }
 
-    /// reasoning 键存在性按 vendor 推断（P1 C3 唯一实现，P3 不实现第二套）：
-    /// DeepSeek 工具循环轮次必须回传 `reasoning_content`（空串兜底，缺键 400），
-    /// 其余厂商 omit 保持现状。判定只依赖生效配置（base_url / model）。
+    /// reasoning 键存在性按剖面判定（plans/04 §1.2）：`thinking_format ==
+    /// DeepSeek` → Require（工具循环轮次必须回传 `reasoning_content`，缺键 400），
+    /// 其余 → Omit。判定只依赖 live yaml，禁止 `infer_reasoning_vendor` URL 猜。
+    #[cfg(test)]
     pub(crate) fn reasoning_content_mode(&self) -> ReasoningContentMode {
-        match infer_reasoning_vendor(Some(&self.config.base_url), Some(&self.config.model)) {
-            ReasoningVendor::Deepseek => ReasoningContentMode::Require,
-            _ => ReasoningContentMode::Omit,
-        }
+        protocol::catalog_request_profile(&self.config).reasoning_content
     }
 
     /// 发送层基础请求头（chat/responses 轨）：Authorization + 亲和头；
@@ -253,7 +300,7 @@ impl HttpProviderCall {
     pub(crate) fn request_headers(
         &self,
         policy: Option<&agent_provider::request::cache::CachePolicy>,
-    ) -> Vec<(&'static str, String)> {
+    ) -> Vec<(String, String)> {
         headers::request_headers_for(&self.config, WireProtocol::Chat, policy, None, None)
     }
 
@@ -262,7 +309,7 @@ impl HttpProviderCall {
         &self,
         protocol: WireProtocol,
         request: &ProviderRequest<'_>,
-    ) -> Vec<(&'static str, String)> {
+    ) -> Vec<(String, String)> {
         let policy = match protocol {
             WireProtocol::Chat | WireProtocol::Responses => self.request_options(request).cache,
             WireProtocol::Anthropic | WireProtocol::Gemini => None,
@@ -284,18 +331,30 @@ impl ProviderCall for HttpProviderCall {
         &self,
         request: &ProviderRequest<'a>,
     ) -> Result<ProviderEventStream, ClassifiedStreamError> {
-        // 1. 请求面思考档位拒绝校验（战役 I4 · R5 B-1）：显式档位不在模型能力白名单
-        //    （describe_model C9）→ 流前 Err（分类错误，不降级不改写）——**HTTP I/O 之前**
-        //    返回；省略 / off / auto → 放行（省略即不发送思考参数）。随后构建请求体、
-        //    发起 HTTP（其余照旧）。
-        //    R3 T3.2：协议路由单一真源——URL / body / parser 三处统一由
-        //    effective_protocol 决策，保证四轨同轨。
-        let protocol = effective_protocol(&self.config);
-        thinking::validate_reasoning_effort(&self.config, request.reasoning_effort)?;
-        let body = self.request_body_for(protocol, request);
-        let url = provider_url(&self.config);
+        // 1. 出站剖面 = live_catalog 单次命中（协议 / 思考字典 / 模态 / 字段名
+        //    / reasoning_content 全部从这一次 lookup 长出；plans/04 §1.2）。
+        let profile = protocol::catalog_request_profile(&self.config);
+        let protocol = profile.protocol;
 
-        // 2. HTTP 请求（共享连接池；tokio::select! 强打断竞速）
+        // 2. 请求面思考档位拒绝校验（plans/04 §1.4）：TitleCase 字典白名单，
+        //    不在白名单 / 无字典的显式档位 → 流前 Err（分类错误，不降级不
+        //    改写）——**HTTP I/O 之前**返回。
+        thinking::validate_reasoning_effort(&profile, request.reasoning_effort)?;
+
+        // 3. 多模态出站硬拒（plans/04 §4.1 唯一挂载点）：纯文本模型带图 →
+        //    HTTP 前 InvalidRequest，上游零字节。S3 入口禁图是第一道；本闸
+        //    不可绕过（工具 / 脚本 / 恶意 IPC）。
+        if let Err(err) =
+            ensure_outbound_modalities(request.messages, profile.supports_image)
+        {
+            return Err(to_modality_reject(err));
+        }
+
+        // 4. 构建请求体（四轨同轨：body/URL/parser 同以 profile.protocol 为键）
+        let body = self.request_body_for(protocol, request);
+        let url = protocol::provider_url_for(&self.config, protocol);
+
+        // 5. HTTP 请求（共享连接池；tokio::select! 强打断竞速）
         let abort_signal = self.abort_signal.clone().or_else(|| {
             request
                 .session_id
@@ -397,6 +456,43 @@ impl ProviderCall for HttpProviderCall {
             state,
             |mut state| async move { http_stream_next(&mut state).await.map(|item| (item, state)) },
         )))
+    }
+}
+
+/// 缓存策略只来自 yaml 声明（plans/04 §1.3）：`compat.cacheControlFormat:
+/// anthropic` → 显式断点机制；无声明 → None（请求体不出现 cache 键）。
+/// 禁止 `bundled_catalog` + base_url 猜 cache 能力（§2.4）。
+fn cache_policy_from_profile(profile: &protocol::CatalogRequestProfile) -> Option<CachePolicy> {
+    match profile
+        .compat
+        .as_ref()
+        .and_then(|c| c.cache_control_format)
+    {
+        Some(CacheControlFormat::Anthropic) => Some(CachePolicy {
+            mechanism: CacheMechanism::Explicit,
+            retention: CacheRetention::Short,
+            ttl: TtlBucket::FiveMinutes,
+            breakpoints: Some(BreakpointPlan::default()),
+            cache_key: None,
+            prompt_cache_options: None,
+            affinity_header: None,
+        }),
+        None => None,
+    }
+}
+
+/// 多模态硬拒（[agent_provider::error::ProviderError::InvalidRequest]）→
+/// 已分类流前错误（kind = InvalidRequest、不可重试，plans/04 §4.3）。
+fn to_modality_reject(err: agent_provider::error::ProviderError) -> ClassifiedStreamError {
+    let message = match err {
+        agent_provider::error::ProviderError::InvalidRequest { message, .. } => message,
+        other => other.to_string(),
+    };
+    ClassifiedStreamError {
+        kind: ProviderErrorKind::InvalidRequest,
+        message,
+        retryable: false,
+        retry_after_ms: None,
     }
 }
 

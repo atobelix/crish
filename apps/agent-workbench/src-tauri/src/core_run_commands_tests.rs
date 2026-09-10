@@ -920,6 +920,22 @@ fn context_window_assembles_into_budget_with_defaults() {
 /// 窗口兜底；普通 run 无窗口 → None（向后兼容不钳制）
 #[test]
 fn resolve_context_budget_subagent_arm_uses_engine_catalog_window() {
+    // live yaml 夹具：qwen2-5-omni-7b contextWindow 32000（plans/04 §2.4
+    // 窗口只读 live，不读 bundled catalog）
+    crate::engine_provider::protocol::reload_live_catalog_from_yaml_str(
+        r#"
+version: 2
+providers:
+  qwen:
+    displayName: Qwen
+    baseUrl: "https://dashscope.example.com/v1"
+    protocol: "openai/chat"
+    models:
+      - id: qwen2-5-omni-7b
+        contextWindow: 32000
+"#,
+    )
+    .expect("qwen 夹具必须解析成功");
     // 生效模型 qwen2-5-omni-7b（catalog 窗口 32000）——小窗口模型保证
     // 兜底臂窗口值可断言（deepseek-v4-flash 窗口 1M 亦可，选小窗口
     // 便于与预检集成测试共用同一模型口径）
@@ -1385,6 +1401,21 @@ async fn compaction_policy_preflight_triggers_compaction_in_full_run() {
 /// 真实触发（context-compression-start/end 事件落库到子代理会话）。
 #[tokio::test]
 async fn subagent_run_assembles_catalog_window_budget_and_preflight_compaction() {
+    // live yaml 夹具：qwen2-5-omni-7b contextWindow 32000（窗口只读 live）
+    crate::engine_provider::protocol::reload_live_catalog_from_yaml_str(
+        r#"
+version: 2
+providers:
+  qwen:
+    displayName: Qwen
+    baseUrl: "https://dashscope.example.com/v1"
+    protocol: "openai/chat"
+    models:
+      - id: qwen2-5-omni-7b
+        contextWindow: 32000
+"#,
+    )
+    .expect("qwen 夹具必须解析成功");
     let subagent_session = "sub-sess-budget";
     // 子代理脚本：单轮文本收口（无工具调用）
     let provider = Arc::new(TestProvider::new(vec![
@@ -5386,6 +5417,7 @@ async fn fault_inject_test_state(
         endpoint: Endpoint::ChatCompletions,
         stream: true,
         extra: BTreeMap::new(),
+        ..Default::default()
     };
     state.engine.inject_provider_for_test(provider, config);
     (state, db, emitter)
@@ -6747,6 +6779,7 @@ fn subagent_state_with_providers(
         endpoint: Endpoint::ChatCompletions,
         stream: true,
         extra: BTreeMap::new(),
+        ..Default::default()
     };
     state.engine.inject_provider_for_test(routed, config);
     (state, db, main, sub, emitter)
@@ -6846,6 +6879,9 @@ fn test_options(run_id: &str, session_id: &str, prompt: &str) -> RunTaskOptions 
         reasoning_effort: None,
         // I1-α②：测试 run 不携带 context-state（注入面单独验收）
         context_state: None,
+        // plans/04 §4.2：测试 run 不携带多模态 content
+        content: None,
+        has_images: None,
     }
 }
 
@@ -7751,6 +7787,9 @@ fn run_control_test_state_on_db_with_model(
         endpoint: Endpoint::ChatCompletions,
         stream: true,
         extra: BTreeMap::new(),
+        // live 夹具键（qwen2-5-omni-7b 预算兜底；plans/04 §2.4 窗口只读 live）
+        provider_id: Some("qwen".to_string()),
+        ..Default::default()
     };
     state.engine.inject_provider_for_test(routed, config);
     (state, db, emitter)

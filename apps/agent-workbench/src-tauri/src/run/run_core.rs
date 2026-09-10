@@ -634,7 +634,17 @@ impl CoreRunState {
                 return None;
             }
         };
-        RunUsage::from_run_cache_stats(stats)
+        // plans/05 T5.2：取价 = live yaml（当前引擎生效配置的身份键精确命中）；
+        // pricing None → RunUsage.cost None = 未定价
+        let pricing = self
+            .engine
+            .provider_config()
+            .and_then(|config| {
+                config.provider_id.as_deref().and_then(|provider_id| {
+                    crate::live_pricing::live_model_pricing(provider_id, &config.model)
+                })
+            });
+        RunUsage::from_run_cache_stats(stats, pricing.as_ref())
     }
 
     /// T-40（R5-D3 轮末合并接线 ④）：store 下转型取 [LocalDb]——run

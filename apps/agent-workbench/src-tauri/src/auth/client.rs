@@ -144,8 +144,7 @@ impl CloudAuthClient {
             return Err(auth_error_for_status(resp.status()).into());
         }
 
-        let body: serde_json::Value =
-            resp.json().await.context("login response is not JSON")?;
+        let body: serde_json::Value = resp.json().await.context("login response is not JSON")?;
         let access_token = body["accessToken"]
             .as_str()
             .ok_or_else(|| CloudAuthError::BadResponse("accessToken missing".into()))?
@@ -187,8 +186,10 @@ impl CloudAuthClient {
             return Err(auth_error_for_status(resp.status()));
         }
 
-        let body: serde_json::Value =
-            resp.json().await.map_err(|e| CloudAuthError::BadResponse(e.to_string()))?;
+        let body: serde_json::Value = resp
+            .json()
+            .await
+            .map_err(|e| CloudAuthError::BadResponse(e.to_string()))?;
         let access_token = body["accessToken"]
             .as_str()
             .ok_or_else(|| CloudAuthError::BadResponse("accessToken missing".into()))?
@@ -220,8 +221,10 @@ impl CloudAuthClient {
             return Err(auth_error_for_status(resp.status()));
         }
 
-        let body: serde_json::Value =
-            resp.json().await.map_err(|e| CloudAuthError::BadResponse(e.to_string()))?;
+        let body: serde_json::Value = resp
+            .json()
+            .await
+            .map_err(|e| CloudAuthError::BadResponse(e.to_string()))?;
         parse_profile(&body["user"])
     }
 
@@ -243,8 +246,10 @@ impl CloudAuthClient {
             return Err(auth_error_for_status(resp.status()));
         }
 
-        let body: serde_json::Value =
-            resp.json().await.map_err(|e| CloudAuthError::BadResponse(e.to_string()))?;
+        let body: serde_json::Value = resp
+            .json()
+            .await
+            .map_err(|e| CloudAuthError::BadResponse(e.to_string()))?;
         let items = body["items"]
             .as_array()
             .ok_or_else(|| CloudAuthError::BadResponse("items missing".into()))?;

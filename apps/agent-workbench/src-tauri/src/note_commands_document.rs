@@ -18,18 +18,17 @@ use serde_json::{json, Value as JsonValue};
 
 /// 1. 获取文档元数据列表
 #[tauri::command]
-pub async fn note_document_list(
-    include_archived: Option<bool>,
-) -> Result<JsonValue, CoreError> {
+pub async fn note_document_list(include_archived: Option<bool>) -> Result<JsonValue, CoreError> {
     let _ = include_archived; // 保持入参兼容性，底层单轨全量返回
     let Some(backend) = note_runtime::try_store_backend() else {
         return Ok(super::unwired_failure());
     };
 
-    let joined = tokio::task::spawn_blocking(move || -> Result<Vec<NoteDocumentMeta>, StoreError> {
-        backend.store().list_documents()
-    })
-    .await;
+    let joined =
+        tokio::task::spawn_blocking(move || -> Result<Vec<NoteDocumentMeta>, StoreError> {
+            backend.store().list_documents()
+        })
+        .await;
 
     match joined {
         Ok(Ok(documents)) => {
@@ -94,7 +93,9 @@ pub async fn note_document_rename(doc_id: String, title: String) -> Result<JsonV
     let doc_id_clone = doc_id.clone();
     let title_clone = title.clone();
     let joined = tokio::task::spawn_blocking(move || -> Result<i64, StoreError> {
-        let updated_at = backend.store().rename_document(&doc_id_clone, &title_clone)?;
+        let updated_at = backend
+            .store()
+            .rename_document(&doc_id_clone, &title_clone)?;
         Ok(updated_at)
     })
     .await;

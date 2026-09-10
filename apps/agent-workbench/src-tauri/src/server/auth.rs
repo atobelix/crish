@@ -709,13 +709,9 @@ pub async fn require_signed_request(
         let body_sha256: [u8; 32] = hasher.finalize().into();
         let body_sha256_hex = hex::encode(body_sha256);
 
-        let check = state.nonce_guard().check_and_record(
-            &device_id,
-            &nonce,
-            ts,
-            now,
-            body_sha256,
-        );
+        let check = state
+            .nonce_guard()
+            .check_and_record(&device_id, &nonce, ts, now, body_sha256);
         match check {
             NonceCheckResult::Valid => {}
             NonceCheckResult::IdempotentRetry {

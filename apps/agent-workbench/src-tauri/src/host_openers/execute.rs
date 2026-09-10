@@ -246,6 +246,38 @@ fn open_with_shortcut(
 // 校验与文件头安全模型），即门禁落地处本身；
 // 函数级 allow 覆盖函数体全部 cfg 分支（对齐 clippy.toml 豁免面
 // 「函数级 allow + 理由」），理由详见文件头安全模型。
+/// §4.3 可执行后缀拦截 SSOT（与前端 `blockedExecutableExtensions.ts` 对齐；
+/// 门禁 `scripts/check-blocked-executable-ssot.mjs` 静态校验两边一致）。
+const BLOCKED_EXECUTABLE_EXTENSIONS: &[&str] =
+    &["exe", "bat", "cmd", "msi", "ps1", "vbs", "com", "sh", "bin"];
+
+fn extension_of_path(path: &str) -> Option<&str> {
+    let base = path.rsplit(['/', '\\']).next().unwrap_or(path);
+    // 剥离代码行号锚点：name.ext:12 或 name.ext:12:3
+    let mut cleaned = base;
+    while let Some(i) = cleaned.rfind(':') {
+        let rest = &cleaned[i + 1..];
+        if !rest.is_empty() && rest.chars().all(|c| c.is_ascii_digit()) {
+            cleaned = &cleaned[..i];
+            continue;
+        }
+        break;
+    }
+    let dot = cleaned.rfind('.')?;
+    if dot == 0 || dot + 1 >= cleaned.len() {
+        return None;
+    }
+    Some(&cleaned[dot + 1..])
+}
+
+fn is_blocked_executable_path(path: &str) -> bool {
+    let Some(ext) = extension_of_path(path) else {
+        return false;
+    };
+    let lower = ext.to_ascii_lowercase();
+    BLOCKED_EXECUTABLE_EXTENSIONS.iter().any(|e| *e == lower)
+}
+
 #[allow(clippy::disallowed_methods)]
 pub(crate) fn open_path_with_default_app(path: String) -> Result<HostOpenResult, CoreError> {
     let target = path.trim().to_string();
@@ -255,6 +287,15 @@ pub(crate) fn open_path_with_default_app(path: String) -> Result<HostOpenResult,
             "Path is empty.",
             None,
             None,
+        )));
+    }
+
+    if is_blocked_executable_path(&target) {
+        return Err(to_core_error(host_opener_error(
+            "PermissionDenied",
+            "Executable path blocked by safety policy (blocked executable extension)",
+            None,
+            Some(target.clone()),
         )));
     }
 
@@ -292,31 +333,51 @@ pub(crate) fn open_path_with_default_app(path: String) -> Result<HostOpenResult,
         // P1-S5 修复：弃用 `cmd /C start "" <target>`——cmd 对命令行的
         // 字符串二次解释是注入根源（`&` 拆命令、`%` 变量展开等）。
         // 改 ShellExecuteW 直调并在独立线程拉起，防止 DDE/COM 阻塞 IPC 消息循环；
-        // 若 ShellExecuteW 异常则回落 explorer.exe。
+        // 若 ShellExecuteW 异常则回落 explorer.exe。成功/失败必须回传，禁止恒 ok:true。
         let target_clone = target.clone();
-        let handle = std::thread::spawn(move || {
-            let res = open_with_shell_execute(&target_clone);
-            if res.is_err() {
-                let _ = std::process::Command::new("explorer.exe")
-                    .arg(&target_clone)
-                    .spawn();
+        let handle = std::thread::spawn(move || -> Result<&'static str, String> {
+            match open_with_shell_execute(&target_clone) {
+                Ok(()) => Ok("ShellExecute"),
+                Err(shell_err) => {
+                    match std::process::Command::new("explorer.exe")
+                        .arg(&target_clone)
+                        .spawn()
+                    {
+                        Ok(_) => Ok("explorer.exe"),
+                        Err(explorer_err) => Err(format!(
+                            "ShellExecute failed ({shell_err}); explorer.exe fallback failed ({explorer_err})"
+                        )),
+                    }
+                }
             }
         });
-        drop(handle);
-
-        Ok(HostOpenResult {
-            ok: true,
-            opener_id: "system-default".to_string(),
-            target_kind: HostOpenTargetKindForResult::Path,
-            target: target.clone(),
-            command: "ShellExecute".to_string(),
-            diagnostic: host_opener_diagnostic(
-                "host-opener-launched",
-                "Opened path with system default association.",
+        match handle.join() {
+            Ok(Ok(command)) => Ok(HostOpenResult {
+                ok: true,
+                opener_id: "system-default".to_string(),
+                target_kind: HostOpenTargetKindForResult::Path,
+                target: target.clone(),
+                command: command.to_string(),
+                diagnostic: host_opener_diagnostic(
+                    "host-opener-launched",
+                    "Opened path with system default association.",
+                    Some(command.to_string()),
+                    Some(target),
+                ),
+            }),
+            Ok(Err(message)) => Err(to_core_error(host_opener_error(
+                "host-opener-spawn-failed",
+                message,
                 Some("ShellExecute".to_string()),
                 Some(target),
-            ),
-        })
+            ))),
+            Err(_) => Err(to_core_error(host_opener_error(
+                "host-opener-spawn-failed",
+                "Open-path worker thread panicked.",
+                Some("ShellExecute".to_string()),
+                Some(target),
+            ))),
+        }
     }
 
     #[cfg(target_os = "macos")]
@@ -529,5 +590,49 @@ mod tests {
         }
         // 测试临时目录清理（走 test 豁免面，产物为测试自建）
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn open_path_blocks_executable_extensions_ssot() {
+        // 后缀拦截先于存在性检查：即便文件不存在也应因可执行策略失败
+        for name in [
+            "run.exe",
+            "setup.bat",
+            "tool.CMD",
+            "install.msi",
+            "x.ps1",
+            "a.vbs",
+            "b.com",
+            "c.sh",
+            "d.bin",
+            "scripts/run.ps1:12",
+        ] {
+            let res = open_path_with_default_app(name.to_string());
+            assert!(res.is_err(), "executable suffix must be blocked: {name}");
+            let msg = format!("{:?}", res.unwrap_err());
+            assert!(
+                msg.contains("blocked executable extension"),
+                "expected executable SSOT error for {name}, got {msg}"
+            );
+        }
+        // 非可执行后缀不应被本策略拦截（可能因路径不存在失败，但错误码不同）
+        let res = open_path_with_default_app("readme.md".to_string());
+        assert!(res.is_err());
+        let err = res.unwrap_err();
+        let msg = format!("{err:?}");
+        assert!(
+            !msg.contains("blocked executable extension"),
+            "readme.md must not hit executable SSOT: {msg}"
+        );
+    }
+
+    #[test]
+    fn extension_of_path_strips_line_anchors() {
+        assert_eq!(extension_of_path("a/b/run.EXE"), Some("EXE"));
+        assert_eq!(extension_of_path("run.ps1:12"), Some("ps1"));
+        assert_eq!(extension_of_path("run.ps1:12:3"), Some("ps1"));
+        assert_eq!(extension_of_path("README"), None);
+        assert!(is_blocked_executable_path(r"C:\tmp\x.exe"));
+        assert!(!is_blocked_executable_path("notes.md"));
     }
 }

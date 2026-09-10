@@ -87,8 +87,8 @@ mod tests {
         time::{SystemTime, UNIX_EPOCH},
     };
 
-    use crate::fs_commands::types::{self, FileCommandError, ReadPolicy, MAX_TEXT_FILE_BYTES};
     use crate::fs_commands::types::WorkspaceFsGuard;
+    use crate::fs_commands::types::{self, FileCommandError, ReadPolicy, MAX_TEXT_FILE_BYTES};
     use crate::fs_commands::{dialog, directory, read, write};
 
     struct TestDir {

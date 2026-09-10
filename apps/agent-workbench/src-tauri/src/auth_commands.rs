@@ -5,7 +5,9 @@
 use std::sync::Arc;
 use tauri::State;
 
-use crate::auth::{AuthManager, CloudDeviceItem, RelayTicketResponse, SessionSnapshot, UserProfile};
+use crate::auth::{
+    AuthManager, CloudDeviceItem, RelayTicketResponse, SessionSnapshot, UserProfile,
+};
 
 /// 账号密码登录
 #[tauri::command]

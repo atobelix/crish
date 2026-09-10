@@ -504,7 +504,6 @@ pub async fn core_jsonl_to_messages(text: String) -> Result<Vec<serde_json::Valu
     result
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
