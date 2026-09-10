@@ -25,7 +25,6 @@ import {
   EMPTY_NARRATIVE_SLOTS,
   NarrativeRenderSlotsContext,
 } from '../chat-message/narrativeRenderSlots';
-import { EphemeralStatusSlot } from './EphemeralStatusSlot';
 import { isContextStateCarrierMessage } from '../../store/sessionInjectionMount';
 
 export type {
@@ -90,6 +89,7 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
     setDismissedFollowUps,
     sessionAllMessages: pinSourceMessages,
     pinnedItems,
+    pinnedColors,
     togglePin,
     handleMarkdownClick,
     onToggleExpandUser,
@@ -191,29 +191,18 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
     return { renderTools, renderThought };
   }, [renderTools, renderThought]);
 
-  if (messages.length === 0) {
-    if (!activeSessionId) return null;
-    return (
-      <div
-        data-chat-scroll-container=""
-        style={{ padding: '8px 0', display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}
-      >
-        <EphemeralStatusSlot
-          sessionId={activeSessionId}
-        />
-      </div>
-    );
-  }
+  if (messages.length === 0) return null;
 
   const pins = useMemo(
     () => ({
       pinnedItems,
+      pinnedColors,
       pinsOpen,
       setPinsOpen,
       jumpToPinned,
       togglePin,
     }),
-    [pinnedItems, pinsOpen, jumpToPinned, togglePin]
+    [pinnedItems, pinnedColors, pinsOpen, jumpToPinned, togglePin]
   );
 
   const flowControl = useMemo(

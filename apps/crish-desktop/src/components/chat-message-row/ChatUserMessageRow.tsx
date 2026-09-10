@@ -4,7 +4,6 @@ import styles from './ChatMessageRow.module.css';
 import { Tooltip } from '../ui';
 import type { SessionMessage } from '../../store/types';
 import type { VirtualScrollManager } from '../../api/VirtualScrollManager';
-import { Pin } from 'lucide-react';
 import {
   copyTextBestEffort,
   isUserBubbleLong,
@@ -25,10 +24,11 @@ import type { ChatAttachment } from '../../hooks/useChatStream';
 export type ChatUserMessageRowProps = {
   msg: SessionMessage;
   isPinned: boolean;
+  pinnedColor?: string;
   isSearchHit: boolean;
   isExpanded: boolean;
   onToggleExpand: (msgId: string) => void;
-  onTogglePin: (msgId: string) => void;
+  onTogglePin: (msgId: string, color?: string) => void;
   /** 会话最后一条 user：挂消息级撤回（用户锁：入口在对话里，不在 composer） */
   isLastUser?: boolean;
   onRetract?: () => void;
@@ -59,6 +59,7 @@ function userRowPropsEqual(
     prev.msg.text === next.msg.text &&
     prev.msg.timestamp === next.msg.timestamp &&
     prev.isPinned === next.isPinned &&
+    prev.pinnedColor === next.pinnedColor &&
     prev.isSearchHit === next.isSearchHit &&
     prev.isExpanded === next.isExpanded &&
     prev.isEditing === next.isEditing &&
@@ -81,6 +82,7 @@ function userRowPropsEqual(
 const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
   msg,
   isPinned,
+  pinnedColor,
   isSearchHit,
   isExpanded,
   onToggleExpand,
@@ -235,6 +237,7 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
       data-msg-id={msg.id}
       data-role="user"
       data-pinned={isPinned ? 'true' : undefined}
+      data-editing={isEditingRow ? 'true' : undefined}
       data-session-user-row
       role="article"
       aria-label={rowAria}
@@ -243,16 +246,6 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
         className={`${styles.userStack}${isEditingRow ? ` ${styles.userStackEditing}` : ''}`}
         data-editing={isEditingRow ? 'true' : undefined}
       >
-        {/* 固定徽标 */}
-        {isPinned ? (
-          <Tooltip content="已固定">
-            <span className={styles.pinBadge} aria-hidden="true">
-              <Pin size={11} strokeWidth={2.25} />
-              已固定
-            </span>
-          </Tooltip>
-        ) : null}
-
         {isEditingRow ? (
           <div
             className={styles.rowComposerHost}
@@ -265,11 +258,16 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
             {/* 统一类输入框卡片：内嵌顶部附件卡片横排流 + 底部正文文本 */}
             {hasAttachmentCards || hasTextContent ? (
               <div
-                className={`${styles.userBubble} ${isLong ? styles.userBubbleExpandable : ''}`}
+                className={`${styles.userBubble} ${isLong ? styles.userBubbleExpandable : ''}${isPinned ? ` ${styles.userBubblePinned}` : ''}`}
                 onClick={toggleExpand}
                 onKeyDown={onBubbleKeyDown}
                 style={{
                   cursor: isLong ? 'pointer' : 'default',
+                  ...(isPinned
+                    ? ({
+                        '--user-bubble-pin-color': pinnedColor || '#10b981',
+                      } as React.CSSProperties)
+                    : {}),
                 }}
                 role={isLong ? 'button' : undefined}
                 tabIndex={isLong ? 0 : undefined}
@@ -328,12 +326,12 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
             <UserMessageActionsBar
               timestamp={msg.timestamp}
               isPinned={isPinned}
+              pinnedColor={pinnedColor}
               copied={copied}
               onCopy={handleCopy}
-              onTogglePin={() => onTogglePin(msg.id)}
+              onTogglePin={(color?: string) => onTogglePin(msg.id, color)}
               onRetract={retractHandler}
               onEdit={onStartEdit}
-              alwaysVisible={Boolean(retractHandler)}
             />
           </>
         )}

@@ -143,8 +143,8 @@ describe('pin / expand / thinking a11y labels', () => {
       ariaLabel: '固定消息',
     });
     expect(pinToggleLabels(true)).toEqual({
-      title: '取消固定',
-      ariaLabel: '取消固定',
+      title: '解除固定',
+      ariaLabel: '解除固定',
     });
   });
 

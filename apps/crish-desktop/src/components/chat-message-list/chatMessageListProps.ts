@@ -122,10 +122,11 @@ export interface PinnedItem {
 /** 固定消息 (Pin) 控制器域 */
 export interface MessageVirtualizerPinsProps {
   pinnedItems: PinnedItem[];
-  pinsOpen: boolean;
-  setPinsOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  pinnedColors?: Record<string, string>;
+  pinsOpen?: boolean;
+  setPinsOpen?: React.Dispatch<React.SetStateAction<boolean>>;
   jumpToPinned: (id: string) => void;
-  togglePin: (id: string) => void;
+  togglePin: (id: string, color?: string) => void;
 }
 
 /** 流程与思考流控制域 */

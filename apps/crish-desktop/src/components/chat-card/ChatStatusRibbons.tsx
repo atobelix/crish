@@ -16,7 +16,7 @@ import * as Lucide from 'lucide-react';
 import { AppErrorBoundary } from '../AppErrorBoundary';
 import type { EngineStatus } from '../../api/engineConfig';
 import type { RunNotice } from '../../hooks/useChatStream';
-import { getSessionById } from '../../store/storeAccess';
+import { useSessionStore } from '../../store/sessionStore';
 import {
   resolveSessionProgressItems,
   computeChecklistProgress,
@@ -34,9 +34,7 @@ import {
   type PlanRibbonState,
 } from './PlanGoalRibbons';
 import { ApprovalDock } from './ApprovalDock';
-import { RetrySlotNotice } from './RetrySlotNotice';
 import { RunNoticeBar } from './RunNoticeBar';
-import { useContinuityUiStore } from '../../api/continuity/continuityUiStore';
 import { useConnectionStatus } from '../../hooks/useConnectionStatus';
 import { connectionManager } from '../../services/ConnectionManager';
 import {
@@ -199,16 +197,10 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
   const engineCrashed = connectionStatus === 'engine_crashed';
   const engineCrashedText = resolveEngineCrashedText({ onEmptySurface });
 
-  // D8 §3.7.4：临时通知（老虎机滚动重连；会话级订阅；
-  // 不进对话历史，仅 UI 层——事件 handler 写入 continuityUiStore）
-  const activeSession = activeSessionId ?? null;
-  const retryNotice = useContinuityUiStore((s) =>
-    activeSession ? s.retryNotices[activeSession] : null
+  // §5.2：订阅 session store（与 ComposerPlanProgressBar 同源），删除快照轨
+  const currentSession = useSessionStore((s) =>
+    activeSessionId ? s.sessionsById[activeSessionId] : undefined
   );
-
-  const currentSession = activeSessionId
-    ? getSessionById(activeSessionId)
-    : null;
   const progressItems = useMemo(
     () => resolveSessionProgressItems(currentSession),
     [currentSession]
@@ -359,15 +351,6 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
       )}
 
       {between}
-
-      {/* 临时通知老虎机滚动（D8 §3.7.4）：重连进度单起一行，不进对话历史；
-          空态不挂载（retryNotice null）防幽灵条 */}
-      {retryNotice ? (
-        <RetrySlotNotice
-          attempt={retryNotice.attempt}
-          maxAttempts={retryNotice.maxAttempts}
-        />
-      ) : null}
 
       {/* 系统提示：错误/空回复 — 明确非 AI 输出；空文案不挂载（防幽灵条） */}
       <RunNoticeBar runNotice={runNotice} onDismiss={onDismissRunNotice} />

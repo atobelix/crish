@@ -3,7 +3,6 @@ import type { FileDiff, SessionMessage } from '../../store/types';
 import type { PermissionMode } from '../../api/permissionModes';
 import {
   AssistantMessageActionsBar,
-  FollowUpSuggestionsSection,
   PlanApprovalRow,
 } from '../chat-message-row/MessageActionsBar';
 import { useToast } from '../../services/toast/ToastContext';
@@ -15,6 +14,7 @@ export interface MessageActionsState {
   copied: boolean;
   isLastAssistant: boolean;
   isPinned: boolean;
+  pinnedColor?: string;
   isThinkingMsg?: boolean | undefined;
   inPlanMode: boolean;
   planApproved: boolean;
@@ -23,8 +23,8 @@ export interface MessageActionsState {
 
 export interface MessageActionsActions {
   onCopy: () => void;
-  onRegenerate: (msgId: string) => void;
-  onTogglePin: (msgId: string) => void;
+  onRegenerate?: (msgId: string) => void;
+  onTogglePin: (msgId: string, color?: string) => void;
   setPermissionMode: (mode: PermissionMode) => void;
   setPlanApproved: (v: boolean) => void;
   onFillFollowUp?: ((prompt: string) => void) | undefined;
@@ -50,6 +50,7 @@ export const MessageActions: React.FC<MessageActionsProps> = React.memo(
       copied = false,
       isLastAssistant = false,
       isPinned = false,
+      pinnedColor,
       isThinkingMsg = false,
       inPlanMode = false,
       planApproved = false,
@@ -68,6 +69,9 @@ export const MessageActions: React.FC<MessageActionsProps> = React.memo(
       onOpenDiffPanel: _onOpenDiffPanel,
       onRetract,
     } = actions ?? {};
+    void _onOpenDiff;
+    void _onOpenDiffPanel;
+
     const { showToast } = useToast();
     // B-05：完成态气泡挂「发送到笔记」（agent-card / 主 chat 共用 MessageActions）
     const noteMarkdown = assistantCopyText(msg) || msg.text || '';
@@ -99,9 +103,12 @@ export const MessageActions: React.FC<MessageActionsProps> = React.memo(
           copied={copied}
           isLastAssistant={isLastAssistant}
           isPinned={isPinned}
+          pinnedColor={pinnedColor}
           onCopy={onCopy}
-          onRegenerate={() => onRegenerate(msg.id)}
-          onTogglePin={() => onTogglePin(msg.id)}
+          {...(onRegenerate !== undefined && {
+            onRegenerate: () => onRegenerate(msg.id),
+          })}
+          onTogglePin={(color?: string) => onTogglePin(msg.id, color)}
           {...(onRetract !== undefined && { onRetract })}
           sendToNoteNode={
             <ChatSendToNoteEntry
@@ -114,15 +121,6 @@ export const MessageActions: React.FC<MessageActionsProps> = React.memo(
             />
           }
           metricsNode={cacheMetricsNode}
-        />
-        <FollowUpSuggestionsSection
-          msg={msg}
-          isLastAssistant={isLastAssistant}
-          isThinkingMsg={isThinkingMsg}
-          followUpDismissed={followUpDismissed}
-          {...(onFillFollowUp !== undefined && { onFillFollowUp })}
-          {...(onSendFollowUp !== undefined && { onSendFollowUp })}
-          {...(onDismissFollowUp !== undefined && { onDismissFollowUp })}
         />
       </>
     );

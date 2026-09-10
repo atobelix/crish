@@ -23,8 +23,6 @@ import {
 
 import { MessageContent } from '../chat-message/MessageContent';
 import { MessageActions } from '../chat-message/MessageActions';
-import { CacheMetricsBadge } from './CacheMetricsBadge';
-import { RetractActionButton } from './RetractActionButton';
 import { isContextStateCarrierMessage } from '../../store/sessionInjectionMount';
 
 export type { ChatAssistantMessageRowProps } from './chatMessageRowUtils';
@@ -36,6 +34,7 @@ const ChatAssistantMessageRowInner: React.FC<
   streamText,
   isFollowUp,
   isPinned,
+  pinnedColor,
   isSearchHit,
   isThinkingMsg,
   hideThinkingBlock,
@@ -135,8 +134,6 @@ const ChatAssistantMessageRowInner: React.FC<
     if (isThinkingMsg || (streamText || '').trim().length > 0) return false;
     return isContextStateCarrierMessage(msg);
   }, [msg, isThinkingMsg, streamText]);
-  const showLiveRetract =
-    !isPureCarrier && Boolean(onRetract) && isLastAssistant && isLive;
 
   const handleCopy = useCallback(() => {
     // T4 A1：壳层已装配合并 view model——流式期间 msg.text 即热缓冲累积正文，
@@ -179,11 +176,6 @@ const ChatAssistantMessageRowInner: React.FC<
         />
       </div>
 
-      {showLiveRetract && onRetract ? (
-        <div className={`${styles.assistantMeta} ${styles.metaAlways}`}>
-          <RetractActionButton onRetract={onRetract} />
-        </div>
-      ) : null}
       {!isLive && !isPureCarrier && (
         <MessageActions
           msg={msg}
@@ -191,6 +183,7 @@ const ChatAssistantMessageRowInner: React.FC<
             copied,
             isLastAssistant,
             isPinned,
+            pinnedColor,
             isThinkingMsg,
             inPlanMode,
             planApproved,
@@ -198,7 +191,7 @@ const ChatAssistantMessageRowInner: React.FC<
           }}
           actions={{
             onCopy: handleCopy,
-            onRegenerate,
+            ...(onRegenerate !== undefined && { onRegenerate }),
             onTogglePin,
             setPermissionMode,
             setPlanApproved,
@@ -209,9 +202,7 @@ const ChatAssistantMessageRowInner: React.FC<
             ...(onOpenDiffPanel !== undefined && { onOpenDiffPanel }),
             ...(isLastAssistant && onRetract !== undefined && { onRetract }),
           }}
-          cacheMetricsNode={
-            <CacheMetricsBadge metrics={msg.cacheMetrics?.metrics ?? null} />
-          }
+          cacheMetricsNode={null}
         />
       )}
     </div>

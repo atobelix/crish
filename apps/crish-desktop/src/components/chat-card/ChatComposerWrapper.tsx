@@ -12,7 +12,7 @@ import { slotCore } from '../../services/view-registry/SlotCore';
 import type { ChatComposerAboveProps } from './chatComposerAboveProps';
 import './workspaceChatComposerAbove.slot';
 import { ApprovalDock } from './ApprovalDock';
-import { getSessionById } from '../../store/storeAccess';
+import { useSessionStore } from '../../store/sessionStore';
 import { resolveSessionProgressItems } from '../../api/sessionProgressApi';
 import {
   ComposerPlanProgressBar,
@@ -71,9 +71,10 @@ export const ChatComposerWrapper: React.FC<ChatComposerWrapperProps> = React.mem
   isProcessing = false,
   onStopGeneration,
 }) => {
-  const currentSession = activeSessionId
-    ? getSessionById(activeSessionId)
-    : null;
+  // §5.2：订阅 session store，禁止一次性会话快照轨冒充实时进度
+  const currentSession = useSessionStore((s) =>
+    activeSessionId ? s.sessionsById[activeSessionId] : undefined
+  );
   const progressItems = useMemo(
     () => resolveSessionProgressItems(currentSession),
     [currentSession]
@@ -125,26 +126,27 @@ export const ChatComposerWrapper: React.FC<ChatComposerWrapperProps> = React.mem
     activeSessionId,
   };
 
-  const composerAbove: ChatComposerAboveProps = useMemo(
-    () => ({
+  // §5.2：审批必有真实 props；缺回调时不塞空实现（Slot 侧显式不可用）
+  const composerAbove: ChatComposerAboveProps | null = useMemo(() => {
+    if (!onApprovalAllow || !onApprovalDeny) return null;
+    return {
       pendingCount: pendingApprovalCount,
       firstToolId: pendingApprovalToolId,
       firstMsgId: pendingApprovalMsgId,
       firstSummary: pendingApprovalSummary,
       approvalBusy,
-      onApprovalAllow: onApprovalAllow ?? noopApproval,
-      onApprovalDeny: onApprovalDeny ?? noopApproval,
-    }),
-    [
-      pendingApprovalCount,
-      pendingApprovalToolId,
-      pendingApprovalMsgId,
-      pendingApprovalSummary,
-      approvalBusy,
       onApprovalAllow,
       onApprovalDeny,
-    ]
-  );
+    };
+  }, [
+    pendingApprovalCount,
+    pendingApprovalToolId,
+    pendingApprovalMsgId,
+    pendingApprovalSummary,
+    approvalBusy,
+    onApprovalAllow,
+    onApprovalDeny,
+  ]);
 
   const floatHasContent =
     pendingApprovalCount > 0 ||
@@ -174,11 +176,26 @@ export const ChatComposerWrapper: React.FC<ChatComposerWrapperProps> = React.mem
             data-composer-float-zone=""
             hidden={!floatHasContent && !liftApproval}
           >
-            <SlotOutlet
-              slotKey="workspace.chat.composerAbove"
-              context={composerAbove}
-              fallback={null}
-            />
+            {composerAbove ? (
+              <SlotOutlet
+                slotKey="workspace.chat.composerAbove"
+                context={composerAbove}
+                fallback={null}
+              />
+            ) : liftApproval && pendingApprovalCount > 0 ? (
+              <div
+                role="status"
+                aria-live="polite"
+                data-testid="composer-above-approval-unavailable"
+                style={{
+                  padding: '6px 10px',
+                  fontSize: 'var(--font-size-xs)',
+                  color: 'var(--text-secondary)',
+                }}
+              >
+                审批操作不可用（未接入真实回调）
+              </div>
+            ) : null}
             {liftApproval ? null : (
               <ApprovalDock
                 show={showApprovalDock}
@@ -218,7 +235,3 @@ export const ChatComposerWrapper: React.FC<ChatComposerWrapperProps> = React.mem
     </div>
   );
 });
-
-function noopApproval(_toolId: string, _msgId: string, _remember?: boolean): void {
-  /* 关插件路径不消费 composerAbove；缺回调时按钮无操作 */
-}

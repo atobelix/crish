@@ -62,22 +62,22 @@ describe('Markdown Typography & Syntax Highlighting Tokens (Plan 06)', () => {
     it('ChatMessageRow.module.css 必须包含完整的 H1~H6 独立阶梯规则', () => {
       // H1 ~ H6 必须独立声明且绑定对应的 token 变量与 fallback 值
       expect(chatMessageRowCss).toContain('.assistantText :global(.md-h1)');
-      expect(chatMessageRowCss).toContain('--md-heading-h1-size, 1.5em');
+      expect(chatMessageRowCss).toContain('--md-h1-size, 1.85em');
 
       expect(chatMessageRowCss).toContain('.assistantText :global(.md-h2)');
-      expect(chatMessageRowCss).toContain('--md-heading-h2-size, 1.3em');
+      expect(chatMessageRowCss).toContain('--md-h2-size, 1.45em');
 
       expect(chatMessageRowCss).toContain('.assistantText :global(.md-h3)');
-      expect(chatMessageRowCss).toContain('--md-heading-h3-size, 1.15em');
+      expect(chatMessageRowCss).toContain('--md-h3-size, 1.25em');
 
       expect(chatMessageRowCss).toContain('.assistantText :global(.md-h4)');
-      expect(chatMessageRowCss).toContain('--md-heading-h4-size, 1.05em');
+      expect(chatMessageRowCss).toContain('--md-h4-size, 1.10em');
 
       expect(chatMessageRowCss).toContain('.assistantText :global(.md-h5)');
-      expect(chatMessageRowCss).toContain('--md-heading-h5-size, 1em');
+      expect(chatMessageRowCss).toContain('--md-h5-size, 1.00em');
 
       expect(chatMessageRowCss).toContain('.assistantText :global(.md-h6)');
-      expect(chatMessageRowCss).toContain('--md-heading-h6-size, 0.9em');
+      expect(chatMessageRowCss).toContain('--md-h6-size, 0.90em');
     });
 
     it('必须消除历史粗暴的无 font-size 聚合 H1~H6 声明', () => {

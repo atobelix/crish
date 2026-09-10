@@ -153,13 +153,21 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
       setEditAttachments((prev) => [...prev, ...mapped]);
     }, []);
 
-    const modelBadgeNode = state.showModelPicker ? (
+    const mainModelBadgeNode = state.showModelPicker ? (
       <ModelBadgePicker
         engineModel={state.engineModel}
         activeProfileId={state.activeProfileId}
         needsModelSetup={state.needsModelSetup}
         showModelDropdown={state.showModelDropdown}
         setShowModelDropdown={state.setShowModelDropdown}
+      />
+    ) : null;
+
+    const editModelBadgeNode = state.showModelPicker ? (
+      <ModelBadgePicker
+        engineModel={state.engineModel}
+        activeProfileId={state.activeProfileId}
+        needsModelSetup={state.needsModelSetup}
       />
     ) : null;
 
@@ -179,7 +187,7 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
         onPermissionChange={(m) => {
           state.setPermissionMode(m);
         }}
-        rightActions={modelBadgeNode}
+        rightActions={mainModelBadgeNode}
       />
     );
 
@@ -210,7 +218,7 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
         onPermissionChange={(m) => state.setPermissionMode(m)}
         isEditingMessage={true}
         onCancelEdit={handleCancelEditMessage}
-        rightActions={modelBadgeNode}
+        rightActions={editModelBadgeNode}
       />
     ) : null;
 

@@ -61,45 +61,45 @@
   border-radius: var(--radius-sm, 4px);
 }
 
-/* 极简状态指示灯（流式运行态 5px 脉冲微光） */
+/* 极简状态指示灯（流式运行态 4px 中性炭灰微脉冲） */
 .statusDot {
-  width: 5px;
-  height: 5px;
-  min-width: 5px;
-  min-height: 5px;
+  width: 4px;
+  height: 4px;
+  min-width: 4px;
+  min-height: 4px;
   border-radius: 50%;
-  background: var(--accent-color);
-  box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--accent-color) 22%, transparent);
-  animation: thought-dot-pulse 1.4s ease-in-out infinite;
+  background: var(--text-tertiary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--text-tertiary) 20%, transparent);
+  animation: thought-dot-pulse 1.6s ease-in-out infinite;
   display: inline-block;
   flex-shrink: 0;
-  margin-right: 4px;
+  margin-right: 5px;
 }
 
 @keyframes thought-dot-pulse {
   0%, 100% {
     transform: scale(0.85);
-    opacity: 0.7;
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-color) 18%, transparent);
+    opacity: 0.6;
+    box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--text-tertiary) 15%, transparent);
   }
   50% {
-    transform: scale(1.15);
-    opacity: 1;
-    box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent-color) 32%, transparent);
+    transform: scale(1.1);
+    opacity: 0.95;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--text-tertiary) 25%, transparent);
   }
 }
 
 /* 静态语义标签 */
 .reasoningLabel {
   font-weight: 500;
-  color: inherit;
+  color: var(--text-secondary);
   flex-shrink: 0;
   pointer-events: none;
   white-space: nowrap;
 }
 
 .isLive .reasoningLabel {
-  color: var(--accent-color);
+  color: var(--text-secondary);
 }
 
 /* 微型分割点 */
@@ -127,6 +127,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: var(--text-secondary);
 }
 
 /* 右对齐打字机动态跟随：靠右硬截断，让左侧较早文字溢出可视边界外 */
@@ -149,38 +150,24 @@
   text-overflow: clip;
 }
 
-/* 扫光微交互（@keyframes sweep-shine） */
+/* 极简微交互动画契约声明 */
 @keyframes sweep-shine {
   0% {
-    background-position: -200% 0;
+    opacity: 0.75;
+  }
+  50% {
+    opacity: 1;
   }
   100% {
-    background-position: 200% 0;
+    opacity: 0.75;
   }
 }
 
-@keyframes reasoning-row-sweep {
-  0% {
-    background-position: -200% 0;
-  }
-  100% {
-    background-position: 200% 0;
-  }
-}
-
+/* 流式尾窗柔和纯净字色（中性微交互） */
 .sweepShine {
-  background: linear-gradient(
-    90deg,
-    var(--text-tertiary) 0%,
-    var(--text-primary) 50%,
-    var(--text-tertiary) 100%
-  );
-  background-size: 200% 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
   animation: sweep-shine 2.6s ease-in-out infinite;
-  font-weight: 500;
+  color: var(--text-secondary);
+  font-weight: 400;
 }
 
 /* 无障碍降级：系统偏好减弱动态效果时关停扫光 */

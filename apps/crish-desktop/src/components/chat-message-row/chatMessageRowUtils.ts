@@ -35,7 +35,7 @@ export function pinToggleLabels(isPinned: boolean): {
   ariaLabel: string;
 } {
   return isPinned
-    ? { title: '取消固定', ariaLabel: '取消固定' }
+    ? { title: '解除固定', ariaLabel: '解除固定' }
     : { title: '固定', ariaLabel: '固定消息' };
 }
 
@@ -163,6 +163,7 @@ export type ChatAssistantMessageRowProps = {
   streamText?: string;
   isFollowUp: boolean;
   isPinned: boolean;
+  pinnedColor?: string;
   isSearchHit: boolean;
   isThinkingMsg: boolean;
   hideThinkingBlock: boolean;
@@ -170,8 +171,8 @@ export type ChatAssistantMessageRowProps = {
   planApproved: boolean;
   isLastAssistant: boolean;
   toolStackProps: ChatToolStackSharedProps;
-  onTogglePin: (msgId: string) => void;
-  onRegenerate: (assistantMsgId: string) => void;
+  onTogglePin: (msgId: string, color?: string) => void;
+  onRegenerate?: (assistantMsgId: string) => void;
   onBranch: () => void;
   onOpenDiff: (diff: FileDiff) => void;
   onOpenDiffPanel?: (() => void) | undefined;
@@ -200,6 +201,7 @@ export const MEMO_COMPARE_FIELDS = [
   'streamText',
   'isFollowUp',
   'isPinned',
+  'pinnedColor',
   'isSearchHit',
   'isThinkingMsg',
   'hideThinkingBlock',
@@ -251,6 +253,7 @@ export function assistantRowPropsEqual(
     prev.msg.cacheMetrics === next.msg.cacheMetrics &&
     prev.streamText === next.streamText &&
     prev.isPinned === next.isPinned &&
+    prev.pinnedColor === next.pinnedColor &&
     prev.isSearchHit === next.isSearchHit &&
     prev.isFollowUp === next.isFollowUp &&
     prev.isThinkingMsg === next.isThinkingMsg &&

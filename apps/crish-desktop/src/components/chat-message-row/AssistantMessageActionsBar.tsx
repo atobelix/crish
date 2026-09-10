@@ -1,8 +1,8 @@
 import React from 'react';
-import { Check, Copy, Pin, PinOff, RefreshCw } from 'lucide-react';
+import { Check, Copy, RefreshCw } from 'lucide-react';
 import styles from './ChatMessageRow.module.css';
 import { Button, Tooltip } from '../ui';
-import { formatMsgTime, pinToggleLabels } from './chatMessageRowUtils';
+import { formatMsgTime } from './chatMessageRowUtils';
 import { RetractActionButton } from './RetractActionButton';
 
 // ─── Assistant Message Meta Actions Bar ─────────────────────────────────────
@@ -11,10 +11,11 @@ export interface AssistantMessageActionsBarProps {
   timestamp?: number;
   copied: boolean;
   isLastAssistant: boolean;
-  isPinned: boolean;
+  isPinned?: boolean;
+  pinnedColor?: string;
   onCopy: () => void;
-  onRegenerate: () => void;
-  onTogglePin: () => void;
+  onRegenerate?: () => void;
+  onTogglePin?: (color?: string) => void;
   sendToNoteNode?: React.ReactNode;
   metricsNode?: React.ReactNode;
   onRetract?: () => void;
@@ -26,15 +27,12 @@ export const AssistantMessageActionsBar: React.FC<
   timestamp,
   copied,
   isLastAssistant,
-  isPinned,
   onCopy,
   onRegenerate,
-  onTogglePin,
   sendToNoteNode,
   metricsNode,
   onRetract,
 }) => {
-  const pinLabels = pinToggleLabels(isPinned);
   return (
     <div className={styles.assistantMeta}>
       <span className={styles.time}>{formatMsgTime(timestamp)}</span>
@@ -49,7 +47,7 @@ export const AssistantMessageActionsBar: React.FC<
           icon={copied ? <Check size={14} /> : <Copy size={14} />}
         />
       </Tooltip>
-      {isLastAssistant ? (
+      {isLastAssistant && onRegenerate ? (
         <Tooltip content="重新生成">
           <Button
             type="button"
@@ -64,18 +62,6 @@ export const AssistantMessageActionsBar: React.FC<
       ) : null}
       {onRetract ? <RetractActionButton onRetract={onRetract} /> : null}
       {sendToNoteNode}
-      <Tooltip content={pinLabels.title}>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className={`${styles.iconBtn}${isPinned ? ` ${styles.isPinnedActive}` : ''}`}
-          aria-label={pinLabels.ariaLabel}
-          aria-pressed={isPinned}
-          onClick={onTogglePin}
-          icon={isPinned ? <PinOff size={14} /> : <Pin size={14} />}
-        />
-      </Tooltip>
       {metricsNode ? (
         <span className={styles.cacheMetricsInline}>{metricsNode}</span>
       ) : null}

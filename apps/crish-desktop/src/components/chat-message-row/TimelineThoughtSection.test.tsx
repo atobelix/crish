@@ -14,19 +14,18 @@ describe('TimelineThoughtSection', () => {
       />
     );
 
-    expect(screen.getByText('第 1 阶段思考')).toBeDefined();
-    expect(screen.getByText(/2.4s/)).toBeDefined();
+    expect(screen.getByText('已思考 · 2.4秒')).toBeDefined();
     expect(screen.queryByText(/共.*字/)).toBeNull();
     expect(screen.queryByRole('button', { name: /查看完整思考链/i })).toBeNull();
   });
 
-  it('实时思考中展示呼吸绿点与流式文案', () => {
+  it('实时思考中展示流式文案，无呼吸绿点', () => {
     const { container } = render(
       <TimelineThoughtSection content="正在思考下一步工具调用" isLive={true} />
     );
 
     expect(screen.getByText('思考中')).toBeDefined();
-    expect(container.querySelector('[class*="thoughtLiveDot"]')).not.toBeNull();
+    expect(container.querySelector('[class*="thoughtLiveDot"]')).toBeNull();
   });
 
   it('defaultExpanded 控制新渲染块的初始开合', () => {

@@ -109,6 +109,20 @@ describe('flowScrubberModel', () => {
       top: 100,
       behavior: 'smooth',
     });
+
+    // 针对高度超过视口 50% 的长消息，断言采用 block: 'start' 顶部对齐，彻底防止开头被顶出视口遭裁切
+    const tallRow = document.createElement('article');
+    tallRow.setAttribute('data-msg-id', 'a_tall');
+    const tallIntoView = vi.fn();
+    tallRow.scrollIntoView = tallIntoView;
+    Object.defineProperty(tallRow, 'offsetHeight', { value: 350, configurable: true });
+    Object.defineProperty(scroller, 'clientHeight', { value: 500, configurable: true });
+    scroller.appendChild(tallRow);
+    scrollToScrubberTarget(scroller, 'a_tall', manager);
+    expect(tallIntoView).toHaveBeenCalledWith({
+      behavior: 'smooth',
+      block: 'start',
+    });
   });
 
   it('conversation-flow 祖先与 purpose 节点读取', () => {
@@ -121,5 +135,23 @@ describe('flowScrubberModel', () => {
     expect(isConversationFlowOn(scroller)).toBe(true);
     expect(readPurposeLabel(scroller, 'a1')).toBe('梳理 IPC');
     expect(readPurposeLabel(scroller, 'missing')).toBeUndefined();
+  });
+
+  it('buildScrubberSegments 提取随后的 assistantSnippet 并清洗 markdown', () => {
+    const segs = buildScrubberSegments(
+      [
+        msg('u1', 'user', '### 如何实现无轨刻度？'),
+        msg('a1', 'assistant', '**方案如下**：\n```ts\nconst a = 1;\n```\n非常简单。'),
+      ],
+      () => 100
+    );
+    const tickSeg = segs.find((s) => s.type === 'tick');
+    expect(tickSeg).toBeDefined();
+    if (tickSeg?.type === 'tick') {
+      expect(tickSeg.tick.snippet).toBe('如何实现无轨刻度？');
+      expect(tickSeg.tick.nextAssistantId).toBe('a1');
+      expect(tickSeg.tick.assistantSnippet).toContain('方案如下');
+      expect(tickSeg.tick.assistantSnippet).not.toContain('**');
+    }
   });
 });

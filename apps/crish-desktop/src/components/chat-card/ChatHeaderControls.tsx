@@ -13,11 +13,15 @@ import {
   getActiveModelId,
   getActiveProfile,
   getActiveProfileId,
-  resolveDisplayModelId,
-  resolvePreferredModelSelection,
 } from '../../api/providerProfiles';
+import {
+  getLiveModel,
+  getLiveProvider,
+  listLivePickerEntries,
+} from '../../api/modelsCatalogLive';
 import { fetchEngineStatus, type EngineStatus } from '../../api/engineConfig';
 import { onUiEvent } from '../../api/uiEvents';
+import { useModelsCatalogVersion } from '../../hooks/useModelsCatalogVersion';
 import type { AppSettings } from '../../store/types';
 import { abbreviateModel } from '../../api/modelAbbreviation';
 
@@ -38,33 +42,74 @@ export interface ChatHeaderControlsProps {
   needsModelSetup: boolean;
 }
 
+export interface HeaderModelLabel {
+  profileId: string | null;
+  model: string;
+}
+
+/**
+ * 按 yaml 镜像解析顶栏当前标签。删除/改名后同厂商自愈或置空，禁止跨厂商同名跳转。
+ * 未加载或空树 → 空标签，不得回落 LS 种子模型。
+ */
+export function resolveHeaderModelFromCatalog(opts: {
+  profileId?: string | null;
+  storedModel?: string | null;
+  engineModel?: string | null;
+  settingsDefault?: string | null;
+}): HeaderModelLabel {
+  const profileId = (opts.profileId || '').trim() || null;
+  const candidate =
+    (opts.storedModel || '').trim() ||
+    (opts.engineModel || '').trim() ||
+    (opts.settingsDefault || '').trim();
+
+  if (profileId && candidate) {
+    const spec = getLiveModel(profileId, candidate);
+    const provider = getLiveProvider(profileId);
+    if (
+      spec &&
+      spec.enabled !== false &&
+      provider &&
+      provider.enabled !== false &&
+      (spec.id || '').trim()
+    ) {
+      return { profileId, model: spec.id };
+    }
+  }
+
+  if (profileId) {
+    const norm = profileId.toLowerCase();
+    const firstSameVendor = listLivePickerEntries().find(
+      (entry) => entry.providerId.trim().toLowerCase() === norm
+    );
+    if (firstSameVendor) {
+      return { profileId, model: firstSameVendor.model.id };
+    }
+    return { profileId, model: '' };
+  }
+
+  return { profileId: null, model: '' };
+}
+
 export function useModelSelection(
   appSettings: AppSettings | undefined,
   projectTick: number
 ) {
+  const catalogVersion = useModelsCatalogVersion();
   const [engineModel, setEngineModel] = useState('');
   const [activeProfileId, setActiveProfileId] = useState<string | null>(null);
   const [showModelDropdown, setShowModelDropdown] = useState(false);
   const [engineHint, setEngineHint] = useState<EngineStatus | null>(null);
 
   const applyResolvedModelLabel = (engineHintModel?: string | null) => {
-    const resolved = resolvePreferredModelSelection(
-      engineHintModel !== undefined ? { engineModel: engineHintModel } : {}
-    );
-    if (resolved) {
-      setEngineModel(resolved.model);
-      setActiveProfileId(resolved.profileId);
-      return;
-    }
-    const settingsDefault = (appSettings?.defaultModel || '').trim();
-    const localActive = (getActiveModelId() || '').trim();
-    const display =
-      resolveDisplayModelId(engineHintModel) ||
-      localActive ||
-      settingsDefault ||
-      '';
-    setEngineModel(display);
-    setActiveProfileId(getActiveProfileId());
+    const next = resolveHeaderModelFromCatalog({
+      profileId: getActiveProfileId(),
+      storedModel: getActiveModelId(),
+      engineModel: engineHintModel,
+      settingsDefault: appSettings?.defaultModel,
+    });
+    setEngineModel(next.model);
+    setActiveProfileId(next.profileId);
   };
 
   useEffect(() => {
@@ -74,6 +119,11 @@ export function useModelSelection(
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectTick, appSettings?.defaultModel]);
+
+  useEffect(() => {
+    applyResolvedModelLabel(engineHint?.model);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [catalogVersion]);
 
   // 引擎连接超时回退：15 秒后 engineHint 仍为 null → 标记离线
   useEffect(() => {
@@ -136,8 +186,7 @@ export const ModelBadgePicker: React.FC<ModelBadgePickerProps> = ({
   const renderModelName = (modelId: string) => {
     if (!modelId) return '选择模型';
     if (modelId === '填写模型' || modelId === '无可用模型') return modelId;
-    const clean = resolveDisplayModelId(modelId) || modelId;
-    const abbr = abbreviateModel(clean);
+    const abbr = abbreviateModel(modelId);
     return (
       <span className={styles.modelAdaptiveWrapper}>
         <span className={styles.modelStandard}>{abbr.standard}</span>
@@ -152,7 +201,7 @@ export const ModelBadgePicker: React.FC<ModelBadgePickerProps> = ({
       <Tooltip
         content={
           getActiveProfile()
-            ? `${getActiveProfile()!.name} · ${resolveDisplayModelId(engineModel) || engineModel || '未选模型'}`
+            ? `${getActiveProfile()!.name} · ${engineModel || '未选模型'}`
             : '服务商与模型（可在设置中更改）'
         }
         disabled={showModelDropdown}
@@ -179,9 +228,7 @@ export const ModelBadgePicker: React.FC<ModelBadgePickerProps> = ({
             }}
           >
             {renderModelName(
-              resolveDisplayModelId(engineModel) ||
-                engineModel ||
-                (needsModelSetup ? '填写模型' : '无可用模型')
+              engineModel || (needsModelSetup ? '填写模型' : '无可用模型')
             )}
           </span>
         </button>

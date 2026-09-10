@@ -68,6 +68,7 @@ function makeState(overrides: Record<string, unknown> = {}) {
       handleStopGeneration: vi.fn(),
       handleForceCancelGeneration: vi.fn(),
       handleFilesSelected: vi.fn(),
+      handleDroppedFiles: vi.fn(),
       setChatInput: vi.fn(),
       runNotice: null,
       setRunNotice: vi.fn(),

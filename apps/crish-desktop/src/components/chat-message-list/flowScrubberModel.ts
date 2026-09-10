@@ -25,6 +25,7 @@ export interface ScrubberTick {
   snippet: string;
   timestamp: number;
   nextAssistantId?: string;
+  assistantSnippet?: string;
 }
 
 export type ScrubberSegment =
@@ -36,8 +37,27 @@ export type ScrubberLayoutManager = Pick<
   'getOffset' | 'getHeight' | 'getOrder'
 >;
 
+export function cleanMarkdownForSnippet(raw?: string): string {
+  if (!raw) return '';
+  return raw
+    .replace(/```[a-zA-Z0-9_-]*\n?/g, '')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/(\*\*|__)(.*?)\1/g, '$2')
+    .replace(/(\*|_)(.*?)\1/g, '$2')
+    .replace(/^>\s+/gm, '')
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 export function snippetFromUserText(text?: string): string {
-  return pinSnippet(text, 80);
+  return pinSnippet(cleanMarkdownForSnippet(text), 48);
+}
+
+export function snippetFromAssistantText(text?: string): string {
+  return pinSnippet(cleanMarkdownForSnippet(text), 160);
 }
 
 /**
@@ -85,13 +105,20 @@ export function buildScrubberSegments(
     if (msg.sender === 'user') {
       flushGap();
       let nextAssistantId: string | undefined;
+      let assistantSnippet: string | undefined;
       for (let j = i + 1; j < messages.length; j++) {
         const later = messages[j]!;
-        if (later.sender === 'assistant') {
-          nextAssistantId = later.id;
-          break;
-        }
         if (later.sender === 'user') break;
+        if (later.sender === 'assistant') {
+          if (!nextAssistantId) {
+            nextAssistantId = later.id;
+          }
+          if (later.text && later.text.trim()) {
+            assistantSnippet = snippetFromAssistantText(later.text);
+            nextAssistantId = later.id;
+            break;
+          }
+        }
       }
       segs.push({
         type: 'tick',
@@ -102,6 +129,7 @@ export function buildScrubberSegments(
           snippet: snippetFromUserText(msg.text),
           timestamp: msg.timestamp,
           nextAssistantId,
+          assistantSnippet,
         },
       });
     } else {
@@ -167,7 +195,7 @@ export function wheelDeltaY(
   return e.deltaMode === 1 ? e.deltaY * 36 : e.deltaY;
 }
 
-/** DOM 在视口内用 scrollIntoView；虚拟窗外用 VSM offset 居中。 */
+/** DOM 在视口内用 scrollIntoView；长消息顶部对齐防裁切（受 .row scroll-margin-top: 56px 保护）；虚拟窗外用 VSM offset。 */
 export function scrollToScrubberTarget(
   scroller: HTMLElement,
   messageId: string,
@@ -177,7 +205,14 @@ export function scrollToScrubberTarget(
     `[data-msg-id="${CSS.escape(messageId)}"]`
   );
   if (inView instanceof HTMLElement) {
-    inView.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const viewH = scroller.clientHeight || 0;
+    const targetH = inView.offsetHeight || 0;
+    // 目标消息高度超过视口 50% 时顶部对齐，避免长助手回复居中导致开头被向上顶出视口裁切
+    if (targetH > viewH * 0.5 && viewH > 0) {
+      inView.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } else {
+      inView.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
     return;
   }
   const order = manager.getOrder();
@@ -186,7 +221,11 @@ export function scrollToScrubberTarget(
   const offset = manager.getOffset(index);
   const height = manager.getHeight(messageId);
   const viewH = scroller.clientHeight || 0;
-  const top = Math.max(0, offset - Math.max(0, viewH - height) / 2);
+  // 虚拟窗外同样防裁切：若高于视口一半，顶部保留 24px 呼吸间距
+  const top =
+    height > viewH * 0.5 && viewH > 0
+      ? Math.max(0, offset - 24)
+      : Math.max(0, offset - Math.max(0, viewH - height) / 2);
   if (typeof scroller.scrollTo === 'function') {
     scroller.scrollTo({ top, behavior: 'smooth' });
   } else {

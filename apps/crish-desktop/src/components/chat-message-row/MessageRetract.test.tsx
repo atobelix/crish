@@ -63,7 +63,7 @@ function assertRetractChrome(btn: HTMLElement) {
 }
 
 describe('消息级撤回入口', () => {
-  it('最后一条 user 常显撤回，点击走 onRetract', () => {
+  it('最后一条 user 挂撤回，点击走 onRetract', () => {
     const onRetract = vi.fn();
     render(
       <ChatUserMessageRow
@@ -81,7 +81,7 @@ describe('消息级撤回入口', () => {
     );
     const btn = screen.getByRole('button', { name: '撤回上一条用户消息' });
     assertRetractChrome(btn);
-    expect(btn.closest('[class*="metaAlways"]')).toBeTruthy();
+    expect(btn).toBeInTheDocument();
     fireEvent.click(btn);
     expect(onRetract).toHaveBeenCalledTimes(1);
   });
@@ -119,7 +119,7 @@ describe('消息级撤回入口', () => {
     expect(screen.queryByTestId('message-retract')).toBeNull();
   });
 
-  it('生成中的最后一条助手行仍可撤回（不丢流式撤回）', () => {
+  it('生成中的最后一条助手行隐藏动作栏（运行中不到最后不展示工具栏）', () => {
     const onRetract = vi.fn();
     render(
       <ChatAssistantMessageRow
@@ -144,11 +144,7 @@ describe('消息级撤回入口', () => {
         virtualScrollManager={null}
       />
     );
-    const btn = screen.getByRole('button', { name: '撤回上一条用户消息' });
-    assertRetractChrome(btn);
-    expect(btn.closest('[class*="metaAlways"]')).toBeTruthy();
-    fireEvent.click(btn);
-    expect(onRetract).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('button', { name: '撤回上一条用户消息' })).toBeNull();
   });
 
   it('已完成的最后一条助手行动作栏带撤回', () => {
@@ -188,23 +184,18 @@ describe('消息级撤回入口', () => {
     expect(onTogglePin).toHaveBeenCalledTimes(1);
   });
 
-  it('AssistantMessageActionsBar 未固定时渲染固定按钮，点击触发 onTogglePin', () => {
-    const onTogglePin = vi.fn();
+  it('AssistantMessageActionsBar 严守契约：AI 助手消息不提供固定功能', () => {
     render(
       <AssistantMessageActionsBar
         timestamp={1}
         copied={false}
         isLastAssistant={false}
-        isPinned={false}
         onCopy={vi.fn()}
         onRegenerate={vi.fn()}
-        onTogglePin={onTogglePin}
       />
     );
-    const pinBtn = screen.getByRole('button', { name: '固定消息' });
-    expect(pinBtn).toBeInTheDocument();
-    fireEvent.click(pinBtn);
-    expect(onTogglePin).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('button', { name: '固定消息' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '解除固定' })).toBeNull();
   });
 
   it('撤回皮：7px token + appearance none，无 scale 果冻', () => {
@@ -220,4 +211,36 @@ describe('消息级撤回入口', () => {
     );
     expect(composerCss).not.toMatch(/\.retractBtn\s*\{/);
   });
+  it('AssistantMessageActionsBar 无 onRegenerate 时不渲染重新生成', () => {
+    render(
+      <AssistantMessageActionsBar
+        timestamp={1}
+        copied={false}
+        isLastAssistant
+        isPinned={false}
+        onCopy={vi.fn()}
+        onTogglePin={vi.fn()}
+      />
+    );
+    expect(screen.queryByRole('button', { name: '重新生成' })).toBeNull();
+  });
+
+  it('AssistantMessageActionsBar 有 onRegenerate 且 isLastAssistant 时渲染并可点', () => {
+    const onRegenerate = vi.fn();
+    render(
+      <AssistantMessageActionsBar
+        timestamp={1}
+        copied={false}
+        isLastAssistant
+        isPinned={false}
+        onCopy={vi.fn()}
+        onRegenerate={onRegenerate}
+        onTogglePin={vi.fn()}
+      />
+    );
+    const btn = screen.getByRole('button', { name: '重新生成' });
+    fireEvent.click(btn);
+    expect(onRegenerate).toHaveBeenCalledTimes(1);
+  });
+
 });

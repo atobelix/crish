@@ -1,7 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { toast } from '../../services/toast/ToastContext';
 import { useSettingsField, selectAppSettings } from '../../store/storeAccess';
 import { getProviderSetupStatus } from '../../api/providerProfiles';
+import { listLivePickerEntries } from '../../api/modelsCatalogLive';
+import { useModelsCatalogVersion } from '../../hooks/useModelsCatalogVersion';
 import { useModelSelection } from './ChatHeaderControls';
 import type { EngineStatus } from '../../api/engineConfig';
 import type { AppSettings } from '../../store/types';
@@ -27,6 +29,7 @@ export function useChatModelPicker({
   projectTick,
 }: UseChatModelPickerOptions): UseChatModelPickerResult {
   const appSettings: AppSettings | null = useSettingsField(selectAppSettings);
+  const catalogVersion = useModelsCatalogVersion();
   const [pickerInlineError, setPickerInlineError] = useState('');
 
   const {
@@ -37,6 +40,11 @@ export function useChatModelPicker({
     engineHint,
   } = useModelSelection(appSettings ?? undefined, projectTick);
 
+  const liveHasEnabledModel = useMemo(
+    () => listLivePickerEntries().length > 0,
+    [catalogVersion]
+  );
+
   const setupStatus = getProviderSetupStatus({
     ...(engineHint?.ok !== undefined ? { engineOk: engineHint.ok } : {}),
     ...(engineHint?.hasApiKey !== undefined
@@ -46,7 +54,8 @@ export function useChatModelPicker({
   });
 
   const needsKeySetup = setupStatus.needsKeySetup;
-  const needsModelSetup = setupStatus.needsModelSetup;
+  // yaml 空树 / 未加载 → 需要填模型；禁止用 LS 种子列表把 needsModelSetup 打成 false
+  const needsModelSetup = setupStatus.hasKey && !liveHasEnabledModel;
   const showModelPicker = setupStatus.showModelPicker;
 
   // pickerInlineError toast 展示

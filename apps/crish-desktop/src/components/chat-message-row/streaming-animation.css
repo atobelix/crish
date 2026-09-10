@@ -75,7 +75,7 @@
   height: var(--stream-caret-height, 0.95em);
   margin-left: var(--stream-caret-margin-left, var(--space-0_5, 2px));
   vertical-align: text-bottom;
-  background: var(--stream-caret-color, var(--brand, hsl(160 84% 39%)));
+  background: var(--stream-caret-color, var(--text-primary));
   border-radius: var(--stream-caret-radius, 1px);
   animation: conex-caret-blink var(--stream-caret-blink-dur, 800ms) cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }

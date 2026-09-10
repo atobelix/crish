@@ -65,4 +65,10 @@ describe('FlowScrubber 源码钉', () => {
     expect(card).toMatch(/workspace\.chat\.stream/);
     expect(card).toMatch(/fallback=\{<ChatMessageList/);
   });
+
+  it('FlowScrubber 无 emoji，固定提示无文字硬编码「已固定」', () => {
+    const tsx = read('FlowScrubber.tsx');
+    expect(tsx).not.toMatch(/📌/);
+    expect(tsx).not.toMatch(/已固定/);
+  });
 });

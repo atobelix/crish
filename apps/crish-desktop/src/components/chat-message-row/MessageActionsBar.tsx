@@ -9,7 +9,3 @@ export {
   type AssistantMessageActionsBarProps,
 } from './AssistantMessageActionsBar';
 export { RetractActionButton } from './RetractActionButton';
-export {
-  FollowUpSuggestionsSection,
-  type FollowUpSuggestionsSectionProps,
-} from './FollowUpSuggestionsSection';

@@ -8,13 +8,11 @@ import React, {
 } from 'react';
 import styles from './ChatMessageList.module.css';
 import { AppErrorBoundary } from '../AppErrorBoundary';
-import { Button, Tooltip } from '../ui';
 import { messageMatchesSearch } from '../../api/sessionSearch';
 import { ChatUserMessageRow } from '../chat-message-row/ChatMessageRow';
 import { StreamingAssistantRow } from './StreamingAssistantRow';
 import { useVirtualScroll } from '../../hooks/useVirtualScroll';
 import { MESSAGE_ESTIMATED_ROW_HEIGHT } from '../../api/VirtualScrollManager';
-import { ChevronDown, Pin, PinOff } from 'lucide-react';
 import {
   registerActiveVsm,
   unregisterActiveVsm,
@@ -22,7 +20,6 @@ import {
 } from '../../store/storeAccess';
 import { useUndoWithScrollAnchor } from './useUndoWithScrollAnchor';
 import { FlowScrubber } from './FlowScrubber';
-import { EphemeralStatusSlot } from './EphemeralStatusSlot';
 import { ChatScrollFloorSlot } from './ChatScrollFloorSlot';
 
 import {
@@ -53,8 +50,7 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
 
   // 领域分组对象直接解构（切除双向兼容与扁平回退代码）
   const pinnedItems = pins?.pinnedItems ?? [];
-  const pinsOpen = pins?.pinsOpen ?? false;
-  const setPinsOpen = pins?.setPinsOpen ?? (() => {});
+  const pinnedColors = pins?.pinnedColors ?? {};
   const jumpToPinned = pins?.jumpToPinned ?? (() => {});
   const togglePin = pins?.togglePin ?? (() => {});
 
@@ -315,69 +311,7 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
         onScroll={handleScroll}
       >
         <div className={styles.listInner} data-chat-list-inner="">
-        {pinnedItems.length > 0 ? (
-          <div
-            className={styles.pinnedBar}
-            role="region"
-            aria-label="已固定消息"
-          >
-            <Tooltip content={pinsOpen ? '收起固定列表' : '展开固定列表'}>
-              <button
-                type="button"
-                className={styles.pinnedBarToggle}
-                onClick={() => setPinsOpen((v) => !v)}
-                aria-expanded={pinsOpen}
-                aria-controls="chat-pinned-list"
-                aria-label={
-                  pinsOpen
-                    ? `收起已固定消息列表，共 ${pinnedItems.length} 条`
-                    : `展开已固定消息列表，共 ${pinnedItems.length} 条`
-                }
-              >
-                <Pin size={13} strokeWidth={2} aria-hidden />
-                <span>已固定 · {pinnedItems.length}</span>
-                <ChevronDown
-                  size={14}
-                  className={`${styles.pinnedChevron}${pinsOpen ? ` ${styles.isOpen}` : ''}`}
-                  aria-hidden
-                />
-              </button>
-            </Tooltip>
-            {pinsOpen ? (
-              <ul id="chat-pinned-list" className={styles.pinnedList}>
-                {pinnedItems.map((item) => (
-                  <li key={item.id} className={styles.pinnedItem}>
-                    <Tooltip content="跳转到消息">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className={styles.pinnedJump}
-                        aria-label={`跳转到${item.sender === 'user' ? '你' : '助手'}的固定消息：${item.snippet}`}
-                        onClick={() => jumpToPinned(item.id)}
-                      >
-                        <span className={styles.pinnedSnippet}>
-                          {item.snippet}
-                        </span>
-                      </Button>
-                    </Tooltip>
-                    <Tooltip content="取消固定">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className={styles.pinnedUnpin}
-                        aria-label={`取消固定：${item.snippet}`}
-                        onClick={() => togglePin(item.id)}
-                        icon={<PinOff size={14} aria-hidden />}
-                      />
-                    </Tooltip>
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-          </div>
-        ) : null}
+
 
         <div
           hidden
@@ -405,6 +339,7 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
                   <ChatUserMessageRow
                     msg={msg}
                     isPinned={isPinnedMsg}
+                    pinnedColor={pinnedColors[msg.id]}
                     isSearchHit={isSearchHit}
                     isExpanded={!!expandedUserMsgs[msg.id]}
                     onToggleExpand={onToggleExpandUser}
@@ -436,6 +371,7 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
                   msg={msg}
                   isFollowUp={isFollowUp}
                   isPinned={isPinnedMsg}
+                  pinnedColor={pinnedColors[msg.id]}
                   isSearchHit={isSearchHit}
                   isThinkingMsg={msg.id === thinkingMsgId}
                   hideThinkingBlock={hideThinkingBlock}
@@ -475,18 +411,7 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
           aria-hidden
         />
 
-        {activeSessionId && (
-          <EphemeralStatusSlot
-            sessionId={activeSessionId}
-            onRetry={
-              generation?.handleRegenerateRow && lastAssistantId
-                ? () => {
-                    generation.handleRegenerateRow!(lastAssistantId);
-                  }
-                : undefined
-            }
-          />
-        )}
+
         </div>
         <ChatScrollFloorSlot
           visible={showFloorButton}
@@ -499,6 +424,9 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
         manager={manager}
         totalHeight={totalHeight}
         scrollerRef={vs.containerRef}
+        pinnedIdSet={pinnedIdSet}
+        pinnedColors={pinnedColors}
+        onTogglePin={togglePin}
       />
     </div>
   );

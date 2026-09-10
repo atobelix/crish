@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import React from 'react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { fireEvent, render } from '@testing-library/react';
+import { act, fireEvent, render } from '@testing-library/react';
 import { VirtualScrollManager } from '../../api/VirtualScrollManager';
 import type { SessionMessage } from '../../store/types';
 import { FlowScrubber } from './FlowScrubber';
@@ -184,6 +184,58 @@ describe('FlowScrubber', () => {
     const wrap = container.querySelector('[data-flow-scrubber]');
     fireEvent.wheel(wrap!, { deltaY: 40, deltaMode: 0 });
     expect(scroller.scrollTop).toBe(50);
+  });
+
+  it('Hover tick 快速呼出问答预览卡片（按图 5 结构无分割线），跨 tick 移动无缝切换且不重新销毁重建', () => {
+    vi.useFakeTimers();
+    const scroller = document.createElement('div');
+    const manager = new VirtualScrollManager(100);
+    manager.syncOrder(['u1', 'a1', 'u2', 'a2']);
+    manager.setActual('u1', 100);
+    manager.setActual('a1', 100);
+    manager.setActual('u2', 100);
+    manager.setActual('a2', 100);
+    const onTogglePin = vi.fn();
+
+    const { container } = render(
+      <FlowScrubber
+        messages={[
+          userMsg('u1', '提问一'),
+          assistantMsg('a1', '回答一'),
+          userMsg('u2', '提问二'),
+          assistantMsg('a2', '回答二'),
+        ]}
+        manager={manager}
+        totalHeight={400}
+        scrollerRef={{ current: scroller }}
+        onTogglePin={onTogglePin}
+      />
+    );
+
+    const ticks = container.querySelectorAll('[data-flow-scrubber-tick]');
+    expect(ticks).toHaveLength(2);
+
+    // 1. 鼠标移入第一个 tick，60ms 快速呼出
+    fireEvent.mouseEnter(ticks[0]!);
+    act(() => {
+      vi.advanceTimersByTime(80);
+    });
+
+    // 呼出卡片，图 5 结构断言
+    const tooltipCard = container.querySelector('[class*="scrubberTooltipCard"]');
+    expect(tooltipCard).not.toBeNull();
+    expect(tooltipCard?.textContent).toContain('提问一');
+    expect(tooltipCard?.textContent).toContain('回答一');
+    // 断言无细分割线
+    expect(container.querySelector('[class*="scrubberTooltipDivider"]')).toBeNull();
+
+    // 2. 跨 tick 移动至第二个 tick：立刻无缝切至提问二
+    fireEvent.mouseEnter(ticks[1]!);
+    const updatedCard = container.querySelector('[class*="scrubberTooltipCard"]');
+    expect(updatedCard?.textContent).toContain('提问二');
+    expect(updatedCard?.textContent).toContain('回答二');
+
+    vi.useRealTimers();
   });
 });
 

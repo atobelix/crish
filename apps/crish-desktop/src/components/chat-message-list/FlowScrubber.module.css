@@ -61,9 +61,9 @@
   margin: 0;
   padding: 0;
   border: none;
-  border-radius: 1px;
-  background-color: var(--text-tertiary);
-  opacity: 0.35;
+  border-radius: var(--radius-full, 9999px);
+  background-color: var(--tint-divider);
+  opacity: 1;
   transform-origin: right center;
   cursor: pointer;
   pointer-events: auto;
@@ -91,25 +91,220 @@
 }
 
 .tick.isActive {
-  background-color: var(--text-secondary);
-  opacity: 0.75;
+  background-color: var(--tint-overlay);
   width: 16px;
 }
 
 .root:hover .tick {
   width: 16px;
-  opacity: 0.5;
+  background-color: var(--tint-divider);
 }
 
 .root:hover .tick.isActive {
   width: 24px;
-  opacity: 0.85;
+  background-color: var(--tint-highlight);
 }
 
-.tick:hover,
+.root .tick:hover,
 .root:hover .tick:hover {
-  background-color: var(--text-secondary) !important;
-  opacity: 1 !important;
-  width: 32px !important;
+  background-color: color-mix(in srgb, var(--text-primary) 45%, transparent);
+  width: 32px;
   z-index: 10;
+}
+
+/* 存在固定消息时保持纯净透明，不渲染多余阴影/底色 */
+.wrapper[data-has-pinned='true'] {
+  background: transparent;
+  box-shadow: none;
+}
+
+/* 固定刻度卡点：无阴影扩散，短线带上颜色，圆角胶囊 */
+.root .tick.isPinnedTick {
+  background-color: var(--tick-pin-color, #10b981);
+  opacity: 0.9;
+  width: 13px;
+  box-shadow: none;
+  border-radius: var(--radius-full, 9999px);
+}
+
+.root:hover .tick.isPinnedTick {
+  width: 18px;
+  opacity: 0.95;
+}
+
+.root:hover .tick.isPinnedTick.isActive {
+  width: 24px;
+  opacity: 1;
+}
+
+.root .tick.isPinnedTick:hover,
+.root:hover .tick.isPinnedTick:hover {
+  background-color: var(--tick-pin-color, #10b981);
+  width: 32px;
+  opacity: 1;
+  box-shadow: none;
+}
+
+.root .tick.isHoveredTick,
+.root:hover .tick.isHoveredTick {
+  background-color: color-mix(in srgb, var(--text-primary) 45%, transparent);
+  width: 32px;
+  z-index: 10;
+}
+
+.root .tick.isPinnedTick.isHoveredTick,
+.root:hover .tick.isPinnedTick.isHoveredTick {
+  background-color: var(--tick-pin-color, #10b981);
+  width: 32px;
+  opacity: 1;
+}
+
+/* 单一悬浮预览卡片容器：无 fixed、相对 wrapper 绝对定位，Y 轴平滑过渡跟手 */
+.scrubberFloatingTooltip {
+  position: absolute;
+  right: calc(100% + 8px);
+  z-index: var(--z-dropdown, 100);
+  pointer-events: auto;
+  transform: translateY(-50%);
+  animation: scrubberTooltipFadeIn 120ms cubic-bezier(0.16, 1, 0.3, 1);
+  transition: top 100ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes scrubberTooltipFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-50%) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(-50%) scale(1);
+  }
+}
+
+/* 问答卡片主体：按图 5 规范，无中间分割线，圆角柔和，双层微阴影 */
+.scrubberTooltipCard {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-width: 220px;
+  max-width: 360px;
+  padding: 8px 10px;
+  background: var(--tooltip-card-bg, var(--bg-card, #ffffff));
+  border: 1px solid var(--tooltip-card-border, color-mix(in srgb, var(--border-color) 70%, transparent));
+  border-radius: var(--radius-lg, 10px);
+  box-shadow: 0 6px 20px -2px rgba(0, 0, 0, 0.1), 0 2px 6px -1px rgba(0, 0, 0, 0.05);
+  text-align: left;
+  box-sizing: border-box;
+  transition: background-color var(--transition-fast, 120ms ease),
+    border-color var(--transition-fast, 120ms ease);
+}
+
+.scrubberTooltipHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 6px 4px;
+}
+
+.scrubberTooltipTime {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scrubberPinBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  background: transparent;
+  border: none;
+  padding: 0;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--text-tertiary);
+  transition: background-color var(--transition-fast, 120ms ease),
+    color var(--transition-fast, 120ms ease);
+  flex-shrink: 0;
+}
+
+.scrubberPinBtn:hover {
+  background-color: var(--tint-hover);
+  color: var(--text-primary);
+}
+
+.scrubberPinBtn.isPinned {
+  color: var(--tick-pin-color, #10b981);
+}
+
+.scrubberPinBtn.isPinned:hover {
+  background-color: var(--tint-hover);
+  color: var(--tick-pin-color, #10b981);
+}
+
+/* 用户提问行：主文本色，中等字重，多行包裹 */
+.scrubberTooltipUserBtn {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  padding: 4px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color var(--transition-fast, 120ms ease);
+  box-sizing: border-box;
+}
+
+.scrubberTooltipUserBtn:hover {
+  background-color: var(--tint-hover, color-mix(in srgb, var(--text-primary) 2.5%, transparent));
+}
+
+.scrubberTooltipUserText {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.45;
+  color: var(--text-primary);
+  word-break: break-word;
+  white-space: normal;
+}
+
+/* 助手回复行：次级灰度，略小字号，多行包裹完整呈现 */
+.scrubberTooltipAssistantBtn {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  padding: 4px 6px;
+  margin-top: 4px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color var(--transition-fast, 120ms ease);
+  box-sizing: border-box;
+}
+
+.scrubberTooltipAssistantBtn:hover {
+  background-color: var(--tint-hover, color-mix(in srgb, var(--text-primary) 2.5%, transparent));
+}
+
+.scrubberTooltipAssistantText {
+  display: -webkit-box;
+  -webkit-line-clamp: 5;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-tertiary);
+  word-break: break-word;
+  white-space: normal;
 }

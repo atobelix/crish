@@ -35,18 +35,16 @@ export const TimelineThoughtSection: React.FC<TimelineThoughtSectionProps> = ({
   const durationLabel = useMemo(() => {
     if (durationMs != null && durationMs > 0) {
       const sec = (durationMs / 1000).toFixed(1);
-      return turnIndex != null ? `${sec}s` : `${sec}秒`;
+      return `${sec}秒`;
     }
     return null;
-  }, [durationMs, turnIndex]);
+  }, [durationMs]);
 
   const titleText = isLive
     ? '思考中'
-    : turnIndex != null
-      ? `第 ${turnIndex + 1} 阶段思考`
-      : durationLabel
-        ? `思考了 ${durationLabel}`
-        : '思考过程';
+    : durationLabel
+      ? `已思考 · ${durationLabel}`
+      : '已思考';
 
   return (
     <div
@@ -61,23 +59,13 @@ export const TimelineThoughtSection: React.FC<TimelineThoughtSectionProps> = ({
         tabIndex={0}
         aria-expanded={isOpen}
       >
-        {isLive ? (
-          <span className={styles.thoughtLiveDot} aria-hidden />
-        ) : null}
-
         <span className={styles.thoughtTitle}>
           {titleText}
         </span>
 
         {isLive ? (
           <ThinkingTimer isLive />
-        ) : (
-          <span className={styles.thoughtMeta}>
-            {turnIndex != null && durationLabel ? (
-              <span className={styles.thoughtDuration}> · {durationLabel}</span>
-            ) : null}
-          </span>
-        )}
+        ) : null}
 
         <span
           className={`${styles.thoughtChevron} ${isOpen ? styles.isOpen : ''}`}
