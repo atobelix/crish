@@ -312,7 +312,9 @@ impl DeviceErrorCode {
             DeviceErrorCode::StreamNotSubscribed => "stream.not_subscribed".to_string(),
             DeviceErrorCode::StreamCursorInvalid => "stream.cursor_invalid".to_string(),
             DeviceErrorCode::StreamCursorStale => "stream.cursor_stale".to_string(),
-            DeviceErrorCode::StreamTooManySubscriptions => "stream.too_many_subscriptions".to_string(),
+            DeviceErrorCode::StreamTooManySubscriptions => {
+                "stream.too_many_subscriptions".to_string()
+            }
             DeviceErrorCode::StreamTooManyStreams => "stream.too_many_streams".to_string(),
             DeviceErrorCode::FileNotFound => "file.not_found".to_string(),
             DeviceErrorCode::FileNotGranted => "file.not_granted".to_string(),
@@ -461,10 +463,19 @@ mod tests {
 
     #[test]
     fn error_code_wire_values() {
-        assert_eq!(DeviceErrorCode::CmdApprovalMismatch.as_str(), "cmd.approval_mismatch");
+        assert_eq!(
+            DeviceErrorCode::CmdApprovalMismatch.as_str(),
+            "cmd.approval_mismatch"
+        );
         assert_eq!(DeviceErrorCode::PairExpired.as_str(), "pair.expired");
-        assert_eq!(DeviceErrorCode::VersionMismatch.as_str(), "version_mismatch");
-        assert_eq!(DeviceErrorCode::Unknown("future.code".into()).as_str(), "future.code");
+        assert_eq!(
+            DeviceErrorCode::VersionMismatch.as_str(),
+            "version_mismatch"
+        );
+        assert_eq!(
+            DeviceErrorCode::Unknown("future.code".into()).as_str(),
+            "future.code"
+        );
         // wire 序列化
         let json = serde_json::to_value(&DeviceErrorCode::StreamCursorStale).unwrap();
         assert_eq!(json, "stream.cursor_stale");
@@ -512,8 +523,11 @@ mod tests {
 
     #[test]
     fn error_body_roundtrip() {
-        let body = ErrorBody::new(DeviceErrorCode::CmdApprovalMismatch, "该请求已被其他设备处理或已过期")
-            .with_req_msg_id("m-iph-001-12");
+        let body = ErrorBody::new(
+            DeviceErrorCode::CmdApprovalMismatch,
+            "该请求已被其他设备处理或已过期",
+        )
+        .with_req_msg_id("m-iph-001-12");
         let json = serde_json::to_value(&body).unwrap();
         assert_eq!(json["code"], "cmd.approval_mismatch");
         assert_eq!(json["message"], "该请求已被其他设备处理或已过期");
@@ -550,7 +564,9 @@ mod tests {
             DeviceErrorCode::CmdInvalid
         );
         assert_eq!(
-            DeviceErrorCode::from_core_error(&CoreError::InvalidInput("workspace_not_granted".into())),
+            DeviceErrorCode::from_core_error(&CoreError::InvalidInput(
+                "workspace_not_granted".into()
+            )),
             DeviceErrorCode::FileNotGranted
         );
         assert_eq!(

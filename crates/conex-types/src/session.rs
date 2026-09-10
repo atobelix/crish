@@ -48,9 +48,7 @@ pub enum AgentSessionEvent {
     /// 一轮准备完毕（turnIndex+1，toolCallCount 归零）
     TurnPrepared,
     /// 模型输出含工具调用，携带调用数量
-    HasToolCalls {
-        count: u32,
-    },
+    HasToolCalls { count: u32 },
     /// 无工具调用（纯文字正常收场路径）
     NoToolCalls,
     /// 流错误恢复后继续（重试/压缩后重进准备）

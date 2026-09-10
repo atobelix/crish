@@ -38,28 +38,27 @@ pub use injection_card::{
 // codes 常量集在 error.rs 内（`pub mod codes`），根级重导出供
 // orchestrator / 壳命令面以 `conex_types::codes` 引用（R6 接线点）。
 pub use checkpoint::{
-    CHECKPOINT_CORRUPT_SIGNAL, CHECKPOINT_MARKER, CHECKPOINT_PAYLOAD_KEY,
-    CHECKPOINT_PRESENT_SIGNAL, CONEX_CHECKPOINT_MARKER, CheckpointError, CheckpointPayload,
-    LeafCheckpointState,
+    CheckpointError, CheckpointPayload, LeafCheckpointState, CHECKPOINT_CORRUPT_SIGNAL,
+    CHECKPOINT_MARKER, CHECKPOINT_PAYLOAD_KEY, CHECKPOINT_PRESENT_SIGNAL, CONEX_CHECKPOINT_MARKER,
 };
-pub use context::{CONTEXT_SAFETY_TOKENS, ContextBudget, SessionContextMeta};
+pub use context::{ContextBudget, SessionContextMeta, CONTEXT_SAFETY_TOKENS};
 pub use cron::{CronError, CronField, CronSchedule};
-pub use denied_stats::{DeniedStats, DeniedStatsSummary, global_denied_stats};
+pub use denied_stats::{global_denied_stats, DeniedStats, DeniedStatsSummary};
 pub use error::codes;
 
 pub use error::{
-    CrishError, CrishErrorCategory, CrishErrorPayload, MigrateErrorContext, ProviderErrorKind,
-    RunTerminal, RunTerminalError, migrate_error_code,
+    migrate_error_code, CrishError, CrishErrorCategory, CrishErrorPayload, MigrateErrorContext,
+    ProviderErrorKind, RunTerminal, RunTerminalError,
 };
 pub use events::{
-    AgentEvent, AgentEventEnvelope, ApprovalDecision, BackpressureLevel, DropClass,
-    EVENT_ENVELOPE_SCHEMA_VERSION, EventPolicy, MissAttribution,
-    PermissionRequest, PersistenceDecision, RunCacheStats, RunTerminalStatus,
+    AgentEvent, AgentEventEnvelope, ApprovalDecision, BackpressureLevel, DropClass, EventPolicy,
+    MissAttribution, PermissionRequest, PersistenceDecision, RunCacheStats, RunTerminalStatus,
     SecurityAuditDecision, SecurityAuditOperation, SubagentEndStatus, SubagentEventKind,
     SubagentEventPayload, TimelineTruncateReason, ToolMetadata, TurnUsage,
+    EVENT_ENVELOPE_SCHEMA_VERSION,
 };
 pub use history::HistoryMessage;
-pub use impact::{IMPACT_FLAG_FILE_THRESHOLD, ImpactAssessment};
+pub use impact::{ImpactAssessment, IMPACT_FLAG_FILE_THRESHOLD};
 pub use message::{
     AgentMessage, AgentMessageBlock, AgentMessageMetadataKind, AgentMessageRole, ToolCallBlock,
 };
@@ -67,7 +66,7 @@ pub use response::{ClassifiedStreamError, ProviderOutput};
 pub use session::{AgentEndReason, AgentSessionContext, AgentSessionEvent, AgentSessionState};
 pub use timer::{TimerCondition, TimerDeclaration, TimerHandle};
 pub use tool::{
-    ContextCompressionRecord, ContextCompressionReason, ContextCompressionTrigger,
+    ContextCompressionReason, ContextCompressionRecord, ContextCompressionTrigger,
     ProviderDiagnostic, ProviderDiagnosticPhase, RuntimeCheckpointKind, RuntimeCheckpointRecord,
     RuntimeCheckpointRestoreRecord, SystemPromptWireMode, ToolArtifact, ToolArtifactKind,
     ToolBatchCall, ToolBatchResult, ToolCategory, ToolConcurrency, ToolOutput, ToolProgressUpdate,
@@ -79,7 +78,7 @@ pub use transition::{AgentTransition, AgentTransitionEffect, TransitionError};
 // 错误类型（DeviceEnvelope/MessageKind/AuthHeader/DeviceErrorCode/ErrorBody/
 // CommandRequest/CommandResult/PairCode），与 events 域两形并存惯例一致。
 pub use device::commands::{CommandRequest, CommandResult};
-pub use device::envelope::{AuthHeader, DeviceEnvelope, DeviceEndpoint, MessageKind};
+pub use device::envelope::{AuthHeader, DeviceEndpoint, DeviceEnvelope, MessageKind};
 pub use device::error::{DeviceErrorCode, ErrorBody};
 pub use device::pair::PairCode;
 
@@ -321,9 +320,18 @@ mod tests {
                 new_start: 1,
                 new_lines: 4,
                 lines: vec![
-                    DiffLine { kind: DiffLineKind::Context, content: "hello".into() },
-                    DiffLine { kind: DiffLineKind::Deletion, content: "old".into() },
-                    DiffLine { kind: DiffLineKind::Addition, content: "new".into() },
+                    DiffLine {
+                        kind: DiffLineKind::Context,
+                        content: "hello".into(),
+                    },
+                    DiffLine {
+                        kind: DiffLineKind::Deletion,
+                        content: "old".into(),
+                    },
+                    DiffLine {
+                        kind: DiffLineKind::Addition,
+                        content: "new".into(),
+                    },
                 ],
             }],
             added_lines: 1,
@@ -409,8 +417,6 @@ mod tests {
         assert_eq!(json["tokensConsumed"], 150);
         assert_eq!(json["cacheHitRateOptimized"], true);
     }
-
-
 
     #[test]
     fn session_message_serializes_to_camel_case() {

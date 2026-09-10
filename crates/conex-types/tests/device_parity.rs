@@ -19,17 +19,19 @@
 //! 死条目）见 `tests/fixtures/device-protocol/README.md`。
 
 use conex_types::device::{
-    CommandRequest, CommandResult, DeviceEnvelope, DeviceEndpoint, ErrorBody, EventsPush,
-    Hello, HelloOk, MessageKind, PairChallenge, PairHello, PairOk, PairVerify, Resume,
-    ResumeDone, ResumePage, StreamChunk, Subscribe,
+    CommandRequest, CommandResult, DeviceEndpoint, DeviceEnvelope, ErrorBody, EventsPush, Hello,
+    HelloOk, MessageKind, PairChallenge, PairHello, PairOk, PairVerify, Resume, ResumeDone,
+    ResumePage, StreamChunk, Subscribe,
 };
 use serde_json::Value;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 /// 样例集根目录（共享输入；`tests/fixtures/device-protocol/`）
-const FIXTURES_ROOT: &str =
-    concat!(env!("CARGO_MANIFEST_DIR"), "/../../tests/fixtures/device-protocol");
+const FIXTURES_ROOT: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../tests/fixtures/device-protocol"
+);
 
 /// 递归按键码点升序排序后输出紧凑 JSON（双端 canonical 比较基准：
 /// TS 侧 parity.test.ts 的 canonicalJsonString 同一语义；serde_json 默认
@@ -38,10 +40,8 @@ fn canonical(value: &Value) -> String {
     fn sort(v: &Value) -> Value {
         match v {
             Value::Object(map) => {
-                let sorted: BTreeMap<String, Value> = map
-                    .iter()
-                    .map(|(k, v)| (k.clone(), sort(v)))
-                    .collect();
+                let sorted: BTreeMap<String, Value> =
+                    map.iter().map(|(k, v)| (k.clone(), sort(v))).collect();
                 Value::Object(sorted.into_iter().collect())
             }
             Value::Array(items) => Value::Array(items.iter().map(sort).collect()),
@@ -144,7 +144,11 @@ fn valid_samples_roundtrip_and_match_fixture() {
 #[test]
 fn invalid_samples_are_rejected_both_sides() {
     let files = fixture_files("invalid");
-    assert!(files.len() >= 5, "invalid 样例集规模过小（{} 个）", files.len());
+    assert!(
+        files.len() >= 5,
+        "invalid 样例集规模过小（{} 个）",
+        files.len()
+    );
     for path in files {
         let name = path.file_name().unwrap().to_string_lossy().to_string();
         let (text, _) = load_fixture(&path);
@@ -161,10 +165,10 @@ fn invalid_samples_are_rejected_both_sides() {
 fn canonical_signing_payload_locked_by_fixture() {
     // 以 13-remote-approve.json（审批命令请求）为 canon 锁定样例
     let path = std::path::Path::new(FIXTURES_ROOT).join("valid/13-remote-approve.json");
-    let text = std::fs::read_to_string(&path)
-        .unwrap_or_else(|e| panic!("读取 canon 样例失败：{e}"));
-    let env: DeviceEnvelope = serde_json::from_str(&text)
-        .unwrap_or_else(|e| panic!("canon 样例反序列化失败：{e}"));
+    let text =
+        std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("读取 canon 样例失败：{e}"));
+    let env: DeviceEnvelope =
+        serde_json::from_str(&text).unwrap_or_else(|e| panic!("canon 样例反序列化失败：{e}"));
 
     // canon(header) = deviceId ∥ ts ∥ nonce ∥ msgId ∥ kind ∥ v，再拼接 body
     // 紧凑 JSON（serde_json 默认 Map 后端键序 = 码点序，确定性）

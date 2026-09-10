@@ -136,9 +136,7 @@ pub struct ToolCallBlock {
 pub enum AgentMessageBlock {
     /// 正文增量/终态块
     #[serde(rename = "text", rename_all = "camelCase")]
-    Text {
-        text: String,
-    },
+    Text { text: String },
     /// 思考块（redacted 透传，02 §1.4：Responses 推理标 redacted=true）
     #[serde(rename = "thought", rename_all = "camelCase")]
     Thought {

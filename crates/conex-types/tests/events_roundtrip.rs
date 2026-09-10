@@ -8,15 +8,14 @@
 
 use conex_types::{
     AgentEndReason, AgentEvent, AgentEventEnvelope, AgentMessage, AgentMessageBlock,
-    AgentMessageRole, ApprovalDecision, ContextCompressionRecord,
-    ContextCompressionReason, ContextCompressionTrigger, ImpactAssessment,
-    MissAttribution, PermissionRequest,
+    AgentMessageRole, ApprovalDecision, ContextCompressionReason, ContextCompressionRecord,
+    ContextCompressionTrigger, ImpactAssessment, MissAttribution, PermissionRequest,
     ProviderDiagnostic, ProviderDiagnosticPhase, ProviderErrorKind, RunCacheStats,
     RunTerminalStatus, RuntimeCheckpointKind, RuntimeCheckpointRecord,
     RuntimeCheckpointRestoreRecord, SecurityAuditDecision, SecurityAuditOperation,
     SubagentEndStatus, SubagentEventKind, SubagentEventPayload, TimelineTruncateReason,
-    ToolArtifactKind, ToolBatchCall, ToolBatchResult, ToolCallBlock, ToolCategory,
-    ToolConcurrency, ToolMetadata, ToolOutput, TurnUsage,
+    ToolArtifactKind, ToolBatchCall, ToolBatchResult, ToolCallBlock, ToolCategory, ToolConcurrency,
+    ToolMetadata, ToolOutput, TurnUsage,
 };
 use serde_json::json;
 use std::sync::Arc;
@@ -709,13 +708,19 @@ fn all_event_types_have_expected_wire_type_name() {
     // 顺序必须一一对应——新增事件变体在两处登记后本测试自动纳入
     let events = all_events();
     assert_eq!(events.len(), AgentEvent::ALL_TYPE_NAMES.len());
-    for (event, name) in events.iter().zip(AgentEvent::ALL_TYPE_NAMES.iter().copied()) {
+    for (event, name) in events
+        .iter()
+        .zip(AgentEvent::ALL_TYPE_NAMES.iter().copied())
+    {
         let json = serde_json::to_value(event).unwrap();
         assert_eq!(json["type"], name, "顶层 type 字段（03 §5.1-1）");
         // 每个事件都携带 sessionId；例外：goal-* 三事件为 envelope 事件
         // 不列 sessionId 变体字段（会话归属在事件行，读侧信封已含，
         // 02-定夺 B2/S9 约定）
-        if !matches!(name, "goal-round-started" | "goal-round-completed" | "goal-continuation-decided") {
+        if !matches!(
+            name,
+            "goal-round-started" | "goal-round-completed" | "goal-continuation-decided"
+        ) {
             assert!(json.get("sessionId").is_some(), "{name} 缺 sessionId");
         }
     }
@@ -761,7 +766,10 @@ fn subagent_session_id_old_frame_parses_to_none() {
         AgentEvent::SubagentStarted {
             subagent_session_id,
             ..
-        } => assert_eq!(subagent_session_id, None, "旧帧缺省 subagentSessionId → None"),
+        } => assert_eq!(
+            subagent_session_id, None,
+            "旧帧缺省 subagentSessionId → None"
+        ),
         other => panic!("type 判别错误：{}", other.type_name()),
     }
 
@@ -778,7 +786,10 @@ fn subagent_session_id_old_frame_parses_to_none() {
         AgentEvent::SubagentEnded {
             subagent_session_id,
             ..
-        } => assert_eq!(subagent_session_id, &None, "旧帧缺省 subagentSessionId → None"),
+        } => assert_eq!(
+            subagent_session_id, &None,
+            "旧帧缺省 subagentSessionId → None"
+        ),
         other => panic!("type 判别错误：{}", other.type_name()),
     }
 
@@ -942,7 +953,10 @@ fn tool_start_hard_dependency_call_id_and_tool_name() {
     assert_eq!(json["call"]["category"], "filesystem");
     assert_eq!(json["call"]["concurrency"], "parallel");
     // D-03（EV-09/EV-11）：turnIndex 可选——None 省略，旧帧形状不变
-    assert!(json.get("turnIndex").is_none(), "turn_index=None 不得序列化 turnIndex 键");
+    assert!(
+        json.get("turnIndex").is_none(),
+        "turn_index=None 不得序列化 turnIndex 键"
+    );
 }
 
 #[test]
@@ -965,9 +979,18 @@ fn tool_end_hard_dependency_result_fields() {
     assert_eq!(json["result"]["durationMs"], 12);
     // D-03（EV-09/EV-11）：attempt/deduplicated/executedInput 可选——
     // None 省略，旧帧形状不变
-    assert!(json.get("attempt").is_none(), "attempt=None 不得序列化 attempt 键");
-    assert!(json.get("deduplicated").is_none(), "deduplicated=None 不得序列化");
-    assert!(json.get("executedInput").is_none(), "executedInput=None 不得序列化");
+    assert!(
+        json.get("attempt").is_none(),
+        "attempt=None 不得序列化 attempt 键"
+    );
+    assert!(
+        json.get("deduplicated").is_none(),
+        "deduplicated=None 不得序列化"
+    );
+    assert!(
+        json.get("executedInput").is_none(),
+        "executedInput=None 不得序列化"
+    );
 }
 
 #[test]
@@ -1057,7 +1080,10 @@ fn agent_end_hard_dependency_reason_and_error() {
         assert_eq!(json["reason"], expected, "agent-end.reason={expected}");
     }
     // stopped 为 D1 遗留候选值（01 D1）
-    assert_eq!(serde_json::to_value(AgentEndReason::Stopped).unwrap(), "stopped");
+    assert_eq!(
+        serde_json::to_value(AgentEndReason::Stopped).unwrap(),
+        "stopped"
+    );
 }
 
 // ── 3. 其余事件字段名 camelCase 锚定 ──
@@ -1328,7 +1354,10 @@ fn envelope_serializes_flat_with_run_id_and_sequence() {
     assert_eq!(json["type"], "run-terminal");
     assert_eq!(json["runId"], "run-1");
     assert_eq!(json["sequence"], 42);
-    assert_eq!(json["schemaVersion"], 1, "信封顶层 schemaVersion（PE-03 T03.10）");
+    assert_eq!(
+        json["schemaVersion"], 1,
+        "信封顶层 schemaVersion（PE-03 T03.10）"
+    );
     assert_eq!(json["sessionId"], "s1");
     assert_eq!(json["terminal"], "failed");
     assert!(json.get("event").is_none(), "信封不得二次包装 event 键");
@@ -1353,7 +1382,10 @@ fn envelope_omits_run_id_and_sequence_when_absent() {
     assert!(json.get("runId").is_none());
     assert!(json.get("sequence").is_none());
     assert_eq!(json["type"], "agent-start");
-    assert_eq!(json["schemaVersion"], 1, "runId/sequence 缺省但 schemaVersion 恒注入");
+    assert_eq!(
+        json["schemaVersion"], 1,
+        "runId/sequence 缺省但 schemaVersion 恒注入"
+    );
     let back: AgentEventEnvelope = serde_json::from_value(json).unwrap();
     assert_eq!(envelope, back);
 }
@@ -1408,7 +1440,12 @@ fn envelope_trace_id_roundtrip_all_events() {
         let json = serde_json::to_value(&envelope).unwrap();
         assert_eq!(json["traceId"], "run-all-1");
         let back: AgentEventEnvelope = serde_json::from_value(json).unwrap();
-        assert_eq!(envelope, back, "带 trace_id 的信封 roundtrip 不一致：{}", event_type_name(&event));
+        assert_eq!(
+            envelope,
+            back,
+            "带 trace_id 的信封 roundtrip 不一致：{}",
+            event_type_name(&event)
+        );
     }
 }
 
@@ -1422,7 +1459,12 @@ fn envelope_roundtrip_all_events_with_run_id_and_sequence() {
         assert_eq!(json["runId"], "run-1");
         assert_eq!(json["sequence"], 7);
         let back: AgentEventEnvelope = serde_json::from_value(json).unwrap();
-        assert_eq!(envelope, back, "信封 roundtrip 不一致：{}", event_type_name(&event));
+        assert_eq!(
+            envelope,
+            back,
+            "信封 roundtrip 不一致：{}",
+            event_type_name(&event)
+        );
     }
 }
 
@@ -1485,7 +1527,10 @@ fn block_wire_types_and_camel_case() {
 #[test]
 fn tool_artifact_kind_roundtrip() {
     // 其余工具域枚举的 wire 值
-    assert_eq!(serde_json::to_value(ToolArtifactKind::Diff).unwrap(), "diff");
+    assert_eq!(
+        serde_json::to_value(ToolArtifactKind::Diff).unwrap(),
+        "diff"
+    );
     assert_eq!(serde_json::to_value(ToolCategory::Mcp).unwrap(), "mcp");
     assert_eq!(
         serde_json::to_value(ToolConcurrency::Sequential).unwrap(),
@@ -1543,8 +1588,8 @@ fn legacy_payload_reads_new_optional_fields_as_none() {
         "summary": "写入文件",
         "toolMetadata": { "category": "filesystem" },
     });
-    let parsed: PermissionRequest = serde_json::from_value(legacy_json)
-        .expect("旧载荷缺省新字段必须可反序列化");
+    let parsed: PermissionRequest =
+        serde_json::from_value(legacy_json).expect("旧载荷缺省新字段必须可反序列化");
     assert_eq!(parsed.requester_run_id, None, "缺省 requesterRunId → None");
     assert_eq!(parsed.reason, None, "缺省 reason → None");
     // 主 agent 请求（缺省）序列化不携带新字段（skip_serializing_if）

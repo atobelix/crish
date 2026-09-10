@@ -548,11 +548,23 @@ mod tests {
             1_752_000_000_000,
             "awaiting",
         );
-        assert_eq!(value.get("blockId"), Some(&serde_json::json!("compacted-summary-1-2")));
+        assert_eq!(
+            value.get("blockId"),
+            Some(&serde_json::json!("compacted-summary-1-2"))
+        );
         assert_eq!(value.get("generation"), Some(&serde_json::json!(1)));
-        assert_eq!(value.get("prevBlockId"), Some(&serde_json::json!("compacted-summary-1-1")));
-        assert_eq!(value.get("droppedAtMs"), Some(&serde_json::json!(1_752_000_000_000i64)));
-        assert_eq!(value.get("summaryState"), Some(&serde_json::json!("awaiting")));
+        assert_eq!(
+            value.get("prevBlockId"),
+            Some(&serde_json::json!("compacted-summary-1-1"))
+        );
+        assert_eq!(
+            value.get("droppedAtMs"),
+            Some(&serde_json::json!(1_752_000_000_000i64))
+        );
+        assert_eq!(
+            value.get("summaryState"),
+            Some(&serde_json::json!("awaiting"))
+        );
         // camelCase 断言：snake_case 键不得出现
         assert!(value.get("block_id").is_none());
         assert!(value.get("prev_block_id").is_none());
@@ -572,8 +584,14 @@ mod tests {
             }
             m
         };
-        assert_eq!(combined.get("blockId").unwrap(), &serde_json::json!("compacted-summary-1-2"));
-        assert_eq!(combined.get("coversUpToTurn").unwrap(), &serde_json::json!(3));
+        assert_eq!(
+            combined.get("blockId").unwrap(),
+            &serde_json::json!("compacted-summary-1-2")
+        );
+        assert_eq!(
+            combined.get("coversUpToTurn").unwrap(),
+            &serde_json::json!(3)
+        );
         // 序列化回环：details 可随 record 落 JSON 且读回一致
         let json = serde_json::to_string(&serde_json::json!({ "details": combined })).unwrap();
         let back: serde_json::Value = serde_json::from_str(&json).unwrap();
@@ -585,7 +603,8 @@ mod tests {
     /// 41 变体 fixture 依赖该形状；本测试钉死 None 缺省可序列化）。
     #[test]
     fn record_details_none_default_remains_compatible() {
-        let record = serde_json::from_str::<ContextCompressionRecord>(r#"{
+        let record = serde_json::from_str::<ContextCompressionRecord>(
+            r#"{
             "id": "c-1",
             "trigger": "threshold",
             "summary": "摘要",
@@ -594,7 +613,8 @@ mod tests {
             "tokensBefore": 100,
             "tokensAfter": 10,
             "createdAt": "2026-08-08T00:00:00.000Z"
-        }"#)
+        }"#,
+        )
         .unwrap();
         assert!(record.details.is_none(), "旧载荷缺省 details 可读且为 None");
     }

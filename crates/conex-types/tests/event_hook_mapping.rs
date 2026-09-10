@@ -147,8 +147,10 @@ const HOOK_NAMES: &[&str] = &[
 /// 无引擎事件源的钩子（02 方案 M14 补事件源，E1 只挂钩不补源）
 const SOURCE_PENDING_HOOKS: &[&str] = &["model.beforeRequest", "model.afterResponse"];
 
-const HOOKS_TS_PATH: &str =
-    concat!(env!("CARGO_MANIFEST_DIR"), "/../../packages/shared-types/src/hooks.ts");
+const HOOKS_TS_PATH: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../packages/shared-types/src/hooks.ts"
+);
 
 /// 映射行引用的引擎事件名（去重，保序）
 fn mapped_engine_events() -> Vec<&'static str> {
@@ -210,12 +212,14 @@ fn mapping_partitions_all_engine_events() {
 
     let union: BTreeSet<&str> = mapped.union(&unmapped).copied().collect();
     assert_eq!(
-        union,
-        registry,
+        union, registry,
         "映射清单 ∪ 无对应清单 必须恰好等于全部引擎事件（58 = 11 + 47）"
     );
     let overlap: BTreeSet<&str> = mapped.intersection(&unmapped).copied().collect();
-    assert!(overlap.is_empty(), "映射清单与无对应清单不得重叠：{overlap:?}");
+    assert!(
+        overlap.is_empty(),
+        "映射清单与无对应清单不得重叠：{overlap:?}"
+    );
 }
 
 // ── 3. 钩子名冻结 ──
@@ -232,10 +236,7 @@ fn hook_names_are_frozen_14() {
     }
     // 补源钩子（model.beforeRequest/afterResponse）属于 14 钩子全集
     for hook in SOURCE_PENDING_HOOKS {
-        assert!(
-            names.contains(hook),
-            "补源钩子 {hook} 必须在 14 钩子全集内"
-        );
+        assert!(names.contains(hook), "补源钩子 {hook} 必须在 14 钩子全集内");
     }
 }
 
@@ -253,16 +254,14 @@ fn every_hook_name_has_mapping_row() {
         "补源钩子不得出现在映射行内（M14 补源，E1 只挂钩）"
     );
     assert_eq!(
-        covered,
-        frozen,
+        covered, frozen,
         "映射钩子 ∪ 补源钩子 必须恰好等于 14 钩子全集"
     );
 }
 
 #[test]
 fn only_tool_end_has_two_hooks() {
-    let mut counts: std::collections::BTreeMap<&str, Vec<&str>> =
-        std::collections::BTreeMap::new();
+    let mut counts: std::collections::BTreeMap<&str, Vec<&str>> = std::collections::BTreeMap::new();
     for (event, hook) in HOOK_MAPPINGS {
         counts.entry(event).or_default().push(hook);
     }
@@ -289,16 +288,34 @@ fn only_tool_end_has_two_hooks() {
 fn sample_event(wire: &str) -> AgentEvent {
     let v = match wire {
         "agent-start" => json!({"type":"agent-start","sessionId":"s","timestamp":"t"}),
-        "run-terminal" => json!({"type":"run-terminal","sessionId":"s","runId":"r","timestamp":"t","terminal":"completed"}),
+        "run-terminal" => {
+            json!({"type":"run-terminal","sessionId":"s","runId":"r","timestamp":"t","terminal":"completed"})
+        }
         "turn-start" => json!({"type":"turn-start","sessionId":"s","turnIndex":0,"timestamp":"t"}),
-        "turn-end" => json!({"type":"turn-end","sessionId":"s","turnIndex":0,"timestamp":"t","toolCallCount":0}),
-        "tool-start" => json!({"type":"tool-start","sessionId":"s","batchId":"b","timestamp":"t","call":{"id":"c","toolName":"n","summary":"s","input":{},"category":"terminal","concurrency":"parallel"}}),
-        "tool-end" => json!({"type":"tool-end","sessionId":"s","batchId":"b","timestamp":"t","result":{"id":"c","toolName":"n","output":{"text":"x"},"isError":false,"durationMs":1}}),
-        "context-compression-start" => json!({"type":"context-compression-start","sessionId":"s","timestamp":"t","reason":"threshold","tokensBefore":100}),
-        "context-compression-end" => json!({"type":"context-compression-end","sessionId":"s","timestamp":"t","aborted":false}),
-        "runtime-error" => json!({"type":"runtime-error","sessionId":"s","timestamp":"t","error":"boom"}),
-        "subagent-started" => json!({"type":"subagent-started","sessionId":"s","subagentId":"a","subagentRunId":"r","role":"researcher","capabilityMode":"read-only","startedAt":"t"}),
-        "subagent-ended" => json!({"type":"subagent-ended","sessionId":"s","subagentId":"a","subagentRunId":"r","status":"completed","endedAt":"t"}),
+        "turn-end" => {
+            json!({"type":"turn-end","sessionId":"s","turnIndex":0,"timestamp":"t","toolCallCount":0})
+        }
+        "tool-start" => {
+            json!({"type":"tool-start","sessionId":"s","batchId":"b","timestamp":"t","call":{"id":"c","toolName":"n","summary":"s","input":{},"category":"terminal","concurrency":"parallel"}})
+        }
+        "tool-end" => {
+            json!({"type":"tool-end","sessionId":"s","batchId":"b","timestamp":"t","result":{"id":"c","toolName":"n","output":{"text":"x"},"isError":false,"durationMs":1}})
+        }
+        "context-compression-start" => {
+            json!({"type":"context-compression-start","sessionId":"s","timestamp":"t","reason":"threshold","tokensBefore":100})
+        }
+        "context-compression-end" => {
+            json!({"type":"context-compression-end","sessionId":"s","timestamp":"t","aborted":false})
+        }
+        "runtime-error" => {
+            json!({"type":"runtime-error","sessionId":"s","timestamp":"t","error":"boom"})
+        }
+        "subagent-started" => {
+            json!({"type":"subagent-started","sessionId":"s","subagentId":"a","subagentRunId":"r","role":"researcher","capabilityMode":"read-only","startedAt":"t"})
+        }
+        "subagent-ended" => {
+            json!({"type":"subagent-ended","sessionId":"s","subagentId":"a","subagentRunId":"r","status":"completed","endedAt":"t"})
+        }
         other => panic!("映射表含未登记样本的事件 {other}"),
     };
     serde_json::from_value(v).unwrap_or_else(|e| panic!("事件 {wire} 样本构造失败：{e}"))

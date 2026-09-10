@@ -25,10 +25,7 @@ use std::path::PathBuf;
 
 /// fixture 根目录（tests/fixtures/）
 pub fn fixture_dir() -> PathBuf {
-    PathBuf::from(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/tests/fixtures"
-    ))
+    PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures"))
 }
 
 /// 读取 fixture 文本（缺失即 panic，失败信息带完整路径）

@@ -75,7 +75,11 @@ mod tests {
 
     #[test]
     fn context_budget_serializes_to_camel_case() {
-        let budget = ContextBudget { context_window: 128_000, reserve_tokens: 20_000, safety_tokens: 4096 };
+        let budget = ContextBudget {
+            context_window: 128_000,
+            reserve_tokens: 20_000,
+            safety_tokens: 4096,
+        };
         let json = serde_json::to_value(budget).unwrap();
         assert_eq!(json["contextWindow"], 128_000);
         assert_eq!(json["reserveTokens"], 20_000);
@@ -85,7 +89,11 @@ mod tests {
 
     #[test]
     fn context_budget_roundtrip() {
-        let budget = ContextBudget { context_window: 64_000, reserve_tokens: 16_384, safety_tokens: 4096 };
+        let budget = ContextBudget {
+            context_window: 64_000,
+            reserve_tokens: 16_384,
+            safety_tokens: 4096,
+        };
         let json = serde_json::to_string(&budget).unwrap();
         let back: ContextBudget = serde_json::from_str(&json).unwrap();
         assert_eq!(budget, back);

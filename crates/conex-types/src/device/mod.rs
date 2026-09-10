@@ -24,51 +24,46 @@ pub mod token;
 pub mod version;
 
 pub use commands::{
-    ApproveParams, ApproveResult, ApprovalHistoryItem, ApprovalHistoryParams,
-    ApprovalHistoryResult, ApprovalChannel, Arbiter, AssetKind, AssetUrlParams,
-    AssetUrlResult, CancelRunParams, CancelRunResult, CheckCommandParams,
-    CheckCommandResult, CheckDecision, CommandDomain, CommandRequest, CommandResult,
-    CommandSpec, COMMANDS, DenyParams, DeviceChannel, DeviceEntry, DeviceRole,
-    DeviceType, DirectoryItem, EventPageParams, EventPageResult, FileSearchHit,
-    FileStatParams, FileStatResult, FlowSnapshotParams, FlowSnapshotResult,
+    ApprovalChannel, ApprovalHistoryItem, ApprovalHistoryParams, ApprovalHistoryResult,
+    ApproveParams, ApproveResult, Arbiter, AssetKind, AssetUrlParams, AssetUrlResult,
+    CancelRunParams, CancelRunResult, CheckCommandParams, CheckCommandResult, CheckDecision,
+    CommandDomain, CommandRequest, CommandResult, CommandSpec, DenyParams, DeviceChannel,
+    DeviceEntry, DeviceRole, DeviceType, DirectoryItem, EventPageParams, EventPageResult,
+    FileSearchHit, FileStatParams, FileStatResult, FlowSnapshotParams, FlowSnapshotResult,
     GetSettingsParams, GetSettingsResult, ListCommandsParams, ListCommandsResult,
-    ListDevicesParams, ListDevicesResult, ListDirParams, ListDirResult,
-    ListPendingApprovalsParams, ListPendingApprovalsResult, ListSessionsParams,
-    ListSessionsResult, ListTasksParams, ListTasksResult, ListWorkspacesParams,
-    ListWorkspacesResult, MessageDirection, OkResult, PageDirection,
-    PairStateParams, PairStateResult, PauseAutomationParams, PauseAutomationResult,
-    PendingApproval, PermissionMode, PresenceParams, PresenceResult, REMOTE_KINDS,
-    RESULT_KINDS, ReadFileParams, ReadFileResult, RenameDeviceParams,
-    RevokeDeviceParams, RunControlLevel, RunControlParams, RunControlResult,
-    RunEventsParams, RunSnapshotParams, RunSnapshotResult, RunTaskParams,
-    RunTaskResult, SearchFilesParams, SearchFilesResult, SearchIndexParams,
-    SearchIndexResult, SearchSessionsParams, SearchSessionsResult,
+    ListDevicesParams, ListDevicesResult, ListDirParams, ListDirResult, ListPendingApprovalsParams,
+    ListPendingApprovalsResult, ListSessionsParams, ListSessionsResult, ListTasksParams,
+    ListTasksResult, ListWorkspacesParams, ListWorkspacesResult, MessageDirection, OkResult,
+    PageDirection, PairStateParams, PairStateResult, PauseAutomationParams, PauseAutomationResult,
+    PendingApproval, PermissionMode, PresenceParams, PresenceResult, ReadFileParams,
+    ReadFileResult, RenameDeviceParams, RevokeDeviceParams, RunControlLevel, RunControlParams,
+    RunControlResult, RunEventsParams, RunSnapshotParams, RunSnapshotResult, RunTaskParams,
+    RunTaskResult, SearchFilesParams, SearchFilesResult, SearchIndexParams, SearchIndexResult,
+    SearchSessionsParams, SearchSessionsResult, COMMANDS, REMOTE_KINDS, RESULT_KINDS,
 };
 pub use envelope::{
-    AuthHeader, DeviceEndpoint, DeviceEnvelope, Heartbeat, HeartbeatOk, MessageKind,
-    STATIC_KINDS,
+    AuthHeader, DeviceEndpoint, DeviceEnvelope, Heartbeat, HeartbeatOk, MessageKind, STATIC_KINDS,
 };
-pub use error::{ALL_ERROR_CODES, DeviceErrorCode, ErrorBody};
+pub use error::{DeviceErrorCode, ErrorBody, ALL_ERROR_CODES};
 pub use events::{
-    AckMode, EventAck, EventRedactStrategy, EventRedactedTuple, EventsPush,
-    Granularity, Resume, ResumeDone, ResumePage, ResumeState, SessionCursor,
-    SessionRemoved, SessionUpdated, SessionUpdatedAll, Subscribe, SubscribeAll,
-    SubscribeOk, SYNC_ELIGIBLE_TYPES, event_cross_strategy, event_is_sync_eligible,
+    event_cross_strategy, event_is_sync_eligible, AckMode, EventAck, EventRedactStrategy,
+    EventRedactedTuple, EventsPush, Granularity, Resume, ResumeDone, ResumePage, ResumeState,
+    SessionCursor, SessionRemoved, SessionUpdated, SessionUpdatedAll, Subscribe, SubscribeAll,
+    SubscribeOk, SYNC_ELIGIBLE_TYPES,
 };
 pub use pair::{
-    DeviceReady, DeviceUnlink, PAIR_CODE_ALPHABET, PAIR_CODE_LENGTH,
-    PAIR_CODE_PREFIX, PairAudit, PairAuditEvent, PairChallenge, PairCode,
-    PairCodeError, PairHello, PairOk, PairVerify, Platform,
+    DeviceReady, DeviceUnlink, PairAudit, PairAuditEvent, PairChallenge, PairCode, PairCodeError,
+    PairHello, PairOk, PairVerify, Platform, PAIR_CODE_ALPHABET, PAIR_CODE_LENGTH,
+    PAIR_CODE_PREFIX,
 };
 pub use stream::{StreamChunk, StreamClose, StreamKind, StreamOpen, StreamResume};
 pub use token::{
-    AccessTokenClaims, AccountToken, PairingTokenSet, PushRegistration,
-    RelayCredential,
+    AccessTokenClaims, AccountToken, PairingTokenSet, PushRegistration, RelayCredential,
 };
 pub use version::{
-    ALL_CAPABILITIES, Capability, CommandSurface, Hello, HelloOk, ManifestEntry,
-    ManifestList, MIN_PROTOCOL_VERSION, ProtocolVersion, PROTOCOL_VERSION, Refresh,
-    Rotate, negotiate_protocol, versions_compatible,
+    negotiate_protocol, versions_compatible, Capability, CommandSurface, Hello, HelloOk,
+    ManifestEntry, ManifestList, ProtocolVersion, Refresh, Rotate, ALL_CAPABILITIES,
+    MIN_PROTOCOL_VERSION, PROTOCOL_VERSION,
 };
 
 /// bool 缺省 false 时的序列化省略助手（`#[serde(default,
@@ -100,7 +95,10 @@ mod tests {
         let unique: std::collections::HashSet<&str> = kinds.iter().copied().collect();
         assert_eq!(unique.len(), kinds.len(), "kind 必须唯一");
         // 静态 29 + 命令 37 + 响应 37
-        assert_eq!(STATIC_KINDS.len() + REMOTE_KINDS.len() + RESULT_KINDS.len(), 103);
+        assert_eq!(
+            STATIC_KINDS.len() + REMOTE_KINDS.len() + RESULT_KINDS.len(),
+            103
+        );
         // 每个 kind 都能经 MessageKind 往返
         for kind in kinds {
             let parsed: MessageKind = serde_json::from_str(&format!("\"{kind}\"")).unwrap();

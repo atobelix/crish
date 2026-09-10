@@ -83,7 +83,10 @@ mod tests {
         let cases = [
             (TimerCondition::Never, json!("never")),
             (TimerCondition::Any, json!("any")),
-            (TimerCondition::Task("task-42".into()), json!({"task": "task-42"})),
+            (
+                TimerCondition::Task("task-42".into()),
+                json!({"task": "task-42"}),
+            ),
         ];
         for (cond, wire) in cases {
             let out = serde_json::to_value(&cond).unwrap();
@@ -108,7 +111,11 @@ mod tests {
         };
         assert_eq!(decl.remaining_ms(1_010_000), 20_000, "到期前剩余毫秒");
         assert_eq!(decl.remaining_ms(1_030_000), 0, "到点必须为 0");
-        assert_eq!(decl.remaining_ms(1_040_000), 0, "超时后必须为 0（不溢出为负数）");
+        assert_eq!(
+            decl.remaining_ms(1_040_000),
+            0,
+            "超时后必须为 0（不溢出为负数）"
+        );
         assert_eq!(
             decl.remaining_ms(u64::MAX),
             0,

@@ -577,7 +577,8 @@ mod tests {
             "to": "desktop",
             "body": { "code": "7K4LQ2MB9XRT" }
         }"#;
-        let env: DeviceEnvelope = serde_json::from_str(json_str).expect("缺失 auth 字段必须反序列化成功");
+        let env: DeviceEnvelope =
+            serde_json::from_str(json_str).expect("缺失 auth 字段必须反序列化成功");
         assert_eq!(env.auth, AuthHeader::default());
         assert_eq!(env.auth.device_id, "");
         assert_eq!(env.auth.ts, 0);

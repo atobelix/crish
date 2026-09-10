@@ -296,7 +296,8 @@ mod tests {
         assert_eq!(json["deviceName"], "我的 iPhone");
         assert_eq!(json["platform"], "ios");
 
-        let back: PairHello = serde_json::from_str(&serde_json::to_string(&hello).unwrap()).unwrap();
+        let back: PairHello =
+            serde_json::from_str(&serde_json::to_string(&hello).unwrap()).unwrap();
         assert_eq!(hello, back);
 
         // 无 platform → 反序列化为 None
@@ -315,27 +316,41 @@ mod tests {
         };
         let json = serde_json::to_value(&challenge).unwrap();
         assert_eq!(json["tlsFingerprint"], "a1b2c3");
-        let back: PairChallenge = serde_json::from_str(&serde_json::to_string(&challenge).unwrap()).unwrap();
+        let back: PairChallenge =
+            serde_json::from_str(&serde_json::to_string(&challenge).unwrap()).unwrap();
         assert_eq!(challenge, back);
 
-        let verify = PairVerify { challenge_sig: "s1".into(), device_pub_sig: "s2".into() };
+        let verify = PairVerify {
+            challenge_sig: "s1".into(),
+            device_pub_sig: "s2".into(),
+        };
         let json = serde_json::to_value(&verify).unwrap();
         assert_eq!(json["challengeSig"], "s1");
         assert_eq!(json["devicePubSig"], "s2");
-        let back: PairVerify = serde_json::from_str(&serde_json::to_string(&verify).unwrap()).unwrap();
+        let back: PairVerify =
+            serde_json::from_str(&serde_json::to_string(&verify).unwrap()).unwrap();
         assert_eq!(verify, back);
 
-        let ok = PairOk { desktop_id: "d-01HZ".into(), ttl: 86400 };
+        let ok = PairOk {
+            desktop_id: "d-01HZ".into(),
+            ttl: 86400,
+        };
         let back: PairOk = serde_json::from_str(&serde_json::to_string(&ok).unwrap()).unwrap();
         assert_eq!(ok, back);
 
-        let ready = DeviceReady { device_id: "dev-1".into() };
-        let back: DeviceReady = serde_json::from_str(&serde_json::to_string(&ready).unwrap()).unwrap();
+        let ready = DeviceReady {
+            device_id: "dev-1".into(),
+        };
+        let back: DeviceReady =
+            serde_json::from_str(&serde_json::to_string(&ready).unwrap()).unwrap();
         assert_eq!(ready, back);
 
         // revoked 复用 DeviceUnlink 载荷
-        let unlink = DeviceUnlink { device_id: "dev-1".into() };
-        let back: DeviceUnlink = serde_json::from_str(&serde_json::to_string(&unlink).unwrap()).unwrap();
+        let unlink = DeviceUnlink {
+            device_id: "dev-1".into(),
+        };
+        let back: DeviceUnlink =
+            serde_json::from_str(&serde_json::to_string(&unlink).unwrap()).unwrap();
         assert_eq!(unlink, back);
     }
 
@@ -358,7 +373,8 @@ mod tests {
         let json = serde_json::to_value(&audit).unwrap();
         assert_eq!(json["event"], "failed");
         assert_eq!(json["ts"], 1754651200000_i64);
-        let back: PairAudit = serde_json::from_str(&serde_json::to_string(&audit).unwrap()).unwrap();
+        let back: PairAudit =
+            serde_json::from_str(&serde_json::to_string(&audit).unwrap()).unwrap();
         assert_eq!(audit, back);
     }
 }

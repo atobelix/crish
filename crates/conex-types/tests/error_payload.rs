@@ -103,7 +103,10 @@ fn migrate_provider_kinds() {
         migrate_error_code("gateway-challenge", ctx),
         codes::PROVIDER_GATEWAY_CHALLENGE
     );
-    assert_eq!(migrate_error_code("rate-limit", ctx), codes::PROVIDER_RATE_LIMIT);
+    assert_eq!(
+        migrate_error_code("rate-limit", ctx),
+        codes::PROVIDER_RATE_LIMIT
+    );
     assert_eq!(migrate_error_code("auth", ctx), codes::PROVIDER_AUTH);
     assert_eq!(migrate_error_code("quota", ctx), codes::PROVIDER_QUOTA);
     assert_eq!(
@@ -113,7 +116,10 @@ fn migrate_provider_kinds() {
     assert_eq!(migrate_error_code("schema", ctx), codes::PROVIDER_SCHEMA);
     assert_eq!(migrate_error_code("server", ctx), codes::PROVIDER_SERVER);
     assert_eq!(migrate_error_code("timeout", ctx), codes::PROVIDER_TIMEOUT);
-    assert_eq!(migrate_error_code("cancelled", ctx), codes::PROVIDER_CANCELLED);
+    assert_eq!(
+        migrate_error_code("cancelled", ctx),
+        codes::PROVIDER_CANCELLED
+    );
     assert_eq!(
         migrate_error_code("invalid-stream", ctx),
         codes::PROVIDER_STREAM_INTERRUPTED
@@ -157,7 +163,10 @@ fn migrate_tool_error_split_by_context_kind() {
 #[test]
 fn migrate_error_domain_and_session_codes() {
     let ctx = MigrateErrorContext::default();
-    assert_eq!(migrate_error_code("USER_ABORT", ctx), codes::RUNTIME_ABORTED);
+    assert_eq!(
+        migrate_error_code("USER_ABORT", ctx),
+        codes::RUNTIME_ABORTED
+    );
     assert_eq!(
         migrate_error_code("STREAM_INTERRUPT", ctx),
         codes::PROVIDER_STREAM_INTERRUPTED
@@ -174,11 +183,20 @@ fn migrate_error_domain_and_session_codes() {
         migrate_error_code("CLIENT_INVALID_INPUT", context_overflow),
         codes::CONTEXT_LENGTH_EXCEEDED
     );
-    assert_eq!(migrate_error_code("not_found", ctx), codes::SESSION_NOT_FOUND);
-    assert_eq!(migrate_error_code("storage", ctx), codes::SESSION_STORAGE_FAILED);
+    assert_eq!(
+        migrate_error_code("not_found", ctx),
+        codes::SESSION_NOT_FOUND
+    );
+    assert_eq!(
+        migrate_error_code("storage", ctx),
+        codes::SESSION_STORAGE_FAILED
+    );
     assert_eq!(migrate_error_code("UNKNOWN", ctx), codes::COMMON_UNKNOWN);
     // 未知名回退
-    assert_eq!(migrate_error_code("SOME_LEGACY_CODE", ctx), codes::COMMON_UNKNOWN);
+    assert_eq!(
+        migrate_error_code("SOME_LEGACY_CODE", ctx),
+        codes::COMMON_UNKNOWN
+    );
 }
 
 // ── ProviderErrorKind 13 类（02 §4.2 分类表逐行）──
@@ -217,7 +235,10 @@ fn provider_error_kind_code_mapping() {
         ProviderErrorKind::ContextLengthExceeded.code(),
         codes::CONTEXT_LENGTH_EXCEEDED
     );
-    assert_eq!(ProviderErrorKind::RateLimit.code(), codes::PROVIDER_RATE_LIMIT);
+    assert_eq!(
+        ProviderErrorKind::RateLimit.code(),
+        codes::PROVIDER_RATE_LIMIT
+    );
     assert_eq!(ProviderErrorKind::Network.code(), codes::PROVIDER_NETWORK);
     assert_eq!(ProviderErrorKind::Aborted.code(), codes::PROVIDER_CANCELLED);
     assert_eq!(ProviderErrorKind::Unknown.code(), codes::PROVIDER_UNKNOWN);

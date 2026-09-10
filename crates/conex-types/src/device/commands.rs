@@ -42,12 +42,8 @@ impl CommandRequest {
     }
 
     /// 以类型化参数构造（任意 Serialize 结构 → params JSON）
-    pub fn with_typed_params<T: Serialize>(
-        command: impl Into<String>,
-        params: &T,
-    ) -> Self {
-        let params = serde_json::to_value(params)
-            .expect("类型化命令参数必须可序列化为 JSON");
+    pub fn with_typed_params<T: Serialize>(command: impl Into<String>, params: &T) -> Self {
+        let params = serde_json::to_value(params).expect("类型化命令参数必须可序列化为 JSON");
         Self::new(command, params)
     }
 
@@ -167,80 +163,426 @@ pub struct CommandSpec {
 /// 37 条命令规格（C01-C37；M6 §4 各域总表 + §10.6.2 对照表）
 pub const COMMANDS: [CommandSpec; 37] = [
     // ── F1 监控域（10）──
-    CommandSpec { name: "getStatus", tauri_command: "core_get_status", domain: CommandDomain::Monitor, write: false, direction: MessageDirection::MobileToDesktop, params_type: "StatusQuery", result_type: "StatusResult" },
-    CommandSpec { name: "getRunSnapshot", tauri_command: "core_get_run_snapshot", domain: CommandDomain::Monitor, write: false, direction: MessageDirection::MobileToDesktop, params_type: "RunSnapshotParams", result_type: "RunSnapshotResult" },
-    CommandSpec { name: "readSessionEvents", tauri_command: "core_read_session_events", domain: CommandDomain::Monitor, write: false, direction: MessageDirection::MobileToDesktop, params_type: "EventPageParams", result_type: "EventPageResult" },
-    CommandSpec { name: "readRunEvents", tauri_command: "core_read_run_events", domain: CommandDomain::Monitor, write: false, direction: MessageDirection::MobileToDesktop, params_type: "RunEventsParams", result_type: "EventPageResult" },
-    CommandSpec { name: "listSessions", tauri_command: "list_sessions", domain: CommandDomain::Monitor, write: false, direction: MessageDirection::MobileToDesktop, params_type: "ListSessionsParams", result_type: "ListSessionsResult" },
-    CommandSpec { name: "listBackgroundTasks", tauri_command: "workbench_list_background_tasks", domain: CommandDomain::Monitor, write: false, direction: MessageDirection::MobileToDesktop, params_type: "ListTasksParams", result_type: "ListTasksResult" },
-    CommandSpec { name: "getTaskOutput", tauri_command: "workbench_get_background_task_output", domain: CommandDomain::Monitor, write: false, direction: MessageDirection::MobileToDesktop, params_type: "TaskOutputParams", result_type: "TaskOutputResult" },
-    CommandSpec { name: "getFlowSnapshot", tauri_command: "get_flow_snapshot", domain: CommandDomain::Monitor, write: false, direction: MessageDirection::MobileToDesktop, params_type: "FlowSnapshotParams", result_type: "FlowSnapshotResult" },
-    CommandSpec { name: "listCommands", tauri_command: "core_list_commands", domain: CommandDomain::Monitor, write: false, direction: MessageDirection::MobileToDesktop, params_type: "ListCommandsParams", result_type: "ListCommandsResult" },
-    CommandSpec { name: "getSearchIndex", tauri_command: "core_search_files", domain: CommandDomain::Monitor, write: false, direction: MessageDirection::MobileToDesktop, params_type: "SearchIndexParams", result_type: "SearchIndexResult" },
+    CommandSpec {
+        name: "getStatus",
+        tauri_command: "core_get_status",
+        domain: CommandDomain::Monitor,
+        write: false,
+        direction: MessageDirection::MobileToDesktop,
+        params_type: "StatusQuery",
+        result_type: "StatusResult",
+    },
+    CommandSpec {
+        name: "getRunSnapshot",
+        tauri_command: "core_get_run_snapshot",
+        domain: CommandDomain::Monitor,
+        write: false,
+        direction: MessageDirection::MobileToDesktop,
+        params_type: "RunSnapshotParams",
+        result_type: "RunSnapshotResult",
+    },
+    CommandSpec {
+        name: "readSessionEvents",
+        tauri_command: "core_read_session_events",
+        domain: CommandDomain::Monitor,
+        write: false,
+        direction: MessageDirection::MobileToDesktop,
+        params_type: "EventPageParams",
+        result_type: "EventPageResult",
+    },
+    CommandSpec {
+        name: "readRunEvents",
+        tauri_command: "core_read_run_events",
+        domain: CommandDomain::Monitor,
+        write: false,
+        direction: MessageDirection::MobileToDesktop,
+        params_type: "RunEventsParams",
+        result_type: "EventPageResult",
+    },
+    CommandSpec {
+        name: "listSessions",
+        tauri_command: "list_sessions",
+        domain: CommandDomain::Monitor,
+        write: false,
+        direction: MessageDirection::MobileToDesktop,
+        params_type: "ListSessionsParams",
+        result_type: "ListSessionsResult",
+    },
+    CommandSpec {
+        name: "listBackgroundTasks",
+        tauri_command: "workbench_list_background_tasks",
+        domain: CommandDomain::Monitor,
+        write: false,
+        direction: MessageDirection::MobileToDesktop,
+        params_type: "ListTasksParams",
+        result_type: "ListTasksResult",
+    },
+    CommandSpec {
+        name: "getTaskOutput",
+        tauri_command: "workbench_get_background_task_output",
+        domain: CommandDomain::Monitor,
+        write: false,
+        direction: MessageDirection::MobileToDesktop,
+        params_type: "TaskOutputParams",
+        result_type: "TaskOutputResult",
+    },
+    CommandSpec {
+        name: "getFlowSnapshot",
+        tauri_command: "get_flow_snapshot",
+        domain: CommandDomain::Monitor,
+        write: false,
+        direction: MessageDirection::MobileToDesktop,
+        params_type: "FlowSnapshotParams",
+        result_type: "FlowSnapshotResult",
+    },
+    CommandSpec {
+        name: "listCommands",
+        tauri_command: "core_list_commands",
+        domain: CommandDomain::Monitor,
+        write: false,
+        direction: MessageDirection::MobileToDesktop,
+        params_type: "ListCommandsParams",
+        result_type: "ListCommandsResult",
+    },
+    CommandSpec {
+        name: "getSearchIndex",
+        tauri_command: "core_search_files",
+        domain: CommandDomain::Monitor,
+        write: false,
+        direction: MessageDirection::MobileToDesktop,
+        params_type: "SearchIndexParams",
+        result_type: "SearchIndexResult",
+    },
     // ── F2 审批域（5）──
-    CommandSpec { name: "approve", tauri_command: "core_approve_tool", domain: CommandDomain::Approval, write: true, direction: MessageDirection::MobileToDesktop, params_type: "ApproveParams", result_type: "ApproveResult" },
-    CommandSpec { name: "deny", tauri_command: "core_deny_tool", domain: CommandDomain::Approval, write: true, direction: MessageDirection::MobileToDesktop, params_type: "DenyParams", result_type: "ApproveResult" },
-    CommandSpec { name: "listPendingApprovals", tauri_command: "mobile_list_pending_approvals", domain: CommandDomain::Approval, write: false, direction: MessageDirection::MobileToDesktop, params_type: "ListPendingApprovalsParams", result_type: "ListPendingApprovalsResult" },
-    CommandSpec { name: "approvalHistory", tauri_command: "mobile_approval_sync_state", domain: CommandDomain::Approval, write: false, direction: MessageDirection::MobileToDesktop, params_type: "ApprovalHistoryParams", result_type: "ApprovalHistoryResult" },
-    CommandSpec { name: "checkCommand", tauri_command: "core_check_command", domain: CommandDomain::Approval, write: false, direction: MessageDirection::MobileToDesktop, params_type: "CheckCommandParams", result_type: "CheckCommandResult" },
+    CommandSpec {
+        name: "approve",
+        tauri_command: "core_approve_tool",
+        domain: CommandDomain::Approval,
+        write: true,
+        direction: MessageDirection::MobileToDesktop,
+        params_type: "ApproveParams",
+        result_type: "ApproveResult",
+    },
+    CommandSpec {
+        name: "deny",
+        tauri_command: "core_deny_tool",
+        domain: CommandDomain::Approval,
+        write: true,
+        direction: MessageDirection::MobileToDesktop,
+        params_type: "DenyParams",
+        result_type: "ApproveResult",
+    },
+    CommandSpec {
+        name: "listPendingApprovals",
+        tauri_command: "mobile_list_pending_approvals",
+        domain: CommandDomain::Approval,
+        write: false,
+        direction: MessageDirection::MobileToDesktop,
+        params_type: "ListPendingApprovalsParams",
+        result_type: "ListPendingApprovalsResult",
+    },
+    CommandSpec {
+        name: "approvalHistory",
+        tauri_command: "mobile_approval_sync_state",
+        domain: CommandDomain::Approval,
+        write: false,
+        direction: MessageDirection::MobileToDesktop,
+        params_type: "ApprovalHistoryParams",
+        result_type: "ApprovalHistoryResult",
+    },
+    CommandSpec {
+        name: "checkCommand",
+        tauri_command: "core_check_command",
+        domain: CommandDomain::Approval,
+        write: false,
+        direction: MessageDirection::MobileToDesktop,
+        params_type: "CheckCommandParams",
+        result_type: "CheckCommandResult",
+    },
     // ── F4 文件与资产域（8）──
-    CommandSpec { name: "listDir", tauri_command: "workbench_list_directory", domain: CommandDomain::Files, write: false, direction: MessageDirection::MobileToDesktop, params_type: "ListDirParams", result_type: "ListDirResult" },
-    CommandSpec { name: "readFile", tauri_command: "workbench_read_file_content", domain: CommandDomain::Files, write: false, direction: MessageDirection::MobileToDesktop, params_type: "ReadFileParams", result_type: "ReadFileResult" },
-    CommandSpec { name: "writeFile", tauri_command: "workbench_write_file_content", domain: CommandDomain::Files, write: true, direction: MessageDirection::MobileToDesktop, params_type: "WriteFileParams", result_type: "WriteFileResult" },
-    CommandSpec { name: "listWorkspaces", tauri_command: "workbench_list_workspaces", domain: CommandDomain::Files, write: false, direction: MessageDirection::MobileToDesktop, params_type: "ListWorkspacesParams", result_type: "ListWorkspacesResult" },
-    CommandSpec { name: "switchWorkspace", tauri_command: "workbench_open_workspace", domain: CommandDomain::Files, write: false, direction: MessageDirection::MobileToDesktop, params_type: "SwitchWorkspaceParams", result_type: "SwitchWorkspaceResult" },
-    CommandSpec { name: "searchFiles", tauri_command: "mobile_search_files", domain: CommandDomain::Files, write: false, direction: MessageDirection::MobileToDesktop, params_type: "SearchFilesParams", result_type: "SearchFilesResult" },
-    CommandSpec { name: "assetUrl", tauri_command: "mobile_asset_url", domain: CommandDomain::Files, write: false, direction: MessageDirection::MobileToDesktop, params_type: "AssetUrlParams", result_type: "AssetUrlResult" },
-    CommandSpec { name: "fileStat", tauri_command: "file_stat", domain: CommandDomain::Files, write: false, direction: MessageDirection::MobileToDesktop, params_type: "FileStatParams", result_type: "FileStatResult" },
+    CommandSpec {
+        name: "listDir",
+        tauri_command: "workbench_list_directory",
+        domain: CommandDomain::Files,
+        write: false,
+        direction: MessageDirection::MobileToDesktop,
+        params_type: "ListDirParams",
+        result_type: "ListDirResult",
+    },
+    CommandSpec {
+        name: "readFile",
+        tauri_command: "workbench_read_file_content",
+        domain: CommandDomain::Files,
+        write: false,
+        direction: MessageDirection::MobileToDesktop,
+        params_type: "ReadFileParams",
+        result_type: "ReadFileResult",
+    },
+    CommandSpec {
+        name: "writeFile",
+        tauri_command: "workbench_write_file_content",
+        domain: CommandDomain::Files,
+        write: true,
+        direction: MessageDirection::MobileToDesktop,
+        params_type: "WriteFileParams",
+        result_type: "WriteFileResult",
+    },
+    CommandSpec {
+        name: "listWorkspaces",
+        tauri_command: "workbench_list_workspaces",
+        domain: CommandDomain::Files,
+        write: false,
+        direction: MessageDirection::MobileToDesktop,
+        params_type: "ListWorkspacesParams",
+        result_type: "ListWorkspacesResult",
+    },
+    CommandSpec {
+        name: "switchWorkspace",
+        tauri_command: "workbench_open_workspace",
+        domain: CommandDomain::Files,
+        write: false,
+        direction: MessageDirection::MobileToDesktop,
+        params_type: "SwitchWorkspaceParams",
+        result_type: "SwitchWorkspaceResult",
+    },
+    CommandSpec {
+        name: "searchFiles",
+        tauri_command: "mobile_search_files",
+        domain: CommandDomain::Files,
+        write: false,
+        direction: MessageDirection::MobileToDesktop,
+        params_type: "SearchFilesParams",
+        result_type: "SearchFilesResult",
+    },
+    CommandSpec {
+        name: "assetUrl",
+        tauri_command: "mobile_asset_url",
+        domain: CommandDomain::Files,
+        write: false,
+        direction: MessageDirection::MobileToDesktop,
+        params_type: "AssetUrlParams",
+        result_type: "AssetUrlResult",
+    },
+    CommandSpec {
+        name: "fileStat",
+        tauri_command: "file_stat",
+        domain: CommandDomain::Files,
+        write: false,
+        direction: MessageDirection::MobileToDesktop,
+        params_type: "FileStatParams",
+        result_type: "FileStatResult",
+    },
     // ── F5 会话与消息域（4）──
-    CommandSpec { name: "runTask", tauri_command: "core_run_task", domain: CommandDomain::Sessions, write: false, direction: MessageDirection::MobileToDesktop, params_type: "RunTaskParams", result_type: "RunTaskResult" },
-    CommandSpec { name: "runControl", tauri_command: "core_run_control", domain: CommandDomain::Sessions, write: false, direction: MessageDirection::MobileToDesktop, params_type: "RunControlParams", result_type: "RunControlResult" },
-    CommandSpec { name: "cancelRun", tauri_command: "core_cancel_run", domain: CommandDomain::Sessions, write: false, direction: MessageDirection::MobileToDesktop, params_type: "CancelRunParams", result_type: "CancelRunResult" },
-    CommandSpec { name: "searchSessions", tauri_command: "mobile_search_sessions", domain: CommandDomain::Sessions, write: false, direction: MessageDirection::MobileToDesktop, params_type: "SearchSessionsParams", result_type: "SearchSessionsResult" },
+    CommandSpec {
+        name: "runTask",
+        tauri_command: "core_run_task",
+        domain: CommandDomain::Sessions,
+        write: false,
+        direction: MessageDirection::MobileToDesktop,
+        params_type: "RunTaskParams",
+        result_type: "RunTaskResult",
+    },
+    CommandSpec {
+        name: "runControl",
+        tauri_command: "core_run_control",
+        domain: CommandDomain::Sessions,
+        write: false,
+        direction: MessageDirection::MobileToDesktop,
+        params_type: "RunControlParams",
+        result_type: "RunControlResult",
+    },
+    CommandSpec {
+        name: "cancelRun",
+        tauri_command: "core_cancel_run",
+        domain: CommandDomain::Sessions,
+        write: false,
+        direction: MessageDirection::MobileToDesktop,
+        params_type: "CancelRunParams",
+        result_type: "CancelRunResult",
+    },
+    CommandSpec {
+        name: "searchSessions",
+        tauri_command: "mobile_search_sessions",
+        domain: CommandDomain::Sessions,
+        write: false,
+        direction: MessageDirection::MobileToDesktop,
+        params_type: "SearchSessionsParams",
+        result_type: "SearchSessionsResult",
+    },
     // ── F6 设置与账户域（5）──
-    CommandSpec { name: "getSettings", tauri_command: "config_get", domain: CommandDomain::Settings, write: false, direction: MessageDirection::MobileToDesktop, params_type: "GetSettingsParams", result_type: "GetSettingsResult" },
-    CommandSpec { name: "setSettings", tauri_command: "config_update", domain: CommandDomain::Settings, write: true, direction: MessageDirection::MobileToDesktop, params_type: "SetSettingsParams", result_type: "SetSettingsResult" },
-    CommandSpec { name: "settingsConfirm", tauri_command: "mobile_settings_confirm", domain: CommandDomain::Settings, write: false, direction: MessageDirection::MobileToDesktop, params_type: "SettingsConfirmParams", result_type: "SettingsConfirmResult" },
-    CommandSpec { name: "pauseAutomation", tauri_command: "mobile_pause_automation", domain: CommandDomain::Settings, write: true, direction: MessageDirection::MobileToDesktop, params_type: "PauseAutomationParams", result_type: "PauseAutomationResult" },
-    CommandSpec { name: "queryPresence", tauri_command: "device_presence_query", domain: CommandDomain::Settings, write: false, direction: MessageDirection::MobileToDesktop, params_type: "PresenceParams", result_type: "PresenceResult" },
+    CommandSpec {
+        name: "getSettings",
+        tauri_command: "config_get",
+        domain: CommandDomain::Settings,
+        write: false,
+        direction: MessageDirection::MobileToDesktop,
+        params_type: "GetSettingsParams",
+        result_type: "GetSettingsResult",
+    },
+    CommandSpec {
+        name: "setSettings",
+        tauri_command: "config_update",
+        domain: CommandDomain::Settings,
+        write: true,
+        direction: MessageDirection::MobileToDesktop,
+        params_type: "SetSettingsParams",
+        result_type: "SetSettingsResult",
+    },
+    CommandSpec {
+        name: "settingsConfirm",
+        tauri_command: "mobile_settings_confirm",
+        domain: CommandDomain::Settings,
+        write: false,
+        direction: MessageDirection::MobileToDesktop,
+        params_type: "SettingsConfirmParams",
+        result_type: "SettingsConfirmResult",
+    },
+    CommandSpec {
+        name: "pauseAutomation",
+        tauri_command: "mobile_pause_automation",
+        domain: CommandDomain::Settings,
+        write: true,
+        direction: MessageDirection::MobileToDesktop,
+        params_type: "PauseAutomationParams",
+        result_type: "PauseAutomationResult",
+    },
+    CommandSpec {
+        name: "queryPresence",
+        tauri_command: "device_presence_query",
+        domain: CommandDomain::Settings,
+        write: false,
+        direction: MessageDirection::MobileToDesktop,
+        params_type: "PresenceParams",
+        result_type: "PresenceResult",
+    },
     // ── 设备域（5；非 Tauri 命令面，由服务网关直接实现）──
-    CommandSpec { name: "listDevices", tauri_command: "", domain: CommandDomain::Devices, write: false, direction: MessageDirection::MobileToDesktop, params_type: "ListDevicesParams", result_type: "ListDevicesResult" },
-    CommandSpec { name: "renameDevice", tauri_command: "", domain: CommandDomain::Devices, write: false, direction: MessageDirection::MobileToDesktop, params_type: "RenameDeviceParams", result_type: "OkResult" },
-    CommandSpec { name: "revokeDevice", tauri_command: "", domain: CommandDomain::Devices, write: false, direction: MessageDirection::MobileToDesktop, params_type: "RevokeDeviceParams", result_type: "OkResult" },
-    CommandSpec { name: "getPairState", tauri_command: "", domain: CommandDomain::Devices, write: false, direction: MessageDirection::MobileToDesktop, params_type: "PairStateParams", result_type: "PairStateResult" },
-    CommandSpec { name: "unlink", tauri_command: "", domain: CommandDomain::Devices, write: false, direction: MessageDirection::MobileToDesktop, params_type: "UnlinkParams", result_type: "UnlinkResult" },
+    CommandSpec {
+        name: "listDevices",
+        tauri_command: "",
+        domain: CommandDomain::Devices,
+        write: false,
+        direction: MessageDirection::MobileToDesktop,
+        params_type: "ListDevicesParams",
+        result_type: "ListDevicesResult",
+    },
+    CommandSpec {
+        name: "renameDevice",
+        tauri_command: "",
+        domain: CommandDomain::Devices,
+        write: false,
+        direction: MessageDirection::MobileToDesktop,
+        params_type: "RenameDeviceParams",
+        result_type: "OkResult",
+    },
+    CommandSpec {
+        name: "revokeDevice",
+        tauri_command: "",
+        domain: CommandDomain::Devices,
+        write: false,
+        direction: MessageDirection::MobileToDesktop,
+        params_type: "RevokeDeviceParams",
+        result_type: "OkResult",
+    },
+    CommandSpec {
+        name: "getPairState",
+        tauri_command: "",
+        domain: CommandDomain::Devices,
+        write: false,
+        direction: MessageDirection::MobileToDesktop,
+        params_type: "PairStateParams",
+        result_type: "PairStateResult",
+    },
+    CommandSpec {
+        name: "unlink",
+        tauri_command: "",
+        domain: CommandDomain::Devices,
+        write: false,
+        direction: MessageDirection::MobileToDesktop,
+        params_type: "UnlinkParams",
+        result_type: "UnlinkResult",
+    },
 ];
 
 /// 37 条命令 kind（wire 全量 `remote.<name>`）
 pub const REMOTE_KINDS: [&str; 37] = [
-    "remote.getStatus", "remote.getRunSnapshot", "remote.readSessionEvents",
-    "remote.readRunEvents", "remote.listSessions", "remote.listBackgroundTasks",
-    "remote.getTaskOutput", "remote.getFlowSnapshot", "remote.listCommands",
-    "remote.getSearchIndex", "remote.approve", "remote.deny",
-    "remote.listPendingApprovals", "remote.approvalHistory", "remote.checkCommand",
-    "remote.listDir", "remote.readFile", "remote.writeFile", "remote.listWorkspaces",
-    "remote.switchWorkspace", "remote.searchFiles", "remote.assetUrl",
-    "remote.fileStat", "remote.runTask", "remote.runControl", "remote.cancelRun",
-    "remote.searchSessions", "remote.getSettings", "remote.setSettings",
-    "remote.settingsConfirm", "remote.pauseAutomation", "remote.queryPresence",
-    "remote.listDevices", "remote.renameDevice", "remote.revokeDevice",
-    "remote.getPairState", "remote.unlink",
+    "remote.getStatus",
+    "remote.getRunSnapshot",
+    "remote.readSessionEvents",
+    "remote.readRunEvents",
+    "remote.listSessions",
+    "remote.listBackgroundTasks",
+    "remote.getTaskOutput",
+    "remote.getFlowSnapshot",
+    "remote.listCommands",
+    "remote.getSearchIndex",
+    "remote.approve",
+    "remote.deny",
+    "remote.listPendingApprovals",
+    "remote.approvalHistory",
+    "remote.checkCommand",
+    "remote.listDir",
+    "remote.readFile",
+    "remote.writeFile",
+    "remote.listWorkspaces",
+    "remote.switchWorkspace",
+    "remote.searchFiles",
+    "remote.assetUrl",
+    "remote.fileStat",
+    "remote.runTask",
+    "remote.runControl",
+    "remote.cancelRun",
+    "remote.searchSessions",
+    "remote.getSettings",
+    "remote.setSettings",
+    "remote.settingsConfirm",
+    "remote.pauseAutomation",
+    "remote.queryPresence",
+    "remote.listDevices",
+    "remote.renameDevice",
+    "remote.revokeDevice",
+    "remote.getPairState",
+    "remote.unlink",
 ];
 
 /// 37 条响应 kind（wire 全量 `result.<name>`）
 pub const RESULT_KINDS: [&str; 37] = [
-    "result.getStatus", "result.getRunSnapshot", "result.readSessionEvents",
-    "result.readRunEvents", "result.listSessions", "result.listBackgroundTasks",
-    "result.getTaskOutput", "result.getFlowSnapshot", "result.listCommands",
-    "result.getSearchIndex", "result.approve", "result.deny",
-    "result.listPendingApprovals", "result.approvalHistory", "result.checkCommand",
-    "result.listDir", "result.readFile", "result.writeFile", "result.listWorkspaces",
-    "result.switchWorkspace", "result.searchFiles", "result.assetUrl",
-    "result.fileStat", "result.runTask", "result.runControl", "result.cancelRun",
-    "result.searchSessions", "result.getSettings", "result.setSettings",
-    "result.settingsConfirm", "result.pauseAutomation", "result.queryPresence",
-    "result.listDevices", "result.renameDevice", "result.revokeDevice",
-    "result.getPairState", "result.unlink",
+    "result.getStatus",
+    "result.getRunSnapshot",
+    "result.readSessionEvents",
+    "result.readRunEvents",
+    "result.listSessions",
+    "result.listBackgroundTasks",
+    "result.getTaskOutput",
+    "result.getFlowSnapshot",
+    "result.listCommands",
+    "result.getSearchIndex",
+    "result.approve",
+    "result.deny",
+    "result.listPendingApprovals",
+    "result.approvalHistory",
+    "result.checkCommand",
+    "result.listDir",
+    "result.readFile",
+    "result.writeFile",
+    "result.listWorkspaces",
+    "result.switchWorkspace",
+    "result.searchFiles",
+    "result.assetUrl",
+    "result.fileStat",
+    "result.runTask",
+    "result.runControl",
+    "result.cancelRun",
+    "result.searchSessions",
+    "result.getSettings",
+    "result.setSettings",
+    "result.settingsConfirm",
+    "result.pauseAutomation",
+    "result.queryPresence",
+    "result.listDevices",
+    "result.renameDevice",
+    "result.revokeDevice",
+    "result.getPairState",
+    "result.unlink",
 ];
 
 // ── 共享枚举 ──
@@ -1416,13 +1758,17 @@ mod tests {
         assert_eq!(json["params"]["toolCallId"], "tc-9");
         assert_eq!(json["params"]["runId"], "r-01");
         assert_eq!(json["timeoutMs"], 30_000);
-        let back: CommandRequest = serde_json::from_str(&serde_json::to_string(&req).unwrap()).unwrap();
+        let back: CommandRequest =
+            serde_json::from_str(&serde_json::to_string(&req).unwrap()).unwrap();
         assert_eq!(req, back);
     }
 
     #[test]
     fn command_result_three_states() {
-        let ok = CommandResult::success("m-1", serde_json::json!({ "ok": true, "toolCallId": "tc-9" }));
+        let ok = CommandResult::success(
+            "m-1",
+            serde_json::json!({ "ok": true, "toolCallId": "tc-9" }),
+        );
         let json = serde_json::to_value(&ok).unwrap();
         assert_eq!(json["reqMsgId"], "m-1");
         assert_eq!(json["ok"], true);
@@ -1430,7 +1776,10 @@ mod tests {
         assert!(json.get("partial").is_none());
         assert!(json.get("error").is_none());
 
-        let err = CommandResult::failure("m-2", ErrorBody::new(DeviceErrorCode::CmdApprovalMismatch, "已处理"));
+        let err = CommandResult::failure(
+            "m-2",
+            ErrorBody::new(DeviceErrorCode::CmdApprovalMismatch, "已处理"),
+        );
         let json = serde_json::to_value(&err).unwrap();
         assert_eq!(json["ok"], false);
         assert_eq!(json["error"]["code"], "cmd.approval_mismatch");
@@ -1440,7 +1789,8 @@ mod tests {
         let json = serde_json::to_value(&part).unwrap();
         assert_eq!(json["partial"], true);
 
-        let back: CommandResult = serde_json::from_str(&serde_json::to_string(&ok).unwrap()).unwrap();
+        let back: CommandResult =
+            serde_json::from_str(&serde_json::to_string(&ok).unwrap()).unwrap();
         assert_eq!(ok, back);
     }
 
@@ -1459,7 +1809,8 @@ mod tests {
     #[test]
     fn deny_params_reason() {
         let params: DenyParams =
-            serde_json::from_str(r#"{"toolCallId":"tc-9","runId":"r-01","reason":"风险过高"}"#).unwrap();
+            serde_json::from_str(r#"{"toolCallId":"tc-9","runId":"r-01","reason":"风险过高"}"#)
+                .unwrap();
         assert_eq!(params.reason.as_deref(), Some("风险过高"));
     }
 
@@ -1505,16 +1856,46 @@ mod tests {
 
     #[test]
     fn enum_wire_values() {
-        assert_eq!(serde_json::to_string(&CheckDecision::RequiresApproval).unwrap(), "\"requires-approval\"");
-        assert_eq!(serde_json::to_string(&RunControlLevel::CooperativeStop).unwrap(), "\"cooperative_stop\"");
-        assert_eq!(serde_json::to_string(&PermissionMode::FullAccess).unwrap(), "\"full-access\"");
-        assert_eq!(serde_json::to_string(&PairState::Handshaking).unwrap(), "\"handshaking\"");
-        assert_eq!(serde_json::to_string(&DeviceType::Phone).unwrap(), "\"phone\"");
-        assert_eq!(serde_json::to_string(&SetSettingsKey::ResponseStyle).unwrap(), "\"responseStyle\"");
-        assert_eq!(serde_json::to_string(&Arbiter::MainAgent).unwrap(), "\"main-agent\"");
-        assert_eq!(serde_json::to_string(&PageDirection::Backward).unwrap(), "\"backward\"");
-        assert_eq!(serde_json::to_string(&ApprovalChannel::Mobile).unwrap(), "\"mobile\"");
-        assert_eq!(serde_json::to_string(&SettingsConfirmStatus::Withdrawn).unwrap(), "\"withdrawn\"");
+        assert_eq!(
+            serde_json::to_string(&CheckDecision::RequiresApproval).unwrap(),
+            "\"requires-approval\""
+        );
+        assert_eq!(
+            serde_json::to_string(&RunControlLevel::CooperativeStop).unwrap(),
+            "\"cooperative_stop\""
+        );
+        assert_eq!(
+            serde_json::to_string(&PermissionMode::FullAccess).unwrap(),
+            "\"full-access\""
+        );
+        assert_eq!(
+            serde_json::to_string(&PairState::Handshaking).unwrap(),
+            "\"handshaking\""
+        );
+        assert_eq!(
+            serde_json::to_string(&DeviceType::Phone).unwrap(),
+            "\"phone\""
+        );
+        assert_eq!(
+            serde_json::to_string(&SetSettingsKey::ResponseStyle).unwrap(),
+            "\"responseStyle\""
+        );
+        assert_eq!(
+            serde_json::to_string(&Arbiter::MainAgent).unwrap(),
+            "\"main-agent\""
+        );
+        assert_eq!(
+            serde_json::to_string(&PageDirection::Backward).unwrap(),
+            "\"backward\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ApprovalChannel::Mobile).unwrap(),
+            "\"mobile\""
+        );
+        assert_eq!(
+            serde_json::to_string(&SettingsConfirmStatus::Withdrawn).unwrap(),
+            "\"withdrawn\""
+        );
     }
 
     #[test]
@@ -1528,7 +1909,16 @@ mod tests {
         let writes: Vec<&CommandSpec> = COMMANDS.iter().filter(|s| s.write).collect();
         assert_eq!(writes.len(), 5);
         let write_names: Vec<&str> = writes.iter().map(|s| s.name).collect();
-        assert_eq!(write_names, ["approve", "deny", "writeFile", "setSettings", "pauseAutomation"]);
+        assert_eq!(
+            write_names,
+            [
+                "approve",
+                "deny",
+                "writeFile",
+                "setSettings",
+                "pauseAutomation"
+            ]
+        );
         // 域分布：10 + 5 + 8 + 4 + 5 + 5
         let domains: Vec<CommandDomain> = COMMANDS.iter().map(|s| s.domain).collect();
         for d in [
@@ -1539,14 +1929,17 @@ mod tests {
             CommandDomain::Settings,
             CommandDomain::Devices,
         ] {
-            assert_eq!(domains.iter().filter(|&&x| x == d).count(), match d {
-                CommandDomain::Monitor => 10,
-                CommandDomain::Approval => 5,
-                CommandDomain::Files => 8,
-                CommandDomain::Sessions => 4,
-                CommandDomain::Settings => 5,
-                CommandDomain::Devices => 5,
-            });
+            assert_eq!(
+                domains.iter().filter(|&&x| x == d).count(),
+                match d {
+                    CommandDomain::Monitor => 10,
+                    CommandDomain::Approval => 5,
+                    CommandDomain::Files => 8,
+                    CommandDomain::Sessions => 4,
+                    CommandDomain::Settings => 5,
+                    CommandDomain::Devices => 5,
+                }
+            );
         }
         // 命令名唯一
         let names: std::collections::HashSet<&str> = COMMANDS.iter().map(|s| s.name).collect();
@@ -1561,8 +1954,11 @@ mod tests {
             assert_eq!(REMOTE_KINDS[i], format!("remote.{}", spec.name));
             assert_eq!(RESULT_KINDS[i], format!("result.{}", spec.name));
         }
-        let unique: std::collections::HashSet<&str> =
-            REMOTE_KINDS.iter().chain(RESULT_KINDS.iter()).copied().collect();
+        let unique: std::collections::HashSet<&str> = REMOTE_KINDS
+            .iter()
+            .chain(RESULT_KINDS.iter())
+            .copied()
+            .collect();
         assert_eq!(unique.len(), 74);
     }
 
@@ -1585,17 +1981,20 @@ mod tests {
         assert_eq!(json["deviceId"], "7f0a");
         assert_eq!(json["channel"], "lan");
         assert_eq!(json["needsReauth"], false);
-        let back: DeviceEntry = serde_json::from_str(&serde_json::to_string(&entry).unwrap()).unwrap();
+        let back: DeviceEntry =
+            serde_json::from_str(&serde_json::to_string(&entry).unwrap()).unwrap();
         assert_eq!(entry, back);
     }
 
     #[test]
     fn settings_result_two_states() {
-        let direct: SetSettingsResult = serde_json::from_str(r#"{"ok":true,"applied":true}"#).unwrap();
+        let direct: SetSettingsResult =
+            serde_json::from_str(r#"{"ok":true,"applied":true}"#).unwrap();
         assert_eq!(direct.pending, None);
-        let pending: SetSettingsResult =
-            serde_json::from_str(r#"{"ok":true,"applied":false,"pending":true,"confirmRequestId":"cf-01HZ"}"#)
-                .unwrap();
+        let pending: SetSettingsResult = serde_json::from_str(
+            r#"{"ok":true,"applied":false,"pending":true,"confirmRequestId":"cf-01HZ"}"#,
+        )
+        .unwrap();
         assert_eq!(pending.confirm_request_id.as_deref(), Some("cf-01HZ"));
     }
 }

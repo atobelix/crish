@@ -322,16 +322,32 @@ mod tests {
 
     #[test]
     fn capability_wire_values() {
-        assert_eq!(serde_json::to_string(&Capability::FileRead).unwrap(), "\"fileRead\"");
-        assert_eq!(serde_json::to_string(&Capability::EventReplay).unwrap(), "\"eventReplay\"");
-        assert_eq!(serde_json::to_string(&Capability::SessionSearch).unwrap(), "\"sessionSearch\"");
-        assert_eq!(serde_json::to_string(&Capability::RunTask).unwrap(), "\"runTask\"");
-        assert_eq!(serde_json::to_string(&Capability::Presence).unwrap(), "\"presence\"");
+        assert_eq!(
+            serde_json::to_string(&Capability::FileRead).unwrap(),
+            "\"fileRead\""
+        );
+        assert_eq!(
+            serde_json::to_string(&Capability::EventReplay).unwrap(),
+            "\"eventReplay\""
+        );
+        assert_eq!(
+            serde_json::to_string(&Capability::SessionSearch).unwrap(),
+            "\"sessionSearch\""
+        );
+        assert_eq!(
+            serde_json::to_string(&Capability::RunTask).unwrap(),
+            "\"runTask\""
+        );
+        assert_eq!(
+            serde_json::to_string(&Capability::Presence).unwrap(),
+            "\"presence\""
+        );
         let back: Capability = serde_json::from_str("\"taskList\"").unwrap();
         assert_eq!(back, Capability::TaskList);
 
         assert_eq!(ALL_CAPABILITIES.len(), 17);
-        let unique: std::collections::HashSet<Capability> = ALL_CAPABILITIES.iter().copied().collect();
+        let unique: std::collections::HashSet<Capability> =
+            ALL_CAPABILITIES.iter().copied().collect();
         assert_eq!(unique.len(), ALL_CAPABILITIES.len());
     }
 
@@ -395,13 +411,18 @@ mod tests {
 
     #[test]
     fn refresh_and_rotate_roundtrip() {
-        let refresh = Refresh { refresh_token: "hmac-base64".into() };
+        let refresh = Refresh {
+            refresh_token: "hmac-base64".into(),
+        };
         let json = serde_json::to_value(&refresh).unwrap();
         assert_eq!(json["refreshToken"], "hmac-base64");
-        let back: Refresh = serde_json::from_str(&serde_json::to_string(&refresh).unwrap()).unwrap();
+        let back: Refresh =
+            serde_json::from_str(&serde_json::to_string(&refresh).unwrap()).unwrap();
         assert_eq!(refresh, back);
 
-        let rotate = Rotate { nonce_seed: "seed-1".into() };
+        let rotate = Rotate {
+            nonce_seed: "seed-1".into(),
+        };
         let json = serde_json::to_value(&rotate).unwrap();
         assert_eq!(json["nonceSeed"], "seed-1");
         let back: Rotate = serde_json::from_str(&serde_json::to_string(&rotate).unwrap()).unwrap();

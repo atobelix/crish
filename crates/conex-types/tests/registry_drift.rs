@@ -28,21 +28,21 @@
 //! 任何一侧改动不同步（改 enum 不更新注册表 / 改注册表不匹配 serde），
 //! `cargo test -p conex-types` 立即失败。
 
-use conex_types::{
-    AgentEndReason, AgentEvent, AgentMessage, AgentMessageBlock, AgentMessageMetadataKind,
-    AgentMessageRole, ApprovalDecision, BackpressureLevel, ImpactAssessment, MissAttribution,
-    PermissionRequest, ProviderDiagnostic, ProviderDiagnosticPhase, ProviderErrorKind, RunCacheStats,
-    RunTerminalStatus, RuntimeCheckpointKind, RuntimeCheckpointRecord,
-    RuntimeCheckpointRestoreRecord, SecurityAuditDecision, SecurityAuditOperation,
-    SubagentEndStatus, SubagentEventKind, SubagentEventPayload, SystemPromptWireMode,
-    TimelineTruncateReason, ToolArtifact, ToolArtifactKind, ToolBatchCall, ToolBatchResult,
-    ToolCallBlock, ToolCategory, ToolConcurrency, ToolMetadata, ToolOutput,
-};
 use conex_types::tool::{
     CompressionCacheInvalidation, ContextCompressionCacheBoundaryMetadata,
     ContextCompressionHandoffMetadata, ContextCompressionPolicyAction,
     ContextCompressionPolicyMetadata, ContextCompressionPolicyTier, ContextCompressionReason,
     ContextCompressionRecord, ContextCompressionTrigger,
+};
+use conex_types::{
+    AgentEndReason, AgentEvent, AgentMessage, AgentMessageBlock, AgentMessageMetadataKind,
+    AgentMessageRole, ApprovalDecision, BackpressureLevel, ImpactAssessment, MissAttribution,
+    PermissionRequest, ProviderDiagnostic, ProviderDiagnosticPhase, ProviderErrorKind,
+    RunCacheStats, RunTerminalStatus, RuntimeCheckpointKind, RuntimeCheckpointRecord,
+    RuntimeCheckpointRestoreRecord, SecurityAuditDecision, SecurityAuditOperation,
+    SubagentEndStatus, SubagentEventKind, SubagentEventPayload, SystemPromptWireMode,
+    TimelineTruncateReason, ToolArtifact, ToolArtifactKind, ToolBatchCall, ToolBatchResult,
+    ToolCallBlock, ToolCategory, ToolConcurrency, ToolMetadata, ToolOutput,
 };
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -96,8 +96,13 @@ struct FieldSpec {
 #[derive(serde::Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
 enum TypeSpec {
-    Struct { fields: Vec<FieldSpec> },
-    Tagged { tag: String, variants: Vec<VariantSpec> },
+    Struct {
+        fields: Vec<FieldSpec>,
+    },
+    Tagged {
+        tag: String,
+        variants: Vec<VariantSpec>,
+    },
 }
 
 #[derive(serde::Deserialize)]
@@ -116,8 +121,8 @@ struct EnumSpec {
 
 fn registry() -> Registry {
     let path = concat!(env!("CARGO_MANIFEST_DIR"), "/contracts/engine-events.json");
-    let text = std::fs::read_to_string(path)
-        .unwrap_or_else(|e| panic!("读取事件注册表 {path} 失败：{e}"));
+    let text =
+        std::fs::read_to_string(path).unwrap_or_else(|e| panic!("读取事件注册表 {path} 失败：{e}"));
     serde_json::from_str(&text).unwrap_or_else(|e| panic!("解析事件注册表失败：{e}"))
 }
 
@@ -213,10 +218,17 @@ fn check_roundtrip<T: Serialize + DeserializeOwned>(
 #[test]
 fn registry_event_types_match_enum_declaration_order() {
     let reg = registry();
-    assert_eq!(reg.contract, "engine-events", "注册表契约名必须为 engine-events");
+    assert_eq!(
+        reg.contract, "engine-events",
+        "注册表契约名必须为 engine-events"
+    );
     assert_eq!(reg.schema_version, 1);
     assert_eq!(reg.event_count, 57);
-    assert_eq!(reg.events.len(), 57, "事件注册表必须是 57 条（R1 tool-update 删除）");
+    assert_eq!(
+        reg.events.len(),
+        57,
+        "事件注册表必须是 57 条（R1 tool-update 删除）"
+    );
     assert_eq!(
         AgentEvent::ALL_TYPE_NAMES.len(),
         57,
@@ -231,13 +243,21 @@ fn registry_event_types_match_enum_declaration_order() {
             i + 1
         );
         // rustVariant 必须是对应 enum 变体名（生成器依赖该命名产 TS 类型名）
-        assert_eq!(ev.rust_variant, type_name_guess(&ev.wire), "rustVariant 与 wire 不一致：{}", ev.wire);
+        assert_eq!(
+            ev.rust_variant,
+            type_name_guess(&ev.wire),
+            "rustVariant 与 wire 不一致：{}",
+            ev.wire
+        );
         // 每个事件都必须登记 domain（域归属，供生成器与前端路由使用）
         assert!(!ev.domain.is_empty(), "事件 {} 缺 domain 字段", ev.wire);
         // 每个事件都必须携带 sessionId 且必填（协议硬约束，03 §5.1）；
         // 例外：goal-* 三事件（envelope 事件不列 sessionId 变体字段——
         // 会话归属在事件行 session_id 列，读侧信封已含，02-定夺 B2/S9 约定）
-        if matches!(ev.wire.as_str(), "goal-round-started" | "goal-round-completed" | "goal-continuation-decided") {
+        if matches!(
+            ev.wire.as_str(),
+            "goal-round-started" | "goal-round-completed" | "goal-continuation-decided"
+        ) {
             assert!(
                 ev.fields.iter().all(|f| f.name != "sessionId"),
                 "goal-* 事件 {} 不得登记 sessionId 变体字段（B2/S9 约定）",
@@ -295,7 +315,10 @@ fn registry_event_types_match_enum_declaration_order() {
     );
     for value in &kind_enum.values {
         assert!(
-            matches!(kb.get(value).map(String::as_str), Some("delta" | "soft" | "critical")),
+            matches!(
+                kb.get(value).map(String::as_str),
+                Some("delta" | "soft" | "critical")
+            ),
             "kindBackpressure[{}] 非法或缺失",
             value
         );
@@ -500,10 +523,25 @@ fn enum_values_match_serde_wire() {
     check_enum!(reg, "SystemPromptWireMode", SystemPromptWireMode, 2);
     check_enum!(reg, "ProviderErrorKind", ProviderErrorKind, 13);
     check_enum!(reg, "RuntimeCheckpointKind", RuntimeCheckpointKind, 3);
-    check_enum!(reg, "ContextCompressionTrigger", ContextCompressionTrigger, 10);
+    check_enum!(
+        reg,
+        "ContextCompressionTrigger",
+        ContextCompressionTrigger,
+        10
+    );
     check_enum!(reg, "ContextCompressionReason", ContextCompressionReason, 8);
-    check_enum!(reg, "ContextCompressionPolicyTier", ContextCompressionPolicyTier, 5);
-    check_enum!(reg, "ContextCompressionPolicyAction", ContextCompressionPolicyAction, 2);
+    check_enum!(
+        reg,
+        "ContextCompressionPolicyTier",
+        ContextCompressionPolicyTier,
+        5
+    );
+    check_enum!(
+        reg,
+        "ContextCompressionPolicyAction",
+        ContextCompressionPolicyAction,
+        2
+    );
     check_enum!(
         reg,
         "CompressionCacheInvalidation",
@@ -564,8 +602,12 @@ fn security_audit_undeclared_write_operation_stays_in_sync() {
 fn registry_entries_are_reachable_from_events() {
     let reg = registry();
     // 从 49 事件出发做传递闭包；JsonValue/string/number/boolean 为基元。
-    let mut reachable: std::collections::BTreeSet<String> =
-        reg.events.iter().flat_map(|e| e.fields.iter()).map(|f| f.ts_type.clone()).collect();
+    let mut reachable: std::collections::BTreeSet<String> = reg
+        .events
+        .iter()
+        .flat_map(|e| e.fields.iter())
+        .map(|f| f.ts_type.clone())
+        .collect();
     let mut queue: Vec<String> = reachable.iter().cloned().collect();
     while let Some(ty) = queue.pop() {
         if let Some(inner) = ty.strip_suffix("[]") {
@@ -584,9 +626,11 @@ fn registry_entries_are_reachable_from_events() {
         if let Some(spec) = reg.types.get(&ty) {
             let names: Vec<String> = match spec {
                 TypeSpec::Struct { fields } => fields.iter().map(|f| f.ts_type.clone()).collect(),
-                TypeSpec::Tagged { variants, .. } => {
-                    variants.iter().flat_map(|v| v.fields.iter()).map(|f| f.ts_type.clone()).collect()
-                }
+                TypeSpec::Tagged { variants, .. } => variants
+                    .iter()
+                    .flat_map(|v| v.fields.iter())
+                    .map(|f| f.ts_type.clone())
+                    .collect(),
             };
             for n in names {
                 if reachable.insert(n.clone()) {
@@ -697,10 +741,22 @@ fn envelope_wire_fields_are_separate_from_event_body() {
     for ev in &reg.events {
         let carries_body_run_id = body_run_id_events.contains(&ev.wire.as_str());
         for f in &ev.fields {
-            assert_ne!(f.name, "sequence", "事件 {} 不应把信封 sequence 登记为事件体字段", ev.wire);
-            assert_ne!(f.name, "schemaVersion", "事件 {} 不应把信封 schemaVersion 登记为事件体字段", ev.wire);
+            assert_ne!(
+                f.name, "sequence",
+                "事件 {} 不应把信封 sequence 登记为事件体字段",
+                ev.wire
+            );
+            assert_ne!(
+                f.name, "schemaVersion",
+                "事件 {} 不应把信封 schemaVersion 登记为事件体字段",
+                ev.wire
+            );
             if !carries_body_run_id {
-                assert_ne!(f.name, "runId", "事件 {} 不应把信封 runId 登记为事件体字段", ev.wire);
+                assert_ne!(
+                    f.name, "runId",
+                    "事件 {} 不应把信封 runId 登记为事件体字段",
+                    ev.wire
+                );
             }
         }
         if carries_body_run_id {
@@ -765,7 +821,10 @@ fn subagent_event_kind_backpressure_matches_registry() {
         .iter()
         .find(|e| e.wire == "subagent-event")
         .expect("注册表必须有 subagent-event");
-    let kb = ev.kind_backpressure.as_ref().expect("kindBackpressure 必须存在");
+    let kb = ev
+        .kind_backpressure
+        .as_ref()
+        .expect("kindBackpressure 必须存在");
     for (kind, expected) in [
         (SubagentEventKind::Progress, BackpressureLevel::Delta),
         (SubagentEventKind::Message, BackpressureLevel::Soft),
@@ -810,22 +869,71 @@ fn backpressure_classification_semantics_anchored() {
             .backpressure
             .clone()
     };
-    assert_eq!(level_of("message-delta"), "delta", "message-delta 必须保持 Delta（可丢）");
-    assert_eq!(level_of("subagent-started"), "critical", "subagent-started 必达");
-    assert_eq!(level_of("subagent-ended"), "critical", "subagent-ended 必达");
-    assert_eq!(level_of("subagent-event"), "delta", "subagent-event 基级为 Delta");
+    assert_eq!(
+        level_of("message-delta"),
+        "delta",
+        "message-delta 必须保持 Delta（可丢）"
+    );
+    assert_eq!(
+        level_of("subagent-started"),
+        "critical",
+        "subagent-started 必达"
+    );
+    assert_eq!(
+        level_of("subagent-ended"),
+        "critical",
+        "subagent-ended 必达"
+    );
+    assert_eq!(
+        level_of("subagent-event"),
+        "delta",
+        "subagent-event 基级为 Delta"
+    );
     // 任务域七事件分级锚定（T-AB-17 §4.5 冻结契约，防分级漂移）
-    assert_eq!(level_of("task-output"), "delta", "task-output 为 Delta（可丢不落库）");
-    assert_eq!(level_of("task-heartbeat"), "delta", "task-heartbeat 为 Delta（可丢不落库）");
-    assert_eq!(level_of("task-suspicious"), "soft", "task-suspicious 为 Soft（尽力投递留痕）");
-    for wire in ["task-started", "task-completed", "task-failed", "task-killed"] {
-        assert_eq!(level_of(wire), "critical", "任务事件 {wire} 为 Critical（终态必达落库）");
+    assert_eq!(
+        level_of("task-output"),
+        "delta",
+        "task-output 为 Delta（可丢不落库）"
+    );
+    assert_eq!(
+        level_of("task-heartbeat"),
+        "delta",
+        "task-heartbeat 为 Delta（可丢不落库）"
+    );
+    assert_eq!(
+        level_of("task-suspicious"),
+        "soft",
+        "task-suspicious 为 Soft（尽力投递留痕）"
+    );
+    for wire in [
+        "task-started",
+        "task-completed",
+        "task-failed",
+        "task-killed",
+    ] {
+        assert_eq!(
+            level_of(wire),
+            "critical",
+            "任务事件 {wire} 为 Critical（终态必达落库）"
+        );
     }
     // 定时器域两事件分级锚定（T-CF-04 §4.7 冻结契约，防分级漂移）
-    assert_eq!(level_of("timer-fired"), "critical", "timer-fired 为 Critical（数据面必达落库）");
-    assert_eq!(level_of("timer-cancelled"), "soft", "timer-cancelled 为 Soft（尽力投递）");
+    assert_eq!(
+        level_of("timer-fired"),
+        "critical",
+        "timer-fired 为 Critical（数据面必达落库）"
+    );
+    assert_eq!(
+        level_of("timer-cancelled"),
+        "soft",
+        "timer-cancelled 为 Soft（尽力投递）"
+    );
     // cron 域事件分级锚定（T-CF-08 §4.7 冻结契约，防分级漂移）
-    assert_eq!(level_of("cron-fired"), "critical", "cron-fired 为 Critical（数据面必达落库）");
+    assert_eq!(
+        level_of("cron-fired"),
+        "critical",
+        "cron-fired 为 Critical（数据面必达落库）"
+    );
     // 既有关键事件全部保持 Critical（对齐 buffer.rs drop_class_of：非 delta 全 Critical）
     for wire in [
         "agent-start",
@@ -839,7 +947,11 @@ fn backpressure_classification_semantics_anchored() {
         "checkpoint-restored",
         "security-audit",
     ] {
-        assert_eq!(level_of(wire), "critical", "事件 {wire} 必须保持 Critical（既有语义）");
+        assert_eq!(
+            level_of(wire),
+            "critical",
+            "事件 {wire} 必须保持 Critical（既有语义）"
+        );
     }
 }
 
@@ -869,8 +981,7 @@ fn event_policy_table_drift_locked() {
             other => panic!("事件 {} 注册表 backpressure 非法：{other}", ev.wire),
         };
         assert_eq!(
-            policy.backpressure,
-            expected_bp,
+            policy.backpressure, expected_bp,
             "事件 {} 的背压分级与注册表不一致",
             ev.wire
         );
@@ -881,8 +992,7 @@ fn event_policy_table_drift_locked() {
             PersistenceDecision::NoPersist
         };
         assert_eq!(
-            policy.persist,
-            expected_persist,
+            policy.persist, expected_persist,
             "事件 {} 的持久化决策与注册表不一致",
             ev.wire
         );
@@ -893,8 +1003,7 @@ fn event_policy_table_drift_locked() {
             other => panic!("事件 {} 注册表 bridgePriority 非法：{other}", ev.wire),
         };
         assert_eq!(
-            policy.bridge_priority,
-            expected_bridge,
+            policy.bridge_priority, expected_bridge,
             "事件 {} 的桥丢帧优先级与注册表不一致",
             ev.wire
         );
@@ -907,7 +1016,9 @@ fn event_policy_table_drift_locked() {
 /// Critical+Persist+Critical（终态必达落库）、timer/cron 仅实时轨等）
 #[test]
 fn event_policy_decision_table_rows_anchored() {
-    use conex_types::events::{BackpressureLevel as Bp, DropClass as Dc, PersistenceDecision as Pd};
+    use conex_types::events::{
+        BackpressureLevel as Bp, DropClass as Dc, PersistenceDecision as Pd,
+    };
     let reg = registry();
     let policy_of = |wire: &str| -> EventPolicy {
         let ev = reg
@@ -934,12 +1045,20 @@ fn event_policy_decision_table_rows_anchored() {
         ("task-failed", Bp::Critical, Pd::Persist, Dc::Critical),
         ("task-killed", Bp::Critical, Pd::Persist, Dc::Critical),
         ("run-terminal", Bp::Critical, Pd::Persist, Dc::Critical),
-        ("approval-requested", Bp::Critical, Pd::Persist, Dc::Critical),
+        (
+            "approval-requested",
+            Bp::Critical,
+            Pd::Persist,
+            Dc::Critical,
+        ),
         ("message-end", Bp::Critical, Pd::Persist, Dc::Critical),
     ];
     for (wire, bp, persist, bridge) in rows {
         let policy = policy_of(wire);
-        assert_eq!(policy.backpressure, *bp, "定案表行 {wire} backpressure 不符");
+        assert_eq!(
+            policy.backpressure, *bp,
+            "定案表行 {wire} backpressure 不符"
+        );
         assert_eq!(policy.persist, *persist, "定案表行 {wire} persist 不符");
         assert_eq!(
             policy.bridge_priority, *bridge,
@@ -957,7 +1076,10 @@ fn subagent_event_policy_kind_level_decisions() {
         session_id: "s1".into(),
         subagent_id: "sub-1".into(),
         subagent_run_id: "sr-1".into(),
-        event: SubagentEventPayload { kind, payload: None },
+        event: SubagentEventPayload {
+            kind,
+            payload: None,
+        },
     };
     let progress = event_policy(&sample(SubagentEventKind::Progress));
     assert_eq!(progress.backpressure, BackpressureLevel::Delta);
@@ -1014,7 +1136,10 @@ fn registry_drift_timer_events_registered() {
     // 累计基线：38 → 40 → 41 → 49 → 57 → 58 → 57（D-03 契约窗口：
     // tool-input-repaired 核销 + 9 新观测事件已登记；T1a 统一输入流收敛战役
     // 追加 timeline-truncate；R1 tool-update 死契约删除回落 57）
-    assert_eq!(reg.event_count, 57, "累计基线必须为 57（R1 tool-update 死契约删除）");
+    assert_eq!(
+        reg.event_count, 57,
+        "累计基线必须为 57（R1 tool-update 死契约删除）"
+    );
     assert_eq!(reg.events.len(), 57);
     assert_eq!(
         AgentEvent::ALL_TYPE_NAMES.len(),
@@ -1028,11 +1153,20 @@ fn registry_drift_timer_events_registered() {
         .iter()
         .find(|e| e.wire == "timer-fired")
         .expect("注册表必须登记 timer-fired");
-    assert_eq!(fired.id, 37, "timer-fired 编号必须为 37（声明序，R1 tool-update 删除前移）");
+    assert_eq!(
+        fired.id, 37,
+        "timer-fired 编号必须为 37（声明序，R1 tool-update 删除前移）"
+    );
     assert_eq!(fired.rust_variant, "TimerFired");
     assert_eq!(fired.domain, "timer", "timer-fired 必须归属 timer 域");
-    assert_eq!(fired.backpressure, "critical", "timer-fired 必须为 Critical（必达落库）");
-    assert!(fired.kind_backpressure.is_none(), "timer-fired 不得登记 kindBackpressure");
+    assert_eq!(
+        fired.backpressure, "critical",
+        "timer-fired 必须为 Critical（必达落库）"
+    );
+    assert!(
+        fired.kind_backpressure.is_none(),
+        "timer-fired 不得登记 kindBackpressure"
+    );
     let fired_fields: Vec<&str> = fired.fields.iter().map(|f| f.name.as_str()).collect();
     assert_eq!(
         fired_fields,
@@ -1046,10 +1180,19 @@ fn registry_drift_timer_events_registered() {
         .iter()
         .find(|e| e.wire == "timer-cancelled")
         .expect("注册表必须登记 timer-cancelled");
-    assert_eq!(cancelled.id, 38, "timer-cancelled 编号必须为 38（声明序，R1 tool-update 删除前移）");
+    assert_eq!(
+        cancelled.id, 38,
+        "timer-cancelled 编号必须为 38（声明序，R1 tool-update 删除前移）"
+    );
     assert_eq!(cancelled.rust_variant, "TimerCancelled");
-    assert_eq!(cancelled.domain, "timer", "timer-cancelled 必须归属 timer 域");
-    assert_eq!(cancelled.backpressure, "soft", "timer-cancelled 必须为 Soft（尽力投递）");
+    assert_eq!(
+        cancelled.domain, "timer",
+        "timer-cancelled 必须归属 timer 域"
+    );
+    assert_eq!(
+        cancelled.backpressure, "soft",
+        "timer-cancelled 必须为 Soft（尽力投递）"
+    );
     assert!(
         cancelled.kind_backpressure.is_none(),
         "timer-cancelled 不得登记 kindBackpressure"
@@ -1078,7 +1221,10 @@ fn registry_drift_timer_events_registered() {
         .iter()
         .find(|e| e.wire == "cron-fired")
         .expect("cron-fired 必须已由 T-CF-08 登记");
-    assert_eq!(cron.id, 39, "cron-fired 编号必须为 39（声明序，R1 tool-update 删除前移）");
+    assert_eq!(
+        cron.id, 39,
+        "cron-fired 编号必须为 39（声明序，R1 tool-update 删除前移）"
+    );
 
     // 注册表样本 ↔ serde 行为双向一致（build_event_sample 构造 → 反序列化
     // → 回序列化，必填字段全在场）
@@ -1137,10 +1283,16 @@ fn registry_drift_cron_fired_registered() {
         .iter()
         .find(|e| e.wire == "cron-fired")
         .expect("注册表必须登记 cron-fired");
-    assert_eq!(cron.id, 39, "cron-fired 编号必须为 39（声明序，R1 tool-update 删除前移）");
+    assert_eq!(
+        cron.id, 39,
+        "cron-fired 编号必须为 39（声明序，R1 tool-update 删除前移）"
+    );
     assert_eq!(cron.rust_variant, "CronFired");
     assert_eq!(cron.domain, "cron", "cron-fired 必须归属 cron 域");
-    assert_eq!(cron.backpressure, "critical", "cron-fired 必须为 Critical（必达落库）");
+    assert_eq!(
+        cron.backpressure, "critical",
+        "cron-fired 必须为 Critical（必达落库）"
+    );
     assert!(
         cron.kind_backpressure.is_none(),
         "cron-fired 不得登记 kindBackpressure（仅 subagent-event 允许）"
@@ -1148,7 +1300,14 @@ fn registry_drift_cron_fired_registered() {
     let cron_fields: Vec<&str> = cron.fields.iter().map(|f| f.name.as_str()).collect();
     assert_eq!(
         cron_fields,
-        vec!["sessionId", "cronId", "prompt", "expression", "iteration", "firedAtMs"],
+        vec![
+            "sessionId",
+            "cronId",
+            "prompt",
+            "expression",
+            "iteration",
+            "firedAtMs"
+        ],
         "cron-fired 字段形状与 §4.7 不符"
     );
     // 字段全部必填（无可选字段）
@@ -1173,7 +1332,11 @@ fn registry_drift_cron_fired_registered() {
     let obj = out.as_object().unwrap();
     assert_eq!(obj.get("type"), Some(&Value::String("cron-fired".into())));
     for f in &cron.fields {
-        assert!(obj.contains_key(&f.name), "cron-fired 序列化缺少必填字段 {}", f.name);
+        assert!(
+            obj.contains_key(&f.name),
+            "cron-fired 序列化缺少必填字段 {}",
+            f.name
+        );
     }
     assert_eq!(
         parsed.type_name(),
@@ -1203,7 +1366,11 @@ fn registry_drift_recovery_and_goal_events_registered() {
         ("recovery-budget-denied", "RecoveryBudgetDenied", "recovery"),
         ("goal-round-started", "GoalRoundStarted", "goal"),
         ("goal-round-completed", "GoalRoundCompleted", "goal"),
-        ("goal-continuation-decided", "GoalContinuationDecided", "goal"),
+        (
+            "goal-continuation-decided",
+            "GoalContinuationDecided",
+            "goal",
+        ),
     ];
     for (offset, (wire, variant, domain)) in expected.iter().enumerate() {
         let id = 40 + offset as u32;
@@ -1215,7 +1382,10 @@ fn registry_drift_recovery_and_goal_events_registered() {
         assert_eq!(ev.id, id, "{wire} 编号必须为 {id}（声明序）");
         assert_eq!(ev.rust_variant, *variant, "{wire} rustVariant 不符");
         assert_eq!(ev.domain, *domain, "{wire} 必须归属 {domain} 域");
-        assert_eq!(ev.backpressure, "critical", "{wire} 必须为 Critical（落库必达）");
+        assert_eq!(
+            ev.backpressure, "critical",
+            "{wire} 必须为 Critical（落库必达）"
+        );
         assert!(
             ev.kind_backpressure.is_none(),
             "{wire} 不得登记 kindBackpressure（仅 subagent-event 允许）"
@@ -1231,35 +1401,78 @@ fn registry_drift_recovery_and_goal_events_registered() {
             "recovery-escalated" => {
                 assert_eq!(
                     wire_fields,
-                    vec!["sessionId", "subagentRunId", "kind", "retries", "elapsedMs", "detail"],
+                    vec![
+                        "sessionId",
+                        "subagentRunId",
+                        "kind",
+                        "retries",
+                        "elapsedMs",
+                        "detail"
+                    ],
                     "recovery-escalated 字段形状与 D8 §4.1 不符"
                 );
-                assert!(!ev.fields[1].required, "subagentRunId 必须可选（W1 熔断侧 None）");
+                assert!(
+                    !ev.fields[1].required,
+                    "subagentRunId 必须可选（W1 熔断侧 None）"
+                );
                 assert!(!ev.fields[5].required, "detail 必须可选（W1 熔断侧 Some）");
             }
             "recovery-steering" => {
                 assert_eq!(
                     wire_fields,
-                    vec!["sessionId", "subagentId", "subagentRunId", "fingerprint", "retries", "remainingStatus", "pending", "createdAtMs"],
+                    vec![
+                        "sessionId",
+                        "subagentId",
+                        "subagentRunId",
+                        "fingerprint",
+                        "retries",
+                        "remainingStatus",
+                        "pending",
+                        "createdAtMs"
+                    ],
                     "recovery-steering 字段形状与 D8 §4.1 不符"
                 );
-                assert!(ev.fields.iter().all(|f| f.required), "recovery-steering 字段必须全必填");
+                assert!(
+                    ev.fields.iter().all(|f| f.required),
+                    "recovery-steering 字段必须全必填"
+                );
             }
             "recovery-fork" => {
                 assert_eq!(
                     wire_fields,
-                    vec!["sessionId", "fingerprint", "subagentId", "fromRunId", "fromLeafId", "newRunId", "newLeafId", "contextMode"],
+                    vec![
+                        "sessionId",
+                        "fingerprint",
+                        "subagentId",
+                        "fromRunId",
+                        "fromLeafId",
+                        "newRunId",
+                        "newLeafId",
+                        "contextMode"
+                    ],
                     "recovery-fork 字段形状与 D8 §4.1 不符"
                 );
-                assert!(ev.fields.iter().all(|f| f.required), "recovery-fork 字段必须全必填");
+                assert!(
+                    ev.fields.iter().all(|f| f.required),
+                    "recovery-fork 字段必须全必填"
+                );
             }
             "recovery-report" => {
                 assert_eq!(
                     wire_fields,
-                    vec!["sessionId", "subagentId", "subagentRunId", "stuckAtMs", "suggestion"],
+                    vec![
+                        "sessionId",
+                        "subagentId",
+                        "subagentRunId",
+                        "stuckAtMs",
+                        "suggestion"
+                    ],
                     "recovery-report 字段形状与 D8 §4.1 不符"
                 );
-                assert!(ev.fields.iter().all(|f| f.required), "recovery-report 字段必须全必填");
+                assert!(
+                    ev.fields.iter().all(|f| f.required),
+                    "recovery-report 字段必须全必填"
+                );
             }
             "recovery-budget-denied" => {
                 assert_eq!(
@@ -1267,19 +1480,41 @@ fn registry_drift_recovery_and_goal_events_registered() {
                     vec!["sessionId", "subagentRunId", "fingerprint", "count", "max"],
                     "recovery-budget-denied 字段形状与 D8 §4.1 不符"
                 );
-                assert!(!ev.fields[1].required, "subagentRunId 必须可选（W6 D2 主 run 侧 None）");
+                assert!(
+                    !ev.fields[1].required,
+                    "subagentRunId 必须可选（W6 D2 主 run 侧 None）"
+                );
             }
             "goal-round-started" => {
-                assert_eq!(wire_fields, vec!["round", "maxRounds", "goal"], "goal-round-started 字段形状与 D8 §4.1 不符");
-                assert!(ev.fields.iter().all(|f| f.required), "goal-round-started 字段必须全必填");
+                assert_eq!(
+                    wire_fields,
+                    vec!["round", "maxRounds", "goal"],
+                    "goal-round-started 字段形状与 D8 §4.1 不符"
+                );
+                assert!(
+                    ev.fields.iter().all(|f| f.required),
+                    "goal-round-started 字段必须全必填"
+                );
             }
             "goal-round-completed" => {
                 assert_eq!(
                     wire_fields,
-                    vec!["round", "toolCallCount", "toolSuccessCount", "messageCount", "decision", "reasonDetail", "stalledDelta", "evidence"],
+                    vec![
+                        "round",
+                        "toolCallCount",
+                        "toolSuccessCount",
+                        "messageCount",
+                        "decision",
+                        "reasonDetail",
+                        "stalledDelta",
+                        "evidence"
+                    ],
                     "goal-round-completed 字段形状与 D8 §4.1（B2 统一字段集）不符"
                 );
-                assert!(ev.fields.iter().all(|f| f.required), "goal-round-completed 字段必须全必填");
+                assert!(
+                    ev.fields.iter().all(|f| f.required),
+                    "goal-round-completed 字段必须全必填"
+                );
             }
             "goal-continuation-decided" => {
                 assert_eq!(
@@ -1298,7 +1533,10 @@ fn registry_drift_recovery_and_goal_events_registered() {
     // 之后；D-03 九观测事件续在其后 48-56）
     let tail: Vec<&str> = AgentEvent::ALL_TYPE_NAMES[39..47].to_vec();
     let expected_wires: Vec<&str> = expected.iter().map(|(w, _, _)| *w).collect();
-    assert_eq!(tail, expected_wires, "enum 声明序尾部（40-47）必须为 8 新事件");
+    assert_eq!(
+        tail, expected_wires,
+        "enum 声明序尾部（40-47）必须为 8 新事件"
+    );
 }
 
 // ── 8.6 D-03 观测补全九事件登记（2026-08-14 契约窗口：49 → 57）──
@@ -1319,8 +1557,14 @@ fn registry_drift_d03_observation_events_registered() {
             "SteeringEvaluated",
             "steering",
             &[
-                "sessionId", "timestamp", "phase", "hitStrategies", "steeringCountBefore",
-                "steeringCountAfter", "budgetRemaining", "reset",
+                "sessionId",
+                "timestamp",
+                "phase",
+                "hitStrategies",
+                "steeringCountBefore",
+                "steeringCountAfter",
+                "budgetRemaining",
+                "reset",
             ],
         ),
         (
@@ -1328,7 +1572,13 @@ fn registry_drift_d03_observation_events_registered() {
             "ControlIntent",
             "control",
             &[
-                "sessionId", "timestamp", "kind", "intentId", "source", "reason", "state",
+                "sessionId",
+                "timestamp",
+                "kind",
+                "intentId",
+                "source",
+                "reason",
+                "state",
             ],
         ),
         (
@@ -1336,26 +1586,50 @@ fn registry_drift_d03_observation_events_registered() {
             "HookOutcome",
             "hook",
             &[
-                "sessionId", "timestamp", "hookType", "outcome", "hookName", "blockedReason",
+                "sessionId",
+                "timestamp",
+                "hookType",
+                "outcome",
+                "hookName",
+                "blockedReason",
             ],
         ),
         (
             "summary-background",
             "SummaryBackground",
             "summary",
-            &["sessionId", "timestamp", "phase", "attempt", "reason", "messageId"],
+            &[
+                "sessionId",
+                "timestamp",
+                "phase",
+                "attempt",
+                "reason",
+                "messageId",
+            ],
         ),
         (
             "stage-summary-milestone",
             "StageSummaryMilestone",
             "summary",
-            &["sessionId", "timestamp", "milestoneType", "tier", "milestoneIndex"],
+            &[
+                "sessionId",
+                "timestamp",
+                "milestoneType",
+                "tier",
+                "milestoneIndex",
+            ],
         ),
         (
             "nudge-enqueued",
             "NudgeEnqueued",
             "steering",
-            &["sessionId", "timestamp", "reason", "targetRing", "overwrote"],
+            &[
+                "sessionId",
+                "timestamp",
+                "reason",
+                "targetRing",
+                "overwrote",
+            ],
         ),
         (
             "recovery-acknowledged",
@@ -1368,7 +1642,12 @@ fn registry_drift_d03_observation_events_registered() {
             "RecoveryRetryAttempted",
             "recovery",
             &[
-                "sessionId", "timestamp", "attempt", "delayMs", "budgetRemaining", "fromRunId",
+                "sessionId",
+                "timestamp",
+                "attempt",
+                "delayMs",
+                "budgetRemaining",
+                "fromRunId",
                 "newRunId",
             ],
         ),
@@ -1376,7 +1655,13 @@ fn registry_drift_d03_observation_events_registered() {
             "provider-request-anchored",
             "ProviderRequestAnchored",
             "diagnostic",
-            &["sessionId", "timestamp", "turnIndex", "model", "requestStartedAtMs"],
+            &[
+                "sessionId",
+                "timestamp",
+                "turnIndex",
+                "model",
+                "requestStartedAtMs",
+            ],
         ),
     ];
     for (offset, (wire, variant, domain, field_names)) in expected.iter().enumerate() {
@@ -1417,16 +1702,31 @@ fn registry_drift_d03_observation_events_registered() {
             .unwrap_or_else(|e| panic!("事件 {wire} 按注册表样本反序列化失败：{e}"));
         assert_eq!(parsed.type_name(), *wire, "事件 {wire} 的 type_name 不符");
         let policy = event_policy(&parsed);
-        assert_eq!(policy.backpressure, BackpressureLevel::Delta, "{wire} 背压判定不符");
-        assert_eq!(policy.persist, PersistenceDecision::NoPersist, "{wire} 持久化判定不符");
-        assert_eq!(policy.bridge_priority, DropClass::Critical, "{wire} 桥丢帧判定不符");
+        assert_eq!(
+            policy.backpressure,
+            BackpressureLevel::Delta,
+            "{wire} 背压判定不符"
+        );
+        assert_eq!(
+            policy.persist,
+            PersistenceDecision::NoPersist,
+            "{wire} 持久化判定不符"
+        );
+        assert_eq!(
+            policy.bridge_priority,
+            DropClass::Critical,
+            "{wire} 桥丢帧判定不符"
+        );
     }
     // 与 ALL_TYPE_NAMES 声明序对齐（48-56 为 D-03 九观测事件，追加在
     // goal-continuation-decided 之后；timeline-truncate 由 T1a 追加在 57
     // （R1 tool-update 删除后），故此处只取前 9 项校验）
     let tail: Vec<&str> = AgentEvent::ALL_TYPE_NAMES[47..56].to_vec();
     let expected_wires: Vec<&str> = expected.iter().map(|(w, _, _, _)| *w).collect();
-    assert_eq!(tail, expected_wires, "enum 声明序尾部（48-56）必须为 9 新事件");
+    assert_eq!(
+        tail, expected_wires,
+        "enum 声明序尾部（48-56）必须为 9 新事件"
+    );
 }
 
 /// tool-input-repaired 核销终态断言（D-03 EV-01）：enum 变体 + type_name +
@@ -1475,13 +1775,25 @@ fn registry_drift_timeline_truncate_registered() {
         .iter()
         .find(|e| e.wire == "timeline-truncate")
         .expect("注册表必须登记 timeline-truncate");
-    assert_eq!(ev.id, 57, "timeline-truncate 编号必须为 57（声明序尾插，R1 tool-update 删除后）");
+    assert_eq!(
+        ev.id, 57,
+        "timeline-truncate 编号必须为 57（声明序尾插，R1 tool-update 删除后）"
+    );
     assert_eq!(ev.rust_variant, "TimelineTruncate");
-    assert_eq!(ev.domain, "retraction", "timeline-truncate 必须归属 retraction 域");
+    assert_eq!(
+        ev.domain, "retraction",
+        "timeline-truncate 必须归属 retraction 域"
+    );
     // default required（决定 3）：Critical+Persist+Critical 三决策显式锁定
-    assert_eq!(ev.backpressure, "critical", "timeline-truncate 必须为 Critical（必达落库）");
+    assert_eq!(
+        ev.backpressure, "critical",
+        "timeline-truncate 必须为 Critical（必达落库）"
+    );
     assert!(ev.persist, "timeline-truncate 必须 Persist（落库）");
-    assert_eq!(ev.bridge_priority, "critical", "timeline-truncate 桥丢帧必须 Critical");
+    assert_eq!(
+        ev.bridge_priority, "critical",
+        "timeline-truncate 桥丢帧必须 Critical"
+    );
     assert!(
         ev.kind_backpressure.is_none(),
         "timeline-truncate 不得登记 kindBackpressure（仅 subagent-event 允许）"
@@ -1489,7 +1801,14 @@ fn registry_drift_timeline_truncate_registered() {
     let wire_fields: Vec<&str> = ev.fields.iter().map(|f| f.name.as_str()).collect();
     assert_eq!(
         wire_fields,
-        vec!["sessionId", "runId", "boundarySeq", "reason", "targetMessageId", "timestamp"],
+        vec![
+            "sessionId",
+            "runId",
+            "boundarySeq",
+            "reason",
+            "targetMessageId",
+            "timestamp"
+        ],
         "timeline-truncate 字段形状与详案-T1 §1.2(a) 不符"
     );
     // 字段全部必填（default required）
@@ -1512,13 +1831,20 @@ fn registry_drift_timeline_truncate_registered() {
         .iter()
         .find(|f| f.name == "reason")
         .expect("timeline-truncate 缺 reason 字段");
-    assert_eq!(reason.ts_type, "TimelineTruncateReason", "reason 必须引用 TimelineTruncateReason");
+    assert_eq!(
+        reason.ts_type, "TimelineTruncateReason",
+        "reason 必须引用 TimelineTruncateReason"
+    );
 
     // 注册表样本 ↔ serde 行为双向一致 + event_policy 三决策一致
     let sample = build_event_sample(&reg, ev);
     let parsed: AgentEvent = serde_json::from_value(sample)
         .unwrap_or_else(|e| panic!("timeline-truncate 按注册表样本反序列化失败：{e}"));
-    assert_eq!(parsed.type_name(), "timeline-truncate", "type_name 与注册表 wire 不一致");
+    assert_eq!(
+        parsed.type_name(),
+        "timeline-truncate",
+        "type_name 与注册表 wire 不一致"
+    );
 
     // seq 归属不变量：枚举声明序中 timeline-truncate 为最后一变体，其自身取号
     // 在 boundarySeq 之后（`TimelineTruncate.sequence > boundarySeq`）；
@@ -1581,20 +1907,20 @@ fn registry_drift_timeline_truncate_registered() {
 // packages/shared-types/src/generated/device/drift.test.ts 与 CI
 // engine-bindings-drift job 兜底。
 
-use conex_types::device::{
-    all_kinds, ALL_ERROR_CODES, CommandRequest, CommandResult, DeviceErrorCode, DeviceReady,
-    DeviceUnlink, ErrorBody, EventAck, EventsPush, Heartbeat, HeartbeatOk, Hello, HelloOk,
-    PairAudit, PairChallenge, PairHello, PairOk, PairVerify, Refresh, REMOTE_KINDS,
-    RESULT_KINDS, Resume, ResumeDone, ResumePage, SessionRemoved, SessionUpdated,
-    SessionUpdatedAll, StreamChunk, StreamClose, StreamOpen, StreamResume, Subscribe,
-    SubscribeAll, SubscribeOk,
-};
+use conex_types::device::events::event_cross_strategy;
 use conex_types::device::version::{
     ALL_CAPABILITIES, EVENT_WINDOW, MAX_FRAME_BYTES, MAX_STREAMS, MAX_SUBSCRIPTIONS,
     MIN_PROTOCOL_VERSION, PROTOCOL_VERSION,
 };
+use conex_types::device::{
+    all_kinds, CommandRequest, CommandResult, DeviceErrorCode, DeviceReady, DeviceUnlink,
+    ErrorBody, EventAck, EventsPush, Heartbeat, HeartbeatOk, Hello, HelloOk, PairAudit,
+    PairChallenge, PairHello, PairOk, PairVerify, Refresh, Resume, ResumeDone, ResumePage,
+    SessionRemoved, SessionUpdated, SessionUpdatedAll, StreamChunk, StreamClose, StreamOpen,
+    StreamResume, Subscribe, SubscribeAll, SubscribeOk, ALL_ERROR_CODES, REMOTE_KINDS,
+    RESULT_KINDS,
+};
 use conex_types::device::{Capability, EventRedactStrategy, SYNC_ELIGIBLE_TYPES};
-use conex_types::device::events::event_cross_strategy;
 
 /// 设备注册表 JSON 结构（与 contracts/device-protocol.json 逐字段对应）
 #[derive(serde::Deserialize)]
@@ -1701,9 +2027,12 @@ struct DeviceCapabilitySpec {
 }
 
 fn device_registry() -> DeviceRegistry {
-    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/contracts/device-protocol.json");
-    let text = std::fs::read_to_string(path)
-        .unwrap_or_else(|e| panic!("读取设备注册表 {path} 失败：{e}"));
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/contracts/device-protocol.json"
+    );
+    let text =
+        std::fs::read_to_string(path).unwrap_or_else(|e| panic!("读取设备注册表 {path} 失败：{e}"));
     serde_json::from_str(&text).unwrap_or_else(|e| panic!("解析设备注册表失败：{e}"))
 }
 
@@ -1716,12 +2045,7 @@ fn all_device_error_codes(reg: &DeviceRegistry) -> Vec<&str> {
             codes.push(code.as_str());
         }
     }
-    for entry in reg
-        .errors
-        .protocol
-        .iter()
-        .chain(reg.errors.business.iter())
-    {
+    for entry in reg.errors.protocol.iter().chain(reg.errors.business.iter()) {
         if seen.insert(entry.code.as_str()) {
             codes.push(entry.code.as_str());
         }
@@ -1830,7 +2154,10 @@ fn check_device_body_roundtrip(rust_variant: &str, fields: &[FieldSpec], sample:
 #[test]
 fn device_registry_kinds_match_rust_all_kinds() {
     let reg = device_registry();
-    assert_eq!(reg.contract, "device-protocol", "注册表契约名必须为 device-protocol");
+    assert_eq!(
+        reg.contract, "device-protocol",
+        "注册表契约名必须为 device-protocol"
+    );
     assert_eq!(reg.schema_version, 1);
     assert_eq!(reg.protocol_version, 1);
     assert_eq!(reg.message_count, 103, "M6 §1.1：kind 总数必须为 103");
@@ -1839,24 +2166,45 @@ fn device_registry_kinds_match_rust_all_kinds() {
 
     // kinds 与 messages 一一对应（id/kind 双键）
     for (i, kind) in reg.kinds.iter().enumerate() {
-        assert_eq!(kind.message_id as usize, i + 1, "kind messageId 必须从 1 连续递增");
+        assert_eq!(
+            kind.message_id as usize,
+            i + 1,
+            "kind messageId 必须从 1 连续递增"
+        );
         let msg = &reg.messages[i];
         assert_eq!(msg.id as usize, i + 1, "message id 必须与 kinds 对齐");
         assert_eq!(msg.kind, kind.kind, "message.kind 必须与 kinds 对齐");
         assert!(
-            matches!(kind.family.as_str(), "pair" | "auth" | "device" | "events" | "remote" | "result" | "stream" | "heartbeat" | "error"),
+            matches!(
+                kind.family.as_str(),
+                "pair"
+                    | "auth"
+                    | "device"
+                    | "events"
+                    | "remote"
+                    | "result"
+                    | "stream"
+                    | "heartbeat"
+                    | "error"
+            ),
             "kind {} 的 family 非法：{}",
             kind.kind,
             kind.family
         );
         assert!(
-            matches!(kind.direction.as_str(), "mobile-to-desktop" | "desktop-to-mobile" | "both"),
+            matches!(
+                kind.direction.as_str(),
+                "mobile-to-desktop" | "desktop-to-mobile" | "both"
+            ),
             "kind {} 的 direction 非法：{}",
             kind.kind,
             kind.direction
         );
         assert!(
-            matches!(kind.auth_phase.as_str(), "pairing" | "handshake" | "session" | "both"),
+            matches!(
+                kind.auth_phase.as_str(),
+                "pairing" | "handshake" | "session" | "both"
+            ),
             "kind {} 的 authPhase 非法：{}",
             kind.kind,
             kind.auth_phase
@@ -1864,7 +2212,10 @@ fn device_registry_kinds_match_rust_all_kinds() {
         // rustVariant 必须可解析（types 表内或命令/响应信封）
         assert!(
             reg.types.contains_key(&msg.rust_variant)
-                || matches!(msg.rust_variant.as_str(), "CommandRequest" | "CommandResult"),
+                || matches!(
+                    msg.rust_variant.as_str(),
+                    "CommandRequest" | "CommandResult"
+                ),
             "message {} 的 rustVariant {} 未在 types 登记",
             msg.kind,
             msg.rust_variant
@@ -1872,10 +2223,26 @@ fn device_registry_kinds_match_rust_all_kinds() {
         // family 与 kinds 对齐；remote/result 必须声明可解析的 params/result 类型
         assert_eq!(msg.family, kind.family, "message.family 必须与 kinds 对齐");
         if matches!(msg.family.as_str(), "remote" | "result") {
-            let params = msg.params_type.as_deref().expect("remote/result 必须声明 paramsType");
-            let result = msg.result_type.as_deref().expect("remote/result 必须声明 resultType");
-            assert!(reg.types.contains_key(params), "{} 的 paramsType {} 未登记", msg.kind, params);
-            assert!(reg.types.contains_key(result), "{} 的 resultType {} 未登记", msg.kind, result);
+            let params = msg
+                .params_type
+                .as_deref()
+                .expect("remote/result 必须声明 paramsType");
+            let result = msg
+                .result_type
+                .as_deref()
+                .expect("remote/result 必须声明 resultType");
+            assert!(
+                reg.types.contains_key(params),
+                "{} 的 paramsType {} 未登记",
+                msg.kind,
+                params
+            );
+            assert!(
+                reg.types.contains_key(result),
+                "{} 的 resultType {} 未登记",
+                msg.kind,
+                result
+            );
         }
     }
 
@@ -1884,7 +2251,10 @@ fn device_registry_kinds_match_rust_all_kinds() {
     assert_eq!(rust_kinds.len(), 103);
     let reg_kinds: std::collections::BTreeSet<&str> =
         reg.kinds.iter().map(|k| k.kind.as_str()).collect();
-    assert_eq!(reg_kinds, rust_kinds, "注册表 kind 集合与 Rust all_kinds() 不一致");
+    assert_eq!(
+        reg_kinds, rust_kinds,
+        "注册表 kind 集合与 Rust all_kinds() 不一致"
+    );
 }
 
 // ── 9.2 错误码全量：注册表去重 45 ↔ Rust ALL_ERROR_CODES ──
@@ -1893,7 +2263,11 @@ fn device_registry_kinds_match_rust_all_kinds() {
 fn device_registry_error_codes_match_rust_all_error_codes() {
     let reg = device_registry();
     let codes = all_device_error_codes(&reg);
-    assert_eq!(codes.len(), 45, "注册表错误码去重后必须为 45（D3 §6.2 / M6 §6.2）");
+    assert_eq!(
+        codes.len(),
+        45,
+        "注册表错误码去重后必须为 45（D3 §6.2 / M6 §6.2）"
+    );
     // common 码必须重新登记在 protocol|business（防分段漂移）
     let protocol_business: std::collections::BTreeSet<&str> = reg
         .errors
@@ -1909,16 +2283,13 @@ fn device_registry_error_codes_match_rust_all_error_codes() {
         );
     }
     let reg_set: std::collections::BTreeSet<&str> = codes.into_iter().collect();
-    let rust_set: std::collections::BTreeSet<&str> =
-        ALL_ERROR_CODES.iter().copied().collect();
-    assert_eq!(reg_set, rust_set, "注册表错误码集合与 Rust ALL_ERROR_CODES 不一致");
+    let rust_set: std::collections::BTreeSet<&str> = ALL_ERROR_CODES.iter().copied().collect();
+    assert_eq!(
+        reg_set, rust_set,
+        "注册表错误码集合与 Rust ALL_ERROR_CODES 不一致"
+    );
     // retryable 标志 ↔ Rust 静态判定表（D3 §6.2：retryable=true 才允许自动重试）
-    for entry in reg
-        .errors
-        .protocol
-        .iter()
-        .chain(reg.errors.business.iter())
-    {
+    for entry in reg.errors.protocol.iter().chain(reg.errors.business.iter()) {
         let code: DeviceErrorCode = serde_json::from_value(Value::String(entry.code.clone()))
             .unwrap_or_else(|e| panic!("错误码 {} 反序列化失败：{e}", entry.code));
         assert_eq!(
@@ -1935,7 +2306,11 @@ fn device_registry_error_codes_match_rust_all_error_codes() {
 #[test]
 fn device_registry_commands_match_rust_kinds() {
     let reg = device_registry();
-    assert_eq!(reg.commands.len(), 37, "命令必须为 37 条（M6 §4：F1 10 + F2 5 + F4 8 + F5 4 + F6 5 + 设备域 5）");
+    assert_eq!(
+        reg.commands.len(),
+        37,
+        "命令必须为 37 条（M6 §4：F1 10 + F2 5 + F4 8 + F5 4 + F6 5 + 设备域 5）"
+    );
     let error_codes: std::collections::BTreeSet<&str> =
         all_device_error_codes(&reg).into_iter().collect();
     let command_numbers: std::collections::BTreeSet<&str> =
@@ -1943,19 +2318,47 @@ fn device_registry_commands_match_rust_kinds() {
     for (i, cmd) in reg.commands.iter().enumerate() {
         let expected_number = format!("C{:02}", i + 1);
         assert_eq!(cmd.number, expected_number, "命令编号必须 C01-C37 连续");
-        assert_eq!(cmd.kind, format!("remote.{}", cmd.name), "命令 kind 必须为 remote.<name>");
-        assert!(!cmd.tauri_command.is_empty(), "命令 {} 缺 tauriCommand", cmd.kind);
-        assert!(matches!(cmd.surface.as_str(), "engine" | "gui"), "命令 {} surface 非法", cmd.kind);
+        assert_eq!(
+            cmd.kind,
+            format!("remote.{}", cmd.name),
+            "命令 kind 必须为 remote.<name>"
+        );
+        assert!(
+            !cmd.tauri_command.is_empty(),
+            "命令 {} 缺 tauriCommand",
+            cmd.kind
+        );
+        assert!(
+            matches!(cmd.surface.as_str(), "engine" | "gui"),
+            "命令 {} surface 非法",
+            cmd.kind
+        );
         assert!(!cmd.domain.is_empty(), "命令 {} 缺 domain", cmd.kind);
-        assert!(!cmd.idempotency_key.is_empty(), "命令 {} 缺 idempotencyKey", cmd.kind);
+        assert!(
+            !cmd.idempotency_key.is_empty(),
+            "命令 {} 缺 idempotencyKey",
+            cmd.kind
+        );
         // outbox 语义锁定：出站队列化的必然是写命令（审批/写文件/设置/自动化）
         if cmd.outbox {
             assert!(cmd.write, "命令 {} outbox=true 但 write=false", cmd.kind);
         }
-        assert!(reg.types.contains_key(&cmd.params_type), "命令 {} paramsType 未登记", cmd.kind);
-        assert!(reg.types.contains_key(&cmd.result_type), "命令 {} resultType 未登记", cmd.kind);
+        assert!(
+            reg.types.contains_key(&cmd.params_type),
+            "命令 {} paramsType 未登记",
+            cmd.kind
+        );
+        assert!(
+            reg.types.contains_key(&cmd.result_type),
+            "命令 {} resultType 未登记",
+            cmd.kind
+        );
         for code in &cmd.error_codes {
-            assert!(error_codes.contains(code.as_str()), "命令 {} 引用未登记错误码 {code}", cmd.kind);
+            assert!(
+                error_codes.contains(code.as_str()),
+                "命令 {} 引用未登记错误码 {code}",
+                cmd.kind
+            );
         }
     }
     // 白名单（M6 §4.7 B/C 面：registered=true ∩ surface=engine）必须成规模非空
@@ -1964,22 +2367,29 @@ fn device_registry_commands_match_rust_kinds() {
         .iter()
         .filter(|c| c.registered && c.surface == "engine")
         .count();
-    assert!(whitelist_count >= 10, "命令白名单必须成规模非空：{whitelist_count}");
+    assert!(
+        whitelist_count >= 10,
+        "命令白名单必须成规模非空：{whitelist_count}"
+    );
     // remote.* 37 个 kind == Rust REMOTE_KINDS；result.* 37 个 kind == RESULT_KINDS
     let remote_kinds: std::collections::BTreeSet<&str> =
         reg.commands.iter().map(|c| c.kind.as_str()).collect();
-    let rust_remote: std::collections::BTreeSet<&str> =
-        REMOTE_KINDS.iter().copied().collect();
-    assert_eq!(remote_kinds, rust_remote, "注册表 remote.* kind 与 Rust REMOTE_KINDS 不一致");
+    let rust_remote: std::collections::BTreeSet<&str> = REMOTE_KINDS.iter().copied().collect();
+    assert_eq!(
+        remote_kinds, rust_remote,
+        "注册表 remote.* kind 与 Rust REMOTE_KINDS 不一致"
+    );
     let result_kinds: std::collections::BTreeSet<&str> = reg
         .kinds
         .iter()
         .filter(|k| k.family == "result")
         .map(|k| k.kind.as_str())
         .collect();
-    let rust_result: std::collections::BTreeSet<&str> =
-        RESULT_KINDS.iter().copied().collect();
-    assert_eq!(result_kinds, rust_result, "注册表 result.* kind 与 Rust RESULT_KINDS 不一致");
+    let rust_result: std::collections::BTreeSet<&str> = RESULT_KINDS.iter().copied().collect();
+    assert_eq!(
+        result_kinds, rust_result,
+        "注册表 result.* kind 与 Rust RESULT_KINDS 不一致"
+    );
     // C 编号集合必须与命令表一一对应（防能力位引用悬空）
     assert_eq!(command_numbers.len(), 37);
 }
@@ -1993,7 +2403,13 @@ fn device_registry_capabilities_match_rust_all_capabilities() {
     let reg_names: Vec<String> = reg.capabilities.iter().map(|c| c.name.clone()).collect();
     let rust_wire: Vec<String> = ALL_CAPABILITIES
         .iter()
-        .map(|c| serde_json::to_value(c).unwrap().as_str().unwrap().to_string())
+        .map(|c| {
+            serde_json::to_value(c)
+                .unwrap()
+                .as_str()
+                .unwrap()
+                .to_string()
+        })
         .collect();
     assert_eq!(
         reg_names, rust_wire,
@@ -2003,7 +2419,10 @@ fn device_registry_capabilities_match_rust_all_capabilities() {
     for name in &reg_names {
         let parsed: Capability = serde_json::from_value(Value::String(name.clone()))
             .unwrap_or_else(|e| panic!("能力位 {name} 反序列化失败：{e}"));
-        assert_eq!(serde_json::to_value(parsed).unwrap(), Value::String(name.clone()));
+        assert_eq!(
+            serde_json::to_value(parsed).unwrap(),
+            Value::String(name.clone())
+        );
     }
     // owner 域合法；C 编号引用必须命中命令表（通配符/kind 字面量允许）
     let command_numbers: std::collections::BTreeSet<&str> =
@@ -2037,7 +2456,11 @@ fn device_registry_events_match_engine_and_sync_whitelist() {
     // 2026-08-14 契约窗口 tool-input-repaired 核销 + 9 新事件 49 → 57；
     // 2026-08-16 统一输入流收敛战役 T1b 补链 timeline-truncate 57 → 58；
     // 同日 R1 tool-update 死契约删除回落 57）
-    assert_eq!(reg.events.len(), 57, "事件段必须为 57 条（R1 tool-update 删除后）");
+    assert_eq!(
+        reg.events.len(),
+        57,
+        "事件段必须为 57 条（R1 tool-update 删除后）"
+    );
     let mut strategy_counts: std::collections::BTreeMap<&str, usize> =
         std::collections::BTreeMap::new();
     for (i, ev) in reg.events.iter().enumerate() {
@@ -2049,15 +2472,27 @@ fn device_registry_events_match_engine_and_sync_whitelist() {
             i + 1
         );
         assert_eq!(
-            ev.wire,
-            engine.events[i].wire,
+            ev.wire, engine.events[i].wire,
             "设备注册表事件段与 engine-events.json 同名同序（D3 §7 透传基）"
         );
-        assert!(matches!(ev.strategy.as_str(), "transparent" | "redacted" | "tuple"));
-        assert!(matches!(ev.realtime.backpressure.as_str(), "delta" | "soft" | "critical"));
-        assert!(matches!(ev.push_level.as_str(), "p0" | "p1" | "p2" | "none"));
+        assert!(matches!(
+            ev.strategy.as_str(),
+            "transparent" | "redacted" | "tuple"
+        ));
+        assert!(matches!(
+            ev.realtime.backpressure.as_str(),
+            "delta" | "soft" | "critical"
+        ));
+        assert!(matches!(
+            ev.push_level.as_str(),
+            "p0" | "p1" | "p2" | "none"
+        ));
         // 49 变体全部可经实时面 events.push 下发（P-3 冻结，无 push=false 事件）
-        assert!(ev.realtime.push, "事件 {} 必须可实时推送（events.push）", ev.wire);
+        assert!(
+            ev.realtime.push,
+            "事件 {} 必须可实时推送（events.push）",
+            ev.wire
+        );
         // sync 标志 ↔ 同步面白名单
         assert_eq!(
             ev.sync,
@@ -2131,7 +2566,10 @@ fn device_registry_static_message_bodies_match_serde_wire() {
         check_device_body_roundtrip(&msg.rust_variant, fields, Value::Object(obj));
         checked += 1;
     }
-    assert_eq!(checked, 29, "静态消息（内联 fields）必须为 29 条（103 - 37 - 37）");
+    assert_eq!(
+        checked, 29,
+        "静态消息（内联 fields）必须为 29 条（103 - 37 - 37）"
+    );
 
     // 命令/响应信封单独锁定（remote.* / result.* 共 74 条共用两个 body 类型）
     let request_fields = match reg.types.get("CommandRequest") {
@@ -2155,8 +2593,12 @@ fn device_registry_constants_match_rust_version_consts() {
     let reg = device_registry();
     let consts = &reg.constants;
     let expect_u64 = |key: &str, expected: u64| {
-        let v = consts.get(key).unwrap_or_else(|| panic!("注册表缺常量 {key}"));
-        let actual = v.as_u64().unwrap_or_else(|| panic!("常量 {key} 必须为整数"));
+        let v = consts
+            .get(key)
+            .unwrap_or_else(|| panic!("注册表缺常量 {key}"));
+        let actual = v
+            .as_u64()
+            .unwrap_or_else(|| panic!("常量 {key} 必须为整数"));
         assert_eq!(actual, expected, "常量 {key} 与 Rust version 常量不一致");
     };
     expect_u64("PROTOCOL_VERSION", PROTOCOL_VERSION as u64);
@@ -2166,4 +2608,3 @@ fn device_registry_constants_match_rust_version_consts() {
     expect_u64("MAX_SUBSCRIPTIONS", MAX_SUBSCRIPTIONS as u64);
     expect_u64("MAX_STREAMS", MAX_STREAMS as u64);
 }
-

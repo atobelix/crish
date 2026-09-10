@@ -335,8 +335,7 @@ impl EventsPush {
         envelope: &AgentEventEnvelope,
         preview: bool,
     ) -> Self {
-        let event = serde_json::to_value(envelope)
-            .expect("AgentEventEnvelope 必须可序列化为 JSON");
+        let event = serde_json::to_value(envelope).expect("AgentEventEnvelope 必须可序列化为 JSON");
         Self {
             session_id: session_id.into(),
             preview,
@@ -492,9 +491,7 @@ mod tests {
             session_id: "s1".into(),
             timestamp: "t".into(),
             message_id: "m1".into(),
-            block: crate::message::AgentMessageBlock::Text {
-                text: "x".into()
-            },
+            block: crate::message::AgentMessageBlock::Text { text: "x".into() },
         }));
     }
 
@@ -522,7 +519,8 @@ mod tests {
         assert_eq!(json["event"]["schemaVersion"], 1);
         assert_eq!(json["event"]["sessionId"], "s-abc");
 
-        let back: EventsPush = serde_json::from_str(&serde_json::to_string(&push).unwrap()).unwrap();
+        let back: EventsPush =
+            serde_json::from_str(&serde_json::to_string(&push).unwrap()).unwrap();
         assert_eq!(push, back);
     }
 
@@ -579,7 +577,11 @@ mod tests {
 
     #[test]
     fn resume_and_session_messages_roundtrip() {
-        let resume = Resume { session_id: "s-abc".into(), after_sequence: 128, max_events: Some(200) };
+        let resume = Resume {
+            session_id: "s-abc".into(),
+            after_sequence: 128,
+            max_events: Some(200),
+        };
         let json = serde_json::to_value(&resume).unwrap();
         assert_eq!(json["sessionId"], "s-abc");
         assert_eq!(json["afterSequence"], 128);
@@ -595,11 +597,16 @@ mod tests {
         let json = serde_json::to_value(&page).unwrap();
         assert_eq!(json["nextAfterSequence"], 130);
         assert_eq!(json["hasMore"], true);
-        let back: ResumePage = serde_json::from_str(&serde_json::to_string(&page).unwrap()).unwrap();
+        let back: ResumePage =
+            serde_json::from_str(&serde_json::to_string(&page).unwrap()).unwrap();
         assert_eq!(page, back);
 
-        let done = ResumeDone { session_id: "s-abc".into(), resumed_to: 135 };
-        let back: ResumeDone = serde_json::from_str(&serde_json::to_string(&done).unwrap()).unwrap();
+        let done = ResumeDone {
+            session_id: "s-abc".into(),
+            resumed_to: 135,
+        };
+        let back: ResumeDone =
+            serde_json::from_str(&serde_json::to_string(&done).unwrap()).unwrap();
         assert_eq!(done, back);
 
         // session.updated 复用既有 SessionIndexEntry
@@ -645,7 +652,9 @@ mod tests {
         let back: SubscribeOk = serde_json::from_str(&serde_json::to_string(&ok).unwrap()).unwrap();
         assert_eq!(ok, back);
 
-        let removed = SessionRemoved { session_id: "s-abc".into() };
+        let removed = SessionRemoved {
+            session_id: "s-abc".into(),
+        };
         let json = serde_json::to_value(&removed).unwrap();
         assert_eq!(json["sessionId"], "s-abc");
 

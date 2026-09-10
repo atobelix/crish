@@ -239,7 +239,11 @@ impl EventPolicy {
         persist: PersistenceDecision,
         bridge_priority: DropClass,
     ) -> Self {
-        Self { backpressure, persist, bridge_priority }
+        Self {
+            backpressure,
+            persist,
+            bridge_priority,
+        }
     }
 }
 
@@ -722,7 +726,6 @@ pub enum AgentEvent {
     // ── 任务域（T-AB-17：AB 命令执行与后台任务，01 方案 §4.5 七事件冻结
     //    契约；背压分级入注册表，registry_drift 护栏锁定；runId 由 emit 层
     //    信封注入 = 发起 run）──
-
     /// 后台任务启动（adopt 成功；Critical 必达落库；ownerRunId 供
     /// orchestrator 按来源过滤——主 agent 与其派发的子 agent run 看到的
     /// 任务按来源归组，T-AB-18 可见性消费）
@@ -827,7 +830,6 @@ pub enum AgentEvent {
     //     steering 面而非事件面，事件仅实时轨广播、不落库（R-22，R-CF3
     //     翻转点），触发痕迹的持久事实源 = session_meta timer_<id> +
     //     steering 条目 + 续 run 事件链（§4.7 读取面声明））──
-
     /// 定时器到期（TimerRegistry 到期触发；Critical 实时桥必达——仅实时
     /// 轨广播、不落库（R-22，R-CF3 翻转点）；唤醒摘要「<prompt>（定时器
     /// <id> 已到期）」，T-CF-12）
@@ -861,7 +863,6 @@ pub enum AgentEvent {
     //     翻转点），触发痕迹的持久事实源 = session_meta + steering 条目 +
     //     续 run 事件链（§4.7 读取面声明）；唤醒摘要「<prompt>（cron <id>
     //     第 <n> 次触发）」，T-CF-12）──
-
     /// cron 已触发（SchedulerRegistry 触发；Critical 实时桥必达——仅实时
     /// 轨广播、不落库（R-22，R-CF3 翻转点）；AI 实际唤醒走 steering
     /// 条目，事件与唤醒解耦）
@@ -885,7 +886,6 @@ pub enum AgentEvent {
     //     不引入 payload struct——registry_drift 可达性护栏）；sessionId 为
     //     事件行级列，读侧合成信封（D8 §3.2）；runId 由 emit 层信封注入；
     //     背压全 Critical（append_event 落库必达，数据面））──
-
     /// 恢复阶梯升级留痕（阶梯 1 → 阶梯 2 的边界证据；双发射方（02-定夺
     /// W1）：子代理侧 subagentRunId=Some、detail=None；熔断侧（D1）
     /// subagentRunId=None、detail=Some("circuit-trip")）
@@ -978,7 +978,6 @@ pub enum AgentEvent {
     //     envelope 事件不列 sessionId 变体字段——会话归属在事件行
     //     session_id 列，读侧信封已含，02-定夺 B2/S9 约定；
     //     runId 由 emit 层信封注入）──
-
     /// goal 新一轮开始（round 从 1 计）
     #[serde(rename = "goal-round-started", rename_all = "camelCase")]
     GoalRoundStarted {
@@ -1033,7 +1032,6 @@ pub enum AgentEvent {
 
     // ── D-03 事件面补全域（2026-08-14 契约窗口：全 Delta 可丢级观测事件，
     //     不落库不阻塞主链；编号 50-58，按窗口任务清单声明序追加）──
-
     /// steering 评估过程（EV-03：evaluate 命中/跳过 + 计数重置；hitStrategies
     /// 命中策略名列表，空 = 无动作；reset 标志 = 本评估伴随计数重置）
     #[serde(rename = "steering-evaluated", rename_all = "camelCase")]
@@ -1185,7 +1183,6 @@ pub enum AgentEvent {
     //     reserve_sequence 取号），boundary_seq 是「截断到哪」——两者关系
     //     `TimelineTruncate.sequence > boundary_seq`。R1 定义「防越界不变量」：
     //     boundary_seq 之前的旧事件保留、之后的重放忽略——事件流只追加不物理删）──
-
     /// 时间线截断（R1 撤回出站事件；`type` = "timeline-truncate"）
     #[serde(rename = "timeline-truncate", rename_all = "camelCase")]
     TimelineTruncate {
@@ -1495,13 +1492,9 @@ pub struct AgentEventEnvelope {
 pub const EVENT_ENVELOPE_SCHEMA_VERSION: u32 = 1;
 
 impl serde::Serialize for AgentEventEnvelope {
-    fn serialize<S: serde::Serializer>(
-        &self,
-        serializer: S,
-    ) -> Result<S::Ok, S::Error> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         use serde::ser::Error as _;
-        let mut value =
-            serde_json::to_value(&self.event).map_err(S::Error::custom)?;
+        let mut value = serde_json::to_value(&self.event).map_err(S::Error::custom)?;
         let map = value
             .as_object_mut()
             .ok_or_else(|| S::Error::custom("事件必须序列化为 JSON 对象"))?;
@@ -1523,9 +1516,7 @@ impl serde::Serialize for AgentEventEnvelope {
 }
 
 impl<'de> serde::Deserialize<'de> for AgentEventEnvelope {
-    fn deserialize<D: serde::Deserializer<'de>>(
-        deserializer: D,
-    ) -> Result<Self, D::Error> {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         use serde::de::Error as _;
         let value = serde_json::Value::deserialize(deserializer)?;
         let map = value
@@ -1533,7 +1524,10 @@ impl<'de> serde::Deserialize<'de> for AgentEventEnvelope {
             .ok_or_else(|| D::Error::custom("事件信封必须是 JSON 对象"))?;
         // 事件体保留顶层 runId（run-terminal 依赖它），其余事件忽略该键
         let event = AgentEvent::deserialize(value.clone()).map_err(D::Error::custom)?;
-        let run_id = map.get("runId").and_then(serde_json::Value::as_str).map(str::to_string);
+        let run_id = map
+            .get("runId")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_string);
         let sequence = map.get("sequence").and_then(serde_json::Value::as_u64);
         // S2：traceId 可选字段——旧帧缺省 None，向后兼容（schema_version 不升）
         let trace_id = map
@@ -1559,11 +1553,7 @@ impl<'de> serde::Deserialize<'de> for AgentEventEnvelope {
 impl AgentEventEnvelope {
     /// 构造信封（schema 版本默认取当前 [EVENT_ENVELOPE_SCHEMA_VERSION]；
     /// trace_id 缺省 None——S2 起 run 级 trace 经 [Self::with_trace_id] 注入）
-    pub fn new(
-        event: AgentEvent,
-        run_id: Option<String>,
-        sequence: Option<u64>,
-    ) -> Self {
+    pub fn new(event: AgentEvent, run_id: Option<String>, sequence: Option<u64>) -> Self {
         Self {
             event,
             run_id,

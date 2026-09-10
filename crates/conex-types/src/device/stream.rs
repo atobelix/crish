@@ -56,7 +56,11 @@ pub struct StreamChunk {
     /// UTF-8 文本块（或 base64，meta.encoding=b64）
     pub data: String,
     /// 块级终帧标记（非流级收口；流级收口走 stream.close）
-    #[serde(default, skip_serializing_if = "crate::device::skip_false", rename = "final")]
+    #[serde(
+        default,
+        skip_serializing_if = "crate::device::skip_false",
+        rename = "final"
+    )]
     pub is_final: bool,
     /// 字节偏移锚点（续传用；final 时省略）
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -107,13 +111,23 @@ mod tests {
         assert_eq!(json["kind"], "event_replay");
         assert_eq!(json["totalBytes"], 102_400);
         assert_eq!(json["meta"]["sessionId"], "s-abc");
-        let back: StreamOpen = serde_json::from_str(&serde_json::to_string(&open).unwrap()).unwrap();
+        let back: StreamOpen =
+            serde_json::from_str(&serde_json::to_string(&open).unwrap()).unwrap();
         assert_eq!(open, back);
 
         // 全部流类别 wire 值
-        assert_eq!(serde_json::to_string(&StreamKind::File).unwrap(), "\"file\"");
-        assert_eq!(serde_json::to_string(&StreamKind::TaskOutput).unwrap(), "\"task_output\"");
-        assert_eq!(serde_json::to_string(&StreamKind::Prompt).unwrap(), "\"prompt\"");
+        assert_eq!(
+            serde_json::to_string(&StreamKind::File).unwrap(),
+            "\"file\""
+        );
+        assert_eq!(
+            serde_json::to_string(&StreamKind::TaskOutput).unwrap(),
+            "\"task_output\""
+        );
+        assert_eq!(
+            serde_json::to_string(&StreamKind::Prompt).unwrap(),
+            "\"prompt\""
+        );
     }
 
     #[test]
@@ -132,7 +146,8 @@ mod tests {
         // Rust 关键字 final 经 rename 为 `final`，且 final=true 不省略
         assert_eq!(json["final"], true);
         assert!(json.get("nextOffset").is_none());
-        let back: StreamChunk = serde_json::from_str(&serde_json::to_string(&chunk).unwrap()).unwrap();
+        let back: StreamChunk =
+            serde_json::from_str(&serde_json::to_string(&chunk).unwrap()).unwrap();
         assert_eq!(chunk, back);
 
         // final=false 省略；nextOffset 携带续传锚点
@@ -150,11 +165,15 @@ mod tests {
 
     #[test]
     fn stream_resume_roundtrip() {
-        let resume = StreamResume { stream_id: "st-01HZ".into(), offset: 65_536 };
+        let resume = StreamResume {
+            stream_id: "st-01HZ".into(),
+            offset: 65_536,
+        };
         let json = serde_json::to_value(&resume).unwrap();
         assert_eq!(json["streamId"], "st-01HZ");
         assert_eq!(json["offset"], 65_536);
-        let back: StreamResume = serde_json::from_str(&serde_json::to_string(&resume).unwrap()).unwrap();
+        let back: StreamResume =
+            serde_json::from_str(&serde_json::to_string(&resume).unwrap()).unwrap();
         assert_eq!(resume, back);
     }
 

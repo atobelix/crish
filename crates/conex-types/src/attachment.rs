@@ -301,10 +301,7 @@ mod tests {
         assert_eq!(value["id"], "att_snippet_01");
         assert_eq!(value["kind"], "code-snippet");
         assert_eq!(value["estimatedTokens"], 184);
-        assert_eq!(
-            value["truncation"]["truncationStrategy"],
-            "none"
-        );
+        assert_eq!(value["truncation"]["truncationStrategy"], "none");
         assert_eq!(
             value["metadata"]["filePath"],
             "crates/session-loop/src/lib.rs"

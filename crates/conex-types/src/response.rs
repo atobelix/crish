@@ -44,9 +44,7 @@ pub enum ProviderOutput {
     Empty,
     /// 传输/服务端错误（已分类）
     #[serde(rename_all = "camelCase")]
-    StreamError {
-        classified: ClassifiedStreamError,
-    },
+    StreamError { classified: ClassifiedStreamError },
 }
 
 impl ProviderOutput {

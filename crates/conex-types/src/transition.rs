@@ -120,9 +120,7 @@ pub fn apply_transition(
                     ..AgentTransitionEffect::none()
                 },
             )),
-            E::InterventionRequired => {
-                Ok(AgentTransition::with_end_reason(S::Done, Error))
-            }
+            E::InterventionRequired => Ok(AgentTransition::with_end_reason(S::Done, Error)),
             E::Abort => Ok(AgentTransition::with_end_reason(S::Done, Aborted)),
             E::Error => Ok(AgentTransition::with_end_reason(S::Done, Error)),
             _ => Err(TransitionError::Undefined { state, event }),
@@ -140,14 +138,10 @@ pub fn apply_transition(
             // 不 bump steeringCount（01 §1.4：由策略/coordinator 掌管预算）
             E::SteeringNeeded => Ok(AgentTransition::plain(S::SteeringEvaluation)),
             E::NoProgressContinue => Ok(AgentTransition::plain(S::PreparingTurn)),
-            E::InterventionRequired => {
-                Ok(AgentTransition::with_end_reason(S::TurnComplete, Error))
-            }
+            E::InterventionRequired => Ok(AgentTransition::with_end_reason(S::TurnComplete, Error)),
             // 抢救已产出内容：streaming 中 abort 只推进到 turn-complete
             E::Abort => Ok(AgentTransition::with_end_reason(S::TurnComplete, Aborted)),
-            E::ProviderError => {
-                Ok(AgentTransition::with_end_reason(S::TurnComplete, Error))
-            }
+            E::ProviderError => Ok(AgentTransition::with_end_reason(S::TurnComplete, Error)),
             E::Error => Ok(AgentTransition::with_end_reason(S::TurnComplete, Error)),
             _ => Err(TransitionError::Undefined { state, event }),
         },
@@ -158,9 +152,7 @@ pub fn apply_transition(
             E::SteeringBudgetExhausted => {
                 Ok(AgentTransition::with_end_reason(S::TurnComplete, Error))
             }
-            E::InterventionRequired => {
-                Ok(AgentTransition::with_end_reason(S::TurnComplete, Error))
-            }
+            E::InterventionRequired => Ok(AgentTransition::with_end_reason(S::TurnComplete, Error)),
             E::Abort => Ok(AgentTransition::with_end_reason(S::Done, Aborted)),
             E::Error => Ok(AgentTransition::with_end_reason(S::Done, Error)),
             _ => Err(TransitionError::Undefined { state, event }),
@@ -185,9 +177,7 @@ pub fn apply_transition(
                 },
             )),
             E::NextTurn => Ok(AgentTransition::plain(S::PreparingTurn)),
-            E::MaxTurnsReached => {
-                Ok(AgentTransition::with_end_reason(S::Done, MaxTurns))
-            }
+            E::MaxTurnsReached => Ok(AgentTransition::with_end_reason(S::Done, MaxTurns)),
             // 协作停止建议：默认 stop 收场
             E::ShouldStop => Ok(AgentTransition::plain(S::Done)),
             E::Abort => Ok(AgentTransition::with_end_reason(S::Done, Aborted)),
@@ -271,10 +261,19 @@ mod tests {
         assert_eq!(apply(S::Idle, E::Initialized), Ok(plain(S::AwaitingInput)));
         assert_eq!(apply(S::Idle, E::Error), Ok(end(S::Done, R::Error)));
         // awaiting-input
-        assert_eq!(apply(S::AwaitingInput, E::InputReady), Ok(plain(S::PreparingTurn)));
+        assert_eq!(
+            apply(S::AwaitingInput, E::InputReady),
+            Ok(plain(S::PreparingTurn))
+        );
         assert_eq!(apply(S::AwaitingInput, E::NoInput), Ok(plain(S::Done)));
-        assert_eq!(apply(S::AwaitingInput, E::Abort), Ok(end(S::Done, R::Aborted)));
-        assert_eq!(apply(S::AwaitingInput, E::Error), Ok(end(S::Done, R::Error)));
+        assert_eq!(
+            apply(S::AwaitingInput, E::Abort),
+            Ok(end(S::Done, R::Aborted))
+        );
+        assert_eq!(
+            apply(S::AwaitingInput, E::Error),
+            Ok(end(S::Done, R::Error))
+        );
         // preparing-turn
         assert_eq!(
             apply(S::PreparingTurn, E::TurnPrepared),
@@ -291,8 +290,14 @@ mod tests {
             apply(S::PreparingTurn, E::InterventionRequired),
             Ok(end(S::Done, R::Error))
         );
-        assert_eq!(apply(S::PreparingTurn, E::Abort), Ok(end(S::Done, R::Aborted)));
-        assert_eq!(apply(S::PreparingTurn, E::Error), Ok(end(S::Done, R::Error)));
+        assert_eq!(
+            apply(S::PreparingTurn, E::Abort),
+            Ok(end(S::Done, R::Aborted))
+        );
+        assert_eq!(
+            apply(S::PreparingTurn, E::Error),
+            Ok(end(S::Done, R::Error))
+        );
         // streaming
         assert_eq!(
             apply(S::Streaming, E::HasToolCalls { count: 2 }),
@@ -304,7 +309,10 @@ mod tests {
                 }
             ))
         );
-        assert_eq!(apply(S::Streaming, E::NoToolCalls), Ok(plain(S::TurnComplete)));
+        assert_eq!(
+            apply(S::Streaming, E::NoToolCalls),
+            Ok(plain(S::TurnComplete))
+        );
         assert_eq!(
             apply(S::Streaming, E::SteeringNeeded),
             Ok(plain(S::SteeringEvaluation))
@@ -351,7 +359,10 @@ mod tests {
             Ok(end(S::Done, R::Error))
         );
         // executing-tools
-        assert_eq!(apply(S::ExecutingTools, E::ToolsComplete), Ok(plain(S::TurnComplete)));
+        assert_eq!(
+            apply(S::ExecutingTools, E::ToolsComplete),
+            Ok(plain(S::TurnComplete))
+        );
         assert_eq!(
             apply(S::ExecutingTools, E::InputAvailable),
             Ok(plain(S::PreparingTurn))
@@ -375,13 +386,19 @@ mod tests {
                 }
             ))
         );
-        assert_eq!(apply(S::TurnComplete, E::NextTurn), Ok(plain(S::PreparingTurn)));
+        assert_eq!(
+            apply(S::TurnComplete, E::NextTurn),
+            Ok(plain(S::PreparingTurn))
+        );
         assert_eq!(
             apply(S::TurnComplete, E::MaxTurnsReached),
             Ok(end(S::Done, R::MaxTurns))
         );
         assert_eq!(apply(S::TurnComplete, E::ShouldStop), Ok(plain(S::Done)));
-        assert_eq!(apply(S::TurnComplete, E::Abort), Ok(end(S::Done, R::Aborted)));
+        assert_eq!(
+            apply(S::TurnComplete, E::Abort),
+            Ok(end(S::Done, R::Aborted))
+        );
         assert_eq!(apply(S::TurnComplete, E::Finish), Ok(plain(S::Done)));
     }
 

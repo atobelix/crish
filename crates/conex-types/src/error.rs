@@ -212,574 +212,1189 @@ pub mod codes {
 static CRISH_ERROR_REGISTRY: Lazy<HashMap<&'static str, CrishErrorInfo>> = Lazy::new(|| {
     let mut m = HashMap::with_capacity(102);
     // ── config 域 ──
-    m.insert(codes::CONFIG_INVALID, CrishErrorInfo {
-        code: codes::CONFIG_INVALID, title: "配置项非法",
-        category: CrishErrorCategory::Permanent, retryable: false,
-        is_public: true, action: "action.config.check_field",
-    });
-    m.insert(codes::CONFIG_MISSING, CrishErrorInfo {
-        code: codes::CONFIG_MISSING, title: "配置缺失",
-        category: CrishErrorCategory::Permanent, retryable: false,
-        is_public: true, action: "action.config.provide_value",
-    });
-    m.insert(codes::CONFIG_PARSE_FAILED, CrishErrorInfo {
-        code: codes::CONFIG_PARSE_FAILED, title: "配置解析失败",
-        category: CrishErrorCategory::Permanent, retryable: false,
-        is_public: true, action: "action.config.verify_syntax",
-    });
+    m.insert(
+        codes::CONFIG_INVALID,
+        CrishErrorInfo {
+            code: codes::CONFIG_INVALID,
+            title: "配置项非法",
+            category: CrishErrorCategory::Permanent,
+            retryable: false,
+            is_public: true,
+            action: "action.config.check_field",
+        },
+    );
+    m.insert(
+        codes::CONFIG_MISSING,
+        CrishErrorInfo {
+            code: codes::CONFIG_MISSING,
+            title: "配置缺失",
+            category: CrishErrorCategory::Permanent,
+            retryable: false,
+            is_public: true,
+            action: "action.config.provide_value",
+        },
+    );
+    m.insert(
+        codes::CONFIG_PARSE_FAILED,
+        CrishErrorInfo {
+            code: codes::CONFIG_PARSE_FAILED,
+            title: "配置解析失败",
+            category: CrishErrorCategory::Permanent,
+            retryable: false,
+            is_public: true,
+            action: "action.config.verify_syntax",
+        },
+    );
     // ── session 域 ──
-    m.insert(codes::SESSION_NOT_FOUND, CrishErrorInfo {
-        code: codes::SESSION_NOT_FOUND, title: "会话未找到",
-        category: CrishErrorCategory::Permanent, retryable: false,
-        is_public: true, action: "action.session.select_existing",
-    });
-    m.insert(codes::SESSION_INVALID_SESSION, CrishErrorInfo {
-        code: codes::SESSION_INVALID_SESSION, title: "会话数据非法",
-        category: CrishErrorCategory::Permanent, retryable: false,
-        is_public: true, action: "action.session.restart",
-    });
-    m.insert(codes::SESSION_INVALID_ENTRY, CrishErrorInfo {
-        code: codes::SESSION_INVALID_ENTRY, title: "会话条目非法",
-        category: CrishErrorCategory::Permanent, retryable: false,
-        is_public: true, action: "action.session.check_entry",
-    });
-    m.insert(codes::SESSION_INVALID_STATE, CrishErrorInfo {
-        code: codes::SESSION_INVALID_STATE, title: "会话状态非法",
-        category: CrishErrorCategory::Permanent, retryable: false,
-        is_public: true, action: "action.session.refresh",
-    });
-    m.insert(codes::SESSION_STORAGE_FAILED, CrishErrorInfo {
-        code: codes::SESSION_STORAGE_FAILED, title: "会话存储失败",
-        category: CrishErrorCategory::Transient, retryable: true,
-        is_public: true, action: "action.session.retry_save",
-    });
-    m.insert(codes::SESSION_REWIND_FAILED, CrishErrorInfo {
-        code: codes::SESSION_REWIND_FAILED, title: "会话回滚失败",
-        category: CrishErrorCategory::Permanent, retryable: false,
-        is_public: true, action: "action.session.check_rewind_target",
-    });
+    m.insert(
+        codes::SESSION_NOT_FOUND,
+        CrishErrorInfo {
+            code: codes::SESSION_NOT_FOUND,
+            title: "会话未找到",
+            category: CrishErrorCategory::Permanent,
+            retryable: false,
+            is_public: true,
+            action: "action.session.select_existing",
+        },
+    );
+    m.insert(
+        codes::SESSION_INVALID_SESSION,
+        CrishErrorInfo {
+            code: codes::SESSION_INVALID_SESSION,
+            title: "会话数据非法",
+            category: CrishErrorCategory::Permanent,
+            retryable: false,
+            is_public: true,
+            action: "action.session.restart",
+        },
+    );
+    m.insert(
+        codes::SESSION_INVALID_ENTRY,
+        CrishErrorInfo {
+            code: codes::SESSION_INVALID_ENTRY,
+            title: "会话条目非法",
+            category: CrishErrorCategory::Permanent,
+            retryable: false,
+            is_public: true,
+            action: "action.session.check_entry",
+        },
+    );
+    m.insert(
+        codes::SESSION_INVALID_STATE,
+        CrishErrorInfo {
+            code: codes::SESSION_INVALID_STATE,
+            title: "会话状态非法",
+            category: CrishErrorCategory::Permanent,
+            retryable: false,
+            is_public: true,
+            action: "action.session.refresh",
+        },
+    );
+    m.insert(
+        codes::SESSION_STORAGE_FAILED,
+        CrishErrorInfo {
+            code: codes::SESSION_STORAGE_FAILED,
+            title: "会话存储失败",
+            category: CrishErrorCategory::Transient,
+            retryable: true,
+            is_public: true,
+            action: "action.session.retry_save",
+        },
+    );
+    m.insert(
+        codes::SESSION_REWIND_FAILED,
+        CrishErrorInfo {
+            code: codes::SESSION_REWIND_FAILED,
+            title: "会话回滚失败",
+            category: CrishErrorCategory::Permanent,
+            retryable: false,
+            is_public: true,
+            action: "action.session.check_rewind_target",
+        },
+    );
     // 跨线共享码（S3 ActivationGate 互斥守卫，browser_* 与 computer_* 共用；
     // 06 文档 §5 码表：登记归属 session 域，等待会话切换）
-    m.insert(codes::TOOL_SESSION_EXCLUSIVE, CrishErrorInfo {
-        code: codes::TOOL_SESSION_EXCLUSIVE, title: "会话互斥",
-        category: CrishErrorCategory::Permanent, retryable: false,
-        is_public: true, action: "action.session.wait_switch",
-    });
+    m.insert(
+        codes::TOOL_SESSION_EXCLUSIVE,
+        CrishErrorInfo {
+            code: codes::TOOL_SESSION_EXCLUSIVE,
+            title: "会话互斥",
+            category: CrishErrorCategory::Permanent,
+            retryable: false,
+            is_public: true,
+            action: "action.session.wait_switch",
+        },
+    );
     // ── agent 域 ──
-    m.insert(codes::AGENT_MAX_TURNS_REACHED, CrishErrorInfo {
-        code: codes::AGENT_MAX_TURNS_REACHED, title: "达到最大轮次",
-        category: CrishErrorCategory::Permanent, retryable: false,
-        is_public: true, action: "action.agent.increase_max_turns",
-    });
-    m.insert(codes::AGENT_NO_PROGRESS, CrishErrorInfo {
-        code: codes::AGENT_NO_PROGRESS, title: "Agent 无进展",
-        category: CrishErrorCategory::Permanent, retryable: false,
-        is_public: true, action: "action.agent.intervene",
-    });
-    m.insert(codes::AGENT_INTERVENTION_REQUIRED, CrishErrorInfo {
-        code: codes::AGENT_INTERVENTION_REQUIRED, title: "需用户介入",
-        category: CrishErrorCategory::Permanent, retryable: false,
-        is_public: true, action: "action.agent.review",
-    });
+    m.insert(
+        codes::AGENT_MAX_TURNS_REACHED,
+        CrishErrorInfo {
+            code: codes::AGENT_MAX_TURNS_REACHED,
+            title: "达到最大轮次",
+            category: CrishErrorCategory::Permanent,
+            retryable: false,
+            is_public: true,
+            action: "action.agent.increase_max_turns",
+        },
+    );
+    m.insert(
+        codes::AGENT_NO_PROGRESS,
+        CrishErrorInfo {
+            code: codes::AGENT_NO_PROGRESS,
+            title: "Agent 无进展",
+            category: CrishErrorCategory::Permanent,
+            retryable: false,
+            is_public: true,
+            action: "action.agent.intervene",
+        },
+    );
+    m.insert(
+        codes::AGENT_INTERVENTION_REQUIRED,
+        CrishErrorInfo {
+            code: codes::AGENT_INTERVENTION_REQUIRED,
+            title: "需用户介入",
+            category: CrishErrorCategory::Permanent,
+            retryable: false,
+            is_public: true,
+            action: "action.agent.review",
+        },
+    );
     // ── runtime 域 ──
-    m.insert(codes::RUNTIME_UNEXPECTED_STATE, CrishErrorInfo {
-        code: codes::RUNTIME_UNEXPECTED_STATE, title: "运行时状态异常",
-        category: CrishErrorCategory::Permanent, retryable: false,
-        is_public: true, action: "action.runtime.restart_session",
-    });
-    m.insert(codes::RUNTIME_TRANSITION_FAILED, CrishErrorInfo {
-        code: codes::RUNTIME_TRANSITION_FAILED, title: "状态转移失败",
-        category: CrishErrorCategory::Permanent, retryable: false,
-        is_public: true, action: "action.runtime.report_bug",
-    });
-    m.insert(codes::RUNTIME_ABORTED, CrishErrorInfo {
-        code: codes::RUNTIME_ABORTED, title: "用户中止",
-        category: CrishErrorCategory::Permanent, retryable: false,
-        is_public: true, action: "action.runtime.none",
-    });
-    m.insert(codes::RUNTIME_TIMEOUT, CrishErrorInfo {
-        code: codes::RUNTIME_TIMEOUT, title: "运行时超时",
-        category: CrishErrorCategory::Transient, retryable: true,
-        is_public: true, action: "action.runtime.retry",
-    });
+    m.insert(
+        codes::RUNTIME_UNEXPECTED_STATE,
+        CrishErrorInfo {
+            code: codes::RUNTIME_UNEXPECTED_STATE,
+            title: "运行时状态异常",
+            category: CrishErrorCategory::Permanent,
+            retryable: false,
+            is_public: true,
+            action: "action.runtime.restart_session",
+        },
+    );
+    m.insert(
+        codes::RUNTIME_TRANSITION_FAILED,
+        CrishErrorInfo {
+            code: codes::RUNTIME_TRANSITION_FAILED,
+            title: "状态转移失败",
+            category: CrishErrorCategory::Permanent,
+            retryable: false,
+            is_public: true,
+            action: "action.runtime.report_bug",
+        },
+    );
+    m.insert(
+        codes::RUNTIME_ABORTED,
+        CrishErrorInfo {
+            code: codes::RUNTIME_ABORTED,
+            title: "用户中止",
+            category: CrishErrorCategory::Permanent,
+            retryable: false,
+            is_public: true,
+            action: "action.runtime.none",
+        },
+    );
+    m.insert(
+        codes::RUNTIME_TIMEOUT,
+        CrishErrorInfo {
+            code: codes::RUNTIME_TIMEOUT,
+            title: "运行时超时",
+            category: CrishErrorCategory::Transient,
+            retryable: true,
+            is_public: true,
+            action: "action.runtime.retry",
+        },
+    );
     // ── provider 域 ──
-    m.insert(codes::PROVIDER_NETWORK, CrishErrorInfo {
-        code: codes::PROVIDER_NETWORK, title: "网络故障",
-        category: CrishErrorCategory::Transient, retryable: true,
-        is_public: true, action: "action.provider.check_network",
-    });
-    m.insert(codes::PROVIDER_GATEWAY_CHALLENGE, CrishErrorInfo {
-        code: codes::PROVIDER_GATEWAY_CHALLENGE, title: "网关质询拦截",
-        category: CrishErrorCategory::Protocol, retryable: false,
-        is_public: true, action: "action.provider.disable_proxy",
-    });
-    m.insert(codes::PROVIDER_RATE_LIMIT, CrishErrorInfo {
-        code: codes::PROVIDER_RATE_LIMIT, title: "限流",
-        category: CrishErrorCategory::Transient, retryable: true,
-        is_public: true, action: "action.provider.wait_retry",
-    });
-    m.insert(codes::PROVIDER_AUTH, CrishErrorInfo {
-        code: codes::PROVIDER_AUTH, title: "鉴权失败",
-        category: CrishErrorCategory::Security, retryable: false,
-        is_public: true, action: "action.provider.check_api_key",
-    });
-    m.insert(codes::PROVIDER_QUOTA, CrishErrorInfo {
-        code: codes::PROVIDER_QUOTA, title: "配额耗尽",
-        category: CrishErrorCategory::Permanent, retryable: false,
-        is_public: true, action: "action.provider.top_up",
-    });
-    m.insert(codes::PROVIDER_ENDPOINT_UNAVAILABLE, CrishErrorInfo {
-        code: codes::PROVIDER_ENDPOINT_UNAVAILABLE, title: "端点不可用",
-        category: CrishErrorCategory::Permanent, retryable: false,
-        is_public: true, action: "action.provider.check_endpoint",
-    });
-    m.insert(codes::PROVIDER_SCHEMA, CrishErrorInfo {
-        code: codes::PROVIDER_SCHEMA, title: "请求 schema 非法",
-        category: CrishErrorCategory::Protocol, retryable: false,
-        is_public: true, action: "action.provider.fix_request",
-    });
-    m.insert(codes::PROVIDER_SERVER, CrishErrorInfo {
-        code: codes::PROVIDER_SERVER, title: "服务端错误",
-        category: CrishErrorCategory::Transient, retryable: true,
-        is_public: true, action: "action.provider.wait_retry",
-    });
-    m.insert(codes::PROVIDER_TIMEOUT, CrishErrorInfo {
-        code: codes::PROVIDER_TIMEOUT, title: "请求超时",
-        category: CrishErrorCategory::Transient, retryable: true,
-        is_public: true, action: "action.provider.retry",
-    });
-    m.insert(codes::PROVIDER_CANCELLED, CrishErrorInfo {
-        code: codes::PROVIDER_CANCELLED, title: "请求取消",
-        category: CrishErrorCategory::Permanent, retryable: false,
-        is_public: false, action: "action.runtime.none",
-    });
-    m.insert(codes::PROVIDER_STREAM_INTERRUPTED, CrishErrorInfo {
-        code: codes::PROVIDER_STREAM_INTERRUPTED, title: "流中断",
-        category: CrishErrorCategory::Transient, retryable: true,
-        is_public: true, action: "action.provider.retry",
-    });
-    m.insert(codes::PROVIDER_UNKNOWN, CrishErrorInfo {
-        code: codes::PROVIDER_UNKNOWN, title: "未知 Provider 错误",
-        category: CrishErrorCategory::Permanent, retryable: false,
-        is_public: true, action: "action.provider.report_bug",
-    });
-    m.insert(codes::PROVIDER_CONNECTION_ERROR, CrishErrorInfo {
-        code: codes::PROVIDER_CONNECTION_ERROR, title: "Provider 连接错误",
-        category: CrishErrorCategory::Transient, retryable: true,
-        is_public: true, action: "action.provider.check_connection",
-    });
-    m.insert(codes::PROVIDER_NO_TOKEN, CrishErrorInfo {
-        code: codes::PROVIDER_NO_TOKEN, title: "OAuth 令牌缺失",
-        category: CrishErrorCategory::Security, retryable: false,
-        is_public: true, action: "action.provider.reauth",
-    });
-    m.insert(codes::PROVIDER_REAUTH_REQUIRED, CrishErrorInfo {
-        code: codes::PROVIDER_REAUTH_REQUIRED, title: "需重新鉴权",
-        category: CrishErrorCategory::Security, retryable: false,
-        is_public: true, action: "action.provider.reauth",
-    });
-    m.insert(codes::PROVIDER_FATAL, CrishErrorInfo {
-        code: codes::PROVIDER_FATAL, title: "Provider 不可恢复错误",
-        category: CrishErrorCategory::Permanent, retryable: false,
-        is_public: true, action: "action.provider.report_bug",
-    });
-    m.insert(codes::PROVIDER_REFRESH_FAILED, CrishErrorInfo {
-        code: codes::PROVIDER_REFRESH_FAILED, title: "令牌刷新失败",
-        category: CrishErrorCategory::Security, retryable: false,
-        is_public: true, action: "action.provider.reauth",
-    });
+    m.insert(
+        codes::PROVIDER_NETWORK,
+        CrishErrorInfo {
+            code: codes::PROVIDER_NETWORK,
+            title: "网络故障",
+            category: CrishErrorCategory::Transient,
+            retryable: true,
+            is_public: true,
+            action: "action.provider.check_network",
+        },
+    );
+    m.insert(
+        codes::PROVIDER_GATEWAY_CHALLENGE,
+        CrishErrorInfo {
+            code: codes::PROVIDER_GATEWAY_CHALLENGE,
+            title: "网关质询拦截",
+            category: CrishErrorCategory::Protocol,
+            retryable: false,
+            is_public: true,
+            action: "action.provider.disable_proxy",
+        },
+    );
+    m.insert(
+        codes::PROVIDER_RATE_LIMIT,
+        CrishErrorInfo {
+            code: codes::PROVIDER_RATE_LIMIT,
+            title: "限流",
+            category: CrishErrorCategory::Transient,
+            retryable: true,
+            is_public: true,
+            action: "action.provider.wait_retry",
+        },
+    );
+    m.insert(
+        codes::PROVIDER_AUTH,
+        CrishErrorInfo {
+            code: codes::PROVIDER_AUTH,
+            title: "鉴权失败",
+            category: CrishErrorCategory::Security,
+            retryable: false,
+            is_public: true,
+            action: "action.provider.check_api_key",
+        },
+    );
+    m.insert(
+        codes::PROVIDER_QUOTA,
+        CrishErrorInfo {
+            code: codes::PROVIDER_QUOTA,
+            title: "配额耗尽",
+            category: CrishErrorCategory::Permanent,
+            retryable: false,
+            is_public: true,
+            action: "action.provider.top_up",
+        },
+    );
+    m.insert(
+        codes::PROVIDER_ENDPOINT_UNAVAILABLE,
+        CrishErrorInfo {
+            code: codes::PROVIDER_ENDPOINT_UNAVAILABLE,
+            title: "端点不可用",
+            category: CrishErrorCategory::Permanent,
+            retryable: false,
+            is_public: true,
+            action: "action.provider.check_endpoint",
+        },
+    );
+    m.insert(
+        codes::PROVIDER_SCHEMA,
+        CrishErrorInfo {
+            code: codes::PROVIDER_SCHEMA,
+            title: "请求 schema 非法",
+            category: CrishErrorCategory::Protocol,
+            retryable: false,
+            is_public: true,
+            action: "action.provider.fix_request",
+        },
+    );
+    m.insert(
+        codes::PROVIDER_SERVER,
+        CrishErrorInfo {
+            code: codes::PROVIDER_SERVER,
+            title: "服务端错误",
+            category: CrishErrorCategory::Transient,
+            retryable: true,
+            is_public: true,
+            action: "action.provider.wait_retry",
+        },
+    );
+    m.insert(
+        codes::PROVIDER_TIMEOUT,
+        CrishErrorInfo {
+            code: codes::PROVIDER_TIMEOUT,
+            title: "请求超时",
+            category: CrishErrorCategory::Transient,
+            retryable: true,
+            is_public: true,
+            action: "action.provider.retry",
+        },
+    );
+    m.insert(
+        codes::PROVIDER_CANCELLED,
+        CrishErrorInfo {
+            code: codes::PROVIDER_CANCELLED,
+            title: "请求取消",
+            category: CrishErrorCategory::Permanent,
+            retryable: false,
+            is_public: false,
+            action: "action.runtime.none",
+        },
+    );
+    m.insert(
+        codes::PROVIDER_STREAM_INTERRUPTED,
+        CrishErrorInfo {
+            code: codes::PROVIDER_STREAM_INTERRUPTED,
+            title: "流中断",
+            category: CrishErrorCategory::Transient,
+            retryable: true,
+            is_public: true,
+            action: "action.provider.retry",
+        },
+    );
+    m.insert(
+        codes::PROVIDER_UNKNOWN,
+        CrishErrorInfo {
+            code: codes::PROVIDER_UNKNOWN,
+            title: "未知 Provider 错误",
+            category: CrishErrorCategory::Permanent,
+            retryable: false,
+            is_public: true,
+            action: "action.provider.report_bug",
+        },
+    );
+    m.insert(
+        codes::PROVIDER_CONNECTION_ERROR,
+        CrishErrorInfo {
+            code: codes::PROVIDER_CONNECTION_ERROR,
+            title: "Provider 连接错误",
+            category: CrishErrorCategory::Transient,
+            retryable: true,
+            is_public: true,
+            action: "action.provider.check_connection",
+        },
+    );
+    m.insert(
+        codes::PROVIDER_NO_TOKEN,
+        CrishErrorInfo {
+            code: codes::PROVIDER_NO_TOKEN,
+            title: "OAuth 令牌缺失",
+            category: CrishErrorCategory::Security,
+            retryable: false,
+            is_public: true,
+            action: "action.provider.reauth",
+        },
+    );
+    m.insert(
+        codes::PROVIDER_REAUTH_REQUIRED,
+        CrishErrorInfo {
+            code: codes::PROVIDER_REAUTH_REQUIRED,
+            title: "需重新鉴权",
+            category: CrishErrorCategory::Security,
+            retryable: false,
+            is_public: true,
+            action: "action.provider.reauth",
+        },
+    );
+    m.insert(
+        codes::PROVIDER_FATAL,
+        CrishErrorInfo {
+            code: codes::PROVIDER_FATAL,
+            title: "Provider 不可恢复错误",
+            category: CrishErrorCategory::Permanent,
+            retryable: false,
+            is_public: true,
+            action: "action.provider.report_bug",
+        },
+    );
+    m.insert(
+        codes::PROVIDER_REFRESH_FAILED,
+        CrishErrorInfo {
+            code: codes::PROVIDER_REFRESH_FAILED,
+            title: "令牌刷新失败",
+            category: CrishErrorCategory::Security,
+            retryable: false,
+            is_public: true,
+            action: "action.provider.reauth",
+        },
+    );
     // ── context 域 ──
-    m.insert(codes::CONTEXT_LENGTH_EXCEEDED, CrishErrorInfo {
-        code: codes::CONTEXT_LENGTH_EXCEEDED, title: "上下文超长",
-        category: CrishErrorCategory::Protocol, retryable: true,
-        is_public: true, action: "action.context.compact",
-    });
-    m.insert(codes::CONTEXT_COMPACTION_FAILED, CrishErrorInfo {
-        code: codes::CONTEXT_COMPACTION_FAILED, title: "上下文压缩失败",
-        category: CrishErrorCategory::Transient, retryable: true,
-        is_public: true, action: "action.context.retry_compact",
-    });
-    m.insert(codes::CONTEXT_HEAL_FAILED, CrishErrorInfo {
-        code: codes::CONTEXT_HEAL_FAILED, title: "上下文修复失败",
-        category: CrishErrorCategory::Permanent, retryable: false,
-        is_public: true, action: "action.context.manual_trim",
-    });
+    m.insert(
+        codes::CONTEXT_LENGTH_EXCEEDED,
+        CrishErrorInfo {
+            code: codes::CONTEXT_LENGTH_EXCEEDED,
+            title: "上下文超长",
+            category: CrishErrorCategory::Protocol,
+            retryable: true,
+            is_public: true,
+            action: "action.context.compact",
+        },
+    );
+    m.insert(
+        codes::CONTEXT_COMPACTION_FAILED,
+        CrishErrorInfo {
+            code: codes::CONTEXT_COMPACTION_FAILED,
+            title: "上下文压缩失败",
+            category: CrishErrorCategory::Transient,
+            retryable: true,
+            is_public: true,
+            action: "action.context.retry_compact",
+        },
+    );
+    m.insert(
+        codes::CONTEXT_HEAL_FAILED,
+        CrishErrorInfo {
+            code: codes::CONTEXT_HEAL_FAILED,
+            title: "上下文修复失败",
+            category: CrishErrorCategory::Permanent,
+            retryable: false,
+            is_public: true,
+            action: "action.context.manual_trim",
+        },
+    );
     // ── tool 域 ──
-    m.insert(codes::TOOL_NOT_FOUND, CrishErrorInfo {
-        code: codes::TOOL_NOT_FOUND, title: "工具未找到",
-        category: CrishErrorCategory::Permanent, retryable: false,
-        is_public: true, action: "action.tool.check_name",
-    });
-    m.insert(codes::TOOL_INVALID_INPUT, CrishErrorInfo {
-        code: codes::TOOL_INVALID_INPUT, title: "工具入参非法",
-        category: CrishErrorCategory::Protocol, retryable: false,
-        is_public: true, action: "action.tool.fix_input",
-    });
-    m.insert(codes::TOOL_EXECUTION_FAILED, CrishErrorInfo {
-        code: codes::TOOL_EXECUTION_FAILED, title: "工具执行失败",
-        category: CrishErrorCategory::Transient, retryable: true,
-        is_public: true, action: "action.tool.retry",
-    });
-    m.insert(codes::TOOL_PATH_ESCAPE, CrishErrorInfo {
-        code: codes::TOOL_PATH_ESCAPE, title: "路径越界",
-        category: CrishErrorCategory::Security, retryable: false,
-        is_public: true, action: "action.tool.check_path",
-    });
-    m.insert(codes::TOOL_VERSION_CONFLICT, CrishErrorInfo {
-        code: codes::TOOL_VERSION_CONFLICT, title: "文档版本冲突",
-        category: CrishErrorCategory::Protocol, retryable: false,
-        is_public: true, action: "action.tool.refresh_and_retry",
-    });
+    m.insert(
+        codes::TOOL_NOT_FOUND,
+        CrishErrorInfo {
+            code: codes::TOOL_NOT_FOUND,
+            title: "工具未找到",
+            category: CrishErrorCategory::Permanent,
+            retryable: false,
+            is_public: true,
+            action: "action.tool.check_name",
+        },
+    );
+    m.insert(
+        codes::TOOL_INVALID_INPUT,
+        CrishErrorInfo {
+            code: codes::TOOL_INVALID_INPUT,
+            title: "工具入参非法",
+            category: CrishErrorCategory::Protocol,
+            retryable: false,
+            is_public: true,
+            action: "action.tool.fix_input",
+        },
+    );
+    m.insert(
+        codes::TOOL_EXECUTION_FAILED,
+        CrishErrorInfo {
+            code: codes::TOOL_EXECUTION_FAILED,
+            title: "工具执行失败",
+            category: CrishErrorCategory::Transient,
+            retryable: true,
+            is_public: true,
+            action: "action.tool.retry",
+        },
+    );
+    m.insert(
+        codes::TOOL_PATH_ESCAPE,
+        CrishErrorInfo {
+            code: codes::TOOL_PATH_ESCAPE,
+            title: "路径越界",
+            category: CrishErrorCategory::Security,
+            retryable: false,
+            is_public: true,
+            action: "action.tool.check_path",
+        },
+    );
+    m.insert(
+        codes::TOOL_VERSION_CONFLICT,
+        CrishErrorInfo {
+            code: codes::TOOL_VERSION_CONFLICT,
+            title: "文档版本冲突",
+            category: CrishErrorCategory::Protocol,
+            retryable: false,
+            is_public: true,
+            action: "action.tool.refresh_and_retry",
+        },
+    );
     // T-D-08（REQ-D04 硬沙箱）：越权写拒绝——Permanent/不可重试（确定拒绝，
     // 目标路径与允许范围在错误消息载荷中，可指引调整或走权限申请通道）
-    m.insert(codes::TOOL_WRITE_NOT_ALLOWED, CrishErrorInfo {
-        code: codes::TOOL_WRITE_NOT_ALLOWED, title: "写入路径不在允许范围内",
-        category: CrishErrorCategory::Permanent, retryable: false,
-        is_public: true, action: "action.tool.request_path_allowance",
-    });
+    m.insert(
+        codes::TOOL_WRITE_NOT_ALLOWED,
+        CrishErrorInfo {
+            code: codes::TOOL_WRITE_NOT_ALLOWED,
+            title: "写入路径不在允许范围内",
+            category: CrishErrorCategory::Permanent,
+            retryable: false,
+            is_public: true,
+            action: "action.tool.request_path_allowance",
+        },
+    );
     // F8-02（I4-M3 写路径互斥）：并发互斥冲突——Permanent/不可重试（确定拒绝，
     // 等待占用者释放后由主 agent 编排串行重试；错误消息载荷含占用者/时间/有效期）。
     // 与 write_not_allowed 语义独立：白名单放行但被占用仍返回本码
-    m.insert(codes::TOOL_WRITE_PATH_CONFLICT, CrishErrorInfo {
-        code: codes::TOOL_WRITE_PATH_CONFLICT, title: "写入路径互斥冲突",
-        category: CrishErrorCategory::Permanent, retryable: false,
-        is_public: true, action: "action.tool.wait_retry",
-    });
+    m.insert(
+        codes::TOOL_WRITE_PATH_CONFLICT,
+        CrishErrorInfo {
+            code: codes::TOOL_WRITE_PATH_CONFLICT,
+            title: "写入路径互斥冲突",
+            category: CrishErrorCategory::Permanent,
+            retryable: false,
+            is_public: true,
+            action: "action.tool.wait_retry",
+        },
+    );
     // ── browser 域（9 正式码：17 文档 §1.3，R-9-2/R-8/U-12 语义）──
     // R-9-2：恢复期工具门禁——Transient/可重试（等待恢复完成重试）
-    m.insert(codes::TOOL_BROWSER_NOT_READY, CrishErrorInfo {
-        code: codes::TOOL_BROWSER_NOT_READY, title: "浏览器恢复中",
-        category: CrishErrorCategory::Transient, retryable: true,
-        is_public: true, action: "action.browser.wait_recovery",
-    });
+    m.insert(
+        codes::TOOL_BROWSER_NOT_READY,
+        CrishErrorInfo {
+            code: codes::TOOL_BROWSER_NOT_READY,
+            title: "浏览器恢复中",
+            category: CrishErrorCategory::Transient,
+            retryable: true,
+            is_public: true,
+            action: "action.browser.wait_recovery",
+        },
+    );
     // 17 §4：域名门禁拦截——Permanent/不可重试（策略拒绝，需改目标域）
-    m.insert(codes::TOOL_BROWSER_GATE_BLOCKED, CrishErrorInfo {
-        code: codes::TOOL_BROWSER_GATE_BLOCKED, title: "域名门禁拦截",
-        category: CrishErrorCategory::Security, retryable: false,
-        is_public: true, action: "action.browser.check_domain",
-    });
+    m.insert(
+        codes::TOOL_BROWSER_GATE_BLOCKED,
+        CrishErrorInfo {
+            code: codes::TOOL_BROWSER_GATE_BLOCKED,
+            title: "域名门禁拦截",
+            category: CrishErrorCategory::Security,
+            retryable: false,
+            is_public: true,
+            action: "action.browser.check_domain",
+        },
+    );
     // 17 §2.3：能力位默认关闭——Security/不可重试（需显式开启）
-    m.insert(codes::TOOL_BROWSER_CAPABILITY_DISABLED, CrishErrorInfo {
-        code: codes::TOOL_BROWSER_CAPABILITY_DISABLED, title: "能力未开启",
-        category: CrishErrorCategory::Security, retryable: false,
-        is_public: true, action: "action.browser.enable_capability",
-    });
+    m.insert(
+        codes::TOOL_BROWSER_CAPABILITY_DISABLED,
+        CrishErrorInfo {
+            code: codes::TOOL_BROWSER_CAPABILITY_DISABLED,
+            title: "能力未开启",
+            category: CrishErrorCategory::Security,
+            retryable: false,
+            is_public: true,
+            action: "action.browser.enable_capability",
+        },
+    );
     // R-1：快照版本失效——Transient/可重试（重拍快照后重试）
-    m.insert(codes::TOOL_BROWSER_STALE_SNAPSHOT, CrishErrorInfo {
-        code: codes::TOOL_BROWSER_STALE_SNAPSHOT, title: "快照版本失效",
-        category: CrishErrorCategory::Transient, retryable: true,
-        is_public: true, action: "action.browser.refresh_snapshot",
-    });
+    m.insert(
+        codes::TOOL_BROWSER_STALE_SNAPSHOT,
+        CrishErrorInfo {
+            code: codes::TOOL_BROWSER_STALE_SNAPSHOT,
+            title: "快照版本失效",
+            category: CrishErrorCategory::Transient,
+            retryable: true,
+            is_public: true,
+            action: "action.browser.refresh_snapshot",
+        },
+    );
     // 节点过期——Transient/可重试（重拍快照后重试）
-    m.insert(codes::TOOL_BROWSER_NODE_GONE, CrishErrorInfo {
-        code: codes::TOOL_BROWSER_NODE_GONE, title: "元素已过期",
-        category: CrishErrorCategory::Transient, retryable: true,
-        is_public: true, action: "action.browser.refresh_snapshot",
-    });
+    m.insert(
+        codes::TOOL_BROWSER_NODE_GONE,
+        CrishErrorInfo {
+            code: codes::TOOL_BROWSER_NODE_GONE,
+            title: "元素已过期",
+            category: CrishErrorCategory::Transient,
+            retryable: true,
+            is_public: true,
+            action: "action.browser.refresh_snapshot",
+        },
+    );
     // R-8：用户接管/急停吊销——Permanent/不可重试（不计入重试额度，编排层重试）
-    m.insert(codes::TOOL_BROWSER_CANCELLED, CrishErrorInfo {
-        code: codes::TOOL_BROWSER_CANCELLED, title: "浏览器动作已取消",
-        category: CrishErrorCategory::Permanent, retryable: false,
-        is_public: false, action: "action.browser.none",
-    });
+    m.insert(
+        codes::TOOL_BROWSER_CANCELLED,
+        CrishErrorInfo {
+            code: codes::TOOL_BROWSER_CANCELLED,
+            title: "浏览器动作已取消",
+            category: CrishErrorCategory::Permanent,
+            retryable: false,
+            is_public: false,
+            action: "action.browser.none",
+        },
+    );
     // 17 §3：evaluate 白名单外——Security/不可重试
-    m.insert(codes::TOOL_BROWSER_EVAL_FORBIDDEN, CrishErrorInfo {
-        code: codes::TOOL_BROWSER_EVAL_FORBIDDEN, title: "evaluate 被拒",
-        category: CrishErrorCategory::Security, retryable: false,
-        is_public: true, action: "action.browser.check_eval_policy",
-    });
+    m.insert(
+        codes::TOOL_BROWSER_EVAL_FORBIDDEN,
+        CrishErrorInfo {
+            code: codes::TOOL_BROWSER_EVAL_FORBIDDEN,
+            title: "evaluate 被拒",
+            category: CrishErrorCategory::Security,
+            retryable: false,
+            is_public: true,
+            action: "action.browser.check_eval_policy",
+        },
+    );
     // 15 MAX_TABS 上限——Permanent/不可重试
-    m.insert(codes::TOOL_BROWSER_TAB_LIMIT_EXCEEDED, CrishErrorInfo {
-        code: codes::TOOL_BROWSER_TAB_LIMIT_EXCEEDED, title: "标签数量超限",
-        category: CrishErrorCategory::Permanent, retryable: false,
-        is_public: true, action: "action.browser.close_tabs",
-    });
+    m.insert(
+        codes::TOOL_BROWSER_TAB_LIMIT_EXCEEDED,
+        CrishErrorInfo {
+            code: codes::TOOL_BROWSER_TAB_LIMIT_EXCEEDED,
+            title: "标签数量超限",
+            category: CrishErrorCategory::Permanent,
+            retryable: false,
+            is_public: true,
+            action: "action.browser.close_tabs",
+        },
+    );
     // P1 接线前——Permanent/不可重试（引擎侧接线后消除）
-    m.insert(codes::TOOL_BROWSER_UNWIRED, CrishErrorInfo {
-        code: codes::TOOL_BROWSER_UNWIRED, title: "浏览器能力未接线",
-        category: CrishErrorCategory::Permanent, retryable: false,
-        is_public: true, action: "action.browser.check_supported",
-    });
+    m.insert(
+        codes::TOOL_BROWSER_UNWIRED,
+        CrishErrorInfo {
+            code: codes::TOOL_BROWSER_UNWIRED,
+            title: "浏览器能力未接线",
+            category: CrishErrorCategory::Permanent,
+            retryable: false,
+            is_public: true,
+            action: "action.browser.check_supported",
+        },
+    );
     // ── computer 域（8 正式码：06 文档 §5 码表语义 + 任务分类裁决）──
     // 参数非法——Permanent/不可重试（模型修参后重试，非自动重试）
-    m.insert(codes::TOOL_COMPUTER_INVALID_PARAMS, CrishErrorInfo {
-        code: codes::TOOL_COMPUTER_INVALID_PARAMS, title: "参数非法",
-        category: CrishErrorCategory::Permanent, retryable: false,
-        is_public: true, action: "action.computer.fix_input",
-    });
+    m.insert(
+        codes::TOOL_COMPUTER_INVALID_PARAMS,
+        CrishErrorInfo {
+            code: codes::TOOL_COMPUTER_INVALID_PARAMS,
+            title: "参数非法",
+            category: CrishErrorCategory::Permanent,
+            retryable: false,
+            is_public: true,
+            action: "action.computer.fix_input",
+        },
+    );
     // 坐标越界——Permanent/不可重试（模型需取新感知）
-    m.insert(codes::TOOL_COMPUTER_COORDS_OUT_OF_BOUNDS, CrishErrorInfo {
-        code: codes::TOOL_COMPUTER_COORDS_OUT_OF_BOUNDS, title: "坐标越界",
-        category: CrishErrorCategory::Permanent, retryable: false,
-        is_public: true, action: "action.computer.refresh_perception",
-    });
+    m.insert(
+        codes::TOOL_COMPUTER_COORDS_OUT_OF_BOUNDS,
+        CrishErrorInfo {
+            code: codes::TOOL_COMPUTER_COORDS_OUT_OF_BOUNDS,
+            title: "坐标越界",
+            category: CrishErrorCategory::Permanent,
+            retryable: false,
+            is_public: true,
+            action: "action.computer.refresh_perception",
+        },
+    );
     // 提权窗口——Security/不可重试（UI-PIA 会话隔离，需用户手动操作）
-    m.insert(codes::TOOL_COMPUTER_ELEVATED_WINDOW, CrishErrorInfo {
-        code: codes::TOOL_COMPUTER_ELEVATED_WINDOW, title: "提权窗口拒绝",
-        category: CrishErrorCategory::Security, retryable: false,
-        is_public: true, action: "action.computer.manual_operation",
-    });
+    m.insert(
+        codes::TOOL_COMPUTER_ELEVATED_WINDOW,
+        CrishErrorInfo {
+            code: codes::TOOL_COMPUTER_ELEVATED_WINDOW,
+            title: "提权窗口拒绝",
+            category: CrishErrorCategory::Security,
+            retryable: false,
+            is_public: true,
+            action: "action.computer.manual_operation",
+        },
+    );
     // 会话未开启——Permanent/不可重试（需用户重新显式开启）
-    m.insert(codes::TOOL_COMPUTER_NOT_ENABLED, CrishErrorInfo {
-        code: codes::TOOL_COMPUTER_NOT_ENABLED, title: "会话未开启",
-        category: CrishErrorCategory::Permanent, retryable: false,
-        is_public: true, action: "action.computer.enable_session",
-    });
+    m.insert(
+        codes::TOOL_COMPUTER_NOT_ENABLED,
+        CrishErrorInfo {
+            code: codes::TOOL_COMPUTER_NOT_ENABLED,
+            title: "会话未开启",
+            category: CrishErrorCategory::Permanent,
+            retryable: false,
+            is_public: true,
+            action: "action.computer.enable_session",
+        },
+    );
     // 会话未就绪——Transient/可重试（等待会话注入/恢复完成）
-    m.insert(codes::TOOL_COMPUTER_NOT_READY, CrishErrorInfo {
-        code: codes::TOOL_COMPUTER_NOT_READY, title: "电脑会话未就绪",
-        category: CrishErrorCategory::Transient, retryable: true,
-        is_public: true, action: "action.computer.wait_retry",
-    });
+    m.insert(
+        codes::TOOL_COMPUTER_NOT_READY,
+        CrishErrorInfo {
+            code: codes::TOOL_COMPUTER_NOT_READY,
+            title: "电脑会话未就绪",
+            category: CrishErrorCategory::Transient,
+            retryable: true,
+            is_public: true,
+            action: "action.computer.wait_retry",
+        },
+    );
     // 急停/取消——Permanent/不可重试（对齐 browser.cancelled，不计入重试额度）
-    m.insert(codes::TOOL_COMPUTER_CANCELLED, CrishErrorInfo {
-        code: codes::TOOL_COMPUTER_CANCELLED, title: "电脑操作已取消",
-        category: CrishErrorCategory::Permanent, retryable: false,
-        is_public: false, action: "action.computer.none",
-    });
+    m.insert(
+        codes::TOOL_COMPUTER_CANCELLED,
+        CrishErrorInfo {
+            code: codes::TOOL_COMPUTER_CANCELLED,
+            title: "电脑操作已取消",
+            category: CrishErrorCategory::Permanent,
+            retryable: false,
+            is_public: false,
+            action: "action.computer.none",
+        },
+    );
     // 能力缺失——Security/不可重试（UIA+视觉双通道皆无，缺依赖）
-    m.insert(codes::TOOL_COMPUTER_CAPABILITY_UNAVAILABLE, CrishErrorInfo {
-        code: codes::TOOL_COMPUTER_CAPABILITY_UNAVAILABLE, title: "能力不可用",
-        category: CrishErrorCategory::Security, retryable: false,
-        is_public: true, action: "action.computer.check_capability",
-    });
+    m.insert(
+        codes::TOOL_COMPUTER_CAPABILITY_UNAVAILABLE,
+        CrishErrorInfo {
+            code: codes::TOOL_COMPUTER_CAPABILITY_UNAVAILABLE,
+            title: "能力不可用",
+            category: CrishErrorCategory::Security,
+            retryable: false,
+            is_public: true,
+            action: "action.computer.check_capability",
+        },
+    );
     // 未接线——Permanent/不可重试（骨架占位，实施轮接线后消除）
-    m.insert(codes::TOOL_COMPUTER_UNWIRED, CrishErrorInfo {
-        code: codes::TOOL_COMPUTER_UNWIRED, title: "电脑能力未接线",
-        category: CrishErrorCategory::Permanent, retryable: false,
-        is_public: true, action: "action.computer.check_supported",
-    });
+    m.insert(
+        codes::TOOL_COMPUTER_UNWIRED,
+        CrishErrorInfo {
+            code: codes::TOOL_COMPUTER_UNWIRED,
+            title: "电脑能力未接线",
+            category: CrishErrorCategory::Permanent,
+            retryable: false,
+            is_public: true,
+            action: "action.computer.check_supported",
+        },
+    );
     // ── mcp 域 ──
-    m.insert(codes::MCP_CONNECTION_FAILED, CrishErrorInfo {
-        code: codes::MCP_CONNECTION_FAILED, title: "MCP 连接失败",
-        category: CrishErrorCategory::Transient, retryable: true,
-        is_public: true, action: "action.mcp.check_server",
-    });
-    m.insert(codes::MCP_PROTOCOL_VIOLATION, CrishErrorInfo {
-        code: codes::MCP_PROTOCOL_VIOLATION, title: "MCP 协议违规",
-        category: CrishErrorCategory::Protocol, retryable: false,
-        is_public: true, action: "action.mcp.report_bug",
-    });
-    m.insert(codes::MCP_SERVER_NOT_FOUND, CrishErrorInfo {
-        code: codes::MCP_SERVER_NOT_FOUND, title: "MCP 服务器未找到",
-        category: CrishErrorCategory::Permanent, retryable: false,
-        is_public: true, action: "action.mcp.check_config",
-    });
+    m.insert(
+        codes::MCP_CONNECTION_FAILED,
+        CrishErrorInfo {
+            code: codes::MCP_CONNECTION_FAILED,
+            title: "MCP 连接失败",
+            category: CrishErrorCategory::Transient,
+            retryable: true,
+            is_public: true,
+            action: "action.mcp.check_server",
+        },
+    );
+    m.insert(
+        codes::MCP_PROTOCOL_VIOLATION,
+        CrishErrorInfo {
+            code: codes::MCP_PROTOCOL_VIOLATION,
+            title: "MCP 协议违规",
+            category: CrishErrorCategory::Protocol,
+            retryable: false,
+            is_public: true,
+            action: "action.mcp.report_bug",
+        },
+    );
+    m.insert(
+        codes::MCP_SERVER_NOT_FOUND,
+        CrishErrorInfo {
+            code: codes::MCP_SERVER_NOT_FOUND,
+            title: "MCP 服务器未找到",
+            category: CrishErrorCategory::Permanent,
+            retryable: false,
+            is_public: true,
+            action: "action.mcp.check_config",
+        },
+    );
     // ── store 域 ──
-    m.insert(codes::STORE_WRITE_FAILED, CrishErrorInfo {
-        code: codes::STORE_WRITE_FAILED, title: "存储写入失败",
-        category: CrishErrorCategory::Transient, retryable: true,
-        is_public: true, action: "action.store.retry_write",
-    });
-    m.insert(codes::STORE_IO, CrishErrorInfo {
-        code: codes::STORE_IO, title: "存储/IO 失败",
-        category: CrishErrorCategory::Transient, retryable: true,
-        is_public: true, action: "action.store.retry_write",
-    });
-    m.insert(codes::STORE_READ_FAILED, CrishErrorInfo {
-        code: codes::STORE_READ_FAILED, title: "存储读取失败",
-        category: CrishErrorCategory::Transient, retryable: true,
-        is_public: true, action: "action.store.retry_read",
-    });
-    m.insert(codes::STORE_CORRUPTED, CrishErrorInfo {
-        code: codes::STORE_CORRUPTED, title: "存储数据损坏",
-        category: CrishErrorCategory::Permanent, retryable: false,
-        is_public: true, action: "action.store.restore_backup",
-    });
-    m.insert(codes::STORE_CAPACITY_EXCEEDED, CrishErrorInfo {
-        code: codes::STORE_CAPACITY_EXCEEDED, title: "存储容量超限",
-        category: CrishErrorCategory::Permanent, retryable: false,
-        is_public: true, action: "action.store.cleanup_or_expand",
-    });
+    m.insert(
+        codes::STORE_WRITE_FAILED,
+        CrishErrorInfo {
+            code: codes::STORE_WRITE_FAILED,
+            title: "存储写入失败",
+            category: CrishErrorCategory::Transient,
+            retryable: true,
+            is_public: true,
+            action: "action.store.retry_write",
+        },
+    );
+    m.insert(
+        codes::STORE_IO,
+        CrishErrorInfo {
+            code: codes::STORE_IO,
+            title: "存储/IO 失败",
+            category: CrishErrorCategory::Transient,
+            retryable: true,
+            is_public: true,
+            action: "action.store.retry_write",
+        },
+    );
+    m.insert(
+        codes::STORE_READ_FAILED,
+        CrishErrorInfo {
+            code: codes::STORE_READ_FAILED,
+            title: "存储读取失败",
+            category: CrishErrorCategory::Transient,
+            retryable: true,
+            is_public: true,
+            action: "action.store.retry_read",
+        },
+    );
+    m.insert(
+        codes::STORE_CORRUPTED,
+        CrishErrorInfo {
+            code: codes::STORE_CORRUPTED,
+            title: "存储数据损坏",
+            category: CrishErrorCategory::Permanent,
+            retryable: false,
+            is_public: true,
+            action: "action.store.restore_backup",
+        },
+    );
+    m.insert(
+        codes::STORE_CAPACITY_EXCEEDED,
+        CrishErrorInfo {
+            code: codes::STORE_CAPACITY_EXCEEDED,
+            title: "存储容量超限",
+            category: CrishErrorCategory::Permanent,
+            retryable: false,
+            is_public: true,
+            action: "action.store.cleanup_or_expand",
+        },
+    );
     // ── subagent 域 ──
-    m.insert(codes::SUBAGENT_DEPTH_EXCEEDED, CrishErrorInfo {
-        code: codes::SUBAGENT_DEPTH_EXCEEDED, title: "子代理递归深度超限",
-        category: CrishErrorCategory::Permanent, retryable: false,
-        is_public: true, action: "action.subagent.reduce_depth",
-    });
-    m.insert(codes::SUBAGENT_DEADLOCK_DETECTED, CrishErrorInfo {
-        code: codes::SUBAGENT_DEADLOCK_DETECTED, title: "子代理死锁",
-        category: CrishErrorCategory::Permanent, retryable: false,
-        is_public: true, action: "action.subagent.break_cycle",
-    });
-    m.insert(codes::SUBAGENT_NESTING_DENIED, CrishErrorInfo {
-        code: codes::SUBAGENT_NESTING_DENIED, title: "子代理嵌套禁止",
-        category: CrishErrorCategory::Permanent, retryable: false,
-        is_public: true, action: "action.subagent.ask_main_agent",
-    });
-    m.insert(codes::SUBAGENT_NOT_FOUND, CrishErrorInfo {
-        code: codes::SUBAGENT_NOT_FOUND, title: "子代理不存在",
-        category: CrishErrorCategory::Permanent, retryable: false,
-        is_public: true, action: "action.subagent.verify_id",
-    });
-    m.insert(codes::SUBAGENT_TIMEOUT, CrishErrorInfo {
-        code: codes::SUBAGENT_TIMEOUT, title: "子代理超时",
-        category: CrishErrorCategory::Transient, retryable: true,
-        is_public: true, action: "action.subagent.retry",
-    });
+    m.insert(
+        codes::SUBAGENT_DEPTH_EXCEEDED,
+        CrishErrorInfo {
+            code: codes::SUBAGENT_DEPTH_EXCEEDED,
+            title: "子代理递归深度超限",
+            category: CrishErrorCategory::Permanent,
+            retryable: false,
+            is_public: true,
+            action: "action.subagent.reduce_depth",
+        },
+    );
+    m.insert(
+        codes::SUBAGENT_DEADLOCK_DETECTED,
+        CrishErrorInfo {
+            code: codes::SUBAGENT_DEADLOCK_DETECTED,
+            title: "子代理死锁",
+            category: CrishErrorCategory::Permanent,
+            retryable: false,
+            is_public: true,
+            action: "action.subagent.break_cycle",
+        },
+    );
+    m.insert(
+        codes::SUBAGENT_NESTING_DENIED,
+        CrishErrorInfo {
+            code: codes::SUBAGENT_NESTING_DENIED,
+            title: "子代理嵌套禁止",
+            category: CrishErrorCategory::Permanent,
+            retryable: false,
+            is_public: true,
+            action: "action.subagent.ask_main_agent",
+        },
+    );
+    m.insert(
+        codes::SUBAGENT_NOT_FOUND,
+        CrishErrorInfo {
+            code: codes::SUBAGENT_NOT_FOUND,
+            title: "子代理不存在",
+            category: CrishErrorCategory::Permanent,
+            retryable: false,
+            is_public: true,
+            action: "action.subagent.verify_id",
+        },
+    );
+    m.insert(
+        codes::SUBAGENT_TIMEOUT,
+        CrishErrorInfo {
+            code: codes::SUBAGENT_TIMEOUT,
+            title: "子代理超时",
+            category: CrishErrorCategory::Transient,
+            retryable: true,
+            is_public: true,
+            action: "action.subagent.retry",
+        },
+    );
     // ── plugin 域 ──
-    m.insert(codes::PLUGIN_NOT_FOUND, CrishErrorInfo {
-        code: codes::PLUGIN_NOT_FOUND, title: "插件未找到",
-        category: CrishErrorCategory::Permanent, retryable: false,
-        is_public: true, action: "action.plugin.check_install",
-    });
-    m.insert(codes::PLUGIN_ACTIVATION_FAILED, CrishErrorInfo {
-        code: codes::PLUGIN_ACTIVATION_FAILED, title: "插件激活失败",
-        category: CrishErrorCategory::Permanent, retryable: false,
-        is_public: true, action: "action.plugin.check_manifest",
-    });
-    m.insert(codes::PLUGIN_PERMISSION_DENIED, CrishErrorInfo {
-        code: codes::PLUGIN_PERMISSION_DENIED, title: "插件权限不足",
-        category: CrishErrorCategory::Security, retryable: false,
-        is_public: true, action: "action.plugin.grant_permission",
-    });
+    m.insert(
+        codes::PLUGIN_NOT_FOUND,
+        CrishErrorInfo {
+            code: codes::PLUGIN_NOT_FOUND,
+            title: "插件未找到",
+            category: CrishErrorCategory::Permanent,
+            retryable: false,
+            is_public: true,
+            action: "action.plugin.check_install",
+        },
+    );
+    m.insert(
+        codes::PLUGIN_ACTIVATION_FAILED,
+        CrishErrorInfo {
+            code: codes::PLUGIN_ACTIVATION_FAILED,
+            title: "插件激活失败",
+            category: CrishErrorCategory::Permanent,
+            retryable: false,
+            is_public: true,
+            action: "action.plugin.check_manifest",
+        },
+    );
+    m.insert(
+        codes::PLUGIN_PERMISSION_DENIED,
+        CrishErrorInfo {
+            code: codes::PLUGIN_PERMISSION_DENIED,
+            title: "插件权限不足",
+            category: CrishErrorCategory::Security,
+            retryable: false,
+            is_public: true,
+            action: "action.plugin.grant_permission",
+        },
+    );
     // ── approval 域 ──
-    m.insert(codes::APPROVAL_TIMEOUT, CrishErrorInfo {
-        code: codes::APPROVAL_TIMEOUT, title: "审批超时",
-        category: CrishErrorCategory::Transient, retryable: true,
-        is_public: true, action: "action.approval.resubmit",
-    });
-    m.insert(codes::APPROVAL_REJECTED, CrishErrorInfo {
-        code: codes::APPROVAL_REJECTED, title: "审批被拒",
-        category: CrishErrorCategory::Permanent, retryable: false,
-        is_public: true, action: "action.approval.modify_request",
-    });
+    m.insert(
+        codes::APPROVAL_TIMEOUT,
+        CrishErrorInfo {
+            code: codes::APPROVAL_TIMEOUT,
+            title: "审批超时",
+            category: CrishErrorCategory::Transient,
+            retryable: true,
+            is_public: true,
+            action: "action.approval.resubmit",
+        },
+    );
+    m.insert(
+        codes::APPROVAL_REJECTED,
+        CrishErrorInfo {
+            code: codes::APPROVAL_REJECTED,
+            title: "审批被拒",
+            category: CrishErrorCategory::Permanent,
+            retryable: false,
+            is_public: true,
+            action: "action.approval.modify_request",
+        },
+    );
     // ── event_store 域 ──
-    m.insert(codes::EVENT_STORE_APPEND_FAILED, CrishErrorInfo {
-        code: codes::EVENT_STORE_APPEND_FAILED, title: "事件追加失败",
-        category: CrishErrorCategory::Transient, retryable: true,
-        is_public: false, action: "action.event_store.retry_append",
-    });
-    m.insert(codes::EVENT_STORE_CONSISTENCY_VIOLATION, CrishErrorInfo {
-        code: codes::EVENT_STORE_CONSISTENCY_VIOLATION, title: "事件一致性违规",
-        category: CrishErrorCategory::Permanent, retryable: false,
-        is_public: false, action: "action.event_store.rebuild_index",
-    });
-    m.insert(codes::EVENT_STORE_READ_FAILED, CrishErrorInfo {
-        code: codes::EVENT_STORE_READ_FAILED, title: "事件读取失败",
-        category: CrishErrorCategory::Transient, retryable: true,
-        is_public: false, action: "action.event_store.retry_read",
-    });
-    m.insert(codes::EVENT_STORE_DEGRADED, CrishErrorInfo {
-        code: codes::EVENT_STORE_DEGRADED, title: "事件存储降级",
-        category: CrishErrorCategory::Permanent, retryable: false,
-        is_public: false, action: "action.event_store.check_disk",
-    });
+    m.insert(
+        codes::EVENT_STORE_APPEND_FAILED,
+        CrishErrorInfo {
+            code: codes::EVENT_STORE_APPEND_FAILED,
+            title: "事件追加失败",
+            category: CrishErrorCategory::Transient,
+            retryable: true,
+            is_public: false,
+            action: "action.event_store.retry_append",
+        },
+    );
+    m.insert(
+        codes::EVENT_STORE_CONSISTENCY_VIOLATION,
+        CrishErrorInfo {
+            code: codes::EVENT_STORE_CONSISTENCY_VIOLATION,
+            title: "事件一致性违规",
+            category: CrishErrorCategory::Permanent,
+            retryable: false,
+            is_public: false,
+            action: "action.event_store.rebuild_index",
+        },
+    );
+    m.insert(
+        codes::EVENT_STORE_READ_FAILED,
+        CrishErrorInfo {
+            code: codes::EVENT_STORE_READ_FAILED,
+            title: "事件读取失败",
+            category: CrishErrorCategory::Transient,
+            retryable: true,
+            is_public: false,
+            action: "action.event_store.retry_read",
+        },
+    );
+    m.insert(
+        codes::EVENT_STORE_DEGRADED,
+        CrishErrorInfo {
+            code: codes::EVENT_STORE_DEGRADED,
+            title: "事件存储降级",
+            category: CrishErrorCategory::Permanent,
+            retryable: false,
+            is_public: false,
+            action: "action.event_store.check_disk",
+        },
+    );
     // ── artifact 域 ──
-    m.insert(codes::ARTIFACT_NOT_FOUND, CrishErrorInfo {
-        code: codes::ARTIFACT_NOT_FOUND, title: "Artifact 未找到",
-        category: CrishErrorCategory::Permanent, retryable: false,
-        is_public: true, action: "action.artifact.check_uri",
-    });
-    m.insert(codes::ARTIFACT_INVALID_URI, CrishErrorInfo {
-        code: codes::ARTIFACT_INVALID_URI, title: "Artifact URI 非法",
-        category: CrishErrorCategory::Protocol, retryable: false,
-        is_public: true, action: "action.artifact.fix_uri",
-    });
+    m.insert(
+        codes::ARTIFACT_NOT_FOUND,
+        CrishErrorInfo {
+            code: codes::ARTIFACT_NOT_FOUND,
+            title: "Artifact 未找到",
+            category: CrishErrorCategory::Permanent,
+            retryable: false,
+            is_public: true,
+            action: "action.artifact.check_uri",
+        },
+    );
+    m.insert(
+        codes::ARTIFACT_INVALID_URI,
+        CrishErrorInfo {
+            code: codes::ARTIFACT_INVALID_URI,
+            title: "Artifact URI 非法",
+            category: CrishErrorCategory::Protocol,
+            retryable: false,
+            is_public: true,
+            action: "action.artifact.fix_uri",
+        },
+    );
     // ── run 域 ──
-    m.insert(codes::RUN_NOT_FOUND, CrishErrorInfo {
-        code: codes::RUN_NOT_FOUND, title: "Run 未找到",
-        category: CrishErrorCategory::Permanent, retryable: false,
-        is_public: true, action: "action.run.select_existing",
-    });
-    m.insert(codes::RUN_INVALID_STATE, CrishErrorInfo {
-        code: codes::RUN_INVALID_STATE, title: "Run 状态非法",
-        category: CrishErrorCategory::Protocol, retryable: false,
-        is_public: true, action: "action.run.refresh",
-    });
-    m.insert(codes::RUN_NOT_GOAL_RUN, CrishErrorInfo {
-        code: codes::RUN_NOT_GOAL_RUN, title: "非 Goal Run",
-        category: CrishErrorCategory::Protocol, retryable: false,
-        is_public: true, action: "action.run.use_goal_run",
-    });
+    m.insert(
+        codes::RUN_NOT_FOUND,
+        CrishErrorInfo {
+            code: codes::RUN_NOT_FOUND,
+            title: "Run 未找到",
+            category: CrishErrorCategory::Permanent,
+            retryable: false,
+            is_public: true,
+            action: "action.run.select_existing",
+        },
+    );
+    m.insert(
+        codes::RUN_INVALID_STATE,
+        CrishErrorInfo {
+            code: codes::RUN_INVALID_STATE,
+            title: "Run 状态非法",
+            category: CrishErrorCategory::Protocol,
+            retryable: false,
+            is_public: true,
+            action: "action.run.refresh",
+        },
+    );
+    m.insert(
+        codes::RUN_NOT_GOAL_RUN,
+        CrishErrorInfo {
+            code: codes::RUN_NOT_GOAL_RUN,
+            title: "非 Goal Run",
+            category: CrishErrorCategory::Protocol,
+            retryable: false,
+            is_public: true,
+            action: "action.run.use_goal_run",
+        },
+    );
     // ── network 域 ──
-    m.insert(codes::NETWORK_UNREACHABLE, CrishErrorInfo {
-        code: codes::NETWORK_UNREACHABLE, title: "网络不可达",
-        category: CrishErrorCategory::Transient, retryable: true,
-        is_public: true, action: "action.network.check_connection",
-    });
-    m.insert(codes::NETWORK_DAEMON_DEAD, CrishErrorInfo {
-        code: codes::NETWORK_DAEMON_DEAD, title: "后台 Daemon 已死",
-        category: CrishErrorCategory::Permanent, retryable: false,
-        is_public: true, action: "action.network.restart_daemon",
-    });
+    m.insert(
+        codes::NETWORK_UNREACHABLE,
+        CrishErrorInfo {
+            code: codes::NETWORK_UNREACHABLE,
+            title: "网络不可达",
+            category: CrishErrorCategory::Transient,
+            retryable: true,
+            is_public: true,
+            action: "action.network.check_connection",
+        },
+    );
+    m.insert(
+        codes::NETWORK_DAEMON_DEAD,
+        CrishErrorInfo {
+            code: codes::NETWORK_DAEMON_DEAD,
+            title: "后台 Daemon 已死",
+            category: CrishErrorCategory::Permanent,
+            retryable: false,
+            is_public: true,
+            action: "action.network.restart_daemon",
+        },
+    );
     // ── telemetry 域（含 log.write_failed）──
-    m.insert(codes::TELEMETRY_EXPORT_FAILED, CrishErrorInfo {
-        code: codes::TELEMETRY_EXPORT_FAILED, title: "观测数据导出失败",
-        category: CrishErrorCategory::Transient, retryable: true,
-        is_public: false, action: "action.telemetry.retry_export",
-    });
-    m.insert(codes::TELEMETRY_TRACE_LOST, CrishErrorInfo {
-        code: codes::TELEMETRY_TRACE_LOST, title: "Trace 丢失",
-        category: CrishErrorCategory::Transient, retryable: true,
-        is_public: false, action: "action.telemetry.none",
-    });
-    m.insert(codes::LOG_WRITE_FAILED, CrishErrorInfo {
-        code: codes::LOG_WRITE_FAILED, title: "日志写入失败",
-        category: CrishErrorCategory::Transient, retryable: true,
-        is_public: false, action: "action.log.retry_write",
-    });
+    m.insert(
+        codes::TELEMETRY_EXPORT_FAILED,
+        CrishErrorInfo {
+            code: codes::TELEMETRY_EXPORT_FAILED,
+            title: "观测数据导出失败",
+            category: CrishErrorCategory::Transient,
+            retryable: true,
+            is_public: false,
+            action: "action.telemetry.retry_export",
+        },
+    );
+    m.insert(
+        codes::TELEMETRY_TRACE_LOST,
+        CrishErrorInfo {
+            code: codes::TELEMETRY_TRACE_LOST,
+            title: "Trace 丢失",
+            category: CrishErrorCategory::Transient,
+            retryable: true,
+            is_public: false,
+            action: "action.telemetry.none",
+        },
+    );
+    m.insert(
+        codes::LOG_WRITE_FAILED,
+        CrishErrorInfo {
+            code: codes::LOG_WRITE_FAILED,
+            title: "日志写入失败",
+            category: CrishErrorCategory::Transient,
+            retryable: true,
+            is_public: false,
+            action: "action.log.retry_write",
+        },
+    );
     // ── common 域 ──
-    m.insert(codes::COMMON_UNKNOWN, CrishErrorInfo {
-        code: codes::COMMON_UNKNOWN, title: "未知错误",
-        category: CrishErrorCategory::Permanent, retryable: false,
-        is_public: true, action: "action.common.report_bug",
-    });
-    m.insert(codes::COMMON_UNSUPPORTED, CrishErrorInfo {
-        code: codes::COMMON_UNSUPPORTED, title: "不支持的操作",
-        category: CrishErrorCategory::Permanent, retryable: false,
-        is_public: true, action: "action.common.check_version",
-    });
-    m.insert(codes::COMMON_NOT_FOUND, CrishErrorInfo {
-        code: codes::COMMON_NOT_FOUND, title: "通用资源未找到",
-        category: CrishErrorCategory::Permanent, retryable: false,
-        is_public: true, action: "action.common.check_resource",
-    });
-    m.insert(codes::COMMON_INVALID_INPUT, CrishErrorInfo {
-        code: codes::COMMON_INVALID_INPUT, title: "参数非法",
-        category: CrishErrorCategory::Permanent, retryable: false,
-        is_public: true, action: "action.common.check_field",
-    });
-    m.insert(codes::COMMON_ENCODING, CrishErrorInfo {
-        code: codes::COMMON_ENCODING, title: "编解码失败",
-        category: CrishErrorCategory::Permanent, retryable: false,
-        is_public: true, action: "action.common.check_encoding",
-    });
+    m.insert(
+        codes::COMMON_UNKNOWN,
+        CrishErrorInfo {
+            code: codes::COMMON_UNKNOWN,
+            title: "未知错误",
+            category: CrishErrorCategory::Permanent,
+            retryable: false,
+            is_public: true,
+            action: "action.common.report_bug",
+        },
+    );
+    m.insert(
+        codes::COMMON_UNSUPPORTED,
+        CrishErrorInfo {
+            code: codes::COMMON_UNSUPPORTED,
+            title: "不支持的操作",
+            category: CrishErrorCategory::Permanent,
+            retryable: false,
+            is_public: true,
+            action: "action.common.check_version",
+        },
+    );
+    m.insert(
+        codes::COMMON_NOT_FOUND,
+        CrishErrorInfo {
+            code: codes::COMMON_NOT_FOUND,
+            title: "通用资源未找到",
+            category: CrishErrorCategory::Permanent,
+            retryable: false,
+            is_public: true,
+            action: "action.common.check_resource",
+        },
+    );
+    m.insert(
+        codes::COMMON_INVALID_INPUT,
+        CrishErrorInfo {
+            code: codes::COMMON_INVALID_INPUT,
+            title: "参数非法",
+            category: CrishErrorCategory::Permanent,
+            retryable: false,
+            is_public: true,
+            action: "action.common.check_field",
+        },
+    );
+    m.insert(
+        codes::COMMON_ENCODING,
+        CrishErrorInfo {
+            code: codes::COMMON_ENCODING,
+            title: "编解码失败",
+            category: CrishErrorCategory::Permanent,
+            retryable: false,
+            is_public: true,
+            action: "action.common.check_encoding",
+        },
+    );
     // ── security 域 ──
-    m.insert(codes::SECURITY_SSRF_REJECTED, CrishErrorInfo {
-        code: codes::SECURITY_SSRF_REJECTED, title: "SSRF 拦截",
-        category: CrishErrorCategory::Security, retryable: false,
-        is_public: false, action: "action.security.check_target",
-    });
+    m.insert(
+        codes::SECURITY_SSRF_REJECTED,
+        CrishErrorInfo {
+            code: codes::SECURITY_SSRF_REJECTED,
+            title: "SSRF 拦截",
+            category: CrishErrorCategory::Security,
+            retryable: false,
+            is_public: false,
+            action: "action.security.check_target",
+        },
+    );
     // ── goal 域 ──
-    m.insert(codes::GOAL_STALLED, CrishErrorInfo {
-        code: codes::GOAL_STALLED, title: "Goal 循环停滞",
-        category: CrishErrorCategory::Permanent, retryable: false,
-        is_public: true, action: "action.goal.review_progress",
-    });
-    m.insert(codes::GOAL_LOOP_DETECTED, CrishErrorInfo {
-        code: codes::GOAL_LOOP_DETECTED, title: "Goal 循环签名重复",
-        category: CrishErrorCategory::Permanent, retryable: false,
-        is_public: true, action: "action.goal.break_loop",
-    });
-    m.insert(codes::GOAL_MAX_ROUNDS, CrishErrorInfo {
-        code: codes::GOAL_MAX_ROUNDS, title: "Goal 达到最大轮次",
-        category: CrishErrorCategory::Permanent, retryable: false,
-        is_public: true, action: "action.goal.increase_max_rounds",
-    });
+    m.insert(
+        codes::GOAL_STALLED,
+        CrishErrorInfo {
+            code: codes::GOAL_STALLED,
+            title: "Goal 循环停滞",
+            category: CrishErrorCategory::Permanent,
+            retryable: false,
+            is_public: true,
+            action: "action.goal.review_progress",
+        },
+    );
+    m.insert(
+        codes::GOAL_LOOP_DETECTED,
+        CrishErrorInfo {
+            code: codes::GOAL_LOOP_DETECTED,
+            title: "Goal 循环签名重复",
+            category: CrishErrorCategory::Permanent,
+            retryable: false,
+            is_public: true,
+            action: "action.goal.break_loop",
+        },
+    );
+    m.insert(
+        codes::GOAL_MAX_ROUNDS,
+        CrishErrorInfo {
+            code: codes::GOAL_MAX_ROUNDS,
+            title: "Goal 达到最大轮次",
+            category: CrishErrorCategory::Permanent,
+            retryable: false,
+            is_public: true,
+            action: "action.goal.increase_max_rounds",
+        },
+    );
     m
 });
 
 /// 查询错误码元信息，未知码回退到 common.unknown（TS 端 getErrorInfo 同构）
 pub fn info(code: &str) -> CrishErrorInfo {
-    CRISH_ERROR_REGISTRY.get(code).cloned().unwrap_or(CrishErrorInfo {
-        code: codes::COMMON_UNKNOWN,
-        title: "未知错误",
-        category: CrishErrorCategory::Permanent,
-        retryable: false,
-        is_public: true,
-        action: "action.common.report_bug",
-    })
+    CRISH_ERROR_REGISTRY
+        .get(code)
+        .cloned()
+        .unwrap_or(CrishErrorInfo {
+            code: codes::COMMON_UNKNOWN,
+            title: "未知错误",
+            category: CrishErrorCategory::Permanent,
+            retryable: false,
+            is_public: true,
+            action: "action.common.report_bug",
+        })
 }
 
 fn now_millis() -> i64 {
@@ -1319,8 +1934,7 @@ mod tests {
         // 构建 10 层 cause 链：depth0 -> depth1 -> ... -> depth9
         let mut err = CrishError::new(codes::COMMON_UNKNOWN, "depth 9");
         for i in (0..9).rev() {
-            err = CrishError::new(codes::COMMON_UNKNOWN, format!("depth {i}"))
-                .with_cause(err);
+            err = CrishError::new(codes::COMMON_UNKNOWN, format!("depth {i}")).with_cause(err);
         }
         let payload = err.to_error_payload(0);
         // 遍历 cause 链，统计到达截断层的深度
@@ -1411,7 +2025,10 @@ mod tests {
         assert_eq!(info_val.category, CrishErrorCategory::Permanent);
         assert!(!info_val.retryable, "越权写为确定拒绝，不可重试");
         assert!(info_val.is_public, "越权拒绝必须对前端可见（编排用）");
-        assert!(info_val.title.contains("写入路径"), "文案「写入路径不在允许范围内」");
+        assert!(
+            info_val.title.contains("写入路径"),
+            "文案「写入路径不在允许范围内」"
+        );
         // 构造错误：category/retryable 由注册表派生，payload 出站正确
         let err = CrishError::new(codes::TOOL_WRITE_NOT_ALLOWED, "目标不在允许范围");
         assert_eq!(err.code, codes::TOOL_WRITE_NOT_ALLOWED);
@@ -1446,15 +2063,60 @@ mod tests {
     fn computer_codes_registered() {
         let cases: [(&str, CrishErrorCategory, bool, bool); 9] = [
             // (码, category, retryable, is_public)
-            (codes::TOOL_COMPUTER_INVALID_PARAMS, CrishErrorCategory::Permanent, false, true),
-            (codes::TOOL_COMPUTER_COORDS_OUT_OF_BOUNDS, CrishErrorCategory::Permanent, false, true),
-            (codes::TOOL_COMPUTER_ELEVATED_WINDOW, CrishErrorCategory::Security, false, true),
-            (codes::TOOL_COMPUTER_NOT_ENABLED, CrishErrorCategory::Permanent, false, true),
-            (codes::TOOL_COMPUTER_NOT_READY, CrishErrorCategory::Transient, true, true),
-            (codes::TOOL_COMPUTER_CANCELLED, CrishErrorCategory::Permanent, false, false),
-            (codes::TOOL_COMPUTER_CAPABILITY_UNAVAILABLE, CrishErrorCategory::Security, false, true),
-            (codes::TOOL_COMPUTER_UNWIRED, CrishErrorCategory::Permanent, false, true),
-            (codes::TOOL_SESSION_EXCLUSIVE, CrishErrorCategory::Permanent, false, true),
+            (
+                codes::TOOL_COMPUTER_INVALID_PARAMS,
+                CrishErrorCategory::Permanent,
+                false,
+                true,
+            ),
+            (
+                codes::TOOL_COMPUTER_COORDS_OUT_OF_BOUNDS,
+                CrishErrorCategory::Permanent,
+                false,
+                true,
+            ),
+            (
+                codes::TOOL_COMPUTER_ELEVATED_WINDOW,
+                CrishErrorCategory::Security,
+                false,
+                true,
+            ),
+            (
+                codes::TOOL_COMPUTER_NOT_ENABLED,
+                CrishErrorCategory::Permanent,
+                false,
+                true,
+            ),
+            (
+                codes::TOOL_COMPUTER_NOT_READY,
+                CrishErrorCategory::Transient,
+                true,
+                true,
+            ),
+            (
+                codes::TOOL_COMPUTER_CANCELLED,
+                CrishErrorCategory::Permanent,
+                false,
+                false,
+            ),
+            (
+                codes::TOOL_COMPUTER_CAPABILITY_UNAVAILABLE,
+                CrishErrorCategory::Security,
+                false,
+                true,
+            ),
+            (
+                codes::TOOL_COMPUTER_UNWIRED,
+                CrishErrorCategory::Permanent,
+                false,
+                true,
+            ),
+            (
+                codes::TOOL_SESSION_EXCLUSIVE,
+                CrishErrorCategory::Permanent,
+                false,
+                true,
+            ),
         ];
         for (code, category, retryable, is_public) in cases {
             let info_val = info(code);
@@ -1473,12 +2135,27 @@ mod tests {
     // ── PE-03 T03.3：core_error_code 显式映射（6 kind × 主码表 + 注册存在性）──    /// 6 个 kind 全部映射到 78 码体系主码（§2.4.2 映射表逐行断言）。
     #[test]
     fn core_error_code_maps_all_kinds() {
-        assert_eq!(core_error_code(&CoreError::InvalidInput("x".into())), codes::COMMON_INVALID_INPUT);
-        assert_eq!(core_error_code(&CoreError::Encoding("x".into())), codes::COMMON_ENCODING);
+        assert_eq!(
+            core_error_code(&CoreError::InvalidInput("x".into())),
+            codes::COMMON_INVALID_INPUT
+        );
+        assert_eq!(
+            core_error_code(&CoreError::Encoding("x".into())),
+            codes::COMMON_ENCODING
+        );
         assert_eq!(core_error_code(&CoreError::Io("x".into())), codes::STORE_IO);
-        assert_eq!(core_error_code(&CoreError::NotFound("x".into())), codes::COMMON_NOT_FOUND);
-        assert_eq!(core_error_code(&CoreError::Cancelled), codes::RUNTIME_ABORTED);
-        assert_eq!(core_error_code(&CoreError::Internal("x".into())), codes::COMMON_UNKNOWN);
+        assert_eq!(
+            core_error_code(&CoreError::NotFound("x".into())),
+            codes::COMMON_NOT_FOUND
+        );
+        assert_eq!(
+            core_error_code(&CoreError::Cancelled),
+            codes::RUNTIME_ABORTED
+        );
+        assert_eq!(
+            core_error_code(&CoreError::Internal("x".into())),
+            codes::COMMON_UNKNOWN
+        );
     }
 
     /// 映射出的主码必须存在于注册表（info 回查 code 一致），禁止映射到未登记码。
@@ -1494,7 +2171,11 @@ mod tests {
         ];
         for err in samples {
             let code = core_error_code(&err);
-            assert_eq!(info(code).code, code, "主码 {code} 必须已登记（info 回查一致）");
+            assert_eq!(
+                info(code).code,
+                code,
+                "主码 {code} 必须已登记（info 回查一致）"
+            );
         }
     }
 

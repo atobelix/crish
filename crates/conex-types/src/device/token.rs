@@ -138,7 +138,8 @@ mod tests {
         assert_eq!(json["tokenKey"], "tk-base64");
         assert_eq!(json["encKey"], "ek-base64");
         assert_eq!(json["refreshKey"], "rk-base64");
-        let back: PairingTokenSet = serde_json::from_str(&serde_json::to_string(&set).unwrap()).unwrap();
+        let back: PairingTokenSet =
+            serde_json::from_str(&serde_json::to_string(&set).unwrap()).unwrap();
         assert_eq!(set, back);
     }
 
@@ -149,7 +150,10 @@ mod tests {
             refresh_token: "rt-001".into(),
         };
         assert!(token.is_access_format());
-        let bad = AccountToken { access_token: "bearer-xyz".into(), refresh_token: "".into() };
+        let bad = AccountToken {
+            access_token: "bearer-xyz".into(),
+            refresh_token: "".into(),
+        };
         assert!(!bad.is_access_format());
 
         let claims = AccessTokenClaims {
@@ -170,12 +174,20 @@ mod tests {
 
     #[test]
     fn relay_credential_format() {
-        assert!(RelayCredential { credential: "rc_abcdefghijklmnopqrstuvwxyz0123456789AB".into() }
-            .is_valid_format());
+        assert!(RelayCredential {
+            credential: "rc_abcdefghijklmnopqrstuvwxyz0123456789AB".into()
+        }
+        .is_valid_format());
         // 缺前缀
-        assert!(!RelayCredential { credential: "abcdefghijklmnop".into() }.is_valid_format());
+        assert!(!RelayCredential {
+            credential: "abcdefghijklmnop".into()
+        }
+        .is_valid_format());
         // 材料过短
-        assert!(!RelayCredential { credential: "rc_x".into() }.is_valid_format());
+        assert!(!RelayCredential {
+            credential: "rc_x".into()
+        }
+        .is_valid_format());
     }
 
     #[test]

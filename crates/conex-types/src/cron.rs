@@ -205,7 +205,11 @@ fn step_range(lo: u32, hi: u32, step: u32) -> impl Iterator<Item = u32> {
 
 /// 组装字段（值集去重升序；text 保留原文）
 fn make_field(text: &str, values: impl IntoIterator<Item = u32>) -> CronField {
-    let values: Vec<u32> = values.into_iter().collect::<BTreeSet<_>>().into_iter().collect();
+    let values: Vec<u32> = values
+        .into_iter()
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect();
     CronField {
         text: text.to_string(),
         values,
@@ -274,8 +278,8 @@ fn parse_cron_field(field: &str, min: u32, max: u32) -> Result<CronField, String
             check_bounds(lo, hi, min, max)?;
             set.extend(lo..=hi);
         } else {
-            let n = parse_1to2_digits(p)
-                .ok_or_else(|| "非法格式：须为数字、范围或 *".to_string())?;
+            let n =
+                parse_1to2_digits(p).ok_or_else(|| "非法格式：须为数字、范围或 *".to_string())?;
             check_bounds(n, n, min, max)?;
             set.insert(n);
         }
@@ -332,14 +336,7 @@ fn epoch_ms_to_local_fields(after_ms: u64, offset_minutes: i32) -> (i64, u32, u3
 
 /// 本地墙钟字段 + 时区偏移 → epoch 毫秒（秒恒 0；负 epoch 钳为 0——
 /// 扫描窗口恒在未来，负值仅理论边界可达，钳位后不满足「> after_ms」自然跳过）
-fn local_fields_to_epoch_ms(
-    y: i64,
-    m: u32,
-    d: u32,
-    h: u32,
-    min: u32,
-    offset_minutes: i32,
-) -> u64 {
+fn local_fields_to_epoch_ms(y: i64, m: u32, d: u32, h: u32, min: u32, offset_minutes: i32) -> u64 {
     let days = days_from_civil(y, m, d);
     let local_secs = days * 86_400 + i64::from(h) * 3_600 + i64::from(min) * 60;
     let utc_secs = local_secs - i64::from(offset_minutes) * 60;
@@ -351,8 +348,7 @@ fn local_fields_to_epoch_ms(
 
 /// 周字段命中判定（7 与 0 都表周日：值集含 wd，或 wd==0 且值集含 7）
 fn dow_field_matches(field: &CronField, weekday_sunday0: u32) -> bool {
-    field.values.contains(&weekday_sunday0)
-        || (weekday_sunday0 == 0 && field.values.contains(&7))
+    field.values.contains(&weekday_sunday0) || (weekday_sunday0 == 0 && field.values.contains(&7))
 }
 
 impl CronSchedule {
@@ -482,8 +478,11 @@ fn local_offset_via_win32() -> i32 {
     unsafe {
         GetLocalTime(&mut st);
     }
-    let local_epoch_secs = days_from_civil(i64::from(st.w_year), u32::from(st.w_month), u32::from(st.w_day))
-        * 86_400
+    let local_epoch_secs = days_from_civil(
+        i64::from(st.w_year),
+        u32::from(st.w_month),
+        u32::from(st.w_day),
+    ) * 86_400
         + i64::from(st.w_hour) * 3_600
         + i64::from(st.w_minute) * 60
         + i64::from(st.w_second);
@@ -537,7 +536,10 @@ mod tests {
     #[test]
     fn cron_field_values_expanded_correctly() {
         let sched = parse_cron("*/5 * * * *").unwrap();
-        assert_eq!(sched.minute.values, vec![0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]);
+        assert_eq!(
+            sched.minute.values,
+            vec![0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]
+        );
         assert_eq!(sched.minute.text, "*/5", "原文保留（回显用）");
 
         let sched = parse_cron("0 8-10 * * 1-5").unwrap();
@@ -548,13 +550,21 @@ mod tests {
         assert_eq!(sched.minute.values, vec![0, 20, 40], "a-b/step 等差序列");
 
         let sched = parse_cron("5/10 * * * *").unwrap();
-        assert_eq!(sched.minute.values, vec![5, 15, 25, 35, 45, 55], "n/step 至上限");
+        assert_eq!(
+            sched.minute.values,
+            vec![5, 15, 25, 35, 45, 55],
+            "n/step 至上限"
+        );
 
         let sched = parse_cron("30 4 1,15 * *").unwrap();
         assert_eq!(sched.day_of_month.values, vec![1, 15], "列表展开");
 
         let sched = parse_cron("* * * * *").unwrap();
-        assert_eq!(sched.day_of_week.values, (0..=7).collect::<Vec<_>>(), "* 展开为全集");
+        assert_eq!(
+            sched.day_of_week.values,
+            (0..=7).collect::<Vec<_>>(),
+            "* 展开为全集"
+        );
     }
 
     // ── 解析：非法表达式（T-CF-08 验收 2）──
@@ -576,17 +586,30 @@ mod tests {
         // @ 宏（文案对齐前端 :177-180）
         let err = parse_cron("@daily").unwrap_err();
         assert!(matches!(err, CronError::MacroNotSupported));
-        assert_eq!(err.to_string(), "不支持 @yearly 等 cron 宏，请用 5 字段表达式");
+        assert_eq!(
+            err.to_string(),
+            "不支持 @yearly 等 cron 宏，请用 5 字段表达式"
+        );
         assert!(parse_cron("@yearly * * * *").is_err(), "@ 开头一律拒绝");
 
         // 非 5 字段：4 字段与 7 字段
         let err = parse_cron("0 9 * *").unwrap_err();
         assert!(matches!(err, CronError::WrongFieldCount { actual: 4 }));
-        assert!(matches!(parse_cron("0 0 0 0 0 0 0").unwrap_err(), CronError::WrongFieldCount { actual: 7 }));
+        assert!(matches!(
+            parse_cron("0 0 0 0 0 0 0").unwrap_err(),
+            CronError::WrongFieldCount { actual: 7 }
+        ));
 
         // 越界字段：minute=60 → 字段定位 0（分钟）
         match parse_cron("60 * * * *").unwrap_err() {
-            CronError::FieldInvalid { index, field_name, raw, min, max, reason } => {
+            CronError::FieldInvalid {
+                index,
+                field_name,
+                raw,
+                min,
+                max,
+                reason,
+            } => {
                 assert_eq!(index, 0, "字段定位必须为分钟");
                 assert_eq!(field_name, "分钟");
                 assert_eq!(raw, "60");
@@ -598,10 +621,22 @@ mod tests {
 
         // 越界字段：hour=24（定位 1）、dom=0（定位 2）、month=13（定位 3）、
         // dow=8（定位 4）
-        assert!(matches!(parse_cron("0 24 * * *").unwrap_err(), CronError::FieldInvalid { index: 1, .. }));
-        assert!(matches!(parse_cron("0 0 0 * *").unwrap_err(), CronError::FieldInvalid { index: 2, .. }));
-        assert!(matches!(parse_cron("0 0 * 13 *").unwrap_err(), CronError::FieldInvalid { index: 3, .. }));
-        assert!(matches!(parse_cron("0 0 * * 8").unwrap_err(), CronError::FieldInvalid { index: 4, .. }));
+        assert!(matches!(
+            parse_cron("0 24 * * *").unwrap_err(),
+            CronError::FieldInvalid { index: 1, .. }
+        ));
+        assert!(matches!(
+            parse_cron("0 0 0 * *").unwrap_err(),
+            CronError::FieldInvalid { index: 2, .. }
+        ));
+        assert!(matches!(
+            parse_cron("0 0 * 13 *").unwrap_err(),
+            CronError::FieldInvalid { index: 3, .. }
+        ));
+        assert!(matches!(
+            parse_cron("0 0 * * 8").unwrap_err(),
+            CronError::FieldInvalid { index: 4, .. }
+        ));
 
         // 非法步进：*/0（步进为 0）、*/60（分钟上限 59 内越界）
         let err = parse_cron("*/0 * * * *").unwrap_err();
@@ -611,17 +646,26 @@ mod tests {
         assert!(err.to_string().contains("步进"), "文案应含步进原因");
 
         // 非法范围：a > b、三段连字符、列表空项、列表内步进（前端同拒）
-        assert!(matches!(parse_cron("0 10-5 * * *").unwrap_err(), CronError::FieldInvalid { index: 1, .. }));
+        assert!(matches!(
+            parse_cron("0 10-5 * * *").unwrap_err(),
+            CronError::FieldInvalid { index: 1, .. }
+        ));
         assert!(parse_cron("0 1-2-3 * * *").is_err(), "多段连字符拒绝");
         assert!(parse_cron("0 1,,2 * * *").is_err(), "列表空项拒绝");
-        assert!(parse_cron("0 1,15/5 * * *").is_err(), "列表内步进拒绝（前端同语义）");
+        assert!(
+            parse_cron("0 1,15/5 * * *").is_err(),
+            "列表内步进拒绝（前端同语义）"
+        );
         assert!(parse_cron("0 1- * * *").is_err(), "开放范围拒绝");
         assert!(parse_cron("*/-1 * * * *").is_err(), "负步进拒绝");
 
         // 空表达式
         assert!(matches!(parse_cron("").unwrap_err(), CronError::Empty));
         assert!(matches!(parse_cron("   ").unwrap_err(), CronError::Empty));
-        assert_eq!(parse_cron("").unwrap_err().to_string(), "cron 表达式不能为空");
+        assert_eq!(
+            parse_cron("").unwrap_err().to_string(),
+            "cron 表达式不能为空"
+        );
     }
 
     /// 前端对照（双实现锁定）：workflowScheduler.test.ts:36-49 的 cron 用例
@@ -711,11 +755,17 @@ mod tests {
     #[test]
     fn cron_next_fire_after_month_dom() {
         let sched = parse_cron("0 0 30 2 *").unwrap();
-        assert_eq!(sched.next_fire_after_in_offset(utc_ms(2026, 1, 1, 0, 0), 0), None);
+        assert_eq!(
+            sched.next_fire_after_in_offset(utc_ms(2026, 1, 1, 0, 0), 0),
+            None
+        );
 
         // 4 月 31 日同样恒无命中（AND 语义的另一个锚点）
         let apr31 = parse_cron("0 0 31 4 *").unwrap();
-        assert_eq!(apr31.next_fire_after_in_offset(utc_ms(2026, 1, 1, 0, 0), 0), None);
+        assert_eq!(
+            apr31.next_fire_after_in_offset(utc_ms(2026, 1, 1, 0, 0), 0),
+            None
+        );
 
         // 2 月 29 日：闰年命中（2028-02-29 00:00 UTC；从 2026-01-01 与
         // 2027-01-01 起算都会在 40 年窗口内遇到最近闰年——仅当日期不存在

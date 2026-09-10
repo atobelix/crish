@@ -22,7 +22,7 @@
 //!   camelCase / 缺省字段 / 信封 schemaVersion。
 
 use conex_types::{
-    AgentEvent, AgentEventEnvelope, EVENT_ENVELOPE_SCHEMA_VERSION, MissAttribution, RunCacheStats,
+    AgentEvent, AgentEventEnvelope, MissAttribution, RunCacheStats, EVENT_ENVELOPE_SCHEMA_VERSION,
 };
 use serde_json::{json, Value};
 
@@ -181,7 +181,10 @@ fn v1_fixtures_parse_and_default_schema_version_one() {
         // 升级读后重序列化再解析，roundtrip 保真（补位后的 schema_version 恒 1）
         let reserialized = serde_json::to_string(&envelope).unwrap();
         let back: AgentEventEnvelope = serde_json::from_str(&reserialized).unwrap();
-        assert_eq!(envelope, back, "{name}：补位 schemaVersion 后 roundtrip 保真");
+        assert_eq!(
+            envelope, back,
+            "{name}：补位 schemaVersion 后 roundtrip 保真"
+        );
     }
 }
 
@@ -194,7 +197,10 @@ fn old_runtime_error_string_form_parses() {
     assert_eq!(envelope.type_name(), "runtime-error");
     let event = serde_json::to_value(&envelope.event).unwrap();
     assert_eq!(event["error"], "provider failed", "v1 的 error 是字符串");
-    assert!(event["error"].is_string(), "旧形态 error 必须是 String（演进锚点）");
+    assert!(
+        event["error"].is_string(),
+        "旧形态 error 必须是 String（演进锚点）"
+    );
     assert_eq!(event["retryable"], true);
     assert_eq!(event["sessionId"], "s1");
 }
@@ -250,7 +256,10 @@ fn minimal_old_frame_without_envelope_keys_parses() {
 #[test]
 fn new_envelope_serializes_schema_version_one() {
     // 新信封序列化恒带 schemaVersion: 1（PE-12 T12.5 验收口径）
-    assert_eq!(EVENT_ENVELOPE_SCHEMA_VERSION, 1, "当前 wire schema 版本为 1");
+    assert_eq!(
+        EVENT_ENVELOPE_SCHEMA_VERSION, 1,
+        "当前 wire schema 版本为 1"
+    );
     let envelope = AgentEventEnvelope::new(
         serde_json::from_value(json!({
             "type": "agent-end",
@@ -293,7 +302,10 @@ fn upgrade_on_read_reserializes_with_schema_version() {
     let envelope: AgentEventEnvelope =
         serde_json::from_str(&common::fixture("events-v1/frame-with-runid-sequence.json")).unwrap();
     let reserialized: Value = serde_json::to_value(&envelope).unwrap();
-    assert_eq!(reserialized["schemaVersion"], 1, "旧帧重序列化自动补 schemaVersion");
+    assert_eq!(
+        reserialized["schemaVersion"], 1,
+        "旧帧重序列化自动补 schemaVersion"
+    );
     assert_eq!(reserialized["runId"], "run-1");
     assert_eq!(reserialized["sequence"], 42);
     assert_eq!(reserialized["terminal"], "completed");
@@ -380,7 +392,9 @@ fn cache_waste_alert_missing_cost_field_defaults_to_none() {
     });
     let event: AgentEvent = serde_json::from_value(raw).unwrap();
     match event {
-        AgentEvent::CacheWasteAlert { missed_cost_usd, .. } => {
+        AgentEvent::CacheWasteAlert {
+            missed_cost_usd, ..
+        } => {
             assert_eq!(missed_cost_usd, None, "缺省字段必须补 None");
         }
         other => panic!("type 判别错误：{}", other.type_name()),
@@ -450,7 +464,10 @@ fn security_audit_roundtrip_and_camel_case() {
     assert_eq!(json["decision"], "redirected");
     assert_eq!(json["toolCallId"], "tc-1");
     // 可选字段 None 时必须省略（skip_serializing_if 纪律）
-    assert!(json.get("permissionMode").is_none(), "None 可选字段必须省略");
+    assert!(
+        json.get("permissionMode").is_none(),
+        "None 可选字段必须省略"
+    );
     // runId 属信封注入（03 §5.3-2），事件体不得携带
     assert!(json.get("runId").is_none(), "runId 不得出现在事件体");
     let back: AgentEvent = serde_json::from_value(json).unwrap();
@@ -484,8 +501,14 @@ fn security_audit_decision_wire_values() {
         ("trash-purge", SecurityAuditOperation::TrashPurge),
         ("git-revert", SecurityAuditOperation::GitRevert),
         ("command-exec", SecurityAuditOperation::CommandExec),
-        ("remote-source-attempt", SecurityAuditOperation::RemoteSourceAttempt),
-        ("remote-mode-downgrade", SecurityAuditOperation::RemoteModeDowngrade),
+        (
+            "remote-source-attempt",
+            SecurityAuditOperation::RemoteSourceAttempt,
+        ),
+        (
+            "remote-mode-downgrade",
+            SecurityAuditOperation::RemoteModeDowngrade,
+        ),
         ("remote-only", SecurityAuditOperation::RemoteOnly),
     ] {
         let parsed: SecurityAuditOperation =
@@ -589,8 +612,14 @@ fn subagent_started_roundtrip_and_camel_case() {
     .unwrap();
     assert!(slim.get("description").is_none(), "None 可选字段必须省略");
     assert!(slim.get("mode").is_none(), "None 可选字段必须省略");
-    assert!(slim.get("parentToolCallId").is_none(), "None 可选字段必须省略");
-    assert!(slim.get("subagentSessionId").is_none(), "None 可选字段必须省略");
+    assert!(
+        slim.get("parentToolCallId").is_none(),
+        "None 可选字段必须省略"
+    );
+    assert!(
+        slim.get("subagentSessionId").is_none(),
+        "None 可选字段必须省略"
+    );
 }
 
 #[test]
@@ -602,8 +631,7 @@ fn subagent_event_roundtrip_and_kind_wire_values() {
         ("message", SubagentEventKind::Message),
         ("tool", SubagentEventKind::Tool),
     ] {
-        let parsed: SubagentEventKind =
-            serde_json::from_value(serde_json::json!(wire)).unwrap();
+        let parsed: SubagentEventKind = serde_json::from_value(serde_json::json!(wire)).unwrap();
         assert_eq!(parsed, kind, "kind 值 {wire}");
         assert_eq!(
             serde_json::to_value(parsed).unwrap(),
@@ -655,8 +683,7 @@ fn subagent_ended_roundtrip_and_status_wire_values() {
         ("failed", SubagentEndStatus::Failed),
         ("cancelled", SubagentEndStatus::Cancelled),
     ] {
-        let parsed: SubagentEndStatus =
-            serde_json::from_value(serde_json::json!(value)).unwrap();
+        let parsed: SubagentEndStatus = serde_json::from_value(serde_json::json!(value)).unwrap();
         assert_eq!(parsed, status, "status 值 {value}");
         assert_eq!(
             serde_json::to_value(parsed).unwrap(),
@@ -797,7 +824,10 @@ fn task_events_envelopes_camel_case_and_schema_version_one() {
         assert_eq!(json["schemaVersion"], 1, "信封 schemaVersion 必须为 1");
         assert!(json.get("event").is_none(), "不得二次包装 event 键");
         for field in camel_fields {
-            assert!(json.get(field).is_some(), "{type_name} 缺 camelCase 字段 {field}");
+            assert!(
+                json.get(field).is_some(),
+                "{type_name} 缺 camelCase 字段 {field}"
+            );
         }
         // runId 属信封注入（03 §5.3-2），事件体由信封承载不占 payload 键
         // roundtrip 保真
@@ -834,7 +864,11 @@ fn task_output_optional_fields_omitted_and_default_to_none() {
     let parsed: AgentEvent = serde_json::from_value(full).unwrap();
     match parsed {
         AgentEvent::TaskOutput {
-            task_id, line, chunk, line_count, ..
+            task_id,
+            line,
+            chunk,
+            line_count,
+            ..
         } => {
             assert_eq!(task_id, "t-1");
             assert_eq!(line, None, "缺省 line 必须补 None");
@@ -919,10 +953,7 @@ fn task_events_backpressure_levels() {
             },
             BackpressureLevel::Soft,
         ),
-        (
-            started("t-1"),
-            BackpressureLevel::Critical,
-        ),
+        (started("t-1"), BackpressureLevel::Critical),
         (
             AgentEvent::TaskCompleted {
                 session_id: "s1".into(),
