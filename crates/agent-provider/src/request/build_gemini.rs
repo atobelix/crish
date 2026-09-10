@@ -337,7 +337,10 @@ fn gemini_thinking_dialect(opts: &GeminiRequestOptions) -> (Option<Value>, Optio
     assemble_thinking_dialect(&DialectBuildOptions {
         effort,
         format: ThinkingDialectFormat::GeminiThinkingConfig,
-        max_output_tokens: opts.max_output_tokens.unwrap_or(64_000),
+        // 0 = 无已知上限：dialect 不发明 64000 兜底（轨G P2，对齐 build_chat）。
+        // 仅当 opts.max_output_tokens 已为 Some 时才写请求体 maxOutputTokens 字段
+        // （见 build_gemini_request_body 的 generationConfig 分支）；None 时省略。
+        max_output_tokens: opts.max_output_tokens.unwrap_or(0),
         thinking_map: opts.thinking_map.as_ref(),
     })
 }

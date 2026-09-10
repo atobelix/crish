@@ -86,6 +86,72 @@ describe('serializeModelsYamlTree', () => {
     expect(text).not.toMatch(/capabilities:[\s\S]*video:/);
   });
 
+  it('非空 tiers 写出 SSOT 键（inputTokensAbove/input/output），禁写 inputCost/outputCost', () => {
+    const tree: ModelsYamlTree = {
+      version: 2,
+      providers: {
+        bailian: {
+          displayName: 'Bailian',
+          baseUrl: 'https://dashscope.aliyuncs.com',
+          protocol: 'openai/chat',
+          models: [
+            {
+              id: 'qwen-tiered',
+              pricing: {
+                currency: 'CNY',
+                input: 4.0,
+                output: 12.0,
+                cacheRead: 0.8,
+                tiers: [
+                  {
+                    inputTokensAbove: 256_000,
+                    input: 6.0,
+                    output: 18.0,
+                    cacheRead: 1.2,
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      },
+    };
+    const text = serializeModelsYamlTree(tree);
+    expect(text).toContain('tiers:');
+    expect(text).toContain('inputTokensAbove: 256000');
+    expect(text).toContain('input: 6');
+    expect(text).toContain('output: 18');
+    expect(text).toContain('cacheRead: 1.2');
+    expect(text).not.toContain('inputCost');
+    expect(text).not.toContain('outputCost');
+  });
+
+  it('空 tiers 数组写出跳过（不当有值字段）', () => {
+    const tree: ModelsYamlTree = {
+      version: 2,
+      providers: {
+        acme: {
+          displayName: 'Acme',
+          baseUrl: 'https://example.invalid/v1',
+          protocol: 'openai/chat',
+          models: [
+            {
+              id: 'no-tiers',
+              pricing: {
+                currency: 'USD',
+                input: 1,
+                output: 2,
+                tiers: [],
+              },
+            },
+          ],
+        },
+      },
+    };
+    const text = serializeModelsYamlTree(tree);
+    expect(text).not.toContain('tiers:');
+  });
+
   it('协议旧名写出 google/generate-content；pricing 只写 SSOT 键；窗口只写 contextWindow', () => {
     const tree: ModelsYamlTree = {
       version: 2,
@@ -236,6 +302,59 @@ describe('readModelsYamlIpc', () => {
     expect(res.data.providers.g.compat?.thinkingFormat).toBe('gemini');
     expect(res.data.providers.g.models[0].protocol).toBe('google/generate-content');
     expect(res.data.providers.g.baseUrl).toBe('https://example.invalid/gemini');
+  });
+
+  it('读回含 tiers 的 providers：树与 pricing.tiers 不丢', async () => {
+    const providersWithTiers = {
+      bailian: {
+        displayName: 'Bailian',
+        baseUrl: 'https://dashscope.aliyuncs.com',
+        protocol: 'openai/chat' as const,
+        models: [
+          {
+            id: 'qwen-tiered',
+            pricing: {
+              currency: 'CNY' as const,
+              input: 4.0,
+              output: 12.0,
+              cacheRead: 0.8,
+              tiers: [
+                {
+                  inputTokensAbove: 256_000,
+                  input: 6.0,
+                  output: 18.0,
+                  cacheRead: 1.2,
+                },
+              ],
+            },
+          },
+        ],
+      },
+    };
+    mockTauriCommand('workbench_read_models_yaml', () => ({
+      path: '/tmp/models.yaml',
+      content: '',
+      template: '',
+      seeded: false,
+      providers: providersWithTiers,
+    }));
+
+    const res = await readModelsYamlIpc();
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    const tiers = res.data.tree.providers.bailian.models[0]?.pricing?.tiers;
+    expect(tiers).toHaveLength(1);
+    expect(tiers?.[0]).toMatchObject({
+      inputTokensAbove: 256_000,
+      input: 6.0,
+      output: 18.0,
+      cacheRead: 1.2,
+    });
+
+    // 序列化往返：树再写 yaml 仍含 tiers
+    const text = serializeModelsYamlTree(res.data.tree);
+    expect(text).toContain('tiers:');
+    expect(text).toContain('inputTokensAbove: 256000');
   });
 });
 

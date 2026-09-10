@@ -101,6 +101,26 @@ function serializeCompat(compat: ProviderCompatConfig | undefined): Record<strin
   return out;
 }
 
+/**
+ * 序列化阶梯档（与内核 `PricingTier` serde 同构）。
+ * 写出键钉死：inputTokensAbove / input / output / cacheRead? / cacheWrite?。
+ * 禁止写出 inputCost / outputCost 等 TS 历史别名。
+ */
+function serializeTiers(
+  tiers: NonNullable<PricingConfig['tiers']>
+): Record<string, unknown>[] {
+  return tiers.map((tier) => {
+    const out: Record<string, unknown> = {
+      inputTokensAbove: tier.inputTokensAbove,
+      input: tier.input,
+      output: tier.output,
+    };
+    if (tier.cacheRead != null) out.cacheRead = tier.cacheRead;
+    if (tier.cacheWrite != null) out.cacheWrite = tier.cacheWrite;
+    return out;
+  });
+}
+
 function serializePricing(pricing: PricingConfig): Record<string, unknown> {
   const input = pickPrice(pricing.input, pricing.inputPerMTok);
   const output = pickPrice(pricing.output, pricing.outputPerMTok);
@@ -115,6 +135,10 @@ function serializePricing(pricing: PricingConfig): Record<string, unknown> {
   if (cacheRead != null) out.cacheRead = cacheRead;
   if (cacheWrite != null) out.cacheWrite = cacheWrite;
   if (perImage != null) out.perImage = perImage;
+  // 非空 tiers 必须写出（UI 改价保存不得丢阶梯）；空数组与 undefined 均跳过
+  if (Array.isArray(pricing.tiers) && pricing.tiers.length > 0) {
+    out.tiers = serializeTiers(pricing.tiers);
+  }
   return out;
 }
 

@@ -75,5 +75,5 @@ pub use vendor::{
     ThinkingIntensity, NO_THINKING,
 };
 #[allow(deprecated)]
-pub use vendor::{infer_thinking_capability, ReasoningEffortFormat};
+pub use vendor::infer_thinking_capability;
 pub use wire_protocol::{build_endpoint_url, resolve_wire_protocol, WireProtocol};

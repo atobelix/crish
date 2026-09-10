@@ -769,7 +769,7 @@ describe('独立四维双币结算与阶梯费率', () => {
         output: 12.0,
         cacheRead: 0.80,
         tiers: [
-          { inputTokensAbove: 256_000, inputCost: 6.0, outputCost: 18.0 },
+          { inputTokensAbove: 256_000, input: 6.0, output: 18.0 },
         ],
       },
     });

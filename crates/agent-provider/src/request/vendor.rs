@@ -94,34 +94,6 @@ impl ReasoningEffort {
     }
 }
 
-/// reasoningEffortFormat（auto/responses/chat-completions/none）
-///
-/// **已废弃（轨G P2）**：四个 builder（chat / responses / anthropic / gemini）
-/// 均不再消费此枚举——出站思考键唯一入口是 `assemble_thinking_dialect` +
-/// `catalog_types::ThinkingFormat`（模型/供应商 yaml `compat.thinkingFormat`）。
-/// 枚举仅为公共 re-export 契约保留；`ChatCompletionsRequestOptions` 已删除
-/// 对应字段，任何值都不会进入请求体（见 build_chat_tests
-/// `reasoning_effort_format_field_removed_never_enters_body`）。
-#[deprecated(
-    note = "出站思考键 SSOT = assemble_thinking_dialect + catalog ThinkingFormat；本枚举无生产消费者，保留仅为 re-export 兼容"
-)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ReasoningEffortFormat {
-    /// 按 endpoint 推断（保持向后兼容）
-    Auto,
-    Responses,
-    ChatCompletions,
-    /// 不发送任何 reasoning 参数
-    None,
-}
-
-#[allow(deprecated)]
-impl Default for ReasoningEffortFormat {
-    fn default() -> Self {
-        Self::Auto
-    }
-}
-
 /// thinking 强度档位（对齐 ThinkingIntensity；01 D5 透传）
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ThinkingIntensity {
