@@ -1,9 +1,15 @@
 /**
- * modelsCatalogIpc.ts —— Tauri IPC 强类型通信管道与韧性防护
+ * modelsCatalogIpc.ts —— models.yaml 诚实 IPC
  *
- * 权威对接：
- * - Tauri IPC: models_yaml_read, models_yaml_write, models_yaml_reload
- * - 故障防御：三态分派、单飞复用、自动向后兼容与结构化诊断
+ * 唯一合法命令：
+ *   workbench_read_models_yaml
+ *   workbench_validate_models_yaml
+ *   workbench_save_models_yaml
+ *
+ * 读成功 = 命令命中 ∧ parseError 空 ∧ providers 为对象（含诚实 {}）。
+ * 交给 Store 的 tree = { version: 2, providers }，组装源只能是 wire.providers。
+ * 写路径：serializeModelsYamlTree → workbench_save_models_yaml({ content })。
+ * 热重载由调用方 ensureLoaded(true) 驱动，不监听不存在的内核广播。
  */
 
 import { stringify as yamlStringify } from 'yaml';
@@ -11,291 +17,272 @@ import { invokeTyped } from './tauriInvoke';
 import type {
   ModelsYamlTree,
   ReadModelsYamlWire,
+  ReadModelsYamlIpcData,
+  SaveModelsYamlWire,
   ProviderSpec,
   ModelSpec,
+  ModelProtocol,
+  PricingConfig,
+  ProviderCompatConfig,
+  ThinkingWireFormat,
 } from './modelsCatalogTypes';
 
 export type IpcResult<T> =
   | { ok: true; data: T }
   | { ok: false; kind: 'MISSING' | 'IPC_ERROR' | 'PARSE_ERROR'; error: string };
 
-/**
- * 将旧版平铺 CatalogModelSpec[] 转换为 v2.0 树状 ModelsYamlTree
- */
-export function convertFlatModelsToTree(flatList: any[]): ModelsYamlTree {
-  const providers: Record<string, ProviderSpec> = {};
+const CANONICAL_PROTOCOLS: ReadonlySet<string> = new Set([
+  'openai/chat',
+  'openai/responses',
+  'anthropic/messages',
+  'google/generate-content',
+]);
 
-  for (const item of flatList || []) {
-    const rawVendor = String(item.vendor || 'custom').trim().toLowerCase();
-    const vendor = rawVendor || 'custom';
+const CANONICAL_THINKING_FORMATS: ReadonlySet<string> = new Set([
+  'openai',
+  'qwen',
+  'deepseek',
+  'anthropic',
+  'gemini',
+  'zai',
+  'custom',
+]);
 
-    if (!providers[vendor]) {
-      providers[vendor] = {
-        displayName: item.vendorDisplayName || vendor,
-        baseUrl:
-          vendor === 'openai'
-            ? 'https://api.openai.com/v1'
-            : vendor === 'anthropic'
-              ? 'https://api.anthropic.com'
-              : vendor === 'deepseek'
-                ? 'https://api.deepseek.com'
-                : 'https://api.openai.com/v1',
-        protocol: (item.protocol as any) || 'openai/chat',
-        models: [],
-      };
-    }
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return value != null && typeof value === 'object' && !Array.isArray(value);
+}
 
-    const modelSpec: ModelSpec = {
-      id: item.model || item.id,
-      displayName: item.displayName || item.model || item.id,
-      protocol: item.protocol,
-      contextWindow: item.contextWindow,
-      maxOutputTokens: item.maxOutputTokens,
-      pricing: item.pricing
-        ? {
-            currency: item.pricing.currency || 'USD',
-            unit: 'per_1m_tokens',
-            input: item.pricing.inputPerMTok ?? item.pricing.input,
-            output: item.pricing.outputPerMTok ?? item.pricing.output,
-            cacheRead: item.pricing.cacheReadPerMTok ?? item.pricing.cacheRead,
-            cacheWrite: item.pricing.cacheWritePerMTok ?? item.pricing.cacheWrite,
-            perImage: item.pricing.perImageCost ?? item.pricing.perImage,
-          }
-        : undefined,
-      capabilities: item.capabilities,
-      enabled: true,
-    };
-
-    providers[vendor].models.push(modelSpec);
+/** 读/写边界：旧协议字面量单向归一为规范名 */
+function normalizeProtocol(raw: unknown): ModelProtocol | undefined {
+  if (raw === 'google/interactions') return 'google/generate-content';
+  if (typeof raw === 'string' && CANONICAL_PROTOCOLS.has(raw)) {
+    return raw as ModelProtocol;
   }
+  return undefined;
+}
 
+/** 读/写边界：thinkingFormat 旧名单向归一为内核序列化名 */
+function normalizeThinkingFormat(raw: unknown): ThinkingWireFormat | undefined {
+  if (raw === 'google') return 'gemini';
+  if (raw === 'qwen_enable_thinking') return 'qwen';
+  if (typeof raw === 'string' && CANONICAL_THINKING_FORMATS.has(raw)) {
+    return raw as ThinkingWireFormat;
+  }
+  return undefined;
+}
+
+function normalizeCompat(compat: ProviderCompatConfig | undefined): ProviderCompatConfig | undefined {
+  if (!compat) return undefined;
+  const thinkingFormat = normalizeThinkingFormat(compat.thinkingFormat);
+  if (thinkingFormat === undefined && compat.thinkingFormat === undefined) return compat;
+  return { ...compat, ...(thinkingFormat ? { thinkingFormat } : {}) };
+}
+
+function pickPrice(primary: number | undefined, alias: number | undefined): number | undefined {
+  if (primary != null) return primary;
+  if (alias != null) return alias;
+  return undefined;
+}
+
+function normalizePricing(pricing: PricingConfig | undefined): PricingConfig | undefined {
+  if (!pricing) return undefined;
   return {
-    version: 2,
-    providers,
+    ...pricing,
+    ...(pricing.input == null && pricing.inputPerMTok != null ? { input: pricing.inputPerMTok } : {}),
+    ...(pricing.output == null && pricing.outputPerMTok != null ? { output: pricing.outputPerMTok } : {}),
+    ...(pricing.cacheRead == null && pricing.cacheReadPerMTok != null
+      ? { cacheRead: pricing.cacheReadPerMTok }
+      : {}),
+    ...(pricing.cacheWrite == null && pricing.cacheWritePerMTok != null
+      ? { cacheWrite: pricing.cacheWritePerMTok }
+      : {}),
+    ...(pricing.perImage == null && pricing.perImageCost != null ? { perImage: pricing.perImageCost } : {}),
   };
 }
 
-/**
- * 从 Rust 内核读取 models.yaml 真源（自动触发缺失播种）
- * 优先调用 models_yaml_read，缺失时兼容退回 workbench_read_models_yaml
- */
-export async function readModelsYamlIpc(): Promise<IpcResult<ReadModelsYamlWire>> {
-  // 1. 尝试调用新版 models_yaml_read
-  const res = await invokeTyped<ReadModelsYamlWire>('models_yaml_read', {});
+function normalizeModel(model: ModelSpec): ModelSpec {
+  const protocol = normalizeProtocol(model.protocol);
+  const contextWindow = model.contextWindow ?? model.contextLength;
+  return {
+    ...model,
+    ...(protocol ? { protocol } : {}),
+    ...(contextWindow != null ? { contextWindow } : {}),
+    pricing: normalizePricing(model.pricing),
+    compat: normalizeCompat(model.compat),
+  };
+}
 
-  if (res.status === 'ok') {
-    if (res.data.parseError) {
-      return {
-        ok: false,
-        kind: 'PARSE_ERROR',
-        error: `YAML 第 ${res.data.parseError.line ?? '?'} 行解析失败: ${res.data.parseError.message}`,
-      };
-    }
-
-    // 若返回已有 tree，直接返回
-    if (res.data.tree && res.data.tree.providers) {
-      return { ok: true, data: res.data };
-    }
-
-    // 若返回的是平铺 models，转换为 tree
-    if (res.data.models && Array.isArray(res.data.models)) {
-      return {
-        ok: true,
-        data: {
-          ...res.data,
-          tree: convertFlatModelsToTree(res.data.models),
-        },
-      };
-    }
-
-    return { ok: true, data: res.data };
-  }
-
-  // 2. 若 models_yaml_read 命令未注册，优雅回退至 workbench_read_models_yaml
-  if (res.status === 'missing') {
-    const fallbackRes = await invokeTyped<any>('workbench_read_models_yaml', {});
-    if (fallbackRes.status === 'missing') {
-      return { ok: false, kind: 'MISSING', error: 'Tauri 命令 models_yaml_read 未注册' };
-    }
-    if (fallbackRes.status === 'error') {
-      return { ok: false, kind: 'IPC_ERROR', error: fallbackRes.message };
-    }
-
-    const wire = fallbackRes.data;
-    if (wire.parseError) {
-      return {
-        ok: false,
-        kind: 'PARSE_ERROR',
-        error: `models.yaml 解析失败（第 ${wire.parseError.line ?? '?'} 行）：${wire.parseError.message}`,
-      };
-    }
-
-    const tree = wire.tree || convertFlatModelsToTree(wire.models || []);
-    return {
-      ok: true,
-      data: {
-        path: wire.path || '~/.conex/models.yaml',
-        content: wire.content,
-        rawYaml: wire.content,
-        tree,
-        models: wire.models,
-        seeded: Boolean(wire.seeded),
-        parseError: wire.parseError,
-      },
+function normalizeProviders(raw: Record<string, ProviderSpec>): Record<string, ProviderSpec> {
+  const out: Record<string, ProviderSpec> = {};
+  for (const [id, provider] of Object.entries(raw)) {
+    const protocol = normalizeProtocol(provider.protocol);
+    out[id] = {
+      ...provider,
+      displayName: provider.displayName || id,
+      baseUrl: typeof provider.baseUrl === 'string' ? provider.baseUrl : '',
+      protocol: (protocol ?? provider.protocol) as ModelProtocol,
+      compat: normalizeCompat(provider.compat),
+      models: Array.isArray(provider.models) ? provider.models.map(normalizeModel) : [],
     };
   }
+  return out;
+}
 
-  // res.status === 'error'
-  return { ok: false, kind: 'IPC_ERROR', error: res.message };
+function serializeCompat(compat: ProviderCompatConfig | undefined): Record<string, unknown> | undefined {
+  if (!compat) return undefined;
+  const out: Record<string, unknown> = { ...compat };
+  const thinkingFormat = normalizeThinkingFormat(compat.thinkingFormat);
+  if (thinkingFormat) out.thinkingFormat = thinkingFormat;
+  else delete out.thinkingFormat;
+  return out;
+}
+
+function serializePricing(pricing: PricingConfig): Record<string, unknown> {
+  const input = pickPrice(pricing.input, pricing.inputPerMTok);
+  const output = pickPrice(pricing.output, pricing.outputPerMTok);
+  const cacheRead = pickPrice(pricing.cacheRead, pricing.cacheReadPerMTok);
+  const cacheWrite = pickPrice(pricing.cacheWrite, pricing.cacheWritePerMTok);
+  const perImage = pickPrice(pricing.perImage, pricing.perImageCost);
+  const out: Record<string, unknown> = {
+    currency: pricing.currency || 'USD',
+  };
+  if (input != null) out.input = input;
+  if (output != null) out.output = output;
+  if (cacheRead != null) out.cacheRead = cacheRead;
+  if (cacheWrite != null) out.cacheWrite = cacheWrite;
+  if (perImage != null) out.perImage = perImage;
+  return out;
+}
+
+function serializeModel(model: ModelSpec): Record<string, unknown> {
+  const protocol = normalizeProtocol(model.protocol);
+  const contextWindow = model.contextWindow ?? model.contextLength;
+  const clean: Record<string, unknown> = { id: model.id };
+  if (model.displayName) clean.displayName = model.displayName;
+  if (protocol) clean.protocol = protocol;
+  if (contextWindow != null) clean.contextWindow = contextWindow;
+  if (model.maxOutputTokens != null) clean.maxOutputTokens = model.maxOutputTokens;
+  if (model.thinking && Object.keys(model.thinking).length > 0) clean.thinking = model.thinking;
+  if (model.modalities) clean.modalities = model.modalities;
+  if (model.pricing) clean.pricing = serializePricing(model.pricing);
+  if (model.enabled !== undefined) clean.enabled = model.enabled;
+  // 运行时只信 modalities；tools 没有等价字段，磁盘必须留下字面量。
+  // 禁止再写 capabilities.image/video（与 modalities 双写）。
+  if (model.capabilities && typeof model.capabilities.tools === 'boolean') {
+    clean.capabilities = { tools: model.capabilities.tools };
+  }
+  const compat = serializeCompat(model.compat);
+  if (compat) clean.compat = compat;
+  return clean;
 }
 
 /**
- * 将 ModelsYamlTree 规范化并序列化为纯净的 v2 树状 YAML 文本。
- * 彻底铲除手拼 flat models: 列表的降级逻辑，完整保留供应商与模型的全部配置属性与方言。
+ * 将 ModelsYamlTree 序列化为 v2 yaml 文本。
+ * 写出键钉死为 contextWindow / input|output|cacheRead|cacheWrite / google/generate-content；
+ * thinkingFormat 写出 gemini / qwen；保留 thinking / modalities / apiKey / headers。
  */
 export function serializeModelsYamlTree(tree: ModelsYamlTree): string {
-  const cleanProviders: Record<string, any> = {};
+  const cleanProviders: Record<string, unknown> = {};
 
   for (const [vendorId, provider] of Object.entries(tree.providers || {})) {
-    // 归一化协议方言：将兼容别名 google/interactions 归一化为标准的 google/generate-content
-    const normProviderProtocol =
-      provider.protocol === 'google/interactions'
-        ? 'google/generate-content'
-        : provider.protocol;
-
-    const cleanModels = (provider.models || []).map((m) => {
-      const modelProtocol =
-        m.protocol === 'google/interactions'
-          ? 'google/generate-content'
-          : m.protocol;
-
-      const cleanModel: Record<string, any> = {
-        id: m.id,
-      };
-
-      if (m.displayName) cleanModel.displayName = m.displayName;
-      if (modelProtocol) cleanModel.protocol = modelProtocol;
-      if (m.contextWindow != null) cleanModel.contextWindow = m.contextWindow;
-      else if (m.contextLength != null) cleanModel.contextWindow = m.contextLength;
-      if (m.maxOutputTokens != null) cleanModel.maxOutputTokens = m.maxOutputTokens;
-      if (m.thinking) cleanModel.thinking = m.thinking;
-      if (m.modalities) cleanModel.modalities = m.modalities;
-      if (m.capabilities) cleanModel.capabilities = m.capabilities;
-      if (m.compat) cleanModel.compat = m.compat;
-
-      if (m.pricing) {
-        cleanModel.pricing = {
-          currency: m.pricing.currency || 'USD',
-          ...(m.pricing.unit ? { unit: m.pricing.unit } : {}),
-          ...(m.pricing.input != null
-            ? { input: m.pricing.input }
-            : m.pricing.inputPerMTok != null
-              ? { input: m.pricing.inputPerMTok }
-              : {}),
-          ...(m.pricing.output != null
-            ? { output: m.pricing.output }
-            : m.pricing.outputPerMTok != null
-              ? { output: m.pricing.outputPerMTok }
-              : {}),
-          ...(m.pricing.cacheRead != null
-            ? { cacheRead: m.pricing.cacheRead }
-            : m.pricing.cacheReadPerMTok != null
-              ? { cacheRead: m.pricing.cacheReadPerMTok }
-              : {}),
-          ...(m.pricing.cacheWrite != null
-            ? { cacheWrite: m.pricing.cacheWrite }
-            : m.pricing.cacheWritePerMTok != null
-              ? { cacheWrite: m.pricing.cacheWritePerMTok }
-              : {}),
-          ...(m.pricing.perImage != null
-            ? { perImage: m.pricing.perImage }
-            : m.pricing.perImageCost != null
-              ? { perImage: m.pricing.perImageCost }
-              : {}),
-          ...(m.pricing.tiers ? { tiers: m.pricing.tiers } : {}),
-        };
-      }
-
-      if (m.enabled !== undefined) cleanModel.enabled = m.enabled;
-
-      return cleanModel;
-    });
-
-    cleanProviders[vendorId] = {
+    const protocol = normalizeProtocol(provider.protocol) ?? provider.protocol;
+    const cleanModels = (provider.models || []).map(serializeModel);
+    const entry: Record<string, unknown> = {
       displayName: provider.displayName,
       baseUrl: provider.baseUrl,
-      protocol: normProviderProtocol,
-      ...(provider.apiKey ? { apiKey: provider.apiKey } : {}),
-      ...(provider.apiKeyRef ? { apiKeyRef: provider.apiKeyRef } : {}),
-      ...(provider.compat ? { compat: provider.compat } : {}),
-      ...(provider.headers ? { headers: provider.headers } : {}),
-      ...(provider.proxyUrl ? { proxyUrl: provider.proxyUrl } : {}),
-      ...(provider.enabled !== undefined ? { enabled: provider.enabled } : {}),
-      ...(provider.order !== undefined ? { order: provider.order } : {}),
+      protocol,
       models: cleanModels,
     };
+    if (provider.apiKey) entry.apiKey = provider.apiKey;
+    if (provider.apiKeyRef) entry.apiKeyRef = provider.apiKeyRef;
+    const compat = serializeCompat(provider.compat);
+    if (compat) entry.compat = compat;
+    if (provider.headers) entry.headers = provider.headers;
+    if (provider.proxyUrl) entry.proxyUrl = provider.proxyUrl;
+    if (provider.enabled !== undefined) entry.enabled = provider.enabled;
+    if (provider.order !== undefined) entry.order = provider.order;
+    cleanProviders[vendorId] = entry;
   }
 
-  const payload = {
+  return yamlStringify({
     version: 2,
     providers: cleanProviders,
-  };
-
-  return yamlStringify(payload);
+  });
 }
 
 /**
- * 将整棵模型树原子写入 models.yaml
- * 必须且只写入纯净的 v2 树状结构，若后端报错则向上抛出标准异常供 UI 弹窗，绝不擅自将 v2 降级为残疾 v1！
+ * 从 Rust 内核读取 models.yaml 真源。
+ * 只 invoke workbench_read_models_yaml；missing 不换命令、不把空树当成功。
+ */
+export async function readModelsYamlIpc(): Promise<IpcResult<ReadModelsYamlIpcData>> {
+  const res = await invokeTyped<ReadModelsYamlWire>('workbench_read_models_yaml', {});
+
+  if (res.status === 'missing') {
+    return { ok: false, kind: 'MISSING', error: 'workbench_read_models_yaml 命令未注册' };
+  }
+  if (res.status === 'error') {
+    return { ok: false, kind: 'IPC_ERROR', error: res.message };
+  }
+
+  const wire = res.data;
+  if (wire.parseError) {
+    return {
+      ok: false,
+      kind: 'PARSE_ERROR',
+      error: `models.yaml 解析失败（第 ${wire.parseError.line ?? '?'} 行）：${wire.parseError.message}`,
+    };
+  }
+
+  if (!isPlainObject(wire.providers)) {
+    return {
+      ok: false,
+      kind: 'IPC_ERROR',
+      error: '读 IPC 协议漂移：成功载荷缺少 providers 对象',
+    };
+  }
+
+  const providers = normalizeProviders(wire.providers as Record<string, ProviderSpec>);
+  const tree: ModelsYamlTree = { version: 2, providers };
+  return {
+    ok: true,
+    data: {
+      path: wire.path,
+      content: wire.content ?? '',
+      template: wire.template ?? '',
+      seeded: Boolean(wire.seeded),
+      version: wire.version,
+      providers,
+      tree,
+    },
+  };
+}
+
+/**
+ * 将整棵模型树原子写入 models.yaml。
+ * 唯一路径：序列化 v2 文本 → workbench_save_models_yaml({ content })。
+ * 写失败只返回 ok:false，不用空对象覆盖调用方镜像。
  */
 export async function writeModelsYamlIpc(
   tree: ModelsYamlTree
-): Promise<{ ok: boolean; error?: string }> {
-  // 1. 优先调用 models_yaml_write（若环境支持，保证测试桩与未来原生树状命令兼容）
-  const res = await invokeTyped<{ success: boolean; writtenPath?: string }>('models_yaml_write', {
-    tree,
+): Promise<{ ok: boolean; error?: string; providers?: Record<string, ProviderSpec> }> {
+  const yamlContent = serializeModelsYamlTree(tree);
+  const res = await invokeTyped<SaveModelsYamlWire>('workbench_save_models_yaml', {
+    content: yamlContent,
   });
 
   if (res.status === 'ok') {
-    return { ok: true };
-  }
-
-  if (res.status === 'error') {
-    return { ok: false, error: res.message };
-  }
-
-  // 2. 若 models_yaml_write 未注册（生产 Tauri 环境），调用 workbench_save_models_yaml
-  // 严格保存纯净 v2 树状结构，彻底铲除手拼平铺列表降级自毁代码！
-  const yamlContent = serializeModelsYamlTree(tree);
-  const fallbackRes = await invokeTyped<{ path: string; models?: any[] }>(
-    'workbench_save_models_yaml',
-    { content: yamlContent }
-  );
-
-  if (fallbackRes.status === 'ok') {
-    return { ok: true };
+    return {
+      ok: true,
+      ...(isPlainObject(res.data.providers)
+        ? { providers: res.data.providers as Record<string, ProviderSpec> }
+        : {}),
+    };
   }
 
   return {
     ok: false,
     error:
-      fallbackRes.status === 'missing'
-        ? 'workbench_save_models_yaml 命令不可用'
-        : fallbackRes.message,
-  };
-}
-
-/**
- * 触发 Rust 内核无锁重载 models.yaml
- */
-export async function reloadModelsYamlIpc(): Promise<{ ok: boolean; error?: string }> {
-  const res = await invokeTyped<{ reloadedCount?: number }>('models_yaml_reload', {});
-  if (res.status === 'ok') {
-    return { ok: true };
-  }
-  return {
-    ok: false,
-    error: res.status === 'missing' ? 'models_yaml_reload 命令不可用' : res.message,
+      res.status === 'missing' ? 'workbench_save_models_yaml 命令不可用' : res.message,
   };
 }
 
@@ -342,21 +329,11 @@ export function debounceSaveModelsYaml(
 }
 
 /**
- * 启动全系统模型真源热重载监听器
+ * 热重载由写成功后的 ensureLoaded(true) 驱动（YAML 弹窗已如此）。
+ * Rust 不广播 yaml 热重载事件；本函数为 no-op，避免半截死接线。
  */
 export function setupModelsYamlHotReloadListener(
-  onReload: () => Promise<void> | void
+  _onReload?: () => Promise<void> | void
 ): () => void {
-  const win = typeof window !== 'undefined' ? (window as any) : null;
-  const unlistenPromise = win?.__TAURI__?.event?.listen?.(
-    'models-yaml-reloaded',
-    async () => {
-      console.info('[ModelsCatalog] 收到后端内核热重载广播，自动无缝对齐前端真源...');
-      await onReload();
-    }
-  );
-
-  return () => {
-    unlistenPromise?.then((unlisten: any) => typeof unlisten === 'function' && unlisten());
-  };
+  return () => {};
 }
