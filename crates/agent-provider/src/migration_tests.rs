@@ -24,7 +24,7 @@ impl TempTestDir {
             "conex_migration_test_{}_{}_{}",
             name,
             std::process::id(),
-            ConfigMigrationManager::current_local_timestamp()
+            ConfigMigrationManager::current_utc_timestamp()
         );
         let path = temp_base.join(unique_name);
         fs::create_dir_all(&path).expect("创建临时测试目录成功");
@@ -443,9 +443,56 @@ models:
 }
 
 #[test]
+fn test_missing_context_window_and_max_output_stay_none() {
+    // 契约：迁移不得发明 contextWindow / maxOutputTokens 默认值；
+    // 缺字段时保持 None（与 catalog_types.rs「缺省 None，禁止发明 128000」对齐）。
+    let legacy = json!({
+        "schema_version": 1,
+        "models": [
+            { "id": "bare-model", "vendor": "deepseek" }
+        ]
+    });
+
+    let (migrated, total) =
+        ConfigMigrationManager::transform_flat_to_tree(&legacy).expect("迁移应成功");
+    assert_eq!(total, 1);
+
+    let providers = migrated.get("providers").and_then(|v| v.as_object()).unwrap();
+    let models = providers
+        .get("deepseek")
+        .and_then(|v| v.get("models"))
+        .and_then(|v| v.as_array())
+        .unwrap();
+    let m0 = &models[0];
+    assert!(
+        m0.get("contextWindow").is_none(),
+        "缺 contextWindow 时不得发明 131072 等默认值"
+    );
+    assert!(
+        m0.get("maxOutputTokens").is_none(),
+        "缺 maxOutputTokens 时不得发明 8192 等默认值"
+    );
+
+    // 强类型反序列化：Option 字段必须为 None
+    let yaml_str = serde_yaml::to_string(&migrated).unwrap();
+    let catalog: crate::models::catalog_types::UnifiedModelsConfig =
+        serde_yaml::from_str(&yaml_str).expect("必须与 catalog_types 契约兼容");
+    let model = catalog
+        .providers
+        .get("deepseek")
+        .and_then(|p| p.models.first())
+        .expect("模型存在");
+    assert_eq!(model.context_window, None, "缺字段 context_window 必须为 None");
+    assert_eq!(
+        model.max_output_tokens, None,
+        "缺字段 max_output_tokens 必须为 None"
+    );
+}
+
+#[test]
 fn test_timestamp_format_and_civil_days_math() {
-    let ts = ConfigMigrationManager::current_local_timestamp();
-    // 格式应当为 15 字符，如 "20260908_120000"
+    let ts = ConfigMigrationManager::current_utc_timestamp();
+    // 格式应当为 15 字符，如 "20260908_120000"（UTC）
     assert_eq!(ts.len(), 15);
     let parts: Vec<&str> = ts.split('_').collect();
     assert_eq!(parts.len(), 2);

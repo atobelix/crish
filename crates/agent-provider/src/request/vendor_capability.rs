@@ -155,7 +155,16 @@ static MODEL_SERIES_CAPABILITIES: &[(&str, ThinkingCapability)] = &[
     ("kimi", NO_THINKING),
 ];
 
-/// 推断模型思考能力（最长前缀命中；未命中 → [NO_THINKING]）
+/// 推断模型思考能力（最长前缀命中；未命中 → [NO_THINKING]）。
+///
+/// **已废弃（轨A SSOT）**：出站思考键唯一入口 = `assemble_thinking_dialect`；
+/// 本函数按模型名前缀猜能力，禁止再接入生产请求路径。仅保留供测试与
+/// 描述面兼容期参考。生产拒绝校验走 yaml thinking 字典白名单
+/// （壳层 `validate_reasoning_effort`）。
+#[deprecated(
+    since = "track-a",
+    note = "按模型名前缀猜思考能力已废除；出站唯一入口 = assemble_thinking_dialect，拒绝校验走 yaml thinking_map 白名单"
+)]
 pub fn infer_thinking_capability(model: &str) -> ThinkingCapability {
     let lower = model.to_ascii_lowercase();
     let mut best: Option<&(&str, ThinkingCapability)> = None;

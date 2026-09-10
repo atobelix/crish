@@ -24,13 +24,11 @@ use agent_provider::request::wire_protocol::{
 };
 use agent_provider::request::{
     anthropic_request_headers, build_anthropic_request_body, build_chat_completions_request_body,
-    build_gemini_request_body, build_reasoning_wire, effort_to_budget_tokens,
-    effort_to_gemini_thinking_level, gemini_request_headers, reasoning_effort_headers,
-    resolve_thinking_params, resolve_wire_protocol,
+    build_gemini_request_body, effort_to_budget_tokens, effort_to_gemini_thinking_level,
+    gemini_request_headers, resolve_wire_protocol,
     vendor::{thinking_to_budget_tokens, thinking_to_gemini_thinking_level},
-    AnthropicRequestOptions, ChatCompletionsRequestOptions, DegradePolicy, GeminiRequestOptions,
-    ReasoningEffort, ReasoningEffortState, ReasoningFormat, ReasoningVendor, RequestBuildContext,
-    ThinkingCapability, ThinkingIntensity, WireProtocol,
+    AnthropicRequestOptions, ChatCompletionsRequestOptions, GeminiRequestOptions, ReasoningEffort,
+    ReasoningVendor, RequestBuildContext, ThinkingIntensity, WireProtocol,
 };
 use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
 use conex_types::tool::SystemPromptWireMode;
@@ -100,10 +98,6 @@ fn chat_body(opts: &ChatCompletionsRequestOptions, messages: Vec<Arc<AgentMessag
         wire_mode: SystemPromptWireMode::NativeSystemRole,
     };
     build_chat_completions_request_body(opts, &context)
-}
-
-fn infer_capability(model: &str) -> agent_provider::request::ThinkingCapability {
-    agent_provider::request::infer_thinking_capability(model)
 }
 
 // ─────────── 1. anthropic 思考档位链路 ───────────
@@ -245,33 +239,6 @@ fn anthropic_base_headers_have_exactly_three_no_beta() {
     );
 }
 
-/// 显式档位 beta 头：仅非 off/auto 档位经 `reasoning_effort_headers` 返回。
-#[test]
-fn anthropic_beta_header_for_explicit_effort_only() {
-    for effort in [
-        ReasoningEffort::Minimal,
-        ReasoningEffort::Low,
-        ReasoningEffort::Medium,
-        ReasoningEffort::High,
-        ReasoningEffort::Xhigh,
-        ReasoningEffort::Max,
-    ] {
-        let header = reasoning_effort_headers(Some(ReasoningVendor::Anthropic), Some(effort));
-        assert!(header.is_some(), "档位 {effort:?} 应返回 beta 头");
-        assert_eq!(header.unwrap().0, "anthropic-beta");
-    }
-    for effort in [ReasoningEffort::Off, ReasoningEffort::Auto] {
-        assert!(
-            reasoning_effort_headers(Some(ReasoningVendor::Anthropic), Some(effort)).is_none(),
-            "off/auto 不得返回 beta 头"
-        );
-    }
-    assert!(
-        reasoning_effort_headers(Some(ReasoningVendor::Anthropic), None).is_none(),
-        "无档位不得返回 beta 头"
-    );
-}
-
 // ─────────── 3. gemini 思考档位链路 ───────────
 
 /// thinkingIntensity → `generationConfig.thinkingConfig.thinkingLevel`，与 vendor 换算同值。
@@ -405,32 +372,6 @@ fn vendor_budget_and_level_constants_are_stable() {
     assert_eq!(
         thinking_to_gemini_thinking_level(ThinkingIntensity::Minimal),
         "minimal"
-    );
-}
-
-/// dialect 层 `resolve_thinking_params`：anthropic 旧代际 → enabled + budget_tokens。
-#[test]
-fn dialect_resolve_thinking_params_matches_builder_shape() {
-    let old_gen = infer_capability("claude-sonnet-4-5");
-    let params =
-        resolve_thinking_params(&old_gen, ThinkingIntensity::High, Endpoint::ChatCompletions);
-    assert_eq!(params["thinking"]["type"], "enabled");
-    assert_eq!(params["thinking"]["budget_tokens"], 4096);
-    assert!(params.get("thinking").is_some(), "旧代际应为 enabled");
-}
-
-/// dialect 层 `resolve_thinking_params`：anthropic 新代际（adaptive）→ display summarized + effort。
-#[test]
-fn dialect_resolve_thinking_params_adaptive_for_new_gen() {
-    let new_gen = infer_capability("claude-sonnet-5");
-    let params =
-        resolve_thinking_params(&new_gen, ThinkingIntensity::High, Endpoint::ChatCompletions);
-    assert_eq!(params["thinking"]["type"], "adaptive");
-    assert_eq!(params["thinking"]["display"], "summarized");
-    assert_eq!(params["effort"], "high");
-    assert!(
-        params["thinking"].get("budget_tokens").is_none(),
-        "adaptive 形态不得携带 budget_tokens"
     );
 }
 
@@ -635,111 +576,80 @@ fn anthropic_messages_2026_claude5_budget_and_max_tokens_clamp() {
     }
 }
 
-/// 阿里百炼 (`qwen-3.8-max`): 顶层 `enable_thinking: true`。
+/// 阿里百炼 (`qwen-3.8-max`): 顶层 `enable_thinking: true`——经生产 builder（assemble_thinking_dialect）。
 #[test]
 fn ali_bailian_qwen38_wire_payload_top_level_enable_thinking() {
-    let qwen_cap = ThinkingCapability {
-        supported: true,
-        levels: &[
-            ThinkingIntensity::Low,
-            ThinkingIntensity::Medium,
-            ThinkingIntensity::High,
-        ],
-        format: ReasoningFormat::QwenEnableThinking,
-        vendor: ReasoningVendor::Qwen,
+    // 1. 生产 chat builder：thinking_format=Qwen + thinking_map → enable_thinking 布尔方言
+    let mut map = indexmap::IndexMap::new();
+    map.insert("High".to_string(), "true".to_string());
+    let opts = ChatCompletionsRequestOptions {
+        model: Some("qwen-3.8-max".to_string()),
+        reasoning_effort: Some(ReasoningEffort::High),
+        thinking_format: Some(ThinkingFormat::Qwen),
+        thinking_map: Some(map),
+        ..ChatCompletionsRequestOptions::default()
     };
-
-    // 1. build_reasoning_wire 生成阿里百炼顶层布尔方言
-    let wire_on = build_reasoning_wire(
-        Endpoint::ChatCompletions,
-        None,
-        ReasoningEffortState::Explicit(ReasoningEffort::High),
-        Some(ReasoningVendor::Qwen),
-        &qwen_cap,
-        Some(ReasoningFormat::QwenEnableThinking),
-        DegradePolicy::Reject,
-    )
-    .expect("构建百炼思考方言成功")
-    .expect("返回有效的 Wire 参数");
-
+    let body = chat_body(&opts, vec![Arc::new(user_msg("hi"))]);
     assert_eq!(
-        wire_on,
-        serde_json::json!({ "enable_thinking": true }),
+        body["enable_thinking"], true,
         "阿里百炼开启思考必须输出顶层 enable_thinking: true"
     );
     assert!(
-        wire_on.get("reasoning_effort").is_none(),
+        body.get("reasoning_effort").is_none(),
         "阿里百炼严禁携带 OpenAI reasoning_effort 字段"
     );
 
-    // 2. resolve_thinking_params 验证
-    let params_on = resolve_thinking_params(
-        &qwen_cap,
-        ThinkingIntensity::High,
-        Endpoint::ChatCompletions,
-    );
+    // 2. 关闭思考：Off → enable_thinking: false
+    let opts_off = ChatCompletionsRequestOptions {
+        model: Some("qwen-3.8-max".to_string()),
+        reasoning_effort: Some(ReasoningEffort::Off),
+        thinking_format: Some(ThinkingFormat::Qwen),
+        thinking_map: None,
+        ..ChatCompletionsRequestOptions::default()
+    };
+    let body_off = chat_body(&opts_off, vec![Arc::new(user_msg("hi"))]);
     assert_eq!(
-        params_on["enable_thinking"], true,
-        "resolve_thinking_params 对 QwenEnableThinking 格式必须产出 enable_thinking: true"
+        body_off["enable_thinking"], false,
+        "阿里百炼关闭思考时输出 enable_thinking: false"
     );
-
-    // 3. 关闭思考时验证：安全省略参数（或为 false），无 reasoning_effort 渗透
-    let wire_off = build_reasoning_wire(
-        Endpoint::ChatCompletions,
-        None,
-        ReasoningEffortState::Explicit(ReasoningEffort::Off),
-        Some(ReasoningVendor::Qwen),
-        &qwen_cap,
-        Some(ReasoningFormat::QwenEnableThinking),
-        DegradePolicy::Reject,
-    )
-    .expect("构建成功");
-
-    assert!(
-        wire_off.is_none() || wire_off == Some(serde_json::json!({ "enable_thinking": false })),
-        "阿里百炼关闭思考时安全省略或输出 enable_thinking: false"
-    );
+    assert!(body_off.get("reasoning_effort").is_none());
 }
 
-/// DeepSeek (`deepseek-v4-pro`): `thinking: {"type": "enabled"}`。
+/// DeepSeek (`deepseek-v4-pro`): `thinking: {"type": "enabled"}`——经生产 builder。
 #[test]
 fn deepseek_v4_pro_wire_payload_thinking_enabled_and_disabled() {
-    // 1. 思考开启状态：深思原生方言格式为 {"thinking": {"type": "enabled"}}
-    let cap = infer_capability("deepseek-v4-pro");
-    assert!(cap.supported, "deepseek-v4-pro 必须支持思考");
-
-    // 2. 思考关闭状态 (Off)：必须显式输出 {"thinking": {"type": "disabled"}}（严禁带 reasoning_effort，对齐官方协议规范）
-    let wire_off = build_reasoning_wire(
-        Endpoint::ChatCompletions,
-        None,
-        ReasoningEffortState::Explicit(ReasoningEffort::Off),
-        Some(ReasoningVendor::Deepseek),
-        &cap,
-        None,
-        DegradePolicy::Reject,
-    )
-    .expect("构建成功")
-    .expect("DeepSeek 显式 Off 必须返回 wire 片段");
-
+    // 1. 思考开启：DeepSeekNative 方言 → thinking:{type:"enabled"}
+    let opts_on = ChatCompletionsRequestOptions {
+        model: Some("deepseek-v4-pro".to_string()),
+        reasoning_effort: Some(ReasoningEffort::Medium),
+        thinking_format: Some(ThinkingFormat::DeepSeek),
+        thinking_map: None,
+        ..ChatCompletionsRequestOptions::default()
+    };
+    let body_on = chat_body(&opts_on, vec![Arc::new(user_msg("hi"))]);
     assert_eq!(
-        wire_off,
-        serde_json::json!({ "thinking": { "type": "disabled" } }),
-        "DeepSeek 思考关闭时必须输出 thinking: {{ type: \"disabled\" }}"
+        body_on["thinking"]["type"], "enabled",
+        "DeepSeek 思考开启必须输出 thinking:{{type:\"enabled\"}}"
+    );
+    assert!(body_on.get("reasoning_effort").is_none());
+
+    // 2. 思考关闭 (Off)：必须显式输出 disabled（严禁带 reasoning_effort）
+    let opts_off = ChatCompletionsRequestOptions {
+        model: Some("deepseek-v4-pro".to_string()),
+        reasoning_effort: Some(ReasoningEffort::Off),
+        thinking_format: Some(ThinkingFormat::DeepSeek),
+        thinking_map: None,
+        ..ChatCompletionsRequestOptions::default()
+    };
+    let body_off = chat_body(&opts_off, vec![Arc::new(user_msg("hi"))]);
+    assert_eq!(
+        body_off["thinking"]["type"], "disabled",
+        "DeepSeek 思考关闭时必须输出 thinking:{{type:\"disabled\"}}"
     );
     assert!(
-        wire_off.get("reasoning_effort").is_none(),
+        body_off.get("reasoning_effort").is_none(),
         "DeepSeek 思考关闭时不得携带 reasoning_effort 键"
     );
-
-    // 3. 验证端到端请求体中带 thinking 开关的格式
-    let mut body_map = serde_json::Map::new();
-    body_map.insert("model".to_string(), serde_json::json!("deepseek-v4-pro"));
-    body_map.insert(
-        "thinking".to_string(),
-        serde_json::json!({ "type": "enabled" }),
-    );
-    let body = Value::Object(body_map);
-    assert_eq!(body["thinking"]["type"], "enabled");
 }
 
 // ─────────── 8. 协议决议真实性 (Model.protocol > Provider.protocol > "openai/chat") ───────────

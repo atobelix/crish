@@ -52,14 +52,16 @@ impl AgentSessionLoop {
                 session_id: self.session_id.clone(),
                 timestamp: conex_shared::time::now_iso_utc(),
                 error: "maxTurns 预算用尽（turnIndex=0，maxTurns=0）".to_string(),
-                retryable: Some(true),
+                // 与注册表 AGENT_MAX_TURNS_REACHED（Permanent/retryable=false）对齐：
+                // max-turns 是预算收场而非可重试故障
+                retryable: Some(false),
             });
             if let Some(hooks) = &self.state.options.tool_exec.hooks {
                 let _ = hooks
                     .dispatch(&crate::hooks::HookEvent::ErrorOccurred {
                         session_id: self.session_id.clone(),
                         error: "maxTurns 预算用尽（turnIndex=0，maxTurns=0）".to_string(),
-                        retryable: true,
+                        retryable: false,
                     })
                     .await;
             }

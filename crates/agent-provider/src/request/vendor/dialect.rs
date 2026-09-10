@@ -20,23 +20,17 @@
 //! 4. 代理出站历史消息清洗 `sanitize_outbound_messages_for_proxy`：彻底剥离 assistant 中的
 //!    Thought 块，防止第三方中转代理因未定义字段报 HTTP 400 错误。
 //!
-//! 兼容层：保留历史 `build_reasoning_wire` 与 `resolve_wire_spelling_with_tiers` 契约，
-//! 供既有测试与 S7 删除前过渡；生产四轨思考键唯一入口 = [assemble_thinking_dialect]。
+//! SSOT（轨A）：生产四轨思考键唯一入口 = [assemble_thinking_dialect]。
+//! 旧兼容层 `build_reasoning_wire` / `resolve_wire_spelling_with_tiers` 已物理删除
+//! （无生产调用者；模型级 wire 改名经 yaml thinking 字典 value 直达）。
 
-use std::collections::BTreeMap;
-
-use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-use crate::config::Endpoint;
-use crate::request::vendor::{
-    effort_to_budget_tokens, effort_to_gemini_thinking_level, normalize_reasoning_effort,
-    resolve_reasoning_level, DegradePolicy, ReasoningEffort as LegacyReasoningEffort,
-    ReasoningEffortState, ReasoningFormat, ReasoningReject, ReasoningVendor, ThinkingCapability,
-    ThinkingIntensity,
-};
+use crate::request::vendor::{ReasoningEffort as LegacyReasoningEffort, ThinkingIntensity};
+
+use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
 
 /// 2026 标准化思考强度等级（纯英文白名单，无中文污染）
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -340,122 +334,6 @@ pub fn sanitize_outbound_messages(raw_messages: &[AgentMessage]) -> Vec<AgentMes
     let mut cloned = raw_messages.to_vec();
     sanitize_outbound_messages_for_proxy(&mut cloned);
     cloned
-}
-
-// ── 兼容层：供既有 vendor.rs 调用的历史实现 ──
-
-/// 模型级 wire 拼写改名（T4.2 / G6-a）：档位载体（档位 → Option<wire 拼写>）命中提供档
-/// → 返回改名/同名 wire 拼写；隐藏档（None 值）与未收录档 → 回落系列级换算。
-pub fn resolve_wire_spelling_with_tiers(
-    effort: LegacyReasoningEffort,
-    tiers: Option<&BTreeMap<String, Option<String>>>,
-) -> Option<String> {
-    if let Some(map) = tiers {
-        if let Some(wire) = map.get(effort.as_str()) {
-            return wire.clone();
-        }
-    }
-    normalize_reasoning_effort(effort).map(str::to_owned)
-}
-
-/// 构建 vendor 原生思考 wire（R4 T4.1+T4.2+T4.5 一体化协调入口）。
-pub fn build_reasoning_wire(
-    endpoint: Endpoint,
-    tiers: Option<&BTreeMap<String, Option<String>>>,
-    effort: ReasoningEffortState,
-    vendor: Option<ReasoningVendor>,
-    capability: &ThinkingCapability,
-    dialect: Option<ReasoningFormat>,
-    policy: DegradePolicy,
-) -> Result<Option<Value>, ReasoningReject> {
-    // 0. deepseek 方言 off 显式 disabled：早退（无 effort wire）。
-    if matches!(
-        effort,
-        ReasoningEffortState::Explicit(LegacyReasoningEffort::Off)
-    ) && matches!(
-        vocabulary_vendor(vendor, capability),
-        ReasoningVendor::Deepseek
-    ) {
-        return Ok(Some(json!({ "thinking": { "type": "disabled" } })));
-    }
-
-    // 1. T4.1 三态 → 待发送档位（拒绝/省略/降级收敛于此）。
-    let active = match resolve_reasoning_level(effort, capability, policy)? {
-        Some(level) => level,
-        None => return Ok(None),
-    };
-
-    // 2. T4.2 模型级 wire 改名（未命中回落系列级）。
-    let wire = resolve_wire_spelling_with_tiers(active, tiers)
-        .ok_or_else(|| ReasoningReject::hidden_tier(active))?;
-
-    // 3. T4.5 方言分派。
-    let format = dialect.unwrap_or(capability.format);
-    Ok(Some(dialect_wire(
-        endpoint, active, &wire, capability, format,
-    )))
-}
-
-fn adaptive_effort_wire(effort: LegacyReasoningEffort) -> &'static str {
-    match effort {
-        LegacyReasoningEffort::Minimal => "low",
-        other => other.as_str(),
-    }
-}
-
-fn dialect_wire(
-    endpoint: Endpoint,
-    effort: LegacyReasoningEffort,
-    wire: &str,
-    capability: &ThinkingCapability,
-    format: ReasoningFormat,
-) -> Value {
-    use ReasoningFormat as F;
-    match format {
-        F::ReasoningEffort => {
-            if capability.vendor == ReasoningVendor::Openai && endpoint == Endpoint::Responses {
-                json!({ "reasoning": { "effort": wire } })
-            } else {
-                json!({ "reasoning_effort": wire })
-            }
-        }
-        F::ThinkingBudget => json!({
-            "thinking": { "type": "enabled", "budget_tokens": budget_for(effort) },
-        }),
-        F::ThinkingAdaptive => json!({
-            "thinking": { "type": "adaptive", "display": "summarized" },
-            "effort": adaptive_effort_wire(effort),
-        }),
-        F::ThinkingLevel => json!({
-            "generation_config": { "thinking_level": level_for(effort) },
-        }),
-        F::QwenEnableThinking => {
-            json!({ "enable_thinking": !matches!(effort, LegacyReasoningEffort::Off) })
-        }
-        F::ZaiThinking => json!({
-            "thinking": { "type": "enabled", "clear_thinking": false },
-            "reasoning_effort": wire,
-        }),
-        F::OpenRouterReasoning => json!({ "reasoning": { "effort": wire } }),
-        F::None => json!({}),
-    }
-}
-
-fn vocabulary_vendor(
-    vendor: Option<ReasoningVendor>,
-    capability: &ThinkingCapability,
-) -> ReasoningVendor {
-    vendor
-        .filter(|v| *v != ReasoningVendor::Auto)
-        .unwrap_or(capability.vendor)
-}
-
-fn budget_for(effort: LegacyReasoningEffort) -> u64 {
-    effort_to_budget_tokens(effort)
-}
-
-fn level_for(effort: LegacyReasoningEffort) -> &'static str {
-    effort_to_gemini_thinking_level(effort)
 }
 
 #[cfg(test)]

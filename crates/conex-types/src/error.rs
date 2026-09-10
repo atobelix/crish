@@ -1260,8 +1260,10 @@ static CRISH_ERROR_REGISTRY: Lazy<HashMap<&'static str, CrishErrorInfo>> = Lazy:
         CrishErrorInfo {
             code: codes::TELEMETRY_TRACE_LOST,
             title: "Trace 丢失",
-            category: CrishErrorCategory::Transient,
-            retryable: true,
+            // Trace 已丢失不可恢复：retryable 与 action 对齐为 Permanent/none
+            //（原 Transient/retryable=true + action.none 自相矛盾）
+            category: CrishErrorCategory::Permanent,
+            retryable: false,
             is_public: false,
             action: "action.telemetry.none",
         },

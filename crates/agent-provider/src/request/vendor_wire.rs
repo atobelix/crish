@@ -1,11 +1,14 @@
 //! effort/intensity → wire 值换算域（SR-06e · 拆分 · ≠ EL）
 //!
 //! 自 request/vendor.rs 拆出的实现域：effort/intensity 到厂商原生 wire 值
-//! （budget_tokens / thinking_level / 归一化 effort）的换算与 Anthropic
-//! adaptive 形态辅助（[is_adaptive_thinking_model] / [adaptive_effort_wire]）。
+//! （budget_tokens / thinking_level / 归一化 effort）的换算。
 //! 门面（request/vendor.rs）re-export 全部公开符号，对外路径不变。
+//!
+//! SSOT 注记（轨A）：出站思考键唯一入口 = `assemble_thinking_dialect`；
+//! 本域的换算函数仅供方言字典构造与测试参考，**禁止**再按模型名前缀
+//! 推断思考能力（`infer_thinking_capability` 已标 deprecated，无生产调用者）。
 
-use super::{infer_thinking_capability, ReasoningEffort, ReasoningFormat, ThinkingIntensity};
+use super::{ReasoningEffort, ThinkingIntensity};
 
 /// 归一化 reasoning effort（对齐 `model:openai-request-build.ts:107-113`）：
 /// off/auto → None（不发送 reasoning 参数）；xhigh → high；max 直发；其余原样
@@ -65,23 +68,5 @@ pub fn thinking_to_gemini_thinking_level(intensity: ThinkingIntensity) -> &'stat
         ThinkingIntensity::Medium => "medium",
         ThinkingIntensity::High | ThinkingIntensity::Xhigh | ThinkingIntensity::Max => "high",
         ThinkingIntensity::Off => "medium",
-    }
-}
-
-/// 判定 Anthropic 自适应思考代际（Opus 4.7+ / Sonnet 5+ / Fable 5 / Mythos 5，
-/// 含 SAP 倒置形态 claude-4-7-opus 等）：按模型系列前缀命中能力表的
-/// ThinkingAdaptive 形态（对齐 opencode anthropicOpus47OrLater /
-/// anthropicSonnet5OrLater 的系列门控；旧代际保持 ThinkingBudget 既有映射）
-pub fn is_adaptive_thinking_model(model: &str) -> bool {
-    infer_thinking_capability(model).format == ReasoningFormat::ThinkingAdaptive
-}
-
-/// Anthropic 自适应思考的 wire effort：xhigh/max 直发（新代际有效档位）；
-/// minimal 不在 adaptive 档位集 → 降级 low（对齐 normalize_thinking_intensity）。
-/// off/auto 已在上游提前返回，不会到达此处。
-pub fn adaptive_effort_wire(effort: ReasoningEffort) -> &'static str {
-    match effort {
-        ReasoningEffort::Minimal => "low",
-        other => other.as_str(),
     }
 }

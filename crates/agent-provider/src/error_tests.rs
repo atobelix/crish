@@ -171,6 +171,22 @@ fn row8_invalid_request() {
     // Anthropic 4130 系列错误码不应误判为 payload（:372-377）
     let error = classify(None, Some("model version 4130"), None);
     assert_eq!(error.kind(), Kind::Unknown);
+    // 整词 413：命中；"4130" / "1413" 等子串不误伤
+    assert_eq!(
+        looks_like_payload_too_large_message("error code 413 found"),
+        true,
+        "整词 413 应命中"
+    );
+    assert_eq!(
+        looks_like_payload_too_large_message("model version 4130"),
+        false,
+        "4130 不得命中裸 413"
+    );
+    assert_eq!(
+        looks_like_payload_too_large_message("ticket 1413"),
+        false,
+        "1413 中的 413 不得命中"
+    );
 }
 
 /// 第 9 行：HTTP 429 → RateLimit（可重试，携带 Retry-After）
@@ -212,6 +228,41 @@ fn row9_rate_limit() {
     let error = classify(None, Some("Rate limit reached. Please try again in 5.5s."), None);
     assert_eq!(error.kind(), Kind::RateLimit);
     assert_eq!(error.retry_after(), Some(Duration::from_millis(5500)));
+
+    // 单位感知提取：minutes 必须 ×60，ms 不转换
+    assert_eq!(
+        extract_seconds_from_text("wait 5 minutes"),
+        Some(5 * 60 * 1000),
+        "5 minutes 必须换算为 300000ms"
+    );
+    assert_eq!(
+        extract_seconds_from_text("retry after 2 min"),
+        Some(2 * 60 * 1000),
+        "2 min 必须换算为 120000ms"
+    );
+    assert_eq!(
+        extract_seconds_from_text("try again in 500ms"),
+        Some(500),
+        "500 ms 不得被误转成 500s"
+    );
+    assert_eq!(
+        extract_seconds_from_text("wait 150 milliseconds"),
+        Some(150),
+        "150 milliseconds 原值即毫秒"
+    );
+    assert_eq!(
+        extract_seconds_from_text("wait 3 s"),
+        Some(3000),
+        "显式秒单位与裸数字同语义"
+    );
+    // 纯数字无单位 → 历史契约「视为秒」（已钉死）
+    assert_eq!(
+        extract_seconds_from_text("please retry in 5"),
+        Some(5000),
+        "无单位数字保留「视为秒」契约"
+    );
+    // 未知单位 token → 不猜测（避免 "5 hours" 变成 5 秒）
+    assert_eq!(extract_seconds_from_text("wait 5 hours"), None);
 
     // 长周期锁定（hours / days / tomorrow / 超过3分钟）快速判定为 Quota，直接打回
     for long_lock_body in [
@@ -316,6 +367,17 @@ fn row12_network_transport() {
         assert_eq!(error.kind(), Kind::Network, "body: {body}");
         assert!(error.is_retryable(), "body: {body}");
     }
+    // "network" 改为整词匹配：纯 "network" 命中，"internetwork" 等不误伤
+    assert_eq!(
+        classify(None, Some("network"), None).kind(),
+        Kind::Network,
+        "整词 network 应命中"
+    );
+    assert_eq!(
+        classify(None, Some("internetwork stack"), None).kind(),
+        Kind::Unknown,
+        "internetwork 中的 network 子串不得命中"
+    );
 }
 
 /// 第 13 行：兜底 → Unknown（不可重试）

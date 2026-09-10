@@ -427,11 +427,14 @@ struct HandlerEntry {
 }
 
 /// 钩子注册表（广播分派；线程安全，可跨 run 复用）
+///
+/// 错误事件化重入护栏：不使用全局共享状态（如 AtomicBool），完全由
+/// dispatch_inner 的 per-dispatch `error_eventing` 参数承担——error.occurred
+/// 自身再分派时传 false 即可防级联；全局标志会在并发双失败路径误伤后到者
+/// （swap 见 true 直接 return，丢掉 error.occurred）。
 #[derive(Default)]
 pub struct HookRegistry {
     entries: RwLock<Vec<HandlerEntry>>,
-    /// 错误事件化重入护栏（error.occurred 再分派期间不再触发错误事件）
-    error_eventing: std::sync::atomic::AtomicBool,
     /// hook-outcome 观测镜像出口（D-03 EV-05）：dispatch 聚合出口发射
     /// AgentEvent::HookOutcome（Delta 级可丢）；None = 未接线，dispatch
     /// 语义不变（仅观测，不搬 HookEvent 插件通道）
@@ -826,6 +829,8 @@ impl HookRegistry {
     ///
     /// 重入护栏：error.occurred 事件自身的分派关闭错误事件化
     /// （error_eventing=false），防止 handler 失败无限级联。
+    /// 并发安全：不再使用全局 AtomicBool——per-dispatch 参数已足以防
+    /// 单链路级联；全局标志会让并发双失败的后到者丢掉 error.occurred。
     async fn emit_error_event(
         &self,
         event: &HookEvent,
@@ -834,13 +839,6 @@ impl HookRegistry {
         outcome: &mut HookDispatchOutcome,
     ) {
         if !error_eventing {
-            return;
-        }
-        // 重入护栏：error.occurred 分派期间不再触发错误事件
-        if self
-            .error_eventing
-            .swap(true, std::sync::atomic::Ordering::SeqCst)
-        {
             return;
         }
         let error_event = HookEvent::ErrorOccurred {
@@ -852,8 +850,6 @@ impl HookRegistry {
         // 间接递归（dispatch_inner → handle_failure → emit_error_event →
         // dispatch_inner）须 Box::pin 打破 async 递归（E0733）
         let _ = Box::pin(self.dispatch_inner(&error_event, false)).await;
-        self.error_eventing
-            .store(false, std::sync::atomic::Ordering::SeqCst);
         outcome.error_events += 1;
     }
 }
@@ -1270,9 +1266,7 @@ mod tests {
         registry.register_observe(
             HookEventKind::ErrorOccurred,
             HookFailStrategy::Swallow,
-            Arc::new(ErrorSpy {
-                seen: errors.clone(),
-            }) as Arc<dyn HookHandler>,
+            Arc::new(ErrorSpy::new(errors.clone())) as Arc<dyn HookHandler>,
         );
         let slow = Arc::new(SpyHandler::slow("slow", 50));
         registry
@@ -1310,9 +1304,7 @@ mod tests {
         registry.register_observe(
             HookEventKind::ErrorOccurred,
             HookFailStrategy::Swallow,
-            Arc::new(ErrorSpy {
-                seen: errors.clone(),
-            }) as Arc<dyn HookHandler>,
+            Arc::new(ErrorSpy::new(errors.clone())) as Arc<dyn HookHandler>,
         );
         registry.register(
             HookEventKind::TurnEnd,
@@ -1348,6 +1340,53 @@ mod tests {
         // error.occurred 的 handler 失败被吞（不再级联新错误事件）
         assert_eq!(outcome.failed_handlers, 1, "原 handler 失败计数 1");
         assert_eq!(outcome.error_events, 1, "只广播一次错误事件");
+    }
+
+    /// 并发双失败：两个并发 dispatch 各自失败时，后到者不得丢 error.occurred
+    /// （回归：全局 AtomicBool 重入护栏 swap 见 true 直接 return 会误伤并发
+    /// 失败；修复后护栏只由 per-dispatch error_eventing 参数承担）
+    #[tokio::test]
+    async fn concurrent_failures_both_emit_error_occurred() {
+        let registry = HookRegistry::new();
+        let errors = Arc::new(std::sync::Mutex::new(Vec::new()));
+        // ErrorSpy 带延迟：拉长 error.occurred 分派窗口，让第二个并发
+        // dispatch 的失败路径在第一个仍在 emit 期间到达（复现竞态时序）
+        registry.register_observe(
+            HookEventKind::ErrorOccurred,
+            HookFailStrategy::Swallow,
+            Arc::new(ErrorSpy::slow(errors.clone(), 30)) as Arc<dyn HookHandler>,
+        );
+        registry.register(
+            HookEventKind::TurnEnd,
+            HookFailStrategy::Swallow,
+            Arc::new(SpyHandler::failing("fail-a", "boom-a")) as Arc<dyn HookHandler>,
+        );
+        registry.register(
+            HookEventKind::ToolPre,
+            HookFailStrategy::Swallow,
+            Arc::new(SpyHandler::failing("fail-b", "boom-b")) as Arc<dyn HookHandler>,
+        );
+
+        // 两个并发 dispatch：TurnEnd 与 ToolPre 各自失败。
+        // join! 在单线程 runtime 上于 await 点交错——第一个 dispatch 的
+        // ErrorSpy sleep 期间，第二个 dispatch 的失败路径会进入 emit_error_event。
+        let ev_a = turn_end();
+        let ev_b = tool_pre();
+        let (o1, o2) = tokio::join!(
+            registry.dispatch(&ev_a),
+            registry.dispatch(&ev_b),
+        );
+        let o1 = o1.expect("dispatch turn_end");
+        let o2 = o2.expect("dispatch tool_pre");
+        assert_eq!(o1.error_events, 1, "先到失败必须广播 error.occurred");
+        assert_eq!(
+            o2.error_events, 1,
+            "后到失败不得丢 error.occurred（全局 AtomicBool 误伤回归）"
+        );
+        let errs = errors.lock().unwrap();
+        assert_eq!(errs.len(), 2, "ErrorSpy 必须收到两条 error.occurred");
+        assert!(errs.iter().any(|e| e.contains("boom-a")));
+        assert!(errs.iter().any(|e| e.contains("boom-b")));
     }
 
     /// 事件名全集冻结：HookEventKind::as_str() 14 变体与
@@ -1488,6 +1527,24 @@ mod tests {
     /// 测试 handler：记录事件名（错误事件化断言用）
     struct ErrorSpy {
         seen: Arc<std::sync::Mutex<Vec<String>>>,
+        /// 可选延迟：拉长 error.occurred 分派窗口，供并发交叠测试制造竞态
+        delay_ms: Option<u64>,
+    }
+
+    impl ErrorSpy {
+        fn new(seen: Arc<std::sync::Mutex<Vec<String>>>) -> Self {
+            Self {
+                seen,
+                delay_ms: None,
+            }
+        }
+
+        fn slow(seen: Arc<std::sync::Mutex<Vec<String>>>, delay_ms: u64) -> Self {
+            Self {
+                seen,
+                delay_ms: Some(delay_ms),
+            }
+        }
     }
 
     #[async_trait::async_trait]
@@ -1497,6 +1554,9 @@ mod tests {
         }
 
         async fn handle(&self, event: &HookEvent) -> Result<HookAction, HookError> {
+            if let Some(ms) = self.delay_ms {
+                tokio::time::sleep(Duration::from_millis(ms)).await;
+            }
             if let HookEvent::ErrorOccurred { error, .. } = event {
                 self.seen
                     .lock()

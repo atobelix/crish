@@ -79,11 +79,6 @@ impl ReasoningReject {
             ),
         }
     }
-
-    /// 档位为模型级隐藏档（档位载体 None 值，未收录白名单），按显式不支持拒绝。
-    pub(crate) fn hidden_tier(effort: ReasoningEffort) -> Self {
-        Self::unsupported(effort.as_str())
-    }
 }
 
 /// 校验 resolve 显式/默认档位（R4 T4.1 校验面核心入口；纯函数无 IO）。

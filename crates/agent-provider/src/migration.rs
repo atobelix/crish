@@ -6,7 +6,7 @@
 //! 核心设计契约：
 //! 1. 唯一真源不变量 (SSOT)：保持 ~/.conex/models.yaml 为唯一物理真源；
 //! 2. 幂等性与内容嗅探：若已是 v2.0 树状配置或无旧版顶层 models 数组，直接跳过；
-//! 3. 时间戳防灾物理备份：在修改磁盘前以本地时间戳 (%Y%m%d_%H%M%S) 创建不可篡改物理备份 (.bak)；
+//! 3. 时间戳防灾物理备份：在修改磁盘前以 UTC 时间戳 (%Y%m%d_%H%M%S) 创建不可篡改物理备份 (.bak)；
 //! 4. 聚类重构：按 vendor 聚类为 Provider 树状拓扑，自动推导协议与兼容性方言；
 //! 5. 思考配置彻底拍平：将 reasoning: true 转换为纯英文 TitleCase 字典映射 { Low: "low", Medium: "medium", High: "high" }；
 //! 6. 多模态与协议补齐：默认补齐 modalities: { input: ["text"], output: ["text"] }；
@@ -193,7 +193,7 @@ impl ConfigMigrationManager {
         let metadata = fs::metadata(source)?;
         let original_size = metadata.len();
 
-        let timestamp = Self::current_local_timestamp();
+        let timestamp = Self::current_utc_timestamp();
         let file_stem = source
             .file_stem()
             .and_then(|s| s.to_str())
@@ -265,8 +265,10 @@ impl ConfigMigrationManager {
         Ok(())
     }
 
-    /// 获取本地时间戳字符串 (%Y%m%d_%H%M%S)
-    pub fn current_local_timestamp() -> String {
+    /// 获取 UTC 时间戳字符串 (%Y%m%d_%H%M%S)。
+    /// 实现基于 Unix epoch 的秒数换算，天然为 UTC，绝非本地时区；
+    /// 历史名 current_local_timestamp 已更名为 current_utc_timestamp，消除撒谎命名。
+    pub fn current_utc_timestamp() -> String {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default();
@@ -381,16 +383,14 @@ impl ConfigMigrationManager {
                     .and_then(|v| v.as_str())
                     .unwrap_or(model_id);
 
-                let context_window = m
-                    .get("contextWindow")
-                    .and_then(|v| v.as_u64())
-                    .unwrap_or(131072);
+                // 契约：与 catalog_types 一致——缺字段保持 None，禁止发明 131072 / 8192 默认值
+                let context_window: Option<u64> =
+                    m.get("contextWindow").and_then(|v| v.as_u64());
 
-                let max_output = m
+                let max_output: Option<u64> = m
                     .get("maxTokens")
                     .or_else(|| m.get("maxOutputTokens"))
-                    .and_then(|v| v.as_u64())
-                    .unwrap_or(8192);
+                    .and_then(|v| v.as_u64());
 
                 // 思考能力推导（极致扁平拍平：TitleCase -> wire，不支持思考则直接缺省）
                 let reasoning_bool = m
@@ -448,8 +448,12 @@ impl ConfigMigrationManager {
                 let mut model_spec_map = serde_json::Map::new();
                 model_spec_map.insert("id".to_string(), json!(model_id));
                 model_spec_map.insert("displayName".to_string(), json!(display_name));
-                model_spec_map.insert("contextWindow".to_string(), json!(context_window));
-                model_spec_map.insert("maxOutputTokens".to_string(), json!(max_output));
+                if let Some(cw) = context_window {
+                    model_spec_map.insert("contextWindow".to_string(), json!(cw));
+                }
+                if let Some(mo) = max_output {
+                    model_spec_map.insert("maxOutputTokens".to_string(), json!(mo));
+                }
                 model_spec_map.insert("modalities".to_string(), modalities);
 
                 if !thinking_map.is_empty() {
@@ -701,7 +705,7 @@ mod migration_hardening_tests {
         let temp_dir = std::env::temp_dir().join(format!(
             "conex_atomic_replace_test_{}_{}",
             std::process::id(),
-            ConfigMigrationManager::current_local_timestamp()
+            ConfigMigrationManager::current_utc_timestamp()
         ));
         let _ = fs::create_dir_all(&temp_dir);
 

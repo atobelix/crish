@@ -294,9 +294,20 @@ impl Aggregate {
                 tool_name,
                 input,
             } => {
-                let id = id
-                    .filter(|s| !s.trim().is_empty())
-                    .unwrap_or_else(|| format!("call_{}", self.tool_calls.len()));
+                // 空/纯空白 id → 合成 call_{n}；合成 id 须跳过已存在 id
+                //（显式 id="call_0" 在场时空 id 合成 call_0 会碰撞）
+                let id = match id.filter(|s| !s.trim().is_empty()) {
+                    Some(id) => id,
+                    None => {
+                        let mut n = self.tool_calls.len();
+                        let mut candidate = format!("call_{n}");
+                        while self.tool_calls.iter().any(|tc| tc.id == candidate) {
+                            n += 1;
+                            candidate = format!("call_{n}");
+                        }
+                        candidate
+                    }
+                };
                 self.tool_calls.push(ToolCallBlock {
                     id,
                     tool_name,
@@ -726,6 +737,125 @@ mod tests {
         assert_eq!(text, "调用后的话");
         assert_eq!(tool_calls.len(), 1);
         assert_eq!(tool_calls[0].id, "call_0");
+    }
+
+    /// 空 id → 合成 call_0（既有行为锁定）
+    #[test]
+    fn empty_tool_call_id_generates_call_0() {
+        let result = consume(
+            vec![
+                ProviderStreamEvent::tool_call(
+                    Some("".into()),
+                    "read_file",
+                    serde_json::json!({"path": "/tmp/a"}),
+                ),
+                ProviderStreamEvent::stop(StopReason::Stop),
+            ],
+            false,
+        );
+        let ProviderOutput::Message { tool_calls, .. } = &result.response else {
+            panic!("应为 Message");
+        };
+        assert_eq!(tool_calls[0].id, "call_0", "空字符串 id 必须合成 call_0");
+    }
+
+    /// 纯空白 id（"   "）→ 合成 call_0（trim 后为空视为空 id）
+    #[test]
+    fn whitespace_tool_call_id_generates_call_0() {
+        let result = consume(
+            vec![
+                ProviderStreamEvent::tool_call(
+                    Some("   \t".into()),
+                    "read_file",
+                    serde_json::json!({"path": "/tmp/a"}),
+                ),
+                ProviderStreamEvent::stop(StopReason::Stop),
+            ],
+            false,
+        );
+        let ProviderOutput::Message { tool_calls, .. } = &result.response else {
+            panic!("应为 Message");
+        };
+        assert_eq!(tool_calls[0].id, "call_0", "纯空白 id 必须合成 call_0");
+    }
+
+    /// 合成 id 与显式 id 碰撞：显式 call_0 在场时空 id 不得再生成 call_0
+    ///（修复前 format!("call_{}", len) 在 len=1 时生成 call_1 恰好不撞——
+    /// 真正碰撞场景是空 id 先到生成 call_0、显式 call_0 后到；以及多个空 id
+    /// 后显式 call_N 插入。本测试锁定「合成跳过已存在 id」语义）
+    #[test]
+    fn synthesized_id_skips_existing_explicit_id() {
+        // 场景①：显式 call_0 先到（len=0 时不占合成位），空 id 后到
+        // 修复前 len=1 → 生成 call_1（不撞）；锁定无碰撞 + id 唯一
+        let result = consume(
+            vec![
+                ProviderStreamEvent::tool_call(
+                    Some("call_0".into()),
+                    "first",
+                    serde_json::json!({}),
+                ),
+                ProviderStreamEvent::tool_call(None, "second", serde_json::json!({})),
+                ProviderStreamEvent::stop(StopReason::Stop),
+            ],
+            false,
+        );
+        let ProviderOutput::Message { tool_calls, .. } = &result.response else {
+            panic!("应为 Message");
+        };
+        assert_eq!(tool_calls.len(), 2);
+        assert_eq!(tool_calls[0].id, "call_0", "显式 id 保留");
+        assert_ne!(
+            tool_calls[1].id, "call_0",
+            "空 id 合成结果不得与显式 call_0 碰撞"
+        );
+        assert_ne!(tool_calls[0].id, tool_calls[1].id, "两条 tool-call id 必须唯一");
+    }
+
+    /// 合成 id 跳过已存在 id（含显式插入后的空洞场景，修复前真实碰撞路径）：
+    /// 显式 ["call_0","call_2"] 在场时空 id 修复前生成 call_2（len=2）碰撞；
+    /// 修复后合成须跳到 call_3。多空 id 连续合成亦互不相同。
+    #[test]
+    fn synthesized_id_skips_existing_after_explicit_insert() {
+        let result = consume(
+            vec![
+                // 显式 call_0 / call_2 先占位，制造合成候选 call_2 碰撞
+                ProviderStreamEvent::tool_call(
+                    Some("call_0".into()),
+                    "a",
+                    serde_json::json!({}),
+                ),
+                ProviderStreamEvent::tool_call(
+                    Some("call_2".into()),
+                    "b",
+                    serde_json::json!({}),
+                ),
+                // 空 id：len=2 → 候选 call_2 已存在 → 跳到 call_3
+                ProviderStreamEvent::tool_call(None, "c", serde_json::json!({})),
+                ProviderStreamEvent::tool_call(Some("".into()), "d", serde_json::json!({})),
+                ProviderStreamEvent::tool_call(Some("  ".into()), "e", serde_json::json!({})),
+                ProviderStreamEvent::stop(StopReason::Stop),
+            ],
+            false,
+        );
+        let ProviderOutput::Message { tool_calls, .. } = &result.response else {
+            panic!("应为 Message");
+        };
+        assert_eq!(tool_calls.len(), 5);
+        assert_eq!(tool_calls[0].id, "call_0", "显式 id 保留");
+        assert_eq!(tool_calls[1].id, "call_2", "显式 id 保留");
+        // c：候选 call_2 撞已存在 → call_3
+        assert_eq!(
+            tool_calls[2].id, "call_3",
+            "合成 id 必须跳过已存在的 call_2"
+        );
+        // d：len=3 → 候选 call_3 已存在 → call_4
+        assert_eq!(tool_calls[3].id, "call_4");
+        // e：len=4 → 候选 call_4 已存在 → call_5
+        assert_eq!(tool_calls[4].id, "call_5");
+        // 全部合成 id（c/d/e）与显式 id 互不相同
+        let all: std::collections::HashSet<&str> =
+            tool_calls.iter().map(|tc| tc.id.as_str()).collect();
+        assert_eq!(all.len(), 5, "五条 tool-call id 必须全部唯一");
     }
 
     /// Q33（T09.9）：reannotate_aborted——Message 正常聚合后补 aborted 标注

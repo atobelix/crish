@@ -125,8 +125,9 @@ pub(crate) async fn handle(state: &mut LoopState) -> Result<HandlerOutcome, Loop
 
     // 5. maxTurns（shouldStopForMaxTurns = turnIndex >= maxTurns，01 §2.9 步骤 4）
     if ctx.should_stop_for_max_turns() {
-        // runtime-error 观测事件（retryable=true 纯观测；max-turns 不是错误，
-        // 01 §1.5 / 05 §2.8 对齐 core:index.ts:593-608）
+        // runtime-error 观测事件：与注册表 AGENT_MAX_TURNS_REACHED
+        // （Permanent/retryable=false）对齐——max-turns 是预算收场而非
+        // 可重试故障（01 §1.5 / 05 §2.8；retryable 语义以错误码注册表为 SSOT）
         state.emit_event(AgentEvent::RuntimeError {
             session_id: ctx.session_id.clone(),
             timestamp: conex_shared::time::now_iso_utc(),
@@ -134,7 +135,7 @@ pub(crate) async fn handle(state: &mut LoopState) -> Result<HandlerOutcome, Loop
                 "maxTurns 预算用尽（turnIndex={}，maxTurns={}）",
                 ctx.turn_index, ctx.max_turns
             ),
-            retryable: Some(true),
+            retryable: Some(false),
         });
         // I8-E1 第二批：error.occurred 钩子广播（runtime-error 事件同点位；
         // observe 默认，失败吞掉 + 计数，收场流程继续）
@@ -146,17 +147,18 @@ pub(crate) async fn handle(state: &mut LoopState) -> Result<HandlerOutcome, Loop
                         "maxTurns 预算用尽（turnIndex={}，maxTurns={}）",
                         ctx.turn_index, ctx.max_turns
                     ),
-                    retryable: true,
+                    retryable: false,
                 })
                 .await;
         }
         // 错误日志（T04.3-3，点位同 T04.2-2）：max-turns 边界按类型化错误码
-        // 记录（纯观测事件：retryable=true 只表可重试，与收场 reason=max-turns 正交）
+        // 记录（retryable=false 与注册表 AGENT_MAX_TURNS_REACHED 对齐，
+        // 与收场 reason=max-turns 正交）
         tracing::error!(
             target: "run",
             event = "runtime_error",
             error_code = %codes::AGENT_MAX_TURNS_REACHED,
-            retryable = true,
+            retryable = false,
             "maxTurns 预算用尽"
         );
         dispatch(state, E::MaxTurnsReached)?;
