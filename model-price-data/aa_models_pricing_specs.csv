@@ -1,0 +1,645 @@
+﻿模型名称,厂商,详情链接,推理模型,输入模态,输出模态,上下文窗口(tokens),上下文窗口(可读),开源权重,规模等级,参数量(总B),输入价格(USD/1M),输出价格(USD/1M),缓存命中价格(USD/1M),缓存写入价格(USD/1M),缓存命中折扣,混合价格0:3:1(USD/1M),混合价格7:2:1(USD/1M),成本排名(按0:3:1),被定价模型总数,Intelligence Index,发布日期,已弃用,替代模型,示例评测价格
+GLM-4.5V (Non-reasoning),Z AI,https://artificialanalysis.ai/models/glm-4-5v,No,text|image,text,64000,64K,Yes,medium,108,0.6,1.8,,,,0.9,0.72,91,436,6.6967,2025-08-11,Yes,glm-4-6v,1.2
+Gemini 3.5 Flash (high),Google,https://artificialanalysis.ai/models/gemini-3-5-flash,Yes,text|image|speech|video,text,1000000,1M,No,large,,1.5,9,0.15,,0.9,3.375,1.305,128,436,32.9816,2026-05-19,Yes,gemini-3-6-flash,5.25
+MiMo-V2.5-Pro,Xiaomi,https://artificialanalysis.ai/models/mimo-v2-5-pro,Yes,text,text,1000000,1M,Yes,large,1023,0.435,0.87,0.0036,,0.9917,0.5438,0.1765,73,436,26.4078,2026-04-22,No,,0.6525
+JT-35B-Flash,China Mobile,https://artificialanalysis.ai/models/jt-35b-flash,No,text,text,256000,256K,No,small,35,,,,,,,,,436,18.6626,2026-05-14,No,,
+Mercury 2,Inception,https://artificialanalysis.ai/models/mercury-2,Yes,text,text,128000,128K,No,medium,,0.25,0.75,0.025,,0.9,0.375,0.1425,58,436,11.5087,2026-02-20,No,,0.5
+Qwen3.5 Omni Plus,Alibaba,https://artificialanalysis.ai/models/qwen3-5-omni-plus,No,text|image|speech|video,text|speech,256000,256K,No,large,,0.4,4.8,,,,1.5,0.84,111,436,20.384,2026-03-30,No,,2.6
+Nova 2.0 Omni (medium),Amazon,https://artificialanalysis.ai/models/nova-2-0-omni-reasoning-medium,Yes,text|image,text,1000000,1M,No,medium,,0.3,2.5,,,,0.85,0.52,89,436,13.6465,2025-11-26,No,,1.4
+GPT-5.2 Codex (xhigh),OpenAI,https://artificialanalysis.ai/models/gpt-5-2-codex,Yes,text|image,text,400000,400K,No,large,,1.75,14,0.175,,0.9,4.8125,1.8725,135,436,28.5017,2025-12-11,Yes,gpt-5-3-codex,7.875
+Qwen3.5 122B A10B (Non-reasoning),Alibaba,https://artificialanalysis.ai/models/qwen3-5-122b-a10b-non-reasoning,No,text|image,text,262144,262.1K,Yes,medium,125,0.4,3.2,,,,1.1,0.68,99,436,17.748,2026-02-24,No,,1.8
+Gemma 4 12B (Non-reasoning),Google,https://artificialanalysis.ai/models/gemma-4-12b-non-reasoning,No,text|image|speech|video,text,262144,262.1K,Yes,small,12,0.1,0.3,,,,0.15,0.12,26,436,9.3799,2026-06-03,No,,0.2
+Gemini 3.5 Flash (minimal),Google,https://artificialanalysis.ai/models/gemini-3-5-flash-minimal,No,text|image|speech|video,text,1000000,1M,No,large,,1.5,9,0.15,,0.9,3.375,1.305,128,436,23.8488,2026-05-19,No,,5.25
+Claude 3.5 Haiku,Anthropic,https://artificialanalysis.ai/models/claude-3-5-haiku,No,text|image,text,200000,200K,No,,,,,,,,,,,436,8.9384,2024-10-22,Yes,claude-4-5-haiku,
+GPT-3.5 Turbo,OpenAI,https://artificialanalysis.ai/models/gpt-35-turbo,No,text,text,4096,4.1K,No,medium,,0.5,1.5,,,,0.75,0.6,84,436,5.4856,2022-11-30,Yes,gpt-4,1
+Gemini 2.0 Flash Thinking Experimental (Jan '25),Google,https://artificialanalysis.ai/models/gemini-2-0-flash-thinking-exp-0121,Yes,text|image|speech|video,text|image|speech,1000000,1M,No,,,,,,,,,,,436,9.4181,2025-01-21,Yes,gemini-2-5-flash-reasoning,
+Qwen2.5 Coder Instruct 32B,Alibaba,https://artificialanalysis.ai/models/qwen2-5-coder-32b-instruct,No,text,text,131072,131.1K,Yes,small,32,,,,,,,,,436,6.7405,2024-11-11,Yes,qwen3-32b-instruct,
+Sonar Reasoning,Perplexity,https://artificialanalysis.ai/models/sonar-reasoning,Yes,text,text,127000,127K,No,,,,,,,,,,,436,8.6725,2025-01-28,Yes,sonar-reasoning-pro,
+Gemma 3 270M,Google,https://artificialanalysis.ai/models/gemma-3-270m,No,text,text,32000,32K,Yes,tiny,0.268,,,,,,,,,436,5.1171,2025-08-14,No,,
+Grok 4.20 0309 (Reasoning),SpaceXAI,https://artificialanalysis.ai/models/grok-4-20-0309,Yes,text|image,text,2000000,2M,No,large,,2,6,0.2,,0.9,3,1.14,127,436,25.2163,2026-03-10,Yes,grok-4-20,4
+GPT-5.1 Codex (high),OpenAI,https://artificialanalysis.ai/models/gpt-5-1-codex,Yes,text|image,text,400000,400K,No,large,,1.25,10,,,,3.4375,2.125,129,436,23.6973,2025-11-13,Yes,gpt-5-2-codex,5.625
+Muse Spark 1.2 (xhigh),Meta,https://artificialanalysis.ai/models/muse-spark-1-2,Yes,text|image|speech|video,text,1048576,1.0M,No,large,,1.25,4.25,0.15,,0.88,2,0.78,120,436,39.8039,2026-08-05,No,,2.75
+GPT-5.6 Luna (low),OpenAI,https://artificialanalysis.ai/models/gpt-5-6-luna-low,Yes,text|image,text,1000000,1M,No,medium,,0.2,1.2,0.02,0.25,0.9,0.45,0.174,65,436,21.8342,2026-07-09,No,,0.7
+"Claude Fable 5.1 (Adaptive Reasoning, Low Effort, Default Fallback)",Anthropic,https://artificialanalysis.ai/models/claude-fable-5-1-low,Yes,text|image,text,1000000,1M,No,large,,10,50,0.25,12.5,0.975,20,7.175,144,436,47.0392,2026-09-01,No,,30
+Mistral Medium 3.1,Mistral,https://artificialanalysis.ai/models/mistral-medium-3-1,No,text|image,text,128000,128K,No,medium,,0.4,2,,,,0.8,0.56,85,436,9.8921,2025-08-12,Yes,mistral-medium-3-5,1.2
+GPT-5 nano (minimal),OpenAI,https://artificialanalysis.ai/models/gpt-5-nano-minimal,No,text|image,text,400000,400K,No,small,,0.05,0.4,0.005,,0.9,0.1375,0.0535,25,436,7.0888,2025-08-07,Yes,gpt-5-4-nano-non-reasoning,0.225
+Gemini 2.5 Pro Preview (May' 25),Google,https://artificialanalysis.ai/models/gemini-2-5-pro-05-06,Yes,text|speech|video,text,1000000,1M,No,large,,1.25,10,0.125,,0.9,3.4375,1.3375,129,436,14.5216,2025-05-06,Yes,gemini-2-5-pro,5.625
+o3-mini (high),OpenAI,https://artificialanalysis.ai/models/o3-mini-high,Yes,text,text,200000,200K,No,large,,1.1,4.4,0.55,,0.5,1.925,1.045,118,436,10.9644,2025-01-31,Yes,gpt-5-mini,2.75
+o1-preview,OpenAI,https://artificialanalysis.ai/models/o1-preview,Yes,text,text,128000,128K,No,large,,16.5,66,8.25,,0.5,28.875,15.675,146,436,11.3759,2024-09-12,Yes,o3,41.25
+DeepSeek V3.2 Exp (Non-reasoning),DeepSeek,https://artificialanalysis.ai/models/deepseek-v3-2-0925,No,text,text,128000,128K,Yes,large,685,0.28,0.42,0.028,,0.9,0.315,0.1176,53,436,13.8834,2025-09-29,Yes,deepseek-v3-2,0.35
+Apodex 1.1,Apodex,https://artificialanalysis.ai/models/apodex-1-1,Yes,text|image,text,256000,256K,No,medium,,0.3,3,0.03,,0.9,0.975,0.381,94,436,30.3656,2026-08-30,No,,1.65
+GPT-5.6 Sol (low),OpenAI,https://artificialanalysis.ai/models/gpt-5-6-sol-low,Yes,text|image,text,1000000,1M,No,large,,4,20,0.4,5,0.9,8,3.08,140,436,33.7979,2026-07-09,No,,12
+Qwen3 Coder 480B A35B Instruct,Alibaba,https://artificialanalysis.ai/models/qwen3-coder-480b-a35b-instruct,No,text,text,262144,262.1K,Yes,large,480,1.5,7.5,,,,3,2.1,127,436,11.899,2025-07-22,Yes,qwen3-coder-next,4.5
+Gemini 3.5 Flash-Lite,Google,https://artificialanalysis.ai/models/gemini-3-5-flash-lite,Yes,text|image|speech|video,text,1000000,1M,No,medium,,0.3,2.5,0.03,,0.9,0.85,0.331,89,436,22.6607,2026-07-21,No,,1.4
+Qwen3.5 2B (Non-reasoning),Alibaba,https://artificialanalysis.ai/models/qwen3-5-2b-non-reasoning,No,text|image|video,text,262144,262.1K,Yes,tiny,2.27,,,,,,,,,436,6.1856,2026-03-02,No,,
+Devstral 2,Mistral,https://artificialanalysis.ai/models/devstral-2,No,text,text,256000,256K,Yes,medium,125,0,0,,,,0,0,1,436,9.4059,2025-12-09,No,,0
+Claude 3.5 Sonnet (Oct '24),Anthropic,https://artificialanalysis.ai/models/claude-35-sonnet,No,text|image,text,200000,200K,No,large,,3,15,0.3,3.75,0.9,6,2.31,138,436,7.8791,2024-10-22,Yes,claude-3-7-sonnet,9
+DeepSeek V3.1 Terminus (Reasoning),DeepSeek,https://artificialanalysis.ai/models/deepseek-v3-1-terminus-reasoning,Yes,text,text,128000,128K,Yes,large,685,1.635,2.75,,,,1.9138,1.7465,117,436,15.4047,2025-09-22,Yes,deepseek-v3-2-reasoning,2.1925
+Qwen3 Omni 30B A3B Instruct,Alibaba,https://artificialanalysis.ai/models/qwen3-omni-30b-a3b-instruct,No,text|image|speech|video,text|speech,65536,65.5K,Yes,small,35.3,0.25,0.97,,,,0.43,0.322,63,436,6.0061,2025-09-22,No,,0.61
+Grok Build 0.1 0616,SpaceXAI,https://artificialanalysis.ai/models/grok-build-0-1-06-16,Yes,text|image,text,256000,256K,No,large,,1,2,0.2,,0.8,1.25,0.54,105,436,27.1714,2026-06-16,Yes,grok-4-5,1.5
+Granite 4.2 3B,IBM,https://artificialanalysis.ai/models/granite-4-2-3b,Yes,text,text,131072,131.1K,Yes,tiny,3,0.03,0.12,0.0075,,0.75,0.0525,0.0233,5,436,9.0559,2026-08-25,No,,0.075
+Nova 2.0 Pro Preview (medium),Amazon,https://artificialanalysis.ai/models/nova-2-0-pro-reasoning-medium,Yes,text|image,text,256000,256K,No,large,,1.25,10,0.312,,0.7504,3.4375,1.4684,129,436,14.1555,2025-11-27,No,,5.625
+Inkling (xhigh),Thinking Machines,https://artificialanalysis.ai/models/inkling,Yes,text|image|speech,text,1000000,1M,Yes,large,975,1,4.05,0.17,,0.83,1.7625,0.724,116,436,25.5423,2026-07-15,No,,2.525
+Kimi K2.6,Kimi,https://artificialanalysis.ai/models/kimi-k2-6,Yes,text|image|video,text,256000,256K,Yes,large,1000,0.95,4,0.16,,0.8316,1.7125,0.702,115,436,31.3197,2026-04-20,Yes,kimi-k3,2.475
+DeepSeek R1 (Jan '25),DeepSeek,https://artificialanalysis.ai/models/deepseek-r1-0120,Yes,text,text,128000,128K,Yes,large,685,2,4,,,,2.5,2.2,124,436,11.411,2025-01-20,Yes,deepseek-r1,3
+DeepSeek R1 Distill Llama 8B,DeepSeek,https://artificialanalysis.ai/models/deepseek-r1-distill-llama-8b,Yes,text,text,128000,128K,Yes,small,8,,,,,,,,,436,6.4762,2025-01-20,Yes,deepseek-v3-0324,
+Qwen3 0.6B (Non-reasoning),Alibaba,https://artificialanalysis.ai/models/qwen3-0.6b-instruct,No,text,text,32000,32K,Yes,tiny,0.752,,,,,,,,,436,4.8342,2025-04-28,Yes,qwen3-5-0-8b-non-reasoning,
+Qwen3.5 397B A17B (Reasoning),Alibaba,https://artificialanalysis.ai/models/qwen3-5-397b-a17b,Yes,text|image,text,262144,262.1K,Yes,large,397,0.6,3.6,,,,1.35,0.9,109,436,19.1073,2026-02-16,No,,2.1
+LFM2 1.2B,Liquid AI,https://artificialanalysis.ai/models/lfm2-1-2b,No,text,text,32768,32.8K,Yes,tiny,1.17,,,,,,,,,436,4.8342,2025-07-10,Yes,lfm2-5-1-2b-instruct,
+Kimi K2.6 (Non-reasoning),Kimi,https://artificialanalysis.ai/models/kimi-k2-6-non-reasoning,No,text|image|video,text,256000,256K,Yes,large,1000,0.95,4,0.16,,0.8316,1.7125,0.702,115,436,23.5696,2026-04-20,Yes,kimi-k3-low,2.475
+Magistral Small 1,Mistral,https://artificialanalysis.ai/models/magistral-small,Yes,text,text,40000,40K,Yes,small,23.6,,,,,,,,,436,8.2243,2025-06-10,Yes,magistral-small-2509,
+Granite 4.2 30B,IBM,https://artificialanalysis.ai/models/granite-4-2-30b,Yes,text,text,131072,131.1K,Yes,small,30,0.16,0.65,0.04,,0.75,0.2825,0.125,48,436,14.8312,2026-08-25,No,,0.405
+LFM 40B,Liquid AI,https://artificialanalysis.ai/models/lfm-40b,No,text|image,text,32000,32K,No,medium,40.3,,,,,,,,,436,5.418,2024-09-30,Yes,,
+MiniMax-M2.5,MiniMax,https://artificialanalysis.ai/models/minimax-m2-5,Yes,text,text,204800,204.8K,Yes,large,230,0.3,1.2,0.03,0.375,0.9,0.525,0.201,72,436,22.7966,2026-02-12,Yes,minimax-m2-7,0.75
+Mistral Small 4 (Non-reasoning),Mistral,https://artificialanalysis.ai/models/mistral-small-4-non-reasoning,No,text|image,text,256000,256K,Yes,medium,119,0.15,0.6,,,,0.2625,0.195,45,436,8.9901,2026-03-16,No,,0.375
+"Claude Opus 5 (Adaptive Reasoning, Xhigh Effort)",Anthropic,https://artificialanalysis.ai/models/claude-opus-5-xhigh,Yes,text|image,text,1000000,1M,No,large,,5,25,0.5,6.25,0.9,10,3.85,141,436,49.6515,2026-07-24,No,,15
+Claude 3.7 Sonnet (Reasoning),Anthropic,https://artificialanalysis.ai/models/claude-3-7-sonnet-thinking,Yes,text|image,text,200000,200K,No,,,,,,,,,,,436,17.7114,2025-02-24,Yes,claude-4-sonnet-thinking,
+"Claude Sonnet 5 (Adaptive Reasoning, Low Effort)",Anthropic,https://artificialanalysis.ai/models/claude-sonnet-5-low,Yes,text|image,text,1000000,1M,No,large,,2,10,0.2,2.5,0.9,4,1.54,132,436,24.7426,2026-06-30,No,,6
+MiMo-V2-Flash (Feb 2026),Xiaomi,https://artificialanalysis.ai/models/mimo-v2-0206,Yes,text,text,256000,256K,Yes,large,309,,,,,,,,,436,22.4406,2025-12-16,No,,
+GLM-5-Turbo,Z AI,https://artificialanalysis.ai/models/glm-5-turbo,Yes,text,text,200000,200K,No,,,,,,,,,,,436,26.5966,2026-03-15,Yes,glm-5-1-non-reasoning,
+Ling-1T,InclusionAI,https://artificialanalysis.ai/models/ling-1t,No,text,text,128000,128K,Yes,large,1000,,,,,,,,,436,9.1721,2025-10-08,Yes,ling-2-6-1t,
+gpt-oss-20b (low),OpenAI,https://artificialanalysis.ai/models/gpt-oss-20b-low,Yes,text,text,131072,131.1K,Yes,small,21,0.07,0.2,,,,0.1025,0.083,19,436,9.953,2025-08-05,No,,0.135
+Qwen3.5 27B (Reasoning),Alibaba,https://artificialanalysis.ai/models/qwen3-5-27b,Yes,text|image,text,262144,262.1K,Yes,small,27.8,0.3,2.4,,,,0.825,0.51,86,436,22.8993,2026-02-24,Yes,qwen3-6-27b,1.35
+o3,OpenAI,https://artificialanalysis.ai/models/o3,Yes,text|image,text,200000,200K,No,large,,2,8,0.5,,0.75,3.5,1.55,130,436,20.2008,2025-04-16,No,,5
+Gemini 1.5 Pro (May '24),Google,https://artificialanalysis.ai/models/gemini-1-5-pro-may-2024,No,text|image|speech|video,text,2000000,2M,No,,,,,,,,,,,436,6.4407,2024-05-15,Yes,gemini-2-0-flash,
+K-EXAONE 2.0,LG AI Research,https://artificialanalysis.ai/models/k-exaone-2-0-0803,Yes,text,text,262144,262.1K,Yes,large,750,,,,,,,,,436,19.6905,2026-08-12,No,,
+Qwen3 4B (Reasoning),Alibaba,https://artificialanalysis.ai/models/qwen3-4b-instruct-reasoning,Yes,text,text,32000,32K,Yes,tiny,4.02,,,,,,,,,436,7.2285,2025-04-28,Yes,qwen3-4b-2507-instruct-reasoning,
+GLM-5.3-Flash,Z AI,https://artificialanalysis.ai/models/glm-5-3-flash,Yes,text|image,text,1000000,1M,Yes,large,320,0.15,0.5,0.026,,0.8267,0.2375,0.0982,39,436,41.9074,2026-08-26,No,,0.325
+DeepSeek V3.1 (Reasoning),DeepSeek,https://artificialanalysis.ai/models/deepseek-v3-1-reasoning,Yes,text,text,128000,128K,Yes,large,685,0.59,1.69,,,,0.865,0.7,90,436,13.4758,2025-08-21,Yes,deepseek-v3-1-terminus-reasoning,1.14
+Llama 3.3 Nemotron Super 49B v1 (Reasoning),NVIDIA,https://artificialanalysis.ai/models/llama-3-3-nemotron-super-49b-reasoning,Yes,text,text,128000,128K,Yes,medium,49,,,,,,,,,436,8.9331,2025-03-18,Yes,llama-nemotron-super-49b-v1-5-reasoning,
+Step 3.5 Flash 2603,StepFun,https://artificialanalysis.ai/models/step-3-5-flash,Yes,text,text,256000,256K,No,medium,,0.1,0.3,0.02,,0.8,0.15,0.064,26,436,16.9641,2026-04-02,Yes,step-3-7-flash,0.2
+Mistral Large 2 (Jul '24),Mistral,https://artificialanalysis.ai/models/mistral-large-2407,No,text,text,128000,128K,Yes,medium,123,2,6,,,,3,2.4,127,436,6.7995,2024-07-24,Yes,mistral-large-2,4
+Solar Pro 4,Upstage,https://artificialanalysis.ai/models/solar-pro4,Yes,text,text,512000,512K,No,medium,,0.3,1.2,0.06,,0.8,0.525,0.222,72,436,28.1541,2026-08-06,No,,0.75
+DBRX Instruct,Databricks,https://artificialanalysis.ai/models/dbrx,No,text,text,32768,32.8K,Yes,medium,132,,,,,,,,,436,5.2887,2024-03-27,Yes,,
+GLM-4.5 (Reasoning),Z AI,https://artificialanalysis.ai/models/glm-4.5,Yes,text,text,128000,128K,Yes,large,355,,,,,,,,,436,12.768,2025-07-28,Yes,glm-4-6-reasoning,
+Qwen2.5 Instruct 32B,Alibaba,https://artificialanalysis.ai/models/qwen2.5-32b-instruct,No,text,text,128000,128K,Yes,small,32,,,,,,,,,436,6.8716,2024-09-19,Yes,qwen3-32b-instruct,
+Gemini 2.5 Flash-Lite (Non-reasoning),Google,https://artificialanalysis.ai/models/gemini-2-5-flash-lite,No,text|image|speech|video,text,1000000,1M,No,medium,,0.1,0.4,0.01,,0.9,0.175,0.067,31,436,6.6685,2025-06-17,Yes,gemini-2-5-flash-lite-preview-09-2025,0.25
+Hermes 3 - Llama-3.1 70B,Nous Research,https://artificialanalysis.ai/models/hermes-3-llama-3-1-70b,No,text,text,128000,128K,Yes,medium,70.6,0.7,0.7,,,,0.7,0.7,81,436,5.9968,2024-08-15,Yes,hermes-4-llama-3-1-70b,0.7
+North Mini Code,Cohere,https://artificialanalysis.ai/models/north-mini-code,Yes,text,text,256000,256K,Yes,small,30,0,0,,,,0,0,1,436,12.8393,2026-06-09,No,,0
+Sonar Reasoning Pro,Perplexity,https://artificialanalysis.ai/models/sonar-reasoning-pro,Yes,text,text,127000,127K,No,,,,,,,,,,,436,11.8218,2025-01-28,Yes,,
+GPT-5.5 (xhigh),OpenAI,https://artificialanalysis.ai/models/gpt-5-5,Yes,text|image,text,922000,922K,No,large,,5,30,0.5,,0.9,11.25,4.35,142,436,38.6292,2026-04-23,Yes,gpt-5-6-sol-xhigh,17.5
+Mistral Medium,Mistral,https://artificialanalysis.ai/models/mistral-medium,No,text,text,32768,32.8K,No,large,,1.5,7.5,,,,3,2.1,127,436,5.4919,2023-12-11,Yes,mistral-medium-3,4.5
+GPT-6 Astra (xhigh),OpenAI,https://artificialanalysis.ai/models/gpt-6-astra-xhigh,Yes,text|image,text,1000000,1M,No,large,,10,50,1,12.5,0.9,20,7.7,144,436,52.5059,2026-09-03,No,,30
+Nova 2.0 Omni (Non-reasoning),Amazon,https://artificialanalysis.ai/models/nova-2-0-omni,No,text|image,text,1000000,1M,No,medium,,0.3,2.5,,,,0.85,0.52,89,436,8.1509,2025-11-26,No,,1.4
+Granite 4.0 Micro,IBM,https://artificialanalysis.ai/models/granite-4-0-micro,No,text,text,128000,128K,Yes,tiny,3,,,,,,,,,436,5.1066,2025-09-22,No,,
+Claude 3 Haiku,Anthropic,https://artificialanalysis.ai/models/claude-3-haiku,No,text|image,text,200000,200K,No,medium,,0.25,1.25,,,,0.5,0.35,70,436,5.5784,2024-03-04,Yes,claude-3-5-haiku,0.75
+"Claude Opus 5 (Adaptive Reasoning, Low Effort)",Anthropic,https://artificialanalysis.ai/models/claude-opus-5-low,Yes,text|image,text,1000000,1M,No,large,,5,25,0.5,6.25,0.9,10,3.85,141,436,39.7883,2026-07-24,No,,15
+Qwen3.5 9B (Non-reasoning),Alibaba,https://artificialanalysis.ai/models/qwen3-5-9b-non-reasoning,No,text|image|video,text,262144,262.1K,Yes,small,9.65,0.17,0.25,,,,0.19,0.178,33,436,13.266,2026-03-02,No,,0.21
+Mistral 7B Instruct,Mistral,https://artificialanalysis.ai/models/mistral-7b-instruct,No,text,text,8192,8.2K,Yes,small,7,0.25,0.25,,,,0.25,0.25,43,436,5.035,2023-09-27,Yes,ministral-3-8b,0.25
+Gemini 2.5 Flash (Reasoning),Google,https://artificialanalysis.ai/models/gemini-2-5-flash-reasoning,Yes,text|image|speech|video,text,1000000,1M,No,medium,,0.3,2.5,0.03,,0.9,0.85,0.331,89,436,13.106,2025-05-20,Yes,gemini-2-5-flash-preview-09-2025-reasoning,1.4
+GPT-6 Astra (Non-reasoning),OpenAI,https://artificialanalysis.ai/models/gpt-6-astra-non-reasoning,No,text|image,text,1000000,1M,No,large,,10,50,1,12.5,0.9,20,7.7,144,436,45.1698,2026-09-03,No,,30
+Gemma 3 4B Instruct,Google,https://artificialanalysis.ai/models/gemma-3-4b,No,text|image,text,128000,128K,Yes,tiny,4.3,0,0,,,,0,0,1,436,4.8342,2025-03-12,Yes,gemma-4-e4b,0
+Qwen3.5 122B A10B (Reasoning),Alibaba,https://artificialanalysis.ai/models/qwen3-5-122b-a10b,Yes,text|image,text,262144,262.1K,Yes,medium,125,0.4,3.2,,,,1.1,0.68,99,436,16.187,2026-02-24,No,,1.8
+MiMo-V2.5,Xiaomi,https://artificialanalysis.ai/models/mimo-v2-5-0424,Yes,text|image,text,1000000,1M,Yes,large,310,0.14,0.28,0.0028,,0.98,0.175,0.058,31,436,22.3039,2026-04-22,No,,0.21
+Grok 4.1 Fast (Reasoning),SpaceXAI,https://artificialanalysis.ai/models/grok-4-1-fast-reasoning,Yes,text|image,text,2000000,2M,No,,,,,,,,,,,436,20.3702,2025-11-19,Yes,grok-4-3,
+Hermes 4 - Llama-3.1 70B (Non-reasoning),Nous Research,https://artificialanalysis.ai/models/hermes-4-llama-3-1-70b,No,text,text,128000,128K,Yes,medium,70.6,,,,,,,,,436,6.6582,2025-08-27,No,,
+NVIDIA Nemotron 3 Nano 30B A3B (Non-reasoning),NVIDIA,https://artificialanalysis.ai/models/nvidia-nemotron-3-nano-30b-a3b,No,text,text,1000000,1M,Yes,small,31.6,0.05,0.2,,,,0.0875,0.065,14,436,6.8479,2025-12-15,No,,0.125
+"Claude Sonnet 5 (Adaptive Reasoning, Max Effort)",Anthropic,https://artificialanalysis.ai/models/claude-sonnet-5,Yes,text|image,text,1000000,1M,No,large,,2,10,0.2,2.5,0.9,4,1.54,132,436,38.3577,2026-06-30,No,,6
+Grok 3,SpaceXAI,https://artificialanalysis.ai/models/grok-3,No,text,text|image,1000000,1M,No,large,,4,20,1.5375,,0.985,8,3.8763,140,436,12.1076,2025-02-19,Yes,grok-4,12
+GLM 5V Turbo (Reasoning),Z AI,https://artificialanalysis.ai/models/glm-5v-turbo,Yes,text|image|video,text,200000,200K,No,,,,,,,,,,,436,23.4967,2026-04-01,Yes,glm-5-1,
+Mistral Small 3.1,Mistral,https://artificialanalysis.ai/models/mistral-small-3-1,No,text|image,text,128000,128K,Yes,small,24,0.1,0.3,,,,0.15,0.12,26,436,7.367,2025-03-17,Yes,mistral-small-3-2,0.2
+Claude Opus 4.5 (Reasoning),Anthropic,https://artificialanalysis.ai/models/claude-opus-4-5-thinking,Yes,text|image,text,200000,200K,No,large,,5,25,0.5,6.25,0.9,10,3.85,141,436,29.0955,2025-11-24,Yes,claude-opus-4-6-adaptive,15
+Grok 4.6 (medium),SpaceXAI,https://artificialanalysis.ai/models/grok-4-6-medium,Yes,text|image,text,500000,500K,No,large,,2,6,0.5,,0.75,3,1.35,127,436,43.0112,2026-08-12,No,,4
+Qwen3 Next 80B A3B Instruct,Alibaba,https://artificialanalysis.ai/models/qwen3-next-80b-a3b-instruct,No,text,text,262144,262.1K,Yes,medium,80,0.15,1.2,,,,0.4125,0.255,61,436,9.6434,2025-09-11,No,,0.675
+Llama Nemotron Super 49B v1.5 (Non-reasoning),NVIDIA,https://artificialanalysis.ai/models/llama-nemotron-super-49b-v1-5,No,text,text,128000,128K,Yes,medium,49,0.4,0.4,,,,0.4,0.4,59,436,7.3644,2025-07-25,No,,0.4
+GPT-5.6 Terra (medium),OpenAI,https://artificialanalysis.ai/models/gpt-5-6-terra-medium,Yes,text|image,text,1000000,1M,No,large,,2,12,0.2,2.5,0.9,4.5,1.74,134,436,32.7588,2026-07-09,No,,7
+Gemini 2.5 Pro,Google,https://artificialanalysis.ai/models/gemini-2-5-pro,Yes,text|image|speech|video,text,1000000,1M,No,large,,1.25,10,0.125,,0.9,3.4375,1.3375,129,436,16.6574,2025-06-05,Yes,gemini-3-pro,5.625
+MiniMax-M2.1,MiniMax,https://artificialanalysis.ai/models/minimax-m2-1,Yes,text,text,204800,204.8K,Yes,large,230,0.3,1.2,,,,0.525,0.39,72,436,20.9453,2025-12-23,Yes,minimax-m2-5,0.75
+MiniMax-M3,MiniMax,https://artificialanalysis.ai/models/minimax-m3,Yes,text|image|video,text,1000000,1M,Yes,large,428,0.3,1.2,0.06,0.375,0.8,0.525,0.222,72,436,29.6126,2026-06-01,No,,0.75
+Grok 2 (Dec '24),SpaceXAI,https://artificialanalysis.ai/models/grok-2-1212,No,text,text,131072,131.1K,Yes,large,270,,,,,,,,,436,7.1056,2024-12-12,Yes,grok-3,
+MiMo-V2-Omni-0327,Xiaomi,https://artificialanalysis.ai/models/mimo-v2-omni-0327,Yes,text|image|speech|video,text,256000,256K,No,,,,,,,,,,,436,25.1205,2026-03-27,No,,
+GPT-5 mini (high),OpenAI,https://artificialanalysis.ai/models/gpt-5-mini,Yes,text|image,text,400000,400K,No,medium,,0.25,2,0.025,,0.9,0.6875,0.2675,80,436,17.4074,2025-08-07,Yes,gpt-5-4-mini,1.125
+Nemotron 3.5 Lightning,NVIDIA,https://artificialanalysis.ai/models/nemotron-3-5-lightning,Yes,text,text,1000000,1M,Yes,small,31.6,0.06,0.2,0.05,,0.5,0.095,0.067,16,436,13.6353,2026-08-11,No,,0.13
+Qwen3 4B 2507 (Reasoning),Alibaba,https://artificialanalysis.ai/models/qwen3-4b-2507-instruct-reasoning,Yes,text,text,262144,262.1K,Yes,tiny,4.02,,,,,,,,,436,8.7984,2025-08-06,Yes,qwen3-5-4b,
+Gemini 1.5 Pro (Sep '24),Google,https://artificialanalysis.ai/models/gemini-1-5-pro,No,text|image|speech|video,text,2000000,2M,No,,,,,,,,,,,436,7.9055,2024-09-24,Yes,gemini-2-0-flash,
+Gemini 1.0 Ultra,Google,https://artificialanalysis.ai/models/gemini-1-0-ultra,No,text,text,32768,32.8K,No,,,,,,,,,,,436,5.8384,2023-12-06,Yes,gemini-2-0-pro-experimental-02-05,
+Qwen3 1.7B (Non-reasoning),Alibaba,https://artificialanalysis.ai/models/qwen3-1.7b-instruct,No,text,text,32000,32K,Yes,tiny,2.03,,,,,,,,,436,4.8568,2025-04-28,Yes,qwen3-5-2b-non-reasoning,
+Gemma 3 27B Instruct,Google,https://artificialanalysis.ai/models/gemma-3-27b,No,text|image,text,128000,128K,Yes,small,27.4,0,0,,,,0,0,1,436,4.853,2025-03-12,Yes,gemma-4-31b,0
+GLM-4.7-Flash (Reasoning),Z AI,https://artificialanalysis.ai/models/glm-4-7-flash,Yes,text,text,200000,200K,Yes,small,31.2,0.07,0.4,0.07,,0.8333,0.1525,0.103,28,436,14.872,2026-01-19,Yes,glm-5,0.235
+Phi-4 Multimodal Instruct,Microsoft,https://artificialanalysis.ai/models/phi-4-multimodal,No,text|image|speech,text,128000,128K,Yes,small,5.6,0,0,,,,0,0,1,436,5.8052,2025-02-26,No,,0
+Granite 3.3 8B (Non-reasoning),IBM,https://artificialanalysis.ai/models/granite-3-3-8b-instruct,No,text,text,128000,128K,Yes,small,8.17,0.03,0.25,,,,0.085,0.052,12,436,4.9216,2025-04-16,Yes,granite-4-0-micro,0.14
+DeepSeek-V2-Chat,DeepSeek,https://artificialanalysis.ai/models/deepseek-v2,No,text,text,128000,128K,Yes,large,236,,,,,,,,,436,5.5061,2024-05-06,Yes,deepseek-v3-0324,
+Qwen3.5 9B (Reasoning),Alibaba,https://artificialanalysis.ai/models/qwen3-5-9b,Yes,text|image|video,text,262144,262.1K,Yes,small,9.65,0.135,0.2,,,,0.1513,0.1415,27,436,13.6541,2026-03-02,No,,0.1675
+o3-mini,OpenAI,https://artificialanalysis.ai/models/o3-mini,Yes,text,text,200000,200K,No,large,,1.1,4.4,0.55,,0.5,1.925,1.045,118,436,12.4708,2025-01-31,Yes,gpt-5-mini-medium,2.75
+Grok 4 Fast (Non-reasoning),SpaceXAI,https://artificialanalysis.ai/models/grok-4-fast,No,text|image,text,2000000,2M,No,medium,,0.2,0.5,,,,0.275,0.23,46,436,11.0642,2025-09-19,Yes,grok-4-1-fast,0.35
+"Claude Sonnet 4.6 (Non-reasoning, High Effort)",Anthropic,https://artificialanalysis.ai/models/claude-sonnet-4-6,No,text|image,text,1000000,1M,No,large,,3,15,0.3,3.75,0.9,6,2.31,138,436,24.6869,2026-02-17,Yes,claude-sonnet-5-non-reasoning,9
+Ling-2.6-1T,InclusionAI,https://artificialanalysis.ai/models/ling-2-6-1t,No,text,text,262144,262.1K,Yes,large,1026,0.3,2.5,,,,0.85,0.52,89,436,17.0002,2026-04-23,Yes,ling-3-0-flash,1.4
+Gemma 3 12B Instruct,Google,https://artificialanalysis.ai/models/gemma-3-12b,No,text|image,text,128000,128K,Yes,small,12.2,0,0,,,,0,0,1,436,3.7508,2025-03-12,Yes,gemma-4-26b-a4b,0
+NVIDIA Nemotron Nano 9B V2 (Non-reasoning),NVIDIA,https://artificialanalysis.ai/models/nvidia-nemotron-nano-9b-v2,No,text,text,131072,131.1K,Yes,small,9,0.05,0.195,,,,0.0863,0.0645,13,436,6.8441,2025-08-18,No,,0.1225
+Command A+,Cohere,https://artificialanalysis.ai/models/command-a-plus,Yes,text|image,text,192000,192K,Yes,large,218,0,0,,,,0,0,1,436,13.9235,2026-05-20,No,,0
+GPT-6 Astra (max),OpenAI,https://artificialanalysis.ai/models/gpt-6-astra,Yes,text|image,text,1000000,1M,No,large,,10,50,1,12.5,0.9,20,7.7,144,436,52.8141,2026-09-03,No,,30
+EXAONE 4.0 32B (Non-reasoning),LG AI Research,https://artificialanalysis.ai/models/exaone-4-0-32b,No,text,text,131000,131K,Yes,small,32,,,,,,,,,436,6.3262,2025-07-15,No,,
+"Claude Opus 4.7 (Non-reasoning, High Effort)",Anthropic,https://artificialanalysis.ai/models/claude-opus-4-7-non-reasoning,No,text|image,text,1000000,1M,No,large,,5,25,0.5,6.25,0.9,10,3.85,141,436,30.9317,2026-04-16,Yes,claude-opus-5-low,15
+G9v3-3B,AI9Stars,https://artificialanalysis.ai/models/g9v3-3b,Yes,text,text,131072,131.1K,Yes,tiny,3,0,0,,,,0,0,1,436,10.8416,2026-07-23,No,,0
+GLM-4.5V (Reasoning),Z AI,https://artificialanalysis.ai/models/glm-4-5v-reasoning,Yes,text|image,text,64000,64K,Yes,medium,108,0.6,1.8,,,,0.9,0.72,91,436,7.5561,2025-08-11,Yes,glm-4-6v-reasoning,1.2
+Qwen3.5 4B (Non-reasoning),Alibaba,https://artificialanalysis.ai/models/qwen3-5-4b-non-reasoning,No,text|image|video,text,262144,262.1K,Yes,small,4.66,0.03,0.15,,,,0.06,0.042,6,436,10.8123,2026-03-02,No,,0.09
+Qwen3.5 397B A17B (Non-reasoning),Alibaba,https://artificialanalysis.ai/models/qwen3-5-397b-a17b-non-reasoning,No,text|image,text,262144,262.1K,Yes,large,397,0.6,3.6,,,,1.35,0.9,109,436,21.4367,2026-02-16,No,,2.1
+Qwen3 235B A22B 2507 Instruct,Alibaba,https://artificialanalysis.ai/models/qwen3-235b-a22b-instruct-2507,No,text,text,256000,256K,Yes,large,235,0.23,0.92,,,,0.4025,0.299,60,436,11.9971,2025-07-21,Yes,qwen3-5-397b-a17b-non-reasoning,0.575
+Olmo 3 7B Think,Allen Institute for AI,https://artificialanalysis.ai/models/olmo-3-7b-think,Yes,text,text,65536,65.5K,Yes,small,7,,,,,,,,,436,5.6169,2025-11-20,No,,
+HyperCLOVA X SEED Think (32B),Naver,https://artificialanalysis.ai/models/hyperclova-x-seed-think-32b,Yes,text|image|video,text,128000,128K,Yes,small,32,,,,,,,,,436,11.3648,2025-12-26,No,,
+"HyperNova 60B 2605 (high, based on gpt-oss-120b)",Multiverse Computing,https://artificialanalysis.ai/models/hypernova-60b,Yes,text,text,131072,131.1K,Yes,medium,58.7,0.04,0.14,,,,0.065,0.05,9,436,11.738,2026-05-26,No,,0.09
+Sonar Pro,Perplexity,https://artificialanalysis.ai/models/sonar-pro,No,text,text,200000,200K,No,,,,,,,,,,,436,7.6069,2025-01-21,Yes,sonar-reasoning-pro,
+Nova Micro,Amazon,https://artificialanalysis.ai/models/nova-micro,No,text,text,130000,130K,No,small,,0.035,0.14,0.0088,,0.75,0.0613,0.0271,7,436,5.8765,2024-12-03,No,,0.0875
+Sarvam M (Reasoning),Sarvam,https://artificialanalysis.ai/models/sarvam-m-reasoning,Yes,text,text,32768,32.8K,Yes,small,23.6,0,0,,,,0,0,1,436,5.3107,2025-05-23,Yes,sarvam-30b,0
+Qwen2.5 Turbo,Alibaba,https://artificialanalysis.ai/models/qwen-turbo,No,text,text,1000000,1M,No,small,,0.05,0.2,,,,0.0875,0.065,14,436,6.4332,2024-11-18,Yes,qwen3-32b-instruct,0.125
+EXAONE 4.5 33B (Non-reasoning),LG AI Research,https://artificialanalysis.ai/models/exaone-4-5-33b-non-reasoning,No,text|image,text,262144,262.1K,Yes,small,34.4,,,,,,,,,436,,2026-04-09,No,,
+Qwen3.8 27B (Non-reasoning),Alibaba,https://artificialanalysis.ai/models/qwen3-8-27b-non-reasoning,No,text|image|video,text,256000,256K,Yes,small,27,0.5,3,0.05,,0.9,1.125,0.435,100,436,22.419,2026-08-14,No,,1.75
+Mistral Small (Feb '24),Mistral,https://artificialanalysis.ai/models/mistral-small-2402,No,text,text,32768,32.8K,No,medium,,0.15,0.6,,,,0.2625,0.195,45,436,5.5004,2024-02-26,Yes,mistral-small,0.375
+INTELLECT-3,Prime Intellect,https://artificialanalysis.ai/models/intellect-3,Yes,text,text,131100,131.1K,Yes,medium,107,,,,,,,,,436,10.6061,2025-11-27,No,,
+gpt-oss-20b (high),OpenAI,https://artificialanalysis.ai/models/gpt-oss-20b,Yes,text,text,131072,131.1K,Yes,small,21,0.06,0.19,,,,0.0925,0.073,15,436,9.0372,2025-08-05,No,,0.125
+MiniMax M1 40k,MiniMax,https://artificialanalysis.ai/models/minimax-m1-40k,Yes,text,text,1000000,1M,Yes,large,456,,,,,,,,,436,9.9857,2025-06-17,Yes,minimax-m2,
+GPT-5.4 mini (medium),OpenAI,https://artificialanalysis.ai/models/gpt-5-4-mini-medium,Yes,text|image,text,400000,400K,No,large,,0.75,4.5,0.075,,0.9,1.6875,0.6525,114,436,19.7484,2026-03-17,Yes,gpt-5-6-terra-medium,2.625
+Olmo 3.1 32B Think,Allen Institute for AI,https://artificialanalysis.ai/models/olmo-3-1-32b-think,Yes,text,text,65500,65.5K,Yes,small,32.2,0,0,,,,0,0,1,436,7.1236,2025-12-12,No,,0
+Qwen3.6 27B (Non-reasoning),Alibaba,https://artificialanalysis.ai/models/qwen3-6-27b-non-reasoning,No,text|image|video,text,262144,262.1K,Yes,small,27.8,0.6,3.6,,,,1.35,0.9,109,436,19.8288,2026-04-22,No,,2.1
+Nex-N2-Pro,Nex AGI,https://artificialanalysis.ai/models/nex-n2-pro,Yes,text|image,text,262000,262K,Yes,large,397,0.5,2.5,0.25,,0.5,1,0.525,96,436,28.1991,2026-06-02,No,,1.5
+GPT-4.1,OpenAI,https://artificialanalysis.ai/models/gpt-4-1,No,text|image,text,1000000,1M,No,large,,2,8,0.5,,0.75,3.5,1.55,130,436,12.6913,2025-04-14,Yes,gpt-5-medium,5
+"Claude Fable 5.1 (Adaptive Reasoning, Medium Effort, Default Fallback)",Anthropic,https://artificialanalysis.ai/models/claude-fable-5-1-medium,Yes,text|image,text,1000000,1M,No,large,,10,50,0.25,12.5,0.975,20,7.175,144,436,49.0592,2026-09-01,No,,30
+Command A,Cohere,https://artificialanalysis.ai/models/command-a,No,text,text,256000,256K,Yes,medium,111,2.5,10,,,,4.375,3.25,133,436,6.9582,2025-03-13,No,,6.25
+LFM2.5-VL-1.6B,Liquid AI,https://artificialanalysis.ai/models/lfm2-5-vl-1-6b,No,text|image,text,32000,32K,Yes,tiny,1.6,0,0,,,,0,0,1,436,4.8342,2026-01-05,No,,0
+Qwen3 VL 8B Instruct,Alibaba,https://artificialanalysis.ai/models/qwen3-vl-8b-instruct,No,text|image,text,256000,256K,Yes,small,8.77,0.18,0.7,,,,0.31,0.232,51,436,7.2584,2025-10-14,Yes,qwen3-5-9b-non-reasoning,0.44
+JT-MINI,China Mobile,https://artificialanalysis.ai/models/jt-mini,No,text,text,128000,128K,No,,,,,,,,,,,436,12.2118,2026-04-15,No,,
+Ling-mini-2.0,InclusionAI,https://artificialanalysis.ai/models/ling-mini-2-0,No,text,text,131000,131K,Yes,small,16.3,,,,,,,,,436,5.5439,2025-09-09,Yes,ling-3-0-tiny,
+Gemini 2.0 Flash-Lite (Preview),Google,https://artificialanalysis.ai/models/gemini-2-0-flash-lite-preview,No,text|image|speech|video,text,1000000,1M,No,,,,,,,,,,,436,7.3274,2025-02-05,Yes,gemini-2-0-flash-lite-001,
+Qwen3 30B A3B (Reasoning),Alibaba,https://artificialanalysis.ai/models/qwen3-30b-a3b-instruct-reasoning,Yes,text,text,32768,32.8K,Yes,small,30.5,0.2,2.4,,,,0.75,0.42,84,436,7.6261,2025-04-28,Yes,qwen3-30b-a3b-2507-reasoning,1.3
+"Claude Fable 5.1 (Adaptive Reasoning, Max Effort, Default Fallback)",Anthropic,https://artificialanalysis.ai/models/claude-fable-5-1,Yes,text|image,text,1000000,1M,No,large,,10,50,0.25,12.5,0.975,20,7.175,144,436,53.3738,2026-09-01,No,,30
+Mixtral 8x7B Instruct,Mistral,https://artificialanalysis.ai/models/mixtral-8x7b-instruct,No,text,text,32768,32.8K,Yes,medium,46.7,0.45,0.7,,,,0.5125,0.475,71,436,5.1229,2023-12-11,Yes,mistral-small-3-2,0.575
+Molmo2-8B,Allen Institute for AI,https://artificialanalysis.ai/models/molmo2-8b,No,text|image|video,text,36864,36.9K,Yes,small,8.66,,,,,,,,,436,5.0025,2025-12-11,No,,
+Mistral Small 4 (Reasoning),Mistral,https://artificialanalysis.ai/models/mistral-small-4,Yes,text|image,text,256000,256K,Yes,medium,119,0.15,0.6,,,,0.2625,0.195,45,436,11.4511,2026-03-16,No,,0.375
+Qwen3.5 0.8B (Non-reasoning),Alibaba,https://artificialanalysis.ai/models/qwen3-5-0-8b-non-reasoning,No,text|image|video,text,262144,262.1K,Yes,tiny,0.873,,,,,,,,,436,5.4001,2026-03-02,No,,
+GLM-5 (Reasoning),Z AI,https://artificialanalysis.ai/models/glm-5,Yes,text,text,200000,200K,Yes,large,744,1,3.2,0.2,,0.8,1.55,0.66,112,436,27.9112,2026-02-11,Yes,glm-5-1,2.1
+Claude Opus 4.5 (Non-reasoning),Anthropic,https://artificialanalysis.ai/models/claude-opus-4-5,No,text|image,text,200000,200K,No,large,,5,25,0.5,6.25,0.9,10,3.85,141,436,23.6789,2025-11-24,Yes,claude-opus-4-6,15
+Qwen Chat 72B,Alibaba,https://artificialanalysis.ai/models/qwen-chat-72b,No,text,text,33792,33.8K,Yes,medium,72,,,,,,,,,436,5.4364,2023-11-30,Yes,qwen3-32b-instruct,
+Gemini 1.5 Flash (Sep '24),Google,https://artificialanalysis.ai/models/gemini-1-5-flash,No,text|image|speech|video,text,1000000,1M,No,,,,,,,,,,,436,7.0711,2024-09-24,Yes,gemini-2-0-flash-lite-001,
+GPT-5.6 Luna (max),OpenAI,https://artificialanalysis.ai/models/gpt-5-6-luna,Yes,text|image,text,1000000,1M,No,medium,,0.2,1.2,0.02,0.25,0.9,0.45,0.174,65,436,37.5048,2026-07-09,No,,0.7
+GLM-4.6V (Non-reasoning),Z AI,https://artificialanalysis.ai/models/glm-4-6v,No,text|image,text,128000,128K,Yes,medium,108,0.3,0.9,,,,0.45,0.36,65,436,8.35,2025-12-08,Yes,glm-5v-turbo,0.6
+Solar Pro 2 (Preview) (Non-reasoning),Upstage,https://artificialanalysis.ai/models/solar-pro-2-preview,No,text,text,64000,64K,No,small,30.9,,,,,,,,,436,7.9055,2025-05-20,Yes,solar-pro-2,
+MiniCPM-V 4.6 1.3B,OpenBMB,https://artificialanalysis.ai/models/minicpm-v4-6-1-3b,No,text|image|video,text,262000,262K,Yes,tiny,1.3,,,,,,,,,436,5.6903,2026-05-11,No,,
+GPT-4o mini Realtime (Dec '24),OpenAI,https://artificialanalysis.ai/models/gpt-4o-mini-realtime-dec-2024,No,text|speech,text|speech,128000,128K,No,,,,,,,,,,,436,,2024-12-17,Yes,gpt-realtime-mini-oct-25,
+Qwen3 235B A22B (Non-reasoning),Alibaba,https://artificialanalysis.ai/models/qwen3-235b-a22b-instruct,No,text,text,32768,32.8K,Yes,large,235,0.7,2.8,,,,1.225,0.91,104,436,8.2947,2025-04-28,Yes,qwen3-235b-a22b-instruct-2507,1.75
+"Claude Opus 4.6 (Non-reasoning, High Effort)",Anthropic,https://artificialanalysis.ai/models/claude-opus-4-6,No,text|image,text,1000000,1M,No,large,,5,25,0.5,6.25,0.9,10,3.85,141,436,26.3534,2026-02-05,Yes,claude-opus-4-7-non-reasoning,15
+Mistral Small 3.2,Mistral,https://artificialanalysis.ai/models/mistral-small-3-2,No,text|image,text,128000,128K,Yes,small,24,0.1,0.3,,,,0.15,0.12,26,436,6.9635,2025-06-20,Yes,mistral-small-4,0.2
+DeepSeek V3 (Dec '24),DeepSeek,https://artificialanalysis.ai/models/deepseek-v3,No,text,text,128000,128K,Yes,large,671,0.32,0.89,,,,0.4625,0.377,67,436,8.4869,2024-12-26,Yes,deepseek-v3-1,0.605
+Kimi K2,Kimi,https://artificialanalysis.ai/models/kimi-k2,No,text,text,128000,128K,Yes,large,1000,0.57,2.3,,,,1.0025,0.743,97,436,12.7155,2025-07-11,Yes,kimi-k2-0905,1.435
+DeepSeek R1 Distill Qwen 1.5B,DeepSeek,https://artificialanalysis.ai/models/deepseek-r1-distill-qwen-1-5b,Yes,text,text,128000,128K,Yes,tiny,1.5,,,,,,,,,436,5.5111,2025-01-20,Yes,deepseek-v3-0324,
+EXAONE 4.0 32B (Reasoning),LG AI Research,https://artificialanalysis.ai/models/exaone-4-0-32b-reasoning,Yes,text,text,131000,131K,Yes,small,32,,,,,,,,,436,8.1784,2025-07-15,No,,
+Solar Pro 2 (Non-reasoning),Upstage,https://artificialanalysis.ai/models/solar-pro-2,No,text,text,65536,65.5K,No,,,,,,,,,,,436,6.9984,2025-07-09,Yes,solar-pro-3,
+Qwen3 14B (Reasoning),Alibaba,https://artificialanalysis.ai/models/qwen3-14b-instruct-reasoning,Yes,text,text,32768,32.8K,Yes,small,14.8,0.35,4.2,,,,1.3125,0.735,107,436,6.387,2025-04-28,Yes,qwen3-30b-a3b-2507-reasoning,2.275
+Sarvam 105B (high),Sarvam,https://artificialanalysis.ai/models/sarvam-105b,Yes,text,text,128000,128K,Yes,medium,106,0.042,0.17,0.026,,0.381,0.074,0.0436,11,436,8.7906,2026-03-06,No,,0.106
+Llama 3.1 Instruct 405B,Meta,https://artificialanalysis.ai/models/llama-3-1-instruct-405b,No,text,text,128000,128K,Yes,large,405,,,,,,,,,436,7.2893,2024-07-23,No,,
+Llama 3.1 Instruct 70B,Meta,https://artificialanalysis.ai/models/llama-3-1-instruct-70b,No,text,text,128000,128K,Yes,medium,70,0.56,0.56,,,,0.56,0.56,74,436,6.604,2024-07-23,Yes,llama-3-3-instruct-70b,0.56
+Qwen3.5 35B A3B (Reasoning),Alibaba,https://artificialanalysis.ai/models/qwen3-5-35b-a3b,Yes,text|image,text,262144,262.1K,Yes,small,36,0.25,2,,,,0.6875,0.425,80,436,19.3295,2026-02-24,Yes,qwen3-6-35b-a3b,1.125
+MiMo-V2.5-Pro (Non-reasoning),Xiaomi,https://artificialanalysis.ai/models/mimo-v2-5-pro-non-reasoning,No,text,text,1000000,1M,Yes,large,1023,0.435,0.87,0.0036,,0.9917,0.5438,0.1765,73,436,18.29,2026-04-22,No,,0.6525
+Ring-flash-2.0,InclusionAI,https://artificialanalysis.ai/models/ring-flash-2-0,Yes,text,text,128000,128K,Yes,medium,103,0.14,0.57,,,,0.2475,0.183,41,436,7.1534,2025-09-19,No,,0.355
+LFM2.5-1.2B-Instruct,Liquid AI,https://artificialanalysis.ai/models/lfm2-5-1-2b-instruct,No,text,text,32000,32K,Yes,tiny,1.17,,,,,,,,,436,5.2095,2026-01-05,No,,
+GPT-5 (high),OpenAI,https://artificialanalysis.ai/models/gpt-5,Yes,text|image,text,400000,400K,No,large,,1.25,10,0.125,,0.9,3.4375,1.3375,129,436,22.9828,2025-08-07,Yes,gpt-5-1,5.625
+Mistral Large 3,Mistral,https://artificialanalysis.ai/models/mistral-large-3,No,text|image,text,256000,256K,Yes,large,675,0.5,1.5,,,,0.75,0.6,84,436,9.708,2025-12-02,No,,1
+GPT-5.4 (Non-reasoning),OpenAI,https://artificialanalysis.ai/models/gpt-5-4-non-reasoning,No,text|image,text,1050000,1.1M,No,large,,2.5,15,0.25,,0.9,5.625,2.175,137,436,18.1597,2026-03-05,Yes,gpt-5-5-non-reasoning,8.75
+GPT-5.2 (xhigh),OpenAI,https://artificialanalysis.ai/models/gpt-5-2,Yes,text|image,text,400000,400K,No,large,,1.75,14,0.175,,0.9,4.8125,1.8725,135,436,30.4482,2025-12-11,Yes,gpt-5-4,7.875
+Apertus 70B Instruct,Swiss AI Initiative,https://artificialanalysis.ai/models/apertus-70b-instruct,No,text,text,65536,65.5K,Yes,medium,70,0.82,2.92,,,,1.345,1.03,108,436,5.1146,2025-09-02,No,,1.87
+Grok 4.1 Fast (Non-reasoning),SpaceXAI,https://artificialanalysis.ai/models/grok-4-1-fast,No,text|image,text,2000000,2M,No,,,,,,,,,,,436,11.2849,2025-11-19,Yes,grok-4-3-non-reasoning,
+DeepSeek R1 Distill Llama 70B,DeepSeek,https://artificialanalysis.ai/models/deepseek-r1-distill-llama-70b,Yes,text,text,128000,128K,Yes,medium,70,0.7,1.1,,,,0.8,0.74,85,436,7.8882,2025-01-20,Yes,deepseek-v3-0324,0.9
+Qwen3 0.6B (Reasoning),Alibaba,https://artificialanalysis.ai/models/qwen3-0.6b-instruct-reasoning,Yes,text,text,32000,32K,Yes,tiny,0.752,,,,,,,,,436,4.8342,2025-04-28,Yes,qwen3-5-0-8b,
+MiniMax-M2.7,MiniMax,https://artificialanalysis.ai/models/minimax-m2-7,Yes,text,text,204800,204.8K,Yes,large,230,0.3,1.2,0.06,0.375,0.8,0.525,0.222,72,436,23.2171,2026-03-18,Yes,minimax-m3,0.75
+Grok-1,SpaceXAI,https://artificialanalysis.ai/models/grok-1,No,text,text,8192,8.2K,Yes,large,314,,,,,,,,,436,6.3379,2024-03-17,Yes,grok-beta,
+Doubao Seed Code,ByteDance Seed,https://artificialanalysis.ai/models/doubao-seed-code,Yes,text|image,text,256000,256K,No,,,,,,,,,,,436,16.9468,2025-11-11,No,,
+GPT-5.1 (high),OpenAI,https://artificialanalysis.ai/models/gpt-5-1,Yes,text|image,text,272000,272K,No,large,,1.25,10,0.125,,0.9,3.4375,1.3375,129,436,24.7358,2025-11-13,Yes,gpt-5-2,5.625
+Gemini 3.5 Flash (medium),Google,https://artificialanalysis.ai/models/gemini-3-5-flash-medium,Yes,text|image|speech|video,text,1000000,1M,No,large,,1.5,9,0.15,,0.9,3.375,1.305,128,436,33.6326,2026-05-19,No,,5.25
+Claude 4 Opus (Non-reasoning),Anthropic,https://artificialanalysis.ai/models/claude-4-opus,No,text|image,text,200000,200K,No,large,,15,75,1.5,18.75,0.9,30,11.55,147,436,16.6142,2025-05-22,Yes,claude-4-1-opus,45
+EXAONE 4.5 33B,LG AI Research,https://artificialanalysis.ai/models/exaone-4-5-33b,Yes,text|image,text,262144,262.1K,Yes,small,34.4,,,,,,,,,436,13.2058,2026-04-09,No,,
+Qwen3.5 27B (Non-reasoning),Alibaba,https://artificialanalysis.ai/models/qwen3-5-27b-non-reasoning,No,text|image,text,262144,262.1K,Yes,small,27.8,0.3,2.4,,,,0.825,0.51,86,436,19.3684,2026-02-24,Yes,qwen3-6-35b-a3b-non-reasoning,1.35
+Mistral Large 2 (Nov '24),Mistral,https://artificialanalysis.ai/models/mistral-large-2,No,text,text,128000,128K,Yes,medium,123,,,,,,,,,436,7.5556,2024-11-18,Yes,mistral-large-3,
+Kimi K3 (low),Kimi,https://artificialanalysis.ai/models/kimi-k3-low,Yes,text|image,text,1048576,1.0M,Yes,large,2780,3,15,0.3,,0.9,6,2.31,138,436,34.4555,2026-07-16,No,,9
+PALM-2,Google,https://artificialanalysis.ai/models/palm-2,No,text,text,8000,8K,No,,,,,,,,,,,436,5.3692,2023-05-10,Yes,,
+Qwen3 VL 30B A3B Instruct,Alibaba,https://artificialanalysis.ai/models/qwen3-vl-30b-a3b-instruct,No,text|image,text,256000,256K,Yes,small,30,0.2,0.8,,,,0.35,0.26,56,436,7.9264,2025-10-03,Yes,qwen3-5-35b-a3b-non-reasoning,0.5
+Grok 4.20 0309 (Non-reasoning),SpaceXAI,https://artificialanalysis.ai/models/grok-4-20-0309-non-reasoning,No,text|image,text,2000000,2M,No,large,,2,6,0.2,,0.9,3,1.14,127,436,14.6066,2026-03-10,Yes,grok-4-20-non-reasoning,4
+DeepSeek V3.2 Speciale,DeepSeek,https://artificialanalysis.ai/models/deepseek-v3-2-speciale,Yes,text,text,128000,128K,Yes,large,685,,,,,,,,,436,14.4561,2025-12-01,Yes,deepseek-v4-pro-0424,
+Gemma 4 E4B (Non-reasoning),Google,https://artificialanalysis.ai/models/gemma-4-e4b-non-reasoning,No,text|image|speech|video,text,128000,128K,Yes,small,8,0.02,0.1,,,,0.04,0.028,3,436,7.4577,2026-04-03,No,,0.06
+GPT-5.4 (low),OpenAI,https://artificialanalysis.ai/models/gpt-5-4-low,Yes,text|image,text,1050000,1.1M,No,large,,2.5,15,0.25,,0.9,5.625,2.175,137,436,27.5773,2026-03-05,Yes,gpt-5-5-low,8.75
+"Claude Opus 4.6 (Adaptive Reasoning, Max Effort)",Anthropic,https://artificialanalysis.ai/models/claude-opus-4-6-adaptive,Yes,text|image,text,1000000,1M,No,large,,5,25,0.5,6.25,0.9,10,3.85,141,436,31.9457,2026-02-05,Yes,claude-opus-4-7,15
+Jamba 1.5 Mini,AI21 Labs,https://artificialanalysis.ai/models/jamba-1-5-mini,No,text,text,256000,256K,Yes,medium,52,0.2,0.4,,,,0.25,0.22,43,436,5.2064,2024-08-22,Yes,jamba-1-6-mini,0.3
+OLMo 2 32B,Allen Institute for AI,https://artificialanalysis.ai/models/olmo-2-32b,No,text,text,4096,4.1K,Yes,small,32.2,,,,,,,,,436,5.9709,2025-03-13,Yes,olmo-3-32b-think,
+Nova Pro,Amazon,https://artificialanalysis.ai/models/nova-pro,No,text|image|video,text,300000,300K,No,large,,0.8,3.2,0.2,,0.75,1.4,0.62,110,436,6.9583,2024-12-03,Yes,nova-2-0-pro,2
+Granite 4.0 350M,IBM,https://artificialanalysis.ai/models/granite-4-0-350m,No,text,text,32768,32.8K,Yes,tiny,0.35,,,,,,,,,436,4.8342,2025-10-28,No,,
+Gemini 2.5 Flash Preview (Non-reasoning),Google,https://artificialanalysis.ai/models/gemini-2-5-flash-04-2025,No,text|image|speech|video,text,1000000,1M,No,,,,,,,,,,,436,8.6587,2025-04-17,Yes,gemini-2-5-flash,
+Grok 4 Fast (Reasoning),SpaceXAI,https://artificialanalysis.ai/models/grok-4-fast-reasoning,Yes,text|image,text,2000000,2M,No,medium,,0.2,0.5,,,,0.275,0.23,46,436,17.9399,2025-09-19,Yes,grok-4-1-fast-reasoning,0.35
+"GPT-4o (March 2025, chatgpt-4o-latest)",OpenAI,https://artificialanalysis.ai/models/gpt-4o-chatgpt-03-25,No,text|image,text,128000,128K,No,,,,,,,,,,,436,8.9618,2025-03-27,Yes,gpt-4o-chatgpt-04-25,
+Muse Glimmer (high),Meta,https://artificialanalysis.ai/models/muse-glimmer,Yes,text|image,text,131072,131.1K,Yes,small,30,0.35,1.5,0.04,,0.8857,0.6375,0.248,77,436,18.0678,2026-08-10,No,,0.925
+GPT-5.6 Luna (medium),OpenAI,https://artificialanalysis.ai/models/gpt-5-6-luna-medium,Yes,text|image,text,1000000,1M,No,medium,,0.2,1.2,0.02,0.25,0.9,0.45,0.174,65,436,25.7829,2026-07-09,No,,0.7
+Qwen3 1.7B (Reasoning),Alibaba,https://artificialanalysis.ai/models/qwen3-1.7b-instruct-reasoning,Yes,text,text,32000,32K,Yes,tiny,2.03,,,,,,,,,436,5.1866,2025-04-28,Yes,qwen3-5-2b,
+Gemini 3.1 Flash-Lite,Google,https://artificialanalysis.ai/models/gemini-3-1-flash-lite-preview,Yes,text|image|speech|video,text,1000000,1M,No,medium,,0.25,1.5,0.025,,0.9,0.5625,0.2175,75,436,16.0342,2026-03-03,Yes,gemini-3-5-flash-lite,0.875
+Kimi Linear 48B A3B Instruct,Kimi,https://artificialanalysis.ai/models/kimi-linear-48b-a3b-instruct,No,text,text,1000000,1M,Yes,medium,49.1,,,,,,,,,436,7.3004,2025-10-30,No,,
+Llama 2 Chat 70B,Meta,https://artificialanalysis.ai/models/llama-2-chat-70b,No,text,text,4096,4.1K,Yes,medium,70,,,,,,,,,436,5.3045,2023-07-18,Yes,llama-3-instruct-70b,
+Solar Open 100B (Reasoning),Upstage,https://artificialanalysis.ai/models/solar-open-100b-reasoning,Yes,text,text,128000,128K,Yes,medium,102,,,,,,,,,436,10.3644,2025-12-17,No,,
+GPT-5.3 Codex (xhigh),OpenAI,https://artificialanalysis.ai/models/gpt-5-3-codex,Yes,text|image,text,400000,400K,No,large,,1.75,14,0.175,,0.9,4.8125,1.8725,135,436,32.5028,2026-02-05,No,,7.875
+Mistral Medium 3,Mistral,https://artificialanalysis.ai/models/mistral-medium-3,No,text|image,text,128000,128K,No,medium,,0.4,2,,,,0.8,0.56,85,436,9.0476,2025-05-07,Yes,mistral-medium-3-1,1.2
+LFM2.5-1.2B-Thinking,Liquid AI,https://artificialanalysis.ai/models/lfm2-5-1-2b-thinking,Yes,text,text,32000,32K,Yes,tiny,1.17,,,,,,,,,436,5.2219,2026-01-20,No,,
+K2 Think V2,MBZUAI Institute of Foundation Models,https://artificialanalysis.ai/models/k2-think-v2,Yes,text,text,262144,262.1K,Yes,medium,70,,,,,,,,,436,11.4957,2025-12-15,No,,
+GLM-5.1 (Reasoning),Z AI,https://artificialanalysis.ai/models/glm-5-1,Yes,text,text,200000,200K,Yes,large,744,1.2,4.4,0.26,,0.8082,2,0.862,120,436,26.4455,2026-04-07,Yes,glm-5-2,2.8
+o1,OpenAI,https://artificialanalysis.ai/models/o1,Yes,text|image,text,200000,200K,No,large,,15,60,7.5,,0.5,26.25,14.25,145,436,15.2309,2024-12-05,Yes,o3,37.5
+Qwen3 Max (Preview),Alibaba,https://artificialanalysis.ai/models/qwen3-max-preview,No,text,text,262144,262.1K,No,large,,1.2,6,,,,2.4,1.68,123,436,12.5884,2025-09-05,Yes,qwen3-max,3.6
+Nemotron 3 Ultra 550B A55B (Reasoning),NVIDIA,https://artificialanalysis.ai/models/nvidia-nemotron-3-ultra-550b-a55b,Yes,text,text,262144,262.1K,Yes,large,550,0.6,2.6,0.2,,0.8,1.1,0.52,99,436,23.4145,2026-06-04,No,,1.6
+GPT-5.4 Pro (xhigh),OpenAI,https://artificialanalysis.ai/models/gpt-5-4-pro,Yes,text|image,text,1050000,1.1M,No,large,,30,180,,,,67.5,45,150,436,,2026-03-05,Yes,gpt-5-5-pro,105
+LongCat 2.0,LongCat,https://artificialanalysis.ai/models/longcat-2-0,Yes,text,text,1000000,1M,Yes,large,1600,0.75,2.95,0.015,,0.98,1.3,0.4555,106,436,19.6878,2026-06-29,No,,1.85
+Nova Lite,Amazon,https://artificialanalysis.ai/models/nova-lite,No,text|image|video,text,300000,300K,No,small,,0.06,0.24,0.015,,0.75,0.105,0.0465,20,436,6.6657,2024-12-03,Yes,nova-2-0-lite,0.15
+Seed-OSS-36B-Instruct,ByteDance Seed,https://artificialanalysis.ai/models/seed-oss-36b-instruct,Yes,text,text,512000,512K,Yes,small,36.2,0.21,0.57,,,,0.3,0.246,49,436,12.0993,2025-08-20,Yes,doubao-seed-code,0.39
+GPT-4.5 (Preview),OpenAI,https://artificialanalysis.ai/models/gpt-4-5,No,text|image,text,128000,128K,No,,,,,,,,,,,436,9.5762,2025-02-27,Yes,gpt-4-1,
+GPT-5 Codex (high),OpenAI,https://artificialanalysis.ai/models/gpt-5-codex,Yes,text|image,text,400000,400K,No,large,,1.25,10,0.125,,0.9,3.4375,1.3375,129,436,24.8819,2025-09-23,Yes,gpt-5-1-codex,5.625
+GLM-4.5-Air,Z AI,https://artificialanalysis.ai/models/glm-4-5-air,Yes,text,text,128000,128K,Yes,medium,106,0.17,0.98,,,,0.3725,0.251,57,436,11.0889,2025-07-28,Yes,glm-4-7-flash,0.575
+Qwen3.5 2B (Reasoning),Alibaba,https://artificialanalysis.ai/models/qwen3-5-2b,Yes,text|image,text,262144,262.1K,Yes,tiny,2.27,,,,,,,,,436,6.9441,2026-03-02,No,,
+MiMo-V2-Pro,Xiaomi,https://artificialanalysis.ai/models/mimo-v2-pro,Yes,text,text,1000000,1M,No,,,,,,,,,,,436,28.6442,2026-03-18,Yes,mimo-v2-5-pro,
+Tri-21B-Think,Trillion Labs,https://artificialanalysis.ai/models/tri-21b-think-v0-5,Yes,text,text,32000,32K,Yes,small,21,,,,,,,,,436,8.987,2026-02-10,No,,
+"DeepSeek V4 Pro (Reasoning, High Effort)",DeepSeek,https://artificialanalysis.ai/models/deepseek-v4-pro-0424-high,Yes,text,text,1000000,1M,Yes,large,1600,0.435,0.87,0.0036,,0.9917,0.5438,0.1765,73,436,30.1055,2026-04-24,No,,0.6525
+Granite 4.0 H Small,IBM,https://artificialanalysis.ai/models/granite-4-0-h-small,No,text,text,128000,128K,Yes,small,32,0.06,0.25,,,,0.1075,0.079,21,436,6.0493,2025-09-22,No,,0.155
+Qwen3 30B A3B 2507 (Reasoning),Alibaba,https://artificialanalysis.ai/models/qwen3-30b-a3b-2507-reasoning,Yes,text,text,262144,262.1K,Yes,small,30.5,0.2,2.4,,,,0.75,0.42,84,436,9.8054,2025-07-30,Yes,qwen3-5-35b-a3b,1.3
+Mistral Large (Feb '24),Mistral,https://artificialanalysis.ai/models/mistral-large,No,text,text,32768,32.8K,No,large,,4,12,,,,6,4.8,138,436,5.7644,2024-02-26,Yes,mistral-large-2407,8
+Qwen3.8 Max,Alibaba,https://artificialanalysis.ai/models/qwen3-8-max,Yes,text|image|video,text,1000000,1M,No,large,,2,6,0.25,,0.875,3,1.175,127,436,40.3049,2026-08-03,No,,4
+Grok 4.3 (medium),SpaceXAI,https://artificialanalysis.ai/models/grok-4-3-medium,Yes,text|image,text,1000000,1M,No,large,,1.25,2.5,0.2,1.25,0.84,1.5625,0.64,113,436,24.7817,2026-04-30,No,,1.875
+GPT-5 (medium),OpenAI,https://artificialanalysis.ai/models/gpt-5-medium,Yes,text|image,text,400000,400K,No,large,,1.25,10,0.125,,0.9,3.4375,1.3375,129,436,22.8693,2025-08-07,Yes,gpt-5-1,5.625
+Grok 4,SpaceXAI,https://artificialanalysis.ai/models/grok-4,Yes,text|image,text,256000,256K,No,large,,3,15,,,,6,4.2,138,436,22.4867,2025-07-10,Yes,grok-4-20-0309,9
+Sonar,Perplexity,https://artificialanalysis.ai/models/sonar,No,text,text,127000,127K,No,,,,,,,,,,,436,7.7097,2025-01-21,Yes,sonar-reasoning-pro,
+Llama 3.2 Instruct 11B (Vision),Meta,https://artificialanalysis.ai/models/llama-3-2-instruct-11b-vision,No,text|image,text,128000,128K,Yes,small,11,0.345,0.345,,,,0.345,0.345,55,436,5.408,2024-09-25,No,,0.345
+DeepSeek R1 0528 Qwen3 8B,DeepSeek,https://artificialanalysis.ai/models/deepseek-r1-qwen3-8b,Yes,text,text,32768,32.8K,Yes,small,8.19,,,,,,,,,436,8.0789,2025-05-29,Yes,deepseek-v3-0324,
+Qwen3.6 Max Preview,Alibaba,https://artificialanalysis.ai/models/qwen3-6-max,Yes,text,text,256000,256K,No,large,,1.3,7.8,0.13,1.625,0.9,2.925,1.131,126,436,28.3749,2026-04-20,Yes,qwen3-7-max,4.55
+LongCat Flash Lite,LongCat,https://artificialanalysis.ai/models/longcat-flash-lite,No,text,text,256000,256K,Yes,medium,68.5,,,,,,,,,436,11.4709,2026-01-28,No,,
+Tri-21B-think Preview,Trillion Labs,https://artificialanalysis.ai/models/tri-21b-think-preview,Yes,text,text,32000,32K,Yes,small,21,,,,,,,,,436,9.5919,2026-02-10,Yes,tri-21b-think-v0-5,
+Nova 2.0 Lite (high),Amazon,https://artificialanalysis.ai/models/nova-2-0-lite-reasoning,Yes,text|image,text,1000000,1M,No,medium,,0.3,2.5,,,,0.85,0.52,89,436,13.3741,2025-10-29,No,,1.4
+Gemini 2.5 Pro Preview (Mar' 25),Google,https://artificialanalysis.ai/models/gemini-2-5-pro-03-25,Yes,text|image|speech|video,text,1000000,1M,No,,,,,,,,,,,436,14.961,2025-03-25,Yes,gemini-2-5-pro,
+Nemotron 3 Super 120B A12B (Reasoning),NVIDIA,https://artificialanalysis.ai/models/nvidia-nemotron-3-super-120b-a12b,Yes,text,text,1000000,1M,Yes,medium,120.6,0.1925,0.65,,,,0.3069,0.2383,50,436,13.5508,2026-03-11,No,,0.4213
+MiniCPM5-2B,OpenBMB,https://artificialanalysis.ai/models/minicpm5-2b,Yes,text,text,131072,131.1K,Yes,tiny,2.6,,,,,,,,,436,13.1371,2026-09-07,No,,
+Grok 4.20 0309 v2 (Non-reasoning),SpaceXAI,https://artificialanalysis.ai/models/grok-4-20-non-reasoning,No,text|image,text,2000000,2M,No,large,,1.25,2.5,0.2,,0.84,1.5625,0.64,113,436,14.201,2026-04-07,Yes,grok-4-3-non-reasoning,1.875
+Qwen3.5 4B (Reasoning),Alibaba,https://artificialanalysis.ai/models/qwen3-5-4b,Yes,text|image|video,text,262144,262.1K,Yes,small,4.66,0.03,0.15,,,,0.06,0.042,6,436,13.1248,2026-03-02,No,,0.09
+Magistral Medium 1,Mistral,https://artificialanalysis.ai/models/magistral-medium,Yes,text,text,40000,40K,No,,,,,,,,,,,436,9.0539,2025-06-10,Yes,magistral-medium-2509,
+Kimi K2 0905,Kimi,https://artificialanalysis.ai/models/kimi-k2-0905,No,text,text,256000,256K,Yes,large,1000,0.6,2.5,,,,1.075,0.79,98,436,15.2942,2025-09-05,Yes,kimi-k2-5-non-reasoning,1.55
+Qwen3.8 27B (medium),Alibaba,https://artificialanalysis.ai/models/qwen3-8-27b-medium,Yes,text|image|video,text,256000,256K,Yes,small,27,0.5,3,0.05,,0.9,1.125,0.435,100,436,30.6565,2026-08-14,No,,1.75
+Motif-2-12.7B-Reasoning,Motif Technologies,https://artificialanalysis.ai/models/motif-2-12-7b,Yes,text,text,128000,128K,No,small,12.7,,,,,,,,,436,9.1875,2025-12-04,No,,
+Qwen3.6 35B A3B (Non-reasoning),Alibaba,https://artificialanalysis.ai/models/qwen3-6-35b-a3b-non-reasoning,No,text|image|video,text,262144,262.1K,Yes,small,36,0.375,2.25,,,,0.8438,0.5625,87,436,15.2321,2026-04-16,No,,1.3125
+Ministral 3 3B,Mistral,https://artificialanalysis.ai/models/ministral-3-3b,No,text|image,text,256000,256K,Yes,tiny,3,0.1,0.1,,,,0.1,0.1,18,436,4.8376,2025-12-02,No,,0.1
+LFM2 8B A1B,Liquid AI,https://artificialanalysis.ai/models/lfm2-8b-a1b,No,text,text,32768,32.8K,Yes,small,8.34,,,,,,,,,436,4.9296,2025-10-07,No,,
+Gemini 2.5 Flash Preview (Reasoning),Google,https://artificialanalysis.ai/models/gemini-2-5-flash-reasoning-04-2025,Yes,text|image|speech|video,text,1000000,1M,No,,,,,,,,,,,436,11.6539,2025-04-17,Yes,gemini-2-5-flash-reasoning,
+Qwen3.7 Max,Alibaba,https://artificialanalysis.ai/models/qwen3-7-max,Yes,text,text,1000000,1M,No,large,,2.5,7.5,0.5,,0.8,3.75,1.6,131,436,29.8725,2026-05-19,Yes,qwen3-8-max,5
+GLM-4.6 (Reasoning),Z AI,https://artificialanalysis.ai/models/glm-4-6-reasoning,Yes,text,text,200000,200K,Yes,large,357,0.55,2.2,0.55,,0.8,0.9625,0.715,93,436,18.5297,2025-09-30,Yes,glm-4-7,1.375
+GPT-4,OpenAI,https://artificialanalysis.ai/models/gpt-4,No,text,text,8192,8.2K,No,large,,30,60,,,,37.5,33,149,436,6.7016,2023-03-14,Yes,gpt-4-5,45
+Gemini 2.5 Flash (Non-reasoning),Google,https://artificialanalysis.ai/models/gemini-2-5-flash,No,text|image|speech|video,text,1000000,1M,No,medium,,0.3,2.5,0.03,,0.9,0.85,0.331,89,436,9.8513,2025-05-20,Yes,gemini-2-5-flash-preview-09-2025,1.4
+Llama 2 Chat 13B,Meta,https://artificialanalysis.ai/models/llama-2-chat-13b,No,text,text,4096,4.1K,Yes,small,13,,,,,,,,,436,5.3007,2023-07-18,Yes,llama-3-instruct-70b,
+GPT-5.5 (medium),OpenAI,https://artificialanalysis.ai/models/gpt-5-5-medium,Yes,text|image,text,922000,922K,No,large,,5,30,0.5,,0.9,11.25,4.35,142,436,34.1542,2026-04-23,Yes,gpt-5-6-sol-medium,17.5
+Hermes 4 - Llama-3.1 70B (Reasoning),Nous Research,https://artificialanalysis.ai/models/hermes-4-llama-3-1-70b-reasoning,Yes,text,text,128000,128K,Yes,medium,70.6,,,,,,,,,436,7.9058,2025-08-27,No,,
+Step 3.7 Flash,StepFun,https://artificialanalysis.ai/models/step-3-7-flash,Yes,text|image,text,262144,262.1K,Yes,large,198,0.2,1.15,0.04,,0.8,0.4375,0.183,64,436,19.4813,2026-05-29,No,,0.675
+DeepSeek V3.2 (Non-reasoning),DeepSeek,https://artificialanalysis.ai/models/deepseek-v3-2,No,text,text,128000,128K,Yes,large,685,0.28,0.42,,,,0.315,0.294,53,436,16.0435,2025-12-01,Yes,deepseek-v4-pro-0424-non-reasoning,0.35
+Qwen3 VL 32B Instruct,Alibaba,https://artificialanalysis.ai/models/qwen3-vl-32b-instruct,No,text|image,text,256000,256K,Yes,small,33.4,0.16,0.64,,,,0.28,0.208,47,436,8.387,2025-10-21,Yes,qwen3-5-27b-non-reasoning,0.4
+GPT-5.2 (Non-reasoning),OpenAI,https://artificialanalysis.ai/models/gpt-5-2-non-reasoning,No,text|image,text,400000,400K,No,large,,1.75,14,0.175,,0.9,4.8125,1.8725,135,436,16.976,2025-12-11,Yes,gpt-5-4-non-reasoning,7.875
+Gemma 4 26B A4B (Reasoning),Google,https://artificialanalysis.ai/models/gemma-4-26b-a4b,Yes,text|image|video,text,256000,256K,Yes,small,25.2,0.115,0.37,0.085,,0.6377,0.1788,0.1195,32,436,16.6719,2026-04-02,No,,0.2425
+DeepSeek V4 Pro (Non-reasoning),DeepSeek,https://artificialanalysis.ai/models/deepseek-v4-pro-0424-non-reasoning,No,text,text,1000000,1M,Yes,large,1600,0.435,0.87,0.0036,,0.9917,0.5438,0.1765,73,436,20.8345,2026-04-24,No,,0.6525
+NVIDIA Nemotron Nano 12B v2 VL (Reasoning),NVIDIA,https://artificialanalysis.ai/models/nvidia-nemotron-nano-12b-v2-vl-reasoning,Yes,text|image,text,128000,128K,Yes,small,13.2,0.2,0.6,,,,0.3,0.24,49,436,7.478,2025-10-28,No,,0.4
+GPT-5.6 Sol (medium),OpenAI,https://artificialanalysis.ai/models/gpt-5-6-sol-medium,Yes,text|image,text,1000000,1M,No,large,,4,20,0.4,5,0.9,8,3.08,140,436,39.4846,2026-07-09,No,,12
+GPT-5.5 (Non-reasoning),OpenAI,https://artificialanalysis.ai/models/gpt-5-5-non-reasoning,No,text|image,text,922000,922K,No,large,,5,30,0.5,,0.9,11.25,4.35,142,436,23.1674,2026-04-23,Yes,gpt-5-6-sol-non-reasoning,17.5
+Qwen3.5 Omni Flash,Alibaba,https://artificialanalysis.ai/models/qwen3-5-omni-flash,No,text|image|speech|video,text|speech,256000,256K,No,medium,,0.1,0.8,,,,0.275,0.17,46,436,12.474,2026-03-30,No,,0.45
+GLM-4.7 (Reasoning),Z AI,https://artificialanalysis.ai/models/glm-4-7,Yes,text,text,200000,200K,Yes,large,357,0.6,2.2,0.6,,0.8,1,0.76,96,436,22.2403,2025-12-22,Yes,glm-5,1.4
+Nova 2.0 Lite (low),Amazon,https://artificialanalysis.ai/models/nova-2-0-lite-reasoning-low,Yes,text|image,text,1000000,1M,No,medium,,0.3,2.5,,,,0.85,0.52,89,436,11.8041,2025-10-29,No,,1.4
+Magistral Small 1.2,Mistral,https://artificialanalysis.ai/models/magistral-small-2509,Yes,text|image,text,128000,128K,Yes,small,24,0.5,1.5,,,,0.75,0.6,84,436,8.5937,2025-09-17,No,,1
+Gemma 4 26B A4B (Non-reasoning),Google,https://artificialanalysis.ai/models/gemma-4-26b-a4b-non-reasoning,No,text|image|video,text,256000,256K,Yes,small,25.2,0.13,0.4,0.125,,0.6377,0.1975,0.1535,34,436,13.1304,2026-04-02,No,,0.265
+"Claude Opus 5 (Adaptive Reasoning, High Effort)",Anthropic,https://artificialanalysis.ai/models/claude-opus-5-high,Yes,text|image,text,1000000,1M,No,large,,5,25,0.5,6.25,0.9,10,3.85,141,436,48.2372,2026-07-24,No,,15
+Ministral 3 14B,Mistral,https://artificialanalysis.ai/models/ministral-3-14b,No,text|image,text,256000,256K,Yes,small,14,0.2,0.2,,,,0.2,0.2,35,436,6.0444,2025-12-02,No,,0.2
+K-EXAONE (Reasoning),LG AI Research,https://artificialanalysis.ai/models/k-exaone,Yes,text,text,256000,256K,Yes,large,236,,,,,,,,,436,14.3684,2025-12-31,No,,
+Llama 3.2 Instruct 3B,Meta,https://artificialanalysis.ai/models/llama-3-2-instruct-3b,No,text,text,128000,128K,Yes,tiny,3,,,,,,,,,436,5.7006,2024-09-25,Yes,llama-3-3-instruct-70b,
+Gemini 2.5 Flash-Lite Preview (Sep '25) (Non-reasoning),Google,https://artificialanalysis.ai/models/gemini-2-5-flash-lite-preview-09-2025,No,text|image|speech|video,text,1000000,1M,No,medium,,0.1,0.4,0.01,,0.9,0.175,0.067,31,436,9.3368,2025-09-25,Yes,gemini-3-1-flash-lite-preview,0.25
+Inkling Small,Thinking Machines,https://artificialanalysis.ai/models/inkling-small,Yes,text|image|speech,text,1000000,1M,Yes,large,266,0.3,1.2,0.06,,0.8,0.525,0.222,72,436,26.0861,2026-07-30,No,,0.75
+GPT-4.1 nano,OpenAI,https://artificialanalysis.ai/models/gpt-4-1-nano,No,text|image,text,1000000,1M,No,medium,,0.1,0.4,0.025,,0.75,0.175,0.0775,31,436,7.818,2025-04-14,Yes,gpt-5-nano-medium,0.25
+Llama 3.1 Nemotron Instruct 70B,NVIDIA,https://artificialanalysis.ai/models/llama-3-1-nemotron-instruct-70b,No,text,text,128000,128K,Yes,medium,70,1.2,1.2,,,,1.2,1.2,103,436,6.9438,2024-10-15,No,,1.2
+Llama 3.1 Instruct 8B,Meta,https://artificialanalysis.ai/models/llama-3-1-instruct-8b,No,text,text,128000,128K,Yes,small,8,0.02,0.05,,,,0.0275,0.023,2,436,6.9335,2024-07-23,Yes,llama-3-2-instruct-11b-vision,0.035
+LFM2 2.6B,Liquid AI,https://artificialanalysis.ai/models/lfm2-2-6b,No,text,text,32768,32.8K,Yes,tiny,2.57,,,,,,,,,436,5.2107,2025-09-23,No,,
+Gemini 3.8 Flash (medium),Google,https://artificialanalysis.ai/models/gemini-3-8-flash-medium,Yes,text|image|speech|video,text,1000000,1M,No,large,,0.75,3.75,0.075,0.75,0.9,1.5,0.5775,111,436,39.9993,2026-09-02,No,,2.25
+Gemma 4 E2B (Non-reasoning),Google,https://artificialanalysis.ai/models/gemma-4-e2b-non-reasoning,No,text|image|speech|video,text|image,128000,128K,Yes,small,5.1,,,,,,,,,436,6.4754,2026-04-02,No,,
+DeepSeek V3 0324,DeepSeek,https://artificialanalysis.ai/models/deepseek-v3-0324,No,text,text,128000,128K,Yes,large,671,0.845,1.175,0.7925,,0.4375,0.9275,0.8413,92,436,9.72,2025-03-25,Yes,deepseek-v3-1,1.01
+Command-R+ (Apr '24),Cohere,https://artificialanalysis.ai/models/command-r-plus-04-2024,No,text,text,128000,128K,Yes,medium,104,,,,,,,,,436,5.2982,2024-04-04,Yes,command-a,
+Sarvam 30B (high),Sarvam,https://artificialanalysis.ai/models/sarvam-30b,Yes,text,text,65536,65.5K,Yes,small,32.2,0.026,0.11,0.016,,0.3846,0.047,0.0274,4,436,6.5597,2026-03-06,No,,0.068
+Qwen2 Instruct 72B,Alibaba,https://artificialanalysis.ai/models/qwen2-72b-instruct,No,text,text,131072,131.1K,Yes,medium,72,,,,,,,,,436,6.3287,2024-06-07,Yes,qwen2-5-72b-instruct,
+GPT-4 Turbo,OpenAI,https://artificialanalysis.ai/models/gpt-4-turbo,No,text|image,text,128000,128K,No,large,,10,30,,,,15,12,143,436,7.0435,2023-11-06,Yes,gpt-4-turbo-0125-preview,20
+Nova 2.0 Lite (Non-reasoning),Amazon,https://artificialanalysis.ai/models/nova-2-0-lite,No,text|image,text,1000000,1M,No,medium,,0.3,2.5,,,,0.85,0.52,89,436,8.7366,2025-10-29,No,,1.4
+NVIDIA Nemotron 3 Nano 30B A3B (Reasoning),NVIDIA,https://artificialanalysis.ai/models/nvidia-nemotron-3-nano-30b-a3b-reasoning,Yes,text,text,1000000,1M,Yes,small,31.6,0.05,0.2,,,,0.0875,0.065,14,436,8.8961,2025-12-15,No,,0.125
+"DeepSeek V4 Flash Vision (Reasoning, Max Effort)",DeepSeek,https://artificialanalysis.ai/models/deepseek-v4-flash-vision,Yes,text|image,text,1000000,1M,No,large,284,0.44,1.32,0.014,,0.9682,0.66,0.2298,78,436,35.0122,2026-08-21,No,,0.88
+DeepSeek LLM 67B Chat (V1),DeepSeek,https://artificialanalysis.ai/models/deepseek-llm-67b-chat,No,text,text,4096,4.1K,Yes,small,7,,,,,,,,,436,5.3045,2023-11-29,Yes,deepseek-v3-0324,
+MiniCPM5-1B (Reasoning),OpenBMB,https://artificialanalysis.ai/models/minicpm5-1b,Yes,text,text,128000,128K,Yes,tiny,1,,,,,,,,,436,8.7966,2026-05-25,No,,
+Claude 3 Opus,Anthropic,https://artificialanalysis.ai/models/claude-3-opus,No,text|image,text,200000,200K,No,large,,15,75,1.5,18.75,0.9,30,11.55,147,436,8.724,2024-03-04,Yes,claude-35-sonnet-june-24,45
+Gemini 3.6 Flash (high),Google,https://artificialanalysis.ai/models/gemini-3-6-flash,Yes,text|image|speech|video,text,1000000,1M,No,large,,0.75,3.75,0.15,,0.8,1.5,0.63,111,436,34.3396,2026-07-21,No,,2.25
+Gemini 3 Flash Preview (Non-reasoning),Google,https://artificialanalysis.ai/models/gemini-3-flash,No,text|image|speech|video,text,1000000,1M,No,large,,0.5,3,0.05,,0.9,1.125,0.435,100,436,17.9337,2025-12-17,Yes,gemini-3-5-flash-minimal,1.75
+Jamba 1.7 Large,AI21 Labs,https://artificialanalysis.ai/models/jamba-1-7-large,No,text,text,256000,256K,Yes,large,398,,,,,,,,,436,6.071,2025-07-07,No,,
+Grok 4.5 (high),SpaceXAI,https://artificialanalysis.ai/models/grok-4-5,Yes,text|image,text,500000,500K,No,large,,2,6,0.3,,0.85,3,1.21,127,436,39.0842,2026-07-08,No,,4
+Mistral Saba,Mistral,https://artificialanalysis.ai/models/mistral-saba,No,text,text,32000,32K,No,small,24,,,,,,,,,436,6.486,2025-02-17,Yes,mistral-small-3-2,
+Qwen3 Max,Alibaba,https://artificialanalysis.ai/models/qwen3-max,No,text,text,262144,262.1K,No,large,,1.2,6,,,,2.4,1.68,123,436,15.6098,2025-09-23,Yes,qwen3-max-thinking,3.6
+Gemini 2.0 Flash-Lite (Feb '25),Google,https://artificialanalysis.ai/models/gemini-2-0-flash-lite-001,No,text|image|speech|video,text,1000000,1M,No,,,,,,,,,,,436,7.408,2025-02-25,Yes,gemini-2-5-flash-lite-preview-09-2025,
+Mistral Small (Sep '24),Mistral,https://artificialanalysis.ai/models/mistral-small,No,text,text,32768,32.8K,Yes,small,22,0.2,0.6,,,,0.3,0.24,49,436,5.8484,2024-09-17,Yes,mistral-small-3,0.4
+GPT-5.6 Sol (Non-reasoning),OpenAI,https://artificialanalysis.ai/models/gpt-5-6-sol-non-reasoning,No,text|image,text,1000000,1M,No,large,,4,20,0.4,5,0.9,8,3.08,140,436,28.328,2026-07-09,No,,12
+Gemini 3 Flash Preview (Reasoning),Google,https://artificialanalysis.ai/models/gemini-3-flash-reasoning,Yes,text|image|speech|video,text,1000000,1M,No,large,,0.5,3,0.05,,0.9,1.125,0.435,100,436,26.3272,2025-12-17,Yes,gemini-3-5-flash,1.75
+Nanbeige4.1-3B,Nanbeige,https://artificialanalysis.ai/models/nanbeige4-1-3b,Yes,text,text,256000,256K,Yes,tiny,3.93,,,,,,,,,436,8.4012,2026-02-11,No,,
+Qwen3.8 27B (low),Alibaba,https://artificialanalysis.ai/models/qwen3-8-27b-low,Yes,text|image|video,text,256000,256K,Yes,small,27,0.5,3,0.05,,0.9,1.125,0.435,100,436,29.2201,2026-08-14,No,,1.75
+Solar Open2 250B,Upstage,https://artificialanalysis.ai/models/solar-open2-250b,Yes,text,text,1048576,1.0M,Yes,large,250,,,,,,,,,436,24.7365,2026-08-12,No,,
+Ling 3.0 Tiny,InclusionAI,https://artificialanalysis.ai/models/ling-3-0-tiny,Yes,text,text,262144,262.1K,Yes,small,7.9,0,0,,,,0,0,1,436,11.8679,2026-08-06,No,,0
+Qwen3 30B A3B 2507 Instruct,Alibaba,https://artificialanalysis.ai/models/qwen3-30b-a3b-2507,No,text,text,262144,262.1K,Yes,small,30.5,0.2,0.8,,,,0.35,0.26,56,436,7.5211,2025-07-29,Yes,qwen3-5-35b-a3b-non-reasoning,0.5
+GPT-5 (low),OpenAI,https://artificialanalysis.ai/models/gpt-5-low,Yes,text|image,text,400000,400K,No,large,,1.25,10,0.125,,0.9,3.4375,1.3375,129,436,20.7856,2025-08-07,Yes,gpt-5-1,5.625
+Celeris-1,Celeris,https://artificialanalysis.ai/models/celeris-1,No,text|image,text,131072,131.1K,No,medium,,0.2,0.7,,,,0.325,0.25,54,436,6.347,2026-07-24,No,,0.45
+Qwen3 Max Thinking,Alibaba,https://artificialanalysis.ai/models/qwen3-max-thinking,Yes,text,text,256000,256K,No,,,,,,,,,,,436,21.2551,2026-01-26,Yes,qwen3-6-max,
+Llama 3.2 Instruct 1B,Meta,https://artificialanalysis.ai/models/llama-3-2-instruct-1b,No,text,text,128000,128K,Yes,tiny,1,,,,,,,,,436,4.8342,2024-09-25,Yes,llama-3-3-instruct-70b,
+Tiny Aya Global,Cohere,https://artificialanalysis.ai/models/tiny-aya-global,No,text,text,8192,8.2K,Yes,tiny,3.35,0,0,,,,0,0,1,436,4.8342,2026-02-17,No,,0
+GPT-5.6 Terra (high),OpenAI,https://artificialanalysis.ai/models/gpt-5-6-terra-high,Yes,text|image,text,1000000,1M,No,large,,2,12,0.2,2.5,0.9,4.5,1.74,134,436,34.491,2026-07-09,No,,7
+GLM-4.7 (Non-reasoning),Z AI,https://artificialanalysis.ai/models/glm-4-7-non-reasoning,No,text,text,200000,200K,Yes,large,357,0.6,2.2,0.525,,0.8,1,0.7075,96,436,17.3564,2025-12-22,Yes,glm-5-non-reasoning,1.4
+A.X-K2,SK Telecom,https://artificialanalysis.ai/models/a-x-k2,Yes,text,text,262144,262.1K,Yes,large,692,,,,,,,,,436,22.7039,2026-08-12,No,,
+Exaone 4.0 1.2B (Non-reasoning),LG AI Research,https://artificialanalysis.ai/models/exaone-4-0-1-2b,No,text,text,64000,64K,Yes,tiny,1.28,,,,,,,,,436,5.2294,2025-07-15,No,,
+Llama 3 Instruct 8B,Meta,https://artificialanalysis.ai/models/llama-3-instruct-8b,No,text,text,8192,8.2K,Yes,small,8,0.045,0.145,,,,0.07,0.055,10,436,4.8342,2024-04-18,Yes,llama-3-1-instruct-8b,0.095
+Hermes 4 - Llama-3.1 405B (Reasoning),Nous Research,https://artificialanalysis.ai/models/hermes-4-llama-3-1-405b-reasoning,Yes,text,text,128000,128K,Yes,large,406,1,3,,,,1.5,1.2,111,436,7.495,2025-08-27,No,,2
+MiMo-V2-Flash (Non-reasoning),Xiaomi,https://artificialanalysis.ai/models/mimo-v2-flash,No,text,text,256000,256K,Yes,large,309,,,,,,,,,436,16.0499,2025-12-16,No,,
+Granite 4.1 8B,IBM,https://artificialanalysis.ai/models/granite-4-1-8b,No,text,text,131072,131.1K,Yes,small,8,0.05,0.1,,,,0.0625,0.055,8,436,6.5721,2026-04-29,No,,0.075
+"DeepSeek V4 Pro 0813 (Reasoning, Max Effort)",DeepSeek,https://artificialanalysis.ai/models/deepseek-v4-pro,Yes,text,text,1000000,1M,Yes,large,1600,1.32,3.96,0.044,,0.9667,1.98,0.6908,119,436,36.2829,2026-08-13,No,,2.64
+Claude Instant,Anthropic,https://artificialanalysis.ai/models/claude-instant,No,text,text,100000,100K,No,,,,,,,,,,,436,5.035,2023-03-14,Yes,claude-2,
+Gemini 2.5 Flash-Lite Preview (Sep '25) (Reasoning),Google,https://artificialanalysis.ai/models/gemini-2-5-flash-lite-preview-09-2025-reasoning,Yes,text|image|speech|video,text,1000000,1M,No,medium,,0.1,0.4,0.01,,0.9,0.175,0.067,31,436,10.3543,2025-09-08,Yes,gemini-3-1-flash-lite-preview,0.25
+o4-mini (high),OpenAI,https://artificialanalysis.ai/models/o4-mini,Yes,text|image,text,200000,200K,No,large,,1.1,4.4,0.275,,0.75,1.925,0.8525,118,436,16.6531,2025-04-16,Yes,gpt-5-mini,2.75
+GPT-5.2 (medium),OpenAI,https://artificialanalysis.ai/models/gpt-5-2-medium,Yes,text|image,text,400000,400K,No,large,,1.75,14,0.9625,,0.9,4.8125,2.4238,135,436,26.501,2025-12-11,Yes,gpt-5-4,7.875
+Magistral Medium 1.2,Mistral,https://artificialanalysis.ai/models/magistral-medium-2509,Yes,text|image,text,128000,128K,No,,,,,,,,,,,436,11.8255,2025-09-18,No,,
+Qwen3.6 35B A3B (Reasoning),Alibaba,https://artificialanalysis.ai/models/qwen3-6-35b-a3b,Yes,text|image,text,262144,262.1K,Yes,small,36,0.375,2.25,,,,0.8438,0.5625,87,436,22.2616,2026-04-16,No,,1.3125
+GPT-5.6 Luna (xhigh),OpenAI,https://artificialanalysis.ai/models/gpt-5-6-luna-xhigh,Yes,text|image,text,1000000,1M,No,medium,,0.2,1.2,0.02,0.25,0.9,0.45,0.174,65,436,34.772,2026-07-09,No,,0.7
+Gemini 2.5 Flash Preview (Sep '25) (Non-reasoning),Google,https://artificialanalysis.ai/models/gemini-2-5-flash-preview-09-2025,No,text|image|speech|video,text,1000000,1M,No,,,,,,,,,,,436,12.3823,2025-09-25,Yes,gemini-3-flash,
+QwQ 32B-Preview,Alibaba,https://artificialanalysis.ai/models/QwQ-32B-Preview,Yes,text,text,32768,32.8K,Yes,small,32.8,,,,,,,,,436,7.587,2024-11-27,Yes,qwq-32b,
+Ling-flash-2.0,InclusionAI,https://artificialanalysis.ai/models/ling-flash-2-0,No,text,text,128000,128K,Yes,medium,103,0.14,0.57,,,,0.2475,0.183,41,436,7.8075,2025-09-17,Yes,ling-2-6-flash,0.355
+GPT-5.4 nano (medium),OpenAI,https://artificialanalysis.ai/models/gpt-5-4-nano-medium,Yes,text|image,text,400000,400K,No,medium,,0.2,1.25,0.02,,0.9,0.4625,0.179,67,436,20.0139,2026-03-17,Yes,gpt-5-6-luna-medium,0.725
+Apertus 8B Instruct,Swiss AI Initiative,https://artificialanalysis.ai/models/apertus-8b-instruct,No,text,text,65536,65.5K,Yes,small,8,0.1,0.2,,,,0.125,0.11,24,436,4.8342,2025-09-02,No,,0.15
+"DeepSeek V4 Flash (Reasoning, High Effort)",DeepSeek,https://artificialanalysis.ai/models/deepseek-v4-flash-0420-high,Yes,text,text,1000000,1M,Yes,large,284,0.13,0.28,0.028,,0.791,0.1675,0.0736,30,436,24.8441,2026-04-24,Yes,deepseek-v4-flash,0.205
+DeepSeek-V2.5,DeepSeek,https://artificialanalysis.ai/models/deepseek-v2-5-sep-2024,No,text,text,128000,128K,Yes,large,236,,,,,,,,,436,6.5531,2024-09-06,Yes,deepseek-v3-0324,
+Claude 4 Opus (Reasoning),Anthropic,https://artificialanalysis.ai/models/claude-4-opus-thinking,Yes,text|image,text,200000,200K,No,large,,15,75,1.5,18.75,0.9,30,11.55,147,436,20.6446,2025-05-22,Yes,claude-4-1-opus-thinking,45
+Gemini 3.8 Flash (high),Google,https://artificialanalysis.ai/models/gemini-3-8-flash,Yes,text|image|speech|video,text,1000000,1M,No,large,,0.75,3.75,0.075,0.75,0.9,1.5,0.5775,111,436,41.1864,2026-09-02,No,,2.25
+GPT-5.6 Sol (high),OpenAI,https://artificialanalysis.ai/models/gpt-5-6-sol-high,Yes,text|image,text,1000000,1M,No,large,,4,20,0.4,5,0.9,8,3.08,140,436,42.4992,2026-07-09,No,,12
+GPT-3.5 Turbo (0613),OpenAI,https://artificialanalysis.ai/models/gpt-3-5-turbo-0613,No,text,text,4096,4.1K,No,,,,,,,,,,,436,,2023-06-13,Yes,gpt-35-turbo,
+GPT-4o (Aug '24),OpenAI,https://artificialanalysis.ai/models/gpt-4o-2024-08-06,No,text|image,text,128000,128K,No,large,,2.5,10,1.25,,0.5,4.375,2.375,133,436,7.7397,2024-08-06,Yes,gpt-4o,6.25
+Qwen3.6 27B (Reasoning),Alibaba,https://artificialanalysis.ai/models/qwen3-6-27b,Yes,text|image|video,text,262144,262.1K,Yes,small,27.8,0.6,3.6,,,,1.35,0.9,109,436,21.9051,2026-04-22,No,,2.1
+Nemotron 3 Nano Omni 30B A3B Reasoning,NVIDIA,https://artificialanalysis.ai/models/nemotron-3-nano-omni-30b-a3b,Yes,text|image|speech|video,text,256000,256K,Yes,small,30,0.09,0.36,,,,0.1575,0.117,29,436,10.2507,2026-04-29,No,,0.225
+Hy3-preview (Reasoning),Tencent,https://artificialanalysis.ai/models/hy3-preview,Yes,text,text,256000,256K,Yes,large,295,0.063,0.21,0.021,,0.6667,0.0998,0.0483,17,436,22.7362,2026-04-23,Yes,hy3,0.1365
+Kimi K2.7 Code,Kimi,https://artificialanalysis.ai/models/kimi-k2-7-code,Yes,text|image|video,text,256000,256K,Yes,large,1000,0.95,4,0.19,,0.8,1.7125,0.723,115,436,26.2687,2026-06-12,No,,2.475
+Gemini 1.0 Pro,Google,https://artificialanalysis.ai/models/gemini-1-0-pro,No,text|image,text,32768,32.8K,No,,,,,,,,,,,436,5.3424,2023-12-06,Yes,gemini-2-0-pro-experimental-02-05,
+Agnes 2.5 Pro Alpha,Sapiens AI,https://artificialanalysis.ai/models/agnes-2-5-pro-alpha,Yes,text|image|video,text,1000000,1M,Yes,large,397,0.45,0.9,0.01,,0.9778,0.5625,0.187,75,436,26.7728,2026-07-24,No,,0.675
+Qwen3.8 2.4T A95B,Alibaba,https://artificialanalysis.ai/models/qwen3-8-2-4t-a95b,Yes,text,text,983616,983.6K,Yes,large,2400,2,6,0.25,,0.875,3,1.175,127,436,40.0446,2026-08-12,No,,4
+Solar Pro 2 (Preview) (Reasoning),Upstage,https://artificialanalysis.ai/models/solar-pro-2-preview-reasoning,Yes,text,text,64000,64K,No,small,30.9,,,,,,,,,436,9.07,2025-05-20,Yes,solar-pro-2-reasoning,
+GPT-5 nano (medium),OpenAI,https://artificialanalysis.ai/models/gpt-5-nano-medium,Yes,text|image,text,400000,400K,No,small,,0.05,0.4,0.005,,0.9,0.1375,0.0535,25,436,12.4803,2025-08-07,Yes,gpt-5-4-nano-medium,0.225
+DeepSeek-Coder-V2,DeepSeek,https://artificialanalysis.ai/models/deepseek-coder-v2,No,text,text,128000,128K,Yes,large,236,,,,,,,,,436,5.9843,2024-06-17,Yes,deepseek-v2-5-sep-2024,
+Olmo 3 7B Instruct,Allen Institute for AI,https://artificialanalysis.ai/models/olmo-3-7b-instruct,No,text,text,65536,65.5K,Yes,small,7,0.1,0.2,,,,0.125,0.11,24,436,5.241,2025-11-20,No,,0.15
+JT-4.1 Flash 236B A21B,China Mobile,https://artificialanalysis.ai/models/jt-4-1-flash-236b-a21b,No,text|image,text,256000,256K,No,large,236,,,,,,,,,436,27.2926,2026-07-09,No,,
+Grok 4.3 (Non-reasoning),SpaceXAI,https://artificialanalysis.ai/models/grok-4-3-non-reasoning,No,text|image,text,1000000,1M,No,large,,1.25,2.5,0.2,1.25,0.84,1.5625,0.64,113,436,14.5407,2026-04-30,No,,1.875
+Claude 4.5 Sonnet (Reasoning),Anthropic,https://artificialanalysis.ai/models/claude-4-5-sonnet-thinking,Yes,text|image,text,1000000,1M,No,large,,3,15,0.3,3.75,0.9,6,2.31,138,436,21.1764,2025-09-29,Yes,claude-sonnet-4-6-adaptive,9
+Claude 4.5 Sonnet (Non-reasoning),Anthropic,https://artificialanalysis.ai/models/claude-4-5-sonnet,No,text|image,text,1000000,1M,No,large,,3,15,0.3,3.75,0.9,6,2.31,138,436,19.3437,2025-09-29,Yes,claude-sonnet-4-6,9
+Granite 4.1 3B,IBM,https://artificialanalysis.ai/models/granite-4-1-3b,No,text,text,131072,131.1K,Yes,tiny,3,,,,,,,,,436,5.8619,2026-04-29,No,,
+Ling 2.6 Flash,InclusionAI,https://artificialanalysis.ai/models/ling-2-6-flash,No,text,text,262144,262.1K,Yes,medium,107,,,,,,,,,436,9.679,2026-04-21,Yes,ling-3-0-flash,
+Llama 4 Maverick,Meta,https://artificialanalysis.ai/models/llama-4-maverick,No,text|image,text,1000000,1M,Yes,large,402,0.26,0.91,0.245,,0.5143,0.4225,0.3145,62,436,9.299,2025-04-05,No,,0.585
+Jamba 1.6 Large,AI21 Labs,https://artificialanalysis.ai/models/jamba-1-6-large,No,text,text,256000,256K,Yes,large,398,,,,,,,,,436,5.9674,2025-03-06,Yes,jamba-1-7-large,
+GLM-5.1 (Non-reasoning),Z AI,https://artificialanalysis.ai/models/glm-5-1-non-reasoning,No,text,text,200000,200K,Yes,large,744,1.38,4.4,0.26,,0.8082,2.135,0.898,121,436,24.2412,2026-04-07,Yes,glm-5-2-non-reasoning,2.89
+Gemini 1.5 Flash-8B,Google,https://artificialanalysis.ai/models/gemini-1-5-flash-8b,No,text|image|speech|video,text,1048576,1.0M,No,small,8,,,,,,,,,436,6.1534,2024-10-03,Yes,gemini-2-0-flash-lite-001,
+GLM-4.6 (Non-reasoning),Z AI,https://artificialanalysis.ai/models/glm-4-6,No,text,text,200000,200K,Yes,large,357,0.575,2.2,,,,0.9813,0.7375,95,436,14.9293,2025-09-30,Yes,glm-4-7-non-reasoning,1.3875
+Grok 4.3 (high),SpaceXAI,https://artificialanalysis.ai/models/grok-4-3,Yes,text|image,text,1000000,1M,No,large,,1.25,2.5,0.2,1.25,0.84,1.5625,0.64,113,436,25.3911,2026-04-30,Yes,grok-4-5,1.875
+Olmo 3.1 32B Instruct,Allen Institute for AI,https://artificialanalysis.ai/models/olmo-3-1-32b-instruct,No,text,text,65536,65.5K,Yes,small,32.2,,,,,,,,,436,6.4967,2026-01-13,No,,
+MiMo-V2-Omni,Xiaomi,https://artificialanalysis.ai/models/mimo-v2-omni,Yes,text|image,text,256000,256K,No,,,,,,,,,,,436,23.9174,2026-03-19,No,,
+Ministral 3 8B,Mistral,https://artificialanalysis.ai/models/ministral-3-8b,No,text|image,text,256000,256K,Yes,small,8,0.15,0.15,,,,0.15,0.15,26,436,5.4777,2025-12-02,No,,0.15
+Llama 3.3 Instruct 70B,Meta,https://artificialanalysis.ai/models/llama-3-3-instruct-70b,No,text,text,128000,128K,Yes,medium,70,0.655,0.72,0.655,,0.5,0.6713,0.6615,79,436,7.6638,2024-12-06,No,,0.6875
+Nemotron Cascade 2 30B A3B,NVIDIA,https://artificialanalysis.ai/models/nemotron-cascade-2-30b-a3b,Yes,text,text,1000000,1M,Yes,small,31.6,,,,,,,,,436,11.6708,2026-03-19,No,,
+R1 1776,Perplexity,https://artificialanalysis.ai/models/r1-1776,Yes,text,text,128000,128K,Yes,large,671,,,,,,,,,436,6.4386,2025-02-18,No,,
+"Claude Opus 4.8 (Adaptive Reasoning, Max Effort)",Anthropic,https://artificialanalysis.ai/models/claude-opus-4-8,Yes,text|image,text,1000000,1M,No,large,,5,25,0.5,6.25,0.9,10,3.85,141,436,41.9916,2026-05-28,Yes,claude-opus-5,15
+Muse Spark 1.3 (max),Meta,https://artificialanalysis.ai/models/muse-spark-1-3,Yes,text|image|video,text,1000000,1M,No,large,,1.25,4.25,0.15,,0.88,2,0.78,120,436,48.169,2026-09-02,No,,2.75
+"Claude Sonnet 5 (Adaptive Reasoning, Xhigh Effort)",Anthropic,https://artificialanalysis.ai/models/claude-sonnet-5-xhigh,Yes,text|image,text,1000000,1M,No,large,,2,10,0.2,2.5,0.9,4,1.54,132,436,,2026-06-30,No,,6
+Qwen3.8-Flash-Next,Alibaba,https://artificialanalysis.ai/models/qwen3-8-flash-next,Yes,text|image|video,text,256000,256K,Yes,large,180,0.15,0.47,0.016,,0.8933,0.23,0.0882,38,436,42.2396,2026-08-26,No,,0.31
+"Claude Fable 5.1 (Adaptive Reasoning, Xhigh Effort, Default Fallback)",Anthropic,https://artificialanalysis.ai/models/claude-fable-5-1-xhigh,Yes,text|image,text,1000000,1M,No,large,,10,50,0.25,12.5,0.975,20,7.175,144,436,53.184,2026-09-01,No,,30
+GPT-5.6 Terra (Non-reasoning),OpenAI,https://artificialanalysis.ai/models/gpt-5-6-terra-non-reasoning,No,text|image,text,1000000,1M,No,large,,2,12,0.2,2.5,0.9,4.5,1.74,134,436,22.3001,2026-07-09,No,,7
+MiniMax M1 80k,MiniMax,https://artificialanalysis.ai/models/minimax-m1-80k,Yes,text,text,1000000,1M,Yes,large,456,0.55,2.2,,,,0.9625,0.715,93,436,11.7253,2025-06-17,Yes,minimax-m2,1.375
+Llama 3.2 Instruct 90B (Vision),Meta,https://artificialanalysis.ai/models/llama-3-2-instruct-90b-vision,No,text|image,text,128000,128K,Yes,medium,90,,,,,,,,,436,6.4088,2024-09-25,No,,
+K-EXAONE (Non-reasoning),LG AI Research,https://artificialanalysis.ai/models/k-exaone-non-reasoning,No,text,text,256000,256K,Yes,large,236,,,,,,,,,436,11.2077,2025-12-31,No,,
+"Claude Fable 5.1 (Adaptive Reasoning, High Effort, Default Fallback)",Anthropic,https://artificialanalysis.ai/models/claude-fable-5-1-high,Yes,text|image,text,1000000,1M,No,large,,10,50,0.25,12.5,0.975,20,7.175,144,436,51.2095,2026-09-01,No,,30
+Qwen3 8B (Reasoning),Alibaba,https://artificialanalysis.ai/models/qwen3-8b-instruct-reasoning,Yes,text,text,131072,131.1K,Yes,small,8.19,0.18,2.1,,,,0.66,0.372,78,436,5.1615,2025-04-28,Yes,qwen3-vl-8b-reasoning,1.14
+Claude 2.1,Anthropic,https://artificialanalysis.ai/models/claude-21,No,text,text,200000,200K,No,,,,,,,,,,,436,5.5858,2023-11-21,Yes,claude-3-sonnet,
+GPT-5.6 Terra (xhigh),OpenAI,https://artificialanalysis.ai/models/gpt-5-6-terra-xhigh,Yes,text|image,text,1000000,1M,No,large,,2,12,0.2,2.5,0.9,4.5,1.74,134,436,38.1856,2026-07-09,No,,7
+Devstral Small (Jul '25),Mistral,https://artificialanalysis.ai/models/devstral-small,No,text,text,256000,256K,Yes,small,24,,,,,,,,,436,7.6024,2025-07-10,Yes,devstral-small-2,
+NVIDIA Nemotron 3 Nano 4B,NVIDIA,https://artificialanalysis.ai/models/nvidia-nemotron-3-nano-4b,Yes,text,text,262000,262K,Yes,tiny,3.97,,,,,,,,,436,7.3816,2026-03-16,No,,
+GPT-4.1 mini,OpenAI,https://artificialanalysis.ai/models/gpt-4-1-mini,No,text|image,text,1000000,1M,No,medium,,0.4,1.6,0.1,,0.75,0.7,0.31,81,436,10.1589,2025-04-14,Yes,gpt-5-mini-medium,1
+Phi-4 Mini Instruct,Microsoft,https://artificialanalysis.ai/models/phi-4-mini,No,text,text,128000,128K,Yes,tiny,3.84,0,0,,,,0,0,1,436,6.3286,2024-02-26,No,,0
+Grok Beta,SpaceXAI,https://artificialanalysis.ai/models/grok-beta,No,text,text,128000,128K,No,,,,,,,,,,,436,6.8877,2024-08-13,Yes,grok-2-1212,
+Grok Code Fast 1,SpaceXAI,https://artificialanalysis.ai/models/grok-code-fast-1,Yes,text,text,256000,256K,No,,,,,,,,,,,436,14.0585,2025-08-28,Yes,grok-4-20,
+Nova 2.0 Pro Preview (Non-reasoning),Amazon,https://artificialanalysis.ai/models/nova-2-0-pro,No,text|image,text,256000,256K,No,large,,1.25,10,,,,3.4375,2.125,129,436,9.959,2025-11-27,No,,5.625
+Ring-1T,InclusionAI,https://artificialanalysis.ai/models/ring-1t,Yes,text,text,128000,128K,Yes,large,1000,,,,,,,,,436,10.8975,2025-10-13,Yes,ring-2-6-1t,
+Granite 4.0 1B,IBM,https://artificialanalysis.ai/models/granite-4-0-nano-1b,No,text,text,128000,128K,Yes,tiny,1.6,,,,,,,,,436,5.0144,2025-10-28,No,,
+Motif 3 (Beta),Motif Technologies,https://artificialanalysis.ai/models/motif-0714,Yes,text,text,262144,262.1K,No,large,314,,,,,,,,,436,32.3147,2026-07-14,No,,
+K2-V2 (high),MBZUAI Institute of Foundation Models,https://artificialanalysis.ai/models/k2-v2,Yes,text,text,512000,512K,Yes,medium,70,,,,,,,,,436,9.8739,2025-12-05,No,,
+GPT-6 Astra (low),OpenAI,https://artificialanalysis.ai/models/gpt-6-astra-low,Yes,text|image,text,1000000,1M,No,large,,10,50,1,12.5,0.9,20,7.7,144,436,45.9945,2026-09-03,No,,30
+Gemini 3 Deep Think,Google,https://artificialanalysis.ai/models/gemini-3-deep-think,Yes,text,text,128000,128K,No,,,,,,,,,,,436,,2026-02-05,No,,
+ERNIE 5.0 Thinking Preview,Baidu,https://artificialanalysis.ai/models/ernie-5-0-thinking-preview,Yes,text|image|video,text,128000,128K,No,,,,,,,,,,,436,14.2552,2025-11-13,No,,
+Kimi K2.5 (Reasoning),Kimi,https://artificialanalysis.ai/models/kimi-k2-5,Yes,text|image|video,text,256000,256K,Yes,large,1000,0.6,2.75,0.35,,0.8444,1.1375,0.64,101,436,23.4585,2026-01-27,Yes,kimi-k2-6,1.675
+Claude 4.5 Haiku (Reasoning),Anthropic,https://artificialanalysis.ai/models/claude-4-5-haiku-reasoning,Yes,text|image,text,200000,200K,No,large,,1,5,0.1,1.25,0.9,2,0.77,120,436,17.5869,2025-10-15,No,,3
+Granite 4.0 H 350M,IBM,https://artificialanalysis.ai/models/granite-4-0-h-350m,No,text,text,32768,32.8K,Yes,tiny,0.34,,,,,,,,,436,4.8342,2025-10-28,No,,
+Qwen3.5 0.8B (Reasoning),Alibaba,https://artificialanalysis.ai/models/qwen3-5-0-8b,Yes,text|image|video,text,262144,262.1K,Yes,tiny,0.873,,,,,,,,,436,6.1285,2026-03-02,No,,
+Apriel-v1.6-15B-Thinker,ServiceNow,https://artificialanalysis.ai/models/apriel-v1-6-15b-thinker,Yes,text|image,text,128000,128K,Yes,small,15,0,0,,,,0,0,1,436,13.4014,2025-11-25,No,,0
+Claude 4 Sonnet (Reasoning),Anthropic,https://artificialanalysis.ai/models/claude-4-sonnet-thinking,Yes,text|image,text,1000000,1M,No,large,,3,15,0.3,3.75,0.9,6,2.31,138,436,18.9183,2025-05-22,Yes,claude-4-5-sonnet-thinking,9
+Gemma 3n E4B Instruct,Google,https://artificialanalysis.ai/models/gemma-3n-e4b,No,text|image,text,32000,32K,Yes,small,8.39,,,,,,,,,436,4.8342,2025-06-26,Yes,gemma-4-e4b,
+Qwen3 VL 235B A22B (Reasoning),Alibaba,https://artificialanalysis.ai/models/qwen3-vl-235b-a22b-reasoning,Yes,text|image,text,262144,262.1K,Yes,large,235,0.4,4,,,,1.3,0.76,106,436,13.4376,2025-09-23,Yes,qwen3-5-397b-a17b,2.2
+DeepSeek R1 0528 (May '25),DeepSeek,https://artificialanalysis.ai/models/deepseek-r1,Yes,text,text,128000,128K,Yes,large,685,1.35,3,1.35,,0.3,1.7625,1.515,116,436,13.1221,2025-05-28,Yes,deepseek-v3-1-reasoning,2.175
+Qwen3.7 Plus,Alibaba,https://artificialanalysis.ai/models/qwen3-7-plus,Yes,text|image|video,text,1000000,1M,No,medium,,0.4,1.6,0.04,0.5,0.9,0.7,0.268,81,436,25.8187,2026-06-01,No,,1
+GPT-5.4 (xhigh),OpenAI,https://artificialanalysis.ai/models/gpt-5-4,Yes,text|image,text,1050000,1.1M,No,large,,2.5,15,0.25,,0.9,5.625,2.175,137,436,38.9756,2026-03-05,Yes,gpt-5-5,8.75
+Gemma 3n E2B Instruct,Google,https://artificialanalysis.ai/models/gemma-3n-e2b,No,text|image,text,32000,32K,Yes,small,5.98,0,0,,,,0,0,1,436,4.8342,2025-06-26,Yes,gemma-4-e2b,0
+DeepHermes 3 - Mistral 24B Preview (Non-reasoning),Nous Research,https://artificialanalysis.ai/models/deephermes-3-mistral-24b-preview,No,text,text,32000,32K,Yes,small,24,,,,,,,,,436,6.0743,2025-03-13,No,,
+Reka Flash (Sep '24),Reka AI,https://artificialanalysis.ai/models/reka-flash,No,text|image|speech|video,text,128000,128K,No,small,21,0.2,0.8,,,,0.35,0.26,56,436,6.4311,2024-10-04,Yes,reka-flash-3,0.5
+GPT-5.6 Luna (high),OpenAI,https://artificialanalysis.ai/models/gpt-5-6-luna-high,Yes,text|image,text,1000000,1M,No,medium,,0.2,1.2,0.02,0.25,0.9,0.45,0.174,65,436,32.906,2026-07-09,No,,0.7
+Llama 3 Instruct 70B,Meta,https://artificialanalysis.ai/models/llama-3-instruct-70b,No,text,text,8192,8.2K,Yes,medium,70,0.65,2.75,,,,1.175,0.86,102,436,5.4528,2024-04-18,Yes,llama-3-1-instruct-70b,1.7
+NVIDIA Nemotron Nano 12B v2 VL (Non-reasoning),NVIDIA,https://artificialanalysis.ai/models/nvidia-nemotron-nano-12b-v2-vl,No,text|image,text,128000,128K,Yes,small,13.2,0.2,0.6,,,,0.3,0.24,49,436,5.8205,2025-10-28,No,,0.4
+Devstral Medium,Mistral,https://artificialanalysis.ai/models/devstral-medium,No,text,text,256000,256K,No,,,,,,,,,,,436,9.0058,2025-07-10,Yes,devstral-2,
+Command-R (Mar '24),Cohere,https://artificialanalysis.ai/models/command-r-03-2024,No,text,text,128000,128K,Yes,small,35,,,,,,,,,436,5.035,2024-03-12,Yes,command-r-plus-04-2024,
+Apriel-v1.5-15B-Thinker,ServiceNow,https://artificialanalysis.ai/models/apriel-v1-5-15b-thinker,Yes,text|image,text,128000,128K,Yes,small,15,0,0,,,,0,0,1,436,13.8241,2025-09-30,Yes,apriel-v1-6-15b-thinker,0
+Gemini 1.5 Flash (May '24),Google,https://artificialanalysis.ai/models/gemini-1-5-flash-may-2024,No,text|image|speech|video,text,1000000,1M,No,,,,,,,,,,,436,5.9375,2024-05-14,Yes,gemini-1-5-flash,
+Claude 3.5 Sonnet (June '24),Anthropic,https://artificialanalysis.ai/models/claude-35-sonnet-june-24,No,text|image,text,200000,200K,No,large,,3,15,0.3,3.75,0.9,6,2.31,138,436,7.2099,2024-06-21,Yes,claude-3-7-sonnet,9
+Step3 VL 10B,StepFun,https://artificialanalysis.ai/models/step-3-vl-10b,Yes,text|image,text,65536,65.5K,Yes,small,10.2,,,,,,,,,436,7.6939,2026-01-20,No,,
+DeepSeek V4 Flash (Non-reasoning),DeepSeek,https://artificialanalysis.ai/models/deepseek-v4-flash-non-reasoning,No,text,text,1000000,1M,Yes,large,284,0.0938,0.195,0.07,,0.6487,0.1191,0.0873,23,436,18.8769,2026-04-24,No,,0.1444
+Llama 4 Scout,Meta,https://artificialanalysis.ai/models/llama-4-scout,No,text|image,text,10000000,10M,Yes,medium,109,0.19,0.68,,,,0.3125,0.239,52,436,6.4513,2025-04-05,No,,0.435
+Granite 4.2 8B,IBM,https://artificialanalysis.ai/models/granite-4-2-8b,Yes,text,text,131072,131.1K,Yes,small,8,0.06,0.25,0.015,,0.75,0.1075,0.0475,21,436,12.3971,2026-08-25,No,,0.155
+GPT-5.4 mini (Non-Reasoning),OpenAI,https://artificialanalysis.ai/models/gpt-5-4-mini-non-reasoning,No,text|image,text,400000,400K,No,large,,0.75,4.5,0.075,,0.9,1.6875,0.6525,114,436,11.1447,2026-03-17,Yes,gpt-5-6-terra-non-reasoning,2.625
+ERNIE 4.5 300B A47B,Baidu,https://artificialanalysis.ai/models/ernie-4-5-300b-a47b,No,text,text,131072,131.1K,Yes,large,300,0.28,1.1,,,,0.485,0.362,69,436,7.5045,2025-06-30,No,,0.69
+DeepSeek V3.2 Exp (Reasoning),DeepSeek,https://artificialanalysis.ai/models/deepseek-v3-2-reasoning-0925,Yes,text,text,128000,128K,Yes,large,685,0.28,0.42,0.028,,0.9,0.315,0.1176,53,436,16.5794,2025-09-29,Yes,deepseek-v3-2-reasoning,0.35
+Molmo 7B-D,Allen Institute for AI,https://artificialanalysis.ai/models/molmo-7b-d,No,text|image,text,4096,4.1K,Yes,small,8.02,,,,,,,,,436,5.5626,2024-09-25,No,,
+Qwen3 32B (Reasoning),Alibaba,https://artificialanalysis.ai/models/qwen3-32b-instruct-reasoning,Yes,text,text,32768,32.8K,Yes,small,32.8,0.16,0.64,,,,0.28,0.208,47,436,7.2152,2025-04-28,Yes,qwen3-30b-a3b-2507-reasoning,0.4
+Qwen3.8 27B (xhigh),Alibaba,https://artificialanalysis.ai/models/qwen3-8-27b,Yes,text|image|video,text,256000,256K,Yes,small,27,0.5,3,0.05,,0.9,1.125,0.435,100,436,33.9015,2026-08-14,No,,1.75
+Motif 3,Motif Technologies,https://artificialanalysis.ai/models/motif-3,Yes,text,text,262144,262.1K,Yes,large,314,,,,,,,,,436,33.5666,2026-08-12,No,,
+Qwen3 4B 2507 Instruct,Alibaba,https://artificialanalysis.ai/models/qwen3-4b-2507-instruct,No,text,text,262144,262.1K,Yes,tiny,4.02,,,,,,,,,436,6.7446,2025-08-06,Yes,qwen3-5-4b-non-reasoning,
+Gemma 4 E2B (Reasoning),Google,https://artificialanalysis.ai/models/gemma-4-e2b,Yes,text|image|speech|video,text|image,128000,128K,Yes,small,5.1,,,,,,,,,436,7.7745,2026-04-02,No,,
+GPT-5.5 (high),OpenAI,https://artificialanalysis.ai/models/gpt-5-5-high,Yes,text|image,text,922000,922K,No,large,,5,30,0.5,,0.9,11.25,4.35,142,436,37.285,2026-04-23,Yes,gpt-5-6-sol-high,17.5
+Llama 3.1 Nemotron Nano 4B v1.1 (Reasoning),NVIDIA,https://artificialanalysis.ai/models/llama-3-1-nemotron-nano-4b-reasoning,Yes,text,text,128000,128K,Yes,small,4.51,,,,,,,,,436,7.3075,2025-05-20,Yes,nvidia-nemotron-3-nano-4b,
+Gemini 3.7 Flash (high),Google,https://artificialanalysis.ai/models/gemini-3-7-flash,Yes,text|image|speech|video,text,1000000,1M,No,large,,0.75,3.75,0.075,0.75,0.9,1.5,0.5775,111,436,39.4295,2026-08-13,No,,2.25
+Hy3,Tencent,https://artificialanalysis.ai/models/hy3,Yes,text,text,256000,256K,Yes,large,299,0.136,0.554,0.034,,0.75,0.2405,0.1064,40,436,25.7716,2026-07-06,No,,0.345
+DeepSeek R1 Distill Qwen 14B,DeepSeek,https://artificialanalysis.ai/models/deepseek-r1-distill-qwen-14b,Yes,text,text,128000,128K,Yes,small,14,,,,,,,,,436,7.8467,2025-01-20,Yes,deepseek-v3-0324,
+Qwen3 8B (Non-reasoning),Alibaba,https://artificialanalysis.ai/models/qwen3-8b-instruct,No,text,text,32768,32.8K,Yes,small,8.19,0.18,0.7,,,,0.31,0.232,51,436,5.9921,2025-04-28,Yes,qwen3-vl-8b-instruct,0.44
+Claude 3 Sonnet,Anthropic,https://artificialanalysis.ai/models/claude-3-sonnet,No,text|image,text,200000,200K,No,,,,,,,,,,,436,5.8772,2024-03-04,Yes,claude-35-sonnet-june-24,
+Gemini 3 Pro Preview (low),Google,https://artificialanalysis.ai/models/gemini-3-pro-low,Yes,text|image|speech|video,text,1000000,1M,No,large,,2,12,0.2,,0.9,4.5,1.74,134,436,22.3196,2025-11-18,Yes,gemini-3-1-pro-preview,7
+Nova 2.0 Omni (low),Amazon,https://artificialanalysis.ai/models/nova-2-0-omni-reasoning-low,Yes,text|image,text,1000000,1M,No,medium,,0.3,2.5,,,,0.85,0.52,89,436,11.1141,2025-11-26,No,,1.4
+Arctic Instruct,Snowflake,https://artificialanalysis.ai/models/arctic-instruct,No,text,text,4000,4K,Yes,large,480,,,,,,,,,436,5.4364,2024-04-24,Yes,,
+GPT-4o (ChatGPT),OpenAI,https://artificialanalysis.ai/models/gpt-4o-chatgpt,No,text|image,text,128000,128K,No,,,,,,,,,,,436,7.1866,2025-02-15,Yes,gpt-5-chatgpt,
+Jamba 1.5 Large,AI21 Labs,https://artificialanalysis.ai/models/jamba-1-5-large,No,text,text,256000,256K,Yes,large,398,2,8,,,,3.5,2.6,130,436,6.0121,2024-08-22,Yes,jamba-1-6-large,5
+Jamba 1.7 Mini,AI21 Labs,https://artificialanalysis.ai/models/jamba-1-7-mini,No,text,text,258000,258K,Yes,medium,52,,,,,,,,,436,5.2177,2025-07-07,No,,
+Qwen2.5 Instruct 72B,Alibaba,https://artificialanalysis.ai/models/qwen2-5-72b-instruct,No,text,text,131072,131.1K,Yes,medium,72,0.475,0.495,0.355,,0.6667,0.48,0.393,68,436,7.7349,2024-09-19,Yes,qwen3-235b-a22b-instruct,0.485
+o1-mini,OpenAI,https://artificialanalysis.ai/models/o1-mini,Yes,text,text,128000,128K,No,,,,,,,,,,,436,9.7706,2024-09-12,Yes,o4-mini,
+Hy3-preview (Non-reasoning),Tencent,https://artificialanalysis.ai/models/hy3-non-reasoning,No,text,text,256000,256K,Yes,large,295,0.063,0.21,0.021,,0.6667,0.0998,0.0483,17,436,17.0362,2026-04-23,Yes,hy3,0.1365
+GPT-4o mini,OpenAI,https://artificialanalysis.ai/models/gpt-4o-mini,No,text|image,text,128000,128K,No,medium,,0.15,0.6,0.075,,0.5,0.2625,0.1425,45,436,6.6643,2024-07-18,Yes,gpt-5-mini-medium,0.375
+Trinity Large Thinking,Arcee AI,https://artificialanalysis.ai/models/trinity-large-thinking,Yes,text,text,512000,512K,Yes,large,399,0.25,0.9,,,,0.4125,0.315,61,436,10.8821,2026-04-01,No,,0.575
+DeepHermes 3 - Llama-3.1 8B Preview (Non-reasoning),Nous Research,https://artificialanalysis.ai/models/deephermes-3-llama-3-1-8b-preview,No,text,text,128000,128K,Yes,small,8,,,,,,,,,436,5.0803,2025-02-13,No,,
+Solar Pro 3,Upstage,https://artificialanalysis.ai/models/solar-pro-3,Yes,text,text,128000,128K,No,medium,102,0.15,0.6,0.015,,0.9,0.2625,0.1005,45,436,7.8155,2026-04-06,No,,0.375
+"Claude Opus 5 (Adaptive Reasoning, Max Effort)",Anthropic,https://artificialanalysis.ai/models/claude-opus-5,Yes,text|image,text,1000000,1M,No,large,,5,25,0.5,6.25,0.9,10,3.85,141,436,50.7002,2026-07-24,No,,15
+Qwen3 Omni 30B A3B (Reasoning),Alibaba,https://artificialanalysis.ai/models/qwen3-omni-30b-a3b-reasoning,Yes,text|image|speech|video,text,65536,65.5K,Yes,small,35.3,0.25,0.97,,,,0.43,0.322,63,436,7.7608,2025-09-22,No,,0.61
+Qwen2.5 Max,Alibaba,https://artificialanalysis.ai/models/qwen-2-5-max,No,text,text,32000,32K,No,,,,,,,,,,,436,8.02,2025-01-28,Yes,qwen3-max,
+"Claude Sonnet 5 (Adaptive Reasoning, High Effort)",Anthropic,https://artificialanalysis.ai/models/claude-sonnet-5-high,Yes,text|image,text,1000000,1M,No,large,,2,10,0.2,2.5,0.9,4,1.54,132,436,,2026-06-30,No,,6
+Kimi K2.5 (Non-reasoning),Kimi,https://artificialanalysis.ai/models/kimi-k2-5-non-reasoning,No,text|image|video,text,256000,256K,Yes,large,1000,0.6,3,0.6,,0.8333,1.2,0.84,103,436,19.4343,2026-01-27,Yes,kimi-k2-6-non-reasoning,1.8
+GPT-5.4 mini (xhigh),OpenAI,https://artificialanalysis.ai/models/gpt-5-4-mini,Yes,text|image,text,400000,400K,No,large,,0.75,4.5,0.075,,0.9,1.6875,0.6525,114,436,24.5789,2026-03-17,Yes,gpt-5-6-terra-xhigh,2.625
+K2 Horizon 375B A23B,MBZUAI Institute of Foundation Models,https://artificialanalysis.ai/models/k2-horizon-375b-a23b,Yes,text,text,524288,524.3K,Yes,large,375,,,,,,,,,436,33.9204,2026-09-03,No,,
+Gemini 3.1 Pro Preview,Google,https://artificialanalysis.ai/models/gemini-3-1-pro-preview,Yes,text|image|speech|video,text,1000000,1M,No,large,,2,12,0.2,,0.9,4.5,1.74,134,436,30.3597,2026-02-19,No,,7
+Qwen3 235B A22B (Reasoning),Alibaba,https://artificialanalysis.ai/models/qwen3-235b-a22b-instruct-reasoning,Yes,text,text,32768,32.8K,Yes,large,235,0.7,8.4,,,,2.625,1.47,125,436,9.4997,2025-04-28,Yes,qwen3-235b-a22b-instruct-2507-reasoning,4.55
+GPT-5 mini (minimal),OpenAI,https://artificialanalysis.ai/models/gpt-5-mini-minimal,No,text|image,text,400000,400K,No,medium,,0.25,2,0.025,,0.9,0.6875,0.2675,80,436,9.9062,2025-08-07,Yes,gpt-5-4-mini-non-reasoning,1.125
+DeepSeek-V2.5 (Dec '24),DeepSeek,https://artificialanalysis.ai/models/deepseek-v2-5,No,text,text,128000,128K,Yes,large,236,,,,,,,,,436,6.6173,2024-12-10,Yes,deepseek-v3-0324,
+Gemini 2.0 Flash (Feb '25),Google,https://artificialanalysis.ai/models/gemini-2-0-flash,No,text|image|speech|video,text|image,1000000,1M,No,,,,,,,,,,,436,8.9414,2025-02-05,Yes,gemini-2-5-flash,
+GPT-5.6 Terra (max),OpenAI,https://artificialanalysis.ai/models/gpt-5-6-terra,Yes,text|image,text,1000000,1M,No,large,,2,12,0.2,2.5,0.9,4.5,1.74,134,436,42.2515,2026-07-09,No,,7
+Gemma 3n E4B Instruct Preview (May '25),Google,https://artificialanalysis.ai/models/gemma-3n-e4b-preview-0520,No,text|speech|video,text,32000,32K,Yes,small,8.39,,,,,,,,,436,5.811,2025-05-20,Yes,gemma-3n-e4b,
+Kimi K2 Thinking,Kimi,https://artificialanalysis.ai/models/kimi-k2-thinking,Yes,text,text,256000,256K,Yes,large,1000,0.6,2.5,,,,1.075,0.79,98,436,22.02,2025-11-06,Yes,kimi-k2-5,1.55
+MiMo-V2-Flash (Reasoning),Xiaomi,https://artificialanalysis.ai/models/mimo-v2-flash-reasoning,Yes,text,text,256000,256K,Yes,large,309,0.1,0.3,,,,0.15,0.12,26,436,20.8177,2025-12-16,Yes,mimo-v2-0206,0.2
+"DeepSeek V4 Pro (Reasoning, Max Effort)",DeepSeek,https://artificialanalysis.ai/models/deepseek-v4-pro-0424,Yes,text,text,1000000,1M,Yes,large,1600,0.435,0.87,0.0036,,0.9917,0.5438,0.1765,73,436,30.8651,2026-04-24,No,,0.6525
+Qwen3 32B (Non-reasoning),Alibaba,https://artificialanalysis.ai/models/qwen3-32b-instruct,No,text,text,32768,32.8K,Yes,small,32.8,0.16,0.64,,,,0.28,0.208,47,436,7.3443,2025-04-28,Yes,qwen3-30b-a3b-2507,0.4
+Grok 4.6 (low),SpaceXAI,https://artificialanalysis.ai/models/grok-4-6-low,Yes,text|image,text,500000,500K,No,large,,2,6,0.5,,0.75,3,1.35,127,436,35.4148,2026-08-12,No,,4
+GPT-4o (Nov '24),OpenAI,https://artificialanalysis.ai/models/gpt-4o,No,text|image,text,128000,128K,No,large,,2.5,10,1.5,,0.4,4.375,2.55,133,436,8.4416,2024-11-20,Yes,gpt-4o-chatgpt-03-25,6.25
+G9v3-39A5B,AI9Stars,https://artificialanalysis.ai/models/g9v3-39a5b,Yes,text,text,131072,131.1K,Yes,small,39,0,0,,,,0,0,1,436,21.8316,2026-08-20,No,,0
+GPT-5.4 nano (Non-Reasoning),OpenAI,https://artificialanalysis.ai/models/gpt-5-4-nano-non-reasoning,No,text|image,text,400000,400K,No,medium,,0.2,1.25,0.02,,0.9,0.4625,0.179,67,436,11.6892,2026-03-17,Yes,gpt-5-6-luna-non-reasoning,0.725
+Claude 4.5 Haiku (Non-reasoning),Anthropic,https://artificialanalysis.ai/models/claude-4-5-haiku,No,text|image,text,200000,200K,No,large,,1,5,0.1,1.25,0.9,2,0.77,120,436,15.4109,2025-10-15,No,,3
+GPT-5 mini (medium),OpenAI,https://artificialanalysis.ai/models/gpt-5-mini-medium,Yes,text|image,text,400000,400K,No,medium,,0.25,2,0.025,,0.9,0.6875,0.2675,80,436,20.5992,2025-08-07,Yes,gpt-5-4-mini-medium,1.125
+GPT-5 (minimal),OpenAI,https://artificialanalysis.ai/models/gpt-5-minimal,No,text|image,text,400000,400K,No,large,,1.25,10,0.125,,0.9,3.4375,1.3375,129,436,11.4482,2025-08-07,Yes,gpt-5-1-non-reasoning,5.625
+DiffusionGemma 26B A4B,Google,https://artificialanalysis.ai/models/diffusiongemma-26b-a4b,Yes,text|image|video,text,256000,256K,Yes,small,25.2,,,,,,,,,436,9.5101,2026-06-10,No,,
+GPT-5.5 Instant (June 2026),OpenAI,https://artificialanalysis.ai/models/gpt-5-5-instant-06-26,Yes,text|image,text,400000,400K,No,large,,5,30,0.5,,0.9,11.25,4.35,142,436,26.8043,2026-06-25,No,,17.5
+Qwen Chat 14B,Alibaba,https://artificialanalysis.ai/models/qwen-chat-14b,No,text,text,8192,8.2K,Yes,small,14,,,,,,,,,436,5.035,2023-09-25,Yes,qwen3-14b-instruct,
+Llama 3.3 Nemotron Super 49B v1 (Non-reasoning),NVIDIA,https://artificialanalysis.ai/models/llama-3-3-nemotron-super-49b,No,text,text,128000,128K,Yes,medium,49,,,,,,,,,436,7.2751,2025-03-18,Yes,llama-nemotron-super-49b-v1-5,
+Gemini 2.0 Pro Experimental (Feb '25),Google,https://artificialanalysis.ai/models/gemini-2-0-pro-experimental-02-05,No,text|image|speech|video,text,2000000,2M,No,,,,,,,,,,,436,8.7462,2025-02-05,Yes,gemini-2-5-pro-03-25,
+Grok 4.20 0309 v2 (Reasoning),SpaceXAI,https://artificialanalysis.ai/models/grok-4-20,Yes,text|image,text,2000000,2M,No,large,,1.25,2.5,0.2,,0.84,1.5625,0.64,113,436,25.655,2026-04-07,Yes,grok-4-3,1.875
+DeepSeek Coder V2 Lite Instruct,DeepSeek,https://artificialanalysis.ai/models/deepseek-coder-v2-lite,No,text,text,128000,128K,Yes,small,16,,,,,,,,,436,5.3359,2024-06-17,Yes,deepseek-v2-5-sep-2024,
+Gemini 2.5 Flash Preview (Sep '25) (Reasoning),Google,https://artificialanalysis.ai/models/gemini-2-5-flash-preview-09-2025-reasoning,Yes,text|image|speech|video,text,1000000,1M,No,,,,,,,,,,,436,15.4672,2025-09-25,Yes,gemini-3-flash,
+Falcon-H1R-7B,TII UAE,https://artificialanalysis.ai/models/falcon-h1r-7b,Yes,text,text,256000,256K,Yes,small,7,,,,,,,,,436,7.8278,2026-01-04,No,,
+GPT-5.5 (low),OpenAI,https://artificialanalysis.ai/models/gpt-5-5-low,Yes,text|image,text,922000,922K,No,large,,5,30,0.5,,0.9,11.25,4.35,142,436,30.7095,2026-04-23,Yes,gpt-5-6-sol-low,17.5
+Step 3.5 Flash,StepFun,https://artificialanalysis.ai/models/step-3-5-flash-0202,Yes,text,text,256000,256K,Yes,large,196,0.1,0.3,,,,0.15,0.12,26,436,16.6169,2026-02-02,Yes,step-3-5-flash,0.2
+GLM-4.7-Flash (Non-reasoning),Z AI,https://artificialanalysis.ai/models/glm-4-7-flash-non-reasoning,No,text,text,200000,200K,Yes,small,31.2,0.07,0.4,,,,0.1525,0.103,28,436,10.5557,2026-01-19,Yes,glm-5-non-reasoning,0.235
+Olmo 3 32B Think,Allen Institute for AI,https://artificialanalysis.ai/models/olmo-3-32b-think,Yes,text,text,65536,65.5K,Yes,small,32.2,,,,,,,,,436,6.4728,2025-11-20,Yes,olmo-3-1-32b-think,
+Qwen3 Next 80B A3B (Reasoning),Alibaba,https://artificialanalysis.ai/models/qwen3-next-80b-a3b-reasoning,Yes,text,text,262144,262.1K,Yes,medium,80,0.15,1.2,,,,0.4125,0.255,61,436,11.1974,2025-09-11,No,,0.675
+Grok 4.6 (high),SpaceXAI,https://artificialanalysis.ai/models/grok-4-6,Yes,text|image,text,500000,500K,No,large,,2,6,0.5,,0.75,3,1.35,127,436,44.405,2026-08-12,No,,4
+gpt-oss-120b (low),OpenAI,https://artificialanalysis.ai/models/gpt-oss-120b-low,Yes,text,text,131072,131.1K,Yes,medium,117,0.15,0.545,0.15,,0.45,0.2487,0.1895,42,436,10.2106,2025-08-05,No,,0.3475
+o3-pro,OpenAI,https://artificialanalysis.ai/models/o3-pro,Yes,text|image,text,200000,200K,No,large,,20,80,,,,35,26,148,436,21.87,2025-06-10,Yes,gpt-5,50
+Mixtral 8x22B Instruct,Mistral,https://artificialanalysis.ai/models/mistral-8x22b-instruct,No,text,text,65384,65.4K,Yes,medium,141,,,,,,,,,436,5.7443,2024-04-17,Yes,mistral-small-3-2,
+Qwen3 Max Thinking (Preview),Alibaba,https://artificialanalysis.ai/models/qwen3-max-thinking-preview,Yes,text,text,262144,262.1K,No,large,,1.2,6,,,,2.4,1.68,123,436,16.291,2025-11-03,Yes,qwen3-max-thinking,3.6
+Devstral Small (May '25),Mistral,https://artificialanalysis.ai/models/devstral-small-2505,No,text,text,256000,256K,Yes,small,23.6,,,,,,,,,436,8.735,2025-05-21,Yes,devstral-small,
+GPT-5.6 Terra (low),OpenAI,https://artificialanalysis.ai/models/gpt-5-6-terra-low,Yes,text|image,text,1000000,1M,No,large,,2,12,0.2,2.5,0.9,4.5,1.74,134,436,27.8765,2026-07-09,No,,7
+Claude 4.1 Opus (Reasoning),Anthropic,https://artificialanalysis.ai/models/claude-4-1-opus-thinking,Yes,text|image,text,200000,200K,No,large,,15,75,1.5,18.75,0.9,30,11.55,147,436,22.8472,2025-08-05,Yes,claude-opus-4-5-thinking,45
+Gemma 4 31B (Reasoning),Google,https://artificialanalysis.ai/models/gemma-4-31b,Yes,text|image|video,text,256000,256K,Yes,small,30.7,0,0,,,,0,0,1,436,15.4157,2026-04-02,No,,0
+"Claude Fable 5 (Adaptive Reasoning, Max Effort, Opus 4.8 Fallback)",Anthropic,https://artificialanalysis.ai/models/claude-fable-5,Yes,text|image,text,1000000,1M,No,large,,10,50,1,12.5,0.9,20,7.7,144,436,49.6994,2026-06-09,No,,30
+GLM-5.3 (max),Z AI,https://artificialanalysis.ai/models/glm-5-3,Yes,text,text,1000000,1M,Yes,large,753,1.4,4.4,0.26,,0.8143,2.15,0.902,122,436,44.8557,2026-08-18,No,,2.9
+Qwen3 VL 30B A3B (Reasoning),Alibaba,https://artificialanalysis.ai/models/qwen3-vl-30b-a3b-reasoning,Yes,text|image,text,256000,256K,Yes,small,30,0.2,2.4,,,,0.75,0.42,84,436,9.4531,2025-10-03,Yes,qwen3-5-35b-a3b,1.3
+Devstral Small 2,Mistral,https://artificialanalysis.ai/models/devstral-small-2,No,text|image,text,256000,256K,Yes,small,24,0,0,,,,0,0,1,436,8.3576,2025-12-09,No,,0
+QwQ 32B,Alibaba,https://artificialanalysis.ai/models/qwq-32b,Yes,text,text,131072,131.1K,Yes,small,32.8,0.66,1,,,,0.745,0.694,82,436,9.4721,2025-03-05,Yes,qwen3-32b-instruct-reasoning,0.83
+Llama 3.1 Nemotron Ultra 253B v1 (Reasoning),NVIDIA,https://artificialanalysis.ai/models/llama-3-1-nemotron-ultra-253b-v1-reasoning,Yes,text,text,128000,128K,Yes,large,253,,,,,,,,,436,7.5275,2025-04-07,No,,
+Claude 4 Sonnet (Non-reasoning),Anthropic,https://artificialanalysis.ai/models/claude-4-sonnet,No,text|image,text,1000000,1M,No,large,,3,15,0.3,3.75,0.9,6,2.31,138,436,16.6124,2025-05-22,Yes,claude-4-5-sonnet,9
+Gemma 4 31B (Non-reasoning),Google,https://artificialanalysis.ai/models/gemma-4-31b-non-reasoning,No,text|image|video,text,256000,256K,Yes,small,30.7,0.14,0.4,0.14,,0.6,0.205,0.166,36,436,13.9199,2026-04-02,No,,0.27
+GPT-5.1 (Non-reasoning),OpenAI,https://artificialanalysis.ai/models/gpt-5-1-non-reasoning,No,text|image,text,400000,400K,No,large,,1.25,10,0.125,,0.9,3.4375,1.3375,129,436,13.3137,2025-11-13,Yes,gpt-5-2-non-reasoning,5.625
+Gemini 3 Pro Preview (high),Google,https://artificialanalysis.ai/models/gemini-3-pro,Yes,text|image|speech|video,text,1000000,1M,No,large,,2,12,0.2,,0.9,4.5,1.74,134,436,27.958,2025-11-18,Yes,gemini-3-1-pro-preview,7
+Gemma 3 1B Instruct,Google,https://artificialanalysis.ai/models/gemma-3-1b,No,text,text,32000,32K,Yes,tiny,1,0,0,,,,0,0,1,436,4.8342,2025-03-13,Yes,gemma-4-e2b,0
+Qwen1.5 Chat 110B,Alibaba,https://artificialanalysis.ai/models/qwen1.5-110b-chat,No,text,text,32000,32K,Yes,medium,110,,,,,,,,,436,5.6536,2024-04-25,Yes,qwen2-5-72b-instruct,
+GLM-4.6V (Reasoning),Z AI,https://artificialanalysis.ai/models/glm-4-6v-reasoning,Yes,text|image,text,128000,128K,Yes,medium,108,0.3,0.9,,,,0.45,0.36,65,436,11.2162,2025-12-08,Yes,glm-5v-turbo,0.6
+MiniCPM5-1B (Non-reasoning),OpenBMB,https://artificialanalysis.ai/models/minicpm5-1b-non-reasoning,No,text,text,128000,128K,Yes,tiny,1,,,,,,,,,436,8.6947,2026-05-25,No,,
+Qwen3 VL 32B (Reasoning),Alibaba,https://artificialanalysis.ai/models/qwen3-vl-32b-reasoning,Yes,text|image,text,256000,256K,Yes,small,33.4,0.16,0.64,,,,0.28,0.208,47,436,11.8702,2025-10-21,Yes,qwen3-5-27b,0.4
+Hermes 4 - Llama-3.1 405B (Non-reasoning),Nous Research,https://artificialanalysis.ai/models/hermes-4-llama-3-1-405b,No,text,text,128000,128K,Yes,large,406,1,3,,,,1.5,1.2,111,436,7.4122,2025-08-27,No,,2
+Granite 4.1 30B,IBM,https://artificialanalysis.ai/models/granite-4-1-30b,No,text,text,131072,131.1K,Yes,small,30,,,,,,,,,436,7.4369,2026-04-29,No,,
+GPT-5.4 nano (xhigh),OpenAI,https://artificialanalysis.ai/models/gpt-5-4-nano,Yes,text|image,text,400000,400K,No,medium,,0.2,1.25,0.02,,0.9,0.4625,0.179,67,436,21.2442,2026-03-17,Yes,gpt-5-6-luna-xhigh,0.725
+Muse Spark 1.3 (xhigh),Meta,https://artificialanalysis.ai/models/muse-spark-1-3-xhigh,Yes,text|image|video,text,1000000,1M,No,large,,1.25,4.25,0.15,,0.88,2,0.78,120,436,45.1612,2026-09-02,No,,2.75
+"Claude Sonnet 5 (Non-reasoning, High Effort)",Anthropic,https://artificialanalysis.ai/models/claude-sonnet-5-non-reasoning,No,text|image,text,1000000,1M,No,large,,2,10,0.2,2.5,0.9,4,1.54,132,436,28.9377,2026-06-30,No,,6
+Qwen3 VL 235B A22B Instruct,Alibaba,https://artificialanalysis.ai/models/qwen3-vl-235b-a22b-instruct,No,text|image,text,262144,262.1K,Yes,large,235,0.4,1.6,,,,0.7,0.52,81,436,9.937,2025-09-23,Yes,qwen3-5-397b-a17b-non-reasoning,1
+Muse Spark 1.1 (xhigh),Meta,https://artificialanalysis.ai/models/muse-spark-1-1,Yes,text|image|speech|video,text,1048576,1.0M,No,large,,1.25,4.25,0.15,,0.88,2,0.78,120,436,34.2658,2026-07-09,Yes,muse-spark-1-2,2.75
+DeepSeek V3.2 (Reasoning),DeepSeek,https://artificialanalysis.ai/models/deepseek-v3-2-reasoning,Yes,text,text,128000,128K,Yes,large,685,0.28,0.42,0.014,,0.95,0.315,0.1078,53,436,21.4868,2025-12-01,Yes,deepseek-v4-pro-0424,0.35
+Grok 4.6 (xhigh),SpaceXAI,https://artificialanalysis.ai/models/grok-4-6-xhigh,Yes,text|image,text,500000,500K,No,large,,2,6,0.5,,0.75,3,1.35,127,436,44.2702,2026-08-12,No,,4
+Exaone 4.0 1.2B (Reasoning),LG AI Research,https://artificialanalysis.ai/models/exaone-4-0-1-2b-reasoning,Yes,text,text,64000,64K,Yes,tiny,1.28,,,,,,,,,436,5.2714,2025-07-15,No,,
+Gemma 4 E4B (Reasoning),Google,https://artificialanalysis.ai/models/gemma-4-e4b,Yes,text|image|speech|video,text,128000,128K,Yes,small,8,0.02,0.1,,,,0.04,0.028,3,436,8.9148,2026-04-03,No,,0.06
+"DeepSeek V4 Flash (Reasoning, Max Effort)",DeepSeek,https://artificialanalysis.ai/models/deepseek-v4-flash-0420,Yes,text,text,1000000,1M,Yes,large,284,0.13,0.28,0.028,,0.7974,0.1675,0.0736,30,436,24.6267,2026-04-24,Yes,deepseek-v4-flash,0.205
+Claude 3.7 Sonnet (Non-reasoning),Anthropic,https://artificialanalysis.ai/models/claude-3-7-sonnet,No,text|image,text,200000,200K,No,large,,3,15,0.3,3.75,0.9,6,2.31,138,436,15.2706,2025-02-24,Yes,claude-4-sonnet,9
+GPT-5.6 Sol (max),OpenAI,https://artificialanalysis.ai/models/gpt-5-6-sol,Yes,text|image,text,1000000,1M,No,large,,4,20,0.4,5,0.9,8,3.08,140,436,47.0614,2026-07-09,No,,12
+Solar Mini,Upstage,https://artificialanalysis.ai/models/solar-mini,No,text,text,4096,4.1K,Yes,small,10.7,0.15,0.15,,,,0.15,0.15,26,436,6.4088,2024-01-25,Yes,solar-pro-2-preview,0.15
+GPT-5.6 Sol (xhigh),OpenAI,https://artificialanalysis.ai/models/gpt-5-6-sol-xhigh,Yes,text|image,text,1000000,1M,No,large,,4,20,0.4,5,0.9,8,3.08,140,436,44.138,2026-07-09,No,,12
+Qwen3 Coder 30B A3B Instruct,Alibaba,https://artificialanalysis.ai/models/qwen3-coder-30b-a3b-instruct,No,text,text,262144,262.1K,Yes,small,30.5,0.45,2.25,,,,0.9,0.63,91,436,9.5854,2025-07-31,Yes,qwen3-coder-next,1.35
+K2-V2 (low),MBZUAI Institute of Foundation Models,https://artificialanalysis.ai/models/k2-v2-low,Yes,text,text,512000,512K,Yes,medium,70,,,,,,,,,436,7.3113,2025-12-05,No,,
+Granite 4.0 H 1B,IBM,https://artificialanalysis.ai/models/granite-4-0-h-nano-1b,No,text,text,128000,128K,Yes,tiny,1.5,,,,,,,,,436,5.1946,2025-10-28,No,,
+Reka Flash 3,Reka AI,https://artificialanalysis.ai/models/reka-flash-3,Yes,text,text,128000,128K,Yes,small,21,0.2,0.8,,,,0.35,0.26,56,436,5.646,2025-03-10,No,,0.5
+GPT-5.6 Luna (Non-reasoning),OpenAI,https://artificialanalysis.ai/models/gpt-5-6-luna-non-reasoning,No,text|image,text,1000000,1M,No,medium,,0.2,1.2,0.02,0.25,0.9,0.45,0.174,65,436,16.7637,2026-07-09,No,,0.7
+Mistral Medium 3.5,Mistral,https://artificialanalysis.ai/models/mistral-medium-3-5,Yes,text|image,text,256000,256K,Yes,medium,128,1.5,7.5,0.15,,0.9,3,1.155,127,436,14.8947,2026-04-29,No,,4.5
+K2-V2 (medium),MBZUAI Institute of Foundation Models,https://artificialanalysis.ai/models/k2-v2-medium,Yes,text,text,512000,512K,Yes,medium,70,,,,,,,,,436,9.016,2025-12-05,No,,
+Claude 2.0,Anthropic,https://artificialanalysis.ai/models/claude-2,No,text,text,100000,100K,No,,,,,,,,,,,436,5.5061,2023-07-11,Yes,claude-21,
+Gemini 3.7 Flash (low),Google,https://artificialanalysis.ai/models/gemini-3-7-flash-low,Yes,text|image|speech|video,text,1000000,1M,No,large,,0.75,3.75,0.075,0.75,0.9,1.5,0.5775,111,436,36.9459,2026-08-13,No,,2.25
+Pixtral Large,Mistral,https://artificialanalysis.ai/models/pixtral-large-2411,No,text|image,text,128000,128K,Yes,medium,124,,,,,,,,,436,7.1473,2024-11-18,Yes,mistral-medium-3-1,
+Qwen3 VL 8B (Reasoning),Alibaba,https://artificialanalysis.ai/models/qwen3-vl-8b-reasoning,Yes,text|image,text,256000,256K,Yes,small,8.77,0.18,2.1,,,,0.66,0.372,78,436,8.1723,2025-10-14,Yes,qwen3-5-9b,1.14
+Phi-3 Mini Instruct 3.8B,Microsoft,https://artificialanalysis.ai/models/phi-3-mini,No,text,text,4096,4.1K,Yes,tiny,3.8,,,,,,,,,436,5.824,2024-04-23,Yes,phi-4-mini,
+Mi:dm K 2.5 Pro,Korea Telecom,https://artificialanalysis.ai/models/mi-dm-k-2-5-pro-dec28,Yes,text,text,128000,128K,No,small,32,,,,,,,,,436,11.0361,2025-12-11,No,,
+"Claude Sonnet 4.6 (Adaptive Reasoning, Max Effort)",Anthropic,https://artificialanalysis.ai/models/claude-sonnet-4-6-adaptive,Yes,text|image,text,1000000,1M,No,large,,3,15,0.3,3.75,0.9,6,2.31,138,436,30.4529,2026-02-17,Yes,claude-sonnet-5,9
+DeepSeek R1 Distill Qwen 32B,DeepSeek,https://artificialanalysis.ai/models/deepseek-r1-distill-qwen-32b,Yes,text,text,128000,128K,Yes,small,32,,,,,,,,,436,8.3772,2025-01-20,Yes,deepseek-v3-0324,
+DeepSeek V3.1 Terminus (Non-reasoning),DeepSeek,https://artificialanalysis.ai/models/deepseek-v3-1-terminus,No,text,text,128000,128K,Yes,large,685,0.27,1,0.27,,0.5185,0.4525,0.343,66,436,13.9307,2025-09-22,Yes,deepseek-v3-2,0.635
+Gemini 2.0 Flash Thinking Experimental (Dec '24),Google,https://artificialanalysis.ai/models/gemini-2-0-flash-thinking-exp-1219,Yes,text|image|speech|video,text,2000000,2M,No,,,,,,,,,,,436,6.5553,2024-12-19,Yes,gemini-2-0-flash-thinking-exp-0121,
+Mi:dm K 2.5 Pro Preview,Korea Telecom,https://artificialanalysis.ai/models/midm-250-pro-rsnsft,Yes,text,text,128000,128K,No,,,,,,,,,,,436,,2025-12-11,Yes,mi-dm-k-2-5-pro-dec28,
+GPT-6 Astra (high),OpenAI,https://artificialanalysis.ai/models/gpt-6-astra-high,Yes,text|image,text,1000000,1M,No,large,,10,50,1,12.5,0.9,20,7.7,144,436,51.0481,2026-09-03,No,,30
+GPT-5 nano (high),OpenAI,https://artificialanalysis.ai/models/gpt-5-nano,Yes,text|image,text,400000,400K,No,small,,0.05,0.4,0.005,,0.9,0.1375,0.0535,25,436,12.9922,2025-08-07,Yes,gpt-5-4-nano,0.225
+LFM2.5-2.6B,Liquid AI,https://artificialanalysis.ai/models/lfm2-5-2-6b,Yes,text,text,128000,128K,Yes,tiny,2.7,0,0,,,,0,0,1,436,8.3871,2026-08-04,No,,0
+Llama Nemotron Super 49B v1.5 (Reasoning),NVIDIA,https://artificialanalysis.ai/models/llama-nemotron-super-49b-v1-5-reasoning,Yes,text,text,128000,128K,Yes,medium,49,0.4,0.4,,,,0.4,0.4,59,436,9.0144,2025-07-25,No,,0.4
+LFM2.5-8B-A1B,Liquid AI,https://artificialanalysis.ai/models/lfm2-5-8b-a1b,Yes,text,text,32768,32.8K,Yes,small,8.3,0,0,,,,0,0,1,436,7.2164,2026-05-28,No,,0
+GPT-4o Realtime (Dec '24),OpenAI,https://artificialanalysis.ai/models/gpt-4o-realtime-dec-2024,No,text|speech,text|speech,128000,128K,No,,,,,,,,,,,436,,2024-12-17,Yes,gpt-realtime-aug-25,
+GPT-5.5 Pro (xhigh),OpenAI,https://artificialanalysis.ai/models/gpt-5-5-pro,Yes,text|image,text,922000,922K,No,,,,,,,,,,,436,,2026-04-23,No,,
+Ling 3.0 Flash,InclusionAI,https://artificialanalysis.ai/models/ling-3-0-flash,Yes,text,text,262144,262.1K,Yes,medium,124,0.075,0.22,0.015,,0.8,0.1112,0.0475,22,436,24.9392,2026-08-04,No,,0.1475
+GPT-5.5 Instant (May 2026),OpenAI,https://artificialanalysis.ai/models/gpt-5-5-instant-05-26,Yes,text|image,text,400000,400K,No,large,,5,30,0.5,,0.9,11.25,4.35,142,436,22.6864,2026-05-05,Yes,gpt-5-5-instant-06-26,17.5
+Qwen2.5 Coder Instruct 7B ,Alibaba,https://artificialanalysis.ai/models/qwen2-5-coder-7b-instruct,No,text,text,131072,131.1K,Yes,small,7.62,,,,,,,,,436,5.7872,2024-09-19,Yes,qwen3-8b-instruct,
+Qwen3 4B (Non-reasoning),Alibaba,https://artificialanalysis.ai/models/qwen3-4b-instruct,No,text,text,32000,32K,Yes,tiny,4.02,,,,,,,,,436,6.6104,2025-04-28,Yes,qwen3-4b-2507-instruct,
+Nova Premier,Amazon,https://artificialanalysis.ai/models/nova-premier,No,text,text,1000000,1M,No,large,,2.5,12.5,0.625,,0.75,5,2.1875,136,436,9.1591,2025-04-30,No,,7.5
+Mistral Small 3,Mistral,https://artificialanalysis.ai/models/mistral-small-3,No,text,text,32000,32K,Yes,small,24,0.1,0.3,,,,0.15,0.12,26,436,6.6712,2025-01-30,Yes,mistral-small-3-1,0.2
+GLM-5.2 (Non-reasoning),Z AI,https://artificialanalysis.ai/models/glm-5-2-non-reasoning,No,text,text,1000000,1M,Yes,large,753,1.4,4.4,0.26,,0.832,2.15,0.902,122,436,22.4323,2026-06-16,No,,2.9
+o1-pro,OpenAI,https://artificialanalysis.ai/models/o1-pro,Yes,text|image,text,200000,200K,No,large,,150,600,,,,262.5,195,151,436,12.4165,2025-03-19,Yes,o3-pro,375
+Jamba 1.6 Mini,AI21 Labs,https://artificialanalysis.ai/models/jamba-1-6-mini,No,text,text,256000,256K,Yes,medium,52,,,,,,,,,436,5.1621,2025-03-06,Yes,jamba-1-7-mini,
+GPT-6 Astra (medium),OpenAI,https://artificialanalysis.ai/models/gpt-6-astra-medium,Yes,text|image,text,1000000,1M,No,large,,10,50,1,12.5,0.9,20,7.7,144,436,49.6685,2026-09-03,No,,30
+GPT-4o (May '24),OpenAI,https://artificialanalysis.ai/models/gpt-4o-2024-05-13,No,text|image,text,128000,128K,No,large,,5,15,,,,7.5,6,139,436,7.3317,2024-05-13,Yes,gpt-4o-2024-08-06,10
+"Claude Opus 4.7 (Adaptive Reasoning, Max Effort)",Anthropic,https://artificialanalysis.ai/models/claude-opus-4-7,Yes,text|image,text,1000000,1M,No,large,,5,25,0.5,6.25,0.9,10,3.85,141,436,40.6898,2026-04-16,Yes,claude-opus-4-8,15
+Cogito v2.1 (Reasoning),Deep Cogito,https://artificialanalysis.ai/models/cogito-v2-1-reasoning,Yes,text,text,128000,128K,Yes,large,671,1.25,1.25,,,,1.25,1.25,105,436,,2025-11-18,No,,1.25
+GPT-5 (ChatGPT),OpenAI,https://artificialanalysis.ai/models/gpt-5-chatgpt,No,text|image,text,128000,128K,No,,,,,,,,,,,436,10.4439,2025-08-07,Yes,gpt-5-1,
+Gemini 3.7 Flash (medium),Google,https://artificialanalysis.ai/models/gemini-3-7-flash-medium,Yes,text|image|speech|video,text,1000000,1M,No,large,,0.75,3.75,0.075,0.75,0.9,1.5,0.5775,111,436,39.6178,2026-08-13,No,,2.25
+Ring-2.6-1T,InclusionAI,https://artificialanalysis.ai/models/ring-2-6-1t,Yes,text,text,262144,262.1K,Yes,large,1000,0.3,2.5,,,,0.85,0.52,89,436,17.2771,2026-05-08,No,,1.4
+Solar Pro 2 (Reasoning),Upstage,https://artificialanalysis.ai/models/solar-pro-2-reasoning,Yes,text,text,65536,65.5K,No,,,,,,,,,,,436,7.4917,2025-07-09,Yes,solar-pro-3,
+Muse Spark,Meta,https://artificialanalysis.ai/models/muse-spark,Yes,text|image|speech,text,262144,262.1K,No,,,,,,,,,,,436,31.2991,2026-04-08,Yes,muse-spark-1-1,
+Grok 3 Reasoning Beta,SpaceXAI,https://artificialanalysis.ai/models/grok-3-reasoning,Yes,text,text,1000000,1M,No,,,,,,,,,,,436,10.3554,2025-02-19,Yes,grok-4,
+OpenChat 3.5 (1210),OpenChat,https://artificialanalysis.ai/models/openchat-35,No,text,text,8192,8.2K,Yes,small,7,,,,,,,,,436,5.29,2023-12-18,Yes,,
+Qwen3 14B (Non-reasoning),Alibaba,https://artificialanalysis.ai/models/qwen3-14b-instruct,No,text,text,32768,32.8K,Yes,small,14.8,0.35,1.4,,,,0.6125,0.455,76,436,6.703,2025-04-28,Yes,qwen3-30b-a3b-2507,0.875
+Phi-4,Microsoft,https://artificialanalysis.ai/models/phi-4,No,text,text,16000,16K,Yes,small,14,0.125,0.5,,,,0.2188,0.1625,37,436,5.9226,2024-12-12,No,,0.3125
+Qwen3.5 35B A3B (Non-reasoning),Alibaba,https://artificialanalysis.ai/models/qwen3-5-35b-a3b-non-reasoning,No,text|image,text,262144,262.1K,Yes,small,36,0.25,2,,,,0.6875,0.425,80,436,15.116,2026-02-24,No,,1.125
+"Claude Sonnet 5 (Adaptive Reasoning, Medium Effort)",Anthropic,https://artificialanalysis.ai/models/claude-sonnet-5-medium,Yes,text|image,text,1000000,1M,No,large,,2,10,0.2,2.5,0.9,4,1.54,132,436,28.4376,2026-06-30,No,,6
+gpt-oss-120b (high),OpenAI,https://artificialanalysis.ai/models/gpt-oss-120b,Yes,text,text,131072,131.1K,Yes,medium,117,0.15,0.595,0.125,,0.475,0.2613,0.177,44,436,12.3484,2025-08-05,No,,0.3725
+GLM-5 (Non-reasoning),Z AI,https://artificialanalysis.ai/models/glm-5-non-reasoning,No,text,text,200000,200K,Yes,large,744,1,3.2,0.2,,0.8,1.55,0.66,112,436,21.7826,2026-02-11,Yes,glm-5-1-non-reasoning,2.1
+NVIDIA Nemotron Nano 9B V2 (Reasoning),NVIDIA,https://artificialanalysis.ai/models/nvidia-nemotron-nano-9b-v2-reasoning,Yes,text,text,131072,131.1K,Yes,small,9,0.04,0.16,,,,0.07,0.052,10,436,7.4288,2025-08-18,No,,0.1
+"Claude Sonnet 4.6 (Non-reasoning, Low Effort)",Anthropic,https://artificialanalysis.ai/models/claude-sonnet-4-6-non-reasoning-low-effort,No,text|image,text,1000000,1M,No,large,,3,15,0.3,3.75,0.9,6,2.31,138,436,23.3035,2026-02-17,No,,9
+Claude 4.1 Opus (Non-reasoning),Anthropic,https://artificialanalysis.ai/models/claude-4-1-opus,No,text|image,text,200000,200K,No,large,,15,75,1.5,18.75,0.9,30,11.55,147,436,18.567,2025-08-05,Yes,claude-opus-4-5,45
+Qwen3 30B A3B (Non-reasoning),Alibaba,https://artificialanalysis.ai/models/qwen3-30b-a3b-instruct,No,text,text,32768,32.8K,Yes,small,30.5,0.2,0.8,,,,0.35,0.26,56,436,6.6226,2025-04-28,Yes,qwen3-30b-a3b-2507,0.5
+Qwen3.6 Plus,Alibaba,https://artificialanalysis.ai/models/qwen3-6-plus,Yes,text|image|video,text,1000000,1M,No,large,,0.5,3,0.05,0.625,0.9,1.125,0.435,100,436,27.0099,2026-04-02,Yes,qwen3-7-plus,1.75
+Agnes 2.5 Pro Beta,Sapiens AI,https://artificialanalysis.ai/models/agnes-2-5-pro-beta,Yes,text|image,text,1000000,1M,No,medium,,0.1,0.3,0.01,,0.9,0.15,0.057,26,436,35.2413,2026-08-26,No,,0.2
+Nova 2.0 Pro Preview (low),Amazon,https://artificialanalysis.ai/models/nova-2-0-pro-reasoning-low,Yes,text|image,text,256000,256K,No,large,,1.25,10,,,,3.4375,2.125,129,436,12.7755,2025-11-27,No,,5.625
+Gemini 2.5 Flash-Lite (Reasoning),Google,https://artificialanalysis.ai/models/gemini-2-5-flash-lite-reasoning,Yes,text|image|speech|video,text,1000000,1M,No,medium,,0.1,0.4,0.01,,0.9,0.175,0.067,31,436,8.5456,2025-06-17,Yes,gemini-2-5-flash-lite-preview-09-2025-reasoning,0.25
+Qwen3 VL 4B Instruct,Alibaba,https://artificialanalysis.ai/models/qwen3-vl-4b-instruct,No,text|image,text,256000,256K,Yes,tiny,4.44,,,,,,,,,436,5.6553,2025-10-14,Yes,qwen3-5-4b-non-reasoning,
+Qwen3 235B A22B 2507 (Reasoning),Alibaba,https://artificialanalysis.ai/models/qwen3-235b-a22b-instruct-2507-reasoning,Yes,text,text,256000,256K,Yes,large,235,0.23,2.3,,,,0.7475,0.437,83,436,12.7109,2025-07-25,Yes,qwen3-5-397b-a17b,1.265
+Gemini 3.8 Flash (low),Google,https://artificialanalysis.ai/models/gemini-3-8-flash-low,Yes,text|image|speech|video,text,1000000,1M,No,large,,0.75,3.75,0.075,0.75,0.9,1.5,0.5775,111,436,33.7857,2026-09-02,No,,2.25
+Llama 3.1 Tulu3 405B,Allen Institute for AI,https://artificialanalysis.ai/models/tulu3-405b,No,text,text,128000,128K,Yes,large,405,,,,,,,,,436,7.1989,2025-01-30,Yes,llama-3-3-instruct-70b,
+MiniMax-M2,MiniMax,https://artificialanalysis.ai/models/minimax-m2,Yes,text,text,204800,204.8K,Yes,large,230,0.3,1.2,,,,0.525,0.39,72,436,18.6257,2025-10-26,Yes,minimax-m2-1,0.75
+Jamba Reasoning 3B,AI21 Labs,https://artificialanalysis.ai/models/jamba-reasoning-3b,Yes,text,text,262000,262K,Yes,tiny,3,,,,,,,,,436,5.6683,2025-10-08,No,,
+GLM-5.2 (max),Z AI,https://artificialanalysis.ai/models/glm-5-2,Yes,text,text,1000000,1M,Yes,large,753,1.4,4.4,0.26,,0.8143,2.15,0.902,122,436,38.6393,2026-06-16,No,,2.9
+Kimi K3 (max),Kimi,https://artificialanalysis.ai/models/kimi-k3,Yes,text|image,text,1048576,1.0M,Yes,large,2800,3,15,0.3,,0.9,6,2.31,138,436,43.7842,2026-07-16,No,,9
+OLMo 2 7B,Allen Institute for AI,https://artificialanalysis.ai/models/olmo-2-7b,No,text,text,4096,4.1K,Yes,small,7.3,,,,,,,,,436,5.5774,2024-11-26,Yes,olmo-3-7b-think,
+Qwen3 VL 4B (Reasoning),Alibaba,https://artificialanalysis.ai/models/qwen3-vl-4b-reasoning,Yes,text|image,text,256000,256K,Yes,tiny,4.44,,,,,,,,,436,7.0488,2025-10-14,Yes,qwen3-5-4b,
+"Quasar 438B (max, based on GLM-5.2)",Multiverse Computing,https://artificialanalysis.ai/models/quasar-438b,Yes,text,text,1000000,1M,No,large,438,0.6,1.8,,,,0.9,0.72,91,436,27.1275,2026-08-10,No,,1.2
+KAT-Coder-Pro V1,KwaiKAT,https://artificialanalysis.ai/models/kat-coder-pro-v1,No,text,text,256000,256K,No,,,,,,,,,,,436,18.5863,2025-11-11,Yes,kat-coder-pro-v2,
+DeepSeek V3.1 (Non-reasoning),DeepSeek,https://artificialanalysis.ai/models/deepseek-v3-1,No,text,text,128000,128K,Yes,large,685,0.57,1.68,0.57,,0.48,0.8475,0.681,88,436,13.7079,2025-08-21,Yes,deepseek-v3-1-terminus,1.125
+LFM2 24B A2B,Liquid AI,https://artificialanalysis.ai/models/lfm2-24b-a2b,No,text,text,32768,32.8K,Yes,small,23.8,,,,,,,,,436,5.9475,2026-02-25,No,,
+Nova 2.0 Lite (medium),Amazon,https://artificialanalysis.ai/models/nova-2-0-lite-reasoning-medium,Yes,text|image,text,1000000,1M,No,medium,,0.3,2.5,,,,0.85,0.52,89,436,12.4824,2025-10-29,No,,1.4
+KAT Coder Pro V2,KwaiKAT,https://artificialanalysis.ai/models/kat-coder-pro-v2,No,text,text,256000,256K,No,medium,,0.3,1.2,0.06,,0.8,0.525,0.222,72,436,21.7045,2026-03-27,No,,0.75
+Qwen3 Coder Next,Alibaba,https://artificialanalysis.ai/models/qwen3-coder-next,No,text,text,256000,256K,Yes,medium,79.7,0.35,1.2,0.35,,0.4167,0.5625,0.435,75,436,10.0531,2026-02-03,No,,0.775
+GPT-5.1 Codex mini (high),OpenAI,https://artificialanalysis.ai/models/gpt-5-1-codex-mini,Yes,text|image,text,400000,400K,No,medium,,0.25,2,,,,0.6875,0.425,80,436,20.3782,2025-11-13,Yes,gpt-5-2-codex,1.125
+Gemini 2.0 Flash (experimental),Google,https://artificialanalysis.ai/models/gemini-2-0-flash-experimental,No,text|image|speech|video,text,1000000,1M,No,,,0,0,,,,0,0,1,436,8.2173,2024-12-11,Yes,gemini-2-0-flash,0
+Llama 65B,Meta,https://artificialanalysis.ai/models/llama-65b,No,text,text,2048,2.0K,Yes,medium,65,,,,,,,,,436,5.035,2023-02-24,Yes,llama-3-instruct-70b,
+Grok 4.3 (low),SpaceXAI,https://artificialanalysis.ai/models/grok-4-3-low,Yes,text|image,text,1000000,1M,No,large,,1.25,2.5,0.2,1.25,0.84,1.5625,0.64,113,436,24.2959,2026-04-30,No,,1.875
+"DeepSeek V4 Flash 0731 (Reasoning, Max Effort)",DeepSeek,https://artificialanalysis.ai/models/deepseek-v4-flash,Yes,text,text,1000000,1M,Yes,large,284,0.44,1.32,0.014,,0.9682,0.66,0.2298,78,436,34.5282,2026-07-31,No,,0.88
+Gemma 4 12B (Reasoning),Google,https://artificialanalysis.ai/models/gemma-4-12b,Yes,text|image|speech|video,text,256000,256K,Yes,small,12,0.1,0.3,,,,0.15,0.12,26,436,14.1848,2026-06-03,No,,0.2
+"Claude Opus 5 (Adaptive Reasoning, Medium Effort)",Anthropic,https://artificialanalysis.ai/models/claude-opus-5-medium,Yes,text|image,text,1000000,1M,No,large,,5,25,0.5,6.25,0.9,10,3.85,141,436,45.0576,2026-07-24,No,,15
+Grok 3 mini Reasoning (high),SpaceXAI,https://artificialanalysis.ai/models/grok-3-mini-reasoning,Yes,text,text|image,1000000,1M,No,medium,,0.3,0.5,0.075,,0.75,0.35,0.1625,56,436,14.6213,2025-02-19,Yes,grok-4-3,0.4
+Llama 2 Chat 7B,Meta,https://artificialanalysis.ai/models/llama-2-chat-7b,No,text,text,4096,4.1K,Yes,small,7,0.05,0.25,,,,0.1,0.07,18,436,5.7118,2023-07-18,Yes,llama-3-instruct-8b,0.15
