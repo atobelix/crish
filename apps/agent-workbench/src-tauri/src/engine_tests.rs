@@ -1529,13 +1529,13 @@ fn cold_cache_warning_fires_after_warm_until() {
 #[test]
 fn waste_alert_emitted_above_threshold_with_honest_attribution() {
     // 显式 USD 单价（引擎微元口径）：input 0.14 / cacheRead 0.0028
-    let pricing = agent_provider::pricing::ModelPricing {
+    let pricing = agent_provider::models::catalog_types::ModelPricingSpec {
         currency: agent_provider::pricing::Currency::Usd,
-        unit: agent_provider::pricing::PricingUnit::Per1mTokens,
         input: 0.14,
         output: 0.28,
         cache_read: Some(0.0028),
         cache_write: Some(0.0),
+        per_image: None,
         tiers: vec![],
     };
     let below = sample_stats(Some(61_000), WARN_MISSED_TOKENS - 1);
@@ -1590,13 +1590,13 @@ fn waste_alert_emitted_above_threshold_with_honest_attribution() {
 /// cacheRead 1.25 = 11.25/1M）：10_000 token → $0.1125 ≥ $0.1
 #[test]
 fn waste_alert_fires_on_cost_threshold_alone() {
-    let pricing = agent_provider::pricing::ModelPricing {
+    let pricing = agent_provider::models::catalog_types::ModelPricingSpec {
         currency: agent_provider::pricing::Currency::Usd,
-        unit: agent_provider::pricing::PricingUnit::Per1mTokens,
         input: 12.5,
         output: 12.5,
         cache_read: Some(1.25),
         cache_write: Some(1.25),
+        per_image: None,
         tiers: vec![],
     };
     // token 阈值以下（10_000 < 20_000）但金额超 $0.1 → 必须预警

@@ -280,8 +280,10 @@ pub async fn probe_ping_core(req: ProbePingRequest) -> ProbePingResult {
         }
         "gemini" => {
             let base_url = target.base_url.trim_end_matches('/');
+            // 优先 header x-goog-api-key（与生产轨 gemini_request_headers 同规），
+            // 避免 key 拼进 query 进访问日志；Gemini 官方与兼容网关均支持该头。
             let url = format!(
-                "{base_url}/v1beta/models/{}:generateContent?key={api_key}",
+                "{base_url}/v1beta/models/{}:generateContent",
                 target.model_to_test
             );
             let body = serde_json::json!({
@@ -290,6 +292,7 @@ pub async fn probe_ping_core(req: ProbePingRequest) -> ProbePingResult {
             });
             client
                 .post(url)
+                .header("x-goog-api-key", &api_key)
                 .header(CONTENT_TYPE, "application/json")
                 .json(&body)
         }
@@ -459,8 +462,9 @@ pub async fn probe_scan_models_core(
         }
         "gemini" => {
             let base_url = target.base_url.trim_end_matches('/');
-            let url = format!("{base_url}/v1beta/models?key={api_key}");
-            client.get(url)
+            // 与探活同轨：header x-goog-api-key，key 不进 query / 访问日志。
+            let url = format!("{base_url}/v1beta/models");
+            client.get(url).header("x-goog-api-key", &api_key)
         }
         _ => {
             let base_url = target.base_url.trim_end_matches('/');

@@ -244,7 +244,9 @@ pub(crate) fn catalog_request_profile(
 ///
 /// - 文件缺失：诚实空树 + 空目录（`parse_error = None`），**不是** `catalog.json`；
 /// - 解析失败：保持上一份成功快照；从未成功过则返回 [LiveModels::parse_failed]
-///   显式错误态（`parse_error = Some`），**不写入**槽位，禁止把坏文件装成 empty tree 当真源。
+///   显式错误态（`parse_error = Some`），**并安装进槽位**——禁止把坏文件装成
+///   empty tree 当真源，但失败快照同样要缓存，避免每请求重复读盘直到文件修好；
+///   下一次 [reload_live_catalog] 成功时覆盖失败快照。
 ///
 /// S4 必须把 `request_options` 的 catalog 从 [bundled_catalog] 换成本函数；
 /// 本维不改该调用点，不得宣称出站已通。
@@ -263,7 +265,11 @@ pub(crate) fn live_catalog() -> Arc<LiveModels> {
     adopt_load_result(&mut guard, LiveModels::load_user())
 }
 
-/// 成功才写入 LIVE_CATALOG；失败返回显式错误态且不安装。
+/// 成功或失败都写入 LIVE_CATALOG。
+///
+/// 失败写入 [LiveModels::parse_failed] 快照（`parse_error = Some`），调用方仍能
+/// 与 empty tree 区分；安装失败快照是为了避免首次坏文件后每请求重复 load_user。
+/// [reload_live_catalog] 成功路径会覆盖失败快照。
 fn adopt_load_result(
     slot: &mut Option<Arc<LiveModels>>,
     result: Result<LiveModels, String>,
@@ -277,9 +283,11 @@ fn adopt_load_result(
         Err(err) => {
             tracing::warn!(
                 target: "engine_provider",
-                "读取 ~/.conex/models.yaml 失败，不把空 providers 当作已加载: {err}"
+                "读取 ~/.conex/models.yaml 失败，安装 parse_failed 快照（不把空 providers 当作已加载，也不重复读盘）: {err}"
             );
-            Arc::new(LiveModels::parse_failed(err))
+            let failed_arc = Arc::new(LiveModels::parse_failed(err));
+            *slot = Some(Arc::clone(&failed_arc));
+            failed_arc
         }
     }
 }
@@ -661,9 +669,9 @@ providers:
     }
 
     #[test]
-    fn live_catalog_first_parse_failure_is_explicit_error_not_installed() {
+    fn live_catalog_first_parse_failure_installs_snapshot_no_repeat_io() {
         let _guard = lock_live();
-        {
+        let installed = {
             let mut slot = LIVE_CATALOG
                 .write()
                 .unwrap_or_else(|poison| poison.into_inner());
@@ -674,8 +682,25 @@ providers:
                 failed.tree.providers.is_empty(),
                 "错误态 tree 为空，但靠 parse_error 区分"
             );
-            assert!(slot.is_none(), "首次坏文件不得安装成 empty tree 当真源快照");
-        }
+            let installed = slot
+                .as_ref()
+                .expect("首次失败必须安装 parse_failed 快照，避免每请求重复 load_user")
+                .clone();
+            assert!(
+                Arc::ptr_eq(&failed, &installed),
+                "返回值与槽位须为同一 Arc（失败快照已安装）"
+            );
+            installed
+        };
+        // 第二次 live_catalog() 命中已安装的失败快照，不触发新的 load_user
+        // （若重新读盘，Arc 指针必不同）。
+        let second = live_catalog();
+        assert!(
+            Arc::ptr_eq(&installed, &second),
+            "第二次 live_catalog() 不得重新读盘，须复用已安装的失败快照"
+        );
+        assert_eq!(second.parse_error.as_deref(), Some("语法失败: bad"));
+        // 成功路径覆盖失败快照
         reload_live_catalog_from_yaml_str(acme_yaml()).expect("成功解析仍可安装");
         let live = live_catalog();
         assert!(live.parse_error.is_none());

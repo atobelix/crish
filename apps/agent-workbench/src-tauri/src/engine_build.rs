@@ -1081,7 +1081,7 @@ pub(crate) fn waste_alert_event(
     session_id: &str,
     stats: &RunCacheStats,
     model_changed: bool,
-    pricing: Option<&agent_provider::pricing::ModelPricing>,
+    pricing: Option<&agent_provider::models::catalog_types::ModelPricingSpec>,
 ) -> Option<AgentEvent> {
     let missed_cost_usd = pricing.and_then(|p| {
         if p.currency != agent_provider::pricing::Currency::Usd {

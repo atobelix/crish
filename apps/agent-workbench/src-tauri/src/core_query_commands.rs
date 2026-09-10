@@ -441,7 +441,7 @@ impl RunUsage {
     /// get_run_usage 回退路径 + 测试），E1 过期 allow 已删除（13-T5 核销）。
     pub fn from_run_cache_stats(
         stats: RunCacheStats,
-        pricing: Option<&agent_provider::pricing::ModelPricing>,
+        pricing: Option<&agent_provider::models::catalog_types::ModelPricingSpec>,
     ) -> Option<RunUsage> {
         if stats.sample_count == 0 {
             return None;
@@ -1545,15 +1545,15 @@ mod tests {
     /// 未定价 → cost None；四价 0 无阶梯 → 免费；CNY → ¥。
     #[test]
     fn run_usage_cost_equals_pricing_engine_and_three_states() {
-        use agent_provider::pricing::{Currency, ModelPricing, PricingUnit};
+        use agent_provider::models::catalog_types::{CurrencyKind, ModelPricingSpec};
         let stats = usage_stats();
-        let pricing = ModelPricing {
-            currency: Currency::Usd,
-            unit: PricingUnit::Per1mTokens,
+        let pricing = ModelPricingSpec {
+            currency: CurrencyKind::Usd,
             input: 3.0,
             output: 9.0,
             cache_read: Some(0.1),
             cache_write: Some(0.0),
+            per_image: None,
             tiers: vec![],
         };
         // prompt=1_000 / cache_read=800 → 输入段 200×3/1M=0.0006 + 输出 50×9/1M=0.00045
@@ -1591,13 +1591,13 @@ mod tests {
         assert!(unpriced.cost.is_none(), "无定价 → cost None");
 
         // 四价 0 无阶梯 → 免费
-        let free = ModelPricing {
-            currency: Currency::Usd,
-            unit: PricingUnit::Per1mTokens,
+        let free = ModelPricingSpec {
+            currency: CurrencyKind::Usd,
             input: 0.0,
             output: 0.0,
             cache_read: None,
             cache_write: None,
+            per_image: None,
             tiers: vec![],
         };
         let free_usage =
@@ -1607,13 +1607,13 @@ mod tests {
         assert_eq!(free_cost.formatted_total, "免费");
 
         // CNY → ¥ 前缀（无硬编码 $）
-        let cny = ModelPricing {
-            currency: Currency::Cny,
-            unit: PricingUnit::Per1mTokens,
+        let cny = ModelPricingSpec {
+            currency: CurrencyKind::Cny,
             input: 3.0,
             output: 9.0,
             cache_read: None,
             cache_write: None,
+            per_image: None,
             tiers: vec![],
         };
         let cny_usage = RunUsage::from_run_cache_stats(stats, Some(&cny)).expect("有样本");
