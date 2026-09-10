@@ -244,9 +244,7 @@ pub(crate) fn backfill_legacy_doc_meta_v8(conn: &Connection) -> Result<(), Store
     )?;
 
     // 3. 仅抓取 title 为空串的存量文档 ID
-    let mut stmt = conn.prepare(
-        "SELECT doc_id FROM doc_meta WHERE length(trim(title)) = 0",
-    )?;
+    let mut stmt = conn.prepare("SELECT doc_id FROM doc_meta WHERE length(trim(title)) = 0")?;
     let doc_ids: Vec<String> = stmt
         .query_map([], |r| r.get(0))?
         .collect::<Result<Vec<_>, _>>()?;

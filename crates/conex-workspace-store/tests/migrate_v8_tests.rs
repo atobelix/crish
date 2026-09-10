@@ -8,7 +8,9 @@ fn test_fresh_database_has_schema_version_8_and_5_columns() {
     migrate(&conn).unwrap();
 
     let version: i64 = conn
-        .query_row("SELECT version FROM schema_version LIMIT 1", [], |r| r.get(0))
+        .query_row("SELECT version FROM schema_version LIMIT 1", [], |r| {
+            r.get(0)
+        })
         .unwrap();
     assert_eq!(version, 8, "全新数据库迁移后 schema_version 必须为 8");
     assert_eq!(version, SCHEMA_VERSION);
@@ -21,13 +23,7 @@ fn test_fresh_database_has_schema_version_8_and_5_columns() {
         .map(|r| r.unwrap())
         .collect();
 
-    for expected in [
-        "doc_id",
-        "rev",
-        "updated_at",
-        "title",
-        "created_at",
-    ] {
+    for expected in ["doc_id", "rev", "updated_at", "title", "created_at"] {
         assert!(
             columns.iter().any(|c| c == expected),
             "doc_meta 必须包含列 {expected}"
@@ -75,39 +71,58 @@ fn test_migration_v8_version_gate_preserves_custom_title_on_reboot() {
         INSERT INTO blocks (doc_id, block_id, plain_text, updated_at)
             VALUES ('doc_legacy_1', 'b1', '# 架构设计总纲\n正文内容', 1700001000);
         "#,
-    ).unwrap();
+    )
+    .unwrap();
 
     // 2. 执行第一次迁移（升至 v8）
     migrate(&conn).unwrap();
 
     // 断言标题已从首行智能提取
     let title: String = conn
-        .query_row("SELECT title FROM doc_meta WHERE doc_id = 'doc_legacy_1'", [], |r| r.get(0))
+        .query_row(
+            "SELECT title FROM doc_meta WHERE doc_id = 'doc_legacy_1'",
+            [],
+            |r| r.get(0),
+        )
         .unwrap();
-    assert_eq!(title, "架构设计总纲", "v8 迁移应自动提取首行 heading 回填标题");
+    assert_eq!(
+        title, "架构设计总纲",
+        "v8 迁移应自动提取首行 heading 回填标题"
+    );
 
     // 验证时间戳已自动转换为 13 位毫秒级
     let updated_at: i64 = conn
-        .query_row("SELECT updated_at FROM doc_meta WHERE doc_id = 'doc_legacy_1'", [], |r| r.get(0))
+        .query_row(
+            "SELECT updated_at FROM doc_meta WHERE doc_id = 'doc_legacy_1'",
+            [],
+            |r| r.get(0),
+        )
         .unwrap();
-    assert!(updated_at >= 1_000_000_000_000, "时间戳必须已归一化为 13 位毫秒");
+    assert!(
+        updated_at >= 1_000_000_000_000,
+        "时间戳必须已归一化为 13 位毫秒"
+    );
 
     // 3. 用户将标题主动修改为自定义名称
     conn.execute(
         "UPDATE doc_meta SET title = '用户自定义专属标题' WHERE doc_id = 'doc_legacy_1'",
         [],
-    ).unwrap();
+    )
+    .unwrap();
 
     // 4. 模拟应用重启再次调用 migrate(&conn)
     migrate(&conn).unwrap();
 
     // 刚性断言：BUG-A04 门闩生效，版本已是 8，绝不再执行回填扫描！
     let title_after_reboot: String = conn
-        .query_row("SELECT title FROM doc_meta WHERE doc_id = 'doc_legacy_1'", [], |r| r.get(0))
+        .query_row(
+            "SELECT title FROM doc_meta WHERE doc_id = 'doc_legacy_1'",
+            [],
+            |r| r.get(0),
+        )
         .unwrap();
     assert_eq!(
-        title_after_reboot,
-        "用户自定义专属标题",
+        title_after_reboot, "用户自定义专属标题",
         "重启时绝不允许无条件扫描覆盖用户自定义标题"
     );
 }

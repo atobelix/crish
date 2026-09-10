@@ -28,12 +28,7 @@ fn get_system_critical_prefixes() -> &'static [String] {
         #[cfg(windows)]
         {
             // 1. 动态感知 Windows 系统目录环境变量
-            let env_vars = [
-                "SystemRoot",
-                "windir",
-                "ProgramFiles",
-                "ProgramFiles(x86)",
-            ];
+            let env_vars = ["SystemRoot", "windir", "ProgramFiles", "ProgramFiles(x86)"];
             for var in &env_vars {
                 if let Ok(val) = std::env::var(var) {
                     let norm = ConexPathNormalizer::normalize(Path::new(&val));
@@ -48,14 +43,7 @@ fn get_system_critical_prefixes() -> &'static [String] {
             if let Ok(user_profile) = std::env::var("USERPROFILE") {
                 let norm = ConexPathNormalizer::normalize(Path::new(&user_profile));
                 let user_base = norm.to_string_lossy().to_ascii_uppercase();
-                let sensitive_subdirs = [
-                    ".SSH",
-                    ".GNUPG",
-                    ".AWS",
-                    ".AZURE",
-                    ".KUBE",
-                    ".GITCONFIG",
-                ];
+                let sensitive_subdirs = [".SSH", ".GNUPG", ".AWS", ".AZURE", ".KUBE", ".GITCONFIG"];
                 for sub in &sensitive_subdirs {
                     let full = format!("{user_base}/{sub}");
                     if !prefixes.contains(&full) {
@@ -68,8 +56,18 @@ fn get_system_critical_prefixes() -> &'static [String] {
         #[cfg(not(windows))]
         {
             let posix_critical = [
-                "/BIN", "/SBIN", "/USR/BIN", "/USR/SBIN", "/ETC", "/BOOT", "/DEV", "/PROC",
-                "/SYS", "/LIB", "/LIB64", "/VAR/RUN",
+                "/BIN",
+                "/SBIN",
+                "/USR/BIN",
+                "/USR/SBIN",
+                "/ETC",
+                "/BOOT",
+                "/DEV",
+                "/PROC",
+                "/SYS",
+                "/LIB",
+                "/LIB64",
+                "/VAR/RUN",
             ];
             for p in &posix_critical {
                 prefixes.push(p.to_string());
@@ -125,12 +123,8 @@ impl ConexPathNormalizer {
                         };
                     }
                     _ => {
-                        normalized_components.push(
-                            prefix_comp
-                                .as_os_str()
-                                .to_string_lossy()
-                                .replace('\\', "/"),
-                        );
+                        normalized_components
+                            .push(prefix_comp.as_os_str().to_string_lossy().replace('\\', "/"));
                     }
                 },
                 Component::RootDir => {
@@ -277,13 +271,7 @@ impl ConexPathNormalizer {
             }
 
             // 系统底层危险工具/二进制硬拦截
-            let critical_binaries = [
-                "DISKPART",
-                "BCDEDIT",
-                "FORMAT",
-                "VSSADMIN",
-                "WBADMIN",
-            ];
+            let critical_binaries = ["DISKPART", "BCDEDIT", "FORMAT", "VSSADMIN", "WBADMIN"];
             for bin in &critical_binaries {
                 if upper.ends_with(&format!("/{bin}"))
                     || upper.ends_with(&format!("/{bin}.EXE"))
@@ -422,26 +410,52 @@ mod tests {
     fn test_is_system_critical_path_windows() {
         #[cfg(windows)]
         {
-            assert!(ConexPathNormalizer::is_system_critical_path(Path::new("C:")));
-            assert!(ConexPathNormalizer::is_system_critical_path(Path::new("C:/")));
-            assert!(ConexPathNormalizer::is_system_critical_path(Path::new("D:")));
-            assert!(ConexPathNormalizer::is_system_critical_path(Path::new("D:/")));
-            assert!(ConexPathNormalizer::is_system_critical_path(Path::new("c:\\windows")));
-            assert!(ConexPathNormalizer::is_system_critical_path(Path::new("D:\\Windows\\System32")));
-            assert!(ConexPathNormalizer::is_system_critical_path(Path::new("C:\\Program Files")));
-            assert!(ConexPathNormalizer::is_system_critical_path(Path::new("E:\\Program Files (x86)\\app")));
-            assert!(ConexPathNormalizer::is_system_critical_path(Path::new("diskpart.exe")));
-            assert!(ConexPathNormalizer::is_system_critical_path(Path::new("C:/tools/bcdedit.exe")));
+            assert!(ConexPathNormalizer::is_system_critical_path(Path::new(
+                "C:"
+            )));
+            assert!(ConexPathNormalizer::is_system_critical_path(Path::new(
+                "C:/"
+            )));
+            assert!(ConexPathNormalizer::is_system_critical_path(Path::new(
+                "D:"
+            )));
+            assert!(ConexPathNormalizer::is_system_critical_path(Path::new(
+                "D:/"
+            )));
+            assert!(ConexPathNormalizer::is_system_critical_path(Path::new(
+                "c:\\windows"
+            )));
+            assert!(ConexPathNormalizer::is_system_critical_path(Path::new(
+                "D:\\Windows\\System32"
+            )));
+            assert!(ConexPathNormalizer::is_system_critical_path(Path::new(
+                "C:\\Program Files"
+            )));
+            assert!(ConexPathNormalizer::is_system_critical_path(Path::new(
+                "E:\\Program Files (x86)\\app"
+            )));
+            assert!(ConexPathNormalizer::is_system_critical_path(Path::new(
+                "diskpart.exe"
+            )));
+            assert!(ConexPathNormalizer::is_system_critical_path(Path::new(
+                "C:/tools/bcdedit.exe"
+            )));
 
-            assert!(!ConexPathNormalizer::is_system_critical_path(Path::new("C:/Projects/my-app")));
-            assert!(!ConexPathNormalizer::is_system_critical_path(Path::new("D:/workspace")));
+            assert!(!ConexPathNormalizer::is_system_critical_path(Path::new(
+                "C:/Projects/my-app"
+            )));
+            assert!(!ConexPathNormalizer::is_system_critical_path(Path::new(
+                "D:/workspace"
+            )));
         }
     }
 
     #[tokio::test]
     async fn test_check_unc_path_async() {
         let local_path = PathBuf::from("C:/nonexistent_random_path_123456789");
-        let exists = ConexPathNormalizer::check_unc_path_async(local_path).await.unwrap();
+        let exists = ConexPathNormalizer::check_unc_path_async(local_path)
+            .await
+            .unwrap();
         assert!(!exists);
     }
 }

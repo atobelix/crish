@@ -229,8 +229,8 @@ pub mod path_utils {
         Ok(())
     }
 
-    use std::collections::HashSet;
     use crate::path_normalizer::ConexPathNormalizer;
+    use std::collections::HashSet;
 
     #[derive(Debug, thiserror::Error)]
     pub enum SymlinkResolveError {

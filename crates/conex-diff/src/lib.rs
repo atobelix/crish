@@ -157,10 +157,22 @@ pub mod diff_engine {
                 });
             }
 
-            let final_old_start =
-                old_start.unwrap_or(if old_count == 0 { prev_old } else { prev_old + 1 }.max(1));
-            let final_new_start =
-                new_start.unwrap_or(if new_count == 0 { prev_new } else { prev_new + 1 }.max(1));
+            let final_old_start = old_start.unwrap_or(
+                if old_count == 0 {
+                    prev_old
+                } else {
+                    prev_old + 1
+                }
+                .max(1),
+            );
+            let final_new_start = new_start.unwrap_or(
+                if new_count == 0 {
+                    prev_new
+                } else {
+                    prev_new + 1
+                }
+                .max(1),
+            );
 
             if !lines.is_empty() {
                 hunks.push(DiffHunk {
@@ -228,7 +240,11 @@ mod tests {
 
         // Should have context lines around the change
         let hunk = &result.hunks[0];
-        let contexts = hunk.lines.iter().filter(|l| l.kind == DiffLineKind::Context).count();
+        let contexts = hunk
+            .lines
+            .iter()
+            .filter(|l| l.kind == DiffLineKind::Context)
+            .count();
         assert!(contexts >= 2); // at least "aaa" and "ccc" as context
     }
 

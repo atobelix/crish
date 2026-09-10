@@ -242,7 +242,10 @@ impl LocalDb {
     }
 
     /// 存量 LocalStorage 快照平滑迁移（幂等，成功导入返回 true，已迁移过返回 false）
-    pub fn import_legacy_usage_snapshot(&self, snapshot: &serde_json::Value) -> Result<bool, DbFailure> {
+    pub fn import_legacy_usage_snapshot(
+        &self,
+        snapshot: &serde_json::Value,
+    ) -> Result<bool, DbFailure> {
         let conn = self.conn.lock().map_err(|e| DbFailure {
             message: format!("lock poisoned: {e}"),
             kind: DbFailureKind::Lock,
@@ -285,7 +288,8 @@ impl LocalDb {
                 let m: u32 = parts[1].parse().unwrap_or(1);
                 let d: u32 = parts[2].parse().unwrap_or(1);
 
-                const DAYS_BEFORE_MONTH: [i64; 12] = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
+                const DAYS_BEFORE_MONTH: [i64; 12] =
+                    [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
                 let is_leap = (y % 4 == 0 && y % 100 != 0) || (y % 400 == 0);
                 let m_idx = ((m as usize).saturating_sub(1)).min(11);
                 let mut days_in_year = DAYS_BEFORE_MONTH[m_idx] + (d as i64 - 1);
@@ -705,7 +709,8 @@ impl LocalDb {
         let today_days = local_now_ms.div_euclid(86_400_000);
 
         for row_res in rows_iter {
-            let (tokens, cost, ts) = row_res.map_err(|e| self.latch_error("query_activity_row", e))?;
+            let (tokens, cost, ts) =
+                row_res.map_err(|e| self.latch_error("query_activity_row", e))?;
             let local_ts = ts - (tz_offset_minutes as i64) * 60_000;
             let record_days = local_ts.div_euclid(86_400_000);
             let h = ((local_ts.rem_euclid(86_400_000) / 1000) / 3600) as usize;

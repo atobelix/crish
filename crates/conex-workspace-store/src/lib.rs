@@ -94,9 +94,7 @@ pub use mirror_os_watch::{
     detect_if_os_event_hits_mirror, poll_on_os_hint, FakeMirrorOsEventSource, MirrorOsEvent,
     MirrorOsEventKind, MirrorOsEventSource, MirrorOsWatchError, MirrorOsWatcher,
 };
-pub use note_documents::{
-    current_time_ms, normalize_timestamp_ms, DocMetaRow, NoteDocumentMeta,
-};
+pub use note_documents::{current_time_ms, normalize_timestamp_ms, DocMetaRow, NoteDocumentMeta};
 pub use persist_plugin::SharedWorkspaceStore;
 pub use projection::{
     block_kind_to_store_str, commit_ops, commit_ops_with_mirror, export_mirror_now,

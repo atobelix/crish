@@ -524,7 +524,10 @@ async fn test_group_commit_panic_isolation_and_recovery() {
 
     assert!(panic_res.is_err(), "Panicking task must return error");
     let err = panic_res.unwrap_err();
-    assert_eq!(err.kind, DbFailureKind::Other("write_closure_panic".to_string()));
+    assert_eq!(
+        err.kind,
+        DbFailureKind::Other("write_closure_panic".to_string())
+    );
     assert!(err.message.contains("simulated crash inside write closure"));
 
     // 2. 验证 Actor 依然存活，紧随其后的后续写操作 100% 成功
@@ -544,5 +547,8 @@ async fn test_group_commit_panic_isolation_and_recovery() {
         .expect("write after panic must succeed");
 
     assert_eq!(success_res, 1);
-    assert!(!handle.is_closed(), "Actor channel must remain open and alive");
+    assert!(
+        !handle.is_closed(),
+        "Actor channel must remain open and alive"
+    );
 }

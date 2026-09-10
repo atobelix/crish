@@ -102,7 +102,6 @@ impl LocalDb {
 
         Ok(())
     }
-
 }
 
 /// 灵活解析会话消息：先尝试 JSON 数组，失败再走 JSONL 行解析。

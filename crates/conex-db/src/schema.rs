@@ -329,4 +329,3 @@ pub(crate) fn create_v5_schema() -> &'static str {
     CREATE INDEX IF NOT EXISTS idx_active_blob_leases_expires ON active_blob_leases(expires_at);
     "#
 }
-

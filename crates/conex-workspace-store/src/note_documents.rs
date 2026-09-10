@@ -81,7 +81,10 @@ pub fn normalize_timestamp_ms(ts: i64, fallback_ms: i64) -> i64 {
 impl WorkspaceStore {
     /// 1. 获取文档列表（带实时块计数，按更新时间倒序排序，100% 命中 idx_doc_meta_updated 索引）
     pub fn list_note_documents(&self) -> Result<Vec<DocMetaRow>, StoreError> {
-        let conn = self.conn.lock().map_err(|e| StoreError::Lock(e.to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| StoreError::Lock(e.to_string()))?;
 
         let mut stmt = conn.prepare_cached(
             r#"
@@ -97,27 +100,29 @@ impl WorkspaceStore {
             "#,
         )?;
 
-        let rows = stmt.query_map([], |r| {
-            let doc_id: String = r.get(0)?;
-            let rev: i64 = r.get(1)?;
-            let raw_updated_at: i64 = r.get(2)?;
-            let title: String = r.get(3)?;
-            let raw_created_at: i64 = r.get(4)?;
-            let block_count = r.get::<_, i64>(5)? as usize;
+        let rows = stmt
+            .query_map([], |r| {
+                let doc_id: String = r.get(0)?;
+                let rev: i64 = r.get(1)?;
+                let raw_updated_at: i64 = r.get(2)?;
+                let title: String = r.get(3)?;
+                let raw_created_at: i64 = r.get(4)?;
+                let block_count = r.get::<_, i64>(5)? as usize;
 
-            let now_ms = current_time_ms();
-            let updated_at = normalize_timestamp_ms(raw_updated_at, now_ms);
-            let created_at = normalize_timestamp_ms(raw_created_at, updated_at);
+                let now_ms = current_time_ms();
+                let updated_at = normalize_timestamp_ms(raw_updated_at, now_ms);
+                let created_at = normalize_timestamp_ms(raw_created_at, updated_at);
 
-            Ok(DocMetaRow {
-                doc_id,
-                rev,
-                updated_at,
-                title,
-                created_at,
-                block_count,
-            })
-        })?.collect::<Result<Vec<_>, _>>()?;
+                Ok(DocMetaRow {
+                    doc_id,
+                    rev,
+                    updated_at,
+                    title,
+                    created_at,
+                    block_count,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
 
         Ok(rows)
     }
@@ -129,7 +134,10 @@ impl WorkspaceStore {
         title: &str,
         now_ms: i64,
     ) -> Result<DocMetaRow, StoreError> {
-        let conn = self.conn.lock().map_err(|e| StoreError::Lock(e.to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| StoreError::Lock(e.to_string()))?;
 
         let effective_now = normalize_timestamp_ms(now_ms, current_time_ms());
         let trimmed_title = title.trim();
@@ -164,7 +172,10 @@ impl WorkspaceStore {
         new_title: &str,
         now_ms: i64,
     ) -> Result<DocMetaRow, StoreError> {
-        let conn = self.conn.lock().map_err(|e| StoreError::Lock(e.to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| StoreError::Lock(e.to_string()))?;
         let effective_now = normalize_timestamp_ms(now_ms, current_time_ms());
         let trimmed_title = new_title.trim();
         let final_title = if trimmed_title.is_empty() {
@@ -213,18 +224,33 @@ impl WorkspaceStore {
 
     /// 4. 彻底删除文档（事务级联硬删除 9 张关联表，包含 blocks_fts）
     pub fn delete_note_document(&self, doc_id: &str) -> Result<u64, StoreError> {
-        let mut conn = self.conn.lock().map_err(|e| StoreError::Lock(e.to_string()))?;
+        let mut conn = self
+            .conn
+            .lock()
+            .map_err(|e| StoreError::Lock(e.to_string()))?;
 
         // 开启独占事务，彻底物理清理全表级联关联数据（含 blocks_fts，确保 structure_gate 门禁不红）
         let tx = conn.transaction()?;
         tx.execute("DELETE FROM blocks_fts WHERE doc_id = ?1;", params![doc_id])?;
-        tx.execute("DELETE FROM block_attachments WHERE doc_id = ?1;", params![doc_id])?;
+        tx.execute(
+            "DELETE FROM block_attachments WHERE doc_id = ?1;",
+            params![doc_id],
+        )?;
         tx.execute("DELETE FROM block_refs WHERE doc_id = ?1;", params![doc_id])?;
         tx.execute("DELETE FROM blocks WHERE doc_id = ?1;", params![doc_id])?;
-        tx.execute("DELETE FROM mirror_meta WHERE doc_id = ?1;", params![doc_id])?;
+        tx.execute(
+            "DELETE FROM mirror_meta WHERE doc_id = ?1;",
+            params![doc_id],
+        )?;
         tx.execute("DELETE FROM doc_clocks WHERE doc_id = ?1;", params![doc_id])?;
-        tx.execute("DELETE FROM doc_updates WHERE doc_id = ?1;", params![doc_id])?;
-        tx.execute("DELETE FROM doc_snapshots WHERE doc_id = ?1;", params![doc_id])?;
+        tx.execute(
+            "DELETE FROM doc_updates WHERE doc_id = ?1;",
+            params![doc_id],
+        )?;
+        tx.execute(
+            "DELETE FROM doc_snapshots WHERE doc_id = ?1;",
+            params![doc_id],
+        )?;
         let affected = tx.execute("DELETE FROM doc_meta WHERE doc_id = ?1;", params![doc_id])?;
         tx.commit()?;
 
