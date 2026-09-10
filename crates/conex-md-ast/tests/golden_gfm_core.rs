@@ -739,7 +739,11 @@ fn golden_gfm_core_list_nested_table_paragraph_child() {
         "普通列表不得编入 checkbox: {:?}",
         n_parent.text_snapshot
     );
-    assert_eq!(n_parent.children, vec![table], "表降 Paragraph 叶子挂父项，非 flatten");
+    assert_eq!(
+        n_parent.children,
+        vec![table],
+        "表降 Paragraph 叶子挂父项，非 flatten"
+    );
     assert_eq!(n_parent.parent, None);
 
     let n_table = tree.get(&table).unwrap();

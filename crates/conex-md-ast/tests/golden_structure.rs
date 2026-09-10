@@ -4,7 +4,7 @@
 //! 列表/有序/引用深化见 `golden_lists_quote.rs`；plain text RT 见 `roundtrip_text.rs`。
 
 use conex_md_ast::{
-    BlockId, BlockKind, BlockTree, document_to_md, parse_document, serialize_tree, structure_eq,
+    document_to_md, parse_document, serialize_tree, structure_eq, BlockId, BlockKind, BlockTree,
 };
 use std::str::FromStr;
 
@@ -116,10 +116,7 @@ fn dump_tree(tree: &BlockTree) -> String {
 fn dump_node(tree: &BlockTree, id: &BlockId, depth: usize, s: &mut String) {
     let n = tree.get(id).unwrap();
     let pad = "  ".repeat(depth);
-    s.push_str(&format!(
-        "{pad}{id} {:?} {:?}\n",
-        n.kind, n.text_snapshot
-    ));
+    s.push_str(&format!("{pad}{id} {:?} {:?}\n", n.kind, n.text_snapshot));
     for c in &n.children {
         dump_node(tree, c, depth + 1, s);
     }

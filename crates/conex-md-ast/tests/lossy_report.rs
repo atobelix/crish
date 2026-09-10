@@ -1,7 +1,7 @@
 //! Round6 · LossyReport 补测：pure-gfm 剥离、缺/重 ID、表格 note、禁止 HTML 反推。
 
 use conex_md_ast::{
-    BlockKind, encode_block_id_line, parse_document_detailed, strip_conex_id_comments_detailed,
+    encode_block_id_line, parse_document_detailed, strip_conex_id_comments_detailed, BlockKind,
 };
 use std::str::FromStr;
 
@@ -17,30 +17,21 @@ fn strip_pure_gfm_lossy_codes() {
     assert!(body.contains("段落后"));
     assert!(body.contains("<!-- ordinary -->"));
     assert!(!body.contains("<!--c:"));
-    assert!(
-        report
-            .items
-            .iter()
-            .any(|i| i.code == "stripped_block_ids")
-    );
-    assert!(
-        report
-            .items
-            .iter()
-            .any(|i| i.code == "stripped_block_ids_count")
-    );
+    assert!(report.items.iter().any(|i| i.code == "stripped_block_ids"));
+    assert!(report
+        .items
+        .iter()
+        .any(|i| i.code == "stripped_block_ids_count"));
 }
 
 #[test]
 fn parse_lossy_missing_and_duplicate() {
     let missing = parse_document_detailed("无ID段落\n").unwrap();
-    assert!(
-        missing
-            .lossy
-            .items
-            .iter()
-            .any(|i| i.code == "missing_block_id")
-    );
+    assert!(missing
+        .lossy
+        .items
+        .iter()
+        .any(|i| i.code == "missing_block_id"));
 
     let dup_md = "\
 <!--c:11111111-1111-4111-a111-111111111111-->
@@ -50,12 +41,11 @@ A
 B
 ";
     let dup = parse_document_detailed(dup_md).unwrap();
-    assert!(
-        dup.lossy
-            .items
-            .iter()
-            .any(|i| i.code == "duplicate_block_id")
-    );
+    assert!(dup
+        .lossy
+        .items
+        .iter()
+        .any(|i| i.code == "duplicate_block_id"));
     assert_eq!(dup.tree.nodes.len(), 2);
 }
 
@@ -77,10 +67,7 @@ fn parse_lossy_table_structure_note() {
     assert!(note.detail.contains("表格") || note.detail.contains("段落"));
     assert_eq!(out.tree.root_children.len(), 1);
     assert_eq!(
-        out.tree
-            .get(&out.tree.root_children[0])
-            .unwrap()
-            .kind,
+        out.tree.get(&out.tree.root_children[0]).unwrap().kind,
         BlockKind::Paragraph
     );
 }

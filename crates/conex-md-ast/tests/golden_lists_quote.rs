@@ -1,7 +1,7 @@
 //! Round6 · 列表 / 有序 / 引用 golden：结构 + plain 文本往返。
 
 use conex_md_ast::{
-    BlockId, BlockKind, document_to_md, parse_document, serialize_tree, structure_eq,
+    document_to_md, parse_document, serialize_tree, structure_eq, BlockId, BlockKind,
 };
 use std::str::FromStr;
 
@@ -90,10 +90,7 @@ fn golden_blockquote_structure_and_text() {
 
     let n_d = tree.get(&d).unwrap();
     assert_eq!(n_d.kind, BlockKind::Quote);
-    assert_eq!(
-        n_d.text_snapshot.as_deref(),
-        Some("单行引用：契约视图")
-    );
+    assert_eq!(n_d.text_snapshot.as_deref(), Some("单行引用：契约视图"));
 
     let n_e = tree.get(&e).unwrap();
     assert_eq!(n_e.kind, BlockKind::Quote);

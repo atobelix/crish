@@ -47,7 +47,10 @@ fn serialize_node(tree: &BlockTree, id: &BlockId, out: &mut String) {
 
     out.push_str(&node.id.to_html_comment());
     out.push('\n');
-    out.push_str(&format_block_content(&node.kind, node.text_snapshot.as_deref()));
+    out.push_str(&format_block_content(
+        &node.kind,
+        node.text_snapshot.as_deref(),
+    ));
     out.push('\n');
 
     let mut children = node.children.clone();
@@ -158,7 +161,9 @@ mod tests {
         assert!(md.contains("第一段"));
         assert!(md.contains("第二段"));
         // ID 独占行：注释行后换行再内容
-        assert!(md.lines().any(|l| l == "<!--c:11111111-1111-4111-a111-111111111111-->"));
+        assert!(md
+            .lines()
+            .any(|l| l == "<!--c:11111111-1111-4111-a111-111111111111-->"));
     }
 
     #[test]

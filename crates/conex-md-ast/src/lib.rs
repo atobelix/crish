@@ -35,8 +35,8 @@
 #![allow(missing_docs)]
 
 pub use conex_doc_collab::{
-    BlockId, BlockKind, BlockNode, BlockProps, BlockTree, Op, Origin, block_id_from_comment,
-    block_id_to_comment,
+    block_id_from_comment, block_id_to_comment, BlockId, BlockKind, BlockNode, BlockProps,
+    BlockTree, Op, Origin,
 };
 
 mod apply;
@@ -47,9 +47,7 @@ mod parse_mdast;
 mod serialize;
 
 pub use apply::{apply_md_fragment, ApplyReport};
-pub use mode::{
-    normalize_md, parse_md, serialize_md, MdMode, ParseOpts, SerializeOpts,
-};
+pub use mode::{normalize_md, parse_md, serialize_md, MdMode, ParseOpts, SerializeOpts};
 pub use parse::{parse_document, parse_document_detailed, ParseOutput, PARSE_BACKEND};
 pub use serialize::{document_to_md, serialize_tree};
 
@@ -92,7 +90,12 @@ impl LossyReport {
         self.items.is_empty()
     }
 
-    pub fn push(&mut self, code: impl Into<String>, detail: impl Into<String>, line: Option<usize>) {
+    pub fn push(
+        &mut self,
+        code: impl Into<String>,
+        detail: impl Into<String>,
+        line: Option<usize>,
+    ) {
         self.items.push(LossyItem {
             code: code.into(),
             detail: detail.into(),

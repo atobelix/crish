@@ -79,7 +79,10 @@ beta
         let b = bid("22222222-2222-4222-a222-222222222222");
         assert_eq!(tree.root_children, vec![a, b]);
         assert_eq!(tree.get(&a).unwrap().kind, BlockKind::Paragraph);
-        assert_eq!(tree.get(&a).unwrap().text_snapshot.as_deref(), Some("alpha"));
+        assert_eq!(
+            tree.get(&a).unwrap().text_snapshot.as_deref(),
+            Some("alpha")
+        );
         assert_eq!(tree.get(&b).unwrap().parent, None);
     }
 
@@ -191,15 +194,14 @@ beta
         assert!(note.detail.contains("表格"));
         let id = &out.tree.root_children[0];
         assert_eq!(out.tree.get(id).unwrap().kind, BlockKind::Paragraph);
-        assert!(
-            out.tree
-                .get(id)
-                .unwrap()
-                .text_snapshot
-                .as_deref()
-                .unwrap()
-                .contains('|')
-        );
+        assert!(out
+            .tree
+            .get(id)
+            .unwrap()
+            .text_snapshot
+            .as_deref()
+            .unwrap()
+            .contains('|'));
     }
 
     #[test]
@@ -234,7 +236,10 @@ beta
         let o = bid("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
         let q = bid("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb");
         assert_eq!(tree.get(&o).unwrap().kind, BlockKind::OrderedItem);
-        assert_eq!(tree.get(&o).unwrap().text_snapshot.as_deref(), Some("有序甲"));
+        assert_eq!(
+            tree.get(&o).unwrap().text_snapshot.as_deref(),
+            Some("有序甲")
+        );
         assert_eq!(tree.get(&q).unwrap().kind, BlockKind::Quote);
         assert_eq!(
             tree.get(&q).unwrap().text_snapshot.as_deref(),

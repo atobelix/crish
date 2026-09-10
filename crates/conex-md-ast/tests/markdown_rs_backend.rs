@@ -2,9 +2,7 @@
 //!
 //! 诚实边界：本文件绿 = 接线可证伪；**≠** A-MD-01 全表 / EL-06 关闭。
 
-use conex_md_ast::{
-    PARSE_BACKEND, BlockId, BlockKind, parse_document, parse_document_detailed,
-};
+use conex_md_ast::{parse_document, parse_document_detailed, BlockId, BlockKind, PARSE_BACKEND};
 use std::str::FromStr;
 
 fn bid(s: &str) -> BlockId {
@@ -41,12 +39,11 @@ fn gfm_table_structure_note_via_mdast() {
 | c1 | c2 |
 ";
     let out = parse_document_detailed(md).unwrap();
-    assert!(
-        out.lossy
-            .items
-            .iter()
-            .any(|i| i.code == "structure_note" && i.detail.contains("表格"))
-    );
+    assert!(out
+        .lossy
+        .items
+        .iter()
+        .any(|i| i.code == "structure_note" && i.detail.contains("表格")));
     assert_eq!(
         out.tree.get(&out.tree.root_children[0]).unwrap().kind,
         BlockKind::Paragraph
@@ -69,7 +66,10 @@ code body
     let c = bid("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb");
     assert_eq!(tree.get(&h).unwrap().kind, BlockKind::Heading { level: 1 });
     assert_eq!(tree.get(&c).unwrap().kind, BlockKind::Code);
-    assert_eq!(tree.get(&c).unwrap().text_snapshot.as_deref(), Some("code body"));
+    assert_eq!(
+        tree.get(&c).unwrap().text_snapshot.as_deref(),
+        Some("code body")
+    );
     // 容器栈：code 挂在 heading 下
     assert_eq!(tree.get(&h).unwrap().children, vec![c]);
 }

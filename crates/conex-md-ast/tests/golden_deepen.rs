@@ -13,8 +13,8 @@
 //! - 嵌套 blockquote 在 mdast 内扁平进 Quote plain（**无** 子 Quote 块）
 
 use conex_md_ast::{
-    BlockId, BlockKind, document_to_md, parse_document, parse_document_detailed, serialize_tree,
-    structure_eq,
+    document_to_md, parse_document, parse_document_detailed, serialize_tree, structure_eq, BlockId,
+    BlockKind,
 };
 use std::str::FromStr;
 
@@ -56,10 +56,7 @@ fn golden_task_nested_paragraph_under_task_item() {
 
     let n_sib = tree.get(&sibling).unwrap();
     assert_eq!(n_sib.kind, BlockKind::BulletItem);
-    assert_eq!(
-        n_sib.text_snapshot.as_deref(),
-        Some("[ ] 兄弟未完成任务")
-    );
+    assert_eq!(n_sib.text_snapshot.as_deref(), Some("[ ] 兄弟未完成任务"));
     assert!(n_sib.children.is_empty());
 
     // TaskItem kind 缺席诚实 note
@@ -81,10 +78,7 @@ fn golden_task_nested_paragraph_under_task_item() {
         md2.contains("- [x] 父任务：容器项") && md2.contains("- [ ] 兄弟未完成任务"),
         "S 任务项: {md2}"
     );
-    assert!(
-        md2.contains("子段落挂在任务项下"),
-        "S 子段落: {md2}"
-    );
+    assert!(md2.contains("子段落挂在任务项下"), "S 子段落: {md2}");
     let tree2 = parse_document(&md2).unwrap();
     assert!(structure_eq(tree, &tree2), "task nested RT md2=\n{md2}");
 
@@ -196,10 +190,7 @@ fn golden_nested_blockquote_flatten_to_plain() {
 
     let n2 = tree.get(&plain_q).unwrap();
     assert_eq!(n2.kind, BlockKind::Quote);
-    assert_eq!(
-        n2.text_snapshot.as_deref(),
-        Some("独立单层引用旁路")
-    );
+    assert_eq!(n2.text_snapshot.as_deref(), Some("独立单层引用旁路"));
 
     let md2 = serialize_tree(&tree);
     assert!(md2.contains("> 外层引用"), "S: {md2}");

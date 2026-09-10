@@ -4,7 +4,7 @@
 //! 围栏 lang/meta 诚实与 task nested 续加深见 `golden_deepen.rs`（仍 ≠ EL-06）。
 
 use conex_md_ast::{
-    BlockId, BlockKind, document_to_md, parse_document, serialize_tree, structure_eq,
+    document_to_md, parse_document, serialize_tree, structure_eq, BlockId, BlockKind,
 };
 use std::str::FromStr;
 
@@ -26,10 +26,7 @@ fn golden_fenced_code_structure_and_text() {
 
     let n1 = tree.get(&c1).unwrap();
     assert_eq!(n1.kind, BlockKind::Code);
-    assert_eq!(
-        n1.text_snapshot.as_deref(),
-        Some("plain fence body\nline2")
-    );
+    assert_eq!(n1.text_snapshot.as_deref(), Some("plain fence body\nline2"));
     assert!(n1.children.is_empty());
     assert_eq!(n1.parent, None);
 
@@ -43,10 +40,7 @@ fn golden_fenced_code_structure_and_text() {
 
     let n_p = tree.get(&p).unwrap();
     assert_eq!(n_p.kind, BlockKind::Paragraph);
-    assert_eq!(
-        n_p.text_snapshot.as_deref(),
-        Some("旁路段落：码块之后")
-    );
+    assert_eq!(n_p.text_snapshot.as_deref(), Some("旁路段落：码块之后"));
 
     let md2 = serialize_tree(&tree);
     let tree2 = parse_document(&md2).unwrap();
@@ -70,10 +64,7 @@ fn golden_nested_list_paragraph_and_quote() {
 
     let n_b1 = tree.get(&b1).unwrap();
     assert_eq!(n_b1.kind, BlockKind::BulletItem);
-    assert_eq!(
-        n_b1.text_snapshot.as_deref(),
-        Some("父无序项：中文")
-    );
+    assert_eq!(n_b1.text_snapshot.as_deref(), Some("父无序项：中文"));
     assert_eq!(n_b1.children, vec![child]);
     assert_eq!(tree.get(&child).unwrap().parent, Some(b1));
     assert_eq!(
@@ -83,10 +74,7 @@ fn golden_nested_list_paragraph_and_quote() {
 
     let n_b2 = tree.get(&b2).unwrap();
     assert_eq!(n_b2.kind, BlockKind::BulletItem);
-    assert_eq!(
-        n_b2.text_snapshot.as_deref(),
-        Some("兄弟无序项 emoji 🔥")
-    );
+    assert_eq!(n_b2.text_snapshot.as_deref(), Some("兄弟无序项 emoji 🔥"));
     assert!(n_b2.children.is_empty());
 
     let n_q = tree.get(&q).unwrap();

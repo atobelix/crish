@@ -41,11 +41,7 @@ pub(crate) fn assemble_tree(blocks: &[RawBlock]) -> Result<BlockTree, MdError> {
     for b in blocks {
         // 弹出秩 ≥ 当前容器秩 的容器
         if let Some(rank) = container_rank(&b.kind) {
-            while stack
-                .last()
-                .map(|(_, r)| *r >= rank)
-                .unwrap_or(false)
-            {
+            while stack.last().map(|(_, r)| *r >= rank).unwrap_or(false) {
                 stack.pop();
             }
         }
@@ -71,9 +67,7 @@ pub(crate) fn assemble_tree(blocks: &[RawBlock]) -> Result<BlockTree, MdError> {
                 if let Some(p) = nodes.get_mut(&pid) {
                     p.children.push(b.id);
                 } else {
-                    return Err(MdError::Parse(format!(
-                        "内部错误：父节点 {pid} 不存在"
-                    )));
+                    return Err(MdError::Parse(format!("内部错误：父节点 {pid} 不存在")));
                 }
             }
             None => root_children.push(b.id),

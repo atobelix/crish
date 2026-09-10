@@ -11,8 +11,8 @@
 //! - 默认 [`crate::parse_document`] / [`crate::serialize_tree`] 仍为 **conex + 发 ID**
 
 use crate::{
-    BlockTree, LossyReport, MdError, ParseOutput, parse_document_detailed, serialize_tree,
-    strip_conex_id_comments_detailed,
+    parse_document_detailed, serialize_tree, strip_conex_id_comments_detailed, BlockTree,
+    LossyReport, MdError, ParseOutput,
 };
 
 /// 契约模式：`conex` 保留/识别 `<!--c:UUID-->`；`pure_gfm` 剥 ID 并记 lossy。
@@ -125,8 +125,7 @@ pub fn normalize_md(md: &str) -> String {
     // 围栏：行 trim 后以 ``` 或 ~~~ 开头则翻转 in_fence；围栏内不改列表标记
     for line in md.lines() {
         let trimmed_start = line.trim_start();
-        let is_fence_delim =
-            trimmed_start.starts_with("```") || trimmed_start.starts_with("~~~");
+        let is_fence_delim = trimmed_start.starts_with("```") || trimmed_start.starts_with("~~~");
         let inside_before = in_fence;
         if is_fence_delim {
             in_fence = !in_fence;
@@ -171,7 +170,7 @@ fn unify_unordered_marker(line: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{BlockId, BlockKind, encode_block_id_line, structure_eq};
+    use crate::{encode_block_id_line, structure_eq, BlockId, BlockKind};
     use std::str::FromStr;
 
     fn bid(s: &str) -> BlockId {
@@ -279,8 +278,7 @@ mod tests {
             report
                 .items
                 .iter()
-                .any(|i| i.code == "stripped_block_ids"
-                    || i.code == "stripped_block_ids_count"),
+                .any(|i| i.code == "stripped_block_ids" || i.code == "stripped_block_ids_count"),
             "须 lossy 声明剥 ID，got {:?}",
             report
         );

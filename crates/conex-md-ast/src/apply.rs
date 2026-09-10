@@ -15,9 +15,7 @@
 //! - **未关闭**：**≠ EL-06**；**≠ A-MD 全表**（尤 **≠ A-MD-04** merge 联测全集；零半树 ⊆ 写安全，≠ RT-7）
 //! - **不含** opts 模式面 / pure-gfm apply 一等（后续包）
 
-use crate::{
-    BlockId, BlockTree, LossyReport, MdError, Op, parse_document_detailed,
-};
+use crate::{parse_document_detailed, BlockId, BlockTree, LossyReport, MdError, Op};
 use std::collections::HashSet;
 
 /// `apply_md_fragment` 成功结果：ops + 有损报告 + 本批新块 ID。
@@ -137,9 +135,9 @@ fn emit_subtree(
     order: String,
     ops: &mut Vec<Op>,
 ) -> Result<(), MdError> {
-    let node = frag.get(&id).ok_or_else(|| {
-        MdError::Parse(format!("内部错误：片段节点 {id} 缺失"))
-    })?;
+    let node = frag
+        .get(&id)
+        .ok_or_else(|| MdError::Parse(format!("内部错误：片段节点 {id} 缺失")))?;
 
     ops.push(Op::Insert {
         id,
@@ -183,7 +181,7 @@ fn assert_ops_ids_unique(ops: &[Op]) -> Result<(), MdError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{BlockKind, BlockNode, BlockProps, structure_eq};
+    use crate::{structure_eq, BlockKind, BlockNode, BlockProps};
     use conex_doc_collab::{DocSession, Origin};
     use std::collections::HashMap;
     use std::str::FromStr;
@@ -301,7 +299,9 @@ beta
         assert_eq!(inserts.len(), 2);
 
         match inserts[0] {
-            Op::Insert { id, parent, kind, .. } => {
+            Op::Insert {
+                id, parent, kind, ..
+            } => {
                 assert_eq!(*id, h);
                 assert_eq!(*parent, Some(hang));
                 assert_eq!(*kind, BlockKind::Heading { level: 1 });
@@ -309,7 +309,9 @@ beta
             _ => unreachable!(),
         }
         match inserts[1] {
-            Op::Insert { id, parent, kind, .. } => {
+            Op::Insert {
+                id, parent, kind, ..
+            } => {
                 assert_eq!(*id, p);
                 assert_eq!(*parent, Some(h));
                 assert_eq!(*kind, BlockKind::Paragraph);
@@ -429,9 +431,7 @@ new
         let ops = report.ops;
 
         let mut session = DocSession::new("test-md-frag");
-        session
-            .apply(Origin::Agent, &ops)
-            .expect("apply ops");
+        session.apply(Origin::Agent, &ops).expect("apply ops");
 
         // 结构：ID / kind / 父子
         assert_eq!(session.tree().root_children, expected.root_children);
@@ -491,7 +491,9 @@ new
 ";
         let report = apply_md_fragment(&target, Some(parent), md).unwrap();
         match &report.ops[0] {
-            Op::Insert { order, parent: p, .. } => {
+            Op::Insert {
+                order, parent: p, ..
+            } => {
                 assert_eq!(*p, Some(parent));
                 // 已有 1 个兄弟 → 新 order a0001
                 assert_eq!(order, "a0001");
@@ -509,10 +511,7 @@ new
         let report = apply_md_fragment(&empty_tree(), None, md).unwrap();
 
         // 调用方能读到 lossy 项
-        assert!(
-            !report.lossy.is_empty(),
-            "缺 ID 必须透出 lossy，got empty"
-        );
+        assert!(!report.lossy.is_empty(), "缺 ID 必须透出 lossy，got empty");
         assert!(
             report
                 .lossy
@@ -524,10 +523,7 @@ new
         );
 
         // 仍产出可 apply 的 ops（零半树路径完整）
-        assert!(
-            !report.ops.is_empty(),
-            "缺 ID 仍应生成 Insert（新 ID）"
-        );
+        assert!(!report.ops.is_empty(), "缺 ID 仍应生成 Insert（新 ID）");
         assert_eq!(report.new_ids.len(), 1);
         assert!(
             matches!(report.ops[0], Op::Insert { .. }),

@@ -4,8 +4,8 @@
 //! plain 文本相等（多段、中文、emoji）。结构-only；无 yrs inline 富文本。
 
 use conex_md_ast::{
-    BlockId, BlockKind, BlockNode, BlockProps, BlockTree, document_to_md, parse_document,
-    serialize_tree, structure_eq,
+    document_to_md, parse_document, serialize_tree, structure_eq, BlockId, BlockKind, BlockNode,
+    BlockProps, BlockTree,
 };
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -132,8 +132,5 @@ fn empty_paragraph_text_roundtrip() {
     let md = document_to_md(&tree);
     let tree2 = parse_document(&md).unwrap();
     // 仅有 ID 无内容时 parse 也会产出空段落
-    assert_eq!(
-        tree2.get(&a).unwrap().text_snapshot.as_deref(),
-        Some("")
-    );
+    assert_eq!(tree2.get(&a).unwrap().text_snapshot.as_deref(), Some(""));
 }

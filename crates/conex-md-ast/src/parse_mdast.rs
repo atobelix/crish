@@ -18,11 +18,9 @@
 //! - wiki `[[…]]`：**未**建模；作 plain 文本保留（**≠** A-MD-03 / EL-06）
 
 use crate::assemble::RawBlock;
-use crate::{
-    BlockId, BlockKind, LossyReport, MdError, block_id_from_comment,
-};
+use crate::{block_id_from_comment, BlockId, BlockKind, LossyReport, MdError};
 use markdown::mdast::Node;
-use markdown::{ParseOptions, to_mdast};
+use markdown::{to_mdast, ParseOptions};
 use std::collections::HashSet;
 
 /// GFM 选项：`ParseOptions::gfm()`（表 / 删除线 / 任务列表等）。
@@ -35,9 +33,8 @@ pub(crate) fn lower_md_to_raw_blocks(
     md: &str,
     lossy: &mut LossyReport,
 ) -> Result<Vec<RawBlock>, MdError> {
-    let tree = to_mdast(md, &gfm_parse_options()).map_err(|e| {
-        MdError::Parse(format!("markdown-rs to_mdast 失败: {e}"))
-    })?;
+    let tree = to_mdast(md, &gfm_parse_options())
+        .map_err(|e| MdError::Parse(format!("markdown-rs to_mdast 失败: {e}")))?;
 
     let children = match &tree {
         Node::Root(root) => &root.children,
@@ -75,9 +72,7 @@ struct PendingId {
 }
 
 fn node_line(node: &Node) -> usize {
-    node.position()
-        .map(|p| p.start.line)
-        .unwrap_or(1)
+    node.position().map(|p| p.start.line).unwrap_or(1)
 }
 
 /// 取 pending ID 或生成新 ID（并记 missing / 处理 duplicate 已在 set_pending）。
@@ -125,10 +120,7 @@ fn set_pending_id(
             format!("line {line}: 重复 ID {bid} → 重分配为 {fresh}"),
             Some(line),
         );
-        *pending = Some(PendingId {
-            id: fresh,
-            line,
-        });
+        *pending = Some(PendingId { id: fresh, line });
     } else {
         *pending = Some(PendingId { id: bid, line });
     }
@@ -371,16 +363,13 @@ fn lower_list(
 ) -> Result<(), MdError> {
     let ordered = list.ordered;
     // 列表级诚实 note：任意项带 GFM checked → TaskItem kind 未入 collab
-    let list_has_task = list.children.iter().any(|item| {
-        matches!(item, Node::ListItem(li) if li.checked.is_some())
-    });
+    let list_has_task = list
+        .children
+        .iter()
+        .any(|item| matches!(item, Node::ListItem(li) if li.checked.is_some()));
     if list_has_task {
         // 优先首项行号（List 自身 position 偶发缺失时更稳）
-        let line = list
-            .children
-            .first()
-            .map(node_line)
-            .unwrap_or(1);
+        let line = list.children.first().map(node_line).unwrap_or(1);
         lossy.push(
             "structure_note",
             format!(
@@ -414,15 +403,7 @@ fn lower_list(
         } else {
             BlockKind::BulletItem
         };
-        push_block(
-            blocks,
-            pending,
-            seen_ids,
-            lossy,
-            kind,
-            item_text,
-            line,
-        );
+        push_block(blocks, pending, seen_ids, lossy, kind, item_text, line);
 
         // 列表项内后续块（嵌套列表 / 额外段落）作为后续 RawBlock，
         // 由容器栈挂到本 BulletItem/OrderedItem 下。
@@ -444,9 +425,7 @@ fn encode_task_checkbox(checked: bool, body: &str) -> String {
 }
 
 /// 首段 → 项文本；其余 flow 子节点原样返回供后续 lowering。
-fn split_list_item_contents(
-    li: &markdown::mdast::ListItem,
-) -> (String, Vec<&Node>) {
+fn split_list_item_contents(li: &markdown::mdast::ListItem) -> (String, Vec<&Node>) {
     let mut text = String::new();
     let mut took_first_para = false;
     let mut trailing: Vec<&Node> = Vec::new();
@@ -564,14 +543,7 @@ fn table_plain(table: &markdown::mdast::Table) -> String {
                 cells.iter().map(|_| "---").collect()
             } else {
                 (0..cells.len())
-                    .map(|i| {
-                        table
-                            .align
-                            .get(i)
-                            .copied()
-                            .map(align_sep)
-                            .unwrap_or("---")
-                    })
+                    .map(|i| table.align.get(i).copied().map(align_sep).unwrap_or("---"))
                     .collect()
             };
             rows.push(format!("| {} |", seps.join(" | ")));
