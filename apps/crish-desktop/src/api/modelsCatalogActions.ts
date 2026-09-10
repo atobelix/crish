@@ -100,8 +100,6 @@ export function addModel(
     : {
         id: rawId,
         displayName: rawId,
-        contextWindow: 128_000,
-        maxOutputTokens: 8_192,
         enabled: true,
       };
 
@@ -162,6 +160,7 @@ export function updateModel(
 
   const updatedModels = [...existingModels];
   const currentModel = existingModels[index]!;
+  // spread 保留未出现在 patch 中的 thinking / modalities / pricing 等字段
   updatedModels[index] = {
     ...currentModel,
     ...patch,

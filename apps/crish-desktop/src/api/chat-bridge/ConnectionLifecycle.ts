@@ -24,6 +24,7 @@ export {
   resetReadiness,
   ensureReadinessSync,
   resolveContextWindow,
+  resolveSendThinkingFields,
   checkEngineReadyRealtime,
   ensureEngineConnected,
 } from './readiness';

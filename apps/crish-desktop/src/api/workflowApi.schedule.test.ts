@@ -361,10 +361,13 @@ describe('validateWorkflowSchedule / normalizeWorkflowSchedule', () => {
 
 describe('validateWorkflowDraft', () => {
   it('requires name and prompt', () => {
-    const base = emptyWorkflowDraft();
+    const base = emptyWorkflowDraft('/test/workspace');
     expect(validateWorkflowDraft(base)).toBe('请填写名称与提示词');
     expect(validateWorkflowDraft({ ...base, name: 'n' })).toBe('请填写提示词');
     expect(validateWorkflowDraft({ ...base, prompt: 'p' })).toBe('请填写名称');
+    expect(
+      validateWorkflowDraft({ ...base, name: 'n', prompt: 'p', cwd: '' })
+    ).toBe('请选择所属工作区项目');
     expect(
       validateWorkflowDraft({ ...base, name: 'n', prompt: 'p' })
     ).toBeNull();
@@ -372,7 +375,7 @@ describe('validateWorkflowDraft', () => {
   });
 
   it('guards daily time and interval fields', () => {
-    const base = emptyWorkflowDraft();
+    const base = emptyWorkflowDraft('/test/workspace');
     expect(
       validateWorkflowDraft({
         ...base,

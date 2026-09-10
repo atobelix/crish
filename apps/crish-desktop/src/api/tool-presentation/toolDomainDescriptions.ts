@@ -279,6 +279,11 @@ export function toolLabelFromArgs(tc: MessageToolCall): string {
     return blockId ? `更新笔记区块 (${blockId})` : '更新笔记区块';
   }
 
+  // 15. 差异比对 (diff / diff_text)
+  if (name.includes('diff')) {
+    return '文本差异比对';
+  }
+
   // 终极安全清洗兜底
   if (args.primaryTarget) {
     const short = basename(args.primaryTarget);

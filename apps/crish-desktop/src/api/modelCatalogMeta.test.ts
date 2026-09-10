@@ -57,7 +57,7 @@ describe('modelCatalogMeta with In-Memory Cache', () => {
       expect(meta.profileId).toBe('provider-1');
       expect(meta.model).toBe('deepseek-v4-flash');
       expect(meta.enabled).toBe(true);
-      expect(meta.contextLength).toBe(1_000_000);
+      expect(meta.contextLength).toBe(1_048_576);
     });
 
     it('setModelEnabled 能够正确写入并读取', () => {

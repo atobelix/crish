@@ -51,6 +51,11 @@ export type UiEventMap = {
    * 镜像加载 / 重置（含解析失败清空）后广播，驱动录入联想与价格预设重渲染。
    */
   'models-catalog-changed': void;
+  /**
+   * 会话思考档位 Title 变更（真源 = SessionRuntimeRegistry.thinkingTitle）。
+   * Picker 改档后广播，驱动 Composer 思考胶囊同步刷新（单会话载荷，跨会话不串）。
+   */
+  'thinking-title-changed': { sessionId: string };
   /** 快捷键：聚焦主对话输入框 */
   'focus-composer': void;
   /** 快捷键：中断当前生成 */
@@ -111,6 +116,7 @@ export const UI_EVENT_NAMES = [
   'profiles-changed',
   'model-meta-changed',
   'models-catalog-changed',
+  'thinking-title-changed',
   'focus-composer',
   'stop-generation',
   'close-all-popovers',

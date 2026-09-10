@@ -134,8 +134,8 @@ export function openFileInPanel(
 export function extractFilePathFromToolArgs(args: string): string | null {
   if (!args?.trim()) return null;
   const raw = args.trim();
-  try {
-    if (raw.startsWith('{')) {
+  if (raw.startsWith('{') || raw.startsWith('[')) {
+    try {
       const parsed = JSON.parse(raw) as Record<string, unknown>;
       const inner =
         parsed.parameters && typeof parsed.parameters === 'object'
@@ -162,9 +162,10 @@ export function extractFilePathFromToolArgs(args: string): string | null {
           return v.trim();
         }
       }
+    } catch {
+      /* swallow-ok: JSON 参数解析失败时防穿透 */
     }
-  } catch {
-    /* swallow-ok: JSON 参数解析失败时按原串路径兜底 */
+    return null;
   }
   // 像路径的单行
   if (!raw.includes('\n') && /[\\/]/.test(raw) && raw.length < 400) {

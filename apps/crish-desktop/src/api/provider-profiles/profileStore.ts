@@ -37,6 +37,7 @@ export {
   getActiveProfile,
   anyProfileHasKey,
   anyProfileHasModel,
+  profileHasConfiguredKey,
   upsertProfile,
   createCustomProfile,
   removeProfile,

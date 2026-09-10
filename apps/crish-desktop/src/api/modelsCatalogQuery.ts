@@ -4,7 +4,7 @@
  * 规范：
  * 1. 纯计算与只读查询，无副作用；
  * 2. 保持与历史平铺结构（CatalogModelSpec）100% 兼容；
- * 3. 跨供应商 O(1) 索引定位与智能模糊搜索；
+ * 3. findCatalogModel 必须 (modelId, providerId) 双键；禁止跨厂商 [0] 兜底；
  * 4. 解耦 Store 状态中枢，严格控制单文件代码行数门禁。
  */
 
@@ -137,57 +137,37 @@ export function listCatalogModels(): readonly CatalogModelSpec[] {
 }
 
 /**
- * 根据模型 ID 精确查找模型规格。
+ * 按联合主键查找平铺门面规格。
  *
- * 防跨厂商串线（Cross-Provider Hijacking）安全机制：
- * 1. 若提供 `providerId`：优先使用 `${providerId}::${modelId}` 联合主键在局部索引中 O(1) 精确查找；
- *    若未直接命中，在该 Provider 的下属模型中匹配（杜绝跨服务商拿错协议与单价）。
- * 2. 若未提供 `providerId`（或指定供应商下未找到）：兜底查询全局索引 `globalModelIndex` 并选取首个匹配条目；
- * 3. 最终回退至全量平铺列表扫描。
+ * providerId 必填；只走 `${normPId}::${normMId}`，未命中则在同供应商 models[] 精确匹配 id。
+ * 禁止 globalModelIndex[0] 与全表扫描兜底。生产能力 / 视觉 / 思考禁止走本函数，改 getLiveModel。
  *
  * @param modelId 模型 ID（大小写不敏感）
- * @param providerId 可选供应商 ID（强烈推荐传入以防跨服务商同名模型串线）
+ * @param providerId 供应商 ID（必填；缺参在类型层失败）
  */
 export function findCatalogModel(
   modelId: string,
-  providerId?: string
+  providerId: string
 ): CatalogModelSpec | undefined {
   const target = (modelId || '').trim().toLowerCase();
-  if (!target || !globalCatalogAccessor) return undefined;
+  const normPId = (providerId || '').trim().toLowerCase();
+  if (!target || !normPId || !globalCatalogAccessor) return undefined;
 
   const state = globalCatalogAccessor();
-
-  // 1. 若显式指定 providerId，优先精确匹配该 Provider 下的模型，彻底杜绝跨服务商参数劫持
-  if (providerId) {
-    const normPId = providerId.trim().toLowerCase();
-    const compositeKey = `${normPId}::${target}`;
-    const directEntry = state.modelIndex.get(compositeKey);
-    if (directEntry) {
-      return modelToCatalogSpec(directEntry.providerId, directEntry.provider, directEntry.model);
-    }
-
-    // 回退尝试该供应商的实际 models 列表匹配
-    const provider = state.providerMap.get(normPId);
-    if (provider) {
-      const matched = (provider.models || []).find(
-        (m) =>
-          (m.id || '').trim().toLowerCase() === target ||
-          (m.displayName || '').trim().toLowerCase() === target
-      );
-      if (matched) {
-        return modelToCatalogSpec(normPId, provider, matched);
-      }
-    }
+  const compositeKey = `${normPId}::${target}`;
+  const directEntry = state.modelIndex.get(compositeKey);
+  if (directEntry) {
+    return modelToCatalogSpec(directEntry.providerId, directEntry.provider, directEntry.model);
   }
 
-  // 2. 若未提供 providerId，才兜底全局索引匹配首个模型
-  const entry = state.globalModelIndex.get(target)?.[0];
-  if (entry) {
-    return modelToCatalogSpec(entry.providerId, entry.provider, entry.model);
-  }
+  const provider = state.providerMap.get(normPId);
+  if (!provider) return undefined;
 
-  // 3. 全局平铺列表模糊兜底
-  return listCatalogModels().find((m) => m.model.toLowerCase() === target);
+  const matched = (provider.models || []).find(
+    (m) => (m.id || '').trim().toLowerCase() === target
+  );
+  if (!matched) return undefined;
+  return modelToCatalogSpec(normPId, provider, matched);
 }
 
 /**

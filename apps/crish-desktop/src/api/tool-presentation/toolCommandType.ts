@@ -108,7 +108,8 @@ export function toolCommandType(tc: MessageToolCall): ToolCommandKind {
     isEditToolName(name) ||
     name.includes('replace') ||
     name.includes('patch') ||
-    name.includes('edit')
+    name.includes('edit') ||
+    name.includes('diff')
   ) {
     return 'edit';
   }

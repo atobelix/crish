@@ -99,18 +99,23 @@ export function looksLikeDirectoryListing(text: string): boolean {
 /** 是否像文件编辑类工具 */
 export function isEditToolName(name: string): boolean {
   const n = name.toLowerCase().replace(/[\s-]+/g, '_');
+  if (isShellToolName(n)) return false;
   return (
     n === 'edit' ||
     n === 'write' ||
     n === 'write_file' ||
+    n === 'write_to_file' ||
+    n === 'replace_file_content' ||
     n === 'apply_patch' ||
+    n === 'apply_diff' ||
     n === 'apply_workspace_edits' ||
     n === 'str_replace' ||
     n === 'search_replace' ||
     n === 'create_file' ||
     n.includes('edit') ||
     n.includes('write') ||
-    n.includes('patch')
+    n.includes('patch') ||
+    n.includes('replace')
   );
 }
 
@@ -359,6 +364,12 @@ export function resolveToolDiffs(opts: {
   output?: string | undefined;
   structuredDiffs?: FileDiff[] | undefined;
 }): FileDiff[] {
+  // 核心契约：只有在实际编辑/修改文件的工具调用时，才展示差异变化；
+  // 查看代码差异、检查命令（如 git diff、git show、view_file 等）绝不展示差异内容展开
+  if (!isEditToolName(opts.name)) {
+    return [];
+  }
+
   if (opts.structuredDiffs?.length) {
     return filterPublishableFileDiffs(opts.structuredDiffs);
   }

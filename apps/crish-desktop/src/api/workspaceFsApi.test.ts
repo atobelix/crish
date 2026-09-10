@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+﻿import { beforeEach, describe, expect, it } from 'vitest';
 import {
   detectFileKind,
   FILE_PREVIEW_CHUNK_LINES,
@@ -8,6 +8,10 @@ import {
   pathBasename,
   pathRelativeToRoot,
   resolveWorkspacePath,
+  assertWorkspacePath,
+  isInsideWorkspace,
+  toAssetUrl,
+  writeTextFile,
 } from './workspaceFsApi';
 
 describe('detectFileKind', () => {
@@ -96,10 +100,11 @@ describe('resolveWorkspacePath（14-T3：工作区根前缀匹配边界修复）
     expect(resolveWorkspacePath('sub/dir/x.txt')).toBe('c:/work/sub/dir/x.txt');
   });
 
-  it('未设置工作区时拒绝绝对路径、相对路径原样返回', () => {
+  it('未设置工作区时绝对与相对路径均拒绝（空串）', () => {
     localStorage.removeItem(WORKSPACE_KEY);
     expect(resolveWorkspacePath('c:/work/x.txt')).toBe('');
-    expect(resolveWorkspacePath('x.txt')).toBe('x.txt');
+    expect(resolveWorkspacePath('x.txt')).toBe('');
+    expect(resolveWorkspacePath('./x.txt')).toBe('');
   });
 
   it('既有防御保持：遍历/NUL/bidi/保留设备名/超长均拒绝', () => {
@@ -110,5 +115,48 @@ describe('resolveWorkspacePath（14-T3：工作区根前缀匹配边界修复）
     expect(resolveWorkspacePath('c:/work/CON')).toBe('');
     expect(resolveWorkspacePath('c:/work/com1.txt')).toBe('');
     expect(resolveWorkspacePath(`c:/work/${'a'.repeat(5000)}`)).toBe('');
+  });
+});
+
+
+describe('assertWorkspacePath / isInsideWorkspace', () => {
+  const WORKSPACE_KEY = 'crish_workspace';
+
+  beforeEach(() => {
+    localStorage.setItem(WORKSPACE_KEY, 'c:/work');
+  });
+
+  it('rejects empty path', () => {
+    expect(() => assertWorkspacePath('')).toThrow(/空/);
+    expect(() => assertWorkspacePath('   ')).toThrow(/空/);
+    expect(isInsideWorkspace('')).toBe(false);
+  });
+
+  it('rejects out-of-workspace absolute path', () => {
+    expect(() => assertWorkspacePath('c:/etc/passwd')).toThrow(/工作区/);
+    expect(isInsideWorkspace('c:/etc/passwd')).toBe(false);
+  });
+
+  it('accepts in-workspace path', () => {
+    expect(assertWorkspacePath('c:/work/a.ts')).toBe('c:/work/a.ts');
+    expect(assertWorkspacePath('a.ts')).toBe('c:/work/a.ts');
+    expect(isInsideWorkspace('c:/work/a.ts')).toBe(true);
+  });
+
+  it('rejects relative path when workspace root unset', () => {
+    localStorage.removeItem(WORKSPACE_KEY);
+    expect(() => assertWorkspacePath('secrets.txt')).toThrow(/工作区/);
+    expect(() => assertWorkspacePath('./x.txt')).toThrow(/工作区/);
+    expect(isInsideWorkspace('secrets.txt')).toBe(false);
+  });
+});
+
+describe('writeTextFile / toAssetUrl empty-path symmetry', () => {
+  it('writeTextFile rejects empty path before invoke', async () => {
+    await expect(writeTextFile('', 'x')).rejects.toThrow(/空/);
+  });
+
+  it('toAssetUrl rejects empty path', async () => {
+    await expect(toAssetUrl('')).rejects.toThrow(/空/);
   });
 });

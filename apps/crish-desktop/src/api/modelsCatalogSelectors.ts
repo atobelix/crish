@@ -44,12 +44,13 @@ export function createSelectors(getState: StateAccessor) {
       return 'openai/chat';
     },
 
-    selectEffectiveContextWindow(providerId: string, modelId: string): number {
+    /** 真实 contextWindow。缺省、非正数、找不到 → undefined。禁止发明 128000。 */
+    selectEffectiveContextWindow(providerId: string, modelId: string): number | undefined {
       const model = this.selectModel(providerId, modelId);
       if (typeof model?.contextWindow === 'number' && model.contextWindow > 0) {
         return model.contextWindow;
       }
-      return 128_000;
+      return undefined;
     },
 
     selectSupportsThinking(providerId: string, modelId: string): boolean {
@@ -72,38 +73,13 @@ export function createSelectors(getState: StateAccessor) {
         cacheWriteTokens?: number;
       }
     ): { currency: 'USD' | 'CNY'; totalCost: number } | null {
-      const model = this.selectModel(providerId, modelId);
-      const pricing = model?.pricing;
-      if (!pricing) {
-        return null;
-      }
-
-      let inputPrice = pricing.input ?? pricing.inputPerMTok ?? 0;
-      let outputPrice = pricing.output ?? pricing.outputPerMTok ?? 0;
-
-      if (pricing.tiers && pricing.tiers.length > 0) {
-        for (const tier of pricing.tiers) {
-          if (usage.inputTokens >= tier.inputTokensAbove) {
-            inputPrice = tier.inputCost;
-            outputPrice = tier.outputCost;
-            break;
-          }
-        }
-      }
-
-      const inputCost = (usage.inputTokens / 1_000_000) * inputPrice;
-      const outputCost = (usage.outputTokens / 1_000_000) * outputPrice;
-      const cacheReadCost =
-        ((usage.cacheReadTokens ?? 0) / 1_000_000) *
-        (pricing.cacheRead ?? pricing.cacheReadPerMTok ?? 0);
-      const cacheWriteCost =
-        ((usage.cacheWriteTokens ?? 0) / 1_000_000) *
-        (pricing.cacheWrite ?? pricing.cacheWritePerMTok ?? 0);
-
-      return {
-        currency: pricing.currency,
-        totalCost: inputCost + outputCost + cacheReadCost + cacheWriteCost,
-      };
+      // plans/05 T5.4：会话费用唯一算费入口 = Rust PricingEngine；本选择器
+      // 生产零调用（会话/总览/运行时已切引擎三态）。保留签名作 gravestone，
+      // 不再做 JS f64 算账（S7 物理删除）。
+      void providerId;
+      void modelId;
+      void usage;
+      return null;
     },
   };
 }

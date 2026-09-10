@@ -12,10 +12,26 @@ import { projectAgentMessageContent } from './messageProjection';
 const baseUsage: UsageDeltaState = {
   input: 100,
   output: 50,
+  costStatus: 'priced',
+  currency: 'USD',
+  costMicros: 10000,
+  formattedCost: '$0.0100',
   cost: 0.01,
   inputMax: 160000,
   outputMax: 40000,
 };
+
+/** 引擎有价账夹具（USD） */
+const engineCost = (totalMicros: number, formatted: string) => ({
+  currency: 'USD' as const,
+  inputMicros: totalMicros,
+  outputMicros: 0,
+  cacheReadMicros: 0,
+  cacheWriteMicros: 0,
+  totalMicros,
+  formattedTotal: formatted,
+  isFree: false,
+});
 
 describe('parseRunSnapshotUsage', () => {
   it('returns null without usage', () => {
@@ -104,55 +120,48 @@ describe('parseRunSnapshotUsage', () => {
 });
 
 describe('applyUsageDelta', () => {
-  it('no-ops when all deltas are zero', () => {
-    const next = applyUsageDelta(baseUsage, {}, () => 1);
+  it('no-ops when all deltas are zero and no cost', () => {
+    const next = applyUsageDelta(baseUsage, {});
     expect(next).toBe(baseUsage);
   });
 
-  it('accumulates 2D tokens + cost via estimateCost', () => {
-    const next = applyUsageDelta(
-      baseUsage,
-      { promptTokens: 10, completionTokens: 5 },
-      (i, o) => i * 0.001 + o * 0.002
-    );
+  it('accumulates tokens + 引擎有价账（同币种累计 micros）', () => {
+    const next = applyUsageDelta(baseUsage, {
+      promptTokens: 10,
+      completionTokens: 5,
+      cost: engineCost(20000, '$0.0200'),
+    });
     expect(next.input).toBe(110);
     expect(next.output).toBe(55);
-    // base 0.01 + (10*0.001 + 5*0.002)=0.02 → 0.03
-    expect(next.cost).toBeCloseTo(0.03, 8);
+    // base 10000 + 20000 = 30000 micros
+    expect(next.costStatus).toBe('priced');
+    expect(next.costMicros).toBe(30000);
+    expect(next.formattedCost).toBe('$0.0200');
     expect(next.cacheRead).toBeUndefined();
-    expect(next.savedCost).toBeUndefined();
   });
 
-  it('accumulates 4D cache + savedCost when provided', () => {
-    const next = applyUsageDelta(
-      baseUsage,
-      {
-        promptTokens: 100,
-        completionTokens: 20,
-        cacheReadTokens: 40,
-        cacheWriteTokens: 10,
-      },
-      (i, o, cr = 0, cw = 0) =>
-        i * 0.0001 + o * 0.0002 + cr * 0.00001 + cw * 0.00005,
-      (i, o, cr = 0) => cr * 0.00009
-    );
+  it('accumulates 4D cache + 引擎 cost when provided', () => {
+    const next = applyUsageDelta(baseUsage, {
+      promptTokens: 100,
+      completionTokens: 20,
+      cacheReadTokens: 40,
+      cacheWriteTokens: 10,
+      cost: engineCost(12000, '$0.0120'),
+    });
     expect(next.input).toBe(200);
     expect(next.output).toBe(70);
     expect(next.cacheRead).toBe(40);
     expect(next.cacheWrite).toBe(10);
-    expect(next.savedCost).toBeCloseTo(40 * 0.00009, 8);
-    expect(next.cost).toBeGreaterThan(baseUsage.cost);
+    expect(next.costMicros).toBe(22000);
   });
 
   it('preserves existing cache counters across subsequent deltas', () => {
     const mid = applyUsageDelta(
-      { ...baseUsage, cacheRead: 10, savedCost: 0.01 },
-      { promptTokens: 5, completionTokens: 0, cacheReadTokens: 3 },
-      () => 0.001,
-      () => 0.002
+      { ...baseUsage, cacheRead: 10 },
+      { promptTokens: 5, completionTokens: 0, cacheReadTokens: 3 }
     );
     expect(mid.cacheRead).toBe(13);
-    expect(mid.savedCost).toBeCloseTo(0.012, 8);
+    expect(mid.costStatus).toBe('priced');
   });
 });
 

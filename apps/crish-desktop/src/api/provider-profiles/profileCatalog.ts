@@ -30,6 +30,8 @@ export type ProviderProfile = {
   id: string;
   name: string;
   baseUrl: string;
+  /** 供应商首要通信协议（Default Protocol，下属模型默认继承） */
+  protocol?: 'openai/chat' | 'openai/responses' | 'anthropic/messages' | undefined;
   authType?: AuthType | undefined;
   models: string[];
   /** 是否已保存密钥或已完成 OAuth 授权 */

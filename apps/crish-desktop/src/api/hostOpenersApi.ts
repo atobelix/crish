@@ -1,3 +1,4 @@
+import { isBlockedExecutablePath } from './blockedExecutableExtensions';
 /**
  * 主机「打开方式」：扫描本机已安装应用 / 快捷方式，不用前端硬编码名单。
  * 经 Tauri workbench_list_host_openers / workbench_open_host_target。
@@ -110,6 +111,10 @@ export async function openWithHostOpener(
 export async function openPathDefault(filePath: string): Promise<void> {
   const path = (filePath || '').trim();
   if (!path) throw new Error('路径为空');
+  // §4.3：可执行后缀 SSOT — 在任何 IPC / shell 回落之前硬拒绝（禁旁路）
+  if (isBlockedExecutablePath(path)) {
+    throw new Error('出于安全保护，禁止直接运行可执行文件');
+  }
   // 优先专用命令；缺失则 file-manager 回落 reveal 体验较差，再试 start
   const res = await invokeResult('workbench_open_path_default', { path });
   if (res.status === 'ok') return;

@@ -98,8 +98,14 @@ export function onMessageDelta(
   const currentTurn = state.activeTurnIndex ?? 0;
 
   if (block.type === 'thought') {
+    if (!state.turnStreamedThoughts) {
+      state.turnStreamedThoughts = new Map<number, string>();
+    }
+    const prevThought = state.turnStreamedThoughts.get(currentTurn) || '';
+    const nextThought = prevThought + t;
+    state.turnStreamedThoughts.set(currentTurn, nextThought);
     state.assistantThought += t;
-    callbacks.onThought(state.assistantThought);
+    callbacks.onThought(nextThought, currentTurn);
     return;
   }
 
@@ -142,10 +148,20 @@ export function onMessageEnd(
 
   const { text, thought } = projectAgentMessageContent(msg);
 
+  const rawTurn =
+    ('turnIndex' in envelope.event
+      ? (envelope.event as { turnIndex?: unknown }).turnIndex
+      : undefined) ?? envelope.raw.turnIndex;
+  const turnIndex = sanitizeTurnIndex(rawTurn);
+
   // 1. 思考链收口：权威覆盖，不追加
   if (thought.trim()) {
+    if (!state.turnAuthoritativeThoughts) {
+      state.turnAuthoritativeThoughts = new Map<number, string>();
+    }
+    state.turnAuthoritativeThoughts.set(turnIndex, thought.trim());
     state.assistantThought = thought.trim();
-    callbacks.onThought(state.assistantThought);
+    callbacks.onThought(thought.trim(), turnIndex);
   }
 
   // 2. 正文收口：Map 双账本模型与多轮分段权威覆盖，单生产者铁律（绝对不调 onChunk 追加！）

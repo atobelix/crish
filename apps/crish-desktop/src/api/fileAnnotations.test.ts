@@ -14,6 +14,7 @@ import {
   formatAnnotationsForModel,
   resetFileAnnotationsForTest,
   takePendingFileAnnotations,
+  updatePendingFileAnnotationComment,
 } from './fileAnnotations';
 import { sessionRuntimeRegistry } from './SessionRuntimeRegistry';
 
@@ -81,5 +82,21 @@ describe('fileAnnotations 会话隔离与附件协同', () => {
 
   it('formatAnnotationsForModel 单一来源：空列表返回空串', () => {
     expect(formatAnnotationsForModel([])).toBe('');
+  });
+
+  it('批注评论不可变更新：不原地 mutate 原对象', () => {
+    const created = addPendingFileAnnotation(ann('旧评论'), {
+      targetSessionId: 'sess-a',
+    });
+    expect(created).not.toBeNull();
+    const before = sessionRuntimeRegistry.get('sess-a').attachments[0]!;
+    const beforeAnn = before.annotation!;
+    const ok = updatePendingFileAnnotationComment(created!.id, '新评论', 'sess-a');
+    expect(ok).toBe(true);
+    const after = sessionRuntimeRegistry.get('sess-a').attachments[0]!;
+    expect(after).not.toBe(before);
+    expect(after.annotation).not.toBe(beforeAnn);
+    expect(after.annotation?.comment).toBe('新评论');
+    expect(beforeAnn.comment).toBe('旧评论');
   });
 });

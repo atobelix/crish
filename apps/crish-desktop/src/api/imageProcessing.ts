@@ -87,6 +87,72 @@ export function mimeToExt(mime: string): string {
   return 'png';
 }
 
+export async function parseImageDimensions(
+  dataUrl: string,
+): Promise<{ width: number; height: number }> {
+  if (typeof document === 'undefined') return { width: 0, height: 0 };
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      resolve({
+        width: img.naturalWidth || img.width || 0,
+        height: img.naturalHeight || img.height || 0,
+      });
+    };
+    img.onerror = () => resolve({ width: 0, height: 0 });
+    img.src = dataUrl;
+  });
+}
+
+/**
+ * 为 58×58 方形卡片生成高保真、居中裁切的轻量正方形缩略图（默认 116×116 @2x）
+ */
+export async function generateSquareThumbnail(
+  dataUrl: string,
+  targetSize = 116,
+): Promise<string> {
+  if (typeof document === 'undefined') return dataUrl;
+
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const w = img.naturalWidth || img.width;
+      const h = img.naturalHeight || img.height;
+      if (!w || !h) {
+        resolve(dataUrl);
+        return;
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = targetSize;
+      canvas.height = targetSize;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        resolve(dataUrl);
+        return;
+      }
+
+      // 计算居中正方形裁切（Center Crop）
+      const minEdge = Math.min(w, h);
+      const sx = (w - minEdge) / 2;
+      const sy = (h - minEdge) / 2;
+
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(img, sx, sy, minEdge, minEdge, 0, 0, targetSize, targetSize);
+
+      try {
+        const thumb = canvas.toDataURL('image/webp', 0.82);
+        resolve(thumb);
+      } catch {
+        resolve(canvas.toDataURL('image/jpeg', 0.82));
+      }
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
+}
+
 export async function blobToImageAttachment(
   blob: Blob,
   preferredName?: string,
@@ -97,7 +163,22 @@ export async function blobToImageAttachment(
     `截图-${Date.now()}-${Math.random().toString(36).slice(2, 6)}.${mimeToExt(mime)}`;
   let dataUrl = await readBlobAsDataURL(blob);
   dataUrl = await downscaleDataUrlIfNeeded(dataUrl, mime);
-  return { name, dataUrl, mime };
+  const dims = await parseImageDimensions(dataUrl);
+  const thumbnailUrl = await generateSquareThumbnail(dataUrl);
+  return {
+    name,
+    dataUrl,
+    thumbnailUrl,
+    mime,
+    status: 'ready',
+    progress: 100,
+    imageMeta: {
+      width: dims.width,
+      height: dims.height,
+      size: blob.size || approxDataUrlBytes(dataUrl),
+      mime,
+    },
+  };
 }
 
 export function isImageFile(f: File): boolean {

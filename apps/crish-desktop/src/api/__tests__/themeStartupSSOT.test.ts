@@ -28,9 +28,9 @@ describe('Zero-FOUC & Startup Theme SSOT Test Suite', () => {
       explicitTextPrimary: warmGray.textPrimary,
     });
 
-    // 验证 --text-primary 保持纯净中性黑 #111111，未被篡改为 hsl(35, 12%, 11%)
+    // 验证 --text-primary 保持中性深灰 #1a1a1a，未被篡改为 hsl(35, 12%, 11%)
     const currentVal = document.documentElement.style.getPropertyValue('--text-primary');
-    expect(currentVal).toBe('#111111');
+    expect(currentVal).toBe('#1a1a1a');
   });
 
   it('SSOT-02: oklchColorGuard 在自定义极端背景下能够精准介入兜底', () => {
@@ -64,14 +64,14 @@ describe('Zero-FOUC & Startup Theme SSOT Test Suite', () => {
     expect(darkCozy.bgPrimary).toBe('#1f1f1f');
     expect(darkCozy.bgSecondary).toBe('#191919');
     expect(darkCozy.bgTertiary).toBe('#161616');
-    expect(darkCozy.textPrimary).toBe('#dddddd');
+    expect(darkCozy.textPrimary).toBe('#cccccc');
 
     const warmGray = SKIN_PRESETS['warm-gray'];
     expect(warmGray).toBeDefined();
     expect(warmGray.bgPrimary).toBe('hsl(35 8% 94.5%)');
     expect(warmGray.bgSecondary).toBe('hsl(35 8% 92.1%)');
     expect(warmGray.bgTertiary).toBe('hsl(35 8% 89.7%)');
-    expect(warmGray.textPrimary).toBe('#111111');
+    expect(warmGray.textPrimary).toBe('#1a1a1a');
   });
 
   it('SSOT-05: getContrastGuardedText 算法在浅色与深色背景下的对比度判定', () => {

@@ -548,21 +548,38 @@ describe('DIM-05 / Batch 3 工具卡片语义化与防逃逸测试套件', () =>
       ).toBe(false);
     });
 
-    it('toolHasExpandableBody 对有参数或有输出的调用返回 true', () => {
+    it('toolHasExpandableBody 对有参数或有输出的通用调用返回 true，正常文件读取返回 false', () => {
       expect(
         toolHasExpandableBody({
           id: '1',
-          name: 'view_file',
-          arguments: JSON.stringify({ AbsolutePath: 'src/main.rs' }),
+          name: 'run_command',
+          arguments: JSON.stringify({ CommandLine: 'cargo test' }),
           status: 'success',
         })
       ).toBe(true);
       expect(
         toolHasExpandableBody({
           id: '2',
-          name: 'view_file',
+          name: 'run_command',
           arguments: '',
           output: '',
+          status: 'success',
+        })
+      ).toBe(false);
+      // 文件读取在正常状态下无需展开，点击路径链接在右侧栏检视
+      expect(
+        toolHasExpandableBody({
+          id: '3',
+          name: 'view_file',
+          arguments: JSON.stringify({ AbsolutePath: 'src/main.rs' }),
+          status: 'success',
+        })
+      ).toBe(false);
+      expect(
+        toolHasExpandableBody({
+          id: '4',
+          name: 'read_file',
+          arguments: JSON.stringify({ path: 'src/main.rs' }),
           status: 'success',
         })
       ).toBe(false);

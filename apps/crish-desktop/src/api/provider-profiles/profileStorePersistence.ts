@@ -159,6 +159,15 @@ export function getActiveProfile(): ProviderProfile | null {
 }
 
 /** 是否至少有一个服务商已配置密钥（用于首次引导） */
+/**
+ * 该供应商是否已配置凭据（凭据壳 hasKey / apiKey 字面）。
+ * 对话选择器用它判定「可用」：未配置的 yaml 预置壳不占列表，
+ * 避免选择后 activateProfileModel 报 profile_not_found。
+ */
+export function profileHasConfiguredKey(providerId: string): boolean {
+  return loadProfiles().some((p) => p.id === providerId && profileHasKey(p));
+}
+
 export function anyProfileHasKey(): boolean {
   return loadProfiles().some((p) => profileHasKey(p));
 }

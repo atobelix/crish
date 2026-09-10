@@ -131,7 +131,7 @@ describe('resolveToolDiffs shell safety', () => {
     ).toEqual([]);
   });
 
-  it('parses real unified git diff from shell output', () => {
+  it('parses real unified git diff from edit tool output, but ignores shell inspect diffs', () => {
     const out = [
       'diff --git a/foo.ts b/foo.ts',
       '--- a/foo.ts',
@@ -142,17 +142,26 @@ describe('resolveToolDiffs shell safety', () => {
       '+new',
       '+extra',
     ].join('\n');
-    const files = resolveToolDiffs({
+    // 查看代码差异（如终端 git diff、git show）不显示差异内容
+    const shellFiles = resolveToolDiffs({
       name: 'run_terminal_command',
       args: JSON.stringify({ command: 'git diff' }),
       output: out,
     });
-    expect(files.length).toBe(1);
-    expect(files![0]!.filePath).toContain('foo.ts');
-    expect(files![0]!.additions).toBeGreaterThan(0);
+    expect(shellFiles).toEqual([]);
+
+    // 只有实际编辑文件时才显示差异变化
+    const editFiles = resolveToolDiffs({
+      name: 'replace_file_content',
+      args: JSON.stringify({ targetFile: 'foo.ts' }),
+      output: out,
+    });
+    expect(editFiles.length).toBe(1);
+    expect(editFiles![0]!.filePath).toContain('foo.ts');
+    expect(editFiles![0]!.additions).toBeGreaterThan(0);
   });
 
-  it('keeps structured diffs even when tool name is not edit-like', () => {
+  it('keeps structured diffs for edit-like tools and ignores non-edit tools', () => {
     const structured = [
       {
         filePath: 'src/a.ts',
@@ -162,11 +171,18 @@ describe('resolveToolDiffs shell safety', () => {
       },
     ];
     const files = resolveToolDiffs({
-      name: 'mystery_tool',
+      name: 'write_to_file',
       output: 'ok',
       structuredDiffs: structured,
     });
     expect(files).toEqual(structured);
+
+    const nonEditFiles = resolveToolDiffs({
+      name: 'view_file',
+      output: 'ok',
+      structuredDiffs: structured,
+    });
+    expect(nonEditFiles).toEqual([]);
   });
 });
 
@@ -269,7 +285,7 @@ describe('tool name helpers', () => {
   it('resolveToolDiffs filters unsafe structured diffs', () => {
     expect(
       resolveToolDiffs({
-        name: 'mystery',
+        name: 'replace_file_content',
         structuredDiffs: [
           {
             filePath: '../bad.ts',

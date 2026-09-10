@@ -11,6 +11,7 @@ import type {
   PickDefaultCatalogOpts,
   UsableCatalogOpts,
 } from './modelCatalogTypes';
+import { findAutofillModel } from './modelsAutofillBaseline';
 
 /**
  * Unicode 安全 trim（中文/全角空格）：NFC 后去首尾空白（含 \u3000）。
@@ -251,40 +252,25 @@ export function isEmptyCatalog(
   );
 }
 
-/**
- * 常见模型默认上下文（仅作缺省展示，可被扫描/手改覆盖）。
- * 来源：docs/cache-optimization/00-vendor-model-pricing-catalog.md（2026-08-02）：
- * - gpt-5.6 / gpt-5.5：§2.2（1,050,000）；gpt-4.1 仍受 §2.1 24h 保留支持，沿用 1M
- * - claude-sonnet-5 / claude-haiku-4-5：§1.4（litellm 副本）；opus-4-5 / sonnet-4-5 沿用 200k
- * - deepseek-v4-flash / deepseek-v4-pro：§3.1（1,000,000）
- * - gemini-3.x 窗口 catalog 未收录，沿用旧值 1M（风险项，见 R0.5 审计）
- */
-const KNOWN_CONTEXT: Record<string, number> = {
-  'gpt-5.6': 1_050_000,
-  'gpt-5.5': 1_050_000,
-  'gpt-4.1': 1_000_000,
-  'claude-sonnet-5': 1_000_000,
-  'claude-haiku-4-5': 200_000,
-  'claude-opus-4-5': 200_000,
-  'claude-sonnet-4-5': 200_000,
-  'deepseek-v4-flash': 1_000_000,
-  'deepseek-v4-pro': 1_000_000,
-  'mimo-v2.5': 128_000,
-  'gemini-3.6-flash': 1_000_000,
-  'gemini-3.5-flash': 1_000_000,
-};
+const contextLengthCache = new Map<string, number | undefined>();
 
+/**
+ * 彻底废除 KNOWN_CONTEXT 128K 假上限硬编码与正则盲猜。
+ * 模型上下文容量 100% 取自模型自身真实配置（如 1,048,576、1,050,000 等）。
+ * 兜底未声明或未配置时返回 undefined，绝不在 128K 处粗暴腰斩。
+ */
 export function guessContextLength(model: string): number | undefined {
   if (!model) return undefined;
-  const m = model.toLowerCase();
-  for (const [k, v] of Object.entries(KNOWN_CONTEXT)) {
-    if (m === k || m.includes(k) || k.includes(m)) return v;
+  if (contextLengthCache.has(model)) {
+    return contextLengthCache.get(model);
   }
-  if (m.includes('128k') || m.includes('128000')) return 128_000;
-  if (m.includes('32k')) return 32_000;
-  if (m.includes('200k')) return 200_000;
-  if (m.includes('1m') || m.includes('1000k')) return 1_000_000;
-  return undefined;
+  const autofill = findAutofillModel(model);
+  const result =
+    typeof autofill?.contextWindow === 'number' && autofill.contextWindow > 0
+      ? autofill.contextWindow
+      : undefined;
+  contextLengthCache.set(model, result);
+  return result;
 }
 
 /**

@@ -14,16 +14,35 @@ function asRec(v: unknown): AnyRec | null {
   return v && typeof v === 'object' && !Array.isArray(v) ? (v as AnyRec) : null;
 }
 
-/** usage delta 累加状态（4D：支持 cache read/write + savedCost） */
+/** usage delta 累加状态（4D：支持 cache read/write + savedCost；
+ * 费用为引擎三态，plans/05 T5.4） */
 export type UsageDeltaState = {
   input: number;
   output: number;
+  /** 引擎账三态：未定价 / 免费 / 有价 */
+  costStatus: 'unpriced' | 'free' | 'priced';
+  currency?: 'CNY' | 'USD';
+  costMicros?: number;
+  formattedCost?: string;
+  /** 遗留 JS 浮点（δ 后不再写入；S7 删除） */
   cost: number;
   inputMax: number;
   outputMax: number;
   cacheRead?: number;
   cacheWrite?: number;
   savedCost?: number;
+};
+
+/** 引擎 CostBreakdown（serde camelCase 同形；plans/05 T5.3） */
+export type RunUsageCost = {
+  currency: 'CNY' | 'USD';
+  inputMicros: number;
+  outputMicros: number;
+  cacheReadMicros: number;
+  cacheWriteMicros: number;
+  totalMicros: number;
+  formattedTotal: string;
+  isFree: boolean;
 };
 
 /** run-snapshot usage 解析结果（4D 可选字段） */
@@ -43,6 +62,8 @@ export type RunSnapshotUsage = {
   missedTokens?: number;
   /** 缓存温暖截止（now + TTL）；undefined = 无 TTL 数据 */
   warmUntilMs?: number;
+  /** 引擎微元账（None/缺失 = 未定价） */
+  cost?: RunUsageCost | null;
 };
 
 /**
@@ -127,6 +148,30 @@ export function parseRunSnapshotUsage(raw: unknown): RunSnapshotUsage | null {
   const missedTokens = positive(usage.missedTokens);
   const warmUntilMs = positive(usage.warmUntilMs);
 
+  // 引擎微元账（plans/05 T5.3：usage.cost，serde camelCase；缺失/null = 未定价）
+  const costRaw = usage.cost;
+  let cost: RunUsageCost | null | undefined;
+  if (costRaw && typeof costRaw === 'object') {
+    const c = costRaw as AnyRec;
+    const currency = c.currency === 'CNY' ? 'CNY' : c.currency === 'USD' ? 'USD' : undefined;
+    if (currency && typeof c.totalMicros === 'number' && typeof c.formattedTotal === 'string') {
+      cost = {
+        currency,
+        inputMicros: Number(c.inputMicros) || 0,
+        outputMicros: Number(c.outputMicros) || 0,
+        cacheReadMicros: Number(c.cacheReadMicros) || 0,
+        cacheWriteMicros: Number(c.cacheWriteMicros) || 0,
+        totalMicros: c.totalMicros,
+        formattedTotal: c.formattedTotal,
+        isFree: c.isFree === true,
+      };
+    } else {
+      cost = null;
+    }
+  } else {
+    cost = costRaw === null ? null : undefined;
+  }
+
   return {
     promptTokens: promptTokens ?? 0,
     completionTokens: completionTokens ?? 0,
@@ -139,17 +184,17 @@ export function parseRunSnapshotUsage(raw: unknown): RunSnapshotUsage | null {
     ...(writeRatio !== undefined && { writeRatio }),
     ...(missedTokens !== undefined && { missedTokens }),
     ...(warmUntilMs !== undefined && { warmUntilMs }),
+    ...(cost !== undefined && { cost }),
   };
 }
 
 /**
- * 将 usage delta 并入本地累计状态（4D：支持 cache read/write + savedCost）。
+ * 将 usage delta 并入本地累计状态（4D：支持 cache read/write + savedCost；
+ * 费用 = 引擎微元三态，plans/05 T5.4）。
  * sampleCount 为 0 时视为无真实样本，调用方可回退估算。
  *
- * @param current      当前累计状态
- * @param usage        本次增量（promptTokens / completionTokens / cacheRead/WriteTokens）
- * @param estimateCost (input, output, cacheRead?, cacheWrite?) => cost
- * @param estimateSavings (input, output, cacheRead?, cacheWrite?) => savedCost（可选）
+ * @param current 当前累计状态
+ * @param usage   本次增量（promptTokens / completionTokens / cacheRead/WriteTokens / cost）
  */
 export function applyUsageDelta(
   current: UsageDeltaState,
@@ -158,30 +203,18 @@ export function applyUsageDelta(
     completionTokens?: number;
     cacheReadTokens?: number;
     cacheWriteTokens?: number;
-  },
-  estimateCost: (
-    input: number,
-    output: number,
-    cacheRead?: number,
-    cacheWrite?: number
-  ) => number,
-  estimateSavings?: (
-    input: number,
-    output: number,
-    cacheRead?: number,
-    cacheWrite?: number
-  ) => number
+    cost?: RunUsageCost | null;
+  }
 ): UsageDeltaState {
   const din = Math.max(0, usage.promptTokens ?? 0);
   const dout = Math.max(0, usage.completionTokens ?? 0);
   const dcr = Math.max(0, usage.cacheReadTokens ?? 0);
   const dcw = Math.max(0, usage.cacheWriteTokens ?? 0);
-  if (din === 0 && dout === 0 && dcr === 0 && dcw === 0) return current;
+  const hasCost = usage.cost !== undefined && usage.cost !== null;
+  if (din === 0 && dout === 0 && dcr === 0 && dcw === 0 && !hasCost) return current;
 
   const nextIn = current.input + din;
   const nextOut = current.output + dout;
-  const nextCost =
-    current.cost + estimateCost(din, dout, dcr || undefined, dcw || undefined);
 
   const hasCacheRead = dcr > 0;
   const hasCacheWrite = dcw > 0;
@@ -192,19 +225,37 @@ export function applyUsageDelta(
     ? (current.cacheWrite ?? 0) + dcw
     : current.cacheWrite;
 
-  let nextSavedCost = current.savedCost;
-  if (estimateSavings && (dcr > 0 || dcw > 0)) {
-    const ds = estimateSavings(din, dout, dcr || undefined, dcw || undefined);
-    nextSavedCost = (current.savedCost ?? 0) + ds;
+  // 引擎三态费用累计（同币种 saturating；混币种不累加，展示最近 formatted）
+  let nextCostStatus = current.costStatus;
+  let nextCurrency = current.currency;
+  let nextCostMicros = current.costMicros;
+  let nextFormattedCost = current.formattedCost;
+  if (usage.cost) {
+    if (usage.cost.isFree) {
+      nextCostStatus = 'free';
+      nextFormattedCost = '免费';
+    } else {
+      nextCostStatus = 'priced';
+      nextCurrency = usage.cost.currency;
+      if (current.costStatus === 'priced' && current.currency === usage.cost.currency) {
+        nextCostMicros = (current.costMicros ?? 0) + usage.cost.totalMicros;
+      } else {
+        nextCostMicros = usage.cost.totalMicros;
+      }
+      nextFormattedCost = usage.cost.formattedTotal;
+    }
   }
 
   return {
     ...current,
     input: nextIn,
     output: nextOut,
-    cost: nextCost,
+    costStatus: nextCostStatus,
+    currency: nextCurrency,
+    costMicros: nextCostMicros,
+    formattedCost: nextFormattedCost,
     ...(nextCacheRead !== undefined && { cacheRead: nextCacheRead }),
     ...(nextCacheWrite !== undefined && { cacheWrite: nextCacheWrite }),
-    ...(nextSavedCost !== undefined && { savedCost: nextSavedCost }),
+    ...(current.savedCost !== undefined && { savedCost: current.savedCost }),
   };
 }

@@ -89,9 +89,18 @@ export const GFM_EMOJI_MAP: Readonly<Record<string, string>> = Object.freeze({
 
 const GFM_EMOJI_RE = /:([a-z0-9_+-]{1,32}):/g;
 
-/** 将文本中的 GFM Emoji 短代码转义为 Unicode 字符 */
-export function translateGfmEmoji(text: string): string {
-  if (!text || !text.includes(':')) return text;
+/**
+ * AGENTS §21 / SCOUT §7.3：GFM emoji 短码翻译默认关闭（与 Rust `GFM_EMOJI_SHORTCODES_DEFAULT` 对齐）。
+ * 若产品日后坚持短码，Rust IPC 与 JS fallback 须共读同一默认；禁止仅一端开启。
+ */
+export const GFM_EMOJI_SHORTCODES_DEFAULT = false as const;
+
+/** 将文本中的 GFM Emoji 短代码转义为 Unicode 字符（默认关闭） */
+export function translateGfmEmoji(
+  text: string,
+  enabled: boolean = GFM_EMOJI_SHORTCODES_DEFAULT,
+): string {
+  if (!enabled || !text || !text.includes(':')) return text;
   return text.replace(GFM_EMOJI_RE, (match, key: string) => GFM_EMOJI_MAP[key] ?? match);
 }
 

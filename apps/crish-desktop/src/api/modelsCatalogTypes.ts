@@ -1,19 +1,30 @@
 /**
- * modelsCatalogTypes.ts —— 供应商与模型能力统一强类型契约
+ * modelsCatalogTypes.ts —— 前端唯一树契约（与 Rust catalog_types / IPC DTO 同构）
  *
- * 权威对标：
- * - 战役方案：docs/provider-model-unification/plans/03-前端单源状态中枢重构与IPC通信打通计划.md
- * - Rust 内核：crates/agent-provider/src/catalog_types.rs / models_yaml.rs
- * - 调研总库：docs/model-capability/surveys/01-主流模型多源权威数据全景调研.md
+ * 磁盘 / IPC 写出键（SSOT）：
+ *   contextWindow、input/output/cacheRead/cacheWrite、google/generate-content、拍平 thinking
+ * 旧键只在读边界认一次；运行时协议以 google/generate-content 为准。
+ *
+ * 读 IPC 命令：workbench_read_models_yaml
+ * 写 IPC 命令：workbench_save_models_yaml
+ * 校验命令：workbench_validate_models_yaml
+ *
+ * Rust ReadModelsYamlResult 字段：
+ *   path / content / template / seeded / parseError / version / providers
+ * 无 tree 字段。扁平 models 若仍出现在载荷里，是 lossy 投影，禁止生产消费。
  */
 
-/** AI 网络通信协议方言（全系统强类型枚举，禁止自由字符串） */
+/**
+ * AI 网络通信协议方言。
+ * 运行时与写出以 google/generate-content 为准。
+ * google/interactions 仅为读边界旧名，IPC 读写边界单向归一，禁止写出。
+ */
 export type ModelProtocol =
   | 'openai/chat'              // 标准 OpenAI Chat Completions 兼容协议 (/v1/chat/completions)
   | 'openai/responses'         // OpenAI 2025/2026 Responses 原生协议 (/v1/responses)
   | 'anthropic/messages'       // Anthropic Claude Messages 原生协议 (/v1/messages)
-  | 'google/generate-content'  // Google Gemini 原生 GenerateContent 协议 (/v1beta/models/{model}:streamGenerateContent)
-  | 'google/interactions';     // 兼容别名：Google Gemini 3.x Interactions 原生协议 (/v1beta/interactions)
+  | 'google/generate-content'  // Google Gemini 原生 GenerateContent 协议
+  | 'google/interactions';     // 只读边界旧名 → google/generate-content；禁止写出
 
 /** 思考推理标准纯英文 TitleCase 显示名白名单 */
 export type ThinkingLevelTitle =
@@ -25,15 +36,23 @@ export type ThinkingLevelTitle =
   | 'XHigh'
   | 'Max';
 
-/** 思考推理协议 Wire 方言枚举 */
+/**
+ * 思考推理协议 Wire 方言枚举。
+ * 内核序列化名：gemini / qwen（以及 openai / deepseek / anthropic / zai）。
+ * google、qwen_enable_thinking 仅为读边界旧名，写出必须归一。
+ */
 export type ThinkingWireFormat =
   | 'openai'               // reasoning_effort: "low" | "medium" | "high"
   | 'qwen'                 // enable_thinking: true | false
-  | 'qwen_enable_thinking' // 别名
   | 'deepseek'             // thinking: { type: "enabled" | "disabled" }
   | 'anthropic'            // thinking: { type: "enabled", budget_tokens: number }
-  | 'google'               // thinkingConfig: { thinkingLevel: "HIGH" | ... }
-  | 'custom';              // 自定义透传参数
+  | 'gemini'               // thinkingConfig: { thinkingLevel: "HIGH" | ... }
+  | 'zai'                  // thinking: { type: "enable" }
+  | 'custom'               // 自定义透传参数
+  /** 只读边界旧名 → gemini */
+  | 'google'
+  /** 只读边界旧名 → qwen */
+  | 'qwen_enable_thinking';
 
 /** 多模态类型枚举 */
 export type ModalityType =
@@ -51,20 +70,10 @@ export type PricingCurrency = 'USD' | 'CNY';
 export type PricingBillingUnit = 'per_1m_tokens' | 'token' | 'per_image';
 
 /**
- * 思考推理极致扁平键值映射契约 (最高裁决规范)：
- *
- * 彻底拍平！删除中间多余的 levels: 层级，砍掉 mandatory 与 defaultLevel。
- * - Key: 前端 UI 显示的标准纯英文 TitleCase（如 "Off", "Minimal", "Low", "Medium", "High", "XHigh", "Max"）
- * - Value: 底层实际发送给上游 API 的真实 Wire 参数值（如 "off", "minimal", "low", "medium", "high" 等）
- *
- * 示例：
- * thinking: {
- *   "Low": "low",
- *   "Medium": "medium",
- *   "High": "high"
- * }
- *
- * 不支持思考的模型直接缺省不配置（undefined / Rust None）
+ * 思考推理极致扁平键值映射契约：
+ * - Key: 前端 UI 显示的标准纯英文 TitleCase
+ * - Value: 发给上游 API 的 Wire 参数值
+ * 不支持思考的模型直接缺省（undefined / Rust None）
  */
 export type ThinkingMap = Record<string, string>;
 
@@ -86,7 +95,11 @@ export interface PricingTier {
   outputCost: number;
 }
 
-/** 价格计量配置契约（完全选填，未配置时系统静默跳过费用统计，杜绝 0 元视觉噪音） */
+/**
+ * 价格计量配置契约（完全选填，未配置时系统静默跳过费用统计）。
+ * 写出只许 input / output / cacheRead / cacheWrite（另可带 currency / perImage）。
+ * 下列 *PerMTok / perImageCost / billingUnit 仅为读边界旧别名，禁止写出。
+ */
 export interface PricingConfig {
   /** 结算货币：USD ($) 或 CNY (¥) */
   currency: PricingCurrency;
@@ -98,7 +111,7 @@ export interface PricingConfig {
   output?: number;
   /**
    * 缓存读取独立绝对单价 (Cache Read Per 1M Tokens)：
-   * 严禁假设为固定一折！必须如实记录厂商独立定价（如 DeepSeek V4 为 ¥0.10，Qwen3.8 为 ¥2.40）
+   * 严禁假设为固定一折！必须如实记录厂商独立定价
    */
   cacheRead?: number;
   /** 缓存写入独立绝对单价 (Cache Write Per 1M Tokens) */
@@ -107,19 +120,24 @@ export interface PricingConfig {
   perImage?: number;
   /** 大上下文超长文本阶梯费率列表 */
   tiers?: PricingTier[];
-  /** 兼容历史平铺字段命名 */
+  /** 只读边界旧名 → input；禁止写出 */
   inputPerMTok?: number;
+  /** 只读边界旧名 → output；禁止写出 */
   outputPerMTok?: number;
+  /** 只读边界旧名 → cacheRead；禁止写出 */
   cacheReadPerMTok?: number;
+  /** 只读边界旧名 → cacheWrite；禁止写出 */
   cacheWritePerMTok?: number;
+  /** 只读边界旧名；禁止写出 */
   billingUnit?: 'token' | 'per_image';
+  /** 只读边界旧名 → perImage；禁止写出 */
   perImageCost?: number;
 }
 
 /** ModelPricingSpec 契约别名（对齐 Rust catalog_types.rs 与前端共享契约） */
 export type ModelPricingSpec = PricingConfig;
 
-/** 模型核心定义契约（与 Rust ModelSpec 100% 同构） */
+/** 模型核心定义契约（与 Rust ModelSpec 同构） */
 export interface ModelSpec {
   /** 模型全局或厂商内唯一标识（如 "deepseek-v4-flash"） */
   id: string;
@@ -128,19 +146,18 @@ export interface ModelSpec {
   /**
    * 模型级别显式协议覆盖（可选）：
    * - 缺省时自动继承所属 Provider 的顶层 protocol
-   * - 显式指定时（如 OpenAI 供应商下的 Responses 原生模型），强制覆盖供应商协议
+   * - 显式指定时强制覆盖供应商协议
    */
   protocol?: ModelProtocol;
-  /** 真实上下文物理窗口总容量（Tokens），彻底告别 128K 假上限 */
+  /** 真实上下文物理窗口总容量（Tokens）。磁盘键名只有 contextWindow */
   contextWindow?: number;
-  /** 上下文长度别名（与 contextWindow 互通），杜绝旧代码读到 undefined */
+  /** 只读边界旧名 → contextWindow；禁止写出 */
   contextLength?: number;
   /** 单次请求最大生成输出 Token 上限 */
   maxOutputTokens?: number;
   /**
-   * 思考推理特性配置 (极致拍平)：
-   * 存在时即表示支持思考推理，直接为 TitleCase -> Wire 字符串的键值对；
-   * 缺省（undefined）时表示不支持思考推理，UI 彻底折叠隐藏思考胶囊。
+   * 思考推理特性配置（拍平 TitleCase → Wire）：
+   * 存在即表示支持思考；缺省表示不支持，UI 折叠思考胶囊。
    */
   thinking?: ThinkingMap;
   /** 多模态输入输出矩阵 */
@@ -149,7 +166,7 @@ export interface ModelSpec {
   pricing?: PricingConfig;
   /** 模型是否在此供应商下被显式禁用（默认 true 启用） */
   enabled?: boolean;
-  /** 兼容能力字段（旧版只读展示） */
+  /** 兼容能力字段（旧版只读展示；运行时只信 modalities） */
   capabilities?: {
     tools?: boolean;
     image?: boolean;
@@ -162,7 +179,7 @@ export interface ModelSpec {
 
 /** 供应商兼容性与请求体方言调整参数 */
 export interface ProviderCompatConfig {
-  /** 思考推理参数打包方言格式 */
+  /** 思考推理参数打包方言格式（写出 gemini / qwen，读可认 google / qwen_enable_thinking） */
   thinkingFormat?: ThinkingWireFormat;
   /**
    * 是否支持 OpenAI 标准 developer 角色：
@@ -176,15 +193,15 @@ export interface ProviderCompatConfig {
   strictJsonSchema?: boolean;
 }
 
-/** 供应商核心定义契约（与 Rust ProviderSpec 100% 同构） */
+/** 供应商核心定义契约（与 Rust ProviderSpec 同构） */
 export interface ProviderSpec {
   /** 供应商人类友好展示名称（如 "阿里云百炼", "DeepSeek 官方"） */
   displayName: string;
   /** 基础 API 端点根地址（如 "https://api.deepseek.com"） */
   baseUrl: string;
   /**
-   * 供应商总协议（第一公民！）：
-   * 该供应商下属的所有子模型默认继承该协议，无需在单模型配置中重复繁琐指定
+   * 供应商总协议（第一公民）：
+   * 下属子模型默认继承该协议
    */
   protocol: ModelProtocol;
   /** API 凭证密钥（可选，优先环境变量或凭据库引用） */
@@ -223,21 +240,50 @@ export interface YamlParseErrorInfo {
   message: string;
 }
 
-/** Rust 命令 models_yaml_read 的 Wire 响应载荷 */
+/**
+ * Rust `workbench_read_models_yaml` 的 Wire 响应载荷（camelCase）。
+ * 与 ReadModelsYamlResult 同构。不含 tree——Rust 从不返回该字段。
+ */
 export interface ReadModelsYamlWire {
   /** 物理配置文件绝对路径（如 "C:/Users/orange/.conex/models.yaml"） */
   path: string;
   /** 磁盘 YAML 文本原始内容（用于高级代码编辑器呈现） */
-  rawYaml?: string;
-  content?: string;
-  /** Rust 内核反序列化后的纯树状数据结构 */
-  tree?: ModelsYamlTree;
-  /** 首次启动是否由 Rust 内核执行了内置模板自动播种 */
+  content: string;
+  /** 内置模板原文（「恢复标准模版」单一来源） */
+  template: string;
+  /** 本次读取是否触发了播种 */
   seeded: boolean;
-  /** 解析错误信息（若解析失败则返回，非空时 tree 为退化空树） */
+  /** 解析错误信息（非空时 providers 为 None，禁止据此构造生产树） */
   parseError?: YamlParseErrorInfo | null;
-  /** 兼容旧版平铺 models 字段 */
-  models?: any[];
+  /** yaml 根 version；生产树一律按 2 组装 */
+  version?: number;
+  /**
+   * 与磁盘 v2 树同构的供应商字典。
+   * 解析失败为缺失；诚实空配置为 {}。
+   */
+  providers?: Record<string, ProviderSpec> | null;
+}
+
+/**
+ * 读 IPC 成功后交给 Store 的载荷。
+ * providers 来自 Rust；tree 仅客户端用 { version: 2, providers } 组装，不是 Rust 字段。
+ */
+export interface ReadModelsYamlIpcData {
+  path: string;
+  content: string;
+  template: string;
+  seeded: boolean;
+  version?: number;
+  providers: Record<string, ProviderSpec>;
+  tree: ModelsYamlTree;
+}
+
+/** Rust `workbench_save_models_yaml` 的 Wire 响应载荷 */
+export interface SaveModelsYamlWire {
+  path: string;
+  version?: number;
+  /** 写回的 v2 树，可作镜像校验；写失败不得用空对象覆盖 */
+  providers?: Record<string, ProviderSpec> | null;
 }
 
 /** 前端 Store 错误类型定义 */

@@ -101,7 +101,7 @@ export function readStoredPersonalization(): PersonalizationSettings {
   try {
     const skin = localStorage.getItem('crish_theme_skin') || 'warm-gray';
     const customBg = localStorage.getItem('crish_theme_custom_bg') || '#f4f3f0';
-    const customFg = localStorage.getItem('crish_theme_custom_fg') || '#111111';
+    const customFg = localStorage.getItem('crish_theme_custom_fg') || '#1a1a1a';
     const fsAdjustRaw = localStorage.getItem('crish_font_size_adjust');
     const fontSizeAdjust = fsAdjustRaw ? parseInt(fsAdjustRaw, 10) : 0;
     const brightnessRaw = localStorage.getItem('crish_theme_brightness_adjust');
@@ -112,7 +112,7 @@ export function readStoredPersonalization(): PersonalizationSettings {
     const themeAutoTimeTransition = autoTimeRaw === 'true';
     return { skin, customBg, customFg, fontSizeAdjust, themeBrightnessAdjust, themeBrightnessVibrant, themeAutoTimeTransition };
   } catch {
-    return { skin: 'warm-gray', customBg: '#f4f3f0', customFg: '#111111', fontSizeAdjust: 0, themeBrightnessAdjust: 0, themeBrightnessVibrant: false, themeAutoTimeTransition: false };
+    return { skin: 'warm-gray', customBg: '#f4f3f0', customFg: '#1a1a1a', fontSizeAdjust: 0, themeBrightnessAdjust: 0, themeBrightnessVibrant: false, themeAutoTimeTransition: false };
   }
 }
 

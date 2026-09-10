@@ -24,7 +24,7 @@ import {
   createStreamCancel,
   type StreamCancelFn,
 } from './streamFinishControl';
-import { resolveContextWindow } from './readiness';
+import { resolveContextWindow, resolveSendThinkingFields } from './readiness';
 import { type HistoryMessage, buildHistoryMessages } from './historyMessages';
 import {
   getResponseStyleDescription,
@@ -92,6 +92,8 @@ export async function createStreamSession(
 
     let mcpDisabledTools: Record<string, string[]> | undefined;
     let reasoningEffort: string | undefined;
+    let thinkingTitle: string | undefined;
+    let thinkingWire: string | undefined;
     let responseStyleGuidance: string | undefined;
     let contextWindow: number | undefined;
     try {
@@ -103,13 +105,6 @@ export async function createStreamSession(
       ) {
         mcpDisabledTools = sets.mcpDisabledTools;
       }
-      // I1-β：defaultThinkingLevel → ReasoningEffort（wire 值 = 枚举字面量）
-      const tl = String(sets?.defaultThinkingLevel || '')
-        .trim()
-        .toLowerCase();
-      if (['minimal', 'low', 'medium', 'high', 'xhigh', 'max'].includes(tl)) {
-        reasoningEffort = tl;
-      }
 
       // 响应风格：设置值经 resolveResponseStyle 归一为 wire 档位后，
       // 取英文单行描述（行为等价原 STYLE_ZH_MAP/STYLE_DESCS 硬编码字典，文本源迁至 prompts SSOT）
@@ -119,6 +114,24 @@ export async function createStreamSession(
     } catch {
       /* swallow-ok: 设置解析失败按默认执行 */
     }
+
+    const optionWire =
+      typeof options?.thinkingWire === 'string' && options.thinkingWire.trim()
+        ? options.thinkingWire.trim()
+        : undefined;
+    const optionTitle =
+      typeof options?.thinkingTitle === 'string' && options.thinkingTitle.trim()
+        ? options.thinkingTitle.trim()
+        : undefined;
+    if (optionWire) {
+      thinkingWire = optionWire;
+      thinkingTitle = optionTitle;
+    } else {
+      const fields = resolveSendThinkingFields(safeSessionId, optionTitle);
+      thinkingTitle = fields.thinkingTitle;
+      thinkingWire = fields.thinkingWire;
+    }
+    reasoningEffort = thinkingWire || thinkingTitle;
 
     const goalMode =
       typeof options?.mode === 'string' ? options.mode.trim() : '';
@@ -167,45 +180,45 @@ export async function createStreamSession(
       return;
     }
 
-    // I1-α②：取走暂存 context-state（会话寻址——仅消费绑定本会话或未绑定
-    // 的暂存，跨会话串扰根除）→ run-task 下发 → 队列去重注入；取走即清空。
-    // 纪律：消息发送前无论变动几次均不显示不注入；仅在正式发消息时顺带携带注入
-    const contextState = (
-      await import('../provider-profiles/contextStatePending')
-    ).takePendingContextState(safeSessionId);
+    // I1-α②：若发送瞬间未消费则兜底取走暂存 context-state
+    let contextStateText = options?.contextState;
+    if (!contextStateText) {
+      const pending = (
+        await import('../provider-profiles/contextStatePending')
+      ).takePendingContextState(safeSessionId);
+      if (pending) {
+        contextStateText = typeof pending === 'string' ? pending : pending?.text || '';
+        try {
+          const { contextInjectionDispatcher } = await import(
+            '../contextInjectionDispatcher'
+          );
+          const { readContextStateSnapshot } = await import(
+            '../provider-profiles/contextStatePending'
+          );
+          const snapshot = readContextStateSnapshot();
+          const model = (typeof pending === 'object' && pending?.model) || snapshot.model || undefined;
+          const profile = (typeof pending === 'object' && pending?.profile) || snapshot.profile || undefined;
+          const permission = (typeof pending === 'object' && pending?.permission) || snapshot.permission || undefined;
+          const thinking = (typeof pending === 'object' && pending?.thinking) || snapshot.thinking || undefined;
 
-    if (contextState) {
-      try {
-        const { contextInjectionDispatcher } = await import(
-          '../contextInjectionDispatcher'
-        );
-        const { readContextStateSnapshot } = await import(
-          '../provider-profiles/contextStatePending'
-        );
-        const snapshot = readContextStateSnapshot();
-        const rawText = typeof contextState === 'string' ? contextState : contextState?.text || '';
-        const model = (typeof contextState === 'object' && contextState?.model) || snapshot.model || undefined;
-        const profile = (typeof contextState === 'object' && contextState?.profile) || snapshot.profile || undefined;
-        const permission = (typeof contextState === 'object' && contextState?.permission) || snapshot.permission || undefined;
-        const thinking = (typeof contextState === 'object' && contextState?.thinking) || snapshot.thinking || undefined;
-
-        contextInjectionDispatcher.inject(safeSessionId, {
-          kind: 'workspace_env',
-          title: '上下文状态切换',
-          summary: rawText,
-          status: 'injected',
-          source: 'system_event',
-          content: rawText,
-          metadata: {
-            mode: 'context-state',
-            ...(model ? { model } : {}),
-            ...(profile ? { profile } : {}),
-            ...(permission ? { permission } : {}),
-            ...(thinking ? { thinking } : {}),
-          },
-        });
-      } catch {
-        /* swallow-ok: 提示卡片注入失败不阻断 run 核心调用 */
+          contextInjectionDispatcher.inject(safeSessionId, {
+            kind: 'workspace_env',
+            title: '上下文状态切换',
+            summary: contextStateText,
+            status: 'injected',
+            source: 'system_event',
+            content: contextStateText,
+            metadata: {
+              mode: 'context-state',
+              ...(model ? { model } : {}),
+              ...(profile ? { profile } : {}),
+              ...(permission ? { permission } : {}),
+              ...(thinking ? { thinking } : {}),
+            },
+          });
+        } catch {
+          /* swallow-ok: 提示卡片注入失败不阻断 run 核心调用 */
+        }
       }
     }
 
@@ -222,7 +235,9 @@ export async function createStreamSession(
       ...(cwd ? { cwd } : {}),
       ...(mcpDisabledTools ? { mcpDisabledTools } : {}),
       ...(reasoningEffort ? { reasoningEffort } : {}),
-      ...(contextState ? { contextState: contextState.text } : {}),
+      ...(thinkingTitle ? { thinkingTitle } : {}),
+      ...(thinkingWire ? { thinkingWire } : {}),
+      ...(contextStateText ? { contextState: contextStateText } : {}),
       ...(options?.content?.length ? { content: options.content } : {}),
       ...(hasImages ? { hasImages: true } : {}),
       ...(options?.attachments?.length

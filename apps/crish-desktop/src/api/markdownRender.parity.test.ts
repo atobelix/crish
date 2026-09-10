@@ -173,7 +173,7 @@ describe('markdown fixture parity (D0 completed-message)', () => {
     expect(asyncHtml).toBe(syncHtml);
   });
 
-  it('GFM Emoji: converts :white_check_mark: and :x: to Unicode emoji, preserves raw text in code fences and inline code', async () => {
+  it('GFM Emoji: default OFF preserves shortcodes in body/code; enabled helper still translates', async () => {
     const md = [
       '状态通过: :white_check_mark:，状态阻断: :x:',
       '',
@@ -186,18 +186,17 @@ describe('markdown fixture parity (D0 completed-message)', () => {
 
     const syncHtml = parseMarkdownToHtml(md);
 
-    // 1. 正文文本中的 GFM Emoji 必须转为原生 Unicode 符号
-    expect(syncHtml).toContain('状态通过: ✅，状态阻断: ❌');
-    expect(syncHtml).not.toContain('状态通过: :white_check_mark:');
-    expect(syncHtml).not.toContain('状态阻断: :x:');
+    // 1. AGENTS §21 / §7.3：默认关闭 — 正文保留短码，不得插入 Unicode Emoji
+    expect(syncHtml).toContain('状态通过: :white_check_mark:，状态阻断: :x:');
+    expect(syncHtml).not.toContain('✅');
+    expect(syncHtml).not.toContain('❌');
 
-    // 2. 行内代码与代码围栏内必须严格保留生文本短代码，不得转义为 emoji
+    // 2. 行内代码与代码围栏内必须严格保留生文本短代码
     expect(syncHtml).toContain('<code class="md-inline-code">:white_check_mark:</code>');
     expect(syncHtml).toContain('md-code-block');
     expect(syncHtml).toContain(':white_check_mark:');
     expect(syncHtml).toContain(':x:');
 
-    // 提取代码块内部，断言保留了 raw text
     const codeFenceMatch = syncHtml.match(/<code class="language-bash">([\s\S]*?)<\/code>/);
     expect(codeFenceMatch).toBeTruthy();
     expect(codeFenceMatch![1]).toContain(':white_check_mark:');
@@ -249,8 +248,9 @@ describe('markdown fixture parity (D0 completed-message)', () => {
     // 验证对齐属性保留且内容为空
     expect(syncHtml).toContain('<td class="md-td" style="text-align:right"></td>');
 
-    // 4. 单元格内部 Emoji 与文本正常解析
-    expect(syncHtml).toContain('<td class="md-td" style="text-align:center">✅</td>');
+    // 4. 单元格内部短码默认保留（§7.3 关翻译），文本正常解析
+    expect(syncHtml).toContain('<td class="md-td" style="text-align:center">:white_check_mark:</td>');
+    expect(syncHtml).not.toContain('✅');
     expect(syncHtml).toContain('<td class="md-td">Alice</td>');
 
     // 5. Worker 异步降级路径与同步输出严格一致 (byte-for-byte)

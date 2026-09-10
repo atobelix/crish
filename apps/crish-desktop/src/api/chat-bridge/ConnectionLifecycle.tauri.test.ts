@@ -12,6 +12,16 @@ import type { StreamCallbacks } from '../chatApi';
 import type { StreamState } from './handlers/streamState';
 import type { SessionMessage } from '../../store/types';
 import { resetControlMetrics } from '../controlMetrics';
+import { mockTauriCommand } from '../../test-setup';
+import {
+  ensureModelsCatalogLoaded,
+  resetModelsCatalogMirror,
+} from '../modelsCatalogStore';
+import {
+  sessionRuntimeRegistry,
+  setSessionThinkingTitle,
+} from '../SessionRuntimeRegistry';
+import type { ProviderSpec } from '../modelsCatalogTypes';
 
 const { fakeTransport, startRunTask, messageListener, loadSessionBodyMock } =
   vi.hoisted(() => {
@@ -99,6 +109,8 @@ describe('ConnectionLifecycle Tauri IPC 路径（C1.2）', () => {
     localStorage.removeItem('crish_active_model_id');
     localStorage.removeItem('crish_model_meta_v1');
     localStorage.removeItem('crish_pending_context_state_v1');
+    resetModelsCatalogMirror();
+    sessionRuntimeRegistry.clearAll();
   });
 
   describe('createStreamSession：core_run_task 参数组装', () => {
@@ -151,15 +163,14 @@ describe('ConnectionLifecycle Tauri IPC 路径（C1.2）', () => {
           permissionMode: 'ask',
           clientMessageId: 'user-msg-1',
           assistantClientMessageId: 'assistant-msg-1',
-          // I1-β：defaultThinkingLevel（'medium'）→ ReasoningEffort 档位
-          // 真下发（替换旧 budgetDifficulty 思考档位代表；budgetDifficulty
-          // 不再出现在 run-task 参数中——Rust 侧零消费死参数）
-          reasoningEffort: 'medium',
           // P1：systemPrompt 经 composeSystemPrompt 组装后下发（settings 为 medium → 仅 guidance）
           systemPrompt:
             'Response style: balanced. Be clear and complete without padding. Explain non-obvious steps briefly.',
         })
       );
+      // settings.defaultThinkingLevel 不再当 reasoningEffort 规格
+      expect(params.reasoningEffort).toBeUndefined();
+      expect(params.thinkingWire).toBeUndefined();
       // I1-β：budgetDifficulty 已从 run-task 参数移除（无 Rust 消费面）
       expect(params.budgetDifficulty).toBeUndefined();
       // I1-α②：无 pending context-state 时不携带 contextState 参数
@@ -253,17 +264,26 @@ describe('ConnectionLifecycle Tauri IPC 路径（C1.2）', () => {
     it('P4 T-31：history 经 startRunTask 透传（loadSessionBody 数据源；完成态过滤 + 排除当前消息 + camelCase 字段）', async () => {
       localStorage.setItem('crish_active_profile_id', 'p1');
       localStorage.setItem('crish_active_model_id', 'deepseek-chat');
-      localStorage.setItem(
-        'crish_model_meta_v1',
-        JSON.stringify({
-          'p1::deepseek-chat': {
-            profileId: 'p1',
-            model: 'deepseek-chat',
-            enabled: true,
-            contextLength: 131_072,
-          },
-        })
-      );
+      resetModelsCatalogMirror();
+      mockTauriCommand('workbench_read_models_yaml', () => ({
+        path: 'C:\\tmp\\models.yaml',
+        content: '',
+        template: '',
+        seeded: false,
+        parseError: null,
+        providers: {
+          p1: {
+            displayName: 'P1',
+            baseUrl: 'https://example.invalid/v1',
+            protocol: 'openai/chat',
+            models: [{ id: 'deepseek-chat', contextWindow: 131_072 }],
+          } satisfies ProviderSpec,
+        },
+      }));
+      mockTauriCommand('workbench_save_models_yaml', () => ({
+        path: 'C:\\tmp\\models.yaml',
+      }));
+      await ensureModelsCatalogLoaded(true);
       loadSessionBodyMock.mockResolvedValue([
         {
           id: 'h1',
@@ -345,8 +365,105 @@ describe('ConnectionLifecycle Tauri IPC 路径（C1.2）', () => {
           tool_call_results_json: '[{"id":"c1","output":"ok","isError":false}]',
         },
       ]);
-      // contextWindow 经生效模型 catalog 解析后透传（T-33 预算钳制消费）
+      // contextWindow 经 live contextWindow 透传（T-33 预算钳制消费）
       expect(params.contextWindow).toBe(131_072);
+    });
+
+    it('options.thinkingWire 原样作为 reasoningEffort（不 toLowerCase settings）', async () => {
+      const callbacks: StreamCallbacks = {
+        onChunk: vi.fn(),
+        onThought: vi.fn(),
+        onToolStart: vi.fn(),
+        onToolError: vi.fn(),
+        onToolSuccess: vi.fn(),
+        onComplete: vi.fn(),
+      };
+      const state: StreamState = {
+        cancelled: false,
+        finished: false,
+        assistantText: '',
+        assistantThought: '',
+        unsub: null,
+        endTimer: null,
+      };
+
+      await createStreamSession(
+        'hello',
+        'sess-think-1',
+        'run-think-1',
+        callbacks,
+        { thinkingTitle: 'High', thinkingWire: 'HIGH' },
+        state,
+        () => undefined,
+        vi.fn()
+      );
+
+      expect(startRunTask).toHaveBeenCalledTimes(1);
+      const params = startRunTask.mock.calls[0][1] as Record<string, unknown>;
+      expect(params.reasoningEffort).toBe('HIGH');
+      expect(params.thinkingTitle).toBe('High');
+      expect(params.thinkingWire).toBe('HIGH');
+    });
+
+    it('会话 Title + live 字典 → reasoningEffort 为 yaml value', async () => {
+      localStorage.setItem('crish_active_profile_id', 'gemini');
+      localStorage.setItem('crish_active_model_id', 'flash');
+      resetModelsCatalogMirror();
+      mockTauriCommand('workbench_read_models_yaml', () => ({
+        path: 'C:\\tmp\\models.yaml',
+        content: '',
+        template: '',
+        seeded: false,
+        parseError: null,
+        providers: {
+          gemini: {
+            displayName: 'Gemini',
+            baseUrl: 'https://generativelanguage.googleapis.com',
+            protocol: 'google/generate-content',
+            models: [
+              { id: 'flash', thinking: { Off: 'disabled', High: 'HIGH' } },
+            ],
+          } satisfies ProviderSpec,
+        },
+      }));
+      mockTauriCommand('workbench_save_models_yaml', () => ({
+        path: 'C:\\tmp\\models.yaml',
+      }));
+      await ensureModelsCatalogLoaded(true);
+      setSessionThinkingTitle('sess-think-2', 'High');
+
+      const callbacks: StreamCallbacks = {
+        onChunk: vi.fn(),
+        onThought: vi.fn(),
+        onToolStart: vi.fn(),
+        onToolError: vi.fn(),
+        onToolSuccess: vi.fn(),
+        onComplete: vi.fn(),
+      };
+      const state: StreamState = {
+        cancelled: false,
+        finished: false,
+        assistantText: '',
+        assistantThought: '',
+        unsub: null,
+        endTimer: null,
+      };
+
+      await createStreamSession(
+        'hello',
+        'sess-think-2',
+        'run-think-2',
+        callbacks,
+        undefined,
+        state,
+        () => undefined,
+        vi.fn()
+      );
+
+      const params = startRunTask.mock.calls[0][1] as Record<string, unknown>;
+      expect(params.reasoningEffort).toBe('HIGH');
+      expect(params.thinkingTitle).toBe('High');
+      expect(params.thinkingWire).toBe('HIGH');
     });
 
     it('P4 T-31：空会话 → history / contextWindow 均不发送（params 无对应字段）', async () => {

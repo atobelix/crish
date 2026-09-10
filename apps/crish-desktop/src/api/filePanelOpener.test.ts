@@ -160,5 +160,10 @@ describe('extractFilePathFromToolArgs', () => {
     );
     expect(extractFilePathFromToolArgs('foo/bar/baz.ts')).toBe('foo/bar/baz.ts');
     expect(extractFilePathFromToolArgs('just text')).toBeNull();
+    expect(
+      extractFilePathFromToolArgs(
+        '{"contentA":"hello\\nworld","contentB":"hello\\nthere"}'
+      )
+    ).toBeNull();
   });
 });

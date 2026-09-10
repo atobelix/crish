@@ -32,6 +32,7 @@ import {
   getActiveModelId,
   setActiveModelId,
 } from './profileActiveSelection';
+import { getLiveProvider } from '../modelsCatalogLive';
 
 /**
  * 保存 Base URL；若该 profile 为当前活动项，同步到引擎（保存即生效）。
@@ -141,22 +142,27 @@ export async function activateProfileModel(
   error?: string;
   warning?: 'no_local_key' | 'model_mismatch';
 }> {
-  const p = loadProfiles().find((x) => x.id === profileId);
-  if (!p) return { ok: false, error: 'profile_not_found' };
-
   const m = model.trim();
   if (!m) return { ok: false, error: 'empty_model' };
 
-  if (!p.models.includes(m)) {
+  const p = loadProfiles().find((x) => x.id === profileId);
+  // 身份合一（总方案 §3）：yaml live provider 可无 LS 凭据壳（凭据在 DPAPI /
+  // yaml apiKey）。选择器只列「可用」供应商后仍可能遇到仅 yaml 带 key 的供应商，
+  // 这里从 live catalog 兜底 baseUrl，禁止把未配置的预置壳当真配置。
+  const live = getLiveProvider(profileId);
+  if (!p && !live) return { ok: false, error: 'profile_not_found' };
+
+  if (p && !p.models.includes(m)) {
     addModelToProfile(profileId, m);
   }
 
   const fresh = loadProfiles().find((x) => x.id === profileId) || p;
-  const hasLocalKey = profileHasKey(fresh);
+  const hasLocalKey = p ? profileHasKey(fresh) : Boolean(live?.apiKey?.trim());
 
+  const effectiveBaseUrl = live?.baseUrl || fresh?.baseUrl;
   const res = await configProfileApply({
     profileId,
-    ...(fresh.baseUrl ? { baseUrl: fresh.baseUrl } : {}),
+    ...(effectiveBaseUrl ? { baseUrl: effectiveBaseUrl } : {}),
     model: m,
   });
   if (res.status !== 'ok' || res.data?.ok !== true) {

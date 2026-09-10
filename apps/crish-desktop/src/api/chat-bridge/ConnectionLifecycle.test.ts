@@ -3,7 +3,7 @@
  * - 完整 run-task / 事件流契约见 ConnectionLifecycle.tauri.test.ts；
  * - 本文件覆盖 createFinishController / createStreamCancel / ensureEngineConnected 纯逻辑面。
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   createFinishController,
   createStreamCancel,
@@ -13,6 +13,7 @@ import {
   composeSystemPrompt,
   buildHistoryMessages,
   resolveContextWindow,
+  resolveSendThinkingFields,
   estimateTextTokens,
 } from './ConnectionLifecycle';
 import { ApprovalFlowMachine } from '../approvalFlowMachine';
@@ -22,6 +23,16 @@ import type { SessionMessage } from '../../store/types';
 import type { Settings } from '../clientApi';
 import type { HistoryMessage } from './ConnectionLifecycle';
 import { getControlMetrics, resetControlMetrics } from '../controlMetrics';
+import { mockTauriCommand } from '../../test-setup';
+import {
+  ensureModelsCatalogLoaded,
+  resetModelsCatalogMirror,
+} from '../modelsCatalogStore';
+import {
+  sessionRuntimeRegistry,
+  setSessionThinkingTitle,
+} from '../SessionRuntimeRegistry';
+import type { ProviderSpec } from '../modelsCatalogTypes';
 
 const { fakeTransport, startRunTask, loadSessionBodyMock } = vi.hoisted(() => {
   const fakeTransport = {
@@ -362,26 +373,37 @@ describe('buildHistoryMessages（P4 T-31：store 消息 → history 载荷）', 
   });
 });
 
-describe('resolveContextWindow（P4 T-31：contextWindow 解析）', () => {
+const CATALOG_PATH = 'C:\\tmp\\models.yaml';
+
+async function loadLiveCatalog(
+  providers: Record<string, ProviderSpec>
+): Promise<void> {
+  resetModelsCatalogMirror();
+  mockTauriCommand('workbench_read_models_yaml', () => ({
+    path: CATALOG_PATH,
+    content: '',
+    template: '',
+    seeded: false,
+    parseError: null,
+    providers,
+  }));
+  mockTauriCommand('workbench_save_models_yaml', () => ({
+    path: CATALOG_PATH,
+  }));
+  const res = await ensureModelsCatalogLoaded(true);
+  expect(res.ok).toBe(true);
+}
+
+describe('resolveContextWindow（live contextWindow；禁止 128000 假上限）', () => {
   afterEach(() => {
     localStorage.removeItem('crish_active_profile_id');
     localStorage.removeItem('crish_active_model_id');
     localStorage.removeItem('crish_model_meta_v1');
+    resetModelsCatalogMirror();
+    sessionRuntimeRegistry.clearAll();
   });
 
-  it('设置显式键优先（Settings.contextWindow 预留键；非正数 / NaN 忽略）', () => {
-    expect(
-      resolveContextWindow({ contextWindow: 64_000 } as unknown as Settings)
-    ).toBe(64_000);
-    expect(
-      resolveContextWindow({ contextWindow: 0 } as unknown as Settings)
-    ).toBeUndefined();
-    expect(
-      resolveContextWindow({ contextWindow: NaN } as unknown as Settings)
-    ).toBeUndefined();
-  });
-
-  it('无设置键 → 生效模型 catalog 元数据（getModelMeta.contextLength）', () => {
+  it('settings / LS meta 不是规格源（不读 contextWindow 键，不读 contextLength）', async () => {
     localStorage.setItem('crish_active_profile_id', 'p1');
     localStorage.setItem('crish_active_model_id', 'deepseek-chat');
     localStorage.setItem(
@@ -395,15 +417,117 @@ describe('resolveContextWindow（P4 T-31：contextWindow 解析）', () => {
         },
       })
     );
-    expect(resolveContextWindow()).toBe(131_072);
+    expect(
+      resolveContextWindow({ contextWindow: 64_000 } as unknown as Settings)
+    ).toBeUndefined();
+    expect(resolveContextWindow()).toBeUndefined();
   });
 
-  it('无显式设置且无目录数据 → undefined（缺省不发）', () => {
+  it('live contextWindow 正数 → 原样取整；缺省 undefined，不发明 128000', async () => {
+    localStorage.setItem('crish_active_profile_id', 'p1');
+    localStorage.setItem('crish_active_model_id', 'deepseek-chat');
+    await loadLiveCatalog({
+      p1: {
+        displayName: 'P1',
+        baseUrl: 'https://example.invalid/v1',
+        protocol: 'openai/chat',
+        models: [
+          {
+            id: 'deepseek-chat',
+            contextWindow: 131_072,
+            thinking: { High: 'HIGH', Low: 'low' },
+          },
+        ],
+      },
+    });
+    expect(resolveContextWindow()).toBe(131_072);
+
+    localStorage.setItem('crish_active_model_id', 'no-window');
+    await loadLiveCatalog({
+      p1: {
+        displayName: 'P1',
+        baseUrl: 'https://example.invalid/v1',
+        protocol: 'openai/chat',
+        models: [{ id: 'no-window' }],
+      },
+    });
+    expect(resolveContextWindow()).toBeUndefined();
+    expect(resolveContextWindow()).not.toBe(128_000);
+  });
+
+  it('无活动模型 / 未加载 → undefined', () => {
     expect(resolveContextWindow()).toBeUndefined();
     expect(resolveContextWindow(null)).toBeUndefined();
-    expect(
-      resolveContextWindow({ responseStyle: 'medium' } as Settings)
-    ).toBeUndefined();
+  });
+});
+
+describe('resolveSendThinkingFields（会话 Title → live wire）', () => {
+  afterEach(() => {
+    localStorage.removeItem('crish_active_profile_id');
+    localStorage.removeItem('crish_active_model_id');
+    resetModelsCatalogMirror();
+    sessionRuntimeRegistry.clearAll();
+  });
+
+  it('会话 High → wire HIGH；不读 settings 小写标签', async () => {
+    localStorage.setItem('crish_active_profile_id', 'gemini');
+    localStorage.setItem('crish_active_model_id', 'gpt-4o');
+    await loadLiveCatalog({
+      gemini: {
+        displayName: 'Gemini',
+        baseUrl: 'https://generativelanguage.googleapis.com',
+        protocol: 'google/generate-content',
+        models: [
+          {
+            id: 'gpt-4o',
+            thinking: { Off: 'disabled', High: 'HIGH' },
+          },
+        ],
+      },
+    });
+    setSessionThinkingTitle('sess-a', 'High');
+    expect(resolveSendThinkingFields('sess-a')).toEqual({
+      thinkingTitle: 'High',
+      thinkingWire: 'HIGH',
+    });
+  });
+
+  it('显式 Off → 仍交出字典 value（disabled），不省略', async () => {
+    localStorage.setItem('crish_active_profile_id', 'gemini');
+    localStorage.setItem('crish_active_model_id', 'gpt-4o');
+    await loadLiveCatalog({
+      gemini: {
+        displayName: 'Gemini',
+        baseUrl: 'https://generativelanguage.googleapis.com',
+        protocol: 'google/generate-content',
+        models: [
+          {
+            id: 'gpt-4o',
+            thinking: { Off: 'disabled', High: 'HIGH' },
+          },
+        ],
+      },
+    });
+    setSessionThinkingTitle('sess-a', 'Off');
+    expect(resolveSendThinkingFields('sess-a')).toEqual({
+      thinkingTitle: 'Off',
+      thinkingWire: 'disabled',
+    });
+  });
+
+  it('非思考模型 → 省略，不伪造 Off', async () => {
+    localStorage.setItem('crish_active_profile_id', 'p1');
+    localStorage.setItem('crish_active_model_id', 'plain');
+    await loadLiveCatalog({
+      p1: {
+        displayName: 'P1',
+        baseUrl: 'https://example.invalid/v1',
+        protocol: 'openai/chat',
+        models: [{ id: 'plain' }],
+      },
+    });
+    setSessionThinkingTitle('sess-a', 'High');
+    expect(resolveSendThinkingFields('sess-a')).toEqual({});
   });
 });
 

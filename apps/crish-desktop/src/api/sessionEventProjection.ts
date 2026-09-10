@@ -244,19 +244,12 @@ export function projectEventsToMessages(events: unknown[]): {
             a.text = st.text;
           }
           turnTextByMessage.set(a.id, st);
-          // 合并正文，绝不抹掉已有 tool_call 块
+          // 合并正文，绝不抹掉已有 tool_call / thought 块
           if (!a.blocks) a.blocks = [];
-          const hasTools = a.blocks.some((b) => b.type === 'tool_call');
-          if (!hasTools) {
-            a.blocks = [{ type: 'text', content: text }];
-          } else {
-            // 保留 tool 块；把全文挂到末尾 text 段（或新建）
-            const last = a.blocks[a.blocks.length - 1];
-            if (last?.type === 'text') last.content = text;
-            else a.blocks.push({ type: 'text', content: text });
-            // 若全文应覆盖各 text 段，至少保证 msg.text 正确
-            a.streamTextOffset = text.length;
-          }
+          const last = a.blocks[a.blocks.length - 1];
+          if (last?.type === 'text') last.content = text;
+          else a.blocks.push({ type: 'text', content: text });
+          a.streamTextOffset = text.length;
         }
       }
       continue;
@@ -268,18 +261,28 @@ export function projectEventsToMessages(events: unknown[]): {
       const t = blockText(b);
       if (!t) continue;
       const a = ensureAssistant(ts);
+      const rawTurn =
+        'turnIndex' in event
+          ? (event as { turnIndex?: unknown }).turnIndex
+          : undefined;
+      const turn = typeof rawTurn === 'number' ? rawTurn : 0;
       if (b.type === 'thought') {
         a.thinking = (a.thinking || '') + t;
-        // 同步维护 blocks 中的思考块（支持多轮思考卡片复现）
         if (!a.blocks) a.blocks = [];
-        const thoughtKey = `thought-turn-0`;
+        const thoughtKey = `thought-turn-${turn}`;
         const existingIdx = a.blocks.findIndex(
           (bl) => bl.type === 'thought' && bl.id === thoughtKey
         );
         if (existingIdx >= 0) {
-          a.blocks[existingIdx]!.content = a.thinking;
+          a.blocks[existingIdx]!.content =
+            (a.blocks[existingIdx]!.content || '') + t;
         } else {
-          a.blocks.push({ type: 'thought', id: thoughtKey, content: a.thinking, turnIndex: 0 });
+          a.blocks.push({
+            type: 'thought',
+            id: thoughtKey,
+            content: t,
+            turnIndex: turn,
+          });
         }
       } else {
         a.text = (a.text || '') + t;

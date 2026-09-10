@@ -21,7 +21,7 @@ import type {
   IndexedModelEntry,
   ModelsCatalogState,
 } from './modelsCatalogTypes';
-import { readModelsYamlIpc, writeModelsYamlIpc, setupModelsYamlHotReloadListener } from './modelsCatalogIpc';
+import { readModelsYamlIpc, writeModelsYamlIpc } from './modelsCatalogIpc';
 import { applyIncrementalProbe, type IncrementalProbeResult } from './probeIncremental';
 import {
   addProvider,
@@ -91,7 +91,45 @@ setCatalogStateAccessor(() => state);
 
 const listeners = new Set<StoreListener>();
 let inflightLoadPromise: Promise<boolean> | null = null;
-let hotReloadCleanup: (() => void) | null = null;
+
+const WRITE_BEFORE_LOAD_ERROR = '模型目录尚未成功加载，拒绝写盘以免覆盖用户文件';
+
+/** 读 IPC 成功载荷：只认 providers 对象。data.tree 无论有没有都不得当成功源。 */
+interface ModelsYamlReadPayload {
+  path?: string;
+  providers?: unknown;
+}
+
+function isProvidersObject(value: unknown): value is Record<string, ProviderSpec> {
+  return value != null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function treeFromReadPayload(data: ModelsYamlReadPayload): ModelsYamlTree | null {
+  if (isProvidersObject(data.providers)) {
+    return { version: 2, providers: data.providers };
+  }
+  return null;
+}
+
+function refuseWriteIfNotLoaded(): { ok: false; error: string } | null {
+  if (state.loaded !== true) {
+    return { ok: false, error: WRITE_BEFORE_LOAD_ERROR };
+  }
+  return null;
+}
+
+function applyLoadFailure(kind: ModelsCatalogError['kind'], message: string): false {
+  // 失败不得用空 providers 覆盖上一份成功快照；显式把 loaded 打回 false
+  state = {
+    ...state,
+    loaded: false,
+    version: state.version + 1,
+    lastError: { kind, message },
+  };
+  notify();
+  emitUiEvent('models-catalog-changed', undefined);
+  return false;
+}
 
 function buildIndexes(tree: ModelsYamlTree): {
   providerMap: Map<string, ProviderSpec>;
@@ -159,10 +197,6 @@ export const modelsCatalogStore = {
     };
     listeners.clear();
     inflightLoadPromise = null;
-    if (hotReloadCleanup) {
-      hotReloadCleanup();
-      hotReloadCleanup = null;
-    }
   },
 
   async ensureLoaded(force = false): Promise<boolean> {
@@ -172,33 +206,23 @@ export const modelsCatalogStore = {
     inflightLoadPromise = (async () => {
       const result = await readModelsYamlIpc();
       if (!result.ok) {
-        state = {
-          ...state,
-          tree: { version: 2, providers: {} },
-          providerMap: new Map(),
-          modelIndex: new Map(),
-          globalModelIndex: new Map(),
-          version: state.version + 1,
-          lastError: {
-            kind: result.kind === 'PARSE_ERROR' ? 'PARSE_FAILURE' : 'IPC_DISCONNECTED',
-            message: result.error,
-          },
-        };
-        notify();
-        emitUiEvent('models-catalog-changed', undefined);
-        return false;
+        const kind =
+          result.kind === 'PARSE_ERROR' ? 'PARSE_FAILURE' : 'IPC_DISCONNECTED';
+        return applyLoadFailure(kind, result.error);
       }
 
-      const rawTree = result.data.tree || { version: 2 as const, providers: {} };
-      const normalizedTree: ModelsYamlTree = {
-        version: 2,
-        providers: rawTree.providers || {},
-      };
+      const loadedTree = treeFromReadPayload(result.data as ModelsYamlReadPayload);
+      if (!loadedTree) {
+        return applyLoadFailure(
+          'IPC_DISCONNECTED',
+          '读 IPC 未返回 providers 对象（协议漂移，拒绝空树冒充已加载）'
+        );
+      }
 
-      const { providerMap, modelIndex, globalModelIndex } = buildIndexes(normalizedTree);
+      const { providerMap, modelIndex, globalModelIndex } = buildIndexes(loadedTree);
 
       state = {
-        tree: normalizedTree,
+        tree: loadedTree,
         providerMap,
         modelIndex,
         globalModelIndex,
@@ -207,12 +231,6 @@ export const modelsCatalogStore = {
         filePath: result.data.path || state.filePath,
         lastError: null,
       };
-
-      if (!hotReloadCleanup) {
-        hotReloadCleanup = setupModelsYamlHotReloadListener(async () => {
-          await modelsCatalogStore.ensureLoaded(true);
-        });
-      }
 
       notify();
       emitUiEvent('models-catalog-changed', undefined);
@@ -227,6 +245,9 @@ export const modelsCatalogStore = {
   },
 
   async updateTree(newTree: ModelsYamlTree): Promise<{ ok: boolean; error?: string }> {
+    const refused = refuseWriteIfNotLoaded();
+    if (refused) return refused;
+
     const prevSnapshot = state;
     const { providerMap, modelIndex, globalModelIndex } = buildIndexes(newTree);
 
@@ -259,26 +280,38 @@ export const modelsCatalogStore = {
   },
 
   async addProvider(providerId: string, provider: ProviderSpec): Promise<{ ok: boolean; error?: string }> {
+    const refused = refuseWriteIfNotLoaded();
+    if (refused) return refused;
     return this.updateTree(addProvider(state.tree, providerId, provider));
   },
 
   async updateProvider(providerId: string, patch: Partial<ProviderSpec>): Promise<{ ok: boolean; error?: string }> {
+    const refused = refuseWriteIfNotLoaded();
+    if (refused) return refused;
     return this.updateTree(updateProvider(state.tree, providerId, patch));
   },
 
   async removeProvider(providerId: string): Promise<{ ok: boolean; error?: string }> {
+    const refused = refuseWriteIfNotLoaded();
+    if (refused) return refused;
     return this.updateTree(removeProvider(state.tree, providerId));
   },
 
   async addModel(providerId: string, modelInput: Partial<ModelSpec> & { id: string }): Promise<{ ok: boolean; error?: string }> {
+    const refused = refuseWriteIfNotLoaded();
+    if (refused) return refused;
     return this.updateTree(addModel(state.tree, providerId, modelInput));
   },
 
   async updateModel(providerId: string, modelId: string, patch: Partial<ModelSpec>): Promise<{ ok: boolean; error?: string }> {
+    const refused = refuseWriteIfNotLoaded();
+    if (refused) return refused;
     return this.updateTree(updateModel(state.tree, providerId, modelId, patch));
   },
 
   async removeModel(providerId: string, modelId: string): Promise<{ ok: boolean; error?: string }> {
+    const refused = refuseWriteIfNotLoaded();
+    if (refused) return refused;
     return this.updateTree(removeModel(state.tree, providerId, modelId));
   },
 

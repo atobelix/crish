@@ -83,12 +83,10 @@ export function pureIncrementalProbe(
       };
     }
 
-    // 预填库未收录的模型：生成安全基础模板（不支持思考推理，thinking 字段缺省）
+    // 预填库未收录：只写 id，不发明 128000 / 8192。thinking 缺省 = 非思考。
     return {
       id,
       displayName: id,
-      contextWindow: 128_000,
-      maxOutputTokens: 8_192,
       enabled: true,
     };
   });

@@ -57,6 +57,7 @@ export {
   clearActiveProfileId,
   createCustomProfile,
   flattenModelChoices,
+  profileHasConfiguredKey,
   getActiveModelId,
   getActiveProfile,
   getActiveProfileId,

@@ -84,10 +84,16 @@ export type StreamRequestOptions = {
    * 经 run-task 下发；message-end 带回后 hydrate rekey 与 stream final 合并。
    */
   assistantClientMessageId?: string;
+  /** 发送瞬间选中的思考档位 yaml key（Off/Low/High…）。S4 读此字段。 */
+  thinkingTitle?: string;
+  /** 发送瞬间按 live 字典解析出的 wire（yaml value；禁止 toLowerCase 标签）。 */
+  thinkingWire?: string;
+  /** 上下文状态切换感知快照文本（发送瞬间注入时间线） */
+  contextState?: string;
 };
 
 export interface StreamCallbacks {
-  onThought: (thought: string) => void;
+  onThought: (thought: string, turnIndex?: number) => void;
   onToolStart: (
     toolId: string,
     name: string,

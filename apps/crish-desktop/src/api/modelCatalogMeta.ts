@@ -187,6 +187,9 @@ function upsertModelMeta(
       | 'capabilities'
       | 'defaultThinkingLevel'
       | 'protocol'
+      | 'modalities'
+      | 'thinking'
+      | 'pricing'
     >
   >
 ): ModelMeta {
@@ -300,9 +303,55 @@ export function setModelThinkingLevel(
 export function setModelProtocol(
   profileId: string,
   model: string,
-  protocol: 'openai/chat' | 'openai/responses' | 'anthropic/messages' | undefined
+  protocol:
+    | 'openai/chat'
+    | 'openai/responses'
+    | 'anthropic/messages'
+    | 'google/interactions'
+    | undefined
 ): ModelMeta {
   return upsertModelMeta(profileId, model, { protocol });
+}
+
+/**
+ * 设置多模态能力矩阵
+ */
+export function setModelModalities(
+  profileId: string,
+  model: string,
+  modalities: { input: string[]; output: string[] } | undefined
+): ModelMeta {
+  return upsertModelMeta(profileId, model, { modalities });
+}
+
+/**
+ * 设置拍平思考档位映射表
+ */
+export function setModelThinking(
+  profileId: string,
+  model: string,
+  thinking: Record<string, string> | undefined
+): ModelMeta {
+  return upsertModelMeta(profileId, model, { thinking });
+}
+
+/**
+ * 设置四维单价计量规格
+ */
+export function setModelPricing(
+  profileId: string,
+  model: string,
+  pricing:
+    | {
+        currency: 'USD' | 'CNY';
+        input?: number | undefined;
+        output?: number | undefined;
+        cacheRead?: number | undefined;
+        cacheWrite?: number | undefined;
+      }
+    | undefined
+): ModelMeta {
+  return upsertModelMeta(profileId, model, { pricing });
 }
 
 /** 展示名：优先 displayName，否则 model id */

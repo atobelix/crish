@@ -4,11 +4,11 @@
  * 验证反过度设计与用户微调资产 100% 绝对保护铁律
  */
 
-import { beforeEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { pureIncrementalProbe, applyIncrementalProbe } from './probeIncremental';
 import { modelsCatalogStore } from './modelsCatalogStore';
 import { mockTauriCommand } from '../test-setup';
-import type { ProviderSpec, ModelsYamlTree } from './modelsCatalogTypes';
+import type { ProviderSpec } from './modelsCatalogTypes';
 
 describe('probeIncremental 纯增量探测套件', () => {
   const sampleProvider: ProviderSpec = {
@@ -79,21 +79,29 @@ describe('probeIncremental 纯增量探测套件', () => {
     // 未知模型回退至安全基线
     const unknownModel = updatedProvider.models[2];
     expect(unknownModel.id).toBe('custom-unknown-1');
-    expect(unknownModel.contextWindow).toBe(128_000);
+    expect(unknownModel.contextWindow).toBeUndefined();
+    expect(unknownModel.maxOutputTokens).toBeUndefined();
     expect(unknownModel.thinking).toBeUndefined();
   });
 
   it('applyIncrementalProbe 正确更新 store 并写盘', async () => {
     modelsCatalogStore.resetForTesting();
-    mockTauriCommand('models_yaml_write', () => ({ success: true, writtenPath: 'test' }));
-
-    const initialTree: ModelsYamlTree = {
-      version: 2,
-      providers: {
-        deepseek: { ...sampleProvider, models: [...sampleProvider.models] },
-      },
+    const providers = {
+      deepseek: { ...sampleProvider, models: [...sampleProvider.models] },
     };
-    await modelsCatalogStore.updateTree(initialTree);
+    mockTauriCommand('workbench_read_models_yaml', () => ({
+      path: 'C:\\Users\\tester\\.conex\\models.yaml',
+      content: '',
+      template: '',
+      seeded: false,
+      parseError: null,
+      providers,
+    }));
+    mockTauriCommand('workbench_save_models_yaml', () => ({
+      path: 'C:\\Users\\tester\\.conex\\models.yaml',
+    }));
+    const loaded = await modelsCatalogStore.ensureLoaded(true);
+    expect(loaded).toBe(true);
 
     const res = await applyIncrementalProbe('deepseek', [
       'deepseek-v4-flash',

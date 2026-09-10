@@ -10,7 +10,8 @@ import { classifyErrorDomain, domainUserMessage, logInternalError, networkUserMe
 import type { ErrorDomain } from '../userFacingErrors';
 import type { Settings } from '../clientApi';
 import { getActiveModelId, getActiveProfileId } from '../providerProfiles';
-import { getModelMeta } from '../modelCatalog';
+import { getLiveModel, resolveThinkingHandoff } from '../modelsCatalogLive';
+import { getSessionThinkingTitle } from '../SessionRuntimeRegistry';
 
 export type ReadinessState = 'ok' | 'blocked_with_action' | 'retryable_wait';
 
@@ -63,24 +64,57 @@ export function ensureReadinessSync(): void {
   }
 }
 
+/**
+ * 发送路径上下文窗口：只读 live `contextWindow`。
+ * 缺省 / 非正数 / 未加载 → undefined。禁止 128_000 假上限，不读 settings / LS meta。
+ */
 export function resolveContextWindow(
-  sets?: Settings | null
+  _sets?: Settings | null
 ): number | undefined {
-  const explicit = (sets as { contextWindow?: unknown } | null)?.contextWindow;
-  if (typeof explicit === 'number' && Number.isFinite(explicit) && explicit > 0)
-    return Math.floor(explicit);
   try {
-    const profileId = getActiveProfileId(),
-      model = getActiveModelId();
-    if (profileId && model) {
-      const meta = getModelMeta(profileId, model);
-      if (typeof meta.contextLength === 'number' && meta.contextLength > 0)
-        return meta.contextLength;
+    const profileId = getActiveProfileId();
+    const model = getActiveModelId();
+    if (!profileId || !model) return undefined;
+    const window = getLiveModel(profileId, model)?.contextWindow;
+    if (typeof window === 'number' && Number.isFinite(window) && window > 0) {
+      return Math.floor(window);
     }
   } catch {
-    /* swallow-ok: 目录读取失败不发窗口 */
+    /* swallow-ok: live 读取失败不发窗口 */
   }
   return undefined;
+}
+
+/**
+ * 发送瞬间思考档位：会话 Title（yaml key）对 live 字典解析为 wire。
+ * 不支持思考 → 空对象（省略，不伪造 Off）。settings.defaultThinkingLevel 不是规格。
+ */
+export function resolveSendThinkingFields(
+  sessionId?: string | null,
+  selectedTitleOverride?: string | null
+): {
+  thinkingTitle?: string;
+  thinkingWire?: string;
+} {
+  try {
+    const providerId = getActiveProfileId();
+    const modelId = getActiveModelId();
+    if (!providerId || !modelId) return {};
+    const selectedTitle =
+      typeof selectedTitleOverride === 'string' && selectedTitleOverride.trim()
+        ? selectedTitleOverride.trim()
+        : sessionId
+          ? getSessionThinkingTitle(sessionId)
+          : null;
+    const handoff = resolveThinkingHandoff(providerId, modelId, selectedTitle);
+    if (!handoff.supported) return {};
+    return {
+      thinkingTitle: handoff.selectedTitle,
+      thinkingWire: handoff.selectedWire,
+    };
+  } catch {
+    return {};
+  }
 }
 
 /**

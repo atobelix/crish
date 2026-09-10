@@ -80,8 +80,28 @@ export function toolRowTone(
   return 'idle';
 }
 
+export function isReadFileToolName(name: string): boolean {
+  const n = (name || '').toLowerCase().replace(/[\s-]+/g, '_');
+  return (
+    n === 'read_file' ||
+    n === 'view_file' ||
+    n === 'open_file' ||
+    n === 'cat' ||
+    n === 'read_text' ||
+    n === 'read_file_content' ||
+    n === 'workbench_read_file_content' ||
+    (n.includes('read') && !n.includes('url') && !n.includes('resource') && !n.includes('log')) ||
+    (n.includes('view') && !n.includes('preview') && !n.includes('diff'))
+  );
+}
+
 export function toolHasExpandableBody(tc: MessageToolCall): boolean {
   if (tc.status === 'pending_approval') return false;
+  // 文件读取类工具正常情况下无需在聊天流内展开大块文件源码，
+  // 用户点击路径超链接直接在右侧边栏文件管理器/查看器中检视
+  if (isReadFileToolName(tc.name || '') && tc.status !== 'error') {
+    return false;
+  }
   if (tc.status === 'running') {
     return Boolean(
       (tc.arguments && tc.arguments.trim().length > 2) ||

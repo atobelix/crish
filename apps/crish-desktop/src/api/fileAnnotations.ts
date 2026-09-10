@@ -177,34 +177,52 @@ export function updatePendingFileAnnotationComment(
   if (!sid) return false;
   const list = pendingBySession.get(sid);
   if (list) {
-    const item = list.find((a) => a.id === id);
-    if (item) {
-      item.text = newComment.trim();
+    const itemIdx = list.findIndex((a) => a.id === id);
+    if (itemIdx >= 0) {
+      const item = list[itemIdx]!;
+      pendingBySession.set(
+        sid,
+        list.map((a, i) =>
+          i === itemIdx ? { ...item, text: newComment.trim() } : a
+        )
+      );
     }
   }
 
   const runtime = sessionRuntimeRegistry.get(sid);
   const existing = (runtime.attachments ?? []) as ChatAttachment[];
-  const target = existing.find((att) => att.annotation?.id === id || att.id === id);
-  if (target && target.annotation) {
-    target.annotation.comment = newComment;
-    target.text = `【代码选区批注: ${target.path || target.name}】\n选中内容:\n${target.annotation.selectedText}\n批注:\n${newComment}`;
-    sessionRuntimeRegistry.save(sid, {
-      attachments: [...existing] as Attachment[],
-    });
-    try {
-      window.dispatchEvent(
-        new CustomEvent('crish-attachments-changed', {
-          detail: { sessionId: sid, attachment: target },
-        })
-      );
-    } catch {
-      /* swallow-ok */
-    }
-    notifyChanged();
-    return true;
+  const idx = existing.findIndex((att) => att.annotation?.id === id || att.id === id);
+  if (idx < 0) return false;
+  const target = existing[idx]!;
+  if (!target.annotation) return false;
+  const trimmed = newComment.trim();
+  const nextAttachment: ChatAttachment = {
+    ...target,
+    text: `【代码选区批注: ${target.path || target.name}】
+选中内容:
+${target.annotation.selectedText}
+批注:
+${trimmed}`,
+    annotation: {
+      ...target.annotation,
+      comment: trimmed,
+    },
+  };
+  const nextAtts = existing.map((att, i) => (i === idx ? nextAttachment : att));
+  sessionRuntimeRegistry.save(sid, {
+    attachments: nextAtts as Attachment[],
+  });
+  try {
+    window.dispatchEvent(
+      new CustomEvent('crish-attachments-changed', {
+        detail: { sessionId: sid, attachment: nextAttachment },
+      })
+    );
+  } catch {
+    /* swallow-ok */
   }
-  return false;
+  notifyChanged();
+  return true;
 }
 
 export function countPendingFileAnnotations(sessionId?: string | null): number {

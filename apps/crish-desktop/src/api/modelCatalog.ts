@@ -53,6 +53,9 @@ export {
   setModelCapability,
   setModelThinkingLevel,
   setModelProtocol,
+  setModelModalities,
+  setModelThinking,
+  setModelPricing,
   formatModelDisplayName,
 } from './modelCatalogMeta';
 

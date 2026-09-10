@@ -27,6 +27,7 @@ export {
   applyInline,
   visualIndent,
   GFM_EMOJI_MAP,
+  GFM_EMOJI_SHORTCODES_DEFAULT,
   translateGfmEmoji,
 } from './markdownInlineFormat';
 export {

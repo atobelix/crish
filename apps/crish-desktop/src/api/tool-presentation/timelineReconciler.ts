@@ -80,7 +80,7 @@ export function sanitizeTimelineTurnIndex(raw: unknown): number {
  * 核心设计：
  * 1. 以 `${cleanTurn}:${type}:${id}` 为三元组槽位；
  * 2. 更新对应槽位内容，并 100% 保留已有未被覆盖的历史 thought 与 tool_call 块（orphan blocks 永不丢失）；
- * 3. 严格按流式到达的插入顺序输出——禁止任何 type 排序；真实时间线顺序即为唯一权威。
+ * 3. 严格按流式到达的插入顺序输出——禁止任何 type/turn 强制重排，真实时间线顺序即为唯一权威。
  */
 export function reconcileAssistantMessageBlocks(
   existingBlocks: MessageTimelineBlock[] | undefined,
@@ -98,7 +98,7 @@ export function reconcileAssistantMessageBlocks(
     }
   }
 
-  // 2. 融合 incoming blocks（严格保持 incoming 插入顺序，即流式到达顺序）
+  // 2. 融合 incoming blocks
   if (incomingBlocks && incomingBlocks.length > 0) {
     for (const b of incomingBlocks) {
       const cleanTurn = sanitizeTimelineTurnIndex(b.turnIndex);
@@ -112,7 +112,7 @@ export function reconcileAssistantMessageBlocks(
     }
   }
 
-  // 3. 追加未被覆盖的历史工具与思考块（orphan 块追加到末尾，保持相对顺序）
+  // 3. 追加未被覆盖的历史工具与思考块（100% 永久保全历史 orphan 思考块与工具块）
   for (const [, orphan] of existingMap) {
     if (orphan.type === 'tool_call' || orphan.type === 'thought') {
       result.push(orphan);
@@ -149,17 +149,11 @@ export function normalizeAssistantTimeline(
           content: tt.content,
           turnIndex: cleanTurn,
           durationMs: tt.durationMs,
-          id: tt.id,
+          id: tt.id || `thought-turn-${cleanTurn}`,
         };
-        // 严格保持自然因果时序：思考必然发生在同轮次正文或工具之前
-        const insertIdx = blocks.findIndex((b) => {
-          const bTurn = sanitizeTimelineTurnIndex(b.turnIndex);
-          return (
-            bTurn > cleanTurn || (bTurn === cleanTurn && b.type !== 'thought')
-          );
-        });
-        if (insertIdx >= 0) {
-          blocks.splice(insertIdx, 0, thoughtBlock);
+        // 严格保持自然因果时序：思考必然在工具之前发生
+        if (cleanTurn === 0) {
+          blocks.unshift(thoughtBlock);
         } else {
           blocks.push(thoughtBlock);
         }
@@ -176,13 +170,9 @@ export function normalizeAssistantTimeline(
       durationMs: msg.thinkingTime ? msg.thinkingTime * 1000 : undefined,
       id: 'thought-legacy',
     };
-    // 关键：思考必然在首个正文块之前发生，绝不追加到正文之后
-    const firstTextIdx = blocks.findIndex((b) => b.type === 'text');
-    if (firstTextIdx >= 0) {
-      blocks.splice(firstTextIdx, 0, thoughtBlock);
-    } else {
-      blocks.unshift(thoughtBlock);
-    }
+    // 关键：若此前完全没有 thought 块，思考必然是在整条助手消息最开始发生的，
+    // 严格置于首位，绝不追加到正文之后或插入到已有工具之后
+    blocks.unshift(thoughtBlock);
   }
 
   const alignedBlocks = alignToolCallBlocks(blocks, tools);

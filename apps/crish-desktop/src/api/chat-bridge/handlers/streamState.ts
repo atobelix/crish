@@ -48,10 +48,18 @@ export interface StreamState extends StreamRunLifecycle {
    */
   turnStreamedTexts?: Map<number, string>;
   /**
+   * 每轮流式增量思考账本（按 turnIndex 索引）。
+   */
+  turnStreamedThoughts?: Map<number, string>;
+  /**
    * 每轮 message-end 权威终态文本快照账本（按 turnIndex 索引）。
    * @deprecated 线性流重构中逐步废弃，单轨化流式推进，由单增量账本替代。
    */
   turnAuthoritativeTexts?: Map<number, string>;
+  /**
+   * 每轮 message-end 权威终态思考快照账本（按 turnIndex 索引）。
+   */
+  turnAuthoritativeThoughts?: Map<number, string>;
   /**
    * 每轮 message-end 的权威终态文本快照（按 turnIndex 索引）。
    * 惰性初始化（onMessageEnd 首轮创建）；同 turn 幂等覆盖、跨 turn 追加。

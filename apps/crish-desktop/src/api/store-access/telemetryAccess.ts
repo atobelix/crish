@@ -96,11 +96,18 @@ export function syncTelemetryData(data: TelemetrySyncPayload): void {
 /**
  * tokenUsage 增量（并发合并输入）。
  * cacheRead/cacheWrite/savedCost 为 4D 可选字段：undefined = 本次不涉及。
+ * 费用（plans/05 T5.4）：引擎三态增量——costStatus/currency/costMicros/formattedCost。
  */
 export type TokenUsageDelta = {
   input?: number;
   output?: number;
+  /** 遗留 JS 浮点（δ 后不再写入；S7 删除） */
   cost?: number;
+  /** 引擎三态（unpriced 可省略 = 本次不写费用） */
+  costStatus?: 'unpriced' | 'free' | 'priced';
+  currency?: 'CNY' | 'USD';
+  costMicros?: number;
+  formattedCost?: string;
   cacheRead?: number;
   cacheWrite?: number;
   savedCost?: number;
@@ -114,16 +121,21 @@ function nonNegFinite(v: number | undefined): number {
 /**
  * 纯函数：将 delta 累加到 cur（保留 inputMax/outputMax 与未涉及的 4D 字段）。
  * 语义与 applyUsageDelta 的「next - cur」差值一致，但直接以最新状态为基底。
+ * 费用微元只对同一币种 saturating 累加；混币种 → 不累加（展示最近 formatted）。
  */
 export function mergeTokenUsageDelta(
   cur: TokenUsageState,
   delta: TokenUsageDelta
 ): TokenUsageState {
-  return {
+  const next: TokenUsageState = {
     input: cur.input + nonNegFinite(delta.input),
     inputMax: cur.inputMax,
     output: cur.output + nonNegFinite(delta.output),
     outputMax: cur.outputMax,
+    costStatus: delta.costStatus ?? cur.costStatus,
+    currency: delta.currency ?? cur.currency,
+    costMicros: cur.costMicros,
+    formattedCost: delta.formattedCost ?? cur.formattedCost,
     cost: cur.cost + nonNegFinite(delta.cost),
     ...(delta.cacheRead !== undefined && {
       cacheRead: (cur.cacheRead ?? 0) + nonNegFinite(delta.cacheRead),
@@ -135,6 +147,15 @@ export function mergeTokenUsageDelta(
       savedCost: (cur.savedCost ?? 0) + nonNegFinite(delta.savedCost),
     }),
   };
+  // 有价微元累计：仅同币种累加（混币种保留原累计，展示最近 formatted）
+  if (delta.costStatus === 'priced' && delta.costMicros !== undefined) {
+    if (cur.costStatus === 'priced' && cur.currency === delta.currency) {
+      next.costMicros = (cur.costMicros ?? 0) + delta.costMicros;
+    } else {
+      next.costMicros = delta.costMicros;
+    }
+  }
+  return next;
 }
 
 /**

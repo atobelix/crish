@@ -89,7 +89,7 @@ describe('modelCatalog', () => {
   });
 
   it('guessContextLength uses known ids but does not invent provider defaults', () => {
-    expect(guessContextLength('deepseek-v4-flash')).toBe(1_000_000);
+    expect(guessContextLength('deepseek-v4-flash')).toBe(1_048_576);
     expect(guessContextLength('gpt-5.6')).toBe(1_050_000);
     // 已退役的旧 alias 不再有映射（deepseek-chat 系 v3 时代 id）
     expect(guessContextLength('deepseek-chat')).toBeUndefined();
@@ -235,7 +235,7 @@ describe('modelCatalog', () => {
   it('getModelMeta defaults enabled true with optional context', () => {
     const meta = getModelMeta('any', 'deepseek-v4-flash');
     expect(meta.enabled).toBe(true);
-    expect(meta.contextLength).toBe(1_000_000);
+    expect(meta.contextLength).toBe(1_048_576);
     expect(meta.profileId).toBe('any');
   });
 
