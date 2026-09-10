@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { WorkflowConfirmCard } from './WorkflowConfirmCard';
+import { __resetWorkflowConfirmSignaturesForTests } from '../../api/workflow-api/workflowConfirmSignatures';
 import type { WorkflowConfirmPayload } from '../../api/workflow-api/workflowConfirm';
 
 vi.mock('../../services/toast/ToastContext', () => ({
@@ -19,17 +20,25 @@ vi.mock('../../api/draft/sessionDraftManager', () => ({
   },
 }));
 
-vi.mock('../../store/sessionStore', () => ({
-  useSessionStore: {
-    getState: () => ({ activeSessionId: 'test-session-1' }),
-  },
-}));
+vi.mock('../../store/sessionStore', () => {
+  const state = { activeSessionId: 'test-session-1' };
+  const useSessionStore = Object.assign(
+    (selector?: (s: typeof state) => unknown) =>
+      typeof selector === 'function' ? selector(state) : state,
+    { getState: () => state }
+  );
+  return { useSessionStore };
+});
 
 vi.mock('../../api/workflow-api/workflowConfirm', () => ({
   registerWorkflowFromGrillMe: vi.fn().mockResolvedValue({ ok: true }),
 }));
 
 describe('WorkflowConfirmCard', () => {
+  beforeEach(() => {
+    __resetWorkflowConfirmSignaturesForTests();
+  });
+
   const payload: WorkflowConfirmPayload = {
     name: '每日巡检',
     scheduleType: 'daily',

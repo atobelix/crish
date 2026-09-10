@@ -82,7 +82,6 @@ export function AgentMessageRow({
         },
       }}
       onTogglePin={() => {}}
-      onRegenerate={() => {}}
       onBranch={() => {}}
       onOpenDiff={onOpenDiff}
       onOpenDiffPanel={() => {}}

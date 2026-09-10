@@ -16,6 +16,13 @@ import {
   registerWorkflowFromGrillMe,
   type WorkflowConfirmPayload,
 } from '../../api/workflow-api/workflowConfirm';
+import {
+  clearWorkflowConfirmSignaturesForSession,
+  getConfirmedBucket,
+  getPayloadSignature,
+} from '../../api/workflow-api/workflowConfirmSignatures';
+
+export { clearWorkflowConfirmSignaturesForSession };
 
 export interface WorkflowConfirmCardProps {
   payload: WorkflowConfirmPayload;
@@ -35,18 +42,12 @@ function scheduleSummary(payload: WorkflowConfirmPayload): string {
   }
 }
 
-// 跨组件挂载持久化已确认载荷集合，防虚拟列表卸载后重复创建
-const confirmedPayloadSignatures = new Set<string>();
-
-function getPayloadSignature(payload: WorkflowConfirmPayload): string {
-  return `${payload.name}::${payload.prompt}::${payload.scheduleType}::${payload.cronExpression || payload.dailyTime || payload.intervalMinutes || ''}`;
-}
-
 export const WorkflowConfirmCard: React.FC<WorkflowConfirmCardProps> =
   React.memo(function WorkflowConfirmCard({ payload }) {
     const toast = useToast();
+    const activeSessionId = useSessionStore((s) => s.activeSessionId);
     const sig = useMemo(() => getPayloadSignature(payload), [payload]);
-    const isAlreadyConfirmed = confirmedPayloadSignatures.has(sig);
+    const isAlreadyConfirmed = getConfirmedBucket(activeSessionId).has(sig);
 
     const [busy, setBusy] = useState(false);
     const [result, setResult] = useState<'idle' | 'ok' | 'error'>(
@@ -62,7 +63,7 @@ export const WorkflowConfirmCard: React.FC<WorkflowConfirmCardProps> =
       try {
         const res = await registerWorkflowFromGrillMe(payload);
         if (res.ok) {
-          confirmedPayloadSignatures.add(sig);
+          getConfirmedBucket(activeSessionId).add(sig);
           setResult('ok');
           toast.success('定时任务已创建并激活');
         } else {
@@ -79,7 +80,7 @@ export const WorkflowConfirmCard: React.FC<WorkflowConfirmCardProps> =
       } finally {
         setBusy(false);
       }
-    }, [busy, payload, toast, sig, result]);
+    }, [busy, payload, toast, sig, result, activeSessionId]);
 
     /** 修改配置：把载荷回填到输入框并引导继续对齐（不落盘） */
     const handleModify = useCallback(() => {
