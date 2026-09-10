@@ -144,12 +144,18 @@ export function useChatStream(
   const wsId = options.wsId;
   const setActiveDiffSource = useTerminalStore((s) => s.setActiveDiffSource);
   const upsertSessionAgent = useSessionStore((s) => s.upsertSessionAgent);
+  const activeSessionId = useSessionStore((s) => s.activeSessionId);
 
   const [runNotice, setRunNotice] = useState<RunNotice | null>(null);
   const runNoticeControllerRef = useRef<RunNoticeController | null>(null);
   if (runNoticeControllerRef.current == null) {
     runNoticeControllerRef.current = createRunNoticeController(setRunNotice);
   }
+
+  // 会话切换时清理运行提示：按会话显示，切换其他对话及切回均不重显
+  useEffect(() => {
+    runNoticeControllerRef.current?.dismiss();
+  }, [activeSessionId]);
 
   const pushRunNotice = useCallback((notice: RunNotice, ttlMs?: number) => {
     runNoticeControllerRef.current?.push(notice, ttlMs);

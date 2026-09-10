@@ -23,7 +23,6 @@ import {
   sanitizeToolDisplayOutput,
 } from '../../api/toolFeedback';
 import { publishToolDiffsLazy } from './helpers';
-import { useEphemeralChatStore } from '../../store/ephemeralChatStore';
 import {
   buildMessageIndex,
   resolveToolIdentity,
@@ -342,24 +341,7 @@ export function handleRunError(opts: {
       ? (kind as (typeof validKinds)[number])
       : 'generic';
 
-  // 错误统一收敛为消息流底部的瞬态进行时状态（灰色字体、可重试、内存独占）
-  useEphemeralChatStore.getState().setEphemeralStatus(sid, {
-    id: `${kind || 'error'}:${message}`,
-    kind: resolvedKind,
-    message: message || '服务暂时不可用，请检查网络或后端配置',
-    technicalDetail:
-      typeof detail === 'string'
-        ? detail
-        : detail
-          ? JSON.stringify(detail)
-          : undefined,
-    retryable: true,
-    timestamp: Date.now(),
-    retryContext: {
-      userMsgId: refs.streamManager?.get(sid)?.userMsgId || lastUserMsg?.id,
-      promptText: lastUserMsg?.text,
-    },
-  });
+
   flushStreamBatchers();
   // R-11（08-detail T5.4）：error 收口补清理——先预算刷残余帧
   //（避免残余文本被 gen 守卫丢弃），再按 complete 同语义删 gen

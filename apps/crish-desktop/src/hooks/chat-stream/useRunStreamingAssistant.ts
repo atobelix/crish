@@ -205,12 +205,15 @@ export function useRunStreamingAssistant(
               .session.getState()
               .setEngineLastRunId(sid, runId);
           },
-          onThought: (thought) => {
+          onThought: (thought, turnIndex = 0) => {
             if (!assertLive()) return;
             thinkingBatcherRef.current?.push(
               streamBatchKey(sid, assistantMsgId),
               thought
             );
+            getCompositionRoot()
+              .session.getState()
+              .updateMessageThinking(sid, assistantMsgId, thought, turnIndex);
           },
           onToolStart: (toolId, name, args, explanation) => {
             if (!assertLive()) return;

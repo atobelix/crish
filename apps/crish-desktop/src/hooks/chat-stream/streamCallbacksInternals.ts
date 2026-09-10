@@ -13,7 +13,8 @@ import type {
   MessageToolApprovalMeta,
   MessageToolCall,
 } from '../../store/types';
-import { getStreamTool } from '../../store/streamingStore';
+import { getStreamTool, getStreamThinking } from '../../store/streamingStore';
+import { getCompositionRoot } from '../../app/compositionRoot';
 import { buildGoalRunTaskFields } from '../../api/goalModeController';
 import {
   streamToolBatchKey,
@@ -209,6 +210,14 @@ export function createToolPatchQueue(opts: {
     status: 'running' | 'pending_approval',
     approvalMeta?: MessageToolApprovalMeta
   ) => {
+    // 物理因果时序保全：在工具启动前，若存在流式思考，立即提交至 sessionStore，
+    // 确保思考块必然处于该工具块之前，绝不发生事后重排颠倒
+    const currentLiveThinking = getStreamThinking(sid, assistantMsgId);
+    if (currentLiveThinking && currentLiveThinking.trim()) {
+      getCompositionRoot()
+        .session.getState()
+        .updateMessageThinking(sid, assistantMsgId, currentLiveThinking);
+    }
     // Durable text snapshot before tool so blocks/streamTextOffset interleave correctly.
     snapshotStreamTextToSession(sid, assistantMsgId, readStreamedFullText());
     toolNames[toolId] = name;

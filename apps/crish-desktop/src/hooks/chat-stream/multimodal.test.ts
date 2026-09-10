@@ -13,7 +13,8 @@ describe('buildMultimodalFromAttachments', () => {
     const attachments: ChatAttachment[] = [
       {
         name: 'screenshot.png',
-        dataUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+        dataUrl:
+          'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
         mime: 'image/png',
       },
     ];
@@ -72,11 +73,13 @@ describe('buildMultimodalFromAttachments', () => {
     });
   });
 
-  it('非视觉模型优雅降级：不生成 image_url 并以源数据/元数据形式下发', () => {
+  it('非视觉模型：仅脱敏元数据，禁止 dataUrl / 绝对路径进 prompt', () => {
+    const dataUrl =
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
     const attachments: ChatAttachment[] = [
       {
         name: 'diagram.png',
-        dataUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+        dataUrl,
         mime: 'image/png',
         path: 'c:/project/diagram.png',
       },
@@ -85,10 +88,24 @@ describe('buildMultimodalFromAttachments', () => {
     const res = buildMultimodalFromAttachments('请解释流程', attachments, false);
 
     expect(res.streamOptions?.hasImages).toBe(false);
-    expect(res.streamOptions?.content).toHaveLength(2); // text (prompt) + text (image source data)
-    expect(res.streamOptions?.content?.some((c) => c.type === 'image_url')).toBe(false);
-    const imageTextPart = res.streamOptions?.content?.find((c) => c.type === 'text' && c.text.includes('图片源数据附件'));
-    expect(imageTextPart).toBeDefined();
-    expect(res.promptAttachBlock).toContain('图片源数据附件: diagram.png');
+    expect(res.streamOptions?.content).toHaveLength(2);
+    expect(res.streamOptions?.content?.some((c) => c.type === 'image_url')).toBe(
+      false
+    );
+    const joined =
+      JSON.stringify(res.streamOptions?.content) + res.promptAttachBlock;
+    expect(joined).not.toContain(dataUrl);
+    expect(joined).not.toContain('c:/project/diagram.png');
+    expect(res.promptAttachBlock).toContain('图片附件元数据: diagram.png');
+    expect(res.promptAttachBlock).toContain('纯文本非视觉模型');
+  });
+
+  it('通用文件附件不把绝对路径写入 prompt', () => {
+    const attachments: ChatAttachment[] = [
+      { name: 'archive.zip', path: 'D:/secrets/archive.zip' },
+    ];
+    const res = buildMultimodalFromAttachments('', attachments, false);
+    expect(res.promptAttachBlock).toContain('- archive.zip');
+    expect(res.promptAttachBlock).not.toContain('D:/secrets');
   });
 });

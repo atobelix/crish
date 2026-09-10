@@ -3,6 +3,7 @@
  * 负责发送前置校验、本地斜杠命令路由与多模态 Payload 组装（单一职责叶）
  */
 import { checkEngineReadyRealtime } from '../../api/chat-bridge/ConnectionLifecycle';
+import { resolveSendThinkingFields } from '../../api/chat-bridge/readiness';
 import { domainUserMessage } from '../../api/userFacingErrors';
 import { useSessionStore } from '../../store/sessionStore';
 import { navigateToNewDraft } from '../../store/storeAccess';
@@ -36,8 +37,6 @@ import {
 import { buildMultimodalFromAttachments } from './multimodal';
 import { isModelVisionSupported } from '../../api/modelVisionSupport';
 import { getActiveModelId, getActiveProfileId } from '../../api/providerProfiles';
-import { modelsCatalogStore } from '../../api/modelsCatalogStore';
-import { getModelMeta } from '../../api/modelCatalogMeta';
 import { canStreamLocalSession } from './helpers';
 import { getSessionById } from '../../store/sessionStore';
 import { generateMessageId } from '../../utils/generateMessageId';
@@ -49,33 +48,13 @@ import type { ChatContentPart, StreamRequestOptions } from '../../api/chatApi';
 import { toast } from '../../services/toast/ToastContext';
 
 /**
- * 判定指定模型是否支持图像多模态输入（优先读取 modalities.input 契约）
+ * 判定指定模型是否支持图像多模态输入（只信 live modalities.input）
  */
 export function checkModelVisionSupport(
   modelId: string,
   profileId?: string | null
 ): boolean {
-  const rawModel = (modelId || '').trim();
-  if (!rawModel) return false;
-  const normModel = rawModel.toLowerCase();
-  const state = modelsCatalogStore.getState();
-
-  const entry = profileId
-    ? state.modelIndex.get(`${profileId.trim().toLowerCase()}::${normModel}`)
-    : undefined;
-  const input =
-    entry?.model?.modalities?.input ??
-    state.globalModelIndex.get(normModel)?.[0]?.model?.modalities?.input;
-  if (Array.isArray(input)) return input.includes('image');
-
-  if (profileId) {
-    const meta = getModelMeta(profileId, rawModel);
-    if (Array.isArray(meta?.modalities?.input)) {
-      return meta.modalities.input.includes('image');
-    }
-  }
-
-  return isModelVisionSupported(rawModel, profileId);
+  return isModelVisionSupported(modelId, profileId);
 }
 
 export interface PreflightCheckOptions {
@@ -438,6 +417,15 @@ export function assembleChatPayload(opts: AssembleChatPayloadOptions): {
     finalStreamOptions = {
       content: [{ type: 'text', text: `${annBlock}\n\n${modelText}` }],
       hasImages: false,
+    };
+  }
+
+  const thinkingFields = resolveSendThinkingFields(sessionId);
+  if (thinkingFields.thinkingWire) {
+    finalStreamOptions = {
+      ...(finalStreamOptions ?? {}),
+      thinkingTitle: thinkingFields.thinkingTitle,
+      thinkingWire: thinkingFields.thinkingWire,
     };
   }
 

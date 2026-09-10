@@ -6,6 +6,68 @@ import { addMessage } from '../../api/storeAccess';
 import { getSessionById } from '../../store/sessionStore';
 import { getCompositionRoot } from '../../app/compositionRoot';
 import { isSessionAiBusy } from './helpers';
+import {
+  takePendingContextState,
+  readContextStateSnapshot,
+} from '../../api/provider-profiles/contextStatePending';
+import { contextInjectionDispatcher } from '../../api/contextInjectionDispatcher';
+
+/**
+ * 在向会话追加新消息前，取走并注入可能存在的上下文状态变更卡片。
+ * 确保时间线严格满足：[状态切换通知] -> [用户消息] -> [AI 回复]。
+ */
+export function flushContextStateBeforeSend(
+  sessionId: string
+): string | undefined {
+  try {
+    const contextState = takePendingContextState(sessionId);
+    if (!contextState) return undefined;
+    const snapshot = readContextStateSnapshot();
+    const rawText =
+      typeof contextState === 'string'
+        ? contextState
+        : contextState.text || '';
+    const model =
+      (typeof contextState === 'object' && contextState?.model) ||
+      snapshot.model ||
+      undefined;
+    const profile =
+      (typeof contextState === 'object' && contextState?.profile) ||
+      snapshot.profile ||
+      undefined;
+    const permission =
+      (typeof contextState === 'object' && contextState?.permission) ||
+      snapshot.permission ||
+      undefined;
+    const thinking =
+      (typeof contextState === 'object' && contextState?.thinking) ||
+      snapshot.thinking ||
+      undefined;
+
+    contextInjectionDispatcher.inject(sessionId, {
+      kind: 'workspace_env',
+      title: '上下文状态切换',
+      summary: rawText,
+      status: 'injected',
+      source: 'system_event',
+      content: rawText,
+      metadata: {
+        mode: 'context-state',
+        ...(model ? { model } : {}),
+        ...(profile ? { profile } : {}),
+        ...(permission ? { permission } : {}),
+        ...(thinking ? { thinking } : {}),
+      },
+    });
+    return rawText;
+  } catch (err) {
+    console.error(
+      '[slashSendQueueHelper] failed to flush context-state before send:',
+      err
+    );
+    return undefined;
+  }
+}
 
 export interface EnqueueFollowUpParams {
   wsId: string;
@@ -48,6 +110,7 @@ export function enqueueFollowUpMessage(params: EnqueueFollowUpParams): boolean {
     attachments,
   } = params;
   try {
+    flushContextStateBeforeSend(sessionId);
     addMessage(wsId, sessionId, {
       id: userMsgId,
       sender: 'user',

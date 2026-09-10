@@ -26,6 +26,7 @@ import {
 import {
   checkSessionAiBusy,
   enqueueFollowUpMessage,
+  flushContextStateBeforeSend,
 } from './slashSendQueueHelper';
 import { runPreflightChecks, assembleChatPayload } from './slashSendPreflight';
 import { useEphemeralChatStore } from '../../store/ephemeralChatStore';
@@ -217,6 +218,11 @@ export function useSlashSend(
     }
 
     // 9. 空闲时乐观入库并启动流式
+    const flushedContextState = flushContextStateBeforeSend(sessionId);
+    if (flushedContextState) {
+      streamOptionsWithClientMsg.contextState = flushedContextState;
+    }
+
     let enqueued = false;
     try {
       addMessage(wsId, sessionId, {
