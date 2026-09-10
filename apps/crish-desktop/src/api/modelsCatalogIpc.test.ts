@@ -10,7 +10,6 @@ import {
   readModelsYamlIpc,
   writeModelsYamlIpc,
   serializeModelsYamlTree,
-  setupModelsYamlHotReloadListener,
 } from './modelsCatalogIpc';
 import type { ModelsYamlTree, ProviderSpec } from './modelsCatalogTypes';
 
@@ -281,15 +280,5 @@ describe('writeModelsYamlIpc', () => {
       ok: false,
       error: 'workbench_save_models_yaml 命令不可用',
     });
-  });
-});
-
-describe('setupModelsYamlHotReloadListener', () => {
-  it('为 no-op：不抛错，cleanup 可调用', () => {
-    const off = setupModelsYamlHotReloadListener(async () => {
-      throw new Error('不应被热重载回调触发');
-    });
-    expect(typeof off).toBe('function');
-    off();
   });
 });

@@ -16,12 +16,12 @@ import {
 } from '../../api/modelsCatalogStore';
 import type { ModelSpec } from '../../api/modelsCatalogTypes';
 import {
-  canonicalizeProtocol,
   draftToModelPatch,
   modelToConfigDraft,
   modelSpecRevision,
   type ModelConfigDraft,
 } from '../../api/modelsDraftMap';
+import { normalizeProtocol } from '../../api/modelsNormalize';
 import {
   ensureLsImported,
   LS_IMPORT_FLAG_KEY,
@@ -85,7 +85,7 @@ function toCfgDraft(d: ModelConfigDraft): ConfigDraft {
   };
   if (d.maxOutputTokens !== undefined) out.maxOutputTokens = d.maxOutputTokens;
   if (d.thinkingLevel !== undefined) out.thinkingLevel = d.thinkingLevel;
-  const protocol = canonicalizeProtocol(d.protocol);
+  const protocol = normalizeProtocol(d.protocol);
   if (protocol) out.protocol = protocol;
   if (d.modalities) out.modalities = d.modalities;
   if (d.thinkingEnabled !== undefined) out.thinkingEnabled = d.thinkingEnabled;
@@ -191,7 +191,7 @@ export function useModelConfigSession(args: ModelConfigSessionArgs) {
           const addProv = await modelsCatalogStore.addProvider(providerId, {
             displayName: selected.name,
             baseUrl: selected.baseUrl,
-            protocol: canonicalizeProtocol(selected.protocol) ?? 'openai/chat',
+            protocol: normalizeProtocol(selected.protocol) ?? 'openai/chat',
             models: [],
           });
           if (!addProv.ok) {

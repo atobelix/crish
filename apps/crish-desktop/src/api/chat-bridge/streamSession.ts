@@ -24,7 +24,11 @@ import {
   createStreamCancel,
   type StreamCancelFn,
 } from './streamFinishControl';
-import { resolveContextWindow, resolveSendThinkingFields } from './readiness';
+import {
+  resolveContextWindow,
+  resolveSendThinkingFields,
+  ENGINE_SEND_GATE_TIMEOUT_MS,
+} from './readiness';
 import { type HistoryMessage, buildHistoryMessages } from './historyMessages';
 import {
   getResponseStyleDescription,
@@ -55,7 +59,7 @@ export async function createStreamSession(
       : undefined;
 
   try {
-    const ready = await transport.waitUntilConnected(1_500);
+    const ready = await transport.waitUntilConnected(ENGINE_SEND_GATE_TIMEOUT_MS);
     if (isRunDead(state)) {
       cleanupStreamState(state);
       return;

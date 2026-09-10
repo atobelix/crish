@@ -8,6 +8,7 @@ import { guessContextLength } from './modelCatalogPure';
 import type {
   ModelCapabilityKey,
   ModelMeta,
+  ModelProtocol,
 } from './modelCatalogTypes';
 import { emitUiEvent } from './uiEvents';
 
@@ -298,17 +299,14 @@ export function setModelThinkingLevel(
 }
 
 /**
- * 设置模型调用协议（'openai/chat' | 'openai/responses' | 'anthropic/messages'）
+ * 设置模型调用协议。
+ * 类型与新契约 ModelProtocol SSOT 对齐（含 google/generate-content 规范名）；
+ * 写出前调用方应先经 normalizeProtocol 归一，禁止把 google/interactions 写回 LS。
  */
 export function setModelProtocol(
   profileId: string,
   model: string,
-  protocol:
-    | 'openai/chat'
-    | 'openai/responses'
-    | 'anthropic/messages'
-    | 'google/interactions'
-    | undefined
+  protocol: ModelProtocol | undefined
 ): ModelMeta {
   return upsertModelMeta(profileId, model, { protocol });
 }

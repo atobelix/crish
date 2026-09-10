@@ -12,8 +12,8 @@ import { describe, expect, it } from 'vitest';
 import { updateModel } from './modelsCatalogActions';
 import { serializeModelsYamlTree } from './modelsCatalogIpc';
 import type { ModelSpec, ModelsYamlTree, ProviderSpec } from './modelsCatalogTypes';
+import { normalizeProtocol } from './modelsNormalize';
 import {
-  canonicalizeProtocol,
   draftToModelPatch,
   modelSpecRevision,
   modelToConfigDraft,
@@ -210,12 +210,12 @@ describe('draftToModelPatch', () => {
   });
 });
 
-describe('canonicalizeProtocol', () => {
+describe('normalizeProtocol', () => {
   it('google/interactions → google/generate-content', () => {
-    expect(canonicalizeProtocol('google/interactions')).toBe(
+    expect(normalizeProtocol('google/interactions')).toBe(
       'google/generate-content'
     );
-    expect(canonicalizeProtocol('not-a-protocol')).toBeUndefined();
+    expect(normalizeProtocol('not-a-protocol')).toBeUndefined();
   });
 });
 

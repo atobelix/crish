@@ -34,6 +34,14 @@ export function createSelectors(getState: StateAccessor) {
       return list && list.length > 0 ? list[0] : undefined;
     },
 
+    /**
+     * 有效协议：模型级覆盖 → 供应商级继承。
+     *
+     * 兜底 `'openai/chat'` 仅供 UI 展示占位（找不到 provider/model 时
+     * 避免渲染 undefined），**不是出站真源**。出站请求协议必须来自
+     * models.yaml 树的真实 ModelProtocol，禁止把本 fallback 灌回
+     * 序列化 / IPC 写出路径。
+     */
     selectEffectiveProtocol(providerId: string, modelId: string): ModelProtocol {
       const model = this.selectModel(providerId, modelId);
       if (model?.protocol) return model.protocol;
@@ -41,6 +49,7 @@ export function createSelectors(getState: StateAccessor) {
       const provider = this.selectProvider(providerId);
       if (provider?.protocol) return provider.protocol;
 
+      // UI 展示专用 fallback（见上方注释）；单测钉死此语义。
       return 'openai/chat';
     },
 

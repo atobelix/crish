@@ -1,6 +1,6 @@
 import { findAutofillModel } from '../../services/modelsAutofillBaseline';
 import { getLiveModel } from '../../api/modelsCatalogLive';
-import { canonicalizeProtocol } from '../../api/modelsDraftMap';
+import { normalizeProtocol } from '../../api/modelsNormalize';
 import { STANDARD_THINKING_PRESET } from './ModelThinkingEditor';
 import type { AddDraft } from './useModelProfilesState';
 
@@ -71,9 +71,9 @@ export function calculateAutofillDraft(
       prev.thinkingMap ||
       STANDARD_THINKING_PRESET,
     protocol: live?.protocol
-      ? canonicalizeProtocol(live.protocol)
+      ? normalizeProtocol(live.protocol)
       : autofill?.protocol
-      ? canonicalizeProtocol(autofill.protocol)
+      ? normalizeProtocol(autofill.protocol)
       : prev.protocol,
     pricing: live?.pricing
       ? {

@@ -6,6 +6,7 @@
  * 会话选档与旧默认档字段不进 patch。
  */
 
+import { normalizeProtocol } from './modelsNormalize';
 import type {
   ModelProtocol,
   ModelSpec,
@@ -15,13 +16,6 @@ import type {
   ProviderSpec,
   ThinkingMap,
 } from './modelsCatalogTypes';
-
-const CANONICAL_PROTOCOLS: ReadonlySet<string> = new Set([
-  'openai/chat',
-  'openai/responses',
-  'anthropic/messages',
-  'google/generate-content',
-]);
 
 /** 设置抽屉草稿。表单窗口字段名仍是 contextLength；写出必须是 contextWindow。 */
 export interface ModelConfigDraft {
@@ -52,15 +46,6 @@ export interface ModelConfigDraft {
     cacheRead?: string;
     cacheWrite?: string;
   };
-}
-
-/** 读/写边界：google/interactions 单向归一为 google/generate-content */
-export function canonicalizeProtocol(raw: unknown): ModelProtocol | undefined {
-  if (raw === 'google/interactions') return 'google/generate-content';
-  if (typeof raw === 'string' && CANONICAL_PROTOCOLS.has(raw)) {
-    return raw as ModelProtocol;
-  }
-  return undefined;
 }
 
 function parsePositiveInt(raw: unknown): number | undefined {
@@ -189,7 +174,7 @@ export function draftToModelPatch(draft: ModelConfigDraft): Partial<ModelSpec> {
     patch.thinking = undefined;
   }
 
-  const protocol = canonicalizeProtocol(draft.protocol);
+  const protocol = normalizeProtocol(draft.protocol);
   if (protocol) {
     patch.protocol = protocol;
   }
@@ -251,7 +236,7 @@ export function modelToConfigDraft(
     };
   }
 
-  const protocol = canonicalizeProtocol(model.protocol);
+  const protocol = normalizeProtocol(model.protocol);
   if (protocol) draft.protocol = protocol;
 
   return draft;
@@ -266,7 +251,7 @@ export function modelSpecRevision(model: ModelSpec): string {
     contextWindow: model.contextWindow ?? null,
     maxOutputTokens: model.maxOutputTokens ?? null,
     enabled: model.enabled ?? true,
-    protocol: canonicalizeProtocol(model.protocol) ?? null,
+    protocol: normalizeProtocol(model.protocol) ?? null,
     thinking: stableThinking(model.thinking),
     modalities: model.modalities
       ? {

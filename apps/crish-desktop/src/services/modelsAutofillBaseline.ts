@@ -25,9 +25,9 @@ export interface CommonProviderSeedSuggestion {
 
 const clone = <T>(val: T): T => JSON.parse(JSON.stringify(val));
 
-/** 2026 官方权威主流模型全景预填基线树 */
+/** 2026 官方权威主流模型全景预填基线树（version 钉死为 2，与 SSOT ModelsYamlTree 对齐） */
 export const AUTOFILL_BASELINE_2026: ModelsYamlTree = {
-  version: baselineData.version,
+  version: 2,
   providers: baselineData.providers as unknown as Record<string, ProviderSpec>,
 };
 

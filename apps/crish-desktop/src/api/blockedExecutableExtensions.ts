@@ -19,6 +19,17 @@ export const BLOCKED_EXECUTABLE_EXTENSIONS = [
   'com',
   'sh',
   'bin',
+  // Windows 可执行变体（E1：scr/pif/hta/jse/vbe/wsf/wsh/msc/jar 等，
+  // 与 Rust `host_openers/execute.rs` BLOCKED_EXECUTABLE_EXTENSIONS 同步）
+  'scr',
+  'pif',
+  'hta',
+  'jse',
+  'vbe',
+  'wsf',
+  'wsh',
+  'msc',
+  'jar',
 ] as const;
 
 export type BlockedExecutableExtension =

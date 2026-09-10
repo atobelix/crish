@@ -75,11 +75,13 @@ export const PriceConfigModal: React.FC<{
   const handleSelectAddSuggestion = (spec: CatalogModelSpec) => {
     setPriceDraft({
       model: spec.model,
-      input: String(spec.pricing?.inputPerMTok ?? 0),
-      output: String(spec.pricing?.outputPerMTok ?? 0),
+      // CatalogModelSpec.pricing 投影只产出规范字段（input/output/cacheRead）；
+      // ModelPrice（价表存储）仍用 *PerMTok 旧名——在边界处映射
+      input: String(spec.pricing?.input ?? 0),
+      output: String(spec.pricing?.output ?? 0),
       cacheRead:
-        spec.pricing?.cacheReadPerMTok !== undefined
-          ? String(spec.pricing.cacheReadPerMTok)
+        spec.pricing?.cacheRead !== undefined
+          ? String(spec.pricing.cacheRead)
           : '',
       billingUnit: spec.pricing?.billingUnit || 'token',
     });
@@ -280,7 +282,7 @@ export const PriceConfigModal: React.FC<{
                     <span className={styles.suggestionItemMeta}>
                       {item.pricing?.billingUnit === 'per_image'
                         ? '按张'
-                        : `${currencySymbol}${item.pricing?.inputPerMTok ?? 0}/${item.pricing?.outputPerMTok ?? 0}`}
+                        : `${currencySymbol}${item.pricing?.input ?? 0}/${item.pricing?.output ?? 0}`}
                     </span>
                   </div>
                 ))}
