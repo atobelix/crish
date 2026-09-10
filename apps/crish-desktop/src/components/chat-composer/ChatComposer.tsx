@@ -116,7 +116,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
   draftInjectionTick,
   isEditingMessage = false,
   onCancelEdit,
-  layoutVariant = 'multiline',
+  layoutVariant = 'adaptive',
 }) => {
   const plusMenuId = useId();
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -371,11 +371,9 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
             {/* 左侧控制区：[ ＋ 加号按钮 ] + [ 权限盾牌按钮 ]（icon-only 模式） */}
             <div className={styles.actionLeft} data-composer-grid="left">
               <Tooltip content="添加文件、技能、扩展…" disabled={showPlusMenu}>
-                <Button
+                <button
                   ref={plusBtnRef}
                   type="button"
-                  variant="ghost"
-                  size="sm"
                   className={`${styles.plusBtn} ${showPlusMenu ? styles.isOpen : ''}`}
                   aria-label="打开添加菜单"
                   aria-haspopup="menu"
@@ -391,8 +389,9 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
                       onCloseSiblingMenus?.();
                     }
                   }}
-                  icon={<Lucide.Plus size={14} aria-hidden />}
-                />
+                >
+                  <Lucide.Plus size={14} aria-hidden />
+                </button>
               </Tooltip>
               <ComposePlusMenu
                 id={plusMenuId}
@@ -426,22 +425,40 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
               {renderInputField()}
             </div>
 
-            {/* 权限模式切换按钮（icon-only 模式） */}
-            <div className={styles.permSlot} data-composer-grid="perm">
-              <PermissionModeMenu
-                iconOnly
-                mode={permissionMode}
-                onChange={(m) => {
-                  onPermissionChange(m);
-                  setShowPlusMenu(false);
-                  onCloseSiblingMenus?.();
-                }}
-              />
-            </div>
+            {/* 权限模式切换按钮：多行态常驻左下角；单行态并入右侧动作区融合胶囊 */}
+            {isMultiline ? (
+              <div className={styles.permSlot} data-composer-grid="perm">
+                <PermissionModeMenu
+                  mode={permissionMode}
+                  onChange={(m) => {
+                    onPermissionChange(m);
+                    setShowPlusMenu(false);
+                    onCloseSiblingMenus?.();
+                  }}
+                />
+              </div>
+            ) : null}
 
-            {/* 右侧动作区：[ 3.7 Sonnet ⏐ High ] 融合模型胶囊 + 语音/统计 + 墨绿正圆发送按钮 */}
+            {/* 右侧动作区：[ 权限(单行) ⏐ 3.7 Sonnet ⏐ High ] 融合模型胶囊 + 语音/统计 + 墨绿正圆发送按钮 */}
             <div className={styles.actionRight} data-composer-grid="right">
-              <ComposerFusedTrigger>{rightActions}</ComposerFusedTrigger>
+              <ComposerFusedTrigger
+                prefix={
+                  !isMultiline ? (
+                    <PermissionModeMenu
+                      mode={permissionMode}
+                      hideChevron
+                      variant="fused"
+                      onChange={(m) => {
+                        onPermissionChange(m);
+                        setShowPlusMenu(false);
+                        onCloseSiblingMenus?.();
+                      }}
+                    />
+                  ) : undefined
+                }
+              >
+                {rightActions}
+              </ComposerFusedTrigger>
               {voiceStatsButton ||
                 (showVoiceStatsButton ? (
                   <Tooltip content="语音输入 / 上下文统计">

@@ -15,7 +15,7 @@ const MODE_ICON_MAP: Record<PermissionMode, React.ReactNode> = {
   ask: <Lucide.ShieldCheck size={14} strokeWidth={1.8} />,
   deep: <Lucide.Search size={14} strokeWidth={1.8} />,
   plan: <Lucide.Target size={14} strokeWidth={1.8} />,
-  full: <Lucide.Zap size={14} strokeWidth={1.8} />,
+  full: <Lucide.AlertCircle size={14} strokeWidth={1.8} />,
 };
 
 const MODE_SUBLABEL_MAP: Record<PermissionMode, string> = {
@@ -30,6 +30,10 @@ type Props = {
   onChange: (m: PermissionMode) => void;
   /** 主对话网格：盾形 icon-only；侧栏/测试默认文字药丸 */
   iconOnly?: boolean;
+  /** 隐藏折叠展开箭头（单行融合胶囊左段时使用） */
+  hideChevron?: boolean;
+  /** 药丸形态变体：default 独立药丸；fused 左半融入三段式胶囊 */
+  variant?: 'default' | 'fused';
 };
 
 /**
@@ -44,6 +48,8 @@ export const PermissionModeMenu: React.FC<Props> = ({
   mode: modeRaw,
   onChange,
   iconOnly = false,
+  hideChevron = false,
+  variant = 'default',
 }) => {
   const mode = coercePermissionMode(modeRaw);
   const meta = permissionModeMeta(mode);
@@ -89,6 +95,7 @@ export const PermissionModeMenu: React.FC<Props> = ({
             styles.permPill,
             open ? styles.isOpen : null,
             iconOnly ? styles.iconOnly : null,
+            variant === 'fused' ? styles.fused : null,
           ]
             .filter(Boolean)
             .join(' ')}
@@ -98,11 +105,11 @@ export const PermissionModeMenu: React.FC<Props> = ({
           aria-haspopup="menu"
           aria-label={`当前权限模式：${meta.label}`}
         >
-          {iconOnly ? (
-            <Lucide.Shield size={14} strokeWidth={1.8} aria-hidden="true" />
-          ) : null}
-          <span>{meta.label}</span>
-          {iconOnly ? null : (
+          <span className={styles.permIcon} aria-hidden="true">
+            {MODE_ICON_MAP[mode] ?? <Lucide.Shield size={14} strokeWidth={1.8} />}
+          </span>
+          <span className={styles.permLabel}>{meta.label}</span>
+          {!hideChevron && (
             <Lucide.ChevronDown
               size={11}
               className={styles.permPillChev}

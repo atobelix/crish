@@ -5,7 +5,7 @@
  */
 // @vitest-environment jsdom
 import React from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   render,
   screen,
@@ -13,6 +13,17 @@ import {
   waitFor,
   act,
 } from '@testing-library/react';
+
+const acceptsImageMock = vi.hoisted(() => vi.fn(() => true));
+vi.mock('../../api/modelVisionSupport', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../../api/modelVisionSupport')>();
+  return {
+    ...actual,
+    activeModelAcceptsImage: () => acceptsImageMock(),
+  };
+});
+
 import { TiptapEditorField } from './TiptapEditorField';
 import { useSettingsStore } from '../../store/settingsStore';
 
@@ -85,6 +96,10 @@ async function typeText(text: string): Promise<void> {
 }
 
 describe('TiptapEditorField T3 补全', () => {
+  beforeEach(() => {
+    acceptsImageMock.mockReturnValue(true);
+  });
+
   it('Mention 注册：markdown 水合渲染 mention chip，序列化双向保真', async () => {
     const onMarkdownChange = vi.fn();
     render(
@@ -279,6 +294,7 @@ describe('TiptapEditorField T3 补全', () => {
   });
 
   it('图片粘贴转发原事件与文件（适配层附件链）', async () => {
+    acceptsImageMock.mockReturnValue(true);
     const onPasteImage = vi.fn();
     render(<TiptapEditorField onPasteImage={onPasteImage} />);
     const dom = getEditorDom();
@@ -287,6 +303,90 @@ describe('TiptapEditorField T3 补全', () => {
     const eventStub = { items, getData: () => '' };
     fireEvent.paste(dom, { clipboardData: eventStub });
     expect(onPasteImage).toHaveBeenCalledWith(fakeFile, expect.anything());
+  });
+
+  it('无视觉时粘贴图片不转交附件链（不 preventDefault 成附件）', async () => {
+    acceptsImageMock.mockReturnValue(false);
+    const onPasteImage = vi.fn();
+    render(<TiptapEditorField onPasteImage={onPasteImage} />);
+    const dom = getEditorDom();
+    const fakeFile = new File(['x'], 'shot.png', { type: 'image/png' });
+    const items = [{ type: 'image/png', getAsFile: () => fakeFile }];
+    fireEvent.paste(dom, {
+      clipboardData: { items, getData: () => '' },
+    });
+    expect(onPasteImage).not.toHaveBeenCalled();
+  });
+
+  it('剪贴板物理文件接管（模块 C）：clipboardData.files 优先提取并调用 onPasteFiles，阻止默认行为', async () => {
+    const onPasteFiles = vi.fn();
+    render(<TiptapEditorField onPasteFiles={onPasteFiles} />);
+    const dom = getEditorDom();
+    const fakeFile1 = new File(['fn main() {}'], 'main.rs', { type: 'text/rust' });
+    const fakeFile2 = new File(['# Title'], 'doc.md', { type: 'text/markdown' });
+
+    let prevented = false;
+    const pasteEvent = new Event('paste', { bubbles: true, cancelable: true });
+    Object.defineProperty(pasteEvent, 'preventDefault', {
+      value: () => {
+        prevented = true;
+      },
+    });
+    Object.defineProperty(pasteEvent, 'clipboardData', {
+      value: {
+        files: [fakeFile1, fakeFile2],
+        items: [],
+        getData: () => '',
+      },
+    });
+
+    dom.dispatchEvent(pasteEvent);
+
+    expect(prevented).toBe(true);
+    expect(onPasteFiles).toHaveBeenCalledWith([fakeFile1, fakeFile2]);
+  });
+
+  it('优先提取物理文件：当 clipboardData 同时存在 files 与 text/html 时，优先分发 files 而不走 html 清洗', async () => {
+    const onPasteFiles = vi.fn();
+    render(<TiptapEditorField onPasteFiles={onPasteFiles} />);
+    const dom = getEditorDom();
+    const fakeFile = new File(['print("hi")'], 'script.py', { type: 'text/x-python' });
+    const html = '<p>should not be pasted as html</p>';
+
+    const pasteEvent = new Event('paste', { bubbles: true, cancelable: true });
+    Object.defineProperty(pasteEvent, 'clipboardData', {
+      value: {
+        files: [fakeFile],
+        items: [],
+        getData: (type: string) => (type === 'text/html' ? html : ''),
+      },
+    });
+
+    dom.dispatchEvent(pasteEvent);
+
+    expect(onPasteFiles).toHaveBeenCalledWith([fakeFile]);
+    expect(dom.textContent).not.toContain('should not be pasted as html');
+  });
+
+  it('非图片物理文件不受视觉限制：即使当前无视觉，代码或文档物理文件依然正常被接管派发', async () => {
+    acceptsImageMock.mockReturnValue(false);
+    const onPasteFiles = vi.fn();
+    render(<TiptapEditorField onPasteFiles={onPasteFiles} />);
+    const dom = getEditorDom();
+    const docFile = new File(['content'], 'notes.txt', { type: 'text/plain' });
+
+    const pasteEvent = new Event('paste', { bubbles: true, cancelable: true });
+    Object.defineProperty(pasteEvent, 'clipboardData', {
+      value: {
+        files: [docFile],
+        items: [],
+        getData: () => '',
+      },
+    });
+
+    dom.dispatchEvent(pasteEvent);
+
+    expect(onPasteFiles).toHaveBeenCalledWith([docFile]);
   });
 
   it('动态占位符：placeholder prop 切换后重算装饰', async () => {

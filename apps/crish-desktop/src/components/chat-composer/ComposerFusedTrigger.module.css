@@ -7,41 +7,60 @@
   display: inline-flex;
   align-items: center;
   height: 28px;
-  padding: 0 6px;
+  padding: 0;
   border: none;
-  border-radius: 14px;
   background: transparent;
   box-shadow: none;
   min-width: 0;
   box-sizing: border-box;
   user-select: none;
+}
+
+.prefix {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  height: 100%;
+}
+
+/* 穿透控制前置插槽中的权限模式按钮（左半药丸形态） */
+.prefix :global(button) {
+  height: 28px;
+  min-height: 28px;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 8px 0 10px;
+  border-radius: 14px 0 0 14px;
   transition:
     background var(--transition-fast, 120ms ease),
     color var(--transition-fast, 120ms ease);
 }
 
-.capsule:hover {
-  background: var(--tint-hover);
-}
-
-.capsule:active {
-  background: var(--tint-active);
+.prefix :global(button:hover),
+.prefix :global(button:active),
+.prefix :global(button[class*='isOpen']) {
+  background: var(--composer-control-hover-bg);
 }
 
 .left {
   display: inline-flex;
   align-items: center;
   min-width: 0;
+  height: 100%;
 }
 
 /* 穿透控制内嵌 ModelBadgePicker 按钮 */
 .left :global(button.model-badge-btn),
 .left :global(button[data-testid='model-selector-button']),
 .left :global(button) {
-  height: 24px;
-  min-height: 24px;
+  height: 28px;
+  min-height: 28px;
   min-width: 0;
-  padding: 0 2px;
   border: none;
   background: transparent;
   color: var(--text-primary);
@@ -51,20 +70,79 @@
   box-sizing: border-box;
   display: inline-flex;
   align-items: center;
+  transition:
+    background var(--transition-fast, 120ms ease),
+    color var(--transition-fast, 120ms ease);
 }
 
+/* 场景 A：单行融合三段式（有权限 prefix + 有思考档位） -> 中间矩形直角平切 */
+.capsule[data-has-prefix='true'][data-has-thinking='true'] .left :global(button.model-badge-btn),
+.capsule[data-has-prefix='true'][data-has-thinking='true'] .left :global(button[data-testid='model-selector-button']),
+.capsule[data-has-prefix='true'][data-has-thinking='true'] .left :global(button) {
+  padding: 0 8px;
+  border-radius: 0;
+}
+
+/* 场景 B：单行融合两段式（有权限 prefix + 无思考档位） -> 左平切贴合权限，右半圆弧收尾 */
+.capsule[data-has-prefix='true'][data-has-thinking='false'] .left :global(button.model-badge-btn),
+.capsule[data-has-prefix='true'][data-has-thinking='false'] .left :global(button[data-testid='model-selector-button']),
+.capsule[data-has-prefix='true'][data-has-thinking='false'] .left :global(button),
+.capsule[data-has-prefix='true']:not([data-has-thinking='true']) .left :global(button.model-badge-btn),
+.capsule[data-has-prefix='true']:not([data-has-thinking='true']) .left :global(button[data-testid='model-selector-button']),
+.capsule[data-has-prefix='true']:not([data-has-thinking='true']) .left :global(button) {
+  padding: 0 10px 0 8px;
+  border-radius: 0 14px 14px 0;
+}
+
+/* 场景 C：多行态两段式（无权限 prefix + 有思考档位） -> 左半圆弧，右平切贴合思考 */
+.capsule:not([data-has-prefix='true'])[data-has-thinking='true'] .left :global(button.model-badge-btn),
+.capsule:not([data-has-prefix='true'])[data-has-thinking='true'] .left :global(button[data-testid='model-selector-button']),
+.capsule:not([data-has-prefix='true'])[data-has-thinking='true'] .left :global(button) {
+  padding: 0 8px 0 10px;
+  border-radius: 14px 0 0 14px;
+}
+
+/* 场景 D：多行态一段式（无权限 prefix + 无思考档位） -> 独立全胶囊全圆弧 */
+.capsule:not([data-has-prefix='true'])[data-has-thinking='false'] .left :global(button.model-badge-btn),
+.capsule:not([data-has-prefix='true'])[data-has-thinking='false'] .left :global(button[data-testid='model-selector-button']),
+.capsule:not([data-has-prefix='true'])[data-has-thinking='false'] .left :global(button),
+.capsule:not([data-has-prefix='true']):not([data-has-thinking='true']) .left :global(button.model-badge-btn),
+.capsule:not([data-has-prefix='true']):not([data-has-thinking='true']) .left :global(button[data-testid='model-selector-button']),
+.capsule:not([data-has-prefix='true']):not([data-has-thinking='true']) .left :global(button) {
+  padding: 0 10px;
+  border-radius: 14px;
+}
+
+/* 独立悬停态与激活态：光标悬停或激活在模型槽时单独高亮 */
 .left :global(button.model-badge-btn:hover),
+.left :global(button.model-badge-btn:active),
+.left :global(button.model-badge-btn[class*='active']),
 .left :global(button[data-testid='model-selector-button']:hover),
-.left :global(button:hover) {
+.left :global(button[data-testid='model-selector-button']:active),
+.left :global(button[data-testid='model-selector-button'][class*='active']),
+.left :global(button:hover),
+.left :global(button:active),
+.left :global(button[class*='active']) {
+  background: var(--composer-control-hover-bg);
   color: var(--text-primary);
 }
 
+.left :global(button.model-badge-btn:focus-visible),
+.left :global(button[data-testid='model-selector-button']:focus-visible),
+.left :global(button:focus-visible) {
+  outline: none;
+  background: var(--composer-control-hover-bg);
+}
+
+/* 中间弱发丝分割线：不占据水平排版空间（margin-left: -1px），实现左右槽无缝贴合整体感 */
 .divider {
   width: 1px;
-  height: 10px;
-  margin: 0 4px;
-  background: var(--border-color, rgba(0, 0, 0, 0.12));
+  height: 12px;
+  margin: 0;
+  margin-left: -1px;
+  background: var(--border-subtle);
   flex-shrink: 0;
+  pointer-events: none;
 }
 
 .right {
@@ -72,15 +150,18 @@
   display: inline-flex;
   align-items: center;
   flex-shrink: 0;
+  height: 100%;
 }
 
+/* 右侧思考强度槽（图示 ②：左平切贴合，右圆弧 14px） */
 .thinkBtn {
   display: inline-flex;
   align-items: center;
   gap: 2px;
-  height: 24px;
-  padding: 0 2px;
+  height: 28px;
+  padding: 0 10px 0 8px;
   border: none;
+  border-radius: 0 14px 14px 0;
   background: transparent;
   color: var(--text-secondary);
   font-family: inherit;
@@ -90,20 +171,22 @@
   box-shadow: none;
   white-space: nowrap;
   box-sizing: border-box;
+  transition:
+    background var(--transition-fast, 120ms ease),
+    color var(--transition-fast, 120ms ease);
 }
 
-.thinkBtn:hover {
-  color: var(--text-primary);
-}
-
+/* 独立悬停态与激活态：光标悬停或激活在思考档时单独高亮 */
+.thinkBtn:hover,
+.thinkBtn:active,
 .thinkBtn.isOpen {
+  background: var(--composer-control-hover-bg);
   color: var(--text-primary);
-  font-weight: 500;
 }
 
 .thinkBtn:focus-visible {
   outline: none;
-  background: var(--tint-hover);
+  background: var(--composer-control-hover-bg);
 }
 
 .chev {

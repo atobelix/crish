@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 /**
  * 权限丸 × 模型徽标：加号同构互斥 + 四击回归。
+ * 夹具 = yaml 字典镜像（workbench_read_models_yaml），禁止回落 LS 种子（γ-9 补洞）。
  */
 import React from 'react';
 import { describe, expect, it, vi, afterEach, beforeEach } from 'vitest';
@@ -14,27 +15,42 @@ import {
 import { PermissionModeMenu } from './PermissionModeMenu';
 import { ModelBadgePicker } from '../chat-card/ChatHeaderControls';
 import { layerStackService } from '../ui/internal/layer-stack/LayerStackService';
+import { mockTauriCommand } from '../../test-setup';
+import {
+  ensureModelsCatalogLoaded,
+  resetModelsCatalogMirror,
+} from '../../api/modelsCatalogStore';
+import type { ProviderSpec } from '../../api/modelsCatalogTypes';
 
 vi.mock('../../api/storeAccess', () => ({
   openSettings: vi.fn(),
 }));
 
-const PROFILES_KEY = 'crish_provider_profiles_v1';
+const CATALOG_PATH = 'C:\\Users\\tester\\.conex\\models.yaml';
 
-function seedProfiles() {
-  localStorage.setItem(
-    PROFILES_KEY,
-    JSON.stringify([
-      {
-        id: 'p1',
-        name: '测试服务商',
-        baseUrl: 'https://example.com',
-        hasKey: false,
-        enabled: true,
-        models: ['model-a', 'model-b'],
-      },
-    ])
-  );
+function yamlProvider(models: string[]): ProviderSpec {
+  return {
+    displayName: '测试服务商',
+    baseUrl: 'https://example.com',
+    apiKey: 'k-test',
+    protocol: 'openai/chat',
+    models: models.map((id) => ({ id, displayName: id })),
+  };
+}
+
+/** 灌 yaml 镜像夹具：单供应商双模型，与真源同构，不经 LS。 */
+async function seedYamlCatalog(): Promise<void> {
+  mockTauriCommand('workbench_read_models_yaml', () => ({
+    path: CATALOG_PATH,
+    content: '',
+    template: '',
+    seeded: false,
+    parseError: null,
+    providers: { p1: yamlProvider(['model-a', 'model-b']) },
+  }));
+  mockTauriCommand('workbench_save_models_yaml', () => ({ path: CATALOG_PATH }));
+  const res = await ensureModelsCatalogLoaded(true);
+  expect(res.ok).toBe(true);
 }
 
 function pointerClick(el: HTMLElement) {
@@ -43,13 +59,15 @@ function pointerClick(el: HTMLElement) {
   fireEvent.click(el);
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   localStorage.clear();
-  seedProfiles();
+  resetModelsCatalogMirror();
+  await seedYamlCatalog();
 });
 
 afterEach(() => {
   cleanup();
+  resetModelsCatalogMirror();
   layerStackService.dispose();
   vi.restoreAllMocks();
 });

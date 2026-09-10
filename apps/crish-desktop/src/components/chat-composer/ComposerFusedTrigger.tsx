@@ -31,10 +31,12 @@ import { useModelsCatalogVersion } from '../../hooks/useModelsCatalogVersion';
 import { useSessionStore } from '../../store/sessionStore';
 
 export type ComposerFusedTriggerProps = {
+  prefix?: React.ReactNode;
   children?: React.ReactNode;
 };
 
 export const ComposerFusedTrigger: React.FC<ComposerFusedTriggerProps> = ({
+  prefix,
   children,
 }) => {
   const catalogVersion = useModelsCatalogVersion();
@@ -152,8 +154,13 @@ export const ComposerFusedTrigger: React.FC<ComposerFusedTriggerProps> = ({
       data-testid="composer-fused-trigger"
       data-catalog-tick={catalogVersion}
       data-live-model-id={liveModel?.id ?? ''}
+      data-has-prefix={prefix ? 'true' : 'false'}
       data-has-thinking={showThinking ? 'true' : 'false'}
     >
+      {prefix ? <div className={styles.prefix}>{prefix}</div> : null}
+      {prefix && children ? (
+        <span className={styles.divider} aria-hidden />
+      ) : null}
       {children ? <div className={styles.left}>{children}</div> : null}
       {showThinking && children ? (
         <span className={styles.divider} aria-hidden />

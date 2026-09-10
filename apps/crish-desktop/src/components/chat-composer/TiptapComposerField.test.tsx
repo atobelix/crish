@@ -296,4 +296,62 @@ describe('TiptapComposerField 适配层契约（T2）', () => {
     });
     expect(sentValues).toEqual(['按钮发送']);
   });
+
+  it('TiptapComposerField 剪贴板文件接管：粘贴物理文件正确分发至 onPasteFiles', async () => {
+    const onPasteFiles = vi.fn();
+    render(
+      <TiptapComposerField
+        value=""
+        onChange={() => {}}
+        onSend={() => {}}
+        canSend={true}
+        isComposing={false}
+        setIsComposing={() => {}}
+        onPasteFiles={onPasteFiles}
+      />
+    );
+    const dom = getEditorDom();
+    const codeFile = new File(['const x = 42;'], 'index.ts', {
+      type: 'text/typescript',
+    });
+    const pasteEvent = new Event('paste', { bubbles: true, cancelable: true });
+    Object.defineProperty(pasteEvent, 'clipboardData', {
+      value: {
+        files: [codeFile],
+        items: [],
+        getData: () => '',
+      },
+    });
+    dom.dispatchEvent(pasteEvent);
+    expect(onPasteFiles).toHaveBeenCalledWith([codeFile]);
+  });
+
+  it('TiptapComposerField 剪贴板文件接管回退：未提供 onPasteFiles 时回退至 onFilesSelected', async () => {
+    const onFilesSelected = vi.fn();
+    render(
+      <TiptapComposerField
+        value=""
+        onChange={() => {}}
+        onSend={() => {}}
+        canSend={true}
+        isComposing={false}
+        setIsComposing={() => {}}
+        onFilesSelected={onFilesSelected}
+      />
+    );
+    const dom = getEditorDom();
+    const codeFile = new File(['const x = 42;'], 'index.ts', {
+      type: 'text/typescript',
+    });
+    const pasteEvent = new Event('paste', { bubbles: true, cancelable: true });
+    Object.defineProperty(pasteEvent, 'clipboardData', {
+      value: {
+        files: [codeFile],
+        items: [],
+        getData: () => '',
+      },
+    });
+    dom.dispatchEvent(pasteEvent);
+    expect(onFilesSelected).toHaveBeenCalledWith([codeFile]);
+  });
 });

@@ -1,114 +1,132 @@
+/* 默认：宽屏药丸态（高度 28px，半圆端头，与加号等高平权，显示文字即可） */
 .permPill {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-1_5);
-  height: var(--control-height);
+  gap: 3px;
+  height: 28px;
+  min-height: 28px;
+  max-height: 28px;
   padding: 0 10px;
   border: none;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-full, 9999px);
   background: transparent;
-  color: var(--text-secondary);
+  color: var(--text-primary);
   font-family: inherit;
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-xs, 12px);
+  font-weight: 500;
   cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  box-sizing: border-box;
   transition:
     background var(--transition-micro, 100ms ease),
     color var(--transition-micro, 100ms ease);
-  white-space: nowrap;
-  flex-shrink: 0;
-  max-width: 100%;
 }
 
-.permPill > span {
-  white-space: nowrap;
+/* 融合模式（单行胶囊左段）：左圆弧 14px，右平切贴合中间模型槽 */
+.permPill.fused {
+  border-radius: 14px 0 0 14px;
+  padding: 0 8px 0 10px;
 }
 
-.permPill:hover {
-  background: var(--tint-hover);
-  color: var(--text-primary);
-}
-
+.permPill:hover,
 .permPill:active,
 .permPill.isOpen {
-  background: var(--tint-active);
+  background: var(--composer-control-hover-bg);
   color: var(--text-primary);
 }
 
 .permPill:focus-visible {
   outline: none;
-  background: var(--tint-active);
+  background: var(--composer-control-hover-bg);
   box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
 }
 
-.permPillDot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--text-tertiary);
+.permLabel {
+  display: inline;
+  white-space: nowrap;
+  line-height: 1;
+}
+
+.permPillChev {
+  opacity: 0.55;
+  transition: transform var(--transition-micro, 100ms ease);
   flex-shrink: 0;
 }
 
-/* 极简无边框盾牌图标（精确对齐截图：无背景无描边，语义色） */
-.permPill.iconOnly {
-  width: 24px;
-  height: 24px;
-  min-width: 24px;
-  max-width: 24px;
-  padding: 0;
-  border-radius: 50%;
-  border: none;
-  background: transparent;
-  color: var(--text-secondary);
-  display: inline-flex;
+.permPill.isOpen .permPillChev {
+  transform: rotate(180deg);
+}
+
+.permIcon {
+  display: none;
   align-items: center;
   justify-content: center;
-  cursor: pointer;
-  box-sizing: border-box;
-  gap: 0;
-  transition:
-    background var(--transition-micro, 100ms ease),
-    color var(--transition-micro, 100ms ease);
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
 }
 
-.permPill.iconOnly span {
-  display: none;
-}
-
-.permPill.iconOnly:hover {
-  background: var(--tint-hover);
-}
-
-.permPill.iconOnly.isOpen,
-.permPill.iconOnly:active {
-  background: var(--tint-active);
-}
-
-.permPill.iconOnly svg {
+.permIcon svg {
   width: 14px;
   height: 14px;
   stroke-width: 1.75;
 }
 
-.permPill.iconOnly[data-perm-mode='ask'] {
+.permPill[data-perm-mode='ask'] {
   color: var(--sem-warn, hsl(37 91% 44%));
 }
 
-.permPill.iconOnly[data-perm-mode='full'] {
+.permPill[data-perm-mode='full'] {
   color: var(--accent-orange-strong, color-mix(in srgb, var(--accent-orange, hsl(28 80% 52%)) 85%, var(--text-primary)));
 }
 
-.permPill.iconOnly[data-perm-mode='plan'],
-.permPill.iconOnly[data-perm-mode='deep'] {
+.permPill[data-perm-mode='plan'],
+.permPill[data-perm-mode='deep'] {
   color: var(--text-secondary);
 }
 
-.permPillChev {
-  opacity: 0.5;
-  transition: transform var(--transition-micro);
+/* 窄屏或显式 iconOnly：自动折叠为 28x28 正圆图标按钮，与旁边的加号 100% 几何与视觉同构 */
+@container (max-width: 520px) {
+  .permPill {
+    width: 28px;
+    height: 28px;
+    min-width: 28px;
+    max-width: 28px;
+    padding: 0;
+    border-radius: 50%;
+    justify-content: center;
+    gap: 0;
+  }
+
+  .permPill .permLabel,
+  .permPill .permPillChev {
+    display: none;
+  }
+
+  .permPill .permIcon {
+    display: inline-flex;
+  }
 }
 
-.permPill.isOpen .permPillChev {
-  transform: rotate(180deg);
+.permPill.iconOnly {
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  max-width: 28px;
+  padding: 0;
+  border-radius: 50%;
+  justify-content: center;
+  gap: 0;
+}
+
+.permPill.iconOnly .permLabel,
+.permPill.iconOnly .permPillChev {
+  display: none;
+}
+
+.permPill.iconOnly .permIcon {
+  display: inline-flex;
 }
 
 .permMenu {
