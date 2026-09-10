@@ -21,7 +21,7 @@ use crate::config::Endpoint;
 use super::cache::CachePolicy;
 use super::messages::ReasoningContentMode;
 use super::tools::{ToolChoice, ToolDefinition};
-use super::vendor::{ReasoningEffort, ReasoningEffortFormat, ReasoningVendor, ThinkingIntensity};
+use super::vendor::{ReasoningEffort, ReasoningVendor, ThinkingIntensity};
 
 #[path = "build_chat.rs"]
 mod build_chat;
@@ -82,7 +82,6 @@ pub struct ChatCompletionsRequestOptions {
     pub max_tokens: Option<u64>,
     pub max_tokens_field: Option<MaxTokensField>,
     pub reasoning_effort: Option<ReasoningEffort>,
-    pub reasoning_effort_format: Option<ReasoningEffortFormat>,
     /// 思考回传模式（默认 omit，02 §1.4 请求侧）
     pub reasoning_content: Option<ReasoningContentMode>,
     pub tool_choice: Option<ToolChoice>,

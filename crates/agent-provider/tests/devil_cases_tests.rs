@@ -15,9 +15,7 @@
 
 use agent_provider::migration::{ConfigMigrationManager, MigrationError, MigrationStatus};
 use agent_provider::models::catalog_types::*;
-use agent_provider::pricing::{
-    CostBreakdown, Currency, ModelPricing, PricingEngine, PricingTier, PricingUnit,
-};
+use agent_provider::pricing::{CostBreakdown, Currency, PricingEngine};
 use agent_provider::request::build::dialect::{
     assemble_thinking_dialect, DialectBuildOptions, ReasoningEffort, ThinkingDialectFormat,
 };
@@ -37,13 +35,13 @@ mod devil_tests {
     #[test]
     fn test_devil_01_cache_read_write_exact_micros_deduction() {
         // 测试 Claude 3.7 / 5 官方计费：输入 $3.00, 缓存写 $3.75, 缓存读 $0.30
-        let pricing = ModelPricing {
+        let pricing = ModelPricingSpec {
             currency: Currency::Usd,
-            unit: PricingUnit::Per1mTokens,
             input: 3.00,
             output: 15.00,
             cache_read: Some(0.30),
             cache_write: Some(3.75),
+            per_image: None,
             tiers: vec![],
         };
 
@@ -75,22 +73,22 @@ mod devil_tests {
     // -------------------------------------------------------------------------
     #[test]
     fn test_devil_02_dual_currency_formatting_and_isolation() {
-        let cny_pricing = ModelPricing {
+        let cny_pricing = ModelPricingSpec {
             currency: Currency::Cny,
-            unit: PricingUnit::Per1mTokens,
             input: 2.0,
             output: 6.0,
             cache_read: None,
             cache_write: None,
+            per_image: None,
             tiers: vec![],
         };
-        let usd_pricing = ModelPricing {
+        let usd_pricing = ModelPricingSpec {
             currency: Currency::Usd,
-            unit: PricingUnit::Per1mTokens,
             input: 2.0,
             output: 6.0,
             cache_read: None,
             cache_write: None,
+            per_image: None,
             tiers: vec![],
         };
 
@@ -114,13 +112,13 @@ mod devil_tests {
     // -------------------------------------------------------------------------
     #[test]
     fn test_devil_03_ultra_long_393k_output_u64_anti_overflow() {
-        let pricing = ModelPricing {
+        let pricing = ModelPricingSpec {
             currency: Currency::Cny,
-            unit: PricingUnit::Per1mTokens,
             input: 10.0,
             output: 30.0,
             cache_read: None,
             cache_write: None,
+            per_image: None,
             tiers: vec![],
         };
 
@@ -248,13 +246,13 @@ thinking:
     // -------------------------------------------------------------------------
     #[test]
     fn test_devil_07_tiered_pricing_exact_threshold_boundary_ge() {
-        let pricing = ModelPricing {
+        let pricing = ModelPricingSpec {
             currency: Currency::Cny,
-            unit: PricingUnit::Per1mTokens,
             input: 2.0,
             output: 8.0,
             cache_read: None,
             cache_write: None,
+            per_image: None,
             tiers: vec![PricingTier {
                 input_tokens_above: 262_144,
                 input: 4.0, // 达到门槛翻倍
@@ -296,13 +294,13 @@ thinking:
     // -------------------------------------------------------------------------
     #[test]
     fn test_devil_09_image_generation_per_image_micros_pricing() {
-        let pricing = ModelPricing {
+        let pricing = ModelPricingSpec {
             currency: Currency::Cny,
-            unit: PricingUnit::PerImage,
             input: 0.0,
-            output: 0.20, // 每张 ¥0.20
+            output: 0.0,
             cache_read: None,
             cache_write: None,
+            per_image: Some(0.20), // 每张 ¥0.20（费率显式在 per_image 字段）
             tiers: vec![],
         };
 
@@ -530,13 +528,13 @@ models:
     // -------------------------------------------------------------------------
     #[test]
     fn test_devil_19_explicit_zero_price_marked_as_free_not_silent() {
-        let zero_pricing = ModelPricing {
+        let zero_pricing = ModelPricingSpec {
             currency: Currency::Cny,
-            unit: PricingUnit::Per1mTokens,
             input: 0.0,
             output: 0.0,
             cache_read: None,
             cache_write: None,
+            per_image: None,
             tiers: vec![],
         };
         let cost = PricingEngine::calculate_cost(&Some(zero_pricing), 1000, 500, 0, 0).unwrap();
@@ -688,13 +686,13 @@ models:
     // -------------------------------------------------------------------------
     #[test]
     fn test_devil_28_negative_or_overflow_tokens_validation_guard() {
-        let pricing = ModelPricing {
+        let pricing = ModelPricingSpec {
             currency: Currency::Cny,
-            unit: PricingUnit::Per1mTokens,
             input: 2.0,
             output: 6.0,
             cache_read: None,
             cache_write: None,
+            per_image: None,
             tiers: vec![],
         };
 

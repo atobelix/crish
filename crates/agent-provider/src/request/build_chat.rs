@@ -64,7 +64,10 @@ pub fn build_chat_completions_request_body(
             let dialect_opts = DialectBuildOptions {
                 effort,
                 format,
-                max_output_tokens: opts.max_tokens.unwrap_or(64000),
+                // 0 = 无已知上限：dialect 不发明 64000 兜底（轨G P2）。
+                // 仅当 opts.max_tokens 已为 Some 时才写请求体 max_tokens 字段
+                // （见下方 elevated 分支）；None 时请求体省略该字段，跟随协议缺省。
+                max_output_tokens: opts.max_tokens.unwrap_or(0),
                 thinking_map: opts.thinking_map.as_ref(),
             };
             let (thinking_val, elevated_tokens) = assemble_thinking_dialect(&dialect_opts);

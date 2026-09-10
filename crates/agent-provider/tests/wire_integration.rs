@@ -65,35 +65,31 @@ fn assistant_msg(id: &str, text: &str) -> AgentMessage {
     }
 }
 
-/// 借用拉长至 'static（模拟壳层 Arc 消息切片驱动 builder）
-fn static_slice(messages: Vec<Arc<AgentMessage>>) -> &'static [Arc<AgentMessage>] {
-    Box::leak(messages.into_boxed_slice())
-}
-
-fn anthropic_body(opts: &AnthropicRequestOptions, messages: Vec<Arc<AgentMessage>>) -> Value {
+/// 消息切片借用驱动 builder（栈上/调用方本地 Vec 借用，无 Box::leak）
+fn anthropic_body(opts: &AnthropicRequestOptions, messages: &[Arc<AgentMessage>]) -> Value {
     let context = RequestBuildContext {
         system_prompt: None,
-        messages: static_slice(messages),
+        messages,
         tools: Vec::new(),
         wire_mode: SystemPromptWireMode::NativeSystemRole,
     };
     build_anthropic_request_body(opts, &context)
 }
 
-fn gemini_body(opts: &GeminiRequestOptions, messages: Vec<Arc<AgentMessage>>) -> Value {
+fn gemini_body(opts: &GeminiRequestOptions, messages: &[Arc<AgentMessage>]) -> Value {
     let context = RequestBuildContext {
         system_prompt: None,
-        messages: static_slice(messages),
+        messages,
         tools: Vec::new(),
         wire_mode: SystemPromptWireMode::NativeSystemRole,
     };
     build_gemini_request_body(opts, &context)
 }
 
-fn chat_body(opts: &ChatCompletionsRequestOptions, messages: Vec<Arc<AgentMessage>>) -> Value {
+fn chat_body(opts: &ChatCompletionsRequestOptions, messages: &[Arc<AgentMessage>]) -> Value {
     let context = RequestBuildContext {
         system_prompt: None,
-        messages: static_slice(messages),
+        messages,
         tools: Vec::new(),
         wire_mode: SystemPromptWireMode::NativeSystemRole,
     };
@@ -131,7 +127,7 @@ fn anthropic_effort_tier_produces_enabled_thinking() {
             thinking_map: Some(thinking_map),
             ..AnthropicRequestOptions::default()
         };
-        let body = anthropic_body(&opts, vec![Arc::new(user_msg("hi"))]);
+        let body = anthropic_body(&opts, &[Arc::new(user_msg("hi"))]);
         let thinking = body.get("thinking").expect("启用档位必须带 thinking 键");
         assert_eq!(thinking["type"], "enabled");
         assert_eq!(
@@ -176,7 +172,7 @@ fn anthropic_intensity_tier_produces_thinking_or_omits_on_off() {
             thinking_map: Some(thinking_map),
             ..AnthropicRequestOptions::default()
         };
-        let body = anthropic_body(&opts, vec![Arc::new(user_msg("hi"))]);
+        let body = anthropic_body(&opts, &[Arc::new(user_msg("hi"))]);
         let thinking = body
             .get("thinking")
             .expect("启用 intensity 必须带 thinking");
@@ -192,7 +188,7 @@ fn anthropic_intensity_tier_produces_thinking_or_omits_on_off() {
         thinking_format: Some(ThinkingFormat::Anthropic),
         ..AnthropicRequestOptions::default()
     };
-    let body = anthropic_body(&opts, vec![Arc::new(user_msg("hi"))]);
+    let body = anthropic_body(&opts, &[Arc::new(user_msg("hi"))]);
     assert!(body.get("thinking").is_none(), "Off 不得注入 thinking 键");
 }
 
@@ -205,7 +201,7 @@ fn anthropic_off_and_auto_omit_thinking_key() {
             reasoning_effort: Some(effort),
             ..AnthropicRequestOptions::default()
         };
-        let body = anthropic_body(&opts, vec![Arc::new(user_msg("hi"))]);
+        let body = anthropic_body(&opts, &[Arc::new(user_msg("hi"))]);
         assert!(
             body.get("thinking").is_none(),
             "effort {effort:?} 不应注入 thinking"
@@ -216,7 +212,7 @@ fn anthropic_off_and_auto_omit_thinking_key() {
             model: Some("claude-sonnet-4-5".to_string()),
             ..AnthropicRequestOptions::default()
         },
-        vec![Arc::new(user_msg("hi"))],
+        &[Arc::new(user_msg("hi"))],
     );
     assert!(body.get("thinking").is_none(), "无档位不注入 thinking");
 }
@@ -269,7 +265,7 @@ fn gemini_intensity_maps_to_generation_config_thinking_level() {
             thinking_map: Some(thinking_map),
             ..GeminiRequestOptions::default()
         };
-        let body = gemini_body(&opts, vec![Arc::new(user_msg("hi"))]);
+        let body = gemini_body(&opts, &[Arc::new(user_msg("hi"))]);
         assert_eq!(
             body["generationConfig"]["thinkingConfig"]["thinkingLevel"], expected,
             "intensity {intensity:?} 必须与 vendor 换算一致"
@@ -297,7 +293,7 @@ fn gemini_off_omits_thinking_level() {
         thinking_intensity: Some(ThinkingIntensity::Off),
         ..GeminiRequestOptions::default()
     };
-    let body = gemini_body(&opts, vec![Arc::new(user_msg("hi"))]);
+    let body = gemini_body(&opts, &[Arc::new(user_msg("hi"))]);
     if let Some(generation) = body.get("generationConfig").and_then(|v| v.as_object()) {
         assert!(
             !generation.contains_key("thinking_level"),
@@ -322,7 +318,7 @@ fn consecutive_assistant_alternative_projection_inv07() {
     };
     let body = anthropic_body(
         &opts,
-        vec![
+        &[
             Arc::new(assistant_msg("a1", "第一段")),
             Arc::new(user_msg("追问")),
             Arc::new(assistant_msg("a2", "第二段")),
@@ -445,7 +441,7 @@ fn openai_chat_2026_wire_payload_reasoning_effort_string() {
                 thinking_map: Some(map),
                 ..ChatCompletionsRequestOptions::default()
             };
-            let body = chat_body(&opts, vec![Arc::new(user_msg("Explain quantum computing"))]);
+            let body = chat_body(&opts, &[Arc::new(user_msg("Explain quantum computing"))]);
             let reasoning = body
                 .get("reasoning_effort")
                 .unwrap_or_else(|| panic!("{model_name} 必须包含 reasoning_effort 字段"));
@@ -486,7 +482,7 @@ fn anthropic_messages_2026_claude5_budget_and_max_tokens_clamp() {
             thinking_map: Some(map),
             ..AnthropicRequestOptions::default()
         };
-        let body = anthropic_body(&opts, vec![Arc::new(user_msg("Refactor this code"))]);
+        let body = anthropic_body(&opts, &[Arc::new(user_msg("Refactor this code"))]);
         let thinking = body.get("thinking").expect("claude-5 必须包含 thinking 键");
         assert_eq!(thinking["type"], "enabled");
         let budget = thinking["budget_tokens"]
@@ -516,7 +512,7 @@ fn anthropic_messages_2026_claude5_budget_and_max_tokens_clamp() {
             thinking_map: Some(map),
             ..AnthropicRequestOptions::default()
         };
-        let body = anthropic_body(&opts, vec![Arc::new(user_msg("Deep research"))]);
+        let body = anthropic_body(&opts, &[Arc::new(user_msg("Deep research"))]);
         let thinking = body.get("thinking").expect("必须包含 thinking 键");
         let budget = thinking["budget_tokens"].as_u64().unwrap();
         assert_eq!(budget, 8192);
@@ -540,7 +536,7 @@ fn anthropic_messages_2026_claude5_budget_and_max_tokens_clamp() {
             thinking_map: Some(map),
             ..AnthropicRequestOptions::default()
         };
-        let body = anthropic_body(&opts, vec![Arc::new(user_msg("Quick answer"))]);
+        let body = anthropic_body(&opts, &[Arc::new(user_msg("Quick answer"))]);
         let thinking = body.get("thinking").expect("必须包含 thinking 键");
         let budget = thinking["budget_tokens"].as_u64().unwrap();
         assert!(
@@ -566,7 +562,7 @@ fn anthropic_messages_2026_claude5_budget_and_max_tokens_clamp() {
             thinking_map: Some(map),
             ..AnthropicRequestOptions::default()
         };
-        let body = anthropic_body(&opts, vec![Arc::new(user_msg("Analyze architecture"))]);
+        let body = anthropic_body(&opts, &[Arc::new(user_msg("Analyze architecture"))]);
         let thinking = body.get("thinking").expect("High 档位必须生成 thinking 键");
         let budget = thinking["budget_tokens"].as_u64().unwrap();
         assert!(budget >= 1024);
@@ -589,7 +585,7 @@ fn ali_bailian_qwen38_wire_payload_top_level_enable_thinking() {
         thinking_map: Some(map),
         ..ChatCompletionsRequestOptions::default()
     };
-    let body = chat_body(&opts, vec![Arc::new(user_msg("hi"))]);
+    let body = chat_body(&opts, &[Arc::new(user_msg("hi"))]);
     assert_eq!(
         body["enable_thinking"], true,
         "阿里百炼开启思考必须输出顶层 enable_thinking: true"
@@ -607,7 +603,7 @@ fn ali_bailian_qwen38_wire_payload_top_level_enable_thinking() {
         thinking_map: None,
         ..ChatCompletionsRequestOptions::default()
     };
-    let body_off = chat_body(&opts_off, vec![Arc::new(user_msg("hi"))]);
+    let body_off = chat_body(&opts_off, &[Arc::new(user_msg("hi"))]);
     assert_eq!(
         body_off["enable_thinking"], false,
         "阿里百炼关闭思考时输出 enable_thinking: false"
@@ -626,7 +622,7 @@ fn deepseek_v4_pro_wire_payload_thinking_enabled_and_disabled() {
         thinking_map: None,
         ..ChatCompletionsRequestOptions::default()
     };
-    let body_on = chat_body(&opts_on, vec![Arc::new(user_msg("hi"))]);
+    let body_on = chat_body(&opts_on, &[Arc::new(user_msg("hi"))]);
     assert_eq!(
         body_on["thinking"]["type"], "enabled",
         "DeepSeek 思考开启必须输出 thinking:{{type:\"enabled\"}}"
@@ -641,7 +637,7 @@ fn deepseek_v4_pro_wire_payload_thinking_enabled_and_disabled() {
         thinking_map: None,
         ..ChatCompletionsRequestOptions::default()
     };
-    let body_off = chat_body(&opts_off, vec![Arc::new(user_msg("hi"))]);
+    let body_off = chat_body(&opts_off, &[Arc::new(user_msg("hi"))]);
     assert_eq!(
         body_off["thinking"]["type"], "disabled",
         "DeepSeek 思考关闭时必须输出 thinking:{{type:\"disabled\"}}"

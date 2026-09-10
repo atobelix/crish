@@ -177,31 +177,41 @@ fn yaml_is_effectively_empty(content: &str) -> bool {
 /// 读边界一次性认旧键：写出侧结构体只含 SSOT 字段，不会把旧名再序列化回去。
 ///
 /// IPC 与 [UnifiedModelsConfig::from_yaml_str] 共用本预处理，禁止再复制一份。
+///
+/// **作用域限定（轨G P2）**：改名不再对任意嵌套 Mapping 无差别递归——
+/// - 计价别名（`inputPerMTok` 等）只在 `pricing` 对象内生效；
+/// - `contextLength` 别名只在 model 对象层生效；
+/// - `thinkingFormat` 值改写只在 `compat` 对象内生效。
+/// 无关嵌套里恰有同名键（如 headers / modalities 下的自定义 `input` 语义）
+/// 不再被误伤。
 pub fn normalize_yaml_read_aliases(value: &mut serde_yaml::Value) {
     match value {
         serde_yaml::Value::Mapping(map) => {
-            for nested in map.values_mut() {
+            // 按已知结构键定向下钻，不在任意嵌套层做改名
+            let pricing_key = serde_yaml::Value::String("pricing".to_string());
+            let compat_key = serde_yaml::Value::String("compat".to_string());
+            let models_key = serde_yaml::Value::String("models".to_string());
+            if let Some(node) = map.get_mut(&pricing_key) {
+                normalize_pricing_object(node);
+            }
+            if let Some(node) = map.get_mut(&compat_key) {
+                normalize_compat_object(node);
+            }
+            if let Some(node) = map.get_mut(&models_key) {
+                if let serde_yaml::Value::Sequence(seq) = node {
+                    for model in seq {
+                        normalize_model_object(model);
+                    }
+                }
+            }
+            // 继续下钻其余 Mapping（如 providers.*）以触达更深的 pricing/compat/models
+            for (k, nested) in map.iter_mut() {
+                let key = k.as_str().unwrap_or("");
+                if key == "pricing" || key == "compat" || key == "models" {
+                    continue;
+                }
                 normalize_yaml_read_aliases(nested);
             }
-            const RENAMES: &[(&str, &str)] = &[
-                ("contextLength", "contextWindow"),
-                ("context_length", "contextWindow"),
-                ("inputPerMTok", "input"),
-                ("input_per_m_tok", "input"),
-                ("outputPerMTok", "output"),
-                ("output_per_m_tok", "output"),
-                ("cacheReadPerMTok", "cacheRead"),
-                ("cache_read_per_m_tok", "cacheRead"),
-                ("cacheWritePerMTok", "cacheWrite"),
-                ("cache_write_per_m_tok", "cacheWrite"),
-                ("perImageCost", "perImage"),
-                ("per_image_cost", "perImage"),
-            ];
-            for (from, to) in RENAMES {
-                mapping_rename_legacy(map, from, to);
-            }
-            normalize_thinking_format_entry(map, "thinkingFormat");
-            normalize_thinking_format_entry(map, "thinking_format");
         }
         serde_yaml::Value::Sequence(seq) => {
             for nested in seq {
@@ -209,6 +219,54 @@ pub fn normalize_yaml_read_aliases(value: &mut serde_yaml::Value) {
             }
         }
         _ => {}
+    }
+}
+
+/// 计价对象作用域：只改 `inputPerMTok` / `outputPerMTok` / cache* / perImage 旧键。
+fn normalize_pricing_object(value: &mut serde_yaml::Value) {
+    let serde_yaml::Value::Mapping(map) = value else {
+        return;
+    };
+    const RENAMES: &[(&str, &str)] = &[
+        ("inputPerMTok", "input"),
+        ("input_per_m_tok", "input"),
+        ("outputPerMTok", "output"),
+        ("output_per_m_tok", "output"),
+        ("cacheReadPerMTok", "cacheRead"),
+        ("cache_read_per_m_tok", "cacheRead"),
+        ("cacheWritePerMTok", "cacheWrite"),
+        ("cache_write_per_m_tok", "cacheWrite"),
+        ("perImageCost", "perImage"),
+        ("per_image_cost", "perImage"),
+    ];
+    for (from, to) in RENAMES {
+        mapping_rename_legacy(map, from, to);
+    }
+}
+
+/// compat 对象作用域：只改写 thinkingFormat 值字面量（google→gemini 等）。
+fn normalize_compat_object(value: &mut serde_yaml::Value) {
+    let serde_yaml::Value::Mapping(map) = value else {
+        return;
+    };
+    normalize_thinking_format_entry(map, "thinkingFormat");
+    normalize_thinking_format_entry(map, "thinking_format");
+}
+
+/// model 对象作用域：context 别名 + 内嵌 pricing / compat 作用域下钻。
+fn normalize_model_object(value: &mut serde_yaml::Value) {
+    let serde_yaml::Value::Mapping(map) = value else {
+        return;
+    };
+    mapping_rename_legacy(map, "contextLength", "contextWindow");
+    mapping_rename_legacy(map, "context_length", "contextWindow");
+    let pricing_key = serde_yaml::Value::String("pricing".to_string());
+    let compat_key = serde_yaml::Value::String("compat".to_string());
+    if let Some(node) = map.get_mut(&pricing_key) {
+        normalize_pricing_object(node);
+    }
+    if let Some(node) = map.get_mut(&compat_key) {
+        normalize_compat_object(node);
     }
 }
 
@@ -526,6 +584,12 @@ impl CurrencyKind {
     }
 }
 
+impl std::fmt::Display for CurrencyKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.code())
+    }
+}
+
 /// 阶梯计费配置（与 yaml `tiers` 同构；会话账单唯一匹配器 = 引擎阶梯，
 /// plans/05 §3.5——禁止接 `catalog_price` 半开区间第二套匹配器）
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -546,7 +610,12 @@ pub struct PricingTier {
 }
 
 /// 四维双币独立单价计量契约 (ModelPricingSpec)
-/// 严格四指标：输入、输出、缓存读取、缓存写入，全选填且价格完全独立，绝非固定一折
+///
+/// 严格四指标：输入、输出、缓存读取、缓存写入，全选填且价格完全独立，绝非固定一折。
+///
+/// **计费数据唯一真源（SSOT）**：wire（yaml/JSON）与引擎（[crate::pricing::PricingEngine]）
+/// 共用本结构，禁止再建平行计费 DTO。计费模式由 [Self::per_image] 显式判定——
+/// `Some(rate)` = 按张计费（每张单价 = rate 本身）；`None` = 按百万 Token 计费。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ModelPricingSpec {
@@ -597,7 +666,7 @@ impl ModelPricingSpec {
         cache_read_tokens: u64,
         cache_write_tokens: u64,
     ) -> Option<crate::pricing::CostBreakdown> {
-        crate::pricing::PricingEngine::calculate_cost_from_spec(
+        crate::pricing::PricingEngine::calculate_cost(
             &Some(self.clone()),
             input_tokens,
             output_tokens,
@@ -996,6 +1065,78 @@ providers:
         assert!(written.contains("gemini"));
         assert!(written.contains("qwen"));
         assert!(!written.contains("qwen_enable_thinking"));
+    }
+
+    #[test]
+    fn test_normalize_yaml_aliases_scoped_not_global() {
+        // 轨G P2：计价别名只在 pricing 对象、context 别名只在 model 对象、
+        // thinkingFormat 改写只在 compat 对象——无关嵌套同名键不得被误伤。
+        let mut value: serde_yaml::Value = serde_yaml::from_str(
+            r#"
+providers:
+  acme:
+    models:
+      - id: acme-x
+        contextLength: 128000
+        pricing:
+          inputPerMTok: 1.5
+        modalities:
+          inputPerMTok: 999
+          contextLength: 1
+        thinking:
+          High: high
+"#,
+        )
+        .expect("yaml");
+        normalize_yaml_read_aliases(&mut value);
+
+        let model = &value["providers"]["acme"]["models"][0];
+        // model 层：contextLength → contextWindow
+        assert!(
+            model.get("contextWindow").is_some() && model.get("contextLength").is_none(),
+            "model 层 contextLength 必须改名"
+        );
+        // pricing 层：inputPerMTok → input
+        let pricing = &model["pricing"];
+        assert!(
+            pricing.get("input").is_some() && pricing.get("inputPerMTok").is_none(),
+            "pricing 内计价别名必须改名"
+        );
+        // 无关嵌套（modalities）：同名键不得被改名
+        let mods = &model["modalities"];
+        assert!(
+            mods.get("inputPerMTok").is_some() && mods.get("input").is_none(),
+            "modalities 下 inputPerMTok 是无关嵌套，不得误改为 input"
+        );
+        assert!(
+            mods.get("contextLength").is_some(),
+            "modalities 下 contextLength 不是 model 层，不得误改"
+        );
+    }
+
+    #[test]
+    fn test_normalize_yaml_thinking_format_only_in_compat() {
+        // thinkingFormat 值改写（google→gemini）只在 compat 对象内生效
+        let mut value: serde_yaml::Value = serde_yaml::from_str(
+            r#"
+compat:
+  thinkingFormat: google
+unrelated:
+  thinkingFormat: google
+"#,
+        )
+        .expect("yaml");
+        normalize_yaml_read_aliases(&mut value);
+        assert_eq!(
+            value["compat"]["thinkingFormat"].as_str(),
+            Some("gemini"),
+            "compat 内 google 必须改写为 gemini"
+        );
+        assert_eq!(
+            value["unrelated"]["thinkingFormat"].as_str(),
+            Some("google"),
+            "compat 外 thinkingFormat 不得被改写"
+        );
     }
 
     #[test]

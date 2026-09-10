@@ -186,6 +186,9 @@ impl From<crate::models::catalog_types::ThinkingFormat> for ThinkingDialectForma
 pub struct DialectBuildOptions<'a> {
     pub effort: ReasoningEffort,
     pub format: ThinkingDialectFormat,
+    /// 模型物理输出上限（仅 AnthropicBudget 预算余量钳制消费）。
+    /// `None`/`0` = 无已知上限：**不发明 64000 兜底**，预算只保底 ≥1024，
+    /// 抬升建议 = budget+4096（调用方仅在自身已有显式 max_tokens 时才写请求体）。
     pub max_output_tokens: u64,
     /// 用户在 models.yaml 中配置的 thinking 拍平 Key-Value 字典映射
     pub thinking_map: Option<&'a IndexMap<String, String>>,
@@ -256,16 +259,19 @@ pub fn assemble_thinking_dialect(opts: &DialectBuildOptions<'_>) -> (Option<Valu
                 return (None, None);
             };
             let raw_budget = parsed_budget.max(1024);
-            // 安全余量钳制：不能超过模型物理上限的一半，且至少预留 4096 tokens
-            let max_cap = if opts.max_output_tokens > 0 {
-                opts.max_output_tokens
+            // 安全余量钳制：仅当调用方提供已知物理上限（>0）时才钳；
+            // 无上限（0/None 语义）→ 不发明 64000 兜底，只保底 ≥1024。
+            let (safe_budget, elevated_max_tokens) = if opts.max_output_tokens > 0 {
+                let max_cap = opts.max_output_tokens;
+                let safe = raw_budget.min(max_cap.saturating_sub(4096)).max(1024);
+                let elevated = safe.saturating_add(4096).min(max_cap.max(safe + 4096));
+                (safe, Some(elevated))
             } else {
-                64000
+                // 无已知上限：预算照用户字典值（≥1024），抬升建议 = budget+4096
+                // （build_chat 仅在 opts.max_tokens 为 Some 时才把 elevated 写进请求体）
+                let safe = raw_budget.max(1024);
+                (safe, Some(safe.saturating_add(4096)))
             };
-            let safe_budget = raw_budget.min(max_cap.saturating_sub(4096)).max(1024);
-            let elevated_max_tokens = safe_budget
-                .saturating_add(4096)
-                .min(max_cap.max(safe_budget + 4096));
             (
                 Some(json!({
                     "thinking": {
@@ -273,7 +279,7 @@ pub fn assemble_thinking_dialect(opts: &DialectBuildOptions<'_>) -> (Option<Valu
                         "budget_tokens": safe_budget
                     }
                 })),
-                Some(elevated_max_tokens),
+                elevated_max_tokens,
             )
         }
         ThinkingDialectFormat::DeepSeekNative => {
@@ -442,6 +448,27 @@ mod tests {
         // 预算受上限钳制：8192 - 4096 = 4096
         assert_eq!(budget, 4096);
         assert_eq!(elevated_tokens, Some(8192));
+    }
+
+    #[test]
+    fn test_anthropic_budget_zero_max_output_tokens_no_invented_64000() {
+        // 轨G P2：max_output_tokens=0（无已知上限）→ 不发明 64000 兜底，
+        // budget 保底取用户字典值，elevated = budget+4096。
+        let mut map = IndexMap::new();
+        map.insert("High".to_string(), "32000".to_string());
+        let opts = DialectBuildOptions {
+            effort: ReasoningEffort::High,
+            format: ThinkingDialectFormat::AnthropicBudget,
+            max_output_tokens: 0,
+            thinking_map: Some(&map),
+        };
+        let (val, elevated) = assemble_thinking_dialect(&opts);
+        let budget = val.unwrap()["thinking"]["budget_tokens"].as_u64().unwrap();
+        assert_eq!(
+            budget, 32000,
+            "无上限时不得按 64000-4096 钳制到 59904"
+        );
+        assert_eq!(elevated, Some(32000 + 4096));
     }
 
     #[test]

@@ -71,9 +71,9 @@ pub use vendor::{
     effort_to_budget_tokens, effort_to_gemini_thinking_level, infer_reasoning_vendor,
     normalize_reasoning_effort, normalize_thinking_intensity, resolve_reasoning_level,
     thinking_to_budget_tokens, thinking_to_gemini_thinking_level, DegradePolicy, ReasoningEffort,
-    ReasoningEffortFormat, ReasoningEffortState, ReasoningFormat, ReasoningReject, ReasoningVendor,
-    ThinkingCapability, ThinkingIntensity, NO_THINKING,
+    ReasoningEffortState, ReasoningFormat, ReasoningReject, ReasoningVendor, ThinkingCapability,
+    ThinkingIntensity, NO_THINKING,
 };
 #[allow(deprecated)]
-pub use vendor::infer_thinking_capability;
+pub use vendor::{infer_thinking_capability, ReasoningEffortFormat};
 pub use wire_protocol::{build_endpoint_url, resolve_wire_protocol, WireProtocol};

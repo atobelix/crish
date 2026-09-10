@@ -2,213 +2,34 @@
 //!
 //! 采用纯 u64/u128 整数定点运算，以 micros (10^-6 货币单位) 为基准，
 //! 彻底根除浮点运算累加误差，支持阶梯计费、Prompt Cache 扣减与按张计费。
+//!
+//! ## SSOT 契约（计费平行 DTO 收敛）
+//!
+//! 计费数据的唯一真源 = [ModelPricingSpec]（连同 [CurrencyKind] / [PricingTier]，
+//! 均定义于 [crate::models::catalog_types]）。本模块是纯计算引擎，直接消费该契约；
+//! 历史上与之平行的引擎侧 `Currency` / `PricingUnit` / `ModelPricing` DTO 已删除，
+//! **禁止再引入第二套计费结构**：
+//! - 结算币种：`CurrencyKind`（本模块 re-export 为 `Currency`，仅作旧路径兼容别名）；
+//! - 计费模式：由 `ModelPricingSpec.per_image` 显式判定——`Some(rate)` = 按张计费
+//!   （每张单价 = rate 本身，不再借用 `output` 字段做 `input=0/output=per_img`
+//!   隐式编码）；`None` = 按百万 Token 计费（四维费率 + 可选阶梯）；
+//! - `PerRequest`（按次）无 wire 表达且无生产构造方，已作为死枚举删除。
 
 use serde::{Deserialize, Serialize};
 
-/// 货币枚举 (严格限定为 CNY 或 USD)
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "UPPERCASE")]
-pub enum Currency {
-    Cny,
-    Usd,
-}
+pub use crate::models::catalog_types::PricingTier;
+use crate::models::catalog_types::{CurrencyKind, ModelPricingSpec};
 
-impl Currency {
-    /// 获取货币符号
-    pub fn symbol(&self) -> &'static str {
-        match self {
-            Self::Cny => "¥",
-            Self::Usd => "$",
-        }
-    }
-
-    /// 获取 ISO 4217 货币代码
-    pub fn code(&self) -> &'static str {
-        match self {
-            Self::Cny => "CNY",
-            Self::Usd => "USD",
-        }
-    }
-}
-
-impl Default for Currency {
-    fn default() -> Self {
-        Self::Usd
-    }
-}
-
-impl std::fmt::Display for Currency {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.code())
-    }
-}
-
-impl From<crate::models::catalog_types::CurrencyKind> for Currency {
-    fn from(kind: crate::models::catalog_types::CurrencyKind) -> Self {
-        match kind {
-            crate::models::catalog_types::CurrencyKind::Cny => Currency::Cny,
-            crate::models::catalog_types::CurrencyKind::Usd => Currency::Usd,
-        }
-    }
-}
-
-impl From<Currency> for crate::models::catalog_types::CurrencyKind {
-    fn from(c: Currency) -> Self {
-        match c {
-            Currency::Cny => crate::models::catalog_types::CurrencyKind::Cny,
-            Currency::Usd => crate::models::catalog_types::CurrencyKind::Usd,
-        }
-    }
-}
-
-/// 计量计价单位枚举
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum PricingUnit {
-    Per1mTokens,
-    PerImage,
-    PerRequest,
-}
-
-impl Default for PricingUnit {
-    fn default() -> Self {
-        Self::Per1mTokens
-    }
-}
-
-/// 阶梯计费配置
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PricingTier {
-    /// 触发此阶梯的输入 Token 数量门槛 (>= inputTokensAbove)
-    pub input_tokens_above: u64,
-    /// 阶梯普通输入单价
-    pub input: f64,
-    /// 阶梯生成输出单价
-    pub output: f64,
-    /// 阶梯缓存读取单价
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub cache_read: Option<f64>,
-    /// 阶梯缓存写入单价
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub cache_write: Option<f64>,
-}
-
-/// 模型四价计费定义
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ModelPricing {
-    /// 结算币种
-    pub currency: Currency,
-    /// 计费单位 (默认 per_1m_tokens)
-    #[serde(default)]
-    pub unit: PricingUnit,
-    /// 基础普通提示词输入单价 (元/1M Tokens 或 $/1M Tokens)
-    pub input: f64,
-    /// 生成补全输出单价 (元/1M Tokens 或 $/1M Tokens)
-    pub output: f64,
-    /// 提示词上下文缓存命中读取独立单价 (Cache Read / Hit)，绝非固定一折
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub cache_read: Option<f64>,
-    /// 提示词上下文缓存创建写入独立单价 (Cache Write / Creation)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub cache_write: Option<f64>,
-    /// 阶梯计费档位列表
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub tiers: Vec<PricingTier>,
-}
-
-impl From<crate::models::catalog_types::ModelPricingSpec> for ModelPricing {
-    fn from(spec: crate::models::catalog_types::ModelPricingSpec) -> Self {
-        let (unit, input, output) = if let Some(per_img) = spec.per_image {
-            (PricingUnit::PerImage, 0.0, per_img)
-        } else {
-            (PricingUnit::Per1mTokens, spec.input, spec.output)
-        };
-        Self {
-            currency: spec.currency.into(),
-            unit,
-            input,
-            output,
-            cache_read: spec.cache_read,
-            cache_write: spec.cache_write,
-            // plans/05 T5.1：必须拷贝阶梯（spec 真没有才为空；禁止静默清空）
-            tiers: spec
-                .tiers
-                .into_iter()
-                .map(|t| PricingTier {
-                    input_tokens_above: t.input_tokens_above,
-                    input: t.input,
-                    output: t.output,
-                    cache_read: t.cache_read,
-                    cache_write: t.cache_write,
-                })
-                .collect(),
-        }
-    }
-}
-
-impl From<&crate::models::catalog_types::ModelPricingSpec> for ModelPricing {
-    fn from(spec: &crate::models::catalog_types::ModelPricingSpec) -> Self {
-        spec.clone().into()
-    }
-}
-
-impl From<ModelPricing> for crate::models::catalog_types::ModelPricingSpec {
-    fn from(p: ModelPricing) -> Self {
-        let per_image = if p.unit == PricingUnit::PerImage {
-            Some(p.output)
-        } else {
-            None
-        };
-        Self {
-            currency: p.currency.into(),
-            input: p.input,
-            output: p.output,
-            cache_read: p.cache_read,
-            cache_write: p.cache_write,
-            per_image,
-            tiers: p
-                .tiers
-                .into_iter()
-                .map(|t| crate::models::catalog_types::PricingTier {
-                    input_tokens_above: t.input_tokens_above,
-                    input: t.input,
-                    output: t.output,
-                    cache_read: t.cache_read,
-                    cache_write: t.cache_write,
-                })
-                .collect(),
-        }
-    }
-}
-
-impl From<&ModelPricing> for crate::models::catalog_types::ModelPricingSpec {
-    fn from(p: &ModelPricing) -> Self {
-        p.clone().into()
-    }
-}
-
-impl Default for ModelPricing {
-    fn default() -> Self {
-        Self {
-            currency: Currency::default(),
-            unit: PricingUnit::default(),
-            input: 0.0,
-            output: 0.0,
-            cache_read: None,
-            cache_write: None,
-            tiers: Vec::new(),
-        }
-    }
-}
+/// 货币类型兼容别名：SSOT = [CurrencyKind]（catalog_types）。
+/// 保留 `pricing::Currency` 路径仅为既有调用方不漂移；禁止再扩展平行枚举。
+pub use crate::models::catalog_types::CurrencyKind as Currency;
 
 /// 定点微元账目明细 (CostBreakdown)
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CostBreakdown {
     /// 结算货币类型
-    pub currency: Currency,
+    pub currency: CurrencyKind,
     /// 普通输入微元开销 ($10^{-6}$ 货币单位)
     pub input_micros: u64,
     /// 生成输出微元开销 ($10^{-6}$ 货币单位)
@@ -232,7 +53,7 @@ impl CostBreakdown {
     }
 
     /// 构造权威显式全免账单明细
-    pub fn free(currency: Currency) -> Self {
+    pub fn free(currency: CurrencyKind) -> Self {
         Self {
             currency,
             input_micros: 0,
@@ -247,7 +68,7 @@ impl CostBreakdown {
 
     /// 根据 Token 用量与模型定价直接生成权威 CostBreakdown（会话流结算入口）
     pub fn from_usage(
-        pricing_opt: &Option<ModelPricing>,
+        pricing_opt: &Option<ModelPricingSpec>,
         usage: &crate::events::ProviderUsage,
     ) -> Option<Self> {
         PricingEngine::calculate_cost_from_usage(pricing_opt, usage)
@@ -255,7 +76,7 @@ impl CostBreakdown {
 
     /// 根据详细 Token 计数与模型定价直接生成权威 CostBreakdown
     pub fn calculate(
-        pricing_opt: &Option<ModelPricing>,
+        pricing_opt: &Option<ModelPricingSpec>,
         prompt_tokens: u64,
         completion_tokens: u64,
         cache_read_tokens: u64,
@@ -274,7 +95,7 @@ impl CostBreakdown {
 impl Default for CostBreakdown {
     fn default() -> Self {
         Self {
-            currency: Currency::default(),
+            currency: CurrencyKind::default(),
             input_micros: 0,
             output_micros: 0,
             cache_read_micros: 0,
@@ -290,11 +111,15 @@ impl Default for CostBreakdown {
 pub struct PricingEngine;
 
 impl PricingEngine {
-    /// 计算单次调用的四维双币微元账目
+    /// 计算单次调用的四维双币微元账目（唯一算费入口，直接消费 catalog SSOT）
+    ///
+    /// 计费模式由 `pricing.per_image` 显式判定：
+    /// - `Some(rate)` → 按张计费：`completion_tokens` 解释为张数，每张单价 = rate；
+    /// - `None` → 按百万 Token 计费（含阶梯检索与缓存扣减）。
     ///
     /// 若 `pricing_opt` 为 `None`，返回 `None` 实现空配置静默 (Zero-Cost Silence)。
     pub fn calculate_cost(
-        pricing_opt: &Option<ModelPricing>,
+        pricing_opt: &Option<ModelPricingSpec>,
         prompt_tokens: u64,
         completion_tokens: u64,
         cache_read_tokens: u64,
@@ -302,8 +127,11 @@ impl PricingEngine {
     ) -> Option<CostBreakdown> {
         let pricing = pricing_opt.as_ref()?;
 
-        // 显式免费模型判断：必须且仅当不存在阶梯计费且所有四项费率均为 0.0 时，才允许短路返回全免
+        // 显式免费模型判断：必须且仅当不存在阶梯计费、无按张费率且
+        // 所有四项 Token 费率均为 0.0 时，才允许短路返回全免
+        // （per_image 必须参与判定：纯生图模型 input/output 常为 0，费率在 per_image）
         if pricing.tiers.is_empty()
+            && pricing.per_image.unwrap_or(0.0) == 0.0
             && pricing.input == 0.0
             && pricing.output == 0.0
             && pricing.cache_read.unwrap_or(0.0) == 0.0
@@ -312,10 +140,11 @@ impl PricingEngine {
             return Some(CostBreakdown::free(pricing.currency));
         }
 
-        // 分支 1：按张计费模式 (PerImage)
-        if pricing.unit == PricingUnit::PerImage {
+        // 分支 1：按张计费模式 (PerImage)——费率显式来自 spec.per_image，
+        // 绝不借用 output 字段编码（无 input=0/output=per_img 信息损失）
+        if let Some(rate_per_image) = pricing.per_image {
             let image_count = completion_tokens;
-            let rate_micros_per_image = Self::f64_to_micros(pricing.output);
+            let rate_micros_per_image = Self::f64_to_micros(rate_per_image);
             let product = (image_count as u128) * (rate_micros_per_image as u128);
             let total_micros = product.min(u64::MAX as u128) as u64;
 
@@ -331,24 +160,7 @@ impl PricingEngine {
             });
         }
 
-        // 分支 2：按次计费模式 (PerRequest)
-        if pricing.unit == PricingUnit::PerRequest {
-            let rate_micros = Self::f64_to_micros(pricing.input.max(pricing.output));
-            let total_micros = rate_micros;
-
-            return Some(CostBreakdown {
-                currency: pricing.currency,
-                input_micros: rate_micros,
-                output_micros: 0,
-                cache_read_micros: 0,
-                cache_write_micros: 0,
-                total_micros,
-                formatted_total: Self::format_micros(total_micros, pricing.currency),
-                is_free: false,
-            });
-        }
-
-        // 分支 3：按百万 Token 计费模式 (Per1mTokens)
+        // 分支 2：按百万 Token 计费模式 (Per1mTokens)
         let mut active_input_rate = pricing.input;
         let mut active_output_rate = pricing.output;
         let mut active_cache_read_rate = pricing.cache_read.unwrap_or(0.0);
@@ -399,27 +211,9 @@ impl PricingEngine {
         })
     }
 
-    /// 基于 ModelPricingSpec 计算费用（与 `catalog_types` 无缝互操作）
-    pub fn calculate_cost_from_spec(
-        spec_opt: &Option<crate::models::catalog_types::ModelPricingSpec>,
-        prompt_tokens: u64,
-        completion_tokens: u64,
-        cache_read_tokens: u64,
-        cache_write_tokens: u64,
-    ) -> Option<CostBreakdown> {
-        let pricing = spec_opt.as_ref().map(ModelPricing::from);
-        Self::calculate_cost(
-            &pricing,
-            prompt_tokens,
-            completion_tokens,
-            cache_read_tokens,
-            cache_write_tokens,
-        )
-    }
-
-    /// 基于 ProviderUsage 与 ModelPricing 计算费用（会话流结算权威入口）
+    /// 基于 ProviderUsage 与 ModelPricingSpec 计算费用（会话流结算权威入口）
     pub fn calculate_cost_from_usage(
-        pricing_opt: &Option<ModelPricing>,
+        pricing_opt: &Option<ModelPricingSpec>,
         usage: &crate::events::ProviderUsage,
     ) -> Option<CostBreakdown> {
         let prompt_tokens = usage.prompt_tokens.unwrap_or(0);
@@ -428,24 +222,6 @@ impl PricingEngine {
         let cache_write_tokens = usage.cache_write_tokens.unwrap_or(0);
         Self::calculate_cost(
             pricing_opt,
-            prompt_tokens,
-            completion_tokens,
-            cache_read_tokens,
-            cache_write_tokens,
-        )
-    }
-
-    /// 基于 ProviderUsage 与 ModelPricingSpec 计算费用（与 catalog_types 无缝互操作）
-    pub fn calculate_cost_from_usage_spec(
-        spec_opt: &Option<crate::models::catalog_types::ModelPricingSpec>,
-        usage: &crate::events::ProviderUsage,
-    ) -> Option<CostBreakdown> {
-        let prompt_tokens = usage.prompt_tokens.unwrap_or(0);
-        let completion_tokens = usage.completion_tokens.unwrap_or(0);
-        let cache_read_tokens = usage.cache_read_tokens.unwrap_or(0);
-        let cache_write_tokens = usage.cache_write_tokens.unwrap_or(0);
-        Self::calculate_cost_from_spec(
-            spec_opt,
             prompt_tokens,
             completion_tokens,
             cache_read_tokens,
@@ -488,7 +264,7 @@ impl PricingEngine {
     /// - 若金额为 0：返回 "$0.0000" 或 "¥0.0000"
     /// - 若金额极小 (< 1000 微元，即 < 0.001 货币单位)：保留 6 位小数 (如 "¥0.000500")
     /// - 常规金额：保留 4 位小数并正确四舍五入进位 (如 "¥0.0520", "$0.5325")
-    pub fn format_micros(micros: u64, currency: Currency) -> String {
+    pub fn format_micros(micros: u64, currency: CurrencyKind) -> String {
         let symbol = currency.symbol();
         if micros == 0 {
             return format!("{}0.0000", symbol);
