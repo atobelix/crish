@@ -46,6 +46,11 @@ export const ComposerFusedTrigger: React.FC<ComposerFusedTriggerProps> = ({
     providerId: (getActiveProfileId() ?? '').trim(),
     modelId: (getActiveModelId() ?? '').trim(),
   }));
+  // titleEpoch：SessionRuntimeRegistry 的 thinkingTitle 存在模块级可变内存中，
+  // 不是 React 状态源——外部写入口（Picker / 跨会话恢复）改档后本组件无法感知。
+  // 用递增计数器作为「外部状态已变」的显式 re-read 信号（比强行把 registry
+  // 改造成响应式 store 改动面小一个量级）；若未来 SessionRuntimeRegistry 接入
+  // 订阅模型，应删掉本 epoch 并改用真实依赖。可选优化项，本轮跳过结构性改造。
   const [titleEpoch, setTitleEpoch] = useState(0);
   const btnRef = useRef<HTMLButtonElement>(null);
 

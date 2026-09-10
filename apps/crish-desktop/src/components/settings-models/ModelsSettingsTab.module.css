@@ -404,6 +404,143 @@
   padding-top: 4px;
 }
 
+/* ── 6b. 手动添加表单内联样式收敛（E2：仅布局/间距/颜色，动态值仍走 style） ── */
+.mrdAddHeaderRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.mrdAddHeaderLabel {
+  font-size: var(--font-size-xs, 12px);
+  font-weight: 500;
+}
+
+.mrdAddModelIdField {
+  position: relative;
+  flex: 1;
+  min-width: 160px;
+}
+
+.mrdAddModelIdHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.mrdAddModelIdLabel {
+  font-size: var(--font-size-xs, 12px);
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.mrdAddScanBtn {
+  height: 20px;
+  padding: 0 4px;
+  font-size: 11px;
+  color: var(--brand);
+}
+
+.mrdAddSuggestMenu {
+  position: fixed;
+  /* top / left / width 由运行时 dropdownRect 动态写入 style */
+  z-index: var(--z-tooltip, 9000);
+  background: var(--bg-card, #ffffff);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md, 8px);
+  box-shadow: 0 4px 16px hsl(0 0% 0% / 0.08);
+  max-height: 210px;
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.mrdAddSuggestItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm, 6px);
+  cursor: pointer;
+  gap: 8px;
+  font-size: var(--font-size-xs, 12px);
+  transition: background var(--duration-fast, 150ms) ease;
+}
+
+.mrdAddSuggestItem:hover {
+  background: var(--bg-subtle);
+}
+
+.mrdAddSuggestMeta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.mrdAddSuggestId {
+  font-family: var(--font-mono, monospace);
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.mrdAddSuggestName {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mrdAddSuggestCtx {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--bg-subtle);
+  color: var(--text-tertiary);
+  border: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+
+.mrdAddThinkingWrap {
+  position: relative;
+}
+
+.mrdAddThinkingClose {
+  position: absolute;
+  right: 56px;
+  top: 0;
+  z-index: 1;
+}
+
+.mrdAddThinkingCloseBtn {
+  font-size: 11px;
+  height: 22px;
+  color: var(--text-tertiary);
+}
+
+.mrdAddThinkingOffRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 0;
+}
+
+.mrdAddThinkingOffLabel {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.mrdAddThinkingOffBtn {
+  font-size: 11px;
+  height: 22px;
+}
+
+.mrdAddFooterActions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
 /* ── 7. 展开配置抽屉（修复深色模式光学下沉） ── */
 .modelConfigPanel {
   width: 100%;

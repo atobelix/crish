@@ -1,6 +1,6 @@
 /**
  * 发送 / 排队 / 停止（L2 协作 · L3 强制取消）。
- * 主对话卡片使用墨绿色实体圆形发送按钮（32x32px 正圆，#10b981，Hover #059669，白色上箭头，200ms Spring 展开/收缩）；
+ * 主对话卡片使用墨绿色实体圆形发送按钮（32x32px 正圆，var(--brand)，Hover #059669，白色上箭头，200ms Spring 展开/收缩）；
  * 侧栏 ComposerField / 兜底模式回落至盒内回车折角按钮。
  */
 import React, { useCallback, useEffect, useRef } from 'react';

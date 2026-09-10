@@ -153,41 +153,15 @@ export const ManualAddForm: React.FC<{
 
   return (
     <div className={`${styles.mrdAddForm} mrd-add-form`}>
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-        }}
-      >
-        <span style={{ fontSize: 'var(--font-size-xs, 12px)', fontWeight: 500 }}>
-          手动添加模型
-        </span>
+      <div className={styles.mrdAddHeaderRow}>
+        <span className={styles.mrdAddHeaderLabel}>手动添加模型</span>
       </div>
 
       <div className={`${styles.mrdAddFormFields} mrd-add-form-fields`}>
         {/* 模型 ID 智能输入行（集成在线获取） */}
-        <div
-          ref={inputContainerRef}
-          style={{ position: 'relative', flex: 1, minWidth: '160px' }}
-        >
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginBottom: '4px',
-            }}
-          >
-            <span
-              style={{
-                fontSize: 'var(--font-size-xs, 12px)',
-                fontWeight: 500,
-                color: 'var(--text-secondary)',
-              }}
-            >
-              模型 ID *
-            </span>
+        <div ref={inputContainerRef} className={styles.mrdAddModelIdField}>
+          <div className={styles.mrdAddModelIdHeader}>
+            <span className={styles.mrdAddModelIdLabel}>模型 ID *</span>
             {runScan && (
               <Button
                 type="button"
@@ -196,12 +170,7 @@ export const ManualAddForm: React.FC<{
                 disabled={scanBusy}
                 onClick={() => void runScan()}
                 aria-label="在线获取"
-                style={{
-                  height: '20px',
-                  padding: '0 4px',
-                  fontSize: '11px',
-                  color: 'var(--brand, #10b981)',
-                }}
+                className={styles.mrdAddScanBtn}
                 icon={
                   scanBusy ? (
                     <Lucide.Loader2
@@ -240,7 +209,6 @@ export const ManualAddForm: React.FC<{
               if (e.key === 'Escape') setShowSuggestions(false);
             }}
             spellCheck={false}
-            style={{ background: '#ffffff' }}
           />
         </div>
 
@@ -251,19 +219,12 @@ export const ManualAddForm: React.FC<{
           createPortal(
             <div
               ref={dropdownRef}
+              className={styles.mrdAddSuggestMenu}
+              // 动态几何（视口定位）保留 style：静态视觉规则在 module CSS
               style={{
-                position: 'fixed',
                 top: dropdownRect.top,
                 left: dropdownRect.left,
                 width: dropdownRect.width,
-                zIndex: 'var(--z-tooltip, 9000)',
-                background: 'var(--bg-card, #ffffff)',
-                border: '1px solid var(--border-subtle)',
-                borderRadius: 'var(--radius-md, 8px)',
-                boxShadow: '0 4px 16px rgba(0, 0, 0, 0.08)',
-                maxHeight: '210px',
-                overflowY: 'auto',
-                padding: '4px',
               }}
               onMouseDown={(e) => e.stopPropagation()}
             >
@@ -273,64 +234,14 @@ export const ManualAddForm: React.FC<{
                 return (
                   <div
                     key={id}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: '6px 8px',
-                      borderRadius: 'var(--radius-sm, 6px)',
-                      cursor: 'pointer',
-                      gap: '8px',
-                      fontSize: 'var(--font-size-xs, 12px)',
-                      transition: 'background var(--duration-fast, 150ms) ease',
-                    }}
-                    onMouseEnter={(e) =>
-                      (e.currentTarget.style.background = 'var(--bg-subtle)')
-                    }
-                    onMouseLeave={(e) =>
-                      (e.currentTarget.style.background = 'transparent')
-                    }
+                    className={styles.mrdAddSuggestItem}
                     onClick={() => handleSelectSuggestion(id)}
                   >
-                    <div
-                      style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        minWidth: 0,
-                      }}
-                    >
-                      <span
-                        style={{
-                          fontFamily: 'var(--font-mono, monospace)',
-                          fontWeight: 500,
-                          color: 'var(--text-primary)',
-                        }}
-                      >
-                        {id}
-                      </span>
-                      <span
-                        style={{
-                          fontSize: '11px',
-                          color: 'var(--text-tertiary)',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                        }}
-                      >
-                        {name}
-                      </span>
+                    <div className={styles.mrdAddSuggestMeta}>
+                      <span className={styles.mrdAddSuggestId}>{id}</span>
+                      <span className={styles.mrdAddSuggestName}>{name}</span>
                     </div>
-                    <span
-                      style={{
-                        fontSize: '10px',
-                        padding: '1px 5px',
-                        borderRadius: '4px',
-                        background: 'var(--bg-subtle)',
-                        color: 'var(--text-tertiary)',
-                        border: '1px solid var(--border-subtle)',
-                        flexShrink: 0,
-                      }}
-                    >
+                    <span className={styles.mrdAddSuggestCtx}>
                       {live?.contextWindow != null
                         ? formatContextLabel(live.contextWindow)
                         : ''}
@@ -351,7 +262,6 @@ export const ManualAddForm: React.FC<{
             onChange={(e) =>
               setAddDraft((d) => ({ ...d, displayName: e.target.value }))
             }
-            style={{ background: '#ffffff' }}
           />
         </label>
 
@@ -364,7 +274,6 @@ export const ManualAddForm: React.FC<{
             onChange={(e) =>
               setAddDraft((d) => ({ ...d, contextLength: e.target.value }))
             }
-            style={{ background: '#ffffff' }}
           />
         </label>
 
@@ -377,7 +286,6 @@ export const ManualAddForm: React.FC<{
             onChange={(e) =>
               setAddDraft((d) => ({ ...d, maxOutputTokens: e.target.value }))
             }
-            style={{ background: '#ffffff' }}
           />
         </label>
       </div>
@@ -403,15 +311,8 @@ export const ManualAddForm: React.FC<{
 
       {/* 思考推理档位编辑器 */}
       {addDraft.thinkingEnabled ? (
-        <div style={{ position: 'relative' }}>
-          <div
-            style={{
-              position: 'absolute',
-              right: 56,
-              top: 0,
-              zIndex: 1,
-            }}
-          >
+        <div className={styles.mrdAddThinkingWrap}>
+          <div className={styles.mrdAddThinkingClose}>
             <Button
               type="button"
               variant="ghost"
@@ -423,11 +324,7 @@ export const ManualAddForm: React.FC<{
                   caps: { ...d.caps, reasoning: false },
                 }))
               }
-              style={{
-                fontSize: '11px',
-                height: '22px',
-                color: 'var(--text-tertiary)',
-              }}
+              className={styles.mrdAddThinkingCloseBtn}
             >
               关闭思考
             </Button>
@@ -441,17 +338,8 @@ export const ManualAddForm: React.FC<{
           />
         </div>
       ) : (
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            padding: '4px 0',
-          }}
-        >
-          <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-            思考推理
-          </span>
+        <div className={styles.mrdAddThinkingOffRow}>
+          <span className={styles.mrdAddThinkingOffLabel}>思考推理</span>
           <Button
             type="button"
             variant="ghost"
@@ -465,7 +353,7 @@ export const ManualAddForm: React.FC<{
               }))
             }
             icon={<Lucide.Plus size={11} />}
-            style={{ fontSize: '11px', height: '22px' }}
+            className={styles.mrdAddThinkingOffBtn}
           >
             配置思考档位
           </Button>
@@ -474,7 +362,7 @@ export const ManualAddForm: React.FC<{
 
       {/* 底部操作区 */}
       <div className={`${styles.mrdAddFormFooter} mrd-add-form-footer`}>
-        <div style={{ display: 'flex', gap: '8px', marginLeft: 'auto' }}>
+        <div className={styles.mrdAddFooterActions}>
           <Button
             type="button"
             variant="secondary"

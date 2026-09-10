@@ -5,13 +5,6 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { ModelConfigPanel } from './ModelConfigPanel';
 import type { CfgDraft } from './useModelProfilesState';
 
-const dummyMeta = {
-  profileId: 'p1',
-  model: 'deepseek-v4-pro',
-  enabled: true,
-  displayName: 'DeepSeek V4 Pro',
-};
-
 function PanelWrapper({
   initialThinkingEnabled = false,
   modelId = 'deepseek-v4-pro',
@@ -60,10 +53,6 @@ function PanelWrapper({
       modelId={modelId}
       cfgDraft={cfgDraft!}
       setCfgDraft={setCfgDraft as any}
-      meta={dummyMeta as any}
-      tKey="deepseek-v4-pro"
-      testBusy={null}
-      runTest={vi.fn()}
       closeConfig={vi.fn()}
       saveConfig={saveConfig}
     />

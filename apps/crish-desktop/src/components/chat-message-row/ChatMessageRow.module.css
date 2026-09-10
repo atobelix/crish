@@ -975,10 +975,11 @@
   border-radius: 50%;
   border: 1.5px solid rgba(255, 255, 255, 0.95);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--border-color) 70%, transparent);
+  /* 钉选色轮调色板：与 PRESET_PIN_COLORS 对齐；翡翠绿位走 brand token fallback */
   background: conic-gradient(
     #f43f5e 0deg,
     #f59e0b 60deg,
-    #10b981 120deg,
+    var(--brand, #10b981) 120deg,
     #0ea5e9 180deg,
     #8b5cf6 240deg,
     #ec4899 300deg,

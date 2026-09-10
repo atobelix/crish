@@ -335,15 +335,6 @@ export const ModelList: React.FC<{
                 modelId={m}
                 cfgDraft={cfgDraft}
                 setCfgDraft={setCfgDraft}
-                meta={{
-                  profileId: providerId,
-                  model: m,
-                  enabled: !off,
-                  displayName: display,
-                }}
-                tKey={tKey}
-                testBusy={testBusy}
-                runTest={runTest}
                 closeConfig={closeConfig}
                 saveConfig={saveConfig}
               />

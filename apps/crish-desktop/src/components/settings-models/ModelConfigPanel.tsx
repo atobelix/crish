@@ -1,6 +1,4 @@
-import React, { useCallback, useMemo } from 'react';
-import * as Lucide from 'lucide-react';
-import type { ModelMeta } from '../../api/modelCatalog';
+import React, { useMemo } from 'react';
 import { Button, Input } from '../ui';
 import { ModelModalitiesEditor } from './ModelModalitiesEditor';
 import {
@@ -21,20 +19,12 @@ export const ModelConfigPanel: React.FC<{
   modelId: string;
   cfgDraft: CfgDraft;
   setCfgDraft: React.Dispatch<React.SetStateAction<CfgDraft | null>>;
-  meta: ModelMeta;
-  tKey: string;
-  testBusy: string | null;
-  runTest: (model: string) => Promise<void>;
   closeConfig: () => void;
   saveConfig: () => void;
 }> = ({
   modelId: m,
   cfgDraft,
   setCfgDraft,
-  meta: _meta,
-  tKey: _tKey,
-  testBusy: _testBusy,
-  runTest: _runTest,
   closeConfig,
   saveConfig,
 }) => {

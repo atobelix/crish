@@ -208,15 +208,13 @@ export const PinActionWithPicker: React.FC<PinActionWithPickerProps> = React.mem
         const y = Math.max(0, Math.min(rect.height, clientY - rect.top));
         const s = Math.round((x / rect.width) * 100);
         const v = Math.round((1 - y / rect.height) * 100);
-        setHsv((prev) => {
-          const next = { ...prev, s, v };
-          const hex = hsvToHex(next.h, s, v);
-          setHexInput(hex.toUpperCase());
-          onTogglePin(hex);
-          return next;
-        });
+        const next = { ...hsv, s, v };
+        const hex = hsvToHex(next.h, s, v);
+        setHsv(next);
+        setHexInput(hex.toUpperCase());
+        onTogglePin(hex);
       },
-      [onTogglePin]
+      [hsv, onTogglePin]
     );
 
     const handlePalettePointerDown = useCallback(
@@ -240,15 +238,13 @@ export const PinActionWithPicker: React.FC<PinActionWithPickerProps> = React.mem
     const handleHueChange = useCallback(
       (e: React.ChangeEvent<HTMLInputElement>) => {
         const val = Number(e.target.value);
-        setHsv((prev) => {
-          const next = { ...prev, h: val };
-          const hex = hsvToHex(val, next.s, next.v);
-          setHexInput(hex.toUpperCase());
-          onTogglePin(hex);
-          return next;
-        });
+        const next = { ...hsv, h: val };
+        const hex = hsvToHex(val, next.s, next.v);
+        setHsv(next);
+        setHexInput(hex.toUpperCase());
+        onTogglePin(hex);
       },
-      [onTogglePin]
+      [hsv, onTogglePin]
     );
 
     const handleResetDefault = useCallback(() => {
@@ -405,16 +401,17 @@ export const PinActionWithPicker: React.FC<PinActionWithPickerProps> = React.mem
                       />
 
                       <div className={styles.pinCustomBottomRow}>
-                        <button
-                          type="button"
-                          className={styles.pinResetBtn}
-                          onClick={handleResetDefault}
-                          aria-label="重置为默认绿色"
-                          title="重置为默认绿色"
-                        >
-                          <RotateCcw size={11} strokeWidth={2.5} />
-                          <span>重置</span>
-                        </button>
+                        <Tooltip content="重置为默认绿色">
+                          <button
+                            type="button"
+                            className={styles.pinResetBtn}
+                            onClick={handleResetDefault}
+                            aria-label="重置为默认绿色"
+                          >
+                            <RotateCcw size={11} strokeWidth={2.5} />
+                            <span>重置</span>
+                          </button>
+                        </Tooltip>
 
                         <div className={styles.pinCustomValueRow}>
                           <span
@@ -431,7 +428,7 @@ export const PinActionWithPicker: React.FC<PinActionWithPickerProps> = React.mem
                             onKeyDown={handleHexKeyDown}
                             maxLength={7}
                             aria-label="十六进制色值"
-                            placeholder="#10B981"
+                            placeholder={DEFAULT_PIN_COLOR.toUpperCase()}
                             spellCheck={false}
                           />
                         </div>

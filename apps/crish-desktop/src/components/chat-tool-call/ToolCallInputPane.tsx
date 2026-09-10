@@ -101,12 +101,11 @@ export const ToolCallInputPane: React.FC<ToolCallInputPaneProps> = ({
           </div>
           <div className={styles.terminalLineEndSlot}>
             {parsedArgs.props.cwd ? (
-              <span
-                className={styles.terminalCwdBadge}
-                title={String(parsedArgs.props.cwd)}
-              >
-                ({String(parsedArgs.props.cwd)})
-              </span>
+              <Tooltip content={String(parsedArgs.props.cwd)}>
+                <span className={styles.terminalCwdBadge}>
+                  ({String(parsedArgs.props.cwd)})
+                </span>
+              </Tooltip>
             ) : null}
             <Tooltip content={copied ? '已复制！' : '复制完整命令'}>
               <Button
