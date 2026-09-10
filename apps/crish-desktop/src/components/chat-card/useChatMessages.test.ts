@@ -5,11 +5,16 @@ import { useSessionStore } from '../../store/sessionStore';
 import { useChatMessages } from './useChatMessages';
 import type { SessionMessage, SessionState } from '../../store/types';
 
-function makeMsg(id: string, text: string, status?: SessionMessage['status']): SessionMessage {
+function makeMsg(
+  id: string,
+  text: string,
+  status?: SessionMessage['status'],
+  timestamp: number = 1
+): SessionMessage {
   return {
     id,
     sender: 'user',
-    timestamp: 1,
+    timestamp,
     text,
     status,
   } as SessionMessage;
@@ -122,5 +127,56 @@ describe('useChatMessages', () => {
     expect(result.current.messages).toHaveLength(3);
     // 载体去重后只保留最后一条同一 carrierKey 的消息
     expect(result.current.displayMessages.some((m) => m.id === 'c2')).toBe(true);
+  });
+
+  it('乱序 messages 输入时 displayMessages 按 (timestamp,id) 有序（防御性排序兜底）', () => {
+    // 构造乱序：ts 3 → 1 → 2（同 ts 时用 id 做 tiebreak）
+    useSessionStore.setState((st) => {
+      st.sessionsById['sess-1']!.messages = [
+        makeMsg('m3', 'third', undefined, 300),
+        makeMsg('m1', 'first', undefined, 100),
+        makeMsg('m2', 'second', undefined, 200),
+      ];
+    });
+
+    const { result } = renderHook(() =>
+      useChatMessages({
+        resolveSessionId: (s) => s.activeSessionId,
+        activeSessionId: 'sess-1',
+        localMsgFilter: '',
+        mainSurface: 'chat',
+      })
+    );
+
+    expect(result.current.displayMessages.map((m) => m.id)).toEqual([
+      'm1',
+      'm2',
+      'm3',
+    ]);
+  });
+
+  it('已序 messages 输入时 displayMessages 顺序不变（稳定排序不打乱）', () => {
+    useSessionStore.setState((st) => {
+      st.sessionsById['sess-1']!.messages = [
+        makeMsg('m1', 'a', undefined, 100),
+        makeMsg('m2', 'b', undefined, 200),
+        makeMsg('m3', 'c', undefined, 300),
+      ];
+    });
+
+    const { result } = renderHook(() =>
+      useChatMessages({
+        resolveSessionId: (s) => s.activeSessionId,
+        activeSessionId: 'sess-1',
+        localMsgFilter: '',
+        mainSurface: 'chat',
+      })
+    );
+
+    expect(result.current.displayMessages.map((m) => m.id)).toEqual([
+      'm1',
+      'm2',
+      'm3',
+    ]);
   });
 });

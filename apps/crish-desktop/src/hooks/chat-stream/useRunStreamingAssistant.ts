@@ -25,6 +25,7 @@ import { getCompositionRoot } from '../../app/compositionRoot';
 import { setStreamText } from '../../store/streamingStore';
 import { StreamRenderBuffer } from '../../api/StreamRenderBuffer';
 import { streamBatchKey } from '../../api/streamTextBatcher';
+import { recordChunkSample } from '../../api/streamDiag';
 import { useGoalMode } from './useGoalMode';
 import {
   applySubagentStarted,
@@ -205,15 +206,14 @@ export function useRunStreamingAssistant(
               .session.getState()
               .setEngineLastRunId(sid, runId);
           },
-          onThought: (thought, turnIndex = 0) => {
+          onThought: (thought) => {
+            // D2 单轨收敛：thinking 仅经 batcher → streamingStore（与 onChunk 同构），
+            // 不再同步直写 sessionStore.updateMessageThinking。
             if (!assertLive()) return;
             thinkingBatcherRef.current?.push(
               streamBatchKey(sid, assistantMsgId),
               thought
             );
-            getCompositionRoot()
-              .session.getState()
-              .updateMessageThinking(sid, assistantMsgId, thought, turnIndex);
           },
           onToolStart: (toolId, name, args, explanation) => {
             if (!assertLive()) return;
@@ -289,6 +289,7 @@ export function useRunStreamingAssistant(
           },
           onChunk: (chunk) => {
             if (!assertLive()) return;
+            recordChunkSample(chunk.length);
             gotRealText = true;
             dismissTransientRunNotice();
             streamedFullText += chunk;

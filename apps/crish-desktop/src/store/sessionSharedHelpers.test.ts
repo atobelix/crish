@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { SessionMessage } from './types';
+import { mergeMessagesById } from '../api/sessionEventProjection';
 import {
   isTerminalSessionMessageStatus,
   mergeSessionMessageFields,
@@ -157,5 +158,136 @@ describe('mergeSessionMessageFields / upsertMessageById', () => {
     upsertMessageById(list, msg({ id: 'a', sender: 'user', text: 'u' }));
     upsertMessageById(list, msg({ id: 'b', sender: 'assistant', text: 'r' }));
     expect(list).toHaveLength(2);
+  });
+});
+
+describe('upsertMessageById 有序插入（D1 canonical order）', () => {
+  it('新消息按 ts 插入中间而非尾部', () => {
+    const list: SessionMessage[] = [
+      msg({ id: 'u1', sender: 'user', text: 'first', timestamp: 100 }),
+      msg({ id: 'a1', sender: 'assistant', text: 'second', timestamp: 200 }),
+    ];
+    const result = upsertMessageById(
+      list,
+      msg({ id: 'u0', sender: 'user', text: 'early', timestamp: 50 })
+    );
+    expect(result).toBe('appended');
+    expect(list.map((m) => m.id)).toEqual(['u0', 'u1', 'a1']);
+  });
+
+  it('新消息 ts 更大时仍插到正确中间位（不裸 push）', () => {
+    const list: SessionMessage[] = [
+      msg({ id: 'u1', sender: 'user', text: 'first', timestamp: 100 }),
+      msg({ id: 'a1', sender: 'assistant', text: 'second', timestamp: 300 }),
+    ];
+    upsertMessageById(
+      list,
+      msg({ id: 'mid', sender: 'assistant', text: 'mid', timestamp: 200 })
+    );
+    expect(list.map((m) => m.id)).toEqual(['u1', 'mid', 'a1']);
+  });
+
+  it('同 id merge 不改变位置', () => {
+    const list: SessionMessage[] = [
+      msg({
+        id: 'a1',
+        sender: 'assistant',
+        text: 'hel',
+        timestamp: 200,
+        status: 'processing',
+      }),
+      msg({
+        id: 'a2',
+        sender: 'assistant',
+        text: 'later',
+        timestamp: 300,
+        status: 'completed',
+      }),
+    ];
+    // 同 id 回放：即使 incoming.timestamp 更早，也不得把消息搬到前面
+    const result = upsertMessageById(
+      list,
+      msg({
+        id: 'a1',
+        sender: 'assistant',
+        text: 'hello world',
+        timestamp: 50,
+        status: 'completed',
+      })
+    );
+    expect(result).toBe('updated');
+    expect(list.map((m) => m.id)).toEqual(['a1', 'a2']);
+    expect(list[0]?.text).toBe('hello world');
+    expect(list[0]?.status).toBe('completed');
+  });
+
+  it('缺省 timestamp 视为 0，插到列表头部', () => {
+    const list: SessionMessage[] = [
+      msg({ id: 'u1', sender: 'user', text: 'a', timestamp: 100 }),
+    ];
+    upsertMessageById(list, msg({ id: 'legacy', sender: 'user', text: 'x' }));
+    expect(list.map((m) => m.id)).toEqual(['legacy', 'u1']);
+  });
+
+  it('engineSequence 优先于 timestamp 决定插入位', () => {
+    const withSeq = msg({
+      id: 'has-seq',
+      sender: 'assistant',
+      text: 's',
+      timestamp: 9999,
+    });
+    (withSeq as SessionMessage & { engineSequence?: number }).engineSequence = 1;
+    const list: SessionMessage[] = [
+      msg({ id: 'u1', sender: 'user', text: 'a', timestamp: 100 }),
+    ];
+    upsertMessageById(list, withSeq);
+    expect(list.map((m) => m.id)).toEqual(['has-seq', 'u1']);
+  });
+});
+
+describe('mergeMessagesById 有序插入（D1）', () => {
+  it('incoming 旧 ts 消息插入正确位置，不追加到末尾', () => {
+    const local: SessionMessage[] = [
+      msg({ id: 'u2', sender: 'user', text: 'l1', timestamp: 200, status: 'completed' }),
+      msg({ id: 'a2', sender: 'assistant', text: 'l2', timestamp: 201, status: 'completed' }),
+    ];
+    const engine: SessionMessage[] = [
+      msg({ id: 'u1', sender: 'user', text: 'e1', timestamp: 100, status: 'completed' }),
+      msg({ id: 'a1', sender: 'assistant', text: 'e2', timestamp: 101, status: 'completed' }),
+    ];
+    const merged = mergeMessagesById(local, engine);
+    expect(merged.map((m) => m.id)).toEqual(['u1', 'a1', 'u2', 'a2']);
+  });
+
+  it('同 id merge 不改变既有位置（ts 保持序内时）', () => {
+    const local: SessionMessage[] = [
+      msg({ id: 'u1', sender: 'user', text: 'hi', timestamp: 100, status: 'completed' }),
+      msg({ id: 'a1', sender: 'assistant', text: 'hel', timestamp: 200, status: 'processing' }),
+    ];
+    // 同 id、同 ts 回放：仅升终态与正文，不触发重排
+    const incoming: SessionMessage[] = [
+      msg({ id: 'a1', sender: 'assistant', text: 'hello', timestamp: 200, status: 'completed' }),
+    ];
+    const merged = mergeMessagesById(local, incoming);
+    expect(merged.map((m) => m.id)).toEqual(['u1', 'a1']);
+    expect(merged[1]?.text).toBe('hello');
+    expect(merged[1]?.status).toBe('completed');
+  });
+
+  it('同 id merge 更新 ts 后列表按 canonical order 兜底收敛（不乱序）', () => {
+    const local: SessionMessage[] = [
+      msg({ id: 'u1', sender: 'user', text: 'hi', timestamp: 100, status: 'completed' }),
+      msg({ id: 'a1', sender: 'assistant', text: 'hel', timestamp: 200, status: 'processing' }),
+    ];
+    // incoming 把 a1.timestamp 改到 10：merge 后无序 → sortMessagesByOrder 收敛
+    const incoming: SessionMessage[] = [
+      msg({ id: 'a1', sender: 'assistant', text: 'hello', timestamp: 10, status: 'completed' }),
+    ];
+    const merged = mergeMessagesById(local, incoming);
+    // 收敛后 a1(ts=10) 在 u1(ts=100) 之前
+    expect(merged.map((m) => m.id)).toEqual(['a1', 'u1']);
+    expect(merged[0]?.text).toBe('hello');
+    expect(merged[0]?.status).toBe('completed');
+    expect(merged[1]?.text).toBe('hi');
   });
 });

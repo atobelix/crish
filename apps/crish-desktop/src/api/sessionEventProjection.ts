@@ -7,7 +7,15 @@
 
 import { pickStableMessageId } from '@crish/shared-types';
 import type { SessionMessage } from '../store/layoutStore';
-import { mergeSessionMessageFields } from './store-access/helperAccess';
+import {
+  findInsertIndex,
+  isSortedByMessageOrder,
+  messageOrderKey,
+} from '../store/messageOrderKey';
+import {
+  mergeSessionMessageFields,
+  sortMessagesByOrder,
+} from './store-access/helperAccess';
 import { normalizeAssistantTimeline } from './toolPresentation';
 import { parseBridgeEvent } from './chat-bridge/handlers/eventParser';
 import { unwrapOrchestratorEnvelope } from './chat-bridge/handlers/eventEnvelope';
@@ -71,9 +79,11 @@ function rekeyAssistantIfStable(
 }
 
 /**
- * 按 id 合并消息列表：同 id 原地 merge，否则 append。
+ * 按 id 合并消息列表：同 id 原地 merge；新 id 按 compareMessageOrder
+ * 二分插入正确位置（禁止一律 append，消灭纯 append 重排）。
  * 用于 hydrate 与本地乐观消息合并 / 重放去重（重放 length 不增）。
  * existing 为空时也对 incoming 自身按 id 折叠（对抗重复事件数组）。
+ * 合并结束后若数组无序，按 sortMessagesByOrder 一次兜底（幂等）。
  */
 export function mergeMessagesById(
   existing: SessionMessage[],
@@ -88,24 +98,43 @@ export function mergeMessagesById(
     if (id) indexById.set(id, i);
   }
 
+  /** 在 out 中按 order key 二分找插入点（list 需保持已序时 O(log n)） */
+  const insertPosFor = (msg: SessionMessage): number => {
+    const keys: ReturnType<typeof messageOrderKey>[] = [];
+    for (let i = 0; i < out.length; i++) {
+      keys.push(messageOrderKey(out[i]!));
+    }
+    return findInsertIndex(keys, messageOrderKey(msg));
+  };
+
+  /** 插入后同步 indexById（pos 及之后下标整体右移） */
+  const insertAt = (pos: number, msg: SessionMessage) => {
+    out.splice(pos, 0, msg);
+    for (const [key, idx] of indexById) {
+      if (idx >= pos) indexById.set(key, idx + 1);
+    }
+  };
+
   for (const msg of incoming) {
     const id = typeof msg.id === 'string' ? msg.id : '';
     if (!id) {
-      out.push(msg);
+      insertAt(insertPosFor(msg), msg);
       continue;
     }
     const idx = indexById.get(id);
     if (idx === undefined) {
-      indexById.set(id, out.length);
       // 浅拷贝，避免调用方改写 incoming 元素污染 out
-      out.push({ ...msg });
+      const pos = insertPosFor({ ...msg });
+      insertAt(pos, { ...msg });
+      indexById.set(id, pos);
     } else {
       const target = { ...out[idx]! };
       mergeSessionMessageFields(target, msg);
       out[idx] = target;
     }
   }
-  return out;
+  // 兜底：existing 若本就无序（历史脏数据），一次幂等排序收敛
+  return isSortedByMessageOrder(out) ? out : sortMessagesByOrder(out);
 }
 
 /**

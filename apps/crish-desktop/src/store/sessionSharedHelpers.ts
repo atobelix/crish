@@ -26,6 +26,7 @@ export {
   preferSessionMessageStatus,
   preferSessionMessageText,
   mergeSessionMessageFields,
+  sortMessagesByOrder,
   upsertMessageById,
   truncateMessagesForAppend,
 } from './sessionSharedHelpers.messageMerge';

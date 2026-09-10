@@ -7,7 +7,6 @@
  */
 
 import { MAX_MESSAGES_PER_SESSION } from '@crish/shared-utils/browser';
-import { nowIsoTimestamp } from '../api/sessionTime';
 import { getSessionForWrite, rebindSessionById } from './sessionIndex';
 import { saveMessageSnapshot } from './messageSnapshotsBridge';
 import type {
@@ -44,8 +43,15 @@ export function createSessionMessageActionsCore<T extends SessionStoreSlice>(
         if (!sess) return;
         if (!sess.messages) sess.messages = [];
 
+        // D1：timestamp 非有限数时补 Date.now()（order key 与 sess.timestamp 共用）
+        const timestamp =
+          typeof message.timestamp === 'number' &&
+          Number.isFinite(message.timestamp)
+            ? message.timestamp
+            : Date.now();
         const newMsg = {
           ...message,
+          timestamp,
           blocks: message.blocks || [],
         };
         if (newMsg.blocks.length === 0) {
@@ -69,13 +75,9 @@ export function createSessionMessageActionsCore<T extends SessionStoreSlice>(
             sess.pinnedMessageIds
           );
         }
+        // D1：不额外排序——upsertMessageById 已按 compareMessageOrder 有序插入
         upsertMessageById(sess.messages, newMsg);
-        const ts =
-          typeof message.timestamp === 'number' &&
-          Number.isFinite(message.timestamp)
-            ? new Date(message.timestamp).toISOString()
-            : nowIsoTimestamp();
-        sess.timestamp = ts;
+        sess.timestamp = new Date(timestamp).toISOString();
         if (sess.timestampSource !== 'local') {
           sess.timestampSource = 'local';
         }

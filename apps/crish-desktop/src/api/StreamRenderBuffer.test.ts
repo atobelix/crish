@@ -361,7 +361,10 @@ describe('S3 帧预算超限计数（6ms/8192B 预算热点）', () => {
       perfCalls++;
       return perfCalls * 20;
     });
+    // LoggerService 在非 dev（NODE_ENV=test）走 console.log(JSON)，
+    // dev 才走 console.warn——两条出口都 spy，避免环境耦合假阴性。
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
     const buf = new StreamRenderBuffer({
       maxBytesPerFrame: 10_000,
@@ -376,7 +379,9 @@ describe('S3 帧预算超限计数（6ms/8192B 预算热点）', () => {
 
     expect(frames.length).toBeGreaterThanOrEqual(1);
     expect(buf.frameOverruns()).toBeGreaterThanOrEqual(1);
-    expect(warnSpy).toHaveBeenCalled();
+    expect(
+      warnSpy.mock.calls.length + logSpy.mock.calls.length
+    ).toBeGreaterThanOrEqual(1);
   });
 
   it('force 帧不计超限不告警（终态路径豁免）', async () => {
@@ -489,5 +494,123 @@ describe('Unicode Grapheme 簇边界安全截断 (Intl.Segmenter)', () => {
     const result = flushFrame([text], 8, performance.now() + 1000, false);
     expect(result.batch).toEqual(['hello ']);
     expect(result.remaining).toEqual(['👩‍💻 world']);
+  });
+});
+
+// ──────────────────────────────────────────────
+describe('默认 maxBytesPerFrame 契约（D2 收敛回归）', () => {
+  // 契约锚点：当前默认值 1024（StreamRenderBuffer 构造函数私有字段）。
+  // 默认值有意变更时同步更新本常量——测试锁的是「有界默认帧上限」行为本身。
+  const DEFAULT_MAX_BYTES = 1024;
+
+  it('默认构造：超过默认上限的大单 chunk 必须分帧，每帧 ≤ 默认上限', () => {
+    const buf = new StreamRenderBuffer();
+    const frames: RenderFrame[] = [];
+    buf.onFrame = (f) => frames.push(f);
+
+    const big = 'a'.repeat(DEFAULT_MAX_BYTES * 2 + 100);
+    buf.push(big);
+    // rAF 在测试环境为 stub → 手动循环非 force 刷完
+    while (buf.bufferedLength() > 0) {
+      buf.flush(false);
+    }
+
+    expect(frames.length).toBeGreaterThan(1);
+    for (const f of frames) {
+      expect(f.delta.length).toBeLessThanOrEqual(DEFAULT_MAX_BYTES);
+    }
+    const allDelta = frames.map((f) => f.delta).join('');
+    expect(allDelta).toBe(big);
+    expect(buf.bufferedLength()).toBe(0);
+  });
+
+  it('默认构造：不超过默认上限的单 chunk 不拆分', () => {
+    const buf = new StreamRenderBuffer();
+    const frames: RenderFrame[] = [];
+    buf.onFrame = (f) => frames.push(f);
+
+    buf.push('x'.repeat(DEFAULT_MAX_BYTES));
+    buf.flush(false);
+
+    expect(frames).toHaveLength(1);
+    expect(frames[0]!.delta).toBe('x'.repeat(DEFAULT_MAX_BYTES));
+  });
+
+  it('显式 maxBytesPerFrame 覆盖默认：构造 options 决定帧上限', () => {
+    // 显式更小上限 → 分帧边界跟随 options，而非默认 8192
+    const buf = new StreamRenderBuffer({ maxBytesPerFrame: 100 });
+    const frames: RenderFrame[] = [];
+    buf.onFrame = (f) => frames.push(f);
+
+    const text = 'b'.repeat(300);
+    buf.push(text);
+    while (buf.bufferedLength() > 0) {
+      buf.flush(false);
+    }
+
+    expect(frames.length).toBeGreaterThan(1);
+    for (const f of frames) {
+      expect(f.delta.length).toBeLessThanOrEqual(100);
+    }
+    expect(frames.map((f) => f.delta).join('')).toBe(text);
+  });
+});
+
+// ──────────────────────────────────────────────
+describe('flushFinal 小残余同步刷完不丢字（D2 收敛回归）', () => {
+  it('残余 ≤ 2×maxBytesPerFrame：单帧同步收口，全文无损且 isFinal=true', () => {
+    const buf = new StreamRenderBuffer({ maxBytesPerFrame: 64 });
+    const frames: RenderFrame[] = [];
+    buf.onFrame = (f) => frames.push(f);
+
+    // 残余 100 ≤ 2×64=128 → 同步 force 单帧
+    const text = 'hello stream 收口不丢字'.repeat(4);
+    expect(text.length).toBeLessThanOrEqual(128);
+    buf.push(text);
+    buf.flushFinal();
+
+    expect(frames).toHaveLength(1);
+    expect(frames[0]!.delta).toBe(text);
+    expect(frames[0]!.full).toBe(text);
+    expect(frames[0]!.isFinal).toBe(true);
+    expect(buf.bufferedLength()).toBe(0);
+  });
+
+  it('非 force 预刷后小残余经 flushFinal 收口，拼接 = 全文不丢字', () => {
+    const buf = new StreamRenderBuffer({ maxBytesPerFrame: 64 });
+    const frames: RenderFrame[] = [];
+    buf.onFrame = (f) => frames.push(f);
+
+    const partA = 'a'.repeat(60);
+    const partB = 'b'.repeat(40); // 残余 40 ≤ 128
+    buf.push(partA);
+    buf.push(partB);
+    buf.flush(false); // 首帧取 partA（60 ≤ 64，partB 会超限）
+
+    buf.flushFinal(); // 小残余同步收口
+
+    const allDelta = frames.map((f) => f.delta).join('');
+    expect(allDelta).toBe(partA + partB);
+    expect(buf.bufferedLength()).toBe(0);
+    const finalFrames = frames.filter((f) => f.isFinal);
+    expect(finalFrames).toHaveLength(1);
+    expect(finalFrames[0]!).toBe(frames[frames.length - 1]);
+    expect(finalFrames[0]!.full).toBe(partA + partB);
+  });
+
+  it('默认上限下 flushFinal 小残余同样同步无损', () => {
+    const buf = new StreamRenderBuffer();
+    const frames: RenderFrame[] = [];
+    buf.onFrame = (f) => frames.push(f);
+
+    const text = '默认帧上限下的小残余同步收口验证'.repeat(10);
+    // ≤ 2×DEFAULT_MAX_BYTES → 同步路径
+    expect(text.length).toBeLessThanOrEqual(2 * 1024);
+    buf.push(text);
+    buf.flushFinal();
+
+    expect(frames).toHaveLength(1);
+    expect(frames[0]!.full).toBe(text);
+    expect(frames[0]!.isFinal).toBe(true);
   });
 });

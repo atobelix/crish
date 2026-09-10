@@ -339,6 +339,46 @@ describe('mergeMessagesById (C0 幂等)', () => {
     expect(got[0]?.status).toBe('completed');
     expect(got[0]?.text).toBe('a!');
   });
+
+  it('D1 有序合并：incoming 旧 ts 对插入前部，不追加到末尾', () => {
+    // 本地已有较晚一轮 [u2(ts=200), a2(ts=201)]
+    const local: SessionMessage[] = [
+      {
+        id: 'u2',
+        sender: 'user',
+        text: 'second ask',
+        timestamp: 200,
+        status: 'completed',
+      },
+      {
+        id: 'a2',
+        sender: 'assistant',
+        text: 'second answer',
+        timestamp: 201,
+        status: 'completed',
+      },
+    ];
+    // 引擎回放更早一轮 [u1(ts=100), a1(ts=101)]
+    const fromEngine: SessionMessage[] = [
+      {
+        id: 'u1',
+        sender: 'user',
+        text: 'first ask',
+        timestamp: 100,
+        status: 'completed',
+      },
+      {
+        id: 'a1',
+        sender: 'assistant',
+        text: 'first answer',
+        timestamp: 101,
+        status: 'completed',
+      },
+    ];
+    const merged = mergeMessagesById(local, fromEngine);
+    expect(merged.map((m) => m.id)).toEqual(['u1', 'a1', 'u2', 'a2']);
+    expect(merged.map((m) => m.timestamp)).toEqual([100, 101, 200, 201]);
+  });
 });
 
 describe('projectEventsToMessages id 稳定 / 幂等', () => {

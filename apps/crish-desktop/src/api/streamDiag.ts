@@ -72,6 +72,49 @@ function clip(s: string, n: number): string {
   return t.length <= n ? t : t.slice(0, n - 1) + '…';
 }
 
+// ── chunk 样本计数（流式期 chunk 大小诊断；纯内存，无定时器） ──
+
+/** largeChunks 判定阈值：单 chunk 字符数超过此值计一次 */
+const LARGE_CHUNK_THRESHOLD = 256;
+
+let chunkSampleCount = 0;
+let chunkSampleTotalChars = 0;
+let chunkSampleMaxChars = 0;
+let chunkSampleLargeChunks = 0;
+
+/** 记录一次流式 chunk 样本（onChunk 入口调用） */
+export function recordChunkSample(chunkLength: number): void {
+  chunkSampleCount += 1;
+  chunkSampleTotalChars += chunkLength;
+  if (chunkLength > chunkSampleMaxChars) chunkSampleMaxChars = chunkLength;
+  if (chunkLength > LARGE_CHUNK_THRESHOLD) chunkSampleLargeChunks += 1;
+}
+
+/** 读取累计 chunk 统计（avgChars 在无样本时为 0） */
+export function getChunkSampleStats(): {
+  count: number;
+  totalChars: number;
+  maxChars: number;
+  avgChars: number;
+  largeChunks: number;
+} {
+  return {
+    count: chunkSampleCount,
+    totalChars: chunkSampleTotalChars,
+    maxChars: chunkSampleMaxChars,
+    avgChars: chunkSampleCount > 0 ? chunkSampleTotalChars / chunkSampleCount : 0,
+    largeChunks: chunkSampleLargeChunks,
+  };
+}
+
+/** 重置 chunk 样本计数（新 run / 调试清零） */
+export function resetChunkSampleStats(): void {
+  chunkSampleCount = 0;
+  chunkSampleTotalChars = 0;
+  chunkSampleMaxChars = 0;
+  chunkSampleLargeChunks = 0;
+}
+
 /**
  * 把原始失败收成「用户可读主句 + 可选技术 detail」。
  * detail 给横幅第二行 / 控制台，主句保持冷静。

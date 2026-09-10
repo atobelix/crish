@@ -15,4 +15,7 @@
  */
 
 export { getStreamTools } from '../../store/streamingStore';
-export { mergeSessionMessageFields } from '../../store/sessionSharedHelpers';
+export {
+  mergeSessionMessageFields,
+  sortMessagesByOrder,
+} from '../../store/sessionSharedHelpers';

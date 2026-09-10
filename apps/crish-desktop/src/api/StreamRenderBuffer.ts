@@ -58,8 +58,12 @@ export class StreamRenderBuffer {
    * 60 FPS 场景下也只占用约 36% 帧预算，仍能保持流畅交互。
    */
   private frameBudgetMs = 6;
-  /** 单帧输出字符上限；默认 8192 */
-  private maxBytesPerFrame = 8192;
+  /**
+   * 单帧输出字符上限；默认 1024。
+   * 1024 而非 8192：单帧过大时 UI 观感为「攒完再渲」；
+   * 流式期更碎的小帧更接近打字机节奏（与 6ms frameBudgetMs 配合）。
+   */
+  private maxBytesPerFrame = 1024;
   /** 积压降级阈值（字节）；超过此值时非 force flush 输出降级帧 */
   private maxBacklogBytes: number | undefined;
   /** 收到 final 标记后不再接收 push，仅 flush 剩余 */
@@ -134,7 +138,7 @@ export class StreamRenderBuffer {
   /**
    * 预算式收口（08-detail 3.1，T2.1）：complete/stop 终态路径专用。
    *
-   * - 残余 ≤ 2 × maxBytesPerFrame（≈16KB，常态）：同步 force 单帧刷完，
+   * - 残余 ≤ 2 × maxBytesPerFrame（默认 ≈2KB，常态）：同步 force 单帧刷完，
    *   帧成本有界（数毫秒级 setStreamText + 渲染），无长任务；
    * - 大残余（异常积压，如 100KB）：markFinal + 普通预算帧循环
    *   （每帧 ≤ maxBytesPerFrame），isFinal 仅出现在最后一帧——不再

@@ -9,6 +9,7 @@ import type { SessionMessage, SessionAgent } from '../../store/types';
 import { triggerSessionMessageHydrateIfNeeded } from '../../store/sessionCrudActions';
 import { messageMatchesSearch } from '../../api/sessionSearch';
 import { dedupeStateCarrierMessages } from '../chat-message/contextStateUtils';
+import { sortMessagesByOrder } from '../../store/sessionSharedHelpers';
 
 export interface UseChatMessagesOptions {
   resolveSessionId: (s: SessionStoreStateShape) => string;
@@ -63,7 +64,9 @@ export function useChatMessages({
   const displayMessages = useMemo(() => {
     const q = localMsgFilter.trim();
     const base = q ? messages.filter((m) => messageMatchesSearch(m, q)) : messages;
-    return dedupeStateCarrierMessages(base);
+    // 显示层唯一防御排序入口：复用写入序比较器（sortMessagesByOrder → compareMessageOrder）
+    // 防历史脏数据乱序；processing 流式消息若 timestamp 最新自然在末尾，不 special-case
+    return sortMessagesByOrder(dedupeStateCarrierMessages(base));
   }, [messages, localMsgFilter]);
 
   const {

@@ -5,6 +5,11 @@
  */
 
 import { recordMessageUpsert } from '../api/controlMetrics';
+import {
+  compareMessageOrder,
+  findInsertIndex,
+  messageOrderKey,
+} from './messageOrderKey';
 import type {
   MessageToolCall,
   SessionAgent,
@@ -315,7 +320,21 @@ export function getSessionAgent(
 import type { SessionState } from './types';
 
 /**
- * 消息列表按 id upsert：同 id → 原地 merge；否则 append。
+ * 按 canonical order（messageOrderKey）对消息列表排序。
+ * 纯函数：不 mutate 入参；返回按序新数组。
+ * 空 id / 非法 timestamp 已在 messageOrderKey 内兜底。
+ */
+export function sortMessagesByOrder(
+  messages: SessionMessage[]
+): SessionMessage[] {
+  return [...messages].sort((a, b) =>
+    compareMessageOrder(messageOrderKey(a), messageOrderKey(b))
+  );
+}
+
+/**
+ * 消息列表按 id upsert：同 id → 原地 merge；新 id → 按 compareMessageOrder
+ * 二分插入（禁止裸 push，消灭纯 append 重排）。
  * 供 addMessage / agent 消息等 immer 路径共用，防双 append。
  * @returns 'updated' | 'appended'
  */
@@ -330,7 +349,13 @@ export function upsertMessageById(
     mergeSessionMessageFields(existing, message);
     return 'updated';
   }
-  messages.push(message);
+  // D1 SSOT：新 id 按 order key 二分插入（list 通常已序，O(log n) 定位）
+  const keys: ReturnType<typeof messageOrderKey>[] = [];
+  for (let i = 0; i < messages.length; i++) {
+    keys.push(messageOrderKey(messages[i]!));
+  }
+  const pos = findInsertIndex(keys, messageOrderKey(message));
+  messages.splice(pos, 0, message);
   return 'appended';
 }
 
