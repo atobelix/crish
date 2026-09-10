@@ -652,9 +652,9 @@ impl CoreRunState {
     /// 此访问。
     ///
     /// 实现说明：生产路径 store 恒为 [orchestrator::persist::LocalDbStore]
-    /// （main.rs 接线），经 [orchestrator::persist::Store::as_local_db] 返回
-    /// 连接克隆（Arc +1）；非 LocalDb 实现（InMemoryStore 测试替身）保持
-    /// 默认 None——usage 查询回退前端估算，不阻塞其他功能。
+    /// （main.rs 接线），经 [Store::as_local_db] 返回连接克隆（Arc +1）；
+    /// 非 LocalDb 实现（InMemoryStore 测试替身）保持默认 None——usage
+    /// 查询回退前端估算，不阻塞其他功能。
     pub fn local_db(&self) -> Option<LocalDb> {
         self.store.as_local_db()
     }
