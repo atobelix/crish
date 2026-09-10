@@ -137,4 +137,55 @@ describe('ChatComposer 卡片网格（composer-wrapper 结构）', () => {
       expect(onSend).toHaveBeenCalled();
     });
   });
+
+  it('单行模式：权限合并进右侧融合胶囊（无 independent permSlot，胶囊内无 chevron）', () => {
+    function SingleLineHarness() {
+      const [input, setInput] = useState('');
+      const fileInputRef = useRef<HTMLInputElement>(null);
+      const [permission, setPermission] = useState<
+        'ask' | 'deep' | 'full' | 'plan'
+      >('ask');
+      return (
+        <ChatComposer
+          chatInput={input}
+          setChatInput={setInput}
+          isComposing={false}
+          setIsComposing={() => {}}
+          filteredCommands={[]}
+          loadSkillSlash={vi.fn()}
+          onPasteImage={vi.fn()}
+          onSend={vi.fn()}
+          onStop={vi.fn()}
+          canSend={false}
+          isProcessing={false}
+          attachments={[]}
+          setAttachments={() => {}}
+          fileInputRef={fileInputRef}
+          onFilesSelected={vi.fn()}
+          showPlusMenu={false}
+          setShowPlusMenu={() => {}}
+          permissionMode={permission}
+          onPermissionChange={setPermission}
+          onOpenSchedule={vi.fn()}
+        />
+      );
+    }
+    const { container } = render(<SingleLineHarness />);
+    const card = container.querySelector('[data-composer-card]');
+    expect(card?.getAttribute('data-multiline')).toBe('0');
+
+    // 单行时独立 permSlot 不渲染在网格中
+    expect(container.querySelector('[data-composer-grid="perm"]')).toBeNull();
+
+    // 权限按钮位于 composer-fused-trigger 内部作为前置插槽
+    const fusedTrigger = screen.getByTestId('composer-fused-trigger');
+    expect(fusedTrigger).toBeTruthy();
+    expect(fusedTrigger.getAttribute('data-has-prefix')).toBe('true');
+    const permBtn = screen.getByRole('button', { name: /当前权限模式：需确认/ });
+    expect(fusedTrigger.contains(permBtn)).toBe(true);
+
+    // 权限按钮为 fused 变体且不含折叠展开箭头
+    expect(permBtn.className).toMatch(/fused/);
+    expect(permBtn.querySelector('svg.lucide-chevron-down')).toBeNull();
+  });
 });

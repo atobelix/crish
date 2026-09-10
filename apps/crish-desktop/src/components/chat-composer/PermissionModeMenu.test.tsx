@@ -141,4 +141,18 @@ describe('PermissionModeMenu（ui/Menu 基座）', () => {
     expect(await screen.findByRole('menu')).toBeInTheDocument();
     outside.remove();
   });
+
+  it('hideChevron=true 时不渲染下拉折叠展开小箭头，且支持 variant="fused"', () => {
+    const { container } = render(
+      <PermissionModeMenu
+        mode="ask"
+        onChange={() => {}}
+        hideChevron
+        variant="fused"
+      />
+    );
+    const trigger = screen.getByRole('button', { name: /当前权限模式/ });
+    expect(trigger.className).toMatch(/fused/);
+    expect(container.querySelector('svg.lucide-chevron-down')).toBeNull();
+  });
 });

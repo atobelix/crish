@@ -290,4 +290,20 @@ describe('ComposerFusedTrigger（S3 融合触发 · live 档位）', () => {
     expect(css).toMatch(/\.thinkBtn:hover/);
     expect(css).toMatch(/button.*:hover/);
   });
+
+  it('prefix 插槽契约：支持前置插槽与 data-has-prefix="true"，分割线正确隔离', () => {
+    const { container } = render(
+      <ComposerFusedTrigger
+        prefix={<button data-testid="prefix-btn">权限</button>}
+      >
+        <span>model-a</span>
+      </ComposerFusedTrigger>
+    );
+    const trigger = container.querySelector('[data-testid="composer-fused-trigger"]');
+    expect(trigger?.getAttribute('data-has-prefix')).toBe('true');
+    expect(screen.getByTestId('prefix-btn')).toBeInTheDocument();
+    // 存在 prefix 与 model 之间的 divider，以及 model 与 thinking 之间的 divider
+    const dividers = container.querySelectorAll('span[class*="divider"]');
+    expect(dividers.length).toBe(2);
+  });
 });
