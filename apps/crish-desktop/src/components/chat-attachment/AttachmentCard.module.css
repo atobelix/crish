@@ -22,8 +22,8 @@
 
 /* 柔和 Hover 态：边框加深控制在 5-10%，背景混入 2.5% 文本色，严禁纯黑边框 (AGENTS.md §13) */
 .attachmentCard:hover {
-  border-color: var(--border-color);
-  background: color-mix(in srgb, var(--text-primary) 2.5%, var(--bg-card, hsl(0 0% 100%)));
+  /* border-color: var(--border-color); */
+  background: color-mix(in srgb, var(--text-primary) 2%, var(--bg-card, hsl(0 0% 100%)));
   box-shadow: var(--shadow-sm);
 }
 
@@ -41,12 +41,12 @@
    -------------------------------------------------------------------------- */
 .cardImageMode,
 .attachChipImage {
-  width: var(--composer-attach-card-size, 58px);
-  height: var(--composer-attach-card-size, 58px);
-  min-width: var(--composer-attach-card-size, 58px);
-  min-height: var(--composer-attach-card-size, 58px);
-  max-width: var(--composer-attach-card-size, 58px);
-  max-height: var(--composer-attach-card-size, 58px);
+  width: var(--composer-attach-card-size, 52px);
+  height: var(--composer-attach-card-size, 52px);
+  min-width: var(--composer-attach-card-size, 52px);
+  min-height: var(--composer-attach-card-size, 52px);
+  max-width: var(--composer-attach-card-size, 52px);
+  max-height: var(--composer-attach-card-size, 52px);
   padding: 0;
   display: inline-flex;
   align-items: center;
@@ -65,14 +65,14 @@
   border-color: var(--composer-attach-card-hover-border, var(--border-color));
 }
 
-/* 兼容未加 fileCardHorizontal 且非图片卡片时的保底 58×58 尺寸 */
+/* 兼容未加 fileCardHorizontal 且非图片卡片时的保底尺寸 */
 .attachmentCard:not(.fileCardHorizontal):not(.cardImageMode) {
-  width: 58px;
-  height: 58px;
-  min-width: 58px;
-  min-height: 58px;
-  max-width: 58px;
-  max-height: 58px;
+  width: var(--composer-attach-card-size, 52px);
+  height: var(--composer-attach-card-size, 52px);
+  min-width: var(--composer-attach-card-size, 52px);
+  min-height: var(--composer-attach-card-size, 52px);
+  max-width: var(--composer-attach-card-size, 52px);
+  max-height: var(--composer-attach-card-size, 52px);
 }
 
 .imageBox {
@@ -113,12 +113,12 @@
 }
 
 .cardImageMode.missingCard {
-  width: 58px;
-  height: 58px;
-  min-width: 58px;
-  min-height: 58px;
-  max-width: 58px;
-  max-height: 58px;
+  width: var(--composer-attach-card-size, 52px);
+  height: var(--composer-attach-card-size, 52px);
+  min-width: var(--composer-attach-card-size, 52px);
+  min-height: var(--composer-attach-card-size, 52px);
+  max-width: var(--composer-attach-card-size, 52px);
+  max-height: var(--composer-attach-card-size, 52px);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -148,15 +148,15 @@
 }
 
 /* --------------------------------------------------------------------------
-   文档 / 文件横向微卡片模式 (Document/File Mode - 48~52px 高度, 160~220px 宽度)
+   文档 / 文件横向微卡片模式 (Document/File Mode - 52px 统一卡片高度, 160~220px 宽度)
    -------------------------------------------------------------------------- */
 .fileCardHorizontal {
   width: auto;
   min-width: 160px;
   max-width: 220px;
-  height: 50px;
-  min-height: 48px;
-  max-height: 52px;
+  height: var(--composer-attach-card-size, 52px);
+  min-height: var(--composer-attach-card-size, 52px);
+  max-height: var(--composer-attach-card-size, 52px);
   padding: 6px 10px;
   display: flex;
   flex-direction: row;
@@ -234,9 +234,11 @@
   width: 16px;
   height: 16px;
   border-radius: var(--radius-full, 9999px);
-  background: color-mix(in srgb, hsl(38, 95%, 50%) 20%, var(--bg-elevated, #fff));
-  border: 1px solid color-mix(in srgb, hsl(38, 95%, 50%) 60%, transparent);
+  /* background: color-mix(in srgb, hsl(38, 95%, 50%) 20%, var(--bg-elevated, #fff)); */
+  background: hsla(0, 0%, 100%, 0.6);
+  /* border: 1px solid color-mix(in srgb, hsl(38, 95%, 50%) 60%, transparent); */
   color: hsl(38, 95%, 44%);
+  backdrop-filter: blur(4px);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -278,6 +280,8 @@
   background: var(--sem-error, #ef4444);
   color: var(--text-on-accent, #ffffff);
   transform: scale(1.08);
+  opacity: 1;
+  pointer-events: auto;
 }
 
 /* --------------------------------------------------------------------------
