@@ -18,9 +18,7 @@ use crate::coord::Point;
 use super::keys::{resolve_key, to_enigo_button};
 use super::steps::{build_click_steps, build_key_steps, build_scroll_steps, InjectStep};
 
-use conex_shared::input::{
-    ScrollDirection as SharedScrollDirection,
-};
+use conex_shared::input::ScrollDirection as SharedScrollDirection;
 
 /// 统一注入错误(动作层向上透传)
 pub type InjectError = String;
@@ -39,7 +37,11 @@ pub fn release_all_keys_and_buttons(enigo: &mut Enigo) {
     for k in keys {
         let _ = enigo.key(k, Direction::Release);
     }
-    let buttons = [enigo::Button::Left, enigo::Button::Middle, enigo::Button::Right];
+    let buttons = [
+        enigo::Button::Left,
+        enigo::Button::Middle,
+        enigo::Button::Right,
+    ];
     for b in buttons {
         let _ = enigo.button(b, Direction::Release);
     }
@@ -62,23 +64,20 @@ pub fn run_steps_guarded(
         }
         match step {
             InjectStep::MoveTo { x, y } => {
-                let ok = unsafe {
-                    windows_sys::Win32::UI::WindowsAndMessaging::SetCursorPos(*x, *y)
-                };
+                let ok =
+                    unsafe { windows_sys::Win32::UI::WindowsAndMessaging::SetCursorPos(*x, *y) };
                 if ok == 0 {
                     return Err(format!("SetCursorPos 失败: ({x}, {y})"));
                 }
             }
             InjectStep::KeyDown { name } => {
-                let key =
-                    resolve_key(name).ok_or_else(|| format!("键名无法解析: {name}"))?;
+                let key = resolve_key(name).ok_or_else(|| format!("键名无法解析: {name}"))?;
                 enigo
                     .key(key, Direction::Press)
                     .map_err(|e| format!("按键按下失败: {e:?}"))?;
             }
             InjectStep::KeyUp { name } => {
-                let key =
-                    resolve_key(name).ok_or_else(|| format!("键名无法解析: {name}"))?;
+                let key = resolve_key(name).ok_or_else(|| format!("键名无法解析: {name}"))?;
                 enigo
                     .key(key, Direction::Release)
                     .map_err(|e| format!("按键抬起失败: {e:?}"))?;
@@ -164,7 +163,11 @@ impl OsInputBackend {
     /// 组合键注入核心:修饰键按序 down → 主键 down/up → 修饰键 up
     /// (04 §2.1「修饰键多键时保持按住其余键」语义);
     /// `hold_ms = Some` 时主键按住后松开(共享层 key 语义,05 §4.1)。
-    pub(crate) fn key_hold_inner(&self, keys: &[String], hold_ms: Option<u32>) -> Result<(), InjectError> {
+    pub(crate) fn key_hold_inner(
+        &self,
+        keys: &[String],
+        hold_ms: Option<u32>,
+    ) -> Result<(), InjectError> {
         let steps = build_key_steps(keys, hold_ms);
         let mut enigo = self.enigo.lock().expect("注入后端锁损坏");
         let should_abort = || self.aborted();
@@ -355,8 +358,7 @@ impl OsInputBackend {
     #[allow(unsafe_code)]
     pub fn cursor_physical(&self) -> Result<Point, InjectError> {
         let mut point = windows_sys::Win32::Foundation::POINT { x: 0, y: 0 };
-        let ok =
-            unsafe { windows_sys::Win32::UI::WindowsAndMessaging::GetCursorPos(&mut point) };
+        let ok = unsafe { windows_sys::Win32::UI::WindowsAndMessaging::GetCursorPos(&mut point) };
         if ok == 0 {
             return Err("GetCursorPos 失败".to_string());
         }

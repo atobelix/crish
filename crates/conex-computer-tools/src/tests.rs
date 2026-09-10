@@ -10,8 +10,8 @@ use super::*;
 use agent_tools::context::{create_mock_tool_context, ToolContext};
 use async_trait::async_trait;
 use base64::Engine;
-use conex_computer::activation::ActivationGate;
 use conex_computer::action::ActionError;
+use conex_computer::activation::ActivationGate;
 use conex_computer::coord::Point;
 use conex_computer::perception::{PerceptionNode, PerceptionSnapshot, Rect};
 use conex_computer::screen::CapturedFrame;
@@ -89,10 +89,7 @@ impl MockComputerOps {
     }
 
     fn received_actions(&self) -> Vec<Action> {
-        self.dispatch_calls
-            .lock()
-            .expect("mock 锁损坏")
-            .clone()
+        self.dispatch_calls.lock().expect("mock 锁损坏").clone()
     }
 
     fn fail_dispatch(&self, err: SessionError) {
@@ -190,9 +187,7 @@ fn wired_config() -> (ComputerToolsConfig, Arc<MockComputerOps>) {
     let enablement = Arc::new(SessionEnablement::new());
     enablement.enable().expect("用户开启应成功");
     let activation = Arc::new(ActivationGate::new());
-    activation
-        .request_desktop()
-        .expect("桌面会话激活应成功");
+    activation.request_desktop().expect("桌面会话激活应成功");
     let config = ComputerToolsConfig {
         session: Some(session.clone()),
         enablement: Some(enablement),
@@ -349,7 +344,8 @@ fn coexists_with_browser_tools_in_same_registry() {
         "computer_* 工具可见"
     );
     assert!(
-        defs.iter().all(|d| d.name.starts_with("browser_") || d.name.starts_with("computer_")),
+        defs.iter()
+            .all(|d| d.name.starts_with("browser_") || d.name.starts_with("computer_")),
         "两族名称无歧义"
     );
 }
@@ -429,9 +425,14 @@ async fn guard_abort_token_rejects() {
     let (config, session) = wired_config();
     let ctx = create_mock_tool_context();
     ctx.abort_token.abort();
-    let err = exec("computer_move", &config, json!({ "coordinate": [1, 2] }), &ctx)
-        .await
-        .expect_err("中止令牌必须拒绝");
+    let err = exec(
+        "computer_move",
+        &config,
+        json!({ "coordinate": [1, 2] }),
+        &ctx,
+    )
+    .await
+    .expect_err("中止令牌必须拒绝");
     assert_eq!(err.code(), codes::TOOL_COMPUTER_CANCELLED);
     assert_eq!(session.dispatch_count(), 0);
 }
@@ -503,9 +504,14 @@ async fn coords_out_of_bounds_mapped_from_session() {
     session.fail_dispatch(SessionError::Action(ActionError::CoordsOutOfBounds));
 
     let ctx = default_ctx();
-    let err = exec("computer_move", &config, json!({ "coordinate": [99999, 0] }), &ctx)
-        .await
-        .expect_err("越界必须拒绝");
+    let err = exec(
+        "computer_move",
+        &config,
+        json!({ "coordinate": [99999, 0] }),
+        &ctx,
+    )
+    .await
+    .expect_err("越界必须拒绝");
     assert_eq!(err.code(), codes::TOOL_COMPUTER_COORDS_OUT_OF_BOUNDS);
 }
 
@@ -530,39 +536,32 @@ async fn gate_denial_maps_to_elevated_window() {
 #[tokio::test]
 async fn snapshot_failure_maps_to_execution_failed() {
     let (config, session) = wired_config();
-    *session
-        .snapshot_result
-        .lock()
-        .expect("mock 锁损坏") = Err(conex_computer::perception::PerceptionError::NoActiveWindow);
+    *session.snapshot_result.lock().expect("mock 锁损坏") =
+        Err(conex_computer::perception::PerceptionError::NoActiveWindow);
 
     let ctx = default_ctx();
     let err = exec("computer_snapshot", &config, json!({}), &ctx)
         .await
         .expect_err("感知失败应报错");
-    assert_eq!(
-        err.code(),
-        conex_types::error::codes::TOOL_EXECUTION_FAILED
+    assert_eq!(err.code(), conex_types::error::codes::TOOL_EXECUTION_FAILED);
+    assert!(
+        err.to_string().contains("无活动窗口"),
+        "消息携带语义：{err}"
     );
-    assert!(err.to_string().contains("无活动窗口"), "消息携带语义：{err}");
 }
 
 /// 截屏失败映射：SessionError::Capture → tool.execution_failed。
 #[tokio::test]
 async fn screenshot_failure_maps_to_execution_failed() {
     let (config, session) = wired_config();
-    *session
-        .screenshot_result
-        .lock()
-        .expect("mock 锁损坏") = Err(SessionError::Capture("截屏设备失败".into()));
+    *session.screenshot_result.lock().expect("mock 锁损坏") =
+        Err(SessionError::Capture("截屏设备失败".into()));
 
     let ctx = default_ctx();
     let err = exec("computer_screenshot", &config, json!({}), &ctx)
         .await
         .expect_err("截屏失败应报错");
-    assert_eq!(
-        err.code(),
-        conex_types::error::codes::TOOL_EXECUTION_FAILED
-    );
+    assert_eq!(err.code(), conex_types::error::codes::TOOL_EXECUTION_FAILED);
 }
 
 // ===== 返回形状 =====
@@ -583,9 +582,14 @@ async fn click_ok_returns_perception_version() {
 async fn type_ok_returns_typed_chars() {
     let (config, session) = wired_config();
     let ctx = default_ctx();
-    let result = exec("computer_type", &config, json!({ "text": "你好 world" }), &ctx)
-        .await
-        .expect("应成功");
+    let result = exec(
+        "computer_type",
+        &config,
+        json!({ "text": "你好 world" }),
+        &ctx,
+    )
+    .await
+    .expect("应成功");
     assert_eq!(result["typedChars"], 8, "中文按字符计");
     assert_eq!(result["perceptionVersion"], 7);
     assert_eq!(
@@ -601,9 +605,14 @@ async fn type_ok_returns_typed_chars() {
 async fn hold_key_ok_returns_duration_secs() {
     let (config, _session) = wired_config();
     let ctx = default_ctx();
-    let result = exec("computer_hold_key", &config, json!({ "key": "a", "duration": 2.5 }), &ctx)
-        .await
-        .expect("应成功");
+    let result = exec(
+        "computer_hold_key",
+        &config,
+        json!({ "key": "a", "duration": 2.5 }),
+        &ctx,
+    )
+    .await
+    .expect("应成功");
     assert_eq!(result["ok"], true);
     assert_eq!(result["durationSecs"], 2.5);
 }
@@ -613,9 +622,14 @@ async fn hold_key_ok_returns_duration_secs() {
 async fn move_ok_passes_coordinate() {
     let (config, session) = wired_config();
     let ctx = default_ctx();
-    let result = exec("computer_move", &config, json!({ "coordinate": [683, 384] }), &ctx)
-        .await
-        .expect("应成功");
+    let result = exec(
+        "computer_move",
+        &config,
+        json!({ "coordinate": [683, 384] }),
+        &ctx,
+    )
+    .await
+    .expect("应成功");
     assert_eq!(result["ok"], true);
     assert_eq!(
         session.received_actions(),
@@ -629,10 +643,8 @@ async fn move_ok_passes_coordinate() {
 #[tokio::test]
 async fn cursor_position_ok_returns_api_coords() {
     let (config, session) = wired_config();
-    *session
-        .dispatch_result
-        .lock()
-        .expect("mock 锁损坏") = Ok(ActionResult::CursorPosition(Point::new(683, 384)));
+    *session.dispatch_result.lock().expect("mock 锁损坏") =
+        Ok(ActionResult::CursorPosition(Point::new(683, 384)));
     session.display_count.store(2, Ordering::SeqCst);
 
     let ctx = default_ctx();
@@ -652,9 +664,14 @@ async fn screenshot_ok_returns_base64_payload() {
     session.display_count.store(2, Ordering::SeqCst);
 
     let ctx = default_ctx();
-    let result = exec("computer_screenshot", &config, json!({ "format": "png" }), &ctx)
-        .await
-        .expect("应成功");
+    let result = exec(
+        "computer_screenshot",
+        &config,
+        json!({ "format": "png" }),
+        &ctx,
+    )
+    .await
+    .expect("应成功");
     assert_eq!(result["image"]["mediaType"], "image/png");
     let data = result["image"]["data"]
         .as_str()
@@ -725,9 +742,14 @@ async fn wait_with_screenshot_returns_frame() {
 async fn snapshot_budget_applied() {
     let (config, _session) = wired_config();
     let ctx = default_ctx();
-    let result = exec("computer_snapshot", &config, json!({ "max_depth": 1 }), &ctx)
-        .await
-        .expect("应成功");
+    let result = exec(
+        "computer_snapshot",
+        &config,
+        json!({ "max_depth": 1 }),
+        &ctx,
+    )
+    .await
+    .expect("应成功");
     assert_eq!(result["nodeCount"], 1, "max_depth=1 仅保留根");
     assert_eq!(result["truncated"], true, "截断必须标记");
 }

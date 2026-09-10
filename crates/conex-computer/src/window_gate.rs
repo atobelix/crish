@@ -199,21 +199,18 @@ pub fn resolve_foreground_target() -> ActionTarget {
         let proc_name = if !process_handle.is_null() {
             let mut name_buf = [0u16; 1024];
             let mut size = name_buf.len() as u32;
-            let name = if QueryFullProcessImageNameW(
-                process_handle,
-                0,
-                name_buf.as_mut_ptr(),
-                &mut size,
-            ) != 0
-            {
-                let full_path = String::from_utf16_lossy(&name_buf[..size as usize]);
-                std::path::Path::new(&full_path)
-                    .file_name()
-                    .and_then(|n| n.to_str())
-                    .map(|s| s.to_string())
-            } else {
-                get_process_name_by_pid(pid)
-            };
+            let name =
+                if QueryFullProcessImageNameW(process_handle, 0, name_buf.as_mut_ptr(), &mut size)
+                    != 0
+                {
+                    let full_path = String::from_utf16_lossy(&name_buf[..size as usize]);
+                    std::path::Path::new(&full_path)
+                        .file_name()
+                        .and_then(|n| n.to_str())
+                        .map(|s| s.to_string())
+                } else {
+                    get_process_name_by_pid(pid)
+                };
             CloseHandle(process_handle);
             name
         } else {

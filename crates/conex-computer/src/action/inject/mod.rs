@@ -11,5 +11,5 @@ pub mod input;
 pub mod keys;
 pub mod steps;
 
-pub use backend::{InjectError, OsInputBackend, release_all_keys_and_buttons, run_steps_guarded};
+pub use backend::{release_all_keys_and_buttons, run_steps_guarded, InjectError, OsInputBackend};
 pub use steps::InjectStep;

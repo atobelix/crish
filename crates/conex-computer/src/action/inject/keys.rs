@@ -152,7 +152,7 @@ pub(crate) fn resolve_key(name: &str) -> Option<enigo::Key> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::action::{MouseButton};
+    use crate::action::MouseButton;
     use conex_shared::input::MouseButton as SharedMouseButton;
     use enigo::Button;
 

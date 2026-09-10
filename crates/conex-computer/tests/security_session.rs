@@ -8,9 +8,7 @@
 //!   本测试锁定键名常量与布尔语义）；
 //! - 并发 enable 互斥（多线程安全）。
 
-use conex_computer::security::{
-    EnablementError, SessionEnablement, COMPUTER_USE_ENABLED_KEY,
-};
+use conex_computer::security::{EnablementError, SessionEnablement, COMPUTER_USE_ENABLED_KEY};
 use std::sync::Arc;
 use std::thread;
 

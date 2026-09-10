@@ -29,11 +29,11 @@ use agent_tools::registry::ToolRegistry;
 use async_trait::async_trait;
 use base64::Engine;
 use conex_computer::action::{ClickCount, MouseButton, ScrollDirection};
+use conex_computer::activation::ActivationGate;
 use conex_computer::coord::Point;
 use conex_computer::perception::{PerceptionNode, PerceptionSnapshot};
 use conex_computer::security::SessionEnablement;
 use conex_computer::{Action, ActionResult};
-use conex_computer::activation::ActivationGate;
 use serde_json::{json, Value};
 use std::io::Cursor;
 use std::sync::Arc;
@@ -163,10 +163,7 @@ impl ComputerTool {
                 let key = parse_hold_key_name(args)?;
                 let duration_secs = parse_hold_key_duration(args)?;
                 session
-                    .dispatch(&Action::HoldKey {
-                        key,
-                        duration_secs,
-                    })
+                    .dispatch(&Action::HoldKey { key, duration_secs })
                     .await
                     .map_err(|e| error::map_session_error(name, e))?;
                 self.check_in_flight(tctx)?;
@@ -306,9 +303,10 @@ impl Tool for ComputerTool {
 
     async fn execute(&self, tctx: &ToolContext, args: Value) -> Result<Value, ToolError> {
         // ① 会话注入 + 开启态合并检查（未注入或未开启 → not_ready/not_enabled）
-        let session = self.ctx.session.as_ref().ok_or_else(|| {
-            error::not_ready("电脑操作会话未注入（ComputerToolsConfig.session）")
-        })?;
+        let session =
+            self.ctx.session.as_ref().ok_or_else(|| {
+                error::not_ready("电脑操作会话未注入（ComputerToolsConfig.session）")
+            })?;
         if let Some(enablement) = &self.ctx.enablement {
             if !enablement.enabled() {
                 return Err(error::not_enabled("电脑操作未开启"));
@@ -355,8 +353,7 @@ fn optional_string(args: &Value, key: &str) -> Result<Option<String>, ToolError>
 }
 
 fn required_string(args: &Value, key: &str) -> Result<String, ToolError> {
-    optional_string(args, key)?
-        .ok_or_else(|| error::invalid_params(format!("缺少必填参数：{key}")))
+    optional_string(args, key)?.ok_or_else(|| error::invalid_params(format!("缺少必填参数：{key}")))
 }
 
 fn optional_bool(args: &Value, key: &str) -> Result<Option<bool>, ToolError> {
@@ -395,27 +392,21 @@ fn optional_string_array(args: &Value, key: &str) -> Result<Option<Vec<String>>,
             for item in items {
                 match item {
                     Value::String(s) => out.push(s.clone()),
-                    _ => {
-                        return Err(error::invalid_params(format!(
-                            "{key} 的元素必须是字符串"
-                        )))
-                    }
+                    _ => return Err(error::invalid_params(format!("{key} 的元素必须是字符串"))),
                 }
             }
             Ok(Some(out))
         }
-        Some(_) => Err(error::invalid_params(format!(
-            "{key} 必须是字符串数组"
-        ))),
+        Some(_) => Err(error::invalid_params(format!("{key} 必须是字符串数组"))),
     }
 }
 
 /// 坐标点解析（[x,y] 二元组 → Point；类型/长度错误 → invalid_params。
 /// 负值与边界越界由会话内 `Action::validate`（coords_out_of_bounds）承担）。
 fn parse_point(v: &Value, what: &str) -> Result<Point, ToolError> {
-    let arr = v.as_array().ok_or_else(|| {
-        error::invalid_params(format!("{what} 必须是 [x,y] 整数二元组"))
-    })?;
+    let arr = v
+        .as_array()
+        .ok_or_else(|| error::invalid_params(format!("{what} 必须是 [x,y] 整数二元组")))?;
     if arr.len() != 2 {
         return Err(error::invalid_params(format!(
             "{what} 必须是 [x,y] 整数二元组（长度 2）"
@@ -423,12 +414,11 @@ fn parse_point(v: &Value, what: &str) -> Result<Point, ToolError> {
     }
     let mut coords = [0i32; 2];
     for (i, item) in arr.iter().enumerate() {
-        let raw = item.as_i64().ok_or_else(|| {
-            error::invalid_params(format!("{what}[{i}] 必须是整数"))
-        })?;
-        coords[i] = i32::try_from(raw).map_err(|_| {
-            error::invalid_params(format!("{what}[{i}] 超出 i32 坐标范围"))
-        })?;
+        let raw = item
+            .as_i64()
+            .ok_or_else(|| error::invalid_params(format!("{what}[{i}] 必须是整数")))?;
+        coords[i] = i32::try_from(raw)
+            .map_err(|_| error::invalid_params(format!("{what}[{i}] 超出 i32 坐标范围")))?;
     }
     Ok(Point::new(coords[0], coords[1]))
 }
@@ -563,8 +553,8 @@ fn parse_hold_key_duration(args: &Value) -> Result<f32, ToolError> {
 fn parse_button_down(args: &Value) -> Result<(MouseButton, bool), ToolError> {
     reject_unknown(args, &["button", "down"])?;
     let button = parse_button(args)?;
-    let down = optional_bool(args, "down")?
-        .ok_or_else(|| error::invalid_params("缺少必填参数：down"))?;
+    let down =
+        optional_bool(args, "down")?.ok_or_else(|| error::invalid_params("缺少必填参数：down"))?;
     Ok((button, down))
 }
 
@@ -594,9 +584,8 @@ fn parse_scroll(
     };
     let amount_raw = optional_u64(args, "amount")?
         .ok_or_else(|| error::invalid_params("缺少必填参数：amount"))?;
-    let amount = u32::try_from(amount_raw).map_err(|_| {
-        error::invalid_params(format!("amount 超出 u32 范围：{amount_raw}"))
-    })?;
+    let amount = u32::try_from(amount_raw)
+        .map_err(|_| error::invalid_params(format!("amount 超出 u32 范围：{amount_raw}")))?;
     let coordinate = optional_point(args, "coordinate")?;
     let modifiers = parse_modifiers(args)?;
     Ok((direction, amount, coordinate, modifiers))
@@ -635,9 +624,9 @@ fn parse_screenshot_args(args: &Value) -> Result<(String, u8, Option<[i32; 4]>),
     let region = match args.get("region") {
         None => None,
         Some(v) => {
-            let arr = v.as_array().ok_or_else(|| {
-                error::invalid_params("region 必须是 [x0,y0,x1,y1] 整数四元组")
-            })?;
+            let arr = v
+                .as_array()
+                .ok_or_else(|| error::invalid_params("region 必须是 [x0,y0,x1,y1] 整数四元组"))?;
             if arr.len() != 4 {
                 return Err(error::invalid_params(
                     "region 必须是 [x0,y0,x1,y1] 整数四元组（长度 4）",
@@ -645,12 +634,11 @@ fn parse_screenshot_args(args: &Value) -> Result<(String, u8, Option<[i32; 4]>),
             }
             let mut out = [0i32; 4];
             for (i, item) in arr.iter().enumerate() {
-                let raw = item.as_i64().ok_or_else(|| {
-                    error::invalid_params(format!("region[{i}] 必须是整数"))
-                })?;
-                out[i] = i32::try_from(raw).map_err(|_| {
-                    error::invalid_params(format!("region[{i}] 超出 i32 范围"))
-                })?;
+                let raw = item
+                    .as_i64()
+                    .ok_or_else(|| error::invalid_params(format!("region[{i}] 必须是整数")))?;
+                out[i] = i32::try_from(raw)
+                    .map_err(|_| error::invalid_params(format!("region[{i}] 超出 i32 范围")))?;
             }
             Some(out)
         }
@@ -703,8 +691,7 @@ fn postprocess_frame(
     let mut buf = Cursor::new(Vec::new());
     if format == "jpeg" {
         let rgb = img.to_rgb8();
-        let mut encoder =
-            image::codecs::jpeg::JpegEncoder::new_with_quality(&mut buf, quality);
+        let mut encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut buf, quality);
         encoder
             .encode(
                 &rgb,
@@ -716,9 +703,10 @@ fn postprocess_frame(
                 ToolError::execution_failed("computer_screenshot", format!("JPEG 编码失败：{e}"))
             })?;
     } else {
-        img.write_to(&mut buf, image::ImageFormat::Png).map_err(|e| {
-            ToolError::execution_failed("computer_screenshot", format!("PNG 编码失败：{e}"))
-        })?;
+        img.write_to(&mut buf, image::ImageFormat::Png)
+            .map_err(|e| {
+                ToolError::execution_failed("computer_screenshot", format!("PNG 编码失败：{e}"))
+            })?;
     }
     Ok(buf.into_inner())
 }
@@ -997,10 +985,7 @@ pub(crate) fn definitions(ctx: Arc<GuardCtx>) -> Vec<ComputerTool> {
 
 /// 注册全部 12 个 computer_* 工具（幂等：同名已注册跳过，不报冲突；
 /// 06 文档 §3.2 幂等语义对齐浏览器线 17 §1.4）。
-pub(crate) fn register_all(
-    registry: &ToolRegistry,
-    ctx: Arc<GuardCtx>,
-) -> Result<(), ToolError> {
+pub(crate) fn register_all(registry: &ToolRegistry, ctx: Arc<GuardCtx>) -> Result<(), ToolError> {
     for tool in definitions(ctx) {
         if !registry.has(tool.name()) {
             registry.register_runtime(Arc::new(tool))?;
@@ -1078,12 +1063,10 @@ mod tests {
         assert_eq!((decoded.width(), decoded.height()), (4, 4));
 
         // 越界拒绝：x1 超出帧宽 → coords_out_of_bounds
-        let err =
-            postprocess_frame(&png, "png", 80, Some([0, 0, 5, 4])).expect_err("越界应拒绝");
+        let err = postprocess_frame(&png, "png", 80, Some([0, 0, 5, 4])).expect_err("越界应拒绝");
         assert_eq!(err.code(), crate::codes::TOOL_COMPUTER_COORDS_OUT_OF_BOUNDS);
         // 非法 region（反向区间）同样拒绝
-        let err =
-            postprocess_frame(&png, "png", 80, Some([2, 0, 1, 4])).expect_err("反向应拒绝");
+        let err = postprocess_frame(&png, "png", 80, Some([2, 0, 1, 4])).expect_err("反向应拒绝");
         assert_eq!(err.code(), crate::codes::TOOL_COMPUTER_COORDS_OUT_OF_BOUNDS);
     }
 
@@ -1148,11 +1131,14 @@ mod tests {
         assert_eq!(registry.len(), 12);
         assert_eq!(registry.len(), crate::ALL_TOOL_NAMES.len());
         // 幂等：重复注册不冲突
-        register_all(&registry, Arc::new(GuardCtx {
-            session: None,
-            activation: None,
-            enablement: None,
-        }))
+        register_all(
+            &registry,
+            Arc::new(GuardCtx {
+                session: None,
+                activation: None,
+                enablement: None,
+            }),
+        )
         .expect("重复注册应幂等");
         assert_eq!(registry.len(), 12);
     }

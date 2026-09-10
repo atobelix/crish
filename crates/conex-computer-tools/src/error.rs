@@ -34,10 +34,7 @@ pub fn exclusive(reason: impl Into<String>) -> ToolError {
 
 /// 中止 / 取消（06 §5 `tool.computer.cancelled`；会话级中止令牌触发，不计重试额度）。
 pub fn cancelled() -> ToolError {
-    ToolError::new(
-        codes::TOOL_COMPUTER_CANCELLED,
-        "已停止（AI 操作中止）",
-    )
+    ToolError::new(codes::TOOL_COMPUTER_CANCELLED, "已停止（AI 操作中止）")
 }
 
 /// 参数非法（06 §5 `tool.computer.invalid_params`，Permanent 修参重试）。
@@ -99,7 +96,7 @@ mod tests {
     use super::*;
     use conex_computer::action::ActionError;
     use conex_computer::perception::PerceptionError;
-    use conex_computer::{SessionError};
+    use conex_computer::SessionError;
     use conex_shared::gate::{TargetDenial, TargetDenialKind};
 
     /// SessionError → 错误码映射全表（06 §5 码表逐项回归）。
@@ -154,10 +151,7 @@ mod tests {
     /// 感知错误映射统一 execution_failed（消息携带语义）。
     #[test]
     fn perception_error_mapping() {
-        let err = map_perception_error(
-            "computer_snapshot",
-            PerceptionError::NoActiveWindow,
-        );
+        let err = map_perception_error("computer_snapshot", PerceptionError::NoActiveWindow);
         assert_eq!(err.code(), shared_codes::TOOL_EXECUTION_FAILED);
         assert!(err.to_string().contains("无活动窗口"));
 
@@ -172,14 +166,20 @@ mod tests {
     #[test]
     fn guard_error_codes() {
         assert_eq!(not_ready("未注入").code(), codes::TOOL_COMPUTER_NOT_READY);
-        assert_eq!(not_enabled("未开启").code(), codes::TOOL_COMPUTER_NOT_ENABLED);
+        assert_eq!(
+            not_enabled("未开启").code(),
+            codes::TOOL_COMPUTER_NOT_ENABLED
+        );
         assert_eq!(
             exclusive("互斥").code(),
             codes::TOOL_SESSION_EXCLUSIVE,
             "跨线共享码 tool.session.exclusive"
         );
         assert_eq!(cancelled().code(), codes::TOOL_COMPUTER_CANCELLED);
-        assert_eq!(elevated_window("提权").code(), codes::TOOL_COMPUTER_ELEVATED_WINDOW);
+        assert_eq!(
+            elevated_window("提权").code(),
+            codes::TOOL_COMPUTER_ELEVATED_WINDOW
+        );
         assert_eq!(
             coords_out_of_bounds("越界").code(),
             codes::TOOL_COMPUTER_COORDS_OUT_OF_BOUNDS

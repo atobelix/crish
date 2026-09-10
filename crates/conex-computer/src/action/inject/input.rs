@@ -46,11 +46,7 @@ impl InputBackend for OsInputBackend {
         run_steps_guarded(&mut enigo, &steps, should_abort).map_err(InputBackendError::Failed)
     }
 
-    async fn button(
-        &self,
-        btn: SharedMouseButton,
-        down: bool,
-    ) -> Result<(), InputBackendError> {
+    async fn button(&self, btn: SharedMouseButton, down: bool) -> Result<(), InputBackendError> {
         let direction = if down {
             Direction::Press
         } else {
@@ -105,7 +101,10 @@ impl InputBackend for OsInputBackend {
 mod tests {
     use super::*;
     use crate::action::inject::OsInputBackend;
-    use conex_shared::input::{InputBackend, MouseButton as SharedMouseButton, ClickCount as SharedClickCount, ScrollDirection as SharedScrollDirection};
+    use conex_shared::input::{
+        ClickCount as SharedClickCount, InputBackend, MouseButton as SharedMouseButton,
+        ScrollDirection as SharedScrollDirection,
+    };
     use std::sync::Arc;
 
     fn block_on<F: std::future::Future>(fut: F) -> F::Output {

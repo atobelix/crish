@@ -126,8 +126,11 @@ impl RealComputerSession {
     /// 失败原因在 readiness 中可读）。
     pub fn new() -> Result<Self, String> {
         let session = conex_computer::ComputerSession::new().map_err(|e| e.to_string())?;
-        let perception = conex_computer::perception::UiaPerception::new().map_err(|e| e.to_string())?;
-        let gate = Arc::new(conex_computer::window_gate::WindowTargetGate::new(Vec::new()));
+        let perception =
+            conex_computer::perception::UiaPerception::new().map_err(|e| e.to_string())?;
+        let gate = Arc::new(conex_computer::window_gate::WindowTargetGate::new(
+            Vec::new(),
+        ));
         Ok(Self {
             inner: Arc::new(Mutex::new(session)),
             perception: PerceptionGuard(perception),

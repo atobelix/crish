@@ -240,7 +240,9 @@ async fn full_chain() -> Result<(), String> {
         if prev != SessionMode::BrowserActive {
             return Err(format!("T2b release 应返回 BrowserActive，实得 {prev:?}"));
         }
-        rig.activation.request_desktop().map_err(|e| format!("T2c 桌面激活失败：{e}"))?;
+        rig.activation
+            .request_desktop()
+            .map_err(|e| format!("T2c 桌面激活失败：{e}"))?;
         if !rig.activation.current().is_desktop() {
             return Err(format!(
                 "T2c 应处于 DesktopActive，实得 {:?}",
@@ -262,8 +264,8 @@ async fn full_chain() -> Result<(), String> {
         }
 
         // ── T4 click：编辑区中心 → 光标坐标闭环 ──
-        let edit_node = find_editor_preferred(tree)
-            .ok_or_else(|| "T4a 树无 edit/document 节点".to_string())?;
+        let edit_node =
+            find_editor_preferred(tree).ok_or_else(|| "T4a 树无 edit/document 节点".to_string())?;
         let center = rect_center(edit_node).ok_or_else(|| "T4b 编辑区 rect 无效".to_string())?;
         let api = spec.phys_to_api(Point::new(center.0, center.1));
         let r = run_tool(
@@ -328,8 +330,8 @@ async fn full_chain() -> Result<(), String> {
         let bytes = base64::engine::general_purpose::STANDARD
             .decode(data)
             .map_err(|e| format!("T6a base64 解码失败：{e}"))?;
-        let png_magic = bytes.len() > 8
-            && bytes[..8] == [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+        let png_magic =
+            bytes.len() > 8 && bytes[..8] == [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
         if !png_magic {
             return Err("T6a PNG 魔数缺失".to_string());
         }
@@ -377,7 +379,9 @@ async fn full_chain() -> Result<(), String> {
             )])));
         let gated_session: Arc<dyn ComputerOps> = Arc::new(gated);
         let rig2 = build_rig(gated_session);
-        rig2.activation.request_desktop().map_err(|e| format!("T8 桌面激活失败：{e}"))?;
+        rig2.activation
+            .request_desktop()
+            .map_err(|e| format!("T8 桌面激活失败：{e}"))?;
         let e2 = run_tool(&rig2, "computer_click", json!({}))
             .await
             .expect_err("白名单外窗口应拒绝");
