@@ -9,6 +9,7 @@ import { logInternalError } from '../../userFacingErrors';
 import type { EngineEnvelope } from './eventParser';
 import type { HandlerEnv } from './handlerEnv';
 import { useContinuityUiStore } from '../../continuity/continuityUiStore';
+import { useEphemeralChatStore } from '../../../store/ephemeralChatStore';
 
 export function onProviderDiagnostic(
   _env: HandlerEnv,
@@ -33,6 +34,17 @@ export function onProviderDiagnostic(
       useContinuityUiStore
         .getState()
         .applyRetryNotice(sessionId, attempt, maxAttempts);
+
+      const rawDelay = (diag as unknown as Record<string, unknown> | undefined)?.delayMs;
+      const delayMs = typeof rawDelay === 'number' ? rawDelay : 3000;
+      useEphemeralChatStore.getState().updateRetryProgress(sessionId, {
+        attempt,
+        maxAttempts: maxAttempts ?? 3,
+        nextRetryTimestamp: Date.now() + delayMs,
+        backoffMs: delayMs,
+        reasonText: (diag as { message?: string })?.message || '网络连接抖动，正在自动重试',
+        rawDiagnostic: diag,
+      });
     }
   }
 }

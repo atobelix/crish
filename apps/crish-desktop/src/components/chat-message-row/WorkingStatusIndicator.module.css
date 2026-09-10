@@ -1,0 +1,50 @@
+/* WorkingStatusIndicator: 24px 极简翡翠绿工作态指示器 */
+.container {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  height: 24px;
+  line-height: 24px;
+  padding: 0 var(--space-2, 8px);
+  border-radius: var(--radius-sm, 4px);
+  user-select: none;
+  font-family: inherit;
+  font-size: var(--font-size-sm, 12px);
+  color: var(--text-secondary);
+  background: transparent;
+  transition: opacity 0.2s ease-out;
+}
+
+.pulseDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 6px hsl(158 64% 52% / 0.6);
+  animation: pulse-ring 1.6s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse-ring {
+  0%, 100% {
+    transform: scale(0.9);
+    opacity: 0.7;
+  }
+  50% {
+    transform: scale(1.25);
+    opacity: 1;
+    box-shadow: 0 0 10px hsl(158 64% 52% / 0.85);
+  }
+}
+
+.text {
+  font-size: var(--font-size-xs, 12px);
+  color: var(--text-tertiary);
+  letter-spacing: 0.01em;
+}
+
+.timer {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: var(--font-size-micro, 11px);
+  color: var(--text-tertiary);
+  opacity: 0.85;
+}

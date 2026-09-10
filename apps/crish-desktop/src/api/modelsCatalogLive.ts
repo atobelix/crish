@@ -131,11 +131,25 @@ export function resolveThinkingHandoff(
     return unsupportedHandoff(providerId, modelId);
   }
 
-  // 已存档选项命中直接使用；未存档时跳过 'Off'，选首个非 Off 项（避免总默认到关闭思考）
-  const hit =
+  // 1. 精确匹配用户选择
+  let hit: string | undefined =
     selectedTitle != null && Object.hasOwn(thinking, selectedTitle)
       ? selectedTitle
-      : (entries.find(([k]) => k.toLowerCase() !== 'off')?.[0] ?? entries[0]![0]);
+      : undefined;
+
+  // 2. 大小写不敏感容错平移
+  if (!hit && selectedTitle != null && selectedTitle.trim()) {
+    const norm = selectedTitle.trim().toLowerCase();
+    const caseMatch = entries.find(([k]) => k.toLowerCase() === norm);
+    if (caseMatch) {
+      hit = caseMatch[0];
+    }
+  }
+
+  // 3. 未存档或未命中时：稳态平滑回退到字典第一项（契约规范）
+  if (!hit) {
+    hit = entries[0]![0];
+  }
 
   const provider = getLiveProvider(providerId);
   const thinkingFormat = (provider?.compat ?? spec.compat)?.thinkingFormat;

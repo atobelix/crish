@@ -27,6 +27,7 @@ import {
   checkSessionAiBusy,
   enqueueFollowUpMessage,
   flushContextStateBeforeSend,
+  settleStaleSessionProcessingMessages,
 } from './slashSendQueueHelper';
 import {
   sanitizeAttachmentForPersist,
@@ -157,10 +158,11 @@ export function useSlashSend(
     }
 
     // 6. 并发忙碌检测与 Follow-up 判定
-    const isAiBusy = checkSessionAiBusy(
-      streamManagerRef.current?.hasStream(sessionId) ?? false,
-      sessionId
-    );
+    const hasLiveStream = streamManagerRef.current?.hasStream(sessionId) ?? false;
+    // 强制执行绝对自愈：只要无物理 live stream，立即收口清扫历史 processing/queued 脏数据
+    settleStaleSessionProcessingMessages(sessionId, hasLiveStream);
+
+    const isAiBusy = checkSessionAiBusy(hasLiveStream, sessionId);
     const isFollowUp = decideSendWhileRunning(isAiBusy) === 'follow_up';
     const liveHandle = streamManagerRef.current?.get(sessionId);
 

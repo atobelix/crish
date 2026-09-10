@@ -11,7 +11,7 @@
 
 /** 无条件合法转换表: from → Set<to> */
 const VALID_TRANSITIONS: Record<string, ReadonlySet<string>> = {
-  queued: new Set(['processing']),
+  queued: new Set(['processing', 'cancelled']),
   processing: new Set(['completed', 'error', 'cancelled']),
   completed: new Set(['processing']),
   error: new Set(['processing']),
@@ -20,10 +20,14 @@ const VALID_TRANSITIONS: Record<string, ReadonlySet<string>> = {
 
 /**
  * 需要 force=true 才放行的转换。
- * 当前仅 completed → processing（regenerate 路径）。
+ * 包括 completed → processing（regenerate 路径），以及自愈收束清理路径。
  */
 const FORCE_TRANSITIONS: Record<string, ReadonlySet<string>> = {
   completed: new Set(['processing']),
+  queued: new Set(['completed', 'error', 'cancelled']),
+  processing: new Set(['completed', 'error', 'cancelled']),
+  error: new Set(['processing', 'completed']),
+  cancelled: new Set(['processing']),
 };
 
 /**

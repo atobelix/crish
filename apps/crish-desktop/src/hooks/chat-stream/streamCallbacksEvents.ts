@@ -12,6 +12,7 @@ import type { SessionAgent } from '../../store/types';
 import type { FileDiff } from '../../store/types';
 import { clearStream, getStreamText } from '../../store/streamingStore';
 import { getCompositionRoot } from '../../app/compositionRoot';
+import { useEphemeralChatStore } from '../../store/ephemeralChatStore';
 import { recordStreamDiag } from '../../api/streamDiag';
 import { toast } from '../../services/toast/ToastContext';
 import type { StreamCallbacks } from '../../api/chatApi';
@@ -322,7 +323,7 @@ export function handleRunError(opts: {
     }
   }
 
-  // 提取当轮真实提问文本与用户消息 ID，保障 0-token 失败重试闭环
+  // 提取当轮真实提问文本与用户消息 ID，保障失败重试闭环
   const lastUserMsg = st?.sessionsById?.[sid]?.messages?.findLast(
     (m) => m.sender === 'user'
   );
@@ -340,6 +341,20 @@ export function handleRunError(opts: {
     kind && (validKinds as readonly string[]).includes(kind)
       ? (kind as (typeof validKinds)[number])
       : 'generic';
+
+  useEphemeralChatStore.getState().setEphemeralStatus(sid, {
+    id: `err-${sid}-${assistantMsgId}`,
+    messageId: assistantMsgId,
+    kind: resolvedKind,
+    message: message || '服务暂时不可用，请检查网络或后端配置',
+    technicalDetail: typeof detail === 'string' ? detail : undefined,
+    retryable: true,
+    timestamp: Date.now(),
+    retryContext: {
+      userMsgId: lastUserMsg?.id,
+      promptText: lastUserMsg?.text,
+    },
+  });
 
 
   flushStreamBatchers();

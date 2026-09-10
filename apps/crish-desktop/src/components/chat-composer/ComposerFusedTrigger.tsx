@@ -23,8 +23,8 @@ import {
 import {
   getSessionThinkingTitle,
   setSessionThinkingTitle,
-  loadModelThinkingPref,
-  saveModelThinkingPref,
+  resolveEffectiveThinkingTitle,
+  persistThinkingSelection,
 } from '../../api/SessionRuntimeRegistry';
 import { recordPendingContextState } from '../../api/provider-profiles/contextStatePending';
 import { useModelsCatalogVersion } from '../../hooks/useModelsCatalogVersion';
@@ -97,10 +97,7 @@ export const ComposerFusedTrigger: React.FC<ComposerFusedTriggerProps> = ({
   );
 
   const storedTitle = useMemo(
-    () =>
-      // 先读会话内存存档；未设置时尝试按模型读取 localStorage 跨会话存档
-      getSessionThinkingTitle(sessionId) ??
-      loadModelThinkingPref(providerId, modelId),
+    () => resolveEffectiveThinkingTitle(sessionId, providerId, modelId),
     [sessionId, titleEpoch, providerId, modelId]
   );
 
@@ -116,7 +113,12 @@ export const ComposerFusedTrigger: React.FC<ComposerFusedTriggerProps> = ({
     if (!showThinking) return;
     if (!handoff.supported) return;
     if (storedTitle !== handoff.selectedTitle) {
-      setSessionThinkingTitle(sessionId, handoff.selectedTitle);
+      persistThinkingSelection(
+        sessionId,
+        providerId,
+        modelId,
+        handoff.selectedTitle
+      );
       setTitleEpoch((n) => n + 1);
     }
   }, [
@@ -125,20 +127,16 @@ export const ComposerFusedTrigger: React.FC<ComposerFusedTriggerProps> = ({
     storedTitle,
     handoff.supported,
     handoff.selectedTitle,
+    providerId,
+    modelId,
   ]);
 
   const currentTitle = handoff.supported ? handoff.selectedTitle : '';
 
   const selectLevel = useCallback(
     (title: string) => {
-      setSessionThinkingTitle(sessionId, title);
-      // 跨会话持久化：按模型存档用户选择，重启后可恢复
-      saveModelThinkingPref(providerId, modelId, title);
-      try {
-        recordPendingContextState();
-      } catch {
-        /* swallow-ok */
-      }
+      persistThinkingSelection(sessionId, providerId, modelId, title);
+      recordPendingContextState(sessionId);
       setTitleEpoch((n) => n + 1);
       setOpen(false);
     },

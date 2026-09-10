@@ -1,0 +1,100 @@
+.errorContainer {
+  margin: var(--space-2, 8px) 0;
+  padding: var(--space-2, 8px) var(--space-3, 12px);
+  background: hsl(0 84% 60% / 0.05);
+  border: 1px solid hsl(0 84% 60% / 0.2);
+  border-radius: var(--radius-md, 8px);
+  font-size: var(--font-size-sm, 12px);
+  color: var(--text-primary);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2, 8px);
+}
+
+.headerRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2, 8px);
+}
+
+.statusGroup {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+}
+
+.errorIcon {
+  width: 14px;
+  height: 14px;
+  color: #ef4444;
+  flex-shrink: 0;
+}
+
+.errorBadge {
+  font-size: var(--font-size-micro, 11px);
+  font-weight: 500;
+  color: #dc2626;
+  background: hsl(0 84% 60% / 0.1);
+  padding: 1px 6px;
+  border-radius: var(--radius-sm, 4px);
+  white-space: nowrap;
+}
+
+.errorMessage {
+  font-size: var(--font-size-xs, 12px);
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.actionsGroup {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+}
+
+.btnRetryTurn {
+  background: hsl(0 84% 60% / 0.1);
+  border: 1px solid hsl(0 84% 60% / 0.25);
+  color: #dc2626;
+  padding: 2px 10px;
+  border-radius: var(--radius-sm, 4px);
+  cursor: pointer;
+  font-size: var(--font-size-micro, 11px);
+  font-weight: 500;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.btnRetryTurn:hover {
+  background: hsl(0 84% 60% / 0.2);
+  border-color: hsl(0 84% 60% / 0.4);
+}
+
+.detailsFold {
+  font-size: var(--font-size-micro, 11px);
+  color: var(--text-tertiary);
+}
+
+.detailsSummary {
+  outline: none;
+  cursor: pointer;
+  user-select: none;
+}
+
+.detailsSummary:hover {
+  color: var(--text-secondary);
+}
+
+.detailsContent {
+  margin-top: var(--space-1, 4px);
+  padding: var(--space-1, 4px) var(--space-2, 8px);
+  background: hsl(0 0% 0% / 0.03);
+  border-radius: var(--radius-sm, 4px);
+  font-family: var(--font-mono, monospace);
+  font-size: var(--font-size-micro, 11px);
+  color: var(--text-secondary);
+  word-break: break-all;
+}

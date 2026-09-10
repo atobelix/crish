@@ -4,6 +4,7 @@ import { useSlashMenu } from './useSlashMenu';
 import { useChatAttachments } from './useChatAttachments';
 import { useChatQueue } from './useChatQueue';
 import { useChatSend } from './useChatSend';
+import { settleStaleSessionProcessingMessages } from '../../hooks/chat-stream/helpers';
 
 export interface UseChatComposerPropsOptions {
   wsId: string;
@@ -47,6 +48,11 @@ export function useChatComposerProps(options: UseChatComposerPropsOptions) {
   });
 
   const onSend = useCallback(() => {
+    const sid = (activeSessionId || '').trim();
+    if (sid) {
+      // 只要用户手动点击发送，先无条件清扫任何孤儿 processing / queued 状态
+      settleStaleSessionProcessingMessages(sid, false);
+    }
     if (queueMode && isProcessing) {
       const text = chatInput;
       enqueueMessage(text, attachments);

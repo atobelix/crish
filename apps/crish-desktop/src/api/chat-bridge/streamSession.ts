@@ -83,7 +83,6 @@ export async function createStreamSession(
       return;
     }
     state.unsub = transport.onMessage(onMessage);
-    callbacks.onThought('正在处理…');
 
     const { getWorkspacePath } = await import('../projectStore');
     const cwd = getWorkspacePath() || undefined;
@@ -184,7 +183,7 @@ export async function createStreamSession(
       return;
     }
 
-    // I1-α②：若发送瞬间未消费则兜底取走暂存 context-state
+    // I1-α②：若发送瞬间未消费则兜底取走暂存 context-state（仅供引擎入参，绝不在流式中异步向前端补插卡片）
     let contextStateText = options?.contextState;
     if (!contextStateText) {
       const pending = (
@@ -192,37 +191,6 @@ export async function createStreamSession(
       ).takePendingContextState(safeSessionId);
       if (pending) {
         contextStateText = typeof pending === 'string' ? pending : pending?.text || '';
-        try {
-          const { contextInjectionDispatcher } = await import(
-            '../contextInjectionDispatcher'
-          );
-          const { readContextStateSnapshot } = await import(
-            '../provider-profiles/contextStatePending'
-          );
-          const snapshot = readContextStateSnapshot();
-          const model = (typeof pending === 'object' && pending?.model) || snapshot.model || undefined;
-          const profile = (typeof pending === 'object' && pending?.profile) || snapshot.profile || undefined;
-          const permission = (typeof pending === 'object' && pending?.permission) || snapshot.permission || undefined;
-          const thinking = (typeof pending === 'object' && pending?.thinking) || snapshot.thinking || undefined;
-
-          contextInjectionDispatcher.inject(safeSessionId, {
-            kind: 'workspace_env',
-            title: '上下文状态切换',
-            summary: contextStateText,
-            status: 'injected',
-            source: 'system_event',
-            content: contextStateText,
-            metadata: {
-              mode: 'context-state',
-              ...(model ? { model } : {}),
-              ...(profile ? { profile } : {}),
-              ...(permission ? { permission } : {}),
-              ...(thinking ? { thinking } : {}),
-            },
-          });
-        } catch {
-          /* swallow-ok: 提示卡片注入失败不阻断 run 核心调用 */
-        }
       }
     }
 
@@ -291,8 +259,6 @@ export async function createStreamSession(
       } catch (err) {
         logInternalError('stream-start-busy-followup', err);
       }
-      if (callbacks.onThought)
-        callbacks.onThought('当前会话上一轮任务仍在收尾中，已自动为您排队…');
       finish();
       return;
     }

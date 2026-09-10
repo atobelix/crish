@@ -23,6 +23,11 @@ import {
   isContextStateInjection,
   formatContextStateDisplayText,
 } from './contextStateUtils';
+import { WorkingStatusIndicator } from '../chat-message-row/WorkingStatusIndicator';
+import { ModelRetryNode } from '../chat-message-row/ModelRetryNode';
+import { TurnErrorNode } from '../chat-message-row/TurnErrorNode';
+import { useEphemeralChatStore } from '../../store/ephemeralChatStore';
+import { useSessionStore } from '../../store/sessionStore';
 
 
 export interface MessageContentProps {
@@ -192,6 +197,60 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
     // 纸墨极简流：思考段折叠受 hideThinkingBlock 契约管控（默认受控收起/展开）
     const thoughtDefaultOpen = !hideThinkingBlock;
 
+    const sessionId = useSessionStore((s) => s.activeSessionId) || '';
+    const ephemeralStatus = useEphemeralChatStore(
+      useCallback((s) => s.statusBySession[sessionId], [sessionId])
+    );
+
+    const isWorking = Boolean(
+      msg.status === 'processing' &&
+      !displayMsg.text?.trim() &&
+      !streamText?.trim() &&
+      !displayMsg.thinking?.trim() &&
+      (!displayMsg.toolCalls || displayMsg.toolCalls.length === 0)
+    );
+
+    const inFlowRetry = ephemeralStatus?.retryState;
+    const isErrorMsg = msg.status === 'error';
+    const errorDetail = msg.errorDetail;
+
+    const handleRetryNow = useCallback(() => {
+      if (sessionId) {
+        useEphemeralChatStore.getState().clearEphemeralStatus(sessionId);
+      }
+    }, [sessionId]);
+
+    const handleCancelRetry = useCallback(() => {
+      if (sessionId) {
+        useEphemeralChatStore.getState().clearEphemeralStatus(sessionId);
+      }
+    }, [sessionId]);
+
+    const handleRetryTurn = useCallback(() => {
+      if (!sessionId) return;
+      useEphemeralChatStore.getState().clearEphemeralStatus(sessionId);
+      const currentSession = useSessionStore.getState().sessionsById[sessionId];
+      const msgs = currentSession?.messages || [];
+      const thisIdx = msgs.findIndex((m) => m.id === msg.id);
+      let promptText = '';
+      if (thisIdx > 0) {
+        for (let i = thisIdx - 1; i >= 0; i--) {
+          if (msgs[i]?.sender === 'user') {
+            promptText = msgs[i]?.text || '';
+            break;
+          }
+        }
+      }
+      if (!promptText && ephemeralStatus?.retryContext?.promptText) {
+        promptText = ephemeralStatus.retryContext.promptText;
+      }
+      if (promptText) {
+        void import('../../app/compositionRoot').then(({ getCompositionRoot }) => {
+          void getCompositionRoot().session.getState().setComposerDraft(sessionId, promptText);
+        });
+      }
+    }, [sessionId, msg.id, ephemeralStatus]);
+
     // timeline 签名缓存
     const timelineCacheRef = useRef<{
       msgId: string;
@@ -279,10 +338,33 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
       return -1;
     }, [linearItems, lastToolIndex]);
 
-    // Timeline 为空时的降级平铺渲染
+    // Timeline 为空时的降级平铺渲染（如首 Token 到达前，或纯错误态）
     if (!linearItems.length) {
       const fallback = stripThoughtPlaceholders(displayMsg.text || streamText || '');
       if (!fallback.trim() && !streaming) {
+        if (isWorking) {
+          return (
+            <div className={`${styles.contentText} ${className || ''}`}>
+              <WorkingStatusIndicator startTime={msg.timestamp} />
+            </div>
+          );
+        }
+        if (isErrorMsg) {
+          return (
+            <div className={`${styles.contentText} ${className || ''}`}>
+              <TurnErrorNode
+                kind={(errorDetail?.kind as any) || ephemeralStatus?.kind}
+                message={errorDetail?.message || ephemeralStatus?.message}
+                technicalDetail={
+                  errorDetail?.technical ||
+                  ((errorDetail as Record<string, unknown> | undefined)?.detail as string | undefined) ||
+                  ephemeralStatus?.technicalDetail
+                }
+                onRetryTurn={handleRetryTurn}
+              />
+            </div>
+          );
+        }
         return null;
       }
       return (
@@ -295,6 +377,25 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
             }
             messageId={msg.id}
           />
+          {inFlowRetry && (
+            <ModelRetryNode
+              retryState={inFlowRetry}
+              onRetryNow={handleRetryNow}
+              onCancel={handleCancelRetry}
+            />
+          )}
+          {isErrorMsg && (
+            <TurnErrorNode
+              kind={(errorDetail?.kind as any) || ephemeralStatus?.kind}
+              message={errorDetail?.message || ephemeralStatus?.message}
+              technicalDetail={
+                errorDetail?.technical ||
+                ((errorDetail as Record<string, unknown> | undefined)?.detail as string | undefined) ||
+                ephemeralStatus?.technicalDetail
+              }
+              onRetryTurn={handleRetryTurn}
+            />
+          )}
         </div>
       );
     }
@@ -340,6 +441,26 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
               messageId={msg.id}
             />
           </div>
+        )}
+        {isWorking && <WorkingStatusIndicator startTime={msg.timestamp} />}
+        {inFlowRetry && (
+          <ModelRetryNode
+            retryState={inFlowRetry}
+            onRetryNow={handleRetryNow}
+            onCancel={handleCancelRetry}
+          />
+        )}
+        {isErrorMsg && (
+          <TurnErrorNode
+            kind={(errorDetail?.kind as any) || ephemeralStatus?.kind}
+            message={errorDetail?.message || ephemeralStatus?.message}
+            technicalDetail={
+              errorDetail?.technical ||
+              ((errorDetail as Record<string, unknown> | undefined)?.detail as string | undefined) ||
+              ephemeralStatus?.technicalDetail
+            }
+            onRetryTurn={handleRetryTurn}
+          />
         )}
       </div>
     );

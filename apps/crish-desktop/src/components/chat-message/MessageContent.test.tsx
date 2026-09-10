@@ -206,12 +206,13 @@ describe('MessageContent 零闪烁与平滑降级断言', () => {
       <MessageContent msg={errorMsg} />
     );
 
-    // 纯 AI 气泡纪律：MessageContent 气泡内部严禁内嵌伪造红框错误横幅，错误统一由底槽承接
-    expect(container.textContent).not.toContain('后端请求超时');
+    // 对话流内生韧性：错误通过 TurnErrorNode 挂载在流内
+    expect(container.querySelector('[data-testid="turn-error-node"]')).not.toBeNull();
+    expect(container.textContent).toContain('后端请求超时');
     expect(container.querySelector('.errorBanner')).toBeNull();
   });
 
-  it('当 msg.status === "error" 且 timeline.length > 0（包含思考链）时，保留真实思考链，绝不内嵌伪造错误横幅', () => {
+  it('当 msg.status === "error" 且 timeline.length > 0（包含思考链）时，保留真实思考链，同时挂载流内错误节点', () => {
     const errorWithThoughtMsg: SessionMessage = {
       id: 'err-msg-thought-1',
       sender: 'assistant',
@@ -225,13 +226,14 @@ describe('MessageContent 零闪烁与平滑降级断言', () => {
       <MessageContent msg={errorWithThoughtMsg} />
     );
 
-    // 思考链真实呈现，错误横幅绝不侵入气泡内部
+    // 思考链真实呈现，流内原生挂载 TurnErrorNode
     expect(container.textContent).toContain('思考');
-    expect(container.textContent).not.toContain('模型生成阶段发生异常');
+    expect(container.querySelector('[data-testid="turn-error-node"]')).not.toBeNull();
+    expect(container.textContent).toContain('模型生成阶段发生异常');
     expect(container.querySelector('.errorBanner')).toBeNull();
   });
 
-  it('当 msg.status === "error" 且存在前置 partial 正文时，仅展示真实生成正文，不污染伪造错误卡片', () => {
+  it('当 msg.status === "error" 且存在前置 partial 正文时，展示真实生成正文与流内错误节点', () => {
     const errorWithPartialTextMsg: SessionMessage = {
       id: 'err-msg-partial-1',
       sender: 'assistant',
@@ -245,11 +247,12 @@ describe('MessageContent 零闪烁与平滑降级断言', () => {
     );
 
     expect(container.textContent).toContain('已完成前半部分数据收集。');
-    expect(container.textContent).not.toContain('下游服务连接中断');
+    expect(container.querySelector('[data-testid="turn-error-node"]')).not.toBeNull();
+    expect(container.textContent).toContain('下游服务连接中断');
     expect(container.querySelector('.errorBanner')).toBeNull();
   });
 
-  it('当 msg.status === "error" 且无文本时，气泡安静不渲染任何伪造文本', () => {
+  it('当 msg.status === "error" 且无文本时，渲染默认流内异常节点', () => {
     const errorDefaultMsg: SessionMessage = {
       id: 'err-msg-default-1',
       sender: 'assistant',
@@ -261,7 +264,8 @@ describe('MessageContent 零闪烁与平滑降级断言', () => {
       <MessageContent msg={errorDefaultMsg} />
     );
 
-    expect(container.textContent).toBe('');
+    expect(container.querySelector('[data-testid="turn-error-node"]')).not.toBeNull();
+    expect(container.textContent).toContain('生成过程中发生异常');
     expect(container.querySelector('.errorBanner')).toBeNull();
   });
 });

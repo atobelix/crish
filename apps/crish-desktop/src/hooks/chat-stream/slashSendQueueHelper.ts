@@ -5,12 +5,16 @@
 import { addMessage } from '../../api/storeAccess';
 import { getSessionById } from '../../store/sessionStore';
 import { getCompositionRoot } from '../../app/compositionRoot';
-import { isSessionAiBusy } from './helpers';
+import { isSessionAiBusy, settleStaleSessionProcessingMessages } from './helpers';
 import {
   takePendingContextState,
   readContextStateSnapshot,
 } from '../../api/provider-profiles/contextStatePending';
 import { contextInjectionDispatcher } from '../../api/contextInjectionDispatcher';
+import {
+  getLastSentContextSignature,
+  setLastSentContextSignature,
+} from '../../api/SessionRuntimeRegistry';
 
 /**
  * 在向会话追加新消息前，取走并注入可能存在的上下文状态变更卡片。
@@ -21,8 +25,22 @@ export function flushContextStateBeforeSend(
 ): string | undefined {
   try {
     const contextState = takePendingContextState(sessionId);
-    if (!contextState) return undefined;
-    const snapshot = readContextStateSnapshot();
+    const snapshot = readContextStateSnapshot(sessionId);
+    if (!contextState) {
+      // 若本会话尚未建立首发基线，记录当前状态作为基线（后续切换可检测差异）
+      if (!getLastSentContextSignature(sessionId) && snapshot.model) {
+        const baseline =
+          (snapshot.profile
+            ? `当前已切换到模型 ${snapshot.model}（服务商 ${snapshot.profile}）`
+            : `当前已切换到模型 ${snapshot.model}`) +
+          (snapshot.permission ? `。权限模式：${snapshot.permission}` : '') +
+          (snapshot.thinking ? `。思考档位：${snapshot.thinking}` : '') +
+          '。';
+        setLastSentContextSignature(sessionId, baseline);
+      }
+      return undefined;
+    }
+
     const rawText =
       typeof contextState === 'string'
         ? contextState
@@ -44,6 +62,7 @@ export function flushContextStateBeforeSend(
       snapshot.thinking ||
       undefined;
 
+    // 仅在真实发生切换且在用户点击发送按钮瞬间，将居中提示挂载于会话（位于用户发送的消息上方）
     contextInjectionDispatcher.inject(sessionId, {
       kind: 'workspace_env',
       title: '上下文状态切换',
@@ -59,6 +78,9 @@ export function flushContextStateBeforeSend(
         ...(thinking ? { thinking } : {}),
       },
     });
+
+    // 成功发送后更新该会话最后发送的状态签名基线
+    setLastSentContextSignature(sessionId, rawText);
     return rawText;
   } catch (err) {
     console.error(
@@ -93,7 +115,7 @@ export function checkSessionAiBusy(
   return isSessionAiBusy({ hasLiveStream, messages: msgs });
 }
 
-export { isSessionAiBusy };
+export { isSessionAiBusy, settleStaleSessionProcessingMessages };
 
 /**
  * 将消息以 queued 状态入库并派发 followUp 事件

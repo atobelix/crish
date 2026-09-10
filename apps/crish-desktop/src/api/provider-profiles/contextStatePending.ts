@@ -21,7 +21,13 @@
 
 import { getPermissionMode } from '../storeAccess';
 import { useSessionStore } from '../../store/sessionStore';
-import { getSessionThinkingTitle } from '../SessionRuntimeRegistry';
+import {
+  getSessionThinkingTitle,
+  loadModelThinkingPref,
+  getLastSentContextSignature,
+} from '../SessionRuntimeRegistry';
+import { contextInjectionDispatcher } from '../contextInjectionDispatcher';
+import { isPendingDraft } from '../../store/draftSession';
 
 /** 暂存键（取走即清空；载荷为 { sessionId, text } 会话寻址 JSON） */
 export const PENDING_CONTEXT_STATE_KEY = 'crish_pending_context_state_v1';
@@ -45,11 +51,13 @@ function readActiveProfileId(): string {
   }
 }
 
-/** 读本会话思考档位 Title（yaml 字典 key）。无则空串，调用方省略该段。 */
-function readThinkingLevel(): string {
+/** 读本会话思考档位 Title（yaml 字典 key）。优先会话显式设定，回退模型持久偏好。无则空串。 */
+function readThinkingLevel(targetSessionId?: string): string {
   try {
-    const sid = useSessionStore.getState().activeSessionId || '';
-    const title = getSessionThinkingTitle(sid);
+    const sid = (targetSessionId || useSessionStore.getState().activeSessionId || '').trim();
+    const title =
+      (sid ? getSessionThinkingTitle(sid) : null) ??
+      loadModelThinkingPref(readActiveProfileId(), readActiveModelId());
     return typeof title === 'string' ? title.trim() : '';
   } catch {
     return '';
@@ -59,7 +67,7 @@ function readThinkingLevel(): string {
 /**
  * 获取当前状态快照的结构化字段
  */
-export function readContextStateSnapshot(): {
+export function readContextStateSnapshot(targetSessionId?: string): {
   model: string;
   profile: string;
   permission: string;
@@ -69,7 +77,7 @@ export function readContextStateSnapshot(): {
     model: readActiveModelId(),
     profile: readActiveProfileId(),
     permission: getPermissionMode(),
-    thinking: readThinkingLevel(),
+    thinking: readThinkingLevel(targetSessionId),
   };
 }
 
@@ -80,11 +88,13 @@ export function readContextStateSnapshot(): {
  * {permission}。思考档位：{thinking}。」——逐段可省略（读不到/空则跳过
  * 该段），模型为空时整体返回 null（无可注入的状态告知）。
  */
-export function buildContextStateSnapshot(): Omit<ContextStatePayload, 'sessionId'> | null {
+export function buildContextStateSnapshot(
+  targetSessionId?: string
+): Omit<ContextStatePayload, 'sessionId'> | null {
   const model = readActiveModelId();
   const profile = readActiveProfileId();
   const permission = getPermissionMode();
-  const thinking = readThinkingLevel();
+  const thinking = readThinkingLevel(targetSessionId);
   if (!model && !profile) return null;
   const parts: string[] = [];
   if (model) {
@@ -107,8 +117,8 @@ export function buildContextStateSnapshot(): Omit<ContextStatePayload, 'sessionI
 }
 
 /** 生成 context-state 快照文本（兼容旧接口） */
-export function buildContextStateText(): string {
-  return buildContextStateSnapshot()?.text || '';
+export function buildContextStateText(targetSessionId?: string): string {
+  return buildContextStateSnapshot(targetSessionId)?.text || '';
 }
 
 /** 会话寻址暂存结构化载荷（SSOT 单一真理源） */
@@ -135,8 +145,7 @@ function readStash(sessionId?: string): ContextStatePayload | null {
     if (sessionId) {
       const key = getSessionStashKey(sessionId);
       raw = localStorage.getItem(key);
-    }
-    if (!raw) {
+    } else {
       raw = localStorage.getItem(PENDING_CONTEXT_STATE_KEY);
     }
     if (!raw) return null;
@@ -184,23 +193,45 @@ function clearStash(sessionId?: string): void {
 }
 
 /**
- * 产生器入口：在 emitUiEvent('profiles-changed') 处调用——生成当前
- * 状态快照结构化载荷，并按会话寻址暂存（状态未变化则保持既有暂存；
- * 失败静默——感知注入是尽力而为面，不阻断状态切换本身）。
+ * @deprecated 切换时不再即时派发提示卡片。居中提示必须在用户点击发送后才带上，且位于用户消息上方。
  */
-export function recordPendingContextState(): void {
+export function dispatchInstantContextStateNotification(
+  _targetSessionId?: string | null
+): void {
+  // no-op: 严格遵守用户裁决，切换瞬间不向消息流追加任何卡片
+}
+
+/**
+ * 产生器入口：在切换模型、思考档位或权限时调用——
+ * 仅记录该会话待发送的结构化上下文状态快照；
+ * 严格纪律（用户裁决）：切换发生瞬间绝对不向对话流注入任何卡片；
+ * 仅在用户点击发送按钮后，由 flushContextStateBeforeSend 带上并置于用户发送的消息上方。
+ */
+export function recordPendingContextState(targetSessionId?: string): void {
   try {
-    const snapshot = buildContextStateSnapshot();
+    const store = useSessionStore.getState();
+    const sid = (targetSessionId || store.activeSessionId || '').trim();
+    if (!sid) {
+      // 无活跃会话时不记录无主暂存，防止污染后续会话
+      return;
+    }
+    const snapshot = buildContextStateSnapshot(sid);
     if (!snapshot) return;
     const text = snapshot.text;
-    const sid = useSessionStore.getState().activeSessionId || '';
-    // 会话级去重：文本与当前会话上次一致 → 不重新写入
+
+    // 检查是否切回了本会话上一次真实发送时的状态（切出去又切回来不重复弹提示）
+    const lastSentSig = getLastSentContextSignature(sid);
+    if (lastSentSig && text === lastSentSig) {
+      clearStash(sid);
+      lastRecordedSignaturesBySession.delete(sid);
+      return;
+    }
+
+    // 会话级去重：文本与当前会话上次待发送快照一致 → 不重复写入
     const lastSig = lastRecordedSignaturesBySession.get(sid);
     if (text === lastSig) return;
     lastRecordedSignaturesBySession.set(sid, text);
 
-    // 发送前绝不提前显示也不注入系统上下文：无论用户变动多少次模型/权限，
-    // 仅暂存最新状态，直到用户正式发送消息时才由 streamSession 顺带携带注入
     writeStash({
       sessionId: sid,
       model: snapshot.model,
@@ -224,29 +255,37 @@ export function takePendingContextState(
 ): ContextStatePayload | undefined {
   const sid = (currentSessionId || '').trim();
   let stash = readStash(sid);
-  // 如果会话刚从草稿晋升，尝试读取草稿暂存
+  // 如果当前 sid 没有专属暂存，且当前是从草稿晋升或新建会话：检查全局暂存是否属于草稿态产生的
   if (!stash && sid) {
-    stash = readStash('__pending_draft__');
+    const globalStash = readStash();
+    if (
+      globalStash &&
+      (!globalStash.sessionId ||
+        isPendingDraft(globalStash.sessionId) ||
+        globalStash.sessionId === '__pending_draft__' ||
+        globalStash.sessionId.startsWith('draft-'))
+    ) {
+      stash = globalStash;
+    }
   }
   if (!stash) return undefined;
-  if (
-    stash.sessionId &&
-    stash.sessionId !== sid &&
-    stash.sessionId !== '__pending_draft__'
-  ) {
-    // 绑定他会话：本次不消费，保留快照供目标会话消费
+  const isDraftOrigin =
+    !stash.sessionId ||
+    isPendingDraft(stash.sessionId) ||
+    stash.sessionId === '__pending_draft__' ||
+    stash.sessionId.startsWith('draft-');
+  if (stash.sessionId && stash.sessionId !== sid && !isDraftOrigin) {
+    // 绑定他真实会话：本次不消费，保留快照供目标会话消费
     return undefined;
   }
   // 匹配成功才消费并清除暂存
   clearStash(sid);
-  if (stash.sessionId === '__pending_draft__') {
-    clearStash('__pending_draft__');
-  }
-  // 消费完成后清空会话已记录签名，允许后续切回相同模型时能重新触发提示
-  lastRecordedSignaturesBySession.delete(sid);
   if (stash.sessionId) {
+    clearStash(stash.sessionId);
     lastRecordedSignaturesBySession.delete(stash.sessionId);
   }
+  clearStash();
+  lastRecordedSignaturesBySession.delete(sid);
   lastRecordedSignaturesBySession.delete('');
   lastRecordedSignaturesBySession.delete('__pending_draft__');
   return stash;

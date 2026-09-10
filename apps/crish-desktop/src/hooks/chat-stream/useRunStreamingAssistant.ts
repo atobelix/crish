@@ -111,7 +111,7 @@ export function useRunStreamingAssistant(
         id: assistantMsgId,
         sender: 'assistant',
         text: '',
-        thinking: '正在处理…',
+        thinking: undefined,
         timestamp: startTime,
         status: 'processing',
         toolCalls: [],

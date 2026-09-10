@@ -20,14 +20,25 @@ export type EphemeralErrorKind =
   | 'stream_abort'  // 异常非正常中断
   | 'generic';      // 通用运行错误
 
+export interface InFlowRetryState {
+  attempt: number;
+  maxAttempts: number;
+  nextRetryTimestamp: number;
+  backoffMs: number;
+  reasonText: string;
+  rawDiagnostic?: unknown;
+}
+
 export interface EphemeralChatStatus {
   id: string;                      // 唯一指纹 ID
   sessionId: string;               // 绑定的会话 ID
+  messageId?: string;              // 绑定的助手消息 ID（流内精准定位）
   kind: EphemeralErrorKind;        // 错误语义分类
   message: string;                 // 用户可读的简洁提示文案
   technicalDetail?: string;        // 详细技术信息（供排查）
   retryable: boolean;              // 是否可直接重试
   timestamp: number;               // 发生时刻（epoch ms）
+  retryState?: InFlowRetryState;   // 若当前正处于重试退避中，挂载该对象
   retryContext?: {
     userMsgId?: string;
     promptText?: string;
@@ -42,6 +53,12 @@ export interface EphemeralChatState {
   setEphemeralStatus: (
     sessionId: string,
     status: Omit<EphemeralChatStatus, 'sessionId'>
+  ) => void;
+
+  /** 更新重试退避进度 */
+  updateRetryProgress: (
+    sessionId: string,
+    retry: InFlowRetryState
   ) => void;
 
   /** 清空指定会话的瞬态状态（自愈动作） */
@@ -65,6 +82,30 @@ export const useEphemeralChatStore = create<EphemeralChatState>()((set) => ({
         },
       },
     }));
+  },
+
+  updateRetryProgress: (sessionId, retry) => {
+    if (!sessionId) return;
+    set((state) => {
+      const current = state.statusBySession[sessionId];
+      const base: EphemeralChatStatus = current || {
+        id: `retry-${sessionId}-${Date.now()}`,
+        sessionId,
+        kind: 'rate_limit',
+        message: retry.reasonText || '正在自动重试...',
+        retryable: true,
+        timestamp: Date.now(),
+      };
+      return {
+        statusBySession: {
+          ...state.statusBySession,
+          [sessionId]: {
+            ...base,
+            retryState: retry,
+          },
+        },
+      };
+    });
   },
 
   clearEphemeralStatus: (sessionId) => {
