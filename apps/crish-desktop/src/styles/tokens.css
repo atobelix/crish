@@ -61,7 +61,7 @@ html[data-theme='light'] {
   --shell-gutter: var(--space-2, 8px);
   --card-header-bg: var(--bg-secondary);
   --bg-subtle: var(--bg-secondary);
-  --text-primary: #111111;
+  --text-primary: #1a1a1a;
   --text-secondary: #555555;
   /* 文本三级色：WCAG AA 达标 */
   --text-tertiary: #696969;
@@ -144,6 +144,10 @@ html[data-theme='light'] {
   --border-subtle: hsl(30 6% 93.8%);
   --composer-bg: var(--bg-card, hsl(0 0% 100%));
   --composer-footer-bg: transparent;
+  /* 输入框底部操作区按钮统一底色（默认透明，hover/click/active 均为同一 3% 灰度 #F7F7F7，单一灰度无级差） */
+  --composer-control-bg: transparent;
+  --composer-control-hover-bg: color-mix(in srgb, var(--text-primary) 3.3%, transparent);
+  --composer-control-active-bg: var(--composer-control-hover-bg);
   --hairline-width: 1px;
   --hairline: var(--border-subtle);
   --hairline-strong: var(--border-color);
@@ -214,7 +218,7 @@ html[data-theme='light'] {
   --sep-border-focus: color-mix(in srgb, var(--border-color) 70%, var(--text-primary) 30%);
   --sep-divider-color: color-mix(in srgb, var(--text-primary) 6%, transparent);
 
-  --sep-text-primary: #111111;
+  --sep-text-primary: #1a1a1a;
   --sep-text-secondary: #555555;
   --sep-text-muted: #767676;
 
@@ -233,18 +237,18 @@ html[data-theme='light'] {
   --accent-hover: hsl(35, 16%, 22%); /*      */
   --accent-soft: hsl(35, 12%, 93.5%); /*      */
 
-  --accent-orange: hsl(38, 92%, 50%);
-  --accent-green: hsl(142 72% 46%); /* 活泼高 RGB 翠绿 (RGB: 33, 201, 98) */
-  --accent-green-hover: hsl(142 72% 38%);
-  --accent-green-light: hsl(142 72% 96.5%);
-  --accent-green-soft: hsl(142 60% 92.5%);
-  --accent-green-muted: hsl(142 50% 82.5%);
-  --status-online: hsl(142 76% 46%);
-  --accent-red: hsl(0, 55%, 55%); /*     /   */
-  --accent-red-light: hsl(0, 55%, 97.5%); /*        */
-  /* Zero-Blue 铁律：--accent-blue / --accent-primary 收敛为高对比中性墨阶与翡翠绿 */
-  --accent-blue: #065f46;
-  --accent-blue-light: hsl(160 84% 39% / 0.12);
+  --accent-orange: oklch(0.74 0.17 75); /* 金黄琥珀，基准 #f0b100，鲜艳纯净不刺眼 */
+  --accent-orange-light: oklch(0.74 0.17 75 / 0.08);
+  --accent-green: oklch(0.60 0.17 152); /* 纯净翡翠翠绿，基准 #00b478 / #4b984f，通透不刺眼 */
+  --accent-green-hover: oklch(0.54 0.17 152);
+  --accent-green-light: oklch(0.60 0.17 152 / 0.08);
+  --accent-green-soft: oklch(0.60 0.17 152 / 0.12);
+  --accent-green-muted: oklch(0.60 0.17 152 / 0.20);
+  --status-online: oklch(0.60 0.17 152);
+  --accent-red: oklch(0.58 0.21 27.5); /* 纯净温暖朱红，基准 #de4931，鲜艳不刺眼 */
+  --accent-red-light: oklch(0.58 0.21 27.5 / 0.08);
+  --accent-blue: oklch(0.58 0.18 250); /* 纯净天蓝，鲜艳纯正，不与文字/墨色混浊 */
+  --accent-blue-light: oklch(0.58 0.18 250 / 0.08);
   --accent-violet: hsl(258, 90%, 66%);
   --accent-violet-light: hsl(258, 40%, 97%);
   --accent-primary: #10b981;
@@ -374,8 +378,8 @@ html[data-theme='light'] {
   --radius-circle: 50%; /*     2: Avatar        */
   --radius-full: 9999px; /*        (  Switch/Avatar      ) */
 
-  /* --- Composer Attachment Card Tokens (58×58 Square Card) --- */
-  --composer-attach-card-size: 58px;
+  /* --- Composer Attachment Card Tokens (52px Unified Card Height) --- */
+  --composer-attach-card-size: 52px;
   --composer-attach-card-radius: var(--radius-xl, 12px);
   --composer-attach-card-gap: 8px;
   --composer-attach-card-border: 1px solid var(--border-subtle);
@@ -662,20 +666,23 @@ html[data-theme='light'] {
   --artifact-btn-hover-border: color-mix(in srgb, var(--border-subtle) 92%, var(--text-primary) 8%);
   --artifact-btn-active-bg: var(--tint-active);
 
-  /* Diff 比对 (清爽通透配色) */
-  --diff-add-bg: hsl(150 65% 97%);
-  --diff-add-fg: hsl(152 75% 36%);
-  --diff-add-word-bg: transparent;
+  /* Diff 比对 (OKLCH 纯净通透配色，基准：红 #de4931，绿 #4b984f / #00b478，黄 #f0b100，无混色、不灰蒙) */
+  --diff-add-bg: oklch(0.60 0.17 152 / 0.08);
+  --diff-add-fg: oklch(0.55 0.17 152);
+  --diff-add-word-bg: oklch(0.60 0.17 152 / 0.18);
   --diff-add-gutter-bg: transparent;
   --diff-add-gutter-fg: var(--diff-add-fg);
   --diff-add-indicator: var(--diff-add-fg);
 
-  --diff-del-bg: hsl(0 80% 98%);
-  --diff-del-fg: hsl(0 75% 50%);
-  --diff-del-word-bg: transparent;
+  --diff-del-bg: oklch(0.58 0.21 27.5 / 0.08);
+  --diff-del-fg: oklch(0.55 0.21 27.5);
+  --diff-del-word-bg: oklch(0.58 0.21 27.5 / 0.18);
   --diff-del-gutter-bg: transparent;
   --diff-del-gutter-fg: var(--diff-del-fg);
   --diff-del-indicator: var(--diff-del-fg);
+
+  --diff-mod-fg: oklch(0.70 0.17 75);
+  --diff-mod-bg: oklch(0.70 0.17 75 / 0.08);
 
   --diff-linenum-fg: var(--text-tertiary, #696969);
   --diff-gutter-bg: var(--bg-card);
@@ -858,7 +865,7 @@ html[data-theme='dark'] {
   --shell-inset-bg: var(--bg-workspace, var(--bg-primary));
   /* 外壳留白：叶子卡片与窗口边缘之间的落差，密度档位可覆写 */
   --shell-gutter: var(--space-2, 8px);
-  --text-primary: #dddddd;
+  --text-primary: #cccccc;
   --text-secondary: #aaaaaa;
   /* 文本三级色：WCAG AA 达标 */
   --text-tertiary: #8f8f8f;
@@ -876,14 +883,14 @@ html[data-theme='dark'] {
   /* 暗色未激活态：微弱透光冷灰，融入暗色底板 (--bg-primary: #1b1b1b) */
   --scrollbar-thumb-bg: color-mix(
     in srgb,
-    var(--text-primary, #dddddd) 20%,
+    var(--text-primary, #cccccc) 20%,
     transparent
   );
 
   /* 暗色激活态：Hover 与 Active 严格同色，坚挺沉着，透光率提升至 36%，杜绝高对比刺眼 */
   --scrollbar-thumb-active: color-mix(
     in srgb,
-    var(--text-primary, #dddddd) 36%,
+    var(--text-primary, #cccccc) 36%,
     transparent
   );
 
@@ -924,10 +931,18 @@ html[data-theme='dark'] {
     var(--bg-card, #242424)
   );
 
-  --border-color: #333333;
+  --border-color: #EBEBEB;
   --border-subtle: #2a2a2a;
   --composer-bg: var(--bg-secondary);
   --composer-footer-bg: var(--bg-secondary);
+  /* 暗色环境输入框底部操作区按钮底色适配（默认透明，hover/active 统一） */
+  --composer-control-bg: transparent;
+  --composer-control-hover-bg: color-mix(
+    in srgb,
+    var(--text-primary) 8%,
+    transparent
+  );
+  --composer-control-active-bg: var(--composer-control-hover-bg);
   /* S6      theme-dark.css                           */
   --md-code-bg: var(--md-code-block-bg);
   --md-code-border: var(--md-code-block-border);
@@ -1017,30 +1032,21 @@ html[data-theme='dark'] {
   --accent-hover: #ffffff;
   --accent-soft: hsl(0 0% 26%);
 
-  --accent-orange: hsl(38, 92%, 50%);
-  --accent-orange-light: hsl(21, 92%, 14%);
-  --accent-green: hsl(142 72% 46%);
-  --accent-green-hover: hsl(142 72% 38%);
-  --accent-green-light: hsl(142 60% 16%);
-  --accent-green-soft: hsl(142 50% 20%);
-  --accent-green-muted: hsl(142 45% 24%);
-  --status-online: hsl(142 76% 48%);
-  --accent-red: hsl(0, 55%, 55%);
-  --accent-red-light: hsl(0, 55%, 16%);
-  /*       themeStore applyTheme              dark    */
-  --accent-green-light-adaptive: color-mix(
-    in srgb,
-    var(--accent-green, #22c55e) 8%,
-    var(--bg-primary)
-  );
-  --accent-red-light-adaptive: color-mix(
-    in srgb,
-    var(--accent-red, #ef4444) 8%,
-    var(--bg-primary)
-  );
-  /* Zero-Blue 铁律：--accent-blue / --accent-primary 收敛为高对比中性墨阶与翡翠绿 */
-  --accent-blue: #34d399;
-  --accent-blue-light: hsl(160 84% 45% / 0.16);
+  --accent-orange: oklch(0.80 0.17 75);
+  --accent-orange-light: oklch(0.80 0.17 75 / 0.14);
+  --accent-green: oklch(0.76 0.16 152);
+  --accent-green-hover: oklch(0.80 0.16 152);
+  --accent-green-light: oklch(0.76 0.16 152 / 0.14);
+  --accent-green-soft: oklch(0.76 0.16 152 / 0.20);
+  --accent-green-muted: oklch(0.76 0.16 152 / 0.26);
+  --status-online: oklch(0.76 0.16 152);
+  --accent-red: oklch(0.72 0.19 27.5);
+  --accent-red-light: oklch(0.72 0.19 27.5 / 0.14);
+  /* themeStore applyTheme dark */
+  --accent-green-light-adaptive: oklch(0.76 0.16 152 / 0.14);
+  --accent-red-light-adaptive: oklch(0.72 0.19 27.5 / 0.14);
+  --accent-blue: oklch(0.74 0.16 250);
+  --accent-blue-light: oklch(0.74 0.16 250 / 0.14);
   --accent-violet: hsl(258, 90%, 66%);
   --accent-violet-light: hsl(261, 73%, 23%);
   --accent-primary: #10b981;
@@ -1150,6 +1156,7 @@ html[data-theme='dark'] {
   --syntax-meta: #a3a3a3;
 
   /* --- Composer Attachment Card Tokens (Dark) --- */
+  --composer-attach-card-size: 52px;
   --composer-attach-card-border: 1px solid var(--border-subtle);
   --composer-attach-card-bg: var(--bg-card, hsl(0 0% 12%));
   --composer-attach-card-hover-border: var(--border-color);
@@ -1287,20 +1294,23 @@ html[data-theme='dark'] {
   --artifact-btn-hover-border: color-mix(in srgb, var(--border-subtle) 90%, var(--text-primary) 10%);
   --artifact-btn-active-bg: var(--tint-active);
 
-  /* Diff 比对 (Dark 高对比度) */
-  --diff-add-bg: hsl(142 40% 50% / 0.12);
-  --diff-add-fg: hsl(142 75% 72%); /* 9.46:1 WCAG AAA */
-  --diff-add-word-bg: transparent;
+  /* Diff 比对 (Dark OKLCH 纯净通透配色，高对比鲜艳不刺眼，无灰蒙脏感) */
+  --diff-add-bg: oklch(0.76 0.16 152 / 0.14);
+  --diff-add-fg: oklch(0.76 0.16 152);
+  --diff-add-word-bg: oklch(0.76 0.16 152 / 0.25);
   --diff-add-gutter-bg: transparent;
-  --diff-add-gutter-fg: hsl(142 45% 72%);
-  --diff-add-indicator: hsl(142 75% 72%);
+  --diff-add-gutter-fg: var(--diff-add-fg);
+  --diff-add-indicator: var(--diff-add-fg);
 
-  --diff-del-bg: hsl(0 60% 55% / 0.12);
-  --diff-del-fg: hsl(0 85% 75%); /* 7.21:1 WCAG AAA */
-  --diff-del-word-bg: transparent;
+  --diff-del-bg: oklch(0.72 0.19 27.5 / 0.14);
+  --diff-del-fg: oklch(0.72 0.19 27.5);
+  --diff-del-word-bg: oklch(0.72 0.19 27.5 / 0.25);
   --diff-del-gutter-bg: transparent;
-  --diff-del-gutter-fg: hsl(0 60% 75%);
-  --diff-del-indicator: hsl(0 85% 75%);
+  --diff-del-gutter-fg: var(--diff-del-fg);
+  --diff-del-indicator: var(--diff-del-fg);
+
+  --diff-mod-fg: oklch(0.82 0.16 75);
+  --diff-mod-bg: oklch(0.82 0.16 75 / 0.14);
 
   --diff-linenum-fg: hsl(0 0% 56%);
   --diff-gutter-bg: var(--bg-card);
