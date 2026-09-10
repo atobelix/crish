@@ -10,102 +10,29 @@ import type {
   ScrollAreaProps,
   ScrollAreaHandle,
   ScrollMetrics,
-  ScrollAreaSize,
 } from './ScrollArea.types';
 import styles from './ScrollArea.module.css';
+import {
+  calculateSafeAreaInset,
+  StepperArrowUpIcon,
+  StepperArrowDownIcon,
+  StepperArrowLeftIcon,
+  StepperArrowRightIcon,
+  getButtonDimension,
+  getScrollbarThickness,
+  resolveStepDelta,
+  snapScrollDelta,
+} from './ScrollAreaHelpers';
+import { ScrollAreaScrollBar } from './ScrollAreaScrollBar';
+import { useThumbDrag } from './useThumbDrag';
 
-/**
- * 极端圆角断头台切角动态避让算法 (M02 落地)
- * @param radius 容器外层圆角半径 (px)
- * @param margin 滚动条离容器外边缘间距 (px)，严格为 2px
- */
-export function calculateSafeAreaInset(radius: number = 0, margin: number = 2): number {
-  if (radius <= 0) return 0;
-  const x = Math.max(0, radius - margin);
-  const arcY = Math.sqrt(Math.max(0, radius * radius - x * x));
-  return Math.ceil(radius - arcY) + 1;
-}
-
-/** 顶部向上大圆角贝塞尔矢量等腰三角 (宽 8px 高 6px，顶角与两底角均带平滑 Q 圆角曲率) */
-export const StepperArrowUpIcon: React.FC<{ className?: string }> = ({ className }) => (
-  <svg
-    viewBox="0 0 9 6"
-    width="8"
-    height="6"
-    className={className}
-    fill="currentColor"
-    aria-hidden="true"
-    style={{ width: '8px', height: '6px', display: 'block' }}
-  >
-    <path d="M 4.0 1.4 Q 4.5 0.5 5.0 1.4 L 8.1 4.9 Q 8.6 5.6 7.8 5.6 L 1.2 5.6 Q 0.4 5.6 0.9 4.9 Z" />
-  </svg>
-);
-
-/** 底部向下大圆角贝塞尔矢量等腰三角 (宽 8px 高 6px，顶角与两底角均带平滑 Q 圆角曲率) */
-export const StepperArrowDownIcon: React.FC<{ className?: string }> = ({ className }) => (
-  <svg
-    viewBox="0 0 9 6"
-    width="8"
-    height="6"
-    className={className}
-    fill="currentColor"
-    aria-hidden="true"
-    style={{ width: '8px', height: '6px', display: 'block' }}
-  >
-    <path d="M 4.0 4.6 Q 4.5 5.5 5.0 4.6 L 8.1 1.1 Q 8.6 0.4 7.8 0.4 L 1.2 0.4 Q 0.4 0.4 0.9 1.1 Z" />
-  </svg>
-);
-
-/** 左侧向左大圆角贝塞尔矢量等腰三角 (宽 6px 高 8px，顶角与两底角均带平滑 Q 圆角曲率) */
-export const StepperArrowLeftIcon: React.FC<{ className?: string }> = ({ className }) => (
-  <svg
-    viewBox="0 0 6 9"
-    width="6"
-    height="8"
-    className={className}
-    fill="currentColor"
-    aria-hidden="true"
-    style={{ width: '6px', height: '8px', display: 'block' }}
-  >
-    <path d="M 1.4 4.5 Q 0.5 4.0 1.4 3.5 L 4.9 0.4 Q 5.6 -0.1 5.6 0.7 L 5.6 7.3 Q 5.6 8.1 4.9 7.6 Z" />
-  </svg>
-);
-
-/** 右侧向右大圆角贝塞尔矢量等腰三角 (宽 6px 高 8px，顶角与两底角均带平滑 Q 圆角曲率) */
-export const StepperArrowRightIcon: React.FC<{ className?: string }> = ({ className }) => (
-  <svg
-    viewBox="0 0 6 9"
-    width="6"
-    height="8"
-    className={className}
-    fill="currentColor"
-    aria-hidden="true"
-    style={{ width: '6px', height: '8px', display: 'block' }}
-  >
-    <path d="M 4.6 4.5 Q 5.5 4.0 4.6 3.5 L 1.1 0.4 Q 0.4 -0.1 0.4 0.7 L 0.4 7.3 Q 0.4 8.1 1.1 7.6 Z" />
-  </svg>
-);
-
-function getButtonDimension(size: ScrollAreaSize): number {
-  return size === 'xs' ? 6 : size === 'lg' ? 10 : 8;
-}
-
-function getScrollbarThickness(size: ScrollAreaSize): number {
-  return size === 'xs' ? 6 : size === 'sm' ? 7 : size === 'lg' ? 11 : 9;
-}
-
-function resolveStepDelta(stepSizeProp: number | 'auto' | undefined, dimension: number): number {
-  if (typeof stepSizeProp === 'number' && stepSizeProp > 0) return stepSizeProp;
-  const dynamic = Math.round(dimension * 0.18);
-  return Math.max(32, Math.min(dynamic > 0 ? dynamic : 40, 96));
-}
-
-function snapScrollDelta(current: number, delta: number, maxScroll: number, threshold = 4): number {
-  const target = current + delta;
-  if (target <= threshold) return 0;
-  if (target >= maxScroll - threshold) return maxScroll;
-  return Math.max(0, Math.min(target, maxScroll));
-}
+export {
+  calculateSafeAreaInset,
+  StepperArrowUpIcon,
+  StepperArrowDownIcon,
+  StepperArrowLeftIcon,
+  StepperArrowRightIcon,
+};
 
 export const ScrollArea = forwardRef<ScrollAreaHandle, ScrollAreaProps>(
   (
@@ -158,24 +85,6 @@ export const ScrollArea = forwardRef<ScrollAreaHandle, ScrollAreaProps>(
 
     const [isHovered, setIsHovered] = useState(false);
     const [isScrolling, setIsScrolling] = useState(false);
-    const [isDraggingY, setIsDraggingY] = useState(false);
-    const [isDraggingX, setIsDraggingX] = useState(false);
-
-    const dragStateRefY = useRef({
-      isDragging: false,
-      startY: 0,
-      startScrollTop: 0,
-      maxTravel: 0,
-      maxScroll: 0,
-    });
-
-    const dragStateRefX = useRef({
-      isDragging: false,
-      startX: 0,
-      startScrollLeft: 0,
-      maxTravel: 0,
-      maxScroll: 0,
-    });
 
     const effectiveShowButtons = showButtons ?? (size !== 'xs');
     const safeInset = calculateSafeAreaInset(radius, trackMargin);
@@ -328,10 +237,6 @@ export const ScrollArea = forwardRef<ScrollAreaHandle, ScrollAreaProps>(
     useEffect(() => {
       const handleWindowBlur = () => {
         rigidBrake();
-        dragStateRefY.current.isDragging = false;
-        dragStateRefX.current.isDragging = false;
-        setIsDraggingY(false);
-        setIsDraggingX(false);
       };
       window.addEventListener('blur', handleWindowBlur);
       return () => {
@@ -424,105 +329,22 @@ export const ScrollArea = forwardRef<ScrollAreaHandle, ScrollAreaProps>(
       [maxTravelPxY, maxTravelPxX, updateMetrics, onScroll, onScrollIdle]
     );
 
-    // W3C Pointer Capture 鼠标抓取拖拽引擎（垂直）
-    const handleThumbPointerDownY = useCallback(
-      (e: React.PointerEvent<HTMLDivElement>) => {
-        if (e.button !== 0) return;
-        e.preventDefault();
-        e.stopPropagation();
-        const el = internalViewportRef.current;
-        if (!el) return;
-        const maxScroll = Math.max(0, el.scrollHeight - el.clientHeight);
-        if (maxScroll <= 0 || maxTravelPxY <= 0) return;
-
-        (e.target as HTMLElement).setPointerCapture(e.pointerId);
-        dragStateRefY.current = {
-          isDragging: true,
-          startY: e.clientY,
-          startScrollTop: el.scrollTop,
-          maxTravel: maxTravelPxY,
-          maxScroll,
-        };
-        setIsDraggingY(true);
-      },
-      [maxTravelPxY]
-    );
-
-    const handleThumbPointerMoveY = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-      if (!dragStateRefY.current.isDragging) return;
-      e.preventDefault();
-      const { startY, startScrollTop, maxTravel, maxScroll } = dragStateRefY.current;
-      if (maxTravel > 0 && internalViewportRef.current) {
-        const scrollDelta = ((e.clientY - startY) / maxTravel) * maxScroll;
-        const nextScroll = Math.max(0, Math.min(startScrollTop + scrollDelta, maxScroll));
-        internalViewportRef.current.scrollTop = nextScroll;
-        const topPx = maxScroll > 0 ? (nextScroll / maxScroll) * maxTravel : 0;
-        if (thumbRefY.current) {
-          thumbRefY.current.style.transform = `translate3d(0, ${topPx}px, 0)`;
-        }
-      }
-    }, []);
-
-    const handleThumbPointerUpY = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-      if (!dragStateRefY.current.isDragging) return;
-      try {
-        (e.target as HTMLElement).releasePointerCapture(e.pointerId);
-      } catch {
-        // ignore
-      }
-      dragStateRefY.current.isDragging = false;
-      setIsDraggingY(false);
-    }, []);
-
-    // W3C Pointer Capture 鼠标抓取拖拽引擎（水平）
-    const handleThumbPointerDownX = useCallback(
-      (e: React.PointerEvent<HTMLDivElement>) => {
-        if (e.button !== 0) return;
-        e.preventDefault();
-        e.stopPropagation();
-        const el = internalViewportRef.current;
-        if (!el) return;
-        const maxScroll = Math.max(0, el.scrollWidth - el.clientWidth);
-        if (maxScroll <= 0 || maxTravelPxX <= 0) return;
-
-        (e.target as HTMLElement).setPointerCapture(e.pointerId);
-        dragStateRefX.current = {
-          isDragging: true,
-          startX: e.clientX,
-          startScrollLeft: el.scrollLeft,
-          maxTravel: maxTravelPxX,
-          maxScroll,
-        };
-        setIsDraggingX(true);
-      },
-      [maxTravelPxX]
-    );
-
-    const handleThumbPointerMoveX = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-      if (!dragStateRefX.current.isDragging) return;
-      e.preventDefault();
-      const { startX, startScrollLeft, maxTravel, maxScroll } = dragStateRefX.current;
-      if (maxTravel > 0 && internalViewportRef.current) {
-        const scrollDelta = ((e.clientX - startX) / maxTravel) * maxScroll;
-        const nextScroll = Math.max(0, Math.min(startScrollLeft + scrollDelta, maxScroll));
-        internalViewportRef.current.scrollLeft = nextScroll;
-        const leftPx = maxScroll > 0 ? (nextScroll / maxScroll) * maxTravel : 0;
-        if (thumbRefX.current) {
-          thumbRefX.current.style.transform = `translate3d(${leftPx}px, 0, 0)`;
-        }
-      }
-    }, []);
-
-    const handleThumbPointerUpX = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-      if (!dragStateRefX.current.isDragging) return;
-      try {
-        (e.target as HTMLElement).releasePointerCapture(e.pointerId);
-      } catch {
-        // ignore
-      }
-      dragStateRefX.current.isDragging = false;
-      setIsDraggingX(false);
-    }, []);
+    const {
+      isDraggingY,
+      isDraggingX,
+      handleThumbPointerDownY,
+      handleThumbPointerMoveY,
+      handleThumbPointerUpY,
+      handleThumbPointerDownX,
+      handleThumbPointerMoveX,
+      handleThumbPointerUpX,
+    } = useThumbDrag({
+      viewportRef: internalViewportRef,
+      thumbRefY,
+      thumbRefX,
+      maxTravelPxY,
+      maxTravelPxX,
+    });
 
     useImperativeHandle(
       ref,
@@ -554,27 +376,6 @@ export const ScrollArea = forwardRef<ScrollAreaHandle, ScrollAreaProps>(
       (type === 'hover' && isHovered && hasHorizontalOverflow) ||
       (type === 'scroll' && isScrolling && hasHorizontalOverflow) ||
       isDraggingX;
-
-    const renderStepperBtn = (
-      dir: 'up' | 'down' | 'left' | 'right',
-      icon: React.ReactNode,
-      disabled: boolean,
-      label: string
-    ) => (
-      <button
-        type="button"
-        tabIndex={-1}
-        className={`${styles.stepperButton} ${styles[`${dir}Button`]} ${disabled ? styles.disabled : ''}`}
-        onPointerDown={handleButtonPointerDown(dir)}
-        onPointerUp={rigidBrake}
-        onPointerLeave={rigidBrake}
-        onPointerCancel={rigidBrake}
-        onBlur={rigidBrake}
-        aria-label={label}
-      >
-        {icon}
-      </button>
-    );
 
     const orientationClass =
       orientation === 'horizontal'
@@ -612,85 +413,47 @@ export const ScrollArea = forwardRef<ScrollAreaHandle, ScrollAreaProps>(
         </div>
 
         {showVertical && (
-          <div
-            className={`${styles.stepperTrackColumn} ${isBarVisibleY ? styles.visible : ''}`}
-            style={{
-              top: `${insetTop}px`,
-              bottom: `${effectiveBottom}px`,
-              right: `${trackMargin}px`,
-            }}
-            aria-hidden="true"
-          >
-            {shouldRenderButtonsY && (
-              <>
-                {renderStepperBtn('up', <StepperArrowUpIcon className={styles.arrowIcon} />, metrics.isAtTop, 'Scroll Up')}
-                <div className={styles.safeGap} />
-              </>
-            )}
-
-            <div className={styles.isolatedTrack}>
-              <div
-                ref={thumbRefY}
-                className={`${styles.thumbIndicator} ${isDraggingY ? styles.dragging : ''}`}
-                style={{
-                  height: `${thumbHeightPx}px`,
-                  transform: `translate3d(0, ${thumbTopPx}px, 0)`,
-                }}
-                onPointerDown={handleThumbPointerDownY}
-                onPointerMove={handleThumbPointerMoveY}
-                onPointerUp={handleThumbPointerUpY}
-                onPointerCancel={handleThumbPointerUpY}
-              />
-            </div>
-
-            {shouldRenderButtonsY && (
-              <>
-                <div className={styles.safeGap} />
-                {renderStepperBtn('down', <StepperArrowDownIcon className={styles.arrowIcon} />, metrics.isAtBottom, 'Scroll Down')}
-              </>
-            )}
-          </div>
+          <ScrollAreaScrollBar
+            orientation="vertical"
+            visible={isBarVisibleY}
+            isDragging={isDraggingY}
+            trackMargin={trackMargin}
+            insetStart={insetTop}
+            insetEnd={effectiveBottom}
+            shouldRenderButtons={shouldRenderButtonsY}
+            isAtStart={metrics.isAtTop}
+            isAtEnd={metrics.isAtBottom}
+            thumbSizePx={thumbHeightPx}
+            thumbOffsetPx={thumbTopPx}
+            thumbRef={thumbRefY}
+            onPointerDown={handleThumbPointerDownY}
+            onPointerMove={handleThumbPointerMoveY}
+            onPointerUp={handleThumbPointerUpY}
+            onButtonPointerDown={handleButtonPointerDown}
+            onButtonPointerUpOrLeave={rigidBrake}
+          />
         )}
 
         {showHorizontal && (
-          <div
-            className={`${styles.stepperTrackRow} ${isBarVisibleX ? styles.visible : ''}`}
-            style={{
-              bottom: `${trackMargin}px`,
-              left: `${insetLeft}px`,
-              right: `${effectiveRight}px`,
-            }}
-            aria-hidden="true"
-          >
-            {shouldRenderButtonsX && (
-              <>
-                {renderStepperBtn('left', <StepperArrowLeftIcon className={styles.arrowIcon} />, metrics.isAtLeft, 'Scroll Left')}
-                <div className={styles.safeGapHorizontal} />
-              </>
-            )}
-
-            <div className={styles.isolatedTrackHorizontal}>
-              <div
-                ref={thumbRefX}
-                className={`${styles.thumbIndicatorHorizontal} ${isDraggingX ? styles.dragging : ''}`}
-                style={{
-                  width: `${thumbWidthPx}px`,
-                  transform: `translate3d(${thumbLeftPx}px, 0, 0)`,
-                }}
-                onPointerDown={handleThumbPointerDownX}
-                onPointerMove={handleThumbPointerMoveX}
-                onPointerUp={handleThumbPointerUpX}
-                onPointerCancel={handleThumbPointerUpX}
-              />
-            </div>
-
-            {shouldRenderButtonsX && (
-              <>
-                <div className={styles.safeGapHorizontal} />
-                {renderStepperBtn('right', <StepperArrowRightIcon className={styles.arrowIcon} />, metrics.isAtRight, 'Scroll Right')}
-              </>
-            )}
-          </div>
+          <ScrollAreaScrollBar
+            orientation="horizontal"
+            visible={isBarVisibleX}
+            isDragging={isDraggingX}
+            trackMargin={trackMargin}
+            insetStart={insetLeft}
+            insetEnd={effectiveRight}
+            shouldRenderButtons={shouldRenderButtonsX}
+            isAtStart={metrics.isAtLeft}
+            isAtEnd={metrics.isAtRight}
+            thumbSizePx={thumbWidthPx}
+            thumbOffsetPx={thumbLeftPx}
+            thumbRef={thumbRefX}
+            onPointerDown={handleThumbPointerDownX}
+            onPointerMove={handleThumbPointerMoveX}
+            onPointerUp={handleThumbPointerUpX}
+            onButtonPointerDown={handleButtonPointerDown}
+            onButtonPointerUpOrLeave={rigidBrake}
+          />
         )}
       </Component>
     );

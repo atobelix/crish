@@ -95,3 +95,20 @@ export const PREVIEW_INSPECTOR_MESSAGE_TYPES = [
 
 export type PreviewInspectorMessageType =
   (typeof PREVIEW_INSPECTOR_MESSAGE_TYPES)[number];
+
+/**
+ * §4.1 预览 postMessage origin 白名单：
+ * 代理页与宿主同源，因此只接受 `window.location.origin`。
+ * （非浏览器环境 / 无 location 时拒绝，避免隐式放行。）
+ */
+export function getPreviewHostOrigin(): string | null {
+  if (typeof window === 'undefined' || !window.location?.origin) return null;
+  return window.location.origin;
+}
+
+/** 宿主 subscribeToInspector / 桥端校验共用 */
+export function isAllowedPreviewMessageOrigin(origin: string): boolean {
+  const allowed = getPreviewHostOrigin();
+  if (!allowed) return false;
+  return origin === allowed;
+}

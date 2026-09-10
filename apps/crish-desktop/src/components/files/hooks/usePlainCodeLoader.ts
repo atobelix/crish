@@ -1,10 +1,5 @@
 import { useState, useEffect } from 'react';
-import {
-  readTextFile,
-  isAbsoluteFsPath,
-  resolveWorkspacePath,
-} from '../../../api/workspaceFsApi';
-import { readLocalTextBestEffort } from '../../../api/localFileReader';
+import { readTextFile } from '../../../api/workspaceFsApi';
 
 export interface PlainCodeState {
   plainCode: string;
@@ -13,6 +8,10 @@ export interface PlainCodeState {
   plainLineCount: number;
 }
 
+/**
+ * 纯文本/源码加载：只经 workspaceFsApi.readTextFile（含路径沙箱）。
+ * 禁止越界后回落 localFileReader / shell 读盘。
+ */
 export function usePlainCodeLoader(filePath: string): PlainCodeState {
   const [plainCode, setPlainCode] = useState<string>('');
   const [plainLoading, setPlainLoading] = useState<boolean>(false);
@@ -26,19 +25,6 @@ export function usePlainCodeLoader(filePath: string): PlainCodeState {
       setPlainTruncated(false);
       setPlainLineCount(0);
       try {
-        const isAbsolute = isAbsoluteFsPath(filePath);
-        const inWorkspace = Boolean(resolveWorkspacePath(filePath));
-
-        if (isAbsolute && !inWorkspace) {
-          const localText = await readLocalTextBestEffort(filePath);
-          if (active && typeof localText === 'string') {
-            setPlainCode(localText);
-            setPlainTruncated(localText.length >= 512000);
-            setPlainLineCount(localText.split('\n').length);
-            return;
-          }
-        }
-
         const res = await readTextFile(filePath, 20000);
         if (active) {
           setPlainCode(res.content || '');
@@ -46,17 +32,6 @@ export function usePlainCodeLoader(filePath: string): PlainCodeState {
           setPlainLineCount(res.lineCount || 0);
         }
       } catch (err) {
-        try {
-          const localText = await readLocalTextBestEffort(filePath);
-          if (active && typeof localText === 'string') {
-            setPlainCode(localText);
-            setPlainTruncated(localText.length >= 512000);
-            setPlainLineCount(localText.split('\n').length);
-            return;
-          }
-        } catch {
-          /* swallow */
-        }
         if (active) {
           setPlainCode(`读取源码失败：${String(err)}`);
         }

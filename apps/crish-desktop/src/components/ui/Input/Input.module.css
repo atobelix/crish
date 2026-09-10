@@ -47,11 +47,11 @@
 }
 
 .input:hover:not(:focus):not(:focus-visible):not(:disabled) {
-  border-color: var(--border-color);
+  border-color: hsl(30 4.8% 91.8%);
   background: color-mix(in srgb, var(--bg-primary) 20%, var(--bg-card));
 }
 
-/* 焦点激活态：锁定恒定同一灰度（~8%微调），无论 hover 与否完全零色差，严禁 box-shadow 粗描边环 */
+/* 焦点激活态：锁定浅灰（~8%微调，源自 #EBEAE9 推算 hsl(30 4.8% 91.8%)），无论 hover 与否完全零色差，严禁 box-shadow 粗描边环与加黑 */
 .input:focus,
 .input:focus-visible,
 .input:focus:hover,
@@ -59,7 +59,7 @@
   outline: none;
   background: var(--bg-card);
   box-shadow: none;
-  border-color: color-mix(in srgb, var(--border-color) 92%, var(--text-primary) 8%);
+  border-color: hsl(30 4.8% 91.8%);
 }
 
 .input:disabled {

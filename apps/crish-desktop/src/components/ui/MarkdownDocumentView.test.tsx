@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import fs from 'node:fs';
+import path from 'node:path';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, fireEvent, act } from '@testing-library/react';
 import React from 'react';
@@ -278,6 +280,152 @@ describe('MarkdownDocumentView 架构契约与立体验证测试', () => {
         'noopener,noreferrer'
       );
       openSpy.mockRestore();
+    });
+
+    it('§7.1 大小写 HTTPS:// 外链走 sanitize/isSafeHref 并 window.open', async () => {
+      const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
+      vi.mocked(markdownRenderAsync.useAsyncMarkdownHtml).mockReturnValue({
+        html: `<p><a class="md-a" href="HTTPS://example.com/Upper">文档</a></p>`,
+        loading: false,
+        failed: false,
+      });
+
+      const { container } = render(
+        <MarkdownDocumentView content="[文档](HTTPS://example.com/Upper)" />
+      );
+
+      const anchor = container.querySelector('a.md-a') as HTMLAnchorElement;
+      expect(anchor).toBeTruthy();
+
+      await act(async () => {
+        fireEvent.click(anchor);
+      });
+
+      expect(openSpy).toHaveBeenCalledWith(
+        'HTTPS://example.com/Upper',
+        '_blank',
+        'noopener,noreferrer'
+      );
+      openSpy.mockRestore();
+    });
+
+    it('§7.1 大小写 MAILTO: 外链走 sanitize/isSafeHref 并 window.open', async () => {
+      const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
+      vi.mocked(markdownRenderAsync.useAsyncMarkdownHtml).mockReturnValue({
+        html: `<p><a class="md-a" href="MAILTO:dev@example.com">邮件</a></p>`,
+        loading: false,
+        failed: false,
+      });
+
+      const { container } = render(
+        <MarkdownDocumentView content="[邮件](MAILTO:dev@example.com)" />
+      );
+
+      const anchor = container.querySelector('a.md-a') as HTMLAnchorElement;
+      expect(anchor).toBeTruthy();
+
+      await act(async () => {
+        fireEvent.click(anchor);
+      });
+
+      expect(openSpy).toHaveBeenCalledWith(
+        'MAILTO:dev@example.com',
+        '_blank',
+        'noopener,noreferrer'
+      );
+      openSpy.mockRestore();
+    });
+
+    it('§7.1 javascript: 不安全链 preventDefault 且不 window.open', async () => {
+      const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
+      vi.mocked(markdownRenderAsync.useAsyncMarkdownHtml).mockReturnValue({
+        html: `<p><a class="md-a" href="javascript:alert(1)">坏链</a></p>`,
+        loading: false,
+        failed: false,
+      });
+
+      const { container } = render(
+        <MarkdownDocumentView content="[坏链](javascript:alert(1))" />
+      );
+
+      const anchor = container.querySelector('a.md-a') as HTMLAnchorElement;
+      expect(anchor).toBeTruthy();
+
+      let defaultPrevented = false;
+      await act(async () => {
+        const evt = new MouseEvent('click', { bubbles: true, cancelable: true });
+        anchor.dispatchEvent(evt);
+        defaultPrevented = evt.defaultPrevented;
+      });
+
+      // fireEvent 路径再验一遍
+      await act(async () => {
+        fireEvent.click(anchor);
+      });
+
+      expect(openSpy).not.toHaveBeenCalled();
+      expect(defaultPrevented).toBe(true);
+      openSpy.mockRestore();
+    });
+
+    it('§7.1 未知 scheme 不安全链不 window.open', async () => {
+      const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
+      vi.mocked(markdownRenderAsync.useAsyncMarkdownHtml).mockReturnValue({
+        html: `<p><a class="md-a" href="foo:bar">未知</a></p>`,
+        loading: false,
+        failed: false,
+      });
+
+      const { container } = render(
+        <MarkdownDocumentView content="[未知](foo:bar)" />
+      );
+
+      const anchor = container.querySelector('a.md-a') as HTMLAnchorElement;
+      await act(async () => {
+        fireEvent.click(anchor);
+      });
+
+      expect(openSpy).not.toHaveBeenCalled();
+      openSpy.mockRestore();
+    });
+
+    it('§7.1 相对路径与 #锚点不外开 window.open', async () => {
+      const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
+      vi.mocked(markdownRenderAsync.useAsyncMarkdownHtml).mockReturnValue({
+        html: `
+          <p><a class="md-a" href="./local.md">本地</a></p>
+          <p><a class="md-a" href="#section">锚点</a></p>
+        `,
+        loading: false,
+        failed: false,
+      });
+
+      const { container } = render(
+        <MarkdownDocumentView content="[本地](./local.md) [#](#section)" />
+      );
+
+      const anchors = container.querySelectorAll('a.md-a');
+      expect(anchors.length).toBe(2);
+
+      await act(async () => {
+        fireEvent.click(anchors[0]!);
+        fireEvent.click(anchors[1]!);
+      });
+
+      expect(openSpy).not.toHaveBeenCalled();
+      openSpy.mockRestore();
+    });
+
+    it('§7.1 源码契约：生产点击轨不含 startsWith 启发式', () => {
+      const src = fs.readFileSync(
+        path.resolve(__dirname, './MarkdownDocumentView.tsx'),
+        'utf8'
+      );
+      expect(src).toMatch(/sanitizeUrlCandidate/);
+      expect(src).toMatch(/isSafeHref/);
+      expect(src).not.toMatch(/startsWith\(['"]http:\/\//);
+      expect(src).not.toMatch(/startsWith\(['"]https:\/\//);
+      expect(src).not.toMatch(/startsWith\(['"]mailto:/);
     });
   });
 

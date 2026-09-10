@@ -131,8 +131,10 @@
   background: var(--bg-card, #ffffff);
   color: var(--text-primary);
   font-weight: 500;
-  border-color: var(--border-color);
-  box-shadow: var(--shadow-sm);
+  border-color: var(--border-subtle);
+  box-shadow:
+    0 1px 2px color-mix(in srgb, var(--text-primary) 3%, transparent),
+    0 0.5px 1px color-mix(in srgb, var(--text-primary) 2%, transparent);
 }
 
 /* 入场：@starting-style 首帧以左侧实际落地位置为锚点展开，无纵向浮动漂移；首轮挂载由 data-booted 关闭。
@@ -245,13 +247,10 @@
     margin var(--duration-normal) var(--ease-standard);
 }
 
-.addBtn:hover {
+.addBtn:hover,
+.addBtn:active {
   background: var(--bg-hover);
   color: var(--text-primary);
-}
-
-.addBtn:active {
-  background: var(--tint-active, hsl(0 0% 0% / 0.09));
 }
 
 .inFlow {
@@ -321,13 +320,10 @@
     color var(--duration-micro) var(--ease-standard);
 }
 
-.sideBtn:hover {
+.sideBtn:hover,
+.sideBtn:active {
   background: var(--bg-hover);
   color: var(--text-primary);
-}
-
-.sideBtn:active {
-  background: var(--tint-active, hsl(0 0% 0% / 0.09));
 }
 
 /* Row 2: Action / Navigation Toolbar (32px Height) */

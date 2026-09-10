@@ -79,7 +79,7 @@
   color: var(--text-primary);
   font-weight: var(--font-weight-medium, 500);
   border: 1px solid color-mix(in srgb, var(--border-subtle) 35%, transparent);
-  box-shadow: var(--shadow-sm);
+  box-shadow: none;
 }
 
 .toggleTabActive:hover {

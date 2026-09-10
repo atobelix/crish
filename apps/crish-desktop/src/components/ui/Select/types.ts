@@ -143,6 +143,7 @@ export interface SelectIconProps {
 export interface SelectOption {
   id: string;
   label: string;
+  value?: string;
   icon?: React.ReactNode;
   disabled?: boolean;
   hint?: string;

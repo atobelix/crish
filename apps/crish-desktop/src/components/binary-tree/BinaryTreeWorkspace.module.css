@@ -26,7 +26,8 @@
   flex-direction: column;
   overflow: hidden;
   background: var(--bg-workspace, var(--bg-primary));
-  padding: 0 var(--shell-gutter, 8px) var(--shell-gutter, 8px) 0;
+  /* padding: 0 var(--shell-gutter, 8px) var(--shell-gutter, 8px) 0; */
+  padding: 0;    /*暂时去掉四周内边距，优化视觉效果*/
   box-sizing: border-box;
 }
 
@@ -332,11 +333,11 @@
   padding-top: 0;
   margin-top: 0;
   background: var(--bg-card, #ffffff);
-  border: 1px solid var(--border-subtle, hsl(30 6% 93.8%));
+  /* border: 1px solid var(--border-subtle, hsl(30 6% 93.8%)); */
   border-radius: var(--radius-lg);
-  box-shadow:
+  /* box-shadow:
     0 1px 3px hsl(0 0% 0% / 0.03),
-    0 4px 12px hsl(0 0% 0% / 0.02);
+    0 4px 12px hsl(0 0% 0% / 0.02); */
   transition: border-color var(--transition-fast, 150ms ease-out);
 }
 

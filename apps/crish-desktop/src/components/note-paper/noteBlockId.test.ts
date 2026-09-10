@@ -1,6 +1,7 @@
-/**
- * newNoteBlockId 单测（audit-repair-202609 · T7）：
+﻿/**
+ * newNoteBlockId 单测（audit-repair-202609 · T7 / §6）：
  * 产出必须是合法 UUID v4（引擎 BlockId::parse 硬约束）。
+ * 生产熵约束见 noteBlockId.sec6.source.test.ts。
  */
 import { describe, expect, it } from 'vitest';
 import { isUuidV4, newNoteBlockId } from './noteBlockId';

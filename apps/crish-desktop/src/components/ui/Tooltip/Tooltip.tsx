@@ -77,6 +77,11 @@ export interface TooltipProps {
   /** 意图停留；未满此时长离开则从未显示。默认 350ms */
   delayShow?: number;
   delayHide?: number;
+  contentClassName?: string;
+  portalClassName?: string;
+  contentStyle?: React.CSSProperties;
+  portalStyle?: React.CSSProperties;
+  interactive?: boolean;
 }
 
 export const Tooltip = forwardRef<HTMLElement, TooltipProps>(
@@ -90,6 +95,11 @@ export const Tooltip = forwardRef<HTMLElement, TooltipProps>(
       disabled = false,
       delayShow = DEFAULT_DELAY_SHOW_MS,
       delayHide = 0,
+      contentClassName,
+      portalClassName,
+      contentStyle,
+      portalStyle,
+      interactive = false,
       ...restProps
     },
     forwardedRef
@@ -356,18 +366,32 @@ export const Tooltip = forwardRef<HTMLElement, TooltipProps>(
       }, delayShow);
     };
 
+    const effectiveDelayHide =
+      delayHide > 0 ? delayHide : interactive ? 160 : 0;
+
     const handleHide = () => {
       triggerModeRef.current = null;
       // 未满 delayShow 离开：清定时器，从未显示
       clearShowTimer();
-      if (delayHide > 0 && visibleRef.current) {
+      if (effectiveDelayHide > 0 && visibleRef.current) {
         hideTimerRef.current = setTimeout(() => {
           hideImmediate();
-        }, delayHide);
+        }, effectiveDelayHide);
       } else {
         hideImmediate();
       }
     };
+
+    const handleTipMouseEnter = useCallback(() => {
+      if (!interactive) return;
+      clearHideTimer();
+      triggerModeRef.current = 'hover';
+    }, [interactive, clearHideTimer]);
+
+    const handleTipMouseLeave = useCallback(() => {
+      if (!interactive) return;
+      handleHide();
+    }, [interactive]);
 
     const handleMouseEnter = (e: React.MouseEvent<HTMLElement>) => {
       triggerModeRef.current = 'hover';
@@ -524,29 +548,28 @@ export const Tooltip = forwardRef<HTMLElement, TooltipProps>(
               id={tipId}
               role="tooltip"
               data-tooltip-portal="true"
-              className={`${styles.tooltip} ${styles[effectiveSide]} ${tooltipStateClass}`}
+              onMouseEnter={interactive ? handleTipMouseEnter : undefined}
+              onMouseLeave={interactive ? handleTipMouseLeave : undefined}
+              className={[styles.tooltip, styles[effectiveSide], tooltipStateClass, portalClassName].filter(Boolean).join(' ')}
               style={
                 {
                   top: `${clampedPos?.top ?? rect.top}px`,
                   left: `${clampedPos?.left ?? rect.left}px`,
                   visibility: isPositionReady ? 'visible' : 'hidden',
-                  opacity:
-                    isPositionReady && isValidDOMRect(rect) ? undefined : 0,
-                  pointerEvents:
-                    state === 'exiting' ||
-                    !isPositionReady ||
-                    !isValidDOMRect(rect)
-                      ? 'none'
-                      : undefined,
+                  opacity: isPositionReady && isValidDOMRect(rect) ? undefined : 0,
+                  pointerEvents: state === 'exiting' || !isPositionReady || !isValidDOMRect(rect) ? 'none' : interactive ? 'auto' : undefined,
                   '--tooltip-translate': translateFor(effectiveSide),
-                  '--tooltip-arrow-offset':
-                    clampedPos?.arrowOffset !== undefined
-                      ? `${clampedPos.arrowOffset}px`
-                      : undefined,
+                  '--tooltip-arrow-offset': clampedPos?.arrowOffset !== undefined ? `${clampedPos.arrowOffset}px` : undefined,
+                  ...(portalStyle || {}),
                 } as React.CSSProperties & Record<string, unknown>
               }
             >
-              <div className={styles.tooltipContent}>{content}</div>
+              <div
+                className={[styles.tooltipContent, contentClassName].filter(Boolean).join(' ')}
+                style={contentStyle}
+              >
+                {content}
+              </div>
               <div className={styles.arrow} />
             </div>,
             (typeof document !== 'undefined'

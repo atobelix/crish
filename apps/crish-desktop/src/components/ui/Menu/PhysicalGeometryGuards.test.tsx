@@ -32,10 +32,39 @@ import { layerStackService } from '../internal/layer-stack/LayerStackService';
 import { MockPhysicalGeometryEngine } from '../../../test-utils/MockPhysicalGeometryEngine';
 import { ControllableResizeObserver } from '../../../test-utils/ControllableResizeObserver';
 import { mockTauriCommand, clearMockTauriCommands } from '../../../test-setup';
+import {
+  ensureModelsCatalogLoaded,
+  resetModelsCatalogMirror,
+} from '../../../api/modelsCatalogStore';
+import type { ProviderSpec } from '../../../api/modelsCatalogTypes';
 
 vi.mock('../../../api/storeAccess', () => ({
   openSettings: vi.fn(),
 }));
+
+const CATALOG_PATH = 'C:\\Users\\tester\\.conex\\models.yaml';
+
+/** 灌 yaml 镜像夹具：ModelBadgePickerMenu 只读 live catalog，不再吃 LS 种子（γ-9 补洞）。 */
+async function seedYamlCatalog(): Promise<void> {
+  const provider: ProviderSpec = {
+    displayName: '测试服务商',
+    baseUrl: 'https://example.com',
+    apiKey: 'k-test',
+    protocol: 'openai/chat',
+    models: [{ id: 'model-a', displayName: 'model-a' }],
+  };
+  mockTauriCommand('workbench_read_models_yaml', () => ({
+    path: CATALOG_PATH,
+    content: '',
+    template: '',
+    seeded: false,
+    parseError: null,
+    providers: { p1: provider },
+  }));
+  mockTauriCommand('workbench_save_models_yaml', () => ({ path: CATALOG_PATH }));
+  const res = await ensureModelsCatalogLoaded(true);
+  expect(res.ok).toBe(true);
+}
 
 beforeEach(() => {
   clearMockTauriCommands();
@@ -53,6 +82,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  resetModelsCatalogMirror();
   vi.restoreAllMocks();
   layerStackService.dispose();
   MockPhysicalGeometryEngine.getInstance().reset();
@@ -98,6 +128,7 @@ describe('专项 1：400px~1200px 极限视口与碰撞翻折守卫矩阵 (GEO-V
   // GEO-VP-02: 600x400 ModelBadgePickerMenu 强制 bottom
   it('GEO-VP-02: 600x400 顶栏 ModelBadgePickerMenu 强制朝向 bottom 展开，Y_max <= 388px', async () => {
     engine.setViewport({ width: 600, height: 400 });
+    await seedYamlCatalog();
     const ModelBadgeTest = () => {
       const [open, setOpen] = useState(false);
       const anchorRef = React.useRef<HTMLButtonElement>(null);

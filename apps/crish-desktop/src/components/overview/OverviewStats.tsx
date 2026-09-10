@@ -3,7 +3,8 @@ import { UsageSection } from './UsageSection';
 
 export interface OverviewStatsProps {
   open: boolean;
-  estimated: number;
+  /** 引擎费用三态展示串 */
+  estimated: string;
   inputTokens: number;
   outputTokens: number;
   onToggle: () => void;

@@ -22,14 +22,20 @@ import {
 function makeIframeRef(postMessageMock: ReturnType<typeof vi.fn>): InspectorIframeRef {
   return {
     current: {
-      contentWindow: { postMessage: postMessageMock },
+      contentWindow: {
+        postMessage: postMessageMock,
+        location: { origin: window.location.origin },
+      },
     } as unknown as HTMLIFrameElement,
   };
 }
 
 /** 派发一条客户端 → 宿主 message 事件 */
-function dispatchClientMessage(data: unknown): void {
-  window.dispatchEvent(new MessageEvent('message', { data }));
+function dispatchClientMessage(
+  data: unknown,
+  origin: string = window.location.origin
+): void {
+  window.dispatchEvent(new MessageEvent('message', { data, origin }));
 }
 
 describe('previewHostBridge', () => {
@@ -52,7 +58,7 @@ describe('previewHostBridge', () => {
           type: 'INSPECT_TOGGLE',
           payload: { enabled: true },
         },
-        '*'
+        window.location.origin
       );
     });
 
@@ -65,7 +71,7 @@ describe('previewHostBridge', () => {
           type: 'INSPECT_TOGGLE',
           payload: { enabled: false },
         }),
-        '*'
+        window.location.origin
       );
     });
 
@@ -255,6 +261,21 @@ describe('previewHostBridge', () => {
         payload: { tagName: 'div' },
       });
 
+      expect(listener).not.toHaveBeenCalled();
+      unsubscribe();
+    });
+
+    it('非法 event.origin：即使 source 合法也静默丢弃', () => {
+      const listener = vi.fn();
+      const unsubscribe = subscribeToInspector(listener);
+      dispatchClientMessage(
+        {
+          source: CRISH_PREVIEW_INSPECTOR_SOURCE,
+          type: 'INSPECT_READY',
+          payload: {},
+        },
+        'https://evil.example'
+      );
       expect(listener).not.toHaveBeenCalled();
       unsubscribe();
     });

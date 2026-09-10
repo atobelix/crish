@@ -8,7 +8,8 @@
  * 2. **刚性落盘防饿死**：400ms debounce 合并连续击键，1500ms `maxWait` 刚性落盘机制，
  *    防止高频输入下防抖持续推迟导致饿死；失焦 / 回车立即冲刷。
  * 3. **应急同步刷盘与离开守卫**：挂载 `beforeunload` 同步将未落盘草稿写入 localStorage
- *    应急抢救，并尽力触发冲刷；切换 / 新建文档前由文档管理器可靠等待冲刷完毕。
+ *    应急抢救，并尽力触发冲刷；**打开/挂载文档时对称调用 `loadEmergencyDraftSync` 读回**，
+ *    叠到 UI 并可再落盘；切换 / 新建文档前由文档管理器可靠等待冲刷完毕。
  * 4. **空笔记首块**：点击空白 → `newNoteBlockId` 生成合法 UUID → 经既有
  *    结构意图管线 insert paragraph；text_edit 必须等待 insert 完成后才发送
  *    （保证引擎已注册该块）。insert 失败回退空态，杜绝幽灵块 ID。
@@ -55,6 +56,11 @@ export interface UseNoteTextPersistenceOptions {
   onTextCommitProp?: (blockId: string, newText: string) => void;
   /** 向宿主注册/注销待落盘冲刷器 */
   registerPendingFlush?: (flush: (() => Promise<void>) | null) => void;
+  /**
+   * hydrate 是否已达终态（ready | empty）。为 false 时不读回应急草稿，
+   * 避免 loading 空块误判。省略时视为 true（单测 / 无 hydrate 宿主）。
+   */
+  hydrateReady?: boolean;
 }
 
 export interface UseNoteTextPersistenceResult {
@@ -67,6 +73,11 @@ export interface UseNoteTextPersistenceResult {
   handleTextCommit: (blockId: string, newText: string) => Promise<void>;
   /** 全部待落盘文本立即冲刷（切换 / 新建文档前调用） */
   flushPendingDraft: () => Promise<void>;
+  /**
+   * 挂载读回的应急草稿（blockId → text）。仅用于 UI 叠字，禁止回灌进
+   * 传入本 hook 的权威 `blocks`（否则差量基准会把抢救文本当成已落盘）。
+   */
+  emergencyDrafts: Record<string, string> | null;
 }
 
 export function saveEmergencyDraftSync(
@@ -116,6 +127,26 @@ export function clearEmergencyDraftSync(docId: string): void {
   }
 }
 
+/**
+ * 将应急草稿叠到投影块的 text 上（纯函数，供面板展示「写必可读回」）。
+ * 不修改入参；无草稿时原样返回（保持引用）。
+ */
+export function overlayEmergencyDraftTexts<
+  T extends { id: string; text?: string },
+>(
+  blocks: readonly T[],
+  drafts: Record<string, string> | null | undefined
+): readonly T[] {
+  if (!drafts) return blocks;
+  const ids = Object.keys(drafts);
+  if (ids.length === 0) return blocks;
+  return blocks.map((b) =>
+    Object.prototype.hasOwnProperty.call(drafts, b.id)
+      ? { ...b, text: drafts[b.id] }
+      : b
+  );
+}
+
 export function useNoteTextPersistence({
   docId,
   applyOpsProp,
@@ -123,10 +154,19 @@ export function useNoteTextPersistence({
   onBlockChangeProp,
   onTextCommitProp,
   registerPendingFlush,
+  hydrateReady = true,
 }: UseNoteTextPersistenceOptions): UseNoteTextPersistenceResult {
   const [localSaveStatus, setLocalSaveStatus] = useState<NoteSaveStatus | null>(
     null
   );
+
+  /** 挂载时 loadEmergencyDraftSync 读回；flush 排空后清除 */
+  const [emergencyDrafts, setEmergencyDrafts] = useState<Record<
+    string,
+    string
+  > | null>(null);
+  /** 每个 docId 只读回/应用一次，防 blocks 刷新重入 */
+  const rescueAppliedDocRef = useRef<string | null>(null);
 
   const resolvedApplyOps = useMemo(() => {
     if (applyOpsProp) return applyOpsProp;
@@ -237,6 +277,7 @@ export function useNoteTextPersistence({
         }
         if (pendingFlushRef.current.size === 0) {
           clearEmergencyDraftSync(docId);
+          setEmergencyDrafts(null);
         }
         updateSaveStatus();
         return;
@@ -268,6 +309,7 @@ export function useNoteTextPersistence({
           }
           if (pendingFlushRef.current.size === 0) {
             clearEmergencyDraftSync(docId);
+            setEmergencyDrafts(null);
           }
         } else {
           failedBlocksRef.current.add(blockId);
@@ -360,19 +402,58 @@ export function useNoteTextPersistence({
     [updateSaveStatus]
   );
 
-  /** 全部待落盘文本立即冲刷（切换 / 新建文档前由文档管理器调用，可靠等待排空） */
+  /**
+   * 全部待落盘文本立即冲刷（切换 / 新建文档前由文档管理器调用）。
+   * 排空语义（§6）：循环至 pending/queue/inFlight 皆空，或停滞/触顶时显式抛错；
+   * 禁止固定两轮 pass 的伪排空。
+   */
   const flushPendingDraft = useCallback(async (): Promise<void> => {
-    for (let pass = 0; pass < 2; pass++) {
+    /** 安全上界：防死循环；触顶视为显式失败，禁止静默截断 */
+    const MAX_DRAIN_ROUNDS = 64;
+    for (let round = 0; round < MAX_DRAIN_ROUNDS; round++) {
       const candidateIds = new Set([
         ...pendingFlushRef.current.keys(),
         ...blockQueueRef.current.keys(),
         ...inFlightBlocksRef.current,
       ]);
-      if (candidateIds.size === 0) break;
+      if (candidateIds.size === 0) return;
+
+      const pendingSizeBefore = pendingFlushRef.current.size;
       await Promise.all(
         [...candidateIds].map((id) => flushBlockTextRef.current(id))
       );
+
+      const remaining = new Set([
+        ...pendingFlushRef.current.keys(),
+        ...blockQueueRef.current.keys(),
+        ...inFlightBlocksRef.current,
+      ]);
+      if (remaining.size === 0) return;
+
+      // 队列或飞行仍在推进 → 继续下一轮
+      if (blockQueueRef.current.size > 0 || inFlightBlocksRef.current.size > 0) {
+        continue;
+      }
+
+      const pendingSizeAfter = pendingFlushRef.current.size;
+      // pending 规模下降说明有进展（可能仍有残留/重入），继续排空
+      if (pendingSizeAfter < pendingSizeBefore) {
+        continue;
+      }
+
+      // 无进展且无飞行/排队 → 失败可见（含 apply 失败 / 无适配器早退）
+      setLocalSaveStatus('unsaved');
+      const pending = [...pendingFlushRef.current.keys()];
+      const failed = pending.filter((id) => failedBlocksRef.current.has(id));
+      throw new Error(
+        `[flushPendingDraft] drain stalled (round ${round + 1}); pending=[${pending.join(',')}]` +
+          (failed.length ? `; failed=[${failed.join(',')}]` : '')
+      );
     }
+    setLocalSaveStatus('unsaved');
+    throw new Error(
+      `[flushPendingDraft] exceeded ${MAX_DRAIN_ROUNDS} drain rounds with work remaining`
+    );
   }, []);
 
   const flushPendingDraftRef = useRef(flushPendingDraft);
@@ -386,6 +467,52 @@ export function useNoteTextPersistence({
       registerPendingFlush(null);
     };
   }, [registerPendingFlush, flushPendingDraft]);
+
+  // ── doc 切换：清空读回态，允许新文档再跑一次 loadEmergencyDraftSync ─────
+  useEffect(() => {
+    rescueAppliedDocRef.current = null;
+    setEmergencyDrafts(null);
+  }, [docId]);
+
+  /**
+   * 生产挂载/打开文档读回（与 beforeunload → saveEmergencyDraftSync 对称）。
+   * hydrateReady 后才应用，避免 loading 空投影误判「已落盘」。
+   * 每个 docId 只应用一次；差异写入 pending 并排程落盘，UI 经 emergencyDrafts 叠字。
+   */
+  useEffect(() => {
+    if (!hydrateReady) return;
+    if (rescueAppliedDocRef.current === docId) return;
+    rescueAppliedDocRef.current = docId;
+
+    const drafts = loadEmergencyDraftSync(docId);
+    if (!drafts || Object.keys(drafts).length === 0) {
+      setEmergencyDrafts(null);
+      return;
+    }
+
+    const pending: Record<string, string> = {};
+    for (const [blockId, text] of Object.entries(drafts)) {
+      const block = blocks.find((b) => b.id === blockId);
+      // 无对应块：仍保留可读回（空笔记崩溃等边缘）；有块且已一致则跳过
+      if (block && (block.text ?? '') === text) {
+        continue;
+      }
+      pending[blockId] = text;
+    }
+
+    if (Object.keys(pending).length === 0) {
+      // 异步冲刷已在 beforeunload 后完成：清掉陈旧抢救快照
+      clearEmergencyDraftSync(docId);
+      setEmergencyDrafts(null);
+      return;
+    }
+
+    setEmergencyDrafts(pending);
+    for (const [blockId, text] of Object.entries(pending)) {
+      // 权威 blocks 仍为落盘态；差量基准正确。叠字只走 emergencyDrafts。
+      scheduleBlockText(blockId, text);
+    }
+  }, [docId, hydrateReady, blocks, scheduleBlockText]);
 
   // ── 窗口关闭 / 刷新应急同步刷盘守卫（DEF-NOTE-PERSIST-04）───────────────
   useEffect(() => {
@@ -512,5 +639,6 @@ export function useNoteTextPersistence({
     handleBlockChange,
     handleTextCommit,
     flushPendingDraft,
+    emergencyDrafts,
   };
 }

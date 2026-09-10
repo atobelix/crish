@@ -11,7 +11,6 @@ import {
   selectScheduledTasks,
   selectTokenUsage,
 } from '../../store/storeAccess';
-import { estimateCostUsd } from '../../api/pricingStore';
 import {
   getActiveModelId,
   resolveDisplayModelId,
@@ -22,7 +21,6 @@ import { filterWorkflowsByWorkspace } from '../../api/workflowApi';
 
 import { OverviewHeader } from './OverviewHeader';
 import { OverviewStats } from './OverviewStats';
-import { OverviewQuickActions } from './OverviewQuickActions';
 import { ActiveTasksSection } from './ActiveTasksSection';
 import { AgentSection } from './AgentSection';
 import { BackgroundSection } from './BackgroundSection';
@@ -77,10 +75,14 @@ const OverviewCardInner: React.FC<OverviewCardProps> = ({ onOpenPanel }) => {
   const toggle = (k: SecKey) => setOpenSec((s) => ({ ...s, [k]: !s[k] }));
 
   const modelId = resolveDisplayModelId() || getActiveModelId() || 'unknown';
+  // plans/05 T5.4：费用只渲染引擎三态，禁止 JS 估算
   const estimated =
-    tokenUsage.cost > 0
-      ? tokenUsage.cost
-      : estimateCostUsd(modelId, tokenUsage.input, tokenUsage.output);
+    tokenUsage.costStatus === 'priced'
+      ? (tokenUsage.formattedCost ?? '')
+      : tokenUsage.costStatus === 'free'
+        ? '免费'
+        : '未定价';
+  void modelId;
   const agents = session?.agents || [];
   const runningAgentCount = agents.filter((a) => a.status === 'running').length;
 
@@ -172,8 +174,6 @@ const OverviewCardInner: React.FC<OverviewCardProps> = ({ onOpenPanel }) => {
         onOpenGitFile={openGitFile}
         onOpenPanel={onOpenPanel}
       />
-
-      <OverviewQuickActions onOpenPanel={onOpenPanel} />
     </div>
   );
 };

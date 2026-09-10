@@ -12,7 +12,6 @@ import {
 } from '../../store/storeAccess';
 import { clearAgentPanelFocus } from '../../api/openAgentPanel';
 import { setActiveSessionId } from '../../api/storeAccess';
-import { estimateCostUsd } from '../../api/pricingStore';
 import {
   getActiveModelId,
   resolveDisplayModelId,
@@ -37,8 +36,8 @@ export type UseRuntimePanelDataResult = {
   planCountLabel: string | null;
   approvalCountLabel: string | null;
   tokenPercent: number;
-  /** 估算费用（已有成本直接取用，否则按模型单价估算） */
-  estimated: number;
+  /** 引擎费用三态展示串（formattedTotal / 「未定价」/「免费」） */
+  estimated: string;
   /** 聚焦会话：写 store + 清面板焦点 + 派发切换事件 */
   focusSession: (sessionId: string) => void;
 };
@@ -111,10 +110,15 @@ export function useRuntimePanelData(): UseRuntimePanelDataResult {
   };
 
   const modelId = resolveDisplayModelId() || getActiveModelId() || 'unknown';
+  // plans/05 T5.4：费用只渲染引擎三态（formattedTotal / 未定价 / 免费），
+  // 禁止 JS 估算与 `$` + toFixed
   const estimated =
-    tokenUsage.cost > 0
-      ? tokenUsage.cost
-      : estimateCostUsd(modelId, tokenUsage.input, tokenUsage.output);
+    tokenUsage.costStatus === 'priced'
+      ? (tokenUsage.formattedCost ?? '')
+      : tokenUsage.costStatus === 'free'
+        ? '免费'
+        : '未定价';
+  void modelId;
 
   const tokenPercent = Math.min(
     100,

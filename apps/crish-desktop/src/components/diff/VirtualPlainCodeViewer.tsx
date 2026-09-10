@@ -7,6 +7,7 @@
 
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useVirtualScroll } from '../../hooks/useVirtualScroll';
+import { useLayoutStore } from '../../store/layoutStore';
 import { highlightCodeSafe } from '../../api/codeHighlight';
 import { LineBuffer } from './LineBuffer';
 import { VirtualCodeEngine, MAX_DOM_LINE_CHARS, MAX_EXPANDED_LINE_CHARS } from './VirtualCodeEngine';
@@ -46,12 +47,14 @@ export const VirtualPlainCodeViewer: React.FC<VirtualPlainCodeViewerProps> = Rea
     const [expandedLines, setExpandedLines] = useState<ReadonlySet<number>>(
       () => new Set()
     );
+    const uiSize = useLayoutStore((s) => s.uiSize);
 
     const firstLineRef = useRef<HTMLDivElement | null>(null);
     const measureLineRef = useRef<HTMLDivElement | null>(null);
     const measureSpanRef = useRef<HTMLSpanElement | null>(null);
     const prevWidthRef = useRef(800);
-    const isMeasuredRef = useRef(false);
+    // 测高可失效：字号/Token/uiSize 变化时重测；禁止永久测高锁定
+    const measureGenRef = useRef(0);
 
     // 文本切换后清空展开态，避免旧行号映射到新内容
     useEffect(() => {
@@ -104,23 +107,24 @@ export const VirtualPlainCodeViewer: React.FC<VirtualPlainCodeViewerProps> = Rea
       };
     }, [containerRef]);
 
-    // 4. 真实行高与单字符测量（单次测定锁定标量，杜绝滚动中微小抖动触发级联重算）
+    // 4. 真实行高与单字符测量：单一测高源；字号/Token/uiSize 变更时失效重测（禁止永久测高锁定）
     useLayoutEffect(() => {
-      if (isMeasuredRef.current) return;
-
-      let validRowHeight: number | null = null;
-      let validCharWidth: number | null = null;
-
+      measureGenRef.current += 1;
+      const gen = measureGenRef.current;
       const lineEl = measureLineRef.current;
-      if (lineEl) {
+      const spanEl = measureSpanRef.current;
+      if (!lineEl || !spanEl) return;
+
+      const applyMeasure = () => {
+        if (gen !== measureGenRef.current) return;
+        let validRowHeight: number | null = null;
+        let validCharWidth: number | null = null;
+
         const measured = lineEl.offsetHeight || lineEl.getBoundingClientRect().height;
         if (measured > 0) {
           validRowHeight = Math.round(measured);
         }
-      }
 
-      const spanEl = measureSpanRef.current;
-      if (spanEl) {
         const rect = spanEl.getBoundingClientRect();
         if (rect.height > 0 && validRowHeight === null) {
           validRowHeight = Math.round(rect.height);
@@ -128,18 +132,29 @@ export const VirtualPlainCodeViewer: React.FC<VirtualPlainCodeViewerProps> = Rea
         if (rect.width > 0) {
           validCharWidth = rect.width / 36;
         }
-      }
 
-      if (validRowHeight !== null && Math.abs(validRowHeight - rowHeight) >= 1) {
-        setRowHeight(validRowHeight);
-      }
-      if (validCharWidth !== null && Math.abs(validCharWidth - charWidth) >= 0.1) {
-        setCharWidth(validCharWidth);
-      }
-      if (validRowHeight !== null && validCharWidth !== null) {
-        isMeasuredRef.current = true;
-      }
-    }, [rowHeight, charWidth]);
+        if (validRowHeight !== null) {
+          setRowHeight((prev) =>
+            Math.abs(validRowHeight! - prev) >= 1 ? validRowHeight! : prev
+          );
+        }
+        if (validCharWidth !== null) {
+          setCharWidth((prev) =>
+            Math.abs(validCharWidth! - prev) >= 0.1 ? validCharWidth! : prev
+          );
+        }
+      };
+
+      applyMeasure();
+      const ro = new ResizeObserver(() => {
+        applyMeasure();
+      });
+      ro.observe(lineEl);
+      ro.observe(spanEl);
+      return () => {
+        ro.disconnect();
+      };
+    }, [uiSize, wordWrap]);
 
     // 5. 排版引擎实例构建（仅在行宽、换行模式、文本或展开态改变时微量计算）
     const engine = useMemo(() => {

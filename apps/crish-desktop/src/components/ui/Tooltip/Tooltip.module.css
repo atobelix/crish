@@ -43,15 +43,15 @@
 }
 
 .tooltipContent {
-  background: var(--bg-elevated);
-  border: 1px solid var(--hairline-strong);
-  border-radius: var(--radius-full, 9999px);
-  box-shadow: var(--shadow-sm);
-  padding: 4px 10px;
+  background: var(--tooltip-bg, var(--bg-elevated));
+  border: 1px solid var(--tooltip-border, var(--hairline-strong));
+  border-radius: var(--tooltip-radius, var(--radius-full, 9999px));
+  box-shadow: var(--tooltip-shadow, var(--shadow-sm));
+  padding: var(--tooltip-padding, 4px 10px);
   font-size: var(--font-size-xs);
   line-height: var(--line-height-base);
   color: var(--text-primary);
-  white-space: nowrap;
+  white-space: var(--tooltip-white-space, nowrap);
 }
 
 :global(body[data-floating-active='true']) .tooltip {
@@ -75,37 +75,37 @@
   position: absolute;
   width: 8px;
   height: 8px;
-  background: var(--bg-elevated);
+  background: var(--tooltip-bg, var(--bg-elevated));
 }
 
 .top .arrow {
   bottom: -4px;
   left: var(--tooltip-arrow-offset, 50%);
   transform: translateX(-50%) rotate(45deg);
-  border-right: 1px solid var(--hairline-strong);
-  border-bottom: 1px solid var(--hairline-strong);
+  border-right: 1px solid var(--tooltip-border, var(--hairline-strong));
+  border-bottom: 1px solid var(--tooltip-border, var(--hairline-strong));
 }
 
 .bottom .arrow {
   top: -4px;
   left: var(--tooltip-arrow-offset, 50%);
   transform: translateX(-50%) rotate(45deg);
-  border-left: 1px solid var(--hairline-strong);
-  border-top: 1px solid var(--hairline-strong);
+  border-left: 1px solid var(--tooltip-border, var(--hairline-strong));
+  border-top: 1px solid var(--tooltip-border, var(--hairline-strong));
 }
 
 .left .arrow {
   right: -4px;
   top: var(--tooltip-arrow-offset, 50%);
   transform: translateY(-50%) rotate(45deg);
-  border-right: 1px solid var(--hairline-strong);
-  border-top: 1px solid var(--hairline-strong);
+  border-right: 1px solid var(--tooltip-border, var(--hairline-strong));
+  border-top: 1px solid var(--tooltip-border, var(--hairline-strong));
 }
 
 .right .arrow {
   left: -4px;
   top: var(--tooltip-arrow-offset, 50%);
   transform: translateY(-50%) rotate(45deg);
-  border-left: 1px solid var(--hairline-strong);
-  border-bottom: 1px solid var(--hairline-strong);
+  border-left: 1px solid var(--tooltip-border, var(--hairline-strong));
+  border-bottom: 1px solid var(--tooltip-border, var(--hairline-strong));
 }

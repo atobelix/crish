@@ -129,7 +129,7 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
         setFormattedCode('');
         return;
       }
-      const res = formatJsonSafe(plainCode, 2);
+      const res = formatJsonSafe(plainCode, 2, filePath);
       if (res.success) {
         setFormattedCode(res.formatted);
         setIsFormatted(true);

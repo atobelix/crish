@@ -159,8 +159,7 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = () => {
             <div className={`${styles.statRow} ${styles.isTotal}`}>
               <span className={styles.statLabel}>费用</span>
               <span className={styles.statValue}>
-                {'$'}
-                {data.estimated.toFixed(4)}
+                {data.estimated}
               </span>
             </div>
           </div>

@@ -7,6 +7,7 @@
  * 1. 【DEF-NOTE-PERSIST-01】flushBlockText 排队锁与 inFlight 互斥保护，杜绝 "ABA" 差量基准错位；
  * 2. 【DEF-NOTE-PERSIST-01】1500ms maxWait 刚性落盘机制，防止高频输入下防抖持续推迟导致饿死；
  * 3. 【DEF-NOTE-PERSIST-04】beforeunload 应急同步刷盘至 localStorage，抢救未落盘草稿；
+ * 3b.【§6 写必可读回】挂载/打开时 loadEmergencyDraftSync 生产读回 + 叠字，防假绿；
  * 4. 【DEF-NOTE-PERSIST-05】多块混合编辑下的诚实保存状态机；
  * 5. 【DEF-NOTE-PERSIST-03】useNoteDocumentManager 切换文档时可靠等待，杜绝 500ms 强杀丢数据。
  */
@@ -19,6 +20,8 @@ import {
   PERSIST_MAX_WAIT_MS,
   loadEmergencyDraftSync,
   clearEmergencyDraftSync,
+  saveEmergencyDraftSync,
+  overlayEmergencyDraftTexts,
 } from './useNoteTextPersistence';
 import { useNoteDocumentManager } from './useNoteDocumentManager';
 import { makeHydratedBlock } from './hydrateProjection';
@@ -324,5 +327,124 @@ describe('useNoteTextPersistence · 并发保护与刚性落盘 (DEF-NOTE-PERSIS
     // 验证：刷盘已完整执行完毕，文档安全切换为 doc-beta，数据零丢失
     expect(flushFinished).toBe(true);
     expect(result.current.activeDocId).toBe('doc-beta');
+  });
+  it('§6 写必可读回: 挂载时生产调用 loadEmergencyDraftSync，差异草稿进入 emergencyDrafts 并可再落盘', async () => {
+    const applied: string[] = [];
+    const mockApplyOps: ApplyOpsAdapter = (opsJson) => {
+      applied.push(opsJson);
+      return Promise.resolve({ ok: true });
+    };
+
+    // 模拟上次 beforeunload 已写入、进程被杀后来不及异步冲刷
+    saveEmergencyDraftSync('doc-rescue', {
+      b1: '抢救后可见的正文',
+      b2: '第二段抢救',
+    });
+    expect(loadEmergencyDraftSync('doc-rescue')).toEqual({
+      b1: '抢救后可见的正文',
+      b2: '第二段抢救',
+    });
+
+    const blocks = [
+      makeHydratedBlock({ id: 'b1', flavour: 'paragraph', text: '旧盘正文', index: 0 }),
+      makeHydratedBlock({ id: 'b2', flavour: 'paragraph', text: '', index: 1 }),
+    ];
+
+    const { result } = renderHook(() =>
+      useNoteTextPersistence({
+        docId: 'doc-rescue',
+        applyOpsProp: mockApplyOps,
+        blocks,
+        hydrateReady: true,
+      })
+    );
+
+    // 可读回：hook 暴露应急草稿供 UI 叠字
+    expect(result.current.emergencyDrafts).toEqual({
+      b1: '抢救后可见的正文',
+      b2: '第二段抢救',
+    });
+
+    // 叠字纯函数：展示层看到抢救文本，权威 blocks 入参不变
+    const overlaid = overlayEmergencyDraftTexts(blocks, result.current.emergencyDrafts);
+    expect(overlaid[0].text).toBe('抢救后可见的正文');
+    expect(overlaid[1].text).toBe('第二段抢救');
+    expect(blocks[0].text).toBe('旧盘正文');
+
+    // 推进 debounce → 差量落盘（旧盘 → 抢救文本）
+    await act(async () => {
+      vi.advanceTimersByTime(PERSIST_DEBOUNCE_MS + 10);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(applied.length).toBeGreaterThanOrEqual(1);
+    // 差量 op 可能拆分前缀/后缀；语义上 b1 从「旧盘正文」救回、b2 插入抢救段
+    const parsed = applied.map((j) => JSON.parse(j));
+    const b1ops = parsed.filter((ops) => ops[0]?.id === 'b1');
+    const b2ops = parsed.filter((ops) => ops[0]?.id === 'b2');
+    expect(b1ops.length).toBeGreaterThanOrEqual(1);
+    expect(b2ops.length).toBeGreaterThanOrEqual(1);
+    const b1insert = b1ops.map((ops) => ops[0]?.insert ?? '').join('');
+    expect(b1insert).toContain('抢救后可见的');
+    expect(JSON.stringify(b2ops)).toContain('第二段抢救');
+  });
+
+  it('§6 写必可读回: hydrateReady=false 时不读回，避免 loading 假绿', () => {
+    saveEmergencyDraftSync('doc-loading', { b1: '不该在 loading 应用' });
+
+    const blocks = [
+      makeHydratedBlock({ id: 'b1', flavour: 'paragraph', text: '', index: 0 }),
+    ];
+
+    const { result, rerender } = renderHook(
+      ({ ready }: { ready: boolean }) =>
+        useNoteTextPersistence({
+          docId: 'doc-loading',
+          applyOpsProp: () => Promise.resolve({ ok: true }),
+          blocks,
+          hydrateReady: ready,
+        }),
+      { initialProps: { ready: false } }
+    );
+
+    expect(result.current.emergencyDrafts).toBeNull();
+
+    rerender({ ready: true });
+    expect(result.current.emergencyDrafts).toEqual({
+      b1: '不该在 loading 应用',
+    });
+  });
+
+  it('§6 写必可读回: 磁盘已与抢救一致时清除陈旧快照，不假叠字', () => {
+    saveEmergencyDraftSync('doc-stale', { b1: '已落盘' });
+    const blocks = [
+      makeHydratedBlock({ id: 'b1', flavour: 'paragraph', text: '已落盘', index: 0 }),
+    ];
+
+    const { result } = renderHook(() =>
+      useNoteTextPersistence({
+        docId: 'doc-stale',
+        applyOpsProp: () => Promise.resolve({ ok: true }),
+        blocks,
+        hydrateReady: true,
+      })
+    );
+
+    expect(result.current.emergencyDrafts).toBeNull();
+    expect(loadEmergencyDraftSync('doc-stale')).toBeNull();
+  });
+
+  it('overlayEmergencyDraftTexts: 无草稿保持引用；有草稿只改对应 text', () => {
+    const blocks = [
+      makeHydratedBlock({ id: 'a', flavour: 'paragraph', text: 'A', index: 0 }),
+      makeHydratedBlock({ id: 'b', flavour: 'paragraph', text: 'B', index: 1 }),
+    ];
+    expect(overlayEmergencyDraftTexts(blocks, null)).toBe(blocks);
+    expect(overlayEmergencyDraftTexts(blocks, {})).toBe(blocks);
+    const out = overlayEmergencyDraftTexts(blocks, { b: 'B2' });
+    expect(out[0].text).toBe('A');
+    expect(out[1].text).toBe('B2');
+    expect(blocks[1].text).toBe('B');
   });
 });

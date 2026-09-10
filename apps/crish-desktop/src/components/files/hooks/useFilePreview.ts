@@ -139,7 +139,7 @@ export function useFilePreview() {
       }
     }
 
-    const res = formatJsonSafe(raw, 2);
+    const res = formatJsonSafe(raw, 2, selected);
     if (res.success) {
       setFormattedContent(res.formatted);
       setIsFormatted(true);

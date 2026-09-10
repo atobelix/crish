@@ -3,6 +3,7 @@ import {
   formatJsonSafe,
   isCompactOrSingleLineJson,
   isJsonFileOrContent,
+  stripJsoncComments,
 } from './jsonFormatUtils';
 
 describe('jsonFormatUtils 纯逻辑测试套件', () => {
@@ -44,9 +45,7 @@ describe('jsonFormatUtils 纯逻辑测试套件', () => {
       const input = '{"name":"conex","version":"1.0.0","tags":["editor","desktop"]}';
       const res = formatJsonSafe(input, 2);
       expect(res.success).toBe(true);
-      expect(res.formatted).toBe(
-        JSON.stringify(JSON.parse(input), null, 2)
-      );
+      expect(res.formatted).toBe(JSON.stringify(JSON.parse(input), null, 2));
       expect(res.error).toBeUndefined();
     });
 
@@ -61,6 +60,33 @@ describe('jsonFormatUtils 纯逻辑测试套件', () => {
     it('对空文本返回成功与空结果', () => {
       expect(formatJsonSafe('').success).toBe(true);
       expect(formatJsonSafe('').formatted).toBe('');
+    });
+  });
+
+  describe('jsonc / jsonl 真解析', () => {
+    it('stripJsoncComments 保留字符串内斜杠', () => {
+      expect(stripJsoncComments('{"u":"http://x"}')).toBe('{"u":"http://x"}');
+    });
+
+    it('jsonc：剥离注释后格式化成功', () => {
+      const raw = "{\n  // comment\n  \"a\": 1, /* b */\n  \"b\": 2\n}";
+      const res = formatJsonSafe(raw, 2, 'tsconfig.jsonc');
+      expect(res.success).toBe(true);
+      expect(JSON.parse(res.formatted)).toEqual({ a: 1, b: 2 });
+    });
+
+    it('jsonl：逐行解析并保持一行一记录', () => {
+      const raw = "{\"a\":1}\n{\"b\":2}\n";
+      const res = formatJsonSafe(raw, 2, 'logs.jsonl');
+      expect(res.success).toBe(true);
+      expect(res.formatted.trim().split(/\n/)).toEqual(['{"a":1}', '{"b":2}']);
+    });
+
+    it('jsonl 坏行硬失败且不假绿', () => {
+      const raw = "{\"a\":1}\n{bad}\n";
+      const res = formatJsonSafe(raw, 2, 'logs.jsonl');
+      expect(res.success).toBe(false);
+      expect(res.error).toMatch(/第 2 行/);
     });
   });
 });

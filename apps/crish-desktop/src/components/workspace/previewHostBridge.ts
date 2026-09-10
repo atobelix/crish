@@ -7,7 +7,7 @@
  *    iframe 内 DOM 拾取器（客户端实现 = dev-server/previewBridgeScript.ts
  *    注入桥，由预览代理在服务端注入；监听并响应 INSPECT_TOGGLE）。
  * 2. `subscribeToInspector(callback)`：监听宿主 window 的 message 事件，
- *    仅接受 source = crish-preview-inspector 的客户端消息，过滤未知 type，
+ *    校验 event.origin 白名单 + source = crish-preview-inspector，过滤未知 type，
  *    向回调派发 INSPECT_READY / INSPECT_TOGGLE（客户端 Esc 退出）/
  *    INSPECT_HOVER / INSPECT_SELECT。
  * 3. 返回 unsubscribe 清理函数，卸载时移除监听器。
@@ -18,6 +18,8 @@
 import {
   CRISH_PREVIEW_HOST_SOURCE,
   CRISH_PREVIEW_INSPECTOR_SOURCE,
+  getPreviewHostOrigin,
+  isAllowedPreviewMessageOrigin,
   type InspectHoverPayload,
   type InspectRect,
   type InspectSelectPayload,
@@ -194,6 +196,20 @@ export function parseClientToHostMessage(
 }
 
 /**
+ * §4.1：宿主 → iframe 的明确 targetOrigin（禁 '*'）。
+ * 预览经同源代理加载时 iframe.origin === 宿主 origin；若可读 contentWindow.location 则用之。
+ */
+function resolveInspectorTargetOrigin(iframe: HTMLIFrameElement): string | null {
+  try {
+    const childOrigin = iframe.contentWindow?.location?.origin;
+    if (childOrigin && childOrigin !== 'null') return childOrigin;
+  } catch {
+    // 跨域不可读 location —— 回落宿主 origin（代理架构下仍同源）
+  }
+  return getPreviewHostOrigin();
+}
+
+/**
  * 向预览 iframe 发送拾取器启停指令。
  * @param iframeRef iframe 引用（RefObject 或原生元素；null 安全）
  * @param enabled   true = 激活拾取，false = 退出拾取
@@ -205,7 +221,10 @@ export function enableInspector(
 ): boolean {
   const iframe = unwrapIframe(iframeRef);
   const contentWindow = iframe?.contentWindow;
-  if (!contentWindow) return false;
+  if (!iframe || !contentWindow) return false;
+
+  const targetOrigin = resolveInspectorTargetOrigin(iframe);
+  if (!targetOrigin) return false;
 
   const message: PreviewHostToClientMessage = {
     source: CRISH_PREVIEW_HOST_SOURCE,
@@ -213,7 +232,7 @@ export function enableInspector(
     payload: { enabled },
   };
   try {
-    contentWindow.postMessage(message, '*');
+    contentWindow.postMessage(message, targetOrigin);
     return true;
   } catch {
     // 跨域 / 页面未就绪时投递失败，静默返回 false
@@ -230,6 +249,8 @@ export function subscribeToInspector(
   listener: PreviewInspectorListener
 ): () => void {
   const handleMessage = (event: MessageEvent) => {
+    // §4.1：先校验 origin 白名单，再解析 source/type（防伪造 source）
+    if (!isAllowedPreviewMessageOrigin(event.origin)) return;
     const message = parseClientToHostMessage(event.data);
     if (!message) return;
 

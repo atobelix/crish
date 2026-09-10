@@ -24,7 +24,10 @@
  */
 
 import React, { useCallback, useMemo } from 'react';
-import { useNoteTextPersistence } from './useNoteTextPersistence';
+import {
+  overlayEmergencyDraftTexts,
+  useNoteTextPersistence,
+} from './useNoteTextPersistence';
 /** DomHost chrome 皮；≠ EL-01 */
 import '@crish/block-paper/chrome.css';
 /** W3-G PaperList 挂载皮；≠ EL-01 */
@@ -152,6 +155,8 @@ export const NotePaperStrictPanel: React.FC<NotePaperStrictPanelProps> = ({
   });
 
 
+  const hydrateReady = status === 'ready' || status === 'empty';
+
   const {
     localSaveStatus,
     setLocalSaveStatus,
@@ -159,6 +164,7 @@ export const NotePaperStrictPanel: React.FC<NotePaperStrictPanelProps> = ({
     handleInitFirstBlock,
     handleBlockChange,
     handleTextCommit,
+    emergencyDrafts,
   } = useNoteTextPersistence({
     docId,
     applyOpsProp,
@@ -166,7 +172,14 @@ export const NotePaperStrictPanel: React.FC<NotePaperStrictPanelProps> = ({
     onBlockChangeProp,
     onTextCommitProp,
     registerPendingFlush,
+    hydrateReady,
   });
+
+  /** 展示叠字：权威 hydrate blocks 仍进 persistence；UI 读回应急草稿 */
+  const displayBlocks = useMemo(
+    () => overlayEmergencyDraftTexts(blocks, emergencyDrafts),
+    [blocks, emergencyDrafts]
+  );
 
   const effectiveSaveStatus = localSaveStatus ?? saveStatusProp;
 
@@ -226,7 +239,7 @@ export const NotePaperStrictPanel: React.FC<NotePaperStrictPanelProps> = ({
       <NotePaperStrictHeader
         docId={docId}
         title={title}
-        blocks={blocks}
+        blocks={displayBlocks}
         saveStatus={effectiveSaveStatus}
         isSidebarOpen={isSidebarOpen}
         onToggleSidebar={onToggleSidebar}
@@ -247,7 +260,7 @@ export const NotePaperStrictPanel: React.FC<NotePaperStrictPanelProps> = ({
         status={status}
         errorReason={errorReason}
         errorCode={errorCode}
-        blocks={blocks}
+        blocks={displayBlocks}
         baseRev={resolvedRev > 0 ? resolvedRev : undefined}
         renderReactRows={renderReactRows}
         chrome={chrome}
@@ -269,7 +282,7 @@ export const NotePaperStrictPanel: React.FC<NotePaperStrictPanelProps> = ({
         <NotePaperStrictChromeSlot
           note={{
             status,
-            blocks,
+            blocks: displayBlocks,
             renderPaperList,
             paperListWindow: paperListConfig.window,
             paperListScroll: paperListConfig.scroll,
