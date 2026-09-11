@@ -221,11 +221,12 @@ export function applyPersonalization(p: PersonalizationSettings, activeTheme: 'd
       vibrantTint = `color-mix(in srgb, hsl(30, 50%, 65%) ${solarWarmthMix * 100}%, ${vibrantTint})`;
     }
 
-    // 💡 护眼暖灰：100% 纯 HSL 数学公式驱动调色板与 2.4% ~ 8% 亮度微调阶梯
+    // 💡 护眼暖灰：原 H=35 S=8% 亮度阶梯保留；card/elevated 固定纯白，不与 primary 压平
     if (!isDarkPreset && p.skin === 'warm-gray') {
       const lPrimary = Number((95.2 + adjust * 0.6).toFixed(2));
-      const lSecondary = Number((lPrimary - 2.4).toFixed(2));
-      const lTertiary = Number((lPrimary - 4.8).toFixed(2));
+      /* 侧栏约 5% 灰：L≈95，仅比画布略沉一点，避免过深 */
+      const lSecondary = Number((95 + adjust * 0.3).toFixed(2));
+      const lTertiary = Number((lSecondary - 3).toFixed(2));
 
       bgPrimary = `hsl(35 8% ${lPrimary}%)`;
       bgSecondary = `hsl(35 8% ${lSecondary}%)`;
@@ -327,22 +328,40 @@ export function applyPersonalization(p: PersonalizationSettings, activeTheme: 'd
     if (!isDarkPreset) {
       // 🌟 浅色模式下采用极净的高饱和高对比混色：直接混入 `hsl(0 0% 100%)` 纯白，拒绝混合变暗的泥脏底色！ 🌟
       // 增加饱和度比例（绿 15.5%，红 12.5%），确保底色极其清新透亮，在黄色/Cream主题或最暗微调都绝对鲜亮夺目！
-      greenLight = `color-mix(in srgb, var(--accent-green, hsl(142 35% 42%)) 15.5%, hsl(0 0% 100%))`;
-      redLight = `color-mix(in srgb, var(--accent-red, hsl(0 55% 55%)) 12.5%, hsl(0 0% 100%))`;
+      greenLight = `color-mix(in srgb, var(--accent-green) 15.5%, hsl(0 0% 100%))`;
+      redLight = `color-mix(in srgb, var(--accent-red) 12.5%, hsl(0 0% 100%))`;
     } else {
       // 深色模式默认基于 bgSecondary
       if (adjust < 0) {
         const pct = Math.abs(adjust) * 1.2;
-        greenLight = `color-mix(in srgb, var(--accent-green, hsl(142 71% 45%)) ${8 + pct}%, ${bgSecondary})`;
-        redLight = `color-mix(in srgb, var(--accent-red, hsl(0 84% 60%)) ${8 + pct}%, ${bgSecondary})`;
+        greenLight = `color-mix(in srgb, var(--accent-green) ${8 + pct}%, ${bgSecondary})`;
+        redLight = `color-mix(in srgb, var(--accent-red) ${8 + pct}%, ${bgSecondary})`;
       } else {
-        greenLight = `color-mix(in srgb, var(--accent-green, hsl(142 71% 45%)) 8%, ${bgPrimary})`;
-        redLight = `color-mix(in srgb, var(--accent-red, hsl(0 84% 60%)) 8%, ${bgPrimary})`;
+        greenLight = `color-mix(in srgb, var(--accent-green) 8%, ${bgPrimary})`;
+        redLight = `color-mix(in srgb, var(--accent-red) 8%, ${bgPrimary})`;
       }
     }
     root.style.setProperty('--accent-green-light-adaptive', greenLight);
     root.style.setProperty('--accent-red-light-adaptive', redLight);
 
+    // 最终层级锁：浅色 card/elevated = 纯白（不从 primary 再 mix 回灰）
+    // 深色 card 比 paper 更沉，保持工具卡可辨识
+    if (!isDarkPreset) {
+      if (p.skin === 'warm-gray' || p.skin === 'paper' || p.skin === 'classic-gray' || p.skin === 'custom') {
+        bgCard = 'hsl(0 0% 100%)';
+        bgElevated = 'hsl(0 0% 100%)';
+      }
+    } else {
+      // dark: card 深于 paper（约 4% L 差），避免与画布粘死
+      bgCard = `color-mix(in srgb, ${bgPrimary} 70%, hsl(0 0% 0%))`;
+      bgElevated = `color-mix(in srgb, ${bgPrimary} 82%, hsl(0 0% 0%))`;
+    }
+
+    root.style.setProperty('--surface-chrome', bgSecondary);
+    root.style.setProperty('--surface-paper', bgPrimary);
+    root.style.setProperty('--surface-card', bgCard);
+    root.style.setProperty('--surface-elevated', bgElevated);
+    root.style.setProperty('--bg-paper', bgPrimary);
     root.style.setProperty('--bg-primary', bgPrimary);
     root.style.setProperty('--bg-secondary', bgSecondary);
     root.style.setProperty('--bg-tertiary', bgTertiary);
@@ -375,20 +394,11 @@ export function applyPersonalization(p: PersonalizationSettings, activeTheme: 'd
     root.style.setProperty('--control-soft-bg-hover', `color-mix(in srgb, ${controlSoftBase} ${softHoverPct}, ${bgSecondary})`);
     root.style.setProperty('--control-soft-bg-active', `color-mix(in srgb, ${controlSoftBase} ${softActivePct}, ${bgSecondary})`);
 
-    // --- 🌟 对话输入框背景：浅色模式下始终保持纯净纸面白底 bgCard (hsl(0 0% 100%)) 🌟 ---
-    let composerBg = skinConfig.composerBg;
-    if (!isDarkPreset) {
-      if (!composerBg) {
-        composerBg = bgCard || 'hsl(0 0% 100%)';
-      }
-    } else {
-      if (!composerBg) {
-        composerBg = bgSecondary;
-      }
-    }
+    // 对话输入框：白卡（与工具调用同层）
+    const composerBg = skinConfig.composerBg || bgCard;
     root.style.setProperty('--composer-bg', composerBg);
 
-    const termBg = isDarkPreset ? (bgCard || '#0c0c0c') : (bgCard || '#ffffff');
+    const termBg = bgCard;
     root.style.setProperty('--terminal-bg', termBg);
     root.style.setProperty('--terminal-fg', textPrimary);
     root.style.setProperty('--terminal-cmd', textPrimary);
@@ -400,6 +410,11 @@ export function applyPersonalization(p: PersonalizationSettings, activeTheme: 'd
     });
   } else {
     // 移除属性，使用 tokens.css 默认值
+    root.style.removeProperty('--surface-chrome');
+    root.style.removeProperty('--surface-paper');
+    root.style.removeProperty('--surface-card');
+    root.style.removeProperty('--surface-elevated');
+    root.style.removeProperty('--bg-paper');
     root.style.removeProperty('--bg-primary');
     root.style.removeProperty('--bg-secondary');
     root.style.removeProperty('--bg-tertiary');

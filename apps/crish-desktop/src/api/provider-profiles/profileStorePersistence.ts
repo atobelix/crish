@@ -6,10 +6,7 @@
  */
 
 import { emitUiEvent } from '../uiEvents';
-import {
-  DEFAULT_PROFILES,
-  type ProviderProfile,
-} from './profileCatalog';
+import type { ProviderProfile } from './profileCatalog';
 import {
   isEmptyModelCatalog,
   normalizeModelIds,
@@ -78,31 +75,20 @@ export function loadProfiles(): ProviderProfile[] {
   try {
     const raw = localStorage.getItem(PROFILES_KEY);
     if (!raw) {
-      saveProfiles(DEFAULT_PROFILES);
-      const seeded = DEFAULT_PROFILES.map((p) => ({
-        ...p,
-        models: [...p.models],
-      }));
-      sanitizeGhostActiveModel(seeded);
-      return seeded;
+      // 中立产品：空库不种第三方壳，由向导/设置自建
+      saveProfiles([]);
+      sanitizeGhostActiveModel([]);
+      return [];
     }
     const arr = JSON.parse(raw);
     if (!Array.isArray(arr) || arr.length === 0) {
-      const seeded = DEFAULT_PROFILES.map((p) => ({
-        ...p,
-        models: [...p.models],
-      }));
-      sanitizeGhostActiveModel(seeded);
-      return seeded;
+      sanitizeGhostActiveModel([]);
+      return [];
     }
     const normalized = normalizeProviderProfiles(arr);
     if (normalized.length === 0) {
-      const seeded = DEFAULT_PROFILES.map((p) => ({
-        ...p,
-        models: [...p.models],
-      }));
-      sanitizeGhostActiveModel(seeded);
-      return seeded;
+      sanitizeGhostActiveModel([]);
+      return [];
     }
     let changed = false;
     if (normalized.length !== arr.length) changed = true;
@@ -143,12 +129,8 @@ export function loadProfiles(): ProviderProfile[] {
     purgeOrphanMetaKeys(new Set(migrated.map((p) => p.id)));
     return migrated;
   } catch {
-    const seeded = DEFAULT_PROFILES.map((p) => ({
-      ...p,
-      models: [...p.models],
-    }));
-    sanitizeGhostActiveModel(seeded);
-    return seeded;
+    sanitizeGhostActiveModel([]);
+    return [];
   }
 }
 
@@ -191,15 +173,18 @@ export function createCustomProfile(input: {
   name: string;
   baseUrl?: string;
   models?: string[];
+  protocol?: ProviderProfile['protocol'];
 }): ProviderProfile {
   const name = input.name.trim() || '自定义服务商';
   const id = `custom-${Date.now().toString(36)}`;
   const entry = normalizeProfile({
     id,
     name,
-    baseUrl: (input.baseUrl || 'https://api.openai.com/v1').trim(),
+    // 中立：不预填任何官方/第三方 URL；由用户填写
+    baseUrl: (input.baseUrl || '').trim(),
     models: input.models?.length ? input.models : [],
     hasKey: false,
+    ...(input.protocol ? { protocol: input.protocol } : {}),
   });
   upsertProfile(entry);
   return entry;
@@ -207,10 +192,8 @@ export function createCustomProfile(input: {
 
 export function removeProfile(profileId: string): ProviderProfile[] {
   const list = loadProfiles().filter((p) => p.id !== profileId);
-  const next =
-    list.length > 0
-      ? list
-      : DEFAULT_PROFILES.map((p) => ({ ...p, models: [...p.models] }));
+  // 删空后保持空列表，不回种第三方默认壳
+  const next = list;
   saveProfiles(next);
   if (getActiveProfileId() === profileId) {
     clearActiveProfileId();

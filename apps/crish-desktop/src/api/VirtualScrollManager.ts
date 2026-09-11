@@ -47,29 +47,38 @@ export function estimateTimelineMessageHeight(msg: SessionMessage): number {
   if (blocks.length > 0) {
     for (const b of blocks) {
       if (b.type === 'thought') {
-        // 折叠思考胶囊 36px
-        h += 36;
+        const thoughtLen = (b.content || (b as { text?: string }).text || '').length;
+        // 思考块：基础头部 36px，预览文字根据长度增加，受折叠视口最大约束 260px
+        h += Math.min(36 + Math.ceil(thoughtLen / 45) * 20, 260);
       } else if (b.type === 'tool_call') {
-        // 工具卡片紧凑行约 52px
-        h += 52;
+        // 工具卡片：包含头部、命令输入与输出区域，实测均值约 130px
+        h += 130;
       } else if (b.type === 'context_injection') {
-        // 上下文注入卡片紧凑单行约 40px
-        h += 40;
+        // 上下文注入卡片紧凑单行约 44px
+        h += 44;
       } else if (b.type === 'text') {
         const len = b.content?.length || 0;
-        h += Math.max(32, Math.ceil(len / 60) * 22);
+        // 文本块：段落垂直节奏与折行，每 35 字符一整行 22px
+        h += Math.max(36, 16 + Math.ceil(len / 35) * 22);
       }
     }
   } else {
     // 降级文本估算
-    if ((msg.thinking || '').trim()) h += 36;
-    if (msg.toolCalls?.length) h += msg.toolCalls.length * 52;
-    if (msg.injections?.length) h += msg.injections.length * 40;
+    const thinkLen = (msg.thinking || '').trim().length;
+    if (thinkLen > 0) {
+      h += Math.min(36 + Math.ceil(thinkLen / 45) * 20, 260);
+    }
+    if (msg.toolCalls?.length) {
+      h += msg.toolCalls.length * 130;
+    }
+    if (msg.injections?.length) {
+      h += msg.injections.length * 44;
+    }
     const len = msg.text?.length || 0;
-    h += Math.max(48, Math.ceil(len / 60) * 22);
+    h += Math.max(48, 20 + Math.ceil(len / 35) * 22);
   }
 
-  return Math.min(Math.max(h, 50), 6000);
+  return Math.min(Math.max(h, 50), 10000);
 }
 
 export class VirtualScrollManager {
@@ -209,6 +218,16 @@ export class VirtualScrollManager {
   /** 返回当前 order 副本 */
   getOrder(): string[] {
     return this.order.slice();
+  }
+
+  /** 获取当前 order 长度 (O(1)，绝不进行数组拷贝) */
+  getOrderCount(): number {
+    return this.order.length;
+  }
+
+  /** 获取指定 id 在当前 order 中的下标 (O(1)) */
+  getIndex(id: string): number | undefined {
+    return this.idToIndexMap.get(id);
   }
 
   /** 返回当前代际编号（clear() 时递增） */

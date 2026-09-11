@@ -9,8 +9,10 @@ import {
   coerceSessionTimestamp,
   compareSessionsByActivity,
   formatAbsoluteCalendarDate,
+  formatCompactActivity,
   formatRelativeActivity,
   formatSessionListAbsoluteTime,
+  formatSessionListCompactTime,
   formatSessionListTime,
   hasRecentSessionActivity,
   isBadTimestampLiteral,
@@ -212,6 +214,18 @@ describe('formatSessionListTime', () => {
     expect(formatRelativeActivity(0, now)).toBe('');
     expect(formatRelativeActivity(Number.NaN, now)).toBe('');
     expect(formatRelativeActivity(-1, now)).toBe('');
+  });
+
+  it('formatCompactActivity thresholds (m, h, d, mo, y)', () => {
+    const now = 1_000_000_000_000;
+    expect(formatCompactActivity(now - 10_000, now)).toBe('now');
+    expect(formatCompactActivity(now - 120_000, now)).toBe('2m');
+    expect(formatCompactActivity(now - 3 * 3_600_000, now)).toBe('3h');
+    expect(formatCompactActivity(now - 2 * 86_400_000, now)).toBe('2d');
+    expect(formatCompactActivity(now - 60 * 86_400_000, now)).toBe('2mo');
+    expect(formatCompactActivity(now - 400 * 86_400_000, now)).toBe('1y');
+    expect(formatCompactActivity(0, now)).toBe('');
+    expect(formatCompactActivity(Number.NaN, now)).toBe('');
   });
 
   it('formatRelativeActivity absolute calendar for old / far-future', () => {

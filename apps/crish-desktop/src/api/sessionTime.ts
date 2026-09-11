@@ -314,6 +314,21 @@ export function msUntilRelativeLabelChange(activityMs: number, now = Date.now())
   return null;
 }
 
+/** 紧凑时间文案（m、h、d、mo，如 5m、2h、3d、1mo） */
+export function formatCompactActivity(ms: number, now = Date.now()): string {
+  if (!ms || ms <= 0 || !Number.isFinite(ms)) return '';
+  if (ms > now + SESSION_LIST_CLOCK_SKEW_MS) {
+    return formatAbsoluteCalendarDate(ms, now);
+  }
+  const d = Math.max(0, now - ms);
+  if (d < 60_000) return 'now';
+  if (d < 3_600_000) return `${Math.max(1, Math.floor(d / 60_000))}m`;
+  if (d < 86_400_000) return `${Math.max(1, Math.floor(d / 3_600_000))}h`;
+  if (d < 30 * 86_400_000) return `${Math.max(1, Math.floor(d / 86_400_000))}d`;
+  if (d < 365 * 86_400_000) return `${Math.max(1, Math.floor(d / (30 * 86_400_000)))}mo`;
+  return `${Math.max(1, Math.floor(d / (365 * 86_400_000)))}y`;
+}
+
 /**
  * 侧栏展示用：统一走 sessionLastActivityMs，绝不把存盘「刚刚」当静态文案。
  * 「刚刚」仅当 now - activity < 45s（或近未来时钟漂移）时瞬时出现，随后由 tick 刷新为「N分钟前」。
@@ -324,6 +339,18 @@ export function formatSessionListTime(s: SessionState, now = Date.now()): string
   }
   const ms = sessionLastActivityMs(s);
   if (ms > 0) return formatRelativeActivity(ms, now);
+  return '';
+}
+
+/**
+ * 侧栏展示用紧凑时间（m、h、d、mo），极简轻量省空间。
+ */
+export function formatSessionListCompactTime(s: SessionState, now = Date.now()): string {
+  if (isRemoteSessionTimestamp(s.timestamp, s.timestampSource) && sessionLastActivityMs(s) <= 0) {
+    return '远程';
+  }
+  const ms = sessionLastActivityMs(s);
+  if (ms > 0) return formatCompactActivity(ms, now);
   return '';
 }
 

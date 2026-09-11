@@ -41,6 +41,11 @@ export interface SessionRuntimeState {
    * `null` = 未选 / 切到非思考模型已清空。
    */
   thinkingTitle?: string | null;
+  /**
+   * 本会话上一轮真实发送时的上下文状态签名（模型+服务商+权限+思考档位快照）。
+   * 仅用于发送比对：若用户切出去又切回相同状态，或连续多轮未换模型，则不弹出居中切换提示。
+   */
+  lastSentContextSignature?: string | null;
 }
 
 class SessionRuntimeRegistry {
@@ -97,6 +102,7 @@ class SessionRuntimeRegistry {
       state.queuedMessages = [];
       state.fileCompareModes = {};
       state.thinkingTitle = null;
+      state.lastSentContextSignature = null;
     }
     this.states.delete(sessionId);
     this.refCounts.delete(sessionId);
@@ -217,12 +223,35 @@ export function getSessionThinkingTitle(sessionId: string): string | null {
   return sessionRuntimeRegistry.get(sessionId).thinkingTitle ?? null;
 }
 
+/**
+ * 记录本会话上一轮真实发送时的上下文状态签名。
+ */
+export function setLastSentContextSignature(
+  sessionId: string,
+  signature: string | null,
+): void {
+  if (!sessionId) return;
+  sessionRuntimeRegistry.save(sessionId, { lastSentContextSignature: signature });
+}
+
+/**
+ * 读取本会话上一轮真实发送时的上下文状态签名。未记录返回 null。
+ */
+export function getLastSentContextSignature(sessionId: string): string | null {
+  if (!sessionId) return null;
+  if (!sessionRuntimeRegistry.exists(sessionId)) return null;
+  return sessionRuntimeRegistry.get(sessionId).lastSentContextSignature ?? null;
+}
+
 // ── 跨会话、按模型持久化的思考档位（localStorage） ───────────────────────────
 
 /** localStorage 键名：按提供者 + 模型 ID 存档用户选择的思考强度 */
 function modelThinkingPrefKey(providerId: string, modelId: string): string {
   return `conex:model-thinking-pref:${providerId}:${modelId}`;
 }
+
+/** 全局最近一次选中的思考强度偏好 */
+const GLOBAL_THINKING_PREF_KEY = 'conex:global-thinking-pref';
 
 /**
  * 持久化用户为某模型选择的思考档位 Title 到 localStorage。
@@ -260,4 +289,90 @@ export function loadModelThinkingPref(
   } catch {
     return null;
   }
+}
+
+/** 保存全局最近一次选中的思考强度偏好 */
+export function saveGlobalThinkingPref(title: string | null): void {
+  try {
+    if (title == null) {
+      localStorage.removeItem(GLOBAL_THINKING_PREF_KEY);
+    } else {
+      localStorage.setItem(GLOBAL_THINKING_PREF_KEY, title);
+    }
+  } catch {
+    // localStorage 不可用时静默跳过
+  }
+}
+
+/** 读取全局最近一次选中的思考强度偏好 */
+export function loadGlobalThinkingPref(): string | null {
+  try {
+    return localStorage.getItem(GLOBAL_THINKING_PREF_KEY);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 统一解析生效的思考档位（SSOT 单一真理源）：
+ * 优先级 1: 当前会话显式设定的 thinkingTitle（会话临时覆盖）
+ * 优先级 2: 该模型本地持久化保存的思考强度（跨会话记忆，用户设置绝对优先）
+ * 优先级 3: 用户最近一次全局设定的思考强度（跨模型继承意图）
+ * 未命中返回 null，交由 resolveThinkingHandoff 稳态计算。
+ */
+export function resolveEffectiveThinkingTitle(
+  sessionId?: string | null,
+  providerId?: string | null,
+  modelId?: string | null,
+): string | null {
+  const p = (providerId || '').trim();
+  const m = (modelId || '').trim();
+  const s = (sessionId || '').trim();
+
+  // 1. 会话临时覆盖
+  if (s) {
+    const sessionVal = getSessionThinkingTitle(s);
+    if (sessionVal != null && sessionVal.trim() !== '') {
+      return sessionVal.trim();
+    }
+  }
+
+  // 2. 该模型历史持久化偏好（用户设置绝对优先）
+  if (p && m) {
+    const modelPref = loadModelThinkingPref(p, m);
+    if (modelPref != null && modelPref.trim() !== '') {
+      return modelPref.trim();
+    }
+  }
+
+  // 3. 用户最近一次全局思考偏好（例如刚在另一个模型选了 High，切换过来优先继承 High）
+  const globalPref = loadGlobalThinkingPref();
+  if (globalPref != null && globalPref.trim() !== '') {
+    return globalPref.trim();
+  }
+
+  return null;
+}
+
+/**
+ * 统一持久化思考档位选择：
+ * 同时写入会话运行时、模型持久化存储与全局偏好，确保跨会话、重启后用户设置永不丢失。
+ */
+export function persistThinkingSelection(
+  sessionId: string | null | undefined,
+  providerId: string | null | undefined,
+  modelId: string | null | undefined,
+  title: string | null,
+): void {
+  const p = (providerId || '').trim();
+  const m = (modelId || '').trim();
+  const s = (sessionId || '').trim();
+
+  if (s) {
+    setSessionThinkingTitle(s, title);
+  }
+  if (p && m) {
+    saveModelThinkingPref(p, m, title);
+  }
+  saveGlobalThinkingPref(title);
 }

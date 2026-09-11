@@ -77,76 +77,20 @@ export type PickDefaultModelOptions = {
 };
 
 /**
- * 首次空库种子：只提供服务商壳，**不**硬编码具体模型 id。
- * 模型列表由用户扫描 / 手填；避免列表里永远挂着 mimo 等写死项。
- *
- * 注意：全部种子均按 **OpenAI-compatible** 路径消费。
- * 原生 family（anthropic / gemini）未接线前，引擎不会按官方 Anthropic/Gemini 协议发请求。
+ * 首次空库种子：**空列表**。
+ * 产品中立——不预置任何第三方服务商壳；用户在向导或设置中自填
+ * 名称 / Base URL / 密钥 / 协议。协议层只做 openai|anthropic 兼容。
  */
-export const DEFAULT_PROFILES: ProviderProfile[] = [
-  {
-    id: 'opencode-go',
-    name: 'OpenCode Go 订阅',
-    baseUrl: 'https://opencode.ai/zen/go/v1',
-    models: ['deepseek-v4-flash'],
-    hasKey: false,
-    enabled: true,
-  },
-  {
-    id: 'opencode-zen',
-    name: 'OpenCode Zen 订阅',
-    baseUrl: 'https://opencode.ai/zen/v1',
-    models: [],
-    hasKey: false,
-  },
-  {
-    id: 'deepseek',
-    name: 'DeepSeek 官方',
-    baseUrl: 'https://api.deepseek.com',
-    models: [],
-    hasKey: false,
-  },
-  {
-    id: 'qwen',
-    name: '千问 Qwen Portal',
-    baseUrl: 'https://portal.qwen.ai/v1',
-    models: [],
-    hasKey: false,
-  },
-  {
-    id: 'openai',
-    name: 'OpenAI 兼容',
-    baseUrl: 'https://api.openai.com/v1',
-    models: [],
-    hasKey: false,
-  },
-  {
-    // 非原生 Anthropic：引擎仅 OpenAI-compatible。
-    // baseUrl 请填兼容代理（LiteLLM / OpenRouter 等），不要填官方 api.anthropic.com。
-    id: 'anthropic',
-    name: 'Anthropic（OpenAI 兼容代理）',
-    // 空串：强制用户显式填写代理地址，避免误用官方原生端点走 OpenAI 路径。
-    baseUrl: '',
-    models: [],
-    hasKey: false,
-  },
-  {
-    id: 'flowbit',
-    name: 'Flowbit',
-    baseUrl: 'https://api.flowbit.me',
-    models: [],
-    hasKey: false,
-  },
-];
+export const DEFAULT_PROFILES: ProviderProfile[] = [];
 
-/** 导出只读默认壳，便于单测断言契约 */
+/** 导出只读默认壳，便于单测断言契约（恒为 []） */
 export function getDefaultProviderProfiles(): ProviderProfile[] {
   return DEFAULT_PROFILES.map((p) => ({ ...p, models: [...p.models] }));
 }
 
 /**
- * 已知壳 id → 中文/产品展示名（纯函数；不读 LS，不发事件）。
- * 自定义 id 无条目时由调用方回退到 name/id。
+ * 历史壳 id → 中文/产品展示名（仅兼容存量用户 LS 数据；不再种子化）。
+ * 新建 profile 一律 custom-*，展示名取 name 字段。
  */
 export const KNOWN_PROFILE_LABELS: Readonly<Record<string, string>> = {
   'opencode-go': 'OpenCode Go 订阅',

@@ -156,6 +156,13 @@ export function applyFontStacks(prefs: FontPreferences, platform: PlatformId = d
   html.style.setProperty('--font-sans', uiStack);
   html.style.setProperty('--font-mono', monoStack);
   html.style.setProperty('--font-mono-features', lig);
+  html.style.setProperty('--md-font-family', uiStack);
+  html.style.setProperty('--md-font-sans', uiStack);
+  html.style.setProperty('--md-text-font', uiStack);
+  html.style.setProperty('--md-font-mono', monoStack);
+  html.style.setProperty('--md-code-font', monoStack);
+  html.style.setProperty('--sep-font-sans', uiStack);
+  html.style.setProperty('--sep-font-mono', monoStack);
 
   html.setAttribute('data-ui-font', p.uiFont.startsWith('local:') ? 'local' : p.uiFont);
   html.setAttribute('data-mono-font', p.monoFont.startsWith('local:') ? 'local' : p.monoFont);

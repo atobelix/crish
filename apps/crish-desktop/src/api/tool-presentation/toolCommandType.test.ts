@@ -111,14 +111,13 @@ describe('toolCommandIcon（最小 kind→图标表）', () => {
       'misc',
     ];
     for (const k of kinds) {
-      expect(TOOL_COMMAND_ICONS[k], `kind=${k}`).toBeTypeOf('object');
+      expect(TOOL_COMMAND_ICONS[k], `kind=${k}`).toBeTypeOf('string');
     }
   });
 
-  it('toolCommandIcon(kind) 返回对应表项；未知 kind 走 Wrench 兜底', () => {
+  it('toolCommandIcon(kind) 返回对应表项；未知 kind 走 wrench 兜底', () => {
     expect(toolCommandIcon('shell')).toBe(TOOL_COMMAND_ICONS.shell);
     expect(toolCommandIcon('misc')).toBe(TOOL_COMMAND_ICONS.misc);
-    // 兜底路径：表缺项时返回 Wrench（与现状 CircleDot 兜底语义不冲突）
     expect(toolCommandIcon('unknown' as ToolCommandKind)).toBe(
       TOOL_COMMAND_ICONS.misc
     );
