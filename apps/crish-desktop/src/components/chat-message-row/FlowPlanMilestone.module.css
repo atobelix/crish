@@ -30,7 +30,7 @@
   bottom: calc(var(--plan-gap) * -1);
   left: 7.625px;
   width: 0.75px;
-  background-color: var(--border-color, rgba(0, 0, 0, 0.15));
+  background-color: var(--border-color);
   z-index: 0;
 }
 

@@ -40,33 +40,29 @@
   overflow: hidden;
   user-select: none;
   font-family: inherit;
-  font-size: var(--font-size-sm, 13px);
+  font-size: 14px;
   line-height: 24px;
-  color: var(--text-secondary);
-  opacity: 0.4;
+  color: var(--text-tertiary);
   text-align: left;
-  transition:
-    opacity var(--transition-fast, 150ms ease),
-    color var(--transition-fast, 150ms ease);
+  transition: color var(--transition-fast, 150ms ease);
 }
 
 .reasoningRow:hover,
 .reasoningRow:focus-visible {
-  opacity: 1;
   color: var(--text-primary);
   background: transparent;
 }
 
 .reasoningContainer.isLive .reasoningRow,
 .reasoningContainer[data-live='true'] .reasoningRow {
-  opacity: 0.85;
+  color: var(--text-secondary);
 }
 
 /* Conex §13 双层微弱焦点软环规范（对比度上限约 10%） */
 .reasoningRow:focus-visible {
   outline: none;
   box-shadow:
-    0 0 0 0.5px color-mix(in srgb, var(--text-primary) 6%, transparent),
+    0 0 0 0.5px var(--border-subtle),
     0 0 0 2px color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
   border-radius: var(--radius-sm, 4px);
 }
@@ -101,7 +97,8 @@
 
 /* 静态语义标签 */
 .reasoningLabel {
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
+  font-size: 14px;
   color: var(--text-secondary);
   flex-shrink: 0;
   pointer-events: none;
@@ -116,6 +113,7 @@
 .dotSeparator {
   flex-shrink: 0;
   margin: 0 4px;
+  font-size: 14px;
   color: var(--text-tertiary);
   pointer-events: none;
   user-select: none;
@@ -126,8 +124,8 @@
   min-width: 0;
   overflow: hidden;
   flex: 1 1 auto;
-  color: var(--text-secondary);
-  font-size: var(--font-size-sm, 13px);
+  color: inherit;
+  font-size: 14px;
   line-height: 24px;
   white-space: nowrap;
 }
@@ -137,7 +135,8 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--text-secondary);
+  font-size: 14px;
+  color: inherit;
 }
 
 /* 右对齐打字机动态跟随：靠右硬截断，让左侧较早文字溢出可视边界外 */
@@ -177,7 +176,7 @@
 .sweepShine {
   animation: sweep-shine 2.6s ease-in-out infinite;
   color: var(--text-secondary);
-  font-weight: 400;
+  font-weight: var(--font-weight-normal);
 }
 
 /* 无障碍降级：系统偏好减弱动态效果时关停扫光 */
@@ -199,7 +198,7 @@
 .durationBadge {
   font-variant-numeric: tabular-nums;
   color: var(--text-tertiary);
-  font-size: var(--font-size-sm, 13px);
+  font-size: 14px;
   line-height: 24px;
   flex-shrink: 0;
   white-space: nowrap;
@@ -239,13 +238,13 @@
   overflow: visible;
   height: auto;
   max-height: none;
-  opacity: 0.4;
-  transition: opacity var(--transition-fast, 150ms ease);
+  color: var(--text-tertiary);
+  transition: color var(--transition-fast, 150ms ease);
 }
 
 .reasoningBody:hover,
 .reasoningBody:focus-within {
-  opacity: 1;
+  color: var(--text-secondary);
 }
 
 .reasoningActions {
@@ -279,15 +278,15 @@
 .copyButton:focus-visible {
   outline: none;
   box-shadow:
-    0 0 0 0.5px color-mix(in srgb, var(--text-primary) 6%, transparent),
+    0 0 0 0.5px var(--border-subtle),
     0 0 0 2px color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
 }
 
 .reasoningContent {
   width: 100%;
   box-sizing: border-box;
-  color: var(--text-secondary);
-  font-size: var(--font-size-sm, 13px);
+  color: inherit;
+  font-size: 14px;
   line-height: 1.65;
   user-select: text;
   overflow: visible;
@@ -308,8 +307,7 @@
 
 .thinkingSep {
   margin: 0 2px;
-  color: inherit;
-  opacity: 0.6;
+  color: var(--text-faint);
 }
 
 .thinkingTick {

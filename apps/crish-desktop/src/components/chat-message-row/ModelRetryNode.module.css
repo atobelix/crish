@@ -25,8 +25,8 @@
 .retrySummary::after {
   width: 5px;
   height: 5px;
-  border-right: 1.5px solid currentcolor;
-  border-bottom: 1.5px solid currentcolor;
+  border-right: var(--md-task-check-stroke, 2px) solid currentcolor;
+  border-bottom: var(--md-task-check-stroke, 2px) solid currentcolor;
   content: '';
   opacity: 0.7;
   transform: rotate(-45deg);

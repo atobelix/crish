@@ -107,7 +107,7 @@
 
 .root .tick:hover,
 .root:hover .tick:hover {
-  background-color: color-mix(in srgb, var(--text-primary) 45%, transparent);
+  background-color: var(--scrollbar-thumb-bg);
   width: 32px;
   z-index: 10;
 }
@@ -147,7 +147,7 @@
 
 .root .tick.isHoveredTick,
 .root:hover .tick.isHoveredTick {
-  background-color: color-mix(in srgb, var(--text-primary) 45%, transparent);
+  background-color: var(--scrollbar-thumb-bg);
   width: 32px;
   z-index: 10;
 }
@@ -262,7 +262,7 @@
 }
 
 .scrubberTooltipUserBtn:hover {
-  background-color: var(--tint-hover, color-mix(in srgb, var(--text-primary) 2.5%, transparent));
+  background-color: var(--tint-hover);
 }
 
 .scrubberTooltipUserText {
@@ -294,7 +294,7 @@
 }
 
 .scrubberTooltipAssistantBtn:hover {
-  background-color: var(--tint-hover, color-mix(in srgb, var(--text-primary) 2.5%, transparent));
+  background-color: var(--tint-hover);
 }
 
 .scrubberTooltipAssistantText {

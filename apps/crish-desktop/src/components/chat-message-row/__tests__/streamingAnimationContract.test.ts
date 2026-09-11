@@ -55,12 +55,12 @@ describe('Streaming Animation, Caret & Performance Tier Tokens Contract', () => 
 
   it('Light 模式高对比度：--stream-caret-color 必须锁定 --brand-deep (4.88:1)', () => {
     const lightSection = tokensCss.slice(tokensCss.indexOf("html[data-theme='light']"));
-    expect(lightSection).toContain('--stream-caret-color: var(--brand-deep, hsl(160 84% 31%));');
+    expect(lightSection).toContain('--stream-caret-color: var(--brand-deep);');
   });
 
   it('Dark 模式高对比度：--stream-caret-color 必须锁定 --brand (8.92:1)', () => {
     const darkSection = tokensCss.slice(tokensCss.indexOf("html[data-theme='dark']"));
-    expect(darkSection).toContain('--stream-caret-color: var(--brand, hsl(160 84% 45%));');
+    expect(darkSection).toContain('--stream-caret-color: var(--brand);');
   });
 
   it('性能分档折叠：data-perf-tier="eco" 必须将流式动画折叠为 0ms', () => {

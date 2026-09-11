@@ -1,7 +1,7 @@
 import React from 'react';
-import * as Lucide from 'lucide-react';
 import styles from './TurnErrorNode.module.css';
 import type { EphemeralErrorKind } from '../../store/ephemeralChatStore';
+import { AppIcon } from '../ui/icons/index';
 
 export interface TurnErrorNodeProps {
   kind?: EphemeralErrorKind;
@@ -40,7 +40,7 @@ export const TurnErrorNode: React.FC<TurnErrorNodeProps> = React.memo(
       >
         <div className={styles.headerRow}>
           <div className={styles.statusGroup}>
-            <Lucide.AlertCircle className={styles.errorIcon} aria-hidden />
+            <AppIcon name="alert-circle" className={styles.errorIcon} aria-hidden />
             <span className={styles.errorBadge}>{badgeLabel}</span>
             <span className={styles.errorMessage}>{message}</span>
           </div>
@@ -51,7 +51,7 @@ export const TurnErrorNode: React.FC<TurnErrorNodeProps> = React.memo(
                 className={styles.btnRetryTurn}
                 onClick={onRetryTurn}
               >
-                <Lucide.RotateCw size={12} aria-hidden />
+                <AppIcon name="rotate-cw" size={12} aria-hidden />
                 <span>重试此轮</span>
               </button>
             </div>

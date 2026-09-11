@@ -27,7 +27,7 @@
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #10b981;
+  background: var(--brand);
   box-shadow: 0 0 6px hsl(158 64% 52% / 0.6);
   animation: pulse-ring 1.6s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   flex-shrink: 0;
@@ -52,14 +52,12 @@
 }
 
 .separator {
-  color: var(--text-tertiary);
-  opacity: 0.6;
+  color: var(--text-faint);
 }
 
 .timer {
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: var(--font-size-micro, 11px);
-  color: var(--text-tertiary);
+  color: var(--text-faint);
   font-variant-numeric: tabular-nums;
-  opacity: 0.85;
 }

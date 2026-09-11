@@ -83,12 +83,12 @@
 /* 活跃单元格呼吸脉冲动画定义 (GPU 硬件加速) */
 @keyframes md-table-pulse {
   0%, 100% {
-    outline-color: var(--stream-table-active-border, color-mix(in srgb, var(--accent-color) 48%, var(--border-color)));
-    box-shadow: var(--stream-table-active-glow, 0 0 0 1px color-mix(in srgb, var(--accent-color) 18%, transparent));
+    outline-color: color-mix(in srgb, var(--accent-color) 48%, var(--border-color));
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-color) 18%, transparent);
     background-color: var(--stream-table-active-bg, color-mix(in srgb, var(--accent-color) 6%, transparent));
   }
   50% {
-    outline-color: color-mix(in srgb, var(--stream-table-active-border, color-mix(in srgb, var(--accent-color) 48%, var(--border-color))) 35%, transparent);
+    outline-color: color-mix(in srgb, color-mix(in srgb, var(--accent-color) 48%, var(--border-color)) 35%, transparent);
     box-shadow: 0 0 0 0 transparent;
     background-color: color-mix(in srgb, var(--stream-table-active-bg, color-mix(in srgb, var(--accent-color) 6%, transparent)) 25%, transparent);
   }
@@ -99,11 +99,11 @@
 .tableContainerRoot[data-table-streaming='true'] .tableScrollViewport :global(.md-table) tbody tr:last-child td:last-child,
 .tableContainerRoot[data-table-streaming='true'] .tableScrollViewport :global(.md-table) tbody tr:last-child :global(.md-td:last-child) {
   position: relative;
-  outline: 1px dashed var(--stream-table-active-border, color-mix(in srgb, var(--accent-color) 48%, var(--border-color)));
+  outline: 1px dashed color-mix(in srgb, var(--accent-color) 48%, var(--border-color));
   outline-offset: -1px;
-  box-shadow: var(--stream-table-active-glow, 0 0 0 1px color-mix(in srgb, var(--accent-color) 18%, transparent));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-color) 18%, transparent);
   background-color: var(--stream-table-active-bg, color-mix(in srgb, var(--accent-color) 6%, transparent));
-  animation: md-table-pulse var(--stream-table-pulse-duration, 1.6s) var(--stream-table-pulse-timing, cubic-bezier(0.16, 1, 0.3, 1)) infinite;
+  animation: md-table-pulse 1.6s var(--stream-anim-easing) infinite;
   will-change: outline-color, box-shadow, background-color;
 }
 

@@ -4,7 +4,7 @@
  *
  * 特性：
  * - 产物芯片（ArtifactCapsule）：`📄 已生成 PE-08-session-loop-ipc-batcher`
- *   - 呈现为高级的翡翠绿下划线超链接（color: var(--brand-deep, #059669)）；
+ *   - 呈现为高级的翡翠绿下划线超链接（color: var(--brand-deep)）；
  *   - Hover 时加深，点击分流至右侧面板或打开 Notebook 预览；
  * - 实时同步行（SyncLine）：
  *   - 正在同步：`🟢 正在同步 batcher.rs 与前端虚拟列表渲染管线...`（1.4s 呼吸绿点）；

@@ -33,7 +33,7 @@
 
 .miss {
   color: var(--text-tertiary);
-  background: color-mix(in srgb, var(--text-primary) 4%, transparent);
+  background: var(--tint-hover);
   border: 1px solid var(--border-subtle);
 }
 

@@ -1,9 +1,10 @@
 import React from 'react';
-import { Check, Copy, RefreshCw } from 'lucide-react';
+
 import styles from './ChatMessageRow.module.css';
 import { Button, Tooltip } from '../ui';
 import { formatMsgTime } from './chatMessageRowUtils';
 import { RetractActionButton } from './RetractActionButton';
+import { AppIcon } from '../ui/icons/index';
 
 // ─── Assistant Message Meta Actions Bar ─────────────────────────────────────
 
@@ -44,7 +45,7 @@ export const AssistantMessageActionsBar: React.FC<
           className={`${styles.iconBtn}${copied ? ` ${styles.isCopied}` : ''}`}
           aria-label={copied ? '已复制' : '复制正文'}
           onClick={onCopy}
-          icon={copied ? <Check size={14} /> : <Copy size={14} />}
+          icon={copied ? <AppIcon name="check" size={14} /> : <AppIcon name="copy" size={14} />}
         />
       </Tooltip>
       {isLastAssistant && onRegenerate ? (
@@ -56,7 +57,7 @@ export const AssistantMessageActionsBar: React.FC<
             className={styles.iconBtn}
             aria-label="重新生成"
             onClick={onRegenerate}
-            icon={<RefreshCw size={14} />}
+            icon={<AppIcon name="refresh" size={14} />}
           />
         </Tooltip>
       ) : null}

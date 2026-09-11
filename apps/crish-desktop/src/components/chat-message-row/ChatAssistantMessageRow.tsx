@@ -10,7 +10,7 @@ import { useToast } from '../../services/toast/ToastContext';
  * - 展开或收拢思考/工具时，联动 ResizeObserver 触发 VSM 树状数组动态测高自愈，零重排撕裂；
  * - 保持 assistantRowPropsEqual 比较契约与 memo 完整性。
  */
-import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import styles from './ChatMessageRow.module.css';
 import { assistantCopyText } from '../../api/toolPresentation';
 
@@ -78,24 +78,10 @@ const ChatAssistantMessageRowInner: React.FC<
     []
   );
 
-  // 1. 节点级精确测高自愈：借助 ResizeObserver 联动 VSM 树状数组，零重排撕裂
-  useLayoutEffect(() => {
-    const el = rowRef.current;
-    if (!el || !virtualScrollManager) return;
-    const ro = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        // 统一度量入口（Plan 05 §2.2）：使用 el.offsetHeight 度量完整盒模型高度
-        const h = el.offsetHeight || Math.ceil(entry.contentRect.height);
-        if (h > 0) {
-          virtualScrollManager.setActual(msg.id, h);
-        }
-      }
-    });
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [msg.id, virtualScrollManager]);
+  // 测高单轨：禁止行级私有 RO 直写 manager.setActual（会绕过 actualTick → 总高/滚动条不更新）。
+  // 尺寸变化由 MessageVirtualizer 宿主 ResizeObserver → useVirtualScroll.setActual 统一回写。
 
-  // 2. 当内容落定、思考/工具折叠展开状态变化时，精确使旧实测高度失效，由 ResizeObserver 重新测量自愈
+  // 内容/折叠态变化 → 作废旧实测；宿主 RO 在尺寸变化时重测并触发 tick
   useEffect(() => {
     if (isThinkingMsg || msg.status === 'processing') return;
     virtualScrollManager?.invalidateActual(msg.id);
@@ -112,7 +98,7 @@ const ChatAssistantMessageRowInner: React.FC<
     virtualScrollManager,
   ]);
 
-  // 3. 增强 toolStackProps：工具展开/收起时立即作废旧测高，联动 ResizeObserver 动态测高自愈
+  // 增强 toolStackProps：工具展开/收起时立即作废旧测高，由宿主 RO 重测并触发 actualTick
   const augmentedToolStackProps = useMemo(() => {
     if (!toolStackProps) return toolStackProps;
     return {

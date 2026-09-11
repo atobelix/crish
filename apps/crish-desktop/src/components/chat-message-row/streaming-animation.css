@@ -30,9 +30,9 @@
   display: inline;
   will-change: opacity, transform;
   animation-name: conex-fade-in;
-  animation-duration: var(--sd-duration, var(--conex-duration, var(--stream-anim-word-fade, 100ms)));
+  animation-duration: var(--stream-anim-word-fade);
   animation-timing-function: var(--stream-anim-easing, cubic-bezier(0.16, 1, 0.3, 1));
-  animation-delay: var(--sd-delay, var(--conex-delay, 0ms));
+  animation-delay: 0ms;
   animation-fill-mode: both;
 }
 
@@ -51,7 +51,7 @@
 
 [data-conex-animate-marker]::marker,
 [data-sd-animate-marker]::marker {
-  animation: conex-marker-fade var(--sd-marker-duration, var(--conex-marker-duration, var(--stream-anim-marker-fade, 120ms))) ease var(--sd-marker-delay, var(--conex-marker-delay, 0ms)) both;
+  animation: conex-marker-fade var(--stream-anim-marker-fade) ease 0ms both;
 }
 
 /* ==========================================================================

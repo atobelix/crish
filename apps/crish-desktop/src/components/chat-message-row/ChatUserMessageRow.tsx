@@ -164,6 +164,7 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
   }, []);
 
   // 虚拟滚动高度同步与失效通知
+  // 展开/收起/正文变化 → invalidate；实测回写只允许经宿主 RO → useVirtualScroll.setActual（触发 actualTick）
   useEffect(() => {
     if (msg.status === 'processing') return;
     virtualScrollManager?.invalidateActual(msg.id);
@@ -173,15 +174,11 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
     msg.status,
     msg.images,
     msg.attachments,
+    isExpanded,
     virtualScrollManager,
   ]);
 
   const rowRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!virtualScrollManager || !rowRef.current) return;
-    const h = rowRef.current.offsetHeight;
-    if (h > 0) virtualScrollManager.setActual(msg.id, h);
-  });
 
   const handleCopy = useCallback(() => {
     const text = msg.text || '';

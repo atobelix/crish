@@ -1,6 +1,7 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import styles from './ChatMessageRow.module.css';
 import { useAsyncMarkdownHtml } from '../../api/markdownRenderAsync';
+import { getMarkdownHtmlCache } from '../../api/markdownCache';
 import {
   applyCodeIndentToRenderedRoot,
   normalizeCodeBlockIndent,
@@ -122,13 +123,23 @@ export const MarkdownBlockItem = React.memo(function MarkdownBlockItem({
         textNodeRef.current = null;
         el.textContent = activeContent;
       } else if (isSealed) {
-        // 封口块异步编译过渡期：保持原位纯文本垫片，锁死盒模型高度，彻底杜绝骨架屏与 CLS
+        // 封口块：禁止把 Markdown 源码画给用户。优先同步吃 LRU 已缓存 HTML；
+        // 未命中则空容器等待 Rust/worker 就绪，绝不显示源码。
         if (el.getAttribute('data-has-html') !== 'true') {
-          el.textContent = text;
+          const cached = getMarkdownHtmlCache(text);
+          if (cached) {
+            el.innerHTML = cached;
+            el.setAttribute('data-has-html', 'true');
+            applyCodeIndentToRenderedRoot(el, codeIndent);
+            el.style.visibility = '';
+          } else {
+            el.textContent = '';
+            el.style.visibility = '';
+          }
         }
       }
     }
-  }, [text, activeContent, isSealed, isActiveTail, html, failed, isTurboMode]);
+  }, [text, activeContent, isSealed, isActiveTail, html, failed, isTurboMode, codeIndent]);
 
   // 3. 封口完成态异步 HTML 原地原子替换
   useEffect(() => {
@@ -136,6 +147,7 @@ export const MarkdownBlockItem = React.memo(function MarkdownBlockItem({
     if (!el || !isSealed) return;
     if (failed) {
       el.removeAttribute('data-has-html');
+      el.style.visibility = '';
       return; // 失败回退走 JSX fallback pre 节点
     }
     if (!html) return;
@@ -143,6 +155,7 @@ export const MarkdownBlockItem = React.memo(function MarkdownBlockItem({
     textNodeRef.current = null;
     el.innerHTML = html;
     el.setAttribute('data-has-html', 'true');
+    el.style.visibility = '';
     applyCodeIndentToRenderedRoot(el, codeIndent);
   }, [html, isSealed, failed, codeIndent]);
 

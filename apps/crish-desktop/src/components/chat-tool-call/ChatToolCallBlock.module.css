@@ -436,7 +436,7 @@
   padding: 6px 8px;
   margin: 2px 0;
   border-radius: var(--radius-xl);
-  background: color-mix(in srgb, var(--text-primary) 3%, transparent);
+  background: var(--tint-hover);
   border: 1px solid var(--border-subtle);
 }
 
@@ -566,7 +566,7 @@
   gap: 4px;
   font-size: var(--font-size-xs, 12px);
   font-weight: var(--font-weight-normal, 400);
-  border-radius: var(--button-radius, 8px);
+  border-radius: var(--button-radius, 7px);
   color: var(--text-secondary);
   background: transparent;
   border: 1px solid transparent;

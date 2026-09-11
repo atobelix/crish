@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Check, Pin, PinOff, RotateCcw } from 'lucide-react';
+
 import styles from './ChatMessageRow.module.css';
 import { Button, Tooltip, Input } from '../ui';
 import { pinToggleLabels } from './chatMessageRowUtils';
@@ -14,6 +14,7 @@ import {
 
 export { DEFAULT_PIN_COLOR, PRESET_PIN_COLORS };
 export type { PinColorOption } from './colorPickerUtils';
+import { AppIcon } from '../ui/icons/index';
 
 export interface PinActionWithPickerProps {
   isPinned: boolean;
@@ -301,7 +302,7 @@ export const PinActionWithPicker: React.FC<PinActionWithPickerProps> = React.mem
             aria-label={pinLabels.ariaLabel}
             aria-pressed={isPinned}
             onClick={handleMainClick}
-            icon={isPinned ? <PinOff size={14} /> : <Pin size={14} />}
+            icon={isPinned ? <AppIcon name="pin-off" size={14} /> : <AppIcon name="pin" size={14} />}
           />
         </Tooltip>
 
@@ -336,7 +337,7 @@ export const PinActionWithPicker: React.FC<PinActionWithPickerProps> = React.mem
                               onClick={() => handleSelectColor(c.value)}
                             >
                               {isSelected ? (
-                                <Check size={10} color="#fff" strokeWidth={3} />
+                                <AppIcon name="check" size={10} color="#fff" />
                               ) : null}
                             </button>
                           </Tooltip>
@@ -352,7 +353,7 @@ export const PinActionWithPicker: React.FC<PinActionWithPickerProps> = React.mem
                           aria-expanded={isExpanded}
                         >
                           {isExpanded || isCustomSelected ? (
-                            <Check size={10} color="#fff" strokeWidth={3} />
+                            <AppIcon name="check" size={10} color="#fff" />
                           ) : null}
                         </button>
                       </Tooltip>
@@ -408,7 +409,7 @@ export const PinActionWithPicker: React.FC<PinActionWithPickerProps> = React.mem
                             onClick={handleResetDefault}
                             aria-label="重置为默认绿色"
                           >
-                            <RotateCcw size={11} strokeWidth={2.5} />
+                            <AppIcon name="rotate-ccw" size={11} />
                             <span>重置</span>
                           </button>
                         </Tooltip>

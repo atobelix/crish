@@ -255,7 +255,7 @@
 /* Hover 状态：不位移跳动、不染主题色，仅微背景响应与纯净发丝边框 */
 .quickPromptCard:hover,
 .sessionEmpty .quickPromptCard:hover {
-  background: color-mix(in srgb, var(--text-primary) 3.5%, var(--bg-card, var(--bg-secondary)));
+  background: var(--bg-card-hover);
   border-color: var(--border-subtle);
 }
 
@@ -266,7 +266,7 @@
 
 .quickPromptCard:active,
 .sessionEmpty .quickPromptCard:active {
-  background: color-mix(in srgb, var(--text-primary) 6.5%, var(--bg-card, var(--bg-secondary)));
+  background: var(--bg-card-active);
 }
 
 .quickPromptCard:focus-visible {

@@ -59,7 +59,7 @@
 .chatScrollFab:focus-visible {
   outline: none;
   box-shadow:
-    0 0 0 0.5px color-mix(in srgb, var(--text-primary) 6%, transparent),
+    0 0 0 0.5px var(--border-subtle),
     0 0 0 2px color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
 }
 
@@ -75,7 +75,7 @@
   height: 14px;
   min-width: 14px;
   padding: 0 3px;
-  border-radius: 7px;
+  border-radius: var(--radius-full, 9999px);
   text-align: center;
   box-sizing: border-box;
 }

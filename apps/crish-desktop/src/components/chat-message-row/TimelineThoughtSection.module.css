@@ -22,41 +22,51 @@
   background: transparent;
   cursor: pointer;
   font-family: inherit;
-  font-size: var(--font-size-sm, 13px);
+  font-size: 14px;
   line-height: 1.5;
-  color: var(--text-secondary);
-  opacity: 0.4;
+  color: var(--text-tertiary);
   text-align: left;
   box-sizing: border-box;
   user-select: none;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
-  transition:
-    opacity var(--transition-fast, 150ms ease),
-    color var(--transition-fast, 150ms ease);
+  transition: color var(--transition-fast, 150ms ease);
 }
 
 .thoughtHeaderBtn:hover,
 .thoughtHeaderBtn:focus-visible {
   color: var(--text-primary);
-  opacity: 1;
   background: transparent;
 }
 
 .thoughtTimelineSection.isLive .thoughtHeaderBtn {
-  opacity: 0.85;
+  color: var(--text-secondary);
 }
 
 .thoughtTimelineSection.isLive .thoughtTitle {
   color: var(--text-secondary);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
 }
 
 .thoughtTitle {
-  font-weight: 400;
+  font-weight: var(--font-weight-normal);
+  font-size: 14px;
   color: inherit;
   flex: 0 0 auto;
+  pointer-events: none;
+}
+
+.thoughtSummary {
+  display: inline-block;
+  color: inherit;
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  max-width: min(560px, calc(100% - 110px));
+  flex: 0 1 auto;
   pointer-events: none;
 }
 
@@ -73,22 +83,9 @@
 
 .thoughtDotSeparator {
   margin: 0 4px;
-  color: var(--text-tertiary);
-  opacity: 0.6;
+  color: var(--text-faint);
+  font-size: 14px;
   flex-shrink: 0;
-}
-
-.thoughtSummary {
-  display: inline-block;
-  color: var(--text-tertiary);
-  font-size: var(--font-size-xs, 12px);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  min-width: 0;
-  max-width: min(560px, calc(100% - 110px));
-  flex: 0 1 auto;
-  pointer-events: none;
 }
 
 .thoughtMeta {
@@ -96,7 +93,7 @@
   align-items: center;
   gap: 2px;
   color: inherit;
-  font-size: var(--font-size-sm, 13px);
+  font-size: 14px;
   font-variant-numeric: tabular-nums;
   flex: 0 1 auto;
 }
@@ -115,8 +112,7 @@
 
 .thinkingSep {
   margin: 0 2px;
-  color: inherit;
-  opacity: 0.6;
+  color: var(--text-faint);
 }
 
 .thinkingTick {
@@ -158,17 +154,17 @@
 
 .thoughtAccordionInner {
   overflow: hidden;
-  opacity: 0;
-  transition: opacity 150ms ease;
+  color: var(--text-tertiary);
+  transition: color 150ms ease;
 }
 
 .thoughtAccordion[data-expanded='true'] .thoughtAccordionInner {
-  opacity: 0.4;
-  transition: opacity var(--transition-fast, 150ms ease);
+  color: var(--text-tertiary);
+  transition: color var(--transition-fast, 150ms ease);
 }
 
 .thoughtAccordion[data-expanded='true'] .thoughtAccordionInner:hover {
-  opacity: 1;
+  color: var(--text-secondary);
 }
 
 .thinkingBodyContainer {
@@ -183,9 +179,9 @@
   overflow: visible;
   padding: 6px 0 10px;
   margin: 0;
-  font-size: var(--font-size-sm, 13px);
+  font-size: 14px;
   line-height: 1.65;
-  color: var(--text-secondary);
+  color: inherit;
   white-space: pre-wrap;
   word-break: break-word;
   border: none;

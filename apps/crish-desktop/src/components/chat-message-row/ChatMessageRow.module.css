@@ -117,7 +117,7 @@
 
 .userBubble {
   /* DIM-01 §1.3: 统一类输入框卡片结构，5.5% 灰度混入保持气泡底色，消除图文分离 */
-  background: color-mix(in srgb, var(--text-primary) 3.9%, var(--bg-card));
+  background: var(--bg-card-hover);
   color: var(--text-primary);
   border: none;
   border-radius: var(--radius-xl, 16px);
@@ -209,7 +209,7 @@
 .time {
   font-size: 11px;
   font-weight: var(--font-weight-normal);
-  color: color-mix(in srgb, var(--text-primary) 45%, transparent);
+  color: var(--text-faint);
   margin-right: 4px;
   font-variant-numeric: tabular-nums;
   user-select: none;
@@ -377,7 +377,7 @@
   padding: var(--md-code-inline-padding, 0.15em 0.4em);
   margin: 0 0.2em;
   border-radius: var(--md-code-inline-radius, 4px);
-  background: color-mix(in srgb, var(--text-primary) 3.5%, var(--bg-card));
+  background: var(--bg-card-hover);
   color: var(--md-code-inline-fg);
   border: none;
   word-break: break-word;
@@ -474,8 +474,8 @@
   content: '';
   width: 4px;
   height: 8px;
-  border: solid var(--text-on-accent, hsl(0 0% 100%));
-  border-width: 0 1.5px 1.5px 0;
+  border: solid var(--text-on-accent);
+  border-width: 0 var(--md-task-check-stroke, 2px) var(--md-task-check-stroke, 2px) 0;
   transform: rotate(45deg) translate(-0.5px, -0.5px);
 }
 
@@ -569,7 +569,7 @@
   pointer-events: none;
   padding: 1px 6px;
   border-radius: var(--radius-sm, 4px);
-  background: color-mix(in srgb, var(--text-primary) 5%, transparent);
+  background: var(--tint-active);
   line-height: 1.3;
 }
 
@@ -642,7 +642,7 @@
 }
 
 .assistantText :global(.md-code-copy.is-copied) {
-  color: var(--brand, hsl(160 84% 39%));
+  color: var(--brand);
   border-color: color-mix(in srgb, var(--brand) 40%, transparent);
   background: color-mix(in srgb, var(--brand) 8%, var(--bg-card));
   opacity: 1;
@@ -723,7 +723,7 @@
   border: none;
   background: transparent;
   border-radius: var(--button-radius, 7px);
-  color: color-mix(in srgb, var(--text-primary) 45%, transparent);
+  color: var(--text-faint);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -742,7 +742,7 @@
 
 .iconBtn:hover {
   background: transparent;
-  color: color-mix(in srgb, var(--text-primary) 60%, transparent);
+  color: var(--text-secondary);
   transform: none;
 }
 
@@ -771,17 +771,17 @@
 }
 
 .userBubblePinned {
-  background: color-mix(in srgb, var(--user-bubble-pin-color, #10b981) 6%, var(--bg-card)) !important;
-  border-color: color-mix(in srgb, var(--user-bubble-pin-color, #10b981) 26%, var(--border-color)) !important;
+  background: color-mix(in srgb, var(--user-bubble-pin-color) 6%, var(--bg-card)) !important;
+  border-color: color-mix(in srgb, var(--user-bubble-pin-color) 26%, var(--border-color)) !important;
 }
 
 .iconBtn.isPinnedActive {
-  color: var(--active-pin-color, #10b981);
+  color: var(--active-pin-color);
   opacity: 1;
 }
 
 .iconBtn.isCopied {
-  color: color-mix(in srgb, var(--text-primary) 85%, transparent);
+  color: var(--text-primary);
   opacity: 1;
 }
 
@@ -877,7 +877,7 @@
 }
 .skeletonLine {
   height: var(--font-size-base);
-  border-radius: 3px;
+  border-radius: var(--radius-xs, 2px);
   background: linear-gradient(
     90deg,
     var(--bg-secondary) 25%,
@@ -897,12 +897,12 @@
 }
 
 .iconBtn.isPinnedActive {
-  color: var(--active-pin-color, #10b981);
+  color: var(--active-pin-color);
 }
 
 .iconBtn.isPinnedActive:hover {
-  color: var(--active-pin-color, #10b981);
-  background-color: color-mix(in srgb, var(--active-pin-color, #10b981) 12%, transparent);
+  color: var(--active-pin-color);
+  background-color: color-mix(in srgb, var(--active-pin-color) 12%, transparent);
 }
 
 .pinPickerPopover {
@@ -911,7 +911,7 @@
   flex-direction: column;
   gap: 6px;
   padding: 5px;
-  background: var(--bg-card, #ffffff);
+  background: var(--bg-card);
   border: 1px solid color-mix(in srgb, var(--border-color) 75%, transparent);
   border-radius: var(--radius-full, 9999px);
   box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.12), 0 2px 6px -1px rgba(0, 0, 0, 0.06);
@@ -948,7 +948,7 @@
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  border: 1.5px solid rgba(255, 255, 255, 0.95);
+  border: var(--border-width-emphasis, 2px) solid rgba(255, 255, 255, 0.95);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--border-color) 70%, transparent);
   cursor: pointer;
   padding: 0;
@@ -973,13 +973,13 @@
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  border: 1.5px solid rgba(255, 255, 255, 0.95);
+  border: var(--border-width-emphasis, 2px) solid rgba(255, 255, 255, 0.95);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--border-color) 70%, transparent);
   /* 钉选色轮调色板：与 PRESET_PIN_COLORS 对齐；翡翠绿位走 brand token fallback */
   background: conic-gradient(
     #f43f5e 0deg,
     #f59e0b 60deg,
-    var(--brand, #10b981) 120deg,
+    var(--brand) 120deg,
     #0ea5e9 180deg,
     #8b5cf6 240deg,
     #ec4899 300deg,
@@ -1027,7 +1027,7 @@
   touch-action: none;
   background:
     linear-gradient(to bottom, transparent, #000000),
-    linear-gradient(to right, #ffffff, var(--palette-pure-hue, #10b981));
+    linear-gradient(to right, #ffffff, var(--palette-pure-hue));
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
   overflow: hidden;
   box-sizing: border-box;
@@ -1072,7 +1072,7 @@
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: #ffffff;
+  background: var(--surface-overlay-fg);
   border: 2px solid var(--text-primary);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
   cursor: pointer;
@@ -1109,7 +1109,7 @@
 }
 
 .pinResetBtn:hover {
-  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  background: var(--tint-active);
   color: var(--text-primary);
 }
 

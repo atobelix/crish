@@ -18,11 +18,10 @@ html.preload *:not(.app-initial-loader, .app-initial-loader *)::after {
 :root {
   /* 响应式断点权威单一真源 (SSOT) */
 
-  /* 几何尺寸与圆角契约 (锁定 8px 按钮圆角与 9999px 胶囊圆角) */
-  --button-radius: 8px;
+  /* 几何尺寸与圆角契约 (锁定 7px 按钮圆角与 9999px 胶囊圆角；U1 用户锁) */
   --radius-full: 9999px;
-  --seg-outer-radius: var(--button-radius, 8px);
-  --seg-inner-radius: var(--button-radius, 8px);
+  --seg-outer-radius: var(--button-radius, 7px);
+  --seg-inner-radius: var(--button-radius, 7px);
 
   /* 悬空兼容易错别名兜底安全网 */
   --color-text-dim: var(--text-tertiary);
@@ -105,20 +104,6 @@ html[data-theme='light'] {
   /* 轨道背景：完全透明，消除轨道占位边缘对内容的侵入感 */
   --scrollbar-track-bg: transparent;
 
-  /* 端点微型矢量三角按钮前景色：继承未激活滑块色，悬停/激活随滑块同步沉稳加深 */
-  --scrollbar-button-color: var(--scrollbar-thumb-bg);
-  --scrollbar-button-hover-color: var(--scrollbar-thumb-active);
-  --scrollbar-button-hover-bg: color-mix(
-    in srgb,
-    var(--text-primary) 5%,
-    transparent
-  );
-  --scrollbar-button-active-bg: color-mix(
-    in srgb,
-    var(--text-primary) 10%,
-    transparent
-  );
-
   /* --- 2. 四级宽度 Token 体系 (Four-Tier Width System，包含 2px 右侧防误触间距) --- */
   --scrollbar-width-xs: 6px; /* 超细纤薄型：滑块净宽 4px + 2px 边距 */
   --scrollbar-width-sm: 7px; /* 紧凑型：滑块净宽 5px + 2px 边距 */
@@ -129,11 +114,8 @@ html[data-theme='light'] {
   --scrollbar-width: var(--scrollbar-width-md);
   --scrollbar-thumb-width: var(--scrollbar-width);
 
-  /* --- 3. 几何与端点护栏尺寸 Token (Geometry & Endcap Guardrails) --- */
+  /* --- 3. 几何与圆角 Token (Geometry) --- */
   --scrollbar-thumb-radius: var(--radius-full, 9999px); /* 胶囊圆角，保证两端半圆完全对称 */
-  --scrollbar-thumb-min-size: 18px; /* 最小滑块尺寸，防止极短滑块抓取失灵 */
-  --scrollbar-button-size: var(--scrollbar-width); /* 端点安全按钮尺寸 (长边)，激活 Blink TrackRect 端点护栏 */
-  --scrollbar-button-arrow-size: 4px; /* 内部等腰圆角微型三角矢量长边 */
 
   /* --- 向后兼容别名安全网 (Deprecated Aliases Bridge) ---
      警告：以下别名仅供存量代码渐进过渡，全新业务严禁直接引用，将在维度 6 门禁收口后全面废弃 */
@@ -292,7 +274,6 @@ html[data-theme='light'] {
   --ui-text-muted: var(--text-tertiary);
   --ui-text-info: var(--color-info);
   --ui-text-warning: var(--text-warning-strong);
-  --ui-text-primary: inherit;
 
   /* Windows caption close (shared by app top bar + inset chrome) */
 
@@ -351,12 +332,18 @@ html[data-theme='light'] {
   /* 刻度新增：设置/按钮恒 7px（用户锁；来源 docs/desktop-ui-repair/survey/04-*） */
   --radius-circle: 50%; /* Avatar 等正圆；被 ModelsSettingsTab 等消费 */
   --radius-btn: 7px;
+  --button-radius: var(--radius-btn); /* :root 唯一权威定义（U1）；密度档/主题块禁止覆写 */
   --radius-xs: 2px; /*            (2px) */
   --radius-sm: 4px; /*      (IconButton)      (Badge)    (Kbd) (4px) */
   --radius-md: 6px; /*            Tab     Select     (6px) */
   --radius-lg: 8px; /*           Content        (8px) */
   --radius-xl: 12px; /*               (12px) */
   --radius-2xl: 12px; /*      */
+  --radius-3xl: 24px; /* U2 新增：Composer 多行等 */
+  /* 语义场景契约 Token（Tier 2，BATCH-01 新增）：组件优先消费语义层 */
+  --composer-radius-single: 20px;
+  --composer-radius-multi: var(--radius-3xl);
+  --chat-bubble-radius: 16px;
   --composer-attach-card-radius: var(--radius-xl, 12px);
   --composer-attach-card-border: 1px solid var(--border-subtle);
   --composer-attach-card-bg: var(--bg-card, #ffffff);
@@ -419,10 +406,6 @@ html[data-theme='light'] {
   --font-mono:
     'Cascadia Mono', 'Cascadia Code', 'JetBrains Mono', 'Segoe UI Mono',
     'SF Mono', Consolas, 'Liberation Mono', ui-monospace, monospace;
-
-  /* 设置/按钮圆角锁（用户锁，盖过旧 8px 口径）：恒 7px，不随 data-ui-size 变化；
-     禁止再别名到 --radius-md 的 6px。来源：docs/desktop-ui-repair/survey/04-*。 */
-  --button-radius: var(--radius-btn);
 
   /* 响应式断点单一真源 (SSOT) */
   --breakpoint-sm: 640px;
@@ -664,7 +647,7 @@ html[data-theme='light'] {
 
 
   /* --- 5. 流式动效与打字机光标体系 (Light) --- */
-  --stream-caret-color: var(--brand-deep, hsl(160 84% 31%)); /* 4.88:1 WCAG AA */
+  --stream-caret-color: var(--brand-deep);
   --stream-caret-width: 2px;
   --stream-caret-height: 0.95em;
   --stream-caret-radius: 1px;
@@ -675,6 +658,10 @@ html[data-theme='light'] {
   --stream-anim-word-offset-y: 2px;
   --stream-anim-marker-fade: 120ms;
   --stream-anim-easing: cubic-bezier(0.16, 1, 0.3, 1);
+
+  --stream-pulse-glow: 0 0 0 3px color-mix(in srgb, var(--brand, hsl(160 84% 39%)) 16%, transparent);
+  --stream-pulse-bg: color-mix(in srgb, var(--brand, hsl(160 84% 39%)) 3%, transparent);
+  --stream-pulse-duration: 1.6s;
 
 
   /*         styles/z-index.css       */
@@ -708,6 +695,7 @@ html[data-theme='light'] {
   --space-4: 16px;
   --space-5: 20px;
   --space-6: 24px;
+  --space-7: 28px;
   --space-8: 32px;
   --space-10: 40px;
 
@@ -837,20 +825,6 @@ html[data-theme='dark'] {
 
   /* 暗色轨道背景：保持完全透明 */
   --scrollbar-track-bg: transparent;
-
-  /* 暗色端点按钮前景色与微交互底色 */
-  --scrollbar-button-color: var(--scrollbar-thumb-bg);
-  --scrollbar-button-hover-color: var(--scrollbar-thumb-active);
-  --scrollbar-button-hover-bg: color-mix(
-    in srgb,
-    var(--text-primary) 8%,
-    transparent
-  );
-  --scrollbar-button-active-bg: color-mix(
-    in srgb,
-    var(--text-primary) 15%,
-    transparent
-  );
 
   /* 向后兼容别名安全网 */
   --tint-scrollbar-thumb: var(--scrollbar-thumb-bg);
@@ -1065,7 +1039,6 @@ html[data-theme='dark'] {
   --ui-text-muted: #a3a3a3;
   --ui-text-info: #74c0fc;
   --ui-text-warning: #ffa94d;
-  --ui-text-primary: inherit;
 
 
   /* syntax highlighting dark */
@@ -1266,7 +1239,7 @@ html[data-theme='dark'] {
 
 
   /* --- 5. 流式动效与打字机光标体系 (Dark) --- */
-  --stream-caret-color: var(--brand, hsl(160 84% 45%)); /* 8.92:1 WCAG AAA */
+  --stream-caret-color: var(--brand);
   --stream-caret-width: 2px;
   --stream-caret-height: 0.95em;
   --stream-caret-radius: 1px;
@@ -1277,6 +1250,10 @@ html[data-theme='dark'] {
   --stream-anim-word-offset-y: 2px;
   --stream-anim-marker-fade: 120ms;
   --stream-anim-easing: cubic-bezier(0.16, 1, 0.3, 1);
+
+  --stream-pulse-glow: 0 0 0 3px color-mix(in srgb, var(--brand, hsl(160 84% 45%)) 20%, transparent);
+  --stream-pulse-bg: color-mix(in srgb, var(--brand, hsl(160 84% 45%)) 5%, transparent);
+  --stream-pulse-duration: 1.6s;
 
 
   /* --- 6. 用量监控与时序分析（Usage Dashboard）暗色体系 (Dark) --- */
@@ -1331,26 +1308,33 @@ html[data-theme='dark'] {
   --control-height-xs: 22px;
   --control-height-lg: 34px;
 
+  /* 密度矩阵 §4.2（全偶数、严格单调、零碰撞） */
   --space-0_5: 2px;
-  --space-1_5: 4px;
-  --space-2_5: 6px;
-  --space-3_5: 10px;
-  --space-1: 3px;
-  --space-2: 5px;
-  --space-3: 6px;
-  --space-4: 10px;
-  --space-5: 14px;
-  --space-6: 18px;
+  --space-1: 4px;
+  --space-1_5: 6px;
+  --space-2: 8px;
+  --space-2_5: 10px;
+  --space-3: 12px;
+  --space-3_5: 14px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 28px;
+  --space-8: 32px;
+  --space-10: 40px;
 
   --line-height-tight: 1.22;
   --line-height-ui: 1.32;
   --line-height-body: 1.5;
 
+  /* 圆角偶数化（BATCH-01 §4.4）；禁止改写 --radius-btn / --button-radius */
   --radius-xs: 2px;
-  --radius-sm: 3px;
-  --radius-md: 5px;
-  --radius-lg: 7px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
   --radius-xl: 10px;
+  --radius-2xl: 10px;
+  --radius-3xl: 20px;
   --radius-full: 9999px;
 
   --card-header-min-height: 32px;
@@ -1388,26 +1372,33 @@ html[data-theme='dark'] {
   --control-height-xs: 26px;
   --control-height-lg: 40px;
 
+  /* 密度矩阵 §4.3（全偶数、严格单调；真正放大间距） */
   --space-0_5: 2px;
-  --space-1_5: 6px;
-  --space-2_5: 10px;
-  --space-3_5: 14px;
-  --space-1: 4px;
-  --space-2: 8px;
-  --space-3: 12px;
-  --space-4: 16px;
-  --space-5: 20px;
-  --space-6: 24px;
+  --space-1: 6px;
+  --space-1_5: 8px;
+  --space-2: 10px;
+  --space-2_5: 12px;
+  --space-3: 14px;
+  --space-3_5: 16px;
+  --space-4: 20px;
+  --space-5: 24px;
+  --space-6: 28px;
+  --space-7: 32px;
+  --space-8: 36px;
+  --space-10: 48px;
 
   --line-height-tight: 1.28;
   --line-height-ui: 1.4;
   --line-height-body: 1.6;
 
-  --radius-xs: 3px;
-  --radius-sm: 5px;
-  --radius-md: 7px;
-  --radius-lg: 9px;
+  /* 圆角偶数化（BATCH-01 §4.4）；禁止改写 --radius-btn / --button-radius */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
   --radius-xl: 14px;
+  --radius-2xl: 14px;
+  --radius-3xl: 26px;
   --radius-full: 9999px;
 
   --card-header-min-height: 40px;
@@ -1510,6 +1501,9 @@ html[data-perf-tier='eco'] {
   --stream-anim-marker-fade: 0ms;
   --stream-anim-word-offset-y: 0px;
   --stream-caret-blink-dur: 0ms;
+  --stream-pulse-duration: 0ms;
+  --stream-pulse-glow: none;
+  --stream-pulse-bg: transparent;
 }
 
 /* Reduced Motion Preference: System-level quiet response */

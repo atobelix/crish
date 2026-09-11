@@ -122,7 +122,7 @@
 .topProcessHeader {
   width: 100%;
   box-sizing: border-box;
-  border-bottom: 0.5px solid var(--border-subtle);
+  border-bottom: var(--hairline-width, 1px) solid var(--hairline, var(--border-subtle));
   padding-bottom: 4px;
   margin-bottom: var(--space-2, 8px);
 }
