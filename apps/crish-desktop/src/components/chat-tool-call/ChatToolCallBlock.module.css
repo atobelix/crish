@@ -135,22 +135,6 @@
   }
 }
 
-.toolRowChevronSlot {
-  flex: 0 0 14px;
-  width: 14px;
-  height: 14px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  border-radius: var(--radius-xs, 4px);
-  color: var(--text-tertiary);
-  transition: opacity var(--transition-micro, 120ms ease), color var(--transition-micro, 120ms ease);
-}
-
-.toolRowChevronSlot.isToggle {
-}
-
 .toolRowHead:hover {
   background: transparent;
   color: var(--text-primary);
@@ -164,11 +148,6 @@
 .toolRowHead:hover .toolRowIcoSlot {
   background: transparent;
   border: none;
-  color: var(--text-primary);
-}
-
-.toolRowHead:hover .toolRowChevronSlot {
-  opacity: 1;
   color: var(--text-primary);
 }
 

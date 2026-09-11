@@ -107,7 +107,7 @@ export interface ChatMessageListProps {
    */
   renderTools?: ChatNarrativeRenderTools;
   /**
-   * 可选：替换思考段。缺省 undefined = TimelineThoughtSection。
+   * 可选：替换思考段。缺省 undefined = ReasoningRow。
    */
   renderThought?: ChatNarrativeRenderThought;
 }
