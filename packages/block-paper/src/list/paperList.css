@@ -37,7 +37,7 @@
   border: none;
   background: transparent;
   color: var(--text-primary, #111111);
-  font-family: var(--font-sans, system-ui, sans-serif);
+  font-family: var(--font-sans);
   font-size: var(--font-size-base, 14px);
   line-height: var(--line-height-body, 1.55);
   /* 默认不自滚：由 note-paper .body 或外层 scrollport 接管 */
@@ -276,7 +276,7 @@
 
 .bp-paper-block[data-flavour='code'],
 .bp-paper-block[data-flavour='Code'] {
-  font-family: var(--font-mono, ui-monospace, 'Cascadia Code', monospace);
+  font-family: var(--font-mono);
   font-size: var(--font-size-sm, 13px);
   font-weight: var(--font-weight-normal, 400);
   color: var(--md-code-fg, var(--text-primary, #111111));

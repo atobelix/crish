@@ -34,7 +34,7 @@
   flex-direction: column;
   gap: var(--space-0_5, 2px);
   min-width: 0;
-  font-family: var(--font-sans, system-ui, sans-serif);
+  font-family: var(--font-sans);
   color: var(--text-primary, #111111);
 }
 
@@ -271,7 +271,7 @@
     0 8px 10px -6px rgba(0, 0, 0, 0.04)
   );
   color: var(--text-primary, #111111);
-  font-family: var(--font-sans, system-ui, sans-serif);
+  font-family: var(--font-sans);
   font-size: var(--font-size-base, 14px);
   line-height: var(--line-height-ui, 1.35);
   /* 入场微透明；eco 下取消（见文末；含 React 裸 .bp-slash-host） */
@@ -515,7 +515,7 @@
 /* ---------- flavour 轻量（DomHost 若写 data-flavour 时生效） ---------- */
 
 .bp-block-row[data-flavour='code'] {
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: var(--font-mono);
 }
 
 .bp-block-row[data-flavour='quote'],
@@ -544,7 +544,7 @@
     0 1px 2px color-mix(in srgb, var(--text-primary, #111) 8%, transparent)
   );
   color: var(--text-secondary, #555555);
-  font-family: var(--font-sans, system-ui, sans-serif);
+  font-family: var(--font-sans);
   font-size: var(--font-size-sm, 13px);
   line-height: var(--line-height-ui, 1.35);
   pointer-events: none;
