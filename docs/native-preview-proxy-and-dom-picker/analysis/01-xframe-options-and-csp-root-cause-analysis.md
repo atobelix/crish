@@ -37,7 +37,7 @@ flowchart TD
     CSPCheck -- 是 --> MatchAncestors{父窗口 Origin<br/>是否匹配 frame-ancestors ?}
     MatchAncestors -- 否 --> Block1[🛑 触发 CSP 违规拦截<br/>net::ERR_BLOCKED_BY_RESPONSE]
     MatchAncestors -- 是 --> Allow[✅ 放行渲染]
-    
+
     CSPCheck -- 否 --> XFOCheck{检查是否存在<br/>X-Frame-Options ?}
     XFOCheck -- 否 --> Allow
     XFOCheck -- 是 --> CheckXFO{值是否为 DENY<br/>或父子不同源 SAMEORIGIN ?}

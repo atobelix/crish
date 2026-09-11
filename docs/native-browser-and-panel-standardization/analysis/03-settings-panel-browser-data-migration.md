@@ -1,7 +1,7 @@
 # 03-受管浏览器数据导入与配置迁移至设置面板方案
 
-> **文档定位**：战役 `native-browser-and-panel-standardization` 分析详案。  
-> **核心目标**：深入审查浏览器数据导入（书签/历史/登录态）及运维区块现状，设计将其从工作区右侧交互面板（`BrowserPanel.tsx`）彻底剥离，并优雅迁移至全局设置中心（`SettingsPanel.tsx`）的完整落地方案。  
+> **文档定位**：战役 `native-browser-and-panel-standardization` 分析详案。
+> **核心目标**：深入审查浏览器数据导入（书签/历史/登录态）及运维区块现状，设计将其从工作区右侧交互面板（`BrowserPanel.tsx`）彻底剥离，并优雅迁移至全局设置中心（`SettingsPanel.tsx`）的完整落地方案。
 > **编码要求**：UTF-8 无 BOM、中文撰写、严谨代码变更点与接口定义。
 
 ---

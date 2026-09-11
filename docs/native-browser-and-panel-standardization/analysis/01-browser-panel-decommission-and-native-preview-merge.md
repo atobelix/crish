@@ -1,8 +1,8 @@
 # 浏览器与应用预览体系标准化：BrowserPanel 彻底废除与原生 PreviewCard 无缝收敛分析报告
 
-> **文件标识**：`docs/native-browser-and-panel-standardization/analysis/01-browser-panel-decommission-and-native-preview-merge.md`  
-> **责任领域**：前端架构治理 / 去过度设计 / 视图注册标准化 / 应用预览与浏览器体系收敛  
-> **核心使命**：彻底根除 Conex/Crish 中基于 Canvas 逐帧投屏与 InputLayer 透明事件拦截的旧式过度设计；将全量 Web 浏览与本地开发预览功能无缝收敛至 `PreviewCard.tsx` 作为唯一的原生应用预览与浏览器组件；清理视图注册表（`main.tsx`、`registerBuiltInViews.tsx`）中的独立 `browser` 视图并实现向后兼容的路由重定向。  
+> **文件标识**：`docs/native-browser-and-panel-standardization/analysis/01-browser-panel-decommission-and-native-preview-merge.md`
+> **责任领域**：前端架构治理 / 去过度设计 / 视图注册标准化 / 应用预览与浏览器体系收敛
+> **核心使命**：彻底根除 Conex/Crish 中基于 Canvas 逐帧投屏与 InputLayer 透明事件拦截的旧式过度设计；将全量 Web 浏览与本地开发预览功能无缝收敛至 `PreviewCard.tsx` 作为唯一的原生应用预览与浏览器组件；清理视图注册表（`main.tsx`、`registerBuiltInViews.tsx`）中的独立 `browser` 视图并实现向后兼容的路由重定向。
 > **遵循铁律**：`AGENTS.md`（通用协作纪律、反过度设计硬性红线 §8、反退避全文）、UTF-8 编码、纯逻辑规划与具体文件行号证据。
 
 ---
@@ -519,19 +519,19 @@ gantt
     title 浏览器与预览体系标准化四阶段迁移路线
     dateFormat  X
     axisFormat %d
-    
+
     section 阶段一：视图注册与路由统一
     main.tsx 与 registerBuiltInViews 清理           :active, p1_1, 0, 2
     ViewRegistry 别名重定向与单测覆盖              :p1_2, after p1_1, 2
-    
+
     section 阶段二：PreviewCard 纯净化
     移除 aiStack、aiBrowser 及 Monitor 按钮        :p2_1, after p1_2, 2
     PreviewCard 单元测试更新                       :p2_2, after p2_1, 2
-    
+
     section 阶段三：旧式代码物理删除
     删除 BrowserPanel 及 browser-panel/ 目录      :p3_1, after p2_2, 2
     清理 browserSessionApi 废弃帧流命令            :p3_2, after p3_1, 1
-    
+
     section 阶段四：全量验证与门禁回归
     TypeScript 类型检查与全量单测回归              :p4_1, after p3_2, 2
     架构防退避审查与文档归档                       :p4_2, after p4_1, 1

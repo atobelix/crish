@@ -1,11 +1,11 @@
 # 窗格独立标签栏 PaneHeader 与卡片岛屿详案
 
-> **文档标识**：`docs/pane-tab-system/plan-improvements/02-窗格独立标签栏PaneHeader与卡片岛屿详案.md`  
-> **方案状态**：规划详案（Architecture & Implementation Plan）  
-> **文档版本**：v1.0.0 (Strict Read-Only Specification)  
+> **文档标识**：`docs/pane-tab-system/plan-improvements/02-窗格独立标签栏PaneHeader与卡片岛屿详案.md`
+> **方案状态**：规划详案（Architecture & Implementation Plan）
+> **文档版本**：v1.0.0 (Strict Read-Only Specification)
 > **前置排查**：
 > - [`02-二叉树叶子窗格独立标签体系排查.md`](file:///c:/Software/conex/docs/pane-tab-system/analysis/02-%E4%BA%8C%E5%8F%89%E6%A0%91%E5%8F%B6%E5%AD%90%E7%AA%97%E6%A0%BC%E7%8B%AC%E7%AB%8B%E6%A0%87%E7%AD%BE%E4%BD%93%E7%B3%BB%E6%8E%92%E6%9F%A5.md)
-> - [`03-Demo参考架构与CSS几何对齐排查.md`](file:///c:/Software/conex/docs/pane-tab-system/analysis/03-Demo%E5%8F%82%E8%80%83%E6%9E%B6%E6%9E%84%E4%B8%8ECSS%E5%87%A0%E4%BD%95%E5%AF%B9%E9%BD%90%E6%8E%92%E6%9F%A5.md)  
+> - [`03-Demo参考架构与CSS几何对齐排查.md`](file:///c:/Software/conex/docs/pane-tab-system/analysis/03-Demo%E5%8F%82%E8%80%83%E6%9E%B6%E6%9E%84%E4%B8%8ECSS%E5%87%A0%E4%BD%95%E5%AF%B9%E9%BD%90%E6%8E%92%E6%9F%A5.md)
 > **核心目标**：彻底废除 Chat 叶与工具叶的头部异构与负外边距浮层，落地对标金标 Demo（`reference/chat-composer-component`）的 **卡片岛屿架构（Card Island Architecture）**，为每个二叉树叶子窗格建立独立、统一的 36px `PaneHeader` 顶栏与 10px 圆角白底内容卡片主体 `PaneContent`，实现标签栏与卡片主体 **1:1 结构级几何对齐与绝对同宽**。
 
 ---
@@ -217,7 +217,7 @@ export interface PaneHeaderProps {
   <div class="top-bar-fixed-cluster">
     <!-- 固定新建加号（发生溢出时淡入展开） -->
     <button class="top-bar-new-tab-btn pinned" title="新建标签页">+</button>
-    
+
     <!-- 业务动作槽（预览 / 文件 / 更多） -->
     {customActionsSlot}
 

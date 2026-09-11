@@ -1,8 +1,8 @@
 # 原生浏览器融合与全量面板三段式标准化 — 测试保障与回归防护方案
 
-> **文档标识**：`docs/native-browser-and-panel-standardization/analysis/05-test-coverage-and-regression-guardrails.md`  
-> **战役工作区**：`docs/native-browser-and-panel-standardization/`  
-> **角色归属**：资深 QA / 测试架构师（Test Architect & CI Governance Specialist）  
+> **文档标识**：`docs/native-browser-and-panel-standardization/analysis/05-test-coverage-and-regression-guardrails.md`
+> **战役工作区**：`docs/native-browser-and-panel-standardization/`
+> **角色归属**：资深 QA / 测试架构师（Test Architect & CI Governance Specialist）
 > **遵循铁律**：`AGENTS.md` §9（测试资产保护铁律）、§11（前端 CI 治理与解耦断言）、§1（反退避与纯逻辑规划）、`ANTI_OVERENGINEERING_GUARDRAILS.md`（反过度设计红线）
 
 ---
@@ -346,5 +346,5 @@ cargo test --workspace
 - [ ] **[CI 全绿]** `npm run typecheck` + `npm test` + `cargo test --workspace` 全绿通过，无 `--no-verify`。
 
 ---
-*文档编制完成：资深 QA / 测试架构师*  
+*文档编制完成：资深 QA / 测试架构师*
 *签署日期：2026-08-21*

@@ -1,7 +1,7 @@
 # 右侧面板三段式架构规范化与改造方案
 
-> **文档定位**：战役详案文档  
-> **战役工作区**：`docs/native-browser-and-panel-standardization/`  
+> **文档定位**：战役详案文档
+> **战役工作区**：`docs/native-browser-and-panel-standardization/`
 > **目标**：全面调研除应用预览之外的所有右侧面板，制定标准的三段式（Header 38px + Toolbar 32px + Body）改造方案，严格对齐基准范例规范。
 
 ---
@@ -309,12 +309,12 @@
 graph TD
   A[三段式架构统一] --> B[Toolbar 32px 统一组]
   A --> C[纯 Body 容器组]
-  
+
   B --> B1[FilesCard.tsx / filesBar 规范化]
   B --> B2[DiffCard.tsx / DiffHeaderControls 规范化]
   B --> B3[FileViewerCard.tsx / header 规范化]
   B --> B4[AgentCard.tsx / AgentCardHeader 规范化]
-  
+
   C --> C1[OverviewCard.tsx / 纯 Body 容器]
   C --> C2[TerminalCard.tsx / 纯 Body 容器与 CSS 瘦身]
 ```

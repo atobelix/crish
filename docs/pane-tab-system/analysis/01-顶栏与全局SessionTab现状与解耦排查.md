@@ -1,8 +1,8 @@
 # 顶栏与全局 SessionTab 现状与解耦排查报告
 
-> **文档标识**：`docs/pane-tab-system/analysis/01-顶栏与全局SessionTab现状与解耦排查.md`  
-> **审计性质**：全景架构与源码只读排查（Strict Read-Only）  
-> **编码格式**：UTF-8 无 BOM  
+> **文档标识**：`docs/pane-tab-system/analysis/01-顶栏与全局SessionTab现状与解耦排查.md`
+> **审计性质**：全景架构与源码只读排查（Strict Read-Only）
+> **编码格式**：UTF-8 无 BOM
 > **关联源码**：
 > - [`apps/crish-desktop/src/components/top-bar/AppTopBar.tsx`](file:///c:/Software/conex/apps/crish-desktop/src/components/top-bar/AppTopBar.tsx)
 > - [`apps/crish-desktop/src/components/top-bar/AppTopBar.module.css`](file:///c:/Software/conex/apps/crish-desktop/src/components/top-bar/AppTopBar.module.css)

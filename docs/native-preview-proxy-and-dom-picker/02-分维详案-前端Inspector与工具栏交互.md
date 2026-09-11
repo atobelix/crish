@@ -88,13 +88,13 @@ sequenceDiagram
     Host->>Bridge: enableInspector()
     Bridge->>Client: postMessage({ type: 'CRISH_INSPECT_TOGGLE', payload: { active: true } })
     Client->>Client: 激活捕获阶段事件监听器
-    
+
     User->>TargetDOM: 鼠标悬停 (hover) 目标节点
     TargetDOM->>Client: pointermove 捕获
     Client->>Client: getBoundingClientRect() 计算高亮盒模型
     Client->>Bridge: postMessage({ type: 'CRISH_INSPECT_HOVER', payload: { ...hoverData } })
     Bridge->>Host: 更新悬停信息浮层 (Tag/Size/Class)
-    
+
     User->>TargetDOM: 鼠标点击 (click) 目标节点
     TargetDOM->>Client: click 捕获 (preventDefault & stopPropagation)
     Client->>Client: 计算最优选择器 (data-testid > id > class > xpath)

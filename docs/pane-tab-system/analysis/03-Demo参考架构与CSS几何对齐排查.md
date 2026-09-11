@@ -1,14 +1,14 @@
 # Demo 参考架构与 CSS 几何对齐排查报告
 
-> **文档定位**：`docs/pane-tab-system/analysis/03-Demo参考架构与CSS几何对齐排查.md`  
-> **审查对象**：  
-> - `reference/chat-composer-component/index.html`  
-> - `reference/chat-composer-component/css/composer.css`  
-> - `reference/chat-composer-component/css/design-tokens.css`  
-> - `reference/chat-composer-component/js/popovers.js`  
-> - `apps/crish-desktop/src/components/top-bar/AppTopBar.tsx` / `AppTopBar.module.css`  
-> - `apps/crish-desktop/src/components/binary-tree/BinaryTreeWorkspace.tsx` / `BinaryTreeWorkspace.module.css`  
-> - `apps/crish-desktop/src/components/shell/GlobalSessionTabBar.tsx`  
+> **文档定位**：`docs/pane-tab-system/analysis/03-Demo参考架构与CSS几何对齐排查.md`
+> **审查对象**：
+> - `reference/chat-composer-component/index.html`
+> - `reference/chat-composer-component/css/composer.css`
+> - `reference/chat-composer-component/css/design-tokens.css`
+> - `reference/chat-composer-component/js/popovers.js`
+> - `apps/crish-desktop/src/components/top-bar/AppTopBar.tsx` / `AppTopBar.module.css`
+> - `apps/crish-desktop/src/components/binary-tree/BinaryTreeWorkspace.tsx` / `BinaryTreeWorkspace.module.css`
+> - `apps/crish-desktop/src/components/shell/GlobalSessionTabBar.tsx`
 > **核心任务**：全面剖析金标 Demo 的卡片岛屿拓扑（Card Island Architecture）、标签栏物理几何、标签状态微交互、1:1 几何对齐机制与动态智能固定（Smart Pinning）逻辑，为桌面端标签页系统重构提供精确的几何基线与源码参照。
 
 ---

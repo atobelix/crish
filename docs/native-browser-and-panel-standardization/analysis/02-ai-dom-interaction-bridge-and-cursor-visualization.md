@@ -1,7 +1,7 @@
 # 02 分析与架构设计：AI 原生驱动 PreviewCard DOM 与 100% 实时可见反馈机制
 
-> **文档定位**：战役 `native-browser-and-panel-standardization` 核心技术调研与架构详案。  
-> **核心目标**：彻底解决 PreviewCard 中 AI 自动化的原生驱动与实时可见性问题，实现 AI 动作指令（click, type, scroll 等）直接派发原生 DOM 事件，并在界面上呈现 100% 肉眼可见、丝滑自然的实时反馈（流式打字、点击波纹、Ghost Cursor 贝塞尔光标轨迹、意图高亮）。  
+> **文档定位**：战役 `native-browser-and-panel-standardization` 核心技术调研与架构详案。
+> **核心目标**：彻底解决 PreviewCard 中 AI 自动化的原生驱动与实时可见性问题，实现 AI 动作指令（click, type, scroll 等）直接派发原生 DOM 事件，并在界面上呈现 100% 肉眼可见、丝滑自然的实时反馈（流式打字、点击波纹、Ghost Cursor 贝塞尔光标轨迹、意图高亮）。
 > **参考规范**：遵循仓库根目录 `AGENTS.md`、`ANTI_OVERENGINEERING_GUARDRAILS.md`，严格执行 UTF-8 编码与反过度设计红线。
 
 ---
@@ -147,11 +147,11 @@ export function getElementTargetPoint(el: HTMLElement, relativeRatio = { x: 0.5,
   const rect = el.getBoundingClientRect();
   const x = rect.left + rect.width * relativeRatio.x;
   const y = rect.top + rect.height * relativeRatio.y;
-  
+
   // 检测该坐标处真实命中的顶层元素
   const hitEl = el.ownerDocument.elementFromPoint(x, y);
   const isObscured = hitEl ? !el.contains(hitEl) && !hitEl.contains(el) : true;
-  
+
   return { x, y, rect, isObscured, hitEl };
 }
 ```

@@ -1,12 +1,12 @@
 # Demo 级高精 CSS 样式与物理动效改进详案
 
-> **文档位置**：`docs/pane-tab-system/plan-improvements/03-Demo级高精CSS样式与物理动效详案.md`  
-> **所属战役**：多窗格标签系统重构战役（Pane-Tab System Architecture Campaign）  
-> **关联排查**：[`docs/pane-tab-system/analysis/03-Demo参考架构与CSS几何对齐排查.md`](file:///c:/Software/conex/docs/pane-tab-system/analysis/03-Demo%E5%8F%82%E8%80%83%E6%9E%B6%E6%9E%84%E4%B8%8ECSS%E5%87%A0%E4%BD%95%E5%AF%B9%E9%BD%90%E6%8E%92%E6%9F%A5.md)  
-> **对标参考**：  
-> - [`reference/chat-composer-component/css/composer.css:176-265, 360-470, 1800-1848`](file:///c:/Software/conex/reference/chat-composer-component/css/composer.css#L176-L265)  
-> - [`reference/chat-composer-component/css/design-tokens.css:36-44`](file:///c:/Software/conex/reference/chat-composer-component/css/design-tokens.css#L36-L44)  
-> - [`reference/chat-composer-component/js/popovers.js:1957-2265`](file:///c:/Software/conex/reference/chat-composer-component/js/popovers.js#L1957-L2265)  
+> **文档位置**：`docs/pane-tab-system/plan-improvements/03-Demo级高精CSS样式与物理动效详案.md`
+> **所属战役**：多窗格标签系统重构战役（Pane-Tab System Architecture Campaign）
+> **关联排查**：[`docs/pane-tab-system/analysis/03-Demo参考架构与CSS几何对齐排查.md`](file:///c:/Software/conex/docs/pane-tab-system/analysis/03-Demo%E5%8F%82%E8%80%83%E6%9E%B6%E6%9E%84%E4%B8%8ECSS%E5%87%A0%E4%BD%95%E5%AF%B9%E9%BD%90%E6%8E%92%E6%9F%A5.md)
+> **对标参考**：
+> - [`reference/chat-composer-component/css/composer.css:176-265, 360-470, 1800-1848`](file:///c:/Software/conex/reference/chat-composer-component/css/composer.css#L176-L265)
+> - [`reference/chat-composer-component/css/design-tokens.css:36-44`](file:///c:/Software/conex/reference/chat-composer-component/css/design-tokens.css#L36-L44)
+> - [`reference/chat-composer-component/js/popovers.js:1957-2265`](file:///c:/Software/conex/reference/chat-composer-component/js/popovers.js#L1957-L2265)
 > **方案职责**：彻底解决当前桌面端全局通栏标签与大画布割裂、标签视觉样式退化、缺乏入场/离场弹性物理动效、标签溢出时新建按钮滚出屏幕以及滚轮无法横向滚动等核心体验断层。1:1 复刻金标 Demo 的卡片岛屿拓扑（Card Island Topology）、26px 纯白胶囊几何微观样式、220ms 弹性弹簧贝塞尔动画、Smart Pinning 双模智能固定加号及横向滚轮重定向，构建顶级桌面级原生质感。
 
 ---
@@ -126,7 +126,7 @@
 ```html
 <!-- 单个叶子面板根容器（绝对定位由二叉树布局引擎计算百分比 rect） -->
 <div class="tree-leaf-pane" data-leaf-id="leaf-1" data-top-row="true" data-left-edge="true" data-right-edge="false">
-  
+
   <!-- 1. 独立标签栏（高度严格锁定 36px，充当卡片岛屿头部） -->
   <div class="tree-pane-header">
     <!-- 横向滚动标签容器 -->

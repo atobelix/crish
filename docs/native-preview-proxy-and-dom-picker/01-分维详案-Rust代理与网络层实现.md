@@ -77,7 +77,7 @@ pub async fn preview_proxy_handler(
 
     // SSRF 安全校验
     validate_target_url(&target_url)?;
-    
+
     // 执行代理转发 ...
 }
 ```
@@ -114,7 +114,7 @@ impl PreviewProxyClient {
             .redirect(reqwest::redirect::Policy::limited(5))
             .build()
             .expect("Failed to build preview proxy reqwest client");
-        
+
         Self { client }
     }
 }
@@ -234,7 +234,7 @@ pub fn inject_base_and_inspector(
     inspector_script: &str,
 ) -> String {
     let mut result = String::with_capacity(html_content.len() + 4096);
-    
+
     // 1. 注入 <base href="..."> 至 <head> 顶部
     let base_tag = format!("<base href=\"{}\" />\n", target_base_url);
     let head_pos = html_content.find("<head>")
