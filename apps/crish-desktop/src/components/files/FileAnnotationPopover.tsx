@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { CornerDownLeft, X } from 'lucide-react';
 import styles from './FileAnnotationPopover.module.css';
 import { Tooltip } from '../ui';
 import { addPendingFileAnnotation } from '../../api/workspaceFsApi';
 import { useSessionStore } from '../../store/storeAccess';
+import { AppIcon } from '../ui/icons/index';
 
 export interface FileAnnotationPopoverProps {
   filePath: string;
@@ -129,7 +129,6 @@ export const FileAnnotationPopover: React.FC<FileAnnotationPopoverProps> = React
       }
     }, [containerRef, disabled, handleClose]);
 
-
     // 监听选区变化与鼠标事件
     useEffect(() => {
       const container = containerRef.current;
@@ -227,7 +226,6 @@ export const FileAnnotationPopover: React.FC<FileAnnotationPopoverProps> = React
       onAnnotated?.();
     }, [filePath, selText, commentDraft, targetSessionId, onAnnotated, handleClose]);
 
-
     if (!selText || !selAnchor || disabled) {
       return null;
     }
@@ -273,7 +271,6 @@ export const FileAnnotationPopover: React.FC<FileAnnotationPopoverProps> = React
           }}
         />
 
-
         <div className={styles.actionGroup}>
           <Tooltip content="添加 (Enter)">
             <button
@@ -283,7 +280,7 @@ export const FileAnnotationPopover: React.FC<FileAnnotationPopoverProps> = React
               disabled={!hasInput}
               onClick={handleSubmit}
             >
-              <CornerDownLeft size={12} strokeWidth={2.2} />
+              <AppIcon name="corner-down-left" size={12} />
             </button>
           </Tooltip>
           <Tooltip content="取消 (Esc)">
@@ -293,7 +290,7 @@ export const FileAnnotationPopover: React.FC<FileAnnotationPopoverProps> = React
               aria-label="取消"
               onClick={handleClose}
             >
-              <X size={12} strokeWidth={2} />
+              <AppIcon name="x" size={12} />
             </button>
           </Tooltip>
         </div>

@@ -1,10 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import * as Lucide from 'lucide-react';
 import { Button, Tooltip } from '../ui';
 import { useToast } from '../../services/toast/ToastContext';
 import { runLocalGit } from '../../api/gitApi';
 import { getWorkspacePath, pathRelativeToRoot } from '../../api/workspaceFsApi';
 import styles from './FileViewerCard.module.css';
+import { AppIcon } from '../ui/icons/index';
 
 export interface FileViewerHistoryDrawerProps {
   filePath: string;
@@ -92,7 +92,7 @@ export const FileViewerHistoryDrawer: React.FC<FileViewerHistoryDrawerProps> = (
     >
       <div className={styles.historyHeader}>
         <div className={styles.historyTitleWrap}>
-          <Lucide.History size={14} className={styles.historyHeaderIcon} aria-hidden />
+          <AppIcon name="history" size={14} className={styles.historyHeaderIcon} aria-hidden />
           <span className={styles.historyTitle}>
             提交历史 {history.length > 0 ? `(${history.length})` : ''}
           </span>
@@ -106,7 +106,7 @@ export const FileViewerHistoryDrawer: React.FC<FileViewerHistoryDrawerProps> = (
               className={styles.drawerActBtn}
               onClick={() => void loadHistory()}
               disabled={loading}
-              icon={<Lucide.RefreshCw size={13} className={loading ? 'spin' : ''} aria-hidden />}
+              icon={<AppIcon name="refresh" size={13} className={loading ? 'spin' : ''} aria-hidden />}
               aria-label="刷新历史记录"
             />
           </Tooltip>
@@ -117,7 +117,7 @@ export const FileViewerHistoryDrawer: React.FC<FileViewerHistoryDrawerProps> = (
               size="xs"
               className={styles.drawerActBtn}
               onClick={onClose}
-              icon={<Lucide.X size={13} aria-hidden />}
+              icon={<AppIcon name="x" size={13} aria-hidden />}
               aria-label="关闭历史记录面板"
             />
           </Tooltip>
@@ -151,12 +151,12 @@ export const FileViewerHistoryDrawer: React.FC<FileViewerHistoryDrawerProps> = (
 
         {loading ? (
           <div className={styles.historyLoading} role="status" aria-live="polite">
-            <Lucide.Loader2 size={16} className="spin" aria-hidden />
+            <AppIcon name="loader" size={16} className="spin" aria-hidden />
             <span>正在读取 Git 提交历史…</span>
           </div>
         ) : history.length === 0 ? (
           <div className={styles.historyEmpty} role="status" aria-live="polite">
-            <Lucide.GitCommit size={22} className={styles.historyEmptyIcon} aria-hidden />
+            <AppIcon name="git-commit" size={22} className={styles.historyEmptyIcon} aria-hidden />
             <div className={styles.historyEmptyTitle}>暂无提交历史</div>
             <div className={styles.historyEmptySub}>
               该文件尚未提交至 Git 仓库或为全新创建。
@@ -178,7 +178,7 @@ export const FileViewerHistoryDrawer: React.FC<FileViewerHistoryDrawerProps> = (
                       onClick={() => handleCopyHash(commit.hash)}
                       aria-label={`复制提交哈希 ${commit.hash}`}
                     >
-                      <Lucide.GitCommit size={12} className={styles.commitIcon} aria-hidden />
+                      <AppIcon name="git-commit" size={12} className={styles.commitIcon} aria-hidden />
                       <span>{commit.hash}</span>
                     </button>
                   </Tooltip>

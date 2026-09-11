@@ -7,17 +7,7 @@ import React, {
 } from 'react';
 import styles from './FilesCard.module.css';
 import { Tooltip } from '../ui';
-import {
-  ChevronRight,
-  File,
-  FileCode2,
-  FileText,
-  Folder,
-  FolderOpen,
-  Image,
-  Search,
-  Table,
-} from 'lucide-react';
+
 import {
   detectFileKind,
   listDirectory,
@@ -28,6 +18,7 @@ import {
 } from '../../api/workspaceFsApi';
 import { fileExtColor } from '../../api/codeHighlight';
 import type { ViewMode } from './hooks/useFilePreview';
+import { AppIcon } from '../ui/icons/index';
 
 function joinLocal(base: string, name: string): string {
   const sep = base.includes('\\') ? '\\' : '/';
@@ -48,13 +39,13 @@ function BcFileIcon({ name }: { name: string }) {
   const k = detectFileKind(name);
   const color = fileExtColor(name);
   const sz = 14;
-  if (k === 'image') return <Image size={sz} style={{ color }} aria-hidden />;
-  if (k === 'pdf') return <FileText size={sz} style={{ color }} aria-hidden />;
-  if (k === 'table') return <Table size={sz} style={{ color }} aria-hidden />;
+  if (k === 'image') return <AppIcon name="image" size={sz} style={{ color }} aria-hidden />;
+  if (k === 'pdf') return <AppIcon name="file-text" size={sz} style={{ color }} aria-hidden />;
+  if (k === 'table') return <AppIcon name="table" size={sz} style={{ color }} aria-hidden />;
   if (/\.(ts|tsx|js|jsx|mjs|cjs|rs|py|go|java|css|html|json|md|yml|yaml)$/i.test(name)) {
-    return <FileCode2 size={sz} style={{ color }} aria-hidden />;
+    return <AppIcon name="file-code" size={sz} style={{ color }} aria-hidden />;
   }
-  return <File size={sz} style={{ color }} aria-hidden />;
+  return <AppIcon name="file" size={sz} style={{ color }} aria-hidden />;
 }
 
 interface BreadcrumbItem {
@@ -309,12 +300,10 @@ export const FileBreadcrumb = React.memo(function FileBreadcrumb({
           >
             {ent.isDir ? (
               <>
-                <ChevronRight
-                  size={13}
+                <AppIcon name="chevron-right" size={13}
                   className={`${styles.filesBcFlyoutChev} ${isExpanded ? styles.isExpanded : ''}`}
-                  aria-hidden
-                />
-                <Folder size={14} aria-hidden />
+                  aria-hidden />
+                <AppIcon name="folder" size={14} aria-hidden />
               </>
             ) : (
               <>
@@ -396,7 +385,7 @@ export const FileBreadcrumb = React.memo(function FileBreadcrumb({
                       aria-label={`${bcFlyout.anchorLabel} 目录`}
                     >
                       <div className={styles.filesBcFlyoutSearch}>
-                        <Search size={13} aria-hidden />
+                        <AppIcon name="search" size={13} aria-hidden />
                         <input
                           ref={bcFilterRef}
                           type="search"
@@ -426,7 +415,7 @@ export const FileBreadcrumb = React.memo(function FileBreadcrumb({
                             aria-label="在文件树中打开此目录"
                             onClick={handleDirectOpenCurrentDir}
                           >
-                            <FolderOpen size={14} aria-hidden />
+                            <AppIcon name="folder-open" size={14} aria-hidden />
                           </button>
                         </Tooltip>
                       </div>
@@ -449,7 +438,7 @@ export const FileBreadcrumb = React.memo(function FileBreadcrumb({
                                 onDoubleClick={() => ent.isDir && handleDoubleClickFolder(ent.path)}
                               >
                                 {ent.isDir ? (
-                                  <Folder size={14} aria-hidden />
+                                  <AppIcon name="folder" size={14} aria-hidden />
                                 ) : (
                                   <BcFileIcon name={ent.name} />
                                 )}

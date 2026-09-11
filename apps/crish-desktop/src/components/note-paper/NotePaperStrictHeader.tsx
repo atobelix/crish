@@ -11,18 +11,6 @@
  */
 
 import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
-import {
-  FileText,
-  Copy,
-  Download,
-  RotateCw,
-  X,
-  Check,
-  Loader2,
-  ChevronDown,
-  Plus,
-} from 'lucide-react';
-import { IconSidebarLeft } from '../sidebar/SidebarToggleIcons';
 import type { SlashOverlayWriteMode } from './SlashMenuOverlay';
 import { IconButton } from '../ui/Button/IconButton';
 import { Tooltip } from '../ui/Tooltip/Tooltip';
@@ -30,6 +18,7 @@ import { EditableTitle } from './EditableTitle';
 import { computeNoteMetrics, exportBlocksToMarkdown } from './noteMetrics';
 import type { SerializableBlock } from './noteMetrics';
 import styles from './NotePaperPanel.module.css';
+import { AppIcon } from '../ui/icons/index';
 
 export interface NoteDocumentDropdownItem {
   id?: string;
@@ -176,11 +165,11 @@ export const NotePaperStrictHeader: React.FC<NotePaperStrictHeaderProps> = React
               tooltip="展开侧栏 (Ctrl+\)"
               onClick={onToggleSidebar}
               data-testid="note-paper-strict-toggle-sidebar"
-              icon={<IconSidebarLeft size={14} aria-hidden />}
+              icon={<AppIcon name="sidebar-left" size={14} aria-hidden />}
             />
           )}
 
-          <FileText size={14} className={styles.noteIcon} aria-hidden />
+          <AppIcon name="file-text" size={14} className={styles.noteIcon} aria-hidden />
 
           <EditableTitle
             title={title}
@@ -201,7 +190,7 @@ export const NotePaperStrictHeader: React.FC<NotePaperStrictHeaderProps> = React
                   aria-label="切换笔记文档"
                   data-testid="note-document-dropdown-trigger"
                 >
-                  <ChevronDown size={13} className={styles.dropdownChevron} aria-hidden />
+                  <AppIcon name="chevron-down" size={13} className={styles.dropdownChevron} aria-hidden />
                 </button>
               </Tooltip>
 
@@ -224,7 +213,7 @@ export const NotePaperStrictHeader: React.FC<NotePaperStrictHeaderProps> = React
                         }}
                         data-testid="note-document-dropdown-new"
                       >
-                        <Plus size={12} aria-hidden />
+                        <AppIcon name="plus" size={12} aria-hidden />
                         <span>新建</span>
                       </button>
                     )}
@@ -248,10 +237,10 @@ export const NotePaperStrictHeader: React.FC<NotePaperStrictHeaderProps> = React
                           aria-selected={isSelected}
                           data-testid={`note-document-dropdown-item-${id}`}
                         >
-                          <FileText size={12} className={styles.dropdownItemIcon} aria-hidden />
+                          <AppIcon name="file-text" size={12} className={styles.dropdownItemIcon} aria-hidden />
                           <span className={styles.dropdownItemTitle}>{doc.title || '无标题笔记'}</span>
                           {isSelected && (
-                            <Check size={12} className={styles.dropdownItemCheck} aria-hidden />
+                            <AppIcon name="check" size={12} className={styles.dropdownItemCheck} aria-hidden />
                           )}
                         </button>
                       );
@@ -270,7 +259,7 @@ export const NotePaperStrictHeader: React.FC<NotePaperStrictHeaderProps> = React
           >
             {saveStatus === 'syncing' || saveStatus === 'saving' ? (
               <span className={styles.saveStatusSyncing}>
-                <Loader2 size={12} className={styles.spinIcon} aria-hidden />
+                <AppIcon name="loader" size={12} className={styles.spinIcon} aria-hidden />
                 <span>保存中...</span>
               </span>
             ) : saveStatus === 'unsaved' ? (
@@ -335,7 +324,7 @@ export const NotePaperStrictHeader: React.FC<NotePaperStrictHeaderProps> = React
             tooltip="复制全文 (Markdown)"
             onClick={handleCopyMarkdown}
             data-testid="note-paper-strict-copy"
-            icon={<Copy size={14} aria-hidden />}
+            icon={<AppIcon name="copy" size={14} aria-hidden />}
           />
 
           <IconButton
@@ -345,7 +334,7 @@ export const NotePaperStrictHeader: React.FC<NotePaperStrictHeaderProps> = React
             tooltip="导出 Markdown (.md)"
             onClick={handleExportMarkdown}
             data-testid="note-paper-strict-export"
-            icon={<Download size={14} aria-hidden />}
+            icon={<AppIcon name="download" size={14} aria-hidden />}
           />
 
           {/* 重新加载投影（保全三大测试桩之二：note-paper-strict-refresh） */}
@@ -360,11 +349,9 @@ export const NotePaperStrictHeader: React.FC<NotePaperStrictHeaderProps> = React
             }}
             data-testid="note-paper-strict-refresh"
             icon={
-              <RotateCw
-                size={14}
+              <AppIcon name="rotate-cw" size={14}
                 className={isLoading ? styles.spinIcon : undefined}
-                aria-hidden
-              />
+                aria-hidden />
             }
           />
 
@@ -379,7 +366,7 @@ export const NotePaperStrictHeader: React.FC<NotePaperStrictHeaderProps> = React
                 tooltip="关闭当前面板"
                 onClick={onClose}
                 data-testid="note-paper-strict-close"
-                icon={<X size={14} aria-hidden />}
+                icon={<AppIcon name="x" size={14} aria-hidden />}
               />
             </>
           )}

@@ -1,17 +1,7 @@
 import React from 'react';
 import styles from './FilesCard.module.css';
 import { Button, Tooltip, Menu } from '../ui';
-import {
-  AppWindow,
-  Braces,
-  ChevronDown,
-  Copy,
-  FolderOpen,
-  MoreHorizontal,
-  Pencil,
-  Save,
-  WrapText,
-} from 'lucide-react';
+
 import { revealInOs } from '../../api/workspaceFsApi';
 import {
   openPathDefault,
@@ -20,6 +10,7 @@ import {
 } from '../../api/hostOpenersApi';
 import { logInternalError } from '../../api/userFacingErrors';
 import type { ViewMode } from './hooks/useFilePreview';
+import { AppIcon } from '../ui/icons/index';
 
 function getOpenerIcon(op: HostOpener, size = 14) {
   if (op.iconDataUrl)
@@ -33,11 +24,9 @@ function getOpenerIcon(op: HostOpener, size = 14) {
       />
     );
   return (
-    <AppWindow
-      size={size}
+    <AppIcon name="app-window" size={size}
       aria-hidden
-      style={{ flexShrink: 0, color: 'var(--text-secondary)' }}
-    />
+      style={{ flexShrink: 0, color: 'var(--text-secondary)' }} />
   );
 }
 
@@ -124,7 +113,7 @@ export const FileActions = React.memo(function FileActions({
       style={{ flexShrink: 0, objectFit: 'contain' }}
     />
   ) : (
-    <FolderOpen size={14} aria-hidden />
+    <AppIcon name="folder-open" size={14} aria-hidden />
   );
   const defaultOpener = fileOpeners[0];
   const defaultOpenIcon = defaultOpener?.iconDataUrl ? (
@@ -136,7 +125,7 @@ export const FileActions = React.memo(function FileActions({
       style={{ flexShrink: 0, objectFit: 'contain' }}
     />
   ) : (
-    <AppWindow size={14} aria-hidden />
+    <AppIcon name="app-window" size={14} aria-hidden />
   );
 
   return (
@@ -179,7 +168,7 @@ export const FileActions = React.memo(function FileActions({
               size="sm"
               className={styles.filesSoftBtn}
               onClick={onEdit}
-              icon={<Pencil size={14} />}
+              icon={<AppIcon name="pencil" size={14} />}
             >
               编辑
             </Button>
@@ -193,7 +182,7 @@ export const FileActions = React.memo(function FileActions({
                 className={`${styles.filesSoftBtn} ${styles.filesSoftBtnEmphasis}`}
                 disabled={!dirty}
                 onClick={onSave}
-                icon={<Save size={14} />}
+                icon={<AppIcon name="save" size={14} />}
               >
                 保存
               </Button>
@@ -218,7 +207,7 @@ export const FileActions = React.memo(function FileActions({
                 aria-label={isFormatted ? '还原紧凑格式' : '格式化 JSON 排版'}
                 aria-pressed={isFormatted}
                 onClick={onToggleFormatJson}
-                icon={<Braces size={14} />}
+                icon={<AppIcon name="braces" size={14} />}
               >
                 {isFormatted ? '还原' : '格式化'}
               </Button>
@@ -234,7 +223,7 @@ export const FileActions = React.memo(function FileActions({
                 aria-label={wordWrap ? '关闭自动换行' : '开启自动换行'}
                 aria-pressed={wordWrap}
                 onClick={onToggleWordWrap}
-                icon={<WrapText size={14} />}
+                icon={<AppIcon name="wrap-text" size={14} />}
               />
             </Tooltip>
           ) : null}
@@ -262,7 +251,7 @@ export const FileActions = React.memo(function FileActions({
                       size="sm"
                       className={styles.filesOpenChev}
                       aria-label={OPEN_WITH_LABEL}
-                      icon={<ChevronDown size={14} aria-hidden />}
+                      icon={<AppIcon name="chevron-down" size={14} aria-hidden />}
                     />
                   </Tooltip>
                 }
@@ -270,7 +259,7 @@ export const FileActions = React.memo(function FileActions({
                   {
                     id: 'copy-path',
                     label: '复制绝对路径',
-                    icon: <Copy size={14} aria-hidden />,
+                    icon: <AppIcon name="copy" size={14} aria-hidden />,
                     onClick: () => onCopyPath('abs'),
                   },
                   {
@@ -303,7 +292,7 @@ export const FileActions = React.memo(function FileActions({
                 size="sm"
                 className={styles.filesNavBtn}
                 aria-label={MORE_ACTIONS_LABEL}
-                icon={<MoreHorizontal size={14} />}
+                icon={<AppIcon name="more-horizontal" size={14} />}
               />
             </Tooltip>
           }
@@ -311,13 +300,13 @@ export const FileActions = React.memo(function FileActions({
             {
               id: 'copy-rel',
               label: '复制相对路径',
-              icon: <Copy size={14} aria-hidden />,
+              icon: <AppIcon name="copy" size={14} aria-hidden />,
               onClick: () => onCopyPath('rel'),
             },
             {
               id: 'copy-abs',
               label: '复制绝对路径',
-              icon: <Copy size={14} aria-hidden />,
+              icon: <AppIcon name="copy" size={14} aria-hidden />,
               onClick: () => onCopyPath('abs'),
             },
             {

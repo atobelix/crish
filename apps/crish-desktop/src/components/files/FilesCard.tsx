@@ -2,7 +2,7 @@ import { useToast } from '../../services/toast/ToastContext';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import styles from './FilesCard.module.css';
 import { Button, Tooltip } from '../ui';
-import { RotateCw, Search, X } from 'lucide-react';
+
 import {
   countPendingFileAnnotations,
   openPathDefault,
@@ -17,6 +17,7 @@ import { FileBreadcrumb } from './FileBreadcrumb';
 import { FileTreeView } from './FileTreeView';
 import { FilePreview } from './FilePreview';
 import { FileActions } from './FileActions';
+import { AppIcon } from '../ui/icons/index';
 
 interface FilesCardProps {
   initialPath?: string | null;
@@ -270,7 +271,7 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(
                 className={styles.filesNavBtn}
                 aria-label={REFRESH_LABEL}
                 onClick={handleRefreshBtn}
-                icon={<RotateCw size={14} />}
+                icon={<AppIcon name="rotate-cw" size={14} />}
               />
             </Tooltip>
 
@@ -330,9 +331,9 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(
                   }}
                   icon={
                     nav.filterMode || nav.filter ? (
-                      <X size={14} />
+                      <AppIcon name="x" size={14} />
                     ) : (
-                      <Search size={14} />
+                      <AppIcon name="search" size={14} />
                     )
                   }
                 />
@@ -401,7 +402,7 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(
                   className={styles.filesActionHintDismiss}
                   aria-label="关闭提示"
                   onClick={() => preview.clearActionHint()}
-                  icon={<X size={12} />}
+                  icon={<AppIcon name="x" size={12} />}
                 />
               </Tooltip>
             </div>

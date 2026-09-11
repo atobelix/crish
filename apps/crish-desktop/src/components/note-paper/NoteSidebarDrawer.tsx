@@ -1,15 +1,9 @@
 import React, { useState, useId, useCallback } from 'react';
-import {
-  Plus,
-  Search,
-  Edit2,
-  Trash2,
-} from 'lucide-react';
 import type { NoteDocumentMeta } from '../../api/noteDocumentContracts';
 import { formatRelativeActivity } from '../../api/sessionTime';
 import { Tooltip } from '../ui/Tooltip/Tooltip';
-import { IconSidebarLeft } from '../sidebar/SidebarToggleIcons';
 import styles from './NoteSidebarDrawer.module.css';
+import { AppIcon } from '../ui/icons/index';
 
 export interface NoteSidebarDrawerProps {
   isOpen: boolean;
@@ -90,7 +84,7 @@ export const NoteSidebarDrawer: React.FC<NoteSidebarDrawerProps> = ({
                 aria-label="新建笔记"
                 data-testid="note-sidebar-create-btn"
               >
-                <Plus size={14} />
+                <AppIcon name="plus" size={14} />
               </button>
             </Tooltip>
             <Tooltip content="收起侧栏 (Ctrl+\)">
@@ -101,14 +95,14 @@ export const NoteSidebarDrawer: React.FC<NoteSidebarDrawerProps> = ({
                 aria-label="收起侧栏"
                 data-testid="note-sidebar-close-btn"
               >
-                <IconSidebarLeft size={15} aria-hidden="true" />
+                <AppIcon name="sidebar-left" size={15} aria-hidden />
               </button>
             </Tooltip>
           </div>
         </div>
 
         <div className={styles.searchRow} role="search" aria-label="搜索笔记">
-          <Search size={14} className={styles.searchIcon} aria-hidden="true" />
+          <AppIcon name="search" size={14} className={styles.searchIcon} aria-hidden="true" />
           <input
             id={searchInputId}
             type="search"
@@ -186,7 +180,7 @@ export const NoteSidebarDrawer: React.FC<NoteSidebarDrawerProps> = ({
                             aria-label="重命名"
                             tabIndex={-1}
                           >
-                            <Edit2 size={12} />
+                            <AppIcon name="edit" size={12} />
                           </button>
                         </Tooltip>
                         <Tooltip content="删除笔记">
@@ -200,7 +194,7 @@ export const NoteSidebarDrawer: React.FC<NoteSidebarDrawerProps> = ({
                             aria-label="删除笔记"
                             tabIndex={-1}
                           >
-                            <Trash2 size={12} />
+                            <AppIcon name="trash" size={12} />
                           </button>
                         </Tooltip>
                       </div>

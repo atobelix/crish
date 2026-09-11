@@ -136,7 +136,7 @@
 }
 
 .titleInput::selection {
-  background: color-mix(in srgb, var(--brand-primary, #10b981) 18%, transparent);
+  background: color-mix(in srgb, var(--brand-primary) 18%, transparent);
   color: inherit;
 }
 
@@ -187,7 +187,7 @@
   left: 0;
   min-width: 200px;
   max-width: 280px;
-  background: var(--bg-popover, var(--bg-card));
+  background: var(--bg-card);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md, 6px);
   box-shadow: var(--shadow-md);
@@ -534,7 +534,7 @@ button.badge:focus-visible {
 .readingColumn {
   position: relative;
   width: 100%;
-  max-width: var(--note-paper-col-max, var(--chat-col-max, 720px));
+  max-width: var(--chat-col-max);
   margin-inline: auto;
   padding-left: var(--space-6, 24px);
   padding-right: var(--space-2, 8px);
@@ -670,7 +670,6 @@ button.badge:focus-visible {
 }
 
 .blockRow[data-handle='multi'] .handle {
-  opacity: 0.7;
 }
 
 .blockRow:hover .handle {
@@ -692,7 +691,6 @@ button.badge:focus-visible {
   color: var(--text-tertiary);
   margin-bottom: var(--space-0_5, 2px);
   line-height: var(--line-height-tight, 1.25);
-  opacity: 0.85;
 }
 
 .panel[data-debug='true'] .flavour,
@@ -879,7 +877,6 @@ button.badge:focus-visible {
 html[data-perf-tier='eco'] .stateLoading::before {
   animation: none;
   border-top-color: var(--border-color);
-  opacity: 0.6;
 }
 
 html[data-perf-tier='eco'] .blockRow,

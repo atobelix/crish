@@ -1,12 +1,13 @@
 import React, { useCallback, useRef } from 'react';
 import styles from './FilesCard.module.css';
 import { Button, MarkdownDocumentView, Tooltip } from '../ui';
-import { ExternalLink, X } from 'lucide-react';
+
 import { parseCsvPreview, pathBasename } from '../../api/workspaceFsApi';
 import { FileEditor } from './FileEditor';
 import { VirtualPlainCodeViewer } from '../diff/VirtualPlainCodeViewer';
 import { FileAnnotationPopover } from './FileAnnotationPopover';
 import type { ViewMode } from './hooks/useFilePreview';
+import { AppIcon } from '../ui/icons/index';
 
 /** files 叶内预览。禁止挂 document.body 或整屏覆盖层。 */
 
@@ -121,7 +122,7 @@ export const FilePreview = React.memo(function FilePreview({
               className={styles.filesInlineErrDismiss}
               aria-label="关闭错误"
               onClick={() => onError('')}
-              icon={<X size={11} />}
+              icon={<AppIcon name="x" size={11} />}
             />
           </Tooltip>
         </div>
@@ -266,7 +267,7 @@ export const FilePreview = React.memo(function FilePreview({
               className={styles.filesSoftBtn}
               style={{ marginTop: 10 }}
               onClick={onOpenFile}
-              icon={<ExternalLink size={13} />}
+              icon={<AppIcon name="external-link" size={13} />}
             >
               用默认应用打开
             </Button>

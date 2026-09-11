@@ -1,5 +1,4 @@
 import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
-import * as Lucide from 'lucide-react';
 import type { FileDiff } from '../../store/types';
 import {
   openToolInSession,
@@ -244,26 +243,26 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
         {
           id: 'open-file-path',
           label: '打开文件路径',
-          icon: <Lucide.FolderOpen size={14} aria-hidden />,
+          icon: <AppIcon name="folder-open" size={14} aria-hidden />,
           onClick: handleOpenSystemExplorer,
         },
         {
           id: 'copy-rel-path',
           label: '复制相对路径',
-          icon: <Lucide.Copy size={14} aria-hidden />,
+          icon: <AppIcon name="copy" size={14} aria-hidden />,
           onClick: handleCopyRelativePath,
         },
         {
           id: 'copy-abs-path',
           label: '复制绝对路径',
-          icon: <Lucide.FileCode size={14} aria-hidden />,
+          icon: <AppIcon name="file-code" size={14} aria-hidden />,
           onClick: handleCopyAbsolutePath,
         },
         {
           id: 'open-with-default',
           label: '选择打开方式',
           hint: openDefaultLabel,
-          icon: <Lucide.ExternalLink size={14} aria-hidden />,
+          icon: <AppIcon name="external-link" size={14} aria-hidden />,
           onClick: handleOpenDefault,
         },
       ];
@@ -281,13 +280,11 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
               style={{ flexShrink: 0, objectFit: 'contain' }}
             />
           ) : (
-            <Lucide.AppWindow
-              size={14}
+            <AppIcon name="app-window" size={14}
               style={{
                 flexShrink: 0,
                 color: 'var(--text-secondary)',
-              }}
-            />
+              }} />
           ),
           onClick: () => {
             void openWithHostOpener(op.id, absolutePath).catch((e) =>
@@ -300,7 +297,7 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
       items.push({
         id: 'locate-tree',
         label: '在应用文件树中定位',
-        icon: <Lucide.Locate size={14} aria-hidden />,
+        icon: <AppIcon name="locate" size={14} aria-hidden />,
         onClick: handleLocateInFiles,
       });
 
@@ -376,7 +373,7 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
                   aria-label={isFormatted ? '还原紧凑格式' : '格式化 JSON 排版'}
                   aria-pressed={isFormatted}
                   onClick={toggleFormatJson}
-                  icon={<Lucide.Braces size={14} />}
+                  icon={<AppIcon name="braces" size={14} />}
                 >
                   {isFormatted ? '还原' : '格式化'}
                 </Button>
@@ -393,7 +390,7 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
                 aria-label={wordWrap ? '关闭自动换行' : '开启自动换行'}
                 aria-pressed={wordWrap}
                 onClick={() => toggleWordWrap()}
-                icon={<Lucide.WrapText size={14} />}
+                icon={<AppIcon name="wrap-text" size={14} />}
               />
             </Tooltip>
 
@@ -406,7 +403,7 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
                 className={styles.actBtn}
                 aria-label={COPY_ALL_LABEL}
                 onClick={handleCopyAll}
-                icon={<Lucide.Copy size={14} />}
+                icon={<AppIcon name="copy" size={14} />}
               />
             </Tooltip>
 
@@ -420,7 +417,7 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
                 aria-label={HISTORY_LABEL}
                 aria-pressed={historyOpen}
                 onClick={() => setHistoryOpen((v) => !v)}
-                icon={<Lucide.History size={14} />}
+                icon={<AppIcon name="history" size={14} />}
               />
             </Tooltip>
 
@@ -436,7 +433,7 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
                       size="sm"
                       className={styles.actBtn}
                       aria-label={MORE_ACTIONS_LABEL}
-                      icon={<Lucide.MoreHorizontal size={14} />}
+                      icon={<AppIcon name="more-horizontal" size={14} />}
                     />
                   </Tooltip>
                 }
@@ -451,7 +448,7 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
             {viewMode === 'plain' ? (
               plainLoading ? (
                 <div className={styles.detailLoading}>
-                  <Lucide.Loader2 size={16} className="spin" />
+                  <AppIcon name="loader" size={16} className="spin" />
                   <span>正在加载源码...</span>
                 </div>
               ) : (
@@ -476,11 +473,9 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
               />
             ) : (
               <div className={styles.diffEmpty}>
-                <Lucide.FileDiff
-                  size={22}
+                <AppIcon name="file-diff" size={22}
                   className={styles.diffEmptyIcon}
-                  aria-hidden
-                />
+                  aria-hidden />
                 <div>该文件目前没有本地改动</div>
                 <div className={styles.diffEmptySub}>
                   本地工作区与基准版本完全一致。
@@ -511,3 +506,4 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
 FileViewerCard.displayName = 'FileViewerCard';
 
 export { FileViewerCardView } from './FileViewerCardView';
+import { AppIcon } from '../ui/icons/index';

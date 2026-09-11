@@ -1,11 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import styles from './FilesCard.module.css';
 import { Button, Tooltip } from '../ui';
-import { Folder, X } from 'lucide-react';
 import { ChevronDownIcon, ChevronRightIcon, FileFormatIcon } from '../../assets/icons';
 import { useVirtualScroll } from '../../hooks/useVirtualScroll';
 import { isSameFsPath } from '../../api/workspaceFsApi';
 import type { TreeNode } from './hooks/useFileNavigation';
+import { AppIcon } from '../ui/icons/index';
 
 function TreeFileIcon({ name }: { name: string }) {
   return <FileFormatIcon fileName={name} size={14} className={styles.filesRowIco} />;
@@ -264,7 +264,7 @@ export const FileTreeView: React.FC<FileTreeViewProps> = React.memo(
                     className={styles.filesInlineErrDismiss}
                     aria-label="关闭错误"
                     onClick={onErrorDismiss}
-                    icon={<X size={11} />}
+                    icon={<AppIcon name="x" size={11} />}
                   />
                 </Tooltip>
               </div>
@@ -275,6 +275,7 @@ export const FileTreeView: React.FC<FileTreeViewProps> = React.memo(
                 height: `${totalHeight}px`,
                 width: '100%',
                 position: 'relative',
+                overflow: 'hidden',
               }}
             >
               {visibleItems.map((e, index) => {
@@ -341,10 +342,8 @@ export const FileTreeView: React.FC<FileTreeViewProps> = React.memo(
                       }
                     />
                     {e.isDir ? (
-                      <Folder
-                        size={14}
-                        className={`${styles.filesRowIco} ${styles.dir}`}
-                      />
+                      <AppIcon name="folder" size={14}
+                        className={`${styles.filesRowIco} ${styles.dir}`} />
                     ) : (
                       <TreeFileIcon name={e.name} />
                     )}

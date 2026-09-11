@@ -15,7 +15,7 @@
  */
 
 import React, { useCallback, useState } from 'react';
-import { Check, SquarePen } from 'lucide-react';
+
 import { Button, Tooltip } from '../ui';
 import type { NoteTransport } from '../../api/noteApi';
 import {
@@ -25,6 +25,7 @@ import {
   type SendToNoteSink,
 } from '../../bridges/send-to-note';
 import styles from './NotePaperPanel.module.css';
+import { AppIcon } from '../ui/icons/index';
 
 export type SendToNoteButtonProps = {
   /** 消息 id */
@@ -171,9 +172,9 @@ export const SendToNoteButton: React.FC<SendToNoteButtonProps> = ({
             className={className}
           >
             {lastOk ? (
-              <Check size={13} aria-hidden />
+              <AppIcon name="check" size={13} aria-hidden />
             ) : (
-              <SquarePen size={13} aria-hidden />
+              <AppIcon name="square-pen" size={13} aria-hidden />
             )}
           </button>
         </Tooltip>
@@ -199,7 +200,7 @@ export const SendToNoteButton: React.FC<SendToNoteButtonProps> = ({
         }}
         aria-label={label}
         data-testid="send-to-note-button"
-        icon={<SquarePen size={14} aria-hidden />}
+        icon={<AppIcon name="square-pen" size={14} aria-hidden />}
       >
         {label}
       </Button>
