@@ -398,7 +398,7 @@ t0     触发（preflight Regular / overflow）
 | T12 | schema.rs v7 新增 | `summary_documents(session_id, block_id PRIMARY KEY, schema_version, height, tier, document_json, state, attempts, created_at, updated_at)` + 索引（session_id, updated_at） |
 | T13 | migrate.rs | v7 迁移（幂等、备份契约沿用） |
 | T14 | 新文件 `conex-db/src/summary_documents.rs` | `save_document`（upsert 幂等按 session_id+block_id）/ `get_document` / `list_documents` / `mark_state` |
-| T15 | （壳层）agent-workbench run 收口 | RunOutcome 序列化后：把 conversation stub 行与 summary_documents 对齐；state=committed → stub 行正文替换为渲染 md（写 session_messages 行）；追加 summary-ready 事件 | 
+| T15 | （壳层）agent-workbench run 收口 | RunOutcome 序列化后：把 conversation stub 行与 summary_documents 对齐；state=committed → stub 行正文替换为渲染 md（写 session_messages 行）；追加 summary-ready 事件 |
 
 ### 9.4 凭证/接線
 
