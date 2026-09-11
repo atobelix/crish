@@ -117,7 +117,7 @@
 }
 
 .termBranchActive {
-  background: var(--bg-active, rgba(0, 0, 0, 0.06));
+  background: var(--bg-active);
   color: var(--text-primary);
   font-weight: 600;
 }
@@ -594,7 +594,7 @@
   padding: 6px var(--panel-pad-x, 12px);
   font-size: var(--font-size-xs);
   color: var(--terminal-muted);
-  background: color-mix(in srgb, var(--terminal-bar-fill, rgba(255, 255, 255, 0.04)) 80%, transparent);
+  background: color-mix(in srgb, var(--terminal-bar-fill) 80%, transparent);
   border-bottom: var(--hairline-width, 1px) solid var(--terminal-border, var(--hairline, var(--border-subtle)));
   line-height: var(--line-height-ui, 1.35);
 }

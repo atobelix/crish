@@ -1,5 +1,5 @@
 import React from 'react';
-import * as Lucide from 'lucide-react';
+
 import styles from './PreviewCard.module.css';
 import { Button, Tooltip } from '../ui';
 import { usePreviewNavigation } from './usePreviewNavigation';
@@ -27,6 +27,7 @@ import {
   setPreviewFavicon,
   isAboutBlank,
 } from '../../api/previewBrowserStore';
+import { AppIcon } from '../ui/icons/index';
 
 export interface PreviewCardProps {
   wsId?: string;
@@ -330,7 +331,7 @@ export const PreviewCard: React.FC<PreviewCardProps> = ({
                 size="sm"
                 className={styles.aiStopBtn}
                 onClick={handleStopAi}
-                icon={<Lucide.Square size={11} fill="currentColor" />}
+                icon={<AppIcon name="square" size={11} fill="currentColor" />}
               >
                 停止
               </Button>
@@ -380,7 +381,7 @@ export const PreviewCard: React.FC<PreviewCardProps> = ({
                                 title={url}
                                 aria-label={`打开最近网页 ${displayHost}`}
                               >
-                                <Lucide.Globe size={12} className={styles.recentIcon} aria-hidden />
+                                <AppIcon name="globe" size={12} className={styles.recentIcon} aria-hidden />
                                 <span className={styles.recentText}>{displayHost}</span>
                               </button>
                             );

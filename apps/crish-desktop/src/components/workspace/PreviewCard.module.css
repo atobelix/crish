@@ -26,14 +26,14 @@
   min-width: 0;
 }
 .inspectorActive {
-  background: color-mix(in srgb, var(--brand, hsl(160 84% 39%)) 12%, transparent);
-  color: var(--brand, hsl(160 84% 39%));
+  background: color-mix(in srgb, var(--brand) 12%, transparent);
+  color: var(--brand);
   border: var(--hairline-width, 1px) solid
-    color-mix(in srgb, var(--brand, hsl(160 84% 39%)) 36%, transparent);
+    color-mix(in srgb, var(--brand) 36%, transparent);
 }
 .inspectorActive:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--brand, hsl(160 84% 39%)) 18%, transparent);
-  color: var(--brand, hsl(160 84% 39%));
+  background: color-mix(in srgb, var(--brand) 18%, transparent);
+  color: var(--brand);
 }
 .urlForm {
   flex: 1;
@@ -65,7 +65,6 @@
 
 .urlInput::placeholder {
   color: var(--text-tertiary) !important;
-  opacity: 0.85;
 }
 
 /* 悬停态与获得焦点态：无边框无绿色，仅背景微加深（对齐侧边栏搜索框） */
@@ -107,7 +106,7 @@
   flex: 1;
   min-height: 0;
   position: relative;
-  background: var(--bg-card, #ffffff);
+  background: var(--bg-card);
 }
 
 .aiRunningBadge {
@@ -119,7 +118,7 @@
   align-items: center;
   gap: 6px;
   padding: 3px 6px 3px 8px;
-  background: var(--bg-card, #ffffff);
+  background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-full, 9999px);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
@@ -132,7 +131,7 @@
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--brand, #10b981);
+  background: var(--brand);
   animation: pulseDot 1.5s ease-in-out infinite;
 }
 
@@ -172,7 +171,7 @@
   width: 100%;
   height: 100%;
   border: none;
-  background: var(--bg-card, #ffffff);
+  background: var(--bg-card);
 }
 .inspectorBadge {
   position: absolute;
@@ -185,7 +184,7 @@
   justify-content: space-between;
   gap: var(--space-1_5, 6px);
   padding: 4px 8px;
-  background: var(--bg-elevated, var(--bg-card, #ffffff));
+  background: var(--bg-elevated, var(--bg-card));
   border: var(--hairline-width, 1px) solid var(--border-color);
   border-radius: var(--radius-md, 6px);
   box-shadow: 0 2px 8px color-mix(in srgb, var(--text-primary) 8%, transparent);
@@ -203,14 +202,14 @@
   white-space: nowrap;
 }
 .inspectorResultIcon {
-  color: var(--accent-primary, #10b981);
+  color: var(--accent-primary);
   flex-shrink: 0;
 }
 .inspectorCode {
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: var(--font-size-xxs, 11px);
-  color: var(--accent-primary, #10b981);
-  background: color-mix(in srgb, var(--accent-primary, #10b981) 8%, transparent);
+  color: var(--accent-primary);
+  background: color-mix(in srgb, var(--accent-primary) 8%, transparent);
   padding: 1px 4px;
   border-radius: var(--radius-sm, 3px);
   overflow: hidden;
@@ -294,8 +293,8 @@
   flex-shrink: 0;
 }
 .inspectorActionBtn:hover:not(:disabled) {
-  color: var(--accent-primary, #10b981);
-  background: color-mix(in srgb, var(--accent-primary, #10b981) 10%, transparent);
+  color: var(--accent-primary);
+  background: color-mix(in srgb, var(--accent-primary) 10%, transparent);
 }
 .inspectorActionBtn:focus-visible {
   outline: none;
@@ -305,8 +304,8 @@
 .inspectorHover {
   position: absolute;
   box-sizing: border-box;
-  border: 1px solid var(--accent-primary, #10b981);
-  background: color-mix(in srgb, var(--accent-primary, #10b981) 12%, transparent);
+  border: 1px solid var(--accent-primary);
+  background: color-mix(in srgb, var(--accent-primary) 12%, transparent);
   pointer-events: none;
   z-index: 8;
   border-radius: 2px;
@@ -320,9 +319,9 @@
   gap: 4px;
   max-width: 260px;
   overflow: hidden;
-  background: var(--bg-elevated, #ffffff);
+  background: var(--bg-elevated);
   border: var(--hairline-width, 1px) solid
-    color-mix(in srgb, var(--accent-primary, #10b981) 36%, transparent);
+    color-mix(in srgb, var(--accent-primary) 36%, transparent);
   border-radius: var(--radius-sm, 3px);
   box-shadow: var(--shadow-sm);
   padding: 1px 5px;
@@ -331,7 +330,7 @@
 }
 .inspectorHoverTag code {
   font-size: var(--font-size-xxs, 11px);
-  color: var(--accent-primary, #10b981);
+  color: var(--accent-primary);
 }
 .inspectorHoverTag em {
   font-style: normal;
@@ -347,7 +346,7 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: var(--bg-primary, #ffffff);
+  background: var(--bg-primary);
   box-sizing: border-box;
   overflow-y: auto;
   user-select: none;
@@ -493,7 +492,6 @@
   box-sizing: border-box;
 }
 .emptyIco {
-  opacity: 0.35;
   color: var(--text-tertiary);
 }
 .emptyTitle {
@@ -545,7 +543,7 @@
 }
 .quickChip {
   border: var(--hairline-width, 1px) solid var(--border-subtle);
-  background: var(--bg-card, #ffffff);
+  background: var(--bg-card);
   border-radius: var(--radius-md, 8px);
   padding: 3px 8px;
   font-size: var(--font-size-xxs);
@@ -570,7 +568,7 @@
   border-bottom: var(--hairline-width, 1px) solid var(--border-subtle);
   max-height: 160px;
   overflow: hidden;
-  background: var(--bg-card, #ffffff);
+  background: var(--bg-card);
 }
 .histPanelFloat {
   position: absolute;

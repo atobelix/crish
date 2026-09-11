@@ -9,9 +9,9 @@
  *   - 关闭分屏 (X)
  */
 import React from 'react';
-import * as Lucide from 'lucide-react';
 import styles from './TerminalCard.module.css';
 import { IconButton } from '../ui';
+import { AppIcon } from '../ui/icons/index';
 
 export type TerminalSplitMode = 'none' | 'horizontal' | 'vertical';
 
@@ -46,7 +46,7 @@ export const TerminalToolbar: React.FC<TerminalToolbarProps> = ({
       <div className={styles.terminalTabsGroup}>
         {!isSplit ? (
           <div className={`${styles.termTag} ${styles.termTagActive}`}>
-            <Lucide.Terminal size={12} className={styles.termTagIcon} />
+            <AppIcon name="terminal" size={12} className={styles.termTagIcon} />
             <span>{title || 'pwsh'}</span>
           </div>
         ) : (
@@ -60,7 +60,7 @@ export const TerminalToolbar: React.FC<TerminalToolbarProps> = ({
               aria-label="切换到主分屏终端"
             >
               <span className={styles.branchSymbol}>┌</span>
-              <Lucide.Terminal size={11} className={styles.termTagIcon} />
+              <AppIcon name="terminal" size={11} className={styles.termTagIcon} />
               <span>{title ? `${title} (主)` : 'pwsh 1'}</span>
             </button>
             <button
@@ -72,7 +72,7 @@ export const TerminalToolbar: React.FC<TerminalToolbarProps> = ({
               aria-label="切换到副分屏终端"
             >
               <span className={styles.branchSymbol}>└</span>
-              <Lucide.Terminal size={11} className={styles.termTagIcon} />
+              <AppIcon name="terminal" size={11} className={styles.termTagIcon} />
               <span>{title ? `${title} (分屏)` : 'pwsh 2'}</span>
             </button>
           </div>
@@ -87,7 +87,7 @@ export const TerminalToolbar: React.FC<TerminalToolbarProps> = ({
           aria-label="新建独立终端"
           tooltip="新建独立终端标签"
           onClick={onNewTerminal}
-          icon={<Lucide.Plus size={13} strokeWidth={2} />}
+          icon={<AppIcon name="plus" size={13} />}
         />
 
         <IconButton
@@ -96,7 +96,7 @@ export const TerminalToolbar: React.FC<TerminalToolbarProps> = ({
           aria-label="左右分屏"
           tooltip={splitMode === 'horizontal' ? '当前已向右分屏' : '向右分屏 (左右并列)'}
           onClick={onSplitHorizontal}
-          icon={<Lucide.Columns2 size={13} strokeWidth={1.8} />}
+          icon={<AppIcon name="columns" size={13} />}
         />
 
         <IconButton
@@ -105,7 +105,7 @@ export const TerminalToolbar: React.FC<TerminalToolbarProps> = ({
           aria-label="上下分屏"
           tooltip={splitMode === 'vertical' ? '当前已向下分屏' : '向下分屏 (上下堆叠)'}
           onClick={onSplitVertical}
-          icon={<Lucide.Rows2 size={13} strokeWidth={1.8} />}
+          icon={<AppIcon name="rows" size={13} />}
         />
 
         <IconButton
@@ -114,7 +114,7 @@ export const TerminalToolbar: React.FC<TerminalToolbarProps> = ({
           aria-label="清空当前终端屏幕"
           tooltip="清屏 (Ctrl+L)"
           onClick={onClear}
-          icon={<Lucide.Eraser size={13} strokeWidth={1.8} />}
+          icon={<AppIcon name="eraser" size={13} />}
         />
 
         {isSplit && (
@@ -124,7 +124,7 @@ export const TerminalToolbar: React.FC<TerminalToolbarProps> = ({
             aria-label="关闭当前分屏"
             tooltip="关闭副分屏"
             onClick={onCloseSplit}
-            icon={<Lucide.X size={13} strokeWidth={2} />}
+            icon={<AppIcon name="x" size={13} />}
           />
         )}
       </div>

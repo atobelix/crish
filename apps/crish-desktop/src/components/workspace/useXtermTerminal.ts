@@ -224,22 +224,39 @@ export function useXtermTerminal({
       rows: 24,
     });
 
-    // 监听 html[data-theme] 与 style 属性变化，当主题在 light/dark 或个性化皮肤调色切换时，实时动态同步 xterm 主题色彩
+    // 监听 html[data-theme] 与 style 属性变化，当主题在 light/dark 或字体偏好切换时，实时动态同步 xterm 主题色彩与等宽字体
+    const updateTerminalStyles = () => {
+      try {
+        term.options.theme = getXtermTheme();
+        const nextMono = readCssVar(
+          '--font-mono',
+          "'Cascadia Mono', 'Cascadia Code', 'Consolas', monospace"
+        )
+          .replace(/\s+/g, ' ')
+          .trim();
+        if (nextMono && term.options.fontFamily !== nextMono) {
+          term.options.fontFamily = nextMono;
+          fitAddonRef.current?.fit();
+        }
+        term.refresh(0, Math.max(0, term.rows - 1));
+      } catch {
+        /* swallow-ok: 终端卸载或已被 dispose 时更新静默跳过 */
+      }
+    };
+
     let themeObserver: MutationObserver | null = null;
     if (typeof MutationObserver !== 'undefined' && typeof document !== 'undefined') {
-      themeObserver = new MutationObserver(() => {
-        try {
-          term.options.theme = getXtermTheme();
-          term.refresh(0, Math.max(0, term.rows - 1));
-        } catch {
-          /* swallow-ok: 终端卸载或已被 dispose 时更新静默跳过 */
-        }
-      });
+      themeObserver = new MutationObserver(updateTerminalStyles);
       themeObserver.observe(document.documentElement, {
         attributes: true,
         attributeFilter: ['data-theme', 'style'],
       });
     }
+
+    const handleFontChange = () => {
+      updateTerminalStyles();
+    };
+    window.addEventListener('crish-fonts-changed', handleFontChange);
 
     const fitAddon = new FitAddon();
     term.loadAddon(fitAddon);
@@ -296,6 +313,7 @@ export function useXtermTerminal({
       if (themeObserver) {
         themeObserver.disconnect();
       }
+      window.removeEventListener('crish-fonts-changed', handleFontChange);
       cancelAnimationFrame(rafId);
       if (innerRaf) cancelAnimationFrame(innerRaf);
       dataDisp.dispose();

@@ -3,11 +3,12 @@
  * 非模态面板语义（aria-haspopup）；Esc/外点关闭由 usePreviewNavigation 接管。
  */
 import React from 'react';
-import * as Lucide from 'lucide-react';
+
 import styles from './PreviewCard.module.css';
 import { Button, Tooltip } from '../ui';
 import { previewDisplayHost } from '../../api/previewBrowserStore';
 import { HIST_PANEL_ID } from './previewCardLib';
+import { AppIcon } from '../ui/icons/index';
 
 export type PreviewHistoryPanelProps = {
   history: string[];
@@ -77,7 +78,7 @@ export const PreviewHistoryPanel: React.FC<PreviewHistoryPanelProps> = ({
                     className={styles.histX}
                     aria-label={`移除书签 ${b.title || b.url}`}
                     onClick={() => onRemoveBookmark(b.url)}
-                    icon={<Lucide.X size={12} />}
+                    icon={<AppIcon name="x" size={12} />}
                   />
                 </Tooltip>
               </div>
@@ -133,7 +134,7 @@ export const PreviewHistoryPanel: React.FC<PreviewHistoryPanelProps> = ({
                     className={styles.histX}
                     aria-label={`从历史移除 ${label}`}
                     onClick={() => onRemoveHistory(u)}
-                    icon={<Lucide.X size={12} />}
+                    icon={<AppIcon name="x" size={12} />}
                   />
                 </Tooltip>
               </div>

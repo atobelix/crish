@@ -6,7 +6,7 @@ import { useToast } from '../../services/toast/ToastContext';
  * （34 文档 DD5-T2a 前端装配测试配套；走 task.suspicious 字段路径）。
  */
 import React, { useState } from 'react';
-import * as Lucide from 'lucide-react';
+
 import styles from './RuntimePanel.module.css';
 import { Tooltip } from '../ui';
 import {
@@ -22,6 +22,7 @@ import {
 } from './runtimePanelLib';
 import { useConnectionStatus } from '../../hooks/useConnectionStatus';
 import { SUSPICIOUS_TASK_TEXT } from '../bg-tasks/bgTaskCardLib';
+import { AppIcon } from '../ui/icons/index';
 
 export type BgTasksSectionProps = {
   bgTasks: BackgroundTaskInfo[];
@@ -111,19 +112,19 @@ export const BgTasksSection: React.FC<BgTasksSectionProps> = ({
                   }}
                 >
                   <div className={styles.rowMain}>
-                    <Lucide.Terminal size={16} className={styles.rowIco} aria-hidden />
+                    <AppIcon name="terminal" size={16} className={styles.rowIco} aria-hidden />
                     <div className={styles.rowText}>
                       <span className={styles.rowTitle}>{t.label}</span>
                       <span className={styles.rowMeta}>{meta}</span>
                       {suspicious ? (
                         <span className={styles.rowMeta}>
-                          <Lucide.AlertTriangle size={12} aria-hidden />
+                          <AppIcon name="alert-triangle" size={12} aria-hidden />
                           {SUSPICIOUS_TASK_TEXT}
                         </span>
                       ) : null}
                     </div>
                   </div>
-                  <Lucide.ChevronRight size={16} className={styles.rowChevron} aria-hidden />
+                  <AppIcon name="chevron-right" size={16} className={styles.rowChevron} aria-hidden />
                 </div>
               </Tooltip>
             );

@@ -3,12 +3,6 @@
  * 正本清源：彻底清退私造样式与非标准区块，全面对齐系统 SettingsRow 与单原子操作
  */
 import React, { useState } from 'react';
-import {
-  Bookmark,
-  Download,
-  History,
-  KeyRound,
-} from 'lucide-react';
 import styles from './BrowserImportSection.module.css';
 import { Button, Tooltip } from '../../ui';
 import { useBookmarksImport } from './import-hooks/useBookmarksImport';
@@ -18,6 +12,7 @@ import { useExportAuth } from './import-hooks/useExportAuth';
 import { ExportAuthDialogs } from './ExportAuthDialogs';
 import { SettingsCard, SettingsRow, SettingsSection } from '../../settings/SettingsUI';
 import type { BusyKind } from './import-hooks/browserImportShared';
+import { AppIcon } from '../../ui/icons/index';
 
 export interface BrowserImportSectionProps {
   /** 浏览器是否运行中：登录态导出/导入需运行中会话。 */
@@ -70,7 +65,7 @@ export const BrowserImportSection: React.FC<BrowserImportSectionProps> = ({
       <SettingsSection title="数据导入">
         <SettingsCard>
           <SettingsRow
-            icon={<Bookmark size={16} strokeWidth={1.75} />}
+            icon={<AppIcon name="bookmark" size={16} />}
             title="书签"
             desc="导入 Chrome 书签文件"
             control={
@@ -99,7 +94,7 @@ export const BrowserImportSection: React.FC<BrowserImportSectionProps> = ({
           />
 
           <SettingsRow
-            icon={<History size={16} strokeWidth={1.75} />}
+            icon={<AppIcon name="history" size={16} />}
             title="浏览历史"
             desc="导入本地 Chrome 历史记录"
             control={
@@ -120,7 +115,7 @@ export const BrowserImportSection: React.FC<BrowserImportSectionProps> = ({
           />
 
           <SettingsRow
-            icon={<KeyRound size={16} strokeWidth={1.75} />}
+            icon={<AppIcon name="key" size={16} />}
             title="登录态"
             desc="导入浏览器会话凭据"
             control={
@@ -161,7 +156,7 @@ export const BrowserImportSection: React.FC<BrowserImportSectionProps> = ({
       <SettingsSection title="凭据备份">
         <SettingsCard>
           <SettingsRow
-            icon={<Download size={16} strokeWidth={1.75} />}
+            icon={<AppIcon name="download" size={16} />}
             title="导出登录态"
             desc="备份当前浏览器会话凭据"
             control={

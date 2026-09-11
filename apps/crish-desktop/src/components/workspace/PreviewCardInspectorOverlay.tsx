@@ -1,5 +1,4 @@
 import React from 'react';
-import * as Lucide from 'lucide-react';
 import styles from './PreviewCard.module.css';
 import { Button, Tooltip } from '../ui';
 import {
@@ -10,6 +9,7 @@ import type {
   InspectHoverPayload,
   InspectSelectPayload,
 } from './previewProtocol';
+import { AppIcon } from '../ui/icons/index';
 
 export interface PreviewCardInspectorOverlayProps {
   isInspectorActive: boolean;
@@ -58,11 +58,9 @@ export const PreviewCardInspectorOverlay: React.FC<PreviewCardInspectorOverlayPr
           aria-label="DOM 拾取结果"
         >
           <div className={styles.inspectorResultText}>
-            <Lucide.ScanSearch
-              size={13}
+            <AppIcon name="scan-search" size={13}
               className={styles.inspectorResultIcon}
-              aria-hidden
-            />
+              aria-hidden />
             <span>已拾取 DOM 元素：</span>
             <code className={styles.inspectorCode}>
               {`<${buildInspectorElementLabel(
@@ -97,7 +95,7 @@ export const PreviewCardInspectorOverlay: React.FC<PreviewCardInspectorOverlayPr
                 className={styles.inspectorActionBtn}
                 onClick={onCopySelector}
                 aria-label="复制选择器"
-                icon={<Lucide.Copy size={12} strokeWidth={1.75} />}
+                icon={<AppIcon name="copy" size={12} />}
               />
             </Tooltip>
             <Tooltip content="复制 HTML 片段">
@@ -108,7 +106,7 @@ export const PreviewCardInspectorOverlay: React.FC<PreviewCardInspectorOverlayPr
                 className={styles.inspectorActionBtn}
                 onClick={onCopyHtml}
                 aria-label="复制 HTML 片段"
-                icon={<Lucide.Code2 size={12} strokeWidth={1.75} />}
+                icon={<AppIcon name="code" size={12} />}
               />
             </Tooltip>
             <Tooltip content="发送到 AI">
@@ -119,7 +117,7 @@ export const PreviewCardInspectorOverlay: React.FC<PreviewCardInspectorOverlayPr
                 className={styles.inspectorActionBtn}
                 onClick={onSendToAi}
                 aria-label="发送到 AI"
-                icon={<Lucide.Send size={12} strokeWidth={1.75} />}
+                icon={<AppIcon name="send" size={12} />}
               />
             </Tooltip>
             <Tooltip content="清除">
@@ -130,7 +128,7 @@ export const PreviewCardInspectorOverlay: React.FC<PreviewCardInspectorOverlayPr
                 className={styles.inspectorActionBtn}
                 onClick={onClearSelected}
                 aria-label="清除拾取结果"
-                icon={<Lucide.X size={12} strokeWidth={1.75} />}
+                icon={<AppIcon name="x" size={12} />}
               />
             </Tooltip>
           </div>

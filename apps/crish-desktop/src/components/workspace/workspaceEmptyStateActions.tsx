@@ -10,13 +10,14 @@
  */
 
 import React from 'react';
-import * as Lucide from 'lucide-react';
+
 import {
   W5B_STRICT_PACKAGE_ID,
   W5B_STRICT_TRACK,
 } from '../note-paper/notePaperStrictTrack';
 import { Button } from '../ui';
 import styles from './WorkspaceEmptyState.module.css';
+import { AppIcon } from '../ui/icons/index';
 
 export type WorkspaceEmptyStateActionsProps = {
   preferredNotePaperTrack: 'strict' | 'skeleton';
@@ -46,7 +47,7 @@ export function WorkspaceEmptyStateActions({
         onOpenStrict();
       }}
       onPointerDown={(e) => e.stopPropagation()}
-      icon={<Lucide.FileText size={14} aria-hidden />}
+      icon={<AppIcon name="file-text" size={14} aria-hidden />}
     >
       打开笔记纸面（Strict）
     </Button>
@@ -66,7 +67,7 @@ export function WorkspaceEmptyStateActions({
         onOpenSkeleton();
       }}
       onPointerDown={(e) => e.stopPropagation()}
-      icon={<Lucide.NotebookPen size={14} aria-hidden />}
+      icon={<AppIcon name="notebook-pen" size={14} aria-hidden />}
     >
       打开笔记纸面（预览壳）
     </Button>
@@ -104,7 +105,7 @@ export function WorkspaceEmptyStateLanding(
   return (
     <>
       <div className={styles.emptyStateIconWrapper}>
-        <Lucide.LayoutPanelLeft size={32} strokeWidth={1.5} aria-hidden />
+        <AppIcon name="layout-panel-left" size={32} aria-hidden />
       </div>
       <div className={styles.emptyStateTitle}>工作区暂无面板</div>
       <div className={styles.emptyStateDesc}>

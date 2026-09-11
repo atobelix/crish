@@ -3,7 +3,7 @@
  * 点击 / Enter / Space 聚焦对应会话（无会话行不可点）。
  */
 import React from 'react';
-import * as Lucide from 'lucide-react';
+
 import { Tooltip } from '../ui';
 import styles from './RuntimePanel.module.css';
 import type { LiveTask } from './useRuntimePanelData';
@@ -13,6 +13,7 @@ import {
   formatElapsed,
   liveTaskAriaLabel,
 } from './runtimePanelLib';
+import { AppIcon } from '../ui/icons/index';
 
 export type LiveTasksSectionProps = {
   liveTasks: LiveTask[];
@@ -82,7 +83,7 @@ export const LiveTasksSection: React.FC<LiveTasksSectionProps> = ({
                   </div>
                 </div>
                 {clickable ? (
-                  <Lucide.ChevronRight size={16} className={styles.rowChevron} aria-hidden />
+                  <AppIcon name="chevron-right" size={16} className={styles.rowChevron} aria-hidden />
                 ) : null}
               </div>
             );

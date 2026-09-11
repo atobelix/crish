@@ -50,9 +50,8 @@
 }
 
 .workspaceEmptyState[data-empty='true'] .emptyStateIconWrapper {
-  color: var(--text-tertiary);
-  opacity: 0.6;
-  margin-bottom: var(--space-1);
+  color: var(--text-faint);
+margin-bottom: var(--space-1);
   box-shadow: none;
   transition: opacity var(--transition-smooth);
 }

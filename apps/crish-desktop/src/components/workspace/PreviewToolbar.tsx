@@ -4,9 +4,10 @@
  * 纯渲染：一切导航动作与安全校验由 hook 注入。
  */
 import React from 'react';
-import * as Lucide from 'lucide-react';
+
 import styles from './PreviewCard.module.css';
 import { IconButton, Input } from '../ui';
+import { AppIcon } from '../ui/icons/index';
 
 /** 预览状态（可回退/前进/空白/src/加载/地址/书签/历史/外部打开等收敛为单一子对象） */
 export interface PreviewToolbarPreviewProps {
@@ -96,7 +97,7 @@ export const PreviewToolbar: React.FC<PreviewToolbarProps> = ({
         onClick={onBack}
         aria-label="后退"
         tooltip="后退"
-        icon={<Lucide.ChevronLeft size={iconSz} strokeWidth={1.5} />}
+        icon={<AppIcon name="chevron-left" size={iconSz} />}
       />
       <IconButton
         type="button"
@@ -106,7 +107,7 @@ export const PreviewToolbar: React.FC<PreviewToolbarProps> = ({
         onClick={onForward}
         aria-label="前进"
         tooltip="前进"
-        icon={<Lucide.ChevronRight size={iconSz} strokeWidth={1.5} />}
+        icon={<AppIcon name="chevron-right" size={iconSz} />}
       />
       <IconButton
         type="button"
@@ -116,7 +117,7 @@ export const PreviewToolbar: React.FC<PreviewToolbarProps> = ({
         onClick={onHome}
         aria-label="主页"
         tooltip="主页（空白预览）"
-        icon={<Lucide.Home size={iconSz} strokeWidth={1.5} />}
+        icon={<AppIcon name="home" size={iconSz} />}
       />
       <IconButton
         type="button"
@@ -129,13 +130,10 @@ export const PreviewToolbar: React.FC<PreviewToolbarProps> = ({
         tooltip="刷新"
         icon={
           loading ? (
-            <Lucide.Loader2
-              size={iconSz}
-              strokeWidth={1.5}
-              className={styles.spin}
-            />
+            <AppIcon name="loader" size={iconSz}
+              className={styles.spin} />
           ) : (
-            <Lucide.RotateCw size={iconSz} strokeWidth={1.5} />
+            <AppIcon name="rotate-cw" size={iconSz} />
           )
         }
       />
@@ -156,7 +154,7 @@ export const PreviewToolbar: React.FC<PreviewToolbarProps> = ({
           placeholder="请输入网址"
           onChange={(e) => onUrlChange(e.target.value)}
           prefixIcon={
-            <Lucide.Globe size={13} strokeWidth={1.5} aria-hidden />
+            <AppIcon name="globe" size={13} aria-hidden />
           }
           spellCheck={false}
           aria-label="预览地址"
@@ -184,10 +182,7 @@ export const PreviewToolbar: React.FC<PreviewToolbarProps> = ({
             : '拾取页面元素 (Inspect)'
         }
         icon={
-          <Lucide.MousePointerClick
-            size={iconSz}
-            strokeWidth={isInspectorActive ? 2.0 : 1.5}
-          />
+          <AppIcon name="mouse-pointer-click" size={iconSz} />
         }
       />
       <IconButton
@@ -207,11 +202,8 @@ export const PreviewToolbar: React.FC<PreviewToolbarProps> = ({
               : '加入书签'
         }
         icon={
-          <Lucide.Star
-            size={iconSz}
-            strokeWidth={bookmarked ? 2.0 : 1.5}
-            fill={bookmarked ? 'currentColor' : 'none'}
-          />
+          <AppIcon name="star" size={iconSz}
+            fill={bookmarked ? 'currentColor' : 'none'} />
         }
       />
       <IconButton
@@ -227,10 +219,7 @@ export const PreviewToolbar: React.FC<PreviewToolbarProps> = ({
         aria-haspopup="dialog"
         tooltip="历史与书签"
         icon={
-          <Lucide.History
-            size={iconSz}
-            strokeWidth={showHist ? 2.0 : 1.5}
-          />
+          <AppIcon name="history" size={iconSz} />
         }
       />
       <IconButton
@@ -242,7 +231,7 @@ export const PreviewToolbar: React.FC<PreviewToolbarProps> = ({
         disabled={!canExternal}
         aria-label="系统浏览器打开"
         tooltip={canExternal ? '系统浏览器打开' : '当前地址无法外部打开'}
-        icon={<Lucide.ExternalLink size={iconSz} strokeWidth={1.5} />}
+        icon={<AppIcon name="external-link" size={iconSz} />}
       />
     </div>
   );
