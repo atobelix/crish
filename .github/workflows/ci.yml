@@ -82,6 +82,11 @@ jobs:
       # 零新增 job）；报告模式便于 diff 观察趋势，非门禁本体。
       - run: npm run check:swallowed-errors-frontend
       - run: npm run check:css-encoding
+      # token 一致性门禁（G1/G2 · docs/design-token-ssot/00-总方案 §6.5）：
+      # var() 引用完整性（未定义引用）+ 死 token 计数，基线 ratchet
+      # （基线记录/token-consistency-baseline.md，新增即 fail、--update 显式收紧）。
+      # 与 check:desktop 同口径，CI 单独接线确保 PR 级拦截。
+      - run: npm run check:token-consistency
       # 收敛硬闸（X1/R9）：被跟踪运行时产物与波次命名文件必须归零
       - run: node scripts/check-convergence-metrics.mjs
 
