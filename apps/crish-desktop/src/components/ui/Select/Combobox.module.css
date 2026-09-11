@@ -5,8 +5,8 @@
   align-items: center;
   gap: var(--space-2, 8px);
   width: 100%;
-  border: 1px solid var(--border-color, hsl(35 10% 86%));
-  background: var(--bg-card, hsl(0 0% 100%));
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
   color: var(--text-primary);
   border-radius: var(--radius-lg, 8px);
   box-sizing: border-box;
@@ -99,8 +99,8 @@
   width: 100%;
   min-height: 32px;
   padding: 3px 8px;
-  border: 1px solid var(--border-color, hsl(35 10% 86%));
-  background: var(--bg-card, hsl(0 0% 100%));
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
   border-radius: var(--radius-lg, 8px);
   box-sizing: border-box;
   cursor: text;
@@ -176,7 +176,7 @@
 
 /* 关键词高亮 */
 .highlightText {
-  color: var(--brand-deep, hsl(160 84% 30%));
+  color: var(--brand-deep);
   font-weight: 600;
 }
 

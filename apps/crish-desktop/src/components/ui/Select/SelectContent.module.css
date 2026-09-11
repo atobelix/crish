@@ -3,11 +3,11 @@
 .content {
   position: fixed;
   z-index: var(--z-dropdown, 300);
-  background: var(--bg-card, hsl(0 0% 100%));
-  border: 1px solid var(--border-color, hsl(35 10% 86%));
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
   box-shadow:
-    0 10px 28px -4px color-mix(in srgb, var(--shadow-color, hsl(35 5% 11%)) 10%, transparent),
-    0 3px 10px -2px color-mix(in srgb, var(--shadow-color, hsl(35 5% 11%)) 4%, transparent);
+    0 10px 28px -4px color-mix(in srgb, var(--shadow-color) 10%, transparent),
+    0 3px 10px -2px color-mix(in srgb, var(--shadow-color) 4%, transparent);
   box-sizing: border-box;
   outline: none;
   font-family: inherit;
@@ -225,7 +225,7 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  color: var(--brand, hsl(160 84% 39%));
+  color: var(--brand);
   margin-left: auto;
 }
 

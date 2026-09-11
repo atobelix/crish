@@ -7,8 +7,8 @@
   gap: var(--space-2, 8px);
   width: 100%;
   min-height: 0;
-  border: 1px solid var(--border-color, hsl(35 10% 86%));
-  background: var(--bg-card, hsl(0 0% 100%));
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
   color: var(--text-primary);
   font-family: inherit;
   cursor: pointer;
@@ -84,13 +84,13 @@
 
 .triggerOutline,
 .variant-outline {
-  background: var(--bg-card, hsl(0 0% 100%));
-  border-color: var(--border-color, hsl(35 10% 86%));
+  background: var(--bg-card);
+  border-color: var(--border-color);
 }
 
 /* 错误态 */
 .triggerError {
-  border-color: var(--color-error, hsl(0 84% 60%));
+  border-color: var(--color-error);
 }
 
 .startSlot,
@@ -148,11 +148,11 @@
 .content {
   position: fixed;
   z-index: var(--z-dropdown, 300);
-  background: var(--bg-card, hsl(0 0% 100%));
-  border: 1px solid var(--border-color, hsl(35 10% 86%));
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
   box-shadow:
-    0 12px 32px -4px color-mix(in srgb, var(--shadow-color, hsl(35 5% 11%)) 12%, transparent),
-    0 4px 12px -2px color-mix(in srgb, var(--shadow-color, hsl(35 5% 11%)) 4%, transparent);
+    0 12px 32px -4px color-mix(in srgb, var(--shadow-color) 12%, transparent),
+    0 4px 12px -2px color-mix(in srgb, var(--shadow-color) 4%, transparent);
   box-sizing: border-box;
   outline: none;
   font-family: inherit;
@@ -323,7 +323,7 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  color: var(--brand-deep, hsl(160 84% 30%));
+  color: var(--brand-deep);
   margin-left: auto;
 }
 

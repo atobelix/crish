@@ -1,9 +1,9 @@
 import React, { useState, useRef } from 'react';
 import type { MouseEvent, ReactNode } from 'react';
-import { Check, ChevronRight, ChevronDown } from 'lucide-react';
 import type { MenuItem } from './types';
 import menuStyles from '../Menu/Menu.module.css';
 import styles from './SmartExpandablePanel.module.css';
+import { AppIcon } from '../icons/index';
 
 export interface SmartPanelItemProps {
   item: MenuItem;
@@ -75,9 +75,9 @@ export const SmartPanelItem: React.FC<SmartPanelItemProps> = ({
             <span className={styles.itemRight}>
               {item.badge && <span className={styles.badge}>{item.badge}</span>}
               {expanded ? (
-                <ChevronDown size={13} className={styles.submenuChevron} aria-hidden="true" />
+                <AppIcon name="chevron-down" size={13} className={styles.submenuChevron} aria-hidden="true" />
               ) : (
-                <ChevronRight size={13} className={styles.submenuChevron} aria-hidden="true" />
+                <AppIcon name="chevron-right" size={13} className={styles.submenuChevron} aria-hidden="true" />
               )}
             </span>
           </button>
@@ -179,10 +179,10 @@ export const SmartPanelItem: React.FC<SmartPanelItemProps> = ({
             <span className={styles.shortcut}>{item.shortcut}</span>
           )}
           {hasSubmenu && (
-            <ChevronRight size={13} className={styles.submenuChevron} aria-hidden="true" />
+            <AppIcon name="chevron-right" size={13} className={styles.submenuChevron} aria-hidden="true" />
           )}
           {isSelectable && item.selected && (
-            <Check size={13} className={styles.checkIcon} aria-hidden="true" />
+            <AppIcon name="check" size={13} className={styles.checkIcon} aria-hidden="true" />
           )}
         </span>
       </button>

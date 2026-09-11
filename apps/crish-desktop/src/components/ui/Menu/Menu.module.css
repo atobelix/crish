@@ -25,7 +25,7 @@
   padding: 6px;
   border-radius: var(--sep-radius-outer, 14px);
   border: 1px solid var(--border-color);
-  background: var(--bg-elevated, hsl(0 0% 100%));
+  background: var(--bg-elevated);
   box-shadow: var(--shadow-lg);
   display: flex;
   flex-direction: column;
@@ -118,12 +118,12 @@
 }
 
 .menuItemDanger {
-  color: var(--color-error, hsl(0 84% 60%));
+  color: var(--color-error);
 }
 
 .menuItemDanger:hover {
-  background: var(--color-error-bg, hsl(0 84% 60% / 0.08));
-  color: var(--color-error, hsl(0 84% 60%));
+  background: var(--color-error-bg);
+  color: var(--color-error);
 }
 
 .menuItemIcon {
@@ -183,12 +183,11 @@
   flex-shrink: 0;
   color: var(--text-tertiary);
   margin-left: auto;
-  opacity: 0.7;
 }
 
 .menuItemCheck {
   flex-shrink: 0;
-  color: var(--brand-deep, hsl(160 84% 30%));
+  color: var(--brand-deep);
   margin-left: auto;
   display: inline-flex;
   align-items: center;

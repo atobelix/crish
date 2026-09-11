@@ -334,7 +334,7 @@ export const MarkdownDocumentView: React.FC<MarkdownDocumentViewProps> = React.m
               flexShrink: 0,
             }}
           >
-            <span aria-hidden="true" style={{ color: 'var(--color-warning, #f59e0b)' }}>⚡</span>
+            <span aria-hidden="true" style={{ color: 'var(--color-warning)' }}>⚡</span>
             <span>大文件 Markdown（{sizeKb} KB）已启用虚拟化极速代码呈现</span>
           </div>
           <div style={{ flex: 1, minHeight: 0, height: '100%', width: '100%' }}>

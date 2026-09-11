@@ -18,9 +18,9 @@
   gap: 5px;
   padding: 2px 8px;
   border-radius: 9999px;
-  background: hsl(220 18% 14% / 0.85);
+  background: color-mix(in srgb, var(--surface-scrim) 85%, transparent);
   border: 1px solid hsl(220 16% 24% / 0.9);
-  color: var(--text-primary, hsl(215 20% 95%));
+  color: var(--text-primary);
   font-family: inherit;
   font-size: 11px;
   line-height: 1.4;
@@ -33,8 +33,8 @@
 }
 
 .capsule:hover {
-  border-color: color-mix(in srgb, var(--border-color, hsl(220 16% 24%)) 90%, var(--text-primary, #fff) 10%);
-  background: hsl(220 18% 18% / 0.95);
+  border-color: color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
+  background: color-mix(in srgb, var(--surface-scrim) 90%, var(--surface-chrome));
 }
 
 /* 状态小圆点 */
@@ -42,7 +42,7 @@
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: hsl(155 75% 50% / 0.9);
+  background: color-mix(in srgb, var(--brand) 90%, transparent);
   flex-shrink: 0;
 }
 

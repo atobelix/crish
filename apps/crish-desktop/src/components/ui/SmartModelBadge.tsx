@@ -39,7 +39,7 @@ export const SmartModelBadge: React.FC<SmartModelBadgeProps> = ({
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         <div style={{ fontWeight: 600 }}>{abbr.standard}</div>
-        <div style={{ fontSize: 10, opacity: 0.8, fontFamily: 'monospace' }}>
+        <div style={{ fontSize: 10, opacity: 0.8, fontFamily: 'var(--font-mono)' }}>
           原始标识: {modelId}
         </div>
       </div>

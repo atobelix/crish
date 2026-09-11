@@ -6,8 +6,8 @@
   justify-content: space-between;
   gap: var(--space-2, 8px);
   width: 100%;
-  border: 1px solid var(--border-color, hsl(35 10% 86%));
-  background: var(--bg-card, hsl(0 0% 100%));
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
   color: var(--text-primary);
   font-family: inherit;
   cursor: pointer;
@@ -83,13 +83,13 @@
 
 .triggerOutline,
 .variant-outline {
-  background: var(--bg-card, hsl(0 0% 100%));
-  border-color: var(--border-color, hsl(35 10% 86%));
+  background: var(--bg-card);
+  border-color: var(--border-color);
 }
 
 /* 错误态 */
 .triggerError {
-  border-color: var(--color-error, hsl(0 84% 60%));
+  border-color: var(--color-error);
 }
 
 .startSlot,

@@ -1,8 +1,8 @@
 import React from 'react';
 import type { MouseEvent, KeyboardEvent } from 'react';
-import { ChevronRight, Check } from 'lucide-react';
 import type { MenuItem } from './types';
 import styles from './SmartPanel.module.css';
+import { AppIcon } from '../icons/index';
 
 export interface SmartItemRowProps {
   item: MenuItem;
@@ -107,17 +107,15 @@ export const SmartItemRow: React.FC<SmartItemRowProps> = ({
           ) : null}
           {item.shortcut ? <span className={styles.shortcut}>{item.shortcut}</span> : null}
           {item.selected ? (
-            <Check size={14} className={styles.checkIcon} strokeWidth={2.2} aria-hidden="true" />
+            <AppIcon name="check" size={14} className={styles.checkIcon} aria-hidden="true" />
           ) : null}
           {isSubmenu ? (
-            <ChevronRight size={13} className={styles.submenuChevron} aria-hidden="true" />
+            <AppIcon name="chevron-right" size={13} className={styles.submenuChevron} aria-hidden="true" />
           ) : null}
           {isCollapsible ? (
-            <ChevronRight
-              size={13}
+            <AppIcon name="chevron-right" size={13}
               className={`${styles.chevronIcon} ${item.expanded ? styles.chevronRotated : ''}`}
-              aria-hidden="true"
-            />
+              aria-hidden="true" />
           ) : null}
         </div>
       </button>

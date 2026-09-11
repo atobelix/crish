@@ -1,8 +1,9 @@
 import React from 'react';
 import type { RefObject } from 'react';
-import { Search, X } from 'lucide-react';
+
 import { Tooltip } from '../Tooltip/Tooltip';
 import styles from './SmartExpandablePanel.module.css';
+import { AppIcon } from '../icons/index';
 
 export interface SmartPanelHeaderProps {
   query: string;
@@ -23,7 +24,7 @@ export const SmartPanelHeader: React.FC<SmartPanelHeaderProps> = ({
     <div className={styles.headerContainer}>
       <div className={`${styles.sepSearchWrapper} sep-search-wrapper`}>
         <div className={styles.searchIconBox}>
-          <Search size={14} aria-hidden="true" strokeWidth={1.8} />
+          <AppIcon name="search" size={14} aria-hidden="true" />
         </div>
         <input
           ref={inputRef}
@@ -49,7 +50,7 @@ export const SmartPanelHeader: React.FC<SmartPanelHeaderProps> = ({
                 inputRef?.current?.focus();
               }}
             >
-              <X size={13} aria-hidden="true" />
+              <AppIcon name="x" size={13} aria-hidden="true" />
             </button>
           </Tooltip>
         ) : null}

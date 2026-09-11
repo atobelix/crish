@@ -13,7 +13,7 @@
   background: var(--sep-bg-panel-solid, var(--bg-elevated));
   border: 1px solid var(--border-color);
   box-shadow: var(--sep-shadow);
-  color: var(--text-primary, #1d1c1a);
+  color: var(--text-primary);
   font-family: var(--font-sans, sans-serif);
   box-sizing: border-box;
   outline: none;
@@ -37,9 +37,9 @@
 }
 
 .panelTitle {
-  font-size: var(--sep-font-size-header, 11px);
+  font-size: var(--font-size-micro);
   font-weight: 500;
-  color: var(--sep-text-muted, #8b8780);
+  color: var(--sep-text-muted);
   padding: 2px 6px 4px;
 }
 
@@ -225,12 +225,12 @@
 }
 
 .item.danger {
-  color: var(--sem-error, #ef4444);
+  color: var(--color-error);
 }
 
 .item.danger:hover,
 .item.danger.focused {
-  background-color: color-mix(in srgb, var(--sem-error, #ef4444) 10%, transparent);
+  background-color: color-mix(in srgb, var(--color-error) 10%, transparent);
 }
 
 .itemLeft {
@@ -287,22 +287,22 @@
   font-weight: 500;
   padding: 1px 5px;
   border-radius: var(--sep-badge-radius, 4px);
-  background: var(--sep-bg-input, rgba(29, 28, 26, 0.04));
-  color: var(--sep-text-secondary, #5c5954);
+  background: var(--sep-bg-input);
+  color: var(--sep-text-secondary);
 }
 
 .shortcut {
   font-size: 10.5px;
   font-family: var(--sep-font-mono, monospace);
-  color: var(--sep-text-muted, #8b8780);
+  color: var(--sep-text-muted);
 }
 
 .submenuChevron {
-  color: var(--sep-text-muted, #8b8780);
+  color: var(--sep-text-muted);
 }
 
 .checkIcon {
-  color: var(--sep-accent-check, hsl(160 84% 39%));
+  color: var(--sep-accent-check);
 }
 
 /* 尾部绝对定位动作（删除/终止） */
@@ -323,8 +323,8 @@
   top: 0;
   min-width: 160px;
   border-radius: var(--sep-radius-outer, 14px);
-  border: 1px solid var(--border-color, hsl(35 10% 86%));
-  background: var(--bg-card, hsl(0 0% 100%));
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
   box-shadow: var(--sep-shadow);
   padding: 6px;
   display: flex;
