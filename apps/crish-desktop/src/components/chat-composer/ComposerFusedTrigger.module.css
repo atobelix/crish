@@ -64,7 +64,7 @@
   border: none;
   background: transparent;
   color: var(--text-primary);
-  font-size: var(--font-sub, 13px);
+  font-size: var(--font-size-base);
   font-weight: 500;
   cursor: pointer;
   box-sizing: border-box;
@@ -165,7 +165,7 @@
   background: transparent;
   color: var(--text-secondary);
   font-family: inherit;
-  font-size: var(--font-sub, 13px);
+  font-size: var(--font-size-base);
   font-weight: 400;
   cursor: pointer;
   box-shadow: none;
@@ -195,7 +195,7 @@
 
 .menu {
   z-index: var(--z-dropdown-menu, var(--z-dropdown));
-  background: var(--bg-card, hsl(0 0% 100%));
+  background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: var(--sep-radius-outer, 14px);
   box-shadow: var(--shadow-dropdown);

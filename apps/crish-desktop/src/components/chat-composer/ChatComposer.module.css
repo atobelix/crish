@@ -68,7 +68,7 @@
   margin: 0;
   border-radius: 12px;
   background: var(
-    --sem-warn-soft,
+    --color-warning-bg,
     color-mix(in srgb, hsl(38, 90%, 50%) 4.5%, var(--bg-elevated))
   );
   border: 1px solid
@@ -77,7 +77,7 @@
       hsl(38, 90%, 50%) 16%,
       var(--border-color)
     );
-  box-shadow: 0 1px 3px var(--shadow-color, rgba(0, 0, 0, 0.02));
+  box-shadow: 0 1px 3px var(--shadow-color);
   overflow: hidden;
   font-size: 12px;
   color: var(--text-primary);
@@ -148,7 +148,7 @@
 }
 
 .flowPermissionBarBadge[data-risk='high'] {
-  color: var(--sem-error);
+  color: var(--color-error);
   font-weight: 600;
 }
 
@@ -184,16 +184,16 @@
 }
 
 .flowPermissionBarTimer.isOrange {
-  color: var(--sem-warn);
+  color: var(--color-warning);
 }
 
 .flowPermissionBarTimer.isWarningFlash {
-  color: var(--sem-warn);
+  color: var(--color-warning);
   animation: permWarnPulse 2s ease-in-out infinite;
 }
 
 .flowPermissionBarTimer.isExpired {
-  color: var(--sem-error);
+  color: var(--color-error);
   animation: permExpirePulse 1.4s ease-in-out infinite alternate;
 }
 
@@ -267,7 +267,7 @@
   max-height: 22px;
   line-height: 22px;
   padding: 0 8px;
-  border-radius: 5px;
+  border-radius: var(--radius-sm, 4px);
   border: none;
   outline: none;
   font-family: inherit;
@@ -282,11 +282,11 @@
 
 .flowPermissionBtnDeny {
   background: transparent;
-  color: var(--sem-error);
+  color: var(--color-error);
 }
 
 .flowPermissionBtnDeny:hover {
-  background: color-mix(in srgb, var(--sem-error) 8%, transparent);
+  background: color-mix(in srgb, var(--color-error) 8%, transparent);
 }
 
 .flowPermissionBtnAllow {
@@ -387,7 +387,7 @@
 }
 
 .planExpandedStep:hover {
-  background: color-mix(in srgb, var(--text-primary) 3.5%, transparent);
+  background: var(--tint-hover);
   color: var(--text-primary);
 }
 
@@ -398,7 +398,7 @@
 .planExpandedStep.active {
   color: var(--text-primary);
   font-weight: 600;
-  background: color-mix(in srgb, var(--text-primary) 3.5%, transparent);
+  background: var(--tint-hover);
   border: none;
   outline: none;
 }
@@ -425,8 +425,8 @@
 }
 
 .planExpandedStep.active .planStepDot {
-  background: var(--accent-green, hsl(160 84% 39%));
-  box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--accent-green, hsl(160 84% 39%)) 25%, transparent);
+  background: var(--accent-green);
+  box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--accent-green) 25%, transparent);
 }
 
 .stepText {
@@ -574,7 +574,7 @@
   justify-content: center;
   width: 24px;
   height: 24px;
-  border-radius: 5px;
+  border-radius: var(--radius-sm, 4px);
   border: none;
   background: transparent;
   color: var(--text-muted);
@@ -591,8 +591,8 @@
 }
 
 .planActionBtn.stop:hover {
-  background: color-mix(in srgb, var(--sem-error) 10%, transparent);
-  color: var(--sem-error);
+  background: color-mix(in srgb, var(--color-error) 10%, transparent);
+  color: var(--color-error);
 }
 
 .planActionBtn svg {
@@ -636,7 +636,7 @@
   width: var(--composer-attach-card-size, 58px);
   height: var(--composer-attach-card-size, 58px);
   padding: 6px;
-  background: var(--composer-attach-card-bg, var(--bg-card, hsl(0 0% 100%)));
+  background: var(--composer-attach-card-bg, var(--bg-card));
   border: var(--composer-attach-card-border, 1px solid var(--border-subtle));
   border-radius: var(--composer-attach-card-radius, 12px);
   cursor: pointer;
@@ -655,7 +655,7 @@
 .attachChip:hover,
 .attachChip:focus-visible {
   border-color: var(--composer-attach-card-hover-border, var(--border-color));
-  background: color-mix(in srgb, var(--text-primary) 1.5%, var(--bg-card));
+  background: var(--bg-card-subtle);
   box-shadow: none;
   outline: none;
   z-index: var(--z-popover);
@@ -769,7 +769,7 @@
   justify-content: center;
   flex-shrink: 0;
   border-radius: var(--radius-md, 6px);
-  background: var(--bg-subtle, hsl(0 0% 95%));
+  background: var(--bg-subtle);
 }
 
 .fileCardHorizontal .fileInfoCol,
@@ -788,7 +788,7 @@
   font-size: 10px;
   font-weight: var(--font-weight-medium, 500);
   line-height: 1;
-  color: var(--text-tertiary, hsl(0 0% 55%));
+  color: var(--text-tertiary);
   letter-spacing: 0.02em;
   white-space: nowrap;
   overflow: hidden;
@@ -806,7 +806,7 @@
   padding: 1px 4px;
   border-radius: var(--radius-full, 9999px);
   background: transparent;
-  color: var(--composer-attach-progress-color, var(--accent-primary, hsl(160 84% 39%)));
+  color: var(--composer-attach-progress-color, var(--accent-primary));
   font-size: 11px;
   font-weight: 600;
   line-height: 1;
@@ -817,10 +817,10 @@
 }
 
 .attachProgressBadgeImage {
-  background: hsl(0 0% 0% / 0.55);
+  background: var(--surface-overlay);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
-  color: hsl(0 0% 100%);
+  color: var(--text-on-overlay);
   text-shadow: 0 1px 2px hsl(0 0% 0% / 0.6);
 }
 
@@ -884,7 +884,7 @@
   opacity: 0;
   transform: scale(0.85);
   pointer-events: none;
-  background: var(--composer-attach-remove-bg, hsl(0 0% 100% / 0.72));
+  background: var(--composer-attach-remove-bg);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   border: 1px solid var(--composer-attach-remove-border, var(--border-subtle));
@@ -934,9 +934,9 @@
 /* 单一真理源统一 Hover：正红色稍弱一点（不混合黑色），纯白叉号，清透干净，全卡片类型绝对统一样式 */
 .fileRemove:hover,
 .attachRemove:hover {
-  background: hsl(0 78% 54%) !important;
+  background: var(--color-error) !important;
   border-color: transparent !important;
-  color: hsl(0 0% 100%) !important;
+  color: var(--text-on-danger) !important;
 }
 
 /* ==========================================================================
@@ -1063,7 +1063,7 @@
 
 /* 批注输入区：采用约 2% 的设计 Token 柔和微底色，遵循几何同心法则 (Ri = 6px) */
 .annInputContainer {
-  background: var(--md-code-block-bg, color-mix(in srgb, var(--text-primary) 2%, var(--bg-card)));
+  background: var(--md-code-block-bg);
   border: 1px solid transparent;
   border-radius: var(--ann-radius-inner);
   padding: 6px 8px;
@@ -1158,9 +1158,6 @@
 
 .composerCard {
   /* 同心几何标尺：外圆角 = 内边距 + 内圆角 */
-  --composer-radius-inner: 14px;
-  --composer-pad-y: 8px;
-  --composer-pad-x: 12px;
   --composer-radius-outer: 20px;
   position: relative;
   z-index: var(--z-dock);
@@ -1171,8 +1168,8 @@
   box-sizing: border-box;
   padding: 6px 10px;
   border: 1px solid var(--border-subtle);
-  border-radius: var(--composer-radius-single, 22px);
-  background: var(--composer-bg, var(--bg-composer, var(--bg-elevated)));
+  border-radius: 22px;
+  background: var(--bg-elevated);
   box-shadow:
     0 1px 3px hsl(0 0% 0% / 0.015),
     0 3px 8px -1px hsl(0 0% 0% / 0.02);
@@ -1466,8 +1463,8 @@
 }
 
 .stopCircleBtn:hover {
-  background: color-mix(in srgb, var(--sem-error) 10%, transparent);
-  color: var(--sem-error);
+  background: color-mix(in srgb, var(--color-error) 10%, transparent);
+  color: var(--color-error);
 }
 
 /* ==========================================================================

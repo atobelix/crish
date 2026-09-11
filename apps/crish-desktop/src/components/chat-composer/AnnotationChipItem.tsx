@@ -6,7 +6,6 @@ import React, {
   useState,
 } from 'react';
 import { createPortal } from 'react-dom';
-import * as Lucide from 'lucide-react';
 import styles from './ChatComposer.module.css';
 import type { ChatAttachment } from '../../hooks/useChatStream';
 import { openFileInPanel } from '../../api/filePanelOpener';
@@ -14,6 +13,7 @@ import {
   pathBasename,
   updatePendingFileAnnotationComment,
 } from '../../api/workspaceFsApi';
+import { AppIcon } from '../ui/icons/index';
 
 export interface AnnotationChipItemProps {
   attachment: ChatAttachment;
@@ -204,7 +204,7 @@ export const AnnotationChipItem: React.FC<AnnotationChipItemProps> = React.memo(
           }}
         >
           <span className={`${styles.fileIcon} ${styles.attachIconBox} file-icon`} aria-hidden>
-            <Lucide.MessageSquareQuote size={20} className={styles.attachIcon} />
+            <AppIcon name="message-square-quote" size={20} className={styles.attachIcon} />
           </span>
 
           <span className={`${styles.fileName} ${styles.attachName} file-name`}>
@@ -222,7 +222,7 @@ export const AnnotationChipItem: React.FC<AnnotationChipItemProps> = React.memo(
               onRemove(attachment.name);
             }}
           >
-            <Lucide.X size={10} strokeWidth={2.2} aria-hidden />
+            <AppIcon name="x" size={10} aria-hidden />
           </button>
         </span>
 

@@ -1,8 +1,9 @@
 import React, { useCallback } from 'react';
-import * as Lucide from 'lucide-react';
+
 import styles from './ChatQueuePanel.module.css';
 import type { QueuedMessage } from '../../hooks/useChatStream';
 import { Button, Tooltip } from '../ui';
+import { AppIcon } from '../ui/icons/index';
 
 export interface ChatQueuePanelProps {
   queue: QueuedMessage[];
@@ -67,7 +68,7 @@ export const ChatQueuePanel: React.FC<ChatQueuePanelProps> = ({
                 className={styles.actionBtn}
                 aria-label="立即发送"
                 onClick={handleSendNow(msg.id)}
-                icon={<Lucide.Send size={14} aria-hidden />}
+                icon={<AppIcon name="send" size={14} aria-hidden />}
               />
             </Tooltip>
             <Tooltip content="编辑">
@@ -78,7 +79,7 @@ export const ChatQueuePanel: React.FC<ChatQueuePanelProps> = ({
                 className={styles.actionBtn}
                 aria-label="编辑排队消息"
                 onClick={handleEdit(msg.id)}
-                icon={<Lucide.Pencil size={14} aria-hidden />}
+                icon={<AppIcon name="pencil" size={14} aria-hidden />}
               />
             </Tooltip>
             <Tooltip content="删除">
@@ -89,7 +90,7 @@ export const ChatQueuePanel: React.FC<ChatQueuePanelProps> = ({
                 className={`${styles.actionBtn} ${styles.danger}`}
                 aria-label="删除排队消息"
                 onClick={handleDelete(msg.id)}
-                icon={<Lucide.Trash2 size={14} aria-hidden />}
+                icon={<AppIcon name="trash" size={14} aria-hidden />}
               />
             </Tooltip>
           </div>

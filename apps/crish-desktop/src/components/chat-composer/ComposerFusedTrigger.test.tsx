@@ -96,8 +96,9 @@ describe('ComposerFusedTrigger（S3 融合触发 · live 档位）', () => {
     sessionRuntimeRegistry.clearAll();
     localStorage.setItem('crish_active_profile_id', 'acme');
     localStorage.setItem('crish_active_model_id', 'acme-think');
-    // 清除按模型存档的思考档位，避免测试间污染
+    // 清除按模型存档的思考档位与全局偏好，避免测试间污染
     localStorage.removeItem('conex:model-thinking-pref:acme:acme-think');
+    localStorage.removeItem('conex:global-thinking-pref');
     useSettingsStore.setState({
       appSettings: { defaultThinkingLevel: 'default' },
     });
@@ -105,8 +106,9 @@ describe('ComposerFusedTrigger（S3 融合触发 · live 档位）', () => {
 
   afterEach(() => {
     sessionRuntimeRegistry.clearAll();
-    // 清除按模型存档的思考档位
+    // 清除按模型存档的思考档位与全局偏好
     localStorage.removeItem('conex:model-thinking-pref:acme:acme-think');
+    localStorage.removeItem('conex:global-thinking-pref');
   });
 
   it('左槽渲染真模型、右为 yaml key 档位，无 Claude 3.7、无 title、无中文标签', async () => {

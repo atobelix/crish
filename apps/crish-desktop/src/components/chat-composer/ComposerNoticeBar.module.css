@@ -13,7 +13,7 @@
   padding: 6px 12px;
   border-radius: var(--radius-md, 8px);
   border: 1px solid var(--border-subtle);
-  background-color: #ffffff;
+  background-color: var(--surface-paper);
   color: var(--text-primary);
   font-size: 12px;
   user-select: none;
@@ -29,35 +29,35 @@
 
 /* 1. info 类型 */
 .noticeBar.info {
-  border-color: color-mix(in srgb, var(--color-info, #3b82f6) 20%, var(--border-subtle));
+  border-color: color-mix(in srgb, var(--color-info) 20%, var(--border-subtle));
 }
 
 .noticeBar.info .icon {
-  color: var(--color-info, #3b82f6);
+  color: var(--color-info);
 }
 
 /* 2. warning 类型 */
 .noticeBar.warning {
-  border-color: color-mix(in srgb, var(--color-warning, #f59e0b) 25%, var(--border-subtle));
+  border-color: color-mix(in srgb, var(--color-warning) 25%, var(--border-subtle));
 }
 
 .noticeBar.warning .icon {
-  color: var(--color-warning, #f59e0b);
+  color: var(--color-warning);
 }
 
 /* 3. error 类型 */
 .noticeBar.error {
-  border: 1px solid color-mix(in srgb, var(--error-color, #ef4444) 25%, var(--border-subtle));
-  background-color: color-mix(in srgb, var(--error-color, #ef4444) 4%, hsl(0 0% 100%));
+  border: 1px solid color-mix(in srgb, var(--color-error) 25%, var(--border-subtle));
+  background-color: color-mix(in srgb, var(--color-error) 4%, hsl(0 0% 100%));
 }
 
 :global(html[data-theme='dark']) .noticeBar.error {
-  border-color: color-mix(in srgb, var(--error-color, #ef4444) 30%, var(--border-subtle));
-  background-color: color-mix(in srgb, var(--error-color, #ef4444) 6%, var(--bg-card));
+  border-color: color-mix(in srgb, var(--color-error) 30%, var(--border-subtle));
+  background-color: color-mix(in srgb, var(--color-error) 6%, var(--bg-card));
 }
 
 .noticeBar.error .icon {
-  color: var(--error-color, #ef4444);
+  color: var(--color-error);
 }
 
 /* --- 子元素样式 --- */
@@ -102,13 +102,13 @@
 }
 
 .detailBadge:hover {
-  background-color: var(--tint-hover, color-mix(in srgb, var(--text-primary) 5%, transparent));
+  background-color: var(--tint-hover);
   color: var(--text-primary);
   border-color: var(--border-color);
 }
 
 .detailBadge:active {
-  background-color: var(--tint-active, color-mix(in srgb, var(--text-primary) 8%, transparent));
+  background-color: var(--tint-active);
 }
 
 .detailBadge:focus-visible {
@@ -140,13 +140,13 @@
 
 .copyBtn:hover,
 .feedbackBtn:hover {
-  background-color: var(--tint-hover, color-mix(in srgb, var(--text-primary) 5%, transparent));
+  background-color: var(--tint-hover);
   color: var(--text-primary);
 }
 
 .copyBtn:active,
 .feedbackBtn:active {
-  background-color: var(--tint-active, color-mix(in srgb, var(--text-primary) 8%, transparent));
+  background-color: var(--tint-active);
 }
 
 .copyBtn:focus-visible,
@@ -178,12 +178,12 @@
 }
 
 .dismissBtn:hover {
-  background-color: var(--tint-hover, color-mix(in srgb, var(--text-primary) 5%, transparent));
+  background-color: var(--tint-hover);
   color: var(--text-primary);
 }
 
 .dismissBtn:active {
-  background-color: var(--tint-active, color-mix(in srgb, var(--text-primary) 8%, transparent));
+  background-color: var(--tint-active);
 }
 
 .dismissBtn:focus-visible {

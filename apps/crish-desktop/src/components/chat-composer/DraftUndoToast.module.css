@@ -19,7 +19,7 @@
   border: var(--hairline-width, 1px) solid
     color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
   border-radius: 10px;
-  background: var(--bg-elevated, hsl(0 0% 100%));
+  background: var(--bg-elevated);
   color: var(--text-primary);
   font-size: 12px;
   line-height: 1.4;
@@ -51,8 +51,8 @@
   gap: 4px;
   padding: 3px 8px;
   border: none;
-  border-radius: 7px;
-  background: color-mix(in srgb, var(--accent-color, hsl(160 60% 40%)) 10%, transparent);
+  border-radius: var(--button-radius, 7px);
+  background: color-mix(in srgb, var(--accent-color) 10%, transparent);
   color: var(--text-primary);
   font: inherit;
   cursor: pointer;
@@ -60,7 +60,7 @@
 }
 
 .undoBtn:hover {
-  background: color-mix(in srgb, var(--accent-color, hsl(160 60% 40%)) 16%, transparent);
+  background: color-mix(in srgb, var(--accent-color) 16%, transparent);
 }
 
 .undoBtn:focus-visible {
@@ -79,7 +79,7 @@
   border: none;
   border-radius: 6px;
   background: transparent;
-  color: color-mix(in srgb, var(--text-primary) 62%, transparent);
+  color: var(--text-tertiary);
   cursor: pointer;
   transition: background-color 120ms ease, color 120ms ease;
 }

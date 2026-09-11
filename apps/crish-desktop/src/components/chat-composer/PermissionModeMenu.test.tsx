@@ -153,6 +153,6 @@ describe('PermissionModeMenu（ui/Menu 基座）', () => {
     );
     const trigger = screen.getByRole('button', { name: /当前权限模式/ });
     expect(trigger.className).toMatch(/fused/);
-    expect(container.querySelector('svg.lucide-chevron-down')).toBeNull();
+    expect(container.querySelector('[data-icon="chevron-down"]')).toBeNull();
   });
 });

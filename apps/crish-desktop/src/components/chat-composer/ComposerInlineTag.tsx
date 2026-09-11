@@ -1,17 +1,18 @@
 /**
  * 行内 mention 芯片（文件图标盒 + Skill 变体）。
- * Tiptap NodeView：Lucide 图标，禁止 dangerouslySetInnerHTML / 参考仓图标字典。
+ * Tiptap NodeView：统一 AppIcon，禁止 dangerouslySetInnerHTML / lucide-react。
  * 文件类点击走已有 openFileInPanel（叶预览），不造 body 模态。
  */
 import React from 'react';
 import { NodeViewWrapper, type NodeViewProps } from '@tiptap/react';
-import * as Lucide from 'lucide-react';
-import { openFileInPanel } from '../../api/filePanelOpener';
 
-function iconForKind(kind: string) {
-  if (kind === 'skill') return Lucide.Sparkles;
-  if (kind === 'agent') return Lucide.Bot;
-  return Lucide.FileText;
+import { openFileInPanel } from '../../api/filePanelOpener';
+import { AppIcon, type IconName } from '../ui/icons';
+
+function iconForKind(kind: string): IconName {
+  if (kind === 'skill') return 'sparkles';
+  if (kind === 'agent') return 'bot';
+  return 'file-text';
 }
 
 export const ComposerInlineTag: React.FC<NodeViewProps> = ({
@@ -21,7 +22,7 @@ export const ComposerInlineTag: React.FC<NodeViewProps> = ({
   const kind = String(node.attrs.kind || 'file');
   const label = String(node.attrs.label || node.attrs.id || '');
   const id = String(node.attrs.id || '');
-  const Icon = iconForKind(kind);
+  const iconName = iconForKind(kind);
   const text = kind === 'skill' ? label : `@${label}`;
   const canOpen = kind === 'file' && id.length > 0;
 
@@ -59,7 +60,7 @@ export const ComposerInlineTag: React.FC<NodeViewProps> = ({
       }}
     >
       <span className="mention-icon-box" aria-hidden="true">
-        <Icon size={12} strokeWidth={1.75} />
+        <AppIcon name={iconName} size={12} stroke={1.75} />
       </span>
       <span className="mention-label">{text}</span>
     </NodeViewWrapper>

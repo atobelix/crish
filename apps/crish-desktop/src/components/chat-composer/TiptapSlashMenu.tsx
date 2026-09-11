@@ -17,27 +17,7 @@ import React, {
   useRef,
 } from 'react';
 import * as Popover from '@radix-ui/react-popover';
-import {
-  HelpCircle,
-  Target,
-  BookOpen,
-  Calendar,
-  Users,
-  Globe,
-  PlayCircle,
-  Sparkles,
-  Shrink,
-  Minimize2,
-  AtSign,
-  FileText,
-  Bot,
-  Search,
-  Eraser,
-  Terminal,
-  Square,
-  Sliders,
-  FileCode,
-} from 'lucide-react';
+
 import type { SlashMenuProps, SlashCommandItem } from './composerTypes';
 import styles from './TiptapSlashMenu.module.css';
 import {
@@ -46,37 +26,37 @@ import {
   calculateSafeCursorAnchor,
   type SafeAnchorRect,
 } from './safeCursorAnchor';
+import { AppIcon, type IconName } from '../ui/icons';
 
 export { isValidClientRect } from './safeCursorAnchor';
 
-const ICON_MAP: Record<
-  string,
-  React.ComponentType<{
-    size?: number;
-    className?: string;
-    'aria-hidden'?: boolean;
-  }>
-> = {
-  Target,
-  BookOpen,
-  Calendar,
-  Users,
-  Globe,
-  PlayCircle,
-  Sparkles,
-  Compress: Shrink,
-  Shrink,
-  Minimize2,
-  AtSign,
-  FileText,
-  Bot,
-  Search,
-  Eraser,
-  Terminal,
-  HelpCircle,
-  Square,
-  Sliders,
-  FileCode,
+/** 斜杠命令 iconName → AppIcon IconName（键沿用历史 PascalCase 语义名） */
+const ICON_MAP: Record<string, IconName> = {
+  Target: 'target',
+  BookOpen: 'book-open',
+  Calendar: 'calendar',
+  Users: 'users',
+  Globe: 'globe',
+  PlayCircle: 'play-circle',
+  Sparkles: 'sparkles',
+  Compress: 'shrink',
+  Shrink: 'shrink',
+  Minimize2: 'minimize',
+  AtSign: 'at-sign',
+  FileText: 'file-text',
+  Bot: 'bot',
+  Search: 'search',
+  Eraser: 'eraser',
+  Terminal: 'terminal',
+  HelpCircle: 'help-circle',
+  Square: 'square',
+  Sliders: 'sliders',
+  FileCode: 'file-code',
+  Shield: 'shield',
+  Clock: 'clock',
+  Flame: 'zap',
+  Compass: 'globe',
+  Settings: 'settings',
 };
 
 export interface SlashMenuRefHandle {
@@ -269,8 +249,8 @@ export const TiptapSlashMenu = forwardRef<SlashMenuRefHandle, SlashMenuProps>(
                 </div>
               ) : (
                 items.map((item: SlashCommandItem, index: number) => {
-                  const IconComponent =
-                    (item.iconName && ICON_MAP[item.iconName]) || HelpCircle;
+                  const iconName: IconName =
+                    (item.iconName && ICON_MAP[item.iconName]) || 'help-circle';
                   const isActive = index === selectedIndex;
 
                   return (
@@ -292,7 +272,7 @@ export const TiptapSlashMenu = forwardRef<SlashMenuRefHandle, SlashMenuProps>(
                       onMouseEnter={() => setSelectedIndex(index)}
                     >
                       <div className={styles.iconWrapper}>
-                        <IconComponent size={16} aria-hidden />
+                        <AppIcon name={iconName} size={16} aria-hidden />
                       </div>
                       <div className={styles.itemText}>
                         <span className={styles.itemTitle}>{item.title}</span>

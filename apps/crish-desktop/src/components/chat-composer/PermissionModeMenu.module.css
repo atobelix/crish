@@ -74,11 +74,11 @@
 }
 
 .permPill[data-perm-mode='ask'] {
-  color: var(--sem-warn, hsl(37 91% 44%));
+  color: var(--color-warning);
 }
 
 .permPill[data-perm-mode='full'] {
-  color: var(--accent-orange-strong, color-mix(in srgb, var(--accent-orange, hsl(28 80% 52%)) 85%, var(--text-primary)));
+  color: color-mix(in srgb, var(--accent-orange) 85%, var(--text-primary));
 }
 
 .permPill[data-perm-mode='plan'],
@@ -131,7 +131,7 @@
 
 .permMenu {
   z-index: var(--z-dropdown-menu, var(--z-dropdown));
-  background: var(--bg-elevated, hsl(0 0% 100%));
+  background: var(--bg-elevated);
   border: 1px solid var(--border-color);
   border-radius: var(--sep-radius-outer, 14px);
   box-shadow: var(--shadow-lg);
@@ -246,7 +246,7 @@
 
 .checkIcon,
 .permMenuCheck {
-  color: var(--brand-deep, hsl(160 84% 30%));
+  color: var(--brand-deep);
   flex-shrink: 0;
   margin-left: auto;
 }

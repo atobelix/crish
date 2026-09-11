@@ -8,8 +8,9 @@
  * CI Guardrail: UI Component (Max 500 lines of effective code, Max 12 useState)
  */
 import React, { useEffect, useState } from 'react';
-import { Undo2, X } from 'lucide-react';
+
 import styles from './DraftUndoToast.module.css';
+import { AppIcon } from '../ui/icons/index';
 
 export interface DraftUndoToastProps {
   /** 是否存在可撤销历史（外部模板覆盖后为 true） */
@@ -58,7 +59,7 @@ export const DraftUndoToast: React.FC<DraftUndoToastProps> = ({
           dismiss();
         }}
       >
-        <Undo2 size={12} aria-hidden />
+        <AppIcon name="undo" size={12} aria-hidden />
         <span>撤销恢复</span>
       </button>
       <button
@@ -67,7 +68,7 @@ export const DraftUndoToast: React.FC<DraftUndoToastProps> = ({
         onClick={dismiss}
         aria-label="关闭提示"
       >
-        <X size={12} aria-hidden />
+        <AppIcon name="x" size={12} aria-hidden />
       </button>
     </div>
   );

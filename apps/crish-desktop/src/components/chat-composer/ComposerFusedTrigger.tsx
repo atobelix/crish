@@ -6,7 +6,7 @@
  * 无思考选项则物理卸载右侧槽。
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import * as Lucide from 'lucide-react';
+
 import styles from './ComposerFusedTrigger.module.css';
 import { Menu, Tooltip } from '../ui';
 import { toggleExclusiveMenu } from '../ui/Menu';
@@ -29,6 +29,7 @@ import {
 import { recordPendingContextState } from '../../api/provider-profiles/contextStatePending';
 import { useModelsCatalogVersion } from '../../hooks/useModelsCatalogVersion';
 import { useSessionStore } from '../../store/sessionStore';
+import { AppIcon } from '../ui/icons/index';
 
 export type ComposerFusedTriggerProps = {
   prefix?: React.ReactNode;
@@ -215,11 +216,9 @@ export const ComposerFusedTrigger: React.FC<ComposerFusedTriggerProps> = ({
                   >
                     <span>{opt.label}</span>
                     {selected ? (
-                      <Lucide.Check
-                        size={13}
+                      <AppIcon name="check" size={13}
                         className={styles.check}
-                        aria-hidden="true"
-                      />
+                        aria-hidden="true" />
                     ) : null}
                   </button>
                 );

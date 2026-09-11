@@ -7,7 +7,7 @@
 .attachmentCard {
   border-radius: var(--radius-lg, 10px);
   border: 1px solid var(--border-subtle);
-  background: var(--bg-card, hsl(0 0% 100%));
+  background: var(--bg-card);
   box-sizing: border-box;
   overflow: hidden;
   cursor: pointer;
@@ -23,15 +23,15 @@
 /* 柔和 Hover 态：边框加深控制在 5-10%，背景混入 2.5% 文本色，严禁纯黑边框 (AGENTS.md §13) */
 .attachmentCard:hover {
   /* border-color: var(--border-color); */
-  background: color-mix(in srgb, var(--text-primary) 2%, var(--bg-card, hsl(0 0% 100%)));
+  background: var(--bg-card-subtle);
   box-shadow: var(--shadow-sm);
 }
 
 /* 柔软焦点态：AGENTS.md §13 铁律，加深对比度严格限制在 10% 以内，绝不使用实心粗黑外环 */
 .attachmentCard:focus-visible {
   outline: none;
-  border-color: var(--accent-color, hsl(160 84% 36%));
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-color, hsl(160 84% 36%)) 30%, transparent);
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-color) 30%, transparent);
 }
 
 /* --------------------------------------------------------------------------
@@ -103,13 +103,13 @@
    优雅失效 / 丢失态 (Missing Card)
    -------------------------------------------------------------------------- */
 .missingCard {
-  border: 1px dashed color-mix(in srgb, var(--border-color, hsl(0 0% 80%)) 85%, var(--text-tertiary, hsl(0 0% 60%)) 15%);
-  background: var(--bg-subtle, hsl(0 0% 96%));
+  border: 1px dashed color-mix(in srgb, var(--border-color) 85%, var(--text-tertiary) 15%);
+  background: var(--bg-subtle);
   cursor: pointer;
 }
 
 .missingCard:hover {
-  background: color-mix(in srgb, var(--text-primary) 2.5%, var(--bg-subtle, hsl(0 0% 96%)));
+  background: var(--tint-hover);
 }
 
 .cardImageMode.missingCard {
@@ -134,8 +134,8 @@
 }
 
 .missingIcon {
-  color: var(--text-tertiary, hsl(0 0% 55%));
-  opacity: 0.8;
+  color: var(--text-tertiary);
+
   flex-shrink: 0;
 }
 
@@ -143,7 +143,7 @@
   font-size: var(--font-size-nano, 9px);
   font-weight: var(--font-weight-medium, 500);
   line-height: 1;
-  color: var(--text-tertiary, hsl(0 0% 55%));
+  color: var(--text-tertiary);
   letter-spacing: 0.02em;
 }
 
@@ -177,7 +177,7 @@
   justify-content: center;
   flex-shrink: 0;
   border-radius: var(--radius-md, 6px);
-  background: var(--bg-subtle, hsl(0 0% 95%));
+  background: var(--bg-subtle);
 }
 
 .fileInfoCol,
@@ -206,9 +206,9 @@
 }
 
 .fileNameMissing {
-  color: var(--text-tertiary, hsl(0 0% 60%));
+  color: var(--text-tertiary);
   text-decoration: line-through;
-  opacity: 0.75;
+
 }
 
 .fileMeta,
@@ -234,10 +234,10 @@
   width: 16px;
   height: 16px;
   border-radius: var(--radius-full, 9999px);
-  /* background: color-mix(in srgb, hsl(38, 95%, 50%) 20%, var(--bg-elevated, #fff)); */
-  background: hsla(0, 0%, 100%, 0.6);
+  /* background: color-mix(in srgb, hsl(38, 95%, 50%) 20%, var(--bg-elevated)); */
+  background: color-mix(in srgb, var(--surface-paper) 60%, transparent);
   /* border: 1px solid color-mix(in srgb, hsl(38, 95%, 50%) 60%, transparent); */
-  color: hsl(38, 95%, 44%);
+  color: var(--text-warning-strong);
   backdrop-filter: blur(4px);
   display: inline-flex;
   align-items: center;
@@ -277,8 +277,8 @@
 
 .fileRemove:hover,
 .attachRemove:hover {
-  background: var(--sem-error, #ef4444);
-  color: var(--text-on-accent, #ffffff);
+  background: var(--color-error);
+  color: var(--text-on-accent);
   transform: scale(1.08);
   opacity: 1;
   pointer-events: auto;
@@ -304,8 +304,8 @@
   font-weight: 600;
   padding: 1px 4px;
   border-radius: 4px;
-  background: rgba(0, 0, 0, 0.65);
-  color: #fff;
+  background: var(--surface-overlay);
+  color: var(--text-on-overlay);
   line-height: 1;
   z-index: 6;
 }

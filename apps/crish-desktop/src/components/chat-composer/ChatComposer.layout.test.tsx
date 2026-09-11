@@ -186,6 +186,6 @@ describe('ChatComposer 卡片网格（composer-wrapper 结构）', () => {
 
     // 权限按钮为 fused 变体且不含折叠展开箭头
     expect(permBtn.className).toMatch(/fused/);
-    expect(permBtn.querySelector('svg.lucide-chevron-down')).toBeNull();
+    expect(permBtn.querySelector('[data-icon="chevron-down"]')).toBeNull();
   });
 });

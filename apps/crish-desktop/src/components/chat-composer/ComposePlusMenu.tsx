@@ -1,10 +1,11 @@
 import React from 'react';
-import * as Lucide from 'lucide-react';
+
 import styles from './ComposePlusMenu.module.css';
 import { openSettings } from '../../api/storeAccess';
 import { emitUiEvent } from '../../api/uiEvents';
 import { Menu, Tooltip } from '../ui';
 import type { SelectOptionItem } from '../ui';
+import { AppIcon } from '../ui/icons/index';
 
 export interface ComposePlusMenuProps {
   open: boolean;
@@ -28,7 +29,7 @@ export const ComposePlusMenu: React.FC<ComposePlusMenuProps> = ({
       id: 'file',
       label: '添加文件',
       hint: '图片、代码或文档',
-      icon: <Lucide.Paperclip size={14} strokeWidth={1.8} />,
+      icon: <AppIcon name="paperclip" size={14} />,
       onClick: () => {
         onAddFiles();
         onClose();
@@ -38,7 +39,7 @@ export const ComposePlusMenu: React.FC<ComposePlusMenuProps> = ({
       id: 'skill',
       label: '使用技能',
       hint: '键入 / 快速唤起技能',
-      icon: <Lucide.Sparkles size={14} strokeWidth={1.8} />,
+      icon: <AppIcon name="sparkles" size={14} />,
       onClick: () => {
         onInsertSkillSlash?.();
         onClose();
@@ -49,7 +50,7 @@ export const ComposePlusMenu: React.FC<ComposePlusMenuProps> = ({
       id: 'plugin',
       label: '插件',
       hint: '管理已安装插件',
-      icon: <Lucide.Puzzle size={14} strokeWidth={1.8} />,
+      icon: <AppIcon name="puzzle" size={14} />,
       onClick: () => {
         onClose();
         openSettings('plugins');
@@ -59,7 +60,7 @@ export const ComposePlusMenu: React.FC<ComposePlusMenuProps> = ({
       id: 'mcp',
       label: 'MCP 工具',
       hint: '服务与协议连接',
-      icon: <Lucide.Cable size={14} strokeWidth={1.8} />,
+      icon: <AppIcon name="cable" size={14} />,
       onClick: () => {
         onClose();
         openSettings('plugins');
@@ -69,7 +70,7 @@ export const ComposePlusMenu: React.FC<ComposePlusMenuProps> = ({
       id: 'extensions',
       label: '扩展中心',
       hint: '发现与安装新工具',
-      icon: <Lucide.Blocks size={14} strokeWidth={1.8} />,
+      icon: <AppIcon name="blocks" size={14} />,
       onClick: () => {
         onClose();
         openSettings('plugins');
@@ -79,7 +80,7 @@ export const ComposePlusMenu: React.FC<ComposePlusMenuProps> = ({
       id: 'schedule',
       label: '定时任务',
       hint: '计划执行与循环任务',
-      icon: <Lucide.Clock size={14} strokeWidth={1.8} />,
+      icon: <AppIcon name="clock" size={14} />,
       onClick: () => {
         onClose();
         emitUiEvent('open-scheduled');

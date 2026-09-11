@@ -1,5 +1,5 @@
 import React, { useCallback, useRef, useState } from 'react';
-import * as Lucide from 'lucide-react';
+
 import styles from './PermissionModeMenu.module.css';
 import { Menu, Tooltip } from '../ui';
 import { toggleExclusiveMenu } from '../ui/Menu';
@@ -10,12 +10,13 @@ import {
   transitionPermissionMode,
   type PermissionMode,
 } from '../../api/permissionModes';
+import { AppIcon } from '../ui/icons/index';
 
 const MODE_ICON_MAP: Record<PermissionMode, React.ReactNode> = {
-  ask: <Lucide.ShieldCheck size={14} strokeWidth={1.8} />,
-  deep: <Lucide.Search size={14} strokeWidth={1.8} />,
-  plan: <Lucide.Target size={14} strokeWidth={1.8} />,
-  full: <Lucide.AlertCircle size={14} strokeWidth={1.8} />,
+  ask: <AppIcon name="shield-check" size={14} />,
+  deep: <AppIcon name="search" size={14} />,
+  plan: <AppIcon name="target" size={14} />,
+  full: <AppIcon name="alert-circle" size={14} />,
 };
 
 const MODE_SUBLABEL_MAP: Record<PermissionMode, string> = {
@@ -106,15 +107,13 @@ export const PermissionModeMenu: React.FC<Props> = ({
           aria-label={`当前权限模式：${meta.label}`}
         >
           <span className={styles.permIcon} aria-hidden="true">
-            {MODE_ICON_MAP[mode] ?? <Lucide.Shield size={14} strokeWidth={1.8} />}
+            {MODE_ICON_MAP[mode] ?? <AppIcon name="shield" size={14} />}
           </span>
           <span className={styles.permLabel}>{meta.label}</span>
           {!hideChevron && (
-            <Lucide.ChevronDown
-              size={11}
+            <AppIcon name="chevron-down" size={11}
               className={styles.permPillChev}
-              aria-hidden="true"
-            />
+              aria-hidden="true" />
           )}
         </button>
       </Tooltip>
@@ -136,7 +135,7 @@ export const PermissionModeMenu: React.FC<Props> = ({
             const isSelected = opt.id === mode;
             const icon =
               MODE_ICON_MAP[opt.id as PermissionMode] ?? (
-                <Lucide.Shield size={14} strokeWidth={1.8} />
+                <AppIcon name="shield" size={14} />
               );
             const sublabel =
               MODE_SUBLABEL_MAP[opt.id as PermissionMode] ??
@@ -160,11 +159,9 @@ export const PermissionModeMenu: React.FC<Props> = ({
                     <span className={styles.desc}>{sublabel}</span>
                   </div>
                   {isSelected ? (
-                    <Lucide.Check
-                      size={13}
+                    <AppIcon name="check" size={13}
                       className={styles.checkIcon}
-                      aria-hidden="true"
-                    />
+                      aria-hidden="true" />
                   ) : null}
                 </button>
               </Tooltip>

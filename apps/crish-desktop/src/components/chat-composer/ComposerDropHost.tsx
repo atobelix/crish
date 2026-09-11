@@ -3,8 +3,9 @@
  * 与 Tiptap handleDrop 分工：编辑器内由 PM 拦截；页脚/附件条由本宿主收。
  */
 import React, { useCallback, useRef, useState } from 'react';
-import * as Lucide from 'lucide-react';
+
 import styles from './ChatComposer.module.css';
+import { AppIcon } from '../ui/icons/index';
 
 export function hasFiles(dt: DataTransfer | null | undefined): boolean {
   if (!dt) return false;
@@ -78,7 +79,7 @@ export const ComposerDropHost = React.forwardRef<
           data-testid="composer-drop-mask"
           aria-hidden
         >
-          <Lucide.Upload size={20} strokeWidth={1.75} aria-hidden />
+          <AppIcon name="upload" size={20} aria-hidden />
           <span>放到这里添加附件</span>
         </div>
       ) : null}

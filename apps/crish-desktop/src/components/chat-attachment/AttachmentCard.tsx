@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import * as Lucide from 'lucide-react';
+
 import styles from './AttachmentCard.module.css';
 import { Tooltip } from '../ui';
 import { FileFormatIcon } from '../../assets/icons';
@@ -7,6 +7,13 @@ import {
   useActiveModelAcceptsImage,
   isComplexDocChatAttachment,
 } from '../../api/modelVisionSupport';
+
+/**
+ * 进度环载荷描边宽度。
+ * 注意：这是几何图形参数（56×56 视口的进度弧视觉重量），**不是图标描边**，
+ * 因此不走 ICON_STROKE 契约；在此具名以免散落裸数字被误纳入图标线宽口径。
+ */
+const PROGRESS_RING_STROKE = 2;
 
 export interface AttachmentItem {
   id?: string;
@@ -53,6 +60,7 @@ import {
   resolveCardImageSrc,
   getFileKindBadge,
 } from './attachmentCardUtils';
+import { AppIcon } from '../ui/icons';
 
 export const AttachmentCard: React.FC<AttachmentCardProps> = React.memo(
   ({
@@ -207,11 +215,11 @@ export const AttachmentCard: React.FC<AttachmentCardProps> = React.memo(
                     aria-label={warnText}
                     onClick={(e) => e.stopPropagation()}
                   >
-                    <Lucide.AlertCircle size={12} strokeWidth={2.4} aria-hidden="true" />
+                    <AppIcon name="alert-circle" size={12} aria-hidden="true" />
                   </span>
                 </Tooltip>
               ) : null}
-              <Lucide.ImageOff size={20} className={styles.missingIcon} />
+              <AppIcon name="image-off" size={20} className={styles.missingIcon} />
               <span className={styles.missingBadge}>失效</span>
               {onRemove ? (
                 <button
@@ -223,7 +231,7 @@ export const AttachmentCard: React.FC<AttachmentCardProps> = React.memo(
                     onRemove(item);
                   }}
                 >
-                  <Lucide.X size={10} strokeWidth={2.2} aria-hidden />
+                  <AppIcon name="x" size={10} aria-hidden />
                 </button>
               ) : null}
             </div>
@@ -259,7 +267,7 @@ export const AttachmentCard: React.FC<AttachmentCardProps> = React.memo(
                   aria-label={warnText}
                   onClick={(e) => e.stopPropagation()}
                 >
-                  <Lucide.AlertCircle size={12} strokeWidth={2.4} aria-hidden="true" />
+                  <AppIcon name="alert-circle" size={12} aria-hidden="true" />
                 </span>
               </Tooltip>
             ) : null}
@@ -286,8 +294,8 @@ export const AttachmentCard: React.FC<AttachmentCardProps> = React.memo(
                     height="56"
                     rx="11"
                     fill="none"
-                    stroke="var(--composer-attach-progress-color, var(--accent-primary, #10b981))"
-                    strokeWidth="2"
+                    stroke="var(--composer-attach-progress-color, var(--accent-primary))"
+                    strokeWidth={PROGRESS_RING_STROKE}
                     pathLength="100"
                     strokeDasharray="100"
                     strokeDashoffset={100 - (progressVal || 25)}
@@ -311,7 +319,7 @@ export const AttachmentCard: React.FC<AttachmentCardProps> = React.memo(
                   onRemove(item);
                 }}
               >
-                <Lucide.X size={10} strokeWidth={2.2} aria-hidden />
+                <AppIcon name="x" size={10} aria-hidden />
               </button>
             ) : null}
           </div>
@@ -351,13 +359,13 @@ export const AttachmentCard: React.FC<AttachmentCardProps> = React.memo(
                 aria-label={warnText}
                 onClick={(e) => e.stopPropagation()}
               >
-                <Lucide.AlertCircle size={12} strokeWidth={2.4} aria-hidden="true" />
+                <AppIcon name="alert-circle" size={12} aria-hidden="true" />
               </span>
             </Tooltip>
           ) : null}
           <div className={`${styles.fileIconBox} ${styles.fileIcon} file-icon`}>
             {isItemMissing ? (
-              <Lucide.FileQuestion size={18} className={styles.missingIcon} />
+              <AppIcon name="file-question" size={18} className={styles.missingIcon} />
             ) : (
               <FileFormatIcon
                 fileName={item.name || item.path || ''}
@@ -390,8 +398,8 @@ export const AttachmentCard: React.FC<AttachmentCardProps> = React.memo(
                   height="56"
                   rx="11"
                   fill="none"
-                  stroke="var(--composer-attach-progress-color, var(--accent-primary, #10b981))"
-                  strokeWidth="2"
+                  stroke="var(--composer-attach-progress-color, var(--accent-primary))"
+                  strokeWidth={PROGRESS_RING_STROKE}
                   pathLength="100"
                   strokeDasharray="100"
                   strokeDashoffset={100 - (progressVal || 25)}
@@ -415,7 +423,7 @@ export const AttachmentCard: React.FC<AttachmentCardProps> = React.memo(
                 onRemove(item);
               }}
             >
-              <Lucide.X size={10} strokeWidth={2.2} aria-hidden />
+              <AppIcon name="x" size={10} aria-hidden />
             </button>
           ) : null}
         </div>

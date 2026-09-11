@@ -16,7 +16,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import * as Lucide from 'lucide-react';
+
 import styles from './ChatComposer.module.css';
 import { AppErrorBoundary } from '../AppErrorBoundary';
 import { ComposePlusMenu } from './ComposePlusMenu';
@@ -64,6 +64,7 @@ export { ComposerPlanProgressBar, type ComposerPlanProgressBarProps } from './Co
 export { ComposerAttachmentBar, type ComposerAttachmentBarProps } from './ComposerAttachmentBar';
 export { ComposerSendControls, type ComposerSendControlsProps } from './ComposerSendControls';
 export { ComposerFusedTrigger, type ComposerFusedTriggerProps } from './ComposerFusedTrigger';
+import { AppIcon } from '../ui/icons/index';
 
 /** 富文本输入（默认主路）：React.lazy 软接，装配失败回落 textarea（F1-γ） */
 const TiptapComposerFieldLazy = React.lazy(() =>
@@ -390,7 +391,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
                     }
                   }}
                 >
-                  <Lucide.Plus size={14} aria-hidden />
+                  <AppIcon name="plus" size={14} aria-hidden />
                 </button>
               </Tooltip>
               <ComposePlusMenu
@@ -467,7 +468,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
                       className={styles.actionCircleBtn}
                       aria-label="语音输入或上下文统计"
                     >
-                      <Lucide.BarChart2 size={16} aria-hidden />
+                      <AppIcon name="bar-chart" size={16} aria-hidden />
                     </button>
                   </Tooltip>
                 ) : null)}
@@ -480,7 +481,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
                     data-testid="composer-cancel-edit-btn"
                     aria-label="取消编辑"
                   >
-                    <Lucide.X size={16} aria-hidden />
+                    <AppIcon name="x" size={16} aria-hidden />
                   </button>
                 </Tooltip>
               ) : null}

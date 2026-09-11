@@ -6,9 +6,10 @@
  * - 审批后瞬态渐变并平滑合拢。
  */
 import React, { useEffect, useState } from 'react';
-import * as Lucide from 'lucide-react';
+
 import styles from './ChatComposer.module.css';
 import { Tooltip } from '../ui';
+import { AppIcon } from '../ui/icons/index';
 
 export type PermissionRiskLevel = 'low' | 'medium' | 'high';
 
@@ -78,7 +79,7 @@ export const ComposerPermissionBar: React.FC<ComposerPermissionBarProps> = ({
     >
       <div className={`${styles.flowPermissionBarLine1} flow-permission-bar__line1`}>
         <div className={`${styles.flowPermissionBarTitleGroup} flow-permission-bar__title-group`}>
-          <Lucide.ShieldAlert size={14} className={styles.shieldIcon} aria-hidden />
+          <AppIcon name="shield-alert" size={14} className={styles.shieldIcon} aria-hidden />
           <span
             className={`${styles.flowPermissionBarBadge} flow-permission-bar__badge`}
             data-risk={risk}

@@ -5,9 +5,9 @@
  * - 向上展开抽屉：真实任务步骤列表（完成态黑点、正在执行绿点、等待态空圈）。
  */
 import React, { useState, useEffect } from 'react';
-import * as Lucide from 'lucide-react';
 import styles from './ChatComposer.module.css';
 import { Tooltip } from '../ui';
+import { AppIcon } from '../ui/icons/index';
 
 export interface PlanStepItem {
   id?: string;
@@ -153,7 +153,7 @@ export const ComposerPlanProgressBar: React.FC<ComposerPlanProgressBarProps> = (
           aria-expanded={isExpanded}
           aria-label={`切换${modeLabel}详情展开`}
         >
-          <Lucide.Target size={13} className={`${styles.modeIcon} mode-icon`} aria-hidden />
+          <AppIcon name="target" size={13} className={`${styles.modeIcon} mode-icon`} aria-hidden />
           <span className="mode-text">{modeLabel}</span>
         </button>
 
@@ -193,7 +193,7 @@ export const ComposerPlanProgressBar: React.FC<ComposerPlanProgressBarProps> = (
                   onClick={onEditGoal}
                   aria-label="编辑目标"
                 >
-                  <Lucide.Edit3 size={13} strokeWidth={1.8} aria-hidden />
+                  <AppIcon name="edit-alt" size={13} aria-hidden />
                 </button>
               </Tooltip>
             ) : null}
@@ -207,9 +207,9 @@ export const ComposerPlanProgressBar: React.FC<ComposerPlanProgressBarProps> = (
                   aria-label={isPaused ? '继续' : '暂停'}
                 >
                   {isPaused ? (
-                    <Lucide.Play size={13} strokeWidth={1.8} aria-hidden />
+                    <AppIcon name="play" size={13} aria-hidden />
                   ) : (
-                    <Lucide.Pause size={13} strokeWidth={1.8} aria-hidden />
+                    <AppIcon name="pause" size={13} aria-hidden />
                   )}
                 </button>
               </Tooltip>
@@ -223,7 +223,7 @@ export const ComposerPlanProgressBar: React.FC<ComposerPlanProgressBarProps> = (
                   onClick={onStop}
                   aria-label="终止"
                 >
-                  <Lucide.Square size={13} strokeWidth={1.8} aria-hidden />
+                  <AppIcon name="square" size={13} aria-hidden />
                 </button>
               </Tooltip>
             ) : null}

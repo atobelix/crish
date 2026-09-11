@@ -7,9 +7,9 @@
  */
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import * as Lucide from 'lucide-react';
 import styles from './ComposerNoticeBar.module.css';
 import { Tooltip } from '../ui';
+import { AppIcon } from '../ui/icons/index';
 
 export interface ComposerNotice {
   id: string;
@@ -75,12 +75,12 @@ export const ComposerNoticeBar: React.FC<ComposerNoticeBarProps> = ({
   const renderIcon = () => {
     switch (notice.type) {
       case 'info':
-        return <Lucide.Info size={14} className={styles.icon} aria-hidden="true" />;
+        return <AppIcon name="info" size={14} className={styles.icon} aria-hidden="true" />;
       case 'warning':
-        return <Lucide.AlertTriangle size={14} className={styles.icon} aria-hidden="true" />;
+        return <AppIcon name="alert-triangle" size={14} className={styles.icon} aria-hidden="true" />;
       case 'error':
       default:
-        return <Lucide.AlertCircle size={14} className={styles.icon} aria-hidden="true" />;
+        return <AppIcon name="alert-circle" size={14} className={styles.icon} aria-hidden="true" />;
     }
   };
 
@@ -106,9 +106,11 @@ export const ComposerNoticeBar: React.FC<ComposerNoticeBarProps> = ({
       {renderIcon()}
 
       {/* b. 问题简述文本 */}
-      <span className={styles.message} title={notice.message}>
-        {notice.message}
-      </span>
+      <Tooltip content={notice.message}>
+        <span className={styles.message}>
+          {notice.message}
+        </span>
+      </Tooltip>
 
       {/* c. 错误详情叹号徽标 */}
       <Tooltip content={detailContent}>
@@ -132,12 +134,12 @@ export const ComposerNoticeBar: React.FC<ComposerNoticeBarProps> = ({
       >
         {copied ? (
           <>
-            <Lucide.Check size={13} className={styles.btnIcon} aria-hidden="true" />
+            <AppIcon name="check" size={13} className={styles.btnIcon} aria-hidden="true" />
             <span>已复制</span>
           </>
         ) : (
           <>
-            <Lucide.Copy size={13} className={styles.btnIcon} aria-hidden="true" />
+            <AppIcon name="copy" size={13} className={styles.btnIcon} aria-hidden="true" />
             <span>复制</span>
           </>
         )}
@@ -151,7 +153,7 @@ export const ComposerNoticeBar: React.FC<ComposerNoticeBarProps> = ({
         aria-label="反馈"
         data-testid="composer-notice-feedback-btn"
       >
-        <Lucide.MessageSquarePlus size={13} className={styles.btnIcon} aria-hidden="true" />
+        <AppIcon name="message-square-plus" size={13} className={styles.btnIcon} aria-hidden="true" />
         <span>反馈</span>
       </button>
 
@@ -163,7 +165,7 @@ export const ComposerNoticeBar: React.FC<ComposerNoticeBarProps> = ({
         aria-label="关闭提示"
         data-testid="composer-notice-dismiss-btn"
       >
-        <Lucide.X size={14} aria-hidden="true" />
+        <AppIcon name="x" size={14} aria-hidden="true" />
       </button>
     </div>
   );

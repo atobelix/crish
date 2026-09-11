@@ -4,10 +4,11 @@
  * 侧栏 ComposerField / 兜底模式回落至盒内回车折角按钮。
  */
 import React, { useCallback, useEffect, useRef } from 'react';
-import * as Lucide from 'lucide-react';
+
 import styles from './ChatComposer.module.css';
 import { Button, ConfirmDialog, Tooltip } from '../ui';
 import { useConfirmGate } from '../../hooks/useConfirmGate';
+import { AppIcon } from '../ui/icons/index';
 
 export const STOP_TOOLTIP = '停止生成（协作停止）。Shift+点击或长按：强制取消';
 export const STOP_ARIA_LABEL =
@@ -134,7 +135,7 @@ export const ComposerSendControls: React.FC<ComposerSendControlsProps> = ({
         onPointerUp={clearLongPress}
         onPointerLeave={clearLongPress}
         onPointerCancel={clearLongPress}
-        icon={<Lucide.Square size={14} fill="currentColor" aria-hidden />}
+        icon={<AppIcon name="square" size={14} fill="currentColor" aria-hidden />}
       />
     </Tooltip>
   ) : null;
@@ -172,7 +173,7 @@ export const ComposerSendControls: React.FC<ComposerSendControlsProps> = ({
               onClick={trySend}
               disabled={sendDisabled}
               loading={Boolean(disabled)}
-              icon={<Lucide.ArrowUp size={16} strokeWidth={2.5} aria-hidden />}
+              icon={<AppIcon name="arrow-up" size={16} aria-hidden />}
             />
           </Tooltip>
         ) : (
@@ -187,7 +188,7 @@ export const ComposerSendControls: React.FC<ComposerSendControlsProps> = ({
               onClick={trySend}
               disabled={sendDisabled}
               loading={Boolean(disabled)}
-              icon={<Lucide.CornerDownLeft size={16} aria-hidden />}
+              icon={<AppIcon name="corner-down-left" size={16} aria-hidden />}
             />
           </Tooltip>
         )}

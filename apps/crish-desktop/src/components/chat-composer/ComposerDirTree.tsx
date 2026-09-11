@@ -9,7 +9,7 @@ import React, {
   useImperativeHandle,
   useState,
 } from 'react';
-import * as Lucide from 'lucide-react';
+
 import * as Popover from '@radix-ui/react-popover';
 import type { SlashMenuProps } from './composerTypes';
 import type { FsDirEntry } from '../../api/workspaceFsApi';
@@ -26,6 +26,7 @@ import {
 import slashStyles from './TiptapSlashMenu.module.css';
 import styles from './ComposerDirTree.module.css';
 import { Tooltip } from '../ui';
+import { AppIcon } from '../ui/icons/index';
 
 export type ComposerDirTreeHandle = {
   onKeyDown: (props: { event: KeyboardEvent }) => boolean;
@@ -225,7 +226,7 @@ export const ComposerDirTree = forwardRef<
                     aria-label="上级目录"
                     onClick={() => void load(parentOf(cwd, root))}
                   >
-                    <Lucide.CornerLeftUp size={14} aria-hidden />
+                    <AppIcon name="corner-left-up" size={14} aria-hidden />
                   </button>
                 </Tooltip>
               ) : null}
@@ -239,7 +240,7 @@ export const ComposerDirTree = forwardRef<
               <div className={styles.empty}>空目录</div>
             ) : (
               entries.map((entry, index) => {
-                const Icon = entry.isDir ? Lucide.Folder : Lucide.FileText;
+                const iconName = entry.isDir ? 'folder' : 'file-text';
                 const active = index === selected;
                 return (
                   <button
@@ -252,7 +253,7 @@ export const ComposerDirTree = forwardRef<
                     onClick={() => activate(index)}
                   >
                     <span className={styles.icon} aria-hidden>
-                      <Icon size={14} strokeWidth={1.75} />
+                      <AppIcon name={iconName} size={14} />
                     </span>
                     <span className={styles.name}>{entry.name}</span>
                   </button>

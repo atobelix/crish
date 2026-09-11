@@ -7,7 +7,7 @@
  * orderedList / listItem / taskList / taskItem / blockquote / horizontalRule，
  * 见 TiptapEditorExtensions 的 StarterKit 配置——对话输入框保持纯净行内修饰流）。
  * 因此 parseFromMarkdown 输出恒为行内 schema 形状：块级结构降维为段落并原样
- * 保留标记文本（# / - / - [ ] / 1. / > / ---），codeBlock 与行内 mark 全保真。
+ * 保留标记文本（# / - / - [ ] / 1. /> / ---），codeBlock 与行内 mark 全保真。
  * 否则 setContent 会因未知节点抛错并触发水合静默丢失（历史事故：列表模板水合为空）。
  */
 
