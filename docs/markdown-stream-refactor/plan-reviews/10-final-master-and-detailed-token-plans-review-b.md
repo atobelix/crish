@@ -1,7 +1,7 @@
 # 战役终审评审 B：Token 重构总方案与 5 大分维详案最终交叉审查报告
 
-> **文档标识**：[`docs/markdown-stream-refactor/plan-reviews/10-final-master-and-detailed-token-plans-review-b.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/plan-reviews/10-final-master-and-detailed-token-plans-review-b.md)  
-> **评审角色**：Senior Systems Engineer & Codebase Architect (Final Reviewer B · Token Architecture Consistency & Master Cross-Audit Lead)  
+> **文档标识**：[`docs/markdown-stream-refactor/plan-reviews/10-final-master-and-detailed-token-plans-review-b.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/plan-reviews/10-final-master-and-detailed-token-plans-review-b.md)
+> **评审角色**：Senior Systems Engineer & Codebase Architect (Final Reviewer B · Token Architecture Consistency & Master Cross-Audit Lead)
 > **审查基准**：
 > - 核心总案：[`docs/markdown-stream-refactor/00-总方案-主界面流式渲染Design-Tokens系统化重构.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/00-%E6%80%BB%E6%96%B9%E6%A1%88-%E4%B8%BB%E7%95%8C%E9%9D%A2%E6%B5%81%E5%BC%8F%E6%B8%B2%E6%9F%93Design-Tokens%E7%B3%BB%E7%BB%9F%E5%8C%96%E9%87%8D%E6%9E%84.md)
 > - 核心定案：[`docs/markdown-stream-refactor/00-定案-主界面流式渲染Token体系与删除面决策.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/00-%E5%AE%9A%E6%A1%88-%E4%B8%BB%E7%95%8C%E9%9D%A2%E6%B5%81%E5%BC%8F%E6%B8%B2%E6%9F%93Token%E4%BD%93%E7%B3%BB%E4%B8%8E%E5%88%A0%E9%99%A4%E9%9D%A2%E5%86%B3%E7%AD%96.md)
@@ -11,7 +11,7 @@
 >   - 详案 08：[`08-自定义HTML富交互组件Token详案.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/08-%E8%87%AA%E5%AE%9A%E4%B9%89HTML%E5%AF%8C%E4%BA%A4%E4%BA%92%E7%BB%84%E4%BB%B6Token%E8%AF%A6%E6%A1%88.md)
 >   - 详案 09：[`09-思考链折叠与状态横幅Token详案.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/09-%E6%80%9D%E8%80%83%E9%93%BE%E6%8A%98%E5%8F%A0%E4%B8%8E%E7%8A%B6%E6%80%81%E6%A8%AA%E5%B9%85Token%E8%AF%A6%E6%A1%88.md)
 >   - 详案 10：[`10-流式动效打字光标与性能分档Token详案.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/10-%E6%B5%81%E5%BC%8F%E5%8A%A8%E6%95%88%E6%89%93%E5%AD%97%E5%85%89%E6%A0%87%E4%B8%8E%E6%80%A7%E8%83%BD%E5%88%86%E6%A1%A3Token%E8%AF%A6%E6%A1%88.md)
-> - 规范与纪律：[`docs/agent-roles/prompts/主控-全流程调度-v3.md`](file:///c:/Software/conex/docs/agent-roles/prompts/%E4%B8%BB%E6%8E%A7-%E5%85%A8%E6%B5%81%E7%A8%8B%E8%B0%83%E5%BA%A6-v3.md) §二.5、[`AGENTS.md`](file:///c:/Software/conex/AGENTS.md) §12/§13/§14、[`ANTI_OVERENGINEERING_GUARDRAILS.md`](file:///c:/Software/conex/ANTI_OVERENGINEERING_GUARDRAILS.md)  
+> - 规范与纪律：[`docs/agent-roles/prompts/主控-全流程调度-v3.md`](file:///c:/Software/conex/docs/agent-roles/prompts/%E4%B8%BB%E6%8E%A7-%E5%85%A8%E6%B5%81%E7%A8%8B%E8%B0%83%E5%BA%A6-v3.md) §二.5、[`AGENTS.md`](file:///c:/Software/conex/AGENTS.md) §12/§13/§14、[`ANTI_OVERENGINEERING_GUARDRAILS.md`](file:///c:/Software/conex/ANTI_OVERENGINEERING_GUARDRAILS.md)
 >
 > **审查宗旨**：依据《主控全流程调度 v3》§二.5 标准，以**“架构一致性、死层删除面对账、文件域互斥性、先删后改 DAG 依赖闭环、WCAG AA 对比度与 AGENTS.md 铁律”**为六大核心基准，对《00-总方案》与《06》~《10》全部 5 份分维实施详案展开最终定稿前严苛交叉审查，确保 Token 重构战役进入实施阶段时达到 **0 概念冲突、0 变量悬空、0 文件写冲突、0 死层残留、100% WCAG AA 达标**。
 
@@ -47,7 +47,7 @@
 └─────────────────┴───────────────────────────────┴──────────┴────────────────────────────────────────┘
 ```
 
-> **终审评审 B 总体裁决**：**全票一致通过（APPROVED FOR EXECUTION）**。  
+> **终审评审 B 总体裁决**：**全票一致通过（APPROVED FOR EXECUTION）**。
 > 方案完全满足《主控全流程调度 v3》§二.5 的所有定稿标准，全链路死层清剿明确，Token 命名空间自洽统一，串行瘦身序列闭环完备，色度模型数学推导严密。即刻签发准入指令，准予进入实施阶段。
 
 ---
@@ -424,7 +424,7 @@ flowchart TD
 ### 6.2 主控定稿签发与实施准入指令
 
 > [!IMPORTANT]
-> **主控实施准入指令（Master Execution Directive）**：  
+> **主控实施准入指令（Master Execution Directive）**：
 > 1. **指令性质**：终审全面通过，正式封板《00-总方案》与《06》~《10》分维详案，禁止再对 Token 命名空间或架构边界进行非必要微调；
 > 2. **实施执行顺序**：
 >    - **第一步（Phase 0）**：严格执行死层物理清剿工单（清剿 `custom-tags.module.css` 46 处裸色、拔除 12 幽灵变量、剥离 `TimelineThoughtSection.module.css`、消除双源表格与双轨光标）；

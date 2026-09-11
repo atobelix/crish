@@ -1,9 +1,9 @@
 # 独立 Token 方案全景交叉审查与架构边界报告（方案评审 B）
 
-> **评审标识**：[`docs/markdown-stream-refactor/plan-reviews/07-token-plans-cross-review-b.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/plan-reviews/07-token-plans-cross-review-b.md)  
-> **评审角色**：Senior Systems Engineer & Codebase Architect (Reviewer B - Design Tokens & Rendering Architecture Specialist)  
-> **审查标准**：[`docs/agent-roles/prompts/主控-全流程调度-v3.md`](file:///c:/Software/conex/docs/agent-roles/prompts/%E4%B8%BB%E6%8E%A7-%E5%85%A8%E6%B5%81%E7%A8%8B%E8%B0%83%E5%BA%A6-v3.md) §二.2、[`AGENTS.md`](file:///c:/Software/conex/AGENTS.md) §13（焦点对比度上限 ≤10%）、§14（HSLA 现代色彩空间与 Zero-Blue 铁律）、[`ANTI_OVERENGINEERING_GUARDRAILS.md`](file:///c:/Software/conex/ANTI_OVERENGINEERING_GUARDRAILS.md) 禁令 12  
-> **基准定案**：[`docs/markdown-stream-refactor/00-定案-主界面流式渲染Token体系与删除面决策.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/00-%E5%AE%9A%E6%A1%88-%E4%B8%BB%E7%95%8C%E9%9D%A2%E6%B5%81%E5%BC%8F%E6%B8%B2%E6%9F%93Token%E4%BD%93%E7%B3%BB%E4%B8%8E%E5%88%A0%E9%99%A4%E9%9D%A2%E5%86%B3%E7%AD%96.md)  
+> **评审标识**：[`docs/markdown-stream-refactor/plan-reviews/07-token-plans-cross-review-b.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/plan-reviews/07-token-plans-cross-review-b.md)
+> **评审角色**：Senior Systems Engineer & Codebase Architect (Reviewer B - Design Tokens & Rendering Architecture Specialist)
+> **审查标准**：[`docs/agent-roles/prompts/主控-全流程调度-v3.md`](file:///c:/Software/conex/docs/agent-roles/prompts/%E4%B8%BB%E6%8E%A7-%E5%85%A8%E6%B5%81%E7%A8%8B%E8%B0%83%E5%BA%A6-v3.md) §二.2、[`AGENTS.md`](file:///c:/Software/conex/AGENTS.md) §13（焦点对比度上限 ≤10%）、§14（HSLA 现代色彩空间与 Zero-Blue 铁律）、[`ANTI_OVERENGINEERING_GUARDRAILS.md`](file:///c:/Software/conex/ANTI_OVERENGINEERING_GUARDRAILS.md) 禁令 12
+> **基准定案**：[`docs/markdown-stream-refactor/00-定案-主界面流式渲染Token体系与删除面决策.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/00-%E5%AE%9A%E6%A1%88-%E4%B8%BB%E7%95%8C%E9%9D%A2%E6%B5%81%E5%BC%8F%E6%B8%B2%E6%9F%93Token%E4%BD%93%E7%B3%BB%E4%B8%8E%E5%88%A0%E9%99%A4%E9%9D%A2%E5%86%B3%E7%AD%96.md)
 > **审查对象**：`docs/markdown-stream-refactor/independent-plans/` 目录下全部 6 份 Token 重构独立方案：
 > 1. [`07-streaming-typography-token-plan.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/independent-plans/07-streaming-typography-token-plan.md)（排版与高亮 Token 方案）
 > 2. [`08-streaming-table-and-code-token-plan.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/independent-plans/08-streaming-table-and-code-token-plan.md)（流式表格与视口动效 Token 方案）

@@ -1,9 +1,9 @@
 # 11. 流式动效、打字光标与性能分档 Token 重构方案（方案 11）
 
-> **文档标识**：`docs/markdown-stream-refactor/independent-plans/11-caret-animation-and-perf-tier-token-plan.md`  
-> **所属战役**：Markdown 真流式渲染与主界面 Design Tokens 体系重构战役 (`docs/markdown-stream-refactor/`)  
-> **方案定位**：流式渲染独立实施详案 11 —— 流式动效、打字光标与性能分档 Token 重构（`Streaming Animation, Caret & Performance Tier Token Plan`）  
-> **架构师**：Senior Systems Engineer & UI Motion Architecture Specialist  
+> **文档标识**：`docs/markdown-stream-refactor/independent-plans/11-caret-animation-and-perf-tier-token-plan.md`
+> **所属战役**：Markdown 真流式渲染与主界面 Design Tokens 体系重构战役 (`docs/markdown-stream-refactor/`)
+> **方案定位**：流式渲染独立实施详案 11 —— 流式动效、打字光标与性能分档 Token 重构（`Streaming Animation, Caret & Performance Tier Token Plan`）
+> **架构师**：Senior Systems Engineer & UI Motion Architecture Specialist
 > **设计依据**：
 > - 核心定案决策：[`00-定案-主界面流式渲染Token体系与删除面决策.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/00-%E5%AE%9A%E6%A1%88-%E4%B8%BB%E7%95%8C%E9%9D%A2%E6%B5%81%E5%BC%8F%E6%B8%B2%E6%9F%93Token%E4%BD%93%E7%B3%BB%E4%B8%8E%E5%88%A0%E9%99%A4%E9%9D%A2%E5%86%B3%E7%AD%96.md) §维度五
 > - 审查蓝图：[`audits/06-streaming-typography-token-audit.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/audits/06-streaming-typography-token-audit.md)、[`audits/10-streaming-design-token-system-blueprint.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/audits/10-streaming-design-token-system-blueprint.md)
@@ -609,7 +609,7 @@ Opacity
 -   background: var(--text-tertiary);
 -   animation: caret var(--transition-blink) infinite;
 - }
-- 
+-
 - @keyframes caret {
 -   50% {
 -     opacity: 0;
@@ -619,7 +619,7 @@ Opacity
 - .suppressCaret {
 -   /* 表格流式状态下抑制全局打字机光标 */
 - }
-- 
+-
 - /* 当检测到表格时，彻底抑制末尾光标，防止破坏 table 盒模型 */
 - .assistantText.isStreaming.suppressCaret::after,
 - .assistantText.suppressCaret::after,

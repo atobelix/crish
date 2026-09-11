@@ -1,8 +1,8 @@
 # 多轮生命周期单源收敛与时间线幂等实施总案（方案 5）
 
-> **文档标识**：`docs/markdown-stream-refactor/independent-plans/05-lifecycle-idempotency-and-reconcile-plan.md`  
-> **战役维度**：维度五 · 多轮生命周期单源收敛与时间线幂等域（Message Lifecycle & Turn-Idempotent Timeline）  
-> **实施基准**：[`docs/markdown-stream-refactor/00-定案-核心维度与删除面决策.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/00-%E5%AE%9A%E6%A1%88-%E6%A0%B8%E5%BF%83%E7%BB%B4%E5%BA%A6%E4%B8%8E%E5%88%A0%E9%99%A4%E9%9D%A2%E5%86%B3%E7%AD%96.md) §一.5  
+> **文档标识**：`docs/markdown-stream-refactor/independent-plans/05-lifecycle-idempotency-and-reconcile-plan.md`
+> **战役维度**：维度五 · 多轮生命周期单源收敛与时间线幂等域（Message Lifecycle & Turn-Idempotent Timeline）
+> **实施基准**：[`docs/markdown-stream-refactor/00-定案-核心维度与删除面决策.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/00-%E5%AE%9A%E6%A1%88-%E6%A0%B8%E5%BF%83%E7%BB%B4%E5%BA%A6%E4%B8%8E%E5%88%A0%E9%99%A4%E9%9D%A2%E5%86%B3%E7%AD%96.md) §一.5
 > **核心使命**：以“单源收敛与数学幂等不变性”为最高准则，彻底根除正文大段重复两遍、轮次间尾段幻影字符重叠、思考链与工具调用块历史丢失等顽疾；全面拆解超标文件，剔除违规断路器与冗余计算，构建确定性无损的生命周期状态机与时间线管线。
 
 ---
@@ -91,12 +91,12 @@ $$\text{SlotKey}(b) = \langle \text{sanitizeTurnIndex}(b.\text{turnIndex}), \; b
 flowchart TD
     InExisting["已有 blocks (existingBlocks)"] --> MapExisting["按 (turnIndex, type, id) 注册入 existingMap"]
     InIncoming["新传入 blocks (incomingBlocks)"] --> MergeScan["遍历 incomingBlocks"]
-    
+
     MapExisting --> MergeScan
     MergeScan --> CheckHit{"existingMap 中存在同名槽位?"}
     CheckHit -- 是 --> UpdateSlot["更新槽位内容并从 existingMap 移除"]
     CheckHit -- 否 --> AppendNew["作为新槽位加入 result"]
-    
+
     UpdateSlot --> CollectRemain["收集 existingMap 中剩余的历史 thought / tool_call"]
     AppendNew --> CollectRemain
     CollectRemain --> SortBlocks["全局按 turnIndex 升序 + [thought->tool->text] 排序"]

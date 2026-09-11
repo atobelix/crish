@@ -1,7 +1,7 @@
 # 消息生命周期、流式缓冲与多轮完全幂等合并深度解剖与状态机设计
 
-> **文件路径**：`docs/markdown-stream-refactor/analysis/03-message-lifecycle-and-turn-idempotency.md`  
-> **战役归属**：Markdown 真流式渲染与正文退化根治战役 (Phase Σ / Δ / Ω)  
+> **文件路径**：`docs/markdown-stream-refactor/analysis/03-message-lifecycle-and-turn-idempotency.md`
+> **战役归属**：Markdown 真流式渲染与正文退化根治战役 (Phase Σ / Δ / Ω)
 > **关联资产与核心代码**：
 > - [`messageHandlers.ts`](file:///c:/Software/conex/apps/crish-desktop/src/api/chat-bridge/handlers/messageHandlers.ts)
 > - [`eventUtils.ts`](file:///c:/Software/conex/apps/crish-desktop/src/api/chat-bridge/handlers/eventUtils.ts)
@@ -67,7 +67,7 @@ sequenceDiagram
     Note over Engine,Handlers: 【第二阶段：当前轮完成，收口事件到达】
     Engine->>Router: IPC: message-end (message.blocks / content, turnIndex)
     Router->>Handlers: onMessageEnd(env, envelope)
-    
+
     rect rgb(255, 230, 230)
     Note over Handlers: 💥 缺陷爆发点：双轨碰撞与伪增量计算
     Handlers->>Handlers: piece = projectAgentMessageContent(msg).text.trim()
@@ -258,34 +258,34 @@ graph LR
 ```mermaid
 stateDiagram-v2
     [*] --> IDLE
-    
+
     IDLE --> STREAMING_THOUGHT: turn-start / message-delta(thought)
     IDLE --> STREAMING_TEXT: turn-start / message-delta(text)
-    
+
     STREAMING_THOUGHT --> STREAMING_THOUGHT: message-delta(thought)
     STREAMING_THOUGHT --> STREAMING_TEXT: message-delta(text)
     STREAMING_THOUGHT --> TOOL_RUNNING: tool-start
-    
+
     STREAMING_TEXT --> STREAMING_TEXT: message-delta(text)
     STREAMING_TEXT --> TOOL_RUNNING: tool-start
     STREAMING_TEXT --> TURN_SETTLED: message-end
-    
+
     TOOL_RUNNING --> TOOL_RUNNING: tool-output / tool-heartbeat
     TOOL_RUNNING --> STREAMING_THOUGHT: tool-end -> next turn thought
     TOOL_RUNNING --> STREAMING_TEXT: tool-end -> next turn text
     TOOL_RUNNING --> TURN_SETTLED: tool-end -> message-end
-    
+
     TURN_SETTLED --> STREAMING_THOUGHT: turn-start (turnIndex + 1)
     TURN_SETTLED --> STREAMING_TEXT: message-delta (turnIndex + 1)
     TURN_SETTLED --> RUN_COMPLETING: run-terminal / agent-end
-    
+
     STREAMING_TEXT --> RUN_COMPLETING: run-terminal / agent-end
     STREAMING_THOUGHT --> RUN_COMPLETING: run-terminal / agent-end
     TOOL_RUNNING --> RUN_COMPLETING: run-terminal / agent-end
-    
+
     RUN_COMPLETING --> COMMITTED: commitRunCompletion & clearStream
     COMMITTED --> [*]
-    
+
     STREAMING_TEXT --> STOPPED: user stop / cancel
     STREAMING_THOUGHT --> STOPPED: user stop / cancel
     TOOL_RUNNING --> STOPPED: user stop / cancel
@@ -357,7 +357,7 @@ export class StreamTurnLedger {
     const sortedTurns = Array.from(this.turns.values()).sort(
       (a, b) => a.turnIndex - b.turnIndex
     );
-    
+
     // 如果只有一轮，直接返回该轮文本
     if (sortedTurns.length <= 1) {
       const single = sortedTurns[0];
@@ -372,7 +372,7 @@ export class StreamTurnLedger {
         parts.push(content.trim());
       }
     }
-    
+
     // 如果后一轮已经包含了前一轮的全部内容（累计载荷模式），直接采用最后一轮
     const lastTurn = sortedTurns[sortedTurns.length - 1];
     const lastContent = lastTurn?.authoritativeText || lastTurn?.streamedText || '';
@@ -439,7 +439,7 @@ export class StreamTurnLedger {
 > **定理**：若系统满足以下两条约束：
 > 1. $\forall e_i = \text{delta}(t)$，渲染缓冲区状态转移为 $B_{i} = B_{i-1} \cdot t$；
 > 2. $\forall e_i = \text{end}(k, p)$，不向增量通道派发任何数据，仅执行账本状态记录 $L(k) \leftarrow p$；
-> 
+>
 > 则最终渲染缓冲区输出字符串 $B_n = \prod_{e_i \in E_{\text{delta}}} t_i$，且不存在任何由 $\text{end}$ 事件引入的非空切片 $\Delta s$ 使得 $B_n = B_{\text{delta}} \cdot \Delta s$。
 
 **证明**：

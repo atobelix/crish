@@ -1,9 +1,9 @@
 # 极速吞吐与速率自适应调度实施总案（方案 1 / 维度一）
 
-> **文档标识**：`docs/markdown-stream-refactor/independent-plans/01-throughput-and-rate-adaptive-plan.md`  
-> **领域概念**：极速吞吐与速率自适应调度域（Throughput & Rate-Adaptive Scheduling）  
-> **标准依据**：[`docs/markdown-stream-refactor/00-定案-核心维度与删除面决策.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/00-%E5%AE%9A%E6%A1%88-%E6%A0%B8%E5%BF%83%E7%BB%B4%E5%BA%A6%E4%B8%8E%E5%88%A0%E9%99%A4%E9%9D%A2%E5%86%B3%E7%AD%96.md) §一.1 与 [`docs/agent-roles/prompts/主控-全流程调度-v3.md`](file:///c:/Software/conex/docs/agent-roles/prompts/%E4%B8%BB%E6%8E%A7-%E5%85%A8%E6%B5%81%E7%A8%8B%E8%B0%83%E5%BA%A6-v3.md) §二.1  
-> **架构师**：Independent Architect 1 (Throughput & Rate-Adaptive Scheduling Specialist)  
+> **文档标识**：`docs/markdown-stream-refactor/independent-plans/01-throughput-and-rate-adaptive-plan.md`
+> **领域概念**：极速吞吐与速率自适应调度域（Throughput & Rate-Adaptive Scheduling）
+> **标准依据**：[`docs/markdown-stream-refactor/00-定案-核心维度与删除面决策.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/00-%E5%AE%9A%E6%A1%88-%E6%A0%B8%E5%BF%83%E7%BB%B4%E5%BA%A6%E4%B8%8E%E5%88%A0%E9%99%A4%E9%9D%A2%E5%86%B3%E7%AD%96.md) §一.1 与 [`docs/agent-roles/prompts/主控-全流程调度-v3.md`](file:///c:/Software/conex/docs/agent-roles/prompts/%E4%B8%BB%E6%8E%A7-%E5%85%A8%E6%B5%81%E7%A8%8B%E8%B0%83%E5%BA%A6-v3.md) §二.1
+> **架构师**：Independent Architect 1 (Throughput & Rate-Adaptive Scheduling Specialist)
 > **核心使命**：构建 $5 \sim 2000+\text{ tokens/s}$ 全速率自适应不变性调度器，通过滑动窗口速率估计器（SW-TRE）与自适应 GPU CSS 变量时间轴（$B=320\text{ms}, S_{\min}=4\text{ms}$），根治极慢速（$3 \sim 15\text{ t/s}$）打字机卡顿排队与极高速（$\ge 300\sim 2000+\text{ t/s}$）DOM 膨胀与主线程冻结，实现全速率档位下的丝滑 120 FPS 满帧呈现与 TURBO 宏块零分配追加。
 
 ---
@@ -41,14 +41,14 @@ flowchart TD
     Chunk["新到达 Token / 字符增量 (Δc, now)"] --> RingBuf["环形滑动窗口队列 (W = 500ms, M = 10)"]
     RingBuf --> WindowRate["窗口累计速率计算:<br/>V_window = (Σ Δc / Δt_window) * 1000"]
     RingBuf --> InstantRate["瞬时速率计算:<br/>v_k = (Δc / Δt_sample) * 1000"]
-    
+
     InstantRate & WindowRate --> DynamicEMA{"瞬时速率 v_k > smoothedRate ?"}
     DynamicEMA -- "是 (加速态)" --> AlphaFast["α = 0.5 (敏捷加速响应)"]
     DynamicEMA -- "否 (减速态)" --> AlphaSlow["α = 0.2 (平稳退出，防动画截断)"]
-    
+
     AlphaFast & AlphaSlow --> EMA["V_smoothed = α · v_k + (1 - α) · V_prev"]
     EMA --> TokenCalc["等效 Token 速率估算:<br/>R_token = V_smoothed / 3.8"]
-    
+
     TokenCalc --> TierSwitch{"四级速率档位判定"}
     TierSwitch -- "< 15 t/s" --> T1["Tier 1: CRAWL (逐字丝滑打字机, S=40ms, D=120ms)"]
     TierSwitch -- "15 ~ 100 t/s" --> T2["Tier 2: NORMAL (动态交错压缩淡入, S=4~20ms, D=100ms)"]

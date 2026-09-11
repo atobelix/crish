@@ -1,11 +1,11 @@
 # 维度详案 10：流式动效打字光标与性能分档 Token 详案
 
-> **文档标识**：[`docs/markdown-stream-refactor/10-流式动效打字光标与性能分档Token详案.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/10-%E6%B5%81%E5%BC%8F%E5%8A%A8%E6%95%88%E6%89%93%E5%AD%97%E5%85%89%E6%A0%87%E4%B8%8E%E6%80%A7%E8%83%BD%E5%88%86%E6%A1%A3Token%E8%AF%A6%E6%A1%88.md)  
-> **所属战役**：Markdown 真流式渲染与主界面 Design Tokens 体系重构战役  
-> **领域概念**：流式动效、打字光标与性能分档 Token 体系（`Streaming Animation, Caret & Performance Tier Design Tokens`）  
-> **标准依据**：[`docs/agent-roles/prompts/主控-全流程调度-v3.md`](file:///c:/Software/conex/docs/agent-roles/prompts/%E4%B8%BB%E6%8E%A7-%E5%85%A8%E6%B5%81%E7%A8%8B%E8%B0%83%E5%BA%A6-v3.md) §二.4、[`docs/markdown-stream-refactor/00-总方案-主界面流式渲染Design-Tokens系统化重构.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/00-%E6%80%BB%E6%96%B9%E6%A1%88-%E4%B8%BB%E7%95%8C%E9%9D%A2%E6%B5%81%E5%BC%8F%E6%B8%B2%E6%9F%93Design-Tokens%E7%B3%BB%E7%BB%9F%E5%8C%96%E9%87%8D%E6%9E%84.md) §一.5 与 [`docs/markdown-stream-refactor/00-定案-主界面流式渲染Token体系与删除面决策.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/00-%E5%AE%9A%E6%A1%88-%E4%B8%BB%E7%95%8C%E9%9D%A2%E6%B5%81%E5%BC%8F%E6%B8%B2%E6%9F%93Token%E4%BD%93%E7%B3%BB%E4%B8%8E%E5%88%A0%E9%99%A4%E9%9D%A2%E5%86%B3%E7%AD%96.md) §维度五  
-> **审查定案依据**：[`docs/markdown-stream-refactor/plan-reviews/06-token-plans-cross-review-a.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/plan-reviews/06-token-plans-cross-review-a.md)、[`07-token-plans-cross-review-b.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/plan-reviews/07-token-plans-cross-review-b.md)、[`08-token-plans-cross-review-c.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/plan-reviews/08-token-plans-cross-review-c.md)  
-> **架构师**：Senior Systems Engineer & UI Motion Architecture Specialist (Dimension 10 Lead)  
+> **文档标识**：[`docs/markdown-stream-refactor/10-流式动效打字光标与性能分档Token详案.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/10-%E6%B5%81%E5%BC%8F%E5%8A%A8%E6%95%88%E6%89%93%E5%AD%97%E5%85%89%E6%A0%87%E4%B8%8E%E6%80%A7%E8%83%BD%E5%88%86%E6%A1%A3Token%E8%AF%A6%E6%A1%88.md)
+> **所属战役**：Markdown 真流式渲染与主界面 Design Tokens 体系重构战役
+> **领域概念**：流式动效、打字光标与性能分档 Token 体系（`Streaming Animation, Caret & Performance Tier Design Tokens`）
+> **标准依据**：[`docs/agent-roles/prompts/主控-全流程调度-v3.md`](file:///c:/Software/conex/docs/agent-roles/prompts/%E4%B8%BB%E6%8E%A7-%E5%85%A8%E6%B5%81%E7%A8%8B%E8%B0%83%E5%BA%A6-v3.md) §二.4、[`docs/markdown-stream-refactor/00-总方案-主界面流式渲染Design-Tokens系统化重构.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/00-%E6%80%BB%E6%96%B9%E6%A1%88-%E4%B8%BB%E7%95%8C%E9%9D%A2%E6%B5%81%E5%BC%8F%E6%B8%B2%E6%9F%93Design-Tokens%E7%B3%BB%E7%BB%9F%E5%8C%96%E9%87%8D%E6%9E%84.md) §一.5 与 [`docs/markdown-stream-refactor/00-定案-主界面流式渲染Token体系与删除面决策.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/00-%E5%AE%9A%E6%A1%88-%E4%B8%BB%E7%95%8C%E9%9D%A2%E6%B5%81%E5%BC%8F%E6%B8%B2%E6%9F%93Token%E4%BD%93%E7%B3%BB%E4%B8%8E%E5%88%A0%E9%99%A4%E9%9D%A2%E5%86%B3%E7%AD%96.md) §维度五
+> **审查定案依据**：[`docs/markdown-stream-refactor/plan-reviews/06-token-plans-cross-review-a.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/plan-reviews/06-token-plans-cross-review-a.md)、[`07-token-plans-cross-review-b.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/plan-reviews/07-token-plans-cross-review-b.md)、[`08-token-plans-cross-review-c.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/plan-reviews/08-token-plans-cross-review-c.md)
+> **架构师**：Senior Systems Engineer & UI Motion Architecture Specialist (Dimension 10 Lead)
 > **核心使命**：彻底根除 `ChatMessageRow.module.css` 与 `streaming-animation.css` 历史双轨光标撕裂、`#94a3b8` 蓝灰裸色对 Zero-Blue 铁律的刺穿、以及节能档位盲目运行高频动画的性能浪费；构建一套单源收敛（`.conex-streaming-caret`）、统一翡翠绿活态签名、Chromium Compositor 独立 GPU 硬件加速、且与 `html[data-perf-tier='eco']` / `prefers-reduced-motion` 0ms 零损耗深度绑定的现代化流式动效与打字光标 Token 体系。
 
 ---
@@ -721,7 +721,7 @@ html[data-perf-tier='eco'] {
 @@ -514,23 +514,9 @@
    margin-top: 1px;
  }
- 
+
 -.assistantText.isStreaming::after,
 -.streamingCaret {
 -  content: '';

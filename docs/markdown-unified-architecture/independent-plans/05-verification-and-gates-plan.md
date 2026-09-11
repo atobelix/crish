@@ -1,8 +1,8 @@
 # Conex / Crish — Markdown 统一渲染与排版立体化验证方案
 
-> **文档标识**：`docs/markdown-unified-architecture/independent-plans/05-verification-and-gates-plan.md`  
-> **所属战役**：Markdown 统一架构独立方案（Plan 05）  
-> **设计基准**：严格遵循仓库铁律 `AGENTS.md` §7（严禁补丁、绕过与作弊）、§7.1（立体验证纪律）、§8（反过度设计硬性红线）、§11（CI 治理与解耦断言）、§14（色彩空间与现代 CSS）及 `LOGIC_PLAN_NO_RETREAT.md`。  
+> **文档标识**：`docs/markdown-unified-architecture/independent-plans/05-verification-and-gates-plan.md`
+> **所属战役**：Markdown 统一架构独立方案（Plan 05）
+> **设计基准**：严格遵循仓库铁律 `AGENTS.md` §7（严禁补丁、绕过与作弊）、§7.1（立体验证纪律）、§8（反过度设计硬性红线）、§11（CI 治理与解耦断言）、§14（色彩空间与现代 CSS）及 `LOGIC_PLAN_NO_RETREAT.md`。
 > **核心原则**：纯逻辑编排，问题同权，严禁单一检查冒充验收，坚决构筑“编译底线 + 核心算法穷举 + 规范契约守门 + 真实环境现场验收”四道纵深防线。
 
 ---
@@ -990,7 +990,7 @@ export function extractCleanSemanticDomTree(rootElement: Element): string {
       const cls = el.className ? ` class="${el.className}"` : '';
       const role = el.getAttribute('role') ? ` role="${el.getAttribute('role')}"` : '';
       const aria = el.getAttribute('aria-label') ? ` aria-label="${el.getAttribute('aria-label')}"` : '';
-      
+
       let out = `${indent}<${tag}${cls}${role}${aria}>\n`;
       for (const child of Array.from(el.childNodes)) {
         out += serializeNode(child, depth + 1);

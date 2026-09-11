@@ -1,8 +1,8 @@
 # 15. 主界面流式渲染 Design Token 体系重构维度与删除面建议（提案 A）
 
-> **文档定位**：Conex / Crish 主界面流式渲染 Design Token 体系重构落地维度规划与重复死层专项清理方案（`Proposal A: Streaming Token Architecture Partitioning & Deletion Surface Manifest`）  
-> **所属战役**：Markdown 真流式渲染与正文退化根治战役 (`docs/markdown-stream-refactor/`)  
-> **审查基准**：基于 `audits/06` ~ `10` 全部 5 份 Token 审查报告与架构蓝图，严格对照 [`AGENTS.md`](file:///c:/Software/conex/AGENTS.md)（§13 柔和焦点与克制边框、§14 HSLA 色彩空间、Zero-Blue 去蓝化铁律）、[`ANTI_OVERENGINEERING_GUARDRAILS.md`](file:///c:/Software/conex/ANTI_OVERENGINEERING_GUARDRAILS.md)（禁令 12：GPU 硬件加速与零主线程阻塞）以及《主控全流程调度 v3》§一.4 规范。  
+> **文档定位**：Conex / Crish 主界面流式渲染 Design Token 体系重构落地维度规划与重复死层专项清理方案（`Proposal A: Streaming Token Architecture Partitioning & Deletion Surface Manifest`）
+> **所属战役**：Markdown 真流式渲染与正文退化根治战役 (`docs/markdown-stream-refactor/`)
+> **审查基准**：基于 `audits/06` ~ `10` 全部 5 份 Token 审查报告与架构蓝图，严格对照 [`AGENTS.md`](file:///c:/Software/conex/AGENTS.md)（§13 柔和焦点与克制边框、§14 HSLA 色彩空间、Zero-Blue 去蓝化铁律）、[`ANTI_OVERENGINEERING_GUARDRAILS.md`](file:///c:/Software/conex/ANTI_OVERENGINEERING_GUARDRAILS.md)（禁令 12：GPU 硬件加速与零主线程阻塞）以及《主控全流程调度 v3》§一.4 规范。
 > **核心原则**：**先做物理减法（清剿 46 处硬编码色值、Zero-Blue 违规电光蓝、幽灵变量、死选择器与双源漂移），再做架构收敛（单一真源 Token 字典），最后落地领域分层治理**。
 
 ---
@@ -388,7 +388,7 @@ graph TD
     classDef gate fill:#fef3c7,stroke:#f59e0b,stroke-width:2px;
 
     S1["步骤 1: tokens.css 基座注血<br/>全量注入 5 大命名空间 (Light/Dark/Eco)"]:::inject
-    
+
     S2["步骤 2: 清剿 custom-tags 46 处硬编码<br/>修复 divide-x 语法错误与 undefined 类"]:::del
     S3["步骤 3: 消除表格双源漂移与电光蓝<br/>修复 td[data-streaming] 死选择器"]:::del
     S4["步骤 4: 根除 ErrorBanner 内联样式<br/>剥离 TimelineThoughtSection.module.css"]:::del

@@ -1,7 +1,7 @@
 # 战役总方案：Conex 下一代极速流式 Markdown 与富交互渲染引擎
 
-> **战役定位**：彻底根治正文伪流式退化、多轮文字大段重复、50k+ Tokens 长文卡死、流式表格撕裂与缺乏自定义交互组件五大系统性断层，构建一套具备极致吞吐（5 ~ 2000+ tokens/s 速率不变性）、绝对零骨架屏（Zero-CLS = 0.000）、四层 XSS 安全沙箱与单源确定性幂等的多端渲染架构。  
-> **调度标准**：严格遵循 [`docs/agent-roles/prompts/主控-全流程调度-v3.md`](file:///c:/Software/conex/docs/agent-roles/prompts/%E4%B8%BB%E6%8E%A7-%E5%85%A8%E6%B5%81%E7%A8%8B%E8%B0%83%E5%BA%A6-v3.md)。  
+> **战役定位**：彻底根治正文伪流式退化、多轮文字大段重复、50k+ Tokens 长文卡死、流式表格撕裂与缺乏自定义交互组件五大系统性断层，构建一套具备极致吞吐（5 ~ 2000+ tokens/s 速率不变性）、绝对零骨架屏（Zero-CLS = 0.000）、四层 XSS 安全沙箱与单源确定性幂等的多端渲染架构。
+> **调度标准**：严格遵循 [`docs/agent-roles/prompts/主控-全流程调度-v3.md`](file:///c:/Software/conex/docs/agent-roles/prompts/%E4%B8%BB%E6%8E%A7-%E5%85%A8%E6%B5%81%E7%A8%8B%E8%B0%83%E5%BA%A6-v3.md)。
 > **执行铁律**：先删后改，一个领域概念唯一主路径；禁止新增波次命名文件；严格负产出验收（净删除 23 个孤岛死文件，消除 ~3,700 行废弃代码）。
 
 ---
@@ -116,13 +116,13 @@
 
 ## 四、核心工程契约与架构决策记录（ADRs）
 
-- **ADR-001：确立单一渲染协调器，杜绝组件分裂**  
+- **ADR-001：确立单一渲染协调器，杜绝组件分裂**
   全链路只保留 `StreamingMarkdownView` 与 `MarkdownBlockItem`，禁止派生 `ActiveTailMarkdownBlock` 或重新引入 `AsyncMarkdownBlock`。
-- **ADR-002：语义哈希稳定 Block Key 策略**  
+- **ADR-002：语义哈希稳定 Block Key 策略**
   封口块采用 `${msgId}-blk-${index}-${hash16}`，活动草稿块采用 `${msgId}-blk-${tailIndex}-active`，彻底终结索引漂移引起的级联缓存击穿。
-- **ADR-003：宏观分块优先，组件沙箱内联**  
+- **ADR-003：宏观分块优先，组件沙箱内联**
   `IncrementalBlockSplitter` 拥有最高词法切分权；`preprocessCustomTags` 作为块内部 AST 预处理器，防止全局正则将组件切碎。
-- **ADR-004：投机补全纯内存化，保证数据源纯洁性**  
+- **ADR-004：投机补全纯内存化，保证数据源纯洁性**
   `SpeculativeVirtualCloser` 仅在内存中补全用于视图展示的草稿副本，绝不修改或落盘原始流式 Markdown 字符串。
-- **ADR-005：单生产者单源状态机与三元槽位保全**  
+- **ADR-005：单生产者单源状态机与三元槽位保全**
   `onMessageDelta` 唯一驱动增量；`turnAuthoritativeTexts` Map 账本承载收口快照；`(turnIndex, type, id)` 槽位 100% 永久保全历史思考链与工具调用卡片。

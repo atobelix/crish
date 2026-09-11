@@ -1,9 +1,9 @@
 # 独立方案全景交叉审查与冲突定位报告（方案评审 A）
 
-> **评审标识**：[`docs/markdown-stream-refactor/plan-reviews/01-independent-plans-cross-review-a.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/plan-reviews/01-independent-plans-cross-review-a.md)  
-> **评审角色**：Senior Systems Engineer & Codebase Architect (Reviewer A)  
-> **审查标准**：[`docs/agent-roles/prompts/主控-全流程调度-v3.md`](file:///c:/Software/conex/docs/agent-roles/prompts/%E4%B8%BB%E6%8E%A7-%E5%85%A8%E6%B5%81%E7%A8%8B%E8%B0%83%E5%BA%A6-v3.md) §二.2、[`ANTI_OVERENGINEERING_GUARDRAILS.md`](file:///c:/Software/conex/ANTI_OVERENGINEERING_GUARDRAILS.md)（13 项硬性红线）  
-> **基准定案**：[`docs/markdown-stream-refactor/00-定案-核心维度与删除面决策.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/00-%E5%AE%9A%E6%A1%88-%E6%A0%B8%E5%BF%83%E7%BB%B4%E5%BA%A6%E4%B8%8E%E5%88%A0%E9%99%A4%E9%9D%A2%E5%86%B3%E7%AD%96.md)  
+> **评审标识**：[`docs/markdown-stream-refactor/plan-reviews/01-independent-plans-cross-review-a.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/plan-reviews/01-independent-plans-cross-review-a.md)
+> **评审角色**：Senior Systems Engineer & Codebase Architect (Reviewer A)
+> **审查标准**：[`docs/agent-roles/prompts/主控-全流程调度-v3.md`](file:///c:/Software/conex/docs/agent-roles/prompts/%E4%B8%BB%E6%8E%A7-%E5%85%A8%E6%B5%81%E7%A8%8B%E8%B0%83%E5%BA%A6-v3.md) §二.2、[`ANTI_OVERENGINEERING_GUARDRAILS.md`](file:///c:/Software/conex/ANTI_OVERENGINEERING_GUARDRAILS.md)（13 项硬性红线）
+> **基准定案**：[`docs/markdown-stream-refactor/00-定案-核心维度与删除面决策.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/00-%E5%AE%9A%E6%A1%88-%E6%A0%B8%E5%BF%83%E7%BB%B4%E5%BA%A6%E4%B8%8E%E5%88%A0%E9%99%A4%E9%9D%A2%E5%86%B3%E7%AD%96.md)
 > **审查对象**：`docs/markdown-stream-refactor/independent-plans/` 目录下全部 8 份方案资产：
 > 1. [`01-end-to-end-contract-first-plan.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/independent-plans/01-end-to-end-contract-first-plan.md)（早期探索稿 A）
 > 2. [`01-throughput-and-rate-adaptive-plan.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/independent-plans/01-throughput-and-rate-adaptive-plan.md)（维度一详案）
@@ -96,7 +96,7 @@
 └──────────────────────────────┴──────────────────────────────┴──────────────────────────┘
 ```
 
-> **评审裁决**：  
+> **评审裁决**：
 > 1. `01-end-to-end-contract-first-plan.md` 与 `02-progressive-chunk-render-plan.md` 属于战役早期的“探索提案稿”，其内部的渲染机制已被正式定案全面推翻。
 > 2. **主控总案与后续工单派发必须完全忽略这两份草案中的渲染与分块算法**，严格以 `01-throughput` ~ `06-dead-layer` 作为权威唯一主路径。
 
@@ -121,7 +121,7 @@
                  └── MarkdownBlockItem (同一个组件实例，原地双缓冲晋升)
 ```
 
-> **评审裁决**：  
+> **评审裁决**：
 > - 彻底禁止引入 `ActiveTailBlock`、`SealedMarkdownBlock` 等分裂组件；
 > - 统一收敛为 **`StreamingMarkdownView` + `MarkdownBlockItem`** 单一主路径。
 
@@ -138,7 +138,7 @@
 | **02 详案** | `${msgId}-blk-${idx}-${hash}` | `${msgId}-blk-${tailIdx}-active` | **最优解**：封口块哈希固定保持 0 重排；尾块 key 恒定保持 DOM 复用。 |
 | **06 详案** | `${msgId}-blk-${idx}-${hash}` | `${msgId}-blk-${tailIdx}-active` | 与 02 详案完全对齐。 |
 
-> **评审裁决**：  
+> **评审裁决**：
 > 统一定案采用 **02 详案 / 06 详案** 的分层 Key 策略：
 > - 封口块：`${msgId}-blk-${index}-${blake3_16(rawText)}`
 > - 活动尾块：`${msgId}-blk-${tailIndex}-active`
@@ -165,7 +165,7 @@
   └── timelineBuilder.ts         (~180行: 时间线构建入口)
 ```
 
-> **评审裁决**：  
+> **评审裁决**：
 > 两个方案拆分的职责边界完全合理且行数均严格控制在 $\le 200$ 行以内，但文件名必须在总案中彻底统一，推荐统一采用**语义更严谨、命名空间更收敛的方案 05 规范**：
 > 1. `apps/crish-desktop/src/api/tool-presentation/timelineReconciler.ts`
 > 2. `apps/crish-desktop/src/api/tool-presentation/inlineTagParser.ts`
@@ -180,7 +180,7 @@
 - 方案 06 §2.3 明确指出存量代码存在 `content ?? text ?? ''` 双重别名，并要求收敛为 `content: string`；
 - 方案 02 详案在接口中声明为 `content: string`。
 
-> **评审裁决**：  
+> **评审裁决**：
 > 统一收敛为 **`content: string`**。彻底删除 `text` 兼容别名，调用端统一传 `content`。
 
 ---
@@ -197,7 +197,7 @@
    路径 B (02/05/06 详案)：IPC -> messageHandlers -> StreamingStore -> View (内部挂载 SW-TRE & Timeline)
 ```
 
-> **评审裁决**：  
+> **评审裁决**：
 > 1. 依据反过度设计红线禁令 12（禁止同进程微服务套娃与多层 Buffer 嵌套），`StreamRenderBuffer` 不应作为中间状态机二次缓冲；
 > 2. `SlidingWindowRateEstimator` 与 `AdaptiveAnimateTimeline` 作为纯计算模块，直接由 `StreamingMarkdownView` / `useStreamingBlocks` 挂载使用；
 > 3. 彻底精简 `StreamRenderBuffer.ts` 中的未接线死逻辑，避免两套帧缓冲区相互打架。
@@ -244,7 +244,7 @@ pie title 21 个物理删除文件构成 (共 3,346 行死代码)
 | 20 | `apps/crish-desktop/src/api/markdown-render/IncrementalMarkdownParser.adversarial.test.ts` | ✅ | ✅ | ✅ | **一致（删除）** |
 | 21 | `apps/crish-desktop/src/api/markdown-render/STREAMING_RENDER_PLAN.md` | ✅ | — | ✅ | **一致（删除）** |
 
-> **核验结论**：  
+> **核验结论**：
 > 21 个物理删除文件在《00-定案》与《06-dead-layer》中达成 **100% 精确闭合**，不存在任何遗漏或多删，具备立刻执行 `git rm` 的无害化前置条件。
 
 ---
@@ -262,7 +262,7 @@ pie title 21 个物理删除文件构成 (共 3,346 行死代码)
    - 必须等待 Phase 3 `StreamingMarkdownView` 全链路替换并稳定接入 `MarkdownBlockItem` 之后，方可执行物理删除！
 ```
 
-> **评审裁决**：  
+> **评审裁决**：
 > 在总调度 DAG 中严格区分 **Phase 0 孤岛死层清剿（21 文件）** 与 **Phase 3 组件退役清剿（`AsyncMarkdownBlock.*` 2 文件）**，严禁在 Phase 0 提前误删导致编译中断。
 
 ---
@@ -309,7 +309,7 @@ $$v_k = \frac{\Delta c_k}{\max(1, t_k - t_{k-1})} \times 1000$$
 1. **冷启动抖动**：当首个 Token 到达时（$k=1$），$t_0$ 为 0，导致首个样本的 $\Delta t$ 极其巨大，瞬时速率计算为 0，使调度器误判为 Tier 1 (CRAWL)。当第 2 个 Token 紧接着在 2ms 内到达时，瞬时速率突增到 $500\text{ chars/s}$，触发 EMA 剧烈震荡；
 2. **零除数保护不足**：当两个 Token 增量在同一次微任务事件循环中被连续推送时，$t_k - t_{k-1} = 0$，虽然有 $\max(1, \dots)$ 保护，但会产生高达数千 chars/s 的虚假峰值。
 
-> **改进补丁建议**：  
+> **改进补丁建议**：
 > 1. 增加样本数守卫：当 `samples.length < 3` 时，固定强制返回默认的 `Tier 2 (NORMAL)`，忽略瞬时波动；
 > 2. 只有当滑动窗口内累积时间跨度 $> 50\text{ms}$ 且样本数 $\ge 3$ 时，才正式激活动态档位切换。
 
@@ -325,7 +325,7 @@ $$v_k = \frac{\Delta c_k}{\max(1, t_k - t_{k-1})} \times 1000$$
 1. **流式中止（Abort）或用户重新生成（Regenerate）**：用户在流式输出到一半时点击“停止”或重新提问，会话被重置，但此前发出的多个 `render_markdown` IPC 仍在后台排队执行；
 2. 当这些过期的 IPC 响应在数毫秒至数十毫秒后陆续返回前端时，若没有进行所有权与时戳校验，会误将已废弃的旧内容注入新的 DOM 节点中（发生内容串扰）。
 
-> **改进补丁建议**：  
+> **改进补丁建议**：
 > 1. 每个封口块在发起 IPC 编译时生成唯一的 `requestToken = `${msgId}-${blockIdx}-${blake3_16(text)}``；
 > 2. 在 IPC 返回处理闭包中校验：只有当当前组件的 `currentKey === requestToken` 且消息未处于 `aborted` 状态时，才允许执行原子替换。
 
@@ -354,7 +354,7 @@ $$v_k = \frac{\Delta c_k}{\max(1, t_k - t_{k-1})} \times 1000$$
    ──► 结果: widget-diff 开始标签被孤立，整个组件瞬间炸裂退化！
 ```
 
-> **🔥 核心整改指令（Mandatory Fix）**：  
+> **🔥 核心整改指令（Mandatory Fix）**：
 > `normalizeUnclosedOpenTags` 必须同步接管未闭合标签作用域内的内容扫描：从未闭合开始标签的尾部到当前流式文本末尾（或下一个顶层块），将其内部所有出现的 `\n\n` 动态替换为 `\n<!---->\n`，确保未闭合组件在流式期间始终保持在单一 Block 内！
 
 ---
@@ -370,7 +370,7 @@ $$v_k = \frac{\Delta c_k}{\max(1, t_k - t_{k-1})} \times 1000$$
 - 当第 2 行确认为普通文本发生降级时，光标又被突发重新唤醒显示；
 - 如果用户在极慢速网络下输入类似 Markdown 管道符的内容，光标会出现 1~2 秒的短暂消失后突然闪现。
 
-> **改进补丁建议**：  
+> **改进补丁建议**：
 > 只有在**确切接收到第二行分隔符前缀**（即 `|` 且包含 `-` 特征）时才激活 `hasTable` 光标抑制；纯首行单管道符阶段仅进入前瞻侦测，不提前隐藏容器光标。
 
 ---
@@ -385,7 +385,7 @@ $$v_k = \frac{\Delta c_k}{\max(1, t_k - t_{k-1})} \times 1000$$
 - 若第 1 轮的首个 `message-delta` 到达主线程并写入 `streamingStore` 的时刻，恰好与第 0 轮排队的 `queueMicrotask(clearStream)` 撞车；
 - 微任务执行无差别清空 `streamingStore.streamText`，会导致第 1 轮刚喷出的前几个 Token 被意外抹杀！
 
-> **改进补丁建议**：  
+> **改进补丁建议**：
 > `clearStream` 必须由无参重构为带参守卫：`clearStream(expectedSessionId, expectedTurnIndex)`。微任务触发时，若发现当前 `streamingStore` 的 `activeTurnIndex` 已经递增，则自动放弃清理。
 
 ---

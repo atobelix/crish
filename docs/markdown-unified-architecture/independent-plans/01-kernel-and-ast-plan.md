@@ -1,8 +1,8 @@
 # Conex/Crish Markdown 底层内核与 AST 契约架构方案
 
-> **文件路径**：`docs/markdown-unified-architecture/independent-plans/01-kernel-and-ast-plan.md`  
-> **所属战役**：Markdown 统一渲染架构战役（`markdown-unified-architecture`）  
-> **定位**：底层内核解析、AST 契约、双端语义对齐与渲染输出 SSOT 架构总案  
+> **文件路径**：`docs/markdown-unified-architecture/independent-plans/01-kernel-and-ast-plan.md`
+> **所属战役**：Markdown 统一渲染架构战役（`markdown-unified-architecture`）
+> **定位**：底层内核解析、AST 契约、双端语义对齐与渲染输出 SSOT 架构总案
 > **架构准则**：依据真实源码独立审视，零退避、零多轨、零硬编码、严禁补丁与功能伪连通；仅包含纯逻辑依赖与执行顺序，所有问题逻辑同权。
 
 ---

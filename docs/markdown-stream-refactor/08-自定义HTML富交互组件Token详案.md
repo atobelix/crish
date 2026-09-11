@@ -1,14 +1,14 @@
 # 08-分维实现详案：自定义 HTML 富交互组件 (<widget-diff>, <file-tree>, <ai-card>) Token 详案
 
-> **所属战役**：[`docs/markdown-stream-refactor/`](file:///c:/Software/conex/docs/markdown-stream-refactor/)  
-> **架构领域**：自定义 HTML 富交互组件 (<widget-diff>, <file-tree>, <ai-card>)、Artifacts 沙箱与 Design Tokens 体系（维度三 / 详案 08）  
+> **所属战役**：[`docs/markdown-stream-refactor/`](file:///c:/Software/conex/docs/markdown-stream-refactor/)
+> **架构领域**：自定义 HTML 富交互组件 (<widget-diff>, <file-tree>, <ai-card>)、Artifacts 沙箱与 Design Tokens 体系（维度三 / 详案 08）
 > **标准依据**：
-> - [`docs/markdown-stream-refactor/00-总方案-主界面流式渲染Design-Tokens系统化重构.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/00-%E6%80%BB%E6%96%B9%E6%A1%88-%E4%B8%BB%E7%95%8C%E9%9D%A2%E6%B5%81%E5%BC%8F%E6%B8%B2%E6%9F%93Design-Tokens%E7%B3%BB%E7%BB%9F%E5%8C%96%E9%87%8D%E6%9E%84.md) 维度三  
-> - [`docs/markdown-stream-refactor/00-定案-主界面流式渲染Token体系与删除面决策.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/00-%E5%AE%9A%E6%A1%88-%E4%B8%BB%E7%95%8C%E9%9D%A2%E6%B5%81%E5%BC%8F%E6%B8%B2%E6%9F%93Token%E4%BD%93%E7%B3%BB%E4%B8%8E%E5%88%A0%E9%99%A4%E9%9D%A2%E5%86%B3%E7%AD%96.md) 维度三  
-> - [`docs/markdown-stream-refactor/plan-reviews/06-token-plans-cross-review-a.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/plan-reviews/06-token-plans-cross-review-a.md) ~ [`08-token-plans-cross-review-c.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/plan-reviews/08-token-plans-cross-review-c.md) 评审定案  
-> - [`AGENTS.md`](file:///c:/Software/conex/AGENTS.md) §12 (Tooltip & A11y 规范), §13 (柔和焦点与克制边框 ≤10%), §14 (HSLA 现代色彩空间与 Zero-Blue 铁律)  
-> - [`docs/agent-roles/prompts/主控-全流程调度-v3.md`](file:///c:/Software/conex/docs/agent-roles/prompts/%E4%B8%BB%E6%8E%A7-%E5%85%A8%E6%B5%81%E7%A8%8B%E8%B0%83%E5%BA%A6-v3.md) §二.4  
-> 
+> - [`docs/markdown-stream-refactor/00-总方案-主界面流式渲染Design-Tokens系统化重构.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/00-%E6%80%BB%E6%96%B9%E6%A1%88-%E4%B8%BB%E7%95%8C%E9%9D%A2%E6%B5%81%E5%BC%8F%E6%B8%B2%E6%9F%93Design-Tokens%E7%B3%BB%E7%BB%9F%E5%8C%96%E9%87%8D%E6%9E%84.md) 维度三
+> - [`docs/markdown-stream-refactor/00-定案-主界面流式渲染Token体系与删除面决策.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/00-%E5%AE%9A%E6%A1%88-%E4%B8%BB%E7%95%8C%E9%9D%A2%E6%B5%81%E5%BC%8F%E6%B8%B2%E6%9F%93Token%E4%BD%93%E7%B3%BB%E4%B8%8E%E5%88%A0%E9%99%A4%E9%9D%A2%E5%86%B3%E7%AD%96.md) 维度三
+> - [`docs/markdown-stream-refactor/plan-reviews/06-token-plans-cross-review-a.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/plan-reviews/06-token-plans-cross-review-a.md) ~ [`08-token-plans-cross-review-c.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/plan-reviews/08-token-plans-cross-review-c.md) 评审定案
+> - [`AGENTS.md`](file:///c:/Software/conex/AGENTS.md) §12 (Tooltip & A11y 规范), §13 (柔和焦点与克制边框 ≤10%), §14 (HSLA 现代色彩空间与 Zero-Blue 铁律)
+> - [`docs/agent-roles/prompts/主控-全流程调度-v3.md`](file:///c:/Software/conex/docs/agent-roles/prompts/%E4%B8%BB%E6%8E%A7-%E5%85%A8%E6%B5%81%E7%A8%8B%E8%B0%83%E5%BA%A6-v3.md) §二.4
+>
 > **核心使命**：彻底根治自定义富交互组件（`<widget-diff>`, `<file-tree>`, `<ai-card>`, `CustomTagPortal`, `CustomTagErrorBoundary`）中的 **46 处硬编码色值与暗黑偏置 Fallback**，物理拔除非法 CSS 属性 `divide-x` 与孤立死代码，修复 TSX 运行时 `styles.fileTreeItem` / `styles.fileTreeChildren` 为 `undefined` 的缺陷与内联魔法数字；在 `tokens.css` 中完整建立 `--artifact-*`、`--diff-*`、`--filetree-*`、`--aicard-*` 四大语义 Design Tokens 体系，**彻底将 Light 浅色模式下的 Diff 与 Badge 对比度从 1.34:1 极限提升至 ≥5.24:1~7.01:1（100% 达标 WCAG AA）**，构建一套极致细腻、双主题自适应、具备局部熔断能力的现代化桌面端富交互组件渲染体系。
 
 ---
@@ -92,7 +92,7 @@ flowchart TD
     CSS_Card & CSS_FT --> FTree
     CSS_Card & CSS_AI --> AICard
     CSS_Err --> EB
-    
+
     WDiff & FTree & AICard --> EB
 ```
 

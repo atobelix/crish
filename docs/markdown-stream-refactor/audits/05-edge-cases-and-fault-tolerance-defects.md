@@ -1,6 +1,6 @@
 # 挑刺审查报告 05：边缘交互与异常容错缺陷深度审查
 
-> **审查范围**：`MessageContent.tsx`、`ChatAssistantMessageRow.tsx`、`useStreamingBlocks.ts`、`parseMarkdownIntoBlocks.ts`、`streamSession.ts`、`streamFinishControl.ts`、`EventRouter.ts`、`streamCallbacksEvents.ts`、`useStreamCallbacks.ts` 等核心交互与容错模块。  
+> **审查范围**：`MessageContent.tsx`、`ChatAssistantMessageRow.tsx`、`useStreamingBlocks.ts`、`parseMarkdownIntoBlocks.ts`、`streamSession.ts`、`streamFinishControl.ts`、`EventRouter.ts`、`streamCallbacksEvents.ts`、`useStreamCallbacks.ts` 等核心交互与容错模块。
 > **审查原则**：严格只挑刺、只记录缺陷与隐患，严禁套话、总结与夸奖。
 
 ---

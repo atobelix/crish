@@ -1,8 +1,8 @@
 # 16. Conex 主界面流式渲染 Design Token 体系重构维度与删除面建议（提案 B）
 
-> **文件路径**：[`docs/markdown-stream-refactor/analysis/16-token-refactor-proposal-b.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/analysis/16-token-refactor-proposal-b.md)  
-> **所属战役**：Markdown 真流式渲染与正文退化根治战役 (`docs/markdown-stream-refactor/`)  
-> **角色定位**：Senior Systems Engineer & Codebase Architect  
+> **文件路径**：[`docs/markdown-stream-refactor/analysis/16-token-refactor-proposal-b.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/analysis/16-token-refactor-proposal-b.md)
+> **所属战役**：Markdown 真流式渲染与正文退化根治战役 (`docs/markdown-stream-refactor/`)
+> **角色定位**：Senior Systems Engineer & Codebase Architect
 > **核心使命**：依据《主控全流程调度 v3》§一.4 与全套 Token 审查报告（`audits/06` ~ `10`），独立梳理流式渲染 Design Token 体系重构的 5 大落地维度，制定严苛、详尽、可物理清剿的“重复、死层与硬编码删除面清单（Deletion Surface）”，彻底根治浅色模式 1.34:1 灾难性对比度与 Zero-Blue 违规，确立“先删后改、去粗取精”的技术依赖执行序列。
 
 ---

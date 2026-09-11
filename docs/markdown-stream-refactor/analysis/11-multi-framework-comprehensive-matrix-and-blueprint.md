@@ -1,8 +1,8 @@
 # 11. 多框架全维度综合对比矩阵与 Conex 终极流式 Markdown 演进蓝图
 
-> **文件路径**：`docs/markdown-stream-refactor/analysis/11-multi-framework-comprehensive-matrix-and-blueprint.md`  
-> **战役归属**：Markdown 真流式渲染与正文退化根治战役 (`docs/markdown-stream-refactor/`)  
-> **角色定位**：System Architect & Cross-Framework Benchmark Specialist  
+> **文件路径**：`docs/markdown-stream-refactor/analysis/11-multi-framework-comprehensive-matrix-and-blueprint.md`
+> **战役归属**：Markdown 真流式渲染与正文退化根治战役 (`docs/markdown-stream-refactor/`)
+> **角色定位**：System Architect & Cross-Framework Benchmark Specialist
 > **核心使命**：横向拉通 Streamdown、Incremark、Appemd、Markstream-Vue 与 Conex / Crish 现有架构，建立 6 大核心维度 SWOT 全景对比矩阵；深刻解剖 Incremark 样式与打字机反面教材，提炼 Streamdown、Appemd 与 Markstream 核心算法精髓；去粗取精，规划 Conex 专属的“Rust 高性能内核分流 + 前端分块增量状态机 + CSS GPU 时间轴 + 自定义 HTML 组件沙箱”端到端演进蓝图。
 
 ---
@@ -123,7 +123,7 @@ export function parseMarkdownIntoBlocks(markdown: string): string[] {
 
   for (let i = 0; i < tokens.length; i++) {
     const token = tokens[i];
-    
+
     // 3. 多行未闭合 HTML 标签栈保护：防止外层 div/p 被撕裂
     if (htmlStack.length > 0) {
       blocks[blocks.length - 1] += token.raw;
@@ -234,7 +234,7 @@ append(chunk: string) {
 
   // 1. 应用变更区域，复用此前所有未改变的 AST TreeFragment
   const fragments = TreeFragment.applyChanges(this.fragments, changed, 1);
-  
+
   // 2. 仅对增量受影响的节点重新计算语法树 (时间复杂度 O(ΔN))
   this.tree = this.parser.parse(this.text, fragments);
   this.fragments = TreeFragment.addTree(this.tree, fragments);
@@ -260,11 +260,11 @@ flowchart TD
     StreamInput["流式文本到达"] --> LexDetect{"是否包含 Heavy Block?<br/>(```mermaid, $$, ```diff)"}
     LexDetect -- "否 (普通文本/表格)" --> FastPath["快速流式通道: RAF 批量渲染"]
     LexDetect -- "是 (重载图表/公式)" --> SkeletonPlaceholder["渲染轻量 Skeleton 占位节点"]
-    
+
     SkeletonPlaceholder --> StreamEndWait{"该重载块语法是否完整闭合?"}
     StreamEndWait -- "未闭合" --> KeepSkeleton["保持骨架动画, 避免 Mermaid 语法解析崩溃"]
     StreamEndWait -- "已闭合" --> DebounceQueue["加入 WebWorker 异步编译队列 (防抖)"]
-    
+
     DebounceQueue --> WorkerCompile["后台 Worker 生成 SVG / HTML"]
     WorkerCompile --> FadeTransition["通过 CSS Transition 平滑替换占位骨架"]
 ```
@@ -351,14 +351,14 @@ flowchart TD
     subgraph TIER1 ["【Tier 1: Rust 高性能内核分流与编译引擎】(agent-provider & session-loop)"]
         SSE[LLM SSE 原始字节流] --> Parser[chat_core / gemini_core / ollama_core]
         Parser --> TagExtractor["StreamingTagExtractor (确定性有限状态机 DFA)"]
-        
+
         TagExtractor -- "State::Thinking (<think>区段)" --> ThoughtDelta["ProviderStreamEvent::ThoughtDelta"]
         TagExtractor -- "State::Text (正文区段)" --> TextDelta["ProviderStreamEvent::TextDelta"]
-        
+
         ThoughtDelta & TextDelta --> LiveSink["实时增量轨: AgentEvent::MessageDelta"]
         TagExtractor --> Collector["StreamCollector (内存聚合账本)"]
         Collector --> EndEvent["终态权威轨: AgentEvent::MessageEnd (带 turnIndex 与 blocks)"]
-        
+
         RustCompiler["Rust Native md_render<br/>(pulldown-cmark + syntect SIMD 极速编译)"]
     end
 
@@ -371,10 +371,10 @@ flowchart TD
     subgraph TIER2 ["【Tier 2: 前端单生产者与多轮幂等状态机】(chat-bridge & stores)"]
         Router --> DeltaHandler["onMessageDelta (唯一 onChunk 生产者)"]
         Router --> EndHandler["onMessageEnd (权威多轮收口, 0 伪增量)"]
-        
+
         DeltaHandler --> LiveBuffer[(streamingStore 实时热缓冲区)]
         EndHandler --> SessionStore[(sessionStore 持久化状态)]
-        
+
         SessionStore --> Reconciler["reconcileAssistantMessageBlocks<br/>(三元锚点多轮保全算法: Tool + Thought + Text)"]
     end
 
@@ -382,14 +382,14 @@ flowchart TD
     subgraph TIER3 ["【Tier 3: 渐进分块状态机与 GPU 排版系统】(chat-message-row)"]
         LiveBuffer & Reconciler --> ViewComp["StreamingMarkdownView (统一渲染中枢)"]
         ViewComp --> ChunkEngine["parseMarkdownIntoBlocks (词法边界切分引擎)"]
-        
+
         ChunkEngine --> BlockSealer{"块状态裁决<br/>(空行三明治法则)"}
-        
+
         BlockSealer -- "已封口块 Block 0..N-2" --> SealedPool["已封口块池 (Sealed Blocks)"]
         SealedPool --> LRUCache["LRU 编译缓存 (Key: Hash(rawContent))"]
         LRUCache -- "命中缓存" --> MemoStaticDOM["React.memo 静态高质 DOM (0 re-render)"]
         LRUCache -- "未命中" --> IPCBridge
-        
+
         BlockSealer -- "活跃尾块 Block N-1" --> ActiveTail["活跃尾块 (Active Tail Block)"]
         ActiveTail --> RemendEngine["Remend 防御性闭合 (临时补全代码栅栏/表格)"]
         RemendEngine --> AdaptiveQueue["自适应背压排空队列 (Adaptive RAF Throttle)"]
@@ -529,7 +529,7 @@ sequenceDiagram
     Note over Lexer,Active: 【阶段 1: 尾块实时增长】
     Lexer->>Active: 更新未封口文本 + Remend 防御性闭合
     Active->>Active: GPU 平滑渲染光标与打字文字 (无骨架屏)
-    
+
     Note over Lexer,Sealed: 【阶段 2: 遇到 \n\n 触发封口】
     Lexer->>Lexer: 判定 Block k 形成封口 (isSealed = true)
     Lexer->>Rust: 异步发起 md_render(rawContent) (耗时 ~0.2ms)

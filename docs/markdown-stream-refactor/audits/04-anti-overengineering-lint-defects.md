@@ -1,6 +1,6 @@
 # 挑刺审查报告 04：反过度设计与 CI 门禁解耦严苛审查
 
-> **审查范围**：全量新增/修改的 Rust 与 TypeScript 代码、`ANTI_OVERENGINEERING_GUARDRAILS.md`、前端行数基线、组件架构层级与依赖拓扑  
+> **审查范围**：全量新增/修改的 Rust 与 TypeScript 代码、`ANTI_OVERENGINEERING_GUARDRAILS.md`、前端行数基线、组件架构层级与依赖拓扑
 > **审查原则**：严禁夸奖套话与中立总结，仅挑刺、仅记录超标违规、过度设计、死代码及架构缺陷项。
 
 ---

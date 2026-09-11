@@ -1,8 +1,8 @@
 # Markdown 表格渲染与交互行为统一架构方案
 
-> **文件标识**：`docs/markdown-unified-architecture/independent-plans/04-table-and-interaction-plan.md`  
-> **所属战役**：`markdown-unified-architecture` 独立详案篇章 04  
-> **设计定位**：端到端解决 Markdown 表格排版溃散、列宽粘连、跨容器断层、交互事件散落与按钮伪连通问题，确立全桌面端统一的表格物理排版与交互总线标准。  
+> **文件标识**：`docs/markdown-unified-architecture/independent-plans/04-table-and-interaction-plan.md`
+> **所属战役**：`markdown-unified-architecture` 独立详案篇章 04
+> **设计定位**：端到端解决 Markdown 表格排版溃散、列宽粘连、跨容器断层、交互事件散落与按钮伪连通问题，确立全桌面端统一的表格物理排版与交互总线标准。
 > **架构纪律**：纯逻辑规划、问题同权（无业务优先级削减）、全 Token 驱动（杜绝硬编码）、原生高效、无退避设计。
 
 ---

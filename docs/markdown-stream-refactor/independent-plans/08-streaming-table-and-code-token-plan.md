@@ -1,8 +1,8 @@
 # 08. 流式表格与视口动效 Token 重构实施总案（方案 8）
 
-> **文档标识**：`docs/markdown-stream-refactor/independent-plans/08-streaming-table-and-code-token-plan.md`  
-> **方案定位**：下一代流式 Markdown 架构战役独立实施详案 8 —— 流式表格与视口动效 Token 重构（`Streaming Table & Viewport Motion Token Refactor Plan`）  
-> **架构师**：Senior Systems Engineer & Codebase Architect (Design Tokens & Viewport Motion Specialist)  
+> **文档标识**：`docs/markdown-stream-refactor/independent-plans/08-streaming-table-and-code-token-plan.md`
+> **方案定位**：下一代流式 Markdown 架构战役独立实施详案 8 —— 流式表格与视口动效 Token 重构（`Streaming Table & Viewport Motion Token Refactor Plan`）
+> **架构师**：Senior Systems Engineer & Codebase Architect (Design Tokens & Viewport Motion Specialist)
 > **输入与执行标准**：
 > - 战役定案依据：[`00-定案-主界面流式渲染Token体系与删除面决策.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/00-%E5%AE%9A%E6%A1%88-%E4%B8%BB%E7%95%8C%E9%9D%A2%E6%B5%81%E5%BC%8F%E6%B8%B2%E6%9F%93Token%E4%BD%93%E7%B3%BB%E4%B8%8E%E5%88%A0%E9%99%A4%E9%9D%A2%E5%86%B3%E7%AD%96.md) §维度二
 > - 挑刺审查依据：[`audits/07-streaming-table-and-code-token-audit.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/audits/07-streaming-table-and-code-token-audit.md)

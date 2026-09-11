@@ -1,9 +1,9 @@
 # Conex/Crish Markdown 统一组件层与多轨代码收敛方案
 （MarkdownDocumentView & Multi-Track Code Convergence Architecture Plan）
 
-> **文档定位**：Conex / Crish 桌面客户端 Markdown 消费层单一真理源（SSOT）架构方案。  
-> **存放路径**：`docs/markdown-unified-architecture/independent-plans/03-unified-component-architecture-plan.md`  
-> **设计原则**：立足真实源码、杜绝硬编码与多轨修补、消除功能伪连通、保证 Zero-CLS 与极速秒开、实现架构净收敛。  
+> **文档定位**：Conex / Crish 桌面客户端 Markdown 消费层单一真理源（SSOT）架构方案。
+> **存放路径**：`docs/markdown-unified-architecture/independent-plans/03-unified-component-architecture-plan.md`
+> **设计原则**：立足真实源码、杜绝硬编码与多轨修补、消除功能伪连通、保证 Zero-CLS 与极速秒开、实现架构净收敛。
 > **规划纪律**：纯逻辑执行顺序，问题同权，不包含工期、人天及人员分配。
 
 ---

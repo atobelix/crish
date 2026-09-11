@@ -1,8 +1,8 @@
 # 13. Conex 流式渲染落地维度划分与删除面建议详案（提案 B）
 
-> **文件路径**：[`docs/markdown-stream-refactor/analysis/13-dimension-and-deletion-proposal-b.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/analysis/13-dimension-and-deletion-proposal-b.md)  
-> **所属战役**：Markdown 真流式渲染与正文退化根治战役 (`docs/markdown-stream-refactor/`)  
-> **角色定位**：Senior Systems Engineer & Codebase Architect  
+> **文件路径**：[`docs/markdown-stream-refactor/analysis/13-dimension-and-deletion-proposal-b.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/analysis/13-dimension-and-deletion-proposal-b.md)
+> **所属战役**：Markdown 真流式渲染与正文退化根治战役 (`docs/markdown-stream-refactor/`)
+> **角色定位**：Senior Systems Engineer & Codebase Architect
 > **核心使命**：依据《主控全流程调度 v3》§一.4 与全套分析审查资产（`analysis/06~11`、`audits/01~05`），独立给出 Conex 下一代流式 Markdown 架构的 5 大核心落地维度，系统性梳理现有前端渲染 5 条并行/降级路径拓扑，制定严苛彻底的“重复与死层物理删除清单”，并确立“先删后改、去粗取精”的技术依赖执行序列。
 
 ---
@@ -274,15 +274,15 @@ flowchart TD
 ```mermaid
 graph TD
     P0["【Phase 0: 物理清理死层与残肢】<br/>1. 删除 5 个废弃弹窗/Worker/Store 文件<br/>2. 删除 StreamingTextBlock / AsyncMarkdownBlock<br/>3. 清理 IncrementalThoughtStripper 与死函数<br/>4. 解除 Barrel 导出与废弃单测"]
-    
+
     P1["【Phase 1: 数据契约与单生产者状态机】<br/>1. Rust DFA 标签状态机与 ThoughtDelta 分流<br/>2. messageHandlers.ts turnIndex 安全清洗<br/>3. sessionMessageActionsTools 消除双重 reconciliation<br/>4. timelineNormalizer.ts 拆分降行 (≤400行)"]
-    
+
     P2["【Phase 2: 渐进词法分块与稳定 Key 重构】<br/>1. parseMarkdownIntoBlocks 去除 footnote 粗暴退化<br/>2. 引入 remend 未闭合语法自动修补<br/>3. useStreamingBlocks 引入语义哈希稳定 Key<br/>4. 有界 LRU 替换无界 Map 缓存"]
-    
+
     P3["【Phase 3: 统一渲染组件与双缓冲无缝晋升】<br/>1. 统一正文渲染至 StreamingMarkdownView<br/>2. MarkdownBlockItem 落实封口晋升纯文本垫片 (0 骨架屏)<br/>3. TimelineThoughtSection 接入渐进式 Markdown 流<br/>4. 消除 MessageContent timeline.length===0 冗余降级"]
-    
+
     P4["【Phase 4: 速率自适应与 GPU 排版系统】<br/>1. 接入 Sliding-Window Token Rate Estimator (SW-TRE)<br/>2. 超高速 (>300 t/s) RAF 动态瞬冲与动画熔断<br/>3. 流式表格局部对齐与视口吸底锚定锁 (Zero CLS)"]
-    
+
     P5["【Phase 5: 全链路门禁检查与端到端实机验收】<br/>1. 运行 check:line-counts 门禁校验<br/>2. 运行 Vitest 单元与集成测试套件<br/>3. Tauri MCP 实机多轮与高吞吐流式验收"]
 
     P0 --> P1
@@ -364,5 +364,5 @@ graph TD
 
 ---
 
-> **提案总结**：  
+> **提案总结**：
 > 提案 B 秉持**“大刀阔斧斩断死层，精益求精重塑流式”**的核心准则，通过物理删除 15 个死文件与全部伪流式残肢，将前端渲染路径 100% 统一至“渐进分块 + 双缓冲无缝晋升”体系；结合 Rust DFA 内核分流与 SW-TRE 自适应背压，为 Conex / Crish 构建起高吞吐、零闪烁、零污染、强幂等的终极流式渲染底座。

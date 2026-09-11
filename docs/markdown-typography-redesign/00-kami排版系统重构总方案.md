@@ -1,10 +1,10 @@
 # 基于 Kami 紙设计系统的 Markdown 渲染引擎排版与前端界面全景重构方案
 
-> **战役工作区**：`docs/markdown-typography-redesign/`  
-> **总方案编号**：`00-总方案`  
-> **蓝本参考**：Kami 紙（[https://kami.tw93.fun/](https://kami.tw93.fun/) & [https://kami.tw93.fun/index-zh.html](https://kami.tw93.fun/index-zh.html)）  
-> **对齐标准**：仓耳今楷/思源宋体人文纸墨质感、油墨蓝单主色系统、纯暖调灰阶、纯字号层级、三档行距韵律、平铺抽屉侧栏、出版级横线表格  
-> **门禁刚性约束**：100% 保持既有 88 个测试套件、1146 个测试用例全绿，严格遵守 `color-gate.test.ts` 零 HEX/零 RGBA 现代 HSL 语法门禁与 `css-contract.test.ts` 变量表完整性契约  
+> **战役工作区**：`docs/markdown-typography-redesign/`
+> **总方案编号**：`00-总方案`
+> **蓝本参考**：Kami 紙（[https://kami.tw93.fun/](https://kami.tw93.fun/) & [https://kami.tw93.fun/index-zh.html](https://kami.tw93.fun/index-zh.html)）
+> **对齐标准**：仓耳今楷/思源宋体人文纸墨质感、油墨蓝单主色系统、纯暖调灰阶、纯字号层级、三档行距韵律、平铺抽屉侧栏、出版级横线表格
+> **门禁刚性约束**：100% 保持既有 88 个测试套件、1146 个测试用例全绿，严格遵守 `color-gate.test.ts` 零 HEX/零 RGBA 现代 HSL 语法门禁与 `css-contract.test.ts` 变量表完整性契约
 
 ---
 

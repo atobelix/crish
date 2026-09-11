@@ -1,8 +1,8 @@
 # 17. Conex 主界面流式渲染 Design Token 体系重构维度与删除面建议（提案 C）
 
-> **文档定位**：Conex / Crish 主界面流式渲染 Design Token 体系领域维度划分、全景删除面清单与先删后改实施路线规划（`Proposal C: Streaming Design Token Architecture & Deletion Surface Manifest`）  
-> **所属战役**：Markdown 真流式渲染与正文退化根治战役 (`docs/markdown-stream-refactor/`)  
-> **输入资产**：挑刺审查报告 06~10（排版、表格、代码块、富组件、思考链折叠、Token 蓝图）及 4 份核心 CSS/TSX 源文件  
+> **文档定位**：Conex / Crish 主界面流式渲染 Design Token 体系领域维度划分、全景删除面清单与先删后改实施路线规划（`Proposal C: Streaming Design Token Architecture & Deletion Surface Manifest`）
+> **所属战役**：Markdown 真流式渲染与正文退化根治战役 (`docs/markdown-stream-refactor/`)
+> **输入资产**：挑刺审查报告 06~10（排版、表格、代码块、富组件、思考链折叠、Token 蓝图）及 4 份核心 CSS/TSX 源文件
 > **核心原则**：严格执行《反过度设计硬性红线》(ANTI_OVERENGINEERING_GUARDRAILS.md) 与《主控全流程调度 v3》；**坚决彻底物理删除硬编码色值、暗黑偏置 Fallback、幽灵变量与死代码层，先做减法，再建底座，最后收敛演进**。
 
 ---
@@ -356,15 +356,15 @@ graph TD
 ```mermaid
 graph TD
     P0["【Phase 0: 先删】死代码与违规硬编码物理清剿<br/>• 删除 divide-x, .portalOverlay 等孤立死代码<br/>• 删除 ChatMessageRow 中的重复表格与冲突光标规则<br/>• 剔除 ErrorMessageBanner 8 处内联魔数<br/>• 剥离并新建 TimelineThoughtSection.module.css"]
-    
+
     P1["【Phase 1: 建基】tokens.css 全量 5 领域 Token 显式注血<br/>• 注入 --md-*, --stream-*, --artifact-*, --thought-* 等 60+ Tokens<br/>• 注入 Light/Dark HSLA 矩阵与 [data-perf-tier] 性能折叠规则"]
-    
+
     P2["【Phase 2: 改组件】自定义富组件与 Artifacts 全量 Token 化<br/>• custom-tags.module.css 46 处色值全面切至正式 Token<br/>• 修复 Light 模式 Diff 与 Badge 1.34:1 对比度击穿<br/>• 修复 FileTree/AiCard 内联样式与无障碍 Tooltip/ARIA"]
-    
+
     P3["【Phase 3: 改表格】流式表格与打字机动效单源闭环<br/>• StreamingTableContainer 对齐 --stream-table-* 翡翠绿脉冲<br/>• 接入 @keyframes md-table-pulse 呼吸律动与滚动条 Token<br/>• streaming-animation.css 统一打字机光标与 GPU 逐词淡入"]
-    
+
     P4["【Phase 4: 改排版】Markdown 排版与语法高亮接线<br/>• ChatMessageRow 接入 Typography Scale 阶梯字号 (h1~h6)<br/>• 补齐 .md-inline-code, .md-path-link, .md-task-item 等裸奔样式<br/>• 补齐 .md-code-lang 工具栏，将 20 个 --syntax-* Token 真正接线"]
-    
+
     P5["【Phase 5: 验证】双主题与性能自动化门禁核验<br/>• 执行 npm run check:desktop 验证语法与类型<br/>• 执行 scripts/check-line-counts.mjs 验证文件行数<br/>• 通过 Tauri MCP 自动化验证 Light/Dark 真实对比度与 Eco 性能"]
 
     P0 --> P1

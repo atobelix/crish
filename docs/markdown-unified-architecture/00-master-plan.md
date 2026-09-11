@@ -1,8 +1,8 @@
 # Conex / Crish — Markdown 统一渲染与排版架构实现总方案
 
-> **战役工作区**：`docs/markdown-unified-architecture/`  
-> **文档定位**：战役根目录方案实现总文档（SSOT 权威总纲）  
-> **参谋输入**：综合收敛 `independent-plans/01~06` 六份跨领域专家方案的核心洞察与批判性审查  
+> **战役工作区**：`docs/markdown-unified-architecture/`
+> **文档定位**：战役根目录方案实现总文档（SSOT 权威总纲）
+> **参谋输入**：综合收敛 `independent-plans/01~06` 六份跨领域专家方案的核心洞察与批判性审查
 > **核心使命**：彻底根除文件管理器等外部预览“排版逼仄、表格崩塌、Emoji 暴露为生文本、无边框无间距”的严重视效缺陷，终结多轨代码割裂与功能伪连通，实现系统净收敛与 GitHub 级现代文档体验。
 
 ---

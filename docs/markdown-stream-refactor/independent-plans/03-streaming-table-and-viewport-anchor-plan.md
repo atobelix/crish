@@ -1,8 +1,8 @@
 # 流式表格排版与视口锚定稳定实施总案（方案 3）
 
-> **文档标识**：`docs/markdown-stream-refactor/independent-plans/03-streaming-table-and-viewport-anchor-plan.md`  
-> **所属战役**：Markdown 真流式渲染与正文退化根治战役 (`docs/markdown-stream-refactor/`)  
-> **设计依据**：[`00-定案-核心维度与删除面决策.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/00-%E5%AE%9A%E6%A1%88-%E6%A0%B8%E5%BF%83%E7%BB%B4%E5%BA%A6%E4%B8%8E%E5%88%A0%E9%99%A4%E9%9D%A2%E5%86%B3%E7%AD%96.md) §维度三、[`08-streaming-table-and-pinned-scroll-architecture.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/analysis/08-streaming-table-and-pinned-scroll-architecture.md)  
+> **文档标识**：`docs/markdown-stream-refactor/independent-plans/03-streaming-table-and-viewport-anchor-plan.md`
+> **所属战役**：Markdown 真流式渲染与正文退化根治战役 (`docs/markdown-stream-refactor/`)
+> **设计依据**：[`00-定案-核心维度与删除面决策.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/00-%E5%AE%9A%E6%A1%88-%E6%A0%B8%E5%BF%83%E7%BB%B4%E5%BA%A6%E4%B8%8E%E5%88%A0%E9%99%A4%E9%9D%A2%E5%86%B3%E7%AD%96.md) §维度三、[`08-streaming-table-and-pinned-scroll-architecture.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/analysis/08-streaming-table-and-pinned-scroll-architecture.md)
 > **核心使命**：彻底根治流式大表格生成时的 GFM 语法中间态撕裂、段落 `<p>` 标签向 Table 突变引发的剧烈重排（CLS）、光标侵入排版造成的匿名盒畸变、列宽剧烈抽搐抖动以及视口局部双向滚动与吸底冲突，构建工业级流式表格排版与稳定视口锚定引擎。
 
 ---
@@ -102,20 +102,20 @@
 ```mermaid
 stateDiagram-v2
     [*] --> State0_NormalText: 接收字符流
-    
+
     State0_NormalText --> State1_PotentialHeader: 行包含 '|' 且非空
     State0_NormalText --> State0_NormalText: 普通段落/代码块/列表
-    
+
     State1_PotentialHeader --> State2_DelimiterStreaming: 换行且下一行以 '|' 或 ':|-' 起始
     State1_PotentialHeader --> State0_NormalText: 换行后为普通文本 (回退为段落)
-    
+
     State2_DelimiterStreaming --> State2_DelimiterStreaming: 分隔行增量吐出 (如 '|:--- | -')
     State2_DelimiterStreaming --> State3_BodyStreaming: 分隔行完整闭合 (确立 GFM 表格)
     State2_DelimiterStreaming --> State0_NormalText: 分隔行非法 (回退为段落)
-    
+
     State3_BodyStreaming --> State3_BodyStreaming: 增量接收数据行 ('| cell | cell |')
     State3_BodyStreaming --> State4_TableSealed: 遇到空行 '\n\n' / 块定界符 / 流结束
-    
+
     State4_TableSealed --> [*]: 封口固化 (Sealed Table Block)
 ```
 
@@ -190,10 +190,10 @@ export function synthesizeStreamingTableTokens(
       });
 
     const colCount = Math.max(headerCols.length, 1);
-    
+
     // 如果第二行尚未完整闭合所有列的分隔符，自动补齐标准 '| --- | --- |'
     const fullSeparator = `| ${Array(colCount).fill('---').join(' | ')} |`;
-    
+
     // 重构安全的流式 Markdown
     const remainingLines = lines.slice(2);
     const synthesizedMarkdown = [
@@ -314,7 +314,7 @@ return (
 ```html
 <!-- 层级 1: 外层包裹器 (Margin, Border, 工具条) -->
 <div class="md-table-wrapper flex flex-col rounded-lg border border-border bg-sidebar/50 p-2 my-3">
-  
+
   <!-- 顶部控制栏 (Copy / Download / Fullscreen) -->
   <div class="md-table-controls flex items-center justify-end gap-1 pb-1.5">
     <button class="iconBtn" title="复制表格">...</button>
@@ -323,7 +323,7 @@ return (
   </div>
 
   <!-- 层级 2: 局部滚动视口 (挂载 usePinnedScroll，承载 maxHeight 与双向滚动) -->
-  <div 
+  <div
     class="md-table-scroll-viewport border-collapse overflow-x-auto overflow-y-auto rounded-md border border-border/80 bg-background"
     style="max-height: 480px;"
   >
@@ -345,16 +345,16 @@ return (
 ```mermaid
 flowchart TD
     Init["初始化 usePinnedScroll(isActive, enabled, contentKey)"] --> StateInit["pinnedRef.current = true<br/>wasActiveRef.current = false"]
-    
+
     SubScroll["监听滚动容器 scroll 事件 (passive: true)"] --> CheckScroll{"滚动计算:<br/>scrollHeight - scrollTop - clientHeight < 8px ?"}
-    
+
     CheckScroll -- "是 (处于底部 8px 容差区)" --> SetPinnedTrue["pinnedRef.current = true<br/>(保持/恢复吸底锁定)"]
     CheckScroll -- "否 (用户主动上滚查看历史)" --> SetPinnedFalse["pinnedRef.current = false<br/>(解锁吸底，保持用户视口停驻)"]
-    
+
     ActiveChange["流式状态 isActive 发生变化"] --> CheckNewSession{"isActive 从 false 变为 true ?<br/>(新一轮生成启动)"}
     CheckNewSession -- "是" --> ResetPinned["重置 pinnedRef.current = true<br/>自动激活吸底"]
     CheckNewSession -- "否" --> KeepPinned["保持 pinnedRef.current = true"]
-    
+
     ContentGrow["流式数据追加 (contentKey 变更)"] --> ExecScroll{"isActive && enabled && pinnedRef.current ?"}
     ExecScroll -- "全部满足" --> DoScroll["el.scrollTo({<br/>  top: el.scrollHeight,<br/>  behavior: 'instant'<br/>})"]
     ExecScroll -- "已解锁吸底 (pinned=false)" --> DoNothing["保持当前 scrollTop 绝对不动<br/>零干扰用户阅读历史"]
@@ -404,7 +404,7 @@ export interface UsePinnedScrollOptions {
 
 /**
  * 局部视口双向吸底滚动 Hook
- * 
+ *
  * 核心设计规则：
  * 1. 8px 容差判定：高分屏浮点计算与触控板回弹保护；
  * 2. instant 瞬时滚动：严禁在高频流式中使用 smooth，消除动画帧积压；

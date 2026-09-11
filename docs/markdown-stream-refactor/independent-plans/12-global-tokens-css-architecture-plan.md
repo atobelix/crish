@@ -1,8 +1,8 @@
 # 12. 全局 Design Tokens (tokens.css) 体系架构注入方案（方案 12）
 
-> **文档标识**：`docs/markdown-stream-refactor/independent-plans/12-global-tokens-css-architecture-plan.md`  
-> **方案定位**：下一代流式 Markdown 架构战役独立实施详案 12 —— 全局 Design Tokens 体系架构注入与幽灵变量清剿（`Global Design Tokens Architecture & Phantom Variables Purge Plan`）  
-> **架构师**：Senior Systems Engineer & Codebase Architect (Design Tokens & Color Science Specialist)  
+> **文档标识**：`docs/markdown-stream-refactor/independent-plans/12-global-tokens-css-architecture-plan.md`
+> **方案定位**：下一代流式 Markdown 架构战役独立实施详案 12 —— 全局 Design Tokens 体系架构注入与幽灵变量清剿（`Global Design Tokens Architecture & Phantom Variables Purge Plan`）
+> **架构师**：Senior Systems Engineer & Codebase Architect (Design Tokens & Color Science Specialist)
 > **输入与执行标准**：
 > - 核心定案依据：[`docs/markdown-stream-refactor/00-定案-主界面流式渲染Token体系与删除面决策.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/00-%E5%AE%9A%E6%A1%88-%E4%B8%BB%E7%95%8C%E9%9D%A2%E6%B5%81%E5%BC%8F%E6%B8%B2%E6%9F%93Token%E4%BD%93%E7%B3%BB%E4%B8%8E%E5%88%A0%E9%99%A4%E9%9D%A2%E5%86%B3%E7%AD%96.md)
 > - 蓝图审查资产：[`docs/markdown-stream-refactor/audits/10-streaming-design-token-system-blueprint.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/audits/10-streaming-design-token-system-blueprint.md)
@@ -252,7 +252,7 @@ graph TD
 +  background: var(--artifact-card-bg);
    overflow: hidden;
  }
- 
+
 @@ -51,8 +51,8 @@
  .cardHeader {
    display: flex;
@@ -264,7 +264,7 @@ graph TD
 +  background: var(--artifact-header-bg);
 +  border-bottom: 1px solid var(--artifact-card-border);
  }
- 
+
 -/* 彻底删除非法 Tailwind 残留属性 divide-x */
 -.splitPane {
 -  display: flex;
@@ -608,9 +608,9 @@ html[data-perf-tier='eco'] {
 对于 sRGB 色彩空间的 8-bit 通道值 $C \in \{R, G, B\}$，其归一化值 $C_{\text{srgb}} = C / 255$ 的线性化亮度 $C_{\text{linear}}$ 计算公式为：
 
 $$
-C_{\text{linear}} = \begin{cases} 
+C_{\text{linear}} = \begin{cases}
 \dfrac{C_{\text{srgb}}}{12.92}, & \text{若 } C_{\text{srgb}} \le 0.04045 \\[10pt]
-\left( \dfrac{C_{\text{srgb}} + 0.055}{1.055} \right)^{2.4}, & \text{若 } C_{\text{srgb}} > 0.04045 
+\left( \dfrac{C_{\text{srgb}} + 0.055}{1.055} \right)^{2.4}, & \text{若 } C_{\text{srgb}} > 0.04045
 \end{cases}
 $$
 
@@ -1107,7 +1107,7 @@ html[data-theme='dark'] {
 ```css
 /**
  * TimelineThoughtSection.module.css
- * 
+ *
  * 思考链折叠容器与状态横幅独立样式模块
  * 100% 消费全局 --thought-* 与 --banner-* Design Tokens
  */

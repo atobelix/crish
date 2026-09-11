@@ -1,7 +1,7 @@
 # 独立方案架构可行性与边界审查报告（方案评审 B）
 
-> **评审标识**：`docs/markdown-stream-refactor/plan-reviews/02-independent-plans-cross-review-b.md`  
-> **评审角色**：Senior Systems Engineer & Codebase Architect (Reviewer B · Architecture Feasibility & Boundary Lead)  
+> **评审标识**：`docs/markdown-stream-refactor/plan-reviews/02-independent-plans-cross-review-b.md`
+> **评审角色**：Senior Systems Engineer & Codebase Architect (Reviewer B · Architecture Feasibility & Boundary Lead)
 > **评审依据**：
 > - 核心定案：[`docs/markdown-stream-refactor/00-定案-核心维度与删除面决策.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/00-%E5%AE%9A%E6%A1%88-%E6%A0%B8%E5%BF%83%E7%BB%B4%E5%BA%A6%E4%B8%8E%E5%88%A0%E9%99%A4%E9%9D%A2%E5%86%B3%E7%AD%96.md)
 > - 独立方案：[`docs/markdown-stream-refactor/independent-plans/01`](file:///c:/Software/conex/docs/markdown-stream-refactor/independent-plans/01-throughput-and-rate-adaptive-plan.md) ~ [`06`](file:///c:/Software/conex/docs/markdown-stream-refactor/independent-plans/06-dead-layer-elimination-and-refactor-plan.md) 全部 6 份独立实施详案（含方案 A/B 探索稿）
@@ -114,7 +114,7 @@ flowchart LR
     RawStream["LLM SSE 原始文本流"] --> P4Pre["1. normalizeUnclosedOpenTags<br/>(含代码栅栏保护, 仅占位保护)"]
     P4Pre --> Splitter["2. IncrementalBlockSplitter<br/>(基于行前缀和 O(1) 增量切分)"]
     Splitter --> Blocks["Block 列表 (Sealed Blocks + 1 Active Tail)"]
-    
+
     Blocks --> BlockItem["3. MarkdownBlockItem (按 Block 调度)"]
     BlockItem -->|"Sealed Block"| RustIPC["Rust conex-markdown 异步安全编译"]
     BlockItem -->|"Active Tail"| Remend["4. SpeculativeVirtualCloser<br/>(统一纯内存补全: Code/Table/Math/HTML)"]

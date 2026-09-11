@@ -1,9 +1,9 @@
 # Wave 1 战役执行报告：全链路自动化回归测试套件与防退避门禁
 
-> **战役归属**：`docs/markdown-stream-refactor/`  
-> **执行阶段**：Wave 1（自动化回归测试套件落地与防退避防护网确立）  
-> **参考详案**：`docs/markdown-stream-refactor/05-测试门禁与端到端验证详案.md`  
-> **报告时间**：2026-08-30  
+> **战役归属**：`docs/markdown-stream-refactor/`
+> **执行阶段**：Wave 1（自动化回归测试套件落地与防退避防护网确立）
+> **参考详案**：`docs/markdown-stream-refactor/05-测试门禁与端到端验证详案.md`
+> **报告时间**：2026-08-30
 > **状态**：**已完成 (Completed)**
 
 ---

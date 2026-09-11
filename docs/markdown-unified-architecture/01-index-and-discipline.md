@@ -1,6 +1,6 @@
 # Conex / Crish — Markdown 统一架构战役索引与执行纪律
 
-> **战役工作区**：`docs/markdown-unified-architecture/`  
+> **战役工作区**：`docs/markdown-unified-architecture/`
 > **文档性质**：战役根目录导航、纪律与索引规范文档
 
 ---

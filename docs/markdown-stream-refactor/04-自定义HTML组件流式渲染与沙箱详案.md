@@ -1,8 +1,8 @@
 # 04-分维实现详案：自定义 HTML 组件流式渲染与沙箱详案
 
-> **所属战役**：[`docs/markdown-stream-refactor/`](file:///c:/Software/conex/docs/markdown-stream-refactor/)  
-> **架构领域**：自定义 HTML 富交互组件、流式未闭合解析、React Portal 沙箱与 4 层 XSS 纵深防御（维度四）  
-> **标准依据**：[`docs/agent-roles/prompts/主控-全流程调度-v3.md`](file:///c:/Software/conex/docs/agent-roles/prompts/%E4%B8%BB%E6%8E%A7-%E5%85%A8%E6%B5%81%E7%A8%8B%E8%B0%83%E5%BA%A6-v3.md) §二.4 与 [`00-总方案-下一代极速流式Markdown与富交互渲染引擎.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/00-%E6%80%BB%E6%96%B9%E6%A1%88-%E4%B8%8B%E4%B8%80%E4%BB%A3%E6%9E%81%E9%80%9F%E6%B5%81%E5%BC%8FMarkdown%E4%B8%8E%E5%AF%8C%E4%BA%A4%E4%BA%92%E6%B8%B2%E6%9F%93%E5%BC%95%E6%93%8E.md)  
+> **所属战役**：[`docs/markdown-stream-refactor/`](file:///c:/Software/conex/docs/markdown-stream-refactor/)
+> **架构领域**：自定义 HTML 富交互组件、流式未闭合解析、React Portal 沙箱与 4 层 XSS 纵深防御（维度四）
+> **标准依据**：[`docs/agent-roles/prompts/主控-全流程调度-v3.md`](file:///c:/Software/conex/docs/agent-roles/prompts/%E4%B8%BB%E6%8E%A7-%E5%85%A8%E6%B5%81%E7%A8%8B%E8%B0%83%E5%BA%A6-v3.md) §二.4 与 [`00-总方案-下一代极速流式Markdown与富交互渲染引擎.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/00-%E6%80%BB%E6%96%B9%E6%A1%88-%E4%B8%8B%E4%B8%80%E4%BB%A3%E6%9E%81%E9%80%9F%E6%B5%81%E5%BC%8FMarkdown%E4%B8%8E%E5%AF%8C%E4%BA%A4%E4%BA%92%E6%B8%B2%E6%9F%93%E5%BC%95%E6%93%8E.md)
 > **核心使命**：攻克 CommonMark 规范下的 Type 7 HTML 块阻隔壁垒，实现大模型流式未闭合自定义组件（`<widget-diff>`, `<file-tree>`, `<ai-card>`）即时渲染、React Portal 安全沙箱挂载与 4 层 XSS 纵深防御体系；同时坚决彻底物理清剿沉浸式思维链弹窗全套套娃残留（15 个死文件）及 `IncrementalMarkdownParser*` 历史手写包，净删除 2,500+ 行死代码。
 
 ---
@@ -22,23 +22,23 @@
 flowchart TD
     Stream["大模型原始增量流 (含未闭合 <widget-diff ...>)"] --> FenceDetect["Markdown 代码栅栏保护识别 (findMarkdownCodeRanges)"]
     FenceDetect --> Preprocess["preprocessCustomTags 空行三明治预处理"]
-    
+
     subgraph PreprocessPipeline ["预处理管线 (API Layer)"]
         Preprocess --> Unclosed["normalizeUnclosedOpenTags: 正文到达即刻注入 \\n\\n 激活即时渲染"]
         Unclosed --> BlankProtect["内部空行转 \\n<!---->\\n (防止上游分块器跨 Block 撕裂)"]
     end
-    
+
     BlankProtect --> AST["remark-parse + remark-rehype (MDAST -> HAST)"]
-    
+
     subgraph Sandbox4Tier ["4 层 XSS 纵深防御沙箱 (Security Layer)"]
         AST --> Tier1["Tier 1: 标签白名单校验 (未知自定义标签安全解包展开)"]
         Tier1 --> Tier2["Tier 2: 属性与 on* 事件处理器彻底剥离 (长度限制 10k)"]
         Tier2 --> Tier3["Tier 3: URL 协议白名单校验 (http/https/conex/crish-local)"]
         Tier3 --> Tier4["Tier 4: CustomTagErrorBoundary 局部故障隔离"]
     end
-    
+
     Tier4 --> Registry["CustomTagRegistry 组件分发路由"]
-    
+
     subgraph ComponentSuite ["React 富交互组件套件 (UI Layer)"]
         Registry --> WDiff["<widget-diff> 代码比对卡片 (Unified / Split 切换 + IPC 采纳)"]
         Registry --> FTree["<file-tree> 工程文件树卡片 (树形折叠 + IPC 文件定位)"]
@@ -230,7 +230,7 @@ export const preprocessCustomTags = (
       `(<${tagName}(?=[\\s>/])[^>]*>)([\\s\\S]*?)(</${tagName}\\s*>)`,
       'gi'
     );
-    
+
     // 闭合标签处理（过滤代码栅栏）
     result = result.replace(closedPattern, (matchStr, open, content, close, offset) => {
       if (isPositionInRanges(offset, codeRanges)) {

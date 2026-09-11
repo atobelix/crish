@@ -1,7 +1,7 @@
 # 01-分维实现详案：Rust 实时流思考标签解析与状态机设计
 
-> **所属战役**：`docs/markdown-stream-refactor/`  
-> **核心目标**：在 Rust 协议解析层实时拦截并剥离模型内嵌的 `<think>` / `<thought>` 标签，精准分流 `ThoughtDelta` 与 `TextDelta`，彻底根除推理文字逃逸至正文。  
+> **所属战役**：`docs/markdown-stream-refactor/`
+> **核心目标**：在 Rust 协议解析层实时拦截并剥离模型内嵌的 `<think>` / `<thought>` 标签，精准分流 `ThoughtDelta` 与 `TextDelta`，彻底根除推理文字逃逸至正文。
 > **涉及文件**：
 > - `crates/agent-provider/src/parse/think_tags.rs` (新建通用模块)
 > - `crates/agent-provider/src/parse/chat_core.rs` (修改集成)

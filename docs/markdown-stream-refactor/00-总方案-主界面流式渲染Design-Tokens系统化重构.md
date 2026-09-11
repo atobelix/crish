@@ -1,7 +1,7 @@
 # 战役总方案：主界面流式渲染 Design Tokens 体系系统化重构
 
-> **战役定位**：全面根治主界面流式 Markdown 排版扁平化、表格与代码块 Token 真空、自定义富交互组件（`<widget-diff>`, `<file-tree>`, `<ai-card>`）46 处裸写 HSL/Hex、浅色模式 1.34:1 对比度击穿、12 个幽灵变量及 `ChatMessageRow.module.css` 1086 行超标巨石样式表问题，构建一套 100% 达标 WCAG AA、遵循 AGENTS.md §13/§14 与 Zero-Blue 铁律的现代化 Design Tokens 体系。  
-> **调度标准**：严格遵循 [`docs/agent-roles/prompts/主控-全流程调度-v3.md`](file:///c:/Software/conex/docs/agent-roles/prompts/%E4%B8%BB%E6%8E%A7-%E5%85%A8%E6%B5%81%E7%A8%8B%E8%B0%83%E5%BA%A6-v3.md)。  
+> **战役定位**：全面根治主界面流式 Markdown 排版扁平化、表格与代码块 Token 真空、自定义富交互组件（`<widget-diff>`, `<file-tree>`, `<ai-card>`）46 处裸写 HSL/Hex、浅色模式 1.34:1 对比度击穿、12 个幽灵变量及 `ChatMessageRow.module.css` 1086 行超标巨石样式表问题，构建一套 100% 达标 WCAG AA、遵循 AGENTS.md §13/§14 与 Zero-Blue 铁律的现代化 Design Tokens 体系。
+> **调度标准**：严格遵循 [`docs/agent-roles/prompts/主控-全流程调度-v3.md`](file:///c:/Software/conex/docs/agent-roles/prompts/%E4%B8%BB%E6%8E%A7-%E5%85%A8%E6%B5%81%E7%A8%8B%E8%B0%83%E5%BA%A6-v3.md)。
 > **核心原则**：先删后改，一个领域概念唯一主路径；禁止新增波次命名文件；严格负产出验收（净清除 88 处硬编码、12 个幽灵变量，样式表巨石瘦身 45%）。
 
 ---
@@ -108,13 +108,13 @@
 
 ## 四、核心架构契约与设计决策记录（ADRs）
 
-- **ADR-006：全局 Design Tokens 唯一真相源（SSOT）**  
+- **ADR-006：全局 Design Tokens 唯一真相源（SSOT）**
   所有流式 Markdown、表格、富交互组件、思考链与动效样式必须 100% 引用 `tokens.css` 中声明的 CSS 变量，严禁在业务 CSS Module 中裸写 HSL/Hex 或私设暗黑偏置 Fallback。
-- **ADR-007：Light Theme WCAG 2.1 AA 刚性对比度红线**  
+- **ADR-007：Light Theme WCAG 2.1 AA 刚性对比度红线**
   浅色模式下的 Diff 新增行文字（`--diff-add-fg: hsl(142 65% 25%)` 对比度 6.75:1）、删除行文字（`--diff-del-fg: hsl(0 68% 38%)` 对比度 7.01:1）、修改徽标（`--filetree-badge-mod-fg: hsl(32 95% 30%)` 对比度 5.38:1）必须 100% 达标 $\ge 4.85:1$。
-- **ADR-008：AGENTS.md §13 克制边框与焦点态铁律**  
+- **ADR-008：AGENTS.md §13 克制边框与焦点态铁律**
   所有卡片、按钮在 hover / active 态下的边框加深混入比例严格约束在 $5\% \sim 8\% \le 10\%$，彻底杜绝浅色模式下的生硬深黑粗环与 50% 重阴影。
-- **ADR-009：Zero-Blue 铁律穿透与翡翠绿品牌签名**  
+- **ADR-009：Zero-Blue 铁律穿透与翡翠绿品牌签名**
   彻底拔除所有 `hsl(215 90% 52%)` 与 `#94a3b8` 蓝灰裸色，将品牌翡翠绿（`hsl(160 84% 39%)` / Light `--brand-deep` `hsl(160 84% 31%)`）独占于打字呼吸光标与流式活态光晕。
-- **ADR-010：动效性能三档分级（`data-perf-tier`）**  
+- **ADR-010：动效性能三档分级（`data-perf-tier`）**
   在 `eco` 节能档与 `prefers-reduced-motion` 下，所有动画时长自动折叠为 `0ms`（纯静态），消除额外的 GPU 与 Compositor 算力损耗。

@@ -1,11 +1,11 @@
 # 自定义 HTML 富交互组件 (<widget-diff>, <file-tree>, <ai-card>) Token 重构方案（方案 9）
 
-> **文档标识**：`docs/markdown-stream-refactor/independent-plans/09-custom-tags-and-artifacts-token-plan.md`  
-> **方案架构师**：Independent Architect I (Design Tokens & Rich Interactive Components Specialist)  
+> **文档标识**：`docs/markdown-stream-refactor/independent-plans/09-custom-tags-and-artifacts-token-plan.md`
+> **方案架构师**：Independent Architect I (Design Tokens & Rich Interactive Components Specialist)
 > **实施基准**：
-> - [`docs/markdown-stream-refactor/00-定案-主界面流式渲染Token体系与删除面决策.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/00-%E5%AE%9A%E6%A1%88-%E4%B8%BB%E7%95%8C%E9%9D%A2%E6%B5%81%E5%BC%8F%E6%B8%B2%E6%9F%93Token%E4%BD%93%E7%B3%BB%E4%B8%8E%E5%88%A0%E9%99%A4%E9%9D%A2%E5%86%B3%E7%AD%96.md) 维度三  
-> - [`docs/markdown-stream-refactor/audits/08-custom-tags-artifacts-token-audit.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/audits/08-custom-tags-artifacts-token-audit.md)  
-> - [`AGENTS.md`](file:///c:/Software/conex/AGENTS.md) §12 (Tooltip & A11y 规范), §13 (柔和焦点与克制边框), §14 (HSLA 色彩空间与 Zero-Blue 铁律)  
+> - [`docs/markdown-stream-refactor/00-定案-主界面流式渲染Token体系与删除面决策.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/00-%E5%AE%9A%E6%A1%88-%E4%B8%BB%E7%95%8C%E9%9D%A2%E6%B5%81%E5%BC%8F%E6%B8%B2%E6%9F%93Token%E4%BD%93%E7%B3%BB%E4%B8%8E%E5%88%A0%E9%99%A4%E9%9D%A2%E5%86%B3%E7%AD%96.md) 维度三
+> - [`docs/markdown-stream-refactor/audits/08-custom-tags-artifacts-token-audit.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/audits/08-custom-tags-artifacts-token-audit.md)
+> - [`AGENTS.md`](file:///c:/Software/conex/AGENTS.md) §12 (Tooltip & A11y 规范), §13 (柔和焦点与克制边框), §14 (HSLA 色彩空间与 Zero-Blue 铁律)
 > **核心使命**：彻底根治自定义富交互组件（`<widget-diff>`, `<file-tree>`, `<ai-card>`, `CustomTagPortal`, `CustomTagErrorBoundary`）中的 **46 处硬编码色值与暗黑偏置 Fallback**，物理拔除非法 CSS 属性 `divide-x` 与孤立死代码，修复 TSX 运行时 `undefined` 类名漏洞与内联魔法数字；建立 `--artifact-*`、`--diff-*`、`--filetree-*`、`--aicard-*` 四大语义 Design Tokens 体系，**将 Light 浅色模式下的 Diff 与 Badge 对比度从 1.34:1 提升至 ≥5.24:1（100% 达标 WCAG AA）**，实现极致细腻、双主题自适应的现代化桌面端视觉体验。
 
 ---
@@ -1349,7 +1349,7 @@ describe('WCAG AA 对比度自动化断言 (Light Theme)', () => {
 ```mermaid
 flowchart TD
     Start([开始重构]) --> Phase0[【阶段 0：死层、硬编码与非法属性清剿】]
-    
+
     subgraph P0 [阶段 0：清剿与修复]
         P0_1[清除 custom-tags.module.css 46 处裸色与暗黑偏置 Fallback]
         P0_2[物理删除 divide-x 非法属性并重写分栏边框]
@@ -1359,7 +1359,7 @@ flowchart TD
     Phase0 --> P0_1 & P0_2 & P0_3 & P0_4
 
     P0_1 & P0_2 & P0_3 & P0_4 --> Phase1[【阶段 1：全局 Design Tokens 注入】]
-    
+
     subgraph P1 [阶段 1：tokens.css 注入]
         P1_1[注入 --artifact-* 卡片外壳与按钮 Tokens]
         P1_2[注入 --diff-* 高对比度比对 Tokens ≥6.75:1]
@@ -1369,7 +1369,7 @@ flowchart TD
     Phase1 --> P1_1 & P1_2 & P1_3 & P1_4
 
     P1_1 & P1_2 & P1_3 & P1_4 --> Phase2[【阶段 2：组件层全量 Token 接线与 TSX 重构】]
-    
+
     subgraph P2 [阶段 2：TSX & CSS 模块化接线]
         P2_1[custom-tags.module.css 全量绑定四大 Token 体系]
         P2_2[WidgetDiff.tsx 接入 Tooltip 与 ARIA]
@@ -1379,7 +1379,7 @@ flowchart TD
     Phase2 --> P2_1 & P2_2 & P2_3 & P2_4
 
     P2_1 & P2_2 & P2_3 & P2_4 --> Phase3[【阶段 3：WCAG AA 对比度验收与测试门禁】]
-    
+
     subgraph P3 [阶段 3：验收门禁]
         P3_1[运行 npm run typecheck: 0 错误]
         P3_2[运行 customTagsContrast.test.ts: 100% 通过]

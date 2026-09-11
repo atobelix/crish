@@ -1,8 +1,8 @@
 # 自定义 HTML 组件流式渲染与沙箱方案（方案 4）
 
-> **文档标识**：`docs/markdown-stream-refactor/independent-plans/04-custom-html-and-artifacts-sandbox-plan.md`  
-> **架构师**：Independent Architect D (Custom HTML & Streaming Artifacts Sandbox Specialist)  
-> **实施基准**：用户定案（`00-定案-核心维度与删除面决策.md` 维度四）与《主控全流程调度 v3》§二.1  
+> **文档标识**：`docs/markdown-stream-refactor/independent-plans/04-custom-html-and-artifacts-sandbox-plan.md`
+> **架构师**：Independent Architect D (Custom HTML & Streaming Artifacts Sandbox Specialist)
+> **实施基准**：用户定案（`00-定案-核心维度与删除面决策.md` 维度四）与《主控全流程调度 v3》§二.1
 > **核心使命**：攻克 CommonMark 规范下的 HTML 块解析阻隔壁垒，构建支持大模型流式未闭合自定义组件（`<widget-diff>`, `<file-tree>`, `<ai-card>`, `<interactive-qa>`, `<chart>`）即时渲染、React Portal 安全沙箱挂载、4 层 XSS 纵深防御体系；同时坚决彻底物理清剿沉浸式思维链弹窗全套套娃残留（15+ 个死文件与冗余代码）。
 
 ---

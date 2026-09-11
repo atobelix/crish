@@ -1,12 +1,12 @@
 # 战役终审评审 B：总方案与 5 大分维详案最终交叉审查报告
 
-> **评审标识**：[`docs/markdown-stream-refactor/plan-reviews/05-final-master-and-detailed-plans-review-b.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/plan-reviews/05-final-master-and-detailed-plans-review-b.md)  
-> **评审角色**：Senior Systems Engineer & Codebase Architect (Final Reviewer B · Architecture Consistency & Master Cross-Audit Lead)  
+> **评审标识**：[`docs/markdown-stream-refactor/plan-reviews/05-final-master-and-detailed-plans-review-b.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/plan-reviews/05-final-master-and-detailed-plans-review-b.md)
+> **评审角色**：Senior Systems Engineer & Codebase Architect (Final Reviewer B · Architecture Consistency & Master Cross-Audit Lead)
 > **审查基准**：
 > - 核心总案：[`docs/markdown-stream-refactor/00-总方案-下一代极速流式Markdown与富交互渲染引擎.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/00-%E6%80%BB%E6%96%B9%E6%A1%88-%E4%B8%8B%E4%B8%80%E4%BB%A3%E6%9E%81%E9%80%9F%E6%B5%81%E5%BC%8FMarkdown%E4%B8%8E%E5%AF%8C%E4%BA%A4%E4%BA%92%E6%B8%B2%E6%9F%93%E5%BC%95%E6%93%8E.md)
 > - 核心定案：[`docs/markdown-stream-refactor/00-定案-核心维度与删除面决策.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/00-%E5%AE%9A%E6%A1%88-%E6%A0%B8%E5%BF%83%E7%BB%B4%E5%BA%A6%E4%B8%8E%E5%88%A0%E9%99%A4%E9%9D%A2%E5%86%B3%E7%AD%96.md)
 > - 5 大分维详案：[`01-极速吞吐与速率自适应调度详案.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/01-%E6%9E%81%E9%80%9F%E5%90%9E%E5%90%90%E4%B8%8E%E9%80%9F%E7%8E%87%E8%87%AA%E9%80%82%E5%BA%94%E8%B0%83%E5%BA%A6%E8%AF%A6%E6%A1%88.md)、[`02-渐进词法分块与无缝双缓冲晋升详案.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/02-%E6%B8%90%E8%BF%9B%E8%AF%8D%E6%B3%95%E5%88%86%E5%9D%97%E4%B8%8E%E6%97%A0%E7%BC%9D%E5%8F%8C%E7%BC%93%E5%86%B2%E6%99%8B%E5%8D%87%E8%AF%A6%E6%A1%88.md)、[`03-流式表格排版与视口锚定稳定详案.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/03-%E6%B5%81%E5%BC%8F%E8%A1%A8%E6%A0%BC%E6%8E%92%E7%89%88%E4%B8%8E%E8%A7%86%E5%8F%A3%E9%94%9A%E5%AE%9A%E7%A8%B3%E5%AE%9A%E8%AF%A6%E6%A1%88.md)、[`04-自定义HTML组件流式渲染与沙箱详案.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/04-%E8%87%AA%E5%AE%9A%E4%B9%89HTML%E7%BB%84%E4%BB%B6%E6%B5%81%E5%BC%8F%E6%B8%B2%E6%9F%93%E4%B8%8E%E6%B2%99%E7%AE%B1%E8%AF%A6%E6%A1%88.md)、[`05-多轮生命周期单源收敛与时间线幂等详案.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/05-%E5%A4%9A%E8%BD%AE%E7%94%9F%E5%91%BD%E5%91%A8%E6%9C%9F%E5%8D%95%E6%BA%90%E6%94%B6%E6%95%9B%E4%B8%8E%E6%97%B6%E9%97%B4%E7%BA%BF%E5%B9%82%E7%AD%89%E8%AF%A6%E6%A1%88.md)
-> - 纪律与规范：[`docs/agent-roles/prompts/主控-全流程调度-v3.md`](file:///c:/Software/conex/docs/agent-roles/prompts/%E4%B8%BB%E6%8E%A7-%E5%85%A8%E6%B5%81%E7%A8%8B%E8%B0%83%E5%BA%A6-v3.md) §二.5、[`ANTI_OVERENGINEERING_GUARDRAILS.md`](file:///c:/Software/conex/ANTI_OVERENGINEERING_GUARDRAILS.md)（13 项硬性红线）  
+> - 纪律与规范：[`docs/agent-roles/prompts/主控-全流程调度-v3.md`](file:///c:/Software/conex/docs/agent-roles/prompts/%E4%B8%BB%E6%8E%A7-%E5%85%A8%E6%B5%81%E7%A8%8B%E8%B0%83%E5%BA%A6-v3.md) §二.5、[`ANTI_OVERENGINEERING_GUARDRAILS.md`](file:///c:/Software/conex/ANTI_OVERENGINEERING_GUARDRAILS.md)（13 项硬性红线）
 > **审查宗旨**：**以最高标准执行定稿前终审裁决**。全面核验总方案与 5 大分维详案的契约一致性、删除面清单（23 个孤岛文件）对齐度、文件域互斥性、先删后改 DAG 拓扑闭环及反过度设计红线，确保方案进入实施阶段时 0 概念冲突、0 依赖死锁、0 悬空死层。
 
 ---
@@ -66,7 +66,7 @@
 └─────────────────┴───────────────────────────────┴──────────┴────────────────────────────────────────┘
 ```
 
-> **终审总体裁决**：**全票通过（APPROVED WITH MINOR HARMONIZATION）**。  
+> **终审总体裁决**：**全票通过（APPROVED WITH MINOR HARMONIZATION）**。
 > 《00-总方案》与《01》~《05》分维详案逻辑严密、架构清晰、工程度极高，彻底根治了正文伪流式退化、多轮大段文字重复、骨架屏跳变与思维链弹窗过度设计四大历史顽疾。仅需在实施阶段对 2 处极微小文本口径与目录规范进行统一步调即可无缝开工。
 
 ---
@@ -175,9 +175,9 @@
 ```
 
 > [!NOTE]
-> **关于序号 20 `IncrementalInlineRenderer.ts` 的审查发现与微调指示**：  
-> 1. **代码事实**：经调用工具扫描代码仓库，`apps/crish-desktop/src/api/markdown-render/IncrementalInlineRenderer.ts` 真实存在（11,681 字节，224 行），属于历史手写 Markdown 解析器的一部分；  
-> 2. **总方案对照**：《00-总方案》第 68 行准确包含了该文件（序号 20），总删除清单为 **23 个文件**，100% 准确；  
+> **关于序号 20 `IncrementalInlineRenderer.ts` 的审查发现与微调指示**：
+> 1. **代码事实**：经调用工具扫描代码仓库，`apps/crish-desktop/src/api/markdown-render/IncrementalInlineRenderer.ts` 真实存在（11,681 字节，224 行），属于历史手写 Markdown 解析器的一部分；
+> 2. **总方案对照**：《00-总方案》第 68 行准确包含了该文件（序号 20），总删除清单为 **23 个文件**，100% 准确；
 > 3. **分维详案 04 微调指示**：详案 04 在 §2.1 大表中仅列出 17 个文件，偶然遗漏了该文件的单行记录。在阶段 0 执行删除时，统一以《00-总方案》锁定的 **23 个物理删除清单**为唯一准则，确保 `IncrementalInlineRenderer.ts` 随同其他 6 个历史手写解析器文件一并 `git rm` 销毁，绝不留死层孤岛。
 
 ---

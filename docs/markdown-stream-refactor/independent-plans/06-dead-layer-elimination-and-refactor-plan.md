@@ -1,8 +1,8 @@
 # 06. 死层物理清剿、代码瘦身与全链路防退化实施总案（方案 6）
 
-> **文档标识**：`docs/markdown-stream-refactor/independent-plans/06-dead-layer-elimination-and-refactor-plan.md`  
-> **方案定位**：下一代流式 Markdown 架构战役独立实施详案 6 —— 死层物理清剿、代码瘦身与全链路防退化（`Dead-Layer Purge, Code Slimming & Full-Chain Anti-Regression Plan`）  
-> **架构师**：Senior Systems Engineer & Codebase Architect (Purge & Modular Governance Specialist)  
+> **文档标识**：`docs/markdown-stream-refactor/independent-plans/06-dead-layer-elimination-and-refactor-plan.md`
+> **方案定位**：下一代流式 Markdown 架构战役独立实施详案 6 —— 死层物理清剿、代码瘦身与全链路防退化（`Dead-Layer Purge, Code Slimming & Full-Chain Anti-Regression Plan`）
+> **架构师**：Senior Systems Engineer & Codebase Architect (Purge & Modular Governance Specialist)
 > **输入与执行标准**：
 > - 核心定案依据：[`00-定案-核心维度与删除面决策.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/00-%E5%AE%9A%E6%A1%88-%E6%A0%B8%E5%BF%83%E7%BB%B4%E5%BA%A6%E4%B8%8E%E5%88%A0%E9%99%A4%E9%9D%A2%E5%86%B3%E7%AD%96.md)
 > - 提案建议资产：[`analysis/12`](file:///c:/Software/conex/docs/markdown-stream-refactor/analysis/12-dimension-and-deletion-proposal-a.md) ~ [`14`](file:///c:/Software/conex/docs/markdown-stream-refactor/analysis/14-dimension-and-deletion-proposal-c.md) 提案 A/B/C 交叉结论
@@ -155,9 +155,9 @@ flowchart TD
 ## 二、【强制专节】本方案要删掉什么 / 收敛什么
 
 > [!IMPORTANT]
-> **物理删除铁律（Physical Elimination Rule）**：  
-> 1. 坚决禁止采用 `// @deprecated` 注释、保留空实现桩代码 `export const Foo = () => null` 或保留空壳 store。  
-> 2. 所有 21 个废弃文件必须直接从文件系统中**完全物理删除**；  
+> **物理删除铁律（Physical Elimination Rule）**：
+> 1. 坚决禁止采用 `// @deprecated` 注释、保留空实现桩代码 `export const Foo = () => null` 或保留空壳 store。
+> 2. 所有 21 个废弃文件必须直接从文件系统中**完全物理删除**；
 > 3. 所有入口 Barrel 导出必须同步清理，存量相关测试必须完成断言剥离与重构。
 
 ### 2.1 21 个物理删除文件全景大表（完整路径、行数、替代路径与无害化证明）
@@ -526,7 +526,7 @@ describe('50k+ Tokens 极端流式高吞吐压测门禁', () => {
 ```typescript
 it('【防退化门禁】已封口的历史 MarkdownBlockItem 在后续流式帧中重渲染次数严格为 0', async () => {
   const renderSpy = vi.fn();
-  
+
   // 模拟消息流持续增长：Block 0 已封口，Block 1 处于活跃尾部生长
   const { rerender } = render(
     <StreamingMarkdownView
@@ -767,6 +767,6 @@ graph LR
 
 ---
 
-*实施详案编制：Senior Systems Engineer & Codebase Architect*  
-*编制日期：2026-08-30*  
+*实施详案编制：Senior Systems Engineer & Codebase Architect*
+*编制日期：2026-08-30*
 *状态：方案 6 已就绪，等待主控统一调度推进*

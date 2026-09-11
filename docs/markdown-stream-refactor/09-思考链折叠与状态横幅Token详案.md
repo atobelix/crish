@@ -1,13 +1,13 @@
 # 维度详案 09：思考链折叠与状态横幅 Token 详案
 
-> **文档标识**：[`docs/markdown-stream-refactor/09-思考链折叠与状态横幅Token详案.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/09-%E6%80%BB%E6%96%B9%E6%A1%88-%E4%B8%BB%E7%95%8C%E9%9D%A2%E6%B5%81%E5%BC%8F%E6%B8%B2%E6%9F%93Design-Tokens%E7%B3%BB%E7%BB%9F%E5%8C%96%E9%87%8D%E6%9E%84.md)  
-> **所属战役**：[`docs/markdown-stream-refactor/00-总方案-主界面流式渲染Design-Tokens系统化重构.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/00-%E6%80%BB%E6%96%B9%E6%A1%88-%E4%B8%BB%E7%95%8C%E9%9D%A2%E6%B5%81%E5%BC%8F%E6%B8%B2%E6%9F%93Design-Tokens%E7%B3%BB%E7%BB%9F%E5%8C%96%E9%87%8D%E6%9E%84.md)  
-> **领域概念**：思考链折叠容器、时间线指示与状态横幅 Token 体系（`Thought Chain Collapse & Status Banner Design Tokens Domain`）  
+> **文档标识**：[`docs/markdown-stream-refactor/09-思考链折叠与状态横幅Token详案.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/09-%E6%80%BB%E6%96%B9%E6%A1%88-%E4%B8%BB%E7%95%8C%E9%9D%A2%E6%B5%81%E5%BC%8F%E6%B8%B2%E6%9F%93Design-Tokens%E7%B3%BB%E7%BB%9F%E5%8C%96%E9%87%8D%E6%9E%84.md)
+> **所属战役**：[`docs/markdown-stream-refactor/00-总方案-主界面流式渲染Design-Tokens系统化重构.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/00-%E6%80%BB%E6%96%B9%E6%A1%88-%E4%B8%BB%E7%95%8C%E9%9D%A2%E6%B5%81%E5%BC%8F%E6%B8%B2%E6%9F%93Design-Tokens%E7%B3%BB%E7%BB%9F%E5%8C%96%E9%87%8D%E6%9E%84.md)
+> **领域概念**：思考链折叠容器、时间线指示与状态横幅 Token 体系（`Thought Chain Collapse & Status Banner Design Tokens Domain`）
 > **标准依据**：
 > - [`docs/agent-roles/prompts/主控-全流程调度-v3.md`](file:///c:/Software/conex/docs/agent-roles/prompts/%E4%B8%BB%E6%8E%A7-%E5%85%A8%E6%B5%81%E7%A8%8B%E8%B0%83%E5%BA%A6-v3.md) §二.4（详案模板）
 > - [`00-定案-主界面流式渲染Token体系与删除面决策.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/00-%E5%AE%9A%E6%A1%88-%E4%B8%BB%E7%95%8C%E9%9D%A2%E6%B5%81%E5%BC%8F%E6%B8%B2%E6%9F%93Token%E4%BD%93%E7%B3%BB%E4%B8%8E%E5%88%A0%E9%99%A4%E9%9D%A2%E5%86%B3%E7%AD%96.md) §一.4、§二 阶段 0~3
 > - 独立方案与评审定案：[`independent-plans/10-thought-and-banner-token-plan.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/independent-plans/10-thought-and-banner-token-plan.md)、[`plan-reviews/06`](file:///c:/Software/conex/docs/markdown-stream-refactor/plan-reviews/06-token-plans-cross-review-a.md) ~ [`08`](file:///c:/Software/conex/docs/markdown-stream-refactor/plan-reviews/08-token-plans-cross-review-c.md)
-> - 规范红线：[`ANTI_OVERENGINEERING_GUARDRAILS.md`](file:///c:/Software/conex/ANTI_OVERENGINEERING_GUARDRAILS.md)、[`AGENTS.md`](file:///c:/Software/conex/AGENTS.md) §13（焦点与悬浮对比度加深 $\le 10\%$）、§14（HSLA 现代色彩空间与 Zero-Blue 铁律）  
+> - 规范红线：[`ANTI_OVERENGINEERING_GUARDRAILS.md`](file:///c:/Software/conex/ANTI_OVERENGINEERING_GUARDRAILS.md)、[`AGENTS.md`](file:///c:/Software/conex/AGENTS.md) §13（焦点与悬浮对比度加深 $\le 10\%$）、§14（HSLA 现代色彩空间与 Zero-Blue 铁律）
 > **核心使命**：彻底剥离寄生于 `ChatMessageRow.module.css` 中的思考链样式并建立物理独立模块 `TimelineThoughtSection.module.css`（样式表净瘦身 230+ 行）；全量注入 `--thought-*` 与 `--banner-error-*` 双主题 Design Tokens；彻底根除 `MessageContent.tsx` 中 8 处内联 `style={{...}}` 魔法对象；拔除 `--bg-error-subtle` 及 10 余个幽灵 `--flow-*` 变量；消灭暗黑模式下对比度仅 1.76:1 的不可读文字 fallback `#4a4a4a` 与白雾渐变，实现 100% 达标 WCAG 2.1 AA 的高质感视觉交互体系。
 
 ---

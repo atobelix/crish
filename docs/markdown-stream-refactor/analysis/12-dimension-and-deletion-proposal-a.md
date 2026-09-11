@@ -1,7 +1,7 @@
 # 12. Conex 流式 Markdown 渲染架构落地维度与删除面建议（提案 A）
 
-> **文档定位**：Conex / Crish 下一代流式 Markdown 渲染架构落地维度规划与重复死层专项清理方案（`Proposal A: Dimension Partitioning & Deletion Surface Manifest`）  
-> **所属战役**：Markdown 真流式渲染与正文退化根治战役 (`docs/markdown-stream-refactor/`)  
+> **文档定位**：Conex / Crish 下一代流式 Markdown 渲染架构落地维度规划与重复死层专项清理方案（`Proposal A: Dimension Partitioning & Deletion Surface Manifest`）
+> **所属战役**：Markdown 真流式渲染与正文退化根治战役 (`docs/markdown-stream-refactor/`)
 > **核心原则**：严格执行《反过度设计硬性红线》(ANTI_OVERENGINEERING_GUARDRAILS.md) 与《主控全流程调度 v3》；**先做物理减法（坚决彻底物理删除全部死层与割裂分支），再做架构收敛（单一真源），最后做渐进演进**。
 
 ---
@@ -365,6 +365,6 @@ flowchart TD
 | **门禁与架构健康度**| `timelineNormalizer` 超标 487 行，Chat Bridge 循环依赖 | **全部文件 $\le 400$ 行，零循环引用，React 19 纯洁性**| **CI 门禁 100% Green，符合反过度设计 13 项红线** |
 
 ---
-*报告编制：System Architect & Streaming Refactor Specialist*  
-*编制日期：2026-08-30*  
+*报告编制：System Architect & Streaming Refactor Specialist*
+*编制日期：2026-08-30*
 *状态：Proposal A 已完成，等待主控评审合流*

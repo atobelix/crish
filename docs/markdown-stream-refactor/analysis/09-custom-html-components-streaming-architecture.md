@@ -1,8 +1,8 @@
 # 流式 Markdown 自定义 HTML 交互组件嵌入与渲染架构深度设计
 
-> **文件路径**：`docs/markdown-stream-refactor/analysis/09-custom-html-components-streaming-architecture.md`  
-> **所属战役**：Markdown 真流式渲染与正文退化根治战役 (`docs/markdown-stream-refactor/`)  
-> **权威副本与纪律**：`AGENTS.md` / `.agents/LOGIC_PLAN_NO_RETREAT.md`  
+> **文件路径**：`docs/markdown-stream-refactor/analysis/09-custom-html-components-streaming-architecture.md`
+> **所属战役**：Markdown 真流式渲染与正文退化根治战役 (`docs/markdown-stream-refactor/`)
+> **权威副本与纪律**：`AGENTS.md` / `.agents/LOGIC_PLAN_NO_RETREAT.md`
 > **核心使命**：攻克 CommonMark 规范下的 HTML 块解析阻隔壁垒，构建支持大模型流式未闭合自定义组件（如 `<widget-diff>`, `<ai-card>`, `<chart>`, `<file-tree>`）即时渲染、安全沙箱白名单与 React 运行时映射的下一代富交互基石架构。
 
 ---
@@ -232,20 +232,20 @@ Frame 5:  </widget-diff>
 ```mermaid
 stateDiagram-v2
     [*] --> ScanOpenTag: 扫描文本中的 <tag_name ...>
-    
+
     ScanOpenTag --> CheckCloseExists: 发现未闭合候选开始标签
     CheckCloseExists --> SkipToClosedPass: 文本后方存在配对 </tag_name> (交给闭合通道)
     CheckCloseExists --> InspectBody: 文本后方不存在配对闭合标签 (处于流式活跃态)
-    
+
     InspectBody --> NoBodyYet: 标签后无内容或仅有空格换行
     NoBodyYet --> KeepRaw: 保持原样，不注入多余空行
-    
+
     InspectBody --> InlineBody: 标签与内容在同一行 (<tag>hello)
     InlineBody --> KeepInline: 保持行内上下文
-    
+
     InspectBody --> MultiLineBody: 标签后已换行并开始输出正文
     MultiLineBody --> InjectSandwichBreak: 强制注入 \n\n 并替换内部 \n\n 为 <!---->
-    
+
     InjectSandwichBreak --> EmitProcessedText: 输出标准化流式 Markdown
     SkipToClosedPass --> EmitProcessedText
     KeepRaw --> EmitProcessedText
@@ -354,15 +354,15 @@ export const normalizeUnclosedOpenTags = (
 ```mermaid
 stateDiagram-v2
     [*] --> Idle: 等待流式输入
-    
+
     Idle --> OpeningIncomplete: 遇到 '<' 且匹配白名单前缀
     OpeningIncomplete --> OpenStreamingBody: 遇到完整 '>'，开始标签属性解析成功
     OpeningIncomplete --> TextFallback: 字符失配，回滚为普通正文
-    
+
     OpenStreamingBody --> OpenStreamingBody: 持续接收 Chunk，子节点增量渲染 (isStreaming=true)
     OpenStreamingBody --> ClosedComplete: 接收到配对 '</tag>' (isStreaming=false)
     OpenStreamingBody --> ErrorFallback: 流异常中断 / 会话中止 (Graceful Seal)
-    
+
     ClosedComplete --> Idle: 封口完成，进入静态缓存
     ErrorFallback --> Idle: 降级渲染完成
     TextFallback --> Idle
@@ -766,7 +766,7 @@ sequenceDiagram
     Note over Unified: remarkParse -> remarkRehype -> rehypeRaw -> rehypeSanitize
     Unified->>ReactUI: toJsxRuntime(HAST, { components })
     ReactUI->>ReactUI: 渲染 <WidgetDiff isStreaming={true}>+ code</WidgetDiff>
-    
+
     Rust->>Bridge: emit("chat://stream_delta", { text: "</widget-diff>\n\n" })
     Bridge->>Store: commitTurnFinished()
     Store->>Preprocess: preprocessCustomTags(finalMarkdown, ...)

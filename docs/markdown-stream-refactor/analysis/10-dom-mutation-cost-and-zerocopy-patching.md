@@ -1,7 +1,7 @@
 # 10. 流式 Markdown 渲染的 DOM 突变开销、内存占用与零拷贝 Patching 深度调研
 
-> **所属战役**：Markdown 真流式渲染与正文退化根治战役  
-> **文档定位**：渲染内核架构调研与下一代零拷贝 Patching 设计规范（`Streaming Markdown DOM Architect`）  
+> **所属战役**：Markdown 真流式渲染与正文退化根治战役
+> **文档定位**：渲染内核架构调研与下一代零拷贝 Patching 设计规范（`Streaming Markdown DOM Architect`）
 > **关联源码与资产**：
 > - [`reference/markdown_compare/appemd/src/nodemap.ts`](file:///c:/Software/conex/reference/markdown_compare/appemd/src/nodemap.ts)
 > - [`reference/markdown_compare/appemd/src/renderer.ts`](file:///c:/Software/conex/reference/markdown_compare/appemd/src/renderer.ts)

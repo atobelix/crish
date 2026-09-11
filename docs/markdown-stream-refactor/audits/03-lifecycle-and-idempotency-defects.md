@@ -1,6 +1,6 @@
 # 消息生命周期与多轮状态机严苛审查报告
 
-**审查对象**：Conex / Crish 桌面端消息生命周期、流式分发、多轮状态机与时间线归一化核心实现  
+**审查对象**：Conex / Crish 桌面端消息生命周期、流式分发、多轮状态机与时间线归一化核心实现
 **审查范围**：
 - `apps/crish-desktop/src/api/chat-bridge/handlers/messageHandlers.ts`
 - `apps/crish-desktop/src/api/chat-bridge/handlers/streamState.ts`

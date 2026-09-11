@@ -1,9 +1,9 @@
 # 战役终审评审报告 A：总方案与 5 大分维详案最终交叉审查
 
-> **文档标识**：[`docs/markdown-stream-refactor/plan-reviews/04-final-master-and-detailed-plans-review-a.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/plan-reviews/04-final-master-and-detailed-plans-review-a.md)  
-> **评审阶段**：终审评审 A（Final Master & Detailed Plans Cross-Review A）  
-> **评审角色**：Senior Systems Engineer & Codebase Architect (Reviewer A)  
-> **审查标准**：[`docs/agent-roles/prompts/主控-全流程调度-v3.md`](file:///c:/Software/conex/docs/agent-roles/prompts/%E4%B8%BB%E6%8E%A7-%E5%85%A8%E6%B5%81%E7%A8%8B%E8%B0%83%E5%BA%A6-v3.md) §二.5、[`ANTI_OVERENGINEERING_GUARDRAILS.md`](file:///c:/Software/conex/ANTI_OVERENGINEERING_GUARDRAILS.md)（13 项硬性红线）  
+> **文档标识**：[`docs/markdown-stream-refactor/plan-reviews/04-final-master-and-detailed-plans-review-a.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/plan-reviews/04-final-master-and-detailed-plans-review-a.md)
+> **评审阶段**：终审评审 A（Final Master & Detailed Plans Cross-Review A）
+> **评审角色**：Senior Systems Engineer & Codebase Architect (Reviewer A)
+> **审查标准**：[`docs/agent-roles/prompts/主控-全流程调度-v3.md`](file:///c:/Software/conex/docs/agent-roles/prompts/%E4%B8%BB%E6%8E%A7-%E5%85%A8%E6%B5%81%E7%A8%8B%E8%B0%83%E5%BA%A6-v3.md) §二.5、[`ANTI_OVERENGINEERING_GUARDRAILS.md`](file:///c:/Software/conex/ANTI_OVERENGINEERING_GUARDRAILS.md)（13 项硬性红线）
 > **审查对象**：
 > 1. [`00-总方案-下一代极速流式Markdown与富交互渲染引擎.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/00-%E6%80%BB%E6%96%B9%E6%A1%88-%E4%B8%8B%E4%B8%80%E4%BB%A3%E6%9E%81%E9%80%9F%E6%B5%81%E5%BC%8FMarkdown%E4%B8%8E%E5%AF%8C%E4%BA%A4%E4%BA%92%E6%B8%B2%E6%9F%93%E5%BC%95%E6%93%8E.md)
 > 2. [`01-极速吞吐与速率自适应调度详案.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/01-%E6%9E%81%E9%80%9F%E5%90%9E%E5%90%90%E4%B8%8E%E9%80%9F%E7%8E%87%E8%87%AA%E9%80%82%E5%BA%94%E8%B0%83%E5%BA%A6%E8%AF%A6%E6%A1%88.md)
@@ -46,8 +46,8 @@
 
 ### 1.1 核心裁决结论
 
-> **【终审裁决结论】：APPROVED WITH MINOR REMEDIATION（总体通过，附 2 项极轻微清单对齐与同步指令）**  
-> 
+> **【终审裁决结论】：APPROVED WITH MINOR REMEDIATION（总体通过，附 2 项极轻微清单对齐与同步指令）**
+>
 > 1. **架构契约高度统一**：总方案（`00`）与 5 大分维详案（`01`~`05`）在 5 大领域唯一主路径、核心算法（SW-TRE、行前缀和分块器、表格 DFA、空行三明治、Map 双账本 Reconciler）及 ADR 契约上保持了 **100% 精确闭环**。
 > 2. **删除面清单闭环**：23 个物理删除孤岛文件定义完备，累计消除 ~3,700 行死代码；仅在方案 04 的列表汇总中定位到漏写 1 个历史手写文件 `IncrementalInlineRenderer.ts` 的小瑕疵，现已在全网拉通纠正。
 > 3. **文件域与时序无冲突**：独占文件域严格隔离，共享文件（`MarkdownBlockItem.tsx` 等）通过阶段 DAG（Phase 0 $\to$ Phase 1/2 $\to$ Phase 3 $\to$ Phase 4 $\to$ Phase 5）实现了严格的分层推进，无循环死锁。
@@ -151,8 +151,8 @@
 └────┴──────────────────────────────────────────────────────────┴──────┴─────┴───────────┘
 ```
 
-> **【微调整改指令 REM-01】**：  
-> `04-自定义HTML组件流式渲染与沙箱详案.md` 在 §2.1 与 §4.1 清单中列出了 17 个文件，漏列了第 20 项 `apps/crish-desktop/src/api/markdown-render/IncrementalInlineRenderer.ts`（224 行）。  
+> **【微调整改指令 REM-01】**：
+> `04-自定义HTML组件流式渲染与沙箱详案.md` 在 §2.1 与 §4.1 清单中列出了 17 个文件，漏列了第 20 项 `apps/crish-desktop/src/api/markdown-render/IncrementalInlineRenderer.ts`（224 行）。
 > 实测该文件确实存在于磁盘中且属于已被淘汰的历史手写解析包。正式执行 Phase 0 时，必须按 `00-总方案` 统一清剿全部 **23 个物理文件**。
 
 ---
@@ -328,7 +328,7 @@ flowchart TD
     classDef final fill:#dcfce7,stroke:#10b981,stroke-width:2px;
 
     P0["【阶段 0：死层物理清剿与规范瘦身】<br/>• 物理删除 23 个孤岛文件 (净消除 3,694 行)<br/>• 拆分 timelineNormalizer.ts 为 4 个 ≤150 行子模块<br/>• 剔除 circuitBanners、hasFootnote、无界 Map<br/>• 同步清理 store / workers / api/markdown/index 导出"]:::purge
-    
+
     G0{"【阶段 0 准入门禁】<br/>npm run typecheck<br/>+ node scripts/check-line-counts.mjs --all"}:::gate
 
     P1_2["【阶段 1 & 阶段 2：内核协议与生命周期单源】<br/>• Track A: Rust StreamingTagExtractor 标签零逃逸分流<br/>• Track B: TS Bridge onMessageDelta 唯一单生产者<br/>• Map 双账本 + 三元槽位 Reconciler + ErrorMessageBanner"]:::phase
@@ -491,9 +491,9 @@ flowchart TD
 
 为确保进入施工阶段后绝对零偏差，主控在最终定稿时执行以下 2 项微调整改：
 
-1. **【REM-01：Plan 04 删除清单补全】**  
+1. **【REM-01：Plan 04 删除清单补全】**
    - 在 `docs/markdown-stream-refactor/04-自定义HTML组件流式渲染与沙箱详案.md` §2.1 与 §4.1 清单中，将删除项由 17 个补全为 18 个，正式登记 `apps/crish-desktop/src/api/markdown-render/IncrementalInlineRenderer.ts`（224 行），使全战役物理删除总数在各文档间严格统一为 **23 个文件**。
-2. **【REM-02：Phase 0 明确同步清理 `api/markdown/index.ts`】**  
+2. **【REM-02：Phase 0 明确同步清理 `api/markdown/index.ts`】**
    - 在阶段 0 的清理任务中，明确在拔除 `parseMarkdownIntoBlocks.ts` 死导出的同时，同步清理 `apps/crish-desktop/src/api/markdown/index.ts` 中的悬空 re-export（`hasIncompleteCodeFence`、`hasTable`、`hasFootnote`），确保 Phase 0 门禁 `npm run typecheck` 一次性全绿通过。
 
 ---
@@ -516,6 +516,6 @@ flowchart TD
 ========================================================================================
 ```
 
-> **评审结论总结**：  
-> 本战役总方案与 5 大分维详案历经 3 轮独立探索、全景交叉审查与本次终审会审，架构逻辑严密，先删后改因果链路完整，概念主路径高度收敛，删除面与性能指标坚实可信。  
+> **评审结论总结**：
+> 本战役总方案与 5 大分维详案历经 3 轮独立探索、全景交叉审查与本次终审会审，架构逻辑严密，先删后改因果链路完整，概念主路径高度收敛，删除面与性能指标坚实可信。
 > **评审组一致同意：正式签发定稿，全面准予进入 Wave 1 阶段 0 工程实施！**

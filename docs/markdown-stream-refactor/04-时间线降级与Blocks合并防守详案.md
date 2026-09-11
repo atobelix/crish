@@ -1,7 +1,7 @@
 # 04-分维实现详案：时间线降级与 Blocks 合并防守详案
 
-> **所属战役**：`docs/markdown-stream-refactor/`  
-> **核心目标**：根除多轮交互时 `updateMessageTimeline` 对历史思考块与工具卡片的破坏性覆盖，设计 Turn-Aware 三元锚点保全算法与前端 Markdown 免疫防御层。  
+> **所属战役**：`docs/markdown-stream-refactor/`
+> **核心目标**：根除多轮交互时 `updateMessageTimeline` 对历史思考块与工具卡片的破坏性覆盖，设计 Turn-Aware 三元锚点保全算法与前端 Markdown 免疫防御层。
 > **涉及文件**：
 > - `apps/crish-desktop/src/api/tool-presentation/timelineNormalizer.ts` (深度防御防守)
 > - `apps/crish-desktop/src/store/sessionMessageActionsTools.ts` (多轮合并算法)

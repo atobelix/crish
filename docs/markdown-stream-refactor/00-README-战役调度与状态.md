@@ -1,7 +1,7 @@
 # 战役调度与状态：Markdown真流式渲染与正文退化根治战役
 
-> **战役工作区**：`docs/markdown-stream-refactor/`  
-> **权威纪律**：`AGENTS.md` / `.agents/LOGIC_PLAN_NO_RETREAT.md`  
+> **战役工作区**：`docs/markdown-stream-refactor/`
+> **权威纪律**：`AGENTS.md` / `.agents/LOGIC_PLAN_NO_RETREAT.md`
 > **当前阶段**：Phase Σ / Δ / Ω 并行推进（深度勘察、架构设计、独立总案推演）
 
 ---

@@ -1,7 +1,7 @@
 # 战役定案：主界面流式渲染 Design Tokens 体系与删除面决策
 
-> **依据规范**：[`docs/agent-roles/prompts/主控-全流程调度-v3.md`](file:///c:/Software/conex/docs/agent-roles/prompts/%E4%B8%BB%E6%8E%A7-%E5%85%A8%E6%B5%81%E7%A8%8B%E8%B0%83%E5%BA%A6-v3.md) §一.5  
-> **审查依据**：06~10 5 份严苛审查报告与 15~17 3 份独立提案交叉验证结论。  
+> **依据规范**：[`docs/agent-roles/prompts/主控-全流程调度-v3.md`](file:///c:/Software/conex/docs/agent-roles/prompts/%E4%B8%BB%E6%8E%A7-%E5%85%A8%E6%B5%81%E7%A8%8B%E8%B0%83%E5%BA%A6-v3.md) §一.5
+> **审查依据**：06~10 5 份严苛审查报告与 15~17 3 份独立提案交叉验证结论。
 > **核心原则**：推进单位是「领域概念」，一个概念唯一主路径；收敛先于增强，先删后改，零死层、零幽灵变量、零硬编码裸写。
 
 ---

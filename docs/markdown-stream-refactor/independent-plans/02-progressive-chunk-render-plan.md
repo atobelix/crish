@@ -1,7 +1,7 @@
 # 渐进式分块渲染引擎与极致平滑实施总案（方案 B）
-> **文档标识**：`docs/markdown-stream-refactor/independent-plans/02-progressive-chunk-render-plan.md`  
-> **架构师**：Independent Architect B (Render & Smoothness Focus)  
-> **实施基准**：用户确认 R2 方案（Rust 实时流提取 + Markdown-first 真流式分块渲染 + 多轮幂等 + 新消息生效）  
+> **文档标识**：`docs/markdown-stream-refactor/independent-plans/02-progressive-chunk-render-plan.md`
+> **架构师**：Independent Architect B (Render & Smoothness Focus)
+> **实施基准**：用户确认 R2 方案（Rust 实时流提取 + Markdown-first 真流式分块渲染 + 多轮幂等 + 新消息生效）
 > **核心使命**：彻底根治正文界面“伪流式纯文本化”与完成态全量闪烁跳变，构建工业级渐进分块编译与高保真流式渲染引擎。
 
 ---
@@ -68,11 +68,11 @@ stateDiagram-v2
     IncompleteText --> IncompleteTable: 检测到 | 表头行
     IncompleteText --> IncompleteMath: 检测到 $$ 开头
     IncompleteText --> SealedBlock: 遇到双换行 \n\n 或块级定界符
-    
+
     IncompleteCode --> SealedBlock: 遇到闭合 ```\n
     IncompleteTable --> SealedBlock: 遇到空行 \n\n 或非表格行
     IncompleteMath --> SealedBlock: 遇到闭合 $$\n
-    
+
     SealedBlock --> RustAsyncCompile: 晋升为封口块，触发后台 IPC
     RustAsyncCompile --> RenderedBlock: 缓存生效，DOM 固化
 ```
@@ -83,14 +83,14 @@ stateDiagram-v2
 export type BlockStatus = 'streaming' | 'sealed' | 'compiled';
 
 /** 块的语义类型 */
-export type BlockKind = 
-  | 'paragraph' 
-  | 'heading' 
-  | 'code' 
-  | 'table' 
-  | 'list' 
-  | 'blockquote' 
-  | 'math' 
+export type BlockKind =
+  | 'paragraph'
+  | 'heading'
+  | 'code'
+  | 'table'
+  | 'list'
+  | 'blockquote'
+  | 'math'
   | 'html';
 
 export interface MarkdownChunkBlock {
@@ -258,7 +258,7 @@ export class ProgressiveChunkParser {
       // - 末尾块：若 isLiveStream 为 false 则封口；
       //           若正在流式中，但文本末尾具有明确双换行 \n\n，亦判定为封口！
       const isSealed = !isLiveStream || (!isLast) || b.raw.endsWith('\n\n');
-      
+
       const kind = this.detectBlockKind(b.type, b.raw);
       const chunkBlock: MarkdownChunkBlock = {
         id: `chunk-block-${idx}`,
@@ -298,7 +298,7 @@ export class ProgressiveChunkParser {
     const fenceMarker = match ? match[1] : '```';
     const lang = match && match[2] ? match[2] : '';
     const filePath = match && match[3] ? match[3] : undefined;
-    
+
     // 检查末尾是否闭合
     let isFenceClosed = false;
     if (lines.length >= 2) {
@@ -399,7 +399,7 @@ export const StreamingMarkdownView: React.FC<StreamingMarkdownViewProps> = React
       <div className={`${styles.assistantText} md-rendered ${className || ''}`}>
         {blocks.map((block, idx) => {
           const isTail = idx === blocks.length - 1;
-          
+
           // 如果是已封口块（或者处于非流式模式下的全部块）
           if (block.isSealed) {
             return (
@@ -421,7 +421,7 @@ export const StreamingMarkdownView: React.FC<StreamingMarkdownViewProps> = React
       </div>
     );
   },
-  (prev, next) => 
+  (prev, next) =>
     prev.text === next.text &&
     prev.isStreaming === next.isStreaming &&
     prev.messageId === next.messageId
@@ -516,7 +516,7 @@ export const ActiveTailBlock: React.FC<ActiveTailBlockProps> = React.memo(
       // 计算本帧相较上一帧的增量 Delta
       const current = block.raw;
       const prev = prevRawRef.current;
-      
+
       if (current.startsWith(prev)) {
         const delta = current.slice(prev.length);
         if (delta) {

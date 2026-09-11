@@ -1,7 +1,7 @@
 # 06. 极速吞吐与速率自适应流式动画机制深度调研与架构设计
 
-> **所属战役**：Markdown 真流式渲染与正文退化根治战役 (Phase Σ / Wave 2)  
-> **文档定位**：前端流式动画渲染架构核心设计方案（`Streaming Animation & Rate Adaptive Architect`）  
+> **所属战役**：Markdown 真流式渲染与正文退化根治战役 (Phase Σ / Wave 2)
+> **文档定位**：前端流式动画渲染架构核心设计方案（`Streaming Animation & Rate Adaptive Architect`）
 > **关联资产与核心参考**：
 > - [`reference/streamdown/packages/streamdown/lib/animate.ts`](file:///c:/Software/conex/reference/streamdown/packages/streamdown/lib/animate.ts)
 > - [`reference/streamdown/packages/streamdown/index.tsx`](file:///c:/Software/conex/reference/streamdown/packages/streamdown/index.tsx)
@@ -405,8 +405,8 @@ export class SlidingWindowRateEstimator {
     const instantRate = (charDelta / elapsed) * 1000;
     // 快速响应加速 (alpha = 0.5), 缓慢平滑减速 (alpha = 0.2)
     const alpha = instantRate > this.smoothedRate ? 0.5 : 0.2;
-    this.smoothedRate = this.smoothedRate === 0 
-      ? windowRate 
+    this.smoothedRate = this.smoothedRate === 0
+      ? windowRate
       : alpha * instantRate + (1 - alpha) * this.smoothedRate;
 
     // 5. 估算 Token 速率 (以 1 Token ≈ 3.8 字符为换算基准)
@@ -426,8 +426,8 @@ export class SlidingWindowRateEstimator {
   }
 
   private deriveTierSnapshot(
-    instantRate: number, 
-    smoothedRate: number, 
+    instantRate: number,
+    smoothedRate: number,
     tokenRate: number
   ): RateSnapshot {
     let tier: StreamingTier = 'NORMAL';

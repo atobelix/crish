@@ -1,7 +1,7 @@
 # Token 方案评审 C · 独立方案 07~12 综合收敛与实施 DAG 审查报告
 
-> **文档标识**：`docs/markdown-stream-refactor/plan-reviews/08-token-plans-cross-review-c.md`  
-> **评审角色**：Senior Systems Engineer & Codebase Architect (Reviewer C · Token Convergence & DAG Lead)  
+> **文档标识**：`docs/markdown-stream-refactor/plan-reviews/08-token-plans-cross-review-c.md`
+> **评审角色**：Senior Systems Engineer & Codebase Architect (Reviewer C · Token Convergence & DAG Lead)
 > **评审对象**：
 > - 核心定案决策：[`docs/markdown-stream-refactor/00-定案-主界面流式渲染Token体系与删除面决策.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/00-%E5%AE%9A%E6%A1%88-%E4%B8%BB%E7%95%8C%E9%9D%A2%E6%B5%81%E5%BC%8F%E6%B8%B2%E6%9F%93Token%E4%BD%93%E7%B3%BB%E4%B8%8E%E5%88%A0%E9%99%A4%E9%9D%A2%E5%86%B3%E7%AD%96.md)
 > - 独立方案 07：[`07-streaming-typography-token-plan.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/independent-plans/07-streaming-typography-token-plan.md) (排版与语法高亮)

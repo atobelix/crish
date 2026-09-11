@@ -170,7 +170,7 @@ graph TD
     G2 -. "100% 旁路未接入" .-> C1
     G4 -. "100% 旁路未接入" .-> C2
     G5 -. "被硬编码覆盖" .-> C3
-    
+
     style C1 fill:#fee2e2,stroke:#ef4444,stroke-width:2px
     style C2 fill:#fee2e2,stroke:#ef4444,stroke-width:2px
     style C3 fill:#fee2e2,stroke:#ef4444,stroke-width:2px

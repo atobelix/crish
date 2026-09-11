@@ -1,8 +1,8 @@
 # Conex/Crish 全栈 Markdown 渲染统一方案（Challenger 独立架构方案）
 
-> **作者**：系统架构师 & 挑战者（Challenger）  
-> **文档属性**：独立深度方案（Independent Architectural Plan）  
-> **目标路径**：`docs/markdown-unified-architecture/independent-plans/06-challenger-fullstack-plan.md`  
+> **作者**：系统架构师 & 挑战者（Challenger）
+> **文档属性**：独立深度方案（Independent Architectural Plan）
+> **目标路径**：`docs/markdown-unified-architecture/independent-plans/06-challenger-fullstack-plan.md`
 > **核心原则**：纯源码现场取证、零历史文档依赖、零业务优先级妥协、逻辑同权、系统净收敛。
 
 ---
@@ -12,8 +12,8 @@
 ### 0.1 诊断背景：为什么文件管理器的 Markdown 预览“效果极差、表格崩塌”？
 用户强烈反馈：在 Conex/Crish 文件管理器中预览 Markdown 文件时，排版效果极其粗糙，与 GitHub、VS Code 等主流优秀渲染器相比差异悬殊，特别是**表格严重崩塌**、边框缺失、内边距丢失、对齐失效、代码块毫无层次感。
 
-常规工程团队往往将其误判为“漏写了几条 CSS 样式”，试图在局部 CSS 文件中打补丁（如在 `FilesCard.module.css` 里加几条针对 `table` 的样式）。  
-**挑战者在此必须断言：这是对系统性架构溃败的浅薄误读！**  
+常规工程团队往往将其误判为“漏写了几条 CSS 样式”，试图在局部 CSS 文件中打补丁（如在 `FilesCard.module.css` 里加几条针对 `table` 的样式）。
+**挑战者在此必须断言：这是对系统性架构溃败的浅薄误读！**
 通过穿透源码的全面审视，真相是：当前仓内存在**四轨解析分裂、样式彻底真空、孤儿组件伪连通、主线程 DOM 自残操作、以及静默数据截断**的重大系统性断层。
 
 ---
@@ -113,7 +113,7 @@ flowchart TD
         SyntectHL["syntect (CSS Variables 纯类名模式)"]
         AmmoniaSan["ammonia (零副作用白名单过滤)"]
         RustCache["Moka LRU 字节缓存"]
-        
+
         RawMd --> PCMark
         PCMark --> SyntectHL
         SyntectHL --> AmmoniaSan
@@ -131,7 +131,7 @@ flowchart TD
         ClientLRU["前端 LRU 缓存 (markdownCache.ts)"]
         UseMdHook["useMarkdownRender Hook (自适应防抖/预热)"]
         UnifiedComp["统一组件: MarkdownViewer (Zero-CLS / 双缓冲)"]
-        
+
         CmdRender --> ClientLRU
         CmdBatch --> ClientLRU
         ClientLRU --> UseMdHook
@@ -149,7 +149,7 @@ flowchart TD
         SiteFiles["文件管理器: FilePreview.tsx"]
         SiteChat["聊天消息流: MarkdownBlockItem.tsx"]
         SiteSkills["技能详情: SkillDetailPreview.tsx"]
-        
+
         UnifiedComp --> SiteFiles
         UnifiedComp --> SiteChat
         UnifiedComp --> SiteSkills
@@ -180,7 +180,7 @@ flowchart TD
    - 对于超过 64KB 的大文本传输，采用 Tauri 优化的二进制或紧凑 UTF-8 字符串传递，减少 JSON 序列化开销。
 
 ### 1.3 样式架构单一真理（Design Token & Global CSS SSOT）
-彻底废除在 `ChatMessageRow.module.css` 中的私有选择器，建立全局唯一的 Markdown 样式中枢文件：  
+彻底废除在 `ChatMessageRow.module.css` 中的私有选择器，建立全局唯一的 Markdown 样式中枢文件：
 `apps/crish-desktop/src/styles/markdown-theme.css`。
 
 所有的渲染输出均置于 `.conex-markdown` 根容器内，严格绑定 `tokens.css` 中的语义化变量：
@@ -438,8 +438,8 @@ flowchart TD
       out.push_str("<wbr>");
   }
   ```
-  该逻辑每逢 10 个中文字符就强制插入一个 `<wbr>` HTML 标签！  
-  **这是导致表格排版崩塌的隐蔽暗刺！**  
+  该逻辑每逢 10 个中文字符就强制插入一个 `<wbr>` HTML 标签！
+  **这是导致表格排版崩塌的隐蔽暗刺！**
   浏览器在计算表格列宽时，依据单元格的最小内容宽度（min-content）进行分配。在 CJK 语境下，天然每个汉字都可以换行，但一旦被硬塞了 `<wbr>`，浏览器会将“10 个汉字”作为一个强制性换行节拍，导致单元格在宽度紧张时以极度丑陋的 10 字为单位突兀折行，破坏中文词意，并在窄列中引发高度剧烈拉伸与横向布局坍塌。更严重的是，用户选中文本复制时，剪贴板会受到不可见的 DOM 节点断裂干扰！
 - **挑战者防御方案**：
   1. **彻底物理剔除 `split_long_cjk_runs` 与 `<wbr>` 注入逻辑**！
@@ -523,7 +523,7 @@ export interface MarkdownViewerProps {
 ## 4. 挑战性反思：如何确保方案不是“又创造了一个中间层”，而是真正实现系统的净收敛与债务清退
 
 ### 4.1 警惕“第 15 个标准”陷阱（XKCD 927 警钟）
-许多平庸的重构方案在面对系统混乱时，最常见的做法是“新建一个抽象层把旧系统包起来”。结果旧代码没删掉，系统里又多了一个维护层，复杂度从 N 变成 N+1。  
+许多平庸的重构方案在面对系统混乱时，最常见的做法是“新建一个抽象层把旧系统包起来”。结果旧代码没删掉，系统里又多了一个维护层，复杂度从 N 变成 N+1。
 **挑战者在此设立刚性准则：本方案只做减法，不做伪加法！每增加 1 个核心组件，必须同时拔除至少 5 个历史碎片模块！**
 
 ### 4.2 淘汰与清退清单（Deprecation & Retirement Checklist）
@@ -584,5 +584,5 @@ export interface MarkdownViewerProps {
 
 ## 6. 结语：挑战者的架构誓言
 
-架构的优雅从不体现在“兼容了多少历史烂摊子”，而体现在“以多大的决绝勇气切除毒瘤”。  
+架构的优雅从不体现在“兼容了多少历史烂摊子”，而体现在“以多大的决绝勇气切除毒瘤”。
 本方案不妥协、不打补丁、不造多余中间层。通过 Rust 引擎与现代 CSS 变量标准的强力对齐，Conex/Crish 将一劳永逸地解决 Markdown 预览断层与表格崩塌问题，真正赢得专业开发者对工具品质的严苛信任。

@@ -1,7 +1,7 @@
 # 07. 增量 AST 解析算法与 Incremark / Appemd 架构批判性调研
 
-> **所属战役**：Markdown 真流式渲染与正文退化根治战役  
-> **文档定位**：增量 AST 解析算法、树片段复用与渲染引擎演进核心调研报告（`Incremental Parser & AST Architect`）  
+> **所属战役**：Markdown 真流式渲染与正文退化根治战役
+> **文档定位**：增量 AST 解析算法、树片段复用与渲染引擎演进核心调研报告（`Incremental Parser & AST Architect`）
 > **关联资产与核心参考**：
 > - [Incremark Core Parser](file:///c:/Software/conex/reference/markdown_compare/incremark/packages/core/src/parser/IncremarkParser.ts) (`reference/markdown_compare/incremark/packages/core/`)
 > - [Incremark Boundary Detector](file:///c:/Software/conex/reference/markdown_compare/incremark/packages/core/src/parser/boundary/BoundaryDetector.ts) (`reference/markdown_compare/incremark/packages/core/src/parser/boundary/`)
@@ -356,7 +356,7 @@ export class IncrementalBlockSlicer {
   public appendChunk(chunk: string): void {
     const chunkLines = chunk.split('\n');
     const { lines, lineOffsets } = this.state;
-    
+
     if (lines.length === 0) {
       this.state.lines = chunkLines;
       for (let i = 0; i < chunkLines.length - 1; i++) {
@@ -400,7 +400,7 @@ export class SpeculativeVirtualCloser {
       const fenceChar = fenceMatch[1][0];
       const fenceLen = fenceMatch[1].length;
       const closePattern = new RegExp(`^[ \\t]{0,3}${fenceChar}{${fenceLen},}\\s*$`, 'm');
-      
+
       // 若只有开围栏而无闭合围栏，在末尾虚拟补齐换行与闭合符号
       if (!closePattern.test(text.slice(fenceMatch.index! + fenceMatch[0].length))) {
         text = text.endsWith('\n') ? `${text}${fenceChar.repeat(fenceLen)}` : `${text}\n${fenceChar.repeat(fenceLen)}`;

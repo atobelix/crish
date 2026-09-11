@@ -1,8 +1,8 @@
 # 08. 流式表格渲染、视口稳定与增强控制机制深度架构设计
 
-> **文件路径**：`docs/markdown-stream-refactor/analysis/08-streaming-table-and-pinned-scroll-architecture.md`  
-> **所属战役**：Markdown 真流式渲染与正文退化根治战役 (`docs/markdown-stream-refactor/`)  
-> **权威副本与纪律**：`AGENTS.md` / `.agents/LOGIC_PLAN_NO_RETREAT.md`  
+> **文件路径**：`docs/markdown-stream-refactor/analysis/08-streaming-table-and-pinned-scroll-architecture.md`
+> **所属战役**：Markdown 真流式渲染与正文退化根治战役 (`docs/markdown-stream-refactor/`)
+> **权威副本与纪律**：`AGENTS.md` / `.agents/LOGIC_PLAN_NO_RETREAT.md`
 > **核心目标**：彻底解决流式生成大表格时的语法中间态撕裂、列宽剧烈跳动、光标侵入排版与视口失控跳跃等顽疾，构建集局部双向吸底滚动、DOM 重排防护、增强控制工具条与全屏沉浸视口于一体的顶级流式表格交互引擎。
 
 ---
@@ -129,14 +129,14 @@ stateDiagram-v2
 export function fixTableTokens(tokens: MarkdownToken[], final = false, source = ''): MarkdownToken[] {
   const fixedTokens = [...tokens];
   if (tokens.length < 3) return fixedTokens;
-  
+
   const i = tokens.length - 2;
   const token = tokens[i];
-  
+
   if (token.type === 'inline') {
     const tcontent = String(token.content ?? '');
     const [headerLine = '', separatorLine = '', ...rest] = tcontent.split('\n');
-    
+
     // 场景 A：表头刚写完，分隔行仅输出前缀（如 '|'、'|:'、'| -'）
     const isPartialSeparator = isTableSeparatorRowWithPartialTail(separatorLine);
     const hasValidHeader = hasTrailingPipeHeaderRow(headerLine);
@@ -229,16 +229,16 @@ const shouldHideCaret = useMemo(() => {
 ```mermaid
 flowchart TD
     Init["初始化 usePinnedScroll(isActive, enabled, contentKey)"] --> StateInit["pinnedRef.current = true<br/>wasActiveRef.current = false"]
-    
+
     SubScroll["监听滚动容器 scroll 事件 (passive: true)"] --> CheckScroll{"滚动计算:<br/>scrollHeight - scrollTop - clientHeight < 8px ?"}
-    
+
     CheckScroll -- "是 (处于底部 8px 容差区)" --> SetPinnedTrue["pinnedRef.current = true<br/>(保持/恢复吸底锁定)"]
     CheckScroll -- "否 (用户主动上滚查看历史)" --> SetPinnedFalse["pinnedRef.current = false<br/>(解锁吸底，保持用户视口停驻)"]
-    
+
     ActiveChange["流式状态 isActive 发生变化"] --> CheckNewSession{"isActive 从 false 变为 true ?<br/>(新一轮生成启动)"}
     CheckNewSession -- "是" --> ResetPinned["重置 pinnedRef.current = true<br/>自动激活吸底"]
     CheckNewSession -- "否" --> KeepPinned["保持 pinnedRef.current = true"]
-    
+
     ContentGrow["流式数据追加 (contentKey 变更)"] --> ExecScroll{"isActive && enabled && pinnedRef.current ?"}
     ExecScroll -- "全部满足" --> DoScroll["el.scrollTo({<br/>  top: el.scrollHeight,<br/>  behavior: 'instant'<br/>})"]
     ExecScroll -- "已解锁吸底 (pinned=false)" --> DoNothing["保持当前 scrollTop 绝对不动<br/>零干扰用户阅读历史"]
@@ -248,7 +248,7 @@ flowchart TD
 
 $$\Delta_{\text{bottom}} = \text{scrollHeight} - \text{scrollTop} - \text{clientHeight}$$
 
-$$\text{isPinned} = \begin{cases} 
+$$\text{isPinned} = \begin{cases}
 \text{true}, & \text{if } \Delta_{\text{bottom}} < \text{THRESHOLD}_{\text{px}} \ (8\text{px}) \\
 \text{false}, & \text{if } \Delta_{\text{bottom}} \ge \text{THRESHOLD}_{\text{px}} \ (8\text{px})
 \end{cases}$$
@@ -304,7 +304,7 @@ export const resolveMaxHeight = (
 ```html
 <!-- Table 外层容器：管理外边距、圆角与控制栏 -->
 <div class="table-wrapper flex flex-col rounded-lg border border-border bg-sidebar p-2" data-streamdown="table-wrapper">
-  
+
   <!-- 顶部悬浮/常驻控制栏 -->
   <div class="table-controls flex items-center justify-end gap-1 pb-1">
     <button class="copy-btn">...</button>
@@ -313,7 +313,7 @@ export const resolveMaxHeight = (
   </div>
 
   <!-- 局部滚动视口容器：挂载 scrollRef 与 maxHeight -->
-  <div 
+  <div
     class="table-scroll-viewport border-collapse overflow-x-auto overflow-y-auto rounded-md border border-border bg-background"
     style="max-height: 480px;"
   >
@@ -423,17 +423,17 @@ graph TD
 flowchart LR
     DOM["DOM 真实渲染表格 (HTMLTableElement)"] --> Extractor["extractTableDataFromElement(tableEl)"]
     Extractor --> TableDataModel["TableData {<br/>  headers: string[],<br/>  rows: string[][]<br/>}"]
-    
+
     TableDataModel --> CSV_Engine["tableDataToCSV(data, separator)"]
     TableDataModel --> TSV_Engine["tableDataToTSV(data)"]
     TableDataModel --> JSON_Engine["tableDataToJSON(data)"]
     TableDataModel --> MD_Engine["tableDataToMarkdown(data)"]
-    
+
     CSV_Engine --> Clipboard["navigator.clipboard.write()"]
     TSV_Engine --> Clipboard
     JSON_Engine --> Clipboard
     MD_Engine --> Clipboard
-    
+
     CSV_Engine --> FileSaver["saveAsFile(filename.csv)"]
     MD_Engine --> FileSaver
     JSON_Engine --> FileSaver
@@ -573,7 +573,7 @@ export const TableFullscreenModal = ({
 }) => {
   useEffect(() => {
     if (!isOpen) return;
-    
+
     // 1. 锁定背景页面滚动，防止滚动穿透
     const originalOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -815,11 +815,11 @@ export function toTSV(data: TableDataExtraction): string {
 export function toMarkdown(data: TableDataExtraction): string {
   if (data.headers.length === 0) return "";
   const escape = (c: string) => c.replace(/\\/g, "\\\\").replace(/\|/g, "\\|").replace(/\n/g, "<br>");
-  
+
   const lines: string[] = [];
   lines.push(`| ${data.headers.map(escape).join(" | ")} |`);
   lines.push(`| ${data.headers.map(() => "---").join(" | ")} |`);
-  
+
   for (const row of data.rows) {
     const padded = [...row];
     while (padded.length < data.headers.length) padded.push("");

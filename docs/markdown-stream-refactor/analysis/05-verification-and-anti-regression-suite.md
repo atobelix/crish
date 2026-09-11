@@ -1,9 +1,9 @@
 # 05. 全链路验证体系、反退避检查项与魔鬼测试用例套件
 
-> **文件路径**：`docs/markdown-stream-refactor/analysis/05-verification-and-anti-regression-suite.md`  
-> **所属战役**：Markdown 真流式渲染与正文退化根治战役 (`docs/markdown-stream-refactor/`)  
-> **角色定位**：QA and Verification Specialist (全链路测试架构与质量保证专家)  
-> **权威纪律**：`AGENTS.md` / `.agents/LOGIC_PLAN_NO_RETREAT.md` / `FULL_CHECK_COMMANDS.md`  
+> **文件路径**：`docs/markdown-stream-refactor/analysis/05-verification-and-anti-regression-suite.md`
+> **所属战役**：Markdown 真流式渲染与正文退化根治战役 (`docs/markdown-stream-refactor/`)
+> **角色定位**：QA and Verification Specialist (全链路测试架构与质量保证专家)
+> **权威纪律**：`AGENTS.md` / `.agents/LOGIC_PLAN_NO_RETREAT.md` / `FULL_CHECK_COMMANDS.md`
 > **输入资产**：
 > - `docs/markdown-stream-refactor/analysis/01-rust-stream-think-tag-state-machine.md`
 > - `docs/markdown-stream-refactor/analysis/02-streaming-markdown-chunking-architecture.md`
@@ -418,7 +418,7 @@ describe('ProgressiveChunkParser & Code Immunity 极限分块测试套件', () =
   it('TS-03: HTML 嵌套标签跨段落保持完整合并，不发生断块', () => {
     const htmlMarkdown = `<div class="container">\n\n<p>段落内容 1</p>\n\n<p>段落内容 2</p>\n\n</div>`;
     const blocks = parseMarkdownIntoBlocks(htmlMarkdown);
-    
+
     // 断言整个 div 容器被聚合为一个单独的 Block，避免外层 HTML 断开
     expect(blocks).toHaveLength(1);
     expect(blocks[0]).toContain('<div class="container">');

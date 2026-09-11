@@ -1,8 +1,8 @@
 # 端到端契约优先实施总案（方案 A）
 
-> **文档标识**：`docs/markdown-stream-refactor/independent-plans/01-end-to-end-contract-first-plan.md`  
-> **架构师**：Independent Architect A (End-to-End & Contract-First Focus)  
-> **实施基准**：用户确认 R2 方案（Rust 实时流提取 + Markdown-first 真流式分块渲染 + 多轮幂等 + 新消息生效）  
+> **文档标识**：`docs/markdown-stream-refactor/independent-plans/01-end-to-end-contract-first-plan.md`
+> **架构师**：Independent Architect A (End-to-End & Contract-First Focus)
+> **实施基准**：用户确认 R2 方案（Rust 实时流提取 + Markdown-first 真流式分块渲染 + 多轮幂等 + 新消息生效）
 > **核心使命**：以“契约优先（Contract-First）”为顶层设计原则，确立从 LLM SSE 网络流到最终前端像素渲染的 7 级数据流管道、全层级类型契约、模块责任不变量，并提供可直接指派给多 Agent 并行执行的子任务工单（Task Cards）与依赖 DAG。
 
 ---
@@ -115,12 +115,12 @@ sequenceDiagram
     Loop->>Bridge: LiveSink: MessageDelta(block=Text)
     Bridge->>Store: onChunk("## 方案\n段落一\n\n段落二")
     Store->>VM: streamText 更新
-    
+
     Note over VM,View: 阶段 6 & 7: 真流式分块渲染
     VM->>View: StreamingMarkdownView(text)
     View->>View: parseMarkdownIntoBlocks(text)
     Note right of View: Block 0: "## 方案\n段落一\n\n" (封口) -> 触发 Rust md_render<br/>Block 1: "段落二" (活动末尾块) -> DOM 增量实时呈现
-    
+
     Note over LLM,Bridge: 阶段 3 & 4: 消息收口与多轮幂等
     LLM->>Parser: SSE Finish (finish_reason="stop")
     Parser->>Loop: ProviderStreamEvent::Stop
@@ -161,14 +161,14 @@ pub enum ThinkTagState {
 pub enum ProviderStreamEvent {
     #[serde(rename_all = "camelCase")]
     TextDelta { text: String },
-    
+
     #[serde(rename_all = "camelCase")]
     ThoughtDelta {
         text: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         redacted: Option<bool>,
     },
-    
+
     #[serde(rename_all = "camelCase")]
     ToolCall {
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -176,7 +176,7 @@ pub enum ProviderStreamEvent {
         tool_name: String,
         input: serde_json::Value,
     },
-    
+
     #[serde(rename_all = "camelCase")]
     Stop {
         reason: StopReason,
@@ -201,17 +201,17 @@ pub enum ProviderStreamEvent {
 pub enum AgentMessageBlock {
     #[serde(rename_all = "camelCase")]
     Text { text: String },
-    
+
     #[serde(rename_all = "camelCase")]
     Thought {
         text: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         redacted: Option<bool>,
     },
-    
+
     #[serde(rename_all = "camelCase")]
     ToolCall(ToolCallBlock),
-    
+
     #[serde(rename_all = "camelCase")]
     ToolResult(ToolResultBlock),
 }
@@ -227,7 +227,7 @@ pub enum AgentEvent {
         session_id: String,
         message: Arc<AgentMessage>,
     },
-    
+
     #[serde(rename_all = "camelCase")]
     MessageDelta {
         session_id: String,
@@ -235,7 +235,7 @@ pub enum AgentEvent {
         message_id: String,
         block: AgentMessageBlock,
     },
-    
+
     #[serde(rename_all = "camelCase")]
     MessageEnd {
         session_id: String,
@@ -260,7 +260,7 @@ export interface EngineEnvelope<T = string> {
   sequence?: number | null;
 }
 
-export type AgentEventPayload<T> = 
+export type AgentEventPayload<T> =
   T extends 'message-delta' ? {
     sessionId: string;
     messageId: string;
@@ -479,7 +479,7 @@ impl ThinkTagStateMachine {
                 ThinkTagState::InsideThink => {
                     if ch == '<' {
                         if !thought_buf.is_empty() {
-                            events.push(ProviderStreamEvent::ThoughtDelta { 
+                            events.push(ProviderStreamEvent::ThoughtDelta {
                                 text: std::mem::take(&mut thought_buf),
                                 redacted: None,
                             });
@@ -568,17 +568,17 @@ export function onMessageEnd(
   if (text.trim()) {
     const piece = text.trim();
     const turnIndex = typeof envelope.event.turnIndex === 'number' ? envelope.event.turnIndex : 0;
-    
+
     if (!state.messageEndTurnSegments) state.messageEndTurnSegments = [];
     const segs = state.messageEndTurnSegments;
     while (segs.length <= turnIndex) segs.push('');
-    
+
     // 权威设置当前轮次文本（直接赋值，无需脆弱的字符串 search）
     segs[turnIndex] = piece;
-    
+
     const joined = segs.filter(Boolean).join('\n\n');
     state.assistantText = joined;
-    
+
     // 关键修正：message-end 仅更新 store 权威值，绝不再次调用 callbacks.onChunk！
     // 流式增量已经在 onMessageDelta 中由 LiveSink 完全交付。
   }
@@ -657,7 +657,7 @@ export const StreamingMarkdownView: React.FC<StreamingMarkdownViewProps> = React
   function StreamingMarkdownView({ text, isStreaming = false, priority }) {
     // 1. 实时分块
     const blocks = useMemo(() => parseMarkdownIntoBlocks(text), [text]);
-    
+
     // 2. 尾块增量计算（使用 Ref 记录上一帧末尾块长度）
     const prevTailRef = useRef<{ blockIndex: number; content: string }>({
       blockIndex: -1,
@@ -953,5 +953,5 @@ npm run test:snapshots
 
 ---
 
-> **架构结论**：  
+> **架构结论**：
 > 本实施方案严格基于契约优先原则，清晰划定了 Rust 内核、Bridge Handler、Projection ViewModel 与 UI View 组件的四级责任边界。通过状态机前置剥离思考、分段数组幂等收口、Streamdown 级分块渐进编译三道防线，彻底根治“纯文字化、双倍重复、完成闪烁”三大核心痛点。

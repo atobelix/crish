@@ -1,9 +1,9 @@
 # 渐进词法分块与无缝双缓冲晋升实施方案（方案二）
 
-> **文档标识**：`docs/markdown-stream-refactor/independent-plans/02-progressive-chunking-double-buffering-plan.md`  
-> **架构师**：Senior Systems & Streaming Markdown UI Architect  
-> **实施基准**：用户定案（Rust 实时流分流 + 渐进词法分块渲染 + 双缓冲无缝晋升 + 多轮幂等生命周期）  
-> **标准依据**：[`docs/markdown-stream-refactor/00-定案-核心维度与删除面决策.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/00-%E5%AE%9A%E6%A1%88-%E6%A0%B8%E5%BF%83%E7%BB%B4%E5%BA%A6%E4%B8%8E%E5%88%A0%E9%99%A4%E9%9D%A2%E5%86%B3%E7%AD%96.md) §一.2、[`docs/agent-roles/prompts/主控-全流程调度-v3.md`](file:///c:/Software/conex/docs/agent-roles/prompts/%E4%B8%BB%E6%8E%A7-%E5%85%A8%E6%B5%81%E7%A8%8B%E8%B0%83%E5%BA%A6-v3.md) §二.1  
+> **文档标识**：`docs/markdown-stream-refactor/independent-plans/02-progressive-chunking-double-buffering-plan.md`
+> **架构师**：Senior Systems & Streaming Markdown UI Architect
+> **实施基准**：用户定案（Rust 实时流分流 + 渐进词法分块渲染 + 双缓冲无缝晋升 + 多轮幂等生命周期）
+> **标准依据**：[`docs/markdown-stream-refactor/00-定案-核心维度与删除面决策.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/00-%E5%AE%9A%E6%A1%88-%E6%A0%B8%E5%BF%83%E7%BB%B4%E5%BA%A6%E4%B8%8E%E5%88%A0%E9%99%A4%E9%9D%A2%E5%86%B3%E7%AD%96.md) §一.2、[`docs/agent-roles/prompts/主控-全流程调度-v3.md`](file:///c:/Software/conex/docs/agent-roles/prompts/%E4%B8%BB%E6%8E%A7-%E5%85%A8%E6%B5%81%E7%A8%8B%E8%B0%83%E5%BA%A6-v3.md) §二.1
 > **核心使命**：彻底根治正文流式输出期间“伪流式纯文本化”与完成态“骨架屏塌陷全量闪烁跳变（CLS）”两大顽疾。构筑基于行前缀和的 $O(1)$ 增量边界分块器、Remend 内存投机未闭合语法虚拟补全器、语义哈希稳定 Block Key 协调缓存，以及原地纯文本垫片无缝双缓冲晋升引擎，**彻底物理消灭骨架屏**，实现 60 FPS 满帧流式与零视觉跳变。
 
 ---
@@ -187,25 +187,25 @@ flowchart TD
 ```mermaid
 stateDiagram-v2
     [*] --> Scanning: 逐行扫描 pendingLines
-    
+
     Scanning --> InCodeFence: 遇到 ^[ \\t]{0,3}(`{3,}|~{3,})
     InCodeFence --> InCodeFence: 代码内容逐行累积
     InCodeFence --> SealedFence: 遇到匹配长度与符号的闭合围栏
     SealedFence --> Scanning: 标记当前行为稳定边界
-    
+
     Scanning --> InTable: 遇到表头 | A | B | 且下一行为定界行 |---|---|
     InTable --> InTable: 表格数据行逐行累积
     InTable --> SealedTable: 遇到空行 \n 或非表格行
     SealedTable --> Scanning: 标记表格末尾行为稳定边界
-    
+
     Scanning --> InHtmlBlock: 遇到未自闭合 HTML 块标签 (<details>, <div>)
     InHtmlBlock --> InHtmlBlock: 维护标签平衡栈 (tagStack)
     InHtmlBlock --> SealedHtml: tagStack 弹空 (闭合标签对齐)
     SealedHtml --> Scanning: 标记闭合标签行为稳定边界
-    
+
     Scanning --> SealedHeading: 遇到 ATX 标题 (^#{1,6}\\s) 且上一行为空行
     SealedHeading --> Scanning: 标记标题所在行为稳定边界
-    
+
     Scanning --> SealedParagraph: 遇到连续非空行后的空行 (\\n\\n)
     SealedParagraph --> Scanning: 标记空行前一行为稳定边界
 ```
@@ -269,7 +269,7 @@ if (isSealed && cached && cached.key === key && cached.text === blockText) {
 
 ```
 [阶段 A: 活跃草稿态]
-  MarkdownBlockItem (isSealed=false) 
+  MarkdownBlockItem (isSealed=false)
   ──► useLayoutEffect: el.textContent = text (维持草稿文本)
   ──► CSS 类: .isStreaming (::after 伪元素呼吸 Caret)
 
@@ -326,21 +326,21 @@ if (isSealed && cached && cached.key === key && cached.text === blockText) {
 ---
 
 ### 4.2 新建文件清单（2 个文件）
-1. `apps/crish-desktop/src/api/markdown/IncrementalBlockSplitter.ts`  
+1. `apps/crish-desktop/src/api/markdown/IncrementalBlockSplitter.ts`
    - 职责：维护行缓冲区与行前缀和，基于 DFA 状态机执行 $O(1)$ 增量边界检测与分块。
-2. `apps/crish-desktop/src/api/markdown/SpeculativeVirtualCloser.ts`  
+2. `apps/crish-desktop/src/api/markdown/SpeculativeVirtualCloser.ts`
    - 职责：提供纯内存的投机式语法虚拟补全器（Remend-lite），支撑活跃尾块即时排版。
 
 ---
 
 ### 4.3 核心修改文件清单（4 个文件）
-1. `apps/crish-desktop/src/api/markdown/parseMarkdownIntoBlocks.ts`  
+1. `apps/crish-desktop/src/api/markdown/parseMarkdownIntoBlocks.ts`
    - 改动：删除 `hasFootnote` 全量退化逻辑、删除无界 Map 正则缓存、删除未调用的死导出 `hasIncompleteCodeFence` 与 `hasTable`；桥接至 `IncrementalBlockSplitter`。
-2. `apps/crish-desktop/src/components/chat-message-row/useStreamingBlocks.ts`  
+2. `apps/crish-desktop/src/components/chat-message-row/useStreamingBlocks.ts`
    - 改动：接入语义哈希稳定 Key（`${msgId}-blk-${idx}-${hash}`），强化 `sealedCacheRef` 引用持久化。
-3. `apps/crish-desktop/src/components/chat-message-row/MarkdownBlockItem.tsx`  
+3. `apps/crish-desktop/src/components/chat-message-row/MarkdownBlockItem.tsx`
    - 改动：完善原地纯文本垫片双缓冲晋升逻辑，集成 `SpeculativeVirtualCloser`，保证零骨架屏。
-4. `apps/crish-desktop/src/components/chat-message-row/ChatMessageRow.module.css`  
+4. `apps/crish-desktop/src/components/chat-message-row/ChatMessageRow.module.css`
    - 改动：物理删除 `.skeletonLine` 骨架屏动画与样式类；强化 Typography 排版预对齐与 Caret 动画。
 
 ---
@@ -795,7 +795,7 @@ describe('IncrementalBlockSplitter Invariants', () => {
   it('断言 1: O(1) 增量追加与无损拼接完整性 (Lossless Concatenation)', () => {
     const splitter = new IncrementalBlockSplitter();
     const chunks = ['# 标题\n\n段落', '一内容。\n\n```ts\nconst', ' x = 1;\n```\n\n尾部段落'];
-    
+
     for (const chunk of chunks) {
       splitter.appendChunk(chunk);
     }

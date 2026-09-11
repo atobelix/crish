@@ -1,7 +1,7 @@
 # 02. 真流式 Markdown 分块渲染架构设计与零视觉跳变机制
 
-> **所属战役**：Markdown真流式渲染与正文退化根治战役  
-> **文档定位**：前端 UI 架构核心设计方案（`Streaming Markdown UI Architect`）  
+> **所属战役**：Markdown真流式渲染与正文退化根治战役
+> **文档定位**：前端 UI 架构核心设计方案（`Streaming Markdown UI Architect`）
 > **关联输入**：
 > - `reference/streamdown/packages/streamdown/lib/parse-blocks.tsx`
 > - `reference/streamdown/packages/streamdown/index.tsx`
@@ -20,11 +20,11 @@
 在当前 Conex / Crish 桌面端实现中，正文流式输出采用的是 **“伪流式纯文本”** 渲染策略：
 
 ```
-[流式传输中] 
+[流式传输中]
   SSE Chunk → MessageContent → IncrementalThoughtStripper → StreamingTextBlock
   视觉呈现：纯文本 DOM appendChild（无代码高亮、无标题层级、表格错位、裸字符列表）
          ↓ (流结束瞬间完成态切换)
-[完成态瞬间] 
+[完成态瞬间]
   isStreaming: true → false → AsyncMarkdownBlock → useAsyncMarkdownHtml → Rust md_render (Tauri IPC)
   视觉呈现：闪现 Skeleton 骨架屏 → 瞬间全屏跳变为渲染后的 Markdown HTML
 ```
@@ -59,19 +59,19 @@ flowchart TD
     Input["输入累积 Markdown 文本"] --> FootnoteCheck{"是否包含脚注引用/定义?<br/>([^[\\w-]+] / [^[\\w-]+]:)"}
     FootnoteCheck -- "是 (避免断链)" --> SingleBlock["返回整篇单一块: [markdown]"]
     FootnoteCheck -- "否" --> MarkedLex["Marked Lexer.lex(markdown, { gfm: true })"]
-    
+
     MarkedLex --> TokenLoop["遍历 Token 列表"]
     TokenLoop --> InHtml{"htmlStack.length > 0 ?<br/>(处于多行 HTML 块内部)"}
-    
+
     InHtml -- "是" --> MergeHtml["追加合并到上一 Block:<br/>mergedBlocks[len-1] += raw<br/>更新标签嵌套计数"]
     InHtml -- "否" --> CheckHtmlTag{"是否为未闭合 HTML block token?"}
-    
+
     CheckHtmlTag -- "是" --> PushHtmlStack["htmlStack.push(tagName)"]
     CheckHtmlTag -- "否" --> CheckMath{"上一块有未闭合 $$ ?<br/>(countDoubleDollars % 2 === 1)"}
-    
+
     CheckMath -- "是 (非 code 块)" --> MergeMath["追加合并到上一 Block:<br/>mergedBlocks[len-1] += raw"]
     CheckMath -- "否" --> PushBlock["mergedBlocks.push(raw)"]
-    
+
     PushHtmlStack --> PushBlock
     MergeHtml --> NextToken["下一个 Token"]
     MergeMath --> NextToken
@@ -154,21 +154,21 @@ stateDiagram-v2
     ActiveTail --> SealingPending: 词法边界闭合 (Token Finished)
     SealingPending --> SealedReady: Rust 异步 md_render 完成 (写入 LRU 缓存)
     SealedReady --> [*]: 会话归档 / 稳定展示
-    
+
     note right of ActiveTail
       尾部活跃态 (Tail Block)
       - 仅末尾 1 个 Block 处于该状态
       - 纯文本增量 / 局部即时流式排版
       - 带打字机 Caret 光标
     end note
-    
+
     note right of SealingPending
       晋升过渡态 (Promotion Pending)
       - 词法已封口，后台发起 IPC
       - 前台保留 Active 阶段 DOM 镜像
       - 严格禁止展示 Skeleton (零塌陷)
     end note
-    
+
     note right of SealedReady
       已封口完成态 (Sealed & Cached)
       - Rust 生成的标准安全 HTML 注入
@@ -211,17 +211,17 @@ sequenceDiagram
     Stream->>View: 推送增量 chunk (段落进行中)
     View->>BlockItem: render(text, isStreaming=true)
     BlockItem->>DOM: 增量写入 DOM 镜像 (draft container)
-    
+
     Note over BlockItem, DOM: [阶段 2: 词法封口与晋升触发]
     Stream->>View: 推送 "\n\n" (段落结束，新段落开启)
     View->>View: parseMarkdownIntoBlocks 切分出 Block N (已封口) 与 Block N+1
     View->>BlockItem: render(text, isStreaming=false, isSealed=true)
-    
+
     Note over BlockItem, DOM: [阶段 3: 双缓冲保持 - 零塌陷]
     BlockItem->>BlockItem: 检查 LRU Cache (未命中)
     BlockItem->>Rust: 发起 invoke("core_md_render", { text })
     BlockItem-->>DOM: 保持原有 DOM 镜像可见! (禁止挂载 skeleton)
-    
+
     Note over BlockItem, DOM: [阶段 4: HTML 就绪原地替换]
     Rust-->>BlockItem: 返回 Sanitized HTML 字符串
     BlockItem->>BlockItem: 写入 LRU Cache

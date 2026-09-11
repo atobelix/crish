@@ -1,7 +1,7 @@
 # 14. Conex 下一代流式 Markdown 渲染落地维度与删除面建议（提案 C）
 
-> **所属战役**：Markdown 真流式渲染与正文退化根治战役 (`docs/markdown-stream-refactor/`)  
-> **文档定位**：提案 C 独立架构总览、落地维度划分与死层清剿专项报告（`Architecture Synthesis & Dead-Layer Purge Specialist`）  
+> **所属战役**：Markdown 真流式渲染与正文退化根治战役 (`docs/markdown-stream-refactor/`)
+> **文档定位**：提案 C 独立架构总览、落地维度划分与死层清剿专项报告（`Architecture Synthesis & Dead-Layer Purge Specialist`）
 > **审查与输入依据**：
 > - 分析报告：[`06-极速吞吐与速率自适应`](file:///c:/Software/conex/docs/markdown-stream-refactor/analysis/06-token-rate-adaptive-and-animation-architecture.md)、[`07-增量 AST 解析算法`](file:///c:/Software/conex/docs/markdown-stream-refactor/analysis/07-incremental-ast-and-parser-comparison.md)、[`08-流式表格与视口稳定`](file:///c:/Software/conex/docs/markdown-stream-refactor/analysis/08-streaming-table-and-pinned-scroll-architecture.md)、[`09-自定义 HTML 组件沙箱`](file:///c:/Software/conex/docs/markdown-stream-refactor/analysis/09-custom-html-components-streaming-architecture.md)、[`10-DOM 突变开销与零拷贝`](file:///c:/Software/conex/docs/markdown-stream-refactor/analysis/10-dom-mutation-cost-and-zerocopy-patching.md)、[`11-多框架综合对比蓝图`](file:///c:/Software/conex/docs/markdown-stream-refactor/analysis/11-multi-framework-comprehensive-matrix-and-blueprint.md)
 > - 审查报告：[`01-Rust 协议层审查`](file:///c:/Software/conex/docs/markdown-stream-refactor/audits/01-rust-protocol-fsm-defects.md)、[`02-前端渲染引擎审查`](file:///c:/Software/conex/docs/markdown-stream-refactor/audits/02-streaming-markdown-render-defects.md)、[`03-生命周期与幂等审查`](file:///c:/Software/conex/docs/markdown-stream-refactor/audits/03-lifecycle-and-idempotency-defects.md)、[`04-反过度设计与门禁审查`](file:///c:/Software/conex/docs/markdown-stream-refactor/audits/04-anti-overengineering-lint-defects.md)、[`05-边缘交互与容错审查`](file:///c:/Software/conex/docs/markdown-stream-refactor/audits/05-edge-cases-and-fault-tolerance-defects.md)
@@ -127,13 +127,13 @@ stateDiagram-v2
     [*] --> ActiveTailBlock: 流式 Token 到达 (Chunk)
     ActiveTailBlock --> ActiveTailBlock: 投机闭合补全 + 原地纯文本/轻量高亮 (0 闪烁)
     ActiveTailBlock --> SealedBlock: 遇到 \\n\\n / 块定界符 (封口晋升)
-    
+
     state SealedBlock {
         [*] --> Compiling: 发起 Rust IPC conex-markdown
         Compiling --> CompiledReady: HTML 产物写入 LRU Cache
         CompiledReady --> VDOM_Locked: React.memo 永久锁定 (0 重渲染)
     }
-    
+
     SealedBlock --> [*]: 消息完成态 (无缝保留，零全量重排)
 ```
 

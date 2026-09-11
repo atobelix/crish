@@ -1,9 +1,9 @@
 # 战役终审评审报告 A：Token 重构总方案与 5 大分维详案最终交叉审查
 
-> **文档标识**：[`docs/markdown-stream-refactor/plan-reviews/09-final-master-and-detailed-token-plans-review-a.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/plan-reviews/09-final-master-and-detailed-token-plans-review-a.md)  
-> **评审阶段**：终审评审 A（Final Master & Detailed Token Plans Cross-Review A）  
-> **评审角色**：Senior Systems Engineer & Codebase Architect (Reviewer A)  
-> **审查标准**：[`docs/agent-roles/prompts/主控-全流程调度-v3.md`](file:///c:/Software/conex/docs/agent-roles/prompts/%E4%B8%BB%E6%8E%A7-%E5%85%A8%E6%B5%81%E7%A8%8B%E8%B0%83%E5%BA%A6-v3.md) §二.5、[`ANTI_OVERENGINEERING_GUARDRAILS.md`](file:///c:/Software/conex/ANTI_OVERENGINEERING_GUARDRAILS.md)（13 项硬性禁令）、[`AGENTS.md`](file:///c:/Software/conex/AGENTS.md) §12 (Tooltip 规范), §13 (柔和焦点与克制边框 $\le 10\%$), §14 (HSLA 现代色彩语法与 Zero-Blue 铁律)  
+> **文档标识**：[`docs/markdown-stream-refactor/plan-reviews/09-final-master-and-detailed-token-plans-review-a.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/plan-reviews/09-final-master-and-detailed-token-plans-review-a.md)
+> **评审阶段**：终审评审 A（Final Master & Detailed Token Plans Cross-Review A）
+> **评审角色**：Senior Systems Engineer & Codebase Architect (Reviewer A)
+> **审查标准**：[`docs/agent-roles/prompts/主控-全流程调度-v3.md`](file:///c:/Software/conex/docs/agent-roles/prompts/%E4%B8%BB%E6%8E%A7-%E5%85%A8%E6%B5%81%E7%A8%8B%E8%B0%83%E5%BA%A6-v3.md) §二.5、[`ANTI_OVERENGINEERING_GUARDRAILS.md`](file:///c:/Software/conex/ANTI_OVERENGINEERING_GUARDRAILS.md)（13 项硬性禁令）、[`AGENTS.md`](file:///c:/Software/conex/AGENTS.md) §12 (Tooltip 规范), §13 (柔和焦点与克制边框 $\le 10\%$), §14 (HSLA 现代色彩语法与 Zero-Blue 铁律)
 > **输入资产**：
 > 1. [`00-总方案-主界面流式渲染Design-Tokens系统化重构.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/00-%E6%80%BB%E6%96%B9%E6%A1%88-%E4%B8%BB%E7%95%8C%E9%9D%A2%E6%B5%81%E5%BC%8F%E6%B8%B2%E6%9F%93Design-Tokens%E7%B3%BB%E7%BB%9F%E5%8C%96%E9%87%8D%E6%9E%84.md)
 > 2. [`06-Markdown正文排版与语法高亮Token详案.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/06-Markdown%E6%AD%A3%E6%96%87%E6%8E%92%E7%89%88%E4%B8%8E%E8%AF%AD%E6%B3%95%E9%AB%98%E4%BA%AEToken%E8%AF%A6%E6%A1%88.md)（维度一）
@@ -11,7 +11,7 @@
 > 4. [`08-自定义HTML富交互组件Token详案.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/08-%E8%87%AA%E5%AE%9A%E4%B9%89HTML%E5%AF%8C%E4%BA%A4%E4%BA%92%E7%BB%84%E4%BB%B6Token%E8%AF%A6%E6%A1%88.md)（维度三）
 > 5. [`09-思考链折叠与状态横幅Token详案.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/09-%E6%80%9D%E8%80%83%E9%93%BE%E6%8A%98%E5%8F%A0%E4%B8%8E%E7%8A%B6%E6%80%81%E6%A8%AA%E5%B9%85Token%E8%AF%A6%E6%A1%88.md)（维度四）
 > 6. [`10-流式动效打字光标与性能分档Token详案.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/10-%E6%B5%81%E5%BC%8F%E5%8A%A8%E6%95%88%E6%89%93%E5%AD%97%E5%85%89%E6%A0%87%E4%B8%8E%E6%80%A7%E8%83%BD%E5%88%86%E6%A1%A3Token%E8%AF%A6%E6%A1%88.md)（维度五）
-> 
+>
 > **审查核心原则**：推进单位是「领域概念」，一个概念唯一主路径；收敛先于增强，先删后改；零死层、零幽灵变量、零硬编码裸写；严禁执行 git 操作。
 
 ---
@@ -51,8 +51,8 @@
 
 ### 1.1 核心裁决结论
 
-> **【终审裁决结论】：APPROVED FOR PRODUCTION IMPLEMENTATION（100% 全量通过，具备立即投产落地条件）**  
-> 
+> **【终审裁决结论】：APPROVED FOR PRODUCTION IMPLEMENTATION（100% 全量通过，具备立即投产落地条件）**
+>
 > 1. **Token 命名空间与语义定义 100% 精确闭环**：00 总方案确立的 11 大 Token 命名空间（`--md-*`, `--syntax-*`, `--md-table-*`, `--stream-table-*`, `--artifact-*`, `--diff-*`, `--filetree-*`, `--aicard-*`, `--thought-*`, `--banner-*`, `--stream-*`）在 06~10 各分维详案中保持了字符级精准一致，完全消除了独立方案阶段曾存在的双源命名漂移与复合属性字符串反模式。
 > 2. **删除面清单全量拉通与认领对账完成**：全战役 88 处硬编码色值、12 个幽灵变量、非法 CSS 属性 `divide-x`、运行时 `undefined` 类名及 3 处孤立死代码（`.portalOverlay`, `.portalContent`, `.statusPulse`）被 06~10 详案 100% 认领并给出了明确的物理清除指令与替代规范。
 > 3. **巨石文件瘦身序列严密无冲突**：针对 `ChatMessageRow.module.css`（1086 行超标巨石）的修改，确立了严格的“排版 $\to$ 表格 $\to$ 思考链 $\to$ 光标”四阶段串行推进序列；思考链模块（`TimelineThoughtSection.module.css`）物理剥离后，样式表净瘦身 230+ 行，其余 4 大维度文件域 100% 正交隔离。

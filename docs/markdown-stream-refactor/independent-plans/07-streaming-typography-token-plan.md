@@ -1,15 +1,15 @@
 # 07. Markdown 排版与语法高亮 Token 重构方案（方案 7）
 
-> **文档标识**：`docs/markdown-stream-refactor/independent-plans/07-streaming-typography-token-plan.md`  
-> **方案定位**：下一代流式 Markdown 架构战役独立实施详案 7 —— Markdown 排版与语法高亮 Token 重构（`Markdown Streaming Typography & Syntax Highlight Token Refactoring Plan`）  
-> **架构师**：Senior Systems Engineer & Codebase Architect (Typography, Design Tokens & Rendering Pipeline Specialist)  
+> **文档标识**：`docs/markdown-stream-refactor/independent-plans/07-streaming-typography-token-plan.md`
+> **方案定位**：下一代流式 Markdown 架构战役独立实施详案 7 —— Markdown 排版与语法高亮 Token 重构（`Markdown Streaming Typography & Syntax Highlight Token Refactoring Plan`）
+> **架构师**：Senior Systems Engineer & Codebase Architect (Typography, Design Tokens & Rendering Pipeline Specialist)
 > **输入资产**：
 > - 定案决策：[`docs/markdown-stream-refactor/00-定案-主界面流式渲染Token体系与删除面决策.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/00-%E5%AE%9A%E6%A1%88-%E4%B8%BB%E7%95%8C%E9%9D%A2%E6%B5%81%E5%BC%8F%E6%B8%B2%E6%9F%93Token%E4%BD%93%E7%B3%BB%E4%B8%8E%E5%88%A0%E9%99%A4%E9%9D%A2%E5%86%B3%E7%AD%96.md)
 > - 审查报告：[`docs/markdown-stream-refactor/audits/06-streaming-typography-token-audit.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/audits/06-streaming-typography-token-audit.md)
 > - 核心样式：[`apps/crish-desktop/src/components/chat-message-row/ChatMessageRow.module.css`](file:///c:/Software/conex/apps/crish-desktop/src/components/chat-message-row/ChatMessageRow.module.css)
 > - 全局字典：[`apps/crish-desktop/src/styles/tokens.css`](file:///c:/Software/conex/apps/crish-desktop/src/styles/tokens.css)
 > - 系统规范：[`reference/chat-composer-component/css/brand.css`](file:///c:/Software/conex/reference/chat-composer-component/css/brand.css) 与 [`design-tokens.css`](file:///c:/Software/conex/reference/chat-composer-component/css/design-tokens.css)
-> 
+>
 > **核心使命**：彻底根治 Conex 桌面端在流式文本生成时长久存在的 **H1~H6 标题字号扁平化退化（全平铺 14px）、行内代码胶囊裸奔、本地路径链接退化为 Windows 原生灰按钮、代码块面包屑排版残缺以及 20 组 `--syntax-*` 高亮 Token 100% 闲置** 的系统性缺陷。建立完整的 Typography Scale、垂直节奏韵律与双引擎语法高亮接线，使流式阅读体验达到顶级出版物级标准。
 
 ---
@@ -154,7 +154,7 @@ flowchart TD
 ## 二、【强制专节】本方案要删掉什么 / 收敛什么
 
 > [!IMPORTANT]
-> **先删后改铁律（Eliminate Before Build Rule）**：  
+> **先删后改铁律（Eliminate Before Build Rule）**：
 > 必须彻底拔除引发视觉退化、样式裸奔和不可维护的旧代码、假变量与未约束的默认样式，严禁在错误基底上做“打补丁式修饰”。
 
 ### 2.1 核心清剿与删除面矩阵大表

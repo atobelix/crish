@@ -1,7 +1,7 @@
 # 方案评审 C · 独立方案综合收敛与实施 DAG 审查报告
 
-> **评审标识**：`docs/markdown-stream-refactor/plan-reviews/03-independent-plans-cross-review-c.md`  
-> **评审角色**：Senior Systems Engineer & Codebase Architect (Reviewer C · Comprehensive Convergence & DAG Lead)  
+> **评审标识**：`docs/markdown-stream-refactor/plan-reviews/03-independent-plans-cross-review-c.md`
+> **评审角色**：Senior Systems Engineer & Codebase Architect (Reviewer C · Comprehensive Convergence & DAG Lead)
 > **评审依据**：
 > - 核心定案：[`docs/markdown-stream-refactor/00-定案-核心维度与删除面决策.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/00-%E5%AE%9A%E6%A1%88-%E6%A0%B8%E5%BF%83%E7%BB%B4%E5%BA%A6%E4%B8%8E%E5%88%A0%E9%99%A4%E9%9D%A2%E5%86%B3%E7%AD%96.md)
 > - 独立方案：[`docs/markdown-stream-refactor/independent-plans/01`](file:///c:/Software/conex/docs/markdown-stream-refactor/independent-plans/01-throughput-and-rate-adaptive-plan.md) ~ [`06`](file:///c:/Software/conex/docs/markdown-stream-refactor/independent-plans/06-dead-layer-elimination-and-refactor-plan.md) 全部 6 份独立实施详案（含方案 A/B 提案）
@@ -236,10 +236,10 @@ sequenceDiagram
   > export function commitAndScheduleClear(sessionId: string, messageId: string, runId: string) {
   >   // 1. 同步提交持久态
   >   commitStreamToSession(sessionId, messageId);
-  >   
+  >
   >   // 2. 捕获当前会话的活动令牌
   >   const expectedToken = `${sessionId}:${messageId}:${runId}`;
-  >   
+  >
   >   queueMicrotask(() => {
   >     const currentToken = streamingStore.getState().getActiveStreamToken();
   >     // 只有当前活动流依然属于该消息时才允许执行清空

@@ -1,8 +1,8 @@
 # Rust 流式解析层 `<think>` 状态机与跨 Chunk 分割边界算法深度设计
 
-> **文件路径**：`docs/markdown-stream-refactor/analysis/01-rust-stream-think-tag-state-machine.md`  
-> **所属战役**：Markdown 真流式渲染与正文退化根治战役 (`docs/markdown-stream-refactor/`)  
-> **权威副本与纪律**：`AGENTS.md` / `.agents/LOGIC_PLAN_NO_RETREAT.md`  
+> **文件路径**：`docs/markdown-stream-refactor/analysis/01-rust-stream-think-tag-state-machine.md`
+> **所属战役**：Markdown 真流式渲染与正文退化根治战役 (`docs/markdown-stream-refactor/`)
+> **权威副本与纪律**：`AGENTS.md` / `.agents/LOGIC_PLAN_NO_RETREAT.md`
 > **核心目标**：根除正文界面纯文字化、推理逃逸为正文、多轮文字重复、Blocks 破坏性覆盖四大顽疾，在 Rust 实时流式解析层构筑 100% 确定性的思考标签状态机与协同契约。
 
 ---
@@ -680,12 +680,12 @@ mod tag_extractor_tests {
             "A", "n", "s", "w", "e", "r",
         ];
         let events = extract_all(&mut extractor, chunks);
-        
+
         let thoughts: String = events.iter().filter_map(|e| match e {
             ProviderStreamEvent::ThoughtDelta { text, .. } => Some(text.as_str()),
             _ => None,
         }).collect();
-        
+
         let texts: String = events.iter().filter_map(|e| match e {
             ProviderStreamEvent::TextDelta { text } => Some(text.as_str()),
             _ => None,
@@ -702,7 +702,7 @@ mod tag_extractor_tests {
         // "<thin" 看起来像 "<think>"，但下一个字符是 "g"
         let chunks = &["3 < thin", "g is not tag"];
         let events = extract_all(&mut extractor, chunks);
-        
+
         let texts: String = events.iter().filter_map(|e| match e {
             ProviderStreamEvent::TextDelta { text } => Some(text.as_str()),
             _ => None,

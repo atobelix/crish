@@ -1,9 +1,9 @@
 # 独立方案 07~12 全景交叉审查与冲突定位报告（Token 方案评审 A）
 
-> **评审标识**：[`docs/markdown-stream-refactor/plan-reviews/06-token-plans-cross-review-a.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/plan-reviews/06-token-plans-cross-review-a.md)  
-> **评审角色**：Senior Systems Engineer & Codebase Architect (Reviewer A)  
-> **审查依据**：[`docs/agent-roles/prompts/主控-全流程调度-v3.md`](file:///c:/Software/conex/docs/agent-roles/prompts/%E4%B8%BB%E6%8E%A7-%E5%85%A8%E6%B5%81%E7%A8%8B%E8%B0%83%E5%BA%A6-v3.md) §二.2、[`ANTI_OVERENGINEERING_GUARDRAILS.md`](file:///c:/Software/conex/ANTI_OVERENGINEERING_GUARDRAILS.md)（禁令 12：反高频渲染穿透、GPU 独立硬件加速）、[`AGENTS.md`](file:///c:/Software/conex/AGENTS.md) §12 (Tooltip 规范), §13 (柔和焦点与克制边框 ≤10%), §14 (HSLA 现代色彩语法与 Zero-Blue 铁律)  
-> **基准定案**：[`docs/markdown-stream-refactor/00-定案-主界面流式渲染Token体系与删除面决策.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/00-%E5%AE%9A%E6%A1%88-%E4%B8%BB%E7%95%8C%E9%9D%A2%E6%B5%81%E5%BC%8F%E6%B8%B2%E6%9F%93Token%E4%BD%93%E7%B3%BB%E4%B8%8E%E5%88%A0%E9%99%A4%E9%9D%A2%E5%86%B3%E7%AD%96.md)  
+> **评审标识**：[`docs/markdown-stream-refactor/plan-reviews/06-token-plans-cross-review-a.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/plan-reviews/06-token-plans-cross-review-a.md)
+> **评审角色**：Senior Systems Engineer & Codebase Architect (Reviewer A)
+> **审查依据**：[`docs/agent-roles/prompts/主控-全流程调度-v3.md`](file:///c:/Software/conex/docs/agent-roles/prompts/%E4%B8%BB%E6%8E%A7-%E5%85%A8%E6%B5%81%E7%A8%8B%E8%B0%83%E5%BA%A6-v3.md) §二.2、[`ANTI_OVERENGINEERING_GUARDRAILS.md`](file:///c:/Software/conex/ANTI_OVERENGINEERING_GUARDRAILS.md)（禁令 12：反高频渲染穿透、GPU 独立硬件加速）、[`AGENTS.md`](file:///c:/Software/conex/AGENTS.md) §12 (Tooltip 规范), §13 (柔和焦点与克制边框 ≤10%), §14 (HSLA 现代色彩语法与 Zero-Blue 铁律)
+> **基准定案**：[`docs/markdown-stream-refactor/00-定案-主界面流式渲染Token体系与删除面决策.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/00-%E5%AE%9A%E6%A1%88-%E4%B8%BB%E7%95%8C%E9%9D%A2%E6%B5%81%E5%BC%8F%E6%B8%B2%E6%9F%93Token%E4%BD%93%E7%B3%BB%E4%B8%8E%E5%88%A0%E9%99%A4%E9%9D%A2%E5%86%B3%E7%AD%96.md)
 > **审查对象**：`docs/markdown-stream-refactor/independent-plans/` 目录下全部 6 份 Token 重构独立方案资产：
 > 1. [`07-streaming-typography-token-plan.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/independent-plans/07-streaming-typography-token-plan.md)（维度一：Markdown 正文排版与语法高亮 Token 详案）
 > 2. [`08-streaming-table-and-code-token-plan.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/independent-plans/08-streaming-table-and-code-token-plan.md)（维度二：流式表格与视口动效 Token 详案）
@@ -11,7 +11,7 @@
 > 4. [`10-thought-and-banner-token-plan.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/independent-plans/10-thought-and-banner-token-plan.md)（维度四：思考链折叠与状态横幅 Token 详案）
 > 5. [`11-caret-animation-and-perf-tier-token-plan.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/independent-plans/11-caret-animation-and-perf-tier-token-plan.md)（维度五：流式动效、打字光标与性能分档 Token 详案）
 > 6. [`12-global-tokens-css-architecture-plan.md`](file:///c:/Software/conex/docs/markdown-stream-refactor/independent-plans/12-global-tokens-css-architecture-plan.md)（全局 tokens.css 架构与幽灵变量清剿详案）
-> 
+>
 > **审查原则**：推进单位是「领域概念」，一个概念唯一主路径；收敛先于增强，先删后改；只挑刺、严查冲突、死抠边界、拒绝妥协，严禁执行 git 操作。
 
 ---
@@ -132,9 +132,9 @@
 2. **复合属性字符串的反模式危害**：方案 12 将 `--stream-table-active-outline` 定义为 `1px dashed var(--brand, ...)` 复合字符串。这破坏了 CSS 变量的独立组合能力，无法在 CSS Module 中单独微调 `outline-width` 或 `outline-offset`。
 3. **底色语义断层**：方案 08 采用 `var(--bg-secondary)` 作为底色，能与聊天气泡背景自然融合；方案 12 采用 `var(--bg-card, #ffffff)`，在部分背景下会产生生硬的白块突兀感。
 
-> **评审裁决（SSOT 统一）**：  
-> 1. 表格边框与底色统一采纳**方案 08 命名体系**：`--md-table-bg`, `--md-table-border`, `--md-table-row-border`, `--md-table-cell-padding`, `--md-table-cell-padding-compact`。  
-> 2. 活跃单元格描边统一采纳**色值型 Token**：`--stream-table-active-border`，禁止在 Token 中声明 `1px dashed` 复合字符串。  
+> **评审裁决（SSOT 统一）**：
+> 1. 表格边框与底色统一采纳**方案 08 命名体系**：`--md-table-bg`, `--md-table-border`, `--md-table-row-border`, `--md-table-cell-padding`, `--md-table-cell-padding-compact`。
+> 2. 活跃单元格描边统一采纳**色值型 Token**：`--stream-table-active-border`，禁止在 Token 中声明 `1px dashed` 复合字符串。
 > 3. 吸顶表头统一使用方案 08 的毛玻璃定义：`--md-table-header-bg: color-mix(in srgb, var(--bg-secondary) 90%, transparent);` + `backdrop-filter: blur(12px)`。
 
 ---
@@ -171,9 +171,9 @@
 2. **对比度色阶优劣**：方案 09 经过严格微调的 `hsl(142 65% 25%)` 对比度高达 **6.75:1**，`hsl(32 95% 30%)` 对比度达 **5.38:1**；相比方案 12 的紧贴 4.50:1 边缘值具有更高的可读性冗余。
 3. **完成态语义冲突**：方案 09 将成功态标记为翡翠绿灯；而定案文档《00-定案》§一.3 与方案 12 明确要求：“**AI 步骤卡片生命周期状态色阶：运行态翡翠绿呼吸、完成态克制中性墨阶（消除界面光污染）**”。方案 09 违背了定案决策。
 
-> **评审裁决（SSOT 统一）**：  
-> 1. 变量命名统一采纳**方案 09 语义命名**：`--diff-text-add`, `--diff-text-del`, `--diff-line-add-bg`, `--diff-line-del-bg`。  
-> 2. 色彩值采用**方案 09 的高对比色阶**（新增 `hsl(142 65% 25%)`，修改徽标 `hsl(32 95% 30%)`），确保浅色模式下对比度稳超 5.24:1。  
+> **评审裁决（SSOT 统一）**：
+> 1. 变量命名统一采纳**方案 09 语义命名**：`--diff-text-add`, `--diff-text-del`, `--diff-line-add-bg`, `--diff-line-del-bg`。
+> 2. 色彩值采用**方案 09 的高对比色阶**（新增 `hsl(142 65% 25%)`，修改徽标 `hsl(32 95% 30%)`），确保浅色模式下对比度稳超 5.24:1。
 > 3. AI 步骤卡片完成态指示灯必须纠偏：严格采纳定案决策，`--aicard-status-success` 收敛为中性墨阶 `var(--text-secondary, #555555)`。
 
 ---
@@ -210,9 +210,9 @@
 1. **方案 12 类名失真漏洞**：方案 12 §5.3 自行编写了一个简化版 `TimelineThoughtSection.module.css`（包含 `.thoughtSectionContainer`, `.thoughtHeader`, `.thoughtBody` 等）。但真实的 `TimelineThoughtSection.tsx` 需要配合 CSS Grid 高度动画（`grid-template-rows: 0fr -> 1fr`）、左侧对齐指示条（`border-left`）以及实时流式内容容器。方案 12 的简化类名一旦落盘，将直接导致组件渲染崩溃。
 2. **缩进架构退避**：方案 12 依然保留了历史未定义的 `--thought-summary-indent: 0.35em`；而方案 10 彻底拔除了负缩进，改用现代优雅的左侧微光对齐线 `--thought-rail-color`，架构更干净。
 
-> **评审裁决（SSOT 统一）**：  
-> 1. 思考链模块的 CSS 类名体系与 TSX 接线**100% 以方案 10 为唯一基准**（`.thoughtTimelineSection`, `.thoughtHeaderBtn`, `.thoughtAccordion`, `.errorBannerWrapper`）。  
-> 2. Token 统一采纳**方案 10 命名**：`--thought-chevron-fg`, `--thought-badge-fg`, `--thought-rail-color`, `--thought-scroll-max-h`。  
+> **评审裁决（SSOT 统一）**：
+> 1. 思考链模块的 CSS 类名体系与 TSX 接线**100% 以方案 10 为唯一基准**（`.thoughtTimelineSection`, `.thoughtHeaderBtn`, `.thoughtAccordion`, `.errorBannerWrapper`）。
+> 2. Token 统一采纳**方案 10 命名**：`--thought-chevron-fg`, `--thought-badge-fg`, `--thought-rail-color`, `--thought-scroll-max-h`。
 > 3. 彻底删除 `--thought-summary-indent`，全面采用方案 10 的左侧微光 Rail 对齐架构。
 
 ---
@@ -229,8 +229,8 @@
 - `design-system.css` 是全局样式，高亮类名若直接裸写在根层级，容易污染其他非代码块区域；
 - 而 `ChatMessageRow.module.css` 仅作用于消息流内部，但可能无法覆盖弹窗或独立 Markdown 渲染视口。
 
-> **评审裁决（SSOT 统一）**：  
-> 1. 全局通用语法高亮选择器（`.hljs-*` 与 `.source .*`）统一收敛注入到 [`apps/crish-desktop/src/styles/design-system.css`](file:///c:/Software/conex/apps/crish-desktop/src/styles/design-system.css) 中作为**全局代码高亮基座**。  
+> **评审裁决（SSOT 统一）**：
+> 1. 全局通用语法高亮选择器（`.hljs-*` 与 `.source .*`）统一收敛注入到 [`apps/crish-desktop/src/styles/design-system.css`](file:///c:/Software/conex/apps/crish-desktop/src/styles/design-system.css) 中作为**全局代码高亮基座**。
 > 2. `ChatMessageRow.module.css` 仅保留正文排版（H1~H6、行内代码、路径链接、引用、列表），**不再重复声明语法高亮选择器**，避免 CSS 规则冗余膨胀。
 
 ---
@@ -240,7 +240,7 @@
 - **方案 08**：`--stream-table-pulse-duration: 2000ms;`
 - **方案 11 与方案 12**：`--stream-pulse-duration: 1.6s;`（1600ms）
 
-> **评审裁决**：  
+> **评审裁决**：
 > 统一流式呼吸律动周期为 **`1.6s` (1600ms)**，动画缓动统一采用三次贝塞尔曲线 `cubic-bezier(0.16, 1, 0.3, 1)`，使流式表格单元格与打字机光标的呼吸节奏形成全局和谐的视觉共振。
 
 ---
@@ -295,7 +295,7 @@
 └──────────────────────────────┴──────────────────────────────┴──────────────────────────┘
 ```
 
-> **注意微小冲突纠偏**：方案 08 中曾将 `--status-success` 替换为 `var(--color-success, var(--accent-green))`；而方案 07 与方案 12 替换为 `var(--brand, hsl(160 84% 39%))`。  
+> **注意微小冲突纠偏**：方案 08 中曾将 `--status-success` 替换为 `var(--color-success, var(--accent-green))`；而方案 07 与方案 12 替换为 `var(--brand, hsl(160 84% 39%))`。
 > **裁决**：统一采纳 `var(--brand, hsl(160 84% 39%))`，与 Conex 整体品牌翡翠绿签名保持 100% 一致。
 
 ---
@@ -310,8 +310,8 @@
 ### 3.4 【严重缺陷拦截】方案 12 §6.2 重蹈死选择器覆辙缺陷
 
 > [!CAUTION]
-> **严重审查发现（Defect In Plan 12 §6.2）**：  
-> 方案 08 §2.4 与方案 12 §2.3 均明确指出了历史实现中的致命死选择器：`td:last-child[data-streaming='true']`（由于 `data-streaming` 挂载在根容器而不是 `<td>` 上，该选择器 100% 无法命中）。  
+> **严重审查发现（Defect In Plan 12 §6.2）**：
+> 方案 08 §2.4 与方案 12 §2.3 均明确指出了历史实现中的致命死选择器：`td:last-child[data-streaming='true']`（由于 `data-streaming` 挂载在根容器而不是 `<td>` 上，该选择器 100% 无法命中）。
 > **然而，在方案 12 §6.2 的实施代码（第 1295~1298 行）中，竟然再次写出了死选择器**：
 > ```css
 > /* ❌ 方案 12 §6.2 中的错误复现代码 */
@@ -322,7 +322,7 @@
 > ```
 > 这是一个典型的“分析时正确，但在落地代码块中又把错误旧代码复制回来”的严重漏洞！
 
-> **评审裁决与修复**：  
+> **评审裁决与修复**：
 > 严禁采纳方案 12 §6.2 的错误选择器，必须严格执行方案 08 §7.2 的容器契约选择器：
 > ```css
 > /* ✅ 正确的选择器契约（方案 08） */

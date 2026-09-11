@@ -1,7 +1,7 @@
 # 时间线构建与 Blocks 合并深度分析与防御层设计
 
-> **文件路径**：`docs/markdown-stream-refactor/analysis/04-timeline-normalization-and-block-merge.md`  
-> **战役归属**：Markdown 真流式渲染与正文退化根治战役 (Phase Σ / Δ / Ω)  
+> **文件路径**：`docs/markdown-stream-refactor/analysis/04-timeline-normalization-and-block-merge.md`
+> **战役归属**：Markdown 真流式渲染与正文退化根治战役 (Phase Σ / Δ / Ω)
 > **相关代码资产**：
 > - [`timelineNormalizer.ts`](file:///c:/Software/conex/apps/crish-desktop/src/api/tool-presentation/timelineNormalizer.ts)
 > - [`messageProjection.ts`](file:///c:/Software/conex/apps/crish-desktop/src/api/messageProjection.ts)
@@ -203,21 +203,21 @@ flowchart TD
     CheckSender -- 是 --> PrepMap["建立 toolsById 字典与状态缓冲区 toolBuf"]
 
     PrepMap --> HasBlocks{"blocks.length > 0 ?"}
-    
+
     subgraph BlocksBranch["标准 Blocks 分拣路径"]
         HasBlocks -- 是 --> ScanBlocks["遍历 blocks 项"]
         ScanBlocks --> BlockTypeSwitch{"block.type"}
-        
+
         BlockTypeSwitch -- "thought" --> Flush1["flushTools()"] --> PushThought["生成 TimelineThoughtItem"]
         BlockTypeSwitch -- "tool_call" --> PushBuf["toolBuf.push(tc)"]
         BlockTypeSwitch -- "text" --> Flush2["flushTools()"] --> ParseText["parseInlineThoughtAndText()"] --> PushText["生成 TimelineTextItem / ThoughtItem"]
-        
+
         PushThought --> NextBlock{"还有下一个 block?"}
         PushBuf --> NextBlock
         PushText --> NextBlock
         NextBlock -- 是 --> ScanBlocks
         NextBlock -- 否 --> FlushFinal["flushTools() 清空缓冲区"]
-        
+
         FlushFinal --> CheckOrphans{"存在未匹配 toolCalls?"}
         CheckOrphans -- 是 --> InsertOrphans["基于 turnIndex 对齐孤儿工具"]
         CheckOrphans -- 否 --> CheckMissingText{"blocks 无 text 但 msg.text 非空?"}
@@ -232,11 +232,11 @@ flowchart TD
         CheckThinkingTurns -- 否 --> CheckThinkingField{"msg.thinking 存在?"}
         CheckThinkingField -- 是 --> PushSingleThought["生成 legacy thought item"]
         CheckThinkingField -- 否 --> NoThought["无思考项"]
-        
+
         PushTurns --> RenderTools["buildToolRenderItems(msg.toolCalls)"]
         PushSingleThought --> RenderTools
         NoThought --> RenderTools
-        
+
         RenderTools --> ParseRawText["parseInlineThoughtAndText(msg.text)"]
         ParseRawText --> CollectFallbackItems["组装 Fallback items"]
     end
@@ -253,7 +253,7 @@ flowchart TD
 
 旧实现中的调用链路如下：
 ```
-streamRunCompletion.finalizeAssistantMessageText 
+streamRunCompletion.finalizeAssistantMessageText
   -> sessionStore.updateMessageTimeline(sid, msgId)
     -> normalizeAssistantTimeline(msg)
       -> alignToolCallBlocks(msg.blocks, tools)
@@ -295,7 +295,7 @@ export function reconcileAssistantMessageBlocks(
   const tools = [...(toolCalls || [])];
   const toolsById = new Map(tools.map((t) => [t.id, t]));
   const existingBlocks = currentBlocks ? [...currentBlocks] : [];
-  
+
   // 1. 提取所有已存在的 thought 块并按 turnIndex 索引
   const thoughtsByTurn = new Map<number, MessageTimelineBlock>();
   for (const b of existingBlocks) {
@@ -350,7 +350,7 @@ export function reconcileAssistantMessageBlocks(
     const existingTurnTools = existingBlocks.filter(
       (b) => b.type === 'tool_call' && b.id && toolsById.has(b.id) && !processedToolIds.has(b.id)
     );
-    
+
     // 筛选出属于当前 turn 的工具
     for (const tb of existingTurnTools) {
       const tc = toolsById.get(tb.id!);
@@ -408,7 +408,7 @@ export function reconcileAssistantMessageBlocks(
    ```typescript
    // ❌ 错误代码：会无条件抹杀全部 thought 块
    // msg.blocks = msg.blocks.filter((b) => b.type === 'tool_call');
-   
+
    // ✅ 修复方案：仅清空/重置正文文本块，完整保留 thought 和 tool_call 块
    msg.blocks = msg.blocks.filter((b) => b.type !== 'text');
    ```
@@ -452,18 +452,18 @@ flowchart TD
     In["输入原始文本 raw, turnIndex, isStreaming"] --> MaskCheck["第一步: 扫描 Markdown 代码块区间 (Code Fences & Inline Backticks)"]
     MaskCheck --> RangeTree["构建保护区间表 ProtectedRanges"]
     RangeTree --> TagScan["第二步: 扫描 <think> / <thought> 标签候选"]
-    
+
     TagScan --> HitProtected{"候选标签是否位于 ProtectedRange 内?"}
     HitProtected -- 是 --> SkipExtraction["保留为普通 Markdown 文本字面量"]
     HitProtected -- 否 --> ExtractMatch["第三步: 提取为 ThoughtItem"]
-    
+
     SkipExtraction --> LoopNext{"继续扫描"}
     ExtractMatch --> LoopNext
-    
+
     LoopNext -- 完成全量扫描 --> CheckTrailingUnclosed{"isStreaming && 存在未闭合 <think>?"}
     CheckTrailingUnclosed -- 是 --> SliceOpenTag["将未闭合部分切分为 isStreaming 思考块"]
     CheckTrailingUnclosed -- 否 --> AssembleSegments["第四步: 拼接各 TextItem 与 ThoughtItem"]
-    
+
     SliceOpenTag --> AssembleSegments
     AssembleSegments --> Out["输出有序且不破坏 Markdown 的 TimelineItems"]
 ```
@@ -484,7 +484,7 @@ interface ProtectedRange {
  */
 function findMarkdownCodeRanges(text: string): ProtectedRange[] {
   const ranges: ProtectedRange[] = [];
-  
+
   // 1. 匹配多行代码栅栏 ``` ... ``` 或 ~~~ ... ~~~
   const fenceRegex = /(?:```[\s\S]*?(?:```|$))|(?:~~~[\s\S]*?(?:~~~|$))/g;
   let match: RegExpExecArray | null;
@@ -579,7 +579,7 @@ export function parseInlineThoughtAndTextSafely(
       // 检查是否有未闭合的流式 <think> 或 <thought>
       const openTagRegex = /<(?:think|thought)>([\s\S]*)$/i;
       const openMatch = openTagRegex.exec(textAfter);
-      
+
       if (openMatch) {
         const preText = textAfter.slice(0, openMatch.index);
         if (preText.trim()) {
@@ -675,10 +675,10 @@ export function applyStreamTextToMessage<T extends MsgWithBlocks>(
   if (lastTextIdx !== -1) {
     // 存在既有 text 块：更新该块的内容以匹配当前流式正文
     const prefixOffset = (msg as any).streamTextOffset || 0;
-    const currentTurnContent = streamText.length >= prefixOffset 
-      ? streamText.slice(prefixOffset) 
+    const currentTurnContent = streamText.length >= prefixOffset
+      ? streamText.slice(prefixOffset)
       : streamText;
-      
+
     blocks[lastTextIdx] = {
       ...blocks[lastTextIdx]!,
       content: currentTurnContent,
@@ -725,7 +725,7 @@ export function applyStreamTextToMessage<T extends MsgWithBlocks>(
 
 ```typescript
 describe('Timeline Normalization & Block Reconciliation 防退化测试套件', () => {
-  
+
   describe('reconcileAssistantMessageBlocks (多轮无损保全)', () => {
     it('T-01: 多轮交互中 updateMessageTimeline 绝不丢弃前序轮次的 thought 块', () => {
       const initialBlocks: MessageTimelineBlock[] = [
@@ -763,7 +763,7 @@ describe('Timeline Normalization & Block Reconciliation 防退化测试套件', 
     it('T-02: 处于 Markdown 代码栅栏内的 <think> 标签严禁被提取为思考项', () => {
       const markdownCode = '演示代码：\n```xml\n<think>不要提取我</think>\n```\n结束。';
       const items = parseInlineThoughtAndTextSafely(markdownCode, 0, false);
-      
+
       expect(items.some((i) => i.kind === 'thought')).toBe(false);
       expect(items).toHaveLength(1);
       expect(items[0]!.kind).toBe('text');
@@ -773,7 +773,7 @@ describe('Timeline Normalization & Block Reconciliation 防退化测试套件', 
     it('T-03: 流式未闭合的 <think> 标签必须安全切分为 isStreaming 思考块', () => {
       const streamingRaw = '前置说明：\n<think>正在思考系统架构设计方案';
       const items = parseInlineThoughtAndTextSafely(streamingRaw, 0, true);
-      
+
       expect(items).toHaveLength(2);
       expect(items[0]).toMatchObject({ kind: 'text', content: '前置说明：\n' });
       expect(items[1]).toMatchObject({

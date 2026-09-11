@@ -1,8 +1,8 @@
 # Markdown 全局排版与 Design Token 体系系统性架构方案
 
-> **文件标识**：`docs/markdown-unified-architecture/independent-plans/02-token-and-typography-plan.md`  
-> **所属战役**：Markdown 全局统一架构重构（markdown-unified-architecture）  
-> **方案性质**：独立架构设计方案（排版与 Design Token 体系）  
+> **文件标识**：`docs/markdown-unified-architecture/independent-plans/02-token-and-typography-plan.md`
+> **所属战役**：Markdown 全局统一架构重构（markdown-unified-architecture）
+> **方案性质**：独立架构设计方案（排版与 Design Token 体系）
 > **设计原则**：严格基于真实源码审视；100% 消费 Design Tokens（零硬编码、现代 CSS `color-mix` 混色）；纯逻辑执行顺序（问题同权）；彻底消除样式孤岛与浏览器出厂样式裸奔。
 
 ---
