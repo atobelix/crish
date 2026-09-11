@@ -1,8 +1,8 @@
 # 差异面板与笔记面板系统性重构 —— 分维详案 03：文件名超链接单轨接线独立预览Tab与全域Tokens规范
 
-> **专项编号**：DETAIL-PLAN-03  
-> **所属战役**：差异面板与笔记面板系统性重构（Diff View & Note Panel Systematic Redesign）  
-> **版本标识**：v2.0-FINAL-AUTHORITATIVE-BLUEPRINT（终局定稿落盘施工图 · 跨方案打架彻底出清版）  
+> **专项编号**：DETAIL-PLAN-03
+> **所属战役**：差异面板与笔记面板系统性重构（Diff View & Note Panel Systematic Redesign）
+> **版本标识**：v2.0-FINAL-AUTHORITATIVE-BLUEPRINT（终局定稿落盘施工图 · 跨方案打架彻底出清版）
 > **前置输入与终审依据**：
 > - [`docs/diff-view-redesign/analysis/03-file-viewer-tab-integration-audit.md`](file:///c:/Software/conex/docs/diff-view-redesign/analysis/03-file-viewer-tab-integration-audit.md)（AUDIT-03 现场审计）
 > - [`docs/diff-view-redesign/analysis/04-hover-tokens-contrast-audit.md`](file:///c:/Software/conex/docs/diff-view-redesign/analysis/04-hover-tokens-contrast-audit.md)（AUDIT-04 现场审计）
@@ -10,7 +10,7 @@
 > - [`docs/diff-view-redesign/audits/03-global-architecture-and-cross-plan-conflict-audit.md`](file:///c:/Software/conex/docs/diff-view-redesign/audits/03-global-architecture-and-cross-plan-conflict-audit.md)（AUDIT-03 全局架构冲突终审裁决）
 > - [`docs/diff-view-redesign/audits/04-implementation-feasibility-and-grounding-audit.md`](file:///c:/Software/conex/docs/diff-view-redesign/audits/04-implementation-feasibility-and-grounding-audit.md)（AUDIT-04 落地可行性与真实卡点审计）
 > - [`docs/diff-view-redesign/01-分维详案-差异面板平直列表直角化与32px紧凑架构.md`](file:///c:/Software/conex/docs/diff-view-redesign/01-%E5%88%86%E7%BB%B4%E8%AF%A6%E6%A1%88-%E5%B7%AE%E5%BC%82%E9%9D%A2%E6%9D%BF%E5%B9%B3%E7%9B%B4%E5%88%97%E8%A1%A8%E7%9B%B4%E8%A7%92%E5%8C%96%E4%B8%8E32px%E7%B4%A7%E5%87%91%E6%9E%B6%E6%9E%84.md)（DETAIL-PLAN-01 基准协同）
-> - [`docs/diff-view-redesign/00-总方案-差异与笔记面板系统性重构全景架构总纲.md`](file:///c:/Software/conex/docs/diff-view-redesign/00-%E6%80%BB%E6%96%B9%E6%A1%88-%E5%B7%AE%E5%BC%82%E4%B8%8E%E7%AC%94%E8%AE%B0%E9%9D%A2%E6%9D%BF%E7%B3%BB%E7%BB%9F%E6%80%A7%E9%87%8D%E6%9E%84%E5%85%A8%E6%99%AF%E6%9E%B6%E6%9E%84%E6%80%BB%E7%BA%B2.md)（总纲领）  
+> - [`docs/diff-view-redesign/00-总方案-差异与笔记面板系统性重构全景架构总纲.md`](file:///c:/Software/conex/docs/diff-view-redesign/00-%E6%80%BB%E6%96%B9%E6%A1%88-%E5%B7%AE%E5%BC%82%E4%B8%8E%E7%AC%94%E8%AE%B0%E9%9D%A2%E6%9D%BF%E7%B3%BB%E7%BB%9F%E6%80%A7%E9%87%8D%E6%9E%84%E5%85%A8%E6%99%AF%E6%9E%B6%E6%9E%84%E6%80%BB%E7%BA%B2.md)（总纲领）
 >
 > **终局定稿核心硬性纪律（刚性约束）**：
 > 1. **彻底废黜异化代码与私造类名（指令 1，解决跨方案打架）**：彻底删除 03 详案中自立门户的 `DiffCardFileList.tsx`（包含旧手风琴残存 `.accordionToggleBtn`、私造结构 `div.accordionFiller`、私造类名 `.addStat`、`.delStat`、绝对定位 `.hoverActions`）；100% 收敛至详案 01 的 AST 与全域 33 大标准选择器白名单；保留单向数据流契约（`onOpenFileViewer?: (filePath: string) => void` 由父组件统一调度），超链接按钮与状态徽标外层全量包裹规范原子组件 `<Tooltip content={...}>`，彻底杜绝原生 `title`；
@@ -206,7 +206,7 @@ sequenceDiagram
     Note over OpenTool: 构造 Canonical Tab ID: "file-viewer:" + trimmed (匹配测试正则)
     OpenTool->>OpenTool: setFileViewerModeOverride(canonicalTabId, 'diff') 登记初始模式意图
     OpenTool->>TreeStore: openToolInLeaf(targetLeafId, canonicalTabId)
-    
+
     rect rgb(240, 248, 255)
         Note over TreeStore: 严格 Canonical Tab 去重判定：<br/>dock.openPanelIds.includes(canonicalTabId)
         alt 标签已存在（同名 Tab 热激活）
@@ -220,13 +220,13 @@ sequenceDiagram
     Note over OpenTool: 微任务派发模式覆盖事件：<br/>queueMicrotask -> dispatchEvent('conex:file-viewer-mode')
     TreeStore-->>TabStrip: Zustand 订阅触发重渲染并聚焦
     TreeStore-->>Viewer: 挂载或聚焦 <FileViewerCard filePath={trimmed} initialMode="diff" />
-    
+
     alt 冷启动挂载
         Viewer->>OpenTool: consumeFileViewerModeOverride(canonicalTabId) -> 获取初始模式 'diff'
     else 热激活同名 Tab (Tab 已存在)
         Viewer->>Viewer: useEffect 响应 'conex:file-viewer-mode' 微任务事件或 prop -> 即时 setViewMode('diff')
     end
-    
+
     Viewer->>Backend: readTextFile(trimmed)
     Backend-->>Viewer: 返回磁盘真实源码文本
     Viewer-->>User: 渲染 32px 紧凑工具栏 + 系统单轨 DiffCardUnifiedView 高保真比对视口
@@ -362,7 +362,7 @@ export function normalizeViewerFilePath(rawPath: string): string {
 ### 3.1 物理双重叠加数学机理与 SLoHT 单层 Hover 架构
 
 #### (1) 用户痛点定性与双重变灰现场还原
-用户明确指出：“*这个界面的hover我看也是有问题的，有的很灰啊。*”  
+用户明确指出：“*这个界面的hover我看也是有问题的，有的很灰啊。*”
 现场审查确认：在折叠状态下，条目呈现出脏乱、刺眼的深灰斑，而光标移到右侧操作按钮时，条目左侧突然变亮，产生极不协调的频闪。
 
 #### (2) Porter-Duff Over 算子物理合成推导
@@ -474,7 +474,7 @@ import { getWorkspacePath } from '../../api/workspaceFsApi';
 
 /**
  * 独立文件预览路径规范化纯函数 (DETAIL-PLAN-03 核心算法)
- * 
+ *
  * 刚性保证：
  * 1. Windows 反斜杠统统转为标准正斜杠；
  * 2. 剥离前导 ./ 与路径中段 /./；

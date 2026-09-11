@@ -1,10 +1,10 @@
 # 多笔记综合管理体系与多文档切换架构实施方案 (PLAN-07)
 
-> **方案编号**：PLAN-07  
-> **方案主题**：多笔记综合管理体系（SQLite 迁移、IPC 契约与多文档切换）独立方案  
-> **所属战役**：差异面板与笔记面板系统性重构（Diff View & Note Panel Redesign）  
-> **输入依赖**：[`docs/diff-view-redesign/analysis/07-note-multi-doc-management-audit.md`](file:///c:/Software/conex/docs/diff-view-redesign/analysis/07-note-multi-doc-management-audit.md)  
-> **产出落盘**：`docs/diff-view-redesign/independent-plans/07-note-multi-doc-management-plan.md`  
+> **方案编号**：PLAN-07
+> **方案主题**：多笔记综合管理体系（SQLite 迁移、IPC 契约与多文档切换）独立方案
+> **所属战役**：差异面板与笔记面板系统性重构（Diff View & Note Panel Redesign）
+> **输入依赖**：[`docs/diff-view-redesign/analysis/07-note-multi-doc-management-audit.md`](file:///c:/Software/conex/docs/diff-view-redesign/analysis/07-note-multi-doc-management-audit.md)
+> **产出落盘**：`docs/diff-view-redesign/independent-plans/07-note-multi-doc-management-plan.md`
 > **状态**：阶段二 · 独立方案制定完成
 
 ---
@@ -320,7 +320,7 @@ pub fn migrate(conn: &Connection) -> Result<(), StoreError> {
     // 优化多文档列表排序与过滤复合索引
     conn.execute_batch(
         r#"
-        CREATE INDEX IF NOT EXISTS idx_doc_meta_listing 
+        CREATE INDEX IF NOT EXISTS idx_doc_meta_listing
             ON doc_meta(is_archived, is_pinned DESC, updated_at DESC);
         "#
     )?;
@@ -340,7 +340,7 @@ pub fn migrate(conn: &Connection) -> Result<(), StoreError> {
 
 设计的聚合查询 SQL 语句：
 ```sql
-SELECT 
+SELECT
     m.doc_id,
     m.rev,
     m.updated_at,
@@ -384,10 +384,10 @@ impl WorkspaceStore {
     pub fn list_documents(&self, include_archived: bool) -> Result<Vec<NoteDocumentMeta>, StoreError> {
         let conn = self.conn.lock().map_err(|e| StoreError::Lock(e.to_string()))?;
         let filter_archived = if include_archived { None } else { Some(0) };
-        
+
         let mut stmt = conn.prepare_cached(
             r#"
-            SELECT 
+            SELECT
                 m.doc_id, m.rev, m.updated_at, m.title, m.created_at,
                 m.is_pinned, m.is_archived, m.tags_json,
                 (SELECT COUNT(*) FROM blocks b WHERE b.doc_id = m.doc_id) AS block_count
@@ -431,7 +431,7 @@ impl WorkspaceStore {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_millis() as i64;
-        
+
         let initial_title = title.unwrap_or("未命名笔记").trim();
         let tags_json = serde_json::to_string(tags.unwrap_or(&[])).unwrap_or_else(|_| "[]".to_string());
 
@@ -479,7 +479,7 @@ impl WorkspaceStore {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_millis() as i64;
-        
+
         let affected = conn.execute(
             r#"
             UPDATE doc_meta

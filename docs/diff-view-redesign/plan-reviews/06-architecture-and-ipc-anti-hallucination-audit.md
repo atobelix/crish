@@ -1,14 +1,14 @@
 # 架构与 IPC 真实性终审反幻觉严苛审计报告 (AUDIT-FINAL-IPC-06)
 
-> **战役名称**：差异面板与笔记面板系统性重构（Diff View & Note Panel Systematic Redesign）  
-> **审计阶段**：阶段五 · 详案终审反幻觉严苛审计（Final Anti-Hallucination Architecture & IPC Audit）  
-> **审计编号**：AUDIT-FINAL-IPC-06  
-> **审计角色**：架构与 IPC 真实性终审官（Architecture & IPC Anti-Hallucination Auditor）  
-> **审计对象**：  
-> - [`docs/diff-view-redesign/00-总方案-差异与笔记面板系统性重构全景架构总纲.md`](file:///c:/Software/conex/docs/diff-view-redesign/00-%E6%80%BB%E6%96%B9%E6%A1%88-%E5%B7%AE%E5%BC%82%E4%B8%8E%E7%AC%94%E8%AE%B0%E9%9D%A2%E6%9D%BF%E7%B3%BB%E7%BB%9F%E6%80%A7%E9%87%8D%E6%9E%84%E5%85%A8%E6%99%AF%E6%9E%B6%E6%9E%84%E6%80%BB%E7%BA%B2.md)  
-> - [`docs/diff-view-redesign/03-分维详案-文件名超链接单轨接线独立预览Tab与全域Tokens规范.md`](file:///c:/Software/conex/docs/diff-view-redesign/03-%E5%88%86%E7%BB%B4%E8%AF%A6%E6%A1%88-%E6%96%87%E4%BB%B6%E5%90%8D%E8%B6%85%E9%93%BE%E6%8E%A5%E5%8D%95%E8%BD%A8%E6%8E%A5%E7%BA%BF%E7%8B%AC%E7%AB%8B%E9%A2%84%E8%A7%88Tab%E4%B8%8E%E5%85%A8%E5%9F%9FTokens%E8%A7%84%E8%8C%83.md)  
-> - [`docs/diff-view-redesign/06-分维详案-多笔记综合管理体系与SQLite及IPC后端架构.md`](file:///c:/Software/conex/docs/diff-view-redesign/06-%E5%88%86%E7%BB%B4%E8%AF%A6%E6%A1%88-%E5%A4%9A%E7%AC%94%E8%AE%B0%E7%BB%BC%E5%90%88%E7%AE%A1%E7%90%86%E4%BD%93%E7%B3%BB%E4%B8%8ESQLite%E5%8F%8AIPC%E5%90%8E%E7%AB%AF%E6%9E%B6%E6%9E%84.md)  
-> **落盘路径**：`docs/diff-view-redesign/plan-reviews/06-architecture-and-ipc-anti-hallucination-audit.md`  
+> **战役名称**：差异面板与笔记面板系统性重构（Diff View & Note Panel Systematic Redesign）
+> **审计阶段**：阶段五 · 详案终审反幻觉严苛审计（Final Anti-Hallucination Architecture & IPC Audit）
+> **审计编号**：AUDIT-FINAL-IPC-06
+> **审计角色**：架构与 IPC 真实性终审官（Architecture & IPC Anti-Hallucination Auditor）
+> **审计对象**：
+> - [`docs/diff-view-redesign/00-总方案-差异与笔记面板系统性重构全景架构总纲.md`](file:///c:/Software/conex/docs/diff-view-redesign/00-%E6%80%BB%E6%96%B9%E6%A1%88-%E5%B7%AE%E5%BC%82%E4%B8%8E%E7%AC%94%E8%AE%B0%E9%9D%A2%E6%9D%BF%E7%B3%BB%E7%BB%9F%E6%80%A7%E9%87%8D%E6%9E%84%E5%85%A8%E6%99%AF%E6%9E%B6%E6%9E%84%E6%80%BB%E7%BA%B2.md)
+> - [`docs/diff-view-redesign/03-分维详案-文件名超链接单轨接线独立预览Tab与全域Tokens规范.md`](file:///c:/Software/conex/docs/diff-view-redesign/03-%E5%88%86%E7%BB%B4%E8%AF%A6%E6%A1%88-%E6%96%87%E4%BB%B6%E5%90%8D%E8%B6%85%E9%93%BE%E6%8E%A5%E5%8D%95%E8%BD%A8%E6%8E%A5%E7%BA%BF%E7%8B%AC%E7%AB%8B%E9%A2%84%E8%A7%88Tab%E4%B8%8E%E5%85%A8%E5%9F%9FTokens%E8%A7%84%E8%8C%83.md)
+> - [`docs/diff-view-redesign/06-分维详案-多笔记综合管理体系与SQLite及IPC后端架构.md`](file:///c:/Software/conex/docs/diff-view-redesign/06-%E5%88%86%E7%BB%B4%E8%AF%A6%E6%A1%88-%E5%A4%9A%E7%AC%94%E8%AE%B0%E7%BB%BC%E5%90%88%E7%AE%A1%E7%90%86%E4%BD%93%E7%B3%BB%E4%B8%8ESQLite%E5%8F%8AIPC%E5%90%8E%E7%AB%AF%E6%9E%B6%E6%9E%84.md)
+> **落盘路径**：`docs/diff-view-redesign/plan-reviews/06-architecture-and-ipc-anti-hallucination-audit.md`
 > **审查基准**：用户最高指示（“挤干一切水分，严查一切幻觉与过度设计，项目中的代码应该是清晰的、单轨的、最先进的代码”）、[`AGENTS.md`](file:///c:/Software/conex/AGENTS.md)（§1 反退避、§3 Git 独占提交、§7 严禁补丁与绕过、§7.1 立体验证）、[`ANTI_OVERENGINEERING_GUARDRAILS.md`](file:///c:/Software/conex/ANTI_OVERENGINEERING_GUARDRAILS.md)。
 
 ---
@@ -64,7 +64,7 @@
   通过 `ensure_column` 进行幂等追加。语法为标准的 SQLite 3 语法，完全支持。
 - **复合覆盖索引**：
   ```sql
-  CREATE INDEX IF NOT EXISTS idx_doc_meta_listing 
+  CREATE INDEX IF NOT EXISTS idx_doc_meta_listing
       ON doc_meta(is_archived, is_pinned DESC, updated_at DESC);
   ```
   SQLite 3.3.0+ 原生支持降序索引（`DESC`），语法合法真实。
@@ -356,6 +356,6 @@ export function openFileViewerInSession(
 
 ---
 
-> **架构与 IPC 真实性终审官签署**：  
-> **审计状态**：PASS WITH RECTIFICATIONS  
+> **架构与 IPC 真实性终审官签署**：
+> **审计状态**：PASS WITH RECTIFICATIONS
 > **终审意见**：详案骨干极其扎实，彻底排除了假实现与过度设计。上述 7 项技术断层与幻觉定位精准、整改方案完备清晰，修复后即可全面启动阶段六代码级施工！

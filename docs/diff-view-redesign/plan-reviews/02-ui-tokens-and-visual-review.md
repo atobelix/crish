@@ -1,12 +1,12 @@
 # UI 视觉对齐、直角规范与 Tokens 对比度独立评审报告 (REVIEW-02)
 
-> **评审编号**：REVIEW-02  
-> **所属战役**：差异面板与笔记面板系统性重构 —— 阶段三：方案交叉独立评审  
-> **评审角色**：UI 视觉对齐、直角规范与 Tokens 对比度首席评审官  
+> **评审编号**：REVIEW-02
+> **所属战役**：差异面板与笔记面板系统性重构 —— 阶段三：方案交叉独立评审
+> **评审角色**：UI 视觉对齐、直角规范与 Tokens 对比度首席评审官
 > **输入依赖**：
 > - `docs/diff-view-redesign/analysis/` 全量 8 份审计报告（重点依赖 AUDIT-01, AUDIT-04, AUDIT-05, AUDIT-06, AUDIT-08）
-> - `docs/diff-view-redesign/independent-plans/` 全量 7 份独立方案（重点审查 PLAN-01, PLAN-04, PLAN-05, PLAN-06，兼顾 PLAN-02, PLAN-03, PLAN-07）  
-> **产出落盘**：`docs/diff-view-redesign/plan-reviews/02-ui-tokens-and-visual-review.md`  
+> - `docs/diff-view-redesign/independent-plans/` 全量 7 份独立方案（重点审查 PLAN-01, PLAN-04, PLAN-05, PLAN-06，兼顾 PLAN-02, PLAN-03, PLAN-07）
+> **产出落盘**：`docs/diff-view-redesign/plan-reviews/02-ui-tokens-and-visual-review.md`
 > **审查基准**：
 > - 用户最高指示：“差异界面的每个文件改成列表就行了，去掉圆角。这个界面的hover我看也是有问题的，有的很灰啊。而且现在的这个界面很多东西还有硬编码的呢，这个也统一使用我们的token体系。笔记的顶部功能栏我看也没有。底部那个灰色的大区域一点用处没有，两个块区域是又丑又没用。这个界面的整体布局我看和其他的标签界面也不一样，需要你系统性来分析一下才行。”
 > - 仓库铁律 [`AGENTS.md`](file:///c:/Software/conex/AGENTS.md) §7（严禁补丁与绕过、立体验证、架构净收敛）、§12（使用自定义 Tooltip，禁止原生 HTML title）、§13（输入框与焦点态、焦点对比度上限 10%、形态 ④ 纯光标极简型）、§14（现代 CSS 语法、优先 HSLA / 斜杠透明度、零硬编码十六进制）、[`.agents/LOGIC_PLAN_NO_RETREAT.md`](file:///c:/Software/conex/.agents/LOGIC_PLAN_NO_RETREAT.md)（反退避全文）。
@@ -119,8 +119,8 @@ UI 视觉与样式层净收敛核算矩阵（以物理净化与架构解耦为�
 
 > **【评审裁决】**：**Need-Fix（必须正向修复后方可进入实施阶段）**
 
-**裁决理由概述**：  
-7 份独立方案总体方向紧扣用户最高指示与 Conex 架构演进路线（全面平直单轨化、拔除行内冗余工具行、拔除双重 hover 叠灰、拔除笔记底部丑陋灰色块、顶栏 32px 标准化）。  
+**裁决理由概述**：
+7 份独立方案总体方向紧扣用户最高指示与 Conex 架构演进路线（全面平直单轨化、拔除行内冗余工具行、拔除双重 hover 叠灰、拔除笔记底部丑陋灰色块、顶栏 32px 标准化）。
 然而，从**首席视觉与 Design Tokens 评审官**的严苛视角审查，方案在**微观几何直角彻底性、Windows 字体基线渲染、窄视口排版弹性防抖、跨方案类名同步、以及笔记顶栏 CSS 规约完整性**等五个核心维度存在明显的**断层与漏洞**。如果不在此评审轮次刚性补全与纠偏，实施阶段必将导致严重的排版崩溃、样式断裂或二次返工。
 
 ---
@@ -172,7 +172,7 @@ graph LR
     A4 & B4 --> C4
 ```
 
-**裁决认定**：  
+**裁决认定**：
 1. 容器类名锁定为 **`.flatFileList`**，彻底废除 `.fileList`；
 2. 逻辑包裹节点锁定为 **`.fileNode`**，彻底废除 `.accordionItem` 与 `.flatFileItem`；
 3. 交互行实体锁定为 **`.fileRow`**，彻底废除 `.fileItem` 与 `.flatFileRow`；
@@ -185,7 +185,7 @@ graph LR
 
 ### 2.1 直角几何彻底性审查：隐藏的 border-radius 遗留漏洞
 
-用户在裁决中反复严厉强调：“*差异界面的每个文件改成列表就行了，去掉圆角。越简单越好...*”。  
+用户在裁决中反复严厉强调：“*差异界面的每个文件改成列表就行了，去掉圆角。越简单越好...*”。
 审查 PLAN-01 发现，方案虽清除了卡片外框的 6px/8px 大圆角，但在细微组件层依然残留了“隐式微圆角”，未能贯彻纯粹的直角哲学：
 
 1. **状态徽章 (`.statusBadge`) 2px 遗留**：
@@ -294,8 +294,8 @@ graph LR
 - 此时预留给中间路径区的剩余空间：
   $$W_{avail} = 320\text{px} - 24\text{px} - 20\text{px} - 24\text{px} - 128\text{px} = \mathbf{124\text{px}}$$
 - **灾难发生**：
-  长文件名 `WorkspaceEmptyStatePaperEntry.tsx`（12px 字体）实际渲染宽度约为 **235px**！  
-  由于 `.fileName` 锁死了 `flex-shrink: 0`，即使 `.dirPath` 被完全压缩到 0px，`.fileName` 依然撑满 235px！  
+  长文件名 `WorkspaceEmptyStatePaperEntry.tsx`（12px 字体）实际渲染宽度约为 **235px**！
+  由于 `.fileName` 锁死了 `flex-shrink: 0`，即使 `.dirPath` 被完全压缩到 0px，`.fileName` 依然撑满 235px！
   整行实际物理宽度膨胀为：
   $$W_{row} = 24 + 20 + 24 + 235 + 8 + 128 = \mathbf{439\text{px}} > 320\text{px}$$
 - **后果**：
@@ -348,7 +348,7 @@ graph LR
 ### 3.1 “单一真理 Hover 层级 (SLoHT)” 特异性与父级容器漏删排查
 
 #### (1) SLoHT 机制的物理正确性
-PLAN-04 通过深入的 Porter-Duff Over 算子数学建模，彻底拆穿了导致界面“有的很灰、划过跳闪”的本质根因在于：**父级容器 `.accordionItem:hover` 的 2.5% 与子级按钮 `.fileItem:hover` 的 2.5% 在 Alpha 合成管线中相乘叠加出了 4.94% 的深脏灰**。  
+PLAN-04 通过深入的 Porter-Duff Over 算子数学建模，彻底拆穿了导致界面“有的很灰、划过跳闪”的本质根因在于：**父级容器 `.accordionItem:hover` 的 2.5% 与子级按钮 `.fileItem:hover` 的 2.5% 在 Alpha 合成管线中相乘叠加出了 4.94% 的深脏灰**。
 确立“单一真理 Hover 交互层级”（Single Layer of Hover Truth, SLoHT）在理论上完全正确且极其深刻。
 
 #### (2) 特异性与全路径漏删排查
@@ -371,7 +371,7 @@ PLAN-04 通过深入的 Porter-Duff Over 算子数学建模，彻底拆穿了导
 - `DiffCard.module.css:140, 141, 142`（3 处 `#ef4444`）$\to$ 改为 `var(--color-error-bg)`、`var(--color-error-border)` 与 `var(--color-error)`；
 - `DiffCard.module.css:280`（1 处 `var(--accent-blue)`）$\to$ 收敛为 Zero-Blue 翡翠绿 `var(--md-link-color)`；
 - `DiffCard.module.css:446, 462, 476, 730`（4 处 `var(--diff-bg-pane, #ffffff)`）$\to$ 改为 `var(--bg-card)`；
-- `VirtualPlainCodeViewer.tsx:65`（1 处行内 `var(--diff-bg-pane, #ffffff)`）$\to$ 改为 `var(--bg-card)`。  
+- `VirtualPlainCodeViewer.tsx:65`（1 处行内 `var(--diff-bg-pane, #ffffff)`）$\to$ 改为 `var(--bg-card)`。
 **结论**：差异审查模块原代码中的全部 13 处坏味道已被 PLAN-04 **100% 捕获并提供正确映射，零遗漏**。
 
 #### (2) 6 处幽灵 Token 处置核查
@@ -380,15 +380,15 @@ PLAN-04 通过深入的 Porter-Duff Over 算子数学建模，彻底拆穿了导
 3. `--diff-text-normal`（消费 2 次）：校正为系统前景色 `var(--text-primary)`；
 4. `--diff-gutter-width-unified`（消费 2 次）：规范化为固定标尺 `40px`；
 5. `--diff-gutter-width-split`（消费 1 次）：规范化为固定标尺 `36px`；
-6. `--diff-gutter-marker-width`（消费 2 次）：规范化为固定标尺 `20px`。  
+6. `--diff-gutter-marker-width`（消费 2 次）：规范化为固定标尺 `20px`。
 **结论**：处置方案清晰干净，彻底消除了暗色模式下因幽灵 Token 未命中而回退至刺眼纯白 `#ffffff` 的重大渲染 Bug。
 
 ---
 
 ### 3.3 跨方案选择器脱节修复（PLAN-01 .fileRow 与 PLAN-04 .flatFileRow 强行收敛）
 
-- **严重病灶**：  
-  PLAN-01 声明的文件条目类名是 **`.fileRow`**；  
+- **严重病灶**：
+  PLAN-01 声明的文件条目类名是 **`.fileRow`**；
   而 PLAN-04 在 lines 280-318 声明的单层 Hover 规则是：
   ```css
   .accordionItem :global(.fileItem):hover,
@@ -398,7 +398,7 @@ PLAN-04 通过深入的 Porter-Duff Over 算子数学建模，彻底拆穿了导
   }
   ```
   如果分别按两份方案落地，PLAN-01 渲染出的 `<button class="fileRow">` 将**无法命中** PLAN-04 的 `.flatFileRow:hover`，导致平直列表完全丧失 Hover 高亮反馈！
-- **刚性收敛裁定**：  
+- **刚性收敛裁定**：
   所有方案一律以 **`.fileRow`** 为唯一合法类名，样式规则统一定义为：
   ```css
   /* 唯一的单层悬停真源 */
@@ -416,7 +416,7 @@ PLAN-04 通过深入的 Porter-Duff Over 算子数学建模，彻底拆穿了导
 
 ### 3.4 行内按钮透光防闪烁与透明度继承机制验证
 
-- **防跳闪机制**：  
+- **防跳闪机制**：
   在 PLAN-01 与 PLAN-04 中，右侧快捷按钮（`.rowActBtn` / `.hoverActBtn`）背景被严格锁定为 `background: transparent;`；
 - 当鼠标从文件名横向移入暂存按钮时，由于光标始终处于 `.fileRow` 内部，`.fileRow:hover` 始终维持纯净的 2.5%（浅色）/ 3.5%（深色）背景；
 - 按钮自身透明，完全透出整行的悬停底色，仅微调文字颜色至 `var(--text-primary)`；
@@ -428,7 +428,7 @@ PLAN-04 通过深入的 Porter-Duff Over 算子数学建模，彻底拆穿了导
 
 ### 4.1 笔记 32px 顶栏与 DiffCard / FilesCard 像素级一致性对比
 
-用户裁决：“*笔记的顶部功能栏我看也没有...这个界面的整体布局我看和其他的标签界面也不一样，需要你系统性来分析一下才行。*”  
+用户裁决：“*笔记的顶部功能栏我看也没有...这个界面的整体布局我看和其他的标签界面也不一样，需要你系统性来分析一下才行。*”
 我们对三者顶栏的几何标尺与 Token 进行像素级对比：
 
 | 标尺属性 | DiffCard 紧凑顶栏 (`DiffCard.module.css:21-35`) | FilesCard 顶栏 (`FilesCard.module.css:35-51`) | NotePaper 顶栏重构标准 (`PLAN-05`) | 像素级一致性裁决 |
@@ -454,7 +454,7 @@ PLAN-05 在 Section 2 提出了极为完备的生产力功能矩阵 JSX 实现�
 - `<div className={styles.headerLeftGroup} />` 与 `<div className={styles.headerRightGroup} />`；
 - `<div className={styles.saveStatus} />`、`<span className={styles.wordCountBadge} />` 以及 `<div className={styles.divider} />`。
 
-**致命漏洞**：在 PLAN-05 的 CSS 规约章节（Section 1.1 及 Section 4.2）中，**上述类名的 CSS 规则全部漏写**！  
+**致命漏洞**：在 PLAN-05 的 CSS 规约章节（Section 1.1 及 Section 4.2）中，**上述类名的 CSS 规则全部漏写**！
 如果执行人员直接实施，行内编辑输入框将成为一个带着厚重原生边框与白色底色的野生 `<input>`，严重破坏 32px 紧凑顶栏的精致感！
 
 #### (2) 官方完整补齐样式规范（严格对齐 AGENTS.md §13-14）
@@ -733,5 +733,5 @@ PLAN-05 在 Section 2 提出了极为完备的生产力功能矩阵 JSX 实现�
 
 ---
 
-> **评审官结论与签发**：  
+> **评审官结论与签发**：
 > 本评审报告确立了“直角化、零叠灰、32px 高度对齐、全高纯净书写”的刚性工程标准。各实施 Agent 必须严格吸收上述 7 项 Actionable Patches，不打折扣地落实用户最高指示，交付兼具工业级严谨度与顶级视觉质感的专业界面。

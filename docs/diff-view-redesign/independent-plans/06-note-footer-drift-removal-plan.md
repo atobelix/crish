@@ -1,9 +1,9 @@
 # 笔记底部灰色块彻底拔除与全高视口自适应方案 (PLAN-06)
 
-> **专项方案编号**：PLAN-06  
-> **所属战役**：差异面板与笔记面板系统性重构 —— 阶段二：独立方案设计  
-> **输入依赖**：[`docs/diff-view-redesign/analysis/06-note-footer-drift-bar-removal-audit.md`](file:///c:/Software/conex/docs/diff-view-redesign/analysis/06-note-footer-drift-bar-removal-audit.md)  
-> **产出落盘路径**：`docs/diff-view-redesign/independent-plans/06-note-footer-drift-removal-plan.md`  
+> **专项方案编号**：PLAN-06
+> **所属战役**：差异面板与笔记面板系统性重构 —— 阶段二：独立方案设计
+> **输入依赖**：[`docs/diff-view-redesign/analysis/06-note-footer-drift-bar-removal-audit.md`](file:///c:/Software/conex/docs/diff-view-redesign/analysis/06-note-footer-drift-bar-removal-audit.md)
+> **产出落盘路径**：`docs/diff-view-redesign/independent-plans/06-note-footer-drift-removal-plan.md`
 > **核心目标**：彻底物理拔除笔记面板底部 `MirrorDriftStatusBar` 与 `footer` 两大丑陋深灰/暗黄色块，切断后台无用 IPC 轮询，恢复主编辑区 100% 垂直全高自适应与沉浸纯净纸面体验。
 
 ---
@@ -624,7 +624,7 @@ classDiagram
 +++ b/apps/crish-desktop/src/components/workspace/WorkspaceEmptyState.strict.test.tsx
 @@ -109,5 +109,7 @@
      expect(panel.querySelector('[data-bp-paper-list-mount]')).toBeNull();
- 
+
 -    const footer = screen.getByTestId('note-paper-strict-footer');
 -    expect(footer.textContent).toMatch(/可演示≠EL-01|≠EL-01/);
 -    expect(footer.textContent).toMatch(/W5-B/);

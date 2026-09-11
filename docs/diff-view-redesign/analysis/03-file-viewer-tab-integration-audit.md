@@ -1,9 +1,9 @@
 # 文件名超链接单轨接线至右侧独立文件预览面板审计报告 (AUDIT-03)
 
-> **专项审计编号**：AUDIT-03  
-> **战役名称**：差异面板与笔记面板系统性重构 —— 阶段一：前置代码现场深度审计  
-> **任务标题**：文件名超链接单轨接线至右侧独立文件预览面板架构深度审计  
-> **落盘路径**：`docs/diff-view-redesign/analysis/03-file-viewer-tab-integration-audit.md`  
+> **专项审计编号**：AUDIT-03
+> **战役名称**：差异面板与笔记面板系统性重构 —— 阶段一：前置代码现场深度审计
+> **任务标题**：文件名超链接单轨接线至右侧独立文件预览面板架构深度审计
+> **落盘路径**：`docs/diff-view-redesign/analysis/03-file-viewer-tab-integration-audit.md`
 > **核心勘察对象**：
 > - [`apps/crish-desktop/src/components/diff/DiffCardFileList.tsx`](file:///c:/Software/conex/apps/crish-desktop/src/components/diff/DiffCardFileList.tsx)（文件名节点、事件绑定与手风琴行内渲染）
 > - [`apps/crish-desktop/src/store/workspace-shell/openTool.ts`](file:///c:/Software/conex/apps/crish-desktop/src/store/workspace-shell/openTool.ts)（`openFileViewerInSession`、`openToolInLeaf` 及其 Dock 树调度契约）

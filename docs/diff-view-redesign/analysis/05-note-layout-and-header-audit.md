@@ -1,9 +1,9 @@
 # 笔记面板整体布局重塑与 32px 紧凑顶栏标准化审计报告 (AUDIT-05)
 
-> **战役名称**：差异面板与笔记面板系统性重构  
-> **阶段与编号**：阶段一：前置代码现场深度审计 / AUDIT-05  
-> **审计主题**：笔记面板整体布局重塑与 32px 紧凑顶栏标准化深度审计  
-> **落盘路径**：[`docs/diff-view-redesign/analysis/05-note-layout-and-header-audit.md`](file:///c:/Software/conex/docs/diff-view-redesign/analysis/05-note-layout-and-header-audit.md)  
+> **战役名称**：差异面板与笔记面板系统性重构
+> **阶段与编号**：阶段一：前置代码现场深度审计 / AUDIT-05
+> **审计主题**：笔记面板整体布局重塑与 32px 紧凑顶栏标准化深度审计
+> **落盘路径**：[`docs/diff-view-redesign/analysis/05-note-layout-and-header-audit.md`](file:///c:/Software/conex/docs/diff-view-redesign/analysis/05-note-layout-and-header-audit.md)
 > **核心勘察对象**：
 > - [`NotePaperStrictPanel.tsx`](file:///c:/Software/conex/apps/crish-desktop/src/components/note-paper/NotePaperStrictPanel.tsx)（严格笔记面板装配容器与根布局）
 > - [`NotePaperStrictHeader.tsx`](file:///c:/Software/conex/apps/crish-desktop/src/components/note-paper/NotePaperStrictHeader.tsx)（现存笔记顶栏实现与内部徽章堆砌处）

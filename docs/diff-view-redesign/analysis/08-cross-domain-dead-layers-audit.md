@@ -1,8 +1,8 @@
 # 全域死层清退、单轨契约与伪实现全面收敛审计报告 (AUDIT-08)
 
-> **战役专项编号**：AUDIT-08  
-> **审计日期**：2026-09-05  
-> **审计目标**：全域死层清退、单轨契约与伪实现全面收敛深度现场穿透  
+> **战役专项编号**：AUDIT-08
+> **审计日期**：2026-09-05
+> **审计目标**：全域死层清退、单轨契约与伪实现全面收敛深度现场穿透
 > **涉及代码域**：
 > - `apps/crish-desktop/src/components/diff/`（21 文件，4,414 行）
 > - `apps/crish-desktop/src/components/note-paper/`（73 文件，13,567 行）
@@ -369,22 +369,22 @@ gantt
     title Diff 与 NotePaper 系统性重构“先删后改”执行路线
     dateFormat  X
     axisFormat %s
-    
+
     section 阶段一：死层物理拔除
     删除 notePaperSilentFixture.ts 及无用导出       :p1_1, 0, 1
     废黜 WorkspaceEmptyState 双轨幽灵宿主           :p1_2, 1, 2
     清洗 DiffCard & NotePaper 废弃 CSS 与乱码注释    :p1_3, 2, 3
-    
+
     section 阶段二：真理入口与契约单轨化
     收敛 NotePaperStrictPanel 为单轨 NotePaper       :p2_1, 3, 5
     剥离生产界面中的开发期测试徽章与免责声明        :p2_2, 4, 6
     收敛 DiffCardFileList Git/Session 双模行为     :p2_3, 5, 7
-    
+
     section 阶段三：渲染内核与高内聚重塑
     归一化 DiffCard 分词渲染并消除 57 行复制代码     :p3_1, 7, 9
     清退 FileViewerCard 内部简陋手写 diff 旁路       :p3_2, 8, 10
     打通 NotePaper 真实双向数据持久化通道           :p3_3, 9, 12
-    
+
     section 阶段四：立体验证与净收敛锁定
     运行全量单元测试与回归门禁                      :p4_1, 12, 13
     行数预算与死代码防回潮自动化锁死                :p4_2, 13, 14

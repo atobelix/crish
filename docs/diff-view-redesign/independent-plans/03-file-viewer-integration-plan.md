@@ -1,11 +1,11 @@
 # 文件名超链接单轨接线独立文件预览面板实施方案 (PLAN-03)
 
-> **专项方案编号**：PLAN-03  
-> **战役名称**：差异面板与笔记面板系统性重构 —— 阶段二：独立方案设计  
-> **任务标题**：文件名超链接单轨接线至右侧独立文件预览面板 (FileViewerCard) 独立方案  
-> **输入依赖**：[`docs/diff-view-redesign/analysis/03-file-viewer-tab-integration-audit.md`](file:///c:/Software/conex/docs/diff-view-redesign/analysis/03-file-viewer-tab-integration-audit.md)  
-> **产出落盘路径**：`docs/diff-view-redesign/independent-plans/03-file-viewer-integration-plan.md`  
-> **方案状态**：设计锁定（待主控评审与实施执行）  
+> **专项方案编号**：PLAN-03
+> **战役名称**：差异面板与笔记面板系统性重构 —— 阶段二：独立方案设计
+> **任务标题**：文件名超链接单轨接线至右侧独立文件预览面板 (FileViewerCard) 独立方案
+> **输入依赖**：[`docs/diff-view-redesign/analysis/03-file-viewer-tab-integration-audit.md`](file:///c:/Software/conex/docs/diff-view-redesign/analysis/03-file-viewer-tab-integration-audit.md)
+> **产出落盘路径**：`docs/diff-view-redesign/independent-plans/03-file-viewer-integration-plan.md`
+> **方案状态**：设计锁定（待主控评审与实施执行）
 > **关联核心文件**：
 > - [`apps/crish-desktop/src/components/diff/DiffCardFileList.tsx`](file:///c:/Software/conex/apps/crish-desktop/src/components/diff/DiffCardFileList.tsx)（头部行 DOM 正交解耦与文件名超链接改造）
 > - [`apps/crish-desktop/src/components/diff/DiffCard.module.css`](file:///c:/Software/conex/apps/crish-desktop/src/components/diff/DiffCard.module.css)（超链接与折叠指示器样式 Tokens 契约）
@@ -105,7 +105,7 @@ import { resolveLeafIdForSession } from './treeSessionQuery';
 
 /**
  * 在当前会话所属叶节点的右侧坞中打开/聚焦独立文件预览面板。
- * 
+ *
  * 单轨真理路径守门：
  * 1. 严格经过 normalizeViewerFilePath 标准化，杜绝路径漂移产生重复 Tab；
  * 2. 连通 initialMode 参数，当为 diff 时自动携带 ?mode=diff；
@@ -571,7 +571,7 @@ describe('openFileViewerInSession (PLAN-03)', () => {
     const leaf = getLeafById(leafId);
     const expectedPrefix = 'file-viewer:';
     const activePanel = leaf.dock.activePanelId;
-    
+
     expect(activePanel).toContain(expectedPrefix);
     expect(activePanel).toContain('apps/crish-desktop/src/main.tsx');
     expect(activePanel).toContain('?mode=diff');

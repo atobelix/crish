@@ -1,13 +1,13 @@
 # 单轨架构与接口契约交叉独立评审报告 (REVIEW-01)
 
-> **战役名称**：差异面板与笔记面板系统性重构（Diff View & Note Panel Systematic Redesign）  
-> **评审阶段**：阶段三 · 方案交叉独立评审（Cross-Plan Independent Review）  
-> **专项编号**：REVIEW-01  
-> **评审角色**：架构单轨性与接口契约首席评审官（Chief Architecture & Contract Reviewer）  
-> **输入依赖**：  
-> - [`docs/diff-view-redesign/analysis/`](file:///c:/Software/conex/docs/diff-view-redesign/analysis/) 全量 8 份现场审计报告（AUDIT-01 至 AUDIT-08）  
-> - [`docs/diff-view-redesign/independent-plans/`](file:///c:/Software/conex/docs/diff-view-redesign/independent-plans/) 全量 7 份独立方案（PLAN-01 至 PLAN-07）  
-> **落盘路径**：`docs/diff-view-redesign/plan-reviews/01-architecture-and-contracts-review.md`  
+> **战役名称**：差异面板与笔记面板系统性重构（Diff View & Note Panel Systematic Redesign）
+> **评审阶段**：阶段三 · 方案交叉独立评审（Cross-Plan Independent Review）
+> **专项编号**：REVIEW-01
+> **评审角色**：架构单轨性与接口契约首席评审官（Chief Architecture & Contract Reviewer）
+> **输入依赖**：
+> - [`docs/diff-view-redesign/analysis/`](file:///c:/Software/conex/docs/diff-view-redesign/analysis/) 全量 8 份现场审计报告（AUDIT-01 至 AUDIT-08）
+> - [`docs/diff-view-redesign/independent-plans/`](file:///c:/Software/conex/docs/diff-view-redesign/independent-plans/) 全量 7 份独立方案（PLAN-01 至 PLAN-07）
+> **落盘路径**：`docs/diff-view-redesign/plan-reviews/01-architecture-and-contracts-review.md`
 > **审查基准**：用户最高裁决（“系统性做，先考虑架构。以及避免双轨或者多轨、硬编码、功能伪实现、伪连通。项目中的代码应该是清晰的、单轨的、最先进的代码”）、[`.agents/LOGIC_PLAN_NO_RETREAT.md`](file:///c:/Software/conex/.agents/LOGIC_PLAN_NO_RETREAT.md)（反退避）、[`AGENTS.md`](file:///c:/Software/conex/AGENTS.md)（协作纪律）与 [`ANTI_OVERENGINEERING_GUARDRAILS.md`](file:///c:/Software/conex/ANTI_OVERENGINEERING_GUARDRAILS.md)。
 
 ---
@@ -224,7 +224,7 @@ export function normalizeViewerFilePath(rawPath: string): string {
 
   // 1. 保留 UNC 前缀（如 //server 或 //wsl.localhost）
   const isUnc = p.startsWith('//') && !p.startsWith('///');
-  
+
   // 2. 清理多余连续斜杠（保护开头的 UNC 双斜杠）
   if (isUnc) {
     p = '//' + p.substring(2).replace(/\/+/g, '/');

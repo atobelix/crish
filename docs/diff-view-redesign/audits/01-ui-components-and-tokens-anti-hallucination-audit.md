@@ -1,15 +1,15 @@
 # 战役：差异面板与笔记面板系统性重构 —— 阶段五：详案终审反幻觉严苛审计报告 (AUDIT-FINAL-UI-TOKENS)
 
-> **审计编号**：AUDIT-FINAL-UI-TOKENS  
-> **战役名称**：差异面板与笔记面板系统性重构（Diff View & Note Panel Systematic Redesign）  
-> **所属阶段**：阶段五 · 详案终审反幻觉严苛审计（Phase 5: Anti-Hallucination Final Audit）  
-> **审计角色**：UI 组件与 CSS Tokens 真实性终审官（UI & CSS Tokens Anti-Hallucination Auditor）  
+> **审计编号**：AUDIT-FINAL-UI-TOKENS
+> **战役名称**：差异面板与笔记面板系统性重构（Diff View & Note Panel Systematic Redesign）
+> **所属阶段**：阶段五 · 详案终审反幻觉严苛审计（Phase 5: Anti-Hallucination Final Audit）
+> **审计角色**：UI 组件与 CSS Tokens 真实性终审官（UI & CSS Tokens Anti-Hallucination Auditor）
 > **审计对象**：
 > - [`docs/diff-view-redesign/01-分维详案-差异面板平直列表直角化与32px紧凑架构.md`](file:///c:/Software/conex/docs/diff-view-redesign/01-分维详案-差异面板平直列表直角化与32px紧凑架构.md) (DETAIL-PLAN-01)
 > - [`docs/diff-view-redesign/02-分维详案-行内工具条物理拔除与代码比对专注化.md`](file:///c:/Software/conex/docs/diff-view-redesign/02-分维详案-行内工具条物理拔除与代码比对专注化.md) (DETAIL-PLAN-02)
 > - [`docs/diff-view-redesign/04-分维详案-全域Tokens规范重构与SLoHT单层Hover体系.md`](file:///c:/Software/conex/docs/diff-view-redesign/04-分维详案-全域Tokens规范重构与SLoHT单层Hover体系.md) (DETAIL-PLAN-04)
 > - [`docs/diff-view-redesign/05-分维详案-笔记面板32px紧凑顶栏重塑与底部调试块彻底拔除.md`](file:///c:/Software/conex/docs/diff-view-redesign/05-分维详案-笔记面板32px紧凑顶栏重塑与底部调试块彻底拔除.md) (DETAIL-PLAN-05)
-> **产出落盘**：`docs/diff-view-redesign/audits/01-ui-components-and-tokens-anti-hallucination-audit.md`  
+> **产出落盘**：`docs/diff-view-redesign/audits/01-ui-components-and-tokens-anti-hallucination-audit.md`
 > **审计准则与权威底线**：
 > - 用户最高指示：“差异界面的每个文件改成列表就行了，去掉圆角。然后去掉每个文件列表里面的顶部工具行，越简单越好...而且现在的这个界面很多东西还有硬编码的呢，这个也统一使用我们的token体系。这个界面的hover我看也是有问题的，有的很灰啊...笔记的顶部功能栏我看也没有。底部那个灰色的大区域一点用处没有，两个块区域是又丑又没用...系统性做，先考虑架构。以及避免双轨或者多轨、硬编码、功能伪实现、伪连通。”
 > - 仓库铁律 [`AGENTS.md`](file:///c:/Software/conex/AGENTS.md) §1（反退避纯逻辑推进）、§3（Git 提交权归主控）、§7（严禁补丁与绕过、立体验证、架构净收敛）、§8（反过度设计红线）、§9（测试资产保护铁律）、§12（UI 自定义 Tooltip，严禁原生 HTML title）、§13（输入框与焦点态、焦点对比度上限 <= 10%、形态 ④ 纯光标极简型）、§14（现代 CSS 语法、优先 HSLA / 斜杠透明度、零裸写十六进制、Zero-Blue 铁律）。
@@ -49,8 +49,8 @@
 
 本终审官在全面通读 4 份分维详案（合计超过 9000 行技术文档与全量源代码）、地毯式审查 `apps/crish-desktop/` 源码现场与全量关联测试套件后，签发终审裁决：
 
-**【判定】：条件性准入（NEED-FIX）**  
-详案的重构大方向（直角化、32px 紧凑、专注比对、单轨超链接、物理剔除底部双灰块、SLoHT 单层悬停）完全契合用户最高指示，且对 13 处裸写 Hex 与 6 处幽灵 Token 的代码定位 100% 真实确凿；  
+**【判定】：条件性准入（NEED-FIX）**
+详案的重构大方向（直角化、32px 紧凑、专注比对、单轨超链接、物理剔除底部双灰块、SLoHT 单层悬停）完全契合用户最高指示，且对 13 处裸写 Hex 与 6 处幽灵 Token 的代码定位 100% 真实确凿；
 然而，**方案在子方案协同一致性、测试资产保护、铁律门禁遵从度上出现了严重的“幻觉”、“阳奉阴违”与“破门禁”行为**。若不经修正确接盲目进入阶段六实施，将直接引发 **3 套测试套件红灯报错、HTML 语法结构崩溃、以及多处样式回潮**。必须执行本文第五章的整改指令后，方可由主控统一发令编码。
 
 ### 1.2 关键缺陷统计分布
@@ -248,7 +248,7 @@
 - **确凿证据与缺陷剖析**：
   在详案 04 §2.3 中，作者在推导单层悬停时写道：
   > “*文件条目由 `<button type="button" class="fileRow">` 或平直单轨中的行实体承载，独占所有光标响应*”
-  
+
   **严重病理**：
   1. 根据 W3C HTML5 规范 §4.10.6（Interactive Content），`<button>` 元素内部**严禁包含任何可交互内容（Interactive content descendants）**，包括 `<button>`、`<a>`、`<input>` 等；
   2. 根据详案 01 的三大正交子域架构，行内包含：
@@ -281,7 +281,7 @@
   ```
   整整 8 处 `!important`！
   更为讽刺的是，在同一份详案的结语第 2011 行，作者自己写道：“*实施过程中，严禁因特异性不足而使用 `!important` 覆盖*”！
-  
+
   **危害剖析**：
   1. [`apps/crish-desktop/src/styles/style-contract.test.ts:331-350`](file:///c:/Software/conex/apps/crish-desktop/src/styles/style-contract.test.ts#L331) 明确设置了 `全仓 !important 计数 ≤ 626` 的刚性防回潮棘轮（Ratchet）；
   2. 在 CSS Modules 环境下，`.searchInput:focus` 自身特异性达到 (0, 2, 0)，完全足以自然覆盖默认样式，加 `!important` 属于典型的“盲目打补丁”陋习，直接违反 [`AGENTS.md`](file:///c:/Software/conex/AGENTS.md) §7“严禁补丁、绕过与作弊”。
@@ -382,7 +382,7 @@
 - **确凿证据与缺陷剖析**：
   [`AGENTS.md`](file:///c:/Software/conex/AGENTS.md) §12 刚性要求：
   > “*使用自定义 Tooltip：始终使用项目自定义 `<Tooltip>` 组件，不要用原生 HTML `title` 作为主悬停提示。避免浏览器默认气泡：原生 title 观感不一致且陈旧；用 `<Tooltip content={...}>` 包裹可交互元素，以获得圆角胶囊、柔和阴影与主题色一致的提示。*”
-  
+
   详案 01 与详案 05 在给出组件 JSX 时，偷懒大量使用了原生 HTML `title` 属性，渲染后会弹出丑陋陈旧的 Windows 默认矩形黄色/白底气泡。
 - **整改要求**：
   全量替换为原子组件 `<Tooltip content={...}>` 包裹目标元素。

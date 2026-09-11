@@ -1,9 +1,9 @@
 # 全域 Hover 双重叠加根除与系统 Design Tokens 规范化方案 (PLAN-04)
 
-> **文档位置**：`docs/diff-view-redesign/independent-plans/04-hover-tokens-standardization-plan.md`  
-> **所属战役**：差异面板与笔记面板系统性重构（Diff View & Note Panel Systematic Redesign）  
-> **方案编号**：PLAN-04（阶段二：独立方案设计）  
-> **输入依赖**：[`docs/diff-view-redesign/analysis/04-hover-tokens-contrast-audit.md`](file:///c:/Software/conex/docs/diff-view-redesign/analysis/04-hover-tokens-contrast-audit.md) (AUDIT-04)  
+> **文档位置**：`docs/diff-view-redesign/independent-plans/04-hover-tokens-standardization-plan.md`
+> **所属战役**：差异面板与笔记面板系统性重构（Diff View & Note Panel Systematic Redesign）
+> **方案编号**：PLAN-04（阶段二：独立方案设计）
+> **输入依赖**：[`docs/diff-view-redesign/analysis/04-hover-tokens-contrast-audit.md`](file:///c:/Software/conex/docs/diff-view-redesign/analysis/04-hover-tokens-contrast-audit.md) (AUDIT-04)
 > **方案职责**：彻底物理切断外层容器与包装层上的 `:hover` 背景规则，消除导致局部变暗 4.94%~6.88% 脏灰的 Porter-Duff 物理 Alpha 双重叠加缺陷；确立“单一真理 Hover 交互层级”（Single Layer of Hover Truth, SLoHT）；全量清剿 13 处裸写硬编码色值（`#ffffff`、`#ef4444`）与 6 处幽灵 Token（`--diff-bg-pane` 等），收敛违章旧蓝 `--accent-blue` 为 Conex Zero-Blue 规范的 `--md-link-color`；严格对齐 [`AGENTS.md`](file:///c:/Software/conex/AGENTS.md) §13-14 视觉对比度与形态 ④ 极简输入框规范；并在样式测试层构建刚性 AST 正则防回归门禁。
 
 ---

@@ -1,19 +1,19 @@
 # 差异与笔记面板详案终审反幻觉严苛审计与准入评审报告 (FINAL-REVIEW-ENTRY)
 
-> **战役名称**：差异面板与笔记面板系统性重构（Diff View & Note Panel Systematic Redesign）  
-> **评审阶段**：阶段五 · 详案终审反幻觉严苛审计与实施波准入裁决（Final Entry Review）  
-> **终审编号**：FINAL-REVIEW-ENTRY (04)  
-> **终审席位**：测试资产与状态机真实性终审官（Test Safety & State Machine Anti-Hallucination Auditor）  
-> **终审对象**：  
-> - [`docs/diff-view-redesign/05-分维详案-笔记面板32px紧凑顶栏重塑与底部调试块彻底拔除.md`](file:///c:/Software/conex/docs/diff-view-redesign/05-%E5%88%86%E7%BB%B4%E8%AF%A6%E6%A1%88-%E7%AC%94%E8%AE%B0%E9%9D%A2%E6%9D%BF32px%E7%B4%A7%E5%87%91%E9%A1%B6%E6%A0%8F%E9%87%8D%E5%A1%91%E4%B8%8E%E5%BA%95%E9%83%A8%E8%B0%83%E8%AF%95%E5%9D%97%E5%BD%BB%E5%BA%95%E6%8B%94%E9%99%A4.md)（DETAIL-PLAN-05）  
-> - [`docs/diff-view-redesign/06-分维详案-多笔记综合管理体系与SQLite及IPC后端架构.md`](file:///c:/Software/conex/docs/diff-view-redesign/06-%E5%88%86%E7%BB%B4%E8%AF%A6%E6%A1%88-%E5%A4%9A%E7%AC%94%E8%AE%B0%E7%BB%BC%E5%90%88%E7%AE%A1%E7%90%86%E4%BD%93%E7%B3%BB%E4%B8%8ESQLite%E5%8F%8AIPC%E5%90%8E%E7%AB%AF%E6%9E%B6%E6%9E%84.md)（DETAIL-PLAN-06）  
-> - [`docs/diff-view-redesign/07-分维详案-立体验证套件与回归测试平滑迁移.md`](file:///c:/Software/conex/docs/diff-view-redesign/07-%E5%88%86%E7%BB%B4%E8%AF%A6%E6%A1%88-%E7%AB%8B%E4%BD%93%E9%AA%8C%E8%AF%81%E5%A5%97%E4%BB%B6%E4%B8%8E%E5%9B%9E%E5%BD%92%E6%B5%8B%E8%AF%95%E5%B9%B3%E6%BB%91%E8%BF%81%E7%A7%BB.md)（DETAIL-PLAN-07）  
-> **输入协同**：  
-> - 阶段三独立评审报告：[`01-architecture-and-contracts-review.md`](file:///c:/Software/conex/docs/diff-view-redesign/plan-reviews/01-architecture-and-contracts-review.md)（架构单轨性与接口契约）  
-> - 阶段三独立评审报告：[`02-ui-tokens-and-visual-review.md`](file:///c:/Software/conex/docs/diff-view-redesign/plan-reviews/02-ui-tokens-and-visual-review.md)（UI 视觉规范与 Tokens 纯度）  
-> - 阶段三独立评审报告：[`03-test-safety-and-state-machine-review.md`](file:///c:/Software/conex/docs/diff-view-redesign/plan-reviews/03-test-safety-and-state-machine-review.md)（测试资产保护与状态机边界）  
-> - 阶段五笔记专项终审：[`05-note-final-entry-review.md`](file:///c:/Software/conex/docs/diff-view-redesign/plan-reviews/05-note-final-entry-review.md)（FINAL-REVIEW-02 准入裁决）  
-> **落盘路径**：`docs/diff-view-redesign/plan-reviews/04-final-entry-review.md`  
+> **战役名称**：差异面板与笔记面板系统性重构（Diff View & Note Panel Systematic Redesign）
+> **评审阶段**：阶段五 · 详案终审反幻觉严苛审计与实施波准入裁决（Final Entry Review）
+> **终审编号**：FINAL-REVIEW-ENTRY (04)
+> **终审席位**：测试资产与状态机真实性终审官（Test Safety & State Machine Anti-Hallucination Auditor）
+> **终审对象**：
+> - [`docs/diff-view-redesign/05-分维详案-笔记面板32px紧凑顶栏重塑与底部调试块彻底拔除.md`](file:///c:/Software/conex/docs/diff-view-redesign/05-%E5%88%86%E7%BB%B4%E8%AF%A6%E6%A1%88-%E7%AC%94%E8%AE%B0%E9%9D%A2%E6%9D%BF32px%E7%B4%A7%E5%87%91%E9%A1%B6%E6%A0%8F%E9%87%8D%E5%A1%91%E4%B8%8E%E5%BA%95%E9%83%A8%E8%B0%83%E8%AF%95%E5%9D%97%E5%BD%BB%E5%BA%95%E6%8B%94%E9%99%A4.md)（DETAIL-PLAN-05）
+> - [`docs/diff-view-redesign/06-分维详案-多笔记综合管理体系与SQLite及IPC后端架构.md`](file:///c:/Software/conex/docs/diff-view-redesign/06-%E5%88%86%E7%BB%B4%E8%AF%A6%E6%A1%88-%E5%A4%9A%E7%AC%94%E8%AE%B0%E7%BB%BC%E5%90%88%E7%AE%A1%E7%90%86%E4%BD%93%E7%B3%BB%E4%B8%8ESQLite%E5%8F%8AIPC%E5%90%8E%E7%AB%AF%E6%9E%B6%E6%9E%84.md)（DETAIL-PLAN-06）
+> - [`docs/diff-view-redesign/07-分维详案-立体验证套件与回归测试平滑迁移.md`](file:///c:/Software/conex/docs/diff-view-redesign/07-%E5%88%86%E7%BB%B4%E8%AF%A6%E6%A1%88-%E7%AB%8B%E4%BD%93%E9%AA%8C%E8%AF%81%E5%A5%97%E4%BB%B6%E4%B8%8E%E5%9B%9E%E5%BD%92%E6%B5%8B%E8%AF%95%E5%B9%B3%E6%BB%91%E8%BF%81%E7%A7%BB.md)（DETAIL-PLAN-07）
+> **输入协同**：
+> - 阶段三独立评审报告：[`01-architecture-and-contracts-review.md`](file:///c:/Software/conex/docs/diff-view-redesign/plan-reviews/01-architecture-and-contracts-review.md)（架构单轨性与接口契约）
+> - 阶段三独立评审报告：[`02-ui-tokens-and-visual-review.md`](file:///c:/Software/conex/docs/diff-view-redesign/plan-reviews/02-ui-tokens-and-visual-review.md)（UI 视觉规范与 Tokens 纯度）
+> - 阶段三独立评审报告：[`03-test-safety-and-state-machine-review.md`](file:///c:/Software/conex/docs/diff-view-redesign/plan-reviews/03-test-safety-and-state-machine-review.md)（测试资产保护与状态机边界）
+> - 阶段五笔记专项终审：[`05-note-final-entry-review.md`](file:///c:/Software/conex/docs/diff-view-redesign/plan-reviews/05-note-final-entry-review.md)（FINAL-REVIEW-02 准入裁决）
+> **落盘路径**：`docs/diff-view-redesign/plan-reviews/04-final-entry-review.md`
 > **审查铁律**：用户最高指令（“系统性做，先考虑架构。以及避免双轨或者多轨、硬编码、功能伪实现、伪连通。项目中的代码应该是清晰的、单轨的、最先进的代码”）、[`.agents/LOGIC_PLAN_NO_RETREAT.md`](file:///c:/Software/conex/.agents/LOGIC_PLAN_NO_RETREAT.md)（反退避全文）、[`AGENTS.md`](file:///c:/Software/conex/AGENTS.md) §1（纯逻辑规划）、§3（Git 提交权主控独占）、§7（严禁补丁、绕过与作弊，零容忍 `--no-verify`）、§7.1（立体验证纪律）、§9（测试资产保护铁律）、§12（UI 自定义 Tooltip）、§13（输入框焦点对比度 <= 10%）、§14（现代 CSS、禁止裸写 Hex）、[`ANTI_OVERENGINEERING_GUARDRAILS.md`](file:///c:/Software/conex/ANTI_OVERENGINEERING_GUARDRAILS.md)。
 
 ---
@@ -55,7 +55,7 @@
 
 测试资产与状态机真实性终审官对分维详案 05、06、07 展开了穿透至 Node.js 运行时底层、源码 AST、React 18/19 并发调度器与真实 Git 树测试套件的“挤干水分”式反幻觉严苛审计。
 
-**终审裁决结论**：**【CONDITIONAL PASS（有条件准入实施）】**。  
+**终审裁决结论**：**【CONDITIONAL PASS（有条件准入实施）】**。
 各分维详案在单轨架构收敛、用户痛点物理切除、数据库版本加固、五重 IPC 闭环上的总体逻辑完备坚实，但详案中提供的部分关键代码存在**“直接在 Node 运行时抛 SyntaxError 崩溃”、“Hook 调用实参类型与声明类型脱节”、“在状态更新函数内部触发级联状态修改的反模式”、以及“CSS 样式文件违规声明 Hex/display:none”**等 4 项直接阻断 CI 门禁的重大幻觉性缺陷。
 
 **放行前提条件**：实施波（Phase 6）必须**无条件采用本终审报告第 [五章](#五准入修复施工补丁drop-in-code-patches) 提供的 6 大 Drop-in 修正补丁**作为基准进行代码落盘，严禁原样照抄详案 06 与 07 中不可执行的伪代码！
@@ -456,7 +456,7 @@ describe('战役 07 样式守卫：差异与笔记面板直角化、单层Hover�
       // 剥离注释
       const cleanContent = content.replace(/\/\*[\s\S]*?\*\//g, '');
       const hexMatches = cleanContent.match(hexPattern) ?? [];
-      
+
       expect(
         hexMatches,
         `文件 ${file} 存在裸写 Hex 违规色值: ${hexMatches.join(', ')}。必须全量替换为 Design Tokens！`

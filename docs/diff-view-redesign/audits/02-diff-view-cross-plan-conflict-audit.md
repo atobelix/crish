@@ -1,20 +1,20 @@
 # 差异面板跨方案深层打架排查官贯通审计报告
 ## （Diff View Cross-Plan Conflict Audit & SSOT Convergence Directive）
 
-> **审计执行人**：差异面板跨方案深层打架排查官（Diff View Cross-Plan Conflict Auditor）  
-> **审计范围**：  
-> - `docs/diff-view-redesign/00-总方案-差异与笔记面板系统性重构全景架构总纲.md`  
-> - `docs/diff-view-redesign/01-分维详案-差异面板平直列表直角化与32px紧凑架构.md`  
-> - `docs/diff-view-redesign/02-分维详案-行内工具条物理拔除与代码比对专注化.md`  
-> - `docs/diff-view-redesign/03-分维详案-文件名超链接单轨接线独立预览Tab与全域Tokens规范.md`  
-> - `docs/diff-view-redesign/04-分维详案-全域Tokens规范重构与SLoHT单层Hover体系.md`  
-> - `docs/diff-view-redesign/07-分维详案-立体验证套件与回归测试平滑迁移.md`  
-> **代码物理坐标**：  
-> - 组件实体：[`apps/crish-desktop/src/components/diff/DiffCardFileList.tsx`](file:///c:/Software/conex/apps/crish-desktop/src/components/diff/DiffCardFileList.tsx)  
-> - 宿主父组件：[`apps/crish-desktop/src/components/diff/DiffCard.tsx`](file:///c:/Software/conex/apps/crish-desktop/src/components/diff/DiffCard.tsx)  
-> - 样式实体：[`apps/crish-desktop/src/components/diff/DiffCard.module.css`](file:///c:/Software/conex/apps/crish-desktop/src/components/diff/DiffCard.module.css)  
-> - 测试实体：[`apps/crish-desktop/src/components/diff/DiffCardFileList.test.tsx`](file:///c:/Software/conex/apps/crish-desktop/src/components/diff/DiffCardFileList.test.tsx)  
-> **审计日期**：2026-09-05  
+> **审计执行人**：差异面板跨方案深层打架排查官（Diff View Cross-Plan Conflict Auditor）
+> **审计范围**：
+> - `docs/diff-view-redesign/00-总方案-差异与笔记面板系统性重构全景架构总纲.md`
+> - `docs/diff-view-redesign/01-分维详案-差异面板平直列表直角化与32px紧凑架构.md`
+> - `docs/diff-view-redesign/02-分维详案-行内工具条物理拔除与代码比对专注化.md`
+> - `docs/diff-view-redesign/03-分维详案-文件名超链接单轨接线独立预览Tab与全域Tokens规范.md`
+> - `docs/diff-view-redesign/04-分维详案-全域Tokens规范重构与SLoHT单层Hover体系.md`
+> - `docs/diff-view-redesign/07-分维详案-立体验证套件与回归测试平滑迁移.md`
+> **代码物理坐标**：
+> - 组件实体：[`apps/crish-desktop/src/components/diff/DiffCardFileList.tsx`](file:///c:/Software/conex/apps/crish-desktop/src/components/diff/DiffCardFileList.tsx)
+> - 宿主父组件：[`apps/crish-desktop/src/components/diff/DiffCard.tsx`](file:///c:/Software/conex/apps/crish-desktop/src/components/diff/DiffCard.tsx)
+> - 样式实体：[`apps/crish-desktop/src/components/diff/DiffCard.module.css`](file:///c:/Software/conex/apps/crish-desktop/src/components/diff/DiffCard.module.css)
+> - 测试实体：[`apps/crish-desktop/src/components/diff/DiffCardFileList.test.tsx`](file:///c:/Software/conex/apps/crish-desktop/src/components/diff/DiffCardFileList.test.tsx)
+> **审计日期**：2026-09-05
 
 ---
 
@@ -23,7 +23,7 @@
 经过对 `docs/diff-view-redesign/` 下 00 总纲、01、02、03、04 四份详案及 07 测试方案的全文逐行对照与源码现场核验，排查官正式签署审计结论：
 
 > [!CAUTION]
-> **审计最高裁决**：**各方案之间确实存在极其严重的深层打架（Deep Cross-Plan Conflicts）！**  
+> **审计最高裁决**：**各方案之间确实存在极其严重的深层打架（Deep Cross-Plan Conflicts）！**
 > 在未经过本报告贯通裁决前，若任由各 Agent 孤立落盘代码，将立刻导致：**TypeScript 编译类型断裂、组件与样式表 10+ 处选择器失配脱节、DOM 树结构破损变形、测试套件用例当场红灯崩溃**！
 
 ### 核心打架点速查总览：

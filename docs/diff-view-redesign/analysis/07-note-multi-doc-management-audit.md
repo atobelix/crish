@@ -1,9 +1,9 @@
 # 多笔记综合管理体系与多文档切换架构设计审计报告 (AUDIT-07)
 
-> **审计编号**：AUDIT-07  
-> **审计主题**：多笔记综合管理体系与多文档切换架构设计深度审计  
-> **战役阶段**：阶段一 · 前置代码现场深度审计  
-> **落盘路径**：`docs/diff-view-redesign/analysis/07-note-multi-doc-management-audit.md`  
+> **审计编号**：AUDIT-07
+> **审计主题**：多笔记综合管理体系与多文档切换架构设计深度审计
+> **战役阶段**：阶段一 · 前置代码现场深度审计
+> **落盘路径**：`docs/diff-view-redesign/analysis/07-note-multi-doc-management-audit.md`
 > **状态**：已完成（现场深度勘察与架构设计完成）
 
 ---
@@ -213,7 +213,7 @@ ALTER TABLE doc_meta ADD COLUMN is_archived INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE doc_meta ADD COLUMN tags_json TEXT NOT NULL DEFAULT '[]';
 
 -- 优化多文档列表排序查询索引
-CREATE INDEX IF NOT EXISTS idx_doc_meta_listing 
+CREATE INDEX IF NOT EXISTS idx_doc_meta_listing
 ON doc_meta(is_archived, is_pinned DESC, updated_at DESC);
 ```
 

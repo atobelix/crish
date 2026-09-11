@@ -1,9 +1,9 @@
 # 战役：差异面板与笔记面板系统性重构 —— 落地可行性与现实代码咬合终极审计报告 (AUDIT-FEASIBILITY-GROUNDING-04)
 
-> **战役名称**：差异面板与笔记面板系统性重构（Diff View & Note Panel Systematic Redesign）  
-> **审计编号**：AUDIT-FEASIBILITY-GROUNDING-04  
-> **所属阶段**：落地可行性与代码咬合最终审计（Pre-Implementation Grounding & Feasibility Audit）  
-> **审计席位**：落地可行性与代码咬合审计官（Implementation Feasibility & Grounding Auditor）  
+> **战役名称**：差异面板与笔记面板系统性重构（Diff View & Note Panel Systematic Redesign）
+> **审计编号**：AUDIT-FEASIBILITY-GROUNDING-04
+> **所属阶段**：落地可行性与代码咬合最终审计（Pre-Implementation Grounding & Feasibility Audit）
+> **审计席位**：落地可行性与代码咬合审计官（Implementation Feasibility & Grounding Auditor）
 > **核心任务**：
 > 1. 【如果现在开始动手改代码，哪一步会卡住？】穿透 Rust 编译器/宏展开、DiffCard 状态机与超链接、笔记面板切底后 100% 全高传递与滚动宿主。
 > 2. 【存量测试会不会大面积挂掉？】全面排查详案 07 未提及的、暗中依赖被改动文件的隐藏测试，给出确凿源码证据与破坏机理。

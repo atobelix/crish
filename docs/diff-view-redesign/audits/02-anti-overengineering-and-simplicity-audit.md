@@ -1,9 +1,9 @@
 # 战役：差异面板与笔记面板系统性重构 —— 全景反过度设计与极简纯粹性审计报告 (AUDIT-SIMPLICITY-FINAL)
 
-> **审计编号**：AUDIT-SIMPLICITY-FINAL  
-> **战役名称**：差异面板与笔记面板系统性重构（Diff View & Note Panel Systematic Redesign）  
-> **所属阶段**：阶段五 · 全景贯通审计补齐（Phase 5: Holistic End-to-End Audit Completion）  
-> **审计角色**：反过度设计与极简纯粹性审计官（Anti-Overengineering & Simplicity Auditor）  
+> **审计编号**：AUDIT-SIMPLICITY-FINAL
+> **战役名称**：差异面板与笔记面板系统性重构（Diff View & Note Panel Systematic Redesign）
+> **所属阶段**：阶段五 · 全景贯通审计补齐（Phase 5: Holistic End-to-End Audit Completion）
+> **审计角色**：反过度设计与极简纯粹性审计官（Anti-Overengineering & Simplicity Auditor）
 > **审计对象**：`docs/diff-view-redesign/` 下全部 8 份方案全集：
 > - [`docs/diff-view-redesign/00-总方案-差异与笔记面板系统性重构全景架构总纲.md`](file:///c:/Software/conex/docs/diff-view-redesign/00-%E6%80%BB%E6%96%B9%E6%A1%88-%E5%B7%AE%E5%BC%82%E4%B8%8E%E7%AC%94%E8%AE%B0%E9%9D%A2%E6%9D%BF%E7%B3%BB%E7%BB%9F%E6%80%A7%E9%87%8D%E6%9E%84%E5%85%A8%E6%99%AF%E6%9E%B6%E6%9E%84%E6%80%BB%E7%BA%B2.md) (MASTER-PLAN-00)
 > - [`docs/diff-view-redesign/01-分维详案-差异面板平直列表直角化与32px紧凑架构.md`](file:///c:/Software/conex/docs/diff-view-redesign/01-%E5%88%86%E7%BB%B4%E8%AF%A6%E6%A1%88-%E5%B7%AE%E5%BC%82%E9%9D%A2%E6%9D%BF%E5%B9%B3%E7%9B%B4%E5%88%97%E8%A1%A8%E7%9B%B4%E8%A7%92%E5%8C%96%E4%B8%8E32px%E7%B4%A7%E5%87%91%E6%9E%B6%E6%9E%84.md) (DETAIL-PLAN-01)
@@ -13,12 +13,12 @@
 > - [`docs/diff-view-redesign/05-分维详案-笔记面板32px紧凑顶栏重塑与底部调试块彻底拔除.md`](file:///c:/Software/conex/docs/diff-view-redesign/05-%E5%88%86%E7%BB%B4%E8%AF%A6%E6%A1%88-%E7%AC%94%E8%AE%B0%E9%9D%A2%E6%9D%BF32px%E7%B4%A7%E5%87%91%E9%A1%B6%E6%A0%8F%E9%87%8D%E5%A1%91%E4%B8%8E%E5%BA%95%E9%83%A8%E8%B0%83%E8%AF%95%E5%9D%97%E5%BD%BB%E5%BA%95%E6%8B%94%E9%99%A4.md) (DETAIL-PLAN-05)
 > - [`docs/diff-view-redesign/06-分维详案-多笔记综合管理体系与SQLite及IPC后端架构.md`](file:///c:/Software/conex/docs/diff-view-redesign/06-%E5%88%86%E7%BB%B4%E8%AF%A6%E6%A1%88-%E5%A4%9A%E7%AC%94%E8%AE%B0%E7%BB%BC%E5%90%88%E7%AE%A1%E7%90%86%E4%BD%93%E7%B3%BB%E4%B8%8ESQLite%E5%8F%8AIPC%E5%90%8E%E7%AB%AF%E6%9E%B6%E6%9E%84.md) (DETAIL-PLAN-06)
 > - [`docs/diff-view-redesign/07-分维详案-立体验证套件与回归测试平滑迁移.md`](file:///c:/Software/conex/docs/diff-view-redesign/07-%E5%88%86%E7%BB%B4%E8%AF%A6%E6%A1%88-%E7%AB%8B%E4%BD%93%E9%AA%8C%E8%AF%81%E5%A5%97%E4%BB%B6%E4%B8%8E%E5%9B%9E%E5%BD%92%E6%B5%8B%E8%AF%95%E5%B9%B3%E6%BB%91%E8%BF%81%E7%A7%BB.md) (DETAIL-PLAN-07)
-> **产出落盘**：`docs/diff-view-redesign/audits/02-anti-overengineering-and-simplicity-audit.md`  
-> **审计基准与硬性红线**：  
-> 1. 仓库根目录 [`ANTI_OVERENGINEERING_GUARDRAILS.md`](file:///c:/Software/conex/ANTI_OVERENGINEERING_GUARDRAILS.md)（13 项明确禁令）；  
-> 2. 用户关于“越简单越好”的战略指示与最高裁决：  
->    - *“差异界面的每个文件改成列表就行了，去掉圆角。然后去掉每个文件列表里面的顶部工具行，越简单越好，现在功能多了用户反而不知道怎么用了。整个差异界面基本上是都要重构了...项目中的代码应该是清晰的、单轨的、最先进的代码。”*  
->    - *“笔记界面一起哈。笔记的顶部功能栏我看也没有。底部那个灰色的大区域一点用处没有，这两个块区域是又丑又没用...先优化界面吧，这个笔记界面还是有些问题，因为笔记不可能只有一个，以及笔记没有一个综合的管理界面，现在只能看一个类似于硬编码的标签界面了，这和展示没什么区别。了解清楚了，这个也一起加进去。”*  
+> **产出落盘**：`docs/diff-view-redesign/audits/02-anti-overengineering-and-simplicity-audit.md`
+> **审计基准与硬性红线**：
+> 1. 仓库根目录 [`ANTI_OVERENGINEERING_GUARDRAILS.md`](file:///c:/Software/conex/ANTI_OVERENGINEERING_GUARDRAILS.md)（13 项明确禁令）；
+> 2. 用户关于“越简单越好”的战略指示与最高裁决：
+>    - *“差异界面的每个文件改成列表就行了，去掉圆角。然后去掉每个文件列表里面的顶部工具行，越简单越好，现在功能多了用户反而不知道怎么用了。整个差异界面基本上是都要重构了...项目中的代码应该是清晰的、单轨的、最先进的代码。”*
+>    - *“笔记界面一起哈。笔记的顶部功能栏我看也没有。底部那个灰色的大区域一点用处没有，这两个块区域是又丑又没用...先优化界面吧，这个笔记界面还是有些问题，因为笔记不可能只有一个，以及笔记没有一个综合的管理界面，现在只能看一个类似于硬编码的标签界面了，这和展示没什么区别。了解清楚了，这个也一起加进去。”*
 > 3. 协作纪律 [`AGENTS.md`](file:///c:/Software/conex/AGENTS.md) §1（反退避纯逻辑推进）、§7（严禁补丁与绕过、立体验证、架构净收敛）、§8（反过度设计硬性红线）。
 
 ---
@@ -143,12 +143,12 @@
 
 ### 2.5 差异面板审查结论：达成极致专注与极简
 
-> **【审查结论】：PASS（极简专注完全达标）**  
-> 差异面板的 4 份分维详案（01、02、03、04）对用户“越简单越好”的指示贯彻得极为坚决、透彻：  
-> - 删除了 110 行无用行内工具条；  
-> - 废黜了圆角卡片手风琴，换装平直 32px 直角列表；  
-> - 根治了双层 Hover 叠加导致的 4.94% 脏灰（SLoHT）；  
-> - 超链接单轨直通系统右侧标签坞，零自造弹窗；  
+> **【审查结论】：PASS（极简专注完全达标）**
+> 差异面板的 4 份分维详案（01、02、03、04）对用户“越简单越好”的指示贯彻得极为坚决、透彻：
+> - 删除了 110 行无用行内工具条；
+> - 废黜了圆角卡片手风琴，换装平直 32px 直角列表；
+> - 根治了双层 Hover 叠加导致的 4.94% 脏灰（SLoHT）；
+> - 超链接单轨直通系统右侧标签坞，零自造弹窗；
 > - **没有在任何别处搞出新的冗余伪功能，做到了极致专注。**
 
 ---
@@ -218,7 +218,7 @@
   ```
 - **复合索引包含该字段**（`06-分维详案:438`）：
   ```sql
-  CREATE INDEX IF NOT EXISTS idx_doc_meta_listing 
+  CREATE INDEX IF NOT EXISTS idx_doc_meta_listing
       ON doc_meta(is_archived, is_pinned DESC, updated_at DESC);
   ```
 - **Rust 后端依然保留分支**（`06-分维详案:833-847`）：
@@ -324,7 +324,7 @@ CREATE TABLE IF NOT EXISTS doc_meta (
 );
 
 -- 极简覆盖排序索引（去除 is_archived 冗余维度）
-CREATE INDEX IF NOT EXISTS idx_doc_meta_listing 
+CREATE INDEX IF NOT EXISTS idx_doc_meta_listing
     ON doc_meta(is_pinned DESC, updated_at DESC);
 ```
 
@@ -383,15 +383,15 @@ CREATE INDEX IF NOT EXISTS idx_doc_meta_listing
 
 针对主控 Agent 派发的三项具体审计问题，本审计官给出确凿、不含糊的判定：
 
-1. **审查差异面板：是否做到了极致的专注与极简？有没有在别处搞出新的冗余伪功能？**  
+1. **审查差异面板：是否做到了极致的专注与极简？有没有在别处搞出新的冗余伪功能？**
    **【答复】**：**是，做到了极致专注。** 物理切除了 110 行行内工具栏与 6 个杂糅按钮；平直列表直角化消灭了卡片孤岛；SLoHT 单层 hover 根除了 4.94% 脏灰；文件名超链接单轨接入系统成熟的独立 Tab，没有在任何别处自造弹窗、浮层或新的冗余伪功能。
-2. **审查笔记面板：多笔记管理是否过度设计？是否塞入了过多的复杂次要属性从而冲淡了核心体验？**  
+2. **审查笔记面板：多笔记管理是否过度设计？是否塞入了过多的复杂次要属性从而冲淡了核心体验？**
    **【答复】**：**是，存在明显的过度设计与次要属性堆砌。** 确凿指出了：
    - `tags_json` 标签体系（底层加列加逻辑，UI 零入口，属于半吊子画饼）；
    - `is_archived` 深度归档（前端砍掉假回收站，后端与数据库却留存软删除死逻辑）；
    - 侧栏抽屉与顶栏下拉双重切换控件并存，功能重叠导致认知混乱；
    - 顶栏常驻低频高危的“清空笔记”红色按钮，多图标过载挤压核心标题编辑区。
-3. **明确指出哪些功能属于“过度设计/可删减内容”，给出精简建议。有就是有，没有别强行搞事情。**  
+3. **明确指出哪些功能属于“过度设计/可删减内容”，给出精简建议。有就是有，没有别强行搞事情。**
    **【答复】**：已在第五章出具了精确的代码级精简指令：
    - 删减 `tags_json` 与相关搜索逻辑；
    - 删减 `is_archived` 与软删除分支，确立极简硬删除单轨；

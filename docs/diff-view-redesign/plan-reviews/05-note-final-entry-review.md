@@ -1,14 +1,14 @@
 # 笔记面板分维详案终审准入报告 (FINAL-REVIEW-02)
 
-> **战役名称**：差异面板与笔记面板系统性重构（Diff View & Note Panel Systematic Redesign）  
-> **评审阶段**：阶段五 · 详案终审准入裁决（Final Entry Review）  
-> **终审编号**：FINAL-REVIEW-02  
-> **评审席位**：笔记系统与多文档管理首席终审官（Chief Reviewer for Note Architecture & Multi-Doc Systems）  
-> **评审对象**：  
-> - [`docs/diff-view-redesign/00-总方案-差异与笔记面板系统性重构.md`](file:///c:/Software/conex/docs/diff-view-redesign/00-%E6%80%BB%E6%96%B9%E6%A1%88-%E5%B7%AE%E5%BC%82%E4%B8%8E%E7%AC%94%E8%AE%B0%E9%9D%A2%E6%9D%BF%E7%B3%BB%E7%BB%9F%E6%80%A7%E9%87%8D%E6%9E%84.md)  
-> - [`docs/diff-view-redesign/03-分维详案-笔记面板32px紧凑顶栏重塑与底部调试块彻底拔除.md`](file:///c:/Software/conex/docs/diff-view-redesign/03-%E5%88%86%E7%BB%B4%E8%AF%A6%E6%A1%88-%E7%AC%94%E8%AE%B0%E9%9D%A2%E6%9D%BF32px%E7%B4%A7%E5%87%91%E9%A1%B6%E6%A0%8F%E9%87%8D%E5%A1%91%E4%B8%8E%E5%BA%95%E9%83%A8%E8%B0%83%E8%AF%95%E5%9D%97%E5%BD%BB%E5%BA%95%E6%8B%94%E9%99%A4.md)  
-> - [`docs/diff-view-redesign/04-分维详案-多笔记综合管理体系与并发隔离架构.md`](file:///c:/Software/conex/docs/diff-view-redesign/04-%E5%88%86%E7%BB%B4%E8%AF%A6%E6%A1%88-%E5%A4%9A%E7%AC%94%E8%AE%B0%E7%BB%BC%E5%90%88%E7%AE%A1%E7%90%86%E4%BD%93%E7%B3%BB%E4%B8%8E%E5%B9%B6%E5%8F%91%E9%9A%94%E7%A6%BB%E6%9E%B6%E6%9E%84.md)  
-> **落盘路径**：`docs/diff-view-redesign/plan-reviews/05-note-final-entry-review.md`  
+> **战役名称**：差异面板与笔记面板系统性重构（Diff View & Note Panel Systematic Redesign）
+> **评审阶段**：阶段五 · 详案终审准入裁决（Final Entry Review）
+> **终审编号**：FINAL-REVIEW-02
+> **评审席位**：笔记系统与多文档管理首席终审官（Chief Reviewer for Note Architecture & Multi-Doc Systems）
+> **评审对象**：
+> - [`docs/diff-view-redesign/00-总方案-差异与笔记面板系统性重构.md`](file:///c:/Software/conex/docs/diff-view-redesign/00-%E6%80%BB%E6%96%B9%E6%A1%88-%E5%B7%AE%E5%BC%82%E4%B8%8E%E7%AC%94%E8%AE%B0%E9%9D%A2%E6%9D%BF%E7%B3%BB%E7%BB%9F%E6%80%A7%E9%87%8D%E6%9E%84.md)
+> - [`docs/diff-view-redesign/03-分维详案-笔记面板32px紧凑顶栏重塑与底部调试块彻底拔除.md`](file:///c:/Software/conex/docs/diff-view-redesign/03-%E5%88%86%E7%BB%B4%E8%AF%A6%E6%A1%88-%E7%AC%94%E8%AE%B0%E9%9D%A2%E6%9D%BF32px%E7%B4%A7%E5%87%91%E9%A1%B6%E6%A0%8F%E9%87%8D%E5%A1%91%E4%B8%8E%E5%BA%95%E9%83%A8%E8%B0%83%E8%AF%95%E5%9D%97%E5%BD%BB%E5%BA%95%E6%8B%94%E9%99%A4.md)
+> - [`docs/diff-view-redesign/04-分维详案-多笔记综合管理体系与并发隔离架构.md`](file:///c:/Software/conex/docs/diff-view-redesign/04-%E5%88%86%E7%BB%B4%E8%AF%A6%E6%A1%88-%E5%A4%9A%E7%AC%94%E8%AE%B0%E7%BB%BC%E5%90%88%E7%AE%A1%E7%90%86%E4%BD%93%E7%B3%BB%E4%B8%8E%E5%B9%B6%E5%8F%91%E9%9A%94%E7%A6%BB%E6%9E%B6%E6%9E%84.md)
+> **落盘路径**：`docs/diff-view-redesign/plan-reviews/05-note-final-entry-review.md`
 > **铁律基准**：用户最高指示（“避免双轨或者多轨、硬编码、功能伪实现、伪连通”）、[`AGENTS.md`](file:///c:/Software/conex/AGENTS.md) §1（反退避）、§3（Git提交权主控独占）、§7（严禁补丁、绕过与作弊）、§7.1（立体验证纪律）、§9（测试资产保护）、§13（输入框焦点对比度 <= 10%）及 [`ANTI_OVERENGINEERING_GUARDRAILS.md`](file:///c:/Software/conex/ANTI_OVERENGINEERING_GUARDRAILS.md)。
 
 ---

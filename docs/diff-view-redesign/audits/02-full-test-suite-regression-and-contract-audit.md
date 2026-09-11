@@ -1,9 +1,9 @@
 # 差异面板与笔记面板系统性重构 —— 全仓测试全景回归与门禁防线审计报告 (AUDIT-FINAL-TEST-SUITE)
 
-> **战役工作区**：`docs/diff-view-redesign/`  
-> **审计编号**：AUDIT-FINAL-TEST-SUITE (AUDIT-02)  
-> **落盘路径**：[`docs/diff-view-redesign/audits/02-full-test-suite-regression-and-contract-audit.md`](file:///c:/Software/conex/docs/diff-view-redesign/audits/02-full-test-suite-regression-and-contract-audit.md)  
-> **审计角色**：全仓测试全景回归与门禁防线审计官（Full Test Suite Regression & Contract Auditor）  
+> **战役工作区**：`docs/diff-view-redesign/`
+> **审计编号**：AUDIT-FINAL-TEST-SUITE (AUDIT-02)
+> **落盘路径**：[`docs/diff-view-redesign/audits/02-full-test-suite-regression-and-contract-audit.md`](file:///c:/Software/conex/docs/diff-view-redesign/audits/02-full-test-suite-regression-and-contract-audit.md)
+> **审计角色**：全仓测试全景回归与门禁防线审计官（Full Test Suite Regression & Contract Auditor）
 > **审计基准**：
 > - 方案体系全量 8 份方案：[`00-总方案`](file:///c:/Software/conex/docs/diff-view-redesign/00-总方案-差异与笔记面板系统性重构全景架构总纲.md) 至 [`07-分维详案`](file:///c:/Software/conex/docs/diff-view-redesign/07-分维详案-立体验证套件与回归测试平滑迁移.md)
 > - 仓库全仓测试：Rust `cargo test --workspace`（73 套件）、前端 Vitest 快层与集成测试（全量用例）
@@ -504,5 +504,5 @@ describe('批次 6 · T4 hover-only 键盘闭环契约（08-步5 · 平直列表
 经过全景代码级穿透审计，本审计官裁定：
 **本报告揭示的 6 项修复施工项是战役从阶段五迈向阶段六实现的刚性准入门闩。只要在代码实现阶段严格执行本报告第七章的修复补齐清单，全仓 73 套 Rust 测试与 Vitest 全量前端测试将 100% 稳固通过，实现真正意义上的零回归、零红灯交付！**
 
-*全仓测试全景回归与门禁防线审计官 签署定稿*  
+*全仓测试全景回归与门禁防线审计官 签署定稿*
 *2026-09-05*

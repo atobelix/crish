@@ -1,13 +1,13 @@
 # 分维详案 04：全域 Tokens 规范重构与 SLoHT 单层 Hover 体系 (DETAIL-PLAN-04)
 
-> **战役工作区**：`docs/diff-view-redesign/`  
-> **文档位置**：`docs/diff-view-redesign/04-分维详案-全域Tokens规范重构与SLoHT单层Hover体系.md`  
-> **专项编号**：DETAIL-PLAN-04（阶段四：分维实施详案 · 终局定稿修订版）  
-> **统领总纲**：[`00-总方案-差异与笔记面板系统性重构.md`](./00-总方案-差异与笔记面板系统性重构.md)  
-> **输入依据**：  
-> - [`analysis/04-hover-tokens-contrast-audit.md`](./analysis/04-hover-tokens-contrast-audit.md) (AUDIT-04 全域 Hover 过灰根因与 Design Tokens 规范审计)  
-> - [`independent-plans/04-hover-tokens-standardization-plan.md`](./independent-plans/04-hover-tokens-standardization-plan.md) (PLAN-04 独立方案)  
-> - [`plan-reviews/02-ui-tokens-and-visual-review.md`](./plan-reviews/02-ui-tokens-and-visual-review.md) (REVIEW-02 首席视觉评审官裁决)  
+> **战役工作区**：`docs/diff-view-redesign/`
+> **文档位置**：`docs/diff-view-redesign/04-分维详案-全域Tokens规范重构与SLoHT单层Hover体系.md`
+> **专项编号**：DETAIL-PLAN-04（阶段四：分维实施详案 · 终局定稿修订版）
+> **统领总纲**：[`00-总方案-差异与笔记面板系统性重构.md`](./00-总方案-差异与笔记面板系统性重构.md)
+> **输入依据**：
+> - [`analysis/04-hover-tokens-contrast-audit.md`](./analysis/04-hover-tokens-contrast-audit.md) (AUDIT-04 全域 Hover 过灰根因与 Design Tokens 规范审计)
+> - [`independent-plans/04-hover-tokens-standardization-plan.md`](./independent-plans/04-hover-tokens-standardization-plan.md) (PLAN-04 独立方案)
+> - [`plan-reviews/02-ui-tokens-and-visual-review.md`](./plan-reviews/02-ui-tokens-and-visual-review.md) (REVIEW-02 首席视觉评审官裁决)
 > - 终审审计报告矩阵：
 >   - [`audits/01-ui-components-and-tokens-anti-hallucination-audit.md`](./audits/01-ui-components-and-tokens-anti-hallucination-audit.md) (AUDIT-FINAL-UI-TOKENS 缺陷 03/04/08：肃清 8 处 `!important`、规范 HTML 容器、收敛 Flex 盒 `.rowActions`)
 >   - [`audits/02-diff-view-cross-plan-conflict-audit.md`](./audits/02-diff-view-cross-plan-conflict-audit.md) (AUDIT-CONFLICT-02 §5.1/§5.2：消除 `.rowActBtn` 悬停叠灰与状态徽章裸写 Hex)
@@ -16,7 +16,7 @@
 >   - [`apps/crish-desktop/src/styles/style-contract.test.ts`](file:///c:/Software/conex/apps/crish-desktop/src/styles/style-contract.test.ts) (全仓 `!important` 计数 ≤ 626 刚性防回潮棘轮门禁与 SLoHT 键盘闭环契约)
 >   - [`apps/crish-desktop/src/styles/__tests__/input-three-patterns-guard.test.ts`](file:///c:/Software/conex/apps/crish-desktop/src/styles/__tests__/input-three-patterns-guard.test.ts) (形态 ④ 纯光标极简型输入框全态零边框零阴影门禁)
 >   - [`apps/crish-desktop/src/styles/__tests__/antiDarkeningGuard.test.ts`](file:///c:/Software/conex/apps/crish-desktop/src/styles/__tests__/antiDarkeningGuard.test.ts) (RULE-11A/B/C 抗二次叠黑与顶栏 Select 紧凑 `size="sm"` 门禁)
-> - 仓库铁律 [`AGENTS.md`](file:///c:/Software/conex/AGENTS.md) §3（Git 提交权归主控）、§7（严禁补丁、绕过与作弊）、§7.1（立体验证纪律）、§12（自定义 Tooltip）、§13（输入框与焦点态、焦点对比度 <= 10%、形态 ④ 纯光标极简型）、§14（现代 CSS 语法、优先 HSLA / 斜杠透明度、零硬编码十六进制、Zero-Blue 铁律）。  
+> - 仓库铁律 [`AGENTS.md`](file:///c:/Software/conex/AGENTS.md) §3（Git 提交权归主控）、§7（严禁补丁、绕过与作弊）、§7.1（立体验证纪律）、§12（自定义 Tooltip）、§13（输入框与焦点态、焦点对比度 <= 10%、形态 ④ 纯光标极简型）、§14（现代 CSS 语法、优先 HSLA / 斜杠透明度、零硬编码十六进制、Zero-Blue 铁律）。
 > **施工标准**：代码级施工图深度；全量代码物理展开，严禁使用“...”省略；全文正文严格大于 1000 行。
 
 ---
@@ -340,7 +340,7 @@ SLoHT 三层物理架构契约模型：
 文件条目由 `<div className={styles.fileRow} role="row">`（或由父级 `role="list"` 包裹的语义容器）承载，独占行级通栏悬停光标响应与背景高亮。
 
 > [!IMPORTANT]
-> **刚性 W3C 契约防线（拒绝 button 嵌套与 DOM 规整破坏）**：  
+> **刚性 W3C 契约防线（拒绝 button 嵌套与 DOM 规整破坏）**：
 > 严禁将 `.fileRow` 声明为 `<button>`！根据 W3C HTML5 规范 §4.10.6（Interactive Content），`<button>` 元素内部**绝对禁止嵌套任何交互性元素（Interactive content descendants）**。行内包含子域 A 的折叠按钮 `<button className={styles.chevronBtn}>`、子域 B 的文件名超链接按钮 `<button className={styles.fileNameLinkBtn}>` 与子域 C 的 Git 操作按钮 `<button className={styles.rowActBtn}>`。若外层为 `<button>`，现代浏览器（Blink/WebView2）在解析 DOM 时会发生自动规整破坏（Auto-correction）或强制闭合，破坏点击事件冒泡隔离（`e.stopPropagation()`）与键盘 Tab 导航序列。因此，`.fileRow` 必须刚性声明为 `<div>` 语义容器。
 
 ```css
@@ -2293,5 +2293,5 @@ npm run test:coverage -- --project=unit
 npm run check:line-counts
 ```
 
-**反退避铁律警示**：  
+**反退避铁律警示**：
 实施过程中，严禁因特异性不足而使用 `!important` 覆盖；严禁因局部样式调整而重新在父容器添加 `:hover`；改动严格留在工作区，提交权统一交还主 Agent！

@@ -1,9 +1,9 @@
 # 战役：差异面板与笔记面板系统性重构 —— 全局架构与深层逻辑终极审计报告 (AUDIT-GLOBAL-ARCH-FINAL)
 
-> **战役名称**：差异面板与笔记面板系统性重构（Diff View & Note Panel Systematic Redesign）  
-> **审计编号**：AUDIT-GLOBAL-ARCH-FINAL (03)  
-> **所属阶段**：阶段五 · 全景架构与深层逻辑终极闭环审计（Phase 5 Final Closure Audit）  
-> **审计席位**：全局架构与深层逻辑审计官（Global Architecture & Deep Logic Auditor）  
+> **战役名称**：差异面板与笔记面板系统性重构（Diff View & Note Panel Systematic Redesign）
+> **审计编号**：AUDIT-GLOBAL-ARCH-FINAL (03)
+> **所属阶段**：阶段五 · 全景架构与深层逻辑终极闭环审计（Phase 5 Final Closure Audit）
+> **审计席位**：全局架构与深层逻辑审计官（Global Architecture & Deep Logic Auditor）
 > **审计对象**：`docs/diff-view-redesign/` 下全部核心方案资产：
 > - [`docs/diff-view-redesign/00-总方案-差异与笔记面板系统性重构全景架构总纲.md`](file:///c:/Software/conex/docs/diff-view-redesign/00-%E6%80%BB%E6%96%B9%E6%A1%88-%E5%B7%AE%E5%BC%82%E4%B8%8E%E7%AC%94%E8%AE%B0%E9%9D%A2%E6%9D%BF%E7%B3%BB%E7%BB%9F%E6%80%A7%E9%87%8D%E6%9E%84%E5%85%A8%E6%99%AF%E6%9E%B6%E6%9E%84%E6%80%BB%E7%BA%B2.md) (MASTER-PLAN-00)
 > - [`docs/diff-view-redesign/01-分维详案-差异面板平直列表直角化与32px紧凑架构.md`](file:///c:/Software/conex/docs/diff-view-redesign/01-%E5%88%86%E7%BB%B4%E8%AF%A6%E6%A1%88-%E5%B7%AE%E5%BC%82%E9%9D%A2%E6%9D%BF%E5%B9%B3%E7%9B%B4%E5%88%97%E8%A1%A8%E7%9B%B4%E8%A7%92%E5%8C%96%E4%B8%8E32px%E7%B4%A7%E5%87%91%E6%9E%B6%E6%9E%84.md) (DETAIL-PLAN-01)
@@ -13,7 +13,7 @@
 > - [`docs/diff-view-redesign/05-分维详案-笔记面板32px紧凑顶栏重塑与底部调试块彻底拔除.md`](file:///c:/Software/conex/docs/diff-view-redesign/05-%E5%88%86%E7%BB%B4%E8%AF%A6%E6%A1%88-%E7%AC%94%E8%AE%B0%E9%9D%A2%E6%9D%BF32px%E7%B4%A7%E5%87%91%E9%A1%B6%E6%A0%8F%E9%87%8D%E5%A1%91%E4%B8%8E%E5%BA%95%E9%83%A8%E8%B0%83%E8%AF%95%E5%9D%97%E5%BD%BB%E5%BA%95%E6%8B%94%E9%99%A4.md) (DETAIL-PLAN-05)
 > - [`docs/diff-view-redesign/06-分维详案-多笔记综合管理体系与SQLite及IPC后端架构.md`](file:///c:/Software/conex/docs/diff-view-redesign/06-%E5%88%86%E7%BB%B4%E8%AF%A6%E6%A1%88-%E5%A4%9A%E7%AC%94%E8%AE%B0%E7%BB%BC%E5%90%88%E7%AE%A1%E7%90%86%E4%BD%93%E7%B3%BB%E4%B8%8ESQLite%E5%8F%8AIPC%E5%90%8E%E7%AB%AF%E6%9E%B6%E6%9E%84.md) (DETAIL-PLAN-06)
 > - [`docs/diff-view-redesign/07-分维详案-立体验证套件与回归测试平滑迁移.md`](file:///c:/Software/conex/docs/diff-view-redesign/07-%E5%88%86%E7%BB%B4%E8%AF%A6%E6%A1%88-%E7%AC%94%E8%AE%B0%E9%9D%A2%E6%9D%BF32px%E7%B4%A7%E5%87%91%E9%A1%B6%E6%A0%8F%E9%87%8D%E5%A1%91%E4%B8%8E%E5%BA%95%E9%83%A8%E8%B0%83%E8%AF%95%E5%9D%97%E5%BD%BB%E5%BA%95%E6%8B%94%E9%99%A4.md) (DETAIL-PLAN-07)
-> - `docs/diff-view-redesign/plan-reviews/` 下全部 6 份评审与反幻觉报告 (01 至 06)  
+> - `docs/diff-view-redesign/plan-reviews/` 下全部 6 份评审与反幻觉报告 (01 至 06)
 > **审计基准**：用户最高指示（“系统性做，先考虑架构。以及避免双轨或者多轨、硬编码、功能伪实现、伪连通。项目中的代码应该是清晰的、单轨的、最先进的代码。越简单越好，现在功能多了用户反而不知道怎么用了。给出诚实、深刻、切中要害的审计意见。有就是有，没有别强行搞事情。”）、[`AGENTS.md`](file:///c:/Software/conex/AGENTS.md) §1、§3、§7、§7.1、§8、§9、§12-14、[`ANTI_OVERENGINEERING_GUARDRAILS.md`](file:///c:/Software/conex/ANTI_OVERENGINEERING_GUARDRAILS.md)。
 
 ---
@@ -167,10 +167,10 @@
 
 ## 2.1 违背用户“越简单越好”原则：半吊子“三废字段”（Tags / Archive / Pin）
 
-用户在现场给出的最高指示极为直白：  
+用户在现场给出的最高指示极为直白：
 > *“去掉每个文件列表里面的顶部工具行，越简单越好，现在功能多了用户反而不知道怎么用了……因为笔记不可能只有一个，以及笔记没有一个综合的管理界面，现在只能看一个类似于硬编码的标签界面了，这和展示没什么区别。了解清楚了，这个也一起加进去。”*
 
-用户要求的是：**从只能看 1 篇硬编码笔记，升级为可以管理多篇笔记（创建、重命名、删除、切换）**。  
+用户要求的是：**从只能看 1 篇硬编码笔记，升级为可以管理多篇笔记（创建、重命名、删除、切换）**。
 然而审查 06 详案的数据库与领域模型：
 
 ```sql

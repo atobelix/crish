@@ -1,15 +1,15 @@
 # 笔记面板跨方案深层打架排查审计报告 (AUDIT-CROSS-PLAN-NOTE)
 
-> **战役名称**：差异面板与笔记面板系统性重构（Diff View & Note Panel Systematic Redesign）  
-> **审计编号**：AUDIT-CROSS-PLAN-NOTE (02)  
-> **审计角色**：笔记面板跨方案深层打架排查官（Note Panel Cross-Plan Conflict Auditor）  
-> **落盘路径**：[`docs/diff-view-redesign/audits/02-note-panel-cross-plan-conflict-audit.md`](file:///c:/Software/conex/docs/diff-view-redesign/audits/02-note-panel-cross-plan-conflict-audit.md)  
+> **战役名称**：差异面板与笔记面板系统性重构（Diff View & Note Panel Systematic Redesign）
+> **审计编号**：AUDIT-CROSS-PLAN-NOTE (02)
+> **审计角色**：笔记面板跨方案深层打架排查官（Note Panel Cross-Plan Conflict Auditor）
+> **落盘路径**：[`docs/diff-view-redesign/audits/02-note-panel-cross-plan-conflict-audit.md`](file:///c:/Software/conex/docs/diff-view-redesign/audits/02-note-panel-cross-plan-conflict-audit.md)
 > **审计对象**：
 > - [`docs/diff-view-redesign/00-总方案-差异与笔记面板系统性重构全景架构总纲.md`](file:///c:/Software/conex/docs/diff-view-redesign/00-总方案-差异与笔记面板系统性重构全景架构总纲.md)
 > - [`docs/diff-view-redesign/05-分维详案-笔记面板32px紧凑顶栏重塑与底部调试块彻底拔除.md`](file:///c:/Software/conex/docs/diff-view-redesign/05-分维详案-笔记面板32px紧凑顶栏重塑与底部调试块彻底拔除.md)
 > - [`docs/diff-view-redesign/06-分维详案-多笔记综合管理体系与SQLite及IPC后端架构.md`](file:///c:/Software/conex/docs/diff-view-redesign/06-分维详案-多笔记综合管理体系与SQLite及IPC后端架构.md)
 > - [`docs/diff-view-redesign/07-分维详案-立体验证套件与回归测试平滑迁移.md`](file:///c:/Software/conex/docs/diff-view-redesign/07-分维详案-立体验证套件与回归测试平滑迁移.md)
-> - 现场代码：`apps/crish-desktop/src/components/note-paper/` 与 `apps/crish-desktop/src/extensions/note-paper/`  
+> - 现场代码：`apps/crish-desktop/src/components/note-paper/` 与 `apps/crish-desktop/src/extensions/note-paper/`
 > **审计裁决结论**：🔴 **【确认严重深层打架（CRITICAL CONFLICTS CONFIRMED）】**。05 详案与 06 详案在**顶栏组件交互拓扑、状态机生命周期所有权、侧栏抽屉挂载槽位、以及 Flex 弹性全高视口流水线**等 4 个关键维度存在严重割裂与物理互斥。若直接依照两份独立详案合并施工，将直接引发界面双头标题畸形、DOM 嵌套非法、侧栏切换导致编辑态雪崩、以及视口垂直叠压坍缩。
 
 ---
@@ -202,21 +202,21 @@ export interface NotePaperStrictHeaderProps {
 
 05 详案第三章自豪地宣称建立了“100% 全高弹性高度传递流水线（Stretch Pipeline）”：
 ```
-[分屏窗格宿主 TreeLeafPanel] 
+[分屏窗格宿主 TreeLeafPanel]
   .leafBody: flex: 1 1 0%; min-height: 0; width: 100%; height: 100%;
     │
     ▼
-[笔记叶宿主 NoteLeafHost] 
+[笔记叶宿主 NoteLeafHost]
   [data-note-leaf-host]: flex: 1 1 0%; min-height: 0; width: 100%; height: 100%; display: flex; flex-direction: column;
     │
     ▼
-[主面板容器 NotePaperStrictPanel] 
+[主面板容器 NotePaperStrictPanel]
   .panel: flex: 1 1 0%; height: 100%; min-height: 0; width: 100%; display: flex; flex-direction: column;
     │
-    ├─► [32px 紧凑顶栏 NotePaperStrictHeader] 
+    ├─► [32px 紧凑顶栏 NotePaperStrictHeader]
     │     .compactHeader: flex: 0 0 32px; height: 32px; min-height: 32px; max-height: 32px;
     │
-    └─► [主编辑区 NotePaperStrictBody] 
+    └─► [主编辑区 NotePaperStrictBody]
           .body: flex: 1 1 0%; min-height: 0; height: 100%; overflow-y: auto; overflow-x: hidden;
 ```
 
@@ -292,21 +292,21 @@ flowchart TD
     subgraph Host ["NoteLeafHost (data-note-leaf-host, 保持 flex-col)"]
         direction TB
         M["useNoteDocumentManager()<br/>(状态机单源真理: activeDocId, documents, rename, switch, create)"]
-        
+
         subgraph RowContainer ["div.workspaceRow (新建: flex-row, flex: 1 1 0%, height: 100%, overflow: hidden)"]
             direction LR
             Drawer["NoteSidebarDrawer (220px 抽屉)<br/>• isOpen={isSidebarOpen}<br/>• 独立列表滚动与搜索态<br/>• 切换 docId 时不销毁！"]
-            
+
             subgraph EditorPane ["div.editorPane (flex: 1 1 0%, flex-col, height: 100%, min-width: 0)"]
                 Panel["NotePaperStrictPanel (key={activeDocId})<br/>• 切换 docId 时精准重置正文编辑态<br/>• 彻底拔除底部灰色双块 (05 成果)"]
                 Header["NotePaperStrictHeader (32px 紧凑顶栏)<br/>• [≡] 侧栏开关 (Ctrl+\)<br/>• [📄] 图标<br/>• [EditableTitle] 行内编辑<br/>• [▾] 轻量下拉切换触点<br/>• [✓] 保存状态<br/>• [字数] + [+] + [刷新] + [··· 更多] + [X 关闭]"]
                 Body["NotePaperStrictBody (100% 全高弹性视口)<br/>• 遵循单一垂直滚动宿主契约"]
-                
+
                 Panel --> Header
                 Panel --> Body
             end
         end
-        
+
         M -.-> Drawer
         M -.-> Panel
     end

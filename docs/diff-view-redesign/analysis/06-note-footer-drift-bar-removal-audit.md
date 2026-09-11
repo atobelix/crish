@@ -1,9 +1,9 @@
 # 笔记底部灰色块 (MirrorDriftStatusBar 与 footer) 彻底拔除审计报告 (AUDIT-06)
 
-> **专项审计编号**：AUDIT-06  
-> **所属战役**：差异面板与笔记面板系统性重构 —— 阶段一：前置代码现场深度审计  
-> **关联议题**：笔记底部巨大丑陋灰色区域（MirrorDriftStatusBar 与 footer）彻底物理拔除  
-> **现场截图诉求**：彻底清除 `class="_mirrorDriftBar_fcd5v_1083 _mirrorDriftBarAttention_fcd5v_1109"` 与 `class="_footer_fcd5v_21"` 两大冗余、丑陋且侵占垂直视口的深色块  
+> **专项审计编号**：AUDIT-06
+> **所属战役**：差异面板与笔记面板系统性重构 —— 阶段一：前置代码现场深度审计
+> **关联议题**：笔记底部巨大丑陋灰色区域（MirrorDriftStatusBar 与 footer）彻底物理拔除
+> **现场截图诉求**：彻底清除 `class="_mirrorDriftBar_fcd5v_1083 _mirrorDriftBarAttention_fcd5v_1109"` 与 `class="_footer_fcd5v_21"` 两大冗余、丑陋且侵占垂直视口的深色块
 > **审计结论**：**物理拔除（Hard Physical Removal）**，严禁使用 `display: none` 掩耳盗铃，彻底恢复编辑区域 100% 垂直全高自适应与极简纯净纸面。
 
 ---

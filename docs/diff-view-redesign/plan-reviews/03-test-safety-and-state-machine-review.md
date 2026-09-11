@@ -1,9 +1,9 @@
 # 测试资产保护、状态机边界与防回归门禁独立评审报告 (REVIEW-03)
 
-> **战役名称**：差异面板与笔记面板系统性重构（Diff View & Note Panel Systematic Redesign）  
-> **评审阶段**：阶段三 · 方案交叉独立评审  
-> **专项编号**：REVIEW-03  
-> **评审席位**：测试资产保护、状态机边界与防回归门禁首席评审官  
+> **战役名称**：差异面板与笔记面板系统性重构（Diff View & Note Panel Systematic Redesign）
+> **评审阶段**：阶段三 · 方案交叉独立评审
+> **专项编号**：REVIEW-03
+> **评审席位**：测试资产保护、状态机边界与防回归门禁首席评审官
 > **输入依据**：
 > - 现场代码审计报告：[`docs/diff-view-redesign/analysis/`](file:///c:/Software/conex/docs/diff-view-redesign/analysis/) 全量 8 份审计文档（AUDIT-01 至 AUDIT-08）
 > - 独立重构实施方案：[`docs/diff-view-redesign/independent-plans/`](file:///c:/Software/conex/docs/diff-view-redesign/independent-plans/) 全量 7 份独立方案（PLAN-01 至 PLAN-07）
@@ -112,14 +112,14 @@ it('DiffCard 行内快捷操作不以 display:none 阻断 Tab 序，且在悬停
   expect(block, '快捷操作容器应存在').toContain('opacity: 0');
   expect(block).toContain('visibility: hidden');
   expect(block).not.toContain('display: none');
-  
+
   // 兼容新平直列表选择器体系
   const hasRowHover = css.includes('.fileRow:hover .rowActions') || css.includes('.fileRow:hover .hoverActions');
   expect(hasRowHover, '必须支持行级 hover 揭示快捷操作').toBe(true);
-  
+
   const hasRowFocus = css.includes('.fileRow:focus-within .rowActions') || css.includes('.fileRow:focus-within .hoverActions');
   expect(hasRowFocus, '必须支持行级 focus-within 键盘无障碍揭示').toBe(true);
-  
+
   // 刚性防回归：确保统计数字绝对不含有 opacity: 0 暴力隐藏反模式
   const hideStatMatch = css.match(/\.fileRow[^{]*:hover[^{]*\.fileStat\s*\{[^}]*opacity:\s*0/);
   expect(hideStatMatch, '严禁在 hover 时隐藏统计数字').toBeNull();
@@ -159,10 +159,10 @@ it('DiffCard 行内快捷操作不以 display:none 阻断 Tab 序，且在悬停
        // 1. 验证文件节点容器与无障碍列表项角色
        const fileNode = container.querySelector('[role="listitem"]');
        expect(fileNode).toBeDefined();
-       
+
        // 2. 验证独立超链接按钮可访问
        expect(getByRole('button', { name: /独立预览.*main\.ts|main\.ts/ })).toBeInTheDocument();
-       
+
        // 3. 验证增删统计数字常驻呈现且数值准确
        expect(container.textContent).toMatch(/\+15/);
        expect(container.textContent).toMatch(/−7/);
@@ -363,7 +363,7 @@ it('DiffCard 行内快捷操作不以 display:none 阻断 Tab 序，且在悬停
   it('刚性门禁 1：差异面板全域容器与外壳包装层严禁声明任何 :hover 背景规则', () => {
     const diffCss = readFile('src/components/diff/DiffCard.module.css').replace(/\r\n/g, '\n');
     // 全面覆盖新老所有外壳与容器类名（含 fileNode, flatFileList, fileRowContainer）
-    const wrapperSelectorPattern = 
+    const wrapperSelectorPattern =
       /\.(accordionItem|flatFileList|fileList|groupItemsContainer|accordionHeaderRow|fileNode|fileRowContainer)[^{]*:hover[^{]*\{[^}]*background/gi;
     const violations = diffCss.match(wrapperSelectorPattern) ?? [];
     expect(violations, `发现违章外层容器 hover 背景注入：${violations.join('; ')}`).toEqual([]);
@@ -382,7 +382,7 @@ it('DiffCard 行内快捷操作不以 display:none 阻断 Tab 序，且在悬停
   ```typescript
   it('刚性门禁 6（新增）：差异文件平直列表与比对视口严格执行 0px 直角契约（去圆角防复活）', () => {
     const diffCss = readFile('src/components/diff/DiffCard.module.css').replace(/\r\n/g, '\n');
-    
+
     // 1. 抽取 .flatFileList、.fileRow、.fileNode、.diffPane 规则块
     const flatSelectors = ['flatFileList', 'fileRow', 'fileNode', 'diffPane'];
     for (const sel of flatSelectors) {

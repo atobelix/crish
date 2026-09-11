@@ -1,8 +1,8 @@
 # 对话顶栏与工具面板顶栏状态机与交互重构方案
 
-> **文档定位**：`docs/dual-header-refactor/proposals/02-interaction-workflow-plan.md`  
-> **角色**：交互状态机与组件工程专家（Interaction & Component Workflow Specialist）  
-> **核心目标**：根除对话顶栏 (`UnitChromeActions`) 与工具面板顶栏 (`LeafToolTabStrip`) 的交互断层与状态机缺陷，重构信息架构、统一设计规范，确保与 `reference/chat-composer-component` 深度对齐。  
+> **文档定位**：`docs/dual-header-refactor/proposals/02-interaction-workflow-plan.md`
+> **角色**：交互状态机与组件工程专家（Interaction & Component Workflow Specialist）
+> **核心目标**：根除对话顶栏 (`UnitChromeActions`) 与工具面板顶栏 (`LeafToolTabStrip`) 的交互断层与状态机缺陷，重构信息架构、统一设计规范，确保与 `reference/chat-composer-component` 深度对齐。
 > **基准原则**：纯逻辑规划、反退避原则、零蓝色原则（Zero-Blue）、无果冻无重阴影、严禁破坏既有单测资产。
 
 ---
@@ -376,7 +376,7 @@
 +                </button>
 +              </Tooltip>
 +            )}
- 
+
 -            {runningAgents > 0 ? (
 +            {totalAgents > 0 ? (
                <>
@@ -414,7 +414,7 @@
 +            />
            </nav>
          </div>
- 
+
 -        <div className={styles.topActions}>
 +        {/* ── 右侧：左侧边栏统一开关 + 5项产品工具 ── */}
 +        <div className={styles.topActions}>
@@ -558,7 +558,7 @@
              />
            </div>
          )}
- 
+
          {/* 3. 右侧绝对固定独立收起按钮 */}
          <div className={styles.pinnedCollapseSlot}>
            <Tooltip content="收起右侧面板" side="bottom">
@@ -605,7 +605,7 @@
    position: relative;
    z-index: var(--z-sticky, 2);
  }
- 
+
 +.tabListWrapper {
 +  flex: 1 1 auto;
 +  min-width: 0;
@@ -630,12 +630,12 @@
    cursor: pointer;
    user-select: none;
  }
- 
+
 +.tabIcon {
 +  flex-shrink: 0;
 +  opacity: 0.75;
 +}
- 
+
  .tabClose {
    display: inline-flex;
    align-items: center;
@@ -652,18 +652,18 @@
 -  transition: transform var(--transition-fast) cubic-bezier(0.4, 0, 0.2, 1), background-color var(--transition-fast), opacity var(--transition-fast);
 +  transition: background-color var(--transition-fast), opacity var(--transition-fast);
  }
- 
+
  .tab:hover .tabClose {
 -  opacity: 0.75;
 +  opacity: 0.7;
  }
- 
+
  .tabClose:hover {
    opacity: 1;
    background: var(--tint-strong);
 -  transform: rotate(90deg) scale(1.05);
  }
- 
+
 +.stickyAddSlot {
 +  flex-shrink: 0;
 +  display: flex;
@@ -671,7 +671,7 @@
 +  margin-left: 2px;
 +  margin-right: 4px;
 +}
- 
+
 +.pinnedCollapseSlot {
 +  flex-shrink: 0;
 +  display: flex;

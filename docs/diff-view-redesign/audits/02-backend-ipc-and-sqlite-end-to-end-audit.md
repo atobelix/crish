@@ -1,15 +1,15 @@
 # 差异面板与笔记面板系统性重构 —— 后端 IPC 与 SQLite 端到端闭环审计报告 (AUDIT-FINAL-IPC-SQLITE-E2E)
 
-> **审计编号**：AUDIT-FINAL-IPC-SQLITE-E2E  
-> **战役名称**：差异面板与笔记面板系统性重构（Diff View & Note Panel Systematic Redesign）  
-> **所属阶段**：阶段五 · 详案终审反幻觉与全景贯通审计（Phase 5: Full-Chain End-to-End Audit）  
-> **审计角色**：后端 IPC 与 SQLite 端到端闭环审计官（Backend IPC & SQLite End-to-End Auditor）  
+> **审计编号**：AUDIT-FINAL-IPC-SQLITE-E2E
+> **战役名称**：差异面板与笔记面板系统性重构（Diff View & Note Panel Systematic Redesign）
+> **所属阶段**：阶段五 · 详案终审反幻觉与全景贯通审计（Phase 5: Full-Chain End-to-End Audit）
+> **审计角色**：后端 IPC 与 SQLite 端到端闭环审计官（Backend IPC & SQLite End-to-End Auditor）
 > **审计对象**：
 > - [`docs/diff-view-redesign/00-总方案-差异与笔记面板系统性重构全景架构总纲.md`](file:///c:/Software/conex/docs/diff-view-redesign/00-总方案-差异与笔记面板系统性重构全景架构总纲.md) (MASTER-PLAN-00)
 > - [`docs/diff-view-redesign/06-分维详案-多笔记综合管理体系与SQLite及IPC后端架构.md`](file:///c:/Software/conex/docs/diff-view-redesign/06-分维详案-多笔记综合管理体系与SQLite及IPC后端架构.md) (DETAIL-PLAN-06)
 > - [`docs/diff-view-redesign/07-分维详案-立体验证套件与回归测试平滑迁移.md`](file:///c:/Software/conex/docs/diff-view-redesign/07-分维详案-立体验证套件与回归测试平滑迁移.md) (DETAIL-PLAN-07)
 > - 真实代码库：`crates/conex-workspace-store/`、`apps/agent-workbench/src-tauri/`、`apps/crish-desktop/`
-> **产出落盘**：`docs/diff-view-redesign/audits/02-backend-ipc-and-sqlite-end-to-end-audit.md`  
+> **产出落盘**：`docs/diff-view-redesign/audits/02-backend-ipc-and-sqlite-end-to-end-audit.md`
 > **遵循铁律**：[`AGENTS.md`](file:///c:/Software/conex/AGENTS.md) §1（反退避逻辑推进）、§3（Git 独占提交）、§7（严禁补丁与绕过、立体验证、架构净收敛）、§8（反过度设计红线）、§9（测试资产保护铁律）、§16（4000 Tauri MCP 通道）及 [`ANTI_OVERENGINEERING_GUARDRAILS.md`](file:///c:/Software/conex/ANTI_OVERENGINEERING_GUARDRAILS.md)。
 
 ---
@@ -56,7 +56,7 @@
 
 本审计官依据用户最高指示及 [`AGENTS.md`](file:///c:/Software/conex/AGENTS.md) 铁律，对 `docs/diff-view-redesign/` 下的 00、06、07 三份详案以及 `crates/conex-workspace-store/`、`apps/agent-workbench/src-tauri/`、`apps/crish-desktop/` 的真实源代码进行了全景端到端（End-to-End）贯通查验。
 
-**【总体裁决】：条件性准入（CONDITIONAL PASS）**  
+**【总体裁决】：条件性准入（CONDITIONAL PASS）**
 - **架构底座非常扎实**：SQLite Schema Migration v8 的 8 列结构设计合理，复合覆盖索引 `idx_doc_meta_listing` 具备卓越的查询效能，BUG-A04 版本门闩（Version Gate）与字符簇安全截断彻底杜绝了重启篡改自定标题的重大隐患；
 - **历史兼容确定性成立**：存量单篇笔记（`strict-${wsId}` / `strict-default`）的主键 `doc_id`、CRDT 快照链、更新日志表与块投影完全保持不可变，升到 v8 后能够被 **100% 准确定位、无缝读取、正常编辑与持久化刷盘，绝无丢失风险**；
 - **但存在 2 处 P0 致命断裂与 1 处 P1 契约漂移**：
@@ -561,7 +561,7 @@ await noteDocumentRename({ docId, title: trimmed });
 2. **历史存量笔记无缝兼容**：`strict-${wsId}` 在 Migration v8 下主键、CRDT 二进制与块投影绝对不受损，通过版本门闩安全回填标题，前端状态机首文档命中，**100% 能够被无缝读取、展示、编辑与持久化保存，零丢失与不可定位风险**；
 3. **IPC 契约纠偏彻底**：对 4 个新增 IPC 命令的参数解构大小写、跨方案命名冲突与返回值错误模型给出了代码级纠偏补丁。
 
-**终审签署**：  
-**审计结论**：CONDITIONAL PASS（执行本文第六章补丁后，全面准入实施）  
-**签字盖章**：后端 IPC 与 SQLite 端到端闭环审计官  
+**终审签署**：
+**审计结论**：CONDITIONAL PASS（执行本文第六章补丁后，全面准入实施）
+**签字盖章**：后端 IPC 与 SQLite 端到端闭环审计官
 **签署日期**：2026-09-05

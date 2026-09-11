@@ -1,11 +1,11 @@
 # 差异面板平直列表化与去圆角架构审计报告 (AUDIT-01)
 
-> **战役名称**：差异面板与笔记面板系统性重构  
-> **阶段与编号**：阶段一：前置代码现场深度审计 / AUDIT-01  
+> **战役名称**：差异面板与笔记面板系统性重构
+> **阶段与编号**：阶段一：前置代码现场深度审计 / AUDIT-01
 > **审计对象**：
 > - [`DiffCardFileList.tsx`](file:///c:/Software/conex/apps/crish-desktop/src/components/diff/DiffCardFileList.tsx)（文件列表与单文件手风琴渲染器）
 > - [`DiffCard.module.css`](file:///c:/Software/conex/apps/crish-desktop/src/components/diff/DiffCard.module.css)（差异面板样式体系）
-> - [`DiffCard.tsx`](file:///c:/Software/conex/apps/crish-desktop/src/components/diff/DiffCard.tsx)（顶层状态编排与容器组装层）  
+> - [`DiffCard.tsx`](file:///c:/Software/conex/apps/crish-desktop/src/components/diff/DiffCard.tsx)（顶层状态编排与容器组装层）
 > **审计基准**：用户最高裁决（平直列表化、去圆角、移除内部工具行、清理硬编码统一 Token）
 
 ---

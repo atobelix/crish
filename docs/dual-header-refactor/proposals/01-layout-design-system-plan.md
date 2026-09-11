@@ -1,8 +1,8 @@
 # 对话顶栏与工具面板顶栏布局与设计系统重构方案
 ## Dual-Header Layout & Design System Architecture Plan
 
-> **文档版本**：v1.0.0-PROPOSAL  
-> **责任领域**：Layout & Design System Architecture (`crish-desktop`)  
+> **文档版本**：v1.0.0-PROPOSAL
+> **责任领域**：Layout & Design System Architecture (`crish-desktop`)
 > **涉及核心文件**：
 > - `apps/crish-desktop/src/components/chat-card/UnitChromeActions.tsx`
 > - `apps/crish-desktop/src/components/chat-card/UnitChromeActions.module.css`
@@ -258,7 +258,7 @@
 @@ -191,6 +195,19 @@ export const UnitChromeActions: React.FC<UnitChromeActionsProps> = React.memo(
        [realSession, sid, isPinned]
      );
- 
+
 +    const handleJumpToNewDraft = useCallback(() => {
 +      enterDraftMode(folder);
 +    }, [folder]);
@@ -334,7 +334,7 @@
 +            />
            </nav>
          </div>
- 
+
          <div className={styles.topActions}>
 @@ -326,45 +359,17 @@ export const UnitChromeActions: React.FC<UnitChromeActionsProps> = React.memo(
            {UNIT_TOOL_PANELS.map(({ id, label, testId, Icon }) => {
@@ -383,17 +383,17 @@
 -  UNIT_CHROME_TOOL_TIP_SIDE,
 -} from '../chat-card/unitChromeLabel';
  import styles from './LeafToolTabStrip.module.css';
- 
+
  export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
 @@ -103,11 +100,6 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
      if (tabs.length === 0) return null;
- 
+
      const occupied = new Set(dockOpenIds?.length ? dockOpenIds : tabs);
      const availablePanels = viewRegistry
        .getToolViews()
        .map((v) => v.id)
        .filter((pid) => !occupied.has(pid));
- 
+
      return (
        <div
          className={styles.header}
@@ -444,7 +444,7 @@
              );
            })}
          </div>
- 
+
          {/* 2. 吸附在右侧的固定动作区（加号 + 收起） */}
          <div className={styles.stickyTrailingGroup}>
            {availablePanels.length > 0 && (

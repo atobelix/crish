@@ -1,10 +1,10 @@
 # 笔记面板 32px 紧凑顶栏重塑与生产力功能矩阵实施方案 (PLAN-05)
 
-> **战役名称**：差异面板与笔记面板系统性重构  
-> **阶段与编号**：阶段二：独立方案设计 / PLAN-05  
-> **方案主题**：笔记面板 32px 紧凑顶栏重塑与生产力功能矩阵独立方案  
-> **输入依赖**：[`docs/diff-view-redesign/analysis/05-note-layout-and-header-audit.md`](file:///c:/Software/conex/docs/diff-view-redesign/analysis/05-note-layout-and-header-audit.md)  
-> **输出目标**：[`apps/crish-desktop/src/components/note-paper/NotePaperStrictHeader.tsx`](file:///c:/Software/conex/apps/crish-desktop/src/components/note-paper/NotePaperStrictHeader.tsx)、[`apps/crish-desktop/src/components/note-paper/NotePaperStrictPanel.tsx`](file:///c:/Software/conex/apps/crish-desktop/src/components/note-paper/NotePaperStrictPanel.tsx)、[`apps/crish-desktop/src/components/note-paper/NotePaperPanel.module.css`](file:///c:/Software/conex/apps/crish-desktop/src/components/note-paper/NotePaperPanel.module.css)  
+> **战役名称**：差异面板与笔记面板系统性重构
+> **阶段与编号**：阶段二：独立方案设计 / PLAN-05
+> **方案主题**：笔记面板 32px 紧凑顶栏重塑与生产力功能矩阵独立方案
+> **输入依赖**：[`docs/diff-view-redesign/analysis/05-note-layout-and-header-audit.md`](file:///c:/Software/conex/docs/diff-view-redesign/analysis/05-note-layout-and-header-audit.md)
+> **输出目标**：[`apps/crish-desktop/src/components/note-paper/NotePaperStrictHeader.tsx`](file:///c:/Software/conex/apps/crish-desktop/src/components/note-paper/NotePaperStrictHeader.tsx)、[`apps/crish-desktop/src/components/note-paper/NotePaperStrictPanel.tsx`](file:///c:/Software/conex/apps/crish-desktop/src/components/note-paper/NotePaperStrictPanel.tsx)、[`apps/crish-desktop/src/components/note-paper/NotePaperPanel.module.css`](file:///c:/Software/conex/apps/crish-desktop/src/components/note-paper/NotePaperPanel.module.css)
 > **参考对标**：[`apps/crish-desktop/src/components/diff/DiffHeaderControls.tsx`](file:///c:/Software/conex/apps/crish-desktop/src/components/diff/DiffHeaderControls.tsx)、[`apps/crish-desktop/src/components/diff/DiffCard.module.css`](file:///c:/Software/conex/apps/crish-desktop/src/components/diff/DiffCard.module.css)、[`apps/crish-desktop/src/components/ui/Button/IconButton.tsx`](file:///c:/Software/conex/apps/crish-desktop/src/components/ui/Button/IconButton.tsx)
 
 ---
@@ -202,7 +202,7 @@ export function exportBlocksToMarkdown(
   title?: string
 ): string {
   const lines: string[] = [];
-  
+
   // 若提供了标题且首行不是一级大标题，则自动在头部注入 # Title
   if (title && title.trim()) {
     const firstBlock = blocks[0];
@@ -370,7 +370,7 @@ export const NotePaperStrictHeader: React.FC<NotePaperStrictHeaderProps> = React
         {/* 左侧：笔记图标 + 可编辑标题 + 保存状态 */}
         <div className={styles.headerLeftGroup}>
           <FileText size={14} className={styles.noteIcon} aria-hidden />
-          
+
           <EditableTitle
             title={title}
             onRename={onRenameTitle}
@@ -512,7 +512,7 @@ export default NotePaperStrictHeader;
 stateDiagram-v2
     [*] --> DisplayMode: 渲染默认标题
     DisplayMode --> EditMode: 单击/双击标题
-    
+
     state EditMode {
         [*] --> InputFocused: 自动聚焦并全选文本
         InputFocused --> Keystroke: 用户编辑输入

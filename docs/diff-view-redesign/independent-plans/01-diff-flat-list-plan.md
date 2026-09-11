@@ -1,9 +1,9 @@
 # 差异面板平直列表化与去圆角架构实施方案 (PLAN-01)
 
-> **战役名称**：差异面板与笔记面板系统性重构  
-> **阶段与编号**：阶段二：独立方案设计 / PLAN-01  
-> **输入依据**：[`docs/diff-view-redesign/analysis/01-diff-flat-list-audit.md`](file:///c:/Software/conex/docs/diff-view-redesign/analysis/01-diff-flat-list-audit.md) (AUDIT-01)  
-> **产出路径**：`docs/diff-view-redesign/independent-plans/01-diff-flat-list-plan.md`  
+> **战役名称**：差异面板与笔记面板系统性重构
+> **阶段与编号**：阶段二：独立方案设计 / PLAN-01
+> **输入依据**：[`docs/diff-view-redesign/analysis/01-diff-flat-list-audit.md`](file:///c:/Software/conex/docs/diff-view-redesign/analysis/01-diff-flat-list-audit.md) (AUDIT-01)
+> **产出路径**：`docs/diff-view-redesign/independent-plans/01-diff-flat-list-plan.md`
 > **实施基准**：用户最高裁决（平直列表化、去圆角、移除内部工具行、清理硬编码统一 Token、防退避与净负产出）
 
 ---

@@ -1,8 +1,8 @@
 # 差异行内顶部工具行 _inlineHeader_ 彻底拔除实施方案 (PLAN-02)
 
-> **方案编号**：PLAN-02  
-> **所属战役**：差异面板与笔记面板系统性重构 —— 阶段二：独立方案设计  
-> **输入依赖**：[`docs/diff-view-redesign/analysis/02-inline-header-dead-code-audit.md`](file:///c:/Software/conex/docs/diff-view-redesign/analysis/02-inline-header-dead-code-audit.md)  
+> **方案编号**：PLAN-02
+> **所属战役**：差异面板与笔记面板系统性重构 —— 阶段二：独立方案设计
+> **输入依赖**：[`docs/diff-view-redesign/analysis/02-inline-header-dead-code-audit.md`](file:///c:/Software/conex/docs/diff-view-redesign/analysis/02-inline-header-dead-code-audit.md)
 > **核心实施目标**：从 AST 树中物理彻底抹除展开单文件行内顶部工具行（`_inlineHeader_` / `.inlineHeader`），拔除伴生的下拉选择器与 6 个多余按钮，清退 268+ 行死代码与废弃 CSS，使差异面板回归纯粹专注的比对体验。
 
 ---

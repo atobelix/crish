@@ -1,14 +1,14 @@
 # 全域 Hover 过灰根因与 Design Tokens 规范审计报告 (AUDIT-04)
 
-> **战役名称**：差异面板与笔记面板系统性重构  
-> **阶段与编号**：阶段一：前置代码现场深度审计 / 专项审计编号 AUDIT-04  
+> **战役名称**：差异面板与笔记面板系统性重构
+> **阶段与编号**：阶段一：前置代码现场深度审计 / 专项审计编号 AUDIT-04
 > **审计对象**：
 > - [`DiffCard.module.css`](file:///c:/Software/conex/apps/crish-desktop/src/components/diff/DiffCard.module.css)（差异面板主样式表，含所有 Hover/Active/Background 规则）
 > - [`DiffCardFileList.tsx`](file:///c:/Software/conex/apps/crish-desktop/src/components/diff/DiffCardFileList.tsx)（文件列表与行容器 DOM 结构）
 > - [`DiffCardSplitView.tsx`](file:///c:/Software/conex/apps/crish-desktop/src/components/diff/DiffCardSplitView.tsx) / [`DiffCardUnifiedView.tsx`](file:///c:/Software/conex/apps/crish-desktop/src/components/diff/DiffCardUnifiedView.tsx) / [`VirtualPlainCodeViewer.tsx`](file:///c:/Software/conex/apps/crish-desktop/src/components/diff/VirtualPlainCodeViewer.tsx)（代码比对与源码视图）
 > - [`DiffCard.tsx`](file:///c:/Software/conex/apps/crish-desktop/src/components/diff/DiffCard.tsx) / [`DiffHeaderControls.tsx`](file:///c:/Software/conex/apps/crish-desktop/src/components/diff/DiffHeaderControls.tsx) / [`DiffCardGitActions.tsx`](file:///c:/Software/conex/apps/crish-desktop/src/components/diff/DiffCardGitActions.tsx)（容器与子组件组装层）
 > - [`tokens.css`](file:///c:/Software/conex/apps/crish-desktop/src/styles/tokens.css)（Conex 权威 Design Tokens 真源）
-> - [`focus-visible.css`](file:///c:/Software/conex/apps/crish-desktop/src/styles/focus-visible.css)（全局焦点与激活态约束规范）  
+> - [`focus-visible.css`](file:///c:/Software/conex/apps/crish-desktop/src/styles/focus-visible.css)（全局焦点与激活态约束规范）
 > **审计基准**：
 > - 用户原始诉求：“这个界面的hover我看也是有问题的，有的很灰啊。而且现在的这个界面很多东西还有硬编码的呢，这个也统一使用我们的token体系。”
 > - 仓库铁律 [`AGENTS.md`](file:///c:/Software/conex/AGENTS.md) §13（克制的激活边框、焦点对比度上限约 10%、形态 ④ 纯光标极简搜索框）、§14（现代 CSS 语法、优先 HSLA / color-mix 斜杠透明度、严禁裸写硬编码）、§7（严禁打补丁与绕过、追求架构优雅与净收敛）。

@@ -1,12 +1,12 @@
 # 展开行内顶部工具行 _inlineHeader_ 彻底拔除审计报告 (AUDIT-02)
 
-> **专项审计编号**：AUDIT-02  
-> **战役定位**：差异面板与笔记面板系统性重构 —— 阶段一：前置代码现场深度审计  
+> **专项审计编号**：AUDIT-02
+> **战役定位**：差异面板与笔记面板系统性重构 —— 阶段一：前置代码现场深度审计
 > **核心勘察对象**：
 > - [`apps/crish-desktop/src/components/diff/DiffCardFileList.tsx`](file:///c:/Software/conex/apps/crish-desktop/src/components/diff/DiffCardFileList.tsx)
 > - [`apps/crish-desktop/src/components/diff/DiffCard.module.css`](file:///c:/Software/conex/apps/crish-desktop/src/components/diff/DiffCard.module.css)
 > - [`apps/crish-desktop/src/components/diff/DiffCard.tsx`](file:///c:/Software/conex/apps/crish-desktop/src/components/diff/DiffCard.tsx)
-> - [`apps/crish-desktop/src/components/files/FileViewerCard.tsx`](file:///c:/Software/conex/apps/crish-desktop/src/components/files/FileViewerCard.tsx)  
+> - [`apps/crish-desktop/src/components/files/FileViewerCard.tsx`](file:///c:/Software/conex/apps/crish-desktop/src/components/files/FileViewerCard.tsx)
 > **审计结论**：彻底拔除单文件展开行内顶部工具条（`.inlineHeader` / `_inlineHeader_1l05k_374`），消除与独立文件预览面板（`FileViewerCard`）的功能双轨重叠，清剿伴生的高达 260+ 行死代码与废弃 CSS，使差异面板回归纯粹专注的比对展现。
 
 ---

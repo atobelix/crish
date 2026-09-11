@@ -1,17 +1,17 @@
 # 多笔记综合管理体系与 SQLite 及 IPC 后端架构施工图详案 (DETAIL-PLAN-06)
 
-> **战役名称**：差异面板与笔记面板系统性重构（Diff View & Note Panel Systematic Redesign）  
-> **专项编号**：DETAIL-PLAN-06  
-> **方案主题**：多笔记综合管理体系与 SQLite 及 IPC 后端架构代码级施工图（终审定稿修订版）  
-> **落盘路径**：`docs/diff-view-redesign/06-分维详案-多笔记综合管理体系与SQLite及IPC后端架构.md`  
-> **版本**：v2.0-FINAL-REVISED（吸收全景反过度设计、后端 IPC 闭环、全局架构与落地可行性审计定稿）  
-> **输入依据**：  
-> - 现场审计：[`docs/diff-view-redesign/analysis/07-note-multi-doc-management-audit.md`](file:///c:/Software/conex/docs/diff-view-redesign/analysis/07-note-multi-doc-management-audit.md)  
-> - 反过度设计终审：[`docs/diff-view-redesign/audits/02-anti-overengineering-and-simplicity-audit.md`](file:///c:/Software/conex/docs/diff-view-redesign/audits/02-anti-overengineering-and-simplicity-audit.md)（AUDIT-SIMPLICITY-FINAL）  
-> - 后端 IPC 端到端终审：[`docs/diff-view-redesign/audits/02-backend-ipc-and-sqlite-end-to-end-audit.md`](file:///c:/Software/conex/docs/diff-view-redesign/audits/02-backend-ipc-and-sqlite-end-to-end-audit.md)（AUDIT-FINAL-IPC-SQLITE-E2E）  
-> - 全局架构终审：[`docs/diff-view-redesign/audits/03-global-architecture-and-cross-plan-conflict-audit.md`](file:///c:/Software/conex/docs/diff-view-redesign/audits/03-global-architecture-and-cross-plan-conflict-audit.md)（AUDIT-GLOBAL-ARCH-FINAL）  
-> - 落地可行性终审：[`docs/diff-view-redesign/audits/04-implementation-feasibility-and-grounding-audit.md`](file:///c:/Software/conex/docs/diff-view-redesign/audits/04-implementation-feasibility-and-grounding-audit.md)（AUDIT-FEASIBILITY-GROUNDING-04）  
-> - 顶层总纲：[`docs/diff-view-redesign/00-总方案-差异与笔记面板系统性重构全景架构总纲.md`](file:///c:/Software/conex/docs/diff-view-redesign/00-%E6%80%BB%E6%96%B9%E6%A1%88-%E5%B7%AE%E5%BC%82%E4%B8%8E%E7%AC%94%E8%AE%B0%E9%9D%A2%E6%9D%BF%E7%B3%BB%E7%BB%9F%E6%80%A7%E9%87%8D%E6%9E%84%E5%85%A8%E6%99%AF%E6%9E%B6%E6%9E%84%E6%80%BB%E7%BA%B2.md)  
+> **战役名称**：差异面板与笔记面板系统性重构（Diff View & Note Panel Systematic Redesign）
+> **专项编号**：DETAIL-PLAN-06
+> **方案主题**：多笔记综合管理体系与 SQLite 及 IPC 后端架构代码级施工图（终审定稿修订版）
+> **落盘路径**：`docs/diff-view-redesign/06-分维详案-多笔记综合管理体系与SQLite及IPC后端架构.md`
+> **版本**：v2.0-FINAL-REVISED（吸收全景反过度设计、后端 IPC 闭环、全局架构与落地可行性审计定稿）
+> **输入依据**：
+> - 现场审计：[`docs/diff-view-redesign/analysis/07-note-multi-doc-management-audit.md`](file:///c:/Software/conex/docs/diff-view-redesign/analysis/07-note-multi-doc-management-audit.md)
+> - 反过度设计终审：[`docs/diff-view-redesign/audits/02-anti-overengineering-and-simplicity-audit.md`](file:///c:/Software/conex/docs/diff-view-redesign/audits/02-anti-overengineering-and-simplicity-audit.md)（AUDIT-SIMPLICITY-FINAL）
+> - 后端 IPC 端到端终审：[`docs/diff-view-redesign/audits/02-backend-ipc-and-sqlite-end-to-end-audit.md`](file:///c:/Software/conex/docs/diff-view-redesign/audits/02-backend-ipc-and-sqlite-end-to-end-audit.md)（AUDIT-FINAL-IPC-SQLITE-E2E）
+> - 全局架构终审：[`docs/diff-view-redesign/audits/03-global-architecture-and-cross-plan-conflict-audit.md`](file:///c:/Software/conex/docs/diff-view-redesign/audits/03-global-architecture-and-cross-plan-conflict-audit.md)（AUDIT-GLOBAL-ARCH-FINAL）
+> - 落地可行性终审：[`docs/diff-view-redesign/audits/04-implementation-feasibility-and-grounding-audit.md`](file:///c:/Software/conex/docs/diff-view-redesign/audits/04-implementation-feasibility-and-grounding-audit.md)（AUDIT-FEASIBILITY-GROUNDING-04）
+> - 顶层总纲：[`docs/diff-view-redesign/00-总方案-差异与笔记面板系统性重构全景架构总纲.md`](file:///c:/Software/conex/docs/diff-view-redesign/00-%E6%80%BB%E6%96%B9%E6%A1%88-%E5%B7%AE%E5%BC%82%E4%B8%8E%E7%AC%94%E8%AE%B0%E9%9D%A2%E6%9D%BF%E7%B3%BB%E7%BB%9F%E6%80%A7%E9%87%8D%E6%9E%84%E5%85%A8%E6%99%AF%E6%9E%B6%E6%9E%84%E6%80%BB%E7%BA%B2.md)
 > **铁律遵循**：[`AGENTS.md`](file:///c:/Software/conex/AGENTS.md) §1（反退避）、§3（Git 提交权主控独占）、§7（严禁补丁与绕过）、§7.1（立体验证纪律）、§8（反过度设计硬性红线）、§9（测试资产保护）、§13（输入框焦点对比度 <= 10%）、§14（现代 CSS 规范）、§16（4000 Tauri MCP 通道）及 [`ANTI_OVERENGINEERING_GUARDRAILS.md`](file:///c:/Software/conex/ANTI_OVERENGINEERING_GUARDRAILS.md)。
 
 ---
@@ -252,7 +252,7 @@ ensure_column(conn, "doc_meta", "created_at", "INTEGER NOT NULL DEFAULT 0")?;
 #### 3. 极简单列更新倒序索引设计
 由于剔除了归档与置顶等复杂维度，多文档列表的排序逻辑纯粹聚焦于“最新编辑在前”，为此创建专用的 B-Tree 降序索引：
 ```sql
-CREATE INDEX IF NOT EXISTS idx_doc_meta_updated 
+CREATE INDEX IF NOT EXISTS idx_doc_meta_updated
     ON doc_meta(updated_at DESC);
 ```
 **索引效能分析**：
@@ -688,7 +688,7 @@ impl WorkspaceStore {
 
         let mut stmt = conn.prepare_cached(
             r#"
-            SELECT 
+            SELECT
                 m.doc_id,
                 m.rev,
                 m.updated_at,
