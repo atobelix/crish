@@ -22,18 +22,13 @@
   border-radius: var(--radius-xl);
 }
 
+/* 搜索高亮：纯 Paint 扩散（ΔH ≡ 0 / ΔW ≡ 0）。
+   负 margin / width calc / padding-top 突增已全部废除；
+   6px box-shadow spread 不参与盒模型排版，与常规态物理高度严格相等。 */
 .row.searchHit {
   background: color-mix(in srgb, var(--accent-color) 8%, transparent);
   border-radius: var(--radius-xl);
-  padding-top: 4px;
-  padding-bottom: 16px;
-  padding-left: 6px;
-  padding-right: 6px;
-  margin-left: -6px;
-  margin-right: -6px;
-  width: calc(100% + 12px);
-  max-width: calc(min(var(--chat-col-max, 760px), 100%) + 12px);
-  box-sizing: border-box;
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent-color) 8%, transparent);
 }
 
 .rowUser {

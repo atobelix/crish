@@ -27,13 +27,15 @@
   position: relative;
 }
 
-/* 消息列居中容器 */
+/* 消息列居中容器。
+   纵向 padding 归零：顶/底呼吸区由 chatScrollGeometry.ts（CHAT_SCROLL_PAD_TOP/BOTTOM）单轨接管；
+   CSS 仅保留水平衬垫，严禁再写同值纵向 padding（几何 SSOT）。 */
 .listInner {
   width: 100%;
   max-width: min(var(--chat-col-max, 760px), 100%);
   margin-left: auto;
   margin-right: auto;
-  padding: 48px 20px 16px;
+  padding: 0 var(--chat-stream-pad-x, 20px);
   box-sizing: border-box;
   min-width: 0;
   overflow-anchor: none;
@@ -49,47 +51,9 @@
   overflow-anchor: none;
 }
 
-.pinnedBar {
-  position: sticky;
-  top: 0;
-  z-index: var(--z-pinned-bar);
-  width: 100%;
-  max-width: none;
-  border: var(--hairline-width, 1px) solid
-    var(--hairline, var(--border-subtle, var(--border-color)));
-  border-radius: var(--radius-md);
-  background: var(--bg-primary);
-  box-shadow: none;
-}
-
-.pinnedBarToggle {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1_5);
-  width: 100%;
-  border: none;
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: var(--font-size-xs);
-  padding: 7px 10px;
-  cursor: pointer;
-  border-radius: var(--radius-xl);
-}
-
-.pinnedBarToggle:hover {
-  color: var(--text-primary);
-  background: var(--tint-hover);
-}
-
-.pinnedChevron {
-  margin-left: auto;
-  transition: transform var(--transition-fast);
-}
-
-.pinnedChevron.isOpen {
-  transform: rotate(180deg);
-}
-
+/* 注：历史 .pinnedBar / .pinnedBarToggle 等僵尸样式已清退（无 TSX styles.pinnedBar 消费者）。
+   PagingAnchor.ts 对 [data-pinned-bar="true"] 的查询逻辑保持不变。
+   .pinnedList 仍被 useScrollAnchor.test.ts 契约断言（overflow-y: visible），故保留最小规则防回归。 */
 .pinnedList {
   list-style: none;
   margin: 0;
@@ -98,71 +62,6 @@
   flex-direction: column;
   gap: var(--space-0_5);
   overflow-y: visible;
-}
-
-.pinnedItem {
-  display: flex;
-  align-items: center;
-  gap: var(--space-0_5);
-  min-width: 0;
-}
-
-.pinnedJump {
-  flex: 1 1 auto;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  border: none;
-  background: transparent;
-  color: var(--text-primary);
-  text-align: left;
-  padding: 5px 8px;
-  border-radius: var(--button-radius, 7px);
-  cursor: pointer;
-  font-size: var(--font-size-xs);
-}
-
-.pinnedJump:hover {
-  background: var(--bg-hover, var(--bg-tertiary));
-}
-
-.pinnedRole {
-  display: none;
-}
-
-.pinnedSnippet {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--text-secondary);
-}
-
-.pinnedUnpin {
-  flex-shrink: 0;
-  width: 22px;
-  height: 22px;
-  border: none;
-  background: transparent;
-  border-radius: var(--radius-md);
-  color: var(--text-tertiary);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  padding: 0;
-}
-
-.pinnedUnpin svg {
-  width: 13px;
-  height: 13px;
-}
-
-.pinnedUnpin:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-  opacity: 1;
 }
 
 @media (max-width: 720px) {
@@ -175,10 +74,4 @@
   .listInner {
     max-width: min(var(--chat-col-max-wide, 840px), 100%);
   }
-}
-
-/* eco: disable pinned bar glass */
-:global([data-perf-tier='eco']) .pinnedBar {
-  backdrop-filter: none;
-  background: color-mix(in srgb, var(--bg-primary) 97%, transparent);
 }

@@ -16,7 +16,8 @@
   max-width: min(var(--chat-col-max, 760px), 100%);
   margin-left: auto;
   margin-right: auto;
-  padding-right: 18px;
+  /* 与消息流水平栅格（CHAT_SCROLL_PAD_X / --chat-stream-pad-x）20px 对齐，消除 18px 历史 2px 错位 */
+  padding-right: var(--chat-stream-pad-x, 20px);
 }
 
 /* 交互锚点：局部恢复点击穿透 */
@@ -25,9 +26,9 @@
   display: inline-flex;
 }
 
-/* 回底轻量浮钮：使用负 margin 向上反向抽离自身可视高度，实现 ΔscrollHeight ≡ 0 */
+/* 回底轻量浮钮：GPU transform 向上物理位移（对文档流 scrollHeight 贡献严格为 0），
+   彻底拔除破坏性负 margin。基态 -46px；hover 再抬 1px（-47px）；active 回落至基态。 */
 .chatScrollFab {
-  margin-top: -46px;
   width: 34px;
   height: 34px;
   border-radius: 50%;
@@ -40,19 +41,20 @@
   cursor: pointer;
   box-shadow: 0 2px 8px hsl(0 0% 0% / 0.12), 0 0 0 1px hsl(0 0% 0% / 0.04);
   padding: 0;
+  transform: translateY(-46px);
   transition: transform 120ms ease, background 120ms ease, border-color 120ms ease, color 120ms ease;
   position: relative;
 }
 
 .chatScrollFab:hover {
-  transform: translateY(-1px);
+  transform: translateY(-47px);
   color: var(--text-primary);
   border-color: var(--border-color);
   background: var(--bg-hover);
 }
 
 .chatScrollFab:active {
-  transform: translateY(0);
+  transform: translateY(-46px);
 }
 
 /* 遵循 AGENTS.md §13 软环焦点态：对比度 <= 10%，杜绝粗黑硬边 */
