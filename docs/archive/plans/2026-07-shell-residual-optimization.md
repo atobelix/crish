@@ -12,7 +12,7 @@
 
 ## 0. 一句话结论
 
-**R1–R3 与 R4 主体（caption、per-unit 标签条、多 unit focus 不投影坞）已在代码中落地；文档严重滞后。**  
+**R1–R3 与 R4 主体（caption、per-unit 标签条、多 unit focus 不投影坞）已在代码中落地；文档严重滞后。**
 真缺口不在「从零做 R4」，而在：
 
 1. **全局 tool 折叠 / 投影拍扁 tool 子树**（多 unit 正确性）
@@ -108,7 +108,7 @@
 
 ## 4. 最终实施路线（推荐）
 
-> 原则：先正确性，再交互闭环，再持久化/性能，最后 a11y 与文档出门。  
+> 原则：先正确性，再交互闭环，再持久化/性能，最后 a11y 与文档出门。
 > 约束：每波 ≤8 agent；文件所有权不交叉。
 
 ### 波次 S0 — 止血（1–2 人日）**立即**
@@ -161,11 +161,11 @@
 
 ### 波次 S5 — 出门 QA（1–2 人日）
 
-1. plan §5 验收 1–11 + R4 三条（双 strip / caption / 切 tab 不关坞）  
-2. 双 unit 双 PTY；反复开闭终端 20 次无进程泄漏  
-3. 工具 split + openTool 不毁布局  
-4. typecheck + `workspace-shell` / `layout-tree` / `pty*` / `binary-tree` vitest  
-5. tauri-mcp 手测清单（见下）  
+1. plan §5 验收 1–11 + R4 三条（双 strip / caption / 切 tab 不关坞）
+2. 双 unit 双 PTY；反复开闭终端 20 次无进程泄漏
+3. 工具 split + openTool 不毁布局
+4. typecheck + `workspace-shell` / `layout-tree` / `pty*` / `binary-tree` vitest
+5. tauri-mcp 手测清单（见下）
 6. plan / redesign 标 **R4 done / R5 done**（或 R5 partial）
 
 ---
@@ -196,15 +196,15 @@
 
 ## 6. tauri-mcp / 手测清单（浓缩）
 
-1. Caption：`.app-top-bar` 有窗键，无 `right-dock-toggle`，无 `.unified-top-bar`  
-2. 单 chat：1 条 `[data-unit-session-tab-strip]`  
-3. 分屏两会话：2 条 strip，不同 `data-leaf-id`  
-4. A 开终端坞，B 开 files 坞 → 折 B → **A 终端仍在**（P0-1）  
-5. A 工具 tab split 后再开 overview → **split 仍在**（P0-2）  
-6. 切 strip 标签：坞不因 focus 关（S1.2）  
-7. 双 unit 双终端：键入不串；关 B tab 只杀 B 的 shell  
-8. 开终端：任务管理器仅 **一个** pwsh/session；折坞再开 **同进程**（P0-3/4）  
-9. D5 后：同条重排；拖到侧 split 不 clone；再拖同一 session → activate only  
+1. Caption：`.app-top-bar` 有窗键，无 `right-dock-toggle`，无 `.unified-top-bar`
+2. 单 chat：1 条 `[data-unit-session-tab-strip]`
+3. 分屏两会话：2 条 strip，不同 `data-leaf-id`
+4. A 开终端坞，B 开 files 坞 → 折 B → **A 终端仍在**（P0-1）
+5. A 工具 tab split 后再开 overview → **split 仍在**（P0-2）
+6. 切 strip 标签：坞不因 focus 关（S1.2）
+7. 双 unit 双终端：键入不串；关 B tab 只杀 B 的 shell
+8. 开终端：任务管理器仅 **一个** pwsh/session；折坞再开 **同进程**（P0-3/4）
+9. D5 后：同条重排；拖到侧 split 不 clone；再拖同一 session → activate only
 
 ---
 
@@ -225,19 +225,19 @@
 
 ## 8. 非目标（本方案仍不做）
 
-- 替换 BinaryTree 布局引擎  
-- OS 多窗口 / 完整 VS Code grid  
-- 改 daemon chat 协议  
-- 完整 scrollback 跨重启持久化 / 沙箱 seccomp  
-- 把所有 oneshot shell 立刻废弃  
+- 替换 BinaryTree 布局引擎
+- OS 多窗口 / 完整 VS Code grid
+- 改 daemon chat 协议
+- 完整 scrollback 跨重启持久化 / 沙箱 seccomp
+- 把所有 oneshot shell 立刻废弃
 
 ---
 
 ## 9. 建议下一步
 
-1. 用户确认 **§5 决策 D-A～D-E**（可用默认）。  
-2. 启动 **波次 S0**（多 agent ≤6）：P0-1～P0-5 + 测试注释。  
-3. 合入后跑 vitest + tauri-mcp 清单 1–8。  
+1. 用户确认 **§5 决策 D-A～D-E**（可用默认）。
+2. 启动 **波次 S0**（多 agent ≤6）：P0-1～P0-5 + 测试注释。
+3. 合入后跑 vitest + tauri-mcp 清单 1–8。
 4. 再开 **S1 → S2（D5）→ S3/S4 → S5**。
 
 ---

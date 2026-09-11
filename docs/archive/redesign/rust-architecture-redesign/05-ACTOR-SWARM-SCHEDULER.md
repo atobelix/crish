@@ -22,18 +22,18 @@
 graph TD
     subgraph Swarm Scheduler [Swarm Scheduler (Tokio Runtime)]
         Coordinator(Swarm Coordinator Actor)
-        
+
         Agent1(Agent Actor 1)
         Agent2(Agent Actor 2)
         AgentN(Agent Actor N)
-        
+
         Coordinator -- mpsc / oneshot --> Agent1
         Coordinator -- mpsc / oneshot --> Agent2
         Coordinator -- mpsc / oneshot --> AgentN
-        
+
         Agent1 -. Broadcast .-> Agent2
     end
-    
+
     UI(UI / Frontend) --> |Command| Coordinator
 ```
 
@@ -131,10 +131,10 @@ impl AgentActor {
         match msg {
             AgentMessage::ExecuteTask { prompt, task_id, reply_to } => {
                 self.update_status(AgentStatus::Thinking);
-                
+
                 // 模拟 Agent 思考与执行
                 let exec_result = self.do_execution(&prompt).await;
-                
+
                 match exec_result {
                     Ok(out) => {
                         let _ = self.event_bus.send(GlobalSwarmEvent::TaskCompleted {
@@ -191,7 +191,7 @@ impl AgentHandle {
             task_id,
             reply_to: send,
         };
-        
+
         self.sender.send(msg).await.map_err(|_| anyhow!("Actor dead"))?;
         recv.await.map_err(|_| anyhow!("Reply channel dropped"))?
             .map_err(|e| anyhow!(e))
@@ -223,7 +223,7 @@ graph TD
     Root[Root Supervisor] --> NetworkSubsystem
     Root --> DatabaseSubsystem
     Root --> SwarmSupervisor[Swarm Supervisor]
-    
+
     SwarmSupervisor --> AgentActor1[Agent Actor 1]
     SwarmSupervisor --> AgentActor2[Agent Actor 2]
     SwarmSupervisor --> AgentActorN[Agent Actor N]
@@ -250,7 +250,7 @@ sequenceDiagram
     participant PC as PC Agent (Local CRDT)
     participant Cloud as P2P Network / Cloud
     participant Mobile as Mobile App (Remote CRDT)
-    
+
     PC->>PC: Agent 1 修改了代码行 10 (产生 Change A)
     Mobile->>Mobile: 用户离线修改了代码行 15 (产生 Change B)
     PC->>Cloud: 广播 Change A
@@ -342,7 +342,7 @@ impl SwarmSupervisor {
 
     pub async fn restart_child_with_backoff(&mut self, id: u32) -> Result<AgentHandle> {
         let spec = self.children.get(&id).ok_or_else(|| anyhow!("Child spec not found"))?;
-        
+
         let mut retry_count = 0;
         let mut backoff = spec.backoff_initial_ms;
 
@@ -352,7 +352,7 @@ impl SwarmSupervisor {
 
             let (tx, rx) = mpsc::channel(100);
             let actor = AgentActor::new(id, spec.name.clone(), rx, self.event_bus.clone());
-            
+
             let join_handle = tokio::spawn(async move {
                 actor.run().await;
             });
@@ -460,12 +460,12 @@ fn configure_server() -> Result<(ServerConfig, Vec<u8>)> {
     let cert = rcgen::generate_simple_self_signed(vec!["conex.local".into()])?;
     let cert_der = cert.cert.der().to_vec();
     let priv_key = cert.key_pair.serialize_der();
-    
+
     let mut server_config = ServerConfig::with_single_cert(
         vec![rustls::Certificate(cert_der.clone())],
         rustls::PrivateKey(priv_key),
     )?;
-    
+
     Arc::get_mut(&mut server_config.transport)
         .unwrap()
         .max_concurrent_bidi_streams(10_000u32.into());
@@ -577,7 +577,7 @@ mod tests {
 
         println!("Processed 100 concurrent agent tasks in {:?}", elapsed);
         assert!(elapsed.as_millis() < 500, "100 concurrency should complete in < 500ms");
-        
+
         for res in results {
             assert!(res.unwrap().is_ok());
         }
@@ -625,8 +625,8 @@ mod tests {
    - 对于 `write_file`、`edit_file`、`run_command` 等有副作用工具，调度器将其归入串行锁队列。
    - 在执行前送入 `Command Safety Gatekeeper` 进行 Level 1 绝对系统红线扫描（禁止清空系统根目录/核心系统目录）。在**全自主模式 (Full-Autonomous Mode)** 开启时，校验通过后自动执行，无需二次确认。
 
-> **文档状态：** Final Approved v1.2  
-> **保存位置：** `c:\Software\conex\docs\rust-architecture-redesign\05-ACTOR-SWARM-SCHEDULER.md`  
+> **文档状态：** Final Approved v1.2
+> **保存位置：** `c:\Software\conex\docs\rust-architecture-redesign\05-ACTOR-SWARM-SCHEDULER.md`
 > **行数约束验证：** > 450 Lines Passed.
 
 

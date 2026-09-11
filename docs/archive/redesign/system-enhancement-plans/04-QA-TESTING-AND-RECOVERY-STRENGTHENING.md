@@ -1,7 +1,7 @@
 # 维度四：QA 测试质量链与防崩溃恢复强化方案
 
-> **存储路径**：`docs/system-enhancement-plans/04-QA-TESTING-AND-RECOVERY-STRENGTHENING.md`  
-> **关联源码**：`apps/crish-desktop/src/store/sessionIndex.test.ts` / `apps/crish-desktop/src/store/sessionActions.test.ts` / `tests/recovery/` / `tests/fuzz/` / `tests/race/`  
+> **存储路径**：`docs/system-enhancement-plans/04-QA-TESTING-AND-RECOVERY-STRENGTHENING.md`
+> **关联源码**：`apps/crish-desktop/src/store/sessionIndex.test.ts` / `apps/crish-desktop/src/store/sessionActions.test.ts` / `tests/recovery/` / `tests/fuzz/` / `tests/race/`
 > **核心目标**：彻底修复当前全量测试中出现的 67 个断言失败用例（恢复 100% 单元测试绿灯），扩展 Fuzz 边界模糊测试与 Race 并发互斥逻辑，并引入 Tauri E2E 自动化框架保障桌面端质量闭环。
 
 ---
@@ -89,10 +89,10 @@ import { useLayoutStore } from './layoutStore';
 describe('sessionActions prune & active session lifecycle', () => {
   it('createSession activate:true reuses active empty shell and retains peer-ghost correctly', () => {
     const store = useLayoutStore.getState();
-    
+
     // 初始化测试上下文
     store.createSession({ folder: 'general', activate: true });
-    
+
     const st = useLayoutStore.getState();
     expect(st.activeSessionId).toBeDefined();
 
@@ -107,7 +107,7 @@ describe('sessionActions prune & active session lifecycle', () => {
 
     // 模拟添加首条中文消息
     store.setSessionMessageStatus(sessionId, 'msg_1', 'user_input');
-    
+
     // 确保标题更新逻辑能够成功捕获中文特征词
     const session = useLayoutStore.getState().sessionsById[sessionId];
     expect(session).toBeDefined();
@@ -129,7 +129,7 @@ describe('Tauri command registry package scripts', () => {
   it('keeps root package scripts focused on product workbench and daemon paths', () => {
     expect(pkg.scripts["dev:cli"]).toBe("npm --workspace @crish/agent-workbench run cli");
     expect(pkg.scripts.cli).toBe("npm run dev:cli");
-    
+
     // 纠正：对齐当前 Turbo 构建管线下的真实脚本字符串
     expect(pkg.scripts["build:product"]).toBe("turbo run build && npm run build:daemon-binary");
   });
@@ -194,7 +194,7 @@ export class RaceLockGuard {
   ): Promise<T | null> {
     const currentSeq = ++this.activeSequenceId;
     const result = await asyncTask(currentSeq);
-    
+
     // 如果在执行期间有新的任务被调起，丢弃过期的响应
     if (currentSeq !== this.activeSequenceId) {
       if (onOutdated) onOutdated();
@@ -239,7 +239,7 @@ describe('Session State Crash Recovery', () => {
     // 模拟重启恢复流程
     const raw = mockCorruptedStorage['session_recovery_mirror'];
     const parsed = JSON.parse(raw);
-    
+
     // 恢复断言：自动将处于 streaming 状态的遗留消息修复为 failed/interrupted
     const recoveredSession = parsed.sessions[0];
     const fixedMessages = recoveredSession.messages.map((m: any) => {

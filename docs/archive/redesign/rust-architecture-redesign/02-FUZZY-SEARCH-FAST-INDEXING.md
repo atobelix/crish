@@ -39,7 +39,7 @@ use std::time::Instant;
 pub fn build_directory_index(root_path: &str) -> Vec<String> {
     let start_time = Instant::now();
     let (tx, rx) = channel();
-    
+
     // 配置 WalkBuilder
     let walker = WalkBuilder::new(root_path)
         .hidden(true) // 忽略隐藏文件/目录
@@ -61,13 +61,13 @@ pub fn build_directory_index(root_path: &str) -> Vec<String> {
             WalkState::Continue
         })
     });
-    
+
     // 释放发送端以结束迭代
     drop(tx);
-    
+
     let files: Vec<String> = rx.into_iter().collect();
     println!("Indexed {} files in {:?}", files.len(), start_time.elapsed());
-    
+
     files
 }
 ```
@@ -102,7 +102,7 @@ impl MmapIndex {
     pub fn read_bytes(&self, offset: usize, len: usize) -> &[u8] {
         &self.mmap[offset..(offset + len)]
     }
-    
+
     /// 将字节转换为字符串（假设索引中存储的都是合法的 UTF-8）
     pub fn read_str(&self, offset: usize, len: usize) -> &str {
         let bytes = self.read_bytes(offset, len);
@@ -166,7 +166,7 @@ impl FuzzyMatcher {
 
         let p_chars: Vec<char> = pattern.chars().collect();
         let t_chars: Vec<char> = target.chars().collect();
-        
+
         let mut p_idx = 0;
         let mut matched_indices = Vec::with_capacity(p_chars.len());
         let mut score = 0;
@@ -186,11 +186,11 @@ impl FuzzyMatcher {
             if is_match {
                 matched_indices.push(t_idx);
                 p_idx += 1;
-                
+
                 // 1. 基础分计算与连续匹配加分逻辑
                 consecutive_matches += 1;
                 score += 10 + (consecutive_matches * 5);
-                
+
                 // 2. 边界加分逻辑（CamelCase 边界、符号边界）
                 if t_idx == 0 {
                     score += 15; // 绝对词首
@@ -216,12 +216,12 @@ impl FuzzyMatcher {
             let span = last_idx - first_idx + 1;
             let penalty = (span - p_chars.len()) as i32 * 2;
             score -= penalty;
-            
+
             // 为了防止负分，可以设定最低分为 1
             if score <= 0 {
                 score = 1;
             }
-            
+
             Some(FuzzyMatchResult { score, matched_indices })
         } else {
             None
@@ -270,7 +270,7 @@ impl<'a> Sink for SearchPipeSink<'a> {
     fn matched(&mut self, _searcher: &Searcher, mat: &SinkMatch<'_>) -> Result<bool, Self::Error> {
         // 解析行内容
         let line_content = String::from_utf8_lossy(mat.bytes()).trim_end().to_string();
-        
+
         // 构造结果
         let result = SearchResult {
             line_number: mat.line_number().unwrap_or(0),
@@ -278,7 +278,7 @@ impl<'a> Sink for SearchPipeSink<'a> {
             file_path: self.file_path.to_string(),
             byte_ranges: vec![], // 在简单模式下暂不计算精确偏移，以换取速度
         };
-        
+
         // 发送结果，忽略发送错误。如果接收端（前端通道）断开，则提前终止搜索。
         if self.tx.send(result).is_err() {
             return Ok(false);
@@ -291,14 +291,14 @@ impl<'a> Sink for SearchPipeSink<'a> {
 pub fn search_in_file(file_path: &str, pattern: &str, tx: mpsc::Sender<SearchResult>) {
     // 编译正则表达式，忽略错误处理仅为示例
     let matcher = RegexMatcher::new_line_matcher(pattern).expect("Invalid Regex");
-    
+
     // 构建 Searcher，配置一些高级参数，如支持多行、内存映射等
     let mut searcher = SearcherBuilder::new()
         .line_number(true)
         .build();
-        
+
     let sink = SearchPipeSink { tx, file_path };
-    
+
     // 真正执行底层 I/O 搜索
     let _ = searcher.search_path(&matcher, Path::new(file_path), sink);
 }
@@ -324,7 +324,7 @@ use std::path::Path;
 pub fn start_file_watcher(root_path: &str, event_tx: mpsc::Sender<Event>) -> notify::Result<impl Watcher> {
     let config = Config::default()
         .with_poll_interval(Duration::from_secs(2)); // 如果不支持系统事件，则降级为 2秒一次的轮询
-        
+
     let mut watcher = notify::RecommendedWatcher::new(move |res: notify::Result<Event>| {
         if let Ok(event) = res {
             // 将事件推入队列，等待防抖处理
@@ -370,13 +370,13 @@ impl GlobalIndex {
     pub fn update_files_with_diff(&self, added: Vec<String>, removed: Vec<String>) {
         // 1. Copy
         let mut current_files = self.files.load().as_ref().clone();
-        
+
         // 2. Update
         // 删除逻辑
         current_files.retain(|f| !removed.contains(f));
         // 添加逻辑
         current_files.extend(added);
-        
+
         // 3. Swap (原子操作)
         self.files.store(Arc::new(current_files));
     }
@@ -457,15 +457,15 @@ use tauri::{State, Window};
 /// 这是一个直接返回结果的 Request-Response 模式调用
 #[tauri::command]
 pub async fn search_files(
-    query: String, 
-    limit: usize, 
+    query: String,
+    limit: usize,
     state: State<'_, GlobalIndex>
 ) -> Result<Vec<FileHit>, String> {
-    
+
     // 异步执行模糊匹配，Tauri 的 async command 会分配在专用的 Tokio 线程上，不会阻塞主线程
-    let files = state.get_files(); 
+    let files = state.get_files();
     let matcher = FuzzyMatcher::new(false);
-    
+
     let mut hits = Vec::new();
     // 这里未来可以引入 Rayon 的 par_iter() 实现并发打分
     for file in files.iter() {
@@ -477,12 +477,12 @@ pub async fn search_files(
             });
         }
     }
-    
+
     // 根据得分排序，分数高在前
     hits.sort_unstable_by(|a, b| b.score.cmp(&a.score));
     // 截断结果集，降低向前端传输的数据量
     hits.truncate(limit);
-    
+
     Ok(hits)
 }
 
@@ -494,12 +494,12 @@ pub async fn search_text(
     query: String,
     state: State<'_, GlobalIndex>
 ) -> Result<(), String> {
-    
+
     let files = state.get_files();
-    
+
     // 创建一个通道用于接收 Ripgrep 的回调
     let (tx, rx) = std::sync::mpsc::channel();
-    
+
     // 启动一个专门的线程处理文本搜索（避免阻塞当前的 Tokio 线程过久）
     std::thread::spawn(move || {
         for file in files.iter() {
@@ -507,7 +507,7 @@ pub async fn search_text(
             search_in_file(file, &query, tx.clone());
         }
     });
-    
+
     // 在主 Tokio 环境下接收通道数据并派发给前端
     for result in rx {
         let hit = TextSearchHit {
@@ -518,7 +518,7 @@ pub async fn search_text(
         // 触发 "search_text_result" 事件，前端通过 listen 接收
         window.emit("search_text_result", hit).unwrap();
     }
-    
+
     Ok(())
 }
 
@@ -599,10 +599,10 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion};
 /// 针对模糊匹配核心算法的性能压测
 fn bench_fuzzy_match(c: &mut Criterion) {
     let matcher = FuzzyMatcher::new(false);
-    
+
     // 模拟一个较长的，典型的嵌套很深的前端文件路径
     let target = "src/components/layout/sidebar/TreeItem.tsx";
-    
+
     // 1. 精确的前缀命中测试
     c.bench_function("fuzzy match exact prefix", |b| {
         b.iter(|| matcher.match_str(black_box("treeitem"), black_box(target)))
@@ -612,7 +612,7 @@ fn bench_fuzzy_match(c: &mut Criterion) {
     c.bench_function("fuzzy match sparse string", |b| {
         b.iter(|| matcher.match_str(black_box("srccompside"), black_box(target)))
     });
-    
+
     // 3. 失败匹配测试（测试提前退出的性能）
     c.bench_function("fuzzy match failure", |b| {
         b.iter(|| matcher.match_str(black_box("notfoundword"), black_box(target)))
@@ -622,13 +622,13 @@ fn bench_fuzzy_match(c: &mut Criterion) {
 /// 针对 10万 文件遍历速度的模拟压测
 fn bench_large_set_search(c: &mut Criterion) {
     let matcher = FuzzyMatcher::new(false);
-    
+
     // 构建 10 万个虚拟路径
     let mut files = Vec::with_capacity(100_000);
     for i in 0..100_000 {
         files.push(format!("src/module_{}/submodule_{}/file_number_{}.rs", i % 100, i % 50, i));
     }
-    
+
     c.bench_function("search across 100k files", |b| {
         b.iter(|| {
             let query = "file_number_99";

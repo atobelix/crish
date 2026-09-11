@@ -1,8 +1,8 @@
 # Crish 桌面应用全系统终极重构方案
 
-> 版本：v3.0  
-> 生成过程：第 1 轮 8 Agent 问题分析 → 第 2 轮 6 Agent 方案设计 → 最终综合编译  
-> 总问题覆盖：~400 个已识别问题，零遗留原则  
+> 版本：v3.0
+> 生成过程：第 1 轮 8 Agent 问题分析 → 第 2 轮 6 Agent 方案设计 → 最终综合编译
+> 总问题覆盖：~400 个已识别问题，零遗留原则
 > 架构原则：拒绝补丁式改进，系统性重构，力求当前最先进实践
 
 ---
@@ -319,7 +319,7 @@ html[data-theme="light"] {
 E0 (窗口基底):   --bg-primary    无阴影
 E1 (侧栏/面板壳): --bg-secondary 1px hairline bottom
 E2 (卡片/会话):  --bg-card       --shadow-md + inset 顶光
-E3 (输入壳):     --bg-card       --shadow-md + inset 顶光 
+E3 (输入壳):     --bg-card       --shadow-md + inset 顶光
 E4 (弹层/菜单):  --bg-elevated   --shadow-lg + 顺光渐退
 ```
 

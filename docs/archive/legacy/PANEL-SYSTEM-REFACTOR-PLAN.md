@@ -93,14 +93,14 @@ interface UsePanelToggleReturn {
   open: boolean;
   setOpen: (v: boolean) => void;
   toggle: () => void;
-  
+
   // Refs
   triggerRef: React.RefObject<HTMLElement>;
   panelRef: React.RefObject<HTMLElement>;
-  
+
   // Portal
   portalRoot: HTMLElement | null;
-  
+
   // 动画状态
   animationState: 'entering' | 'open' | 'exiting' | 'closed';
   onAnimationEnd: () => void;
@@ -115,19 +115,19 @@ function usePanelToggle(options: UsePanelToggleOptions) {
   const [open, setOpen] = useState(false);
   const [animationState, setAnimationState] = useState<'closed'>('closed');
   const toggleLockRef = useRef(false);
-  
+
   const toggle = useCallback(() => {
     // 防抖：连续快速点击不重置动画
     if (toggleLockRef.current) return;
     toggleLockRef.current = true;
-    
+
     if (open) {
       setAnimationState('exiting');
     } else {
       setOpen(true);
       setAnimationState('entering');
     }
-    
+
     // 50ms 后释放锁
     setTimeout(() => { toggleLockRef.current = false; }, 50);
   }, [open]);
@@ -226,22 +226,22 @@ if (!isMounted) return null;
 ```typescript
 useEffect(() => {
   if (!open) return;
-  
+
   const handleClickOutside = (e: MouseEvent) => {
     const target = e.target as Node;
-    
+
     // 触发按钮 → 不关闭（由 toggle 处理）
     if (triggerRef.current?.contains(target)) return;
-    
+
     // 面板自身 → 不关闭
     if (panelRef.current?.contains(target)) return;
-    
+
     // 子菜单 → 不关闭（级联面板）
     if (subMenuRef.current?.contains(target)) return;
-    
+
     onClose();
   };
-  
+
   // 使用 mousedown 而非 click，确保在 click 事件之前执行
   document.addEventListener('mousedown', handleClickOutside);
   return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -253,7 +253,7 @@ useEffect(() => {
 ```typescript
 useEffect(() => {
   if (!open) return;
-  
+
   const handleKeyDown = (e: KeyboardEvent) => {
     if (e.key === 'Escape') {
       e.preventDefault();
@@ -263,7 +263,7 @@ useEffect(() => {
       triggerRef.current?.focus();
     }
   };
-  
+
   window.addEventListener('keydown', handleKeyDown, true);
   return () => window.removeEventListener('keydown', handleKeyDown, true);
 }, [open]);
@@ -330,16 +330,16 @@ useEffect(() => {
 [data-panel] {
   /* 背景 */
   background: var(--bg-elevated);
-  
+
   /* 圆角 */
   border-radius: var(--radius-lg);
-  
+
   /* 阴影 */
   box-shadow: var(--shadow-lg);
-  
+
   /* 间距 */
   padding: var(--space-1);
-  
+
   /* 菜单项 */
   --panel-item-min-height: 28px;
   --panel-item-padding: var(--space-1_25) var(--space-2);
@@ -396,11 +396,11 @@ useEffect(() => {
 ```tsx
 function PanelPortal({ children, zIndex }: { children: ReactNode; zIndex?: string }) {
   const [mounted, setMounted] = useState(false);
-  
+
   useEffect(() => { setMounted(true); }, []);
-  
+
   if (!mounted) return null;  // SSR safety
-  
+
   return createPortal(
     <div style={{ zIndex: zIndex ? `var(${zIndex})` : undefined }} data-portal>
       {children}

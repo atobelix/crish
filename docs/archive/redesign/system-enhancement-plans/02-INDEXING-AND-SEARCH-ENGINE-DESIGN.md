@@ -1,7 +1,7 @@
 # 维度二：轻量极速搜索引擎设计方案（无 RAG）
 
-> **存储路径**：`docs/system-enhancement-plans/02-INDEXING-AND-SEARCH-ENGINE-DESIGN.md`  
-> **关联源码**：`apps/agent-workbench/src-tauri` / `packages/agent-daemon` / `apps/crish-desktop`  
+> **存储路径**：`docs/system-enhancement-plans/02-INDEXING-AND-SEARCH-ENGINE-DESIGN.md`
+> **关联源码**：`apps/agent-workbench/src-tauri` / `packages/agent-daemon` / `apps/crish-desktop`
 > **核心目标**：放弃高硬件开销的大模型向量 Embedding/RAG，构建基于 Rust Tantivy 倒排词典与 Tree-sitter AST 符号树的高性能搜索引擎，实现在低配 PC 上 < 2ms 响应的增量全文与精确符号检索。
 
 ---
@@ -75,7 +75,7 @@ pub struct FullTextIndexEngine {
 impl FullTextIndexEngine {
     pub fn create_in_memory() -> Result<Self, tantivy::TantivyError> {
         let mut schema_builder = Schema::builder();
-        
+
         // 构建 Tantivy Schema 映射
         let field_file_path = schema_builder.add_text_field("file_path", STRING | STORED);
         let field_content = schema_builder.add_text_field("content", TEXT | STORED);
@@ -126,7 +126,7 @@ impl FullTextIndexEngine {
         let mut results = Vec::new();
         for (score, doc_address) in top_docs {
             let retrieved_doc = searcher.doc(doc_address)?;
-            
+
             let file_path = retrieved_doc
                 .get_first(self.field_file_path)
                 .and_then(|val| val.as_text())

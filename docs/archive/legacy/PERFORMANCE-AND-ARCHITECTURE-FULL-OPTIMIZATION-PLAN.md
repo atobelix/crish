@@ -1,7 +1,7 @@
 # Crish 全系统性能与架构彻底优化方案（MASTER 终极方案）
 
-> **生成时间**: 2026-07-21  
-> **核心原则**: 零遗留死角 · 彻底一把改进 · 前端 GUI 极致视觉与 CLI 级响应速通 · 后端全功能异步零阻塞  
+> **生成时间**: 2026-07-21
+> **核心原则**: 零遗留死角 · 彻底一把改进 · 前端 GUI 极致视觉与 CLI 级响应速通 · 后端全功能异步零阻塞
 > **适用范围**: `apps/crish-desktop`、`apps/agent-workbench`、`packages/agent-daemon`、`packages/agent-runtime`、`packages/agent-orchestrator` 及底座 shared 库
 
 ---
@@ -287,7 +287,7 @@ export const TerminalCard: React.FC<XtermTerminalProps> = ({ streamOutput, onCom
     fitAddonRef.current = fitAddon;
 
     term.open(containerRef.current);
-    
+
     // 优先尝试加载 WebGL 加速渲染插件，降级回落至 Standard Canvas
     try {
       const webglAddon = new WebglAddon();
@@ -380,11 +380,11 @@ export const useSessionStore = create<SessionStoreState>((set) => ({
       // 局部增量 Immutable 更新，不影响无关 Session 对象引用
       const session = state.sessionsById[sessionId];
       if (!session) return state;
-      
+
       const newMessages = session.messages.map((msg) =>
         msg.id === messageId ? { ...msg, text: msg.text + delta } : msg
       );
-      
+
       const updatedSession = { ...session, messages: newMessages };
       return {
         sessionsById: { ...state.sessionsById, [sessionId]: updatedSession },
@@ -560,7 +560,7 @@ export class GroupCommitWAL<T> {
 
     const itemsToFlush = [...this.queue];
     this.queue = [];
-    
+
     try {
       await this.flushCallback(itemsToFlush);
     } catch (err) {

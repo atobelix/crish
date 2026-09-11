@@ -1,8 +1,8 @@
 # Crish Desktop 性能重构 — 多 Agent 多轮执行总提示词
 
-**文档版本**: v1.0  
-**适用对象**: 任何执行此重构的 AI Agent（Claude / GPT / Gemini 均可）  
-**项目根目录**: `c:\Software\conex`  
+**文档版本**: v1.0
+**适用对象**: 任何执行此重构的 AI Agent（Claude / GPT / Gemini 均可）
+**项目根目录**: `c:\Software\conex`
 **前端目录**: `c:\Software\conex\apps\crish-desktop\src`
 
 ---

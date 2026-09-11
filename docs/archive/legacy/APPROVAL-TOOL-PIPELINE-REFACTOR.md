@@ -1,7 +1,7 @@
 # 审批流程与工具执行管道重构方案
 
-> 目标版本: Crish R2  
-> 关联审计: UI-FLOW-AUDIT-COMPLETE.md #106-115, #412-427  
+> 目标版本: Crish R2
+> 关联审计: UI-FLOW-AUDIT-COMPLETE.md #106-115, #412-427
 > 基础架构: 三独立 Store、SessionRuntimeRegistry、操作队列
 
 ---

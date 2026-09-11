@@ -10,7 +10,7 @@
 > [!CAUTION]
 > **切记**：`npm run build:desktop` (Vite 生产环境打包) 会使用 `esbuild` / `rollup` 将所有 TypeScript 强行压缩合并为一个 bundle，并在打包时静默擦除未使用的 import。
 > 这会导致 **“Production 打包能成功，但 Dev 开发模式 (`npm run dev:workbench`) 启动后在 Webview 控制台报 `SyntaxError: The requested module ... does not provide an export named 'FilterType'` 崩溃”** 的隐秘问题。
-> 
+>
 > **防范措施**：必须使用无缓存的 `npx tsc --noEmit -p apps/crish-desktop/tsconfig.app.json` 检查，严格拦截所有 **TS1484** (`verbatimModuleSyntax`) 错误！
 
 ---

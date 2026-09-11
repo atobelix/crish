@@ -1,6 +1,6 @@
 # 系统深度增强与 Rust 内核下沉方案（总览）
 
-> **存储路径**：`docs/system-enhancement-plans/00-OVERVIEW.md`  
+> **存储路径**：`docs/system-enhancement-plans/00-OVERVIEW.md`
 > **设计原则**：GUI 为最强呈现，Rust 为最强底座；放弃昂贵的 RAG 计算，专注极致静态/动态索引与极速搜索；消除类型逃逸与测试回归。
 
 ---
@@ -96,7 +96,7 @@ export interface RustNativeInvokeMap {
     maxResults: number;
     includeSymbols: boolean;
   };
-  
+
   // 响应解元组定义
   'plugin:native_search|query_result': {
     matches: Array<{
@@ -301,7 +301,7 @@ impl Default for EngineConfig {
 
 pub trait NativeOffloadEngine {
     type Error;
-    
+
     fn initialize(&mut self, config: EngineConfig) -> Result<(), Self::Error>;
     fn shutdown(&mut self) -> Result<(), Self::Error>;
 }

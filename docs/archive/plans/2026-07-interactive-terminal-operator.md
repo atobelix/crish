@@ -31,7 +31,7 @@
 | event | `workbench://pty-output` | `{ ptyId, data }` |
 | event | `workbench://pty-exit` | `{ ptyId, code? }` |
 
-前端封装：`apps/crish-desktop/src/api/ptySessionApi.ts`  
+前端封装：`apps/crish-desktop/src/api/ptySessionApi.ts`
 生命周期：`apps/crish-desktop/src/api/ptyRegistry.ts`（`ensurePtyForSession` / `killPtyForSession`）
 
 旧路径 `workbench_run_shell`（`terminalShellApi`）仍是**一行一命令**的非交互执行，与 PTY 并行存在，供过渡/回退。
@@ -59,7 +59,7 @@ cd apps/crish-desktop
 npx vitest run src/api/ptySessionApi.test.ts src/api/ptyRegistry.test.ts --coverage.enabled=false
 ```
 
-预期：**35** 条通过（session API 16 + registry 19）。  
+预期：**35** 条通过（session API 16 + registry 19）。
 Rust 侧：`apps/agent-workbench/src-tauri/src/pty/mod.rs` 内 `pty_id_uniqueness` / write cap 单测。
 
 ---

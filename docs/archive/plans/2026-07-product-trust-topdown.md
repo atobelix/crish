@@ -1,8 +1,8 @@
 # 产品信任与配置契约收敛计划（自上而下）
 
-> 目标：让「UI 上可配的每一项」都有明确写入目标与生效边界；砍死轨、对齐契约、诚实降级。  
-> 排序原则：**逻辑依赖自上而下**（契约 → 引擎接线 → 桌面 API → 设置 UI → 聊天周边 → 卫生结构），**不是优先级排序**。  
-> 状态：**已实施（T0–T8）**，T9 结构拆分可另开专项。  
+> 目标：让「UI 上可配的每一项」都有明确写入目标与生效边界；砍死轨、对齐契约、诚实降级。
+> 排序原则：**逻辑依赖自上而下**（契约 → 引擎接线 → 桌面 API → 设置 UI → 聊天周边 → 卫生结构），**不是优先级排序**。
+> 状态：**已实施（T0–T8）**，T9 结构拆分可另开专项。
 > 实施提交见分支 `refactor/architecture` 近期 commits。
 
 ---
@@ -142,7 +142,7 @@ id = `skill-file:${filePath.normalized}`
 规则 id 建议：
 
 ```ts
-stableId("rule", `${scope}:${title}:${content}`) 
+stableId("rule", `${scope}:${title}:${content}`)
 // 或固定 id：`rule:global:custom` / `rule:project:${projectId}`
 ```
 
@@ -168,19 +168,19 @@ stableId("rule", `${scope}:${title}:${content}`)
 
 ### 2.3 实现切片
 
-1. **共享 id 工具**（小 PR）  
-   - 位置优先：`packages/shared-utils` 或 runtime 已导出函数供 desktop 依赖。  
+1. **共享 id 工具**（小 PR）
+   - 位置优先：`packages/shared-utils` 或 runtime 已导出函数供 desktop 依赖。
    - 若 desktop 不便依赖 runtime：在 desktop 实现 **字节级一致** 的 sha256 截断，并加 golden test 向量（固定 name+path → 固定 id）。
 
-2. **skillsApi 改 id**  
-   - `skillIdFromPath` → `skillIdFromNameAndPath(name, filePath)` 与 runtime 一致。  
+2. **skillsApi 改 id**
+   - `skillIdFromPath` → `skillIdFromNameAndPath(name, filePath)` 与 runtime 一致。
    - 迁移：旧 localStorage `crish_skill_activation_v1` 键 remap 一次（读旧键，按 path 找 skill，写新 id）。
 
-3. **setSkillActivation**  
-   - enabled/recommended/disabled 行为按 §2.2。  
+3. **setSkillActivation**
+   - enabled/recommended/disabled 行为按 §2.2。
    - daemon 失败必须 **throw 或返回 ok:false**，UI toast「仅已保存在本机，引擎未同步」。
 
-4. **规则 upsert**（可与 §3 合并 PR）  
+4. **规则 upsert**（可与 §3 合并 PR）
    - `upsert-scoped-context` kind=rule，固定 id。
 
 ### 2.4 子 agent 约束（§2）
@@ -208,28 +208,28 @@ VERIFY:
 
 ### 3.1 现状
 
-- `SettingsPanel` 保存 `customRules` → `crish_settings` only。  
-- `run-task` 仅：`prompt, sessionId, permissionMode, cwd`。  
+- `SettingsPanel` 保存 `customRules` → `crish_settings` only。
+- `run-task` 仅：`prompt, sessionId, permissionMode, cwd`。
 - 文案已承认未写 AGENTS.md。
 
 ### 3.2 目标行为
 
-1. 用户保存全局/项目规则 →  
-   - 仍可写 `customRules` 到 settings（本地备份）  
-   - **同时** `upsert-scoped-context`：  
-     - id: `rule:desktop:global` / `rule:desktop:project`  
-     - kind: `rule`  
-     - activation: `enabled`  
-     - content: 规则正文  
-     - scope: global | project  
-2. 清空规则 → `delete-scoped-context` 对应 id。  
-3. Toast：成功「已同步到引擎」/ 失败「已保存在本机，引擎未连接」。  
+1. 用户保存全局/项目规则 →
+   - 仍可写 `customRules` 到 settings（本地备份）
+   - **同时** `upsert-scoped-context`：
+     - id: `rule:desktop:global` / `rule:desktop:project`
+     - kind: `rule`
+     - activation: `enabled`
+     - content: 规则正文
+     - scope: global | project
+2. 清空规则 → `delete-scoped-context` 对应 id。
+3. Toast：成功「已同步到引擎」/ 失败「已保存在本机，引擎未连接」。
 4. 可选后续（本计划不强制）：写工作区 `AGENTS.md`——若做，必须用 UTF-8 安全写入，且与 scoped-context **双写说明白**。
 
 ### 3.3 文件范围
 
-- 新建或扩展：`apps/crish-desktop/src/api/rulesApi.ts`（推荐，薄封装）  
-- `SettingsPanel.tsx` 规则保存路径改为调 `rulesApi`  
+- 新建或扩展：`apps/crish-desktop/src/api/rulesApi.ts`（推荐，薄封装）
+- `SettingsPanel.tsx` 规则保存路径改为调 `rulesApi`
 - 不改 `run-task` 协议（依赖已有 scoped-context 注入路径：`buildDaemonScopedPromptContext`）
 
 ### 3.4 子 agent 约束（§3）
@@ -246,9 +246,9 @@ VERIFY: 断连时本地仍保存；连上时 store 可 get-scoped-context 读到
 
 ### 4.1 引擎事实
 
-- `list-mcp-servers`：依赖 `lastMcpStatus.servers`；未配置时常空。  
-- `start-mcp-server` / `stop-mcp-server`：factory 调 `startServer`/`stopServer`，库存 `McpLifecycleManager` **无此方法**。  
-- 真 MCP：有 `mcpServers` 配置时在 **run 路径** 拉起，非 UI 生命周期。  
+- `list-mcp-servers`：依赖 `lastMcpStatus.servers`；未配置时常空。
+- `start-mcp-server` / `stop-mcp-server`：factory 调 `startServer`/`stopServer`，库存 `McpLifecycleManager` **无此方法**。
+- 真 MCP：有 `mcpServers` 配置时在 **run 路径** 拉起，非 UI 生命周期。
 - 默认 `startDaemon` **不**注入 `mcpServers`。
 
 ### 4.2 目标态（分两步，顺序固定）
@@ -257,19 +257,19 @@ VERIFY: 断连时本地仍保存；连上时 store 可 get-scoped-context 读到
 
 正式 `McpSettingsTab`：
 
-1. 调用 `list-capabilities` 或 list 失败信息，展示：  
-   - 未配置 / 不支持启停 / 列表为空 的原因说明。  
-2. **启停按钮**：若 start/stop 探测失败（或 capability 非 implemented），隐藏或 disabled + tooltip「当前引擎不支持从界面启停；MCP 随任务运行时连接」。  
-3. Demo 模式保持 localStorage mock（已隔离），不污染正式。  
+1. 调用 `list-capabilities` 或 list 失败信息，展示：
+   - 未配置 / 不支持启停 / 列表为空 的原因说明。
+2. **启停按钮**：若 start/stop 探测失败（或 capability 非 implemented），隐藏或 disabled + tooltip「当前引擎不支持从界面启停；MCP 随任务运行时连接」。
+3. Demo 模式保持 localStorage mock（已隔离），不污染正式。
 4. 禁止再暗示「添加服务会进引擎」于正式模式。
 
 #### 4.2.2 可选增强（仅当产品明确要求「可配置 MCP」）
 
 单独后续 PR，**不在同一子 agent 任务混做**：
 
-- daemon 支持从配置文件/选项加载 `mcpServers`  
-- factory 实现真正的 start/stop 或改协议对接 `addServer`/`reconnectServer`  
-- desktop 配置通道（文件路径或 WS 消息）  
+- daemon 支持从配置文件/选项加载 `mcpServers`
+- factory 实现真正的 start/stop 或改协议对接 `addServer`/`reconnectServer`
+- desktop 配置通道（文件路径或 WS 消息）
 
 未完成 4.2.2 前，正式 UI **不得** 出现可提交的「注册 MCP」表单。
 
@@ -310,7 +310,7 @@ VERIFY:
 
 ### 5.2 sessionDir / httpProxy
 
-- **短期**：改为只读展示「当前会话数据位置（appData/…）」+ 文案「自定义目录尚未接入」；输入框 disabled。  
+- **短期**：改为只读展示「当前会话数据位置（appData/…）」+ 文案「自定义目录尚未接入」；输入框 disabled。
 - **禁止**：可编辑却只写 settings blob。
 
 ### 5.3 responseStyle
@@ -341,7 +341,7 @@ VERIFY: 刷新后白名单仍在（S1）；sessionDir 不可静默无效写入
 
 ### 6.2 保留
 
-- `clientApi.getSettingsEx` / `saveSettingsEx`（主题、customRules 备份等）  
+- `clientApi.getSettingsEx` / `saveSettingsEx`（主题、customRules 备份等）
 - demo 下 MCP/plugins 若仍依赖 clientApi，用 `isDemoMode()` 门闩包住
 
 ### 6.3 子 agent 约束（§6）
@@ -372,14 +372,14 @@ VERIFY:
 
 ### 7.2 Goal 抽屉
 
-- 正式：`goalActive` 默认 false；不展示假 45% 进度条。  
-- 演示：可保留 playground。  
+- 正式：`goalActive` 默认 false；不展示假 45% 进度条。
+- 演示：可保留 playground。
 - 禁止正式模式 toast-only 的「暂停目标」伪装引擎能力。
 
 ### 7.3 `/skill:` 与 activation 关系（文档化即可）
 
-- 斜杠：当次强制注入正文。  
-- activation：影响自动 scoped-context。  
+- 斜杠：当次强制注入正文。
+- activation：影响自动 scoped-context。
 - 两者并存；子 agent 不得删除斜杠「为了简化」。
 
 ### 7.4 子 agent 约束（§7）
@@ -398,7 +398,7 @@ VERIFY: 正式模式 slash 无 /simulate；Goal 不默认展开
 
 启动或设置打开时 `list-capabilities` 一次，缓存到轻量 store：
 
-- MCP / workflow / scoped-context / artifacts 等  
+- MCP / workflow / scoped-context / artifacts 等
 - UI 根据 state 显示「不支持 / 实验中 / 可用」
 
 ### 8.2 约束
@@ -414,15 +414,15 @@ ALLOWED: 隐藏 artifacts、fork、checkpoint restore 入口（若有）
 
 ### 9.1 删除（确认未引用后）
 
-- `CardPanel.tsx.orig`, `CardPanel.tsx.orig_utf8`  
-- `diff.txt`, `diff_ansi.txt`, `diff_css.txt`  
-- `scripts/_patch_*.py`, `_neutralize_*.py`, `_unify_*.py`, `_rename_pi.py`（一次性脚本）  
-- `packages/agent-daemon/debug-output.txt`, `test-output.txt`  
+- `CardPanel.tsx.orig`, `CardPanel.tsx.orig_utf8`
+- `diff.txt`, `diff_ansi.txt`, `diff_css.txt`
+- `scripts/_patch_*.py`, `_neutralize_*.py`, `_unify_*.py`, `_rename_pi.py`（一次性脚本）
+- `packages/agent-daemon/debug-output.txt`, `test-output.txt`
 - 根目录噪音日志（若存在且未跟踪策略允许）
 
 ### 9.2 废弃别名
 
-- `piClientApi.ts`：删除或保留一行 re-export 并 rg 清调用方  
+- `piClientApi.ts`：删除或保留一行 re-export 并 rg 清调用方
 - `PiRuntimePanel.tsx`：改名或标注 deprecated（低优先级）
 
 ### 9.3 子 agent 约束（§9）
@@ -441,10 +441,10 @@ VERIFY: 构建/typecheck；rg 无引用已删文件
 
 ### 10.1 建议顺序
 
-1. SettingsPanel → 拆 `ProfileSettingsTab` / `RulesSettingsTab` / `SecuritySettingsTab` / `ScheduleSettingsTab`（已有 Models/Skills/MCP/Font）  
-2. ChatCard → 抽 `useSlashCommands` / `useChatSend` / Goal 子组件（行为不变）  
-3. clientApi 缩成 `settingsStorage.ts` + demoMocks  
-4. index.css 按域拆文件（theme / settings / chat / skills）——可另开专项  
+1. SettingsPanel → 拆 `ProfileSettingsTab` / `RulesSettingsTab` / `SecuritySettingsTab` / `ScheduleSettingsTab`（已有 Models/Skills/MCP/Font）
+2. ChatCard → 抽 `useSlashCommands` / `useChatSend` / Goal 子组件（行为不变）
+3. clientApi 缩成 `settingsStorage.ts` + demoMocks
+4. index.css 按域拆文件（theme / settings / chat / skills）——可另开专项
 
 ### 10.2 约束
 
@@ -472,8 +472,8 @@ VERIFY: 行为前后截图或手工清单；typecheck；尽量无逻辑 diff
 
 并行许可：
 
-- T3 ∥ T4 ∥ T5 在 **不同文件集** 且不碰 skillsApi 时可并行。  
-- T1 与 T3 **不要** 并行改同一 Settings 导航。  
+- T3 ∥ T4 ∥ T5 在 **不同文件集** 且不碰 skillsApi 时可并行。
+- T1 与 T3 **不要** 并行改同一 Settings 导航。
 - T2 依赖 upsert 惯例，建议紧随 T1。
 
 ---
@@ -482,11 +482,11 @@ VERIFY: 行为前后截图或手工清单；typecheck；尽量无逻辑 diff
 
 每个子任务必须包含：
 
-1. **阶段编号**（T1…）  
-2. **ALLOWED / FORBIDDEN 文件列表**（复制本文对应节）  
-3. **验收命令**  
-4. **禁止范围**（§0.3）  
-5. **中文写入**：使用工具写 UTF-8；提交用 `git commit -F` + UTF-8 msg 文件  
+1. **阶段编号**（T1…）
+2. **ALLOWED / FORBIDDEN 文件列表**（复制本文对应节）
+3. **验收命令**
+4. **禁止范围**（§0.3）
+5. **中文写入**：使用工具写 UTF-8；提交用 `git commit -F` + UTF-8 msg 文件
 
 ### 12.1 推荐 agent 切分
 
@@ -503,21 +503,21 @@ VERIFY: 行为前后截图或手工清单；typecheck；尽量无逻辑 diff
 
 ### 12.2 冲突热点文件（串行）
 
-- `SettingsPanel.tsx` — **最高冲突**；规则/假控件/死轨尽量同一 agent 或严格分块  
-- `clientApi.ts`  
-- `ChatCard.tsx`  
-- `skillsApi.ts`  
+- `SettingsPanel.tsx` — **最高冲突**；规则/假控件/死轨尽量同一 agent 或严格分块
+- `clientApi.ts`
+- `ChatCard.tsx`
+- `skillsApi.ts`
 - `index.css`（尽量少动，诚实 UI 复用现有 class）
 
 ### 12.3 回归清单（人工 / smoke）
 
-1. 正式模式发一条消息，daemon 连通时正常流式。  
-2. 改模型 key → 仍能聊。  
-3. 设置规则 → 新会话提问是否遵守（或至少 get-scoped-context 可见）。  
-4. 技能启用/禁用 → 刷新列表状态保持；禁用后行为变化。  
-5. MCP 页空态可读。  
-6. 定时任务仍只显示 workflow。  
-7. 演示模式 mock 仍可玩（若 dev）。  
+1. 正式模式发一条消息，daemon 连通时正常流式。
+2. 改模型 key → 仍能聊。
+3. 设置规则 → 新会话提问是否遵守（或至少 get-scoped-context 可见）。
+4. 技能启用/禁用 → 刷新列表状态保持；禁用后行为变化。
+5. MCP 页空态可读。
+6. 定时任务仍只显示 workflow。
+7. 演示模式 mock 仍可玩（若 dev）。
 
 ---
 
@@ -549,10 +549,10 @@ VERIFY: 行为前后截图或手工清单；typecheck；尽量无逻辑 diff
 
 ## 15. 非目标回顾（再次强调给子 agent）
 
-- 不做视觉大改、密度、绿色 token、字体栈调整。  
-- 不把 demo mock 从 chatApi 删除（只关正式入口）。  
-- 不强制会话改为 daemon-only。  
-- 不实现真 PTY / 插件市场 / artifacts。  
+- 不做视觉大改、密度、绿色 token、字体栈调整。
+- 不把 demo mock 从 chatApi 删除（只关正式入口）。
+- 不强制会话改为 daemon-only。
+- 不实现真 PTY / 插件市场 / artifacts。
 
 ---
 
@@ -560,11 +560,11 @@ VERIFY: 行为前后截图或手工清单；typecheck；尽量无逻辑 diff
 
 请确认后再派工：
 
-- [ ] 规则默认 **接真**（scoped-context），不是仅文案诚实  
-- [ ] 技能 ID **方案 A**（与 runtime stableId 对齐）  
-- [ ] MCP 本阶段只做 **诚实 UI**，不做完整配置注入（4.2.2 另议）  
-- [ ] commandPermissions 采用 **S1 持久化**（或改为 S2）  
-- [ ] 执行顺序按 T0→T9，允许注明的并行  
+- [ ] 规则默认 **接真**（scoped-context），不是仅文案诚实
+- [ ] 技能 ID **方案 A**（与 runtime stableId 对齐）
+- [ ] MCP 本阶段只做 **诚实 UI**，不做完整配置注入（4.2.2 另议）
+- [ ] commandPermissions 采用 **S1 持久化**（或改为 S2）
+- [ ] 执行顺序按 T0→T9，允许注明的并行
 
 ---
 

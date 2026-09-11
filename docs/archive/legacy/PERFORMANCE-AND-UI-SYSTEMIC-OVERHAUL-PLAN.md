@@ -297,7 +297,7 @@ private scheduleTimer(): void {
 
 **After** (扁平化 Flex/Grid 单层结构，支持 Content Containment & Sub-Store 局部切片):
 ```tsx
-<div 
+<div
   className={`${styles.row} ${styles.rowUser}`}
   style={{ contain: 'layout style paint', contentVisibility: 'auto' }}
   data-msg-id={msg.id}
@@ -326,10 +326,10 @@ private scheduleTimer(): void {
   const isOffScreen = isIndexBeyondViewportBuffer(index, scrollOffset, totalCount);
   if (isOffScreen && !msg.isStreaming) {
     return (
-      <div 
-        key={msg.id} 
-        data-msg-id={msg.id} 
-        style={{ height: cachedRowHeights.current[msg.id] || 80 }} 
+      <div
+        key={msg.id}
+        data-msg-id={msg.id}
+        style={{ height: cachedRowHeights.current[msg.id] || 80 }}
       />
     );
   }
@@ -426,7 +426,7 @@ const promptCache = new Map<string, { content: string; tokens: number }>();
 export function assemblePrompt(context: AgentContext): string {
   const sysHash = fnv1a(JSON.stringify(context.rules));
   const toolsHash = fnv1a(JSON.stringify(context.tools));
-  
+
   let sysBlock = promptCache.get(sysHash)?.content;
   if (!sysBlock) {
     sysBlock = renderSystemInstructions(context.rules);
@@ -491,34 +491,34 @@ export async function executeCommand(cmd: string): Promise<string> {
 
 为确保全量优化严密落地，划定以下 6 大实施阶段：
 
-### Phase 1: 视觉规范与 Token 基础库重构 
+### Phase 1: 视觉规范与 Token 基础库重构
 - [ ] 在 `styles.css` / `base.css` 定义完整的 Surface 阶梯与 Border 对比度。
 - [ ] 全量清理替换源码中原生 `title="..."` 属性为 `<Tooltip>` 组件。
 - [ ] 排查并彻底清除全局 CSS 中所有 Hover `translateY` 抖动动效。
 - [ ] 校验输入框 Focus 状态边框 contrast 不超过 10%（空态组件 < 3%）。
 
-### Phase 2: 打字流与输入帧率极速隔离 
+### Phase 2: 打字流与输入帧率极速隔离
 - [ ] 重构 `streamTextBatcher.ts`，实现基于 `rAF` 的刷新调度器。
 - [ ] 实现 `ChatMessageRow` 内打字局部 Sub-Store 节点渲染，切断长列表 Reconcile。
 - [ ] 重构 `ChatComposer` 输入控制，实现按键本地 0ms 无锁回显。
 
-### Phase 3: DOM 节点树精简与冷卸载虚拟化 
+### Phase 3: DOM 节点树精简与冷卸载虚拟化
 - [ ] 重构 `ChatMessageRow.tsx` DOM 结构，移除所有多余包裹 `div` 节点。
 - [ ] 为 `ChatMessageList.tsx` 编写 `Off-screen Placeholder Unmounting` 机制。
 - [ ] 对高频 Component 严格标记 React.memo 自定义比较规则。
 
-### Phase 4: CSS Compositor 优化与 WorkerPool 语法高亮分层 
+### Phase 4: CSS Compositor 优化与 WorkerPool 语法高亮分层
 - [ ] 移除对话滚动区域全部 `backdrop-filter` 属性。
 - [ ] 声明消息列表 CSS `contain: content;` 和 `will-change: scroll-position`。
 - [ ] 升级 `markdownRenderAsync.ts` 为 Two-Stage 渐进高亮与双级 LRU Cache。
 
-### Phase 5: 后端 I/O、IPC 通道与进程池优化 
+### Phase 5: 后端 I/O、IPC 通道与进程池优化
 - [ ] 引入 `RingBuffer WAL` 机制重构 `sessionDiskMirror.ts` 磁盘写入。
 - [ ] 重构 `prompt-assembly.ts` 实现基于 Merkle Tree 的增量 Prompt 拼接。
 - [ ] 在 `local-tools.ts` 中实现 Shell 进程池，降低 Command 启动延迟。
 - [ ] 大数据传输引入二进制 Buffer 增量序列化协议。
 
-### Phase 6: 全量回归测试与性能基准守卫 
+### Phase 6: 全量回归测试与性能基准守卫
 - [ ] 运行 `npm run bench:ci` 确认性能基准通过且 ops 指标明显提升。
 - [ ] 运行 `npm run startup:cold` 与 `npm run startup:warm` 验证启动加速。
 - [ ] 运行 `npm run stress:ai` 与 `npm run bench:mem` 验证打字流畅度与零 GC 泄露。

@@ -80,7 +80,7 @@ impl PtyRuntimeEngine {
         };
 
         let pair = self.pty_system.openpty(pty_size)?;
-        
+
         Ok(PtySession {
             master: Arc::new(Mutex::new(pair.master)),
             slave: pair.slave,
@@ -105,10 +105,10 @@ impl PtySession {
     pub fn execute_command(&self, cmd: &str, args: &[&str]) -> Result<Box<dyn Child + Send + Sync>> {
         let mut builder = CommandBuilder::new(cmd);
         builder.args(args);
-        
+
         // 设置当前工作目录
         builder.cwd(std::env::current_dir()?);
-        
+
         // 生成子进程
         let child = self.slave.spawn_command(builder)?;
         Ok(child)
@@ -145,11 +145,11 @@ impl PtyIOHandler {
     ) -> Self {
         // 克隆主端用于读取
         let master_reader = master.lock().unwrap().try_clone_reader().unwrap();
-        
+
         let reader_thread = thread::spawn(move || {
             let mut reader = master_reader;
             let mut buf = [0u8; 8192]; // 8KB 缓冲区
-            
+
             loop {
                 match reader.read(&mut buf) {
                     Ok(0) => {
@@ -175,7 +175,7 @@ impl PtyIOHandler {
             tx_out,
         }
     }
-    
+
     pub fn write_input(master: &Arc<Mutex<Box<dyn MasterPty + Send>>>, data: &[u8]) -> Result<()> {
         let mut master_guard = master.lock().unwrap();
         let mut writer = master_guard.try_clone_writer()?;
@@ -303,9 +303,9 @@ pub fn apply_landlock(workspace_dir: &std::path::Path) -> anyhow::Result<()> {
         .create()?;
 
     let path_beneath = PathBeneath::new(workspace_dir, AccessFs::from_all());
-    
+
     let ruleset = ruleset.add_rule(path_beneath)?;
-    
+
     // 限制进程，应用规则
     ruleset.restrict_self()?;
     Ok(())
@@ -411,19 +411,19 @@ pub enum ExecutionStatus {
 pub trait ToolExecutor: Send + Sync {
     /// 初始化执行器
     async fn initialize(&mut self, ctx: ExecutionContext) -> Result<()>;
-    
+
     /// 执行命令并返回标识符 (Job ID)
     async fn execute(&mut self, cmd: &str, args: &[String]) -> Result<String>;
-    
+
     /// 向运行中的进程发送输入 (Stdin)
     async fn send_input(&self, job_id: &str, data: &[u8]) -> Result<()>;
-    
+
     /// 发送控制信号 (如 Ctrl+C)
     async fn send_signal(&self, job_id: &str, signal: i32) -> Result<()>;
-    
+
     /// 获取当前状态
     async fn get_status(&self, job_id: &str) -> Result<ExecutionStatus>;
-    
+
     /// 强制终止
     async fn terminate(&self, job_id: &str) -> Result<()>;
 }
@@ -455,23 +455,23 @@ impl ToolExecutor for PtyExecutor {
 
     async fn execute(&mut self, cmd: &str, args: &[String]) -> Result<String> {
         let job_id = uuid::Uuid::new_v4().to_string();
-        
+
         let size = TerminalSize { rows: 24, cols: 80, pixel_width: 0, pixel_height: 0 };
         let session = self.engine.spawn_pty(size)?;
-        
+
         // 转换 args
         let args_ref: Vec<&str> = args.iter().map(AsRef::as_ref).collect();
-        
+
         // 此处需要注入沙箱机制 (根据 OS)
         let child = session.execute_command(cmd, &args_ref)?;
-        
+
         #[cfg(target_os = "windows")]
         let job_object = windows_sandbox::JobObject::new();
         // 此处获取 native handle 并 assign 到 job object (省略 unsafe 代码细节)
 
         let (tx, rx) = bounded(100);
         let io_handler = PtyIOHandler::start(session.master.clone(), tx);
-        
+
         // 开启后台监听 tx/rx，将数据通过 N-API 发送给前端
         // ...
 
@@ -529,22 +529,22 @@ impl NativePtyManager {
 
     #[napi]
     pub async fn spawn(
-        &self, 
-        cmd: String, 
-        args: Vec<String>, 
+        &self,
+        cmd: String,
+        args: Vec<String>,
         // 使用 ThreadsafeFunction 用于 Node.js 的事件回调 (如 data 事件)
-        #[napi(ts_args_type = "payload: Buffer")] 
+        #[napi(ts_args_type = "payload: Buffer")]
         on_data: ThreadsafeFunction<Buffer, ErrorStrategy::CalleeHandled>
     ) -> Result<String> {
         let mut exec = self.executor.lock().await;
         let job_id = exec.execute(&cmd, &args).await.map_err(|e| {
             Error::new(Status::GenericFailure, format!("Execute failed: {}", e))
         })?;
-        
+
         // 绑定数据流读取与回调
         // 内部启动 tokio spawn，不断从 PtyIOHandler 的 Receiver 获取数据
         // 然后调用 on_data.call(Ok(Buffer::from(data)), ThreadsafeFunctionCallMode::NonBlocking)
-        
+
         Ok(job_id)
     }
 
@@ -634,10 +634,10 @@ C/C++ 和 Node.js 的内存泄漏大多是因为忘记手动关闭句柄。在 R
 impl Drop for PtyJob {
     fn drop(&mut self) {
         println!("Cleaning up PtyJob...");
-        
+
         // 1. 关闭 IO 线程发送端，停止读取
         // 2. 杀死底层子进程 (如果在 Windows 上，JobObject 的 Drop 会自动处理)
-        
+
         #[cfg(not(target_os = "windows"))]
         {
             // Unix 平台手动发生 SIGKILL
@@ -720,12 +720,12 @@ mod benches {
         c.bench_function("pty throughput 1MB payload", |b| {
             let engine = PtyRuntimeEngine::new();
             let size = TerminalSize { rows: 24, cols: 80, pixel_width: 0, pixel_height: 0 };
-            
+
             b.iter(|| {
                 let session = engine.spawn_pty(size).unwrap();
                 let mut cmd = CommandBuilder::new("cat");
                 cmd.args(["test_data/1mb_text.txt"]);
-                
+
                 let mut child = session.slave.spawn_command(cmd).unwrap();
                 let _status = child.wait().unwrap();
                 // 验证流读取性能

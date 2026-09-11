@@ -1,7 +1,7 @@
 # Crish Workbench - 全站 UI/UX 系统性高级重构与美学改进方案 (Master Plan)
 
-> **版本**：v2.0 (全量终极重构版本)  
-> **设计哲学**：**克制的高级感（Understated Luxury & Restrained Precision）**  
+> **版本**：v2.0 (全量终极重构版本)
+> **设计哲学**：**克制的高级感（Understated Luxury & Restrained Precision）**
 > **目标**：不遗留任何历史视觉与交互漏洞，拒绝喧宾夺主。全方位对齐 Linear、Zed、Cursor、Windsurf、Raycast 等全球顶尖极客工具的像素级（Pixel-Perfect）视效与高操控感 ergonomics 体验。
 
 ---

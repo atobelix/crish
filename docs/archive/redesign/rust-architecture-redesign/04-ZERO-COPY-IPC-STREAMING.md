@@ -24,7 +24,7 @@ sequenceDiagram
     participant IPC as OS Pipe / IPC
     participant Main as UI Main Thread (V8)
     participant DOM as Browser Layout/Paint
-    
+
     Agent->>Agent: 生成 1MB 数据块
     Agent->>Agent: JSON.stringify (阻塞 5ms)
     Agent->>IPC: Write to Pipe (Copy 1)
@@ -43,10 +43,10 @@ sequenceDiagram
 为了彻底解决上述痛点，我们提出基于 Rust 的 Tauri 架构，并利用 `SharedArrayBuffer` 配合 Rust 原生内存映射技术，实现从 Daemon 到 UI 层的“零拷贝”（Zero-Copy）数据传输。
 
 ### 2.1 核心技术选型
-- **Bincode / rkyv**: 
+- **Bincode / rkyv**:
   - `Bincode` 提供了极快、极其紧凑的二进制序列化格式，适用于 Rust 之间的通信。
   - `rkyv` (Archive) 提供了真正的零拷贝反序列化（Zero-Copy Deserialization）。直接将内存中的字节流映射为 Rust / JS 可读的结构，而不需要遍历和重建对象。
-- **SharedArrayBuffer (SAB)**: 
+- **SharedArrayBuffer (SAB)**:
   - 允许 Rust 后端与 WebView 前端共享同一块内存区域。
   - Rust 直接将字节写入 SAB，前端 JS 的 DataView 或 WebAssembly 实例直接读取，**完全省去内核到用户态的拷贝、省去进程间的 Copy-on-Write**。
 
@@ -96,7 +96,7 @@ impl ZeroCopyProducer {
     pub fn new(shared_mem_ptr: *mut u8) -> Self {
         let header = shared_mem_ptr as *mut RingBufferHeader;
         let payload = unsafe { shared_mem_ptr.add(HEADER_SIZE) };
-        
+
         unsafe {
             (*header).magic = 0xCAFEBABE;
             (*header).version = 1;
@@ -118,7 +118,7 @@ impl ZeroCopyProducer {
         unsafe {
             let write_pos = (*self.header).write_ptr.load(Ordering::Acquire);
             let read_pos = (*self.header).read_ptr.load(Ordering::Acquire);
-            
+
             let available = if write_pos >= read_pos {
                 BUFFER_CAPACITY - (write_pos - read_pos)
             } else {
@@ -222,7 +222,7 @@ class FrameBudgetScheduler<T> {
         }
 
         const batchToFlush = this.queue.splice(0, processedCount);
-        
+
         if (batchToFlush.length > 0) {
             this.onBatchFlush(batchToFlush);
         }
@@ -271,15 +271,15 @@ impl StreamParser {
 
     pub fn push_chunk(&mut self, chunk: &str) -> JsValue {
         self.buffer.push_str(chunk);
-        
+
         let parser = Parser::new(&self.buffer);
         let mut events = Vec::new();
-        
+
         for event in parser {
             // 序列化为轻量级的内部表示传递给 JS
             events.push(serialize_event(event));
         }
-        
+
         // 实际工程中这里使用 rkyv 或 serde_wasm_bindgen
         serde_wasm_bindgen::to_value(&events).unwrap()
     }
@@ -411,23 +411,23 @@ class ZeroCopyConsumer {
     private readPtrView: BigUint64Array; // offset 8
     private writePtrView: BigUint64Array; // offset 16
     private payloadView: Uint8Array;
-    
+
     private capacity = 8 * 1024 * 1024;
     private headerSize = 64;
 
     constructor(sab: SharedArrayBuffer) {
         this.sharedBuffer = sab;
         this.headerView = new Uint32Array(sab, 0, this.headerSize / 4);
-        
+
         // 校验 Magic Number
         if (this.headerView[0] !== 0xCAFEBABE) {
             throw new Error("Invalid Magic Number");
         }
-        
+
         // BigUint64Array 对应的 offset 必须是 8 的倍数
         this.readPtrView = new BigUint64Array(sab, 8, 1);
         this.writePtrView = new BigUint64Array(sab, 16, 1);
-        
+
         this.payloadView = new Uint8Array(sab, this.headerSize);
     }
 
@@ -445,7 +445,7 @@ class ZeroCopyConsumer {
         const end = start + len;
 
         const data = new Uint8Array(len);
-        
+
         if (end <= this.capacity) {
             data.set(this.payloadView.subarray(start, end));
         } else {
@@ -458,7 +458,7 @@ class ZeroCopyConsumer {
 
         // 消费完毕后，原子更新 Read Pointer
         Atomics.store(this.readPtrView, 0, writePtr);
-        
+
         return data;
     }
 }
@@ -499,7 +499,7 @@ export interface RustNativeInvokeMap {
     maxResults: number;
     includeSymbols: boolean;
   };
-  
+
   'plugin:native_search|query_result': {
     hits: Array<{
       filePath: string;

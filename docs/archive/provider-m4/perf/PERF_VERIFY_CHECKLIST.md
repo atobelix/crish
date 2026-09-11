@@ -1,6 +1,6 @@
 # Crish Desktop 性能整改 — 人工 QA Checklist
 
-> 对应计划：`docs/perf/MULTI_AGENT_PERF_PLAN.md`（R1–R3）  
+> 对应计划：`docs/perf/MULTI_AGENT_PERF_PLAN.md`（R1–R3）
 > 自动化：先跑 §A，再按 §B–§E 手测。
 
 ---
@@ -52,7 +52,7 @@ npx vitest run `
 
 **Profiler 提示（B4/B5）**
 
-- 录 5–10s 流式：搜 `highlight` / `prepare` / `layout` 是否在 token 热路径。  
+- 录 5–10s 流式：搜 `highlight` / `prepare` / `layout` 是否在 token 热路径。
 - React Profiler：历史 `ChatAssistantMessageRow` 在 token 期 commit 应接近 0（#10 未完全闭环前可能仍有 session 写触发 — 记缺陷）。
 
 ---
@@ -112,9 +112,9 @@ npx vitest run `
 
 **已知残留（勿当新回归）**
 
-1. `#10` **正文**路径：renderBuffer 仍可能每帧 `updateMessageText`；行级 streamingStore 订阅是否全接通以代码复查。**工具 intermediate → streamingStore / terminal → session** 已在 Wave 5 落地（见 `wave4-6-perf-notes.md`）。  
-2. 全仓 typecheck 可能有与 perf 无关的存量错误。  
-3. 侧栏 session 标题量字仍可用 pretext（非输入/流式热路径）。  
+1. `#10` **正文**路径：renderBuffer 仍可能每帧 `updateMessageText`；行级 streamingStore 订阅是否全接通以代码复查。**工具 intermediate → streamingStore / terminal → session** 已在 Wave 5 落地（见 `wave4-6-perf-notes.md`）。
+2. 全仓 typecheck 可能有与 perf 无关的存量错误。
+3. 侧栏 session 标题量字仍可用 pretext（非输入/流式热路径）。
 4. live resize DOM map 仍 partial（shell S4.3）。
 
 **Wave 4–6 增补纪要**：`docs/plans/progress/wave4-6-perf-notes.md`；方案侧 §12：`MULTI_AGENT_PERF_PLAN.md`。

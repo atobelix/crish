@@ -54,7 +54,7 @@ C4Context
     title Conex System Context
     Person(user, "终端用户", "使用 Conex 客户端处理日常业务")
     System(conex, "Conex 客户端", "基于 Rust + Tauri 的桌面应用")
-    
+
     System_Ext(cloud_api, "Conex Cloud API", "云端数据同步与计算服务")
     System_Ext(os_services, "OS Native Services", "文件系统、推送通知、系统托盘")
     System_Ext(third_party, "第三方插件/服务", "第三方业务集成")
@@ -71,7 +71,7 @@ C4Context
 C4Container
     title Conex Container Diagram
     Person(user, "终端用户", "使用应用")
-    
+
     System_Boundary(c1, "Conex 客户端 (Desktop)") {
         Container(gui, "GUI 前端 (React 19/TS)", "WebView/Tauri", "提供交互界面，管理 UI 状态，收紧三门面 Slice")
         Container(rust_core, "Rust Core (Daemon)", "Rust/Tokio", "处理所有核心逻辑、网络、持久化、Diff与符号解析")
@@ -248,7 +248,7 @@ C4Component
 ## 6. 跨平台支持策略与打包部署方案
 
 ### 6.1 平台支持策略
-- **Windows (10 / 11)**: 
+- **Windows (10 / 11)**:
   - WebView 后端: Edge WebView2
   - 原生交互: `windows-rs` API 调用。
   - 考虑到国内环境，WebView2 runtime 采取按需在线下载或静默安装策略，确保兼容性。
@@ -275,7 +275,7 @@ matrix:
 - **构建缓存**: 深度使用 `Swatinem/rust-cache` 缓存 Cargo registry 和 target 目录，将构建时间缩短至 15 分钟以内。
 - **代码规范检查**: 强制集成 `clippy` 与 `rustfmt`，不允许存在任何 Warning。
 - **安全扫描**: 引入 `cargo audit` 检查已知漏洞依赖。
-- **打包产物**: 
+- **打包产物**:
   - Win: `.msi` (WiX Toolset) / `.exe` (NSIS)
   - Mac: `.dmg` / `.app`
   - Linux: `.AppImage` / `.deb`
@@ -413,15 +413,15 @@ sequenceDiagram
     Core->>FS: 读取文件元信息 (size, mime)
     FS-->>Core: 返回 MetaData
     Core->>UI: EmitEvent('upload_init', { total_chunks: 100 })
-    
+
     loop Chunk by Chunk (Parallel max 4)
         Core->>FS: 内存映射 / read_chunk(offset, size)
-        FS-->>Core: 返回 byte[] 
+        FS-->>Core: 返回 byte[]
         Core->>Cloud: PUT S3 / Part Upload (HTTPS)
         Cloud-->>Core: 200 OK (ETag)
         Core->>UI: EmitEvent('upload_progress', { chunk_idx: i, uploaded: byte_size })
     end
-    
+
     Core->>Cloud: Complete Multipart Upload
     Cloud-->>Core: 200 OK (Final URL)
     Core->>UI: EmitEvent('upload_success', { url: finalUrl })
@@ -478,7 +478,7 @@ pub async fn handle_search(payload: SearchQuery) -> Result<SearchRes, Error> {
 - **A (系统域)**: 1=前端, 2=Rust核心, 3=网络层, 4=OS层
 - **BB (模块分类)**: 01=DB, 02=Network, 03=Auth, 04=File, 05=IPC
 - **CCC (具体错误)**: 序号
-*示例*: 
+*示例*:
 - `2-01-004` 代表 Rust核心-数据库模块-主键冲突异常。
 - `3-02-100` 代表 网络层-连接模块-云端服务器拒绝连接。
 
@@ -504,8 +504,8 @@ Tauri 提供了强大的更新机制。我们在打包时集成了公钥：
 所有参与本项目的研发人员，请严格遵守本文档所制定的技术边界、通信协议及质量标准。
 
 > "Architecture is about the important stuff. Whatever that is." —— Ralph Johnson
-> 
-> 架构演进是一场马拉松。保持代码的克制，坚守边界的清晰，方能打造出长盛不衰的工程体系。 
+>
+> 架构演进是一场马拉松。保持代码的克制，坚守边界的清晰，方能打造出长盛不衰的工程体系。
 > 本文档中的每一项技术决策，都是对过往系统血泪史的反思，也是向未来十年技术红利进军的冲锋号。
-> 
+>
 > —— Conex Architecture Redesign Team, 2026

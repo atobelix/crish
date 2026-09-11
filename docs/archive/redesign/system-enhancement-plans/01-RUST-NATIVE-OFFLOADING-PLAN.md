@@ -1,7 +1,7 @@
 # 维度一：Rust 原生内核沉淀与高性能下沉方案
 
-> **存储路径**：`docs/system-enhancement-plans/01-RUST-NATIVE-OFFLOADING-PLAN.md`  
-> **关联源码**：`apps/agent-workbench/src-tauri` / `packages/agent-daemon` / `packages/agent-runtime`  
+> **存储路径**：`docs/system-enhancement-plans/01-RUST-NATIVE-OFFLOADING-PLAN.md`
+> **关联源码**：`apps/agent-workbench/src-tauri` / `packages/agent-daemon` / `packages/agent-runtime`
 > **核心目标**：在不计时间成本的前提下，将所有计算密集、字符串扫描密集、IO 频繁的内核任务全面下沉至 Rust，保留 TypeScript 纯粹的 UI 与编排职责，极大削减 GC 内存消耗与主线程冻结。
 
 ---
@@ -199,7 +199,7 @@ impl StreamAstParser {
         self.buffer.push_str(chunk);
 
         let is_boundary = self.evaluate_state_transitions();
-        
+
         StreamTokenDelta {
             state_before: before,
             state_after: self.current_state.clone(),
@@ -258,8 +258,8 @@ impl NativeFsWatcher {
                         for path in paths {
                             let path_str = path.to_string_lossy().to_string();
                             // 三级过滤：忽略 node_modules, .git, target 目录
-                            if !path_str.contains("node_modules") 
-                               && !path_str.contains(".git") 
+                            if !path_str.contains("node_modules")
+                               && !path_str.contains(".git")
                                && !path_str.contains("target") {
                                 on_event(format!("{:?}", kind), path_str);
                             }
@@ -337,7 +337,7 @@ impl NativeStorageEngine {
 
     pub fn load_snapshot(&self, session_id: &str) -> SqlResult<SessionSnapshotRecord> {
         self.conn.query_row(
-            "SELECT session_id, parent_session_id, title, updated_at, payload_json 
+            "SELECT session_id, parent_session_id, title, updated_at, payload_json
              FROM session_snapshots WHERE session_id = ?1",
             params![session_id],
             |row| {

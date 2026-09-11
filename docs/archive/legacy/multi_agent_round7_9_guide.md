@@ -1,8 +1,8 @@
 # Crish 性能/架构收尾 — Round 7–9 多 Agent 执行纲要
 
-**文档版本**: v1.0  
-**前置**: Round 1–6 已完成（UI 性能、测试修复、Vite MCP、settings eco、STREAM_PAUSE pause-buffer）  
-**项目根**: `c:\Software\conex`  
+**文档版本**: v1.0
+**前置**: Round 1–6 已完成（UI 性能、测试修复、Vite MCP、settings eco、STREAM_PAUSE pause-buffer）
+**项目根**: `c:\Software\conex`
 **分支**: `refactor/architecture`
 
 ---
@@ -91,7 +91,7 @@ Round 9（全量回归 + 契约文档）
 **用例**：
 
 1. `pauseStream` 后 `tryBuffer` 生效；`resumeStream` flush 到 mock transport
-2. `waitIfPaused` 在 resume 前不 resolve  
+2. `waitIfPaused` 在 resume 前不 resolve
    3.（可选）binary frame decode → server handler 调 pauseStream（mock RunHandler）
 
 **验收**：agent-daemon vitest 相关文件 0 fail。

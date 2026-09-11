@@ -86,7 +86,7 @@ self.onmessage = (e) => {
   const { id, payload, signal } = e.data;
   const abortHandler = () => { /* 清理中间状态 */ };
   signal.addEventListener('abort', abortHandler);
-  
+
   executeTask(payload).finally(() => {
     signal.removeEventListener('abort', abortHandler);
   });
@@ -135,7 +135,7 @@ class ComputationCache<K, V> {
   private pending: Map<K, Promise<V>>; // 正在进行的计算
 
   constructor(capacity: number, ttlMs: number);
-  
+
   async getOrCompute(
     key: K,
     compute: () => Promise<V>,
@@ -144,11 +144,11 @@ class ComputationCache<K, V> {
     // 1. 命中缓存 → 返回
     const cached = this.cache.get(key);
     if (cached && !this.isExpired(cached)) return cached.value;
-    
+
     // 2. 有相同 key 正在计算 → 等待同一 Promise
     const pending = this.pending.get(key);
     if (pending) return pending;
-    
+
     // 3. 新建计算
     const promise = compute();
     this.pending.set(key, promise);
@@ -200,21 +200,21 @@ async function detectGpuCapability(): Promise<GpuCapability> {
     const adapter = await navigator.gpu.requestAdapter();
     if (adapter) return { level: 'webgpu', adapter };
   }
-  
+
   // 2. Canvas 2D (用于图像缩放)
   if (typeof OffscreenCanvas !== 'undefined') {
     const canvas = new OffscreenCanvas(1, 1);
     const ctx = canvas.getContext('2d');
     if (ctx) return { level: 'canvas-2d' };
   }
-  
+
   // 3. WebGL (fallback)
   try {
     const canvas = new OffscreenCanvas(1, 1);
     const gl = canvas.getContext('webgl');
     if (gl) return { level: 'webgl', gl };
   } catch {}
-  
+
   // 4. 纯 CPU
   return { level: 'none' };
 }
@@ -229,13 +229,13 @@ class Sha256Provider {
     const shader = `
       @group(0) @binding(0) var<storage, read> input: array<u32>;
       @group(0) @binding(1) var<storage, read_write> output: array<u32>;
-      
+
       // WGSL SHA-256 实现
       // ...
     `;
     // ...
   }
-  
+
   // CPU 路径 (Worker 线程池)
   async hashViaCpu(data: Uint8Array): Promise<string> {
     return this.workerPool.submitTask({
@@ -243,7 +243,7 @@ class Sha256Provider {
       payload: { op: 'sha256', data },
     });
   }
-  
+
   // 自适应路由
   async hash(data: Uint8Array): Promise<string> {
     if (data.length < 1024) return this.hashViaCpu(data); // 小数据 CPU 更快
@@ -307,11 +307,11 @@ async fn native_git_diff(cwd: String, paths: Vec<String>, staged: bool) -> Resul
         .output()
         .await
         .map_err(|e| e.to_string())?;
-    
+
     let patch = String::from_utf8_lossy(&output.stdout).to_string();
     let stat = parse_diff_stat(&patch);
     let files = parse_name_status(&patch);
-    
+
     Ok(GitDiffResult { patch, stat, files })
 }
 
@@ -373,13 +373,13 @@ class StreamingFileReader {
   private handle: FileHandle | undefined;
   private buffer: Buffer;
   private position: number = 0;
-  
+
   constructor(path: string, options?: { highWaterMark?: number });
-  
+
   async readNextBytes(size: number): Promise<Buffer | null>;
   async readLines(limit: number): Promise<string[]>;
   async pipeTo(writer: WritableStream, signal?: AbortSignal): Promise<void>;
-  
+
   // 支持流式 JSONL 解析，不一次性加载全部
   async *[Symbol.asyncIterator](): AsyncGenerator<string> {
     let remainder = '';
@@ -403,17 +403,17 @@ class StreamingFileReader {
 class MmapFileReader {
   private mapping: Buffer | null = null;
   private fd: number = -1;
-  
+
   async open(path: string): Promise<void> {
     // Tauri invoke → Rust native_mmap_open
     // Rust 侧使用 memmap2 crate
   }
-  
+
   readSlice(offset: number, length: number): Buffer {
     // 零拷贝：返回 mapping 的 subarray
     return this.mapping!.subarray(offset, offset + length);
   }
-  
+
   close(): void {
     // munmap
   }
@@ -425,13 +425,13 @@ class MmapFileReader {
 ```
 紧急写入 (用户操作, turn-end):
   writeFile + fsync (await)
-  
+
 批量写入 (事件流, session append):
   JsonlAppendBatcher → 累积 N 条或 T ms → 批量 write + fsync
-  
+
 后台刷盘 (checkpoint, 索引):
   低优先级 Worker → 后台 write + fsync（不阻塞主流程）
-  
+
 Write-ahead log (崩溃恢复):
   先写 WAL → 确认 → 更新数据文件 → 标记 WAL 完成
 ```
@@ -442,7 +442,7 @@ Write-ahead log (崩溃恢复):
 // 平台自适应文件监视
 class FileWatcher {
   private watcher: FSWatcher | null = null;
-  
+
   watch(path: string, callback: (event: FileChangeEvent) => void): void {
     if (process.platform === 'win32') {
       // ReadDirectoryChangesW (Node.js fs.watch 已封装)
@@ -521,7 +521,7 @@ class AdaptiveCapacityManager {
     avgQueueDepth: number;            // 平均队列深度
     avgTaskLatencyMs: number;         // 平均任务等待延迟
   };
-  
+
   async adjust(): Promise<void> {
     if (this.metrics.avgQueueDepth > this.config.workerPool.maxWorkers * 2) {
       // 队列堆积：临时扩容

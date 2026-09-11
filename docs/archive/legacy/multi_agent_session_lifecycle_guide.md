@@ -1,8 +1,8 @@
 # 会话生命周期重构 — Pending Draft 多 Agent 执行指南
 
-**文档版本**: v1.0  
-**ADR**: `docs/architecture/session-pending-draft-adr.md`  
-**项目根**: `c:\Software\conex`  
+**文档版本**: v1.0
+**ADR**: `docs/architecture/session-pending-draft-adr.md`
+**项目根**: `c:\Software\conex`
 **前端**: `apps/crish-desktop/src`
 
 ---

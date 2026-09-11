@@ -643,7 +643,7 @@ graph TD
     SS["streamingStore"]
     LS["layoutStore.sessions"]
   end
-  
+
   subgraph "纯函数层"
     Norm["normalizeAssistantTimeline()"]
     Build["buildAssistantTimeline()"]
@@ -651,7 +651,7 @@ graph TD
     HumanLabel["toolHumanLabel()"]
     CmdPreview["toolCommandPreview()"]
   end
-  
+
   subgraph "组件层"
     MC["MessageContent"]
     TB["MessageThinkingBlock"]
@@ -665,7 +665,7 @@ graph TD
     AAC["ApprovalAskCard"]
     SRB["StickyRootBar ★新"]
   end
-  
+
   SSE --> SS
   SSE --> LS
   SS --> MC

@@ -1,7 +1,7 @@
 # 维度六：UI Store 门面隔离、类型安全收紧与 QA 质量恢复链
 
-> **存储路径**：`docs/rust-architecture-redesign/06-UI-STORE-FACADE-AND-QA-RECOVERY.md`  
-> **关联源码**：`apps/crish-desktop/src/store` / `apps/crish-desktop/src/api/storeAccess.ts` / `scripts/check-no-as-any-store.mjs` / `tests/recovery`  
+> **存储路径**：`docs/rust-architecture-redesign/06-UI-STORE-FACADE-AND-QA-RECOVERY.md`
+> **关联源码**：`apps/crish-desktop/src/store` / `apps/crish-desktop/src/api/storeAccess.ts` / `scripts/check-no-as-any-store.mjs` / `tests/recovery`
 > **核心目标**：在 Rust Core 底盘强悍性能支撑的基础上，彻底重构 UI 层 TypeScript 状态机，完成 Zustand 领域三门面隔离，消除一切 `as any` 类型逃逸；同时精准修补全量测试用例中的 67 个断言失败，建立防崩溃 (Recovery) 与并发互斥 (Race) 的质量红线。
 
 ---
@@ -169,7 +169,7 @@ describe('sessionActions prune & active session lifecycle', () => {
   it('createSession activate:true reuses active empty shell and retains peer-ghost correctly', () => {
     const store = useLayoutStore.getState();
     store.createSession({ folder: 'general', activate: true });
-    
+
     const st = useLayoutStore.getState();
     expect(st.activeSessionId).toBeDefined();
 
@@ -195,5 +195,5 @@ describe('sessionActions prune & active session lifecycle', () => {
 
 ---
 
-> **文档状态：** Final Approved v1.0  
-> **保存位置：** `docs/rust-architecture-redesign/06-UI-STORE-FACADE-AND-QA-RECOVERY.md`  
+> **文档状态：** Final Approved v1.0
+> **保存位置：** `docs/rust-architecture-redesign/06-UI-STORE-FACADE-AND-QA-RECOVERY.md`

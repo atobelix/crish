@@ -1,7 +1,7 @@
 # Technical Debt Register
 
-> 种子清单，基于 P1–P12 审计报告提取（2026-07-23）  
-> 按照严重性分级：Critical / Major / Minor / Cosmetic  
+> 种子清单，基于 P1–P12 审计报告提取（2026-07-23）
+> 按照严重性分级：Critical / Major / Minor / Cosmetic
 > 每项含：ID · 描述 · 影响范围 · 关联位置 · 发现时间
 
 ---

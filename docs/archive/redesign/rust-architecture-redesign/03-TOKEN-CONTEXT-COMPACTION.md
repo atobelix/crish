@@ -67,7 +67,7 @@ struct TokenizerJob {
 impl TokenizerPool {
     pub fn new(size: usize) -> Self {
         let (sender, receiver) = bounded::<TokenizerJob>(1000);
-        
+
         for _ in 0..size {
             let rx = receiver.clone();
             let bpe_clone = CL100K_BASE.clone();
@@ -79,10 +79,10 @@ impl TokenizerPool {
                 }
             });
         }
-        
+
         TokenizerPool { sender }
     }
-    
+
     pub fn count_tokens(&self, text: &str) -> usize {
         let (resp_tx, resp_rx) = bounded(1);
         let job = TokenizerJob {
@@ -184,7 +184,7 @@ impl CompactionEngine {
         let mut total_tokens = self.calculate_total_tokens(&llm_messages);
         let warning_limit = (self.max_context as f64 * self.warning_threshold) as usize;
         let critical_limit = (self.max_context as f64 * self.critical_threshold) as usize;
-        
+
         if total_tokens > critical_limit {
             self.emergency_compaction(&mut llm_messages, critical_limit, &mut total_tokens);
         } else if total_tokens > warning_limit {
@@ -205,7 +205,7 @@ impl CompactionEngine {
 
     fn mild_compaction(&self, messages: &mut Vec<Message>, target: usize, current: &mut usize) {
         while *current > target && messages.len() > 3 {
-            let removed = messages.remove(1); 
+            let removed = messages.remove(1);
             *current -= exact_token_count(&removed.content);
         }
     }
@@ -245,7 +245,7 @@ impl AstCompactor {
     pub fn compact_code(&mut self, source_code: &str, max_tokens: usize) -> String {
         let tree = self.parser.parse(source_code, None).unwrap();
         let root_node = tree.root_node();
-        
+
         let current_tokens = exact_token_count(source_code);
         if current_tokens <= max_tokens {
             return source_code.to_string();
@@ -254,7 +254,7 @@ impl AstCompactor {
         // 递归遍历并折叠
         let mut modified_source = source_code.to_string();
         self.traverse_and_fold(&root_node, source_code, &mut modified_source, max_tokens);
-        
+
         modified_source
     }
 
@@ -358,17 +358,17 @@ export interface CompactionResult {
 
 export class CompactionEngine {
   constructor(maxTokens: number);
-  
+
   /**
    * 精确计算 Token
    */
   countTokens(text: string): number;
-  
+
   /**
    * 智能截断与压缩，保证不超过 maxTokens
    */
   compact(messages: Message[]): CompactionResult;
-  
+
   /**
    * AST 级别代码压缩
    */
@@ -461,10 +461,10 @@ mod tests {
         let text = "Hello world, Rust is amazing!";
         let count = exact_token_count(text);
         assert_eq!(count, 7); // 取决于具体 bpe
-        
+
         let chinese_text = "你好，世界";
         let count_zh = exact_token_count(chinese_text);
-        assert!(count_zh > 4); 
+        assert!(count_zh > 4);
     }
 
     #[test]
@@ -476,10 +476,10 @@ mod tests {
             Message { role: "assistant".into(), content: "Got it".into(), images: vec![] },
             Message { role: "user".into(), content: "Another one".into(), images: vec![] },
         ];
-        
+
         engine.compact(&mut msgs);
         let current_tokens = engine.calculate_total_tokens(&msgs);
-        
+
         assert!(current_tokens <= 100);
         // 系统消息必须被保留
         assert_eq!(msgs[0].role, "system");
@@ -492,10 +492,10 @@ mod tests {
             Message { role: "system".into(), content: "Sys".into(), images: vec![] },
             Message { role: "user".into(), content: "U1".into(), images: vec![] },
         ];
-        
+
         guard.snapshot_prefix(&msgs, 2);
         assert!(guard.verify_invariance(&msgs));
-        
+
         // 修改了前缀，应当校验失败
         let mut modified_msgs = msgs.clone();
         modified_msgs[0].content = "Sys modified".into();

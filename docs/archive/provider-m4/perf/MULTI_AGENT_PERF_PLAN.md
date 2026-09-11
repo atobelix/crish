@@ -1,7 +1,7 @@
 # Crish Desktop 性能整改 — 多轮多 Agent 执行方案
 
-> 源诊断：`implementation_plan.md`（17 病灶 / 5 域）  
-> 增补：UX 止血（机器人头像、气泡 shrink、输入卡顿、流式 MD）  
+> 源诊断：`implementation_plan.md`（17 病灶 / 5 域）
+> 增补：UX 止血（机器人头像、气泡 shrink、输入卡顿、流式 MD）
 > 原则：**每轮 ≤8 agent；文件所有权不重叠；先止血后架构；可验证交付**
 
 ---
@@ -17,9 +17,9 @@
 
 **技术栈决策（固定）**
 
-- 不换 React / 不上新量字库  
-- 删 pretext 热路径 → CSS + `scrollHeight` / `ResizeObserver`  
-- 流式：先停掉丢弃的 hljs；再接增量 MD（不高亮）；final 可高亮  
+- 不换 React / 不上新量字库
+- 删 pretext 热路径 → CSS + `scrollHeight` / `ResizeObserver`
+- 流式：先停掉丢弃的 hljs；再接增量 MD（不高亮）；final 可高亮
 
 ---
 
@@ -27,11 +27,11 @@
 
 ### 相对原 plan 的优化点
 
-1. **#7 不只「惰性跳过」**：默认不 `bridge.push`；另开任务让 DOM 走增量 MD（流式跳过 hljs）。  
-2. **#12 bubble 级 RO**：不改成「容器 context 测宽」，**直接删除 `useBubbleShrinkWidth`**（CSS 足够）。  
-3. **#10 拆两步**：R1 不急做完整 streaming store；R3 再做旁路（依赖 R1 止血 + R2 memo）。  
-4. **补 UX Wave0**：头像物理删除、composer 去 pretext、draft 防抖 — 原 plan 遗漏但用户强痛点。  
-5. **#5 Workspace resize** 与 **#1 tree resize** 同轮不同文件，可并行。  
+1. **#7 不只「惰性跳过」**：默认不 `bridge.push`；另开任务让 DOM 走增量 MD（流式跳过 hljs）。
+2. **#12 bubble 级 RO**：不改成「容器 context 测宽」，**直接删除 `useBubbleShrinkWidth`**（CSS 足够）。
+3. **#10 拆两步**：R1 不急做完整 streaming store；R3 再做旁路（依赖 R1 止血 + R2 memo）。
+4. **补 UX Wave0**：头像物理删除、composer 去 pretext、draft 防抖 — 原 plan 遗漏但用户强痛点。
+5. **#5 Workspace resize** 与 **#1 tree resize** 同轮不同文件，可并行。
 6. **#15+#16+#17** 绑同一 agent（VirtualScroll 同一所有权），避免三家改同一文件冲突。
 
 ### 依赖图
@@ -128,11 +128,11 @@ R3 架构（依赖 R2）
 
 ## 6. Agent 通用约束（写入每个 prompt）
 
-1. 工作区：`C:\Software\conex`，主改 `apps/crish-desktop`。  
-2. 只改本 agent 独占文件；发现必须越界 → 停手并在结果里写 BLOCKED + 原因。  
-3. 中文注释保持 UTF-8；不写无关文档；不 commit（除非用户要求）。  
-4. 改完：`npx tsc -p apps/crish-desktop --noEmit` 或包内已有 typecheck 命令（能跑则跑）。  
-5. 交付摘要：`files changed` / `behavior` / `how to verify` / `risks`。  
+1. 工作区：`C:\Software\conex`，主改 `apps/crish-desktop`。
+2. 只改本 agent 独占文件；发现必须越界 → 停手并在结果里写 BLOCKED + 原因。
+3. 中文注释保持 UTF-8；不写无关文档；不 commit（除非用户要求）。
+4. 改完：`npx tsc -p apps/crish-desktop --noEmit` 或包内已有 typecheck 命令（能跑则跑）。
+5. 交付摘要：`files changed` / `behavior` / `how to verify` / `risks`。
 6. **不要**为估高再引入新量字库；**不要**在流式路径重新打开每帧 hljs。
 
 ---
@@ -252,30 +252,30 @@ powershell -File docs/perf/_run_verify.ps1
 
 **流式**
 
-1. 高速流式（长 markdown + 代码块）：应持续有 MD 结构（粗体/列表/代码壳），不应先 plain 再闪成 MD。  
-2. DevTools Performance：流式 10s 内 Long Task >50ms 尽量 <2；不应每 token 跑 `highlightCode`。  
-3. 历史消息在流式过程中尽量不因 token 重渲（React Profiler / why-did-you-render 可选）。  
+1. 高速流式（长 markdown + 代码块）：应持续有 MD 结构（粗体/列表/代码壳），不应先 plain 再闪成 MD。
+2. DevTools Performance：流式 10s 内 Long Task >50ms 尽量 <2；不应每 token 跑 `highlightCode`。
+3. 历史消息在流式过程中尽量不因 token 重渲（React Profiler / why-did-you-render 可选）。
 4. 流结束后代码块应有最终高亮（若产品开启）。
 
 **拖拽 / resize**
 
-1. 二叉树 sash：拖中 UI 跟手，松手才进历史；中途 Escape 可取消。  
-2. 列/组 resize（`useColumnResize`）：拖中 rAF，pointerup 一次 commit。  
-3. Tab drag：跟手 translate，无明显每帧布局抖动。  
+1. 二叉树 sash：拖中 UI 跟手，松手才进历史；中途 Escape 可取消。
+2. 列/组 resize（`useColumnResize`）：拖中 rAF，pointerup 一次 commit。
+3. Tab drag：跟手 translate，无明显每帧布局抖动。
 4. 侧栏 session 拖拽 ghost 不挡指针。
 
 **输入**
 
-1. 中文 IME 连续输入不丢字。  
-2. Composer 增高用 scrollHeight，keystroke 路径无 pretext prepare。  
+1. 中文 IME 连续输入不丢字。
+2. Composer 增高用 scrollHeight，keystroke 路径无 pretext prepare。
 3. Draft 防抖：快速输入不卡，切换会话 draft 不串。
 
 ---
 
 ## 12. Wave 4–6 / D0-8 增补（2026-07-29）
 
-> 中控波次合入后的 **perf-report 短纪要**。细节与验收面：  
-> [`docs/plans/progress/wave4-6-perf-notes.md`](../plans/progress/wave4-6-perf-notes.md)  
+> 中控波次合入后的 **perf-report 短纪要**。细节与验收面：
+> [`docs/plans/progress/wave4-6-perf-notes.md`](../plans/progress/wave4-6-perf-notes.md)
 > 进度：[`system-control-ledger.md`](../plans/progress/system-control-ledger.md)
 
 | 主题 | 事实 | 波次 |

@@ -1,9 +1,9 @@
 # Round 10 方案：Chat 主路径体积治理 + R1–9 交付打包
 
-**文档版本**: v1.0  
-**状态**: 待确认后执行  
-**项目根**: `c:\Software\conex`  
-**分支**: `refactor/architecture`  
+**文档版本**: v1.0
+**状态**: 待确认后执行
+**项目根**: `c:\Software\conex`
+**分支**: `refactor/architecture`
 **调度角色**: 统一编排 / 多 Agent 并行 / 反偷懒验收
 
 ---
@@ -133,7 +133,7 @@ npx vite build
 # 记录 index / vendor-* 文件名与 KB
 ```
 
-可选（有 rollup-plugin-visualizer 再开）：生成 `stats.html` 一次，确认 chat/markdown/bridge 占比。  
+可选（有 rollup-plugin-visualizer 再开）：生成 `stats.html` 一次，确认 chat/markdown/bridge 占比。
 **无 visualizer 不强装依赖**，用 import 图 + 源文件体积足够。
 
 **基线数字（本方案撰写时）**：index ≈ 1083.5 KB；lucide ≈ 27.2 KB。

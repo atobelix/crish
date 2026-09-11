@@ -1,7 +1,7 @@
 # 系统的全局优化与架构重构主方案 (Systematic Optimization Master Plan)
 
-> **版本 (Version)**: 1.0.0  
-> **制定日期 (Date)**: 2026-07-21  
+> **版本 (Version)**: 1.0.0
+> **制定日期 (Date)**: 2026-07-21
 > **覆盖范围 (Scope)**: LLM Context Caching 底层网络适配、Subagent 对话流 IPC 增量缓存、前端 UI 视觉与微交互规范（遵守 `AGENTS.md`）、流式 Markdown 增量渲染、全量 DOM 虚拟化以及 Store 物理解耦架构。
 
 ---
@@ -187,7 +187,7 @@ export function computeStableHistoryBoundary(
   minUncachedTurns = 2
 ): number {
   if (messages.length <= minUncachedTurns * 2) return 0;
-  
+
   // 找到倒数第 minUncachedTurns 轮 User 消息的起始位置
   let userTurnsCount = 0;
   let splitIndex = messages.length;
@@ -385,14 +385,14 @@ export class SubagentEventRingBuffer {
 :root {
   --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-mono: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
-  
+
   /* 调和 HSL 颜色面板 */
   --bg-app: hsl(220, 15%, 98%);
   --surface-panel: hsla(220, 15%, 100%, 0.75);
   --border-color: hsla(220, 10%, 88%, 0.8);
   --text-primary: hsl(220, 20%, 12%);
   --text-muted: hsl(220, 10%, 46%);
-  
+
   --backdrop-blur: blur(12px);
   --radius-card: 12px;
   --radius-pill: 9999px;
@@ -430,7 +430,7 @@ export class StreamingMarkdownIncrementalParser {
   public parseIncremental(fullMarkdownText: string): string {
     // 找到最后一个双换行位置（即最新闭合块边界）
     const lastDoubleNewline = fullMarkdownText.lastIndexOf("\n\n");
-    
+
     if (lastDoubleNewline <= 0 || lastDoubleNewline <= this.completedTextLength) {
       // 尚无新的闭合块，直接复用已缓存的前缀 HTML + 解析尾部 Text
       const tailText = fullMarkdownText.slice(this.completedTextLength);
@@ -440,7 +440,7 @@ export class StreamingMarkdownIncrementalParser {
     // 存在新闭合块，解析新增部分并更新缓存前缀
     const newlyCompletedText = fullMarkdownText.slice(this.completedTextLength, lastDoubleNewline + 2);
     const newBlockHtml = parseMarkdownToHtmlSync(newlyCompletedText);
-    
+
     this.cachedPrefixHtml += newBlockHtml;
     this.completedTextLength = lastDoubleNewline + 2;
 
@@ -529,7 +529,7 @@ export const usePhysicalSessionStore = create<PhysicalSessionStore>((set) => ({
     set((state) => {
       const targetSession = state.sessionsById[sessionId];
       if (!targetSession) return state;
-      
+
       const newMessages = targetSession.messages.map((m) =>
         m.id === messageId ? { ...m, text: m.text + token } : m
       );

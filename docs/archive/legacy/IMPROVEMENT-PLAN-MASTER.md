@@ -631,7 +631,7 @@ interface UndoableAction {
   snapshot: ActionSnapshot;     // 操作前的状态快照
   timestamp: number;
   description: string;          // 用户可见的操作描述
-  
+
   inverse(): UndoableAction;    // 逆操作 (实现 redo)
 }
 ```

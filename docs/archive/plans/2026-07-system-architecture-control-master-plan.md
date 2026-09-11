@@ -458,7 +458,7 @@ RuntimeDeps (显式)
 
 ### 7.4 与「流程太确定」的关系
 
-DI/组装的意义是：**策略与管线可替换**，状态机骨架稳定。  
+DI/组装的意义是：**策略与管线可替换**，状态机骨架稳定。
 例如：`StopPolicy`、`BudgetPolicy`、`ContextPolicy` 作为注入策略，而不是写死在 loop 分支。
 
 ### 7.5 验收
@@ -698,13 +698,13 @@ Hook observe 通道 = 业务时序；Metrics/Tracing = 聚合。
 
 ### 14.1 全局不变量（任何轮次不得破坏）
 
-1. **I-DRAFT**：draft 不在 `sessions[]`。  
-2. **I-MSG-ID**：同一 session 内 message.id 唯一。  
-3. **I-RUN-END**：终态 run 不再产生 delta（或 delta 被忽略）。  
-4. **I-PROJ**：UserView 不得写回 ModelView（除 rewind API）。  
-5. **I-STOP**：L2 不走 provider abort；L3 才 abort。  
-6. **I-SHELL**：1 session ≤ 1 chat leaf（multi-unit）。  
-7. **I-PTY**：1 session ≤ 1 live ptyId（registry）。  
+1. **I-DRAFT**：draft 不在 `sessions[]`。
+2. **I-MSG-ID**：同一 session 内 message.id 唯一。
+3. **I-RUN-END**：终态 run 不再产生 delta（或 delta 被忽略）。
+4. **I-PROJ**：UserView 不得写回 ModelView（除 rewind API）。
+5. **I-STOP**：L2 不走 provider abort；L3 才 abort。
+6. **I-SHELL**：1 session ≤ 1 chat leaf（multi-unit）。
+7. **I-PTY**：1 session ≤ 1 live ptyId（registry）。
 
 ### 14.2 每层门禁
 
@@ -726,10 +726,10 @@ Hook observe 通道 = 业务时序；Metrics/Tracing = 聚合。
 
 ### 15.1 总规则
 
-1. **轮次按层推进**（可在一层内多轮），不跳过下层契约去改上层 UI 止痛。  
-2. **每轮 ≤8 Agent**，表格式派发；文件所有权互斥。  
-3. **轮末集成官**（可算第 9 角色，但不计入 8 的并行改码 Agent）：merge、跑门禁、写 Progress。  
-4. **失败回滚单位** = 单 Agent 文件集，不整轮 revert，除非契约测红。  
+1. **轮次按层推进**（可在一层内多轮），不跳过下层契约去改上层 UI 止痛。
+2. **每轮 ≤8 Agent**，表格式派发；文件所有权互斥。
+3. **轮末集成官**（可算第 9 角色，但不计入 8 的并行改码 Agent）：merge、跑门禁、写 Progress。
+4. **失败回滚单位** = 单 Agent 文件集，不整轮 revert，除非契约测红。
 5. **与 shell 残留方案并行**：Shell 专项可插在「层 11/12 相关轮」或独立轨道，但 **session/draft 轮优先于 shell 花活**。
 
 ### 15.2 轨道划分
@@ -748,7 +748,7 @@ Hook observe 通道 = 业务时序；Metrics/Tracing = 聚合。
 
 ## 16. 轮次详表（可执行）
 
-> 下列为**逻辑完备**的默认排期。实施时可合并轮次，但**不得打乱层间依赖**。  
+> 下列为**逻辑完备**的默认排期。实施时可合并轮次，但**不得打乱层间依赖**。
 > 每轮格式：目标 · Agent（≤8）· 所有权 · 轮末门禁。
 
 ---
@@ -1055,11 +1055,11 @@ Hook observe 通道 = 业务时序；Metrics/Tracing = 聚合。
 
 派发提示词最小集：
 
-1. 本轮目标与不变量  
-2. 文件所有权（只写这些路径）  
-3. 禁止事项（不跨层止痛）  
-4. 验收命令  
-5. 完成后更新 ledger 一行  
+1. 本轮目标与不变量
+2. 文件所有权（只写这些路径）
+3. 禁止事项（不跨层止痛）
+4. 验收命令
+5. 完成后更新 ledger 一行
 
 ---
 
@@ -1094,15 +1094,15 @@ Hook observe 通道 = 业务时序；Metrics/Tracing = 聚合。
 
 ## 20. 成功图像（逻辑完成态）
 
-1. **新建对话**：永远 draft→commit；侧栏无幽灵；点击必出正确主区。  
-2. **AI 节奏**：L2 自主/协作停；L3 仅强制；L1 可注入；maxTurns 可协商。  
-3. **Hook**：observe/on/emit 目录稳定；perf/health/audit 可挂。  
-4. **组装**：RuntimeDeps / 双 Composition Root；策略可替换。  
-5. **消息**：幂等 id；无重复气泡；虚拟列表完整。  
-6. **双视图**：AI 多看可解释、可展开；投影单向。  
-7. **下沉**：算法 Rust SoT；策略 TS；无死双实现。  
-8. **Shell/PTY**：与会话绑定一致，无孤儿进程。  
-9. **门禁**：I-* 自动化；用户旅程 mcp 可重复。  
+1. **新建对话**：永远 draft→commit；侧栏无幽灵；点击必出正确主区。
+2. **AI 节奏**：L2 自主/协作停；L3 仅强制；L1 可注入；maxTurns 可协商。
+3. **Hook**：observe/on/emit 目录稳定；perf/health/audit 可挂。
+4. **组装**：RuntimeDeps / 双 Composition Root；策略可替换。
+5. **消息**：幂等 id；无重复气泡；虚拟列表完整。
+6. **双视图**：AI 多看可解释、可展开；投影单向。
+7. **下沉**：算法 Rust SoT；策略 TS；无死双实现。
+8. **Shell/PTY**：与会话绑定一致，无孤儿进程。
+9. **门禁**：I-* 自动化；用户旅程 mcp 可重复。
 
 ---
 
@@ -1165,5 +1165,5 @@ Hook observe 通道 = 业务时序；Metrics/Tracing = 聚合。
 
 ---
 
-**文档结束。**  
+**文档结束。**
 实施时以本文件为中控；专项 shell/PTY/tool-hook 文作子程序。若产品决策与默认冲突（例如默认 Stop=L3），只改 §5.2 表并波及 B1，不推翻层模型。

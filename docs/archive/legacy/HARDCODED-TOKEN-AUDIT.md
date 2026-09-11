@@ -27,8 +27,8 @@
 
 ### 🔴 P0: 间距 6px 无对应 Token（367 次）
 
-**值**: `6px` 在 gap/padding/margin 中出现 367 次  
-**原因**: `tokens.css` 的 `--space-1: 4px` 和 `--space-2: 8px` 之间缺少 6px  
+**值**: `6px` 在 gap/padding/margin 中出现 367 次
+**原因**: `tokens.css` 的 `--space-1: 4px` 和 `--space-2: 8px` 之间缺少 6px
 **建议**: 新增 `--space-1_5: 6px`
 
 ### 🔴 P0: `color-mix(in srgb, #000 ...)` 阴影散落 28 处

@@ -1,7 +1,7 @@
 # 系统级缓存复用、对话流性能与 UX 视效极致优化方案
 
-> **文件路径**: `c:\Software\conex\SYSTEMIC-CACHE-REUSE-AND-PERFORMANCE-OPTIMIZATION-PLAN.md`  
-> **制定时间**: 2026-07-21  
+> **文件路径**: `c:\Software\conex\SYSTEMIC-CACHE-REUSE-AND-PERFORMANCE-OPTIMIZATION-PLAN.md`
+> **制定时间**: 2026-07-21
 > **优化目标**: 全面消除软件在主对话界面、子 Agent 对话流、LLM 上下文 Prompt Cache、IPC 事件广播、前端组件 Re-render 及 UI 交互细节中的所有性能瓶颈与缓存失效隐患，做到绝对的无遗留一把优化，同时保持前端顶级视觉质感与流体级交互体验。
 
 ---
@@ -161,7 +161,7 @@ const schemaCache = new Map<string, { jsonString: string; hash: string }>();
 export function getDeterministicToolSchemas(tools: AgentTool[]): { jsonString: string; hash: string } {
   const sortedTools = [...tools].sort((a, b) => a.name.localeCompare(b.name));
   const ids = sortedTools.map((t) => `${t.name}:${t.description}`).join('|');
-  
+
   const existing = schemaCache.get(ids);
   if (existing) return existing;
 
@@ -351,7 +351,7 @@ import { parseMarkdownToHtml, getMarkdownHtmlCache, setMarkdownHtmlCache } from 
 
 export function parseMarkdownIncremental(streamId: string, rawText: string): string {
   if (!rawText) return '';
-  
+
   // 以双换行符划分已确定的段落与末尾正在输入的活跃段落
   const blocks = rawText.split(/\n{2,}/);
   if (blocks.length <= 1) {
@@ -368,7 +368,7 @@ export function parseMarkdownIncremental(streamId: string, rawText: string): str
     const blockContent = finalizedBlocks[i];
     const blockCacheKey = `\0stream-block:${streamId}:${i}:${blockContent}`;
     let cachedHtml = getMarkdownHtmlCache(blockCacheKey);
-    
+
     if (cachedHtml === undefined) {
       cachedHtml = parseMarkdownToHtml(blockContent);
       setMarkdownHtmlCache(blockCacheKey, cachedHtml);
@@ -467,7 +467,7 @@ class FrameEventBatcher {
     this.scheduled = false;
     const tasks = Array.from(this.queue);
     this.queue.clear();
-    
+
     // 在同一个 rAF 批次中全量执行 Store 合并写入，合并为一次统一的 React 刷新
     useLayoutStore.batch(() => {
       for (const task of tasks) {

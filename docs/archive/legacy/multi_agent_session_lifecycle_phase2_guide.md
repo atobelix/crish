@@ -1,8 +1,8 @@
 # 会话生命周期 Phase 2 — 空壳经济清除与数据层收口
 
-**文档版本**: v1.0  
-**前置**: Phase 1 已完成（Pending Draft / commitDraftIfNeeded / 用户入口）  
-**ADR**: `docs/architecture/session-pending-draft-adr.md`  
+**文档版本**: v1.0
+**前置**: Phase 1 已完成（Pending Draft / commitDraftIfNeeded / 用户入口）
+**ADR**: `docs/architecture/session-pending-draft-adr.md`
 **项目根**: `c:\Software\conex`
 
 ---

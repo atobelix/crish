@@ -1,9 +1,9 @@
 # 维度七：前端 DOM 布局、零强制重排与极致渲染性能重构方案 (07-FRONTEND-DOM-LAYOUT-AND-PERFORMANCE-REFACTOR)
 
-> **文档编号**: CX-ARCH-008  
-> **状态**: 最终定稿  
-> **更新日期**: 2026-07-21  
-> **关联源码**: `apps/crish-desktop/src/hooks` / `apps/crish-desktop/src/components` / `packages/shared-utils/src/dynamic-adaptation.ts` / `apps/crish-desktop/src/api/toolFeedback.ts`  
+> **文档编号**: CX-ARCH-008
+> **状态**: 最终定稿
+> **更新日期**: 2026-07-21
+> **关联源码**: `apps/crish-desktop/src/hooks` / `apps/crish-desktop/src/components` / `packages/shared-utils/src/dynamic-adaptation.ts` / `apps/crish-desktop/src/api/toolFeedback.ts`
 > **核心目标**: 基于 567 MB 真实 Chrome Performance Trace 深度分析，彻底解决前端 UI 层 8.9 秒点击卡死、106 个散落 ResizeObserver、1,573 次强制同步重排 (Forced Reflow)、Pretext 测算误用与 `prepare()` 未缓存、FpsMonitor rAF 监测自嗨拖垮 CPU、1,165 次 Tooltip 常驻 Hook 开销以及 30 万+ 次 DevTools Console 通信卡死问题。保障低配设备与 4x CPU 减速下 60 FPS 极致流畅运行。
 
 ---
@@ -365,5 +365,5 @@ export async function getAsyncItem<T>(key: string, fallback: T): Promise<T> {
 
 ---
 
-> **文档状态**: Final Approved v2.0  
+> **文档状态**: Final Approved v2.0
 > **保存位置**: `docs/rust-architecture-redesign/07-FRONTEND-DOM-LAYOUT-AND-PERFORMANCE-REFACTOR.md`

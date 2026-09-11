@@ -1,7 +1,7 @@
 # 维度三：Store 门面重构与类型逃逸彻底清理方案
 
-> **存储路径**：`docs/system-enhancement-plans/03-STORE-ARCHITECTURE-AND-TYPE-SAFETY.md`  
-> **关联源码**：`apps/crish-desktop/src/store` / `apps/crish-desktop/src/api/storeAccess.ts` / `scripts/check-no-as-any-store.mjs`  
+> **存储路径**：`docs/system-enhancement-plans/03-STORE-ARCHITECTURE-AND-TYPE-SAFETY.md`
+> **关联源码**：`apps/crish-desktop/src/store` / `apps/crish-desktop/src/api/storeAccess.ts` / `scripts/check-no-as-any-store.mjs`
 > **核心目标**：彻底消除 `layoutStore.ts`、`storeAccess.ts` 及 `telemetryStore.ts` 中的 `as any` 与 `: any` 类型逃逸，完成 Zustand 领域三门面 (`SessionFacade` / `WorkspaceFacade` / `SettingsUiFacade`) 隔离，确保 `npm run check:store-types` 重新恢复 100% 绿灯通过。
 
 ---
