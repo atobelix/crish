@@ -1,8 +1,8 @@
 # Conex / Crish — 自研现代化原子组件体系与 Appica 动效解构总方案
 
-> **战役工作区**：`docs/ui-component-modernization/`  
-> **版本**：v1.0 (Master Architecture Blueprint)  
-> **设计基准与思想源泉**：深入解构 `reference/appica-ui/` 优秀动效、物理学与几何体系  
+> **战役工作区**：`docs/ui-component-modernization/`
+> **版本**：v1.0 (Master Architecture Blueprint)
+> **设计基准与思想源泉**：深入解构 `reference/appica-ui/` 优秀动效、物理学与几何体系
 > **最高铁律**：**严禁引入第三方外部 npm 组件库，严禁复制粘贴代码；100% 纯净自研，掌握核心动效算法与同心几何，打造符合 Crish Design Tokens 的顶级原生组件。**
 
 ---

@@ -1,14 +1,14 @@
 # Conex / Crish — 全仓 Design Tokens、Zero-Blue 与工程红线实施终态严苛审查报告
 
-> **审查文档**：`docs/ui-component-modernization/audits/11-全仓DesignTokens与工程红线实施终态严苛审查.md`  
-> **审查基准**：`AGENTS.md` §11–§14、`ANTI_OVERENGINEERING_GUARDRAILS.md`、RL-03 行数门禁、WAI-ARIA 1.2 规范与 Appica 动效契约  
+> **审查文档**：`docs/ui-component-modernization/audits/11-全仓DesignTokens与工程红线实施终态严苛审查.md`
+> **审查基准**：`AGENTS.md` §11–§14、`ANTI_OVERENGINEERING_GUARDRAILS.md`、RL-03 行数门禁、WAI-ARIA 1.2 规范与 Appica 动效契约
 > **审查范围**：
 > - `apps/crish-desktop/src/components/ui/Switch/`
 > - `apps/crish-desktop/src/components/ui/SegmentedControl/`
 > - `apps/crish-desktop/src/components/ui/Select/`
 > - `apps/crish-desktop/src/components/ui/Menu/`
 > - `apps/crish-desktop/src/components/settings/`
-> - `apps/crish-desktop/src/components/workspace/browser-panel/`  
+> - `apps/crish-desktop/src/components/workspace/browser-panel/`
 > **审查纪律**：**只挑刺，别的一概不说**。严禁任何赞美、客套或废话，直奔问题、缺陷、潜在 Bug 与架构漏洞。
 
 ---

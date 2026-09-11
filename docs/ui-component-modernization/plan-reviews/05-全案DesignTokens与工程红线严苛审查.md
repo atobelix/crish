@@ -1,12 +1,12 @@
 # 05 · 全案 Design Tokens 合规与反过度设计红线严苛审查报告
 
-> **审查标识**：`docs/ui-component-modernization/plan-reviews/05-全案DesignTokens与工程红线严苛审查.md`  
-> **审查对象**：全部 6 份最新现代化详案（`01` ~ `06`）  
-> **审查基准**：  
-> - `ANTI_OVERENGINEERING_GUARDRAILS.md`（反过度设计 13 项硬性红线）  
-> - `AGENTS.md`（§8 反过度设计、§11 CI 门禁与 RL-03 行数限制、§13 柔和焦点环规范、§14 现代色彩空间）  
-> - `apps/crish-desktop/src/styles/tokens.css`（权威 Design Tokens 单一真源）  
->  
+> **审查标识**：`docs/ui-component-modernization/plan-reviews/05-全案DesignTokens与工程红线严苛审查.md`
+> **审查对象**：全部 6 份最新现代化详案（`01` ~ `06`）
+> **审查基准**：
+> - `ANTI_OVERENGINEERING_GUARDRAILS.md`（反过度设计 13 项硬性红线）
+> - `AGENTS.md`（§8 反过度设计、§11 CI 门禁与 RL-03 行数限制、§13 柔和焦点环规范、§14 现代色彩空间）
+> - `apps/crish-desktop/src/styles/tokens.css`（权威 Design Tokens 单一真源）
+>
 > **审查结论**：**【阻断拦截 · 必须整改】**。6 份详案在整体架构上有显著演进，但仍存在 **38 处硬编码 HEX 残留**、**21 处旧式 `rgba()` 散落**、**多处违反 AGENTS.md §13 的 20% 边框对比度超标**、**在声称 0 依赖的前提下仍偷渡 `@radix-ui/react-popover` 与 `lucide-react` 外部 npm 依赖**、以及 **`Menu.tsx` 达 454 行逼近 500 行门禁** 等硬伤，必须就地彻底清剿！
 
 ---
@@ -126,7 +126,7 @@
   - `03-多行Select文字重叠根治与Menu弹性自适应详案.md:1307`
   - `06-全仓次级按钮实体白卡重塑与受管浏览器现代化详案.md:192, 520, 663, 670, 1189`
 - **缺陷剖析**:
-  上述文件中大量存在 `var(--brand, #10b981)`、`var(--text-primary, #000)`、`var(--text-tertiary, #888888)`、`var(--text-success-strong, #46724c)`、`var(--accent-orange, #d97706)`。  
+  上述文件中大量存在 `var(--brand, #10b981)`、`var(--text-primary, #000)`、`var(--text-tertiary, #888888)`、`var(--text-success-strong, #46724c)`、`var(--accent-orange, #d97706)`。
   虽然置于 `var()` 的第二个参数，但硬编码十六进制值违反了全仓 Design Tokens 绝对纯净化原则，且 `#000`、`#888888` 属于非标准的生硬死黑与冷灰。
 - **极致修复方案**:
   统一将所有 fallback 替换为 `tokens.css` 对应的 HSL 现代声明或纯变量引用：
@@ -146,7 +146,7 @@
   - `03-多行Select文字重叠根治与Menu弹性自适应详案.md:515, 1336, 1655`
   - `06-全仓次级按钮实体白卡重塑与受管浏览器现代化详案.md:142, 147, 168, 194, 205, 296, 328, 343, 388, 395, 672, 808, 822, 930`
 - **缺陷剖析**:
-  `AGENTS.md` §14 明确规定：“优先 HSLA / 斜杠透明度：避免散落旧式 `rgba(r,g,b,a)`；UI 与 Design Token 优先 `hsl(h s l / a)` 或 `hsla(...)`，用斜杠 `/` 分隔不透明度，或使用 `color-mix(in srgb, ...)`”。  
+  `AGENTS.md` §14 明确规定：“优先 HSLA / 斜杠透明度：避免散落旧式 `rgba(r,g,b,a)`；UI 与 Design Token 优先 `hsl(h s l / a)` 或 `hsla(...)`，用斜杠 `/` 分隔不透明度，或使用 `color-mix(in srgb, ...)`”。
   然而在详案 `02`、`03`、`06` 中，阴影属性反复出现 `rgba(29, 28, 26, 0.12)`、`rgba(0, 0, 0, 0.04)`、`rgba(0, 0, 0, 0.02)`，详案 `06` 甚至在 2091 行声称“淘汰旧式 rgba”却在正文中散落 14 处 `rgba(...)`。
 - **极致修复方案**:
   统一重构为 `color-mix(in srgb, ...)` 语法：
@@ -181,7 +181,7 @@
     box-shadow: 0 1px 3px color-mix(in srgb, var(--shadow-color) 6%, transparent);
   }
   ```
-  `AGENTS.md` §13 明确设立了硬性红线：“**焦点对比度上限约 10%**：任何情况下焦点/激活态不得使用硬实线；相对基线，灰色加深混入文本色不超过约 **10%**（例如 `color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%)` 为上限量级）；常规元素优先约 **3%–6%** 混入以保持柔软。”  
+  `AGENTS.md` §13 明确设立了硬性红线：“**焦点对比度上限约 10%**：任何情况下焦点/激活态不得使用硬实线；相对基线，灰色加深混入文本色不超过约 **10%**（例如 `color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%)` 为上限量级）；常规元素优先约 **3%–6%** 混入以保持柔软。”
   混入 20% `var(--text-primary)` 会在鼠标悬停时产生明显的生硬深灰/黑边，破坏长时间阅读的舒适度。
 - **极致修复方案**:
   ```css
@@ -232,7 +232,7 @@
 - **缺陷剖析**:
   详案 `03` 在文首“工程与架构铁律”中第一条明确写道：
   > “1. **零外部 npm 组件库依赖**：绝对禁止引入第三方组件库（如 `@base-ui`, `@radix-ui`, `framer-motion` 等），所有物理动效、手势、浮层几何与无障碍交互均采用纯原生 React 18+ 与 CSS Modules 100% 纯净自研”
-  
+
   然而在第 5.3 节给出的重构代码 `apps/crish-desktop/src/components/ui/Menu/Menu.tsx:L762` 中，第一行导入即为：
   ```tsx
   /* 💥 致命违规：偷渡引入 @radix-ui */
@@ -260,7 +260,7 @@
   - `05-字体选择器全量系统字体读取与优雅内嵌搜索详案.md:983, 1177, 1188, 1215, 1234, 1250`
   - `06-全仓次级按钮实体白卡重塑与受管浏览器现代化详案.md:1328, 1496`
 - **缺陷剖析**:
-  详案 `03`、`05`、`06` 中多处直接从 `lucide-react` 导入图标。  
+  详案 `03`、`05`、`06` 中多处直接从 `lucide-react` 导入图标。
   在原子组件体系（`ui/`）的纯净性规范中，底层原子组件应尽可能具备自闭环的极简内联 SVG（如 `internal/SelectIcons.tsx` 中的 `ChevronUpDown`、`CheckIcon`、`ClearIcon`），避免底层原子组件因外部图标库版本升级或打包配置变异而导致编译失败。
 - **极致修复方案**:
   1. 在 `Select/internal/SelectIcons.tsx` 中建立统一的轻量原子 SVG 集合；
@@ -275,7 +275,7 @@
 - **[严重级别: 一般]**
 - **文件路径**: `docs/ui-component-modernization/plan-improvements/03-多行Select文字重叠根治与Menu弹性自适应详案.md:752-1205`
 - **缺陷剖析**:
-  详案 `03` 中重构后的 `Menu.tsx` 规划代码量达到 **454 行**。  
+  详案 `03` 中重构后的 `Menu.tsx` 规划代码量达到 **454 行**。
   根据 `AGENTS.md` §11 与 `scripts/check-line-counts.mjs` 规范，UI 组件的行数告警门槛为 500 行（硬阻断 650 行）。454 行已处于黄色预警区间（裕量仅 9%），且包含了受控状态机、A11y 键盘导航、Portal 渲染、Option 渲染器等诸多逻辑，存在上帝组件重聚风险。
 - **极致修复方案**:
   对标详案 `02` 的优雅拆分拓扑，将 `Menu` 彻底拆解为单职责子文件：

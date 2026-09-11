@@ -1,8 +1,8 @@
 # Conex / Crish — Select 与 Combobox 大圆角同心架构与解耦拆分详案
 
-> **文档标识**：`docs/ui-component-modernization/plan-improvements/02-Select与Combobox大圆角同心架构与解耦拆分详案.md`  
-> **所属战役**：UI 组件现代化与原生原子库升级（`ui-component-modernization`）  
-> **方案版本**：v2.1.0 (Production Master Architecture Plan)  
+> **文档标识**：`docs/ui-component-modernization/plan-improvements/02-Select与Combobox大圆角同心架构与解耦拆分详案.md`
+> **所属战役**：UI 组件现代化与原生原子库升级（`ui-component-modernization`）
+> **方案版本**：v2.1.0 (Production Master Architecture Plan)
 > **编制依据**：
 > - 视觉形态与交互设计对标基准（**图 2 与图 3 现代大圆角设计资产** vs **图 4 遗留生硬小方框缺陷**）
 > - `docs/ui-component-modernization/audits/02-Select与Combobox浮层解算及无障碍严苛审查.md`（12 项严苛缺陷剖析）
@@ -416,7 +416,7 @@ const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
 
 #### 缺陷机制剖析
 在 `SelectContent` 与 `ComboboxContent` 中，原实现仅检查：
-`if (reason === 'outside-pointer' || reason === 'escape' || reason === 'parent-dismissed') setOpen(false);`  
+`if (reason === 'outside-pointer' || reason === 'escape' || reason === 'parent-dismissed') setOpen(false);`
 当同级另一个互斥浮层（`exclusive-peer`）打开时，LayerStack 发出 `reason: 'programmatic'` 驱逐信号。由于被白名单漏判，已打开的 Select 拒绝关闭，脱离 LayerStack 栈管理后成为孤立驻留在 DOM 视口中的僵尸浮层。
 
 #### 极致修复方案
@@ -553,7 +553,7 @@ useEffect(() => {
 ### 3.9 `<SelectTrigger>` HTML5 规范合规重构（清退嵌套交互元素）
 
 #### 规范违规剖析
-HTML5 与 WAI-ARIA 规范严格禁止在 `<button>` 内部嵌套带有交互语义的子元素（如 `<button>` 或 `<span role="button">`）。  
+HTML5 与 WAI-ARIA 规范严格禁止在 `<button>` 内部嵌套带有交互语义的子元素（如 `<button>` 或 `<span role="button">`）。
 在重构中，`SelectClearButton` 渲染为无语义的 Presentation `<span data-slot="select-clear-button">`，通过 `e.stopPropagation()` 与 `e.preventDefault()` 阻止冒泡，同时 Trigger 支持键盘 `Backspace / Delete` 直接清空，完全符合无障碍规范。
 
 ---
@@ -570,7 +570,7 @@ HTML5 与 WAI-ARIA 规范严格禁止在 `<button>` 内部嵌套带有交互语�
 ### 3.11 多行选项文字重叠根治与自适应高度弹性排版
 
 #### 缺陷根治
-根据审查报告 `06`，多行选项（标题 + 副文本说明）文字重叠的根因在于旧 CSS 硬编码了 `height: 28px;`。  
+根据审查报告 `06`，多行选项（标题 + 副文本说明）文字重叠的根因在于旧 CSS 硬编码了 `height: 28px;`。
 在 `SelectItem` 与 `SelectContent.module.css` 中：
 - 选项容器使用 `min-height: 32px; height: auto; padding: 8px 10px;`；
 - 内容列使用 `display: flex; flex-direction: column; gap: 2px; line-height: 1.35;`；

@@ -1,8 +1,8 @@
 # 10 · 全仓 Hover 黑描边清退与 Switch 纯色胶囊色阶重塑实施详案
 
-> **文件标识**：`docs/ui-component-modernization/plan-improvements/10-全仓Hover黑描边清退与Switch纯色胶囊色阶重塑详案.md`  
-> **所属战役**：UI 组件现代化与原生原子库升级（`ui-component-modernization`）  
-> **方案版本**：v1.0.0 (Production Master Engineering Specification)  
+> **文件标识**：`docs/ui-component-modernization/plan-improvements/10-全仓Hover黑描边清退与Switch纯色胶囊色阶重塑详案.md`
+> **所属战役**：UI 组件现代化与原生原子库升级（`ui-component-modernization`）
+> **方案版本**：v1.0.0 (Production Master Engineering Specification)
 > **编制依据**：
 > - `docs/ui-component-modernization/analysis/10-全仓Hover脏黑描边与色阶混色全面普查.md`（第一步深度排查全量数据与根因）
 > - `apps/crish-desktop/src/styles/tokens.css`（权威 Design Tokens 单一真源）
@@ -395,7 +395,7 @@
 :root {
   /* ... 原有 tokens ... */
   --control-mix-color: var(--text-primary); /* 补齐浅色模式单一真源 */
-  
+
   --focus-ring-color: color-mix(
     in srgb,
     var(--control-mix-color) 6%,
@@ -601,13 +601,13 @@ Switch 组件是现代 UI 中最要求纯粹感与呼吸感的原子控件。以
 +++ b/apps/crish-desktop/src/styles/focus-visible.css
 @@ -8,7 +8,7 @@
  }
- 
+
  :focus-visible {
 -  outline: 2px solid var(--focus-ring-color);
 +  outline: 1.5px solid var(--focus-ring-color, color-mix(in srgb, var(--text-primary) 6%, transparent));
    outline-offset: 1px;
  }
- 
+
 @@ -21,5 +21,5 @@
  [tabindex]:not([tabindex='-1']):focus-visible {
    outline: none;
@@ -954,7 +954,7 @@ html[data-perf-tier='eco'] .track[data-state='unchecked'] .thumb {
 +  background: var(--bg-hover);
 +  border-color: var(--border-subtle);
  }
- 
+
  .mrdModelRow.isLive {
 -  border-color: var(--tint-active);
 +  border-color: var(--border-color);
@@ -1009,7 +1009,7 @@ html[data-perf-tier='eco'] .track[data-state='unchecked'] .thumb {
 --- a/apps/crish-desktop/src/components/settings/ScheduledTasksPanel.module.css
 +++ b/apps/crish-desktop/src/components/settings/ScheduledTasksPanel.module.css
 @@ -199,13 +199,2 @@
- 
+
 -.schedSelect :global(.settings-select-trigger:hover:not(:disabled)),
 -.schedField :global(.settings-select-trigger:hover:not(:disabled)) {
 -  background: var(--bg-primary);

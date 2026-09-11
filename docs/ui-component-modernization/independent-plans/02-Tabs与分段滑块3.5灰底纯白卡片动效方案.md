@@ -1,7 +1,7 @@
 # Tabs 与分段滑块 3.5% 灰底纯白卡片动效方案
 
-> **文件路径**：`docs/ui-component-modernization/independent-plans/02-Tabs与分段滑块3.5灰底纯白卡片动效方案.md`  
-> **所属战役**：UI 组件现代化与原生原子库升级（`ui-component-modernization`）  
+> **文件路径**：`docs/ui-component-modernization/independent-plans/02-Tabs与分段滑块3.5灰底纯白卡片动效方案.md`
+> **所属战役**：UI 组件现代化与原生原子库升级（`ui-component-modernization`）
 > **核心使命**：严格遵守用户最高原则——**严禁引入外部组件库，吸收 Appica UI 的滑动指示器物理动效、按压缩放微交互与圆角设计，自研现代纯净的 Tabs / SegmentedControl**。
 
 ---
@@ -234,7 +234,7 @@ export interface SegmentedControlProps<T extends string = string> {
   --tab-spring-bezier: cubic-bezier(0.175, 0.885, 0.32, 1.5);
   --tab-duration: 250ms;
   --tab-press-duration: 100ms;
-  
+
   display: flex;
   position: relative;
   box-sizing: border-box;

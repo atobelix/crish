@@ -1,7 +1,7 @@
 # Conex / Crish — 全仓 Design Tokens 墨阶合规与 RL-03 单文件行数治理方案
 
-> **方案版本**：v1.0 (Production Master Engineering & Architecture Plan)  
-> **产出文件**：`docs/ui-component-modernization/plan-improvements/05-全仓DesignTokens合规与RL-03单文件行数治理方案.md`  
+> **方案版本**：v1.0 (Production Master Engineering & Architecture Plan)
+> **产出文件**：`docs/ui-component-modernization/plan-improvements/05-全仓DesignTokens合规与RL-03单文件行数治理方案.md`
 > **前置输入**：
 > - `docs/ui-component-modernization/audits/05-全仓DesignTokens合规与工程红线严苛审查.md`
 > - `docs/ui-component-modernization/audits/01-Switch与Tabs物理动效及同心几何严苛审查.md`
@@ -9,7 +9,7 @@
 > - `docs/ui-component-modernization/audits/03-PreviewCard贝塞尔小三角与SafeAim严苛审查.md`
 > - `docs/ui-component-modernization/audits/04-Toast3D层叠展开与手势状态机严苛审查.md`
 >
-> **权威基准**：`AGENTS.md` §11 (CI治理/RL-03 行数红线)、§13 (输入框与焦点态)、§14 (现代CSS色彩空间)、`apps/crish-desktop/src/styles/tokens.css`、`ANTI_OVERENGINEERING_GUARDRAILS.md`  
+> **权威基准**：`AGENTS.md` §11 (CI治理/RL-03 行数红线)、§13 (输入框与焦点态)、§14 (现代CSS色彩空间)、`apps/crish-desktop/src/styles/tokens.css`、`ANTI_OVERENGINEERING_GUARDRAILS.md`
 > **核心使命**：
 > 1. **Design Tokens 与 Zero-Blue 墨阶清零**：全面清剿全仓 5 大现代化原子组件（Switch, Tabs/SegmentedControl, Select/Combobox, PreviewCard/Tooltip, ToastStack）中散落的 26+ 处硬编码 HEX、内联 HEX fallback、旧式 `rgba(...)`，统一收敛至项目权威 Design Tokens；
 > 2. **焦点环与交互态标准化**：严格落地 AGENTS.md §13（3%~10% 柔和混色焦点环，全量清退粗黑硬线）与 Hover/Active 统一收敛至 `var(--tint-hover)` / `var(--tint-active)`；

@@ -1,8 +1,8 @@
 # Conex / Crish — 设置页 SegmentedControl 灰度加深 Bug 根治与 14px SmartPanel 大圆角详案
 
-> **文档版本**：v2.0 (High-Density Engineering Refactoring Plan)  
-> **文件路径**：`docs/ui-component-modernization/plan-improvements/04-设置页分段控件灰度加深Bug根治与大圆角详案.md`  
-> **所属战役**：UI 组件现代化与原生原子库升级（`ui-component-modernization`）  
+> **文档版本**：v2.0 (High-Density Engineering Refactoring Plan)
+> **文件路径**：`docs/ui-component-modernization/plan-improvements/04-设置页分段控件灰度加深Bug根治与大圆角详案.md`
+> **所属战役**：UI 组件现代化与原生原子库升级（`ui-component-modernization`）
 > **对齐输入依据**：
 > - 用户图 5 缺陷实测：设置页激活项 Hover 灰度变深、发脏发灰、发虚穿透
 > - `docs/ui-component-modernization/audits/01-Switch与Tabs物理动效及同心几何严苛审查.md`
@@ -255,21 +255,21 @@ $$C_{\text{final}} \approx 255 \times (1 - 0.068775) + 17 \times 0.068775 = 237.
   bottom: var(--seg-pad);
   left: 0;
   border-radius: var(--seg-inner-radius);
-  
+
   /* 亮色模式：100% 不透明纯白卡底，深色模式：100% 不透明提升层 */
   background-color: var(--bg-card, hsl(0 0% 100%));
-  
+
   /* 精致发丝边框与低空微阴影 */
   border: 1px solid var(--border-subtle);
   box-shadow:
     0 1px 2px color-mix(in srgb, var(--shadow-color, hsl(0 0% 0%)) 5%, transparent),
     0 1px 1px color-mix(in srgb, var(--shadow-color, hsl(0 0% 0%)) 2%, transparent);
-    
+
   pointer-events: none;
   z-index: 1; /* 严格位于轨道底板之上、文字图标之下 */
   will-change: transform, width, opacity;
   transform-origin: center center;
-  
+
   /* Appica 弹性微过冲曲线 */
   transition:
     transform var(--tab-duration) var(--tab-spring-bezier),
@@ -332,10 +332,10 @@ $$C_{\text{final}} \approx 255 \times (1 - 0.068775) + 17 \times 0.068775 = 237.
   box-sizing: border-box;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
-  
+
   /* 创建局部独立层叠上下文，杜绝外部父容器滤镜与阴影渗透 */
   isolation: isolate;
-  
+
   background-color: var(--bg-secondary);
   border: 1px solid var(--border-subtle);
 }

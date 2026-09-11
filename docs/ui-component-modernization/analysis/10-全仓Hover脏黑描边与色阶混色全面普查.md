@@ -1,8 +1,8 @@
 # 10 · 全仓 Hover 脏黑描边与色阶混色全面普查报告
 
-> **排查战区**：全仓 119 个样式文件、基础 Design Tokens、原子组件库（Switch、Button、Select、Input 等）、设置面板与工作区卡片  
-> **核心使命**：对全仓所有在 `:hover`、`:focus`、`:focus-visible`、`:active` 及状态类中引发“脏黑描边”、“灰阶突变”、“深黑光圈”与“色阶塌陷”的代码位置展开地毯式普查，精准定位每一处违规选择器与色度学根因。  
-> **审查基准**：严格对照 [`AGENTS.md` §13（输入框与焦点态标准）](file:///c:/Software/conex/AGENTS.md#L137-L145)、§14 现代色彩空间与 Design Tokens 规范。  
+> **排查战区**：全仓 119 个样式文件、基础 Design Tokens、原子组件库（Switch、Button、Select、Input 等）、设置面板与工作区卡片
+> **核心使命**：对全仓所有在 `:hover`、`:focus`、`:focus-visible`、`:active` 及状态类中引发“脏黑描边”、“灰阶突变”、“深黑光圈”与“色阶塌陷”的代码位置展开地毯式普查，精准定位每一处违规选择器与色度学根因。
+> **审查基准**：严格对照 [`AGENTS.md` §13（输入框与焦点态标准）](file:///c:/Software/conex/AGENTS.md#L137-L145)、§14 现代色彩空间与 Design Tokens 规范。
 > **纪律铁律**：本报告为纯调研与排查报告，不夹带解决方案代码，直击深层根因与代码事实。
 
 ---

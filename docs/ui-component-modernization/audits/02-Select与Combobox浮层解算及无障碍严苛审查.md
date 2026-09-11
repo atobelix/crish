@@ -1,7 +1,7 @@
 # Conex / Crish — Select 与 Combobox 浮层解算及无障碍严苛审查报告
 
-> **审查目标**：`apps/crish-desktop/src/components/ui/Select/`（`Select.tsx`, `Combobox.tsx`, `useFloatingPosition.ts`, `Select.module.css`, `Combobox.module.css`, `types.ts`, `index.ts`, `Select.test.tsx`, `Combobox.test.tsx`）  
-> **对齐基准**：`docs/ui-component-modernization/independent-plans/03-Select与Combobox同心圆角与原生搜索方案.md`、WAI-ARIA 1.2、LayerStack 调度中枢契约、Zero-Blue 墨阶设计令牌与工程红线（RL-03）。  
+> **审查目标**：`apps/crish-desktop/src/components/ui/Select/`（`Select.tsx`, `Combobox.tsx`, `useFloatingPosition.ts`, `Select.module.css`, `Combobox.module.css`, `types.ts`, `index.ts`, `Select.test.tsx`, `Combobox.test.tsx`）
+> **对齐基准**：`docs/ui-component-modernization/independent-plans/03-Select与Combobox同心圆角与原生搜索方案.md`、WAI-ARIA 1.2、LayerStack 调度中枢契约、Zero-Blue 墨阶设计令牌与工程红线（RL-03）。
 > **审查模式**：零废话，直奔问题、缺陷、潜在 Bug 与漏洞。
 
 ---
@@ -19,7 +19,7 @@
     }
   }
   ```
-  然而在 `LayerStackManager.ts:276` 中，当用户打开另一个属于 `exclusive-peer` 的下拉菜单或上下文菜单时，LayerStack 会通过 `evictExclusivePeers()` 调用 `this.dismissLayer(peer.id, 'programmatic')`。  
+  然而在 `LayerStackManager.ts:276` 中，当用户打开另一个属于 `exclusive-peer` 的下拉菜单或上下文菜单时，LayerStack 会通过 `evictExclusivePeers()` 调用 `this.dismissLayer(peer.id, 'programmatic')`。
   由于此处白名单**遗漏了 `'programmatic'`**，原已打开的 Select / Combobox 在接收到驱逐信号后**拒绝执行 `setOpen(false)`**！这导致旧浮层脱离 LayerStack 调度（在 LayerStack 中已被 unregister），但仍孤立驻留在 DOM 视口中，且不再响应 Esc 或外部点击，彻底破坏多浮层排他互斥机制。
 - **极致修复方案**：
   允许所有合法的 LayerStack 驱逐原因触发关闭，或在 `onDismiss` 中全量捕获非 `item-select` 的解散行为：
@@ -124,7 +124,7 @@
     );
   }
   ```
-  带有 `g`（global）标志的 `RegExp` 对象是有状态的（Stateful），每次调用 `regex.test(str)` 都会修改并推进 `regex.lastIndex`。  
+  带有 `g`（global）标志的 `RegExp` 对象是有状态的（Stateful），每次调用 `regex.test(str)` 都会修改并推进 `regex.lastIndex`。
   在 `parts.map` 循环中，当某一段匹配成功后，`lastIndex` 被置为非 0 值；下一轮迭代测试新的子串 `part` 时，`test()` 将从非零索引开始查找，直接导致本应命中的关键词返回 `false`，出现偶发性高亮丢失、高亮错位或跳词 Bug！
 - **极致修复方案**：
   移除 `test` 时对带 `g` 全局正则的复用，改用字符串无大小写比较，或使用纯函数无状态测试：
@@ -158,14 +158,14 @@
   在 Chromium 及 WebKit 内核中，用户使用中文拼音输入法输入英文字母并按下 `Enter` 键上屏原字符（非选词）时，浏览器的事件触发顺序为：
   1. `compositionend`（输入法合成结束）；
   2. `keydown`（键值为 `Enter`，`keyCode: 13`，`isComposing: false`）。
-  
+
   在 `ComboboxInput` 中：
   ```typescript
   onCompositionEnd={() => {
     isComposingRef.current = false;
   }}
   ```
-  `compositionend` 瞬间将 `isComposingRef.current` 设为了 `false`。紧接着到来的 `keydown(Enter)` 检测到 `isComposingRef.current === false` 且 `e.nativeEvent.isComposing === false`，直接执行了 `selectValue(target.value)`！  
+  `compositionend` 瞬间将 `isComposingRef.current` 设为了 `false`。紧接着到来的 `keydown(Enter)` 检测到 `isComposingRef.current === false` 且 `e.nativeEvent.isComposing === false`，直接执行了 `selectValue(target.value)`！
   导致用户原本只是想确认输入的拼音字符，输入框却意外选中了下拉列表中高亮的第一项并强行关闭了下拉菜单。
 - **极致修复方案**：
   增加时间戳/微任务合成锁门闩（Composition Guard），在 `compositionend` 发生后的 20ms 内阻断一切 `Enter` 提交：
@@ -318,7 +318,7 @@
   setQuery(itemLabel);
   setOpen(false);
   ```
-  代码直接将选中项的显示文案（如 `"Claude 3.5 Sonnet"`）写入了 `query` 搜索过滤词。  
+  代码直接将选中项的显示文案（如 `"Claude 3.5 Sonnet"`）写入了 `query` 搜索过滤词。
   当用户再次点击该输入框准备切换模型时，`query` 依然为 `"Claude 3.5 Sonnet"`，`filteredItems` 将此作为关键字进行全量过滤，导致弹出的下拉列表**只包含当前选中的这 1 项**！用户必须手动将输入框内的字逐个删光才能重新看到完整模型列表，交互极其反人性。
 - **极致修复方案**：
   分离「已选值展示文案（Display Value）」与「当前瞬态搜索词（Search Query）」：
@@ -341,7 +341,7 @@
     <ClearIcon />
   </button>
   ```
-  该 `<button>` 未声明 `tabIndex={-1}`，默认会进入页面的 Tab 焦点序列。  
+  该 `<button>` 未声明 `tabIndex={-1}`，默认会进入页面的 Tab 焦点序列。
   当一个多选 Combobox 选中了 10 个项目时，用户在表单中使用 `Tab` 键向后导航，光标必须依次聚焦这 10 个微型叉号按钮（按 10 次 Tab），才能到达搜索输入框或下一个表单控件，严重破坏键盘导航效率。
 - **极致修复方案**：
   为微型删除按钮显式标记 `tabIndex={-1}`，通过 `Backspace` / `Delete` 键在输入框中进行键盘删除导航：

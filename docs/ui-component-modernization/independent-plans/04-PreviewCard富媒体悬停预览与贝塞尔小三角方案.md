@@ -1,7 +1,7 @@
 # PreviewCard 富媒体悬停预览与双层贝塞尔平滑小三角设计方案
 
-> **文件路径**：`docs/ui-component-modernization/independent-plans/04-PreviewCard富媒体悬停预览与贝塞尔小三角方案.md`  
-> **所属战役**：UI 组件现代化与设计系统升级 (ui-component-modernization)  
+> **文件路径**：`docs/ui-component-modernization/independent-plans/04-PreviewCard富媒体悬停预览与贝塞尔小三角方案.md`
+> **所属战役**：UI 组件现代化与设计系统升级 (ui-component-modernization)
 > **核心原则**：**严禁引入外部组件库（如 Radix / Floating UI / Base UI / Framer Motion）**；吸收 Appica UI 优秀的双层贝塞尔平滑小三角几何、Safe-Aim 防误触虚拟多边形与弹性物理微动效，100% 自研 Conex 原生 `PreviewCard` / `RichTooltip` 组件。
 
 ---
@@ -115,7 +115,7 @@
 ## 四、Safe-Aim 120Hz 防误触碰撞多边形算法
 
 ### 4.1 核心问题：斜向滑入的“悬停死区”
-当触发元素（Trigger）位于上方，卡片（Content）位于下方时，两者之间存在 $8\text{px} \sim 12\text{px}$ 的间隙（`sideOffset`）。当用户光标从 Trigger 移动到 Content 内部的按钮时，运动轨迹通常是一条**斜向直线**。  
+当触发元素（Trigger）位于上方，卡片（Content）位于下方时，两者之间存在 $8\text{px} \sim 12\text{px}$ 的间隙（`sideOffset`）。当用户光标从 Trigger 移动到 Content 内部的按钮时，运动轨迹通常是一条**斜向直线**。
 若无 Safe-Aim 保护，光标一旦滑出 Trigger 的矩形，`mouseleave` 立即触发导致卡片关闭；即使设置了简单的 `delayHide=100ms`，斜向移动经过其他元素时也会引发误触。
 
 ```
@@ -189,7 +189,7 @@ export function isPointInTriangle(
 ## 五、物理弹性微动效与 CSS 动画矩阵
 
 ### 5.1 弹性入场物理曲线
-Appica UI 采用了高质感回弹曲线：  
+Appica UI 采用了高质感回弹曲线：
 `cubic-bezier(0.175, 0.885, 0.32, 1.5)`
 
 $$B(t) = (1-t)^3 P_0 + 3(1-t)^2 t P_1 + 3(1-t) t^2 P_2 + t^3 P_3$$

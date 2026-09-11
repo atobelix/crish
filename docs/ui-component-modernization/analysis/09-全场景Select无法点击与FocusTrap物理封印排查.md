@@ -1,7 +1,7 @@
 # 专项深度排查 09：全场景 Select 无法点击与 FocusTrap 物理封印排查报告
 
-> **排查时间**：2026-08-31  
-> **排查定位**：纯调研与深层根因排查（严格遵循不修改任何代码、不执行 git 命令、不编写重构实施方案铁律）  
+> **排查时间**：2026-08-31
+> **排查定位**：纯调研与深层根因排查（严格遵循不修改任何代码、不执行 git 命令、不编写重构实施方案铁律）
 > **涉及核心源码**：
 > - [`apps/crish-desktop/src/components/ui/Select/SelectContent.tsx`](file:///c:/Software/conex/apps/crish-desktop/src/components/ui/Select/SelectContent.tsx)
 > - [`apps/crish-desktop/src/components/ui/Select/ComboboxContent.tsx`](file:///c:/Software/conex/apps/crish-desktop/src/components/ui/Select/ComboboxContent.tsx)

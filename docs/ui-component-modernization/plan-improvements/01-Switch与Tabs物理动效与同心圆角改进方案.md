@@ -1,8 +1,8 @@
 # Switch 与 Tabs / SegmentedControl 物理动效与同心圆角改进方案
 
-> **文件标识**：`docs/ui-component-modernization/plan-improvements/01-Switch与Tabs物理动效与同心圆角改进方案.md`  
-> **所属战役**：UI 组件现代化与原生原子库升级（`ui-component-modernization`）  
-> **方案版本**：v1.1.0 (Production Architecture Improvement Plan)  
+> **文件标识**：`docs/ui-component-modernization/plan-improvements/01-Switch与Tabs物理动效与同心圆角改进方案.md`
+> **所属战役**：UI 组件现代化与原生原子库升级（`ui-component-modernization`）
+> **方案版本**：v1.1.0 (Production Architecture Improvement Plan)
 > **编制依据**：
 > - `docs/ui-component-modernization/audits/01-Switch与Tabs物理动效及同心几何严苛审查.md`
 > - `docs/ui-component-modernization/audits/05-全仓DesignTokens合规与工程红线严苛审查.md`

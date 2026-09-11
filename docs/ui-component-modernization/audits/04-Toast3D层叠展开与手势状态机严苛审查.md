@@ -1,6 +1,6 @@
 # Toast 3D 层叠展开与手势状态机严苛代码与设计审查报告
 
-> **审查基准**：`docs/ui-component-modernization/independent-plans/05-Toast3D层叠缩放与悬停扇形展开通知方案.md`、`reference/appica-ui/packages/react/src/components/toast/toast.tsx`、`AGENTS.md` (§13 焦点环规范、§14 色彩空间规范、RL-03 行数与反过度设计规范)。  
+> **审查基准**：`docs/ui-component-modernization/independent-plans/05-Toast3D层叠缩放与悬停扇形展开通知方案.md`、`reference/appica-ui/packages/react/src/components/toast/toast.tsx`、`AGENTS.md` (§13 焦点环规范、§14 色彩空间规范、RL-03 行数与反过度设计规范)。
 > **审查对象**：
 > - `apps/crish-desktop/src/services/toast/` (`ToastStore.ts`, `toast.ts`, `ToastContext.tsx`, `ToastContainer.tsx`, `types.ts`, `__tests__/ToastStore.test.ts`, `ToastContext.test.tsx`)
 > - `apps/crish-desktop/src/components/overlay/` (`ToastCard.tsx`, `ToastViewport.tsx`, `ToastStackModern.module.css`, `useToastStackMeasurement.ts`, `useSwipeDismiss.ts`, `ToastStack.tsx`, `__tests__/ToastCard.test.tsx`)

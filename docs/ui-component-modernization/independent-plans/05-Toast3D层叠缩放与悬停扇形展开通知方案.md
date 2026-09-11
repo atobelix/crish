@@ -1,8 +1,8 @@
 # Toast 3D 层叠缩放与悬停扇形展开通知方案 (Native Appica-Inspired Toast Center)
 
-> **版本**：1.0.0  
-> **状态**：独立方案审定稿  
-> **设计基准**：吸收 `reference/appica-ui/packages/react/src/components/toast/toast.tsx` 核心物理与动效算法，纯原生零依赖（Zero External Dependency）实现。  
+> **版本**：1.0.0
+> **状态**：独立方案审定稿
+> **设计基准**：吸收 `reference/appica-ui/packages/react/src/components/toast/toast.tsx` 核心物理与动效算法，纯原生零依赖（Zero External Dependency）实现。
 > **目标工程**：`apps/crish-desktop`
 
 ---
@@ -729,7 +729,7 @@ class ToastStoreImpl {
   show(message: React.ReactNode, options?: ShowToastOptions): string {
     const textMessage = typeof message === 'string' ? message : '';
     const id = options?.id ?? `toast-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    
+
     const result = enqueueToast(
       this.toasts,
       textMessage,

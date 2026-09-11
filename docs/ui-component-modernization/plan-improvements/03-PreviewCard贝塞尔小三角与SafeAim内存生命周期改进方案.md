@@ -1,7 +1,7 @@
 # PreviewCard 贝塞尔小三角与 Safe-Aim 内存生命周期改进方案
 
-> **文件路径**：`docs/ui-component-modernization/plan-improvements/03-PreviewCard贝塞尔小三角与SafeAim内存生命周期改进方案.md`  
-> **审查基准**：`docs/ui-component-modernization/audits/03-PreviewCard贝塞尔小三角与SafeAim严苛审查.md`、`docs/ui-component-modernization/audits/05-全仓DesignTokens合规与工程红线严苛审查.md`、`AGENTS.md` §13/§14、RL-03 单文件行数门禁  
+> **文件路径**：`docs/ui-component-modernization/plan-improvements/03-PreviewCard贝塞尔小三角与SafeAim内存生命周期改进方案.md`
+> **审查基准**：`docs/ui-component-modernization/audits/03-PreviewCard贝塞尔小三角与SafeAim严苛审查.md`、`docs/ui-component-modernization/audits/05-全仓DesignTokens合规与工程红线严苛审查.md`、`AGENTS.md` §13/§14、RL-03 单文件行数门禁
 > **核心原则**：**100% 原生自研，零外部组件库依赖**；彻底解决全局事件泄漏、跨组件定时器竞态、小三角旋转错位与 12px 圆角穿模问题，全面落实 RL-03 单文件 ≤ 200 行物理解耦。
 
 ---
@@ -95,7 +95,7 @@ export interface PreviewCardContextValue {
   descriptionId: string;
   arrow: boolean;
   disabled: boolean;
-  
+
   // 集中调度 API
   scheduleOpen: (el?: HTMLElement) => void;
   scheduleClose: (delay?: number) => void;
@@ -356,7 +356,7 @@ export interface PreviewCardContextValue {
   alignOffset: number;
   delayShow: number;
   delayHide: number;
-  
+
   // 集中调度与状态派发
   scheduleOpen: (el?: HTMLElement) => void;
   scheduleClose: (delay?: number) => void;

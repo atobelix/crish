@@ -1,12 +1,12 @@
 # Switch 与 Tabs / SegmentedControl 物理动效及同心几何严苛审查报告
 
-> **审查日期**：2026-08-31  
+> **审查日期**：2026-08-31
 > **审查基准**：
 > - `docs/ui-component-modernization/00-总方案-自研现代化原子组件体系与Appica动效解构总览.md`
 > - `docs/ui-component-modernization/independent-plans/01-Switch流体果冻动效与自研React实现方案.md`
 > - `docs/ui-component-modernization/independent-plans/02-Tabs与分段滑块3.5灰底纯白卡片动效方案.md`
 > - `AGENTS.md`（§13 焦点环规范、§14 现代色彩空间、反过度设计红线）
-> 
+>
 > **审查对象**：
 > - `apps/crish-desktop/src/components/ui/Switch/`（`Switch.tsx`, `Switch.module.css`, `Switch.test.tsx`）
 > - `apps/crish-desktop/src/components/ui/Tabs/`（`Tabs.tsx`, `Tabs.module.css`, `Tabs.test.tsx`, `types.ts`）

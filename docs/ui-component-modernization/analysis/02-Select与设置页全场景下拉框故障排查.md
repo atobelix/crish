@@ -1,10 +1,10 @@
 # 全景深度排查 02：Select 与设置页全场景下拉框故障排查报告
 
-> **排查时间**：2026-08-31  
+> **排查时间**：2026-08-31
 > **排查目标**：
 > - `apps/crish-desktop/src/components/ui/Select/`（[`Select.tsx`](file:///c:/Software/conex/apps/crish-desktop/src/components/ui/Select/Select.tsx), [`SelectRoot.tsx`](file:///c:/Software/conex/apps/crish-desktop/src/components/ui/Select/SelectRoot.tsx), [`SelectTrigger.tsx`](file:///c:/Software/conex/apps/crish-desktop/src/components/ui/Select/SelectTrigger.tsx), [`SelectLegacyAdapter.tsx`](file:///c:/Software/conex/apps/crish-desktop/src/components/ui/Select/SelectLegacyAdapter.tsx), [`SelectContent.tsx`](file:///c:/Software/conex/apps/crish-desktop/src/components/ui/Select/SelectContent.tsx), [`SelectItem.tsx`](file:///c:/Software/conex/apps/crish-desktop/src/components/ui/Select/SelectItem.tsx), [`useFloatingPosition.ts`](file:///c:/Software/conex/apps/crish-desktop/src/components/ui/Select/useFloatingPosition.ts), [`internal/positionGeometry.ts`](file:///c:/Software/conex/apps/crish-desktop/src/components/ui/Select/internal/positionGeometry.ts) 等）
 > - `apps/crish-desktop/src/components/settings/`（[`SettingsSchemaRenderer.tsx`](file:///c:/Software/conex/apps/crish-desktop/src/components/settings/SettingsSchemaRenderer.tsx), [`useAppearanceSchema.ts`](file:///c:/Software/conex/apps/crish-desktop/src/components/settings/useAppearanceSchema.ts), [`useSkinSettings.ts`](file:///c:/Software/conex/apps/crish-desktop/src/components/settings/useSkinSettings.ts), [`useAppearanceSettings.ts`](file:///c:/Software/conex/apps/crish-desktop/src/components/settings/useAppearanceSettings.ts), [`SettingsAppearanceTab.tsx`](file:///c:/Software/conex/apps/crish-desktop/src/components/settings/SettingsAppearanceTab.tsx), [`SettingsPanel.tsx`](file:///c:/Software/conex/apps/crish-desktop/src/components/settings/SettingsPanel.tsx), [`FontSelectField.tsx`](file:///c:/Software/conex/apps/crish-desktop/src/components/settings/FontSelectField.tsx) 等）
-> - 全仓所有消费 `Select`、`Combobox` 与特化下拉菜单的场景组件。  
+> - 全仓所有消费 `Select`、`Combobox` 与特化下拉菜单的场景组件。
 > **权威基准**：`AGENTS.md`（§13 输入框与焦点态设计规范、§14 现代色彩空间）、`docs/ui-component-modernization/` 架构规划。
 
 ---
@@ -78,7 +78,7 @@
    ```tsx
    /** Dialog 遮罩壳层叠上下文：设置全屏等 modal 内的 Menu/Select portal 进 overlay，用局部 z 压过面板，而不抬高全仓 --z-dropdown。 */
    export const DialogOverlayContext = createContext<HTMLElement | null>(null);
-   
+
    // Dialog.tsx 内部注入：
    <DialogOverlayContext.Provider value={overlayEl}>
      ...
@@ -108,7 +108,7 @@ graph TD
         SettingsOverlay["div.settingsCoverOverlay (Dialog, z-index: 1000)<br/>全屏覆盖整个视口 (100vw * 100vh)"]
         SelectPopup["div#select-listbox (SelectContent, z-index: 300)<br/>挂载在 document.body 根节点"]
     end
-    
+
     SettingsOverlay -.->|"遮盖并阻挡视觉呈现 (1000 > 300)"| SelectPopup
 ```
 
@@ -139,13 +139,13 @@ class FocusTrapIsolationManager {
     }
     return false;
   }
-  
+
   private applyIsolation(): void {
     // 遍历 document.body 下所有直接子节点：
     for (const child of Array.from(docBody.children)) {
       if (child === activeTrap || child.contains(activeTrap)) continue;
       if (this.isWhitelisted(child)) continue; // 🚨 自研 SelectContent 不在白名单中！
-      
+
       // 🚨 对该节点施加 inert="" 与 aria-hidden="true" 状态！
       target.setAttribute('aria-hidden', 'true');
       target.setAttribute('inert', '');
@@ -454,7 +454,7 @@ flowchart TD
      border-color: color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
      box-shadow: none;
    }
-   
+
    .trigger.open {
      outline: none;
      border-color: color-mix(in srgb, var(--border-color) 92%, var(--text-primary) 8%);

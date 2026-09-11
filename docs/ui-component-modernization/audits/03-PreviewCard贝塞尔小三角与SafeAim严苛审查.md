@@ -1,7 +1,7 @@
 # PreviewCard 贝塞尔小三角与 Safe-Aim 严苛审查报告
 
-> **审查对象**：`apps/crish-desktop/src/components/ui/PreviewCard/`（`PreviewCard.tsx`, `PreviewCardArrow.tsx`, `PreviewCard.module.css`, `types.ts`, `PreviewCard.test.tsx`）及相关几何引擎 `SafeTriangle.ts`  
-> **审查标准**：Conex / Crish 桌面客户端现代化 UI 规范、WAI-ARIA 1.2、AGENTS.md、RL-03 单文件行数红线  
+> **审查对象**：`apps/crish-desktop/src/components/ui/PreviewCard/`（`PreviewCard.tsx`, `PreviewCardArrow.tsx`, `PreviewCard.module.css`, `types.ts`, `PreviewCard.test.tsx`）及相关几何引擎 `SafeTriangle.ts`
+> **审查标准**：Conex / Crish 桌面客户端现代化 UI 规范、WAI-ARIA 1.2、AGENTS.md、RL-03 单文件行数红线
 > **审查结论**：发现 3 处致命缺陷、3 处严重缺陷、3 处一般缺陷、2 处微小缺陷。整体架构存在全局监听器内存泄漏、跨组件定时器竞态、小三角横向旋转错位与穿模、单文件行数严重超标等严重问题。
 
 ---
@@ -169,11 +169,11 @@
   const maxOffset = Math.max(0, cardWidth / 2 - 20);
   arrowOffset = Math.max(-maxOffset, Math.min(rawOffset, maxOffset));
   ```
-  卡片的圆角半径为 `border-radius: var(--radius-xl, 12px)`（$R = 12\text{px}$），小三角宽度为 26px（半宽 13px）。当 `maxOffset = cardWidth / 2 - 20` 时，小三角最外侧边缘距离卡片边缘仅为：  
-  $$\text{Margin} = \frac{\text{cardWidth}}{2} - \left(\frac{\text{cardWidth}}{2} - 20\right) - 13 = 7\text{px} < 12\text{px}$$  
+  卡片的圆角半径为 `border-radius: var(--radius-xl, 12px)`（$R = 12\text{px}$），小三角宽度为 26px（半宽 13px）。当 `maxOffset = cardWidth / 2 - 20` 时，小三角最外侧边缘距离卡片边缘仅为：
+  $$\text{Margin} = \frac{\text{cardWidth}}{2} - \left(\frac{\text{cardWidth}}{2} - 20\right) - 13 = 7\text{px} < 12\text{px}$$
   小三角已经侵入卡片 12px 圆角弧度弯曲区域！小三角底部的平直背景色与 2px 描边将直接“悬空突出”在卡片圆角之外，形成极为难看的破角穿模刺角。
 - **极致修复方案/代码片段**：
-  根据同心几何安全边界，安全裕量必须严格满足：  
+  根据同心几何安全边界，安全裕量必须严格满足：
   $$\text{SafePadding} = \text{BorderRadius}(12\text{px}) + \text{ArrowHalfWidth}(13\text{px}) + \text{SafetyMargin}(3\text{px}) = 28\text{px}$$
   ```ts
   // apps/crish-desktop/src/components/ui/PreviewCard/previewCardPositioning.ts

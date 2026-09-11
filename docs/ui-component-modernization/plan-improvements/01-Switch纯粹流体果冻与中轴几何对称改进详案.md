@@ -1,14 +1,14 @@
 # Switch 纯粹流体果冻与中轴几何对称改进详案
 
-> **文件标识**：`docs/ui-component-modernization/plan-improvements/01-Switch纯粹流体果冻与中轴几何对称改进详案.md`  
-> **所属战役**：UI 组件现代化与原生原子库升级（`ui-component-modernization`）  
-> **方案版本**：v2.0.0 (Production Axis-Symmetric Fluid Jelly Architecture)  
+> **文件标识**：`docs/ui-component-modernization/plan-improvements/01-Switch纯粹流体果冻与中轴几何对称改进详案.md`
+> **所属战役**：UI 组件现代化与原生原子库升级（`ui-component-modernization`）
+> **方案版本**：v2.0.0 (Production Axis-Symmetric Fluid Jelly Architecture)
 > **编制依据**：
 > - `docs/ui-component-modernization/audits/01-Switch与Tabs物理动效及同心几何严苛审查.md`
 > - `docs/ui-component-modernization/audits/05-全仓DesignTokens合规与工程红线严苛审查.md`
 > - `docs/ui-component-modernization/independent-plans/01-Switch流体果冻动效与自研React实现方案.md`
 > - `AGENTS.md`（§13 焦点环规范、§14 现代色彩空间、反过度设计红线、RL-03 行数门禁）
-> 
+>
 > **最高原则**：**100% 纯净自研，彻底摒弃 `motion/react`、`@base-ui` 等一切外部组件与动画库；深度解构流体表面张力物理算法；彻底移除 Checkmark 微图标回归极简高级感；通过 GPU 硬件垂直中轴对称与微发丝光影方程彻底根除“上宽下窄”下坠阴影视错觉。**
 
 ---

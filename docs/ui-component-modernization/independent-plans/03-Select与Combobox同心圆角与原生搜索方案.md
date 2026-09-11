@@ -1,7 +1,7 @@
 # Conex / Crish — Select 与 Combobox 同心圆角与原生搜索方案
 
-> **文档版本**：v1.0 (Production Master Architecture Plan)  
-> **文件路径**：`docs/ui-component-modernization/independent-plans/03-Select与Combobox同心圆角与原生搜索方案.md`  
+> **文档版本**：v1.0 (Production Master Architecture Plan)
+> **文件路径**：`docs/ui-component-modernization/independent-plans/03-Select与Combobox同心圆角与原生搜索方案.md`
 > **调研对齐资产**：
 > - `reference/appica-ui/packages/react/src/components/select/select.tsx`
 > - `reference/appica-ui/packages/react/src/components/combobox/combobox.tsx`

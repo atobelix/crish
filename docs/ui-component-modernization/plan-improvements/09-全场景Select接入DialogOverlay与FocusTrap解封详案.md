@@ -1,8 +1,8 @@
 # 09 · 全场景 Select 接入 DialogOverlay 与 FocusTrap 解封详案
 
-> **文件标识**：`docs/ui-component-modernization/plan-improvements/09-全场景Select接入DialogOverlay与FocusTrap解封详案.md`  
-> **所属战役**：UI 组件现代化与原生原子库升级（`ui-component-modernization`）  
-> **方案版本**：v1.0.0 (Production Architecture Improvement Plan)  
+> **文件标识**：`docs/ui-component-modernization/plan-improvements/09-全场景Select接入DialogOverlay与FocusTrap解封详案.md`
+> **所属战役**：UI 组件现代化与原生原子库升级（`ui-component-modernization`）
+> **方案版本**：v1.0.0 (Production Architecture Improvement Plan)
 > **编制依据**：
 > - `docs/ui-component-modernization/analysis/09-全场景Select无法点击与FocusTrap物理封印排查.md`（第一步深度排查报告）
 > - `docs/ui-component-modernization/plan-improvements/02-Select与Combobox大圆角同心架构与解耦拆分详案.md`

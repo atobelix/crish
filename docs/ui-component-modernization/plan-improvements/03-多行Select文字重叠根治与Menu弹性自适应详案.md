@@ -1,8 +1,8 @@
 # 03 · 多行 Select 选项文字重叠根治与 Menu 弹性自适应详案
 
-> **文件标识**：`docs/ui-component-modernization/plan-improvements/03-多行Select文字重叠根治与Menu弹性自适应详案.md`  
-> **所属战役**：UI 组件现代化与原生原子库升级（`ui-component-modernization`）  
-> **方案版本**：v1.0.0 (Production Architecture Improvement Plan)  
+> **文件标识**：`docs/ui-component-modernization/plan-improvements/03-多行Select文字重叠根治与Menu弹性自适应详案.md`
+> **所属战役**：UI 组件现代化与原生原子库升级（`ui-component-modernization`）
+> **方案版本**：v1.0.0 (Production Architecture Improvement Plan)
 > **编制依据**：
 > - `docs/ui-component-modernization/audits/06-多行Select文字重叠与全局灰度偏暗按钮及受管浏览器排查.md`（截图 1 权限下拉框文字重叠排查）
 > - `docs/ui-component-modernization/audits/02-Select与Combobox浮层解算及无障碍严苛审查.md`
@@ -157,7 +157,7 @@
 - **剩余给文本列（`.textCol`）的实际宽度**：
   $$\text{Effective Width} = 280 - 12 - 2 - 16 - 30 - 21 - 14 = 185\text{px}$$
 
-中文 11px 字体在标准渲染下的单字宽度约为 $11\text{px} \sim 12\text{px}$。描述文本“改文件、执行前需手动批准”共有 13 个汉字加标点，总需宽度约 $13 \times 11.5\text{px} \approx 150\text{px}$。若稍微增加文字（如加上“读写自动执行，极危操作确认”约 18 个字符，需 $210\text{px}$），$185\text{px}$ 的剩余宽度立刻爆仓，被迫折行！  
+中文 11px 字体在标准渲染下的单字宽度约为 $11\text{px} \sim 12\text{px}$。描述文本“改文件、执行前需手动批准”共有 13 个汉字加标点，总需宽度约 $13 \times 11.5\text{px} \approx 150\text{px}$。若稍微增加文字（如加上“读写自动执行，极危操作确认”约 18 个字符，需 $210\text{px}$），$185\text{px}$ 的剩余宽度立刻爆仓，被迫折行！
 一旦折行，文本高度从 $44\text{px}$ 进一步暴增至 $58\text{px}$，在 $28\text{px}$ 的死锁高度下，重叠与车祸现场彻底失控。
 
 ---
@@ -501,11 +501,11 @@ export interface MenuProps {
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
-  
+
   /* 现代滚动条规范 */
   scrollbar-width: thin;
   scrollbar-color: var(--tint-scrollbar-thumb, color-mix(in srgb, var(--text-primary) 18%, transparent)) transparent;
-  
+
   padding: 6px;
   border-radius: var(--sep-radius-outer, 14px);
   border: 1px solid var(--border-color, hsl(35 10% 86%));
@@ -1158,7 +1158,7 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
                           {opt.icon}
                         </span>
                       ) : null}
-                      
+
                       {desc ? (
                         <div className={styles.textCol}>
                           <span className={styles.title}>{opt.label}</span>
@@ -1913,7 +1913,7 @@ describe('Menu 键盘漫游与滚动跟随测试', () => {
 
     const menuContent = screen.getByRole('menu');
     fireEvent.keyDown(menuContent, { key: 'ArrowDown' });
-    
+
     // 首项获得焦点
     const items = screen.getAllByRole('menuitem');
     expect(document.activeElement).toBe(items[0]);

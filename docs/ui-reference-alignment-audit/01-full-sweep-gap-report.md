@@ -1,7 +1,7 @@
 # Conex / Crish — 全仓 UI 像素级完美与极致交互参考对齐地毯式审计报告
 
-> **文档版本**：v1.0 (Full-Sweep Reference Alignment Audit Report)  
-> **审查报告落盘路径**：`docs/ui-reference-alignment-audit/01-full-sweep-gap-report.md`  
+> **文档版本**：v1.0 (Full-Sweep Reference Alignment Audit Report)
+> **审查报告落盘路径**：`docs/ui-reference-alignment-audit/01-full-sweep-gap-report.md`
 > **审计基准与参考原型资产**：
 > 1. `reference/chat-composer-component/`（包含 `index.html`, `css/composer.css`, `js/popovers.js`, `css/flow/*.css`, `CONVERSATION_FLOW_SPEC.md`, `DESIGN_SYSTEM.md` 等）
 > 2. `reference/smart-expandable-panel/`（包含 `css/tokens.css`, `css/panel.css`, `js/position-engine.js`, `js/safe-aim.js`, `react/SmartExpandablePanel.tsx`, `react/types.ts` 等）

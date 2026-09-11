@@ -1,8 +1,8 @@
 # Conex / Crish — 菜单高度自适应解锁、WebView2 细滚动条无三角修复与侧栏双重幽灵菜单根治落地实施详案
 
-> **文件标识**：`docs/ui-component-modernization/plan-improvements/07-菜单高度自适应解锁与WebView2细滚动条及双重菜单根治详案.md`  
-> **所属战役**：UI 组件现代化与原生原子库升级（`ui-component-modernization`）  
-> **方案版本**：v1.0.0 (Production Architecture Improvement Master Plan)  
+> **文件标识**：`docs/ui-component-modernization/plan-improvements/07-菜单高度自适应解锁与WebView2细滚动条及双重菜单根治详案.md`
+> **所属战役**：UI 组件现代化与原生原子库升级（`ui-component-modernization`）
+> **方案版本**：v1.0.0 (Production Architecture Improvement Master Plan)
 > **编制依据**：
 > - `docs/ui-component-modernization/analysis/07-菜单高度死锁与滚动条异常及双重幽灵菜单深度排查.md`（深度排查与根因剖析）
 > - `apps/crish-desktop/src/components/ui/Menu/Menu.module.css` / `Menu.tsx` / `position.ts`
@@ -181,7 +181,7 @@ flowchart TD
     CheckStandard -- "是 (YES)" --> DisableWebKit["引擎底层机制：<br/>立即全面禁用所有 ::-webkit-scrollbar* 伪元素规则！"]
     DisableWebKit --> FallbackDWM["回退至 Windows 平台原生 DWM 渲染器"]
     FallbackDWM --> ShowArrows["绘制原生 Windows 灰色粗条<br/>带顶部 ▲ 与底部 ▼ 按钮！(视觉崩坏)"]
-    
+
     CheckStandard -- "否 (NO)" --> EnableWebKit["启用 ::-webkit-scrollbar* 伪元素渲染通道"]
     EnableWebKit --> ApplyOverlay["应用 overlay-scrollbar.css：<br/>width: 5px; height: 5px;<br/>button { display: none; width: 0; }<br/>thumb { border-radius: full; }"]
     ApplyOverlay --> ModernScrollbar["呈现 5px 现代纯净无三角半透明细胶囊滚动条！"]
@@ -222,7 +222,7 @@ sequenceDiagram
     Note over Row: 分支 1：本地通道触发
     Row->>LocalPanel: panel.openAtPoint({ x: clientX, y: clientY })
     LocalPanel->>document.body: ReactDOM.createPortal 挂载到 (X, Y)
-    
+
     Note over Row: 分支 2：向上冒泡触发全局通道
     Row->>Hook: onContextMenuSession(e, sessionId)
     deactivate Row
@@ -237,7 +237,7 @@ sequenceDiagram
     GlobalMenu->>document.body: ReactDOM.createPortal 挂载到同一 (X, Y) 坐标！
     GlobalMenu->>LayerMgr: useLayerRegistration(..., true) [常驻注册]
     deactivate GlobalMenu
-    
+
     Note over document.body: 两个半透明 Portal 在完全相同的 (X, Y) 上叠压穿帮！
 ```
 
@@ -702,13 +702,13 @@ export const SessionContextMenu: React.FC<SessionContextMenuProps> = ({
 -  /* 现代滚动条规范 */
 -  scrollbar-width: thin;
 -  scrollbar-color: var(--tint-scrollbar-thumb, color-mix(in srgb, var(--text-primary) 18%, transparent)) transparent;
- 
+
    padding: 6px;
    border-radius: var(--sep-radius-outer, 14px);
 @@ -62,6 +59,12 @@
    background: color-mix(in srgb, var(--text-primary) 30%, transparent);
  }
- 
+
 +.menuContent::-webkit-scrollbar-button {
 +  display: none;
 +  width: 0;
@@ -726,14 +726,14 @@ export const SessionContextMenu: React.FC<SessionContextMenuProps> = ({
 --- a/apps/crish-desktop/src/components/ui/Menu/Menu.tsx
 +++ b/apps/crish-desktop/src/components/ui/Menu/Menu.tsx
 @@ -294,8 +294,8 @@
- 
+
    const resolvedMaxHeight =
      maxHeight != null
 -      ? `min(${typeof maxHeight === 'number' ? `${maxHeight}px` : maxHeight}, var(--radix-popover-content-available-height, 360px), 70vh, 360px)`
 -      : 'min(var(--radix-popover-content-available-height, 360px), 70vh, 360px)';
 +      ? `min(${typeof maxHeight === 'number' ? `${maxHeight}px` : maxHeight}, var(--radix-popover-content-available-height, calc(100vh - 32px)), calc(100vh - 32px))`
 +      : 'min(var(--radix-popover-content-available-height, calc(100vh - 32px)), calc(100vh - 32px), 640px)';
- 
+
    if (anchor && !isOpen) {
      return null;
 ```
@@ -774,7 +774,7 @@ export const SessionContextMenu: React.FC<SessionContextMenuProps> = ({
 +  width: 0;
 +  height: 0;
 +}
- 
+
  .emptyState { padding: 12px 8px; text-align: center; font-size: 12px; color: var(--sep-text-muted, #8b8780); }
  .groupSection, .groupItems { display: flex; flex-direction: column; gap: 2px; }
  .groupTitle { font-size: 10.5px; font-weight: 500; color: var(--sep-text-muted, #8b8780); padding: 4px 6px 2px; text-transform: uppercase; letter-spacing: 0.03em; }
@@ -802,13 +802,13 @@ export const SessionContextMenu: React.FC<SessionContextMenuProps> = ({
 -  scrollbar-color: var(--border-subtle) transparent;
    padding: 2px 0;
  }
- 
+
 @@ -133,14 +131,23 @@
  .listContainer::-webkit-scrollbar {
    width: 5px;
 +  height: 5px;
  }
- 
+
  .listContainer::-webkit-scrollbar-thumb {
 -  background: var(--border-subtle);
 -  border-radius: 3px;
@@ -819,11 +819,11 @@ export const SessionContextMenu: React.FC<SessionContextMenuProps> = ({
 +.listContainer::-webkit-scrollbar-thumb:hover {
 +  background: color-mix(in srgb, var(--text-primary) 30%, transparent);
  }
- 
+
  .listContainer::-webkit-scrollbar-track {
    background: transparent;
  }
- 
+
 +.listContainer::-webkit-scrollbar-button {
 +  display: none;
 +  width: 0;
@@ -868,13 +868,13 @@ export const SessionContextMenu: React.FC<SessionContextMenuProps> = ({
  import { Button, Tooltip } from '../../ui';
 -import { SmartPanel, useSmartPanel, type MenuItem } from '../../ui/SmartPanel';
  import styles from '../SidebarSessionList.module.css';
- 
+
  /** 更多钮边长；必须小于行高，避免撑满整行吞掉标题点击 */
 @@ -216,7 +203,6 @@
    const _rowHeight = props.rowHeight;
    void _rowHeight;
    const dropPlace: SessionRowDropPlace | null = dropPlaceProp ?? null;
- 
+
 -  const panel = useSmartPanel();
    const isBranched = !!s.branchParentId;
    const baseTitle = sessionListDisplayTitle(s);
@@ -882,7 +882,7 @@ export const SessionContextMenu: React.FC<SessionContextMenuProps> = ({
 @@ -246,81 +232,6 @@
      [onContextMenuSession, s.id]
    );
- 
+
 -  const menuItems = useMemo<MenuItem[]>(() => {
 -    return [
 -      {
@@ -1039,7 +1039,7 @@ export const SessionContextMenu: React.FC<SessionContextMenuProps> = ({
 -    true
 +    isOpen
    );
- 
+
    const items = useMemo<MenuItem[]>(
 ```
 
@@ -1053,7 +1053,7 @@ export const SessionContextMenu: React.FC<SessionContextMenuProps> = ({
 @@ -281,17 +281,19 @@
      expect(indexCss).not.toContain(SCROLLBAR_BANNED);
    });
- 
+
 -  it('侧栏 / Menu 消费 thin + thumb token；设置 cover/nav 不得写 scrollbar-width', () => {
 -    const sidebarMenu = [
 -      'src/components/sidebar/Sidebar.module.css',

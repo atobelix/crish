@@ -1,7 +1,7 @@
 # Conex / Crish — Select 与 Combobox 浮层解算与解耦拆分改进方案
 
-> **文档版本**：v2.0 (Modern Architecture & Refactoring Plan)  
-> **文件路径**：`docs/ui-component-modernization/plan-improvements/02-Select与Combobox浮层解算与解耦拆分改进方案.md`  
+> **文档版本**：v2.0 (Modern Architecture & Refactoring Plan)
+> **文件路径**：`docs/ui-component-modernization/plan-improvements/02-Select与Combobox浮层解算与解耦拆分改进方案.md`
 > **对齐输入依据**：
 > - `docs/ui-component-modernization/audits/02-Select与Combobox浮层解算及无障碍严苛审查.md`（12 项缺陷）
 > - `docs/ui-component-modernization/audits/05-全仓DesignTokens合规与工程红线严苛审查.md`（RL-03 行数门禁、Zero-Blue 墨阶与 Token 规范）
@@ -546,7 +546,7 @@ const handleChipRemove = useCallback(
 ## 4.1 `<button>` 嵌套交互元素规范违规剖析
 
 ### W3C / WAI-ARIA 规范红线
-HTML5 规范明确指出：`<button>` 属于 Interactive Content，其内部**严禁包含任何 Interactive Content 子节点**（如 `<button>`, `<a>`, `<input>` 或声明了 `role="button"` 的元素）。  
+HTML5 规范明确指出：`<button>` 属于 Interactive Content，其内部**严禁包含任何 Interactive Content 子节点**（如 `<button>`, `<a>`, `<input>` 或声明了 `role="button"` 的元素）。
 在 `Select.tsx` 现有实现中：
 ```html
 <!-- 违规结构 -->
@@ -1460,10 +1460,10 @@ it('同级 Exclusive Peer 菜单打开触发 programmatic 驱逐时，Select 立
       </button>
     </div>
   );
-  
+
   fireEvent.click(screen.getByRole('combobox'));
   expect(await screen.findByRole('listbox')).toBeInTheDocument();
-  
+
   fireEvent.click(screen.getByText('驱逐全量'));
   await waitFor(() => {
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
@@ -1485,7 +1485,7 @@ it('浮层在完成精准几何计算前保持 visibility: hidden，防止首帧
       </SelectContent>
     </Select>
   );
-  
+
   const content = container.querySelector('[data-slot="select-content"]');
   // 测量完毕后切换为 visible
   expect(content).toHaveStyle({ visibility: 'visible' });
@@ -1500,7 +1500,7 @@ it('浮层在完成精准几何计算前保持 visibility: hidden，防止首帧
 it('highlightMatches 在连续多次调用时保持无状态，绝不发生 lastIndex 变异', () => {
   const result1 = highlightMatches('apple and apple and apple', 'apple');
   const result2 = highlightMatches('apple', 'apple');
-  
+
   // 验证两轮调用均准确命中
   render(<div>{result1}</div>);
   expect(screen.getAllByText('apple')).toHaveLength(3);
@@ -1524,13 +1524,13 @@ it('中文拼音选词回车触发 compositionend 后 50ms 内的 Enter 绝不�
   );
 
   const input = screen.getByRole('combobox');
-  
+
   // 模拟 IME 选词结束
   fireEvent.compositionEnd(input);
-  
+
   // 紧随而来的 Enter 键
   fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' });
-  
+
   expect(onValueChange).not.toHaveBeenCalled();
 });
 ```

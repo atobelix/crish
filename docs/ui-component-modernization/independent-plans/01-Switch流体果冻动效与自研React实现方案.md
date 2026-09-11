@@ -1,7 +1,7 @@
 # Switch 流体果冻拉伸动画与 100% 自研 React 实现方案
 
-> **文件路径**：`docs/ui-component-modernization/independent-plans/01-Switch流体果冻动效与自研React实现方案.md`  
-> **所属战役**：UI 组件现代化与原生原子库升级（`ui-component-modernization`）  
+> **文件路径**：`docs/ui-component-modernization/independent-plans/01-Switch流体果冻动效与自研React实现方案.md`
+> **所属战役**：UI 组件现代化与原生原子库升级（`ui-component-modernization`）
 > **最高原则**：**严禁引入任何第三方 npm 组件库（彻底摒弃 `motion/react`、`@base-ui` 等），严禁复制代码；深度解构物理动效算法，在 Crish Desktop 中实现 100% 纯净自研。**
 
 ---
@@ -157,7 +157,7 @@ Aspect: 1.0                Aspect: 1.56               Aspect: 1.0
 ```tsx
 /**
  * ui/Switch 现代化原子开关组件
- * 
+ *
  * 特性：
  * - 100% 纯净自研，零外部 npm 动画库依赖；
  * - 物理流体果冻拉伸（Pill Stretch）动效与 SVG Checkmark 动态描边；

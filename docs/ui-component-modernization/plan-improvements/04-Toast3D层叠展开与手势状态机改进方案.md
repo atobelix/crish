@@ -1,8 +1,8 @@
 # Toast 3D 层叠展开与手势状态机深度改进方案 (Modern Native Toast Center v2.0)
 
-> **方案定位**：基于 `docs/ui-component-modernization/audits/04-Toast3D层叠展开与手势状态机严苛审查.md` 与 `docs/ui-component-modernization/audits/05-全仓DesignTokens合规与工程红线严苛审查.md` 审查结论的专项整改与架构重构详案。  
-> **基准规范**：`AGENTS.md` (§13 焦点环规范、§14 暖灰墨阶与色彩空间、RL-03 行数与反过度设计红线)、`reference/appica-ui/` 物理动效解构、纯原生 React 18+ 与 CSS Modules（100% 零外部 npm 组件库依赖）。  
-> **实施目标仓**：`apps/crish-desktop/src/services/toast/` 与 `apps/crish-desktop/src/components/overlay/`  
+> **方案定位**：基于 `docs/ui-component-modernization/audits/04-Toast3D层叠展开与手势状态机严苛审查.md` 与 `docs/ui-component-modernization/audits/05-全仓DesignTokens合规与工程红线严苛审查.md` 审查结论的专项整改与架构重构详案。
+> **基准规范**：`AGENTS.md` (§13 焦点环规范、§14 暖灰墨阶与色彩空间、RL-03 行数与反过度设计红线)、`reference/appica-ui/` 物理动效解构、纯原生 React 18+ 与 CSS Modules（100% 零外部 npm 组件库依赖）。
+> **实施目标仓**：`apps/crish-desktop/src/services/toast/` 与 `apps/crish-desktop/src/components/overlay/`
 > **编码格式**：UTF-8 无 BOM
 
 ---
@@ -187,7 +187,7 @@ if (isExistingToast) {
 ### 3.1 内部 Body 独立测量架构与防抖（修复 BUG-02）
 
 #### 根因物理剖析
-在 3D 堆叠态下，第 1 张卡片（$i=0$）之后的卡片由于 CSS 声明了 `height: var(--height)`（其中 `--height: 56px`），其外层 DOM 的物理 `offsetHeight` 与 `getBoundingClientRect().height` 被强制裁剪为 56px。  
+在 3D 堆叠态下，第 1 张卡片（$i=0$）之后的卡片由于 CSS 声明了 `height: var(--height)`（其中 `--height: 56px`），其外层 DOM 的物理 `offsetHeight` 与 `getBoundingClientRect().height` 被强制裁剪为 56px。
 当使用 `ResizeObserver` 观察外层卡片时，采集到的是假高度 56px；当用户悬停展开时，CSS 高度释放，卡片向真实高度（如 128px）膨胀，`ResizeObserver` 在过渡动画中途（约 200ms）异步触发并更新 offset，造成剧烈的纵向跳变（Layout Thrashing）与卡片穿模。
 
 #### 极致修复方案：内部 Body 隔离测量
@@ -283,7 +283,7 @@ ToastViewport 每次 Render -> 生成匿名函数 onDismiss: () => handleDismiss
 ### 3.4 WebView2 居中亚像素文字抗锯齿与 2px 发丝边框补偿（修复 BUG-10）
 
 1. **居中计算消除 Transform**：
-   原有 `.viewportBottomCenter` 使用 `left: 50%; transform: translateX(-50%)`，叠加卡片的 `transform: translateY(...) scale(...)` 后在 Windows WebView2 / 偶数分辨率屏上造成文本模糊。  
+   原有 `.viewportBottomCenter` 使用 `left: 50%; transform: translateX(-50%)`，叠加卡片的 `transform: translateY(...) scale(...)` 后在 Windows WebView2 / 偶数分辨率屏上造成文本模糊。
    **改进为**：
    ```css
    .viewportBottomCenter {

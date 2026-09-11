@@ -45,7 +45,7 @@
   // 移除 Radix 引用，改用原生 Portal 与浮层解算
   import { createPortal } from 'react-dom';
   import { useFloatingPosition } from '../Select/useFloatingPosition';
-  
+
   // 原生挂载节点
   const contentNode = (
     <div
@@ -144,12 +144,12 @@
   ```tsx
   // 修复方案：双轨制解耦
   const labelMapRef = useRef<Map<string, string>>(new Map()); // 仅持久化 value -> label
-  
+
   const registerItem = useCallback(
     (itemId: string, itemValue: string, itemDisabled = false, itemLabel = '') => {
       const label = itemLabel || itemValue;
       labelMapRef.current.set(itemValue, label);
-  
+
       const newItem: RegisteredItemData = {
         id: itemId,
         value: itemValue,
@@ -157,7 +157,7 @@
         label,
         index: 0,
       };
-  
+
       setItems((prev) => {
         const existingIdx = prev.findIndex((i) => i.id === itemId);
         if (
@@ -171,7 +171,7 @@
         const next = [...filtered, newItem];
         return next.map((item, i) => ({ ...item, index: i }));
       });
-  
+
       return () => {
         setItems((prev) => prev.filter((i) => i.id !== itemId));
       };

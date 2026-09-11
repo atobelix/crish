@@ -1,7 +1,7 @@
 # Conex / Crish — 全仓界面与交互极致像素级重构落地方案
 
-> **文档版本**：v1.0 (Production Master Architecture Plan)  
-> **权威输出路径**：`docs/ui-reference-alignment-audit/02-pixel-perfect-implementation-plan.md`  
+> **文档版本**：v1.0 (Production Master Architecture Plan)
+> **权威输出路径**：`docs/ui-reference-alignment-audit/02-pixel-perfect-implementation-plan.md`
 > **对齐资产**：
 > 1. `reference/chat-composer-component/`（包含 `index.html`, `css/composer.css`, `js/popovers.js`, `css/flow/*.css`, `CONVERSATION_FLOW_SPEC.md`, `DESIGN_SYSTEM.md`）
 > 2. `reference/smart-expandable-panel/`（包含 `css/tokens.css`, `css/panel.css`, `js/safe-aim.js`, `js/position-engine.js`, `react/SmartExpandablePanel.tsx`）
