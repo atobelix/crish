@@ -1,7 +1,7 @@
 # Diff 差异对比与代码审查面板 (DiffCard & DiffViewers) 视觉、交互与代码深度审查报告
 
-> **审查范围**：`apps/crish-desktop/src/components/diff/` 下全量组件与 Hook (`DiffCard.tsx`, `DiffHeaderControls.tsx`, `DiffCardFileList.tsx`, `DiffCodeViewer.tsx`, `DiffCardUnifiedView.tsx`, `DiffCardSplitView.tsx`, `VirtualPlainCodeViewer.tsx`, `DiffCardGitActions.tsx`, `ChangeOverviewCard.tsx`, `useDiffData.ts`, `useDiffGitActions.ts`, `diffCardTypes.ts`, `DiffCard.module.css`, `ChangeOverviewCard.module.css`)，以及 `apps/crish-desktop/src/styles/panels.css` 与 `tokens.css` 中涉及 Diff 对比的样式系统。  
-> **审查基准**：对标 GitHub PR Diff、Cursor Code Diff 与 VS Code Merge Editor 商业级视觉与交互体验。  
+> **审查范围**：`apps/crish-desktop/src/components/diff/` 下全量组件与 Hook (`DiffCard.tsx`, `DiffHeaderControls.tsx`, `DiffCardFileList.tsx`, `DiffCodeViewer.tsx`, `DiffCardUnifiedView.tsx`, `DiffCardSplitView.tsx`, `VirtualPlainCodeViewer.tsx`, `DiffCardGitActions.tsx`, `ChangeOverviewCard.tsx`, `useDiffData.ts`, `useDiffGitActions.ts`, `diffCardTypes.ts`, `DiffCard.module.css`, `ChangeOverviewCard.module.css`)，以及 `apps/crish-desktop/src/styles/panels.css` 与 `tokens.css` 中涉及 Diff 对比的样式系统。
+> **审查基准**：对标 GitHub PR Diff、Cursor Code Diff 与 VS Code Merge Editor 商业级视觉与交互体验。
 > **审查纪律**：基于前端源码深度扫描与真实代码实例，严格锚定文件路径与行号，全景剖析视觉失调、布局冗余、对比度失衡及交互断层。
 
 ---

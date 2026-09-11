@@ -1,8 +1,8 @@
 # 全局状态流拓扑、Store 边界模糊与 Hook 过载 (Stores, Slices & Hook Topology) 深度审查
 
-> **审查日期**：2026-08-16  
-> **审查对象**：`apps/crish-desktop/src/store/` 状态架构、`apps/crish-desktop/src/hooks/` 核心 Hook 拓扑与组件层状态流  
-> **审查性质**：前端架构全景扫描专项报告（Full-Sweep Architecture Review）  
+> **审查日期**：2026-08-16
+> **审查对象**：`apps/crish-desktop/src/store/` 状态架构、`apps/crish-desktop/src/hooks/` 核心 Hook 拓扑与组件层状态流
+> **审查性质**：前端架构全景扫描专项报告（Full-Sweep Architecture Review）
 > **审计纪律**：纯前端代码源码（.ts, .tsx）静态深度审查，严禁阅读外部文档，严禁执行构建与测试命令，全篇以代码路径与真实行号为铁证支撑。
 
 ---
@@ -66,16 +66,16 @@
         ──▶ MessageVirtualizer ──▶ ChatAssistantMessageRow ──▶ MessageActions ──▶ ChangeOverviewCard
 ```
 
-1. **上帝 Store 伪门面（God Store & Pseudo-Facades）**：  
+1. **上帝 Store 伪门面（God Store & Pseudo-Facades）**：
    `apps/crish-desktop/src/store/layoutStore.ts` 承载了 5 重异构领域（布局 Chrome、会话/消息/代理、遗留工作区列/DnD、草稿 Drafts、设置浮层）以及 74 个 Actions。虽然表面上建立了 `sessionStore.ts`、`workspaceStore.ts`、`settingsUiStore.ts` 等独立文件，但其本质均为 `export const useSessionStore = useLayoutStore;` 的**别名门面**。任何局部的微小改动（如输入框草稿写入、侧边栏折叠、列宽微调）都会在底层 Zustand 触发全局 listener，导致所有挂在伪门面上的下游 Selector 全部被动唤醒。
 
-2. **通知穿透 39 文件的深层 Prop-Drilling 污染**：  
+2. **通知穿透 39 文件的深层 Prop-Drilling 污染**：
    `onShowToast` 作为全局性轻量通知能力，没有采用 React Context 或全局事件机制，而是从根节点 `App.tsx` 沿着组件树层层向下透传至最底层的卡片操作栏与行内按钮，纵深跨越 **9 层组件**，波及 **39+ 个源码文件**。展示型、几何型与虚拟化滚动组件（如 `BinaryTreeWorkspace`, `TreeLeafPanel`, `MessageVirtualizer`）被迫承载无意义的函数签名，导致 `React.memo` 比较冗余，且引发多处无效的策略冲突调用。
 
-3. **巨型上帝 Hook（God Hooks）过载**：  
+3. **巨型上帝 Hook（God Hooks）过载**：
    `useChatCardState.ts` 导出多达 **60 个属性**，`useChatComposerProps.ts` 导出 **32 个属性**。单一 Hook 内部混合了数据订阅、项目切换、本地过滤、模型选择、权限控制、滚动锚定、审批处理、输入防抖、消息排队、流式收发等极度分散的职责。这种超宽的吞吐面导致下游组件即使使用 `useMemo` 也无法维持依赖项稳定，任何细微更新都会击穿 Memoization 机制，引发雪崩式重渲染。
 
-4. **病态防御代码的滋生与蔓延**：  
+4. **病态防御代码的滋生与蔓延**：
    为了对抗上帝 Store 伪门面带来的全局高频更新，开发人员在业务层被迫发明了 `useScopedSessionField` 等复杂的定制订阅短路机制（通过 `useLayoutStore.subscribe` + `useReducer` 强行拦截），进一步加剧了状态拓扑的混乱与不可预测性。
 
 ---
@@ -372,10 +372,10 @@ const setWithIndex: SetStateFn<S> = (partial, replace) => {
 
 ### 3.3 破坏组件纯洁度与破坏 Memo 比较的根因
 
-1. **中间组件契约污染**：  
+1. **中间组件契约污染**：
    `TreeLeafPanel`（二叉树布局叶子节点）的核心职责是根据 `leaf.kind` 路由渲染对应的面板卡片；`MessageVirtualizer` 的职责是管理虚拟滚动视口与计算 offset。这两个纯几何/结构组件本不需要感知任何全局 Toast 通知，却被迫在 Props 类型定义中声明 `onShowToast: ShowToastFn`，严重违反了**单一职责原则**与**接口隔离原则**。
 
-2. **React.memo 比较防御膨胀**：  
+2. **React.memo 比较防御膨胀**：
    在 `TreeLeafPanel.tsx:209` 中：
    ```typescript
    export const TreeLeafPanel = React.memo(
@@ -561,11 +561,11 @@ return {
 
 **职责交织缺陷**：
 
-1. **草稿防抖持久化逻辑侵入**：  
+1. **草稿防抖持久化逻辑侵入**：
    `scheduleComposerDraft` 设置了 350ms 的定时器，向 `useLayoutStore` 写入 `composerDrafts`。打字操作直接与全局 Store 产生高频 I/O。
-2. **Slash Command 检索与动态导入混杂**：  
+2. **Slash Command 检索与动态导入混杂**：
    静态内置指令（`/goal`, `/learn`, `/schedule` 等）与异步技能命令（`crish-skills-changed` 事件、`getSkillSlashCommandsCached` 动态 import）全部由本 Hook 自行发起并维护 state。
-3. **消息队列引擎（Queue Mode Engine）倒挂在 UI Hook 中**：  
+3. **消息队列引擎（Queue Mode Engine）倒挂在 UI Hook 中**：
    `useChatComposerProps` 内部居然维护了完整的后台消息排队与 Drain 状态机（`queuedMessages`, `drainLockRef`, `editedBackMsgIdRef`，并在 `useEffect` 中监听 `isProcessing` 自动触发 `sendQueuedMessageNow`）。这种本应属于「会话运行时协调器（SessionCoordinator）」的后台调度逻辑，被硬编码在了一个 React 输入框 Hook 中！
 
 ### 4.3 宽吞吐对象击穿 React.memo 的连带破坏

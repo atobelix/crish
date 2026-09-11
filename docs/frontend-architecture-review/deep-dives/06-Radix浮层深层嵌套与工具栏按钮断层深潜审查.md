@@ -1,8 +1,8 @@
 # Radix Popover 多层深嵌套与工具栏按钮逻辑断层深度专项审查报告
 
-> **审查日期**：2026-08-16  
-> **审查对象**：`Menu.tsx` / `Select.tsx` / `Dialog.tsx` / `SettingsRulesTab.tsx` / `RulesEditorDialog.tsx` / `DiffHeaderControls.tsx` 及关联样式体系  
-> **审查性质**：前端架构深度解剖、DOM 渲染层级与事件状态断层实证  
+> **审查日期**：2026-08-16
+> **审查对象**：`Menu.tsx` / `Select.tsx` / `Dialog.tsx` / `SettingsRulesTab.tsx` / `RulesEditorDialog.tsx` / `DiffHeaderControls.tsx` 及关联样式体系
+> **审查性质**：前端架构深度解剖、DOM 渲染层级与事件状态断层实证
 > **文档位置**：`docs/frontend-architecture-review/deep-dives/06-Radix浮层深层嵌套与工具栏按钮断层深潜审查.md`
 
 ---

@@ -1,8 +1,8 @@
 # 对标 AFFiNE 与 AppFlowy 商业级 UI/UX 借鉴与落地指南 综合提炼
 
-> **文档定位**：Conex / Crish 前端架构重构与商业级 UI/UX 演进权威指南  
-> **对标标杆**：AFFiNE (ToEverything / BlockSuite / @affine/component / Workspace Shell) & AppFlowy (Flutter / Rust 内核 / 现代分栏与网格系统)  
-> **数据支撑**：基于 `docs/frontend-architecture-review/` 目录下全部 27 份深度审查报告（根目录 01~~05、full-sweep 01~~16、deep-dives 01~06）的全量实证提炼  
+> **文档定位**：Conex / Crish 前端架构重构与商业级 UI/UX 演进权威指南
+> **对标标杆**：AFFiNE (ToEverything / BlockSuite / @affine/component / Workspace Shell) & AppFlowy (Flutter / Rust 内核 / 现代分栏与网格系统)
+> **数据支撑**：基于 `docs/frontend-architecture-review/` 目录下全部 27 份深度审查报告（根目录 01~~05、full-sweep 01~~16、deep-dives 01~06）的全量实证提炼
 > **生效原则**：UTF-8 无 BOM，纯源码事实驱动，严禁退避，坚持反过度设计红线，追求工业级卓越质感。
 
 ---

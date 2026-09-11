@@ -1,7 +1,7 @@
 # 通用设置、技能扩展与 MCP 工具面板 (Settings Core, Skills & MCP) 深度架构审查报告
 
-> **审查范围**：`apps/crish-desktop/src/components/settings/`, `apps/crish-desktop/src/components/settings-skills/`, `apps/crish-desktop/src/components/settings-mcp/`, `apps/crish-desktop/src/components/settings-extensions/`, `apps/crish-desktop/src/components/settings-models/` 及相关顶层设置文件。  
-> **审查基线**：前端源码（.tsx, .ts, .css）、项目设计规范与编码铁律（严格禁止原生 HTML `title` 气泡、杜绝打补丁与假连通、禁止单文件行数与样式膨胀）。  
+> **审查范围**：`apps/crish-desktop/src/components/settings/`, `apps/crish-desktop/src/components/settings-skills/`, `apps/crish-desktop/src/components/settings-mcp/`, `apps/crish-desktop/src/components/settings-extensions/`, `apps/crish-desktop/src/components/settings-models/` 及相关顶层设置文件。
+> **审查基线**：前端源码（.tsx, .ts, .css）、项目设计规范与编码铁律（严格禁止原生 HTML `title` 气泡、杜绝打补丁与假连通、禁止单文件行数与样式膨胀）。
 > **生成时间**：2026-08-16
 
 ---

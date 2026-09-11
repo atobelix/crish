@@ -1,6 +1,6 @@
 # 二叉树分屏、Sash 拖拽与顶栏 Tab 标签系统 (BinaryTree, Shell & Tabs) 深度审查报告
 
-> **审查范围**：`apps/crish-desktop/src/components/binary-tree/` 全量源码、`apps/crish-desktop/src/components/shell/` 全量源码、`apps/crish-desktop/src/components/AppTopBar.tsx`、`apps/crish-desktop/src/styles/shell/shell-layout.css`、`apps/crish-desktop/src/components/chat-card/` 工具栏与动作区等相关前端实现。  
+> **审查范围**：`apps/crish-desktop/src/components/binary-tree/` 全量源码、`apps/crish-desktop/src/components/shell/` 全量源码、`apps/crish-desktop/src/components/AppTopBar.tsx`、`apps/crish-desktop/src/styles/shell/shell-layout.css`、`apps/crish-desktop/src/components/chat-card/` 工具栏与动作区等相关前端实现。
 > **审计纪律**：纯前端代码实证（.tsx, .ts, .css），无编译执行，所有判定均依托精确代码路径与行号。
 
 ---
