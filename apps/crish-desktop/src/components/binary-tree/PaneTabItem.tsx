@@ -6,9 +6,9 @@
  */
 
 import React from 'react';
-import { X } from 'lucide-react';
 import type { LeafSessionTab } from './paneHeaderGeometry';
 import styles from './PaneHeader.module.css';
+import { AppIcon } from '../ui/icons/index';
 
 export interface PaneTabItemProps {
   tab: LeafSessionTab;
@@ -91,7 +91,7 @@ export const PaneTabItem: React.FC<PaneTabItemProps> = React.memo(
             onClick={(e) => onClose(e, tab)}
             aria-label={`关闭 ${title}`}
           >
-            <X size={10} strokeWidth={1.8} />
+            <AppIcon name="x" size={10} />
           </button>
         </div>
       </div>

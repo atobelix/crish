@@ -18,7 +18,7 @@
   max-height: var(--header-height);
   flex: 0 0 var(--header-height);
   flex-shrink: 0;
-  background: var(--bg-card, #ffffff);
+  background: var(--bg-card);
   position: relative;
   z-index: var(--z-sticky, 2);
   user-select: none;
@@ -50,7 +50,7 @@
   padding: 0 10px;
   box-sizing: border-box;
   border-bottom: none;
-  background: var(--bg-card, #ffffff);
+  background: var(--bg-card);
   flex-shrink: 0;
   width: 100%;
   min-width: 0;
@@ -128,7 +128,7 @@
 }
 
 .tabActive {
-  background: var(--bg-card, #ffffff);
+  background: var(--bg-card);
   color: var(--text-primary);
   font-weight: 500;
   border-color: var(--border-subtle);
@@ -166,7 +166,6 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  opacity: 0.85;
 }
 
 .tabIcon svg {
@@ -202,7 +201,6 @@
   margin-left: 2px;
   cursor: pointer;
   flex-shrink: 0;
-  opacity: 0.65;
   transition:
     opacity var(--duration-micro) var(--ease-standard),
     background-color var(--duration-micro) var(--ease-standard),
@@ -210,7 +208,6 @@
 }
 
 .tab:hover .tabCloseBtn {
-  opacity: 0.75;
 }
 
 .tabCloseBtn:hover {
@@ -220,7 +217,7 @@
 }
 
 .tabCloseBtn:active {
-  background: var(--tint-active, hsl(0 0% 0% / 0.12));
+  background: var(--tint-active);
 }
 
 /* Add Buttons: in-flow and pinned（双态加号：随流位 + 溢出固定位，尺寸同标签高） */
@@ -340,7 +337,7 @@
   border-bottom: 1px solid var(--border-subtle);
   flex-shrink: 0;
   box-sizing: border-box;
-  background: var(--bg-card, #ffffff);
+  background: var(--bg-card);
 }
 
 .toolbarNav {
@@ -381,11 +378,10 @@
 }
 
 .toolbarBtn:active:not(:disabled) {
-  background: var(--tint-active, hsl(0 0% 0% / 0.09));
+  background: var(--tint-active);
 }
 
 .toolbarBtn:disabled {
-  opacity: 0.35;
   cursor: not-allowed;
 }
 
@@ -401,7 +397,7 @@
   align-items: center;
   justify-content: center;
   padding: 24px 16px;
-  background: var(--bg-card, #ffffff);
+  background: var(--bg-card);
   box-sizing: border-box;
   overflow: auto;
 }
@@ -441,7 +437,7 @@
   padding: 10px 14px;
   border-radius: var(--radius-md, 8px);
   border: 1px solid var(--border-subtle);
-  background: var(--bg-card, #ffffff);
+  background: var(--bg-card);
   cursor: pointer;
   text-align: left;
   user-select: none;
@@ -513,32 +509,31 @@
 
 /* Active Port Capsule / Card */
 .activePortCard {
-  border: 1px solid color-mix(in srgb, var(--color-success, #10b981) 35%, transparent);
-  background: color-mix(in srgb, var(--color-success, #10b981) 6%, var(--bg-card, #ffffff));
+  border: 1px solid color-mix(in srgb, var(--color-success) 35%, transparent);
+  background: color-mix(in srgb, var(--color-success) 6%, var(--bg-card));
 }
 
 .activePortCard:hover {
-  background: color-mix(in srgb, var(--color-success, #10b981) 12%, var(--bg-card, #ffffff));
-  border-color: color-mix(in srgb, var(--color-success, #10b981) 60%, transparent);
+  background: color-mix(in srgb, var(--color-success) 12%, var(--bg-card));
+  border-color: color-mix(in srgb, var(--color-success) 60%, transparent);
 }
 
 .activePortIconBox {
-  color: var(--color-success, #10b981);
+  color: var(--color-success);
 }
 
 .activePortDot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background-color: var(--color-success, #10b981);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-success, #10b981) 25%, transparent);
+  background-color: var(--color-success);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-success) 25%, transparent);
   animation: activePortPulse var(--transition-pulse) infinite;
 }
 
 @keyframes activePortPulse {
   0%, 100% {
     transform: scale(0.9);
-    opacity: 0.8;
   }
   50% {
     transform: scale(1.15);
@@ -550,7 +545,6 @@
   color: var(--text-tertiary);
   flex-shrink: 0;
   margin-left: auto;
-  opacity: 0.6;
   transition:
     transform var(--duration-micro) var(--ease-standard),
     opacity var(--duration-micro) var(--ease-standard);

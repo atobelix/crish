@@ -1,7 +1,8 @@
 import React from 'react';
-import { ArrowLeft, ArrowRight, RotateCw, ExternalLink } from 'lucide-react';
+
 import { Tooltip } from '../ui';
 import styles from './LeafToolTabStrip.module.css';
+import { AppIcon } from '../ui/icons/index';
 
 export interface SidePanelNavToolbarProps {
   onRefresh?: () => void;
@@ -27,7 +28,7 @@ export const SidePanelNavToolbar: React.FC<SidePanelNavToolbarProps> = ({
             aria-label="后退"
             disabled
           >
-            <ArrowLeft size={14} strokeWidth={1.8} />
+            <AppIcon name="arrow-left" size={14} />
           </button>
         </Tooltip>
         <Tooltip content="前进" side="bottom">
@@ -37,7 +38,7 @@ export const SidePanelNavToolbar: React.FC<SidePanelNavToolbarProps> = ({
             aria-label="前进"
             disabled
           >
-            <ArrowRight size={14} strokeWidth={1.8} />
+            <AppIcon name="arrow-right" size={14} />
           </button>
         </Tooltip>
         <Tooltip content="刷新" side="bottom">
@@ -47,7 +48,7 @@ export const SidePanelNavToolbar: React.FC<SidePanelNavToolbarProps> = ({
             aria-label="刷新"
             onClick={onRefresh}
           >
-            <RotateCw size={14} strokeWidth={2} />
+            <AppIcon name="rotate-cw" size={14} />
           </button>
         </Tooltip>
       </div>
@@ -59,7 +60,7 @@ export const SidePanelNavToolbar: React.FC<SidePanelNavToolbarProps> = ({
             aria-label="在浏览器中打开"
             onClick={onOpenExternal}
           >
-            <ExternalLink size={14} strokeWidth={2} />
+            <AppIcon name="external-link" size={14} />
           </button>
         </Tooltip>
       </div>

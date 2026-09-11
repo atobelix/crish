@@ -1,3 +1,4 @@
+import { AppIcon } from '../ui/icons';
 /**
  * 二叉树叶子面板 — 声明式微内核叶子容器。
  *
@@ -21,7 +22,7 @@ import React, {
 import type { LayoutLeaf } from '../../store/types';
 import { AppErrorBoundary } from '../AppErrorBoundary';
 import { UnitChromeActions } from '../chat-card/UnitChromeActions';
-import { IconSidebarRight } from '../sidebar/SidebarToggleIcons';
+
 import { LeafToolTabStrip } from './LeafToolTabStrip';
 import { LeafDockResizer } from './LeafDockResizer';
 import { PaneHeader } from './PaneHeader';
@@ -536,7 +537,7 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
             aria-label={dockOpen ? '收起右侧工具栏' : '展开右侧工具栏'}
             onClick={handleToggleDock}
           >
-            <IconSidebarRight size={14} />
+            <AppIcon name="sidebar-right" size={14} aria-hidden />
           </button>
         )}
       </div>

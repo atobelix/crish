@@ -19,7 +19,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Plus } from 'lucide-react';
+
 import type { LayoutLeaf } from '../../store/types';
 import { useSessionStore, useLayoutStore } from '../../store/storeAccess';
 import { useLayoutTreeStore, collectLeaves } from '../../store/layout-tree';
@@ -46,6 +46,7 @@ import {
 } from './paneHeaderGeometry';
 import { PaneTabItem } from './PaneTabItem';
 import styles from './PaneHeader.module.css';
+import { AppIcon } from '../ui/icons/index';
 
 export interface PaneHeaderProps {
   leaf: LayoutLeaf;
@@ -521,7 +522,7 @@ export const PaneHeader: React.FC<PaneHeaderProps> = React.memo(
             aria-label="新对话"
             data-tauri-drag-region="false"
           >
-            <Plus size={14} strokeWidth={1.8} />
+            <AppIcon name="plus" size={14} />
           </button>
         </div>
       </div>

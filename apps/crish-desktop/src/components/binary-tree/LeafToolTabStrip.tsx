@@ -7,11 +7,7 @@ import React, {
   useState,
   useSyncExternalStore,
 } from 'react';
-import {
-  X,
-  Maximize2,
-  Minimize2,
-} from 'lucide-react';
+
 import { SidePanelLauncherHub } from './SidePanelLauncherHub';
 import {
   useLayoutStore,
@@ -36,6 +32,7 @@ import { useTablistKeyboard } from '../../hooks/useTablistKeyboard';
 import { isBrowserTabId, ToolTabFavicon } from './ToolTabFavicon';
 import { ToolTabAddButton } from './ToolTabAddButton';
 import styles from './LeafToolTabStrip.module.css';
+import { AppIcon } from '../ui/icons/index';
 
 export interface LeafToolTabStripProps {
   leaf?: LayoutLeaf;
@@ -353,7 +350,7 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
             >
               {tabs.map((tabId) => {
                 const label = viewRegistry.getTitle(tabId);
-                const Icon = viewRegistry.getIcon(tabId);
+                const iconName = viewRegistry.getIcon(tabId);
                 const isActive = tabId === activeTab;
                 const isLeaving = closingTabIds.has(tabId);
 
@@ -393,9 +390,9 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
                     data-tool-tab-id={tabId}
                     data-tab-id={tabId}
                   >
-                    {(Icon || isBrowserTabId(tabId)) && (
+                    {(iconName || isBrowserTabId(tabId)) && (
                       <span className={`${styles.tabIcon} side-panel-tab-icon`}>
-                        <ToolTabFavicon tabId={tabId} Icon={Icon} />
+                        <ToolTabFavicon tabId={tabId} iconName={iconName} />
                       </span>
                     )}
                     <span className={`${styles.tabLabel} tab-item-title`}>
@@ -408,7 +405,7 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
                         onClick={(e) => triggerCloseTab(tabId, e)}
                         aria-label={`关闭 ${label}`}
                       >
-                        <X size={10} strokeWidth={2} />
+                        <AppIcon name="x" size={10} />
                       </button>
                     </Tooltip>
                   </div>
@@ -440,9 +437,9 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
                 aria-label={isMaximized ? '恢复面板' : '最大化面板'}
               >
                 {isMaximized ? (
-                  <Minimize2 size={14} strokeWidth={2} />
+                  <AppIcon name="minimize" size={14} />
                 ) : (
-                  <Maximize2 size={14} strokeWidth={2} />
+                  <AppIcon name="maximize" size={14} />
                 )}
               </button>
             </Tooltip>

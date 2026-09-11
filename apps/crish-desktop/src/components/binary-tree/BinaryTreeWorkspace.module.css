@@ -146,7 +146,7 @@
  * 卡片已经跟灰底分离，再叠一层描边或压暗只会显脏。
  */
 .leaf[data-active='true'] .leafBody {
-  border-color: var(--border-color, hsl(35 10% 86%));
+  border-color: var(--border-color);
 }
 
 /*
@@ -236,7 +236,7 @@
 
 .sash:hover::after,
 .sash[data-active='true']::after {
-  background: var(--accent-green, #10b981);
+  background: var(--accent-green);
 }
 
 .sashHorizontal:hover::after,
@@ -260,7 +260,7 @@
   border-radius: 6px;
   background-color: color-mix(
     in srgb,
-    var(--accent-green, #10b981) 18%,
+    var(--accent-green) 18%,
     transparent
   );
   border: none;
@@ -295,7 +295,6 @@
   position: fixed;
   pointer-events: none;
   z-index: var(--z-drag-overlay);
-  opacity: 0.85;
   box-shadow: 0 8px 24px color-mix(in srgb, var(--shadow-color) 18%, transparent);
   border-radius: var(--radius-md);
   overflow: hidden;
@@ -332,8 +331,8 @@
   align-items: stretch;
   padding-top: 0;
   margin-top: 0;
-  background: var(--bg-card, #ffffff);
-  /* border: 1px solid var(--border-subtle, hsl(30 6% 93.8%)); */
+  background: var(--bg-card);
+  /* border: 1px solid var(--border-subtle); */
   border-radius: var(--radius-lg);
   /* box-shadow:
     0 1px 3px hsl(0 0% 0% / 0.03),
@@ -395,7 +394,7 @@
 
 .leafDockResizer:hover::after,
 .leafDockResizer[data-dragging='true']::after {
-  background: var(--border-color, rgba(128, 128, 128, 0.4));
+  background: var(--border-color);
 }
 
 .leafDockDrawer {
@@ -407,7 +406,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border-left: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.08));
+  border-left: 1px solid var(--border-subtle);
 }
 
 .leafDockDrawer.maximized,
@@ -424,7 +423,7 @@
   height: 100%;
   border-left: none;
   z-index: 150;
-  background: var(--bg-card, #ffffff);
+  background: var(--bg-card);
 }
 
 .dockPanelPane {
@@ -504,7 +503,7 @@
   min-height: 0;
   color: var(--text-tertiary);
   font-size: var(--font-size-sm);
-  background: var(--bg-card, #ffffff);
+  background: var(--bg-card);
   box-sizing: border-box;
   padding: var(--space-4);
   text-align: center;

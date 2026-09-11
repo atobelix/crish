@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { Globe, FileCode, ArrowRight } from 'lucide-react';
 import { getPreviewUrl, setPreviewUrl } from '../../api/previewBrowserStore';
 import styles from './LeafToolTabStrip.module.css';
+import { AppIcon } from '../ui/icons/index';
 
 export interface SidePanelLauncherHubProps {
   onOpenPanel: (panelId: string) => void;
@@ -128,7 +128,7 @@ export const SidePanelLauncherHub: React.FC<SidePanelLauncherHubProps> = ({
                   运行中的服务: http://localhost:{activePort} (点击在右侧预览)
                 </span>
               </div>
-              <ArrowRight size={14} className={styles.activePortArrow} />
+              <AppIcon name="arrow-right" size={14} className={styles.activePortArrow} />
             </button>
           )}
           <button
@@ -140,7 +140,7 @@ export const SidePanelLauncherHub: React.FC<SidePanelLauncherHubProps> = ({
             <div
               className={`${styles.launcherCardIconBox} launcher-card-icon-box`}
             >
-              <Globe size={16} strokeWidth={1.8} />
+              <AppIcon name="globe" size={16} />
             </div>
             <div className={styles.launcherCardText}>
               <span
@@ -159,7 +159,7 @@ export const SidePanelLauncherHub: React.FC<SidePanelLauncherHubProps> = ({
             <div
               className={`${styles.launcherCardIconBox} launcher-card-icon-box`}
             >
-              <FileCode size={16} strokeWidth={1.8} />
+              <AppIcon name="file-code" size={16} />
             </div>
             <div className={styles.launcherCardText}>
               <span

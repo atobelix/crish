@@ -13,7 +13,7 @@ describe('LeafToolTabStrip 纯标签化、手势交互与状态机极限压测 (
     useLayoutStore.getState().setTabModeEnabled(true);
     vi.spyOn(viewRegistry, 'getTitle').mockImplementation((id: string) => id);
     vi.spyOn(viewRegistry, 'getIcon').mockImplementation(
-      () => () => <span data-testid="tool-icon" />
+      () => 'terminal' as const
     );
     vi.spyOn(viewRegistry, 'getToolViews').mockReturnValue([
       { id: 'files', title: 'Files', isPrimary: false } as any,

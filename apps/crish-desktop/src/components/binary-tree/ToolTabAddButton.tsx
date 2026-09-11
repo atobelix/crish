@@ -6,7 +6,6 @@
  */
 
 import React from 'react';
-import { Plus } from 'lucide-react';
 import { Tooltip } from '../ui';
 import {
   SmartExpandablePanel,
@@ -14,6 +13,7 @@ import {
 } from '../ui/SmartExpandablePanel';
 import { viewRegistry } from '../../services/view-registry';
 import styles from './LeafToolTabStrip.module.css';
+import { AppIcon } from '../ui/icons/index';
 
 export interface ToolTabAddButtonProps {
   tabs: string[];
@@ -51,7 +51,7 @@ export const ToolTabAddButton: React.FC<ToolTabAddButtonProps> = ({
 
   const btnElement = (
     <button type="button" className={btnClass} aria-label="添加功能面板">
-      <Plus size={13} strokeWidth={2} />
+      <AppIcon name="plus" size={13} />
     </button>
   );
 
@@ -64,11 +64,11 @@ export const ToolTabAddButton: React.FC<ToolTabAddButtonProps> = ({
   }
 
   const addMenuItems: MenuItem[] = availablePanels.map((pid) => {
-    const Icon = viewRegistry.getIcon(pid);
+    const iconName = viewRegistry.getIcon(pid);
     return {
       id: pid,
       label: viewRegistry.getTitle(pid),
-      icon: Icon ? <Icon size={13} /> : undefined,
+      icon: iconName ? <AppIcon name={iconName} size={13} aria-hidden /> : undefined,
       onSelect: () => {
         if (pid === 'preview' || pid === 'terminal') {
           openPanel(nextMultiOpenTabId(tabs, pid));

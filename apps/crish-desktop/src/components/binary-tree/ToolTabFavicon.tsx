@@ -2,7 +2,7 @@
  * ToolTabFavicon — 工具标签 favicon 渲染与浏览器标签 URL 解析。
  *
  * 浏览器类标签（preview:* / browser:*）动态展示站点 favicon；
- * 其余标签回落 viewRegistry 图标（由调用方传入 Icon）。
+ * 其余标签回落 viewRegistry 图标语义名（由调用方传入，经 AppIcon 渲染）。
  */
 
 import React, { useEffect, useState } from 'react';
@@ -12,6 +12,7 @@ import {
   isAboutBlank,
 } from '../../api/previewBrowserStore';
 import { viewRegistry } from '../../services/view-registry';
+import { AppIcon, type IconName } from '../ui/icons';
 
 export function isBrowserTabId(tabId: string): boolean {
   return (
@@ -36,10 +37,10 @@ function resolveBrowserTabUrl(tabId: string): string | null {
 
 export function ToolTabFavicon({
   tabId,
-  Icon,
+  iconName,
 }: {
   tabId: string;
-  Icon?: ReturnType<typeof viewRegistry.getIcon> | null;
+  iconName?: IconName | null;
 }) {
   const [faviconUrl, setFaviconUrl] = useState<string | null>(null);
 
@@ -100,6 +101,6 @@ export function ToolTabFavicon({
     );
   }
 
-  if (!Icon) return null;
-  return <Icon size={13} aria-hidden />;
+  if (!iconName) return null;
+  return <AppIcon name={iconName} size={13} aria-hidden />;
 }

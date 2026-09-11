@@ -91,7 +91,7 @@
   border-radius: var(--radius-lg);
   font-size: var(--font-size-xs-plus, 12.5px);
   font-weight: 400;
-  color: var(--text-secondary, #666666);
+  color: var(--text-secondary);
   cursor: pointer;
   white-space: nowrap;
   box-sizing: border-box;
@@ -124,7 +124,7 @@
   transform: translateY(-50%);
   width: 1px;
   height: 14px;
-  background: color-mix(in srgb, var(--border-color, hsl(35 10% 86%)) 60%, transparent);
+  background: color-mix(in srgb, var(--border-color) 60%, transparent);
   pointer-events: none;
   opacity: 1;
   transition: opacity var(--duration-micro) var(--ease-standard);
@@ -159,24 +159,24 @@
 }
 
 .tabItem:hover:not(.tabItemActive) {
-  background: color-mix(in srgb, var(--bg-card, #ffffff) 65%, transparent);
-  border-color: color-mix(in srgb, var(--border-color, hsl(35 10% 86%)) 60%, transparent);
-  box-shadow: 0 1px 2px color-mix(in srgb, var(--shadow-color, hsl(35 5% 11%)) 4%, transparent);
+  background: color-mix(in srgb, var(--bg-card) 65%, transparent);
+  border-color: color-mix(in srgb, var(--border-color) 60%, transparent);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--shadow-color) 4%, transparent);
   color: var(--text-primary);
 }
 
 .tabItemActive {
-  background: var(--bg-card, #ffffff);
+  background: var(--bg-card);
   color: var(--text-primary);
   font-weight: 500;
-  border-color: var(--border-subtle, color-mix(in srgb, var(--border-color, hsl(35 10% 86%)) 80%, transparent));
-  box-shadow: 0 1px 3px color-mix(in srgb, var(--shadow-color, hsl(35 5% 11%)) 6%, transparent);
+  border-color: var(--border-subtle, color-mix(in srgb, var(--border-color) 80%, transparent));
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--shadow-color) 6%, transparent);
 }
 
 .tabItemActive:hover {
-  background: var(--bg-card, #ffffff);
-  border-color: var(--border-color, hsl(35 10% 86%));
-  box-shadow: 0 2px 5px color-mix(in srgb, var(--shadow-color, hsl(35 5% 11%)) 8%, transparent);
+  background: var(--bg-card);
+  border-color: var(--border-color);
+  box-shadow: 0 2px 5px color-mix(in srgb, var(--shadow-color) 8%, transparent);
 }
 
 /* 入场：@starting-style 首帧以左侧实际落地位置为锚点展开，无纵向浮动漂移；首轮挂载由 data-booted 关闭。
@@ -269,7 +269,7 @@
 }
 
 .tabCloseBtn:active {
-  background: var(--tint-active, hsl(0 0% 0% / 0.12));
+  background: var(--tint-active);
 }
 
 /* 新建标签按钮（加号）：28px 与标签同高、8px 圆角，纯流式紧贴末尾标签 */
@@ -299,8 +299,8 @@
 
 .newTabBtn:hover,
 .newTabBtn:active {
-  background: color-mix(in srgb, var(--bg-card, #ffffff) 65%, transparent);
-  border-color: color-mix(in srgb, var(--border-color, hsl(35 10% 86%)) 60%, transparent);
-  box-shadow: 0 1px 2px color-mix(in srgb, var(--shadow-color, hsl(35 5% 11%)) 4%, transparent);
+  background: color-mix(in srgb, var(--bg-card) 65%, transparent);
+  border-color: color-mix(in srgb, var(--border-color) 60%, transparent);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--shadow-color) 4%, transparent);
   color: var(--text-primary);
 }
