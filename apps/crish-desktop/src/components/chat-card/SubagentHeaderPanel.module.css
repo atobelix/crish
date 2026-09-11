@@ -67,7 +67,7 @@
 .triggerText,
 .bcAgentText {
   white-space: nowrap;
-  font-family: 'Segoe UI', -apple-system, var(--font-sans);
+  font-family: var(--font-sans);
   font-variant-numeric: tabular-nums;
   font-feature-settings: 'tnum' 1;
 }

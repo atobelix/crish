@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
-import * as Lucide from 'lucide-react';
+
 import type { SessionGoalTask } from '../../store/layoutStore';
 import styles from './ChatStatusRibbons.module.css';
 import { Button, Tooltip } from '../ui';
+import { AppIcon } from '../ui/icons/index';
 
 export interface DynamicChipBarProps {
   /** 空态时 100% 物理不挂载（核心门闩 1）。 */
@@ -73,7 +74,7 @@ export const DynamicChipBar: React.FC<DynamicChipBarProps> = ({
             aria-label="查看计划与进度详情"
             onClick={onTogglePlanDrawer}
           >
-            <Lucide.Target size={13} strokeWidth={2} aria-hidden />
+            <AppIcon name="target" size={13} aria-hidden />
             <span>
               {goalModeActive
                 ? `目标模式 · 第 ${goalIteration + 1} 轮`
@@ -95,7 +96,7 @@ export const DynamicChipBar: React.FC<DynamicChipBarProps> = ({
             aria-label="查看代码变更"
             onClick={onOpenDiff}
           >
-            <Lucide.GitBranch size={13} strokeWidth={2} aria-hidden />
+            <AppIcon name="git-branch" size={13} aria-hidden />
             <span>{diffCount} 个文件变更</span>
           </Button>
         </Tooltip>
@@ -153,7 +154,7 @@ export const PlanDrawer: React.FC<PlanDrawerProps> = ({
           }}
           aria-label="关闭计划详情"
           onClick={onClose}
-          icon={<Lucide.X size={14} />}
+          icon={<AppIcon name="x" size={14} />}
         />
       </div>
       {progressItems.length > 0 ? (
@@ -164,15 +165,11 @@ export const PlanDrawer: React.FC<PlanDrawerProps> = ({
               className={`${styles.dynamicPlanItem}${item.done ? ` ${styles.isDone}` : ''}`}
             >
               {item.done ? (
-                <Lucide.CheckCircle2
-                  size={13}
-                  style={{ color: 'var(--accent-green)' }}
-                />
+                <AppIcon name="check-circle" size={13}
+                  style={{ color: 'var(--accent-green)' }} />
               ) : (
-                <Lucide.Circle
-                  size={13}
-                  style={{ color: 'var(--text-tertiary)' }}
-                />
+                <AppIcon name="circle" size={13}
+                  style={{ color: 'var(--text-tertiary)' }} />
               )}
               <span>{item.text}</span>
             </li>

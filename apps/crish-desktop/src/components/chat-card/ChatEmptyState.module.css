@@ -245,7 +245,6 @@
 
 .promptArrow {
   color: var(--text-tertiary);
-  opacity: 0.7;
   flex-shrink: 0;
   margin-left: auto;
   transition:

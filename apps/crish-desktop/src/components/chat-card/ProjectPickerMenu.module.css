@@ -2,7 +2,6 @@
 
 .pickerPanel {
   width: 230px;
-  --item-radius: var(--radius-md, 6px);
 }
 
 .item {
@@ -58,8 +57,8 @@
 }
 
 .rowDeleteBtn:hover {
-  color: var(--sep-danger-color, hsl(0 84% 60%));
-  background-color: var(--sep-danger-light, hsl(0 84% 60% / 0.08));
+  color: var(--sep-danger-color);
+  background-color: var(--sep-danger-light);
 }
 
 :global(.sep-item-wrapper):hover .rowDeleteBtn,
@@ -93,7 +92,7 @@
   top: 0;
   margin-left: 4px;
   min-width: 160px;
-  border-radius: var(--sep-submenu-radius, 8px);
+  border-radius: var(--radius-lg);
   border: 1px solid var(--sep-border-color, var(--border-color));
   background: var(--sep-bg-panel-solid, var(--bg-elevated));
   box-shadow: var(--sep-shadow);

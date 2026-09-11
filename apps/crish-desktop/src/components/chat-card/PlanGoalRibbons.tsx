@@ -4,7 +4,7 @@
  * 含计划批准动作（已批准后隐藏）与目标停止动作。
  */
 import React from 'react';
-import * as Lucide from 'lucide-react';
+
 import styles from './PlanGoalRibbons.module.css';
 import { Button, Tooltip } from '../ui';
 import {
@@ -16,6 +16,7 @@ import {
   resolvePlanModeTitle,
   shouldShowPlanApproveAction,
 } from './chatStatusRibbonsLib';
+import { AppIcon } from '../ui/icons/index';
 
 /** 计划模式条渲染状态。 */
 export type PlanRibbonState = {
@@ -61,7 +62,7 @@ export const PlanGoalRibbons: React.FC<PlanGoalRibbonsProps> = ({
           aria-live="polite"
           aria-label={resolvePlanModeAriaLabel(plan.planApproved)}
         >
-          <Lucide.ListChecks size={14} strokeWidth={1.75} aria-hidden />
+          <AppIcon name="list-checks" size={14} aria-hidden />
           <Tooltip content={resolvePlanModeTitle(plan.planApproved)}>
             <span className={styles.planModeRibbonText}>
               {formatPlanModeRibbonLabel(plan.planApproved)}
@@ -76,7 +77,7 @@ export const PlanGoalRibbons: React.FC<PlanGoalRibbonsProps> = ({
                 className={styles.planModeRibbonIconBtn}
                 aria-label="批准计划执行"
                 onClick={plan.onApprovePlan}
-                icon={<Lucide.Check size={14} strokeWidth={2} aria-hidden />}
+                icon={<AppIcon name="check" size={14} aria-hidden />}
               />
             </Tooltip>
           ) : null}
@@ -98,7 +99,7 @@ export const PlanGoalRibbons: React.FC<PlanGoalRibbonsProps> = ({
           data-goal-tasks-done={goal.goalTasksDone}
           data-goal-tasks-total={goal.goalTasksTotal}
         >
-          <Lucide.Target size={14} strokeWidth={1.75} aria-hidden />
+          <AppIcon name="target" size={14} aria-hidden />
           <Tooltip content={(goal.goalText || '').trim() || '目标模式'}>
             <span className={styles.planModeRibbonText}>
               {formatGoalRibbonLabel({
@@ -127,7 +128,7 @@ export const PlanGoalRibbons: React.FC<PlanGoalRibbonsProps> = ({
               className={`${styles.planModeRibbonIconBtn} ${styles.isDanger}`}
               aria-label="停止目标"
               onClick={goal.onStopGoal}
-              icon={<Lucide.Square size={12} fill="currentColor" aria-hidden />}
+              icon={<AppIcon name="square" size={12} fill="currentColor" aria-hidden />}
             />
           </Tooltip>
         </div>

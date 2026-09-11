@@ -20,7 +20,6 @@
 .chatSoftHintIcon {
   flex-shrink: 0;
   color: var(--text-tertiary);
-  opacity: 0.9;
 }
 
 .chatSoftHintText {
@@ -90,5 +89,4 @@
 
 .chatSoftHint[data-setup-hint='sync-engine'] .chatSoftHintIcon {
   color: var(--text-tertiary);
-  opacity: 0.85;
 }

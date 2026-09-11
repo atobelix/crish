@@ -7,9 +7,10 @@
  * 过滤即时生效，Enter 不提交。
  */
 import React, { useId } from 'react';
-import * as Lucide from 'lucide-react';
+
 import styles from './ChatMsgFilterBar.module.css';
 import { Button, Tooltip } from '../ui';
+import { AppIcon } from '../ui/icons/index';
 
 export type ChatMsgFilterBarProps = {
   localMsgFilter: string;
@@ -71,12 +72,9 @@ export const ChatMsgFilterBar: React.FC<ChatMsgFilterBarProps> = ({
 
   return (
     <div className={styles.bar} role="search" aria-label="本会话消息筛选">
-      <Lucide.Search
-        size={13}
+      <AppIcon name="search" size={13}
         className={styles.icon}
-        strokeWidth={1.75}
-        aria-hidden
-      />
+        aria-hidden />
       <input
         ref={inputRef}
         type="search"
@@ -132,7 +130,7 @@ export const ChatMsgFilterBar: React.FC<ChatMsgFilterBarProps> = ({
             aria-keyshortcuts="Escape"
             tabIndex={-1}
             onClick={clearQuery}
-            icon={<Lucide.X size={13} strokeWidth={1.75} aria-hidden />}
+            icon={<AppIcon name="x" size={13} aria-hidden />}
           />
         </Tooltip>
       ) : null}
@@ -144,7 +142,7 @@ export const ChatMsgFilterBar: React.FC<ChatMsgFilterBarProps> = ({
           className={`${styles.clear} ${styles.close}`}
           aria-label="关闭筛选"
           onClick={closeBar}
-          icon={<Lucide.ChevronUp size={13} strokeWidth={1.75} aria-hidden />}
+          icon={<AppIcon name="chevron-up" size={13} aria-hidden />}
         />
       </Tooltip>
     </div>

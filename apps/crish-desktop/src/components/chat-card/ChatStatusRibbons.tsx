@@ -12,7 +12,7 @@
  */
 import React, { useMemo } from 'react';
 import styles from './ChatStatusRibbons.module.css';
-import * as Lucide from 'lucide-react';
+
 import { AppErrorBoundary } from '../AppErrorBoundary';
 import type { EngineStatus } from '../../api/engineConfig';
 import type { RunNotice } from '../../hooks/useChatStream';
@@ -55,6 +55,7 @@ import {
   PlanDrawer,
   usePlanDrawerState,
 } from './DynamicChipBar';
+import { AppIcon } from '../ui/icons/index';
 
 export interface StreamingRibbonProps {
   onOpenTerminal?: () => void;
@@ -327,12 +328,9 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
           aria-live="assertive"
           aria-label={engineCrashedText}
         >
-          <Lucide.AlertTriangle
-            size={14}
-            strokeWidth={1.75}
+          <AppIcon name="alert-triangle" size={14}
             aria-hidden
-            style={{ flexShrink: 0 }}
-          />
+            style={{ flexShrink: 0 }} />
           <span className={styles.crashRibbonText}>{engineCrashedText}</span>
           <Button
             type="button"

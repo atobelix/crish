@@ -4,7 +4,7 @@
  * 挂载门闩与文案 / aria 来自 chatStatusRibbonsLib。
  */
 import React from 'react';
-import * as Lucide from 'lucide-react';
+
 import styles from './ApprovalDock.module.css';
 import { Button, Tooltip } from '../ui';
 import { getSessionById } from '../../store/storeAccess';
@@ -15,6 +15,7 @@ import {
   resolveApprovalDockLabelText,
   shouldRenderApprovalDock,
 } from './chatStatusRibbonsLib';
+import { AppIcon } from '../ui/icons/index';
 
 export type ApprovalDockProps = {
   /** 是否显示 dock（防双渲染：漏传时安全不挂） */
@@ -94,11 +95,9 @@ export const ApprovalDock: React.FC<ApprovalDockProps> = ({
       >
         <span className={styles.approvalDockDot} aria-hidden />
         <span className={styles.approvalDockLabel}>{labelText}</span>
-        <Lucide.ChevronRight
-          size={14}
+        <AppIcon name="chevron-right" size={14}
           className={styles.approvalDockGoIcon}
-          aria-hidden
-        />
+          aria-hidden />
       </Button>
     </Tooltip>
   );

@@ -126,7 +126,7 @@
 }
 
 .modelText {
-  font-size: var(--font-sub, 13px);
+  font-size: var(--font-size-base);
   font-weight: var(--font-weight-medium, 500);
   color: var(--text-primary);
   display: inline-flex;
@@ -204,7 +204,7 @@
   align-items: center;
   justify-content: center;
   gap: var(--space-3, 12px);
-  background: color-mix(in srgb, var(--bg-surface, var(--bg-primary)) 92%, var(--brand) 8%);
+  background: color-mix(in srgb, var(--bg-primary) 92%, var(--brand) 8%);
   backdrop-filter: blur(8px);
   color: var(--text-primary);
   font-size: var(--font-size-base, 14px);

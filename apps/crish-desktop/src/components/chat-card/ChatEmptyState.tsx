@@ -37,14 +37,8 @@ import {
   type ProjectEntry,
 } from '../../api/projectStore';
 import { ProjectPickerMenu } from './ProjectPickerMenu';
-import {
-  ChevronRight,
-  Eraser,
-  MessageSquarePlus,
-  Plus,
-  SearchX,
-  Sparkles,
-} from 'lucide-react';
+import { AppIcon } from '../ui/icons/index';
+
 
 /** 项目菜单悬停关闭延迟（ms）：离开 trigger/菜单后启动，进入菜单取消 */
 const PROJECT_PICKER_CLOSE_DELAY_MS = 400;
@@ -132,9 +126,9 @@ function EmptyIcon({ kind }: { kind: ChatEmptyKind }) {
     'aria-hidden': true as const,
   };
   // 三态图标互不相同，辅助扫视（文案标题已区分）
-  if (kind === 'no-session') return <MessageSquarePlus {...common} />;
-  if (kind === 'filter-empty') return <SearchX {...common} />;
-  return <Sparkles {...common} />;
+  if (kind === 'no-session') return <AppIcon name="message-square-plus" {...common} />;
+  if (kind === 'filter-empty') return <AppIcon name="search-x" {...common} />;
+  return <AppIcon name="sparkles" {...common} />;
 }
 
 function primaryActionHandler(
@@ -395,9 +389,9 @@ export const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
             onClick={actionFn}
             icon={
               primaryAction === 'create-session' ? (
-                <Plus size={14} strokeWidth={2} aria-hidden />
+                <AppIcon name="plus" size={14} aria-hidden />
               ) : (
-                <Eraser size={14} strokeWidth={1.75} aria-hidden />
+                <AppIcon name="eraser" size={14} aria-hidden />
               )
             }
           >
@@ -427,11 +421,9 @@ export const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
                 >
                   <span className={styles.quickPromptLabel}>{item.label}</span>
                   <span className={styles.quickPromptDesc}>{item.prompt}</span>
-                  <ChevronRight
-                    size={14}
+                  <AppIcon name="chevron-right" size={14}
                     className={styles.promptArrow}
-                    aria-hidden="true"
-                  />
+                    aria-hidden="true" />
                 </button>
               </Tooltip>
             ))}

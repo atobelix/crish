@@ -1,11 +1,5 @@
 import React, { useMemo, useState, useCallback } from 'react';
-import {
-  Folder,
-  FolderOpen,
-  FolderPlus,
-  Plus,
-  Trash2,
-} from 'lucide-react';
+
 import {
   addProjectFromPath,
   GENERAL_FOLDER,
@@ -26,6 +20,7 @@ import {
   type MenuItem,
 } from '../ui/SmartExpandablePanel';
 import styles from './ProjectPickerMenu.module.css';
+import { AppIcon } from '../ui/icons/index';
 
 /** 草稿态切项目：同步 draftFolder，不 mint 真会话 */
 function syncDraftFolderOnProjectChange(folder: string): void {
@@ -130,7 +125,7 @@ export const ProjectPickerMenu: React.FC<ProjectPickerMenuProps> = ({
         type: 'selectable',
         label: p.name,
         sublabel: p.path,
-        icon: <Folder size={14} />,
+        icon: <AppIcon name="folder" size={14} />,
         selected: isSelected,
         searchKeywords: `${p.name} ${p.path}`,
         onSelect: () => pickProject(p.id),
@@ -146,7 +141,7 @@ export const ProjectPickerMenu: React.FC<ProjectPickerMenuProps> = ({
                   void handleRemoveProject(p);
                 }}
               >
-                <Trash2 size={12} />
+                <AppIcon name="trash" size={12} />
               </button>
             </Tooltip>
           ) : undefined,
@@ -158,7 +153,7 @@ export const ProjectPickerMenu: React.FC<ProjectPickerMenuProps> = ({
       id: 'proj:general',
       type: 'selectable',
       label: '通用项目',
-      icon: <Folder size={14} />,
+      icon: <AppIcon name="folder" size={14} />,
       selected: isGeneralSelected,
       onSelect: () => {
         setNoProject();
@@ -179,19 +174,19 @@ export const ProjectPickerMenu: React.FC<ProjectPickerMenuProps> = ({
         id: 'action:add-project',
         type: 'submenu',
         label: '添加项目',
-        icon: <Plus size={14} />,
+        icon: <AppIcon name="plus" size={14} />,
         children: [
           {
             id: 'action:open-local',
             label: '打开本地项目...',
-            icon: <FolderOpen size={14} />,
+            icon: <AppIcon name="folder-open" size={14} />,
             disabled: busy,
             onSelect: handlePickFolder,
           },
           {
             id: 'action:create-empty',
             label: '新建空白项目...',
-            icon: <FolderPlus size={14} />,
+            icon: <AppIcon name="folder-plus" size={14} />,
             disabled: busy,
             onSelect: handleCreateEmptyProject,
           },

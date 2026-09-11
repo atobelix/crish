@@ -13,7 +13,7 @@ import { anyProfileHasKey } from '../../api/providerProfiles';
 import { ChatComposerWrapper } from './ChatComposerWrapper';
 import { openSettings, patchSession } from '../../api/storeAccess';
 import { hasFiles } from '../chat-composer/ComposerDropHost';
-import * as Lucide from 'lucide-react';
+
 import { normalizeMessageAttachments } from '../chat-attachment/AttachmentCard';
 import type { SessionMessage } from '../../store/types';
 import type { ChatAttachment } from '../../hooks/useChatStream';
@@ -25,6 +25,7 @@ const ScheduledTasksPanel = lazy(() =>
 );
 
 import { useIpcListener } from '../../hooks/useIpcListener';
+import { AppIcon } from '../ui/icons/index';
 
 export interface ChatCardProps {
   handleGlobalTabClick: (cardId: string) => void;
@@ -362,12 +363,9 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
               data-testid="chat-drop-overlay"
               aria-hidden
             >
-              <Lucide.Upload
-                className={styles.dropOverlayIcon}
+              <AppIcon name="upload" className={styles.dropOverlayIcon}
                 size={28}
-                strokeWidth={1.75}
-                aria-hidden
-              />
+                aria-hidden />
               <span className={styles.dropOverlayText}>
                 释放文件以添加为附件
               </span>

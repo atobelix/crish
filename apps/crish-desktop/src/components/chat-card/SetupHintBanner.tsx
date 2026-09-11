@@ -4,9 +4,10 @@
  * 只展示一条（kind 非 null 时挂载），配合 data-setup-hint 走模块样式差异。
  */
 import React from 'react';
-import * as Lucide from 'lucide-react';
+
 import styles from './SetupHintBanner.module.css';
 import type { SetupHintKind } from './chatStatusRibbonsLib';
+import { AppIcon } from '../ui/icons/index';
 
 /** 单条 soft-hint 的完整渲染状态（文案层已在壳组件算好）。 */
 export type SetupHintState = {
@@ -25,10 +26,10 @@ export type SetupHintBannerProps = {
 
 /** 每种 setup kind 的图标（与抽出前一一对应）。 */
 const SETUP_HINT_ICON: Record<SetupHintKind, React.ReactNode> = {
-  'engine-down': <Lucide.CloudOff size={14} strokeWidth={1.75} aria-hidden />,
-  'needs-key': <Lucide.KeyRound size={14} strokeWidth={1.75} aria-hidden />,
-  'needs-model': <Lucide.Cpu size={14} strokeWidth={1.75} aria-hidden />,
-  'sync-engine': <Lucide.RefreshCw size={14} strokeWidth={1.75} aria-hidden />,
+  'engine-down': <AppIcon name="cloud-off" size={14} aria-hidden />,
+  'needs-key': <AppIcon name="key" size={14} aria-hidden />,
+  'needs-model': <AppIcon name="cpu" size={14} aria-hidden />,
+  'sync-engine': <AppIcon name="refresh" size={14} aria-hidden />,
 };
 
 export const SetupHintBanner: React.FC<SetupHintBannerProps> = ({

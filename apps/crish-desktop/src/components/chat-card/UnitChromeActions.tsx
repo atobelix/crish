@@ -5,7 +5,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { Globe, FolderTree } from 'lucide-react';
+
 import { ChatHeaderMore } from './ChatHeaderMore';
 import { SessionInlineRename } from './SessionInlineRename';
 import { SubagentHeaderPanel } from './SubagentHeaderPanel';
@@ -33,6 +33,7 @@ import { toast } from '../../services/toast';
 import { sessionListDisplayTitle } from '../../api/sessionTitle';
 import { useDraftFolder } from '../../store/draft-routing';
 import styles from './UnitChromeActions.module.css';
+import { AppIcon } from '../ui/icons/index';
 
 const SHARE_FLASH_MS = 2000;
 const EMPTY_SESSION_TITLE = '新会话';
@@ -323,7 +324,7 @@ export const UnitChromeActions: React.FC<UnitChromeActionsProps> = React.memo(
               aria-label="浏览器"
               onClick={handleOpenPreview}
             >
-              <Globe size={14} strokeWidth={1.8} aria-hidden="true" />
+              <AppIcon name="globe" size={14} aria-hidden="true" />
             </button>
           </Tooltip>
 
@@ -338,7 +339,7 @@ export const UnitChromeActions: React.FC<UnitChromeActionsProps> = React.memo(
               aria-label="打开文件"
               onClick={handleOpenFiles}
             >
-              <FolderTree size={14} strokeWidth={1.8} aria-hidden="true" />
+              <AppIcon name="folder-tree" size={14} aria-hidden="true" />
             </button>
           </Tooltip>
 

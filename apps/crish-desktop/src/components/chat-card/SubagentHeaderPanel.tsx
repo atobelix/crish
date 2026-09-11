@@ -1,13 +1,5 @@
 import React, { useMemo } from 'react';
-import {
-  Bot,
-  ChevronDown,
-  Play,
-  CheckCircle2,
-  XCircle,
-  OctagonAlert,
-  XOctagon,
-} from 'lucide-react';
+
 import type { SessionAgent } from '../../store/types';
 import { countRunningSubagents } from './unitChromeLabel';
 import { IconButton, Tooltip } from '../ui';
@@ -18,6 +10,7 @@ import {
   type MenuItem,
 } from '../ui/SmartExpandablePanel';
 import styles from './SubagentHeaderPanel.module.css';
+import { AppIcon } from '../ui/icons/index';
 
 export interface SubagentHeaderPanelProps {
   agents: SessionAgent[];
@@ -54,7 +47,7 @@ export const SubagentHeaderPanel: React.FC<SubagentHeaderPanelProps> = ({
           </>
         ) : (
           <>
-            <Bot size={13} className={styles.botIcon} aria-hidden="true" />
+            <AppIcon name="bot" size={13} className={styles.botIcon} aria-hidden="true" />
             <span
               className={`${styles.triggerText} ${styles.bcAgentText} bc-agent-text`}
             >
@@ -62,11 +55,9 @@ export const SubagentHeaderPanel: React.FC<SubagentHeaderPanelProps> = ({
             </span>
           </>
         )}
-        <ChevronDown
-          size={11}
+        <AppIcon name="chevron-down" size={11}
           className={`${styles.bcChevron} bc-chevron`}
-          aria-hidden="true"
-        />
+          aria-hidden="true" />
       </button>
     </Tooltip>
   );
@@ -89,24 +80,24 @@ export const SubagentHeaderPanel: React.FC<SubagentHeaderPanelProps> = ({
       const isRunning = agent.status === 'running';
 
       let statusBadgeText = '空闲';
-      let statusIcon = <Bot size={14} />;
+      let statusIcon = <AppIcon name="bot" size={14} />;
       let badgeClass = styles.badgeIdle;
 
       if (isRunning) {
         statusBadgeText = '运行中';
-        statusIcon = <Play size={14} className={styles.pulseGreen} />;
+        statusIcon = <AppIcon name="play" size={14} className={styles.pulseGreen} />;
         badgeClass = styles.badgeRunning;
       } else if (agent.status === 'completed') {
         statusBadgeText = '已完成';
-        statusIcon = <CheckCircle2 size={14} />;
+        statusIcon = <AppIcon name="check-circle" size={14} />;
         badgeClass = styles.badgeCompleted;
       } else if (agent.status === 'failed') {
         statusBadgeText = '失败';
-        statusIcon = <XCircle size={14} />;
+        statusIcon = <AppIcon name="x-circle" size={14} />;
         badgeClass = styles.badgeFailed;
       } else if (agent.status === 'stopped') {
         statusBadgeText = '已停止';
-        statusIcon = <OctagonAlert size={14} />;
+        statusIcon = <AppIcon name="octagon-alert" size={14} />;
         badgeClass = styles.badgeStopped;
       }
 
@@ -132,7 +123,7 @@ export const SubagentHeaderPanel: React.FC<SubagentHeaderPanelProps> = ({
                 e.stopPropagation();
                 killSubagent(parentSessionId, agent.id);
               }}
-              icon={<XOctagon size={12} />}
+              icon={<AppIcon name="x-octagon" size={12} />}
             />
           </Tooltip>
         ) : undefined,

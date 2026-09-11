@@ -4,7 +4,6 @@
  * chatStatusRibbonsLib 纯函数，本组件只做装配。
  */
 import React from 'react';
-import * as Lucide from 'lucide-react';
 import styles from './RunNoticeBar.module.css';
 import { Button, Tooltip } from '../ui';
 import type { RunNotice } from '../../hooks/useChatStream';
@@ -13,6 +12,7 @@ import {
   resolveRunNoticeAriaLive,
   shouldRenderRunNotice,
 } from './chatStatusRibbonsLib';
+import { AppIcon } from '../ui/icons/index';
 export type RunNoticeBarProps = {
   runNotice: RunNotice | null;
   onDismiss: () => void;
@@ -53,7 +53,7 @@ export const RunNoticeBar: React.FC<RunNoticeBarProps> = ({
         className={styles.runNoticeDismiss}
         aria-label="关闭提示"
         onClick={onDismiss}
-        icon={<Lucide.X size={14} aria-hidden />}
+        icon={<AppIcon name="x" size={14} aria-hidden />}
       />
     </div>
   );

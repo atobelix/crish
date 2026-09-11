@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Pencil } from 'lucide-react';
+
 import { Tooltip } from '../ui';
 import styles from './SessionInlineRename.module.css';
 

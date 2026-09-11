@@ -5,7 +5,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { ChevronDown } from 'lucide-react';
+
 import styles from './ChatCard.module.css';
 import { Tooltip } from '../ui';
 import { toggleExclusiveMenu } from '../ui/Menu';

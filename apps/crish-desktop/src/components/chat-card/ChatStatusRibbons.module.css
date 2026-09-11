@@ -137,7 +137,7 @@
   background: var(--bg-secondary);
   color: var(--text-secondary);
   font-size: var(--font-size-xs);
-  line-height: var(--line-height-normal);
+  line-height: var(--line-height-body);
   max-width: min(var(--chat-col-max, 760px), 100%);
   box-sizing: border-box;
 }
@@ -158,7 +158,7 @@
   );
   color: var(--text-primary);
   font-size: var(--font-size-xs);
-  line-height: var(--line-height-normal);
+  line-height: var(--line-height-body);
   max-width: min(var(--chat-col-max, 760px), 100%);
   box-sizing: border-box;
 }
