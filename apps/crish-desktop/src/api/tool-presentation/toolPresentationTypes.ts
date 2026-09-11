@@ -153,6 +153,25 @@ export interface ProcessTimelineSegment {
   id: string;
   items: AssistantTimelineItem[];
   metrics: ProcessSegmentMetrics;
+  /**
+   * 段起始时间戳（毫秒，取段内最早子项的 `startTime`）。
+   * 用于顶部时间胶囊：运行中跳秒，终态定格为「工作 xx 时间」。
+   */
+  startTime?: number;
+  /**
+   * 段结束时间戳（毫秒，仅在段处于终态时存在）。
+   * 与 `startTime` 配合计算「工作 xx 时间」。
+   */
+  endTime?: number;
+  /**
+   * 顶部「工作时间胶囊 + 虚线分割」是否显示。
+   *
+   * 唯一口径（用户裁决 · 2026-09-11）：段内思考与工具调用计数之和 ≥ 2 时显示；
+   * **只有一个思考 或 只有一个工具调用时，工作时间区域与分割线一律不显示**。
+   *
+   * 该字段由 `partitionTimelineSegments` 唯一裁决，禁止调用方本地重推导。
+   */
+  showTimeCapsule: boolean;
   /** 是否具备折叠资格（由四铁律裁决，禁止调用方本地推导） */
   foldable: boolean;
   /** 默认展开态（仅作初始态参考；运行时展开态由宿主字典控制） */
@@ -176,8 +195,27 @@ export interface TextTimelineSegment {
   isStreaming: boolean;
 }
 
+/**
+ * 系统状态通知段（上下文压缩 / 模型切换 / 思考强度切换 / 权限模式切换）。
+ *
+ * 【为何独立成段】状态通知是**系统对用户的告知**，语义上不属于「AI 过程产出」，
+ * 绝不允许被过程段折叠吞掉。故注入项在分段器中作为**物理界标**处理：
+ * 先冲掉前置过程缓冲，再以本段常驻平铺，渲染走 `ContextStateNotice`
+ * （居中 + 发丝分割线，与模型切换同一视觉通道）。
+ */
+export interface StateNoticeTimelineSegment {
+  kind: 'state_notice';
+  /** 唯一稳定键，格式 `${msgId}-state-${index}` */
+  id: string;
+  /** kind === 'injection' 的时间线项 */
+  item: TimelineInjectionItem;
+}
+
 /** 时间线交错分段（判别联合） */
-export type TimelineSegment = ProcessTimelineSegment | TextTimelineSegment;
+export type TimelineSegment =
+  | ProcessTimelineSegment
+  | TextTimelineSegment
+  | StateNoticeTimelineSegment;
 
 /**
  * Slot DOM ID 唯一生成规则（SSOT）。

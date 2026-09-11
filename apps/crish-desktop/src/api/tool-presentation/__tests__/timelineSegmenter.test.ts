@@ -258,15 +258,115 @@ describe('partitionTimelineSegments · 铁律四（子代理可见性特权）',
   });
 });
 
+/* ═══════════════════════════════════════════════════════════════════════════
+ * 顶部工作时间胶囊显示门槛（用户裁决 · 2026-09-11）
+ *   只有一个思考 或 只有一个工具调用 → 工作时间区域与分割线一律不显示
+ * ═══════════════════════════════════════════════════════════════════════════ */
+describe('partitionTimelineSegments · 时间胶囊显示门槛', () => {
+  function capsuleOf(items: AssistantTimelineItem[], isTurnLive = false) {
+    const segs = partitionTimelineSegments('m1', items, isTurnLive, false);
+    const seg = segs.find((s) => s.kind === 'process_section') as
+      | { showTimeCapsule: boolean; startTime?: number; endTime?: number; isLive: boolean }
+      | undefined;
+    return seg;
+  }
+
+  it('单一思考 → showTimeCapsule=false', () => {
+    expect(capsuleOf([thought('t1', 1000)])?.showTimeCapsule).toBe(false);
+  });
+
+  it('单一工具调用 → showTimeCapsule=false', () => {
+    expect(capsuleOf([tools('k1', ['read_file'])])?.showTimeCapsule).toBe(false);
+  });
+
+  it('思考 + 工具 → showTimeCapsule=true', () => {
+    expect(capsuleOf([thought('t1'), tools('k1', ['read_file'])])?.showTimeCapsule).toBe(true);
+  });
+
+  it('两个工具（同一 tools 项）→ showTimeCapsule=true', () => {
+    expect(capsuleOf([tools('k1', ['read_file', 'grep_search'])])?.showTimeCapsule).toBe(true);
+  });
+
+  it('负向断言：注入项不参与胶囊门槛计数（仅注入不产出过程段）', () => {
+    const segs = partitionTimelineSegments('m1', [injection('i1'), thought('t1')], false, false);
+    const proc = segs.find((s) => s.kind === 'process_section') as
+      | { showTimeCapsule: boolean }
+      | undefined;
+    expect(proc?.showTimeCapsule).toBe(false);
+  });
+
+  it('段起止时间戳：终态取段内最早 / 最晚 startTime', () => {
+    const t1: TimelineThoughtItem = { ...thought('t1'), startTime: 1_000 };
+    const k1: TimelineToolsItem = { ...tools('k1', ['read_file']), startTime: 4_500 };
+    const seg = capsuleOf([t1, k1]);
+    expect(seg?.startTime).toBe(1_000);
+    expect(seg?.endTime).toBe(4_500);
+  });
+
+  it('段起止时间戳：活跃态 endTime 必须为 undefined（跳秒）', () => {
+    const t1: TimelineThoughtItem = { ...thought('t1'), startTime: 1_000 };
+    const k1: TimelineToolsItem = { ...tools('k1', ['read_file']), startTime: 4_500 };
+    const seg = capsuleOf([t1, k1], true);
+    expect(seg?.isLive).toBe(true);
+    expect(seg?.startTime).toBe(1_000);
+    expect(seg?.endTime).toBeUndefined();
+  });
+});
+
 describe('partitionTimelineSegments · 段边界与空输入', () => {
   it('空数组 → 空结果', () => {
     expect(partitionTimelineSegments('m1', [], false, false)).toEqual([]);
   });
 
-  it('仅注入项 → 产出过程段（injectionCount > 0）', () => {
+  it('仅注入项 → 产出状态通知段（绝不落入可折叠过程段）', () => {
     const segs = partitionTimelineSegments('m1', [injection('i1')], false, false);
     expect(segs).toHaveLength(1);
-    expect((segs[0] as { metrics: { injectionCount: number } }).metrics.injectionCount).toBe(1);
+    expect(segs[0]!.kind).toBe('state_notice');
+    expect(segs[0]!.id).toBe('m1-state-0');
+    // 负向断言：不得产出 process_section（状态通知被折叠吞掉即为缺陷）
+    expect(segs.some((s) => s.kind === 'process_section')).toBe(false);
+  });
+
+  it('注入项作为物理界标：先冲掉前置过程段，本体常驻平铺', () => {
+    const items: AssistantTimelineItem[] = [
+      thought('t1'),
+      tools('k1', ['read_file', 'grep_search']),
+      injection('i1'),
+      tools('k2', ['run_command']),
+      text('x1'),
+    ];
+    const segs = partitionTimelineSegments('m1', items, false, false);
+    expect(segs.map((s) => s.kind)).toEqual([
+      'process_section',
+      'state_notice',
+      'process_section',
+      'text_narrative',
+    ]);
+    // 注入前的段仍受铁律一约束（后继存在正文 → 折叠）
+    const first = segs[0] as { foldable: boolean; defaultExpanded: boolean };
+    expect(first.foldable).toBe(true);
+    expect(first.defaultExpanded).toBe(false);
+    // 注入后的段同样受铁律一约束
+    const third = segs[2] as { foldable: boolean; defaultExpanded: boolean };
+    expect(third.foldable).toBe(true);
+    expect(third.defaultExpanded).toBe(false);
+  });
+
+  it('负向断言：注入项绝不可出现在任何 process_section 的 items 中', () => {
+    const items: AssistantTimelineItem[] = [
+      injection('i1'),
+      thought('t1'),
+      injection('i2'),
+      tools('k1', ['read_file']),
+      text('x1'),
+    ];
+    const segs = partitionTimelineSegments('m1', items, false, false);
+    for (const seg of segs) {
+      if (seg.kind === 'process_section') {
+        expect(seg.items.some((i) => i.kind === 'injection')).toBe(false);
+      }
+    }
+    expect(segs.filter((s) => s.kind === 'state_notice')).toHaveLength(2);
   });
 
   it('相同输入幂等（纯函数）', () => {

@@ -79,7 +79,6 @@ export const ProcessItemRenderer: React.FC<ProcessItemRendererProps> = React.mem
           isLive={item.isLive ?? isThinkingMsg}
           durationMs={item.durationMs}
           turnIndex={item.turnIndex}
-          startTime={item.startTime}
           messageId={msgId}
           defaultExpanded={thoughtDefaultOpen}
         />

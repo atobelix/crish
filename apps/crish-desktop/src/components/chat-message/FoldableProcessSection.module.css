@@ -20,6 +20,48 @@
   box-sizing: border-box;
 }
 
+/* ─────────── 顶部工作时间胶囊（居中 · 虚线分割 · 仅时间） ─────────── */
+.timeCapsule {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3, 12px);
+  width: 100%;
+  height: 20px;
+  min-height: 20px;
+  max-height: 20px;
+  margin: 0 0 var(--space-1, 4px);
+  padding: 0;
+  background: transparent;
+  box-sizing: border-box;
+  user-select: none;
+}
+
+/*
+ * 虚线分割：与 ContextStateNotice 同一视觉通道（居中系统状态通知）。
+ * 用户裁决：只有一个思考 / 一个工具调用时，本胶囊连同虚线整体不渲染。
+ */
+.timeCapsule::before,
+.timeCapsule::after {
+  content: '';
+  flex: 1;
+  min-width: 16px;
+  height: 0;
+  border-top: var(--hairline-width, 1px) dashed var(--border-color);
+}
+
+.timeCapsuleText {
+  font-family: inherit;
+  font-size: var(--font-size-micro, 11px);
+  font-weight: var(--font-weight-normal, 400);
+  line-height: 20px;
+  color: var(--text-tertiary);
+  text-align: center;
+  white-space: nowrap;
+  flex-shrink: 0;
+  letter-spacing: 0.01em;
+}
+
 /* ─────────── 33px 发丝底线控制栏 ─────────── */
 .controlBar {
   display: flex;
@@ -116,10 +158,16 @@
  * 使用 `:not([hidden])` 正向分支表达，绝不反向写成
  * `[hidden] { display: none !important }`。
  */
+/*
+ * 【间距纪律】同段内思考块与工具块之间不得存在额外留白。
+ * 每个子块（ReasoningRow / ToolCallBlock）自带内边距，
+ * 容器层再叠 gap 即产生「空白过多」的样式假象。
+ * 用户裁决（2026-09-11）：思考与工具调用之间的空白必须收紧为 0。
+ */
 .sectionBody:not([hidden]) {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2, 8px);
-  padding-top: var(--space-2, 8px);
-  padding-bottom: var(--space-2, 8px);
+  gap: 0;
+  padding-top: 0;
+  padding-bottom: 0;
 }

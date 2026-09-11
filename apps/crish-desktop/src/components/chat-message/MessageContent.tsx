@@ -444,6 +444,17 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
         )}
 
         {segments.map((seg) => {
+          // 系统状态通知段（上下文压缩 / 模型切换 / 思考强度切换 / 权限切换）：
+          // 走居中发丝通知通道，常驻平铺，绝不参与过程折叠。
+          // 渲染路径与过程子项同构，统一由 ProcessItemRenderer 承载（单一出口）。
+          if (seg.kind === 'state_notice') {
+            return (
+              <React.Fragment key={seg.id}>
+                {renderSegmentItem(seg.item, 0)}
+              </React.Fragment>
+            );
+          }
+
           if (seg.kind === 'text_narrative') {
             const item = seg.item;
             const isThisStreaming = streaming && item === streamingTextItem;
@@ -484,6 +495,10 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
               sectionId={seg.id}
               items={seg.items}
               metrics={seg.metrics}
+              startTime={seg.startTime}
+              endTime={seg.endTime}
+              showTimeCapsule={seg.showTimeCapsule}
+              isLive={seg.isLive}
               isExpanded={isExpanded}
               isFoldable={seg.foldable}
               forceExpanded={seg.forceExpanded}

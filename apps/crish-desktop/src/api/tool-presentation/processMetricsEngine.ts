@@ -173,18 +173,19 @@ export function aggregateProcessMetrics(items: readonly AssistantTimelineItem[])
 function extractToolTargetPath(tc: MessageToolCall): string {
   if (tc.diffs && tc.diffs.length > 0) {
     const first = tc.diffs[0];
-    if (first && first.path) return first.path;
+    if (first && first.filePath) return first.filePath;
   }
-  let args: unknown = tc.arguments ?? (tc as { args?: unknown }).args;
-  if (typeof args === 'string' && args) {
+  const rawArgs = tc.arguments ?? (tc as { args?: unknown }).args;
+  let parsedArgs: unknown = rawArgs;
+  if (typeof rawArgs === 'string' && rawArgs) {
     try {
-      args = JSON.parse(args);
+      parsedArgs = JSON.parse(rawArgs);
     } catch {
-      return args.trim();
+      return rawArgs.trim();
     }
   }
-  if (args && typeof args === 'object') {
-    const rec = args as Record<string, unknown>;
+  if (parsedArgs && typeof parsedArgs === 'object') {
+    const rec = parsedArgs as Record<string, unknown>;
     for (const key of ['path', 'filePath', 'file_path', 'target', 'TargetFile', 'target_file', 'AbsolutePath', 'SearchPath', 'path_within_root', 'uri', 'url']) {
       const v = rec[key];
       if (typeof v === 'string' && v) return v;
