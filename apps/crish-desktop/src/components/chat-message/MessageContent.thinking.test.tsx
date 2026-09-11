@@ -61,33 +61,31 @@ function ThoughtSlotProbe({
 }
 
 describe('MessageContent hideThinkingBlock', () => {
-  it('为真时思考段默认折叠，为假时默认展开', () => {
+  it('思考段折叠由四铁律裁决：hideThinkingBlock 仅影响段内思考行默认开合，不覆盖铁律一', () => {
+    // 该样本 `thinking` 后跟随正文 `text='结论'`，命中【铁律一】：
+    // 过程段后继存在 AI 正文 ⟹ foldable=true ∧ defaultExpanded=false。
+    // 铁律一是物理界标裁决，优先级高于 hideThinkingBlock 的视觉偏好，
+    // 因此无论 hideThinkingBlock 取何值，过程段一律收敛折叠。
     const folded = render(
       <MessageContent msg={thoughtMsg} hideThinkingBlock />
     );
-    const foldedThought = folded.container.querySelector('[data-kind="thought"]');
-    expect(foldedThought).not.toBeNull();
-    expect(
-      foldedThought?.querySelector('[aria-expanded="false"]')
-    ).not.toBeNull();
-    expect(
-      foldedThought?.querySelector('[data-expanded="false"]')
-    ).not.toBeNull();
+    const foldedSection = folded.container.querySelector('[data-process-segment]');
+    expect(foldedSection).not.toBeNull();
+    expect(foldedSection?.getAttribute('data-foldable')).toBe('true');
+    expect(foldedSection?.getAttribute('data-expanded')).toBe('false');
+    const foldedSlot = foldedSection?.querySelector('[data-testid^="process-slot-"]');
+    expect(foldedSlot?.getAttribute('hidden')).toBe('until-found');
     folded.unmount();
 
     const expanded = render(
       <MessageContent msg={thoughtMsg} hideThinkingBlock={false} />
     );
-    const expandedThought = expanded.container.querySelector(
-      '[data-kind="thought"]'
-    );
-    expect(expandedThought).not.toBeNull();
-    expect(
-      expandedThought?.querySelector('[aria-expanded="true"]')
-    ).not.toBeNull();
-    expect(
-      expandedThought?.querySelector('[data-expanded="true"]')
-    ).not.toBeNull();
+    const expandedSection = expanded.container.querySelector('[data-process-segment]');
+    expect(expandedSection).not.toBeNull();
+    // 铁律一同样生效：段仍默认折叠
+    expect(expandedSection?.getAttribute('data-expanded')).toBe('false');
+    const expandedSlot = expandedSection?.querySelector('[data-testid^="process-slot-"]');
+    expect(expandedSlot?.getAttribute('hidden')).toBe('until-found');
   });
 
   it('叙事槽 renderThought 收到 defaultOpen = !hideThinkingBlock', () => {
@@ -206,14 +204,17 @@ describe('DIM-05 双阶段生命周期调度与思考折叠规范契约', () => 
     expect(receivedArgs?.content).toBe('耗时分析与执行步骤规划');
   });
 
-  it('默认无叙事插槽时，DOM 节点具备正确 data-kind="thought" 与折叠展开 aria 契约', () => {
+  it('默认无叙事插槽时，过程段折叠容器具备正确 data 属性与折叠 aria 契约', () => {
     const { container } = render(
       <MessageContent msg={thoughtMsg} hideThinkingBlock={true} />
     );
-    const thoughtElem = container.querySelector('[data-kind="thought"]');
-    expect(thoughtElem).not.toBeNull();
-    expect(thoughtElem?.getAttribute('data-kind')).toBe('thought');
-    expect(thoughtElem?.querySelector('[aria-expanded="false"]')).not.toBeNull();
+    const section = container.querySelector('[data-process-segment]');
+    expect(section).not.toBeNull();
+    expect(section?.getAttribute('data-foldable')).toBe('true');
+    expect(section?.getAttribute('data-expanded')).toBe('false');
+    expect(section?.querySelector('[aria-expanded="false"]')).not.toBeNull();
+    // 负向断言：历史遗留的 `data-kind="thought"` 契约已随旧思考行组件物理切除
+    expect(container.querySelector('[data-kind="thought"]')).toBeNull();
   });
 });
 

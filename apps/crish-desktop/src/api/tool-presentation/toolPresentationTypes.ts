@@ -187,3 +187,22 @@ export type TimelineSegment = ProcessTimelineSegment | TextTimelineSegment;
 export function buildSlotId(sectionId: string): string {
   return `process-slot-${sectionId}`;
 }
+
+/**
+ * 子代理工具名判定（SSOT）。
+ *
+ * 收敛说明：本函数原寄居于 `components/chat-message/turnProcessState.ts`，
+ * 但 `api/tool-presentation/toolActionClassifier.ts` 亦需消费，形成
+ * `api → components` 的反向依赖。故上移至本层，成为唯一判定源。
+ *
+ * 负向红线：禁止在其它文件重复实现子代理名判定。
+ */
+export function isSubagentToolName(name?: string): boolean {
+  if (!name) return false;
+  return (
+    name.includes('subagent') ||
+    name === 'invoke_subagent' ||
+    name === 'run_subagent' ||
+    name === 'wait_subagents'
+  );
+}

@@ -15,7 +15,7 @@ import {
   extractWorkflowConfirmPayload,
   stripWorkflowConfirmFence,
 } from '../../api/workflow-api/workflowConfirm';
-import { TimelineThoughtSection } from '../chat-message-row/TimelineThoughtSection';
+import { ReasoningRow } from '../chat-message-row/ReasoningRow';
 import { ContextStateNotice } from './ContextStateNotice';
 import { isContextStateInjection } from './contextStateUtils';
 import type { useNarrativeRenderSlots } from './narrativeRenderSlots';
@@ -50,6 +50,12 @@ export const ProcessItemRenderer: React.FC<ProcessItemRendererProps> = React.mem
     isStreamingText,
     streamingTextContent,
   }) {
+    const toolItems = item.kind === 'tools' ? item.items : null;
+    const itemsToPass = React.useMemo(
+      () => (toolItems && streamPhase ? [...toolItems] : toolItems || []),
+      [toolItems, streamPhase]
+    );
+
     if (item.kind === 'thought') {
       if (renderThought) {
         return (
@@ -67,7 +73,7 @@ export const ProcessItemRenderer: React.FC<ProcessItemRendererProps> = React.mem
         );
       }
       return (
-        <TimelineThoughtSection
+        <ReasoningRow
           key={item.key}
           content={item.content}
           isLive={item.isLive ?? isThinkingMsg}
@@ -125,7 +131,6 @@ export const ProcessItemRenderer: React.FC<ProcessItemRendererProps> = React.mem
       );
     }
     if (item.kind === 'tools') {
-      const itemsToPass = streamPhase ? [...item.items] : item.items;
       const toolsContent =
         renderTools && toolStackProps ? (
           <React.Fragment key={item.key}>

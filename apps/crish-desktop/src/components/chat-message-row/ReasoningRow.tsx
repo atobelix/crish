@@ -40,11 +40,6 @@ export interface ReasoningRowProps {
 }
 
 /**
- * 兼容导出：全面覆盖历史调用点
- */
-export type TimelineThoughtSectionProps = ReasoningRowProps;
-
-/**
  * 512 字节尾窗切片算法：提取流式思考最新行
  * 复杂度严格保证：时间复杂度 O(1)，空间开销 ≤ 512B
  */
@@ -262,5 +257,3 @@ export const ReasoningRow: React.FC<ReasoningRowProps> = ({
     </div>
   );
 };
-
-export const TimelineThoughtSection = ReasoningRow;

@@ -6,7 +6,6 @@ import { describe, expect, it, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import {
   ReasoningRow,
-  TimelineThoughtSection,
   extractLatestLine,
   extractFirstLine,
 } from '../ReasoningRow';
@@ -257,9 +256,11 @@ describe('DIM-03 §1.1: 24px ReasoningRow 极简思考行流式追踪与扫光�
     });
   });
 
-  describe('六、兼容导出断言', () => {
-    it('TimelineThoughtSection 别名导出与 ReasoningRow 完全等同', () => {
-      expect(TimelineThoughtSection).toBe(ReasoningRow);
+  describe('六、负向断言：历史兼容别名已物理切除', () => {
+    it('ReasoningRow 模块不得再导出 TimelineThoughtSection（命名收敛 SSOT）', async () => {
+      const mod = await import('../ReasoningRow');
+      expect('TimelineThoughtSection' in mod).toBe(false);
+      expect('TimelineThoughtSectionProps' in mod).toBe(false);
     });
   });
 

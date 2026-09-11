@@ -15,7 +15,7 @@
  * 负向红线：禁止在其它文件实现工具分类；禁止把 emoji/Lucide 名称写进本模块。
  */
 
-import { isSubagentToolName } from '../../components/chat-message/turnProcessState';
+import { isSubagentToolName } from './toolPresentationTypes';
 
 /**
  * 工具在「折叠态摘要」中的动作轴（与 `ProcessLeadAction` 同构，但语义更细）。

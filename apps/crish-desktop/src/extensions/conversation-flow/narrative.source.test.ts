@@ -64,8 +64,10 @@ describe('conversation-flow 叙事块源码锁', () => {
     expect(src).toMatch(/useNarrativeRenderSlots/);
     expect(src).toMatch(/renderTools/);
     expect(src).toMatch(/renderThought/);
-    expect(src).toMatch(/TimelineThoughtSection/);
-    expect(src).toMatch(/MessageToolCallsSection/);
+    expect(src).toMatch(/ProcessItemRenderer/);
+    expect(src).toMatch(/FoldableProcessSection/);
+    // 负向断言：历史遗留思考行组件名已物理切除
+    expect(src).not.toMatch(/TimelineThoughtSection/);
   });
 
   it('activate 仍默认关', () => {
