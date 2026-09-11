@@ -114,6 +114,15 @@ const ChatAssistantMessageRowInner: React.FC<
     };
   }, [toolStackProps, virtualScrollManager, msg.id]);
 
+  // 过程段展开/收起（含铁律四强制展开段、检索命中唤醒）→ 走同一单轨测高作废通道。
+  // 禁止行级私有 RO 直写 setActual：尺寸变化统一由宿主 ResizeObserver 回写。
+  const handleInvalidateActual = useCallback(
+    (_msgId: string) => {
+      virtualScrollManager?.invalidateActual(msg.id);
+    },
+    [virtualScrollManager, msg.id]
+  );
+
   const isLive = isThinkingMsg || msg.status === 'processing';
   const isPureCarrier = useMemo(() => {
     // 完善 isPureCarrier 判定：处于深度思考、流式输出、或消息本身包含实质数据时不为纯载体
@@ -159,6 +168,7 @@ const ChatAssistantMessageRowInner: React.FC<
           isThinkingMsg={isThinkingMsg}
           hideThinkingBlock={hideThinkingBlock}
           toolStackProps={augmentedToolStackProps}
+          onInvalidateActual={handleInvalidateActual}
         />
       </div>
 
