@@ -23,7 +23,6 @@ import React, {
   useState,
 } from 'react';
 import { createPortal } from 'react-dom';
-import * as Lucide from 'lucide-react';
 import {
   profileDisplayLabel,
   profileHasKey,
@@ -45,6 +44,7 @@ import {
   calculateSubmenuPosition,
   type SubmenuPlacementResult,
 } from '../ui/Menu/position';
+import { AppIcon } from '../ui/icons/index';
 
 /** 全局安全空态兜底契约（RED-04 防御） */
 export const FALLBACK_EMPTY_SELECTION = {
@@ -177,7 +177,7 @@ const CascadeSubmenuFlyout: React.FC<CascadeSubmenuFlyoutProps> = ({
               {liveModelLabel(profile.id, m)}
             </span>
             {selected && (
-              <Lucide.Check size={14} className={styles.cascadeCheck} />
+              <AppIcon name="check" size={14} className={styles.cascadeCheck} />
             )}
           </Button>
         );
@@ -300,10 +300,8 @@ export const ModelsCascadeSelect: React.FC<ModelsCascadeSelectProps> = ({
           aria-expanded={open}
         >
           <span className={styles.cascadeSelectValue}>{activeLabel}</span>
-          <Lucide.ChevronDown
-            size={14}
-            style={{ opacity: 0.6, flexShrink: 0 }}
-          />
+          <AppIcon name="chevron-down" size={14}
+            style={{ flexShrink: 0 }} />
         </Button>
       }
     >
@@ -379,9 +377,9 @@ export const ModelsCascadeSelect: React.FC<ModelsCascadeSelectProps> = ({
                 </span>
 
                 {isFlippedLeft ? (
-                  <Lucide.ChevronLeft size={14} className={styles.cascadeChev} />
+                  <AppIcon name="chevron-left" size={14} className={styles.cascadeChev} />
                 ) : (
-                  <Lucide.ChevronRight size={14} className={styles.cascadeChev} />
+                  <AppIcon name="chevron-right" size={14} className={styles.cascadeChev} />
                 )}
               </div>
             );

@@ -1,5 +1,5 @@
 import React from 'react';
-import * as Lucide from 'lucide-react';
+
 import {
   getActiveModelId,
   getActiveProfileId,
@@ -17,6 +17,7 @@ import {
   prepareCatalogWrite,
 } from './catalogWriteGate';
 import styles from './ModelsSettingsTab.module.css';
+import { AppIcon } from '../ui/icons';
 
 const CONFIGURE_LABEL = '配置';
 const DELETE_LABEL = '删除';
@@ -132,7 +133,7 @@ export const ModelList: React.FC<{
                       className={`${styles.mrdCapTag} mrd-cap-tag`}
                       aria-label="支持工具调用"
                     >
-                      <Lucide.Wrench size={10} />
+                      <AppIcon name="wrench" size={10} />
                     </span>
                   )}
                   {hasImage && (
@@ -140,7 +141,7 @@ export const ModelList: React.FC<{
                       className={`${styles.mrdCapTag} mrd-cap-tag`}
                       aria-label="支持图片理解"
                     >
-                      <Lucide.Image size={10} />
+                      <AppIcon name="image" size={10} />
                     </span>
                   )}
                   {hasVideo && (
@@ -148,7 +149,7 @@ export const ModelList: React.FC<{
                       className={`${styles.mrdCapTag} mrd-cap-tag`}
                       aria-label="支持视频理解"
                     >
-                      <Lucide.Video size={10} />
+                      <AppIcon name="video" size={10} />
                     </span>
                   )}
                   {hasReasoning && (
@@ -156,7 +157,7 @@ export const ModelList: React.FC<{
                       className={`${styles.mrdCapTag} mrd-cap-tag`}
                       aria-label="支持思考"
                     >
-                      <Lucide.BrainCircuit size={10} />
+                      <AppIcon name="brain-circuit" size={10} />
                     </span>
                   )}
                 </div>
@@ -178,15 +179,15 @@ export const ModelList: React.FC<{
                         userSelect: 'none',
                         lineHeight: '16px',
                         background: lastTest.ok
-                          ? 'color-mix(in srgb, var(--accent-green, #10b981) 12%, transparent)'
-                          : 'color-mix(in srgb, var(--accent-red, #ef4444) 12%, transparent)',
+                          ? 'color-mix(in srgb, var(--accent-green) 12%, transparent)'
+                          : 'color-mix(in srgb, var(--accent-red) 12%, transparent)',
                         color: !lastTest.ok
-                          ? 'var(--accent-red, #ef4444)'
+                          ? 'var(--accent-red)'
                           : (lastTest.latencyMs || 0) < 400
-                            ? 'var(--accent-green, #10b981)'
+                            ? 'var(--accent-green)'
                             : (lastTest.latencyMs || 0) < 1200
-                              ? 'var(--accent-orange, #f59e0b)'
-                              : 'var(--accent-red, #ef4444)',
+                              ? 'var(--accent-orange)'
+                              : 'var(--accent-red)',
                       }}
                     >
                       {lastTest.ok
@@ -217,12 +218,9 @@ export const ModelList: React.FC<{
                     }}
                     icon={
                       testBusy === `${providerId}::${m}` ? (
-                        <Lucide.Loader2
-                          size={13}
-                          className={styles.loadingSpinner}
-                        />
+                        <AppIcon name="loader" size={13} className={styles.loadingSpinner} />
                       ) : (
-                        <Lucide.Wifi size={13} />
+                        <AppIcon name="wifi" size={13} />
                       )
                     }
                   />
@@ -277,7 +275,7 @@ export const ModelList: React.FC<{
                       if (expanded) closeConfig();
                       else openConfigFor(m);
                     }}
-                    icon={<Lucide.SlidersHorizontal size={13} />}
+                    icon={<AppIcon name="sliders" size={13} />}
                   />
                 </Tooltip>
                 <Tooltip content={DELETE_LABEL}>
@@ -324,7 +322,7 @@ export const ModelList: React.FC<{
                         }
                       });
                     }}
-                    icon={<Lucide.Trash2 size={13} />}
+                    icon={<AppIcon name="trash" size={13} />}
                   />
                 </Tooltip>
               </div>

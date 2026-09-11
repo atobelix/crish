@@ -29,7 +29,7 @@
   padding-left: 6px;
   padding-right: 6px;
   min-width: 26px;
-  border-left: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.08));
+  border-left: 1px solid var(--border-subtle);
 }
 
 .yamlDropdownMenu {
@@ -44,7 +44,7 @@
 .menuSectionTitle {
   font-size: 11px;
   font-weight: 600;
-  color: var(--text-tertiary, #888888);
+  color: var(--text-tertiary);
   padding: 6px 8px 4px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -59,7 +59,7 @@
   border: none;
   border-radius: var(--radius-md, 6px);
   background: transparent;
-  color: var(--text-primary, #111111);
+  color: var(--text-primary);
   font-size: 13px;
   text-align: left;
   cursor: pointer;
@@ -67,12 +67,12 @@
 }
 
 .menuItemBtn:hover {
-  background: var(--bg-hover, rgba(0, 0, 0, 0.04));
+  background: var(--bg-hover);
 }
 
 .menuDivider {
   height: 1px;
-  background: var(--border-subtle, rgba(0, 0, 0, 0.06));
+  background: var(--border-subtle);
   margin: 4px 0;
 }
 
@@ -83,7 +83,7 @@
   gap: 8px;
   font-size: 15px;
   font-weight: 600;
-  color: var(--text-primary, #111111);
+  color: var(--text-primary);
 }
 
 .modalTitleIcon {
@@ -91,7 +91,7 @@
 }
 
 .dirtyDot {
-  color: var(--warning-color, #f59e0b);
+  color: var(--warning-color);
   font-size: 10px;
   line-height: 1;
   margin-left: 2px;
@@ -108,11 +108,11 @@
   display: inline-block;
   font-family: var(--font-mono, monospace);
   font-size: 11px;
-  color: var(--text-tertiary, #666666);
-  background: var(--bg-secondary, rgba(0, 0, 0, 0.03));
+  color: var(--text-tertiary);
+  background: var(--bg-secondary);
   padding: 2px 6px;
   border-radius: var(--radius-sm, 4px);
-  border: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.06));
+  border: 1px solid var(--border-subtle);
   max-width: 480px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -125,8 +125,8 @@
   align-items: center;
   justify-content: space-between;
   padding: 8px 16px;
-  border-bottom: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.08));
-  background: var(--bg-secondary, rgba(0, 0, 0, 0.02));
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-secondary);
 }
 
 .toolbarLeft {
@@ -143,7 +143,7 @@
 
 .toolbarInfo {
   font-size: 12px;
-  color: var(--text-tertiary, #888888);
+  color: var(--text-tertiary);
   font-family: 'Segoe UI', -apple-system, var(--font-sans);
   font-variant-numeric: tabular-nums;
   font-feature-settings: 'tnum' 1;
@@ -168,8 +168,8 @@
 .gutter {
   width: 46px;
   flex-shrink: 0;
-  background: var(--bg-secondary, rgba(0, 0, 0, 0.02));
-  border-right: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.08));
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border-subtle);
   overflow: hidden;
   user-select: none;
   box-sizing: border-box;
@@ -183,15 +183,15 @@
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   font-feature-settings: 'tnum' 1;
-  color: var(--text-tertiary, #999);
+  color: var(--text-tertiary);
   text-align: right;
   padding-right: 10px;
   box-sizing: border-box;
 }
 
 .editorGutter .gutterLine.gutterLineError {
-  background: rgba(239, 68, 68, 0.25);
-  color: var(--danger-color, #ef4444);
+  background: color-mix(in srgb, var(--color-error) 25%, transparent);
+  color: var(--danger-color);
   font-weight: 700;
 }
 
@@ -222,7 +222,7 @@
   pointer-events: none;
   user-select: none;
   background: transparent;
-  color: var(--text-primary, #111111);
+  color: var(--text-primary);
 }
 
 .highlightLayer .highlightCode {
@@ -252,7 +252,7 @@
   resize: none;
   background: transparent;
   color: transparent;
-  caret-color: var(--text-primary, #111111);
+  caret-color: var(--text-primary);
   overflow: auto;
   z-index: 1;
 }
@@ -271,11 +271,11 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  background: hsl(0 84% 60% / 0.1);
-  border: 1px solid hsl(0 84% 60% / 0.25);
+  background: var(--color-error-bg);
+  border: 1px solid var(--color-error-border);
   border-radius: var(--radius-md, 6px);
   padding: 4px 10px;
-  color: var(--danger-color, #ef4444);
+  color: var(--danger-color);
   font-size: 12px;
   max-width: 60%;
   cursor: pointer;
@@ -283,7 +283,7 @@
 }
 
 .errorBanner:hover {
-  background: hsl(0 84% 60% / 0.18);
+  background: color-mix(in srgb, var(--color-error) 18%, transparent);
 }
 
 .errorBannerText {
@@ -313,5 +313,5 @@
 }
 
 .errorBannerStatic:hover {
-  background: hsl(0 84% 60% / 0.1);
+  background: var(--color-error-bg);
 }

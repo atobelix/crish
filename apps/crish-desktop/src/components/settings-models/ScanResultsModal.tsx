@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
-import * as Lucide from 'lucide-react';
 import { Button, Dialog, Input, Tooltip } from '../ui';
 import styles from './ScanResultsModal.module.css';
+import { AppIcon } from '../ui/icons/index';
 
 export interface ScanResultsModalProps {
   open: boolean;
@@ -225,7 +225,7 @@ export const ScanResultsModal: React.FC<ScanResultsModalProps> = ({
                         isChecked ? styles.customCheckboxChecked : ''
                       }`}
                     >
-                      {isChecked && <Lucide.Check size={11} strokeWidth={2.5} />}
+                      {isChecked && <AppIcon name="check" size={11} />}
                     </div>
                     <span className={styles.modelId}>{m}</span>
                   </div>
@@ -234,7 +234,7 @@ export const ScanResultsModal: React.FC<ScanResultsModalProps> = ({
                     {isExisting && (
                       <Tooltip content="当前服务商中已存在该模型">
                         <span className={styles.existingIcon} aria-label="已存在">
-                          <Lucide.Check size={14} strokeWidth={2.5} />
+                          <AppIcon name="check" size={14} />
                         </span>
                       </Tooltip>
                     )}

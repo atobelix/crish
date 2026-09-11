@@ -165,25 +165,12 @@ describe('providerProfiles', () => {
     vi.clearAllMocks();
   });
 
-  it('DEFAULT_PROFILES: only opencode-go seeds deepseek-v4-flash (no mimo)', () => {
-    // Product SoT (profileCatalog DEFAULT_PROFILES): only opencode-go is
-    // pre-seeded with the intentional default model; other shells stay empty
-    // so users scan/hand-fill — never legacy mimo hardcode.
-    const defaults = getDefaultProviderProfiles();
-    expect(defaults.length).toBeGreaterThanOrEqual(3);
-    const go = defaults.find((p) => p.id === 'opencode-go');
-    expect(go?.models).toEqual(['deepseek-v4-flash']);
-    for (const p of defaults) {
-      expect(p.models.includes('mimo-v2.5')).toBe(false);
-      if (p.id !== 'opencode-go') {
-        expect(p.models).toEqual([]);
-      }
-    }
+  it('DEFAULT_PROFILES: empty — neutral product, no third-party shells', () => {
+    // 中立产品：不预置任何第三方服务商；用户自建 custom 服务商
+    expect(getDefaultProviderProfiles()).toEqual([]);
 
     const loaded = loadProfiles();
-    for (const p of loaded) {
-      expect(Array.isArray(p.models)).toBe(true);
-    }
+    expect(loaded).toEqual([]);
   });
 
   it('resolvePreferred prefers stored local model over engine demo mimo', () => {
@@ -372,20 +359,20 @@ describe('providerProfiles', () => {
   });
 
   it('getProviderSetupStatus: fresh install needs key, hides picker', () => {
-    // Defaults seed opencode-go with deepseek-v4-flash (intentional product default)
-    // but no keys — so needs key setup, picker hidden, model shell already present.
+    // 中立产品：空库无预置服务商/模型/密钥
     loadProfiles();
     const s = getProviderSetupStatus({
       engineOk: true,
       engineHasApiKey: false,
     });
     expect(s.needsKeySetup).toBe(true);
+    // 无密钥时不进入 needsModelSetup（先要配连接）
     expect(s.needsModelSetup).toBe(false);
     expect(s.showModelPicker).toBe(false);
     expect(s.hasLocalKey).toBe(false);
     expect(anyProfileHasKey()).toBe(false);
-    // opencode-go pre-seeds deepseek-v4-flash → catalog not empty
-    expect(anyProfileHasModel()).toBe(true);
+    // 空库：无任何模型
+    expect(anyProfileHasModel()).toBe(false);
   });
 
   it('getProviderSetupStatus: key without models → needsModelSetup, picker visible', () => {

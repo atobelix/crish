@@ -4,10 +4,11 @@
  */
 
 import React from 'react';
-import * as Lucide from 'lucide-react';
+
 import type { McpServerInfo } from '../../api/mcpApi';
 import styles from './McpSettingsTab.module.css';
 import { Button, Tooltip } from '../ui';
+import { AppIcon } from '../ui/icons/index';
 
 export type McpServerToolsProps = {
   srv: McpServerInfo;
@@ -39,7 +40,7 @@ export const McpServerTools: React.FC<McpServerToolsProps> = ({
         <ul>
           {srv.tools.map((t) => (
             <li key={t}>
-              <Lucide.Wrench size={12} aria-hidden />
+              <AppIcon name="wrench" size={12} aria-hidden />
               <Tooltip content="复制工具名">
                 <Button
                   type="button"

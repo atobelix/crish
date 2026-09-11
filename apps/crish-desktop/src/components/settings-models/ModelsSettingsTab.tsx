@@ -10,7 +10,6 @@ import { useToast } from '../../services/toast/ToastContext';
  * 5. 挂载 ensureLsImported + ensureModelsCatalogLoaded；列表/协议读 store。
  */
 import React, { useCallback, useEffect, useState } from 'react';
-import * as Lucide from 'lucide-react';
 import {
   activateProfileModel,
   clearActiveModelId,
@@ -41,13 +40,12 @@ import {
 } from '../settings/SettingsUI';
 import {
   emptyAddDraft,
-  PRESETS,
   useModelProfilesState,
-  type PresetProvider,
 } from './useModelProfilesState';
 import { ModelProfileList, ModelsCascadeSelect } from './ModelProfileList';
 import { ModelConfigEditor } from './ModelConfigEditor';
 import { YamlConfigEditorModal } from './YamlConfigEditorModal';
+import { AppIcon } from '../ui/icons/index';
 
 type Props = {
   _onBlockingOverlayChange?: (open: boolean) => void;
@@ -97,153 +95,50 @@ export function resolveActiveModelAfterMetaChange(
 }
 
 /**
- * 「添加服务商」下拉
+ * 「添加服务商」：中立单按钮——点击直接创建空白服务商并进入配置，
+ * 不弹第三方预置下拉（产品不绑定任何官方/第三方服务商）。
+ */
+export const AddProviderButton: React.FC<{
+  onAdd: () => void;
+  disabled?: boolean;
+}> = ({ onAdd, disabled }) => (
+  <Button
+    type="button"
+    variant="secondary"
+    size="sm"
+    disabled={disabled}
+    aria-label="添加服务商"
+    onClick={onAdd}
+  >
+    添加服务商
+  </Button>
+);
+
+/**
+ * @deprecated 兼容旧测试入口：历史下拉菜单已废除，现转发为直进配置。
  */
 export const AddProviderMenu: React.FC<{
   addOpen: boolean;
   setAddOpen: (v: boolean) => void;
-  onAddTemplate: (format: 'openai' | 'anthropic') => void;
-  onAddPreset: (preset: PresetProvider) => void;
+  onAddTemplate?: (format: 'openai' | 'anthropic') => void;
+  onAddPreset?: (preset: { id: string; name: string }) => void;
   onAddDirect?: () => void;
-}> = ({ addOpen, setAddOpen, onAddTemplate, onAddPreset, onAddDirect }) => {
-  const handleTemplateClick = (format: 'openai' | 'anthropic') => {
-    onAddTemplate(format);
-    setAddOpen(false);
-  };
-
-  const handlePresetClick = (preset: PresetProvider) => {
-    onAddPreset(preset);
-    setAddOpen(false);
-  };
-
-  const menuOptions: SelectOptionItem[] = [
-    {
-      id: 'openai',
-      label: 'OpenAI 格式',
-      onClick: () => handleTemplateClick('openai'),
-    },
-    {
-      id: 'anthropic',
-      label: 'Anthropic 格式',
-      onClick: () => handleTemplateClick('anthropic'),
-    },
-    ...PRESETS.map((pr) => ({
-      id: pr.id,
-      label: pr.name,
-      onClick: () => handlePresetClick(pr),
-    })),
-  ];
-
-  const menuContent = (
-    <div role="menu" aria-label="添加服务商">
-      <div className={styles.addMenuTitle}>接口类型</div>
-      <Button
-        bare
-        type="button"
-        role="menuitem"
-        className={styles.addMenuOption}
-        onClick={() => handleTemplateClick('openai')}
-      >
-        OpenAI 格式
-      </Button>
-      <Button
-        bare
-        type="button"
-        role="menuitem"
-        className={styles.addMenuOption}
-        onClick={() => handleTemplateClick('anthropic')}
-      >
-        Anthropic 格式
-      </Button>
-
-      <div className={`${styles.addMenuTitle} ${styles.addMenuTitleGap}`}>常用服务</div>
-      {PRESETS.map((pr) => (
-        <Button
-          bare
-          key={pr.id}
-          type="button"
-          role="menuitem"
-          className={styles.addMenuOption}
-          onClick={() => handlePresetClick(pr)}
-        >
-          {pr.name}
-        </Button>
-      ))}
-    </div>
-  );
-
-  // 若提供了 onAddDirect，使用组合 Split Button（主按钮直接创建入编，右侧下拉箭头提供快速预设）
-  if (onAddDirect) {
-    return (
-      <div className={yamlStyles.configButtonCombo}>
-        <Button
-          type="button"
-          variant="secondary"
-          size="sm"
-          className={styles.addServiceBtn}
-          aria-label="添加服务商"
-          icon={<Lucide.Plus size={13} style={{ opacity: 0.75 }} aria-hidden />}
-          onClick={onAddDirect}
-        >
-          添加服务商
-        </Button>
-        <Menu
-          openState={{ open: addOpen, onOpenChange: setAddOpen }}
-          position={{ align: 'end', side: 'bottom', sideOffset: 4 }}
-          options={menuOptions}
-          panel={{ contentClassName: styles.addProviderMenu }}
-          trigger={
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              className={yamlStyles.configMenuTrigger}
-              aria-label="更多添加选项"
-              icon={<Lucide.ChevronDown size={13} aria-hidden />}
-            />
-          }
-        >
-          {menuContent}
-        </Menu>
-      </div>
-    );
-  }
-
-  return (
-    <Menu
-      openState={{ open: addOpen, onOpenChange: setAddOpen }}
-      position={{ align: 'end', side: 'bottom', sideOffset: 6 }}
-      options={menuOptions}
-      panel={{ contentClassName: styles.addProviderMenu }}
-      trigger={
-        <Button
-          type="button"
-          variant="secondary"
-          size="sm"
-          className={styles.addServiceBtn}
-          aria-label="添加服务商"
-          icon={<Lucide.Plus size={13} style={{ opacity: 0.75 }} aria-hidden />}
-        >
-          添加服务商
-        </Button>
-      }
-    >
-      {menuContent}
-    </Menu>
-  );
+}> = ({ onAddDirect }) => {
+  // 废弃壳：保持可 import 的旧导出；实际行为 = 直接添加
+  return <AddProviderButton onAdd={() => onAddDirect?.()} />;
 };
 
 export const ModelsSettingsTab: React.FC<Props> = ({ _onBlockingOverlayChange }) => {
   const { showToast: _showToast } = useToast();
   const {
     profiles, setProfiles, selectedId, setSelectedId, selected,
-    keyDraft, setKeyDraft, addOpen, setAddOpen,
+    keyDraft, setKeyDraft,
     testBusy, scanBusy, checkBusy,
     modelFilter, setModelFilter, configOpenId,
     manualOpen, setManualOpen, addDraft, setAddDraft,
     cfgDraft, setCfgDraft, editingName, setEditingName,
     nameDraft, setNameDraft, confirmDeleteId, setConfirmDeleteId,
-    refresh, notify, runAsLocalMutation, saveKey, addFromTemplate, addCustomProvider, addFromPreset,
+    refresh, notify, runAsLocalMutation, saveKey, addCustomProvider,
     handleManualAdd, openConfigFor, closeConfig, saveConfig,
     runTest, runScan, runCheck,
     scanModalOpen, setScanModalOpen, scannedModelsList, confirmScannedModels,
@@ -251,9 +146,9 @@ export const ModelsSettingsTab: React.FC<Props> = ({ _onBlockingOverlayChange })
     selectedLabel, hasKeySelected, activeProfileId, globalActiveModelId,
   } = useModelProfilesState();
 
-  // 点击加号直接创建空白服务商并进入右侧配置界面（无冗余中间弹窗）
+  // 点击「添加服务商」直接创建空白服务商并进入右侧配置（无下拉预置）
   const handleDirectAdd = useCallback(async () => {
-    await addCustomProvider({ name: '', format: 'openai', baseUrl: '' });
+    await addCustomProvider({ baseUrl: '' });
   }, [addCustomProvider]);
 
   // ── YAML 编辑器与打开方式状态 ──────────────────────────────────────────
@@ -402,7 +297,7 @@ export const ModelsSettingsTab: React.FC<Props> = ({ _onBlockingOverlayChange })
           type="button"
           variant="secondary"
           size="sm"
-          icon={<Lucide.FileCode2 size={13} style={{ opacity: 0.8 }} aria-hidden />}
+          icon={<AppIcon name="file-code" size={13} style={{ opacity: 0.8 }} aria-hidden />}
           onClick={() => setYamlEditorOpen(true)}
           aria-label="在内置编辑器中编辑配置文件 (YAML)"
         >
@@ -420,7 +315,7 @@ export const ModelsSettingsTab: React.FC<Props> = ({ _onBlockingOverlayChange })
               size="sm"
               className={yamlStyles.configMenuTrigger}
               aria-label="配置文件直达与打开方式"
-              icon={<Lucide.ChevronDown size={13} aria-hidden />}
+              icon={<AppIcon name="chevron-down" size={13} aria-hidden />}
             />
           }
         >
@@ -436,7 +331,7 @@ export const ModelsSettingsTab: React.FC<Props> = ({ _onBlockingOverlayChange })
                 setYamlEditorOpen(true);
               }}
             >
-              <Lucide.Code size={13} aria-hidden />
+              <AppIcon name="code" size={13} aria-hidden />
               内置编辑器打开
             </Button>
 
@@ -452,7 +347,7 @@ export const ModelsSettingsTab: React.FC<Props> = ({ _onBlockingOverlayChange })
                 className={yamlStyles.menuItemBtn}
                 onClick={() => void handleOpenExternal(op.id)}
               >
-                <Lucide.ExternalLink size={13} aria-hidden />
+                <AppIcon name="external-link" size={13} aria-hidden />
                 {op.displayName || op.label || op.id}
               </Button>
             ))}
@@ -464,7 +359,7 @@ export const ModelsSettingsTab: React.FC<Props> = ({ _onBlockingOverlayChange })
               className={yamlStyles.menuItemBtn}
               onClick={() => void handleOpenDefault()}
             >
-              <Lucide.ExternalLink size={13} aria-hidden />
+              <AppIcon name="external-link" size={13} aria-hidden />
               系统默认程序打开
             </Button>
 
@@ -478,7 +373,7 @@ export const ModelsSettingsTab: React.FC<Props> = ({ _onBlockingOverlayChange })
               className={yamlStyles.menuItemBtn}
               onClick={() => void handleReveal()}
             >
-              <Lucide.FolderOpen size={13} aria-hidden />
+              <AppIcon name="folder-open" size={13} aria-hidden />
               在文件资源管理器中定位
             </Button>
 
@@ -489,23 +384,15 @@ export const ModelsSettingsTab: React.FC<Props> = ({ _onBlockingOverlayChange })
               className={yamlStyles.menuItemBtn}
               onClick={handleCopyPath}
             >
-              <Lucide.Copy size={13} aria-hidden />
+              <AppIcon name="copy" size={13} aria-hidden />
               复制绝对路径
             </Button>
           </div>
         </Menu>
       </div>
 
-      {/* 添加服务商 */}
-      <div style={{ position: 'relative', display: 'inline-block' }}>
-        <AddProviderMenu
-          addOpen={addOpen}
-          setAddOpen={setAddOpen}
-          onAddTemplate={addFromTemplate}
-          onAddPreset={addFromPreset}
-          onAddDirect={handleDirectAdd}
-        />
-      </div>
+      {/* 添加服务商：点击直进配置，无预置下拉 */}
+      <AddProviderButton onAdd={() => void handleDirectAdd()} />
     </div>
   );
 

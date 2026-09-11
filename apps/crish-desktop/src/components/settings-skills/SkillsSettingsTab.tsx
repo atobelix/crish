@@ -8,7 +8,7 @@ import { useToast } from '../../services/toast/ToastContext';
  * - 引擎未同步：formatEngineDegradeToast（先说问题）
  */
 import React, { useId } from 'react';
-import * as Lucide from 'lucide-react';
+
 import { Button, Input, Select, Tooltip } from '../ui';
 import styles from './SkillsSettingsTab.module.css';
 import { SettingsPage } from '../settings/SettingsUI';
@@ -19,6 +19,7 @@ import { SkillCardList as SkillList } from './SkillCardList';
 import { SkillDetailPreview as SkillDetailPanel } from './SkillDetailPreview';
 import { SkillEditorModal } from './SkillEditorModal';
 import { SkillsMoreMenu } from './SkillsMoreMenu';
+import { AppIcon } from '../ui/icons/index';
 
 type Props = {
   onBlockingOverlayChange?: (open: boolean) => void;
@@ -106,7 +107,7 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onBlockingOverlayChange: _o
               aria-label={createMode !== 'none' ? '收起新建' : '新建技能'}
               aria-expanded={createMode !== 'none'}
               aria-controls={createBoxId}
-              icon={<Lucide.Plus size={14} aria-hidden />}
+              icon={<AppIcon name="plus" size={14} aria-hidden />}
             >
               {createMode !== 'none' ? '收起' : '新建'}
             </Button>

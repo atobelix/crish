@@ -48,7 +48,7 @@
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-xl, 12px);
   overflow: hidden;
-  background: var(--bg-card, hsl(0 0% 100%));
+  background: var(--bg-card);
 }
 
 .rowBlockExpanded {

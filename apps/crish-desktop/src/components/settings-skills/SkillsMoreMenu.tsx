@@ -6,7 +6,7 @@ import { useToast } from '../../services/toast/ToastContext';
  * （目录迁移 settings-tabs → settings-skills 随 T05.6.2 一并完成）
  */
 import React from 'react';
-import * as Lucide from 'lucide-react';
+
 import { clientApi } from '../../api/clientApi';
 import { getWorkspacePath } from '../../api/projectStore';
 import { getSettingsState } from '../../store/storeAccess';
@@ -14,6 +14,7 @@ import styles from './SkillsSettingsTab.module.css';
 import { Button, Menu, Tooltip } from '../ui';
 import { errText } from './useSkillsSettingsState';
 import type { DesktopSkill } from '../../api/skillsApi';
+import { AppIcon } from '../ui/icons/index';
 
 /** 批量启用/禁用域状态（T4-9c Props 收敛：6 字段 → 1 对象） */
 export type SkillsBatchState = {
@@ -149,7 +150,7 @@ export const SkillsMoreMenu: React.FC<SkillsMoreMenuProps> = ({
               aria-controls={moreMenuId}
               aria-haspopup="menu"
               aria-label="更多操作"
-              icon={<Lucide.MoreHorizontal size={16} aria-hidden />}
+              icon={<AppIcon name="more-horizontal" size={16} aria-hidden />}
             />
           </Tooltip>
         }

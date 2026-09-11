@@ -1,7 +1,7 @@
 import React, { useCallback, useMemo } from 'react';
-import * as Lucide from 'lucide-react';
 import { Button, Input, Tooltip } from '../ui';
 import styles from './ModelsSettingsTab.module.css';
+import { AppIcon } from '../ui/icons/index';
 
 export const STANDARD_THINKING_PRESET: Record<string, string> = {
   Off: 'off',
@@ -122,7 +122,7 @@ export const ModelThinkingEditor: React.FC<ModelThinkingEditorProps> = ({
                     height: '20px',
                     color: 'var(--text-tertiary)',
                   }}
-                  icon={<Lucide.Plus size={12} />}
+                  icon={<AppIcon name="plus" size={12} />}
                   aria-label="添加档位"
                 />
               </Tooltip>
@@ -137,7 +137,7 @@ export const ModelThinkingEditor: React.FC<ModelThinkingEditorProps> = ({
                     height: '20px',
                     color: 'var(--text-tertiary)',
                   }}
-                  icon={<Lucide.RotateCcw size={12} />}
+                  icon={<AppIcon name="rotate-ccw" size={12} />}
                   aria-label="重置推荐档位"
                 />
               </Tooltip>
@@ -179,7 +179,7 @@ export const ModelThinkingEditor: React.FC<ModelThinkingEditorProps> = ({
                       height: '26px',
                       color: 'var(--text-tertiary)',
                     }}
-                    icon={<Lucide.Trash2 size={12} />}
+                    icon={<AppIcon name="trash" size={12} />}
                   />
                 </Tooltip>
               </div>

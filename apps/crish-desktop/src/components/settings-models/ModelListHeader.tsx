@@ -1,8 +1,9 @@
 import React from 'react';
-import * as Lucide from 'lucide-react';
+
 import { Button, Tooltip, Input } from '../ui';
 import type { AddDraft } from './useModelProfilesState';
 import styles from './ModelsSettingsTab.module.css';
+import { AppIcon } from '../ui/icons/index';
 
 /** 模型列表头部：连通性检查 / 自动获取 / 搜索 / 手动添加 */
 export const ModelListHeader: React.FC<{
@@ -52,12 +53,10 @@ export const ModelListHeader: React.FC<{
             aria-label="检查连通性"
             icon={
               checkBusy ? (
-                <Lucide.Loader2
-                  size={13}
-                  className={styles.loadingSpinner}
-                />
+                <AppIcon name="loader" size={13}
+                  className={styles.loadingSpinner} />
               ) : (
-                <Lucide.Wifi size={13} />
+                <AppIcon name="wifi" size={13} />
               )
             }
           />
@@ -80,12 +79,10 @@ export const ModelListHeader: React.FC<{
             aria-label="自动获取"
             icon={
               scanBusy ? (
-                <Lucide.Loader2
-                  size={13}
-                  className={styles.loadingSpinner}
-                />
+                <AppIcon name="loader" size={13}
+                  className={styles.loadingSpinner} />
               ) : (
-                <Lucide.RefreshCw size={13} />
+                <AppIcon name="refresh" size={13} />
               )
             }
           />
@@ -118,7 +115,7 @@ export const ModelListHeader: React.FC<{
               justifyContent: 'center',
             }}
             aria-label="添加模型"
-            icon={<Lucide.Plus size={13} />}
+            icon={<AppIcon name="plus" size={13} />}
           />
         </Tooltip>
       </div>

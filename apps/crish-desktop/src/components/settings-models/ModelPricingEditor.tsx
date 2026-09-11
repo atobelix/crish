@@ -1,6 +1,7 @@
 import React from 'react';
-import * as Lucide from 'lucide-react';
+
 import { Input } from '../ui';
+import { AppIcon } from '../ui/icons';
 import styles from './ModelsSettingsTab.module.css';
 
 export interface ModelPricingDraft {
@@ -52,10 +53,7 @@ export const ModelPricingEditor: React.FC<ModelPricingEditorProps> = ({
     <div className={styles.mrdSubSection}>
       <div className={styles.mrdSubSectionHeader}>
         <span className={styles.mrdSubSectionTitle}>
-          <Lucide.CircleDollarSign
-            size={13}
-            style={{ color: 'var(--brand, #10b981)' }}
-          />
+          <AppIcon name="circle-dollar" size={13} style={{ color: 'var(--brand)' }} />
           四维计费 (选填 · 留空优雅静默)
         </span>
         <div className={styles.mrdCurrencyToggle}>

@@ -1,10 +1,11 @@
 import { useToast } from '../../services/toast/ToastContext';
 import React from 'react';
-import * as Lucide from 'lucide-react';
+
 import { revealSkillPath, type DesktopSkill, type SkillActivation } from '../../api/skillsApi';
 import { Button, MarkdownDocumentView, SegmentedControl, Tooltip } from '../ui';
 import styles from './SkillsSettingsTab.module.css';
 import { ACTIVATION_OPTIONS, scopeGroupLabel } from './useSkillsSettingsState';
+import { AppIcon } from '../ui/icons/index';
 
 interface SkillDetailPreviewProps {
   selected: DesktopSkill | null;
@@ -83,7 +84,7 @@ export const SkillDetailPreview: React.FC<SkillDetailPreviewProps> = ({
                     size="sm"
                     aria-label={`复制命令 ${selectedSlash}`}
                     onClick={() => void copySlashCommand(selected.name)}
-                    icon={<Lucide.Copy size={14} aria-hidden />}
+                    icon={<AppIcon name="copy" size={14} aria-hidden />}
                   />
                 </Tooltip>
                 <Tooltip content={selected.filePath}>
@@ -102,7 +103,7 @@ export const SkillDetailPreview: React.FC<SkillDetailPreviewProps> = ({
                         if (!ok) showToast('无法打开路径（需桌面壳）');
                       });
                     }}
-                    icon={<Lucide.ExternalLink size={14} aria-hidden />}
+                    icon={<AppIcon name="external-link" size={14} aria-hidden />}
                   />
                 </Tooltip>
               </div>

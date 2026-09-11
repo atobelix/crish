@@ -4,10 +4,11 @@
  * 纯渲染：一切键盘/过滤状态由 useSettingsNav 注入。
  */
 import React from 'react';
-import * as Lucide from 'lucide-react';
+
 import styles from './settings/SettingsPanel.module.css';
 import { Button, Tooltip } from './ui';
 import type { TabMeta, TabType } from './settingsTabsMeta';
+import { AppIcon } from './ui/icons/index';
 
 export interface SettingsTablistAria {
   baseId: string;
@@ -84,7 +85,7 @@ export const SettingsTablist: React.FC<SettingsTablistProps> = ({
             className={`${styles.navBack} no-drag`}
             onClick={onBack}
             aria-label="返回应用，关闭设置"
-            icon={<Lucide.ArrowLeft size={16} strokeWidth={1.75} aria-hidden />}
+            icon={<AppIcon name="arrow-left" size={16} aria-hidden />}
           >
             返回应用
           </Button>
@@ -92,12 +93,9 @@ export const SettingsTablist: React.FC<SettingsTablistProps> = ({
       ) : null}
 
       <div className={styles.searchWrap}>
-        <Lucide.Search
-          size={14}
-          strokeWidth={1.75}
+        <AppIcon name="search" size={14}
           className={styles.searchIco}
-          aria-hidden
-        />
+          aria-hidden />
         <input
           ref={searchInputRef}
           id={searchId}
@@ -128,7 +126,7 @@ export const SettingsTablist: React.FC<SettingsTablistProps> = ({
         {items.map((tab, idx, arr) => {
           const isTabActive = activeId === tab.id;
           const isRoving = rovingId === tab.id;
-          const Icon = tab.icon;
+          const iconName = tab.icon;
           const showGroup = idx === 0 || arr[idx - 1]?.group !== tab.group;
           const tabBtnId = `${baseId}-tab-${tab.id}`;
 
@@ -159,7 +157,7 @@ export const SettingsTablist: React.FC<SettingsTablistProps> = ({
                   className={`${styles.sidebarTab} ${isTabActive ? styles.active : ''}`}
                 >
                   <span className={styles.sidebarTabIco} aria-hidden>
-                    <Icon size={16} strokeWidth={1.75} />
+                    <AppIcon name={iconName} size={16} aria-hidden />
                   </span>
                   <span>{tab.label}</span>
                 </button>

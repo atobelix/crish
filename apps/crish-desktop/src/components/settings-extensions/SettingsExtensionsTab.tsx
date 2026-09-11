@@ -6,12 +6,13 @@ import React, { lazy, Suspense } from 'react';
 import { AppErrorBoundary } from '../AppErrorBoundary';
 import { SettingsHeadTools, SettingsPage } from '../settings/SettingsUI';
 import uiStyles from '../settings/SettingsUI.module.css';
-import { ArrowLeft, RefreshCw } from 'lucide-react';
+
 import { useExtensionMarket } from './useExtensionMarket';
 import { ExtensionList } from './ExtensionList';
 import { Button, Input, SegmentedControl } from '../ui';
 import type { KindFilter, MainView } from './types';
 import styles from './SettingsExtensionsTab.module.css';
+import { AppIcon } from '../ui/icons/index';
 
 const SkillsSettingsTab = lazy(() =>
   import('../settings-skills/SkillsSettingsTab').then((m) => ({
@@ -87,7 +88,7 @@ export const SettingsExtensionsTab: React.FC<Props> = ({
               setManage(null);
               void refresh();
             }}
-            icon={<ArrowLeft size={14} aria-hidden />}
+            icon={<AppIcon name="arrow-left" size={14} aria-hidden />}
           >
             返回扩展
           </Button>
@@ -129,11 +130,9 @@ export const SettingsExtensionsTab: React.FC<Props> = ({
             disabled={loading}
             aria-label="刷新"
             icon={
-              <RefreshCw
-                size={14}
+              <AppIcon name="refresh" size={14}
                 className={loading ? 'spin' : undefined}
-                aria-hidden
-              />
+                aria-hidden />
             }
           />
         </SettingsHeadTools>

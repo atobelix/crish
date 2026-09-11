@@ -87,9 +87,9 @@
   top: 10px;
   bottom: 24px;
   width: 1px;
-  background: color-mix(in srgb, var(--text-primary) 20%, transparent);
+  background: var(--tint-strong);
   pointer-events: none;
-  border-left: 1px dashed color-mix(in srgb, var(--text-primary) 25%, transparent);
+  border-left: 1px dashed var(--border-color);
 }
 
 /* 自定义悬浮卡片 (符合系统 Tooltip 规范，同心圆角: outer=8px, pad=8px，防边缘溢出截断) */
@@ -183,7 +183,7 @@
   gap: 6px;
   cursor: pointer;
   padding: 3px 8px;
-  border-radius: 5px;
+  border-radius: var(--radius-sm, 4px);
   transition: all 140ms ease;
 }
 

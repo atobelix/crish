@@ -93,7 +93,7 @@
   width: 100%;
   justify-content: flex-start;
   color: var(--text-secondary);
-  border-radius: var(--button-radius, 8px);
+  border-radius: var(--button-radius, 7px);
 }
 
 .sidebarBackBtn:hover {

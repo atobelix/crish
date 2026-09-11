@@ -1,5 +1,5 @@
 import React from 'react';
-import * as Lucide from 'lucide-react';
+
 import type { McpServerInfo } from '../../api/mcpApi';
 import { mcpStateKind, mcpStateLabel } from '../../api/mcpApi';
 import type { McpServer } from '../../api/clientApi';
@@ -22,6 +22,7 @@ import type {
   McpUiGroup,
   McpActionsGroup,
 } from './useMcpServerListState';
+import { AppIcon } from '../ui/icons/index';
 
 export type McpServerListProps = {
   servers: McpServersGroup;
@@ -144,7 +145,7 @@ export const McpServerList: React.FC<McpServerListProps> = ({
                   size="sm"
                   onClick={() => onSetShowAdd(true)}
                   aria-label="添加演示服务"
-                  icon={<Lucide.Plus size={14} aria-hidden />}
+                  icon={<AppIcon name="plus" size={14} aria-hidden />}
                 >
                   添加
                 </Button>
@@ -156,7 +157,7 @@ export const McpServerList: React.FC<McpServerListProps> = ({
                 onClick={() => void refreshDemo()}
                 disabled={loading}
                 aria-label="刷新列表"
-                icon={<Lucide.RefreshCw size={14} aria-hidden />}
+                icon={<AppIcon name="refresh" size={14} aria-hidden />}
               >
                 刷新
               </Button>
@@ -219,7 +220,7 @@ export const McpServerList: React.FC<McpServerListProps> = ({
                         size="sm"
                         aria-label={`删除 ${srv.name}`}
                         onClick={() => void onDeleteDemo(srv.id)}
-                        icon={<Lucide.Trash2 size={14} aria-hidden />}
+                        icon={<AppIcon name="trash" size={14} aria-hidden />}
                       />
                     </Tooltip>
                   </div>
@@ -254,7 +255,7 @@ export const McpServerList: React.FC<McpServerListProps> = ({
                 onClick={() => void refreshLive()}
                 disabled={loading}
                 aria-label="刷新列表"
-                icon={<Lucide.RefreshCw size={14} aria-hidden />}
+                icon={<AppIcon name="refresh" size={14} aria-hidden />}
               >
                 刷新
               </Button>
@@ -339,9 +340,9 @@ export const McpServerList: React.FC<McpServerListProps> = ({
                       onClick={() => onToggleExpanded(srv.id)}
                       icon={
                         isOpen ? (
-                          <Lucide.ChevronUp size={14} aria-hidden />
+                          <AppIcon name="chevron-up" size={14} aria-hidden />
                         ) : (
-                          <Lucide.ChevronDown size={14} aria-hidden />
+                          <AppIcon name="chevron-down" size={14} aria-hidden />
                         )
                       }
                     />
@@ -357,7 +358,7 @@ export const McpServerList: React.FC<McpServerListProps> = ({
                           aria-label={`停止 ${srv.name}`}
                           aria-busy={busy || undefined}
                           onClick={() => void onToggleServer(srv.id, 'stop')}
-                          icon={<Lucide.Square size={14} aria-hidden />}
+                          icon={<AppIcon name="square" size={14} aria-hidden />}
                         />
                       </Tooltip>
                     ) : (
@@ -370,7 +371,7 @@ export const McpServerList: React.FC<McpServerListProps> = ({
                           aria-label={`启动 ${srv.name}`}
                           aria-busy={busy || undefined}
                           onClick={() => void onToggleServer(srv.id, 'start')}
-                          icon={<Lucide.Play size={14} aria-hidden />}
+                          icon={<AppIcon name="play" size={14} aria-hidden />}
                         />
                       </Tooltip>
                     )
@@ -384,9 +385,9 @@ export const McpServerList: React.FC<McpServerListProps> = ({
                         aria-label={running ? '停止不可用' : '启动不可用'}
                         icon={
                           running ? (
-                            <Lucide.Square size={14} aria-hidden />
+                            <AppIcon name="square" size={14} aria-hidden />
                           ) : (
-                            <Lucide.Play size={14} aria-hidden />
+                            <AppIcon name="play" size={14} aria-hidden />
                           )
                         }
                       />

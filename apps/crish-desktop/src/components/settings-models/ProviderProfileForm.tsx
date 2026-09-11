@@ -1,5 +1,4 @@
 import React, { useEffect, useRef, useState } from 'react';
-import * as Lucide from 'lucide-react';
 import { Button, Input, Select } from '../ui';
 import {
   saveProfileBaseUrl,
@@ -19,6 +18,7 @@ import {
   toYamlProtocol,
 } from './catalogWriteGate';
 import styles from './ModelsSettingsTab.module.css';
+import { AppIcon } from '../ui/icons/index';
 
 /** 凭据区：厂商名称/Base URL/API Key/协议。配置完成后支持优雅人机工程折叠。 */
 export const ProviderProfileForm: React.FC<{
@@ -139,17 +139,13 @@ export const ProviderProfileForm: React.FC<{
       >
         <div className={styles.credentialsHeaderLeft}>
           {isCollapsed ? (
-            <Lucide.ChevronRight
-              size={13}
+            <AppIcon name="chevron-right" size={13}
               className={styles.credentialsChevron}
-              aria-hidden
-            />
+              aria-hidden />
           ) : (
-            <Lucide.ChevronDown
-              size={13}
+            <AppIcon name="chevron-down" size={13}
               className={styles.credentialsChevron}
-              aria-hidden
-            />
+              aria-hidden />
           )}
           <span className={styles.credentialsTitle}>连接与凭据</span>
         </div>

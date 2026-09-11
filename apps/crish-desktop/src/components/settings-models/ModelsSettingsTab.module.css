@@ -13,7 +13,7 @@
   height: 100%;
   width: 100%;
   box-sizing: border-box;
-  background: var(--bg-card, hsl(0 0% 100%));
+  background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-xl, 12px);
   box-shadow: var(--shadow-sm);
@@ -34,7 +34,7 @@
 
 /* 深色模式导轨底色校准：直接回归底板真源，激活项卡片反差立即可辨 */
 :global(html[data-theme='dark']) .modelsRail {
-  background: var(--bg-primary, #1b1b1b);
+  background: var(--bg-primary);
 }
 
 .mrlHeader {
@@ -88,7 +88,7 @@
 
 /* 选中态：对齐系统一级侧边栏 .sidebarTab.active 实体白卡微浮起质感 */
 .mrlItem.isActive {
-  background: var(--bg-card, hsl(0 0% 100%));
+  background: var(--bg-card);
   border-color: var(--border-subtle);
   box-shadow: var(--shadow-sm);
 }
@@ -130,7 +130,7 @@
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: var(--bg-card, hsl(0 0% 100%));
+  background: var(--bg-card);
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 20px 24px;
@@ -352,7 +352,7 @@
   align-items: center;
   justify-content: center;
   color: var(--text-tertiary);
-  opacity: 0.85;
+
   cursor: help;
 }
 
@@ -374,7 +374,7 @@
   padding: 12px 14px;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg, 8px);
-  background: var(--bg-card, hsl(0 0% 100%));
+  background: var(--bg-card);
   display: flex;
   flex-direction: column;
   gap: var(--space-3, 12px);
@@ -446,7 +446,7 @@
   position: fixed;
   /* top / left / width 由运行时 dropdownRect 动态写入 style */
   z-index: var(--z-tooltip, 9000);
-  background: var(--bg-card, #ffffff);
+  background: var(--bg-card);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md, 8px);
   box-shadow: 0 4px 16px hsl(0 0% 0% / 0.08);
@@ -548,7 +548,7 @@
   padding: 12px 14px;
   border-radius: var(--button-radius);
   border: 1px solid var(--border-subtle);
-  background: color-mix(in srgb, var(--text-primary) 1.5%, var(--bg-card));
+  background: var(--bg-card-subtle);
   display: flex;
   flex-direction: column;
   gap: var(--space-3, 12px);
@@ -579,7 +579,7 @@
      真底色落 --bg-card，禁止幽灵 --surface-primary 与 bottom:-12px */
   position: sticky;
   bottom: 0;
-  background: var(--bg-card, hsl(0 0% 100%));
+  background: var(--bg-card);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -635,7 +635,7 @@
 .cascadeFlyout,
 .cascadeFlyoutPortal {
   min-width: 200px;
-  background: var(--bg-card, hsl(0 0% 100%));
+  background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: var(--sep-radius-outer, 14px);
   box-shadow: var(--sep-shadow);
@@ -763,14 +763,14 @@
   display: flex;
   flex-direction: column;
   background: var(--bg-card);
-  border: 1px solid hsl(30 4.8% 91.8%);
-  border-radius: var(--button-radius, 8px);
+  border: 1px solid var(--border-color);
+  border-radius: var(--button-radius, 7px);
   overflow: hidden;
   transition: border-color var(--transition-fast), background-color var(--transition-fast);
 }
 
 .credentialsContainer:hover {
-  border-color: hsl(30 4.8% 91.8%);
+  border-color: var(--border-color);
 }
 
 .credentialsHeader {
@@ -785,7 +785,7 @@
 }
 
 .credentialsHeader:hover {
-  background-color: hsl(30 4.8% 91.8% / 0.35);
+  background-color: color-mix(in srgb, var(--border-color) 35%, transparent);
 }
 
 .credentialsHeaderLeft {
@@ -822,7 +822,7 @@
   gap: 5px;
   font-size: 11px;
   color: var(--text-secondary);
-  background: hsl(30 4.8% 91.8% / 0.5);
+  background: color-mix(in srgb, var(--border-color) 50%, transparent);
   padding: 2px 8px;
   border-radius: var(--radius-full, 9999px);
   font-weight: var(--font-weight-normal, 400);
@@ -834,7 +834,7 @@
   gap: 5px;
   font-size: 11px;
   color: var(--text-tertiary);
-  background: hsl(30 4.8% 91.8% / 0.5);
+  background: color-mix(in srgb, var(--border-color) 50%, transparent);
   padding: 2px 8px;
   border-radius: var(--radius-full, 9999px);
   font-weight: var(--font-weight-normal, 400);
@@ -844,7 +844,7 @@
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background-color: var(--brand, hsl(160 84% 39%));
+  background-color: var(--brand);
   flex-shrink: 0;
 }
 
@@ -862,7 +862,7 @@
   flex-direction: column;
   gap: var(--space-3, 12px);
   padding: 12px;
-  border-top: 1px solid hsl(30 4.8% 91.8%);
+  border-top: 1px solid var(--border-color);
   background: var(--bg-card);
 }
 
@@ -938,14 +938,14 @@
 }
 
 .mrdModalityChipActive {
-  background: var(--brand, hsl(160 84% 39%));
-  color: #ffffff;
+  background: var(--brand);
+  color: var(--text-on-accent);
   font-weight: var(--font-weight-medium, 500);
 }
 
 .mrdModalityChipActive:hover {
-  background: color-mix(in srgb, var(--brand, hsl(160 84% 39%)) 88%, #000000);
-  color: #ffffff;
+  background: color-mix(in srgb, var(--brand) 88%, #000000);
+  color: var(--text-on-accent);
 }
 
 .mrdSubSection {
@@ -991,7 +991,7 @@
 .mrdCurrencyToggle {
   display: inline-flex;
   border: 1px solid var(--border-subtle);
-  border-radius: 5px;
+  border-radius: var(--radius-sm, 4px);
   overflow: hidden;
   background: var(--bg-card);
 }
@@ -1013,7 +1013,7 @@
 }
 
 .mrdCurrencyBtnActive {
-  background: color-mix(in srgb, var(--brand, #10b981) 15%, transparent);
-  color: var(--brand, #10b981);
+  background: color-mix(in srgb, var(--brand) 15%, transparent);
+  color: var(--brand);
   font-weight: 600;
 }

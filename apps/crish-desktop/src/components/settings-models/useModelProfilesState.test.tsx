@@ -8,7 +8,7 @@ import { parse as parseYaml } from 'yaml';
 import { mockTauriCommand } from '../../test-setup';
 import { modelsCatalogStore } from '../../api/modelsCatalogStore';
 import type { ProviderSpec } from '../../api/modelsCatalogTypes';
-import { emptyAddDraft, PRESETS, useModelProfilesState } from './useModelProfilesState';
+import { emptyAddDraft, useModelProfilesState } from './useModelProfilesState';
 
 const HOOK_SRC = readFileSync(
   join(dirname(fileURLToPath(import.meta.url)), 'useModelProfilesState.ts'),
@@ -24,12 +24,14 @@ const profileMocks = vi.hoisted(() => {
     models: ['gpt-4o'],
   };
   const loadProfiles = vi.fn(() => [OPENAI]);
+  const createCustomProfile = vi.fn((opts: { name: string; baseUrl?: string; protocol?: string }) => {
+    const p = { id: 'custom-123', models: [], hasKey: false, ...opts };
+    loadProfiles.mockReturnValue([OPENAI, p]);
+    return p;
+  });
   return {
     OPENAI,
-    createCustomProfile: vi.fn((opts: { name: string }) => ({
-      id: 'custom-123',
-      ...opts,
-    })),
+    createCustomProfile,
     loadProfiles,
   };
 });
@@ -162,45 +164,48 @@ describe('useModelProfilesState', () => {
     expect(result.current.addDraft).toEqual(emptyAddDraft());
   });
 
-  it('allows adding profile from preset', async () => {
+  it('addCustomProvider 直接创建空白服务商并选中（无预置 URL）', async () => {
     profileMocks.createCustomProfile.mockClear();
     const { result } = renderHook(() => useModelProfilesState());
 
     await act(async () => {
-      result.current.addFromPreset(PRESETS[0]);
-      await Promise.resolve();
+      await result.current.addCustomProvider({});
       await Promise.resolve();
     });
 
     expect(profileMocks.createCustomProfile).toHaveBeenCalledTimes(1);
+    const arg = profileMocks.createCustomProfile.mock.calls[0]?.[0] as {
+      name?: string;
+      baseUrl?: string;
+    };
+    expect(arg.name).toBe('自定义服务商');
+    // 中立：不预填任何官方 URL
+    expect(arg.baseUrl ?? '').not.toContain('openai.com');
     await waitFor(() => {
       expect(result.current.selectedId).toBe('custom-123');
     });
   });
 
-  it('添加同名预设绑定已有行，不 createCustomProfile', async () => {
-    const seed = {
-      id: 'opencode-go',
-      name: 'OpenCode Go 订阅',
-      baseUrl: 'https://opencode.ai/zen/go/v1',
-      models: ['deepseek-v4-flash'],
-    };
-    profileMocks.loadProfiles.mockReturnValue([seed]);
+  it('addCustomProvider 可带自定义名称与 Base URL', async () => {
     profileMocks.createCustomProfile.mockClear();
     const { result } = renderHook(() => useModelProfilesState());
 
     await act(async () => {
-      result.current.addFromPreset(PRESETS[0]);
-      await Promise.resolve();
+      await result.current.addCustomProvider({
+        name: '公司网关',
+        baseUrl: 'https://gw.example.com/v1',
+        protocol: 'anthropic/messages',
+      });
       await Promise.resolve();
     });
 
-    expect(profileMocks.createCustomProfile).not.toHaveBeenCalled();
-    expect(result.current.selectedId).toBe('opencode-go');
-    expect(
-      result.current.profiles.filter((p) => p.name === 'OpenCode Go 订阅')
-    ).toHaveLength(1);
-    profileMocks.loadProfiles.mockReturnValue([profileMocks.OPENAI]);
+    expect(profileMocks.createCustomProfile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: '公司网关',
+        baseUrl: 'https://gw.example.com/v1',
+        protocol: 'anthropic/messages',
+      })
+    );
   });
 
   it('设置列表按展示名折叠：种子 opencode-go 与 preset 拷贝只一行', () => {
@@ -257,40 +262,6 @@ describe('useModelProfilesState', () => {
     expect(result.current.selectedId).toBe('opencode-go');
     expect(result.current.selected?.id).toBe('opencode-go');
     sessionStorage.removeItem('crish_models_selected_profile_v1');
-  });
-
-  it('已有种子+拷贝时添加同名预设不 create、列表仍一行', async () => {
-    const seed = {
-      id: 'opencode-go',
-      name: 'OpenCode Go 订阅',
-      baseUrl: 'https://opencode.ai/zen/go/v1',
-      models: ['deepseek-v4-flash'],
-      hasKey: false,
-      enabled: true,
-    };
-    const copy = {
-      id: 'preset-opencode-go',
-      name: 'OpenCode Go 订阅',
-      baseUrl: 'https://opencode.ai/zen/go/v1',
-      models: [],
-      hasKey: false,
-      enabled: true,
-    };
-    profileMocks.loadProfiles.mockReturnValue([seed, copy]);
-    profileMocks.createCustomProfile.mockClear();
-    const { result } = renderHook(() => useModelProfilesState());
-    expect(result.current.profiles).toHaveLength(1);
-
-    await act(async () => {
-      result.current.addFromPreset(PRESETS[0]);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    expect(profileMocks.createCustomProfile).not.toHaveBeenCalled();
-    expect(result.current.profiles).toHaveLength(1);
-    expect(result.current.profiles[0]?.id).toBe('opencode-go');
-    expect(result.current.selectedId).toBe('opencode-go');
   });
 
   it('allows filtering models', () => {

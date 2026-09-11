@@ -1,6 +1,6 @@
 import React, { useMemo, useRef, useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import * as Lucide from 'lucide-react';
+
 import { Button, Input } from '../ui';
 import { ModelModalitiesEditor } from './ModelModalitiesEditor';
 import {
@@ -13,6 +13,7 @@ import { formatContextLabel } from '../../api/modelCatalogPure';
 import { calculateAutofillDraft } from './manualAddAutofill';
 import type { AddDraft } from './useModelProfilesState';
 import styles from './ModelsSettingsTab.module.css';
+import { AppIcon } from '../ui/icons/index';
 
 /**
  * 手动添加模型表单（与配置面板 1:1 对齐一等公民设计）：
@@ -173,12 +174,10 @@ export const ManualAddForm: React.FC<{
                 className={styles.mrdAddScanBtn}
                 icon={
                   scanBusy ? (
-                    <Lucide.Loader2
-                      size={11}
-                      className={styles.loadingSpinner}
-                    />
+                    <AppIcon name="loader" size={11}
+                      className={styles.loadingSpinner} />
                   ) : (
-                    <Lucide.RefreshCw size={11} />
+                    <AppIcon name="refresh" size={11} />
                   )
                 }
               >
@@ -352,7 +351,7 @@ export const ManualAddForm: React.FC<{
                 caps: { ...d.caps, reasoning: true },
               }))
             }
-            icon={<Lucide.Plus size={11} />}
+            icon={<AppIcon name="plus" size={11} />}
             className={styles.mrdAddThinkingOffBtn}
           >
             配置思考档位

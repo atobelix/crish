@@ -282,7 +282,7 @@
 }
 
 .highlightMark {
-  background: color-mix(in srgb, var(--text-primary) 10%, transparent);
+  background: var(--tint-highlight);
   color: var(--text-primary);
   border-radius: 2px;
   padding: 0 1px;

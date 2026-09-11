@@ -2,7 +2,6 @@ import { toast } from '../../services/toast/ToastContext';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   createCustomProfile,
-  findProfileByDisplayName,
   getActiveModelId,
   getActiveProfileId,
   loadProfiles,
@@ -20,11 +19,7 @@ import {
   type AddModelDraft,
   type ConfigDraft,
 } from './modelsIpcHelpers';
-import {
-  DEFAULT_PROVIDER_BASE_URLS,
-  PRESETS,
-  type PresetProvider,
-} from './modelsPresets';
+import { PROTOCOL_TEMPLATES } from './modelsPresets';
 import { onUiEvent } from '../../api/uiEvents';
 import { editSessionConsumer } from '../../api/chat-bridge/editSessionConsumer';
 import {
@@ -43,10 +38,9 @@ export type AddDraft = AddModelDraft;
 export type CfgDraft = ConfigDraft;
 export {
   emptyAddDraft,
-  PRESETS,
+  PROTOCOL_TEMPLATES,
   type AddModelDraft,
   type ConfigDraft,
-  type PresetProvider,
 };
 
 export function useModelProfilesState() {
@@ -89,7 +83,7 @@ export function useModelProfilesState() {
   );
 
   // ── R2-a ④ 设置页失效订阅（详案 §1.1-④ + analysis/15 §2.4）──────────────
-  // 自身落盘（saveKey/addFrom*/handleManualAdd/runScan/saveConfig）经
+  // 自身落盘（saveKey/addCustomProvider/handleManualAdd/runScan/saveConfig）经
   // localMutationRef 标记为本地变更，跳过「外部变更」提示；外部变更（其它
   // tab/窗口/Rust 端）命中 profiles-changed 事件时：有未保存草稿 → 提示 +
   // 编辑会话 invalidate（不静默覆盖）；无未保存草稿 → 直接 refresh 重载。
@@ -280,36 +274,34 @@ export function useModelProfilesState() {
     });
   };
 
+  /**
+   * 直接添加空白服务商：不预置任何官方/第三方 URL 或厂商名。
+   * 点击后立即选中并进入右侧配置（名称/Base URL/密钥/协议由用户填写）。
+   */
   const addCustomProvider = useCallback(
     async (params: {
-      name: string;
-      format: 'openai' | 'anthropic';
+      name?: string;
       baseUrl?: string;
       apiKey?: string;
+      protocol?: string;
     }) => {
       return await runAsLocalMutation(async () => {
-        const trimmedName = params.name.trim();
-        const defaultUrl = DEFAULT_PROVIDER_BASE_URLS[params.format] || '';
-        const finalUrl = (params.baseUrl?.trim() || defaultUrl).trim();
-
         const p = createCustomProfile({
-          name:
-            trimmedName ||
-            (params.format === 'openai' ? 'OpenAI 格式' : 'Anthropic 格式'),
-          ...(finalUrl ? { baseUrl: finalUrl } : {}),
+          name: params.name?.trim() || '自定义服务商',
+          ...(params.baseUrl?.trim() ? { baseUrl: params.baseUrl.trim() } : {}),
           models: [],
+          protocol:
+            (params.protocol as ProviderProfile['protocol']) || 'openai/chat',
         });
         refresh();
         setSelectedIdState(p.id);
         setAddOpen(false);
 
-        const protocol =
-          params.format === 'anthropic' ? 'anthropic/messages' : 'openai/chat';
         const shell = await ensureProviderShell({
           providerId: p.id,
           displayName: p.name,
           baseUrl: p.baseUrl,
-          protocol,
+          protocol: p.protocol ?? 'openai/chat',
         });
         if (!shell.ok) notify(false, shell.error || '写入服务商失败');
 
@@ -328,67 +320,6 @@ export function useModelProfilesState() {
     },
     [refresh, runAsLocalMutation, notify, runScan]
   );
-
-  const addFromTemplate = (format: 'openai' | 'anthropic') => {
-    void runAsLocalMutation(async () => {
-      const p = createCustomProfile({
-        name: format === 'openai' ? 'OpenAI 格式' : 'Anthropic 格式',
-        ...(DEFAULT_PROVIDER_BASE_URLS[format] !== undefined && {
-          baseUrl: DEFAULT_PROVIDER_BASE_URLS[format],
-        }),
-        models: [],
-      });
-      refresh();
-      setSelectedIdState(p.id);
-      setAddOpen(false);
-      const shell = await ensureProviderShell({
-        providerId: p.id,
-        displayName: p.name,
-        baseUrl: p.baseUrl,
-        protocol: format === 'anthropic' ? 'anthropic/messages' : 'openai/chat',
-      });
-      if (!shell.ok) notify(false, shell.error || '写入服务商失败');
-    });
-  };
-
-  const addFromPreset = (preset: PresetProvider) => {
-    void runAsLocalMutation(async () => {
-      const raw = loadProfiles();
-      const existing = findProfileByDisplayName(raw, preset.name);
-      if (existing) {
-        setProfiles(raw);
-        setSelectedIdState(existing.id);
-        setAddOpen(false);
-        const shell = await ensureProviderShell({
-          providerId: existing.id,
-          displayName: existing.name,
-          baseUrl: existing.baseUrl,
-          protocol:
-            preset.format === 'anthropic'
-              ? 'anthropic/messages'
-              : existing.protocol,
-        });
-        if (!shell.ok) notify(false, shell.error || '写入服务商失败');
-        return;
-      }
-      const p = createCustomProfile({
-        name: preset.name,
-        baseUrl: preset.baseUrl,
-        models: [],
-      });
-      setProfiles(loadProfiles());
-      setSelectedIdState(p.id);
-      setAddOpen(false);
-      const shell = await ensureProviderShell({
-        providerId: p.id,
-        displayName: p.name,
-        baseUrl: p.baseUrl,
-        protocol:
-          preset.format === 'anthropic' ? 'anthropic/messages' : 'openai/chat',
-      });
-      if (!shell.ok) notify(false, shell.error || '写入服务商失败');
-    });
-  };
 
   const handleManualAdd = () => {
     if (!selected) return;
@@ -481,9 +412,7 @@ export function useModelProfilesState() {
     notify,
     runAsLocalMutation,
     saveKey,
-    addFromTemplate,
     addCustomProvider,
-    addFromPreset,
     handleManualAdd,
     openConfigFor,
     closeConfig,

@@ -2,7 +2,7 @@
   width: 290px;
   min-width: 280px;
   max-width: 320px;
-  background: var(--bg-elevated, hsl(0 0% 100%));
+  background: var(--bg-elevated);
   border: 1px solid var(--border-color);
   border-radius: var(--sep-radius-outer, 14px);
   box-shadow: var(--shadow-lg);
@@ -48,7 +48,7 @@
   align-items: center;
   gap: 6px;
   padding: 4px 6px 6px;
-  border-bottom: 1px solid var(--sep-divider-color, rgba(0, 0, 0, 0.06));
+  border-bottom: 1px solid var(--sep-divider-color);
 }
 
 .searchIcon {
@@ -93,7 +93,7 @@
 }
 
 .settingsBtn:hover {
-  background: var(--sep-bg-item-hover, hsl(35 20% 92% / 0.6));
+  background: var(--sep-bg-item-hover);
   color: var(--sep-text-primary, var(--text-primary));
 }
 
@@ -161,7 +161,7 @@
 }
 
 .checkIcon {
-  color: var(--brand-deep, #059669);
+  color: var(--brand-deep);
   flex-shrink: 0;
   margin-left: 6px;
 }
@@ -176,7 +176,7 @@
 /* 分割线 */
 .divider {
   height: 1px;
-  background: var(--sep-divider-color, rgba(0, 0, 0, 0.06));
+  background: var(--sep-divider-color);
   margin: 2px 0;
   border: none;
 }
@@ -270,7 +270,7 @@
 }
 
 .advancedTrigger:hover {
-  background: var(--bg-hover, hsl(35 20% 92% / 0.6));
+  background: var(--bg-hover);
   color: var(--text-primary);
 }
 
@@ -308,7 +308,7 @@
 }
 
 .advancedItem:hover {
-  background: var(--bg-hover, hsl(35 20% 92% / 0.6));
+  background: var(--bg-hover);
   color: var(--text-primary);
 }
 
@@ -323,5 +323,5 @@
   display: contents;
 }
 .mbCheck {
-  color: var(--brand-deep, #059669);
+  color: var(--brand-deep);
 }

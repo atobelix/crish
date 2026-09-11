@@ -1,9 +1,17 @@
 import React from 'react';
+import { ICON_STROKE } from '../../ui/icons/iconTokens';
 
 export interface IconProps extends React.SVGAttributes<SVGElement> {
   size?: number;
   className?: string;
 }
+
+/**
+ * 设置页内部图标集（24 网格）。
+ * 线宽一律取自 iconTokens 的 ICON_STROKE.ui，禁止裸写数字——
+ * 24 网格上裸写 2 / 2.5 会让图标显著粗于全应用基准。
+ */
+const STROKE = ICON_STROKE.ui;
 
 export const SearchIcon: React.FC<IconProps> = ({ size = 14, className, ...props }) => (
   <svg
@@ -12,7 +20,7 @@ export const SearchIcon: React.FC<IconProps> = ({ size = 14, className, ...props
     viewBox="0 0 24 24"
     fill="none"
     stroke="currentColor"
-    strokeWidth="2"
+    strokeWidth={STROKE}
     strokeLinecap="round"
     strokeLinejoin="round"
     aria-hidden="true"
@@ -31,7 +39,7 @@ export const HardDriveIcon: React.FC<IconProps> = ({ size = 14, className, ...pr
     viewBox="0 0 24 24"
     fill="none"
     stroke="currentColor"
-    strokeWidth="2"
+    strokeWidth={STROKE}
     strokeLinecap="round"
     strokeLinejoin="round"
     aria-hidden="true"
@@ -52,7 +60,7 @@ export const RotateCcwIcon: React.FC<IconProps> = ({ size = 14, className, ...pr
     viewBox="0 0 24 24"
     fill="none"
     stroke="currentColor"
-    strokeWidth="2"
+    strokeWidth={STROKE}
     strokeLinecap="round"
     strokeLinejoin="round"
     aria-hidden="true"
@@ -71,7 +79,7 @@ export const CheckIcon: React.FC<IconProps> = ({ size = 14, className, ...props 
     viewBox="0 0 24 24"
     fill="none"
     stroke="currentColor"
-    strokeWidth="2.5"
+    strokeWidth={STROKE}
     strokeLinecap="round"
     strokeLinejoin="round"
     aria-hidden="true"
@@ -89,7 +97,7 @@ export const Loader2Icon: React.FC<IconProps> = ({ size = 14, className, ...prop
     viewBox="0 0 24 24"
     fill="none"
     stroke="currentColor"
-    strokeWidth="2"
+    strokeWidth={STROKE}
     strokeLinecap="round"
     strokeLinejoin="round"
     aria-hidden="true"
@@ -107,7 +115,7 @@ export const ChevronDownIcon: React.FC<IconProps> = ({ size = 14, className, ...
     viewBox="0 0 24 24"
     fill="none"
     stroke="currentColor"
-    strokeWidth="2"
+    strokeWidth={STROKE}
     strokeLinecap="round"
     strokeLinejoin="round"
     aria-hidden="true"

@@ -1,5 +1,5 @@
 import React from 'react';
-import * as Lucide from 'lucide-react';
+
 import {
   removeProfile,
   setProfileEnabled,
@@ -8,6 +8,7 @@ import {
 } from '../../api/providerProfiles';
 import { modelsCatalogStore } from '../../api/modelsCatalogStore';
 import { Button, Input, Switch, Tooltip } from '../ui';
+import { AppIcon } from '../ui/icons/index';
 
 /**
  * 详情头部：重命名标题 / 启用状态按钮 / 自定义服务商删除确认组。
@@ -204,7 +205,7 @@ export const ProfileHeader: React.FC<{
                     color: 'var(--text-tertiary)',
                   }}
                   onClick={() => setConfirmDeleteId(selected.id)}
-                  icon={<Lucide.Trash2 size={14} />}
+                  icon={<AppIcon name="trash" size={14} />}
                 />
               </Tooltip>
             )}

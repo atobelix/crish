@@ -160,7 +160,7 @@
   justify-content: space-between;
   padding: 0 14px;
   border-radius: var(--usage-capsule-outer-radius, 9px);
-  background: color-mix(in srgb, var(--text-primary) 2.5%, var(--bg-card));
+  background: var(--bg-card-subtle);
   cursor: pointer;
   overflow: hidden;
   transition: background 120ms ease;

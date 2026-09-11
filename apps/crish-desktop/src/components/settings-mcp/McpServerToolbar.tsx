@@ -4,10 +4,10 @@
  */
 
 import React from 'react';
-import * as Lucide from 'lucide-react';
 import styles from './McpSettingsTab.module.css';
 import { Button, Input, SegmentedControl, Tooltip } from '../ui';
 import type { SortMode } from './types';
+import { AppIcon } from '../ui/icons/index';
 
 export type McpServerToolbarProps = {
   demo: boolean;
@@ -49,11 +49,9 @@ export const McpServerToolbar: React.FC<McpServerToolbarProps> = ({
         aria-label={loading ? '刷新中' : '刷新列表'}
         aria-busy={loading || undefined}
         icon={
-          <Lucide.RefreshCw
-            size={14}
+          <AppIcon name="refresh" size={14}
             className={loading ? 'spin' : undefined}
-            aria-hidden
-          />
+            aria-hidden />
         }
       />
     </Tooltip>
@@ -97,7 +95,7 @@ export const McpServerToolbar: React.FC<McpServerToolbarProps> = ({
           onClick={() => onSetShowAdd((v) => !v)}
           aria-label={showAdd ? '收起添加表单' : '添加演示服务'}
           aria-expanded={showAdd}
-          icon={<Lucide.Plus size={14} aria-hidden />}
+          icon={<AppIcon name="plus" size={14} aria-hidden />}
         >
           {showAdd ? '收起' : '添加'}
         </Button>

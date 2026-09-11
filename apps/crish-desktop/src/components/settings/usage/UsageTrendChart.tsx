@@ -11,6 +11,13 @@ import { clampViewportX, computeDecimatedTicks } from './usageSpline';
 import { Button, SegmentedControl } from '../../ui';
 import styles from './UsageTrendChart.module.css';
 
+/**
+ * 折线数据点圆环描边宽度。
+ * 注意：这是**图表几何载荷**（数据点标记的视觉重量），与图标描边契约无关，
+ * 因此不引用 ICON_STROKE；在此具名以区别于违规裸写。
+ */
+const CHART_POINT_STROKE = 1.5;
+
 export interface UsageTrendChartProps {
   points: UsageTimeseriesPoint[];
   maxTokens: number;
@@ -236,7 +243,7 @@ export const UsageTrendChart: React.FC<UsageTrendChartProps> = ({
                         r="3.5"
                         fill="var(--bg-card)"
                         stroke={ser.color}
-                        strokeWidth="1.5"
+                        strokeWidth={CHART_POINT_STROKE}
                       />
                     );
                   })}

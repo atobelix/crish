@@ -19,12 +19,12 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import * as Lucide from 'lucide-react';
 import { Button, ConfirmDialog, Dialog, Textarea, Tooltip } from '../ui';
 import { highlightCode } from '../../api/codeHighlight';
 import { invokeTyped } from '../../api/tauriInvoke';
 import { ensureModelsCatalogLoaded, getModelsCatalogPath } from '../../api/modelsCatalogStore';
 import styles from './YamlConfigEditorModal.module.css';
+import { AppIcon } from '../ui/icons/index';
 
 interface YamlConfigEditorModalProps {
   open: boolean;
@@ -322,7 +322,7 @@ export const YamlConfigEditorModal: React.FC<YamlConfigEditorModalProps> = ({
         showCloseButton={true}
         title={
           <div className={styles.modalTitleRow}>
-            <Lucide.FileCode2 size={16} className={styles.modalTitleIcon} aria-hidden />
+            <AppIcon name="file-code" size={16} className={styles.modalTitleIcon} aria-hidden />
             <span>模型能力与参数配置 (models.yaml)</span>
             {isDirty && (
               <Tooltip content="有未保存修改">
@@ -343,7 +343,7 @@ export const YamlConfigEditorModal: React.FC<YamlConfigEditorModalProps> = ({
           <div className={styles.modalFooter}>
             {serviceError ? (
               <div className={`${styles.errorBanner} ${styles.errorBannerStatic}`} role="alert">
-                <Lucide.Unplug size={14} aria-hidden />
+                <AppIcon name="unplug" size={14} aria-hidden />
                 <span className={styles.errorBannerText}>{serviceError}</span>
               </div>
             ) : syntaxError ? (
@@ -357,7 +357,7 @@ export const YamlConfigEditorModal: React.FC<YamlConfigEditorModalProps> = ({
                     if (e.key === 'Enter' || e.key === ' ') handleJumpToError();
                   }}
                 >
-                  <Lucide.AlertCircle size={14} aria-hidden />
+                  <AppIcon name="alert-circle" size={14} aria-hidden />
                   <span className={styles.errorBannerText}>
                     第 {syntaxError.line} 行: {syntaxError.message} (点击定位)
                   </span>
@@ -365,7 +365,7 @@ export const YamlConfigEditorModal: React.FC<YamlConfigEditorModalProps> = ({
               </Tooltip>
             ) : saveSuccess ? (
               <div className={styles.successIndicator}>
-                <Lucide.Check size={14} />
+                <AppIcon name="check" size={14} />
                 <span>已保存并生效</span>
               </div>
             ) : (
@@ -385,7 +385,7 @@ export const YamlConfigEditorModal: React.FC<YamlConfigEditorModalProps> = ({
                 onClick={() => void handleSave()}
                 loading={saving}
                 disabled={!canSave}
-                icon={<Lucide.Save size={13} aria-hidden />}
+                icon={<AppIcon name="save" size={13} aria-hidden />}
               >
                 保存并热重载
               </Button>
@@ -402,7 +402,7 @@ export const YamlConfigEditorModal: React.FC<YamlConfigEditorModalProps> = ({
               size="xs"
               disabled={!template}
               onClick={() => template && setCode(template)}
-              icon={<Lucide.FileText size={12} aria-hidden />}
+              icon={<AppIcon name="file-text" size={12} aria-hidden />}
             >
               恢复标准模版
             </Button>
@@ -411,7 +411,7 @@ export const YamlConfigEditorModal: React.FC<YamlConfigEditorModalProps> = ({
               variant="secondary"
               size="xs"
               onClick={() => void loadConfigFile()}
-              icon={<Lucide.RefreshCw size={12} aria-hidden />}
+              icon={<AppIcon name="refresh" size={12} aria-hidden />}
             >
               重载磁盘
             </Button>

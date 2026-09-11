@@ -49,15 +49,15 @@
 }
 
 .modelRow:hover {
-  background: var(--bg-hover, rgba(128, 128, 128, 0.08));
+  background: var(--bg-hover);
 }
 
 .modelRowSelected {
-  background: color-mix(in srgb, var(--brand, #10b981) 6%, transparent);
+  background: color-mix(in srgb, var(--brand) 6%, transparent);
 }
 
 .modelRowSelected:hover {
-  background: color-mix(in srgb, var(--brand, #10b981) 10%, transparent);
+  background: color-mix(in srgb, var(--brand) 10%, transparent);
 }
 
 .modelRowLeft {
@@ -82,8 +82,8 @@
 }
 
 .customCheckboxChecked {
-  background: var(--brand, #10b981);
-  border-color: var(--brand, #10b981);
+  background: var(--brand);
+  border-color: var(--brand);
   color: var(--text-on-accent);
 }
 
@@ -109,7 +109,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: var(--brand, #10b981);
+  color: var(--brand);
 }
 
 .emptyTip {

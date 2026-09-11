@@ -1,5 +1,5 @@
 import React, { useId } from 'react';
-import * as Lucide from 'lucide-react';
+
 import type { DesktopSkill } from '../../api/skillsApi';
 import { Button, Input, Tooltip } from '../ui';
 import styles from './SkillsSettingsTab.module.css';
@@ -9,6 +9,7 @@ import {
   EMPTY_INSTALL_HINT,
   scopeGroupLabel,
 } from './useSkillsSettingsState';
+import { AppIcon } from '../ui/icons/index';
 
 interface SkillCardListProps {
   skills: DesktopSkill[];
@@ -94,7 +95,7 @@ export const SkillCardList: React.FC<SkillCardListProps> = ({
               size="sm"
               onClick={() => setCreateMode('paths')}
               aria-label="新建技能"
-              icon={<Lucide.Plus size={14} aria-hidden />}
+              icon={<AppIcon name="plus" size={14} aria-hidden />}
             >
               新建技能
             </Button>
@@ -178,9 +179,9 @@ export const SkillCardList: React.FC<SkillCardListProps> = ({
                     >
                       <span className={`${styles.skillsRailIcon} skills-rail-icon`} aria-hidden>
                         {s.system ? (
-                          <Lucide.Package size={12} />
+                          <AppIcon name="package" size={12} />
                         ) : (
-                          <Lucide.Sparkles size={12} />
+                          <AppIcon name="sparkles" size={12} />
                         )}
                       </span>
                       <span className={`${styles.skillsRailName} skills-rail-name`}>
@@ -224,7 +225,7 @@ export const SkillCardList: React.FC<SkillCardListProps> = ({
                   size="sm"
                   aria-label={`移除目录 ${d}`}
                   onClick={() => handleRemoveExtra(d)}
-                  icon={<Lucide.X size={14} aria-hidden />}
+                  icon={<AppIcon name="x" size={14} aria-hidden />}
                 />
               </Tooltip>
             </div>
@@ -255,7 +256,7 @@ export const SkillCardList: React.FC<SkillCardListProps> = ({
                   size="sm"
                   aria-label="浏览文件夹"
                   onClick={() => void handlePickExtra()}
-                  icon={<Lucide.FolderOpen size={14} aria-hidden />}
+                  icon={<AppIcon name="folder-open" size={14} aria-hidden />}
                 />
               </Tooltip>
               <Button

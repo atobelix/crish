@@ -5,7 +5,6 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import * as Lucide from 'lucide-react';
 import styles from './ModelBadgePickerMenu.module.css';
 
 import { activateProfileModel } from '../../api/providerProfiles';
@@ -24,8 +23,12 @@ import { useSessionStore } from '../../store/sessionStore';
 import {
   getSessionThinkingTitle,
   setSessionThinkingTitle,
+  resolveEffectiveThinkingTitle,
+  persistThinkingSelection,
 } from '../../api/SessionRuntimeRegistry';
 import { groupLivePickerEntries } from './ModelBadgePickerMenu.data';
+import { recordPendingContextState } from '../../api/provider-profiles/contextStatePending';
+import { AppIcon } from '../ui/icons/index';
 
 export type Props = {
   activeModel?: string | null;
@@ -59,8 +62,6 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
 
   // 只列「可用」供应商：yaml 带 apiKey 或凭据壳带 key（未配置的预置壳不占列表，
   // 避免选择器出现从未配置过的供应商导致切换 profile_not_found）
-  // 只列「可用」供应商：yaml 带 apiKey 或凭据壳带 key（未配置的预置壳不占列表，
-  // 避免选择后 activateProfileModel 报 profile_not_found）
   const entries = useMemo(
     () =>
       listLivePickerEntries().filter((e) => {
@@ -87,7 +88,12 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
     [providerId, modelId, catalogVersion],
   );
 
-  const selectedTitle = getSessionThinkingTitle(sessionId);
+  // 统一从 SSOT 中枢读取有效思考档位（用户设置优先，跨会话保留）
+  const selectedTitle = resolveEffectiveThinkingTitle(
+    sessionId,
+    providerId,
+    modelId,
+  );
   const handoff = useMemo(
     () => resolveThinkingHandoff(providerId, modelId, selectedTitle),
     [providerId, modelId, selectedTitle, catalogVersion],
@@ -95,45 +101,60 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
 
   const showThinking = thinkingOptions.length > 0 && Boolean(selectedSpec);
 
+  // 仅在当前模型物理不支持思考时，清理会话临时覆盖，杜绝反向覆写有效用户偏好
   useEffect(() => {
     if (!sessionId || !providerId || !modelId || !selectedSpec) return;
-    if (!handoff.supported) {
-      if (selectedTitle != null) setSessionThinkingTitle(sessionId, null);
-      return;
+    if (!handoff.supported && selectedTitle != null) {
+      setSessionThinkingTitle(sessionId, null);
     }
-    if (handoff.selectedTitle !== selectedTitle) {
-      setSessionThinkingTitle(sessionId, handoff.selectedTitle);
-    }
-  }, [sessionId, providerId, modelId, selectedSpec, handoff, selectedTitle]);
+  }, [sessionId, providerId, modelId, selectedSpec, handoff.supported, selectedTitle]);
 
   const handleSelectModel = useCallback(
     async (profileId: string, nextModelId: string) => {
+      // 跨模型切换时：优先加载目标模型专属偏好；若无则平移继承用户当前选中的档位
+      const targetTitle = resolveEffectiveThinkingTitle(
+        sessionId,
+        profileId,
+        nextModelId,
+      );
+      const nextHandoff = resolveThinkingHandoff(
+        profileId,
+        nextModelId,
+        targetTitle,
+      );
+      if (nextHandoff.supported) {
+        persistThinkingSelection(
+          sessionId,
+          profileId,
+          nextModelId,
+          nextHandoff.selectedTitle,
+        );
+      } else {
+        setSessionThinkingTitle(sessionId, null);
+      }
+
       try {
         await activateProfileModel(profileId, nextModelId);
       } catch (err) {
         console.error('activateProfileModel failed:', err);
       }
-      const nextOptions = listThinkingOptions(profileId, nextModelId);
-      if (nextOptions.length === 0) {
-        setSessionThinkingTitle(sessionId, null);
-      } else if (
-        selectedTitle &&
-        !nextOptions.some((o) => o.title === selectedTitle)
-      ) {
-        setSessionThinkingTitle(sessionId, nextOptions[0]!.title);
-      }
+
+      // 仅记录待发送快照，绝不提前向对话流注入卡片（发送按钮触发时才带上）
+      recordPendingContextState(sessionId);
       onOpenChange?.(false);
       onClose();
     },
-    [onOpenChange, onClose, sessionId, selectedTitle],
+    [onOpenChange, onClose, sessionId],
   );
 
   const handleSelectThinking = useCallback(
     (title: string) => {
-      setSessionThinkingTitle(sessionId, title);
+      persistThinkingSelection(sessionId, providerId, modelId, title);
       setThinkingEpoch((n) => n + 1);
+      // 仅记录待发送快照，绝不提前向对话流注入卡片（发送按钮触发时才带上）
+      recordPendingContextState(sessionId);
     },
-    [sessionId],
+    [sessionId, providerId, modelId],
   );
 
   const handleOpenSettings = useCallback(() => {
@@ -165,7 +186,7 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
     >
       <div ref={panelRef} className={styles.mbInner} role="menu">
         <div className={styles.searchHeader}>
-          <Lucide.Search size={14} className={styles.searchIcon} />
+          <AppIcon name="search" size={14} className={styles.searchIcon} />
           <input
             ref={searchInputRef}
             type="text"
@@ -187,7 +208,7 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
               aria-label="模型管理"
               onClick={handleOpenSettings}
             >
-              <Lucide.SlidersHorizontal size={14} />
+              <AppIcon name="sliders" size={14} />
               <span style={{ position: 'absolute', width: 1, height: 1, padding: 0, margin: -1, overflow: 'hidden', clip: 'rect(0,0,0,0)', border: 0 }}>模型管理...</span>
             </button>
           </Tooltip>
@@ -217,7 +238,7 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
                     >
                       <span className={styles.modelName}>{m.name || m.id}</span>
                       {isSelected ? (
-                        <Lucide.Check size={14} className={styles.checkIcon} />
+                        <AppIcon name="check" size={14} className={styles.checkIcon} />
                       ) : null}
                     </button>
                   );
@@ -238,10 +259,8 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
                 onClick={() => setShowAdvanced((v) => !v)}
               >
                 <span>高级选项</span>
-                <Lucide.ChevronDown
-                  size={13}
-                  className={`${styles.advancedChevron} ${showAdvanced ? styles.rotated : ''}`}
-                />
+                <AppIcon name="chevron-down" size={13}
+                  className={`${styles.advancedChevron} ${showAdvanced ? styles.rotated : ''}`} />
               </button>
               {showAdvanced ? (
                 <div className={styles.advancedContent}>
