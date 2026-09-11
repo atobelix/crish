@@ -2,9 +2,9 @@
 
 ## （Cross-Platform WebView2 Host Adaptation, Window Geometry & Sub-Pixel Precision Implementation Plan）
 
-> **战役代号**：`CRISH-FLOATING-POPOVER-REMEDIATION`  
-> **编制架构师**：【Agent 02-F: 跨平台 WebView2 与宿主适配架构师】  
-> **执行宪章**：遵循《逻辑规划与反退避铁律》（`.agents/LOGIC_PLAN_NO_RETREAT.md`）与《反过度设计硬性红线》（`ANTI_OVERENGINEERING_GUARDRAILS.md`），坚持效果锁、无排期、无工期、所有问题同权；零容忍假阳性、零容忍假完成、严禁 `--no-verify`；纯方案编制，零业务代码修改（0 diffs）。  
+> **战役代号**：`CRISH-FLOATING-POPOVER-REMEDIATION`
+> **编制架构师**：【Agent 02-F: 跨平台 WebView2 与宿主适配架构师】
+> **执行宪章**：遵循《逻辑规划与反退避铁律》（`.agents/LOGIC_PLAN_NO_RETREAT.md`）与《反过度设计硬性红线》（`ANTI_OVERENGINEERING_GUARDRAILS.md`），坚持效果锁、无排期、无工期、所有问题同权；零容忍假阳性、零容忍假完成、严禁 `--no-verify`；纯方案编制，零业务代码修改（0 diffs）。
 > **输入资产**：
 >
 > - `docs/frontend-floating-popover-analysis/plans/00-总方案顶层架构与领域映射.md`
@@ -13,7 +13,7 @@
 > - `docs/frontend-floating-popover-analysis/13-全系统缺陷因果拓扑图与故障根因裁决书.md`
 > - `docs/frontend-floating-popover-analysis/14-统一浮层几何自适应架构与基座重构详案.md`
 >
-> **落盘路径**：`docs/frontend-floating-popover-analysis/plans/06-跨平台WebView2与宿主适配详案.md`  
+> **落盘路径**：`docs/frontend-floating-popover-analysis/plans/06-跨平台WebView2与宿主适配详案.md`
 > **纪律性质**：跨平台 WebView2 宿主环境适配、Windows OS 窗口几何补偿、DPI 亚像素对齐与全链路防抖排空优化实施详案（指导后续实施阶段代码落盘）。
 
 ---

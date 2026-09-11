@@ -1,7 +1,7 @@
 # 01 - Radix Popper 碰撞与翻折机制深度分析报告
 
-**分析者**：Agent 01 (Radix 碰撞与 Popper 引擎深度分析师)  
-**审计目标**：`apps/crish-desktop/src/components/ui/Menu/` 及底层依赖 `@radix-ui/react-popover`、`@radix-ui/react-popper`、`@floating-ui/react-dom`、`@floating-ui/dom`、`@floating-ui/core`  
+**分析者**：Agent 01 (Radix 碰撞与 Popper 引擎深度分析师)
+**审计目标**：`apps/crish-desktop/src/components/ui/Menu/` 及底层依赖 `@radix-ui/react-popover`、`@radix-ui/react-popper`、`@floating-ui/react-dom`、`@floating-ui/dom`、`@floating-ui/core`
 **审计基准**：源码穿透审计、运行期生命周期时序、数学几何模型推导、Ref/Slot 绑定机制
 
 ---

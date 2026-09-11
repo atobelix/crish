@@ -1,7 +1,7 @@
 # 04 - Tooltip 顶部遮挡截断与四向碰撞翻折深度分析报告
 
-**报告代号**：CRISH-GEO-FLIP-04  
-**分析师**：Agent 01: 顶部 Tooltip 遮挡截断与四向碰撞翻折分析师  
+**报告代号**：CRISH-GEO-FLIP-04
+**分析师**：Agent 01: 顶部 Tooltip 遮挡截断与四向碰撞翻折分析师
 **审计目标**：
 
 - `apps/crish-desktop/src/components/ui/Tooltip/Tooltip.tsx`
@@ -9,7 +9,7 @@
 - `apps/crish-desktop/src/components/AppTopBar.tsx`
 - `apps/crish-desktop/src/components/shell/GlobalSessionTabBar.tsx`
 - `apps/crish-desktop/src/components/binary-tree/UnitSessionTabStrip.tsx`
-- 全系统顶部控件与 `<Tooltip>` 消费生态  
+- 全系统顶部控件与 `<Tooltip>` 消费生态
   **审计纪律**：纯深度源码与几何数学分析，零业务代码修改
 
 ---

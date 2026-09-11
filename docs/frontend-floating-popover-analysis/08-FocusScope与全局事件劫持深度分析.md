@@ -1,7 +1,7 @@
 # 08 - FocusScope、DismissableLayer 与全局事件劫持深度分析报告
 
-**分析师角色**：【Agent 08: FocusScope 与全局事件劫持分析师】  
-**审计范围**：`apps/crish-desktop` 前端全系统事件监听、焦点管理、键盘快捷键、Radix DismissableLayer / FocusScope 与自研 Dialog / FocusTrap / Menu / Tooltip 浮层系统。  
+**分析师角色**：【Agent 08: FocusScope 与全局事件劫持分析师】
+**审计范围**：`apps/crish-desktop` 前端全系统事件监听、焦点管理、键盘快捷键、Radix DismissableLayer / FocusScope 与自研 Dialog / FocusTrap / Menu / Tooltip 浮层系统。
 **审计基准**：零盲区静态代码穿透、DOM 事件分发捕获/冒泡时序推演、层叠上下文与无障碍焦点圈定断层检测。
 
 ---

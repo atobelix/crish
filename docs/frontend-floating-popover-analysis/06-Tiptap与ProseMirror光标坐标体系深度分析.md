@@ -1,7 +1,7 @@
 # 06 - Tiptap 与 ProseMirror 光标选区坐标体系深度分析报告
 
-**分析师角色**：【Agent 06: Tiptap / ProseMirror 光标选区坐标分析师】  
-**审计基准**：前端代码一律视为不可信任源，实施史无前例的严格几何与时序穿透分析。  
+**分析师角色**：【Agent 06: Tiptap / ProseMirror 光标选区坐标分析师】
+**审计基准**：前端代码一律视为不可信任源，实施史无前例的严格几何与时序穿透分析。
 **涉及核心文件域**：
 
 - `apps/crish-desktop/src/components/chat-composer/SlashExtension.ts`

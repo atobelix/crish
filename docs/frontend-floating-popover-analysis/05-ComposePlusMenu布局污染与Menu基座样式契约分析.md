@@ -1,8 +1,8 @@
 # 05 - ComposePlusMenu 布局污染与 Menu 基座样式契约分析
 
-> **战役代号**：CRISH-FLOATING-POPOVER-FORENSICS-CAMPAIGN  
-> **文档定位**：针对输入区「+」加号菜单左侧 40px+ 巨大空白虚位缺陷的深度 DOM/CSS 渲染层叠冲突剖析，以及全仓 `Menu` 基座消费方 `contentClassName` 样式污染的地毯式排查与隔离清洗契约制定。  
-> **责任分析师**：Agent 02 (加号菜单布局污染与 Menu 样式契约分析师)  
+> **战役代号**：CRISH-FLOATING-POPOVER-FORENSICS-CAMPAIGN
+> **文档定位**：针对输入区「+」加号菜单左侧 40px+ 巨大空白虚位缺陷的深度 DOM/CSS 渲染层叠冲突剖析，以及全仓 `Menu` 基座消费方 `contentClassName` 样式污染的地毯式排查与隔离清洗契约制定。
+> **责任分析师**：Agent 02 (加号菜单布局污染与 Menu 样式契约分析师)
 > **排查准则**：代码一律视为不可信任源，零假设、零代码修改、纯逻辑与渲染管线逆向推导。
 
 ---

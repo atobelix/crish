@@ -1,9 +1,9 @@
 # 03 — Shell 收缩与会话命令
 
-> **战役**：`docs/leaf-owned-tabs/`  
-> **总案**：`00-总方案.md`（口径权威）  
-> **本维文件域（独占写）**：`workspaceShellStore.ts`、`workspace-shell/types.ts`、`leafBindingHelpers.ts`、`compositionRoot.ts`  
-> **依赖**：维 01（`SessionTab` / `LayoutLeaf.tabs` / 迁移）+ 维 02（`activateTab` / `addTab` / `openSession` / `removeTab` / 空叶 prune）  
+> **战役**：`docs/leaf-owned-tabs/`
+> **总案**：`00-总方案.md`（口径权威）
+> **本维文件域（独占写）**：`workspaceShellStore.ts`、`workspace-shell/types.ts`、`leafBindingHelpers.ts`、`compositionRoot.ts`
+> **依赖**：维 01（`SessionTab` / `LayoutLeaf.tabs` / 迁移）+ 维 02（`activateTab` / `addTab` / `openSession` / `removeTab` / 空叶 prune）
 > **被依赖**：维 05（窗格 UI 只调本维门面）、维 07（删测试与死轨）
 
 ---
@@ -188,7 +188,7 @@ tree.findTabByTabId(tabId): { leafId; tab } | null
 
 ### 4.1 `openOrFocusSession(sessionId, opts?)`（含侧栏）
 
-现码：过滤全局草稿 tab → 已有则激活 + `bindActiveChatLeafSession`；否则 `openTabs.push` + `syncOpenTabsToLegacy` + bind。  
+现码：过滤全局草稿 tab → 已有则激活 + `bindActiveChatLeafSession`；否则 `openTabs.push` + `syncOpenTabsToLegacy` + bind。
 消费方：`compositionRoot.session.openOrFocusSession`、`useSidebarHandlers.handleSelectSession`、`useSidebarContextMenu`、slash send、MCP。
 
 ```ts
@@ -226,7 +226,7 @@ openOrFocusSession(sessionId, opts?) {
 
 ### 4.2 `activateTab`
 
-现码：只收 `tabId`；切到真会话时**删掉全局草稿 tab**；`bindActiveChatLeafSession`。  
+现码：只收 `tabId`；切到真会话时**删掉全局草稿 tab**；`bindActiveChatLeafSession`。
 新签名必须带叶（I6 / 维 05 点条带时已知 `leaf.id`）：
 
 ```ts
@@ -329,7 +329,7 @@ openNewDraftTab(opts?: { leafId?: string; workspaceKey?: string } | string) {
 
 ### 4.5 `reorderSessionTab`
 
-现码：按 `workspaceKey` 重排**全局** `openTabs` + `moveSessionTab` 写 legacy map。  
+现码：按 `workspaceKey` 重排**全局** `openTabs` + `moveSessionTab` 写 legacy map。
 新语义：条内重排 = 维 02 `moveTab` 同叶改下标。全局跨叶顺序不再存在。
 
 ```ts
@@ -351,7 +351,7 @@ reorderSessionTab(sessionId: string, beforeSessionId: string | null) {
 
 ### 4.6 `updateRightDock`
 
-现码：改 `openTabs[i].rightDock` + `applyDockToTree`（会切 `H(chat, tool)`）。  
+现码：改 `openTabs[i].rightDock` + `applyDockToTree`（会切 `H(chat, tool)`）。
 本维改为转发维 02 `updateTabDock`（只改 `SessionTab.dock`）。**禁止**再调 `applyDockToTree`（维 04 删除该投影）。`openTool.ts` 仍调 `shell.updateRightDock` 时，03 落地后语义已是「改 tab.dock」，04 再把开工具改成只走 `updateTabDock` + 叶内抽屉。
 
 ```ts
@@ -597,7 +597,7 @@ function commitDraftAndPromote(): string {
 
 ## 7. Legacy open-tabs map
 
-文件：`apps/crish-desktop/src/api/workspaceChromeTabs.ts`。  
+文件：`apps/crish-desktop/src/api/workspaceChromeTabs.ts`。
 现运行期双写：`syncOpenTabsToLegacy`（打开）/ `closeSessionTab`（关闭）/ `moveSessionTab`（重排）。Hydrate：`hydrateWorkspaceShell.ts` 读 map → `shell.migrateFromOpenTabsMap`。
 
 ### 7.1 运行期
@@ -731,7 +731,7 @@ UI 不经 tree 门面开/关/激活会话。Hydrate 只 `getState()` 读树 + �
 | `resetToSingleDraftLeaf` | 替换整棵树为单 chat 叶 + 一个 draft tab |
 | `ensureAtLeastOneChatLeaf` | 仅 persist 损坏；日常路径不应走到 |
 
-维 02 **不要**调 `setActiveSessionId` / `enterDraftMode` / PTY（副作用留本维）。  
+维 02 **不要**调 `setActiveSessionId` / `enterDraftMode` / PTY（副作用留本维）。
 维 02 **不要**实现 `bindActiveChatLeafSession` 的 5 条旧规则。
 
 ### 9.3 维 05 必须改的调用（本维不改这些文件）
@@ -782,9 +782,9 @@ UI 不经 tree 门面开/关/激活会话。Hydrate 只 `getState()` 读树 + �
 | `closeTab 关光最后 tab：openTabs 为空` | 单叶 + 1 draft tab；`isPendingDraft(picture.sessionId)` |
 | `openOrFocusSession` 仅 focus 不 reproject dock | 保持「不投影树几何」；改为不改邻叶 `tabs` |
 
-`focusDockIsolation.test.ts`「不 auto-split」：改写为「未放置加入活动叶 tabs，绝不 split、绝不改邻叶」。  
-`unitTabPlacement.test.ts`：随模块删除。  
-`hydrateWorkspaceShell.test.ts`：断言不再出现 `openTabs.length`；断言树叶 `tabs`。  
+`focusDockIsolation.test.ts`「不 auto-split」：改写为「未放置加入活动叶 tabs，绝不 split、绝不改邻叶」。
+`unitTabPlacement.test.ts`：随模块删除。
+`hydrateWorkspaceShell.test.ts`：断言不再出现 `openTabs.length`；断言树叶 `tabs`。
 `compositionRoot.test.ts` / `ownershipEnforce.test.ts`：去掉 `setLeafSessionId`；加上 `session.deleteSession`、`shell.activateTab(leafId, tabId)`。
 
 实现波 03 提交前至少跑：`workspaceShellStore` 单测（按新语义重写后）+ `compositionRoot` 单测。全量矩阵归维 07。
