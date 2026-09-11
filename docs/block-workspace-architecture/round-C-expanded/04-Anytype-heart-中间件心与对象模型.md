@@ -1,9 +1,9 @@
 # Anytype-heart：中间件心与对象模型
 
-> **对象**：`reference/markdown_compare/anytype-heart`（Anytype 中间件 / Middleware）  
-> **客户端壳**：`anytype-ts`（Electron + TS，**本仓未克隆**；边界以 heart 内 proto / gRPC / 构建文档推断）  
-> **立场**：只读分析；机制可借鉴，**许可禁止商用内化整仓**  
-> **本产品标尺**：状态沉底、重任务可在非 UI 语言；壳 Tauri/TS；效果完整度优先于流行栈安全感  
+> **对象**：`reference/markdown_compare/anytype-heart`（Anytype 中间件 / Middleware）
+> **客户端壳**：`anytype-ts`（Electron + TS，**本仓未克隆**；边界以 heart 内 proto / gRPC / 构建文档推断）
+> **立场**：只读分析；机制可借鉴，**许可禁止商用内化整仓**
+> **本产品标尺**：状态沉底、重任务可在非 UI 语言；壳 Tauri/TS；效果完整度优先于流行栈安全感
 > **文档编号**：Round-C `04`（对齐 `00-筛选与本波目标.md`）
 
 ---
@@ -24,7 +24,7 @@
 
 ### 1.1 README 自述
 
-- 标题：**Anytype Heart — Middleware library for Anytype, distributed as part of the Anytype clients.**  
+- 标题：**Anytype Heart — Middleware library for Anytype, distributed as part of the Anytype clients.**
   证据：`reference/markdown_compare/anytype-heart/README.md:1-3`
 - 架构入口：`docs/Architecture.md`（Service Locator：`github.com/anyproto/any-sync/app`）
 - 许可：`Any Source Available License 1.0`（`LICENSE.md`，README:32）
@@ -162,17 +162,17 @@ Space（隔离工作区 / ACL 边界）
 **两类持久管线**（`IsStoreBacked`）：
 
 - **经典 ObjectTree + Change 管道**（大多数文档对象）
-- **storestate / any-store CRDT 集合**（Chat、AccountObject、Discussion、TechSpaceObject）  
+- **storestate / any-store CRDT 集合**（Chat、AccountObject、Discussion、TechSpaceObject）
   证据：`pkg/lib/core/smartblock/smartblock.go:76-88`
 
 #### Block（对象内）
 
-- 模型：`models.proto` `message Block` — `id`、`childrenIds`、`oneof content`  
-  content：Text / File / Layout / Div / Bookmark / Link / Dataview / Relation / Latex / Table* / Widget / Chat…  
+- 模型：`models.proto` `message Block` — `id`、`childrenIds`、`oneof content`
+  content：Text / File / Layout / Div / Bookmark / Link / Dataview / Relation / Latex / Table* / Widget / Chat…
   证据：`models.proto:107-136`
-- 实现注册表：`core/block/simple` — `RegisterCreator` + `Block` 接口（Diff/Copy/Validate）  
+- 实现注册表：`core/block/simple` — `RegisterCreator` + `Block` 接口（Diff/Copy/Validate）
   证据：`core/block/simple/simple.go:26-33, 68-78`
-- 状态容器：`core/block/editor/state.State` — `blocks map`、`details`、`changes`、object type keys  
+- 状态容器：`core/block/editor/state.State` — `blocks map`、`details`、`changes`、object type keys
   证据：`core/block/editor/state/state.go:51-75, 108-119`
 
 #### Details / Properties / Types
@@ -184,7 +184,7 @@ Space（隔离工作区 / ACL 边界）
 
 #### Space
 
-- 用户 Space + **Tech Space**（账号级：空间列表、设备、account object）  
+- 用户 Space + **Tech Space**（账号级：空间列表、设备、account object）
   证据：`AGENTS.md:30-34`；SmartBlockType 中 TechSpace*
 - 同步与 ACL 边界在 space 级（any-sync commonspace）
 
@@ -211,7 +211,7 @@ Anytype 是 **「对象图数据库 + 每个对象内嵌块编辑器」**，不�
 
 MD 在 heart 中的位置：
 
-- 导入：`core/block/import/markdown/`（anymark 解析、YAML front matter、**JSON Schema 确定性导入**）  
+- 导入：`core/block/import/markdown/`（anymark 解析、YAML front matter、**JSON Schema 确定性导入**）
   证据：`SCHEMA_IMPORT.md` — `schemas/*.schema.json` 定义 type/relation，无 schema 时回退 YAML
 - 导出：`core/block/export/`
 - **MD 不是运行时真相**，是边界格式；round-trip 靠 schema 补强，而非「编辑即写 md」
@@ -225,7 +225,7 @@ MD 在 heart 中的位置：
 
 ### 3.6 索引是投影
 
-- **ObjectStore**（`pkg/lib/localstore/objectstore`）：每 space 索引 details/links；跨 space 查询；全文队列；file encryption keys  
+- **ObjectStore**（`pkg/lib/localstore/objectstore`）：每 space 索引 details/links；跨 space 查询；全文队列；file encryption keys
   证据：`objectstore/service.go` 头注释 Responsibility
 - **Tantivy** 全文：`pkg/lib/localstore/ftsearch`
 - 订阅：对 details 的 live query（`docs/Subscriptions.md`）——客户端不直接扫 ObjectTree 做列表
@@ -254,15 +254,15 @@ MD 在 heart 中的位置：
 | 第二管线 | any-store storestate                   | Chat 等集合型 CRDT                                      |
 | 内容寻址 | IPFS 兼容 CID                          | 文件块                                                  |
 
-`treesyncer` 直接 import any-sync 的 `objecttree`、`synctree`、`treemanager`、`peermanager`（`treesyncer.go:9-20`）。  
+`treesyncer` 直接 import any-sync 的 `objecttree`、`synctree`、`treemanager`、`peermanager`（`treesyncer.go:9-20`）。
 `source` 包把 ObjectTree 接到业务 Source（`core/block/source/interface.go`）。
 
-**边界一句话**：  
+**边界一句话**：
 **「合并正确性」在 any-sync；「语义正确性（块位置、详情、限制、模板）」在 heart state/smartblock。**
 
 ### 4.3 加密与身份
 
-- **Wallet**：助记词 / account key / device key / master key / ethereum key  
+- **Wallet**：助记词 / account key / device key / master key / ethereum key
   证据：`core/wallet/wallet.go:34-49`；依赖 `any-sync/util/crypto`、`accountdata`
 - **文件密钥**：`Change.FileKeys`、objectstore 存 file encryption keys（service 注释）
 - **配置注释**：部分历史 `disableEncryption` 已 deprecated 无效（proto 文档串）
@@ -279,7 +279,7 @@ MD 在 heart 中的位置：
 
 ### 4.5 实时 UI 契约：Subscription + Event
 
-- 订阅 = **对象 details 的实时查询**（初始快照 + 增量事件），不是 Yjs awareness  
+- 订阅 = **对象 details 的实时查询**（初始快照 + 增量事件），不是 Yjs awareness
   证据：`docs/Subscriptions.md:11-23`
 - 桌面一次打开一个 space 可有 **数十个并发订阅**（类型单例、dataview 视图、widget…）——创建/销毁必须便宜
 - 事件总线与 session 路由在 heart，壳只消费
@@ -288,7 +288,7 @@ MD 在 heart 中的位置：
 
 ## 5. 与 AppFlowy Rust 心、SiYuan Go kernel 对照
 
-> 本仓已有 AppFlowy 深研：`docs/block-workspace-architecture/round-B-appflowy/02-优点-Rust核心与FFI边界.md`。  
+> 本仓已有 AppFlowy 深研：`docs/block-workspace-architecture/round-B-appflowy/02-优点-Rust核心与FFI边界.md`。
 > SiYuan 同波文档：`01`/`02`（若已落盘则交叉；此处按公开架构常识 + Round-C 目标对齐 heart 视角）。
 
 ### 5.1 对照表
@@ -315,7 +315,7 @@ MD 在 heart 中的位置：
 2. **契约层（PB/HTTP API）隔离壳与心**
 3. **列表/搜索用投影或查询层，编辑用权威状态机**
 
-Anytype 与 AppFlowy 更近：**重协同 CRDT + 多端心**。  
+Anytype 与 AppFlowy 更近：**重协同 CRDT + 多端心**。
 Anytype 与 SiYuan 更近：**都是 Go 中间件/内核 + Electron 壳**，但数据哲学分叉——Anytype 对象图/CRDT，SiYuan 块仓库/MD 纪律。
 
 ### 5.3 差异对「块工作区」选型的含义
@@ -370,7 +370,7 @@ Anytype 与 SiYuan 更近：**都是 Go 中间件/内核 + Electron 壳**，但�
 3. **契约是 PB 不是「TS 类型导出凑合」**：`ClientCommands` 生成多语言绑定（`docs/Build.md` protos-swift/java/js）。
 4. **同波 SiYuan** 再次用 Go kernel 证明这条路在笔记领域可走通。
 
-因此：**「编辑器 UI 在 TS」≠「对象模型/事务/同步必须在 TS」。**  
+因此：**「编辑器 UI 在 TS」≠「对象模型/事务/同步必须在 TS」。**
 把领域沉到 Go/Rust/其它系统语言，是已验证上限路径，不是冒险猎奇。
 
 ### 7.2 相对 Rust 心路径：优 / 劣
@@ -455,6 +455,6 @@ anytype-ts / Swift / Kotlin
   本地 any-store / tree storage / 加密文件块
 ```
 
-**可借鉴**：心壳干净切分、对象+块双层模型、Change 管道、订阅投影、多端一共心。  
-**不可借鉴为内化**：Source Available 源码与 any-sync 粘连栈。  
+**可借鉴**：心壳干净切分、对象+块双层模型、Change 管道、订阅投影、多端一共心。
+**不可借鉴为内化**：Source Available 源码与 any-sync 粘连栈。
 **上限结论**：领域语言可以是 Go/Rust；TS 只做壳不降真理上限；Rust 心在 CRDT/Tauri 贴合上仍具优势，但 **「非 TS 心」已被 Anytype 证成必选项而非可选项。**

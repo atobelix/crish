@@ -1,7 +1,7 @@
 # AFFiNE：Rust / Native 职责边界 vs「状态沉底、重任务交给 Rust」
 
-> **范围**：`reference/markdown_compare/AFFiNE`（v0.27.0 镜像）  
-> **读法**：只读盘点；路径为证据；对照本产品 **Notion 皮 + Rust 心**（Tauri + TS + Rust；状态沉底、重任务下沉）。  
+> **范围**：`reference/markdown_compare/AFFiNE`（v0.27.0 镜像）
+> **读法**：只读盘点；路径为证据；对照本产品 **Notion 皮 + Rust 心**（Tauri + TS + Rust；状态沉底、重任务下沉）。
 > **不做**：工期、人员、业务优先级；不改 AFFiNE 源码。
 
 ---

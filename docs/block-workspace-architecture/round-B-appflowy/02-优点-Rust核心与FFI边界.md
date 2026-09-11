@@ -1,9 +1,9 @@
 # AppFlowy：Rust 心架构优点与 FFI 边界
 
-> **对象**：`reference/markdown_compare/AppFlowy`（shallow clone）  
-> **主路径**：`frontend/rust-lib/`  
-> **立场**：只谈架构优点与可借鉴机制；壳层是 Flutter，**不可整包复用**。  
-> **本产品标尺**：状态沉底、重任务 Rust；壳 Tauri；UI/扩展 TS。  
+> **对象**：`reference/markdown_compare/AppFlowy`（shallow clone）
+> **主路径**：`frontend/rust-lib/`
+> **立场**：只谈架构优点与可借鉴机制；壳层是 Flutter，**不可整包复用**。
+> **本产品标尺**：状态沉底、重任务 Rust；壳 Tauri；UI/扩展 TS。
 > **对照结论先行**：**机制可借鉴**（域 crate 切分、事件总线、PB 契约、通知推送、collab 外置）；**壳层不可复用**（Dart FFI / Flutter isolate / MethodChannel 栈）。
 
 ---
@@ -25,7 +25,7 @@ AppFlowy 前端是 **Flutter + 静态库 `dart_ffi`**，业务真相几乎全部
 
 工具链：`rust-toolchain.toml` 钉 **1.85**；workspace 成员见 `frontend/rust-lib/Cargo.toml`；构建编排 `frontend/Makefile.toml`（cargo-make，含 Flutter / protobuf / **tauri** 脚本残留）。
 
-**优点核心一句话**：  
+**优点核心一句话**：
 **「一个 AFPlugin 事件名 + Protobuf 字节」同时充当命令契约、测试入口与多壳生成目标**——UI 换皮，心不变。
 
 ---
@@ -103,7 +103,7 @@ flowy-<domain>/
 
 `flowy-core::module::make_plugins` 一次性挂上：
 
-- user / folder / database / document / date / search / ai / file_storage  
+- user / folder / database / document / date / search / ai / file_storage
   （`flowy-core/src/module.rs:12-38`）
 
 **优点**：
@@ -289,7 +289,7 @@ pub enum DocumentEvent {
 
 ## 7. 对「Rust 心 + TS 皮」（本产品）的映射启发
 
-> 本产品：**Tauri + TypeScript + Rust**；状态沉底；扩展在 TS。  
+> 本产品：**Tauri + TypeScript + Rust**；状态沉底；扩展在 TS。
 > AppFlowy 壳是 Flutter——下列只迁移**机制**，不迁移 Dart/Flutter 栈。
 
 ### 7.1 机制可借鉴（建议内化，勿点名抄库）
@@ -372,5 +372,5 @@ pub enum DocumentEvent {
 
 ## 9. 一句话收束
 
-AppFlowy 的 Rust 心优点不在「用了 Flutter」，而在：**域 crate 切分 + 全局唯一事件插件 + Protobuf 契约 codegen + 请求/通知双通道 + collab 外置装配**。  
+AppFlowy 的 Rust 心优点不在「用了 Flutter」，而在：**域 crate 切分 + 全局唯一事件插件 + Protobuf 契约 codegen + 请求/通知双通道 + collab 外置装配**。
 对本产品（Tauri + TS 皮）：**抄边界与沉底策略，不抄 Dart FFI 与 Flutter 壳**；用 invoke/emit 替换 isolate port，用 TS codegen 替换 Dart event 生成，即可落到同一类「Rust 心」架构。

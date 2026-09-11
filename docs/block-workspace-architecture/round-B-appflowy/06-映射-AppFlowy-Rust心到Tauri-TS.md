@@ -1,15 +1,15 @@
 # 06 映射：AppFlowy Rust 心 → Tauri 命令/事件 + TS UI + 可选 TS 扩展
 
-> **调研轮次**：round-B-appflowy  
-> **效果锁**（见 `docs/block-workspace-architecture/00-调研边界与效果锁.md`）：栈 **Tauri + TypeScript + Rust**；目标 **Notion 的皮（块与丰富交互）+ Rust 的心（极速、低内存、原生协同计算）**；必备 **块操作 / 多人实时协同 / TS 扩展生态**；性能与体验须**双双超过**参考产品。  
-> **表述纪律**：机制意图可借鉴；设计句用本产品内化语言，禁止「照抄 AppFlowy」作方案落点。  
+> **调研轮次**：round-B-appflowy
+> **效果锁**（见 `docs/block-workspace-architecture/00-调研边界与效果锁.md`）：栈 **Tauri + TypeScript + Rust**；目标 **Notion 的皮（块与丰富交互）+ Rust 的心（极速、低内存、原生协同计算）**；必备 **块操作 / 多人实时协同 / TS 扩展生态**；性能与体验须**双双超过**参考产品。
+> **表述纪律**：机制意图可借鉴；设计句用本产品内化语言，禁止「照抄 AppFlowy」作方案落点。
 > **证据源**：
 >
 > - AppFlowy：`reference/markdown_compare/AppFlowy/frontend/rust-lib/`
 > - 本仓 Tauri 形态：`apps/agent-workbench/src-tauri/`、`apps/crish-desktop/`
 > - 本仓 Rust 工作区：`crates/*`、`Cargo.toml`
-> - 行级引擎：`reference/markdown-editor/`  
->   **对照**：round-A AFFiNE 映射见 `round-A-affine/08-映射-Tauri-TS-RS与本仓差距.md`（块 UI/扩展偏 TS 巨仓视角）；本文专攻 **AppFlowy 的 crate 切分 + FFI 事件模型** 如何落到本栈。  
+> - 行级引擎：`reference/markdown-editor/`
+>   **对照**：round-A AFFiNE 映射见 `round-A-affine/08-映射-Tauri-TS-RS与本仓差距.md`（块 UI/扩展偏 TS 巨仓视角）；本文专攻 **AppFlowy 的 crate 切分 + FFI 事件模型** 如何落到本栈。
 >   **日期**：2026-08-10
 
 ---
@@ -167,7 +167,7 @@ SubscribeObject / DocumentNotification
 
 ## 4. 建议的 crate / 模块边界（本产品内化名）
 
-> 下列为**逻辑边界与依赖方向**，供选型消费；不排期、不砍效果。  
+> 下列为**逻辑边界与依赖方向**，供选型消费；不排期、不砍效果。
 > 依赖方向：**叶子无环**；Tauri 壳只装配；TS 不进 RS 热路径。
 
 ### 4.1 建议新增 / 扩展的逻辑单元

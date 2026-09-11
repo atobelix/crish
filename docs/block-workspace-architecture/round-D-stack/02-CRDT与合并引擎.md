@@ -54,7 +54,7 @@
 
 ### 1.3 裁判键（重申）
 
-效果完整度 → 正确性/不变量 → 可验证性 → 与「RS 心 + TS 皮 + Tauri 壳」契约一致 → 结构干净。  
+效果完整度 → 正确性/不变量 → 可验证性 → 与「RS 心 + TS 皮 + Tauri 壳」契约一致 → 结构干净。
 **不得**以「Yjs 生态最火」「先上 JS 再沉」砍掉 RS 权威。
 
 ---
@@ -288,7 +288,7 @@ UI / Agent / Remote
 
 ### 6.3 备选 B：**yrs 全量拼树（弱推荐）**
 
-仅当：团队接受用 YMap/YArray 编码块树，且 move 语义用严格封装测过。  
+仅当：团队接受用 YMap/YArray 编码块树，且 move 语义用严格封装测过。
 风险：块移动/嵌套意图与 YATA 重排不一致 → **长期债**。默认不采纳。
 
 ### 6.4 备选 C：**自研事务为主，CRDT 后置（不推荐作终局）**
@@ -318,7 +318,7 @@ UI / Agent / Remote
 | **Anytype**    | **Go + any-sync ObjectTree**        | 中间件心；Change 管线；space ACL                                                     | 心/壳契约、对象级同步边界                                                  | Source Available；MD 非一等         |
 | **Docmost 等** | JS Yjs 团队 Wiki                    | 协同模板                                                                             | 产品完成度对照                                                             | AGPL+JS 真相                        |
 
-**形态合成（与 `08` 一致）**：  
+**形态合成（与 `08` 一致）**：
 SiYuan 的内核权威与工具面 × AppFlowy 的 yrs 沉底与插件管线 × AFFiNE 的协同通道分层 × **非 JS 真相**。
 
 ---

@@ -1,8 +1,8 @@
 # 06 · Docmost — TipTap + Yjs 团队协同样本（经典 JS 协同上限）
 
-> **代码根**：`reference/markdown_compare/docmost`（约 v0.95.0）  
-> **角色**：Round C「经典 JS 协同」上限与代价样本——**不是**推荐本产品照搬栈。  
-> **范围**：编辑器、Hocuspocus/Yjs、页面三份存储、权限/Space、实时协同、大文档/性能线索。  
+> **代码根**：`reference/markdown_compare/docmost`（约 v0.95.0）
+> **角色**：Round C「经典 JS 协同」上限与代价样本——**不是**推荐本产品照搬栈。
+> **范围**：编辑器、Hocuspocus/Yjs、页面三份存储、权限/Space、实时协同、大文档/性能线索。
 > **边界**：只读源码与既有 AFFiNE 分析；无运行基准处标**推断**；不编造未出现的 GC/压缩管线。
 
 ---
@@ -164,7 +164,7 @@ TypeScript 实体：`apps/server/src/database/types/db.d.ts`（`Pages`：`conten
 6. 否则 `updatePage({ content, textContent, ydoc, lastUpdatedById, contributorIds })`
 7. 成功后：stateless `page.updated` 广播、transclusion 同步、history 延迟任务、mention/AI 队列
 
-**创建路径** — `page.service.ts`：有初始 content 时 `createYdocFromJson` 同时写入 ydoc。  
+**创建路径** — `page.service.ts`：有初始 content 时 `createYdocFromJson` 同时写入 ydoc。
 **导入路径** — `import.service.ts`：同类 toYdoc + encode。
 
 ### 3.3 一致性模型
@@ -226,7 +226,7 @@ Workspace（租户）
 | `PagePermissionRole` | reader / writer         | 页级限制下的最近祖先角色       |
 | `UserRole`（工作区） | owner / admin / member  | 租户级，与 Space 正交          |
 
-Space 表：`migrations/20240324T085900-spaces.ts`（`default_role` 默认 writer，`visibility` 默认 private）。  
+Space 表：`migrations/20240324T085900-spaces.ts`（`default_role` 默认 writer，`visibility` 默认 private）。
 成员：`space_members` 强制 **user_id XOR group_id**。
 
 ### 4.2 协同鉴权链
@@ -318,7 +318,7 @@ Space 表：`migrations/20240324T085900-spaces.ts`（`default_role` 默认 write
 | 多实例         | Redis 文档锁 + 代理                             | 自有 SpaceSync 协议 + 时间戳水位                 |
 | 复杂度税       | 低，可读完协同目录                              | 高（nbstore/sync/原生）                          |
 
-**同构结论**：两者都证明——**「实时协同 + 富文本」在开源界的默认吸引子是 Yjs**。  
+**同构结论**：两者都证明——**「实时协同 + 富文本」在开源界的默认吸引子是 Yjs**。
 **差异结论**：AFFiNE 在 **存储管线与服务端原生合并** 上抬了一档；Docmost 展示 **没有** 这些加码时，经典 Hocuspocus 样板长什么样。**两者都没有**把「文档权威」沉到可给 Agent 安全细粒度写的非 JS 内核（AppFlowy/思源更接近那条轴）。
 
 ---

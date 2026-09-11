@@ -1,10 +1,10 @@
 # 05 · note-gen：Tauri + AI Markdown 笔记样本（同壳对照）
 
-> **调研轮次**：round-C-expanded  
-> **样本角色**：**同壳形态（Tauri 2 + TS 前端）下「AI 笔记」能力与上限**——证明路线可行，并标出缺口在编辑器/块/协同而非壳。  
-> **代码根**：`reference/markdown_compare/note-gen`  
-> **版本线索**：`src-tauri/tauri.conf.json` → `productName: NoteGen`，`version: 0.34.1`；`package.json` → `next@^15`、`@tauri-apps/*@2`、`@tiptap/*@^3.19`  
-> **效果锁对齐**：本地优先 MD；AI/Agent 工具面；**不**把 note-gen 当块工作区权威模型。  
+> **调研轮次**：round-C-expanded
+> **样本角色**：**同壳形态（Tauri 2 + TS 前端）下「AI 笔记」能力与上限**——证明路线可行，并标出缺口在编辑器/块/协同而非壳。
+> **代码根**：`reference/markdown_compare/note-gen`
+> **版本线索**：`src-tauri/tauri.conf.json` → `productName: NoteGen`，`version: 0.34.1`；`package.json` → `next@^15`、`@tauri-apps/*@2`、`@tiptap/*@^3.19`
+> **效果锁对齐**：本地优先 MD；AI/Agent 工具面；**不**把 note-gen 当块工作区权威模型。
 > **日期**：2026-08-11
 
 ---
@@ -247,7 +247,7 @@
 
 **推论（对齐效果锁）**：
 
-> 用 note-gen 当反证：**「同壳做 AI 笔记」已有上限样本**；其天花板卡在 **编辑器语义与协同/块内核**，不是「Tauri 做不了笔记」。  
+> 用 note-gen 当反证：**「同壳做 AI 笔记」已有上限样本**；其天花板卡在 **编辑器语义与协同/块内核**，不是「Tauri 做不了笔记」。
 > 因此本产品若目标是 **Notion 皮 + 块操作 + 实时协同 + 超参考性能**，不能只复刻 note-gen 的 TipTap+Agent 组合——**必须自研文档权威层**；note-gen 证明的是 **AI 产品层与壳切分**，不是块工作区终局架构。
 
 ### 5.3 与五问筛选键（`00-筛选与本波目标.md` §4）

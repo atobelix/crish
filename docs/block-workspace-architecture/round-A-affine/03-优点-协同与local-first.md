@@ -1,7 +1,7 @@
 # AFFiNE 优点：协同 / Local-First / 存储
 
-> **范围**：只读分析 `reference/markdown_compare/AFFiNE` 中与 local-first、实时协同、持久化相关的实现。  
-> **本产品对照**：Tauri + TS + Rust；多人实时协同必备；重任务沉 Rust；性能与内存须超过参考。  
+> **范围**：只读分析 `reference/markdown_compare/AFFiNE` 中与 local-first、实时协同、持久化相关的实现。
+> **本产品对照**：Tauri + TS + Rust；多人实时协同必备；重任务沉 Rust；性能与内存须超过参考。
 > **诚实边界**：未读到的 CRDT 算法细节不编造；Yjs / y-octo 内部合并语义以源码调用点为准，库内部行为标「不确定」。
 
 ---
@@ -136,7 +136,7 @@ BlockSuite `@blocksuite/sync` 提供更底层的 **DocEngine = main DocSource + 
 端 B Awareness（光标等）走 space:update-awareness / broadcast-awareness-update（独立通道）
 ```
 
-离线：A 只写本地；上线后靠 clock 清单 + pullAndPush 收敛。  
+离线：A 只写本地；上线后靠 clock 清单 + pullAndPush 收敛。
 同机多 tab：awareness 可用 BroadcastChannel；doc 也可挂 broadcast-channel storage（web worker 装配）。
 
 ---

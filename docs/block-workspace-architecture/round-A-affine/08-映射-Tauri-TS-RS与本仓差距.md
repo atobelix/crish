@@ -1,9 +1,9 @@
 # 08 映射：AFFiNE/BlockSuite → Tauri + TS + RS 与本仓差距
 
-> **调研轮次**：round-A-affine  
-> **效果锁**（见 `docs/block-workspace-architecture/00-调研边界与效果锁.md`）：栈 **Tauri + TypeScript + Rust**；目标 **Notion 的皮（块与丰富交互）+ Rust 的心（极速、低内存、原生协同计算）**；必备 **块操作 / 多人实时协同 / TS 扩展生态**；性能与体验须**双双超过**参考产品。  
-> **表述纪律**：机制意图可借鉴；设计句用本产品内化语言，禁止「照抄 AFFiNE」作方案落点。  
-> **证据源**：`reference/markdown_compare/AFFiNE`（抽样）、`reference/markdown-editor`（行级引擎边界）、`apps/crish-desktop` + `apps/agent-workbench`（已定桌面壳）。  
+> **调研轮次**：round-A-affine
+> **效果锁**（见 `docs/block-workspace-architecture/00-调研边界与效果锁.md`）：栈 **Tauri + TypeScript + Rust**；目标 **Notion 的皮（块与丰富交互）+ Rust 的心（极速、低内存、原生协同计算）**；必备 **块操作 / 多人实时协同 / TS 扩展生态**；性能与体验须**双双超过**参考产品。
+> **表述纪律**：机制意图可借鉴；设计句用本产品内化语言，禁止「照抄 AFFiNE」作方案落点。
+> **证据源**：`reference/markdown_compare/AFFiNE`（抽样）、`reference/markdown-editor`（行级引擎边界）、`apps/crish-desktop` + `apps/agent-workbench`（已定桌面壳）。
 > **日期**：2026-08-10
 
 ---

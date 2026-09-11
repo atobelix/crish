@@ -1,7 +1,7 @@
 # 03 · Logseq — 块大纲与查询模型
 
-> 代码根：`reference/markdown_compare/logseq`  
-> 调研范围：块=权威单元、DataScript/Datalog 查询、outliner 编辑、block ref、Electron 壳 vs CLJS 核心、DB version vs file version  
+> 代码根：`reference/markdown_compare/logseq`
+> 调研范围：块=权威单元、DataScript/Datalog 查询、outliner 编辑、block ref、Electron 壳 vs CLJS 核心、DB version vs file version
 > 原则：只读源码与仓库文档；**不 fork、不嵌入 AGPL 整仓**；结论服务「AI 工作栈笔记」选型。
 
 ---
@@ -383,8 +383,8 @@ DSL 预变换与共享解析：`deps/db/src/logseq/db/frontend/query_dsl.cljs`�
 
 ## 10. 给本仓（Conex / 块工作区）的一句话建议
 
-> **把 Logseq 当「块权威 + 引用边 + 声明式查询」的教科书，不要当可嵌入的编辑器内核。**  
-> 一等做：uuid 块、parent/order、refs 物化、受限 query DSL、worker 单权威 mutate。  
+> **把 Logseq 当「块权威 + 引用边 + 声明式查询」的教科书，不要当可嵌入的编辑器内核。**
+> 一等做：uuid 块、parent/order、refs 物化、受限 query DSL、worker 单权威 mutate。
 > 不做：AGPL 整仓、DataScript 宗教化、强制 bullet-only UI、全图内存当唯一扩展路径。
 
 ---

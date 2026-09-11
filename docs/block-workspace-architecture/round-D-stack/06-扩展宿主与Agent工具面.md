@@ -56,7 +56,7 @@
 
 ### 1.3 裁判键（重申）
 
-效果完整度 → 正确性/不变量 → 可验证性 → 与「RS 心 + TS 皮 + 已有 agent-tools/session-loop」一致 → 结构干净。  
+效果完整度 → 正确性/不变量 → 可验证性 → 与「RS 心 + TS 皮 + 已有 agent-tools/session-loop」一致 → 结构干净。
 **不得**以「iframe 更安全感」「大家都 MCP 外挂」把笔记写路径拆出 RS 心。
 
 ---
@@ -267,7 +267,7 @@ Store 侧「schema 扩展」若未来开放自定义块类型，仍须 **RS sche
 
 ## 6. 工具 schema 列表草案
 
-> 形状：单工具多 `action`（思源友好）或 verb 拆工具（等价）；下表按 **逻辑工具** 列。  
+> 形状：单工具多 `action`（思源友好）或 verb 拆工具（等价）；下表按 **逻辑工具** 列。
 > 实现落点：RS `agent-tools` 原生 Tool + `input_schema`；出站 camelCase。
 
 ### 6.1 内容核心

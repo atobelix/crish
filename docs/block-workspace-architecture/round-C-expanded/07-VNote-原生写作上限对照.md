@@ -1,8 +1,8 @@
 # 07 · VNote — 原生写作上限对照
 
-> 代码根：`C:\Software\conex\reference\markdown_compare\vnote`  
-> 角色：把 **C++/Qt 原生 Markdown 笔记** 当作「纯原生写作体验」的可测量上界样本，判断是否值得为写作手感放弃 Web/TS 扩展生态。  
-> 约束：只读源码 + 公开 submodule 文档；本地 `libs/vtextedit`、`libs/vxcore` 目录在本克隆中为空（未 `git submodule update`），编辑器内核细节以父仓 include/调用面 + [vnotex/vtextedit README/头文件](https://github.com/vnotex/vtextedit) 交叉确认。  
+> 代码根：`C:\Software\conex\reference\markdown_compare\vnote`
+> 角色：把 **C++/Qt 原生 Markdown 笔记** 当作「纯原生写作体验」的可测量上界样本，判断是否值得为写作手感放弃 Web/TS 扩展生态。
+> 约束：只读源码 + 公开 submodule 文档；本地 `libs/vtextedit`、`libs/vxcore` 目录在本克隆中为空（未 `git submodule update`），编辑器内核细节以父仓 include/调用面 + [vnotex/vtextedit README/头文件](https://github.com/vnotex/vtextedit) 交叉确认。
 > 准则：效果完整度 → 正确性/不变量 → 可验证性 → 与 AI 工作栈契约一致 → 结构干净。
 
 ---

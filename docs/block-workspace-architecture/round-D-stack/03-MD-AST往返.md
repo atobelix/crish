@@ -169,7 +169,7 @@
 
 ### 4.3 与思源 IAL 的「学不嵌」
 
-思源：`SetKramdownIAL(true)`，块属性进 Kramdown IAL；标准 MD 导出丢 IAL（round-C `02` §4）。  
+思源：`SetKramdownIAL(true)`，块属性进 Kramdown IAL；标准 MD 导出丢 IAL（round-C `02` §4）。
 本产品：
 
 - **学**：ID/属性 in-band；标准/GFM 导出分档有损；热路径不靠 MD。
@@ -244,12 +244,12 @@
 
 #### 块 IR 映射成本
 
-三者都 **不能** 直接等于 Conex BlockTree：都必须 **自研 lowering/raising**（mdast/comrak AST → 块 IR）。  
+三者都 **不能** 直接等于 Conex BlockTree：都必须 **自研 lowering/raising**（mdast/comrak AST → 块 IR）。
 差异在「标准节点覆盖率」与「源码位置信息」：markdown-rs 带 position，利于诊断与 Agent 指错行。
 
 #### 序列化可控性
 
-往返质量取决于 **自研 S**，不取决于「库能否 to_html」。  
+往返质量取决于 **自研 S**，不取决于「库能否 to_html」。
 库的价值是 **P 的标准子集正确性**；S 必须按 Conex 规范化规约手写（或基于库 format 再后处理 ID/扩展）。
 
 ---
