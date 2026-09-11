@@ -1,7 +1,7 @@
 # 多 Agent 方案校准重塑任务书与专用提示词体系（6 大专属席位版）
 
-> **文档标识**：`docs/file-tree-and-attachments-architecture/detailed-plans/00-calibration-task-prompts.md`  
-> **任务性质**：以已完成真实源码逐行核验落地的两份权威方案（`06-final-best-plan-alpha.md` 与 `07-final-best-plan-beta.md`）为基准，按照 Conex 协同纪律（每轮派发 5–12 个子 Agent，单 Agent 单文档独占极致精细化作业），部署 **6 大专业席位子 Agent**，一对一全面重塑与就地更新此前多 Agent 编写的 5 份分维施工详案（`detailed-plans/01` 至 `05`）与战役总方案（`00-master-plan.md`）。  
+> **文档标识**：`docs/file-tree-and-attachments-architecture/detailed-plans/00-calibration-task-prompts.md`
+> **任务性质**：以已完成真实源码逐行核验落地的两份权威方案（`06-final-best-plan-alpha.md` 与 `07-final-best-plan-beta.md`）为基准，按照 Conex 协同纪律（每轮派发 5–12 个子 Agent，单 Agent 单文档独占极致精细化作业），部署 **6 大专业席位子 Agent**，一对一全面重塑与就地更新此前多 Agent 编写的 5 份分维施工详案（`detailed-plans/01` 至 `05`）与战役总方案（`00-master-plan.md`）。
 > **架构结构**：第一部分至第四部分为 6 位 Agent 必须严格共同恪守的外部通用总纲；第五部分至第十部分为分别派发给 6 位 Agent 的高精度独占执行提示词（每个提示词均独立超过 600 字，精准锁定文件、行号、算法契约、AST 骨架与负向断言要求）。
 
 ---
@@ -11,11 +11,11 @@
 ## 一、权威输入基准与单一真实源（SSOT）
 
 受派 Agent 开展工作时，必须严格依托以下两类资产，杜绝主观臆造：
-1. **📘 权威落地方案 Alpha**：[`docs/file-tree-and-attachments-architecture/independent-plans/06-final-best-plan-alpha.md`](file:///c:/Software/conex/docs/file-tree-and-attachments-architecture/independent-plans/06-final-best-plan-alpha.md)  
+1. **📘 权威落地方案 Alpha**：[`docs/file-tree-and-attachments-architecture/independent-plans/06-final-best-plan-alpha.md`](file:///c:/Software/conex/docs/file-tree-and-attachments-architecture/independent-plans/06-final-best-plan-alpha.md)
    - 包含 3,957 行经过 9 大源码文件逐行核验的完整代码与推导；
    - 确立了 W3C 原生 `scrollend` 事件驱动的平滑位移停泊确认与焦点守护机制；
    - 提供了 11 个重构模块 100% 完整展开的生产级 TypeScript / CSS 代码。
-2. **📙 权威落地方案 Beta**：[`docs/file-tree-and-attachments-architecture/independent-plans/07-final-best-plan-beta.md`](file:///c:/Software/conex/docs/file-tree-and-attachments-architecture/independent-plans/07-final-best-plan-beta.md)  
+2. **📙 权威落地方案 Beta**：[`docs/file-tree-and-attachments-architecture/independent-plans/07-final-best-plan-beta.md`](file:///c:/Software/conex/docs/file-tree-and-attachments-architecture/independent-plans/07-final-best-plan-beta.md)
    - 包含 3,795 行经过真实 IPC 与样式核验的完整代码；
    - 严密推导了祖先盒模型 3 级高度链物理方程与 0px/50px/300px/2000px 4 大极限高度代数证明；
    - 严密推导了 W3C Compositing & Blending Level 1 层叠上下文隔离舱防穿透偏序定理。

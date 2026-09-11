@@ -120,7 +120,7 @@ flowchart TD
     B --> C{是否在当前工作区内?}
     C -- 否 (外部文件) --> D[以外部独立模式打开系统关联程序或专用预览, 绝不污染工作区树]
     C -- 是 (项目文件) --> E[直接调用单轨工作区导航命令: revealAndSelectFile]
-    
+
     subgraph 单轨工作区状态机调度 (Deterministic Tree & Preview Sync)
         E --> F[1. 立即激活右侧文件预览: 打开骨架屏, 异步装载内容]
         E --> G[2. 收集缺失祖先路径: ancestors.filter(!expanded[p])]

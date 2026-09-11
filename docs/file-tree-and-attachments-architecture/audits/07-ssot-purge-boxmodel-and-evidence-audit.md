@@ -1,11 +1,11 @@
 # SSOT 单轨纯度、物理切除彻底性、盒模型高度链路与五大物证体系终审穿透审计报告
 
-> **文档标识**：`docs/file-tree-and-attachments-architecture/audits/07-ssot-purge-boxmodel-and-evidence-audit.md`  
-> **所属战役**：`docs/file-tree-and-attachments-architecture/`  
-> **审计专家**：资深前端工程架构师、CSS 渲染专家与代码质量治理总监  
-> **审计基准**：用户全新最高裁决、参考图（`media_1788837641997.png`）与仓库权威基线  
-> **审计日期**：2026-09-08  
-> **权威纪律**：严格遵循仓库根目录 [`AGENTS.md`](file:///c:/Software/conex/AGENTS.md)（§1 反退避、§2 子 Agent 调度、§3 Git 提交纪律、§7 严禁补丁与作弊、§7.1 立体验证纪律、§8 反过度设计红线、§11 CI 治理与行数门禁、§12 自定义 Tooltip、§13 输入框与焦点态规范、§14 色彩空间与现代 CSS、§15/§16 Tauri MCP 4000 调试通道）及 [`ANTI_OVERENGINEERING_GUARDRAILS.md`](file:///c:/Software/conex/ANTI_OVERENGINEERING_GUARDRAILS.md)。  
+> **文档标识**：`docs/file-tree-and-attachments-architecture/audits/07-ssot-purge-boxmodel-and-evidence-audit.md`
+> **所属战役**：`docs/file-tree-and-attachments-architecture/`
+> **审计专家**：资深前端工程架构师、CSS 渲染专家与代码质量治理总监
+> **审计基准**：用户全新最高裁决、参考图（`media_1788837641997.png`）与仓库权威基线
+> **审计日期**：2026-09-08
+> **权威纪律**：严格遵循仓库根目录 [`AGENTS.md`](file:///c:/Software/conex/AGENTS.md)（§1 反退避、§2 子 Agent 调度、§3 Git 提交纪律、§7 严禁补丁与作弊、§7.1 立体验证纪律、§8 反过度设计红线、§11 CI 治理与行数门禁、§12 自定义 Tooltip、§13 输入框与焦点态规范、§14 色彩空间与现代 CSS、§15/§16 Tauri MCP 4000 调试通道）及 [`ANTI_OVERENGINEERING_GUARDRAILS.md`](file:///c:/Software/conex/ANTI_OVERENGINEERING_GUARDRAILS.md)。
 > **审计准则与绝对红线（零容忍）**：
 > 1. **严禁多轨并存与给旧岛续命**：单一概念必须收敛至唯一权威源（SSOT）。严禁将新规范数据倒灌/双写回旧存储介质；重构必须是物理切除（彻底删除废弃代码与样式），严禁使用注释、隐藏或永久性兼容 Shim 掩盖旧轨。
 > 2. **严禁虚构 Token 与样式欺骗**：UI 必须 100% 遵从 Design Tokens，严禁发明不存在的伪变量，严禁裸 Hex；涉及滚动/粘性/层叠布局时，必须穿透检查祖先盒模型与 Stacking Context，杜绝样式假象。
@@ -303,7 +303,7 @@ L118:   flex-wrap: wrap;
 L119:   gap: var(--space-2, 8px);
 L120:   margin-bottom: var(--space-2, 8px);
 L121: }
-L122: 
+L122:
 L123: .userImageWrapper {
 L124:   cursor: pointer;
 L125:   border-radius: var(--radius-lg, 10px);
@@ -312,12 +312,12 @@ L127:   border: 1px solid var(--border-subtle);
 L128:   background: var(--bg-card);
 L129:   transition: transform var(--transition-base, 150ms ease), border-color var(--transition-base, 150ms ease);
 L130: }
-L131: 
+L131:
 L132: .userImageWrapper:hover {
 L133:   border-color: var(--border-color);
 L134:   transform: scale(1.01);
 L135: }
-L136: 
+L136:
 L137: .userImage {
 L138:   display: block;
 L139:   max-width: min(100%, 320px);
@@ -325,14 +325,14 @@ L140:   max-height: 240px;
 L141:   object-fit: cover;
 L142:   border-radius: inherit;
 L143: }
-L144: 
+L144:
 L145: .userAttachments {
 L146:   display: flex;
 L147:   flex-wrap: wrap;
 L148:   gap: var(--space-1_5, 6px);
 L149:   margin-bottom: var(--space-2, 8px);
 L150: }
-L151: 
+L151:
 L152: .userAttachmentChip {
 L153:   display: inline-flex;
 L154:   align-items: center;
@@ -346,12 +346,12 @@ L161:   cursor: pointer;
 L162:   color: var(--text-secondary);
 L163:   transition: background var(--transition-fast), color var(--transition-fast);
 L164: }
-L165: 
+L165:
 L166: .userAttachmentChip:hover {
 L167:   background: color-mix(in srgb, var(--text-primary) 14%, transparent);
 L168:   color: var(--text-primary);
 L169: }
-L170: 
+L170:
 L171: .userAttachmentName {
 L172:   max-width: 180px;
 L173:   overflow: hidden;
@@ -580,7 +580,7 @@ $$\text{max-width: } \min(70.2\%, 560\text{px});$$
    其相对于整行宽度的实际占比暴跌为：
    $$70.2\% \times 70.2\% = 49.28\%!$$
 
-**后果**：附件卡片在小屏幕或窄侧边栏下被错误地压缩到不足半屏宽度，卡片提前发生不必要的换行折叠，下方气泡与上方卡片右对齐基准线发生严重撕裂。  
+**后果**：附件卡片在小屏幕或窄侧边栏下被错误地压缩到不足半屏宽度，卡片提前发生不必要的换行折叠，下方气泡与上方卡片右对齐基准线发生严重撕裂。
 **整改指令**：`.userAttachmentStrip` 处于已有全局约束的 `.userStack` 内部，其宽度约束必须收敛为 `width: 100%; max-width: 100%;`，杜绝百分比复合衰减。
 
 ---
@@ -613,7 +613,7 @@ return (
     role="tree"
   >
 ```
-**真实物理结构**：`.filesListPane` 与 `.filesList` 并不是父子嵌套关系，而是被**合并赋予在同一个 DOM `div` 节点上**（`div.filesList.filesListPane`）！  
+**真实物理结构**：`.filesListPane` 与 `.filesList` 并不是父子嵌套关系，而是被**合并赋予在同一个 DOM `div` 节点上**（`div.filesList.filesListPane`）！
 因此，真实物理高度约束链路为 3 级直接传递：
 $$\text{Host} \to \text{.filesCard} \to \text{.filesBody (filesBodySplit)} \to \text{div.filesList.filesListPane (containerRef)}$$
 
@@ -1277,7 +1277,7 @@ const refresh = useCallback(async (): Promise<void> => {
 ### 8.3 终审裁决与施工前修正准令
 
 #### 终审裁决（Final Verdict）
-**裁决结果：【条件准予推进（CONDITIONAL PASS）】**。  
+**裁决结果：【条件准予推进（CONDITIONAL PASS）】**。
 所有参与战役的各波次执行子 Agent **严禁立即动手修改生产代码**。在进入 Wave 1 施工之前，必须先将本文第七节提供的 AST 级 Drop-in 修复代码**无损合并进对应的施工任务书（Spec-02, Spec-03, Spec-04, Spec-05）**，补齐物理删除矩阵与测试更新指引后，方可启动实施波次！
 
 #### 施工前 5 项刚性修正执行准令：

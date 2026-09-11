@@ -1,8 +1,8 @@
 # 施工任务书 04：宿主单轨收敛、防穿透隔离舱与面包屑搜索框重塑
 
-> **文档标识**：`docs/file-tree-and-attachments-architecture/execution-specs/spec-04-files-card-and-breadcrumb.md`  
-> **所属战役**：`docs/file-tree-and-attachments-architecture/`  
-> **指派角色**：`FilesCard & Breadcrumb UI Engineer`  
+> **文档标识**：`docs/file-tree-and-attachments-architecture/execution-specs/spec-04-files-card-and-breadcrumb.md`
+> **所属战役**：`docs/file-tree-and-attachments-architecture/`
+> **指派角色**：`FilesCard & Breadcrumb UI Engineer`
 > **纪律铁律**：
 > 1. **用户明确裁决：面包屑下拉树逻辑维持现状，严禁改写或删除下钻树逻辑！**
 > 2. 严格按要求注入 CSS 隔离舱消除穿透；

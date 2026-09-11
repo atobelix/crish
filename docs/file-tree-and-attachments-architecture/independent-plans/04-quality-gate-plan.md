@@ -1,8 +1,8 @@
 # 目录树展开、单轨收敛、附件统一卡片与面包屑重塑 · 立体化质量守门与验证方案
 
-> **文档标识**：`04-quality-gate-plan.md`  
-> **所属战役**：`docs/file-tree-and-attachments-architecture/`  
-> **设计权威依据**：`AGENTS.md` §7（严禁补丁、绕过与作弊）、§7.1（立体验证纪律）、§11（CI 治理与行数门禁）、§15/§16（Tauri MCP 4000 唯一合法调试通道）、`ANTI_OVERENGINEERING_GUARDRAILS.md`、`.agents/LOGIC_PLAN_NO_RETREAT.md`  
+> **文档标识**：`04-quality-gate-plan.md`
+> **所属战役**：`docs/file-tree-and-attachments-architecture/`
+> **设计权威依据**：`AGENTS.md` §7（严禁补丁、绕过与作弊）、§7.1（立体验证纪律）、§11（CI 治理与行数门禁）、§15/§16（Tauri MCP 4000 唯一合法调试通道）、`ANTI_OVERENGINEERING_GUARDRAILS.md`、`.agents/LOGIC_PLAN_NO_RETREAT.md`
 > **纪律属性**：纯逻辑规划（无工期/人天/人员/业务优先级，按纯逻辑依赖编排）；全量实测与代码原生审视；零脱水 Mock；零裸 Hex 容忍。
 
 ---
@@ -87,16 +87,16 @@ graph TD
     L1 --> L2C[任务 2.3: 消息流附件重构与负向单测]
     L1 --> L2D[任务 2.4: 单轨无钻取根不变性单测]
     L1 --> L2E[任务 2.5: 面包屑浮层状态机单测]
-    
+
     L2A & L2B & L2C & L2D & L2E --> L3A[任务 3.1: 零裸 Hex 扫描工具与基线校验]
     L2A & L2B & L2C & L2D & L2E --> L3B[任务 3.2: 零脱水样式检查]
     L2A & L2B & L2C & L2D & L2E --> L3C[任务 3.3: RL-03 有效行数门禁与解耦验证]
-    
+
     L3A & L3B & L3C --> L4A[任务 4.1: Tauri MCP 4000 调试套接字握手]
     L4A --> L4B[任务 4.2: 桌面现场目录树展开与定位验收]
     L4A --> L4C[任务 4.3: 桌面现场附件卡片微交互验收]
     L4A --> L4D[任务 4.4: 桌面现场面包屑浮层防穿透验收]
-    
+
     L4B & L4C & L4D --> L5[任务 5: 全量回归门禁自动化脚本闭环]
 ```
 
@@ -178,7 +178,7 @@ it('UT-NAV-01 & UT-NAV-02: 跨平台路径归一化与盘符大小写兼容级�
 ```typescript
 it('UT-VIRT-02: 深层节点选中触发视口滚动并在 DOM 中正确渲染', async () => {
   // 构造 200 个模拟平铺节点
-  const manyNodes = Array.from({ length: 200 }, (_, i) => 
+  const manyNodes = Array.from({ length: 200 }, (_, i) =>
     makeNode({ path: `file-${i}.ts`, depth: 0 })
   );
   const targetPath = 'file-150.ts';
@@ -199,7 +199,7 @@ it('UT-VIRT-02: 深层节点选中触发视口滚动并在 DOM 中正确渲染',
   expect(selectedRow).toBeTruthy();
   expect(selectedRow).toHaveAttribute('aria-selected', 'true');
   expect(selectedRow.textContent).toContain('file-150.ts');
-  
+
   // 验证顶部第 0 项已被虚拟卸载，不在 DOM 中
   expect(container.querySelector('[data-tree-index="0"]')).toBeNull();
 });

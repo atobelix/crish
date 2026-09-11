@@ -1,17 +1,17 @@
 # 阶段三：方案合理性严格审计 · 跨平台路径鲁棒性与边界算法审计报告 (Cross-Platform Path Robustness & Boundary Algorithm Audit)
 
-> **文档标识**：`docs/file-tree-and-attachments-architecture/audits/05-cross-platform-path-audit.md`  
-> **战役工作区**：`docs/file-tree-and-attachments-architecture/`  
-> **审查专家**：资深跨平台底层与边界安全审查专家（Senior Cross-Platform Low-Level & Boundary Security Audit Expert）  
+> **文档标识**：`docs/file-tree-and-attachments-architecture/audits/05-cross-platform-path-audit.md`
+> **战役工作区**：`docs/file-tree-and-attachments-architecture/`
+> **审查专家**：资深跨平台底层与边界安全审查专家（Senior Cross-Platform Low-Level & Boundary Security Audit Expert）
 > **审计基准依据**：
 > 1. `docs/file-tree-and-attachments-architecture/analysis/05-audit-framework-strategy.md`（审计框架与一票否决全景准则）；
 > 2. `AGENTS.md`（§1 逻辑规划与反退避、§7 严禁补丁与作弊、§7.1 立体验证纪律、§8 反过度设计硬性红线、§11 CI 治理与解耦断言）；
-> 3. `ANTI_OVERENGINEERING_GUARDRAILS.md`（反过度设计 13 项硬性禁令）。  
+> 3. `ANTI_OVERENGINEERING_GUARDRAILS.md`（反过度设计 13 项硬性禁令）。
 > **审查对象清单**：
 > - [`detailed-plans/01-path-canonical-spec.md`](file:///c:/Software/conex/docs/file-tree-and-attachments-architecture/detailed-plans/01-path-canonical-spec.md)（路径规范化与 SSOT 契约）
 > - [`detailed-plans/02-tree-navigation-spec.md`](file:///c:/Software/conex/docs/file-tree-and-attachments-architecture/detailed-plans/02-tree-navigation-spec.md)（目录树单轨收敛与祖先展开 Hook）
 > - [`detailed-plans/03-tree-virtual-scroll-spec.md`](file:///c:/Software/conex/docs/file-tree-and-attachments-architecture/detailed-plans/03-tree-virtual-scroll-spec.md)（虚拟滚动平滑居中与脉冲高亮）
-> - 交叉校验文档：[`detailed-plans/04-files-card-and-breadcrumb-spec.md`](file:///c:/Software/conex/docs/file-tree-and-attachments-architecture/detailed-plans/04-files-card-and-breadcrumb-spec.md) 与 [`detailed-plans/05-message-attachment-spec.md`](file:///c:/Software/conex/docs/file-tree-and-attachments-architecture/detailed-plans/05-message-attachment-spec.md)  
+> - 交叉校验文档：[`detailed-plans/04-files-card-and-breadcrumb-spec.md`](file:///c:/Software/conex/docs/file-tree-and-attachments-architecture/detailed-plans/04-files-card-and-breadcrumb-spec.md) 与 [`detailed-plans/05-message-attachment-spec.md`](file:///c:/Software/conex/docs/file-tree-and-attachments-architecture/detailed-plans/05-message-attachment-spec.md)
 > **审计纪律属性**：纯逻辑工程审计（不谈工期、人天、人员偏见，技术问题与边界缺陷逻辑同权，完全以源码真理源与代数确定性为准绳，严禁执行 git commit）。
 
 ---
@@ -384,7 +384,7 @@
 
 ### 4.1 DEFECT-01：`toCanonicalFsPath` 盘符大小写与相对段 `/../` 消解修复
 
-目标文件：`apps/crish-desktop/src/api/workspaceFsApi.ts`（Spec-01 范围）  
+目标文件：`apps/crish-desktop/src/api/workspaceFsApi.ts`（Spec-01 范围）
 整改目标：符合 HB-16 强制小写化，增加循环栈消除 `/../` 路径段。
 
 ```typescript
@@ -476,7 +476,7 @@ export function isSameFsPath(pathA: string, pathB: string): boolean {
 
 ### 4.2 DEFECT-02：`getAncestorDirPaths` 根路径斜杠双拼与越界防御修复
 
-目标文件：`apps/crish-desktop/src/api/workspaceFsApi.ts`（Spec-01 范围）  
+目标文件：`apps/crish-desktop/src/api/workspaceFsApi.ts`（Spec-01 范围）
 整改目标：根路径尾斜杠安全拼接，杜绝 `c://`，增加 `..` 越界守卫。
 
 ```typescript
@@ -529,7 +529,7 @@ export function getAncestorDirPaths(targetPath: string, rootPath: string): strin
 
 ### 4.3 DEFECT-03：`useFileNavigation` 中 `revealPath` 大小写鲁棒性与根兼容修复
 
-目标文件：`apps/crish-desktop/src/components/files/hooks/useFileNavigation.ts`（Spec-02 范围）  
+目标文件：`apps/crish-desktop/src/components/files/hooks/useFileNavigation.ts`（Spec-02 范围）
 整改目标：修复 Windows 大小写不敏感校验，修复根目录 `//` 判定，完善失败拦截。
 
 ```typescript
@@ -628,7 +628,7 @@ export function getAncestorDirPaths(targetPath: string, rootPath: string): strin
 
 ### 4.4 DEFECT-04：`FileTreeView` 视口 `[0, maxScrollTop]` 钳位与防劫持修复
 
-目标文件：`apps/crish-desktop/src/components/files/FileTreeView.tsx`（Spec-03 范围）  
+目标文件：`apps/crish-desktop/src/components/files/FileTreeView.tsx`（Spec-03 范围）
 整改目标：代数闭环钳位位移，使用 `prevSelectedRef` 阻断 `flatTree` 重算时的视口劫持。
 
 ```typescript
@@ -705,7 +705,7 @@ export function getAncestorDirPaths(targetPath: string, rootPath: string): strin
 
 ### 4.5 DEFECT-05：Spec-04 中 `FilesCard` 与 `FileBreadcrumb` 契约消除 `cwd` 遗漏修复
 
-目标文件：`apps/crish-desktop/src/components/files/FilesCard.tsx` 与 `FileBreadcrumb.tsx`（Spec-04 范围）  
+目标文件：`apps/crish-desktop/src/components/files/FilesCard.tsx` 与 `FileBreadcrumb.tsx`（Spec-04 范围）
 整改目标：从顶层移除废弃属性传递，解除 TypeScript 编译阻断。
 
 **在 `FilesCard.tsx` 中（移除 `cwd={nav.cwd}`）**：

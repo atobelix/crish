@@ -1,11 +1,11 @@
 # 施工任务书 SPEC-04：面板宿主单轨收敛、物理拔除 cwd、防穿透隔离舱与面包屑无损清洗施工规范
 
-> **文档标识**：`docs/file-tree-and-attachments-architecture/detailed-plans/04-files-card-and-breadcrumb-spec.md`  
-> **所属战役**：`docs/file-tree-and-attachments-architecture/`（分阶段详细施工图：Wave 4）  
-> **首席架构师**：面板宿主单轨收敛与 W3C 层叠隔离舱首席架构师  
-> **权威地位**：本规范为 Wave 4 实施的唯一合法施工图，直接派生自 [`00-master-plan.md`](../00-master-plan.md)（§2.5, §2.6, §3.3, §4.3, §4.4, §6.7, §6.8, §6.9, §6.12, §7.1, §8）。  
-> **波次编号映射（2026-09-08）**：本规范自标「Wave 4」，对应 00-master-plan §8.2 的 **Wave 5（宿主收敛）**；详案 05 自标「Wave 5」对应主案 Wave 4（消息气泡附件）。执行以主案 §8.2 文件域矩阵为准。  
-> **权威遵循**：严格遵从仓库根目录 [`AGENTS.md`](file:///c:/Software/conex/AGENTS.md)（§1 逻辑规划与反退避、§2 子 Agent 调度、§3 Git 提交纪律、§7 严禁补丁与作弊、§7.1 立体验证纪律、§8 反过度设计红线、§11 CI 行数门禁、§12 自定义 Tooltip、§13 输入框焦点态、§14 色彩空间规范）及 [`ANTI_OVERENGINEERING_GUARDRAILS.md`](file:///c:/Software/conex/ANTI_OVERENGINEERING_GUARDRAILS.md)。  
+> **文档标识**：`docs/file-tree-and-attachments-architecture/detailed-plans/04-files-card-and-breadcrumb-spec.md`
+> **所属战役**：`docs/file-tree-and-attachments-architecture/`（分阶段详细施工图：Wave 4）
+> **首席架构师**：面板宿主单轨收敛与 W3C 层叠隔离舱首席架构师
+> **权威地位**：本规范为 Wave 4 实施的唯一合法施工图，直接派生自 [`00-master-plan.md`](../00-master-plan.md)（§2.5, §2.6, §3.3, §4.3, §4.4, §6.7, §6.8, §6.9, §6.12, §7.1, §8）。
+> **波次编号映射（2026-09-08）**：本规范自标「Wave 4」，对应 00-master-plan §8.2 的 **Wave 5（宿主收敛）**；详案 05 自标「Wave 5」对应主案 Wave 4（消息气泡附件）。执行以主案 §8.2 文件域矩阵为准。
+> **权威遵循**：严格遵从仓库根目录 [`AGENTS.md`](file:///c:/Software/conex/AGENTS.md)（§1 逻辑规划与反退避、§2 子 Agent 调度、§3 Git 提交纪律、§7 严禁补丁与作弊、§7.1 立体验证纪律、§8 反过度设计红线、§11 CI 行数门禁、§12 自定义 Tooltip、§13 输入框焦点态、§14 色彩空间规范）及 [`ANTI_OVERENGINEERING_GUARDRAILS.md`](file:///c:/Software/conex/ANTI_OVERENGINEERING_GUARDRAILS.md)。
 > **核心硬性红线（零容忍）**：
 > 1. **严格恪守用户最高裁决（下拉树逻辑维持现状）**：`FileBreadcrumb.tsx` 内部下拉浮层的树遍历、展开折叠、异步加载、缓存管理等全部逻辑（`openBcFlyout`, `toggleExpand`, `loadDir`, `dirCache`, `expandedPaths`, `loadingPaths`, `renderTreeNodes`, `filteredEntries`）**维持现状严禁重构**！仅物理切除 `cwd` 属性定义、解构与兜底回退；
 > 2. **零多轨并存与物理拔除 `cwd`（Zero Multi-track & Zero Compat Shim）**：工作区根目录（`root`）为全系统唯一权威事实源（SSOT），全域彻底物理拔除 `cwd`，严禁保留 `@deprecated cwd?: string`、`cwd: _cwd` 或 `refresh(_ignoredDir?: string)`；
@@ -82,7 +82,7 @@
 4. **色彩 Token 漂移**：样式表中残留 8 处裸 Hex `#ffffff` 以及经典蓝 `#2563eb`，违反现代 CSS 与 Zero-Blue 铁律；
 5. **存量单测编译雪崩**：`FileBreadcrumb.test.tsx` 中存在多达 13 处显式传递 `cwd` 的用例，直接阻碍组件属性的物理切除。
 
-**Wave 4 的核心使命**：  
+**Wave 4 的核心使命**：
 实施外科手术式的物理切除，彻底拔除 `cwd` 契约，收敛面板宿主为单一真理源（`root` SSOT）；严格恪守用户最高裁决，对 `FileBreadcrumb.tsx` 下拉浮层内部树遍历与展开逻辑维持现状严禁重构；依托 W3C Compositing and Blending Level 1 规范建立原生隔离舱，消灭分割线穿透；完成 8 处裸 Hex 清洗与 13 处存量单测无损清洗，达成端到端物理交付闭环。
 
 ### 1.3 四大严禁负向红线刚性对照终审矩阵
@@ -429,11 +429,11 @@ $$H_{\text{body}} = \max(0, H_{\text{host}} - 32\text{px})$$
 
 ### 4.3 分割线 `.filesSplitResizer`（$z=1$）受困于局部层叠上下文的代数推导
 
-根据 W3C Stacking Context 的树形代数性质，不同层叠上下文之间的兄弟元素比较只发生在其最近共同祖先上下文上。  
+根据 W3C Stacking Context 的树形代数性质，不同层叠上下文之间的兄弟元素比较只发生在其最近共同祖先上下文上。
 由于：
 $$\text{StackingContext}(\text{.filesSplitResizer}) = S_{\text{body}}$$
 $$\text{StackingContext}(\text{.filesBar}) = S_{\text{root}}$$
-且 $S_{\text{body}}$ 作为整体挂载在 $S_{\text{root}}$ 的 $z=0$ 层级，因此 `.filesSplitResizer` 的任何局部 $z$ 值增加（即便局部设为 $z=999$）也绝对无法使其全局图层高度超越其父层叠上下文 $S_{\text{body}}$ 的上限（即全局 $z=0$）。  
+且 $S_{\text{body}}$ 作为整体挂载在 $S_{\text{root}}$ 的 $z=0$ 层级，因此 `.filesSplitResizer` 的任何局部 $z$ 值增加（即便局部设为 $z=999$）也绝对无法使其全局图层高度超越其父层叠上下文 $S_{\text{body}}$ 的上限（即全局 $z=0$）。
 而 `.filesBar` 在 $S_{\text{root}}$ 中的层级为 $z=10$（浮层展开时为 $z=400$），恒满足：
 $$z_{\text{global}}(\text{.filesBar}) \ge 10 > 0 = z_{\text{global}}(S_{\text{body}}) \ge z_{\text{global}}(\text{.filesSplitResizer})$$
 几何图层代数证明确立：`.filesBar` 对 `.filesSplitResizer` 拥有无条件的、跨层级的永久压制权。

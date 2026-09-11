@@ -1,10 +1,10 @@
 # Conex / Crish 文件树与附件联动架构端到端全链路终极总方案（Master Architecture & Implementation Plan）
 
-> **文档标识**：`docs/file-tree-and-attachments-architecture/00-master-plan.md`  
-> **所属战役**：`docs/file-tree-and-attachments-architecture/`  
-> **首席架构师**：战役终极融合总方案首席系统架构师与跨平台通信专家  
-> **权威性质**：全战役唯一合法、系统性自上而下的端到端终极总方案（全面融合 Plan Alpha 与 Plan Beta，穿透真实源码核验建立）。  
-> **权威遵循**：严格遵从仓库根目录 [`AGENTS.md`](file:///c:/Software/conex/AGENTS.md)（§1 逻辑规划与反退避、§2 子 Agent 调度、§3 Git 提交纪律、§4 战役工作区结构规范、§7 严禁补丁与作弊、§7.1 立体验证纪律、§8 反过度设计硬性红线、§11 CI 治理与行数门禁、§12 自定义 Tooltip、§13 输入框与焦点态规范、§14 色彩空间与现代 CSS、§15/§16 Tauri MCP 4000 调试通道）及 [`ANTI_OVERENGINEERING_GUARDRAILS.md`](file:///c:/Software/conex/ANTI_OVERENGINEERING_GUARDRAILS.md)。  
+> **文档标识**：`docs/file-tree-and-attachments-architecture/00-master-plan.md`
+> **所属战役**：`docs/file-tree-and-attachments-architecture/`
+> **首席架构师**：战役终极融合总方案首席系统架构师与跨平台通信专家
+> **权威性质**：全战役唯一合法、系统性自上而下的端到端终极总方案（全面融合 Plan Alpha 与 Plan Beta，穿透真实源码核验建立）。
+> **权威遵循**：严格遵从仓库根目录 [`AGENTS.md`](file:///c:/Software/conex/AGENTS.md)（§1 逻辑规划与反退避、§2 子 Agent 调度、§3 Git 提交纪律、§4 战役工作区结构规范、§7 严禁补丁与作弊、§7.1 立体验证纪律、§8 反过度设计硬性红线、§11 CI 治理与行数门禁、§12 自定义 Tooltip、§13 输入框与焦点态规范、§14 色彩空间与现代 CSS、§15/§16 Tauri MCP 4000 调试通道）及 [`ANTI_OVERENGINEERING_GUARDRAILS.md`](file:///c:/Software/conex/ANTI_OVERENGINEERING_GUARDRAILS.md)。
 > **核心硬性红线（零容忍）**：
 > 1. **零功能伪连通（Zero Fake Connectivity）**：真实调用链 100% 物理绑定，无论文件预览分流至何种宿主（`file-viewer` 或 `files`），无条件优先派发 `crish-open-file` 广播事件，杜绝代码预览截断、空转组件与死快照；
 > 2. **零多轨并存与零兼容 Shim（Zero Multi-track & Zero Compat Shim）**：工作区根目录（`root`）为全系统唯一权威事实源（SSOT），全域物理拔除 `cwd`，严禁保留 `@deprecated cwd?: string`、`cwd: _cwd` 或 `refresh(_ignoredDir?: string)`；
@@ -81,7 +81,7 @@
 4. **双轨下钻残留（给旧岛续命）**：全系统残留 `cwd` 状态与传参，顶栏保留双轨下钻时代的“上级目录 ↰”按钮，存量单测大量存在硬编码 `cwd`；
 5. **样式欺骗与盒模型坍塌**：使用未定义的伪变量 `--z-pinned-bar`，脉冲动画回退色漂移为蓝色 `#2563eb`，嵌套百分比导致附件条宽度二次缩水至 49.3%，分割条由于未受局部层叠上下文封印而穿透覆盖顶栏。
 
-**本方案（00-master-plan.md）的终极使命**：  
+**本方案（00-master-plan.md）的终极使命**：
 依靠严谨的系统工程思维、真实生产代码穿透验证与严格代数证明，融合竞技方案 Alpha 与 Beta 的核心技术优势，制定一份**全战役唯一权威、端到端真实对齐、无任何妥协与兼容 Shim 的施工图级终极总方案**。对历史债务执行物理切除（Physical Purge），全域拔除 `cwd`，建立 100% 对齐的单一事实源（SSOT），打通从卡片点击到目录树停泊高亮的五大物理闭环客观物证体系。
 
 ---
@@ -476,11 +476,11 @@ $$\text{Host Container} \xrightarrow{\text{height: 100\%}} \text{.filesCard} \xr
 
 ### 4.4 `.filesSplitResizer`（$z=1$）受困于局部层叠上下文代数推导与 `.filesBar`（$z=10$ 或 $400$）压制证明
 
-根据 W3C Stacking Context 的树形代数性质，不同层叠上下文之间的兄弟元素比较只发生在其最近共同祖先上下文上。  
+根据 W3C Stacking Context 的树形代数性质，不同层叠上下文之间的兄弟元素比较只发生在其最近共同祖先上下文上。
 由于：
 $$\text{StackingContext}(\text{.filesSplitResizer}) = S_{\text{body}}$$
 $$\text{StackingContext}(\text{.filesBar}) = S_{\text{root}}$$
-且 $S_{\text{body}}$ 作为整体挂载在 $S_{\text{root}}$ 的 $z=0$ 层级，因此 `.filesSplitResizer` 的任何局部 $z$ 值增加（哪怕设为 $z=999$）也绝对无法使其全局图层高度超越其父层叠上下文 $S_{\text{body}}$ 的上限（即全局 $z=0$）。  
+且 $S_{\text{body}}$ 作为整体挂载在 $S_{\text{root}}$ 的 $z=0$ 层级，因此 `.filesSplitResizer` 的任何局部 $z$ 值增加（哪怕设为 $z=999$）也绝对无法使其全局图层高度超越其父层叠上下文 $S_{\text{body}}$ 的上限（即全局 $z=0$）。
 而 `.filesBar` 在 $S_{\text{root}}$ 中的层级为 $z=10$（浮层展开时为 $z=400$），满足：
 $$z_{\text{global}}(\text{.filesBar}) \ge 10 > 0 = z_{\text{global}}(S_{\text{body}}) \ge z_{\text{global}}(\text{.filesSplitResizer})$$
 因此，从几何图层代数上证明，`.filesBar` 对 `.filesSplitResizer` 拥有无条件的、跨层级的永久压制权。
@@ -763,7 +763,7 @@ export function detectFileKind(name: string): FileKind {
 ```typescript
 /**
  * 文件面板打开器 + 工具参数路径抽取。
- * 
+ *
  * 架构重构核心修复（CRIT-01）：
  * 彻底解耦文件预览宿主分流（FilePreviewLeafHost）与主目录树联动导航（Tree Navigation）。
  * 无论目标路径分流至 'file-viewer' 还是 'files'，只要是工作区合法物理文件，
@@ -3522,7 +3522,7 @@ ChatUserMessageRow.displayName = 'ChatUserMessageRow';
    ChatMessageRow.module.css 核心重构与物理切除
    ───────────────────────────────────────────────────────────────────────── */
 
-/* 物理切除：原 L116-L176 的 .userImages, .userImageWrapper, .userImage, 
+/* 物理切除：原 L116-L176 的 .userImages, .userImageWrapper, .userImage,
    .userAttachments, .userAttachmentChip, .userAttachmentName 共 61 行死亡 CSS 彻底删除！ */
 
 .userStack {

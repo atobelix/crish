@@ -1,8 +1,8 @@
 # 面包屑视觉重塑与防穿透隔离战略分析报告
 
-> **文件标识**：`docs/file-tree-and-attachments-architecture/analysis/03-breadcrumb-and-resizer-strategy.md`  
-> **专题性质**：阶段一 · 多 Agent 方案生成战略分析报告（布局层级、设计系统对齐与架构边界控制）  
-> **面向对象**：架构评审者、后续详细方案规划 Agent（Detailed Plan Designer）、执行子 Agent（Implementation Agents）  
+> **文件标识**：`docs/file-tree-and-attachments-architecture/analysis/03-breadcrumb-and-resizer-strategy.md`
+> **专题性质**：阶段一 · 多 Agent 方案生成战略分析报告（布局层级、设计系统对齐与架构边界控制）
+> **面向对象**：架构评审者、后续详细方案规划 Agent（Detailed Plan Designer）、执行子 Agent（Implementation Agents）
 > **核心原则**：纯逻辑规划、问题逻辑同权、严守零魔术数字、设计系统原子对齐、严禁回退与过度设计。
 
 ---
@@ -34,7 +34,7 @@
 ```html
 <!-- 宿主根容器 -->
 <div class="filesCard">
-  
+
   <!-- Sibling 1: 顶部工具条 -->
   <div class="filesBar">
     <div class="filesCrumbs">
@@ -105,25 +105,25 @@
 #### 2.1.2 W3C 规范推导：为什么 400 敌不过 10？
 根据 **W3C CSS 2.1 § 9.9 (Layered presentation)** 与 **CSS Positioned Layout Level 3**，层叠上下文的建立与竞争遵循严格的代数公理：
 
-1. **公理一（封装性原则 Encapsulation Principle）**：  
+1. **公理一（封装性原则 Encapsulation Principle）**：
    一个层叠上下文内部的所有子元素，其 `z-index` 无论多大，都只在当前层叠上下文内部比较。对外部祖先层叠上下文而言，该子元素所在的整个层叠上下文被视为一个**原子化不可分割的整体**，其在外部的实际参与层级等于其创建者的全局层级：
    $$\text{StackLevel}_{\text{global}}(\text{Child}) \equiv \text{StackLevel}_{\text{global}}(\text{Parent Context})$$
-   在当前代码中，`.filesBar` 拥有 `position: relative` 且 `z-index: 10`（来自 `--z-card-footer: 10`），因此创建了层叠上下文 $\mathcal{SC}_{\text{bar}}$，其全局等级为 **10**。  
+   在当前代码中，`.filesBar` 拥有 `position: relative` 且 `z-index: 10`（来自 `--z-card-footer: 10`），因此创建了层叠上下文 $\mathcal{SC}_{\text{bar}}$，其全局等级为 **10**。
    即使 `.filesBcFlyout` 在内部声明了 `z-index: var(--z-breadcrumb, 400)`，在宿主容器 `.filesCard` 的眼里，它的有效层级依然被**截断且牢牢锁定在 10**！
    $$\text{StackLevel}_{\text{global}}(\text{.filesBcFlyout}) = 10$$
 
-2. **公理二（普通流非上下文容器的穿透冒泡）**：  
-   `.filesBody` 是常规 flex 容器，既无定位（`position: static`），也无 `isolation: isolate`，更无 `transform` / `filter` 等属性。根据规范，`.filesBody` **没有创建层叠上下文**。  
+2. **公理二（普通流非上下文容器的穿透冒泡）**：
+   `.filesBody` 是常规 flex 容器，既无定位（`position: static`），也无 `isolation: isolate`，更无 `transform` / `filter` 等属性。根据规范，`.filesBody` **没有创建层叠上下文**。
    当其子元素 `.filesSplitResizer` 声明了 `position: relative; z-index: 10` 时，由于其直接父容器没有层叠上下文，`.filesSplitResizer` 将**直接逃逸（Escape）穿透出 `.filesBody`**，向外寻找最近的祖先层叠上下文——即外层的 `.filesCard`！
 
-3. **公理三（平权参与者与 DOM 树顺序决胜机制 Tree Order Tie-Breaker）**：  
+3. **公理三（平权参与者与 DOM 树顺序决胜机制 Tree Order Tie-Breaker）**：
    在祖先 `.filesCard` 的层叠树中，此时出现了两个拥有**完全相同全局层叠等级（Stack Level = 10）**的参与者：
    - 参与者 A：$\mathcal{SC}_{\text{bar}}$（内含 `.filesBcFlyout`，层级 10）；
    - 参与者 B：`.filesSplitResizer`（逃逸出的定位元素，层级 10）。
-   
+
    W3C CSS 2.1 § 9.9 明确裁定：
    > *"Within each stacking context, positioned elements with the same stack level are stacked according to tree order (i.e. DOM source order)."*
-   
+
    在 [FilesCard.tsx:288-485](file:///c:/Software/conex/apps/crish-desktop/src/components/files/FilesCard.tsx#L288-L485) 中：
    ```tsx
    // DOM 树顺序：先渲染 filesBar，后渲染 filesBody（及其包含的 filesSplitResizer）
@@ -132,7 +132,7 @@
      <div className={styles.filesSplitResizer} />    <!-- DOM 顺序在后！ -->
    </div>
    ```
-   因为 $\text{DOM\_Order}(\text{.filesSplitResizer}) > \text{DOM\_Order}(\text{.filesBar})$，**后出现的 `.filesSplitResizer` 必然绘制在先出现的 `.filesBar` 之上**！  
+   因为 $\text{DOM\_Order}(\text{.filesSplitResizer}) > \text{DOM\_Order}(\text{.filesBar})$，**后出现的 `.filesSplitResizer` 必然绘制在先出现的 `.filesBar` 之上**！
    当面包屑下拉面板 `.filesBcFlyout` 向下垂挂至 `.filesBody` 视口上方时，处于后方且穿透出来的 `.filesSplitResizer` 便以其蓝/灰分割线，硬生生垂直劈开并遮挡了下拉面板。
 
 ```
@@ -144,7 +144,7 @@
  │         └── .filesBcFlyout [z-index: 400] --------> (被困在 Level 10 内部无法逃逸!)
  │
  └── .filesBody [无 Stacking Context, 裸露通道]
-      └── .filesSplitResizer [position: relative; z-index: 10] 
+      └── .filesSplitResizer [position: relative; z-index: 10]
            │
            └── 逃逸冒泡至 .filesCard！
                与 .filesBar 层级同为 10，因 DOM 顺序在后，
@@ -240,13 +240,13 @@
 ```
 
 其核心设计标准包含四个不可动摇的维度：
-1. **发丝底边一体化（Integrated Header with Hairline Divider）**：  
+1. **发丝底边一体化（Integrated Header with Hairline Divider）**：
    搜索栏不是被随意塞进浮层里的独立带边框方盒，而是作为浮层顶部的 Header 区。其四周无 border、无独立背景块，底部仅用一条极轻量发丝分割线（`1px solid var(--hairline, var(--border-subtle))`）与下方列表做物理隔离；
-2. **形态 ④ 纯光标极简型（Pure Cursor Minimalist Input）**：  
+2. **形态 ④ 纯光标极简型（Pure Cursor Minimalist Input）**：
    输入框元素在全生命周期内（默认、hover、focus、focus-visible、active）保持**完全无边框（border: none）、完全无轮廓（outline: none）、完全无阴影投影（box-shadow: none）、完全透明背景（background: transparent）**。整个交互状态中，**只有原生的文本光标（caret）在闪烁，无任何粗黑描边或深灰光环**，杜绝任何视觉压迫；
-3. **左侧弱灰矢量放大镜（Muted Search Icon）**：  
+3. **左侧弱灰矢量放大镜（Muted Search Icon）**：
    左侧固定精确尺寸为 14px 的放大镜图标（`Search`），前景色采用弱化辅助色（`var(--text-tertiary)`），不可缩放、不争夺视觉重心；
-4. **右侧紧凑微动操作胶囊（Refined Action Button Group）**：  
+4. **右侧紧凑微动操作胶囊（Refined Action Button Group）**：
    右侧动作按钮采用 24×24px 正方形极简胶囊，`border: none; background: transparent; border-radius: var(--radius-sm, 4px)`。悬停时展现温和的高亮背景（`var(--bg-hover)`），并由项目自定义 `<Tooltip>` 刚性包裹，杜绝原生 HTML `title` 气泡。
 
 ### 3.2 真实代码对比：当前面包屑搜索栏缺陷定位

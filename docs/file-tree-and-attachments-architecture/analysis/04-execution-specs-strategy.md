@@ -1,9 +1,9 @@
 # 多 Agent 任务拆解与防自由发挥机制战略分析
 
-> **文档标识**：`docs/file-tree-and-attachments-architecture/analysis/04-execution-specs-strategy.md`  
-> **所属战役**：`docs/file-tree-and-attachments-architecture/`（阶段一：方案生成战略分析）  
-> **权威纪律**：严格遵循仓库根目录 [`AGENTS.md`](file:///c:/Software/conex/AGENTS.md)（§1 反退避、§2 子 Agent 调度、§3 Git 提交纪律、§7 严禁补丁与作弊、§7.1 立体验证、§8 反过度设计红线、§11 CI 治理与行数门禁、§13 输入框焦点态、§14 色彩空间）与 [`ANTI_OVERENGINEERING_GUARDRAILS.md`](file:///c:/Software/conex/ANTI_OVERENGINEERING_GUARDRAILS.md)。  
-> **规划准则**：纯逻辑规划（不谈工期、人天、人员分配，严禁划分 P0/P1 业务优先级，所有工程与架构问题逻辑同权，完全基于抽象拓扑与调用依赖编排推进）。  
+> **文档标识**：`docs/file-tree-and-attachments-architecture/analysis/04-execution-specs-strategy.md`
+> **所属战役**：`docs/file-tree-and-attachments-architecture/`（阶段一：方案生成战略分析）
+> **权威纪律**：严格遵循仓库根目录 [`AGENTS.md`](file:///c:/Software/conex/AGENTS.md)（§1 反退避、§2 子 Agent 调度、§3 Git 提交纪律、§7 严禁补丁与作弊、§7.1 立体验证、§8 反过度设计红线、§11 CI 治理与行数门禁、§13 输入框焦点态、§14 色彩空间）与 [`ANTI_OVERENGINEERING_GUARDRAILS.md`](file:///c:/Software/conex/ANTI_OVERENGINEERING_GUARDRAILS.md)。
+> **规划准则**：纯逻辑规划（不谈工期、人天、人员分配，严禁划分 P0/P1 业务优先级，所有工程与架构问题逻辑同权，完全基于抽象拓扑与调用依赖编排推进）。
 > **核心使命**：剖析多 Agent 并行执行期失控与过度发挥的 6 大反模式，确立“施工图级任务书（Execution Spec）”规范范式，制定单文件空间独占与波次串行推进拓扑，建立阶段二任务书生成与五维审核硬门禁。
 
 ---
@@ -185,10 +185,10 @@ graph TD
 ````markdown
 # 施工任务书 [SPEC-ID]：[模块/功能精准名称]
 
-> **文档标识**：`docs/file-tree-and-attachments-architecture/execution-specs/spec-[ID]-[kebab-name].md`  
-> **所属战役**：`docs/file-tree-and-attachments-architecture/`  
-> **指派角色**：`[专用角色名称，例如：Workspace Path & Canonical API Engineer]`  
-> **前置依赖**：`[明确的前置 Spec ID，无则填无]`  
+> **文档标识**：`docs/file-tree-and-attachments-architecture/execution-specs/spec-[ID]-[kebab-name].md`
+> **所属战役**：`docs/file-tree-and-attachments-architecture/`
+> **指派角色**：`[专用角色名称，例如：Workspace Path & Canonical API Engineer]`
+> **前置依赖**：`[明确的前置 Spec ID，无则填无]`
 > **纪律铁律**：纯逻辑实现，禁止自主过度发挥，严禁越权修改白名单外文件，严禁执行 git commit。
 
 ---

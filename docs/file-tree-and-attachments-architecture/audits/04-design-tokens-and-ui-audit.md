@@ -1,17 +1,17 @@
 # 方案合理性严格审计 04：UI Design Tokens 遵从度与防穿透隔离专题审计报告
 
-> **文档标识**：`docs/file-tree-and-attachments-architecture/audits/04-design-tokens-and-ui-audit.md`  
-> **所属战役**：`docs/file-tree-and-attachments-architecture/`（阶段三：方案合理性严格审计）  
-> **审查角色**：资深 Design System 与前端人机工程审查专家（Senior Design System & Front-End Ergonomics Audit Expert）  
+> **文档标识**：`docs/file-tree-and-attachments-architecture/audits/04-design-tokens-and-ui-audit.md`
+> **所属战役**：`docs/file-tree-and-attachments-architecture/`（阶段三：方案合理性严格审计）
+> **审查角色**：资深 Design System 与前端人机工程审查专家（Senior Design System & Front-End Ergonomics Audit Expert）
 > **审查对象**：
 > 1. `detailed-plans/03-tree-virtual-scroll-spec.md`（虚拟滚动平滑居中与脉冲高亮）
 > 2. `detailed-plans/04-files-card-and-breadcrumb-spec.md`（宿主单轨收敛、防穿透隔离舱与面包屑搜索框）
 > 3. `detailed-plans/05-message-attachment-spec.md`（消息附件 58×58 卡片与独立横排布局）
-> 4. 辅助对照：`execution-specs/spec-03 ~ spec-05` 与系统标杆 `ModelBadgePickerMenu.module.css`  
+> 4. 辅助对照：`execution-specs/spec-03 ~ spec-05` 与系统标杆 `ModelBadgePickerMenu.module.css`
 > **审计依据**：
 > - 仓库协作指令 [`AGENTS.md`](file:///c:/Software/conex/AGENTS.md)（§1 反退避、§7 严禁补丁、§7.1 立体验证、§8 反过度设计、§12 自定义 Tooltip、§13 输入框与焦点态、§14 现代 CSS 色彩）
 > - 审计准则 [`analysis/05-audit-framework-strategy.md`](file:///c:/Software/conex/docs/file-tree-and-attachments-architecture/analysis/05-audit-framework-strategy.md)（六维打分卡与 18 项一票否决 Hard Blockers）
-> - W3C CSS Compositing and Blending Level 1 与 CSS 2.1 § 9.9 层叠上下文规范  
+> - W3C CSS Compositing and Blending Level 1 与 CSS 2.1 § 9.9 层叠上下文规范
 > **审查原则**：纯逻辑工程审计，问题逻辑同权，不谈工期、人天、P0/P1，以代码级数学确定性与源码真理源为唯一裁判基准。
 
 ---

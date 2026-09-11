@@ -1,8 +1,8 @@
 # 施工任务书 02：目录树单轨收敛与祖先展开核心 Hook
 
-> **文档标识**：`docs/file-tree-and-attachments-architecture/execution-specs/spec-02-tree-navigation-hook.md`  
-> **所属战役**：`docs/file-tree-and-attachments-architecture/`  
-> **指派角色**：`Directory Tree Navigation Hook Engineer`  
+> **文档标识**：`docs/file-tree-and-attachments-architecture/execution-specs/spec-02-tree-navigation-hook.md`
+> **所属战役**：`docs/file-tree-and-attachments-architecture/`
+> **指派角色**：`Directory Tree Navigation Hook Engineer`
 > **纪律铁律**：纯逻辑规划，禁止自主过度发挥，严禁篡改工作区根目录，严禁执行 git commit。
 
 ---

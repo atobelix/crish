@@ -1,11 +1,11 @@
 # 阶段三方案合理性严格审计报告：SSOT 纯度与反过度设计红线专题审计
 
-> **文档标识**：`docs/file-tree-and-attachments-architecture/audits/01-ssot-and-guardrails-audit.md`  
-> **所属战役**：`docs/file-tree-and-attachments-architecture/`（阶段三：方案合理性严格审计）  
-> **审查对象**：阶段二编制的 5 份详细设计施工任务书（`detailed-plans/01-path-canonical-spec.md` ~ `05-message-attachment-spec.md`）  
-> **审计依据**：仓库根目录 [`ANTI_OVERENGINEERING_GUARDRAILS.md`](file:///c:/Software/conex/ANTI_OVERENGINEERING_GUARDRAILS.md)、[`AGENTS.md`](file:///c:/Software/conex/AGENTS.md)（§1 反退避、§7 严禁补丁与作弊、§7.1 立体验证纪律、§8 反过度设计红线、§11 CI 治理、§12 自定义 Tooltip、§13 输入框焦点态规范、§14 现代 CSS 语法规范）及战役审计大纲 [`analysis/05-audit-framework-strategy.md`](file:///c:/Software/conex/docs/file-tree-and-attachments-architecture/analysis/05-audit-framework-strategy.md)。  
-> **审查专家**：资深系统架构师与反过度设计审查专家（Senior System Architecture & Anti-Overengineering Audit Expert）  
-> **审查属性**：纯逻辑工程审计（不谈工期、人天、人员偏见，问题同权，以源码真理源与数学不变量为裁判准绳）。  
+> **文档标识**：`docs/file-tree-and-attachments-architecture/audits/01-ssot-and-guardrails-audit.md`
+> **所属战役**：`docs/file-tree-and-attachments-architecture/`（阶段三：方案合理性严格审计）
+> **审查对象**：阶段二编制的 5 份详细设计施工任务书（`detailed-plans/01-path-canonical-spec.md` ~ `05-message-attachment-spec.md`）
+> **审计依据**：仓库根目录 [`ANTI_OVERENGINEERING_GUARDRAILS.md`](file:///c:/Software/conex/ANTI_OVERENGINEERING_GUARDRAILS.md)、[`AGENTS.md`](file:///c:/Software/conex/AGENTS.md)（§1 反退避、§7 严禁补丁与作弊、§7.1 立体验证纪律、§8 反过度设计红线、§11 CI 治理、§12 自定义 Tooltip、§13 输入框焦点态规范、§14 现代 CSS 语法规范）及战役审计大纲 [`analysis/05-audit-framework-strategy.md`](file:///c:/Software/conex/docs/file-tree-and-attachments-architecture/analysis/05-audit-framework-strategy.md)。
+> **审查专家**：资深系统架构师与反过度设计审查专家（Senior System Architecture & Anti-Overengineering Audit Expert）
+> **审查属性**：纯逻辑工程审计（不谈工期、人天、人员偏见，问题同权，以源码真理源与数学不变量为裁判准绳）。
 > **Git 状态**：严格遵守提交纪律，纯净留存工作区，严禁执行 `git commit`。
 
 ---
@@ -426,9 +426,9 @@ $$\begin{array}{c|ccccc}
 - **主审专家最终裁决**：
   $$\mathbf{AUDIT\;VERDICT:\;CONDITIONAL\;FAIL\;/\;REVISE\;BEFORE\;SIGN\text{-}OFF}$$
   **【条件性阻断 / 限期修订后准入】**
-  
+
   阶段二生成的 5 份详细施工任务书在整体架构设计、反过度设计克制性、物理删除坚决度、用户裁决对齐度及文件白名单互斥性上表现出高超的工程水准；然而，由于 **Spec-01 与 HB-16 存在盘符大小写方向冲突**，且伴随 **Spec-04 `nav.cwd` 契约断裂** 与 **CSS fallback 裸 Hex 隐患**，根据仓库质量红线，**当前版本不得直接签发准入放行书**。
-  
+
   必须由规划责任 Agent 依照下节整改指令完成就地原子修订，复审确认 4 项缺陷归零且总分达到 98+ 分后，方可正式下发施工许可！
 
 ---

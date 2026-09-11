@@ -1,8 +1,8 @@
 # 施工任务书 01：路径规范化内核与 SSOT 契约库
 
-> **文档标识**：`docs/file-tree-and-attachments-architecture/execution-specs/spec-01-path-canonical-api.md`  
-> **所属战役**：`docs/file-tree-and-attachments-architecture/`  
-> **指派角色**：`Workspace Path & Canonical API Engineer`  
+> **文档标识**：`docs/file-tree-and-attachments-architecture/execution-specs/spec-01-path-canonical-api.md`
+> **所属战役**：`docs/file-tree-and-attachments-architecture/`
+> **指派角色**：`Workspace Path & Canonical API Engineer`
 > **纪律铁律**：纯逻辑规划，禁止自主过度发挥，禁止引入第三方路径解析库，严格独占文件域，严禁执行 git commit。
 
 ---

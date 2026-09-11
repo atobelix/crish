@@ -1,11 +1,11 @@
 # 详细施工规划任务书 02：目录树无头单轨状态机与祖先展开 Hook 详细施工规范
 
-> **文档标识**：`docs/file-tree-and-attachments-architecture/detailed-plans/02-tree-navigation-spec.md`  
-> **所属战役**：`docs/file-tree-and-attachments-architecture/`（Wave 2：状态机与钩子单轨纯净化）  
-> **首席架构师**：Wave 2 分阶段详细施工方案架构师与前端状态机专家  
-> **前置依赖**：`docs/file-tree-and-attachments-architecture/detailed-plans/01-path-canonical-api-spec.md`（路径规范化内核与 SSOT 契约库）  
-> **后置消费**：`03-tree-view-viewport-spec.md`（虚拟列表视口停泊与脉冲高亮）与 `04-files-card-spec.md`（宿主收敛与顶栏物理切除）  
-> **权威遵循**：严格遵从仓库根目录 [`AGENTS.md`](file:///c:/Software/conex/AGENTS.md)（§1 逻辑规划与反退避、§2 子 Agent 调度、§3 Git 提交纪律、§7 严禁补丁与作弊、§7.1 立体验证纪律、§8 反过度设计硬性红线、§11 CI 治理与行数门禁）及 [`ANTI_OVERENGINEERING_GUARDRAILS.md`](file:///c:/Software/conex/ANTI_OVERENGINEERING_GUARDRAILS.md)。  
+> **文档标识**：`docs/file-tree-and-attachments-architecture/detailed-plans/02-tree-navigation-spec.md`
+> **所属战役**：`docs/file-tree-and-attachments-architecture/`（Wave 2：状态机与钩子单轨纯净化）
+> **首席架构师**：Wave 2 分阶段详细施工方案架构师与前端状态机专家
+> **前置依赖**：`docs/file-tree-and-attachments-architecture/detailed-plans/01-path-canonical-api-spec.md`（路径规范化内核与 SSOT 契约库）
+> **后置消费**：`03-tree-view-viewport-spec.md`（虚拟列表视口停泊与脉冲高亮）与 `04-files-card-spec.md`（宿主收敛与顶栏物理切除）
+> **权威遵循**：严格遵从仓库根目录 [`AGENTS.md`](file:///c:/Software/conex/AGENTS.md)（§1 逻辑规划与反退避、§2 子 Agent 调度、§3 Git 提交纪律、§7 严禁补丁与作弊、§7.1 立体验证纪律、§8 反过度设计硬性红线、§11 CI 治理与行数门禁）及 [`ANTI_OVERENGINEERING_GUARDRAILS.md`](file:///c:/Software/conex/ANTI_OVERENGINEERING_GUARDRAILS.md)。
 > **核心硬性红线（零容忍）**：
 > 1. **零多轨并存与零兼容 Shim（Zero Multi-track & Zero Compat Shim）**：目录树状态机核心无头（Headless），树根永久锚定 `getWorkspacePath()` 作为全系统唯一事实源（SSOT）。全域彻底物理拔除 `cwd`, `setCwd`, `goUp`；严禁保留 `@deprecated cwd?: string`、`cwd: _cwd` 或 `refresh(_ignoredDir?: string)`；`refresh` 彻底物理重塑为无参函数 `() => Promise<void>`；
 > 2. **零截肢式降级与严密异常回写（CRIT-03 根治）**：并发拉取缺失直系祖先目录时，严禁使用 `catch { /* ignore */ }` 静默吞咽异常；必须在 `Promise.allSettled` 中遍历收集所有 `rejected` 的失败原因，聚合回写 `setError`；若祖先全量失败返回 `false`，若部分成功则合并进 `expanded` 并呈现明确错误提示；
@@ -67,7 +67,7 @@
 2. **状态竞争白屏**：当用户在聊天卡片中点击文件尝试定位时，若当前处于深层 `cwd` 下钻状态，由于目标祖先不在当前虚拟树内，定位算法直接失败，导致目录树空白死寂；
 3. **面包屑与顶栏死锁**：视图层必须同时处理 `root` 与 `cwd` 两套路径推导逻辑，顶栏存在多余的“上级目录 ↰”按钮。
 
-**Wave 2 架构定性**：  
+**Wave 2 架构定性**：
 `useFileNavigation` 是整个主目录树的**核心无头（Headless）单轨状态机**。
 - **永久真理源**：树根 `root` 在初始化与刷新时**唯一且不可篡改地**取自 `getWorkspacePath()`；
 - **单轨直属条目**：`entries` 数组恒且仅代表工作区根目录下的直属条目（Level 0）；
@@ -92,7 +92,7 @@ stateDiagram-v2
     [*] --> Uninitialized: 组件挂载
 
     Uninitialized --> Idle: setRoot(getWorkspacePath())
-    
+
     state Idle {
         [*] --> EmptyEntries: entries = []
         EmptyEntries --> RootReady: refresh() 加载根条目完成
@@ -100,7 +100,7 @@ stateDiagram-v2
 
     state RootReady {
         [*] --> Browsing: flatTree 响应式计算完成
-        
+
         Browsing --> TogglingFolder: 用户点击文件夹 (toggleExpand)
         state TogglingFolder {
             [*] --> CheckCache: expanded[canonicalPath] 存在?
@@ -117,18 +117,18 @@ stateDiagram-v2
             AssertBoundary --> OutOfBounds: 越界 -> setError('文件不在当前工作区内'), return false
             AssertBoundary --> ResolveAncestors: getAncestorDirPaths(target, root)
             ResolveAncestors --> CheckMissing: 过滤 !expanded[dir] 得到 toLoad
-            
+
             state CheckMissing {
                 [*] --> AllPresent: toLoad.length == 0 -> return true
                 [*] --> NeedFetch: toLoad.length > 0 -> Promise.allSettled(toLoad)
             }
-            
+
             NeedFetch --> ProcessSettled: 遍历 settledResults
             state ProcessSettled {
                 [*] --> CollectFulfilled: fulfilled -> 合并进 results 字典
                 CollectFulfilled --> CollectRejected: rejected -> failureReasons.push(reason)
             }
-            
+
             ProcessSettled --> CommitState: 原子提交与异常回写
             state CommitState {
                 [*] --> ApplyExpanded: results 非空 -> setExpanded
@@ -139,7 +139,7 @@ stateDiagram-v2
             }
         }
         CascadingRevealing --> Browsing: flatTree useMemo 重算, 目标行进入平铺列表
-        
+
         Browsing --> RootRefreshing: 显式刷新 (refresh())
         state RootRefreshing {
             [*] --> FetchRoot: listDirectory(normRoot)
@@ -1037,7 +1037,7 @@ $$\text{root}(t) \equiv \text{getWorkspacePath}(t)$$
 $$\forall a \in \{\text{refresh}(), \text{toggleExpand}(p), \text{revealPath}(p)\}, \quad \text{root}(t+1) = \text{root}(t)$$
 $$\text{entries}(t) \subseteq \text{Children}(\text{root}(t))$$
 
-**定理 1（树根绝对不可变性）**：  
+**定理 1（树根绝对不可变性）**：
 无论经历多少次折叠展开（`toggleExpand`）、级联定位（`revealPath`）或页面刷新（`refresh`），目录树 Level 0 节点的父节点恒为工作区物理根路径。
 
 ---
@@ -1057,7 +1057,7 @@ $$\mathcal{C}(\mathcal{C}(p)) = \mathcal{C}(p)$$
 2. 读取时（Read-Side）：
    $$\text{Key}_{\text{lookup}} = \mathcal{C}(e.\text{path})$$
 
-**定理 2（键名完备命中定理）**：  
+**定理 2（键名完备命中定理）**：
 若物理路径 $p_1$ 与 $p_2$ 指向同一磁盘实体，即 $\text{isSameFsPath}(p_1, p_2) = \text{true}$，则必有：
 $$\mathcal{C}(p_1) = \mathcal{C}(p_2) \implies \text{expanded}[\mathcal{C}(p_1)] \equiv \text{expanded}[\mathcal{C}(p_2)]$$
 跨平台路径在字典中的查找命中率收敛至 $100\%$。
@@ -1194,7 +1194,7 @@ graph TD
 3. **物证 3（防环熔断生效）**：`flatTree` 中的 `walk` 算法包含 `MAX_DEPTH = 32` 与 `visitedPaths` 进出栈；
 4. **物证 4（测试全绿）**：`useFileNavigation.test.tsx` 针对性测试 100% 通过（All Green），包含 NEG-01 负向断言。
 
-**下游波次解锁信号**：  
+**下游波次解锁信号**：
 一旦 Wave 2 验收通过，即刻解锁 **Wave 3（`FileTreeView.tsx` 虚拟视口原生 `scrollend` 确定性停泊与 1.4s 呼吸高亮）** 与 **Wave 5（`FilesCard.tsx` 面板收敛与顶栏按钮物理切除）**，主目录树单轨收敛链路全面打通。
 
 ### 10.3 纪律铁律：工作区保留与严禁执行 git commit

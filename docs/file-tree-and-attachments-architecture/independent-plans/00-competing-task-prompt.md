@@ -1,7 +1,7 @@
 # 多 Agent 独立竞技方案编制任务任务书（Task Specification Prompt）
 
-> **文档标识**：`docs/file-tree-and-attachments-architecture/independent-plans/00-competing-task-prompt.md`  
-> **任务目标**：根据两份深度审计报告（`06` 与 `07`）挑出的所有致命缺陷与深层隐患，独立制定出**最系统、最彻底、无任何妥协与兼容 Shim 的端到端重构最佳方案（Best Comprehensive Implementation Plan）**。  
+> **文档标识**：`docs/file-tree-and-attachments-architecture/independent-plans/00-competing-task-prompt.md`
+> **任务目标**：根据两份深度审计报告（`06` 与 `07`）挑出的所有致命缺陷与深层隐患，独立制定出**最系统、最彻底、无任何妥协与兼容 Shim 的端到端重构最佳方案（Best Comprehensive Implementation Plan）**。
 > **审查与竞技机制**：两个受派子 Agent 将根据本任务书独立开展全量推导与方案设计，主控 Agent 将对两份产出进行多维深度评比与优劣合流。
 
 ---

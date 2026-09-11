@@ -1,10 +1,10 @@
 # 全链路端到端重构最佳方案（Zero-Shim & Complete Evidence-Based Blueprint Beta）
 
-> **文档标识**：`docs/file-tree-and-attachments-architecture/independent-plans/07-final-best-plan-beta.md`  
-> **所属战役**：`docs/file-tree-and-attachments-architecture/`  
-> **方案性质**：系统性、自上而下的端到端物理闭环与绝对纯净单轨重构实施施工总图（竞技方案 Beta · 权威校准版）  
-> **审查与竞技基准**：基于深度审计报告 `06-e2e-connectivity-and-protocols-audit.md` 与 `07-ssot-purge-boxmodel-and-evidence-audit.md` 揭示的全部架构致命断层与细节缺陷，深入真实源码逐行刺穿去幻觉，吸收 Plan Alpha 之 W3C 原生 `scrollend` 事件驱动机制与全模块 100% AST 级完整生产代码展开，升华 Plan Beta 卓越的极限视口物理方程与 W3C Stacking Context 合成图层代数推导，严格落实参考图 `media_1788837641997.png` 规范。  
-> **核心纪律依据**：严格遵循仓库根目录 [`AGENTS.md`](file:///c:/Software/conex/AGENTS.md)（§1 逻辑规划与反退避、§2 子 Agent 调度、§3 Git 提交纪律、§7 严禁补丁与作弊、§7.1 立体验证纪律、§8 反过度设计硬性红线、§11 CI 治理与行数门禁、§12 自定义 Tooltip、§13 输入框与焦点态规范、§14 色彩空间与现代 CSS、§15/§16 Tauri MCP 4000 唯一合法调试通道）及 [`ANTI_OVERENGINEERING_GUARDRAILS.md`](file:///c:/Software/conex/ANTI_OVERENGINEERING_GUARDRAILS.md)。  
+> **文档标识**：`docs/file-tree-and-attachments-architecture/independent-plans/07-final-best-plan-beta.md`
+> **所属战役**：`docs/file-tree-and-attachments-architecture/`
+> **方案性质**：系统性、自上而下的端到端物理闭环与绝对纯净单轨重构实施施工总图（竞技方案 Beta · 权威校准版）
+> **审查与竞技基准**：基于深度审计报告 `06-e2e-connectivity-and-protocols-audit.md` 与 `07-ssot-purge-boxmodel-and-evidence-audit.md` 揭示的全部架构致命断层与细节缺陷，深入真实源码逐行刺穿去幻觉，吸收 Plan Alpha 之 W3C 原生 `scrollend` 事件驱动机制与全模块 100% AST 级完整生产代码展开，升华 Plan Beta 卓越的极限视口物理方程与 W3C Stacking Context 合成图层代数推导，严格落实参考图 `media_1788837641997.png` 规范。
+> **核心纪律依据**：严格遵循仓库根目录 [`AGENTS.md`](file:///c:/Software/conex/AGENTS.md)（§1 逻辑规划与反退避、§2 子 Agent 调度、§3 Git 提交纪律、§7 严禁补丁与作弊、§7.1 立体验证纪律、§8 反过度设计硬性红线、§11 CI 治理与行数门禁、§12 自定义 Tooltip、§13 输入框与焦点态规范、§14 色彩空间与现代 CSS、§15/§16 Tauri MCP 4000 唯一合法调试通道）及 [`ANTI_OVERENGINEERING_GUARDRAILS.md`](file:///c:/Software/conex/ANTI_OVERENGINEERING_GUARDRAILS.md)。
 > **方案核心铁律**：
 > 1. **零功能伪连通（Zero Fake Connectivity）**：真实调用链 100% 物理绑定，无论文件分流至何种预览宿主（`file-viewer` 或 `files`），无条件优先派发 `crish-open-file` 广播事件，杜绝代码分流截断、空转组件或死快照；
 > 2. **零多轨并存与零兼容 Shim（Zero Multi-track & Zero Compat Shim）**：工作区根目录（`root`）全系统唯一权威源（SSOT），全域物理拔除 `cwd`，严禁保留 `@deprecated cwd?: string`、`cwd: _cwd` 或 `refresh(_ignoredDir?: string)`；
@@ -613,11 +613,11 @@ DOM 结构如下：
 
 ### 4.4 `.filesSplitResizer`（$z=1$）受困于局部层叠上下文代数推导与 `.filesBar` 压制证明
 
-根据 W3C Stacking Context 的树形代数性质，不同层叠上下文之间的兄弟元素比较只发生在其最近共同祖先上下文上。  
+根据 W3C Stacking Context 的树形代数性质，不同层叠上下文之间的兄弟元素比较只发生在其最近共同祖先上下文上。
 由于：
 $$\text{StackingContext}(\text{.filesSplitResizer}) = S_{\text{body}}$$
 $$\text{StackingContext}(\text{.filesBar}) = S_{\text{root}}$$
-且 $S_{\text{body}}$ 作为整体挂载在 $S_{\text{root}}$ 的 $z=0$ 层级，因此 `.filesSplitResizer` 的任何局部 $z$ 值增加（哪怕设为 $z=999$）也绝对无法使其全局图层高度超越其父层叠上下文 $S_{\text{body}}$ 的上限（即全局 $z=0$）。  
+且 $S_{\text{body}}$ 作为整体挂载在 $S_{\text{root}}$ 的 $z=0$ 层级，因此 `.filesSplitResizer` 的任何局部 $z$ 值增加（哪怕设为 $z=999$）也绝对无法使其全局图层高度超越其父层叠上下文 $S_{\text{body}}$ 的上限（即全局 $z=0$）。
 而 `.filesBar` 在 $S_{\text{root}}$ 中的层级为 $z=10$，满足：
 $$z_{\text{global}}(\text{.filesBar}) = 10 > 0 = z_{\text{global}}(S_{\text{body}}) \ge z_{\text{global}}(\text{.filesSplitResizer})$$
 因此，从几何图层代数上证明，`.filesBar` 对 `.filesSplitResizer` 拥有无条件的、跨层级的永久压制权。
@@ -874,7 +874,7 @@ export function getAncestorDirPaths(targetPath: string, rootPath: string): strin
 ```typescript
 /**
  * 文件面板打开器 + 工具参数路径抽取。
- * 
+ *
  * 架构重构核心修复（CRIT-01）：
  * 彻底解耦文件预览宿主分流（FilePreviewLeafHost）与主目录树联动导航（Tree Navigation）。
  * 无论目标路径分流至 'file-viewer' 还是 'files'，只要是工作区合法物理文件，
@@ -3379,7 +3379,7 @@ export const ChatUserMessageRow = React.memo(
    ChatMessageRow.module.css 核心重构与物理切除
    ───────────────────────────────────────────────────────────────────────── */
 
-/* 物理切除：旧 .userImages, .userImageWrapper, .userImage, .userAttachments, 
+/* 物理切除：旧 .userImages, .userImageWrapper, .userImage, .userAttachments,
    .userAttachmentChip, .userAttachmentName 共 61 行死亡 CSS 彻底物理删除！ */
 
 .userStack {

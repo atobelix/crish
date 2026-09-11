@@ -1,8 +1,8 @@
 # 施工任务书 05：消息气泡附件 58×58 卡片与独立横排布局重塑
 
-> **文档标识**：`docs/file-tree-and-attachments-architecture/execution-specs/spec-05-attachment-cards-layout.md`  
-> **所属战役**：`docs/file-tree-and-attachments-architecture/`  
-> **指派角色**：`Message Attachment & Layout Refactor Engineer`  
+> **文档标识**：`docs/file-tree-and-attachments-architecture/execution-specs/spec-05-attachment-cards-layout.md`
+> **所属战役**：`docs/file-tree-and-attachments-architecture/`
+> **指派角色**：`Message Attachment & Layout Refactor Engineer`
 > **纪律铁律**：
 > 1. **严格遵照用户参考图（media_1788837641997.png）布局：上方独立 58×58 横向卡片流 + 下方独立文本气泡！**
 > 2. 彻底物理删除原 61 行死亡 CSS 与旧 JSX，严禁留存任何旧药丸胶囊类名；

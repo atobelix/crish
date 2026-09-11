@@ -1,10 +1,10 @@
 # 端到端全链路伪连通、幽灵契约与真实调用流深度审计报告
 
-> **文档标识**：`docs/file-tree-and-attachments-architecture/audits/06-e2e-connectivity-and-protocols-audit.md`  
-> **所属战役**：`docs/file-tree-and-attachments-architecture/`  
-> **审计专家**：`Senior Full-Stack Systems Architect & Cross-Layer Protocol Auditor`  
-> **审计日期**：2026-09-08  
-> **权威准则**：严格遵循仓库根目录 [`AGENTS.md`](file:///c:/Software/conex/AGENTS.md)（§1 反退避、§2 子 Agent 调度、§3 Git 提交纪律、§7 严禁补丁与作弊、§7.1 立体验证纪律、§8 反过度设计红线、§11 CI 治理与行数门禁、§15/§16 Tauri MCP 4000 调试通道）及 [`ANTI_OVERENGINEERING_GUARDRAILS.md`](file:///c:/Software/conex/ANTI_OVERENGINEERING_GUARDRAILS.md)。  
+> **文档标识**：`docs/file-tree-and-attachments-architecture/audits/06-e2e-connectivity-and-protocols-audit.md`
+> **所属战役**：`docs/file-tree-and-attachments-architecture/`
+> **审计专家**：`Senior Full-Stack Systems Architect & Cross-Layer Protocol Auditor`
+> **审计日期**：2026-09-08
+> **权威准则**：严格遵循仓库根目录 [`AGENTS.md`](file:///c:/Software/conex/AGENTS.md)（§1 反退避、§2 子 Agent 调度、§3 Git 提交纪律、§7 严禁补丁与作弊、§7.1 立体验证纪律、§8 反过度设计红线、§11 CI 治理与行数门禁、§15/§16 Tauri MCP 4000 调试通道）及 [`ANTI_OVERENGINEERING_GUARDRAILS.md`](file:///c:/Software/conex/ANTI_OVERENGINEERING_GUARDRAILS.md)。
 > **审计准则与红线**：零容忍功能伪连通、零容忍幽灵契约与截肢式降级、零容忍空转逻辑与死代码；纯逻辑规划，不谈工期、人天、P0/P1，所有问题逻辑同权。
 
 ---
@@ -731,7 +731,7 @@ sequenceDiagram
 ```typescript
 /**
  * 文件面板打开器 + 工具参数路径抽取。
- * 
+ *
  * 架构修复：彻底解耦文件预览宿主（FilePreviewLeafHost）与目录树导航（Tree Navigation）。
  * 无论右侧分流至 'file-viewer' 还是 'files'，只要是工作区有效物理文件，必须保证
  * 同时派发 'crish-open-file' 事件，确保左侧目录树百分之百执行 revealPath 与虚拟居中定位。

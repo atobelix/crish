@@ -1,20 +1,20 @@
 # 阶段三：方案合理性严格审计报告 · 用户最高裁决符合度与布局交互严审
 
-> **文档标识**：`docs/file-tree-and-attachments-architecture/audits/02-user-verdict-alignment-audit.md`  
-> **战役工作区**：`docs/file-tree-and-attachments-architecture/`（目录树同步展开、单轨收敛、消息附件卡片统一与面包屑重塑）  
-> **审查专家**：资深产品交互与用户裁决符合度审查专家（Senior Product Interaction & User Verdict Compliance Auditor）  
+> **文档标识**：`docs/file-tree-and-attachments-architecture/audits/02-user-verdict-alignment-audit.md`
+> **战役工作区**：`docs/file-tree-and-attachments-architecture/`（目录树同步展开、单轨收敛、消息附件卡片统一与面包屑重塑）
+> **审查专家**：资深产品交互与用户裁决符合度审查专家（Senior Product Interaction & User Verdict Compliance Auditor）
 > **审查输入文档**：
 > - `detailed-plans/01-path-canonical-spec.md`（路径规范化与 SSOT 契约）
 > - `detailed-plans/02-tree-navigation-spec.md`（目录树单轨收敛与祖先展开 Hook）
 > - `detailed-plans/03-tree-virtual-scroll-spec.md`（虚拟列表视口平滑居中与脉冲高亮）
 > - `detailed-plans/04-files-card-and-breadcrumb-spec.md`（宿主收敛、防穿透隔离舱与面包屑重塑）
 > - `detailed-plans/05-message-attachment-spec.md`（消息气泡附件 58×58 卡片与独立横排布局）
-> 
+>
 > **最高审计对照依据**：
 > 1. 用户上传的最终效果绝对真理参考图（`media_1788837641997.png`）；
 > 2. 战役审计策略总纲 `analysis/05-audit-framework-strategy.md`；
 > 3. 用户关于【气泡附件上方横排独立卡片+下方独立文本气泡+空气泡零渲染、面包屑下拉树逻辑严格维持现状、主目录树永久单轨锁定根节点并切除钻取上级】的最高不可逆裁决。
-> 
+>
 > **协作纪律**：纯逻辑规划与审计（不谈工期、人天、人员分配，所有逻辑问题同权）；严禁使用 `--no-verify`；严禁执行 `git commit`。
 
 ---

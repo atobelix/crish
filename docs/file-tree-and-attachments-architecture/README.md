@@ -1,7 +1,7 @@
 # 目录树同步展开、单轨收敛、消息附件卡片统一与面包屑重塑战役
 
-> **战役工作区**：`docs/file-tree-and-attachments-architecture/`  
-> **建立时间**：2026-09-08  
+> **战役工作区**：`docs/file-tree-and-attachments-architecture/`
+> **建立时间**：2026-09-08
 > **纪律规范**：严格遵循仓库根目录 `AGENTS.md`（§1 反退避、§2 子 Agent 调度、§3 Git 提交纪律、§4 战役工作区规范、§7 严禁补丁与作弊、§7.1 立体验证纪律）以及 `ANTI_OVERENGINEERING_GUARDRAILS.md`。
 
 ---

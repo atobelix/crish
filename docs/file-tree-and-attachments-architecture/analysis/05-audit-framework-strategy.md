@@ -1,9 +1,9 @@
 # 目录树同步展开、单轨收敛、消息附件卡片统一与面包屑重塑 · 方案合理性审计框架与审查准则（Plan Soundness Audit Framework）
 
-> **文档标识**：`docs/file-tree-and-attachments-architecture/analysis/05-audit-framework-strategy.md`  
-> **战役工作区**：`docs/file-tree-and-attachments-architecture/`  
-> **设计角色**：资深软件质量工程与架构审查专家（Senior Software Quality Engineering & Architecture Audit Expert）  
-> **编制依据**：`AGENTS.md`（§1 反退避、§7 严禁补丁与作弊、§7.1 立体验证纪律、§8 反过度设计硬性红线、§11 CI 治理与行数门禁、§12 自定义 Tooltip、§13 输入框与焦点态规范、§14 现代 CSS 语法规范、§15/§16 Tauri MCP 4000 唯一合法调试通道）、`ANTI_OVERENGINEERING_GUARDRAILS.md` 13 项禁令、用户关于【目录树单轨展开、附件 58×58 卡片与气泡独立横排、面包屑树逻辑维持现状及防穿透】的最高战略裁决。  
+> **文档标识**：`docs/file-tree-and-attachments-architecture/analysis/05-audit-framework-strategy.md`
+> **战役工作区**：`docs/file-tree-and-attachments-architecture/`
+> **设计角色**：资深软件质量工程与架构审查专家（Senior Software Quality Engineering & Architecture Audit Expert）
+> **编制依据**：`AGENTS.md`（§1 反退避、§7 严禁补丁与作弊、§7.1 立体验证纪律、§8 反过度设计硬性红线、§11 CI 治理与行数门禁、§12 自定义 Tooltip、§13 输入框与焦点态规范、§14 现代 CSS 语法规范、§15/§16 Tauri MCP 4000 唯一合法调试通道）、`ANTI_OVERENGINEERING_GUARDRAILS.md` 13 项禁令、用户关于【目录树单轨展开、附件 58×58 卡片与气泡独立横排、面包屑树逻辑维持现状及防穿透】的最高战略裁决。
 > **核心属性**：纯逻辑工程审计规划（不谈工期、人天、人员偏见，技术与质量问题在逻辑上同权，纯粹以源码真理源与数学确定性为裁判准绳）。
 
 ---
@@ -125,7 +125,7 @@ graph TD
     end
 
     P0 & P1 & P2 & P3 & P4 & P5 --> D1 & D2 & D3 & D4 & D5 & D6
-    
+
     D1 & D2 & D3 & D4 & D5 & D6 --> HB{任一维度触发一票否决?}
     HB -- 是: 触发否决 --> REJ[发出 VETO 报告: 阻断施工并退回修订]
     HB -- 否: 满分/合规 --> SC[六维打分卡汇总评分 >= 95]

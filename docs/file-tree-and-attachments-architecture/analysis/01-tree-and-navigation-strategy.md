@@ -1,9 +1,9 @@
 # 目录树单轨收敛与路径导航专题战略分析报告
 
-> **文档标识**：`docs/file-tree-and-attachments-architecture/analysis/01-tree-and-navigation-strategy.md`  
-> **所属战役**：`docs/file-tree-and-attachments-architecture/`（阶段一：方案生成战略分析）  
-> **权威协作指令**：遵循仓库根目录 [`AGENTS.md`](file:///c:/Software/conex/AGENTS.md)（§1 反退避、§2 子 Agent 调度、§3 Git 提交纪律、§7 严禁补丁与作弊、§7.1 立体验证纪律、§8 反过度设计红线、§11 CI 治理与行数门禁、§13 输入框与焦点态规范）及 [`ANTI_OVERENGINEERING_GUARDRAILS.md`](file:///c:/Software/conex/ANTI_OVERENGINEERING_GUARDRAILS.md)。  
-> **规划准则**：纯逻辑规划（不谈工期、人天、人员分配，严禁划分 P0/P1 业务优先级，所有工程与架构问题逻辑同权，完全基于抽象拓扑与调用依赖编排推进）。  
+> **文档标识**：`docs/file-tree-and-attachments-architecture/analysis/01-tree-and-navigation-strategy.md`
+> **所属战役**：`docs/file-tree-and-attachments-architecture/`（阶段一：方案生成战略分析）
+> **权威协作指令**：遵循仓库根目录 [`AGENTS.md`](file:///c:/Software/conex/AGENTS.md)（§1 反退避、§2 子 Agent 调度、§3 Git 提交纪律、§7 严禁补丁与作弊、§7.1 立体验证纪律、§8 反过度设计红线、§11 CI 治理与行数门禁、§13 输入框与焦点态规范）及 [`ANTI_OVERENGINEERING_GUARDRAILS.md`](file:///c:/Software/conex/ANTI_OVERENGINEERING_GUARDRAILS.md)。
+> **规划准则**：纯逻辑规划（不谈工期、人天、人员分配，严禁划分 P0/P1 业务优先级，所有工程与架构问题逻辑同权，完全基于抽象拓扑与调用依赖编排推进）。
 > **战略核心**：深入剖析根目录被篡改、同级文件夹蒸发的代码根因；确立跨平台路径规范化与祖先并发展开的最优架构；推导虚拟滚动视口几何居中计算与呼吸高亮算法；写死后续详细设计（Detailed Plan）的技术边界与负向禁止清单，彻底阻断执行期子 Agent 的自主过度发挥。
 
 ---
@@ -234,19 +234,19 @@ graph LR
 export function toCanonicalFsPath(path: string): string {
   const p = (path || '').trim();
   if (!p) return '';
-  
+
   // 1. 统一正斜杠
   let norm = p.replace(/\\/g, '/');
-  
+
   // 2. 压缩非 UNC 重复斜杠
   const isUnc = norm.startsWith('//');
   norm = (isUnc ? '//' : '') + norm.replace(/\/+/g, '/');
-  
+
   // 3. Windows 盘符强制大写
   norm = norm.replace(/^([a-zA-Z]):(\/|$)/, (_, drive: string, rest: string) => {
     return `${drive.toUpperCase()}:${rest || '/'}`;
   });
-  
+
   // 4. 消除尾部多余斜杠（保留 'C:/' 或 '/'）
   if (norm.length > 1 && norm.endsWith('/')) {
     if (!/^[A-Z]:\/$/.test(norm)) {
@@ -283,7 +283,7 @@ export function isSameFsPath(pathA: string, pathB: string): boolean {
 export function getAncestorDirPaths(targetPath: string, rootPath: string): string[] {
   const canonTarget = toCanonicalFsPath(targetPath);
   const canonRoot = toCanonicalFsPath(rootPath);
-  
+
   if (!canonTarget || !canonRoot || !isSameFsPath(canonTarget, canonRoot)) {
     // 边界：目标路径必须位于 root 内部
     const normRoot = canonRoot.toLowerCase();
@@ -300,7 +300,7 @@ export function getAncestorDirPaths(targetPath: string, rootPath: string): strin
   while (curr) {
     const currCanon = toCanonicalFsPath(curr);
     const currLower = currCanon.toLowerCase();
-    
+
     // 到达根目录或超出根目录范围时终止
     if (currLower === normRootLower || currLower.length <= normRootLower.length) {
       break;
@@ -467,7 +467,7 @@ useEffect(() => {
   if (!selected) return;
   const targetCanon = toCanonicalFsPath(selected);
   const targetIndex = flatTree.findIndex((node) => isSameFsPath(node.path, targetCanon));
-  
+
   if (targetIndex < 0) return;
 
   const container = containerRef.current;

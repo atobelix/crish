@@ -1,8 +1,8 @@
 # 施工任务书 03：目录树虚拟滚动平滑居中与脉冲高亮
 
-> **文档标识**：`docs/file-tree-and-attachments-architecture/execution-specs/spec-03-file-tree-view.md`  
-> **所属战役**：`docs/file-tree-and-attachments-architecture/`  
-> **指派角色**：`FileTreeView Virtual Scroll Engineer`  
+> **文档标识**：`docs/file-tree-and-attachments-architecture/execution-specs/spec-03-file-tree-view.md`
+> **所属战役**：`docs/file-tree-and-attachments-architecture/`
+> **指派角色**：`FileTreeView Virtual Scroll Engineer`
 > **纪律铁律**：纯逻辑规划，禁止自主过度发挥，严禁改动虚拟滚动底层 Hook，严格独占文件域，严禁执行 git commit。
 
 ---

@@ -1,8 +1,8 @@
 # 消息气泡附件卡片统一架构与旧样式物理删除方案
 
-> **文档定位**：战役独立方案（`docs/file-tree-and-attachments-architecture/independent-plans/02-message-attachment-system-plan.md`）  
-> **所属战役**：目录树同步展开、单轨收敛、消息附件卡片统一与面包屑重塑战役  
-> **设计基准**：严格遵循仓库根目录 `AGENTS.md`（§1 逻辑规划与反退避、§3 Git 提交纪律、§7 严禁补丁与作弊、§7.1 立体验证纪律、§8 反过度设计红线、§11 CI 治理与前端解耦断言、§12 自定义 Tooltip 规范、§13 输入框与焦点悬浮态规范、§14 色彩空间规范）及 `ANTI_OVERENGINEERING_GUARDRAILS.md`。  
+> **文档定位**：战役独立方案（`docs/file-tree-and-attachments-architecture/independent-plans/02-message-attachment-system-plan.md`）
+> **所属战役**：目录树同步展开、单轨收敛、消息附件卡片统一与面包屑重塑战役
+> **设计基准**：严格遵循仓库根目录 `AGENTS.md`（§1 逻辑规划与反退避、§3 Git 提交纪律、§7 严禁补丁与作弊、§7.1 立体验证纪律、§8 反过度设计红线、§11 CI 治理与前端解耦断言、§12 自定义 Tooltip 规范、§13 输入框与焦点悬浮态规范、§14 色彩空间规范）及 `ANTI_OVERENGINEERING_GUARDRAILS.md`。
 > **规划纪律**：纯逻辑规划，不谈工期、人天、人员分配，所有逻辑问题一律同权，方案严格按逻辑依赖拓扑编排。
 
 ---
@@ -377,7 +377,7 @@ sequenceDiagram
     Card->>Opener: openFileInPanel(filePath)
     Opener->>Opener: resolveWorkspacePath(filePath)
     Opener->>Window: dispatchEvent('crish-open-file', { detail: { path } })
-    
+
     par 激活工具面板
         Window->>TreeHub: 接收 'crish-open-file'
         TreeHub->>TreeHub: openTool('files') (展开文件面板叶)

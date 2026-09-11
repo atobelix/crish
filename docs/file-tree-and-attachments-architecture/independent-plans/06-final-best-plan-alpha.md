@@ -1,10 +1,10 @@
 # 全链路端到端重构最佳方案（Best Comprehensive Implementation Plan Alpha - Calibrated & Verified）
 
-> **文档标识**：`docs/file-tree-and-attachments-architecture/independent-plans/06-final-best-plan-alpha.md`  
-> **所属战役**：`docs/file-tree-and-attachments-architecture/`  
-> **方案制定**：`Principal Systems Architect & Cross-Layer Protocol Specialist (Agent Alpha · 校准一路)`  
-> **校准与核验基准**：严格基于 9 大真实源码文件执行逐行穿透、去幻觉校准与编译断言核验，真实代码为唯一真实源（SSOT）。  
-> **权威遵循**：严格遵从仓库根目录 [`AGENTS.md`](file:///c:/Software/conex/AGENTS.md)（§1 逻辑规划与反退避、§2 子 Agent 调度、§3 Git 提交纪律、§7 严禁补丁与作弊、§7.1 立体验证纪律、§8 反过度设计红线、§11 CI 治理与行数门禁、§12 自定义 Tooltip、§13 输入框与焦点态规范、§14 色彩空间与现代 CSS、§15/§16 Tauri MCP 4000 调试通道）及 [`ANTI_OVERENGINEERING_GUARDRAILS.md`](file:///c:/Software/conex/ANTI_OVERENGINEERING_GUARDRAILS.md)。  
+> **文档标识**：`docs/file-tree-and-attachments-architecture/independent-plans/06-final-best-plan-alpha.md`
+> **所属战役**：`docs/file-tree-and-attachments-architecture/`
+> **方案制定**：`Principal Systems Architect & Cross-Layer Protocol Specialist (Agent Alpha · 校准一路)`
+> **校准与核验基准**：严格基于 9 大真实源码文件执行逐行穿透、去幻觉校准与编译断言核验，真实代码为唯一真实源（SSOT）。
+> **权威遵循**：严格遵从仓库根目录 [`AGENTS.md`](file:///c:/Software/conex/AGENTS.md)（§1 逻辑规划与反退避、§2 子 Agent 调度、§3 Git 提交纪律、§7 严禁补丁与作弊、§7.1 立体验证纪律、§8 反过度设计红线、§11 CI 治理与行数门禁、§12 自定义 Tooltip、§13 输入框与焦点态规范、§14 色彩空间与现代 CSS、§15/§16 Tauri MCP 4000 调试通道）及 [`ANTI_OVERENGINEERING_GUARDRAILS.md`](file:///c:/Software/conex/ANTI_OVERENGINEERING_GUARDRAILS.md)。
 > **设计哲学与核心硬性红线（零容忍）**：
 > 1. **零功能伪连通（Zero Fake Connectivity）**：真实调用链 100% 物理绑定，杜绝中途拦截短路、空转函数与死快照；
 > 2. **零多轨并存与零兼容 Shim（Zero Multi-track & Zero Compat Shim）**：单一事实源（SSOT），全域物理根除 `cwd`，严禁保留 `@deprecated cwd?: string`、`cwd: _cwd` 或 `refresh(_ignoredDir?: string)`；
@@ -77,7 +77,7 @@
 4. **双轨下钻残留（给旧岛续命）**：全系统残留 `cwd` 状态与传参，顶栏保留双轨下钻时代的“上级目录 ↰”按钮，存量单测大量存在硬编码 `cwd`；
 5. **样式欺骗与盒模型坍塌**：使用未定义的伪变量 `--z-pinned-bar`，脉冲动画回退色漂移为蓝色，嵌套百分比导致附件条宽度二次缩水至 49.3%，分割条穿透覆盖顶栏。
 
-**本方案（Plan Alpha 校准版）的战略使命**：  
+**本方案（Plan Alpha 校准版）的战略使命**：
 依靠严谨的系统工程思维、真实代码验证与代数证明，制定一份**全链路真实对齐、无任何妥协与兼容 Shim 的施工图级重构最佳方案**。对历史债务执行物理切除（Physical Purge），全域拔除 `cwd`，建立 100% 对齐的单一事实源（SSOT），打通从卡片点击到目录树停泊高亮的五大物理闭环客观物证体系。
 
 ---
@@ -284,7 +284,7 @@ Rust 端签名明确只有 `(app, path)`。前端透传的 `workspaceRoot` 属�
 
 ### 3.3 [MIN-03] `FilesCard.module.css` 存量 6 处裸 Hex `#ffffff` 彻底清洗为 `hsl(0 0% 100%)`
 精准定位存量裸色（L8, L46, L275, L290, L428, L543, L554, L720 等），统一替换为语义 Token 与标准回退：
-`background: var(--bg-card, hsl(0 0% 100%));`  
+`background: var(--bg-card, hsl(0 0% 100%));`
 `background: var(--bg-elevated, hsl(0 0% 100%));`
 
 ### 3.4 [MIN-04] `useFileNavigation.ts` 平铺树 `walk` 递归深度熔断（`MAX_DEPTH = 32`）与符号链接防环
@@ -444,7 +444,7 @@ $$\text{Host Container} \xrightarrow{\text{height: 100\%}} \text{.filesCard} \xr
 ```typescript
 /**
  * 文件面板打开器 + 工具参数路径抽取。
- * 
+ *
  * 架构重构核心修复（CRIT-01）：
  * 彻底解耦文件预览宿主分流（FilePreviewLeafHost）与主目录树联动导航（Tree Navigation）。
  * 无论目标路径分流至 'file-viewer' 还是 'files'，只要是工作区合法物理文件，

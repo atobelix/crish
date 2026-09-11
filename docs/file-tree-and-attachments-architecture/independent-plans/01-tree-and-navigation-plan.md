@@ -1,7 +1,7 @@
 # 目录树层级同步展开与单轨收敛系统性技术方案
 
-> **文件路径**：`docs/file-tree-and-attachments-architecture/independent-plans/01-tree-and-navigation-plan.md`  
-> **设计定位**：为 Conex / Crish 桌面端（Tauri + React）量身定制的工业级现代 IDE 目录树单轨收敛与路径级联同步定位技术架构方案。  
+> **文件路径**：`docs/file-tree-and-attachments-architecture/independent-plans/01-tree-and-navigation-plan.md`
+> **设计定位**：为 Conex / Crish 桌面端（Tauri + React）量身定制的工业级现代 IDE 目录树单轨收敛与路径级联同步定位技术架构方案。
 > **核心原则**：纯逻辑规划（无工期/人天/P0P1偏见，问题逻辑同权）、架构净收敛（杜绝打补丁与过度设计）、工作区根节点绝对恒定（单轨展开/折叠，物理切除钻取与返回上级逻辑）。
 
 ---
@@ -36,20 +36,20 @@ flowchart TD
     C -. 丢失 crish-open-file 事件 .-> X1[断裂 1: FilesCard 完全未收到通知]
     B -- Markdown/图片/其他 --> D[派发 crish-open-file 事件]
     D --> E[FilesCard 接收并调用 nav.revealPath]
-    
+
     E --> F[Ancestors 收集与路径比对]
     F -- Windows 反斜杠/正斜杠/盘符大小写不一致 --> X2[断裂 2: 路径比对失效, 收集到非法/不匹配路径]
-    
+
     F --> G[拉取未展开祖先 loadDir]
     G -- 串行 await 且以未归一化路径作为 expanded 字典键 --> X3[断裂 3: expanded key 与 entries.path 无法命中]
-    
+
     G --> H[写入 setExpanded 并计算 flatTree]
     H -- flatTree 遍历时 expanded 查找为 undefined --> X4[断裂 4: 树渲染在中间层级阻断, 目标未进入 flatTree]
-    
+
     H --> I[FileTreeView 渲染]
     I -- 目标节点处于视口可视区外 (如第 150 项) --> J{虚拟滚动 useVirtualScroll}
     J -- 零滚动监听 / 零 scrollTo 调度 --> X5[断裂 5: 视口 scrollTop 停在 0, 目标 DOM 未挂载]
-    
+
     E -. 树曾经历过钻取 (cwd != root) .-> X6[断裂 6: 多轨状态污染, 树结构与工作区完全错位]
 ```
 
@@ -234,29 +234,29 @@ export function toCanonicalFsPath(rawPath: string | null | undefined): string {
   if (!rawPath) return '';
   let p = rawPath.trim();
   if (!p) return '';
-  
+
   // 1. 替换所有反斜杠为正斜杠
   p = p.replace(/\\/g, '/');
-  
+
   // 2. Windows 盘符标准化: 将 c:/ 转换为 C:/
   if (/^[a-zA-Z]:\//.test(p)) {
     p = p.charAt(0).toUpperCase() + p.slice(1);
   }
-  
+
   // 3. 冗余斜杠折叠 (保留 UNC // 前缀)
   const isUnc = p.startsWith('//');
   p = p.replace(/\/+/g, '/');
   if (isUnc) {
     p = '/' + p;
   }
-  
+
   // 4. 剔除末尾斜杠 (保留根目录如 "C:/" 或 "/")
   if (p.length > 3 && p.endsWith('/')) {
     p = p.slice(0, -1);
   } else if (p.length === 2 && /^[A-Z]:$/.test(p)) {
     p = p + '/';
   }
-  
+
   return p;
 }
 
@@ -277,7 +277,7 @@ export function isSameFsPath(
 
 /**
  * 自顶向下提取目标文件的全部祖先目录链 (严格自顶向下排序，不含工作区根自身与目标文件自身)
- * 
+ *
  * 示例:
  *   target: "C:/Software/conex/apps/crish-desktop/src/index.ts"
  *   root:   "C:/Software/conex"
@@ -295,30 +295,30 @@ export function getAncestorDirPaths(
   const cTarget = toCanonicalFsPath(targetPath);
   const cRoot = toCanonicalFsPath(rootPath);
   if (!cTarget || !cRoot) return [];
-  
+
   const cTargetLower = cTarget.toLowerCase();
   const cRootLower = cRoot.toLowerCase();
-  
+
   // 必须严格属于工作区根目录下
   if (cTargetLower === cRootLower || !cTargetLower.startsWith(cRootLower + '/')) {
     return [];
   }
-  
+
   // 获取相对于工作区根的相对路径
   const rel = cTarget.slice(cRoot.length).replace(/^\/+/, '');
   const segments = rel.split('/').filter(Boolean);
-  
+
   // 最后一个是目标文件自身，弹出
   segments.pop();
-  
+
   const ancestors: string[] = [];
   let currentAccumulator = cRoot;
-  
+
   for (const seg of segments) {
     currentAccumulator = `${currentAccumulator}/${seg}`;
     ancestors.push(toCanonicalFsPath(currentAccumulator));
   }
-  
+
   return ancestors;
 }
 ```
@@ -340,7 +340,7 @@ sequenceDiagram
     participant Nav as useFileNavigation
     participant API as workspaceFsApi (listDirectory)
     participant Tree as FileTreeView (flatTree)
-    
+
     Caller->>Nav: revealPath(rawFilePath)
     Nav->>Nav: toCanonicalFsPath 规范化 target 与 root
     Nav->>Nav: 判定是否在工作区内 (isInside)
@@ -405,12 +405,12 @@ export function useFileNavigation(getIsDirty?: () => boolean) {
     try {
       const rootItems = await loadDir(currentRoot);
       setEntries(rootItems);
-      
+
       // 保留当前已展开目录的有效性，静默拉取更新已展开目录的内容
       setExpanded((prev) => {
         const currentlyExpandedPaths = Object.keys(prev);
         if (currentlyExpandedPaths.length === 0) return prev;
-        
+
         // 异步刷新已展开分支，不阻塞主流程
         void Promise.allSettled(
           currentlyExpandedPaths.map(async (path) => ({
@@ -426,7 +426,7 @@ export function useFileNavigation(getIsDirty?: () => boolean) {
           }
           setExpanded((cur) => ({ ...cur, ...updated }));
         });
-        
+
         return prev;
       });
     } catch (e) {
@@ -442,7 +442,7 @@ export function useFileNavigation(getIsDirty?: () => boolean) {
     async (dirPath: string, e?: React.MouseEvent) => {
       e?.stopPropagation();
       const canonical = toCanonicalFsPath(dirPath);
-      
+
       if (expanded[canonical]) {
         setExpanded((prev) => {
           const next = { ...prev };
@@ -451,7 +451,7 @@ export function useFileNavigation(getIsDirty?: () => boolean) {
         });
         return;
       }
-      
+
       try {
         const list = await loadDir(canonical);
         setExpanded((prev) => ({ ...prev, [canonical]: list }));
@@ -468,7 +468,7 @@ export function useFileNavigation(getIsDirty?: () => boolean) {
     async (filePath: string): Promise<boolean> => {
       const currentRoot = toCanonicalFsPath(getWorkspacePath() || root);
       if (!currentRoot || !filePath) return false;
-      
+
       const canonicalTarget = toCanonicalFsPath(resolveWorkspacePath(filePath));
       const canonicalRoot = currentRoot;
 
@@ -533,7 +533,7 @@ export function useFileNavigation(getIsDirty?: () => boolean) {
   const flatTree: TreeNode[] = useMemo(() => {
     const q = filter.trim().toLowerCase();
     const out: TreeNode[] = [];
-    
+
     const walk = (list: FsDirEntry[], depth: number) => {
       const sorted = [...list].sort((a, b) => {
         if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
@@ -545,7 +545,7 @@ export function useFileNavigation(getIsDirty?: () => boolean) {
           sensitivity: 'base',
         });
       });
-      
+
       for (const e of sorted) {
         const canonicalItemPath = toCanonicalFsPath(e.path);
         out.push({ ...e, path: canonicalItemPath, depth });

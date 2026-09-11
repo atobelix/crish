@@ -1,13 +1,13 @@
 # 施工任务书 SPEC-01：路径规范化内核、IPC 契约对齐与全局广播解耦施工方案
 
-> **文档标识**：`docs/file-tree-and-attachments-architecture/detailed-plans/01-path-canonical-spec.md`  
-> **所属战役**：`docs/file-tree-and-attachments-architecture/`（分阶段详细施工方案）  
-> **指派角色**：`Workspace Path & Canonical API Architect`（跨平台路径与系统通信架构师）  
-> **核心定位**：Wave 1 首发底层基石工程——建立跨平台路径规范化纯函数库、1:1 严格对齐的 Rust IPC 通信契约，以及无条件解耦的全局打开广播总线，为整个文件树与附件联动战役提供不可动摇的系统底座。  
-> **前置依赖**：无（Wave 1 为首发基石波次，纯函数与 IPC 契约先行）  
-> **后置依赖**：Wave 2（`useFileNavigation.ts` 状态机单轨收敛）、Wave 3（`FileTreeView.tsx` 虚拟列表平滑停泊与高度链隔离）、Wave 4（消息附件 58×58 卡片与空气泡消除）、Wave 5（宿主收敛与存量测试迁移）  
-> **权威纪律**：严格遵循仓库根目录 [`AGENTS.md`](file:///c:/Software/conex/AGENTS.md)（§1 反退避、§2 子 Agent 调度、§3 Git 提交纪律、§7 严禁补丁与作弊、§7.1 立体验证纪律、§8 反过度设计红线、§11 CI 治理与行数门禁）及 [`ANTI_OVERENGINEERING_GUARDRAILS.md`](file:///c:/Software/conex/ANTI_OVERENGINEERING_GUARDRAILS.md)。  
-> **规划准则**：纯逻辑规划（不谈工期、人天、人员分配，严禁划分 P0/P1 业务优先级，所有工程与架构缺陷逻辑同权，完全基于有向无环图 DAG 编译拓扑与因果调用链编排推进）。  
+> **文档标识**：`docs/file-tree-and-attachments-architecture/detailed-plans/01-path-canonical-spec.md`
+> **所属战役**：`docs/file-tree-and-attachments-architecture/`（分阶段详细施工方案）
+> **指派角色**：`Workspace Path & Canonical API Architect`（跨平台路径与系统通信架构师）
+> **核心定位**：Wave 1 首发底层基石工程——建立跨平台路径规范化纯函数库、1:1 严格对齐的 Rust IPC 通信契约，以及无条件解耦的全局打开广播总线，为整个文件树与附件联动战役提供不可动摇的系统底座。
+> **前置依赖**：无（Wave 1 为首发基石波次，纯函数与 IPC 契约先行）
+> **后置依赖**：Wave 2（`useFileNavigation.ts` 状态机单轨收敛）、Wave 3（`FileTreeView.tsx` 虚拟列表平滑停泊与高度链隔离）、Wave 4（消息附件 58×58 卡片与空气泡消除）、Wave 5（宿主收敛与存量测试迁移）
+> **权威纪律**：严格遵循仓库根目录 [`AGENTS.md`](file:///c:/Software/conex/AGENTS.md)（§1 反退避、§2 子 Agent 调度、§3 Git 提交纪律、§7 严禁补丁与作弊、§7.1 立体验证纪律、§8 反过度设计红线、§11 CI 治理与行数门禁）及 [`ANTI_OVERENGINEERING_GUARDRAILS.md`](file:///c:/Software/conex/ANTI_OVERENGINEERING_GUARDRAILS.md)。
+> **规划准则**：纯逻辑规划（不谈工期、人天、人员分配，严禁划分 P0/P1 业务优先级，所有工程与架构缺陷逻辑同权，完全基于有向无环图 DAG 编译拓扑与因果调用链编排推进）。
 > **执行纪律**：严格限定于独占文件白名单内，零 `// ...` 施工图级展开，绝对严禁使用任何外部脚本做批量替换，严禁执行 `git commit`。
 
 ---
@@ -291,7 +291,7 @@ const res = await invokeResult('workbench_write_file_content', {
 ```typescript
 /**
  * 文件面板打开器 + 工具参数路径抽取。
- * 
+ *
  * 架构重构核心修复（CRIT-01）：
  * 彻底解耦文件预览宿主分流（FilePreviewLeafHost）与主目录树联动导航（Tree Navigation）。
  * 无论目标路径分流至 'file-viewer' 还是 'files'，只要是工作区合法物理文件，
@@ -686,7 +686,7 @@ describe('Wave 1 核心规范与契约验收套件 (SPEC-01)', () => {
 
       expect(invokeSpy).toHaveBeenCalledTimes(1);
       const [cmd, payload] = invokeSpy.mock.calls[0] as [string, Record<string, unknown>];
-      
+
       // 1. 命令名称对齐
       expect(cmd).toBe('workbench_list_directory');
       // 2. 刚性负向断言：出站参数绝无 workspaceRoot

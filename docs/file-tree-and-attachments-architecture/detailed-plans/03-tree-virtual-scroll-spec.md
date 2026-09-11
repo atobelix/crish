@@ -1,12 +1,12 @@
 # 详细规划设计规范 03：目录树虚拟滚动平滑居中与脉冲高亮详细施工方案
 
-> **文档标识**：`docs/file-tree-and-attachments-architecture/detailed-plans/03-tree-virtual-scroll-spec.md`  
-> **所属战役**：`docs/file-tree-and-attachments-architecture/`（分阶段详细施工方案）  
-> **指派角色**：`Wave 3 Virtual Scroll & Viewport Alignment Architecture Engineer`  
-> **前置依赖**：Wave 1（`workspaceFsApi.ts` 跨平台路径规范化与 1:1 IPC 契约）、Wave 2（`useFileNavigation.ts` 单轨收敛与祖先目录异常反截肢）  
-> **后置消费**：Wave 4（`AttachmentCard.tsx` 58×58 卡片与消息气泡解耦）、Wave 5（`FilesCard.tsx` 宿主收敛与隔离舱合流）  
-> **权威遵循**：严格遵从仓库根目录 [`AGENTS.md`](file:///c:/Software/conex/AGENTS.md)（§1 逻辑规划与反退避、§2 子 Agent 调度、§3 Git 提交纪律、§4 战役工作区结构规范、§7 严禁补丁与作弊、§7.1 立体验证纪律、§8 反过度设计硬性红线、§11 CI 治理与行数门禁、§12 自定义 Tooltip、§13 输入框与焦点态规范、§14 色彩空间与现代 CSS、§15/§16 Tauri MCP 4000 调试通道）及 [`ANTI_OVERENGINEERING_GUARDRAILS.md`](file:///c:/Software/conex/ANTI_OVERENGINEERING_GUARDRAILS.md)。  
-> **规划准则**：纯逻辑规划（不谈工期、人天、人员分配，严禁划分 P0/P1 业务优先级，所有工程与架构问题逻辑同权，完全基于编译拓扑、数据流依赖与盒模型几何因果编排推进）。  
+> **文档标识**：`docs/file-tree-and-attachments-architecture/detailed-plans/03-tree-virtual-scroll-spec.md`
+> **所属战役**：`docs/file-tree-and-attachments-architecture/`（分阶段详细施工方案）
+> **指派角色**：`Wave 3 Virtual Scroll & Viewport Alignment Architecture Engineer`
+> **前置依赖**：Wave 1（`workspaceFsApi.ts` 跨平台路径规范化与 1:1 IPC 契约）、Wave 2（`useFileNavigation.ts` 单轨收敛与祖先目录异常反截肢）
+> **后置消费**：Wave 4（`AttachmentCard.tsx` 58×58 卡片与消息气泡解耦）、Wave 5（`FilesCard.tsx` 宿主收敛与隔离舱合流）
+> **权威遵循**：严格遵从仓库根目录 [`AGENTS.md`](file:///c:/Software/conex/AGENTS.md)（§1 逻辑规划与反退避、§2 子 Agent 调度、§3 Git 提交纪律、§4 战役工作区结构规范、§7 严禁补丁与作弊、§7.1 立体验证纪律、§8 反过度设计硬性红线、§11 CI 治理与行数门禁、§12 自定义 Tooltip、§13 输入框与焦点态规范、§14 色彩空间与现代 CSS、§15/§16 Tauri MCP 4000 调试通道）及 [`ANTI_OVERENGINEERING_GUARDRAILS.md`](file:///c:/Software/conex/ANTI_OVERENGINEERING_GUARDRAILS.md)。
+> **规划准则**：纯逻辑规划（不谈工期、人天、人员分配，严禁划分 P0/P1 业务优先级，所有工程与架构问题逻辑同权，完全基于编译拓扑、数据流依赖与盒模型几何因果编排推进）。
 > **核心使命**：基于固定行高 $H_{\text{item}} = 28\text{px}$ 与真实通用虚拟滚动 Hook 契约（`fallbackHeight: ITEM_HEIGHT`, `overscan: 4`, `slice(startIndex, endIndex + 1)`），确立虚拟滚动列表视口居中、W3C 原生 `scrollend` 事件驱动停泊确认搭配 350ms 优雅降级兜底、两帧 rAF 焦点转移与 1400ms 翡翠绿呼吸脉冲高亮；彻底消除矮视口（$< 56\text{px}$）数学空集死锁；全域拔除 `cwd?: string` 与 `cwd: _cwd` 残留；纠偏内联错误条虚构 Token `var(--z-pinned-bar)` 为权威 Token `var(--z-sticky, 10)`；提供零留白、100% 展开的完整生产源码与真实路径单测源码（完整保留 7 大存量测试并补齐原生停泊与负向断言），彻底杜绝执行期幻觉。
 
 ---
@@ -99,7 +99,7 @@ sequenceDiagram
         Effect->>DOM: addEventListener('scrollend', onScrollEnd, { once: true })
         Effect->>Effect: 启动 350ms 超时兜底定时器 fallbackTimer
         Effect->>DOM: container.scrollTo({ top: targetScrollTop, behavior: 'smooth' })
-        
+
         alt 正常平滑滚动停泊 (耗时约 200~300ms)
             Native-->>DOM: 滚动动画结束，浏览器原生派发 'scrollend' 事件
             DOM->>Effect: 触发 onScrollEnd 回调
@@ -127,7 +127,7 @@ $$\text{isInView} = (itemTop \ge currentScrollTop + 28) \land (itemBottom \le cu
 $$currentScrollTop + 28 \le itemTop \le currentScrollTop + viewHeight - 56$$
 当容器视口因面板缩放、分栏拖拽或嵌入微型浮层导致 $viewHeight < 56\text{px}$（即 $viewHeight < 2 \times ITEM\_HEIGHT$）时：
 $$viewHeight - 56 < 0 \implies currentScrollTop + viewHeight - 56 < currentScrollTop + 28$$
-**数学定理**：此时可满足 $itemTop$ 的区间 $[currentScrollTop + 28, currentScrollTop + viewHeight - 56]$ **恒为空集（$\emptyset$）**！  
+**数学定理**：此时可满足 $itemTop$ 的区间 $[currentScrollTop + 28, currentScrollTop + viewHeight - 56]$ **恒为空集（$\emptyset$）**！
 无论如何滚动，目标条目永远不可能落入该区间，导致 `isInView` 恒为 `false`，组件发生周期性不断触发 `scrollTo` 的恶性死循环与抖动。
 
 #### 2. 自适应分流代数证明与防御算法
@@ -152,7 +152,7 @@ const isInView =
 在 Wave 3 中，脉冲动画与焦点轮廓严格遵从以下约束：
 1. **脉冲基色**：`var(--accent-color, hsl(160 84% 36%))`；
 2. **脉冲混入空间**：`color-mix(in srgb, var(--accent-color, hsl(160 84% 36%)) 22%, transparent)`；
-3. **焦点轮廓对比度**：严格遵从 `AGENTS.md` §13 焦点加深混入上限不超过 10% 规范：  
+3. **焦点轮廓对比度**：严格遵从 `AGENTS.md` §13 焦点加深混入上限不超过 10% 规范：
    `box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);`
 4. **脉冲持续周期**：严格锁定为 $1400\text{ms}$，定时器到期后原子卸载，平稳回退至稳态选中背景 `var(--bg-active)`。
 

@@ -1,11 +1,11 @@
 # 施工任务书 SPEC-05：消息气泡附件 58×58 原子卡片流解耦与空气泡物理销毁详细设计施工图
 
-> **文档标识**：`docs/file-tree-and-attachments-architecture/detailed-plans/05-message-attachment-spec.md`  
-> **所属战役**：`docs/file-tree-and-attachments-architecture/`（Wave 5：消息气泡附件体系解耦与物理切除）  
-> **指派角色**：Wave 5 分阶段详细施工方案架构师 / 顶尖消息流 UI 架构与原子组件设计专家  
-> **设计基准**：用户最高裁决参考图（`media_1788837641997.png`）及全局终极总方案（`00-master-plan.md` §2.7, §3.1, §6.3, §6.4, §6.10, §6.11, §7.3, §8）  
-> **波次编号映射（2026-09-08）**：本规范自标「Wave 5」，对应 00-master-plan §8.2 的 **Wave 4（消息气泡附件）**；详案 04 自标「Wave 4」对应主案 Wave 5（宿主收敛）。执行以主案 §8.2 文件域矩阵为准。  
-> **权威遵循**：严格遵从仓库根目录 [`AGENTS.md`](file:///c:/Software/conex/AGENTS.md)（§1 逻辑规划与反退避、§2 子 Agent 调度、§3 Git 提交纪律、§7 严禁补丁与作弊、§7.1 立体验证纪律、§8 反过度设计硬性红线、§11 CI 治理与行数门禁、§12 自定义 Tooltip 规范、§13 输入框与焦点悬浮态规范、§14 色彩空间规范）及 [`ANTI_OVERENGINEERING_GUARDRAILS.md`](file:///c:/Software/conex/ANTI_OVERENGINEERING_GUARDRAILS.md)。  
+> **文档标识**：`docs/file-tree-and-attachments-architecture/detailed-plans/05-message-attachment-spec.md`
+> **所属战役**：`docs/file-tree-and-attachments-architecture/`（Wave 5：消息气泡附件体系解耦与物理切除）
+> **指派角色**：Wave 5 分阶段详细施工方案架构师 / 顶尖消息流 UI 架构与原子组件设计专家
+> **设计基准**：用户最高裁决参考图（`media_1788837641997.png`）及全局终极总方案（`00-master-plan.md` §2.7, §3.1, §6.3, §6.4, §6.10, §6.11, §7.3, §8）
+> **波次编号映射（2026-09-08）**：本规范自标「Wave 5」，对应 00-master-plan §8.2 的 **Wave 4（消息气泡附件）**；详案 04 自标「Wave 4」对应主案 Wave 5（宿主收敛）。执行以主案 §8.2 文件域矩阵为准。
+> **权威遵循**：严格遵从仓库根目录 [`AGENTS.md`](file:///c:/Software/conex/AGENTS.md)（§1 逻辑规划与反退避、§2 子 Agent 调度、§3 Git 提交纪律、§7 严禁补丁与作弊、§7.1 立体验证纪律、§8 反过度设计硬性红线、§11 CI 治理与行数门禁、§12 自定义 Tooltip 规范、§13 输入框与焦点悬浮态规范、§14 色彩空间规范）及 [`ANTI_OVERENGINEERING_GUARDRAILS.md`](file:///c:/Software/conex/ANTI_OVERENGINEERING_GUARDRAILS.md)。
 > **核心硬性红线（零容忍）**：
 > 1. **零虚构 Props 与契约对齐**：Props 严格对齐真实 `ChatUserMessageRowProps` 的 11 项字段（`msg`, `isPinned`, `isSearchHit`, `isExpanded`, `onToggleExpand`, `onTogglePin`, `isLastUser`, `onRetract`, `messageIndex`, `virtualScrollManager`, `onOpenPath`）；`userBubbleDisplayText(msg.text, isExpanded)` 严格为两参数签名；`messageRowAriaLabel({ role: 'user', isPinned, status: msg.status })` 严格对齐真实单对象入参签名；
 > 2. **零 49.3% 宽度几何坍塌（CRIT-07）**：子容器 `.userAttachmentStrip` 约束严格收敛为 `width: 100%; max-width: 100%`，彻底消除相对于父容器 `.userStack`（`max-width: min(70.2%, 560px)`）发生的二次衰减（$70.2\% \times 70.2\% \approx 49.28\%$）；
@@ -321,7 +321,7 @@ export function normalizeMessageAttachments(
 ```mermaid
 stateDiagram-v2
     [*] --> PredicateCalculation
-    
+
     PredicateCalculation --> StatePureText : hasText && !hasCards
     PredicateCalculation --> StatePureAttachment : !hasText && hasCards
     PredicateCalculation --> StateMixed : hasText && hasCards
@@ -955,7 +955,7 @@ ChatUserMessageRow.displayName = 'ChatUserMessageRow';
   gap: var(--space-1_5, 6px);
 }
 
-/* 物理切除：原 L116-L176 的 .userImages, .userImageWrapper, .userImage, 
+/* 物理切除：原 L116-L176 的 .userImages, .userImageWrapper, .userImage,
    .userAttachments, .userAttachmentChip, .userAttachmentName 共 61 行死亡 CSS 彻底删除！
    在原位替换为纯净的 .userAttachmentStrip 规则： */
 

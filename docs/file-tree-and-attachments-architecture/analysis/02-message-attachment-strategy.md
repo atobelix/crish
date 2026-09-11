@@ -1,10 +1,10 @@
 # 阶段一：气泡附件全新布局与卡片系统战略分析报告
 
-> **文档标识**：`docs/file-tree-and-attachments-architecture/analysis/02-message-attachment-strategy.md`  
-> **所属战役**：`docs/file-tree-and-attachments-architecture/`（目录树同步展开、单轨收敛、消息附件卡片统一与面包屑重塑战役）  
-> **指派角色**：资深前端 UI 架构师与消息流组件战略专家  
-> **设计基准**：用户最终效果参考图（`media_1788837641997.png`）及用户最高裁决  
-> **协作纪律**：严格遵循仓库根目录 `AGENTS.md`（§1 逻辑规划与反退避、§3 Git 提交纪律、§7 严禁补丁与作弊、§7.1 立体验证纪律、§8 反过度设计红线、§11 CI 治理与前端解耦断言、§12 自定义 Tooltip 规范、§13 输入框与焦点悬浮态规范、§14 色彩空间规范）及 `ANTI_OVERENGINEERING_GUARDRAILS.md`。  
+> **文档标识**：`docs/file-tree-and-attachments-architecture/analysis/02-message-attachment-strategy.md`
+> **所属战役**：`docs/file-tree-and-attachments-architecture/`（目录树同步展开、单轨收敛、消息附件卡片统一与面包屑重塑战役）
+> **指派角色**：资深前端 UI 架构师与消息流组件战略专家
+> **设计基准**：用户最终效果参考图（`media_1788837641997.png`）及用户最高裁决
+> **协作纪律**：严格遵循仓库根目录 `AGENTS.md`（§1 逻辑规划与反退避、§3 Git 提交纪律、§7 严禁补丁与作弊、§7.1 立体验证纪律、§8 反过度设计红线、§11 CI 治理与前端解耦断言、§12 自定义 Tooltip 规范、§13 输入框与焦点悬浮态规范、§14 色彩空间规范）及 `ANTI_OVERENGINEERING_GUARDRAILS.md`。
 > **规划纪律**：纯逻辑规划，不谈工期、人天、P0/P1，所有逻辑问题同权，严禁执行 git commit。
 
 ---
@@ -210,28 +210,28 @@ div.row.rowUser (消息行容器, align-items: flex-end)
 ```mermaid
 stateDiagram-v2
     [*] --> DetermineState
-    
+
     DetermineState --> StateA : hasText && !hasAtts
     DetermineState --> StateB : !hasText && hasAtts
     DetermineState --> StateC : hasText && hasAtts
     DetermineState --> StateD : !hasText && !hasAtts
-    
+
     state "纯文本模式 (Text Only)" as StateA {
         userAttachmentStrip: 隐藏 (DOM 不挂载)
         userBubble: 显示 (承载文本)
     }
-    
+
     state "纯附件模式 (Attachments Only)" as StateB {
         userAttachmentStrip: 显示 (顶部横排 58x58 卡片)
         userBubble: 销毁 (空气泡自动隐藏，DOM 零渲染)
     }
-    
+
     state "混合模式 (Text + Attachments)" as StateC {
         userAttachmentStrip: 显示 (上方 58x58 卡片流)
         userBubble: 显示 (下方半圆角文本气泡)
         gap: userStack 6px 间距自然分隔
     }
-    
+
     state "退化异常/排队态" as StateD {
         userAttachmentStrip: 隐藏
         userBubble: 仅在 status==='queued' 时渲染微型排队态
@@ -431,7 +431,7 @@ function resolveImageSrc(source: string | undefined, dataUrl: string | undefined
 119:   gap: var(--space-2, 8px);
 120:   margin-bottom: var(--space-2, 8px);
 121: }
-122: 
+122:
 123: .userImageWrapper {
 124:   cursor: pointer;
 125:   border-radius: var(--radius-lg, 10px);
@@ -440,12 +440,12 @@ function resolveImageSrc(source: string | undefined, dataUrl: string | undefined
 128:   background: var(--bg-card);
 129:   transition: transform var(--transition-base, 150ms ease), border-color var(--transition-base, 150ms ease);
 130: }
-131: 
+131:
 132: .userImageWrapper:hover {
 133:   border-color: var(--border-color);
 134:   transform: scale(1.01);
 135: }
-136: 
+136:
 137: .userImage {
 138:   display: block;
 139:   max-width: min(100%, 320px);
@@ -453,14 +453,14 @@ function resolveImageSrc(source: string | undefined, dataUrl: string | undefined
 141:   object-fit: cover;
 142:   border-radius: inherit;
 143: }
-144: 
+144:
 145: .userAttachments {
 146:   display: flex;
 147:   flex-wrap: wrap;
 148:   gap: var(--space-1_5, 6px);
 149:   margin-bottom: var(--space-2, 8px);
 150: }
-151: 
+151:
 152: .userAttachmentChip {
 153:   display: inline-flex;
 154:   align-items: center;
@@ -474,12 +474,12 @@ function resolveImageSrc(source: string | undefined, dataUrl: string | undefined
 162:   color: var(--text-secondary);
 163:   transition: background var(--transition-fast), color var(--transition-fast);
 164: }
-165: 
+165:
 166: .userAttachmentChip:hover {
 167:   background: color-mix(in srgb, var(--text-primary) 14%, transparent);
 168:   color: var(--text-primary);
 169: }
-170: 
+170:
 171: .userAttachmentName {
 172:   max-width: 180px;
 173:   overflow: hidden;
@@ -548,15 +548,15 @@ sequenceDiagram
     User->>Card: 点击 58x58 附件卡片
     Card->>Bubble: e.stopPropagation() (绝不触发行内折叠/展开)
     Card->>Opener: openFileInPanel(targetPath)
-    
+
     rect rgb(240, 248, 255)
     note over Opener: 路径安全校验与规范化
     Opener->>Opener: resolveWorkspacePath(targetPath)
     Opener->>Opener: resolveFilePreviewHost(path) -> 'files' | 'file-viewer'
     end
-    
+
     Opener->>Hub: dispatchEvent('crish-open-file', { detail: { path } })
-    
+
     par 触发左侧主树定位与展开
         Hub->>Nav: 监听到 'crish-open-file'
         Nav->>Nav: nav.revealPath(resolvedPath)

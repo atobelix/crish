@@ -1,8 +1,8 @@
 # 阶段三：方案合理性严格审计报告 · 物理删除彻底性与负向约束审查（Code Purge & Negative Constraints Audit）
 
-> **文档标识**：`docs/file-tree-and-attachments-architecture/audits/03-code-purge-and-negative-constraints-audit.md`  
-> **所属战役**：`docs/file-tree-and-attachments-architecture/`  
-> **审查角色**：资深代码净收敛与死代码清理审查专家（Senior Code Net-Convergence & Dead-Code Purge Audit Specialist）  
+> **文档标识**：`docs/file-tree-and-attachments-architecture/audits/03-code-purge-and-negative-constraints-audit.md`
+> **所属战役**：`docs/file-tree-and-attachments-architecture/`
+> **审查角色**：资深代码净收敛与死代码清理审查专家（Senior Code Net-Convergence & Dead-Code Purge Audit Specialist）
 > **前置输入文档**：
 > - 阶段二详细规划任务书 01：[`detailed-plans/01-path-canonical-spec.md`](file:///c:/Software/conex/docs/file-tree-and-attachments-architecture/detailed-plans/01-path-canonical-spec.md)
 > - 阶段二详细规划任务书 02：[`detailed-plans/02-tree-navigation-spec.md`](file:///c:/Software/conex/docs/file-tree-and-attachments-architecture/detailed-plans/02-tree-navigation-spec.md)
@@ -79,7 +79,7 @@
 119:   gap: var(--space-2, 8px);
 120:   margin-bottom: var(--space-2, 8px);
 121: }
-122: 
+122:
 123: .userImageWrapper {
 124:   cursor: pointer;
 125:   border-radius: var(--radius-lg, 10px);
@@ -88,12 +88,12 @@
 128:   background: var(--bg-card);
 129:   transition: transform var(--transition-base, 150ms ease), border-color var(--transition-base, 150ms ease);
 130: }
-131: 
+131:
 132: .userImageWrapper:hover {
 133:   border-color: var(--border-color);
 134:   transform: scale(1.01);
 135: }
-136: 
+136:
 137: .userImage {
 138:   display: block;
 139:   max-width: min(100%, 320px);
@@ -101,14 +101,14 @@
 141:   object-fit: cover;
 142:   border-radius: inherit;
 143: }
-144: 
+144:
 145: .userAttachments {
 146:   display: flex;
 147:   flex-wrap: wrap;
 148:   gap: var(--space-1_5, 6px);
 149:   margin-bottom: var(--space-2, 8px);
 150: }
-151: 
+151:
 152: .userAttachmentChip {
 153:   display: inline-flex;
 154:   align-items: center;
@@ -122,12 +122,12 @@
 162:   color: var(--text-secondary);
 163:   transition: background var(--transition-fast), color var(--transition-fast);
 164: }
-165: 
+165:
 166: .userAttachmentChip:hover {
 167:   background: color-mix(in srgb, var(--text-primary) 14%, transparent);
 168:   color: var(--text-primary);
 169: }
-170: 
+170:
 171: .userAttachmentName {
 172:   max-width: 180px;
 173:   overflow: hidden;
@@ -469,7 +469,7 @@ $$\text{Files}(\text{Spec}_i) \cap \text{Files}(\text{Spec}_j) = \emptyset \quad
 
 ### 7.1 工单 1（DEFECT-PURGE-01）：切除 `FilesCard.tsx` 中残留的 `nav.cwd` 属性
 
-**目标文件**：[`detailed-plans/04-files-card-and-breadcrumb-spec.md`](file:///c:/Software/conex/docs/file-tree-and-attachments-architecture/detailed-plans/04-files-card-and-breadcrumb-spec.md)  
+**目标文件**：[`detailed-plans/04-files-card-and-breadcrumb-spec.md`](file:///c:/Software/conex/docs/file-tree-and-attachments-architecture/detailed-plans/04-files-card-and-breadcrumb-spec.md)
 **修订内容**：
 1. 在 §4.1.2 的 JSX 骨架中（行 159-167），将 `<FileBreadcrumb cwd={nav.cwd} ... />` 修改为：
    ```tsx
@@ -495,7 +495,7 @@ $$\text{Files}(\text{Spec}_i) \cap \text{Files}(\text{Spec}_j) = \emptyset \quad
 
 ### 7.2 工单 2（DEFECT-PURGE-02）：切除 `ChatUserMessageRow.tsx` 中死亡函数 `resolveUserImageSrc` 及无用 imports
 
-**目标文件**：[`detailed-plans/05-message-attachment-spec.md`](file:///c:/Software/conex/docs/file-tree-and-attachments-architecture/detailed-plans/05-message-attachment-spec.md)  
+**目标文件**：[`detailed-plans/05-message-attachment-spec.md`](file:///c:/Software/conex/docs/file-tree-and-attachments-architecture/detailed-plans/05-message-attachment-spec.md)
 **修订内容**：
 1. 在 §5.2 的物理切除表中追加两项：
    - **项 A**：`ChatUserMessageRow.tsx:22-40`：`function resolveUserImageSrc(...)` 全部 19 行代码，处置动作标记为 **彻底物理删除**（职责已迁移至 `AttachmentCard.tsx` 的 `resolveCardImageSrc`）；
@@ -505,7 +505,7 @@ $$\text{Files}(\text{Spec}_i) \cap \text{Files}(\text{Spec}_j) = \emptyset \quad
 
 ### 7.3 工单 3（DEFECT-TEST-01）：为 `FilesCard` 增补负向断言测试套件
 
-**目标文件**：[`detailed-plans/04-files-card-and-breadcrumb-spec.md`](file:///c:/Software/conex/docs/file-tree-and-attachments-architecture/detailed-plans/04-files-card-and-breadcrumb-spec.md)  
+**目标文件**：[`detailed-plans/04-files-card-and-breadcrumb-spec.md`](file:///c:/Software/conex/docs/file-tree-and-attachments-architecture/detailed-plans/04-files-card-and-breadcrumb-spec.md)
 **修订内容**：
 在 §9 单元测试章节追加 `FilesCard` 的负向渲染断言用例：
 ```typescript
@@ -528,7 +528,7 @@ it('【SPEC-04 负向断言】FilesCard 彻底清除钻取模型：严禁渲染�
 
 ### 7.4 工单 4（DEFECT-SSOT-01）：对齐 Spec-01 与总纲的 Windows 盘符小写化契约
 
-**目标文件**：[`detailed-plans/01-path-canonical-spec.md`](file:///c:/Software/conex/docs/file-tree-and-attachments-architecture/detailed-plans/01-path-canonical-spec.md)  
+**目标文件**：[`detailed-plans/01-path-canonical-spec.md`](file:///c:/Software/conex/docs/file-tree-and-attachments-architecture/detailed-plans/01-path-canonical-spec.md)
 **修订内容**：
 在 §4 核心实现代码块中（行 113-115），将：
 ```typescript

@@ -1,7 +1,7 @@
 # 面包屑展开面板重塑、穿透分割线根除与树范围约束架构设计方案
 
-> **文件标识**：`docs/file-tree-and-attachments-architecture/independent-plans/03-breadcrumb-and-flyout-ui-plan.md`  
-> **方案性质**：系统性前端 UI、布局层级与状态单向流重构方案  
+> **文件标识**：`docs/file-tree-and-attachments-architecture/independent-plans/03-breadcrumb-and-flyout-ui-plan.md`
+> **方案性质**：系统性前端 UI、布局层级与状态单向流重构方案
 > **核心目标**：彻底根除底层拖拽分割线（`.filesSplitResizer`）对面包屑下拉展开面板的层叠穿透、参照 `ModelBadgePickerMenu` 全面重塑面包屑搜索框为现代化一体发丝极简样式、建立面包屑下拉树基于点击节点的纯粹范围约束、杜绝面包屑交互对主工作区 `cwd` 的侵入污染。
 
 ---
@@ -48,13 +48,13 @@
 +-----------------------------------------------------------------------------------+
 ```
 
-1. **缺陷 1：面包屑下拉搜索框样式粗糙落后**  
+1. **缺陷 1：面包屑下拉搜索框样式粗糙落后**
    当前展开面板内的搜索输入框（`.filesBcFlyoutSearch`）采用独立的带边框矩形包裹、内置 `type="search"` 标签，带有外框重边框、生硬的内边距与原生的浏览器清除按钮装饰，整体质感沉重。与桌面端模型选择器（`ModelBadgePickerMenu`）所确立的高级发丝下一体化搜索栏（无边框、左侧弱灰放大镜、右侧紧凑微动作按钮、纯光标闪烁形态）存在严重的设计规范断层。
-2. **缺陷 2：底层垂直拖拽分割线穿透面包屑面板**  
+2. **缺陷 2：底层垂直拖拽分割线穿透面包屑面板**
    在 `FilesCard.module.css` 中，`.filesBar` 被赋予了 `z-index: var(--z-card-footer, 10)`，使其形成了一个层叠层级仅为 10 的独立层叠上下文（Stacking Context）。其内部的下拉浮层 `.filesBcFlyout` 虽声明了 `z-index: var(--z-breadcrumb, 400)`，但在父级层叠上下文限制下无法向外渗透。与此同时，其同级容器 `.filesBody` 未建立层叠上下文，其内部的分割拖拽条 `.filesSplitResizer` 以 `position: relative; z-index: 10` 直接参与外层 `.filesCard` 的层叠竞争，且因 DOM 顺序在后，直接绘制在 `.filesBar`（及其子项 `.filesBcFlyout`）之上！一条细线生硬地垂直穿透面包屑浮层，破坏了界面的基本物理遮挡逻辑。
-3. **缺陷 3：展开面板内的目录树基准漂移**  
+3. **缺陷 3：展开面板内的目录树基准漂移**
    面板内的树结构偶尔在深层或边缘交互后脱离当前点击节点的束缚，甚至因缓存键或渲染递归逻辑导致从项目根目录重复列出，违背了「聚焦当前片段子目录」的局部漫游初衷。
-4. **缺陷 4：面包屑交互副作用破坏主文件树单一真理源（SSOT）**  
+4. **缺陷 4：面包屑交互副作用破坏主文件树单一真理源（SSOT）**
    当前代码中，双击面包屑芯片、双击面板内部文件夹或点击快捷打开按钮时，频繁调用宿主传下的 `onNavigate(path)`，直接触发 `useFileNavigation` 中的 `nav.refresh(path)`，进而将主工作区文件树的 `cwd` 篡改为子目录。主文件树从「工作区全景树」瞬间退化为「孤立子目录树」，所有其他目录的展开折叠状态被粗暴清空，严重破坏了主界面的单一真理源。
 
 ### 1.2 架构解决原则
@@ -139,19 +139,19 @@
 
 #### 2.1.2 为什么会发生穿透（根本机理推导）
 
-1. **`.filesBar` 构成了局部的层叠封闭舱（Stacking Context Trap）**：  
+1. **`.filesBar` 构成了局部的层叠封闭舱（Stacking Context Trap）**：
    `.filesBar` 拥有 `position: relative` 并且其 `z-index` 计算值为数值 `10`（来源于 `--z-card-footer: 10`）。根据规范，该元素在宿主 `.filesCard` 的层叠树中创建了一个新的层叠上下文。
    内部的 `.filesBcFlyout` 即使声明了 `z-index: 400`（`--z-breadcrumb`），根据层叠上下文的封装性原则：
    $$\text{StackingLevel}_{\text{global}}(\text{.filesBcFlyout}) \equiv \text{StackingLevel}_{\text{global}}(\text{.filesBar}) = 10$$
    `.filesBcFlyout` 的 `400` 仅在其父级 `.filesBar`（或 `.filesCrumbs`）内部有效，根本无法逾越 `.filesBar` 的外边界！对外而言，整个 `.filesBar` 及其全部子元素，在宿主中的层叠权重仅为 **10**。
-2. **`.filesBody` 没有构建层叠上下文，导致其子元素冒泡外溢**：  
+2. **`.filesBody` 没有构建层叠上下文，导致其子元素冒泡外溢**：
    `.filesBody` 为普通的文档流元素（`position: static; z-index: auto`），且没有使用 `isolation: isolate`、`opacity`、`transform` 等属性。因此，`.filesBody` **没有**产生层叠上下文。
-3. **`.filesSplitResizer` 的跨层级冒泡与同级平权竞争**：  
+3. **`.filesSplitResizer` 的跨层级冒泡与同级平权竞争**：
    `.filesSplitResizer` 是 `position: relative; z-index: 10`。由于其直接父容器 `.filesBody` 未形成层叠上下文，根据规范，`.filesSplitResizer` 直接向上寻找到最近的祖先层叠上下文——即外层的 `.filesCard`。
    此时，在 `.filesCard` 这一层叠上下文中，存在两个平权的参与者：
    - 参与者 A：`.filesBar`（层叠上下文，`z-index = 10`，内部包含 `.filesBcFlyout`）；
    - 参与者 B：`.filesSplitResizer`（定位元素，`z-index = 10`）。
-4. **DOM 树顺序决胜机制（Tree Order Tie-Breaker）导致致命遮挡**：  
+4. **DOM 树顺序决胜机制（Tree Order Tie-Breaker）导致致命遮挡**：
    W3C CSS 规范 § 9.9 明确规定：
    > *“Within each stacking context, positioned elements with the same stack level are stacked according to tree order (i.e. DOM source order).”*
    在 `FilesCard.tsx` 的 JSX 中，`.filesBar` 先行渲染，而包含 `.filesSplitResizer` 的 `.filesBody` 在其后渲染。因此：
@@ -211,15 +211,15 @@
 
 #### 2.2.2 核心重构要点
 
-1. **在 `.filesBody` 上注入 `isolation: isolate` 与 `z-index: var(--z-base, 0)`**：  
-   `isolation: isolate` 是现代 CSS 规范中用于显式创建独立层叠上下文的标准原生属性（无任何副作用，不改变盒模型、不引起重排）。结合 `position: relative; z-index: var(--z-base, 0);`，将整个内容区分栏（包括主文件树、分割线、代码预览器）完全锁定在 **Level 0**。  
+1. **在 `.filesBody` 上注入 `isolation: isolate` 与 `z-index: var(--z-base, 0)`**：
+   `isolation: isolate` 是现代 CSS 规范中用于显式创建独立层叠上下文的标准原生属性（无任何副作用，不改变盒模型、不引起重排）。结合 `position: relative; z-index: var(--z-base, 0);`，将整个内容区分栏（包括主文件树、分割线、代码预览器）完全锁定在 **Level 0**。
    即使 `.filesSplitResizer` 在其内部声明了任何正值 `z-index`，它也仅能在 `.filesBody` 的 Level 0 隔离舱内部起作用，**在代数上永远无法逃逸到 `.filesCard` 与 `.filesBar` 进行同级竞争**！
-2. **规范 `.filesBar` 的层级语义与动态升阶机制**：  
+2. **规范 `.filesBar` 的层级语义与动态升阶机制**：
    - 将原先错误引用的 `--z-card-footer` 纠正为语义准确的 `--z-dock, 10`。在常规状态下，`.filesBar`（Level 1）严格高于 `.filesBody`（Level 0）。
    - 为确保在展开下拉面板时，面板能够安全跨越任何可能处于 Level 2（如工作区边缘拖拽线 `--z-resizer: 100`）的干扰，利用现代 CSS 的 `:has()` 伪类或由 React 传递状态类 `.filesBar[data-flyout-open="true"]`，使 `.filesBar` 在展开浮层时自动升阶至 `z-index: var(--z-breadcrumb, 400)`。
-3. **消除 `.filesCrumbs` 冗余的嵌套层叠阻断**：  
+3. **消除 `.filesCrumbs` 冗余的嵌套层叠阻断**：
    原代码中 `.filesCrumbs` 上也设置了 `position: relative; z-index: var(--z-card-footer, 10);`。这造成了多层无意义的层叠包裹。方案中移除 `.filesCrumbs` 的 `z-index` 声明，让其作为普通流元素自然透传，由 `.filesBcSeg` 与 `.filesBcFlyout` 直接向 `.filesBar` 汇报层叠顺序。
-4. **规范 `.filesSplitResizer` 的内部局域层级**：  
+4. **规范 `.filesSplitResizer` 的内部局域层级**：
    `.filesSplitResizer` 的 `z-index` 从写死的硬编码 `10` 调整为局域层级 `1`（或 `var(--z-resizer-local, 1)`），其作用仅用于保证分割线及其 hover/active 状态的高亮光晕在 `.filesListPane` 和 `.filesDetailPane` 之上即可，内部干净收敛。
 
 ---
@@ -242,13 +242,13 @@
 +-----------------------------------------------------------------------------+
 ```
 
-1. **发丝下边框一体化搜索栏（Integrated Header with Hairline Divider）**：  
+1. **发丝下边框一体化搜索栏（Integrated Header with Hairline Divider）**：
    搜索栏绝非一个被丢进浮层内、四周带框的独立 input 框，而是与浮层顶端浑然一体的 Header 布局。其四周无边框、无独立背景填充，仅在底部由一条超细发丝线（`border-bottom: 1px solid var(--hairline, var(--border-subtle))`）与下方内容列表进行视觉物理分隔。
-2. **形态 ④ 纯光标极简 input（Pure Cursor Minimalist Input）**：  
+2. **形态 ④ 纯光标极简 input（Pure Cursor Minimalist Input）**：
    输入框元素彻底剔除边框（`border: none`）、投影（`box-shadow: none`）、高亮轮廓（`outline: none`）以及任何背景填充（`background: transparent`）。无论在默认态、hover 态还是 focus 态，**视觉上只有纯粹的文本光标（caret）在闪烁，无任何粗黑描边、外发光或生硬的背景反色**，完全杜绝视觉干扰。
-3. **弱灰矢量搜索图标（Muted Search Icon）**：  
+3. **弱灰矢量搜索图标（Muted Search Icon）**：
    左侧固定一个精确为 14px 的矢量放大镜（`Lucide.Search`），前景色采用弱化辅助色（`var(--text-tertiary)`），紧凑且不喧宾夺主。
-4. **精致动作按钮（Refined Action Button）**：  
+4. **精致动作按钮（Refined Action Button）**：
    右侧动作按钮采用 24×24px 正方形极简胶囊布局，`border: none; background: transparent; border-radius: var(--radius-sm, 4px)`。在悬停时呈现轻柔的背景微温高亮（`var(--bg-hover)` 或 `var(--tint-hover)`），并始终包裹在统一定制的 `<Tooltip>` 提示中。
 
 ### 3.2 JSX 结构现代化重构
@@ -466,9 +466,9 @@ const handleSearchInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
 #### 4.1.1 核心病因诊断：为什么之前会出现「从项目根目录重复列出」？
 
 深入审视 `FileBreadcrumb.tsx` 的源码执行流，发现了两处逻辑隐患：
-1. **树形遍历渲染起点与根基混淆**：  
+1. **树形遍历渲染起点与根基混淆**：
    在旧代码中，虽然 `renderTreeNodes(bcFlyout.anchorPath, 0)` 将 `anchorPath` 作为起始参数，但在某些路径字符串标准化差异下（例如 Windows 下反斜杠 `\` 与正斜杠 `/` 的混用、未标准化的小写盘符），导致 `bcFlyout.dirCache[dirPath]` 命中失败。在容错或回退逻辑中，错误的判断分支使得组件在重新触发加载时错误地使用了 `root`。
-2. **面包屑片段数组生成依赖了动态 `cwd`**：  
+2. **面包屑片段数组生成依赖了动态 `cwd`**：
    `breadcrumbs` 的计算中使用了：
    `const dir = view === 'detail' && selected ? pathDirname(selected) || root : cwd || root;`
    一旦此前的某种误操作篡改了主树的 `cwd`，面包屑的第一项 `breadcrumbs[0]` 虽然依然标注 `rootLabel`，但后续的分段序列实际上是以子目录展开的！当用户点击前面的片段时，算出的绝对路径发生漂移，进而拉取了非预期的目录内容。
@@ -476,7 +476,7 @@ const handleSearchInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
 #### 4.1.2 绝对范围约束锁（Anchor Scope Invariant）
 
 必须建立不可逾越的数学不变量：
-> **不变式断言**：对于任何被激活的面包屑片段 $B_k$（其对应路径为 $P_k$），面包屑下拉浮层所展示的目录树根节点必须**恒等于** $P_k$。  
+> **不变式断言**：对于任何被激活的面包屑片段 $B_k$（其对应路径为 $P_k$），面包屑下拉浮层所展示的目录树根节点必须**恒等于** $P_k$。
 > 展开面板中的第 0 层节点集合 $\mathbf{E}_0$ 必须严格满足：
 > $$\forall e \in \mathbf{E}_0, \quad \text{parent}(e) = P_k$$
 > 绝不允许任何 $P < P_k$（祖先目录节点）或非 $P_k$ 子树的节点出现在该面板中。
@@ -491,7 +491,7 @@ const openBcFlyout = useCallback(
   async (dirPath: string, label: string) => {
     // 强制使用统一正斜杠标准化路径，消除大小写与分隔符漂移
     const normalizedDirPath = resolveWorkspacePath(dirPath);
-    
+
     if (bcFlyout?.anchorPath === normalizedDirPath) {
       setBcFlyout(null);
       requestAnimationFrame(() => bcTriggerRef.current?.focus());
@@ -558,7 +558,7 @@ const renderTreeNodes = (dirPath: string, depth: number) => {
 
 必须在 `FileBreadcrumb.tsx` 中彻底清除以下破坏性代码逻辑：
 
-1. **清除双击面包屑芯片切换 `cwd` 的行为**：  
+1. **清除双击面包屑芯片切换 `cwd` 的行为**：
    *旧代码*：
    ```tsx
    onDoubleClick={() => {
@@ -566,17 +566,17 @@ const renderTreeNodes = (dirPath: string, depth: number) => {
      onNavigate(b.path); // <--- 严重错误！调用了 nav.refresh(path)，篡改了 cwd
    }}
    ```
-   *收敛修正*：  
+   *收敛修正*：
    移除 `onDoubleClick` 对 `onNavigate` 的调用。双击面包屑芯片的行为定义为：在主文件树中**高亮展开并聚焦**该目录（调用非破坏性的 `revealPath`，保持 `cwd === root`），或者直接作为简单的展开/关闭浮层切换，**绝不调用 `onNavigate`**！
-2. **清除双击面板内部文件夹切换 `cwd` 的行为**：  
+2. **清除双击面板内部文件夹切换 `cwd` 的行为**：
    *旧代码*：
    ```tsx
    onDoubleClick={() => ent.isDir && handleDoubleClickFolder(ent.path)}
    // 其中 handleDoubleClickFolder 调用了 onNavigate(folderPath)
    ```
-   *收敛修正*：  
+   *收敛修正*：
    完全废除 `handleDoubleClickFolder`。双击面板内的文件夹，与单击一样，仅在面板内部执行展开/折叠该目录（`toggleExpand(ent.path)`），让用户继续在浮层中向下钻取浏览，绝不触碰主树！
-3. **清除搜索栏快捷按钮篡改 `cwd` 的行为**：  
+3. **清除搜索栏快捷按钮篡改 `cwd` 的行为**：
    *旧代码*：
    ```tsx
    const handleDirectOpenCurrentDir = useCallback(() => {
@@ -586,9 +586,9 @@ const renderTreeNodes = (dirPath: string, depth: number) => {
      onNavigate(target); // <--- 严重错误！篡改了 cwd
    }, [bcFlyout, onNavigate]);
    ```
-   *收敛修正*：  
+   *收敛修正*：
    废除 `handleDirectOpenCurrentDir` 中调用 `onNavigate` 的逻辑。如果需要提供在主树中快速定位的能力，应定义为调用 `nav.revealPath(target)`（仅在主树展开祖先链，不变更 `cwd`），或者将其替换为纯光标筛选的清空操作。
-4. **单击文件的行为界定**：  
+4. **单击文件的行为界定**：
    在面包屑面板中单击文件（`ent.isDir === false`）：
    ```tsx
    const handleOpenFile = useCallback(
@@ -714,7 +714,7 @@ const handleFilterKeyDown = useCallback(
   - 点击/双击面包屑各层 Chip；
   - 展开浮层内部文件夹；
   - 双击浮层内部文件夹；
-  - 在搜索栏中输入文本或按回车。  
+  - 在搜索栏中输入文本或按回车。
   **严格断言 `onNavigate` 调用次数恒为 0**！所有操作均不得篡改宿主 `cwd`。
 - **断言 5（文件正常打开）**：
   在浮层内点击文件节点，断言 `onOpenFile(expectedFilePath)` 被精确触发且浮层正常收起。
@@ -755,16 +755,16 @@ graph TD
   A[分析真实源码层叠上下文与事件流] --> B[建立 Layer 0 内容区 isolation 隔离舱]
   A --> C[规范 Layer 1/3 动态升阶与 Token 对齐]
   B & C --> D[根除 .filesSplitResizer 穿透缺陷]
-  
+
   A --> E[解构 ModelBadgePickerMenu 现代一体化搜索栏]
   E --> F[重塑 JSX 结构与 CSS Modules 发丝样式]
   F --> G[实现纯光标形态 ④ 极简搜索与键盘漫游]
-  
+
   A --> H[厘清 FileBreadcrumb 与主文件树权责边界]
   H --> I[建立 anchorPath 单向严格范围锁]
   H --> J[全面清除 onNavigate 与 cwd 篡改行为]
   I & J --> K[捍卫主目录树单一真理源 SSOT]
-  
+
   D & G & K --> L[立体验证: 单元测试 + 现场视觉验收 + 架构门禁全绿]
 ```
 
