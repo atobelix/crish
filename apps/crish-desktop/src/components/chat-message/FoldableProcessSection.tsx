@@ -2,12 +2,17 @@
  * apps/crish-desktop/src/components/chat-message/FoldableProcessSection.tsx
  *
  * 正文间独立分段折叠容器
- *   ① 顶部：时间胶囊（dashed hairline 居中），仅在「非空过程段」显示
- *      - 运行中：跳秒
- *      - 终态  ：「工作 xx 时间」（xx 可为秒 / 分秒）
- *   ② 33px 发丝底线控制栏：图标 + 摘要文案 + 折叠指示
- *   ③ 内容槽：DOM 常驻，折叠时挂 `hidden="until-found"`
+ *   ① 控制栏（无发丝底线）：主导图标 + 工作时间文案 + 折叠指示
+ *      - 工作时间即原「已深度思考」所在位置（2026-09-11 用户裁决）
+ *      - 运行中：跳秒（裸时长，无前缀）
+ *      - 终态  ：「工作 xx 时间」（xx 可为秒 / 分秒 / 时分）
+ *   ② 内容槽：DOM 常驻，折叠时挂 `hidden="until-found"`
  *      - 同段内的思考 / 工具间间距 0
+ *
+ * 【已废除（禁止回潮）】
+ *   - 顶部 dashed hairline 工作时间区：用户裁决「带上了这个影响排版」，已物理删除；
+ *   - 控制栏底部发丝分割线：同批次裁决移除；
+ *   - 「已深度思考」文案：全仓根除。
  *
  * 【架构要点】
  *   - 物理切除 `return null`：折叠时使用原生 `hidden="until-found"`，DOM 节点常驻，
@@ -28,7 +33,7 @@ import {
 } from '../../api/tool-presentation/toolPresentationTypes';
 import {
   arbitrateLeadAction,
-  formatSegmentSummary,
+  formatProcessControlLabel,
 } from '../../api/tool-presentation/processMetricsEngine';
 import { AppIcon, type IconName } from '../ui/icons';
 import styles from './FoldableProcessSection.module.css';
@@ -44,19 +49,19 @@ export interface FoldableProcessSectionProps {
   metrics: ProcessSegmentMetrics;
   /**
    * 段起始时间戳（毫秒），取段内最早子项的 startTime。
-   * 缺省时不显示顶部时间胶囊。
+   * 缺省时耗时恒为 0，控制栏退化为语义标签。
    */
   startTime?: number;
   /**
    * 段结束时间戳（毫秒）。当段处于终态时存在，用于定格「工作 xx 时间」。
-   * 缺省 + isLive=true 时，胶囊跳秒；终态时退化为以 totalDurationMs 推算。
+   * 缺省 + 终态时退化为以 totalDurationMs 推算。
    */
   endTime?: number;
   /**
-   * 顶部「工作时间胶囊 + 虚线分割」是否显示（SSOT 裁决，禁止本地重推导）。
-   * 单思考 / 单工具调用段为 false —— 工作时间区域与分割线一律不显示。
+   * 控制栏是否承载「工作时间」文案（SSOT 裁决，禁止本地重推导）。
+   * 单思考 / 单工具调用段为 false —— 退化为「思考」/「已运行 N 条命令」。
    */
-  showTimeCapsule: boolean;
+  showWorkTime: boolean;
   /** 当前分段是否展开（受控） */
   isExpanded: boolean;
   /** 是否允许折叠（透传 seg.foldable，禁止调用方本地推导） */
@@ -65,7 +70,7 @@ export interface FoldableProcessSectionProps {
   forceExpanded?: boolean;
   /**
    * 段是否处于流式活跃执行态。
-   * true → 顶部胶囊跳秒；false → 顶部胶囊定格为「工作 xx 时间」。
+   * true → 控制栏跳秒；false → 控制栏定格为「工作 xx 时间」。
    */
   isLive?: boolean;
   /** 展开/折叠状态翻转回调 */
@@ -97,44 +102,19 @@ const SectionLeadIcon: React.FC<{ metrics: ProcessSegmentMetrics }> = React.memo
 );
 
 /**
- * 把毫秒数格式化为人类可读的「xx 时间」标签（纯函数，可穷举验证）。
- *   - < 60s       → "x.x 秒"
- *   - < 3600s     → "m 分 s 秒"
- *   - 否则         → "h 小时 m 分"
- */
-export function formatDurationLabel(ms: number): string {
-  const sec = ms / 1000;
-  if (sec < 60) {
-    return `${sec.toFixed(1)} 秒`;
-  }
-  const m = Math.floor(sec / 60);
-  const s = Math.floor(sec % 60);
-  if (m < 60) {
-    return `${m} 分 ${s} 秒`;
-  }
-  const h = Math.floor(m / 60);
-  const rm = m % 60;
-  return `${h} 小时 ${rm} 分`;
-}
-
-/**
- * 顶部时间胶囊：居中、虚线分割、**仅显示时间**（不显示「已深度思考」等状态词）。
+ * 段耗时计算（唯一口径）。
  *
- * - 运行中（`isLive`）：100ms 跳秒
- * - 终态：定格为「工作 xx 时间」（xx 可为秒 / 分秒 / 时分）
- * - 终态且无法取得有效耗时（<= 0）：不渲染（杜绝「工作 0.0 秒」样式假象）
+ * - 运行中（`isLive`）：以 100ms 频率跳秒，取 `now - startTime`；
+ * - 终态：定格为 `endTime - startTime`；`endTime` 缺失时退化为
+ *   `startTime + totalDurationMs`（由分段器保证终态必有其一）；
+ * - 无有效 `startTime` 或耗时为负：恒返回 0（由文案层决定是否展示）。
  */
-const SectionTimeCapsule: React.FC<{
-  startTime?: number;
-  endTime?: number;
-  isLive: boolean;
-  totalDurationMs: number;
-}> = React.memo(function SectionTimeCapsule({
-  startTime,
-  endTime,
-  isLive,
-  totalDurationMs,
-}) {
+export function useSectionElapsedMs(
+  startTime: number | undefined,
+  endTime: number | undefined,
+  isLive: boolean,
+  totalDurationMs: number
+): number {
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -144,27 +124,14 @@ const SectionTimeCapsule: React.FC<{
     return () => window.clearInterval(id);
   }, [isLive]);
 
-  if (!startTime || startTime <= 0) return null;
-
-  const elapsedMs = isLive
-    ? Math.max(0, now - startTime)
-    : Math.max(0, (endTime ?? startTime + totalDurationMs) - startTime);
-
-  // 终态无有效耗时 → 不渲染（负向断言见 FoldableProcessSection.test.tsx）
-  if (!isLive && elapsedMs <= 0) return null;
-
-  const label = isLive ? formatDurationLabel(elapsedMs) : `工作 ${formatDurationLabel(elapsedMs)}`;
-
-  return (
-    <div
-      className={styles.timeCapsule}
-      data-testid="process-time-capsule"
-      data-live={isLive ? 'true' : 'false'}
-    >
-      <span className={styles.timeCapsuleText}>{label}</span>
-    </div>
-  );
-});
+  return useMemo(() => {
+    if (!startTime || startTime <= 0) return 0;
+    const raw = isLive
+      ? now - startTime
+      : (endTime ?? startTime + totalDurationMs) - startTime;
+    return Math.max(0, raw);
+  }, [startTime, endTime, isLive, totalDurationMs, now]);
+}
 
 /**
  * Slot DOM ID 唯一生成规则由 SSOT 承载（`toolPresentationTypes.buildSlotId`），
@@ -178,7 +145,7 @@ export const FoldableProcessSection: React.FC<FoldableProcessSectionProps> = Rea
     metrics,
     startTime,
     endTime,
-    showTimeCapsule,
+    showWorkTime,
     isExpanded,
     isFoldable,
     forceExpanded = false,
@@ -229,7 +196,17 @@ export const FoldableProcessSection: React.FC<FoldableProcessSectionProps> = Rea
       };
     }, [sectionId, msgId, onExpand, onInvalidateActual]);
 
-    const summaryText = useMemo(() => formatSegmentSummary(metrics), [metrics]);
+    // 段耗时：运行中跳秒，终态定格（唯一口径，禁止组件层自行计算）
+    const elapsedMs = useSectionElapsedMs(startTime, endTime, isLive, metrics.totalDurationMs);
+
+    /**
+     * 控制栏文案：工作时间优先，单元素段退化为极简语义标签。
+     * 【用户裁决】此处即原「已深度思考」所在位置 —— 现在只承载工作时间。
+     */
+    const summaryText = useMemo(
+      () => formatProcessControlLabel(metrics, showWorkTime, elapsedMs, isLive),
+      [metrics, showWorkTime, elapsedMs, isLive]
+    );
 
     const handleToggle = useCallback(() => {
       // 铁律四：强制展开段不接受收起
@@ -258,17 +235,7 @@ export const FoldableProcessSection: React.FC<FoldableProcessSectionProps> = Rea
         data-foldable={isFoldable ? 'true' : 'false'}
         data-expanded={expanded ? 'true' : 'false'}
       >
-        {/* 顶部时间胶囊：仅在「思考 + 工具 ≥ 2」的过程段显示（SSOT 裁决） */}
-        {showTimeCapsule ? (
-          <SectionTimeCapsule
-            startTime={startTime}
-            endTime={endTime}
-            isLive={isLive}
-            totalDurationMs={metrics.totalDurationMs}
-          />
-        ) : null}
-
-        {/* 33px 发丝底线控制栏：图标 + 摘要 + 折叠指示 */}
+        {/* 控制栏：主导图标 + 工作时间 + 折叠指示（工作时间即原「已深度思考」位置） */}
         <div
           className={`${styles.controlBar} ${controlInteractive ? '' : styles.controlBarStatic}`}
           role={controlInteractive ? 'button' : undefined}
@@ -276,6 +243,7 @@ export const FoldableProcessSection: React.FC<FoldableProcessSectionProps> = Rea
           aria-expanded={controlInteractive ? expanded : undefined}
           aria-controls={controlInteractive ? bodyId : undefined}
           aria-disabled={forceExpanded ? 'true' : undefined}
+          data-live={isLive ? 'true' : 'false'}
           data-testid={`process-toggle-${sectionId}`}
           onClick={handleToggle}
           onKeyDown={handleKeyDown}

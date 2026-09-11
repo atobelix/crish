@@ -83,4 +83,10 @@ export type TerminalToolPatch = {
   id: string;
   status: 'error';
   output: string;
+  /**
+   * 软收口固化的真实挂钟耗时（毫秒）。
+   * 仅当工具缺失 `durationMs`（后端未回报）且存在 `startedAt` 时才产出，
+   * 用于锚定终态「工作 xx 时间」的物理终点，杜绝耗时归零假象。
+   */
+  durationMs?: number;
 };

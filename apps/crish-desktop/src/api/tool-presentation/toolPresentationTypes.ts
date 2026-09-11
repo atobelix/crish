@@ -65,8 +65,8 @@ export type AssistantTimelineItem =
  * 权威定义位置：本文件（07-方案收敛审计与SSOT裁决.md §2.1）
  * 纯逻辑实现：
  *   - partitionTimelineSegments → ./timelineSegmenter.ts
- *   - aggregateProcessMetrics / formatSegmentSummary / arbitrateLeadAction
- *                                → ./processMetricsEngine.ts
+ *   - aggregateProcessMetrics / formatDurationLabel / formatProcessControlLabel /
+ *     arbitrateLeadAction         → ./processMetricsEngine.ts
  *   - classifyToolAction         → ./toolActionClassifier.ts
  *
  * 负向红线：禁止在其它文件重复定义 ProcessSegmentMetrics / TimelineSegment /
@@ -155,7 +155,7 @@ export interface ProcessTimelineSegment {
   metrics: ProcessSegmentMetrics;
   /**
    * 段起始时间戳（毫秒，取段内最早子项的 `startTime`）。
-   * 用于顶部时间胶囊：运行中跳秒，终态定格为「工作 xx 时间」。
+   * 用于顶部工作时间区：运行中跳秒，终态定格为「工作 xx 时间」。
    */
   startTime?: number;
   /**
@@ -164,14 +164,14 @@ export interface ProcessTimelineSegment {
    */
   endTime?: number;
   /**
-   * 顶部「工作时间胶囊 + 虚线分割」是否显示。
+   * 顶部「工作工作时间区 + 虚线分割」是否显示。
    *
    * 唯一口径（用户裁决 · 2026-09-11）：段内思考与工具调用计数之和 ≥ 2 时显示；
    * **只有一个思考 或 只有一个工具调用时，工作时间区域与分割线一律不显示**。
    *
    * 该字段由 `partitionTimelineSegments` 唯一裁决，禁止调用方本地重推导。
    */
-  showTimeCapsule: boolean;
+  showWorkTime: boolean;
   /** 是否具备折叠资格（由四铁律裁决，禁止调用方本地推导） */
   foldable: boolean;
   /** 默认展开态（仅作初始态参考；运行时展开态由宿主字典控制） */

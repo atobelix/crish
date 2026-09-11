@@ -247,23 +247,59 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
     // ── 分段展开态字典（受控） ──
     const [expandedMap, setExpandedMap] = useState<SectionExpandedMap>({});
 
-    // 初始态播种：仅在段首次出现时写入 defaultExpanded（用户后续手动操作不被覆盖）
+    /**
+     * 用户手动裁决过的分段 ID 集合。
+     *
+     * 【存在意义】分段权威态（`defaultExpanded`）随流式推进而演化：
+     *   铁律二（尾部活跃）→ true；正文总结抵达后 → 铁律一（hasNextText）→ false。
+     * 若宿主无条件跟随权威态，用户手动展开的操作会在下一次权威态变化时
+     * 被无声冲掉。故显式用户交互即「钉住」该段，权威态收敛对其让位。
+     * 【铁律四】forceExpanded 段不受钉住影响——子代理可见性特权恒最高。
+     */
+    const userInteractedKeysRef = useRef<Set<string>>(new Set());
+
+    /**
+     * 终态收敛：宿主展开态持续对齐分段权威态（2026-09-11 用户裁决）。
+     *
+     * 【裁决原文】「ai 回复正文的总结之后，只显示工作时长和总结内容」。
+     * 即：过程段在流式执行期（铁律二）直出展开，一旦后继总结正文抵达
+     * （铁律一 hasNextText），必须自动收拢为「工作时间 + 折叠指示」单行，
+     * 页面最终只外露工作时长与总结正文。
+     *
+     * 【为何不是「首次播种」】历史实现只在段首次出现时写入一次
+     * `defaultExpanded`，导致「活跃期已展开」的段在总结抵达后仍保持展开，
+     * 折叠态永远无法自愈。此处改为持续对齐，权威态即唯一真相源。
+     */
     useEffect(() => {
-      setExpandedMap((prev) => {
-        let mutated = false;
-        const next = { ...prev };
-        for (const seg of segments) {
-          if (seg.kind !== 'process_section') continue;
-          if (seg.id in next) continue;
-          next[seg.id] = seg.defaultExpanded;
-          mutated = true;
+      const patch: SectionExpandedMap = {};
+      let mutated = false;
+
+      for (const seg of segments) {
+        if (seg.kind !== 'process_section') continue;
+        // ① 用户手动裁决优先：钉住的段不参与自动收敛
+        if (userInteractedKeysRef.current.has(seg.id)) continue;
+        // ② 铁律四：子代理段恒展开（与组件内 forceExpanded 双保险）
+        const target = seg.forceExpanded ? true : seg.defaultExpanded;
+        // ③ 首次出现（无键）或有键但与权威态不符 → 对齐
+        if (
+          Object.prototype.hasOwnProperty.call(expandedMap, seg.id) &&
+          expandedMap[seg.id] === target
+        ) {
+          continue;
         }
-        return mutated ? next : prev;
-      });
-    }, [segments]);
+        patch[seg.id] = target;
+        mutated = true;
+      }
+
+      if (!mutated) return;
+      setExpandedMap((prev) => ({ ...prev, ...patch }));
+      // 高度变更必须经单轨通知宿主动态测高（VSM）
+      onInvalidateActual?.(msg.id);
+    }, [segments, expandedMap, onInvalidateActual, msg.id]);
 
     const handleToggleSection = useCallback(
       (sectionId: string, nextExpanded: boolean) => {
+        userInteractedKeysRef.current.add(sectionId);
         setExpandedMap((prev) => ({ ...prev, [sectionId]: nextExpanded }));
         setMessageProcessExpanded(sectionId, nextExpanded, sessionId);
         onInvalidateActual?.(msg.id);
@@ -273,6 +309,8 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
 
     const handleExpandSection = useCallback(
       (sectionId: string) => {
+        // 检索穿透（beforematch）属显式用户意图：钉住，避免被终态收敛再次收起
+        userInteractedKeysRef.current.add(sectionId);
         setExpandedMap((prev) => ({ ...prev, [sectionId]: true }));
         setMessageProcessExpanded(sectionId, true, sessionId);
         onInvalidateActual?.(msg.id);
@@ -280,25 +318,36 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
       [sessionId, msg.id, onInvalidateActual]
     );
 
-    // 外部检索命中命令入口：bridge 侧要求展开时，同步至对应分段
+    /**
+     * 外部检索命中命令入口：bridge 侧要求展开时，同步至本消息全部过程段。
+     *
+     * 【关键修正】遍历权威分段（`segments`）而非既有字典键：
+     * 若只遍历既有键，则用户从未交互过的分段无处落键，消息级展开形同虚设。
+     * 同时必须「钉住」——检索穿透属显式用户意图，
+     * 否则终态收敛会在下一帧把刚展开的段重新收起（幽灵展开）。
+     */
     useEffect(() => {
       const unsub = subscribeMessageProcessExpansion(msg.id, (exp) => {
         if (!exp) return;
+        for (const seg of segments) {
+          if (seg.kind !== 'process_section') continue;
+          userInteractedKeysRef.current.add(seg.id);
+        }
         setExpandedMap((prev) => {
           let mutated = false;
           const next = { ...prev };
-          for (const key of Object.keys(next)) {
-            if (key.startsWith(`${msg.id}-`)) {
-              next[key] = true;
-              mutated = true;
-            }
+          for (const seg of segments) {
+            if (seg.kind !== 'process_section') continue;
+            if (next[seg.id] === true) continue;
+            next[seg.id] = true;
+            mutated = true;
           }
           return mutated ? next : prev;
         });
         onInvalidateActual?.(msg.id);
       });
       return unsub;
-    }, [msg.id, onInvalidateActual]);
+    }, [msg.id, segments, onInvalidateActual]);
 
     // 定位可承接流式打字的正文项（必须位于最后工具块之后）
     const streamingTextItem = useMemo(() => {
@@ -317,6 +366,17 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
       }
       return null;
     }, [linearItems]);
+
+    /**
+     * 顶部常驻指示器的去重闸门。
+     *
+     * 当尾部活跃过程段已自带「工作工作时间区」（`isLive && showWorkTime`）时，
+     * 顶部再挂一个跳秒指示器即构成**双计时器噪音**——同一耗时被两处重复表达。
+     * 此时顶部指示器让位给分段胶囊（分段胶囊的语义更精准：它是该阶段自身的耗时）。
+     */
+    const hasLiveProcessTimer = segments.some(
+      (seg) => seg.kind === 'process_section' && seg.isLive && seg.showWorkTime
+    );
 
     // 分段渲染项：由 `ProcessItemRenderer` 承载（唯一渲染路径）
     const renderSegmentItem = useCallback(
@@ -436,8 +496,8 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
     let textCursor = 0;
     return (
       <div className={`${styles.assistantTimelineStream} ${className || ''}`}>
-        {/* 顶层唯一常驻态（生成中） */}
-        {isLiveTurn && (
+        {/* 顶层常驻态（生成中）：活动过程段已有工作时间区时让位，杜绝双计时器 */}
+        {isLiveTurn && !hasLiveProcessTimer && (
           <div className={styles.topProcessHeader} data-testid="top-live-header">
             <WorkingStatusIndicator startTime={msg.timestamp} mode="initial" />
           </div>
@@ -497,7 +557,7 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
               metrics={seg.metrics}
               startTime={seg.startTime}
               endTime={seg.endTime}
-              showTimeCapsule={seg.showTimeCapsule}
+              showWorkTime={seg.showWorkTime}
               isLive={seg.isLive}
               isExpanded={isExpanded}
               isFoldable={seg.foldable}

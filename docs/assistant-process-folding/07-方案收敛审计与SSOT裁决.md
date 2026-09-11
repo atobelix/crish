@@ -204,6 +204,74 @@ it('负向断言：无 subagent 的段不得获得 forceExpanded 特权', () => 
 
 ---
 
+## 四·补、2026-09-11 用户设计裁决（工作时间 / 状态通知 / 间距 / 排版统一）
+
+> 来源：用户基于设计稿（图一 ~ 图四）的**两轮**现场校正。
+> - 第一轮（图一 / 图二）：确立工作时间、状态通知通道、间距纪律 → D-01 ~ D-07。
+> - 第二轮（图三 / 图四 + 追加说明）：**推翻时间胶囊载体**、废除发丝分割线、
+>   统一过程区排版 → D-08 ~ D-13，并**就地修订** D-01 / D-03 / D-05。
+>
+> 以下条目与本文件既有裁决同权；与之冲突的旧口径一律以本节为准。
+
+| 编号 | 裁决 | 唯一落地点 | 负向断言 |
+| :---: | --- | --- | --- |
+| **D-01**〔已于第二轮就地修订〕 | **工作时长承载于控制栏**——即原「已深度思考」所在位置。**思考就是思考，没有「已深度思考」这一说** | `FoldableProcessSection` 控制栏 → `formatProcessControlLabel` | 源码可执行字面量中不得出现「已深度思考」；控制栏 `textContent` 亦不得出现 |
+| **D-02** | 运行中**跳秒**（100ms，裸时长无前缀）；终态定格为**「工作 xx 时间」**（可跨秒/分/时） | `formatDurationLabel` + `seg.startTime/endTime` | 终态文案必须匹配 `/工作 /`；运行中不得出现「工作」前缀 |
+| **D-03**〔已于第二轮就地修订，见 D-09〕 | 内容在输出总结前折叠；**虚线胶囊载体已废除** | `.sectionBody` + `hidden="until-found"` | `.timeCapsule` 类与 `dashed` 声明**必须从 CSS 中物理消失** |
+| **D-04** | 上下文压缩（正在压缩 / 已压缩）**走居中通知通道**（同模型切换 / 思考强度切换） | `state_notice` 段 → `ContextStateNotice` | 任何 `process_section.items` 中不得出现 `kind === 'injection'` |
+| **D-05**〔已于第二轮就地修订，第三轮改名〕 | **只有一个思考 或 只有一个工具调用** → 不显示工作时间，退化为「思考」/「已运行 N 条命令」 | `seg.showWorkTime = shouldShowWorkTime(thoughtCount, toolCount)`（原名 `showTimeCapsule`，胶囊载体废除后改名，口径不变） | `showWorkTime=false` 时控制栏文案不得匹配 `/工作/` |
+| **D-06** | 思考块与工具块之间的空白收紧（容器层 `gap` / 纵向 `padding` 一律为 **0**） | `.sectionBody:not([hidden])` | 由子块自身盒模型承载间距，禁止双重留白 |
+| **D-07**〔第三轮改名〕 | 同一耗时不得被两处重复表达：活跃过程段已有工作时间区时，顶部指示器让位 | `MessageContent.hasLiveProcessTimer`（原名 `hasLiveProcessCapsule`，同 D-05 改名，口径不变） | 严禁「顶部跳秒 + 分段跳秒」双计时器并存 |
+| **D-08** | **根除「已深度思考」**：全仓文案与可执行字面量一律清除，注释中仅允许作为「已废除说明」出现 | `processMetricsEngine.formatProcessControlLabel` | 剥离注释后源码不得包含该字面量（见 `processMetricsEngine.test.ts` 源码级负向断言） |
+| **D-09** | **取消发丝分割线**：工具调用下、工作时间下的细线一律去除（影响排版） | `.controlBar` / `.topProcessHeader` / `.toolSectionInput` | 三者声明块不得出现 `border-bottom` / `border-top`；`.toolSectionInput` 须显式 `border-bottom: none` |
+| **D-10** | **过程区排版统一**：思考行 / 工具行 / 折叠控制栏同构——24px 行高、14px 字号、字重 400、`padding: 0 4px` | `ReasoningRow.module.css` / `ChatToolCallBlock.module.css` / `FoldableProcessSection.module.css` | 任一行级选择器不得出现 `font-size: var(--font-size-(xs\|micro\|xxs))` 或 `font-weight: (500\|600\|700)` |
+| **D-11** | **默认浅色**：除正文内容外，过程区默认色恒为 `--text-tertiary`；悬停才提升至 `--text-primary`；活跃态 `--text-secondary` | 同上三份 CSS 的状态机 | `.reasoningLabel` 不得回潮 `--font-weight-medium` 或硬编码 `--text-secondary`；不得出现 `.isLive .reasoningLabel` 冗余覆写 |
+| **D-12** | **终态只外露工作时长与总结正文**：总结正文抵达 / 轮次闭合后，过程段自动收拢为「工作时间」单行 | `MessageContent` 终态收敛 effect + `userInteractedKeysRef` | 终态段内容槽必须挂 `hidden="until-found"`；DOM 节点严禁卸载 |
+| **D-13** | 用户显式交互（点击折叠栏 / 检索穿透）**钉住**该段，终态收敛不得无声冲掉用户裁决；【铁律四】`forceExpanded` 段恒最高优先级 | `MessageContent.userInteractedKeysRef` | 用户展开过的段在终态仍无 `hidden`；bridge 展开后不得在下一帧被重新收起（幽灵展开） |
+
+### 四·补 2、2026-09-11 第三轮裁决（终态末点口径 / 软收口固化 / 旧消息豁免）
+
+> 来源：节点 6（底层数据流与软收口）落地过程中穿透出的三处口径缺陷 + 用户现场豁免。
+> 与 D-01 ~ D-13 同权；冲突处以本节为准。
+
+| 编号 | 裁决 | 唯一落地点 | 负向断言 |
+| :---: | --- | --- | --- |
+| **D-14** | **终态段末点必须锚定物理终点**：`segEnd = max(startTime + durationMs)`，即**必须计入末项自身执行时长**。历史实现取 `max(startTime)`，等价于抹掉末项整段耗时（双工具段只显示首工具耗时，单工具段恒 0） | `timelineSegmenter.partitionTimelineSegments` | 双工具段 `endTime` 不得等于 `max(startTime)`；`endTime` 恒 `>= startTime`；活跃段 `endTime` 恒 `undefined` |
+| **D-15** | **软收口耗时固化**：轮次收口时为「缺失 `durationMs` 的未终结工具」按真实挂钟补齐 `durationMs = now - startedAt`。后端已回报正值 → **原样保留**（禁止覆盖）；无 `startedAt` → **不产出字段**（禁止伪造挂钟） | `helpers.resolveTerminalDurationMs` → `buildTerminalToolPatches` → `applyToolCallPatches` | 补丁中不得出现 `durationMs: 0` 的伪造填充；无 `startedAt` 的补丁对象不得带 `durationMs` 属性 |
+| **D-16** | **旧消息（无 `blocks`）时序归并 —— 用户裁决豁免**：旧会话显示错误可接受，只要新对话正常即可。且 `MessageThinkingTurn` **无绝对时间戳字段**，01 详案 §4.4 设想的「时序归并排序」在原数据模型下**不可实现** | `timelineNormalizer.buildAssistantTimeline` 降级分支（维持 `injections → thoughts → tools → text` 静态顺序） | **严禁为归并而伪造 / 猜测思考时间戳**；严禁在无时钟信号下按启发式重排（属魔术数字补偿） |
+| **D-17** | **节点 6 三处底层断层根治**：① 槽位键必须带「同 turn 同 type 出现序号」，无 id 正文不得塌缩为单块；② 缺失工具按 `startedAt` 因果就近插位，兜底插到**首个**正文块之前；③ 正文写入以 `max(lastToolIdx, lastThoughtIdx)` 为**双物理界标**，且新轮思考开启时推进 `streamTextOffset` 游标 | `timelineReconciler.getReconciliationSlotKey` / `alignToolCallBlocks`；`sessionMessageActionsCore.updateMessageText` / `updateMessageThinking` | existing 两段无 id 正文 + incoming 一段 → 结果必须 2 段（旧实现恒 1 段）；缺失工具不得插到更晚工具之后；正文 2 不得被合并进正文 1 |
+
+**契约增量**：`TerminalToolPatch` 新增可选 `durationMs`（仅软收口固化场景产出）；
+`MessageTimelineBlock.durationMs` 由 `applyToolCallPatches` 同步回写，与 `MessageToolCall.durationMs` 保持单一真理。
+
+---
+
+**契约增量（第二轮）**：`ProcessTimelineSegment` 新增 `startTime` / `endTime` / `showWorkTime`（原名 `showTimeCapsule`）；
+`TimelineSegment` 联合新增 `StateNoticeTimelineSegment`（`kind: 'state_notice'`）。
+
+**已物理切除清单（禁止回潮）**：
+
+| 对象 | 原形态 | 现状 |
+| --- | --- | --- |
+| `SectionTimeCapsule` 组件 + `process-time-capsule` 节点 | 顶部 dashed hairline 胶囊 | 已删除，工作时间迁入控制栏 |
+| `.timeCapsule` / `.timeCapsuleText` 及 `::before` / `::after` | 虚线分割 | CSS 中已删除 |
+| `.controlBar` `border-bottom` | 发丝底线 | 已删除 |
+| `.topProcessHeader` `border-bottom` | 发丝底线 | 已删除 |
+| `.toolSectionInput` `border-bottom` | 工具面板底发丝线 | 显式置 `none` |
+| `formatSegmentSummary` + `MIDDLE_DOT` | 图五中圆点拼接摘要 | 已删除，由 `formatProcessControlLabel` 取代 |
+| 「已深度思考」文案 | 折叠栏状态词 | 全仓根除 |
+
+---
+
+## 附录 C · 变更记录（07 文档）
+
+| 日期 | 变更 | 理由 |
+| --- | --- | --- |
+| 2026-09-11（第二轮） | 就地修订 D-01 / D-03 / D-05，新增 D-08 ~ D-13 | 用户第二轮校正推翻「顶部虚线胶囊」载体，并要求取消发丝线、统一排版、终态只外露工作时长与总结。旧 D-01/D-03/D-05 描述的是已物理切除的结构，留档将构成**假契约**，故就地改写（非静默删除：原文口径保留于本表与「已物理切除清单」） |
+| 2026-09-11（第三轮） | 就地修订 D-05 / D-07（标识符改名），新增「四·补 2」D-14 ~ D-17 | ① `showTimeCapsule`→`showWorkTime`、`hasLiveProcessCapsule`→`hasLiveProcessTimer`：胶囊载体已物理切除，旧名属**幽灵命名**，留档即假契约；② 节点 6 落地穿透出终态末点口径缺陷、软收口耗时缺口与旧消息归并不可实现三项事实，必须入册为裁决（非静默跳过） |
+
+---
+
 ## 五、文件域互斥表（多 Agent 并行调度依据）
 
 **规则**：同一文件在同一时刻只允许一个 Agent 写入（引擎 I4-M3 写路径互斥）。下表列出本战役的**必然串行点**：
@@ -322,7 +390,8 @@ describe('SSOT 收敛负向断言', () => {
 | `aggregateProcessMetrics` | 同上 | 从 `AssistantTimelineItem[]` 聚合 14 项 `ProcessSegmentMetrics` | 01 详案 §2 |
 | `classifyToolAction` | `api/tool-presentation/toolActionClassifier.ts` | 两阶段注册表分类（`EXACT_ACTION_TABLE` + `FALLBACK_RULES`） | 01 详案 §2.3 |
 | `partitionTimelineSegments` | `api/tool-presentation/timelineSegmenter.ts` | 按四铁律切割 `AssistantTimelineItem[]` → `TimelineSegment[]` | 01 详案 §3.2 |
-| `formatSegmentSummary` | `api/tool-presentation/processMetricsEngine.ts` | 生成图五风格中圆点拼接摘要（需按优先序裁剪） | 02 详案 §5 |
+| `formatDurationLabel` | `api/tool-presentation/processMetricsEngine.ts` | 耗时人类可读化（秒 / 分秒 / 时分三档） | 07 §四·补 D-02 |
+| `formatProcessControlLabel` | 同上 | 折叠控制栏文案唯一出口（工作时间优先，单元素段退化语义标签） | 07 §四·补 D-01 / D-05 / D-08 |
 | `arbitrateLeadAction` | 同上 | 依 `subagent > edit > search > read > command > thought > mixed` 仲裁 | 02 详案 §6 |
 | `buildSlotId` | `api/tool-presentation/toolPresentationTypes.ts` | `process-slot-${sectionId}` 唯一生成 | 06 详案 §5.1.1 |
 

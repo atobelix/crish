@@ -1,4 +1,12 @@
 /* Tool Stack */
+/*
+ * 【统一排版纪律 · 2026-09-11 用户裁决】
+ * ① 工具容器与思考行（ReasoningRow）严格同构：24px 行高、左右 4px 内边距、
+ *    上下零外边距——消除两侧「边距不一样」的观感差异；
+ * ② 除正文外一律默认浅色（--text-tertiary），字重统一 400，
+ *    字号统一 14px（原 11px/12px/13px 混排且偏小）；
+ * ③ 语义色（错误 / 差异增删）保留，不计入「统一浅色」范畴。
+ */
 .toolStack {
   display: flex;
   flex-direction: column;
@@ -6,15 +14,15 @@
   margin: 0;
   max-height: none;
   overflow: visible;
-  padding: 2px 0;
+  padding: 0;
   border: none;
   background: transparent;
   box-shadow: none;
-  font-size: var(--font-size-sm);
+  font-size: 14px;
 }
 
 .toolStack > .toolRow + .toolRow {
-  margin-top: 1px;
+  margin-top: 0;
 }
 
 /* Tool Row */
@@ -24,10 +32,10 @@
   background: transparent;
   min-height: 0;
   contain: layout style;
-  color: var(--text-secondary);
+  color: var(--text-tertiary);
   box-shadow: none;
   outline: none;
-  margin: 1px 0;
+  margin: 0;
 }
 
 .toolRow.isRunning .toolRowSummary {
@@ -66,13 +74,14 @@
   cursor: pointer;
   font-family: inherit;
   text-align: left;
-  color: var(--text-secondary);
+  color: var(--text-tertiary);
   height: 24px;
   min-height: 24px;
   max-height: 24px;
   line-height: 24px;
   box-sizing: border-box;
-  font-weight: var(--font-weight-normal);
+  font-size: 14px;
+  font-weight: var(--font-weight-normal, 400);
   overflow: hidden;
   white-space: nowrap;
   box-shadow: none;
@@ -168,18 +177,18 @@
   gap: 6px;
   min-width: 0;
   max-width: 100%;
-  font-size: var(--font-size-sm, 13px);
+  font-size: 14px;
   line-height: 24px;
-  font-weight: var(--font-weight-normal);
-  color: var(--text-secondary);
+  font-weight: var(--font-weight-normal, 400);
+  color: var(--text-tertiary);
   overflow: hidden;
   white-space: nowrap;
 }
 
 .toolActionText {
-  font-size: var(--font-size-sm, 13px);
-  font-weight: var(--font-weight-medium, 500);
-  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: var(--font-weight-normal, 400);
+  color: var(--text-tertiary);
   flex-shrink: 0;
   white-space: nowrap;
   line-height: 24px;
@@ -188,7 +197,7 @@
 .dotSeparator {
   margin: 0 4px;
   color: var(--text-tertiary);
-  font-size: var(--font-size-xs, 12px);
+  font-size: 14px;
   user-select: none;
   flex-shrink: 0;
 }
@@ -229,8 +238,8 @@
 
 .toolParamText {
   font-family: var(--font-mono, monospace);
-  font-size: var(--font-size-xs, 12px);
-  color: var(--text-secondary);
+  font-size: 14px;
+  color: var(--text-tertiary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -241,7 +250,7 @@
 
 .toolErrorParamText {
   font-family: var(--font-mono, monospace);
-  font-size: var(--font-size-xs, 12px);
+  font-size: 14px;
   color: var(--color-error);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -252,7 +261,7 @@
 }
 
 .toolSecondaryMetaInline {
-  font-size: var(--font-size-micro, 11px);
+  font-size: 14px;
   color: var(--text-tertiary);
   font-variant-numeric: tabular-nums;
   flex-shrink: 0;
@@ -262,12 +271,12 @@
 }
 
 .toolRowHead:hover .toolSecondaryMetaInline {
-  color: var(--text-secondary);
+  color: var(--text-primary);
 }
 
 .diffStatsInline {
   font-family: var(--font-mono, monospace);
-  font-size: var(--font-size-micro, 11px);
+  font-size: 14px;
   margin-left: 4px;
   flex-shrink: 0;
   white-space: nowrap;
@@ -285,7 +294,7 @@
 }
 
 .toolSecondaryMeta {
-  font-size: var(--font-size-micro, 11px);
+  font-size: 14px;
   color: var(--text-tertiary);
   font-variant-numeric: tabular-nums;
   flex-shrink: 0;
@@ -295,7 +304,7 @@
 }
 
 .toolRowHead:hover .toolSecondaryMeta {
-  color: var(--text-secondary);
+  color: var(--text-primary);
 }
 
 .toolRowChevron {
@@ -342,7 +351,7 @@
 /* Duration display */
 .duration {
   font-variant-numeric: tabular-nums;
-  font-size: var(--font-size-micro, 11px);
+  font-size: 14px;
   color: var(--text-tertiary);
   margin-left: auto;
   flex-shrink: 0;
@@ -459,8 +468,13 @@
   padding: 10px 14px;
 }
 
+/*
+ * 【用户裁决 · 2026-09-11】工具调用区块下方不得携带发丝分割线（影响排版）。
+ * 输入面板与输出面板之间改由各自的内边距与面板标题承担视觉分隔，
+ * 原 `border-bottom: 1px solid var(--border-subtle)` 已物理切除，禁止回潮。
+ */
 .toolSectionInput {
-  border-bottom: 1px solid var(--border-subtle);
+  border-bottom: none;
 }
 
 .toolSection.isErrorSection {
@@ -585,11 +599,11 @@
   max-height: 520px;
 }
 
-.embeddedDiffCard {
-  border: none !important;
-  border-radius: 0 !important;
-  margin: 0 !important;
-  background: transparent !important;
+.embeddedDiffCard[data-card-variant='embedded'] {
+  border: none;
+  border-radius: 0;
+  margin: 0;
+  background: transparent;
 }
 
 /* CLI Shell     */

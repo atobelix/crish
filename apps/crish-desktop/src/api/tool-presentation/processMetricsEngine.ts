@@ -6,17 +6,16 @@
  * 【SSOT】权威定义位置：本文件（07-方案收敛审计与SSOT裁决.md §2.2）。
  * 负向红线：
  *   - 禁止在组件层重新聚合 metrics；
- *   - 禁止在组件层自行拼装摘要文案（必须调用 formatSegmentSummary）；
- *   - 禁止使用 emoji 作为主导图标（图标名统一来自 DOMINANT_ICON_MAP）。
+ *   - 禁止在组件层自行拼装折叠栏文案（必须调用 formatProcessControlLabel）；
+ *   - 禁止在组件层自行 toFixed 拼接耗时（必须调用 formatDurationLabel）；
+ *   - 禁止使用 emoji 作为主导图标（图标名统一来自 DOMINANT_ICON_MAP）；
+ *   - 「已深度思考」文案已于 2026-09-11 用户裁决彻底废除，禁止任何形式回潮。
  */
 
 import type { AssistantTimelineItem, TimelineToolsItem } from './toolPresentationTypes';
 import type { ProcessLeadAction, ProcessSegmentMetrics } from './toolPresentationTypes';
 import { classifyToolAction } from './toolActionClassifier';
 import type { MessageToolCall } from '../../store/layoutStore';
-
-/** 中圆点分隔符（图五契约：U+0020 U+00B7 U+0020） */
-const MIDDLE_DOT = ' \u00b7 ';
 
 /**
  * 跨平台文件路径归一化（用于 Set 去重）。
@@ -210,34 +209,57 @@ export function arbitrateLeadAction(metrics: ProcessSegmentMetrics): ProcessLead
 }
 
 /**
- * 图五风格折叠态摘要文案（中圆点拼接，按语序裁剪空项）。
+ * 把毫秒数格式化为人类可读的「xx 时间」标签（纯函数，可穷举验证）。
+ *   - < 60s       → "x.x 秒"
+ *   - < 3600s     → "m 分 s 秒"
+ *   - 否则         → "h 小时 m 分"
  *
- * 语序：已编辑 E 个文件 · 已搜索 S 次 · 已读取 R 个文件 · 已运行 C 条命令 · 已调度 A 个子任务
- * 无工具时回退思考文案：已深度思考 (3.2s) / 已深度思考
- * 全空时回退：中间处理过程
+ * 【SSOT】全仓唯一耗时文案格式化入口，禁止组件层自行 toFixed 拼接。
  */
-export function formatSegmentSummary(metrics: ProcessSegmentMetrics): string {
-  const parts: string[] = [];
+export function formatDurationLabel(ms: number): string {
+  const sec = ms / 1000;
+  if (sec < 60) {
+    return `${sec.toFixed(1)} 秒`;
+  }
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  if (m < 60) {
+    return `${m} 分 ${s} 秒`;
+  }
+  const h = Math.floor(m / 60);
+  const rm = m % 60;
+  return `${h} 小时 ${rm} 分`;
+}
 
-  if (metrics.editFilesCount > 0) parts.push(`已编辑 ${metrics.editFilesCount} 个文件`);
-  if (metrics.searchCount > 0) parts.push(`已搜索 ${metrics.searchCount} 次`);
-  if (metrics.readFilesCount > 0) parts.push(`已读取 ${metrics.readFilesCount} 个文件`);
-  if (metrics.commandCount > 0) parts.push(`已运行 ${metrics.commandCount} 条命令`);
-  if (metrics.subagentCount > 0) parts.push(`已调度 ${metrics.subagentCount} 个子任务`);
-
-  if (parts.length === 0) {
-    if (metrics.thoughtCount > 0) {
-      if (metrics.thoughtDurationMs > 0) {
-        parts.push(`已深度思考 (${(metrics.thoughtDurationMs / 1000).toFixed(1)}s)`);
-      } else {
-        parts.push('已深度思考');
-      }
-    } else if (metrics.toolCount > 0) {
-      parts.push(`已完成 ${metrics.toolCount} 项操作`);
-    }
+/**
+ * 过程段折叠控制栏文案（SSOT，2026-09-11 用户裁决）。
+ *
+ * 【裁决要点】
+ *   1. 「工作多少秒是在当前的『已深度思考』那里」——控制栏只承载**工作时间**；
+ *   2. 「思考就是思考，没有已深度思考这一说」——`已深度思考` 文案被彻底废除；
+ *   3. 运行中：跳秒（裸时长，无前缀）；终态：「工作 xx 时间」；
+ *   4. 单思考 / 单工具调用段（`showWorkTime=false`）：不显示工作时间区域，
+ *      退化为极简语义标签「思考」/「已运行 N 条命令」。
+ *
+ * @param metrics         段聚合度量
+ * @param showWorkTime 是否显示工作时间区域（thoughtCount + toolCount >= 2）
+ * @param elapsedMs       已计算好的耗时毫秒
+ * @param isLive          是否运行中（true → 跳秒，无「工作」前缀）
+ */
+export function formatProcessControlLabel(
+  metrics: ProcessSegmentMetrics,
+  showWorkTime: boolean,
+  elapsedMs: number,
+  isLive: boolean
+): string {
+  if (showWorkTime) {
+    const duration = formatDurationLabel(elapsedMs);
+    return isLive ? duration : `工作 ${duration}`;
   }
 
-  return parts.join(MIDDLE_DOT) || '中间处理过程';
+  if (metrics.thoughtCount > 0) return '思考';
+  if (metrics.toolCount > 0) return `已运行 ${metrics.toolCount} 条命令`;
+  return '处理过程';
 }
 
 /**

@@ -12,6 +12,7 @@ import {
   isLiveStreamRun,
   isSessionAiBusy,
   resolveStreamSessionId,
+  resolveTerminalDurationMs,
   safeCancelStream,
   stopAssistantPlaceholderText,
 } from './chat-stream/helpers';
@@ -199,6 +200,57 @@ describe('buildTerminalToolPatches', () => {
         'stop'
       )
     ).toEqual([{ id: 'ok', status: 'error', output: '已停止' }]);
+  });
+});
+
+/**
+ * 软收口耗时固化（节点 6 / M2）。
+ *
+ * 根因：后端 wire 未回报 durationMs 时工具恒为 0，终态过程段
+ * `segEnd = max(startTime + durationMs)` 退化为 `max(startTime)`，
+ * 「工作 xx 时间」少算末项整段执行时长甚至归零。
+ */
+describe('软收口耗时固化 · resolveTerminalDurationMs / buildTerminalToolPatches', () => {
+  const NOW = 1_700_000_000_000;
+
+  it('缺 durationMs + 有 startedAt → 按真实挂钟补齐', () => {
+    expect(resolveTerminalDurationMs({ startedAt: NOW - 4_500 }, NOW)).toBe(4_500);
+  });
+
+  it('已有正值 durationMs → 返回 undefined（后端回报优先，禁止覆盖）', () => {
+    expect(resolveTerminalDurationMs({ startedAt: NOW - 4_500, durationMs: 1_200 }, NOW)).toBeUndefined();
+  });
+
+  it('durationMs = 0 视为缺失（wire 缺省值，不得当作真实 0 耗时）', () => {
+    expect(resolveTerminalDurationMs({ startedAt: NOW - 900, durationMs: 0 }, NOW)).toBe(900);
+  });
+
+  it('无 startedAt → 不产出字段（禁止伪造挂钟）', () => {
+    expect(resolveTerminalDurationMs({ durationMs: 0 }, NOW)).toBeUndefined();
+    expect(resolveTerminalDurationMs({}, NOW)).toBeUndefined();
+  });
+
+  it('挂钟早于 startedAt（时钟回拨）→ 夹到 0，禁止负耗时', () => {
+    expect(resolveTerminalDurationMs({ startedAt: NOW + 5_000 }, NOW)).toBe(0);
+  });
+
+  it('收口补丁真实携带 durationMs（正向：锚定物理终点）', () => {
+    const startedAt = Date.now() - 6_000;
+    const patches = buildTerminalToolPatches(
+      [{ id: 't1', status: 'running', output: '执行中…', startedAt }],
+      'complete'
+    );
+    expect(patches).toHaveLength(1);
+    expect(patches[0]!.durationMs).toBeGreaterThanOrEqual(6_000);
+    expect(patches[0]!.durationMs).toBeLessThan(6_000 + 5_000);
+  });
+
+  it('负向断言：无 startedAt 的工具不得被塞入编造的 durationMs', () => {
+    const patches = buildTerminalToolPatches(
+      [{ id: 't1', status: 'running', output: '执行中…' }],
+      'complete'
+    );
+    expect(patches[0]).not.toHaveProperty('durationMs');
   });
 });
 

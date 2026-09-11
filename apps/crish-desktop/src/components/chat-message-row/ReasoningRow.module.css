@@ -95,18 +95,22 @@
   }
 }
 
-/* 静态语义标签 */
+/*
+ * 【统一排版纪律 · 2026-09-11 用户裁决】
+ * 过程区（思考行 / 工具行 / 折叠控制栏）必须同构：
+ *   字号 14px、字重 400、颜色继承行级状态机（默认 --text-tertiary）。
+ * 严禁此处出现 500/600 字重、更小字号或独立硬编码颜色，
+ * 否则与工具调用行产生「花了、字体偏小」的视觉割裂。
+ * 颜色改为 `inherit`：交由 .reasoningRow 的状态机统一驱动
+ *   （默认 tertiary → 悬停 primary → 活跃 secondary）。
+ */
 .reasoningLabel {
-  font-weight: var(--font-weight-medium);
+  font-weight: var(--font-weight-normal);
   font-size: 14px;
-  color: var(--text-secondary);
+  color: inherit;
   flex-shrink: 0;
   pointer-events: none;
   white-space: nowrap;
-}
-
-.isLive .reasoningLabel {
-  color: var(--text-secondary);
 }
 
 /* 微型分割点 */

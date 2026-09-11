@@ -228,7 +228,13 @@ describe('timelineNormalizer', () => {
       expect(next[1]).toEqual({ type: 'text', content: '正文' });
     });
 
-    it('注入缺失 tool_call 块：插到最后 text 块之前', () => {
+    /**
+     * 【契约变更 · 断层 3 根治】旧实现一律插到「最后一个 text 块之前」，
+     * 于是「正文 1 → 工具 2 → 正文 2」场景下缺失的工具 1 会被插到正文 2 之前
+     * （即工具 2 之后），时序彻底倒流。现按因果时间戳就近插位，
+     * 无时间戳时兜底插到**首个正文块之前**。
+     */
+    it('注入缺失 tool_call 块：无时间戳则插到首个 text 块之前（严禁盲目置到尾部正文前）', () => {
       const blocks = [
         { type: 'tool_call' as const, id: 't1' },
         { type: 'text' as const, content: '前半' },
@@ -240,11 +246,48 @@ describe('timelineNormalizer', () => {
       ]);
       expect(next.map((b) => b.type)).toEqual([
         'tool_call',
-        'text',
         'tool_call',
         'text',
+        'text',
       ]);
-      expect(next[2]).toEqual({ type: 'tool_call', id: 't2' });
+      expect(next[1]).toEqual({ type: 'tool_call', id: 't2' });
+    });
+
+    it('断层 3 根治：正文 1 → 工具 2 → 正文 2 场景下缺失工具 1 必须插到正文 1 之前', () => {
+      const blocks = [
+        { type: 'text' as const, content: '正文 1' },
+        { type: 'tool_call' as const, id: 't2' },
+        { type: 'text' as const, content: '正文 2' },
+      ];
+      const next = alignToolCallBlocks(blocks, [
+        makeToolCall({ id: 't1', name: 'bash', status: 'success' }),
+        makeToolCall({ id: 't2', name: 'bash', status: 'success' }),
+      ]);
+      // 负向断言：t1 绝不能被插到「正文 2」之前（即 t2 之后）
+      expect(next.map((b) => (b.type === 'tool_call' ? b.id : b.type))).toEqual([
+        't1',
+        'text',
+        't2',
+        'text',
+      ]);
+    });
+
+    it('因果时间戳就近插位：工具按其 startedAt 插回真实发生时段', () => {
+      const T0 = 1_700_000_000_000;
+      const blocks = [
+        { type: 'text' as const, content: '早', startTime: T0 + 0 },
+        { type: 'tool_call' as const, id: 't-late', startTime: T0 + 5_000 },
+      ];
+      const next = alignToolCallBlocks(blocks, [
+        makeToolCall({ id: 't-late', name: 'bash', status: 'success', startedAt: T0 + 5_000 }),
+        makeToolCall({ id: 't-mid', name: 'bash', status: 'success', startedAt: T0 + 2_000 }),
+      ]);
+      // t-mid 的时间戳晚于「早」、早于 t-late，必须落在两者之间
+      expect(next.map((b) => (b.type === 'tool_call' ? b.id : b.type))).toEqual([
+        'text',
+        't-mid',
+        't-late',
+      ]);
     });
 
     it('剔除悬空 tool_call 块（id 不在 tools 中）', () => {

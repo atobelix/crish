@@ -119,11 +119,13 @@
   background: var(--bg-secondary);
 }
 
+/*
+ * 【用户裁决 · 2026-09-11】工作时间 / 工具调用下方一律不得携带发丝分割线。
+ * 该线会破坏正文与过程区的排版节奏，已物理切除，禁止回潮。
+ */
 .topProcessHeader {
   width: 100%;
   box-sizing: border-box;
-  border-bottom: var(--hairline-width, 1px) solid var(--hairline, var(--border-subtle));
-  padding-bottom: 4px;
   margin-bottom: var(--space-2, 8px);
 }
 

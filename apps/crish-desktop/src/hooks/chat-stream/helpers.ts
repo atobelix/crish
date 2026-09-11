@@ -443,12 +443,35 @@ export function stopAssistantPlaceholderText(
   return (text || '').trim() ? null : null;
 }
 
+/**
+ * 软收口耗时固化：为「缺失 durationMs 的未终结工具」按真实挂钟补齐终点。
+ *
+ * 根因：后端 wire 未回报 `durationMs` 时，工具恒为 0，导致终态过程段
+ * `segEnd = max(startTime + durationMs)` 退化为 `max(startTime)`，
+ * 「工作 xx 时间」少算末项整段执行时长甚至归零。
+ *
+ * 口径（非魔术补偿，锚定唯一权威时钟）：
+ *   - 已有正值 `durationMs` → 原样保留（后端回报优先）；
+ *   - 缺失且存在 `startedAt` → `now - startedAt`；
+ *   - 两者皆无 → 不产出字段（由调用方保持原状态，禁止伪造 0）。
+ */
+export function resolveTerminalDurationMs(
+  tc: { startedAt?: number | undefined; durationMs?: number | undefined },
+  now: number
+): number | undefined {
+  if (typeof tc.durationMs === 'number' && tc.durationMs > 0) return undefined;
+  if (typeof tc.startedAt !== 'number' || tc.startedAt <= 0) return undefined;
+  return Math.max(0, now - tc.startedAt);
+}
+
 export function buildTerminalToolPatches(
   toolCalls:
     | Array<{
         id: string;
         status?: string | undefined;
         output?: string | undefined;
+        startedAt?: number | undefined;
+        durationMs?: number | undefined;
       }>
     | null
     | undefined,
@@ -456,12 +479,19 @@ export function buildTerminalToolPatches(
 ): TerminalToolPatch[] {
   if (!toolCalls?.length) return [];
   const out: TerminalToolPatch[] = [];
+  const now = Date.now();
   for (const tc of toolCalls) {
     if (!tc?.id) continue;
     if (tc.status !== 'running' && tc.status !== 'pending_approval') continue;
     const existing = (tc.output || '').trim();
+    const durationMs = resolveTerminalDurationMs(tc, now);
     if (reason === 'stop') {
-      out.push({ id: tc.id, status: 'error', output: existing || '已停止' });
+      out.push({
+        id: tc.id,
+        status: 'error',
+        output: existing || '已停止',
+        ...(durationMs !== undefined ? { durationMs } : {}),
+      });
       continue;
     }
     if (tc.status === 'pending_approval') {
@@ -471,6 +501,7 @@ export function buildTerminalToolPatches(
         output:
           existing ||
           (reason === 'error' ? '运行失败时仍待确认' : '回合结束时仍待确认'),
+        ...(durationMs !== undefined ? { durationMs } : {}),
       });
       continue;
     }
@@ -483,6 +514,7 @@ export function buildTerminalToolPatches(
       id: tc.id,
       status: 'error',
       output: placeholder ? fallback : existing,
+      ...(durationMs !== undefined ? { durationMs } : {}),
     });
   }
   return out;

@@ -4,12 +4,15 @@
  * 度量聚合 / 主导动作仲裁 / 摘要文案 / 路径归一 的纯逻辑验证。
  */
 
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   aggregateProcessMetrics,
   arbitrateLeadAction,
   canonicalizeFsPath,
-  formatSegmentSummary,
+  formatDurationLabel,
+  formatProcessControlLabel,
   hasProcessContent,
 } from '../processMetricsEngine';
 import { classifyToolAction } from '../toolActionClassifier';
@@ -175,10 +178,92 @@ describe('arbitrateLeadAction · 主导动作仲裁优先级', () => {
   });
 });
 
-/* ────────────────────── formatSegmentSummary ────────────────────── */
+/* ────────────────────── formatDurationLabel ────────────────────── */
 
-describe('formatSegmentSummary · 图五中圆点拼接', () => {
-  it('完整语序拼接（编辑 → 搜索 → 读取 → 命令 → 子任务）', () => {
+describe('formatDurationLabel · 耗时文案边界穷举', () => {
+  it('秒级：保留一位小数', () => {
+    expect(formatDurationLabel(0)).toBe('0.0 秒');
+    expect(formatDurationLabel(999)).toBe('1.0 秒');
+    expect(formatDurationLabel(12_500)).toBe('12.5 秒');
+    expect(formatDurationLabel(59_900)).toBe('59.9 秒');
+  });
+
+  it('分秒级：秒取整', () => {
+    expect(formatDurationLabel(60_000)).toBe('1 分 0 秒');
+    expect(formatDurationLabel(65_400)).toBe('1 分 5 秒');
+    expect(formatDurationLabel(3_599_000)).toBe('59 分 59 秒');
+  });
+
+  it('时分级：丢弃秒', () => {
+    expect(formatDurationLabel(3_600_000)).toBe('1 小时 0 分');
+    expect(formatDurationLabel(7_260_000)).toBe('2 小时 1 分');
+  });
+
+  it('负值退化为 0（防御上游脏数据）', () => {
+    expect(formatDurationLabel(-5_000)).toBe('-5.0 秒');
+  });
+
+  it('负向断言：永不出现 (x.xs) 旧式英文后缀', () => {
+    for (const ms of [0, 3_200, 12_500, 60_000, 3_600_000]) {
+      expect(formatDurationLabel(ms)).not.toMatch(/\(\d/);
+      expect(formatDurationLabel(ms)).not.toContain('s)');
+    }
+  });
+});
+
+/* ────────────────────── formatProcessControlLabel ────────────────────── */
+
+describe('formatProcessControlLabel · 控制栏文案（2026-09-11 用户裁决）', () => {
+  it('多元素段 · 运行中 → 裸时长跳秒（无「工作」前缀）', () => {
+    const m = { ...emptyMetrics(), thoughtCount: 1, toolCount: 1 };
+    expect(formatProcessControlLabel(m, true, 4_200, true)).toBe('4.2 秒');
+  });
+
+  it('多元素段 · 终态 → 「工作 xx 时间」', () => {
+    const m = { ...emptyMetrics(), thoughtCount: 1, toolCount: 1 };
+    expect(formatProcessControlLabel(m, true, 12_500, false)).toBe('工作 12.5 秒');
+  });
+
+  it('多元素段 · 终态跨分钟 → 「工作 m 分 s 秒」', () => {
+    const m = { ...emptyMetrics(), thoughtCount: 1, toolCount: 3 };
+    expect(formatProcessControlLabel(m, true, 65_400, false)).toBe('工作 1 分 5 秒');
+  });
+
+  it('单思考段（不显示工作时间区域）→ 「思考」', () => {
+    const m = { ...emptyMetrics(), thoughtCount: 1 };
+    expect(formatProcessControlLabel(m, false, 3_200, false)).toBe('思考');
+  });
+
+  it('单工具调用段 → 「已运行 N 条命令」', () => {
+    const m = { ...emptyMetrics(), toolCount: 4 };
+    expect(formatProcessControlLabel(m, false, 8_000, false)).toBe('已运行 4 条命令');
+  });
+
+  it('空段兜底 → 「处理过程」', () => {
+    expect(formatProcessControlLabel(emptyMetrics(), false, 0, false)).toBe('处理过程');
+  });
+
+  it('负向断言：任何输入组合都不得产出「已深度思考」', () => {
+    const variants = [
+      emptyMetrics(),
+      { ...emptyMetrics(), thoughtCount: 1 },
+      { ...emptyMetrics(), thoughtCount: 3, thoughtDurationMs: 3_200 },
+      { ...emptyMetrics(), toolCount: 1 },
+      { ...emptyMetrics(), toolCount: 5, commandCount: 5 },
+      { ...emptyMetrics(), thoughtCount: 1, toolCount: 2 },
+    ];
+    for (const m of variants) {
+      for (const capsule of [true, false]) {
+        for (const live of [true, false]) {
+          for (const ms of [0, 3_200, 12_500, 3_600_000]) {
+            expect(formatProcessControlLabel(m, capsule, ms, live)).not.toContain('已深度思考');
+          }
+        }
+      }
+    }
+  });
+
+  it('负向断言：旧岛中圆点拼接文案已彻底根除', () => {
     const m = {
       ...emptyMetrics(),
       editFilesCount: 2,
@@ -187,40 +272,37 @@ describe('formatSegmentSummary · 图五中圆点拼接', () => {
       commandCount: 4,
       subagentCount: 1,
     };
-    expect(formatSegmentSummary(m)).toBe(
-      '已编辑 2 个文件 \u00b7 已搜索 3 次 \u00b7 已读取 1 个文件 \u00b7 已运行 4 条命令 \u00b7 已调度 1 个子任务'
-    );
+    for (const capsule of [true, false]) {
+      for (const live of [true, false]) {
+        const out = formatProcessControlLabel(m, capsule, 5_000, live);
+        expect(out).not.toContain('\u00b7');
+        expect(out).not.toContain('已编辑');
+        expect(out).not.toContain('已搜索');
+        expect(out).not.toContain('已读取');
+        expect(out).not.toContain('已调度');
+        expect(out).not.toContain('已完成');
+        expect(out).not.toContain('中间处理过程');
+      }
+    }
   });
 
-  it('空项自动裁剪', () => {
-    const m = { ...emptyMetrics(), searchCount: 2, readFilesCount: 3 };
-    expect(formatSegmentSummary(m)).toBe('已搜索 2 次 \u00b7 已读取 3 个文件');
-  });
-
-  it('无工具时回退思考文案（带耗时）', () => {
-    const m = { ...emptyMetrics(), thoughtCount: 1, thoughtDurationMs: 3200 };
-    expect(formatSegmentSummary(m)).toBe('已深度思考 (3.2s)');
-  });
-
-  it('无工具时回退思考文案（无耗时）', () => {
-    const m = { ...emptyMetrics(), thoughtCount: 2 };
-    expect(formatSegmentSummary(m)).toBe('已深度思考');
-  });
-
-  it('仅工具无分类（如未知名）→ 已完成 N 项操作', () => {
-    const m = { ...emptyMetrics(), toolCount: 3 };
-    expect(formatSegmentSummary(m)).toBe('已完成 3 项操作');
-  });
-
-  it('全空兜底', () => {
-    expect(formatSegmentSummary(emptyMetrics())).toBe('中间处理过程');
-  });
-
-  it('负向断言：分隔符必须是中圆点，不得是其他符号', () => {
-    const m = { ...emptyMetrics(), searchCount: 1, readFilesCount: 1 };
-    const out = formatSegmentSummary(m);
-    expect(out).toContain(' \u00b7 ');
-    expect(out).not.toContain(' · · ');
+  it('负向断言（源码级）：战役源码中「已深度思考」仅可存在于说明性注释，不得存在于可执行字面量', () => {
+    const files = [
+      '../processMetricsEngine.ts',
+      '../timelineSegmenter.ts',
+      '../toolPresentationTypes.ts',
+      '../../../components/chat-message/FoldableProcessSection.tsx',
+      '../../../components/chat-message/MessageContent.tsx',
+    ];
+    const needle = ['已深', '度思考'].join('');
+    for (const rel of files) {
+      const src = readFileSync(resolve(__dirname, rel), 'utf8');
+      // 剥离块注释与行注释后，仅剩可执行代码
+      const code = src
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/(^|[^:])\/\/.*$/gm, '$1');
+      expect(code, `${rel} 中不得存在「${needle}」字面量`).not.toContain(needle);
+    }
   });
 });
 

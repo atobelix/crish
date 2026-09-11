@@ -5,9 +5,11 @@
  */
 
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
-import { FoldableProcessSection, formatDurationLabel } from './FoldableProcessSection';
+import { FoldableProcessSection } from './FoldableProcessSection';
 import type { ProcessSegmentMetrics } from '../../api/toolPresentation';
 
 function mockMetrics(): ProcessSegmentMetrics {
@@ -42,7 +44,7 @@ describe('FoldableProcessSection 动态测高与检索穿透断言', () => {
         sectionId="msg-test-proc-0"
         items={[]}
         metrics={mockMetrics()}
-        showTimeCapsule={false}
+        showWorkTime={false}
         isExpanded={false}
         isFoldable={true}
         onToggle={onToggle}
@@ -69,7 +71,7 @@ describe('FoldableProcessSection 动态测高与检索穿透断言', () => {
         sectionId="msg-test-proc-1"
         items={[]}
         metrics={mockMetrics()}
-        showTimeCapsule={false}
+        showWorkTime={false}
         isExpanded={false}
         isFoldable={true}
         onToggle={onToggle}
@@ -104,7 +106,7 @@ describe('FoldableProcessSection 动态测高与检索穿透断言', () => {
         sectionId="msg-test-proc-0"
         items={[]}
         metrics={mockMetrics()}
-        showTimeCapsule={false}
+        showWorkTime={false}
         isExpanded={true}
         isFoldable={true}
         onToggle={onToggle}
@@ -130,7 +132,7 @@ describe('FoldableProcessSection 动态测高与检索穿透断言', () => {
         sectionId="msg-test-proc-subagent"
         items={[]}
         metrics={{ ...mockMetrics(), subagentCount: 1, leadAction: 'subagent' }}
-        showTimeCapsule={false}
+        showWorkTime={false}
         isExpanded={false}
         isFoldable={true}
         forceExpanded={true}
@@ -150,19 +152,23 @@ describe('FoldableProcessSection 动态测高与检索穿透断言', () => {
 });
 
 /* ═══════════════════════════════════════════════════════════════════════════
- * 顶部工作时间胶囊（用户裁决 · 2026-09-11）
- *   ① 最上面只有时间，绝不出现「已深度思考」等状态词
- *   ② 运行中跳秒；终态定格为「工作 xx 时间」（可跨秒 / 分 / 时）
- *   ③ 只有一个思考 或 一个工具调用 → 工作时间区域与分割线一律不显示
+ * 控制栏工作时间（用户裁决 · 2026-09-11）
+ *   ① 工作时长承载于控制栏 —— 即原「已深度思考」所在位置
+ *   ② 运行中跳秒（裸时长，无前缀）；终态定格为「工作 xx 时间」（可跨秒 / 分 / 时）
+ *   ③ 只有一个思考 或 一个工具调用 → 退化为「思考」/「已运行 N 条命令」
+ *   ④ 顶部 dashed hairline 工作时间区已物理切除，禁止任何形式回潮
  * ═══════════════════════════════════════════════════════════════════════════ */
-describe('FoldableProcessSection 顶部工作时间胶囊', () => {
-  function renderCapsule(opts: {
-    showTimeCapsule: boolean;
+describe('FoldableProcessSection 控制栏工作时间', () => {
+  function renderBar(opts: {
+    showWorkTime: boolean;
     isLive?: boolean;
     startTime?: number;
     endTime?: number;
     totalDurationMs?: number;
+    metrics?: Partial<ProcessSegmentMetrics>;
   }) {
+    // 同一 it 内可能连续渲染多组参数（穷举断言），先卸载上一棵渲染树
+    cleanup();
     render(
       <FoldableProcessSection
         msgId="msg-cap"
@@ -172,10 +178,11 @@ describe('FoldableProcessSection 顶部工作时间胶囊', () => {
           ...mockMetrics(),
           toolCount: 2,
           totalDurationMs: opts.totalDurationMs ?? 0,
+          ...opts.metrics,
         }}
         startTime={opts.startTime}
         endTime={opts.endTime}
-        showTimeCapsule={opts.showTimeCapsule}
+        showWorkTime={opts.showWorkTime}
         isLive={opts.isLive ?? false}
         isExpanded={true}
         isFoldable={true}
@@ -184,62 +191,114 @@ describe('FoldableProcessSection 顶部工作时间胶囊', () => {
         renderItem={() => <div>item</div>}
       />
     );
+    return screen.getByTestId('process-toggle-msg-cap-proc-0');
   }
 
-  it('showTimeCapsule=false（单思考 / 单工具）→ 胶囊与虚线分割一律不渲染', () => {
-    renderCapsule({ showTimeCapsule: false, startTime: 1_700_000_000_000, endTime: 1_700_000_012_000 });
+  it('负向断言（物理切除）：dashed hairline 工作时间区节点已彻底消失', () => {
+    renderBar({ showWorkTime: true, startTime: 1_700_000_000_000, endTime: 1_700_000_012_500 });
     expect(screen.queryByTestId('process-time-capsule')).toBeNull();
+    expect(document.querySelector('[class*="timeCapsule"]')).toBeNull();
   });
 
-  it('运行中（isLive）→ 胶囊跳秒且不写「工作」前缀，标记 data-live=true', () => {
-    renderCapsule({ showTimeCapsule: true, isLive: true, startTime: Date.now() - 3_400 });
-    const cap = screen.getByTestId('process-time-capsule');
-    expect(cap.getAttribute('data-live')).toBe('true');
-    expect(cap.textContent ?? '').toMatch(/^\d+\.\d 秒$/);
-    // 负向断言：绝不出现「已深度思考」
-    expect(cap.textContent ?? '').not.toContain('已深度思考');
+  it('运行中（isLive）→ 控制栏跳秒且不写「工作」前缀，标记 data-live=true', () => {
+    const bar = renderBar({ showWorkTime: true, isLive: true, startTime: Date.now() - 3_400 });
+    expect(bar.getAttribute('data-live')).toBe('true');
+    expect(bar.textContent ?? '').toMatch(/\d+\.\d 秒/);
+    expect(bar.textContent ?? '').not.toContain('工作');
   });
 
-  it('终态 → 定格为「工作 xx 时间」，标记 data-live=false', () => {
-    renderCapsule({
-      showTimeCapsule: true,
+  it('终态 → 控制栏定格为「工作 xx 时间」，标记 data-live=false', () => {
+    const bar = renderBar({
+      showWorkTime: true,
       startTime: 1_700_000_000_000,
       endTime: 1_700_000_012_500,
     });
-    const cap = screen.getByTestId('process-time-capsule');
-    expect(cap.getAttribute('data-live')).toBe('false');
-    expect(cap.textContent).toBe('工作 12.5 秒');
+    expect(bar.getAttribute('data-live')).toBe('false');
+    expect(bar.textContent).toContain('工作 12.5 秒');
   });
 
-  it('终态且无法取得有效耗时 → 不渲染（杜绝「工作 0.0 秒」样式假象）', () => {
-    renderCapsule({ showTimeCapsule: true, startTime: 1_700_000_000_000, totalDurationMs: 0 });
-    expect(screen.queryByTestId('process-time-capsule')).toBeNull();
-  });
-
-  it('负向断言：胶囊文案区不得出现任何状态词（只承载时间）', () => {
-    renderCapsule({
-      showTimeCapsule: true,
+  it('单思考段（不显示工作时间区域）→ 退化为「思考」', () => {
+    const bar = renderBar({
+      showWorkTime: false,
       startTime: 1_700_000_000_000,
-      endTime: 1_700_000_065_000,
+      endTime: 1_700_000_003_200,
+      metrics: { toolCount: 0, thoughtCount: 1, thoughtDurationMs: 3_200 },
     });
-    const text = screen.getByTestId('process-time-capsule').textContent ?? '';
-    expect(text).toBe('工作 1 分 5 秒');
-    for (const banned of ['已深度思考', '思考', '工具', '运行中', '正在']) {
-      expect(text).not.toContain(banned);
+    expect(bar.textContent).toContain('思考');
+    expect(bar.textContent ?? '').not.toContain('工作');
+  });
+
+  it('单工具调用段 → 退化为「已运行 N 条命令」', () => {
+    const bar = renderBar({
+      showWorkTime: false,
+      metrics: { toolCount: 1, thoughtCount: 0 },
+    });
+    expect(bar.textContent).toContain('已运行 1 条命令');
+  });
+
+  it('负向断言：控制栏文案区绝不得出现「已深度思考」', () => {
+    const banned = ['已深', '度思考'].join('');
+    for (const [capsule, live] of [[true, true], [true, false], [false, false]] as const) {
+      const bar = renderBar({
+        showWorkTime: capsule,
+        isLive: live,
+        startTime: 1_700_000_000_000,
+        endTime: 1_700_000_065_000,
+        metrics: { thoughtCount: 3, thoughtDurationMs: 65_000, toolCount: 2 },
+      });
+      expect(bar.textContent ?? '').not.toContain(banned);
     }
   });
 });
 
-describe('formatDurationLabel 边界穷举', () => {
-  it('秒 / 分秒 / 时分的档位切换', () => {
-    expect(formatDurationLabel(0)).toBe('0.0 秒');
-    expect(formatDurationLabel(999)).toBe('1.0 秒');
-    expect(formatDurationLabel(12_500)).toBe('12.5 秒');
-    expect(formatDurationLabel(59_900)).toBe('59.9 秒');
-    expect(formatDurationLabel(60_000)).toBe('1 分 0 秒');
-    expect(formatDurationLabel(65_000)).toBe('1 分 5 秒');
-    expect(formatDurationLabel(3_599_000)).toBe('59 分 59 秒');
-    expect(formatDurationLabel(3_600_000)).toBe('1 小时 0 分');
-    expect(formatDurationLabel(7_260_000)).toBe('2 小时 1 分');
+/* ═══════════════════════════════════════════════════════════════════════════
+ * CSS 契约负向断言（样式欺骗零容忍）
+ * ═══════════════════════════════════════════════════════════════════════════ */
+describe('FoldableProcessSection.module.css 契约', () => {
+  /** 剥离 CSS 注释后再做契约扫描：注释内的反例文本不得被误判为真实声明 */
+  const css = readFileSync(
+    resolve(__dirname, 'FoldableProcessSection.module.css'),
+    'utf-8'
+  ).replace(/\/\*[\s\S]*?\*\//g, '');
+
+  it('同段内容槽 gap 必须为 0（思考 / 工具之间不得有额外留白）', () => {
+    const block = css.match(/\.sectionBody:not\(\[hidden\]\)\s*\{[^}]*\}/)?.[0] ?? '';
+    expect(block).not.toBe('');
+    expect(block).toMatch(/gap:\s*0/);
+    // 负向断言：禁止以 padding 变相制造留白
+    expect(block).toMatch(/padding-top:\s*0/);
+    expect(block).toMatch(/padding-bottom:\s*0/);
+  });
+
+  it('负向断言（物理切除）：工作时间区样式已彻底消失，全文件不得残留 dashed 发丝分割', () => {
+    expect(css).not.toMatch(/\.timeCapsule/);
+    expect(css).not.toMatch(/border-top:[^;]*dashed/);
+    expect(css).not.toMatch(/border-bottom:[^;]*dashed/);
+  });
+
+  it('负向断言（用户裁决）：控制栏不得携带任何发丝分割线', () => {
+    const block = css.match(/\.controlBar\s*\{[^}]*\}/)?.[0] ?? '';
+    expect(block).not.toBe('');
+    expect(block).not.toMatch(/border-bottom/);
+    expect(block).not.toMatch(/border-top/);
+    // 悬停态同样禁止回潮分割线
+    const hover = css.match(/\.controlBar:hover\s*\{[^}]*\}/)?.[0] ?? '';
+    expect(hover).not.toMatch(/border/);
+  });
+
+  it('控制栏文案与思考 / 工具行同构：14px、字重 400、继承色、严禁裸 Hex', () => {
+    const block = css.match(/\.summaryLabel\s*\{[^}]*\}/)?.[0] ?? '';
+    expect(block).not.toBe('');
+    expect(block).toMatch(/font-size:\s*14px/);
+    expect(block).not.toMatch(/font-size:\s*var\(--font-size-(xs|micro|xxs)/);
+    expect(block).toMatch(/font-weight:\s*var\(--font-weight-normal/);
+    expect(block).not.toMatch(/font-weight:\s*(500|600|700)/);
+    expect(block).toMatch(/color:\s*inherit/);
+    // 负向断言：全文件零裸 Hex（Design Token 纪律）
+    expect(css).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+  });
+
+  it('负向断言：严禁对 [hidden] 施加 display: none !important', () => {
+    expect(css).not.toMatch(/\[hidden\][^{]*\{[^}]*display:\s*none\s*!important/);
   });
 });

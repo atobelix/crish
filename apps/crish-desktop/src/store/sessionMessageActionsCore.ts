@@ -219,12 +219,23 @@ export function createSessionMessageActionsCore<T extends SessionStoreSlice>(
           msg.blocks = msg.blocks.filter((b) => b.type !== 'text');
         }
         const segment = text.length >= offset ? text.slice(offset) : text;
-        // 定位是否已有可承接当前段落的最新 text 块（位于最后工具调用之后，或全块无工具）
-        const lastToolIdx = msg.blocks.map((b) => b.type).lastIndexOf('tool_call');
+        /**
+         * 【双重物理界标隔离】定位可承接当前段落的最新 text 块时，
+         * 必须确保该正文块位于「最后一个工具块」**与**「最后一个思考块」之后。
+         *
+         * 历史缺陷：仅以 `lastToolIdx` 为界标，于是
+         *   正文 1 → 思考 2 → 正文 2
+         * 这种「无工具 + 多轮思考交错」场景下，倒序查找会命中思考 2 之前的正文 1，
+         * 把正文 2 的内容追加合并进正文 1，中间的 thought 被挤到末尾或彻底错乱。
+         */
+        const blockTypes = msg.blocks.map((b) => b.type);
+        const lastToolIdx = blockTypes.lastIndexOf('tool_call');
+        const lastThoughtIdx = blockTypes.lastIndexOf('thought');
+        const lastProcessDelimiterIdx = Math.max(lastToolIdx, lastThoughtIdx);
         let targetTextIdx = -1;
         for (let i = msg.blocks.length - 1; i >= 0; i--) {
           if (msg.blocks[i]?.type === 'text') {
-            if (lastToolIdx === -1 || i > lastToolIdx) {
+            if (lastProcessDelimiterIdx === -1 || i > lastProcessDelimiterIdx) {
               targetTextIdx = i;
             }
             break;
@@ -309,6 +320,17 @@ export function createSessionMessageActionsCore<T extends SessionStoreSlice>(
             };
           }
         } else if (thinking.trim()) {
+          /**
+           * 【游标校准】开启新轮次思考的瞬间，把流式正文游标推进到当前累计正文长度。
+           *
+           * 历史缺陷：`streamTextOffset` 仅在 `addMessageToolCall` 时推进，
+           * 导致无工具调用但多轮思考的场景下，后续正文的 `segment` 切片
+           * 仍从旧游标起算，把新正文整段重复拼回上一个正文块。
+           */
+          const nextOffset = (msg.text || '').length;
+          // 仅在确有累计正文时推进游标：无正文时保持状态不变，
+          // 以维系「同字符串重复调用为零副作用」的既有契约。
+          if (nextOffset > 0) msg.streamTextOffset = nextOffset;
           const newBlock = {
             type: 'thought' as const,
             id: thoughtKey,

@@ -134,13 +134,17 @@ describe('时间线 Blocks 保全合并算法与防退避测试套件', () => {
       expect(toolCallIds).toEqual(['tc-read', 'tc-scan']);
 
       // 验证物理逻辑顺序：incoming 块在前（按到达顺序），orphan 历史块追加到末尾
-      // 新实现严格按插入顺序：incoming=[turn1.thought, turn1.tool_call, turn1.text]，then orphans=[turn0.thought, turn0.tool_call]
+      // 新实现严格按插入顺序：incoming=[turn1.thought, turn1.tool_call, turn1.text]，
+      // then orphans=[turn0.thought, turn0.tool_call, turn0.text]。
+      // 【断层 2 根治】正文块同为真实时间线成员：orphan 正文同样无损追加，
+      // 不再因类型为 text 而被静默丢弃（历史孤儿正文丢失即数据丢失）。
       expect(merged.map((b) => `${b.turnIndex}:${b.type}`)).toEqual([
         '1:thought',
         '1:tool_call',
         '1:text',
         '0:thought',
         '0:tool_call',
+        '0:text',
       ]);
     });
 
@@ -689,6 +693,190 @@ describe('时间线 Blocks 保全合并算法与防退避测试套件', () => {
         'thought',
         'text',
       ]);
+    });
+  });
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // 6. 节点 6 · 底层数据流三大断层根治断言
+  // ──────────────────────────────────────────────────────────────────────────
+  describe('节点 6 · 底层数据流三大断层根治', () => {
+    describe('断层 2：三元槽位键碰撞导致多段正文被吞并', () => {
+      it('判别性用例：existing 两段无 id 正文 + incoming 一段 → 必须留存 2 段（旧实现恒为 1 段）', () => {
+        const existing: MessageTimelineBlock[] = [
+          { type: 'text', content: '正文 1', turnIndex: 0 },
+          { type: 'text', content: '正文 2', turnIndex: 0 },
+        ];
+        // incoming 只回传第 1 段（流式累积正文重新下发）
+        const incoming: MessageTimelineBlock[] = [
+          { type: 'text', content: '正文 1（已更新）', turnIndex: 0 },
+        ];
+
+        const merged = reconcileAssistantMessageBlocks(existing, incoming);
+        const texts = merged.filter((b) => b.type === 'text');
+
+        // 历史缺陷：两块共用 "0:text:" 槽位键 → existing 只留下最后一块，
+        // 且孤儿正文被 `type === 'tool_call' || 'thought'` 过滤静默丢弃 → 结果恒为 1 段。
+        expect(texts).toHaveLength(2);
+        expect(texts[0]?.content).toBe('正文 1（已更新）');
+        expect(texts[1]?.content).toBe('正文 2');
+      });
+
+      it('三段无 id 正文 + incoming 一段 → 留存 3 段（负向：绝不塌缩为 1 段）', () => {
+        const merged = reconcileAssistantMessageBlocks(
+          [
+            { type: 'text', content: 'A', turnIndex: 0 },
+            { type: 'text', content: 'B', turnIndex: 0 },
+            { type: 'text', content: 'C', turnIndex: 0 },
+          ],
+          [{ type: 'text', content: "A'", turnIndex: 0 }]
+        );
+        expect(merged.filter((b) => b.type === 'text').map((b) => b.content)).toEqual([
+          "A'",
+          'B',
+          'C',
+        ]);
+      });
+
+      it('第 N 个 incoming 正文精准对齐第 N 个 existing 正文（序号槽位语义）', () => {
+        const merged = reconcileAssistantMessageBlocks(
+          [
+            { type: 'text', content: 'A', turnIndex: 0 },
+            { type: 'text', content: 'B', turnIndex: 0 },
+          ],
+          [
+            { type: 'text', content: "A2", turnIndex: 0 },
+            { type: 'text', content: 'B2', turnIndex: 0 },
+          ]
+        );
+        expect(merged.map((b) => b.content)).toEqual(['A2', 'B2']);
+      });
+
+      it('有 id 的块按 id 槽位原地更新，不产生重复', () => {
+        const merged = reconcileAssistantMessageBlocks(
+          [{ type: 'text', id: 'tx-1', content: '旧', turnIndex: 0 }],
+          [{ type: 'text', id: 'tx-1', content: '新', turnIndex: 0 }]
+        );
+        expect(merged).toHaveLength(1);
+        expect(merged[0]).toMatchObject({ id: 'tx-1', content: '新' });
+      });
+    });
+
+    describe('断层 3：alignToolCallBlocks 盲目插位根治（因果时间戳就近）', () => {
+      it('缺失工具按其 startedAt 就近插入，绝不插到更晚工具之后', () => {
+        const t0 = 1_700_000_000_000;
+        const blocks: MessageTimelineBlock[] = [
+          { type: 'tool_call', id: 'early', turnIndex: 0, startTime: t0 },
+          { type: 'tool_call', id: 'late', turnIndex: 0, startTime: t0 + 10_000 },
+        ];
+        const tools = [
+          makeToolCall({ id: 'early', name: 'a', status: 'success', startedAt: t0 }),
+          makeToolCall({
+            id: 'mid',
+            name: 'b',
+            status: 'success',
+            startedAt: t0 + 5_000,
+          }),
+          makeToolCall({
+            id: 'late',
+            name: 'c',
+            status: 'success',
+            startedAt: t0 + 10_000,
+          }),
+        ];
+
+        const aligned = alignToolCallBlocks(blocks, tools);
+        expect(
+          aligned.filter((b) => b.type === 'tool_call').map((b) => b.id)
+        ).toEqual(['early', 'mid', 'late']);
+      });
+
+      it('无时间戳时兜底插到首个 text 块之前（负向：绝不追加到全部正文之后）', () => {
+        const blocks: MessageTimelineBlock[] = [
+          { type: 'thought', content: '思考', turnIndex: 0 },
+          { type: 'text', content: '正文 1', turnIndex: 0 },
+          { type: 'text', content: '正文 2', turnIndex: 1 },
+        ];
+        const tools = [
+          makeToolCall({ id: 'orphan-tool', name: 'x', status: 'success' }),
+        ];
+
+        const aligned = alignToolCallBlocks(blocks, tools);
+        expect(aligned.map((b) => b.type)).toEqual([
+          'thought',
+          'tool_call',
+          'text',
+          'text',
+        ]);
+      });
+    });
+
+    describe('断层 1：updateMessageText 跨过程界标合并根治', () => {
+      it('正文 1 → 思考 2 → 正文 2：正文 2 不得被合并进正文 1', () => {
+        seedSession([
+          makeMessage({
+            id: MSG_ID,
+            sender: 'assistant',
+            text: '',
+            blocks: [
+              { type: 'thought', content: '思考 1', turnIndex: 0, id: 'thought-turn-0' },
+              { type: 'text', content: '正文 1', turnIndex: 0 },
+              { type: 'thought', content: '思考 2', turnIndex: 1, id: 'thought-turn-1' },
+            ],
+          }),
+        ]);
+        const store = useSessionStore.getState();
+        store.updateMessageText(SESS_ID, MSG_ID, '正文 2');
+
+        const msg = useSessionStore
+          .getState()
+          .sessionsById[SESS_ID]?.messages.find((m) => m.id === MSG_ID);
+
+        const texts = msg?.blocks?.filter((b) => b.type === 'text') ?? [];
+        expect(texts).toHaveLength(2);
+        expect(texts[0]?.content).toBe('正文 1');
+        expect(texts[1]?.content).toBe('正文 2');
+        // 负向断言：正文 1 绝不可被追加成「正文 1正文 2」
+        expect(texts[0]?.content).not.toContain('正文 2');
+      });
+
+      it('无过程界标时正文仍就地更新（不新增块）', () => {
+        seedSession([
+          makeMessage({
+            id: MSG_ID,
+            sender: 'assistant',
+            text: '',
+            blocks: [{ type: 'text', content: '旧正文', turnIndex: 0 }],
+          }),
+        ]);
+        const store = useSessionStore.getState();
+        store.updateMessageText(SESS_ID, MSG_ID, '新正文');
+
+        const msg = useSessionStore
+          .getState()
+          .sessionsById[SESS_ID]?.messages.find((m) => m.id === MSG_ID);
+        const texts = msg?.blocks?.filter((b) => b.type === 'text') ?? [];
+        expect(texts).toHaveLength(1);
+        expect(texts[0]?.content).toBe('新正文');
+      });
+
+      it('游标校准：新轮次思考开启时 streamTextOffset 推进到当前正文长度', () => {
+        seedSession([
+          makeMessage({
+            id: MSG_ID,
+            sender: 'assistant',
+            text: '已累计正文',
+            streamTextOffset: 0,
+            blocks: [{ type: 'text', content: '已累计正文', turnIndex: 0 }],
+          }),
+        ]);
+        const store = useSessionStore.getState();
+        store.updateMessageThinking(SESS_ID, MSG_ID, '新的思考', 1);
+
+        const msg = useSessionStore
+          .getState()
+          .sessionsById[SESS_ID]?.messages.find((m) => m.id === MSG_ID);
+        expect(msg?.streamTextOffset).toBe('已累计正文'.length);
+      });
     });
   });
 });

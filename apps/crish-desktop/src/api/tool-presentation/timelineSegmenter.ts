@@ -8,7 +8,7 @@
  * （上下文压缩 / 模型切换 / 思考强度切换）作为 `state_notice` 段平铺常驻，
  * 绝不参与折叠。
  *
- * 【顶部工作时间胶囊门槛】段内思考 + 工具计数之和 ≥ 2 才显示胶囊与虚线分割；
+ * 【顶部工作工作时间区门槛】段内思考 + 工具计数之和 ≥ 2 才显示胶囊与虚线分割；
  * 单思考 / 单工具调用不显示（用户裁决 · 2026-09-11）。
  *
  * 【四铁律裁决优先级（短路顺序）】
@@ -44,12 +44,12 @@ function isProcessItem(item: AssistantTimelineItem): boolean {
 }
 
 /**
- * 顶部「工作时间胶囊 + 虚线分割」的显示门槛（用户裁决 · 2026-09-11）。
+ * 顶部「工作工作时间区 + 虚线分割」的显示门槛（用户裁决 · 2026-09-11）。
  *
  * 只有一个思考 或 只有一个工具调用时，工作时间区域与分割线一律不显示；
  * 计数之和 ≥ 2 才显示。
  */
-function shouldShowTimeCapsule(thoughtCount: number, toolCount: number): boolean {
+function shouldShowWorkTime(thoughtCount: number, toolCount: number): boolean {
   return thoughtCount + toolCount >= 2;
 }
 
@@ -125,21 +125,33 @@ export function partitionTimelineSegments(
       return;
     }
 
-    // 段起止时间戳：取段内子项的最早 / 最晚 startTime。
-    // 段处于 isLive 时：endTime 留空（运行中，顶部时间胶囊跳秒）。
-    // 段处于终态时：endTime = 最晚 startTime（用于定格「工作 xx 时间」）。
+    // 段起止时间戳。
+    //   segStart = 段内子项最早 startTime；
+    //   segEnd   = 段内子项「最晚物理终点」= max(startTime + durationMs)。
+    //
+    // 【关键口径】末点必须计入末项自身的执行时长。历史实现取 max(startTime)，
+    // 等价于把「最后一项的运行时长」整体抹掉 —— 双工具段会只显示首工具的耗时，
+    // 单工具段恒为 0。终态定格必须锚定物理终点，而非起点。
+    //
+    // 段处于 isLive 时：endTime 留空（运行中，控制栏跳秒）。
     let segStart: number | undefined;
     let segEnd: number | undefined;
     for (const it of current) {
       const t = (it as { startTime?: number }).startTime;
       if (typeof t === 'number' && t > 0) {
         if (segStart === undefined || t < segStart) segStart = t;
-        if (segEnd === undefined || t > segEnd) segEnd = t;
+        const d = (it as { durationMs?: number }).durationMs;
+        const end = typeof d === 'number' && d > 0 ? t + d : t;
+        if (segEnd === undefined || end > segEnd) segEnd = end;
       }
     }
     if (!isLive) {
-      // 终态必须存在 endTime，缺省用 totalDurationMs 推算
-      if (segEnd === undefined && segStart !== undefined && metrics.totalDurationMs > 0) {
+      // 子项均无 startTime / 终点退化为起点时，用聚合总耗时兜底（禁止恒 0 假象）
+      if (
+        segStart !== undefined &&
+        (segEnd === undefined || segEnd <= segStart) &&
+        metrics.totalDurationMs > 0
+      ) {
         segEnd = segStart + metrics.totalDurationMs;
       }
     } else {
@@ -154,7 +166,7 @@ export function partitionTimelineSegments(
       metrics,
       startTime: segStart,
       endTime: segEnd,
-      showTimeCapsule: shouldShowTimeCapsule(metrics.thoughtCount, metrics.toolCount),
+      showWorkTime: shouldShowWorkTime(metrics.thoughtCount, metrics.toolCount),
       foldable,
       defaultExpanded,
       forceExpanded,

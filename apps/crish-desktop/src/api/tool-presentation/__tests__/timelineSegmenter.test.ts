@@ -259,40 +259,40 @@ describe('partitionTimelineSegments · 铁律四（子代理可见性特权）',
 });
 
 /* ═══════════════════════════════════════════════════════════════════════════
- * 顶部工作时间胶囊显示门槛（用户裁决 · 2026-09-11）
+ * 顶部工作工作时间区显示门槛（用户裁决 · 2026-09-11）
  *   只有一个思考 或 只有一个工具调用 → 工作时间区域与分割线一律不显示
  * ═══════════════════════════════════════════════════════════════════════════ */
-describe('partitionTimelineSegments · 时间胶囊显示门槛', () => {
+describe('partitionTimelineSegments · 工作时间区显示门槛', () => {
   function capsuleOf(items: AssistantTimelineItem[], isTurnLive = false) {
     const segs = partitionTimelineSegments('m1', items, isTurnLive, false);
     const seg = segs.find((s) => s.kind === 'process_section') as
-      | { showTimeCapsule: boolean; startTime?: number; endTime?: number; isLive: boolean }
+      | { showWorkTime: boolean; startTime?: number; endTime?: number; isLive: boolean }
       | undefined;
     return seg;
   }
 
-  it('单一思考 → showTimeCapsule=false', () => {
-    expect(capsuleOf([thought('t1', 1000)])?.showTimeCapsule).toBe(false);
+  it('单一思考 → showWorkTime=false', () => {
+    expect(capsuleOf([thought('t1', 1000)])?.showWorkTime).toBe(false);
   });
 
-  it('单一工具调用 → showTimeCapsule=false', () => {
-    expect(capsuleOf([tools('k1', ['read_file'])])?.showTimeCapsule).toBe(false);
+  it('单一工具调用 → showWorkTime=false', () => {
+    expect(capsuleOf([tools('k1', ['read_file'])])?.showWorkTime).toBe(false);
   });
 
-  it('思考 + 工具 → showTimeCapsule=true', () => {
-    expect(capsuleOf([thought('t1'), tools('k1', ['read_file'])])?.showTimeCapsule).toBe(true);
+  it('思考 + 工具 → showWorkTime=true', () => {
+    expect(capsuleOf([thought('t1'), tools('k1', ['read_file'])])?.showWorkTime).toBe(true);
   });
 
-  it('两个工具（同一 tools 项）→ showTimeCapsule=true', () => {
-    expect(capsuleOf([tools('k1', ['read_file', 'grep_search'])])?.showTimeCapsule).toBe(true);
+  it('两个工具（同一 tools 项）→ showWorkTime=true', () => {
+    expect(capsuleOf([tools('k1', ['read_file', 'grep_search'])])?.showWorkTime).toBe(true);
   });
 
   it('负向断言：注入项不参与胶囊门槛计数（仅注入不产出过程段）', () => {
     const segs = partitionTimelineSegments('m1', [injection('i1'), thought('t1')], false, false);
     const proc = segs.find((s) => s.kind === 'process_section') as
-      | { showTimeCapsule: boolean }
+      | { showWorkTime: boolean }
       | undefined;
-    expect(proc?.showTimeCapsule).toBe(false);
+    expect(proc?.showWorkTime).toBe(false);
   });
 
   it('段起止时间戳：终态取段内最早 / 最晚 startTime', () => {
@@ -374,5 +374,80 @@ describe('partitionTimelineSegments · 段边界与空输入', () => {
     const a = partitionTimelineSegments('m1', items, true, true);
     const b = partitionTimelineSegments('m1', items, true, true);
     expect(JSON.stringify(a)).toBe(JSON.stringify(b));
+  });
+});
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * 终态段末点锚定（物理终点口径）
+ *
+ * 历史缺陷：segEnd 取 max(startTime)，等价于把「末项自身执行时长」整体抹掉——
+ * 双工具段只显示首工具耗时，单工具段恒为 0。终态定格必须锚定物理终点。
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+function proc(items: AssistantTimelineItem[], isLive = false) {
+  const segs = partitionTimelineSegments('m-end', items, isLive, false);
+  const seg = segs[0];
+  if (seg?.kind !== 'process_section') {
+    throw new Error(`期望首个段为 process_section，实际：${seg?.kind}`);
+  }
+  return seg;
+}
+
+describe('partitionTimelineSegments · 终态段末点锚定（max(start + duration)）', () => {
+  it('双工具段：endTime 计入末项执行时长（负向：不得退化为 max(startTime)）', () => {
+    const t0 = 1_700_000_000_000;
+    const seg = proc([
+      { ...tools('a', ['read_file']), startTime: t0, durationMs: 3_000 },
+      { ...tools('b', ['grep_search']), startTime: t0 + 3_000, durationMs: 5_000 },
+    ]);
+
+    expect(seg.startTime).toBe(t0);
+    // 物理终点：max(t0+3000, t0+3000+5000) = t0 + 8000
+    expect(seg.endTime).toBe(t0 + 8_000);
+    // 负向断言：绝不可是历史实现的 max(startTime) = t0 + 3000
+    expect(seg.endTime).not.toBe(t0 + 3_000);
+  });
+
+  it('单思考 + 单工具：终点 = 工具起点 + 工具耗时（5s + 7s = 12s）', () => {
+    const t0 = 1_700_000_000_000;
+    const seg = proc([
+      { ...thought('t1', 5_000), startTime: t0 },
+      { ...tools('k1', ['run_command']), startTime: t0 + 5_000, durationMs: 7_000 },
+    ]);
+
+    expect(seg.endTime! - seg.startTime!).toBe(12_000);
+  });
+
+  it('末项缺 durationMs：终点退化为该项起点，且恒不小于段起点', () => {
+    const t0 = 1_700_000_000_000;
+    const seg = proc([
+      { ...tools('a', ['read_file']), startTime: t0, durationMs: 2_000 },
+      { ...tools('b', ['grep_search']), startTime: t0 + 2_000 },
+    ]);
+
+    expect(seg.endTime).toBe(t0 + 2_000);
+    expect(seg.endTime!).toBeGreaterThanOrEqual(seg.startTime!);
+  });
+
+  it('无 startTime 但聚合有总耗时 → 以 segStart + totalDurationMs 兜底（禁止恒 0 假象）', () => {
+    // 段内无绝对时钟，仅携带 durationMs：段起点由分段器置空，
+    // 此时「工作 xx 时间」退化为语义标签，但不得产出负时长。
+    const seg = proc([thought('t1', 4_000), tools('k1', ['read_file'])]);
+    expect(seg.startTime).toBeUndefined();
+    expect(seg.metrics.totalDurationMs).toBe(4_000);
+  });
+
+  it('活跃段（铁律二）endTime 恒为 undefined —— 跳秒口径不被终态公式污染', () => {
+    const t0 = 1_700_000_000_000;
+    const seg = proc(
+      [
+        { ...thought('t1', 1_000), startTime: t0 },
+        { ...tools('k1', ['run_command']), startTime: t0 + 1_000, durationMs: 9_000 },
+      ],
+      true
+    );
+
+    expect(seg.isLive).toBe(true);
+    expect(seg.endTime).toBeUndefined();
   });
 });

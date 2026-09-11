@@ -256,6 +256,15 @@ export function createSessionMessageActionsTools<T extends SessionStoreSlice>(
           if (!tc) continue;
           tc.status = p.status;
           if (p.output !== undefined) tc.output = p.output;
+          // 软收口耗时固化：后端未回报 durationMs 时由收口侧按真实挂钟补齐，
+          // 终态过程段据此锚定物理终点（禁止「工作 0.0 秒」假象）。
+          if (p.durationMs !== undefined) {
+            tc.durationMs = p.durationMs;
+            const b = hit.message.blocks?.find(
+              (blk) => blk.type === 'tool_call' && blk.id === tc.id
+            );
+            if (b) b.durationMs = p.durationMs;
+          }
         }
         rebindSessionById(state, sessionId, hit.session);
       }),
