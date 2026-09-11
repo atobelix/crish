@@ -1,9 +1,9 @@
 # Conex / Crish — 侧边栏、文件管理与差异工具 SmartExpandablePanel 重构落地方案
 
-> **文档标识**：`docs/smart-panel-migration/independent-plans/05-sidebar-files-diff-plan.md`  
-> **战役工作区**：`docs/smart-panel-migration/`  
-> **架构角色**：侧边栏、文件管理与差异工具重构专家（Sidebar, Files & Diff Specialist）  
-> **权威遵循**：`AGENTS.md`（反退避铁律、架构优雅、测试资产保护）、`ANTI_OVERENGINEERING_GUARDRAILS.md`、`docs/smart-panel-migration/00-total-migration-plan.md`  
+> **文档标识**：`docs/smart-panel-migration/independent-plans/05-sidebar-files-diff-plan.md`
+> **战役工作区**：`docs/smart-panel-migration/`
+> **架构角色**：侧边栏、文件管理与差异工具重构专家（Sidebar, Files & Diff Specialist）
+> **权威遵循**：`AGENTS.md`（反退避铁律、架构优雅、测试资产保护）、`ANTI_OVERENGINEERING_GUARDRAILS.md`、`docs/smart-panel-migration/00-total-migration-plan.md`
 > **参考资产库**：`reference/smart-expandable-panel/`（CSS Tokens / Panel / Search / Items / Submenu / Safe-Aim / Position / React Wrapper）
 
 ---

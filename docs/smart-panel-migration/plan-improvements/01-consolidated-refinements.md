@@ -1,7 +1,7 @@
 # Conex / Crish — SmartExpandablePanel 评审改进与终极落地总纲
 
-> **文档标识**：`docs/smart-panel-migration/plan-improvements/01-consolidated-refinements.md`  
-> **制定背景**：吸收 3 位魔鬼审查专家（`01-visual-geometry-critique.md`、`02-interaction-state-critique.md`、`03-architecture-anti-overengineering-critique.md`）指出的全部致命漏洞，进行无死角闭环纠偏。  
+> **文档标识**：`docs/smart-panel-migration/plan-improvements/01-consolidated-refinements.md`
+> **制定背景**：吸收 3 位魔鬼审查专家（`01-visual-geometry-critique.md`、`02-interaction-state-critique.md`、`03-architecture-anti-overengineering-critique.md`）指出的全部致命漏洞，进行无死角闭环纠偏。
 > **权威红线**：`AGENTS.md`、`ANTI_OVERENGINEERING_GUARDRAILS.md`、`reference/smart-expandable-panel/`。
 
 ---

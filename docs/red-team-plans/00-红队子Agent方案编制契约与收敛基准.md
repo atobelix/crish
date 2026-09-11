@@ -2,9 +2,9 @@
 
 ## Red Team Subagent Architecture Planning Contract, Anti-Pattern Guidelines & Convergence Baseline
 
-> **权威与纪律说明**：本契约是红队所有方案设计子 Agent（Independent Planner / Detailed Domain Planner）在编制前端重构与收敛方案时的**最高刚性契约与必读基座 (Master Contract)**。  
-> **核心战役目标**：在红蓝对抗中以压倒性的架构深度、代码穿透力、严密的收敛哲学与零漏洞的逻辑设计赢得胜利！  
-> **防作弊最高铁律**：**红队所有 Agent 绝对严禁查看、检索、引用 `docs/frontend-review/`（蓝队隔离区）下的任何文件**。红队方案必须完全基于客观审计报告、标杆真实源码解剖、全景 Review 规范与真实代码库独立构建！  
+> **权威与纪律说明**：本契约是红队所有方案设计子 Agent（Independent Planner / Detailed Domain Planner）在编制前端重构与收敛方案时的**最高刚性契约与必读基座 (Master Contract)**。
+> **核心战役目标**：在红蓝对抗中以压倒性的架构深度、代码穿透力、严密的收敛哲学与零漏洞的逻辑设计赢得胜利！
+> **防作弊最高铁律**：**红队所有 Agent 绝对严禁查看、检索、引用 `docs/frontend-review/`（蓝队隔离区）下的任何文件**。红队方案必须完全基于客观审计报告、标杆真实源码解剖、全景 Review 规范与真实代码库独立构建！
 > **编码与字符集**：UTF-8 无 BOM。
 
 ---
@@ -197,5 +197,5 @@ $$\mathbf{U_{\text{plan}}} = \mathcal{C}_{\text{correctness}}(\Delta) \times \ma
 
 ---
 
-> **结语誓言**：  
+> **结语誓言**：
 > 红队全体子 Agent 必须以此契约为唯一行动指南，以扎实的代码证据、清晰的收敛路径、彻底的死代码清剿与极致的用户体验，制定出无懈可击的前端系统重构总方案！

@@ -1,15 +1,15 @@
 # Conex / Crish — SmartExpandablePanel 移植方案架构解耦、反过度设计与测试回归审查报告
 
-> **文档标识**：`docs/smart-panel-migration/plan-reviews/03-architecture-anti-overengineering-critique.md`  
-> **审查性质**：极度严苛的架构解耦、反过度设计与测试回归专家审查（Architecture & Anti-Overengineering Devil Review）  
-> **审查对象**：  
-> - `docs/smart-panel-migration/00-total-migration-plan.md`  
-> - `docs/smart-panel-migration/independent-plans/01-foundation-adapters-plan.md`  
-> - `docs/smart-panel-migration/independent-plans/02-composer-chat-plan.md`  
-> - `docs/smart-panel-migration/independent-plans/03-headers-workspace-plan.md`  
-> - `docs/smart-panel-migration/independent-plans/04-settings-forms-plan.md`  
-> - `docs/smart-panel-migration/independent-plans/05-sidebar-files-diff-plan.md`  
-> **权威红线**：`AGENTS.md`（反退避铁律、严禁打补丁、测试资产保护）、`ANTI_OVERENGINEERING_GUARDRAILS.md`（13 项硬性禁令）  
+> **文档标识**：`docs/smart-panel-migration/plan-reviews/03-architecture-anti-overengineering-critique.md`
+> **审查性质**：极度严苛的架构解耦、反过度设计与测试回归专家审查（Architecture & Anti-Overengineering Devil Review）
+> **审查对象**：
+> - `docs/smart-panel-migration/00-total-migration-plan.md`
+> - `docs/smart-panel-migration/independent-plans/01-foundation-adapters-plan.md`
+> - `docs/smart-panel-migration/independent-plans/02-composer-chat-plan.md`
+> - `docs/smart-panel-migration/independent-plans/03-headers-workspace-plan.md`
+> - `docs/smart-panel-migration/independent-plans/04-settings-forms-plan.md`
+> - `docs/smart-panel-migration/independent-plans/05-sidebar-files-diff-plan.md`
+> **权威红线**：`AGENTS.md`（反退避铁律、严禁打补丁、测试资产保护）、`ANTI_OVERENGINEERING_GUARDRAILS.md`（13 项硬性禁令）
 > **审查基调**：**严禁任何褒奖、赞美与肯定性废话，通篇 100% 只说问题、缺陷、遗漏、模糊描述与潜在漏洞，直击架构断层！**
 
 ---
@@ -376,5 +376,5 @@ describe('SmartExpandablePanel 工业级架构魔鬼压力测试集', () => {
    - 所有 `trailingAction` 与行内操作按钮必须在组件层原生封装 `e.stopPropagation()`，彻底消灭误触穿透。
 
 ---
-*报告编制：极度严苛架构与反过度设计审查专家（Architecture & Anti-Overengineering Devil Reviewer）*  
+*报告编制：极度严苛架构与反过度设计审查专家（Architecture & Anti-Overengineering Devil Reviewer）*
 *签署生效日期：2026-08-20*

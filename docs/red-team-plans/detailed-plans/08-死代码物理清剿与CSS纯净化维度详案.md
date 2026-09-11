@@ -1071,6 +1071,6 @@ describe('Detailed Plan 08: Dead Code Purge & CSS Purification Assertions', () =
 
 ---
 
-> **详案签署生效**：Detailed Plan Agent 08（红队死代码物理清剿与 CSS 纯净化领域详案编制专员）  
-> **法定产出文档**：`docs/red-team-plans/detailed-plans/08-死代码物理清剿与CSS纯净化维度详案.md`  
+> **详案签署生效**：Detailed Plan Agent 08（红队死代码物理清剿与 CSS 纯净化领域详案编制专员）
+> **法定产出文档**：`docs/red-team-plans/detailed-plans/08-死代码物理清剿与CSS纯净化维度详案.md`
 > **战役宣言**：以压倒性的负产出硬账本（净削减 $\ge 9,800+$ 行）、0-`!important` 纯净度与完美的 Two-Tier 样式架构，坚决打赢红蓝对抗重构战役！

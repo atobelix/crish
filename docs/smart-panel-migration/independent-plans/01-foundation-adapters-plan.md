@@ -1,10 +1,10 @@
 # SmartExpandablePanel 基础设施与双轨适配器落地方案
 
-> **文档标识**：`docs/smart-panel-migration/independent-plans/01-foundation-adapters-plan.md`  
-> **所属战役**：`docs/smart-panel-migration/`（SmartExpandablePanel 工业级组件下沉与全仓移植战役）  
-> **架构定位**：分维方案 01 — 基础设施建设、Design Tokens 融合、核心引擎 TypeScript 实现与双轨适配器设计  
-> **架构角色**：基础组件与设计系统架构专家（Foundation & Design System Architect）  
-> **遵循契约**：`AGENTS.md`（反退避铁律、架构优雅、测试资产保护）、`ANTI_OVERENGINEERING_GUARDRAILS.md`  
+> **文档标识**：`docs/smart-panel-migration/independent-plans/01-foundation-adapters-plan.md`
+> **所属战役**：`docs/smart-panel-migration/`（SmartExpandablePanel 工业级组件下沉与全仓移植战役）
+> **架构定位**：分维方案 01 — 基础设施建设、Design Tokens 融合、核心引擎 TypeScript 实现与双轨适配器设计
+> **架构角色**：基础组件与设计系统架构专家（Foundation & Design System Architect）
+> **遵循契约**：`AGENTS.md`（反退避铁律、架构优雅、测试资产保护）、`ANTI_OVERENGINEERING_GUARDRAILS.md`
 > **参考资产库**：`reference/smart-expandable-panel/`（`css/tokens.css`, `panel.css`, `search.css`, `items.css`, `submenu.css`, `js/safe-aim.js`, `js/position-engine.js`, `js/keyboard-nav.js`, `react/SmartExpandablePanel.tsx`）
 
 ---
@@ -656,7 +656,7 @@ export interface Point2D {
 
 /**
  * SafeAimEngine - 零 Canvas 开销的现代 SVG 多边形 Safe-Triangle 保护引擎
- * 
+ *
  * 核心原理：
  * 采用向量重心坐标系（Barycentric Coordinates）在 O(1) 时间内判定光标是否处于
  * 「当前鼠标位置 -> 子菜单上下边界」构成的虚拟安全斜切三角区内。
@@ -843,7 +843,7 @@ export interface KeyboardNavContext {
 
 /**
  * KeyboardNavEngine - WAI-ARIA 国际标准全键盘交互漫游控制器
- * 
+ *
  * 键位协议：
  * - ArrowDown / ArrowUp：在可用条目间循环漫游，自动跳过 disabled 项，Auto-Scroll 跟随；
  * - ArrowRight：若当前项具备二级级联子菜单，展开并自动聚焦子菜单第 0 项；

@@ -1,8 +1,8 @@
 # 状态拓扑分域、Diff数据管线与会话隔离三轮终极找茬审计报告 (Round 3 Audit 3)
 
-> **审计代号**：`RED-TEAM-ROUND3-AUDIT-03` (Domain 06 / 07 / 08 Ultimate Scrutiny Audit)  
-> **所属战役**：红队前端系统级重构与终极收敛战役 (Round 3 Ultimate Convergence Phase)  
-> **审计性质**：红队极端严苛三轮终极纯找茬审计（100% 聚焦潜在 Bug、边界缺陷、性能瓶颈、内存泄漏与状态污染，**绝对零完成度汇报，绝对禁止歌功颂德**）。  
+> **审计代号**：`RED-TEAM-ROUND3-AUDIT-03` (Domain 06 / 07 / 08 Ultimate Scrutiny Audit)
+> **所属战役**：红队前端系统级重构与终极收敛战役 (Round 3 Ultimate Convergence Phase)
+> **审计性质**：红队极端严苛三轮终极纯找茬审计（100% 聚焦潜在 Bug、边界缺陷、性能瓶颈、内存泄漏与状态污染，**绝对零完成度汇报，绝对禁止歌功颂德**）。
 > **输入基准与对比契约**：
 >
 > - 详案基准：[`06-总览文件树与Diff审查维度详案.md`](file:///c:/Software/conex/docs/red-team-plans/detailed-plans/06-总览文件树与Diff审查维度详案.md)、[`07-状态拓扑分域与空态白板门闩维度详案.md`](file:///c:/Software/conex/docs/red-team-plans/detailed-plans/07-状态拓扑分域与空态白板门闩维度详案.md)、[`08-死代码物理清剿与CSS纯净化维度详案.md`](file:///c:/Software/conex/docs/red-team-plans/detailed-plans/08-死代码物理清剿与CSS纯净化维度详案.md)；
@@ -15,7 +15,7 @@
 > - `apps/crish-desktop/src/components/overview/` 全部组件与 Hook（`OverviewCard.tsx`、`OverviewGitTree.tsx`、`ChangesSection.tsx`、`useOverviewState.ts` 等）；
 > - `apps/crish-desktop/src/components/chat-card/useBackgroundTaskPolling.ts`；
 > - `apps/crish-desktop/src/services/toast/`（`ToastContext.tsx`、`ToastContainer.tsx`、`useToastQueue.ts` 等）；
->   **审计铁律与纪律声明**：纯找茬铁律，严禁运行任何修改业务代码命令；必须穿透至具体行号、控制流分支、数据结构状态与调用时序，给出确凿证据链与根治级架构方案。  
+>   **审计铁律与纪律声明**：纯找茬铁律，严禁运行任何修改业务代码命令；必须穿透至具体行号、控制流分支、数据结构状态与调用时序，给出确凿证据链与根治级架构方案。
 >   **编码格式**：UTF-8 无 BOM。
 
 ---

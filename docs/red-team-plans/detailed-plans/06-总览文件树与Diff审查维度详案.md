@@ -2,17 +2,17 @@
 
 ## Red Team Detailed Plan 06: Workspace Changes Tree & 34px Compact Diff Architecture Specification
 
-> **文档版本**：v1.0.0 (Master Final Architecture Specification)  
-> **所属战役**：红队前端系统级重构与收敛战役 (Red Team Frontend Refactoring & Convergence)  
-> **领域维度代号**：`RED-DETAILED-PLAN-06` (Domain 06: Overview Tree & Compact Diff System)  
+> **文档版本**：v1.0.0 (Master Final Architecture Specification)
+> **所属战役**：红队前端系统级重构与收敛战役 (Red Team Frontend Refactoring & Convergence)
+> **领域维度代号**：`RED-DETAILED-PLAN-06` (Domain 06: Overview Tree & Compact Diff System)
 > **权威与纪律依据**：
 >
 > 1. 严格贯彻《红队前端系统级重构总计划框架与删除面裁决》（[`00-红队前端系统级重构总计划框架与删除面裁决.md`](file:///c:/Software/conex/docs/red-team-plans/00-红队前端系统级重构总计划框架与删除面裁决.md)）；
 > 2. 深度落实《红队子 Agent 方案编制契约与收敛基准》（[`00-红队子Agent方案编制契约与收敛基准.md`](file:///c:/Software/conex/docs/red-team-plans/00-红队子Agent方案编制契约与收敛基准.md)）；
 > 3. 严格遵循三份交叉评审专著的终审裁决（[`01-独立方案交叉评审报告-冲突与路径重叠专审.md`](file:///c:/Software/conex/docs/red-team-plans/plan-reviews/01-独立方案交叉评审报告-冲突与路径重叠专审.md)、[`02-独立方案交叉评审报告-收敛深度与死代码清剿专审.md`](file:///c:/Software/conex/docs/red-team-plans/plan-reviews/02-独立方案交叉评审报告-收敛深度与死代码清剿专审.md)、[`03-独立方案交叉评审报告-依赖拓扑与执行可行性专审.md`](file:///c:/Software/conex/docs/red-team-plans/plan-reviews/03-独立方案交叉评审报告-依赖拓扑与执行可行性专审.md)）；
 > 4. 深度对标 AppFlowy 真实源码解剖（[`05-AppFlowy文件树与状态指示Badge源码解剖.md`](file:///c:/Software/conex/docs/frontend-benchmarking/deep-dives/05-AppFlowy文件树与状态指示Badge源码解剖.md) 与 [`06-AppFlowy紧凑Diff视图与词法高亮源码解剖.md`](file:///c:/Software/conex/docs/frontend-benchmarking/deep-dives/06-AppFlowy紧凑Diff视图与词法高亮源码解剖.md)）；
-> 5. 严格贯彻《主控 Agent 协作指令》（`AGENTS.md`）与《反退避全文》（`.agents/LOGIC_PLAN_NO_RETREAT.md`）——**零退避、零降级、零补丁、负产出验收、推进单位为领域概念、严禁波次/批次命名**。  
->    **防作弊最高铁律**：本详案 100% 独立构建于白盒代码审计与标杆源码解剖，**绝对严禁查看、检索、引用 `docs/frontend-review/`（蓝队隔离区）下的任何文件**。  
+> 5. 严格贯彻《主控 Agent 协作指令》（`AGENTS.md`）与《反退避全文》（`.agents/LOGIC_PLAN_NO_RETREAT.md`）——**零退避、零降级、零补丁、负产出验收、推进单位为领域概念、严禁波次/批次命名**。
+>    **防作弊最高铁律**：本详案 100% 独立构建于白盒代码审计与标杆源码解剖，**绝对严禁查看、检索、引用 `docs/frontend-review/`（蓝队隔离区）下的任何文件**。
 >    **编码格式**：UTF-8 无 BOM。
 
 ---

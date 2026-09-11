@@ -902,5 +902,5 @@ describe('CSS Hygiene & Z-Index Standard Scale Assertions', () => {
 
 ---
 
-> **方案签署**：Plan Agent 8（红队死代码清剿与 CSS 纯净化独立重构设计专家）  
+> **方案签署**：Plan Agent 8（红队死代码清剿与 CSS 纯净化独立重构设计专家）
 > **状态**：方案编制完成，已写入 `docs/red-team-plans/independent-plans/08-死代码物理清剿与CSS纯净化独立重构方案.md`，准备提交主控评审！

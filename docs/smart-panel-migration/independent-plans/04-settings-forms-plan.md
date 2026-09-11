@@ -1,10 +1,10 @@
 # Conex / Crish — 设置系统与全表单选择器重构落地方案
 
-> **文档标识**：`docs/smart-panel-migration/independent-plans/04-settings-forms-plan.md`  
-> **战役工作区**：`docs/smart-panel-migration/`  
-> **专业角色**：设置系统与表单选择器重构专家（Settings & Forms Specialist）  
-> **参考资产库**：`reference/smart-expandable-panel/`（CSS Tokens / Panel / Search / Items / Submenu / Safe-Aim / Position / React Wrapper）  
-> **遵循基准**：`AGENTS.md`（反退避铁律、架构优雅、零补丁绕过）、`ANTI_OVERENGINEERING_GUARDRAILS.md`（反过度设计红线）  
+> **文档标识**：`docs/smart-panel-migration/independent-plans/04-settings-forms-plan.md`
+> **战役工作区**：`docs/smart-panel-migration/`
+> **专业角色**：设置系统与表单选择器重构专家（Settings & Forms Specialist）
+> **参考资产库**：`reference/smart-expandable-panel/`（CSS Tokens / Panel / Search / Items / Submenu / Safe-Aim / Position / React Wrapper）
+> **遵循基准**：`AGENTS.md`（反退避铁律、架构优雅、零补丁绕过）、`ANTI_OVERENGINEERING_GUARDRAILS.md`（反过度设计红线）
 > **治理目标**：彻底消灭设置系统全部 5 大核心面板与表单选择器中的视觉断层、青绿杂色底污染、膨胀药丸、文字挤压截断、原生箭头粗滚动条以及排版重叠碰撞致命 Bug，建立全仓统一的高质感表单规范。
 
 ---

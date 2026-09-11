@@ -1,15 +1,15 @@
 # SmartExpandablePanel 交互状态机、Safe-Aim 算法与无障碍防退避魔鬼审查报告
 
-> **文档标识**：`docs/smart-panel-migration/plan-reviews/02-interaction-state-critique.md`  
-> **所属战役**：`docs/smart-panel-migration/`  
-> **审查专家**：极度严苛的交互状态机、Safe-Aim 算法与无障碍防退避审查专家（Interaction & Algorithm Devil Reviewer）  
+> **文档标识**：`docs/smart-panel-migration/plan-reviews/02-interaction-state-critique.md`
+> **所属战役**：`docs/smart-panel-migration/`
+> **审查专家**：极度严苛的交互状态机、Safe-Aim 算法与无障碍防退避审查专家（Interaction & Algorithm Devil Reviewer）
 > **审查对象**：
 > - `docs/smart-panel-migration/00-total-migration-plan.md`
 > - `docs/smart-panel-migration/independent-plans/01-foundation-adapters-plan.md`
 > - `docs/smart-panel-migration/independent-plans/02-composer-chat-plan.md`
 > - `docs/smart-panel-migration/independent-plans/03-headers-workspace-plan.md`
 > - `docs/smart-panel-migration/independent-plans/04-settings-forms-plan.md`
-> - `docs/smart-panel-migration/independent-plans/05-sidebar-files-diff-plan.md`  
+> - `docs/smart-panel-migration/independent-plans/05-sidebar-files-diff-plan.md`
 > **最高铁律执行**：本报告通篇 100% 直击问题、算法缺陷、数学边界漏洞、交互死锁与退避降级倾向，零赞美、零褒奖、零肯定性废话。
 
 ---
@@ -267,7 +267,7 @@ Level 1 Item ────> Level 2 Submenu (activeSubmenu = L2)
   2. **总方案反向违规（`00-total-migration-plan.md:803`）**：
      > “条目锁定为 6px，悬停淡入 `var(--sidebar-hover)`，选中态为 `var(--sidebar-active)`”
   3. **分方案 02 违规（`02-composer-chat-plan.md:296-302`）**：
-     > `.plusBtn:hover { background: var(--sidebar-hover); }`  
+     > `.plusBtn:hover { background: var(--sidebar-hover); }`
      > `.plusBtn.isOpen { background: var(--sidebar-active); }`
   4. **分方案 02 违规（`02-composer-chat-plan.md:346-352`）**：
      > `.permPill.iconOnly:hover { background: var(--sidebar-hover); }`

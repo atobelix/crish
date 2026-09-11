@@ -1,9 +1,9 @@
 # Conex / Crish — SmartExpandablePanel 工业级组件下沉与全仓移植总方案
 
-> **文档标识**：`docs/smart-panel-migration/00-total-migration-plan.md`  
-> **战役工作区**：`docs/smart-panel-migration/`  
-> **架构角色**：组件架构师 / SmartPanel Integration Architect  
-> **遵循基准**：`AGENTS.md`（反退避铁律、架构优雅）、`ANTI_OVERENGINEERING_GUARDRAILS.md`（反过度设计红线）  
+> **文档标识**：`docs/smart-panel-migration/00-total-migration-plan.md`
+> **战役工作区**：`docs/smart-panel-migration/`
+> **架构角色**：组件架构师 / SmartPanel Integration Architect
+> **遵循基准**：`AGENTS.md`（反退避铁律、架构优雅）、`ANTI_OVERENGINEERING_GUARDRAILS.md`（反过度设计红线）
 > **参考资产库**：`reference/smart-expandable-panel/`（CSS Tokens / Panel / Search / Items / Submenu / Safe-Aim / Position / React Wrapper）
 
 ---
@@ -364,7 +364,7 @@ export class PositionEngine {
     const { triggerEl, panelEl, listEl, headerHeight, bounds } = params;
     const triggerRect = triggerEl.getBoundingClientRect();
     const panelWidth = panelEl.offsetWidth || 265;
-    
+
     // 快速度量实际自然高度
     const naturalHeight = this.measureNaturalHeight(panelEl, listEl, headerHeight);
     const cappedHeight = Math.min(this.maxPanelHeight, naturalHeight);

@@ -2,16 +2,16 @@
 
 ## Red Team Independent Plan 06: Workspace Changes Tree & 34px Compact Diff Architecture
 
-> **方案版本**：v1.0.0 (Master Final Architecture)  
-> **所属战役**：红队前端系统级重构与收敛战役 (Red Team Frontend Refactoring & Convergence)  
-> **方案代号**：`RED-PLAN-06` (Plan Agent 6: Tree & Compact Diff)  
+> **方案版本**：v1.0.0 (Master Final Architecture)
+> **所属战役**：红队前端系统级重构与收敛战役 (Red Team Frontend Refactoring & Convergence)
+> **方案代号**：`RED-PLAN-06` (Plan Agent 6: Tree & Compact Diff)
 > **权威与纪律依据**：
 >
 > 1. 严格贯彻《红队子 Agent 方案编制契约与收敛基准》（[`00-红队子Agent方案编制契约与收敛基准.md`](file:///c:/Software/conex/docs/red-team-plans/00-红队子Agent方案编制契约与收敛基准.md)）；
 > 2. 深度落实《前端架构终极审查规范与全景收敛军规》（[`frontend-review.md`](file:///c:/Software/conex/docs/agent-roles/review/frontend-review.md)）关于难题 1（总览改动树）与难题 2（紧凑 Diff 视图）的全部架构断言；
 > 3. 严格对标 AppFlowy 真实源码解剖（[`05-AppFlowy文件树与状态指示Badge源码解剖.md`](file:///c:/Software/conex/docs/frontend-benchmarking/deep-dives/05-AppFlowy文件树与状态指示Badge源码解剖.md) 与 [`06-AppFlowy紧凑Diff视图与词法高亮源码解剖.md`](file:///c:/Software/conex/docs/frontend-benchmarking/deep-dives/06-AppFlowy紧凑Diff视图与词法高亮源码解剖.md)）及设计赏析专著；
-> 4. 严格贯彻《主控 Agent 协作指令》（`AGENTS.md`）与《反退避全文》（`.agents/LOGIC_PLAN_NO_RETREAT.md`）——**零退避、零降级、零补丁、负产出验收、推进单位为领域概念、严禁波次/批次命名**。  
->    **防作弊最高铁律**：本方案 100% 独立构建于白盒审计报告与客观源码分析，**绝对未查看、未检索、未引用 `docs/frontend-review/`（蓝队隔离区）下的任何文件**。  
+> 4. 严格贯彻《主控 Agent 协作指令》（`AGENTS.md`）与《反退避全文》（`.agents/LOGIC_PLAN_NO_RETREAT.md`）——**零退避、零降级、零补丁、负产出验收、推进单位为领域概念、严禁波次/批次命名**。
+>    **防作弊最高铁律**：本方案 100% 独立构建于白盒审计报告与客观源码分析，**绝对未查看、未检索、未引用 `docs/frontend-review/`（蓝队隔离区）下的任何文件**。
 >    **编码格式**：UTF-8 无 BOM。
 
 ---

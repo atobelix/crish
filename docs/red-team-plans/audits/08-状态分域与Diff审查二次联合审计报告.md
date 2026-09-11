@@ -1,7 +1,7 @@
 # 状态拓扑分域、Diff审查与会话隔离二次联合找茬审计报告 (Re-Audit 03)
 
-> **审计代号**：`RED-TEAM-RE-AUDIT-03` (Domain 06 / 07 / 08 Joint Re-Audit)  
-> **审计性质**：红队极端严苛二次联合找茬审查（纯缺陷与隐患记录，零完成度汇报，绝对禁止歌功颂德）。  
+> **审计代号**：`RED-TEAM-RE-AUDIT-03` (Domain 06 / 07 / 08 Joint Re-Audit)
+> **审计性质**：红队极端严苛二次联合找茬审查（纯缺陷与隐患记录，零完成度汇报，绝对禁止歌功颂德）。
 > **审查基准文档**：
 >
 > - 详案基准：[`06-总览文件树与Diff审查维度详案.md`](file:///c:/Software/conex/docs/red-team-plans/detailed-plans/06-总览文件树与Diff审查维度详案.md)、[`07-状态拓扑分域与空态白板门闩维度详案.md`](file:///c:/Software/conex/docs/red-team-plans/detailed-plans/07-状态拓扑分域与空态白板门闩维度详案.md)、[`08-死代码物理清剿与CSS纯净化维度详案.md`](file:///c:/Software/conex/docs/red-team-plans/detailed-plans/08-死代码物理清剿与CSS纯净化维度详案.md)；
@@ -14,7 +14,7 @@
 > - `apps/crish-desktop/src/components/overview/`（`OverviewCard.tsx`、`OverviewGitTree.tsx`、`ChangesSection.tsx`、`useOverviewState.ts` 等）；
 > - `apps/crish-desktop/src/components/chat-card/useBackgroundTaskPolling.ts`；
 > - `apps/crish-desktop/src/services/toast/`（`ToastContext.tsx`、`useToastQueue.ts` 等）；
->   **最高纪律要求**：纯找茬铁律，深入源码底层逻辑与运行时病理，给出精准行号、证据链、复现条件与根治建议；严禁运行任何修改业务代码命令。  
+>   **最高纪律要求**：纯找茬铁律，深入源码底层逻辑与运行时病理，给出精准行号、证据链、复现条件与根治建议；严禁运行任何修改业务代码命令。
 >   **编码格式**：UTF-8 无 BOM。
 
 ---

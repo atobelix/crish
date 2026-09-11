@@ -1,9 +1,9 @@
 # Conex / Crish — 对话流与输入区交互重构落地方案
 
-> **文档标识**：`docs/smart-panel-migration/independent-plans/02-composer-chat-plan.md`  
-> **战役工作区**：`docs/smart-panel-migration/`  
-> **架构角色**：对话流与输入区重构专家（Composer & Chat Area Specialist）  
-> **遵循基准**：`AGENTS.md`（通用协作纪律、反退避铁律、严禁打补丁）、`ANTI_OVERENGINEERING_GUARDRAILS.md`、`docs/smart-panel-migration/00-total-migration-plan.md`  
+> **文档标识**：`docs/smart-panel-migration/independent-plans/02-composer-chat-plan.md`
+> **战役工作区**：`docs/smart-panel-migration/`
+> **架构角色**：对话流与输入区重构专家（Composer & Chat Area Specialist）
+> **遵循基准**：`AGENTS.md`（通用协作纪律、反退避铁律、严禁打补丁）、`ANTI_OVERENGINEERING_GUARDRAILS.md`、`docs/smart-panel-migration/00-total-migration-plan.md`
 > **资产参考**：`reference/smart-expandable-panel/`（Zero-Blue 墨阶、同心圆角、Safe-Aim 重心坐标、PositionEngine 120Hz 视口解算）
 
 ---
@@ -581,7 +581,7 @@ export const PERMISSION_MODE_OPTIONS: PermissionModeOption[] = [
    transitionPermissionMode,
    type PermissionMode,
  } from '../../api/permissionModes';
- 
+
 +const MODE_ICON_MAP: Record<PermissionMode, React.ReactNode> = {
 +  ask: <Lucide.ShieldCheck size={14} strokeWidth={1.8} />,
 +  deep: <Lucide.Search size={14} strokeWidth={1.8} />,
@@ -848,7 +848,7 @@ export interface SlashCommandItem {
   {/* Layer 3 + Layer 4: 主卡片 */}
   <div className={styles.composerCard} data-multiline={isMultiline ? '1' : '0'}>
     <ComposerAttachmentBar attachments={attachments} onRemoveAttachment={handleRemoveAttachment} />
-    
+
     <div className={styles.inputMainLayout}>
       {/* 左侧控制区：24x24 [ ＋ ] + 24x24 [ 🛡️ ] */}
       <div className={styles.actionLeft}>

@@ -1,10 +1,10 @@
 # Conex / Crish — 顶栏与分屏工作区 SmartExpandablePanel 工业级落地方案
 
-> **文档标识**：`docs/smart-panel-migration/independent-plans/03-headers-workspace-plan.md`  
-> **战役工作区**：`docs/smart-panel-migration/`  
-> **架构角色**：顶栏与分屏工作区重构专家（Headers & Workspace Layout Specialist）  
-> **权威遵循**：`AGENTS.md`（反退避铁律、架构优雅）、`ANTI_OVERENGINEERING_GUARDRAILS.md`（反过度设计红线）  
-> **参考资产库**：`reference/smart-expandable-panel/`（CSS Tokens / Search / Items / Submenu / Safe-Aim Engine / Position Engine / React Wrapper）  
+> **文档标识**：`docs/smart-panel-migration/independent-plans/03-headers-workspace-plan.md`
+> **战役工作区**：`docs/smart-panel-migration/`
+> **架构角色**：顶栏与分屏工作区重构专家（Headers & Workspace Layout Specialist）
+> **权威遵循**：`AGENTS.md`（反退避铁律、架构优雅）、`ANTI_OVERENGINEERING_GUARDRAILS.md`（反过度设计红线）
+> **参考资产库**：`reference/smart-expandable-panel/`（CSS Tokens / Search / Items / Submenu / Safe-Aim Engine / Position Engine / React Wrapper）
 > **关联总方案**：`docs/smart-panel-migration/00-total-migration-plan.md`
 
 ---

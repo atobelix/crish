@@ -1,14 +1,14 @@
 # Conex / Crish — SmartExpandablePanel 视觉几何与色彩空间极度严苛审查报告
 
-> **文档标识**：`docs/smart-panel-migration/plan-reviews/01-visual-geometry-critique.md`  
-> **审查对象**：  
-> - `docs/smart-panel-migration/00-total-migration-plan.md`  
-> - `docs/smart-panel-migration/independent-plans/01-foundation-adapters-plan.md`  
-> - `docs/smart-panel-migration/independent-plans/02-composer-chat-plan.md`  
-> - `docs/smart-panel-migration/independent-plans/03-headers-workspace-plan.md`  
-> - `docs/smart-panel-migration/independent-plans/04-settings-forms-plan.md`  
-> - `docs/smart-panel-migration/independent-plans/05-sidebar-files-diff-plan.md`  
-> **审查角色**：视觉对齐、几何同心与色彩空间审查专家（Visual & Curvature Devil Reviewer）  
+> **文档标识**：`docs/smart-panel-migration/plan-reviews/01-visual-geometry-critique.md`
+> **审查对象**：
+> - `docs/smart-panel-migration/00-total-migration-plan.md`
+> - `docs/smart-panel-migration/independent-plans/01-foundation-adapters-plan.md`
+> - `docs/smart-panel-migration/independent-plans/02-composer-chat-plan.md`
+> - `docs/smart-panel-migration/independent-plans/03-headers-workspace-plan.md`
+> - `docs/smart-panel-migration/independent-plans/04-settings-forms-plan.md`
+> - `docs/smart-panel-migration/independent-plans/05-sidebar-files-diff-plan.md`
+> **审查角色**：视觉对齐、几何同心与色彩空间审查专家（Visual & Curvature Devil Reviewer）
 > **审查原则**：【零赞美、零肯定、100% 直击问题、缺陷、遗漏、模糊描述与潜在漏洞】
 
 ---
@@ -245,5 +245,5 @@
 └────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-**审查结论**：  
+**审查结论**：
 方案当前版本存在多处严重的几何断层、Token 违规与 TypeScript 类型脱节。**在上述 9 项硬性缺陷全量修复并更新文档前，严禁盲目启动代码编写。**
