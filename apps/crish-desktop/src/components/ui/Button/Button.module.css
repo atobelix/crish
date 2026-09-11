@@ -8,7 +8,7 @@
   --btn-h: 32px;
   --btn-px: 12px;
   --btn-fs: var(--font-size-base, 14px);
-  --btn-radius: var(--button-radius, 8px);
+  --btn-radius: var(--button-radius, 7px);
   --btn-icon-size: 16px;
   --btn-gap: var(--space-1_5, 6px);
 
@@ -105,7 +105,7 @@
   --btn-h: 28px;
   --btn-px: 10px;
   --btn-fs: var(--font-size-sm, 13px);
-  --btn-radius: var(--button-radius, 8px);
+  --btn-radius: var(--button-radius, 7px);
   --btn-icon-size: 14px;
   --btn-gap: var(--space-1_5, 6px);
 }
@@ -115,7 +115,7 @@
   --btn-h: 32px;
   --btn-px: 12px;
   --btn-fs: var(--font-size-base, 14px);
-  --btn-radius: var(--button-radius, 8px);
+  --btn-radius: var(--button-radius, 7px);
   --btn-icon-size: 16px;
   --btn-gap: var(--space-1_5, 6px);
 }
@@ -133,23 +133,23 @@
 /* 3. 变体设计 */
 .buttonPrimary,
 .button[data-variant='primary'] {
-  --btn-bg: var(--brand, hsl(160 84% 39%));
-  --btn-fg: var(--text-on-accent, hsl(0 0% 100%));
-  --btn-border: var(--brand, hsl(160 84% 39%));
-  --btn-shadow: 0 1px 2px color-mix(in srgb, var(--shadow-color, #000) 12%, transparent);
-  --btn-hover-overlay: color-mix(in srgb, var(--text-on-accent, hsl(0 0% 100%)) 15%, transparent);
-  --btn-active-overlay: color-mix(in srgb, var(--shadow-color, hsl(0 0% 0%)) 15%, transparent);
+  --btn-bg: var(--brand);
+  --btn-fg: var(--text-on-accent);
+  --btn-border: var(--brand);
+  --btn-shadow: 0 1px 2px color-mix(in srgb, var(--shadow-color) 12%, transparent);
+  --btn-hover-overlay: color-mix(in srgb, var(--text-on-accent) 15%, transparent);
+  --btn-active-overlay: color-mix(in srgb, var(--shadow-color) 15%, transparent);
 }
 
 /* Secondary：纯白实体卡片 + 精致发丝边框 + 低空微阴影 */
 .buttonSecondary,
 .button[data-variant='secondary'] {
-  --btn-bg: var(--bg-card, hsl(0 0% 100%));
+  --btn-bg: var(--bg-card);
   --btn-fg: var(--text-primary);
-  --btn-border: var(--border-color, hsl(35 10% 86%));
+  --btn-border: var(--border-color);
   --btn-shadow:
-    0 1px 2px color-mix(in srgb, var(--shadow-color, hsl(0 0% 0%)) 4%, transparent),
-    0 1px 1px color-mix(in srgb, var(--shadow-color, hsl(0 0% 0%)) 2%, transparent);
+    0 1px 2px color-mix(in srgb, var(--shadow-color) 4%, transparent),
+    0 1px 1px color-mix(in srgb, var(--shadow-color) 2%, transparent);
   --btn-hover-overlay: var(--tint-hover);
   --btn-active-overlay: var(--tint-active);
 }
@@ -159,8 +159,8 @@
 :global(html[data-theme='dark']) .button[data-variant='secondary'],
 :global(.theme-dark) .buttonSecondary,
 :global(.theme-dark) .button[data-variant='secondary'] {
-  --btn-bg: color-mix(in srgb, var(--text-primary) 10%, var(--bg-card, #242424));
-  --btn-fg: var(--text-primary, #dddddd);
+  --btn-bg: color-mix(in srgb, var(--text-primary) 10%, var(--bg-card));
+  --btn-fg: var(--text-primary);
   --btn-border: color-mix(in srgb, var(--text-primary) 10%, transparent);
   --btn-shadow: 0 1px 3px hsl(0 0% 0% / 0.35);
   --btn-hover-overlay: var(--tint-hover);

@@ -317,7 +317,7 @@ describe('ui/Tabs', () => {
 
     // 2. 3.5% 暖灰底板与纯白卡底
     expect(CSS_SRC).toContain('background-color: var(--bg-secondary)');
-    expect(CSS_SRC).toContain('background-color: var(--bg-card, #ffffff)');
+    expect(CSS_SRC).toContain('background-color: var(--bg-card)');
 
     // 3. 微观按压缩放与位移交互 (Scale 0.97 + 1px)
     expect(CSS_SRC).toContain('transform: scale(0.97) translateY(1px)');

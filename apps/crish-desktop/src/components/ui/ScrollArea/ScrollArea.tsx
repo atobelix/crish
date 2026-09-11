@@ -85,6 +85,7 @@ export const ScrollArea = forwardRef<ScrollAreaHandle, ScrollAreaProps>(
 
     const [isHovered, setIsHovered] = useState(false);
     const [isScrolling, setIsScrolling] = useState(false);
+    const isScrollingRef = useRef(false);
 
     const effectiveShowButtons = showButtons ?? (size !== 'xs');
     const safeInset = calculateSafeAreaInset(radius, trackMargin);
@@ -180,9 +181,9 @@ export const ScrollArea = forwardRef<ScrollAreaHandle, ScrollAreaProps>(
       const progressX = maxX > 0 ? Math.min(1, Math.max(0, scrollLeft / maxX)) : 0;
 
       setMetrics((prev) => {
+        // 位置型字段（scrollTop/progress）不驱动 React commit：handleScroll 已直写 transform。
+        // 仅几何或边界布尔变化时更新 state，杜绝 60Hz setMetrics 风暴。
         if (
-          prev.scrollTop === scrollTop &&
-          prev.scrollLeft === scrollLeft &&
           prev.scrollHeight === scrollHeight &&
           prev.scrollWidth === scrollWidth &&
           prev.clientHeight === clientHeight &&
@@ -190,9 +191,7 @@ export const ScrollArea = forwardRef<ScrollAreaHandle, ScrollAreaProps>(
           prev.isAtTop === isAtTop &&
           prev.isAtBottom === isAtBottom &&
           prev.isAtLeft === isAtLeft &&
-          prev.isAtRight === isAtRight &&
-          Math.abs(prev.progressY - progressY) < 0.0001 &&
-          Math.abs(prev.progressX - progressX) < 0.0001
+          prev.isAtRight === isAtRight
         ) {
           return prev;
         }
@@ -318,9 +317,13 @@ export const ScrollArea = forwardRef<ScrollAreaHandle, ScrollAreaProps>(
           thumbRefX.current.style.transform = `translate3d(${leftPx}px, 0, 0)`;
         }
         updateMetrics();
-        setIsScrolling(true);
+        if (!isScrollingRef.current) {
+          isScrollingRef.current = true;
+          setIsScrolling(true);
+        }
         if (idleTimerRef.current !== null) window.clearTimeout(idleTimerRef.current);
         idleTimerRef.current = window.setTimeout(() => {
+          isScrollingRef.current = false;
           setIsScrolling(false);
           onScrollIdle?.();
         }, 150);

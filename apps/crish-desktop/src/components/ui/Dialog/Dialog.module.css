@@ -14,7 +14,7 @@
 .backdrop {
   position: absolute;
   inset: 0;
-  background: color-mix(in srgb, var(--shadow-color, #000000) 22%, transparent);
+  background: color-mix(in srgb, var(--shadow-color) 22%, transparent);
   backdrop-filter: blur(16px) saturate(180%);
   -webkit-backdrop-filter: blur(16px) saturate(180%);
   transition: opacity 180ms ease-out;
@@ -35,8 +35,8 @@
   flex-direction: column;
   max-width: calc(100vw - var(--space-8));
   max-height: calc(100vh - var(--space-8));
-  background: var(--bg-card, hsl(0 0% 100%));
-  border: 1px solid var(--border-color, hsl(35 10% 86%));
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
   border-radius: var(--radius-2xl, 16px);
   box-shadow:
     0 0 0 1px color-mix(in srgb, var(--border-color) 70%, transparent),
@@ -213,6 +213,6 @@
   .backdrop {
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
-    background: color-mix(in srgb, var(--shadow-color, #000000) 65%, transparent);
+    background: color-mix(in srgb, var(--shadow-color) 65%, transparent);
   }
 }

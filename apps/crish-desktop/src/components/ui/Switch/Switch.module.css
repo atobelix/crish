@@ -41,7 +41,7 @@
   vertical-align: middle;
   border-radius: var(--radius-full, 9999px);
   border: 1px solid var(--border-subtle);
-  background: var(--switch-track-bg, color-mix(in srgb, var(--text-primary) 3.5%, var(--bg-card, hsl(0 0% 100%))));
+  background: var(--switch-track-bg, color-mix(in srgb, var(--text-primary) 3.5%, var(--bg-card)));
   box-sizing: border-box;
   cursor: pointer;
   flex-shrink: 0;
@@ -110,14 +110,14 @@
 
 /* 选中状态（Checked）：纯色无界胶囊，彻底清退 --brand-deep */
 .track[data-state='checked'] {
-  background: var(--brand, hsl(160 84% 39%));
-  border-color: var(--brand, hsl(160 84% 39%));
+  background: var(--brand);
+  border-color: var(--brand);
 }
 
 /* 选中态 Hover：微光高亮，杜绝变暗塌陷 */
 .track[data-state='checked']:hover:not(:disabled) {
-  background: color-mix(in srgb, hsl(0 0% 100%) 8%, var(--brand, hsl(160 84% 39%)));
-  border-color: color-mix(in srgb, hsl(0 0% 100%) 8%, var(--brand, hsl(160 84% 39%)));
+  background: color-mix(in srgb, hsl(0 0% 100%) 8%, var(--brand));
+  border-color: color-mix(in srgb, hsl(0 0% 100%) 8%, var(--brand));
 }
 
 /* 焦点环：严格遵守 AGENTS.md §13 (3%~6% 克制软灰 / 品牌柔和光晕) */
@@ -129,8 +129,8 @@
 
 .track[data-state='checked']:focus-visible {
   outline: none;
-  border-color: var(--brand, hsl(160 84% 39%));
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand, hsl(160 84% 39%)) 25%, transparent);
+  border-color: var(--brand);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand) 25%, transparent);
 }
 
 .track:disabled {
@@ -150,12 +150,12 @@
   width: var(--thumb-d);
   height: var(--thumb-d);
   border-radius: var(--radius-full, 9999px);
-  background: var(--switch-thumb-bg, hsl(0 0% 100%));
+  background: var(--switch-thumb-bg);
   box-shadow:
     /* Layer 1: 0.5px 发丝微收边，界定边缘轮廓 */
     0 0 0 0.5px color-mix(in srgb, var(--border-color) 30%, transparent),
     /* Layer 2: 各向同性柔和漫反射环境光，四周均匀 2px 透光缝隙 */
-    var(--switch-thumb-shadow, 0 1px 2px color-mix(in srgb, var(--shadow-color, hsl(0 0% 0%)) 8%, transparent));
+    var(--switch-thumb-shadow, 0 1px 2px color-mix(in srgb, var(--shadow-color) 8%, transparent));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -214,7 +214,7 @@
 .spinner {
   width: var(--spinner-size, 12px);
   height: var(--spinner-size, 12px);
-  color: var(--text-secondary, hsl(0 0% 45%));
+  color: var(--text-secondary);
   animation: switch-spin 750ms linear infinite;
 }
 

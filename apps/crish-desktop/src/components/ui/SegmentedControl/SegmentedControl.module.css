@@ -25,7 +25,7 @@
   height: var(--seg-h);
   padding: var(--seg-pad);
   border-radius: var(--seg-outer-radius);
-  background-color: var(--seg-track-bg, color-mix(in srgb, var(--text-primary) 3.5%, var(--bg-card, hsl(0 0% 100%))));
+  background-color: var(--seg-track-bg, color-mix(in srgb, var(--text-primary) 3.5%, var(--bg-card)));
   border: 1px solid var(--border-subtle);
 }
 
@@ -114,13 +114,13 @@
   border-radius: var(--seg-inner-radius);
 
   /* 浅色纯白 / 深色提亮实体卡底 (Elevated Card Base) */
-  background-color: var(--seg-slider-bg, var(--bg-card, hsl(0 0% 100%)));
+  background-color: var(--seg-slider-bg, var(--bg-card));
 
   /* 彻底消除双重描边：滑块不加边框，仅保留纯净立体微投影 */
   border: none;
   box-shadow:
-    0 1px 2px color-mix(in srgb, var(--shadow-color, hsl(0 0% 0%)) 6%, transparent),
-    0 1px 3px color-mix(in srgb, var(--shadow-color, hsl(0 0% 0%)) 3%, transparent);
+    0 1px 2px color-mix(in srgb, var(--shadow-color) 6%, transparent),
+    0 1px 3px color-mix(in srgb, var(--shadow-color) 3%, transparent);
 
   pointer-events: none;
   z-index: 1;

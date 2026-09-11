@@ -31,9 +31,9 @@
   box-sizing: border-box;
   width: 100%;
   padding: var(--space-2, 8px) var(--space-3, 12px);
-  font-family: var(--font-sans, inherit);
+  font-family: var(--font-sans);
   font-size: var(--font-size-base, 14px);
-  line-height: var(--line-height-normal, 1.5);
+  line-height: var(--line-height-body);
   color: var(--text-primary);
   background: color-mix(in srgb, var(--bg-primary) 40%, var(--bg-card));
   border: 1px solid var(--border-subtle);
