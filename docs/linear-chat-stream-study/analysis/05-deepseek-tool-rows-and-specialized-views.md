@@ -1,10 +1,10 @@
 # DeepSeek-Harness 工具行与专有视图深度架构分析
 
-> **报告标识**：`docs/linear-chat-stream-study/analysis/05-deepseek-tool-rows-and-specialized-views.md`  
-> **研究对象**：`reference/deepseek-harness`  
-> **核心模块**：`packages/client/ui-tool` 与 `packages/client/ui-primitives`  
-> **分析员**：A05 - DeepSeek 工具行与专有视图分析员  
-> **编写日期**：2026-09-06  
+> **报告标识**：`docs/linear-chat-stream-study/analysis/05-deepseek-tool-rows-and-specialized-views.md`
+> **研究对象**：`reference/deepseek-harness`
+> **核心模块**：`packages/client/ui-tool` 与 `packages/client/ui-primitives`
+> **分析员**：A05 - DeepSeek 工具行与专有视图分析员
+> **编写日期**：2026-09-06
 
 ---
 

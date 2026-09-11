@@ -1,13 +1,13 @@
 # 维度详案：数据链路单轨化与列表 Props 解耦（DIM-DATA）
 
-> **工作区归属**：`docs/linear-chat-stream-convergence/`  
-> **文档性质**：战役分维实施详案（基石维度：DIM-DATA 专项定案与落地契约）  
-> **设计员角色**：战役分维详案设计阶段【DIM-DATA 专项设计员】  
-> **版本**：v1.0.0 架构收敛与工程定案版  
+> **工作区归属**：`docs/linear-chat-stream-convergence/`
+> **文档性质**：战役分维实施详案（基石维度：DIM-DATA 专项定案与落地契约）
+> **设计员角色**：战役分维详案设计阶段【DIM-DATA 专项设计员】
+> **版本**：v1.0.0 架构收敛与工程定案版
 > **输入依据**：
 > 1. `docs/linear-chat-stream-convergence/00-线性对话流与极简交互系统重构总方案.md`（§1.1、§1.2、§1.3、§2.6、§8.1、§8.2、§9.2、§10.1）
 > 2. `docs/linear-chat-stream-convergence/plan-improvements/01-数据链路与状态单轨化修订建议.md`
-> 3. 生产代码：`streamState.ts`、`streamMessageViewModel.ts`、`store/types.ts`、`ChatMessageList.tsx`、`messageVirtualizerMemo.ts`  
+> 3. 生产代码：`streamState.ts`、`streamMessageViewModel.ts`、`store/types.ts`、`ChatMessageList.tsx`、`messageVirtualizerMemo.ts`
 > **纪律恪守**：严禁修改现有生产代码，严禁执行 git 提交；写文件使用 UTF-8 无 BOM；遵循反过度设计红线与立体验证纪律。
 
 ---
@@ -384,7 +384,7 @@ Frame T1: 引擎事件返回持久化消息 userNode(id: "msg_999", rpcId: "rpc_
 
 #### 1.4.1 33 项 Props 穷举审计与架构僵化病灶
 
-生产代码 `ChatMessageList.tsx:203-236` 与 `messageVirtualizerMemo.ts:11-45` 目前维持了惊人的 **33 项 Props 裸传**。这不仅严重破坏组件边界，更导致 `messageVirtualizerMemo.ts` 编写了 144 行防御代码，维护了一个长达 33 个元素的字符串常量数组以及 `_exhaustedCheck` 编译期穷举类型。  
+生产代码 `ChatMessageList.tsx:203-236` 与 `messageVirtualizerMemo.ts:11-45` 目前维持了惊人的 **33 项 Props 裸传**。这不仅严重破坏组件边界，更导致 `messageVirtualizerMemo.ts` 编写了 144 行防御代码，维护了一个长达 33 个元素的字符串常量数组以及 `_exhaustedCheck` 编译期穷举类型。
 一旦增加一个特性（如修改权限模式或支持追问忽略），需要串联修改 4 个层级的参数传递，极度容易因遗漏比对导致 memo 失效或死循环。
 
 #### 1.4.2 8 大领域分组对象接口契约设计
@@ -758,5 +758,5 @@ describe('MessageVirtualizer 8 组对象 Props 浅比对稳定性断言', () => 
 
 ## 结论
 
-本详案作为战役基石维度（DIM-DATA）的权威施工图纸，通过引入纯函数增量状态机 `ConversationAssembler`、3-RAF 节流发布管线与 `echo → durable` 同帧互斥换装协议，一举铲除了长期困扰桌面端的三套账撕裂与发消息双气泡顽疾；同时通过对象化聚合将列表 33 项透传彻底收敛为 8 组领域对象。  
+本详案作为战役基石维度（DIM-DATA）的权威施工图纸，通过引入纯函数增量状态机 `ConversationAssembler`、3-RAF 节流发布管线与 `echo → durable` 同帧互斥换装协议，一举铲除了长期困扰桌面端的三套账撕裂与发消息双气泡顽疾；同时通过对象化聚合将列表 33 项透传彻底收敛为 8 组领域对象。
 本方案不引入任何多余框架，逻辑自闭环且与并行维度文件域严格互斥，为后续画纸扁平化、单一滚动宿主防抖及过程折叠等维度的展开奠定了坚不可摧的数据底座。

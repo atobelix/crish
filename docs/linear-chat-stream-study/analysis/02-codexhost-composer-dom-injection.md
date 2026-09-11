@@ -1,8 +1,8 @@
 # CodexHost Composer DOM 注入与交互机制专项分析报告
 
-> **报告编号**：A02  
-> **所属战役**：`docs/linear-chat-stream-study/`（线性对话流与极简 AI 界面研究）  
-> **研究对象**：`reference/codex-host` 仓库  
+> **报告编号**：A02
+> **所属战役**：`docs/linear-chat-stream-study/`（线性对话流与极简 AI 界面研究）
+> **研究对象**：`reference/codex-host` 仓库
 > **重点源码文件**：
 > - `packages/renderer-extension/src/renderer-composer-dom.ts`
 > - `packages/renderer-extension/src/renderer-binding-probe.ts`
@@ -284,7 +284,7 @@ function setNativeControlHidden(
     return;
   }
   if (state.element.hidden && state.element.getAttribute("aria-hidden") === "true") return;
-  
+
   // 安全处理 1：如果隐藏前焦点停留在控件内部，强制主动 blur，防止焦点被销毁导致全局焦点丢失
   const active = typeof document !== "undefined" ? document.activeElement : null;
   if (
@@ -296,7 +296,7 @@ function setNativeControlHidden(
   }
   // 安全处理 2：若隐藏前菜单正处于展开状态，模拟一次点击将其安全收起，防止幽灵弹窗悬浮
   if (state.element.getAttribute("aria-expanded") === "true") state.element.click();
-  
+
   // 安全处理 3：双保险隐藏
   state.element.hidden = true;
   state.element.setAttribute("aria-hidden", "true");

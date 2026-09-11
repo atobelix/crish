@@ -1,8 +1,8 @@
 # 02 - DeepSeek-Harness 极简对话流与组件树拆解
 
-> **战役工作区**：`docs/linear-chat-stream-study/`  
-> **关联源码**：`reference/deepseek-harness`  
-> **关键分析模块**：`packages/client/ui-chat`、`ui-conversation`、`ui-tool`  
+> **战役工作区**：`docs/linear-chat-stream-study/`
+> **关联源码**：`reference/deepseek-harness`
+> **关键分析模块**：`packages/client/ui-chat`、`ui-conversation`、`ui-tool`
 
 ---
 
@@ -21,9 +21,9 @@ graph TD
     subgraph UI-Chat ChatView
         TurnNav["TurnNavigator (右侧微型悬浮轮次轨)"]
         ChatFlow["ChatFlow 虚拟化线性垂直流 [data-chat-flow]"]
-        
+
         ChatNodeSeat["ChatNodeSeat (基于 nodeKey 独立订阅的纯分发器)"]
-        
+
         UserMsg["UserMessageItem (70% 黄金宽度, 22px 圆角气泡)"]
         TurnProcess["TurnProcessNodeView (33px 极简发丝线折叠栏)"]
         ThinkRow["ReasoningRow (24px 动态单行思考行)"]

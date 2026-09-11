@@ -1,8 +1,8 @@
 # 05 - Conex 桌面端正文对话流改进与重构建议
 
-> **战役工作区**：`docs/linear-chat-stream-study/`  
-> **落地目标模块**：`apps/crish-desktop/src/components/chat-message-list/`、`chat-message-row/`、`chat-composer/`  
-> **改造路线**：从“厚重卡片堆叠”全面演进为“极致扁平、自适应跟随、发丝级微交互”的现代专业工作台  
+> **战役工作区**：`docs/linear-chat-stream-study/`
+> **落地目标模块**：`apps/crish-desktop/src/components/chat-message-list/`、`chat-message-row/`、`chat-composer/`
+> **改造路线**：从“厚重卡片堆叠”全面演进为“极致扁平、自适应跟随、发丝级微交互”的现代专业工作台
 
 ---
 

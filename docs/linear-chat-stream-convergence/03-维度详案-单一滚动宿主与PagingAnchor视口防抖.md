@@ -1,8 +1,8 @@
 # 03 - 维度详案：单一滚动宿主与 PagingAnchor 视口防抖（DIM-02）
 
-> **工作区归属**：`docs/linear-chat-stream-convergence/`  
-> **文档性质**：战役分维系统级实施详案（DIM-02 专项定案与无退避执行宪章）  
-> **责任角色**：DIM-02 专项设计员（单一滚动宿主与 PagingAnchor 视口防抖）  
+> **工作区归属**：`docs/linear-chat-stream-convergence/`
+> **文档性质**：战役分维系统级实施详案（DIM-02 专项定案与无退避执行宪章）
+> **责任角色**：DIM-02 专项设计员（单一滚动宿主与 PagingAnchor 视口防抖）
 > **对齐基准**：
 > - 顶层总方案：`docs/linear-chat-stream-convergence/00-线性对话流与极简交互系统重构总方案.md`（§2.1、§3.1–3.8、§8.1、§8.2、§8.4、§9.4）
 > - 专项审计：`docs/linear-chat-stream-convergence/plan-improvements/02-视口机制与渲染契约修订建议.md`
@@ -86,8 +86,8 @@
 ### 1.2 落地 PagingAnchor 双径语义锚定算法与 pre-paint 相对坐标补偿引擎
 
 #### 1.2.1 几何位移病灶与 Layout Thrashing 破除
-当用户向上翻阅历史消息并触发前置加载（Prepend 20–50 条历史消息），或者上方内容展开/收起时，上方 DOM 容器总高度发生突变 $\Delta H$。  
-若无锚定补偿，视口内正在阅读的内容会被瞬间推离当前物理视线，产生剧烈视觉跳动（Jank）。  
+当用户向上翻阅历史消息并触发前置加载（Prepend 20–50 条历史消息），或者上方内容展开/收起时，上方 DOM 容器总高度发生突变 $\Delta H$。
+若无锚定补偿，视口内正在阅读的内容会被瞬间推离当前物理视线，产生剧烈视觉跳动（Jank）。
 既有方案要么盲目依赖异步 `rAF` 补偿导致闪烁，要么使用 `querySelectorAll` 遍历几何位置引发灾难性的浏览重排（Layout Thrashing）。
 
 #### 1.2.2 PagingAnchor 双径算法数学模型与流程图
@@ -226,11 +226,11 @@ export function restorePagingAnchor(
 #### 1.3.1 浮点亚像素与地表收缩钳位（Floor Clamping）误杀根因
 在 AI 对话流场景中，一个普遍存在的严重体验 Bug 是：**生成结束或用户点击折叠长文本/思考块后，滚动条原本处于最底部，却突然停止自动滚动（脱底误杀）**。
 - **物理根因推导**：
-  当某个消息行高度骤降 $\Delta H$（例如长思考折叠，高度减少 800px），滚动容器的总可滚动高度瞬间从 6000px 萎缩至 5200px。  
+  当某个消息行高度骤降 $\Delta H$（例如长思考折叠，高度减少 800px），滚动容器的总可滚动高度瞬间从 6000px 萎缩至 5200px。
   如果此时滚动条处于底部 `scrollTop = 5400px`，浏览器渲染内核为了维持几何不变量，会对 `scrollTop` 施加硬性物理钳位：
   $$\text{scrollTop}_{\text{clamped}} = \max(0, \text{scrollHeight} - \text{clientHeight}) = 5200 - 600 = 4600\text{px}$$
 - **亚像素误差破防**：
-  在 Windows 系统的 125%、150% 高 DPI 缩放下，`scrollTop` 存在 0.2px~0.8px 的浮点舍入偏差（例如真实返回 4600.4px）。  
+  在 Windows 系统的 125%、150% 高 DPI 缩放下，`scrollTop` 存在 0.2px~0.8px 的浮点舍入偏差（例如真实返回 4600.4px）。
   现存的 `useVirtualScroll.ts` 和吸底监听逻辑在检测到 `scrollTop < oldScrollTop` 时，直接判定为“用户主动手指/滚轮向上滑动”，从而将 `isAtBottom` 强行设为 `false`，彻底摧毁了后续 Token 涌入时的自动吸底！
 
 #### 1.3.2 observedTopRef 账本与 $\epsilon = 2.0\text{px}$ 容差判定模型
@@ -247,7 +247,7 @@ sequenceDiagram
     Note over Scroller: 某节点折叠: scrollHeight 从 5600 骤降至 4600
     Chrome->>Scroller: 物理被动钳位: scrollTop 从 5000 降为 4000.4px
     Scroller->>Hook: 派发原生 onScroll 事件 (e.currentTarget.scrollTop = 4000.4)
-    
+
     Hook->>Hook: 计算当前极限值 maxScrollTop = scrollHeight - clientHeight = 4000.0
     Hook->>Hook: 计算物理残差 deltaToFloor = |4000.4 - 4000.0| = 0.4px
     Hook->>Hook: 检测到 deltaToFloor <= ε (2.0px) 且 之前处于吸底态
@@ -323,7 +323,7 @@ const handleScrollInternal = useCallback((el: HTMLElement) => {
 ### 1.4 落地零高度 Sticky 回底槽与 Composer 动态高度自适应联动
 
 #### 1.4.1 几何物理模型与 $\Delta \text{scrollHeight} = 0$ 铁律
-现状回底按钮在 `ChatStatusRibbons` 内使用 `position: absolute; bottom: 148px`，存在严重的视觉脱靶与撑大文档流风险。  
+现状回底按钮在 `ChatStatusRibbons` 内使用 `position: absolute; bottom: 148px`，存在严重的视觉脱靶与撑大文档流风险。
 本详案正式落地**零高度 Sticky 槽（Zero-Height Sticky Slot）**：
 
 ```
@@ -644,7 +644,7 @@ export const chatScrollRegistry = new ChatScrollRegistry();
 ### 1.6 接入 VSM.scrollToId 绝对坐标寻址协议与零延迟跳转闭环
 
 #### 1.6.1 废除 DOM 盲查与双 rAF / 定时器
-现状 `useScrollAnchor.ts` 的 `findMessageElement` 采用 `document.querySelector('[data-msg-id=...]')`。当被 Pin 的消息位于视口之外时，虚拟列表根本没有挂载该 DOM 节点，`querySelector` 100% 返回 `null`，导致双 rAF 和 50ms 超时均告失败并误报 Toast。  
+现状 `useScrollAnchor.ts` 的 `findMessageElement` 采用 `document.querySelector('[data-msg-id=...]')`。当被 Pin 的消息位于视口之外时，虚拟列表根本没有挂载该 DOM 节点，`querySelector` 100% 返回 `null`，导致双 rAF 和 50ms 超时均告失败并误报 Toast。
 `ChatMessageList.tsx:139` 更依赖 `setTimeout(..., 40)` 延时盲等。
 
 #### 1.6.2 VSM 绝对坐标寻址扩展与瞬时直达
@@ -951,5 +951,5 @@ graph TD
 
 ---
 
-> **定案结论**：  
+> **定案结论**：
 > 本详案全面覆盖单一滚动宿主铁律、PagingAnchor 双径算法、observedTopRef $\epsilon$-账本、零高度 Sticky 回底槽以及 chatScrollRegistry 跨会话恢复机制，锁定了净削减 ≥ 350 行的刚性删除面，构筑起工业级坚固的视口力学基石。可作为后续实现波次直接执行的最高准则。

@@ -1,8 +1,8 @@
 # DeepSeek-Harness ChatView 视口防抖、滚动跟随与轮次导航轨深度技术分析
 
-> **作者**：DeepSeek-Harness ChatView 视口与滚动专项分析员 (A03)  
-> **战役工作区**：`docs/linear-chat-stream-study/analysis/`  
-> **分析对象**：`reference/deepseek-harness` 仓库中 `packages/client/ui-chat` 模块  
+> **作者**：DeepSeek-Harness ChatView 视口与滚动专项分析员 (A03)
+> **战役工作区**：`docs/linear-chat-stream-study/analysis/`
+> **分析对象**：`reference/deepseek-harness` 仓库中 `packages/client/ui-chat` 模块
 > **核心源码**：
 > - `packages/client/ui-chat/src/client/chat/ChatView.tsx` (877 行)
 > - `packages/client/ui-chat/src/client/chat/ChatView.module.css` (224 行)
@@ -309,9 +309,9 @@ if (!movedByReader && isAtBottom) {
 $$\text{ExpectedTop} = \min(L, F)$$
 $$\text{movedByReader} = \left| S - \text{ExpectedTop} \right| > 0.5$$
 
-- **场景 1：用户手动滚动**（滚轮/触摸板/拖拽滚动条）  
+- **场景 1：用户手动滚动**（滚轮/触摸板/拖拽滚动条）
   容器高度不变，$F$ 不变，$L$ 保持原值。$S$ 发生了物理位移，因此 $|S - L| > 0.5 \implies \text{movedByReader} = \text{true}$。系统根据当前位置是否在 24px 内更新 `isAtBottom`。
-- **场景 2：思考过程收起导致容器高度缩水（Shrink Clamp）**  
+- **场景 2：思考过程收起导致容器高度缩水（Shrink Clamp）**
   原本处于底部，$L = 2500$。思考过程收起后，容器高度骤降，$F = 800$。浏览器强制将 `scrollTop` 压制到 $S = 800$。此时：
   $$\text{ExpectedTop} = \min(2500, 800) = 800$$
   $$\left| S - \text{ExpectedTop} \right| = |800 - 800| = 0 \le 0.5 \implies \text{movedByReader} = \text{false}$$

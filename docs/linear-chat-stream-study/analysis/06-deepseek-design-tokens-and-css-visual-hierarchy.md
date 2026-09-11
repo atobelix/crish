@@ -1,8 +1,8 @@
 # DeepSeek-Harness 视觉样式与 Design Tokens 深度解析
 
-> **战役工作区**：`docs/linear-chat-stream-study/`  
-> **归属专题**：A06 视觉样式与 Design Tokens 专项分析  
-> **参考代码库**：`reference/deepseek-harness/`  
+> **战役工作区**：`docs/linear-chat-stream-study/`
+> **归属专题**：A06 视觉样式与 Design Tokens 专项分析
+> **参考代码库**：`reference/deepseek-harness/`
 > **核心分析模块**：
 > 1. `packages/client/ui-theme/src/styles/design-platform.css`
 > 2. `packages/client/ui-theme/src/styles/gradient-shadow-text.css` & `corner-shape.css`
@@ -525,7 +525,7 @@ body {
 body,
 body * {
   --dsw-elevation-stroke: 0 0 0 0.5px var(--dsw-elevation-stroke-color);
-  
+
   --dsw-elevation-panel:
     var(--dsw-elevation-stroke),
     0 3px 8px 0 rgba(0, 0, 0, 0.03),
@@ -589,7 +589,7 @@ body * {
   width: 100%;
   max-width: var(--dsh-composer-card-max-width);
   padding-top: 10px;
-  
+
   /* Input stroke: the light neutral (l2), drawn as the elevation hairline
      so it costs no layout; the shadow is the soft elevation tier. */
   border: 0;
@@ -597,7 +597,7 @@ body * {
   border-radius: 22px;
   background: var(--dsw-specific-input-major);
   box-shadow: var(--dsw-elevation-soft);
-  
+
   font-size: var(--dsh-content-font-size, 14px);
   line-height: calc(24px + var(--dsh-content-font-delta, 0px));
 }

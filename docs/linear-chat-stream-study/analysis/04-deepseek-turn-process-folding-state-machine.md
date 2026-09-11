@@ -1,8 +1,8 @@
 # DeepSeek-Harness 折叠状态机与节点树专项分析报告
 
-> 报告路径：`docs/linear-chat-stream-study/analysis/04-deepseek-turn-process-folding-state-machine.md`  
-> 专项角色：A04 - DeepSeek 折叠状态机与节点树分析员  
-> 调研对象：`reference/deepseek-harness/packages/client/ui-chat/`  
+> 报告路径：`docs/linear-chat-stream-study/analysis/04-deepseek-turn-process-folding-state-machine.md`
+> 专项角色：A04 - DeepSeek 折叠状态机与节点树分析员
+> 调研对象：`reference/deepseek-harness/packages/client/ui-chat/`
 > 对应模块：
 > - `ChatNodeSeat.tsx`
 > - `TurnProcessNodeView.tsx` & `TurnProcessNodeView.module.css`
@@ -45,26 +45,26 @@ DeepSeek-Harness 通过一套**“事件流时空投影 + 虚拟状态机 + 极�
 flowchart TD
     Node([ChatNode 传入]) --> Presentation[useChatNodeProcess: 获取 TurnProcessPresentation]
     Presentation --> WindowReady{processWindowReady?}
-    
+
     WindowReady -- 否 --> ShowNormal[保持正常节点渲染 / 不参与折叠]
     WindowReady -- 是 --> CheckKind{节点类型判断}
-    
+
     CheckKind -- 位于 processStartSeq 与 answerAnchorSeq 之间 --> ProcessMember[processMember = true]
     CheckKind -- 是 assistant-step 且 step == answerStep --> ProcessAnswer[processAnswer = true]
     CheckKind -- 是 turn-process 独立控制器 --> OwnsDisclosure[ownsDisclosure = true]
-    
+
     ProcessMember --> EvalFoldable{计算 foldable}
     ProcessAnswer --> EvalFoldable
     OwnsDisclosure --> EvalFoldable
-    
+
     EvalFoldable --> HasWork{有外部过程或思考?}
     HasWork -- 无 --> InactiveCtrl[controllerInactive = true] --> HideNode[processHidden = true]
     HasWork -- 有 --> FoldableTrue[foldable = true]
-    
+
     FoldableTrue --> CheckOpen{用户已手动展开 processOpen?}
     CheckOpen -- 是 --> OpenState[processHidden = false / compactAnswer = false]
     CheckOpen -- 否 --> CollapsedState[processMember: processHidden = true<br/>processAnswer: compactAnswer = true]
-    
+
     CollapsedState --> ApplyAttr[注入 data-turn-process-* 属性与 useSearchableHidden]
 ```
 
@@ -185,7 +185,7 @@ export function useSearchableHidden(
     if (hidden) element.setAttribute('hidden', 'until-found')
     else element.removeAttribute('hidden')
   }, [hidden, reveal])
-  
+
   useEffect(() => {
     const element = ref.current
     if (element === null) return

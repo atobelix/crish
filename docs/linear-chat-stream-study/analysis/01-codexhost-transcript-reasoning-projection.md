@@ -1,7 +1,7 @@
 # CodexHost Transcript 架构与 Reasoning 投影技术调研报告
 
-> **文档标识**：`docs/linear-chat-stream-study/analysis/01-codexhost-transcript-reasoning-projection.md`  
-> **调研对象**：`reference/codex-host` 核心协议库、渲染扩展及架构方案  
+> **文档标识**：`docs/linear-chat-stream-study/analysis/01-codexhost-transcript-reasoning-projection.md`
+> **调研对象**：`reference/codex-host` 核心协议库、渲染扩展及架构方案
 > **核心源码**：
 > - [`packages/protocol-core/src/codex-ui-projector.ts`](file:///c:/Software/conex/reference/codex-host/packages/protocol-core/src/codex-ui-projector.ts)
 > - [`reference/codex-host/docs/Reasoning 实时预览与持久 Transcript 的后续方案.md`](file:///c:/Software/conex/reference/codex-host/docs/Reasoning%20%E5%AE%9E%E6%97%B6%E9%A2%84%E8%A7%88%E4%B8%8E%E6%8C%81%E4%B9%85%20Transcript%20%E7%9A%84%E5%90%8E%E7%BB%AD%E6%96%B9%E6%A1%88.md)
@@ -226,7 +226,7 @@ Turn Lifecycle:
                     ┌─── 派生 ID: `${itemId}-summary` (type: "reasoning")
                     │    接收 summaryPartAdded + summaryTextDelta ──► 原生短暂动画
 HostReasoningItem ──┤
-                    │    
+                    │
                     └─── 原生 ID: `${itemId}` (type: "commandExecution", command: "thinking")
                          接收 outputDelta ──► exec-shell-body 容器 (持久留痕)
 ```
@@ -269,7 +269,7 @@ HostReasoningItem ──┤
 ```mermaid
 stateDiagram-v2
     [*] --> NativePreviewOnly: 首段 Reasoning 文本到达 (0ms)
-    
+
     state NativePreviewOnly {
         [*] --> StreamingNative
         StreamingNative --> StreamingNative: 继续收到 Delta (t < 5s)
@@ -334,7 +334,7 @@ export function toolCommandLine(toolName: string, args: JsonValue): string | und
   // 2. 提取路径与正则匹配
   const filePath = nestedString(args, ["path", "file_path", "filePath", "file", "filename", "target", "uri"]);
   const pattern = nestedString(args, ["pattern", "glob", "glob_pattern", "query", "regex"]);
-  
+
   // 3. 语义提升：Read -> read <file>
   if (["read", "readfile", "fileread", "view"].includes(lower)) {
     return filePath ? `read ${filePath}` : undefined;

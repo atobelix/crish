@@ -1,8 +1,8 @@
 # 01 - Codex 与 CodexHost 正文对话界面架构解析
 
-> **战役工作区**：`docs/linear-chat-stream-study/`  
-> **关联源码**：`reference/codex-host`、Codex Desktop WebView2 渲染层  
-> **关键分析模块**：`packages/protocol-core`、`packages/renderer-extension`  
+> **战役工作区**：`docs/linear-chat-stream-study/`
+> **关联源码**：`reference/codex-host`、Codex Desktop WebView2 渲染层
+> **关键分析模块**：`packages/protocol-core`、`packages/renderer-extension`
 
 ---
 
