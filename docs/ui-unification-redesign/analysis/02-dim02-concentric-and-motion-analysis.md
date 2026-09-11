@@ -1,10 +1,10 @@
 # DIM-02 专项分析：同心几何标尺与 Apple 物理动效
 
-> **战役定位**：`UI-UNIFICATION-REDESIGN` 战役阶段一 · 维度二（DIM-02）专项深度分析报告  
-> **设计依据**：  
-> - `C:\Software\conex\skill\design\apple-design.md`（WWDC 2018 *Designing Fluid Interfaces*、WWDC 2020 *Depth and Translucency*、WWDC 2026 *Principles of Great Design*）  
-> - `C:\Software\conex\skill\design\jakub-skills\skills\better-ui\surfaces.md`（同心圆角几何公理、阴影代边框、光学对齐）  
-> - `C:\Software\conex\skill\design\jakub-skills\skills\better-ui\animations.md`（可中断过渡、按压 scale(0.96) 物理触感、静态逃逸属性、主题切换动画冻结门闩、动效克制律）  
+> **战役定位**：`UI-UNIFICATION-REDESIGN` 战役阶段一 · 维度二（DIM-02）专项深度分析报告
+> **设计依据**：
+> - `C:\Software\conex\skill\design\apple-design.md`（WWDC 2018 *Designing Fluid Interfaces*、WWDC 2020 *Depth and Translucency*、WWDC 2026 *Principles of Great Design*）
+> - `C:\Software\conex\skill\design\jakub-skills\skills\better-ui\surfaces.md`（同心圆角几何公理、阴影代边框、光学对齐）
+> - `C:\Software\conex\skill\design\jakub-skills\skills\better-ui\animations.md`（可中断过渡、按压 scale(0.96) 物理触感、静态逃逸属性、主题切换动画冻结门闩、动效克制律）
 > **核心使命**：全面推行数学级同心几何公理 $R_{outer} = R_{inner} + padding$，根除全仓散落的 5px/7px/10px/11px/13px 随意圆角；纠正伪弹簧 1.5 过冲抖动贝塞尔；为原子与关键控件注入 `scale(0.96)` 触感压缩与可中断响应；重塑 Dialog 16px/20px 景深磨砂与模态 Scrim；构建主题切换瞬态过渡冻结门闩，彻底消除色彩涂抹，实现工程级优雅与代码**净负产出（Net-Negative LOC）**。
 
 ---
@@ -69,7 +69,7 @@
 
 #### 2. 物理与几何机理分析
 - **触觉真空**：依据 `better-ui/animations.md` § Scale on press 与 `apple-design.md` § 1 Response：
-  > "A subtle scale-down on click gives buttons tactile feedback. Always scale(0.96), never below 0.95, which feels exaggerated. Use CSS transitions so a release mid-press returns smoothly."  
+  > "A subtle scale-down on click gives buttons tactile feedback. Always scale(0.96), never below 0.95, which feels exaggerated. Use CSS transitions so a release mid-press returns smoothly."
   > "Feedback lives on the press, and it's instant: .button:active { transform: scale(0.96); transition: transform 100ms ease-out; }"
   现有实现仅有伪元素叠加暗色，在物理直觉上缺少向屏幕内「压下（Depress）」的位移，缺少手感反馈。
 - **7px 几何断层**：标准系统的圆角遵循 4px 基数（`--radius-sm: 4px`, `--radius-md: 6px`, `--radius-lg: 8px`）。7px 既不是 6px 也不是 8px，导致 Button 嵌套在 12px 的 Card（如 `padding: 8px`）内部时，$12 - 8 = 4px \neq 7px$，外壳与内部按钮的同心圆弧必然错位变形。
@@ -156,7 +156,7 @@ expect(CSS_SRC).toContain('--tab-outer-radius: var(--button-radius, 7px)');
 
 #### 2. 物理与视觉机理分析
 - **景深缺失**：依据 `apple-design.md` § 12 Materials & Depth：
-  > "Dim to focus, separate to keep flow. A modal task pairs the surface with a dimming scrim and pushes the background back/down."  
+  > "Dim to focus, separate to keep flow. A modal task pairs the surface with a dimming scrim and pushes the background back/down."
   > "Bigger surfaces should read as thicker: stronger blur + deeper shadow."
   `blur(1.5px)` 在物理学上无法形成散射面（Diffusion Surface），无法将背后的复杂文字和代码折射为柔和色块。4% 的 scrim 几乎等同于完全透明，导致弹窗浮在杂乱界面之上，视线无法聚焦在弹窗内容上。
 - **入场材质突变**：`.backdrop` 在入场时只有简单的 opacity 过渡，没有跟随弹窗的出现同步建立模糊散射，造成「硬切」闪烁感。
@@ -211,8 +211,8 @@ export function applyTheme(theme: UiTheme | string): UiTheme {
 ### 2.5 缺陷 5：全仓嵌套容器圆角违反 $R_{outer} = R_{inner} + padding$ 同心几何全景排查清单
 
 依据 `better-ui/surfaces.md` § Concentric border radius：
-> **Concentric border radius rule**:  
-> `outerRadius = innerRadius + padding`  
+> **Concentric border radius rule**:
+> `outerRadius = innerRadius + padding`
 > The rule matters most when nested surfaces sit close together. Past 24px of padding, treat the layers as separate surfaces.
 
 对全工程容器及内部控件进行地毯式扫描，发现以下严重违背同心几何公理的组件清单：
@@ -367,7 +367,7 @@ $$\mathbf{R_{outer} = R_{inner} + Padding} \quad (\text{当 } Padding \le 24px)$
 /**
  * apps/crish-desktop/src/api/themeTransitionLatch.ts
  * 主题切换瞬态动画冻结门闩 (Zero-Smear Theme Transition Latch)
- * 
+ *
  * 机制：
  * 1. 创建高优先级内联 <style>，向整个 DOM 注入 `*, *::before, *::after { transition: none !important; }`；
  * 2. 执行主题变更（DOM 属性、Class 翻转、个性化 Token 注入）；

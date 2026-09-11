@@ -1,7 +1,7 @@
 # 05-DIM-04 专项评审报告：色彩语义角色、排版节奏与无障碍 APG 终极交叉审查
 
-> **战役代号**：`UI-UNIFICATION-REDESIGN`  
-> **审查对象**：`docs/ui-unification-redesign/independent-plans/04-dim04-colors-typography-a11y-plan.md`（DIM-04 独立详细实施方案）及全域关联方案  
+> **战役代号**：`UI-UNIFICATION-REDESIGN`
+> **审查对象**：`docs/ui-unification-redesign/independent-plans/04-dim04-colors-typography-a11y-plan.md`（DIM-04 独立详细实施方案）及全域关联方案
 > **审查基准**：
 > - 仓库总规 `AGENTS.md`（§13 激活边框与焦点态、§14 色彩空间、§1 反退避铁律、§7 严禁补丁、§7.1 立体验证、§8 反过度设计）
 > - W3C WCAG 2.1 / 2.2 规范（SC 1.4.11 Non-text Contrast 3:1, SC 2.4.11 Focus Appearance, SC 2.5.8 Target Size Minimum 24×24px, WAI-ARIA APG 1.2）
@@ -344,7 +344,7 @@ $$\text{Contrast Ratio} = \frac{L_1 + 0.05}{L_2 + 0.05} \quad (L_1 > L_2)$$
 button:focus-visible,
 [role='button']:focus-visible {
   outline: none;
-  box-shadow: 
+  box-shadow:
     0 0 0 1px var(--bg-card),
     0 0 0 3px color-mix(in srgb, var(--border-color) 50%, var(--text-primary) 50%);
 }

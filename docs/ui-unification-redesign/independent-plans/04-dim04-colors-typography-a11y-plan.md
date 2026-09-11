@@ -1,7 +1,7 @@
 # 04-DIM-04 独立详细实施方案：色彩角色、排版节奏与焦点无障碍
 
-> **战役代号**：`UI-UNIFICATION-REDESIGN`  
-> **文档性质**：阶段二 独立详细实施方案（DIM-04：语义色彩体系、排版防抖动、克制焦点环与 WCAG 无障碍防线）  
+> **战役代号**：`UI-UNIFICATION-REDESIGN`
+> **文档性质**：阶段二 独立详细实施方案（DIM-04：语义色彩体系、排版防抖动、克制焦点环与 WCAG 无障碍防线）
 > **执行依据**：
 > - `c:/Software/conex/docs/ui-unification-redesign/00-战役调度总纲与工作区规范.md`（战役调度总纲与工作区规范）
 > - `c:/Software/conex/docs/ui-unification-redesign/01-四维度定案与删除面矩阵.md`（四维度定案与基准删除面矩阵）
@@ -911,7 +911,7 @@ import { Button } from '../ui';
   --focus-border-color: color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
   /* 1.5px 柔和微外圈阴影 */
   --focus-ring-shadow: 0 0 0 1.5px var(--focus-ring-color);
-  
+
   /* 全页落地空态与极柔和区域（3% 混入量级） */
   --focus-ring-color-soft: color-mix(in srgb, var(--border-color) 97%, var(--text-primary) 3%);
   --focus-border-color-soft: color-mix(in srgb, var(--border-color) 95%, var(--text-primary) 5%);

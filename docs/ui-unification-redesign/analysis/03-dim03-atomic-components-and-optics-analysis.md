@@ -1,7 +1,7 @@
 # DIM-03 专项分析：原子组件全面收敛与光学平衡
 
-> **战役定位**：`UI-UNIFICATION-REDESIGN` 战役阶段一 · 维度三（DIM-03）深度分析报告  
-> **设计依据**：`C:\Software\conex\skill\design\jakub-skills\skills\better-ui`（`surfaces.md`、`icons.md`）、`better-interface`、`apps/crish-desktop/src/components/ui/README.md`  
+> **战役定位**：`UI-UNIFICATION-REDESIGN` 战役阶段一 · 维度三（DIM-03）深度分析报告
+> **设计依据**：`C:\Software\conex\skill\design\jakub-skills\skills\better-ui`（`surfaces.md`、`icons.md`）、`better-interface`、`apps/crish-desktop/src/components/ui/README.md`
 > **核心使命**：彻底根除桌面端各业务组件（Sidebar、Settings、TopBar、Shell）对原生 `<button>` 与 `<input>` 的裸写与私有样式重造，拔除跨层样式穿透，纠正按钮图标内边距与图标 strokeWidth 的光学平衡缺陷，实现代码资产的**净负产出（Net-Negative LOC）**。
 
 ---
@@ -28,8 +28,8 @@
 
 #### 1. 物理现象与视错觉成因
 根据 `better-ui/surfaces.md` § Optical alignment：
-> **Buttons with text + icon**  
-> Where an icon makes symmetric padding look unbalanced, use slightly less on the icon side. A starting point:  
+> **Buttons with text + icon**
+> Where an icon makes symmetric padding look unbalanced, use slightly less on the icon side. A starting point:
 > `icon-side padding = text-side padding - 2px`.
 
 在几何尺寸上相等的内边距，在人类视网膜感知中往往呈现不对称。按钮内部的文字通常呈现密集、连续的水平笔画，右边界（或左边界）实打实地贴合字符外框；而矢量图标（如 Lucide 的 16x16 / 24x24 栅格图形）多为轮廓线、圆环或几何构型，其内部与四周包含天然的**负空间（Negative Space）与镂空**。
@@ -118,8 +118,8 @@ const isOpticallyAsymmetric = hasIcon && hasText;
 
 #### 1. 物理规律与设计准则
 根据 `better-ui/icons.md` § Match icon stroke to text weight：
-> A hairline icon beside semibold text reads as broken; a heavy icon beside regular text shouts.  
-> 
+> A hairline icon beside semibold text reads as broken; a heavy icon beside regular text shouts.
+>
 > | Adjacent text | Icon stroke width (24px grid) |
 > | :--- | :--- |
 > | Regular (400), 14–16px | `1.5px` |

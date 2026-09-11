@@ -1,7 +1,7 @@
 # 跨维度综合建议：方案架构 A（系统结构收敛、纯粹物理光学与拓扑序净消减）
 
-> **战役代号**：`UI-UNIFICATION-REDESIGN`  
-> **文档定位**：阶段一 前置深度审计与跨维度系统架构建议（方案架构 A）  
+> **战役代号**：`UI-UNIFICATION-REDESIGN`
+> **文档定位**：阶段一 前置深度审计与跨维度系统架构建议（方案架构 A）
 > **设计依据**：
 > - `C:\Software\conex\skill\design\`（`apple-design.md` 物理流体动效体系 + `jakub-skills` 7 大工程级设计技能）
 > - `docs/ui-unification-redesign/00-战役调度总纲与工作区规范.md`（战役调度总纲）

@@ -1,8 +1,8 @@
 # 01-全域拓扑与逻辑依赖冲突审查报告（审查结论与仲裁详案）
 
-> **战役代号**：`UI-UNIFICATION-REDESIGN`  
-> **文档性质**：阶段二 交叉评审报告（方案评审 01：全域系统工程拓扑、逻辑依赖倒置、双桥闭环漏洞与选择器权重冲突审查）  
-> **评审对象**：`docs/ui-unification-redesign/independent-plans/` 下全部 6 份独立详案（01 至 06）  
+> **战役代号**：`UI-UNIFICATION-REDESIGN`
+> **文档性质**：阶段二 交叉评审报告（方案评审 01：全域系统工程拓扑、逻辑依赖倒置、双桥闭环漏洞与选择器权重冲突审查）
+> **评审对象**：`docs/ui-unification-redesign/independent-plans/` 下全部 6 份独立详案（01 至 06）
 > **审查基准**：
 > - `c:/Software/conex/docs/ui-unification-redesign/00-战役调度总纲与工作区规范.md`
 > - `c:/Software/conex/docs/ui-unification-redesign/01-四维度定案与删除面矩阵.md`
@@ -18,9 +18,9 @@
 
 ### 1.1 核心审查结论
 
-> **【总体判定：有条件通过，必须在主控排期中执行 10 项刚性拓扑仲裁修正】**  
-> 
-> 六份独立方案在工业级设计规范（Jakub Krehel 理性体系与 Apple 流体微触感）、代码净负产出（目标 $\ge 650$ 行）、原子组件解耦与多层级测试资产防护方面展现了极高的系统工程水准。  
+> **【总体判定：有条件通过，必须在主控排期中执行 10 项刚性拓扑仲裁修正】**
+>
+> 六份独立方案在工业级设计规范（Jakub Krehel 理性体系与 Apple 流体微触感）、代码净负产出（目标 $\ge 650$ 行）、原子组件解耦与多层级测试资产防护方面展现了极高的系统工程水准。
 > 然而，**在跨阶段时序编排、门禁测试激活时机、Token 存量消费面认定、CSS Specificity（权重覆盖）、盒模型对齐以及真实物理文件路径等关键系统工程细节上，存在 10 处足以直接阻断 CI 流水线或导致视觉严重崩塌的断层与竞态漏洞**。若不加仲裁直接进入代码实施，将引发大面积编译阻断与回归事故。
 
 ```
@@ -69,8 +69,8 @@
 
 #### 现象与代码证据
 在 [`05-integrated-execution-and-migration-plan.md:86-115`](file:///c:/Software/conex/docs/ui-unification-redesign/independent-plans/05-integrated-execution-and-migration-plan.md#L86-L115) 中，Phase 0 被定义为：
-> “准入条件：`npm run check:desktop` 与 `npm run typecheck` 100% 绿灯；  
-> 详细步骤：新建 `motion-concentric.test.ts` 与契约准备；运行全量单测基线确认，执行 `npm run test` 确保通过；  
+> “准入条件：`npm run check:desktop` 与 `npm run typecheck` 100% 绿灯；
+> 详细步骤：新建 `motion-concentric.test.ts` 与契约准备；运行全量单测基线确认，执行 `npm run test` 确保通过；
 > BATCH-00 提交 `motion-concentric.test.ts` 与 `style-contract.test.ts`。”
 
 然而，查看 [`06-test-guardrails-and-verification-plan.md:351-458`](file:///c:/Software/conex/docs/ui-unification-redesign/independent-plans/06-test-guardrails-and-verification-plan.md#L351-L458)：
@@ -118,8 +118,8 @@
 
 #### 现场证据
 [`01-dim01:302-308`](file:///c:/Software/conex/docs/ui-unification-redesign/independent-plans/01-dim01-tokens-and-dead-code-plan.md#L302-L308) 明确声称：
-> “AI 步骤卡片、Artifacts 占位与废弃表格变量（21 个变量 · 净消减 46 行）：  
-> `--aicard-bg`, `--aicard-border`... 卡片容器已全面收敛至统一原子 Card 容器，上述 5 个变量全工程 0 次引用；  
+> “AI 步骤卡片、Artifacts 占位与废弃表格变量（21 个变量 · 净消减 46 行）：
+> `--aicard-bg`, `--aicard-border`... 卡片容器已全面收敛至统一原子 Card 容器，上述 5 个变量全工程 0 次引用；
 > `--artifact-card-shadow`, `--artifact-header-fg`... 均属于早期手写 Artifacts 浮层时的未消费占位，彻底清除。”
 
 同时，[`06-test-guardrails:815-817`](file:///c:/Software/conex/docs/ui-unification-redesign/independent-plans/06-test-guardrails-and-verification-plan.md#L815-L817) 设置了刚性阻断正则：
@@ -352,9 +352,9 @@
 - **修复方案**：
   将 `check-ui-negative-churn.mjs` 第 814 行修改为：
   ```javascript
-  { 
-    name: '--sep-* (已清剿的 12 个脚手架死变量)', 
-    regex: /--sep-(?:font-size-(?:base|sm|header)|bg-(?:canvas|panel-solid|item-selected)|border-hover|accent-(?:color|light)|ease-(?:spring|shrink)|duration-(?:open|close))\s*:/g 
+  {
+    name: '--sep-* (已清剿的 12 个脚手架死变量)',
+    regex: /--sep-(?:font-size-(?:base|sm|header)|bg-(?:canvas|panel-solid|item-selected)|border-hover|accent-(?:color|light)|ease-(?:spring|shrink)|duration-(?:open|close))\s*:/g
   }
   ```
   精准守门 12 个真正清剿的目标，放行正在生产使用的 6 个同心几何 Token。
@@ -398,7 +398,7 @@
     ...
     align?: 'center' | 'start' | 'end';
   }
-  
+
   // 派发 data-align
   <button data-align={align !== 'center' ? align : undefined} ...>
   ```

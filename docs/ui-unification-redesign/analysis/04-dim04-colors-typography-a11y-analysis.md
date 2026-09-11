@@ -1,7 +1,7 @@
 # DIM-04 专项分析报告：色彩角色、排版节奏与焦点无障碍
 
-> **战役代号**：`UI-UNIFICATION-REDESIGN`  
-> **归属维度**：`DIM-04`（色彩角色、排版节奏与焦点无障碍）  
+> **战役代号**：`UI-UNIFICATION-REDESIGN`
+> **归属维度**：`DIM-04`（色彩角色、排版节奏与焦点无障碍）
 > **核心规范依据**：
 > - `C:\Software\conex\skill\design\jakub-skills\skills\better-colors`（“Fill exactly one action per view”、色相保持、语义角色分层）
 > - `C:\Software\conex\skill\design\jakub-skills\skills\better-typography`（“Tabular numbers on changing values”、Properties over raw tags）

@@ -1,7 +1,7 @@
 # 01-DIM-01 独立详细实施方案：重复、死层与 Token 碎片收敛
 
-> **战役代号**：`UI-UNIFICATION-REDESIGN`  
-> **文档性质**：阶段二 独立详细实施方案（DIM-01：基础设施层 SSOT、死变量清剿与字阶规范化）  
+> **战役代号**：`UI-UNIFICATION-REDESIGN`
+> **文档性质**：阶段二 独立详细实施方案（DIM-01：基础设施层 SSOT、死变量清剿与字阶规范化）
 > **执行依据**：
 > - `c:/Software/conex/docs/ui-unification-redesign/00-战役调度总纲与工作区规范.md`（战役调度总纲）
 > - `c:/Software/conex/docs/ui-unification-redesign/01-四维度定案与删除面矩阵.md`（四维度定案与基准矩阵）

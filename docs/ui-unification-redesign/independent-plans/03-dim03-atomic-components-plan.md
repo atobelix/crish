@@ -1,7 +1,7 @@
 # 03-原子组件全面收敛与光学平衡独立实施详案（DIM-03 实施详案）
 
-> **战役代号**：`UI-UNIFICATION-REDESIGN`  
-> **文档性质**：战役阶段二 维度独立实施详案（方案 03：DIM-03 原子组件全面收敛与光学平衡）  
+> **战役代号**：`UI-UNIFICATION-REDESIGN`
+> **文档性质**：战役阶段二 维度独立实施详案（方案 03：DIM-03 原子组件全面收敛与光学平衡）
 > **执行依据**：
 > - `c:/Software/conex/docs/ui-unification-redesign/00-战役调度总纲与工作区规范.md`（战役调度总纲）
 > - `c:/Software/conex/docs/ui-unification-redesign/01-四维度定案与删除面矩阵.md`（四维度基准定案与硬性指标）
@@ -74,8 +74,8 @@
 
 #### 1. 物理现象与负空间（Negative Space）视错觉成因
 根据 `better-ui/surfaces.md` § Optical alignment：
-> **Buttons with text + icon**  
-> Where an icon makes symmetric padding look unbalanced, use slightly less on the icon side. A starting point:  
+> **Buttons with text + icon**
+> Where an icon makes symmetric padding look unbalanced, use slightly less on the icon side. A starting point:
 > `icon-side padding = text-side padding - 2px`.
 
 在人类视网膜的几何光学感知中，“物理边框”与“视觉边界”存在显著差异：
@@ -652,7 +652,7 @@ export const ICON_STROKE_BY_WEIGHT = {
          </button>
        );
      }
- 
+
 +    const hasIcon = Boolean(icon || loading);
 +    const hasText = children != null && children !== '';
 +    const isOpticallyAsymmetric = hasIcon && hasText;
@@ -676,7 +676,7 @@ export const ICON_STROKE_BY_WEIGHT = {
 @@ -49,6 +49,16 @@
    gap: var(--btn-gap);
  }
- 
+
 +/* 光学平衡补偿：带图标按钮在图标侧微减 2px，消除视错觉偏心 (better-ui) */
 +.button[data-icon-pos='left'] {
 +  padding-left: max(0px, calc(var(--btn-px) - 2px));
@@ -705,7 +705,7 @@ export const ICON_STROKE_BY_WEIGHT = {
  import { IconSidebarLeft } from './SidebarIcons';
 -import { Tooltip } from '../ui';
 +import { IconButton } from '../ui';
- 
+
  export const SidebarToggle: React.FC<{
    collapsed: boolean;
 @@ -44,18 +45,16 @@ export const SidebarToggle: React.FC<{
@@ -776,7 +776,7 @@ export const ICON_STROKE_BY_WEIGHT = {
 @@ -82,34 +82,6 @@
    padding-left: 70px;
  }
- 
+
 -.sidebarToggleBtn {
 -  width: 32px;
 -  height: 32px;
@@ -824,7 +824,7 @@ export const ICON_STROKE_BY_WEIGHT = {
  import styles from './SidebarNav.module.css';
  import * as Lucide from 'lucide-react';
 +import { Button, Input } from '../ui';
- 
+
  export interface SidebarNavProps {
    activeNav: string;
 @@ -21,52 +22,50 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
@@ -934,7 +934,7 @@ export const ICON_STROKE_BY_WEIGHT = {
 ```diff
 @@ -7,98 +7,6 @@
  }
- 
+
 -.navItem {
 -  --btn-hover-overlay: transparent;
 -  --btn-active-overlay: transparent;
@@ -1050,11 +1050,11 @@ export const ICON_STROKE_BY_WEIGHT = {
 -import { Button, Tooltip } from '../ui';
 +import { Button, IconButton, Tooltip } from '../ui';
  import { UserProfileCard } from './UserProfileCard';
- 
+
  export const SettingsIconButton: React.FC<SettingsIconButtonProps> = React.memo(
 @@ -23,21 +23,23 @@ export const SettingsIconButton: React.FC<SettingsIconButtonProps> = React.memo(
      }`;
- 
+
      return (
 -      <Tooltip content={tooltipText}>
 -        <button
@@ -1103,7 +1103,7 @@ export const ICON_STROKE_BY_WEIGHT = {
 @@ -256,31 +256,3 @@
    flex-shrink: 0;
  }
- 
+
 -.settingsGearBtn {
 -  width: 32px;
 -  height: 32px;
@@ -1149,7 +1149,7 @@ export const ICON_STROKE_BY_WEIGHT = {
  import { SettingsQuickMenu } from '../settings/SettingsQuickMenu';
 +import { Button } from '../ui';
  import { useAuthStore } from '../../store/authStore';
- 
+
  export interface UserProfileCardProps {
 @@ -29,8 +30,8 @@ export const UserProfileCard: React.FC<UserProfileCardProps> = React.memo(
        <SettingsQuickMenu
@@ -1190,7 +1190,7 @@ export const ICON_STROKE_BY_WEIGHT = {
    box-sizing: border-box;
    text-align: left;
  }
- 
+
 -.userProfileCard:hover {
 -  background: var(--tint-hover);
 -  color: var(--text-primary);
@@ -1219,7 +1219,7 @@ export const ICON_STROKE_BY_WEIGHT = {
 -import { Button, Tooltip } from '../ui';
 +import { Button, Input, Tooltip } from '../ui';
  import type { TabMeta, TabType } from '../settingsTabsMeta';
- 
+
 @@ -75,44 +74,40 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = React.memo(
          data-testid="settings-sidebar"
        >
@@ -1244,7 +1244,7 @@ export const ICON_STROKE_BY_WEIGHT = {
                </Button>
              </Tooltip>
            ) : null}
- 
+
 -          <div
 -            className={`${navStyles.navItem} no-drag`}
 -            role="search"
@@ -1324,7 +1324,7 @@ export const ICON_STROKE_BY_WEIGHT = {
 @@ -56,73 +56,6 @@
    height: 100%;
  }
- 
+
 -.navBack {
 -  display: inline-flex;
 -  align-items: center;
@@ -1401,7 +1401,7 @@ export const ICON_STROKE_BY_WEIGHT = {
 @@ -216,55 +149,6 @@
    padding: 20px 32px 24px;
  }
- 
+
 -.sidebarTab {
 -  display: flex;
 -  align-items: center;
@@ -1470,7 +1470,7 @@ export const ICON_STROKE_BY_WEIGHT = {
  import styles from './PreviewCard.module.css';
 -import { Button, Tooltip } from '../ui';
 +import { Button, Input, Tooltip } from '../ui';
- 
+
  export const PreviewToolbar: React.FC<PreviewToolbarProps> = ({
 @@ -148,39 +149,24 @@ export const PreviewToolbar: React.FC<PreviewToolbarProps> = ({
        <form

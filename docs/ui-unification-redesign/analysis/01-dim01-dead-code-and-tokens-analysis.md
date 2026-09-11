@@ -1,7 +1,7 @@
 # DIM-01 专项分析：重复、死层与 Token 碎片收敛
 
-> **战役定位**：`UI-UNIFICATION-REDESIGN` 战役阶段一 · 维度一（DIM-01）深度分析报告  
-> **设计依据**：`C:\Software\conex\skill\design\`（`jakub-skills/skills/better-typography`、`better-colors`、`better-ui`、`apple-design.md`）、`AGENTS.md`（§1、§7、§7.1、§8、§13、§14）  
+> **战役定位**：`UI-UNIFICATION-REDESIGN` 战役阶段一 · 维度一（DIM-01）深度分析报告
+> **设计依据**：`C:\Software\conex\skill\design\`（`jakub-skills/skills/better-typography`、`better-colors`、`better-ui`、`apple-design.md`）、`AGENTS.md`（§1、§7、§7.1、§8、§13、§14）
 > **核心使命**：对桌面端核心样式底座 [`tokens.css`](file:///c:/Software/conex/apps/crish-desktop/src/styles/tokens.css)（1758 行）展开穷尽式静态拓扑扫描；清剿 180+ 个完全未消费的死变量与历史兼容包袱；终结 14 档碎步半像素字阶乱象，建立标准 7 档字阶（11, 12, 13, 14, 16, 18, 22px）与 19 处业务消费点的确定性迁移映射；拔除 SettingsPanel、Sidebar 等核心组件裸造的私有样式轮子，实现全工程 **-680+ 行 Net-Negative LOC（净负产出）**。
 
 ---

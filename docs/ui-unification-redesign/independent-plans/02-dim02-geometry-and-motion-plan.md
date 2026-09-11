@@ -1,7 +1,7 @@
 # 02-同心几何标尺与 Apple 物理动效实施方案（DIM-02 独立详案）
 
-> **战役代号**：`UI-UNIFICATION-REDESIGN`  
-> **文档性质**：阶段二 维度二独立实施详案（DIM-02：同心几何标尺、Apple 物理微触感、临界阻尼归一、Dialog 景深磨砂与主题无感门闩）  
+> **战役代号**：`UI-UNIFICATION-REDESIGN`
+> **文档性质**：阶段二 维度二独立实施详案（DIM-02：同心几何标尺、Apple 物理微触感、临界阻尼归一、Dialog 景深磨砂与主题无感门闩）
 > **执行依据**：
 > - `c:/Software/conex/docs/ui-unification-redesign/00-战役调度总纲与工作区规范.md`（战役调度总纲）
 > - `c:/Software/conex/docs/ui-unification-redesign/01-四维度定案与删除面矩阵.md`（四维度基准定案与硬性指标）
@@ -263,7 +263,7 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
   active?: boolean;
   /** 裸核心模式（不应用默认规格与文字包裹，专供复杂列表项/下拉选项等自定义布局按钮） */
   bare?: boolean;
-  /** 
+  /**
    * 静态模式逃逸契约 (DIM-02 Apple Physical Motion Escape)：
    * 为 true 时抑制 :active 按压物理缩放 scale(0.96)，
    * 专供密集树拖拽把手、高频表格操作等防抖动场景。
@@ -322,14 +322,14 @@ animation: previewCardEnter 200ms cubic-bezier(0.175, 0.885, 0.32, 1.5) forwards
 
 $$B_y(t) = 3(1-t)^2 t \cdot P_{1y} + 3(1-t) t^2 \cdot P_{2y} + t^3$$
 
-其中控制点 $P_1 = (0.175, 0.885)$，$P_2 = (0.32, \mathbf{1.5})$。  
+其中控制点 $P_1 = (0.175, 0.885)$，$P_2 = (0.32, \mathbf{1.5})$。
 由于 $P_{2y} = 1.5 > 1.0$，该曲线在 $t \approx 0.72$ 时达到峰值 $y_{max} \approx 1.25 \sim 1.35$：
 - 意味着当滑块从 Tab A 移动到 Tab B（位移 $\Delta x = 120px$）时，滑块在第 180ms 处会冲出目标 Tab B 达 **$36px \sim 42px$**；
 - 随后在最后的 70ms 内强行反向刹车拉回。
 
 #### 2. 物理与视觉危害
 依据 `apple-design.md` §4 Behavior over animation：
-> “Start most UI at damping 1.0 (critically damped) — graceful and non-distracting.  
+> “Start most UI at damping 1.0 (critically damped) — graceful and non-distracting.
 > Add bounce (damping ~0.8) only when the gesture itself carried momentum (a flick, a throw, a drag release). Overshoot on a menu that just faded in feels wrong; overshoot on a tab feels cheap.”
 
 离散点击交互（Discrete Click）的初始速度 $v_0 = 0$。在这种无手势惯性的离散场景下强行加入 50% 过冲，会在用户视线中呈现失控、轻浮的“劣质果冻晃动感”。
@@ -498,10 +498,10 @@ sequenceDiagram
 ```typescript
 /**
  * apps/crish-desktop/src/api/themeTransitionLatch.ts
- * 
+ *
  * DIM-02: 主题切换瞬态过渡冻结门闩 (Zero-Smear Theme Transition Latch)
  * 遵循 better-ui/animations.md 与 Apple 极简理性工程准则。
- * 
+ *
  * 核心机制：
  * 1. 动态注入最高优先级的内联 <style>，通配禁用所有元素的 transition；
  * 2. 同步执行主题属性、类名及个性化 Token 注入；
@@ -574,7 +574,7 @@ export function applyTheme(theme: UiTheme | string): UiTheme {
     const html = document.documentElement;
     html.setAttribute('data-theme', t);
     document.body.setAttribute('data-theme', t);
-    
+
     // 同步 class 状态
     html.classList.toggle('theme-dark', t === 'dark');
     html.classList.toggle('theme-light', t !== 'dark');
@@ -751,7 +751,7 @@ describe('原子控件与同心圆角标准契约 (DIM-02)', () => {
     expect(button).toContain('--btn-radius: var(--radius-lg, 8px)');
     expect(button).toContain('transform: scale(0.96)');
     expect(button).not.toContain('7px');
-    
+
     // SegmentedControl 满足 R_outer = R_inner + Padding
     expect(seg).toContain('--seg-outer-radius: var(--radius-lg, 8px)');
     expect(seg).toContain('--seg-inner-radius: calc(var(--seg-outer-radius) - var(--seg-pad))');

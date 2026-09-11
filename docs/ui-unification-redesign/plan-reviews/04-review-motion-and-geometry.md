@@ -1,7 +1,7 @@
 # 04-Apple 物理动效与几何标尺真实度审查报告（DIM-02 专项评审）
 
-> **战役代号**：`UI-UNIFICATION-REDESIGN`  
-> **审查对象**：`docs/ui-unification-redesign/independent-plans/02-dim02-geometry-and-motion-plan.md`（DIM-02 独立实施方案）  
+> **战役代号**：`UI-UNIFICATION-REDESIGN`
+> **审查对象**：`docs/ui-unification-redesign/independent-plans/02-dim02-geometry-and-motion-plan.md`（DIM-02 独立实施方案）
 > **关联依据**：
 > - `00-战役调度总纲与工作区规范.md`（战役基准）
 > - `01-四维度定案与删除面矩阵.md`（基线裁决）
@@ -10,7 +10,7 @@
 > - `skill/design/jakub-skills/skills/better-ui/animations.md`（按压缩放、可中断过渡、主题门闩与动效克制律）
 > - `AGENTS.md`（§3 Git 提交纪律、§7 严禁补丁与立体验证、§8 反过度设计红线、§13 输入焦点态、§14 色彩空间）
 > - `.agents/LOGIC_PLAN_NO_RETREAT.md`（反退避全文与纯逻辑规划）
-> **评审结论**：**【条件通过 / 需工程级纠偏（Approved with Technical Amendments）】**  
+> **评审结论**：**【条件通过 / 需工程级纠偏（Approved with Technical Amendments）】**
 > 方案大方向坚决精准（拔除 7px 奇数、消灭 1.5 伪物理过冲、建立同心数学约束、引入换肤门闩），但在底层数学边界、Chromium/WebView2 渲染管线机制、GPU 性能开销及并发重入状态机上存在 **5 处重大认知偏差与隐形炸弹**，必须在实施前执行刚性修正。
 
 ---
@@ -49,9 +49,9 @@
 方案公式为：
 $$R_{outer} = R_{inner} + Padding$$
 
-**物理渲染缺陷**：  
-在 CSS 标准规范（W3C CSS Backgrounds & Borders Level 3 §5.1）中，`border-radius` 定义的是 **Border Box（边框盒）外边缘** 的圆角曲率半径。  
-而在 Crish 桌面工程中，外容器（如 SegmentedControl 轨道、Tabs 胶囊底板 `.listPill`、Card 等）几乎 100% 声明了 `border: 1px solid var(--border-subtle)`。  
+**物理渲染缺陷**：
+在 CSS 标准规范（W3C CSS Backgrounds & Borders Level 3 §5.1）中，`border-radius` 定义的是 **Border Box（边框盒）外边缘** 的圆角曲率半径。
+而在 Crish 桌面工程中，外容器（如 SegmentedControl 轨道、Tabs 胶囊底板 `.listPill`、Card 等）几乎 100% 声明了 `border: 1px solid var(--border-subtle)`。
 子元素（滑块、按钮、输入项）放置于父容器的 **Padding Box** 内部。
 
 ```
@@ -77,10 +77,10 @@ $$R_{outer} = R_{inner} + Padding + W_{outer\_border}$$
 或以 Padding Box 内表面圆角 $R_{outer\_inner}$ 作为基准：
 $$R_{outer\_inner} = R_{outer} - W_{outer\_border} = R_{inner} + Padding$$
 
-> **审查定案**：  
-> 当外容器具有 1px 边框且内嵌元素具有 2px 内边距时（如 Tabs `.sizeXs` 与 `.sizeSm`）：  
-> 外边框圆角 $R_o = 8px$，边框厚度 $W = 1px$，间隙 $P = 2px$，内部滑块 $R_i$ 的严密数学解为：  
-> $$R_i = 8px - 1px - 2px = 5px$$（若要避免奇数，则外圆角应定为 $9px$ 或边框计入 Padding 取 $P = 3px \implies R_i = 4px$）。  
+> **审查定案**：
+> 当外容器具有 1px 边框且内嵌元素具有 2px 内边距时（如 Tabs `.sizeXs` 与 `.sizeSm`）：
+> 外边框圆角 $R_o = 8px$，边框厚度 $W = 1px$，间隙 $P = 2px$，内部滑块 $R_i$ 的严密数学解为：
+> $$R_i = 8px - 1px - 2px = 5px$$（若要避免奇数，则外圆角应定为 $9px$ 或边框计入 Padding 取 $P = 3px \implies R_i = 4px$）。
 > 若统一使用整像素偶数，推荐将设计规范明确为：**“原子外边框圆角统一按 Border-Box 外缘定标，小间隙内部圆角采用等距法向拟合”**。
 
 ---
@@ -100,8 +100,8 @@ $$R_{outer\_inner} = R_{outer} - W_{outer\_border} = R_{inner} + Padding$$
 | **Standard (32px)** | 8px | 4px | 24px | 4px | 12px | $4px \le 12px$ (裕度 8px) | ✅ 绝对安全 |
 | **Elevated (32px)** | 12px | 4px | 24px | 8px | 12px | $8px \le 12px$ (裕度 4px) | ✅ 安全 |
 
-**重要几何发现**：  
-全高胶囊（Pill Capsule）在数学上具有自同心性质：  
+**重要几何发现**：
+全高胶囊（Pill Capsule）在数学上具有自同心性质：
 $$R_o = \frac{H_o}{2}, \quad R_i = \frac{H_i}{2} = \frac{H_o - 2P}{2} = \frac{H_o}{2} - P = R_o - P$$
 因此，**只有当内外两层同时为纯胶囊时，公式天然闭环**。当设计强行把矩形固定圆角（如 8px、12px）套在 24px/28px 控件上时，两端会残留一段垂直平直边缘（例如 28px 高度用 8px 圆角，中间留有 $28 - 16 = 12px$ 的直线段），视觉上呈现“带圆角的方块”而非 macOS Tahoe 经典的“流体胶囊”。DIM-02 方案应在规范中显式界定：**分段控制器（SegmentedControl）是采用连续流体胶囊还是几何倒角矩形**。
 
@@ -147,23 +147,23 @@ $$R_o = \frac{H_o}{2}, \quad R_i = \frac{H_i}{2} = \frac{H_o - 2P}{2} = \frac{H_
 
 ### 2.4 非对称内边距（$P_x \neq P_y$）引发的对角线撕裂走样
 
-在日常排版与复杂卡片中，常出现横向留白大于纵向留白的设计（如 $P_y = 6px, P_x = 12px$）。  
+在日常排版与复杂卡片中，常出现横向留白大于纵向留白的设计（如 $P_y = 6px, P_x = 12px$）。
 方案在 §2.3 序号 9 提到 `planProgressBar` 原为 `pad 10px 14px, 内项 6px`，方案简单将其强改为 `pad 8px, 内项 8px`。
 
-**几何学机理警示**：  
-标量公式 $R_o = R_i + P$ **仅在各向同性内边距（$P_x = P_y$）时成立**！  
+**几何学机理警示**：
+标量公式 $R_o = R_i + P$ **仅在各向同性内边距（$P_x = P_y$）时成立**！
 若 $P_x \neq P_y$，圆角弧线沿 45° 对角线方向的法向间距为：
 $$D_{diag} = \sqrt{P_x^2 + P_y^2} - R_o (1 - \frac{1}{\sqrt{2}}) \dots$$
 若继续赋予内子元素单一半径 $R_i$，会导致子元素在垂直方向与水平方向的间隙不均等，角隅处呈现光学拉扯与缝隙粗细不一（视觉撕裂）。
 
-> **几何铁律修正**：  
+> **几何铁律修正**：
 > 凡涉及同心几何绑定的嵌套容器，**其 Corner Inset（角隅邻接内边距）必须强制各向同性（$P_x = P_y = P$）**；若内容区文字需要更大的横向留白，应通过子元素自身的内边距（`padding-inline`）进行光学补偿，严禁破坏外容器的等距角隅槽位！
 
 ---
 
 ### 2.5 Windows WebView2 / Chromium 亚像素渲染与非整数 DPI 缩放走样
 
-在 Windows 桌面宿主中，主流高分屏缩放比例为 **125%（1.25x）** 与 **150%（1.5x）**。  
+在 Windows 桌面宿主中，主流高分屏缩放比例为 **125%（1.25x）** 与 **150%（1.5x）**。
 将方案中五级矩阵映射到物理设备像素（dpx）：
 
 | 逻辑像素 (CSS px) | 100% 缩放 (dpx) | 125% 缩放 (dpx) | 150% 缩放 (dpx) | 200% 缩放 (dpx) | 栅格物理对齐评估 |
@@ -175,12 +175,12 @@ $$D_{diag} = \sqrt{P_x^2 + P_y^2} - R_o (1 - \frac{1}{\sqrt{2}}) \dots$$
 | **14px** (`--radius-2xl`)| 14 dpx | **17.5 dpx (半像素!)**| **21 dpx** (整数)| **28 dpx** (整数)| ⚠️ 125% 下抗锯齿发虚 |
 | **16px** (Window/Dialog)| 16 dpx | **20 dpx** (整数) | **24 dpx** (整数)| **32 dpx** (整数)| 🌟 完美物理对齐 |
 
-**渲染发虚根因（Skia Rasterization Blur）**：  
+**渲染发虚根因（Skia Rasterization Blur）**：
 - 在 125% 缩放（国内 Windows 笔记本最普遍的分辨率档位）下，**6px 与 14px 转化为带 0.5 的物理像素**；
 - Chromium 底层 Skia 栅格化器在处理 7.5 dpx 圆角时，采样点恰好落在物理像素格子的中心交界处，强制触发双线性次像素抗锯齿过滤（Subpixel Filtering），导致弧线边缘产生 1px 宽度的灰暗晕边与发虚感；
 - 而 4px、8px、12px、16px（4 的整数倍）在 125%、150%、200% 下**全部为整物理像素**！
 
-> **优化建议**：  
+> **优化建议**：
 > 系统应尽量以 `4px / 8px / 12px / 16px` 为主干标尺；微型组件内部若采用 6px，外容器应配置 `overflow: hidden;` 或使用实色底板，抑制亚像素半透明缝隙漏色。
 
 ---
@@ -251,7 +251,7 @@ $$D_{diag} = \sqrt{P_x^2 + P_y^2} - R_o (1 - \frac{1}{\sqrt{2}}) \dots$$
    - 释放 140ms `cubic-bezier(0.16, 1, 0.3, 1)`：具备高初始速度并平滑刹车，中途释放（Pointer Up/Cancel）时可中断性极强，符合 Apple 物理手感。
 2. **`prefers-reduced-motion` 遗漏点审查**：
    - 方案在 `Button.module.css` 中做了 `@media (prefers-reduced-motion: reduce)` 降级；
-   - **但遗漏了 `Tabs.module.css` 滑块位移动画的降级！**  
+   - **但遗漏了 `Tabs.module.css` 滑块位移动画的降级！**
      根据 WCAG 2.3.3 与 `apple-design.md` §14：对于开启了减少动态效果的用户，横跨整个屏幕的 Tab 滑块滑动会诱发前庭眩晕（Vestibular Motion Sickness）。
    - **必须补充**：在 `Tabs.module.css` 中，当 `prefers-reduced-motion: reduce` 时，滑块位移过渡时长必须归零或退化为纯 `opacity 100ms` 淡入淡出！
 
@@ -281,10 +281,10 @@ $$y'(t) = \frac{d}{dt}(3t^2 - 2t^3) = 6t - 6t^2 = \mathbf{6t(1 - t)}$$
   $$\mathbf{y'(t) > 0}$$
 
 #### 3. 极值与过冲量判定
-由于在闭区间 $[0, 1]$ 上 $y'(t) \ge 0$ 恒成立，$y(t)$ 是**严格单调递增函数**。  
+由于在闭区间 $[0, 1]$ 上 $y'(t) \ge 0$ 恒成立，$y(t)$ 是**严格单调递增函数**。
 区间最大值必然在终点 $t = 1$ 取得：
 $$y_{max} = y(1) = 3(1)^2 - 2(1)^3 = \mathbf{1.000000}$$
-在整个动画过程中，$y(t)$ 绝不可能超过 $1.0$。  
+在整个动画过程中，$y(t)$ 绝不可能超过 $1.0$。
 **结论**：该曲线在数学上保证了 **绝对零过冲（Overshoot = 0.000%）**，彻底铲除了历史参数 `1.5` 导致的果冻晃荡。
 
 ---
@@ -432,7 +432,7 @@ const _forceReflow = document.body.offsetHeight;
 
 在客户端启动初期（如 `main.tsx` 执行顶层 `applyTheme` 时）：
 - 若脚本在 `<head>` 内或 DOM 加载完成前执行，`document.body` 此时可能为 `null`！
-- 执行 `document.body.offsetHeight` 会直接抛出：  
+- 执行 `document.body.offsetHeight` 会直接抛出：
   `TypeError: Cannot read properties of null (reading 'offsetHeight')`，导致整个应用白屏死锁！
 - **防御修复**：必须读取 `document.documentElement.offsetHeight` 或先进行空值安全校验。
 
@@ -599,7 +599,7 @@ const _forceReflow = document.body.offsetHeight;
 ```typescript
 /**
  * apps/crish-desktop/src/api/themeTransitionLatch.ts
- * 
+ *
  * 生产级主题无感切换门闩 (Hardened Zero-Smear Transition Latch)
  * 解决重入竞争、启动空指针、异步 Promise 逃逸与全页面 Reflow 性能损耗。
  */
@@ -732,5 +732,5 @@ export function withThemeTransitionFreeze<T>(fn: () => T): T {
 └────┴────────────────────────────┴───────────────────────────────────────────────┴──────────────────────┘
 ```
 
-> **评审结语**：  
+> **评审结语**：
 > DIM-02 方案具备扎实的现代设计哲学与彻底消除历史技术债务的决心。只要在落地时吸收本报告指出的 5 大渲染与并发关键修正，即可完美达到 Apple 流体交互与工业级同心几何的极致工程水准。

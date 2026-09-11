@@ -1,8 +1,8 @@
 # 03-测试资产保护与门禁防线评审报告（测试护栏穿透审查与 CI 终审）
 
-> **战役代号**：`UI-UNIFICATION-REDESIGN`  
-> **评审对象**：`docs/ui-unification-redesign/independent-plans/` 全部 6 份独立实施详案（重点对齐 `06-test-guardrails-and-verification-plan.md`）  
-> **评审角色**：测试资产保护与门禁防线审查 Subagent  
+> **战役代号**：`UI-UNIFICATION-REDESIGN`
+> **评审对象**：`docs/ui-unification-redesign/independent-plans/` 全部 6 份独立实施详案（重点对齐 `06-test-guardrails-and-verification-plan.md`）
+> **评审角色**：测试资产保护与门禁防线审查 Subagent
 > **权威依据**：
 > - `AGENTS.md`（§1 反退避铁律、§3 Git 提交纪律、§7 严禁补丁与绕过、§7.1 立体验证纪律、§8 反过度设计硬性红线、§9 测试资产保护铁律、§11 CI 治理与解耦断言、§13 输入与焦点态、§14 色彩空间、§15/§16 桌面调试 Tauri MCP 4000）
 > - `.agents/LOGIC_PLAN_NO_RETREAT.md`（纯逻辑规划、效果锁与验证资产一等公民）
@@ -374,5 +374,5 @@
 | **新增契约测试完备性** | 纠正 12 处虚假靶标路径与 `--sep-*` 误杀规则 | **AMENDMENT REQUIRED (必须整改)** |
 | **CI 门禁全景闭环** | 下沉 `ResizeObserverManager`，补齐结构检查命令 | **PASS (整改路径清晰)** |
 
-> **签署意见**：  
+> **签署意见**：
 > 本评审报告揭露的 5 项缺陷均为**真实代码级事实断言**。在方案实施阶段，各执行 Agent 必须以本报告给出的纠偏数据与修正代码为执行基准。通过上述刚性加固后，本次 `UI-UNIFICATION-REDESIGN` 战役的测试资产防护网将达到极高水准，完全确保重构全程零破损、零倒退、净负产出真达标！

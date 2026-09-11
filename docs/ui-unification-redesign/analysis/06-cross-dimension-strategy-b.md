@@ -1,7 +1,7 @@
 # 跨维度综合建议：方案架构 B（工程稳健性、防回归资产保护与无障碍防线）
 
-> **战役代号**：`UI-UNIFICATION-REDESIGN`  
-> **文档定位**：阶段一 前置深度审计与维度架构建议（方案架构 B）  
+> **战役代号**：`UI-UNIFICATION-REDESIGN`
+> **文档定位**：阶段一 前置深度审计与维度架构建议（方案架构 B）
 > **权威依据**：
 > - `C:\Software\conex\skill\design\`（`apple-design.md` 物理流体动效体系 + `jakub-skills` 7 大工程级设计技能）
 > - `docs/ui-unification-redesign/00-战役调度总纲与工作区规范.md`（战役调度总纲）
@@ -182,7 +182,7 @@
   /* 采用 1.5px 软灰焦点环 + 0.5px 外层透明过渡，兼顾柔和质感与清晰可辨 */
   :focus-visible {
     outline: none;
-    box-shadow: 
+    box-shadow:
       0 0 0 1px var(--bg-card),
       0 0 0 2.5px color-mix(in srgb, var(--border-color) 88%, var(--text-primary) 12%);
   }

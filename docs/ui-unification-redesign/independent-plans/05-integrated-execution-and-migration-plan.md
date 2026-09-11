@@ -1,7 +1,7 @@
 # 05-跨维度全域集成与先删后改实施方案（总集成与迁移详案）
 
-> **战役代号**：`UI-UNIFICATION-REDESIGN`  
-> **文档性质**：阶段二 跨维度独立详案（方案 05：总集成、全域依赖拓扑与先删后改实施规划）  
+> **战役代号**：`UI-UNIFICATION-REDESIGN`
+> **文档性质**：阶段二 跨维度独立详案（方案 05：总集成、全域依赖拓扑与先删后改实施规划）
 > **执行依据**：
 > - `c:/Software/conex/docs/ui-unification-redesign/00-战役调度总纲与工作区规范.md`（战役调度总纲）
 > - `c:/Software/conex/docs/ui-unification-redesign/01-四维度定案与删除面矩阵.md`（四维度基准定案）

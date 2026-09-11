@@ -1,9 +1,9 @@
 # 02-死代码清除与负产出刚性审计评审报告
 
-> **战役代号**：`UI-UNIFICATION-REDESIGN`  
-> **评审专职**：死代码清除与负产出刚性审计（Negative Churn & Dead Code Rigid Audit）  
-> **文档性质**：战役阶段二 交叉独立评审报告（评审报告 02）  
-> **审查对象**：`docs/ui-unification-redesign/independent-plans/` 下全部 6 份独立详案（重点深审 01、03、04、05 方案之“删什么/收敛什么”专章，以及 06 方案之自动断言脚本）  
+> **战役代号**：`UI-UNIFICATION-REDESIGN`
+> **评审专职**：死代码清除与负产出刚性审计（Negative Churn & Dead Code Rigid Audit）
+> **文档性质**：战役阶段二 交叉独立评审报告（评审报告 02）
+> **审查对象**：`docs/ui-unification-redesign/independent-plans/` 下全部 6 份独立详案（重点深审 01、03、04、05 方案之“删什么/收敛什么”专章，以及 06 方案之自动断言脚本）
 > **执行依据**：
 > - `AGENTS.md`（通用协作纪律、§1 逻辑规划与反退避、§3 Git 提交纪律、§7 严禁补丁与作弊、§7.1 立体验证纪律、§8 反过度设计硬性红线、§9 测试资产保护铁律、§11 CI 治理与行数门禁、§13 输入与焦点态、§14 色彩空间）
 > - `.agents/LOGIC_PLAN_NO_RETREAT.md`（反退避全文、效果锁与纯逻辑规划）
@@ -99,7 +99,7 @@
 ### 2.2 伪死变量（Pseudo-Dead Tokens）深度现场取证
 
 #### 1. `--sep-bg-panel-solid` 隐蔽调用证据链
-方案 01（第 272、289 行）直接在 Diff 中将其从 Light（`tokens.css:209`）与 Dark（`tokens.css:1024`）中彻底抹去。  
+方案 01（第 272、289 行）直接在 Diff 中将其从 Light（`tokens.css:209`）与 Dark（`tokens.css:1024`）中彻底抹去。
 **物理查验反例**：该变量在全仓 4 个业务与样式文件中共计出现 **6 次调用**：
 1. [`apps/crish-desktop/src/components/chat-card/ProjectPickerMenu.module.css:98`](file:///c:/Software/conex/apps/crish-desktop/src/components/chat-card/ProjectPickerMenu.module.css#L98)：
    ```css
@@ -249,7 +249,7 @@
 ```
 
 #### `.userProfileCard` 虚报 19 行的技术扣除剖析
-方案 03 宣称整块删除 `Sidebar.module.css:163-192` 共 30 行。  
+方案 03 宣称整块删除 `Sidebar.module.css:163-192` 共 30 行。
 **现场源码还原**：
 - 第 163-180 行（共 18 行）声明了 `.userProfileCard` 的 `width: 100%`, `display: flex`, `align-items: center`, `gap`, `padding` 以及左右头像文字的流式布局网格；
 - 第 182-192 行（共 11 行）声明了 hover、active 和 isOpen 状态背景色；
@@ -306,7 +306,7 @@
 - 紧接着在 **Phase 4（第 376 行与第 417 行）**，又将 `DiffCard.module.css:430-456 暴力透明覆盖补丁` 计入色彩降级的 -180 行削减中；
 - 方案 01 表 3.3（第 214 行）与方案 04 表 2.0（第 70 行）亦存在此项归口重叠。
 
-**终审归口裁判**：  
+**终审归口裁判**：
 依据“单一真理归口（SSOT Accounting）”铁律，`DiffCard.module.css` 的 `.inlineActionBtn` 暴力透明覆盖代码本质是为掩盖一屏多主色而打的业务补丁，**强制且唯一归口于 DIM-04（定额 -33 行）**；在 DIM-03 及 Phase 3 中**坚决予以剔除**，严禁在汇总时重复叠加，彻底消除 33~42 行的“幽灵双计”。
 
 ---
@@ -618,18 +618,18 @@ main();
 
 依据本评审报告确立的终审裁决，向战役执行调度团队下发以下 **5 项刚性整改指令**。在以下指令得到修正之前，战役不得进入 Phase 3/4 的合并阶段：
 
-1. **【指令 1 - 阻断误删滚动条】**：  
+1. **【指令 1 - 阻断误删滚动条】**：
    坚决禁止执行方案 01 表 6.1 中关于删除 `tokens.css:415-445` 的指令！该区域为全仓字体栈与动画缓动核心参数。滚动条体系属于正在调优的生产资产，非死代码。
-2. **【指令 2 - 伪死变量受控迁移】**：  
+2. **【指令 2 - 伪死变量受控迁移】**：
    `--sep-bg-panel-solid` 与 `--sep-font-size-header` 必须先在 `ProjectPickerMenu`、`SmartPanel` 等 4 个文件中完成原子样式替换，确认外部引用降为 0 后，方可在 Phase 5 拔除声明，严禁在 Phase 1 直接物理剔除。
-3. **【指令 3 - 纠正全套文件路径】**：  
+3. **【指令 3 - 纠正全套文件路径】**：
    各子 Agent 编写代码与提交时，一律使用物理真实路径（`workspace/PreviewCard.module.css`、`settings/SettingsPanel.module.css`、`sidebar/Sidebar.module.css`），严禁使用方案中臆造的碎片化子目录。
-4. **【指令 4 - 根除双重计算归口】**：  
+4. **【指令 4 - 根除双重计算归口】**：
    `DiffCard.module.css:430-462`（-33 行）归口且仅归口于 DIM-04（Phase 4），DIM-03（Phase 3）严禁再次将其计入，确保全仓财务报表级的数据纯正。
-5. **【指令 5 - 部署重构后的断言引擎】**：  
+5. **【指令 5 - 部署重构后的断言引擎】**：
    方案 06 必须采用本评审报告 §6.2 重构的 `check-ui-negative-churn.mjs`，拔除“文件不存在直接送分”的作弊后门，以真实物理基线和硬阻断逻辑守护战役全过程。
 
 ---
 
-> **评审员结论签署**：  
+> **评审员结论签署**：
 > 本评审报告已完成全仓数学级复核，纠正了 3 处重大行数误报、排除了 2 处伪死变量隐患、清除了跨阶段双重计算，并重构了自动化守门引擎。在修正上述偏差后，全仓 Net-Negative LOC 定额为 **-746 行**，切实可信地达成 $\ge 650$ 行战役铁律。评审结论：**【附条件通过整改后放行】**。
