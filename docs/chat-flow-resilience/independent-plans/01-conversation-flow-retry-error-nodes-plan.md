@@ -1,9 +1,9 @@
 # Conex 对话流韧性与端到端解耦系统性方案
 ## —— 基于 DeepSeek Harness 分类思想的流内原生重试、错误自愈与四大病灶彻底根治架构
 
-> **文档版本**：v1.0.0-PROPOSAL  
-> **文档位置**：`docs/chat-flow-resilience/independent-plans/01-conversation-flow-retry-error-nodes-plan.md`  
-> **状态**：架构方案完成 / 待评审执行  
+> **文档版本**：v1.0.0-PROPOSAL
+> **文档位置**：`docs/chat-flow-resilience/independent-plans/01-conversation-flow-retry-error-nodes-plan.md`
+> **状态**：架构方案完成 / 待评审执行
 > **核心领域**：Chat Stream / Resilience Engineering / In-Flow UI / State Machine Auto-Healing
 
 ---
@@ -196,23 +196,23 @@
 stateDiagram-v2
     [*] --> Inflight: 发起流式请求 (Run Started)
     Inflight --> Working: 等待首 Token (TTFT)
-    
+
     Working --> Thinking: 接收到首个真实 <think>
     Working --> StreamingText: 接收到首个真实正文 Token
-    
+
     Thinking --> StreamingText: 思考收口闭合
     StreamingText --> TerminalSuccess: 正常收尾完成
-    
+
     Inflight --> RetryEvaluating: 捕获底层传输错误
     Working --> RetryEvaluating: 捕获超时/中断
-    
+
     state RetryEvaluating <<choice>>
     RetryEvaluating --> ModelRetrying: 判定为可自愈错误 (Network/429/5xx 且 attempt < max)
     RetryEvaluating --> TurnErrorTerminal: 判定为不可重试 (Auth/Context) 或 超过最大次数
-    
+
     ModelRetrying --> Inflight: 倒计时归零或用户点击“立即重试”
     ModelRetrying --> UserAborted: 用户点击“取消重试”
-    
+
     TurnErrorTerminal --> Inflight: 用户点击“重试此轮 (Retry Turn)”
     TurnErrorTerminal --> SettledClean: 用户发送新消息 (触发绝对自愈)
 ```
@@ -442,13 +442,13 @@ sequenceDiagram
     SendHook->>Healer: settleStaleSessionProcessingMessages()
     Healer->>Store: 清扫历史 processing/queued 僵尸状态并强制闭合
     Store-->>SendHook: 自愈完成 (AI 确定处于空闲)
-    
+
     SendHook->>Store: 乐观添加 User 消息 (status: processing)
     SendHook->>Store: 创建 Assistant 消息占位 (thinking: undefined)
     SendHook->>Bridge: 发起底层连接 (startRunTask)
-    
+
     UI->>UI: 渲染 WorkingStatusIndicator (🟢 正在连接模型...)
-    
+
     alt 网络抖动 (触发 429 或断网)
         Bridge-->>Store: provider-diagnostic (phase: retry, attempt: 1/3, backoff: 3000ms)
         Store-->>UI: 更新 ephemeralChatStore & continuityUiStore
@@ -520,7 +520,7 @@ export interface EphemeralChatStatus {
 
 export interface EphemeralChatState {
   statusBySession: Record<string, EphemeralChatStatus | null>;
-  
+
   // 设置流内瞬态状态（严格单例，新事件覆盖旧事件）
   setEphemeralStatus: (
     sessionId: string,
@@ -632,22 +632,22 @@ gantt
     title 对话流韧性与端到端解耦执行蓝图
     dateFormat  X
     axisFormat %s
-    
+
     section 阶段一：根除死锁与切除假思考 (P0)
     自愈契约实现 (settleStaleSessionProcessingMessages) :p1_1, 0, 1
     发送入口强力自愈接线 (useSlashSend & useChatMessages) :p1_2, 1, 2
     切除 streamSession & useRunStreamingAssistant 假思考 :p1_3, 2, 3
-    
+
     section 阶段二：工作态解耦与组件开发 (P1)
     WorkingStatusIndicator 极简脉冲组件实现 :p2_1, 3, 4
     ModelRetryNode 流内重试节点实现 :p2_2, 4, 5
     TurnErrorNode 流内终态错误节点实现 :p2_3, 5, 6
-    
+
     section 阶段三：管道打通与状态接线 (P2)
     ephemeralChatStore 升级与 diagnosticHandlers 接入 :p3_1, 6, 7
     streamCallbacksEvents 终态错误收口重构 :p3_2, 7, 8
     MessageContent 综合组装与平滑过渡 :p3_3, 8, 9
-    
+
     section 阶段四：立体化测试与回归门禁 (P3)
     单元测试套件全覆盖 :p4_1, 9, 10
     全量集成与极端边界用例验证 :p4_2, 10, 11

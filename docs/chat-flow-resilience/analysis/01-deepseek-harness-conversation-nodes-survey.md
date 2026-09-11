@@ -1,7 +1,7 @@
 # DeepSeek Harness 对话流韧性与 ConversationNode 架构深度调研报告
 
-> **权威归属**：`docs/chat-flow-resilience/analysis/01-deepseek-harness-conversation-nodes-survey.md`  
-> **调研目标**：深入解构 `reference/deepseek-harness` 如何将模型重试、网络重连与错误自愈结构化分类并融入对话流（chat flow）内部，为 Conex 对话流韧性改造提供确定性架构蓝图。  
+> **权威归属**：`docs/chat-flow-resilience/analysis/01-deepseek-harness-conversation-nodes-survey.md`
+> **调研目标**：深入解构 `reference/deepseek-harness` 如何将模型重试、网络重连与错误自愈结构化分类并融入对话流（chat flow）内部，为 Conex 对话流韧性改造提供确定性架构蓝图。
 > **核心源码定位**：
 > - 核心节点定义：`packages/client/ui-chat/src/client/conversation-nodes/{retry.ts, turn-error.ts, turn-max-tokens.ts, turn-process.ts, turn-tail.ts}`
 > - 状态与事件契约：`packages/client/ui-chat/src/client/contract/{chat-nodes.ts, snapshot.ts, turn-process.ts}`、`packages/client/ui-conversation/src/client/contract/{conversation.ts, records.ts}`、`packages/core/session/src/types.ts`
