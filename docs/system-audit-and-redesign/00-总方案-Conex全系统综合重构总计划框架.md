@@ -1,8 +1,8 @@
 # Conex / Crish 全系统综合重构总计划框架（权威定案版）
 
-> **【权威标识】**：`docs/system-audit-and-redesign/00-总方案-Conex全系统综合重构总计划框架.md`  
-> **制定者**：主控调度者（Main Agent）  
-> **依据文件**：15 份专题分析报告（`analysis/01~15`）、7 份独立总方案（`independent-plans/01~07`）、3 份严格批判性评审意见（`plan-reviews/01~03`）  
+> **【权威标识】**：`docs/system-audit-and-redesign/00-总方案-Conex全系统综合重构总计划框架.md`
+> **制定者**：主控调度者（Main Agent）
+> **依据文件**：15 份专题分析报告（`analysis/01~15`）、7 份独立总方案（`independent-plans/01~07`）、3 份严格批判性评审意见（`plan-reviews/01~03`）
 > **核心原则**：纯逻辑时序、所有问题同权、零优先级砍项、效果锁不可妥协、反过度设计与反退避。
 
 ---

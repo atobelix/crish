@@ -1,11 +1,11 @@
 # 06-Tauri 桌面壳层与原生终端宿主全盘代码与测试审计报告
 
-> **审计执行人**：全盘代码与测试审计师 06（Tauri Desktop Shell & Native ConPTY Host Auditor）  
+> **审计执行人**：全盘代码与测试审计师 06（Tauri Desktop Shell & Native ConPTY Host Auditor）
 > **审计范围**：
 >
 > - `apps/agent-workbench/src-tauri/src/`（`pty/`, `engine_channels.rs`, `process.rs`, `dev_mcp.rs`, `command_manifest.rs`, `core_event_bridge.rs`, `config/`, `run/`, `engine_provider/`, `fs_commands/`, `main.rs`, `lib.rs` 等）
 > - `apps/agent-workbench/src-tauri/tests/`（`config_command_names_contract.rs`, `event_bridge_contract.rs`, `lr_t1_memory_prod_ban.rs`, `server_integration.rs` 等）
-> - 前端 IPC 交互边界（`apps/crish-desktop/src/api/transport/commandMap.ts`, `commandManifest.ts`, `ptySessionApi.ts`, `ptyRegistry.ts`, `TerminalCard.xterm.tsx`, `command-contract-drift.test.ts` 等）  
+> - 前端 IPC 交互边界（`apps/crish-desktop/src/api/transport/commandMap.ts`, `commandManifest.ts`, `ptySessionApi.ts`, `ptyRegistry.ts`, `TerminalCard.xterm.tsx`, `command-contract-drift.test.ts` 等）
 >   **审计准则**：`docs/system-audit-and-redesign/00-战役通则与协同执行规范.md`、反过度设计红线、只读审计、零废话、直击根因与代码事实。
 
 ---

@@ -2,9 +2,9 @@
 
 > **【调度与定时器铁律】**：如果设置定时器，最短是 **100 秒**；如果命令过长，最好的方式是**等待命令完成后的系统推送通知（Reactive Wakeup）**，而不是一直轮询命令情况。
 
-> **文档标识**：`docs/system-audit-and-redesign/detailed-plans/07-原生ConPTY终端与质量门禁执行详案.md`  
-> **制定角色**：【维度 7 详案架构师: DIM-07 原生 ConPTY 纯终端、设计系统契约与质量门禁闭环执行详案】  
-> **权威基准**：`docs/system-audit-and-redesign/00-战役通则与协同执行规范.md`、`docs/system-audit-and-redesign/00-总方案-Conex全系统综合重构总计划框架.md`、`docs/system-audit-and-redesign/independent-plans/07-原生ConPTY终端与质量门禁独立总方案.md`、`docs/system-audit-and-redesign/analysis/11-原生ConPTY纯终端与命令输出面板双轨架构方案.md`  
+> **文档标识**：`docs/system-audit-and-redesign/detailed-plans/07-原生ConPTY终端与质量门禁执行详案.md`
+> **制定角色**：【维度 7 详案架构师: DIM-07 原生 ConPTY 纯终端、设计系统契约与质量门禁闭环执行详案】
+> **权威基准**：`docs/system-audit-and-redesign/00-战役通则与协同执行规范.md`、`docs/system-audit-and-redesign/00-总方案-Conex全系统综合重构总计划框架.md`、`docs/system-audit-and-redesign/independent-plans/07-原生ConPTY终端与质量门禁独立总方案.md`、`docs/system-audit-and-redesign/analysis/11-原生ConPTY纯终端与命令输出面板双轨架构方案.md`
 > **执行纪律**：纯逻辑规划、效果锁不降级、问题同权、禁止退避裁判、零代码回撤、pwsh7 执行环境对齐、UTF-8 无 BOM 编码、严禁子 Agent 私自 git 提交。
 
 ---

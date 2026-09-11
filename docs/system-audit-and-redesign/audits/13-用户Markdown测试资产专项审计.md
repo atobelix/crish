@@ -1,8 +1,8 @@
 # 13 - 用户 Markdown 测试资产专项保护与审计报告
 
-> **审计执行人**：全盘代码与测试审计师 13（用户核心测试资产专项保护与审计）  
-> **审计基准规范**：[`00-战役通则与协同执行规范.md`](../00-战役通则与协同执行规范.md) 与 [`AGENTS.md §9 测试资产保护铁律`](../../../AGENTS.md)  
-> **审查对象**：`reference/markdown-editor/`（含源码与 `tests/unit/` 下全部 88 个测试套件，以及主仓库专项 E2E spec）  
+> **审计执行人**：全盘代码与测试审计师 13（用户核心测试资产专项保护与审计）
+> **审计基准规范**：[`00-战役通则与协同执行规范.md`](../00-战役通则与协同执行规范.md) 与 [`AGENTS.md §9 测试资产保护铁律`](../../../AGENTS.md)
+> **审查对象**：`reference/markdown-editor/`（含源码与 `tests/unit/` 下全部 88 个测试套件，以及主仓库专项 E2E spec）
 > **审计原则**：只找问题、零废话、清理无用冗余、数据说话、穿透本质。
 
 ---
@@ -197,7 +197,7 @@ if (prevPos === windowStart && windowStart > 0) {
 expect(duration).toBeLessThan(500); // 绝对毫秒时钟断言
 ```
 
-**严重风险证据**：在多 Worker 并发运行 Vitest JSON 报告时，由于 CPU 调度与垃圾回收波动，该用例实测耗时 **519.8ms**，导致测试硬性失败报错：`AssertionError: expected 519.8030999999999 to be less than 500`。  
+**严重风险证据**：在多 Worker 并发运行 Vitest JSON 报告时，由于 CPU 调度与垃圾回收波动，该用例实测耗时 **519.8ms**，导致测试硬性失败报错：`AssertionError: expected 519.8030999999999 to be less than 500`。
 **审计裁决**：单元测试中直接使用绝对物理时间（`< 500ms`）作为断言是严重的反模式。必须改为：
 
 1. 先做 1 次微型预热（Warmup）；
@@ -324,7 +324,7 @@ An update to CodeBlock inside a test was not wrapped in act(...).
 expect(avgMs).toBeLessThan(0.6); // 硬性阈值 0.6ms
 ```
 
-当系统在高负载（12 进程全开跑 Vitest）时，由于 Node.js 进程 CPU 争抢，`append` 均值耗时上升至 **2.21ms**，触发测试失败。  
+当系统在高负载（12 进程全开跑 Vitest）时，由于 Node.js 进程 CPU 争抢，`append` 均值耗时上升至 **2.21ms**，触发测试失败。
 **审计建议**：将非专用 Benchmark 文件中的单元性能断言放宽为保护性上限（如 `< 5.0ms` 防止 O(N) 回归即可），严苛数字由 `tests/perf/baseline-collect.mjs` 独立基准承接。
 
 ---

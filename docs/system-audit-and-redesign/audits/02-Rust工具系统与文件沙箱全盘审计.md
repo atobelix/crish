@@ -1,7 +1,7 @@
 # Rust 工具系统与文件沙箱全盘审计报告（02: 审计师专卷）
 
-> **【战役审计定位】**：本报告遵循 `docs/system-audit-and-redesign/00-战役通则与协同执行规范.md` 与反退避铁律。  
-> **审计范围**：`crates/agent-tools/`、`crates/conex-fs/`、`crates/conex-sandbox/`（涵盖全部源码 `src/`、测试 `tests/` 及关联测试桩）。  
+> **【战役审计定位】**：本报告遵循 `docs/system-audit-and-redesign/00-战役通则与协同执行规范.md` 与反退避铁律。
+> **审计范围**：`crates/agent-tools/`、`crates/conex-fs/`、`crates/conex-sandbox/`（涵盖全部源码 `src/`、测试 `tests/` 及关联测试桩）。
 > **执行原则**：只找问题、零废话、零粉饰、直击架构断层与安全隐患，为后续综合重构提供不可辩驳的机器真值与代码证据。
 
 ---

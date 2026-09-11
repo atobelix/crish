@@ -4,10 +4,10 @@
 
 ## 07-原生ConPTY终端与质量门禁独立总方案：Windows 原生 ConPTY 纯终端双轨架构、全系统设计系统契约（4 级曲率/Tooltip/温润焦点态）、测试资产保护与全系统四级门禁闭环
 
-> **权威标识**：`docs/system-audit-and-redesign/independent-plans/07-原生ConPTY终端与质量门禁独立总方案.md`  
-> **制定角色**：【独立方案编制师 07: 原生 ConPTY 纯终端与全系统质量门禁视角独立总方案】  
-> **关联基准**：`docs/system-audit-and-redesign/00-战役通则与协同执行规范.md`、`docs/system-audit-and-redesign/00-主控拍板最终维度矩阵.md`  
-> **核心专题**：深度聚焦 **DIM-07（原生 ConPTY 纯终端与双轨命令监视器）**、**DIM-01（全系统设计系统契约/4 级曲率/温润焦点态）**、**DIM-04（测试资产保护/四级质量门禁/CDP 9222 真机验收）**，并统筹贯穿全系统 7 大拍板重构维度。  
+> **权威标识**：`docs/system-audit-and-redesign/independent-plans/07-原生ConPTY终端与质量门禁独立总方案.md`
+> **制定角色**：【独立方案编制师 07: 原生 ConPTY 纯终端与全系统质量门禁视角独立总方案】
+> **关联基准**：`docs/system-audit-and-redesign/00-战役通则与协同执行规范.md`、`docs/system-audit-and-redesign/00-主控拍板最终维度矩阵.md`
+> **核心专题**：深度聚焦 **DIM-07（原生 ConPTY 纯终端与双轨命令监视器）**、**DIM-01（全系统设计系统契约/4 级曲率/温润焦点态）**、**DIM-04（测试资产保护/四级质量门禁/CDP 9222 真机验收）**，并统筹贯穿全系统 7 大拍板重构维度。
 > **遵循铁律**：纯逻辑规划、效果锁不降级、问题同权、禁止退避裁判、零代码回撤、pwsh7 环境对齐、UTF-8 无 BOM 编码、严禁直接 git 提交。
 
 ---

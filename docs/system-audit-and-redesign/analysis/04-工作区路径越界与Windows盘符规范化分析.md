@@ -1,7 +1,7 @@
 # 工作区路径越界与 Windows 盘符规范化深度分析报告
 
-**分析师角色**：工作区路径越界与 Windows 盘符规范化分析师  
-**被分析模块**：`crates/agent-tools/`、`crates/conex-tools/`、`crates/session-loop/`、`crates/conex-fs/`、`apps/agent-workbench/src-tauri/`  
+**分析师角色**：工作区路径越界与 Windows 盘符规范化分析师
+**被分析模块**：`crates/agent-tools/`、`crates/conex-tools/`、`crates/session-loop/`、`crates/conex-fs/`、`apps/agent-workbench/src-tauri/`
 **核心现象**：
 用户在让 AI 读写 `c:/Software/conex/temp_ai_test_workspace` 时，工具报错：
 `[tool.path_escape] Path escapes workspace: c:/Software/conex/temp_ai_test_workspace`

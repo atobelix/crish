@@ -1,8 +1,8 @@
 # Rust 自动化工具与桌面/浏览器感知系统全盘审计报告
 
-> **审计执行人**：全盘代码与测试审计师 05  
-> **审计基准**：`docs/system-audit-and-redesign/00-战役通则与协同执行规范.md`、`ANTI_OVERENGINEERING_GUARDRAILS.md`、`AGENTS.md`  
-> **审查范围**：`crates/conex-browser/`、`crates/conex-browser-tools/`、`crates/conex-computer/`、`crates/conex-computer-tools/`、`crates/conex-doc-collab/`  
+> **审计执行人**：全盘代码与测试审计师 05
+> **审计基准**：`docs/system-audit-and-redesign/00-战役通则与协同执行规范.md`、`ANTI_OVERENGINEERING_GUARDRAILS.md`、`AGENTS.md`
+> **审查范围**：`crates/conex-browser/`、`crates/conex-browser-tools/`、`crates/conex-computer/`、`crates/conex-computer-tools/`、`crates/conex-doc-collab/`
 > **审计原则**：只找问题、零废话、清理无用冗余、严禁打补丁与伪验证、问题同权。
 
 ---

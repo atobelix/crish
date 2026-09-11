@@ -1,7 +1,7 @@
 # 思考强度档位调节与 PromptCache 命中机制全链路设计与深度诊断报告
 
-> **报告编号**：ANALYSIS-14  
-> **责任角色**：子 Agent 14 · 思考强度调节与 PromptCache 命中机制全链路设计分析师  
+> **报告编号**：ANALYSIS-14
+> **责任角色**：子 Agent 14 · 思考强度调节与 PromptCache 命中机制全链路设计分析师
 > **涉及核心文件**：
 >
 > - `apps/crish-desktop/src/components/chat-message-row/CacheMetricsBadge.tsx`

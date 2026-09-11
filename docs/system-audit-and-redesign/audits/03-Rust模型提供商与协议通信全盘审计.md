@@ -1,8 +1,8 @@
 # 03-Rust 模型提供商与协议通信全盘审计报告
 
-> **审计范围**：`crates/agent-provider/`、`crates/conex-types/`、`crates/conex-shared/`、`crates/conex-telemetry/`（含全部 `src/`, `tests/`, `benches/`, `contracts/`）  
-> **审计职责**：全盘代码与测试审计师 03: Rust 模型提供商与协议通信（只找问题、零废话、清理无用冗余、严禁修改业务代码与 Git 操作）  
-> **执行标准**：`docs/system-audit-and-redesign/00-战役通则与协同执行规范.md` 及反退避铁律  
+> **审计范围**：`crates/agent-provider/`、`crates/conex-types/`、`crates/conex-shared/`、`crates/conex-telemetry/`（含全部 `src/`, `tests/`, `benches/`, `contracts/`）
+> **审计职责**：全盘代码与测试审计师 03: Rust 模型提供商与协议通信（只找问题、零废话、清理无用冗余、严禁修改业务代码与 Git 操作）
+> **执行标准**：`docs/system-audit-and-redesign/00-战役通则与协同执行规范.md` 及反退避铁律
 > **编码要求**：UTF-8 无 BOM
 
 ---

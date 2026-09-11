@@ -1,7 +1,7 @@
 # 01-Rust 会话循环与编排内核全盘审计报告
 
-> **审计范围**：`crates/session-loop/` 与 `crates/orchestrator/`（含全部 `src/`, `tests/`, `benches/`）  
-> **审计职责**：全盘代码与测试审计师 01（只找问题、零废话、清理无用冗余、严禁修改业务代码与 Git 操作）  
+> **审计范围**：`crates/session-loop/` 与 `crates/orchestrator/`（含全部 `src/`, `tests/`, `benches/`）
+> **审计职责**：全盘代码与测试审计师 01（只找问题、零废话、清理无用冗余、严禁修改业务代码与 Git 操作）
 > **执行标准**：`docs/system-audit-and-redesign/00-战役通则与协同执行规范.md` 及反退避铁律
 
 ---

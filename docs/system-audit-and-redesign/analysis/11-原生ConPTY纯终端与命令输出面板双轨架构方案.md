@@ -1,8 +1,8 @@
 # 原生 ConPTY 纯终端与命令输出面板双轨架构深度分析与重构方案
 
-> **文件标识**：`docs/system-audit-and-redesign/analysis/11-原生ConPTY纯终端与命令输出面板双轨架构方案.md`  
-> **责任角色**：【子Agent 11: 原生 ConPTY 纯终端与命令输出面板双轨架构方案分析师】  
-> **核心使命**：彻底解耦并规范化「用户原生交互终端」与「AI 命令输出只读面板」的双轨职责，深入剖析历史前端无法打字与输出混杂的根因，设计基于 Rust `portable-pty` 的 ConPTY 终端宿主与前端 `@xterm/xterm` 接入方案，制定命令监视器的只读流式与 UI 交互标准。  
+> **文件标识**：`docs/system-audit-and-redesign/analysis/11-原生ConPTY纯终端与命令输出面板双轨架构方案.md`
+> **责任角色**：【子Agent 11: 原生 ConPTY 纯终端与命令输出面板双轨架构方案分析师】
+> **核心使命**：彻底解耦并规范化「用户原生交互终端」与「AI 命令输出只读面板」的双轨职责，深入剖析历史前端无法打字与输出混杂的根因，设计基于 Rust `portable-pty` 的 ConPTY 终端宿主与前端 `@xterm/xterm` 接入方案，制定命令监视器的只读流式与 UI 交互标准。
 > **遵循铁律**：`AGENTS.md`、`ANTI_OVERENGINEERING_GUARDRAILS.md`（pwsh7，写文件 UTF-8 无 BOM，纯逻辑分析，零代码回撤，严禁 git 提交）。
 
 ---

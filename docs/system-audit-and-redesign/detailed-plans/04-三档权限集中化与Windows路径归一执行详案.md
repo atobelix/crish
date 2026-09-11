@@ -1,9 +1,9 @@
 # DIM-04 详案：三档权限集中化大刀阔斧重构与 Windows 路径归一执行详案
 
-> **【权威标识】**：`docs/system-audit-and-redesign/detailed-plans/04-三档权限集中化与Windows路径归一执行详案.md`  
-> **编制角色**：【维度 4 详案架构师: DIM-04 三档权限集中化大刀阔斧重构与 Windows 路径归一执行详案】  
-> **前置必读规范**：`docs/system-audit-and-redesign/00-战役通则与协同执行规范.md`、`docs/system-audit-and-redesign/00-总方案-Conex全系统综合重构总计划框架.md`  
-> **核心裁决遵循**：严格遵循主控 6 大关键裁决，特别是 **RUL-03（完全访问真正信任 + 系统核心目录物理红线）** 与 **RUL-04（统一大写盘符 `C:/` + 正斜杠 `/` + UNC 异步隔离）**。  
+> **【权威标识】**：`docs/system-audit-and-redesign/detailed-plans/04-三档权限集中化与Windows路径归一执行详案.md`
+> **编制角色**：【维度 4 详案架构师: DIM-04 三档权限集中化大刀阔斧重构与 Windows 路径归一执行详案】
+> **前置必读规范**：`docs/system-audit-and-redesign/00-战役通则与协同执行规范.md`、`docs/system-audit-and-redesign/00-总方案-Conex全系统综合重构总计划框架.md`
+> **核心裁决遵循**：严格遵循主控 6 大关键裁决，特别是 **RUL-03（完全访问真正信任 + 系统核心目录物理红线）** 与 **RUL-04（统一大写盘符 `C:/` + 正斜杠 `/` + UNC 异步隔离）**。
 > **状态**：**权威执行详案定稿（Authoritative Detailed Plan）**。
 
 ---

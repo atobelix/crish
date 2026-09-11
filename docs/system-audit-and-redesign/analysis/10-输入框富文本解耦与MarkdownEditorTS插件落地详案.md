@@ -1,9 +1,9 @@
 # 输入框富文本解耦与 MarkdownEditor TS 插件落地详案深度分析报告
 
-> **分析师角色**：【子Agent 10: 输入框富文本解耦与 MarkdownEditor TS 插件落地详案分析师】  
-> **报告类型**：输入框交互解耦、坐标漂移数学推导与几何修复、富文本编辑器 TS 插件化架构与 Rust 后端服务化方案  
-> **权威遵循**：`AGENTS.md`、`ANTI_OVERENGINEERING_GUARDRAILS.md`、`packages/plugin-sdk/`、`packages/editor-kit/`、`reference/markdown-editor/`  
-> **产出目标路径**：`docs/system-audit-and-redesign/analysis/10-输入框富文本解耦与MarkdownEditorTS插件落地详案.md`  
+> **分析师角色**：【子Agent 10: 输入框富文本解耦与 MarkdownEditor TS 插件落地详案分析师】
+> **报告类型**：输入框交互解耦、坐标漂移数学推导与几何修复、富文本编辑器 TS 插件化架构与 Rust 后端服务化方案
+> **权威遵循**：`AGENTS.md`、`ANTI_OVERENGINEERING_GUARDRAILS.md`、`packages/plugin-sdk/`、`packages/editor-kit/`、`reference/markdown-editor/`
+> **产出目标路径**：`docs/system-audit-and-redesign/analysis/10-输入框富文本解耦与MarkdownEditorTS插件落地详案.md`
 > **审查与涉及代码域**：
 >
 > - `apps/crish-desktop/src/components/chat-composer/SlashExtension.ts`（当前混杂排版命令的 Tiptap 扩展）

@@ -1,7 +1,7 @@
 # Rust 会话循环与中间事件发射机制深度分析报告
 
-**分析师角色**：Rust 会话循环与事件分析师  
-**被分析模块**：`crates/session-loop/`、`crates/agent-provider/`、`apps/agent-workbench/src-tauri/`  
+**分析师角色**：Rust 会话循环与事件分析师
+**被分析模块**：`crates/session-loop/`、`crates/agent-provider/`、`apps/agent-workbench/src-tauri/`
 **核心问题**：
 
 1. 思考内容只看到首个 Token（"TheTheThe..."）；

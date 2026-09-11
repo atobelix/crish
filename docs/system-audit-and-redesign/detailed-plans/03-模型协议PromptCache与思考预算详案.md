@@ -1,11 +1,11 @@
 # Conex / Crish 模型协议通信、PromptCache 深度优化与思考预算详细执行方案
 
-> **【调度与定时器铁律】**：如果设置定时器，最短是 100 秒；如果命令过长，最好的方式是等待命令完成后的系统推送通知（Reactive Wakeup），而不是一直轮询命令情况。  
-> **权威标识**：`docs/system-audit-and-redesign/detailed-plans/03-模型协议PromptCache与思考预算详案.md`  
-> **制定角色**：【阶段 1 维度详案架构师 03: Rust 模型协议通信、PromptCache 深度优化与思考预算详案】  
-> **关联总纲**：`docs/system-audit-and-redesign/00-总方案-Conex全系统综合重构总计划框架.md`（DIM-03 规范）  
-> **前置输入**：`docs/system-audit-and-redesign/audits/03-Rust模型提供商与协议通信全盘审计.md`  
-> **核心使命**：彻底根除 Anthropic `Minimal` 思考预算输出 128 tokens 引发 HTTP 400 崩溃、思考预算叠加导致 `max_tokens` 溢出模型物理上限、多轮对话 Prompt Caching 历史消息断点硬编码缺失、`anthropic-beta` 头部集合割裂、Gemini `ThinkingConfig` 契约失配、`conex-types` 废弃死类型残留、HTTP 529 (Anthropic Overloaded) 漏判降级为不可重试故障、以及 Responses 思考流 `redacted` 误标等 8 大核心系统级协议与通信断层；构建工业级强健、零 400 报错、极致命中缓存、全厂商协议合规的底层通讯基座。  
+> **【调度与定时器铁律】**：如果设置定时器，最短是 100 秒；如果命令过长，最好的方式是等待命令完成后的系统推送通知（Reactive Wakeup），而不是一直轮询命令情况。
+> **权威标识**：`docs/system-audit-and-redesign/detailed-plans/03-模型协议PromptCache与思考预算详案.md`
+> **制定角色**：【阶段 1 维度详案架构师 03: Rust 模型协议通信、PromptCache 深度优化与思考预算详案】
+> **关联总纲**：`docs/system-audit-and-redesign/00-总方案-Conex全系统综合重构总计划框架.md`（DIM-03 规范）
+> **前置输入**：`docs/system-audit-and-redesign/audits/03-Rust模型提供商与协议通信全盘审计.md`
+> **核心使命**：彻底根除 Anthropic `Minimal` 思考预算输出 128 tokens 引发 HTTP 400 崩溃、思考预算叠加导致 `max_tokens` 溢出模型物理上限、多轮对话 Prompt Caching 历史消息断点硬编码缺失、`anthropic-beta` 头部集合割裂、Gemini `ThinkingConfig` 契约失配、`conex-types` 废弃死类型残留、HTTP 529 (Anthropic Overloaded) 漏判降级为不可重试故障、以及 Responses 思考流 `redacted` 误标等 8 大核心系统级协议与通信断层；构建工业级强健、零 400 报错、极致命中缓存、全厂商协议合规的底层通讯基座。
 > **执行约束**：纯逻辑推进、问题一律同权、100% 需求保全（反退避）、杜绝打补丁、严格执行 4 级质量与行数门禁（UTF-8 无 BOM、pwsh7 环境、严禁直接 git 提交）。
 
 ---

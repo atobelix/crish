@@ -2,8 +2,8 @@
 
 > **【调度与定时器铁律】**：如果设置定时器，最短是100秒，如果命令过长，最好的方式是等待命令完成后的推送，而不是一直轮询命令情况。
 
-> **报告标识**：`docs/system-audit-and-redesign/detailed-reviews/01-跨维度代码Diff与依赖冲突终审.md`  
-> **责任终审师**：【维度详案评审师 01: 跨维度代码 Diff 与依赖冲突终审师】  
+> **报告标识**：`docs/system-audit-and-redesign/detailed-reviews/01-跨维度代码Diff与依赖冲突终审.md`
+> **责任终审师**：【维度详案评审师 01: 跨维度代码 Diff 与依赖冲突终审师】
 > **审查对象**：
 >
 > - `docs/system-audit-and-redesign/00-总计划框架.md`（战役框架总纲）
@@ -11,8 +11,8 @@
 > - `docs/system-audit-and-redesign/detailed-plans/02-核心聊天与容错状态机详案.md`（维度 2 详案）
 > - `docs/system-audit-and-redesign/detailed-plans/03-设置解耦与底栏重构详案.md`（维度 3 详案）
 > - `docs/system-audit-and-redesign/detailed-plans/04-模型配置全真源与滚轮修复详案.md`（维度 4 详案）
-> - `docs/system-audit-and-redesign/detailed-plans/05-工作区右坞与二叉树全功能详案.md`（维度 5 详案）  
->   **基准规范**：`docs/system-audit-and-redesign/00-战役通则与协同执行规范.md`（零业务代码修改、pwsh7、UTF-8 无 BOM、严禁 git 提交、纯逻辑评审）。  
+> - `docs/system-audit-and-redesign/detailed-plans/05-工作区右坞与二叉树全功能详案.md`（维度 5 详案）
+>   **基准规范**：`docs/system-audit-and-redesign/00-战役通则与协同执行规范.md`（零业务代码修改、pwsh7、UTF-8 无 BOM、严禁 git 提交、纯逻辑评审）。
 >   **终审结论**：**【条件放行（Conditional Sign-off）】** —— 5 份详细方案在整体架构、逻辑依赖 DAG、反退避原则与 4 级质量门禁上达成高度一致；但在 **3 处共享样式覆盖、1 处 TSX 行内圆角覆盖 CSS Module、1 处 Menu Anchor 调用规范** 上存在代码级微观冲突，必须严格按照本报告第三章给出的**黄金合并版本（Golden Merged Blueprint）**执行实施。
 
 ---
@@ -549,6 +549,6 @@ graph TD
 
 ---
 
-> **终审师签名**：【维度详案评审师 01: 跨维度代码 Diff 与依赖冲突终审师】  
-> **报告落盘完成**：`docs/system-audit-and-redesign/detailed-reviews/01-跨维度代码Diff与依赖冲突终审.md`  
+> **终审师签名**：【维度详案评审师 01: 跨维度代码 Diff 与依赖冲突终审师】
+> **报告落盘完成**：`docs/system-audit-and-redesign/detailed-reviews/01-跨维度代码Diff与依赖冲突终审.md`
 > **向主控（Main Agent）汇报就绪**。

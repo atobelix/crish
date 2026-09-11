@@ -1,7 +1,7 @@
 # 工作区路径越界与 Windows 盘符规范化深度分析报告
 
-> **文档定位**：全链路底层架构深度诊断与重构分析  
-> **分析师角色**：【子Agent 04: 工作区路径沙箱越界与 AI 脚本绕过机制深度分析师】  
+> **文档定位**：全链路底层架构深度诊断与重构分析
+> **分析师角色**：【子Agent 04: 工作区路径沙箱越界与 AI 脚本绕过机制深度分析师】
 > **代码权威审视域**：
 >
 > - `crates/agent-tools/src/tools/mod.rs`（`resolve_workspace_path`、`normalize_for_compare`、`has_symlink_below_root`、`strip_verbatim_prefix`）

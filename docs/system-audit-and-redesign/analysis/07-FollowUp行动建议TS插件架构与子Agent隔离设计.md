@@ -1,9 +1,9 @@
 # Follow-up 行动建议 TS 插件架构与子 Agent 隔离设计深度分析报告
 
-> **分析师角色**：【子Agent 07: Follow-up行动建议TS插件架构与子Agent隔离设计分析师】  
-> **报告类型**：架构缺陷诊断、AI 生成协议设计、TypeScript 插件体系规范与子 Agent 隔离工程重构方案  
-> **权威遵循**：`AGENTS.md`、`ANTI_OVERENGINEERING_GUARDRAILS.md`、`packages/shared-types/src/plugin.ts`  
-> **产出目标路径**：`docs/system-audit-and-redesign/analysis/07-FollowUp行动建议TS插件架构与子Agent隔离设计.md`  
+> **分析师角色**：【子Agent 07: Follow-up行动建议TS插件架构与子Agent隔离设计分析师】
+> **报告类型**：架构缺陷诊断、AI 生成协议设计、TypeScript 插件体系规范与子 Agent 隔离工程重构方案
+> **权威遵循**：`AGENTS.md`、`ANTI_OVERENGINEERING_GUARDRAILS.md`、`packages/shared-types/src/plugin.ts`
+> **产出目标路径**：`docs/system-audit-and-redesign/analysis/07-FollowUp行动建议TS插件架构与子Agent隔离设计.md`
 > **涉及代码域**：
 >
 > - `apps/crish-desktop/src/api/followUpSuggestions.ts`（当前 Mock 启发式逻辑）

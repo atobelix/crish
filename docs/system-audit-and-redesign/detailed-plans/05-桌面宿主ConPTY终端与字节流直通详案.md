@@ -1,9 +1,9 @@
 # DIM-05 详案：Tauri 桌面宿主、ConPTY 纯终端与多字节流直通详案
 
-> **【权威标识】**：`docs/system-audit-and-redesign/detailed-plans/05-桌面宿主ConPTY终端与字节流直通详案.md`  
-> **编制角色**：【阶段 1 维度详案架构师 05: Tauri 桌面宿主、ConPTY 纯终端与多字节流直通详案】  
-> **前置输入依据**：`docs/system-audit-and-redesign/audits/06-Tauri桌面壳层与原生终端全盘审计.md`  
-> **通用规范遵循**：`AGENTS.md`、`docs/system-audit-and-redesign/00-战役通则与协同执行规范.md`、反过度设计红线、反退避铁律、执行环境全量统一 **pwsh7**、写文件 UTF-8 无 BOM。  
+> **【权威标识】**：`docs/system-audit-and-redesign/detailed-plans/05-桌面宿主ConPTY终端与字节流直通详案.md`
+> **编制角色**：【阶段 1 维度详案架构师 05: Tauri 桌面宿主、ConPTY 纯终端与多字节流直通详案】
+> **前置输入依据**：`docs/system-audit-and-redesign/audits/06-Tauri桌面壳层与原生终端全盘审计.md`
+> **通用规范遵循**：`AGENTS.md`、`docs/system-audit-and-redesign/00-战役通则与协同执行规范.md`、反过度设计红线、反退避铁律、执行环境全量统一 **pwsh7**、写文件 UTF-8 无 BOM。
 > **状态**：**权威执行详案定稿（Authoritative Detailed Plan）**。
 
 ---

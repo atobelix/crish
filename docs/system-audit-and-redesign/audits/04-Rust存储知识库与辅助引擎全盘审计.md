@@ -2,7 +2,7 @@
 
 # Rust 存储、知识库与辅助引擎深度审计
 
-> **审计范围**：`crates/conex-db/`、`crates/conex-workspace-store/`、`crates/conex-note-runtime/`、`crates/conex-search/`、`crates/conex-compaction/`、`crates/conex-diff/`、`crates/conex-md-ast/`、`crates/conex-markdown/`  
+> **审计范围**：`crates/conex-db/`、`crates/conex-workspace-store/`、`crates/conex-note-runtime/`、`crates/conex-search/`、`crates/conex-compaction/`、`crates/conex-diff/`、`crates/conex-md-ast/`、`crates/conex-markdown/`
 > **审计原则**：只找问题、零废话、清理无用冗余、揭露架构断层与真实隐患、代码行号与证据确凿。
 
 ---
