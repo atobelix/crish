@@ -32,6 +32,7 @@ import {
 } from '../bridges/send-to-note';
 import { resetCompositionRoot } from '../app/compositionRoot';
 import { useLayoutStore } from '../store/layoutStore';
+import { useSessionStore } from '../store/sessionStore';
 import { useChatStream } from '../hooks/useChatStream';
 import { useAgentPanel } from '../hooks/useAgentStream';
 import type { UseChatStreamOptions } from '../hooks/chat-stream/types';
@@ -173,6 +174,19 @@ function seedChatSession(sessionId = CHAT_SID) {
     createdAt: Date.now(),
     updatedAt: Date.now(),
   };
+  useSessionStore.setState((st) => {
+    const s = st as Record<string, unknown>;
+    s.sessionsById = {
+      ...(s.sessionsById as object),
+      [sessionId]: sess,
+    };
+    const list = Array.isArray(s.sessions) ? [...(s.sessions as object[])] : [];
+    const idx = list.findIndex((x: { id?: string }) => x.id === sessionId);
+    if (idx >= 0) list[idx] = sess;
+    else list.push(sess);
+    s.sessions = list;
+    s.activeSessionId = sessionId;
+  });
   useLayoutStore.setState((st) => {
     const s = st as Record<string, unknown>;
     s.sessionsById = {
@@ -205,6 +219,18 @@ function seedAgentParent() {
     createdAt: Date.now(),
     updatedAt: Date.now(),
   };
+  useSessionStore.setState((st) => {
+    const s = st as Record<string, unknown>;
+    s.sessionsById = {
+      ...(s.sessionsById as object),
+      [AGENT_PARENT]: sess,
+    };
+    const list = Array.isArray(s.sessions) ? [...(s.sessions as object[])] : [];
+    const idx = list.findIndex((x: { id?: string }) => x.id === AGENT_PARENT);
+    if (idx >= 0) list[idx] = sess;
+    else list.push(sess);
+    s.sessions = list;
+  });
   useLayoutStore.setState((st) => {
     const s = st as Record<string, unknown>;
     s.sessionsById = {

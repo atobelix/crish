@@ -5,7 +5,7 @@
  * 与 scripts/check-swallowed-errors-frontend.mjs 同构），覆盖：
  * - 形态匹配：无绑定/有绑定空 catch、.catch(() => {}) / .catch((e) => {}) 链；
  * - 注释豁免：阶段 A（任意注释）与阶段 B（markerRequired 仅 swallow-ok）；
- * - 基线 ratchet：有条目文件 ≤ 基线放行 / > 基线拦截；无条目文件零容忍。
+ * - 基线 ratchet：有条目文件 ≤ 基线放行 /> 基线拦截；无条目文件零容忍。
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { ESLint } from 'eslint';

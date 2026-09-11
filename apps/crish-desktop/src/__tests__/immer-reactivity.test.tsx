@@ -3,7 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { useRef, type ReactNode } from 'react';
 import React from 'react';
 import { describe, expect, it, vi, afterEach, beforeAll, afterAll } from 'vitest';
-import { useLayoutStore } from '../store/layoutStore';
+import { useSessionStore } from '../store/sessionStore';
 import type {
   MessageToolCall,
   SessionAgent,
@@ -100,7 +100,7 @@ function bootstrapState(opts?: {
     messages: [msg],
     agents: opts?.agents ?? [],
   };
-  useLayoutStore.setState((st) => {
+  useSessionStore.setState((st) => {
     st.sessions = [sess];
     st.sessionsById = { [SESSION_ID]: sess };
     st.activeSessionId = SESSION_ID;
@@ -109,7 +109,7 @@ function bootstrapState(opts?: {
 }
 
 afterEach(() => {
-  useLayoutStore.setState((st) => {
+  useSessionStore.setState((st) => {
     st.sessions = [];
     st.sessionsById = {};
     st.activeSessionId = '';
@@ -140,7 +140,7 @@ function ToolCallDisplay({
   messageId: string;
   toolCallId: string;
 }) {
-  const toolCall = useLayoutStore((s) => {
+  const toolCall = useSessionStore((s) => {
     const msg = s.sessionsById[sessionId]?.messages?.find(
       (m) => m.id === messageId
     );
@@ -162,7 +162,7 @@ function ToolCallList({
   sessionId: string;
   messageId: string;
 }) {
-  const toolCalls = useLayoutStore((s) => {
+  const toolCalls = useSessionStore((s) => {
     return s.sessionsById[sessionId]?.messages?.find(
       (m) => m.id === messageId
     )?.toolCalls;
@@ -181,7 +181,7 @@ function AgentDisplay({
   sessionId: string;
   agentId: string;
 }) {
-  const agent = useLayoutStore((s) => {
+  const agent = useSessionStore((s) => {
     return s.sessionsById[sessionId]?.agents?.find((a) => a.id === agentId);
   });
   return (
@@ -209,7 +209,7 @@ describe('Immer reactivity', () => {
       'read_file:running'
     );
 
-    useLayoutStore.getState().updateMessageToolCall(SESSION_ID, MSG_ID, TC1_ID, {
+    useSessionStore.getState().updateMessageToolCall(SESSION_ID, MSG_ID, TC1_ID, {
       status: 'success',
       output: 'ok',
     });
@@ -230,7 +230,7 @@ describe('Immer reactivity', () => {
       'test agent:running'
     );
 
-    useLayoutStore.getState().patchSessionAgent(SESSION_ID, AGENT_ID, {
+    useSessionStore.getState().patchSessionAgent(SESSION_ID, AGENT_ID, {
       status: 'completed',
     });
 
@@ -254,7 +254,7 @@ describe('Immer reactivity', () => {
 
     expect(screen.getByTestId('render-count').textContent).toBe('1');
 
-    useLayoutStore.getState().updateMessageToolCall(SESSION_ID, MSG_ID, TC1_ID, {
+    useSessionStore.getState().updateMessageToolCall(SESSION_ID, MSG_ID, TC1_ID, {
       status: 'running',
     });
 
@@ -273,7 +273,7 @@ describe('Immer reactivity', () => {
 
     expect(screen.getByTestId('render-count').textContent).toBe('1');
 
-    useLayoutStore.getState().patchSessionAgent(SESSION_ID, AGENT_ID, {
+    useSessionStore.getState().patchSessionAgent(SESSION_ID, AGENT_ID, {
       status: 'running',
     });
 
@@ -321,7 +321,7 @@ describe('Immer reactivity', () => {
       screen.getByTestId('render-count').textContent
     );
 
-    useLayoutStore.setState((st) => {
+    useSessionStore.setState((st) => {
       const msg = st.sessionsById[SESSION_ID]?.messages?.find(
         (m) => m.id === MSG_ID
       );
@@ -344,7 +344,7 @@ describe('Immer reactivity', () => {
     render(<AgentDisplay sessionId={SESSION_ID} agentId={AGENT_ID} />);
     expect(screen.getByTestId('agent-display').textContent).toBe('none');
 
-    useLayoutStore.getState().upsertSessionAgent(SESSION_ID, makeAgent());
+    useSessionStore.getState().upsertSessionAgent(SESSION_ID, makeAgent());
 
     await waitFor(() => {
       expect(screen.getByTestId('agent-display').textContent).toBe(
@@ -353,5 +353,3 @@ describe('Immer reactivity', () => {
     });
   });
 });
-
-import { useSessionStore } from '@/store/sessionStore';
