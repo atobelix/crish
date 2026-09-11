@@ -18,7 +18,6 @@
 
   /* Level 4: 浮层、卡片气泡与上下文菜单 */
   --z-popover: 500;
-  --z-drawer: var(--z-popover);
 
   /* Level 5: 全局模态、设置面板与通知吐司 */
   --z-modal: 1000;
@@ -26,4 +25,17 @@
 
   /* Level 6: 顶级悬浮提示与光标胶囊 */
   --z-tooltip: 9000;
+
+  /* 角色别名：全部归属上面 7 级标尺，禁止新造数值。
+     原为未定义引用（z-index: var(--x) 整条失效→退回 auto）。 */
+  --z-decorative: var(--z-base);
+  --z-pinned-bar: var(--z-sticky);
+  --z-sticky-bar: var(--z-sticky);
+  --z-smart-panel: var(--z-chrome);
+  --z-dropdown-menu: var(--z-dropdown);
+  --z-context-menu: var(--z-popover);
+  --z-index-popover: var(--z-popover);
+  --z-smart-panel-sub: var(--z-dropdown);
+  --z-drag-highlight: var(--z-popover);
+  --z-drag-overlay: var(--z-tooltip);
 }

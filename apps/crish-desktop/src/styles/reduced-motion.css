@@ -26,25 +26,17 @@
     --transition-micro: 0ms !important;
     --transition-fast: 0ms !important;
     --transition-normal: 0ms !important;
-    --transition-slow: 0ms !important;
-    --transition-spring-enter: 0ms !important;
-    --transition-spring-exit: 0ms !important;
     --transition-popover-enter: 0ms !important;
     --transition-popover-exit: 0ms !important;
     --transition-modal-enter: 0ms !important;
-    --transition-modal-exit: 0ms !important;
     --transition-accordion: 0ms !important;
     --transition-press: 0ms !important;
     --transition-skeleton: 0ms !important;
     --transition-spin: 0ms !important;
     --transition-pulse: 0ms !important;
-    --transition-blink: 0ms !important;
-    --duration-instant: 0ms !important;
     --duration-micro: 0ms !important;
     --duration-fast: 0ms !important;
     --duration-normal: 0ms !important;
-    --duration-slow: 0ms !important;
-    --transition-spring: 0ms !important;
   }
 
   /*                       */
@@ -73,25 +65,17 @@
   --transition-micro: 0ms !important;
   --transition-fast: 0ms !important;
   --transition-normal: 0ms !important;
-  --transition-slow: 0ms !important;
-  --transition-spring-enter: 0ms !important;
-  --transition-spring-exit: 0ms !important;
   --transition-popover-enter: 0ms !important;
   --transition-popover-exit: 0ms !important;
   --transition-modal-enter: 0ms !important;
-  --transition-modal-exit: 0ms !important;
   --transition-accordion: 0ms !important;
   --transition-press: 0ms !important;
   --transition-skeleton: 0ms !important;
   --transition-spin: 0ms !important;
   --transition-pulse: 0ms !important;
-  --transition-blink: 0ms !important;
-  --duration-instant: 0ms !important;
   --duration-micro: 0ms !important;
   --duration-fast: 0ms !important;
   --duration-normal: 0ms !important;
-  --duration-slow: 0ms !important;
-  --transition-spring: 0ms !important;
 }
 
 [data-reduced-motion] .essential-animation {

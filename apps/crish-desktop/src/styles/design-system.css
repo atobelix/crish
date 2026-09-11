@@ -176,7 +176,7 @@ html[data-theme="dark"] .elevation-4 {
 }
 
 .md-code-copy.is-copied {
-  color: var(--brand, hsl(160 84% 39%));
+  color: var(--brand);
 }
 
 /* ==========================================================================
@@ -343,8 +343,8 @@ html[data-theme="dark"] .elevation-4 {
 }
 
 .sep-safe-aim-overlay.sep-debug-visible {
-  fill: color-mix(in srgb, var(--accent-green, #10b981) 12%, transparent);
-  stroke: color-mix(in srgb, var(--accent-green, #10b981) 40%, transparent);
+  fill: color-mix(in srgb, var(--accent-green) 12%, transparent);
+  stroke: color-mix(in srgb, var(--accent-green) 40%, transparent);
   stroke-dasharray: 4 2;
   stroke-width: 1px;
 }

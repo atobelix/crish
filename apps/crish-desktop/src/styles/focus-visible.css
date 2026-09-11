@@ -51,7 +51,7 @@ textarea:focus-visible,
   outline: none;
   border-color: var(--focus-border-color);
   box-shadow:
-    0 0 0 1px var(--bg-card, var(--bg-canvas, #ffffff)),
+    0 0 0 1px var(--bg-card, var(--bg-canvas)),
     0 0 0 1.5px var(--focus-visible-ring);
 }
 
@@ -64,7 +64,7 @@ a:focus-visible,
 [tabindex]:not([tabindex='-1']):focus-visible {
   outline: none;
   box-shadow:
-    0 0 0 1px var(--bg-card, var(--bg-canvas, #ffffff)),
+    0 0 0 1px var(--bg-card, var(--bg-canvas)),
     0 0 0 1.5px var(--focus-visible-ring);
 }
 

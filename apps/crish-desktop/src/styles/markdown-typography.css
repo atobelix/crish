@@ -14,9 +14,7 @@
   --md-font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
   --md-font-mono: var(--font-mono, SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace);
   --md-line-height-body: 1.68;
-  --md-line-height-chat: 1.65;
   --md-paragraph-margin-bottom: 0.88em;
-  --md-paragraph-margin-bottom-chat: 0.82em;
 
   /* --- 2. 标题体系基准 --- */
   --md-heading-font-weight: 600;
@@ -62,15 +60,12 @@
   --md-code-inline-size: 0.9em;
 
   --md-path-link-bg: transparent;
-  --md-path-link-hover-bg: color-mix(in srgb, var(--text-primary) 5%, transparent);
-  --md-path-link-active-bg: color-mix(in srgb, var(--text-primary) 10%, transparent);
   --md-path-link-fg: var(--text-secondary);
   --md-path-link-border: transparent;
-  --md-path-link-radius: var(--radius-sm, 4px);
 
   /* --- 6. 链接体系 --- */
-  --md-link-color: var(--brand-deep, hsl(160 84% 30%));
-  --md-link-hover-color: var(--brand, hsl(160 84% 39%));
+  --md-link-color: var(--brand-deep);
+  --md-link-hover-color: var(--brand);
   --md-link-underline-offset: 3px;
   --md-link-underline-color: color-mix(in srgb, var(--md-link-color) 35%, transparent);
 }
@@ -81,7 +76,7 @@ html[data-theme='dark'] {
   --md-table-row-hover-bg: hsl(0 0% 15%);
   --md-code-inline-bg: color-mix(in srgb, var(--text-primary) 5%, var(--bg-card));
   --md-code-inline-fg: var(--text-primary);
-  --md-link-color: var(--brand, hsl(160 84% 39%));
+  --md-link-color: var(--brand);
   --md-link-hover-color: hsl(160 84% 55%);
 }
 
@@ -610,7 +605,7 @@ html[data-theme='dark'] {
   margin: 1.15em 0;
   border-radius: var(--radius-lg, 8px);
   border: 1px solid var(--md-code-block-border, var(--border-subtle));
-  background: var(--md-code-block-bg, hsl(30 2.5% 96%));
+  background: var(--md-code-block-bg);
   overflow: hidden;
 }
 
@@ -624,7 +619,7 @@ html[data-theme='dark'] {
   font-family: var(--md-font-mono);
   font-size: var(--font-size-xs, 12px);
   color: var(--text-secondary);
-  background: color-mix(in srgb, var(--text-primary) 3%, var(--md-code-block-bg, hsl(30 2.5% 96%)));
+  background: color-mix(in srgb, var(--text-primary) 3%, var(--md-code-block-bg));
   border-bottom: 1px solid var(--border-subtle);
   user-select: none;
 }
@@ -766,7 +761,7 @@ html[data-theme='dark'] {
 :is(.conex-markdown, .md-rendered) .md-code-copy.is-copied,
 .md-rendered .md-code-copy.is-copied,
 .conex-markdown .md-code-copy.is-copied {
-  color: var(--brand, hsl(160 84% 39%));
+  color: var(--brand);
   border-color: color-mix(in srgb, var(--brand) 40%, transparent);
   background: color-mix(in srgb, var(--brand) 8%, var(--bg-card));
   opacity: 1;
@@ -818,8 +813,8 @@ html[data-theme='dark'] {
 .md-rendered .md-task-box.checked,
 .conex-markdown .md-task-box.checked,
 :is(.conex-markdown, .md-rendered) .md-task-box.checked {
-  background: var(--brand, hsl(160 84% 39%));
-  border-color: var(--brand, hsl(160 84% 39%));
+  background: var(--brand);
+  border-color: var(--brand);
 }
 
 .md-rendered .md-task-box.checked::after,

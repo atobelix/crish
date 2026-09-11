@@ -28,7 +28,7 @@ body {
   font-size: var(--font-size-base);
   font-weight: var(--font-weight-normal);
   line-height: 1.5;
-  background-color: var(--bg-workspace, var(--bg-primary, hsl(35 8% 95.2%)));
+  background-color: var(--bg-workspace, var(--bg-primary));
   color: var(--text-primary);
   overflow: hidden;
   height: 100vh;
@@ -40,6 +40,15 @@ body {
   font-synthesis: none;
   font-feature-settings: "kern" 1, "liga" 1;
   font-variant-ligatures: common-ligatures;
+}
+
+/* 三级表面：侧栏壳 = chrome 灰底；对话画布 = paper；工具卡/输入 = card 白 */
+.sidebar-wrapper {
+  background-color: var(--shell-chrome-bg, var(--bg-secondary));
+}
+
+.sidebar-wrapper.collapsed {
+  background-color: transparent;
 }
 
 /*           400      UI 500    */
