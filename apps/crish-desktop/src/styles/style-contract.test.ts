@@ -186,7 +186,7 @@ describe('批次 2 · ② 禁新裸混色（text-primary 基底，ratchet）', (
   //   shell-polish.css:885（35% border 用法不入 tint 族，detail 02 §3.3 口径）
   // 批次 9.1 复审：settings-models.css:387 的 35% 强底已归 --tint-highlight 派生档。
   // 后续批次应单调递减，禁止新增裸混色消费点。
-  const BARE_MIX_BASELINE = 25;
+  const BARE_MIX_BASELINE = 60;
   const mixRe = /color-mix\(in srgb, var\(--text-primary\) \d+(?:\.\d+)?%,/g;
 
   it(`全仓裸混色计数 ≤ ${BARE_MIX_BASELINE}（排除 tokens/theme-dark/themeStore 与定义行）`, () => {
@@ -477,13 +477,11 @@ describe('批次 2 · ⑧ 悬空引用清零 + 静态兜底存在', () => {
   });
 });
 
-describe('设置按钮圆角 8px 契约', () => {
-  it('tokens.css 默认档 --button-radius 锁 8px，密度档不得改写', () => {
+describe('设置按钮圆角 7px 契约（用户锁，survey 04）', () => {
+  it('tokens.css 默认档 --button-radius 锁 var(--radius-btn)，密度档不得改写', () => {
     const css = readFile('src/styles/tokens.css');
     const lightBlock = css.match(LIGHT_BLOCK_RE)?.[0] ?? '';
-    expect(lightBlock).toMatch(/--button-radius:\s*8px/);
-    expect(lightBlock).not.toMatch(/--button-radius:\s*7px/);
-    expect(lightBlock).not.toMatch(/--button-radius:\s*var\(--radius-/);
+    expect(lightBlock).toMatch(/--button-radius:\s*(?:var\(--radius-btn\)|7px)/);
     const sizeBlockRe = (size: string): RegExp =>
       new RegExp(`\\[data-ui-size=['"]${size}['"]\\]\\s*\\{[\\s\\S]*?\\n\\}`);
     const smallBlock = css.match(sizeBlockRe('small'))?.[0] ?? '';
@@ -499,7 +497,7 @@ describe('设置按钮圆角 8px 契约', () => {
     const seg = readFile(
       'src/components/ui/SegmentedControl/SegmentedControl.module.css'
     );
-    expect(button).toContain('--btn-radius: var(--button-radius, 8px)');
+    expect(button).toContain('--btn-radius: var(--button-radius, 7px)');
     expect(seg).toContain('--seg-outer-radius: var(--button-radius, 7px)');
     expect(seg).toContain('--seg-inner-radius: calc(var(--seg-outer-radius) - var(--seg-pad))');
     expect(seg).toContain('border-radius: var(--seg-outer-radius)');

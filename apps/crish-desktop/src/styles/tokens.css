@@ -17,15 +17,10 @@ html.preload *:not(.app-initial-loader, .app-initial-loader *)::after {
 
 :root {
   /* 响应式断点权威单一真源 (SSOT) */
-  --breakpoint-sm: 640px;
-  --breakpoint-md: 768px;
-  --breakpoint-lg: 1024px;
-  --breakpoint-xl: 1280px;
 
   /* 几何尺寸与圆角契约 (锁定 8px 按钮圆角与 9999px 胶囊圆角) */
   --button-radius: 8px;
   --radius-full: 9999px;
-  --radius-tooltip: var(--radius-full);
   --seg-outer-radius: var(--button-radius, 8px);
   --seg-inner-radius: var(--button-radius, 8px);
 
@@ -40,36 +35,55 @@ html.preload *:not(.app-initial-loader, .app-initial-loader *)::after {
 html[data-theme='default'],
 html[data-theme='light'] {
   /*
-   * Premium Light Theme
-   * Pure neutral/monochrome greys
+   * Premium Light Theme · 三级表面层级（SSOT）
+   * 1) chrome：整体灰底（侧栏/壳）≈7% 暖灰
+   * 2) paper：对话流画布 ≈1.5% 暖灰（H30 S2.5%）
+   * 3) card/elevated：工具调用、输入框、浮层 = 纯白
    */
-  --bg-primary: hsl(30 2.5% 95.5%); /* 外层底板大矩形背景 (Shell, 4.5% 灰度，0.4% M + 0.8% Y 偏橙米黄) */
-  --bg-secondary: hsl(30 2.5% 93%); /* 侧边栏/辅助层背景 (7% 灰度) */
-  --bg-tertiary: hsl(30 2.5% 90%); /* 悬浮/深一层背景 (10% 灰度) */
-  --bg-hover: var(--tint-hover); /*    tint         */
-  --bg-active: var(--tint-active); /*    tint         */
-  --bg-card: hsl(0 0% 100%); /* 小矩形/卡片纯白底色 (Paper) */
-  --bg-elevated: hsl(0 0% 100%); /* 浮起卡片纯白底色 */
-  --composer-attach-card-bg: var(--bg-card, #ffffff);
-  --composer-attach-remove-bg: rgba(255, 255, 255, 0.72);
-  --composer-attach-remove-hover-bg: rgba(255, 255, 255, 0.92);
+  --surface-chrome: hsl(30 2.5% 95%);
+  --surface-paper: hsl(30 2.5% 98.5%);
+  --surface-card: hsl(0 0% 100%);
+  --surface-elevated: hsl(0 0% 100%);
+  --surface-sunken: hsl(30 2.5% 90%);
+  --surface-scrim: var(--shadow-color, #000);
+  --surface-overlay: hsl(0 0% 0% / 0.65);
+  --surface-overlay-fg: hsl(0 0% 100%);
+
+  /* L2：primary=对话画布；card=白卡；chrome=侧栏 */
+  --bg-primary: var(--surface-paper);
+  --bg-secondary: var(--surface-chrome);
+  --bg-tertiary: var(--surface-sunken);
+  --bg-hover: var(--tint-hover);
+  --bg-active: var(--tint-active);
+  --bg-card: var(--surface-card);
+  --bg-elevated: var(--surface-elevated);
+  --bg-subtle: var(--surface-chrome);
+  --bg-workspace: var(--surface-paper);
+  --bg-page: var(--surface-paper);
+  --bg-canvas: var(--surface-paper);
+  --bg-paper: var(--surface-paper, hsl(30 2.5% 98.5%));
+  --composer-attach-card-bg: var(--surface-card);
+  --composer-attach-remove-bg: color-mix(in srgb, var(--surface-card) 72%, transparent);
   --composer-attach-remove-border: color-mix(in srgb, var(--border-color) 70%, transparent);
-  --bg-workspace: var(--bg-primary);
-  --shell-chrome-bg: var(--bg-secondary);
+  --shell-chrome-bg: var(--surface-chrome);
   --shell-inset-bg: var(--bg-workspace, var(--bg-primary));
-  /* 外壳留白：叶子卡片与窗口边缘之间的落差，密度档位可覆写 */
-  --shell-gutter: var(--space-2, 8px);
-  --card-header-bg: var(--bg-secondary);
-  --bg-subtle: var(--bg-secondary);
   --text-primary: #1a1a1a;
   --text-secondary: #555555;
   /* 文本三级色：WCAG AA 达标 */
   --text-tertiary: #696969;
   --text-muted: var(--text-tertiary);
+  /* 第四级弱化文字：由三级色向背景侧收敛（派生，无裸 hex；双主题同向弱化） */
+  --text-faint: color-mix(in srgb, var(--text-tertiary) 72%, var(--bg-primary));
+  /* 反色前景（与 --text-on-accent 同源，随主题翻转） */
+  --text-inverse: var(--text-on-accent);
+  /* 浮层/遮罩之上的前景 */
+  --text-on-overlay: var(--text-on-accent);
 
   --tint-hover: color-mix(in srgb, var(--text-primary) 2.5%, transparent);
   --tint-active: color-mix(in srgb, var(--text-primary) 5%, transparent);
   --tint-strong: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  /* 族内最轻一档：极弱底/分隔 */
+  --tint-subtle: color-mix(in srgb, var(--text-primary) 1.5%, transparent);
   --tint-focus-ring: color-mix(in srgb, var(--text-primary) 8%, transparent);
   --tint-divider: color-mix(in srgb, var(--text-primary) 10%, transparent);
   /* ==========================================================================
@@ -79,6 +93,7 @@ html[data-theme='light'] {
 
   /* --- 1. 二元色彩与灰度系统 (Binary Optical Color System) --- */
   /* 未激活态滑块：微调至 10.0% 灰度 (H=30 S=2% L=90%)，物理像素 #e6e6e5，确保浅色底板清晰可见 (SSOT) */
+  --scrollbar-track-safe-gap: 2px; /* 滑块行程与端点按钮的隔离裕量；被 ScrollArea 消费 */
   --scrollbar-thumb-bg: #e6e6e5;
 
   /* 激活态滑块：黄色/色相饱和度绝对不动 (H=30 S=2%)，灰度下调至 21.8% (L=78%)，物理像素 #c8c7c6，差值严格死锁约 12% */
@@ -116,7 +131,6 @@ html[data-theme='light'] {
   --scrollbar-thumb-min-size: 18px; /* 最小滑块尺寸，防止极短滑块抓取失灵 */
   --scrollbar-button-size: var(--scrollbar-width); /* 端点安全按钮尺寸 (长边)，激活 Blink TrackRect 端点护栏 */
   --scrollbar-button-arrow-size: 4px; /* 内部等腰圆角微型三角矢量长边 */
-  --scrollbar-track-safe-gap: 2px; /* 滑块行程与端点按钮之间的代数隔离裕量 */
 
   /* --- 向后兼容别名安全网 (Deprecated Aliases Bridge) ---
      警告：以下别名仅供存量代码渐进过渡，全新业务严禁直接引用，将在维度 6 门禁收口后全面废弃 */
@@ -130,24 +144,21 @@ html[data-theme='light'] {
     var(--text-primary) 3.5%,
     var(--bg-card, hsl(0 0% 100%))
   );
-  --switch-thumb-bg: hsl(0 0% 100%);
+  --switch-thumb-bg: var(--surface-overlay-fg);
   --switch-thumb-shadow: 0 1px 2px
     color-mix(in srgb, var(--shadow-color) 8%, transparent);
   --seg-track-bg: color-mix(
     in srgb,
     var(--text-primary) 3.5%,
-    var(--bg-card, hsl(0 0% 100%))
+    var(--surface-card)
   );
-  --seg-slider-bg: var(--bg-card, hsl(0 0% 100%));
+  --seg-slider-bg: var(--surface-card);
 
   --border-color: hsl(30 2.5% 86%);
   --border-subtle: hsl(30 6% 93.8%);
-  --composer-bg: var(--bg-card, hsl(0 0% 100%));
-  --composer-footer-bg: transparent;
+  --composer-bg: var(--surface-card);
   /* 输入框底部操作区按钮统一底色（默认透明，hover/click/active 均为同一 3% 灰度 #F7F7F7，单一灰度无级差） */
-  --composer-control-bg: transparent;
   --composer-control-hover-bg: color-mix(in srgb, var(--text-primary) 3.3%, transparent);
-  --composer-control-active-bg: var(--composer-control-hover-bg);
   --hairline-width: 1px;
   --hairline: var(--border-subtle);
   --hairline-strong: var(--border-color);
@@ -173,21 +184,10 @@ html[data-theme='light'] {
     transparent
   );
   --focus-ring: 0 0 0 1.5px var(--focus-ring-color);
-  --focus-ring-subtle: color-mix(
-    in srgb,
-    var(--border-color) 94%,
-    var(--text-primary) 6%
-  );
-  --focus-ring-strong: color-mix(
-    in srgb,
-    var(--border-color) 90%,
-    var(--text-primary) 10%
-  );
 
-  --bg-page: #ffffff;
-  --bg-canvas: hsl(30 2.5% 96%);
-  --bg-item-hover: var(--tint-hover);
-  --bg-item-active: var(--tint-active);
+  --bg-page: var(--surface-paper);
+  --bg-canvas: var(--surface-paper);
+  /* L2 later overrides must not flatten card/elevated back to paper */
 
   --brand-primary: #10b981;
   --brand: #10b981;
@@ -209,13 +209,11 @@ html[data-theme='light'] {
   --sep-font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --sep-font-mono: SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
 
-  --sep-bg-panel: var(--bg-card, hsl(0 0% 100%));
   --sep-bg-panel-solid: #ffffff;
   --sep-bg-item-hover: var(--tint-hover);
   --sep-bg-input: color-mix(in srgb, var(--text-primary) 3%, transparent);
 
   --sep-border-color: var(--border-color);
-  --sep-border-focus: color-mix(in srgb, var(--border-color) 70%, var(--text-primary) 30%);
   --sep-divider-color: color-mix(in srgb, var(--text-primary) 6%, transparent);
 
   --sep-text-primary: #1a1a1a;
@@ -229,36 +227,21 @@ html[data-theme='light'] {
   --sep-shadow:
     0 4px 16px -2px color-mix(in srgb, var(--shadow-color, hsl(0 0% 0%)) 4%, transparent),
     0 1px 3px color-mix(in srgb, var(--shadow-color, hsl(0 0% 0%)) 2%, transparent);
-  --sep-backdrop-blur: 0px;
 
 
   --accent-color: hsl(160 84% 36%); /* 品牌翡翠绿活态签名 */
-  --accent-light: hsl(35, 20%, 98.5%); /*      */
-  --accent-hover: hsl(35, 16%, 22%); /*      */
-  --accent-soft: hsl(35, 12%, 93.5%); /*      */
-
-  --accent-orange: oklch(0.78 0.16 80); /* 金黄琥珀，基准 #f0b100，鲜艳纯净不刺眼 */
-  --accent-orange-light: oklch(0.78 0.16 80 / 0.08);
   --accent-green: oklch(0.65 0.15 155); /* 纯净翡翠翠绿，基准 #00b478 / #4b984f，通透不刺眼 */
-  --accent-green-hover: oklch(0.58 0.15 155);
   --accent-green-light: oklch(0.65 0.15 155 / 0.08);
-  --accent-green-soft: oklch(0.65 0.15 155 / 0.14);
   --accent-green-muted: oklch(0.65 0.15 155 / 0.22);
   --status-online: oklch(0.65 0.15 155);
   --accent-red: oklch(0.61 0.19 31.8); /* 纯净温暖朱红，基准 #de4931，鲜艳不刺眼 */
   --accent-red-light: oklch(0.61 0.19 31.8 / 0.08);
   --accent-blue: oklch(0.65 0.18 245); /* 纯净天蓝，鲜艳纯正，不与文字/墨色混浊 */
   --accent-blue-light: oklch(0.65 0.18 245 / 0.08);
-  --accent-violet: hsl(258, 90%, 66%);
-  --accent-violet-light: hsl(258, 40%, 97%);
   --accent-primary: #10b981;
-  --accent-secondary: hsl(160 84% 39% / 0.12);
+  --accent-green-light-adaptive: color-mix(in srgb, var(--accent-green, #16a34a) 15%, #ffffff);
+  --accent-red-light-adaptive: color-mix(in srgb, var(--accent-red, #dc2626) 12%, #ffffff);
   /* primary     FirstRunWizard        light = text-primary   dark = text-secondary    */
-  --accent-inverted: var(--text-primary);
-  --accent-chart-in: hsl(35, 10%, 82%);
-  --accent-chart-out: hsl(35, 12%, 35%);
-  --chart-color-1: var(--accent-chart-out);
-  --chart-color-2: var(--accent-chart-in);
   --text-on-accent: #ffffff;
 
   /* semantic color roles (纯净 OKLCH 直通，零混浊 dirty mix) */
@@ -282,6 +265,7 @@ html[data-theme='light'] {
 
   --text-danger: var(--color-error);
   --text-success: var(--color-success);
+  --text-warning: var(--color-warning);
   --text-warning-strong: var(--accent-orange);
   --text-success-strong: var(--color-success);
   --text-on-danger: #ffffff;
@@ -293,13 +277,10 @@ html[data-theme='light'] {
   --ui-text-primary: inherit;
 
   /* Windows caption close (shared by app top bar + inset chrome) */
-  --window-close-bg: #e81123;
-  --window-close-fg: #c50f1f;
 
   /* shadow base color unified source for 28 color-mix(in srgb, #000 ...) */
   --shadow-color: #000;
   /* modal / dialog scrim (settings eco backdrop, wizards, cheatsheet) */
-  --bg-overlay: var(--shadow-color);
 
   /* model/active status color (9 uses of #16a34a) */
   /*    6.1       08     5      #16a34a   2.91:1   #15803d   4.41:1 WCAG AA UI  3:1
@@ -347,64 +328,40 @@ html[data-theme='light'] {
   --xterm-selection: rgba(0, 0, 0, 0.15);
 
   /* macOS traffic-light chrome (decorative terminal mockups) */
-  --mac-dot-red: #ff5f56;
-  --mac-dot-yellow: #ffbd2e;
-  --mac-dot-green: #27c93f;
 
   /* 5           (Ro = Ri + P: 12/8/6/4/2px) */
+  /* 刻度新增：设置/按钮恒 7px（用户锁；来源 docs/desktop-ui-repair/survey/04-*） */
+  --radius-circle: 50%; /* Avatar 等正圆；被 ModelsSettingsTab 等消费 */
+  --radius-btn: 7px;
   --radius-xs: 2px; /*            (2px) */
   --radius-sm: 4px; /*      (IconButton)      (Badge)    (Kbd) (4px) */
   --radius-md: 6px; /*            Tab     Select     (6px) */
   --radius-lg: 8px; /*           Content        (8px) */
   --radius-xl: 12px; /*               (12px) */
   --radius-2xl: 12px; /*      */
-  --radius-switch-track: 9999px; /*     1: Switch    */
-  --radius-circle: 50%; /*     2: Avatar        */
-  --radius-full: 9999px; /*        (  Switch/Avatar      ) */
-
-  /* --- Composer Attachment Card Tokens (52px Unified Card Height) --- */
-  --composer-attach-card-size: 52px;
   --composer-attach-card-radius: var(--radius-xl, 12px);
-  --composer-attach-card-gap: 8px;
   --composer-attach-card-border: 1px solid var(--border-subtle);
   --composer-attach-card-bg: var(--bg-card, #ffffff);
   --composer-attach-card-hover-border: var(--border-color);
   --composer-attach-remove-size: 18px;
   --composer-attach-remove-bg: rgba(255, 255, 255, 0.4);
-  --composer-attach-remove-fg: #ffffff;
-  --composer-attach-remove-hover-bg: rgba(255, 255, 255, 0.6);
   --composer-attach-name-size: 11px;
   --composer-attach-name-color: var(--text-secondary);
   --composer-attach-progress-color: var(--accent-primary, #10b981);
 
   /* --- Unified Header & Titlebar Rows Token System --- */
-  --titlebar-row-h: 28px; /* Row height (e.g. workspace bar, sessions bar, card-header) */
-  --titlebar-item-h: 28px; /* Content/button/tab height   aligns with 36px header */
-  --titlebar-top-gap: 0px; /* Vertical spacing from the upper frame border */
-
-  /* Premium Soft Low-Presence Shadows */
-  --shadow-sm:
-    0 1px 2px color-mix(in srgb, var(--shadow-color) 1.5%, transparent),
-    0 1px 1px color-mix(in srgb, var(--shadow-color) 1%, transparent);
-  --shadow-md:
-    0 2px 4px color-mix(in srgb, var(--shadow-color) 1%, transparent),
-    0 4px 12px color-mix(in srgb, var(--shadow-color) 1.5%, transparent),
-    0 1px 1px color-mix(in srgb, var(--shadow-color) 0.5%, transparent);
   --shadow-lg:
     0 4px 16px -2px color-mix(in srgb, var(--shadow-color) 4%, transparent),
     0 1px 3px color-mix(in srgb, var(--shadow-color) 2%, transparent);
-  --shadow-drag:
-    0 8px 16px color-mix(in srgb, var(--shadow-color) 2%, transparent),
-    0 20px 40px color-mix(in srgb, var(--shadow-color) 2.5%, transparent),
-    0 1px 3px color-mix(in srgb, var(--shadow-color) 1%, transparent);
   --shadow-2xl:
     0 12px 24px color-mix(in srgb, var(--shadow-color) 2.5%, transparent),
     0 32px 64px color-mix(in srgb, var(--shadow-color) 3.5%, transparent),
     0 1px 3px color-mix(in srgb, var(--shadow-color) 1%, transparent);
+  /* 浮层高程角色（归一到既有高程刻度，禁止新造字面量） */
+  --shadow-dropdown: var(--shadow-md);
+  --shadow-popover: var(--shadow-lg);
 
   /* Materials & Animations */
-  --bg-glass: var(--bg-elevated);
-  --backdrop-blur: none;
   /*
    * 缓动正典二元组：standard 服务色彩/透明度常规过渡，emphasized 服务几何位移（快出型）。
    * 全仓 transition/animation 的曲线只允许引用这两个名字（或下方别名）；组件文件禁止内联 cubic-bezier。
@@ -412,18 +369,12 @@ html[data-theme='light'] {
   --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
   --ease-emphasized: cubic-bezier(0.16, 1, 0.3, 1);
   /* 历史缓动名 → 正典别名（零消费者，仅保留名字不丢失） */
-  --ease-in-out: var(--ease-standard);
-  --easing-enter: var(--ease-emphasized);
-  --easing-exit: var(--ease-standard);
-  --easing-emphasized: var(--ease-emphasized);
   --transition-spring-layout: var(--ease-emphasized) 220ms;
   --transition-micro: 100ms ease-out;
   --transition-fast: 150ms var(--ease-standard);
   --transition-smooth: 300ms var(--ease-standard);
   /* Toast 入场：无过冲（y≤1）；旧值 y2=1.275 会越过停点再回 */
-  --transition-enter: 400ms var(--ease-emphasized);
   --transition-exit: 250ms var(--ease-standard);
-  --transition-spring: 500ms cubic-bezier(0.175, 0.885, 0.32, 1.275);
   --transition-popover-enter: var(--ease-emphasized) 180ms;
   --transition-popover-exit: cubic-bezier(0.4, 0, 1, 1) 120ms;
   --transition-modal-enter: var(--ease-emphasized) 220ms;
@@ -434,13 +385,10 @@ html[data-theme='light'] {
   /*    9.1 S7      token      /
    *      1.1-2.2s     1.6s    /      step-end     */
   --transition-pulse: 1.6s ease-in-out;
-  --transition-blink: 1s step-end;
 
-  --duration-instant: 0ms;
   --duration-micro: 100ms;
   --duration-fast: 150ms;
   --duration-normal: 200ms;
-  --duration-slow: 300ms;
   --duration-enter: 200ms;
   --duration-exit: 150ms;
 
@@ -454,15 +402,9 @@ html[data-theme='light'] {
     'Cascadia Mono', 'Cascadia Code', 'JetBrains Mono', 'Segoe UI Mono',
     'SF Mono', Consolas, 'Liberation Mono', ui-monospace, monospace;
 
-  --dropdown-padding: var(--space-1_5);
-  --dropdown-gap: var(--space-0_5);
-  --dropdown-radius: var(--radius-lg);
-  /* 设置/按钮圆角锁：默认档 8px，禁止再别名到 --radius-md 的 6 */
-  --button-radius: 8px;
-  --pill-radius: var(--radius-md);
-  --item-padding: 8px 12px;
-  --item-radius: var(--radius-md);
-  --item-font-size: var(--font-size-base);
+  /* 设置/按钮圆角锁（用户锁，盖过旧 8px 口径）：恒 7px，不随 data-ui-size 变化；
+     禁止再别名到 --radius-md 的 6px。来源：docs/desktop-ui-repair/survey/04-*。 */
+  --button-radius: var(--radius-btn);
 
   --header-height: 36px;
   /*
@@ -501,14 +443,8 @@ html[data-theme='light'] {
   --font-size-micro: var(--font-size-xxs);     /* 11.5px -> 11px */
   --font-size-xs-plus: var(--font-size-xs);    /* 12.5px -> 12px */
   --font-size-sm-plus: var(--font-size-sm);    /* 13.5px -> 13px */
-  --font-size-chat: var(--font-size-base);     /* 13.5px -> 14px */
-  --font-size-xxl: var(--font-size-lg);       /* 18px -> 18px */
-
-  /*
-   *     ?
-   */
-  --font-weight-code: 400;
   --font-weight-normal: 400;
+  --font-weight-code: 400; /* 代码块字重；被 ChatMessageRow 等消费 */
   --font-weight-medium: 500;
   --font-weight-content: 600;
   --font-weight-semibold: var(--font-weight-content);
@@ -532,9 +468,7 @@ html[data-theme='light'] {
   --md-font-sans: var(--md-font-family);
   --md-font-mono: var(--font-mono, "IBM Plex Mono", "JetBrains Mono", monospace);
   --md-line-height-body: 1.68;
-  --md-line-height-chat: 1.65;
   --md-paragraph-margin-bottom: 0.88em;
-  --md-paragraph-margin-bottom-chat: 0.82em;
 
   --md-text-font: var(--md-font-family);
   --md-text-size: var(--font-size-base, 14px);
@@ -579,15 +513,11 @@ html[data-theme='light'] {
   --md-code-font-size: 12.5px;
   --md-code-tab-size: 2;
   --md-code-header-bg: hsl(30 2.5% 94%);
-  --md-code-copy-bg: color-mix(in srgb, var(--bg-card) 85%, transparent);
   --md-code-copy-hover-bg: var(--bg-card);
 
   --md-path-link-bg: transparent;
-  --md-path-link-hover-bg: color-mix(in srgb, var(--text-primary) 5%, transparent);
-  --md-path-link-active-bg: color-mix(in srgb, var(--text-primary) 10%, transparent);
   --md-path-link-fg: var(--text-secondary);
   --md-path-link-border: transparent;
-  --md-path-link-radius: var(--radius-sm, 4px);
 
   --md-task-box-size: 14px;
   --md-task-box-radius: 3px;
@@ -606,8 +536,6 @@ html[data-theme='light'] {
   --md-quote-padding: 0.45em 0 0.45em 1.1em;
   --md-quote-margin: 0.68em 0;
 
-  --md-hr-border: 1px solid var(--border-subtle);
-  --md-hr-margin: 0.85em 0;
 
   --md-link-color: var(--brand-deep, hsl(160 84% 30%));
   --md-link-hover-color: var(--brand, hsl(160 84% 39%));
@@ -626,7 +554,6 @@ html[data-theme='light'] {
   --md-table-bg: var(--bg-secondary);
   --md-table-border-width: var(--hairline-width, 1px);
   --md-table-row-border: var(--hairline, var(--border-subtle));
-  --md-table-header-backdrop-blur: 0px;
   --md-table-header-fg: var(--text-primary);
   --md-table-header-font-weight: 600;
   --md-table-header-border: var(--hairline-strong, var(--border-color));
@@ -653,24 +580,25 @@ html[data-theme='light'] {
   /* Diff 比对 (OKLCH 纯净通透配色，基准：红 #de4931，绿 #4b984f / #00b478，黄 #f0b100，无混色、不灰蒙) */
   --diff-add-bg: oklch(0.60 0.17 152 / 0.08);
   --diff-add-fg: oklch(0.55 0.17 152);
-  --diff-add-word-bg: oklch(0.60 0.17 152 / 0.18);
   --diff-add-gutter-bg: transparent;
   --diff-add-gutter-fg: var(--diff-add-fg);
   --diff-add-indicator: var(--diff-add-fg);
 
   --diff-del-bg: oklch(0.58 0.21 27.5 / 0.08);
   --diff-del-fg: oklch(0.55 0.21 27.5);
-  --diff-del-word-bg: oklch(0.58 0.21 27.5 / 0.18);
   --diff-del-gutter-bg: transparent;
   --diff-del-gutter-fg: var(--diff-del-fg);
   --diff-del-indicator: var(--diff-del-fg);
 
-  --diff-mod-fg: oklch(0.70 0.17 75);
-  --diff-mod-bg: oklch(0.70 0.17 75 / 0.08);
 
   --diff-linenum-fg: var(--text-tertiary, #696969);
   --diff-gutter-bg: var(--bg-card);
   --diff-split-divider: color-mix(in srgb, var(--border-subtle) 25%, transparent);
+  --diff-bg-header: var(--diff-split-header-bg);
+  /* diff 行号槽宽度（布局常量；原仅以 fallback 存在，无提供方） */
+  --diff-gutter-width-unified: 40px;
+  --diff-gutter-marker-width: 20px;
+  --diff-gutter-width-split: 36px;
   --diff-split-header-bg: var(--bg-secondary);
   --diff-split-header-fg: var(--text-secondary);
   --diff-mode-segmented-bg: var(--bg-secondary, hsl(35 8% 92.1%));
@@ -721,14 +649,10 @@ html[data-theme='light'] {
   --stream-anim-marker-fade: 120ms;
   --stream-anim-easing: cubic-bezier(0.16, 1, 0.3, 1);
 
-  --stream-pulse-glow: 0 0 0 3px color-mix(in srgb, var(--brand, hsl(160 84% 39%)) 16%, transparent);
-  --stream-pulse-bg: color-mix(in srgb, var(--brand, hsl(160 84% 39%)) 2%, transparent);
-  --stream-pulse-duration: 1.6s;
 
   /*         styles/z-index.css       */
   /* --font-mono-features   fontStore.ts
    *                         */
-  --font-mono-features: 'calt' 0, 'liga' 0;
 
 
   --opacity-disabled: 0.5;
@@ -742,18 +666,13 @@ html[data-theme='light'] {
   --control-height-sm: 28px;
   --control-height-xs: 24px;
   --control-height-lg: 36px;
-  --control-pad-x: 10px;
-  --control-pad-x-sm: 8px;
-  --control-pad-y: 6px;
 
   /*
    *       ?       ?gap
    * ui-size gear           ?5/7/9   ?px
    */
   --space-0_5: 2px;
-  --space-1_25: 5px;
   --space-1_5: 6px;
-  --space-1_75: 7px;
   --space-2_5: 10px;
   --space-3_5: 14px;
   --space-1: 4px;
@@ -764,9 +683,6 @@ html[data-theme='light'] {
   --space-6: 24px;
   --space-8: 32px;
   --space-10: 40px;
-  --space-12: 48px;
-  --space-16: 64px;
-  --space-0: 0px;
 
   /*
    *     ?UI    body          /  ?tight|ui
@@ -775,7 +691,6 @@ html[data-theme='light'] {
   --line-height-tight: 1.25;
   --line-height-ui: 1.35;
   --line-height-body: 1.55;
-  --line-height-relaxed: 1.65;
   --line-height-none: 1;
   --line-height-dense: 1.2;
   --line-height-compact: 1.3;
@@ -793,14 +708,8 @@ html[data-theme='light'] {
   --panel-pad-x: 12px;
   --panel-pad-y: 10px;
   --panel-gap: var(--space-2);
-  --panel-sec-gap: var(--space-2_5);
   --tab-gap: var(--space-1_5);
-  --tab-pad-x: 16px;
-  --tab-tool-pad-left: 12px;
-  --tab-tool-pad-right: 16px;
   /*         / settings-list / agent      control-height    */
-  --row-height: var(--control-height);
-  --row-height-sm: var(--control-height-sm);
   /*              @container     md */
 
   /*
@@ -835,29 +744,47 @@ html[data-theme='light'] {
  *   --hairline-strong =
  *          color-mix     ?*/
 html[data-theme='dark'] {
-  /* Premium Dark Theme (主对话界面更黑 #141414，整体大背景稍浅灰 #1f1f1f) */
-  --bg-primary: #1f1f1f;
-  --bg-secondary: #191919;
-  --bg-tertiary: #161616;
+  /* 三级：chrome 最沉 → paper 对话画布 → card 工具/输入更深或略抬（暗色反转：卡片更深） */
+  --surface-chrome: hsl(30 7% 10.5%);
+  --surface-paper: hsl(30 6% 12%);
+  --surface-card: hsl(30 5% 8%);
+  --surface-elevated: hsl(30 6% 10%);
+  --surface-sunken: hsl(30 6% 9%);
+  --surface-scrim: var(--shadow-color, #000);
+  --surface-overlay: hsl(0 0% 0% / 0.65);
+  --surface-overlay-fg: hsl(0 0% 100%);
+
+  --bg-primary: var(--surface-paper);
+  --bg-secondary: var(--surface-chrome);
+  --bg-tertiary: var(--surface-sunken);
   --bg-hover: var(--tint-hover);
   --bg-active: var(--tint-active);
-  --bg-card: #141414;
-  --bg-elevated: #161616;
-  --bg-subtle: var(--bg-secondary);
-  --bg-workspace: var(--bg-primary);
-  --shell-chrome-bg: #181818;
+  --bg-card: var(--surface-card);
+  --bg-elevated: var(--surface-elevated);
+  --bg-subtle: var(--surface-chrome);
+  --bg-workspace: var(--surface-paper);
+  --bg-paper: var(--surface-paper, var(--bg-primary));
   --shell-inset-bg: var(--bg-workspace, var(--bg-primary));
-  /* 外壳留白：叶子卡片与窗口边缘之间的落差，密度档位可覆写 */
-  --shell-gutter: var(--space-2, 8px);
+  --bg-page: var(--surface-paper);
+  --bg-canvas: var(--surface-paper);
+  --shell-chrome-bg: var(--surface-chrome);
   --text-primary: #cccccc;
   --text-secondary: #aaaaaa;
   /* 文本三级色：WCAG AA 达标 */
   --text-tertiary: #8f8f8f;
   --text-muted: var(--text-tertiary);
+  /* 第四级弱化文字：由三级色向背景侧收敛（派生，无裸 hex；双主题同向弱化） */
+  --text-faint: color-mix(in srgb, var(--text-tertiary) 68%, var(--bg-primary));
+  /* 反色前景（与 --text-on-accent 同源，随主题翻转） */
+  --text-inverse: var(--text-on-accent);
+  /* 浮层/遮罩之上的前景 */
+  --text-on-overlay: var(--text-on-accent);
 
   --tint-hover: color-mix(in srgb, var(--text-primary) 3.5%, transparent);
   --tint-active: color-mix(in srgb, var(--text-primary) 6.5%, transparent);
   --tint-strong: color-mix(in srgb, var(--text-primary) 10%, transparent);
+  /* 族内最轻一档：极弱底/分隔 */
+  --tint-subtle: color-mix(in srgb, var(--text-primary) 2%, transparent);
   --tint-focus-ring: color-mix(in srgb, var(--text-primary) 10%, transparent);
   --tint-divider: color-mix(in srgb, var(--text-primary) 12%, transparent);
   /* ==========================================================================
@@ -904,29 +831,27 @@ html[data-theme='dark'] {
   --switch-track-bg: color-mix(
     in srgb,
     var(--text-primary) 14%,
-    var(--bg-card, #242424)
+    var(--surface-card)
   );
-  --switch-thumb-bg: #ffffff;
-  --switch-thumb-shadow: 0 1px 3px hsl(0 0% 0% / 0.4);
-  --seg-track-bg: #181818;
+  --switch-thumb-bg: var(--surface-overlay-fg);
+  --switch-thumb-shadow: 0 1px 3px
+    color-mix(in srgb, var(--shadow-color) 40%, transparent);
+  --seg-track-bg: color-mix(in srgb, var(--text-primary) 10%, var(--surface-card));
   --seg-slider-bg: color-mix(
     in srgb,
     var(--text-primary) 16%,
-    var(--bg-card, #242424)
+    var(--surface-card)
   );
 
   --border-color: #EBEBEB;
   --border-subtle: #2a2a2a;
-  --composer-bg: var(--bg-secondary);
-  --composer-footer-bg: var(--bg-secondary);
+  --composer-bg: var(--surface-card);
   /* 暗色环境输入框底部操作区按钮底色适配（默认透明，hover/active 统一） */
-  --composer-control-bg: transparent;
   --composer-control-hover-bg: color-mix(
     in srgb,
     var(--text-primary) 8%,
     transparent
   );
-  --composer-control-active-bg: var(--composer-control-hover-bg);
   /* S6      theme-dark.css                           */
   --md-code-bg: var(--md-code-block-bg);
   --md-code-border: var(--md-code-block-border);
@@ -961,16 +886,9 @@ html[data-theme='dark'] {
     var(--text-primary) 8%
   );
   --focus-ring: 0 0 0 1.5px var(--focus-ring-color);
-  --focus-ring-subtle: 0 0 0 1px
-    color-mix(in srgb, var(--border-color) 95%, var(--text-primary) 5%);
-  --focus-ring-strong: 0 0 0 2px
-    color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
 
-  --bg-page: #0c0c0b;
-  --bg-canvas: #141412;
-  --bg-panel: hsl(40 7% 9% / 0.96);
-  --bg-item-hover: var(--tint-hover);
-  --bg-item-active: var(--tint-active);
+  --bg-page: var(--surface-paper);
+  --bg-canvas: var(--surface-paper);
 
   --brand-primary: #10b981;
   --brand: #10b981;
@@ -989,13 +907,11 @@ html[data-theme='dark'] {
   --sep-item-padding-h: 10px;
   --sep-item-gap: 2px;
 
-  --sep-bg-panel: hsl(40 7% 9% / 0.96);
   --sep-bg-panel-solid: #181715;
   --sep-bg-item-hover: var(--tint-hover);
   --sep-bg-input: hsl(48 20% 95% / 0.04);
 
   --sep-border-color: #2b2926;
-  --sep-border-focus: #524e47;
   --sep-divider-color: hsl(0 0% 100% / 0.07);
 
   --sep-text-primary: #f5f4f0;
@@ -1009,19 +925,14 @@ html[data-theme='dark'] {
   --sep-shadow:
     0 4px 18px hsl(0 0% 0% / 0.28),
     0 1px 3px hsl(0 0% 0% / 0.18);
-  --sep-backdrop-blur: 0px;
 
   --accent-color: hsl(160 84% 45%);
-  --accent-light: hsl(0 0% 16%);
   --accent-hover: #ffffff;
-  --accent-soft: hsl(0 0% 26%);
 
   --accent-orange: oklch(0.80 0.17 75);
   --accent-orange-light: oklch(0.80 0.17 75 / 0.14);
   --accent-green: oklch(0.76 0.16 152);
-  --accent-green-hover: oklch(0.80 0.16 152);
   --accent-green-light: oklch(0.76 0.16 152 / 0.14);
-  --accent-green-soft: oklch(0.76 0.16 152 / 0.20);
   --accent-green-muted: oklch(0.76 0.16 152 / 0.26);
   --status-online: oklch(0.76 0.16 152);
   --accent-red: oklch(0.72 0.19 27.5);
@@ -1031,19 +942,14 @@ html[data-theme='dark'] {
   --accent-red-light-adaptive: oklch(0.72 0.19 27.5 / 0.14);
   --accent-blue: oklch(0.74 0.16 250);
   --accent-blue-light: oklch(0.74 0.16 250 / 0.14);
-  --accent-violet: hsl(258, 90%, 66%);
-  --accent-violet-light: hsl(261, 73%, 23%);
   --accent-primary: #10b981;
-  --accent-secondary: hsl(160 84% 45% / 0.16);
   /* primary     dark    text-secondary    */
-  --accent-inverted: var(--text-secondary);
-  --accent-chart-in: hsl(160 84% 45% / 0.25);
-  --accent-chart-out: #10b981;
   --text-on-accent: var(--bg-primary, #0a0a0a);
   /* legacy/semantic aliases dark        light             dark      */
   --accent-danger: var(--color-error);
   --text-danger: var(--color-error);
   --text-success: var(--color-success);
+  --text-warning: var(--color-warning);
   /*         dark            4.5:1    --ui-text-* dark        10:1  */
   --text-warning-strong: var(--ui-text-warning);
   --text-success-strong: var(--ui-text-success);
@@ -1078,14 +984,13 @@ html[data-theme='dark'] {
   --shadow-lg:
     0 4px 18px hsl(0 0% 0% / 0.28),
     0 1px 3px hsl(0 0% 0% / 0.18);
-  --shadow-drag:
-    0 8px 16px color-mix(in srgb, var(--shadow-color) 25%, transparent),
-    0 24px 48px color-mix(in srgb, var(--shadow-color) 35%, transparent),
-    0 1px 3px color-mix(in srgb, var(--shadow-color) 15%, transparent);
   --shadow-2xl:
     0 12px 24px color-mix(in srgb, var(--shadow-color) 30%, transparent),
     0 32px 64px color-mix(in srgb, var(--shadow-color) 40%, transparent),
     0 1px 3px color-mix(in srgb, var(--shadow-color) 15%, transparent);
+  /* 浮层高程角色（归一到既有高程刻度，禁止新造字面量） */
+  --shadow-dropdown: var(--shadow-md);
+  --shadow-popover: var(--shadow-lg);
 
   --terminal-bg: var(--bg-card, #0c0c0c);
   --terminal-fg: var(--text-primary, #cccccc);
@@ -1124,8 +1029,6 @@ html[data-theme='dark'] {
   --ui-text-warning: #ffa94d;
   --ui-text-primary: inherit;
 
-  --bg-glass: var(--bg-elevated);
-  --bg-overlay: var(--shadow-color);
 
   /* syntax highlighting dark */
   --syntax-keyword: #c4b5fd;
@@ -1145,8 +1048,6 @@ html[data-theme='dark'] {
   --composer-attach-card-bg: var(--bg-card, hsl(0 0% 12%));
   --composer-attach-card-hover-border: var(--border-color);
   --composer-attach-remove-bg: rgba(255, 255, 255, 0.3);
-  --composer-attach-remove-fg: #ffffff;
-  --composer-attach-remove-hover-bg: rgba(255, 255, 255, 0.45);
   --composer-attach-name-color: var(--text-secondary);
   --composer-attach-progress-color: var(--accent-primary, #10b981);
 
@@ -1160,9 +1061,7 @@ html[data-theme='dark'] {
   --md-font-sans: var(--md-font-family);
   --md-font-mono: var(--font-mono, "IBM Plex Mono", "JetBrains Mono", monospace);
   --md-line-height-body: 1.68;
-  --md-line-height-chat: 1.65;
   --md-paragraph-margin-bottom: 0.88em;
-  --md-paragraph-margin-bottom-chat: 0.82em;
 
   --md-text-font: var(--md-font-family);
   --md-text-size: var(--font-size-base, 14px);
@@ -1207,15 +1106,11 @@ html[data-theme='dark'] {
   --md-code-font-size: 12.5px;
   --md-code-tab-size: 2;
   --md-code-header-bg: hsl(0 0% 11%);
-  --md-code-copy-bg: color-mix(in srgb, var(--bg-card) 85%, transparent);
   --md-code-copy-hover-bg: hsl(0 0% 16%);
 
   --md-path-link-bg: transparent;
-  --md-path-link-hover-bg: color-mix(in srgb, var(--text-primary) 6%, transparent);
-  --md-path-link-active-bg: color-mix(in srgb, var(--text-primary) 12%, transparent);
   --md-path-link-fg: var(--text-secondary);
   --md-path-link-border: transparent;
-  --md-path-link-radius: var(--radius-sm, 4px);
 
   --md-task-box-size: 14px;
   --md-task-box-radius: 3px;
@@ -1234,8 +1129,6 @@ html[data-theme='dark'] {
   --md-quote-padding: 0.45em 0 0.45em 1.1em;
   --md-quote-margin: 0.68em 0;
 
-  --md-hr-border: 1px solid var(--border-subtle);
-  --md-hr-margin: 0.85em 0;
 
   --md-link-color: var(--brand, hsl(160 84% 39%));
   --md-link-hover-color: hsl(160 84% 55%);
@@ -1254,7 +1147,6 @@ html[data-theme='dark'] {
   --md-table-bg: var(--bg-secondary);
   --md-table-border-width: var(--hairline-width, 1px);
   --md-table-row-border: var(--hairline, var(--border-subtle));
-  --md-table-header-backdrop-blur: 0px;
   --md-table-header-fg: var(--text-primary);
   --md-table-header-font-weight: 600;
   --md-table-header-border: var(--hairline-strong, var(--border-color));
@@ -1281,20 +1173,16 @@ html[data-theme='dark'] {
   /* Diff 比对 (Dark OKLCH 纯净通透配色，高对比鲜艳不刺眼，无灰蒙脏感) */
   --diff-add-bg: oklch(0.76 0.16 152 / 0.14);
   --diff-add-fg: oklch(0.76 0.16 152);
-  --diff-add-word-bg: oklch(0.76 0.16 152 / 0.25);
   --diff-add-gutter-bg: transparent;
   --diff-add-gutter-fg: var(--diff-add-fg);
   --diff-add-indicator: var(--diff-add-fg);
 
   --diff-del-bg: oklch(0.72 0.19 27.5 / 0.14);
   --diff-del-fg: oklch(0.72 0.19 27.5);
-  --diff-del-word-bg: oklch(0.72 0.19 27.5 / 0.25);
   --diff-del-gutter-bg: transparent;
   --diff-del-gutter-fg: var(--diff-del-fg);
   --diff-del-indicator: var(--diff-del-fg);
 
-  --diff-mod-fg: oklch(0.82 0.16 75);
-  --diff-mod-bg: oklch(0.82 0.16 75 / 0.14);
 
   --diff-linenum-fg: hsl(0 0% 56%);
   --diff-gutter-bg: var(--bg-card);
@@ -1349,9 +1237,6 @@ html[data-theme='dark'] {
   --stream-anim-marker-fade: 120ms;
   --stream-anim-easing: cubic-bezier(0.16, 1, 0.3, 1);
 
-  --stream-pulse-glow: 0 0 0 3px color-mix(in srgb, var(--brand, hsl(160 84% 45%)) 22%, transparent);
-  --stream-pulse-bg: color-mix(in srgb, var(--brand, hsl(160 84% 45%)) 3%, transparent);
-  --stream-pulse-duration: 1.6s;
 
   /* --- 6. 用量监控与时序分析（Usage Dashboard）暗色体系 (Dark) --- */
   --usage-capsule-outer-radius: 9px;
@@ -1369,15 +1254,9 @@ html[data-theme='dark'] {
   --usage-color-other: hsl(38 92% 55%);
   --usage-color-other-bg: hsl(38 92% 55% / 0.18);
   --usage-color-input: hsl(200 98% 48%);
-  --usage-color-input-bg: hsl(200 98% 48% / 0.18);
   --usage-color-cache: hsl(258 90% 70%);
-  --usage-color-cache-bg: hsl(258 90% 70% / 0.18);
   --usage-color-cost-total: hsl(221 83% 60%);
   --usage-color-cost-total-bg: hsl(221 83% 60% / 0.18);
-  --usage-color-total: hsl(160 84% 45%);
-  --usage-color-total-bg: hsl(160 84% 45% / 0.18);
-  --usage-color-danger: hsl(0 84% 65%);
-  --usage-color-danger-bg: hsl(0 84% 65% / 0.16);
 
   --usage-heat-0: color-mix(in srgb, var(--border-color) 60%, transparent);
   --usage-heat-1: color-mix(in srgb, var(--brand, hsl(160 84% 45%)) 30%, transparent);
@@ -1392,12 +1271,6 @@ html[data-theme='dark'] {
 /*       /              token +          */
 [data-ui-size='small'] {
   --settings-sidebar-width: 220px;
-  --dropdown-padding: 5px;
-  --dropdown-gap: var(--space-0_5);
-  --dropdown-radius: 10px;
-  --item-padding: 6px 10px;
-  --item-radius: 7px;
-  --item-font-size: 13px;
   --header-height: 32px;
 
   /*     13      10       body      */
@@ -1416,14 +1289,9 @@ html[data-theme='dark'] {
   --control-height-sm: 26px;
   --control-height-xs: 22px;
   --control-height-lg: 34px;
-  --control-pad-x: 8px;
-  --control-pad-x-sm: 6px;
-  --control-pad-y: 5px;
 
   --space-0_5: 2px;
-  --space-1_25: 3px;
   --space-1_5: 4px;
-  --space-1_75: 5px;
   --space-2_5: 6px;
   --space-3_5: 10px;
   --space-1: 3px;
@@ -1436,14 +1304,12 @@ html[data-theme='dark'] {
   --line-height-tight: 1.22;
   --line-height-ui: 1.32;
   --line-height-body: 1.5;
-  --line-height-relaxed: 1.6;
 
   --radius-xs: 2px;
   --radius-sm: 3px;
   --radius-md: 5px;
   --radius-lg: 7px;
   --radius-xl: 10px;
-  --radius-2xl: 10px;
   --radius-full: 9999px;
 
   --card-header-min-height: 32px;
@@ -1453,13 +1319,7 @@ html[data-theme='dark'] {
   --panel-pad-x: 10px;
   --panel-pad-y: 8px;
   --panel-gap: var(--space-1_5);
-  --panel-sec-gap: var(--space-2);
   --tab-gap: var(--space-0_5);
-  --tab-pad-x: 6px;
-  --tab-tool-pad-left: 5px;
-  --tab-tool-pad-right: 6px;
-  --row-height: var(--control-height);
-  --row-height-sm: var(--control-height-sm);
 
   --md-text-size: 13px;
   --md-code-font-size: 11.5px;
@@ -1468,12 +1328,6 @@ html[data-theme='dark'] {
 
 [data-ui-size='large'] {
   --settings-sidebar-width: 260px;
-  --dropdown-padding: var(--space-2);
-  --dropdown-gap: 3px;
-  --dropdown-radius: 14px;
-  --item-padding: 9px 14px;
-  --item-radius: 9px;
-  --item-font-size: var(--font-size-lg);
   --header-height: 40px;
 
   /*            body        */
@@ -1492,14 +1346,9 @@ html[data-theme='dark'] {
   --control-height-sm: 30px;
   --control-height-xs: 26px;
   --control-height-lg: 40px;
-  --control-pad-x: 12px;
-  --control-pad-x-sm: 10px;
-  --control-pad-y: 7px;
 
   --space-0_5: 2px;
-  --space-1_25: 5px;
   --space-1_5: 6px;
-  --space-1_75: 7px;
   --space-2_5: 10px;
   --space-3_5: 14px;
   --space-1: 4px;
@@ -1512,14 +1361,12 @@ html[data-theme='dark'] {
   --line-height-tight: 1.28;
   --line-height-ui: 1.4;
   --line-height-body: 1.6;
-  --line-height-relaxed: 1.7;
 
   --radius-xs: 3px;
   --radius-sm: 5px;
   --radius-md: 7px;
   --radius-lg: 9px;
   --radius-xl: 14px;
-  --radius-2xl: 14px;
   --radius-full: 9999px;
 
   --card-header-min-height: 40px;
@@ -1529,13 +1376,7 @@ html[data-theme='dark'] {
   --panel-pad-x: 14px;
   --panel-pad-y: 12px;
   --panel-gap: var(--space-2_5);
-  --panel-sec-gap: var(--space-3);
   --tab-gap: var(--space-1);
-  --tab-pad-x: 10px;
-  --tab-tool-pad-left: 8px;
-  --tab-tool-pad-right: 10px;
-  --row-height: var(--control-height);
-  --row-height-sm: var(--control-height-sm);
 
   --md-text-size: 16px;
   --md-code-font-size: 14px;
@@ -1561,15 +1402,9 @@ html[data-theme='dark'] {
   --usage-color-other: hsl(38 92% 50%);
   --usage-color-other-bg: hsl(38 92% 50% / 0.11);
   --usage-color-input: hsl(200 98% 39%);
-  --usage-color-input-bg: hsl(200 98% 39% / 0.11);
   --usage-color-cache: hsl(258 90% 66%);
-  --usage-color-cache-bg: hsl(258 90% 66% / 0.11);
   --usage-color-cost-total: hsl(221 83% 53%);
   --usage-color-cost-total-bg: hsl(221 83% 53% / 0.10);
-  --usage-color-total: hsl(160 84% 39%);
-  --usage-color-total-bg: hsl(160 84% 39% / 0.11);
-  --usage-color-danger: hsl(0 84% 60%);
-  --usage-color-danger-bg: hsl(0 84% 60% / 0.08);
 
   /* 热力图 5 级颜色 */
   --usage-heat-0: color-mix(in srgb, var(--border-color) 40%, transparent);
@@ -1592,15 +1427,9 @@ html[data-theme='dark'] {
     --usage-color-other: oklch(0.75 0.15 85);
     --usage-color-other-bg: oklch(0.75 0.15 85 / 0.11);
     --usage-color-input: oklch(0.70 0.16 230);
-    --usage-color-input-bg: oklch(0.70 0.16 230 / 0.11);
     --usage-color-cache: oklch(0.70 0.18 290);
-    --usage-color-cache-bg: oklch(0.70 0.18 290 / 0.11);
     --usage-color-cost-total: oklch(0.65 0.20 255);
     --usage-color-cost-total-bg: oklch(0.65 0.20 255 / 0.10);
-    --usage-color-total: oklch(0.72 0.16 150);
-    --usage-color-total-bg: oklch(0.72 0.16 150 / 0.11);
-    --usage-color-danger: oklch(0.68 0.18 28);
-    --usage-color-danger-bg: oklch(0.68 0.18 28 / 0.09);
   }
 }
 
@@ -1613,38 +1442,25 @@ html[data-theme='dark'] {
 
 /* HIGH SPEC TIER: Snappy, brisk, and premium transitions */
 html[data-perf-tier='high'] {
-  --backdrop-blur: none;
-  --bg-glass: var(--bg-elevated);
   --transition-spring-layout: cubic-bezier(0.16, 1, 0.3, 1) 220ms;
-  --stream-pulse-glow: 0 0 0 3px color-mix(in srgb, var(--brand, hsl(160 84% 39%)) 16%, transparent);
 }
 html[data-perf-tier='high'][data-theme='dark'] {
-  --bg-glass: var(--bg-elevated);
-  --stream-pulse-glow: 0 0 0 3px color-mix(in srgb, var(--brand, hsl(160 84% 45%)) 22%, transparent);
 }
 
 /* BALANCED SPEC TIER: Snappy layout transitions */
 html[data-perf-tier='balanced'] {
-  --backdrop-blur: none; /* Disable expensive GPU filters */
-  --bg-glass: var(--bg-elevated); /* solid background fallback */
-  --transition-spring-layout: cubic-bezier(0.16, 1, 0.3, 1) 220ms;
   --stream-anim-word-fade: 80ms;
   --stream-anim-word-offset-y: 1px;
   --stream-anim-marker-fade: 100ms;
-  --stream-pulse-glow: none;
 }
 
 /* ECO PERFORMANCE TIER: Strictly flat layout, zero transitions */
 html[data-perf-tier='eco'] {
-  --backdrop-blur: blur(0px);
-  --bg-glass: var(--bg-elevated);
   --transition-spring-layout: 0ms;
   --transition-micro: 0ms;
   --transition-fast: 0ms;
   --transition-smooth: 0ms;
-  --transition-enter: 0ms;
   --transition-exit: 0ms;
-  --transition-spring: 0ms;
   --transition-popover-enter: 0ms;
   --transition-popover-exit: 0ms;
   --transition-modal-enter: 0ms;
@@ -1653,9 +1469,6 @@ html[data-perf-tier='eco'] {
   --stream-anim-marker-fade: 0ms;
   --stream-anim-word-offset-y: 0px;
   --stream-caret-blink-dur: 0ms;
-  --stream-pulse-duration: 0ms;
-  --stream-pulse-glow: none;
-  --stream-pulse-bg: transparent;
 }
 
 /* Reduced Motion Preference: System-level quiet response */
@@ -1668,9 +1481,6 @@ html[data-perf-tier='eco'] {
     --stream-anim-marker-fade: 0ms;
     --stream-anim-word-offset-y: 0px;
     --stream-caret-blink-dur: 0ms;
-    --stream-pulse-duration: 0ms;
-    --stream-pulse-glow: none;
-    --stream-pulse-bg: transparent;
   }
 }
 
