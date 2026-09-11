@@ -1,9 +1,9 @@
 # Software Requirements Specification (SRS): Tiptap Chat Composer Migration
 
-> **Document Status**: Revised Baseline Specification (m0 Iteration 2 Baseline)  
-> **Target Subsystem**: `apps/crish-desktop` (Chat Composer Subsystem)  
-> **Source Prototype**: `reference/chat-composer-tiptap`  
-> **Date**: 2026-08-04  
+> **Document Status**: Revised Baseline Specification (m0 Iteration 2 Baseline)
+> **Target Subsystem**: `apps/crish-desktop` (Chat Composer Subsystem)
+> **Source Prototype**: `reference/chat-composer-tiptap`
+> **Date**: 2026-08-04
 > **Compliance & Guardrails**: Conex Core Directives (`AGENTS.md`), Anti-Overengineering Guardrails (`ANTI_OVERENGINEERING_GUARDRAILS.md`), Security Baseline (`docs/rust-rewrite/31-security-baseline.md`).
 
 ---
@@ -11,9 +11,9 @@
 ## 1. Executive Summary & Project Objectives
 
 ### 1.1 Purpose & Scope
-This document specifies the software requirements for migrating the independent Notion-like Tiptap block composer prototype (`reference/chat-composer-tiptap`) into the production host desktop application (`apps/crish-desktop`). 
+This document specifies the software requirements for migrating the independent Notion-like Tiptap block composer prototype (`reference/chat-composer-tiptap`) into the production host desktop application (`apps/crish-desktop`).
 
-The current chat input field in `apps/crish-desktop` relies on an auto-growing `<textarea>` wrapper (`ComposerField.tsx`). While functionally complete for plain text, it lacks rich block-level editing, interactive checkable task lists, drag-and-drop block reordering, and native Markdown shortcut transformations. 
+The current chat input field in `apps/crish-desktop` relies on an auto-growing `<textarea>` wrapper (`ComposerField.tsx`). While functionally complete for plain text, it lacks rich block-level editing, interactive checkable task lists, drag-and-drop block reordering, and native Markdown shortcut transformations.
 
 The objective of this migration is to replace `ComposerField.tsx` with a high-performance, modular Tiptap v3 block editor system (`TiptapComposerField.tsx` and associated sub-modules) while maintaining 100% API and state compatibility with the host application's existing `useChatComposerProps` interface, session runtime attachment bar, queue panel, and L2/L3 cancellation mechanisms.
 
@@ -54,7 +54,7 @@ The objective of this migration is to replace `ComposerField.tsx` with a high-pe
 - **Zero Breakage of Outer Interface Contracts**: `TiptapComposerFieldProps` must accept all legacy props plus accessibility and formatting extension props.
 - **Strict Compliance with Anti-Overengineering Guardrails**: No introduction of unnecessary abstraction middleware pipelines, sandbox wrappers, or complex ring buffers.
 - **Strict Modular File Size Limit**: All component and hook files (`TiptapComposerField.tsx`, `useTiptapEditor.ts`, `SlashMenuOverlay.tsx`, `TiptapKeymap.ts`) must strictly stay **$\le$ 500 lines** of code (enforced by CI `no-multi-comp` / line count check).
-- **Security & Performance Bounds**: 
+- **Security & Performance Bounds**:
   - Max character / block limits must be enforced to prevent memory bloat on large pastes (convert ultra-large text blocks into `.txt` attachments automatically).
   - DOMPurify must be used on pasted HTML.
   - Serialization must be debounced, NOT executed synchronously on every keystroke.
@@ -199,7 +199,7 @@ The customized `TiptapKeymap` extension enforces strict keyboard rules:
    - Pressing `Enter` inside a `codeBlock` must **NEVER trigger `onSend()`**, regardless of whether the user's `sendShortcut` preference is set to `Enter` or `Ctrl+Enter`.
 2. **Windows Chromium / WebView2 IME Race Condition Protection**:
    - **Race Condition**: Pressing `Enter` to confirm an IME candidate fires `compositionend` followed immediately by `keydown (Enter)`, leading to premature message dispatch.
-   - **Robust Mitigation**: Do not rely purely on a 50ms `isComposingJustEndedRef` timer, as CPU/thread scheduling makes hardcoded timers vulnerable. 
+   - **Robust Mitigation**: Do not rely purely on a 50ms `isComposingJustEndedRef` timer, as CPU/thread scheduling makes hardcoded timers vulnerable.
    - Ensure the event logic checks internal keyboard event queues or reliable `isComposing` states natively provided by the browser before treating an `Enter` press as a valid trigger.
 
 ---
@@ -223,7 +223,7 @@ export interface TiptapComposerFieldProps {
 
 #### 1. 350ms Debounced Draft Persistence & Safety Nets
 - **Store Key**: `useLayoutStore.getState().composerDrafts[activeSessionId]`.
-- **Debounce Window**: `350ms` debounced schedule via `scheduleComposerDraft` (in `useChatComposerProps.ts:99`). 
+- **Debounce Window**: `350ms` debounced schedule via `scheduleComposerDraft` (in `useChatComposerProps.ts:99`).
 - **Auto-Flush**: When switching `activeSessionId` or triggering `beforeunload`, `flushComposerDraft()` writes the pending serialized markdown immediately.
 - **Tauri Close Safety**: Add an explicit listener for `tauri://close-requested` to ensure the draft is flushed to disk safely before the native desktop window is forcibly killed.
 
@@ -243,7 +243,7 @@ export interface TiptapComposerFieldProps {
 ## 5. UI/UX & Design System Constraints
 
 ### 5.1 Tooltip Enforcement (Zero Native Title Rule)
-Per `.agents/AGENTS.md` Rule 2, native HTML `title="..."` attributes are strictly prohibited across all composer elements. 
+Per `.agents/AGENTS.md` Rule 2, native HTML `title="..."` attributes are strictly prohibited across all composer elements.
 - All action buttons must wrap interactive elements with custom `<Tooltip content="...">` from `@/components/Tooltip`.
 
 ### 5.2 Focus State Border & Shadow Constraints

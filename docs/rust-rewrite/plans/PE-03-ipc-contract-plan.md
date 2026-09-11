@@ -440,7 +440,7 @@ T03.9 产出的独立契约文档 `docs/rust-rewrite/contracts/engine-ipc-contra
   3. 清理连带死代码：error_bridge.rs（T03.3）、WorkbenchRunTaskRequest（commands.rs:5-28，S-4）。
   4. workbench_apply_update：stub 恒 ok 改为显式不可用错误（未配置 updater → CoreError::NotFound），
      updateStore.ts 展示「更新不可用」而非成功提示。
-- **验收**：main.rs 注册面无死面命令；grep `save_api_config|workbench_performance_snapshot|workbench_set_keep_awake|perf_` 
+- **验收**：main.rs 注册面无死面命令；grep `save_api_config|workbench_performance_snapshot|workbench_set_keep_awake|perf_`
   注册面零命中；6 个配置命令均有前端调用点。
 - **依赖**：T03.4（更名先行）。
 
