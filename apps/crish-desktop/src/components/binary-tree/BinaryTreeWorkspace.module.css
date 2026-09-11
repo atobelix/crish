@@ -331,7 +331,7 @@
   padding-top: 0;
   margin-top: 0;
   background: var(--bg-card);
-  /* border: 1px solid var(--border-subtle); */
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   /* box-shadow:
     0 1px 3px hsl(0 0% 0% / 0.03),
@@ -438,59 +438,12 @@
 }
 
 /*
- * ErrorBoundary / SlotOutlet 现为 display:contents：> / > * > * 打在包装上，
- * 不改盒树。纸面根若再 contents，header/footer 会升成叶子弹性子项。
- * :not 让二级 fill 打不中 chrome；不要改成 .leafBody *。
- * 坞展开后行布局：fill 只打在对话列内部，不打在 resizer / 抽屉上。
+ * 叶内二级 fill 已下沉到各消费者自闭环：
+ * - ChatCard `.chatBody` / `.emptyState` 自带 flex: 1 1 0%
+ * - NoteLeafHost 内联 style 自带 flex: 1 1 0%；面板绝缘见 NotePaperPanel.module.css
+ * 禁止再引入 .leafChatColumn > * 等任意后代穿透。
  */
-.leafChatColumn > *:not(:global(header)):not(:global(footer)),
-.leafChatColumn > * > *:not(:global(header)):not(:global(footer)) {
-  flex: 1 1 0%;
-  min-width: 0;
-  min-height: 0;
-  max-height: 100%;
-  width: 100%;
-}
 
-/*
- * 02 叶壳是实盒、非 flex：透视不得用 contents（会把顶栏抬成叶子子项）。
- * 适配器按列吃满叶子；探针已有，不加魔术 class。
- */
-.leafBody :global([data-note-leaf-host]) {
-  display: flex;
-  flex-direction: column;
-  flex: 1 1 0%;
-  min-width: 0;
-  min-height: 0;
-  max-height: 100%;
-  width: 100%;
-}
-
-/*
- * 绝缘：note 顶栏/底栏不得被叶子二级 flex 拉成与正文均分。
- * 不改 NotePaperPanel 的 6% / H1–H6。
- */
-.leafBody :global([data-testid='note-paper-strict-panel']) {
-  flex: 1 1 0%;
-  min-width: 0;
-  min-height: 0;
-  max-height: 100%;
-  width: 100%;
-}
-
-.leafBody :global([data-testid='note-paper-strict-panel']) > :global(header) {
-  flex: 0 0 auto;
-  max-height: none;
-  width: 100%;
-}
-
-.leafBody :global([data-testid='note-paper-strict-panel']) > :global([data-testid='note-paper-strict-body']) {
-  flex: 1 1 0%;
-  min-height: 0;
-  max-height: none;
-}
-
-/*            /                                       */
 
 .emptyState {
   display: flex;

@@ -67,7 +67,16 @@ export function NoteLeafHost(ctx: ViewRenderContext): React.ReactElement {
     flushPendingDraft,
   });
 
-  const activeDocId = docManager.activeDocId || resolution.docId;
+  const activeDocId =
+    !explicit && resolution.binding === 'recent-persisted' && docManager.activeDocId === resolution.syntheticFallback
+      ? resolution.docId
+      : (docManager.activeDocId || resolution.docId);
+
+  useEffect(() => {
+    if (!explicit && recent && resolution.binding === 'recent-persisted' && resolution.docId) {
+      void docManager.switchDocument(resolution.docId);
+    }
+  }, [explicit, recent, resolution.binding, resolution.docId, docManager.switchDocument]);
 
   // 为当前激活的 docId 创建专属 Transport 实例
   const transport = useMemo(
@@ -97,7 +106,7 @@ export function NoteLeafHost(ctx: ViewRenderContext): React.ReactElement {
   return (
     <div
       data-note-leaf-host="true"
-      style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%', minHeight: 0 }}
+      style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%', minHeight: 0, flex: '1 1 0%', maxWidth: '100%', overflow: 'hidden' }}
       {...NOTE_LEAF_HONESTY_ATTRS}
       {...buildStrictDocBindingDataAttrs(resolution)}
       data-active-doc-id={activeDocId}

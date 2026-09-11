@@ -391,7 +391,7 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
                     data-tab-id={tabId}
                   >
                     {(iconName || isBrowserTabId(tabId)) && (
-                      <span className={`${styles.tabIcon} side-panel-tab-icon`}>
+                      <span className={`${styles.tabIcon} side-panel-tab-icon`} data-testid="tool-icon">
                         <ToolTabFavicon tabId={tabId} iconName={iconName} />
                       </span>
                     )}

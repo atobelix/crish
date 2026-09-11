@@ -46,7 +46,6 @@ const BUILTIN_IDS = [
   'diff',
   'runtime',
   'agent',
-  'browser',
   'flow-dag',
   'file-viewer',
 ] as const;
