@@ -36,14 +36,14 @@
 | **标定日期** | 待本机标定 | ISO `YYYY-MM-DD`                                          |
 | **标定提交** | 待本机标定 | git SHA（数值初值写入时）                                 |
 
-> 未填齐指纹前，**数值门**一律视为未生效；结构门不受影响。  
+> 未填齐指纹前，**数值门**一律视为未生效；结构门不受影响。
 > **W6-C-S 验收不要求**填齐指纹；填齐 + 手写数值 = **W6-C** Strict 工作，**不是**本 Skeleton 包。
 
 ---
 
 ## 2. 结构门（可立即验收 · 无数值也可红/绿）
 
-对齐 H3：**无数值也可合入结构侧**；下列项为硬门禁。  
+对齐 H3：**无数值也可合入结构侧**；下列项为硬门禁。
 **结构门绿 ≠ EL-03 关闭 ≠ W6-C 数值门。**
 
 | ID                      | 结构断言                          | 默认/契约                                                                                                                              | 代码锚点（可执行）                                                                              | 状态        |
@@ -64,16 +64,16 @@
 
 ### 2.2 结构门验收清单（合入 PR 可勾 · **仅勾有测证据项**）
 
-> **纪律**：`[x]` = 可点名测路径存在且绿；**禁止**无证据勾选。契约门未接线测的保持 `[ ]`。  
+> **纪律**：`[x]` = 可点名测路径存在且绿；**禁止**无证据勾选。契约门未接线测的保持 `[ ]`。
 > 本清单勾选 = **结构侧形式验收**；**≠** 数值门通过；**≠ EL-03**。
 
-- [x] `DEFAULT_MAX_HOT == 512` 且 `DocSession::new` 默认 `text_max_hot() == 512`  
+- [x] `DEFAULT_MAX_HOT == 512` 且 `DocSession::new` 默认 `text_max_hot() == 512`
       — 证据：`crates/conex-doc-collab/src/session.rs` · `a_mem_01_default_max_hot_constant_is_512`；`text_engine.rs` · `a_mem_01_default_max_hot_is_512`；`packages/editor-kit` · `bounds.test.ts`
-- [x] 活动热实例在非「全 pin」路径下 `hot_count ≤ max_hot`（A-MEM-01）  
+- [x] 活动热实例在非「全 pin」路径下 `hot_count ≤ max_hot`（A-MEM-01）
       — 证据：`text_engine.rs` · `a_mem_01_hot_count_bounded`；`session.rs` · `a_mem_01_session_hot_bounded`
-- [x] 典型视口 + 默认 overscan 的 `queryViewport(...).count ≤ MAX_MOUNTED_DOM_BLOCKS`  
+- [x] 典型视口 + 默认 overscan 的 `queryViewport(...).count ≤ MAX_MOUNTED_DOM_BLOCKS`
       — 证据：`packages/editor-kit/src/viewport/bounds.test.ts` · A-PERF-01 典型视口
-- [x] 默认 diff 路径 `fullRemountCount === 0`（A-IME-07）  
+- [x] 默认 diff 路径 `fullRemountCount === 0`（A-IME-07）
       — 证据：`packages/editor-kit/src/diff/applyProjectionDiff.test.ts`
 - [ ] 无「每键全量 snapshot」默认路径（A-PERF-09）— **契约门**；缺可红接线测 = 未交付（结构可执行层）
 - [ ] merge/批 apply 不阻塞 UI 主线程（A-PERF-06；接线后测）— **契约门**；缺线程归属断言 = 未交付
@@ -88,8 +88,8 @@
 
 ## 3. 数值门表格（初值 **TBD · 未标定** · **≠ 通过**）
 
-> 维度对齐 D7 §5.9 `A-PERF-01…11`；**维度不可删**。  
-> 单位：时间 ms；jank 代理见下表注释。全部 **TBD** 直至本机标定写入并 bump rev（**仅 W6-C Strict**）。  
+> 维度对齐 D7 §5.9 `A-PERF-01…11`；**维度不可删**。
+> 单位：时间 ms；jank 代理见下表注释。全部 **TBD** 直至本机标定写入并 bump rev（**仅 W6-C Strict**）。
 > **W6-C-S 完成时本表必须仍为 TBD（未标定）**——若出现假数字或「已通过」而无指纹，属会计事故。
 
 ### 3.1 打开文档（可交互时间）
@@ -186,8 +186,8 @@ verdict: ok | watch | A-PERF-DEG-01
 
 ## 7. 测量脚手架 · 如何跑 · 如何 **人工** 回填
 
-> **铁律**：脚手架 **只打印** JSON 行；**禁止** 任何脚本自动把本文件的 `TBD（未标定）` 改成数字或宣称「数值门通过」。  
-> 标定 = 人在基准机上跑数 → 核对机器指纹 → 手写填表 → bump `perf_baseline_rev`（若指纹/阈值变更）。  
+> **铁律**：脚手架 **只打印** JSON 行；**禁止** 任何脚本自动把本文件的 `TBD（未标定）` 改成数字或宣称「数值门通过」。
+> 标定 = 人在基准机上跑数 → 核对机器指纹 → 手写填表 → bump `perf_baseline_rev`（若指纹/阈值变更）。
 > 标定完成 = **W6-C** Strict 工作包；**不是** W6-C-S。
 
 ### 7.1 入口（CI **默认不跑**）

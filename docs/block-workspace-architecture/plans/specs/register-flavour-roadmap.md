@@ -9,5 +9,5 @@ EL-07：TS 扩展一等 → **自定义块类型为主路线图项**（非永久
 | F2   | View 轨渲染自定义块；写仍走 Op                                  |
 | F3   | 打包分发 / TrustGate                                            |
 
-W0 产出：本文件 + `plans/interfaces` 可增 `FlavourRegistration` TS 类型草稿。  
+W0 产出：本文件 + `plans/interfaces` 可增 `FlavourRegistration` TS 类型草稿。
 实现不得把第三方块永久锁死在「只能装饰内置 flavour」。

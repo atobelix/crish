@@ -205,7 +205,7 @@
 
 ### 3.8 有损报告
 
-已有 code：`missing_block_id` / `duplicate_block_id` / `structure_note` / `stripped_block_ids`(+count)。  
+已有 code：`missing_block_id` / `duplicate_block_id` / `structure_note` / `stripped_block_ids`(+count)。
 D3 §3 大表（表合并、数学、脚注、callout…）**多数码未建模**。
 
 ### 3.9 审计已认账（同意并继承）

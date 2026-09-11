@@ -142,7 +142,7 @@ type EditorSurface = 'chat' | 'note-paper';
 
 ## 4. 可共享（白名单）
 
-> **共享的是纪律与无状态工具，不是真相。**  
+> **共享的是纪律与无状态工具，不是真相。**
 > 落点优先 `@crish/editor-kit` 与未来 `editor-kit/render`（或独立 render-widgets 包）；**禁止** `editor-kit` 依赖任一侧产品 store。
 
 | ID        | 可共享项                                     | 形态约束                                                                            | 消费方                |
@@ -314,7 +314,7 @@ type SendToNoteIntent = {
 
 ## 7. 验收断言草案（A-SURF）
 
-> 与 **A-INV-03**（行级可写本地缓冲；持久化/协同/Agent 可见仅块树提交）正交加强。  
+> 与 **A-INV-03**（行级可写本地缓冲；持久化/协同/Agent 可见仅块树提交）正交加强。
 > **缺测 = 未交付**（对齐 08）。主责：W5-A 规格 → W5-C 自动化 → W5-B 挂载冒烟引用。
 
 | ID            | 断言                                                                                    | 层（建议）                                  | 主责      |
@@ -351,7 +351,7 @@ type SendToNoteIntent = {
 
 ## 8. W5-B 挂载任务勾选表
 
-> 依赖：W3-F（或可嵌入的 chrome 子集）、**W5-A 本文**。  
+> 依赖：W3-F（或可嵌入的 chrome 子集）、**W5-A 本文**。
 > **挂载 ≠ 交付**：Workbench 可点可写 ≠ EL-01/EL-08 关闭（08 §1.0）。
 
 | #    | 任务                                                                | 文件域（建议）                                      | 验收引用               | 状态 |

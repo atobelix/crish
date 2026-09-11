@@ -25,8 +25,8 @@
 
 **一句话**：
 
-> **D4 交付了投影控制面算法 + IME L1 状态机；D5 交付了 chrome 模型 + Intent 形状 + 半挂 CM6。**  
-> **没有** 真 PM 叶、没有 Intent→RS 闭环、没有块列表 DOM 窗口挂载、没有 A-BLK/A-IME 产品关闭。  
+> **D4 交付了投影控制面算法 + IME L1 状态机；D5 交付了 chrome 模型 + Intent 形状 + 半挂 CM6。**
+> **没有** 真 PM 叶、没有 Intent→RS 闭环、没有块列表 DOM 窗口挂载、没有 A-BLK/A-IME 产品关闭。
 > 方案再生目标：把「骨架诚实分层」写进 04/05/09，消除「PM→Intent」「接 op」「W3 完成」话术漂移。
 
 ---
@@ -53,7 +53,7 @@
 6. Diff 应用器 + `fullRemountCount`
 7. 远端 awareness overlay（视口裁剪）
 
-**验收 ID 族**：A-IME-01…08，A-SEL-01…06，A-PERF 滚动/输入，A-COL-02（远端选区相关）  
+**验收 ID 族**：A-IME-01…08，A-SEL-01…06，A-PERF 滚动/输入，A-COL-02（远端选区相关）
 **禁止**：CSS hidden 假虚拟化；composition 中整树 remount；像素测距选块
 
 ### 1.3 `plans/05` 目标模块（块呈现）
@@ -186,7 +186,7 @@ IntentSink
     ProjectionDiff → 产品 DOM patch  （❌ 未接；仅有内存 applyProjectionDiff）
 ```
 
-**允许宣称**：Intent 形状 + IME 守卫 + wire 映射可测。  
+**允许宣称**：Intent 形状 + IME 守卫 + wire 映射可测。
 **禁止宣称**：「已接 RS / 已 apply / slash 已进 Op 树 / 键入已持久化」。
 
 ### 2.5 PM 叶现状 vs `plans/05` 文档
@@ -502,5 +502,5 @@ A-BLK：     不可 W3 关闭 · 仅 W6-A 全表 e2e · 抽样≠W6-A
 
 ---
 
-**分析员角色**：方案分析子 Agent · 未改业务代码 · 未 git commit · 未嵌套派发。  
+**分析员角色**：方案分析子 Agent · 未改业务代码 · 未 git commit · 未嵌套派发。
 **产出路径**：`docs/block-workspace-architecture/analysis/2026-08-11-realign/D4D5-投影呈现与IME.md`
