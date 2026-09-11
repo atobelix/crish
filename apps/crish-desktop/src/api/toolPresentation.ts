@@ -12,3 +12,6 @@ export * from './tool-presentation/timelineNormalizer';
 export * from './tool-presentation/toolCardPresenter';
 export * from './tool-presentation/toolCommandType';
 export * from './tool-presentation/toolCommandIcon';
+export * from './tool-presentation/toolActionClassifier';
+export * from './tool-presentation/processMetricsEngine';
+export * from './tool-presentation/timelineSegmenter';
