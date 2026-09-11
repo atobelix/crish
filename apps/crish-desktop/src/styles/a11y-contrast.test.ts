@@ -80,6 +80,59 @@ function hslToRgb(value: string): Rgb | null {
   };
 }
 
+function oklchToRgb(value: string, bg: Rgb): Rgb | null {
+  const m = value.match(
+    /oklch\(\s*([\d.]+)\s+([\d.]+)\s+([\d.]+)(?:\s*\/\s*([\d.]+%?))?\s*\)/i
+  );
+  if (!m) return null;
+  const L = parseFloat(m[1]);
+  const C = parseFloat(m[2]);
+  const hDeg = parseFloat(m[3]);
+  const alphaStr = m[4];
+  const alpha = alphaStr
+    ? alphaStr.endsWith('%')
+      ? parseFloat(alphaStr) / 100
+      : parseFloat(alphaStr)
+    : 1;
+
+  const hRad = (hDeg * Math.PI) / 180;
+  const a = C * Math.cos(hRad);
+  const b = C * Math.sin(hRad);
+
+  const l_ = L + 0.3963377774 * a + 0.2158037573 * b;
+  const m_ = L - 0.1055613458 * a - 0.0638541728 * b;
+  const s_ = L - 0.0894841775 * a - 1.2914855480 * b;
+
+  const l_cube = l_ * l_ * l_;
+  const m_cube = m_ * m_ * m_;
+  const s_cube = s_ * s_ * s_;
+
+  const r_lin = +4.0767416621 * l_cube - 3.3077115913 * m_cube + 0.2309699292 * s_cube;
+  const g_lin = -1.2684380046 * l_cube + 2.6097574011 * m_cube - 0.3413193965 * s_cube;
+  const b_lin = -0.0041960863 * l_cube - 0.7034186147 * m_cube + 1.7076147010 * s_cube;
+
+  const toSrgb = (c: number) => {
+    const clamped = Math.max(0, Math.min(1, c));
+    return clamped <= 0.0031308
+      ? 12.92 * clamped
+      : 1.055 * Math.pow(clamped, 1 / 2.4) - 0.055;
+  };
+
+  const r = Math.round(toSrgb(r_lin) * 255);
+  const g = Math.round(toSrgb(g_lin) * 255);
+  const b_val = Math.round(toSrgb(b_lin) * 255);
+
+  if (alpha < 1) {
+    return {
+      r: Math.round(r * alpha + bg.r * (1 - alpha)),
+      g: Math.round(g * alpha + bg.g * (1 - alpha)),
+      b: Math.round(b_val * alpha + bg.b * (1 - alpha)),
+    };
+  }
+
+  return { r, g, b: b_val };
+}
+
 /** 解析 token 值为 sRGB；color-mix(in srgb, A p%, transparent) 按主题背景合成 */
 function resolveColor(
   value: string,
@@ -93,6 +146,8 @@ function resolveColor(
   if (hex) return hex;
   const hsl = hslToRgb(v);
   if (hsl) return hsl;
+  const oklch = oklchToRgb(v, bg);
+  if (oklch) return oklch;
   const varMatch = v.match(/^var\((--[\w-]+)(?:\s*,\s*([^)]+))?\)$/);
   if (varMatch) {
     const resolved = resolveColor(

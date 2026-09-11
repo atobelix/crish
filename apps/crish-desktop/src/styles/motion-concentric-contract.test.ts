@@ -43,9 +43,8 @@ function collectCssFiles(dir: string, out: string[] = []): string[] {
 describe('契约测试：同心几何圆角与 Apple 物理动效防回潮 (DIM-02) [Ratchet Mode]', () => {
   const cssFiles = collectCssFiles(SRC_DIR);
 
-  // Phase 0 存量基线快照：全仓现存 19 处历史奇数/亚像素硬编码圆角
-  // Phase 2 重构完成后此阈值收敛至 0
-  const ODD_RADIUS_PHASE0_BASELINE = 19;
+  // 全仓清除历史奇数/亚像素硬编码圆角，已全部规范化至 Design Tokens，基线硬性锁死为 0
+  const ODD_RADIUS_PHASE0_BASELINE = 0;
 
   it('1. 静态扫描：全站清除 5px/7px 等奇数与亚像素圆角（Ratchet 模式防劣化）', () => {
     const FORBIDDEN_ODD_VALUES = [

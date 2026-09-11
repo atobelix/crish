@@ -132,9 +132,7 @@
   color: var(--text-primary);
   font-weight: 500;
   border-color: var(--border-subtle);
-  box-shadow:
-    0 1px 2px color-mix(in srgb, var(--text-primary) 3%, transparent),
-    0 0.5px 1px color-mix(in srgb, var(--text-primary) 2%, transparent);
+  box-shadow: var(--shadow-sm);
 }
 
 /* 入场：@starting-style 首帧以左侧实际落地位置为锚点展开，无纵向浮动漂移；首轮挂载由 data-booted 关闭。
@@ -451,7 +449,7 @@
 }
 
 .launcherCard:hover {
-  background: color-mix(in srgb, var(--text-primary) 3%, var(--bg-card));
+  background: var(--bg-card-hover);
   border-color: var(--border-color);
   transform: translateY(-1px);
   box-shadow: var(--shadow-sm);

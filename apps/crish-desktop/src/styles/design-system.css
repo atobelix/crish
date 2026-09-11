@@ -20,7 +20,7 @@ html[data-theme="dark"] .elevation-4 {
 
 /* Premium dynamic text selection matching skin-specific themes */
 ::selection {
-  background-color: color-mix(in srgb, var(--text-primary) 9%, transparent);
+  background-color: var(--tint-focus-ring);
   color: inherit;
 }
 

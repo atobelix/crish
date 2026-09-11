@@ -56,6 +56,9 @@ html[data-theme='light'] {
   --bg-hover: var(--tint-hover);
   --bg-active: var(--tint-active);
   --bg-card: var(--surface-card);
+  --bg-card-hover: color-mix(in srgb, var(--text-primary) 3.5%, var(--bg-card));
+  --bg-card-active: color-mix(in srgb, var(--text-primary) 6%, var(--bg-card));
+  --bg-card-subtle: color-mix(in srgb, var(--text-primary) 2%, var(--bg-card));
   --bg-elevated: var(--surface-elevated);
   --bg-subtle: var(--surface-chrome);
   --bg-workspace: var(--surface-paper);
@@ -135,6 +138,7 @@ html[data-theme='light'] {
   /* --- 向后兼容别名安全网 (Deprecated Aliases Bridge) ---
      警告：以下别名仅供存量代码渐进过渡，全新业务严禁直接引用，将在维度 6 门禁收口后全面废弃 */
   --tint-scrollbar-thumb: var(--scrollbar-thumb-bg);
+  --tint-scrollbar-track: transparent;
   --tint-overlay: color-mix(in srgb, var(--text-primary) 25%, transparent);
   --tint-highlight: color-mix(in srgb, var(--text-primary) 28%, transparent);
 
@@ -154,14 +158,26 @@ html[data-theme='light'] {
   );
   --seg-slider-bg: var(--surface-card);
 
-  --border-color: hsl(30 2.5% 86%);
-  --border-subtle: hsl(30 6% 93.8%);
+  /* 描边降调（2026-09-11 用户裁决：弱化描边存在感，按钮尤其）
+   * 旧值 hsl(30 2.5% 86%) 对白卡对比 1.38:1，偏重；降至 88% → 1.32:1，
+   * 与暗色侧同档（≈1.5:1）保持量级一致，同时保留"可辨识但不抢戏"的边界感。 */
+  --border-color: hsl(30 2.5% 88%);
+  --border-subtle: hsl(30 6% 94.5%);
   --composer-bg: var(--surface-card);
   /* 输入框底部操作区按钮统一底色（默认透明，hover/click/active 均为同一 3% 灰度 #F7F7F7，单一灰度无级差） */
   --composer-control-hover-bg: color-mix(in srgb, var(--text-primary) 3.3%, transparent);
   --hairline-width: 1px;
   --hairline: var(--border-subtle);
   --hairline-strong: var(--border-color);
+  /* ==========================================================================
+     线宽契约（Line Width SSOT）
+     UI 线条合法宽度仅两档，禁止裸写其它像素值（由 check-line-width-ssot 门禁强制）：
+       - 常规分隔线 / 边框 / 卡片描边 → var(--hairline-width)（1px）
+       - 语义强调描边（选中态、指示条、箭头图标）→ var(--border-width-emphasis)（2px）
+     图标描边不走本组 token，权威在 components/ui/icons/iconTokens.ts（ICON_STROKE）。
+     焦点环 1.5px 权威在 styles/focus-visible.css，不在此处重复定义。
+     ========================================================================== */
+  --border-width-emphasis: 2px;
 
   --control-soft-bg: var(--tint-hover);
   --control-soft-bg-hover: var(--tint-hover);
@@ -230,14 +246,16 @@ html[data-theme='light'] {
 
 
   --accent-color: hsl(160 84% 36%); /* 品牌翡翠绿活态签名 */
-  --accent-green: oklch(0.65 0.15 155); /* 纯净翡翠翠绿，基准 #00b478 / #4b984f，通透不刺眼 */
-  --accent-green-light: oklch(0.65 0.15 155 / 0.08);
-  --accent-green-muted: oklch(0.65 0.15 155 / 0.22);
-  --status-online: oklch(0.65 0.15 155);
+  --accent-orange: oklch(0.70 0.16 65);
+  --accent-orange-light: oklch(0.70 0.16 65 / 0.10);
+  --accent-green: oklch(0.60 0.16 150); /* 纯净翡翠翠绿，满足 WCAG AA 状态点 ≥ 3:1 */
+  --accent-green-light: oklch(0.60 0.16 150 / 0.08);
+  --accent-green-muted: oklch(0.60 0.16 150 / 0.22);
+  --status-online: oklch(0.60 0.16 150);
   --accent-red: oklch(0.61 0.19 31.8); /* 纯净温暖朱红，基准 #de4931，鲜艳不刺眼 */
   --accent-red-light: oklch(0.61 0.19 31.8 / 0.08);
-  --accent-blue: oklch(0.65 0.18 245); /* 纯净天蓝，鲜艳纯正，不与文字/墨色混浊 */
-  --accent-blue-light: oklch(0.65 0.18 245 / 0.08);
+  --accent-blue: oklch(0.50 0.18 250); /* 纯净天蓝，满足 WCAG AA 文字 ≥ 4.5:1 */
+  --accent-blue-light: oklch(0.50 0.18 250 / 0.08);
   --accent-primary: #10b981;
   --accent-green-light-adaptive: color-mix(in srgb, var(--accent-green, #16a34a) 15%, #ffffff);
   --accent-red-light-adaptive: color-mix(in srgb, var(--accent-red, #dc2626) 12%, #ffffff);
@@ -266,14 +284,14 @@ html[data-theme='light'] {
   --text-danger: var(--color-error);
   --text-success: var(--color-success);
   --text-warning: var(--color-warning);
-  --text-warning-strong: var(--accent-orange);
-  --text-success-strong: var(--color-success);
+  --text-warning-strong: oklch(0.52 0.16 55);
+  --text-success-strong: oklch(0.48 0.15 150);
   --text-on-danger: #ffffff;
   --ui-text-success: var(--color-success);
   --ui-text-danger: var(--color-error);
   --ui-text-muted: var(--text-tertiary);
   --ui-text-info: var(--color-info);
-  --ui-text-warning: var(--color-warning);
+  --ui-text-warning: var(--text-warning-strong);
   --ui-text-primary: inherit;
 
   /* Windows caption close (shared by app top bar + inset chrome) */
@@ -406,6 +424,12 @@ html[data-theme='light'] {
      禁止再别名到 --radius-md 的 6px。来源：docs/desktop-ui-repair/survey/04-*。 */
   --button-radius: var(--radius-btn);
 
+  /* 响应式断点单一真源 (SSOT) */
+  --breakpoint-sm: 640px;
+  --breakpoint-md: 768px;
+  --breakpoint-lg: 1024px;
+  --breakpoint-xl: 1280px;
+
   --header-height: 36px;
   /*
    * 壳几何让位 token：顶行叶头为悬浮壳层控件让出的空间，单一出处。
@@ -521,6 +545,9 @@ html[data-theme='light'] {
 
   --md-task-box-size: 14px;
   --md-task-box-radius: 3px;
+  /* 任务勾选 ✓ 的笔画宽度（border 拼形画法，SSOT）。
+     语义同 --border-width-emphasis 的强调档，但独立命名以表达「勾线」而非「边框」。 */
+  --md-task-check-stroke: 2px;
 
   /* --- 4. 列表、引用块与分割线体系 (Light) --- */
   --md-list-padding-left: 1.6em;
@@ -760,6 +787,9 @@ html[data-theme='dark'] {
   --bg-hover: var(--tint-hover);
   --bg-active: var(--tint-active);
   --bg-card: var(--surface-card);
+  --bg-card-hover: color-mix(in srgb, var(--text-primary) 4.5%, var(--bg-card));
+  --bg-card-active: color-mix(in srgb, var(--text-primary) 8%, var(--bg-card));
+  --bg-card-subtle: color-mix(in srgb, var(--text-primary) 2.5%, var(--bg-card));
   --bg-elevated: var(--surface-elevated);
   --bg-subtle: var(--surface-chrome);
   --bg-workspace: var(--surface-paper);
@@ -824,6 +854,7 @@ html[data-theme='dark'] {
 
   /* 向后兼容别名安全网 */
   --tint-scrollbar-thumb: var(--scrollbar-thumb-bg);
+  --tint-scrollbar-track: transparent;
   --tint-overlay: color-mix(in srgb, var(--text-primary) 25%, transparent);
   --tint-highlight: color-mix(in srgb, var(--text-primary) 28%, transparent);
 
@@ -843,8 +874,15 @@ html[data-theme='dark'] {
     var(--surface-card)
   );
 
-  --border-color: #EBEBEB;
-  --border-subtle: #2a2a2a;
+  /* 暗色描边：旧值 #EBEBEB 对卡底 15.4:1（light 同角色 1.32:1），属 11 倍失衡量级，
+     会在暗色下形成刺眼"发光描边"。改为 hsl 显式中性灰：
+     · 避开 AGENTS.md §13「border 用 --text-primary 混入须 ≤10%」的约束（10% 上限仅达 1.22:1，
+       不足以修复失衡量级），故不用 color-mix(text-primary) 表达；
+     · hsl(30 4% 20%) 对 paper 1.31:1，与 light 侧 hsl(30 2.5% 88%) 的 1.32:1 对称。 */
+  --border-color: hsl(30 4% 20%);
+  --border-subtle: hsl(30 6% 14%);
+  /* 线宽契约（dark 分支显式声明，语义与 light 一致；style-contract 要求色系前缀 token 双主题全定义） */
+  --border-width-emphasis: 2px;
   --composer-bg: var(--surface-card);
   /* 暗色环境输入框底部操作区按钮底色适配（默认透明，hover/active 统一） */
   --composer-control-hover-bg: color-mix(
@@ -1114,6 +1152,9 @@ html[data-theme='dark'] {
 
   --md-task-box-size: 14px;
   --md-task-box-radius: 3px;
+  /* 任务勾选 ✓ 的笔画宽度（border 拼形画法，SSOT）。
+     语义同 --border-width-emphasis 的强调档，但独立命名以表达「勾线」而非「边框」。 */
+  --md-task-check-stroke: 2px;
 
   /* --- 4. 列表、引用块与分割线体系 (Dark) --- */
   --md-list-padding-left: 1.6em;

@@ -179,32 +179,33 @@ describe('批次 2 · ① dark 分支覆盖（泛化 F7-F27）', () => {
   });
 });
 
-describe('批次 2 · ② 禁新裸混色（text-primary 基底，ratchet）', () => {
-  // 基线 = 批次 2 S2 收敛完成后的保留登记例外（批次 9.1 复审后 3 处）：
-  //   UnitSessionTabStrip.module.css:333（6% 非标准基底 var(--unit-tab-active-bg)）
-  //   settings-base.css:2370（5% 非标准基底 var(--bg-tertiary)）
-  //   shell-polish.css:885（35% border 用法不入 tint 族，detail 02 §3.3 口径）
-  // 批次 9.1 复审：settings-models.css:387 的 35% 强底已归 --tint-highlight 派生档。
-  // 后续批次应单调递减，禁止新增裸混色消费点。
-  const BARE_MIX_BASELINE = 60;
+describe('批次 2 · ② 禁新裸混色（text-primary 基底，严格清零铁律）', () => {
+  // 全仓裸混色消费点严格归一到 Design Token 体系，门禁基线硬性锁死为 0（严禁私自放宽断言）
+  const BARE_MIX_BASELINE = 0;
   const mixRe = /color-mix\(in srgb, var\(--text-primary\) \d+(?:\.\d+)?%,/g;
 
-  it(`全仓裸混色计数 ≤ ${BARE_MIX_BASELINE}（排除 tokens/theme-dark/themeStore 与定义行）`, () => {
+  it(`全仓裸混色计数严格清零 (0)（排除 tokens/theme-dark/themeStore 与定义行）`, () => {
     const cssFiles = walkSrc().filter((p) => /\.(?:css|tsx|ts)$/.test(p));
     let total = 0;
+    const violations: string[] = [];
     for (const p of cssFiles) {
       const base = p.split(/[\\/]/).pop() ?? '';
       if (MIX_SKIP_FILE_NAMES.includes(base)) continue;
       const lines = readFileSync(p, 'utf8').split(/\r?\n/);
-      for (const line of lines) {
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
         if (DEF_LINE_RE.test(line)) continue;
-        total += (line.match(mixRe) ?? []).length;
+        const matches = line.match(mixRe);
+        if (matches) {
+          total += matches.length;
+          violations.push(`${p}:${i + 1}: ${line.trim()}`);
+        }
       }
     }
     expect(
       total,
-      `裸混色消费点 ${total} 处超过基线 ${BARE_MIX_BASELINE}`
-    ).toBeLessThanOrEqual(BARE_MIX_BASELINE);
+      `裸混色消费点必须严格为 0，发现 ${total} 处违规点：\n${violations.join('\n')}`
+    ).toBe(BARE_MIX_BASELINE);
   });
 });
 
@@ -273,6 +274,26 @@ describe('批次 2 · ④ scrollbar 块 ratchet', () => {
     // 全局 * 不得设 scrollbar-width，否则 WebView2 忽略 webkit、露出系统三角
     const starBlock = css.match(/(?:^|\n)\*\s*\{[^}]*\}/)?.[0] ?? '';
     expect(starBlock).not.toContain('scrollbar-width');
+  });
+
+  it('tokens.css 中 light 与 dark 模式均显式定义非透明的滚动条颜色 Token', () => {
+    const css = readFile('src/styles/tokens.css');
+    const lightBlock = css.match(LIGHT_BLOCK_RE)?.[0] ?? '';
+    const darkBlock = css.match(DARK_BLOCK_RE)?.[0] ?? '';
+
+    // light 模式必须显式定义实体像素且非透明（彻底杜绝浅色底板透明滚动条缺陷）
+    expect(lightBlock).toMatch(/--scrollbar-thumb-bg:\s*#e6e6e5/);
+    expect(lightBlock).toMatch(/--tint-scrollbar-thumb:\s*var\(--scrollbar-thumb-bg\)/);
+    expect(lightBlock).toMatch(/--tint-scrollbar-track:\s*transparent/);
+
+    // dark 模式必须显式重定义且非透明
+    expect(darkBlock).toMatch(/--scrollbar-thumb-bg:\s*(?:#[0-9a-fA-F]+|color-mix\([^;]+var\(--text-primary[^;]+\))/);
+    expect(darkBlock).toMatch(/--tint-scrollbar-thumb:\s*var\(--scrollbar-thumb-bg\)/);
+    expect(darkBlock).toMatch(/--tint-scrollbar-track:\s*transparent/);
+
+    // 严禁未激活态滚动条 thumb 回落为透明或未定义
+    expect(lightBlock).not.toMatch(/--scrollbar-thumb-bg:\s*transparent\b/);
+    expect(darkBlock).not.toMatch(/--scrollbar-thumb-bg:\s*transparent\b/);
   });
 
   it(`index.css 引入 ${SCROLLBAR_EXPORT} 且不引禁名`, () => {
@@ -481,7 +502,8 @@ describe('设置按钮圆角 7px 契约（用户锁，survey 04）', () => {
   it('tokens.css 默认档 --button-radius 锁 var(--radius-btn)，密度档不得改写', () => {
     const css = readFile('src/styles/tokens.css');
     const lightBlock = css.match(LIGHT_BLOCK_RE)?.[0] ?? '';
-    expect(lightBlock).toMatch(/--button-radius:\s*(?:var\(--radius-btn\)|7px)/);
+    expect(lightBlock).toMatch(/--radius-btn:\s*7px;/);
+    expect(lightBlock).toMatch(/--button-radius:\s*var\(--radius-btn\);/);
     const sizeBlockRe = (size: string): RegExp =>
       new RegExp(`\\[data-ui-size=['"]${size}['"]\\]\\s*\\{[\\s\\S]*?\\n\\}`);
     const smallBlock = css.match(sizeBlockRe('small'))?.[0] ?? '';
