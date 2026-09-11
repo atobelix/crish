@@ -1,10 +1,10 @@
 # 02 — Post-R6 冻结协议 + 窗口桥 + Tab DnD 指示器审计
 
-> Agent：R7-Audit-Freeze-Drag（A-Review 只读）  
-> 日期：2026-07-22  
-> 工作区：`C:\Software\conex`  
-> 契约：`docs/ui-jank-message-dnd-rootfix/01-contract.md`  
-> 对照实现：R2 · R3 · R4  
+> Agent：R7-Audit-Freeze-Drag（A-Review 只读）
+> 日期：2026-07-22
+> 工作区：`C:\Software\conex`
+> 契约：`docs/ui-jank-message-dnd-rootfix/01-contract.md`
+> 对照实现：R2 · R3 · R4
 > 落盘：Orchestrator（explore 只读无法写文件）
 
 ## 0. 结论摘要

@@ -227,7 +227,7 @@ fn clear_sidecar_process(kill_child: bool) {
     if kill_child {
         clear_sidecar_daemon_endpoint();
     }
-    
+
     // 在 guard 生命周期内只做 take，不做阻塞操作
     let child = if let Some(proc_store) = sidecar_process().get()
         && let Ok(mut guard) = proc_store.lock()
@@ -314,13 +314,13 @@ pub(crate) trait SseStreamParserCore {
     fn events_queue(&mut self) -> &mut VecDeque<StreamEvent>;
     fn is_finished(&self) -> bool;
     fn set_finished(&mut self, finished: bool);
-    
+
     /// 处理单个 SSE 帧的 data payload。
     fn process_sse_frame(&mut self, data: &str) -> Result<(), StreamError>;
-    
+
     /// 在 finish() 时执行额外的 flush 操作（如 close_text、flush_tool_calls）。
     fn flush_on_finish(&mut self);
-    
+
     /// 在 reset() 时清理额外的内部状态。
     fn reset_extra(&mut self);
 }
@@ -447,21 +447,21 @@ fn handle_content_block_delta(&mut self, v: &serde_json::Value) -> Result<(), St
 pub(crate) fn create_daemon_job_object() -> Result<windows::Win32::System::JobObjects::HANDLE, String> {
     use windows::Win32::System::JobObjects::*;
     use windows::Win32::Foundation::*;
-    
+
     unsafe {
         let job = CreateJobObjectW(None, None)
             .map_err(|e| format!("CreateJobObject failed: {e}"))?;
-        
+
         let mut info = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
         info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
-        
+
         SetInformationJobObject(
             job,
             JobObjectExtendedLimitInformation,
             &info as *const _ as *const _,
             std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
         ).map_err(|e| format!("SetInformationJobObject failed: {e}"))?;
-        
+
         Ok(job)
     }
 }

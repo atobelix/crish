@@ -197,7 +197,7 @@ class DaemonServer {
   private runtimeFactory!: DaemonRuntimeFactory;
   private lifecycle!: DaemonLifecycleTracker;
   private config!: DaemonConfig;
-  
+
   // 方法委托
   async start(): Promise<void> { ... }
   async stop(): Promise<void> { ... }
@@ -365,11 +365,11 @@ type MessageHandler = (
 
 class DaemonMessageRouter {
   private handlers = new Map<string, MessageHandler>();
-  
+
   register(type: string, handler: MessageHandler): void {
     this.handlers.set(type, handler);
   }
-  
+
   async route(msg: DaemonInboundMessage, client: ConnectedClient): Promise<void> {
     const handler = this.handlers.get(msg.type);
     if (!handler) {

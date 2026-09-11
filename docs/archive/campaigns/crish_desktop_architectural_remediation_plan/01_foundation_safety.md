@@ -4,7 +4,7 @@
 > **建议 Agent 数量**：5–6 个（互不交叉修改同一文件）
 > **涉及维度**：D1（架构耦合与单一职责）、D3（逻辑重复）、D4（并发安全与状态突变）、D5（IPC 边界与 API 契约脆弱性）
 > **下游依赖方**：Layer B (Rust Core)、Layer C (Runtime Engine)、Layer E (State & API)、Layer H (Tool Hook Chain)、Layer J (Testing Infrastructure)——它们都直接消费本层输出的类型定义与工具函数
-> 
+>
 > **本层与其它层的交叉引用**：A-3（async-mutex 修复）是 Layer C1（C1-12 stream-recovery AsyncMutex 修复）的前置条件。A-1（workbench-contract 拆分）的输出被 Layer D 消费（D-1 标记为已由 A-1 完成），Layer D 不再重复此任务。
 
 ---

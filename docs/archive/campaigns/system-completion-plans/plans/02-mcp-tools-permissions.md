@@ -1,9 +1,9 @@
 # 02 — MCP 启停对齐 · Tools 并发锁 · 权限中间件 · 审批/Denial · Tool-Output 防护
 
-**日期**: 2026-07  
-**维度**: MCP + Tools & Permissions（审计 `audits/00-master-findings.md` §2.2 / §2.3）  
-**原则**: 自上而下（契约 → 引擎 API → 调度/中间件 → 回灌语义 → 配置注入 → UI 诚实 → 回归）  
-**执行形态**: **多轮并行，每轮 ≥4 个 Agent**；轮内禁止越界改下轮文件  
+**日期**: 2026-07
+**维度**: MCP + Tools & Permissions（审计 `audits/00-master-findings.md` §2.2 / §2.3）
+**原则**: 自上而下（契约 → 引擎 API → 调度/中间件 → 回灌语义 → 配置注入 → UI 诚实 → 回归）
+**执行形态**: **多轮并行，每轮 ≥4 个 Agent**；轮内禁止越界改下轮文件
 **开源参考**: 执行轮 clone 到仓库根 `reference/`（勿提交巨型依赖，除非 submodule）
 
 | 目标                              | 候选                                                                                                         | 拉取路径建议                                               |
@@ -185,7 +185,7 @@ interface ToolDenialEnvelope {
 
 - 剥离或转义模型常见「注入」模式（可选启发式，可配置，默认保守）
 - **禁止**把 tool-output 以 `role: user/system` 注入 transcript（synthesis 污染属 Agent Loop 专题，本方案只约束 tool-result 路径）
-- 与现有 `budgetToolOutputForContext` / `blob-externalization` 顺序：  
+- 与现有 `budgetToolOutputForContext` / `blob-externalization` 顺序：
   **raw 保留 → Guard 包装 → budget → 进 provider 投影**（raw transcript 不被 guard 破坏时可仅投影层包装）
 
 ### 1.5 Sampling / Elicitation 后置声明
@@ -510,7 +510,7 @@ Round 6  Desktop 诚实 UI + 软件内冒烟                 ≥4 agents  P0 收
 Round 7  全量回归 + 反偷懒巡检                        ≥4 agents
 ```
 
-**建议并行度**: 每轮 4 agents 同时；轮结束 gate 全绿再开下轮。  
+**建议并行度**: 每轮 4 agents 同时；轮结束 gate 全绿再开下轮。
 **关键路径**: R1 → R2 → R3 必须串行依赖；R4/R5 可在 R3 后部分并行；R6 依赖 R1+R2+R3。
 
 ---
@@ -548,5 +548,5 @@ git clone --depth 1 https://github.com/modelcontextprotocol/typescript-sdk.git r
 
 ---
 
-**文档状态**: 方案就绪，待 Round 0 启动。  
+**文档状态**: 方案就绪，待 Round 0 启动。
 **只含方案**: 本文件不修改生产代码。

@@ -1,8 +1,8 @@
 # 04 — Session Fork / Rewind / Checkpoint Restore UI 系统补全方案
 
-**日期**: 2026-07  
-**维度**: Session Fork / Checkpoint / Conversation Rewind  
-**证据源**: `audits/00-master-findings.md` §2.6；daemon `session-handlers` / `capabilities`；desktop `branchSession`；orchestrator `session-tree`  
+**日期**: 2026-07
+**维度**: Session Fork / Checkpoint / Conversation Rewind
+**证据源**: `audits/00-master-findings.md` §2.6；daemon `session-handlers` / `capabilities`；desktop `branchSession`；orchestrator `session-tree`
 **原则**: 禁止本地数组冒充 durable 会话事实；未接线能力必须诚实禁用或下架；危险操作必须有 boundary / checkpoint facts + 回执
 
 ---
@@ -50,7 +50,7 @@ action.kind === "fork"
 
 `packages/agent-daemon/src/capabilities.ts`：
 
-- `session.actions` = experimental  
+- `session.actions` = experimental
   reason 明示：pin/rename/archive/delete 已持久化；**fork remains unsupported until durable session-tree cloning is defined**
 
 Workbench contract 侧：`fork` availability = `unsupported`，effect = `branch`（测试锁定）。

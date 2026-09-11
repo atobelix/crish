@@ -1,8 +1,8 @@
 # 维度二指导方案：FpsMonitor 采样、分值修正与运行时自适应降级防护指南 (02-FPS-MONITOR-AND-RUNTIME-ADAPTATION-GUIDE)
 
-> **Document ID**: CX-GUIDE-002  
-> **Version**: v1.0 Final  
-> **Target Files**: `packages/shared-utils/src/dynamic-adaptation.ts` / `apps/crish-desktop/src/hooks/useFpsMonitor.ts` / `apps/crish-desktop/src/api/performanceEngine.ts` / `apps/crish-desktop/src/components/ChatToolCallBlock.tsx`  
+> **Document ID**: CX-GUIDE-002
+> **Version**: v1.0 Final
+> **Target Files**: `packages/shared-utils/src/dynamic-adaptation.ts` / `apps/crish-desktop/src/hooks/useFpsMonitor.ts` / `apps/crish-desktop/src/api/performanceEngine.ts` / `apps/crish-desktop/src/components/ChatToolCallBlock.tsx`
 > **Core Objective**: Eliminate self-inflicted CPU overhead in `FpsMonitor`; fix `computeScore()` memory math bug causing permanent tier downgrade locks; replace high-overhead IndexedDB latency measurements; resolve boot-time Eco tier false positives; and synchronize performance tiers across the entire system.
 
 ---
@@ -67,7 +67,7 @@ export class FpsMonitor {
 
   public start(): void {
     if (this.timer !== null) return;
-    
+
     this.lastTime = performance.now();
     this.frameCount = 0;
 

@@ -4,13 +4,13 @@
 
 ## 阅读顺序
 
-1. [`audits/00-master-findings.md`](./audits/00-master-findings.md) — **10 路** 专项审计汇总  
-2. [`00-master-multi-agent-roadmap.md`](./00-master-multi-agent-roadmap.md) — Wave 编排与首刀  
+1. [`audits/00-master-findings.md`](./audits/00-master-findings.md) — **10 路** 专项审计汇总
+2. [`00-master-multi-agent-roadmap.md`](./00-master-multi-agent-roadmap.md) — Wave 编排与首刀
 3. 分册：
-   - [`plans/01-fuzzy-seek-and-streaming-patch.md`](./plans/01-fuzzy-seek-and-streaming-patch.md) — 模糊 Seek + 流式 Diff  
-   - [`plans/02-compaction-image-413-tool-pair.md`](./plans/02-compaction-image-413-tool-pair.md) — 图 Token / 413 / Tool 成对  
-   - [`plans/03-cache-denial-maxtokens-slash.md`](./plans/03-cache-denial-maxtokens-slash.md) — Cache / Denial / max_tokens / slash  
-   - [`plans/04-search-cost-keyring.md`](./plans/04-search-cost-keyring.md) — 搜索 / 4D 成本 / 轻密钥  
+   - [`plans/01-fuzzy-seek-and-streaming-patch.md`](./plans/01-fuzzy-seek-and-streaming-patch.md) — 模糊 Seek + 流式 Diff
+   - [`plans/02-compaction-image-413-tool-pair.md`](./plans/02-compaction-image-413-tool-pair.md) — 图 Token / 413 / Tool 成对
+   - [`plans/03-cache-denial-maxtokens-slash.md`](./plans/03-cache-denial-maxtokens-slash.md) — Cache / Denial / max_tokens / slash
+   - [`plans/04-search-cost-keyring.md`](./plans/04-search-cost-keyring.md) — 搜索 / 4D 成本 / 轻密钥
 
 ## 用户约束（全文适用）
 

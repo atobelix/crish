@@ -1,8 +1,8 @@
 # 03 — Anthropic Cache Wire · Denial Intent · max_tokens · /doctor /init
 
-**Directions**: G + H + J  
-**来源**: `docs/benchmark-evolution-plans/audits/00-master-findings.md`  
-**日期**: 2026-07-22  
+**Directions**: G + H + J
+**来源**: `docs/benchmark-evolution-plans/audits/00-master-findings.md`
+**日期**: 2026-07-22
 **硬约束**: 无 TUI；OpenAI 永不注入 `cache_control`；人类 Deny ≠ Claude 分类器 denialTracking
 
 ---
@@ -48,9 +48,9 @@ Desktop slash
 
 ## 2. 非目标
 
-- TUI doctor、classifier denialTracking 照搬  
-- always 永久 denylist、OpenAI cache_control  
-- 静默写 CONEX.md 绕过 agent/权限  
+- TUI doctor、classifier denialTracking 照搬
+- always 永久 denylist、OpenAI cache_control
+- 静默写 CONEX.md 绕过 agent/权限
 
 ---
 
@@ -119,24 +119,24 @@ Runtime / daemon / desktop 回归 + 冒烟清单 + 勾 DoD。
 
 ## 4. DoD
 
-- [ ] Anthropic body 有 ephemeral；OpenAI 永不出现 cache_control  
-- [ ] 人类 deny 同 intent 抑制重弹 + 信封可行动  
-- [ ] length 保真 + 有限 escalate  
-- [ ] `/doctor` `/init` 可发现  
-- [ ] 命名用 `humanIntentDenylist` 而非抄 Claude `denialTracking`  
+- [ ] Anthropic body 有 ephemeral；OpenAI 永不出现 cache_control
+- [ ] 人类 deny 同 intent 抑制重弹 + 信封可行动
+- [ ] length 保真 + 有限 escalate
+- [ ] `/doctor` `/init` 可发现
+- [ ] 命名用 `humanIntentDenylist` 而非抄 Claude `denialTracking`
 
 ### 冒烟
 
-1. Anthropic 请求体 spot  
-2. Deny ×2  
-3. 小 max_tokens length  
-4. `/doctor` `/init`  
+1. Anthropic 请求体 spot
+2. Deny ×2
+3. 小 max_tokens length
+4. `/doctor` `/init`
 
 ---
 
 ## 关键路径
 
-- `anthropic-request-build.ts` / `provider-anthropic.ts`  
-- `provider-response-consumer.ts` / `agent-session-loop.ts`  
-- `daemon-approval-handler.ts` / `runtime-helpers.ts`  
-- `resolveSlashCommand.ts`  
+- `anthropic-request-build.ts` / `provider-anthropic.ts`
+- `provider-response-consumer.ts` / `agent-session-loop.ts`
+- `daemon-approval-handler.ts` / `runtime-helpers.ts`
+- `resolveSlashCommand.ts`

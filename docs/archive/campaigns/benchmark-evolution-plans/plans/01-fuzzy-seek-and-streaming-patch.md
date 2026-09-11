@@ -1,8 +1,8 @@
 # 01 — Fuzzy Seek + Streaming Patch Progressive UI
 
-**Directions**: A（4-pass 模糊 Hunk Seek）+ D（流式 Patch 渐进 UI）  
-**来源审计**: `docs/benchmark-evolution-plans/audits/00-master-findings.md`  
-**日期**: 2026-07-22  
+**Directions**: A（4-pass 模糊 Hunk Seek）+ D（流式 Patch 渐进 UI）
+**来源审计**: `docs/benchmark-evolution-plans/audits/00-master-findings.md`
+**日期**: 2026-07-22
 **约束**: 自然融入 Conex；禁止照抄 opencode/codex；无 TUI；不重做沙箱；默认确定性 4-pass seek，**不上** Levenshtein 静默改文件；Myers `DiffEngine` **仅展示**
 
 ---
@@ -93,13 +93,13 @@ Invariant:
 
 对 haystack 行序列 `lines` 与 pattern 行序列 `pattern`，从 `start`（可选 EOF 锚定）起：
 
-1. **Exact** — 行字节级相等（已统一 EOL 后）  
-2. **Rstrip** — `trim_end` 后相等  
-3. **Trim** — `trim` 后相等  
-4. **Unicode normalize** — trim + 常见 dash/quote/nbsp → ASCII 后相等  
+1. **Exact** — 行字节级相等（已统一 EOL 后）
+2. **Rstrip** — `trim_end` 后相等
+3. **Trim** — `trim` 后相等
+4. **Unicode normalize** — trim + 常见 dash/quote/nbsp → ASCII 后相等
 
-返回：`{ index, pass }` 或 `None`。  
-**禁止**默认第五关 Levenshtein / 编辑距离静默命中。  
+返回：`{ index, pass }` 或 `None`。
+**禁止**默认第五关 Levenshtein / 编辑距离静默命中。
 多命中：返回 ambiguous（与今日 `hits > 1` 一致），不自动选第一处（除非调用方显式 `replace_all` 且产品确认——本计划默认 **不** 加 replace_all）。
 
 ---
@@ -139,10 +139,10 @@ Invariant:
 
 **Round A 闸门**
 
-- [ ] Rust + TS 4-pass 测试全绿  
-- [ ] 无 Levenshtein / edit-distance 依赖  
-- [ ] `DiffEngine` 代码路径未混入 seek  
-- [ ] Fixture 双语一致  
+- [ ] Rust + TS 4-pass 测试全绿
+- [ ] 无 Levenshtein / edit-distance 依赖
+- [ ] `DiffEngine` 代码路径未混入 seek
+- [ ] Fixture 双语一致
 
 ---
 
@@ -159,10 +159,10 @@ Invariant:
 
 **Round B 闸门**
 
-- [ ] `applyFileDiff.test.ts` + agent-runtime edit 单测绿  
-- [ ] 软件内：制造 trailing-space 文件 → AI/手动 search_replace Accept 成功  
-- [ ] 多匹配仍拒绝并 toast  
-- [ ] snapshotTag / mutation lease / pre-mutation checkpoint **行为不变**  
+- [ ] `applyFileDiff.test.ts` + agent-runtime edit 单测绿
+- [ ] 软件内：制造 trailing-space 文件 → AI/手动 search_replace Accept 成功
+- [ ] 多匹配仍拒绝并 toast
+- [ ] snapshotTag / mutation lease / pre-mutation checkpoint **行为不变**
 
 ---
 
@@ -179,9 +179,9 @@ Invariant:
 
 **Round C 闸门**
 
-- [ ] 无 UI 时 runtime 全量回归绿  
-- [ ] 契约测试：delta 不触发 tool 执行  
-- [ ] bridge 能收到 partial 字符串  
+- [ ] 无 UI 时 runtime 全量回归绿
+- [ ] 契约测试：delta 不触发 tool 执行
+- [ ] bridge 能收到 partial 字符串
 
 ---
 
@@ -198,9 +198,9 @@ Invariant:
 
 **Round D 闸门**
 
-- [ ] 软件内冒烟：触发长 `edit`/`str_replace` 流 → 侧栏先「生成中」再变终态 → Accept 仅终态可点  
-- [ ] 取消生成后 provisional 消失  
-- [ ] 非编辑工具（shell）不出现假 diff  
+- [ ] 软件内冒烟：触发长 `edit`/`str_replace` 流 → 侧栏先「生成中」再变终态 → Accept 仅终态可点
+- [ ] 取消生成后 provisional 消失
+- [ ] 非编辑工具（shell）不出现假 diff
 
 ---
 
@@ -217,9 +217,9 @@ Invariant:
 
 **Round E 闸门**
 
-- [ ] 全量相关 vitest + `cargo test -p conex-diff`  
-- [ ] 软件内：seek apply + streaming UI 联合冒烟  
-- [ ] 无 Levenshtein；Myers 仅展示  
+- [ ] 全量相关 vitest + `cargo test -p conex-diff`
+- [ ] 软件内：seek apply + streaming UI 联合冒烟
+- [ ] 无 Levenshtein；Myers 仅展示
 
 ---
 
@@ -255,33 +255,33 @@ E 依赖 B+D 主路径合并后。
 
 ### 4.2 软件内（crish-desktop）
 
-1. **Seek Accept**：工作区文件末尾加空格，构造 del 行为无空格的 FileDiff → 点接受 → 落盘正确且 already_applied 幂等。  
-2. **歧义**：两处相同 old → Accept 失败 toast，文件不变。  
-3. **Streaming**：选 Anthropic（或 mock delta）长 edit → 侧栏/总览出现「生成中」→ 完成后可接受 → 写盘。  
-4. **取消**：流中 Abort → provisional 清理，无残留 Accept。  
-5. **非编辑工具**：`run_terminal` 等不出现 diff 面板。  
+1. **Seek Accept**：工作区文件末尾加空格，构造 del 行为无空格的 FileDiff → 点接受 → 落盘正确且 already_applied 幂等。
+2. **歧义**：两处相同 old → Accept 失败 toast，文件不变。
+3. **Streaming**：选 Anthropic（或 mock delta）长 edit → 侧栏/总览出现「生成中」→ 完成后可接受 → 写盘。
+4. **取消**：流中 Abort → provisional 清理，无残留 Accept。
+5. **非编辑工具**：`run_terminal` 等不出现 diff 面板。
 6. **回归**：纯行号 `edit` 小文件仍成功；`write` full_write Accept 仍成功。
 
 ### 4.3 明确不测
 
-- Levenshtein 命中率  
-- TUI  
+- Levenshtein 命中率
+- TUI
 - 完整 patch 文法 corpus（留给后续 plan）
 
 ---
 
 ## 5. Definition of Done
 
-- [ ] **A**: 4-pass `seekSequence` 在 Rust（`conex-diff`）与 TS（`shared-utils`）可用，黄金 fixture 一致  
-- [ ] **A**: `DiffEngine` / `compute_diff` 仍为纯展示，无 seek 副作用  
-- [ ] **B**: `analyzeSearchReplace` / `applySearchReplaceToContent` 使用 seek；trailing-ws 与常见 unicode 标点可 Accept  
-- [ ] **B**: Agent `edit`（及 workspace edits）支持基于内容的唯一替换；失败显式、不静默多选  
-- [ ] **C**: 工具 args 流式 delta 可出站；**不可**执行 partial tool  
-- [ ] **D**: 编辑类工具流式阶段 progressive FileDiff +「生成中」；**Accept 仅终态**  
-- [ ] **D**: `onToolSuccess` 终态路径保持 `resolveToolDiffs` → `publishToolDiffs`  
-- [ ] **全域**: 无默认 Levenshtein；无 TUI；无沙箱重做  
-- [ ] 测试：§4 单测 + 软件内冒烟 1–6 通过  
-- [ ] 文档：本 plan 闸门勾选；与 `00-master-findings` A/D 条目可追溯  
+- [ ] **A**: 4-pass `seekSequence` 在 Rust（`conex-diff`）与 TS（`shared-utils`）可用，黄金 fixture 一致
+- [ ] **A**: `DiffEngine` / `compute_diff` 仍为纯展示，无 seek 副作用
+- [ ] **B**: `analyzeSearchReplace` / `applySearchReplaceToContent` 使用 seek；trailing-ws 与常见 unicode 标点可 Accept
+- [ ] **B**: Agent `edit`（及 workspace edits）支持基于内容的唯一替换；失败显式、不静默多选
+- [ ] **C**: 工具 args 流式 delta 可出站；**不可**执行 partial tool
+- [ ] **D**: 编辑类工具流式阶段 progressive FileDiff +「生成中」；**Accept 仅终态**
+- [ ] **D**: `onToolSuccess` 终态路径保持 `resolveToolDiffs` → `publishToolDiffs`
+- [ ] **全域**: 无默认 Levenshtein；无 TUI；无沙箱重做
+- [ ] 测试：§4 单测 + 软件内冒烟 1–6 通过
+- [ ] 文档：本 plan 闸门勾选；与 `00-master-findings` A/D 条目可追溯
 
 ---
 
@@ -320,9 +320,9 @@ E 依赖 B+D 主路径合并后。
 
 ## 附录 B — PR 拆分建议
 
-1. **PR1** Round A（seek 纯函数 + fixture）  
-2. **PR2** Round B（applyFileDiff + fs-edit）— 可独立上线正确性  
-3. **PR3** Round C+D（delta 协议 + UI）— 体验  
-4. **PR4** Round E（IPC 可选、诊断、文档）  
+1. **PR1** Round A（seek 纯函数 + fixture）
+2. **PR2** Round B（applyFileDiff + fs-edit）— 可独立上线正确性
+3. **PR3** Round C+D（delta 协议 + UI）— 体验
+4. **PR4** Round E（IPC 可选、诊断、文档）
 
 PR2 不依赖 PR3；符合 findings Wave：A∈W1 正确性，D∈W3 体验。

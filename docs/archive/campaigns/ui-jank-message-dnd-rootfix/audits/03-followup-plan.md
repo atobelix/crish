@@ -1,6 +1,6 @@
 # 03 — R7 汇总后续计划（R8+）
 
-> Orchestrator 根据 `01-post-r6-list.md` + `02-post-r6-freeze-drag.md` 合并。  
+> Orchestrator 根据 `01-post-r6-list.md` + `02-post-r6-freeze-drag.md` 合并。
 > 日期：2026-07-22
 
 ## 总原则

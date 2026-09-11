@@ -1,8 +1,8 @@
 # Benchmark Evolution — 主多轮多 Agent 路线图
 
-**日期**: 2026-07-22  
-**上游**: `audits/00-master-findings.md`（10 路调研）  
-**分册**: `plans/01` … `04`  
+**日期**: 2026-07-22
+**上游**: `audits/00-master-findings.md`（10 路调研）
+**分册**: `plans/01` … `04`
 **用户硬约束**: 自然融入架构 · 禁止照抄 · 无 TUI · 不重做沙箱 · 安全轻量
 
 ---
@@ -11,10 +11,10 @@
 
 在 **不推倒** 现有 React + Rust crates + CQRS + TrustZone + softDeny 体系的前提下，系统补齐：
 
-1. **LLM 编辑容错**（4-pass seek）  
-2. **压缩/载荷健壮**（图 token + 413 + tool pair）  
-3. **模型侧成本与缓存**（ephemeral wire + 4D 账单）  
-4. **运行恢复与产品引导**（length escalate、denial 记忆、/doctor /init）  
+1. **LLM 编辑容错**（4-pass seek）
+2. **压缩/载荷健壮**（图 token + 413 + tool pair）
+3. **模型侧成本与缓存**（ephemeral wire + 4D 账单）
+4. **运行恢复与产品引导**（length escalate、denial 记忆、/doctor /init）
 5. **搜索产品化与轻密钥**（常驻索引 + quick-open；DPAPI sidecar）
 
 ---
@@ -79,10 +79,10 @@ W4: secrets ──── 不阻塞 W1–W3 功能正确性
 
 ## 6. 执行纪律（反浅尝）
 
-1. **先读本 Wave 对应 plan 全文 + master findings 相关节**，再改代码  
-2. Round 内 Agent **文件互斥**；共享文件串行  
-3. 禁止：假绿 skip、空实现 toast 成功、用展示 Myers 冒充 seek  
-4. 验收：**单元 + 相关包 vitest/cargo**；涉及 UI/daemon 的条目写软件内冒烟步骤  
+1. **先读本 Wave 对应 plan 全文 + master findings 相关节**，再改代码
+2. Round 内 Agent **文件互斥**；共享文件串行
+3. 禁止：假绿 skip、空实现 toast 成功、用展示 Myers 冒充 seek
+4. 验收：**单元 + 相关包 vitest/cargo**；涉及 UI/daemon 的条目写软件内冒烟步骤
 5. 合入后更新 `EXECUTION-PROGRESS.md`（本目录，执行轮创建）
 
 ---

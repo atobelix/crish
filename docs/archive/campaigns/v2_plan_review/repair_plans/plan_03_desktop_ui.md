@@ -1,10 +1,10 @@
 # Plan 03: Desktop UI TypeScript 编译错误修复方案
 
-> **Agent**: #3 (修复方案规划 Agent)  
-> **范围**: `apps/crish-desktop/src/` (JSX 解析错误 · 类型错误)  
-> **生成命令**: `npx tsc --noEmit -p apps/crish-desktop/tsconfig.app.json`  
-> **总错误数**: 28  
-> **涉事文件**: 10  
+> **Agent**: #3 (修复方案规划 Agent)
+> **范围**: `apps/crish-desktop/src/` (JSX 解析错误 · 类型错误)
+> **生成命令**: `npx tsc --noEmit -p apps/crish-desktop/tsconfig.app.json`
+> **总错误数**: 28
+> **涉事文件**: 10
 > **日期**: 2026-07-25
 
 ---
@@ -242,9 +242,9 @@ Select-String -Path "apps/crish-desktop/src/components/*.tsx" -Pattern "\)\);" |
 1001:               </div>
 1002:             )}
 ```
-第 893 行的 `) : (` 是 `{activeCardId === 'chat' ? ... ) : (...)}` 的 else 分支。  
-第 1002 行的 `)}` 中的 `)` 关闭 else 分支的 `(`，`}` 关闭 `{activeCardId === 'chat' ? ...}` 的 `{`。  
-但查看实际缩进：1001 行 `              </div>`（14 空格）对应 894 行 `              <div`（14 空格），匹配正确。  
+第 893 行的 `) : (` 是 `{activeCardId === 'chat' ? ... ) : (...)}` 的 else 分支。
+第 1002 行的 `)}` 中的 `)` 关闭 else 分支的 `(`，`}` 关闭 `{activeCardId === 'chat' ? ...}` 的 `{`。
+但查看实际缩进：1001 行 `              </div>`（14 空格）对应 894 行 `              <div`（14 空格），匹配正确。
 1002 行的 `)}` 缩进与 893 行 `) : (` 对齐（12 空格），逻辑正确。
 
 **检查点 3: line 1040-1042**
@@ -253,8 +253,8 @@ Select-String -Path "apps/crish-desktop/src/components/*.tsx" -Pattern "\)\);" |
 1041:           </div>
 1042:         ) : null}
 ```
-1041 行 `</div>` 闭合 `card-header`（814 行的 `<div className="card-header">`）。  
-1042 行 `) : null}` 中的 `)` 闭合 `showCardHeader ? (`（813 行），`}` 闭合 `{showCardHeader` 的 JSX 表达式。  
+1041 行 `</div>` 闭合 `card-header`（814 行的 `<div className="card-header">`）。
+1042 行 `) : null}` 中的 `)` 闭合 `showCardHeader ? (`（813 行），`}` 闭合 `{showCardHeader` 的 JSX 表达式。
 
 此处结构正确，但注意 1040 行的 `: null}` 其实是 `{tabAddOpen && tabAddPos ? createPortal(...) : null}` 的闭合，与 showCardHeader 嵌套在同一层级。
 
@@ -265,9 +265,9 @@ Select-String -Path "apps/crish-desktop/src/components/*.tsx" -Pattern "\)\);" |
 1169:   }
 1170: );
 ```
-1167 行 `</div>` 闭合 793 行的 `<div`。  
-1168 行 `);` 闭合 `return (；  
-1169 行 `}` 闭合箭头函数体 `=> {`（229 行）；  
+1167 行 `</div>` 闭合 793 行的 `<div`。
+1168 行 `);` 闭合 `return (；
+1169 行 `}` 闭合箭头函数体 `=> {`（229 行）；
 1170 行 `);` 闭合 `React.memo(`（228 行）。
 
 **根因结论**: 文件结构从逻辑上看是正确的。TS17008 于 793 行可能是由于 892-894 行之间的某个字符导致 JSX 解析断裂。具体来说：
@@ -318,7 +318,7 @@ Select-String -Path "apps/crish-desktop/src/components/*.tsx" -Pattern "\)\);" |
 
 #### 根因
 
-`React.memo(({ ... }: Props) => { return (...); })` 模式的结尾应为 `});`，实际为 `));`。  
+`React.memo(({ ... }: Props) => { return (...); })` 模式的结尾应为 `});`，实际为 `));`。
 239 行是文件末尾，错误 `'`;' expected` 是因为 `)` 无法匹配任何打开的`(`。
 
 #### 修复
@@ -352,7 +352,7 @@ Expected: 0 matches
 ```
 912:     </AppErrorBoundary>
 913:   ));
-914: 
+914:
 ```
 
 #### 根因
@@ -390,7 +390,7 @@ Expected: 0 matches
 
 #### 根因
 
-`React.memo(({ ... }: Props) => { return createPortal(...); })` 结尾应为 `});`。  
+`React.memo(({ ... }: Props) => { return createPortal(...); })` 结尾应为 `});`。
 注意该组件使用 `createPortal` 而非普通的 `return (...)`，但结尾模式相同。
 
 #### 修复
@@ -529,8 +529,8 @@ Expected: 0 matches
 
 #### 根因
 
-第 230 行的 `<button` 缺少 `>` 和属性（type, className, onClick 等），直接嵌套了 `<Tooltip>`。  
-TypeScript 解析器将 `<Tooltip` 视为 button 标签的未闭合属性名称，导致 TS1005（期望 `>`）。  
+第 230 行的 `<button` 缺少 `>` 和属性（type, className, onClick 等），直接嵌套了 `<Tooltip>`。
+TypeScript 解析器将 `<Tooltip` 视为 button 标签的未闭合属性名称，导致 TS1005（期望 `>`）。
 级联导致 246 行的 `</Tooltip>` 被认为与不存在的 `<button` 匹配，产生 TS17002。
 
 #### 修复
@@ -587,12 +587,12 @@ Expected: 0 matches
 
 #### 根因
 
-第 730 行 `));` 中的第二个 `)` 应为 `}`。`React.memo` 结尾应为 `});`。  
+第 730 行 `));` 中的第二个 `)` 应为 `}`。`React.memo` 结尾应为 `});`。
 第 731 行 `};` 是级联错误——由于 730 行的 `}` 缺失，731 行的 `}` 被当作函数体闭合，多余的 `};` 导致 TS1128。
 
 #### 修复
 
-**730 行**: `));` → `});`  
+**730 行**: `));` → `});`
 **731 行**: 删除（`};`）
 
 ```diff
@@ -655,8 +655,8 @@ Expected: 0 matches
 
 #### 根因
 
-第二个按钮（427-436 行）的 `onClick` 回调在 `s.selectWorkspace({ kind: 'general', id: GENERAL_FOLDER,` 处断裂了。  
-对象字面量缺少 `})` 闭合，箭头函数缺少 `}}>` 闭合，button 标签缺少 `>` 和 `</button>`。  
+第二个按钮（427-436 行）的 `onClick` 回调在 `s.selectWorkspace({ kind: 'general', id: GENERAL_FOLDER,` 处断裂了。
+对象字面量缺少 `})` 闭合，箭头函数缺少 `}}>` 闭合，button 标签缺少 `>` 和 `</button>`。
 取而代之的是 `</div>\n      </div>`，这完全打乱了 JSX 树结构，导致 TypeScript 解析器从 436 行开始完全失步。
 
 **具体缺失的内容**:

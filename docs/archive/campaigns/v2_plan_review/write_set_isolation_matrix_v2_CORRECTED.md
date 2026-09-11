@@ -1,11 +1,11 @@
 # Conex 热点文件冲突分析与写集隔离矩阵 (v2) — 校正版本
 
-> 版本：v2.0-CORRECTED · 2026-07-24  
-> 校正时间：2026-07-25  
-> 校正基准：`v2_path_audit.json` / `v2_root_cause_audit.json` / `v2_remediation_review.json`  
-> 原始文档：`analysis/master_repair_plan_v2/write_set_isolation_matrix_v2.md`  
-> 责任角色：Phase 2 - Agent 3（热点文件冲突分析与写集隔离矩阵）  
-> 分析目标：全仓库涉及修复任务的模块与热点文件  
+> 版本：v2.0-CORRECTED · 2026-07-24
+> 校正时间：2026-07-25
+> 校正基准：`v2_path_audit.json` / `v2_root_cause_audit.json` / `v2_remediation_review.json`
+> 原始文档：`analysis/master_repair_plan_v2/write_set_isolation_matrix_v2.md`
+> 责任角色：Phase 2 - Agent 3（热点文件冲突分析与写集隔离矩阵）
+> 分析目标：全仓库涉及修复任务的模块与热点文件
 > 核心原则：**单一写者原则（Single-Writer Principle）**。同一 Wave 内的任意 2 个 Agent 的写文件列表（`files_write`）绝对不能包含相同路径（0 文件重叠）。重合热点文件必须通过 DAG 依赖链拆分到不同 Round 或同一 Round 的不同 Wave 中串行处理。
 
 > **校正注**：本文档中的 AG/B/D/P/X 等 Agent ID 源自旧编号体系，与 `ledger_v2.json` 的 `GAP-XX-XX` 体系无直接对应关系。对每条引用路径，本校正版本标注了审查发现的实际文件路径与状态（存在/不存在/需修正）。

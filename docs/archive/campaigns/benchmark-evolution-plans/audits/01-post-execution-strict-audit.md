@@ -1,8 +1,8 @@
 # 01 — Post-Execution Strict Audit (W1–W4)
 
-**日期**: 2026-07-22  
-**范围**: `docs/benchmark-evolution-plans` 四册方案 + 代码落地对照  
-**方法**: 只读审计（不改产品代码）；以 plan DoD / 闸门 / 非目标为准绳  
+**日期**: 2026-07-22
+**范围**: `docs/benchmark-evolution-plans` 四册方案 + 代码落地对照
+**方法**: 只读审计（不改产品代码）；以 plan DoD / 闸门 / 非目标为准绳
 **总判**: **不可宣称 W1–W4 完成**。正确性核心（seek / 413 scrub / length 保真 / cache wire / denial denylist）有实质落地；体验层与搜索索引、Rust 压缩门控、流式 Diff 数据面存在 **P0 空洞与假绿**。
 
 ---
@@ -53,8 +53,8 @@ pub async fn register_core_handlers(router: &IpcRouter) {
         }))
 ```
 
-- `SearchHandler` 永久绑定 **空 `files` 向量**；`core_search_files` 只走该 handler。  
-- `GlobalIndex` / `IndexHandler` 存在于 `crates/conex-search`，**未**挂入 workbench 注册表；无 `core_rebuild_index` Tauri 命令接线。  
+- `SearchHandler` 永久绑定 **空 `files` 向量**；`core_search_files` 只走该 handler。
+- `GlobalIndex` / `IndexHandler` 存在于 `crates/conex-search`，**未**挂入 workbench 注册表；无 `core_rebuild_index` Tauri 命令接线。
 - `StatusHandler` 硬编码 `search_index_ready: true`（同文件 ~149–154）—— **索引未就绪却报告 ready（假成功）**。
 
 **产品后果**: Ctrl+P 永远 0 命中；UI 用「索引未就绪」掩盖，但底层永远不会变好。
@@ -72,8 +72,8 @@ pub async fn register_core_handlers(router: &IpcRouter) {
   return 'index_not_ready';
 ```
 
-- 有查询且 0 hits → **永远** `index_not_ready`，从不返回 `no_match`。  
-- 测试把该行为钉死为正确（`quickOpenHelpers.test.ts` ~65–68）。  
+- 有查询且 0 hits → **永远** `index_not_ready`，从不返回 `no_match`。
+- 测试把该行为钉死为正确（`quickOpenHelpers.test.ts` ~65–68）。
 - 当索引真正有文件后，真·无匹配也会被标成「索引未就绪」→ **UI 误导**。
 
 **判定**: 在 P0-1 修复前属于权宜；在未区分「空索引 / 真无匹配 / is_indexing」前 **不得** 勾 DoD「诚实」。
@@ -94,8 +94,8 @@ pub async fn register_core_handlers(router: &IpcRouter) {
     // emergency/mild: while ... { let removed = messages.remove(1); ... images.len() * 500 }
 ```
 
-- Plan 02 明确：`IMAGE_TOKEN_COST=1600` + role-batch 安全删除。  
-- 现码仍 500；`remove(1)` **可切断 tool-call / tool-result 对**。  
+- Plan 02 明确：`IMAGE_TOKEN_COST=1600` + role-batch 安全删除。
+- 现码仍 500；`remove(1)` **可切断 tool-call / tool-result 对**。
 - TS 侧已有 `IMAGE_TOKEN_COST=1600` + `safeCompactionCutoff` export（`context-compression.ts:67,610`）—— **双栈漂移**。
 
 **判定**: 走 IPC `compact_messages` 的路径与 daemon TS 压缩语义不一致；成对门控 **仅 TS 半边**。
@@ -128,7 +128,7 @@ pub async fn register_core_handlers(router: &IpcRouter) {
   }
 ```
 
-3. **Consumer sink 存在且有单测**（`provider-response-consumer.ts:96-106`）——仅在 **假 stream 注入** `phase:"delta"` 时绿。  
+3. **Consumer sink 存在且有单测**（`provider-response-consumer.ts:96-106`）——仅在 **假 stream 注入** `phase:"delta"` 时绿。
 4. **Desktop 无** `onToolArgsDelta` / `partialToolDiff` / `provisional`（全仓 `apps/crish-desktop` grep 为空）。
 
 **判定**: 测试绿 ≠ 产品能力。这是典型 **「旁路 API + 孤立单测」冒充 D 完成**。
@@ -139,9 +139,9 @@ pub async fn register_core_handlers(router: &IpcRouter) {
 
 **证据**
 
-- Consumer 正确保留 `finishReason === "length"` → `stopReason: "length"`（`provider-response-consumer.ts:173-180`）。  
-- Session-loop 仅注入 synthesis nudge 续写，`MAX_LENGTH_RECOVERY = 2`（`agent-session-loop.ts:306-310,777-793`）。  
-- **全程无** `maxTokens` / `max_tokens` 提升逻辑（session-loop 内无 escalate 预算字段）。  
+- Consumer 正确保留 `finishReason === "length"` → `stopReason: "length"`（`provider-response-consumer.ts:173-180`）。
+- Session-loop 仅注入 synthesis nudge 续写，`MAX_LENGTH_RECOVERY = 2`（`agent-session-loop.ts:306-310,777-793`）。
+- **全程无** `maxTokens` / `max_tokens` 提升逻辑（session-loop 内无 escalate 预算字段）。
 - 测试标题写 “escalates with synthesis continue”（`agent-session-loop.test.ts:680`）——验收被 **语义降级为 continue-only**。
 
 **对照 plan 03**: 「escalate maxTokens / 续写」；文档 J 与 R2 阶梯常量 **未落地**。
@@ -152,20 +152,20 @@ pub async fn register_core_handlers(router: &IpcRouter) {
 
 ### P1-1 — Rust/TS seek fixture 未双语锁定
 
-- TS: `packages/shared-utils/src/file/fixtures/seek-cases.json` + golden 测试（≥12 cases）。  
-- Rust: 仅模块内 ad-hoc 测试；**无** `tests/seek_fixtures.rs` 读同一 JSON。  
+- TS: `packages/shared-utils/src/file/fixtures/seek-cases.json` + golden 测试（≥12 cases）。
+- Rust: 仅模块内 ad-hoc 测试；**无** `tests/seek_fixtures.rs` 读同一 JSON。
 - 计划 A3 闸门「两侧同期望 index/pass」**未机械保证**；未来漂移可静默发生。
 
 ### P1-2 — 空 pattern 契约相对 plan 原文变更未回写
 
-- Plan 01 A1 写：空 pattern → `Some(start)`。  
-- 实现：Rust/TS **均** `None` / missing（`seek_sequence.rs:108-109`；TS `seek-sequence.ts:197-199`）。  
+- Plan 01 A1 写：空 pattern → `Some(start)`。
+- 实现：Rust/TS **均** `None` / missing（`seek_sequence.rs:108-109`；TS `seek-sequence.ts:197-199`）。
 - 注释宣称与 TS 对齐——**实现一致但与已发布 plan 文字冲突**；需改 plan 或改码，否则评审按 plan 会判失败。
 
 ### P1-3 — applyFileDiff 诊断码未统一到 plan E1
 
-- Plan 统一：`missing` / `ambiguous` / `conflict` / `seek_failed`。  
-- 现：`missing` / `ambiguous` / `conflict` / `empty` / `noop`；**无 `seek_failed`**，message 未含「已尝试 exact/rstrip/trim/unicode」（`applyFileDiff.ts:426-455`）。  
+- Plan 统一：`missing` / `ambiguous` / `conflict` / `seek_failed`。
+- 现：`missing` / `ambiguous` / `conflict` / `empty` / `noop`；**无 `seek_failed`**，message 未含「已尝试 exact/rstrip/trim/unicode」（`applyFileDiff.ts:426-455`）。
 - Agent edit 侧错误文案较好（含 passTried）；桌面 Accept 人话较弱。
 
 ### P1-4 — exact `indexOf` 优先于行级 seek（桌面 Accept）
@@ -176,7 +176,7 @@ pub async fn register_core_handlers(router: &IpcRouter) {
     // hits === 0：才走 4-pass seek
 ```
 
-- 单行 **子串** 命中可跳过行窗口语义；与 fs-edit 纯 seek 路径可能不一致。  
+- 单行 **子串** 命中可跳过行窗口语义；与 fs-edit 纯 seek 路径可能不一致。
 - 非目标 Levenshtein **未引入**（合规）；但 hybrid 策略应有交叉测试（substring vs multiline）。
 
 ### P1-5 — 4D 成本 UI 半截
@@ -192,61 +192,61 @@ pub async fn register_core_handlers(router: &IpcRouter) {
 
 ### P1-6 — 流式 / projector「delta」语义混淆风险
 
-- `core-event-projector` 的 tool phase `delta` 来自 **tool-update（进度）**，不是 tool **args** 流。  
+- `core-event-projector` 的 tool phase `delta` 来自 **tool-update（进度）**，不是 tool **args** 流。
 - 测试强调 rename 正确，但 **不能** 当作 01-C 完成证据。
 
 ### P1-7 — providerProfiles 安全：实现诚实但 DoD 未满
 
 **正**
 
-- Tauri `workbench_profile_secret_{set,get,has,clear}` + DPAPI 路径（`config/mod.rs:545+`）。  
+- Tauri `workbench_profile_secret_{set,get,has,clear}` + DPAPI 路径（`config/mod.rs:545+`）。
 - `stripApiKeyForPersistence` / `shouldStripApiKeyFromStorage`；注释明确 residual plaintext risk（`providerProfiles.ts:70-80,683`）。
 
 **负**
 
-- DoD「LS 无 apiKey」在浏览器 / 命令缺失 / 非安全 id 时 **仍写明文**。  
-- `serializeProfilesForStorage` residual 分支是**真实后门**，不是死代码。  
+- DoD「LS 无 apiKey」在浏览器 / 命令缺失 / 非安全 id 时 **仍写明文**。
+- `serializeProfilesForStorage` residual 分支是**真实后门**，不是死代码。
 - 无审计级测试断言「Tauri available ⇒ LS dump 永无 apiKey 字段」。
 
 ### P1-8 — length / 413 测试覆盖尚可，但边界偏窄
 
 **已有（合格偏上）**
 
-- 413 scrub 重试、无图失败路径（`agent-session-loop.test.ts`）。  
-- `4130` 不误伤（`payload-image-recovery.test.ts`）。  
+- 413 scrub 重试、无图失败路径（`agent-session-loop.test.ts`）。
+- `4130` 不误伤（`payload-image-recovery.test.ts`）。
 - length 预算耗尽干净 stop。
 
 **缺口**
 
-- 无测：413 与 softDeny tool-result **共存**消息序列不被 scrub 误伤。  
-- 无测：length + tool-call 同帧（代码注释说不 escalate，缺断言）。  
+- 无测：413 与 softDeny tool-result **共存**消息序列不被 scrub 误伤。
+- 无测：length + tool-call 同帧（代码注释说不 escalate，缺断言）。
 - 无测：maxTokens 阶梯（因功能缺失）。
 
 ### P1-9 — Denial：daemon / runtime 分工正确；「第一次 deny softDeny 标记」略不齐
 
-- 首次 human deny：daemon metadata 常 **不** 带 `softDeny:true`（仅 `user_denied` + `retryable:false`）；timeout 才 `softDeny:true`（`daemon-approval-handler.ts:264-291`）。  
-- `buildPermissionDenyToolOutput` 会补齐 softDeny（`runtime-helpers.ts:410-411`）。  
-- Denylist 二次命中带 `softDeny:true` + `matchedRule: run-intent-denylist`。  
-- Recovery 环排除 soft user deny（`runtime-helpers.ts:64-88`）—— **softDeny 回归风险低**。  
+- 首次 human deny：daemon metadata 常 **不** 带 `softDeny:true`（仅 `user_denied` + `retryable:false`）；timeout 才 `softDeny:true`（`daemon-approval-handler.ts:264-291`）。
+- `buildPermissionDenyToolOutput` 会补齐 softDeny（`runtime-helpers.ts:410-411`）。
+- Denylist 二次命中带 `softDeny:true` + `matchedRule: run-intent-denylist`。
+- Recovery 环排除 soft user deny（`runtime-helpers.ts:64-88`）—— **softDeny 回归风险低**。
 - 命名未抄 `denialTracking` —— 合规。
 
 ### P1-10 — /doctor /init：可发现且非假跑 agent
 
-- 解析 / 菜单 / 中文别名测试扎实（`resolveSlashCommand.test.ts`）。  
-- `/doctor`：拉 status+capabilities → 时间线气泡，不 stream agent（`useChatStream.ts:1646+`）。  
-- `/init`：改写 modelText 引导 CONEX.md，禁止静默写盘（同文件 ~375-380, 1808+）——符合非目标。  
+- 解析 / 菜单 / 中文别名测试扎实（`resolveSlashCommand.test.ts`）。
+- `/doctor`：拉 status+capabilities → 时间线气泡，不 stream agent（`useChatStream.ts:1646+`）。
+- `/init`：改写 modelText 引导 CONEX.md，禁止静默写盘（同文件 ~375-380, 1808+）——符合非目标。
 - 残留：doctor 报告依赖的 engine status **可能包含假 `search_index_ready`**（见 P0-1），诊断本身可能报喜。
 
 ### P1-11 — Anthropic cache wire：主体到位
 
-- `anthropic-request-build` system/last-tool ephemeral；provider-anthropic tests 钉 wire 有/无。  
-- OpenAI 路径测无 `cache_control`。  
-- session-loop 传入 `providerFamily`（~1779）。  
+- `anthropic-request-build` system/last-tool ephemeral；provider-anthropic tests 钉 wire 有/无。
+- OpenAI 路径测无 `cache_control`。
+- session-loop 传入 `providerFamily`（~1779）。
 - 残留：产品注释仍称「原生 Anthropic adapter 未接线 / 种子为 OpenAI 兼容代理」（`providerProfiles.ts:10-15`）—— **wire 代码 ≠ 桌面默认能打到原生 Anthropic**。能力诚实性需产品文案对齐。
 
 ### P1-12 — top-K 实现未按 plan（BinaryHeap / select_nth）
 
-- `search_files*`：全量 score → `sort_unstable` → `truncate`（`search.rs:34-42`）。  
+- `search_files*`：全量 score → `sort_unstable` → `truncate`（`search.rs:34-42`）。
 - 无 BinaryHeap；在空索引下无意义，索引修复后 100k 路径 SLA 可能弱于 plan 设计。
 
 ---
@@ -315,9 +315,9 @@ pub async fn register_core_handlers(router: &IpcRouter) {
 
 **禁止假绿清单（本轮命中）**
 
-1. Consumer delta sink 测试绿，生产 stream **从不**发 delta。  
-2. QuickOpen + empty-reason 测试绿，索引 **永远空**。  
-3. `search_index_ready: true` 与空 files 并存。  
+1. Consumer delta sink 测试绿，生产 stream **从不**发 delta。
+2. QuickOpen + empty-reason 测试绿，索引 **永远空**。
+3. `search_index_ready: true` 与空 files 并存。
 4. length 测试用 “escalate” 一词但未测 maxTokens。
 
 ---
@@ -352,32 +352,32 @@ pub async fn register_core_handlers(router: &IpcRouter) {
 ## 8. 残留缺口汇总（按 Wave）
 
 ### W1 正确性
-- [x] Seek 纯函数（两端）  
-- [x] TS 图 token + 413 分类/scrub  
-- [x] Anthropic cache wire（代码）  
-- [x] length 保真  
-- [ ] Rust 1600 + pair-safe compact  
-- [ ] maxTokens 阶梯 escalate  
-- [ ] 共享 golden 双语 CI  
+- [x] Seek 纯函数（两端）
+- [x] TS 图 token + 413 分类/scrub
+- [x] Anthropic cache wire（代码）
+- [x] length 保真
+- [ ] Rust 1600 + pair-safe compact
+- [ ] maxTokens 阶梯 escalate
+- [ ] 共享 golden 双语 CI
 
 ### W2 健壮
-- [x] applyFileDiff / replace_text 消费 seek  
-- [x] denial denylist + envelope  
-- [x] hydrate cache 透传 + 4D 公式  
-- [ ] 诊断码 seek_failed 统一  
-- [ ] Settings/Overview 完整 4 价体验  
-- [ ] orphan tool_result 投影（plan 02 R3）未见实质  
+- [x] applyFileDiff / replace_text 消费 seek
+- [x] denial denylist + envelope
+- [x] hydrate cache 透传 + 4D 公式
+- [ ] 诊断码 seek_failed 统一
+- [ ] Settings/Overview 完整 4 价体验
+- [ ] orphan tool_result 投影（plan 02 R3）未见实质
 
 ### W3 体验
-- [ ] args-delta **真实**出站（Anthropic/OpenAI）  
-- [ ] partialToolDiff + provisional Accept 禁用  
-- [ ] 常驻索引 rebuild + query-only 非空 files  
-- [x] /doctor /init 菜单与执行骨架  
+- [ ] args-delta **真实**出站（Anthropic/OpenAI）
+- [ ] partialToolDiff + provisional Accept 禁用
+- [ ] 常驻索引 rebuild + query-only 非空 files
+- [x] /doctor /init 菜单与执行骨架
 
 ### W4 轻安全
-- [x] multi-profile secret API  
-- [ ] 强制 Tauri 路径下 LS 零明文（测试钉死）  
-- [ ] 迁移残留 apiKey 扫描/清理报告  
+- [x] multi-profile secret API
+- [ ] 强制 Tauri 路径下 LS 零明文（测试钉死）
+- [ ] 迁移残留 apiKey 扫描/清理报告
 
 ---
 
@@ -425,9 +425,9 @@ pub async fn register_core_handlers(router: &IpcRouter) {
 
 ### Round N5 — 契约/文档收口 ≥2
 
-- 回写 plan 空 pattern 语义；勾 DoD。  
-- Rust 消费 `seek-cases.json`（或生成两侧共享 fixture）。  
-- 刷新 `EXECUTION-PROGRESS.md`：与代码真值一致。  
+- 回写 plan 空 pattern 语义；勾 DoD。
+- Rust 消费 `seek-cases.json`（或生成两侧共享 fixture）。
+- 刷新 `EXECUTION-PROGRESS.md`：与代码真值一致。
 - 软件内冒烟清单（plan 01 §4.2 / 03 / 04）写结果，禁止空勾。
 
 ---

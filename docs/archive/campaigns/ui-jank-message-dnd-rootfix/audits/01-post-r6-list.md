@@ -1,9 +1,9 @@
 # 01 — Post-R6 消息列表 + 虚拟滚动 + 消息幂等审计
 
-> Agent：R7-Audit-List（A-Review 只读）  
-> 日期：2026-07-22  
-> 工作区：`C:\Software\conex`  
-> 契约：`docs/ui-jank-message-dnd-rootfix/01-contract.md` §1 / §4 / §7  
+> Agent：R7-Audit-List（A-Review 只读）
+> 日期：2026-07-22
+> 工作区：`C:\Software\conex`
+> 契约：`docs/ui-jank-message-dnd-rootfix/01-contract.md` §1 / §4 / §7
 > 对照实现：R1（高度生命周期 / expand 锚点 / 流式 invalidate）· R5（addMessage upsert / id 熵）
 
 ## 0. 结论摘要
@@ -18,8 +18,8 @@
 | id 熵 | **达标**：`generateMessageId`（ts + uuid 片段 + 计数）+ 专测 |
 | 回归缺口 | **有**：缺 ChatMessageList / useVirtualScroll 组件级接线测；syncOrder 时序债 |
 
-**是否阻塞宣称「消息假重复主因路径根治」：**  
-**不阻塞**主因路径宣称（错误 `startIndex→clearHeights` 已关 + 同 id 静默双插已关 + id 熵足够）。  
+**是否阻塞宣称「消息假重复主因路径根治」：**
+**不阻塞**主因路径宣称（错误 `startIndex→clearHeights` 已关 + 同 id 静默双插已关 + id 熵足够）。
 **阻塞「100% 无列表跳动 / 无高度一帧错位」类更强宣称**——见 High/Medium 时序与补偿缺口。
 
 ---
@@ -200,7 +200,7 @@
 | `sessionEventHydrate` 投影 | 构建新数组，整表替换空会话 | **pass**（非双插） |
 | `subagentTimeline` ensureAsst | 复用 asst；新建 id 低熵 | **M6** |
 
-专测：`sessionActions.test.ts` L800–855「addMessage same id is upsert」。  
+专测：`sessionActions.test.ts` L800–855「addMessage same id is upsert」。
 id 熵：`generateMessageId.ts` + `generateMessageId.test.ts`（同 ms 32 唯一）。
 
 ### 2.3 契约 §7（消息列表相关）
@@ -235,12 +235,12 @@ id 熵：`generateMessageId.ts` + `generateMessageId.test.ts`（同 ms 32 唯一
 
 ## 4. 建议 R8 派发切片（供 R7-Plan）
 
-1. **R8-List-SyncOrderPhase（High）**：`useVirtualScroll` ids→syncOrder 改 layout 相；补 hook 测  
-2. **R8-List-RegressionTests（High）**：ChatMessageList 静态/浅渲染锁「无 startIndex clear」+ 会话 clear  
-3. **R8-List-WidthInvalidate（Medium）**：宽变阈值 → `invalidateAllActual` + tick  
-4. **R8-List-StreamInvalidate（Medium）**：thinking/tools deps 或 RO 权威文档化 + tick 桥  
-5. **R8-List-ExpandAnchor（Medium）**：估高后再补偿 / 二次校正  
-6. **R8-Data-DeadPaths（Low/Medium）**：删或测锁 `createChatActions`；demo save upsert；subagent `generateMessageId`  
+1. **R8-List-SyncOrderPhase（High）**：`useVirtualScroll` ids→syncOrder 改 layout 相；补 hook 测
+2. **R8-List-RegressionTests（High）**：ChatMessageList 静态/浅渲染锁「无 startIndex clear」+ 会话 clear
+3. **R8-List-WidthInvalidate（Medium）**：宽变阈值 → `invalidateAllActual` + tick
+4. **R8-List-StreamInvalidate（Medium）**：thinking/tools deps 或 RO 权威文档化 + tick 桥
+5. **R8-List-ExpandAnchor（Medium）**：估高后再补偿 / 二次校正
+6. **R8-Data-DeadPaths（Low/Medium）**：删或测锁 `createChatActions`；demo save upsert；subagent `generateMessageId`
 
 ---
 

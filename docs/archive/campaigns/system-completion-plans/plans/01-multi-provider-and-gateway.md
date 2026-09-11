@@ -211,9 +211,9 @@ git clone --depth 1 https://github.com/BerriAI/litellm.git C:\Software\conex\ref
 
 ## 4. 多轮多 Agent 执行方案
 
-> **规则**：每轮 **≥ 4 个并行 Agent**（除非本节写明可减）。  
-> **隔离**：按文件所有权拆分，禁止两 agent 同写一文件。  
-> **合流**：每轮结束由 **Inspector（反偷懒）** 做 diff + 测试门禁，不通过不得开下一轮。  
+> **规则**：每轮 **≥ 4 个并行 Agent**（除非本节写明可减）。
+> **隔离**：按文件所有权拆分，禁止两 agent 同写一文件。
+> **合流**：每轮结束由 **Inspector（反偷懒）** 做 diff + 测试门禁，不通过不得开下一轮。
 > **本方案阶段不改代码**；下列为执行轮剧本。
 
 ### Round 0 · 准备（可减至 2 agent，因无产品改动）

@@ -131,12 +131,12 @@ Round 3 ────────────────────────
 interface ProviderRegistryV2 {
   // 声明式（保留）
   loadFromConfig(configPath: string): Promise<void>;
-  
+
   // 程序化 SPI
   registerProviderClass(id: string, providerClass: ProviderClass): void;
   registerProviderFactory(id: string, factory: ProviderFactory): void;
   registerEngineClass(id: string, engineClass: EngineClass): void;
-  
+
   // 统一查询
   getProvider(id: string): AgentProvider | undefined;
   getEngine(id: string): Engine | undefined;
@@ -258,7 +258,7 @@ function getGatewayBridge(): GatewayV2Bridge {
 // 修复后
 class ProviderGateway {
   private gatewayBridge: GatewayV2Bridge;
-  
+
   constructor(options: ProviderGatewayOptions) {
     this.gatewayBridge = options.gatewayBridge ?? new GatewayV2Bridge();
   }
@@ -303,7 +303,7 @@ UNINITIALIZED
 interface AgentProvider {
   // 现有方法
   stream(req: ProviderRequest): AsyncGenerator<ProviderStreamContractEvent>;
-  
+
   // 新增可选生命周期方法
   init?(): Promise<void>;
   dispose?(): Promise<void>;
@@ -410,13 +410,13 @@ packages/agent-runtime/src/
 class AgentSessionLoop {
   // 状态机（保留）
   private machine: ConexStateMachine<...>;
-  
+
   // 委托组件
   private providerCall: ProviderCallCoordinator;
   private toolExec: ToolExecutionCoordinator;
   private steering: SteeringDelegate;
   private recovery: RecoveryCoordinator;
-  
+
   // 核心基础设施（保留）
   private readonly options: AgentRuntimeOptions;
   private readonly inputQueue: AgentInputQueue;
@@ -425,7 +425,7 @@ class AgentSessionLoop {
   private readonly abortController: AbortController;
   private readonly recorder: SessionRecorder;
   private readonly ledger: TokenLedger;
-  
+
   async *run(userInput: string | AgentMessage): AsyncGenerator<AgentEvent, AgentMessage[]> {
     // 状态机驱动循环（保留在此）
     // 每个 case 委托到对应的 Delegate

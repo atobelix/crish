@@ -1,8 +1,8 @@
 # 维度五指导方案：类型安全 Zero-any、异常捕获与单元测试验收指南 (05-TYPE-SAFETY-AND-SYSTEM-CLOSURE-GUIDE)
 
-> **Document ID**: CX-GUIDE-005  
-> **Version**: v1.0 Final  
-> **Target Files**: `apps/crish-desktop/src/services/SessionSyncService.ts` / `apps/crish-desktop/src/api/SessionRuntimeRegistry.ts` / `apps/crish-desktop/src/hooks/useAgentStream.ts` / `packages/shared-utils/src/dynamic-adaptation.ts` / `scripts/check-no-as-any-store.mjs`  
+> **Document ID**: CX-GUIDE-005
+> **Version**: v1.0 Final
+> **Target Files**: `apps/crish-desktop/src/services/SessionSyncService.ts` / `apps/crish-desktop/src/api/SessionRuntimeRegistry.ts` / `apps/crish-desktop/src/hooks/useAgentStream.ts` / `packages/shared-utils/src/dynamic-adaptation.ts` / `scripts/check-no-as-any-store.mjs`
 > **Core Objective**: Eliminate all `as any` type escapes across services and stores; close silent exception swallowing loops; and enforce unit testing and CI/CD quality gates to ensure 100% architectural compliance.
 
 ---

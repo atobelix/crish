@@ -1,11 +1,11 @@
 # Conex 全局依赖拓扑 DAG 修复图谱与 Round 1 ~ Round 9 深度实施计划 — 校正版本
 
-> **文档编号**: `CONEX-TOPOLOGY-DAG-V2-CORRECTED`  
-> **生成时间**: 2026-07-24  
-> **校正时间**: 2026-07-25  
-> **校正基准**: `v2_path_audit.json` / `v2_root_cause_audit.json` / `v2_remediation_review.json`  
-> **原始文档**: `analysis/master_repair_plan_v2/conex_repair_topology_v2.md`  
-> **审计基准**: `analysis/conex_gap_audits/` (下辖 6 份 Gap 诊断报告)  
+> **文档编号**: `CONEX-TOPOLOGY-DAG-V2-CORRECTED`
+> **生成时间**: 2026-07-24
+> **校正时间**: 2026-07-25
+> **校正基准**: `v2_path_audit.json` / `v2_root_cause_audit.json` / `v2_remediation_review.json`
+> **原始文档**: `analysis/master_repair_plan_v2/conex_repair_topology_v2.md`
+> **审计基准**: `analysis/conex_gap_audits/` (下辖 6 份 Gap 诊断报告)
 > **合规遵循**: `AGENTS.md` 及 `ANTI_OVERENGINEERING_GUARDRAILS.md`
 
 > **校正注**：原始拓扑文档使用 `GAP-XX-YYT` 格式的 Issue ID（如 `GAP-01-01T`、`GAP-02-03`），与 `ledger_v2.json` 使用的 `GAP-ST-XX`、`GAP-CS-XX`、`GAP-TC-XX`、`GAP-PM-XX`、`GAP-SE-XX`、`GAP-UI-XX` 体系不一致。经审查，两者为同一问题的不同命名体系（旧编号 vs 新编号）。本校正版本提供双向映射表并将所有 ID 统一映射到 ledger 体系。Round 9 中的 `GAP-09-01/02/03` 为计划创建项，标注说明。Round 8 中 `GAP-08-01/02` 为 orphan 节点，标注说明。
@@ -170,7 +170,7 @@ flowchart TD
     R1_3 --> R5_1
     R1_4 --> R4_1
     R1_5 --> R2_2
-    
+
     R2_1 --> R8_2
     R2_2 --> R8_1
     R2_3 --> R4_5

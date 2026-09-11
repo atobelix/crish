@@ -1,11 +1,11 @@
 # Conex 终极协同修复方案：质量门禁 (G0~G5) 与 Wave 调度规范 (v2) — 校正版本
 
-> **文档版本**：v2.0-CORRECTED  
-> **更新时间**：2026-07-24  
-> **校正时间**：2026-07-25  
-> **校正基准**：`v2_path_audit.json` / `v2_remediation_review.json`  
-> **原始文档**：`analysis/master_repair_plan_v2/quality_gates_and_waves_v2.md`  
-> **适用范围**：Conex 核心团队、全量 CI/CD 自动化构建流水线、多 Agent 协作工程规范  
+> **文档版本**：v2.0-CORRECTED
+> **更新时间**：2026-07-24
+> **校正时间**：2026-07-25
+> **校正基准**：`v2_path_audit.json` / `v2_remediation_review.json`
+> **原始文档**：`analysis/master_repair_plan_v2/quality_gates_and_waves_v2.md`
+> **适用范围**：Conex 核心团队、全量 CI/CD 自动化构建流水线、多 Agent 协作工程规范
 > **存储位置**：`C:\Software\conex\docs\v2_plan_review\quality_gates_and_waves_v2_CORRECTED.md`
 
 ---

@@ -1,9 +1,9 @@
 # 系统补全 · 全局多 Agent 多轮编排总纲
 
-**文档**: `docs/system-completion-plans/00-master-multi-agent-roadmap.md`  
-**日期**: 2026-07  
-**状态**: 总纲（可执行编排入口）  
-**上游审计**: [`audits/00-master-findings.md`](./audits/00-master-findings.md)  
+**文档**: `docs/system-completion-plans/00-master-multi-agent-roadmap.md`
+**日期**: 2026-07
+**状态**: 总纲（可执行编排入口）
+**上游审计**: [`audits/00-master-findings.md`](./audits/00-master-findings.md)
 **下游方案**: [`plans/01`](./plans/) … [`plans/05`](./plans/)（分维度系统性方案，执行轮前/中补全）
 
 ---
@@ -429,7 +429,7 @@ docs/system-completion-plans/
     05-prompt-plugins-and-reference.md
 ```
 
-**阅读顺序**：审计 → 本总纲 → 对应 plan → 开执行轮。  
+**阅读顺序**：审计 → 本总纲 → 对应 plan → 开执行轮。
 **更新规则**：改 P0 定义先改 `audits/00-master-findings.md`，再同步本总纲 §2；改 Phase 顺序只改本文件并在 PR 说明原因。
 
 ---

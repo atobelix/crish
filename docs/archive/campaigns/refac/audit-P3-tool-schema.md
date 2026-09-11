@@ -39,7 +39,7 @@ export function canonicalizeJsonSchema(schema) {
 
 | 关键字 | 风险等级 | 说明 |
 |--------|----------|------|
-| `properties.<key>` | **MUST** | 每个属性值的 schema 对象需递归 | 
+| `properties.<key>` | **MUST** | 每个属性值的 schema 对象需递归 |
 | `items` | **MUST** | 数组元素 schema 需递归 |
 | `additionalProperties` | **MUST** | 布尔值或 schema 对象需处理 |
 | `oneOf` | **MUST** | 数组元素每个分支 schema 需递归；若不同分支属性顺序不同，排序后会导致不同 canonical 结果——需要**更深层的排序策略** |
@@ -65,7 +65,7 @@ export function canonicalizeJsonSchema(schema) {
 
 **`allOf`**: 语义上是子 schema 的交集合并。较简单的做法：
 1. 对数组每个元素递归规范化
-2. 按规范化后的 JSON 字节序排序  
+2. 按规范化后的 JSON 字节序排序
    ⚠️ 但注意：`allOf` 的顺序在语义上无关，但 Anthropic/OpenAI 可能会按位置赋予不同含义。谨慎。
 
 **`$ref`**: 当前方案完全没有提及。建议：
@@ -261,18 +261,18 @@ McpLifecycleManager.start()
 class ToolRegistry {
   private readyPromise: Promise<void>;
   private resolveReady: () => void;
-  
+
   constructor() {
     this.readyPromise = new Promise((resolve) => {
       this.resolveReady = resolve;
     });
   }
-  
+
   /** McpManager 在所有 MCP 初始化完成后调用（无论成功/失败） */
   markReady(): void {
     this.resolveReady();
   }
-  
+
   /** 返回工具列表。ready 前仅返回本地工具 */
   async getAll(options?: { awaitMcp?: boolean }): Promise<AgentTool[]> {
     if (options?.awaitMcp !== false) {
@@ -297,12 +297,12 @@ class ToolRegistry {
 ```typescript
 class ToolRegistry {
   private listeners = new Set<() => void>();
-  
+
   subscribe(listener: () => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
   }
-  
+
   private notifyChange(): void {
     for (const listener of this.listeners) listener();
   }
@@ -381,7 +381,7 @@ interface CacheProfile {
 
 **命中率计算**：
 ```typescript
-const hitRate = usage.cache_read_input_tokens / 
+const hitRate = usage.cache_read_input_tokens /
   (usage.cache_read_input_tokens + usage.cache_creation_input_tokens);
 ```
 
@@ -395,7 +395,7 @@ const hitRate = usage.cache_read_input_tokens /
 2. 与上一次请求的 hash 比较（挂载在 Session 上）
 3. 变更时输出详细 diff：
    - 哪些工具被新增（name list）
-   - 哪些工具被移除（name list）  
+   - 哪些工具被移除（name list）
    - 哪些工具的 schema 发生变化（name + diff type）
 4. 使用 `process.hrtime.bigint()` 而非 `Date.now()` 作为时序基准
 

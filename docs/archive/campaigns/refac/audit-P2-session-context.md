@@ -1,8 +1,8 @@
 # Audit: Part 2 — 会话上下文管理与截断机制重建
 
-> 审计人: Conex 架构师  
-> 审计范围: `refactor_plan.md` 第 185–338 行  
-> 审计日期: 2026-07-23  
+> 审计人: Conex 架构师
+> 审计范围: `refactor_plan.md` 第 185–338 行
+> 审计日期: 2026-07-23
 > 代码基线: 当前 `main` 分支（context-compression.ts + agent-session-loop 已大体成型）
 
 ---
@@ -11,7 +11,7 @@
 
 ### 2.1.1 确认存在性
 
-`MAX_MESSAGES_PER_SESSION` 常量定义于 `packages/shared-utils/src/bounds.ts:2`（值为 500）。  
+`MAX_MESSAGES_PER_SESSION` 常量定义于 `packages/shared-utils/src/bounds.ts:2`（值为 500）。
 使用该常量的 `shift()` 截断点共 **4 处**：
 
 | 文件 | 行号 | 截断对象 | 备注 |
@@ -66,7 +66,7 @@ sess.messages.push(prepared);
 
 ### 2.2.1 实际代码 vs 方案描述
 
-**原方案**描述的是"从末尾累加 Token → 超过预算后向前搜索第一个 user 边界"的算法。  
+**原方案**描述的是"从末尾累加 Token → 超过预算后向前搜索第一个 user 边界"的算法。
 **实际代码**中，`context-compression.ts:610-625` 的 `findFirstKeptMessageIndex` 实现了一套不同的逻辑：
 
 ```
@@ -257,13 +257,13 @@ class FileOpTrackingMiddleware implements ToolMiddleware {
   ): Promise<MiddlewareAfterResult> {
     const fileOp = extractFileOpFromToolCall(tool.name, input, ctx.toolCallId);
     if (!fileOp) return Promise.resolve({});
-    
+
     this.contextState.markFileSnapshot(
       fileOp.path,
       `${fileOp.op === 'read' ? 'read' : 'modified'} by ${tool.name}`,
       ctx.toolCallId
     );
-    
+
     return Promise.resolve({});
   }
 }
@@ -354,18 +354,18 @@ function findFirstKeptMessageIndexSafe(
   compressor?: ContextCompressor  // 可选，用于 L3 降级
 ): number {
   let index = findFirstKeptMessageIndex(messages, targetRecentTokens, minRecentMessages);
-  
+
   if (index === 0 && messages.length > minRecentMessages * 2) {
     // L1: 尝试修复可修复的边界
     index = findFirstKeptMessageIndexWithSanitization(messages, targetRecentTokens, minRecentMessages);
   }
-  
+
   if (index === 0 && compressor && messages.length > minRecentMessages * 2) {
     // L3: 调用主动压缩
     // 注意：这里可能触发递归，需要防止死循环
     return triggerEmergencyCompression(messages, compressor);
   }
-  
+
   return index;
 }
 ```
@@ -426,7 +426,7 @@ If you need details about a compressed turn, use the available tools
 ```
 <context_checkpoint>
   [摘要文本]
-  
+
   Files read: src/index.ts, src/utils.ts
   Files modified: src/config.ts
   Files read by compressed turn 8 is not summarized; use read_file to re-examine.

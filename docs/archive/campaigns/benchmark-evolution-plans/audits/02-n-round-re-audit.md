@@ -1,9 +1,9 @@
 # 02 — N-Round Re-Audit (Strict)
 
-**日期**: 2026-07-22  
-**对照**: [`01-post-execution-strict-audit.md`](./01-post-execution-strict-audit.md)  
-**方法**: 只读复审（除本文件外不改产品代码）；以 file:line 真值为准，不信进度文档、不信「旁路单测绿」  
-**范围**: 用户指定 7 项 N-round 修复目标  
+**日期**: 2026-07-22
+**对照**: [`01-post-execution-strict-audit.md`](./01-post-execution-strict-audit.md)
+**方法**: 只读复审（除本文件外不改产品代码）；以 file:line 真值为准，不信进度文档、不信「旁路单测绿」
+**范围**: 用户指定 7 项 N-round 修复目标
 
 **总判**: N-round 修好了 **5/7 的硬核缺口**（maxTokens 真阶梯、搜索重建+诚实空态、Rust 1600+safe drop、4D 折叠定价、seek 双语 fixture）。**args-delta 端到端仍断在桌面桥**：runtime 真 emit + session-loop 真出站，但 `daemonChatBridge` **不消费** session-loop 实际发出的 `tool-update` 形态 → 产品 UI 仍可能永远看不到「参数生成中」。**不得宣称流式 Diff / progressive args 产品完成**。
 
@@ -74,9 +74,9 @@
 
 **残留（P2，不阻断本项）**
 
-1. 未用 `conex_search::GlobalIndex` / `ArcSwap`（crate 仍有 `index.rs:29-36`，workbench 自管 `RwLock`）——功能等价，非 plan 字面 BinaryHeap/GlobalIndex。  
-2. Rebuild **仅** QuickOpen 打开触发，非「开仓即 rebuild」全生命周期。  
-3. 无 `is_indexing` 中态：rebuild 进行中仍可能短暂 `index_not_ready` / 空 hits。  
+1. 未用 `conex_search::GlobalIndex` / `ArcSwap`（crate 仍有 `index.rs:29-36`，workbench 自管 `RwLock`）——功能等价，非 plan 字面 BinaryHeap/GlobalIndex。
+2. Rebuild **仅** QuickOpen 打开触发，非「开仓即 rebuild」全生命周期。
+3. 无 `is_indexing` 中态：rebuild 进行中仍可能短暂 `index_not_ready` / 空 hits。
 4. top-K 仍全量 sort（01 P1-12）——索引非空后才有 SLA 意义。
 
 ---
@@ -98,8 +98,8 @@
 
 **残留（测试债，P1）**
 
-- 无断言 `IMAGE_TOKEN_COST == 1600` 的单测。  
-- 无「assistant+tool 成对不被切断」回归测（仅有 `test_emergency_compaction_triggers` 等弱测，`:201-215`）。  
+- 无断言 `IMAGE_TOKEN_COST == 1600` 的单测。
+- 无「assistant+tool 成对不被切断」回归测（仅有 `test_emergency_compaction_triggers` 等弱测，`:201-215`）。
 - `safe_drop_end` 对孤立 `tool` 返回 `start`（不 drop）——极端序列可能 stall 压缩；未证明与 TS `safeCompactionCutoff` 完全同构。
 
 ---
@@ -122,7 +122,7 @@
 
 **残留**
 
-- Overview `cost===0` 时回落 **2D** `estimateCostUsd`（`OverviewCard.tsx:344-347`）——有 cache 时 stream 路径写 4D cost（`useChatStream.ts:1289-1340`），回落合理但未在 UI 标注「2D 估算」。  
+- Overview `cost===0` 时回落 **2D** `estimateCostUsd`（`OverviewCard.tsx:344-347`）——有 cache 时 stream 路径写 4D cost（`useChatStream.ts:1289-1340`），回落合理但未在 UI 标注「2D 估算」。
 - 非 per-model 独立 Pcr/Pcw 列（全局倍率）——与 plan「4 列」字面略异，产品可接受。
 
 ---
@@ -290,9 +290,9 @@ tool-args-delta | tool_args_delta | tool-call-delta | tool_call_delta | (tool-ca
 
 ### 可不排多 agent 的债
 
-- Rust compact：补 `IMAGE_TOKEN_COST` + pair 单测（单 agent 即可）。  
-- OpenAI args-delta 对称 emit（产品若默认 OpenAI 兼容代理则升优先）。  
-- QuickOpen 开仓即 rebuild / `is_indexing`。  
+- Rust compact：补 `IMAGE_TOKEN_COST` + pair 单测（单 agent 即可）。
+- OpenAI args-delta 对称 emit（产品若默认 OpenAI 兼容代理则升优先）。
+- QuickOpen 开仓即 rebuild / `is_indexing`。
 - Overview 2D 回落显式文案。
 
 ---

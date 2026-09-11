@@ -399,16 +399,16 @@ export interface BubbledAgentEventMetadata {
 }
 
 // 在 AgentEvent 中增加 bubbled 变体，或使用元数据附加
-export type AgentEvent = 
-  | AgentDomainEvent 
-  | TurnDomainEvent 
+export type AgentEvent =
+  | AgentDomainEvent
+  | TurnDomainEvent
   | ...
   | (DiagnosticDomainEvent & { _bubbled?: BubbledAgentEventMetadata });
 ```
 
 为保持类型安全，建议使用 discriminated union：
 ```typescript
-export type AgentEvent = 
+export type AgentEvent =
   | { type: 'agent-start' | 'agent-end' | ... }
   | (AgentDomainEvent & { _bubbled: BubbledAgentEventMetadata });
 ```

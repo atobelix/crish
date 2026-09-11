@@ -1,8 +1,8 @@
 # 02 — Compaction：IMAGE_TOKEN_COST · 413 Payload Scrub · Tool 成对门控
 
-**Directions**: B + C  
-**来源**: `docs/benchmark-evolution-plans/audits/00-master-findings.md`  
-**日期**: 2026-07-22  
+**Directions**: B + C
+**来源**: `docs/benchmark-evolution-plans/audits/00-master-findings.md`
+**日期**: 2026-07-22
 **原则**: 自然融入 agent-runtime + conex-compaction；禁止照抄 jcode 文件树；无 TUI；不改 softDeny / TrustZone 主语义
 
 ---
@@ -54,9 +54,9 @@ Rust CompactionEngine
 
 ## 2. 非目标
 
-- TUI、TrustZone 重写、桌面 1.5MB 降采样重做  
-- base64/4 当地真 token  
-- 413 与 context-length 混淆分类  
+- TUI、TrustZone 重写、桌面 1.5MB 降采样重做
+- base64/4 当地真 token
+- 413 与 context-length 混淆分类
 
 ---
 
@@ -99,11 +99,11 @@ Rust CompactionEngine
 
 ## 4. 测试与 DoD
 
-- [ ] 大 base64 图估算 ≈ N×1600 非 100k+  
-- [ ] payload-too-large 分类 + scrub 重试  
-- [ ] safeCompactionCutoff 导出 + jcode 级边界测  
-- [ ] Rust 无孤立 tool 角色序列  
-- [ ] softDeny / 审批超时 **零回归**  
+- [ ] 大 base64 图估算 ≈ N×1600 非 100k+
+- [ ] payload-too-large 分类 + scrub 重试
+- [ ] safeCompactionCutoff 导出 + jcode 级边界测
+- [ ] Rust 无孤立 tool 角色序列
+- [ ] softDeny / 审批超时 **零回归**
 
 ```text
 pnpm exec vitest run packages/agent-runtime/src/context-compression.test.ts
@@ -125,8 +125,8 @@ cargo test -p conex-compaction
 
 ## 关键路径
 
-- `packages/agent-runtime/src/context-compression.ts`  
-- `packages/agent-runtime/src/agent-session-loop.ts`  
-- `packages/agent-runtime/src/provider-openai-compatible.ts`  
-- `crates/conex-compaction/src/compaction.rs`  
-- `packages/shared-types/src/tool.ts`  
+- `packages/agent-runtime/src/context-compression.ts`
+- `packages/agent-runtime/src/agent-session-loop.ts`
+- `packages/agent-runtime/src/provider-openai-compatible.ts`
+- `crates/conex-compaction/src/compaction.rs`
+- `packages/shared-types/src/tool.ts`

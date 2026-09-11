@@ -5,7 +5,7 @@
 > **涉及维度**：D1（上帝组件）、D3（重复渲染逻辑）、D4（React 18 并发模式问题）、D8（圈复杂度）
 > **包路径**：`apps/crish-desktop/src/components/`、`apps/crish-desktop/src/App.tsx`
 > **下游依赖方**：Layer G (Performance) 在结构拆分后做性能优化
-> 
+>
 > **本层与其它层的交叉引用**：总览 F-7（useChatStream 拆分）完成后，G-1（SSE 渲染批处理节流）在其拆分子文件中执行。F-2（FilesCard 拆分）完成后，G-1（虚拟滚动内联消除）在拆分出的 `files/FileTree.tsx` 中替换滚动逻辑。F-10（ChatMessageList 拆分）完成后，G-4（Pretext Worker 卸载）在拆分后的子文件中优化渲染管线。
 
 ---

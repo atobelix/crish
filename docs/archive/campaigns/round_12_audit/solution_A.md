@@ -1,8 +1,8 @@
 # Conex 代码库综合修复方案
 
-> **生成依据**: Round 12 全部 12 份审计报告 + 实际代码验证  
-> **方案定位**: 多 Agent 协同修复方案，按逻辑轮次组织，可迭代复用  
-> **覆盖范围**: 所有 P0/P1/P2 问题，无优先级区分  
+> **生成依据**: Round 12 全部 12 份审计报告 + 实际代码验证
+> **方案定位**: 多 Agent 协同修复方案，按逻辑轮次组织，可迭代复用
+> **覆盖范围**: 所有 P0/P1/P2 问题，无优先级区分
 > **方案结构**: 12 个逻辑轮次，每轮 ≤ 12 个 Agent
 >
 > **⚠️ HISTORICAL (OPT-E8 / W4-2):** 文中 `apps/crish-desktop/src/store/session-actions/**` 为**已删除目录**的历史任务路径。现行 session store actions：`sessionCrudActions.ts` / `sessionMessageActions.ts` / `sessionOrderingActions.ts` / `sessionAgentActions.ts` / barrel `sessionActions.ts`。勿按下文「切到 session-actions/」执行。

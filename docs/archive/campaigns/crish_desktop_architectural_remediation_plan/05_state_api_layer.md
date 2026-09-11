@@ -5,7 +5,7 @@
 > **涉及维度**：D1（上帝文件/上帝类）、D3（逻辑重复）、D4（异步竞态 — Zustand 盲目突变 / 晚到覆盖）、D6（资源泄漏）、D8（圈复杂度）
 > **包路径**：`apps/crish-desktop/src/store/`、`apps/crish-desktop/src/hooks/`、`apps/crish-desktop/src/api/`
 > **下游依赖方**：Layer F (UI Components) 直接消费 Store selectors 和 Hooks、Layer G (Performance) 依赖 Store 的不可变更新模式
-> 
+>
 > **本层与其它层的交叉引用**：E-1（useChatStream 拆分）完成后，Layer G 的 G-1（SSE 渲染节流）和 G-2（onFrame 闭包竞态修复）在其拆分子文件中执行。E-6（Zustand 状态审计）发现的全局状态突变模式需要 Layer H 的 ApprovalPipeline（H-3）和 Layer J 的测试隔离（J-20 provider-gateway 单例 reset）协作修复。
 >
 > **⚠️ HISTORICAL (OPT-E8 / W4-2):** 下文规划的 `session-actions/` 子目录拆分形态已过时——该目录在 W4-2 **物理删除**。现行为 flat 模块：`sessionCrudActions.ts` / `sessionMessageActions.ts` / `sessionOrderingActions.ts` / `sessionAgentActions.ts` + barrel `sessionActions.ts`（均在 `apps/crish-desktop/src/store/`）。代码示例与 `wc -l session-actions/*.ts` 验收项仅作历史方案参考。
@@ -134,7 +134,7 @@ const generationMapRef = useRef(new Map<string, number>());
 function runStreamingAssistant(sid: string) {
   const myGen = (generationMapRef.current.get(sid) ?? 0) + 1;
   generationMapRef.current.set(sid, myGen);
-  
+
   onFrame(frame => {
     if (myGen !== generationMapRef.current.get(sid)) return; // 代际不匹配
     buffer.write(frame, sid);

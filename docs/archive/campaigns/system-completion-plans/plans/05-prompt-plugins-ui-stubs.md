@@ -1,8 +1,8 @@
 # 05 · Prompt / 插件 / UI Stub 诚实化与接线方案
 
-**日期**: 2026-07  
-**维度**: Prompt · Rules · Plugins · Extension Catalog · UI 审批 Stub  
-**上游**: [`audits/00-master-findings.md`](../audits/00-master-findings.md) §2.7–2.8、§3 P0/P1  
+**日期**: 2026-07
+**维度**: Prompt · Rules · Plugins · Extension Catalog · UI 审批 Stub
+**上游**: [`audits/00-master-findings.md`](../audits/00-master-findings.md) §2.7–2.8、§3 P0/P1
 **原则**: 证据级路径；先诚实、再接线、后沙箱；测试须在 **真实 Tauri 软件内**（非仅 Vite 端口）
 
 ---
@@ -327,7 +327,7 @@ onBatchDeny = similarly;
 
 ## 5. 多轮多 Agent 执行编排（≥4 Agent，≥4 轮）
 
-> 约束模板与仓库 `multi_agent_execution_guide` / 产品信任计划一致：  
+> 约束模板与仓库 `multi_agent_execution_guide` / 产品信任计划一致：
 > **ALLOWED / FORBIDDEN / VERIFY**；每轮只做一刀；禁止跨维顺手改 MCP 启停实现细节（仅契约引用）。
 
 ### 5.0 Agent 角色

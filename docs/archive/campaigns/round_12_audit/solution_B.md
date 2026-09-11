@@ -92,7 +92,7 @@ Round 1 (Critical Blockers) —— 编译 / 数据损坏 / 安全高危
 | R1-AC7 | 预解析 HTML 直通消费 | `MessageContent.tsx` 读取 `frame.html` 而非调用 markdown 解析；`useStreamCallbacks.ts` 在 `onFrame` 中同时写入 `frame.full` 和 `frame.html` | 无 `parseMarkdownToHtmlAsync` 调用（或仅在无预解析 HTML 时回退） |
 | R1-AC8 | isAiBusy 改用 streamManagerRef | `useSlashSend.ts` 中 L295 | `streamManagerRef.current!.has(sid)` 替代 `sessMsgs.some(...)` |
 | R1-AC9 | cancelFn ref 模式 | `useStreamCallbacks.ts:163-169` | `cancelFn` 为 ref 对象，`streamManagerRef` 中的 cancel 读取 `cancelFnRef.current` |
-| R1-AC10 | layoutStore 集成 slices | `layoutStore.ts` 中存在 `from './slices/xxx'` 导入，且调用 `createUiActions` 等工厂 | store 创建时使用了 slice 工厂而非内联定义 |  
+| R1-AC10 | layoutStore 集成 slices | `layoutStore.ts` 中存在 `from './slices/xxx'` 导入，且调用 `createUiActions` 等工厂 | store 创建时使用了 slice 工厂而非内联定义 |
 | R1-AC11 | ErrorClassifier 统一 | `session-loop/index.ts:255` 和 `types.ts:27` | 调用 `ErrorClassifier.classify` 而非 `classifyProviderErrorMessage` |
 | R1-AC12 | DOMPurify 集成 | `MessageContent.tsx` | `containerRef.current.innerHTML = DOMPurify.sanitize(wrappedHtml)` |
 

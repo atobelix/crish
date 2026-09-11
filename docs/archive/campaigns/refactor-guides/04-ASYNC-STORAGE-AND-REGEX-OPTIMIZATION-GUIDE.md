@@ -1,8 +1,8 @@
 # 维度四指导方案：异步 IndexedDB 存储、零拷贝快照与正则 Fast-Path 优化指南 (04-ASYNC-STORAGE-AND-REGEX-OPTIMIZATION-GUIDE)
 
-> **Document ID**: CX-GUIDE-004  
-> **Version**: v1.0 Final  
-> **Target Files**: `apps/crish-desktop/src/api/sessionPersistence.ts` / `apps/crish-desktop/src/store/storeTransaction.ts` / `apps/crish-desktop/src/api/toolFeedback.ts` / `apps/crish-desktop/src/store/actions/session.ts`  
+> **Document ID**: CX-GUIDE-004
+> **Version**: v1.0 Final
+> **Target Files**: `apps/crish-desktop/src/api/sessionPersistence.ts` / `apps/crish-desktop/src/store/storeTransaction.ts` / `apps/crish-desktop/src/api/toolFeedback.ts` / `apps/crish-desktop/src/store/actions/session.ts`
 > **Core Objective**: Migrate 270+ synchronous `localStorage` calls to asynchronous IndexedDB / Tauri backend; eliminate 14.79% V8 GC memory allocation spikes caused by `structuredClone` on Zustand Stores; and refactor `toolFeedback.ts` 25-regex pipeline with Fast-Path short-circuiting and compiled unified regex matching.
 
 ---

@@ -1,8 +1,8 @@
 # 04 — Search 常驻索引 · 4D 成本 · 轻量 Secret Sidecar
 
-**Directions**: E + I + F  
-**来源**: `docs/benchmark-evolution-plans/audits/00-master-findings.md`  
-**日期**: 2026-07-22  
+**Directions**: E + I + F
+**来源**: `docs/benchmark-evolution-plans/audits/00-master-findings.md`
+**日期**: 2026-07-22
 **硬约束**: 无 TUI；无沙箱重写；**禁止** jcode DP 作 100k 默认；密钥 **轻量**（DPAPI 多 profile，非 daemon 磁盘库）
 
 ---
@@ -48,9 +48,9 @@ savings = max(0, fullPriceIfNoCache - cost)
 
 ## 2. 非目标
 
-- 全文代码索引 / DP 全库打分  
-- keyring crate 全平台大工程（可后置）  
-- daemon 持久化密钥  
+- 全文代码索引 / DP 全库打分
+- keyring crate 全平台大工程（可后置）
+- daemon 持久化密钥
 
 ---
 
@@ -100,19 +100,19 @@ SLA bench · useChatStream 接 4D · secret UX 脱敏 · 文档。
 ## 4. DoD
 
 ### E
-- [ ] 常驻索引；query 不传 files[]  
-- [ ] top-K ≤ limit；无 DP 全库  
-- [ ] Ctrl+P 打开文件  
+- [ ] 常驻索引；query 不传 files[]
+- [ ] top-K ≤ limit；无 DP 全库
+- [ ] Ctrl+P 打开文件
 
 ### I
-- [ ] hydrate 含 cache  
-- [ ] 4 价 + $ Saved 可见  
-- [ ] 无 cache 时 2D 降级  
+- [ ] hydrate 含 cache
+- [ ] 4 价 + $ Saved 可见
+- [ ] 无 cache 时 2D 降级
 
 ### F
-- [ ] 多 profile DPAPI；LS 无 apiKey  
-- [ ] boot hydrate engine  
-- [ ] daemon 仍内存  
+- [ ] 多 profile DPAPI；LS 无 apiKey
+- [ ] boot hydrate engine
+- [ ] daemon 仍内存
 
 ---
 
@@ -128,8 +128,8 @@ SLA bench · useChatStream 接 4D · secret UX 脱敏 · 文档。
 
 ## 关键路径
 
-- `crates/conex-search/src/search.rs` / `handlers/*`  
-- `apps/agent-workbench/src-tauri/src/core_commands.rs`  
-- `apps/crish-desktop/src/api/sessionEventHydrate.ts`  
-- `pricingStore.ts` / `usageStore.ts` / `providerProfiles.ts`  
-- `credentials.rs`  
+- `crates/conex-search/src/search.rs` / `handlers/*`
+- `apps/agent-workbench/src-tauri/src/core_commands.rs`
+- `apps/crish-desktop/src/api/sessionEventHydrate.ts`
+- `pricingStore.ts` / `usageStore.ts` / `providerProfiles.ts`
+- `credentials.rs`

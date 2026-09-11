@@ -1,8 +1,8 @@
 # 维度三指导方案：Tooltip 浮层延迟加载与 Zustand 浅比较门面重构指南 (03-TOOLTIP-LAZY-AND-ZUSTAND-SHALLOW-GUIDE)
 
-> **Document ID**: CX-GUIDE-003  
-> **Version**: v1.0 Final  
-> **Target Files**: `apps/crish-desktop/src/components/Tooltip/Tooltip.tsx` / `apps/crish-desktop/src/components/OverviewCard.tsx` / `RuntimePanel.tsx` / `WorkspaceChromeBars.tsx` / `ChatCard.tsx` / `AgentCard.tsx` / `store/*.ts`  
+> **Document ID**: CX-GUIDE-003
+> **Version**: v1.0 Final
+> **Target Files**: `apps/crish-desktop/src/components/Tooltip/Tooltip.tsx` / `apps/crish-desktop/src/components/OverviewCard.tsx` / `RuntimePanel.tsx` / `WorkspaceChromeBars.tsx` / `ChatCard.tsx` / `AgentCard.tsx` / `store/*.ts`
 > **Core Objective**: Convert `<Tooltip>` from unconditional Hook mounting to Lazy Hover activation; resolve Tooltip floating position displacement during scrolling; enforce `useShallow` across all Zustand Store selectors; and eliminate store drift across multiple Zustand store instances.
 
 ---

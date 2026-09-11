@@ -1,7 +1,7 @@
 # 全量审计汇总：Mock / Stub / 断点 / 长程 Goal
 
-**日期**: 2026-07  
-**方式**: 8 路并行 explore agent + 既有 multi-agent 审计  
+**日期**: 2026-07
+**方式**: 8 路并行 explore agent + 既有 multi-agent 审计
 **原则**: 证据级路径；测试须在 **真实 Tauri 软件内**（非仅 Vite 浏览器端口）
 
 ---

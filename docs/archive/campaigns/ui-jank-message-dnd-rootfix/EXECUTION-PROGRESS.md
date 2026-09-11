@@ -19,7 +19,7 @@
 
 ## Baseline（R0）
 
-> 盘点时间：2026-07-22 · 工作区 `C:\Software\conex` · 焦点 `apps/crish-desktop` · 分支 `refactor/architecture`  
+> 盘点时间：2026-07-22 · 工作区 `C:\Software\conex` · 焦点 `apps/crish-desktop` · 分支 `refactor/architecture`
 > 只读盘点；**不改业务源码**。并行 Agent（R1/R2/R5）已在同树改动部分锚点，下表同时标注 **契约动机（before）** 与 **盘点当下状态**。
 
 ### 1. 关键文件与问题锚点

@@ -1,8 +1,8 @@
 # 03 · Goal 长程闭环与软件内 AI 测试
 
-**状态**: 方案定稿（待多 Agent 执行）  
-**日期**: 2026-07  
-**上游**: [`audits/00-master-findings.md`](../audits/00-master-findings.md) · [`README.md`](../README.md)  
+**状态**: 方案定稿（待多 Agent 执行）
+**日期**: 2026-07
+**上游**: [`audits/00-master-findings.md`](../audits/00-master-findings.md) · [`README.md`](../README.md)
 **范围**: 桌面 `/goal` ↔ 引擎 `driveGoalRun` 统一；完成门禁；reflection/格式修复；**真实 Tauri 软件内** AI 测试采集层
 
 ---
@@ -234,7 +234,7 @@ round3: tool_call satisfies oracle + complete  → expect success
 
 ## 6. 多轮多 Agent 执行计划
 
-**编排约定**：每轮 **≥ 4 个 Agent 并行**；每 Agent 有明确 I/O 与「软件内验收」勾选。  
+**编排约定**：每轮 **≥ 4 个 Agent 并行**；每 Agent 有明确 I/O 与「软件内验收」勾选。
 **全局禁止**：用浏览器端口结果顶替 Tauri 验收。
 
 ---

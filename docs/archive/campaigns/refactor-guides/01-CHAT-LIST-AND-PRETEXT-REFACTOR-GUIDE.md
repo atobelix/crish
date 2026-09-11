@@ -1,8 +1,8 @@
 # 维度一指导方案：消息列表、Pretext 缓存、Re-render 隔离与样式规范重构指南 (01-CHAT-LIST-AND-PRETEXT-REFACTOR-GUIDE)
 
-> **文档编号**: CX-GUIDE-001  
-> **版本**: v1.0 Final  
-> **关联源码**: `apps/crish-desktop/src/components/ChatMessageList.tsx` / `ChatMessageRow.tsx` / `useTextMeasure.ts` / `ChatToolCallBlock.tsx`  
+> **文档编号**: CX-GUIDE-001
+> **版本**: v1.0 Final
+> **关联源码**: `apps/crish-desktop/src/components/ChatMessageList.tsx` / `ChatMessageRow.tsx` / `useTextMeasure.ts` / `ChatToolCallBlock.tsx`
 > **核心目标**: 彻底清理 `useBubbleShrinkWidth` 带来的 DOM 强排死循环；构建全局 Pretext `PreparedText` LRU 缓存池；修复 `expandedTools` 与 `togglePin` 引发的视口消息 100% 级联重绘陷阱；为沉重组件补充 `React.memo` 隔离；治理 Rule 1 原生 `title` 属性违规。
 
 ---

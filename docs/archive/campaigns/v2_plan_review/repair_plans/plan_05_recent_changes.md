@@ -1,8 +1,8 @@
 # Plan 05 — Recent Changes TS Error Repair
 
-**Date**: 2026-07-25  
-**Scope**: 15 files across `agent-runtime`, `shared-utils`, and `agent-daemon`  
-**Total TS Errors**: ~200+ (filtered to 15 relevant source files)  
+**Date**: 2026-07-25
+**Scope**: 15 files across `agent-runtime`, `shared-utils`, and `agent-daemon`
+**Total TS Errors**: ~200+ (filtered to 15 relevant source files)
 **Plan Version**: 1.0
 
 ---
@@ -22,8 +22,8 @@ All errors were extracted from `raw_errors_runtime.txt` and `raw_errors_daemon.t
 ## 2. File-by-File Detailed Analysis
 
 ### 2.1 normalizer.ts
-**Path**: `packages/agent-runtime/src/provider-stream-contract/normalizer.ts`  
-**Lines**: 177  
+**Path**: `packages/agent-runtime/src/provider-stream-contract/normalizer.ts`
+**Lines**: 177
 **Classification**: A类 (1) + B类 (1)
 
 #### Errors (from raw_errors_runtime.txt)
@@ -35,7 +35,7 @@ Line 901: normalizer.test.ts(2,10): error TS2459: Module '"./normalizer"' declar
 #### Source Analysis
 - **Line 44-49**: `function legacyFinishReason(reason: string): ProviderStreamFinishReason { ... }`
   This is a module-private function. It is NOT exported.
-  
+
 - **Line 105**: `const finishReason = legacyFinishReason(raw.reason);`
   Used only internally within `normalizeProviderEvent`.
 
@@ -60,8 +60,8 @@ Line 901: normalizer.test.ts(2,10): error TS2459: Module '"./normalizer"' declar
 ---
 
 ### 2.2 provider-response-consumer.ts
-**Path**: `packages/agent-runtime/src/runtime-components/provider-response-consumer.ts`  
-**Lines**: 155  
+**Path**: `packages/agent-runtime/src/runtime-components/provider-response-consumer.ts`
+**Lines**: 155
 **Classification**: A类
 
 #### Errors (from raw_errors_runtime.txt)
@@ -110,8 +110,8 @@ The source file itself has no direct TS errors. The test needs updating to match
 ---
 
 ### 2.3 mcp-server-controller.ts
-**Path**: `packages/agent-runtime/src/mcp-lifecycle/mcp-server-controller.ts`  
-**Lines**: 534  
+**Path**: `packages/agent-runtime/src/mcp-lifecycle/mcp-server-controller.ts`
+**Lines**: 534
 **Classification**: B类
 
 #### Errors
@@ -133,8 +133,8 @@ The test file imports the class but doesn't use it (likely a skeleton test or le
 ---
 
 ### 2.4 compression-utils.ts
-**Path**: `packages/agent-runtime/src/context-compression/compression-utils.ts`  
-**Lines**: 193  
+**Path**: `packages/agent-runtime/src/context-compression/compression-utils.ts`
+**Lines**: 193
 **Classification**: B类
 
 #### Errors
@@ -156,8 +156,8 @@ Test file imports `includeRequiredToolCallMessages` but doesn't use it.
 ---
 
 ### 2.5 bounded-map.ts
-**Path**: `packages/shared-utils/src/bounded-map.ts`  
-**Lines**: 197  
+**Path**: `packages/shared-utils/src/bounded-map.ts`
+**Lines**: 197
 **Classification**: B类 (`exactOptionalPropertyTypes`)
 
 #### Errors
@@ -188,8 +188,8 @@ The potential issue is with consumers of `BoundedMap` who pass `onEvict` as `und
 ---
 
 ### 2.6 stream-recovery.ts
-**Path**: `packages/agent-runtime/src/recovery/stream-recovery.ts`  
-**Lines**: 260  
+**Path**: `packages/agent-runtime/src/recovery/stream-recovery.ts`
+**Lines**: 260
 **Classification**: A类
 
 #### Errors
@@ -220,8 +220,8 @@ Note: There is a SECOND file at `provider-transport/stream-recovery.ts` (629 lin
 ---
 
 ### 2.7 session.ts
-**Path**: `packages/agent-runtime/src/session.ts`  
-**Lines**: 723  
+**Path**: `packages/agent-runtime/src/session.ts`
+**Lines**: 723
 **Classification**: A类
 
 #### Errors
@@ -264,7 +264,7 @@ pruneHistoricalToolOutputs(this.conversation.getMessagesMutable(), 10);
 
   `AgentMessage` likely has fields like `metadata?: JsonObject`. The spread `...msg` copies all own properties including `metadata: undefined` which with `exactOptionalPropertyTypes` is not valid for an optional property. But this is a spread, not a direct assignment.
 
-  Actually, spreading `...msg` creates an object where `metadata` might be `undefined` (the runtime value) and then the new object literal adds `blocks` override. TypeScript checks object literals more strictly... 
+  Actually, spreading `...msg` creates an object where `metadata` might be `undefined` (the runtime value) and then the new object literal adds `blocks` override. TypeScript checks object literals more strictly...
 
   Hmm, I think the actual issue might be with the interaction between the spread and `exactOptionalPropertyTypes`. When spreading `msg` (which has type `AgentMessage`), optional properties that are `undefined` at runtime get spread as `metadata: undefined`, and with `exactOptionalPropertyTypes`, setting an optional property to `undefined` in an object literal is an error.
 
@@ -281,8 +281,8 @@ pruneHistoricalToolOutputs(this.conversation.getMessagesMutable(), 10);
 ---
 
 ### 2.8 session-loop/index.ts
-**Path**: `packages/agent-runtime/src/session-loop/index.ts`  
-**Lines**: 447  
+**Path**: `packages/agent-runtime/src/session-loop/index.ts`
+**Lines**: 447
 **Classification**: A类
 
 #### Errors
@@ -294,7 +294,7 @@ Line 1463: index.test.ts(2,10): error TS2305: Module '"./index"' has no exported
 #### Source Analysis
 - **Line 37**: `export class AgentSessionLoop { ... }`
   The class is exported as `AgentSessionLoop`, NOT `SessionLoop`.
-  
+
 - **Line 7**: Import statement with type-only imports.
 
 - **Lines 92-144**: `run()` method — the main entry point.
@@ -320,8 +320,8 @@ Line 1463: index.test.ts(2,10): error TS2305: Module '"./index"' has no exported
 ---
 
 ### 2.9 subagents.ts
-**Path**: `packages/agent-runtime/src/subagents.ts`  
-**Lines**: 542  
+**Path**: `packages/agent-runtime/src/subagents.ts`
+**Lines**: 542
 **Classification**: B类
 
 #### Errors
@@ -356,8 +356,8 @@ For the plan, I'll note that the conditional spread pattern is the correct appro
 ---
 
 ### 2.10 tools.ts
-**Path**: `packages/agent-runtime/src/tools.ts`  
-**Lines**: 570  
+**Path**: `packages/agent-runtime/src/tools.ts`
+**Lines**: 570
 **Classification**: B类
 
 #### Errors
@@ -390,7 +390,7 @@ Line 1543: tool-definition.ts(131,24): error TS2379: Argument of type '{ name: s
   }
   ```
 
-- **Lines 124-128**: 
+- **Lines 124-128**:
   ```typescript
   definitions.push({
     name: registered.name,
@@ -417,8 +417,8 @@ For `src/tools.ts` itself:
 ---
 
 ### 2.11 chatgpt-pool.ts
-**Path**: `packages/agent-runtime/src/provider/auth/oauth/chatgpt-pool.ts`  
-**Lines**: 253  
+**Path**: `packages/agent-runtime/src/provider/auth/oauth/chatgpt-pool.ts`
+**Lines**: 253
 **Classification**: B类
 
 #### Errors
@@ -452,8 +452,8 @@ Line 21-23: chatgpt-pool.test.ts(206,33): error TS2379: Argument of type '{ id: 
 ---
 
 ### 2.12 background-command.ts
-**Path**: `packages/agent-runtime/src/background-command.ts`  
-**Lines**: 752  
+**Path**: `packages/agent-runtime/src/background-command.ts`
+**Lines**: 752
 **Classification**: B类
 
 #### Errors
@@ -482,8 +482,8 @@ No direct errors in raw_errors_runtime for `background-command.ts`. But the plan
   ```
   Line 644: process-manager.ts(132,7): error TS2412: Type 'number | undefined' is not assignable to type 'number' with 'exactOptionalPropertyTypes: true'
   ```
-  
-  This is in `process-manager.ts`, not `background-command.ts`. 
+
+  This is in `process-manager.ts`, not `background-command.ts`.
 
   The plan says `background-command.ts` has TS2412. Let me look at the `BackgroundCommandManagerOptions` interface (lines 46-52):
   ```typescript
@@ -496,14 +496,14 @@ No direct errors in raw_errors_runtime for `background-command.ts`. But the plan
     guard?: BackgroundCommandGuardOptions | false;
   }
   ```
-  
+
   And line 466-468:
   ```typescript
   private guard(): Required<BackgroundCommandGuardOptions> {
     return normalizeProcessGuard(this.options.guard);
   }
   ```
-  
+
   Where `this.options.guard` is `BackgroundCommandGuardOptions | false | undefined`. Calling `normalizeProcessGuard` with `| undefined` could be fine.
 
   Actually, looking at `BackgroundCommandRecord` at line 108: `error: string | undefined;` — this is correct (uses `| undefined` instead of `?:`).
@@ -523,8 +523,8 @@ No direct errors in raw_errors_runtime for `background-command.ts`. But the plan
 ---
 
 ### 2.13 trace/index.ts
-**Path**: `packages/agent-runtime/src/trace/index.ts`  
-**Lines**: 367  
+**Path**: `packages/agent-runtime/src/trace/index.ts`
+**Lines**: 367
 **Classification**: B类
 
 #### Errors
@@ -566,8 +566,8 @@ Line 1551: trace/index.ts(210,39): error TS2379: Argument of type '{ timestamp: 
 ---
 
 ### 2.14 daemon-approval-handler.ts
-**Path**: `packages/agent-daemon/src/daemon-approval-handler.ts`  
-**Lines**: 248  
+**Path**: `packages/agent-daemon/src/daemon-approval-handler.ts`
+**Lines**: 248
 **Classification**: B类
 
 #### Errors
@@ -635,7 +635,7 @@ Looking at the actual source:
     timeoutMs,
   });
   ```
-  
+
   Here `timeoutMs` is `number | undefined` (from line 85-86 `const timeoutMs = resolveApprovalTimeoutMs({...})`). `resolveApprovalTimeoutMs` likely returns `number | undefined`. But the parameter `timeoutMs` in `decisionFromResult` input is `number | null`. So `undefined` can't be assigned to `number | null`.
 
   Wait, looking more carefully:
@@ -670,8 +670,8 @@ Looking at the actual source:
 ---
 
 ### 2.15 subagent-runtime.ts
-**Path**: `packages/agent-daemon/src/subagent-runtime.ts`  
-**Lines**: 554  
+**Path**: `packages/agent-daemon/src/subagent-runtime.ts`
+**Lines**: 554
 **Classification**: A类
 
 #### Errors

@@ -5,7 +5,7 @@
 > **涉及维度**：D4（并发/内存安全）、D7（资源泄漏）、D8（渲染性能）
 > **包路径**：跨层（`apps/crish-desktop/`、`packages/agent-runtime/`、`apps/agent-workbench/src-tauri/`）
 > **前提条件**：Layer A-F 的文件拆分已完成并通过验收
-> 
+>
 > **本层与其它层的交叉引用**：G-1（SSE 渲染节流）操作 `useChatStream.ts` 的渲染逻辑区，该文件的结构拆分在总览 F-7 中完成。Layer I（CI/CD）的 I-15（基准测试持久化）需要本层建立的性能基线。Layer J（J-17 Stress 测试可重现重构）与本层的 Worker 优化协同——Stress 测试验证 WorkerPool 的稳定性。
 
 ---
@@ -157,18 +157,18 @@ renderBuffer.onFrame = (frame: RenderFrame) => {
 test('session switch during streaming discards stale frames', () => {
   const buffer = new StreamRenderBuffer();
   let lastFrame: RenderFrame | null = null;
-  
+
   // 启动 session-1 的流
   const sid = 'session-1';
   buffer.onFrame = (frame) => {
     if (activeSidRef.current !== sid) return;
     lastFrame = frame;
   };
-  
+
   buffer.push('hello');
   buffer.flush(true);
   expect(lastFrame?.full).toBe('hello');
-  
+
   // 切换到 session-2
   activeSidRef.current = 'session-2';
   buffer.push(' world');
@@ -207,19 +207,19 @@ private enqueueTask(task: Task<any>): void {
 ```typescript
 class PriorityTaskQueue {
   private heap: Task[] = [];
-  
+
   enqueue(task: Task): void {
     this.heap.push(task);
     this.bubbleUp(this.heap.length - 1);  // O(log N)
   }
-  
+
   dequeueForType(type: WorkerType): Task | undefined {
     // 找到匹配类型的最高优先级任务
     const idx = this.findHighestPriorityByType(type);
     if (idx < 0) return undefined;
     return this.removeAt(idx);  // O(log N)
   }
-  
+
   private bubbleUp(i: number): void { ... }
   private sinkDown(i: number): void { ... }
 }

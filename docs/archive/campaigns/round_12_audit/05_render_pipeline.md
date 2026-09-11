@@ -34,15 +34,15 @@ Token到达
 
 ### MR-1: StreamRenderBuffer.maxBacklogBytes ✅ 已实现
 
-`StreamRenderBuffer.ts:49` — `private readonly maxBacklogBytes: number;`  
-默认值 32768 (约 8K tokens / ~2 秒 @500tok/s)。  
+`StreamRenderBuffer.ts:49` — `private readonly maxBacklogBytes: number;`
+默认值 32768 (约 8K tokens / ~2 秒 @500tok/s)。
 `flushFrame():244` — 当 `bufferedLength() > maxBacklogBytes` 时跳过 `onFrame` 回调，仅累加 pending。`onComplete`/`flush(true)` 强制路径不受降级影响。
 
 **评估**: 阈值合理。但降级时用户看不到中间文字，只有跳变——这是设计取舍，建议在降级发生时在 store 置一个 flag 让 UI 显示"加速中..."提示。
 
 ### MR-2: useStreamingText 是否同时服务两条流 ❌ 不一致
 
-`useStreamingText` (`hooks/useStreamCallbacks.ts`) 仅服务于 `useAgentStream` (子 agent 面板)。  
+`useStreamingText` (`hooks/useStreamCallbacks.ts`) 仅服务于 `useAgentStream` (子 agent 面板)。
 主聊天流 (`hooks/chat-stream/useStreamCallbacks.ts`) 内联创建 `new StreamRenderBuffer()` 并自建 `onFrame`，不通过 `useStreamingText`。
 
 **问题**: 两套管线配置不同：
@@ -58,7 +58,7 @@ Token到达
 onChunk: (c: string) => {
   streamRun?.pushChunk(c);  // 经 StreamRenderBuffer 分帧
 ```
-不再使用 `pa((m) => { m.text = c })` 直接突变。  
+不再使用 `pa((m) => { m.text = c })` 直接突变。
 `pushChunk` → `renderBufferRef.current.push(chunk)` → rAF 分帧 → `onFrame` → `onTextRef.current` → `pa((m) => { m.text = text })`。
 
 正确绕过了 React 批处理，避免了单帧高频写入 store。
@@ -103,7 +103,7 @@ requestIdleCallback(() => {
 | onFrame 回调 | **仅写入 `frame.full` (纯文本)**, `frame.html` 被丢弃 | `useStreamCallbacks.ts:153` |
 | MessageContent 渲染 | `parseMarkdownToHtmlAsync(text)` 重新解析全文 | `MessageContent.ts:43` |
 
-`StreamRenderBuffer` 的 `IncrementalMarkdownBridge` 已做增量解析并生成 HTML，但 `onFrame` 只使用了 `frame.full` 文本写入 store，`frame.html` 和 `frame.chunkUpdates` 被完全丢弃。  
+`StreamRenderBuffer` 的 `IncrementalMarkdownBridge` 已做增量解析并生成 HTML，但 `onFrame` 只使用了 `frame.full` 文本写入 store，`frame.html` 和 `frame.chunkUpdates` 被完全丢弃。
 `MessageContent` 收到纯文本后，用 `parseMarkdownToHtmlAsync` **重新解析全文**——不是增量，且走 Worker 异步线程（仍有调度开销）。
 
 **影响**: 每帧多出 5-50ms 的 markdown 解析成本，约为管线总开销的 60-80%。
@@ -175,6 +175,6 @@ if (renderBufferRef.current) {
 
 ## 总结
 
-渲染管线核心设计健康：代际计数器 ✅、帧预算控制 ✅、requestIdleCallback 延迟 DOM 更新 ✅、useShallow 避免不必要重渲染 ✅。  
+渲染管线核心设计健康：代际计数器 ✅、帧预算控制 ✅、requestIdleCallback 延迟 DOM 更新 ✅、useShallow 避免不必要重渲染 ✅。
 
 **最大问题**是 `RenderFrame` 的 HTML 预解析结果被丢弃导致的重复 markdown 解析 (P0)。若能打通"预解析 HTML → 直接消费"的通道，可减少 60-80% 的渲染管线开销。

@@ -184,10 +184,10 @@ private async *executeSingleWithEvents(...) {
   const startedAt = Date.now();
   const startedAtIso = nowIso();
   // ... 现有逻辑 ...
-  
+
   const completed = await executionPromise;
   const outputByteSize = estimateByteSize(completed.output);
-  
+
   const result: ToolBatchResult = {
     // ... 现有字段 ...
     durationMs: Date.now() - startedAt,
@@ -195,7 +195,7 @@ private async *executeSingleWithEvents(...) {
     startedAt: startedAtIso,
     outputByteSize,
   };
-  
+
   // Telemetry 事件的上下文数据通过 tool-end 事件的 result 携带
   yield { type: 'tool-end', sessionId, batchId, result, timestamp: nowIso() };
 }
@@ -293,7 +293,7 @@ export interface RuntimeToolMetricsSnapshot {
 export interface DoctorReport {
   timestamp: string;
   overall: 'healthy' | 'degraded' | 'unhealthy';
-  
+
   providers: ProviderHealthSection;
   circuitBreakers: CircuitBreakerSection;
   cachePerformance: CacheSection;
@@ -311,7 +311,7 @@ export class DoctorReportBuilder {
     private pricing: PricingEngine,
     private ledger: TokenLedger,
   ) {}
-  
+
   async build(): Promise<DoctorReport>;
 }
 ```
@@ -365,7 +365,7 @@ export interface StreamRecoveryGlobalStats {
 export class StreamRecoveryGlobalRegistry {
   private static instance: StreamRecoveryGlobalRegistry;
   private stats: StreamRecoveryGlobalStats = { ... };
-  
+
   recordAttempt(actionType: string, success: boolean, error?: string): void;
   getStats(): StreamRecoveryGlobalStats;
 }

@@ -1,6 +1,6 @@
 # 多轮次多 Agent 并行根治路线图
 
-> 综合：原方案 + 根因验证 Agent + 架构评审 Agent。  
+> 综合：原方案 + 根因验证 Agent + 架构评审 Agent。
 > Orchestrator 只分配任务与验收；执行 Agent 改代码。
 
 ## 角色
