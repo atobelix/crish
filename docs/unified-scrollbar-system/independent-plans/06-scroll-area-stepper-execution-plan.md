@@ -1,10 +1,10 @@
 # 06 · ScrollArea 组件上下圆角三角步进器与高频出口落地执行详案
 ## （维度 4 & 5：ScrollArea 优雅三角步进器、2px 防误触间隙与 ModelBadgePickerMenu 首选落地）
 
-> **文档标识**：`docs/unified-scrollbar-system/independent-plans/06-scroll-area-stepper-execution-plan.md`  
-> **所属战役**：统一通用滚动条系统重构战役（Unified Scrollbar System）  
-> **角色定位**：战役组件与引擎落地规划专家（Component & Engine Planner）  
-> **编制基准时间**：2026-09-02  
+> **文档标识**：`docs/unified-scrollbar-system/independent-plans/06-scroll-area-stepper-execution-plan.md`
+> **所属战役**：统一通用滚动条系统重构战役（Unified Scrollbar System）
+> **角色定位**：战役组件与引擎落地规划专家（Component & Engine Planner）
+> **编制基准时间**：2026-09-02
 > **权威准则**：
 > - `AGENTS.md`（通用协作纪律、反退避铁律、多 Agent 调度规则、Git 提交纪律、§7 严禁补丁/绕过、§7.1 立体验证纪律）；
 > - `ANTI_OVERENGINEERING_GUARDRAILS.md`（反过度设计硬性红线：零冗余 DOM 节点、零主线程卡顿、零反向依赖）；

@@ -1,10 +1,10 @@
 # 统一滚动条体系与 ScrollArea 战役：维度 2 独立实现详案
 # 【历史死层清剿与排他互斥爆破】（Zero-Debt CSS Purge & Blink Mutual Exclusivity Elimination）
 
-> **文档标识**：`docs/unified-scrollbar-system/detailed-plans/02-plan-purge-debts.md`  
-> **所属战役**：统一滚动条体系与 ScrollArea 高频组件战役（Unified Scrollbar System）  
-> **编制角色**：Plan Architect 2 · 历史死层清剿与排他互斥爆破专家  
-> **权威遵循**：`docs/unified-scrollbar-system/00-master-plan.md`（总纲）、`AGENTS.md`（通用纪律与测试资产铁律）、`ANTI_OVERENGINEERING_GUARDRAILS.md`、§7.1 立体验证纪律。  
+> **文档标识**：`docs/unified-scrollbar-system/detailed-plans/02-plan-purge-debts.md`
+> **所属战役**：统一滚动条体系与 ScrollArea 高频组件战役（Unified Scrollbar System）
+> **编制角色**：Plan Architect 2 · 历史死层清剿与排他互斥爆破专家
+> **权威遵循**：`docs/unified-scrollbar-system/00-master-plan.md`（总纲）、`AGENTS.md`（通用纪律与测试资产铁律）、`ANTI_OVERENGINEERING_GUARDRAILS.md`、§7.1 立体验证纪律。
 > **核心战役方针**：“**先删后改、收敛优先、零死层残留、负产出第一**”（Deletions First, Net-Negative Reduction $\ge 200$ Lines）。
 
 ---
@@ -67,16 +67,16 @@ Chromium 的 Blink 排版引擎在处理滚动条样式时，在底层实现了�
 ```mermaid
 graph TD
     StyleResolve["CSS 样式计算阶段 (StyleResolver)"] --> Check{"元素或祖先是否声明了<br/>scrollbar-width / scrollbar-color ?"}
-    
+
     Check -- "是 (存在标准属性)" --> StandardPath["分支 A: 标准 CSS Scrollbar 流水线<br/>(StandardScrollbarTheme / Platform Theme)"]
     Check -- "否 (无标准属性)" --> WebKitCheck{"元素是否匹配了<br/>::-webkit-scrollbar 伪元素 ?"}
-    
+
     WebKitCheck -- "是" --> CustomPath["分支 B: 自定义 WebKit 伪元素流水线<br/>(LayoutCustomScrollbarPart)"]
     WebKitCheck -- "否" --> DefaultPath["分支 C: 平台默认原生滚动条<br/>(NativeScrollbarTheme)"]
-    
+
     StandardPath --> BlinkSuppression["Blink 内部标志位置位:<br/>UsesCustomScrollbarStyle = false<br/>强制禁止挂载任何 LayoutCustomScrollbarPart !"]
     BlinkSuppression --> Win32Fallback["Windows WebView2 下直接退化为<br/>Win32 / Fluent Native Thin 滚动条<br/>(不可定制，露出系统原生三角箭头)"]
-    
+
     CustomPath --> CanvasRender["由 CSS 完全接管渲染:<br/>Track, Thumb, Buttons, Corner 几何可控<br/>无缝应用 Conex Design Tokens"]
 ```
 
@@ -480,7 +480,7 @@ graph TD
   * - **≠ EL-01**；**≠** A-PERF 数值门；**≠** 虚拟化完成宣称
 @@ -48,6 +46,2 @@
  }
- 
+
 -/*
 - * 列表自身作为滚动宿主（产品挂载写 data-scroll-host="1"）。
 - * 细滚动条 + stable gutter，与 .body / slash 同温；禁 webkit 伪元素块。
@@ -510,7 +510,7 @@ graph TD
 +++ b/apps/crish-desktop/src/components/provider/ModelBadgePickerMenu.module.css
 @@ -107,26 +107,2 @@
  }
- 
+
 -.modelScrollArea::-webkit-scrollbar {
 -  width: 4px;
 -  height: 4px;
@@ -545,7 +545,7 @@ graph TD
 --- a/apps/crish-desktop/src/components/ui/Menu/Menu.module.css
 +++ b/apps/crish-desktop/src/components/ui/Menu/Menu.module.css
 @@ -46,26 +46,2 @@
- 
+
 -/* WebKit / Blink 细滚动条 */
 -.menuContent::-webkit-scrollbar {
 -  width: 5px;
@@ -582,7 +582,7 @@ graph TD
 +++ b/apps/crish-desktop/src/components/ui/Select/Select.module.css
 @@ -171,18 +171,2 @@
  }
- 
+
 -.content::-webkit-scrollbar {
 -  width: 5px;
 -  height: 5px;
@@ -612,7 +612,7 @@ graph TD
 +++ b/apps/crish-desktop/src/components/ui/Select/SelectContent.module.css
 @@ -37,18 +37,2 @@
  }
- 
+
 -.content::-webkit-scrollbar {
 -  width: 5px;
 -  height: 5px;
@@ -642,7 +642,7 @@ graph TD
 +++ b/apps/crish-desktop/src/components/chat-composer/PermissionModeMenu.module.css
 @@ -146,19 +146,2 @@
  }
- 
+
 -.permMenu::-webkit-scrollbar {
 -  width: 5px;
 -  height: 5px;
@@ -687,7 +687,7 @@ graph TD
 -  width: 0;
 -  height: 0;
 -}
- 
+
  .emptyState { padding: 12px 8px; text-align: center; font-size: 12px; color: var(--sep-text-muted, #8b8780); }
 ```
 
@@ -699,7 +699,7 @@ graph TD
 +++ b/apps/crish-desktop/src/components/ui/SmartExpandablePanel/SmartExpandablePanel.module.css
 @@ -128,26 +128,2 @@
  }
- 
+
 -.listContainer::-webkit-scrollbar {
 -  width: 5px;
 -  height: 5px;
@@ -735,7 +735,7 @@ graph TD
 +++ b/apps/crish-desktop/src/components/settings-models/ModelsSettingsTab.module.css
 @@ -1124,12 +1124,2 @@
  }
- 
+
 -.cascadeFlyout::-webkit-scrollbar {
 -  width: 3px;
 -}
@@ -758,7 +758,7 @@ graph TD
 +++ b/apps/crish-desktop/src/components/settings/FontSelectField.module.css
 @@ -212,12 +212,2 @@
  }
- 
+
 -.settingsSelectScroll::-webkit-scrollbar {
 -  width: 3px;
 -}
@@ -781,7 +781,7 @@ graph TD
 +++ b/apps/crish-desktop/src/components/binary-tree/LeafToolTabStrip.module.css
 @@ -61,5 +61,2 @@
  }
- 
+
 -.tabsTrack::-webkit-scrollbar {
 -  display: none;
 -}
@@ -797,7 +797,7 @@ graph TD
 +++ b/apps/crish-desktop/src/components/chat-composer/ChatComposer.module.css
 @@ -610,6 +610,2 @@
  }
- 
+
 -.fileZone::-webkit-scrollbar,
 -.attachStrip::-webkit-scrollbar {
 -  display: none;

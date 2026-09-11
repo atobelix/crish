@@ -1,13 +1,13 @@
 # 06 · 统一滚动条测试契约重塑与负向刚性门禁实现详案（gate-ratchet）
 
-> **规范编号**：`SCROLLBAR-PLAN-GATE-RATCHET-06`  
-> **战役工作区**：`docs/unified-scrollbar-system/`（统一滚动条体系与 ScrollArea 高频组件战役）  
-> **归档落盘路径**：`docs/unified-scrollbar-system/detailed-plans/06-plan-gate-ratchet.md`  
-> **角色定位**：战役方案修订专家（Revision Architect 4：Plan 06 修订专员）  
-> **评审修订基准**：经 Reviewer A（架构治理与执行时序主审）与 Reviewer C（跨平台与魔鬼边界主审，指令 M01）联合严审全面纠偏  
-> **总调度主控**：Antigravity Main Agent  
-> **版本状态**：`v2.0-revised`（工业级可执行落盘定案版）  
-> **修订基准时间**：2026-09-02  
+> **规范编号**：`SCROLLBAR-PLAN-GATE-RATCHET-06`
+> **战役工作区**：`docs/unified-scrollbar-system/`（统一滚动条体系与 ScrollArea 高频组件战役）
+> **归档落盘路径**：`docs/unified-scrollbar-system/detailed-plans/06-plan-gate-ratchet.md`
+> **角色定位**：战役方案修订专家（Revision Architect 4：Plan 06 修订专员）
+> **评审修订基准**：经 Reviewer A（架构治理与执行时序主审）与 Reviewer C（跨平台与魔鬼边界主审，指令 M01）联合严审全面纠偏
+> **总调度主控**：Antigravity Main Agent
+> **版本状态**：`v2.0-revised`（工业级可执行落盘定案版）
+> **修订基准时间**：2026-09-02
 > **遵循基准**：
 > - `docs/unified-scrollbar-system/00-master-plan.md`（统一滚动条体系总纲 §3.6 维度 6）
 > - `docs/unified-scrollbar-system/plan-reviews/01-review-architecture.md`（Reviewer A 架构与时序死锁破解报告）

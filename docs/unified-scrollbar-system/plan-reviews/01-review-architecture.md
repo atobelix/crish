@@ -1,15 +1,15 @@
 # 01 · 战役方案独立评审报告：架构收敛与路径重叠主审（Plan Reviewer A）
 
-> **评审标识**：`docs/unified-scrollbar-system/plan-reviews/01-review-architecture.md`  
-> **所属战役**：统一滚动条体系与 ScrollArea 高频组件战役（Unified Scrollbar System）  
-> **主审官角色**：Plan Reviewer A（架构收敛与路径重叠主审）  
-> **评审基准时间**：2026-09-02  
+> **评审标识**：`docs/unified-scrollbar-system/plan-reviews/01-review-architecture.md`
+> **所属战役**：统一滚动条体系与 ScrollArea 高频组件战役（Unified Scrollbar System）
+> **主审官角色**：Plan Reviewer A（架构收敛与路径重叠主审）
+> **评审基准时间**：2026-09-02
 > **遵循权威依据**：
 > - 《主 Agent 全流程调度提示词 v3》§二.2（多 Agent 独立方案评审纪律）；
 > - `docs/unified-scrollbar-system/00-master-plan.md`（战役总纲与最终定案）；
 > - `AGENTS.md`（§1 逻辑规划与反退避、§3 Git 提交纪律、§7 严禁补丁与绕过、§7.1 立体验证纪律、§8 反过度设计红线、§12-14 UI 规范）；
 > - `ANTI_OVERENGINEERING_GUARDRAILS.md`（反过度设计刚性红线）；
-> - `apps/crish-desktop/src/components/ui/README.md`（UI 原子层纯净契约）。  
+> - `apps/crish-desktop/src/components/ui/README.md`（UI 原子层纯净契约）。
 > **审查对象**：`docs/unified-scrollbar-system/detailed-plans/` 目录下全部 6 份维度独立实现详案：
 >   1. `01-plan-token-system.md`（Token 体系与二元色彩物理学体系）
 >   2. `02-plan-purge-debts.md`（历史死层清剿与排他互斥爆破）
@@ -137,7 +137,7 @@
 flowchart TD
     subgraph CONCEPT["【领域概念】端点安全护栏与微型三角步进箭头"]
         P1["【路径 A：原生 WebKit 伪元素实现】<br/>(维度 3: 03-plan-engine-core.md)<br/>.scrollAreaWithButtons::-webkit-scrollbar-button<br/>• 8px 按钮尺寸，加载内联 SVG 三角<br/>• 宣称消费方: ModelBadgePickerMenu, Select 等"]
-        
+
         P2["【路径 B：React DOM 节点手搓实现】<br/>(维度 4: 04-plan-scroll-area.md)<br/><ScrollArea showButtons={true}><br/>• Viewport 内部 display:none 隐藏原生条<br/>• 外层手搓 <button className={styles.stepperButton}><br/>• 外层手搓 <div className={styles.thumbIndicator}>"]
     end
 
@@ -340,13 +340,13 @@ it('设置 cover/nav/Dialog 吃 overlay 细条：入口引入 + 无三角 + cove
   expect(indexCss).not.toContain('shell-scrollbar.css');
   expect(overlay).toContain('::-webkit-scrollbar');
   expect(overlay).toContain('::-webkit-scrollbar-button');
-  
+
   // 🚨 触目惊心的外部反向死断言！！
   expect(overlay).toContain('coverContent');            // Line 119
   expect(overlay).toContain('navScroll');               // Line 120
   expect(overlay).toContain('dialogBody');              // Line 121
   expect(overlay).toContain('--tint-scrollbar-thumb');   // Line 122
-  
+
   expect(overlay).not.toMatch(/(?:^|\n)\*\s*\{[^}]*scrollbar-width/);
   expect(panel).not.toMatch(/scrollbar-width\s*:/);
   expect(panel).toContain('.coverContent');
@@ -551,5 +551,5 @@ Step 2.3 (验证通过并提交):
 
 ---
 
-> **评审签发**：Plan Reviewer A · 战役方案架构收敛与路径重叠主审  
+> **评审签发**：Plan Reviewer A · 战役方案架构收敛与路径重叠主审
 > **报告状态**：落盘生效（`docs/unified-scrollbar-system/plan-reviews/01-review-architecture.md`），提请总调度主控定夺并下达方案修订指令！

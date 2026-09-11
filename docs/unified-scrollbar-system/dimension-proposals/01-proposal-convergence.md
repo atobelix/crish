@@ -1,9 +1,9 @@
 # 统一滚动条体系与 ScrollArea 战役维度建议详案（收敛与删除面主审视角）
 
-> **文档标识**：`docs/unified-scrollbar-system/dimension-proposals/01-proposal-convergence.md`  
-> **所属战役**：`docs/unified-scrollbar-system/`（统一滚动条体系与 ScrollArea 高频组件战役）  
-> **审查身份**：Dimension Architect A · 收敛与删除面主审（高级架构与系统收敛专家）  
-> **编制基准时间**：2026-09-02  
+> **文档标识**：`docs/unified-scrollbar-system/dimension-proposals/01-proposal-convergence.md`
+> **所属战役**：`docs/unified-scrollbar-system/`（统一滚动条体系与 ScrollArea 高频组件战役）
+> **审查身份**：Dimension Architect A · 收敛与删除面主审（高级架构与系统收敛专家）
+> **编制基准时间**：2026-09-02
 > **核心原则**：“**先删后改、收敛优先、零死层残留**”（Deletions First, Convergence-Driven, Zero Dead Layers）。严格对齐仓库根目录 `AGENTS.md`（反退避铁律、严禁打补丁、UI 原子层解耦）、`ANTI_OVERENGINEERING_GUARDRAILS.md`、`apps/crish-desktop/src/components/ui/README.md` 与 §7.1 立体验证纪律。
 
 ---
@@ -58,13 +58,13 @@
 ```mermaid
 graph TD
     User["用户在 Windows 桌面端使用 Conex"] --> Render{"Chromium 渲染流水线"}
-    
+
     Render --> Path1["路径 1: overlay-scrollbar.css<br/>(标称唯一出口，硬编码 7px，含旧注释与模糊类)"]
     Render --> Path2["路径 2: 11 处私有 ::-webkit-scrollbar 块<br/>(3px/4px/5px 乱象，约 200 行重复代码)"]
     Render --> Path3["路径 3: 18 处 scrollbar-width: thin 地雷<br/>(致命: 触发互斥禁用，露出 Win32 原生三角粗条)"]
     Render --> Path4["路径 4: style-contract.test.ts 保护死层<br/>(SCROLLBAR_WHITELIST 阻碍收敛，甚至反向强断言)"]
     Render --> Path5["路径 5: TSX 内联样式 & 杂项 overflow<br/>(无类名、无 token、无法静态门禁扫描)"]
-    
+
     Path2 -.-> |被白名单纵容| Path4
     Path3 ==> |彻底扼杀| Path1
     Path3 ==> |彻底扼杀| Path2
@@ -688,5 +688,5 @@ flowchart TD
 | **任务书四段规范** | 是否符合“做什么、不做什么、删除面、验收断言”四段规范？ | 4.2 至 4.7 节对 6 大维度 100% 执行四段规范 | ✅ 达成 |
 
 ---
-> **报告签发**：Dimension Architect A · 收敛与删除面主审  
+> **报告签发**：Dimension Architect A · 收敛与删除面主审
 > **归档状态**：已正式物理落盘至 `c:\Software\conex\docs\unified-scrollbar-system\dimension-proposals\01-proposal-convergence.md`

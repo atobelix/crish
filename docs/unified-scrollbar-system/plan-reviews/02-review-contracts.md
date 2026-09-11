@@ -1,10 +1,10 @@
 # 02 · 战役方案独立评审报告：工程契约与物理渲染主审（Plan Reviewer B）
 
-> **评审标识**：`docs/unified-scrollbar-system/plan-reviews/02-review-contracts.md`  
-> **所属战役**：统一滚动条体系与 ScrollArea 高频组件战役（Unified Scrollbar System）  
-> **主审官角色**：Plan Reviewer B（工程契约与物理渲染主审）  
-> **评审基准时间**：2026-09-02  
-> **遵循权威依据**：《主 Agent 全流程调度提示词 v3》§二.2、`docs/unified-scrollbar-system/00-master-plan.md`（总纲）、`AGENTS.md`（§1 逻辑规划与反退避、§7 严禁补丁与绕过、§7.1 立体验证纪律、§8 反过度设计红线、§12-14 UI 设计与色彩规范）、`ANTI_OVERENGINEERING_GUARDRAILS.md`、`apps/crish-desktop/src/components/ui/README.md`。  
+> **评审标识**：`docs/unified-scrollbar-system/plan-reviews/02-review-contracts.md`
+> **所属战役**：统一滚动条体系与 ScrollArea 高频组件战役（Unified Scrollbar System）
+> **主审官角色**：Plan Reviewer B（工程契约与物理渲染主审）
+> **评审基准时间**：2026-09-02
+> **遵循权威依据**：《主 Agent 全流程调度提示词 v3》§二.2、`docs/unified-scrollbar-system/00-master-plan.md`（总纲）、`AGENTS.md`（§1 逻辑规划与反退避、§7 严禁补丁与绕过、§7.1 立体验证纪律、§8 反过度设计红线、§12-14 UI 设计与色彩规范）、`ANTI_OVERENGINEERING_GUARDRAILS.md`、`apps/crish-desktop/src/components/ui/README.md`。
 > **审查对象**：`docs/unified-scrollbar-system/detailed-plans/` 目录下全部 6 份维度独立实现详案（`01-plan-token-system.md` 至 `06-plan-gate-ratchet.md`）。
 
 ---
@@ -293,7 +293,7 @@ const thumbTranslateYPercent = metrics.progressY * (100 - thumbHeightPercent);
   ```tsx
   // 计算滑块顶端相对轨道的百分比
   const thumbTopPercent = metrics.progressY * (100 - thumbHeightPercent);
-  
+
   <div
     className={styles.thumbIndicator}
     style={{
@@ -497,6 +497,6 @@ $$\text{维度 1 (Token)} \longrightarrow \text{维度 6 阶段一 (解绑)} \lo
 **审查结论**：在执行波次中全量吸收上述 6 项补正的前提下，**本方案具备极高的工程严密性与落地可行性，予以正式核准放行（APPROVED WITH COMMITTED FIXES）！**
 
 ---
-> **评审报告编制人**：Plan Reviewer B（工程契约与物理渲染主审）  
-> **报告落盘文件**：`docs/unified-scrollbar-system/plan-reviews/02-review-contracts.md`  
+> **评审报告编制人**：Plan Reviewer B（工程契约与物理渲染主审）
+> **报告落盘文件**：`docs/unified-scrollbar-system/plan-reviews/02-review-contracts.md`
 > **状态**：定稿签署，呈报主控 Agent！

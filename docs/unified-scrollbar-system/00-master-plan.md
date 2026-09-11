@@ -1,9 +1,9 @@
 # 统一滚动条体系与 ScrollArea 高频组件战役：最终维度定案与架构总纲
 
-> **战役工作区**：`docs/unified-scrollbar-system/`  
-> **所属战役**：统一滚动条体系与 ScrollArea 高频组件战役（Unified Scrollbar System）  
-> **总调度主控**：Antigravity Main Agent  
-> **编制基准时间**：2026-09-02  
+> **战役工作区**：`docs/unified-scrollbar-system/`
+> **所属战役**：统一滚动条体系与 ScrollArea 高频组件战役（Unified Scrollbar System）
+> **总调度主控**：Antigravity Main Agent
+> **编制基准时间**：2026-09-02
 > **调度准则遵循**：`docs/agent-roles/prompts/主控-全流程调度-v3.md`、`AGENTS.md`（反退避铁律、严禁打补丁、UI 原子层规范）、`ANTI_OVERENGINEERING_GUARDRAILS.md`、`apps/crish-desktop/src/components/ui/README.md` 与 §7.1 立体验证纪律。
 
 ---

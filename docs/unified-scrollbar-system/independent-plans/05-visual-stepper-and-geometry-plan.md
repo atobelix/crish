@@ -1,11 +1,11 @@
 # 05 · 滚动条视觉与上下微型圆角三角端点几何逆向推导与架构规范
 
-> **规范编号**：`SCROLLBAR-GEOMETRY-STEPPER-05`  
-> **所属战役**：`docs/unified-scrollbar-system/`（统一滚动条体系与 ScrollArea 高频组件战役）  
-> **角色定位**：战役视觉与几何逆向专家（Visual & Geometry Architect）  
+> **规范编号**：`SCROLLBAR-GEOMETRY-STEPPER-05`
+> **所属战役**：`docs/unified-scrollbar-system/`（统一滚动条体系与 ScrollArea 高频组件战役）
+> **角色定位**：战役视觉与几何逆向专家（Visual & Geometry Architect）
 > **逆向标的**：
-> 1. `media_1788348026546.png`（用户最满意的模型选择菜单滚动条 + 上下圆角三角真机截图）  
-> 2. `media_1788351298550.png`（未激活态 ShareX 拾色器物理取色真源：`#EAE8E6`，H=30°，S=2%，L=92%，K=8.2%）  
+> 1. `media_1788348026546.png`（用户最满意的模型选择菜单滚动条 + 上下圆角三角真机截图）
+> 2. `media_1788351298550.png`（未激活态 ShareX 拾色器物理取色真源：`#EAE8E6`，H=30°，S=2%，L=92%，K=8.2%）
 > **权威原则**：严格执行 `AGENTS.md` §1（反退避）、§7（严禁补丁、绕过与作弊）、§7.1（立体验证纪律）、§13-14（现代色彩空间与焦点克制）以及 `ANTI_OVERENGINEERING_GUARDRAILS.md`。
 
 ---

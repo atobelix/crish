@@ -1,9 +1,9 @@
 # 《ScrollArea》统一通用滚动条组件架构与分维实现详案
 
-> **文档标识**：`docs/unified-scrollbar-system/independent-plans/04-scroll-area-component-plan.md`  
-> **所属战役**：统一通用滚动条系统重构战役（Unified Scrollbar System）  
-> **角色定位**：高级前端组件架构师（ScrollArea Component Architect）  
-> **权威遵循**：`AGENTS.md`（反退避铁律、严禁打补丁、UI 原子层规范）、`ANTI_OVERENGINEERING_GUARDRAILS.md`、`apps/crish-desktop/src/components/ui/README.md`  
+> **文档标识**：`docs/unified-scrollbar-system/independent-plans/04-scroll-area-component-plan.md`
+> **所属战役**：统一通用滚动条系统重构战役（Unified Scrollbar System）
+> **角色定位**：高级前端组件架构师（ScrollArea Component Architect）
+> **权威遵循**：`AGENTS.md`（反退避铁律、严禁打补丁、UI 原子层规范）、`ANTI_OVERENGINEERING_GUARDRAILS.md`、`apps/crish-desktop/src/components/ui/README.md`
 > **关联规范**：`docs/unified-scrollbar-system/independent-plans/02-arrow-buttons-and-engine-mechanism.md`、`03-design-token-architecture.md`、`src/styles/tokens.css`、`src/styles/overlay-scrollbar.css`
 
 ---

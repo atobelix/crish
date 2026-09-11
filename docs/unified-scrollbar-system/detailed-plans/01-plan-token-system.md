@@ -1,10 +1,10 @@
 # 统一滚动条体系与 ScrollArea 高频组件战役：维度 1 独立实现详案
 # Token 体系与二元色彩物理学体系（Token System & Binary Optical Physics）
 
-> **文档标识**：`docs/unified-scrollbar-system/detailed-plans/01-plan-token-system.md`  
-> **所属战役**：`docs/unified-scrollbar-system/`（统一滚动条体系与 ScrollArea 高频组件战役）  
-> **方案责任专家**：Plan Architect 1 · Token 与二元色彩物理学体系专家  
-> **编制基准时间**：2026-09-02  
+> **文档标识**：`docs/unified-scrollbar-system/detailed-plans/01-plan-token-system.md`
+> **所属战役**：`docs/unified-scrollbar-system/`（统一滚动条体系与 ScrollArea 高频组件战役）
+> **方案责任专家**：Plan Architect 1 · Token 与二元色彩物理学体系专家
+> **编制基准时间**：2026-09-02
 > **遵循上级依据**：《主 Agent 全流程调度提示词 v3》、`docs/unified-scrollbar-system/00-master-plan.md`（战役总纲）、`AGENTS.md`（反退避铁律、严禁打补丁、UI 原子层解耦、色彩空间规范）及 §7.1 立体验证纪律。
 
 ---
@@ -734,5 +734,5 @@ export const SCROLLBAR_SIZE_MAP: Record<ScrollAreaSize, string> = {
 - **不引入外部调色库**：全仓杜绝引入 Chroma.js、Color.js 等外部运行时依赖，坚守轻量干净。
 
 ---
-> **方案签发**：Plan Architect 1 · Token 与二元色彩物理学体系专家  
+> **方案签发**：Plan Architect 1 · Token 与二元色彩物理学体系专家
 > **文档状态**：定稿落盘完成，随时接受多 Agent 交叉评审与执行派发。

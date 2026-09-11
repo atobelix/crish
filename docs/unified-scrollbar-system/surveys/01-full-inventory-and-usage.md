@@ -1,8 +1,8 @@
 # Conex / Crish 桌面客户端全量滚动条与宿主容器白盒普查报告
-> **文档标识**：`docs/unified-scrollbar-system/surveys/01-full-inventory-and-usage.md`  
-> **普查范围**：`apps/crish-desktop/src/`、`packages/` 全量前端源码与样式表  
-> **普查专家**：Scrollbar Inventory & Usage Surveyor（高级前端与代码库白盒普查专家）  
-> **普查基准时间**：2026-09-02  
+> **文档标识**：`docs/unified-scrollbar-system/surveys/01-full-inventory-and-usage.md`
+> **普查范围**：`apps/crish-desktop/src/`、`packages/` 全量前端源码与样式表
+> **普查专家**：Scrollbar Inventory & Usage Surveyor（高级前端与代码库白盒普查专家）
+> **普查基准时间**：2026-09-02
 > **纪律对齐**：仓库根目录 `AGENTS.md`、`.agents/LOGIC_PLAN_NO_RETREAT.md`、`ANTI_OVERENGINEERING_GUARDRAILS.md`
 
 ---
@@ -76,7 +76,7 @@ flowchart TD
 
 ## 三、全量滚动条与宿主容器白盒清单 (The Master Inventory Table)
 
-以下表格对全仓 63 个文件、186 处声明进行全面穷举登记。  
+以下表格对全仓 63 个文件、186 处声明进行全面穷举登记。
 - **治理级别 (Tier)**：
   - **Tier A**：高频核心交互面、全局悬浮面板、会话/输入/主视口容器，直接决定产品视觉第一印象；
   - **Tier B**：设置子页、次级面板、代码/差异块、长列表局部滚动区；
@@ -293,7 +293,7 @@ graph LR
     D3["缺陷 3: 浮层圆角被直角裁切<br/>(Border-radius Bleed)"]
     D4["缺陷 4: 色彩令牌违背规范<br/>(rgba 与 border-subtle 脏色)"]
     D5["缺陷 5: 缺少平滑 Gutter 保护<br/>(Layout Shift 内容跳动)"]
-    
+
     D1 --> Impact["导致 Windows WebView2 桌面端<br/>频繁露出原生带三角粗滚动条，<br/>界面设计感严重断层！"]
     D2 --> Impact
     D3 --> Impact

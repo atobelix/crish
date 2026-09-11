@@ -1,10 +1,10 @@
 # 06 · 统一滚动条体系波次 1~2 改动质量与负产出审计报告
 
-> **规范编号**：`SCROLLBAR-AUDIT-ROUND-1-2-06`  
-> **战役工作区**：`docs/unified-scrollbar-system/`（统一滚动条体系与 ScrollArea 高频组件战役）  
-> **归档落盘路径**：`docs/unified-scrollbar-system/audits/06-round-1-2-audit-report.md`  
-> **审计专员**：Round Audit Agent（第 1~2 轮改动质量与负产出审计专家）  
-> **审计对象**：前两轮已落库的所有代码改进（波次 1 与波次 2）  
+> **规范编号**：`SCROLLBAR-AUDIT-ROUND-1-2-06`
+> **战役工作区**：`docs/unified-scrollbar-system/`（统一滚动条体系与 ScrollArea 高频组件战役）
+> **归档落盘路径**：`docs/unified-scrollbar-system/audits/06-round-1-2-audit-report.md`
+> **审计专员**：Round Audit Agent（第 1~2 轮改动质量与负产出审计专家）
+> **审计对象**：前两轮已落库的所有代码改进（波次 1 与波次 2）
 > **遵循基准**：
 > - 《主 Agent 全流程调度提示词 v3》§4.3（完成定义：功能 + 负产出双验收）、§4.4（固定审计位）
 > - 根目录 `AGENTS.md`（§1 逻辑规划与反退避、§7 严禁补丁与绕过、§7.1 立体验证纪律、§8 反过度设计红线、§12-14 UI 规范）

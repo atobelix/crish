@@ -1,10 +1,10 @@
 # 统一通用滚动条体系与 ScrollArea 高频组件战役 · 维度划分建议详案
 ## （组件化与消费契约主审 · Dimension Architect B）
 
-> **文档标识**：`docs/unified-scrollbar-system/dimension-proposals/02-proposal-component.md`  
-> **所属战役**：统一通用滚动条体系与 ScrollArea 高频组件重构战役（Unified Scrollbar System）  
-> **专家角色**：高级前端组件与工程架构专家（Dimension Architect B：组件化与消费契约主审）  
-> **审查基准**：基于 `surveys/01-full-inventory-and-usage.md` 白盒普查、`independent-plans/02` 箭头机制、`03` Token 体系、`04` ScrollArea 组件详案  
+> **文档标识**：`docs/unified-scrollbar-system/dimension-proposals/02-proposal-component.md`
+> **所属战役**：统一通用滚动条体系与 ScrollArea 高频组件重构战役（Unified Scrollbar System）
+> **专家角色**：高级前端组件与工程架构专家（Dimension Architect B：组件化与消费契约主审）
+> **审查基准**：基于 `surveys/01-full-inventory-and-usage.md` 白盒普查、`independent-plans/02` 箭头机制、`03` Token 体系、`04` ScrollArea 组件详案
 > **权威原则**：严格遵奉仓库根目录 [AGENTS.md](file:///c:/Software/conex/AGENTS.md)、[.agents/LOGIC_PLAN_NO_RETREAT.md](file:///c:/Software/conex/.agents/LOGIC_PLAN_NO_RETREAT.md) 与 [ANTI_OVERENGINEERING_GUARDRAILS.md](file:///c:/Software/conex/ANTI_OVERENGINEERING_GUARDRAILS.md)。
 
 ---
@@ -68,7 +68,7 @@
 
 ### 3. 结构收敛与负产出第一原则（先删后改）
 
-遵循 `AGENTS.md` 与《主 Agent 全流程调度提示词 v3》§0.2：“**收敛在逻辑顺序上先于增强——一个概念已有多条路径时，先删到一条，再谈改进。没有删除/收敛动作的轮次不算完成。**”  
+遵循 `AGENTS.md` 与《主 Agent 全流程调度提示词 v3》§0.2：“**收敛在逻辑顺序上先于增强——一个概念已有多条路径时，先删到一条，再谈改进。没有删除/收敛动作的轮次不算完成。**”
 本战役绝非单纯写一个新组件丢到 `src/components/ui/` 就宣布完事，而是以**“消灭全仓 18 处扼杀 WebKit 的 `scrollbar-width: thin`、合并 12 处私有重写、收敛 5 条散乱路径”**为首要度量指标！
 
 ---
@@ -192,7 +192,7 @@ sequenceDiagram
    - 直接在 `<ul ref={listRef} className={`${className} ${styles.sessionListWindowed}`}>` 上下挂载 `safe.topPad` 物理占位节点；
    - 依赖精准捕获原生的 `listRef.current.scrollTop` 与视口高度计算视窗切片 `safe.start` 和 `safe.end`。
 
-**致命隐患诊断**：  
+**致命隐患诊断**：
 如果任何 Agent 盲目追求“全量组件化”，强行在 `MessageVirtualizer` 或 `WindowedSessionUl` 外层包裹 `<ScrollArea>`，将瞬间引发三大灾难性雪崩：
 - **Ref 与事件断裂**：`containerRef` / `listRef` 无法直接感知真实可滚动视口，`onScroll` 事件在非合成线程被中间 React 节点截胡或延迟；
 - **几何抖动与测量失真**：`<ScrollArea>` 的额外内层 wrapper 会导致 `ResizeObserver` 计算出的 `contentRect` 与视口产生不可预期的边框与内边距偏移，破坏 `VirtualScrollManager` 的行高测量缓存；

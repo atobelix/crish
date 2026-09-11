@@ -1,12 +1,12 @@
 # 03 · 统一滚动条体系战役方案独立评审报告
 # （Plan Reviewer C：跨平台与魔鬼边界主审报告）
 
-> **评审文档标识**：`docs/unified-scrollbar-system/plan-reviews/03-review-crossplatform.md`  
-> **所属战役**：统一滚动条体系与 ScrollArea 高频组件战役（Unified Scrollbar System）  
-> **评审主审官**：Plan Reviewer C · 跨平台与魔鬼边界主审（Cross-Platform Boundary & Devil Reviewer）  
-> **评审对象**：`docs/unified-scrollbar-system/detailed-plans/` 下 6 份维度详案（01 至 06）及 `00-master-plan.md` 战役总纲  
-> **遵循权威依据**：《主 Agent 全流程调度提示词 v3》§二.2、`AGENTS.md`（通用协作纪律、§7 严禁补丁与绕过、§7.1 立体验证纪律、§8 反过度设计红线）、`ANTI_OVERENGINEERING_GUARDRAILS.md`、`docs/unified-scrollbar-system/audits/05-boundary-and-devil-audit.md`。  
-> **评审基准时间**：2026-09-02  
+> **评审文档标识**：`docs/unified-scrollbar-system/plan-reviews/03-review-crossplatform.md`
+> **所属战役**：统一滚动条体系与 ScrollArea 高频组件战役（Unified Scrollbar System）
+> **评审主审官**：Plan Reviewer C · 跨平台与魔鬼边界主审（Cross-Platform Boundary & Devil Reviewer）
+> **评审对象**：`docs/unified-scrollbar-system/detailed-plans/` 下 6 份维度详案（01 至 06）及 `00-master-plan.md` 战役总纲
+> **遵循权威依据**：《主 Agent 全流程调度提示词 v3》§二.2、`AGENTS.md`（通用协作纪律、§7 严禁补丁与绕过、§7.1 立体验证纪律、§8 反过度设计红线）、`ANTI_OVERENGINEERING_GUARDRAILS.md`、`docs/unified-scrollbar-system/audits/05-boundary-and-devil-audit.md`。
+> **评审基准时间**：2026-09-02
 > **总体裁定结论**：**【有条件批准（Conditional Approval）】——核心架构收敛方向正确，但在跨平台渲染防御、极端几何 Inset 算法、虚拟列表双重溢出以及 CI 测试断言源码中存在 5 项致命缺陷与跨方案死锁，必须在执行前完成刚性修正！**
 
 ---
@@ -419,7 +419,7 @@ expect(activeDarkness).toBeLessThanOrEqual(20.5);
    必须将上述第 **六** 节中的 **M01 至 M05 五项整改要求** 固化至各详案终稿中。完成修正后，方案方可全面进入代码落地波次！
 
 ---
-> **评审报告签发确认**：  
-> **审查官**：Plan Reviewer C（跨平台与魔鬼边界主审）  
-> **报告落盘归档**：`docs/unified-scrollbar-system/plan-reviews/03-review-crossplatform.md`  
+> **评审报告签发确认**：
+> **审查官**：Plan Reviewer C（跨平台与魔鬼边界主审）
+> **报告落盘归档**：`docs/unified-scrollbar-system/plan-reviews/03-review-crossplatform.md`
 > **状态**：**Conditional Approval（限期纠偏后放行）**

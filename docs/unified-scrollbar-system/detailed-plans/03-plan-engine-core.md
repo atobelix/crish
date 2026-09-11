@@ -1,15 +1,15 @@
 # 维度 3：engine-core 独立实现详案（修订终稿）
 # （`overlay-scrollbar.css` 核心引擎重构与零 DOM 工具类矩阵）
 
-> **所属战役**：统一滚动条体系与 ScrollArea 高频组件战役 (`docs/unified-scrollbar-system/`)  
-> **文档标识**：`docs/unified-scrollbar-system/detailed-plans/03-plan-engine-core.md`  
-> **战役方案专家**：Plan Architect 3（WebKit 核心引擎重构架构师） & Revision Architect 2（Plan 03 修订专员）  
-> **修订基准时间**：2026-09-02  
+> **所属战役**：统一滚动条体系与 ScrollArea 高频组件战役 (`docs/unified-scrollbar-system/`)
+> **文档标识**：`docs/unified-scrollbar-system/detailed-plans/03-plan-engine-core.md`
+> **战役方案专家**：Plan Architect 3（WebKit 核心引擎重构架构师） & Revision Architect 2（Plan 03 修订专员）
+> **修订基准时间**：2026-09-02
 > **评审闭环依据**：
 > - 评审报告 A（架构收敛与路径重叠主审）：[`docs/unified-scrollbar-system/plan-reviews/01-review-architecture.md`](file:///c:/Software/conex/docs/unified-scrollbar-system/plan-reviews/01-review-architecture.md)（§2.1 路径重叠裁决、§3.3 外部测试遗漏捕获、§4.4 同步解耦时序、§6.3 补正指令）；
 > - 评审报告 C（跨平台与魔鬼边界主审）：[`docs/unified-scrollbar-system/plan-reviews/03-review-crossplatform.md`](file:///c:/Software/conex/docs/unified-scrollbar-system/plan-reviews/03-review-crossplatform.md)（§2.2 Blink 双属性齐禁与互斥防御、§3.1 虚拟滚动零 DOM 红线）；
 > - 战役总纲定案：[`docs/unified-scrollbar-system/00-master-plan.md`](file:///c:/Software/conex/docs/unified-scrollbar-system/00-master-plan.md)；
-> - 仓内基准代码：[`apps/crish-desktop/src/styles/overlay-scrollbar.css`](file:///c:/Software/conex/apps/crish-desktop/src/styles/overlay-scrollbar.css)、[`apps/crish-desktop/src/styles/tokens.css`](file:///c:/Software/conex/apps/crish-desktop/src/styles/tokens.css)、[`apps/crish-desktop/src/components/settings/SettingsShortcutsTab.test.ts`](file:///c:/Software/conex/apps/crish-desktop/src/components/settings/SettingsShortcutsTab.test.ts)。  
+> - 仓内基准代码：[`apps/crish-desktop/src/styles/overlay-scrollbar.css`](file:///c:/Software/conex/apps/crish-desktop/src/styles/overlay-scrollbar.css)、[`apps/crish-desktop/src/styles/tokens.css`](file:///c:/Software/conex/apps/crish-desktop/src/styles/tokens.css)、[`apps/crish-desktop/src/components/settings/SettingsShortcutsTab.test.ts`](file:///c:/Software/conex/apps/crish-desktop/src/components/settings/SettingsShortcutsTab.test.ts)。
 > **权威遵从**：严格执行《主 Agent 全流程调度提示词 v3》、[`AGENTS.md`](file:///c:/Software/conex/AGENTS.md)（§1 逻辑规划与反退避、§3 Git 提交纪律、§7 严禁补丁与绕过、§7.1 立体验证纪律、§8 反过度设计红线、§12-14 UI 规范）、[`ANTI_OVERENGINEERING_GUARDRAILS.md`](file:///c:/Software/conex/ANTI_OVERENGINEERING_GUARDRAILS.md)。
 >
 > **【用户最高定案铁律（绝对死锁 · 本方案遵从底线）】**：
@@ -772,13 +772,13 @@ it('设置 cover/nav/Dialog 吃 overlay 细条：入口引入 + 无三角 + cove
 flowchart TD
     D1["【维度 1: token-system】<br>tokens.css 注入二元灰度 (8.2%/20.2%)<br>与四级宽度 Token (4/5/7/9px)"]
     D2["【维度 2: purge-debts】<br>物理拔除全仓 18 处 thin 与 11 处私有 WebKit<br>（同步前置解绑 style-contract 反向断言）"]
-    
+
     subgraph D3_Domain ["【维度 3: engine-core 本方案执行域】"]
         D3_Del_Test["步骤 3.1: 外部测试同步解耦<br>删除 SettingsShortcutsTab.test.ts:119-122<br>（去除 coverContent/navScroll/dialogBody/--tint 断言）"]
         D3_Del_CSS["步骤 3.2: overlay-scrollbar 先删面<br>• 删除 5 处子串模糊匹配类名选择器<br>• 删除 shell-scrollbar 废弃死注释<br>• 删除 --tint-overlay 31.4% 黑膏药引用"]
         D3_Add["步骤 3.3: 后改面 (重塑核心引擎)<br>• 挂接二元灰度与 Token 体系<br>• 发布 Mode 2 纯 CSS 实用类矩阵<br>• 全局死锁原生按钮 display: none"]
     end
-    
+
     D4["【维度 4: scroll-area】<br>UI 原子层 &lt;ScrollArea&gt; 组件落地<br>（内建 Pointer Drag 拖拽引擎与 20Hz 三角按钮）"]
     D5["【维度 5: migrate-views】<br>Tier B 虚拟列表纯挂载 .scrollArea<br>Tier A 浮层面板全量迁移至 &lt;ScrollArea&gt;"]
     D6["【维度 6: gate-ratchet】<br>门禁重塑：彻底粉碎 SCROLLBAR_WHITELIST<br>刚性守护 Mode 2 与二元灰度"]
@@ -974,12 +974,12 @@ describe('维度 3 滚动条二元色彩物理学单元测试 (SCROLLBAR-TOKEN-A
    (function() {
      const testContainer = document.querySelector('.scrollArea');
      if (!testContainer) return { error: '未找到 .scrollArea 容器' };
-     
+
      const computedStyle = window.getComputedStyle(testContainer);
      const scrollbarWidth = computedStyle.getPropertyValue('--scrollbar-width').trim();
      const w3cScrollbarWidth = computedStyle.scrollbarWidth;
      const w3cScrollbarColor = computedStyle.scrollbarColor;
-     
+
      return {
        scrollbarWidth,
        w3cScrollbarWidth, // 必须为 auto，严禁 thin
@@ -1004,7 +1004,7 @@ describe('维度 3 滚动条二元色彩物理学单元测试 (SCROLLBAR-TOKEN-A
 2. **外部测试反向死断言彻底纳入删除面**：`SettingsShortcutsTab.test.ts:119-122` 的 4 行反向断言已明确在节拍 1 先行解绑清除，彻底打通 CI 门禁；
 3. **二元灰度绝对死锁（8.2% vs 20.2%，差值 12.0%）**：全文各项公式、蓝图与断言坚决贯彻，绝无第三态。
 
-**编制专家签发**：  
-- Plan Architect 3（WebKit 核心引擎重构架构师）  
-- Revision Architect 2（Plan 03 修订专员）  
+**编制专家签发**：
+- Plan Architect 3（WebKit 核心引擎重构架构师）
+- Revision Architect 2（Plan 03 修订专员）
 **落盘状态**：已落盘于 `docs/unified-scrollbar-system/detailed-plans/03-plan-engine-core.md`，修订终态！

@@ -1,9 +1,9 @@
 # 统一滚动条 Design Token 体系与色彩物理学规范
 
-> **规范编号**：`SCROLLBAR-TOKEN-ARCH-03`  
-> **所属战役**：`docs/unified-scrollbar-system/`（统一滚动条体系与 ScrollArea 高频组件战役）  
-> **角色定位**：高阶 Design Token 与视觉色彩测量架构师（Design Token & Colorimetry Architect）  
-> **裁决状态**：用户最高定案裁决（起始灰度 8.2% $\to$ 激活灰度下调至 20.2%，死锁 12.0% 增量阶梯；宽度 4/5/7/9px 零硬编码分级）  
+> **规范编号**：`SCROLLBAR-TOKEN-ARCH-03`
+> **所属战役**：`docs/unified-scrollbar-system/`（统一滚动条体系与 ScrollArea 高频组件战役）
+> **角色定位**：高阶 Design Token 与视觉色彩测量架构师（Design Token & Colorimetry Architect）
+> **裁决状态**：用户最高定案裁决（起始灰度 8.2% $\to$ 激活灰度下调至 20.2%，死锁 12.0% 增量阶梯；宽度 4/5/7/9px 零硬编码分级）
 > **适用范围**：Conex / Crish 桌面客户端全域（Webview2 / Chromium 运行时、全量组件滚动盒、侧边栏、主工作区、弹窗、下拉菜单与代码编辑器）
 
 ---
@@ -643,7 +643,7 @@ describe('滚动条色彩物理阶梯断言 (Colorimetry Physics Assertion)', ()
     const activeColor = parseColor('hsl(35 12% 79.5%)'); // 灰度 20.2%
 
     const delta = calculateDarknessDelta(idleColor, activeColor);
-    
+
     // 严格死锁在 12.0% ± 0.5% 范围内
     expect(delta).toBeGreaterThanOrEqual(11.5);
     expect(delta).toBeLessThanOrEqual(12.5);

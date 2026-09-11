@@ -1,9 +1,9 @@
 # 03. Conex 统一滚动条体系与 ScrollArea 组件：渲染防御与立体验证维度划分提案（提案 C）
 
-> **所属战役**：统一滚动条体系与 ScrollArea 高频组件战役 (`docs/unified-scrollbar-system/`)  
-> **文档标识**：`docs/unified-scrollbar-system/dimension-proposals/03-proposal-rendering.md`  
-> **方案编号**：`SCROLLBAR-DIM-PROP-03`  
-> **架构专家**：Dimension Architect C：渲染防御与立体验证主审（Cross-Platform Rendering Defense & Stereoscopic Verification Lead）  
+> **所属战役**：统一滚动条体系与 ScrollArea 高频组件战役 (`docs/unified-scrollbar-system/`)
+> **文档标识**：`docs/unified-scrollbar-system/dimension-proposals/03-proposal-rendering.md`
+> **方案编号**：`SCROLLBAR-DIM-PROP-03`
+> **架构专家**：Dimension Architect C：渲染防御与立体验证主审（Cross-Platform Rendering Defense & Stereoscopic Verification Lead）
 > **审查与输入依据**：
 > - 总体战役总纲：[`00-master-plan.md`](file:///c:/Software/conex/docs/unified-scrollbar-system/00-master-plan.md)
 > - 白盒资产普查：[`surveys/01-full-inventory-and-usage.md`](file:///c:/Software/conex/docs/unified-scrollbar-system/surveys/01-full-inventory-and-usage.md)

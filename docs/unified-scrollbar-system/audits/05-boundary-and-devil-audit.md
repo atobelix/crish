@@ -1,9 +1,9 @@
 # 05 · 统一滚动条体系与上下三角箭头 ScrollArea 组件方案：极端边界与魔鬼审计报告
 
-> **工作区**：`docs/unified-scrollbar-system/`  
-> **归档落盘路径**：`docs/unified-scrollbar-system/audits/05-boundary-and-devil-audit.md`  
-> **审计身份**：最高级别魔鬼测试与极端边界审计官（Cross-Platform Boundary & Devil Auditor）  
-> **审计对象**：统一滚动条体系设计、上下三角箭头步进交互、`<ScrollArea>` React 组件架构、Windows WebView2 宿主兼容性  
+> **工作区**：`docs/unified-scrollbar-system/`
+> **归档落盘路径**：`docs/unified-scrollbar-system/audits/05-boundary-and-devil-audit.md`
+> **审计身份**：最高级别魔鬼测试与极端边界审计官（Cross-Platform Boundary & Devil Auditor）
+> **审计对象**：统一滚动条体系设计、上下三角箭头步进交互、`<ScrollArea>` React 组件架构、Windows WebView2 宿主兼容性
 > **基线准则**：严格遵守 `AGENTS.md` 铁律与 `ANTI_OVERENGINEERING_GUARDRAILS.md`，不退避、不妥协、穿透根因、严禁胶水补丁与掩耳盗铃。
 
 ---
@@ -142,11 +142,11 @@ Chromium 引擎在 121 版本（2024 年初）正式实装了 W3C CSS Scrollbars
 ```
 
 #### 【数学防御断言与严格推导】
-设容器右上角圆角半径为 $R$，滚动条宽度为 $W$，滚动条右侧边距（Margin）为 $M$。  
+设容器右上角圆角半径为 $R$，滚动条宽度为 $W$，滚动条右侧边距（Margin）为 $M$。
 建立以圆角圆心为原点 $(0, 0)$ 的局部直角坐标系，外轮廓圆弧方程为：
 $$x^2 + y^2 = R^2 \quad (x \ge 0, y \ge 0)$$
-滚动条最右侧在圆心坐标系下的横坐标为 $x = R - M$；最左侧横坐标为 $x = R - M - W$。  
-若滚动条从容器顶部顶点开始向下布局（对应圆心坐标系中的纵坐标区间 $[R - I_y, R]$）：  
+滚动条最右侧在圆心坐标系下的横坐标为 $x = R - M$；最左侧横坐标为 $x = R - M - W$。
+若滚动条从容器顶部顶点开始向下布局（对应圆心坐标系中的纵坐标区间 $[R - I_y, R]$）：
 圆弧在横坐标 $x = R - M$ 处的垂直高度为：
 $$y_{\text{arc}} = \sqrt{\max\left(0, R^2 - (R - M)^2\right)}$$
 圆弧最高点为 $y = R$。圆弧侵入容器顶部的深度为：

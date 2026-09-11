@@ -1,8 +1,8 @@
 # Conex / Crish 统一滚动条体系与 ScrollArea 高频组件战役 · 方案全景汇总索引
 
-> **战役工作区**：`docs/unified-scrollbar-system/`  
-> **总调度主控**：Antigravity Main Agent  
-> **归档时间**：2026-09-02  
+> **战役工作区**：`docs/unified-scrollbar-system/`
+> **总调度主控**：Antigravity Main Agent
+> **归档时间**：2026-09-02
 > **纪律遵循**：`docs/agent-roles/prompts/主控-全流程调度-v3.md`、`AGENTS.md`、`ANTI_OVERENGINEERING_GUARDRAILS.md`
 
 ---

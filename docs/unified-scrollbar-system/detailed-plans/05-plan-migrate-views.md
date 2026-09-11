@@ -1,9 +1,9 @@
 # 05 · 全仓业务视口分级改造与虚拟滚动边界隔离独立实现详案 (migrate-views)
 
-> **文档标识**：`docs/unified-scrollbar-system/detailed-plans/05-plan-migrate-views.md`  
-> **所属战役**：统一滚动条体系与 ScrollArea 高频组件战役（Unified Scrollbar System）  
-> **角色定位**：战役方案编制专家（Plan Architect 5：全仓业务视口分级改造与虚拟滚动边界隔离架构师）  
-> **编制基准时间**：2026-09-02  
+> **文档标识**：`docs/unified-scrollbar-system/detailed-plans/05-plan-migrate-views.md`
+> **所属战役**：统一滚动条体系与 ScrollArea 高频组件战役（Unified Scrollbar System）
+> **角色定位**：战役方案编制专家（Plan Architect 5：全仓业务视口分级改造与虚拟滚动边界隔离架构师）
+> **编制基准时间**：2026-09-02
 > **权威遵循**：`docs/unified-scrollbar-system/00-master-plan.md`、《主 Agent 全流程调度提示词 v3》、仓库根目录 `AGENTS.md`（反退避铁律、严禁打补丁、UI 原子层规范、§7.1 立体验证纪律）、`ANTI_OVERENGINEERING_GUARDRAILS.md`、`apps/crish-desktop/src/components/ui/README.md`。
 
 ---
@@ -1105,7 +1105,7 @@ Tier C 重点解决全仓历史代码中最隐蔽、最恶劣的样式死层：�
 ```mermaid
 flowchart TD
     S0["前置依赖准备 (Token 体系、核心引擎 Mode 2 与 <ScrollArea> 原子组件就绪)"] --> S1
-    
+
     subgraph Stage1 ["第一阶段：Tier C 脏代码清洗与千层饼拔除"]
         S1["拔除 DiffCard.module.css:546 单行 overflow-x: auto"] --> S2["清洗 5 处 TSX 内联 style 容器并挂载 Mode 2 类名"]
         S2 --> S3["收敛 LeafToolTabStrip / PaneHeader 至 .hideScrollbar"]
