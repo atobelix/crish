@@ -1,6 +1,6 @@
 /**
  * 助手行 tools / thought 可选注入槽。
- * 缺省空对象 = MessageContent 画扁平行（ChatToolCallBlock / TimelineThoughtSection）。
+ * 缺省空对象 = MessageContent 画扁平行（ChatToolCallBlock / ReasoningRow）。
  * 叙事插件经 ChatMessageList 提供；不经过 Virtualizer memo 比较器。
  */
 import { createContext, useContext, type ReactNode } from 'react';

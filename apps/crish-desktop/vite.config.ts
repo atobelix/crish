@@ -625,7 +625,8 @@ export default defineConfig({
       '@radix-ui/react-popover',
       '@tauri-apps/api/window',
       'dompurify',
-      'lucide-react',
+      '@hugeicons/core-free-icons',
+      '@hugeicons/react',
       'zustand',
       'immer',
       'highlight.js',
@@ -677,7 +678,7 @@ export default defineConfig({
             }
             if (n.includes('zustand') || n.includes('immer'))
               return 'vendor-zustand';
-            if (n.includes('lucide-react')) return 'vendor-lucide';
+            if (n.includes('@hugeicons')) return 'vendor-hugeicons';
             if (n.includes('highlight.js')) return 'vendor-highlight';
             if (n.includes('@fontsource')) return 'vendor-fonts';
             // 06-步骤2（P2-4）：tiptap 族（含 @tiptap/pm 的 prosemirror）
