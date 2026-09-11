@@ -80,7 +80,7 @@
   flex-direction: column;
   align-items: center;
   gap: 6px;
-  padding: 28px 0;
+  padding: var(--space-7, 28px) 0;
   color: var(--text-tertiary);
   font-size: 13px;
   text-align: center;

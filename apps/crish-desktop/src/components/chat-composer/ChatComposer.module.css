@@ -1158,7 +1158,7 @@
 
 .composerCard {
   /* 同心几何标尺：外圆角 = 内边距 + 内圆角 */
-  --composer-radius-outer: 20px;
+  --composer-radius-outer: var(--composer-radius-single, 20px);
   position: relative;
   z-index: var(--z-dock);
   display: flex;
@@ -1168,7 +1168,7 @@
   box-sizing: border-box;
   padding: 6px 10px;
   border: 1px solid var(--border-subtle);
-  border-radius: 22px;
+  border-radius: var(--composer-radius-single, 20px);
   background: var(--bg-elevated);
   box-shadow:
     0 1px 3px hsl(0 0% 0% / 0.015),
@@ -1181,7 +1181,7 @@
 
 .composerCard.isMultiline {
   padding: 10px 14px 8px 14px;
-  border-radius: var(--composer-radius-outer, 20px);
+  border-radius: var(--composer-radius-multi, 24px);
 }
 
 .composerCard:has(.attachStrip),

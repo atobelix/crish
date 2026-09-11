@@ -146,8 +146,9 @@ describe('StreamingMarkdownView & MarkdownBlockItem & useStreamingBlocks', () =>
       expect(blockEl).toBeTruthy();
       // Strictly NO skeleton line
       expect(container.querySelector('.skeletonLine')).toBeNull();
-      // Text content shim remains in place to prevent height collapse
-      expect(blockEl?.textContent).toBe('Sealed paragraph waiting for Rust compilation');
+      // HTML 未就绪：禁止把 Markdown 源码画出来（打开历史不闪源码）
+      expect(blockEl?.textContent).toBe('');
+      expect((blockEl as HTMLElement).style.visibility).not.toBe('hidden');
     });
 
     it('injects compiled HTML seamlessly once Rust compilation finishes', () => {
