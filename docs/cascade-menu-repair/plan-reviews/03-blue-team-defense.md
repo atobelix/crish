@@ -1,9 +1,9 @@
 # Conex / Crish 级联菜单蓝方终极架构防御与工程韧性方案
 
-> **文档标识**：`docs/cascade-menu-repair/plan-reviews/03-blue-team-defense.md`  
-> **战役目录**：`docs/cascade-menu-repair/`  
-> **角色定位**：蓝方架构防御与工程韧性专家（Blue Team Defense & Engineering Resilience Architect）  
-> **权威遵循**：`AGENTS.md`（反退避、严禁打补丁、追求架构优雅）、`.agents/LOGIC_PLAN_NO_RETREAT.md`（纯逻辑规划）、`ANTI_OVERENGINEERING_GUARDRAILS.md`（反过度设计硬性红线）  
+> **文档标识**：`docs/cascade-menu-repair/plan-reviews/03-blue-team-defense.md`
+> **战役目录**：`docs/cascade-menu-repair/`
+> **角色定位**：蓝方架构防御与工程韧性专家（Blue Team Defense & Engineering Resilience Architect）
+> **权威遵循**：`AGENTS.md`（反退避、严禁打补丁、追求架构优雅）、`.agents/LOGIC_PLAN_NO_RETREAT.md`（纯逻辑规划）、`ANTI_OVERENGINEERING_GUARDRAILS.md`（反过度设计硬性红线）
 > **关联依赖**：
 > - 方案总纲：[00-总方案.md](file:///c:/Software/conex/docs/cascade-menu-repair/00-总方案.md)
 > - 几何方案：[01-ui-geometry-plan.md](file:///c:/Software/conex/docs/cascade-menu-repair/independent-plans/01-ui-geometry-plan.md)
@@ -237,7 +237,7 @@ onPointerDownOutside={(e) => {
   const originalEvent = e.detail?.originalEvent;
   const target = (originalEvent?.target || e.target) as Node | null;
   const triggerEl = anchor?.current ?? triggerRef.current;
-  
+
   // 1. 触发源自身点击豁免
   if (triggerEl && target && triggerEl.contains(target)) {
     e.preventDefault();
@@ -336,7 +336,7 @@ return portalContainer ? ReactDOM.createPortal(submenuElement, portalContainer) 
 ```ts
 /**
  * apps/crish-desktop/src/components/ui/Menu/position.ts
- * 
+ *
  * 级联子菜单几何定位与视口双向硬性钳位算法（Blue Team Hardened）
  */
 

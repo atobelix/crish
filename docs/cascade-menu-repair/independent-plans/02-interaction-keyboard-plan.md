@@ -1,9 +1,9 @@
 # ModelBadgePickerMenu 级联菜单交互、焦点管理、Safe Triangle 与 ARIA 方案
 
-> **文档标识**：`02-interaction-keyboard-plan.md`  
-> **所属战役**：`docs/cascade-menu-repair/`（级联菜单修复战役）  
-> **角色领域**：交互与无障碍规范专家（Interaction & A11y Specialist）  
-> **权威基线**：对齐 `AGENTS.md` 通用纪律、`LOGIC_PLAN_NO_RETREAT.md` 反退避、`ANTI_OVERENGINEERING_GUARDRAILS.md` 反过度设计红线  
+> **文档标识**：`02-interaction-keyboard-plan.md`
+> **所属战役**：`docs/cascade-menu-repair/`（级联菜单修复战役）
+> **角色领域**：交互与无障碍规范专家（Interaction & A11y Specialist）
+> **权威基线**：对齐 `AGENTS.md` 通用纪律、`LOGIC_PLAN_NO_RETREAT.md` 反退避、`ANTI_OVERENGINEERING_GUARDRAILS.md` 反过度设计红线
 > **核心目标**：根除 `ModelBadgePickerMenu` 在鼠标 Hover 服务商行时子菜单抢焦与跳动问题，构建科学的 Safe Triangle 轨迹保护、无缝键盘漫游体系与完备的 WAI-ARIA 无障碍规范。
 
 ---

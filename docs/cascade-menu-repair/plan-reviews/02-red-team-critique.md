@@ -1,14 +1,14 @@
 # Conex / Crish 级联菜单重构方案红方攻防质询与极限压力对抗报告
 
-> **文档标识**：`docs/cascade-menu-repair/plan-reviews/02-red-team-critique.md`  
-> **报告性质**：红方极限压力对抗与架构穿透质询（Red Team Challenger Assessment）  
-> **质询对象**：  
-> - `docs/cascade-menu-repair/00-总方案.md`  
-> - `docs/cascade-menu-repair/independent-plans/01-ui-geometry-plan.md`  
-> - `docs/cascade-menu-repair/independent-plans/02-interaction-keyboard-plan.md`  
-> - `docs/cascade-menu-repair/independent-plans/03-layer-architecture-plan.md`  
-> - `docs/cascade-menu-repair/plan-reviews/01-cross-review.md`  
-> **权威红线**：`AGENTS.md`（反退避与架构优雅铁律）、`ANTI_OVERENGINEERING_GUARDRAILS.md`（反过度设计 13 项禁令）  
+> **文档标识**：`docs/cascade-menu-repair/plan-reviews/02-red-team-critique.md`
+> **报告性质**：红方极限压力对抗与架构穿透质询（Red Team Challenger Assessment）
+> **质询对象**：
+> - `docs/cascade-menu-repair/00-总方案.md`
+> - `docs/cascade-menu-repair/independent-plans/01-ui-geometry-plan.md`
+> - `docs/cascade-menu-repair/independent-plans/02-interaction-keyboard-plan.md`
+> - `docs/cascade-menu-repair/independent-plans/03-layer-architecture-plan.md`
+> - `docs/cascade-menu-repair/plan-reviews/01-cross-review.md`
+> **权威红线**：`AGENTS.md`（反退避与架构优雅铁律）、`ANTI_OVERENGINEERING_GUARDRAILS.md`（反过度设计 13 项禁令）
 > **报告主旨**：撕开理想化场景的假象，直击几何计算盲区、时序竞态漏洞、DOM 事件拓扑撕裂点与架构过载点，提出 5 大“魔鬼用例（Devil Test Cases）”与最少代码量的高确定性化解方案。
 
 ---
@@ -432,9 +432,9 @@ describe('ModelBadgePickerMenu 红方魔鬼压力对抗用例集', () => {
     const mockVp = { width: 380, height: 300, offsetLeft: 0, offsetTop: 0 };
     // 主菜单宽度 170px，位于 X = 110px ~ 280px (左侧 110px < 190px, 右侧 100px < 190px)
     const rowRect = { left: 110, top: 50, right: 280, bottom: 82, width: 170, height: 32 } as DOMRect;
-    
+
     const pos = calculateSubmenuPosition(rowRect, 190, 200, 4, 8, mockVp);
-    
+
     // 刚性断言：绝对不能出现 X < 8 的负坐标或出界截断
     expect(pos.x).toBeGreaterThanOrEqual(8);
     expect(pos.x + 190).toBeLessThanOrEqual(372); // 380 - 8
@@ -446,7 +446,7 @@ describe('ModelBadgePickerMenu 红方魔鬼压力对抗用例集', () => {
   it('DEVIL-02 [Lightning Zig-Zag]: 快速斜向滑过多行时，不得触发已遗留定时器的跨行误杀', async () => {
     vi.useFakeTimers();
     const { container } = render(<ModelBadgePickerMenu open={true} onClose={vi.fn()} anchor={{ current: document.body }} />);
-    
+
     const row1 = screen.getByTestId('profile-item-p1');
     const row2 = screen.getByTestId('profile-item-p2');
     const row3 = screen.getByTestId('profile-item-p3');
@@ -481,7 +481,7 @@ describe('ModelBadgePickerMenu 红方魔鬼压力对抗用例集', () => {
     render(<ModelBadgePickerMenu open={true} onClose={vi.fn()} anchor={{ current: document.body }} />);
     const row1 = screen.getByTestId('profile-item-p1');
     fireEvent.mouseEnter(row1);
-    
+
     // 子菜单展开
     await waitFor(() => {
       expect(screen.getByRole('menu', { name: /服务商 1/ })).toBeInTheDocument();
@@ -518,7 +518,7 @@ describe('ModelBadgePickerMenu 红方魔鬼压力对抗用例集', () => {
     const subMenu = screen.getByRole('menu', { name: /服务商 1/ });
     // 刚性断言：子菜单必须被 Portal 到 mockDialogContainer 内部，绝不能逃逸至 document.body
     expect(mockDialogContainer.contains(subMenu)).toBe(true);
-    
+
     document.body.removeChild(mockDialogContainer);
   });
 
@@ -528,7 +528,7 @@ describe('ModelBadgePickerMenu 红方魔鬼压力对抗用例集', () => {
   it('DEVIL-05 [Async Unmount Immunity]: 点击模型触发慢速 IPC 期间父组件卸载，严禁抛出未挂载状态异常', async () => {
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const slowActivate = vi.fn().mockImplementation(() => new Promise((resolve) => setTimeout(resolve, 150)));
-    
+
     const { unmount } = render(
       <ModelBadgePickerMenu open={true} onClose={vi.fn()} anchor={{ current: document.body }} onActivateOverride={slowActivate} />
     );
@@ -613,7 +613,7 @@ const hoverEpochRef = useRef(0);
 
 const handleRowEnter = useCallback((profileId: string) => {
   const currentEpoch = ++hoverEpochRef.current;
-  
+
   if (enterTimerRef.current) clearTimeout(enterTimerRef.current);
   if (leaveTimerRef.current) clearTimeout(leaveTimerRef.current);
 
@@ -659,5 +659,5 @@ const handleRowEnter = useCallback((profileId: string) => {
 2. **实施铁律**：严禁引入全局捕获 scroll 监听器，严禁使用未经视口双向钳位的几何算法，严格执行单调代际定时器管理。
 
 ---
-*红方质询专家：Red Team Challenger*  
+*红方质询专家：Red Team Challenger*
 *编制时间：2026-08-20*

@@ -1,8 +1,8 @@
 # 全仓级联菜单浮层架构、LayerStack 调度中枢与生命周期解耦方案
 
-> **文档标识**：`docs/cascade-menu-repair/independent-plans/03-layer-architecture-plan.md`  
-> **角色定位**：浮层架构与系统解耦专家（LayerStack & Architecture Specialist）  
-> **权威遵循**：`AGENTS.md`（反退避与架构优雅铁律）、`.agents/LOGIC_PLAN_NO_RETREAT.md`、`docs/rust-rewrite/31-security-baseline.md`  
+> **文档标识**：`docs/cascade-menu-repair/independent-plans/03-layer-architecture-plan.md`
+> **角色定位**：浮层架构与系统解耦专家（LayerStack & Architecture Specialist）
+> **权威遵循**：`AGENTS.md`（反退避与架构优雅铁律）、`.agents/LOGIC_PLAN_NO_RETREAT.md`、`docs/rust-rewrite/31-security-baseline.md`
 > **目标范围**：`ModelBadgePickerMenu`、`ProjectPickerMenu`、`ContextMenuFlyout`、`ModelsCascadeSelect` 及全仓级联浮层调度基础设施
 
 ---
@@ -309,7 +309,7 @@ export function useMenuContext(): MenuContextValue | null {
     const originalEvent = e.detail?.originalEvent;
     const target = (originalEvent?.target || e.target) as Node | null;
     const triggerEl = anchor?.current ?? triggerRef.current;
-    
+
     // 1. 触发源自身点击豁免
     if (triggerEl && target && triggerEl.contains(target)) {
       e.preventDefault();
@@ -334,7 +334,7 @@ export function useMenuContext(): MenuContextValue | null {
     const customEvent = e as CustomEvent<{ originalEvent?: Event }>;
     const target = (customEvent.detail?.originalEvent?.target || e.target) as Node | null;
     const triggerEl = anchor?.current ?? triggerRef.current;
-    
+
     if (triggerEl && target && triggerEl.contains(target)) {
       e.preventDefault();
       return;
@@ -370,21 +370,21 @@ flowchart TD
     Start[捕获到全局 PointerDown 事件] --> CheckProcessed{WeakSet 是否已处理?}
     CheckProcessed -- 是 --> Stop[终止]
     CheckProcessed -- 否 --> MarkProcessed[加入 WeakSet]
-    
+
     MarkProcessed --> FindTop[倒序查找栈顶 dismissible=true 浮层 targetLayer]
     FindTop --> HasTarget{存在 targetLayer?}
     HasTarget -- 否 --> Stop
     HasTarget -- 是 --> CheckInside{target 是否在 targetLayer.elementRef 内部?}
-    
+
     CheckInside -- 是 --> InsideAction[内部点击: 正常放行, 不关闭]
     CheckInside -- 否 --> CheckAnchor{target 是否在 targetLayer.anchorRef 内部?}
-    
+
     CheckAnchor -- 是 --> AnchorAction[Anchor 自身点击: 记录 anchorPointerDownTarget, 阻止外点误关, 交给 trigger click 逻辑]
     CheckAnchor -- 否 --> CheckDescendants{target 是否在 targetLayer 的子孙 Layer 内部?}
-    
+
     CheckDescendants -- 是 --> DescendantAction[子分支点击: 判定为合法内部交互, 严禁误关父层]
     CheckDescendants -- 否 --> OutsideDismiss[确认外部点击: 记录 dismissedByPointer, 调用 dismissLayer(targetLayer.id, 'outside-pointer')]
-    
+
     OutsideDismiss --> CheckParent{targetLayer 是否有 parentId?}
     CheckParent -- 是 --> OnlyChildDismiss[仅注销子层, 父层保持存活!]
     CheckParent -- 否 --> ParentDismiss[注销该层及其全部子孙]
@@ -539,7 +539,7 @@ export function useCascadeSubmenu({
   const parentId = explicitParentId ?? menuContext?.menuId ?? 'root-menu';
   const submenuId = useId();
   const submenuRef = useRef<HTMLDivElement | null>(null);
-  
+
   const [position, setPosition] = useState<SubmenuPosition>({
     x: 0,
     y: 0,
@@ -556,7 +556,7 @@ export function useCascadeSubmenu({
     // 默认向右，若右侧超出视口则翻转至左侧
     let placement: 'left' | 'right' = 'right';
     let x = rect.right + offset;
-    
+
     if (x + submenuWidth > vw - 8) {
       x = Math.max(8, rect.left - submenuWidth - offset);
       placement = 'left';

@@ -1,7 +1,7 @@
 # Conex / Crish 级联菜单多 Agent 独立方案交叉评审与比对报告
 
-> **文档标识**：`docs/cascade-menu-repair/plan-reviews/01-cross-review.md`  
-> **评审发起**：主控 Agent（Orchestrator）  
+> **文档标识**：`docs/cascade-menu-repair/plan-reviews/01-cross-review.md`
+> **评审发起**：主控 Agent（Orchestrator）
 > **评审对象**：
 > 1. `docs/cascade-menu-repair/independent-plans/01-ui-geometry-plan.md`（UI & Geometry Architect）
 > 2. `docs/cascade-menu-repair/independent-plans/02-interaction-keyboard-plan.md`（Interaction & A11y Specialist）

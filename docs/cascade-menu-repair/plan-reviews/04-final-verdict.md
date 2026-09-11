@@ -1,7 +1,7 @@
 # Conex / Crish 级联菜单重构方案红蓝对抗最终裁判报告
 
-> **文档标识**：`docs/cascade-menu-repair/plan-reviews/04-final-verdict.md`  
-> **裁判发起**：主控 Agent（Orchestrator）  
+> **文档标识**：`docs/cascade-menu-repair/plan-reviews/04-final-verdict.md`
+> **裁判发起**：主控 Agent（Orchestrator）
 > **对抗双方**：
 > - **红方（Red Team Challenger）**：[02-red-team-critique.md](file:///c:/Software/conex/docs/cascade-menu-repair/plan-reviews/02-red-team-critique.md)
 > - **蓝方（Blue Team Defender）**：[03-blue-team-defense.md](file:///c:/Software/conex/docs/cascade-menu-repair/plan-reviews/03-blue-team-defense.md)

@@ -1,8 +1,8 @@
 # ModelBadgePickerMenu 级联菜单几何布局与 CSS 渲染独立修复方案
 
-> **文档标识**：`docs/cascade-menu-repair/independent-plans/01-ui-geometry-plan.md`  
-> **角色定位**：UI 渲染与几何布局专家（UI & Geometry Architect）  
-> **权威遵循**：`AGENTS.md`（反退避与架构优雅铁律）、`.agents/LOGIC_PLAN_NO_RETREAT.md`  
+> **文档标识**：`docs/cascade-menu-repair/independent-plans/01-ui-geometry-plan.md`
+> **角色定位**：UI 渲染与几何布局专家（UI & Geometry Architect）
+> **权威遵循**：`AGENTS.md`（反退避与架构优雅铁律）、`.agents/LOGIC_PLAN_NO_RETREAT.md`
 > **目标组件**：`apps/crish-desktop/src/components/provider/ModelBadgePickerMenu.tsx` 及同类级联菜单体系
 
 ---
@@ -173,7 +173,7 @@ export function calculateSubmenuPosition(
   edgePadding = 8
 ): SubmenuPlacementResult {
   const vp = getEffectiveViewport();
-  
+
   // 1. 水平可用空间分析
   // 左侧可用空间：行左边缘至视口左边界
   const spaceLeft = rowRect.left - vp.offsetLeft - sideOffset - edgePadding;
@@ -197,7 +197,7 @@ export function calculateSubmenuPosition(
   // 3. 垂直对齐决策：默认顶部对齐 (align: start, top: rowRect.top - 4)
   let targetY = rowRect.top - 4;
   const maxAvailableHeight = vp.offsetTop + vp.height - edgePadding;
-  
+
   if (targetY + submenuHeight > maxAvailableHeight) {
     // 底部超出，向上提升对齐
     targetY = Math.max(
@@ -334,23 +334,23 @@ Index: apps/crish-desktop/src/components/provider/ModelBadgePickerMenu.module.cs
 +  overflow-x: hidden;
    -webkit-app-region: no-drag;
  }
- 
+
  .mbMenuExit {
    animation: crish-popover-exit var(--transition-popover-exit) forwards;
  }
- 
+
  .mbEmpty {
    padding: 12px 10px;
    text-align: center;
    font-size: var(--font-size-sm);
    color: var(--text-tertiary);
  }
- 
+
  .mbRowContainer {
 -  position: relative;
    width: 100%;
  }
- 
+
  .mbRow {
    display: flex;
    align-items: center;
@@ -366,12 +366,12 @@ Index: apps/crish-desktop/src/components/provider/ModelBadgePickerMenu.module.cs
    transition: background var(--transition-micro);
    color: var(--text-primary);
  }
- 
+
  .mbRow:hover,
  .mbRow.isExpanded {
    background: var(--bg-hover);
  }
- 
+
  .mbRowText {
    flex: 1;
    font-size: var(--font-size-sm);
@@ -381,12 +381,12 @@ Index: apps/crish-desktop/src/components/provider/ModelBadgePickerMenu.module.cs
    text-overflow: ellipsis;
    white-space: nowrap;
  }
- 
+
  .mbChevron {
    color: var(--text-tertiary);
    flex-shrink: 0;
  }
- 
+
 -/* 废弃原内联绝对定位 .mbSubMenu */
 -.mbSubMenu {
 -  position: absolute;
@@ -519,7 +519,7 @@ describe('ModelBadgePickerMenu 级联几何与渲染脱截守卫 (GEO-CASCADE-01
   it('GEO-CASCADE-02: 视口宽度 600px 且徽标在 X=20px 靠左位置时，二级菜单向右展开且 Chevron 指向右侧', async () => {
     MockPhysicalGeometryEngine.getInstance().setViewport({ width: 600, height: 400 });
     render(<Wrapper anchorRect={{ left: 20, top: 350, width: 100, height: 32 }} />);
-    
+
     const row = screen.getByTestId('profile-item-p1');
     fireEvent.mouseEnter(row);
 
@@ -530,7 +530,7 @@ describe('ModelBadgePickerMenu 级联几何与渲染脱截守卫 (GEO-CASCADE-01
     expect(subRect.left).toBeGreaterThanOrEqual(170);
     expect(subRect.right).toBeLessThanOrEqual(592);
     expect(subRect.left).toBeGreaterThanOrEqual(8);
-    
+
     // 断言：Chevron 箭头渲染为 ChevronRight
     expect(row.querySelector('svg.lucide-chevron-right')).toBeInTheDocument();
   });
@@ -539,7 +539,7 @@ describe('ModelBadgePickerMenu 级联几何与渲染脱截守卫 (GEO-CASCADE-01
   it('GEO-CASCADE-03: 视口宽度 1200px 且空间充裕时，二级菜单向左展开且 Chevron 指向左侧', async () => {
     MockPhysicalGeometryEngine.getInstance().setViewport({ width: 1200, height: 800 });
     render(<Wrapper anchorRect={{ left: 600, top: 350, width: 100, height: 32 }} />);
-    
+
     const row = screen.getByTestId('profile-item-p1');
     fireEvent.mouseEnter(row);
 
@@ -549,7 +549,7 @@ describe('ModelBadgePickerMenu 级联几何与渲染脱截守卫 (GEO-CASCADE-01
     // 断言：二级菜单在主菜单左侧
     expect(subRect.right).toBeLessThanOrEqual(600);
     expect(subRect.left).toBeGreaterThanOrEqual(8);
-    
+
     // 断言：Chevron 箭头渲染为 ChevronLeft
     expect(row.querySelector('svg.lucide-chevron-left')).toBeInTheDocument();
   });
@@ -585,7 +585,7 @@ describe('ModelBadgePickerMenu 级联几何与渲染脱截守卫 (GEO-CASCADE-01
   it('GEO-CASCADE-05: 二级子菜单节点挂载在 Portal 根，主菜单不是其 DOM 祖先', async () => {
     seedProfiles();
     render(<Wrapper />);
-    
+
     const row = screen.getByTestId('profile-item-p1');
     fireEvent.mouseEnter(row);
 
@@ -608,5 +608,5 @@ describe('ModelBadgePickerMenu 级联几何与渲染脱截守卫 (GEO-CASCADE-01
 4. **第四阶段（全量回归验证）**：运行 `npm run test` 与 `PhysicalGeometryGuards.test.tsx`，确保所有低视口（400x600, 600x400）与分屏场景 100% 绿灯。
 
 ---
-*方案编制人：UI & Geometry Architect*  
+*方案编制人：UI & Geometry Architect*
 *编制时间：2026-08-20*
