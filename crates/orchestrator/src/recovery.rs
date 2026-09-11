@@ -20,11 +20,7 @@
 //!   队列与通知）；
 //! - **阶梯 3 重分配/fork**：[RecoveryCoordinator::fork_and_reassign]
 //!   基于 [SessionTree::fork]（冻结接口只读消费）+ `subagent_path_json`
-//!   记录工作流路径；fork 三态上下文继承（ref-analysis 02 Top 6，
-//!   grok verbatim/summarized/New）：同窗口（≤24h）且注入内容 ≤ 会话
-//!   窗口 80% → 字节级继承（Verbatim）、超窗或超占比 → 摘要后注入
-//!   （Summarized，C9 摘要位，M10 实装前以 context_normalized 记录）、
-//!   空内容 → 全新（New）；原 run 置 failed 并留事件；
+//!   记录工作流路径；fork 上下文继承（B6 收敛后仅 `Verbatim`/`New` 两态，`Summarized` 已删除，历史库经 `alias` 兼容为 `Verbatim`）：注入内容为空 → `New`，其余 → `Verbatim`（字节级继承，单路径）；原 run 置 failed 并留事件；
 //! - **阶梯 4 上报用户**：[RecoveryCoordinator::report_to_user] 如实
 //!   上报「卡在哪一步、试过什么（各阶梯尝试记录）、建议怎么办」，连同
 //!   全部留痕（events 表）交用户决策；run 标记需用户介入（session_meta
