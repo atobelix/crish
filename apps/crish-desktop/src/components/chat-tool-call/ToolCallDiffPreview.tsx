@@ -9,6 +9,8 @@ export interface ToolCallDiffPreviewProps {
   diff: FileDiff;
   onOpenDiff?: ((diff: FileDiff) => void) | undefined;
   className?: string;
+  /** 嵌入变体标记：写入 data-card-variant，供 ChatToolCallBlock 内嵌样式提升特异性（替代 !important） */
+  cardVariant?: string;
 }
 
 export const DIFF_FLAT_PREVIEW_LIMIT = 24;
@@ -23,6 +25,7 @@ export const ToolCallDiffPreview: React.FC<ToolCallDiffPreviewProps> = ({
   diff,
   onOpenDiff,
   className = '',
+  cardVariant,
 }) => {
   const [copied, setCopied] = useState(false);
   const [showAll, setShowAll] = useState(false);
@@ -57,7 +60,11 @@ export const ToolCallDiffPreview: React.FC<ToolCallDiffPreviewProps> = ({
   };
 
   return (
-    <div className={`${styles.diffCard} ${className}`} key={diff.filePath}>
+    <div
+      className={`${styles.diffCard} ${className}`}
+      data-card-variant={cardVariant}
+      key={diff.filePath}
+    >
       {/* 卡片头部 */}
       <div
         className={styles.diffCardHeader}

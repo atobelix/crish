@@ -241,6 +241,7 @@ export const ToolCallOutputPane: React.FC<ToolCallOutputPaneProps> = ({
                 diff={d}
                 onOpenDiff={onOpenDiff}
                 className={styles.embeddedDiffCard}
+                cardVariant="embedded"
               />
             ))
           : null}
