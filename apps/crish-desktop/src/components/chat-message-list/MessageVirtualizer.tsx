@@ -30,6 +30,12 @@ import {
   type MessageVirtualizerProps,
   type PinnedItem,
 } from './messageVirtualizerMemo';
+import {
+  CHAT_SCROLL_PAD_BOTTOM,
+  CHAT_SCROLL_PAD_TOP,
+  CHAT_SCROLL_PAD_X,
+  chatSpacerHeight,
+} from './chatScrollGeometry';
 
 /** 浮点亚像素容差常量（px，DIM-02 §1.3.2 规范） */
 const SCROLL_FLOOR_EPSILON = 2.0;
@@ -117,6 +123,7 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
     fallbackHeight: MESSAGE_ESTIMATED_ROW_HEIGHT,
   });
   const { containerRef, setActual, clearHeights, manager } = vs;
+  const vsManager = manager;
 
   const isAtBottomRef = useRef<boolean>(true);
   const [isAtBottom, setIsAtBottom] = useState<boolean>(true);
@@ -124,18 +131,45 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
   const [showFloorButton, setShowFloorButton] = useState<boolean>(false);
 
   const uiSize = useLayoutStore((s) => s.uiSize);
+  const uiSizeSeededRef = useRef(false);
 
   useEffect(() => {
     clearHeights();
     isAtBottomRef.current = true;
     setIsAtBottom(true);
     setShowFloorButton(false);
-  }, [activeSessionId, clearHeights]);
+    // 会话切换：立刻回灌 order + 估高，杜绝 clear 后空 order 空屏
+    if (msgIds.length > 0) {
+      manager.syncOrder(msgIds);
+      manager.preloadEstimates(
+        messages.map((m) => ({
+          id: m.id,
+          height: estimateTimelineMessageHeight(m),
+        }))
+      );
+    }
+    // 仅会话切换清几何；禁止把 messages/msgIds 放进依赖（否则每次消息更新清空导致空屏）
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSessionId, clearHeights, manager]);
 
-  // 字号/UI Token 变更：失效缓存高度并重测（与 VirtualPlainCodeViewer 同纪律）
+  // 字号/UI Token 变更：失效缓存高度并重测；首次挂载跳过（会话 Effect 已播种，避免双倍 O(N)）
   useEffect(() => {
+    if (!uiSizeSeededRef.current) {
+      uiSizeSeededRef.current = true;
+      return;
+    }
     clearHeights();
-  }, [uiSize, clearHeights]);
+    if (msgIds.length > 0) {
+      manager.syncOrder(msgIds);
+      manager.preloadEstimates(
+        messages.map((m) => ({
+          id: m.id,
+          height: estimateTimelineMessageHeight(m),
+        }))
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uiSize, clearHeights, manager]);
 
   useEffect(() => {
     registerActiveVsm(activeSessionId, manager);
@@ -198,12 +232,27 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
     };
   }, []);
 
-  // 仅在 messages 发生引用变化时灌入预估高度，杜绝每次虚拟滚动时对 1500+ 项重复遍历
+  // 展开/收起后同帧兜底重测：RO 异步；宿主在 commit 后扫一遍可见 [data-vindex]，经 vs.setActual 触发 actualTick
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const nodes = container.querySelectorAll('[data-vindex]');
+    nodes.forEach((node) => {
+      if (!(node instanceof HTMLElement)) return;
+      const msgId = node.dataset.vindex;
+      const h = node.offsetHeight;
+      if (msgId != null && h > 0) {
+        setActual(msgId, h);
+      }
+    });
+  });
+
+  // 仅在 messages 引用变化时灌入预估高度（依赖 manager 而非整个 vs，避免每次滚动重扫 1500 项）
   useMemo(() => {
-    vs.manager.syncOrder(msgIds);
+    vsManager.syncOrder(msgIds);
     const unmeasuredEstimates: Array<{ id: string; height: number }> = [];
     for (const m of messages) {
-      if (!vs.manager.hasActualHeight(m.id)) {
+      if (!vsManager.hasActualHeight(m.id)) {
         unmeasuredEstimates.push({
           id: m.id,
           height: estimateTimelineMessageHeight(m),
@@ -211,19 +260,19 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
       }
     }
     if (unmeasuredEstimates.length > 0) {
-      vs.manager.preloadEstimates(unmeasuredEstimates);
+      vsManager.preloadEstimates(unmeasuredEstimates);
     }
-  }, [messages, msgIds, vs.manager]);
+  }, [messages, msgIds, vsManager]);
 
-  const { startIndex, endIndex, startOffset, estimatedTotalHeight } =
-    vs.manager.computeVisibleRange(
-      vs.scrollTop,
-      vs.viewportHeight,
-      messages.length,
-      8
-    );
-  const endOffset = vs.manager.getOffset(endIndex);
-  const totalHeight = vs.manager.getTotalHeight(messages.length);
+  // order 与 ids 不一致时仅同步 order（估高由 messages 变化路径 / 会话切换 Effect 负责，禁止滚动路径 O(N) 重估）
+  if (msgIds.length > 0 && vsManager.getOrderCount() !== msgIds.length) {
+    vsManager.syncOrder(msgIds);
+  }
+
+  const { startIndex, endIndex, startOffset } = vs.visibleRange;
+  const contentHeight = vs.totalHeight;
+  /** 文档坐标系高度 = 顶衬 + 内容前缀和 + 底衬（绝对切片不吃 CSS padding） */
+  const totalHeight = chatSpacerHeight(contentHeight);
 
   const pinnedIdSet = useMemo(
     () => new Set(pinnedItems.map((p) => p.id)),
@@ -358,107 +407,110 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
         onClick={handleMarkdownClick}
         onScroll={handleScroll}
       >
-        <div className={styles.listInner} data-chat-list-inner="" style={{ overflowAnchor: 'none' }}>
-
-
         <div
-          data-vsm-spacer=""
-          style={{ height: startOffset, flexShrink: 0, overflowAnchor: 'none' }}
-          aria-hidden
-        />
-
-        {/* 渲染身份（C2）：key / 高度缓存键 = message.id；stream 与 final 共用同一行 id */}
-        {messages.slice(startIndex, endIndex).map((msg, i) => {
-          const virtualIndex = startIndex + i;
-          const prevMsg = virtualIndex > 0 ? messages[virtualIndex - 1] : null;
-          const isFollowUp =
-            msg.sender === 'assistant' && prevMsg?.sender === 'assistant';
-          const isPinnedMsg = pinnedIdSet.has(msg.id);
-          const isSearchHit =
-            !!searchHighlightQuery &&
-            messageMatchesSearch(msg, searchHighlightQuery);
-
-          if (msg.sender === 'user') {
-            const isThisMsgEditing = composer?.editingMessageId === msg.id;
-            return (
-              <AppErrorBoundary key={msg.id} variant="minimal" title="消息出错">
-                <div data-vindex={msg.id}>
-                  <ChatUserMessageRow
-                    msg={msg}
-                    isPinned={isPinnedMsg}
-                    pinnedColor={pinnedColors[msg.id]}
-                    isSearchHit={isSearchHit}
-                    isExpanded={!!expandedUserMsgs[msg.id]}
-                    onToggleExpand={onToggleExpandUser}
-                    onTogglePin={togglePin}
-                    isLastUser={msg.id === lastUserId}
-                    onRetract={onRetract}
-                    isEditing={isThisMsgEditing}
-                    onStartEdit={
-                      composer?.onStartEditMessage
-                        ? () => composer.onStartEditMessage?.(msg)
-                        : undefined
-                    }
-                    onCancelEdit={composer?.onCancelEditMessage}
-                    composerElement={isThisMsgEditing ? composer?.composerElement : undefined}
-                    onEditMessageAndResend={onEditMessageAndResend}
-                    messageIndex={virtualIndex}
-                    virtualScrollManager={manager}
-                    onOpenPath={onOpenPath}
-                  />
-                </div>
-              </AppErrorBoundary>
-            );
-          }
-
-          return (
-            <AppErrorBoundary key={msg.id} variant="minimal" title="消息出错">
-              <div data-vindex={msg.id}>
-                <StreamingAssistantRow
-                  msg={msg}
-                  isFollowUp={isFollowUp}
-                  isPinned={isPinnedMsg}
-                  pinnedColor={pinnedColors[msg.id]}
-                  isSearchHit={isSearchHit}
-                  isThinkingMsg={msg.id === thinkingMsgId}
-                  hideThinkingBlock={hideThinkingBlock}
-                  inPlanMode={inPlanMode}
-                  planApproved={planApproved}
-                  isLastAssistant={msg.id === lastAssistantId}
-                  toolStackProps={toolStackProps}
-                  onTogglePin={togglePin}
-                  onRegenerate={handleRegenerateRow}
-                  onBranch={onBranch}
-                  onOpenDiff={onOpenDiff}
-                  onOpenDiffPanel={onOpenDiffPanel}
-                  setPermissionMode={setPermissionMode}
-                  setPlanApproved={setPlanApproved}
-                  onFillFollowUp={handleFillFollowUp}
-                  onSendFollowUp={
-                    onSendFollowUp ? handleSendFollowUp : undefined
-                  }
-                  followUpDismissed={!!dismissedFollowUps[msg.id]}
-                  onDismissFollowUp={handleDismissFollowUp}
-                  onRetract={onRetract}
-                  messageIndex={virtualIndex}
-                  virtualScrollManager={manager}
-                />
-              </div>
-            </AppErrorBoundary>
-          );
-        })}
-
-        <div
+          className={styles.listInner}
+          data-chat-list-inner=""
           data-vsm-spacer=""
           style={{
-            height: Math.max(0, estimatedTotalHeight - endOffset),
-            flexShrink: 0,
+            height: `${totalHeight}px`,
+            width: '100%',
+            position: 'relative',
+            overflow: 'hidden',
             overflowAnchor: 'none',
           }}
-          aria-hidden
-        />
+        >
+          <div
+            data-chat-slice-container=""
+            style={{
+              position: 'absolute',
+              top: CHAT_SCROLL_PAD_TOP,
+              left: CHAT_SCROLL_PAD_X,
+              right: CHAT_SCROLL_PAD_X,
+              transform: `translateY(${startOffset}px)`,
+              overflowAnchor: 'none',
+            }}
+          >
+            {/* 渲染身份（C2）：key / 高度缓存键 = message.id；stream 与 final 共用同一行 id */}
+            {messages.slice(startIndex, endIndex).map((msg, i) => {
+              const virtualIndex = startIndex + i;
+              const prevMsg = virtualIndex > 0 ? messages[virtualIndex - 1] : null;
+              const isFollowUp =
+                msg.sender === 'assistant' && prevMsg?.sender === 'assistant';
+              const isPinnedMsg = pinnedIdSet.has(msg.id);
+              const isSearchHit =
+                !!searchHighlightQuery &&
+                messageMatchesSearch(msg, searchHighlightQuery);
 
+              if (msg.sender === 'user') {
+                const isThisMsgEditing = composer?.editingMessageId === msg.id;
+                return (
+                  <AppErrorBoundary key={msg.id} variant="minimal" title="消息出错">
+                    <div data-vindex={msg.id}>
+                      <ChatUserMessageRow
+                        msg={msg}
+                        isPinned={isPinnedMsg}
+                        pinnedColor={pinnedColors[msg.id]}
+                        isSearchHit={isSearchHit}
+                        isExpanded={!!expandedUserMsgs[msg.id]}
+                        onToggleExpand={onToggleExpandUser}
+                        onTogglePin={togglePin}
+                        isLastUser={msg.id === lastUserId}
+                        onRetract={onRetract}
+                        isEditing={isThisMsgEditing}
+                        onStartEdit={
+                          composer?.onStartEditMessage
+                            ? () => composer.onStartEditMessage?.(msg)
+                            : undefined
+                        }
+                        onCancelEdit={composer?.onCancelEditMessage}
+                        composerElement={isThisMsgEditing ? composer?.composerElement : undefined}
+                        onEditMessageAndResend={onEditMessageAndResend}
+                        messageIndex={virtualIndex}
+                        virtualScrollManager={manager}
+                        onOpenPath={onOpenPath}
+                      />
+                    </div>
+                  </AppErrorBoundary>
+                );
+              }
 
+              return (
+                <AppErrorBoundary key={msg.id} variant="minimal" title="消息出错">
+                  <div data-vindex={msg.id}>
+                    <StreamingAssistantRow
+                      msg={msg}
+                      isFollowUp={isFollowUp}
+                      isPinned={isPinnedMsg}
+                      pinnedColor={pinnedColors[msg.id]}
+                      isSearchHit={isSearchHit}
+                      isThinkingMsg={msg.id === thinkingMsgId}
+                      hideThinkingBlock={hideThinkingBlock}
+                      inPlanMode={inPlanMode}
+                      planApproved={planApproved}
+                      isLastAssistant={msg.id === lastAssistantId}
+                      toolStackProps={toolStackProps}
+                      onTogglePin={togglePin}
+                      onRegenerate={handleRegenerateRow}
+                      onBranch={onBranch}
+                      onOpenDiff={onOpenDiff}
+                      onOpenDiffPanel={onOpenDiffPanel}
+                      setPermissionMode={setPermissionMode}
+                      setPlanApproved={setPlanApproved}
+                      onFillFollowUp={handleFillFollowUp}
+                      onSendFollowUp={
+                        onSendFollowUp ? handleSendFollowUp : undefined
+                      }
+                      followUpDismissed={!!dismissedFollowUps[msg.id]}
+                      onDismissFollowUp={handleDismissFollowUp}
+                      onRetract={onRetract}
+                      messageIndex={virtualIndex}
+                      virtualScrollManager={manager}
+                    />
+                  </div>
+                </AppErrorBoundary>
+              );
+            })}
+          </div>
         </div>
         <ChatScrollFloorSlot
           visible={showFloorButton}

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Pin, PinOff } from 'lucide-react';
+
 import type { SessionMessage } from '../../store/types';
 import type { VirtualScrollManager } from '../../api/VirtualScrollManager';
 import styles from './FlowScrubber.module.css';
@@ -15,6 +15,7 @@ import {
 } from './flowScrubberModel';
 import { DEFAULT_PIN_COLOR } from '../chat-message-row/colorPickerUtils';
 import { Tooltip } from '../ui';
+import { AppIcon } from '../ui/icons';
 
 export interface FlowScrubberProps {
   messages: SessionMessage[];
@@ -357,8 +358,8 @@ const FlowScrubberInner: React.FC<FlowScrubberProps> = ({
                   top: `${activeHover.targetY}px`,
                   ...(isCurrentPinned
                     ? {
-                        '--tooltip-card-bg': `color-mix(in srgb, ${currentPinColor} 5%, var(--bg-card, #ffffff))`,
-                        '--tooltip-card-border': `color-mix(in srgb, ${currentPinColor} 22%, var(--border-subtle, rgba(0, 0, 0, 0.08)))`,
+                        '--tooltip-card-bg': `color-mix(in srgb, ${currentPinColor} 5%, var(--bg-card))`,
+                        '--tooltip-card-border': `color-mix(in srgb, ${currentPinColor} 22%, var(--border-subtle))`,
                       }
                     : {}),
                 } as React.CSSProperties
@@ -388,9 +389,9 @@ const FlowScrubberInner: React.FC<FlowScrubberProps> = ({
                       aria-label={isCurrentPinned ? '取消固定' : '固定'}
                     >
                       {isCurrentPinned ? (
-                        <PinOff size={12} strokeWidth={2} />
+                        <AppIcon name="pin-off" size={12} />
                       ) : (
-                        <Pin size={12} strokeWidth={2} />
+                        <AppIcon name="pin" size={12} />
                       )}
                     </button>
                   )}

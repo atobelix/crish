@@ -1,7 +1,7 @@
 import React from 'react';
-import { ChevronDown } from 'lucide-react';
 import { Tooltip } from '../ui';
 import styles from './ChatScrollFloorSlot.module.css';
+import { AppIcon } from '../ui/icons/index';
 
 export interface ChatScrollFloorSlotProps {
   /** 显式控制回底按钮是否可见 */
@@ -91,7 +91,7 @@ export const ChatScrollFloorSlot: React.FC<ChatScrollFloorSlotProps> = ({
               aria-label="回到底部最新消息"
               data-testid="chat-scroll-floor-btn"
             >
-              <ChevronDown size={16} strokeWidth={2} aria-hidden="true" />
+              <AppIcon name="chevron-down" size={16} aria-hidden="true" />
               {unreadCount > 0 ? (
                 <span
                   className={styles.unreadBadge}

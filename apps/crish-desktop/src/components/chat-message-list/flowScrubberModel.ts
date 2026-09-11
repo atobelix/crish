@@ -5,6 +5,7 @@
 import type { VirtualScrollManager } from '../../api/VirtualScrollManager';
 import { formatMsgTime } from '../chat-message-row/chatMessageRowUtils';
 import { pinSnippet } from './useScrollAnchor';
+import { CHAT_SCROLL_PAD_TOP } from './chatScrollGeometry';
 
 /** 产品用户气泡（不要抄参考 .flow-msg--user） */
 export const USER_BUBBLE_SELECTOR = '[data-role="user"][data-msg-id]';
@@ -221,11 +222,12 @@ export function scrollToScrubberTarget(
   const offset = manager.getOffset(index);
   const height = manager.getHeight(messageId);
   const viewH = scroller.clientHeight || 0;
-  // 虚拟窗外同样防裁切：若高于视口一半，顶部保留 24px 呼吸间距
+  // 文档坐标 = PAD_TOP + VSM offset（与 MessageVirtualizer 切片定位一致）
+  const docOffset = CHAT_SCROLL_PAD_TOP + offset;
   const top =
     height > viewH * 0.5 && viewH > 0
-      ? Math.max(0, offset - 24)
-      : Math.max(0, offset - Math.max(0, viewH - height) / 2);
+      ? Math.max(0, docOffset - 24)
+      : Math.max(0, docOffset - Math.max(0, viewH - height) / 2);
   if (typeof scroller.scrollTo === 'function') {
     scroller.scrollTo({ top, behavior: 'smooth' });
   } else {

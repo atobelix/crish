@@ -83,7 +83,6 @@
 
 .pinnedChevron {
   margin-left: auto;
-  opacity: 0.55;
   transition: transform var(--transition-fast);
 }
 
@@ -142,7 +141,6 @@
 
 .pinnedUnpin {
   flex-shrink: 0;
-  opacity: 0.55;
   width: 22px;
   height: 22px;
   border: none;

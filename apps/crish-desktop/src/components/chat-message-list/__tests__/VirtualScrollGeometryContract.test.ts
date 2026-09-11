@@ -22,6 +22,12 @@ describe('虚拟滚动几何稳定与统一盒模型契约 (Plan 05 DEF-13 & DEF
     it('保留虚拟化 Spacer 几何占位', () => {
       expect(listCss).toContain('[data-vsm-spacer]');
     });
+
+    it('.listInner 禁止纵向 padding（几何 SSOT 归 chatScrollGeometry）', () => {
+      // 纵向 padding 会与绝对切片脱节 → 顶遮挡/底截断
+      expect(listCss).not.toMatch(/\.listInner\s*\{[^}]*padding:\s*48px/);
+      expect(listCss).not.toMatch(/\.listInner\s*\{[^}]*padding-top:\s*48px/);
+    });
   });
 
   describe('2. ChatMessageRow.module.css 契约：内部盒模型与双重虚拟化切除 (DEF-13 & DEF-14)', () => {
