@@ -1,7 +1,7 @@
 # Agent 角色库
 
-> **协作总则**：仓库根 [`AGENTS.md`](../../AGENTS.md)（只追加维护）。  
-> **本目录**：角色参考 + **轻量**阶段提示词 + **全员共享追加日志**。  
+> **协作总则**：仓库根 [`AGENTS.md`](../../AGENTS.md)（只追加维护）。
+> **本目录**：角色参考 + **轻量**阶段提示词 + **全员共享追加日志**。
 > **战役正文**（总方案/分维/审计报告）落在 `docs/<战役>/`，不要堆在这里。
 
 ## 1. 设计原则（提示词要轻）
@@ -53,8 +53,8 @@ docs/agent-roles/
 
 ## 4. 战役工作区（docs 下）
 
-根目录：`00-索引`、`00-总方案`、分维终稿。  
-子目录仅一层：`problems/` `dimension-drafts/` `independent-plans/` `plan-audits/` `round-norms/` `execution/` 等。  
+根目录：`00-索引`、`00-总方案`、分维终稿。
+子目录仅一层：`problems/` `dimension-drafts/` `independent-plans/` `plan-audits/` `round-norms/` `execution/` 等。
 共享追加日志固定用 `docs/agent-roles/shared-append/`（跨战役反馈用，**只作提议**；用户启动工作流改进巡航时再扫）。
 
 ## 5. 怎么用 prompt
