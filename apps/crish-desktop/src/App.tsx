@@ -171,10 +171,6 @@ function App() {
           跳转到主要内容
         </a>
 
-        <AppTopBar
-          onShowCheatsheet={() => setShowCheatsheet(true)}
-        />
-
         <main
           id="crish-main"
           className="main-layout"
@@ -217,6 +213,10 @@ function App() {
             role="region"
             aria-label="工作台内容"
           >
+            {/* 流内顶栏：只盖工作区列，不再绝对定位横跨全宽 */}
+            <AppTopBar
+              onShowCheatsheet={() => setShowCheatsheet(true)}
+            />
             <div
               className="workspaces-stack"
               role="region"

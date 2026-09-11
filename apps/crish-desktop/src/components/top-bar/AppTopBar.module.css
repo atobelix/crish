@@ -1,18 +1,16 @@
 /**
- * AppTopBar — 36px 单层顶栏，与工作区外壳共用同一块灰底。
- * 视觉规格对齐参考里的 .tree-pane-header：透明分界、无下边框，
- * 顶栏与下方画布是一整片连续的「大矩形」，卡片浮在其上。
+ * AppTopBar — 流内 36px 顶栏，挂在 .workspaces-column 第一子位。
+ * 只覆盖工作区列；视觉规格对齐参考里的 .tree-pane-header：
+ * 透明分界、无下边框，顶栏与下方画布是一整片连续的「大矩形」，卡片浮在其上。
  */
 
 .topBar {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
+  position: relative;
+  width: 100%;
   height: var(--header-height, 36px);
   min-height: var(--header-height, 36px);
   max-height: var(--header-height, 36px);
-  width: 100vw;
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   background: transparent;
@@ -22,14 +20,7 @@
   user-select: none;
   -webkit-app-region: no-drag;
   app-region: no-drag;
-  z-index: var(--z-sidebar, 100);
-  pointer-events: none;
-}
-
-.headerClearance {
-  height: 100%;
-  flex-shrink: 0;
-  pointer-events: none;
+  pointer-events: auto;
 }
 
 .spacer {

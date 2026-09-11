@@ -1,8 +1,9 @@
 /**
- * AppTopBar — 36px 顶栏浮层。
+ * AppTopBar — 流内顶栏（36px）。
  *
+ * 挂在 .workspaces-column 第一子位：只覆盖工作区列，不再 absolute + 100vw 横跨侧栏。
  * 只负责帮助入口与窗控。侧栏开关属于侧栏自己的 header 槽，不进本层。
- * 整条顶栏默认不接点击，避免盖住下方侧栏头；拖拽窗口只走中间 spacer。
+ * 拖拽窗口只走中间 spacer。
  */
 
 import React, { useMemo, useCallback } from 'react';
@@ -29,23 +30,12 @@ export const AppTopBar: React.FC<AppTopBarProps> = React.memo(
       window.dispatchEvent(new CustomEvent('open-cheatsheet'));
     }, [onShowCheatsheet]);
 
-    const clearanceWidth = isMacDesktop ? 106 : 52;
-
     return (
       <header
         className={`${styles.topBar} app-top-bar`}
         role="banner"
         aria-label="应用顶栏"
       >
-        {/* 左侧让给侧栏 header 开关，本层不接点击、不拖窗口 */}
-        <div
-          className={styles.headerClearance}
-          style={{
-            width: clearanceWidth,
-            minWidth: clearanceWidth,
-          }}
-          aria-hidden="true"
-        />
         <div
           className={`${styles.spacer} app-top-bar__spacer`}
           data-tauri-drag-region
