@@ -323,16 +323,17 @@
   display: flex;
   position: relative;
   flex-direction: column;
-  width: calc(100% - 36px);
-  max-width: 672px;
+  /* 独立闭合卡片：废除抽屉舌头负边距与内缩假象 */
+  width: 100%;
+  max-width: min(var(--chat-col-max, 760px), 100%);
   align-self: flex-start;
-  margin-left: 18px;
+  margin-left: 0;
   margin-right: auto;
-  margin-bottom: -10px;
+  margin-bottom: 2px;
   background: var(--bg-card);
   border: 1px solid var(--border-subtle);
-  border-bottom: none;
-  border-radius: 16px 16px 0 0;
+  border-bottom: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg, 8px);
   box-shadow: 0 -2px 10px color-mix(in srgb, var(--shadow-color) 2%, transparent);
   box-sizing: border-box;
   transition:
@@ -348,7 +349,7 @@
   transition: grid-template-rows 200ms cubic-bezier(0.16, 1, 0.3, 1);
   background: var(--bg-card);
   border-bottom: 0px solid var(--border-subtle);
-  border-radius: 16px 16px 0 0;
+  border-radius: var(--radius-lg, 8px);
   overflow: hidden;
 }
 
@@ -440,7 +441,8 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 6px 12px 14px 12px;
+  /* 底部 14px 垫高是 -10px 舌头补偿，已随闭合卡片废除 */
+  padding: 6px 12px;
   height: 44px;
   box-sizing: border-box;
 }
@@ -1166,7 +1168,8 @@
   gap: 0;
   width: 100%;
   box-sizing: border-box;
-  padding: 6px 10px;
+  /* 水平内衬 SSOT：X 轴锁 --composer-pad-x（单/多行一致） */
+  padding: 6px var(--composer-pad-x, 12px);
   border: 1px solid var(--border-subtle);
   border-radius: var(--composer-radius-single, 20px);
   background: var(--bg-elevated);
@@ -1180,7 +1183,7 @@
 }
 
 .composerCard.isMultiline {
-  padding: 10px 14px 8px 14px;
+  padding: 8px var(--composer-pad-x, 12px);
   border-radius: var(--composer-radius-multi, 24px);
 }
 
@@ -1655,194 +1658,6 @@
   color: var(--text-secondary);
 }
 
-/* ==========================================================================
-   Composer Field in Grid & Fallback Textarea styles
-   ========================================================================== */
-
-.container {
-  --composer-line-height: 1.45;
-  --composer-min-lines: 2;
-  --composer-max-lines: 10;
-  --composer-shell-bg: var(--composer-bg);
-  --composer-shell-bg-focus: var(--composer-bg);
-  display: flex;
-  flex-direction: row;
-  flex-wrap: nowrap;
-  align-items: center;
-  background: var(--composer-shell-bg);
-  background-color: var(--composer-shell-bg);
-  border: 1px solid var(--border-color);
-  border-radius: 20px;
-  padding: 10px 14px;
-  gap: var(--space-2);
-  min-height: calc(
-    1em * var(--composer-line-height) * var(--composer-min-lines) + 16px
-  );
-  transition: border-color var(--transition-fast);
-  color: var(--text-primary);
-  box-sizing: border-box;
-}
-
-.container:focus-within {
-  background: var(--composer-shell-bg-focus);
-  background-color: var(--composer-shell-bg-focus);
-  border-color: color-mix(
-    in srgb,
-    var(--border-color) 94%,
-    var(--text-primary) 6%
-  );
-  box-shadow: none;
-  outline: none;
-}
-
-.container[data-empty-kind='session-empty']:focus-within {
-  border-color: color-mix(
-    in srgb,
-    var(--border-color) 95%,
-    var(--text-primary) 5%
-  );
-}
-
-.containerDense {
-  --composer-line-height: 1.4;
-  padding: 6px 10px;
-  gap: var(--space-1);
-  border-radius: var(--radius-md);
-  background: var(--composer-shell-bg);
-  background-color: var(--composer-shell-bg);
-  border: 1px solid var(--border-color);
-}
-
-.containerDense:focus-within {
-  background: var(--composer-shell-bg-focus);
-  background-color: var(--composer-shell-bg-focus);
-  border-color: color-mix(
-    in srgb,
-    var(--border-color) 94%,
-    var(--text-primary) 6%
-  );
-}
-
-.textarea {
-  flex: 1 1 auto;
-  min-width: 0;
-  align-self: center;
-  background: transparent;
-  background-color: transparent;
-  border: none;
-  outline: none;
-  box-shadow: none;
-  appearance: none;
-  -webkit-appearance: none;
-  color-scheme: inherit;
-  caret-color: var(--text-primary);
-  font-family: var(--font-sans);
-  font-size: var(--font-size-base);
-  font-weight: var(--font-weight-normal);
-  resize: none;
-  min-height: calc(
-    1em * var(--composer-line-height) * var(--composer-min-lines)
-  );
-  max-height: calc(
-    1em * var(--composer-line-height) * var(--composer-max-lines)
-  );
-  color: var(--text-primary);
-  line-height: var(--composer-line-height);
-  padding: 0;
-  margin: 0;
-  overflow-y: hidden;
-  box-sizing: content-box;
-  field-sizing: content;
-  vertical-align: middle;
-}
-
-.textarea::placeholder {
-  color: var(--text-tertiary);
-  opacity: 1;
-}
-
-.textarea:disabled {
-  background: transparent;
-  background-color: transparent;
-  opacity: 0.72;
-  color: var(--text-secondary);
-}
-
-.containerDense .textarea {
-  font-size: var(--font-size-sm, 13px);
-  line-height: var(--composer-line-height);
-}
-
-.buttons {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  flex-shrink: 0;
-  padding: 0;
-  align-self: center;
-}
-
-.sendBtn {
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  color: var(--text-tertiary);
-  width: var(--control-height, 32px);
-  height: var(--control-height, 32px);
-  border-radius: var(--radius-lg, 8px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition:
-    color var(--transition-micro, 80ms ease),
-    background var(--transition-micro, 80ms ease);
-  flex-shrink: 0;
-  padding: 0;
-}
-
-.sendBtn:hover:not(:disabled) {
-  background: transparent;
-  color: var(--text-primary);
-}
-
-.sendBtn:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-}
-
-.sendBtn svg {
-  width: var(--icon-size-sm, 14px);
-  height: var(--icon-size-sm, 14px);
-}
-
-.stop {
-  background: transparent;
-  color: var(--text-secondary);
-}
-
-.stop:hover:not(:disabled) {
-  background: transparent;
-  color: var(--text-primary);
-}
-
-.queue {
-  width: auto;
-  height: var(--control-height-sm, 28px);
-  padding: 0 8px;
-  gap: var(--space-1);
-  background: transparent;
-  color: var(--text-tertiary);
-  font-size: var(--font-size-sm, 13px);
-  font-weight: var(--font-weight-medium, 500);
-  border-radius: var(--radius-md, 6px);
-  font-family: var(--font-sans);
-}
-
-.queue:hover:not(:disabled) {
-  background: var(--bg-hover);
-  color: var(--text-secondary);
-}
-
 .fieldInGrid {
   --composer-min-lines: 1;
   background: transparent;
@@ -1916,3 +1731,5 @@
   flex-shrink: 0;
   color: var(--text-secondary);
 }
+
+/* field 模式 .sendBtn 保留一份；禁止再复制整块 */

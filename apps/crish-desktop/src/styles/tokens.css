@@ -343,6 +343,7 @@ html[data-theme='light'] {
   /* 语义场景契约 Token（Tier 2，BATCH-01 新增）：组件优先消费语义层 */
   --composer-radius-single: 20px;
   --composer-radius-multi: var(--radius-3xl);
+  --composer-pad-x: 12px;
   --chat-bubble-radius: 16px;
   --composer-attach-card-radius: var(--radius-xl, 12px);
   --composer-attach-card-border: 1px solid var(--border-subtle);
@@ -748,7 +749,7 @@ html[data-theme='light'] {
    *                    CSS      680 / 720px    ?
    * coverContent       settingsUiPage           ?
    */
-  --settings-content-max: 720px;
+  --settings-content-max: 820px;
   /* footer        .chat-footer / .agent-card-composer    */
   --chat-footer-fade: linear-gradient(
     to bottom,
