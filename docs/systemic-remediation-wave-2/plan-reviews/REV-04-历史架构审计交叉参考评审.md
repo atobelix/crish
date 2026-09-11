@@ -1,10 +1,10 @@
 # 阶段三：方案评审 — REV-04 历史架构审计（2026-08-14-architecture-audit）交叉参考与对比评审报告
 
-> **评审编号**：REV-04  
-> **评审主题**：历史架构审计（`2026-08-14-architecture-audit`）交叉参考与对比评审报告  
-> **评审对象**：`docs/systemic-remediation-wave-2/plans/` 下全套方案（`00-总方案.md` ~ `06-上帝文件拆分与代码卫生详案.md`）  
-> **对比基准**：`.agent-outputs/2026-08-14-architecture-audit/`（重点包含 `round-3-improvements/` 下 6 份加固收敛详案与 `round-2-reviews/` 对质结论）  
-> **评审纪律**：遵循 `.agents/LOGIC_PLAN_NO_RETREAT.md`（纯逻辑规划、反退避、零工期偏见、所有问题同权、测试资产保护）与 `AGENTS.md`。  
+> **评审编号**：REV-04
+> **评审主题**：历史架构审计（`2026-08-14-architecture-audit`）交叉参考与对比评审报告
+> **评审对象**：`docs/systemic-remediation-wave-2/plans/` 下全套方案（`00-总方案.md` ~ `06-上帝文件拆分与代码卫生详案.md`）
+> **对比基准**：`.agent-outputs/2026-08-14-architecture-audit/`（重点包含 `round-3-improvements/` 下 6 份加固收敛详案与 `round-2-reviews/` 对质结论）
+> **评审纪律**：遵循 `.agents/LOGIC_PLAN_NO_RETREAT.md`（纯逻辑规划、反退避、零工期偏见、所有问题同权、测试资产保护）与 `AGENTS.md`。
 > **评审输出路径**：`docs/systemic-remediation-wave-2/plan-reviews/REV-04-历史架构审计交叉参考评审.md`
 
 ---

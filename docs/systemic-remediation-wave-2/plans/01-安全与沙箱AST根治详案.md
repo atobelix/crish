@@ -1,8 +1,8 @@
 # 阶段二：方案生成 01 —— 安全门禁、沙箱 AST 与 HTML 净化器根治详案
 
-> **方案定位**：基于 `docs/systemic-remediation-wave-2/analysis/01-安全门禁与沙箱AST分析.md` 的代码真值与穿透证据，编制覆盖 2 项红级高危漏洞与 6 项黄级防御纵深缺陷的系统级根治方案。  
-> **契约与红线**：严格遵循 `.agents/LOGIC_PLAN_NO_RETREAT.md`（纯逻辑规划、反退避、拒绝外围打补丁、真实对抗验证、所有问题同权）、`AGENTS.md`（测试资产保护、Win32/pwsh7 环境规范、无工期/无降级排期）。  
-> **输出路径**：`docs/systemic-remediation-wave-2/plans/01-安全与沙箱AST根治详案.md`  
+> **方案定位**：基于 `docs/systemic-remediation-wave-2/analysis/01-安全门禁与沙箱AST分析.md` 的代码真值与穿透证据，编制覆盖 2 项红级高危漏洞与 6 项黄级防御纵深缺陷的系统级根治方案。
+> **契约与红线**：严格遵循 `.agents/LOGIC_PLAN_NO_RETREAT.md`（纯逻辑规划、反退避、拒绝外围打补丁、真实对抗验证、所有问题同权）、`AGENTS.md`（测试资产保护、Win32/pwsh7 环境规范、无工期/无降级排期）。
+> **输出路径**：`docs/systemic-remediation-wave-2/plans/01-安全与沙箱AST根治详案.md`
 > **状态**：方案定稿 / 待主控审查与任务派发
 
 ---

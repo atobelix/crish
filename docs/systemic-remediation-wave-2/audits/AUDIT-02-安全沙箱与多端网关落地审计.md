@@ -1,7 +1,7 @@
 # Wave 2 战役收官多维审计报告 — AUDIT-02: 安全沙箱、AST防御、HTML净化与多端网关落地审计
 
-> **审计标识**：`WAVE-2-AUDIT-02-SANDBOX-XSS-FS-GATEWAY`  
-> **权威输出路径**：[`docs/systemic-remediation-wave-2/audits/AUDIT-02-安全沙箱与多端网关落地审计.md`](file:///c:/Software/conex/docs/systemic-remediation-wave-2/audits/AUDIT-02-安全沙箱与多端网关落地审计.md)  
+> **审计标识**：`WAVE-2-AUDIT-02-SANDBOX-XSS-FS-GATEWAY`
+> **权威输出路径**：[`docs/systemic-remediation-wave-2/audits/AUDIT-02-安全沙箱与多端网关落地审计.md`](file:///c:/Software/conex/docs/systemic-remediation-wave-2/audits/AUDIT-02-安全沙箱与多端网关落地审计.md)
 > **审计基准输入**：
 >
 > - 终态定稿总纲：[`docs/systemic-remediation-wave-2/00-执行方案终态定稿.md`](file:///c:/Software/conex/docs/systemic-remediation-wave-2/00-执行方案终态定稿.md) §3.1 与 §3.5
@@ -86,7 +86,7 @@ if depth >= MAX_RECURSION_DEPTH {
 }
 ```
 
-**魔鬼用例验证**：  
+**魔鬼用例验证**：
 对抗用例 `Invoke-Command { Invoke-Command { Invoke-Command { Invoke-Command { Invoke-Command { Invoke-Command { echo deep } } } } } }`（6 层嵌套）执行测试，结果断言其 `overall_class` 必须恒等于 `CommandClass::Dangerous`。测试 `test_powershell_call_operator_and_indirect_semantics`（`semantics.rs:2195-2201`）实测通过。
 
 ### 2.4 执行器端间接删除接管与引导阻断
@@ -329,6 +329,6 @@ if let Err(e) = force_remove_all(src, is_dir) {
 
 经过严谨的代码逐行审查、形式化断言矩阵核对与全量自动化测试套件机器真值实证：
 
-> **最终判定结论**：  
-> **【AUDIT-02: 安全沙箱、AST防御、HTML净化与多端网关落地审计 — 全量达标 · 签署通过】**  
+> **最终判定结论**：
+> **【AUDIT-02: 安全沙箱、AST防御、HTML净化与多端网关落地审计 — 全量达标 · 签署通过】**
 > 系统在 PowerShell 间接调用与深度熔断、HTML 未闭合 XSS 净化、文件系统 Fail-Closed 事务补偿、CDP 双协议阻断、Win32 提权防御、零信任网关验签与 PTY 活性治理等全量 14 项安全断言上均完全符合设计规范，无任何退避妥协、无降级补丁、无伪完成现象。

@@ -1,15 +1,15 @@
 # Wave 2 战役收官多维审计 — AUDIT-01: 内核并发、五级锁序与存储引擎落地审计报告
 
-> **审计标识**：`WAVE2-AUDIT-01-CONCURRENCY-STORAGE`  
-> **权威归档路径**：[`docs/systemic-remediation-wave-2/audits/AUDIT-01-内核并发与存储引擎落地审计.md`](file:///c:/Software/conex/docs/systemic-remediation-wave-2/audits/AUDIT-01-内核并发与存储引擎落地审计.md)  
+> **审计标识**：`WAVE2-AUDIT-01-CONCURRENCY-STORAGE`
+> **权威归档路径**：[`docs/systemic-remediation-wave-2/audits/AUDIT-01-内核并发与存储引擎落地审计.md`](file:///c:/Software/conex/docs/systemic-remediation-wave-2/audits/AUDIT-01-内核并发与存储引擎落地审计.md)
 > **审计依据**：
 >
 > 1. [`.agents/LOGIC_PLAN_NO_RETREAT.md`](file:///c:/Software/conex/.agents/LOGIC_PLAN_NO_RETREAT.md)（纯逻辑规划、反退避、机器真值穿透、所有问题同权、反伪完成）
 > 2. [`AGENTS.md`](file:///c:/Software/conex/AGENTS.md)（协作指令与子 Agent 纪律：严禁调用 `git commit`）
 > 3. [`00-执行方案终态定稿.md`](file:///c:/Software/conex/docs/systemic-remediation-wave-2/00-执行方案终态定稿.md) §3.2 (方案02) 与 §3.3 (方案03)
 > 4. [`02-并发锁序与异步协调详案.md`](file:///c:/Software/conex/docs/systemic-remediation-wave-2/plans/02-并发锁序与异步协调详案.md) 与 [`03-存储GC与协同编辑详案.md`](file:///c:/Software/conex/docs/systemic-remediation-wave-2/plans/03-存储GC与协同编辑详案.md)
-> 5. [`02-全量验收断言与测试矩阵.md`](file:///c:/Software/conex/docs/systemic-remediation-wave-2/02-全量验收断言与测试矩阵.md)（重点核查 LOCK-01~~04, DB-01~~05, CRDT-01~05, SYNC-01, STRESS-01）  
->    **审计执行日期**：2026-08-14 / 2026-08-15  
+> 5. [`02-全量验收断言与测试矩阵.md`](file:///c:/Software/conex/docs/systemic-remediation-wave-2/02-全量验收断言与测试矩阵.md)（重点核查 LOCK-01~~04, DB-01~~05, CRDT-01~05, SYNC-01, STRESS-01）
+>    **审计执行日期**：2026-08-14 / 2026-08-15
 >    **审计判定结论**：🟢 **【全部合规通过 · 机器真值 100% 验证绿灯】**
 
 ---

@@ -1,6 +1,6 @@
 # 阶段三：方案评审 — REV-01 逻辑依赖、执行可行性与文件冲突评审报告
 
-> **评审阶段**：阶段三 · 方案评审（REV-01 专项）  
+> **评审阶段**：阶段三 · 方案评审（REV-01 专项）
 > **评审对象**：
 >
 > - `docs/systemic-remediation-wave-2/plans/00-总方案.md`
@@ -11,8 +11,8 @@
 > - `docs/systemic-remediation-wave-2/plans/05-多端契约与网络治理详案.md`
 > - `docs/systemic-remediation-wave-2/plans/06-上帝文件拆分与代码卫生详案.md`
 >
-> **评审契约**：严格遵循 `.agents/LOGIC_PLAN_NO_RETREAT.md`（纯逻辑规划、反退避、反伪完成、真机实证、严禁工期人天、所有问题同权）与 `AGENTS.md`（多 Agent 协作纪律、测试资产保护、Win32/pwsh7 环境规范）。  
-> **报告路径**：`docs/systemic-remediation-wave-2/plan-reviews/REV-01-逻辑依赖与可行性评审.md`  
+> **评审契约**：严格遵循 `.agents/LOGIC_PLAN_NO_RETREAT.md`（纯逻辑规划、反退避、反伪完成、真机实证、严禁工期人天、所有问题同权）与 `AGENTS.md`（多 Agent 协作纪律、测试资产保护、Win32/pwsh7 环境规范）。
+> **报告路径**：`docs/systemic-remediation-wave-2/plan-reviews/REV-01-逻辑依赖与可行性评审.md`
 > **评审结论**：**【有条件通过（Conditional Pass）】** —— 核心技术深度扎实，数据结构与算法设计完备，严格履行反退避与纯逻辑规划；但存在 **05 与 06 方案任务重叠冗余**、**00 总方案 DAG 拓扑图局部连线笔误** 以及 **03 方案遗漏 1 处跨模块接口源文件** 等结构性冲突隐患，须在执行派单前按本评审建议完成拓扑校准与文件域去重。
 
 ---

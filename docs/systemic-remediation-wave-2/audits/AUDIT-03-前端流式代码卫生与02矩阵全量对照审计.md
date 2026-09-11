@@ -2,8 +2,8 @@
 
 ## 前端流式状态、上帝文件拆分与 02 全量验收矩阵总对照审计
 
-> **审计标识**：`WAVE-2-AUDIT-03-STREAM-GODFILE-MATRIX`  
-> **权威归档路径**：`docs/systemic-remediation-wave-2/audits/AUDIT-03-前端流式代码卫生与02矩阵全量对照审计.md`  
+> **审计标识**：`WAVE-2-AUDIT-03-STREAM-GODFILE-MATRIX`
+> **权威归档路径**：`docs/systemic-remediation-wave-2/audits/AUDIT-03-前端流式代码卫生与02矩阵全量对照审计.md`
 > **审计基准输入**：
 >
 > 1. `docs/systemic-remediation-wave-2/00-执行方案终态定稿.md`

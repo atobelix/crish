@@ -1,6 +1,6 @@
 # 阶段三：方案评审报告 — REV-02 架构契约、状态机一致性与类型安全评审
 
-> **评审阶段**：阶段三 · 方案多维穿透独立评审（REV-02 专项）  
+> **评审阶段**：阶段三 · 方案多维穿透独立评审（REV-02 专项）
 > **评审对象**：
 >
 > - `docs/systemic-remediation-wave-2/plans/00-总方案.md`
@@ -9,9 +9,9 @@
 > - `docs/systemic-remediation-wave-2/plans/03-存储GC与协同编辑详案.md`
 > - `docs/systemic-remediation-wave-2/plans/04-前端流式与状态管理详案.md`
 > - `docs/systemic-remediation-wave-2/plans/05-多端契约与网络治理详案.md`
-> - `docs/systemic-remediation-wave-2/plans/06-上帝文件拆分与代码卫生详案.md`  
->   **评审基准**：严格遵循 `.agents/LOGIC_PLAN_NO_RETREAT.md`（纯逻辑规划、反退避、反伪完成、真机实证、契约保真、所有问题同权）与 `AGENTS.md`。  
->   **输出路径**：`docs/systemic-remediation-wave-2/plan-reviews/REV-02-架构契约与一致性评审.md`  
+> - `docs/systemic-remediation-wave-2/plans/06-上帝文件拆分与代码卫生详案.md`
+>   **评审基准**：严格遵循 `.agents/LOGIC_PLAN_NO_RETREAT.md`（纯逻辑规划、反退避、反伪完成、真机实证、契约保真、所有问题同权）与 `AGENTS.md`。
+>   **输出路径**：`docs/systemic-remediation-wave-2/plan-reviews/REV-02-架构契约与一致性评审.md`
 >   **评审员**：REV-02 架构契约与一致性独立评审组
 
 ---
@@ -187,17 +187,17 @@ $$
 
 #### 3.1.2 拓扑歧义 C-04 形式化证明与公理澄清
 
-在详案 02 中，形式化表述为“申请锁时必须满足 $L_i \prec L_j \implies i < j$”。  
+在详案 02 中，形式化表述为“申请锁时必须满足 $L_i \prec L_j \implies i < j$”。
 然而在实际执行流中，调用方首先获取 `RecoveryCoordinator` 的 $L_2$ 异步锁，随后在其内部方法 `fork_and_reassign` 中，调用了 `self.tree.lock()`（$L_1$ 同步锁）。
 
-**定理 1（异步作用域锁与叶子同步锁无死锁充要条件）**：  
+**定理 1（异步作用域锁与叶子同步锁无死锁充要条件）**：
 设 $L_2$ 为粗粒度异步作用域互斥锁，$L_1$ 为细粒度叶子同步互斥锁。在 $L_2$ 持有期间获取 $L_1$ 不会引发 ABBA 死锁，当且仅当满足以下两条不变公理：
 
 1. **公理 1（$L_1$ 纯叶子公理）**：$L_1$（`SessionTree`、`PendingMessageQueue`）内部**不包含任何对外部锁的引用**，持锁期间绝不申请任何二级锁；
 2. **公理 2（$L_1 \to L_2$ 逆向不可达公理）**：全仓任何持有 $L_1$ 的代码块内，**物理上不存在调用 $L_2$ 异步锁的方法或通道**，且 $L_1$ 在任何 `.await` 调度点前必须完全 Drop。
 
-**证明**：  
-假设存在死锁环路，必存在线程 $T_A$ 持有 $L_2$ 并等待 $L_1$，且线程 $T_B$ 持有 $L_1$ 并等待 $L_2$。  
+**证明**：
+假设存在死锁环路，必存在线程 $T_A$ 持有 $L_2$ 并等待 $L_1$，且线程 $T_B$ 持有 $L_1$ 并等待 $L_2$。
 由公理 2，$T_B$ 在持有 $L_1$ 期间绝不可能申请 $L_2$（且无法跨 await 等待 $L_2$）。因此不存在此类线程 $T_B$。反证假设不成立，死锁不可能发生。证毕。
 
 **规范修订**：详案 02 应将表述细化为“**外层异步作用域锁（$L_2$）$\to$ 内层瞬态叶子同步锁（$L_1/L_0$）为安全单向调用；严禁在持有 $L_0/L_1$ 时申请 $L_2$，严禁在 $L_2$ 内部跨 await 持有 $L_0/L_1$**”。
@@ -338,7 +338,7 @@ export type DiffReplaceResult = {
 - $f: \text{Utf16Offset} \to \text{UnicodeScalarOffset}$ (`utf16OffsetToUnicodeScalar`)
 - $g: \text{UnicodeScalarOffset} \to \text{Utf16Offset}$ (`unicodeScalarToUtf16Offset`)
 
-**定理 2（坐标映射单射性与互逆性）**：  
+**定理 2（坐标映射单射性与互逆性）**：
 对于任意合规 UTF-16 字符串 $S$ 与任意字符边界偏移 $x$：
 $$g(f(x)) = x \quad \text{且} \quad f(g(y)) = y$$
 
@@ -467,7 +467,7 @@ export async function undoNoteText(
 
 在 `02-并发锁序与异步协调详案.md` §4.2 中增加形式化公理补充：
 
-> **补充公理 4.2.3（作用域锁与叶子锁安全分层）**：  
+> **补充公理 4.2.3（作用域锁与叶子锁安全分层）**：
 > $L_2$ 是粗粒度异步业务互斥锁，$L_1 / L_0$ 是细粒度内存叶子锁。在持有 $L_2$ 的上下文中允许在局部同步作用域 `{}` 内临时获取并释放 $L_1$ 或 $L_0$（立即 Drop，绝不跨 await）；全仓绝对禁止在持有 $L_0 / L_1$ 时申请 $L_2$。
 
 ---

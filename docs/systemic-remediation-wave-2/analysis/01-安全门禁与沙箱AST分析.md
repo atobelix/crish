@@ -1,8 +1,8 @@
 # 阶段一：多维穿透分析 01 —— 安全门禁、沙箱 AST 与 HTML 净化器
 
-> **分析范围**：`crates/conex-sandbox/`、`packages/plugin-sdk/src/sanitizer/`、`crates/conex-fs/`、`crates/conex-browser/`、`crates/conex-computer/`、`crates/agent-tools/src/tools/shell.rs`、`apps/agent-workbench/src-tauri/src/process.rs`  
-> **审计基线与契约**：`.agents/LOGIC_PLAN_NO_RETREAT.md`（纯逻辑规划、反退避、反伪完成、真机实证）、`AGENTS.md`、`docs/review-md-audit/2026-08-14-batch5-wave/08-安全面-沙箱FS浏览器.md` 与 `18-crates-工作区增量.md`  
-> **日期**：2026-08-14  
+> **分析范围**：`crates/conex-sandbox/`、`packages/plugin-sdk/src/sanitizer/`、`crates/conex-fs/`、`crates/conex-browser/`、`crates/conex-computer/`、`crates/agent-tools/src/tools/shell.rs`、`apps/agent-workbench/src-tauri/src/process.rs`
+> **审计基线与契约**：`.agents/LOGIC_PLAN_NO_RETREAT.md`（纯逻辑规划、反退避、反伪完成、真机实证）、`AGENTS.md`、`docs/review-md-audit/2026-08-14-batch5-wave/08-安全面-沙箱FS浏览器.md` 与 `18-crates-工作区增量.md`
+> **日期**：2026-08-14
 > **状态**：分析就绪 / 方案与测试断言锁定
 
 ---
