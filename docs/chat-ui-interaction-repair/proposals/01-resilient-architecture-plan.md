@@ -1,9 +1,9 @@
 # 方案 A：系统架构与工程韧性综合修复实施方案
 
-> **文档标识**：`docs/chat-ui-interaction-repair/proposals/01-resilient-architecture-plan.md`  
-> **方案名称**：方案 A（Resilient Architecture & System Plan）  
-> **角色定位**：系统架构与工程韧性专家（Architecture & Resilience Specialist）  
-> **制定日期**：2026-08-20  
+> **文档标识**：`docs/chat-ui-interaction-repair/proposals/01-resilient-architecture-plan.md`
+> **方案名称**：方案 A（Resilient Architecture & System Plan）
+> **角色定位**：系统架构与工程韧性专家（Architecture & Resilience Specialist）
+> **制定日期**：2026-08-20
 > **输入依据**：
 > - `docs/chat-ui-interaction-repair/independent-plans/01-layout-inspector.md`（布局视效排查）
 > - `docs/chat-ui-interaction-repair/independent-plans/02-interaction-inspector.md`（交互状态机排查）
@@ -180,12 +180,12 @@
 + * 彻底消除 144Hz 极限环振荡重影与 DOM 测量抖动。
   */
  import { useCallback, useLayoutEffect, useRef, useState } from 'react';
- 
+
  const GRID_GUTTER_PX = 18;
  const MIN_CAPACITY_PX = 200;
 +/** 迟滞区间死区裕量：收起阈值低于展开阈值 24px，防止临界文本无限翻转 */
 +const HYSTERESIS_BUFFER_PX = 24;
- 
+
 -function measureTextWidth(text: string, font: string): number {
 +/** 单例离屏 Canvas 度量引擎，规避 DOM 操作与强制重排 (Reflow Thrashing) */
 +let measureCanvas: HTMLCanvasElement | null = null;
@@ -223,7 +223,7 @@
 +  }
 +  return text.length * 8; // 服务端/无 Canvas 兜底
  }
- 
+
  export function useComposerMultiline(opts: {
    text: string;
    hasAttachments: boolean;
@@ -241,11 +241,11 @@
 +    font: '14px sans-serif',
 +    letterSpacing: 'normal',
 +  });
-+  
++
 +  // 振荡熔断器：记录近期状态变更时戳
 +  const toggleHistoryRef = useRef<number[]>([]);
 +  const lockUntilRef = useRef<number>(0);
- 
+
    const measure = useCallback(() => {
      if (hasAttachments || text.includes('\n')) {
 -      setMultiline(true);
@@ -351,7 +351,7 @@
 +      setMultiline(nextMultiline);
 +    }
    }, [hasAttachments, layoutRef, text]);
- 
+
    useLayoutEffect(() => {
      measure();
      const el = layoutRef.current;
@@ -381,7 +381,7 @@
 +      ro.disconnect();
 +    };
    }, [layoutRef, measure]);
- 
+
    return multiline;
  }
 ```
@@ -520,7 +520,7 @@ $$H_{\text{button}} = \frac{300}{900} \times 900\text{px} = 300\text{px}$$
 -.root:hover {
 -  gap: 12px;
  }
- 
+
  .gap {
    flex-shrink: 1;
    flex-basis: 0;
@@ -528,7 +528,7 @@ $$H_{\text{button}} = \frac{300}{900} \times 900\text{px} = 300\text{px}$$
    width: 0;
    pointer-events: none;
  }
- 
+
 +/* 刻度槽位容器：吸收垂直高度比例，本身完全透明 */
 +.tickSlot {
 +  position: relative;
@@ -586,7 +586,7 @@ $$H_{\text{button}} = \frac{300}{900} \times 900\text{px} = 300\text{px}$$
 +    opacity var(--transition-smooth),
      background-color var(--transition-smooth);
  }
- 
+
 +/* 隐形 Hitbox 区域：向上向下延伸 6px，向左延伸 20px，防止悬浮脱靶抖动 */
  .tick::before {
    content: '';
@@ -599,7 +599,7 @@ $$H_{\text{button}} = \frac{300}{900} \times 900\text{px} = 300\text{px}$$
    right: 0;
    z-index: 1;
  }
- 
+
 -.tick.isActive {
 -  background-color: color-mix(in srgb, var(--text-primary) 40%, transparent);
 +.tick.isActive .tickBar {
@@ -607,7 +607,7 @@ $$H_{\text{button}} = \frac{300}{900} \times 900\text{px} = 300\text{px}$$
 +  opacity: 0.7;
 +  background-color: var(--text-secondary);
  }
- 
+
 -.root:hover .tick {
 -  width: 16px;
 -  background-color: color-mix(in srgb, var(--text-primary) 25%, transparent);
@@ -615,7 +615,7 @@ $$H_{\text{button}} = \frac{300}{900} \times 900\text{px} = 300\text{px}$$
    width: 14px;
    opacity: 0.55;
  }
- 
+
 -.root:hover .tick.isActive {
 -  width: 24px;
 -  background-color: color-mix(in srgb, var(--text-primary) 50%, transparent);
@@ -623,7 +623,7 @@ $$H_{\text{button}} = \frac{300}{900} \times 900\text{px} = 300\text{px}$$
    width: 20px;
    opacity: 0.85;
  }
- 
+
 -.tick:hover,
 -.root:hover .tick:hover {
 -  background-color: var(--text-primary);
@@ -1122,12 +1122,12 @@ CSS 规则中 `@keyframes tooltip-enter { to { opacity: 1; } }` **强行覆盖�
    transition: opacity var(--transition-fast);
    padding-right: var(--space-0_5);
  }
- 
+
  .userStack:hover .userMeta {
    opacity: 1;
 +  pointer-events: auto;
  }
- 
+
  .userMeta.metaAlways,
  .assistantMeta.metaAlways {
    opacity: 1;
@@ -1140,7 +1140,7 @@ CSS 规则中 `@keyframes tooltip-enter { to { opacity: 1; } }` **强行覆盖�
 +  pointer-events: none;
    transition: opacity var(--transition-fast);
  }
- 
+
  .rowAssistant:hover .assistantMeta {
    opacity: 1;
 +  pointer-events: auto;
@@ -1155,7 +1155,7 @@ CSS 规则中 `@keyframes tooltip-enter { to { opacity: 1; } }` **强行覆盖�
      opacity var(--transition-fast),
      background var(--transition-fast),
 @@ -601,6 +604,7 @@
- 
+
  .thoughtTimelineSection:hover .thoughtExpandModalBtn {
    opacity: 1;
 +  pointer-events: auto;
@@ -1185,7 +1185,7 @@ CSS 规则中 `@keyframes tooltip-enter { to { opacity: 1; } }` **强行覆盖�
 @@ -356,6 +365,7 @@ export const Tooltip = forwardRef<HTMLElement, TooltipProps>(
      const effectiveSide = clampedPos?.effectiveSide ?? side;
 +    const isPositionReady = clampedPos !== null && isValidDOMRect(rect);
- 
+
      const clonedChild = React.cloneElement(child, {
        ref: mergedRef,
 @@ -384,14 +394,22 @@ export const Tooltip = forwardRef<HTMLElement, TooltipProps>(
@@ -1221,7 +1221,7 @@ CSS 规则中 `@keyframes tooltip-enter { to { opacity: 1; } }` **强行覆盖�
 @@ -16,6 +16,13 @@
    animation: tooltip-exit var(--transition-popover-exit) forwards;
  }
- 
+
 +/* 测量态安全门禁：未完成四向坐标与尺寸测量前，硬性禁止展示与动画执行 */
 +.tooltipMeasuring {
 +  animation: none !important;
@@ -1229,7 +1229,7 @@ CSS 规则中 `@keyframes tooltip-enter { to { opacity: 1; } }` **强行覆盖�
 +  visibility: hidden !important;
 +  pointer-events: none !important;
 +}
- 
+
  @keyframes tooltip-enter {
    from {
      opacity: 0;

@@ -1,11 +1,11 @@
 # 对话界面与交互缺陷修复：方案评审与最终裁决报告
 
-> **文档标识**：`docs/chat-ui-interaction-repair/plan-reviews/01-final-verdict.md`  
-> **评审角色**：系统总架构师（Lead Architect & Reviewer）  
+> **文档标识**：`docs/chat-ui-interaction-repair/plan-reviews/01-final-verdict.md`
+> **评审角色**：系统总架构师（Lead Architect & Reviewer）
 > **评审对象**：
 > - 方案 A：[`docs/chat-ui-interaction-repair/proposals/01-resilient-architecture-plan.md`](../proposals/01-resilient-architecture-plan.md)（系统架构与工程韧性专家）
 > - 方案 B：[`docs/chat-ui-interaction-repair/proposals/02-perf-precision-ui-plan.md`](../proposals/02-perf-precision-ui-plan.md)（性能与像素级视效专家）
-> **评审日期**：2026-08-20  
+> **评审日期**：2026-08-20
 > **裁决状态**：**APPROVED（融合采纳，准入施工）**
 
 ---

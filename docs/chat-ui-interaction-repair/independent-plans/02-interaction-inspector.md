@@ -1,7 +1,7 @@
 # 交互状态机与组件生命周期独立排查与修复方案
 
-> **文件标识**：`docs/chat-ui-interaction-repair/independent-plans/02-interaction-inspector.md`  
-> **角色职责**：交互状态机与组件生命周期专家（Interaction & Component Specialist）  
+> **文件标识**：`docs/chat-ui-interaction-repair/independent-plans/02-interaction-inspector.md`
+> **角色职责**：交互状态机与组件生命周期专家（Interaction & Component Specialist）
 > **排查准则**：穿透表象直达架构根因，以真实源码（`apps/crish-desktop/src/`、`crates/`、`reference/`）为唯一依据，严禁打补丁与魔术数字。
 
 ---
@@ -120,12 +120,12 @@ export function useComposerMultiline(opts: {
 }): boolean {
   const { text, hasAttachments, layoutRef } = opts;
   const [multiline, setMultiline] = useState<boolean>(() => hasAttachments || text.includes('\n'));
-  
+
   // 维护当前排版样式缓存与振荡熔断检测
   const fontStyleRef = useRef<{ font: string; letterSpacing: string }>({ font: '14px sans-serif', letterSpacing: 'normal' });
   const multilineRef = useRef(multiline);
   multilineRef.current = multiline;
-  
+
   // 帧级振荡监控器：检测 100ms 内状态反转次数
   const toggleHistoryRef = useRef<number[]>([]);
 
@@ -592,7 +592,7 @@ export const AssistantMessageActionsBar: React.FC<AssistantMessageActionsBarProp
   return (
     <div className={styles.assistantMeta}>
       <span className={styles.time}>{formatMsgTime(timestamp)}</span>
-      
+
       <IconButton
         type="button"
         variant="ghost"

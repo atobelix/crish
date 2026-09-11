@@ -1,8 +1,8 @@
 # 对话界面与交互缺陷修复：独立代码审计与合规裁决报告
 
-> **审计执行人**：代码审计与架构合规专家（Code Audit Specialist）  
-> **审计日期**：2026-08-20  
-> **审计依据**：`AGENTS.md`、`ANTI_OVERENGINEERING_GUARDRAILS.md`、`docs/chat-ui-interaction-repair/00-总方案.md`  
+> **审计执行人**：代码审计与架构合规专家（Code Audit Specialist）
+> **审计日期**：2026-08-20
+> **审计依据**：`AGENTS.md`、`ANTI_OVERENGINEERING_GUARDRAILS.md`、`docs/chat-ui-interaction-repair/00-总方案.md`
 > **目标文件清单**：
 > 1. `apps/crish-desktop/src/components/chat-composer/useComposerMultiline.ts`
 > 2. `apps/crish-desktop/src/components/chat-composer/useComposerMultiline.test.ts`

@@ -1,9 +1,9 @@
 # 渲染引擎与设计系统独立排查与修复方案
 
-> **文件标识**：`docs/chat-ui-interaction-repair/independent-plans/03-rendering-inspector.md`  
-> **审查领域**：渲染管线、布局抖动、设计系统规范一致性、WebView2 / 高刷屏几何渲染  
-> **审查角色**：Rendering & Design System Specialist（渲染引擎与设计系统规范专家）  
-> **编写日期**：2026-08-20  
+> **文件标识**：`docs/chat-ui-interaction-repair/independent-plans/03-rendering-inspector.md`
+> **审查领域**：渲染管线、布局抖动、设计系统规范一致性、WebView2 / 高刷屏几何渲染
+> **审查角色**：Rendering & Design System Specialist（渲染引擎与设计系统规范专家）
+> **编写日期**：2026-08-20
 > **排查依据**：项目源码全量静态分析与运行时渲染拓扑推导（严禁参考任何既有方案文档，纯源码实证）
 
 ---

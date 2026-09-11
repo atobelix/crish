@@ -1,9 +1,9 @@
 # 极客性能与像素级视效交互综合修复实施方案（方案 B）
 
-> **文件路径**：`docs/chat-ui-interaction-repair/proposals/02-perf-precision-ui-plan.md`  
-> **方案定位**：性能极致（144Hz Zero Reflow）与像素级精度（Pixel-Perfect Reference Alignment）综合修复实施方案  
-> **专家角色**：极客性能与像素级视效交互专家（Performance & Precision UI Specialist）  
-> **编制依据**：`docs/chat-ui-interaction-repair/independent-plans/` 3 份排查报告（01 布局架构、02 交互状态机、03 渲染引擎）与项目真实源码实证  
+> **文件路径**：`docs/chat-ui-interaction-repair/proposals/02-perf-precision-ui-plan.md`
+> **方案定位**：性能极致（144Hz Zero Reflow）与像素级精度（Pixel-Perfect Reference Alignment）综合修复实施方案
+> **专家角色**：极客性能与像素级视效交互专家（Performance & Precision UI Specialist）
+> **编制依据**：`docs/chat-ui-interaction-repair/independent-plans/` 3 份排查报告（01 布局架构、02 交互状态机、03 渲染引擎）与项目真实源码实证
 > **执行铁律**：架构优雅，杜绝打补丁；严禁魔术数字；100% 原生精准定位与 O(1) 几何度量；通过全量测试与门禁验证。
 
 ---
@@ -116,7 +116,7 @@ $$\text{TextWidth} = \text{Canvas2D}.\text{measureText}(\text{cleanText}).\text{
 
 引入施密特触发器双门限机制，建立抗扰动迟滞死区（Deadband，$\Delta_{\text{hysteresis}} = 24\text{px}$）：
 
-$$\text{NextState} = \begin{cases} 
+$$\text{NextState} = \begin{cases}
 \text{Multiline (True)}, & \text{if } \neg\text{CurrentState} \land (\text{Width} \ge \text{Capacity}_{\text{single}}) \\
 \text{Singleline (False)}, & \text{if } \text{CurrentState} \land (\text{Width} < \text{Capacity}_{\text{single}} - 24\text{px}) \\
 \text{CurrentState}, & \text{otherwise}
@@ -148,7 +148,7 @@ $$\text{NextState} = \begin{cases}
 + * 统一采用 Canvas 2D 零回流度量引擎 + 24px 施密特迟滞区间 + 144Hz 振荡自愈熔断保护。
   */
  import { useCallback, useLayoutEffect, useRef, useState } from 'react';
- 
+
  const GRID_GUTTER_PX = 18;
  const MIN_CAPACITY_PX = 200;
 +/** 施密特迟滞区间：收起门限裕量，杜绝临界点极限环振荡 */
@@ -168,7 +168,7 @@ $$\text{NextState} = \begin{cases}
 +  }
 +  return measureCtx;
 +}
- 
+
 -function measureTextWidth(text: string, font: string): number {
 -  if (typeof document === 'undefined') return 0;
 -  const span = document.createElement('span');
@@ -192,7 +192,7 @@ $$\text{NextState} = \begin{cases}
 +  }
 +  return ctx.measureText(text).width;
  }
- 
+
  export function useComposerMultiline(opts: {
 @@ -32,7 +43,12 @@ export function useComposerMultiline(opts: {
    const [multiline, setMultiline] = useState(
@@ -205,7 +205,7 @@ $$\text{NextState} = \begin{cases}
 +  const fontStyleRef = useRef<{ font: string; letterSpacing: string }>({ font: '14px sans-serif', letterSpacing: 'normal' });
 +  const toggleHistoryRef = useRef<number[]>([]);
 +  const lockUntilRef = useRef<number>(0);
- 
+
    const measure = useCallback(() => {
      if (hasAttachments || text.includes('\n')) {
 @@ -62,29 +78,63 @@ export function useComposerMultiline(opts: {
@@ -262,7 +262,7 @@ $$\text{NextState} = \begin{cases}
 +      setMultiline(nextMultiline);
 +    }
    }, [hasAttachments, layoutRef, text]);
- 
+
    useLayoutEffect(() => {
      measure();
      const el = layoutRef.current;
@@ -280,7 +280,7 @@ $$\text{NextState} = \begin{cases}
 +      ro.disconnect();
 +    };
    }, [layoutRef, measure]);
- 
+
    return multiline;
 ```
 
@@ -416,7 +416,7 @@ $$\text{NextState} = \begin{cases}
 @@ -1,4 +1,4 @@
 -/* 对话叶滚动条左侧无轨刻度。相对叶 scroller 绝对定位，禁止钉在视口上。 */
 +/* 对话叶滚动条左侧无轨刻度。100% 对齐 reference/chat-composer-component 像素级规范 */
- 
+
  .wrapper {
    position: absolute;
 @@ -6,8 +6,8 @@
@@ -438,12 +438,12 @@ $$\text{NextState} = \begin{cases}
 -  transition: gap var(--transition-fast);
 +  transition: gap var(--transition-smooth, 150ms ease);
  }
- 
+
  .root:hover {
 -  gap: 12px;
 +  gap: 12px; /* 悬停展开间距 */
  }
- 
+
 +/* 占位槽：负责吸收 flexGrow，本身完全透明 */
 +.tickSlot {
 +  width: 100%;
@@ -464,7 +464,7 @@ $$\text{NextState} = \begin{cases}
    width: 0;
    pointer-events: none;
  }
- 
+
 +/* 刻度物理实体：固定 2px 针状细线，严禁纵向拉伸 */
  .tick {
    position: relative;
@@ -495,7 +495,7 @@ $$\text{NextState} = \begin{cases}
 +    width var(--transition-smooth, 150ms ease),
 +    background-color var(--transition-smooth, 150ms ease);
  }
- 
+
 +/* 隐形宽域 Hitbox：上下 8px 覆盖间隙，左侧 20px 延伸，右侧 0 隔离滚动条 */
  .tick::before {
    content: '';
@@ -506,25 +506,25 @@ $$\text{NextState} = \begin{cases}
    right: 0;
    z-index: 1;
  }
- 
+
  .tick.isActive {
 -  background-color: color-mix(in srgb, var(--text-primary) 40%, transparent);
 +  background-color: color-mix(in srgb, var(--text-primary) 50%, transparent);
    width: 16px;
  }
- 
+
  .root:hover .tick {
    width: 16px;
 -  background-color: color-mix(in srgb, var(--text-primary) 25%, transparent);
 +  background-color: color-mix(in srgb, var(--text-primary) 30%, transparent);
  }
- 
+
  .root:hover .tick.isActive {
    width: 24px;
 -  background-color: color-mix(in srgb, var(--text-primary) 50%, transparent);
 +  background-color: color-mix(in srgb, var(--text-primary) 60%, transparent);
  }
- 
+
  .tick:hover,
  .root:hover .tick:hover {
 -  background-color: var(--text-primary);
@@ -605,7 +605,7 @@ $$\text{NextState} = \begin{cases}
 @@ -450,3 +450,112 @@
    --shadow-elevated: 0 8px 28px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0, 0, 0, 0.06);
  }
- 
+
 +/* ==========================================================================
 +   Markdown Code Block & Copy Button Contract (Zero-Overlap & Glassmorphism)
 +   ========================================================================== */
@@ -789,7 +789,7 @@ $$\text{NextState} = \begin{cases}
 +++ b/apps/crish-desktop/src/components/ui/Tooltip/Tooltip.tsx
 @@ -372,21 +372,27 @@ export const Tooltip = React.forwardRef<HTMLElement, TooltipProps>(
      });
- 
+
 +    const isPositionReady = clampedPos !== null && isValidDOMRect(rect);
 +
      return (
@@ -840,7 +840,7 @@ $$\text{NextState} = \begin{cases}
    z-index: var(--z-popover, 1000);
    pointer-events: none;
  }
- 
+
 +/* 测量锁：首帧未完成坐标计算时，硬性隐藏并禁止动画触发 */
 +.tooltipMeasuring {
 +  visibility: hidden !important;
@@ -888,7 +888,7 @@ $$\text{NextState} = \begin{cases}
 +  pointer-events: none; /* 默认透明时禁止拦截事件，消除右上角悬空气泡 */
    transition: opacity var(--transition-fast);
  }
- 
+
  .thoughtTimelineSection:hover .thoughtExpandModalBtn {
    opacity: 1;
 +  pointer-events: auto;

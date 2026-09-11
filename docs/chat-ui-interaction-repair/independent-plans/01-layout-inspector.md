@@ -1,8 +1,8 @@
 # 前端布局与视效架构独立排查与修复方案
 
-> **文件路径**：`docs/chat-ui-interaction-repair/independent-plans/01-layout-inspector.md`  
-> **角色**：前端布局与视效架构专家（Frontend Layout Specialist）  
-> **排查范围**：`apps/crish-desktop/src/`、`reference/`、`crates/` 等核心源码  
+> **文件路径**：`docs/chat-ui-interaction-repair/independent-plans/01-layout-inspector.md`
+> **角色**：前端布局与视效架构专家（Frontend Layout Specialist）
+> **排查范围**：`apps/crish-desktop/src/`、`reference/`、`crates/` 等核心源码
 > **执行原则**：坚持源码证据第一，彻底穿透表象至底层布局几何与事件驱动断层，杜绝打补丁与魔术数字。
 
 ---
@@ -809,7 +809,7 @@ export const AssistantMessageActionsBar: React.FC<AssistantMessageActionsBarProp
   return (
     <div className={styles.assistantMeta}>
       <span className={styles.time}>{formatMsgTime(timestamp)}</span>
-      
+
       {/* 统一采用 IconButton xs 档 (24x24px)，自带 Tooltip 包裹与 a11y 契约 */}
       <IconButton
         variant="ghost"
