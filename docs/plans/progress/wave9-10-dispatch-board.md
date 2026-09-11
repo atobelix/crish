@@ -1,8 +1,8 @@
 # Wave 9–10 Dispatch Board
 
-**For:** human orchestrator  
-**Date:** 2026-07-29  
-**真源:** `system-control-ledger.md` + master plan E0 / B3 / D0 residual  
+**For:** human orchestrator
+**Date:** 2026-07-29
+**真源:** `system-control-ledger.md` + master plan E0 / B3 / D0 residual
 **Context:** Wave 7 **done**; W8-2 smoke **413 PASS**; W8-1/W8-3 soft/followUp **partial**; Wave 9 MCP draft/stop/hydrate **dispatched**; E0 still **partial**.
 
 **Landed (do not re-implement):** pi force/steer/followUp queue (W6-1), soft Stop=L2 / Force=L3 (W7-5/8), hooks observe/on/emit + compact (B2/W7-1), compositionRoot facades (W5-2), draft MCP I-DRAFT (W7-9).
@@ -63,9 +63,9 @@ W10-7 docs last (or after each SKIP decision)
 
 ## Orchestrator checklist
 
-1. Confirm provider/model before starting **W10-1**; else dispatch W10-2…5 first.  
-2. Reconcile W8-1 / W8-3 before/with **W10-5** (do not duplicate queue rings).  
-3. One Integrator (human or W10-6/7) owns merge + ledger row.  
+1. Confirm provider/model before starting **W10-1**; else dispatch W10-2…5 first.
+2. Reconcile W8-1 / W8-3 before/with **W10-5** (do not duplicate queue rings).
+3. One Integrator (human or W10-6/7) owns merge + ledger row.
 4. No product code from Docs/MCP record agents.
 
 **Out of Wave 10:** process-out hooks, OTel e2e, full `check:desktop` unless free; conex-stream production wire (D0-4).

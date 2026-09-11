@@ -1,8 +1,8 @@
 # Wave 5+6 Integration Results (W7-2)
 
-**Agent:** Integrator Agent W7-2  
-**Date:** 2026-07-29  
-**Scope:** Post Wave 5+6 parallel edits — TypeScript / import / vitest integration on key surfaces  
+**Agent:** Integrator Agent W7-2
+**Date:** 2026-07-29
+**Scope:** Post Wave 5+6 parallel edits — TypeScript / import / vitest integration on key surfaces
 **Policy:** Minimal product changes; fix failures quickly; no large features.
 
 ## Summary
@@ -14,8 +14,8 @@
 | `packages/shared-types` | `src/a1-contracts.test.ts` | 1 | 13 | 0 | **PASS** |
 | **Total** | | **27** | **239** | **0** | **PASS** |
 
-- **Vitest (targeted):** all green after fixes  
-- **Product / feature work:** none  
+- **Vitest (targeted):** all green after fixes
+- **Product / feature work:** none
 - **Blockers remaining for full E0 gate:** outside this slice (e.g. residual package-wide `tsc` noise in `tool-executor.test.ts`)
 
 ## Commands run

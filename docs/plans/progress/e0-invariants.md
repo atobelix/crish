@@ -1,8 +1,8 @@
 # E0-1 gate-invariants — I-* runnable suite
 
-**Agent:** Implementer Agent W6-3  
-**Date:** 2026-07-29  
-**Scope:** Master plan §14.1 global invariants as focused vitest (pure helpers / store fixtures; no App mount)  
+**Agent:** Implementer Agent W6-3
+**Date:** 2026-07-29
+**Scope:** Master plan §14.1 global invariants as focused vitest (pure helpers / store fixtures; no App mount)
 **Ownership:** `apps/crish-desktop/src/__tests__/invariants/**`
 
 ## Invariants covered

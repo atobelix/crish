@@ -1,19 +1,19 @@
 # System Architecture Control — Progress Ledger
 
-真源：`docs/plans/2026-07-system-architecture-control-master-plan.md`  
-更新日期：2026-07-29  
+真源：`docs/plans/2026-07-system-architecture-control-master-plan.md`
+更新日期：2026-07-29
 
-> **主线切换（2026-07-29）：** **统一测试 / E0 关口暂停为 primary track**；**Optimization 为 primary**。  
-> - **OPT-A（OPT-1…OPT-9 + HOTFIX-1）** — **landed**  
-> - **OPT-B（B1…B7）** — **complete**：import 真 Tauri FS + **31 tests**；draft-only 新对话 / `createSessionAndOpenChat` deprecated；CSS Diff/Approval/ToolCall tokens；`navigation-keys`→compositionRoot；InlineAgentPanel→AsyncMarkdownBlock；`sendTerminateDualWire` + dual-wire flag；`system-map-clear.md`  
-> - **OPT-C（C1…C8）** — **complete**：layout ownership partial docs；empty-shell vs draft；transport daemon primary + `ALLOW_AUTO_DIRECT_FETCH_FALLBACK`；shell/models/panels tokens；import soft-dedup `importMeta`；`streamStop` shared helper；docs refresh；FirstRunWizard test fix  
-> - **OPT-D（D1…D8）** — **complete**：providerProfiles tests；BinaryTree/tab-drag tokens；`compositionRoot.tree`；Tooltip SoT；settings tokens；import custom roots；docs；chat pin `allMessages`  
-> - **OPT-E（E1…E9）** — **complete**：chat/provider/settings CSS residual §12–14；setAppSettings + sidebar + openAgentPanel → compositionRoot；docs purge #8；ownershipEnforce + compositionRoot tests（28 pass）  
-> - **OPT-F（F1…F8）** — **complete**：CSS residual §15–16；useStreamCallbacks/drag/tree/chatHandlers → root；transport degraded metric + one-shot console（flag stay true）；system-map + inventory + composition docs  
-> - **OPT-G（G1…G8）** — **complete**：CSS final residual ~15→0（FirstRunWizard deferred H2）；useAgentStream/useSlashSend/openTool/layoutRestore/ChatHeader/session sync/pin-archive-branch → root；dead dual-path delete；post-G hotfix `tsc -b desktop` 0 err  
-> - **OPT-H（H1…H8）** — **complete / landed**：FirstRunWizard CSS hex→0；TSX inline hex ~52→0 high-traffic；stream setState residual **documented**（choice B；no patchState）；mcpBridge→compositionRoot；kill-list G3–G7 **done**；import/wizard 66 tests + hasCustomImportRoot UX；system-map pin/archive facade  
-> **保留：** 控制面已成能力（steer / followUp、Stop L2 / Force L3、compositionRoot、tool stream lite、`api/streamStop`）— 优化波 **不得回退**。  
-> **E0 仍 partial** — multi-unit **PASS**（open-split）；send 原 SKIP，**HOTFIX-1** `clientMessageId` validator 已修，**待 daemon 重启后 re-verify live send**（**勿**标 live send PASS）。**Wave 8 全量 done**（W8-1 soft / W8-2 413 / W8-3 follow_up）。  
+> **主线切换（2026-07-29）：** **统一测试 / E0 关口暂停为 primary track**；**Optimization 为 primary**。
+> - **OPT-A（OPT-1…OPT-9 + HOTFIX-1）** — **landed**
+> - **OPT-B（B1…B7）** — **complete**：import 真 Tauri FS + **31 tests**；draft-only 新对话 / `createSessionAndOpenChat` deprecated；CSS Diff/Approval/ToolCall tokens；`navigation-keys`→compositionRoot；InlineAgentPanel→AsyncMarkdownBlock；`sendTerminateDualWire` + dual-wire flag；`system-map-clear.md`
+> - **OPT-C（C1…C8）** — **complete**：layout ownership partial docs；empty-shell vs draft；transport daemon primary + `ALLOW_AUTO_DIRECT_FETCH_FALLBACK`；shell/models/panels tokens；import soft-dedup `importMeta`；`streamStop` shared helper；docs refresh；FirstRunWizard test fix
+> - **OPT-D（D1…D8）** — **complete**：providerProfiles tests；BinaryTree/tab-drag tokens；`compositionRoot.tree`；Tooltip SoT；settings tokens；import custom roots；docs；chat pin `allMessages`
+> - **OPT-E（E1…E9）** — **complete**：chat/provider/settings CSS residual §12–14；setAppSettings + sidebar + openAgentPanel → compositionRoot；docs purge #8；ownershipEnforce + compositionRoot tests（28 pass）
+> - **OPT-F（F1…F8）** — **complete**：CSS residual §15–16；useStreamCallbacks/drag/tree/chatHandlers → root；transport degraded metric + one-shot console（flag stay true）；system-map + inventory + composition docs
+> - **OPT-G（G1…G8）** — **complete**：CSS final residual ~15→0（FirstRunWizard deferred H2）；useAgentStream/useSlashSend/openTool/layoutRestore/ChatHeader/session sync/pin-archive-branch → root；dead dual-path delete；post-G hotfix `tsc -b desktop` 0 err
+> - **OPT-H（H1…H8）** — **complete / landed**：FirstRunWizard CSS hex→0；TSX inline hex ~52→0 high-traffic；stream setState residual **documented**（choice B；no patchState）；mcpBridge→compositionRoot；kill-list G3–G7 **done**；import/wizard 66 tests + hasCustomImportRoot UX；system-map pin/archive facade
+> **保留：** 控制面已成能力（steer / followUp、Stop L2 / Force L3、compositionRoot、tool stream lite、`api/streamStop`）— 优化波 **不得回退**。
+> **E0 仍 partial** — multi-unit **PASS**（open-split）；send 原 SKIP，**HOTFIX-1** `clientMessageId` validator 已修，**待 daemon 重启后 re-verify live send**（**勿**标 live send PASS）。**Wave 8 全量 done**（W8-1 soft / W8-2 413 / W8-3 follow_up）。
 > 派发板：[`optimization-wave-board.md`](./optimization-wave-board.md)（主）；历史测试波：[`wave9-10-dispatch-board.md`](./wave9-10-dispatch-board.md)。
 
 | Round | Status | Notes |
@@ -204,7 +204,7 @@
 | W10-8 | Optional strip a11y residual | optional | 非优化主线硬门 |
 | **HOTFIX-1** | run-task `clientMessageId` validator | **done** | 解锁 send schema；daemon 重启后验 live send |
 
-历史派发板：`wave9-10-dispatch-board.md`。  
+历史派发板：`wave9-10-dispatch-board.md`。
 **当前派发板：** [`optimization-wave-board.md`](./optimization-wave-board.md)。
 
 ## Optimization wave（**primary** 2026-07-29）
@@ -316,24 +316,24 @@
 | OPT-H7 | FirstRunWizard + import residual polish tests | **done** | import/wizard **66 tests**；`hasCustomImportRoot` UX |
 | OPT-H8 | system-map compositionRoot pin/archive methods | **done** | pin/archive facade docs |
 
-**派发注记：** short-prompt OPT-D 再派发曾 **aborted**（历史）；OPT-D/E/F/G/H full-prompt **complete**；**OPT-A…OPT-H complete**。  
-详表与验收：`optimization-wave-board.md`（含初版 ID→落地映射 + OPT-B/C/D/E/F/G/H）。  
+**派发注记：** short-prompt OPT-D 再派发曾 **aborted**（历史）；OPT-D/E/F/G/H full-prompt **complete**；**OPT-A…OPT-H complete**。
+详表与验收：`optimization-wave-board.md`（含初版 ID→落地映射 + OPT-B/C/D/E/F/G/H）。
 **Residual after H：** dual cancel **gated** E0 live Stop；transport flag **still true**（flip residual）；stream setState **intentional**；Terminal xterm ANSI；E0 **partial** — **no** live send PASS.
 
 ## 未做完 / 后续可迭代
 
-1. 进程外 Hook（jcode 式外部命令）— 明确非本中控主路径  
-2. PTY 进程树 — **exit kill_all done (W4-4)**；**PTY Job Object Windows done (W6-2)**。跨平台/残余孤儿策略若需再迭代可挂 shell plan  
-3. E0 仍 **partial**（**测试非 primary**）：不变量 16 + typecheck + 定向 239 + 扩展 413 已绿；I-DRAFT+hydrate **PASS**；Stop aria **PASS**；multi-unit **PASS**；W10 send schema **HOTFIX-1 done** — **仍待** daemon 重启后 live send re-verify、live stream Stop、全量 `check:desktop` — **统一测试后置**  
-4. B3：**更近 done** — W5-2 + **W9-B3 sidebar** + **OPT-5 layout facade** + **OPT-9 cancel** + **OPT-B4 navigation-keys** + **OPT-D3 tree facade** + **OPT-E5 setAppSettings** + **OPT-E6 sidebar** + **OPT-E7 openAgentPanel** + **OPT-F4–F6 done**（stream/drag/tree/chatHandlers）+ **OPT-G3–G7 done**（agent/slash/tool/header/session/pin-archive-branch）+ **OPT-H5 mcpBridge done**；stream setState residual **intentional documented**（**OPT-H4**）；leftover strip may remain  
-5. D0 residual：fixture / stream crate（tool lite / strip·sash / dead md / perf-report / OPT-7 dual-sub / **OPT-B6 product MD SoT** 已关）  
-6. D2 residual：OTel / traceId e2e / 正式 health UI  
-7. Wave 8：**全量 done**（W8-1 / W8-2 **413** / W8-3）  
-8. Wave 9：**partial** 已归档（MCP-1 PASS、MCP-2 stop PASS、hydrate fork fixed、B3 sidebar、DATA fixed；multi-unit 见 W10 PASS）  
-9. Wave 10：**paused as primary** — multi-unit **PASS**；send re-verify pending（HOTFIX-1）；不阻塞 OPT  
-10. **Optimization primary**：OPT-A **landed**；**OPT-B/C/D/E/F/G/H complete**；E0 后置  
-11. Shell residual（可挂 shell plan）：live resize 子树 paint（S4.3）；**S4.4** stream 双订 **OPT-7 done（4→2）**；pin 路径 **OPT-D8 done**（`allMessages` prop）；list 侧 dual-sub 若仍有则另挂  
-12. Dedup post-H：kill #1/#5/#8/#9 product **done**；#2 partial（**E9** enforce tests landed）；#10 partial（**F7 metric done**；**flag flip residual**；flag **still true**）；#3 partial（+C6 streamStop）/ #4 flagged（dual cancel **gated** E0 live Stop）/ #6 near-done（**D3 + E5–E7 + F4–F6 + G3–G7 done** + **H5 mcpBridge done**；**H4 setState intentional residual** + any leftover strip）；import soft-dedup **C5 done**；import custom roots **D6 done**；Terminal xterm ANSI residual  
+1. 进程外 Hook（jcode 式外部命令）— 明确非本中控主路径
+2. PTY 进程树 — **exit kill_all done (W4-4)**；**PTY Job Object Windows done (W6-2)**。跨平台/残余孤儿策略若需再迭代可挂 shell plan
+3. E0 仍 **partial**（**测试非 primary**）：不变量 16 + typecheck + 定向 239 + 扩展 413 已绿；I-DRAFT+hydrate **PASS**；Stop aria **PASS**；multi-unit **PASS**；W10 send schema **HOTFIX-1 done** — **仍待** daemon 重启后 live send re-verify、live stream Stop、全量 `check:desktop` — **统一测试后置**
+4. B3：**更近 done** — W5-2 + **W9-B3 sidebar** + **OPT-5 layout facade** + **OPT-9 cancel** + **OPT-B4 navigation-keys** + **OPT-D3 tree facade** + **OPT-E5 setAppSettings** + **OPT-E6 sidebar** + **OPT-E7 openAgentPanel** + **OPT-F4–F6 done**（stream/drag/tree/chatHandlers）+ **OPT-G3–G7 done**（agent/slash/tool/header/session/pin-archive-branch）+ **OPT-H5 mcpBridge done**；stream setState residual **intentional documented**（**OPT-H4**）；leftover strip may remain
+5. D0 residual：fixture / stream crate（tool lite / strip·sash / dead md / perf-report / OPT-7 dual-sub / **OPT-B6 product MD SoT** 已关）
+6. D2 residual：OTel / traceId e2e / 正式 health UI
+7. Wave 8：**全量 done**（W8-1 / W8-2 **413** / W8-3）
+8. Wave 9：**partial** 已归档（MCP-1 PASS、MCP-2 stop PASS、hydrate fork fixed、B3 sidebar、DATA fixed；multi-unit 见 W10 PASS）
+9. Wave 10：**paused as primary** — multi-unit **PASS**；send re-verify pending（HOTFIX-1）；不阻塞 OPT
+10. **Optimization primary**：OPT-A **landed**；**OPT-B/C/D/E/F/G/H complete**；E0 后置
+11. Shell residual（可挂 shell plan）：live resize 子树 paint（S4.3）；**S4.4** stream 双订 **OPT-7 done（4→2）**；pin 路径 **OPT-D8 done**（`allMessages` prop）；list 侧 dual-sub 若仍有则另挂
+12. Dedup post-H：kill #1/#5/#8/#9 product **done**；#2 partial（**E9** enforce tests landed）；#10 partial（**F7 metric done**；**flag flip residual**；flag **still true**）；#3 partial（+C6 streamStop）/ #4 flagged（dual cancel **gated** E0 live Stop）/ #6 near-done（**D3 + E5–E7 + F4–F6 + G3–G7 done** + **H5 mcpBridge done**；**H4 setState intentional residual** + any leftover strip）；import soft-dedup **C5 done**；import custom roots **D6 done**；Terminal xterm ANSI residual
 
 
 ## 波次记录
@@ -361,23 +361,23 @@
 
 ## Wave 5–10 + OPT 收口摘要
 
-- **D0 更近 done**：tool stream lite + strip/sash + md purge + **perf-report (D0-8 / W7-7)** + **OPT-7 stream dual-sub 4→2** + **OPT-B6 InlineAgentPanel AsyncMarkdownBlock** 已关；余 fixture（W10-4）/stream crate。  
-- **D2 更近 done**：health pack、compact observe（W7-1）、dev overlay、silent complete 已关；余 OTel/trace/正式 UI。  
-- **B3 更近 done**：W5-2 compositionRoot + **W9-B3 sidebar** + **OPT-5 layout facade** + **OPT-9 cancel** + **OPT-B4 navigation-keys** + **OPT-D3 tree facade** + **OPT-E5 setAppSettings** + **OPT-E6 sidebar** + **OPT-E7 openAgentPanel** + **OPT-F4–F6**（stream/drag/tree/chatHandlers）+ **OPT-G3–G7**（agent/slash/tool/header/session/pin-archive-branch）+ **OPT-H5 mcpBridge** 已关；stream setState residual **intentional**（**OPT-H4** documented）；leftover strip may remain。  
-- **E0 仍 partial**（测试非 primary）：不变量 16 + typecheck + 定向 239 + 扩展 413 绿；I-DRAFT + hydrate sameRef **PASS**；Stop aria **PASS**（probe）；**W9-DATA wipe FIXED**；hydrate fork **FIXED**；**W10 multi-unit PASS**；W10 send 原 SKIP → **HOTFIX-1 clientMessageId validator done** — **待 daemon 重启 re-verify**（未宣称 live send PASS）；live stream Stop / full `check:desktop` 仍 open — 统一测试后置。  
-- **W6-4 / W6-5**：**done**（不再作为尾巴）。  
-- **Wave 7**：**done**（含 hydrate lazy、stop UX、clientMessageId stream、gates）。  
-- **Wave 8**：**done** — W8-1 soft / W8-2 **413** / W8-3 follow_up soft。  
-- **Wave 9**：**partial** — MCP-1 PASS、MCP-2 stop PASS、hydrate fork fixed、B3 sidebar done、DATA fixed；multi-unit 见 W10。  
-- **Wave 10**：**paused as primary** — multi-unit **PASS**（open-split）；send **HOTFIX-1 done / re-verify pending**；W10-INT **197 PASS**。  
-- **OPT-A（primary landed）**：OPT-1…OPT-9 + HOTFIX-1 **done** — import parsers/ADR、Settings+Wizard UX、dedup top10、CSS tokens、compositionRoot layout facade、dead dual 删除、stream 4→2、cancel compositionRoot、docs。  
-- **OPT-B（complete）**：B1 real Tauri FS + **31 tests**；B2 draft-only / deprecated shim；B3 Diff/Approval/ToolCall tokens；B4 navigation-keys→root；B5 system-map-clear；B6 InlineAgentPanel AsyncMarkdownBlock；B7 sendTerminateDualWire + `TRANSITIONAL_DUAL_CANCEL_RUN_WIRE`。  
-- **OPT-C（complete）**：C1 layout ownership docs（#2 partial）；C2 empty-shell vs draft（#9 done）；C3 transport daemon primary + `ALLOW_AUTO_DIRECT_FETCH_FALLBACK`（#10 partial）；C4 shell/models/panels tokens；C5 import soft-dedup `importMeta`；C6 `api/streamStop` shared helper；C7 docs refresh；C8 FirstRunWizard test fix。  
-- **OPT-D（complete / landed）**：D1 providerProfiles/Wizard seed tests；D2 BinaryTree/tab-drag tokens；D3 `compositionRoot.tree`；D4 Tooltip SoT；D5 settings tokens；D6 import custom roots；D7 docs；D8 chat pin `allMessages` prop。  
-- **OPT-E（complete / landed）**：E1 docs；E2–E4 CSS residual §12–14；E5 setAppSettings + AppBootstrap；E6 sidebar → root；E7 openAgentPanel + workspaceChromeHooks；E8 docs purge kill #8；E9 ownershipEnforce 28 pass。  
-- **OPT-F（complete / landed）**：F1 docs；F2–F3 CSS residual §15–16；F4–F6 compositionRoot migrate（stream/drag/tree/chatHandlers）；F7 transport degraded metric + one-shot console（flag stay true）；F8 system-map + inventory + composition docs。  
-- **OPT-G（complete / landed）**：G1 docs；G2 CSS final residual ~15→0（FirstRunWizard deferred H2 → **H2 closed**）；G3–G7 compositionRoot expand（agent/slash/tool/header/session/pin-archive-branch）**done**；G8 dead dual-path delete；post-G hotfix `tsc -b desktop` 0 err。  
-- **OPT-H（complete / landed）**：H1 docs；H2 FirstRunWizard CSS hex→0；H3 TSX inline hex ~52→0 high-traffic；H4 stream setState residual **documented intentional**（no patchState）；H5 mcpBridge→compositionRoot；H6 kill-list refresh（G3–G7 **done** corrected）；H7 import/wizard **66 tests** + hasCustomImportRoot UX；H8 system-map pin/archive facade。  
-- **OPT residual after H：** dual cancel **gated** E0 live Stop；transport flag **still true**（flip residual）；Terminal xterm ANSI；stream setState intentional；E0 **partial** — **no** live send PASS。  
-- **PTY Job Object**：Windows 侧 **done (W6-2)**（配合 W4-4 exit kill_all）。  
+- **D0 更近 done**：tool stream lite + strip/sash + md purge + **perf-report (D0-8 / W7-7)** + **OPT-7 stream dual-sub 4→2** + **OPT-B6 InlineAgentPanel AsyncMarkdownBlock** 已关；余 fixture（W10-4）/stream crate。
+- **D2 更近 done**：health pack、compact observe（W7-1）、dev overlay、silent complete 已关；余 OTel/trace/正式 UI。
+- **B3 更近 done**：W5-2 compositionRoot + **W9-B3 sidebar** + **OPT-5 layout facade** + **OPT-9 cancel** + **OPT-B4 navigation-keys** + **OPT-D3 tree facade** + **OPT-E5 setAppSettings** + **OPT-E6 sidebar** + **OPT-E7 openAgentPanel** + **OPT-F4–F6**（stream/drag/tree/chatHandlers）+ **OPT-G3–G7**（agent/slash/tool/header/session/pin-archive-branch）+ **OPT-H5 mcpBridge** 已关；stream setState residual **intentional**（**OPT-H4** documented）；leftover strip may remain。
+- **E0 仍 partial**（测试非 primary）：不变量 16 + typecheck + 定向 239 + 扩展 413 绿；I-DRAFT + hydrate sameRef **PASS**；Stop aria **PASS**（probe）；**W9-DATA wipe FIXED**；hydrate fork **FIXED**；**W10 multi-unit PASS**；W10 send 原 SKIP → **HOTFIX-1 clientMessageId validator done** — **待 daemon 重启 re-verify**（未宣称 live send PASS）；live stream Stop / full `check:desktop` 仍 open — 统一测试后置。
+- **W6-4 / W6-5**：**done**（不再作为尾巴）。
+- **Wave 7**：**done**（含 hydrate lazy、stop UX、clientMessageId stream、gates）。
+- **Wave 8**：**done** — W8-1 soft / W8-2 **413** / W8-3 follow_up soft。
+- **Wave 9**：**partial** — MCP-1 PASS、MCP-2 stop PASS、hydrate fork fixed、B3 sidebar done、DATA fixed；multi-unit 见 W10。
+- **Wave 10**：**paused as primary** — multi-unit **PASS**（open-split）；send **HOTFIX-1 done / re-verify pending**；W10-INT **197 PASS**。
+- **OPT-A（primary landed）**：OPT-1…OPT-9 + HOTFIX-1 **done** — import parsers/ADR、Settings+Wizard UX、dedup top10、CSS tokens、compositionRoot layout facade、dead dual 删除、stream 4→2、cancel compositionRoot、docs。
+- **OPT-B（complete）**：B1 real Tauri FS + **31 tests**；B2 draft-only / deprecated shim；B3 Diff/Approval/ToolCall tokens；B4 navigation-keys→root；B5 system-map-clear；B6 InlineAgentPanel AsyncMarkdownBlock；B7 sendTerminateDualWire + `TRANSITIONAL_DUAL_CANCEL_RUN_WIRE`。
+- **OPT-C（complete）**：C1 layout ownership docs（#2 partial）；C2 empty-shell vs draft（#9 done）；C3 transport daemon primary + `ALLOW_AUTO_DIRECT_FETCH_FALLBACK`（#10 partial）；C4 shell/models/panels tokens；C5 import soft-dedup `importMeta`；C6 `api/streamStop` shared helper；C7 docs refresh；C8 FirstRunWizard test fix。
+- **OPT-D（complete / landed）**：D1 providerProfiles/Wizard seed tests；D2 BinaryTree/tab-drag tokens；D3 `compositionRoot.tree`；D4 Tooltip SoT；D5 settings tokens；D6 import custom roots；D7 docs；D8 chat pin `allMessages` prop。
+- **OPT-E（complete / landed）**：E1 docs；E2–E4 CSS residual §12–14；E5 setAppSettings + AppBootstrap；E6 sidebar → root；E7 openAgentPanel + workspaceChromeHooks；E8 docs purge kill #8；E9 ownershipEnforce 28 pass。
+- **OPT-F（complete / landed）**：F1 docs；F2–F3 CSS residual §15–16；F4–F6 compositionRoot migrate（stream/drag/tree/chatHandlers）；F7 transport degraded metric + one-shot console（flag stay true）；F8 system-map + inventory + composition docs。
+- **OPT-G（complete / landed）**：G1 docs；G2 CSS final residual ~15→0（FirstRunWizard deferred H2 → **H2 closed**）；G3–G7 compositionRoot expand（agent/slash/tool/header/session/pin-archive-branch）**done**；G8 dead dual-path delete；post-G hotfix `tsc -b desktop` 0 err。
+- **OPT-H（complete / landed）**：H1 docs；H2 FirstRunWizard CSS hex→0；H3 TSX inline hex ~52→0 high-traffic；H4 stream setState residual **documented intentional**（no patchState）；H5 mcpBridge→compositionRoot；H6 kill-list refresh（G3–G7 **done** corrected）；H7 import/wizard **66 tests** + hasCustomImportRoot UX；H8 system-map pin/archive facade。
+- **OPT residual after H：** dual cancel **gated** E0 live Stop；transport flag **still true**（flip residual）；Terminal xterm ANSI；stream setState intentional；E0 **partial** — **no** live send PASS。
+- **PTY Job Object**：Windows 侧 **done (W6-2)**（配合 W4-4 exit kill_all）。
 - **文档**：本 ledger 为进度真源；master plan §21 仅脚注指向本文件；**当前派发板** `optimization-wave-board.md`；人类地图 `system-map-clear.md`；测试波历史板 `wave9-10-dispatch-board.md`。

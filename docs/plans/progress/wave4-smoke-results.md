@@ -1,8 +1,8 @@
 # Wave 4 Ownership Surfaces — Smoke / Regression Results (W5-8)
 
-**Agent:** Tester Agent W5-8  
-**Date:** 2026-07-29  
-**Scope:** Targeted vitest regression for Wave 4 ownership surfaces  
+**Agent:** Tester Agent W5-8
+**Date:** 2026-07-29
+**Scope:** Targeted vitest regression for Wave 4 ownership surfaces
 **Policy:** Test fixes only; no feature work. Large product failures documented, not redesigned.
 
 ## Summary

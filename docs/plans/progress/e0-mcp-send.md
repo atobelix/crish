@@ -1,9 +1,9 @@
 # E0-4 / W10-MCP-1 — full-ish send journey (live tauri-mcp)
 
-**Agent:** MCP Verifier Agent W10-MCP-1  
-**Date:** 2026-07-29 (live)  
-**Scope:** E0-4 send path — minimal user message → assistant stream (if model/API works); Stop L2 only if stream starts  
-**Tooling:** tauri-mcp (`query_page`, `execute_js`, `type_text`, `click`, `log_mark`, `query_logs`, `app_bridge`, `wait_for`)  
+**Agent:** MCP Verifier Agent W10-MCP-1
+**Date:** 2026-07-29 (live)
+**Scope:** E0-4 send path — minimal user message → assistant stream (if model/API works); Stop L2 only if stream starts
+**Tooling:** tauri-mcp (`query_page`, `execute_js`, `type_text`, `click`, `log_mark`, `query_logs`, `app_bridge`, `wait_for`)
 **Policy:** Record only what was observed live. **Do not invent PASS.** No claim of tool-call column / restart / rehydrate unless observed as part of this send.
 
 | Overall | **SKIP** (send path exercised; model/daemon turn failed before any token stream) |
@@ -112,21 +112,21 @@ assistant: id=assistant-msg-ms4yb2oj-cf106e3c-0001
 
 Critical sequence (JS):
 
-1. **`[crish-desktop][daemon-error]`**  
+1. **`[crish-desktop][daemon-error]`**
    `Invalid run-task message: $.clientMessageId: Unexpected field; $.assistantClientMessageId: Unexpected field`
 
-2. **`[crish-stream]`** `scope=daemon-error`  
-   - message: `这一轮没有顺利完成，请查看诊断信息后重试。`  
-   - runId: `run-ms4yb2ok-hjd6wf`  
-   - raw reason: same Unexpected field validation  
-   - sessionId: `sess-1785261003856`  
+2. **`[crish-stream]`** `scope=daemon-error`
+   - message: `这一轮没有顺利完成，请查看诊断信息后重试。`
+   - runId: `run-ms4yb2ok-hjd6wf`
+   - raw reason: same Unexpected field validation
+   - sessionId: `sess-1785261003856`
    - context: `lastTool=null`, `toolCount=0`
 
-3. **`[crish-stream]`** `scope=run-complete` / `kind=complete`  
-   - message: `流正常收口`  
+3. **`[crish-stream]`** `scope=run-complete` / `kind=complete`
+   - message: `流正常收口`
    - `gotRealText: false`, `elapsedSec: 0`, `toolCount: 0`
 
-4. **`[crish-desktop][fetchRunSnapshotUsage]`**  
+4. **`[crish-desktop][fetchRunSnapshotUsage]`**
    `Run not found: run-ms4yb2ok-hjd6wf`
 
 Also observed later in the same marker window (not send-root-cause, environment noise):

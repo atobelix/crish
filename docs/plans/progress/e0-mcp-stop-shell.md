@@ -1,9 +1,9 @@
 # E0 / W9-MCP-2 — Stop control + shell multi-unit readiness (live tauri-mcp)
 
-**Agent:** MCP Verifier Agent W9-MCP-2  
-**Date:** 2026-07-29  
-**Scope:** Live tauri-mcp verification of composer **Stop** presence / W7-5 copy + shell **multi-unit** readiness  
-**Tooling:** tauri-mcp against running Crish desktop  
+**Agent:** MCP Verifier Agent W9-MCP-2
+**Date:** 2026-07-29
+**Scope:** Live tauri-mcp verification of composer **Stop** presence / W7-5 copy + shell **multi-unit** readiness
+**Tooling:** tauri-mcp against running Crish desktop
 **Policy:** Record only what was observed live. Do **not** invent AI send PASS without a real model turn. Stop DOM was exercised via **store probe** (`message.status = 'processing'`), not via a live model stream.
 
 ## Environment

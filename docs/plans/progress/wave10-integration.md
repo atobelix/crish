@@ -1,8 +1,8 @@
 # Wave 10 Integration Results (W10-INT)
 
-**Agent:** Tester Agent W10-INT  
-**Date:** 2026-07-29  
-**Scope:** Targeted vitest after W8-1 soft steer, W8-3 follow_up queue, W9-DATA persistence fix, W9-B3 compositionRoot  
+**Agent:** Tester Agent W10-INT
+**Date:** 2026-07-29
+**Scope:** Targeted vitest after W8-1 soft steer, W8-3 follow_up queue, W9-DATA persistence fix, W9-B3 compositionRoot
 **Policy:** Fix only trivial test/product breakage; report pass/fail counts. No product feature work.
 
 ## Summary
@@ -16,14 +16,14 @@
 | **Core W10-INT slice** | (excl. optional sidebar) | **16** | **197** | **0** | **PASS** |
 | **With optional sidebar** | | **19** | **212** | **0** | **PASS** |
 
-- **Vitest (targeted):** all green — no product or test fixes required  
-- **Trivial breakage fixed:** none  
-- **useSidebar:** no dedicated test files (`useSidebarHandlers` / `useSidebarContextMenu` / `useSidebarResize` untested as units); related sidebar suite run optionally and green  
+- **Vitest (targeted):** all green — no product or test fixes required
+- **Trivial breakage fixed:** none
+- **useSidebar:** no dedicated test files (`useSidebarHandlers` / `useSidebarContextMenu` / `useSidebarResize` untested as units); related sidebar suite run optionally and green
 - **Context:** post W8-1/W8-3 queue + W9-DATA persistence + W9-B3 compositionRoot; smoke confirms soft steer / follow_up / hydrate / compositionRoot surfaces still pass
 
 ## Commands run
 
-Root: `C:\Software\conex`. PowerShell. Vitest v3.2.7, `--coverage.enabled=false`.  
+Root: `C:\Software\conex`. PowerShell. Vitest v3.2.7, `--coverage.enabled=false`.
 Workspace root resolve is fine for these path globs (unit project).
 
 ### agent-runtime
@@ -89,7 +89,7 @@ npx vitest run packages/agent-daemon/src/handlers/run-control.test.ts --coverage
 | sidebarMeasure | `src/components/sidebar/session-list/sidebarMeasure.test.ts` | 7 | PASS | |
 | SidebarContextMenus | `src/components/sidebar/SidebarContextMenus.test.ts` | 3 | PASS | |
 
-**sidebar subtotal: 15 / 15 pass** (3 files)  
+**sidebar subtotal: 15 / 15 pass** (3 files)
 **Note:** No `useSidebar*.test.ts`; handlers/contextMenu/resize remain untested as units.
 
 ### packages/agent-daemon
@@ -130,5 +130,5 @@ W10-INT is a **narrower post-W8/W9 residual slice** (soft steer, follow_up, pers
 
 ## Recommendation
 
-- No merge blockers from this slice.  
+- No merge blockers from this slice.
 - Optional next: re-run full W8-2 smoke if product lands more W10-5/W10-6 changes; add thin unit tests for `useSidebarHandlers` open-new-draft via compositionRoot if W10-3 still open.

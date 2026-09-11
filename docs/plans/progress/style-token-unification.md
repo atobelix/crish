@@ -1,7 +1,7 @@
 # Style Token Unification (OPT-4)
 
-**Scope:** `apps/crish-desktop` — audit + consolidate high-traffic surfaces onto existing tokens.  
-**Date:** 2026-07-29  
+**Scope:** `apps/crish-desktop` — audit + consolidate high-traffic surfaces onto existing tokens.
+**Date:** 2026-07-29
 **Goal:** Consistency only (no visual redesign).
 
 ---

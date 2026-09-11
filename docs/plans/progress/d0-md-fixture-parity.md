@@ -1,8 +1,8 @@
 # D0 residual — markdown fixture parity
 
-**Agent:** Implementer W10-D0 / W10-4  
-**Date:** 2026-07-29  
-**Scope:** completed-message path — Rust async SoT vs TS sync / worker fallback  
+**Agent:** Implementer W10-D0 / W10-4
+**Date:** 2026-07-29
+**Scope:** completed-message path — Rust async SoT vs TS sync / worker fallback
 **Ownership:** `apps/crish-desktop` markdown\* tests; thin crate fixture mirror in `conex-markdown`
 
 ## Goal

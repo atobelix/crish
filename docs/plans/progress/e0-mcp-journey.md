@@ -86,8 +86,8 @@ hydrate(你好啊):     { listMessages: 14, mapMessages: 14, sameRef: true }
 
 ## Prior run: W7-9 — draft smoke (2026-07-29)
 
-**Agent:** Docs Agent W7-9  
-**Scope:** Live tauri-mcp verification of Crish desktop draft / new-chat path (E0-4 slice)  
+**Agent:** Docs Agent W7-9
+**Scope:** Live tauri-mcp verification of Crish desktop draft / new-chat path (E0-4 slice)
 
 ### Journey steps exercised (prior)
 
@@ -142,8 +142,8 @@ hydrate(你好啊):     { listMessages: 14, mapMessages: 14, sameRef: true }
 
 ## Follow-ups
 
-1. Live send with a configured provider; assert stream UI + message upsert.  
-2. Stop / force while streaming; assert run-control L2/L3.  
-3. Optional tool turn + restart hydrate.  
-4. E0-5 dual-unit MCP when shell split path is ready for hand-test.  
+1. Live send with a configured provider; assert stream UI + message upsert.
+2. Stop / force while streaming; assert run-control L2/L3.
+3. Optional tool turn + restart hydrate.
+4. E0-5 dual-unit MCP when shell split path is ready for hand-test.
 5. Keep ledger E0 **partial** until full journey + any remaining full-desktop gate close.

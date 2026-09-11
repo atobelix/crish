@@ -1,8 +1,8 @@
 # Wave 4–6 性能与中控 — 事实纪要（D0-8）
 
-> 对应门禁：`docs/plans/2026-07-system-architecture-control-master-plan.md` **D0-8** `perf-report`  
-> 进度真源：`docs/plans/progress/system-control-ledger.md`  
-> 早期 R1–R3 方案：`docs/archive/provider-m4/perf/MULTI_AGENT_PERF_PLAN.md`  
+> 对应门禁：`docs/plans/2026-07-system-architecture-control-master-plan.md` **D0-8** `perf-report`
+> 进度真源：`docs/plans/progress/system-control-ledger.md`
+> 早期 R1–R3 方案：`docs/archive/provider-m4/perf/MULTI_AGENT_PERF_PLAN.md`
 > 日期：2026-07-29
 
 本文只记已落地事实，不写规划愿望。
@@ -65,26 +65,26 @@
 | **steer** | 安全点注入（tool 批后 / provider 空闲）；可续 turn | W6-1 |
 | **followUp** | 仅 run 将 idle 时 promote；勿当 force | W6-1 |
 
-优先级：`force_cancel (L3) > cooperative_stop (L2) > L1 inject（steer / followUp 分环）`。  
+优先级：`force_cancel (L3) > cooperative_stop (L2) > L1 inject（steer / followUp 分环）`。
 协议与产品语义：`docs/architecture/run-control.md`。
 
 ---
 
 ## 6. 与 R1–R3 backlog 的关系
 
-- R3 的 **#10 正文旁路** 与 Wave 的 **tool lite store** 共用 `streamingStore`（无 immer），但职责分开：text/thinking vs tools intermediate。  
-- 正文 `buffer.onFrame → session` 是否 100% 旁路，以 `MULTI_AGENT_PERF_PLAN.md` §10 为准；本纪要不重开该债。  
+- R3 的 **#10 正文旁路** 与 Wave 的 **tool lite store** 共用 `streamingStore`（无 immer），但职责分开：text/thinking vs tools intermediate。
+- 正文 `buffer.onFrame → session` 是否 100% 旁路，以 `MULTI_AGENT_PERF_PLAN.md` §10 为准；本纪要不重开该债。
 - D0 其它 residual（md Rust SoT、fixture parity、conex-stream）**不**因本 D0-8 关闭。
 
 ---
 
 ## 7. 建议回归面（文档/手测）
 
-1. 工具 running 增量：Profiler 上 session 不应每 token 因 tool intermediate 全量 set。  
-2. 多 unit strip：改无关 unit 的 tabs 时本 strip 不重渲。  
-3. sash 拖中：跟手；松手再进 store。  
-4. 关窗 / PTY exit：子进程被 kill_all / Job Object 收口（Windows）。  
-5. 运行中 steer vs followUp：注入时机符合 `run-control.md` §1.1。  
+1. 工具 running 增量：Profiler 上 session 不应每 token 因 tool intermediate 全量 set。
+2. 多 unit strip：改无关 unit 的 tabs 时本 strip 不重渲。
+3. sash 拖中：跟手；松手再进 store。
+4. 关窗 / PTY exit：子进程被 kill_all / Job Object 收口（Windows）。
+5. 运行中 steer vs followUp：注入时机符合 `run-control.md` §1.1。
 6. Dev：health overlay + control metrics 可见（非正式产品 UI）。
 
 ---

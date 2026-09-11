@@ -1,20 +1,20 @@
 # Optimization Wave Dispatch Board（OPT-1…OPT-9 · OPT-B · OPT-C · OPT-D · OPT-E · OPT-F · OPT-G · OPT-H）
 
-**For:** human orchestrator + parallel agents  
-**Date:** 2026-07-29  
-**真源:** `system-control-ledger.md`  
-**Primary track:** **Optimization**（架构清晰 / 功能去重 / 样式统一 / 性能 / 外部会话导入）  
+**For:** human orchestrator + parallel agents
+**Date:** 2026-07-29
+**真源:** `system-control-ledger.md`
+**Primary track:** **Optimization**（架构清晰 / 功能去重 / 样式统一 / 性能 / 外部会话导入）
 **Paused as primary:** unified E0/live MCP test close-out（E0 仍 **partial** 直至 send 在 daemon 重启后 re-verify；不阻塞优化波）
 
-> **状态（2026-07-29）：**  
-> - **OPT-A（OPT-1…OPT-9 + HOTFIX-1）** — **complete / landed**  
-> - **OPT-B（B1…B7）** — **complete / landed**（import 31 tests、draft-only、CSS Diff/Approval/ToolCall、navigation-keys、InlineAgentPanel MD、sendTerminateDualWire flag、system-map-clear）  
-> - **OPT-C（C1…C8）** — **complete / landed**（layout ownership partial docs、empty-shell vs draft、transport daemon primary + flag、shell/models/panels tokens、import soft-dedup importMeta、streamStop helper、docs、FirstRunWizard test fix）  
-> - **OPT-D（D1…D8）** — **complete / landed**（providerProfiles tests、BinaryTree/tab-drag tokens、tree facade、Tooltip SoT、settings tokens、import custom roots、docs、chat pin `allMessages` prop）  
-> - **OPT-E（E1…E9）** — **complete / landed**（chat/provider/settings CSS residual §12–14；setAppSettings + sidebar + openAgentPanel → compositionRoot；docs purge #8；ownershipEnforce + compositionRoot tests）  
-> - **OPT-F（F1…F8）** — **complete / landed**（CSS residual §15–16；useStreamCallbacks/drag/tree/chatHandlers → root；transport degraded metric + one-shot console；system-map + inventory + composition docs）  
-> - **OPT-G（G1…G8）** — **complete / landed**（CSS final residual ~15→0；agent/slash/tool/header/session/layout facades → root；pin/archive/branch facade；dead dual-path delete；post-G hotfix `tsc -b desktop` 0 errors）  
-> - **OPT-H（H1…H8）** — **complete / landed**（FirstRunWizard CSS hex→0；TSX inline hex ~52→0 high-traffic；stream setState residual **documented**（no patchState）；mcpBridge→compositionRoot；kill-list G3–G7 **done**；import/wizard 66 tests + hasCustomImportRoot UX；system-map pin/archive facade）  
+> **状态（2026-07-29）：**
+> - **OPT-A（OPT-1…OPT-9 + HOTFIX-1）** — **complete / landed**
+> - **OPT-B（B1…B7）** — **complete / landed**（import 31 tests、draft-only、CSS Diff/Approval/ToolCall、navigation-keys、InlineAgentPanel MD、sendTerminateDualWire flag、system-map-clear）
+> - **OPT-C（C1…C8）** — **complete / landed**（layout ownership partial docs、empty-shell vs draft、transport daemon primary + flag、shell/models/panels tokens、import soft-dedup importMeta、streamStop helper、docs、FirstRunWizard test fix）
+> - **OPT-D（D1…D8）** — **complete / landed**（providerProfiles tests、BinaryTree/tab-drag tokens、tree facade、Tooltip SoT、settings tokens、import custom roots、docs、chat pin `allMessages` prop）
+> - **OPT-E（E1…E9）** — **complete / landed**（chat/provider/settings CSS residual §12–14；setAppSettings + sidebar + openAgentPanel → compositionRoot；docs purge #8；ownershipEnforce + compositionRoot tests）
+> - **OPT-F（F1…F8）** — **complete / landed**（CSS residual §15–16；useStreamCallbacks/drag/tree/chatHandlers → root；transport degraded metric + one-shot console；system-map + inventory + composition docs）
+> - **OPT-G（G1…G8）** — **complete / landed**（CSS final residual ~15→0；agent/slash/tool/header/session/layout facades → root；pin/archive/branch facade；dead dual-path delete；post-G hotfix `tsc -b desktop` 0 errors）
+> - **OPT-H（H1…H8）** — **complete / landed**（FirstRunWizard CSS hex→0；TSX inline hex ~52→0 high-traffic；stream setState residual **documented**（no patchState）；mcpBridge→compositionRoot；kill-list G3–G7 **done**；import/wizard 66 tests + hasCustomImportRoot UX；system-map pin/archive facade）
 > - 旁路：W9 hydrate fork **fixed**；W10 multi-unit **PASS**；W10 send schema **HOTFIX-1**，**需 daemon 重启 re-verify**（**勿**标 live send PASS）；E0 **still partial**
 
 ---
@@ -473,25 +473,25 @@ HOTFIX-1 (clientMessageId) ── 解锁 W10 send re-verify（需 daemon 重启�
 
 ## Residual / next（非优化主线硬门）
 
-1. **Daemon 重启后** re-verify W10 full send（HOTFIX-1 后）；通过前 E0 **仍 partial** — **no** live send PASS。  
-2. Live stream Stop（真实 token stream）仍 open。  
-3. 全量 `check:desktop` 非本波硬门。  
-4. Dedup residual：#2 layout enforce **E9 tests landed**（call-site residual may remain）；#3 full hook merge、#4 删 dual body **gated** E0 live Stop；#6 getState migrate（**D3 + E5–E7 + F4–F6 + G3–G7 done** + **H5 mcpBridge done**；**H4 stream setState intentional residual** + any leftover strip）；#8 docs purge **done（E8）**；#10 **F7 metric done**；**flag flip residual**（transport flag **still true**）。  
-5. **OPT-A…OPT-H complete / landed**。  
+1. **Daemon 重启后** re-verify W10 full send（HOTFIX-1 后）；通过前 E0 **仍 partial** — **no** live send PASS。
+2. Live stream Stop（真实 token stream）仍 open。
+3. 全量 `check:desktop` 非本波硬门。
+4. Dedup residual：#2 layout enforce **E9 tests landed**（call-site residual may remain）；#3 full hook merge、#4 删 dual body **gated** E0 live Stop；#6 getState migrate（**D3 + E5–E7 + F4–F6 + G3–G7 done** + **H5 mcpBridge done**；**H4 stream setState intentional residual** + any leftover strip）；#8 docs purge **done（E8）**；#10 **F7 metric done**；**flag flip residual**（transport flag **still true**）。
+5. **OPT-A…OPT-H complete / landed**。
 6. Style residual：BinaryTree/tab-drag **D2 closed**；settings D5 **closed**；E2–E4 **closed**；F2–F3 **closed**（§15–16）；**G2 closed**（~15→0）；**H2 FirstRunWizard closed**（→0）；**H3 TSX high-traffic closed**（~52→0）；**Terminal xterm ANSI** residual（not token CSS）。
 
 ---
 
 ## Orchestrator checklist
 
-1. ~~宣布 **optimization primary**；E0 live MCP **不**再并行抢写同一控制面文件。~~ **done**  
-2. ~~OPT 导入路径/解析先于 UI~~ — **OPT-1 → OPT-2 done**；**OPT-B1 31 tests**  
-3. ~~去重对照 inventory~~ — **OPT-3 + OPT-6 + OPT-B kill 落地** + **OPT-C** #9/#C5/#C6  
-4. 任何触及 `chat-stream` / run-control 的改动：保留 soft steer / follow_up / L2/L3；dual wire 仅经 `sendTerminateDualWire`；stop wire 经 `api/streamStop`。  
-5. 波末：定向 vitest 即可；全量 E0 后置。  
-6. 本机 home：产品 Tauri；agent 扫盘失败 **不**改写为产品 FAIL。  
-7. ~~OPT-B complete~~ → ~~**OPT-C complete**~~ → ~~**OPT-D complete**~~ → ~~**OPT-E complete**~~ → ~~**OPT-F complete**~~ → ~~**OPT-G complete**~~ → ~~**OPT-H complete**~~。  
-8. **下一步测试：** 重启 daemon → re-verify live send；**勿**在未 re-verify 前把 E0 标 done。  
+1. ~~宣布 **optimization primary**；E0 live MCP **不**再并行抢写同一控制面文件。~~ **done**
+2. ~~OPT 导入路径/解析先于 UI~~ — **OPT-1 → OPT-2 done**；**OPT-B1 31 tests**
+3. ~~去重对照 inventory~~ — **OPT-3 + OPT-6 + OPT-B kill 落地** + **OPT-C** #9/#C5/#C6
+4. 任何触及 `chat-stream` / run-control 的改动：保留 soft steer / follow_up / L2/L3；dual wire 仅经 `sendTerminateDualWire`；stop wire 经 `api/streamStop`。
+5. 波末：定向 vitest 即可；全量 E0 后置。
+6. 本机 home：产品 Tauri；agent 扫盘失败 **不**改写为产品 FAIL。
+7. ~~OPT-B complete~~ → ~~**OPT-C complete**~~ → ~~**OPT-D complete**~~ → ~~**OPT-E complete**~~ → ~~**OPT-F complete**~~ → ~~**OPT-G complete**~~ → ~~**OPT-H complete**~~。
+8. **下一步测试：** 重启 daemon → re-verify live send；**勿**在未 re-verify 前把 E0 标 done。
 9. **OPT-H 真源：** 本板 H 表 + ledger + inventory — **closed / landed**。
 
 **Out of closed OPT waves（明确非目标）：** 全量 `check:desktop` 作硬门、OTel e2e、进程外 Hook、conex-stream 生产接线、伪造 live model E0-4 PASS、未经验证关 `TRANSITIONAL_DUAL_CANCEL_RUN_WIRE` / `ALLOW_AUTO_DIRECT_FETCH_FALLBACK`、layoutStore god rewrite（H4 documented intentional residual）。

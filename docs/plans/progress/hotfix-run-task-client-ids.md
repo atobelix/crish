@@ -1,7 +1,7 @@
 # HOTFIX-1: run-task clientMessageId / assistantClientMessageId
 
-**Date:** 2026-07-29  
-**Status:** fixed  
+**Date:** 2026-07-29
+**Status:** fixed
 **Blocks:** live MCP chat send (W10-MCP-1 / E0-4)
 
 ## Symptom

@@ -1,8 +1,8 @@
 # E0-MCP activate hydrate — dual-view agreement (W9-MCP-3)
 
-**Agent:** MCP Verifier + light fixer W9-MCP-3  
-**Date:** 2026-07-29  
-**App:** Crish 0.1.0 @ `http://localhost:5174/` (tauri-mcp)  
+**Agent:** MCP Verifier + light fixer W9-MCP-3
+**Date:** 2026-07-29
+**App:** Crish 0.1.0 @ `http://localhost:5174/` (tauri-mcp)
 **Scope:** After selecting a real session, `sessions[]` and `sessionsById[id]` must agree on messages (same object). LocalStorage bodies often `[]` — daemon hydrate on activate.
 
 ---

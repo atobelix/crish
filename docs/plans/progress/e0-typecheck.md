@@ -1,8 +1,8 @@
 # E0-2 typecheck gate — desktop + core packages
 
-**Agent:** Gate Agent W7-4  
-**Date:** 2026-07-29  
-**Scope:** `apps/crish-desktop`, `packages/agent-runtime`, `packages/agent-daemon`, `packages/agent-orchestrator`, `packages/shared-types`  
+**Agent:** Gate Agent W7-4
+**Date:** 2026-07-29
+**Scope:** `apps/crish-desktop`, `packages/agent-runtime`, `packages/agent-daemon`, `packages/agent-orchestrator`, `packages/shared-types`
 **Ownership:** fix trivial Wave 4–6 TS only; report hard / pre-existing debt separately
 
 ## Commands used

@@ -1,8 +1,8 @@
 # Wave 7–8 Smoke Results (W8-2)
 
-**Agent:** Tester Agent W8-2  
-**Date:** 2026-07-29  
-**Scope:** Expanded targeted vitest after Wave 7 hydrate fix + `clientMessageId` + stop UX  
+**Agent:** Tester Agent W8-2
+**Date:** 2026-07-29
+**Scope:** Expanded targeted vitest after Wave 7 hydrate fix + `clientMessageId` + stop UX
 **Policy:** Fix only trivial breakage; report pass/fail counts. No product feature work.
 
 ## Summary
@@ -15,13 +15,13 @@
 | `packages/shared-types` | `src/a1-contracts.test.ts` | 1 | 14 | 0 | **PASS** |
 | **Total** | | **40** | **413** | **0** | **PASS** |
 
-- **Vitest (targeted):** all green — no product fixes required  
-- **Trivial breakage fixed:** none  
+- **Vitest (targeted):** all green — no product fixes required
+- **Trivial breakage fixed:** none
 - **Compared to W7-2 (239 tests):** expanded slice adds tool-executor, provider-response-consumer, daemon run-control, stop UX, hydrate/session index, pty, layout restore, message projection, etc.
 
 ## Commands run
 
-Root: `C:\Software\conex`. PowerShell (use `;` not `&&`). Vitest v3.2.7, `--coverage.enabled=false`.  
+Root: `C:\Software\conex`. PowerShell (use `;` not `&&`). Vitest v3.2.7, `--coverage.enabled=false`.
 **Important:** run from each package directory so `src/...` does not cross-match workspace projects.
 
 ### agent-runtime

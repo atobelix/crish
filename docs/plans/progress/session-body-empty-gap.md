@@ -1,8 +1,8 @@
 # Session body empty gap — analysis & fix
 
-**Agent:** Explorer W9-DATA  
-**Date:** 2026-07-29  
-**Scope:** Why MCP sees `crish_session_body_v1:*` = `[]` while session index has titles; dual path (local body vs daemon events); offline risk.  
+**Agent:** Explorer W9-DATA
+**Date:** 2026-07-29
+**Scope:** Why MCP sees `crish_session_body_v1:*` = `[]` while session index has titles; dual path (local body vs daemon events); offline risk.
 **Related:** [`e0-mcp-journey.md`](./e0-mcp-journey.md) (observed `messages.length === 0` on listed sessions)
 
 ---
