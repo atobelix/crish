@@ -1,10 +1,11 @@
 /**
- * 消息级缓存命中徽标（四态语义模型落地：⚡ 缓存命中 / 💾 写入缓存 / 未命中 / 隐藏）。
+ * 消息级缓存命中徽标（四态语义模型落地：缓存命中 / 写入缓存 / 未命中 / 隐藏）。
  * 消除虚假未命中，提供精确 Token 计数与详尽 Tooltip 看板。
  */
 import React from 'react';
 import type { CacheMetrics } from '@crish/shared-types';
 import { Tooltip } from '../ui';
+import { AppIcon } from '../ui/icons/index';
 import styles from './CacheMetricsBadge.module.css';
 
 export interface CacheMetricsBadgeProps {
@@ -36,7 +37,10 @@ export const CacheMetricsBadge: React.FC<CacheMetricsBadgeProps> = ({
       <Tooltip
         content={
           <div className={styles.tooltipContent}>
-            <div className={styles.tooltipTitle}>⚡ 提示词缓存加速生效</div>
+            <div className={styles.tooltipTitle}>
+              <AppIcon name="zap" size={13} aria-hidden />
+              <span>提示词缓存加速生效</span>
+            </div>
             <div className={styles.tooltipRow}>
               • 命中读取：{read.toLocaleString()} tokens
             </div>
@@ -66,7 +70,8 @@ export const CacheMetricsBadge: React.FC<CacheMetricsBadgeProps> = ({
           data-testid="cache-metrics-badge"
           data-state="hit"
         >
-          ⚡ 缓存命中 {percent} · 读 {read.toLocaleString()}
+          <AppIcon name="zap" size={12} aria-hidden />
+          <span>缓存命中 {percent} · 读 {read.toLocaleString()}</span>
           {writePart}
         </span>
       </Tooltip>
@@ -79,7 +84,10 @@ export const CacheMetricsBadge: React.FC<CacheMetricsBadgeProps> = ({
       <Tooltip
         content={
           <div className={styles.tooltipContent}>
-            <div className={styles.tooltipTitle}>💾 提示词缓存已建立</div>
+            <div className={styles.tooltipTitle}>
+              <AppIcon name="save" size={13} aria-hidden />
+              <span>提示词缓存已建立</span>
+            </div>
             <div className={styles.tooltipRow}>
               • 本轮写入：{write.toLocaleString()} tokens
             </div>
@@ -94,7 +102,8 @@ export const CacheMetricsBadge: React.FC<CacheMetricsBadgeProps> = ({
           data-testid="cache-metrics-badge"
           data-state="write"
         >
-          💾 写入缓存 {write.toLocaleString()}
+          <AppIcon name="save" size={12} aria-hidden />
+          <span>写入缓存 {write.toLocaleString()}</span>
         </span>
       </Tooltip>
     );

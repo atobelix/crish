@@ -259,8 +259,7 @@ export const SettingsShortcutsTab: React.FC = () => {
         />
       </div>
       {hasQuery ? (
-        <Tooltip content="清空筛选">
-          <Button
+        <Button
             type="button"
             variant="ghost"
             size="xs"
@@ -269,7 +268,6 @@ export const SettingsShortcutsTab: React.FC = () => {
           >
             清空
           </Button>
-        </Tooltip>
       ) : null}
       {headMetaText ? (
         <span
@@ -297,17 +295,15 @@ export const SettingsShortcutsTab: React.FC = () => {
               desc={hasQuery ? '试试更短关键词，或清空筛选' : ''}
               control={
                 hasQuery ? (
-                  <Tooltip content="清空筛选">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={clearQuery}
-                      aria-label="清空筛选并显示全部快捷键"
-                    >
-                      清空筛选
-                    </Button>
-                  </Tooltip>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={clearQuery}
+                    aria-label="清空筛选并显示全部快捷键"
+                  >
+                    清空筛选
+                  </Button>
                 ) : null
               }
             />

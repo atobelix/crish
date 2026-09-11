@@ -10,12 +10,10 @@ import { useBrowserSession } from '../workspace/useBrowserSession';
 type Props = {
   _onBlockingOverlayChange?: (open: boolean) => void;
   saveExport?: (filename: string, content: string) => void;
-  onShowToast?: (message: string) => void;
 };
 
 export const SettingsBrowserTab: React.FC<Props> = ({
   saveExport,
-  onShowToast,
 }) => {
   const { state } = useBrowserSession();
   const browserRunning = state === 'running';
@@ -25,7 +23,6 @@ export const SettingsBrowserTab: React.FC<Props> = ({
       <BrowserImportSection
         browserRunning={browserRunning}
         saveExport={saveExport}
-        onShowToast={onShowToast}
       />
     </SettingsPage>
   );

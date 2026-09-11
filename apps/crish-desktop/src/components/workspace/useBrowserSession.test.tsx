@@ -16,6 +16,15 @@ import {
 
 type TauriEventHandler = (e: { payload?: unknown }) => void;
 
+const { mockShowToast } = vi.hoisted(() => ({
+  mockShowToast: vi.fn(),
+}));
+
+vi.mock('../../services/toast/ToastContext', () => ({
+  useToast: () => ({ showToast: mockShowToast }),
+  toast: { show: mockShowToast },
+}));
+
 const eventMock = vi.hoisted(() => ({
   listen: vi.fn(),
   handlers: new Map<string, TauriEventHandler>(),
@@ -38,7 +47,7 @@ function setupDefaultStatus() {
 }
 
 describe('useBrowserSession', () => {
-  const toast = vi.fn();
+  const toast = mockShowToast;
 
   beforeEach(() => {
     toast.mockClear();
@@ -68,7 +77,7 @@ describe('useBrowserSession', () => {
       url: 'https://example.com',
     }));
     const { result } = renderHook(() =>
-      useBrowserSession({ onShowToast: toast })
+      useBrowserSession()
     );
     await waitFor(() => expect(result.current.state).toBe('running'));
     expect(result.current.url).toBe('https://example.com');
@@ -78,7 +87,7 @@ describe('useBrowserSession', () => {
   it('挂载：查询失败 → error 状态 + 错误 toast（引擎未接线诊断）', async () => {
     mockTauriError(BROWSER_STATUS_CMD, new Error('command not registered'));
     const { result } = renderHook(() =>
-      useBrowserSession({ onShowToast: toast })
+      useBrowserSession()
     );
     await waitFor(() => expect(result.current.state).toBe('error'));
     expect(toast).toHaveBeenCalledWith(
@@ -88,7 +97,7 @@ describe('useBrowserSession', () => {
 
   it('订阅 browser://state-changed：事件驱动状态迁移（含 url）', async () => {
     const { result } = renderHook(() =>
-      useBrowserSession({ onShowToast: toast })
+      useBrowserSession()
     );
     await waitFor(() => expect(result.current.state).toBe('idle'));
 
@@ -108,7 +117,7 @@ describe('useBrowserSession', () => {
 
   it('事件 payload 中的 starting 归一为 launching', async () => {
     const { result } = renderHook(() =>
-      useBrowserSession({ onShowToast: toast })
+      useBrowserSession()
     );
     await waitFor(() => expect(result.current.state).toBe('idle'));
     act(() => emitBrowserEvent({ state: 'starting' }));
@@ -117,7 +126,7 @@ describe('useBrowserSession', () => {
 
   it('非法事件载荷静默丢弃（状态不变、无 toast）', async () => {
     const { result } = renderHook(() =>
-      useBrowserSession({ onShowToast: toast })
+      useBrowserSession()
     );
     await waitFor(() => expect(result.current.state).toBe('idle'));
     act(() => emitBrowserEvent({ state: 'unknown' }));
@@ -131,7 +140,7 @@ describe('useBrowserSession', () => {
     const impl = vi.fn(async () => ({ state: 'starting' as const }));
     mockTauriCommand(BROWSER_START_CMD, impl);
     const { result } = renderHook(() =>
-      useBrowserSession({ onShowToast: toast })
+      useBrowserSession()
     );
     await waitFor(() => expect(result.current.state).toBe('idle'));
 
@@ -147,7 +156,7 @@ describe('useBrowserSession', () => {
       reason: 'chrome missing',
     }));
     const { result } = renderHook(() =>
-      useBrowserSession({ onShowToast: toast })
+      useBrowserSession()
     );
     await waitFor(() => expect(result.current.state).toBe('idle'));
 
@@ -159,7 +168,7 @@ describe('useBrowserSession', () => {
   it('start：invoke 报错 → error 状态 + 错误 toast', async () => {
     mockTauriError(BROWSER_START_CMD, new Error('engine busy'));
     const { result } = renderHook(() =>
-      useBrowserSession({ onShowToast: toast })
+      useBrowserSession()
     );
     await waitFor(() => expect(result.current.state).toBe('idle'));
 
@@ -177,7 +186,7 @@ describe('useBrowserSession', () => {
       state: 'running' as const,
     }));
     const { result } = renderHook(() =>
-      useBrowserSession({ onShowToast: toast })
+      useBrowserSession()
     );
     await waitFor(() => expect(result.current.state).toBe('running'));
 
@@ -193,7 +202,7 @@ describe('useBrowserSession', () => {
       state: 'running' as const,
     }));
     const { result } = renderHook(() =>
-      useBrowserSession({ onShowToast: toast })
+      useBrowserSession()
     );
     await waitFor(() => expect(result.current.state).toBe('running'));
 
@@ -211,7 +220,7 @@ describe('useBrowserSession', () => {
       state: 'launching' as const,
     }));
     const { result } = renderHook(() =>
-      useBrowserSession({ onShowToast: toast })
+      useBrowserSession()
     );
     await waitFor(() => expect(result.current.state).toBe('launching'));
 
@@ -229,7 +238,7 @@ describe('useBrowserSession', () => {
       gate.then(() => ({ state: 'running' as const }))
     );
     const { result } = renderHook(() =>
-      useBrowserSession({ onShowToast: toast })
+      useBrowserSession()
     );
     await waitFor(() => expect(result.current.state).toBe('idle'));
 
@@ -249,7 +258,7 @@ describe('useBrowserSession', () => {
 
   it('卸载：取消监听与未决状态更新', async () => {
     const { result, unmount } = renderHook(() =>
-      useBrowserSession({ onShowToast: toast })
+      useBrowserSession()
     );
     await waitFor(() =>
       expect(eventMock.handlers.has(BROWSER_STATE_EVENT)).toBe(true)

@@ -3,15 +3,16 @@
  * 代码产物胶囊与实时同步状态行（§5.4 / reference artifact-notebook.css）。
  *
  * 特性：
- * - 产物芯片（ArtifactCapsule）：`📄 已生成 PE-08-session-loop-ipc-batcher`
+ * - 产物芯片（ArtifactCapsule）：`已生成 PE-08-session-loop-ipc-batcher`
  *   - 呈现为高级的翡翠绿下划线超链接（color: var(--brand-deep)）；
  *   - Hover 时加深，点击分流至右侧面板或打开 Notebook 预览；
  * - 实时同步行（SyncLine）：
- *   - 正在同步：`🟢 正在同步 batcher.rs 与前端虚拟列表渲染管线...`（1.4s 呼吸绿点）；
- *   - 已完成态：`✓ 已落盘 (1.2KB)`。
+ *   - 正在同步：`正在同步 batcher.rs 与前端虚拟列表渲染管线...`（1.4s 呼吸绿点）；
+ *   - 已完成态：`已落盘 (1.2KB)`。
  */
 import React from 'react';
 import { Tooltip } from '../ui';
+import { AppIcon } from '../ui/icons/index';
 import styles from './FlowArtifactChip.module.css';
 
 export interface ArtifactCapsuleProps {
@@ -38,7 +39,7 @@ export const ArtifactCapsule: React.FC<ArtifactCapsuleProps> = ({
       data-flow-artifact="true"
     >
       <span className={`${styles.flowArtifactIcon} flow-artifact__icon`} aria-hidden>
-        📄
+        <AppIcon name="file-text" size={14} aria-hidden />
       </span>
       <span className="flow-artifact__prefix">{prefix}</span>
       <Tooltip content={`打开产物 ${name}`}>
@@ -84,7 +85,8 @@ export const SyncLine: React.FC<SyncLineProps> = ({
         </>
       ) : (
         <span className={`${styles.flowSyncDone} flow-sync-done`}>
-          ✓ 已落盘 {size ? `(${size})` : ''}
+          <AppIcon name="check" size={13} aria-hidden />
+          <span>已落盘 {size ? `(${size})` : ''}</span>
         </span>
       )}
     </div>

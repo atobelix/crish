@@ -16,7 +16,7 @@ describe('DIM-05 两段式结构化分栏容器与大输出保护测试套件', 
     });
   });
 
-  describe('1. ToolCallInputPane 📥 输入区测试', () => {
+  describe('1. ToolCallInputPane 输入区测试', () => {
     it('Shell 工具应渲染 $ CLI 提示符与工作目录 CWD', () => {
       render(
         <ToolCallInputPane
@@ -176,7 +176,7 @@ describe('DIM-05 两段式结构化分栏容器与大输出保护测试套件', 
   });
 
   describe('3. ToolCallOutput 两段式集成容器测试 (FIN-01)', () => {
-    it('应同时包含 📥 输入区 与 📤 输出区 分栏', () => {
+    it('应同时包含输入区与输出区分栏', () => {
       const tc = {
         id: 'tc-full-1',
         name: 'run_command',

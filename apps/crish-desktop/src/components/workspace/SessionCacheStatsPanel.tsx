@@ -62,7 +62,7 @@ export const SessionCacheStatsPanel: React.FC<SessionCacheStatsPanelProps> = ({
       )}
       {coldHint && (
         <div className="cache-stats-row" data-testid="cold-cache-hint">
-          🧊 缓存已过期 · 下次将重发 ~
+          缓存已过期 · 下次将重发 ~
           {(coldHint.resendEstimateTokens ?? 0).toLocaleString()} tokens
         </div>
       )}

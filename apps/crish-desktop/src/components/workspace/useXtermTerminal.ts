@@ -256,7 +256,12 @@ export function useXtermTerminal({
     const handleFontChange = () => {
       updateTerminalStyles();
     };
+    const handleTokensChange = () => {
+      updateTerminalStyles();
+    };
     window.addEventListener('crish-fonts-changed', handleFontChange);
+    window.addEventListener('crish-tokens-updated', handleTokensChange);
+    window.addEventListener('crish-canvas-recolor', handleTokensChange);
 
     const fitAddon = new FitAddon();
     term.loadAddon(fitAddon);
@@ -314,6 +319,8 @@ export function useXtermTerminal({
         themeObserver.disconnect();
       }
       window.removeEventListener('crish-fonts-changed', handleFontChange);
+      window.removeEventListener('crish-tokens-updated', handleTokensChange);
+      window.removeEventListener('crish-canvas-recolor', handleTokensChange);
       cancelAnimationFrame(rafId);
       if (innerRaf) cancelAnimationFrame(innerRaf);
       dataDisp.dispose();

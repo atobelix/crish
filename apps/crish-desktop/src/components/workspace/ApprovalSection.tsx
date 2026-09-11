@@ -171,8 +171,7 @@ export const ApprovalSection: React.FC<ApprovalSectionProps> = ({
                   aria-label={`${toolLabel} 审批`}
                   onClick={(e) => e.stopPropagation()}
                 >
-                  <Tooltip content="允许">
-                    <Button
+                  <Button
                       type="button"
                       variant="primary"
                       size="sm"
@@ -183,9 +182,7 @@ export const ApprovalSection: React.FC<ApprovalSectionProps> = ({
                     >
                       {busy ? '…' : '允许'}
                     </Button>
-                  </Tooltip>
-                  <Tooltip content="拒绝">
-                    <Button
+                  <Button
                       type="button"
                       variant="ghost"
                       size="sm"
@@ -195,7 +192,6 @@ export const ApprovalSection: React.FC<ApprovalSectionProps> = ({
                     >
                       拒绝
                     </Button>
-                  </Tooltip>
                 </div>
               </div>
             </Tooltip>

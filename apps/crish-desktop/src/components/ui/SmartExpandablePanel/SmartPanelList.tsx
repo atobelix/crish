@@ -34,7 +34,7 @@ export const SmartPanelList: React.FC<SmartPanelListProps> = ({
   if (items.length === 0) {
     return (
       <div style={{ padding: '14px 10px', textAlign: 'center', color: 'var(--sep-text-muted)', fontSize: '12px' }}>
-        未找到匹配结果 🔍
+        未找到匹配结果
       </div>
     );
   }

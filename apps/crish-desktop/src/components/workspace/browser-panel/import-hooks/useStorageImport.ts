@@ -18,7 +18,7 @@ import {
   BROWSER_IMPORT_MAX_BYTES,
   isUsableJsonText,
 } from '../../../../api/browserImportLib';
-import { toast } from '../../../../services/toast/ToastContext';
+import { useToast } from '../../../../services/toast/ToastContext';
 import {
   readFileAsText,
   resultMessage,
@@ -28,14 +28,13 @@ import {
 export interface UseStorageImportOptions {
   busy: BusyKind;
   setBusy: Dispatch<SetStateAction<BusyKind>>;
-  onShowToast?: (message: string) => void;
 }
 
 export function useStorageImport({
   busy,
   setBusy,
-  onShowToast,
 }: UseStorageImportOptions) {
+  const { showToast } = useToast();
   const [storageError, setStorageError] = useState('');
   const [storageJson, setStorageJson] = useState('');
   const [storageFileName, setStorageFileName] = useState('');
@@ -48,10 +47,9 @@ export function useStorageImport({
     (prefix: string, msg: string) => {
       const full = `${prefix}${msg}`;
       setStorageError(full);
-      onShowToast?.(full);
-      toast.show(full);
+      showToast(full);
     },
-    [onShowToast]
+    [showToast]
   );
 
   const applyStorageFile = useCallback(
@@ -90,8 +88,7 @@ export function useStorageImport({
     if (res.status === 'ok') {
       setStorageResult(res.data);
       const msg = `登录态导入成功（cookies ${res.data.cookies} 条）`;
-      onShowToast?.(msg);
-      toast.show(msg);
+      showToast(msg);
     } else {
       reportStorageError('登录态导入失败：', resultMessage(res, ''));
     }
@@ -116,8 +113,7 @@ export function useStorageImport({
       if (res.status === 'ok') {
         setStorageResult(res.data);
         const msg = `登录态导入成功：cookies ${res.data.cookies} 条`;
-        onShowToast?.(msg);
-        toast.show(msg);
+        showToast(msg);
       } else {
         reportStorageError('登录态导入失败：', resultMessage(res, ''));
       }

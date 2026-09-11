@@ -25,6 +25,28 @@
   margin-top: 0;
 }
 
+/* Tool Group */
+.toolGroup {
+  width: 100%;
+  box-sizing: border-box;
+  margin: var(--space-1, 4px) 0;
+}
+
+.toolGroupHeader {
+  font-size: var(--font-size-xs, 12px);
+  color: var(--text-tertiary);
+  padding: 0 var(--space-1, 4px);
+  height: 20px;
+  line-height: 20px;
+}
+
+.toolGroup > .toolRow,
+.toolGroup > div > .toolRow {
+  margin-left: 10px;
+  padding-left: 14px;
+  border-left: 1.5px solid var(--border-subtle);
+}
+
 /* Tool Row */
 .toolRow {
   border: none;
@@ -144,20 +166,55 @@
   }
 }
 
+/* 仅在折叠态下悬停整行加深（用户裁决 · 2026-09-11）；展开后大段输出保持静止不变色 */
+.toolRow.isCollapsed .toolRowHead:hover,
+.toolRow:not(.isOpen) .toolRowHead:hover,
 .toolRowHead:hover {
   background: transparent;
   color: var(--text-primary);
 }
 
+.toolRow.isCollapsed .toolRowHead:hover .toolRowSummary,
+.toolRow.isCollapsed .toolRowHead:hover .toolPathLink,
+.toolRow.isCollapsed .toolRowHead:hover .toolActionText,
+.toolRow.isCollapsed .toolRowHead:hover .dotSeparator,
+.toolRow.isCollapsed .toolRowHead:hover .toolParamText,
+.toolRow.isCollapsed .toolRowHead:hover .toolRowChevron,
+.toolRow.isCollapsed .toolRowHead:hover .toolSecondaryMeta,
+.toolRow.isCollapsed .toolRowHead:hover .toolSecondaryMetaInline,
+.toolRow.isCollapsed .toolRowHead:hover .toolRowIcoSlot,
+.toolRow:not(.isOpen) .toolRowHead:hover .toolRowSummary,
+.toolRow:not(.isOpen) .toolRowHead:hover .toolPathLink,
+.toolRow:not(.isOpen) .toolRowHead:hover .toolActionText,
+.toolRow:not(.isOpen) .toolRowHead:hover .dotSeparator,
+.toolRow:not(.isOpen) .toolRowHead:hover .toolParamText,
+.toolRow:not(.isOpen) .toolRowHead:hover .toolRowChevron,
+.toolRow:not(.isOpen) .toolRowHead:hover .toolSecondaryMeta,
+.toolRow:not(.isOpen) .toolRowHead:hover .toolSecondaryMetaInline,
+.toolRow:not(.isOpen) .toolRowHead:hover .toolRowIcoSlot,
 .toolRowHead:hover .toolRowSummary,
-.toolRowHead:hover .toolPathLink {
-  color: var(--text-primary);
-}
-
+.toolRowHead:hover .toolPathLink,
+.toolRowHead:hover .toolActionText,
+.toolRowHead:hover .dotSeparator,
+.toolRowHead:hover .toolParamText,
+.toolRowHead:hover .toolRowChevron,
+.toolRowHead:hover .toolSecondaryMeta,
+.toolRowHead:hover .toolSecondaryMetaInline,
 .toolRowHead:hover .toolRowIcoSlot {
   background: transparent;
   border: none;
   color: var(--text-primary);
+}
+
+.toolRow.isOpen .toolRowHead:hover {
+  color: var(--text-tertiary);
+}
+.toolRow.isOpen .toolRowHead:hover .toolRowSummary,
+.toolRow.isOpen .toolRowHead:hover .toolActionText,
+.toolRow.isOpen .toolRowHead:hover .toolParamText,
+.toolRow.isOpen .toolRowHead:hover .dotSeparator,
+.toolRow.isOpen .toolRowHead:hover .toolRowIcoSlot {
+  color: var(--text-tertiary);
 }
 
 .toolRowText {
@@ -559,7 +616,7 @@
   gap: 4px;
   font-size: var(--font-size-xs, 12px);
   font-weight: var(--font-weight-normal, 400);
-  border-radius: var(--button-radius, 7px);
+  border-radius: var(--radius-btn);
   color: var(--text-secondary);
   background: transparent;
   border: 1px solid transparent;
@@ -1037,7 +1094,7 @@
   border: 1px solid var(--hairline-strong, var(--border-color));
   background: var(--bg-primary);
   border-radius: var(--radius-xs);
-  padding: 1px 7px;
+  padding: 1px var(--space-1_5, 6px);
   font-size: var(--font-size-xxs);
   color: var(--text-secondary);
   cursor: pointer;

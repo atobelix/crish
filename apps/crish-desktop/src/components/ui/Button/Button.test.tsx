@@ -249,7 +249,7 @@ describe('ui/Button', () => {
   it('纯图标按钮无 children 时不产生 .buttonLabel 节点（杜绝误触发偏心）', () => {
     render(
       <Button
-        icon={<span data-testid="only-icon">⭐</span>}
+        icon={<span data-testid="only-icon">icon</span>}
         data-testid="icon-only-btn"
       />
     );
@@ -261,7 +261,7 @@ describe('ui/Button', () => {
   it('前置图标与 label 正确生成相应结构供纯 CSS 光学微调命中', () => {
     render(
       <Button
-        icon={<span data-testid="leading-ico">📁</span>}
+        icon={<span data-testid="leading-ico">icon</span>}
         iconPosition="left"
         data-testid="optics-leading-btn"
       >
@@ -307,7 +307,7 @@ describe('ui/IconButton', () => {
   it('渲染具有强制 aria-label 的图标按钮', () => {
     render(
       <IconButton
-        icon={<span data-testid="gear-icon">⚙</span>}
+        icon={<span data-testid="gear-icon">icon</span>}
         aria-label="设置"
         size="sm"
         variant="ghost"
@@ -324,7 +324,7 @@ describe('ui/IconButton', () => {
   it('支持带有 Tooltip 的 IconButton 渲染', () => {
     render(
       <IconButton
-        icon={<span>🔍</span>}
+        icon={<span>icon</span>}
         aria-label="搜索"
         tooltip="快捷搜索 (⌘K)"
       />
@@ -333,10 +333,23 @@ describe('ui/IconButton', () => {
     expect(btn).toBeInTheDocument();
   });
 
+  it('支持带有 Tooltip 和 shortcut 的 IconButton 渲染并透传快捷键', () => {
+    render(
+      <IconButton
+        icon={<span>icon</span>}
+        aria-label="快捷键与帮助"
+        tooltip="快捷键与帮助"
+        shortcut="?"
+      />
+    );
+    const btn = screen.getByRole('button', { name: '快捷键与帮助' });
+    expect(btn).toBeInTheDocument();
+  });
+
   it('IconButton 支持透传 align 与 static 属性', () => {
     render(
       <IconButton
-        icon={<span>⚙</span>}
+        icon={<span>icon</span>}
         aria-label="设置"
         align="start"
         static

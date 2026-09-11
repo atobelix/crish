@@ -21,6 +21,15 @@ import {
 
 type TauriEventHandler = (e: { payload?: unknown }) => void;
 
+const { mockShowToast } = vi.hoisted(() => ({
+  mockShowToast: vi.fn(),
+}));
+
+vi.mock('../../services/toast/ToastContext', () => ({
+  useToast: () => ({ showToast: mockShowToast }),
+  toast: { show: mockShowToast },
+}));
+
 const eventMock = vi.hoisted(() => ({
   listen: vi.fn(),
   handlers: new Map<string, TauriEventHandler>(),
@@ -37,7 +46,7 @@ function emitBrowserEvent(payload: unknown): void {
 }
 
 describe('useBrowserSession 挂载竞态（查询在途 × 事件先到）', () => {
-  const toast = vi.fn();
+  const toast = mockShowToast;
 
   beforeEach(() => {
     toast.mockClear();
@@ -65,7 +74,7 @@ describe('useBrowserSession 挂载竞态（查询在途 × 事件先到）', () 
       state: 'idle' as const,
     }));
     const { result } = renderHook(() =>
-      useBrowserSession({ onShowToast: toast })
+      useBrowserSession()
     );
     await waitFor(() => expect(result.current.state).toBe('idle'));
     await waitFor(() =>
@@ -88,7 +97,7 @@ describe('useBrowserSession 挂载竞态（查询在途 × 事件先到）', () 
       gate.then(() => ({ state: 'idle' as const }))
     );
     const { result } = renderHook(() =>
-      useBrowserSession({ onShowToast: toast })
+      useBrowserSession()
     );
     await waitFor(() =>
       expect(eventMock.handlers.has(BROWSER_STATE_EVENT)).toBe(true)

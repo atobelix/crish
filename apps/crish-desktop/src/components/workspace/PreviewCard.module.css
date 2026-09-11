@@ -48,14 +48,15 @@
   width: 100%;
 }
 
-.urlInput {
-  height: 24px !important;
-  min-height: 24px !important;
-  font-size: var(--font-size-xs, 12px) !important;
-  background: transparent !important;
-  border: 1px solid transparent !important;
-  border-radius: var(--radius-md, 6px) !important;
-  box-shadow: none !important;
+.urlForm input.urlInput,
+input.urlInput {
+  height: 24px;
+  min-height: 24px;
+  font-size: var(--font-size-xs, 12px);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md, 6px);
+  box-shadow: none;
   color: var(--text-primary);
   cursor: text;
   transition:
@@ -63,29 +64,37 @@
     color var(--transition-micro, 120ms) ease;
 }
 
-.urlInput::placeholder {
-  color: var(--text-tertiary) !important;
+.urlForm input.urlInput::placeholder,
+input.urlInput::placeholder {
+  color: var(--text-tertiary);
 }
 
 /* 悬停态与获得焦点态：无边框无绿色，仅背景微加深（对齐侧边栏搜索框） */
-.urlForm:hover .urlInput:not(:disabled),
-.urlInput:hover:not(:disabled),
-.urlInput:focus,
-.urlInput:focus-visible,
-.urlForm:focus-within .urlInput {
-  outline: none !important;
-  background: var(--sidebar-hover, var(--bg-card-hover)) !important;
-  border: 1px solid transparent !important;
-  box-shadow: none !important;
+.urlForm:hover input.urlInput:not(:disabled),
+.urlForm input.urlInput:hover:not(:disabled),
+.urlForm input.urlInput:focus,
+.urlForm input.urlInput:focus-visible,
+.urlForm:focus-within input.urlInput,
+input.urlInput:hover:not(:disabled),
+input.urlInput:focus,
+input.urlInput:focus-visible {
+  outline: none;
+  background: var(--sidebar-hover, var(--bg-card-hover));
+  border: 1px solid transparent;
+  box-shadow: none;
 }
 
-.urlInput::-webkit-search-cancel-button,
-.urlInput::-webkit-search-decoration,
-.urlInput::-webkit-search-results-button,
-.urlInput::-webkit-search-results-decoration {
+.urlForm input.urlInput::-webkit-search-cancel-button,
+.urlForm input.urlInput::-webkit-search-decoration,
+.urlForm input.urlInput::-webkit-search-results-button,
+.urlForm input.urlInput::-webkit-search-results-decoration,
+input.urlInput::-webkit-search-cancel-button,
+input.urlInput::-webkit-search-decoration,
+input.urlInput::-webkit-search-results-button,
+input.urlInput::-webkit-search-results-decoration {
   -webkit-appearance: none;
   appearance: none;
-  display: none !important;
+  display: none;
 }
 
 .spin {
@@ -121,7 +130,7 @@
   background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-full, 9999px);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  box-shadow: var(--shadow-sm);
   font-size: var(--font-size-xs, 12px);
   color: var(--text-primary);
   pointer-events: auto;

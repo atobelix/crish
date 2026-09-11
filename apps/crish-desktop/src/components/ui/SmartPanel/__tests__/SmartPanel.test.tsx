@@ -38,7 +38,7 @@ describe('SmartPanel Component Suite', () => {
         sublabel: '创建独立上下文',
         shortcut: 'Ctrl+N',
         badge: 'New',
-        icon: <span data-testid="test-icon">✨</span>,
+        icon: <span data-testid="test-icon">icon</span>,
       },
     ];
 

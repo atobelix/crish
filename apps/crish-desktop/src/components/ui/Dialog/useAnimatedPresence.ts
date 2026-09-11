@@ -3,8 +3,13 @@
  *
  * 从 `hooks/useAnimatedPresence.ts` 提炼：ui 原子层禁止依赖 `hooks/`，
  * 因此由 Dialog 作为三件套锚点持有本实现，ui/Tooltip 等复用。
+ *
+ * 动画状态机与并发竞态消除（02-分维详案）：
+ * 1. 严格跟踪排队的双重 rAF 句柄，组件卸载或 visible=false 时无条件同步取消；
+ * 2. rAF 回调执行时具备闭包守卫与实时状态守卫，严禁在关闭/退出期重新置为 open；
+ * 3. exitDurationMs <= 0 且 !visible 时立即同步收敛为 closed。
  */
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 
 export type TransitionState = 'entering' | 'open' | 'exiting' | 'closed';
 
@@ -25,36 +30,110 @@ export function useAnimatedPresence({
   const [state, setState] = useState<TransitionState>(
     visible ? 'open' : 'closed'
   );
+  const stateRef = useRef<TransitionState>(state);
+  stateRef.current = state;
+
   const prevVisibleRef = useRef(visible);
+  const visibleRef = useRef(visible);
+  visibleRef.current = visible;
+
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined
   );
+  const rafHandlesRef = useRef<number[]>([]);
+
+  const cancelAllRafs = useCallback(() => {
+    for (const handle of rafHandlesRef.current) {
+      cancelAnimationFrame(handle);
+    }
+    rafHandlesRef.current = [];
+  }, []);
+
+  const clearExitTimeout = useCallback(() => {
+    if (timeoutRef.current !== undefined) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = undefined;
+    }
+  }, []);
 
   useEffect(() => {
-    if (visible && !prevVisibleRef.current) {
-      setState('entering');
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          setState('open');
+    let isCancelled = false;
+
+    if (visible) {
+      if (!prevVisibleRef.current) {
+        clearExitTimeout();
+        cancelAllRafs();
+
+        setState('entering');
+
+        let handle1: number | undefined;
+        let handle2: number | undefined;
+
+        handle1 = requestAnimationFrame(() => {
+          if (handle1 !== undefined) {
+            rafHandlesRef.current = rafHandlesRef.current.filter((h) => h !== handle1);
+          }
+          if (isCancelled || !visible || !visibleRef.current) {
+            return;
+          }
+
+          handle2 = requestAnimationFrame(() => {
+            if (handle2 !== undefined) {
+              rafHandlesRef.current = rafHandlesRef.current.filter((h) => h !== handle2);
+            }
+            if (isCancelled || !visible || !visibleRef.current) {
+              return;
+            }
+
+            setState((current) => {
+              if (
+                isCancelled ||
+                !visibleRef.current ||
+                current === 'closed' ||
+                current === 'exiting'
+              ) {
+                return current;
+              }
+              return 'open';
+            });
+          });
+
+          if (handle2 !== undefined) {
+            rafHandlesRef.current.push(handle2);
+          }
         });
-      });
-    } else if (!visible && prevVisibleRef.current) {
+
+        if (handle1 !== undefined) {
+          rafHandlesRef.current.push(handle1);
+        }
+      }
+    } else {
+      // 当 visible 变为 false 时，无条件同步取消所有正在等待的 rAF 句柄
+      cancelAllRafs();
+      clearExitTimeout();
+
       if (exitDurationMs <= 0) {
+        // 当 exitDurationMs <= 0 且 !visible 时，必须立即同步收敛为 'closed'
         setState('closed');
-      } else {
+      } else if (prevVisibleRef.current) {
         setState('exiting');
         timeoutRef.current = setTimeout(() => {
           setState('closed');
+          timeoutRef.current = undefined;
         }, exitDurationMs);
+      } else if (stateRef.current !== 'closed' && stateRef.current !== 'exiting') {
+        setState('closed');
       }
     }
+
     prevVisibleRef.current = visible;
+
     return () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
+      isCancelled = true;
+      cancelAllRafs();
+      clearExitTimeout();
     };
-  }, [visible, exitDurationMs]);
+  }, [visible, exitDurationMs, cancelAllRafs, clearExitTimeout]);
 
   const isMounted = state !== 'closed';
 

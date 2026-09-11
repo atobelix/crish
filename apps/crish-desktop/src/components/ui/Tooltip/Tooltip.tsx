@@ -42,36 +42,17 @@ export type { TooltipSide };
 export { isValidDOMRect, type ClampedTooltipResult };
 export { DEFAULT_DELAY_SHOW_MS };
 
+import { useMergeRefs } from './useMergeRefs';
+
 const isTestEnv =
   typeof process !== 'undefined' &&
   (process.env?.NODE_ENV === 'test' || Boolean(process.env?.VITEST));
 
-function setRef<T>(
-  ref: React.ForwardedRef<T> | React.Ref<T> | undefined,
-  value: T | null
-) {
-  if (typeof ref === 'function') {
-    ref(value);
-  } else if (ref && 'current' in ref) {
-    (ref as React.MutableRefObject<T | null>).current = value;
-  }
-}
-
-function useMergeRefs<T>(
-  ...refs: Array<React.ForwardedRef<T> | React.Ref<T> | undefined>
-) {
-  return useCallback(
-    (value: T | null) => {
-      refs.forEach((ref) => setRef(ref, value));
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    refs
-  );
-}
-
 export interface TooltipProps {
   content: React.ReactNode;
   children: React.ReactElement;
+  /** 快捷键组合：单个字符串（如 'Ctrl+N'）或按键数组（如 ['Ctrl', 'N']） */
+  shortcut?: string | string[];
   side?: TooltipSide;
   disabled?: boolean;
   /** 意图停留；未满此时长离开则从未显示。默认 350ms */
@@ -90,6 +71,7 @@ export const Tooltip = forwardRef<HTMLElement, TooltipProps>(
   (
     {
       content,
+      shortcut,
       children,
       side = 'top',
       disabled = false,
@@ -130,6 +112,9 @@ export const Tooltip = forwardRef<HTMLElement, TooltipProps>(
       visible,
       exitDurationMs: 0,
     });
+    const stateRef = useRef(state);
+    stateRef.current = state;
+    const [, forceUpdate] = useState({});
 
     const clearHideTimer = useCallback(() => {
       if (hideTimerRef.current) {
@@ -146,10 +131,16 @@ export const Tooltip = forwardRef<HTMLElement, TooltipProps>(
     }, []);
 
     const hideImmediate = useCallback(() => {
+      triggerModeRef.current = null;
       clearShowTimer();
       clearHideTimer();
       releaseTooltipSlot(tipId);
       setVisible(false);
+      setRect(null);
+      setClampedPos(null);
+      if (stateRef.current !== 'closed') {
+        forceUpdate({});
+      }
     }, [clearHideTimer, clearShowTimer, tipId]);
 
     const hideImmediateRef = useRef(hideImmediate);
@@ -197,8 +188,10 @@ export const Tooltip = forwardRef<HTMLElement, TooltipProps>(
                 : false;
 
             if (!isTargetHovered && !isTipHovered) {
-              hideImmediate();
-              return;
+              if (!hideTimerRef.current) {
+                hideImmediate();
+                return;
+              }
             }
           } else if (triggerModeRef.current === 'focus') {
             const isTargetFocused =
@@ -223,55 +216,26 @@ export const Tooltip = forwardRef<HTMLElement, TooltipProps>(
 
       rafId = requestAnimationFrame(checkLiveness);
 
-      const onGlobalPointerMove = (e: PointerEvent) => {
+      const onGlobalPointer = (e: PointerEvent) => {
         const targetNode = e.target as Node | null;
-        if (!targetNode) return;
-
-        const inTarget = target.contains(targetNode);
-        const inTip = tipRef.current ? tipRef.current.contains(targetNode) : false;
-
-        if (!inTarget && !inTip) {
-          hideImmediate();
-        }
-      };
-
-      const onGlobalPointerDown = (e: PointerEvent) => {
-        const targetNode = e.target as Node | null;
-        if (!targetNode) return;
-
-        const inTarget = target.contains(targetNode);
-        const inTip = tipRef.current ? tipRef.current.contains(targetNode) : false;
-
-        if (!inTarget && !inTip) {
+        if (targetNode && !target.contains(targetNode) && !tipRef.current?.contains(targetNode)) {
           hideImmediate();
         }
       };
 
       const onDocMouseLeave = (e: MouseEvent) => {
-        if (!e.relatedTarget) {
-          hideImmediate();
-        }
+        if (!e.relatedTarget) hideImmediate();
       };
 
-      window.addEventListener('pointermove', onGlobalPointerMove, {
-        passive: true,
-      });
-      window.addEventListener('pointerdown', onGlobalPointerDown, {
-        capture: true,
-        passive: true,
-      });
+      window.addEventListener('pointermove', onGlobalPointer, { passive: true });
+      window.addEventListener('pointerdown', onGlobalPointer, { capture: true, passive: true });
       document.documentElement.addEventListener('mouseleave', onDocMouseLeave);
 
       return () => {
         cancelAnimationFrame(rafId);
-        window.removeEventListener('pointermove', onGlobalPointerMove);
-        window.removeEventListener('pointerdown', onGlobalPointerDown, {
-          capture: true,
-        } as EventListenerOptions);
-        document.documentElement.removeEventListener(
-          'mouseleave',
-          onDocMouseLeave
-        );
+        window.removeEventListener('pointermove', onGlobalPointer);
+        window.removeEventListener('pointerdown', onGlobalPointer, { capture: true } as EventListenerOptions);
+        document.documentElement.removeEventListener('mouseleave', onDocMouseLeave);
       };
     }, [visible, hideImmediate]);
 
@@ -369,8 +333,7 @@ export const Tooltip = forwardRef<HTMLElement, TooltipProps>(
     const effectiveDelayHide =
       delayHide > 0 ? delayHide : interactive ? 160 : 0;
 
-    const handleHide = () => {
-      triggerModeRef.current = null;
+    const handleHide = useCallback(() => {
       // 未满 delayShow 离开：清定时器，从未显示
       clearShowTimer();
       if (effectiveDelayHide > 0 && visibleRef.current) {
@@ -380,7 +343,7 @@ export const Tooltip = forwardRef<HTMLElement, TooltipProps>(
       } else {
         hideImmediate();
       }
-    };
+    }, [clearShowTimer, effectiveDelayHide, hideImmediate]);
 
     const handleTipMouseEnter = useCallback(() => {
       if (!interactive) return;
@@ -391,7 +354,7 @@ export const Tooltip = forwardRef<HTMLElement, TooltipProps>(
     const handleTipMouseLeave = useCallback(() => {
       if (!interactive) return;
       handleHide();
-    }, [interactive]);
+    }, [interactive, handleHide]);
 
     const handleMouseEnter = (e: React.MouseEvent<HTMLElement>) => {
       triggerModeRef.current = 'hover';
@@ -534,14 +497,23 @@ export const Tooltip = forwardRef<HTMLElement, TooltipProps>(
         ? styles.tooltipExit
         : styles.tooltipEnter;
 
+    const isVisibleOrExiting = visible || state === 'exiting';
+    const canRenderPortal =
+      shouldShowTooltip &&
+      isVisibleOrExiting &&
+      isMounted &&
+      rect &&
+      isValidDOMRect(rect) &&
+      !isTriggerOffscreen(rect);
+
+    const formattedShortcut = Array.isArray(shortcut)
+      ? shortcut.filter(Boolean).join('+')
+      : shortcut;
+
     return (
       <>
         {clonedChild}
-        {shouldShowTooltip &&
-          isMounted &&
-          rect &&
-          isValidDOMRect(rect) &&
-          !isTriggerOffscreen(rect) &&
+        {canRenderPortal &&
           createPortal(
             <div
               ref={tipRef}
@@ -569,6 +541,9 @@ export const Tooltip = forwardRef<HTMLElement, TooltipProps>(
                 style={contentStyle}
               >
                 {content}
+                {formattedShortcut ? (
+                  <kbd className={styles.tooltipKbd}>{formattedShortcut}</kbd>
+                ) : null}
               </div>
               <div className={styles.arrow} />
             </div>,

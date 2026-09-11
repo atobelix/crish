@@ -373,17 +373,17 @@ export const PreviewCard: React.FC<PreviewCardProps> = ({
                               displayHost = url.replace(/^https?:\/\//, '');
                             }
                             return (
-                              <button
-                                key={url}
-                                type="button"
-                                className={styles.pureTextLinkWithIcon}
-                                onClick={() => navigate(url)}
-                                title={url}
-                                aria-label={`打开最近网页 ${displayHost}`}
-                              >
-                                <AppIcon name="globe" size={12} className={styles.recentIcon} aria-hidden />
-                                <span className={styles.recentText}>{displayHost}</span>
-                              </button>
+                              <Tooltip key={url} content={url}>
+                                <button
+                                  type="button"
+                                  className={styles.pureTextLinkWithIcon}
+                                  onClick={() => navigate(url)}
+                                  aria-label={`打开最近网页 ${displayHost}`}
+                                >
+                                  <AppIcon name="globe" size={12} className={styles.recentIcon} aria-hidden />
+                                  <span className={styles.recentText}>{displayHost}</span>
+                                </button>
+                              </Tooltip>
                             );
                           })}
                         </div>

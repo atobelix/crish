@@ -66,7 +66,7 @@
   height: 28px;
   min-height: 28px;
   padding: 0 10px;
-  border-radius: var(--button-radius, 7px);
+  border-radius: var(--radius-btn);
   border: 1px solid var(--border-color);
   background: var(--bg-card);
   color: var(--text-primary);
@@ -84,7 +84,7 @@
 .presetChip:hover:not(:disabled) {
   background: var(--bg-card);
   border-color: var(--border-color);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  box-shadow: var(--shadow-sm);
 }
 
 .presetChip:disabled {

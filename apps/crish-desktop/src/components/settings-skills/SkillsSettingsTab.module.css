@@ -374,7 +374,7 @@
   background: transparent;
   text-align: left;
   padding: var(--space-2_5);
-  border-radius: var(--button-radius, 7px);
+  border-radius: var(--radius-btn);
   cursor: pointer;
   font-family: inherit;
   position: relative;
@@ -385,7 +385,7 @@
   min-height: 24px;
   padding: 1px 6px;
   gap: 5px;
-  border-radius: var(--button-radius, 7px);
+  border-radius: var(--radius-btn);
 }
 
 .skillsRailItemDense .skillsRailIcon {

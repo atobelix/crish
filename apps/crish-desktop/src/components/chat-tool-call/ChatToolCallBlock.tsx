@@ -192,7 +192,12 @@ function renderToolStackItems(
       continue;
     }
     segments.push(
-      <div key={`grp-${item.id}`} className={styles.toolGroup}>
+      <div
+        key={`grp-${item.id}`}
+        className={styles.toolGroup}
+        data-group-id={item.id}
+        data-expanded="true"
+      >
         <div className={styles.toolGroupHeader}>{item.label}</div>
         {renderToolsWithBatchBars(item.tools, msgId, props)}
       </div>

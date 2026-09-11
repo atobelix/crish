@@ -27,15 +27,10 @@ import {
   type BrowserSessionState,
 } from './browserSessionLib';
 
-import { toast } from '../../services/toast/ToastContext';
+import { useToast } from '../../services/toast/ToastContext';
 
 /** busy 互斥超时（评审 F4）：操作挂死 30s 后强制释放，防永久锁死。 */
 const BUSY_OPERATION_TIMEOUT_MS = 30_000;
-
-export interface UseBrowserSessionOptions {
-  /** 错误通知注入（未传入时回退全局 toast.show） */
-  onShowToast?: (message: string) => void;
-}
 
 export interface UseBrowserSessionResult {
   state: BrowserSessionState;
@@ -73,27 +68,14 @@ function extractPayloadReason(payload: unknown): string | undefined {
   return typeof r === 'string' && r ? r : undefined;
 }
 
-export function useBrowserSession(
-  opts: UseBrowserSessionOptions = {},
-): UseBrowserSessionResult {
+export function useBrowserSession(): UseBrowserSessionResult {
+  const { showToast } = useToast();
   const [state, setState] = useState<BrowserSessionState>('idle');
   const [url, setUrl] = useState<string | undefined>(undefined);
   const [reason, setReason] = useState<string | undefined>(undefined);
   const [busy, setBusy] = useState(false);
-  const toastRef = useRef((m: string) => {
-    if (opts.onShowToast) {
-      opts.onShowToast(m);
-    } else {
-      toast.show(m);
-    }
-  });
-  toastRef.current = (m: string) => {
-    if (opts.onShowToast) {
-      opts.onShowToast(m);
-    } else {
-      toast.show(m);
-    }
-  };
+  const toastRef = useRef(showToast);
+  toastRef.current = showToast;
   const busyRef = useRef(false);
 
   const applyPayload = useCallback((payload: unknown) => {

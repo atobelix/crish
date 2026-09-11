@@ -3,6 +3,7 @@ import styles from './custom-tags.module.css';
 import { CustomTagErrorBoundary } from './CustomTagErrorBoundary';
 import type { ExtraComponentProps } from './CustomTagRegistry';
 import { Tooltip } from '../ui';
+import { AppIcon } from '../ui/icons/index';
 import { highlightCode, langFromFilename } from '../../api/codeHighlight';
 import { parseDiffText, buildSplitLinePairs } from '../../api/diffPairMatcher';
 
@@ -73,7 +74,7 @@ export const WidgetDiffInner: React.FC<WidgetDiffProps> = ({
               <span className={styles.statusRunning} aria-label="正在流式生成比对" />
             </Tooltip>
           ) : (
-            <span aria-hidden="true">📄</span>
+            <AppIcon name="file-diff" size={14} aria-hidden />
           )}
           <span className={styles.cardTitle}>{displayTitle}</span>
         </div>
@@ -85,14 +86,14 @@ export const WidgetDiffInner: React.FC<WidgetDiffProps> = ({
               className={`${styles.diffModeBtn} ${viewMode === 'unified' ? styles.active : ''}`}
               onClick={() => setViewMode('unified')}
             >
-              Unified
+              单栏比对
             </button>
             <button
               type="button"
               className={`${styles.diffModeBtn} ${viewMode === 'split' ? styles.active : ''}`}
               onClick={() => setViewMode('split')}
             >
-              Split
+              分栏比对
             </button>
           </div>
 

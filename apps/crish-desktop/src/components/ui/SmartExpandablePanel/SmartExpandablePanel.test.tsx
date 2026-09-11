@@ -482,7 +482,7 @@ describe('SmartExpandablePanel Foundation & Core Engines', () => {
       const input = screen.getByPlaceholderText(/搜索/);
       fireEvent.change(input, { target: { value: 'XYZNotFound' } });
 
-      expect(screen.getByText('未找到匹配结果 🔍')).toBeInTheDocument();
+      expect(screen.getByText('未找到匹配结果')).toBeInTheDocument();
     });
 
     it('triggers onSelect when an enabled item is clicked', () => {

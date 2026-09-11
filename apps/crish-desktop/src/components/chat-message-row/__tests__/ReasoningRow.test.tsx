@@ -220,9 +220,9 @@ describe('DIM-03 §1.1: 24px ReasoningRow 极简思考行流式追踪与扫光�
       expect(body).not.toBeNull();
       expect(btn.getAttribute('aria-expanded')).toBe('true');
 
-      // 包含独立一键复制按钮
-      const copyBtn = screen.getByTestId('copy-thinking-button');
-      expect(copyBtn).toBeDefined();
+      // 负向断言（用户裁决）：彻底切除复制按钮，不得再出现复制按钮
+      expect(screen.queryByTestId('copy-thinking-button')).toBeNull();
+      expect(screen.queryByRole('button', { name: /复制/i })).toBeNull();
 
       // 再次点击收起
       fireEvent.click(btn);
@@ -279,6 +279,26 @@ describe('DIM-03 §1.1: 24px ReasoningRow 极简思考行流式追踪与扫光�
       const body = container.querySelector('[data-testid="reasoning-body"]');
       expect(body).not.toBeNull();
       expect(body?.className).toContain('reasoningBody');
+    });
+
+    it('负向断言（2026-09-11 用户裁决）：展开态思考正文严禁渲染复制按钮', () => {
+      render(
+        <ReasoningRow
+          content="测试思考正文内容"
+          isOpen={true}
+        />
+      );
+
+      expect(screen.queryByTestId('copy-thinking-button')).toBeNull();
+      expect(screen.queryByRole('button', { name: /复制/i })).toBeNull();
+    });
+
+    it('负向断言（源码级）：ReasoningRow.module.css 严禁包含 .reasoningBody:hover 加深文字颜色规则', () => {
+      const cssPath = path.resolve(__dirname, '../ReasoningRow.module.css');
+      const cssContent = fs.readFileSync(cssPath, 'utf8');
+
+      expect(cssContent).not.toMatch(/\.reasoningBody:hover/);
+      expect(cssContent).not.toMatch(/\.copyButton/);
     });
   });
 });

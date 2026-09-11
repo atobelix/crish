@@ -36,20 +36,41 @@ vi.mock('../../../api/browserImportApi', async (importActual) => {
   return { ...actual, readTextFileAtPath: pathReadMock.readTextFileAtPath };
 });
 
+const { mockShowToast } = vi.hoisted(() => ({
+  mockShowToast: vi.fn(),
+}));
+vi.mock('../../../services/toast/ToastContext', () => ({
+  useToast: () => ({
+    show: mockShowToast,
+    showToast: mockShowToast,
+    success: vi.fn(),
+    error: vi.fn(),
+    warning: vi.fn(),
+    info: vi.fn(),
+    loading: vi.fn(),
+    promise: vi.fn(),
+    dismiss: vi.fn(),
+    dismissToast: vi.fn(),
+    toasts: [],
+  }),
+  toast: {
+    show: mockShowToast,
+  },
+}));
+
 function renderSection(
   props: Partial<Parameters<typeof BrowserImportSection>[0]> = {}
 ) {
-  const onShowToast = vi.fn();
+  mockShowToast.mockClear();
   const saveExport = vi.fn();
   const view = render(
     <BrowserImportSection
-      onShowToast={onShowToast}
       browserRunning
       saveExport={saveExport}
       {...props}
     />
   );
-  return { onShowToast, saveExport, ...view };
+  return { onShowToast: mockShowToast, saveExport, ...view };
 }
 
 function makeFile(

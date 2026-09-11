@@ -15,6 +15,7 @@ import styles from './custom-tags.module.css';
 import { CustomTagErrorBoundary } from './CustomTagErrorBoundary';
 import type { ExtraComponentProps } from './CustomTagRegistry';
 import { Tooltip } from '../ui';
+import { AppIcon } from '../ui/icons/index';
 
 export interface FileTreeProps extends ExtraComponentProps {
   root?: string;
@@ -158,7 +159,7 @@ export const FileTreeInner: React.FC<FileTreeProps> = ({
           data-file-path={node.path}
         >
           <span className={styles.fileTreeNodeIcon}>
-            {node.isFolder ? (isCollapsed ? '📁' : '📂') : '📄'}
+            <AppIcon name={node.isFolder ? (isCollapsed ? 'folder' : 'folder-open') : 'file-text'} size={14} aria-hidden />
           </span>
           <span className={styles.fileTreeNodeName}>{node.name}</span>
 
@@ -190,7 +191,7 @@ export const FileTreeInner: React.FC<FileTreeProps> = ({
     <div className={styles.fileTree} data-streaming={isStreaming ? 'true' : 'false'}>
       <div className={styles.cardHeader}>
         <div className={styles.cardTitleGroup}>
-          <span aria-hidden="true">🌳</span>
+          <AppIcon name="folder-tree" size={14} aria-hidden />
           <span className={styles.cardTitle}>{root === '.' ? '工程文件树' : root}</span>
         </div>
         {isStreaming && (

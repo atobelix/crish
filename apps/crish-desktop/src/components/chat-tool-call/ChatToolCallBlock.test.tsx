@@ -51,6 +51,10 @@ describe('ChatToolStack V1-γ 折叠单源渲染', () => {
     );
     // 折叠头文案 = 投影层 group.label（死字段复活）
     expect(container.textContent).toContain('查看 src · 3 步');
+    // 组容器带有 data-group-id 与 data-expanded="true"
+    const groupEl = container.querySelector('[data-group-id="grp-t1"]');
+    expect(groupEl).toBeTruthy();
+    expect(groupEl?.getAttribute('data-expanded')).toBe('true');
     // 组内子行逐一渲染（不展平为独立组外行、也不重分组）
     expect(container.querySelectorAll('.tool-row')).toHaveLength(3);
     expect(container.querySelectorAll('[data-tool-id="t1"]')).toHaveLength(1);

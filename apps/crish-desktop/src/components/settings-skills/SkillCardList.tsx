@@ -37,7 +37,6 @@ interface SkillCardListProps {
   batchBusy?: boolean | undefined;
   batchEnableCount?: number | undefined;
   batchDisableCount?: number | undefined;
-  onShowToast?: ((msg: string) => void) | undefined;
   handleSyncAll?: (() => void) | undefined;
   refresh?: (() => void) | undefined;
   runBatchActivation?: ((confirm: 'enabled' | 'disabled') => Promise<void>) | undefined;

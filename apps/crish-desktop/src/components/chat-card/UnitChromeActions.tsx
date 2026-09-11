@@ -313,7 +313,7 @@ export const UnitChromeActions: React.FC<UnitChromeActionsProps> = React.memo(
             rightDockCollapsed ? styles.withDockMargin : ''
           } chat-top-actions`}
         >
-          {/* 按钮 1: 浏览器 (🌐 Globe) */}
+          {/* 按钮 1: 浏览器 (Globe) */}
           <Tooltip content="浏览器" side={UNIT_CHROME_TOOL_TIP_SIDE}>
             <button
               type="button"
@@ -328,7 +328,7 @@ export const UnitChromeActions: React.FC<UnitChromeActionsProps> = React.memo(
             </button>
           </Tooltip>
 
-          {/* 按钮 2: 文件管理器 (📁 FolderTree) */}
+          {/* 按钮 2: 文件管理器 (FolderTree) */}
           <Tooltip content="打开文件" side={UNIT_CHROME_TOOL_TIP_SIDE}>
             <button
               type="button"

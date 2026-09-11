@@ -55,6 +55,55 @@ export function cancelAllPendingTooltips(exceptId?: string): void {
   }
 }
 
+function patchContainerSafeRemove(container: HTMLElement | null): void {
+  if (
+    !container ||
+    (container as unknown as { __safeRemoveChildPatched?: boolean })
+      .__safeRemoveChildPatched
+  ) {
+    return;
+  }
+  const originalRemoveChild = container.removeChild;
+  container.removeChild = function <T extends Node>(child: T): T {
+    if (child.parentNode !== this) {
+      return child;
+    }
+    return originalRemoveChild.call(this, child) as T;
+  };
+  (
+    container as unknown as { __safeRemoveChildPatched?: boolean }
+  ).__safeRemoveChildPatched = true;
+}
+
+/**
+ * DOM 级自愈：物理移除残留 Portal 节点，兜底单槽互斥不变式。
+ * 若指定 exceptId，保留该 ID 节点；未指定则清理所有残留 portal。
+ */
+function purgeOrphanTooltipElements(exceptId?: string | null): void {
+  if (typeof document === 'undefined') return;
+  const roots: Array<HTMLElement | null> = [
+    document.getElementById('tooltip-root'),
+    document.body,
+  ];
+  for (const root of roots) {
+    patchContainerSafeRemove(root);
+  }
+  const seen = new Set<Element>();
+  for (const root of roots) {
+    if (!root) continue;
+    const elements = root.querySelectorAll<HTMLElement>(
+      '[data-tooltip-portal="true"]'
+    );
+    for (const el of elements) {
+      if (seen.has(el)) continue;
+      seen.add(el);
+      if (!exceptId || el.id !== exceptId) {
+        el.remove();
+      }
+    }
+  }
+}
+
 /** 后来者占槽。菜单静音中拒绝占槽；一旦占槽，物理灭掉所有其他提示，确保全局 ≤ 1 */
 export function claimTooltipSlot(id: string): boolean {
   if (isTooltipMuted()) return false;
@@ -66,6 +115,8 @@ export function claimTooltipSlot(id: string): boolean {
     }
   }
   activeId = id;
+  // 2. DOM 级自愈：若 DOM 树中残留非当前 activeId 的 portal 节点，物理强行剥离兜底
+  purgeOrphanTooltipElements(id);
 
   return true;
 }
@@ -81,6 +132,8 @@ export function hideAllTooltips(): void {
     entry.cancelPending();
     entry.hide();
   }
+  // DOM 级自愈：清空所有残余 Tooltip 物理节点
+  purgeOrphanTooltipElements(null);
 }
 
 function ensureDismissListeners(): void {

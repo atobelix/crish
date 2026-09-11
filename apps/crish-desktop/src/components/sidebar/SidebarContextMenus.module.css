@@ -172,7 +172,7 @@
   gap: var(--space-3);
   width: 100%;
   min-height: 34px;
-  padding: 7px 10px;
+  padding: var(--space-1_5, 6px) var(--space-2_5, 10px);
   border: none;
   border-radius: var(--radius-lg);
   background: transparent;

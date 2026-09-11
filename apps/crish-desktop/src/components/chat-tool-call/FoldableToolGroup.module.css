@@ -1,0 +1,121 @@
+/**
+ * apps/crish-desktop/src/components/chat-tool-call/FoldableToolGroup.module.css
+ *
+ * 过程段内单组工具折叠栏样式契约。
+ *
+ * 【统一排版纪律 · 2026-09-11 用户裁决】
+ * ① 高度 24px，与 ReasoningRow 严格同构；
+ * ② 默认浅色（--text-tertiary），字号 14px，字重 400；
+ * ③ Hover 时整行（前缀图标 + 摘要文案 + 右折叠指示）统一变黑（--text-primary）；
+ * ④ 展开态内部详细输出保持柔和灰阶，禁止全框加深晃动。
+ */
+
+.groupContainer {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+.groupHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  height: 24px;
+  min-height: 24px;
+  max-height: 24px;
+  line-height: 24px;
+  padding: 0 4px;
+  margin: 0;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-md, 6px);
+  cursor: pointer;
+  text-align: left;
+  box-sizing: border-box;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: var(--font-weight-normal, 400);
+  color: var(--text-tertiary);
+  transition: color var(--transition-micro, 120ms ease);
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* 仅在折叠态下 hover 整行统一加深（用户裁决 · 2026-09-11）；展开后不加深以防大面积灰度变化 */
+.groupContainer:not([data-expanded="true"]) .groupHeader:hover {
+  color: var(--text-primary);
+}
+
+.groupContainer:not([data-expanded="true"]) .groupHeader:hover .leadIcon,
+.groupContainer:not([data-expanded="true"]) .groupHeader:hover .summaryLabel,
+.groupContainer:not([data-expanded="true"]) .groupHeader:hover .chevron {
+  color: var(--text-primary);
+}
+
+.groupHeader:focus-visible {
+  outline: none;
+  border-radius: var(--radius-sm, 4px);
+  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
+}
+
+.leadIcon {
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+  transition: color var(--transition-micro, 120ms ease);
+}
+
+.summaryLabel {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  line-height: 24px;
+  font-weight: var(--font-weight-normal, 400);
+  color: inherit;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.errorBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 2px;
+  color: var(--color-error);
+  user-select: none;
+}
+
+.chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--text-tertiary);
+  transform: rotate(0deg);
+  transition:
+    transform var(--transition-fast, 150ms ease),
+    color var(--transition-micro, 120ms ease);
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.rot {
+  transform: rotate(90deg);
+}
+
+.groupBody {
+  width: calc(100% - 10px);
+  box-sizing: border-box;
+  margin-left: 10px;
+  padding-left: 14px;
+  border-left: 1.5px solid var(--border-subtle);
+}
+
+.groupBody:not([hidden]) {
+  display: block;
+}

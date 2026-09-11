@@ -24,6 +24,7 @@ import { ChatUserMessageRow } from './ChatUserMessageRow';
 import { ChatAssistantMessageRow } from './ChatAssistantMessageRow';
 import { UserMessageActionsBar } from './UserMessageActionsBar';
 import { AssistantMessageActionsBar } from './AssistantMessageActionsBar';
+import { RetractActionButton } from './RetractActionButton';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -243,4 +244,54 @@ describe('消息级撤回入口', () => {
     expect(onRegenerate).toHaveBeenCalledTimes(1);
   });
 
+  it('RetractActionButton 源码与 DOM 契约：精准 Tooltip、无原生 title 且图标隐藏于无障碍树', () => {
+    const retractSrc = readFileSync(join(here, 'RetractActionButton.tsx'), 'utf8');
+    expect(retractSrc).toMatch(/content="撤回上一条消息（还原文件、截断并回填输入框）"/);
+    expect(retractSrc).toMatch(/<AppIcon name="undo" size=\{14\} aria-hidden \/>/);
+    expect(retractSrc).not.toMatch(/\btitle=/);
+
+    const onRetract = vi.fn();
+    render(<RetractActionButton onRetract={onRetract} />);
+    const btn = screen.getByRole('button', { name: '撤回上一条用户消息' });
+    expect(btn.getAttribute('title')).toBeNull();
+    const svg = btn.querySelector('svg');
+    expect(svg).not.toBeNull();
+    expect(svg?.getAttribute('aria-hidden')).toBe('true');
+  });
+
+  it('UserMessageActionsBar 编辑与撤回统一契约：Tooltip 与样式类一致性', () => {
+    const userBarSrc = readFileSync(join(here, 'UserMessageActionsBar.tsx'), 'utf8');
+    expect(userBarSrc).toMatch(/content="编辑上一条消息（回填输入框并重新编辑）"/);
+    expect(userBarSrc).not.toMatch(/\btitle=/);
+
+    const onEdit = vi.fn();
+    render(
+      <UserMessageActionsBar
+        timestamp={1}
+        isPinned={false}
+        copied={false}
+        onCopy={vi.fn()}
+        onTogglePin={vi.fn()}
+        onEdit={onEdit}
+      />
+    );
+    const editBtn = screen.getByRole('button', { name: '编辑消息' });
+    expect(editBtn.getAttribute('title')).toBeNull();
+    expect(editBtn.className).toMatch(/editBtn/);
+  });
+
+  it('ChatMessageRow.module.css 样式契约：regenerateBtn 与 editBtn 均具备 7px 圆角与平滑过渡', () => {
+    const css = readFileSync(join(here, 'ChatMessageRow.module.css'), 'utf8');
+    expect(css).toMatch(/\.regenerateBtn\s*\{[^}]*appearance:\s*none/s);
+    expect(css).toMatch(
+      /\.regenerateBtn\s*\{[^}]*border-radius:\s*var\(--button-radius,\s*7px\)/s
+    );
+    expect(css).toMatch(/\.regenerateBtn\s*\{[^}]*transform:\s*none/s);
+
+    expect(css).toMatch(/\.editBtn\s*\{[^}]*appearance:\s*none/s);
+    expect(css).toMatch(
+      /\.editBtn\s*\{[^}]*border-radius:\s*var\(--button-radius,\s*7px\)/s
+    );
+    expect(css).toMatch(/\.editBtn\s*\{[^}]*transform:\s*none/s);
+  });
 });

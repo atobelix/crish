@@ -3,7 +3,7 @@
  * 消息流中的步骤进度里程碑与纵向中轴脊线组件（§5.2 / §5.5 对齐规范）。
  *
  * 特性：
- * - 16px 呼吸圆点指示器：已完成态「✓」、进行中「②」翡翠脉冲高亮、待开始「⚪」；
+ * - 16px 呼吸圆点指示器：已完成态「✓」、进行中「②」翡翠脉冲高亮、待开始纯文本数字；
  * - 居中 0.75px 纵向中轴脊线（left: 7.625px，精准对齐 16px 圆点中心 8 - 0.75/2）；
  * - 支持可嵌套的子步骤缩进排版（substeps）；
  * - 折叠/展开平滑动画与旋转 Chevron；
@@ -46,7 +46,7 @@ export function renderStepIndicator(
     const circledNumbers = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩'];
     return circledNumbers[stepIndex] || String(stepIndex + 1);
   }
-  return '⚪';
+  return String(stepIndex + 1);
 }
 
 export const PlanMilestoneSpine: React.FC<PlanMilestoneSpineProps> = ({

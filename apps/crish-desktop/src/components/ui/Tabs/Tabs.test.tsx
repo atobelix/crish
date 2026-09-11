@@ -295,7 +295,7 @@ describe('ui/Tabs', () => {
         <TabsList>
           <TabsTrigger
             value="tab1"
-            icon={<span data-testid="icon">🔍</span>}
+            icon={<span data-testid="icon">icon</span>}
             badge={<span data-testid="badge">12</span>}
           >
             搜索

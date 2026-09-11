@@ -9,11 +9,11 @@ import {
 } from './PlanMilestoneSpine';
 
 describe('PlanMilestoneSpine', () => {
-  it('renderStepIndicator 正确格式化状态指示器（✓、②、⚪）', () => {
+  it('renderStepIndicator 正确格式化状态指示器（✓、②、纯文本数字）', () => {
     expect(renderStepIndicator('completed', 0)).toBe('✓');
     expect(renderStepIndicator('running', 1)).toBe('②');
     expect(renderStepIndicator('running', 0)).toBe('①');
-    expect(renderStepIndicator('pending', 2)).toBe('⚪');
+    expect(renderStepIndicator('pending', 2)).toBe('3');
   });
 
   it('渲染里程碑中轴线与步骤，包含 16px 圆点与标题', () => {

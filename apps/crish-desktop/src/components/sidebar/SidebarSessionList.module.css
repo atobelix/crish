@@ -626,13 +626,15 @@
 }
 
 /* 拖拽源占位态：完全透明占位，消除灰色色块残留与重影 */
-.isDraggingSource {
-  opacity: 0 !important;
-  pointer-events: none !important;
+li.isDraggingSource,
+.isDraggingSource.isDraggingSource {
+  opacity: 0;
+  pointer-events: none;
 }
 
-.isDraggingSource > * {
-  visibility: hidden !important;
+li.isDraggingSource > *,
+.isDraggingSource.isDraggingSource > * {
+  visibility: hidden;
 }
 
 .sidebarDragging {

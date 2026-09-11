@@ -16,20 +16,19 @@ import {
   type ImportedBookmarkRow,
   type ImportedHistoryRow,
 } from '../../../../api/browserImportApi';
-import { toast } from '../../../../services/toast/ToastContext';
+import { useToast } from '../../../../services/toast/ToastContext';
 import { resultMessage, type BusyKind } from './browserImportShared';
 
 export interface UseHistoryImportOptions {
   busy: BusyKind;
   setBusy: Dispatch<SetStateAction<BusyKind>>;
-  onShowToast?: (message: string) => void;
 }
 
 export function useHistoryImport({
   busy,
   setBusy,
-  onShowToast,
 }: UseHistoryImportOptions) {
+  const { showToast } = useToast();
   // ── 历史导入 ──
   const [historyPath, setHistoryPath] = useState('');
   const [historyResult, setHistoryResult] =
@@ -41,10 +40,9 @@ export function useHistoryImport({
     (prefix: string, msg: string) => {
       const full = `${prefix}${msg}`;
       setHistoryError(full);
-      onShowToast?.(full);
-      toast.show(full);
+      showToast(full);
     },
-    [onShowToast]
+    [showToast]
   );
 
   const runHistoryImport = async (overridePath?: string) => {
@@ -56,8 +54,7 @@ export function useHistoryImport({
     if (res.status === 'ok') {
       setHistoryResult(res.data);
       const msg = `历史记录导入成功：新增 ${res.data.inserted} 条，跳过 ${res.data.skippedDupes} 条`;
-      onShowToast?.(msg);
-      toast.show(msg);
+      showToast(msg);
     } else {
       reportHistoryError('历史导入失败：', resultMessage(res, ''));
     }
@@ -81,10 +78,9 @@ export function useHistoryImport({
     (prefix: string, msg: string) => {
       const full = `${prefix}${msg}`;
       setListError(full);
-      onShowToast?.(full);
-      toast.show(full);
+      showToast(full);
     },
-    [onShowToast]
+    [showToast]
   );
 
   const loadList = async (tab: 'bookmarks' | 'history') => {

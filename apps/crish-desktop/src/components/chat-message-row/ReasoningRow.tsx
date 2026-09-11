@@ -13,7 +13,6 @@ import React, { useState, useMemo, useCallback } from 'react';
 import styles from './ReasoningRow.module.css';
 import { StreamingMarkdownView } from './StreamingMarkdownView';
 import { Priority } from '../../workers';
-import { copyTextBestEffort } from './chatMessageRowUtils';
 
 /**
  * ReasoningRowProps 核心渲染契约（对齐 DIM-03 §1.1）
@@ -106,37 +105,6 @@ export function extractFirstLine(text: string): string {
   }
   return trimmed;
 }
-
-/**
- * 独立一键复制思维链按钮
- */
-export const CopyThinkingButton: React.FC<{ text: string }> = ({ text }) => {
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = useCallback(
-    async (e: React.MouseEvent) => {
-      e.stopPropagation();
-      const ok = await copyTextBestEffort(text);
-      if (ok) {
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-      }
-    },
-    [text]
-  );
-
-  return (
-    <button
-      type="button"
-      className={styles.copyButton}
-      onClick={handleCopy}
-      aria-label={copied ? '已复制' : '复制思考过程'}
-      data-testid="copy-thinking-button"
-    >
-      {copied ? '已复制' : '复制'}
-    </button>
-  );
-};
 
 export const ReasoningRow: React.FC<ReasoningRowProps> = ({
   content,
@@ -238,9 +206,6 @@ export const ReasoningRow: React.FC<ReasoningRowProps> = ({
 
       {isExpanded && (
         <div className={styles.reasoningBody} data-testid="reasoning-body">
-          <div className={styles.reasoningActions}>
-            <CopyThinkingButton text={content} />
-          </div>
           <div className={styles.reasoningContent}>
             {isLive ? (
               <div className={styles.liveContent}>{content}</div>

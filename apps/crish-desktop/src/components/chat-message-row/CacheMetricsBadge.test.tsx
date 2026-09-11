@@ -4,8 +4,8 @@
  *
  * 契约：
  * - 态 1：metrics 为 null 或全 0 时渲染 null（隐藏）；
- * - 态 2：read > 0 时渲染「⚡ 缓存命中」并包含读/写 token 与百分比；
- * - 态 3：write > 0 且 read === 0 时渲染「💾 写入缓存」；
+ * - 态 2：read > 0 时渲染「缓存命中」并包含读/写 token 与百分比；
+ * - 态 3：write > 0 且 read === 0 时渲染「写入缓存」；
  * - 态 4：read === 0 且 write === 0 但存在输入总量时渲染「未命中」。
  */
 import React from 'react';
@@ -50,7 +50,7 @@ describe('CacheMetricsBadge 四态渲染测试', () => {
     );
   });
 
-  it('态 3：首轮写入态 (write > 0 且 read === 0) 渲染「💾 写入缓存」', () => {
+  it('态 3：首轮写入态 (write > 0 且 read === 0) 渲染「写入缓存」', () => {
     const metrics: CacheMetrics = {
       cacheReadTokens: 0,
       cacheWriteTokens: 1250,

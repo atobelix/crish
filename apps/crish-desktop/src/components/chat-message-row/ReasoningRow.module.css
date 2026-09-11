@@ -234,6 +234,7 @@
 }
 
 /* 展开态自然文档流：解除所有固定高度与局部视口限制，零内部滚动条 */
+/* 展开态文字始终以柔和灰色呈现，hover 严禁加深颜色（2026-09-11 用户裁决） */
 .reasoningBody {
   width: 100%;
   max-width: 100%;
@@ -243,57 +244,32 @@
   height: auto;
   max-height: none;
   color: var(--text-tertiary);
-  transition: color var(--transition-fast, 150ms ease);
-}
-
-.reasoningBody:hover,
-.reasoningBody:focus-within {
-  color: var(--text-secondary);
-}
-
-.reasoningActions {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: 4px;
-}
-
-.copyButton {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 8px;
-  border-radius: var(--radius-sm, 4px);
-  border: 1px solid var(--border-subtle);
-  background: var(--bg-card);
-  color: var(--text-secondary);
-  font-size: var(--font-size-xs, 12px);
-  cursor: pointer;
-  transition: all var(--transition-fast, 150ms ease);
-  line-height: 1.4;
-  user-select: none;
-}
-
-.copyButton:hover {
-  color: var(--text-primary);
-  background: var(--tint-hover);
-  border-color: var(--border-color);
-}
-
-.copyButton:focus-visible {
-  outline: none;
-  box-shadow:
-    0 0 0 0.5px var(--border-subtle),
-    0 0 0 2px color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
 }
 
 .reasoningContent {
   width: 100%;
   box-sizing: border-box;
-  color: inherit;
+  color: var(--text-tertiary);
   font-size: 14px;
   line-height: 1.65;
   user-select: text;
   overflow: visible;
+}
+
+.reasoningContent :global(.md-p),
+.reasoningContent :global(.md-h1),
+.reasoningContent :global(.md-h2),
+.reasoningContent :global(.md-h3),
+.reasoningContent :global(.md-h4),
+.reasoningContent :global(.md-h5),
+.reasoningContent :global(.md-h6),
+.reasoningContent :global(.md-list-item),
+.reasoningContent :global(p),
+.reasoningContent :global(span),
+.reasoningContent :global(li),
+.reasoningContent :global(div),
+.reasoningContent :global(blockquote) {
+  color: inherit;
 }
 
 .liveContent {

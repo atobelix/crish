@@ -77,10 +77,10 @@ export const ModernJsonToolCall: React.FC<ModernJsonToolCallProps> = ({
   const displayActionText = useMemo(() => {
     if (actionText) return actionText;
     const lower = name.toLowerCase();
-    if (lower.includes('search') || lower.includes('grep')) return 'Searched the docs';
-    if (lower.includes('read') || lower.includes('view')) return 'Read file';
-    if (lower.includes('write') || lower.includes('edit')) return 'Edited file';
-    if (lower.includes('list') || lower.includes('dir')) return 'Listed directory';
+    if (lower.includes('search') || lower.includes('grep')) return '搜索文档';
+    if (lower.includes('read') || lower.includes('view')) return '读取文件';
+    if (lower.includes('write') || lower.includes('edit')) return '编辑文件';
+    if (lower.includes('list') || lower.includes('dir')) return '浏览目录';
     return name;
   }, [actionText, name]);
 
@@ -134,7 +134,7 @@ export const ModernJsonToolCall: React.FC<ModernJsonToolCallProps> = ({
         <div className={styles.jsonToolCard}>
           {/* Request 区域 */}
           <div className={styles.cardSection}>
-            <div className={styles.sectionLabel}>Request</div>
+            <div className={styles.sectionLabel}>请求参数</div>
             <pre className={styles.jsonCode}>{formattedRequest}</pre>
           </div>
 
@@ -142,11 +142,11 @@ export const ModernJsonToolCall: React.FC<ModernJsonToolCallProps> = ({
 
           {/* Result 区域 */}
           <div className={styles.cardSection}>
-            <div className={styles.sectionLabel}>Result</div>
+            <div className={styles.sectionLabel}>执行结果</div>
             <div className={styles.resultText}>
               {result !== undefined && result !== null && result !== ''
                 ? result
-                : '(no output)'}
+                : '(无输出)'}
             </div>
           </div>
         </div>

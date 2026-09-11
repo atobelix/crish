@@ -35,7 +35,6 @@ import {
 interface RuntimePanelProps {
   className?: string;
   wsId?: string;
-  onShowToast?: (msg: string) => void;
 }
 
 export const RuntimePanel: React.FC<RuntimePanelProps> = () => {

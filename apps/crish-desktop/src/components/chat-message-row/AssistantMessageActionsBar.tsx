@@ -45,19 +45,25 @@ export const AssistantMessageActionsBar: React.FC<
           className={`${styles.iconBtn}${copied ? ` ${styles.isCopied}` : ''}`}
           aria-label={copied ? '已复制' : '复制正文'}
           onClick={onCopy}
-          icon={copied ? <AppIcon name="check" size={14} /> : <AppIcon name="copy" size={14} />}
+          icon={
+            copied ? (
+              <AppIcon name="check" size={14} aria-hidden />
+            ) : (
+              <AppIcon name="copy" size={14} aria-hidden />
+            )
+          }
         />
       </Tooltip>
       {isLastAssistant && onRegenerate ? (
-        <Tooltip content="重新生成">
+        <Tooltip content="重新生成回复 (快捷键: R)">
           <Button
             type="button"
             variant="ghost"
             size="sm"
-            className={styles.iconBtn}
+            className={`${styles.iconBtn} ${styles.regenerateBtn}`}
             aria-label="重新生成"
             onClick={onRegenerate}
-            icon={<AppIcon name="refresh" size={14} />}
+            icon={<AppIcon name="refresh" size={14} aria-hidden />}
           />
         </Tooltip>
       ) : null}

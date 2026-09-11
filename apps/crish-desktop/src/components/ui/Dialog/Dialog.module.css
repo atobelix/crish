@@ -21,7 +21,7 @@
 }
 
 :global(html[data-theme='dark']) .backdrop {
-  background: color-mix(in srgb, #000000 48%, transparent);
+  background: color-mix(in srgb, var(--shadow-color) 48%, transparent);
   backdrop-filter: blur(20px) saturate(190%);
   -webkit-backdrop-filter: blur(20px) saturate(190%);
 }

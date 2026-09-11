@@ -15,7 +15,7 @@ describe('ArtifactCapsule & SyncLine (§5.4)', () => {
       />
     );
 
-    expect(screen.getByText('📄')).toBeDefined();
+    expect(container.querySelector('[data-icon="file-text"]')).not.toBeNull();
     expect(screen.getByText('已生成')).toBeDefined();
     const btn = screen.getByRole('button', {
       name: '打开产物 PE-08-session-loop-ipc-batcher',
@@ -40,7 +40,7 @@ describe('ArtifactCapsule & SyncLine (§5.4)', () => {
   });
 
   it('SyncLine 在完成态渲染已落盘与文件大小', () => {
-    render(
+    const { container } = render(
       <SyncLine
         status="completed"
         label="batcher.rs"
@@ -48,6 +48,7 @@ describe('ArtifactCapsule & SyncLine (§5.4)', () => {
       />
     );
 
-    expect(screen.getByText(/✓ 已落盘 \(1.2KB\)/)).toBeDefined();
+    expect(screen.getByText(/已落盘 \(1.2KB\)/)).toBeDefined();
+    expect(container.querySelector('[data-icon="check"]')).not.toBeNull();
   });
 });

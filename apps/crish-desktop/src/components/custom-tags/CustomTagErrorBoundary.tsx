@@ -10,6 +10,7 @@
  */
 
 import React, { Component, type ReactNode, type ErrorInfo, type ComponentType } from 'react';
+import { AppIcon } from '../ui/icons/index';
 import styles from './custom-tags.module.css';
 
 export interface CustomTagErrorBoundaryProps {
@@ -70,7 +71,8 @@ export class CustomTagErrorBoundary extends Component<
         >
           <div className={styles.customTagErrorHeader}>
             <span className={styles.customTagErrorTitle}>
-              ⚠️ 自定义组件渲染异常 [{this.props.tagName || 'custom-tag'}]
+              <AppIcon name="alert-triangle" size={13} aria-hidden style={{ marginRight: 4, verticalAlign: -2 }} />
+              自定义组件渲染异常 [{this.props.tagName || 'custom-tag'}]
             </span>
             <button
               type="button"

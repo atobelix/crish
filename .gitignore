@@ -7,6 +7,7 @@ build/
 
 # Assets (binary/media files, not tracked in git)
 assets/
+!apps/crish-desktop/src/assets/
 *.tsbuildinfo
 target-tauri-dev/
 
@@ -430,6 +431,16 @@ apps/agent-workbench/src-tauri/gen/*
 !scripts/check-guard-system.mjs
 !scripts/check-tokens-all.mjs
 !scripts/token-registry.json
+# 2026-09-11 补放行（由 check-guard-system 的 unreleased_guard 指标发现）：
+# 以下守卫脚本此前被 381 行 `*.mjs` 吞掉、从未入库 —— 本地存在、clone 后消失，
+# 属「防御体系无法生长」的结构性缺陷。门禁脚本是资产，一律放行。
+!scripts/check-preferences-ssot.mjs
+!scripts/check-sec7-gfm-emoji.mjs
+!scripts/check-chat-state.mjs
+!scripts/check-coverage-threshold.mjs
+!scripts/check-legacy-shim.mjs
+!scripts/check-tsc-threshold.mjs
+!scripts/check-ui-negative-churn.mjs
 # markdown-editor 测试资产放行（本区 *.txt/*.json/*.mjs 忽略规则在 267 行白名单之后，须在此显式放行）
 !reference/markdown-editor/tests/cmspec/spec.txt
 !reference/markdown-editor/tests/cmspec/examples.json

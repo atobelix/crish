@@ -12,6 +12,7 @@ import {
 import type { NetworkEnvInfo } from '../../api/multiDevice';
 import { useToast } from '../../services/toast/ToastContext';
 import { AppIcon } from '../ui/icons/index';
+import { Tooltip } from '../ui';
 
 /** 网络配置文件类别 → 展示名（Rust multi_device_network_info 四态） */
 const PROFILE_LABELS: Record<NetworkEnvInfo['profile'], string> = {
@@ -92,16 +93,17 @@ export const SettingsDevicesNetworkEnv: React.FC<SettingsDevicesNetworkEnvProps>
               ips.length > 0 ? (
                 <div className={styles.ipBadgeGroup}>
                   {ips.map((ip) => (
-                    <button
-                      key={ip}
-                      type="button"
-                      className={styles.ipBadge}
-                      onClick={() => void handleCopyIp(ip)}
-                      title="点击复制 IP 地址"
-                    >
-                      <code>{ip}</code>
-                      <AppIcon name="copy" size={11} aria-hidden />
-                    </button>
+                    <Tooltip key={ip} content="点击复制 IP 地址">
+                      <button
+                        type="button"
+                        className={styles.ipBadge}
+                        onClick={() => void handleCopyIp(ip)}
+                        aria-label="点击复制 IP 地址"
+                      >
+                        <code>{ip}</code>
+                        <AppIcon name="copy" size={11} aria-hidden />
+                      </button>
+                    </Tooltip>
                   ))}
                 </div>
               ) : (

@@ -253,6 +253,7 @@ export const CompactToolRow: React.FC<CompactToolRowProps> = ({
       data-diff-stat={diffStatLabel || undefined}
       data-in-place-replace={shouldReplace ? 'true' : undefined}
       data-in-place-flipping={isFlipping ? 'true' : undefined}
+      data-expanded={isOpen ? 'true' : 'false'}
       aria-busy={running || undefined}
     >
       <ToolCallHeader

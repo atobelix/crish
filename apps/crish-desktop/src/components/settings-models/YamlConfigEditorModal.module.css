@@ -38,7 +38,7 @@
   background: var(--bg-card);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg, 0 10px 25px -5px rgba(0, 0, 0, 0.1));
+  box-shadow: var(--shadow-lg);
 }
 
 .menuSectionTitle {
@@ -46,8 +46,7 @@
   font-weight: 600;
   color: var(--text-tertiary);
   padding: 6px 8px 4px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.02em;
 }
 
 .menuItemBtn {
@@ -55,7 +54,7 @@
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 7px 10px;
+  padding: var(--space-1_5, 6px) var(--space-2_5, 10px);
   border: none;
   border-radius: var(--radius-md, 6px);
   background: transparent;
@@ -68,6 +67,13 @@
 
 .menuItemBtn:hover {
   background: var(--bg-hover);
+}
+
+.openerName {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .menuDivider {
@@ -91,10 +97,14 @@
 }
 
 .dirtyDot {
-  color: var(--warning-color);
-  font-size: 10px;
-  line-height: 1;
-  margin-left: 2px;
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background-color: var(--warning-color);
+  margin-left: 4px;
+  vertical-align: middle;
+  flex-shrink: 0;
 }
 
 .modalSubHeader {
@@ -127,12 +137,33 @@
   padding: 8px 16px;
   border-bottom: 1px solid var(--border-subtle);
   background: var(--bg-secondary);
+  user-select: none;
 }
 
 .toolbarLeft {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+}
+
+.toolbarDivider {
+  width: 1px;
+  height: 14px;
+  background: var(--border-subtle);
+  margin: 0 4px;
+}
+
+.undoBtnActive {
+  color: var(--brand-primary);
+  border-color: color-mix(in srgb, var(--brand-primary) 30%, var(--border-subtle));
+}
+
+.resetTemplateBtn {
+  color: var(--text-secondary);
+}
+
+.resetTemplateBtn:hover:not(:disabled) {
+  color: var(--text-primary);
 }
 
 .toolbarRight {
@@ -147,6 +178,36 @@
   font-family: 'Segoe UI', -apple-system, var(--font-sans);
   font-variant-numeric: tabular-nums;
   font-feature-settings: 'tnum' 1;
+}
+
+.syncStatusClean,
+.syncStatusDirty {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm, 4px);
+}
+
+.syncStatusClean {
+  color: var(--text-tertiary);
+}
+
+.syncStatusDirty {
+  color: var(--warning-color);
+  background: color-mix(in srgb, var(--warning-color) 8%, transparent);
+}
+
+.syncStatusDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  display: inline-block;
+  flex-shrink: 0;
 }
 
 /* ── 双层同步代码编辑器视口 ───────────────────────────────────────── */

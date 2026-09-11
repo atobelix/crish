@@ -79,6 +79,7 @@ export const YamlConfigEditorModal: React.FC<YamlConfigEditorModalProps> = ({
   /** 服务面失败（missing / error）：与内容语法错误分开呈现，统一 fail-closed 禁存 */
   const [serviceError, setServiceError] = useState<string | null>(null);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState<boolean>(false);
+  const [showResetConfirm, setShowResetConfirm] = useState<boolean>(false);
 
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const preRef = useRef<HTMLPreElement | null>(null);
@@ -310,6 +311,17 @@ export const YamlConfigEditorModal: React.FC<YamlConfigEditorModalProps> = ({
     }
   };
 
+  // 8. 恢复内置模板（二次确认保护，防止误触丢失已写内容）
+  const handleRequestResetTemplate = () => {
+    if (!template || code === template) return;
+    setShowResetConfirm(true);
+  };
+
+  const isMac =
+    typeof navigator !== 'undefined' &&
+    /Mac|iPod|iPhone|iPad/.test(navigator.platform || '');
+  const saveShortcutText = isMac ? '⌘S' : 'Ctrl+S';
+
   const canSave = !syntaxError && !serviceError && isDirty && !loading && !saving;
 
   return (
@@ -326,7 +338,7 @@ export const YamlConfigEditorModal: React.FC<YamlConfigEditorModalProps> = ({
             <span>模型能力与参数配置 (models.yaml)</span>
             {isDirty && (
               <Tooltip content="有未保存修改">
-                <span className={styles.dirtyDot} aria-label="有未保存修改">●</span>
+                <span className={styles.dirtyDot} aria-label="有未保存修改" />
               </Tooltip>
             )}
           </div>
@@ -359,7 +371,7 @@ export const YamlConfigEditorModal: React.FC<YamlConfigEditorModalProps> = ({
                 >
                   <AppIcon name="alert-circle" size={14} aria-hidden />
                   <span className={styles.errorBannerText}>
-                    第 {syntaxError.line} 行: {syntaxError.message} (点击定位)
+                    第 {syntaxError.line} 行：{syntaxError.message}（点击定位）
                   </span>
                 </div>
               </Tooltip>
@@ -370,7 +382,7 @@ export const YamlConfigEditorModal: React.FC<YamlConfigEditorModalProps> = ({
               </div>
             ) : (
               <div className={styles.toolbarInfo}>
-                共 {lineCount} 行 ⏐ Tab 为 2 空格 ⏐ Ctrl+S 保存
+                共 {lineCount} 行 · 缩进 2 空格 · 快捷键 {saveShortcutText} 保存
               </div>
             )}
 
@@ -387,7 +399,7 @@ export const YamlConfigEditorModal: React.FC<YamlConfigEditorModalProps> = ({
                 disabled={!canSave}
                 icon={<AppIcon name="save" size={13} aria-hidden />}
               >
-                保存并热重载
+                保存配置
               </Button>
             </div>
           </div>
@@ -396,30 +408,60 @@ export const YamlConfigEditorModal: React.FC<YamlConfigEditorModalProps> = ({
         {/* 顶部轻量工具栏 */}
         <div className={styles.editorToolbar}>
           <div className={styles.toolbarLeft}>
-            <Button
-              type="button"
-              variant="secondary"
-              size="xs"
-              disabled={!template}
-              onClick={() => template && setCode(template)}
-              icon={<AppIcon name="file-text" size={12} aria-hidden />}
+            <Tooltip content="放弃未保存修改，恢复到打开或保存时的内容">
+              <Button
+                type="button"
+                variant="secondary"
+                size="xs"
+                disabled={!isDirty}
+                onClick={() => setCode(originalCode)}
+                icon={<AppIcon name="undo" size={13} aria-hidden />}
+                className={isDirty ? styles.undoBtnActive : undefined}
+              >
+                撤回
+              </Button>
+            </Tooltip>
+            <Tooltip content="从磁盘重新读取 models.yaml 最新内容">
+              <Button
+                type="button"
+                variant="secondary"
+                size="xs"
+                onClick={() => void loadConfigFile()}
+                icon={<AppIcon name="refresh" size={13} aria-hidden />}
+              >
+                刷新
+              </Button>
+            </Tooltip>
+
+            <div className={styles.toolbarDivider} aria-hidden />
+
+            <Tooltip
+              content={
+                !template
+                  ? '未获取到内置模板'
+                  : code === template
+                  ? '当前已是内置模板内容'
+                  : '恢复为系统内置默认 models.yaml 模板'
+              }
             >
-              恢复标准模版
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              size="xs"
-              onClick={() => void loadConfigFile()}
-              icon={<AppIcon name="refresh" size={12} aria-hidden />}
-            >
-              重载磁盘
-            </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                size="xs"
+                disabled={!template || code === template}
+                onClick={handleRequestResetTemplate}
+                icon={<AppIcon name="file-text" size={13} aria-hidden />}
+                className={styles.resetTemplateBtn}
+              >
+                恢复内置模板
+              </Button>
+            </Tooltip>
           </div>
           <div className={styles.toolbarRight}>
-            <span className={styles.toolbarInfo}>
-              {isDirty ? '已修改' : '已同步'}
-            </span>
+            <div className={isDirty ? styles.syncStatusDirty : styles.syncStatusClean}>
+              <span className={styles.syncStatusDot} aria-hidden />
+              <span>{isDirty ? '有未保存修改' : '已与磁盘同步'}</span>
+            </div>
           </div>
         </div>
 
@@ -465,7 +507,7 @@ export const YamlConfigEditorModal: React.FC<YamlConfigEditorModalProps> = ({
               autoComplete="off"
               autoCorrect="off"
               placeholder={
-                serviceError ? '配置文件服务不可用' : '请输入 models.yaml 配置...'
+                serviceError ? '配置文件服务不可用' : '请输入 models.yaml 配置内容...'
               }
               disabled={loading}
             />
@@ -473,12 +515,29 @@ export const YamlConfigEditorModal: React.FC<YamlConfigEditorModalProps> = ({
         </div>
       </Dialog>
 
+      {/* 恢复内置模板二次确认弹窗 */}
+      <ConfirmDialog
+        open={showResetConfirm}
+        title="恢复内置默认模板？"
+        description="此操作将使用系统内置默认模板覆盖当前编辑器内容，未保存的修改将丢失。"
+        confirmLabel="确认恢复模板"
+        cancelLabel="取消"
+        danger={true}
+        onConfirm={() => {
+          setShowResetConfirm(false);
+          if (template) {
+            setCode(template);
+          }
+        }}
+        onCancel={() => setShowResetConfirm(false)}
+      />
+
       {/* 防丢失确认弹窗 */}
       <ConfirmDialog
         open={showDiscardConfirm}
         title="放弃未保存的修改？"
         description="你对 models.yaml 的修改尚未保存，退出后更改将丢失。"
-        confirmLabel="放弃修改退出"
+        confirmLabel="放弃修改并退出"
         cancelLabel="继续编辑"
         danger={true}
         onConfirm={() => {

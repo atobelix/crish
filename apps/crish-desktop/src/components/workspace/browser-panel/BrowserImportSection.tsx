@@ -19,25 +19,21 @@ export interface BrowserImportSectionProps {
   browserRunning?: boolean;
   /** 测试注入：登录态「另存为」写盘（缺省 downloadTextFile）。 */
   saveExport?: (filename: string, content: string) => void;
-  /** 外部传入通知 toast 回调。 */
-  onShowToast?: (message: string) => void;
 }
 
 export const BrowserImportSection: React.FC<BrowserImportSectionProps> = ({
   browserRunning = false,
   saveExport,
-  onShowToast,
 }) => {
   const [busy, setBusy] = useState<BusyKind>(null);
 
-  const bookmarks = useBookmarksImport({ busy, setBusy, onShowToast });
-  const history = useHistoryImport({ busy, setBusy, onShowToast });
-  const storage = useStorageImport({ busy, setBusy, onShowToast });
+  const bookmarks = useBookmarksImport({ busy, setBusy });
+  const history = useHistoryImport({ busy, setBusy });
+  const storage = useStorageImport({ busy, setBusy });
   const exportAuth = useExportAuth({
     setBusy,
     setStorageError: storage.setStorageError,
     saveExport,
-    onShowToast,
   });
 
   const exportReady = browserRunning && busy !== 'storageExport';

@@ -106,13 +106,13 @@
   white-space: nowrap;
   appearance: none;
   -webkit-appearance: none;
-  border-radius: var(--button-radius, 7px);
+  border-radius: var(--radius-btn);
 }
 
 .actionBtn {
   appearance: none;
   -webkit-appearance: none;
-  border-radius: var(--button-radius, 7px);
+  border-radius: var(--radius-btn);
 }
 
 /*                                                                ?select */

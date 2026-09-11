@@ -69,7 +69,7 @@ class FocusTrapIsolationManager {
       node.classList.contains('toaster') ||
       node.id === 'toast-portal' ||
       node.id === 'tooltip-portal' ||
-      // 🌟 Plan-09 自研 Select / Combobox 原子浮层白名单放行
+      // Plan-09 自研 Select / Combobox 原子浮层白名单放行
       node.getAttribute('data-slot') === 'select-content' ||
       node.getAttribute('data-slot') === 'combobox-content' ||
       node.getAttribute('role') === 'listbox' ||

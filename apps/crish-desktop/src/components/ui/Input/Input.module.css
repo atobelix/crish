@@ -47,7 +47,7 @@
 }
 
 .input:hover:not(:focus):not(:focus-visible):not(:disabled) {
-  border-color: hsl(30 4.8% 91.8%);
+  border-color: color-mix(in srgb, var(--border-color) 92%, var(--text-primary) 8%);
   background: color-mix(in srgb, var(--bg-primary) 20%, var(--bg-card));
 }
 
@@ -59,7 +59,7 @@
   outline: none;
   background: var(--bg-card);
   box-shadow: none;
-  border-color: hsl(30 4.8% 91.8%);
+  border-color: color-mix(in srgb, var(--border-color) 92%, var(--text-primary) 8%);
 }
 
 .input:disabled {

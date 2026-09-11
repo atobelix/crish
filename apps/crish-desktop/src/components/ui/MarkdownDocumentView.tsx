@@ -4,6 +4,7 @@ import { useAsyncMarkdownHtml } from '../../api/markdownRenderAsync';
 import { isSafeHref, sanitizeUrlCandidate } from '../../api/markdown-render/markdownSanitizer';
 import { VirtualPlainCodeViewer } from '../diff/VirtualPlainCodeViewer';
 import { ScrollArea } from './ScrollArea';
+import { AppIcon } from './icons/index';
 
 /** 超过此阈值（默认 256KB）将强制熔断切入虚拟化极速代码呈现 */
 export const DEFAULT_LARGE_FILE_THRESHOLD_BYTES = 256 * 1024;
@@ -334,7 +335,7 @@ export const MarkdownDocumentView: React.FC<MarkdownDocumentViewProps> = React.m
               flexShrink: 0,
             }}
           >
-            <span aria-hidden="true" style={{ color: 'var(--color-warning)' }}>⚡</span>
+            <AppIcon name="zap" size={14} color="var(--color-warning)" aria-hidden />
             <span>大文件 Markdown（{sizeKb} KB）已启用虚拟化极速代码呈现</span>
           </div>
           <div style={{ flex: 1, minHeight: 0, height: '100%', width: '100%' }}>

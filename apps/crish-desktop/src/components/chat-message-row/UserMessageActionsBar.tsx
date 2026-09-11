@@ -48,11 +48,17 @@ export const UserMessageActionsBar: React.FC<UserMessageActionsBarProps> = ({
           className={`${styles.iconBtn}${copied ? ` ${styles.isCopied}` : ''}`}
           aria-label={copied ? '已复制' : '复制消息'}
           onClick={onCopy}
-          icon={copied ? <AppIcon name="check" size={14} /> : <AppIcon name="copy" size={14} />}
+          icon={
+            copied ? (
+              <AppIcon name="check" size={14} aria-hidden />
+            ) : (
+              <AppIcon name="copy" size={14} aria-hidden />
+            )
+          }
         />
       </Tooltip>
       {onEdit ? (
-        <Tooltip content="编辑消息">
+        <Tooltip content="编辑上一条消息（回填输入框并重新编辑）">
           <Button
             type="button"
             variant="ghost"

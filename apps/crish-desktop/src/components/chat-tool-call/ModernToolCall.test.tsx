@@ -61,16 +61,16 @@ describe('ModernToolCall 极简黑白灰工具调用组件套件', () => {
       const headBtn = screen.getByRole('button', { name: /Searched the docs/ });
       fireEvent.click(headBtn);
 
-      expect(screen.getByText('Request')).toBeDefined();
+      expect(screen.getByText('请求参数')).toBeDefined();
       expect(screen.getByText(/"query": "draft persistence"/)).toBeDefined();
-      expect(screen.getByText('Result')).toBeDefined();
+      expect(screen.getByText('执行结果')).toBeDefined();
       expect(
         screen.getByText('3 matches, best hit /docs/runtime/drafts')
       ).toBeDefined();
 
       // 再次点击折叠
       fireEvent.click(headBtn);
-      expect(screen.queryByText('Request')).toBeNull();
+      expect(screen.queryByText('请求参数')).toBeNull();
     });
 
     it('支持 defaultOpen 与外部受控 isOpen / onToggle', () => {
@@ -86,7 +86,7 @@ describe('ModernToolCall 极简黑白灰工具调用组件套件', () => {
         />
       );
 
-      expect(screen.getByText('Request')).toBeDefined();
+      expect(screen.getByText('请求参数')).toBeDefined();
       expect(screen.getByText('# Overview')).toBeDefined();
 
       const headBtn = screen.getByRole('button');
@@ -224,9 +224,9 @@ describe('ModernToolCall 极简黑白灰工具调用组件套件', () => {
 
       // 提取出的参数胶囊
       expect(screen.getByText('draft persistence')).toBeDefined();
-      // 展开的 Request
-      expect(screen.getByText('Request')).toBeDefined();
-      expect(screen.getByText('Result')).toBeDefined();
+      // 展开的请求参数与执行结果
+      expect(screen.getByText('请求参数')).toBeDefined();
+      expect(screen.getByText('执行结果')).toBeDefined();
       expect(screen.getByText('3 matches found')).toBeDefined();
     });
   });

@@ -17,7 +17,7 @@ import {
   type StorageStatePreview,
 } from '../../../../api/browserImportLib';
 import { downloadTextFile } from '../../../../api/sessionExport';
-import { toast } from '../../../../services/toast/ToastContext';
+import { useToast } from '../../../../services/toast/ToastContext';
 import { resultMessage, type BusyKind } from './browserImportShared';
 
 export interface UseExportAuthOptions {
@@ -26,15 +26,14 @@ export interface UseExportAuthOptions {
   setStorageError: Dispatch<SetStateAction<string>>;
   /** 测试注入：登录态「另存为」写盘（缺省 downloadTextFile）。 */
   saveExport?: (filename: string, content: string) => void;
-  onShowToast?: (message: string) => void;
 }
 
 export function useExportAuth({
   setBusy,
   setStorageError,
   saveExport,
-  onShowToast,
 }: UseExportAuthOptions) {
+  const { showToast } = useToast();
   const [exportAuthOpen, setExportAuthOpen] = useState(false);
   const [exportPreviewOpen, setExportPreviewOpen] = useState(false);
   const [exportPreview, setExportPreview] =
@@ -46,10 +45,9 @@ export function useExportAuth({
     (prefix: string, msg: string) => {
       const full = `${prefix}${msg}`;
       setStorageError(full);
-      onShowToast?.(full);
-      toast.show(full);
+      showToast(full);
     },
-    [setStorageError, onShowToast]
+    [setStorageError, showToast]
   );
 
   // 登录态导出：两段确认（① 授权读取 → ② 预览域名清单后确认写盘）
@@ -81,8 +79,7 @@ export function useExportAuth({
       setExportedJson('');
       setExportPreview(null);
       const msg = '登录态凭据已导出';
-      onShowToast?.(msg);
-      toast.show(msg);
+      showToast(msg);
     } catch (err) {
       reportStorageError('登录态保存失败：', String(err ?? ''));
     }

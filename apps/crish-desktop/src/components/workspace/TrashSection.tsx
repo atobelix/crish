@@ -22,7 +22,6 @@ import {
 
 export type TrashSectionProps = {
   className?: string;
-  onShowToast?: (msg: string) => void;
 };
 
 function formatSize(bytes: number): string {

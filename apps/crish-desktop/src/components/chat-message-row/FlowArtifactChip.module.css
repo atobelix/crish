@@ -89,6 +89,9 @@
 }
 
 .flowSyncDone {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   color: var(--text-tertiary);
   font-size: var(--font-size-sm, 13px);
 }

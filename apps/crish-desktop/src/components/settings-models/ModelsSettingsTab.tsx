@@ -45,6 +45,7 @@ import {
 import { ModelProfileList, ModelsCascadeSelect } from './ModelProfileList';
 import { ModelConfigEditor } from './ModelConfigEditor';
 import { YamlConfigEditorModal } from './YamlConfigEditorModal';
+import { getOpenerIcon } from '../files/FileActions';
 import { AppIcon } from '../ui/icons/index';
 
 type Props = {
@@ -155,6 +156,7 @@ export const ModelsSettingsTab: React.FC<Props> = ({ _onBlockingOverlayChange })
   const [yamlEditorOpen, setYamlEditorOpen] = useState(false);
   const [yamlMenuOpen, setYamlMenuOpen] = useState(false);
   const [availableOpeners, setAvailableOpeners] = useState<HostOpener[]>([]);
+  const [systemFileManagerOpener, setSystemFileManagerOpener] = useState<HostOpener | null>(null);
   // 真源路径唯一定点 = 字典镜像（Rust workbench_read_models_yaml 返回）；
   // 订阅镜像版本号保证镜像重载后路径与回调同步更新
   const catalogVersion = useModelsCatalogVersion();
@@ -174,6 +176,8 @@ export const ModelsSettingsTab: React.FC<Props> = ({ _onBlockingOverlayChange })
     listHostOpeners()
       .then((openers) => {
         if (!active) return;
+        const fileManager = openers.find((o) => o.id === 'system-file-manager') ?? null;
+        setSystemFileManagerOpener(fileManager);
         const filtered = openers.filter(
           (o) =>
             o.available &&
@@ -288,10 +292,10 @@ export const ModelsSettingsTab: React.FC<Props> = ({ _onBlockingOverlayChange })
     { id: 'copy-path', label: '复制绝对路径', onClick: handleCopyPath },
   ];
 
-  // ── 顶栏操作区：配置文件 (YAML) 组合按钮 + 添加服务商 ──────────────────
+  // ── 顶栏操作区：模型配置文件 (models.yaml) 组合按钮 + 添加服务商 ──────────────────
   const headerMeta = (
     <div className={yamlStyles.headerActionGroup}>
-      {/* 配置文件 (YAML) 组合 Split Button */}
+      {/* 模型配置文件 (models.yaml) 组合 Split Button */}
       <div className={yamlStyles.configButtonCombo}>
         <Button
           type="button"
@@ -299,9 +303,9 @@ export const ModelsSettingsTab: React.FC<Props> = ({ _onBlockingOverlayChange })
           size="sm"
           icon={<AppIcon name="file-code" size={13} style={{ opacity: 0.8 }} aria-hidden />}
           onClick={() => setYamlEditorOpen(true)}
-          aria-label="在内置编辑器中编辑配置文件 (YAML)"
+          aria-label="在内置编辑器中编辑模型配置文件 (models.yaml)"
         >
-          配置文件 (YAML)
+          模型配置文件 (models.yaml)
         </Button>
         <Menu
           openState={{ open: yamlMenuOpen, onOpenChange: setYamlMenuOpen }}
@@ -319,8 +323,8 @@ export const ModelsSettingsTab: React.FC<Props> = ({ _onBlockingOverlayChange })
             />
           }
         >
-          <div role="menu" aria-label="配置文件直达选项">
-            <div className={yamlStyles.menuSectionTitle}>配置文件 (models.yaml)</div>
+          <div role="menu" aria-label="模型配置文件直达选项">
+            <div className={yamlStyles.menuSectionTitle}>模型配置文件 (models.yaml)</div>
             <Button
               bare
               type="button"
@@ -332,11 +336,11 @@ export const ModelsSettingsTab: React.FC<Props> = ({ _onBlockingOverlayChange })
               }}
             >
               <AppIcon name="code" size={13} aria-hidden />
-              内置编辑器打开
+              <span>内置编辑器打开</span>
             </Button>
 
             <div className={yamlStyles.menuDivider} />
-            <div className={yamlStyles.menuSectionTitle}>外部编辑器调起</div>
+            <div className={yamlStyles.menuSectionTitle}>外部编辑器</div>
 
             {availableOpeners.map((op) => (
               <Button
@@ -347,8 +351,8 @@ export const ModelsSettingsTab: React.FC<Props> = ({ _onBlockingOverlayChange })
                 className={yamlStyles.menuItemBtn}
                 onClick={() => void handleOpenExternal(op.id)}
               >
-                <AppIcon name="external-link" size={13} aria-hidden />
-                {op.displayName || op.label || op.id}
+                {getOpenerIcon(op, 14)}
+                <span className={yamlStyles.openerName}>{op.displayName || op.label || op.id}</span>
               </Button>
             ))}
 
@@ -359,8 +363,8 @@ export const ModelsSettingsTab: React.FC<Props> = ({ _onBlockingOverlayChange })
               className={yamlStyles.menuItemBtn}
               onClick={() => void handleOpenDefault()}
             >
-              <AppIcon name="external-link" size={13} aria-hidden />
-              系统默认程序打开
+              <AppIcon name="app-window" size={13} aria-hidden />
+              <span>系统默认程序打开</span>
             </Button>
 
             <div className={yamlStyles.menuDivider} />
@@ -373,8 +377,18 @@ export const ModelsSettingsTab: React.FC<Props> = ({ _onBlockingOverlayChange })
               className={yamlStyles.menuItemBtn}
               onClick={() => void handleReveal()}
             >
-              <AppIcon name="folder-open" size={13} aria-hidden />
-              在文件资源管理器中定位
+              {systemFileManagerOpener?.iconDataUrl ? (
+                <img
+                  src={systemFileManagerOpener.iconDataUrl}
+                  width={14}
+                  height={14}
+                  alt=""
+                  style={{ flexShrink: 0, objectFit: 'contain' }}
+                />
+              ) : (
+                <AppIcon name="folder-open" size={13} aria-hidden />
+              )}
+              <span>在文件资源管理器中定位</span>
             </Button>
 
             <Button
@@ -385,7 +399,7 @@ export const ModelsSettingsTab: React.FC<Props> = ({ _onBlockingOverlayChange })
               onClick={handleCopyPath}
             >
               <AppIcon name="copy" size={13} aria-hidden />
-              复制绝对路径
+              <span>复制绝对路径</span>
             </Button>
           </div>
         </Menu>

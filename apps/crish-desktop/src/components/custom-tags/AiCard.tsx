@@ -15,6 +15,7 @@ import styles from './custom-tags.module.css';
 import { CustomTagErrorBoundary } from './CustomTagErrorBoundary';
 import type { ExtraComponentProps } from './CustomTagRegistry';
 import { Tooltip } from '../ui';
+import { AppIcon } from '../ui/icons/index';
 
 export interface AiCardProps extends ExtraComponentProps {
   title?: string;
@@ -81,7 +82,7 @@ export const AiCardInner: React.FC<AiCardProps> = ({
           </Tooltip>
         );
       default:
-        return <span aria-hidden="true">🤖</span>;
+        return <AppIcon name="bot" size={14} aria-hidden="true" />;
     }
   };
 
@@ -114,7 +115,7 @@ export const AiCardInner: React.FC<AiCardProps> = ({
 
           {collapsible && (
             <span className={styles.chevronIcon} aria-hidden="true">
-              ▶
+              <AppIcon name="chevron-right" size={12} aria-hidden="true" />
             </span>
           )}
         </div>

@@ -18,7 +18,7 @@
   border: 1px solid var(--border-color);
   border-radius: var(--radius-xl, 12px);
   padding: var(--space-3, 12px) var(--space-4, 16px);
-  box-shadow: var(--shadow-2xl, 0 16px 36px -4px rgba(0, 0, 0, 0.2));
+  box-shadow: var(--shadow-2xl);
   display: flex;
   flex-direction: column;
   gap: var(--space-2, 8px);

@@ -24,19 +24,18 @@ import {
   type BusyKind,
 } from './browserImportShared';
 
-import { toast } from '../../../../services/toast/ToastContext';
+import { useToast } from '../../../../services/toast/ToastContext';
 
 export interface UseBookmarksImportOptions {
   busy: BusyKind;
   setBusy: Dispatch<SetStateAction<BusyKind>>;
-  onShowToast?: (message: string) => void;
 }
 
 export function useBookmarksImport({
   busy,
   setBusy,
-  onShowToast,
 }: UseBookmarksImportOptions) {
+  const { showToast } = useToast();
   const [bookmarksJson, setBookmarksJson] = useState('');
   const [bookmarksFileName, setBookmarksFileName] = useState('');
   const [bookmarksResult, setBookmarksResult] =
@@ -50,10 +49,9 @@ export function useBookmarksImport({
     (prefix: string, msg: string) => {
       const full = `${prefix}${msg}`;
       setBookmarksError(full);
-      onShowToast?.(full);
-      toast.show(full);
+      showToast(full);
     },
-    [onShowToast]
+    [showToast]
   );
 
   // 书签：文件三通道（选择 / 拖入 / 路径读取）共用装载
@@ -120,8 +118,7 @@ export function useBookmarksImport({
     if (res.status === 'ok') {
       setBookmarksResult(res.data);
       const msg = `书签导入成功：新增 ${res.data.inserted} 条，跳过 ${res.data.skippedDupes} 条`;
-      onShowToast?.(msg);
-      toast.show(msg);
+      showToast(msg);
     } else {
       reportBookmarksError('书签导入失败：', resultMessage(res, ''));
     }
@@ -146,8 +143,7 @@ export function useBookmarksImport({
       if (res.status === 'ok') {
         setBookmarksResult(res.data);
         const msg = `书签导入成功：新增 ${res.data.inserted} 条，跳过 ${res.data.skippedDupes} 条`;
-        onShowToast?.(msg);
-        toast.show(msg);
+        showToast(msg);
       } else {
         reportBookmarksError('书签导入失败：', resultMessage(res, ''));
       }

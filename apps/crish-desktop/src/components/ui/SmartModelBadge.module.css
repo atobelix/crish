@@ -19,7 +19,7 @@
   padding: 2px 8px;
   border-radius: 9999px;
   background: color-mix(in srgb, var(--surface-scrim) 85%, transparent);
-  border: 1px solid hsl(220 16% 24% / 0.9);
+  border: 1px solid var(--border-subtle);
   color: var(--text-primary);
   font-family: inherit;
   font-size: 11px;

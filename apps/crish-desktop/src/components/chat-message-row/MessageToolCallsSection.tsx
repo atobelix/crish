@@ -10,6 +10,7 @@
 import React, { lazy, useCallback, useLayoutEffect, useMemo, useRef } from 'react';
 import styles from './ChatMessageRow.module.css';
 import { ChatToolStack, type ChatToolStackSharedProps } from '../chat-tool-call/ChatToolCallBlock';
+import { FoldableToolGroup } from '../chat-tool-call/FoldableToolGroup';
 import type { ToolRenderItem } from '../../api/toolPresentation';
 import { buildToolStackHostProps, shouldHostToolStack } from './chatMessageRowUtils';
 import { ReasoningRow } from './ReasoningRow';
@@ -158,19 +159,24 @@ export const MessageToolCallsSection: React.FC<MessageToolCallsSectionProps> = (
       ) : null}
 
       {hasTools && host ? (
-        <ChatToolStack
-          {...host}
-          actions={{
-            ...host.actions,
-            renderLinkedAgentPanel: (agent, parentSessionId, tc) => (
-              <InlineAgentPanel
-                agent={agent}
-                parentSessionId={parentSessionId}
-                defaultOpen={
-                  tc.status === 'running' || agent.status === 'running'
-                }
-              />
-            ),
+        <FoldableToolGroup
+          items={toolRenderItems}
+          msgId={msgId}
+          onInvalidate={() => virtualScrollManager?.invalidateActual(msgId)}
+          hostProps={{
+            ...host,
+            actions: {
+              ...host.actions,
+              renderLinkedAgentPanel: (agent, parentSessionId, tc) => (
+                <InlineAgentPanel
+                  agent={agent}
+                  parentSessionId={parentSessionId}
+                  defaultOpen={
+                    tc.status === 'running' || agent.status === 'running'
+                  }
+                />
+              ),
+            },
           }}
         />
       ) : null}

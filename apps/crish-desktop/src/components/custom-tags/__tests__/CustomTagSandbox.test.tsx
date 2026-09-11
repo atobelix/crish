@@ -214,7 +214,7 @@ describe('React 富交互组件套件功能交互', () => {
     expect(screen.getByText((_, el) => (el?.textContent?.includes('deleted line') ?? false) && el?.tagName === 'SPAN')).toBeDefined();
 
     // 切换到 Split 模式
-    const splitBtn = screen.getByRole('button', { name: 'Split' });
+    const splitBtn = screen.getByRole('button', { name: '分栏比对' });
     fireEvent.click(splitBtn);
     expect(screen.getByText(/Original/)).toBeDefined();
     expect(screen.getByText(/Modified/)).toBeDefined();

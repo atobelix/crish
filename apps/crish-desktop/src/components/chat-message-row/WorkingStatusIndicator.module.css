@@ -28,7 +28,7 @@
   height: 6px;
   border-radius: 50%;
   background: var(--brand);
-  box-shadow: 0 0 6px hsl(158 64% 52% / 0.6);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--brand) 60%, transparent);
   animation: pulse-ring 1.6s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   flex-shrink: 0;
 }
@@ -41,7 +41,7 @@
   50% {
     transform: scale(1.25);
     opacity: 1;
-    box-shadow: 0 0 10px hsl(158 64% 52% / 0.85);
+    box-shadow: 0 0 10px color-mix(in srgb, var(--brand) 85%, transparent);
   }
 }
 

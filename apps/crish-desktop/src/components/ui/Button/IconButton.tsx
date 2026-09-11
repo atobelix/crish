@@ -20,11 +20,13 @@ export interface IconButtonProps extends Omit<
   'aria-label': string;
   /** 声明式 Tooltip 浮层文案（可选） */
   tooltip?: React.ReactNode;
+  /** 快捷键组合：单个字符串（如 '?'）或按键数组 */
+  shortcut?: string | string[];
 }
 
 export const IconButton = React.forwardRef<HTMLButtonElement, IconButtonProps>(
   function IconButton(
-    { icon, tooltip, className, variant = 'ghost', 'aria-label': ariaLabel, ...props },
+    { icon, tooltip, shortcut, className, variant = 'ghost', 'aria-label': ariaLabel, ...props },
     ref
   ) {
     const classNames = [styles.iconButton, className].filter(Boolean).join(' ');
@@ -41,7 +43,11 @@ export const IconButton = React.forwardRef<HTMLButtonElement, IconButtonProps>(
     );
 
     if (tooltip != null) {
-      return <Tooltip content={tooltip}>{buttonNode}</Tooltip>;
+      return (
+        <Tooltip content={tooltip} shortcut={shortcut}>
+          {buttonNode}
+        </Tooltip>
+      );
     }
 
     return buttonNode;
