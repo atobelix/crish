@@ -1,8 +1,8 @@
 # 02-子Agent-工作区隔离定时任务方案
 
-> **战役主题**：定时任务（Workflow / CronJob）按工作区目录（CWD / Workspace Root）强制物理隔离与彻底去全局化设计方案  
-> **用户权威裁决**：“第二个就是定时任务没有全局这一说，只能在工作区目录里面选择，所以其他项目在未绑定定时任务的情况下，是没有东西显示的。”  
-> **文档位置**：[`docs/workspace-scoped-workflows/independent-plans/02-子Agent-工作区隔离定时任务方案.md`](file:///c:/Software/conex/docs/workspace-scoped-workflows/independent-plans/02-子Agent-工作区隔离定时任务方案.md)  
+> **战役主题**：定时任务（Workflow / CronJob）按工作区目录（CWD / Workspace Root）强制物理隔离与彻底去全局化设计方案
+> **用户权威裁决**：“第二个就是定时任务没有全局这一说，只能在工作区目录里面选择，所以其他项目在未绑定定时任务的情况下，是没有东西显示的。”
+> **文档位置**：[`docs/workspace-scoped-workflows/independent-plans/02-子Agent-工作区隔离定时任务方案.md`](file:///c:/Software/conex/docs/workspace-scoped-workflows/independent-plans/02-子Agent-工作区隔离定时任务方案.md)
 > **设计原则**：架构净收敛、单真源（SSOT）、拒绝魔术补丁、全链路端到端物理隔离
 
 ---
@@ -222,7 +222,7 @@ flowchart TD
     Engine[Engine: listWorkflows] --> EngineState[useEngineState: workflows]
     EngineState --> Filter[filterWorkflowsByWorkspace]
     ActiveProject[Active Project / Session Folder: Workspace Root] --> Filter
-    
+
     Filter --> Drawer[右侧抽屉 ScheduleSection]
     Filter --> Settings[设置中心 WorkflowList]
     Filter --> ChatPanel[主对话区 ScheduledTasksPanel]
