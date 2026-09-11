@@ -1,10 +1,10 @@
 # 供应商与模型能力统一 — 兼容 Shim、静默吞咽与无日期降级审计
 
-> **文档编号**：`20-Audit-AntiShim-FailOpen`  
-> **所属战役工作区**：`docs/provider-model-unification/audits/`  
-> **审查角色**：Anti-Shim & Fail-Open Auditor（只读，不改源码）  
-> **审计日期**：2026-09-08  
-> **对齐**：`AGENTS.md` §7 禁补丁；`review.md` §6 错误治理（无日期 fallback=红）、§13 未接线标记趋势（新增=0）、§15.4 假收敛  
+> **文档编号**：`20-Audit-AntiShim-FailOpen`
+> **所属战役工作区**：`docs/provider-model-unification/audits/`
+> **审查角色**：Anti-Shim & Fail-Open Auditor（只读，不改源码）
+> **审计日期**：2026-09-08
+> **对齐**：`AGENTS.md` §7 禁补丁；`review.md` §6 错误治理（无日期 fallback=红）、§13 未接线标记趋势（新增=0）、§15.4 假收敛
 > **问题同权**：下表条目不按 P0/P1 砍项；红/黄仅表示纪律判定，不表示业务优先级。
 
 ---

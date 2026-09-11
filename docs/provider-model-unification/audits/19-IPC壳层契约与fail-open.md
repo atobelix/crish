@@ -1,10 +1,10 @@
 # 19 · IPC 壳层契约与 fail-open 审计（models.yaml 真源）
 
-> **文档编号**：`19-IPC-Shell-Contract`  
-> **工作区归属**：`docs/provider-model-unification/audits/`  
-> **审计角色**：IPC & Shell Contract Auditor（只读；对齐 `docs/agent-roles/review/review.md` §8 跨语言边界）  
-> **审计日期**：2026-09-08  
-> **本会话验证口径**：源码形状审计；**未**跑 `cargo test` / `vitest` / 真机 IPC。下文「测试会红」均为对照断言与注册面的静态漂移，不当作本会话实测绿灯/红灯。  
+> **文档编号**：`19-IPC-Shell-Contract`
+> **工作区归属**：`docs/provider-model-unification/audits/`
+> **审计角色**：IPC & Shell Contract Auditor（只读；对齐 `docs/agent-roles/review/review.md` §8 跨语言边界）
+> **审计日期**：2026-09-08
+> **本会话验证口径**：源码形状审计；**未**跑 `cargo test` / `vitest` / 真机 IPC。下文「测试会红」均为对照断言与注册面的静态漂移，不当作本会话实测绿灯/红灯。
 > **审查对象**：`models.yaml` 三命令（读/校验/保存）在 Rust 注册面、TS registry、前端 invoke 三者是否同名；Wave 4（`f98b7f62`）自称「IPC 降级清除」是否属实；保存/读取是否诚实 fail-closed；会话运行时消费 live yaml 还是编译期目录。
 
 ---
@@ -386,28 +386,28 @@ review.md §1「壳层业务逻辑含量」+ 本任务第 5 条。
 
 删除裁决权在主控（review.md 文首）。下列是按证据排出的逻辑依赖，**不是**工期排序。
 
-1. **斩断幽灵命令（§8 UI 有条无 IPC）**  
+1. **斩断幽灵命令（§8 UI 有条无 IPC）**
    `modelsCatalogIpc.ts` 只 invoke `workbench_{read,validate,save}_models_yaml`。删除 `models_yaml_read/write/reload` 与 `models-yaml-reloaded` 死监听。类型注释改为真实命令名。单测 mock 改为 `workbench_save_models_yaml`（现在 mock 幽灵名会在删除后立刻红——这是要的）。
 
-2. **读路径使用 Rust `providers`，删除 `convertFlatModelsToTree`**  
+2. **读路径使用 Rust `providers`，删除 `convertFlatModelsToTree`**
    全仓 TS 零读取 `providers` 是数据残杀根因。映射 `ReadModelsYamlResult.providers` → `ModelsYamlTree`。拍平 `models` 仅作只读兼容门面，禁止再生成写回树。
 
-3. **`ensureLoaded` 失败不得用空树覆盖已加载镜像**  
+3. **`ensureLoaded` 失败不得用空树覆盖已加载镜像**
    失败：保留 `prevSnapshot.tree`，`loaded` 维持，`lastError` 必填；首次失败 `loaded=false` 且 UI 走错误态，禁止 `listCatalogModels()` 把空当「用户没配供应商」。
 
-4. **设置抽屉保存接到 `modelsCatalogStore.updateTree` / `workbench_save`**  
+4. **设置抽屉保存接到 `modelsCatalogStore.updateTree` / `workbench_save`**
    否则 YAML 编辑器是唯一真源写入口，主按钮仍 LS（`modelsIpcHelpers.ts`）。不关「设置保存」EL。
 
-5. **会话执行改读 live yaml（或证明 bundled 为有意）**  
+5. **会话执行改读 live yaml（或证明 bundled 为有意）**
    `effective_protocol` / `validate_reasoning_effort` / `effective_context_window` / `catalog_get` state 仍 `bundled()`。`reload_live_catalog` 在无人消费时是假热更新。二选一：接线 `live_catalog()` 并去掉 `#[allow(dead_code)]`；或删除 reload 以免假装连通。
 
-6. **统一解析器**  
+6. **统一解析器**
    壳层 `parse_models_yaml` 与 crate `parse_yaml_to_catalog` 对空 id 一拒一跳。应只留 crate（或壳只做 IPC 包装）。`load_user_catalog_or_default` 的空目录回退与「损坏不得当合法空配置」冲突。
 
-7. **注册表 131 vs 142**  
+7. **注册表 131 vs 142**
    把 `REGISTERED_TAURI_COMMANDS` 补齐 auth 7 + note_document 4，测试改为 142；或明确 workbench 注册表降级为子集并停止断言等于 `main.rs` 全量。文件头「127 条」注释一并改，避免下一轮再按 131 关门。
 
-8. **旧轨 `catalog_get` 启动降级**  
+8. **旧轨 `catalog_get` 启动降级**
    `bootstrap-full.ts` + `fetchCatalogSnapshot` 的静态表 fail-open 与 yaml SSOT 互斥。要么启动改 `ensureModelsCatalogLoaded` 且失败可见，要么文档承认定价仍走 bundled/静态表（当前注释写「Rust 目录真源」是撒谎）。
 
 **不建议**：再加一层 `models_yaml_write` 新命令「与测试桩对齐」——那是把幽灵扶正，制造第四个名字。已有 `workbench_save_models_yaml` 收 `content: String`，树序列化放前端或放 Rust 都可以，但命令名必须停在已登记的三名。

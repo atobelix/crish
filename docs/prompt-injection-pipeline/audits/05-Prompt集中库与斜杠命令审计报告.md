@@ -1,13 +1,13 @@
 # 统一 Prompt SSOT 集中库与斜杠命令收敛深度审计报告
 
-> **审计位**：架构与代码安全执行期审计位  
+> **审计位**：架构与代码安全执行期审计位
 > **对照基准**：
 > - `docs/prompt-injection-pipeline/00-总方案-统一提示词与上下文注入通道架构规划.md`
 > - `docs/prompt-injection-pipeline/detailed-plans/01-统一Prompt集中库与模板详案.md`
 > - `docs/prompt-injection-pipeline/detailed-plans/02-对话流可见注入卡片协议与呈现详案.md`
 > - `docs/prompt-injection-pipeline/detailed-plans/05-定时任务编排助手落地实践详案.md`
 > - `AGENTS.md`（§7 严禁补丁与立体验证、§8 反过度设计、§11 前端代码行数与解耦门禁）
-> 
+>
 > **审计范围**：
 > - `apps/crish-desktop/src/prompts/**`（types, registry, compiler, core, environment, modes 及测试）
 > - `apps/crish-desktop/src/hooks/chat-stream/slashSendPreflight.ts`、`slashContextCards.ts`
@@ -15,8 +15,8 @@
 > - `apps/crish-desktop/src/api/chat-bridge/streamSession.ts`、`streamFinishControl.ts`
 > - `apps/crish-desktop/src/api/goalModeContinuation.ts`、`apps/crish-desktop/src/api/skillsApi.ts`
 > - 历史删除文件 `slash-prefixes.ts`、`composerSeed.ts`、`workflowAssistantPrompt.ts` 零残留核查
-> 
-> **审计时间**：2026-09-02  
+>
+> **审计时间**：2026-09-02
 > **审计结论**：**通过（PASS）**，核心契约严密落地，死代码与旧暗流彻底清零，行数门禁全绿；报告记录 2 项深层防注入演进点与 3 项结构微观不对称备忘。
 
 ---

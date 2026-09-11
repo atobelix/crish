@@ -316,7 +316,7 @@ pub(crate) fn truncate_to_budget(&mut self, budget_bytes: usize) -> usize {
     let mut dropped = 0usize;
     let mut ordered = std::mem::take(&mut self.injections);
     ordered.sort_by_key(|injection| injection.kind);
-    
+
     for injection in ordered {
         // 动态段（如时间戳）体积极小，默认保留
         if injection.content.contains("@dynamic") {

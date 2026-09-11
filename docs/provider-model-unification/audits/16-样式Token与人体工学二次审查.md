@@ -1,10 +1,10 @@
 # 16 · 样式 Token 与人体工学二次审查
 
-> **文档标识**：`16-样式Token与人体工学二次审查.md`  
-> **所属战役工作区**：`docs/provider-model-unification/audits/`  
-> **角色**：UI Tokens & Ergonomics Auditor（只读；禁止改源码）  
-> **取证日期**：2026-09-08  
-> **相对上一轮**：`07-样式系统与人体工学合规深度审查.md` 写于 Wave 4 之前。本轮按 **Wave 4 落地后的当前工作区** 重新取证，不以 07 的行号/结论为真。  
+> **文档标识**：`16-样式Token与人体工学二次审查.md`
+> **所属战役工作区**：`docs/provider-model-unification/audits/`
+> **角色**：UI Tokens & Ergonomics Auditor（只读；禁止改源码）
+> **取证日期**：2026-09-08
+> **相对上一轮**：`07-样式系统与人体工学合规深度审查.md` 写于 Wave 4 之前。本轮按 **Wave 4 落地后的当前工作区** 重新取证，不以 07 的行号/结论为真。
 > **Wave 4 自称**：「原生 Token 样式」。提交 `f98b7f62`（`BATCH-UNIFY-04`）对样式域的真实 diff 为：
 >
 > | 文件 | 变更 |
@@ -13,7 +13,7 @@
 > | `ModelConfigPanel.tsx` | 保存钮改 `variant="primary"` + 去掉内联绿底/`#fff`；智能预填色 fallback `#10b981` → `hsl(160 84% 39%)` |
 > | `ModelThinkingEditor.tsx` | 拆掉内嵌 `Switch`；图标色 fallback 同上；`onEnabledChange` 改为未使用 `_onEnabledChange` |
 >
-> **裁决基准**：`AGENTS.md` §12 Tooltip、§13 焦点、§14 HSLA/token、§19 四态铁律、§20 圆角、§21 零 Emoji。Token SSOT：`apps/crish-desktop/src/styles/tokens.css`。门禁线索：`scripts/check-input-guardrails.mjs`（本轮实测 **exit 0 全绿**，见第八节盲区）。  
+> **裁决基准**：`AGENTS.md` §12 Tooltip、§13 焦点、§14 HSLA/token、§19 四态铁律、§20 圆角、§21 零 Emoji。Token SSOT：`apps/crish-desktop/src/styles/tokens.css`。门禁线索：`scripts/check-input-guardrails.mjs`（本轮实测 **exit 0 全绿**，见第八节盲区）。
 > **问题同权**：下列条目不分 P0/P1，不按「看起来小」降级。
 
 ---
@@ -617,6 +617,6 @@ node scripts/check-input-guardrails.mjs
 
 ---
 
-**审计签发**：UI Tokens & Ergonomics Auditor  
-**状态**：二次审查完成 / Wave 4 未闭合 07 的样式与吸底问题  
+**审计签发**：UI Tokens & Ergonomics Auditor
+**状态**：二次审查完成 / Wave 4 未闭合 07 的样式与吸底问题
 **产出路径**：`docs/provider-model-unification/audits/16-样式Token与人体工学二次审查.md`

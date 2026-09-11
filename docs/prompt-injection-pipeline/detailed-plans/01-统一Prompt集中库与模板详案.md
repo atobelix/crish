@@ -1,12 +1,12 @@
 # 维度一：统一 Prompt SSOT 集中库与类型安全模板详案
 
-> **文档版本**：v1.0.0  
-> **所属战役**：Prompt 与上下文注入管线（Prompt Injection Pipeline）专项  
-> **产出路径**：`docs/prompt-injection-pipeline/detailed-plans/01-统一Prompt集中库与模板详案.md`  
+> **文档版本**：v1.0.0
+> **所属战役**：Prompt 与上下文注入管线（Prompt Injection Pipeline）专项
+> **产出路径**：`docs/prompt-injection-pipeline/detailed-plans/01-统一Prompt集中库与模板详案.md`
 > **前置评审基准**：
 > - `docs/prompt-injection-pipeline/plan-reviews/01-架构一致性与可见注入裁决评审.md`
 > - `docs/prompt-injection-pipeline/plan-reviews/02-路径收敛与删除面评审.md`
-> - `docs/prompt-injection-pipeline/plan-reviews/03-前端可见注入卡片交互评审.md`  
+> - `docs/prompt-injection-pipeline/plan-reviews/03-前端可见注入卡片交互评审.md`
 > **纪律准则**：遵守仓库根目录 `AGENTS.md` 通用协作指令、反退避原则（`LOGIC_PLAN_NO_RETREAT.md`）及反过度设计红线（`ANTI_OVERENGINEERING_GUARDRAILS.md`）。
 
 ---
@@ -935,5 +935,5 @@ npm run test
 npm run check:line-counts
 ```
 
-> **详案总结**：  
+> **详案总结**：
 > 本详案作为「维度一：统一 Prompt SSOT 集中库与类型安全模板」的权威落地指南，彻底贯彻了“静态基座不可变、动态模式下放为可见卡片”的架构重构裁决。通过清晰的「做什么、删什么、依赖顺序、文件域与验收断言」，为后续代码的稳健实施与架构净收敛提供了坚实无争议的执行蓝图。

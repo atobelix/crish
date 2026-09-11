@@ -1,8 +1,8 @@
 # 17 — Rust 内核计费 / 迁移 / 目录契约 / 出站协议正确性审计
 
-> **角色**：Rust Kernel Correctness Auditor（只读，不改源码）  
-> **日期**：2026-09-08  
-> **范围**：Wave 1–4 落入的 `crates/agent-provider` 计费、迁移、目录契约、出站协议；宿主接线 `apps/agent-workbench/src-tauri` 仅作「是否真正消费内核」判定。不审前端 UI。  
+> **角色**：Rust Kernel Correctness Auditor（只读，不改源码）
+> **日期**：2026-09-08
+> **范围**：Wave 1–4 落入的 `crates/agent-provider` 计费、迁移、目录契约、出站协议；宿主接线 `apps/agent-workbench/src-tauri` 仅作「是否真正消费内核」判定。不审前端 UI。
 > **对账基准**：`docs/provider-model-unification/audits/10-反打补丁与异常韧性深度审查.md` 四条红项必须按**当前代码**重判。
 
 ---
@@ -160,7 +160,7 @@
 
 ### 7. 出站：thinking 字典、多模态 parts 是否按 modalities 过滤？
 
-**thinking 字典：builder 支持，宿主未传（K-02）。**  
+**thinking 字典：builder 支持，宿主未传（K-02）。**
 **modalities 过滤：函数在、测试在、生产调用链不在（K-03）。**
 
 `user_message_content`（`messages_content.rs:176-226`）只按 `metadata.contentParts` 是否含 `image_url` 决定 Parts vs Text，不读模型 modalities。
@@ -188,7 +188,7 @@
 | `PricingEngine` | 20_000 × 3 / 1M = 0.06 | 80_000 × 0.10 / 1M = 0.008 | **0.068**（`pricing_tests.rs:28-33`，本会话绿） |
 | `ModelPricingSpec::calculate_cost` | 100_000 × 3 / 1M = 0.30 | 80_000 × 0.10 / 1M = 0.008 | **0.308**（cache 段按全价 input 重复计） |
 
-`PricingEngine::calculate_cost_from_spec` 走引擎（扣减正确）但 **丢阶梯**（K-05）。  
+`PricingEngine::calculate_cost_from_spec` 走引擎（扣减正确）但 **丢阶梯**（K-05）。
 公开的 `ModelPricingSpec::calculate_cost` 仍在类型上引诱误用。
 
 ---

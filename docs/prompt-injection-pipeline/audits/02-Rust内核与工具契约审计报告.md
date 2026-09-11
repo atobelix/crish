@@ -1,20 +1,20 @@
 # Rust 内核层与工具契约深度审计报告
 
-> **审计位**：主控执行期固定审计位（对齐 `AGENTS.md` §17 / 主控提示词 §4.4）  
+> **审计位**：主控执行期固定审计位（对齐 `AGENTS.md` §17 / 主控提示词 §4.4）
 > **审计范围**：
 > - 核心类型契约：`crates/conex-types/src/attachment.rs`, `crates/conex-types/src/injection_card.rs`, `crates/conex-types/src/lib.rs`
 > - 工具层与只读裁剪：`crates/agent-tools/src/tools/create_workflow.rs`, `crates/agent-tools/src/readonly.rs`, `crates/agent-tools/src/tools/mod.rs`, `crates/agent-tools/src/lib.rs`
 > - 预算调度与截断算法：`crates/session-loop/src/attachment_budget.rs`, `crates/session-loop/src/attachment_truncation.rs`, `crates/session-loop/src/lib.rs`
 > - Wire 安全与协议组装：`crates/agent-provider/src/request/attachment_wire.rs`, `crates/agent-provider/src/request/mod.rs`
-> - 引擎命令与装配板卡：`apps/agent-workbench/src-tauri/src/workflow_commands.rs`, `engine_build.rs`, `main.rs`  
+> - 引擎命令与装配板卡：`apps/agent-workbench/src-tauri/src/workflow_commands.rs`, `engine_build.rs`, `main.rs`
 > **对照基准**：
 > - `AGENTS.md`（通用协作纪律、反退避、测试资产保护铁律、§7 严禁打补丁与立体验证）；
 > - `ANTI_OVERENGINEERING_GUARDRAILS.md`（反过度设计红线）；
 > - `docs/prompt-injection-pipeline/00-总方案-统一提示词与上下文注入通道架构规划.md`（§三 契约裁决：#1 唯一时间线卡片、#2 metadata 子结构承载、#3 集中库目录结构、#4 提示词注入唯一路径、#5 截断归属裁决）；
 > - `docs/prompt-injection-pipeline/detailed-plans/02-对话流可见注入卡片协议与呈现详案.md`；
 > - `docs/prompt-injection-pipeline/detailed-plans/04-多模态附件与上下文引用标准化详案.md`；
-> - `docs/prompt-injection-pipeline/detailed-plans/05-定时任务编排助手落地实践详案.md`。  
-> **审计时间**：2026-09-02  
+> - `docs/prompt-injection-pipeline/detailed-plans/05-定时任务编排助手落地实践详案.md`。
+> **审计时间**：2026-09-02
 > **审计结论**：**整体架构分层严密，纯函数算法与系统契约解耦彻底，门禁断言与往返测试严密；生产与测试代码零残留未接线标记（TODO/FIXME/HACK/todo! 为 0）。审计共发现 3 个 MAJOR 级缺陷（委托调度下 create 的 nextRunAt 异常、模式匹配未导入常量引发变量名遮蔽跌入 daily、未闭合 OSC 贪婪吞噬至 EOF）与 3 个 MINOR 级问题（TS 侧 diffs 未在 Rust 卡片建模、WorkflowCommandState 缺少 backend 访问器、单测断言脱节）。全部问题均已完成现场精准收敛，所有关联 crate 单元测试与集成测试全部全绿通过。**
 
 ---

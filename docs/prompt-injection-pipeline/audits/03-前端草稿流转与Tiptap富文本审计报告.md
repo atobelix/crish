@@ -1,22 +1,22 @@
 # 前端草稿流转与 Tiptap 富文本深度审计报告
 
-> **审计位**：前端草稿流转与 Tiptap 富文本专属审计位（对齐 `AGENTS.md` §17 / 主控提示词 §4.4）  
+> **审计位**：前端草稿流转与 Tiptap 富文本专属审计位（对齐 `AGENTS.md` §17 / 主控提示词 §4.4）
 > **审计范围**：
-> - `apps/crish-desktop/src/api/draft/sessionDraftManager.ts` 与单测  
-> - `apps/crish-desktop/src/components/chat-card/useChatInput.ts`, `useChatComposerProps.ts`  
-> - `apps/crish-desktop/src/components/chat-composer/ChatComposer.tsx`, `TiptapComposerField.tsx`, `TiptapEditorField.tsx`, `composerTypes.ts`  
-> - `apps/crish-desktop/src/components/chat-composer/tiptapInjectionUtils.ts`  
-> - `apps/crish-desktop/src/components/chat-composer/DraftUndoToast.tsx`, `DraftUndoToast.module.css`  
-> - `apps/crish-desktop/src/components/chat-composer/serialization/markdownDeserializer.ts` 与单测  
-> - 已删除的 `apps/crish-desktop/src/api/composerSeed.ts` 残留扫描  
+> - `apps/crish-desktop/src/api/draft/sessionDraftManager.ts` 与单测
+> - `apps/crish-desktop/src/components/chat-card/useChatInput.ts`, `useChatComposerProps.ts`
+> - `apps/crish-desktop/src/components/chat-composer/ChatComposer.tsx`, `TiptapComposerField.tsx`, `TiptapEditorField.tsx`, `composerTypes.ts`
+> - `apps/crish-desktop/src/components/chat-composer/tiptapInjectionUtils.ts`
+> - `apps/crish-desktop/src/components/chat-composer/DraftUndoToast.tsx`, `DraftUndoToast.module.css`
+> - `apps/crish-desktop/src/components/chat-composer/serialization/markdownDeserializer.ts` 与单测
+> - 已删除的 `apps/crish-desktop/src/api/composerSeed.ts` 残留扫描
 >
 > **对照基准**：
-> - `00-总方案-统一提示词与上下文注入通道架构规划.md`（§三 契约统一裁决 / §四 执行顺序）  
-> - `detailed-plans/03-会话隔离草稿流转与调度收敛详案.md`（不变量一至四 / 断言矩阵）  
-> - `plan-reviews/02-路径收敛与删除面评审.md`  
-> - `AGENTS.md` §7（严禁补丁、绕过与作弊）、§7.1（立体验证纪律）、§13（UI 边框与焦点态）  
+> - `00-总方案-统一提示词与上下文注入通道架构规划.md`（§三 契约统一裁决 / §四 执行顺序）
+> - `detailed-plans/03-会话隔离草稿流转与调度收敛详案.md`（不变量一至四 / 断言矩阵）
+> - `plan-reviews/02-路径收敛与删除面评审.md`
+> - `AGENTS.md` §7（严禁补丁、绕过与作弊）、§7.1（立体验证纪律）、§13（UI 边框与焦点态）
 >
-> **审计时间**：2026-09-02  
+> **审计时间**：2026-09-02
 > **审计评级**：🟡 **有条件通过（发现 1 处严重逻辑断层 + 2 处时序盲区，需立即修复）**
 
 ---

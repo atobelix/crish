@@ -1,9 +1,9 @@
 # 14 — 多轨 SSOT 与 LocalStorage 孤岛
 
-> **角色**：SSOT & Dual-Track Auditor（只读，不改源码）  
-> **战役铁律**：唯一物理真源 `~/.conex/models.yaml`；禁止 LocalStorage 孤岛；禁止多轨。  
-> **方法**：全仓 grep 生产 import（测试另列）；按概念枚举全部实现路径；canonical = 铁律指定的 yaml 真源；路径数 > 1 记 **红**。  
-> **对照**：`audits/09-单一真源与多轨状态漂移深度审查.md` 只作线索，本文件全部重新取证。09 中「写回平铺自毁」一条已部分过期（见 §7.1）；其余双轨结论仍成立。  
+> **角色**：SSOT & Dual-Track Auditor（只读，不改源码）
+> **战役铁律**：唯一物理真源 `~/.conex/models.yaml`；禁止 LocalStorage 孤岛；禁止多轨。
+> **方法**：全仓 grep 生产 import（测试另列）；按概念枚举全部实现路径；canonical = 铁律指定的 yaml 真源；路径数 > 1 记 **红**。
+> **对照**：`audits/09-单一真源与多轨状态漂移深度审查.md` 只作线索，本文件全部重新取证。09 中「写回平铺自毁」一条已部分过期（见 §7.1）；其余双轨结论仍成立。
 > **配合 15 号**：未提交工作区旧轨扩字段从「路径数」判定——**加固旧岛，不是收敛**（§8）。
 
 ---
@@ -37,7 +37,7 @@ canonical 列一律按战役铁律标 `~/.conex/models.yaml`。凡生产读写�
 | --- | --- | --- | --- | --- |
 | 供应商档案（名称 / baseUrl / 密钥标记 / 模型 id 数组） | ① LS `crish_provider_profiles_v1` ← `profileStorePersistence.saveProfiles/loadProfiles`（`apps/crish-desktop/src/api/provider-profiles/profileStorePersistence.ts:38-79`）<br>② yaml `providers` 树 ← `modelsCatalogStore` / `workbench_*_models_yaml`（`models.yaml`）<br>③ 种子 `DEFAULT_PROFILES`（`profileCatalog.ts:86`）<br>④ 设置页 `PRESETS`（`modelsPresets.ts`，经 `useModelProfilesState.addFromPreset` → 仍写 ①）<br>⑤ 预填种子 `COMMON_PROVIDER_SEEDS`（`services/modelsAutofillBaseline.ts:35`）<br>⑥ 引擎运行时 `config_profile_apply`（`profileStoreActivation.ts:157`） | ① yaml `providers.<id>` | **6 · 红** | **写 ①**：设置抽屉全部增删改（`useModelProfilesState` / `useModelProviderActions.confirmScannedModels` / `createCustomProfile` / `upsertProfile`）；首次加载空 LS 播种 ③。<br>**读 ①**：`ModelBadgePickerMenu.listPickerProfiles`、`ChatHeaderControls.resolvePreferredModelSelection`、`ComposerFusedTrigger.getActiveProfile`、`slashSendPreflight.getActiveProfileId`、首次向导。<br>**写 ②**：仅 YAML 文本弹窗 `YamlConfigEditorModal` + 测试里的 `modelsCatalogStore.updateTree`。<br>**写 ⑥**：选模型时 `activateProfileModel`（不同步模型能力/价格）。 |
 
-**生产 import 证据（旧轨档案）**：`ModelsSettingsTab.tsx:17` `providerProfiles`；`useModelProfilesState.ts:15` `loadProfiles/addModelToProfile`；`ModelBadgePickerMenu.tsx:10` `activateProfileModel`。  
+**生产 import 证据（旧轨档案）**：`ModelsSettingsTab.tsx:17` `providerProfiles`；`useModelProfilesState.ts:15` `loadProfiles/addModelToProfile`；`ModelBadgePickerMenu.tsx:10` `activateProfileModel`。
 **生产 import 证据（新轨 yaml）**：`ModelsSettingsTab.tsx:23` 只 `ensureModelsCatalogLoaded` / `getModelsCatalogPath`（取路径展示）；`YamlConfigEditorModal.tsx:26,105,257` 才真正读写 yaml。
 
 ### 1.2 模型身份与列表（Model id 列表）
@@ -268,15 +268,15 @@ canonical 列一律按战役铁律标 `~/.conex/models.yaml`。凡生产读写�
 
 ### 5.4 价格多轨 — **证实**
 
-静态牌价（③）+ catalog.json 快照（④）+ LS 用户价（①）+ LS meta.pricing（②）+ yaml（⑤）+ 预填 JSON（⑥）+ DEFAULT_PRICES（⑦）+ Rust PricingEngine（⑧）。  
+静态牌价（③）+ catalog.json 快照（④）+ LS 用户价（①）+ LS meta.pricing（②）+ yaml（⑤）+ 预填 JSON（⑥）+ DEFAULT_PRICES（⑦）+ Rust PricingEngine（⑧）。
 前端估算链 **故意不读 yaml**。设置保存还把 yaml 牌价 **复制进 LS**，制造第四份副本。
 
 ### 5.5 思考多轨 — **证实**
 
-UI 选项 = catalog.json `thinkingTiers`（经 `thinkingGear`）+ 正则保底。  
-当前值 = LS meta + Settings。  
-请求 = Settings `defaultThinkingLevel`。  
-yaml `thinking` map 与 `MODEL_SERIES` 仍在内核兜底路径（`build_chat.rs:49` 声称废除优先查系列表，但无 yaml map 时仍 `infer_thinking_capability`，`build_chat.rs:124`）。  
+UI 选项 = catalog.json `thinkingTiers`（经 `thinkingGear`）+ 正则保底。
+当前值 = LS meta + Settings。
+请求 = Settings `defaultThinkingLevel`。
+yaml `thinking` map 与 `MODEL_SERIES` 仍在内核兜底路径（`build_chat.rs:49` 声称废除优先查系列表，但无 yaml map 时仍 `infer_thinking_capability`，`build_chat.rs:124`）。
 TS `inferThinkingCapability` 无生产组件 import（只定义于 `thinking-intensity.ts`）。
 
 ### 5.6 协议枚举漂移 — **证实**

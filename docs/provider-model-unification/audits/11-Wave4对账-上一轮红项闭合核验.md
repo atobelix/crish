@@ -1,10 +1,10 @@
 # Wave 4 对账：上一轮审计 06–10 红项闭合核验
 
-> **文档标识**：`docs/provider-model-unification/audits/11-Wave4对账-上一轮红项闭合核验.md`  
-> **角色**：Hard Close-out Auditor（只读）  
-> **对照基线**：`06`–`10` 审计（Wave 4 前约 1.5 小时，仅作问题清单，不当事实验）  
-> **自称修复提交**：`f98b7f62` `feat(models): 全线打通净收敛与深度审查加固 BATCH-UNIFY-04`  
-> **取证范围**：当前工作区代码（含未提交）。Wave 4 相关文件与 `HEAD` 一致；工作区仅多一处无关改动 `apps/agent-workbench/src-tauri/src/main.rs` 增加 `pub(crate) use engine::engine_provider`，不影响本对账。  
+> **文档标识**：`docs/provider-model-unification/audits/11-Wave4对账-上一轮红项闭合核验.md`
+> **角色**：Hard Close-out Auditor（只读）
+> **对照基线**：`06`–`10` 审计（Wave 4 前约 1.5 小时，仅作问题清单，不当事实验）
+> **自称修复提交**：`f98b7f62` `feat(models): 全线打通净收敛与深度审查加固 BATCH-UNIFY-04`
+> **取证范围**：当前工作区代码（含未提交）。Wave 4 相关文件与 `HEAD` 一致；工作区仅多一处无关改动 `apps/agent-workbench/src-tauri/src/main.rs` 增加 `pub(crate) use engine::engine_provider`，不影响本对账。
 > **取证纪律**：每条判定均重新 grep / read_file；禁止把 06–10 当真理照抄；禁止空壳「基本已修复」。
 
 ---
