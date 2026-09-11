@@ -5,9 +5,11 @@
  * Dev / explicit VITE_ALLOW_DEMO can switch modes for designers & QA.
  */
 
+import { preferencesClient } from './preferences/preferencesClient';
+
 export type AppMode = 'normal' | 'demo';
 
-const STORAGE_KEY = 'crish_app_mode';
+let cachedAppMode: AppMode = 'normal';
 
 function isProductionBuild(): boolean {
   return Boolean(import.meta.env.PROD);
@@ -41,27 +43,32 @@ export function canUseDemoMode(): boolean {
 
 export function getAppMode(): AppMode {
   if (!canUseDemoMode()) return 'normal';
+  return cachedAppMode;
+}
+
+export async function loadAppMode(): Promise<AppMode> {
+  if (!canUseDemoMode()) return 'normal';
   try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored === 'demo' || stored === 'normal') return stored;
+    const stored = await preferencesClient.getPreference('app_mode');
+    if (stored === 'demo' || stored === 'normal') {
+      cachedAppMode = stored;
+    }
   } catch {
-    /* swallow-ok: 存储不可用时回退默认 normal 模式 */
+    /* swallow-ok: 偏好读取失败时回退默认 normal 模式 */
   }
-  // Prefer product-like default even in dev
-  return 'normal';
+  return cachedAppMode;
 }
 
 export function isDemoMode(): boolean {
   return false;
 }
 
-function setAppMode(mode: AppMode): void {
+export function setAppMode(mode: AppMode): void {
   if (mode === 'demo' && !canUseDemoMode()) return;
-  try {
-    localStorage.setItem(STORAGE_KEY, mode);
-  } catch {
+  cachedAppMode = mode;
+  void preferencesClient.setPreference('app_mode', mode).catch(() => {
     /* swallow-ok: 模式标记尽力写，失败仅影响下次启动还原 */
-  }
+  });
 }
 
 /** Switch mode and hard-reload so store seeds re-initialize cleanly. */
@@ -71,3 +78,5 @@ export function switchAppMode(mode: AppMode): void {
     window.location.reload();
   }
 }
+
+void loadAppMode();

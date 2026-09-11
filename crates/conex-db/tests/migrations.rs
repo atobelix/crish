@@ -1537,3 +1537,92 @@ fn migration_normal_v3_upgrade_still_works() {
     assert!(table_columns(&conn, "session_messages").contains(&"updated_at".to_string()));
     assert!(table_columns(&conn, "session_agents").contains(&"task_type".to_string()));
 }
+
+/// 构造 v10 形态 fixture（含 sessions / usage_records / session_meta），
+/// 用于验证 v10→v11 升级后 app_preferences 表创建、存量数据保留、无备份产生、二次 open 幂等。
+fn build_v10_fixture(db: &TempDb) {
+    let conn = Connection::open(db.path()).unwrap();
+    conn.execute_batch("PRAGMA foreign_keys = OFF;").unwrap();
+    conn.execute_batch(
+        "CREATE TABLE sessions (
+            id TEXT PRIMARY KEY,
+            title TEXT NOT NULL DEFAULT '',
+            timestamp TEXT NOT NULL DEFAULT '',
+            updated_at INTEGER NOT NULL DEFAULT 0,
+            message_count INTEGER NOT NULL DEFAULT 0,
+            created_at INTEGER NOT NULL DEFAULT 0
+        ) WITHOUT ROWID;
+        CREATE TABLE usage_records (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id TEXT NOT NULL,
+            run_id TEXT,
+            project_name TEXT NOT NULL DEFAULT '',
+            model TEXT NOT NULL,
+            provider TEXT NOT NULL DEFAULT '',
+            prompt_tokens INTEGER NOT NULL DEFAULT 0,
+            completion_tokens INTEGER NOT NULL DEFAULT 0,
+            cache_read_tokens INTEGER NOT NULL DEFAULT 0,
+            cache_write_tokens INTEGER NOT NULL DEFAULT 0,
+            cost_cny REAL NOT NULL DEFAULT 0.0,
+            cost_usd REAL NOT NULL DEFAULT 0.0,
+            timestamp INTEGER NOT NULL
+        );
+        CREATE TABLE session_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL) WITHOUT ROWID;
+        INSERT INTO sessions (id, title, updated_at, created_at)
+            VALUES ('s1', 'V10 会话', 2000, 3000);
+        INSERT INTO usage_records (session_id, model, timestamp)
+            VALUES ('s1', 'claude-3-7-sonnet', 1700000000);
+        PRAGMA user_version = 10;",
+    )
+    .unwrap();
+}
+
+#[test]
+fn migrate_v10_to_v11_creates_app_preferences_preserves_data() {
+    let temp = TempDb::new("v10");
+    build_v10_fixture(&temp);
+
+    let db = LocalDb::open(temp.path()).unwrap();
+    assert!(db.get_failure().is_none(), "v10→v11 升级无失败闩");
+    assert_eq!(
+        db.user_version().unwrap(),
+        LATEST_VERSION,
+        "v10 → v11 升级完成"
+    );
+    assert_eq!(
+        db.get_session_meta("schema_version").unwrap().as_deref(),
+        Some(SCHEMA_VERSION_STRING),
+        "schema_version meta 收敛到最新"
+    );
+
+    let conn = Connection::open(temp.path()).unwrap();
+    let has_prefs: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='app_preferences';",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(has_prefs, 1, "app_preferences 表在场");
+
+    let cols = table_columns(&conn, "app_preferences");
+    assert!(cols.contains(&"key".to_string()));
+    assert!(cols.contains(&"value".to_string()));
+    assert!(cols.contains(&"updated_at".to_string()));
+
+    // 存量数据保留
+    assert_eq!(count_rows(&conn, "sessions"), 1, "会话保留");
+    assert_eq!(count_rows(&conn, "usage_records"), 1, "用量记录保留");
+    let title: String = conn
+        .query_row("SELECT title FROM sessions WHERE id='s1'", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(title, "V10 会话", "会话标题保留");
+
+    // v11 纯建表（无 DROP）：不产生备份
+    assert_eq!(backup_files(temp.path()).len(), 0, "v11 纯建表不产生备份");
+
+    // 二次 open 幂等
+    let db2 = LocalDb::open(temp.path()).unwrap();
+    assert!(db2.get_failure().is_none(), "二次 open 幂等无失败闩");
+    assert_eq!(db2.user_version().unwrap(), LATEST_VERSION);
+}

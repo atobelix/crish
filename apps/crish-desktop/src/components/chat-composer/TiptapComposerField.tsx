@@ -138,19 +138,14 @@ export const TiptapComposerField: React.FC<TiptapComposerFieldProps> = ({
     ? COMPOSER_DENSE_LINE_HEIGHT
     : COMPOSER_LINE_HEIGHT;
 
-  // ── 发送偏好（ctrlEnter/enter，随 storage 事件同步）─────────────────────────
+  // ── 发送偏好（ctrlEnter/enter，响应快捷键变更事件）─────────────────────────
   const [sendShortcut, setSendShortcut] = useState<'enter' | 'ctrlEnter'>(
     readSendShortcut
   );
   useEffect(() => {
     const sync = () => setSendShortcut(readSendShortcut());
-    const onStorage = (e: StorageEvent) => {
-      if (e.key === 'crish_settings' || e.key === 'crish_send_shortcut') sync();
-    };
-    window.addEventListener('storage', onStorage);
     window.addEventListener(SEND_SHORTCUT_CHANGED_EVENT, sync);
     return () => {
-      window.removeEventListener('storage', onStorage);
       window.removeEventListener(SEND_SHORTCUT_CHANGED_EVENT, sync);
     };
   }, []);

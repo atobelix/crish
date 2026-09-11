@@ -2,8 +2,8 @@
  * store 公共入口（barrel）。
  *
  * T11 拆分后架构：各域为物理独立 zustand 实例（各自 create + persist/devtools）。
- * - `useLayoutStore` — 几何布局与壳层 UI 视口域（persist: crish-layout-v1）
- * - `useSessionStore` — 会话域（独立实例，persist: crish_session_store_v1）
+ * - `useLayoutStore` — 几何布局与壳层 UI 视口域（persist: crish_layout_store）
+ * - `useSessionStore` — 会话域（独立实例，persist: crish_session_store）
  * - `useWorkspaceStore` — 工作区面板域
  * - `useSettingsUiStore` — 设置浮层 UI 域（独立实例）
  * - `useSettingsStore` — 应用设置域（独立实例）

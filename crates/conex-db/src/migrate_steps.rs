@@ -1,4 +1,4 @@
-//! 迁移步骤域：v1→v9 逐版本具体 DDL/DML 结构变更与数据升级函数。
+//! 迁移步骤域：v1→v11 逐版本具体 DDL/DML 结构变更与数据升级函数。
 
 /// 查询表的列名清单（`PRAGMA table_info`；v5 col-check 幂等复用）。
 pub(crate) fn table_columns(
@@ -463,4 +463,18 @@ pub(crate) fn migrate_v9_to_v10(tx: &rusqlite::Transaction<'_>) -> Result<(), ru
         CREATE INDEX IF NOT EXISTS idx_usage_records_session
             ON usage_records(session_id, timestamp);",
     )
+}
+
+/// v10 → v11：新增 app_preferences 偏好存储表（设计Token与偏好SSOT端到端重构 B1）。
+/// 纯建表（无 DROP、无既有列语义改动），`CREATE TABLE IF NOT EXISTS` 天然幂等。
+/// 与现存 `create_v1_schema` 中历史废弃的 `metadata` 明确隔离（不同名、不同列定义、不互跨读写）。
+pub(crate) fn step_10_to_11(tx: &rusqlite::Transaction<'_>) -> Result<(), rusqlite::Error> {
+    tx.execute_batch(
+        "CREATE TABLE IF NOT EXISTS app_preferences (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at INTEGER NOT NULL);",
+    )
+}
+
+#[allow(dead_code)]
+pub(crate) fn migrate_v10_to_v11(tx: &rusqlite::Transaction<'_>) -> Result<(), rusqlite::Error> {
+    step_10_to_11(tx)
 }

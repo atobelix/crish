@@ -4,7 +4,6 @@
  * 职责边界（反过度设计约束）：
  *   - key 注册表：集中登记所有 localStorage key 的归属与生命周期标注
  *   - safe* 守卫：统一 try/catch + JSON 序列化/反序列化守卫，消除散落的 try/catch 样板
- *   - migrateLegacyKeys：遗留 key 迁移钩子（仅框架，不做自动迁移流水线）
  *
  * 不做的事：
  *   - 不引入 schema 版本管理 / 自动迁移流水线 / 加密层
@@ -19,6 +18,9 @@ export type StorageKeyType =
   | 'persist' // zustand persist 持久化面
   | 'standalone' // 独立 key（theme/fonts 等）
   | 'index' // 会话索引
+  | 'cache' // 运行期临时缓存（workflows, mcp, skills, font scan 等）
+  | 'draft' // 应急草稿暂存
+  | 'state' // 运行期非偏好本地状态（向导标记、插件启停等）
   | 'legacy'; // 遗留/废弃 key
 
 /** key 注册条目 */
@@ -65,11 +67,47 @@ export const registeredKeys: Readonly<Record<string, RegisteredKey>> = {
     deprecated: true,
     removeDate: '2027-01-01',
   },
-  conex_pi_settings: {
-    owner: 'legacy (conex_pi → crish 迁移前键名)',
-    type: 'legacy',
-    deprecated: true,
-    removeDate: '2027-01-01',
+
+  // 运行期临时缓存与非偏好状态（收敛至 runtimeCache）
+  crish_local_fonts_cache_v1: {
+    owner: 'runtimeCache/fontStoreScan',
+    type: 'cache',
+  },
+  crish_workflows_cache_v1: {
+    owner: 'runtimeCache/workflowsSharedLib',
+    type: 'cache',
+  },
+  crish_workflow_runs_cache_v1: {
+    owner: 'runtimeCache/workflowsSharedLib',
+    type: 'cache',
+  },
+  crish_mcp_servers_cache_v1: {
+    owner: 'runtimeCache/useMcpCache',
+    type: 'cache',
+  },
+  crish_skills_cache_v1: {
+    owner: 'runtimeCache/useSkillsCache',
+    type: 'cache',
+  },
+  crish_first_run_done_v1: {
+    owner: 'runtimeCache/firstRunWizard',
+    type: 'state',
+  },
+  crish_plugin_enabled_v1: {
+    owner: 'runtimeCache/pluginRegistryAdapter',
+    type: 'state',
+  },
+  crish_skill_known_ids_v1: {
+    owner: 'runtimeCache/useSkillList',
+    type: 'state',
+  },
+  crish_sidebar_sections_v1: {
+    owner: 'runtimeCache/sidebarSections',
+    type: 'state',
+  },
+  crish_sidebar_list_prefs: {
+    owner: 'runtimeCache/sidebarListPrefs',
+    type: 'state',
   },
 };
 
@@ -136,25 +174,4 @@ export function safeSetJson(key: string, value: unknown): void {
   } catch {
     /* swallow-ok: 序列化或写入失败静默处理 */
   }
-}
-
-// ── 遗留 key 迁移钩子 ────────────────────────────────────────────────────────
-
-/**
- * 遗留 key 迁移钩子。
- *
- * 当前仅提供框架，不执行自动迁移：
- *   - conex_pi_settings → crish_settings：读取方已在 readStoredTheme/readStoredFonts
- *     中做了双键回退读取，无需在此复制数据
- *   - crish_settings 中的 theme/fonts 字段：读取方已做只读回退（@deprecated 2027-01-01）
- *
- * 如未来需要主动迁移（如键名变更 + 数据格式不兼容），在此函数内追加迁移逻辑。
- * 迁移应幂等：已迁移的 key 不重复处理。
- *
- * @returns 迁移的 key 数量（当前始终为 0，框架预留）
- */
-export function migrateLegacyKeys(): number {
-  // 当前无主动迁移需求：所有遗留键的读取方已做兼容回退。
-  // 新增迁移逻辑时在此追加，保持幂等。
-  return 0;
 }

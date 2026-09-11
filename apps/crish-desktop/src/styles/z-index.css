@@ -29,7 +29,6 @@
   /* 角色别名：全部归属上面 7 级标尺，禁止新造数值。
      原为未定义引用（z-index: var(--x) 整条失效→退回 auto）。 */
   --z-decorative: var(--z-base);
-  --z-pinned-bar: var(--z-sticky);
   --z-sticky-bar: var(--z-sticky);
   --z-smart-panel: var(--z-chrome);
   --z-dropdown-menu: var(--z-dropdown);

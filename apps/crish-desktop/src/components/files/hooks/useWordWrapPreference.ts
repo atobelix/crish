@@ -1,26 +1,30 @@
-import { useCallback, useState } from 'react';
-
-export const WORD_WRAP_STORAGE_KEY = 'crish:file-viewer-word-wrap';
+import { useCallback, useEffect, useState } from 'react';
+import { preferencesClient } from '../../../api/preferences';
 
 /**
  * 代码与文件查看自动换行首选项单一真理源 (SSOT) Hook
- * 默认开启 (true)，统一读写 localStorage: crish:file-viewer-word-wrap
+ * 默认开启 (true)，统一写入 preferencesClient: file_viewer_word_wrap
  */
 export function useWordWrapPreference(): [
   boolean,
   (valOrUpdater?: boolean | ((prev: boolean) => boolean)) => void,
 ] {
-  const [wordWrap, setWordWrap] = useState<boolean>(() => {
-    try {
-      const saved = localStorage.getItem(WORD_WRAP_STORAGE_KEY);
-      if (saved !== null) {
-        return saved === 'true';
-      }
-    } catch {
-      /* swallow */
-    }
-    return true;
-  });
+  const [wordWrap, setWordWrap] = useState<boolean>(true);
+
+  useEffect(() => {
+    let unmounted = false;
+    void preferencesClient
+      .getPreference('file_viewer_word_wrap')
+      .then((saved) => {
+        if (!unmounted && typeof saved === 'boolean') {
+          setWordWrap(saved);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      unmounted = true;
+    };
+  }, []);
 
   const toggleOrSetWordWrap = useCallback(
     (valOrUpdater?: boolean | ((prev: boolean) => boolean)) => {
@@ -35,7 +39,9 @@ export function useWordWrapPreference(): [
         }
 
         try {
-          localStorage.setItem(WORD_WRAP_STORAGE_KEY, String(next));
+          void preferencesClient
+            .setPreference('file_viewer_word_wrap', next)
+            .catch(() => {});
         } catch {
           /* swallow */
         }

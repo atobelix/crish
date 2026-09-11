@@ -2,8 +2,8 @@
  * themeProjection — settingsStore 主题订阅投影（D3 收敛段一，T-E 批次 5）。
  *
  * 真源 = `settingsStore.appSettings.theme`（收敛后）。订阅投影职责：
- * - 监听 appSettings.theme 变化 → `setTheme`（DOM 应用 + crish_theme 缓存写 +
- *   crish-theme-changed 事件，themeStore 的写端入口函数）——`crish_theme`
+ * - 监听 appSettings.theme 变化 → `setTheme`（DOM 应用 + 偏好持久化 +
+ *   crish-theme-changed 事件，themeStore 的写端入口函数）
  *   单一写端即本投影（persistTheme 生产调用点收敛为 1 处）。
  * - 启动播种（AppBootstrap 原 :238-244 的 applyTheme + persistTheme 双写）
  *   抽为本投影的首次执行。

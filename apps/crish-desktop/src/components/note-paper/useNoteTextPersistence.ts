@@ -33,6 +33,11 @@ import { resolveProductStrictApplyOps } from '../../api/noteApplyOpsIpc';
 import { computeTextEditOp } from './noteTextEditOp';
 import { newNoteBlockId } from './noteBlockId';
 import type { HydratedBlockProjection } from './hydrateProjection';
+import {
+  readEmergencyDraft,
+  writeEmergencyDraft,
+  removeEmergencyDraft,
+} from '../../api/cache/runtimeCache';
 
 /** 文本变更落盘 debounce 窗口（连续击键合并；失焦/回车立即冲刷不受此限） */
 export const PERSIST_DEBOUNCE_MS = 400;
@@ -84,47 +89,17 @@ export function saveEmergencyDraftSync(
   docId: string,
   drafts: Record<string, string>
 ): void {
-  try {
-    if (typeof window !== 'undefined' && window.localStorage) {
-      const key = `${NOTE_EMERGENCY_DRAFT_PREFIX}${docId}`;
-      if (Object.keys(drafts).length === 0) {
-        window.localStorage.removeItem(key);
-      } else {
-        window.localStorage.setItem(
-          key,
-          JSON.stringify({ docId, drafts, savedAt: Date.now() })
-        );
-      }
-    }
-  } catch {
-    // quota exceeded or storage disabled
-  }
+  writeEmergencyDraft(docId, drafts);
 }
 
 export function loadEmergencyDraftSync(
   docId: string
 ): Record<string, string> | null {
-  try {
-    if (typeof window !== 'undefined' && window.localStorage) {
-      const raw = window.localStorage.getItem(`${NOTE_EMERGENCY_DRAFT_PREFIX}${docId}`);
-      if (!raw) return null;
-      const parsed = JSON.parse(raw);
-      return parsed?.drafts ?? null;
-    }
-  } catch {
-    // ignore
-  }
-  return null;
+  return readEmergencyDraft(docId);
 }
 
 export function clearEmergencyDraftSync(docId: string): void {
-  try {
-    if (typeof window !== 'undefined' && window.localStorage) {
-      window.localStorage.removeItem(`${NOTE_EMERGENCY_DRAFT_PREFIX}${docId}`);
-    }
-  } catch {
-    // ignore
-  }
+  removeEmergencyDraft(docId);
 }
 
 /**

@@ -344,6 +344,7 @@ html[data-theme='light'] {
   --composer-radius-single: 20px;
   --composer-radius-multi: var(--radius-3xl);
   --composer-pad-x: 12px;
+  --chat-stream-pad-x: var(--space-5, 20px);
   --chat-bubble-radius: 16px;
   --composer-attach-card-radius: var(--radius-xl, 12px);
   --composer-attach-card-border: 1px solid var(--border-subtle);
@@ -424,15 +425,6 @@ html[data-theme='light'] {
   --edge-reserve-left-macos: 106px;
   --edge-reserve-right-win: 144px;
   --edge-reserve-right-macos: 38px;
-  /*
-   * Shell safe-area insets（BATCH-02 · 00-总方案 §6 Gutter SSOT）
-   * 旧 --edge-reserve-* 保留过渡；新消费者优先读本组 token。
-   * Win 窗控已在 AppTopBar.trail 内自然占位，禁止再给 trail 加 96px。
-   */
-  --shell-safe-inset-left: 0px;
-  --shell-safe-inset-right: 0px;
-  --shell-canvas-gutter: 8px;
-  --shell-canvas-gutter-compact: 4px;
   --leaf-corner-btn-size: 28px;
   --leaf-corner-btn-inset: 10px;
   --leaf-corner-btn-gap: 5px;
@@ -704,6 +696,7 @@ html[data-theme='light'] {
   --space-3: 12px;
   --space-4: 16px;
   --space-5: 20px;
+  --chat-stream-pad-x: var(--space-5, 20px);
   --space-6: 24px;
   --space-7: 28px;
   --space-8: 32px;
@@ -1479,20 +1472,6 @@ html[data-theme='dark'] {
  * html[data-theme]         token    ::selection / keyframes /
  * .ui-popover-animate / [data-panel]           design-system.css
  *  S7-3   token    tokens.css     token     */
-
-/* --- Shell safe-area platform / fullscreen overrides（BATCH-02）---
- * data-platform 由 fontStore.applyFontStacks 写入 html（PlatformId 含 macos）。
- * data-fullscreen 由 AppBootstrap 接线；macos + fullscreen 同时成立时，
- * 全屏块因书写顺序在后而覆盖 macos 的 left inset（同特异性靠 order）。 */
-html[data-platform='macos'] {
-  --shell-safe-inset-left: 70px;
-}
-
-html[data-fullscreen='true'] {
-  --shell-safe-inset-left: 0px;
-  --shell-safe-inset-right: 0px;
-  --shell-canvas-gutter: 0px;
-}
 
 /* --- Conex System Performance Tiers --- */
 

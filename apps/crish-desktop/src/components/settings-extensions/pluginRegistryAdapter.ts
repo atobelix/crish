@@ -28,26 +28,17 @@ export type PluginCardState = {
   installRef: string;
 };
 
-const PLUGIN_ENABLED_KEY = 'crish_plugin_enabled_v1';
+import {
+  readPluginEnabledIds,
+  writePluginEnabledIds,
+} from '../../api/cache/runtimeCache';
 
 function loadEnabledIds(): Set<string> {
-  try {
-    const raw = localStorage.getItem(PLUGIN_ENABLED_KEY);
-    if (!raw) return new Set();
-    const arr = JSON.parse(raw);
-    if (!Array.isArray(arr)) return new Set();
-    return new Set(arr.map(String).filter(Boolean));
-  } catch {
-    return new Set();
-  }
+  return readPluginEnabledIds();
 }
 
 function saveEnabledIds(ids: Set<string>): void {
-  try {
-    localStorage.setItem(PLUGIN_ENABLED_KEY, JSON.stringify([...ids]));
-  } catch {
-    /* quota */
-  }
+  writePluginEnabledIds(ids);
 }
 
 /** 插件当前是否启用（localStorage 启停状态；默认启用——官方内置）。 */

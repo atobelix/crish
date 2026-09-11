@@ -27,24 +27,17 @@ import {
 } from './skillsSettingsTypes';
 import type { SharedSkillApi } from './skillsSettingsTypes';
 
-const KNOWN_IDS_KEY = 'crish_skill_known_ids_v1';
+import {
+  readSkillKnownIds,
+  writeSkillKnownIds,
+} from '../../api/cache/runtimeCache';
 
 function loadKnownIds(): Set<string> {
-  try {
-    const raw = localStorage.getItem(KNOWN_IDS_KEY);
-    const arr = raw ? JSON.parse(raw) : [];
-    return new Set(Array.isArray(arr) ? arr.map(String) : []);
-  } catch {
-    return new Set();
-  }
+  return readSkillKnownIds();
 }
 
 function saveKnownIds(ids: Set<string>): void {
-  try {
-    localStorage.setItem(KNOWN_IDS_KEY, JSON.stringify([...ids]));
-  } catch {
-    /* quota / private mode */
-  }
+  writeSkillKnownIds(ids);
 }
 
 export interface UseSkillListApi {

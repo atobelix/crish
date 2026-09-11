@@ -16,8 +16,8 @@ import { useResponsiveLayout } from '../../hooks/useResponsiveLayout';
 import {
   loadSidebarListPrefs,
   loadSidebarSectionsState,
+  saveSidebarListPrefs,
   saveSidebarSectionsState,
-  SIDEBAR_LIST_PREFS_KEY,
   SIDEBAR_WIDTH_MAX,
   SIDEBAR_WIDTH_MIN,
 } from './sidebarHelpers';
@@ -218,12 +218,7 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(
     });
 
     useEffect(() => {
-      try {
-        const prefs = { sortType, groupType, filterType };
-        localStorage.setItem(SIDEBAR_LIST_PREFS_KEY, JSON.stringify(prefs));
-      } catch {
-        /* ignore */
-      }
+      saveSidebarListPrefs({ sortType, groupType, filterType });
     }, [sortType, groupType, filterType]);
 
     useEffect(() => {

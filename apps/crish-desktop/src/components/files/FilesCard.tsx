@@ -18,13 +18,13 @@ import { FileTreeView } from './FileTreeView';
 import { FilePreview } from './FilePreview';
 import { FileActions } from './FileActions';
 import { AppIcon } from '../ui/icons/index';
+import { preferencesClient } from '../../api/preferences';
 
 interface FilesCardProps {
   initialPath?: string | null;
 }
 
 const REFRESH_LABEL = '刷新';
-const FILES_SPLIT_RATIO_KEY = 'crish:files-list-ratio';
 
 export const FilesCard: React.FC<FilesCardProps> = React.memo(
   ({ initialPath }) => {
@@ -34,18 +34,26 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(
     const filterInputRef = useRef<HTMLInputElement>(null);
     const bodySplitRef = useRef<HTMLDivElement>(null);
     const [isResizing, setIsResizing] = useState(false);
-    const [listWidthRatio, setListWidthRatio] = useState<number>(() => {
-      try {
-        const saved = localStorage.getItem(FILES_SPLIT_RATIO_KEY);
-        if (saved) {
-          const val = parseFloat(saved);
-          if (!isNaN(val) && val >= 15 && val <= 75) return val;
-        }
-      } catch {
-        // fallback
-      }
-      return 35;
-    });
+    const [listWidthRatio, setListWidthRatio] = useState<number>(35);
+
+    useEffect(() => {
+      let unmounted = false;
+      void preferencesClient
+        .getPreference('files_list_ratio')
+        .then((prefRatio) => {
+          if (unmounted) return;
+          if (typeof prefRatio === 'number' && Number.isFinite(prefRatio)) {
+            const pct = prefRatio <= 1 ? prefRatio * 100 : prefRatio;
+            if (pct >= 15 && pct <= 75) {
+              setListWidthRatio(pct);
+            }
+          }
+        })
+        .catch(() => {});
+      return () => {
+        unmounted = true;
+      };
+    }, []);
 
     const handleSplitResizeStart = useCallback(
       (
@@ -113,7 +121,9 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(
             );
             setListWidthRatio(finalRatio);
             try {
-              localStorage.setItem(FILES_SPLIT_RATIO_KEY, finalRatio.toFixed(2));
+              void preferencesClient
+                .setPreference('files_list_ratio', finalRatio)
+                .catch(() => {});
             } catch {
               // ignore
             }

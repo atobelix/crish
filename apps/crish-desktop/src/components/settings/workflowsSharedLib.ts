@@ -22,38 +22,27 @@ export const WORKFLOWS_LOAD_TIMEOUT_MS = 12_000;
 
 export type WorkflowsSurface = 'settings' | 'chat';
 
-/** chat 面 localStorage 缓存（离线可看上次列表） */
-const WORKFLOWS_CACHE_KEY = 'crish_workflows_cache_v1';
-const WORKFLOW_RUNS_CACHE_KEY = 'crish_workflow_runs_cache_v1';
+import {
+  readWorkflowsCache,
+  writeWorkflowsCache,
+  readWorkflowRunsCache,
+  writeWorkflowRunsCache,
+} from '../../api/cache/runtimeCache';
 
 export function loadWorkflowsCache(): WorkflowDefinition[] {
-  try {
-    const raw = localStorage.getItem(WORKFLOWS_CACHE_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
+  return readWorkflowsCache();
 }
 
 export function saveWorkflowsCache(list: WorkflowDefinition[]) {
-  try {
-    localStorage.setItem(WORKFLOWS_CACHE_KEY, JSON.stringify(list));
-  } catch { /* ignore */ }
+  writeWorkflowsCache(list);
 }
 
 export function loadWorkflowRunsCache(): WorkflowRunEntry[] {
-  try {
-    const raw = localStorage.getItem(WORKFLOW_RUNS_CACHE_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
+  return readWorkflowRunsCache();
 }
 
 export function saveWorkflowRunsCache(list: WorkflowRunEntry[]) {
-  try {
-    localStorage.setItem(WORKFLOW_RUNS_CACHE_KEY, JSON.stringify(list));
-  } catch { /* ignore */ }
+  writeWorkflowRunsCache(list);
 }
 
 export type ScheduleFilter = 'all' | 'enabled' | 'paused' | 'manual' | 'timed';

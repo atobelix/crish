@@ -33,12 +33,14 @@ mod messages;
 mod migrate;
 mod migrate_steps;
 pub mod reader_pool;
+pub mod preferences;
 mod runs;
 mod schema;
 mod sessions;
 pub mod usage_analytics;
 
 pub use blocks::{BlockState, CompactionBlockRow, BLOCK_SCHEMA_VERSION};
+pub use preferences::AppPreferenceRow;
 pub use cas_gc::{compute_sha256_hex, spawn_cas_gc_loop, CasBlobRow, CasGcConfig, GcScanStats};
 pub use error::{DbFailure, DbFailureKind};
 pub use events::StoredEvent;
@@ -93,10 +95,11 @@ pub struct LocalDb {
 /// v8：新增 imported_bookmarks / imported_history 浏览器导入目标表
 /// （03-方案-书签历史入conex-db目标表 §3.2，纯建表 + 索引，零既有列改动）；
 /// v9：events 补 run_id 列 + idx_events_run 索引、session_agents 补 sub_session_id 列；
-/// v10：新增 usage_records 时序流水表及 4 组复合时序索引（用量监控系统全链路移植）。
-pub const LATEST_VERSION: u32 = 10;
+/// v10：新增 usage_records 时序流水表及 4 组复合时序索引（用量监控系统全链路移植）；
+/// v11：新增 app_preferences 偏好存储表（设计Token与偏好SSOT端到端重构 B1）。
+pub const LATEST_VERSION: u32 = 11;
 /// session_meta 中登记的 schema 版本字符串（与 PRAGMA user_version 保持一致）。
-pub const SCHEMA_VERSION_STRING: &str = "10";
+pub const SCHEMA_VERSION_STRING: &str = "11";
 /// 孤儿会话宽限期（毫秒）：updated_at 距今小于该值的会话不被清理（PE-08 T08.2）。
 pub const ORPHAN_GRACE_MS: i64 = 300_000;
 /// session_meta 中可配宽限期的键。

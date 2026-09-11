@@ -51,7 +51,7 @@ describe('themeProjection — settingsStore.theme 订阅投影', () => {
     } as never);
 
     expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
-    expect(localStorage.getItem('crish_theme')).toBe('dark');
+    expect(localStorage.getItem('crish_theme')).toBeNull();
   });
 
   it('同 theme 值重复触发 → 不重复写（幂等跳过）', () => {
@@ -68,7 +68,7 @@ describe('themeProjection — settingsStore.theme 订阅投影', () => {
       hideThinkingBlock: true,
       tabModeEnabled: true,
     } as never);
-    expect(localStorage.getItem('crish_theme')).toBe('dark');
+    expect(localStorage.getItem('crish_theme')).toBeNull();
     expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
     expect(writes).toBe(1);
   });
@@ -94,7 +94,7 @@ describe('themeProjection — settingsStore.theme 订阅投影', () => {
       tabModeEnabled: true,
     } as never);
     expect(document.documentElement.getAttribute('data-theme')).toBe('default');
-    expect(localStorage.getItem('crish_theme')).toBe('default');
+    expect(localStorage.getItem('crish_theme')).toBeNull();
   });
 });
 

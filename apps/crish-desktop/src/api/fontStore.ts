@@ -1,6 +1,6 @@
 /**
  * 字体体系：按平台自动栈 + 内嵌免费字体 + 本机字体。
- * 独立 key `crish_fonts`，冷启动同步应用；可与 settings.fonts 合并。
+ * 冷启动同步应用，由 preferencesClient 权威管理。
  */
 
 // 平台探测 + 字体栈子模块（拆分自本文件，hub re-export 保持外部 import 路径不变）
@@ -33,6 +33,7 @@ export {
 } from './fontStoreCatalog';
 export { scanSystemFonts } from './fontStoreScan';
 import { ensureFontsLoaded, uiFontOptions, monoFontOptions } from './fontStoreCatalog';
+import { preferencesClient } from './preferences/preferencesClient';
 
 export type PlatformId =
   | 'windows'
@@ -81,10 +82,6 @@ export const DEFAULT_FONT_PREFS: FontPreferences = {
   v: 1,
 };
 
-const FONTS_KEY = 'crish_fonts';
-const SETTINGS_KEY = 'crish_settings';
-const SETTINGS_KEY_LEGACY = 'conex_pi_settings';
-
 export interface FontOptionMeta {
   id: string;
   label: string;
@@ -114,34 +111,30 @@ export function normalizeFontPrefs(raw: unknown): FontPreferences {
   return base;
 }
 
+let cachedFonts: FontPreferences = { ...DEFAULT_FONT_PREFS };
+
 export function readStoredFonts(): FontPreferences {
+  return cachedFonts;
+}
+
+export async function loadStoredFonts(): Promise<FontPreferences> {
   try {
-    const direct = localStorage.getItem(FONTS_KEY);
-    if (direct) return normalizeFontPrefs(JSON.parse(direct));
-  } catch {
-    /* swallow-ok: 字体设置 JSON 损坏时回退默认值 */
-  }
-  // 只读回退：兼容旧版 crish_settings JSON 中的 fonts 字段，不再有写入方更新此字段；
-  // @deprecated 删除日期 2027-01-01
-  try {
-    const raw = localStorage.getItem(SETTINGS_KEY) || localStorage.getItem(SETTINGS_KEY_LEGACY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as { fonts?: unknown };
-      if (parsed?.fonts) return normalizeFontPrefs(parsed.fonts);
+    const direct = await preferencesClient.getPreference('fonts');
+    if (direct) {
+      cachedFonts = normalizeFontPrefs(direct);
     }
   } catch {
-    /* swallow-ok: 旧版 settings 结构解析失败时跳过该来源 */
+    /* swallow-ok: 偏好读取失败时使用当前缓存或默认值 */
   }
-  return { ...DEFAULT_FONT_PREFS };
+  return cachedFonts;
 }
 
 export function persistFonts(prefs: FontPreferences): void {
   const p = normalizeFontPrefs(prefs);
-  try {
-    localStorage.setItem(FONTS_KEY, JSON.stringify(p));
-  } catch {
-    /* swallow-ok: quota 超限时字体偏好尽力写，失败回退默认 */
-  }
+  cachedFonts = p;
+  void preferencesClient.setPreference('fonts', p).catch(() => {
+    /* swallow-ok: 偏好写入失败保持内存态 */
+  });
 }
 
 /* ---------- apply ---------- */
@@ -184,9 +177,12 @@ export function bootstrapFonts(): FontPreferences {
   const prefs = readStoredFonts();
   const platform = detectPlatform();
   applyFontStacks(prefs, platform);
-  // 内嵌字体异步补载，不阻塞首屏
-  void ensureFontsLoaded(prefs).then(() => {
-    applyFontStacks(prefs, platform);
+  // 偏好异步回灌与内嵌字体异步补载，不阻塞首屏
+  void loadStoredFonts().then((loaded) => {
+    applyFontStacks(loaded, platform);
+    void ensureFontsLoaded(loaded).then(() => {
+      applyFontStacks(loaded, platform);
+    });
   });
   return prefs;
 }

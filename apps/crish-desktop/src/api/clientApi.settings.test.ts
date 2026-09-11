@@ -344,14 +344,9 @@ describe('clientApi settings hydrate / save', () => {
     expect(s.responseStyle).toBe('minimal');
   });
 
-  it('legacy conex_pi_settings key migrates on read', async () => {
-    localStorage.setItem(
-      'conex_pi_settings',
-      JSON.stringify({ theme: 'legacy', customRules: ['旧规则'] })
-    );
+  it('getSettingsEx initializes default settings when storage is empty', async () => {
     const s = await clientApi.getSettingsEx('__global__');
-    expect(s.theme).toBe('legacy');
-    expect(s.customRules).toEqual(['旧规则']);
+    expect(s.theme).toBe('default');
     expect(s.responseStyle).toBe('medium');
     expect(localStorage.getItem('crish_settings')).toBeTruthy();
   });

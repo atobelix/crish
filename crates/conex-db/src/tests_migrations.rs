@@ -4,6 +4,7 @@
 #![allow(clippy::disallowed_methods)]
 
 use super::*;
+use crate::migrate_steps::{migrate_v10_to_v11, step_10_to_11};
 use crate::schema::create_v5_schema;
 use conex_types::{RunCacheStats, SessionIndexEntry, SessionMessage};
 use rusqlite::Connection;
@@ -588,4 +589,76 @@ fn fresh_db_includes_v9_columns() {
         )
         .unwrap();
     assert_eq!(idx_count, 1, "新库 idx_events_run 索引必须存在");
+}
+
+#[test]
+fn migration_v11_creates_app_preferences_table() {
+    let db = LocalDb::open_in_memory().unwrap();
+    assert_eq!(db.user_version().unwrap(), LATEST_VERSION);
+    assert_eq!(
+        db.get_session_meta("schema_version").unwrap().as_deref(),
+        Some(SCHEMA_VERSION_STRING),
+    );
+
+    let conn = db.conn.lock().unwrap();
+    let has_table: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='app_preferences';",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(has_table, 1, "app_preferences 表必须存在");
+
+    let cols = table_columns_v5(&conn, "app_preferences");
+    assert!(cols.contains(&"key".to_string()), "缺 key 列");
+    assert!(cols.contains(&"value".to_string()), "缺 value 列");
+    assert!(cols.contains(&"updated_at".to_string()), "缺 updated_at 列");
+
+    // 验证与已废弃 metadata 表明确隔离（metadata 表不应存在）
+    let has_metadata: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='metadata';",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(has_metadata, 0, "metadata 表不得存在（保持废弃隔离）");
+
+    // 验证 app_preferences 表读写正常
+    conn.execute(
+        "INSERT INTO app_preferences (key, value, updated_at) VALUES (?1, ?2, ?3);",
+        rusqlite::params!["appearance.theme", "\"dark\"", 1700000000000i64],
+    )
+    .unwrap();
+
+    let (val, ts): (String, i64) = conn
+        .query_row(
+            "SELECT value, updated_at FROM app_preferences WHERE key = ?1;",
+            ["appearance.theme"],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!(val, "\"dark\"");
+    assert_eq!(ts, 1700000000000i64);
+}
+
+#[test]
+fn migration_v11_step_is_idempotent() {
+    let mut conn = Connection::open_in_memory().unwrap();
+    let tx = conn.transaction().unwrap();
+    // 首次执行
+    step_10_to_11(&tx).unwrap();
+    // 别名与二次执行（天然幂等）
+    migrate_v10_to_v11(&tx).unwrap();
+    tx.commit().unwrap();
+
+    let has_table: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='app_preferences';",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(has_table, 1, "幂等重复执行后表正常存在");
 }

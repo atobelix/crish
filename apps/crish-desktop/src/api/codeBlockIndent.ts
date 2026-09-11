@@ -9,8 +9,6 @@ export const CODE_INDENT_TWO = '  ';
 export const CODE_INDENT_FOUR = '    ';
 export const CODE_INDENT_TAB = '\t';
 
-const SETTINGS_LS_KEY = 'crish_settings';
-
 /** 仅 2 空格 / 4 空格 / Tab；非法值回落 2 空格（与外观写面白名单一致） */
 export function normalizeCodeBlockIndent(raw: unknown): string {
   if (raw === CODE_INDENT_TWO || raw === CODE_INDENT_FOUR || raw === CODE_INDENT_TAB) {
@@ -31,7 +29,7 @@ export function codeIndentAttr(raw: unknown): '2' | '4' | 'tab' {
   return indent === CODE_INDENT_FOUR ? '4' : '2';
 }
 
-/** store 优先，未水合时读 crish_settings.markdown.codeBlockIndent */
+/** store 优先，未水合或未就绪时回退默认 2 空格 */
 export function readCodeBlockIndent(): string {
   try {
     const fromStore =
@@ -39,19 +37,6 @@ export function readCodeBlockIndent(): string {
     if (fromStore !== undefined) return normalizeCodeBlockIndent(fromStore);
   } catch {
     /* store 未就绪 */
-  }
-  try {
-    const raw = localStorage.getItem(SETTINGS_LS_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as {
-        markdown?: { codeBlockIndent?: unknown };
-      };
-      if (parsed?.markdown && 'codeBlockIndent' in parsed.markdown) {
-        return normalizeCodeBlockIndent(parsed.markdown.codeBlockIndent);
-      }
-    }
-  } catch {
-    /* 损坏 JSON / 隐私模式 */
   }
   return CODE_INDENT_TWO;
 }

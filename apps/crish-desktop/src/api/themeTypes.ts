@@ -9,7 +9,6 @@ export type UiTheme = 'default' | 'dark';
 /** 本地存储键 */
 export const THEME_KEY = 'crish_theme';
 export const SETTINGS_KEY = 'crish_settings';
-export const SETTINGS_KEY_LEGACY = 'conex_pi_settings';
 
 export interface PersonalizationSettings {
   skin: string;

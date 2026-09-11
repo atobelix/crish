@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useLayoutStore } from '../../store/storeAccess';
 import { getCompositionRoot } from '../../app/compositionRoot';
 import { configService } from '../../services/ConfigService';
+import { preferencesClient } from '../../api/preferences';
 import {
   SIDEBAR_RESIZE_STEP,
   SIDEBAR_RESIZE_STEP_LARGE,
@@ -17,40 +18,51 @@ export function useSidebarResize() {
   const [sidebarWidthPx, setSidebarWidthPx] = useState(SIDEBAR_WIDTH_DEFAULT);
 
   useEffect(() => {
-    try {
-      const layout = configService.get('workspace.layout') as
-        { sidebarWidth?: number } | undefined;
-      const restoredWidth = layout?.sidebarWidth;
-      if (
-        typeof restoredWidth === 'number' &&
-        restoredWidth >= SIDEBAR_WIDTH_MIN &&
-        restoredWidth <= SIDEBAR_WIDTH_MAX
-      ) {
-        document.documentElement.style.setProperty(
-          '--sidebar-width',
-          `${restoredWidth}px`
-        );
-        document.documentElement.style.setProperty(
-          '--sidebar-visible-width',
-          `${restoredWidth}px`
-        );
-        setSidebarWidthPx(restoredWidth);
-        return;
-      }
-      const raw = localStorage.getItem('crish_sidebar_width');
-      const n = raw ? parseInt(raw, 10) : NaN;
-      if (
-        !Number.isNaN(n) &&
-        n >= SIDEBAR_WIDTH_MIN &&
-        n <= SIDEBAR_WIDTH_MAX
-      ) {
-        document.documentElement.style.setProperty('--sidebar-width', `${n}px`);
-        document.documentElement.style.setProperty(
-          '--sidebar-visible-width',
-          `${n}px`
-        );
-        setSidebarWidthPx(n);
-      } else {
+    let unmounted = false;
+
+    const restoreSidebarWidth = async () => {
+      try {
+        const layout = configService.get('workspace.layout') as
+          { sidebarWidth?: number } | undefined;
+        let restoredWidth = layout?.sidebarWidth;
+        if (
+          typeof restoredWidth !== 'number' ||
+          restoredWidth < SIDEBAR_WIDTH_MIN ||
+          restoredWidth > SIDEBAR_WIDTH_MAX
+        ) {
+          try {
+            const prefWidth = await preferencesClient.getPreference('sidebar_width');
+            if (
+              typeof prefWidth === 'number' &&
+              prefWidth >= SIDEBAR_WIDTH_MIN &&
+              prefWidth <= SIDEBAR_WIDTH_MAX
+            ) {
+              restoredWidth = prefWidth;
+            }
+          } catch {
+            /* ignore preferencesClient read failure */
+          }
+        }
+
+        if (unmounted) return;
+
+        if (
+          typeof restoredWidth === 'number' &&
+          restoredWidth >= SIDEBAR_WIDTH_MIN &&
+          restoredWidth <= SIDEBAR_WIDTH_MAX
+        ) {
+          document.documentElement.style.setProperty(
+            '--sidebar-width',
+            `${restoredWidth}px`
+          );
+          document.documentElement.style.setProperty(
+            '--sidebar-visible-width',
+            `${restoredWidth}px`
+          );
+          setSidebarWidthPx(restoredWidth);
+          return;
+        }
+
         const cssW = parseInt(
           getComputedStyle(document.documentElement).getPropertyValue(
             '--sidebar-width'
@@ -64,11 +76,22 @@ export function useSidebarResize() {
             `${visibleW}px`
           );
           setSidebarWidthPx(visibleW);
+        } else {
+          document.documentElement.style.setProperty(
+            '--sidebar-visible-width',
+            `${SIDEBAR_WIDTH_DEFAULT}px`
+          );
+          setSidebarWidthPx(SIDEBAR_WIDTH_DEFAULT);
         }
+      } catch {
+        /* ignore */
       }
-    } catch {
-      /* ignore */
-    }
+    };
+
+    void restoreSidebarWidth();
+    return () => {
+      unmounted = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -96,7 +119,7 @@ export function useSidebarResize() {
 
   const persistSidebarWidth = useCallback((px: number) => {
     try {
-      localStorage.setItem('crish_sidebar_width', String(px));
+      void preferencesClient.setPreference('sidebar_width', px).catch(() => {});
       const layout = configService.get('workspace.layout') as {
         sidebarWidth?: number;
       };

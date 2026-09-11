@@ -60,7 +60,7 @@ export const useSessionStore = create<SessionStore>()(
           ...createSessionActions(set, get),
         })),
         {
-          name: 'crish_session_store_v1',
+          name: 'crish_session_store',
           partialize: (s) => ({
             sessions: s.sessions,
             folderOrder: s.folderOrder,

@@ -193,7 +193,7 @@ function scanFile(file) {
       if (!cssDefs.has(m[1])) cssDefs.set(m[1], `${at}:${lineOf(text, m.index)}`);
     }
   } else if (CODE_RE.test(file)) {
-    const reSet = /setProperty\(\s*[`'"](--[a-zA-Z0-9_-]+)/g;
+    const reSet = /(?:setProperty|setCustomProperty)\(\s*[`'"](--[a-zA-Z0-9_-]+)/g;
     let m;
     while ((m = reSet.exec(text))) {
       if (!jsDefs.has(m[1])) jsDefs.set(m[1], `${at}:${lineOf(text, m.index)}`);
@@ -204,6 +204,11 @@ function scanFile(file) {
     while ((m = reKey.exec(text))) {
       const name = m[1] ?? m[2];
       if (name && !jsDefs.has(name)) jsDefs.set(name, `${at}:${lineOf(text, m.index)}`);
+    }
+    // 运行时属性赋值：`tokens['--x'] =` 与 `style['--x'] =`（TokenRuntimeController 形态）
+    const reAssign = /\[\s*[`'"](--[a-zA-Z0-9_-]+)[`'"]\s*\]\s*=/g;
+    while ((m = reAssign.exec(text))) {
+      if (!jsDefs.has(m[1])) jsDefs.set(m[1], `${at}:${lineOf(text, m.index)}`);
     }
   }
 
@@ -378,17 +383,18 @@ if (LIST) {
 }
 
 if (UPDATE) {
+  if (metrics.undefined_refs > 0 || metrics.nofallback_refs > 0 || metrics.dead_tokens > 0) {
+    console.error('[check-token-consistency] FAIL: 设计令牌基线永久锁死为 0 / 0 / 0，严禁通过 --update 提升基线掩盖未定义或死 token！');
+    console.error('  当前实测值：');
+    console.error(`    undefined_refs:  ${metrics.undefined_refs}`);
+    console.error(`    nofallback_refs: ${metrics.nofallback_refs}`);
+    console.error(`    dead_tokens:     ${metrics.dead_tokens}`);
+    console.error('  请修复引用、补充定义或物理删除无用定义，使三项全部归零后方可通过门禁。');
+    process.exit(1);
+  }
   const before = readBaseline();
   writeBaseline(metrics);
   console.log(`\n[check-token-consistency] --update 已写回基线：${BASELINE_PATH.replace(root + sep, '')}`);
-  if (before && !before.__malformed) {
-    for (const k of Object.keys(metrics)) {
-      const b = before[k];
-      const now = metrics[k];
-      const arrow = b === undefined ? '（新建）' : b === now ? '=' : b > now ? `↓ ${b} → ${now}` : `↑ ${b} → ${now}`;
-      console.log(`  ${k}: ${now}  ${arrow}`);
-    }
-  }
   process.exit(0);
 }
 
@@ -396,12 +402,18 @@ const baseline = readBaseline();
 if (baseline === null) {
   console.error('[check-token-consistency] FAIL: 基线文件缺失或标记区不完整');
   console.error(`  期望：${BASELINE_PATH.replace(root + sep, '')}（含 ${START_MARKER} / ${END_MARKER}）`);
-  console.error('  处置：先运行 `node scripts/check-token-consistency.mjs --update` 建立基线');
+  console.error('  处置：基线必须为 0 / 0 / 0，请检查基线文件');
   process.exit(1);
 }
 if (baseline.__malformed) {
   console.error(`[check-token-consistency] FAIL: 标记区格式非法（应 \`<metric> <count>\`）：${baseline.__malformed}`);
   process.exit(1);
+}
+for (const [k, v] of Object.entries(baseline)) {
+  if (v !== 0) {
+    console.error(`[check-token-consistency] FAIL: 基线违规篡改，${k} 登记为 ${v}，铁律要求必须恒为 0！`);
+    process.exit(1);
+  }
 }
 
 const regressions = [];
@@ -424,12 +436,45 @@ for (const [k, now] of Object.entries(metrics)) {
 }
 
 if (regressions.length) {
-  console.error('\n[check-token-consistency] FAIL: 新增 1 项以上（未登记/超基线）：');
+  console.error('\n[check-token-consistency] FAIL: 拦截到设计 Token 一致性违规（门禁要求 0 / 0 / 0）：');
   for (const r of regressions) console.error(`  - ${r}`);
-  console.error('\n处置：');
-  console.error('  · 若为新增问题 → 修复引用或补定义，不得提升基线掩盖；');
-  console.error('  · 若确属有意 → 显式运行 `node scripts/check-token-consistency.mjs --update` 并说明理由。');
-  console.error('  · 高危清单：`node scripts/check-token-consistency.mjs --list`');
+
+  if (noFallbackRefs.length) {
+    console.error('\n[高危] 无兜底未定义 Token 引用清单 (nofallback_refs)：');
+    for (const name of noFallbackRefs) {
+      const sites = refs.get(name) ?? [];
+      console.error(`  ${name}`);
+      for (const s of sites) console.error(`    at ${s.at}`);
+    }
+  }
+
+  if (undefinedRefs.length - noFallbackRefs.length > 0) {
+    console.error('\n[警告] 含兜底但未定义 Token 引用清单 (undefined_refs)：');
+    for (const name of undefinedRefs) {
+      if (noFallbackRefs.includes(name)) continue;
+      const sites = refs.get(name) ?? [];
+      console.error(`  ${name}`);
+      for (const s of sites) console.error(`    at ${s.at}`);
+    }
+  }
+
+  if (deadTokens.length) {
+    console.error('\n[死码] 无消费方 Token 清单 (dead_tokens)：');
+    for (const name of deadTokens) {
+      console.error(`  ${name}  at ${cssDefs.get(name)}`);
+    }
+  }
+
+  console.error('\n==================== 明确修复指引 ====================');
+  console.error('1. 未定义引用修复 (undefined_refs / nofallback_refs)：');
+  console.error('   - 若该 Token 属于全局设计体系：请在 apps/crish-desktop/src/styles/tokens.css 的 :root 或对应主题块中补充定义；');
+  console.error('   - 若属于已有 Token 的拼写笔误：请校对并纠正为规范名称（如 tokens.css 中的既有 --space-*、--text-* 等）；');
+  console.error('   - 若属于运行时由 JS 动态注入的属性：请确保使用 setProperty / setCustomProperty 写入，并为 CSS var() 加上安全兜底：var(--token, fallback)；');
+  console.error('2. 死 Token 修复 (dead_tokens)：');
+  console.error('   - 若属于重构残留或废弃变量：必须从定义文件（tokens.css）中物理删除该声明（DELETE-SYMBOL），禁止留空壳；');
+  console.error('   - 若属于新功能待接入：请在组件 CSS 中接入消费，或在契约测试 (*.test.ts) 中增加按名断言。');
+  console.error('3. 铁律：基线永久保持 0 / 0 / 0，任何新增违规一律阻断退出码 1，严禁提升基线！');
+  console.error('======================================================');
   process.exit(1);
 }
 

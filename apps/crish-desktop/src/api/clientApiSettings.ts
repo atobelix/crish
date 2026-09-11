@@ -20,19 +20,11 @@ import type {
 
 // LocalStorage Keys (settings only)
 const SETTINGS_KEY = 'crish_settings';
-const SETTINGS_KEY_LEGACY = 'conex_pi_settings';
 
-function lsGet(key: string, legacy?: string): string | null {
+function lsGet(key: string): string | null {
   try {
     const v = localStorage.getItem(key);
     if (v != null) return v;
-    if (legacy) {
-      const old = localStorage.getItem(legacy);
-      if (old != null) {
-        localStorage.setItem(key, old);
-        return old;
-      }
-    }
   } catch {
     /* ignore */
   }
@@ -41,7 +33,7 @@ function lsGet(key: string, legacy?: string): string | null {
 
 const initSettingsDb = () => {
   if (typeof localStorage === 'undefined') return;
-  if (!lsGet(SETTINGS_KEY, SETTINGS_KEY_LEGACY)) {
+  if (!lsGet(SETTINGS_KEY)) {
     try {
       localStorage.setItem(SETTINGS_KEY, JSON.stringify(DEFAULT_SETTINGS));
     } catch {
@@ -148,7 +140,7 @@ export const clientApi = {
     // 旧实现的 20ms 延迟是「模拟异步 IO」遗留，会让设置页每次 tab 切换累计延迟。
     // 始终以 DEFAULT 为底再叠存储 + 字段规范化，避免旧 LS 缺键 / 脏枚举
     let globalSettings: Settings = getDefaultSettings();
-    const raw = lsGet(SETTINGS_KEY, SETTINGS_KEY_LEGACY);
+    const raw = lsGet(SETTINGS_KEY);
     if (raw) {
       const parsed = parseSettingsJson(raw);
       if (parsed) {
@@ -207,7 +199,7 @@ export const clientApi = {
 
       if (scope === 'global') {
         let current: Settings = getDefaultSettings();
-        const raw = lsGet(SETTINGS_KEY, SETTINGS_KEY_LEGACY);
+        const raw = lsGet(SETTINGS_KEY);
         if (raw) {
           const parsed = parseSettingsJson(raw);
           if (parsed) {
@@ -233,7 +225,7 @@ export const clientApi = {
         localStorage.setItem(projKey, JSON.stringify(merged));
 
         let globalSettings: Settings = getDefaultSettings();
-        const raw = lsGet(SETTINGS_KEY, SETTINGS_KEY_LEGACY);
+        const raw = lsGet(SETTINGS_KEY);
         if (raw) {
           const parsed = parseSettingsJson(raw);
           if (parsed) {

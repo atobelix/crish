@@ -9,21 +9,28 @@ const SSR_GLOBALS = {
 
 export function initSsrGlobals(): void {
   try {
-    SSR_GLOBALS.isTauri = !!window.__TAURI_INTERNALS__;
+    SSR_GLOBALS.isTauri = typeof window !== 'undefined' && !!window.__TAURI_INTERNALS__;
     SSR_GLOBALS.isProduct =
       SSR_GLOBALS.isTauri ||
-      localStorage.getItem('crish_product_shell') === '1';
-    const stored = localStorage.getItem('crish_app_mode');
+      (typeof document !== 'undefined' &&
+        document.documentElement.getAttribute('data-product-shell') === '1');
+    const stored =
+      typeof document !== 'undefined'
+        ? document.documentElement.getAttribute('data-app-mode')
+        : null;
     SSR_GLOBALS.appMode =
       stored === 'demo' || stored === 'normal' ? stored : 'normal';
     SSR_GLOBALS.theme =
-      document.documentElement.getAttribute('data-theme') || 'default';
+      (typeof document !== 'undefined' &&
+        document.documentElement.getAttribute('data-theme')) || 'default';
     SSR_GLOBALS.uiFont =
-      document.documentElement.getAttribute('data-ui-font') || 'auto';
+      (typeof document !== 'undefined' &&
+        document.documentElement.getAttribute('data-ui-font')) || 'auto';
     SSR_GLOBALS.monoFont =
-      document.documentElement.getAttribute('data-mono-font') || 'auto';
+      (typeof document !== 'undefined' &&
+        document.documentElement.getAttribute('data-mono-font')) || 'auto';
   } catch {
-    /* localStorage 不可用时保持默认全局值 */
+    /* 异常时保持默认全局值 */
   }
 }
 

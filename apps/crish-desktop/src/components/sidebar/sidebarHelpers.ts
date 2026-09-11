@@ -1,4 +1,11 @@
 import { sessionListDisplayTitle } from '../../api/sessionTitle';
+import {
+  readSidebarListPrefsCache,
+  readSidebarSectionsCache,
+  writeSidebarListPrefsCache,
+  writeSidebarSectionsCache,
+  RUNTIME_CACHE_KEYS,
+} from '../../api/cache/runtimeCache';
 
 /**
  * 例外声明（T05.5.1 tokens 唯一源）：
@@ -30,9 +37,9 @@ export function shouldCollapseSidebar(widthPx: number): boolean {
   return Number.isFinite(widthPx) && widthPx < SIDEBAR_COLLAPSE_PX;
 }
 
-export const SIDEBAR_LIST_PREFS_KEY = 'crish_sidebar_list_prefs';
+export const SIDEBAR_LIST_PREFS_KEY = RUNTIME_CACHE_KEYS.SIDEBAR_LIST_PREFS;
 /** 侧栏分区折叠状态（pinned / general / projects / 各 projectId） */
-const SIDEBAR_SECTIONS_KEY = 'crish_sidebar_sections_v1';
+export const SIDEBAR_SECTIONS_KEY = RUNTIME_CACHE_KEYS.SIDEBAR_SECTIONS;
 
 export type SortType = 'active' | 'name';
 export type GroupType = 'folder' | 'none';
@@ -66,9 +73,8 @@ const DEFAULT_SECTIONS_STATE: SidebarSectionsState = {
 
 export function loadSidebarListPrefs(): SidebarListPrefs {
   try {
-    const raw = localStorage.getItem(SIDEBAR_LIST_PREFS_KEY);
-    if (!raw) return { ...DEFAULT_LIST_PREFS };
-    const parsed = JSON.parse(raw) as Partial<SidebarListPrefs>;
+    const parsed = readSidebarListPrefsCache<Partial<SidebarListPrefs> | null>(null);
+    if (!parsed) return { ...DEFAULT_LIST_PREFS };
     return {
       sortType:
         parsed.sortType === 'name' || parsed.sortType === 'active'
@@ -90,9 +96,8 @@ export function loadSidebarListPrefs(): SidebarListPrefs {
 
 export function loadSidebarSectionsState(): SidebarSectionsState {
   try {
-    const raw = localStorage.getItem(SIDEBAR_SECTIONS_KEY);
-    if (!raw) return { ...DEFAULT_SECTIONS_STATE, projectIds: {} };
-    const parsed = JSON.parse(raw) as Partial<SidebarSectionsState>;
+    const parsed = readSidebarSectionsCache<Partial<SidebarSectionsState> | null>(null);
+    if (!parsed) return { ...DEFAULT_SECTIONS_STATE, projectIds: {} };
     const projectIds =
       parsed.projectIds &&
       typeof parsed.projectIds === 'object' &&
@@ -112,7 +117,15 @@ export function loadSidebarSectionsState(): SidebarSectionsState {
 
 export function saveSidebarSectionsState(state: SidebarSectionsState): void {
   try {
-    localStorage.setItem(SIDEBAR_SECTIONS_KEY, JSON.stringify(state));
+    writeSidebarSectionsCache(state);
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
+
+export function saveSidebarListPrefs(prefs: SidebarListPrefs): void {
+  try {
+    writeSidebarListPrefsCache(prefs);
   } catch {
     /* ignore quota / private mode */
   }

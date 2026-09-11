@@ -1,172 +1,333 @@
-import { applyPersonalization } from './themePersonalization';
+import { TokenRuntimeController } from '../services/TokenRuntimeController';
+import { preferencesClient } from './preferences/preferencesClient';
 import { withThemeTransitionFreeze } from './themeTransitionLatch';
-import {
-  SETTINGS_KEY,
-  SETTINGS_KEY_LEGACY,
-  THEME_KEY,
-  type PersonalizationSettings,
-  type UiTheme,
-} from './themeTypes';
+import type { PersonalizationSettings, UiTheme } from './themeTypes';
 
 /**
- * 外观主题：应用 DOM + 本地记忆。
- * - 独立 key `crish_theme`，启动时立刻读，不依赖 settings 异步
- * - 同步写入 settings.theme，设置页与其它入口一致
- *
- * 例外声明（T05.5.1 tokens 唯一源）：
- * 皮肤色板常量已迁移至 themePresets.ts（调色板数据文件，约 225 处 hex/hsl），
- * 个性化应用逻辑（脸色注入 / 时光过渡）已迁移至 themePersonalization.ts。
- * 运行时通过 root.style.setProperty 注入 CSS 变量，天然构成 tokens 的运行时数据源。
- * 按 PE-05 T05.5.1 约定不做逐处 token 化，仅保留本例外标注。
+ * 外观主题：应用 DOM 变量与后端偏好持久化。
+ * 全面物理切除 localStorage 孤岛，统一使用 preferencesClient 与后端 SQLite 交互。
+ * 运行时 CSS Token 注入统一委托给 TokenRuntimeController.getInstance().applyTokens。
  */
 
 // re-export 类型与皮肤预设，保持消费方 import 路径不变
 export type { UiTheme, PersonalizationSettings } from './themeTypes';
 export { SKIN_PRESETS, type SkinPreset } from './themePresets';
-export {
-  getDynamicSolarAdjustments,
-  applyPersonalization,
-} from './themePersonalization';
 export { withThemeTransitionFreeze } from './themeTransitionLatch';
 
+const DEFAULT_PERSONALIZATION: PersonalizationSettings = {
+  skin: 'warm-gray',
+  customBg: '#f4f3f0',
+  customFg: '#1a1a1a',
+  fontSizeAdjust: 0,
+  themeBrightnessAdjust: 0,
+  themeBrightnessVibrant: false,
+  themeAutoTimeTransition: false,
+};
+
+let currentTheme: UiTheme = 'default';
+let currentPersonalization: PersonalizationSettings = { ...DEFAULT_PERSONALIZATION };
+
+/**
+ * 规范化主题标识符
+ */
 export function normalizeTheme(raw: unknown): UiTheme {
   if (raw === 'dark') return 'dark';
-  // light / default / 其它一律浅色
   return 'default';
 }
 
+/**
+ * 读取当前生效的主题（内存单真源）
+ */
 export function readStoredTheme(): UiTheme {
-  try {
-    const direct = localStorage.getItem(THEME_KEY);
-    if (direct === 'dark' || direct === 'default' || direct === 'light') {
-      return normalizeTheme(direct === 'light' ? 'default' : direct);
-    }
-  } catch {
-    /* swallow-ok: 主题键读取失败时回退默认主题 */
-  }
-  // 只读回退：兼容旧版 crish_settings JSON 中的 theme 字段，不再有写入方更新此字段；
-  // @deprecated 删除日期 2027-01-01
-  try {
-    const raw =
-      localStorage.getItem(SETTINGS_KEY) || localStorage.getItem(SETTINGS_KEY_LEGACY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as { theme?: string };
-      if (parsed?.theme) return normalizeTheme(parsed.theme);
-    }
-  } catch {
-    /* swallow-ok: 旧版 settings 结构解析失败时跳过该来源 */
-  }
-  return 'default';
+  return currentTheme;
 }
 
-/** 写独立 key crish_theme（唯一写面；维度 2 收敛：已删除 crish_settings JSON 合并写入） */
+/**
+ * 读取当前生效的个性化配置快照
+ */
+export function readStoredPersonalization(): PersonalizationSettings {
+  return { ...currentPersonalization };
+}
+
+/**
+ * 重置主题内存状态（主要用于单元测试隔离）
+ */
+export function resetThemeStore(): void {
+  currentTheme = 'default';
+  currentPersonalization = { ...DEFAULT_PERSONALIZATION };
+}
+
+/**
+ * 持久化主题到后端 SQLite（无 localStorage 写入）
+ */
 export function persistTheme(theme: UiTheme): void {
   const t = normalizeTheme(theme);
+  currentTheme = t;
   try {
-    localStorage.setItem(THEME_KEY, t);
+    void preferencesClient.setPreference('theme', t).catch(() => {
+      /* swallow-ok: 偏好异步持久化失败回退内存态 */
+    });
   } catch {
-    /* swallow-ok: quota/隐私模式写主题尽力而为，失败回退内存态 */
+    /* swallow-ok: 偏好异步持久化失败回退内存态 */
   }
 }
 
 /**
- * 应用到 html（变量源）+ body（兼容旧选择器）。
- * 必须在首屏 paint 前或切换时同步调用。
+ * 统一委托至 TokenRuntimeController.getInstance().applyTokens 应用主题
  */
 export function applyTheme(theme: UiTheme | string): UiTheme {
   return withThemeTransitionFreeze(() => {
     const t = normalizeTheme(theme);
-    const html = document.documentElement;
-    html.setAttribute('data-theme', t);
-    document.body.setAttribute('data-theme', t);
-    // 同步 class，便于排查与扩展
-    html.classList.toggle('theme-dark', t === 'dark');
-    html.classList.toggle('theme-light', t !== 'dark');
-    document.body.classList.toggle('theme-dark', t === 'dark');
-    document.body.classList.toggle('theme-light', t !== 'dark');
-
-    // Automatically apply stored personalization to prevent styling loss
+    currentTheme = t;
     try {
-      const p = readStoredPersonalization();
-      applyPersonalization(p, t);
+      TokenRuntimeController.getInstance().applyTokens(
+        currentPersonalization,
+        currentTheme
+      );
     } catch {
       /* swallow-ok: early boot 或 SSR 环境无 DOM 时跳过个性化应用 */
     }
-
     return t;
   });
 }
 
-export function readStoredPersonalization(): PersonalizationSettings {
-  try {
-    const skin = localStorage.getItem('crish_theme_skin') || 'warm-gray';
-    const customBg = localStorage.getItem('crish_theme_custom_bg') || '#f4f3f0';
-    const customFg = localStorage.getItem('crish_theme_custom_fg') || '#1a1a1a';
-    const fsAdjustRaw = localStorage.getItem('crish_font_size_adjust');
-    const fontSizeAdjust = fsAdjustRaw ? parseInt(fsAdjustRaw, 10) : 0;
-    const brightnessRaw = localStorage.getItem('crish_theme_brightness_adjust');
-    const themeBrightnessAdjust = brightnessRaw ? parseInt(brightnessRaw, 10) : 0;
-    const vibrantRaw = localStorage.getItem('crish_theme_brightness_vibrant');
-    const themeBrightnessVibrant = vibrantRaw === 'true';
-    const autoTimeRaw = localStorage.getItem('crish_theme_brightness_auto_time');
-    const themeAutoTimeTransition = autoTimeRaw === 'true';
-    return { skin, customBg, customFg, fontSizeAdjust, themeBrightnessAdjust, themeBrightnessVibrant, themeAutoTimeTransition };
-  } catch {
-    return { skin: 'warm-gray', customBg: '#f4f3f0', customFg: '#1a1a1a', fontSizeAdjust: 0, themeBrightnessAdjust: 0, themeBrightnessVibrant: false, themeAutoTimeTransition: false };
-  }
+/**
+ * 个性化应用逻辑：委托至 TokenRuntimeController 注入
+ */
+export function applyPersonalization(
+  p: PersonalizationSettings,
+  activeTheme: UiTheme | string
+): void {
+  const t = normalizeTheme(activeTheme);
+  currentPersonalization = { ...p };
+  currentTheme = t;
+  TokenRuntimeController.getInstance().applyTokens(
+    currentPersonalization,
+    currentTheme
+  );
 }
 
-export function writeStoredPersonalization(p: PersonalizationSettings): void {
+/**
+ * 切换皮肤预设并异步持久化到后端 SQLite
+ */
+export function setSkin(skin: string): string {
+  currentPersonalization = {
+    ...currentPersonalization,
+    skin,
+  };
+  TokenRuntimeController.getInstance().applyTokens(
+    currentPersonalization,
+    currentTheme
+  );
+
   try {
-    localStorage.setItem('crish_theme_skin', p.skin);
-    localStorage.setItem('crish_theme_custom_bg', p.customBg);
-    localStorage.setItem('crish_theme_custom_fg', p.customFg);
-    localStorage.setItem('crish_font_size_adjust', String(p.fontSizeAdjust));
-    localStorage.setItem('crish_theme_brightness_adjust', String(p.themeBrightnessAdjust ?? 0));
-    localStorage.setItem('crish_theme_brightness_vibrant', p.themeBrightnessVibrant ? 'true' : 'false');
-    localStorage.setItem('crish_theme_brightness_auto_time', p.themeAutoTimeTransition ? 'true' : 'false');
+    void preferencesClient.setPreference('theme_skin', skin).catch(() => {
+      /* swallow-ok: 偏好异步持久化失败保持内存态 */
+    });
   } catch {
-    /* swallow-ok: 亮度偏好写失败仅影响下次启动还原 */
+    /* swallow-ok: 偏好异步持久化失败保持内存态 */
   }
+
+  return skin;
+}
+
+/**
+ * 写入个性化设置，自动应用并异步持久化到后端 SQLite
+ */
+export function setPersonalization(
+  updates: Partial<PersonalizationSettings>
+): PersonalizationSettings {
+  currentPersonalization = {
+    ...currentPersonalization,
+    ...updates,
+  };
+
+  TokenRuntimeController.getInstance().applyTokens(
+    currentPersonalization,
+    currentTheme
+  );
+
+  const safePersist = <K extends Parameters<typeof preferencesClient.setPreference>[0]>(
+    key: K,
+    val: Parameters<typeof preferencesClient.setPreference>[1]
+  ) => {
+    try {
+      void preferencesClient.setPreference(key, val as any).catch(() => {
+        /* swallow-ok: 偏好异步持久化失败保持内存态 */
+      });
+    } catch {
+      /* swallow-ok: 偏好异步持久化失败保持内存态 */
+    }
+  };
+
+  if (updates.skin !== undefined) {
+    safePersist('theme_skin', currentPersonalization.skin);
+  }
+  if (updates.customBg !== undefined) {
+    safePersist('theme_custom_bg', currentPersonalization.customBg);
+  }
+  if (updates.customFg !== undefined) {
+    safePersist('theme_custom_fg', currentPersonalization.customFg);
+  }
+  if (updates.fontSizeAdjust !== undefined) {
+    safePersist('font_size_adjust', currentPersonalization.fontSizeAdjust);
+  }
+  if (updates.themeBrightnessAdjust !== undefined) {
+    safePersist(
+      'theme_brightness_adjust',
+      currentPersonalization.themeBrightnessAdjust ?? 0
+    );
+  }
+  if (updates.themeBrightnessVibrant !== undefined) {
+    safePersist(
+      'theme_brightness_vibrant',
+      !!currentPersonalization.themeBrightnessVibrant
+    );
+  }
+  if (updates.themeAutoTimeTransition !== undefined) {
+    safePersist(
+      'theme_brightness_auto_time',
+      !!currentPersonalization.themeAutoTimeTransition
+    );
+  }
+
+  return currentPersonalization;
+}
+
+/**
+ * 兼容旧版写入接口（内部委托给 setPersonalization）
+ */
+export function writeStoredPersonalization(p: PersonalizationSettings): void {
+  setPersonalization(p);
 }
 
 let solarIntervalMounted = false;
 
-/** 读本地并应用；返回生效主题 */
+/**
+ * 读偏好并应用；返回生效主题。
+ * 首屏同步应用 Token 杜绝 FOUC，随后异步从后端 SQLite 水合最新偏好。
+ */
 export function bootstrapTheme(): UiTheme {
-  const t = readStoredTheme();
-  applyTheme(t);
-  const p = readStoredPersonalization();
-  applyPersonalization(p, t);
+  TokenRuntimeController.getInstance().applyTokens(
+    currentPersonalization,
+    currentTheme
+  );
 
-  // ⏰ 开启时光过渡的后台 60 秒轮询 Tick 守护定时器，确保无感平滑自愈 ⏰
+  try {
+    void preferencesClient.getAllPreferences().then((prefs) => {
+      let changed = false;
+      if (
+        prefs.theme &&
+        (prefs.theme === 'dark' || prefs.theme === 'default') &&
+        prefs.theme !== currentTheme
+      ) {
+        currentTheme = prefs.theme;
+        changed = true;
+      }
+
+      const newSkin = prefs.theme_skin || currentPersonalization.skin;
+      const newCustomBg =
+        prefs.theme_custom_bg !== undefined
+          ? prefs.theme_custom_bg
+          : currentPersonalization.customBg;
+      const newCustomFg =
+        prefs.theme_custom_fg !== undefined
+          ? prefs.theme_custom_fg
+          : currentPersonalization.customFg;
+      const newFontSize =
+        prefs.font_size_adjust !== undefined
+          ? prefs.font_size_adjust
+          : currentPersonalization.fontSizeAdjust;
+      const newBrightness =
+        prefs.theme_brightness_adjust !== undefined
+          ? prefs.theme_brightness_adjust
+          : currentPersonalization.themeBrightnessAdjust;
+      const newVibrant =
+        prefs.theme_brightness_vibrant !== undefined
+          ? prefs.theme_brightness_vibrant
+          : currentPersonalization.themeBrightnessVibrant;
+      const newAutoTime =
+        prefs.theme_brightness_auto_time !== undefined
+          ? prefs.theme_brightness_auto_time
+          : currentPersonalization.themeAutoTimeTransition;
+
+      if (
+        newSkin !== currentPersonalization.skin ||
+        newCustomBg !== currentPersonalization.customBg ||
+        newCustomFg !== currentPersonalization.customFg ||
+        newFontSize !== currentPersonalization.fontSizeAdjust ||
+        newBrightness !== currentPersonalization.themeBrightnessAdjust ||
+        newVibrant !== currentPersonalization.themeBrightnessVibrant ||
+        newAutoTime !== currentPersonalization.themeAutoTimeTransition
+      ) {
+        currentPersonalization = {
+          skin: newSkin,
+          customBg: newCustomBg,
+          customFg: newCustomFg,
+          fontSizeAdjust: newFontSize,
+          themeBrightnessAdjust: newBrightness,
+          themeBrightnessVibrant: newVibrant,
+          themeAutoTimeTransition: newAutoTime,
+        };
+        changed = true;
+      }
+
+      if (changed) {
+        TokenRuntimeController.getInstance().applyTokens(
+          currentPersonalization,
+          currentTheme
+        );
+      }
+    }).catch(() => {
+      /* swallow-ok: 后端偏好读取失败时保持当前内存态 */
+    });
+  } catch {
+    /* swallow-ok: 环境不支持异步请求时静默保持 */
+  }
+
+  // 开启时光过渡的后台 60 秒轮询 Tick 守护定时器，确保无感平滑自愈
   if (typeof window !== 'undefined' && !solarIntervalMounted) {
     solarIntervalMounted = true;
     setInterval(() => {
-      const activeP = readStoredPersonalization();
-      if (activeP.themeAutoTimeTransition) {
-        const activeT = readStoredTheme();
-        applyPersonalization(activeP, activeT);
+      if (currentPersonalization.themeAutoTimeTransition) {
+        TokenRuntimeController.getInstance().applyTokens(
+          currentPersonalization,
+          currentTheme
+        );
       }
     }, 60000);
   }
 
-  return t;
+  return currentTheme;
 }
 
-/** 切换并持久化（单真源写端入口） */
+/**
+ * 切换主题并持久化（单真源写端入口）
+ */
 export function setTheme(theme: UiTheme | string): UiTheme {
   return withThemeTransitionFreeze(() => {
-    const t = applyTheme(theme);
-    persistTheme(t);
-    const p = readStoredPersonalization();
-    applyPersonalization(p, t);
+    const t = normalizeTheme(theme);
+    currentTheme = t;
+    TokenRuntimeController.getInstance().applyTokens(
+      currentPersonalization,
+      currentTheme
+    );
+
     try {
       window.dispatchEvent(
         new CustomEvent('crish-theme-changed', { detail: { theme: t } })
       );
     } catch {
       /* swallow-ok: 主题变更事件分发失败不影响已应用样式 */
+    }
+
+    // 异步持久化到后端 SQLite
+    try {
+      void preferencesClient.setPreference('theme', t).catch(() => {
+        /* swallow-ok: 异步持久化在非 Tauri 或测试环境中静默忽略 */
+      });
+    } catch {
+      /* swallow-ok: 异步持久化尽力而为 */
     }
 
     // 异步同步至 settingsStore 与磁盘持久化，保证全局单真源一致，消除旧值覆盖
@@ -186,9 +347,4 @@ export function setTheme(theme: UiTheme | string): UiTheme {
 
     return t;
   });
-}
-
-/** 卸载时光守护定时器 */
-export function disposeSolarTimer(): void {
-  /* no-op when static interval */
 }

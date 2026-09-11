@@ -50,12 +50,12 @@ export function getCommandPermissions(): string[] {
   return usePermissionStore.getState().commandPermissions ?? [];
 }
 
-/** 发送快捷键唯一钥匙：crish_settings.sendShortcut（不再读写 crish_send_shortcut） */
+/** 发送快捷键唯一钥匙：settingsStore.appSettings.sendShortcut */
 export type SendShortcut = 'enter' | 'ctrlEnter';
 
 export const SEND_SHORTCUT_CHANGED_EVENT = 'crish-send-shortcut-changed';
-const SETTINGS_LS_KEY = 'crish_settings';
-const SEND_SHORTCUT_LEGACY_LS_KEY = 'crish_send_shortcut';
+
+let memorySendShortcut: SendShortcut = 'enter';
 
 export function normalizeSendShortcut(raw: unknown): SendShortcut {
   return raw === 'ctrlEnter' ? 'ctrlEnter' : 'enter';
@@ -63,16 +63,13 @@ export function normalizeSendShortcut(raw: unknown): SendShortcut {
 
 export function readSendShortcut(): SendShortcut {
   try {
-    const raw = localStorage.getItem(SETTINGS_LS_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as { sendShortcut?: unknown };
-      if (parsed && typeof parsed === 'object' && 'sendShortcut' in parsed) {
-        return normalizeSendShortcut(parsed.sendShortcut);
-      }
+    const settings = useSettingsStore.getState().appSettings;
+    if (settings && typeof settings === 'object' && 'sendShortcut' in settings) {
+      return normalizeSendShortcut(settings.sendShortcut);
     }
-    return normalizeSendShortcut(localStorage.getItem(SEND_SHORTCUT_LEGACY_LS_KEY));
+    return memorySendShortcut;
   } catch {
-    return 'enter';
+    return memorySendShortcut;
   }
 }
 
@@ -81,20 +78,17 @@ export function notifySendShortcutChanged(): void {
   window.dispatchEvent(new Event(SEND_SHORTCUT_CHANGED_EVENT));
 }
 
-/** 立刻写入 crish_settings.sendShortcut 并通知 composer（不等 saveSettingsEx 排队） */
+/** 立刻写入 sendShortcut 并通知 composer（不等 saveSettingsEx 排队） */
 export function persistSendShortcut(value: unknown): SendShortcut {
   const next = normalizeSendShortcut(value);
+  memorySendShortcut = next;
   try {
-    const raw = localStorage.getItem(SETTINGS_LS_KEY);
-    if (!raw) {
-      localStorage.setItem(SETTINGS_LS_KEY, JSON.stringify({ sendShortcut: next }));
-    } else {
-      const obj = JSON.parse(raw) as unknown;
-      if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
-        const parsed = obj as Record<string, unknown>;
-        parsed.sendShortcut = next;
-        localStorage.setItem(SETTINGS_LS_KEY, JSON.stringify(parsed));
-      }
+    const store = useSettingsStore.getState();
+    if (store.appSettings) {
+      store.setAppSettings({
+        ...store.appSettings,
+        sendShortcut: next,
+      });
     }
   } catch {
     /* quota / 隐私模式：仍发事件，读面回落默认 */

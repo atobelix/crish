@@ -133,7 +133,7 @@ export const useLayoutStore = create<LayoutStore>()(
           ...createLayoutCoreActions(set, get),
         })),
         {
-          name: 'crish-layout-v1',
+          name: 'crish_layout_store',
           partialize: (s) => ({
             sidebarCollapsed: s.sidebarCollapsed,
             tabModeEnabled: s.tabModeEnabled,

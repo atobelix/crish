@@ -409,9 +409,27 @@ apps/agent-workbench/src-tauri/gen/*
 !scripts/check-color-ssot.mjs
 !scripts/check-text-color-tokens.mjs
 !scripts/check-token-consistency.mjs
+!scripts/check-preferences-ssot.mjs
 !scripts/check-no-pseudo-dispatch.mjs
 !scripts/check-no-nonvision-dataurl.mjs
 !scripts/check-sec6-note-drain-entropy.mjs
+!scripts/check-tooltip-hygiene.mjs
+!scripts/check-layout-geometry.mjs
+!scripts/check-chat-state.mjs
+!scripts/check-coverage-threshold.mjs
+!scripts/check-legacy-shim.mjs
+!scripts/check-sec7-gfm-emoji.mjs
+!scripts/check-tsc-threshold.mjs
+!scripts/check-ui-negative-churn.mjs
+# T1 门禁资产放行（2026-09-11 · Token 消费面统一战役）
+# 同 381 行 `*.mjs` / 378 行 `*.json` 全局忽略：门禁脚本与真源登记表是资产，
+# 不放行则 CI checkout 后门禁缺失、check:tokens-all / check:guard-system 直接断裂。
+# 注意：check-guard-system.mjs 会检测「新增守卫未放行」并 FAIL，防止此坑复发。
+!scripts/check-token-ssot.mjs
+!scripts/check-repo-integrity.mjs
+!scripts/check-guard-system.mjs
+!scripts/check-tokens-all.mjs
+!scripts/token-registry.json
 # markdown-editor 测试资产放行（本区 *.txt/*.json/*.mjs 忽略规则在 267 行白名单之后，须在此显式放行）
 !reference/markdown-editor/tests/cmspec/spec.txt
 !reference/markdown-editor/tests/cmspec/examples.json

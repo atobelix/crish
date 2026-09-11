@@ -6,22 +6,18 @@ import {
   readSendShortcut,
   SEND_SHORTCUT_CHANGED_EVENT,
 } from './settingsAccess';
+import { useSettingsStore } from '../../store/settingsStore';
 
 describe('sendShortcut 单钥匙', () => {
   beforeEach(() => {
     localStorage.clear();
+    useSettingsStore.setState({ appSettings: null });
   });
 
-  it('读 crish_settings.sendShortcut，不再依赖 crish_send_shortcut 写入面', () => {
-    localStorage.setItem(
-      'crish_settings',
-      JSON.stringify({ sendShortcut: 'ctrlEnter' })
-    );
-    expect(readSendShortcut()).toBe('ctrlEnter');
-  });
-
-  it('settings 缺字段时回落旧钥匙', () => {
-    localStorage.setItem('crish_send_shortcut', 'ctrlEnter');
+  it('读 settingsStore.sendShortcut', () => {
+    useSettingsStore.setState({
+      appSettings: { sendShortcut: 'ctrlEnter' } as never,
+    });
     expect(readSendShortcut()).toBe('ctrlEnter');
   });
 
@@ -30,11 +26,10 @@ describe('sendShortcut 单钥匙', () => {
     expect(normalizeSendShortcut('ctrlEnter')).toBe('ctrlEnter');
   });
 
-  it('persistSendShortcut 写入同一把钥匙并通知同窗 composer', () => {
-    localStorage.setItem(
-      'crish_settings',
-      JSON.stringify({ theme: 'dark', sendShortcut: 'enter' })
-    );
+  it('persistSendShortcut 写入 store 并通知同窗 composer', () => {
+    useSettingsStore.setState({
+      appSettings: { theme: 'dark', sendShortcut: 'enter' } as never,
+    });
     const seen: string[] = [];
     const onChange = () => seen.push(readSendShortcut());
     window.addEventListener(SEND_SHORTCUT_CHANGED_EVENT, onChange);
@@ -42,11 +37,6 @@ describe('sendShortcut 单钥匙', () => {
     window.removeEventListener(SEND_SHORTCUT_CHANGED_EVENT, onChange);
     expect(readSendShortcut()).toBe('ctrlEnter');
     expect(seen).toEqual(['ctrlEnter']);
-    const stored = JSON.parse(localStorage.getItem('crish_settings') || '{}') as {
-      theme?: string;
-      sendShortcut?: string;
-    };
-    expect(stored.theme).toBe('dark');
-    expect(stored.sendShortcut).toBe('ctrlEnter');
+    expect(useSettingsStore.getState().appSettings?.sendShortcut).toBe('ctrlEnter');
   });
 });

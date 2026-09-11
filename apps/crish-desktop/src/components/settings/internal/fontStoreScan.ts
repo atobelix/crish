@@ -7,7 +7,10 @@
 import { logger } from '../../../services/LoggerService';
 import { sanitizeFontFamily } from './fontPinyinMatcher';
 import { detectPlatform } from '../../../api/fontStoreStacks';
-
+import {
+  readFontScanCache,
+  writeFontScanCache,
+} from '../../../api/cache/runtimeCache';
 export interface LocalFontEntry {
   family: string;
   fullName?: string;
@@ -263,40 +266,12 @@ export async function scanViaCanvasChunked(
 
 /** 读取 LocalStorage 瘦身缓存 */
 function readStorageCacheLean(): LocalFontEntry[] | null {
-  if (typeof localStorage === 'undefined') return null;
-  try {
-    const raw = localStorage.getItem(CACHE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as CompressedFontCache;
-    if (!parsed || parsed.v !== 1 || !Array.isArray(parsed.f)) return null;
-    if (Date.now() - parsed.t > CACHE_EXPIRY_MS) {
-      localStorage.removeItem(CACHE_KEY);
-      return null;
-    }
-    return parsed.f.map((fam) => ({ family: fam }));
-  } catch {
-    return null;
-  }
+  return readFontScanCache();
 }
 
 /** 写入 LocalStorage 瘦身缓存（纯字符串数组，防 Quota 超限） */
 function writeStorageCacheLean(fonts: LocalFontEntry[]): void {
-  if (typeof localStorage === 'undefined') return;
-  try {
-    const payload: CompressedFontCache = {
-      v: 1,
-      t: Date.now(),
-      f: fonts.map((f) => f.family),
-    };
-    localStorage.setItem(CACHE_KEY, JSON.stringify(payload));
-  } catch {
-    // 捕获 QuotaExceededError，尝试清理旧键
-    try {
-      localStorage.removeItem(CACHE_KEY);
-    } catch {
-      /* swallow error */
-    }
-  }
+  writeFontScanCache(fonts);
 }
 
 /** 清理内存缓存（测试或重置使用） */

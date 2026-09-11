@@ -12,22 +12,17 @@ import {
 } from '../api/providerProfiles';
 import { networkUserMessage } from '../api/userFacingErrors';
 
-const DONE_KEY = 'crish_first_run_done_v1';
+import {
+  readFirstRunWizardDone,
+  writeFirstRunWizardDone,
+} from '../api/cache/runtimeCache';
 
 export function isFirstRunDone(): boolean {
-  try {
-    return localStorage.getItem(DONE_KEY) === '1';
-  } catch {
-    return true;
-  }
+  return readFirstRunWizardDone();
 }
 
-export function markFirstRunDone() {
-  try {
-    localStorage.setItem(DONE_KEY, '1');
-  } catch {
-    /* ignore */
-  }
+export function markFirstRunDone(): void {
+  writeFirstRunWizardDone();
 }
 
 /**

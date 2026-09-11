@@ -5,7 +5,11 @@
  * Plain browser Vite is "dev host": may talk to a manually started daemon.
  */
 
+import { preferencesClient } from './preferences/preferencesClient';
+
 let cachedTauri: boolean | null = null;
+let cachedProductShell = false;
+let cachedShowEngineSettings = false;
 
 function isTauriShell(): boolean {
   if (cachedTauri != null) return cachedTauri;
@@ -23,23 +27,45 @@ function isTauriShell(): boolean {
 }
 
 /** True when running as the consumer desktop product (not loose browser). */
-function isProductShell(): boolean {
+export function isProductShell(): boolean {
   if (isTauriShell()) return true;
-  try {
-    // Explicit opt-in for packaged webview tests
-    if (localStorage.getItem('crish_product_shell') === '1') return true;
-  } catch {
-    /* ignore */
-  }
-  return false;
+  return cachedProductShell;
 }
 
 /** Dev-only escape hatch to show engine settings. */
 export function isDeveloperEngineUiEnabled(): boolean {
   if (!isProductShell()) return true;
+  return cachedShowEngineSettings;
+}
+
+export async function loadProductModePreferences(): Promise<void> {
   try {
-    return localStorage.getItem('crish_show_engine_settings') === '1';
+    const shell = await preferencesClient.getPreference('product_shell');
+    cachedProductShell = Boolean(shell);
   } catch {
-    return false;
+    /* swallow-ok: 偏好读取失败保持默认 */
+  }
+
+  try {
+    const show = await preferencesClient.getPreference('show_engine_settings');
+    cachedShowEngineSettings = Boolean(show);
+  } catch {
+    /* swallow-ok: 偏好读取失败保持默认 */
   }
 }
+
+export function setProductShell(enabled: boolean): void {
+  cachedProductShell = enabled;
+  void preferencesClient.setPreference('product_shell', enabled).catch(() => {
+    /* swallow-ok: 写入失败保持内存态 */
+  });
+}
+
+export function setDeveloperEngineUiEnabled(enabled: boolean): void {
+  cachedShowEngineSettings = enabled;
+  void preferencesClient.setPreference('show_engine_settings', enabled).catch(() => {
+    /* swallow-ok: 写入失败保持内存态 */
+  });
+}
+
+void loadProductModePreferences();
