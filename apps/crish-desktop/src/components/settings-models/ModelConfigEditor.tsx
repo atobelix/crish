@@ -197,7 +197,8 @@ export const ModelConfigEditor: React.FC<ModelConfigEditorProps> = ({
            * 段三：局部独立模型滚动视口（专属独立滚动条）
            * 1. 吸收右侧全部剩余纵向空间 (flex: 1 1 0; min-height: 0)
            * 2. overscroll-behavior: contain 硬件层吸收滚轮动量，杜绝链式穿透
-           * 3. onWheel.stopPropagation 阻断 React 合成事件向外冒泡
+           * 3. models tab 下 SettingsPanel.handleRootWheel 已 early return，
+           *    此处无需再 stopPropagation（原 onWheel 冗余，已移除）
            * ───────────────────────────────────────────────────────────── */}
           <div
             className={`${styles.mrdModelListScroll || ''} mrd-model-list-scroll`}
@@ -209,10 +210,6 @@ export const ModelConfigEditor: React.FC<ModelConfigEditorProps> = ({
               overscrollBehavior: 'contain',
               scrollbarGutter: 'stable',
               paddingRight: '2px',
-            }}
-            onWheel={(e) => {
-              // 阻断 React 合成事件冒泡到外层 SettingsPanel 的 handleRootWheel
-              e.stopPropagation();
             }}
           >
             <ModelList

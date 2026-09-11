@@ -212,34 +212,31 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   const panelId = `${baseId}-panel-${safeActiveTab}`;
   const activeTabBtnId = `${baseId}-tab-${safeActiveTab}`;
 
+  /**
+   * 有意功能：非内容区滚轮联动（非补丁）。
+   * 用户在侧栏/顶栏等非内容区空白处滚动时，辅助滚动内容区 scrollTop。
+   * 三步结构：① models 视口型 Tab 早退（自管滚动，严禁 JS 篡改 scrollTop）；
+   * ② 内容区内滚轮 → 交浏览器原生管线（含 textarea/pre/select 原生自滚动）；
+   * ③ 仅非内容区目标才辅助 scrollTop。
+   * 注：contains 守卫已消除双倍速问题；本 handler 保留侧栏联动职责。
+   */
   const handleRootWheel = (e: React.WheelEvent) => {
-    // 【Task-E 核心阻断 1】：模型工作区等视口型 Tab 硬性拦截，严禁以任何 JS 形式篡改 scrollTop
+    // ① models 视口型 Tab：硬性早退，不干预其内部滚动
     if (safeActiveTab === 'models') {
       return;
     }
 
-    if (contentAreaRef.current) {
-      const target = e.target as HTMLElement;
+    const contentArea = contentAreaRef.current;
+    if (!contentArea) return;
 
-      // 文本输入框、代码块与下拉框原生自滚动，豁免外层干预
-      if (
-        target.closest('textarea') ||
-        target.closest('pre') ||
-        target.closest('select')
-      ) {
-        return;
-      }
-
-      // 【Task-E 核心阻断 2】：修复内边距空白误判导致的 2x 双倍速狂飙滚动
-      // 只要 target 属于 contentAreaRef.current（包括自身内边距空白区及其所有子元素），
-      // 100% 交由浏览器原生渲染管线接管，JS 不得叠加 scrollTop！
-      if (contentAreaRef.current.contains(target)) {
-        return;
-      }
-
-      // 仅当用户在侧栏空白处、顶栏拖拽条空白处滚动时，才辅助滚动常规设置页
-      contentAreaRef.current.scrollTop += e.deltaY;
+    // ② 内容区内滚轮（含 textarea/pre/select 原生自滚动与子元素/内边距空白）：
+    //    交由浏览器原生渲染管线接管，JS 不叠加 scrollTop（避免双倍速）
+    if (contentArea.contains(e.target as Node)) {
+      return;
     }
+
+    // ③ 非内容区目标（侧栏/顶栏空白）：辅助滚动内容区
+    contentArea.scrollTop += e.deltaY;
   };
 
   useEffect(() => {
