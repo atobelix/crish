@@ -1,9 +1,8 @@
 import React, { useMemo } from 'react';
 import styles from './Sidebar.module.css';
-import { Menu } from 'lucide-react';
 import { IconButton } from '../ui';
-import { IconSidebarLeft } from './SidebarToggleIcons';
 import { SidebarNav } from './SidebarNav';
+import { AppIcon } from '../ui/icons/index';
 
 export interface SidebarHeaderProps {
   sidebarBehavior: string;
@@ -53,7 +52,7 @@ export const SidebarToggle: React.FC<{
         data-testid="sidebar-toggle"
         className="sidebar-toggle-btn"
         onClick={onToggle}
-        icon={<IconSidebarLeft size={16} aria-hidden="true" />}
+        icon={<AppIcon name="sidebar-left" size={16} aria-hidden />}
       />
     </div>
   );
@@ -107,7 +106,7 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = React.memo(
                 className="sidebar-toggle-btn"
                 data-tauri-drag-region="false"
                 onClick={onToggle}
-                icon={<IconSidebarLeft size={16} aria-hidden="true" />}
+                icon={<AppIcon name="sidebar-left" size={16} aria-hidden />}
               />
             )}
           </div>
@@ -129,7 +128,7 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = React.memo(
             aria-label={isOverlayActive ? '关闭侧栏菜单' : '打开侧栏菜单'}
             aria-expanded={isOverlayActive}
             onClick={onHamburgerClick}
-            icon={<Menu size={18} strokeWidth={1.5} aria-hidden />}
+            icon={<AppIcon name="menu" size={18} aria-hidden />}
           />
         )}
 

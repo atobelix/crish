@@ -1,6 +1,6 @@
 import { useToast } from '../../services/toast/ToastContext';
 import React from 'react';
-import * as Lucide from 'lucide-react';
+
 import styles from './Sidebar.module.css';
 import { Button, IconButton, Tooltip } from '../ui';
 import {
@@ -8,6 +8,7 @@ import {
   useShowSettingsOverlay,
 } from '../../store/settingsUiStore';
 import { UserProfileCard } from './UserProfileCard';
+import { AppIcon } from '../ui/icons/index';
 
 export interface SettingsIconButtonProps {
   updateAvailable?: boolean | undefined;
@@ -34,7 +35,7 @@ export const SettingsIconButton: React.FC<SettingsIconButtonProps> = React.memo(
         onClick={() => toggleSettingsOverlay()}
         icon={
           <>
-            <Lucide.Settings size={16} strokeWidth={1.5} aria-hidden />
+            <AppIcon name="settings" size={16} aria-hidden />
             {updateAvailable && (
               <span
                 className={styles.gearUpdatePulseDot}
@@ -93,7 +94,7 @@ export const SidebarFooter: React.FC<SidebarFooterProps> = React.memo(
                   })();
                 }}
                 icon={
-                  <Lucide.RefreshCw size={14} strokeWidth={1.5} aria-hidden />
+                  <AppIcon name="refresh" size={14} aria-hidden />
                 }
               >
                 更新

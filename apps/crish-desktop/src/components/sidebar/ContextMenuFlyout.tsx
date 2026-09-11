@@ -5,9 +5,10 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { Check, ChevronRight } from 'lucide-react';
+
 import { Menu } from '../ui';
 import styles from './SidebarContextMenus.module.css';
+import { AppIcon } from '../ui/icons/index';
 
 type FlyKey = 'sort' | 'group' | 'filter' | null;
 
@@ -80,12 +81,9 @@ const FlyoutRow: React.FC<{
       onKeyDown={onRowKeyDown}
     >
       <span className={styles.sortFilterRowLabel}>{label}</span>
-      <ChevronRight
-        size={14}
-        strokeWidth={1.75}
+      <AppIcon name="chevron-right" size={14}
         className={styles.sortFilterChev}
-        aria-hidden
-      />
+        aria-hidden />
       {open ? (
         <div
           ref={handleFlyoutRef}
@@ -119,12 +117,9 @@ const FlyoutOption: React.FC<{
     >
       <span>{children}</span>
       {checked ? (
-        <Check
-          size={16}
-          strokeWidth={2}
+        <AppIcon name="check" size={16}
           className={styles.sortFilterCheck}
-          aria-hidden
-        />
+          aria-hidden />
       ) : null}
     </button>
   );

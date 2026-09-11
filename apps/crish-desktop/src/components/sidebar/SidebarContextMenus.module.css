@@ -134,7 +134,6 @@
 .sortFilterChev {
   color: var(--text-tertiary);
   flex-shrink: 0;
-  opacity: 0.75;
 }
 
 .sortFilterFlyout {

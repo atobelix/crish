@@ -129,10 +129,10 @@ describe('SessionRow 点击 / 更多钮', () => {
     renderRow();
     const row = screen.getByTestId('sidebar-session-item');
     expect(row.textContent).toContain('测试会话');
-    expect(row.querySelector('svg.lucide-git-branch')).toBeNull();
+    expect(row.querySelector('[data-icon="git-branch"]')).toBeNull();
   });
 
-  it('分支会话渲染 GitBranch 微图标，且标题不带 "分支: " 纯文本前缀', () => {
+  it('分支会话渲染纯净标题，不渲染绿色 GitBranch 图标，且标题不带 "分支: " 纯文本前缀', () => {
     const branchSession = makeSession({
       id: 'sess-branch',
       title: '分析代码架构 - 分支',
@@ -152,7 +152,7 @@ describe('SessionRow 点击 / 更多钮', () => {
     expect(row.textContent).toContain('分析代码架构');
     expect(row.textContent).not.toContain('分支:');
     expect(row.getAttribute('aria-label')).toContain('分支会话：分析代码架构');
-    expect(row.querySelector('svg.lucide-git-branch')).not.toBeNull();
+    expect(row.querySelector('[data-icon="git-branch"]')).toBeNull();
   });
 
   describe('SessionRow 单一菜单出口契约测试（消灭双重幽灵菜单）', () => {

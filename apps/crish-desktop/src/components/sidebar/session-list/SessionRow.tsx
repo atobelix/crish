@@ -5,14 +5,10 @@ import React, {
   useContext,
   useRef,
 } from 'react';
-import {
-  GitBranch,
-  MoreHorizontal,
-} from 'lucide-react';
 import type { SessionState } from '../../../store/types';
 import {
   formatSessionListAbsoluteTime,
-  formatSessionListTime,
+  formatSessionListCompactTime,
   sessionLastActivityMs,
 } from '../../../api/sessionTime';
 import { sessionListDisplayTitle } from '../../../api/sessionTitle';
@@ -23,9 +19,10 @@ import {
 } from '../../../api/sessionSearch';
 import { Button, Tooltip } from '../../ui';
 import styles from '../SidebarSessionList.module.css';
+import { AppIcon } from '../../ui/icons/index';
 
-/** 更多钮边长；保持充足的命中区域 */
-export const SESSION_ACTIONS_BTN_PX = 20;
+/** 更多钮边长；与行高 28px 保持优雅微内嵌，且与头部动作钮 24px 精确同轴 */
+export const SESSION_ACTIONS_BTN_PX = 24;
 
 /** Drop indicator place; local type avoids circular runtime import with useSessionListDrag */
 export type SessionRowDropPlace = 'before' | 'after';
@@ -56,7 +53,7 @@ const SessionRowTime = memo(function SessionRowTime({
   className: string;
 }) {
   const nowTick = useContext(NowTickContext);
-  const timeLabel = formatSessionListTime(s, nowTick);
+  const timeLabel = formatSessionListCompactTime(s, nowTick);
   const timeAbsolute = formatSessionListAbsoluteTime(s, nowTick);
   const activityMs = sessionLastActivityMs(s);
   const timeDateTime =
@@ -350,16 +347,6 @@ export const SessionRow = memo(function SessionRow(props: SessionRowProps) {
         ) : (
           <>
             <span className={styles.sessionTextCol}>
-              {isBranched && (
-                <span className={styles.branchBadge} aria-label="分支会话">
-                  <GitBranch
-                    size={12}
-                    strokeWidth={2}
-                    className={styles.branchIcon}
-                    aria-hidden
-                  />
-                </span>
-              )}
               <span className={styles.sessionText}>{displayText}</span>
             </span>
             <span className={styles.sessionTrailing}>
@@ -408,11 +395,8 @@ export const SessionRow = memo(function SessionRow(props: SessionRowProps) {
                         e.stopPropagation();
                       }}
                       icon={
-                        <MoreHorizontal
-                          size={14}
-                          strokeWidth={1.75}
-                          aria-hidden
-                        />
+                        <AppIcon name="more-horizontal" size={14}
+                          aria-hidden />
                       }
                     />
                   </Tooltip>

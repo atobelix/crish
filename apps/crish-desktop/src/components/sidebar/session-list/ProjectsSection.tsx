@@ -6,13 +6,7 @@ import { navigateToNewDraft } from '../../../store/draft-routing';
 import { getCompositionRoot } from '../../../app/compositionRoot';
 import { Button, Tooltip } from '../../ui';
 import styles from '../SidebarSessionList.module.css';
-import {
-  ChevronDown,
-  FilePlus2,
-  Folder,
-  FolderOpen,
-  FolderPlus,
-} from 'lucide-react';
+import { AppIcon } from '../../ui/icons/index';
 
 const PROJECT_FOLD_LIMIT = 6;
 
@@ -88,11 +82,9 @@ export function ProjectsSection({
           aria-expanded={!projectsSectionCollapsed}
         >
           <span>项目</span>
-          <ChevronDown
-            size={13}
+          <AppIcon name="chevron-down" size={13}
             className={projectsSectionCollapsed ? styles.chevCollapsed : ''}
-            aria-hidden
-          />
+            aria-hidden />
         </button>
         <Tooltip content="管理与选择项目">
           <Button
@@ -105,7 +97,7 @@ export function ProjectsSection({
               e.stopPropagation();
               emitUiEvent('open-project-picker');
             }}
-            icon={<FolderPlus size={14} strokeWidth={1.75} aria-hidden />}
+            icon={<AppIcon name="folder-plus" size={14} aria-hidden />}
           />
         </Tooltip>
       </div>
@@ -141,9 +133,9 @@ export function ProjectsSection({
                   >
                     <span className={styles.folderIcon} aria-hidden>
                       {open ? (
-                        <FolderOpen size={14} strokeWidth={1.75} />
+                        <AppIcon name="folder-open" size={14} />
                       ) : (
-                        <Folder size={14} strokeWidth={1.75} />
+                        <AppIcon name="folder" size={14} />
                       )}
                     </span>
                     <Tooltip content={p.path}>
@@ -166,7 +158,7 @@ export function ProjectsSection({
                           navigateToNewDraft(p.id);
                         }}
                         icon={
-                          <FilePlus2 size={14} strokeWidth={1.75} aria-hidden />
+                          <AppIcon name="file-plus" size={14} aria-hidden />
                         }
                       />
                     </Tooltip>

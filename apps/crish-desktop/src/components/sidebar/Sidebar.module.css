@@ -187,12 +187,12 @@
   width: 7px;
   height: 7px;
   border-radius: var(--radius-full);
-  background: var(--status-online, hsl(142 76% 46%));
+  background: var(--status-online);
   box-shadow: 0 0 0 1.5px var(--bg-workspace, var(--bg-primary));
 }
 
 .userOfflineStatus {
-  background: var(--text-tertiary, hsl(0 0% 60%));
+  background: var(--text-tertiary);
 }
 
 .userTextStack {
@@ -262,7 +262,7 @@
 .sidebarResizer:hover::after,
 .sidebarResizer:global(.is-dragging)::after,
 :global(body.sidebar-resizing) .sidebarResizer::after {
-  background: var(--accent-green, #10b981);
+  background: var(--accent-green);
   width: 2px;
   left: 2px;
 }

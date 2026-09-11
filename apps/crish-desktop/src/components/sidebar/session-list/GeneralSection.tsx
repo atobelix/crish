@@ -7,7 +7,7 @@ import type { SessionListWindowRange } from '../../../api/sessionListWindow';
 import { WindowedSessionUl } from './WindowedSessionUl';
 import { Button, Tooltip } from '../../ui';
 import styles from '../SidebarSessionList.module.css';
-import { ChevronDown, ChevronsUpDown, MessageCirclePlus } from 'lucide-react';
+import { AppIcon } from '../../ui/icons/index';
 
 export interface GeneralSectionProps {
   generalSessions: SessionState[];
@@ -67,11 +67,9 @@ export function GeneralSection({
             aria-expanded={!generalCollapsed}
           >
             <span>对话</span>
-            <ChevronDown
-              size={13}
+            <AppIcon name="chevron-down" size={13}
               className={generalCollapsed ? styles.chevCollapsed : ''}
-              aria-hidden
-            />
+              aria-hidden />
           </button>
           <Tooltip content="排序与过滤">
             <Button
@@ -85,7 +83,7 @@ export function GeneralSection({
                 e.stopPropagation();
                 onSortBtnClick(e);
               }}
-              icon={<ChevronsUpDown size={14} strokeWidth={1.75} aria-hidden />}
+              icon={<AppIcon name="chevrons-up-down" size={14} aria-hidden />}
             />
           </Tooltip>
         </div>
@@ -100,7 +98,7 @@ export function GeneralSection({
               e.stopPropagation();
               navigateToNewDraft(GENERAL_FOLDER);
             }}
-            icon={<MessageCirclePlus size={14} strokeWidth={1.75} aria-hidden />}
+            icon={<AppIcon name="message-circle-plus" size={14} aria-hidden />}
           />
         </Tooltip>
       </div>

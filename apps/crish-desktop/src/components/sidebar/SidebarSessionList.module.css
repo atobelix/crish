@@ -17,7 +17,6 @@
 
 .subtle {
   color: var(--text-tertiary);
-  opacity: 0.85;
 }
 
 .accordionWrapper {
@@ -52,7 +51,7 @@
   height: 28px;
   min-height: 28px;
   max-height: 28px;
-  padding: 0 4px 0 10px;
+  padding: 0 12px 0 10px;
   box-sizing: border-box;
 }
 
@@ -141,9 +140,9 @@
 }
 
 .pinnedDropZone {
-  border: 1px dashed transparent;
+  border: none;
   border-radius: var(--radius-lg);
-  transition: border-color var(--transition-fast), background-color var(--transition-fast);
+  transition: background-color var(--transition-fast);
   contain: layout paint;
   transform: translateZ(0);
   -webkit-transform: translateZ(0);
@@ -178,7 +177,7 @@
   height: 28px;
   min-height: 28px;
   max-height: 28px;
-  padding: 0 4px 0 10px;
+  padding: 0 12px 0 10px;
   box-sizing: border-box;
 }
 
@@ -313,7 +312,7 @@
   min-height: 28px;
   max-height: 28px;
   border-radius: var(--radius-lg);
-  padding: 0 8px 0 10px;
+  padding: 0 4px 0 10px;
   font-size: var(--font-size-base);
   color: var(--text-secondary);
   background: transparent;
@@ -374,8 +373,7 @@
 }
 
 .branchIcon {
-  color: var(--accent-primary, hsl(239 84% 67%));
-  opacity: 0.85;
+  color: var(--accent-primary);
   transition: color var(--transition-micro), opacity var(--transition-micro);
 }
 
@@ -479,7 +477,7 @@
 
 .sessionItem .sessionActionsBtn {
   position: absolute;
-  right: 4px;
+  right: 0;
   top: 50%;
   transform: translateY(-50%);
   opacity: 0;

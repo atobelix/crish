@@ -1,7 +1,8 @@
 import React from 'react';
 import type { SessionState } from '../../../store/types';
 import styles from '../SidebarSessionList.module.css';
-import { ChevronDown } from 'lucide-react';
+import { AppIcon } from '../../ui/icons/index';
+
 
 export interface PinnedSectionProps {
   pinnedSessions: SessionState[];
@@ -50,11 +51,9 @@ export function PinnedSection({
             aria-controls="sb-pinned-zone"
           >
             <span>置顶</span>
-            <ChevronDown
-              size={13}
+            <AppIcon name="chevron-down" size={13}
               className={pinnedCollapsed ? styles.chevCollapsed : ''}
-              aria-hidden
-            />
+              aria-hidden />
           </button>
         </div>
       </div>

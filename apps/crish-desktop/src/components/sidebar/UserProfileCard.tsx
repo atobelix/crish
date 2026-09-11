@@ -1,9 +1,10 @@
 import React, { useEffect } from 'react';
-import * as Lucide from 'lucide-react';
+
 import styles from './Sidebar.module.css';
 import { Button } from '../ui';
 import { SettingsQuickMenu } from '../settings/SettingsQuickMenu';
 import { useAuthStore } from '../../store/authStore';
+import { AppIcon } from '../ui/icons/index';
 
 export interface UserProfileCardProps {
   username?: string;
@@ -39,7 +40,7 @@ export const UserProfileCard: React.FC<UserProfileCardProps> = React.memo(
           >
             <div className={styles.userAvatarContainer}>
               <div className={styles.userAvatar}>
-                <Lucide.User size={15} strokeWidth={1.5} aria-hidden />
+                <AppIcon name="user" size={15} aria-hidden />
               </div>
               <span
                 className={`${styles.userOnlineStatus}${!isLoggedIn ? ` ${styles.userOfflineStatus}` : ''}`}
@@ -50,12 +51,9 @@ export const UserProfileCard: React.FC<UserProfileCardProps> = React.memo(
               <span className={styles.userName}>{activeUser}</span>
               <span className={styles.userWorkspace}>{activeWorkspace}</span>
             </div>
-            <Lucide.ChevronsUpDown
-              size={13}
-              strokeWidth={1.5}
+            <AppIcon name="chevrons-up-down" size={13}
               className={styles.userChevron}
-              aria-hidden
-            />
+              aria-hidden />
           </Button>
         )}
       />

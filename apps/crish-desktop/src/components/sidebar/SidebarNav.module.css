@@ -1,10 +1,10 @@
 .topActions {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2, 6px);
-  margin-bottom: 0; /* Removed margin-bottom so separation is determined by standard gap */
-  padding-left: 0; /* Remove sub-container padding-left */
-  padding-right: 0; /* Remove sub-container padding-right */
+  gap: 4px;
+  margin-bottom: 0;
+  padding-left: 0;
+  padding-right: 0;
 }
 
 .navItem {
@@ -108,8 +108,7 @@
 }
 
 .navItem input[type='search']::placeholder {
-  color: var(--text-secondary);
-  opacity: 0.9;
+  color: var(--text-tertiary);
 }
 
 .navItem input[type='search']::-webkit-search-cancel-button,
