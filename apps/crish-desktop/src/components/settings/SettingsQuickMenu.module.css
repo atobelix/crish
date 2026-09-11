@@ -46,8 +46,8 @@
 
 .sbQuickMenu {
   z-index: var(--z-modal);
-  background: var(--bg-card, hsl(0 0% 100%));
-  border: 1px solid var(--border-color, hsl(35 10% 86%));
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
   border-radius: var(--radius-lg, 12px);
   box-shadow: var(--sep-shadow);
   padding: var(--space-1_5);
@@ -93,7 +93,7 @@
 .sbQuickDivider {
   margin: 4px 6px;
   border: none;
-  border-bottom: 1px solid var(--border-subtle, hsl(35 8% 91%));
+  border-bottom: 1px solid var(--border-subtle);
   height: 0;
   padding: 0;
 }

@@ -6,7 +6,7 @@ import { useToast } from '../../services/toast/ToastContext';
  * 全文弹层见 RulesEditorDialog。
  */
 import React, { useId, useRef, useState } from 'react';
-import * as Lucide from 'lucide-react';
+
 import styles from './SettingsRulesTab.module.css';
 import { Button, Input, Select, Tooltip } from '../ui';
 import {
@@ -21,6 +21,7 @@ import {
   normalizeRuleLine,
 } from './settingsRulesLib';
 import { RulesEditorDialog } from './RulesEditorDialog';
+import { AppIcon } from '../ui/icons/index';
 
 type Props = {
   onBlockingOverlayChange?: (open: boolean) => void;
@@ -194,7 +195,7 @@ export const SettingsRulesTab: React.FC<Props> = ({ onBlockingOverlayChange }) =
                       size="sm"
                       aria-label={`删除规则：${rule}`}
                       disabled={busy}
-                      icon={<Lucide.Trash2 size={14} aria-hidden />}
+                      icon={<AppIcon name="trash" size={14} aria-hidden />}
                     />
                   </Tooltip>
                 }

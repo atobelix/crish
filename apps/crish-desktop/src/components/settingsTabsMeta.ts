@@ -2,8 +2,9 @@
  * 设置 tab 元数据数据文件：10 个侧栏 tab 的中文标签 / 图标 / 分组 / 搜索别名。
  * 纯数据 + 搜索匹配纯函数；从 SettingsPanel.tsx TAB_META（L115-217）抽出。
  */
-import * as Lucide from 'lucide-react';
+
 import type { SettingsTabType } from '../store/types';
+import type { IconName } from './ui/icons';
 
 export type TabType = SettingsTabType;
 
@@ -11,11 +12,8 @@ export type TabMeta = {
   id: TabType;
   /** 中文侧栏标签 */
   label: string;
-  icon: React.ComponentType<{
-    size?: number;
-    strokeWidth?: number;
-    className?: string;
-  }>;
+  /** 图标语义名（经 AppIcon 渲染） */
+  icon: IconName;
   /** 中文分组 */
   group: string;
   /** 搜索别名：中文同义词 + 常见英文缩写，便于键盘/搜索定位 */
@@ -64,7 +62,7 @@ export const TAB_META: TabMeta[] = [
   {
     id: 'profile',
     label: '账户',
-    icon: Lucide.User,
+    icon: 'user',
     group: '个人',
     keywords: [
       '账户',
@@ -86,7 +84,7 @@ export const TAB_META: TabMeta[] = [
   {
     id: 'appearance',
     label: '外观',
-    icon: Lucide.Palette,
+    icon: 'palette',
     group: '个人',
     keywords: [
       '外观',
@@ -103,7 +101,7 @@ export const TAB_META: TabMeta[] = [
   {
     id: 'personalize',
     label: '通用设置',
-    icon: Lucide.SlidersHorizontal,
+    icon: 'sliders',
     group: '个人',
     keywords: [
       '通用设置',
@@ -118,7 +116,7 @@ export const TAB_META: TabMeta[] = [
   {
     id: 'models',
     label: '模型',
-    icon: Lucide.Orbit,
+    icon: 'orbit',
     group: '智能',
     keywords: [
       '模型',
@@ -135,14 +133,14 @@ export const TAB_META: TabMeta[] = [
   {
     id: 'usage',
     label: '用量',
-    icon: Lucide.PieChart,
+    icon: 'bar-chart',
     group: '智能',
     keywords: ['用量', '用量统计', 'token', '费用', 'usage', 'quota'],
   },
   {
     id: 'devices',
     label: '多端互通',
-    icon: Lucide.Smartphone,
+    icon: 'smartphone',
     group: '工作',
     keywords: [
       '多端互通',
@@ -163,21 +161,21 @@ export const TAB_META: TabMeta[] = [
   {
     id: 'rules',
     label: '规则',
-    icon: Lucide.FileText,
+    icon: 'file-text',
     group: '智能',
     keywords: ['规则', '指令', '系统提示', 'rules', 'prompt', 'agent'],
   },
   {
     id: 'schedule',
     label: '定时任务',
-    icon: Lucide.Clock,
+    icon: 'clock',
     group: '工作',
     keywords: ['定时', '定时任务', '计划', 'cron', 'schedule', '任务'],
   },
   {
     id: 'plugins',
     label: '扩展',
-    icon: Lucide.Puzzle,
+    icon: 'puzzle',
     group: '工作',
     keywords: [
       '扩展',
@@ -199,7 +197,7 @@ export const TAB_META: TabMeta[] = [
   {
     id: 'browser',
     label: '浏览器',
-    icon: Lucide.Compass,
+    icon: 'globe',
     group: '工作',
     keywords: [
       '浏览器',
@@ -218,14 +216,14 @@ export const TAB_META: TabMeta[] = [
   {
     id: 'shortcuts',
     label: '快捷键',
-    icon: Lucide.Command,
+    icon: 'keyboard',
     group: '工作',
     keywords: ['快捷键', '键盘', '热键', 'shortcuts', 'hotkey', 'keymap'],
   },
   {
     id: 'security',
     label: '安全',
-    icon: Lucide.Lock,
+    icon: 'shield',
     group: '安全',
     keywords: [
       '安全',
@@ -240,7 +238,7 @@ export const TAB_META: TabMeta[] = [
   {
     id: 'diagnostics',
     label: '状态诊断',
-    icon: Lucide.Activity,
+    icon: 'activity',
     group: '工作',
     keywords: [
       '状态诊断',
@@ -264,7 +262,7 @@ export const TAB_META: TabMeta[] = [
 export const FALLBACK_TAB_META: TabMeta = {
   id: 'profile',
   label: '账户',
-  icon: Lucide.User,
+  icon: 'user',
   group: '个人',
   keywords: ['账户'],
 };

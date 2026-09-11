@@ -86,10 +86,10 @@
   font-variant-numeric: tabular-nums;
   padding: 2px 8px;
   border-radius: var(--radius-sm, 4px);
-  background: var(--bg-card, hsl(0 0% 100%));
+  background: var(--bg-card);
   color: var(--text-primary);
   border: 1px solid var(--border-color);
-  box-shadow: 0 1px 2px color-mix(in srgb, var(--shadow-color, hsl(0 0% 0%)) 3%, transparent);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--shadow-color) 3%, transparent);
 }
 
 .logDirControl {

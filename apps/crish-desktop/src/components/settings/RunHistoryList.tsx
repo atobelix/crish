@@ -3,10 +3,11 @@
  * run 状态中文走 workflowRunStatusLabel；可打开关联会话。
  */
 import React from 'react';
-import * as Lucide from 'lucide-react';
+
 import styles from './ScheduledTasksPanel.module.css';
 import { workflowRunStatusLabel, type WorkflowDefinition, type WorkflowRunEntry } from '../../api/workflowApi';
 import { Button, Tooltip } from '../ui';
+import { AppIcon } from '../ui/icons/index';
 
 /** 最近运行条数上限（对话内紧凑） */
 const RECENT_RUNS_LIMIT = 10;
@@ -75,7 +76,7 @@ export const RunHistoryList: React.FC<RunHistoryListProps> = ({
                     }
                     disabled={!canOpen}
                     onClick={() => onOpenRun(r)}
-                    icon={<Lucide.MessageSquare size={16} aria-hidden />}
+                    icon={<AppIcon name="message-square" size={16} aria-hidden />}
                   />
                 </Tooltip>
               </div>

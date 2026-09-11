@@ -12,7 +12,7 @@
  * 不写 store、不重构设置面板整体（P3 分层前沿用 SettingsUI 现有样式）。
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Activity, AlertTriangle, CheckCircle2, ClipboardCopy, RefreshCw, SearchCheck } from 'lucide-react';
+
 import { useToast } from '../../services/toast/ToastContext';
 import {
   fetchEngineStatus,
@@ -24,6 +24,7 @@ import { rebuildSearchIndex } from '../../api/rustCore';
 import { SettingsCard, SettingsPage, SettingsRow, SettingsSection } from './SettingsUI';
 import { Button, Tooltip } from '../ui';
 import styles from './StatusDiagnosticsPanel.module.css';
+import { AppIcon } from '../ui/icons/index';
 
 type Props = {
   /** 轮询间隔（ms）；测试可注入大值只取首拉 */
@@ -216,7 +217,7 @@ export const StatusDiagnosticsPanel: React.FC<Props> = ({
               disabled={refreshing}
               onClick={() => void load()}
               aria-label="刷新状态诊断"
-              icon={<RefreshCw size={14} strokeWidth={1.75} className={refreshing ? styles.spin : undefined} />}
+              icon={<AppIcon name="refresh" size={14} className={refreshing ? styles.spin : undefined} />}
             >
               刷新
             </Button>
@@ -226,7 +227,7 @@ export const StatusDiagnosticsPanel: React.FC<Props> = ({
     >
       {fetchError ? (
         <div className={styles.errorBanner} role="alert" data-testid="diag-error-banner">
-          <AlertTriangle size={16} strokeWidth={1.75} aria-hidden />
+          <AppIcon name="alert-triangle" size={16} aria-hidden />
           <div className={styles.errorBannerBody}>
             <strong>无法获取核心状态</strong>
             <span>{fetchError}</span>
@@ -277,7 +278,7 @@ export const StatusDiagnosticsPanel: React.FC<Props> = ({
                   disabled={rebuilding}
                   onClick={() => void handleRebuild()}
                   data-testid="diag-rebuild-search-index"
-                  icon={<SearchCheck size={14} strokeWidth={1.75} />}
+                  icon={<AppIcon name="search-check" size={14} />}
                 >
                   {rebuilding ? '重建中…' : '重建索引'}
                 </Button>
@@ -290,7 +291,7 @@ export const StatusDiagnosticsPanel: React.FC<Props> = ({
       <SettingsSection title="日志配置">
         <SettingsCard>
           <SettingsRow
-            icon={<Activity size={18} strokeWidth={1.75} />}
+            icon={<AppIcon name="activity" size={18} />}
             title="当前日志级别"
             desc="日志文件与状态面板共用的过滤级别"
             control={
@@ -317,7 +318,7 @@ export const StatusDiagnosticsPanel: React.FC<Props> = ({
                       size="sm"
                       aria-label="复制日志目录路径"
                       onClick={() => void handleCopyPath(status.logDir!)}
-                      icon={<ClipboardCopy size={13} strokeWidth={1.75} />}
+                      icon={<AppIcon name="clipboard-copy" size={13} />}
                     />
                   </Tooltip>
                 ) : null}
@@ -341,7 +342,7 @@ export const StatusDiagnosticsPanel: React.FC<Props> = ({
                     size="sm"
                     aria-label="复制错误信息"
                     onClick={() => void handleCopy(lastError)}
-                    icon={<ClipboardCopy size={14} strokeWidth={1.75} />}
+                    icon={<AppIcon name="clipboard-copy" size={14} />}
                   >
                     复制
                   </Button>
@@ -351,7 +352,7 @@ export const StatusDiagnosticsPanel: React.FC<Props> = ({
             </div>
           ) : (
             <div className={styles.noError} role="status" data-testid="diag-no-error">
-              <CheckCircle2 size={16} strokeWidth={1.75} aria-hidden />
+              <AppIcon name="check-circle" size={16} aria-hidden />
               无错误记录
             </div>
           )}

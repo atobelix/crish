@@ -1,11 +1,12 @@
 import React from 'react';
-import * as Lucide from 'lucide-react';
+
 import {
   externalSourceLabel,
   type DetectedExternalSession,
 } from '../../api/import';
 import { Button, Tooltip } from '../ui';
 import styles from './ExternalSessionImport.module.css';
+import { AppIcon } from '../ui/icons/index';
 
 export function formatUpdatedAt(ms: number | undefined): string {
   if (ms == null || !Number.isFinite(ms) || ms <= 0) return '时间未知';
@@ -143,9 +144,9 @@ export const ImportListSection: React.FC<{
             }}
             icon={
               importing ? (
-                <Lucide.Loader2 size={14} aria-hidden />
+                <AppIcon name="loader" size={14} aria-hidden />
               ) : (
-                <Lucide.Download size={14} aria-hidden />
+                <AppIcon name="download" size={14} aria-hidden />
               )
             }
           >

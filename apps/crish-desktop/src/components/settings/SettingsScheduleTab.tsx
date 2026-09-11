@@ -5,7 +5,6 @@ import { useToast } from '../../services/toast/ToastContext';
  * 状态/动作见 useWorkflowsState，表单/列表见 WorkflowForm / WorkflowList。
  */
 import React, { useState } from 'react';
-import * as Lucide from 'lucide-react';
 import { getWorkspacePath } from '../../api/projectStore';
 import { emitUiEvent } from '../../api/uiEvents';
 import {
@@ -28,6 +27,7 @@ import {
 import { useWorkflowsState } from './useWorkflowsState';
 import { WorkflowForm } from './WorkflowForm';
 import { WorkflowList } from './WorkflowList';
+import { AppIcon } from '../ui/icons/index';
 
 type Props = {
   _onBlockingOverlayChange?: (open: boolean) => void;
@@ -177,7 +177,7 @@ export const SettingsScheduleTab: React.FC<Props> = ({ _onBlockingOverlayChange 
                 setOk('');
               }
             }}
-            icon={<Lucide.Plus size={16} aria-hidden />}
+            icon={<AppIcon name="plus" size={16} aria-hidden />}
           >
             {createMode !== 'none' ? '收起' : '新建'}
           </Button>

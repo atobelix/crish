@@ -169,19 +169,19 @@
 }
 
 .actLvl1 {
-  background: var(--usage-heat-1, color-mix(in srgb, var(--brand, #10b981) 25%, transparent));
+  background: var(--usage-heat-1, color-mix(in srgb, var(--brand) 25%, transparent));
 }
 
 .actLvl2 {
-  background: var(--usage-heat-2, color-mix(in srgb, var(--brand, #10b981) 50%, transparent));
+  background: var(--usage-heat-2, color-mix(in srgb, var(--brand) 50%, transparent));
 }
 
 .actLvl3 {
-  background: var(--usage-heat-3, color-mix(in srgb, var(--brand, #10b981) 75%, transparent));
+  background: var(--usage-heat-3, color-mix(in srgb, var(--brand) 75%, transparent));
 }
 
 .actLvl4 {
-  background: var(--usage-heat-4, var(--brand, #10b981));
+  background: var(--usage-heat-4, var(--brand));
 }
 
 

@@ -68,13 +68,13 @@
   padding: 0 10px;
   border-radius: var(--button-radius, 7px);
   border: 1px solid var(--border-color);
-  background: var(--bg-card, hsl(0 0% 100%));
+  background: var(--bg-card);
   color: var(--text-primary);
   font-size: var(--font-size-xs, 12px);
   font-family: inherit;
   cursor: pointer;
   box-sizing: border-box;
-  box-shadow: 0 1px 2px color-mix(in srgb, var(--shadow-color, hsl(0 0% 0%)) 3%, transparent);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--shadow-color) 3%, transparent);
   transition:
     background-color var(--transition-micro, 100ms) ease,
     border-color var(--transition-micro, 100ms) ease,

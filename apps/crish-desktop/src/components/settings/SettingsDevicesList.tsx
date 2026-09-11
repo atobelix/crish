@@ -3,7 +3,6 @@
  * 展示设备标签/哈希截断/签发时间/已撤销徽标，行内改名与撤销操作。
  */
 import React from 'react';
-import * as Lucide from 'lucide-react';
 import styles from './SettingsDevicesTab.module.css';
 import {
   SettingsSection,
@@ -13,6 +12,7 @@ import { Button, Input, Tooltip } from '../ui';
 import type { DeviceInfo } from '../../api/multiDevice';
 import type { RenameState } from './useDeviceRename';
 import type { RenameAction } from './useDeviceRename';
+import { AppIcon } from '../ui/icons/index';
 
 export interface SettingsDevicesListProps {
   devices: DeviceInfo[];
@@ -36,7 +36,7 @@ export const SettingsDevicesList: React.FC<SettingsDevicesListProps> = ({
       <SettingsCard>
         {devices.length === 0 ? (
           <div className={styles.emptyState} data-testid="devices-empty">
-            <Lucide.Smartphone size={24} aria-hidden />
+            <AppIcon name="smartphone" size={24} aria-hidden />
             <p className={styles.emptyTitle}>暂无已配对设备</p>
             <p className={styles.emptySub}>开启配对模式后，手机端扫码即可加入</p>
           </div>
@@ -45,7 +45,7 @@ export const SettingsDevicesList: React.FC<SettingsDevicesListProps> = ({
             {devices.map((device) => (
               <li key={device.id} className={styles.deviceRow}>
                 <div className={styles.deviceIcon}>
-                  <Lucide.Smartphone size={18} aria-hidden />
+                  <AppIcon name="smartphone" size={18} aria-hidden />
                 </div>
                 <div className={styles.deviceBody}>
                   {rename.renamingHash === device.id ? (

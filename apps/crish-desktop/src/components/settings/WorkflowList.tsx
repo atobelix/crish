@@ -3,12 +3,13 @@
  * 行操作（启停/立即执行/删除/编辑）由 useWorkflowsState 提供回调。
  */
 import React from 'react';
-import * as Lucide from 'lucide-react';
+
 import { scheduleLabel, workflowEnabledLabel, type WorkflowDefinition } from '../../api/workflowApi';
 import { SettingsRow } from './SettingsUI';
 import { Button, Switch, Tooltip } from '../ui';
 import styles from './ScheduledTasksPanel.module.css';
 import settingsStyles from './SettingsScheduleTab.module.css';
+import { AppIcon } from '../ui/icons/index';
 
 export type WorkflowListProps = {
   variant: 'settings' | 'chat';
@@ -97,7 +98,7 @@ export const WorkflowList: React.FC<WorkflowListProps> = ({
                           aria-label={`编辑 ${w.name}`}
                           disabled={busy}
                           onClick={() => onEdit?.(w)}
-                          icon={<Lucide.Pencil size={16} aria-hidden />}
+                          icon={<AppIcon name="pencil" size={16} aria-hidden />}
                         />
                       </Tooltip>
                       <Tooltip content="立即执行">
@@ -108,7 +109,7 @@ export const WorkflowList: React.FC<WorkflowListProps> = ({
                           aria-label={`立即执行 ${w.name}`}
                           disabled={busy}
                           onClick={() => onTrigger(w)}
-                          icon={<Lucide.Zap size={16} aria-hidden />}
+                          icon={<AppIcon name="zap" size={16} aria-hidden />}
                         />
                       </Tooltip>
                       <Tooltip content="删除">
@@ -119,7 +120,7 @@ export const WorkflowList: React.FC<WorkflowListProps> = ({
                           aria-label={`删除 ${w.name}`}
                           disabled={busy}
                           onClick={() => onDelete(w)}
-                          icon={<Lucide.Trash2 size={16} aria-hidden />}
+                          icon={<AppIcon name="trash" size={16} aria-hidden />}
                         />
                       </Tooltip>
                     </div>
@@ -174,7 +175,7 @@ export const WorkflowList: React.FC<WorkflowListProps> = ({
                       aria-label={`立即触发 ${w.name}`}
                       disabled={busy}
                       onClick={() => onTrigger(w)}
-                      icon={<Lucide.Play size={16} aria-hidden />}
+                      icon={<AppIcon name="play" size={16} aria-hidden />}
                     />
                   </Tooltip>
                   <Tooltip content={paused ? '启用' : '暂停'}>
@@ -188,9 +189,9 @@ export const WorkflowList: React.FC<WorkflowListProps> = ({
                       onClick={() => onToggle(w)}
                       icon={
                         paused ? (
-                          <Lucide.PlayCircle size={16} aria-hidden />
+                          <AppIcon name="play-circle" size={16} aria-hidden />
                         ) : (
-                          <Lucide.Pause size={16} aria-hidden />
+                          <AppIcon name="pause" size={16} aria-hidden />
                         )
                       }
                     />
@@ -203,7 +204,7 @@ export const WorkflowList: React.FC<WorkflowListProps> = ({
                       aria-label={`编辑 ${w.name}`}
                       disabled={busy}
                       onClick={() => onEdit?.(w)}
-                      icon={<Lucide.Pencil size={16} aria-hidden />}
+                      icon={<AppIcon name="pencil" size={16} aria-hidden />}
                     />
                   </Tooltip>
                   <Tooltip content="删除">
@@ -214,7 +215,7 @@ export const WorkflowList: React.FC<WorkflowListProps> = ({
                       aria-label={`删除 ${w.name}`}
                       disabled={busy}
                       onClick={() => onDelete(w)}
-                      icon={<Lucide.Trash2 size={16} aria-hidden />}
+                      icon={<AppIcon name="trash" size={16} aria-hidden />}
                     />
                   </Tooltip>
                 </div>

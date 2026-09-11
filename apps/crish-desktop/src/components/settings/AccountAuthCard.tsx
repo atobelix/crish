@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import * as Lucide from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { SettingsCard } from './SettingsUI';
 import { Button, Tooltip, Input } from '../ui';
 import styles from './AccountAuthCard.module.css';
+import { AppIcon } from '../ui/icons/index';
 
 export const AccountAuthCard: React.FC = () => {
   const {
@@ -123,7 +123,7 @@ export const AccountAuthCard: React.FC = () => {
             <div className={styles.userCardHeader}>
               <div className={styles.userInfo}>
                 <div className={styles.userAvatar}>
-                  <Lucide.User size={18} strokeWidth={1.8} />
+                  <AppIcon name="user" size={18} />
                 </div>
                 <div className={styles.userMeta}>
                   <div className={styles.userName}>
@@ -144,7 +144,7 @@ export const AccountAuthCard: React.FC = () => {
                     size="sm"
                     disabled={loading}
                     onClick={() => void logout()}
-                    icon={<Lucide.LogOut size={14} />}
+                    icon={<AppIcon name="logout" size={14} />}
                   >
                     退出
                   </Button>
@@ -163,7 +163,7 @@ export const AccountAuthCard: React.FC = () => {
                     variant="ghost"
                     size="sm"
                     onClick={() => void loadDevices()}
-                    icon={<Lucide.RefreshCw size={13} />}
+                    icon={<AppIcon name="refresh" size={13} />}
                   >
                     刷新
                   </Button>
@@ -185,9 +185,9 @@ export const AccountAuthCard: React.FC = () => {
                       <div className={styles.deviceLeft}>
                         <div className={styles.deviceIcon}>
                           {isMobile ? (
-                            <Lucide.Smartphone size={16} />
+                            <AppIcon name="smartphone" size={16} />
                           ) : (
-                            <Lucide.Laptop size={16} />
+                            <AppIcon name="laptop" size={16} />
                           )}
                         </div>
                         <div>
@@ -204,7 +204,7 @@ export const AccountAuthCard: React.FC = () => {
                           size="sm"
                           disabled={busyDeviceId === d.id}
                           onClick={() => void handleRevoke(d.id)}
-                          icon={<Lucide.Trash2 size={13} />}
+                          icon={<AppIcon name="trash" size={13} />}
                         >
                           解除
                         </Button>

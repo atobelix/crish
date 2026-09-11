@@ -28,7 +28,7 @@
   padding: 0 10px;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md, 6px);
-  background: var(--bg-card, hsl(0 0% 100%));
+  background: var(--bg-card);
   color: var(--text-primary);
   font-family: inherit;
   font-size: var(--font-size-sm, 13px);
@@ -71,11 +71,10 @@
   flex-shrink: 0;
   color: var(--text-tertiary);
   transition: transform var(--transition-micro, 0.15s ease);
-  opacity: 0.7;
 }
 
 .settingsSelectMenu {
-  background: var(--bg-card, hsl(0 0% 100%));
+  background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: 12px;
   box-shadow: var(--shadow-dropdown);
@@ -280,7 +279,6 @@
 .emptySub {
   font-size: var(--font-size-xxs, 11px);
   color: var(--text-tertiary);
-  opacity: 0.8;
 }
 
 .highlightMark {

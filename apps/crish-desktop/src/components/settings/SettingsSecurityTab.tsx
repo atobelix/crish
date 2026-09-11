@@ -7,7 +7,7 @@
  * call_verdict / ApprovalGateImpl 单一裁决链）。
  */
 import React, { useId, useMemo, useState } from 'react';
-import * as Lucide from 'lucide-react';
+
 import { useToast } from '../../services/toast/ToastContext';
 import styles from './SettingsSecurityTab.module.css';
 import {
@@ -30,6 +30,7 @@ import {
   type PermissionMode,
 } from '../../api/permissionModes';
 import { sanitizeWhitelistEntry } from '../../api/commandPermissions';
+import { AppIcon } from '../ui/icons/index';
 
 /** 常用只读命令 */
 const QUICK_WHITELIST_CMDS = [
@@ -58,10 +59,10 @@ function pathLeaf(path: string): string {
 }
 
 const PERM_ICON_MAP: Record<string, React.ReactNode> = {
-  ask: <Lucide.ShieldCheck size={14} strokeWidth={1.8} />,
-  deep: <Lucide.Search size={14} strokeWidth={1.8} />,
-  plan: <Lucide.Target size={14} strokeWidth={1.8} />,
-  full: <Lucide.Zap size={14} strokeWidth={1.8} />,
+  ask: <AppIcon name="shield-check" size={14} />,
+  deep: <AppIcon name="search" size={14} />,
+  plan: <AppIcon name="target" size={14} />,
+  full: <AppIcon name="zap" size={14} />,
 };
 
 export const SettingsSecurityTab: React.FC = () => {
@@ -419,7 +420,7 @@ export const SettingsSecurityTab: React.FC = () => {
                         size="sm"
                         onClick={() => removeWhitelist(cmd)}
                         aria-label={`移除 ${cmd}`}
-                        icon={<Lucide.Trash2 size={14} aria-hidden />}
+                        icon={<AppIcon name="trash" size={14} aria-hidden />}
                       />
                     </Tooltip>
                   }

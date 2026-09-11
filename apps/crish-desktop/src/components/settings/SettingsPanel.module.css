@@ -272,7 +272,7 @@
   flex-direction: column;
   gap: var(--space-3_5, 14px);
   position: relative;
-  background: var(--bg-elevated, var(--bg-card, hsl(0 0% 100%)));
+  background: var(--bg-elevated, var(--bg-card));
   overflow-y: auto;
   overflow-x: hidden;
   overscroll-behavior: auto;
@@ -319,7 +319,7 @@
 }
 
 .sidebarTab.active {
-  background: var(--bg-card, hsl(0 0% 100%));
+  background: var(--bg-card);
   border: 1px solid var(--border-subtle);
   box-shadow: var(--shadow-sm);
   color: var(--text-primary);

@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import * as Lucide from 'lucide-react';
 import type { ModelPrice } from '../../api/pricingStore';
 import { Button, IconButton, Tooltip, Select, Input } from '../ui';
 import styles from './PriceConfigModal.module.css';
+import { AppIcon } from '../ui/icons/index';
 
 const UNIT_OPTIONS = [
   { id: 'token', value: 'token', label: 'Tokens' },
@@ -153,7 +153,7 @@ export const EditablePriceRow: React.FC<EditablePriceRowProps> = ({
             size="sm"
             tooltip="删除该模型单价"
             onClick={onDelete}
-            icon={<Lucide.Trash2 size={14} />}
+            icon={<AppIcon name="trash" size={14} />}
           />
         </div>
       </div>

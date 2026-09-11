@@ -10,12 +10,13 @@
  * Esc/Tab/选中关闭还原焦点（restoreOnCloseRef 置位）。
  */
 import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
-import * as Lucide from 'lucide-react';
+
 import { openSettings } from '../../store/settingsUiStore';
 import type { SettingsTabType } from '../../store/types';
 import { readStoredTheme, setTheme, type UiTheme } from '../../api/themeStore';
 import styles from './SettingsQuickMenu.module.css';
 import { Menu, SegmentedControl, Tooltip } from '../ui';
+import { AppIcon } from '../ui/icons/index';
 
 export interface SettingsQuickMenuProps {
   trigger?: React.ReactNode;
@@ -63,7 +64,7 @@ const QUICK_ENTRIES: readonly QuickEntry[] = [
     label: '模型与密钥',
     title: '打开模型与 API 密钥设置',
     ariaLabel: '打开模型与密钥设置',
-    icon: <Lucide.Orbit size={16} strokeWidth={1.75} aria-hidden />,
+    icon: <AppIcon name="orbit" size={16} aria-hidden />,
     tab: 'models',
   },
   {
@@ -71,7 +72,7 @@ const QUICK_ENTRIES: readonly QuickEntry[] = [
     label: '外观与字体',
     title: '打开外观与字体设置',
     ariaLabel: '打开外观与字体设置',
-    icon: <Lucide.Palette size={16} strokeWidth={1.75} aria-hidden />,
+    icon: <AppIcon name="palette" size={16} aria-hidden />,
     tab: 'appearance',
   },
   {
@@ -79,7 +80,7 @@ const QUICK_ENTRIES: readonly QuickEntry[] = [
     label: '全部设置',
     title: '打开全部设置',
     ariaLabel: '打开全部设置',
-    icon: <Lucide.Settings size={16} strokeWidth={1.75} aria-hidden />,
+    icon: <AppIcon name="settings" size={16} aria-hidden />,
     // 无 tab：进入设置默认页
   },
 ] as const;
@@ -240,14 +241,11 @@ export const SettingsQuickMenu: React.FC<SettingsQuickMenuProps> = ({
         aria-label={triggerLabel}
         {...triggerProps}
       >
-        <Lucide.Settings size={16} strokeWidth={1.75} aria-hidden />
+        <AppIcon name="settings" size={16} aria-hidden />
         <span>设置</span>
-        <Lucide.ChevronUp
-          size={14}
-          strokeWidth={1.75}
+        <AppIcon name="chevron-up" size={14}
           className={styles.sbQuickChev}
-          aria-hidden
-        />
+          aria-hidden />
       </button>
     </Tooltip>
   );

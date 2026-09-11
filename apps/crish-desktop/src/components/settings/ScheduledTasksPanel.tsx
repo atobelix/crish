@@ -7,7 +7,7 @@ import { useToast } from '../../services/toast/ToastContext';
  * 密度：无 essay、单行表单、紧凑列表；toast 仅错误；占位会话不抢焦点。
  */
 import React, { useState } from 'react';
-import * as Lucide from 'lucide-react';
+
 import {
   WORKFLOW_SCHEDULE_PRESETS,
   emptyWorkflowDraft,
@@ -33,6 +33,7 @@ import { useWorkflowsState } from './useWorkflowsState';
 import { WorkflowForm } from './WorkflowForm';
 import { WorkflowList } from './WorkflowList';
 import { RunHistoryList } from './RunHistoryList';
+import { AppIcon } from '../ui/icons/index';
 
 type Props = {
   onBackToChat?: () => void;
@@ -194,9 +195,9 @@ export const ScheduledTasksPanel: React.FC<Props> = ({ onBackToChat }) => {
             }}
             icon={
               showForm ? (
-                <Lucide.ChevronUp size={16} aria-hidden />
+                <AppIcon name="chevron-up" size={16} aria-hidden />
               ) : (
-                <Lucide.Plus size={16} aria-hidden />
+                <AppIcon name="plus" size={16} aria-hidden />
               )
             }
           >

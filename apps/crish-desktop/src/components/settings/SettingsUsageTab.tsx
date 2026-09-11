@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import * as Lucide from 'lucide-react';
 import { loadPrices, type ModelPrice } from '../../api/pricingStore';
 import {
   clearUsageHistory,
@@ -16,6 +15,7 @@ import { ModelDistributionSection } from './usage/ModelDistributionSection';
 import { UsageSummaryHero } from './usage/UsageSummaryHero';
 import { UsageTrendChart } from './usage/UsageTrendChart';
 import styles from './SettingsUsageTab.module.css';
+import { AppIcon } from '../ui/icons/index';
 
 interface Props {
   _onBlockingOverlayChange?: (open: boolean) => void;
@@ -103,7 +103,7 @@ export const SettingsUsageTab: React.FC<Props> = () => {
         type="button"
         variant="secondary"
         size="sm"
-        icon={<Lucide.DollarSign size={14} />}
+        icon={<AppIcon name="dollar" size={14} />}
         onClick={() => setPricesModalOpen(true)}
       >
         配置单价
@@ -156,7 +156,7 @@ export const SettingsUsageTab: React.FC<Props> = () => {
                   type="button"
                   variant="ghost"
                   size="sm"
-                  icon={<Lucide.RefreshCw size={14} />}
+                  icon={<AppIcon name="refresh" size={14} />}
                   onClick={() => {
                     setRefreshTick((t) => t + 1);
                     void loadData(globalRange);
@@ -169,7 +169,7 @@ export const SettingsUsageTab: React.FC<Props> = () => {
                     type="button"
                     variant="danger"
                     size="sm"
-                    icon={<Lucide.Trash2 size={14} />}
+                    icon={<AppIcon name="trash" size={14} />}
                     onClick={() => void handleClearHistory()}
                   >
                     清空历史

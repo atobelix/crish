@@ -6,7 +6,7 @@ import { useToast } from '../../services/toast/ToastContext';
  * 外部对话：点击扫描 Claude Code / Codex → 勾选 → 导入所选（禁止自动导入）。
  */
 import React, { useId, useState } from 'react';
-import * as Lucide from 'lucide-react';
+
 import { clientApi } from '../../api/clientApi';
 import { ensureEngineConnected } from '../../api/chatBridge';
 import { getTransport } from '../../api/transport';
@@ -23,6 +23,7 @@ import { Button, Tooltip } from '../ui';
 import { ExternalSessionImport } from './ExternalSessionImport';
 import { AccountAuthCard } from './AccountAuthCard';
 import styles from './SettingsProfileTab.module.css';
+import { AppIcon } from '../ui/icons/index';
 
 type Props = {
   _onBlockingOverlayChange?: (open: boolean) => void;
@@ -176,7 +177,7 @@ export const SettingsProfileTab: React.FC<Props> = ({ _onBlockingOverlayChange }
       <SettingsSection title="当前环境">
         <SettingsCard>
           <SettingsRow
-            icon={<Lucide.User size={18} strokeWidth={1.75} />}
+            icon={<AppIcon name="user" size={18} />}
             title="当前项目"
             desc={hasWorkspace ? '本机工作区' : '尚未打开项目'}
             control={

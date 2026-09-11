@@ -76,7 +76,7 @@
 }
 
 .settingsUiCard {
-  background: var(--bg-card, hsl(0 0% 100%));
+  background: var(--bg-card);
   border: 0.1px solid hsl(35 10% 95%);
   box-shadow: 0 1px 3px hsl(0 0% 0% / 0.015),
     0 3px 8px -1px hsl(0 0% 0% / 0.02);

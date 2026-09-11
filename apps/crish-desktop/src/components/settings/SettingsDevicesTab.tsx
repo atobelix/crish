@@ -20,7 +20,7 @@ import { useToast } from '../../services/toast/ToastContext';
  *           已配对设备列表 → SettingsDevicesList。
  */
 import React, { useCallback, useEffect, useReducer, useRef } from 'react';
-import * as Lucide from 'lucide-react';
+
 import { QRCodeSVG } from 'qrcode.react';
 import styles from './SettingsDevicesTab.module.css';
 import {
@@ -42,6 +42,7 @@ import { useDevicePairing } from './useDevicePairing';
 import { useDeviceRename } from './useDeviceRename';
 import { SettingsDevicesNetworkEnv } from './SettingsDevicesNetworkEnv';
 import { SettingsDevicesList } from './SettingsDevicesList';
+import { AppIcon } from '../ui/icons/index';
 
 type Props = {
   _onBlockingOverlayChange?: (open: boolean) => void;
@@ -205,14 +206,14 @@ export const SettingsDevicesTab: React.FC<Props> = ({ _onBlockingOverlayChange }
   return (
     <SettingsPage
       title="多端互通"
-      meta={<Lucide.Smartphone size={16} aria-hidden />}
+      meta={<AppIcon name="smartphone" size={16} aria-hidden />}
     >
       <SettingsSection title="配对模式">
         <SettingsCard>
           {pairing.serviceEnabled ? (
             <>
               <SettingsRow
-                icon={<Lucide.Radio size={18} aria-hidden />}
+                icon={<AppIcon name="radio" size={18} aria-hidden />}
                 title="多端互通服务"
                 desc={
                   <span
@@ -229,12 +230,12 @@ export const SettingsDevicesTab: React.FC<Props> = ({ _onBlockingOverlayChange }
                     onClick={() => void handleDisableService()}
                     disabled={pairing.busy}
                   >
-                    <Lucide.Power size={14} aria-hidden /> 关闭服务
+                    <AppIcon name="power" size={14} aria-hidden /> 关闭服务
                   </Button>
                 }
               />
               <SettingsRow
-                icon={<Lucide.QrCode size={18} aria-hidden />}
+                icon={<AppIcon name="qr-code" size={18} aria-hidden />}
                 title="开启局域网配对"
                 desc="生成一次性配对码，移动端扫码即可连接本机"
                 control={
@@ -260,7 +261,7 @@ export const SettingsDevicesTab: React.FC<Props> = ({ _onBlockingOverlayChange }
                   className={styles.firewallHint}
                   data-testid="pair-code-missing"
                 >
-                  <Lucide.Info size={14} aria-hidden />
+                  <AppIcon name="info" size={14} aria-hidden />
                   配对已开启但配对码已过期。点击上方开关重新开启即可生成新码。
                 </div>
               )}
@@ -268,7 +269,7 @@ export const SettingsDevicesTab: React.FC<Props> = ({ _onBlockingOverlayChange }
           ) : (
             <div data-testid="service-off">
               <SettingsRow
-                icon={<Lucide.Radio size={18} aria-hidden />}
+                icon={<AppIcon name="radio" size={18} aria-hidden />}
                 title="多端互通服务未开启"
                 desc="开启后本机可被局域网内的移动设备发现并连接"
                 control={
@@ -278,7 +279,7 @@ export const SettingsDevicesTab: React.FC<Props> = ({ _onBlockingOverlayChange }
                     onClick={() => void handleEnableService()}
                     disabled={pairing.busy}
                   >
-                    <Lucide.Power size={14} aria-hidden /> 开启服务
+                    <AppIcon name="power" size={14} aria-hidden /> 开启服务
                   </Button>
                 }
               />
@@ -309,11 +310,11 @@ export const SettingsDevicesTab: React.FC<Props> = ({ _onBlockingOverlayChange }
                   onClick={() => void handleCopyCode()}
                   title="复制配对码"
                 >
-                  <Lucide.Copy size={13} aria-hidden /> 复制配对码
+                  <AppIcon name="copy" size={13} aria-hidden /> 复制配对码
                 </Button>
               </div>
               <div className={styles.qrMeta}>
-                <Lucide.Clock size={13} aria-hidden />
+                <AppIcon name="clock" size={13} aria-hidden />
                 <span>
                   剩余有效时间：
                   {formatRemaining(pairing.status?.code_remaining_ms ?? null)}
@@ -325,7 +326,7 @@ export const SettingsDevicesTab: React.FC<Props> = ({ _onBlockingOverlayChange }
                     className={styles.firewallHint}
                     data-testid="firewall-hint"
                   >
-                    <Lucide.ShieldAlert size={14} aria-hidden />
+                    <AppIcon name="shield-alert" size={14} aria-hidden />
                     <span>{pairing.pairResult!.firewall_hint}</span>
                   </div>
                 ) : (
@@ -343,7 +344,7 @@ export const SettingsDevicesTab: React.FC<Props> = ({ _onBlockingOverlayChange }
                   disabled={pairing.busy}
                   className={styles.closePairBtn}
                 >
-                  <Lucide.X size={14} aria-hidden /> 关闭配对
+                  <AppIcon name="x" size={14} aria-hidden /> 关闭配对
                 </Button>
               </div>
             </div>

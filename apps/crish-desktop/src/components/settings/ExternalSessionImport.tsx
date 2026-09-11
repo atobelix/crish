@@ -5,7 +5,7 @@ import { useToast } from '../../services/toast/ToastContext';
  */
 
 import React, { useCallback, useEffect, useId, useMemo, useState } from 'react';
-import * as Lucide from 'lucide-react';
+
 import {
   externalSourceLabel,
   getPersistedImportRoots,
@@ -28,6 +28,7 @@ import {
   type ImportRootDisplay,
 } from './ImportRootsSection';
 import styles from './ExternalSessionImport.module.css';
+import { AppIcon } from '../ui/icons/index';
 
 export type ExternalSessionImportProps = {
   /** settings：完整区块；wizard：紧凑向导步 */
@@ -309,9 +310,9 @@ export const ExternalSessionImport: React.FC<ExternalSessionImportProps> = ({
             }}
             icon={
               scanning === 'claude-code' ? (
-                <Lucide.Loader2 size={14} aria-hidden className="spin" />
+                <AppIcon name="loader" size={14} aria-hidden className="spin" />
               ) : (
-                <Lucide.ScanSearch size={14} aria-hidden />
+                <AppIcon name="scan-search" size={14} aria-hidden />
               )
             }
           >
@@ -338,9 +339,9 @@ export const ExternalSessionImport: React.FC<ExternalSessionImportProps> = ({
             }}
             icon={
               scanning === 'codex' ? (
-                <Lucide.Loader2 size={14} aria-hidden className="spin" />
+                <AppIcon name="loader" size={14} aria-hidden className="spin" />
               ) : (
-                <Lucide.ScanSearch size={14} aria-hidden />
+                <AppIcon name="scan-search" size={14} aria-hidden />
               )
             }
           >

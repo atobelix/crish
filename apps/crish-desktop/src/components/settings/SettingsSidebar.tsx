@@ -1,9 +1,10 @@
 import React from 'react';
-import * as Lucide from 'lucide-react';
+
 import styles from './SettingsPanel.module.css';
 import { Button, Tooltip } from '../ui';
 import type { TabMeta, TabType } from '../settingsTabsMeta';
 import { SidebarFooter } from '../sidebar/SidebarFooter';
+import { AppIcon } from '../ui/icons/index';
 
 export interface SettingsSidebarAria {
   baseId: string;
@@ -84,7 +85,7 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = React.memo(
                 onClick={onBack}
                 aria-label="返回应用，关闭设置"
                 icon={
-                  <Lucide.ArrowLeft size={16} strokeWidth={1.75} aria-hidden />
+                  <AppIcon name="arrow-left" size={16} aria-hidden />
                 }
               >
                 返回应用
@@ -99,7 +100,7 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = React.memo(
             onClick={() => searchInputRef.current?.focus()}
           >
             <span className={styles.searchIco} aria-hidden="true">
-              <Lucide.Search size={16} strokeWidth={1.75} />
+              <AppIcon name="search" size={16} />
             </span>
             <input
               ref={searchInputRef}
@@ -128,7 +129,7 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = React.memo(
                 }}
                 aria-label="清空搜索"
               >
-                <Lucide.X size={12} strokeWidth={2} />
+                <AppIcon name="x" size={12} />
               </button>
             ) : null}
           </div>
@@ -146,7 +147,7 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = React.memo(
           {items.map((tab, idx, arr) => {
             const isTabActive = activeId === tab.id;
             const isRoving = rovingId === tab.id;
-            const Icon = tab.icon;
+            const iconName = tab.icon;
             const showGroup = idx === 0 || arr[idx - 1]?.group !== tab.group;
             const tabBtnId = `${baseId}-tab-${tab.id}`;
 
@@ -177,7 +178,7 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = React.memo(
                     className={`${styles.sidebarTab} ${isTabActive ? styles.active : ''}`}
                   >
                     <span className={styles.sidebarTabIco} aria-hidden>
-                      <Icon size={16} strokeWidth={1.75} />
+                      <AppIcon name={iconName} size={16} aria-hidden />
                     </span>
                     <span>{tab.label}</span>
                   </button>

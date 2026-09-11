@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState, useEffect } from 'react';
-import * as Lucide from 'lucide-react';
+
 import {
   upsertPrice,
   savePrices,

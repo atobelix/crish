@@ -3,7 +3,6 @@
  * 展示网络配置文件类别、可直连 IP 列表与 AP 隔离提示（R1-09 G-4）。
  */
 import React from 'react';
-import * as Lucide from 'lucide-react';
 import styles from './SettingsDevicesTab.module.css';
 import {
   SettingsSection,
@@ -12,6 +11,7 @@ import {
 } from './SettingsUI';
 import type { NetworkEnvInfo } from '../../api/multiDevice';
 import { useToast } from '../../services/toast/ToastContext';
+import { AppIcon } from '../ui/icons/index';
 
 /** 网络配置文件类别 → 展示名（Rust multi_device_network_info 四态） */
 const PROFILE_LABELS: Record<NetworkEnvInfo['profile'], string> = {
@@ -56,7 +56,7 @@ export const SettingsDevicesNetworkEnv: React.FC<SettingsDevicesNetworkEnvProps>
       <SettingsCard>
         <div className={styles.networkCardContent} data-testid="network-env">
           <SettingsRow
-            icon={<Lucide.Wifi size={18} aria-hidden />}
+            icon={<AppIcon name="wifi" size={18} aria-hidden />}
             title="网络类型"
             desc={
               isPublic
@@ -77,7 +77,7 @@ export const SettingsDevicesNetworkEnv: React.FC<SettingsDevicesNetworkEnvProps>
               className={styles.networkWarnBanner}
               data-testid="network-public-hint"
             >
-              <Lucide.ShieldAlert size={14} aria-hidden />
+              <AppIcon name="shield-alert" size={14} aria-hidden />
               <span>
                 请切换到专用网络，否则 Windows 防火墙会阻止手机访问本机服务。
               </span>
@@ -85,7 +85,7 @@ export const SettingsDevicesNetworkEnv: React.FC<SettingsDevicesNetworkEnvProps>
           )}
 
           <SettingsRow
-            icon={<Lucide.Network size={18} aria-hidden />}
+            icon={<AppIcon name="network" size={18} aria-hidden />}
             title="手机直连地址"
             desc="扫码失败或跨网段时手动输入"
             control={
@@ -100,7 +100,7 @@ export const SettingsDevicesNetworkEnv: React.FC<SettingsDevicesNetworkEnvProps>
                       title="点击复制 IP 地址"
                     >
                       <code>{ip}</code>
-                      <Lucide.Copy size={11} aria-hidden />
+                      <AppIcon name="copy" size={11} aria-hidden />
                     </button>
                   ))}
                 </div>
@@ -117,7 +117,7 @@ export const SettingsDevicesNetworkEnv: React.FC<SettingsDevicesNetworkEnvProps>
               className={styles.networkFooterHint}
               data-testid="network-hint"
             >
-              <Lucide.Info size={13} aria-hidden />
+              <AppIcon name="info" size={13} aria-hidden />
               <span>{netEnv.hint}</span>
             </div>
           )}

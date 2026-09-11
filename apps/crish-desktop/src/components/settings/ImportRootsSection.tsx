@@ -1,8 +1,8 @@
 import React from 'react';
-import * as Lucide from 'lucide-react';
 import type { ExternalImportRoots } from '../../api/import';
 import { Button, Tooltip } from '../ui';
 import styles from './ExternalSessionImport.module.css';
+import { AppIcon } from '../ui/icons/index';
 
 export type ImportRootDisplay = {
   /** Effective scan root (custom or default) */
@@ -65,7 +65,7 @@ export const ImportRootsSection: React.FC<{
               onClick={() => {
                 void onPickClaudeRoot();
               }}
-              icon={<Lucide.FolderOpen size={14} aria-hidden />}
+              icon={<AppIcon name="folder-open" size={14} aria-hidden />}
             >
               选择 Claude 目录
             </Button>
@@ -121,7 +121,7 @@ export const ImportRootsSection: React.FC<{
               onClick={() => {
                 void onPickCodexRoot();
               }}
-              icon={<Lucide.FolderOpen size={14} aria-hidden />}
+              icon={<AppIcon name="folder-open" size={14} aria-hidden />}
             >
               选择 Codex 目录
             </Button>
