@@ -1,7 +1,7 @@
 # 方案-A：语义熵锚定与层级自适应模型名称智能缩写系统（SADA-Omni）
 
-> **文档定位**：独立架构设计方案（方案-A）  
-> **面向系统**：Conex / Crish AI 桌面客户端及跨平台界面展示层  
+> **文档定位**：独立架构设计方案（方案-A）
+> **面向系统**：Conex / Crish AI 桌面客户端及跨平台界面展示层
 > **核心使命**：彻底根治多场景（侧边栏、状态胶囊、输入框、下拉框）下的模型长名称溢出与截断失真问题，在任意窄宽容器中实现**极高空间压缩率**、**100% 绝对判别度**以及**面向未知模型的零配置自适应能力**。
 
 ---
@@ -352,14 +352,14 @@ const KNOWN_TIER_MAP: Record<string, { compact: string; short: string; micro: st
  */
 export function compressUnknownWord(word: string, targetLen: number = 4): string {
   if (!word || word.length <= targetLen) return word;
-  
+
   const lower = word.toLowerCase();
   const firstChar = lower[0];
   const rest = lower.slice(1);
-  
+
   // 剥离元音 (a, e, i, o, u, y)
   const consonants = rest.replace(/[aeiouy]/g, '');
-  
+
   // 折叠相邻重复辅音 (例如 tt -> t, ll -> l)
   let collapsed = '';
   for (let i = 0; i < consonants.length; i++) {
@@ -367,12 +367,12 @@ export function compressUnknownWord(word: string, targetLen: number = 4): string
       collapsed += consonants[i];
     }
   }
-  
+
   const candidate = firstChar + collapsed;
   if (candidate.length >= 2 && candidate.length <= targetLen + 1) {
     return candidate.slice(0, Math.max(targetLen, 3));
   }
-  
+
   // 如果剥离元音后太短或候选异常，保底返回截断前缀
   return lower.slice(0, targetLen);
 }
@@ -577,7 +577,7 @@ function fitToBudget(sada: SADAResult, budget: number): string {
     const prefix = sada.meta.brand ? sada.meta.brand[0] : 'm';
     return `${prefix}-${v}`.slice(0, budget);
   }
-  
+
   // 绝对底线截断
   return sada.micro.slice(0, budget);
 }

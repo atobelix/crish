@@ -1,11 +1,11 @@
 # DOM 几何渲染与滚动穿透隔离深度审计报告
 
-> **文档标识**：`docs/model-capability/plan-reviews/05-DOM几何渲染与滚动隔离深度审计.md`  
-> **审计日期**：2026-09-03  
+> **文档标识**：`docs/model-capability/plan-reviews/05-DOM几何渲染与滚动隔离深度审计.md`
+> **审计日期**：2026-09-03
 > **审计目标**：
 > 1. [`00-AI服务商与模型管理全面重构终极方案.md`](file:///c:/Software/conex/docs/model-capability/00-AI服务商与模型管理全面重构终极方案.md)
 > 2. [`05-视口弹性布局与滚动穿透根治方案.md`](file:///c:/Software/conex/docs/model-capability/analysis/05-视口弹性布局与滚动穿透根治方案.md)
-> 3. [`07-下拉级联菜单双滚动条消除与交互打磨方案.md`](file:///c:/Software/conex/docs/model-capability/analysis/07-下拉级联菜单双滚动条消除与交互打磨方案.md)  
+> 3. [`07-下拉级联菜单双滚动条消除与交互打磨方案.md`](file:///c:/Software/conex/docs/model-capability/analysis/07-下拉级联菜单双滚动条消除与交互打磨方案.md)
 > **关联源码基线**：
 > - [`SettingsPanel.tsx`](file:///c:/Software/conex/apps/crish-desktop/src/components/settings/SettingsPanel.tsx) / [`SettingsPanel.module.css`](file:///c:/Software/conex/apps/crish-desktop/src/components/settings/SettingsPanel.module.css)
 > - [`SettingsUI.tsx`](file:///c:/Software/conex/apps/crish-desktop/src/components/settings/SettingsUI.tsx) / [`SettingsUI.module.css`](file:///c:/Software/conex/apps/crish-desktop/src/components/settings/SettingsUI.module.css)
@@ -13,7 +13,7 @@
 > - [`ModelProfileList.tsx`](file:///c:/Software/conex/apps/crish-desktop/src/components/settings-models/ModelProfileList.tsx) / [`ModelConfigEditor.tsx`](file:///c:/Software/conex/apps/crish-desktop/src/components/settings-models/ModelConfigEditor.tsx)
 > - [`Dialog.tsx`](file:///c:/Software/conex/apps/crish-desktop/src/components/ui/Dialog/Dialog.tsx) / [`focusTrap.tsx`](file:///c:/Software/conex/apps/crish-desktop/src/components/ui/Dialog/focusTrap.tsx) / [`dialogOverlayContext.ts`](file:///c:/Software/conex/apps/crish-desktop/src/components/ui/Dialog/dialogOverlayContext.ts)
 > - [`Menu.tsx`](file:///c:/Software/conex/apps/crish-desktop/src/components/ui/Menu/Menu.tsx) / [`position.ts`](file:///c:/Software/conex/apps/crish-desktop/src/components/ui/Menu/position.ts) / [`SafeTriangle.ts`](file:///c:/Software/conex/apps/crish-desktop/src/components/ui/internal/SafeTriangle.ts)
-> - [`useLayerRegistration.ts`](file:///c:/Software/conex/apps/crish-desktop/src/components/ui/internal/layer-registration/useLayerRegistration.ts)  
+> - [`useLayerRegistration.ts`](file:///c:/Software/conex/apps/crish-desktop/src/components/ui/internal/layer-registration/useLayerRegistration.ts)
 > **审计裁决**：**有条件通过（CONDITIONAL PASS · 发现 3 项重大隐患与 2 项临界退化，需执行刚性加固）**
 
 ---

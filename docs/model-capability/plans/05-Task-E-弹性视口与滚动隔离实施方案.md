@@ -1,17 +1,17 @@
 # Task-E 弹性视口与滚动隔离实施方案
 
-> **文档标识**：`docs/model-capability/plans/05-Task-E-弹性视口与滚动隔离实施方案.md`  
-> **任务代号**：`Task-E`（弹性视口与滚动隔离工程师）  
-> **制定时间**：2026-09-03  
+> **文档标识**：`docs/model-capability/plans/05-Task-E-弹性视口与滚动隔离实施方案.md`
+> **任务代号**：`Task-E`（弹性视口与滚动隔离工程师）
+> **制定时间**：2026-09-03
 > **输入基线**：
 > - [`00-AI服务商与模型管理全面重构终极方案.md`](file:///c:/Software/conex/docs/model-capability/00-AI服务商与模型管理全面重构终极方案.md)
 > - [`01-多Agent协同实现方案与任务分工总纲.md`](file:///c:/Software/conex/docs/model-capability/01-多Agent协同实现方案与任务分工总纲.md)
 > - [`05-DOM几何渲染与滚动隔离深度审计.md`](file:///c:/Software/conex/docs/model-capability/plan-reviews/05-DOM几何渲染与滚动隔离深度审计.md)
-> - [`05-视口弹性布局与滚动穿透根治方案.md`](file:///c:/Software/conex/docs/model-capability/analysis/05-视口弹性布局与滚动穿透根治方案.md)  
+> - [`05-视口弹性布局与滚动穿透根治方案.md`](file:///c:/Software/conex/docs/model-capability/analysis/05-视口弹性布局与滚动穿透根治方案.md)
 > **物理文件域白名单（本任务严格限写以下 3 个文件）**：
 > 1. `apps/crish-desktop/src/components/settings/SettingsPanel.module.css`
 > 2. `apps/crish-desktop/src/components/settings/SettingsPanel.tsx`
-> 3. `apps/crish-desktop/src/components/settings-models/ModelConfigEditor.tsx`  
+> 3. `apps/crish-desktop/src/components/settings-models/ModelConfigEditor.tsx`
 > **执行纪律**：遵循 `AGENTS.md` §1 反退避原则与 §7 严禁打补丁；只修改白名单内文件；不执行 git 提交。
 
 ---

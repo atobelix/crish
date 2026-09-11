@@ -1,6 +1,6 @@
 # β 轮通用执行规范
 
-> 实现子 Agent = `00-总方案.md` + `plans/02-设置写路径保存即落盘.md` + 上轮 `execution/α-轮次报告.md` + 本文件。  
+> 实现子 Agent = `00-总方案.md` + `plans/02-设置写路径保存即落盘.md` + 上轮 `execution/α-轮次报告.md` + 本文件。
 > 轮次：β。对应维：S2。禁止 git commit / restore / reset / checkout / --no-verify。禁止派生子 Agent。
 
 ## 本轮鼓励

@@ -1,15 +1,15 @@
 # Task-C 级联菜单与 Portal 逃逸实施方案
 
-> **文档标识**：`docs/model-capability/plans/03-Task-C-级联菜单与Portal逃逸实施方案.md`  
-> **任务代号**：`Task-C`（级联菜单与 Portal 逃逸工程师）  
-> **制定时间**：2026-09-03  
+> **文档标识**：`docs/model-capability/plans/03-Task-C-级联菜单与Portal逃逸实施方案.md`
+> **任务代号**：`Task-C`（级联菜单与 Portal 逃逸工程师）
+> **制定时间**：2026-09-03
 > **输入基线**：
 > - [`00-AI服务商与模型管理全面重构终极方案.md`](file:///c:/Software/conex/docs/model-capability/00-AI服务商与模型管理全面重构终极方案.md)
 > - [`01-多Agent协同实现方案与任务分工总纲.md`](file:///c:/Software/conex/docs/model-capability/01-多Agent协同实现方案与任务分工总纲.md)
 > - [`05-DOM几何渲染与滚动隔离深度审计.md`](file:///c:/Software/conex/docs/model-capability/plan-reviews/05-DOM几何渲染与滚动隔离深度审计.md)
-> - [`03-红方魔鬼对抗与极限边界审计.md`](file:///c:/Software/conex/docs/model-capability/plan-reviews/03-红方魔鬼对抗与极限边界审计.md)  
+> - [`03-红方魔鬼对抗与极限边界审计.md`](file:///c:/Software/conex/docs/model-capability/plan-reviews/03-红方魔鬼对抗与极限边界审计.md)
 > **物理文件域白名单（本任务严格限写以下 1 个文件）**：
-> - `apps/crish-desktop/src/components/settings-models/ModelProfileList.tsx`  
+> - `apps/crish-desktop/src/components/settings-models/ModelProfileList.tsx`
 > **执行纪律**：遵循 `AGENTS.md` §1 反退避原则、§2 协作纪律与 §7 严禁打补丁；只修改物理白名单文件；严禁执行 git 提交。
 
 ---
@@ -267,9 +267,9 @@ stateDiagram-v2
 
     state MenuOpen {
         [*] --> NoSubmenu: 一级菜单展开
-        
+
         NoSubmenu --> SubmenuOpen: 鼠标移入服务商行 (openSubmenu)
-        
+
         SubmenuOpen --> GracePeriod: 鼠标斜向移出服务商行 (enter SafeTriangle)
         note right of GracePeriod
             启动 300ms Grace Timer

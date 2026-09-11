@@ -1,6 +1,6 @@
 # δ 轮通用执行规范
 
-> 实现子 Agent = `00-总方案.md` + 你的维 `plans/04` 或 `plans/05` + `execution/γ-轮次报告.md` + 本文件 + `execution/δ-派单.md` 你那一行。  
+> 实现子 Agent = `00-总方案.md` + 你的维 `plans/04` 或 `plans/05` + `execution/γ-轮次报告.md` + 本文件 + `execution/δ-派单.md` 你那一行。
 > 轮次：δ。对应维：S4 ∥ S5。禁止 git commit / restore / reset / checkout。禁止派生子 Agent。
 
 ## 本轮鼓励

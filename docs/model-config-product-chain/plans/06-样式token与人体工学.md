@@ -1,12 +1,12 @@
 # S6 · 样式 token 与人体工学
 
-> **文档性质**：分维指示文档 / 实现 Agent 任务书。本轮只写方案，不改产品源码。  
-> **战役**：`docs/model-config-product-chain/`  
-> **维名**：样式 token 与人体工学  
-> **依赖**：S2 已闭合（验收必须走真保存面）。可与 S4/S5 并行；与 S3 共享的 Composer/Picker **同文件串行**。  
-> **问题全集**：主责 **20、21**；连带闭合思考区卸载残留、门禁盲区、零 Emoji、Tooltip。不接 IPC/出站/计费。  
-> **裁决**：`AGENTS.md` §12 Tooltip、§13 焦点、§14 HSLA/token、§19 四态、§20 圆角、§21 零 Emoji；`frontend-review.md` §4.4 幽灵 token。  
-> **输入证据**：审计 `07`（Wave 4 前）、`16`（Wave 4 后当前工作区）。本文件锚点按 **当前源码** 复核，不以 07 的过期行号为真。  
+> **文档性质**：分维指示文档 / 实现 Agent 任务书。本轮只写方案，不改产品源码。
+> **战役**：`docs/model-config-product-chain/`
+> **维名**：样式 token 与人体工学
+> **依赖**：S2 已闭合（验收必须走真保存面）。可与 S4/S5 并行；与 S3 共享的 Composer/Picker **同文件串行**。
+> **问题全集**：主责 **20、21**；连带闭合思考区卸载残留、门禁盲区、零 Emoji、Tooltip。不接 IPC/出站/计费。
+> **裁决**：`AGENTS.md` §12 Tooltip、§13 焦点、§14 HSLA/token、§19 四态、§20 圆角、§21 零 Emoji；`frontend-review.md` §4.4 幽灵 token。
+> **输入证据**：审计 `07`（Wave 4 前）、`16`（Wave 4 后当前工作区）。本文件锚点按 **当前源码** 复核，不以 07 的过期行号为真。
 > **效果锁一句话**：设置模型抽屉与对话输入区看起来并摸起来符合设计 token 与四态；非思考模型思考区物理消失；保存按钮在抽屉内可达；无 Emoji。**这不是「再加 sticky 5 行」。**
 
 ---
@@ -359,7 +359,7 @@ Lucide 图标颜色：`style={{ color: 'var(--brand)' }}` 可保留为当前色�
 
 ### 5.3 圆角阶梯
 
-允许：2 / 4 / 6 / 8 / 12 / 胶囊（`--radius-full` / `--sep-pill-radius` / `--radius-switch-track`）。  
+允许：2 / 4 / 6 / 8 / 12 / 胶囊（`--radius-full` / `--sep-pill-radius` / `--radius-switch-track`）。
 禁止：5、7、9、14 **裸像素**（14 只允许作为 `--sep-radius-outer` / `--sep-pill-radius` 的 token 引用，声明里不要写 `, 14px` fallback）。
 
 菜单外壳已是 `var(--sep-radius-outer, 14px)`（Composer `.menu`、Picker `.mbMenu`）：改成 `var(--sep-radius-outer)`，去掉 14px 字面 fallback，以免门禁扩正则后误杀。
@@ -614,15 +614,15 @@ bottom:\s*-12px
 backdrop-filter
 ```
 
-`.mrdModelList` 不得再声明 `overflow: hidden`（可用测读 CSS 文本）。  
-`.mrdCfgFooter` 必须含 `position: sticky`、`bottom: 0`、`background: var(--mrd-panel-bg)` 或与面板相同的 `color-mix`，且 **没有** `--surface-primary`。  
-`ModelsSettingsTab.module.css` 必须存在非空的 `.mrdPinnedHeader` / `.mrdActionBar` / `.mrdModelListScroll` 规则。  
-`ProfileHeader.tsx` 编辑态 `Input` 的 `style` 不得含 `borderBottom` / `border: 'none'`。  
-`ManualAddForm.tsx` 不得出现 `background: '#ffffff'`。  
-`ModelThinkingEditor` 源码不得出现 `onEnabledChange` / `enabled?`。  
-`ModelBadgePickerMenu.tsx` 思考轨 JSX 必须在思考谓词内部。  
-`ComposerFusedTrigger.tsx` 不得再用 `efforts?.offered` 单独点亮右槽。  
-本域无 HTML `title="`（组件 API `title={` 的 SettingsPage/Dialog 除外，可用白名单测）。  
+`.mrdModelList` 不得再声明 `overflow: hidden`（可用测读 CSS 文本）。
+`.mrdCfgFooter` 必须含 `position: sticky`、`bottom: 0`、`background: var(--mrd-panel-bg)` 或与面板相同的 `color-mix`，且 **没有** `--surface-primary`。
+`ModelsSettingsTab.module.css` 必须存在非空的 `.mrdPinnedHeader` / `.mrdActionBar` / `.mrdModelListScroll` 规则。
+`ProfileHeader.tsx` 编辑态 `Input` 的 `style` 不得含 `borderBottom` / `border: 'none'`。
+`ManualAddForm.tsx` 不得出现 `background: '#ffffff'`。
+`ModelThinkingEditor` 源码不得出现 `onEnabledChange` / `enabled?`。
+`ModelBadgePickerMenu.tsx` 思考轨 JSX 必须在思考谓词内部。
+`ComposerFusedTrigger.tsx` 不得再用 `efforts?.offered` 单独点亮右槽。
+本域无 HTML `title="`（组件 API `title={` 的 SettingsPage/Dialog 除外，可用白名单测）。
 本域 TSX/CSS 无 Emoji 图形字符。
 
 **单测（jsdom）必须有、但不得当可达证明：**
@@ -730,5 +730,5 @@ S8 轮次报告应能只跑本节 grep/测，不必重读审计 07/16。
 
 ---
 
-**产出路径**：`docs/model-config-product-chain/plans/06-样式token与人体工学.md`  
+**产出路径**：`docs/model-config-product-chain/plans/06-样式token与人体工学.md`
 **状态**：分维指示定稿（对照当前源码 + 审计 07/16）。实现轮按任务单元执行；本文件不改产品源码。

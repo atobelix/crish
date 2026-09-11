@@ -1,9 +1,9 @@
 # S1 · 真源契约与 IPC 同构
 
-> **指示文档**：交给实现 Agent 的任务书。本维只闭合「读/写 yaml 在类型与 IPC 上诚实同构」，让前端镜像不再自毁。  
-> **权威工作区**：`docs/model-config-product-chain/`  
-> **纪律**：`.agents/LOGIC_PLAN_NO_RETREAT.md`；`00-调度与执行纪律.md` L1–L6、L12；三原则（思考拍平字典、cacheRead 独立单价、预填库不是运行真源）。  
-> **规划模式**：纯逻辑。只规定依赖边、任务单元、文件域、验收断言。禁止工期、人员、业务优先级排序。问题同权。  
+> **指示文档**：交给实现 Agent 的任务书。本维只闭合「读/写 yaml 在类型与 IPC 上诚实同构」，让前端镜像不再自毁。
+> **权威工作区**：`docs/model-config-product-chain/`
+> **纪律**：`.agents/LOGIC_PLAN_NO_RETREAT.md`；`00-调度与执行纪律.md` L1–L6、L12；三原则（思考拍平字典、cacheRead 独立单价、预填库不是运行真源）。
+> **规划模式**：纯逻辑。只规定依赖边、任务单元、文件域、验收断言。禁止工期、人员、业务优先级排序。问题同权。
 > **本轮禁止**：改产品源码以外的「顺手重构」；提交 git；改 Composer；把 S2 保存按钮接线当成本维完成句。
 
 ---
@@ -65,7 +65,7 @@ YAML 弹窗已经直打真命令：`YamlConfigEditorModal.tsx:105` 读、`:144` 
 
 `SaveModelsYamlResult`（`:245-251`）同样带 `models` + `providers`，**没有 `tree`。**
 
-v2 树上 `ModelsYamlModelV2`（`:142-165`）**有** `thinking` / `modalities` / `pricing` / `protocol` / `compat`。  
+v2 树上 `ModelsYamlModelV2`（`:142-165`）**有** `thinking` / `modalities` / `pricing` / `protocol` / `compat`。
 `ModelsYamlProviderV2`（`:169-184`）**有** `base_url` / `api_key` / `headers` / `protocol` / `models`。
 
 拍平循环（`:317-337`）写入的 `ModelsYamlModel`（`:87-106`）**只有** `model/vendor/displayName/contextWindow/maxOutputTokens/protocol/capabilities/pricing`，**丢掉** `thinking` / `modalities` / `compat` / 供应商级 `baseUrl` / `apiKey` / `headers`。
@@ -225,7 +225,7 @@ Rust `ReadModelsYamlResult` 保持（可删前端误用，不可改名糊弄）�
 - **`providers`**：`Option<Map<String, ProviderSpec>>`（与 §4.1 同构；解析失败为 `None`）
 - `models`：若暂时保留，类型与注释必须标明 **lossy 投影，禁止生产消费**。实现 Agent 删除前端 `ReadModelsYamlWire.models` / `.tree` 更干净。
 
-前端 `readModelsYamlIpc` 成功当且仅当：命令命中 **且** `parseError` 为空 **且** `providers` 为对象（含诚实空 `{}`）。  
+前端 `readModelsYamlIpc` 成功当且仅当：命令命中 **且** `parseError` 为空 **且** `providers` 为对象（含诚实空 `{}`）。
 树 = `{ version: 2, providers }`。**禁止** `wire.tree || convertFlat(...)`。
 
 写 IPC：`serializeModelsYamlTree(tree)` → `workbench_save_models_yaml({ content })`。返回的 `providers` 可作镜像校验，但不得在写失败时用空对象覆盖。
@@ -255,12 +255,12 @@ await modelsCatalogStore.updateModel(providerId, modelId, {
 await modelsCatalogStore.updateProvider(providerId, { baseUrl, apiKey, protocol, ... })
 ```
 
-效果：磁盘 yaml 出现同等字段；失败则 Store 回滚到上一份**成功加载**的树，磁盘不被残树覆盖。  
+效果：磁盘 yaml 出现同等字段；失败则 Store 回滚到上一份**成功加载**的树，磁盘不被残树覆盖。
 S2 禁止再 `upsertModelMeta` / `crish_model_meta_v1`。本维不改那些文件。
 
 ### 4.5 交给 S3 的读能力
 
-S3 可以假设 `modelsCatalogStore.getState().tree` 在 `loaded===true && lastError===null` 时与磁盘 v2 树同构，选择器能读到 thinking 字典与 `modalities.input`。  
+S3 可以假设 `modelsCatalogStore.getState().tree` 在 `loaded===true && lastError===null` 时与磁盘 v2 树同构，选择器能读到 thinking 字典与 `modalities.input`。
 本维不改 Composer；S3 把读点从 LS 迁到该镜像。
 
 ### 4.6 交给 S4 的 live 调用契约（本维必须写成可调用，即使不改 request_options）

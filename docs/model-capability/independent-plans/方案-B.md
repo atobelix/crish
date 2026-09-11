@@ -1,9 +1,9 @@
 # 通用模型名称智能自适应缩写方案（方案-B）
 ## 基于 SADA-X 语义信息熵自适应压缩引擎与 MUDT 最小唯一判别消歧
 
-> **文档标识**：`docs/model-capability/independent-plans/方案-B.md`  
-> **所属战役**：`docs/model-capability/`（模型能力统一治理与动态演进）  
-> **设计定位**：通用模型名称智能缩写体系（算法内核、理论模型、工程实现、排版渲染与横向对比）  
+> **文档标识**：`docs/model-capability/independent-plans/方案-B.md`
+> **所属战役**：`docs/model-capability/`（模型能力统一治理与动态演进）
+> **设计定位**：通用模型名称智能缩写体系（算法内核、理论模型、工程实现、排版渲染与横向对比）
 > **核心特性**：**空间自适应**（四阶离散预算收缩）、**绝对判别度**（核心版本与档位硬锚定）、**极致通用性**（零字典依赖的音节骨架压缩、泛化未知模型）、**开箱即用**（完整纯 TypeScript 零外部依赖代码）。
 
 ---
@@ -120,7 +120,7 @@
 
 ### 2.3 最小唯一判别集消歧算法（MUDT - Minimum Unique Discriminative Tokens）
 
-当模型单独出现时，`muse-spark-1.3-contributor` 可以简化为 `muse-1.3`；  
+当模型单独出现时，`muse-spark-1.3-contributor` 可以简化为 `muse-1.3`；
 但如果列表中同时存在：
 1. `muse-spark-1.2-contributor`
 2. `muse-spark-1.3-contributor`
@@ -436,7 +436,7 @@ export function disambiguateCandidateTokens(
 
     // 计算 Jaccard 相似度或公共前缀
     const intersection = new Set([...targetWords].filter(x => otherWords.has(x)));
-    
+
     // 如果两模型高度重合（例如 60% 以上词相同，处于同族状态）
     if (intersection.size >= 2 && intersection.size >= targetWords.size - 2) {
       // 找出 target 独有而 other 没有的词 -> 这些就是生死攸关的消歧键！

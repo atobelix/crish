@@ -1,10 +1,10 @@
 # Task-D 视觉重构与样式瘦身实施方案
 
-> **文档标识**：`docs/model-capability/plans/04-Task-D-视觉重构与样式瘦身实施方案.md`  
-> **所属战役**：AI 服务商与模型管理全面重构（Wave 2 视觉重构波次）  
-> **责任角色**：Task-D 视觉重构与样式瘦身工程师  
-> **唯一定向文件域**：`apps/crish-desktop/src/components/settings-models/ModelsSettingsTab.module.css`  
-> **核心目标**：彻底清退 1165 行中滥用的 `var(--bg-secondary)` 灰阶与大量历史废弃死代码，样式表瘦身 75% 至 ~295 行；双栏外框重构为标准一级设置卡片；左侧导航对齐系统一级侧边栏；解构级联菜单重复包含块彻底根除双滚动条；校准深色模式微下沉底色并消杀幽灵 Token。  
+> **文档标识**：`docs/model-capability/plans/04-Task-D-视觉重构与样式瘦身实施方案.md`
+> **所属战役**：AI 服务商与模型管理全面重构（Wave 2 视觉重构波次）
+> **责任角色**：Task-D 视觉重构与样式瘦身工程师
+> **唯一定向文件域**：`apps/crish-desktop/src/components/settings-models/ModelsSettingsTab.module.css`
+> **核心目标**：彻底清退 1165 行中滥用的 `var(--bg-secondary)` 灰阶与大量历史废弃死代码，样式表瘦身 75% 至 ~295 行；双栏外框重构为标准一级设置卡片；左侧导航对齐系统一级侧边栏；解构级联菜单重复包含块彻底根除双滚动条；校准深色模式微下沉底色并消杀幽灵 Token。
 > **实施纪律**：纯逻辑规划、反退避（`.agents/LOGIC_PLAN_NO_RETREAT.md`）、严禁打补丁（AGENTS.md §7）、严守输入框焦点态 10% 混入红线（AGENTS.md §13）、禁止执行 git 提交。
 
 ---

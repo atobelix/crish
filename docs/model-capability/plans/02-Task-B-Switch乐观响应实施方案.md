@@ -1,8 +1,8 @@
 # Task-B Switch 乐观响应实施方案（落地工程详案）
 
-> **文档标识**：`docs/model-capability/plans/02-Task-B-Switch乐观响应实施方案.md`  
-> **制定时间**：2026-09-03  
-> **责任角色**：Task-B 原子开关与乐观交互工程师  
+> **文档标识**：`docs/model-capability/plans/02-Task-B-Switch乐观响应实施方案.md`
+> **制定时间**：2026-09-03
+> **责任角色**：Task-B 原子开关与乐观交互工程师
 > **物理文件域**：
 > - 核心实现：[`apps/crish-desktop/src/components/ui/Switch/Switch.tsx`](file:///c:/Software/conex/apps/crish-desktop/src/components/ui/Switch/Switch.tsx)
 > - 单元测试：[`apps/crish-desktop/src/components/ui/Switch/Switch.test.tsx`](file:///c:/Software/conex/apps/crish-desktop/src/components/ui/Switch/Switch.test.tsx)
@@ -18,7 +18,7 @@
 ## 一、 问题全景与根因深度穿透
 
 ### 1.1 现场表象与用户反馈
-在 AI 服务商与模型管理中心，用户点击模型行内的开关时反馈：  
+在 AI 服务商与模型管理中心，用户点击模型行内的开关时反馈：
 > **“模型的开启和关闭我看好像好像不能用，点了没反应，滑块不走动，像卡死了一样。”**
 
 ### 1.2 架构断层根因分析
@@ -41,11 +41,11 @@ const handleToggle = useCallback(() => {
 }, [checked, isControlled, isInteractive, onCheckedChange]);
 ```
 
-1. **受控模式纯粹旁路，无本地即时状态**：  
+1. **受控模式纯粹旁路，无本地即时状态**：
    当父组件传入 `checked={...}` 时，`isControlled` 为 `true`。点击触发 `handleToggle` 时，代码显式 `if (!isControlled) { setInternalChecked(...) }` 跳过了本地状态赋值；
-2. **DOM 属性与 CSS 动效完全挂起**：  
+2. **DOM 属性与 CSS 动效完全挂起**：
    组件的 `checked` 计算公式 `isControlled ? Boolean(externalChecked) : internalChecked` 导致 `aria-checked` 和 `data-state` 依然死锁在旧值上。在父组件完成异步 I/O、状态提升与重新渲染（往往耗时 50ms ~ 200ms）之前，`data-state` 不变；
-3. **果冻拉伸动画哑火**：  
+3. **果冻拉伸动画哑火**：
    `Switch.module.css` 中的流体果冻位移动画是由 `.hasInteracted[data-state='checked']` / `.hasInteracted[data-state='unchecked']` 驱动的。因为 `data-state` 在点击瞬间（0ms）没有翻转，浏览器根本无法匹配到新的动画规则，导致滑块物理静止，给用户造成“开关坏了/卡死”的强烈挫败感。
 
 ### 1.3 重构工程目标
@@ -99,7 +99,7 @@ sequenceDiagram
     User->>Switch: 1. 点击开关
     Note over Switch: 【0ms 乐观瞬发】<br/>optimisticChecked = true<br/>data-state = "checked"<br/>激活动画 thumb-stretch-on
     Switch->>Parent: 2. 触发 onCheckedChange(true)
-    
+
     rect rgb(240, 248, 255)
     Note over Parent,Storage: 正常路径 (Normal Path)
     Parent->>Storage: 异步写入持久化 (setModelEnabled)
@@ -137,24 +137,24 @@ graph TD
     Trigger["用户触发 Switch 切换"] --> CheckInteractive{"isInteractive?<br>(!disabled && !loading)"}
     CheckInteractive -- 否 --> Abort["忽略交互，维持原状"]
     CheckInteractive -- 是 --> Mode{"isControlled?"}
-    
+
     Mode -- 非受控 --> DirectUpdate["setInternalChecked(next)<br/>onCheckedChange(next)"]
     Mode -- 受控 --> OptCheck{"optimistic 启用?"}
-    
+
     OptCheck -- 否 --> StrictControlled["onCheckedChange(next)<br/>(严格受控旁路)"]
     OptCheck -- 是 --> CalcNext["计算 nextChecked = !effectiveChecked"]
-    
+
     CalcNext --> EvenCheck{"nextChecked === externalChecked?<br>(偶数次狂点回原点)"}
     EvenCheck -- 是 --> QuickNull["clearRollbackTimer()<br/>setOptimisticChecked(null)<br/>(快速收敛)"]
     EvenCheck -- 否 --> SetOpt["setOptimisticChecked(nextChecked)<br/>startRollbackTimer(5000ms)"]
-    
+
     QuickNull --> InvokeCb["调用 onCheckedChange(nextChecked)"]
     SetOpt --> InvokeCb
-    
+
     InvokeCb --> CatchSync{"同步抛错?"}
     CatchSync -- 是 --> RollbackSync["clearRollbackTimer()<br/>setOptimisticChecked(null)<br/>(同步异常安全回滚)"]
     CatchSync -- 否 --> CheckPromise{"返回值是 Promise?"}
-    
+
     CheckPromise -- 否 --> Done["完成调用，等待外部重绘"]
     CheckPromise -- 是 --> CatchAsync{"Promise Reject?"}
     CatchAsync -- 是 --> RollbackAsync["clearRollbackTimer()<br/>setOptimisticChecked(null)<br/>(异步异常安全回滚)"]
@@ -163,13 +163,13 @@ graph TD
 
 ### 3.1 四层反脆弱加固细节
 
-1. **第 1 层：快速收敛旁路（Even-Click Quick Convergence）**：  
+1. **第 1 层：快速收敛旁路（Even-Click Quick Convergence）**：
    若用户在 100ms 内快速点击两次，第一次令 `opt=true`，第二次计算得到 `nextChecked=false`。由于 `nextChecked === Boolean(externalChecked)`，系统识别出用户意图已回到起点，直接调用 `setOptimisticChecked(null)` 并清除定时器，杜绝无效定时器悬空；
-2. **第 2 层：同步异常沙盒（Sync Try-Catch Sandbox）**：  
+2. **第 2 层：同步异常沙盒（Sync Try-Catch Sandbox）**：
    `onCheckedChange` 执行被 `try...catch` 包裹。如果外部业务处理中发生同步语法错误、解构 null 异常或非法输入校验，Switch 捕获后立即将 `optimisticChecked` 归位为 `null`；
-3. **第 3 层：异步 Promise 守护（Async Promise Sentinel）**：  
+3. **第 3 层：异步 Promise 守护（Async Promise Sentinel）**：
    通过探测 `typeof maybePromise?.then === 'function'`，为异步任务接入 `.catch()` 链条。当后端 Rust IPC 通信失败、网络断开或数据库写冲突时，异步微任务立即回滚；
-4. **第 4 层：TTL 硬件级防死锁定时器（Anti-Deadlock TTL Guard Timer）**：  
+4. **第 4 层：TTL 硬件级防死锁定时器（Anti-Deadlock TTL Guard Timer）**：
    设立 `optimisticTimeout`（默认 5000ms）。若父层逻辑因死循环、未处理的异步挂起或缺少 `refresh()` 触发源而导致外部 `checked` 永远不刷新，5000ms 后定时器强制收回控制权并释放乐观锁。
 
 ---
@@ -206,8 +206,8 @@ graph TD
 
 ## 五、 精确落盘改动代码（Switch.tsx Drop-in Replacement）
 
-> **目标文件**：[`apps/crish-desktop/src/components/ui/Switch/Switch.tsx`](file:///c:/Software/conex/apps/crish-desktop/src/components/ui/Switch/Switch.tsx)  
-> **行数控制**：~235 行（远低于前端组件 500 行硬门禁）。  
+> **目标文件**：[`apps/crish-desktop/src/components/ui/Switch/Switch.tsx`](file:///c:/Software/conex/apps/crish-desktop/src/components/ui/Switch/Switch.tsx)
+> **行数控制**：~235 行（远低于前端组件 500 行硬门禁）。
 > **执行 Agent 须知**：以下为完整、可直接替换的源码，严格保持现有 API 兼容，无破坏性改动。
 
 ```tsx

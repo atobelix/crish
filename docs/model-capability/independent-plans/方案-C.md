@@ -1,7 +1,7 @@
 # 方案-C：通用的模型名称智能缩写与空间自适应算法设计方案
 
-> **文件标识**：`docs/model-capability/independent-plans/方案-C.md`  
-> **方案代号**：**SAMNA**（Semantic-Aware Model Name Abbreviator · 语义感知模型名称自适应缩写算法）  
+> **文件标识**：`docs/model-capability/independent-plans/方案-C.md`
+> **方案代号**：**SAMNA**（Semantic-Aware Model Name Abbreviator · 语义感知模型名称自适应缩写算法）
 > **核心定位**：专为 AI 桌面客户端（侧边栏、状态胶囊、下拉选择框、紧凑顶栏等受限容器）打造的**无硬编码依赖、信息熵优先、支持上下文消歧与渐进式空间自适应**的通用模型标识处理引擎。
 
 ---
@@ -147,7 +147,7 @@ function inferRole(token: string, position: number, totalTokens: number): Semant
 /**
  * SAMNA (Semantic-Aware Model Name Abbreviator)
  * 专为 AI 客户端设计的通用模型标识智能缩写与空间自适应引擎
- * 
+ *
  * 特性：
  * 1. 零外部依赖，纯 TypeScript 强类型实现；
  * 2. 启发式语义分词，自动识别代际、规格、系列与噪音；
@@ -235,7 +235,7 @@ export class ModelNameAbbreviator {
 
     // 1. 提取协议/组织前缀 (如 "meta-llama/...", "azure:...", "D:\models\...")
     let namespace: string | undefined;
-    
+
     // Windows/Unix 路径规范化
     cleaned = cleaned.replace(/\\/g, '/');
     const pathSlashIndex = cleaned.lastIndexOf('/');
@@ -486,7 +486,7 @@ export class ModelNameAbbreviator {
     // 提取所有候选差异 token (快照日期、完整修饰词、或者原始唯一 token)
     for (const item of group) {
       let discriminator = '';
-      
+
       // 优先从快照日期提取后4位
       const dateNoise = item.parsed.noise.find(n => /^\d{4,8}$/.test(n));
       if (dateNoise) {
@@ -704,7 +704,7 @@ interface ModelCapsuleProps {
 
 export const ModelCapsule: React.FC<ModelCapsuleProps> = ({ modelId, className, siblings }) => {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [displayText, setDisplayText] = useState<string>(() => 
+  const [displayText, setDisplayText] = useState<string>(() =>
     ModelNameAbbreviator.abbreviate(modelId, 'L1')
   );
 
@@ -714,7 +714,7 @@ export const ModelCapsule: React.FC<ModelCapsuleProps> = ({ modelId, className, 
     const observer = new ResizeObserver((entries) => {
       for (const entry of entries) {
         const width = entry.contentRect.width;
-        
+
         // 基于容器物理宽度自动降解阶梯
         let level: AbbreviationLevel = 'L1';
         if (width < 75) {

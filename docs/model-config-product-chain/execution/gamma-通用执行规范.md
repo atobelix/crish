@@ -1,6 +1,6 @@
 # γ 轮通用执行规范
 
-> 实现子 Agent = `00-总方案.md` + `plans/03-全界面读路径单轨.md` + `execution/β-轮次报告.md` + 本文件。  
+> 实现子 Agent = `00-总方案.md` + `plans/03-全界面读路径单轨.md` + `execution/β-轮次报告.md` + 本文件。
 > 轮次：γ。对应维：S3。禁止 git commit / restore / reset。禁止派生子 Agent。
 
 ## 本轮鼓励

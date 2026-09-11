@@ -1,12 +1,12 @@
 ﻿# Task-A 状态机底座与内存缓存实施方案
 
-> **文档标识**：`docs/model-capability/plans/01-Task-A-状态机底座与内存缓存实施方案.md`  
-> **制定时间**：2026-09-03  
-> **责任角色**：Task-A 状态机与性能底座工程师  
-> **独立物理文件域**：  
-> • `apps/crish-desktop/src/api/modelCatalogMeta.ts`（核心改造）  
-> • `apps/crish-desktop/src/api/modelCatalogMeta.test.ts`（全新单测）  
-> • `apps/crish-desktop/src/api/uiEvents.ts`（事件契约前置增补，5 行）  
+> **文档标识**：`docs/model-capability/plans/01-Task-A-状态机底座与内存缓存实施方案.md`
+> **制定时间**：2026-09-03
+> **责任角色**：Task-A 状态机与性能底座工程师
+> **独立物理文件域**：
+> • `apps/crish-desktop/src/api/modelCatalogMeta.ts`（核心改造）
+> • `apps/crish-desktop/src/api/modelCatalogMeta.test.ts`（全新单测）
+> • `apps/crish-desktop/src/api/uiEvents.ts`（事件契约前置增补，5 行）
 > **执行标准**：开箱即用，代码完整精确，执行 Agent 可直接据此编码与落盘，绝无盲目猜测。
 
 ---

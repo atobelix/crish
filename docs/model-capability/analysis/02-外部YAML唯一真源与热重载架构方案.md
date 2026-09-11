@@ -1,9 +1,9 @@
 # 外部 YAML 唯一真源与热重载架构方案
 
-> **战役工作区**：`docs/model-capability/`  
-> **文档归属**：`docs/model-capability/analysis/02-外部YAML唯一真源与热重载架构方案.md`  
-> **版本**：v1.0（生产级架构方案规范）  
-> **定位**：Conex / Crish 外部模型配置体系之绝对唯一真源（SSOT）与工业级热重载引擎终极方案  
+> **战役工作区**：`docs/model-capability/`
+> **文档归属**：`docs/model-capability/analysis/02-外部YAML唯一真源与热重载架构方案.md`
+> **版本**：v1.0（生产级架构方案规范）
+> **定位**：Conex / Crish 外部模型配置体系之绝对唯一真源（SSOT）与工业级热重载引擎终极方案
 > **核心裁决**：
 > 1. **外部 YAML 唯一真源（SSOT）**：`~/.conex/models.yaml`（全局）与 `<workspace>/.conex/models.yaml`（工作区）是全系统模型能力、参数、思考形态与计价的**绝对唯一真相源**，运行时彻底取消对未收录模型的拦截与门禁；
 > 2. **参考库定位彻底解耦（Reference Library Decoupling）**：既有模型全景调研表格（涵盖 1,600+ 模型的多源调研资产）**仅作为“智能录入参考库与选项字典”**，用于前端输入补全、模板预填与参数推荐，**绝对不作为运行时校验依据**，零强行依赖；
@@ -193,7 +193,7 @@ sequenceDiagram
     OS-->>Watcher: 目录变更事件 Notify(Create / Rename / Modify)
     Watcher->>Watcher: 过滤非目标文件 (.tmp / .bak / swp)，防抖 200ms
     Watcher->>Reader: 触发安全读取请求
-    
+
     rect rgb(240, 248, 255)
         Note over Reader,OS: 指数退避自愈阶段 (防 Windows 独占锁与截断读)
         loop 最大 5 次尝试 (50ms, 100ms, 200ms, 400ms)
@@ -208,7 +208,7 @@ sequenceDiagram
     end
 
     Reader->>Validator: 提交完整 YAML 内容进入两阶段验证
-    
+
     rect rgb(255, 250, 240)
         Note over Validator,Core: 锁外解析与容灾降级判定
         Validator->>Validator: serde_yaml 解析 AST + Schema 契约校验 + 语义不变量
@@ -239,7 +239,7 @@ sequenceDiagram
 # yaml-language-server: $schema=https://conex.dev/schemas/models-v3.yaml
 # ==============================================================================
 # Conex / Crish 模型能力外部唯一真源配置文件 (Single Source of Truth)
-# 支持位置: 
+# 支持位置:
 #   1. 用户全局: ~/.conex/models.yaml
 #   2. 工作区专用: <workspace_root>/.conex/models.yaml (优先级高于全局)
 # ==============================================================================
@@ -596,7 +596,7 @@ impl ModelsParentDirWatcher {
         // 监视所有目标配置文件的父目录
         for target_file in watch_targets {
             let parent_dir = target_file.parent().unwrap_or_else(|| Path::new("."));
-            
+
             // 若父目录不存在，安全级联创建
             if !parent_dir.exists() {
                 let _ = std::fs::create_dir_all(parent_dir);
@@ -626,12 +626,12 @@ impl ModelsParentDirWatcher {
                 let lower = file_name.to_lowercase();
 
                 // 1. 刚性排除 Conex 内部原子写入事务的临时与备份文件
-                if lower.starts_with(".conex-tmp-") 
+                if lower.starts_with(".conex-tmp-")
                     || lower.starts_with(".conex-bak-")
-                    || lower.ends_with(".tmp") 
+                    || lower.ends_with(".tmp")
                     || lower.ends_with(".bak")
                     || lower.ends_with(".swp")
-                    || lower.starts_with("~") 
+                    || lower.starts_with("~")
                 {
                     continue;
                 }
@@ -765,8 +765,8 @@ fn is_windows_sharing_violation(err: &std::io::Error) -> bool {
 fn is_potential_truncated_yaml(content: &str) -> bool {
     let trimmed = content.trim_end();
     // 典型截断特征：以单冒号结尾、未闭合的单双引号、悬空的转义符
-    trimmed.ends_with(':') 
-        || trimmed.ends_with('\\') 
+    trimmed.ends_with(':')
+        || trimmed.ends_with('\\')
         || (trimmed.ends_with('"') && trimmed.matches('"').count() % 2 != 0)
         || (trimmed.ends_with('\'') && trimmed.matches('\'').count() % 2 != 0)
 }
@@ -830,7 +830,7 @@ impl HotReloadManager {
         // ─────────────────────────────────────────────────────────────
         // 阶段 1: 锁外解析与强语义校验 (Isolated Parsing & Validation)
         // ─────────────────────────────────────────────────────────────
-        
+
         // 1.1 弹性读取文本
         let yaml_text = match super::resilient_reader::read_yaml_resilient(changed_path, &Default::default()) {
             Ok(text) => text,
@@ -853,7 +853,7 @@ impl HotReloadManager {
                 let (line, col) = yaml_err.location()
                     .map(|loc| (loc.line(), loc.column()))
                     .unwrap_or((1, 1));
-                
+
                 let snippet = extract_snippet(&yaml_text, line);
                 let err = ConfigErrorPayload {
                     file_path: changed_path.to_string_lossy().to_string(),
@@ -886,7 +886,7 @@ impl HotReloadManager {
         // ─────────────────────────────────────────────────────────────
         // 阶段 2: 原子提交与状态生效 (Atomic Commit & LKG Sync)
         // ─────────────────────────────────────────────────────────────
-        
+
         let new_version = new_catalog.version();
 
         // 2.1 纳秒级指针原子切换 (ArcSwap 保证读者零锁阻塞)
@@ -949,7 +949,7 @@ fn extract_snippet(text: &str, target_line: usize) -> String {
     }
     let start = target_line.saturating_sub(2).max(1) - 1;
     let end = (target_line + 2).min(lines.len());
-    
+
     let mut out = String::new();
     for i in start..end {
         let prefix = if i + 1 == target_line { ">> " } else { "   " };
@@ -1039,9 +1039,9 @@ fn extract_snippet(text: &str, target_line: usize) -> String {
 
 当前端收到 Tauri 广播的 `catalog:config_error` 事件时：
 1. **轻量错误 Banner 挂载**：在主窗口顶部或设置页面弹出一道琥珀色（Amber）可收起的诊断通知条：
-   > ⚠️ **模型配置文件存在语法错误，已自动维持上一次完好配置（LKG）运行中**  
-   > 路径：`~/.conex/models.yaml`（第 42 行，第 5 列）  
-   > 原因：`mapping values are not allowed in this context`  
+   > ⚠️ **模型配置文件存在语法错误，已自动维持上一次完好配置（LKG）运行中**
+   > 路径：`~/.conex/models.yaml`（第 42 行，第 5 列）
+   > 原因：`mapping values are not allowed in this context`
    > `[点击在 VS Code 中打开修复]   [忽略此警告]`
 2. **自愈消除**：一旦用户在编辑器中修正错误并保存，热重载引擎验证通过后，将广播 `catalog:reloaded`，前端监听器接收到后**自动抹除错误 Banner**，体验平滑流畅。
 

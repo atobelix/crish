@@ -1,6 +1,6 @@
 # α 轮通用执行规范
 
-> 实现子 Agent = `00-总方案.md` + `plans/01-真源契约与IPC同构.md` + 本文件。  
+> 实现子 Agent = `00-总方案.md` + `plans/01-真源契约与IPC同构.md` + 本文件。
 > 轮次：α。对应维：S1。禁止 git commit / restore / reset / checkout。禁止派生子 Agent。
 
 ## 本轮鼓励
