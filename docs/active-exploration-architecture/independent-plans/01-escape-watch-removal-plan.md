@@ -1,7 +1,7 @@
 # 逃逸监视死层物理剔除与装配解绑方案
 
-> **文档位置**：`docs/active-exploration-architecture/independent-plans/01-escape-watch-removal-plan.md`  
-> **所属战役**：主动探索架构（Active Exploration Architecture）独立方案  
+> **文档位置**：`docs/active-exploration-architecture/independent-plans/01-escape-watch-removal-plan.md`
+> **所属战役**：主动探索架构（Active Exploration Architecture）独立方案
 > **方案职责**：彻底物理删除 `crates/session-loop/src/escape_watch.rs` 及其耦合死层 `crates/session-loop/src/undeclared_detector.rs`，从 `session-loop` 内核循环选项与 Tauri 桌面壳层 `run` 生命周期装配中完整解绑，消除后台被动文件监视对会话总线的伪自发唤醒与污染，确立由 Agent 主动调用文件工具的主权架构。
 
 ---

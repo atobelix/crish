@@ -1,8 +1,8 @@
 # 测试资产审查与陪葬测试清洗详细方案
 
-> **文件路径**：`docs/active-exploration-architecture/independent-plans/05-test-suite-cleanup-and-regression-plan.md`  
-> **所属战役**：主动探查架构演进（Active Exploration Architecture）  
-> **职责领域**：测试资产审查、死层陪葬测试识别与清单建立、正向验证套件设计、有效测试资产保护  
+> **文件路径**：`docs/active-exploration-architecture/independent-plans/05-test-suite-cleanup-and-regression-plan.md`
+> **所属战役**：主动探查架构演进（Active Exploration Architecture）
+> **职责领域**：测试资产审查、死层陪葬测试识别与清单建立、正向验证套件设计、有效测试资产保护
 > **状态**：详案定稿
 
 ---

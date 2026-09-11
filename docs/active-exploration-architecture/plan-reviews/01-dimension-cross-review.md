@@ -1,9 +1,9 @@
 # 维度交叉审查与冲突识别评审报告（评审 1）
 
-> **评审文档路径**：`docs/active-exploration-architecture/plan-reviews/01-dimension-cross-review.md`  
-> **所属战役**：主动探查架构（Active Exploration Architecture）方案评审  
-> **评审执行角色**：评审 Agent 1（维度交叉审查与冲突识别专员）  
-> **审查基准文件**：`docs/agent-roles/review/review.md`、`ANTI_OVERENGINEERING_GUARDRAILS.md`、`.agents/LOGIC_PLAN_NO_RETREAT.md`、`AGENTS.md`  
+> **评审文档路径**：`docs/active-exploration-architecture/plan-reviews/01-dimension-cross-review.md`
+> **所属战役**：主动探查架构（Active Exploration Architecture）方案评审
+> **评审执行角色**：评审 Agent 1（维度交叉审查与冲突识别专员）
+> **审查基准文件**：`docs/agent-roles/review/review.md`、`ANTI_OVERENGINEERING_GUARDRAILS.md`、`.agents/LOGIC_PLAN_NO_RETREAT.md`、`AGENTS.md`
 > **被审对象清单**：
 >
 > 1. `docs/active-exploration-architecture/independent-plans/01-escape-watch-removal-plan.md`（逃逸监视死层物理剔除方案）

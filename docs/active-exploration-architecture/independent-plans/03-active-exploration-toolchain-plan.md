@@ -1,8 +1,8 @@
 # 独立方案 03 · Agent 主动探查工具链健壮性与 PowerShell 语法防护方案
 
-> **战役工作区**：`docs/active-exploration-architecture/`  
-> **文档路径**：`docs/active-exploration-architecture/independent-plans/03-active-exploration-toolchain-plan.md`  
-> **文档性质**：独立总方案（分维深入详案），供主控合并定稿。  
+> **战役工作区**：`docs/active-exploration-architecture/`
+> **文档路径**：`docs/active-exploration-architecture/independent-plans/03-active-exploration-toolchain-plan.md`
+> **文档性质**：独立总方案（分维深入详案），供主控合并定稿。
 > **设计纪律**：纯逻辑编排（无工期/人员/优先级）、禁止波次/批次编号命名、禁止魔术数字黑盒重写、禁止回退被动监控、UTF-8 无 BOM 中文编写。
 
 ---
@@ -253,7 +253,7 @@ try {
 
 ### 3.3 非侵入式轻量前置语法诊断与自愈提示（Pre-flight Diagnostics）
 
-> **反过度设计红线**：禁止引入任何黑盒正则表达式对用户/模型命令进行“自动重写”（Automatic Rewriting）。自动重写容易在复杂嵌套参数、引号包含、正则表达式匹配时破坏合法命令。  
+> **反过度设计红线**：禁止引入任何黑盒正则表达式对用户/模型命令进行“自动重写”（Automatic Rewriting）。自动重写容易在复杂嵌套参数、引号包含、正则表达式匹配时破坏合法命令。
 > **正确做法**：**只做只读前置诊断（Read-only Diagnostics），并在命令报错时注入精准的语法对照指引（Self-Healing Syntax Hints）**。
 
 在 [`crates/agent-tools/src/tools/shell.rs`](file:///c:/Software/conex/crates/agent-tools/src/tools/shell.rs) 或 `shell_invoke.rs` 中增加轻量级静态语法诊断器 `diagnose_windows_shell_syntax`：

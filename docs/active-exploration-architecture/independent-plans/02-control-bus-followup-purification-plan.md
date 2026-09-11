@@ -1,7 +1,7 @@
 # ControlBus 队列治理与 Follow-Up 语义纯化方案
 
-> **文档位置**：`docs/active-exploration-architecture/independent-plans/02-control-bus-followup-purification-plan.md`  
-> **所属战役**：主动探索架构（Active Exploration Architecture）独立方案  
+> **文档位置**：`docs/active-exploration-architecture/independent-plans/02-control-bus-followup-purification-plan.md`
+> **所属战役**：主动探索架构（Active Exploration Architecture）独立方案
 > **方案职责**：彻底移除 `ControlBusInjector` 与系统旁路注入通道，治理 `ControlBus` 队列与 `follow_up` 触发语义，建立严密的白名单契约，杜绝任何未经模型显式请求或用户显式输入的自发唤醒。
 
 ---

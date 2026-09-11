@@ -1,7 +1,7 @@
 # 会话消息存储与事件分轮次隔离治理方案
 
-> **文件路径**：`docs/active-exploration-architecture/independent-plans/04-session-messages-turn-isolation-plan.md`  
-> **责任领域**：会话消息存储治理 / 事件分轮次隔离 / 系统诊断与正文解耦 / 流式契约对齐  
+> **文件路径**：`docs/active-exploration-architecture/independent-plans/04-session-messages-turn-isolation-plan.md`
+> **责任领域**：会话消息存储治理 / 事件分轮次隔离 / 系统诊断与正文解耦 / 流式契约对齐
 > **文档属性**：独立设计详案（纯逻辑规划，无降级退避，无源码修改）
 
 ---

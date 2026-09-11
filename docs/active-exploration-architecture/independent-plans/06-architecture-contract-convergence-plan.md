@@ -1,6 +1,6 @@
 # 全局架构与跨语言契约收敛方案
 
-> **文件定位**：`docs/active-exploration-architecture/independent-plans/06-architecture-contract-convergence-plan.md`  
+> **文件定位**：`docs/active-exploration-architecture/independent-plans/06-architecture-contract-convergence-plan.md`
 > **方案职责**：对 Rust 内核（`crates/session-loop`, `crates/orchestrator`, `crates/conex-types`, `crates/conex-fs`, `crates/agent-tools`）与 Tauri 壳层（`apps/agent-workbench`）及前端契约（`apps/crish-desktop`, `packages/*`）进行跨层审查，彻底清理残留的跨层泄漏字段（如 `SessionLoopOptions.escape_watch`），建立单一清晰的 Run 配置契约与依赖倒置架构。
 
 ---

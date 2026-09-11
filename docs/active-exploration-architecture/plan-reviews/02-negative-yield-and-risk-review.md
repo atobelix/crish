@@ -1,8 +1,8 @@
 # 负产出与死层删除深度审查报告
 
-> **文档位置**：`docs/active-exploration-architecture/plan-reviews/02-negative-yield-and-risk-review.md`  
-> **审查领域**：评审 2 · 负产出与死层删除审查（Negative Yield & Dead Layer Deletion Review）  
-> **审查对象**：`docs/active-exploration-architecture/independent-plans/` 下全部 6 份独立分维详案  
+> **文档位置**：`docs/active-exploration-architecture/plan-reviews/02-negative-yield-and-risk-review.md`
+> **审查领域**：评审 2 · 负产出与死层删除审查（Negative Yield & Dead Layer Deletion Review）
+> **审查对象**：`docs/active-exploration-architecture/independent-plans/` 下全部 6 份独立分维详案
 > **审查纪律**：严禁放行无明确删除面的方案、严禁波次/批次编号、严禁假收敛/假删除、严格核算净删除行数（目标：$\ge 1000$ 行）、UTF-8 无 BOM 中文编写。
 
 ---
