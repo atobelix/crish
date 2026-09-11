@@ -11,7 +11,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import * as Lucide from 'lucide-react';
+
 import styles from './ApprovalAskCard.module.css';
 import { Tooltip } from '../ui';
 import {
@@ -45,6 +45,7 @@ import {
 } from './ApprovalRiskChips';
 import { useApprovalCountdown } from './useApprovalCountdown';
 import { useApprovalKeyboard } from './useApprovalKeyboard';
+import { AppIcon } from '../ui/icons/index';
 
 type Props = {
   msgId: string;
@@ -275,7 +276,7 @@ export const ApprovalAskCard: React.FC<Props> = ({
     >
       <div className={styles.approvalCardTop}>
         <span className={styles.approvalCardBadge}>
-          <Lucide.ShieldQuestion size={14} strokeWidth={1.75} aria-hidden />
+          <AppIcon name="shield-question" size={14} aria-hidden />
           {badge}
         </span>
         <span

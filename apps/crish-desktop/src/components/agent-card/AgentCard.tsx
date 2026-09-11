@@ -6,7 +6,7 @@
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import styles from './AgentCard.module.css';
-import * as Lucide from 'lucide-react';
+
 import {
   browseAgentSidePanel,
   openAgentInSidePanel,
@@ -31,6 +31,7 @@ import {
 import { AgentCardHeader } from './AgentCardHeader';
 import { useAgentCardPanelNav } from './useAgentCardPanelNav';
 import { useAgentCardStatusPoll } from './useAgentCardStatusPoll';
+import { AppIcon } from '../ui/icons/index';
 
 export { openAgentInNewWindow };
 
@@ -225,11 +226,8 @@ export const AgentCard: React.FC<AgentCardProps> = React.memo(
                       gap: 6,
                     }}
                   >
-                    <Lucide.MessageSquare
-                      size={13}
-                      strokeWidth={1.75}
-                      aria-hidden
-                    />
+                    <AppIcon name="message-square" size={13}
+                      aria-hidden />
                     暂无消息
                   </span>
                   <span

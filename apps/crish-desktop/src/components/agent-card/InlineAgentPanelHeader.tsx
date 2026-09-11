@@ -4,11 +4,12 @@
  * 零 hook / 零 store，全部经 props 传入（壳组件收敛编排）。
  */
 import React from 'react';
-import * as Lucide from 'lucide-react';
-import { IconSidebarRight } from '../sidebar/SidebarToggleIcons';
+
+
 import styles from './InlineAgentPanel.module.css';
 import { Button, Tooltip } from '../ui';
 import type { SessionAgent } from '../../store/types';
+import { AppIcon } from '../ui/icons/index';
 
 export interface InlineAgentPanelHeaderData {
   status: SessionAgent['status'];
@@ -93,7 +94,7 @@ export const InlineAgentPanelHeader: React.FC<InlineAgentPanelHeaderProps> = ({
             />
           </span>
         ) : (
-          <Lucide.Bot size={13} className="inline-agent-ico" aria-hidden />
+          <AppIcon name="bot" size={13} className="inline-agent-ico" aria-hidden />
         )}
         <span className={styles.inlineAgentLabel}>{displayLabel}</span>
         <span
@@ -128,11 +129,9 @@ export const InlineAgentPanelHeader: React.FC<InlineAgentPanelHeaderProps> = ({
         <span className={styles.inlineAgentMeta}>
           {msgCount} 条{summary ? ` · ${summary.slice(0, 36)}` : ''}
         </span>
-        <Lucide.ChevronRight
-          size={13}
+        <AppIcon name="chevron-right" size={13}
           className={`tool-row-chevron ${open ? 'rot' : ''}`}
-          aria-hidden
-        />
+          aria-hidden />
       </button>
       {/* 折叠态也可：停止 / 侧栏 only（不依赖展开 Composer） */}
       <div className={styles.inlineAgentHeadActions}>
@@ -151,7 +150,7 @@ export const InlineAgentPanelHeader: React.FC<InlineAgentPanelHeaderProps> = ({
                 e.preventDefault();
                 onStop();
               }}
-              icon={<Lucide.Square size={11} fill="currentColor" aria-hidden />}
+              icon={<AppIcon name="square" size={11} fill="currentColor" aria-hidden />}
             />
           </Tooltip>
         ) : null}
@@ -165,7 +164,7 @@ export const InlineAgentPanelHeader: React.FC<InlineAgentPanelHeaderProps> = ({
             aria-pressed={sideFocused}
             disabled={sideDisabled}
             onClick={onOpenSide}
-            icon={<IconSidebarRight size={13} aria-hidden />}
+            icon={<AppIcon name="sidebar-right" size={13} aria-hidden />}
           />
         </Tooltip>
       </div>

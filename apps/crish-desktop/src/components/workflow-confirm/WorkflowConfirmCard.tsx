@@ -6,7 +6,7 @@
  * registerWorkflowFromGrillMe 走 create-workflow 落盘。
  */
 import React, { useCallback, useMemo, useState } from 'react';
-import { CheckCircle2, AlertCircle, Clock } from 'lucide-react';
+
 import styles from './WorkflowConfirmCard.module.css';
 import { Button, Tooltip } from '../ui';
 import { useToast } from '../../services/toast/ToastContext';
@@ -21,6 +21,7 @@ import {
   getConfirmedBucket,
   getPayloadSignature,
 } from '../../api/workflow-api/workflowConfirmSignatures';
+import { AppIcon } from '../ui/icons/index';
 
 export { clearWorkflowConfirmSignaturesForSession };
 
@@ -106,26 +107,22 @@ export const WorkflowConfirmCard: React.FC<WorkflowConfirmCardProps> =
       >
         <div className={styles.confirmHead}>
           <span className={styles.iconSlot} aria-hidden>
-            <Clock size={14} />
+            <AppIcon name="clock" size={14} />
           </span>
           <span className={styles.kindBadge}>任务确认</span>
           <span className={styles.titleText}>定时任务配置确认</span>
           {result === 'ok' ? (
             <Tooltip content="已成功创建">
-              <CheckCircle2
-                size={14}
+              <AppIcon name="check-circle" size={14}
                 className={styles.okIcon}
-                data-testid="confirm-ok"
-              />
+                data-testid="confirm-ok" />
             </Tooltip>
           ) : null}
           {result === 'error' ? (
             <Tooltip content={errorMsg || '创建失败'}>
-              <AlertCircle
-                size={14}
+              <AppIcon name="alert-circle" size={14}
                 className={styles.failIcon}
-                data-testid="confirm-error"
-              />
+                data-testid="confirm-error" />
             </Tooltip>
           ) : null}
         </div>

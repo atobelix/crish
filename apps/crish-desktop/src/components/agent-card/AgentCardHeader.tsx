@@ -5,7 +5,7 @@
 import React from 'react';
 import styles from './AgentCard.module.css';
 import { Button, Tooltip } from '../ui';
-import * as Lucide from 'lucide-react';
+
 import type { SessionAgent } from '../../store/types';
 import { AgentStatusChip } from './AgentStatusChip';
 import { resolveErrorKindLabel } from '../../api/continuity/continuityNotices';
@@ -14,6 +14,7 @@ import {
   countPendingApprovals,
   formatAgentDuration,
 } from './agentCardUtils';
+import { AppIcon } from '../ui/icons/index';
 
 export interface AgentCardHeaderProps {
   agent: SessionAgent;
@@ -52,12 +53,12 @@ export const AgentCardHeader: React.FC<AgentCardHeaderProps> = ({
               size="sm"
               className={styles.agentCardBtn}
               aria-label="返回子智能体列表"
-              icon={<Lucide.ChevronLeft size={14} aria-hidden />}
+              icon={<AppIcon name="chevron-left" size={14} aria-hidden />}
               onClick={onBackToBrowse}
             />
           </Tooltip>
         ) : null}
-        <Lucide.Bot size={14} strokeWidth={1.75} aria-hidden />
+        <AppIcon name="bot" size={14} aria-hidden />
         <Tooltip
           content={[
             titleName,
@@ -132,7 +133,7 @@ export const AgentCardHeader: React.FC<AgentCardHeaderProps> = ({
               className={styles.agentCardBtn}
               aria-label="停止子智能体"
               icon={
-                <Lucide.Square size={12} fill="currentColor" aria-hidden />
+                <AppIcon name="square" size={12} fill="currentColor" aria-hidden />
               }
               onClick={onStop}
             />
@@ -148,9 +149,9 @@ export const AgentCardHeader: React.FC<AgentCardHeaderProps> = ({
               aria-label={embedded ? '返回' : '关闭侧栏'}
               icon={
                 embedded ? (
-                  <Lucide.ChevronLeft size={14} aria-hidden />
+                  <AppIcon name="chevron-left" size={14} aria-hidden />
                 ) : (
-                  <Lucide.X size={14} aria-hidden />
+                  <AppIcon name="x" size={14} aria-hidden />
                 )
               }
               onClick={onClose}

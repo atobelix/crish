@@ -4,8 +4,9 @@
  * 零 hook / 零 store，仅消费 props。
  */
 import React, { useState } from 'react';
-import { ChevronRight } from 'lucide-react';
+
 import styles from './InlineAgentPanel.module.css';
+import { AppIcon } from '../ui/icons/index';
 
 export const InlineAgentThinkingFold: React.FC<{
   thinkingText: string;
@@ -20,10 +21,8 @@ export const InlineAgentThinkingFold: React.FC<{
       onToggle={(e) => setOpen(e.currentTarget.open)}
     >
       <summary className={styles.thinkingFoldSum}>
-        <ChevronRight
-          size={14}
-          className={`${styles.thinkingChevron} ${isExpanded ? styles.isOpen : ''}`}
-        />
+        <AppIcon name="chevron-right" size={14}
+          className={`${styles.thinkingChevron} ${isExpanded ? styles.isOpen : ''}`} />
         <span className={styles.thinkingFoldLabel}>思考</span>
       </summary>
       <div className={styles.thinkingFoldBody}>{thinkingText.trim()}</div>

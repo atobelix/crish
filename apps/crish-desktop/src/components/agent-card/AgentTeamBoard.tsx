@@ -5,7 +5,7 @@
 import React, { useCallback, useId, useMemo, useRef } from 'react';
 import styles from './AgentCard.module.css';
 import { Tooltip } from '../ui';
-import * as Lucide from 'lucide-react';
+
 import type { SessionAgent } from '../../store/types';
 import { openAgentInSidePanel } from '../../api/openAgentPanel';
 import { AgentStatusDot } from './AgentStatusDot';
@@ -24,6 +24,7 @@ import {
 
 // 保留测试消费入口（AgentTeamBoard.title.test.ts 从 ./AgentTeamBoard 导入 agentTitle）
 export { agentTitle } from './agentTeamBoardUtils';
+import { AppIcon } from '../ui/icons/index';
 
 export interface AgentTeamBoardProps {
   agents: SessionAgent[];
@@ -164,7 +165,7 @@ export const AgentTeamBoard: React.FC<AgentTeamBoardProps> = React.memo(
           data-density={density}
         >
           <div className={styles.agentTeamBoardHead}>
-            <Lucide.List size={12} strokeWidth={1.75} aria-hidden />
+            <AppIcon name="list" size={12} aria-hidden />
             <span className={styles.agentTeamBoardLabel}>{headLabel}</span>
             <span className={styles.agentTeamBoardCount} aria-label="协作数量">
               0
@@ -215,7 +216,7 @@ export const AgentTeamBoard: React.FC<AgentTeamBoardProps> = React.memo(
         ref={listRef}
       >
         <div className={styles.agentTeamBoardHead}>
-          <Lucide.List size={12} strokeWidth={1.75} aria-hidden />
+          <AppIcon name="list" size={12} aria-hidden />
           <span className={styles.agentTeamBoardLabel}>
             {compact ? '子智能体' : '协作智能体'} ({boardStats.total})
           </span>

@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import styles from './AgentCard.module.css';
 import { Button, Tooltip } from '../ui';
-import * as Lucide from 'lucide-react';
+
 import { openAgentInSidePanel } from '../../api/openAgentPanel';
 import {
   selectActiveSessionId,
@@ -16,6 +16,7 @@ import {
   formatAgentDuration,
   sortAgentsForBrowse,
 } from './agentCardUtils';
+import { AppIcon } from '../ui/icons/index';
 
 /**
  * Agent 侧栏空态 / 浏览列表：仅浏览本会话已有、由主 AI 拉起的子 agent。
@@ -58,7 +59,7 @@ export function AgentBrowsePad({
         className={`${styles.agentCardHeader} ${styles.agentCardHeaderSlim}`}
       >
         <div className={styles.agentCardTitleRow}>
-          <Lucide.Bot size={14} strokeWidth={1.75} aria-hidden />
+          <AppIcon name="bot" size={14} aria-hidden />
           <span className={styles.agentCardTitle}>聊天</span>
           {agents.length > 0 ? (
             <Tooltip content={`共 ${agents.length} 个`}>
@@ -104,9 +105,9 @@ export function AgentBrowsePad({
               onClick={onClose}
               icon={
                 embedded ? (
-                  <Lucide.ChevronLeft size={14} aria-hidden />
+                  <AppIcon name="chevron-left" size={14} aria-hidden />
                 ) : (
-                  <Lucide.X size={14} aria-hidden />
+                  <AppIcon name="x" size={14} aria-hidden />
                 )
               }
             />
@@ -122,11 +123,9 @@ export function AgentBrowsePad({
             aria-live="polite"
           >
             <div className={styles.skeletonTitleRow}>
-              <Lucide.Bot
-                size={13}
+              <AppIcon name="bot" size={13}
                 className={styles.skeletonBotIcon}
-                aria-hidden
-              />
+                aria-hidden />
               <span>暂无活跃协作</span>
             </div>
             <div className={styles.skeletonGrid}>
@@ -184,7 +183,7 @@ export function AgentBrowsePad({
                       });
                     }}
                   >
-                    <Lucide.Bot size={13} strokeWidth={1.75} aria-hidden />
+                    <AppIcon name="bot" size={13} aria-hidden />
                     <span className={styles.agentLaunchItemT}>{name}</span>
                     {pending > 0 ? (
                       <Tooltip content={`${pending} 项待批`}>

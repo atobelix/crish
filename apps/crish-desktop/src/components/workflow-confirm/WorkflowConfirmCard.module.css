@@ -45,11 +45,11 @@
 }
 
 .okIcon {
-  color: var(--accent-green, #10b981);
+  color: var(--accent-green);
 }
 
 .failIcon {
-  color: var(--text-danger, #ef4444);
+  color: var(--text-danger);
 }
 
 .confirmBody {

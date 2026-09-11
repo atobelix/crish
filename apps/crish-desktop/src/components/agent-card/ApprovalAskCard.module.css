@@ -76,7 +76,6 @@
 }
 
 .approvalCardReason {
-  opacity: 0.9;
   max-height: 3.2em;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -160,7 +159,6 @@
   word-break: break-all;
   max-height: 4.5em;
   overflow: auto;
-  opacity: 0.9;
 }
 
 .approvalCardNote {
@@ -236,7 +234,7 @@
 .approvalCardBtn.allow {
   background: var(--accent-color);
   border-color: transparent;
-  color: var(--text-on-accent, hsl(0 0% 100%));
+  color: var(--text-on-accent);
 }
 
 .approvalCardBtn.allow:hover:not(:disabled) {
