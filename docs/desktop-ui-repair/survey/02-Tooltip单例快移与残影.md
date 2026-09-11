@@ -1,9 +1,9 @@
 # 02 · Tooltip 单例、快移与残影
 
-> 战役：`docs/desktop-ui-repair/`  
-> 性质：只梳理问题。不改源码、不提交、不写实现、不派子代理。  
-> 对照：调研边界 `docs/desktop-ui-repair/00-调研边界.md`；真机缺陷清单 `docs/chat-composer-plugin/execution/真机界面缺陷清单.md`。  
-> 用户锁（本文件必须按此写，不得劝退）：**同一时间只能有一个 hover 提示层**；**鼠标过快移动时一个也不显示**；**残影 / 孤儿 tooltip 必须列为问题**。  
+> 战役：`docs/desktop-ui-repair/`
+> 性质：只梳理问题。不改源码、不提交、不写实现、不派子代理。
+> 对照：调研边界 `docs/desktop-ui-repair/00-调研边界.md`；真机缺陷清单 `docs/chat-composer-plugin/execution/真机界面缺陷清单.md`。
+> 用户锁（本文件必须按此写，不得劝退）：**同一时间只能有一个 hover 提示层**；**鼠标过快移动时一个也不显示**；**残影 / 孤儿 tooltip 必须列为问题**。
 > 问题同权：下列条目不分 P0/P1，不按「好修 / 难修」砍。
 
 本文件依据：现码 + 缺陷清单 + 浮层战役文档对照。工作区没有 `crish-agent-workbench_9lE3DwHRn9.png` / `rMF9MDKPPN.png` 文件；真机「空画布漂着多个『更多操作』『测试一下』、计划项上冒『少打扰』、滚动后残影」以用户圈注 + 源码机制对照，**未在本机开 9222 复拍**。
@@ -34,10 +34,10 @@
 
 ## 2. 基座：`ui/Tooltip` 做了什么、没做什么
 
-入口：`apps/crish-desktop/src/components/ui/Tooltip/Tooltip.tsx`  
-样式：`Tooltip.module.css`  
-定位：`tooltipPositioning.ts`  
-测试：`Tooltip.test.tsx`  
+入口：`apps/crish-desktop/src/components/ui/Tooltip/Tooltip.tsx`
+样式：`Tooltip.module.css`
+定位：`tooltipPositioning.ts`
+测试：`Tooltip.test.tsx`
 挂载点：`apps/crish-desktop/index.html` 48 `#tooltip-root`（缺则回落 `document.body`，`Tooltip.tsx` 380–382）
 
 ### 2.1 没有单例

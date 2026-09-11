@@ -1,9 +1,9 @@
 # 16 · 权限丸 / 模型徽标四击与 `no-drag`
 
-> 2026-08-19。桌面界面一致性战役 `survey/16`。调研/审计子代理。主控调度。  
-> **只列问题。不改产品源码、不 git、不实现、不派子代理、不写第二份文档、不宣称已修好。**  
-> 问题同权：下列条目不分 P0/P1，不按「好修 / 难修 / 业界都用 X」砍。  
-> 遵守 `docs/agent-roles/general_task/三原则.md`、根 `AGENTS.md`、列问题方式 `docs/agent-roles/prompts/分析审计-列问题.md`。  
+> 2026-08-19。桌面界面一致性战役 `survey/16`。调研/审计子代理。主控调度。
+> **只列问题。不改产品源码、不 git、不实现、不派子代理、不写第二份文档、不宣称已修好。**
+> 问题同权：下列条目不分 P0/P1，不按「好修 / 难修 / 业界都用 X」砍。
+> 遵守 `docs/agent-roles/general_task/三原则.md`、根 `AGENTS.md`、列问题方式 `docs/agent-roles/prompts/分析审计-列问题.md`。
 > 必读对读：`survey/10`、`survey/12`、`00-总方案` I3、`menuOpenGuard.ts`、LayerStack、`PermissionModeMenu`、`ComposerFusedTrigger`、`ModelBadgePickerMenu`、`ChatHeaderControls`、`ui/Menu`。
 
 用户真机（本轮未连 `:9222` 复拍，class 以用户圈注为准）：
@@ -207,7 +207,7 @@ rec.anchor 空且 triggerEl.contains(rec.target) → true
 
 会走到 T2-C 的具体口：
 
-1. **T0 contains 成功**（LayerStack 不当外点）→ `dismissedByPointer` 保持 null → suppress 恒 false。此时若 T0 **没有** flush 成 false，T2 的 `open` 仍是 true，走 B 关上——这是加号常走的路。  
+1. **T0 contains 成功**（LayerStack 不当外点）→ `dismissedByPointer` 保持 null → suppress 恒 false。此时若 T0 **没有** flush 成 false，T2 的 `open` 仍是 true，走 B 关上——这是加号常走的路。
    但若 T0 没关、**Radix 或别的写者**在 click 前把 open 写成 false 并 flush，T2 仍 suppress=false 且 open=false → C 重开。
 2. **T0 contains 失败并 dismiss**，但 click 时 `pillBtnRef.current` / `badgeRef.current` 为 **null**（Tooltip `useMergeRefs` 换 identity、`disabled` 翻转）→ `shouldSuppress(null)` 直接 false。
 3. **T0 记的 `rec.anchor` 是旧节点**（卸挂后 `.isConnected===false`），click 时 `triggerEl` 是新按钮：第一支相等失败；第二支要求 `isConnected`，旧节点跳过；第三支 `rec.anchor` 非空不走；return false。

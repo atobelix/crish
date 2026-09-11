@@ -143,7 +143,7 @@ clientY = 钮.top + 钮.height / 2
 
 ### 3.2 两套 measureMenu，注释在撒谎
 
-`SidebarContextMenus.tsx:57-58` 写「坐标钳位单源：`ui/Menu/position.ts`」。  
+`SidebarContextMenus.tsx:57-58` 写「坐标钳位单源：`ui/Menu/position.ts`」。
 `SessionContextMenu.tsx:23-51` **自己又写了一份** `measureMenu`：
 
 - 只用 `window.innerWidth/Height`，不用 `visualViewport`，也没有 `position.ts` 的 Win32 最大化 8px 补偿
@@ -165,7 +165,7 @@ clientY = 钮.top + 钮.height / 2
 
 ### 3.4 `--z-context-menu` 未定义
 
-`SessionContextMenu.tsx:165`：`zIndex: 'var(--z-context-menu)'`。  
+`SessionContextMenu.tsx:165`：`zIndex: 'var(--z-context-menu)'`。
 `styles/z-index.css` 只有 `--z-chrome/sidebar/dropdown/popover/modal/tooltip`（`:1-27`），**没有** `--z-context-menu`。整仓无 `--z-context-menu:` 赋值。
 
 无效 `z-index` 按 `auto`。菜单能盖住文档流，只因 portal 在 `body` 后挂、且 `position:fixed`。挡不住 `z-index: 9000` 的 Tip（真机时间胶囊、「更多操作」都压在菜单/列表之上）。
