@@ -13,7 +13,7 @@
 /*
  * 外壳「大矩形」：铺满的灰底画板。
  * 叶子卡片「小矩形」浮在它上面，靠这里的内边距留出四周落差。
- * 顶部不留内边距——上方 AppTopBar 已经形成断口，再留会显得头重。
+ * BATCH-02：对称外槽 --shell-canvas-gutter；.canvas 保持 padding:0 以保 Sash 0–100%。
  */
 .section {
   position: relative;
@@ -26,8 +26,7 @@
   flex-direction: column;
   overflow: hidden;
   background: var(--bg-workspace, var(--bg-primary));
-  /* padding: 0 var(--shell-gutter, 8px) var(--shell-gutter, 8px) 0; */
-  padding: 0;    /*暂时去掉四周内边距，优化视觉效果*/
+  padding: var(--shell-canvas-gutter, 8px);
   box-sizing: border-box;
 }
 

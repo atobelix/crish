@@ -74,13 +74,14 @@ describe('AppBootstrap — 结构分析 (R9-T10 + shell hydrate)', () => {
     // T06.10：E13 手动 resize class 双写已删除（WindowResizeBridge 接管）
     // PE-07 T07.4-B：+1（7b 旧明文密钥迁移 migrateLegacyProfiles）→ 18
     // WS→IPC 迁移（T06.8）：AppBootstrap 引擎初始化 effect 3/7 归一至 useEngineBootstrap → 16
-    expect(app.length).toBeGreaterThanOrEqual(15);
-    expect(app.length).toBe(15);
+    // layout-token BATCH-02：+1 data-fullscreen 接线 → 16 / combined 18
+    expect(app.length).toBeGreaterThanOrEqual(16);
+    expect(app.length).toBe(16);
   });
 
   it('combined = engine + app', () => {
     expect(combined).toHaveLength(engine.length + app.length);
-    expect(combined).toHaveLength(17);
+    expect(combined).toHaveLength(18);
   });
 
   it('useLayoutEffect：shell hydrate + project folder rebind', () => {

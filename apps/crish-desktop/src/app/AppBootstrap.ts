@@ -266,6 +266,81 @@ export function useAppBootstrap({
     document.body.setAttribute('data-shell-chrome', chrome);
   }, [uiSize, shellChromeMode]);
 
+  // 8b. Fullscreen attribute（BATCH-02）：html[data-fullscreen] 供 shell safe-area / gutter 消费。
+  // 本版 @tauri-apps/api/window 无 onFullscreenChanged 专函；对齐 WindowControls 的
+  // onResized→isMaximized 范式重读 isFullscreen；另始终挂浏览器 fullscreenchange 降级。
+  // jsdom / 非 Tauri 环境全路径 try/catch，不得抛未捕获异常。
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    let disposed = false;
+    let unlistenTauri: (() => void) | null = null;
+
+    const applyFullscreen = (isFullscreen: boolean): void => {
+      document.documentElement.setAttribute(
+        'data-fullscreen',
+        isFullscreen ? 'true' : 'false'
+      );
+    };
+
+    const onBrowserFullscreenChange = (): void => {
+      applyFullscreen(Boolean(document.fullscreenElement));
+    };
+    document.addEventListener('fullscreenchange', onBrowserFullscreenChange);
+    // 初始播种一次浏览器态（默认非全屏 → false）
+    applyFullscreen(Boolean(document.fullscreenElement));
+
+    void (async () => {
+      try {
+        const mod = await import('@tauri-apps/api/window');
+        if (disposed) return;
+        const win = mod.getCurrentWindow();
+        // 特征探测：未来 API 若补上 onFullscreenChanged 则优先走专函
+        const maybeFullscreenWin = win as typeof win & {
+          onFullscreenChanged?: (
+            handler: (event: { payload: boolean }) => void
+          ) => Promise<() => void>;
+        };
+        if (typeof maybeFullscreenWin.onFullscreenChanged === 'function') {
+          unlistenTauri = await maybeFullscreenWin.onFullscreenChanged(
+            ({ payload }) => {
+              if (!disposed) applyFullscreen(Boolean(payload));
+            }
+          );
+        } else if (typeof win.onResized === 'function') {
+          unlistenTauri = await win.onResized(async () => {
+            if (disposed) return;
+            try {
+              applyFullscreen(await win.isFullscreen());
+            } catch {
+              /* window state unavailable mid-resize */
+            }
+          });
+        }
+        // 初始化再读一次 Tauri 真值（覆盖浏览器默认 false）
+        try {
+          applyFullscreen(await win.isFullscreen());
+        } catch {
+          /* keep browser-derived value */
+        }
+      } catch {
+        /* 非 Tauri / 单测环境：保留浏览器 fullscreenchange 降级 */
+      }
+    })();
+
+    return () => {
+      disposed = true;
+      document.removeEventListener(
+        'fullscreenchange',
+        onBrowserFullscreenChange
+      );
+      try {
+        unlistenTauri?.();
+      } catch {
+        /* unlisten best-effort */
+      }
+    };
+  }, []);
+
   // 9. App mode attribute
   useEffect(() => {
     const mode = isDemoModeFast() ? 'demo' : 'normal';
