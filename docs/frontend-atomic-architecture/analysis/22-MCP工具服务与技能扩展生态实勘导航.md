@@ -1,10 +1,10 @@
 # MCP 工具服务、技能扩展与扩展生态体系深度实勘导航
 
-> **战役代号**：前端原子化组件库战役（Frontend Atomic Architecture Campaign）  
-> **任务编号**：任务书 22（Task-22）  
-> **责任领域**：MCP 扩展服务管理（`settings-mcp/`）、技能扩展体系（`settings-skills/`）以及扩展中心货架生态（`settings-extensions/`）  
-> **实勘基准**：深入逐行阅读所辖范围内的全部 43 个源码文件与样式文件，以客观、精准、零退避的技术视角，穿透现有架构断层、状态机分裂、环境变量缺失、杂乱边框与彩色徽章视觉撕裂等核心痛点，并给出下一代统一扩展卡片原语（Unified Extension Card Primitive）与动态环境变量编辑组件的重塑方案。  
-> **创建时间**：2026-09-06  
+> **战役代号**：前端原子化组件库战役（Frontend Atomic Architecture Campaign）
+> **任务编号**：任务书 22（Task-22）
+> **责任领域**：MCP 扩展服务管理（`settings-mcp/`）、技能扩展体系（`settings-skills/`）以及扩展中心货架生态（`settings-extensions/`）
+> **实勘基准**：深入逐行阅读所辖范围内的全部 43 个源码文件与样式文件，以客观、精准、零退避的技术视角，穿透现有架构断层、状态机分裂、环境变量缺失、杂乱边框与彩色徽章视觉撕裂等核心痛点，并给出下一代统一扩展卡片原语（Unified Extension Card Primitive）与动态环境变量编辑组件的重塑方案。
+> **创建时间**：2026-09-06
 > **文档规范**：UTF-8 无 BOM、中文、行级证据复核、行数规范（≥1200行）。
 
 ---
@@ -171,19 +171,19 @@ graph TD
         ExtensionsTab["SettingsExtensionsTab (货架入口)"]
         McpTab["McpSettingsTab (MCP高级管理)"]
         SkillsTab["SkillsSettingsTab (技能高级管理)"]
-        
+
         ExtensionsTab -->|内嵌二级管理| McpTab
         ExtensionsTab -->|内嵌二级管理| SkillsTab
-        
+
         ExtensionsTab --> ExtensionList --> ExtensionCard
         ExtensionCard --> ExtensionBody
         ExtensionCard --> McpToolsSection
-        
+
         SkillsTab --> SkillCardList
         SkillsTab --> SkillDetailPreview
         SkillsTab --> SkillEditorModal
         SkillsTab --> SkillsMoreMenu
-        
+
         McpTab --> McpServerList
         McpServerList --> McpServerToolbar
         McpServerList --> McpServerForm
@@ -195,17 +195,17 @@ graph TD
         useMarketQuery["useMarketQuery.tsx"]
         useSkillsState["useSkillsSettingsState.ts"]
         useMcpState["useMcpSettings.ts"]
-        
+
         ExtensionsTab --> useExtensionMarket
         useExtensionMarket --> useMarketQuery
         useExtensionMarket --> buildInstalledExtensions["buildInstalledExtensions.ts"]
         useExtensionMarket --> pluginRegistry["pluginRegistryAdapter.ts"]
-        
+
         SkillsTab --> useSkillsState
         useSkillsState --> useSkillList["useSkillList.ts"]
         useSkillsState --> useSkillDirs["useSkillDirectories.ts"]
         useSkillsState --> useSkillEditor["useSkillEditor.ts"]
-        
+
         McpTab --> useMcpState
         useMcpState --> useMcpServerListState["useMcpServerListState.ts"]
     end
@@ -215,7 +215,7 @@ graph TD
         skillsApi["skillsApi.ts"]
         clientApi["clientApi.ts"]
         catalogApi["extensionCatalog.ts"]
-        
+
         useMcpState --> mcpApi
         useMcpState --> clientApi
         useSkillList --> skillsApi
@@ -230,14 +230,14 @@ graph TD
         SessionStore[("sessionStorage<br/>(crish_mcp_tool_disabled_cache)")]
         TauriFs["Tauri FS / Dialog / Opener<br/>(@tauri-apps/plugin-dialog, plugin-opener)"]
         RustCore["Rust 核心进程 (core_get_status)<br/>Task-Runner 运行时"]
-        
+
         skillsApi --> LocalStore
         skillsApi --> TauriFs
         catalogApi --> SessionStore
         catalogApi --> LocalStore
         pluginRegistry --> LocalStore
         clientApi --> LocalStore
-        
+
         mcpApi -->|transport.request| RustCore
     end
 ```

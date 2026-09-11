@@ -1,10 +1,10 @@
 # 全局样式体系与设计 Token 实勘导航
 
-> **战役归属**：前端原子化组件库战役（Frontend Atomic Architecture Campaign）  
-> **任务书编号**：任务书 05（Task 05）  
-> **勘察范围**：`apps/crish-desktop/src/styles/` 下全量 CSS/TS 源码、全局 Design Tokens、运行时主题体系及契约测试套件  
-> **基线分支**：`main` | **环境**：Windows 11 / Chromium WebView2 / Vite + React 18 + Zustand + CSS Modules  
-> **字符集规范**：UTF-8 无 BOM | 中文技术规范 | 遵循全仓严禁补丁与反过度设计红线  
+> **战役归属**：前端原子化组件库战役（Frontend Atomic Architecture Campaign）
+> **任务书编号**：任务书 05（Task 05）
+> **勘察范围**：`apps/crish-desktop/src/styles/` 下全量 CSS/TS 源码、全局 Design Tokens、运行时主题体系及契约测试套件
+> **基线分支**：`main` | **环境**：Windows 11 / Chromium WebView2 / Vite + React 18 + Zustand + CSS Modules
+> **字符集规范**：UTF-8 无 BOM | 中文技术规范 | 遵循全仓严禁补丁与反过度设计红线
 
 ---
 

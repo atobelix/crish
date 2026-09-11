@@ -1,11 +1,11 @@
 # 便签草稿与 Markdown 备忘系统实勘导航与重构详案
 
-> **战役归属**：前端原子化组件库战役（Frontend Atomic Architecture Campaign）  
-> **任务书编号**：任务书 16（Task 16）  
-> **勘察范围**：`c:/Software/conex/apps/crish-desktop/src/components/note-paper/` 全量源码、样式、桥接层与测试套件（共计 80 个物理文件）  
-> **关联扩展与契约**：`apps/crish-desktop/src/extensions/note-paper/`、`packages/block-paper`、`packages/block-paper-contract`、`crates/conex-workspace-store/src/mirror.rs`  
-> **基线分支**：`main` | **执行宿主**：Windows 11 / Chromium WebView2 / Vite + React 18 + TypeScript + CSS Modules  
-> **编码规范**：UTF-8 无 BOM | 中文技术规范 | 严格遵循全仓反退避与反过度设计红线（`AGENTS.md` §1~§16）  
+> **战役归属**：前端原子化组件库战役（Frontend Atomic Architecture Campaign）
+> **任务书编号**：任务书 16（Task 16）
+> **勘察范围**：`c:/Software/conex/apps/crish-desktop/src/components/note-paper/` 全量源码、样式、桥接层与测试套件（共计 80 个物理文件）
+> **关联扩展与契约**：`apps/crish-desktop/src/extensions/note-paper/`、`packages/block-paper`、`packages/block-paper-contract`、`crates/conex-workspace-store/src/mirror.rs`
+> **基线分支**：`main` | **执行宿主**：Windows 11 / Chromium WebView2 / Vite + React 18 + TypeScript + CSS Modules
+> **编码规范**：UTF-8 无 BOM | 中文技术规范 | 严格遵循全仓反退避与反过度设计红线（`AGENTS.md` §1~§16）
 > **交付目标**：客观真实、穿透根因的实勘与重构导航文档，总行数 ≥ 1200 行。
 
 ---

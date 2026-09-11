@@ -1,10 +1,10 @@
 # 对话流输入中枢 Layer 4 编辑器内核实勘导航
 
-> **战役任务**：前端原子化组件库战役 · 任务书 06  
-> **实勘范围**：`apps/crish-desktop/src/components/chat-composer/` 下 TiptapComposerField, TiptapEditorField, TiptapEditorExtensions, TiptapSlashMenu, TiptapKeymap, ComposerField 等核心编辑器相关文件与 CSS Module  
-> **交付路径**：`docs/frontend-atomic-architecture/analysis/06-对话输入Tiptap编辑器内核实勘导航.md`  
-> **文档定位**：Layer 4 对话输入中枢底层技术导航、架构运行机制深度剖析与原子化架构提炼全景指南  
-> **规范契约**：中文，UTF-8 无 BOM，客观真实，全量实勘，总行数 >= 1200 行  
+> **战役任务**：前端原子化组件库战役 · 任务书 06
+> **实勘范围**：`apps/crish-desktop/src/components/chat-composer/` 下 TiptapComposerField, TiptapEditorField, TiptapEditorExtensions, TiptapSlashMenu, TiptapKeymap, ComposerField 等核心编辑器相关文件与 CSS Module
+> **交付路径**：`docs/frontend-atomic-architecture/analysis/06-对话输入Tiptap编辑器内核实勘导航.md`
+> **文档定位**：Layer 4 对话输入中枢底层技术导航、架构运行机制深度剖析与原子化架构提炼全景指南
+> **规范契约**：中文，UTF-8 无 BOM，客观真实，全量实勘，总行数 >= 1200 行
 
 ---
 

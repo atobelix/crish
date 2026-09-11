@@ -1,10 +1,10 @@
 # Zustand 全局状态架构与切片拓扑实勘导航
 
-> **战役归属**：前端原子化组件库战役（Frontend Atomic Architecture Campaign）  
-> **任务书编号**：任务书 24（Task 24）  
-> **勘察范围**：`apps/crish-desktop/src/store/` 全量 109 个文件、16,692 行代码（含核心 Store 物理实例、会话切片动作集、投影索引辅助、二叉树分形布局引擎、工作区壳层与多标签调度、历史工作区动作、布局辅助函数、草稿路由、中间件与通用类型契约）  
-> **基线分支**：`main` | **宿主环境**：Windows 11 / Chromium WebView2 / Vite + React 18 + TypeScript + Zustand + Immer  
-> **编码契约**：UTF-8 无 BOM | 中文技术规范 | 遵循全仓反退避与反过度设计红线（`AGENTS.md` §1 ~ §14）  
+> **战役归属**：前端原子化组件库战役（Frontend Atomic Architecture Campaign）
+> **任务书编号**：任务书 24（Task 24）
+> **勘察范围**：`apps/crish-desktop/src/store/` 全量 109 个文件、16,692 行代码（含核心 Store 物理实例、会话切片动作集、投影索引辅助、二叉树分形布局引擎、工作区壳层与多标签调度、历史工作区动作、布局辅助函数、草稿路由、中间件与通用类型契约）
+> **基线分支**：`main` | **宿主环境**：Windows 11 / Chromium WebView2 / Vite + React 18 + TypeScript + Zustand + Immer
+> **编码契约**：UTF-8 无 BOM | 中文技术规范 | 遵循全仓反退避与反过度设计红线（`AGENTS.md` §1 ~ §14）
 
 ---
 
@@ -665,7 +665,7 @@ createSession: (params) => {
 - **代码行数**：321 行
 - **状态机模型**：承载 Agent 执行工具调用时的前端完整生命周期。
   ```
-  [Agent 触发 ToolCall] 
+  [Agent 触发 ToolCall]
          │
          ▼
   [Status: pending_approval] ──(用户在 UI 点击拒绝)──► [Status: rejected]
@@ -841,16 +841,16 @@ export const SessionCoordinator = {
   cleanupSessionResources(sessionId: string): void {
     // 1. 清理 sessionStore 内存状态与草稿
     useSessionStore.getState().deleteSession(sessionId);
-    
+
     // 2. 清理 streamingStore 中的未结流式缓冲区
     useStreamingStore.getState().cleanupSessionStream(sessionId);
-    
+
     // 3. 销毁 messageSnapshotsBridge 中的撤回快照栈
     messageSnapshotsBridge.evictSession(sessionId);
-    
+
     // 4. 终止 terminalStore 中与该会话绑定的 PTY 进程
     useTerminalStore.getState().terminateSessionPty(sessionId);
-    
+
     // 5. 抹除 ephemeralChatStore 中的错误与告警提示
     useEphemeralChatStore.getState().clearSessionEphemeral(sessionId);
   }
@@ -1795,7 +1795,7 @@ export const useSessionUpdatedAt = (sessionId: string) =>
 
 ```typescript
 // src/store/mesh/stateEventBus.ts
-type StateEventType = 
+type StateEventType =
   | "SESSION_ACTIVATED"
   | "SESSION_DELETED"
   | "PANE_CLOSED"
