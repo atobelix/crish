@@ -1,11 +1,11 @@
 import React from 'react';
-import * as Lucide from 'lucide-react';
 import styles from './DiffCard.module.css';
 import { DiffCardUnifiedView } from './DiffCardUnifiedView';
 import { DiffCardSplitView } from './DiffCardSplitView';
 import { VirtualPlainCodeViewer } from './VirtualPlainCodeViewer';
 import type { FileDiff } from '../../store/types';
 import type { CompareMode, ComputedChange, SplitRenderItem, UnifiedRenderItem } from './diffCardTypes';
+import { AppIcon } from '../ui/icons/index';
 
 export interface DiffCodeViewerProps {
   f: FileDiff;
@@ -37,7 +37,7 @@ export const DiffCodeViewer: React.FC<DiffCodeViewerProps> = React.memo(
       if (plainLoading) {
         return (
           <div className={styles.detailLoading}>
-            <Lucide.Loader2 size={16} className="spin" />
+            <AppIcon name="loader" size={16} className="spin" />
             <span>正在加载源码...</span>
           </div>
         );

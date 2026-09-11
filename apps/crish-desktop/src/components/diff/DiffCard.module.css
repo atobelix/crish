@@ -382,19 +382,19 @@
 }
 
 .statusBadge.mod {
-  color: var(--filetree-badge-mod-fg, hsl(32 95% 30%));
+  color: var(--filetree-badge-mod-fg);
 }
 
 .statusBadge.add {
-  color: var(--filetree-badge-add-fg, hsl(142 71% 28%));
+  color: var(--filetree-badge-add-fg);
 }
 
 .statusBadge.del {
-  color: var(--filetree-badge-del-fg, hsl(0 75% 38%));
+  color: var(--filetree-badge-del-fg);
 }
 
 .statusBadge.ren {
-  color: var(--filetree-badge-renamed-fg, hsl(270 60% 36%));
+  color: var(--filetree-badge-renamed-fg);
 }
 
 /* --------------------------------------------------------------------------
@@ -573,8 +573,8 @@
 .danger[data-variant]:hover,
 .rowActBtn.danger:hover,
 .rowActBtn.danger[data-variant]:hover {
-  color: var(--diff-del-fg, hsl(0 75% 50%));
-  --btn-fg: var(--diff-del-fg, hsl(0 75% 50%));
+  color: var(--diff-del-fg);
+  --btn-fg: var(--diff-del-fg);
   --btn-hover-overlay: color-mix(in srgb, var(--color-error) 12%, transparent);
 }
 
@@ -713,7 +713,7 @@
 /* Unified 统一视图网格 */
 .line {
   display: grid;
-  grid-template-columns: var(--diff-gutter-width-unified, 40px) var(--diff-gutter-width-unified, 40px) var(--diff-gutter-marker-width, 20px) minmax(0, 1fr);
+  grid-template-columns: var(--diff-gutter-width-unified) var(--diff-gutter-width-unified) var(--diff-gutter-marker-width) minmax(0, 1fr);
   width: 100%;
   align-items: stretch;
   box-sizing: border-box;
@@ -729,10 +729,9 @@
   justify-content: flex-end;
   align-items: center;
   padding: 0 6px;
-  color: var(--diff-gutter-fg, var(--text-tertiary));
+  color: var(--text-tertiary);
   font-size: var(--font-size-xxs);
   user-select: none;
-  opacity: 0.75;
   text-align: right;
   border-right: 1px solid color-mix(in srgb, var(--border-subtle) 18%, transparent);
   background: var(--diff-gutter-bg, var(--bg-card));
@@ -757,7 +756,7 @@
   overflow-x: hidden;
   font-family: var(--font-mono);
   font-size: var(--font-size-xs);
-  color: var(--diff-text-normal, var(--text-primary));
+  color: var(--text-primary);
   font-weight: var(--font-weight-code, 400);
   line-height: 22px;
   box-sizing: border-box;
@@ -800,7 +799,7 @@
 }
 
 .lineNormal {
-  color: var(--diff-text-normal, var(--text-primary));
+  color: var(--text-primary);
 }
 
 .lineHeader {
@@ -842,7 +841,7 @@
 
 .splitColumn {
   display: grid;
-  grid-template-columns: var(--diff-gutter-width-split, 36px) var(--diff-gutter-marker-width, 20px) minmax(0, 1fr);
+  grid-template-columns: var(--diff-gutter-width-split) var(--diff-gutter-marker-width) minmax(0, 1fr);
   align-items: stretch;
   font-size: var(--font-size-xs, 12px);
   font-family: var(--font-mono);
@@ -892,7 +891,6 @@
 }
 
 .collapseIcon {
-  opacity: 0.75;
 }
 
 /* Commit 面板 */
@@ -946,7 +944,6 @@
 
 .commitTriggerArrow {
   color: var(--text-tertiary);
-  opacity: 0.6;
   flex-shrink: 0;
 }
 
@@ -1014,7 +1011,6 @@
 
 .commitInput::placeholder {
   color: var(--text-tertiary);
-  opacity: 0.8;
 }
 
 .commitInput:focus-visible,

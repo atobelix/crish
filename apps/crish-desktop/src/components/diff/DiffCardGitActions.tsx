@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
-import * as Lucide from 'lucide-react';
 import styles from './DiffCard.module.css';
 import { Button, Tooltip } from '../ui';
+import { AppIcon } from '../ui/icons/index';
 
 interface DiffCardGitActionsProps {
   open: boolean;
@@ -62,11 +62,11 @@ export const DiffCardGitActions: React.FC<DiffCardGitActionsProps> = ({
           }
         }}
       >
-        <Lucide.GitCommit size={14} className={styles.commitTriggerIcon} />
+        <AppIcon name="git-commit" size={14} className={styles.commitTriggerIcon} />
         <span className={styles.commitTriggerText}>
           输入提交信息… ({stagedCount} 个已暂存 / {unstagedCount} 个未暂存)
         </span>
-        <Lucide.ChevronRight size={14} className={styles.commitTriggerArrow} />
+        <AppIcon name="chevron-right" size={14} className={styles.commitTriggerArrow} />
       </div>
     );
   }
@@ -82,7 +82,7 @@ export const DiffCardGitActions: React.FC<DiffCardGitActionsProps> = ({
           className={styles.commitCloseBtn}
           aria-label="关闭提交面板"
           onClick={onToggle}
-          icon={<Lucide.X size={13} />}
+          icon={<AppIcon name="x" size={13} />}
         />
       </div>
       <textarea
@@ -112,7 +112,7 @@ export const DiffCardGitActions: React.FC<DiffCardGitActionsProps> = ({
           style={{ height: 28, borderRadius: 'var(--radius-sm, 4px)' }}
           disabled={!canCommit}
           onClick={onCommit}
-          icon={<Lucide.GitCommit size={14} style={{ marginRight: 4 }} />}
+          icon={<AppIcon name="git-commit" size={14} style={{ marginRight: 4 }} />}
         >
           {commitLoading
             ? '提交中…'
@@ -128,7 +128,7 @@ export const DiffCardGitActions: React.FC<DiffCardGitActionsProps> = ({
             style={{ height: 28, borderRadius: 'var(--radius-sm, 4px)' }}
             disabled={commitLoading || pushLoading}
             onClick={onPush}
-            icon={<Lucide.CloudUpload size={14} style={{ marginRight: 4 }} />}
+            icon={<AppIcon name="cloud-upload" size={14} style={{ marginRight: 4 }} />}
           >
             {pushLoading ? '推送中…' : '推送 (Push)'}
           </Button>

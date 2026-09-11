@@ -1,5 +1,4 @@
 import React, { useMemo, useCallback } from 'react';
-import * as Lucide from 'lucide-react';
 import styles from './DiffCard.module.css';
 import { Button, IconButton, Tooltip } from '../ui';
 import type { FileDiff } from '../../store/types';
@@ -7,6 +6,7 @@ import type { DiffSourceMode } from '../../api/diffPanelHelpers';
 import type { CompareMode } from './diffCardTypes';
 import { formatGitPatch } from './GitPatchFormatter';
 import { useToast } from '../../services/toast/ToastContext';
+import { AppIcon } from '../ui/icons/index';
 
 /**
  * 差异面板文件列表组件属性契约
@@ -206,29 +206,27 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
           role="row"
         >
           {/* =================================================================
-           * 子域 A：折叠展开控制与语义化状态徽章（原子 Tooltip 包裹）
+           * 子域 A：折叠展开控制与语义化状态徽章单槽位融合（原子 Tooltip 包裹）
+           * 未 hover 显示字母，hover 显示折叠/展开 Chevron，字母无背景纯文字有色
            * ================================================================= */}
-          <button
-            type="button"
-            className={styles.chevronBtn}
-            onClick={() => onSetActiveDiffSource(active ? null : f)}
-            aria-label={active ? `折叠 ${name} 差异代码` : `展开 ${name} 差异代码`}
-            aria-expanded={active}
-          >
-            <Lucide.ChevronRight
-              size={14}
-              className={`${styles.chevronIcon} ${active ? styles.expanded : ''}`}
-              aria-hidden
-            />
-          </button>
-
-          <Tooltip content={badge.tooltip}>
-            <span
-              className={`${styles.statusBadge} ${styles[badge.key]}`}
-              aria-label={badge.tooltip}
+          <Tooltip content={`${badge.tooltip} · ${active ? `折叠 ${name} 差异` : `展开 ${name} 差异`}`}>
+            <button
+              type="button"
+              className={styles.fileNodeToggle}
+              onClick={() => onSetActiveDiffSource(active ? null : f)}
+              aria-label={active ? `折叠 ${name} 差异代码` : `展开 ${name} 差异代码`}
+              aria-expanded={active}
             >
-              {badge.char}
-            </span>
+              <span
+                className={`${styles.statusBadge} ${styles[badge.key]}`}
+                aria-label={badge.tooltip}
+              >
+                {badge.char}
+              </span>
+              <AppIcon name="chevron-right" size={14}
+                className={`${styles.chevronIcon} ${active ? styles.expanded : ''}`}
+                aria-hidden />
+            </button>
           </Tooltip>
 
           {/* =================================================================
@@ -275,11 +273,9 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
                 onClick={(e) => e.stopPropagation()}
               >
                 {isStaging ? (
-                  <Lucide.Loader2
-                    size={13}
+                  <AppIcon name="loader" size={13}
                     className={styles.spinner}
-                    aria-label="正在处理暂存操作"
-                  />
+                    aria-label="正在处理暂存操作" />
                 ) : f.staged ? (
                   <>
                     <IconButton
@@ -289,7 +285,7 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
                       tooltip={TOOLTIP_UNSTAGE}
                       disabled={applyBusy}
                       onClick={() => void onUnstageFile(f.filePath)}
-                      icon={<Lucide.Minus size={13} />}
+                      icon={<AppIcon name="minus" size={13} />}
                     />
                     <IconButton
                       size="xs"
@@ -300,7 +296,7 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
                         e.stopPropagation();
                         void copySingleFilePatch(f);
                       }}
-                      icon={<Lucide.Copy size={13} />}
+                      icon={<AppIcon name="copy" size={13} />}
                     />
                   </>
                 ) : (
@@ -312,7 +308,7 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
                       tooltip={TOOLTIP_STAGE}
                       disabled={applyBusy}
                       onClick={() => void onStageFile(f.filePath)}
-                      icon={<Lucide.Plus size={13} />}
+                      icon={<AppIcon name="plus" size={13} />}
                     />
                     <IconButton
                       size="xs"
@@ -323,7 +319,7 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
                         e.stopPropagation();
                         void copySingleFilePatch(f);
                       }}
-                      icon={<Lucide.Copy size={13} />}
+                      icon={<AppIcon name="copy" size={13} />}
                     />
                     <IconButton
                       size="xs"
@@ -333,7 +329,7 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
                       tooltip={TOOLTIP_DISCARD}
                       disabled={applyBusy}
                       onClick={() => void onDiscardChanges(f.filePath)}
-                      icon={<Lucide.Undo2 size={13} />}
+                      icon={<AppIcon name="undo" size={13} />}
                     />
                   </>
                 )}
@@ -389,7 +385,7 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
                   className={styles.groupActionBtn}
                   disabled={applyBusy}
                   onClick={onUnstageAll}
-                  icon={<Lucide.MinusCircle size={13} className={styles.btnIcon} />}
+                  icon={<AppIcon name="minus-circle" size={13} className={styles.btnIcon} />}
                 >
                   全部取消暂存
                 </Button>
@@ -419,7 +415,7 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
                   className={styles.groupActionBtn}
                   disabled={applyBusy}
                   onClick={onStageAll}
-                  icon={<Lucide.PlusCircle size={13} className={styles.btnIcon} />}
+                  icon={<AppIcon name="plus-circle" size={13} className={styles.btnIcon} />}
                 >
                   全部暂存
                 </Button>

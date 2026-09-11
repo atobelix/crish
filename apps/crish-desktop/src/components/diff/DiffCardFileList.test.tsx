@@ -410,4 +410,47 @@ describe('DiffCardFileList (平直单轨与正交子域专项测试)', () => {
       expect(btn).toHaveAttribute('data-variant', 'ghost');
     }
   });
+
+  it('子域 A 折叠与状态字母融合为单一 fileNodeToggle 槽位，彻底切除双元素并排与字母背景色（正向与负向物证）', () => {
+    const handleSetActive = vi.fn();
+    const { container } = render(
+      <DiffCardFileList
+        files={[mockFileDiff]}
+        sourceMode="git"
+        current={null}
+        applyBusy={false}
+        stagingPaths={{}}
+        onSetActiveDiffSource={handleSetActive}
+        onStageFile={vi.fn()}
+        onUnstageFile={vi.fn()}
+        onDiscardChanges={vi.fn()}
+        onStageAll={vi.fn()}
+        onUnstageAll={vi.fn()}
+        renderInlineDiffContent={() => null}
+      />
+    );
+
+    // 1. 查找合并后的单槽位按钮
+    const toggleBtn = container.querySelector('[class*="fileNodeToggle"]');
+    expect(toggleBtn).toBeInTheDocument();
+    expect(toggleBtn?.tagName).toBe('BUTTON');
+
+    // 2. 验证单槽位内部同时嵌合了字母徽标与 Chevron 图标
+    const badge = toggleBtn?.querySelector('[class*="statusBadge"]');
+    const chevron = toggleBtn?.querySelector('[class*="chevronIcon"]');
+    expect(badge).toBeInTheDocument();
+    expect(badge?.textContent).toBe('M');
+    expect(chevron).toBeInTheDocument();
+
+    // 3. 负向断言：整行内绝无第二个并排的独立折叠按钮（原先独立的 chevronBtn 与 statusBadge 并排模式被物理切除）
+    const fileRow = container.querySelector('[class*="fileRow"]');
+    const allRowButtons = fileRow?.querySelectorAll(':scope > button');
+    // 子域 A 只有 1 个 button，路径链接是第 2 个 button（在 pathWrap 内）
+    expect(allRowButtons?.length).toBe(1);
+
+    // 4. 点击单槽位按钮准确触发折叠展开切换
+    fireEvent.click(toggleBtn!);
+    expect(handleSetActive).toHaveBeenCalledTimes(1);
+    expect(handleSetActive).toHaveBeenCalledWith(mockFileDiff);
+  });
 });

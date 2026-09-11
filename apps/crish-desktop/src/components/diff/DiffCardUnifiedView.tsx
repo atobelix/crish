@@ -1,5 +1,4 @@
 import React, { useMemo } from 'react';
-import * as Lucide from 'lucide-react';
 import styles from './DiffCard.module.css';
 import { AppErrorBoundary } from '../AppErrorBoundary';
 import { useVirtualScroll } from '../../hooks/useVirtualScroll';
@@ -10,6 +9,8 @@ import {
   computeIntralinePair,
   type DiffWordToken,
 } from '../../api/intralineDiff';
+import { computeFixedRowViewport, DIFF_FIXED_ROW_HEIGHT } from './fixedRowViewport';
+import { AppIcon } from '../ui/icons/index';
 
 type UnifiedRenderItem = PlaceholderRenderItem | ChangeRenderItem;
 
@@ -27,9 +28,8 @@ function renderTokens(
     return (
       <span
         style={{
-          whiteSpace: 'pre-wrap',
-          wordBreak: 'break-word',
-          overflowWrap: 'anywhere',
+          whiteSpace: 'pre',
+          overflow: 'hidden',
         }}
         dangerouslySetInnerHTML={{
           __html: highlightCode(fallbackText, lang),
@@ -41,12 +41,11 @@ function renderTokens(
     <span
       style={{
         position: 'relative',
-        display: 'inline-block',
+        display: 'block',
         width: '100%',
         maxWidth: '100%',
-        whiteSpace: 'pre-wrap',
-        wordBreak: 'break-word',
-        overflowWrap: 'anywhere',
+        whiteSpace: 'pre',
+        overflow: 'hidden',
       }}
     >
       <span
@@ -57,9 +56,7 @@ function renderTokens(
           right: 0,
           bottom: 0,
           pointerEvents: 'none',
-          whiteSpace: 'pre-wrap',
-          wordBreak: 'break-word',
-          overflowWrap: 'anywhere',
+          whiteSpace: 'pre',
           color: 'transparent',
           userSelect: 'none',
         }}
@@ -86,9 +83,7 @@ function renderTokens(
         style={{
           position: 'relative',
           background: 'transparent',
-          whiteSpace: 'pre-wrap',
-          wordBreak: 'break-word',
-          overflowWrap: 'anywhere',
+          whiteSpace: 'pre',
         }}
         dangerouslySetInnerHTML={{
           __html: highlightCode(fallbackText, lang),
@@ -115,17 +110,16 @@ export const DiffCardUnifiedView: React.FC<DiffCardUnifiedViewProps> = ({
       itemCount: totalItems,
       heightOnly: true,
     });
-  const rowHeight = 22;
-  const totalHeight = totalItems * rowHeight;
-
-  const startIndex = Math.max(0, Math.floor(scrollTop / rowHeight) - 15);
-  const endIndex = Math.min(
+  const rowHeight = DIFF_FIXED_ROW_HEIGHT;
+  const { startIndex, endIndex, offsetTop, totalHeight } = computeFixedRowViewport(
+    scrollTop,
+    containerHeight,
     totalItems,
-    Math.ceil((scrollTop + containerHeight) / rowHeight) + 15
+    rowHeight,
+    15,
   );
 
   const visibleItems = renderItems.slice(startIndex, endIndex);
-  const offsetTop = startIndex * rowHeight;
 
   // 真实语言推导
   const codeLang = useMemo(() => langFromFilename(f.filePath), [f.filePath]);
@@ -137,7 +131,13 @@ export const DiffCardUnifiedView: React.FC<DiffCardUnifiedViewProps> = ({
         className={styles.scrollParent}
         onScroll={onScroll}
         tabIndex={0}
-        style={{ position: 'relative', overflowY: 'auto', overflowX: 'hidden', outline: 'none', overflowAnchor: 'none' }}
+        style={{
+          position: 'relative',
+          overflowY: 'auto',
+          overflowX: 'auto',
+          outline: 'none',
+          overflowAnchor: 'none',
+        }}
       >
         <div
           style={{
@@ -167,10 +167,8 @@ export const DiffCardUnifiedView: React.FC<DiffCardUnifiedViewProps> = ({
                     className={styles.collapseBar}
                     onClick={() => onExpandBlock(f.filePath, item.startIndex)}
                   >
-                    <Lucide.Maximize2
-                      size={12}
-                      className={styles.collapseIcon}
-                    />
+                    <AppIcon name="maximize" size={12}
+                      className={styles.collapseIcon} />
                     <span>展开其余 {item.count} 行代码...</span>
                   </div>
                 );
@@ -231,7 +229,11 @@ export const DiffCardUnifiedView: React.FC<DiffCardUnifiedViewProps> = ({
                 <div
                   key={stableKey}
                   className={`${styles.line} ${lineClass}`}
-                  style={{ minHeight: `${rowHeight}px` }}
+                  style={{
+                    height: `${rowHeight}px`,
+                    minHeight: `${rowHeight}px`,
+                    overflow: 'hidden',
+                  }}
                 >
                   <div className={styles.gutterNum} data-num={oldLineNum}>
                     {oldLineNum}
@@ -246,9 +248,8 @@ export const DiffCardUnifiedView: React.FC<DiffCardUnifiedViewProps> = ({
                     ) : (
                       <span
                         style={{
-                          whiteSpace: 'pre-wrap',
-                          wordBreak: 'break-word',
-                          overflowWrap: 'anywhere',
+                          whiteSpace: 'pre',
+                          overflow: 'hidden',
                         }}
                         dangerouslySetInnerHTML={{
                           __html: highlightCode(change.content, codeLang),

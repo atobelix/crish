@@ -13,7 +13,6 @@ import {
   selectDiffFiles,
   openFileViewerInSession,
 } from '../../store/storeAccess';
-import * as Lucide from 'lucide-react';
 import { filterPublishableDiffs } from '../../api/publishToolDiffs';
 import type { DiffSourceMode } from '../../api/diffPanelHelpers';
 import { DiffCardFileList } from './DiffCardFileList';
@@ -26,6 +25,7 @@ import { formatGitPatch } from './GitPatchFormatter';
 import { getWorkspacePath } from '../../api/projectStore';
 
 import { useToast } from '../../services/toast/ToastContext';
+import { AppIcon } from '../ui/icons/index';
 
 export interface DiffCardProps {
   className?: string;
@@ -53,7 +53,6 @@ const DiffCardInner: React.FC<DiffCardProps> = () => {
   const [panelErr, setPanelErr] = useState('');
   const [_softHint, setSoftHint] = useState('');
   const [commitPanelOpen, setCommitPanelOpen] = useState(false);
-
 
   const {
     aiTurns,
@@ -180,7 +179,6 @@ const DiffCardInner: React.FC<DiffCardProps> = () => {
     applyFiles(turn.files, 'session');
   };
 
-
   const switchSource = (mode: 'session' | 'git') => {
     if (mode === 'git') {
       void loadFromGit();
@@ -289,10 +287,8 @@ const DiffCardInner: React.FC<DiffCardProps> = () => {
           role="alert"
           aria-live="assertive"
         >
-          <Lucide.AlertCircle
-            size={14}
-            style={{ flexShrink: 0, marginTop: 1 }}
-          />
+          <AppIcon name="alert-circle" size={14}
+            style={{ flexShrink: 0, marginTop: 1 }} />
           <div className={styles.panelErrText}>{panelErr}</div>
           <Tooltip content="关闭错误">
             <Button
@@ -302,7 +298,7 @@ const DiffCardInner: React.FC<DiffCardProps> = () => {
               className={styles.panelErrDismiss}
               aria-label="关闭错误"
               onClick={() => setPanelErr('')}
-              icon={<Lucide.X size={13} aria-hidden />}
+              icon={<AppIcon name="x" size={13} aria-hidden />}
             />
           </Tooltip>
         </div>
@@ -330,7 +326,7 @@ const DiffCardInner: React.FC<DiffCardProps> = () => {
           />
         ) : !gitLoading ? (
           <div className={styles.empty} role="status" aria-live="polite">
-            <Lucide.FileDiff size={22} style={{ opacity: 0.3 }} aria-hidden />
+            <AppIcon name="file-diff" size={22} style={{ opacity: 0.3 }} aria-hidden />
             <div>暂无变更</div>
             <div className={styles.emptySub}>
               上方切换「AI
@@ -352,7 +348,7 @@ const DiffCardInner: React.FC<DiffCardProps> = () => {
                 size="sm"
                 disabled={gitLoading || applyBusy}
                 onClick={() => switchSource('git')}
-                icon={<Lucide.GitBranch size={15} aria-hidden />}
+                icon={<AppIcon name="git-branch" size={15} aria-hidden />}
               >
                 Git
               </Button>
@@ -362,12 +358,10 @@ const DiffCardInner: React.FC<DiffCardProps> = () => {
 
         {gitLoading && fileList.length === 0 ? (
           <div className={styles.empty} role="status" aria-live="polite">
-            <Lucide.Loader2
-              size={22}
+            <AppIcon name="loader" size={22}
               className="spin"
               style={{ opacity: 0.45 }}
-              aria-hidden
-            />
+              aria-hidden />
             <div>载入 Git 变更…</div>
           </div>
         ) : null}

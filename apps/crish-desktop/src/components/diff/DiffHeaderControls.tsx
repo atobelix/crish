@@ -5,16 +5,6 @@
  */
 import React, { useMemo } from 'react';
 import {
-  Columns2,
-  GitBranch,
-  GitCommit,
-  List,
-  Search,
-  Copy,
-  Trash2,
-  Sparkles,
-} from 'lucide-react';
-import {
   IconButton,
   Select,
   SegmentedControl,
@@ -22,6 +12,7 @@ import {
 } from '../ui';
 import styles from './DiffCard.module.css';
 import type { FileDiff } from '../../store/types';
+import { AppIcon } from '../ui/icons/index';
 
 export interface DiffHeaderControlsProps {
   sourceMode: 'list' | 'session' | 'git';
@@ -81,14 +72,14 @@ export const DiffHeaderControls: React.FC<DiffHeaderControlsProps> = React.memo(
         {
           value: 'session',
           label: 'AI',
-          icon: <Sparkles size={12} className={styles.tabIcon} aria-hidden />,
+          icon: <AppIcon name="sparkles" size={12} className={styles.tabIcon} aria-hidden />,
           'aria-label': '当前对话中 AI 产生的改动',
           disabled: applyBusy,
         },
         {
           value: 'git',
           label: gitLoading ? 'Git…' : 'Git',
-          icon: <GitBranch size={12} className={styles.tabIcon} aria-hidden />,
+          icon: <AppIcon name="git-branch" size={12} className={styles.tabIcon} aria-hidden />,
           'aria-label': '工作区 Git 未提交变更',
           disabled: gitLoading || applyBusy,
         },
@@ -166,9 +157,9 @@ export const DiffHeaderControls: React.FC<DiffHeaderControlsProps> = React.memo(
             onClick={onViewModeChange}
             icon={
               diffViewMode === 'unified' ? (
-                <Columns2 size={14} aria-hidden />
+                <AppIcon name="columns" size={14} aria-hidden />
               ) : (
-                <List size={14} aria-hidden />
+                <AppIcon name="list" size={14} aria-hidden />
               )
             }
           />
@@ -180,7 +171,7 @@ export const DiffHeaderControls: React.FC<DiffHeaderControlsProps> = React.memo(
               aria-label="复制 Patch"
               tooltip="复制当前文件为标准 Git Patch"
               onClick={onCopyPatch}
-              icon={<Copy size={14} aria-hidden />}
+              icon={<AppIcon name="copy" size={14} aria-hidden />}
             />
           )}
 
@@ -192,7 +183,7 @@ export const DiffHeaderControls: React.FC<DiffHeaderControlsProps> = React.memo(
               aria-label="切换提交面板"
               tooltip={commitPanelOpen ? '隐藏提交面板' : '显示提交面板'}
               onClick={onCommitPanelToggle}
-              icon={<GitCommit size={14} aria-hidden />}
+              icon={<AppIcon name="git-commit" size={14} aria-hidden />}
             />
           )}
 
@@ -204,18 +195,19 @@ export const DiffHeaderControls: React.FC<DiffHeaderControlsProps> = React.memo(
             aria-pressed={searchOpen || searchActive}
             tooltip="搜索差异行"
             onClick={() => onSearchOpenChange(!searchOpen)}
-            icon={<Search size={14} aria-hidden />}
+            icon={<AppIcon name="search" size={14} aria-hidden />}
           />
 
           {fileListLength > 0 && (
             <IconButton
               size="sm"
-              variant="danger"
+              variant="ghost"
+              className={styles.dangerBtn}
               aria-label="清空变更列表"
               tooltip="清空当前审查列表"
               disabled={applyBusy}
               onClick={onClear}
-              icon={<Trash2 size={14} aria-hidden />}
+              icon={<AppIcon name="trash" size={14} aria-hidden />}
             />
           )}
         </div>

@@ -223,7 +223,8 @@ export const VirtualPlainCodeViewer: React.FC<VirtualPlainCodeViewerProps> = Rea
             width: wordWrap ? '100%' : 'max-content',
             minWidth: '100%',
             position: 'relative',
-            flex: 1,
+            flexShrink: 0,
+            overflow: 'hidden',
             overflowAnchor: 'none',
           }}
         >

@@ -108,4 +108,12 @@ describe('DiffHeaderControls Component Alignment & Behavior', () => {
       expect(btn.getAttribute('aria-label')!.length).toBeGreaterThan(0);
     }
   });
+
+  it('清空变更列表 Trash2 按钮常态为 variant="ghost" 且挂载 dangerBtn 类，实现 hover 才带危险红色的交互契约', () => {
+    render(<DiffHeaderControls {...mockProps} fileListLength={3} />);
+    const clearBtn = screen.getByRole('button', { name: '清空变更列表' });
+    expect(clearBtn).toBeInTheDocument();
+    expect(clearBtn).toHaveAttribute('data-variant', 'ghost');
+    expect(clearBtn.className).toContain('dangerBtn');
+  });
 });
