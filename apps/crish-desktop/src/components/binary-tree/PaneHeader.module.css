@@ -8,6 +8,10 @@
  * 4. 尺寸动画由 flex-basis / width / max-width 同步平滑驱动，根除内部元素跳变与截断；
  * 5. 等宽锁定仅经 --tab-item-width 单变量通道，禁止 !important 覆盖块。
  * 几何数值来自 utils/tabStripGeometry，由组件根节点注入 custom properties。
+ *
+ * 边缘避让（BATCH-02 后续）：AppTopBar 已流内化到 workspaces-column 之上，
+ * 二叉树不再被绝对顶栏/窗控覆盖——右侧窗控/交通灯避让由 AppTopBar 承担，
+ * PaneHeader 仅保留左侧折叠态 SidebarToggle 浮层的左缘避让。
  */
 
 .paneHeader {
@@ -30,7 +34,7 @@
 }
 
 /* 声明式避让规则：让位值来自壳几何 token（tokens.css --edge-reserve-*） */
-/* 顶行最左叶子：侧栏收起时让出悬浮按钮空间（macOS 106px） */
+/* 顶行最左叶子：侧栏收起时让出悬浮按钮空间（SidebarToggle 仍 absolute 浮在 main-layout 左缘） */
 :global([data-top-row="true"][data-left-edge="true"]) .paneHeader {
   padding-left: 0px;
 }
@@ -41,13 +45,8 @@
   padding-left: var(--edge-reserve-left-macos);
 }
 
-/* 顶行最右叶子：Windows 让出窗口控制三键空间，macOS 让出交通灯 */
-:global([data-top-row="true"][data-right-edge="true"]) .paneHeader {
-  padding-right: var(--edge-reserve-right-win);
-}
-:global([data-platform="macos"]) :global([data-top-row="true"][data-right-edge="true"]) .paneHeader {
-  padding-right: var(--edge-reserve-right-macos);
-}
+/* 右缘：AppTopBar 已流内化承担窗控/交通灯避让，PaneHeader 不再做 top-row 右缘让位，
+ * 基础 .paneHeader padding: 0 4px 即可 */
 
 .tabsContainer {
   flex: 1 1 auto;
