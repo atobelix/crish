@@ -221,7 +221,7 @@ async function startup() {
     const el = document.getElementById('root');
     if (el) {
       el.innerHTML =
-        '<div style="display:flex;height:100vh;align-items:center;justify-content:center;font-family:sans-serif;color:#888;padding:20px;text-align:center">' +
+        '<div style="display:flex;height:100vh;align-items:center;justify-content:center;font-family:var(--font-sans, sans-serif);color:#888;padding:20px;text-align:center">' +
         '<div><h2 style="margin:0 0 8px;font-weight:500;font-size:18px">应用启动失败</h2>' +
         '<p style="margin:0;font-size:14px">核心模块加载失败，请查看控制台后重试</p></div></div>';
     }
@@ -263,7 +263,7 @@ async function startup() {
     const el = document.getElementById('root');
     if (el) {
       el.innerHTML =
-        '<div style="display:flex;height:100vh;align-items:center;justify-content:center;font-family:sans-serif;color:#888;padding:20px;text-align:center">' +
+        '<div style="display:flex;height:100vh;align-items:center;justify-content:center;font-family:var(--font-sans, sans-serif);color:#888;padding:20px;text-align:center">' +
         '<div><h2 style="margin:0 0 8px;font-weight:500;font-size:18px">应用启动失败</h2>' +
         '<p style="margin:0;font-size:14px">界面保护模块加载失败，请查看控制台后重试</p></div></div>';
     }

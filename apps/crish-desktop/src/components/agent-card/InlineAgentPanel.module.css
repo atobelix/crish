@@ -497,7 +497,7 @@
 
 /*       ?agent                ?.chat-footer.agent-card-composer + ComposerField */
 .inlineAgentComposerWrap {
-  padding: var(--space-2, 6px);
+  padding: var(--space-2);
   width: 100%;
   max-width: none;
   box-sizing: border-box;
@@ -505,7 +505,7 @@
 
 /* denser                 ?pad         ?maxLines=3 */
 .inlineAgentComposerWrapDense {
-  padding: var(--space-1, 4px) var(--space-2, 5px) var(--space-2, 5px);
+  padding: var(--space-1, 4px) var(--space-2) var(--space-2);
 }
 
 .inlineAgentComposerWrap > * {

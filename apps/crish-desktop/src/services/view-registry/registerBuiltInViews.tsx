@@ -1,15 +1,4 @@
-import {
-  MessageSquare,
-  Terminal,
-  LayoutDashboard,
-  GitBranch,
-  PlayCircle,
-  Bot,
-  Globe,
-  Workflow,
-  FolderTree,
-  FileCode,
-} from 'lucide-react';
+
 import type React from 'react';
 import { viewRegistry } from './ViewRegistry';
 import type { ViewRenderContext } from './ViewTypes';
@@ -63,7 +52,7 @@ export function registerBuiltInViews(factories: ViewFactoryMap): void {
   viewRegistry.registerView({
     id: 'chat',
     title: '对话',
-    icon: MessageSquare,
+    icon: 'message-square',
     category: 'primary',
     component: factories['chat']?.() ?? fallbackComponent,
   });
@@ -72,7 +61,7 @@ export function registerBuiltInViews(factories: ViewFactoryMap): void {
   viewRegistry.registerView({
     id: 'terminal',
     title: '终端',
-    icon: Terminal,
+    icon: 'terminal',
     category: 'tool',
     shortcut: 'Mod+`',
     component: factories['terminal']?.() ?? fallbackComponent,
@@ -82,7 +71,7 @@ export function registerBuiltInViews(factories: ViewFactoryMap): void {
   viewRegistry.registerView({
     id: 'preview',
     title: '浏览器',
-    icon: Globe,
+    icon: 'globe',
     category: 'tool',
     component: factories['preview']?.() ?? fallbackComponent,
   });
@@ -91,7 +80,7 @@ export function registerBuiltInViews(factories: ViewFactoryMap): void {
   viewRegistry.registerView({
     id: 'overview',
     title: '总览',
-    icon: LayoutDashboard,
+    icon: 'dashboard',
     category: 'tool',
     component: factories['overview']?.() ?? fallbackComponent,
   });
@@ -100,7 +89,7 @@ export function registerBuiltInViews(factories: ViewFactoryMap): void {
   viewRegistry.registerView({
     id: 'files',
     title: '文件',
-    icon: FolderTree,
+    icon: 'folder-tree',
     category: 'tool',
     component: factories['files']?.() ?? fallbackComponent,
   });
@@ -109,7 +98,7 @@ export function registerBuiltInViews(factories: ViewFactoryMap): void {
   viewRegistry.registerView({
     id: 'diff',
     title: '差异',
-    icon: GitBranch,
+    icon: 'git-branch',
     category: 'tool',
     component: factories['diff']?.() ?? fallbackComponent,
   });
@@ -118,7 +107,7 @@ export function registerBuiltInViews(factories: ViewFactoryMap): void {
   viewRegistry.registerView({
     id: 'runtime',
     title: '运行时',
-    icon: PlayCircle,
+    icon: 'play-circle',
     category: 'tool',
     component: factories['runtime']?.() ?? fallbackComponent,
   });
@@ -127,7 +116,7 @@ export function registerBuiltInViews(factories: ViewFactoryMap): void {
   viewRegistry.registerView({
     id: 'agent',
     title: '协作体',
-    icon: Bot,
+    icon: 'bot',
     category: 'tool',
     component: factories['agent']?.() ?? fallbackComponent,
   });
@@ -136,7 +125,7 @@ export function registerBuiltInViews(factories: ViewFactoryMap): void {
   viewRegistry.registerView({
     id: 'flow-dag',
     title: '编排图',
-    icon: Workflow,
+    icon: 'workflow',
     category: 'tool',
     component: factories['flow-dag']?.() ?? fallbackComponent,
   });
@@ -148,7 +137,7 @@ export function registerBuiltInViews(factories: ViewFactoryMap): void {
       const path = (ctx.params?.filePath as string) || '';
       return path.replace(/^.*[\\/]/, '') || '文件查看';
     },
-    icon: FileCode,
+    icon: 'file-code',
     category: 'auxiliary',
     component: factories['file-viewer']?.() ?? fallbackComponent,
   });

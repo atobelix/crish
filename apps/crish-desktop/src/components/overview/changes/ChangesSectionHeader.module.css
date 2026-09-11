@@ -92,9 +92,8 @@
 /* ── 最右侧折叠指示符：与其它 Section 绝对对齐 ── */
 .chev {
   margin-left: auto;
-  color: var(--text-tertiary);
-  opacity: 0.85;
-  transition: transform var(--transition-fast, 120ms ease), opacity var(--transition-fast, 120ms ease), color var(--transition-fast, 120ms ease);
+  color: var(--text-faint);
+transition: transform var(--transition-fast, 120ms ease), opacity var(--transition-fast, 120ms ease), color var(--transition-fast, 120ms ease);
   flex-shrink: 0;
 }
 

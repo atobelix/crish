@@ -255,7 +255,7 @@
 }
 
 .fileRow:focus-within {
-  outline: 1px solid var(--tint-focus-ring, color-mix(in srgb, var(--text-primary) 6%, transparent));
+  outline: 1px solid var(--tint-focus-ring);
   outline-offset: -1px;
 }
 
@@ -819,13 +819,13 @@
 /* 词法级行内修改高亮 (Intraline) */
 .diffWordAdd {
   background: transparent;
-  border-radius: 3px;
+  border-radius: var(--radius-xs, 2px);
   padding: 0 1px;
 }
 
 .diffWordDel {
   background: transparent;
-  border-radius: 3px;
+  border-radius: var(--radius-xs, 2px);
   padding: 0 1px;
 }
 
@@ -923,7 +923,7 @@
 }
 
 .commitTriggerBar:focus-visible {
-  outline: 1px solid color-mix(in srgb, var(--text-primary) 6%, transparent);
+  outline: 1px solid var(--tint-focus-ring);
   outline-offset: -1px;
 }
 

@@ -1,14 +1,15 @@
 import React from 'react';
-import * as Lucide from 'lucide-react';
+
 import styles from './OverviewCard.module.css';
 import { emitUiEvent } from '../../api/uiEvents';
 import { Button, Tooltip } from '../ui';
+import type { IconName } from '../ui/icons';
 
 export interface QuickPromptItem {
   id: string;
   title: string;
   description: string;
-  icon: keyof typeof Lucide;
+  icon: IconName;
   action: () => void;
 }
 

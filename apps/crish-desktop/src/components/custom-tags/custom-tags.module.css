@@ -11,7 +11,7 @@
    ========================================================================== */
 @keyframes emeraldPulse {
   0% {
-    box-shadow: 0 0 0 0 var(--aicard-pulse-color, color-mix(in srgb, var(--brand) 40%, transparent));
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--brand) 40%, transparent);
   }
   70% {
     box-shadow: 0 0 0 6px transparent;
@@ -103,7 +103,7 @@
 .actionBtn.primary {
   background: var(--brand-deep, var(--brand));
   border-color: var(--brand-primary, var(--brand));
-  color: var(--text-on-accent, #ffffff);
+  color: var(--text-on-accent);
 }
 
 .actionBtn.primary:hover {
@@ -118,7 +118,7 @@
 
 .actionBtn.danger:hover {
   background: var(--color-error);
-  color: var(--text-on-danger, #ffffff);
+  color: var(--text-on-danger);
 }
 
 .actionBtn.active {
@@ -148,7 +148,7 @@
   color: var(--text-secondary);
   font-size: 0.71875rem;
   padding: 0.15rem 0.45rem;
-  border-radius: 3px;
+  border-radius: var(--radius-xs, 2px);
   cursor: pointer;
   transition: all 0.12s ease;
 }
@@ -157,7 +157,7 @@
   background: var(--diff-mode-item-active-bg);
   color: var(--diff-mode-item-active-fg);
   font-weight: 500;
-  box-shadow: 0 1px 2px var(--shadow-color, rgba(0, 0, 0, 0.05));
+  box-shadow: 0 1px 2px var(--shadow-color);
 }
 
 .diffContainer {
@@ -168,7 +168,7 @@
   padding: 0.25rem 0;
   min-height: 44px;
   max-height: min(520px, 60vh);
-  background: var(--diff-bg-pane, var(--bg-card, #ffffff));
+  background: var(--bg-card);
   border-radius: var(--radius-md);
   overscroll-behavior: auto;
 }
@@ -184,7 +184,7 @@
 .diffLineNum {
   width: 36px;
   flex-shrink: 0;
-  color: var(--diff-gutter-fg, var(--text-tertiary));
+  color: var(--text-tertiary);
   user-select: none;
   text-align: right;
   padding-right: 0.5rem;
@@ -204,7 +204,7 @@
   flex: 1;
   min-width: 0;
   overflow-x: auto;
-  color: var(--diff-text-normal, var(--text-primary));
+  color: var(--text-primary);
 }
 
 .diffLineAdd {
@@ -221,7 +221,7 @@
 
 .diffLineContext {
   composes: diffLine;
-  color: var(--diff-text-normal, var(--text-primary));
+  color: var(--text-primary);
 }
 
 .diffLineHeader {
@@ -357,7 +357,7 @@
 .fileTreeNodeBadge {
   font-size: 0.6875rem;
   padding: 0.05rem 0.35rem;
-  border-radius: 3px;
+  border-radius: var(--radius-xs, 2px);
   font-weight: 600;
   line-height: 1.2;
 }
@@ -431,13 +431,13 @@
   padding: 0.1rem 0.4rem;
   border-radius: 4px;
   background: var(--aicard-badge-bg);
-  border: 1px solid var(--aicard-badge-border, var(--border-subtle));
+  border: 1px solid var(--border-subtle);
   color: var(--aicard-badge-fg);
 }
 
 .chevronIcon {
   font-size: 0.75rem;
-  color: var(--aicard-chevron-fg, var(--text-tertiary));
+  color: var(--text-tertiary);
   display: inline-block;
   transition: transform 0.15s ease;
 }
@@ -493,7 +493,7 @@
 
 .customTagErrorResetBtn:hover {
   background: var(--color-error);
-  color: var(--text-on-danger, #ffffff);
+  color: var(--text-on-danger);
 }
 
 .customTagErrorMessage {

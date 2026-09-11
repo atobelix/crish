@@ -1,7 +1,7 @@
 import React from 'react';
 import styles from './OverviewCard.module.css';
 import { Button, Tooltip } from '../ui';
-import { Target } from 'lucide-react';
+
 import {
   computeChecklistProgress,
   findCurrentLiveTool,
@@ -9,6 +9,7 @@ import {
 } from '../../api/sessionProgressApi';
 import { agentOneLineLabel } from './helpers';
 import type { SessionState } from '../../store/types';
+import { AppIcon } from '../ui/icons/index';
 
 interface ProgressSectionProps {
   session?: SessionState | null;
@@ -48,12 +49,9 @@ export const ProgressSection = React.memo(function ProgressSection({
             }
             onClick={onGoalClick}
           >
-            <Target
-              size={14}
-              strokeWidth={1.75}
+            <AppIcon name="target" size={14}
               className={styles.liveIco}
-              aria-hidden
-            />
+              aria-hidden />
             <span className={styles.itemName}>
               {goalMode ? agentOneLineLabel(goalMode.goal, '目标') : '清单'}
             </span>

@@ -82,11 +82,11 @@
 }
 
 .barAdd {
-  background: var(--accent-green, #16a34a);
+  background: var(--accent-green);
 }
 
 .barDel {
-  background: var(--accent-red, #dc2626);
+  background: var(--accent-red);
 }
 
 .barEmpty {
@@ -101,11 +101,11 @@
 }
 
 .numAdd {
-  color: var(--accent-green, #16a34a);
+  color: var(--accent-green);
   font-weight: 500;
 }
 
 .numDel {
-  color: var(--accent-red, #dc2626);
+  color: var(--accent-red);
   font-weight: 500;
 }

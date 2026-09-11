@@ -558,7 +558,7 @@
   display: inline-block;
   width: 12px;
   height: 12px;
-  border: 1.5px solid var(--text-tertiary);
+  border: var(--border-width-emphasis, 2px) solid var(--text-tertiary);
   border-top-color: transparent;
   border-radius: 50%;
   animation: spin var(--transition-spin) infinite;

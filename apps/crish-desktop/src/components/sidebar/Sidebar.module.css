@@ -137,7 +137,7 @@
   align-items: center;
   gap: var(--space-2);
   padding: 4px 8px;
-  border-radius: var(--button-radius, 8px);
+  border-radius: var(--button-radius, 7px);
   border: 1px solid transparent;
   background: transparent;
   cursor: pointer;

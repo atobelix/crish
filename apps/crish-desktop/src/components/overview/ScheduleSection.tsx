@@ -1,10 +1,11 @@
 import React from 'react';
 import styles from './OverviewCard.module.css';
-import { CalendarClock } from 'lucide-react';
+
 import { ChevronDownIcon } from '../../assets/icons';
 import { scheduleLabel } from '../../api/workflowApi';
 import type { CronJob } from '../../api/clientApi';
 import type { WorkflowDefinition } from '../../api/workflowApi';
+import { AppIcon } from '../ui/icons/index';
 
 interface ScheduleSectionProps {
   open: boolean;
@@ -22,7 +23,7 @@ export const ScheduleSection = React.memo(function ScheduleSection({
     <section className={styles.sec} aria-labelledby="overview-sec-cron">
       <button type="button" id="overview-sec-cron" className={styles.secH}
         aria-expanded={open} onClick={onToggle}>
-        <CalendarClock size={15} strokeWidth={1.75} aria-hidden />
+        <AppIcon name="calendar-clock" size={15} aria-hidden />
         <span>计划任务</span>
         {count > 0 ? (
           <span className={styles.pill}>{count}</span>

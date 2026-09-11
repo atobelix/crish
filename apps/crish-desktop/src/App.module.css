@@ -21,8 +21,8 @@
   z-index: var(--z-tooltip);
   top: 8px;
   left: 8px;
-  background: var(--bg-elevated, #fff);
-  color: var(--text-primary, #111);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
   border-radius: 6px;
   text-decoration: none;
   font-size: 13px;

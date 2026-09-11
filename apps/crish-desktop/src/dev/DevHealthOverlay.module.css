@@ -44,7 +44,7 @@
 }
 
 .cellWarn {
-  color: var(--warning-color, #b54708);
+  color: var(--warning-color);
 }
 
 .refresh {
@@ -52,7 +52,7 @@
   margin: 0;
   padding: 0 4px;
   border: none;
-  border-radius: 3px;
+  border-radius: var(--radius-xs, 2px);
   background: transparent;
   color: var(--text-tertiary);
   font: inherit;

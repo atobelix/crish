@@ -11,7 +11,7 @@
   gap: var(--space-2_5);
   box-sizing: border-box;
   -webkit-overflow-scrolling: touch;
-  background: var(--bg-card, #ffffff);
+  background: var(--bg-card);
 }
 
 .lean {
@@ -20,8 +20,7 @@
 
 
 .emptyQuiet {
-  color: var(--text-tertiary);
-  opacity: 0.75;
+  color: var(--text-faint);
   font-size: var(--font-size-xs);
   padding: 2px 2px 4px;
   margin: 0;
@@ -112,15 +111,13 @@
 }
 
 .secH:hover .chev {
-  color: var(--text-secondary);
-  opacity: 1;
+  color: var(--text-primary);
 }
 
 .chev {
   margin-left: auto;
-  color: var(--text-tertiary);
-  opacity: 0.85;
-  transition: transform var(--transition-fast, 120ms ease), opacity var(--transition-fast, 120ms ease), color var(--transition-fast, 120ms ease);
+  color: var(--text-faint);
+  transition: transform var(--transition-fast, 120ms ease), color var(--transition-fast, 120ms ease);
   flex-shrink: 0;
 }
 
@@ -129,7 +126,7 @@
 }
 
 .pill {
-  font-family: 'Segoe UI', -apple-system, var(--font-sans);
+  font-family: var(--font-sans);
   font-variant-numeric: tabular-nums;
   font-feature-settings: 'tnum' 1;
   font-size: var(--font-size-xs);
@@ -283,7 +280,7 @@
 }
 
 .itemMain em {
-  font-family: 'Segoe UI', -apple-system, var(--font-sans);
+  font-family: var(--font-sans);
   font-variant-numeric: tabular-nums;
   font-feature-settings: 'tnum' 1;
   font-style: normal;
@@ -348,7 +345,7 @@ button.liveRow:hover {
 }
 
 .liveRow em {
-  font-family: 'Segoe UI', -apple-system, var(--font-sans);
+  font-family: var(--font-sans);
   font-variant-numeric: tabular-nums;
   font-feature-settings: 'tnum' 1;
   font-style: normal;

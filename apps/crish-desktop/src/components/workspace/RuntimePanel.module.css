@@ -270,7 +270,7 @@
 .spinner {
   width: 12px;
   height: 12px;
-  border: 1.5px solid var(--accent-color);
+  border: var(--border-width-emphasis, 2px) solid var(--accent-color);
   border-top-color: transparent;
   border-radius: 50%;
   animation: spin var(--transition-spin) infinite;

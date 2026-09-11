@@ -1,4 +1,5 @@
 import type React from 'react';
+import type { IconName } from '../../components/ui/icons';
 
 export type ViewCategory = 'primary' | 'tool' | 'auxiliary' | 'debug';
 
@@ -25,12 +26,8 @@ export interface ViewDefinition {
   readonly id: string;
   /** 视图显示标题，支持 Thunk 函数以响应国际化或动态参数 */
   readonly title: string | ((ctx: ViewRenderContext) => string);
-  /** 视图图标组件（统一 Lucide 图标） */
-  readonly icon?: React.ComponentType<{
-    size?: number;
-    className?: string;
-    strokeWidth?: number;
-  }>;
+  /** 视图图标语义名（经 AppIcon 渲染） */
+  readonly icon?: IconName;
   /** 视图分类（'primary' 主对话域 / 'tool' 工具坞 / 'auxiliary' 辅助区 / 'debug' 调试） */
   readonly category: ViewCategory;
   /** 是否单例视图（默认 false，如为 true 则在工作区中只允许打开单个实例） */

@@ -731,7 +731,7 @@
 }
 
 .filesTreeRootHeader:hover {
-  background: color-mix(in srgb, var(--text-primary) 3%, var(--bg-card));
+  background: var(--bg-card-hover);
 }
 
 .filesTreeRootHeaderIcon {

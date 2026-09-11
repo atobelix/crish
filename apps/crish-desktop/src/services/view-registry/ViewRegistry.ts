@@ -1,4 +1,5 @@
 import type React from 'react';
+import type { IconName } from '../../components/ui/icons';
 import type {
   ViewDefinition,
   ViewRenderContext,
@@ -178,16 +179,8 @@ class ViewRegistryImpl {
     return this.resolveView(id).definition;
   }
 
-  /** 获取视图图标 */
-  public getIcon(
-    id: string
-  ):
-    | React.ComponentType<{
-        size?: number;
-        className?: string;
-        strokeWidth?: number;
-      }>
-    | undefined {
+  /** 获取视图图标语义名（经 AppIcon 渲染） */
+  public getIcon(id: string): IconName | undefined {
     return this.resolveView(id).definition?.icon;
   }
 

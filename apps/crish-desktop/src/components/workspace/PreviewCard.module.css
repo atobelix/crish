@@ -13,7 +13,7 @@
 .bar {
   display: flex;
   align-items: center;
-  gap: var(--space-0_5, 4px);
+  gap: var(--space-0_5);
   padding: 0 8px;
   height: 32px;
   min-height: 32px;
@@ -74,7 +74,7 @@
 .urlInput:focus-visible,
 .urlForm:focus-within .urlInput {
   outline: none !important;
-  background: var(--sidebar-hover, color-mix(in srgb, var(--text-primary) 4%, var(--bg-card))) !important;
+  background: var(--sidebar-hover, var(--bg-card-hover)) !important;
   border: 1px solid transparent !important;
   box-shadow: none !important;
 }
@@ -187,7 +187,7 @@
   background: var(--bg-elevated, var(--bg-card));
   border: var(--hairline-width, 1px) solid var(--border-color);
   border-radius: var(--radius-md, 6px);
-  box-shadow: 0 2px 8px color-mix(in srgb, var(--text-primary) 8%, transparent);
+  box-shadow: 0 2px 8px var(--tint-strong);
   font-size: var(--font-size-xs, 12px);
   color: var(--text-primary);
   pointer-events: auto;
@@ -409,12 +409,12 @@
 }
 
 .pureTextLink:hover {
-  background: var(--sidebar-hover, color-mix(in srgb, var(--text-primary) 4%, transparent));
+  background: var(--sidebar-hover, var(--tint-hover));
   color: var(--text-primary);
 }
 
 .pureTextLink:focus-visible {
-  background: var(--sidebar-hover, color-mix(in srgb, var(--text-primary) 6%, transparent));
+  background: var(--sidebar-hover, var(--tint-active));
   color: var(--text-primary);
 }
 
@@ -447,12 +447,12 @@
 }
 
 .pureTextLinkWithIcon:hover {
-  background: var(--sidebar-hover, color-mix(in srgb, var(--text-primary) 4%, transparent));
+  background: var(--sidebar-hover, var(--tint-hover));
   color: var(--text-primary);
 }
 
 .pureTextLinkWithIcon:focus-visible {
-  background: var(--sidebar-hover, color-mix(in srgb, var(--text-primary) 6%, transparent));
+  background: var(--sidebar-hover, var(--tint-active));
   color: var(--text-primary);
 }
 

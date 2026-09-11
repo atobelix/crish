@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Minus, Square, Copy, X } from 'lucide-react';
+
 import { Button, Tooltip } from '../ui';
 import styles from './WindowControls.module.css';
+import { AppIcon } from '../ui/icons/index';
 
 export interface WindowControlsProps {
   onClose?: () => void;
@@ -79,7 +80,7 @@ export const WindowControls: React.FC<WindowControlsProps> = React.memo(
             aria-label="最小化窗口"
             data-tauri-drag-region="false"
             onClick={handleMinimize}
-            icon={<Minus size={15} strokeWidth={1.5} aria-hidden />}
+            icon={<AppIcon name="minus" size={15} aria-hidden />}
           />
         </Tooltip>
         <Tooltip content={isMaximized ? '向下还原' : '最大化'}>
@@ -93,9 +94,9 @@ export const WindowControls: React.FC<WindowControlsProps> = React.memo(
             onClick={handleToggleMaximize}
             icon={
               isMaximized ? (
-                <Copy size={13} strokeWidth={1.5} aria-hidden />
+                <AppIcon name="copy" size={13} aria-hidden />
               ) : (
-                <Square size={13} strokeWidth={1.5} aria-hidden />
+                <AppIcon name="square" size={13} aria-hidden />
               )
             }
           />
@@ -110,7 +111,7 @@ export const WindowControls: React.FC<WindowControlsProps> = React.memo(
             aria-label={onClose ? '关闭设置' : '关闭应用'}
             data-tauri-drag-region="false"
             onClick={handleClose}
-            icon={<X size={16} strokeWidth={1.5} aria-hidden />}
+            icon={<AppIcon name="x" size={16} aria-hidden />}
           />
         </Tooltip>
       </div>

@@ -6,10 +6,10 @@
  */
 
 import React, { useMemo, useCallback } from 'react';
-import { HelpCircle } from 'lucide-react';
 import { IconButton } from '../ui';
 import { WindowControls } from '../shell/WindowControls';
 import styles from './AppTopBar.module.css';
+import { AppIcon } from '../ui/icons/index';
 
 export interface AppTopBarProps {
   onShowCheatsheet: () => void;
@@ -65,7 +65,7 @@ export const AppTopBar: React.FC<AppTopBarProps> = React.memo(
             tooltip="快捷键与帮助"
             onClick={handleShowHelp}
             icon={
-              <HelpCircle size={14} strokeWidth={1.5} aria-hidden="true" />
+              <AppIcon name="help-circle" size={14} aria-hidden="true" />
             }
           />
           {!isMacDesktop && <WindowControls />}

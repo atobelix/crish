@@ -18,7 +18,7 @@ export const SESSION_TAB_INDICATOR_W = INDICATOR_W_PX;
 export const SESSION_TAB_INDICATOR_H = INDICATOR_H_PX;
 export const SESSION_TAB_SHIFT_GAP = TAB_GAP_PX;
 export const SESSION_TAB_INSERT_HYSTERESIS = 1 / 3;
-/** 叶面边缘占比。与 Demo DragController `_handleWorkspaceMove`（rx<0.22 / >0.78）同一数值。 */
+/** 叶面边缘占比。与 Demo DragController `_handleWorkspaceMove`（rx<0.22 />0.78）同一数值。 */
 export const SESSION_PANE_EDGE = 0.22;
 export const SESSION_TAB_STRIP_SHIFT_MS = DURATION_FAST_MS;
 export const SESSION_TAB_STRIP_SHIFT_EASE = EASE_EMPHASIZED;

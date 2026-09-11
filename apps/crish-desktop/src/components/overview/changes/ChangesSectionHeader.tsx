@@ -8,11 +8,11 @@
  */
 
 import React, { useMemo } from 'react';
-import { FileDiff } from 'lucide-react';
 import { ChevronDownIcon } from '../../../assets/icons';
 import { Select } from '../../ui';
 import type { ChangesScopeMode } from './types';
 import styles from './ChangesSectionHeader.module.css';
+import { AppIcon } from '../../ui/icons/index';
 
 export interface ChangesSectionHeaderProps {
   open: boolean;
@@ -65,7 +65,7 @@ export const ChangesSectionHeader: React.FC<ChangesSectionHeaderProps> = ({
     >
       {/* 1. 左侧区域：图标、标题、数量 */}
       <div className={styles.leftCluster}>
-        <FileDiff size={15} strokeWidth={1.75} aria-hidden />
+        <AppIcon name="file-diff" size={15} aria-hidden />
         <span className={styles.titleText}>改动</span>
         {currentCount > 0 && (
           <span className={styles.countText}>

@@ -54,7 +54,7 @@
 }
 
 .changesItemBtn:hover {
-  background: var(--bg-hover, rgba(0, 0, 0, 0.045));
+  background: var(--bg-hover);
 }
 
 .changesItemBtn:focus-visible {
@@ -95,19 +95,19 @@
 }
 
 .statusM {
-  color: var(--text-warning, #d97706);
+  color: var(--text-warning);
 }
 
 .statusA {
-  color: var(--text-success, #16a34a);
+  color: var(--text-success);
 }
 
 .statusD {
-  color: var(--text-danger, #dc2626);
+  color: var(--text-danger);
 }
 
 .statusU {
-  color: var(--text-secondary, #6b7280);
+  color: var(--text-secondary);
 }
 
 .statusDefault {
