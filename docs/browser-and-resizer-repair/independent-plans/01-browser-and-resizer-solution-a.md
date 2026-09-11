@@ -1178,7 +1178,7 @@ it('点击地址栏时，触发文本全选', () => {
 ```typescript
 it('接收到 crish-preview-favicon 广播时，标签页呈现 <img> 网站图标', async () => {
   render(<LeafToolTabStrip tabs={['preview']} activeTab="preview" />);
-  
+
   // 模拟触发网站图标广播
   act(() => {
     window.dispatchEvent(new CustomEvent('crish-preview-favicon', {
@@ -1192,7 +1192,7 @@ it('接收到 crish-preview-favicon 广播时，标签页呈现 <img> 网站图�
 
 it('Favicon 加载失败时 (onError)，自动优雅回落到 Globe 图标', async () => {
   render(<LeafToolTabStrip tabs={['preview']} activeTab="preview" />);
-  
+
   act(() => {
     window.dispatchEvent(new CustomEvent('crish-preview-favicon', {
       detail: { url: 'http://localhost:5173', favicon: 'http://invalid.icon/404.ico' }
@@ -1215,7 +1215,7 @@ it('PointerDown 时立即建立 setPointerCapture 并屏蔽所有 iframe', () =>
   const leafBody = document.createElement('div');
   const ref = { current: leafBody };
   const commitSpy = vi.fn();
-  
+
   render(<LeafDockResizer leafBodyRef={ref} widthRatio={0.5} onCommitRatio={commitSpy} />);
   const resizer = screen.getByRole('separator');
   const captureSpy = vi.spyOn(resizer, 'setPointerCapture');
@@ -1229,7 +1229,7 @@ it('PointerUp 时正确释放 pointerCapture 并恢复 iframe 交互', () => {
   const leafBody = document.createElement('div');
   const ref = { current: leafBody };
   const commitSpy = vi.fn();
-  
+
   render(<LeafDockResizer leafBodyRef={ref} widthRatio={0.5} onCommitRatio={commitSpy} />);
   const resizer = screen.getByRole('separator');
   const releaseSpy = vi.spyOn(resizer, 'releasePointerCapture');

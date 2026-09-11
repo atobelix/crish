@@ -84,7 +84,7 @@ cargo test -p conex-browser-tools --test mcp_attach -- --ignored --nocapture
 - 接线形态：`McpServerConfig::new("browser-mcp", "cmd").with_args(["/c", "npx", "-y",
   "chrome-devtools-mcp", "--browserUrl", url])`（Windows 用 `cmd /c`，见 §4.2）；
 - `register_plugin_server` 枚举 **29 个工具**，全部 `mcp_browser-mcp__*` 前缀（命名空间隔离断言）；
-- 工具适配器（`McpToolAdapter`）执行 `mcp_browser-mcp__take_snapshot` / 
+- 工具适配器（`McpToolAdapter`）执行 `mcp_browser-mcp__take_snapshot` /
   `mcp_browser-mcp__list_console_messages` 成功（只读面）。
 
 ### 3.4 验证脚本位置（temp，不入库）
