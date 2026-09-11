@@ -1,12 +1,12 @@
 # 移动端全面复兴与打包打通战役 · 维度划分建议详案 (Proposal A)
 
-> **报告编号**：`docs/mobile-revival-audit/dimension-proposals/01-dimension-proposal-a.md`  
-> **规划角色**：【维度建议 Agent A】  
-> **生成日期**：2026-09-04  
+> **报告编号**：`docs/mobile-revival-audit/dimension-proposals/01-dimension-proposal-a.md`
+> **规划角色**：【维度建议 Agent A】
+> **生成日期**：2026-09-04
 > **依据资产**：
 > - `docs/mobile-revival-audit/00-summary.md`（调研汇总索引）
 > - `docs/mobile-revival-audit/surveys/` 下 11 份专项调研报告（01~11）
-> 
+>
 > **准则遵循**：
 > - 严格遵守《主 Agent 全流程调度提示词 v3》前置审计阶段规范与《AGENTS.md》协作指令；
 > - 反退避铁律与反过度设计红线；

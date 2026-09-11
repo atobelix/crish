@@ -1,8 +1,8 @@
 # 专项审计报告 10：UI 规范、主题与交互 (ui-specification-and-interaction)
 
-> **审计基准**：`apps/crish-mobile`（Expo SDK 57 / React Native 0.86 / React 19.2.3）  
-> **调查员**：UI 规范、主题与交互调查员  
-> **产出时间**：2026-09-04  
+> **审计基准**：`apps/crish-mobile`（Expo SDK 57 / React Native 0.86 / React 19.2.3）
+> **调查员**：UI 规范、主题与交互调查员
+> **产出时间**：2026-09-04
 > **规范依据**：
 > - 仓库根目录《AGENTS.md》（§12 Tooltip/悬停提示、§13 输入框与焦点态、§14 色彩空间与现代 CSS/RN 语法、§10 项目设计约定、§7 严禁补丁与作弊、§7.1 立体验证纪律）
 > - 移动端设计基线 M4（UI 规范）/ 体验基线 R2UX / 双轨热区 A1 裁决（iOS 44pt / Android 48dp）

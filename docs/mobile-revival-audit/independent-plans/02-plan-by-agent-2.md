@@ -1,10 +1,10 @@
 # 移动端全面复兴与打包打通总方案（类型驱动与契约零漂移学派）
 
-> **方案编号**：`independent-plans/02-plan-by-agent-2.md`  
-> **方案学派**：【类型驱动与契约零漂移学派】  
-> **方案主旨**：以 `@crish/shared-types` 单一真理源（SSOT）为中枢，彻底贯通 57 类事件、108 个严格解析器在移动端、桌面端与 Axum 网关之间的无缝映射，消除 6 个同名冲突符号，清退桌面端深路径侵入，清零移动端 22 处 TS 编译报错；以严格的类型系统保障 7 大领域维度的安全实施与原生打包打通。  
-> **定案依据**：`docs/mobile-revival-audit/01-final-dimensions.md`（DIM-01 ~ DIM-07）  
-> **调研基准**：`docs/mobile-revival-audit/00-summary.md` 与 11 份专项调研报告（`surveys/01` ~ `11`）  
+> **方案编号**：`independent-plans/02-plan-by-agent-2.md`
+> **方案学派**：【类型驱动与契约零漂移学派】
+> **方案主旨**：以 `@crish/shared-types` 单一真理源（SSOT）为中枢，彻底贯通 57 类事件、108 个严格解析器在移动端、桌面端与 Axum 网关之间的无缝映射，消除 6 个同名冲突符号，清退桌面端深路径侵入，清零移动端 22 处 TS 编译报错；以严格的类型系统保障 7 大领域维度的安全实施与原生打包打通。
+> **定案依据**：`docs/mobile-revival-audit/01-final-dimensions.md`（DIM-01 ~ DIM-07）
+> **调研基准**：`docs/mobile-revival-audit/00-summary.md` 与 11 份专项调研报告（`surveys/01` ~ `11`）
 > **纪律准则**：严格遵守《主 Agent 全流程调度提示词 v3》、《AGENTS.md》通用协作与反退避纪律、反过度设计红线；负产出绝对先行；无波次编号；一个概念一条主路径。
 
 ---
@@ -580,7 +580,7 @@ graph TD
 
     D1["DIM-01: 重复与死层<br/>(负产出绝对先行，清理历史毒瘤与阻断Hack)"]:::base
     D2["DIM-02: 类型系统与跨包契约<br/>(@crish/shared-types 导出消歧与全仓 TS 归零)"]:::contract
-    
+
     D3["DIM-03: 安全配对与连接对账网关<br/>(URL补齐、首帧订阅握手、对账游标修复、Dead死锁解除)"]:::domain
     D6["DIM-06: UI 规范、主题与触控交互<br/>(原子Input/Tooltip、48dp双轨热区、HeaderBackButton)"]:::domain
 
@@ -592,13 +592,13 @@ graph TD
     %% 严格单向因果依赖
     D1 -->|净化构建环境与路由树| D2
     D1 -->|清退手写重复组件| D6
-    
+
     D2 -->|提供严格类型安全网| D3
     D2 -->|消除桌面深路径与契约漂移| D7
-    
+
     D3 -->|打通物理长连接与事件总线| D4
     D3 -->|提供稳定的事件推流管道| D5
-    
+
     D4 -->|完成全链路闭环| D7
     D5 -->|完成全链路闭环| D7
     D6 -->|完成全链路闭环| D7

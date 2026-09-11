@@ -1,8 +1,8 @@
 # 专项审计报告 05：审批中心与 Outbox 队列 (approval-center-and-outbox)
 
-> **审计基准**：`apps/crish-mobile`（Expo SDK 57 / RN 0.86 / React 19.2.3）与 `apps/agent-workbench`（Tauri / Rust 内核）  
-> **调查员**：审批中心与 Outbox 队列调查员  
-> **产出时间**：2026-09-04  
+> **审计基准**：`apps/crish-mobile`（Expo SDK 57 / RN 0.86 / React 19.2.3）与 `apps/agent-workbench`（Tauri / Rust 内核）
+> **调查员**：审批中心与 Outbox 队列调查员
+> **产出时间**：2026-09-04
 > **审计范围**：
 > - `apps/crish-mobile/src/domain/store/approvalStore.ts`、`approvalReducers.ts`、`approvalMappers.ts`
 > - `apps/crish-mobile/src/domain/data/outbox.ts`
@@ -187,11 +187,11 @@ Outbox 队列设计了三态模型：`pending` -> `sent` -> `confirmResolved`（
 
 #### (3) 退避阶梯算法与人工介入
 - 退避公式由 [`outboxBackoffMs(attempts)`](file:///c:/Software/conex/apps/crish-mobile/src/domain/data/outbox.ts#L53-L58) 定义：
-  $$\text{Backoff}(N) = \begin{cases} 
-  1\,000\text{ ms} & N \le 1 \\ 
-  4\,000\text{ ms} & N = 2 \\ 
-  16\,000\text{ ms} & N = 3 \\ 
-  60\,000\text{ ms} & N \ge 4 
+  $$\text{Backoff}(N) = \begin{cases}
+  1\,000\text{ ms} & N \le 1 \\
+  4\,000\text{ ms} & N = 2 \\
+  16\,000\text{ ms} & N = 3 \\
+  60\,000\text{ ms} & N \ge 4
   \end{cases}$$
 - **容量与转人工机制**：
   - `OUTBOX_MAX_ITEMS = 200`：队列上限 200 条；当队列满时，**仅淘汰最早已完成的 `sent` 条目；若全是未完成的 `pending`/`failed`，严格拒绝新条目（返回 `full`），绝不丢弃未决决策**；
@@ -349,11 +349,11 @@ Outbox 队列设计了三态模型：`pending` -> `sent` -> `confirmResolved`（
 ### 3. 跨端传输通道的严重断层发现（重大发现）
 
 > [!CAUTION]
-> **发现一：桌面端 WebSocket 服务端的“远程命令黑洞”**  
-> 移动端 `WsGateway.invoke` 通过 WebSocket 向桌面端发送 `remote.approve` / `remote.deny` / `remote.listPendingApprovals` 帧。  
-> 审计桌面端 [`apps/agent-workbench/src-tauri/src/server/ws.rs:1133-1163`](file:///c:/Software/conex/apps/agent-workbench/src-tauri/src/server/ws.rs#L1133-L1163) 发现：  
-> 服务端对入站帧仅匹配了 `PairHello`, `EventsSubscribe`, `EventsSubscribeAll`, `EventsResume`, `Heartbeat`, `EventsAck`, `Error`；  
-> 对于所有 `MessageKind::Remote(...)` 命令帧，直接落入通配忽略分支：  
+> **发现一：桌面端 WebSocket 服务端的“远程命令黑洞”**
+> 移动端 `WsGateway.invoke` 通过 WebSocket 向桌面端发送 `remote.approve` / `remote.deny` / `remote.listPendingApprovals` 帧。
+> 审计桌面端 [`apps/agent-workbench/src-tauri/src/server/ws.rs:1133-1163`](file:///c:/Software/conex/apps/agent-workbench/src-tauri/src/server/ws.rs#L1133-L1163) 发现：
+> 服务端对入站帧仅匹配了 `PairHello`, `EventsSubscribe`, `EventsSubscribeAll`, `EventsResume`, `Heartbeat`, `EventsAck`, `Error`；
+> 对于所有 `MessageKind::Remote(...)` 命令帧，直接落入通配忽略分支：
 > ```rust
 > _ => {
 >     tracing::debug!(target: "ws", conn_id = ctx.conn_id, kind = %envelope.kind_str(), "R1-05 范围外 kind，忽略");
@@ -363,14 +363,14 @@ Outbox 队列设计了三态模型：`pending` -> `sent` -> `confirmResolved`（
 > **后果**：服务端默默丢弃帧，**从不回复任何 `result.*` 或 `error` 帧**！移动端 `invoke` 必将等待 10 秒并报 `cmd.timeout` 超时！
 
 > [!WARNING]
-> **发现二：C13 对账命令未在 Tauri 注册（`registered: false`）**  
-> 在契约表 [`packages/shared-types/src/generated/device/commands.ts:24`](file:///c:/Software/conex/packages/shared-types/src/generated/device/commands.ts#L24) 中明确标明：  
-> `mobile_list_pending_approvals` 的 `registered: false`。在 Tauri 的 `command_manifest.rs` 中全无该命令的注册。  
+> **发现二：C13 对账命令未在 Tauri 注册（`registered: false`）**
+> 在契约表 [`packages/shared-types/src/generated/device/commands.ts:24`](file:///c:/Software/conex/packages/shared-types/src/generated/device/commands.ts#L24) 中明确标明：
+> `mobile_list_pending_approvals` 的 `registered: false`。在 Tauri 的 `command_manifest.rs` 中全无该命令的注册。
 > 这导致对账命令在桌面端目前只能通过 HTTP REST `GET /v1/approvals/pending` 调用，无法通过 WS 网关调用。
 
 > [!NOTE]
-> **发现三：REST 端点可用但移动端未接线**  
-> 桌面端在 [`router.rs:151, 480-515`](file:///c:/Software/conex/apps/agent-workbench/src-tauri/src/server/router.rs#L151-L515) 中其实已经完整实现了 `POST /v1/approval/{toolCallId}/approve`、`POST /v1/approval/{toolCallId}/deny` 以及 `GET /v1/approvals/pending` 的 HTTP REST 路由；  
+> **发现三：REST 端点可用但移动端未接线**
+> 桌面端在 [`router.rs:151, 480-515`](file:///c:/Software/conex/apps/agent-workbench/src-tauri/src/server/router.rs#L151-L515) 中其实已经完整实现了 `POST /v1/approval/{toolCallId}/approve`、`POST /v1/approval/{toolCallId}/deny` 以及 `GET /v1/approvals/pending` 的 HTTP REST 路由；
 > 但移动端 `approvalWiring.ts` 完全绑定于 `WsGateway.invoke`，并未实现 HTTP 降级回退通道。
 
 ---

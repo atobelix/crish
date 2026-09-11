@@ -1,17 +1,17 @@
 # DIM-04 实施详案：跨端审批闭环与 Outbox 队列 (04-plan-dim-04-approval-outbox.md)
 
-> **战役目录**：`docs/mobile-revival-audit/`  
-> **文档位置**：`docs/mobile-revival-audit/plans/04-plan-dim-04-approval-outbox.md`  
-> **负责 Agent**：【DIM-04 跨端审批闭环与 Outbox 队列详案编写 Agent】  
-> **输入基准**：  
-> - 总计划框架：`02-master-revival-plan.md`  
-> - 终审定案：`01-final-dimensions.md`（DIM-04 定案）  
-> - 评审仲裁：`plan-reviews/`（01 契约分歧仲裁、02 负产出硬审、03 可行性对撞）  
-> - 专项调研：`surveys/05-approval-center-and-outbox.md`  
-> **核心准则**：  
-> - 严守《主 Agent 全流程调度提示词 v3》第二阶段第 4 步规范与根目录《AGENTS.md》；  
-> - 坚守反退避纪律（`.agents/LOGIC_PLAN_NO_RETREAT.md`）与反过度设计红线（`ANTI_OVERENGINEERING_GUARDRAILS.md`）；  
-> - 绝对禁止出现任何波次/批次编号；绝对不修改业务代码；不涉及任何笔记功能；  
+> **战役目录**：`docs/mobile-revival-audit/`
+> **文档位置**：`docs/mobile-revival-audit/plans/04-plan-dim-04-approval-outbox.md`
+> **负责 Agent**：【DIM-04 跨端审批闭环与 Outbox 队列详案编写 Agent】
+> **输入基准**：
+> - 总计划框架：`02-master-revival-plan.md`
+> - 终审定案：`01-final-dimensions.md`（DIM-04 定案）
+> - 评审仲裁：`plan-reviews/`（01 契约分歧仲裁、02 负产出硬审、03 可行性对撞）
+> - 专项调研：`surveys/05-approval-center-and-outbox.md`
+> **核心准则**：
+> - 严守《主 Agent 全流程调度提示词 v3》第二阶段第 4 步规范与根目录《AGENTS.md》；
+> - 坚守反退避纪律（`.agents/LOGIC_PLAN_NO_RETREAT.md`）与反过度设计红线（`ANTI_OVERENGINEERING_GUARDRAILS.md`）；
+> - 绝对禁止出现任何波次/批次编号；绝对不修改业务代码；不涉及任何笔记功能；
 > - 推进单位为领域概念，坚持负产出先行，单一真理源（SSOT），单向无环依赖（DAG）。
 
 ---
@@ -231,7 +231,7 @@ graph LR
 ### 2.1 清理 `approvalWiring.ts` 中的纯内存态占位注释与死代码
 1. **核销占位注释**：
    拔除 `src/adapters/wiring/approvalWiring.ts:72` 的历史妥协注释：
-   > `// 职责边界：...持久化（D6 §6.6 硬底线）属 db 域后续轮次，本层为内存态占位。`  
+   > `// 职责边界：...持久化（D6 §6.6 硬底线）属 db 域后续轮次，本层为内存态占位。`
    替换为真实轻量持久化适配器的装配逻辑。
 2. **核销手写重复命令构造函数**：
    删除 `approvalWiring.ts:97-141` 中私自手写的 `buildApproveRequest`、`buildDenyRequest` 与 `buildListPendingApprovalsRequest`。统一改为从 `src/domain/repositories/approvalCommands.ts` 导入单一真理源（SSOT）构造函数，消灭双源维护漂移。

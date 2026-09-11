@@ -1,20 +1,20 @@
 # 移动端全面复兴与打包打通 · 契约分界、文件域互斥与 DAG 拓扑终审报告 (04-final-review-contracts-and-dag.md)
 ## —— 详案终审 Agent 1：契约分界、文件域互斥与 DAG 拓扑终审专员
 
-> **战役工作区**：`docs/mobile-revival-audit/`  
-> **报告位置**：`docs/mobile-revival-audit/plan-reviews/04-final-review-contracts-and-dag.md`  
-> **审查角色**：【详案终审 Agent 1（契约分界、文件域互斥与 DAG 拓扑）】  
-> **审查输入资产**：  
-> - 实施总纲框架：[`docs/mobile-revival-audit/02-master-revival-plan.md`](file:///c:/Software/conex/docs/mobile-revival-audit/02-master-revival-plan.md)  
-> - 7 份可执行详案：[`docs/mobile-revival-audit/plans/01-plan-dim-01-dead-code.md`](file:///c:/Software/conex/docs/mobile-revival-audit/plans/01-plan-dim-01-dead-code.md) 至 [`07-plan-dim-07-packaging.md`](file:///c:/Software/conex/docs/mobile-revival-audit/plans/07-plan-dim-07-packaging.md)  
-> - 前序对撞评审：`docs/mobile-revival-audit/plan-reviews/`（01 契约重叠审、02 负产出硬审、03 可行性对撞）  
-> - 跨端核心源码：桌面端 [`apps/agent-workbench/src-tauri/src/server/ws.rs`](file:///c:/Software/conex/apps/agent-workbench/src-tauri/src/server/ws.rs)、`core_backend.rs` 与移动端 `EndpointResolver.ts`、`ReconnectingWsClient.ts`、`WsGateway.ts`、`approvalWiring.ts`、`feedBridge.ts`、`authStore.ts`、`eventStore.ts`  
-> **遵循准则**：《主 Agent 全流程调度提示词 v3》第二阶段第 5 步规范、根目录《AGENTS.md》、反退避全文（`LOGIC_PLAN_NO_RETREAT.md`）与反过度设计红线（`ANTI_OVERENGINEERING_GUARDRAILS.md`）  
-> **终审纪律铁律**：  
-> 1. **绝对不修改任何业务代码**（只对计划文档进行高强度剖析与仲裁）；  
-> 2. **绝对禁止出现任何波次/批次编号**（一律以阶段概念与 DIM 编号锚定）；  
-> 3. **杜绝空壳“整体良好”与套话**，必须具体到文件、行号、接口名与断言；  
-> 4. **完全不涉及笔记功能**；  
+> **战役工作区**：`docs/mobile-revival-audit/`
+> **报告位置**：`docs/mobile-revival-audit/plan-reviews/04-final-review-contracts-and-dag.md`
+> **审查角色**：【详案终审 Agent 1（契约分界、文件域互斥与 DAG 拓扑）】
+> **审查输入资产**：
+> - 实施总纲框架：[`docs/mobile-revival-audit/02-master-revival-plan.md`](file:///c:/Software/conex/docs/mobile-revival-audit/02-master-revival-plan.md)
+> - 7 份可执行详案：[`docs/mobile-revival-audit/plans/01-plan-dim-01-dead-code.md`](file:///c:/Software/conex/docs/mobile-revival-audit/plans/01-plan-dim-01-dead-code.md) 至 [`07-plan-dim-07-packaging.md`](file:///c:/Software/conex/docs/mobile-revival-audit/plans/07-plan-dim-07-packaging.md)
+> - 前序对撞评审：`docs/mobile-revival-audit/plan-reviews/`（01 契约重叠审、02 负产出硬审、03 可行性对撞）
+> - 跨端核心源码：桌面端 [`apps/agent-workbench/src-tauri/src/server/ws.rs`](file:///c:/Software/conex/apps/agent-workbench/src-tauri/src/server/ws.rs)、`core_backend.rs` 与移动端 `EndpointResolver.ts`、`ReconnectingWsClient.ts`、`WsGateway.ts`、`approvalWiring.ts`、`feedBridge.ts`、`authStore.ts`、`eventStore.ts`
+> **遵循准则**：《主 Agent 全流程调度提示词 v3》第二阶段第 5 步规范、根目录《AGENTS.md》、反退避全文（`LOGIC_PLAN_NO_RETREAT.md`）与反过度设计红线（`ANTI_OVERENGINEERING_GUARDRAILS.md`）
+> **终审纪律铁律**：
+> 1. **绝对不修改任何业务代码**（只对计划文档进行高强度剖析与仲裁）；
+> 2. **绝对禁止出现任何波次/批次编号**（一律以阶段概念与 DIM 编号锚定）；
+> 3. **杜绝空壳“整体良好”与套话**，必须具体到文件、行号、接口名与断言；
+> 4. **完全不涉及笔记功能**；
 > 5. 坚持单一真理源（SSOT）与架构净收敛。
 
 ---
@@ -306,7 +306,7 @@
      /** 令牌有效时长 ms（null = 未知/长期） */
      ttlMs: number | null;
    }
-   
+
    export interface AuthState {
      // ...
      /** 令牌元数据（hasToken/issuedAt/ttl；密钥明文在 secure-store） */
@@ -480,5 +480,5 @@
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-终审报告出具完毕，已全量落盘至：  
+终审报告出具完毕，已全量落盘至：
 `c:/Software/conex/docs/mobile-revival-audit/plan-reviews/04-final-review-contracts-and-dag.md`！

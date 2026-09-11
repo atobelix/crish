@@ -1,6 +1,6 @@
 # 移动端长连接网关与游标对账深入审计报告
 
-> **审计维度**：04 - 长连接网关与游标对账（Network Gateway & Cursor Reconcile）  
+> **审计维度**：04 - 长连接网关与游标对账（Network Gateway & Cursor Reconcile）
 > **审计对象**：
 > - `apps/crish-mobile/src/network/` 全域模块（`ReconnectingWsClient.ts`、`WsGateway.ts`、`WsEnvelope.ts`、`signer.ts`、`EndpointResolver.ts`、`protocolVersion.ts`、`HttpClient.ts`）
 > - `apps/crish-mobile/src/adapters/wiring/observationWiring.ts`

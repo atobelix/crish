@@ -1,8 +1,8 @@
 # 新一代多端协同、远程控制与中转服务完整技术实施方案（方案 C）
 
-> **方案代号**：Plan-C (Agent-C 独立执笔)  
-> **设计定位**：工业级、高可靠、本地优先兼顾广域网无感漫游的多端协同与远程控制实施蓝图  
-> **核心宗旨**：“一切麻烦的东西在我们这，用户最好是点点就能完成的那种最好了”  
+> **方案代号**：Plan-C (Agent-C 独立执笔)
+> **设计定位**：工业级、高可靠、本地优先兼顾广域网无感漫游的多端协同与远程控制实施蓝图
+> **核心宗旨**：“一切麻烦的东西在我们这，用户最好是点点就能完成的那种最好了”
 > **目标容量**：支持 10,000+ 活跃注册用户、单机承载 20,000+ 双端并发长连接，内存平稳、零连接泄漏、具备端到端零知识加密（E2EE）与断线自愈能力。
 
 ---
@@ -216,7 +216,7 @@ impl AuthManager {
         }
         Ok(())
     }
-    
+
     // 自动刷新 Access Token 守卫（由后台轮询或 IPC 请求时透明调用）
     pub async fn ensure_valid_token(&self) -> Result<String, String> {
         let mut guard = self.session.write().await;
@@ -231,7 +231,7 @@ impl AuthManager {
                     &sess.refresh_token,
                     &sess.device_id
                 ).await.map_err(|e| format!("Token 刷新失败: {}", e))?;
-                
+
                 sess.access_token = new_tokens.access_token;
                 sess.refresh_token = new_tokens.refresh_token;
                 sess.access_expires_at = now + 15 * 60 * 1000;
@@ -244,7 +244,7 @@ impl AuthManager {
         }
         Err("未登录".to_string())
     }
-    
+
     fn persist_to_disk(&self, session: &AccountSession) -> Result<(), String> {
         let plain = serde_json::to_vec(session).map_err(|e| e.to_string())?;
         // 平台级加解密包装 (Windows DPAPI / Unix Keyring)
@@ -631,7 +631,7 @@ impl RelayHub {
         for entry in self.channels.iter() {
             let (ref a, ref b) = *entry.value();
             let target_device = if a == src_device { b } else if b == src_device { a } else { continue };
-            
+
             if let Some(target) = self.devices.get(target_device) {
                 // 有界队列背压投递 (Channel 深度 64，满载时快速降级或阻断)
                 match target.tx.try_send(raw) {

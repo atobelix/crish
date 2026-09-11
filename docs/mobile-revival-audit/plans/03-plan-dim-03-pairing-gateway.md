@@ -1,16 +1,16 @@
 # 移动端全面复兴与打包打通 · 维度执行详案 (03-plan-dim-03-pairing-gateway.md)
 ## —— DIM-03: 安全配对与连接对账网关实施详案
 
-> **战役目录**：`docs/mobile-revival-audit/plans/`  
-> **文档编号**：`03-plan-dim-03-pairing-gateway.md`  
-> **责任 Agent**：DIM-03 安全配对与连接对账网关详案编写 Agent  
+> **战役目录**：`docs/mobile-revival-audit/plans/`
+> **文档编号**：`03-plan-dim-03-pairing-gateway.md`
+> **责任 Agent**：DIM-03 安全配对与连接对账网关详案编写 Agent
 > **输入资产**：
 > - 总纲框架：`docs/mobile-revival-audit/02-master-revival-plan.md`
 > - 定案文档：`docs/mobile-revival-audit/01-final-dimensions.md`
 > - 评审报告：`docs/mobile-revival-audit/plan-reviews/01` ~ `03`
 > - 专项调研：`docs/mobile-revival-audit/surveys/03-pairing-and-crypto-handshake.md`、`04-network-gateway-and-reconcile.md`
-> 
-> **准则遵循**：《主 Agent 全流程调度提示词 v3》第二阶段第 4 步规范、根目录《AGENTS.md》、反退避纪律、反过度设计红线 (`ANTI_OVERENGINEERING_GUARDRAILS.md`)  
+>
+> **准则遵循**：《主 Agent 全流程调度提示词 v3》第二阶段第 4 步规范、根目录《AGENTS.md》、反退避纪律、反过度设计红线 (`ANTI_OVERENGINEERING_GUARDRAILS.md`)
 > **核心纪律**：严禁修改或提交任何业务代码；严禁出现任何波次/批次编号；不涉及笔记功能；负产出绝对先行；单一真理源（SSOT）。
 
 ---
@@ -37,7 +37,7 @@
 
 ### 1.1 修复 `PairingWiring.handlePairingPhase`：补齐 Dead 相位分发 `onPairError`（P0 致命死锁）
 
-- **缺陷现场与根因定位**：  
+- **缺陷现场与根因定位**：
   文件：`apps/crish-mobile/src/adapters/wiring/pairing/PairingWiring.ts:464-472`
   ```typescript
   private handlePairingPhase(phase: WsPhase): void {
@@ -50,7 +50,7 @@
     }
   }
   ```
-  底层 `ReconnectingWsClient` 在 5 次退避重试失败后，相位流转至 `'dead'`。`handlePairingPhase` 仅调用了 `reportError`（将错误写入 `this.lastError`），**完全没有调用 `this.dispatch({ type: 'onPairError', ... })` 驱动内部状态机**。  
+  底层 `ReconnectingWsClient` 在 5 次退避重试失败后，相位流转至 `'dead'`。`handlePairingPhase` 仅调用了 `reportError`（将错误写入 `this.lastError`），**完全没有调用 `this.dispatch({ type: 'onPairError', ... })` 驱动内部状态机**。
   状态机 `this.machine.state` 依然死锁在 `'sending-hello'` 态。在表现层 `pairManualScreen.tsx:170` 中：
   ```typescript
   const busy = machine.state === 'sending-hello' || machine.state === 'waiting-verify';
@@ -58,7 +58,7 @@
   ```
   `busy` 恒为 `true`，导致 `loading={busy}` 恒为 `true`，`disabled={!canConnect}` 恒为 `true`，且点击被 `if (busy || submittingRef.current) return;` 硬拦截。用户面对报错提示却无法原地重新点击连接，必须强退或返回放弃。
 
-- **确定性修复方案**：  
+- **确定性修复方案**：
   在 `handlePairingPhase` 判定 `phase === 'dead'` 时，必须同步向状态机派发领域错误事件：
   ```typescript
   private handlePairingPhase(phase: WsPhase): void {
@@ -81,7 +81,7 @@
 
 ### 1.2 修复 `EndpointResolver.resolveWsUrl`：补全 `/v1/events?token=` 查询参数（P0 握手通道阻断）
 
-- **缺陷现场与根因定位**：  
+- **缺陷现场与根因定位**：
   文件：`apps/crish-mobile/src/network/EndpointResolver.ts:21-27`
   ```typescript
   export function resolveWsUrl(
@@ -100,7 +100,7 @@
     - **携带非法 token**：直接返回 **HTTP 401 Unauthorized**。
   原 `resolveWsUrl` 产出 `wss://host:8765`，导致移动端无论配对还是会话长连接，均在 TCP 握手后的 HTTP Upgrade 阶段被直接拒绝。
 
-- **确定性修复方案**：  
+- **确定性修复方案**：
   重构 `EndpointResolver.ts` 的 `resolveWsUrl` 签名与实现，增加可选的 `token` 参数：
   ```typescript
   export function resolveWsUrl(
@@ -125,17 +125,17 @@
 
 ### 1.3 补齐全仓首帧 `events.subscribe` 订阅帧发送与回执处理（P0 推流与对账断裂）
 
-- **缺陷现场与根因定位**：  
-  文件：`apps/crish-mobile/src/adapters/wiring/feedBridge.ts`、`observationWiring.ts`  
-  全仓检索不到任何调用 `gateway.send('events.subscribe', ...)` 或 `invoke('events.subscribe', ...)` 的代码。  
+- **缺陷现场与根因定位**：
+  文件：`apps/crish-mobile/src/adapters/wiring/feedBridge.ts`、`observationWiring.ts`
+  全仓检索不到任何调用 `gateway.send('events.subscribe', ...)` 或 `invoke('events.subscribe', ...)` 的代码。
   根据协议契约（`ws.rs:1226` 与 `device-protocol.json`）：
   - 桌面端为每个连接维护独立的 `FanOutEmitter` 过滤器；新连接建立时过滤器初始为空；
   - 客户端连接后**必须发送 `events.subscribe`** 告知关注的会话集合（`sessions: string[]`）与各会话本地已知序列号（`lastSequences: Record<string, number>`）；
   - 桌面端收到后激活 FanOut 过滤器，并返回 `events.subscribe.ok`，携带逐会话的最新序列号（`nextSequence`）与过期判定（`stale`）；
-  - `approvalWiring.ts:242` 挂起的 `this.gateway.on('events.subscribe.ok', () => this.onSyncReady())` 依赖该回执唤醒 Outbox 离线审批重放。  
+  - `approvalWiring.ts:242` 挂起的 `this.gateway.on('events.subscribe.ok', () => this.onSyncReady())` 依赖该回执唤醒 Outbox 离线审批重放。
   原代码缺失该首帧，导致桌面端推流瘫痪、审批重放永久挂起、对账快照饥饿。
 
-- **确定性修复方案**：  
+- **确定性修复方案**：
   1. **首帧订阅触发**：在 `FeedBridge.handlePhaseChange('open')`（且已确保出站管道就绪）时，自动触发订阅装配方法 `subscribeActiveSessions()`；
   2. **组装订阅载荷**：
      - 从 `sessionStore.getState().sessions` 获取所有已知会话 ID（防御性切片最多 32 个，对齐 `MAX_SUBSCRIPTIONS = 32`）；
@@ -154,8 +154,8 @@
 
 ### 1.4 修复 `FeedBridge.handleProjection`：全量重放前清空窗口与本地游标（P0 数据全部误丢 Bug）
 
-- **缺陷现场与根因定位**：  
-  文件：`apps/crish-mobile/src/adapters/wiring/feedBridge.ts:164-169`  
+- **缺陷现场与根因定位**：
+  文件：`apps/crish-mobile/src/adapters/wiring/feedBridge.ts:164-169`
   文件：`packages/shared-utils/src/event-ring-window.ts:75-78`
   ```typescript
   // feedBridge.ts:164
@@ -175,7 +175,7 @@
   ```
   由于 `FeedBridge` 在触发全量重放前**没有清空本地窗口**，本地 `window.lastSeq` 依然保留着历史旧高水位（例如 6000）。服务端推送的 1~6000 序号帧全部满足 `seq <= window.lastSeq`，**100% 被当做 duplicate 丢弃**！全量重建彻底失效，界面停留在过期或白屏状态。
 
-- **确定性修复方案**：  
+- **确定性修复方案**：
   在 `handleProjection` 处理 `fullReplay` 与 `fresh` 会话集合时，必须在发起 `resumeSession` 之前，先调用 `eventStore.getState().unloadWindow(sessionId)` 彻底重置本地窗口与游标：
   ```typescript
   for (const sessionId of projection.fullReplay) {
@@ -194,7 +194,7 @@
 
 ### 1.5 修复 `ReconnectingWsClient.handleOpen` 时序竞态：先绑定管道再广播 Open 相位
 
-- **缺陷现场与根因定位**：  
+- **缺陷现场与根因定位**：
   文件：`apps/crish-mobile/src/network/ReconnectingWsClient.ts:394-405`
   ```typescript
   private handleOpen(ws: WsSocket): void {
@@ -210,10 +210,10 @@
     this.driveProjection();
   }
   ```
-  `setPhase('open')` 会同步调用 `this.opts.onPhaseChange?.('open')`，上层观察者（`FeedBridge.handlePhaseChange`）在收到 `'open'` 信号后，立即调用 `queryDevicePresence()` 或通过 `gateway.invoke(...)` 发起 RPC。  
+  `setPhase('open')` 会同步调用 `this.opts.onPhaseChange?.('open')`，上层观察者（`FeedBridge.handlePhaseChange`）在收到 `'open'` 信号后，立即调用 `queryDevicePresence()` 或通过 `gateway.invoke(...)` 发起 RPC。
   但在这一微秒，第 399 行的 `gateway.attachSend` 尚未执行，`WsGateway.sendFn` 仍为 `null`，导致建连瞬间出站的 RPC 请求直接被 reject 报错 `transport.closed: 连接未就绪`。
 
-- **确定性修复方案**：  
+- **确定性修复方案**：
   调整时序，严格保证**先绑定出站管道，再变更状态机并广播通知**：
   ```typescript
   private handleOpen(ws: WsSocket): void {
@@ -237,7 +237,7 @@
 
 ### 1.6 统一冷启动 `unpair()` 身份真理源：以 `authStore` 为准发送 `device.unlink`
 
-- **缺陷现场与根因定位**：  
+- **缺陷现场与根因定位**：
   文件：`apps/crish-mobile/src/adapters/wiring/pairing/PairingWiring.ts:361-373`
   ```typescript
   async unpair(): Promise<void> {
@@ -255,10 +255,10 @@
     ...
   }
   ```
-  应用配对成功后退出；次日冷启动打开应用，`hydrate()` 从底层安全存储读出凭据水合至 `authStore`（`pairState = 'paired'`）。但 `hydrate()` 从未触碰瞬态状态机 `this.machine`（其状态保持在初始态 `'idle'`，`pendingHello` 为 `null`）。  
+  应用配对成功后退出；次日冷启动打开应用，`hydrate()` 从底层安全存储读出凭据水合至 `authStore`（`pairState = 'paired'`）。但 `hydrate()` 从未触碰瞬态状态机 `this.machine`（其状态保持在初始态 `'idle'`，`pendingHello` 为 `null`）。
   当用户在设置页点击「移除本机」触发 `unpair()` 时，`this.machine.state === 'paired'` 判定为 `false`，通知桌面端的 `device.unlink` 网络调用被完全跳过！桌面端设备列表永远残留该僵尸设备。
 
-- **确定性修复方案**：  
+- **确定性修复方案**：
   解绑逻辑彻底摒弃对瞬态状态机 `this.machine` 的反向依赖，统一以持久化真理源 `authStore` 为唯一凭据：
   ```typescript
   async unpair(): Promise<void> {
@@ -294,11 +294,11 @@
 
 ### 1.7 增加应用层 15s 配对超时熔断机制
 
-- **缺陷现场与根因定位**：  
-  文件：`apps/crish-mobile/src/adapters/wiring/pairing/PairingWiring.ts:475-480`  
+- **缺陷现场与根因定位**：
+  文件：`apps/crish-mobile/src/adapters/wiring/pairing/PairingWiring.ts:475-480`
   发送 `pair.hello` 后，若桌面端由于后台卡死、配对码并发失效等原因未响应，且底层 TCP 保持连通，客户端将陷入无限等待，机器态永久挂在 `sending-hello`，用户无法感知失败。
 
-- **确定性修复方案**：  
+- **确定性修复方案**：
   在 `PairingWiring` 中引入应用层配对超时定时器 `pairingTimeoutTimer: ReturnType<typeof setTimeout> | null = null`：
   - 在 `beginPairing` 发出 `pair.hello` 阶段启动 15 秒定时器（`PAIRING_TIMEOUT_MS = 15_000`）；
   - 若 15 秒内未收到 `pair.ok` 或 `pair.error`，定时器触发主动熔断：
@@ -346,7 +346,7 @@ graph TD
 
     D1["【阶段 0】DIM-01: 重复与死层清理<br/>(负产出绝对先行，移出测试，Metro 还原)"]:::base
     D2["【阶段 1】DIM-02: 类型系统与跨包契约<br/>(补齐 shared-types 导出，消歧 6 符号)"]:::base
-    
+
     D3["【阶段 2A】DIM-03: 安全配对与连接对账网关<br/>(本维度：握手/订阅/状态机自愈/对账闭环)"]:::current
     D6["【阶段 2B】DIM-06: UI 规范与触控交互<br/>(并行分支)"]:::base
 

@@ -1,8 +1,8 @@
 # 新一代多端协同、远程控制与中转服务完整技术实施方案（方案 D）
 
-> **方案代号**：Plan-D（极简直连 · 盲中继 E2EE · 工业级高并发承载）  
-> **面向场景**：移动端（React Native / Expo）与桌面端（Rust + Tauri / React）跨网络随时随地一键直连、双向实时控制、零知识端到端加密通信与 20,000+ 长连接单机高稳定承载。  
-> **产出位置**：`c:/Software/conex/docs/mobile-revival-audit/independent-plans/04-plan-by-agent-d.md`  
+> **方案代号**：Plan-D（极简直连 · 盲中继 E2EE · 工业级高并发承载）
+> **面向场景**：移动端（React Native / Expo）与桌面端（Rust + Tauri / React）跨网络随时随地一键直连、双向实时控制、零知识端到端加密通信与 20,000+ 长连接单机高稳定承载。
+> **产出位置**：`c:/Software/conex/docs/mobile-revival-audit/independent-plans/04-plan-by-agent-d.md`
 > **文档纪律**：纯中文编写；UTF-8 无 BOM；不改动业务源码；不执行 git 提交。
 
 ---
@@ -157,22 +157,22 @@ export interface EncryptedPayloadBundle {
 ```mermaid
 flowchart TD
     Start([用户在移动端打开 App]) --> CheckAccount{双端是否均登录同账号?}
-    
+
     CheckAccount -- 否 / 未登录 --> ShowLoginPrompt[提示: 登录可开启跨网一键连]
     ShowLoginPrompt --> FallbackLocal[激活【轨 B: 本地局域网直连】]
     FallbackLocal --> LanDiscovery[mDNS 广播发现 / CXN 扫码]
     LanDiscovery --> LanConnected([局域网直连成功])
-    
+
     CheckAccount -- 是 (同账号) --> QueryCloud[查询云端设备状态]
     QueryCloud --> CheckDeskOnline{桌面端是否在线?}
-    
+
     CheckDeskOnline -- 离线 / 休眠 --> WakeOrFallback[提示: 桌面端离线]
     WakeOrFallback --> FallbackLocal
-    
+
     CheckDeskOnline -- 在线 --> TryTrackA[激活【轨 A: 云端 E2EE 中继直连】]
     TryTrackA --> ConnectRelay[申请 Ticket 并接入中继]
     ConnectRelay --> HandshakeOK{E2EE 握手成功?}
-    
+
     HandshakeOK -- 成功 --> RelayConnected([云端 E2EE 直连成功])
     HandshakeOK -- 失败/中继断开 --> ProbeLan{是否在同一局域网?}
     ProbeLan -- 是 --> SilentSwitch[无缝降级切换至局域网直连]
@@ -231,7 +231,7 @@ export const SettingsProfileTab: React.FC = () => {
   const [cloudDevices, setCloudDevices] = useState<CloudDeviceItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [loginMode, setLoginMode] = useState<'password' | 'code'>('password');
-  
+
   // 表单状态
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -720,10 +720,10 @@ export function encryptEnvelope(envelope: DeviceEnvelope, encKey: Uint8Array): E
   const jsonStr = JSON.stringify(envelope);
   const plainBytes = new TextEncoder().encode(jsonStr);
   const nonce = crypto.getRandomValues(new Uint8Array(12)); // 12 字节独一 Nonce
-  
+
   // 使用 ChaCha20-Poly1305 或 AES-GCM
   const { ciphertext, tag } = chacha20poly1305Encrypt(encKey, nonce, plainBytes);
-  
+
   return {
     nonce: base64Encode(nonce),
     tag: base64Encode(tag),
@@ -736,7 +736,7 @@ export function decryptEnvelope(bundle: EncryptedPayloadBundle, encKey: Uint8Arr
   const nonce = base64Decode(bundle.nonce);
   const tag = base64Decode(bundle.tag);
   const cipherBytes = base64Decode(bundle.ciphertext);
-  
+
   const decryptedBytes = chacha20poly1305Decrypt(encKey, nonce, cipherBytes, tag);
   const jsonStr = new TextDecoder().decode(decryptedBytes);
   return JSON.parse(jsonStr) as DeviceEnvelope;
@@ -892,7 +892,7 @@ private async openSocketWithAuth(): Promise<void> {
   try {
     // 1. 动态向云端申请一次性短效中继票据
     const ticket = await this.opts.ticketProvider();
-    
+
     // 2. 构造具备签名票据的安全 URL (不暴露用户长期 Token)
     const secureUrl = new URL(this.opts.url);
     secureUrl.searchParams.set('ticket', ticket);
@@ -1000,7 +1000,7 @@ let messageCount = 0;
 
 async function spawnPair(index) {
   const tunnelId = `bench-tunnel-${index}`;
-  
+
   // 1. 启动虚拟桌面
   const desktop = new WebSocket(`${TARGET_URL}?tunnelId=${tunnelId}&role=desktop`);
   desktop.on('open', () => {
@@ -1009,13 +1009,13 @@ async function spawnPair(index) {
     const mobile = new WebSocket(`${TARGET_URL}?tunnelId=${tunnelId}&role=mobile`);
     mobile.on('open', () => {
       activeSockets++;
-      
+
       // 保持心跳
       setInterval(() => {
         if (desktop.readyState === WebSocket.OPEN) desktop.ping();
         if (mobile.readyState === WebSocket.OPEN) mobile.ping();
       }, 30000);
-      
+
       // 针对部分活跃会话持续发送模拟数据
       if (index % 20 === 0) {
         setInterval(() => {

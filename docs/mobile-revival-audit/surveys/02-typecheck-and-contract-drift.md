@@ -1,10 +1,10 @@
 # 移动端类型系统与契约漂移专项调查报告 (02-typecheck-and-contract-drift)
 
-> **文档编号**：`docs/mobile-revival-audit/surveys/02-typecheck-and-contract-drift.md`  
-> **审计角色**：类型系统与契约漂移调查员  
-> **执行日期**：2026-09-04  
-> **审查对象**：`apps/crish-mobile` TS 编译错误、`packages/shared-types/src/index.ts` 导出结构、`generated/engine` 契约面、移动端 6 处散落类型错误及 Desktop 潜在联动  
-> **遵循规范**：《主 Agent 全流程调度提示词 v3》、《AGENTS.md》、反退避与反过度设计红线  
+> **文档编号**：`docs/mobile-revival-audit/surveys/02-typecheck-and-contract-drift.md`
+> **审计角色**：类型系统与契约漂移调查员
+> **执行日期**：2026-09-04
+> **审查对象**：`apps/crish-mobile` TS 编译错误、`packages/shared-types/src/index.ts` 导出结构、`generated/engine` 契约面、移动端 6 处散落类型错误及 Desktop 潜在联动
+> **遵循规范**：《主 Agent 全流程调度提示词 v3》、《AGENTS.md》、反退避与反过度设计红线
 
 ---
 
@@ -425,7 +425,7 @@ export * from './generated/engine/parser';
    AgentMessage as EngineAgentMessage,
    AgentMessageBlock as EngineAgentMessageBlock,
  } from './generated/engine/types';
- 
+
 -// generated/engine 运行期常量逐条 re-export（events.ts 的值常量；
 -// types.ts 的 `as const` 值数组已由上方 `export *` 覆盖）。
 -export {

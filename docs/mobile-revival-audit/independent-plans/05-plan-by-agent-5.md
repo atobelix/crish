@@ -1,12 +1,12 @@
 # 移动端全面复兴与打包打通总方案（生产级原生工程化与 CI 打包打通学派）
 
-> **方案标识**：`docs/mobile-revival-audit/independent-plans/05-plan-by-agent-5.md`  
-> **学派定位**：【生产级原生工程化与 CI 打包打通学派】  
-> **设计责任**：方案设计 Agent 5  
-> **定案基准**：`docs/mobile-revival-audit/01-final-dimensions.md` (DIM-01 ~ DIM-07)  
-> **事实输入**：`00-summary.md` 调查总览与 `surveys/01` ~ `11` 专项调查报告全文（重点穿透 `surveys/01`、`02`、`07`、`08`、`11`）  
-> **遵循铁律**：《主 Agent 全流程调度提示词 v3》、《AGENTS.md》、反退避全文（`LOGIC_PLAN_NO_RETREAT.md`）、反过度设计红线（`ANTI_OVERENGINEERING_GUARDRAILS.md`）  
-> **纪律禁令**：严禁修改任何业务代码、严禁出现任何波次/批次编号、严禁退避砍功能、不涉及笔记功能  
+> **方案标识**：`docs/mobile-revival-audit/independent-plans/05-plan-by-agent-5.md`
+> **学派定位**：【生产级原生工程化与 CI 打包打通学派】
+> **设计责任**：方案设计 Agent 5
+> **定案基准**：`docs/mobile-revival-audit/01-final-dimensions.md` (DIM-01 ~ DIM-07)
+> **事实输入**：`00-summary.md` 调查总览与 `surveys/01` ~ `11` 专项调查报告全文（重点穿透 `surveys/01`、`02`、`07`、`08`、`11`）
+> **遵循铁律**：《主 Agent 全流程调度提示词 v3》、《AGENTS.md》、反退避全文（`LOGIC_PLAN_NO_RETREAT.md`）、反过度设计红线（`ANTI_OVERENGINEERING_GUARDRAILS.md`）
+> **纪律禁令**：严禁修改任何业务代码、严禁出现任何波次/批次编号、严禁退避砍功能、不涉及笔记功能
 
 ---
 
@@ -404,7 +404,7 @@ apps/crish-mobile/
    cd android
    .\gradlew.bat assembleDebug
    ```
-   *输出路径*：`android/app/build/outputs/apk/debug/app-debug.apk`。  
+   *输出路径*：`android/app/build/outputs/apk/debug/app-debug.apk`。
    *验证*：支持通过 `adb install` 在真机直接安装运行。
 5. **编译 Release AAB（生产分发）**：
    ```powershell
@@ -686,7 +686,7 @@ graph TD
 
     N1["[依赖节点 1] 全域负产出清毒与基座净化<br>(DIM-01 物理删除/移出单测/还原 Metro)"]:::base
     N2["[依赖节点 2] 类型契约消歧与编译清零<br>(DIM-02 补齐 shared-types 导出/修复 22 处 TS 报错)"]:::contract
-    
+
     N3A["[依赖节点 3A] 网络网关与安全配对闭环<br>(DIM-03 解除 Dead 死锁/URL 修复/订阅补齐)"]:::domain
     N3B["[依赖节点 3B] UI 规范与触控热区合规<br>(DIM-06 补齐原子组件/统一返回键/热区达标)"]:::domain
 
@@ -745,7 +745,7 @@ graph TD
     V2[维度 2: 测试资产保护门禁<br>移出单测与全量单元测试 100% 通过]
     V3[维度 3: 协议与运行时现场门禁<br>WS /v1/events 握手畅通 审批双向闭环 终端平滑]
     V4[维度 4: 原生工程化打包终验<br>expo export 静态导出成功<br>expo prebuild 产出合法工程<br>Android APK 离线编译产出]
-    
+
     V1 --> PASSED{全量准出验收}
     V2 --> PASSED
     V3 --> PASSED

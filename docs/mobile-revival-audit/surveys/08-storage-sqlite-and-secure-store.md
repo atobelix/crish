@@ -1,8 +1,8 @@
 # 专项审计报告 08：本地存储与 SQLite 迁移调查 (storage-sqlite-and-secure-store)
 
-> **审计基准**：`apps/crish-mobile`（Expo SDK 57 / RN 0.86 / React 19.2.3）  
-> **调查员**：本地存储与 SQLite 迁移调查员  
-> **产出时间**：2026-09-04  
+> **审计基准**：`apps/crish-mobile`（Expo SDK 57 / RN 0.86 / React 19.2.3）
+> **调查员**：本地存储与 SQLite 迁移调查员
+> **产出时间**：2026-09-04
 > **审计范围**：
 > - `apps/crish-mobile/src/db/` (`db.ts`, `dbBootstrap.ts`, `schema.ts`, `migrations.ts`, `secureStore.ts`, `driver.ts`, `cachePolicy.ts`, `dao/*`)
 > - `apps/crish-mobile/src/domain/store/persistBootstrap.ts`

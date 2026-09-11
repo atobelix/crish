@@ -1,15 +1,15 @@
 # 移动端复兴实施详案 · DIM-01 重复与死层 (01-plan-dim-01-dead-code.md)
 ## —— 全仓负产出基座：22个死文件清退、6个空心DAO核销、8个单测移出路由、Metro标准还原与7组重复算法归一方案
 
-> **战役工作区**：`docs/mobile-revival-audit/`  
-> **详案编号**：`plans/01-plan-dim-01-dead-code.md`  
-> **归属维度**：`DIM-01` 重复与死层（全局固定负产出基座）  
-> **责任 Agent**：DIM-01 重复与死层详案编写 Agent  
-> **定案与依据资产**：  
-> - 终审定案文档：[`docs/mobile-revival-audit/01-final-dimensions.md`](file:///c:/Software/conex/docs/mobile-revival-audit/01-final-dimensions.md)  
-> - 实施总纲框架：[`docs/mobile-revival-audit/02-master-revival-plan.md`](file:///c:/Software/conex/docs/mobile-revival-audit/02-master-revival-plan.md)  
-> - 专项调查报告：[`docs/mobile-revival-audit/surveys/11-dead-code-and-markers-audit.md`](file:///c:/Software/conex/docs/mobile-revival-audit/surveys/11-dead-code-and-markers-audit.md)、[`surveys/01-packaging-and-build-infrastructure.md`](file:///c:/Software/conex/docs/mobile-revival-audit/surveys/01-packaging-and-build-infrastructure.md)、[`surveys/08-storage-sqlite-and-secure-store.md`](file:///c:/Software/conex/docs/mobile-revival-audit/surveys/08-storage-sqlite-and-secure-store.md)  
-> - 三方严审报告：[`docs/mobile-revival-audit/plan-reviews/02-negative-output-and-dead-code-review.md`](file:///c:/Software/conex/docs/mobile-revival-audit/plan-reviews/02-negative-output-and-dead-code-review.md)（负产出与删除面硬度专项评审，98分标杆审查结论）  
+> **战役工作区**：`docs/mobile-revival-audit/`
+> **详案编号**：`plans/01-plan-dim-01-dead-code.md`
+> **归属维度**：`DIM-01` 重复与死层（全局固定负产出基座）
+> **责任 Agent**：DIM-01 重复与死层详案编写 Agent
+> **定案与依据资产**：
+> - 终审定案文档：[`docs/mobile-revival-audit/01-final-dimensions.md`](file:///c:/Software/conex/docs/mobile-revival-audit/01-final-dimensions.md)
+> - 实施总纲框架：[`docs/mobile-revival-audit/02-master-revival-plan.md`](file:///c:/Software/conex/docs/mobile-revival-audit/02-master-revival-plan.md)
+> - 专项调查报告：[`docs/mobile-revival-audit/surveys/11-dead-code-and-markers-audit.md`](file:///c:/Software/conex/docs/mobile-revival-audit/surveys/11-dead-code-and-markers-audit.md)、[`surveys/01-packaging-and-build-infrastructure.md`](file:///c:/Software/conex/docs/mobile-revival-audit/surveys/01-packaging-and-build-infrastructure.md)、[`surveys/08-storage-sqlite-and-secure-store.md`](file:///c:/Software/conex/docs/mobile-revival-audit/surveys/08-storage-sqlite-and-secure-store.md)
+> - 三方严审报告：[`docs/mobile-revival-audit/plan-reviews/02-negative-output-and-dead-code-review.md`](file:///c:/Software/conex/docs/mobile-revival-audit/plan-reviews/02-negative-output-and-dead-code-review.md)（负产出与删除面硬度专项评审，98分标杆审查结论）
 > **协作与纪律铁律**：严格遵守《主 Agent 全流程调度提示词 v3》、《AGENTS.md》、反退避全文（`LOGIC_PLAN_NO_RETREAT.md`）与反过度设计红线（`ANTI_OVERENGINEERING_GUARDRAILS.md`）；**严禁修改或提交任何业务代码**（本阶段仅出具执行详案）；**严禁出现任何波次/批次编号**；完全不涉及笔记功能；一个概念一条主路径；负产出绝对先行。
 
 ---
@@ -122,7 +122,7 @@ apps/crish-mobile/app/pair/scan.test.tsx         # 29 行
 apps/crish-mobile/app/pair/welcome.test.tsx      # 50 行
 ```
 
-> **注记与澄清**：  
+> **注记与澄清**：
 > 业务上涉及的会话详情（`session-detail`）、终端（`terminal`）、审批列表（`approvals`）等页面的真实单元测试，原本就规范存放于 `src/presentation/screens/__tests__/` 内部，从未存放在 `app/` 路由目录下。因此，本次移出任务精准针对上述**真实污染 `app/` 的 8 个文件**进行物理迁移，确保 Expo Router 路由扫描树零测试污染。
 
 #### 2.1.2 8 个单测物理迁移映射与相对导入重定向明细

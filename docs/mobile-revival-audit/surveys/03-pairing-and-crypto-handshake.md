@@ -1,6 +1,6 @@
 # 移动端配对流程与密码学握手深入审计报告
 
-> **审计维度**：03 - 配对流程与密码学握手（Pairing & Crypto Handshake）  
+> **审计维度**：03 - 配对流程与密码学握手（Pairing & Crypto Handshake）
 > **审计对象**：
 > - `apps/crish-mobile/src/pairing/` 全域模块（`cxnCode.ts`、`pairMachine.ts`、`pairProtocol.ts`、`qrPayload.ts`、`rustParity.test.ts`）
 > - `apps/crish-mobile/src/pairing/crypto/` 全域模块（`noblePrimitives.ts`、`keyAgreement.ts`、`primitives.ts`）
@@ -118,7 +118,7 @@ const x25519 = montgomery({
 4. **明确失败断言**：若全部缺失，抛出有上下文指导的错误信息，不再冒泡无解的底层 JS 异常。
 
 ### 1.4 DEF-3 审查结论
-> **断言：DEF-3 缺陷已在数学原理、算法实现和环境探测三方面彻底攻克根治。**  
+> **断言：DEF-3 缺陷已在数学原理、算法实现和环境探测三方面彻底攻克根治。**
 > 经单测验证（`noblePrimitives.test.ts`）：
 > - 注入确定性种子与 RFC 7748 §6.1 官方 Test Vector 1 对拍逐字节吻合；
 > - Mock 全局 `crypto.getRandomValues` 抛错时，全链路密钥派生与协商全程零触发，证明盲化路径已 100% 根除；
@@ -137,7 +137,7 @@ const x25519 = montgomery({
 在 `apps/crish-mobile/src/presentation/pair/pairManualScreen.tsx` 与 `src/pairing/cxnCode.ts` 中，通过受控闭环反向提取器建立了严格的数学互逆映射：
 
 ```
-[用户输入/粘贴/退格] 
+[用户输入/粘贴/退格]
         │
         ▼ 原生文本 (如 'CXN-KC5Q-B')
 ┌──────────────────────────────────────┐
@@ -171,10 +171,10 @@ const x25519 = montgomery({
 | **非法字符混入** | 粘贴 `'KC5Q_BNTV.WH9L'` | `'KC5QBNTVWH9L'` (清洗符号) | `'CXN-KC5Q-BNTV-WH9L'` | **鲁棒清洗** |
 
 ### 2.4 审查结论与潜在体验瑕疵
-> **断言：DEF-1 与 DEF-2 缺陷已在数据流闭环上彻底解决。**  
-> 经 `pairManualScreen.test.tsx` 与 `cxnCode.test.ts` 全部回归单测证实，受控组件闭环不会产生任何字符增生与死循环。  
-> 
-> **注记（体验瑕疵，非阻断）**：  
+> **断言：DEF-1 与 DEF-2 缺陷已在数据流闭环上彻底解决。**
+> 经 `pairManualScreen.test.tsx` 与 `cxnCode.test.ts` 全部回归单测证实，受控组件闭环不会产生任何字符增生与死循环。
+>
+> **注记（体验瑕疵，非阻断）**：
 > 由于 React Native 在受控 `TextInput` 重置 `value` 时，若用户在字符串**中间位置**插入字符或退格，底层可能会由于文本重绘导致光标自动跳跃至字符串末尾。对于配对码这种通常是末尾顺序追加或一次性粘贴的场景，该现象影响较小，但属于 RN 受控格式化输入的经典表现特性。
 
 ---
@@ -189,17 +189,17 @@ stateDiagram-v2
     [*] --> Idle
     Idle --> WaitingInput: begin
     WaitingInput --> SendingHello: submitCode (生成一次性+长期密钥对，构造 pair.hello)
-    
+
     state "SendingHello / WaitingVerify" as InFlight {
         SendingHello --> WaitingVerify: 收到 pair.challenge (保存 remotePub & 提取 challengeFp)
         SendingHello --> WaitingVerify: 收到 pair.ok [简化链] (合成 onHelloAck)
     }
 
     WaitingVerify --> Paired: 收到 pair.ok (比对指纹同意 -> 派生三子钥 -> 持久化 -> 连接会话)
-    
+
     InFlight --> Error: 收到 error 帧 / 派生失败 (计数+1，可 retry)
     InFlight --> Locked: 尝试次数超限 (>=5) / 服务端 pair.too_many_attempts (冷却5分钟)
-    
+
     Error --> WaitingInput: retry (改码重试)
     Locked --> Idle: reset
     Paired --> Idle: unpair (通知 unlink + 清除存储 + 断开会话)

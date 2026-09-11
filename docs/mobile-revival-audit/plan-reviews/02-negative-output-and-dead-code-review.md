@@ -1,13 +1,13 @@
 # 移动端全面复兴方案评审报告 · 负产出与删除面硬度专项评审 (Reviewer 2)
 
-> **战役目录**：`docs/mobile-revival-audit/`  
-> **评审报告文件**：`docs/mobile-revival-audit/plan-reviews/02-negative-output-and-dead-code-review.md`  
-> **评审责任人**：负产出与删除面硬度评审员（Reviewer 2）  
-> **评审对象**：`independent-plans/` 全部 6 份独立方案（`01-plan-by-agent-1.md` 至 `06-plan-by-agent-6.md`）  
-> **审查基准**：  
-> - 终审定案：`docs/mobile-revival-audit/01-final-dimensions.md`（DIM-01 ~ DIM-07）  
-> - 调研汇总与事实：`docs/mobile-revival-audit/00-summary.md` 与 11 份专项调研报告（`surveys/01` ~ `11`）  
-> - 仓库铁律：《主 Agent 全流程调度提示词 v3》、《AGENTS.md》、反退避全文（`LOGIC_PLAN_NO_RETREAT.md`）、反过度设计红线（`ANTI_OVERENGINEERING_GUARDRAILS.md`）  
+> **战役目录**：`docs/mobile-revival-audit/`
+> **评审报告文件**：`docs/mobile-revival-audit/plan-reviews/02-negative-output-and-dead-code-review.md`
+> **评审责任人**：负产出与删除面硬度评审员（Reviewer 2）
+> **评审对象**：`independent-plans/` 全部 6 份独立方案（`01-plan-by-agent-1.md` 至 `06-plan-by-agent-6.md`）
+> **审查基准**：
+> - 终审定案：`docs/mobile-revival-audit/01-final-dimensions.md`（DIM-01 ~ DIM-07）
+> - 调研汇总与事实：`docs/mobile-revival-audit/00-summary.md` 与 11 份专项调研报告（`surveys/01` ~ `11`）
+> - 仓库铁律：《主 Agent 全流程调度提示词 v3》、《AGENTS.md》、反退避全文（`LOGIC_PLAN_NO_RETREAT.md`）、反过度设计红线（`ANTI_OVERENGINEERING_GUARDRAILS.md`）
 > **评审禁令**：严禁修改任何业务代码、严禁出现任何波次/批次编号、严禁避重就轻与姑息妥协、不涉及笔记功能。
 
 ---

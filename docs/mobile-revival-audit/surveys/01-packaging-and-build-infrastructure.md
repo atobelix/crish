@@ -1,10 +1,10 @@
 # 移动端构建与打包工程化专项调查报告 (01-packaging-and-build-infrastructure)
 
-> **文档编号**：`surveys/01-packaging-and-build-infrastructure.md`  
-> **审计角色**：构建与打包工程化调查员  
-> **执行日期**：2026-09-04  
-> **审查对象**：`apps/crish-mobile/metro.config.js`、`app.json`、`package.json`、`r2-16-crypto-polyfill.js` 及 Android/iOS 本地离线打包工程基建  
-> **遵循规范**：《主 Agent 全流程调度提示词 v3》、《AGENTS.md》、反退避与反过度设计红线  
+> **文档编号**：`surveys/01-packaging-and-build-infrastructure.md`
+> **审计角色**：构建与打包工程化调查员
+> **执行日期**：2026-09-04
+> **审查对象**：`apps/crish-mobile/metro.config.js`、`app.json`、`package.json`、`r2-16-crypto-polyfill.js` 及 Android/iOS 本地离线打包工程基建
+> **遵循规范**：《主 Agent 全流程调度提示词 v3》、《AGENTS.md》、反退避与反过度设计红线
 
 ---
 
@@ -57,7 +57,7 @@ Error: Serializer did not return expected format. The project copy of `expo/metr
        try {
            var _artifacts_find;
            const parsed = typeof bundle === 'string' ? JSON.parse(bundle) : bundle;
-           (0, _assert().default)('artifacts' in parsed && Array.isArray(parsed.artifacts), 
+           (0, _assert().default)('artifacts' in parsed && Array.isArray(parsed.artifacts),
                'Expected serializer to return an object with key artifacts to contain an array of serial assets.');
            const artifacts = parsed.artifacts;
            const assets = parsed.assets;
@@ -215,16 +215,16 @@ Error: Serializer did not return expected format. The project copy of `expo/metr
 graph TD
     A["metro.config.js 篡改 Serializer"] -->|阻断| B["npx expo export 失败 (100% 崩溃)"]
     B -->|导致| C["无法导出离线 JS Bundle / Assets"]
-    
+
     D["app.json 缺少包名与权限"] -->|阻断| E["npx expo prebuild 异常"]
     E -->|生成| F["com.placeholder.appid (非可用工程)"]
-    
+
     G["package.json 漏装 expo-crypto"] -->|导致| H["Standalone 原生 APK 密钥生成崩溃"]
-    
+
     I["缺少本地网络与通知配置"] -->|导致| J["真机配对无法连通局域网 / 无法接收推送"]
-    
+
     K["Windows 缺少 JDK 17 & Android 工具链"] -->|导致| L["本地 Gradle 无法编译 APK / AAB"]
-    
+
     M["Windows 无 Xcode"] -->|限制| N["本地无法打出 iOS .ipa 安装包"]
 ```
 
@@ -407,7 +407,7 @@ module.exports = config;
    cd android
    .\gradlew.bat assembleDebug
    ```
-   *产物路径*：`apps/crish-mobile/android/app/build/outputs/apk/debug/app-debug.apk`。  
+   *产物路径*：`apps/crish-mobile/android/app/build/outputs/apk/debug/app-debug.apk`。
    *验证*：通过 `adb install app-debug.apk` 安装到真实手机或模拟器，验证启动、本地配对与通知功能。
 4. **编译 Release AAB / APK（生产分发）**：
    - 生成密钥库 `my-release-key.keystore`；

@@ -1,15 +1,15 @@
 # 移动端全面复兴与独立原生打包总方案
 ## —— 方案设计 Agent 6（现代 UI/UX 与人机工程极致体验学派）
 
-> **方案版本**：v1.0  
-> **设计学派**：现代 UI/UX 与人机工程极致体验学派  
-> **输出文件**：[`docs/mobile-revival-audit/independent-plans/06-plan-by-agent-6.md`](file:///c:/Software/conex/docs/mobile-revival-audit/independent-plans/06-plan-by-agent-6.md)  
-> **基准依据**：  
-> - 定案文档：[`docs/mobile-revival-audit/01-final-dimensions.md`](file:///c:/Software/conex/docs/mobile-revival-audit/01-final-dimensions.md)  
-> - 调研总览：[`docs/mobile-revival-audit/00-summary.md`](file:///c:/Software/conex/docs/mobile-revival-audit/00-summary.md)  
-> - 11 份专项调研：[`docs/mobile-revival-audit/surveys/01-11`](file:///c:/Software/conex/docs/mobile-revival-audit/surveys/)  
-> - 仓库铁律：《AGENTS.md》（§12 自定义 Tooltip、§13 输入框与焦点态、§14 现代色彩空间、§7 严禁补丁与作弊、§7.1 立体验证纪律、§8 反过度设计红线）  
-> - 反退避全文：`.agents/LOGIC_PLAN_NO_RETREAT.md`  
+> **方案版本**：v1.0
+> **设计学派**：现代 UI/UX 与人机工程极致体验学派
+> **输出文件**：[`docs/mobile-revival-audit/independent-plans/06-plan-by-agent-6.md`](file:///c:/Software/conex/docs/mobile-revival-audit/independent-plans/06-plan-by-agent-6.md)
+> **基准依据**：
+> - 定案文档：[`docs/mobile-revival-audit/01-final-dimensions.md`](file:///c:/Software/conex/docs/mobile-revival-audit/01-final-dimensions.md)
+> - 调研总览：[`docs/mobile-revival-audit/00-summary.md`](file:///c:/Software/conex/docs/mobile-revival-audit/00-summary.md)
+> - 11 份专项调研：[`docs/mobile-revival-audit/surveys/01-11`](file:///c:/Software/conex/docs/mobile-revival-audit/surveys/)
+> - 仓库铁律：《AGENTS.md》（§12 自定义 Tooltip、§13 输入框与焦点态、§14 现代色彩空间、§7 严禁补丁与作弊、§7.1 立体验证纪律、§8 反过度设计红线）
+> - 反退避全文：`.agents/LOGIC_PLAN_NO_RETREAT.md`
 > **核心原则**：物理触控是一等公民、美学与确定性不可分割、负产出刚性先行、一个概念一条主路径、严禁波次编号、立体双向验收。
 
 ---
@@ -865,7 +865,7 @@ graph TD
 
     D1["DIM-01: 重复与死层 (负产出基座，全域先行)"]:::base
     D2["DIM-02: 类型系统与跨包契约 (shared-types)"]:::core
-    
+
     D3["DIM-03: 安全配对与连接对账网关"]:::domain
     D6["DIM-06: UI 规范、主题与触控交互 (学派主场)"]:::domain
 
@@ -879,7 +879,7 @@ graph TD
     D2 --> D3
     D3 --> D4
     D3 --> D5
-    
+
     D2 --> D7
     D3 --> D7
     D4 --> D7
@@ -949,5 +949,5 @@ graph TD
 
 ---
 
-> **结语**：  
+> **结语**：
 > 本方案以【现代 UI/UX 与人机工程极致体验学派】为旗帜，既穿透了底层打包与网络通信的硬核工程断层，又为用户指尖注入了最细腻、克制与充满确定性的交互手感。方案已全面闭环，具备直接指导实施的最高工程严密性。

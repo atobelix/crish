@@ -1,10 +1,10 @@
 # 移动端全面复兴与打包打通总方案 · 协议闭环与安全状态机自愈详案
 
-> **方案编号**：`independent-plans/03-plan-by-agent-3.md`  
-> **设计学派**：【协议闭环与安全状态机自愈学派】  
-> **学派宗旨**：通信底座与安全控制为系统绝对基石，状态机不变量为单一真理源，协议交互必有闭环，死锁与命令黑洞零容忍，离线容灾具备物理级自愈能力。  
-> **核心战果定向**：攻克配对 Dead 状态机挂起死锁（P0）、补全 `/v1/events?token=` 端点与 `events.subscribe` 订阅握手（P0）、修复 `fullReplay` 游标未重置丢弃历史 Bug（P0）、打通桌面端 `ws.rs` 远程命令黑洞（`remote.approve`/`deny`/`listPendingApprovals`，P0）、接线 Outbox 离线物理持久化（P0），构建高可用、防死锁、强自愈的双端互联与工程化打包链路。  
-> **基准遵循**：`docs/mobile-revival-audit/01-final-dimensions.md`（7 大维度）、`00-summary.md`、11 份专项调研报告、根目录《AGENTS.md》、反退避与反过度设计红线。  
+> **方案编号**：`independent-plans/03-plan-by-agent-3.md`
+> **设计学派**：【协议闭环与安全状态机自愈学派】
+> **学派宗旨**：通信底座与安全控制为系统绝对基石，状态机不变量为单一真理源，协议交互必有闭环，死锁与命令黑洞零容忍，离线容灾具备物理级自愈能力。
+> **核心战果定向**：攻克配对 Dead 状态机挂起死锁（P0）、补全 `/v1/events?token=` 端点与 `events.subscribe` 订阅握手（P0）、修复 `fullReplay` 游标未重置丢弃历史 Bug（P0）、打通桌面端 `ws.rs` 远程命令黑洞（`remote.approve`/`deny`/`listPendingApprovals`，P0）、接线 Outbox 离线物理持久化（P0），构建高可用、防死锁、强自愈的双端互联与工程化打包链路。
+> **基准遵循**：`docs/mobile-revival-audit/01-final-dimensions.md`（7 大维度）、`00-summary.md`、11 份专项调研报告、根目录《AGENTS.md》、反退避与反过度设计红线。
 > **刚性原则**：推进单位为领域概念、负产出绝对先行、一个概念一条主路径、**严禁任何波次/批次编号**、不涉及笔记功能、立体双向验收。
 
 ---
@@ -144,10 +144,10 @@
 stateDiagram-v2
     [*] --> Idle: 初始状态 / 进程启动
     Idle --> Connecting: connect() / hydrate 触发
-    
+
     Connecting --> Open: ws.onopen 成功建连
     Connecting --> Dead: 连接建立失败且 retry > 5 / offline
-    
+
     state Open {
         [*] --> SendSubscribe: 绑定 sendFn 管道就绪
         SendSubscribe --> AwaitingAck: 发送 events.subscribe 帧
@@ -155,13 +155,13 @@ stateDiagram-v2
         Reconciling --> LiveStreaming: 游标对账与快照对齐完成
         LiveStreaming --> LiveStreaming: 心跳保活 (30s) / 业务帧流转
     }
-    
+
     Open --> Reconnecting: ws.onclose (意外网络抖动 / 假死检测 90s 超时)
     Open --> Idle: disconnect() (主动断开 / 退出配对)
-    
+
     Reconnecting --> Connecting: 指数退避定时器到期 (1s->2s->4s->8s->16s->30s)
     Reconnecting --> Dead: 重试次数超限 (>5) / 检测到离线
-    
+
     Dead --> Connecting: NetInfo 网络恢复事件 / 用户下拉刷新 / reconnect()
 ```
 
@@ -191,7 +191,7 @@ sequenceDiagram
     Mobile->>Engine: events.subscribe { v: 1, msgId, from: 'mobile', sessions: [...] }
     Engine->>Engine: 注册当前连接至 FanOut 订阅器，绑定 Session 过滤器
     Engine-->>Mobile: events.subscribe.ok { reqMsgId, nextSequence: Map, status: 'ok' }
-    
+
     Note over Mobile, Engine: 阶段三：对账快照驱动与增量续传
     Mobile->>Mobile: 提取 nextSequence 构造 ReconcileSnapshot 驱动 driveProjection()
     alt 增量滞后 (resume)
@@ -231,16 +231,16 @@ sequenceDiagram
     UI->>Outbox: enqueueApprovalDecision()
     Outbox->>Outbox: 写入 SQLite approval_queue 表 (status: 'pending')
     Outbox->>Bridge: flushOnce() (单飞锁: replayInflight=true)
-    
+
     Note over Bridge, DesktopWs: 阶段一：出站投递与传输层确认
     Bridge->>DesktopWs: WsGateway.invoke("remote.approve", { toolCallId, runId })
     DesktopWs->>Backend: ApiBackend.approve(toolCallId, runId)
     Backend-->>DesktopWs: ApproveResult { ok: true, toolCallId, decision: 'approved' }
     DesktopWs-->>Bridge: result.approve { reqMsgId, ok: true, body: ... }
-    
+
     Bridge->>Outbox: markSent(id) -> 更新 SQLite 状态为 'sent' (不再参与后续重试)
     Bridge->>Store: markDecisionSent(toolCallId) -> UI 维持“待引擎确认”
-    
+
     Note over DesktopWs, UI: 阶段二：引擎事实广播与最终出队物理核销
     Backend->>DesktopWs: 引擎核准执行完毕，广播 approval-resolved 事件
     DesktopWs-->>Bridge: events.push { type: 'approval-resolved', toolCallId, decision: 'approved' }
@@ -695,7 +695,7 @@ graph TD
 
     D1["DIM-01: 重复与死层清理<br/>(拔除 polyfill / 还原 metro / 迁出单测 / 删死层)"]:::base
     D2["DIM-02: 类型系统与跨包契约<br/>(shared-types 补全与消歧 / 移动端 TS 报错归零)"]:::contract
-    
+
     D3["DIM-03: 安全配对与连接对账网关<br/>(攻克 P0 死锁 / 补全 URL 与订阅 / 修复重放丢弃)"]:::domain
     D6["DIM-06: UI 规范、主题与触控交互<br/>(原子 Input/Tooltip / 返回按钮收敛 / 16处热区)"]:::domain
 
@@ -709,7 +709,7 @@ graph TD
     D2 --> D3
     D3 --> D4
     D3 --> D5
-    
+
     D2 --> D7
     D3 --> D7
     D4 --> D7

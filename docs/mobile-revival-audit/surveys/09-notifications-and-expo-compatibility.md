@@ -1,9 +1,9 @@
 # 移动端通知推送与运行时兼容性深度审计报告 (09-notifications-and-expo-compatibility)
 
-> **审计领域**：`apps/crish-mobile/src/notifications/` 全域、运行时兼容性、系统通道与深链跳转  
-> **执行角色**：通知推送与运行时兼容调查员  
-> **参考基准**：D7 推送方案规范、M8 路由升级矩阵、Z0 通道归一契约、DEF-5 运行时崩溃防御契约  
-> **审计日期**：2026-09-04  
+> **审计领域**：`apps/crish-mobile/src/notifications/` 全域、运行时兼容性、系统通道与深链跳转
+> **执行角色**：通知推送与运行时兼容调查员
+> **参考基准**：D7 推送方案规范、M8 路由升级矩阵、Z0 通道归一契约、DEF-5 运行时崩溃防御契约
+> **审计日期**：2026-09-04
 > **审计结论**：当前通知模块架构设计精良，DEF-5 动态降级、双通道数据面收敛、深链白名单与 Android 四类通道注册均有高质量落地；**但存在 1 处严重业务逻辑断层（偏好过滤未在消费层生效）、2 处死代码孤岛（权限联动未接入设置 UI）、以及原生 Dev Client / 独立打包（APK/IPA）所必需的 5 项基建与 Token 协商协议缺失**。
 
 ---
@@ -45,7 +45,7 @@ flowchart TD
         STORE[("notificationStore<br/>(SQLite / In-Memory)")]
         TRACKER["PresentedKeyTracker<br/>(24h TTL / 512容量淘汰)"]
         ROUTE{"routePresentation(appState)"}
-        
+
         WS --> WIRING --> PARSE --> INGEST --> STORE
         WIRING --> ROUTE
         ROUTE -- "active (前台)" --> SUPPRESS["抑制系统横幅<br/>(仅内部通知中心展示)"]

@@ -1,8 +1,8 @@
 # 专项审计报告 07：终端输出与环形缓冲 (terminal-and-line-buffer)
 
-> **审计基准**：`apps/crish-mobile`（Expo SDK 57 / RN 0.86 / React 19.2.3）  
-> **调查员**：终端输出与环形缓冲调查员  
-> **产出时间**：2026-09-04  
+> **审计基准**：`apps/crish-mobile`（Expo SDK 57 / RN 0.86 / React 19.2.3）
+> **调查员**：终端输出与环形缓冲调查员
+> **产出时间**：2026-09-04
 > **审计范围**：
 > - `apps/crish-mobile/src/presentation/components/terminal/` (`TerminalView.tsx`, `terminalEvents.ts`, `terminalLineBuffer.ts`)
 > - `apps/crish-mobile/src/presentation/screens/terminalScreen.tsx`

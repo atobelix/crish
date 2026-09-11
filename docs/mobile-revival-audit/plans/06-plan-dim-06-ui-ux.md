@@ -1,16 +1,16 @@
 # 移动端复兴实施详案 · DIM-06 UI 规范、主题与触控交互 (06-plan-dim-06-ui-ux.md)
 ## —— 原子组件补齐、§13 柔边焦点态、双轨 44/48 触控热区、导航收敛与推送门禁闭环方案
 
-> **战役工作区**：`docs/mobile-revival-audit/`  
-> **详案编号**：`plans/06-plan-dim-06-ui-ux.md`  
-> **归属维度**：`DIM-06` UI 规范、主题与触控交互  
-> **责任 Agent**：DIM-06 UI 规范、主题与触控交互详案编写 Agent  
-> **定案与依据资产**：  
-> - 终审定案文档：[`docs/mobile-revival-audit/01-final-dimensions.md`](file:///c:/Software/conex/docs/mobile-revival-audit/01-final-dimensions.md)  
-> - 实施总纲框架：[`docs/mobile-revival-audit/02-master-revival-plan.md`](file:///c:/Software/conex/docs/mobile-revival-audit/02-master-revival-plan.md)  
-> - 专项调查报告：[`docs/mobile-revival-audit/surveys/10-ui-specification-and-interaction.md`](file:///c:/Software/conex/docs/mobile-revival-audit/surveys/10-ui-specification-and-interaction.md)、[`09-notifications-and-expo-compatibility.md`](file:///c:/Software/conex/docs/mobile-revival-audit/surveys/09-notifications-and-expo-compatibility.md)  
-> - 三方严审报告：`docs/mobile-revival-audit/plan-reviews/`（01 契约重叠审、02 负产出审、03 可行性审）  
-> - 独立方案沉淀：[`docs/mobile-revival-audit/independent-plans/06-plan-by-agent-6.md`](file:///c:/Software/conex/docs/mobile-revival-audit/independent-plans/06-plan-by-agent-6.md)  
+> **战役工作区**：`docs/mobile-revival-audit/`
+> **详案编号**：`plans/06-plan-dim-06-ui-ux.md`
+> **归属维度**：`DIM-06` UI 规范、主题与触控交互
+> **责任 Agent**：DIM-06 UI 规范、主题与触控交互详案编写 Agent
+> **定案与依据资产**：
+> - 终审定案文档：[`docs/mobile-revival-audit/01-final-dimensions.md`](file:///c:/Software/conex/docs/mobile-revival-audit/01-final-dimensions.md)
+> - 实施总纲框架：[`docs/mobile-revival-audit/02-master-revival-plan.md`](file:///c:/Software/conex/docs/mobile-revival-audit/02-master-revival-plan.md)
+> - 专项调查报告：[`docs/mobile-revival-audit/surveys/10-ui-specification-and-interaction.md`](file:///c:/Software/conex/docs/mobile-revival-audit/surveys/10-ui-specification-and-interaction.md)、[`09-notifications-and-expo-compatibility.md`](file:///c:/Software/conex/docs/mobile-revival-audit/surveys/09-notifications-and-expo-compatibility.md)
+> - 三方严审报告：`docs/mobile-revival-audit/plan-reviews/`（01 契约重叠审、02 负产出审、03 可行性审）
+> - 独立方案沉淀：[`docs/mobile-revival-audit/independent-plans/06-plan-by-agent-6.md`](file:///c:/Software/conex/docs/mobile-revival-audit/independent-plans/06-plan-by-agent-6.md)
 > **协作与纪律铁律**：严格遵守《主 Agent 全流程调度提示词 v3》、《AGENTS.md》（§12 自定义 Tooltip、§13 输入框与焦点态、§14 现代色彩空间、§7 严禁补丁与作弊、§7.1 立体验证纪律、§8 反过度设计红线）、反退避全文（`LOGIC_PLAN_NO_RETREAT.md`）；**严禁修改或提交任何业务代码**（本轮仅出具详案）；**严禁出现任何波次/批次编号**；完全不涉及笔记功能；一个概念一条主路径。
 
 ---

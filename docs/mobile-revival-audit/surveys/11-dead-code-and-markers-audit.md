@@ -1,10 +1,10 @@
 # 移动端重复实现、死层与标记专项审计报告 (11-dead-code-and-markers-audit)
 
-> **战役工作区**：`docs/mobile-revival-audit/`  
-> **调查维度**：11 - 重复实现、死层与标记专项审计（Dead Code, Duplicates & Markers Audit）  
-> **审计对象**：`apps/crish-mobile`（全域源码、测试集、配置文件与根目录临时资产）  
-> **审计属性**：只读调研（严禁修改或删除任何生产代码）  
-> **生成时间**：2026-09-04  
+> **战役工作区**：`docs/mobile-revival-audit/`
+> **调查维度**：11 - 重复实现、死层与标记专项审计（Dead Code, Duplicates & Markers Audit）
+> **审计对象**：`apps/crish-mobile`（全域源码、测试集、配置文件与根目录临时资产）
+> **审计属性**：只读调研（严禁修改或删除任何生产代码）
+> **生成时间**：2026-09-04
 
 ---
 
@@ -176,12 +176,12 @@
 graph TD
     DB[src/db/dbBootstrap.ts] --> M[migrateIfNeeded]
     M --> Schema[schema.ts: 8 张数据表]
-    
+
     subgraph 有效接线层
         Schema --> T1[settings 表] --> DAO1[SqlSettingsDao] --> PB[persistBootstrap.ts] --> S1[settingsStore]
         Schema --> T2[notifications 表] --> DAO2[SqlNotificationsDao] --> PB --> S2[notificationStore]
     end
-    
+
     subgraph 架构断层死层 (未接线)
         Schema -.-> T3[events 表] -.-> D3[SqlEventsDao] -.-> NO1[无任何 Store 消费 / eventStore 纯内存]
         Schema -.-> T4[session_summaries 表] -.-> D4[SqlSessionSummariesDao] -.-> NO2[无任何 Store 消费 / sessionStore 纯内存]

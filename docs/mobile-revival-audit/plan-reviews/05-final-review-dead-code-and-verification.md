@@ -1,14 +1,14 @@
 # 移动端全面复兴实施详案终审报告 · 负产出硬度、死代码根除与立体化验收 (Agent 2)
 ## —— 深入解剖 7 份可执行详案与总计划框架：删除面穿透审查、反过度设计核验与验收可判定性审计
 
-> **战役目录**：`docs/mobile-revival-audit/`  
-> **报告文件**：`docs/mobile-revival-audit/plan-reviews/05-final-review-dead-code-and-verification.md`  
-> **终审责任人**：【详案终审 Agent 2（负产出硬度、死代码根除与立体化验收）】  
-> **审查对象全集**：  
-> - 总计划框架：[`docs/mobile-revival-audit/02-master-revival-plan.md`](../02-master-revival-plan.md)  
-> - 7 份可执行详案：[`plans/01-plan-dim-01-dead-code.md`](../plans/01-plan-dim-01-dead-code.md) 至 [`07-plan-dim-07-packaging.md`](../plans/07-plan-dim-07-packaging.md)  
-> - 前序对撞评审：[`plan-reviews/01-contract-and-overlap-review.md`](./01-contract-and-overlap-review.md) 至 [`03-feasibility-and-closure-review.md`](./03-feasibility-and-closure-review.md)  
-> **审计基准法则**：《主 Agent 全流程调度提示词 v3》第二阶段第 5 步规范、根目录《AGENTS.md》（§7 严禁补丁与作弊、§7.1 立体验证纪律、§8 反过度设计红线、§9 测试资产保护铁律、§12 Tooltip、§13 输入框与焦点态、§14 现代色彩空间）、反退避全文（`LOGIC_PLAN_NO_RETREAT.md`）、反过度设计红线指南（`ANTI_OVERENGINEERING_GUARDRAILS.md`）。  
+> **战役目录**：`docs/mobile-revival-audit/`
+> **报告文件**：`docs/mobile-revival-audit/plan-reviews/05-final-review-dead-code-and-verification.md`
+> **终审责任人**：【详案终审 Agent 2（负产出硬度、死代码根除与立体化验收）】
+> **审查对象全集**：
+> - 总计划框架：[`docs/mobile-revival-audit/02-master-revival-plan.md`](../02-master-revival-plan.md)
+> - 7 份可执行详案：[`plans/01-plan-dim-01-dead-code.md`](../plans/01-plan-dim-01-dead-code.md) 至 [`07-plan-dim-07-packaging.md`](../plans/07-plan-dim-07-packaging.md)
+> - 前序对撞评审：[`plan-reviews/01-contract-and-overlap-review.md`](./01-contract-and-overlap-review.md) 至 [`03-feasibility-and-closure-review.md`](./03-feasibility-and-closure-review.md)
+> **审计基准法则**：《主 Agent 全流程调度提示词 v3》第二阶段第 5 步规范、根目录《AGENTS.md》（§7 严禁补丁与作弊、§7.1 立体验证纪律、§8 反过度设计红线、§9 测试资产保护铁律、§12 Tooltip、§13 输入框与焦点态、§14 现代色彩空间）、反退避全文（`LOGIC_PLAN_NO_RETREAT.md`）、反过度设计红线指南（`ANTI_OVERENGINEERING_GUARDRAILS.md`）。
 > **核心铁律**：**严禁修改任何业务代码**；**严禁出现任何波次/批次编号**；杜绝任何空壳套话与“整体良好”的敷衍，必须具体到文件路径、行号、符号名与可执行断言；完全不涉及笔记功能。
 
 ---
@@ -115,7 +115,7 @@ apps/crish-mobile/src/domain/types/env.ts                        : 存在 (6 行
 - **破坏性后果**：
   若 DIM-06 将 `app/pair/scan.tsx` 物理销毁，则 DIM-01 迁移保留的 `pairScanRoute.test.tsx` 将因无法 `import PairScanRoute from '@/../app/pair/scan'` 发生 `Cannot find module` 致命编译错误！同时，若有任何外部 Scheme 或历史链接跳转 `crish://pair/scan`，应用将直接抛出 Unhandled Route 404 崩溃。
 - **终审裁决**：
-  **绝对禁止物理删除 `apps/crish-mobile/app/pair/scan.tsx`！**  
+  **绝对禁止物理删除 `apps/crish-mobile/app/pair/scan.tsx`！**
   该路由必须保留为**无 UI 纯重定向契约**：
   ```tsx
   // apps/crish-mobile/app/pair/scan.tsx
@@ -156,7 +156,7 @@ apps/crish-mobile/src/domain/types/env.ts                        : 存在 (6 行
     // apps/crish-mobile/src/presentation/components/files/index.ts:18
     export { ... formatRelativeTime ... } from './fileMeta';
     ```
-    同时 `apps/crish-mobile/src/presentation/components/files/fileMeta.test.ts:7, 125-153` 包含专门针对 `fileMeta.ts:formatRelativeTime` 的 28 行独立单测！  
+    同时 `apps/crish-mobile/src/presentation/components/files/fileMeta.test.ts:7, 125-153` 包含专门针对 `fileMeta.ts:formatRelativeTime` 的 28 行独立单测！
     DIM-01 计划直接删除 `fileMeta.ts:144-158` 的函数，但在唯一文件域中**遗漏了 `components/files/index.ts` 与 `fileMeta.test.ts`**！若不修改这两个文件，删除后 TypeScript 立即报错。必须将 `components/files/index.ts`（改为从 `@/domain/pure/time` 重导出或移除）与 `fileMeta.test.ts`（清理或重定向测试）纳入写操作域！
 - **组 2（时钟时间）**：删除 `EventRow.tsx:196-200`（`formatFeedTime`）与 `approvalListScreen.tsx:32-36`（`formatHistoryTime`），收敛至 `time.ts:formatClockTime`。经核查无外部引用泄漏，判定彻底。
 - **组 3（运行状态色调重大 Bug 修复）**：

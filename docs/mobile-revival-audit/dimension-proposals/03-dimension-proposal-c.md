@@ -1,9 +1,9 @@
 # 移动端实际修复维度建议报告 (维度建议 Agent C)
 
-> **文档路径**：`docs/mobile-revival-audit/dimension-proposals/03-dimension-proposal-c.md`  
-> **责任角色**：维度建议 Agent C  
-> **输入资产**：`docs/mobile-revival-audit/00-summary.md` 及 11 份专项调研报告（`surveys/01` ~ `surveys/11`）  
-> **审计基准**：`apps/crish-mobile` 全域源码、`packages/shared-types`、跨端 WebSocket/Axum 路由与协议契约（不含笔记功能）  
+> **文档路径**：`docs/mobile-revival-audit/dimension-proposals/03-dimension-proposal-c.md`
+> **责任角色**：维度建议 Agent C
+> **输入资产**：`docs/mobile-revival-audit/00-summary.md` 及 11 份专项调研报告（`surveys/01` ~ `surveys/11`）
+> **审计基准**：`apps/crish-mobile` 全域源码、`packages/shared-types`、跨端 WebSocket/Axum 路由与协议契约（不含笔记功能）
 > **编写约束**：纯逻辑规划，只谈逻辑依赖、领域概念边界、问题缺陷、删除面与验收收敛
 
 ---

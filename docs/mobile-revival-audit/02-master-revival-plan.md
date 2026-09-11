@@ -1,11 +1,11 @@
 # 移动端全面复兴与打包打通总计划框架 (02-master-revival-plan.md)
 ## —— 融合六大流派与三方严审的唯一实施总纲
 
-> **战役目录**：`docs/mobile-revival-audit/`  
-> **总纲编号**：`02-master-revival-plan.md`  
-> **主控裁决**：主 Agent（亲自精读 5500+ 行核心源码，审阅 11 份调研、6 份独立方案与 3 份多维对撞评审）  
-> **基准遵循**：`01-final-dimensions.md`（7 大维度）、`00-summary.md`、根目录《AGENTS.md》、反退避纪律、反过度设计红线 (`ANTI_OVERENGINEERING_GUARDRAILS.md`)  
-> **核心原则**：推进单位为领域概念、负产出绝对先行、一个概念一条主路径、严禁波次编号、立体双向验收  
+> **战役目录**：`docs/mobile-revival-audit/`
+> **总纲编号**：`02-master-revival-plan.md`
+> **主控裁决**：主 Agent（亲自精读 5500+ 行核心源码，审阅 11 份调研、6 份独立方案与 3 份多维对撞评审）
+> **基准遵循**：`01-final-dimensions.md`（7 大维度）、`00-summary.md`、根目录《AGENTS.md》、反退避纪律、反过度设计红线 (`ANTI_OVERENGINEERING_GUARDRAILS.md`)
+> **核心原则**：推进单位为领域概念、负产出绝对先行、一个概念一条主路径、严禁波次编号、立体双向验收
 
 ---
 
@@ -67,7 +67,7 @@ graph TD
 
     D1["【阶段 0】DIM-01: 重复与死层清理<br/>(负产出绝对先行，移出测试，还原 Metro)"]:::base
     D2["【阶段 1】DIM-02: 类型系统与跨包契约<br/>(补齐 shared-types 导出，消歧 6 符号，TS 0 报错)"]:::contract
-    
+
     D3["【阶段 2A】DIM-03: 安全配对与连接对账网关<br/>(解除 Dead 死锁，补齐 /v1/events 与订阅帧)"]:::network
     D6["【阶段 2B】DIM-06: UI 规范、主题与触控交互<br/>(原子 Input/Tooltip/BackButton，热区达标)"]:::network
 
@@ -81,7 +81,7 @@ graph TD
     D2 --> D6
     D3 --> D4
     D3 --> D5
-    
+
     D2 --> D7
     D3 --> D7
     D4 --> D7

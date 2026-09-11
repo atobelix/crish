@@ -1,15 +1,15 @@
 # 移动端全面复兴与打包打通 · 架构契约与路径冲突评审报告 (01-contract-and-overlap-review.md)
 ## —— 评审员 1 (Reviewer 1)：架构契约与路径冲突评审专员
 
-> **评审角色**：架构契约与路径冲突评审员（Reviewer 1）  
-> **归属战役**：移动端全面复兴与打包打通审计战役 (`docs/mobile-revival-audit/`)  
-> **报告路径**：`docs/mobile-revival-audit/plan-reviews/01-contract-and-overlap-review.md`  
-> **评审依据**：  
-> - 终审定案文档：[`docs/mobile-revival-audit/01-final-dimensions.md`](file:///c:/Software/conex/docs/mobile-revival-audit/01-final-dimensions.md) (DIM-01 ~ DIM-07)  
-> - 调研汇总索引：[`docs/mobile-revival-audit/00-summary.md`](file:///c:/Software/conex/docs/mobile-revival-audit/00-summary.md)  
-> - 11 份专项调研：`docs/mobile-revival-audit/surveys/01` ~ `11`  
-> - 6 份独立方案：`docs/mobile-revival-audit/independent-plans/01-plan-by-agent-1.md` 至 `06-plan-by-agent-6.md`  
-> - 协作纪律规范：《主 Agent 全流程调度提示词 v3》、《AGENTS.md》通用协作与反退避纪律、反过度设计红线 (`ANTI_OVERENGINEERING_GUARDRAILS.md`)  
+> **评审角色**：架构契约与路径冲突评审员（Reviewer 1）
+> **归属战役**：移动端全面复兴与打包打通审计战役 (`docs/mobile-revival-audit/`)
+> **报告路径**：`docs/mobile-revival-audit/plan-reviews/01-contract-and-overlap-review.md`
+> **评审依据**：
+> - 终审定案文档：[`docs/mobile-revival-audit/01-final-dimensions.md`](file:///c:/Software/conex/docs/mobile-revival-audit/01-final-dimensions.md) (DIM-01 ~ DIM-07)
+> - 调研汇总索引：[`docs/mobile-revival-audit/00-summary.md`](file:///c:/Software/conex/docs/mobile-revival-audit/00-summary.md)
+> - 11 份专项调研：`docs/mobile-revival-audit/surveys/01` ~ `11`
+> - 6 份独立方案：`docs/mobile-revival-audit/independent-plans/01-plan-by-agent-1.md` 至 `06-plan-by-agent-6.md`
+> - 协作纪律规范：《主 Agent 全流程调度提示词 v3》、《AGENTS.md》通用协作与反退避纪律、反过度设计红线 (`ANTI_OVERENGINEERING_GUARDRAILS.md`)
 > **评审纪律禁令**：本轮为纯方案评审阶段，严禁修改任何业务代码；**严禁出现任何波次/批次编号**；完全不涉及笔记功能；严格以单一真理源 (SSOT) 与架构契约为准绳。
 
 ---

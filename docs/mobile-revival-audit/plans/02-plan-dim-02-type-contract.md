@@ -1,15 +1,15 @@
 # 移动端复兴实施详案 · DIM-02 类型系统与跨包契约 (02-plan-dim-02-type-contract.md)
 ## —— `@crish/shared-types` 契约中枢治理、ESM 命名消歧、全仓类型清零与深路径清退方案
 
-> **战役工作区**：`docs/mobile-revival-audit/`  
-> **详案编号**：`plans/02-plan-dim-02-type-contract.md`  
-> **归属维度**：`DIM-02` 类型系统与跨包契约  
-> **责任 Agent**：DIM-02 类型系统与跨包契约详案编写 Agent  
-> **定案与依据资产**：  
-> - 终审定案文档：[`docs/mobile-revival-audit/01-final-dimensions.md`](file:///c:/Software/conex/docs/mobile-revival-audit/01-final-dimensions.md)  
-> - 实施总纲框架：[`docs/mobile-revival-audit/02-master-revival-plan.md`](file:///c:/Software/conex/docs/mobile-revival-audit/02-master-revival-plan.md)  
-> - 专项调查报告：[`docs/mobile-revival-audit/surveys/02-typecheck-and-contract-drift.md`](file:///c:/Software/conex/docs/mobile-revival-audit/surveys/02-typecheck-and-contract-drift.md)  
-> - 三方严审报告：`docs/mobile-revival-audit/plan-reviews/`（01 契约重叠审、02 负产出审、03 可行性审）  
+> **战役工作区**：`docs/mobile-revival-audit/`
+> **详案编号**：`plans/02-plan-dim-02-type-contract.md`
+> **归属维度**：`DIM-02` 类型系统与跨包契约
+> **责任 Agent**：DIM-02 类型系统与跨包契约详案编写 Agent
+> **定案与依据资产**：
+> - 终审定案文档：[`docs/mobile-revival-audit/01-final-dimensions.md`](file:///c:/Software/conex/docs/mobile-revival-audit/01-final-dimensions.md)
+> - 实施总纲框架：[`docs/mobile-revival-audit/02-master-revival-plan.md`](file:///c:/Software/conex/docs/mobile-revival-audit/02-master-revival-plan.md)
+> - 专项调查报告：[`docs/mobile-revival-audit/surveys/02-typecheck-and-contract-drift.md`](file:///c:/Software/conex/docs/mobile-revival-audit/surveys/02-typecheck-and-contract-drift.md)
+> - 三方严审报告：`docs/mobile-revival-audit/plan-reviews/`（01 契约重叠审、02 负产出审、03 可行性审）
 > **协作与纪律铁律**：严格遵守《主 Agent 全流程调度提示词 v3》、《AGENTS.md》、反退避全文（`LOGIC_PLAN_NO_RETREAT.md`）与反过度设计红线（`ANTI_OVERENGINEERING_GUARDRAILS.md`）；**严禁修改或提交任何业务代码**（本轮仅出具详案）；**严禁出现任何波次/批次编号**；完全不涉及笔记功能；一个概念一条主路径。
 
 ---

@@ -1,15 +1,15 @@
 # 移动端实施详案：DIM-07 工程化基建与独立原生打包 (07-plan-dim-07-packaging.md)
 ## —— 生产级原生预构建、独立安装包编译与 CI/CD 交付唯一执行详案
 
-> **战役目录**：`docs/mobile-revival-audit/plans/`  
-> **维度编号**：`DIM-07`  
-> **维度名称**：工程化基建与独立原生打包  
-> **输入资产**：  
-> - 总计划框架：[`docs/mobile-revival-audit/02-master-revival-plan.md`](../02-master-revival-plan.md)  
-> - 定案文档：[`docs/mobile-revival-audit/01-final-dimensions.md`](../01-final-dimensions.md)  
-> - 评审报告：[`docs/mobile-revival-audit/plan-reviews/01-contract-and-overlap-review.md`](../plan-reviews/01-contract-and-overlap-review.md)、[`02-negative-output-and-dead-code-review.md`](../plan-reviews/02-negative-output-and-dead-code-review.md)、[`03-feasibility-and-closure-review.md`](../plan-reviews/03-feasibility-and-closure-review.md)  
-> - 专项调研：[`docs/mobile-revival-audit/surveys/01-packaging-and-build-infrastructure.md`](../surveys/01-packaging-and-build-infrastructure.md)  
-> **核心原则**：纯逻辑推进、负产出坚决先行、单一真理源、无波次编号、立体双向验收  
+> **战役目录**：`docs/mobile-revival-audit/plans/`
+> **维度编号**：`DIM-07`
+> **维度名称**：工程化基建与独立原生打包
+> **输入资产**：
+> - 总计划框架：[`docs/mobile-revival-audit/02-master-revival-plan.md`](../02-master-revival-plan.md)
+> - 定案文档：[`docs/mobile-revival-audit/01-final-dimensions.md`](../01-final-dimensions.md)
+> - 评审报告：[`docs/mobile-revival-audit/plan-reviews/01-contract-and-overlap-review.md`](../plan-reviews/01-contract-and-overlap-review.md)、[`02-negative-output-and-dead-code-review.md`](../plan-reviews/02-negative-output-and-dead-code-review.md)、[`03-feasibility-and-closure-review.md`](../plan-reviews/03-feasibility-and-closure-review.md)
+> - 专项调研：[`docs/mobile-revival-audit/surveys/01-packaging-and-build-infrastructure.md`](../surveys/01-packaging-and-build-infrastructure.md)
+> **核心原则**：纯逻辑推进、负产出坚决先行、单一真理源、无波次编号、立体双向验收
 
 ---
 
@@ -303,7 +303,7 @@ graph TD
 flowchart TD
     A["Windows 本地开发机"] -->|代码提交 / Release Tag| B["轨道一：GitHub Actions macOS CI 流水线"]
     A -->|本地单键命令 npx eas-cli build| C["轨道二：EAS Build 云端托管构建"]
-    
+
     subgraph "轨道一：全自主控权 CI 离线打包"
         B --> B1["检出代码 (runs-on: macos-14)"]
         B1 --> B2["npx expo prebuild --platform ios --clean"]
@@ -454,13 +454,13 @@ graph LR
     D2 --> D3["DIM-03 (安全网关)"]
     D3 --> D4["DIM-04 (审批闭环)"]
     D3 --> D5["DIM-05 (流式终端)"]
-    
+
     D2 --> D7["★ DIM-07: 工程化基建与独立原生打包 (最终收口)"]
     D3 --> D7
     D4 --> D7
     D5 --> D7
     D6 --> D7
-    
+
     classDef base fill:#e1f5fe,stroke:#0288d1;
     classDef core fill:#e8f5e9,stroke:#388e3c;
     classDef domain fill:#fff3e0,stroke:#f57c00;

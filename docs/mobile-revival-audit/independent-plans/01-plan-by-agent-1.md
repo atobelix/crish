@@ -1,12 +1,12 @@
 # 移动端全面复兴与打包打通总方案 (01-plan-by-agent-1.md)
 ## —— 极简收敛与先删后改学派实施纲领
 
-> **方案编号**：`independent-plans/01-plan-by-agent-1.md`  
-> **设计学派**：【极简收敛与先删后改学派】（负产出优先、无冗余模式、极简内聚）  
-> **责任 Agent**：方案设计 Agent 1  
-> **设计日期**：2026-09-04  
-> **依据资产**：`01-final-dimensions.md`（定案）、`00-summary.md`（汇总）、11 份专项调研（`surveys/01` ~ `11`）  
-> **遵守规范**：《主 Agent 全流程调度提示词 v3》、《AGENTS.md》、反退避纪律、反过度设计红线  
+> **方案编号**：`independent-plans/01-plan-by-agent-1.md`
+> **设计学派**：【极简收敛与先删后改学派】（负产出优先、无冗余模式、极简内聚）
+> **责任 Agent**：方案设计 Agent 1
+> **设计日期**：2026-09-04
+> **依据资产**：`01-final-dimensions.md`（定案）、`00-summary.md`（汇总）、11 份专项调研（`surveys/01` ~ `11`）
+> **遵守规范**：《主 Agent 全流程调度提示词 v3》、《AGENTS.md》、反退避纪律、反过度设计红线
 > **设计纪律**：本案严禁波次/批次编号（0 出现率）；推进单位为领域概念；单向无环依赖（DAG）；不涉及笔记功能；负产出绝对前置先行。
 
 ---
@@ -349,17 +349,17 @@ graph TD
     classDef final fill:#fce4ec,stroke:#c2185b,stroke-width:2px;
 
     D1["【第 1 步·负产出基座】DIM-01: 重复与死层彻底清理<br/>(核销文件 / 移出单测 / 拔除 customSerializer / 清退 6 个空心 DAO / 收敛 7 组算法)"]:::base
-    
+
     D2["【第 2 步·契约基石】DIM-02: 类型系统与跨包契约<br/>(shared-types 导出 57 类事件与 108 个 parser / 消歧 6 原语 / 移动端 TS 报错归零)"]:::core
-    
+
     D6["【第 3 步·视觉原子】DIM-06: UI 规范与触控交互<br/>(Input/Tooltip 原子组件 / 16 处热区 / 返回按钮统一 / 修复推送穿透)"]:::domain
-    
+
     D3["【第 4 步·连接底座】DIM-03: 安全配对与连接对账网关<br/>(修复 WS URL / 解锁配对死锁 / 修复 unpair / 补发 subscribe / 重放清游标)"]:::domain
-    
+
     D4["【第 5 步·业务闭环】DIM-04: 跨端审批与 Outbox 队列<br/>(桌面 ws.rs 消除命令黑洞 / 做实 Outbox 持久化 / 120s 状态机闭环)"]:::domain
-    
+
     D5["【第 6 步·观测引擎】DIM-05: 会话流式事件与终端缓冲<br/>(接线未读红点 / 修复终端 5000 行吸底死锁 / 修正 24dp 错位 / 缓冲下沉 Domain)"]:::domain
-    
+
     D7["【第 7 步·工程收口】DIM-07: 工程化基建与独立原生打包<br/>(app.json 原生标识与权限 / expo-crypto 引入 / export 与 prebuild 离线打通)"]:::final
 
     D1 --> D2
@@ -367,7 +367,7 @@ graph TD
     D2 --> D3
     D3 --> D4
     D3 --> D5
-    
+
     D2 --> D7
     D3 --> D7
     D4 --> D7

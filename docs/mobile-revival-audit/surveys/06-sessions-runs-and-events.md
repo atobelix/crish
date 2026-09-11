@@ -1,8 +1,8 @@
 # 专项审计报告 06：会话状态与事件流消费 (sessions-runs-and-events)
 
-> **审计基准**：`apps/crish-mobile`（Expo SDK 57 / RN 0.86 / React 19.2.3）  
-> **调查员**：会话状态与事件流消费调查员  
-> **产出时间**：2026-09-04  
+> **审计基准**：`apps/crish-mobile`（Expo SDK 57 / RN 0.86 / React 19.2.3）
+> **调查员**：会话状态与事件流消费调查员
+> **产出时间**：2026-09-04
 > **审计范围**：
 > - `apps/crish-mobile/src/domain/store/sessionStore.ts`, `sessionReducers.ts`
 > - `apps/crish-mobile/src/domain/store/eventStore.ts`, `eventReducers.ts`
