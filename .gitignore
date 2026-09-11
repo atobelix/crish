@@ -211,6 +211,7 @@ apps/crish-desktop/scripts/
 .dependency-cruiser.cjs
 .mcp.json
 .workbuddy/
+.workbuddy-ai/
 .zcode/
 bring-window.ps1
 NUL
@@ -401,6 +402,16 @@ apps/agent-workbench/src-tauri/gen/*
 !scripts/check-markdown-style-compliance.mjs
 # 可执行后缀拦截 SSOT 对齐门禁（check:desktop 依赖）必须入库
 !scripts/check-blocked-executable-ssot.mjs
+# 设计令牌 SSOT 三线门禁（icon 描边 / UI 线宽 / 色彩；check:desktop 依赖）须入库——
+# 同 380 行 `*.mjs` 全局忽略，若不放行则 CI checkout 后门禁脚本缺失、check:desktop 直接断裂
+!scripts/check-icon-ssot.mjs
+!scripts/check-line-width-ssot.mjs
+!scripts/check-color-ssot.mjs
+!scripts/check-text-color-tokens.mjs
+!scripts/check-token-consistency.mjs
+!scripts/check-no-pseudo-dispatch.mjs
+!scripts/check-no-nonvision-dataurl.mjs
+!scripts/check-sec6-note-drain-entropy.mjs
 # markdown-editor 测试资产放行（本区 *.txt/*.json/*.mjs 忽略规则在 267 行白名单之后，须在此显式放行）
 !reference/markdown-editor/tests/cmspec/spec.txt
 !reference/markdown-editor/tests/cmspec/examples.json
@@ -438,6 +449,7 @@ apps/crish-desktop/scripts/
 .dependency-cruiser.cjs
 .mcp.json
 .workbuddy/
+.workbuddy-ai/
 .zcode/
 bring-window.ps1
 NUL
