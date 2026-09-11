@@ -80,10 +80,10 @@
 
 ## ② 计划方案 Agent（数量=表行数，写死）
 
-> **数量 = 4**（表有 **4** 行，**≥4**）。  
-> **其中 ≥2 为 SD/CONN 还债**——满足 §4.1.1（本表 **4 SD**）。  
-> **吸收未切黄带**：`mdPrefixHost` **531** · `note_backend_tests` **500** · `BlockChromeDomHost` **383** · `store_backend_apply` **320**。  
-> **SD-27…45 / A-MD / CONN-DG2 / CONN-D×G2′ 已落 → 本表不再保留。**  
+> **数量 = 4**（表有 **4** 行，**≥4**）。
+> **其中 ≥2 为 SD/CONN 还债**——满足 §4.1.1（本表 **4 SD**）。
+> **吸收未切黄带**：`mdPrefixHost` **531** · `note_backend_tests` **500** · `BlockChromeDomHost` **383** · `store_backend_apply` **320**。
+> **SD-27…45 / A-MD / CONN-DG2 / CONN-D×G2′ 已落 → 本表不再保留。**
 > **新 ID 从 SD-46 起。**
 
 ### 禁派 · 本波已消化（整包重做）
@@ -173,7 +173,7 @@
 | **文件冲突**     | #1 锁 block-paper leaves；#3 锁 chrome DomHost（勿碰 BlockChrome.ts）；#2 锁 agent-tools 测；#4 锁 note-runtime apply            |
 | **本波不做**     | 重复本波十一包 / 本轮同开十一包 / T=13/12/还债/G2 总线/E3/C2 会计/E2′ / D×G2′ / DG2；关 EL；去 `-S`；04 零 SD/CONN；「只 3」当帽 |
 
-> **若主控资源紧**：优先 **#1 SD-46**、**#2 SD-47**、**#3 SD-48**、**#4 SD-49**（保证 **≥4 包且 ≥2 SD/CONN**）；**禁止**只派新功能 2–3 且零还债。  
+> **若主控资源紧**：优先 **#1 SD-46**、**#2 SD-47**、**#3 SD-48**、**#4 SD-49**（保证 **≥4 包且 ≥2 SD/CONN**）；**禁止**只派新功能 2–3 且零还债。
 > **禁止**因本轮同开已切而少派——顺延不等于砍表。
 
 ### 再下一轮仍可能未还（本表未派完时保留）
@@ -266,8 +266,8 @@
 | 顺延   | unused `safe_doc_id`；Panel CSS 748（美学域）                                                                            |
 | 勿派   | 本波十一包 / 本轮同开十一包 / G2 总线 / E3 / E2′ / DG2 / D×G2′ / C2 会计 / query / 14 / 旧 golden / Slash / Strict / fts |
 
-**本波消化判定（钉死）**：`SD-27` / `SD-28` / `SD-29` / `SD-30` / `SD-31` / `SD-32` / `SD-33` / `SD-34` / `SD-35` / `A-MD list_nested_table` / `CONN-DG2` / 美学 EmptyState CSS = **已消化**。  
-**本轮同开判定（钉死）**：`SD-36` / `SD-37` / `SD-38` / `SD-39` / `SD-40` / `SD-41` / `SD-42` / `SD-43` / `SD-44` / `SD-45` / `CONN-D×G2′` = **已消化**。  
+**本波消化判定（钉死）**：`SD-27` / `SD-28` / `SD-29` / `SD-30` / `SD-31` / `SD-32` / `SD-33` / `SD-34` / `SD-35` / `A-MD list_nested_table` / `CONN-DG2` / 美学 EmptyState CSS = **已消化**。
+**本轮同开判定（钉死）**：`SD-36` / `SD-37` / `SD-38` / `SD-39` / `SD-40` / `SD-41` / `SD-42` / `SD-43` / `SD-44` / `SD-45` / `CONN-D×G2′` = **已消化**。
 **勿**写回 04 当未做。
 
 ---

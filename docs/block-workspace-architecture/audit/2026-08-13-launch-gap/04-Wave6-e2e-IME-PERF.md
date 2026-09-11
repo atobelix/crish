@@ -9,7 +9,7 @@
 
 权威（窄读）：`PREP-上线缺口方案位.md` · `plans/09` Wave 6 · `plans/08` §1.0 / 性能两阶段 · `acceptance/A-BLK-progress.md` · `acceptance/perf-baseline.md` · `specs/ime-matrix.md` · `acceptance/EL-dashboard.md` 表 A / D · D7 §5.1–5.9。
 
-可上线对照（PREP，不可降级）：表 A EL 按 **Strict** 关闭 + 表 B 真绿 + G-HYD 产品句。  
+可上线对照（PREP，不可降级）：表 A EL 按 **Strict** 关闭 + 表 B 真绿 + G-HYD 产品句。
 **现状**：表 A **0/10**；W6 仅 `-S`（`19` / 表 C）。**单切片完成 ≠ 关该 EL ≠ 改表 A**。
 
 ---
@@ -159,7 +159,7 @@ Win WebView2 **必测** = A-IME-01…08 共 8 格（`imeMatrix.ts:119-187`）。
 
 ### 3.1 W6-A 强制拆分 · A-BLK-02 / 08 / 09 再 10–14（各占一行）
 
-> 09 Strict：`W6-A` = A-BLK-01…14 **全表 e2e**；**10–14 必须在表**（`09:326`）。  
+> 09 Strict：`W6-A` = A-BLK-01…14 **全表 e2e**；**10–14 必须在表**（`09:326`）。
 > 本小节 8 行是派单不可合并的最小拆分。01 / 03–07 见 §3.2（同权，不因「先做 02」删维）。
 
 | 切片 ID   | 断言                                    | 文件域                            | 完成定义（可测）                                                                                                                                                                                                                                        | **≠**                                          |

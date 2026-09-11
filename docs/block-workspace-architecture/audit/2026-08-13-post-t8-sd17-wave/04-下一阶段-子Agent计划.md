@@ -52,7 +52,7 @@
 
 ## 本轮同开已消化（①∥② · **下轮禁整包重做**）
 
-> ① 写 04 时 ② 已并行落盘。**下轮禁再整包派下表。**  
+> ① 写 04 时 ② 已并行落盘。**下轮禁再整包派下表。**
 > **CONN-E2′ 已落**（非「若未落则保留」情形）。
 
 | 包                  | 状态 | 证据一带                                                                                                                 |
@@ -67,9 +67,9 @@
 
 ## ② 计划方案 Agent（数量=表行数，写死）
 
-> **数量 = 5**（表有 **5** 行，**≥4**）。  
-> **其中 ≥2 为 SD/CONN 还债**——满足 §4.1.1（本表 **5 SD**）。  
-> **吸收未切黄带**：noteMdPrefixBridge / note_backend 测旁挂 / hydrateProjection / NotePaperPanel / mirror_import。  
+> **数量 = 5**（表有 **5** 行，**≥4**）。
+> **其中 ≥2 为 SD/CONN 还债**——满足 §4.1.1（本表 **5 SD**）。
+> **吸收未切黄带**：noteMdPrefixBridge / note_backend 测旁挂 / hydrateProjection / NotePaperPanel / mirror_import。
 > **E2′ 已落 → 本表不再保留。**
 
 ### 禁派 · 本波已消化（整包重做）
@@ -232,8 +232,8 @@
 | 宜派   | `SD-24`（hydrateProjection）· `SD-25`（NotePaperPanel）· `SD-26`（mirror_import）                        |
 | 勿派   | 本波五包 / 本轮同开五包 / G2 总线 / E3 / E2′ / C2 会计 / query / 14 / task_nested / Slash / Strict / fts |
 
-**本波消化判定（钉死）**：`SD-17` / `SD-13-R` / `W4-R` / `CONN-G2-int` / `A-MD(blockquote_nested_table)` = **已消化**。  
-**本轮同开判定（钉死）**：`SD-18` / `SD-19` / `SD-20` / `CONN-E2′` / `SD-21` = **已消化**。  
+**本波消化判定（钉死）**：`SD-17` / `SD-13-R` / `W4-R` / `CONN-G2-int` / `A-MD(blockquote_nested_table)` = **已消化**。
+**本轮同开判定（钉死）**：`SD-18` / `SD-19` / `SD-20` / `CONN-E2′` / `SD-21` = **已消化**。
 **勿**写回 04 当未做。
 
 ---

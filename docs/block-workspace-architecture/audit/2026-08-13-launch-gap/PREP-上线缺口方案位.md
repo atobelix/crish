@@ -11,7 +11,7 @@
 
 权威：`plans/08-验收与门禁.md` + `plans/09` + `acceptance/EL-dashboard.md` + `09` §1.3 G-HYD。
 
-可上线 ⇔ 表 A EL 按 Strict 包关闭 + 表 B 真绿 + G-HYD-1…5 产品句 + 产品默认路径无半连通撒谎。  
+可上线 ⇔ 表 A EL 按 Strict 包关闭 + 表 B 真绿 + G-HYD-1…5 产品句 + 产品默认路径无半连通撒谎。
 **现状**：EL **0/10**；G-HYD 产品句未满；链 A hydrate 仍 🟡；W6 仅 `-S`。
 
 ## 五人文件（一人一份，勿互相覆盖）
