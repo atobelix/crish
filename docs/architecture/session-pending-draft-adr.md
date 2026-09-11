@@ -1,7 +1,7 @@
 # ADR: Pending Draft Session（会话生命周期）
 
-**状态**: Accepted  
-**日期**: 2026-07  
+**状态**: Accepted
+**日期**: 2026-07
 **关联**: 空壳复用 / 侧栏幽灵会话 / folder 过早绑定
 
 ---

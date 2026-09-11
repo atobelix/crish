@@ -62,8 +62,8 @@
 | `pty` | killAll（exit / pagehide） |
 | `metrics` | controlMetrics snapshot / record |
 
-渲染订阅仍用 zustand 窄 selector，**不要**把 root 当 React DI。  
-**OPT-E 命令收口（已落地）：** `layout.setAppSettings`（AppBootstrap 命令路径）；sidebar context menu / handlers → root session/shell；`api/openAgentPanel` + `workspaceChromeHooks` → root session/workspace/shell（组件勿散落 getState 开面板/chrome）。  
+渲染订阅仍用 zustand 窄 selector，**不要**把 root 当 React DI。
+**OPT-E 命令收口（已落地）：** `layout.setAppSettings`（AppBootstrap 命令路径）；sidebar context menu / handlers → root session/shell；`api/openAgentPanel` + `workspaceChromeHooks` → root session/workspace/shell（组件勿散落 getState 开面板/chrome）。
 **OPT-G7（已落地）：** `session.pinSession` / `unpinSession` / `archiveSession` / `unarchiveSession` / `branchSession` — 侧栏 context menu 等经 `getCompositionRoot().session.*`；**勿**挂到 `layout` facade。Strip 等 residual getState 仍 open（kill #6 partial）。
 
 ---
@@ -196,7 +196,7 @@ Settings / FirstRunWizard 点击
 | 壳 TS 支持层 | `apps/agent-workbench/src/core`、`src/shared` | 非 desktop 产品路径 |
 | 样式 token | `styles/tokens.css` 先扩，再写组件 CSS | CP-UI |
 
-**组装纪律：** 第三处命令调用 → 先扩 `compositionRoot` facade，再散落 `getState`。  
+**组装纪律：** 第三处命令调用 → 先扩 `compositionRoot` facade，再散落 `getState`。
 **非产品：** `apps/web-ui`（已移除）、workbench Preact、无框架前端叙述。
 
 ---

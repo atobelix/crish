@@ -1,7 +1,7 @@
 # Desktop Composition Root & Stores
 
-**Scope:** `apps/crish-desktop`  
-**Status:** living guide (B3 partial → layout + **tree thin** + **setAppSettings** facades; OPT-C1 ownership docs; OPT-E5–E7 command migrate; **OPT-G7** session pin/unpin/archive/unarchive/branch)  
+**Scope:** `apps/crish-desktop`
+**Status:** living guide (B3 partial → layout + **tree thin** + **setAppSettings** facades; OPT-C1 ownership docs; OPT-E5–E7 command migrate; **OPT-G7** session pin/unpin/archive/unarchive/branch)
 **Code:** `src/app/compositionRoot.ts`, `src/bootstrap-services.ts`, `src/store/storeOwnership.ts`
 
 ## Purpose

@@ -78,6 +78,6 @@ Open-tab map only stores session ids (not per-tab `rightDock`). After a valid mu
 
 ## 5. Alternatives considered
 
-1. **Always restore multi-unit** — rejected (D-D): high support cost for bad trees  
-2. **Separate `restoreMultiUnitLayout` flag** — deferred; current single switch is enough  
-3. **Persist full shell openTabs JSON** — larger surface; tree + map sufficient for v1  
+1. **Always restore multi-unit** — rejected (D-D): high support cost for bad trees
+2. **Separate `restoreMultiUnitLayout` flag** — deferred; current single switch is enough
+3. **Persist full shell openTabs JSON** — larger surface; tree + map sufficient for v1

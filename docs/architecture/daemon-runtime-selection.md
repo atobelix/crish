@@ -5,7 +5,7 @@
 > 详见根 [`ARCHITECTURE.md`](../../ARCHITECTURE.md) 与引擎事件契约
 > `crates/conex-types/contracts/engine-events.json`。
 
-日期：2026-06-09  
+日期：2026-06-09
 范围：Workbench/Tauri -> agent-daemon -> AgentOrchestrator -> AgentRuntime 的 daemon sidecar 启动、流式传输、打包与 smoke/benchmark 策略。
 
 ## 结论

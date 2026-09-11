@@ -1,8 +1,8 @@
 # ADR: External Conversation Import (Claude Code + Codex CLI)
 
-**Status**: Accepted  
-**Date**: 2026-07  
-**Owner**: `apps/crish-desktop/src/api/import/**`  
+**Status**: Accepted
+**Date**: 2026-07
+**Owner**: `apps/crish-desktop/src/api/import/**`
 **Related**: Session lifecycle (`session-pending-draft-adr.md`), session export (`sessionExport.ts`), workspace FS guard
 
 ---

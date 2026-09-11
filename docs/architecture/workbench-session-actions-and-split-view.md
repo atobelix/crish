@@ -4,7 +4,7 @@
 
 范围：左侧会话列表、会话 More 菜单、Open in 二级菜单、Split View、多会话并行查看、撤回/回溯入口。
 
-> **命名澄清（OPT-E8 / W4-2）：** 本文描述的是 **产品侧 SessionAction 协议 / Workbench UI 动作**（More 菜单、pin/rename/fork/delete、Split View pane binding 等），**不是** 已删除的前端目录 `apps/crish-desktop/src/store/session-actions/`。  
+> **命名澄清（OPT-E8 / W4-2）：** 本文描述的是 **产品侧 SessionAction 协议 / Workbench UI 动作**（More 菜单、pin/rename/fork/delete、Split View pane binding 等），**不是** 已删除的前端目录 `apps/crish-desktop/src/store/session-actions/`。
 > 该 store 子目录已于 W4-2 物理删除。现行 Zustand session **store** actions 为：`sessionCrudActions.ts` / `sessionMessageActions.ts` / `sessionOrderingActions.ts` / `sessionAgentActions.ts` / barrel `sessionActions.ts`。勿把本文标题中的 “session-actions” 误读为上述已删路径。
 
 ## 目标
