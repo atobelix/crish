@@ -103,7 +103,7 @@
   --tab-height: 38px;
   --tab-pad: 4px;
   --tab-gap: 4px;
-  --tab-outer-radius: var(--radius-xl, 10px);
+  --tab-outer-radius: var(--radius-xl, 12px);
   --tab-inner-radius: calc(var(--tab-outer-radius) - var(--tab-pad)); /* 6px */
   --tab-font-size: var(--font-size-md, 15px);
   --tab-item-px: var(--space-4, 16px);

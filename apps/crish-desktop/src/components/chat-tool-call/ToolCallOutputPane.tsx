@@ -50,7 +50,9 @@ export const ToolCallOutputPane: React.FC<ToolCallOutputPaneProps> = ({
   const [copied, setCopied] = useState(false);
   const isError = status === 'error';
   const isRunning = status === 'running';
-  const hasDiffs = Boolean(diffs && diffs.length > 0 && isEditToolName(name || ''));
+  const hasDiffs = Boolean(
+    diffs && diffs.length > 0 && (!name || isEditToolName(name))
+  );
   const hasImages = Boolean(images && images.length > 0);
   const emptyBody = !output && !hasDiffs && !hasImages;
 

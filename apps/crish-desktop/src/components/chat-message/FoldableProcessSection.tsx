@@ -24,7 +24,7 @@ import {
   arbitrateLeadAction,
   formatSegmentSummary,
 } from '../../api/tool-presentation/processMetricsEngine';
-import { AppIcon } from '../ui/icons';
+import { AppIcon, type IconName } from '../ui/icons';
 import styles from './FoldableProcessSection.module.css';
 
 export interface FoldableProcessSectionProps {
@@ -60,7 +60,7 @@ const SectionLeadIcon: React.FC<{ metrics: ProcessSegmentMetrics }> = React.memo
     const leadAction = arbitrateLeadAction(metrics);
     return (
       <AppIcon
-        name={DOMINANT_ICON_MAP[leadAction]}
+        name={DOMINANT_ICON_MAP[leadAction] as IconName}
         size={12}
         className={styles.leadIcon}
         aria-hidden

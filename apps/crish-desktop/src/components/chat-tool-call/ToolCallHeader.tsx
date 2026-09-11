@@ -158,6 +158,15 @@ export const ToolCallHeader: React.FC<ToolCallHeaderProps> = ({
         {durationStr ? (
           <span className={styles.duration}>{durationStr}</span>
         ) : null}
+        {canToggle ? (
+          <span
+            className={`${styles.toolRowChevron} ${isOpen ? styles.rot : ''}`}
+            aria-hidden="true"
+            data-testid={`tool-chevron-${tc.id}`}
+          >
+            &#8250;
+          </span>
+        ) : null}
       </span>
     </div>
   );

@@ -70,14 +70,13 @@ export type AssistantTimelineItem =
  *   - classifyToolAction         → ./toolActionClassifier.ts
  *
  * 负向红线：禁止在其它文件重复定义 ProcessSegmentMetrics / TimelineSegment /
- * ProcessLeadAction / DOMINANT_ICON_MAP（历史别名 ProcessSectionMetrics /
- * dominantCategory / DominantIconSpec / dominantIcon 已物理废除）。
+ * ProcessLeadAction / DOMINANT_ICON_MAP（历史旧别名结构已物理废除）。
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 /**
  * 过程段主导动作（折叠态左前导图标的语义轴）。
  *
- * 收敛说明：取代历史命名 `dominantCategory`；枚举值 `'run'` 已改为 `'command'`，
+ * 收敛说明：取代历史旧命名；枚举值 `'run'` 已改为 `'command'`，
  * `'generic'` 已改为 `'mixed'`。
  */
 export type ProcessLeadAction =
@@ -123,15 +122,15 @@ export interface ProcessSegmentMetrics {
   subagentCount: number;
   /** 检索搜索次数 */
   searchCount: number;
-  /** 终端命令执行条数；收敛：原 `shellCommandCount` */
+  /** 终端命令执行条数 */
   commandCount: number;
   /** 文件读取次数（路径去重后）；收敛：原 `readCount` */
   readFilesCount: number;
   /** 文件编辑次数（路径去重后）；收敛：原 `editCount` */
   editFilesCount: number;
-  /** 去重后的读取路径；收敛：原 `readFilePaths` */
+  /** 去重后的读取路径 */
   readPaths: string[];
-  /** 去重后的编辑路径；收敛：原 `editedFilePaths` */
+  /** 去重后的编辑路径 */
   editPaths: string[];
   /** 上下文注入卡片数量 */
   injectionCount: number;

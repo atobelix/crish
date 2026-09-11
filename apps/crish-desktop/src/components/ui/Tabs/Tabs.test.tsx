@@ -325,9 +325,9 @@ describe('ui/Tabs', () => {
     // 4. 同心圆角几何体系 R_inner = R_outer - Padding
     expect(CSS_SRC).toContain('--tab-inner-radius: calc(var(--tab-outer-radius) - var(--tab-pad))');
     expect(CSS_SRC).toContain('--tab-outer-radius: var(--radius-md, 6px)');
-    expect(CSS_SRC).toContain('--tab-outer-radius: var(--button-radius, 8px)');
+    expect(CSS_SRC).toContain('--tab-outer-radius: var(--button-radius, 7px)');
     expect(CSS_SRC).toContain('--tab-outer-radius: var(--radius-lg, 8px)');
-    expect(CSS_SRC).toContain('--tab-outer-radius: var(--radius-xl, 10px)');
+    expect(CSS_SRC).toContain('--tab-outer-radius: var(--radius-xl, 12px)');
 
     // 5. 焦点环与减弱动画兜底
     expect(CSS_SRC).toContain('color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%)');
