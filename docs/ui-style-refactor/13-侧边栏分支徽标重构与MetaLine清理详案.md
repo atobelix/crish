@@ -1,9 +1,9 @@
 # 详案 13：侧边栏分支徽标重构与 MetaLine 清理详案
 
-> **文档标识**：[`docs/ui-style-refactor/13-侧边栏分支徽标重构与MetaLine清理详案.md`](file:///c:/Software/conex/docs/ui-style-refactor/13-%E4%BE%A7%E8%BE%B9%E6%A0%8F%E5%88%86%E6%94%AF%E5%BE%BD%E6%A0%87%E9%87%8D%E6%9E%84%E4%B8%8EMetaLine%E6%88%BF%E7%90%86%E8%AF%A6%E6%A1%88.md)  
-> **所属战役**：[`docs/ui-style-refactor/00-总方案-工作区面板交互平滑与视觉归一.md`](file:///c:/Software/conex/docs/ui-style-refactor/00-%E6%80%BB%E6%96%B9%E6%A1%88-%E5%B7%A5%E4%BD%9C%E5%8C%BA%E9%9D%A2%E6%9D%BF%E4%BA%A4%E4%BA%92%E5%B9%B3%E6%BB%91%E4%B8%8E%E8%A7%86%E8%A7%89%E5%BD%92%E4%B8%80.md)  
-> **实施基准**：[`docs/ui-style-refactor/06-定案-工作区面板与工具栏细节深化决策.md`](file:///c:/Software/conex/docs/ui-style-refactor/06-%E5%AE%9A%E6%A1%88-%E5%B7%A5%E4%BD%9C%E5%8C%BA%E9%9D%A2%E6%9D%BF%E4%B8%8E%E5%B7%AE%E5%BC%82%E9%9D%A2%E6%9D%BF%E8%A7%86%E8%A7%89%E6%A0%B7%E5%BC%8F%E9%87%8D%E6%9E%84.md) §一.3 & §一.4、[`docs/ui-style-refactor/audits/08-sidebar-branch-escape-and-metaline-audit.md`](file:///c:/Software/conex/docs/ui-style-refactor/audits/08-sidebar-branch-escape-and-metaline-audit.md) 专项审计报告  
-> **调度标准**：严格遵循 [`docs/agent-roles/prompts/主控-全流程调度-v3.md`](file:///c:/Software/conex/docs/agent-roles/prompts/%E4%B8%BB%E6%8E%A7-%E5%85%A8%E6%B5%81%E7%A8%8B%E8%B0%83%E5%BA%A6-v3.md) §二.4 详案模板  
+> **文档标识**：[`docs/ui-style-refactor/13-侧边栏分支徽标重构与MetaLine清理详案.md`](file:///c:/Software/conex/docs/ui-style-refactor/13-%E4%BE%A7%E8%BE%B9%E6%A0%8F%E5%88%86%E6%94%AF%E5%BE%BD%E6%A0%87%E9%87%8D%E6%9E%84%E4%B8%8EMetaLine%E6%88%BF%E7%90%86%E8%AF%A6%E6%A1%88.md)
+> **所属战役**：[`docs/ui-style-refactor/00-总方案-工作区面板交互平滑与视觉归一.md`](file:///c:/Software/conex/docs/ui-style-refactor/00-%E6%80%BB%E6%96%B9%E6%A1%88-%E5%B7%A5%E4%BD%9C%E5%8C%BA%E9%9D%A2%E6%9D%BF%E4%BA%A4%E4%BA%92%E5%B9%B3%E6%BB%91%E4%B8%8E%E8%A7%86%E8%A7%89%E5%BD%92%E4%B8%80.md)
+> **实施基准**：[`docs/ui-style-refactor/06-定案-工作区面板与工具栏细节深化决策.md`](file:///c:/Software/conex/docs/ui-style-refactor/06-%E5%AE%9A%E6%A1%88-%E5%B7%A5%E4%BD%9C%E5%8C%BA%E9%9D%A2%E6%9D%BF%E4%B8%8E%E5%B7%AE%E5%BC%82%E9%9D%A2%E6%9D%BF%E8%A7%86%E8%A7%89%E6%A0%B7%E5%BC%8F%E9%87%8D%E6%9E%84.md) §一.3 & §一.4、[`docs/ui-style-refactor/audits/08-sidebar-branch-escape-and-metaline-audit.md`](file:///c:/Software/conex/docs/ui-style-refactor/audits/08-sidebar-branch-escape-and-metaline-audit.md) 专项审计报告
+> **调度标准**：严格遵循 [`docs/agent-roles/prompts/主控-全流程调度-v3.md`](file:///c:/Software/conex/docs/agent-roles/prompts/%E4%B8%BB%E6%8E%A7-%E5%85%A8%E6%B5%81%E7%A8%8B%E8%B0%83%E5%BA%A6-v3.md) §二.4 详案模板
 > **核心使命**：彻底废除 `SessionRow.tsx` 中暴力拼接 `"分支: "` 字符串导致的侧栏严重挤压变形与样式逃逸，引入 `<GitBranch size={11} />` 规范微徽标组件释放宽度；连根拔除 `OverviewHeader.tsx` 顶层孤立的 `_metaLine_1qjwi_41` 冗余芯片与 `OverviewCard.module.css` 死样式规则，净化右侧总览面板首屏空间。
 
 ---
@@ -339,7 +339,7 @@ c:/Software/conex/apps/crish-desktop/
  import styles from '../SidebarSessionList.module.css';
 -import { MoreHorizontal } from 'lucide-react';
 +import { GitBranch, MoreHorizontal } from 'lucide-react';
- 
+
 @@ -206,5 +206,3 @@
    const isBranched = !!s.branchParentId;
    const baseTitle = sessionListDisplayTitle(s);
@@ -355,7 +355,7 @@ c:/Software/conex/apps/crish-desktop/
 +  const sessionTitleWithBranch = isBranched ? `分支会话：${displayText}` : displayText;
 +  const ariaLabel = isRunning ? `${sessionTitleWithBranch}，处理中` : sessionTitleWithBranch;
 +  const tipContent = sessionTitleWithBranch;
- 
+
 @@ -351,4 +350,9 @@
              <Tooltip content={tipContent}>
                <span className={styles.sessionTextCol}>
@@ -384,7 +384,7 @@ c:/Software/conex/apps/crish-desktop/
  .sessionItem.branchSession {
    position: relative;
  }
- 
+
 -.sessionItem.branchSession::before {
 -  display: none;
 +.branchBadge {
@@ -406,7 +406,7 @@ c:/Software/conex/apps/crish-desktop/
 +.sessionItem.active .branchIcon {
 +  opacity: 1;
  }
- 
+
 @@ -582,2 +593,3 @@
  :global([data-sidebar-collapsed='1']) .sessionActionsBtn,
 +:global([data-sidebar-collapsed='1']) .branchBadge,

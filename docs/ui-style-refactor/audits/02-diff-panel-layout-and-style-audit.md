@@ -1,6 +1,6 @@
 # 差异面板 (Diff Panel / WidgetDiff / DiffCard) 容器到元素全链路布局与样式退化严苛审计报告
 
-> **权威审计版本**：2026-08-30 · UI 视觉与样式重构战役专项  
+> **权威审计版本**：2026-08-30 · UI 视觉与样式重构战役专项
 > **审计对象**：
 > - `apps/crish-desktop/src/components/custom-tags/WidgetDiff.tsx`
 > - `apps/crish-desktop/src/components/custom-tags/custom-tags.module.css`

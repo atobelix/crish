@@ -1,6 +1,6 @@
 # Conex / Crish 界面视觉修复与差异面板重构战役方案（提案 C）
 
-> **方案版本**：v1.0.0 · 独立编制架构提案 C  
+> **方案版本**：v1.0.0 · 独立编制架构提案 C
 > **编制依据**：
 > - `docs/ui-style-refactor/audits/01-theme-flash-and-fouc-audit.md` (首屏闪色与 FOUC 根因)
 > - `docs/ui-style-refactor/audits/02-diff-panel-layout-and-style-audit.md` (差异面板 18 项全链路缺陷)

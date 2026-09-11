@@ -1,8 +1,8 @@
 # Conex / Crish 战役评审报告 C
 # —— UI 视觉方案交叉评审 C：级联绝缘、删除面清单与实施 DAG 审查报告
 
-> **评审编号**：REVIEW-C  
-> **战役任务**：UI 视觉方案交叉评审 C —— 级联绝缘、删除面清单与实施 DAG 审查  
+> **评审编号**：REVIEW-C
+> **战役任务**：UI 视觉方案交叉评审 C —— 级联绝缘、删除面清单与实施 DAG 审查
 > **评审基准文件**：
 > - [`docs/ui-style-refactor/00-定案-视觉样式与差异面板重构决策.md`](file:///c:/Software/conex/docs/ui-style-refactor/00-%E5%AE%9A%E6%A1%88-%E8%A7%86%E8%A7%89%E6%A0%B7%E5%BC%8F%E4%B8%8E%E5%B7%AE%E5%BC%82%E9%9D%A2%E6%9D%BF%E9%87%8D%E6%9E%84%E5%86%B3%E7%AD%96.md)
 > - [`docs/ui-style-refactor/independent-plans/01-zero-fouc-and-startup-theme-plan.md`](file:///c:/Software/conex/docs/ui-style-refactor/independent-plans/01-zero-fouc-and-startup-theme-plan.md)

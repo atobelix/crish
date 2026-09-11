@@ -1,7 +1,7 @@
 # 智能展开面板（SmartPanel）React 移植与全场景重塑详案
 
-> **战役工作区**：`docs/ui-style-refactor/`  
-> **方案编号**：`PLAN-21`  
+> **战役工作区**：`docs/ui-style-refactor/`
+> **方案编号**：`PLAN-21`
 > **实施目标**：
 > 1. 将 `reference/smart-expandable-panel/` 与 `展开面板设计.html` 规范化移植为 React + CSS Modules 标准原子级组件 `apps/crish-desktop/src/components/ui/SmartPanel/`；
 > 2. 以左侧会话列表（`SessionRow.tsx`）的「更多操作」为首个试验田，跑通纯数据驱动、发丝边框、高危红字与高级选项原地手风琴折叠；

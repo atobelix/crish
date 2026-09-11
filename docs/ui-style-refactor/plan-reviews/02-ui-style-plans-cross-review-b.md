@@ -1,12 +1,12 @@
 # Conex / Crish 界面视觉重构交叉评审报告 B
 # —— 差异面板算法、性能与小元素脱黑完整性审查
 
-> **评审编号**：REVIEW-B-20260830  
-> **责任领域**：差异面板（Diff Panel）全链路算法与高亮渲染、微小元素脱黑完整性、弹性容器滚动链、跨方案冲突与系统级稳定性  
+> **评审编号**：REVIEW-B-20260830
+> **责任领域**：差异面板（Diff Panel）全链路算法与高亮渲染、微小元素脱黑完整性、弹性容器滚动链、跨方案冲突与系统级稳定性
 > **被审方案**：
 > - [`docs/ui-style-refactor/independent-plans/02-accent-token-and-small-elements-deblack-plan.md`](file:///c:/Software/conex/docs/ui-style-refactor/independent-plans/02-accent-token-and-small-elements-deblack-plan.md)（方案 02）
 > - [`docs/ui-style-refactor/independent-plans/03-diff-panel-layout-and-syntax-highlighting-plan.md`](file:///c:/Software/conex/docs/ui-style-refactor/independent-plans/03-diff-panel-layout-and-syntax-highlighting-plan.md)（方案 03）
-> - 协同交叉核验：方案 01、方案 04、方案 05 与 [`00-定案-视觉样式与差异面板重构决策.md`](file:///c:/Software/conex/docs/ui-style-refactor/00-%E5%AE%9A%E6%A1%88-%E8%A7%86%E8%A7%89%E6%A0%B7%E5%BC%8F%E4%B8%8E%E5%B7%AE%E5%BC%82%E9%9D%A2%E6%9D%BF%E9%87%8D%E6%9E%84%E5%86%B3%E7%AD%96.md)  
+> - 协同交叉核验：方案 01、方案 04、方案 05 与 [`00-定案-视觉样式与差异面板重构决策.md`](file:///c:/Software/conex/docs/ui-style-refactor/00-%E5%AE%9A%E6%A1%88-%E8%A7%86%E8%A7%89%E6%A0%B7%E5%BC%8F%E4%B8%8E%E5%B7%AE%E5%BC%82%E9%9D%A2%E6%9D%BF%E9%87%8D%E6%9E%84%E5%86%B3%E7%AD%96.md)
 > **评审原则**：严格遵照《主控全流程调度 v3》§二.2 规范，零委婉、深挖死角、直击底层逻辑漏洞、防退化与防破坏。严禁执行 git 操作。
 
 ---
@@ -324,7 +324,7 @@ function renderTokens(tokens: DiffWordToken[], targetType: 'added' | 'removed', 
 - 方案 03 修改 `--diff-*` 增删色阶并删除 `--diff-gutter-width`；
 - 方案 05 顶层抽取 `--breakpoint-*` 并收敛 `--focus-ring-*`（8%）与 `--filetree-badge-*`。
 
-**隐患**：若 5 个方案并行无序向 `tokens.css` 提交代码，必将引发惨烈的 Git 冲突与行号错位。  
+**隐患**：若 5 个方案并行无序向 `tokens.css` 提交代码，必将引发惨烈的 Git 冲突与行号错位。
 **调度要求**：必须严格遵循定案决策的 DAG 拓扑，在阶段 0 由单 Agent 独占执行 `tokens.css` 的基座变量治理，阶段 1 统一注入语义色，后续方案仅消费而不随意篡改结构。
 
 ---

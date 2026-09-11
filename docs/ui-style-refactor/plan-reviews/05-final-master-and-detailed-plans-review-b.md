@@ -1,8 +1,8 @@
 # Conex / Crish 战役终审评审 B
 # —— 视觉修复总方案与 5 大分维详案定稿前最终交叉审查报告
 
-> **评审编号**：`REVIEW-05-FINAL-B`  
-> **评审定位**：Conex / Crish 界面色彩平滑与差异面板视觉重构战役 · 定稿前最终交叉审查（终审评审 B）  
+> **评审编号**：`REVIEW-05-FINAL-B`
+> **评审定位**：Conex / Crish 界面色彩平滑与差异面板视觉重构战役 · 定稿前最终交叉审查（终审评审 B）
 > **审查对象**：
 > - 战役总方案：[`docs/ui-style-refactor/00-总方案-界面色彩平滑与差异面板视觉重构.md`](file:///c:/Software/conex/docs/ui-style-refactor/00-%E6%80%BB%E6%96%B9%E6%A1%88-%E7%95%8C%E9%9D%A2%E8%89%B2%E5%BD%A9%E5%B9%B3%E6%BB%91%E4%B8%8E%E5%B7%AE%E5%BC%82%E9%9D%A2%E6%9D%BF%E8%A7%86%E8%A7%89%E9%87%8D%E6%9E%84.md)
 > - 战役定案决策：[`docs/ui-style-refactor/00-定案-视觉样式与差异面板重构决策.md`](file:///c:/Software/conex/docs/ui-style-refactor/00-%E5%AE%9A%E6%A1%88-%E8%A7%86%E8%A7%89%E6%A0%B7%E5%BC%8F%E4%B8%8E%E5%B7%AE%E5%BC%82%E9%9D%A2%E6%9D%BF%E9%87%8D%E6%9E%84%E5%86%B3%E7%AD%96.md)
@@ -12,7 +12,7 @@
 > - 分维详案 04：[`docs/ui-style-refactor/04-选择器级联绝缘与Important清剿详案.md`](file:///c:/Software/conex/docs/ui-style-refactor/04-%E9%80%89%E6%8B%A9%E5%99%A8%E7%BA%A7%E8%81%94%E7%BB%9D%E7%BC%98%E4%B8%8EImportant%E6%B8%85%E5%89%BF%E8%AF%A6%E6%A1%88.md)
 > - 分维详案 05：[`docs/ui-style-refactor/05-Token继承链归一与A11y规范闭环详案.md`](file:///c:/Software/conex/docs/ui-style-refactor/05-Token%E7%BB%A7%E6%89%BF%E9%93%BE%E5%BD%92%E4%B8%80%E4%B8%8EA11y%E8%A7%84%E8%8C%83%E9%97%AD%E7%8E%AF%E8%AF%A6%E6%A1%88.md)
 > - 交叉评审基线：[`plan-reviews/01`](file:///c:/Software/conex/docs/ui-style-refactor/plan-reviews/01-ui-style-plans-cross-review-a.md) ~ [`03`](file:///c:/Software/conex/docs/ui-style-refactor/plan-reviews/03-ui-style-plans-cross-review-c.md)
-> - 核心规范：[`AGENTS.md`](file:///c:/Software/conex/AGENTS.md)（§1 逻辑规划与反退避、§3 Git 提交纪律、§12 Tooltip 胶囊、§13 输入框与焦点态 $\le 10\%$ 柔和边框、§14 现代色彩空间与 Zero-Blue 铁律）、[`docs/agent-roles/prompts/主控-全流程调度-v3.md`](file:///c:/Software/conex/docs/agent-roles/prompts/%E4%B8%BB%E6%8E%A7-%E5%85%A8%E6%B5%81%E7%A8%8B%E8%B0%83%E5%BA%A6-v3.md) §二.5  
+> - 核心规范：[`AGENTS.md`](file:///c:/Software/conex/AGENTS.md)（§1 逻辑规划与反退避、§3 Git 提交纪律、§12 Tooltip 胶囊、§13 输入框与焦点态 $\le 10\%$ 柔和边框、§14 现代色彩空间与 Zero-Blue 铁律）、[`docs/agent-roles/prompts/主控-全流程调度-v3.md`](file:///c:/Software/conex/docs/agent-roles/prompts/%E4%B8%BB%E6%8E%A7-%E5%85%A8%E6%B5%81%E7%A8%8B%E8%B0%83%E5%BA%A6-v3.md) §二.5
 > **审查结论**：**准予定稿（PASS WITH MINOR PATH CORRECTIONS）**。全套 1 份总方案 + 5 份分维详案在架构契约、删除面清单（DEL-01~DEL-30）、先删后改 DAG 拓扑、文件域互斥性与 WCAG 对比度指标上已达成高度收敛闭环，具备无缝投入实现波施工的完备条件。本报告对总方案中 2 处历史相对路径笔误及 4 处跨方案文件协同边界执行微调裁决。
 
 ---

@@ -77,14 +77,14 @@ $$R(H) = \text{round}\left(k \cdot \sqrt{H}\right) \quad (k \approx 1.15)$$
 
 ```css
 /* Light Theme 投影系统 */
---sep-shadow: 
+--sep-shadow:
   0 20px 48px -10px rgba(29, 28, 26, 0.09),  /* 远景大范围漫反射衰减 */
   0 6px 20px -3px rgba(29, 28, 26, 0.03),   /* 中景空间悬浮感 */
   0 2px 6px 0 rgba(29, 28, 26, 0.015),      /* 近景接触阴影（防止边缘漂浮） */
   inset 0 1px 0 rgba(255, 255, 255, 0.95);  /* 顶部 1px 物理倒角镜面高光 */
 
 /* Dark Theme 投影系统 */
---sep-shadow: 
+--sep-shadow:
   0 24px 54px -10px rgba(0, 0, 0, 0.70),    /* 深度遮蔽暗场 */
   0 8px 24px -4px rgba(0, 0, 0, 0.45),      /* 中景悬浮 */
   0 2px 8px 0 rgba(0, 0, 0, 0.30),          /* 近景轮廓 */
@@ -173,7 +173,7 @@ let preferredDirY = idealDirY;
 if (this.currentDirY && this.currentDirY !== idealDirY) {
   const currentSpace = this.currentDirY === 'down' ? spaceBelow : spaceAbove;
   const idealSpace = idealDirY === 'down' ? spaceBelow : spaceAbove;
-  
+
   // 仅当新方向提供的可用空间超出当前方向达 32px 阈值以上时，才允许方向翻转！
   if (idealSpace - currentSpace > this.HYSTERESIS_Y) {
     preferredDirY = idealDirY;
@@ -410,7 +410,7 @@ export interface SmartPanelProps {
   visibility: hidden;
   pointer-events: none;
   transform: scale(0.92) translateY(-4px);
-  transition: 
+  transition:
     opacity var(--sep-duration-open, 0.22s) var(--sep-ease-spring, cubic-bezier(0.22, 1.25, 0.36, 1)),
     transform var(--sep-duration-open, 0.22s) var(--sep-ease-spring, cubic-bezier(0.22, 1.25, 0.36, 1)),
     visibility var(--sep-duration-open, 0.22s);
@@ -431,7 +431,7 @@ export interface SmartPanelProps {
   visibility: visible;
   pointer-events: none;
   transform: scale(0.94) translateY(-3px);
-  transition: 
+  transition:
     opacity var(--sep-duration-close, 0.15s) var(--sep-ease-shrink, cubic-bezier(0.4, 0, 1, 1)),
     transform var(--sep-duration-close, 0.15s) var(--sep-ease-shrink, cubic-bezier(0.4, 0, 1, 1));
 }

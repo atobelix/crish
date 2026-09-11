@@ -1,14 +1,14 @@
 # Conex / Crish — 界面视觉修复与差异面板重构建议详案（提案 A）
 
-> **方案版本**：v1.0.0 · 提案 A（系统级重构与单源收敛详案）  
-> **编制日期**：2026-08-30  
-> **责任域**：UI 架构治理、Design Tokens 单源化、FOUC 变色根治、差异面板全链路重构、选择器级联绝缘  
+> **方案版本**：v1.0.0 · 提案 A（系统级重构与单源收敛详案）
+> **编制日期**：2026-08-30
+> **责任域**：UI 架构治理、Design Tokens 单源化、FOUC 变色根治、差异面板全链路重构、选择器级联绝缘
 > **输入审计资产**：
 > - [`docs/ui-style-refactor/audits/01-theme-flash-and-fouc-audit.md`](file:///c:/Software/conex/docs/ui-style-refactor/audits/01-theme-flash-and-fouc-audit.md)
 > - [`docs/ui-style-refactor/audits/02-diff-panel-layout-and-style-audit.md`](file:///c:/Software/conex/docs/ui-style-refactor/audits/02-diff-panel-layout-and-style-audit.md)
 > - [`docs/ui-style-refactor/audits/03-small-elements-darkening-and-borders-audit.md`](file:///c:/Software/conex/docs/ui-style-refactor/audits/03-small-elements-darkening-and-borders-audit.md)
 > - [`docs/ui-style-refactor/audits/04-tokens-inheritance-and-conflicts-audit.md`](file:///c:/Software/conex/docs/ui-style-refactor/audits/04-tokens-inheritance-and-conflicts-audit.md)
-> - [`docs/ui-style-refactor/audits/05-runtime-cascading-and-visual-compliance-audit.md`](file:///c:/Software/conex/docs/ui-style-refactor/audits/05-runtime-cascading-and-visual-compliance-audit.md)  
+> - [`docs/ui-style-refactor/audits/05-runtime-cascading-and-visual-compliance-audit.md`](file:///c:/Software/conex/docs/ui-style-refactor/audits/05-runtime-cascading-and-visual-compliance-audit.md)
 > **实施纪律**：严格遵守 [`AGENTS.md`](file:///c:/Software/conex/AGENTS.md) §1（逻辑规划与反退避）、§12（Tooltip 胶囊化）、§13（输入框与焦点态 / ≤10% 柔和边框）、§14（现代 HSLA 与 Zero-Blue 铁律）、[`ANTI_OVERENGINEERING_GUARDRAILS.md`](file:///c:/Software/conex/ANTI_OVERENGINEERING_GUARDRAILS.md)。严禁执行 git 操作。
 
 ---

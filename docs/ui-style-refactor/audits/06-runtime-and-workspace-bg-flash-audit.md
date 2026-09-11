@@ -1,8 +1,8 @@
 # Conex / Crish — 运行时界面背景偏色、右侧面板点击先灰后白闪烁与容器层级地毯式审计报告
 
-> **报告版本**：v1.0.0  
-> **审计日期**：2026-08-30  
-> **审计责任域**：前端视觉工程、工作区容器层级架构、Suspense 时序、FOUC 消除、背景底色统一  
+> **报告版本**：v1.0.0
+> **审计日期**：2026-08-30
+> **审计责任域**：前端视觉工程、工作区容器层级架构、Suspense 时序、FOUC 消除、背景底色统一
 > **核心审计范围**：
 > - [`apps/crish-desktop/src/components/workspace/RuntimePanel.tsx`](file:///c:/Software/conex/apps/crish-desktop/src/components/workspace/RuntimePanel.tsx) & [`RuntimePanel.module.css`](file:///c:/Software/conex/apps/crish-desktop/src/components/workspace/RuntimePanel.module.css)
 > - [`apps/crish-desktop/src/components/diff/DiffCard.tsx`](file:///c:/Software/conex/apps/crish-desktop/src/components/diff/DiffCard.tsx) & [`DiffCard.module.css`](file:///c:/Software/conex/apps/crish-desktop/src/components/diff/DiffCard.module.css)

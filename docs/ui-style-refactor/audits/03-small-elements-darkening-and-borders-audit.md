@@ -1,13 +1,13 @@
 # 全界面小元素变黑与重边框/重阴影严苛审计报告
 
-> **战役任务**：全界面小元素变黑与重边框/重阴影严苛审计  
+> **战役任务**：全界面小元素变黑与重边框/重阴影严苛审计
 > **审计范围**：
 > - `apps/crish-desktop/src/components/ui/`（[Button](file:///c:/Software/conex/apps/crish-desktop/src/components/ui/Button/Button.module.css), [Badge](file:///c:/Software/conex/apps/crish-desktop/src/components/ui/Badge/Badge.module.css), [Chip/Tag](file:///c:/Software/conex/apps/crish-desktop/src/components/ui/Badge/Badge.tsx), [Tooltip](file:///c:/Software/conex/apps/crish-desktop/src/components/ui/Tooltip/Tooltip.module.css), [Switch](file:///c:/Software/conex/apps/crish-desktop/src/components/ui/Switch/Switch.module.css), [SegmentedControl](file:///c:/Software/conex/apps/crish-desktop/src/components/ui/SegmentedControl/SegmentedControl.module.css), [Menu](file:///c:/Software/conex/apps/crish-desktop/src/components/ui/Menu/Menu.module.css), [Slider](file:///c:/Software/conex/apps/crish-desktop/src/components/ui/Slider/Slider.module.css)）
 > - `apps/crish-desktop/src/components/chat-message-row/`（[ChatMessageRow](file:///c:/Software/conex/apps/crish-desktop/src/components/chat-message-row/ChatMessageRow.module.css), [TimelineThoughtSection](file:///c:/Software/conex/apps/crish-desktop/src/components/chat-message-row/TimelineThoughtSection.module.css), [CacheMetricsBadge](file:///c:/Software/conex/apps/crish-desktop/src/components/chat-message-row/CacheMetricsBadge.module.css), [StreamingTableContainer](file:///c:/Software/conex/apps/crish-desktop/src/components/chat-message-row/StreamingTableContainer.module.css)）
 > - `apps/crish-desktop/src/components/custom-tags/`（[custom-tags](file:///c:/Software/conex/apps/crish-desktop/src/components/custom-tags/custom-tags.module.css), [AiCard](file:///c:/Software/conex/apps/crish-desktop/src/components/custom-tags/AiCard.tsx), [FileTree](file:///c:/Software/conex/apps/crish-desktop/src/components/custom-tags/FileTree.tsx), [WidgetDiff](file:///c:/Software/conex/apps/crish-desktop/src/components/custom-tags/WidgetDiff.tsx)）
 > - `apps/crish-desktop/src/components/agent-card/`（[AgentCard](file:///c:/Software/conex/apps/crish-desktop/src/components/agent-card/AgentCard.module.css), [ApprovalAskCard](file:///c:/Software/conex/apps/crish-desktop/src/components/agent-card/ApprovalAskCard.module.css), [InlineAgentPanel](file:///c:/Software/conex/apps/crish-desktop/src/components/agent-card/InlineAgentPanel.module.css), [AgentStatusChip](file:///c:/Software/conex/apps/crish-desktop/src/components/agent-card/AgentStatusChip.tsx), [ApprovalRiskChips](file:///c:/Software/conex/apps/crish-desktop/src/components/agent-card/ApprovalRiskChips.tsx)）
-> - `apps/crish-desktop/src/styles/tokens.css` & `apps/crish-desktop/src/styles/design-system.css`  
-> **审计基准**：[`AGENTS.md`](file:///c:/Software/conex/AGENTS.md) §12（Tooltip规范）、§13（输入框与焦点态、10%对比度红线）、§14（色彩空间与现代CSS语法）  
+> - `apps/crish-desktop/src/styles/tokens.css` & `apps/crish-desktop/src/styles/design-system.css`
+> **审计基准**：[`AGENTS.md`](file:///c:/Software/conex/AGENTS.md) §12（Tooltip规范）、§13（输入框与焦点态、10%对比度红线）、§14（色彩空间与现代CSS语法）
 > **状态**：深度审计完成 · 只读分析 · 严禁回撤
 
 ---

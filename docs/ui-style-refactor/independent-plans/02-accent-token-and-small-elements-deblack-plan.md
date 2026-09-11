@@ -1,6 +1,6 @@
 # Conex / Crish 独立方案 02：全局活态 Token 纠偏与微小元素脱黑实施详案
 
-> **战役任务**：独立方案 02 —— 全局活态 Token 纠偏与微小元素脱黑方案  
+> **战役任务**：独立方案 02 —— 全局活态 Token 纠偏与微小元素脱黑方案
 > **输入资产**：
 > - [`docs/ui-style-refactor/00-定案-视觉样式与差异面板重构决策.md`](file:///c:/Software/conex/docs/ui-style-refactor/00-%E5%AE%9A%E6%A1%88-%E8%A7%86%E8%A7%89%E6%A0%B7%E5%BC%8F%E4%B8%8E%E5%B7%AE%E5%BC%82%E9%9D%A2%E6%9D%BF%E9%87%8D%E6%9E%84%E5%86%B3%E7%AD%96.md)
 > - [`docs/ui-style-refactor/audits/03-small-elements-darkening-and-borders-audit.md`](file:///c:/Software/conex/docs/ui-style-refactor/audits/03-small-elements-darkening-and-borders-audit.md)
@@ -11,7 +11,7 @@
 > - [`apps/crish-desktop/src/components/ui/Slider/`](file:///c:/Software/conex/apps/crish-desktop/src/components/ui/Slider/)
 > - [`apps/crish-desktop/src/components/agent-card/ApprovalAskCard.module.css`](file:///c:/Software/conex/apps/crish-desktop/src/components/agent-card/ApprovalAskCard.module.css)
 > - [`apps/crish-desktop/src/components/chat-composer/ChatComposer.module.css`](file:///c:/Software/conex/apps/crish-desktop/src/components/chat-composer/ChatComposer.module.css)
-> **设计基准**：[`AGENTS.md`](file:///c:/Software/conex/AGENTS.md) §12（Tooltip 胶囊规范）、§13（输入框与焦点态、≤10% 边框加深红线）、§14（现代 CSS 语法与色彩空间）  
+> **设计基准**：[`AGENTS.md`](file:///c:/Software/conex/AGENTS.md) §12（Tooltip 胶囊规范）、§13（输入框与焦点态、≤10% 边框加深红线）、§14（现代 CSS 语法与色彩空间）
 > **文档状态**：方案定稿 · 独占实施详案 · 严格遵循“先删后改”与单一真源原则
 
 ---
@@ -538,7 +538,7 @@
    .goalModeRibbon {
      border-color: color-mix(in srgb, var(--brand) 18%, var(--border-subtle));
    }
-   
+
    .goalModeRibbonMeterFill {
      display: block;
      height: 100%;
@@ -618,7 +618,7 @@
      opacity: 0.9;
      width: 16px;
    }
-   
+
    .tick:hover,
    .root:hover .tick:hover {
      background-color: var(--text-secondary);

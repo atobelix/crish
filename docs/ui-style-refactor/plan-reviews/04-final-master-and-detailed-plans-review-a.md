@@ -1,9 +1,9 @@
 # Conex / Crish 战役终审报告 A
 # —— 视觉修复总方案与 5 大分维详案定稿前最终交叉审查
 
-> **评审编号**：FINAL-REVIEW-A  
-> **战役任务**：视觉修复总方案与 5 大分维详案定稿前最终交叉审查（终审评审 A）  
-> **编制日期**：2026-08-30  
+> **评审编号**：FINAL-REVIEW-A
+> **战役任务**：视觉修复总方案与 5 大分维详案定稿前最终交叉审查（终审评审 A）
+> **编制日期**：2026-08-30
 > **评审对象（输入资产）**：
 > - [`docs/ui-style-refactor/00-总方案-界面色彩平滑与差异面板视觉重构.md`](file:///c:/Software/conex/docs/ui-style-refactor/00-%E6%80%BB%E6%96%B9%E6%A1%88-%E7%95%8C%E9%9D%A2%E8%89%B2%E5%BD%A9%E5%B9%B3%E6%BB%91%E4%B8%8E%E5%B7%AE%E5%BC%82%E9%9D%A2%E6%9D%BF%E8%A7%86%E8%A7%89%E9%87%8D%E6%9E%84.md)
 > - [`docs/ui-style-refactor/01-首屏零闪烁平滑启动与主题单源化详案.md`](file:///c:/Software/conex/docs/ui-style-refactor/01-%E9%A6%96%E5%B1%8F%E9%9B%B6%E9%97%AA%E7%83%81%E5%B9%B3%E6%BB%91%E5%90%AF%E5%8A%A8%E4%B8%8E%E4%B8%BB%E9%A2%98%E5%8D%95%E6%BA%90%E5%8C%96%E8%AF%A6%E6%A1%88.md)

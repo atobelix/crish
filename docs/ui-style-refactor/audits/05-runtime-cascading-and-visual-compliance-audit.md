@@ -253,7 +253,7 @@ $$\text{Canvas / Shell} \longrightarrow \text{Sidebar / Chrome} \longrightarrow 
 【深色模式色相与明度断层拓扑图】
 Standard Token (Hue 0° 纯中性):
   [Shell #0d0d0d] -> [Sidebar #141414] -> [Card #1c1c1c]
-                                              │ 
+                                              │
                                               ▼ (叠加色相漂移!)
 SEP & Hardcoded Token (Hue 36°~40° 暖脏黑):
                                   [Menu/Flyout #181715]

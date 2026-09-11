@@ -1,12 +1,12 @@
 # 05 · Token 继承链归一、悬空/幽灵 Token 拔除与 A11y 规范闭环方案
 
-> **方案定位**：本方案为《Conex / Crish 界面视觉修复与差异面板重构》战役第 5 独立实施方案（维度五：Token 继承链与规范合规闭环），针对全局 CSS Token 继承层叠断层、160px 响应式断点深浅漂移、8 处无 Fallback 悬空 Token、18 处 `--badge-git-*` 幽灵变量、9 处原生 `title=` 气泡违规、深色模式 30% 焦点环超标、244 处旧式 `rgba` 与蓝光色相污染等系统性缺陷，建立“单一真相源（SSOT）、零悬空、零幽灵、8% 浅灰柔软焦点、100% Tooltip 胶囊化、Zero-Blue 纯中性”的终极治理架构。  
+> **方案定位**：本方案为《Conex / Crish 界面视觉修复与差异面板重构》战役第 5 独立实施方案（维度五：Token 继承链与规范合规闭环），针对全局 CSS Token 继承层叠断层、160px 响应式断点深浅漂移、8 处无 Fallback 悬空 Token、18 处 `--badge-git-*` 幽灵变量、9 处原生 `title=` 气泡违规、深色模式 30% 焦点环超标、244 处旧式 `rgba` 与蓝光色相污染等系统性缺陷，建立“单一真相源（SSOT）、零悬空、零幽灵、8% 浅灰柔软焦点、100% Tooltip 胶囊化、Zero-Blue 纯中性”的终极治理架构。
 > **编制依据**：
 > - `docs/ui-style-refactor/00-定案-视觉样式与差异面板重构决策.md`
 > - `docs/ui-style-refactor/audits/04-tokens-inheritance-and-conflicts-audit.md`
 > - `docs/ui-style-refactor/audits/05-runtime-cascading-and-visual-compliance-audit.md`
 > - `docs/ui-style-refactor/audits/03-small-elements-darkening-and-borders-audit.md`
-> - `AGENTS.md` §12（Tooltip 规范）、§13（输入框与焦点态/10% 对比度红线）、§14（色彩空间与现代 CSS 语法）  
+> - `AGENTS.md` §12（Tooltip 规范）、§13（输入框与焦点态/10% 对比度红线）、§14（色彩空间与现代 CSS 语法）
 > **编码纪律**：UTF-8 无 BOM，纯逻辑架构规划，严格锁定文件域与验收断言，严禁执行 git 操作。
 
 ---
@@ -640,7 +640,7 @@ describe('Design System: Anti-Darkening, SSOT & A11y Guardrails', () => {
   it('enforces --breakpoint-sm is defined in tokens.css :root and removed from responsive.css', () => {
     const tokensCss = readFile('src/styles/tokens.css');
     const responsiveCss = readFile('src/styles/responsive.css');
-    
+
     expect(tokensCss).toMatch(/--breakpoint-sm:\s*640px/);
     expect(responsiveCss).not.toMatch(/--breakpoint-sm/);
     expect(responsiveCss).not.toMatch(/--breakpoint-md/);
@@ -684,7 +684,7 @@ describe('Design System: Anti-Darkening, SSOT & A11y Guardrails', () => {
   it('enforces dark theme --focus-ring-color text-primary mix percentage is <= 10%', () => {
     const tokensCss = readFile('src/styles/tokens.css');
     const darkBlock = tokensCss.match(/html\[data-theme=['"]dark['"]\]\s*\{[\s\S]*?\n\}/)?.[0] ?? '';
-    
+
     // 匹配焦点环混入百分比
     const match = darkBlock.match(/--focus-ring-color:\s*color-mix\([^)]*--text-primary\)\s*([\d.]+)%/);
     if (match) {

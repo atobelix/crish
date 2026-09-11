@@ -1,10 +1,10 @@
 # Conex / Crish — 维度详案 12：紧凑工具栏高度对齐与按钮 Hover 去黑详案
 
-> **方案编号**：PLAN-12-DETAILED  
-> **所属战役**：[`docs/ui-style-refactor/00-总方案-工作区面板交互平滑与视觉归一.md`](file:///c:/Software/conex/docs/ui-style-refactor/00-%E6%80%BB%E6%96%B9%E6%A1%88-%E5%B7%A5%E4%BD%9C%E5%8C%BA%E9%9D%A2%E6%9D%BF%E4%BA%A4%E4%BA%92%E5%B9%B3%E6%BB%91%E4%B8%8E%E8%A7%86%E8%A7%89%E5%BD%92%E4%B8%80.md)  
-> **定案依据**：[`docs/ui-style-refactor/06-定案-工作区面板与工具栏细节深化决策.md`](file:///c:/Software/conex/docs/ui-style-refactor/06-%E5%AE%9A%E6%A1%88-%E5%B7%A5%E4%BD%9C%E5%8C%BA%E9%9D%A2%E6%9D%BF%E4%B8%8E%E5%B7%AE%E5%BC%82%E9%9D%A2%E6%9D%BF%E7%BB%86%E8%8A%82%E6%B7%B1%E5%8C%96%E5%86%B3%E7%AD%96.md) §一.2、[`docs/ui-style-refactor/audits/07-toolbar-buttons-hover-and-height-alignment-audit.md`](file:///c:/Software/conex/docs/ui-style-refactor/audits/07-toolbar-buttons-hover-and-height-alignment-audit.md) 专项审计报告  
-> **调度标准**：严格遵循 [`docs/agent-roles/prompts/主控-全流程调度-v3.md`](file:///c:/Software/conex/docs/agent-roles/prompts/%E4%B8%BB%E6%8E%A7-%E5%85%A8%E6%B5%81%E7%A8%8B%E8%B0%83%E5%BA%A6-v3.md) §二.4 详案规范  
-> **设计铁律**：严格对齐 [`AGENTS.md`](file:///c:/Software/conex/AGENTS.md) §12（同源文案与 Tooltip 规范）、§13（输入与焦点态、10% 对比度上限）、§14（Zero-Blue 纯中性色与现代 CSS 规范）  
+> **方案编号**：PLAN-12-DETAILED
+> **所属战役**：[`docs/ui-style-refactor/00-总方案-工作区面板交互平滑与视觉归一.md`](file:///c:/Software/conex/docs/ui-style-refactor/00-%E6%80%BB%E6%96%B9%E6%A1%88-%E5%B7%A5%E4%BD%9C%E5%8C%BA%E9%9D%A2%E6%9D%BF%E4%BA%A4%E4%BA%92%E5%B9%B3%E6%BB%91%E4%B8%8E%E8%A7%86%E8%A7%89%E5%BD%92%E4%B8%80.md)
+> **定案依据**：[`docs/ui-style-refactor/06-定案-工作区面板与工具栏细节深化决策.md`](file:///c:/Software/conex/docs/ui-style-refactor/06-%E5%AE%9A%E6%A1%88-%E5%B7%A5%E4%BD%9C%E5%8C%BA%E9%9D%A2%E6%9D%BF%E4%B8%8E%E5%B7%AE%E5%BC%82%E9%9D%A2%E6%9D%BF%E7%BB%86%E8%8A%82%E6%B7%B1%E5%8C%96%E5%86%B3%E7%AD%96.md) §一.2、[`docs/ui-style-refactor/audits/07-toolbar-buttons-hover-and-height-alignment-audit.md`](file:///c:/Software/conex/docs/ui-style-refactor/audits/07-toolbar-buttons-hover-and-height-alignment-audit.md) 专项审计报告
+> **调度标准**：严格遵循 [`docs/agent-roles/prompts/主控-全流程调度-v3.md`](file:///c:/Software/conex/docs/agent-roles/prompts/%E4%B8%BB%E6%8E%A7-%E5%85%A8%E6%B5%81%E7%A8%8B%E8%B0%83%E5%BA%A6-v3.md) §二.4 详案规范
+> **设计铁律**：严格对齐 [`AGENTS.md`](file:///c:/Software/conex/AGENTS.md) §12（同源文案与 Tooltip 规范）、§13（输入与焦点态、10% 对比度上限）、§14（Zero-Blue 纯中性色与现代 CSS 规范）
 > **核心使命**：彻底根除 `DiffCard.module.css` 与 `FilesCard.module.css` 中对 `<Button>` 的二次 `:hover { background: ... }` 覆写，消除双层叠加导致的 15.36% 死黑与危险按钮焦黑污染，收敛由 `ui/Button` 单层管理 4% 柔和高亮；消除 `Select.module.css` 的 `min-height: 32px` 级联覆盖陷阱，在 `DiffHeaderControls.tsx` 显式注入 `size="sm"`，将 32px 紧凑工具栏内的各交互控件统一锁定在 26px 几何基线上，实现像素级等高对齐。
 
 ---
@@ -924,11 +924,11 @@ describe('RULE-11: Compact Toolbar Height & Anti-Double-Hover Guardrail', () => 
 describe('DiffHeaderControls Component Alignment & Behavior', () => {
   it('renders toolbar with size="sm" Select and standardized action buttons', () => {
     render(<DiffHeaderControls {...mockProps} sourceMode="session" />);
-    
+
     // 断言下拉框带有 sm 尺寸类
     const selectTrigger = screen.getByRole('combobox');
     expect(selectTrigger.className).toContain('triggerSm');
-    
+
     // 断言操作按钮带有正确 aria-label 与 ghost 变体
     const viewBtn = screen.getByLabelText(/切换至/);
     expect(viewBtn).toHaveAttribute('data-variant', 'ghost');

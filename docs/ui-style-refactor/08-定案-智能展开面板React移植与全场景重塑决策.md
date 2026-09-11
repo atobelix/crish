@@ -1,7 +1,7 @@
 # 智能展开面板（SmartPanel）React 移植与全场景重塑裁决与定案决策
 
-> **战役工作区**：`docs/ui-style-refactor/`  
-> **裁决编号**：`DECISION-08`  
+> **战役工作区**：`docs/ui-style-refactor/`
+> **裁决编号**：`DECISION-08`
 > **输入资产**：
 > - `docs/ui-style-refactor/independent-plans/01-存量展开面板解剖与辩证重塑分析.md`
 > - `docs/ui-style-refactor/independent-plans/02-智能展开面板核心解构与React移植蓝图.md`

@@ -1,14 +1,14 @@
 # 方案 04 · 选择器级联污染清剿与 CSS Modules 边界绝缘方案
 
-> **方案版本**：v1.0.0 · 独立方案 04（选择器级联污染清剿与 CSS Modules 边界绝缘详案）  
-> **编制日期**：2026-08-30  
-> **责任域**：CSS Modules 作用域绝缘、选择器特异性降权治理、纯全局泄漏清剿、模糊穿透废除与状态自治下发、暗色模式 Token 驱动归一、组件级 `!important` 清零  
+> **方案版本**：v1.0.0 · 独立方案 04（选择器级联污染清剿与 CSS Modules 边界绝缘详案）
+> **编制日期**：2026-08-30
+> **责任域**：CSS Modules 作用域绝缘、选择器特异性降权治理、纯全局泄漏清剿、模糊穿透废除与状态自治下发、暗色模式 Token 驱动归一、组件级 `!important` 清零
 > **输入资产**：
 > - [`docs/ui-style-refactor/00-定案-视觉样式与差异面板重构决策.md`](file:///c:/Software/conex/docs/ui-style-refactor/00-%E5%AE%9A%E6%A1%88-%E8%A7%86%E8%A7%89%E6%A0%B7%E5%BC%8F%E4%B8%8E%E5%B7%AE%E5%BC%82%E9%9D%A2%E6%9D%BF%E9%87%8D%E6%9E%84%E5%86%B3%E7%AD%96.md)
 > - [`docs/ui-style-refactor/audits/05-runtime-cascading-and-visual-compliance-audit.md`](file:///c:/Software/conex/docs/ui-style-refactor/audits/05-runtime-cascading-and-visual-compliance-audit.md)
 > - [`docs/ui-style-refactor/audits/04-tokens-inheritance-and-conflicts-audit.md`](file:///c:/Software/conex/docs/ui-style-refactor/audits/04-tokens-inheritance-and-conflicts-audit.md)
 > - `apps/crish-desktop/src/components/` 相关样式文件
-> - `apps/crish-desktop/src/styles/`  
+> - `apps/crish-desktop/src/styles/`
 > **实施纪律**：严格遵守 [`AGENTS.md`](file:///c:/Software/conex/AGENTS.md) §1（逻辑规划与反退避）、§12（Tooltip 胶囊化）、§13（输入框与焦点态 / ≤10% 柔和边框）、§14（现代 HSLA 与 Zero-Blue 铁律）、[`ANTI_OVERENGINEERING_GUARDRAILS.md`](file:///c:/Software/conex/ANTI_OVERENGINEERING_GUARDRAILS.md)。严禁执行 git 操作。
 
 ---

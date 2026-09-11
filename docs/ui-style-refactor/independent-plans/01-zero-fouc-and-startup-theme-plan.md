@@ -1,7 +1,7 @@
 # Conex / Crish — 方案 01：首屏 0ms 零闪烁平滑启动与主题单源化方案
 
-> **方案编号**：PLAN-01  
-> **责任领域**：主题生命周期时序、首屏启动架构、CSS Token 单源化、FOUC / 变色闪烁彻底消除  
+> **方案编号**：PLAN-01
+> **责任领域**：主题生命周期时序、首屏启动架构、CSS Token 单源化、FOUC / 变色闪烁彻底消除
 > **依据文件**：
 > - [`docs/ui-style-refactor/00-定案-视觉样式与差异面板重构决策.md`](file:///c:/Software/conex/docs/ui-style-refactor/00-%E5%AE%9A%E6%A1%88-%E8%A7%86%E8%A7%89%E6%A0%B7%E5%BC%8F%E4%B8%8E%E5%B7%AE%E5%BC%82%E9%9D%A2%E6%9D%BF%E9%87%8D%E6%9E%84%E5%86%B3%E7%AD%96.md)
 > - [`docs/ui-style-refactor/audits/01-theme-flash-and-fouc-audit.md`](file:///c:/Software/conex/docs/ui-style-refactor/audits/01-theme-flash-and-fouc-audit.md)
@@ -540,7 +540,7 @@ apps/crish-desktop/
 +++ b/apps/crish-desktop/index.html
 @@ -16,5 +16,5 @@
      <link rel="stylesheet" href="/loader.css" />
- 
+
 -    <!-- 首屏前应用主题/字体栈，避免闪白；与 themeStore / fontStore 同源 key（外链 /loader.js，CSP 阶段 A） -->
 -    <script src="/loader.js" defer></script>
 +    <!-- 首屏 0ms 同步阻塞式种子脚本：彻底杜绝 FOUC 与闪白，同步水合主题与 .preload 门闩 -->
@@ -572,7 +572,7 @@ apps/crish-desktop/
 +  --loader-text: #71717a;
 +  --loader-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.08);
 +}
- 
+
 -html[data-theme='dark'],
 -html.theme-dark {
 -  --loader-bg: #0b0b0e;
@@ -643,7 +643,7 @@ apps/crish-desktop/
 +}
 +
  /* --- CONEX UI tokens pure neutral grays (no blue/purple tint) --- */
- 
+
  :root,
 @@ -822,7 +833,7 @@
  html[data-theme='dark'] {
@@ -676,7 +676,7 @@ apps/crish-desktop/
 +
 +// 🌟 主题与皮肤同步水合（在 React 渲染前完成，彻底消除 useEffect 延迟）
 +bootstrapTheme();
- 
+
 @@ -265,3 +269,7 @@
    requestAnimationFrame(() => {
 +    // 🌟 首帧渲染完成，精准解除 .preload 门闩
@@ -700,12 +700,12 @@ apps/crish-desktop/
 +  options?: { isCustomSkin?: boolean; explicitTextPrimary?: string }
 +) {
    if (typeof window === 'undefined') return;
-+  
++
 +  // 官方预设达标时不侵入覆写
 +  if (!options?.isCustomSkin && options?.explicitTextPrimary) {
 +    return;
 +  }
-+  
++
    const root = document.documentElement;
 ```
 

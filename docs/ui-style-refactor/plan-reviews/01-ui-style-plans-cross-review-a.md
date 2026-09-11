@@ -1,8 +1,8 @@
 # Conex / Crish 战役任务：UI 视觉方案交叉评审 A
 # —— Token 命名、继承链与 Zero-FOUC 启动时序严苛审查报告
 
-> **评审编号**：REVIEW-01  
-> **评审维度**：交叉评审 A（Token 命名空间、样式继承链、Zero-FOUC 启动流水线、WCAG 与 AGENTS.md 铁律合规）  
+> **评审编号**：REVIEW-01
+> **评审维度**：交叉评审 A（Token 命名空间、样式继承链、Zero-FOUC 启动流水线、WCAG 与 AGENTS.md 铁律合规）
 > **被审方案**：
 > - [`docs/ui-style-refactor/00-定案-视觉样式与差异面板重构决策.md`](file:///c:/Software/conex/docs/ui-style-refactor/00-%E5%AE%9A%E6%A1%88-%E8%A7%86%E8%A7%89%E6%A0%B7%E5%BC%8F%E4%B8%8E%E5%B7%AE%E5%BC%82%E9%9D%A2%E6%9D%BF%E9%87%8D%E6%9E%84%E5%86%B3%E7%AD%96.md)
 > - [`docs/ui-style-refactor/independent-plans/01-zero-fouc-and-startup-theme-plan.md`](file:///c:/Software/conex/docs/ui-style-refactor/independent-plans/01-zero-fouc-and-startup-theme-plan.md)
@@ -10,7 +10,7 @@
 > - [`docs/ui-style-refactor/independent-plans/03-diff-panel-layout-and-syntax-highlighting-plan.md`](file:///c:/Software/conex/docs/ui-style-refactor/independent-plans/03-diff-panel-layout-and-syntax-highlighting-plan.md)
 > - [`docs/ui-style-refactor/independent-plans/04-cascading-isolation-and-important-clearing-plan.md`](file:///c:/Software/conex/docs/ui-style-refactor/independent-plans/04-cascading-isolation-and-important-clearing-plan.md)
 > - [`docs/ui-style-refactor/independent-plans/05-tokens-ssot-and-a11y-compliance-plan.md`](file:///c:/Software/conex/docs/ui-style-refactor/independent-plans/05-tokens-ssot-and-a11y-compliance-plan.md)
-> **依据规范**：[`AGENTS.md`](file:///c:/Software/conex/AGENTS.md)（§1 逻辑规划与反退避、§12 Tooltip 胶囊、§13 输入框/焦点环 ≤10% 边框红线、§14 现代色彩空间与语法）与 W3C WCAG 2.1 / 2.2 标准  
+> **依据规范**：[`AGENTS.md`](file:///c:/Software/conex/AGENTS.md)（§1 逻辑规划与反退避、§12 Tooltip 胶囊、§13 输入框/焦点环 ≤10% 边框红线、§14 现代色彩空间与语法）与 W3C WCAG 2.1 / 2.2 标准
 > **评审原则**：只挑刺、深挖断层、严禁含糊、确保 0 运行时缺陷与 0 架构冲突。
 
 ---
@@ -468,5 +468,5 @@ Plan 05 中定义的 `12%` 直接突破了 10% 刚性红线！
 
 ### 2. 交叉评审最终裁决
 
-> **评审结论**：**【原则通过，需按上述 6 项整改建议合并入定案与最终实施方案】（Conditional Pass with 6 Mandatory Adjustments）**。  
+> **评审结论**：**【原则通过，需按上述 6 项整改建议合并入定案与最终实施方案】（Conditional Pass with 6 Mandatory Adjustments）**。
 > 经上述整改后，方案 01~05 之间的逻辑依赖、时序闭环、Token 单源性与规范合规性将达到 100% 无死角的工业级完备状态，可安全进入阶段 0 与阶段 1 的代码实施落地。

@@ -1,6 +1,6 @@
 # 紧凑工具栏高度不齐与按钮 Hover 死黑地毯式审计报告
 
-> **战役任务**：紧凑工具栏高度不齐与按钮 Hover 死黑地毯式审计（战役审计 07）  
+> **战役任务**：紧凑工具栏高度不齐与按钮 Hover 死黑地毯式审计（战役审计 07）
 > **审计范围**：
 > - `apps/crish-desktop/src/components/diff/DiffCard.module.css` (`.compactHeader`, `.side-panel-toolbar`, `.actionBtn`, `.sourceSegment`, `.inlineSelect`)
 > - `apps/crish-desktop/src/components/diff/DiffHeaderControls.tsx`
@@ -9,8 +9,8 @@
 > - `apps/crish-desktop/src/components/files/FilesCard.tsx` & `FileActions.tsx` (文件面板工具栏)
 > - `apps/crish-desktop/src/components/ui/Button/Button.module.css`, `Button.tsx`, `IconButton.tsx`
 > - `apps/crish-desktop/src/components/ui/Select/Select.module.css`, `Select.tsx`
-> - `apps/crish-desktop/src/styles/tokens.css` & `apps/crish-desktop/src/styles/design-system.css`  
-> **审计基准**：[`AGENTS.md`](file:///c:/Software/conex/AGENTS.md) §12（A11y 与同源文案）、§13（输入框与焦点态、10% 对比度上限）、§14（Zero-Blue 纯中性色与现代 CSS 规范）  
+> - `apps/crish-desktop/src/styles/tokens.css` & `apps/crish-desktop/src/styles/design-system.css`
+> **审计基准**：[`AGENTS.md`](file:///c:/Software/conex/AGENTS.md) §12（A11y 与同源文案）、§13（输入框与焦点态、10% 对比度上限）、§14（Zero-Blue 纯中性色与现代 CSS 规范）
 > **状态**：深度审计完成 · 严谨挑刺与根因穿透 · 严禁回撤与 Git 操作
 
 ---

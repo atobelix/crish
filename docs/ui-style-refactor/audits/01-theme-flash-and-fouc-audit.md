@@ -1,8 +1,8 @@
 # Conex / Crish — 界面初始闪色与主题双重注入 / 过渡冲突严苛审计报告
 
-> **报告版本**：v1.0.0  
-> **审计日期**：2026-08-30  
-> **审计责任域**：前端视觉工程、主题生命周期时序、CSS Token 架构、FOUC 消除  
+> **报告版本**：v1.0.0
+> **审计日期**：2026-08-30
+> **审计责任域**：前端视觉工程、主题生命周期时序、CSS Token 架构、FOUC 消除
 > **核心审计范围**：
 > - [`apps/crish-desktop/index.html`](file:///c:/Software/conex/apps/crish-desktop/index.html)
 > - [`apps/crish-desktop/public/loader.css`](file:///c:/Software/conex/apps/crish-desktop/public/loader.css)
@@ -278,19 +278,19 @@
 
 ## 四、架构反模式与缺陷深度剖析
 
-1. **时序反模式：将视觉关键路径置于 React `useEffect`**  
+1. **时序反模式：将视觉关键路径置于 React `useEffect`**
    CSS 变量是全局视觉基底，浏览器渲染引擎在 Layout Tree 构建阶段即需要确定的颜色。将全局核心变量的注入推迟到 React DOM 挂载后的异步 Effect，违背了现代前端“零闪烁（Zero-FOUC）”设计铁律。
 
-2. **双真源反模式：静态 Token 声明与 JS 运行时 Presets 脱节**  
+2. **双真源反模式：静态 Token 声明与 JS 运行时 Presets 脱节**
    团队在迭代过程中，只在 `themePresets.ts` 中调整了视觉调色板，或者在 `oklchColorGuard.ts` 中引入了自动对比度微调，但从未反向同步回 `tokens.css`。使得静态 CSS 变成了一个“仅用于最初 50ms 随后就被废弃”的伪真源。
 
-3. **守卫失控反模式：无条件覆盖符合标准的预设**  
+3. **守卫失控反模式：无条件覆盖符合标准的预设**
    `oklchColorGuard.ts` 设计初衷是防止用户自定义极端背景色导致文字看不清。但在实现中，对系统官方精心调配的预设（如 `#111111` 文本搭配 `#f4f5f7` 背景本已达到 16.5:1 的 AAA 超高对比度），守卫依然强行将字色篡改为 `#201e1a`，造成无谓的动态覆盖与色差。
 
-4. **过渡未锁反模式：冷启动阶段全局动画处于活跃状态**  
+4. **过渡未锁反模式：冷启动阶段全局动画处于活跃状态**
    任何高质量桌面应用在初次装载时，必须在根容器上施加 `.preload` / `.no-transitions` 门闩，冻结所有 CSS transition，直至整棵组件树与个性化变量稳定后再解冻。Crish 目前完全缺失这一防御层。
 
-5. **冗余唤醒反模式：Idle 阶段二次无差别应用**  
+5. **冗余唤醒反模式：Idle 阶段二次无差别应用**
    [`bootstrap-full.ts`](file:///c:/Software/conex/apps/crish-desktop/src/bootstrap-full.ts#L18-L23) 中，在应用已经平稳运行 1~2 秒后，再度通过 `getSettings()` 读取 theme 并调用 `applyTheme()`。若中间存在极小状态微调，将再次引发界面重绘，完全多余。
 
 ---

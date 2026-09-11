@@ -1,7 +1,7 @@
 # 02. Conex / Crish 界面视觉修复与差异面板重构维度划分与删除面建议（提案 B）
 
-> **文档定位**：战役重构维度划分、死层删除清单与 DAG 执行路径建议详案（提案 B）  
-> **所属战役**：Conex / Crish 界面视觉修复、小元素脱黑与差异面板重构战役 (`docs/ui-style-refactor/`)  
+> **文档定位**：战役重构维度划分、死层删除清单与 DAG 执行路径建议详案（提案 B）
+> **所属战役**：Conex / Crish 界面视觉修复、小元素脱黑与差异面板重构战役 (`docs/ui-style-refactor/`)
 > **输入依据**：
 > - [`docs/ui-style-refactor/audits/01-theme-flash-and-fouc-audit.md`](file:///c:/Software/conex/docs/ui-style-refactor/audits/01-theme-flash-and-fouc-audit.md)（首屏闪色与 FOUC 根因）
 > - [`docs/ui-style-refactor/audits/02-diff-panel-layout-and-style-audit.md`](file:///c:/Software/conex/docs/ui-style-refactor/audits/02-diff-panel-layout-and-style-audit.md)（差异面板 18 项系统缺陷）
@@ -9,8 +9,8 @@
 > - [`docs/ui-style-refactor/audits/04-tokens-inheritance-and-conflicts-audit.md`](file:///c:/Software/conex/docs/ui-style-refactor/audits/04-tokens-inheritance-and-conflicts-audit.md)（Token 继承链、双源漂移与冲突）
 > - [`docs/ui-style-refactor/audits/05-runtime-cascading-and-visual-compliance-audit.md`](file:///c:/Software/conex/docs/ui-style-refactor/audits/05-runtime-cascading-and-visual-compliance-audit.md)（级联污染、特异性失控与规范合规性）
 > - 核心规范：[`AGENTS.md`](file:///c:/Software/conex/AGENTS.md) §12（Tooltip）、§13（输入框与焦点态 / 克制边框 ≤10%）、§14（色彩空间与 Zero-Blue 铁律）
-> 
-> **作者/角色**：Senior Systems Engineer & Codebase Architect  
+>
+> **作者/角色**：Senior Systems Engineer & Codebase Architect
 > **状态**：独立方案编制完成 · 待主控审查收敛 · 严禁回撤
 
 ---
@@ -206,15 +206,15 @@ sequenceDiagram
 graph TD
     subgraph "差异面板全链路收敛架构"
         Tokens["Design Tokens 收敛层 (--diff-*)<br/>· 浅色纯白卡片底 (--diff-bg-pane: #ffffff)<br/>· 增量 Add: hsl(142 60% 45% / 0.10)<br/>· 删减 Del: hsl(0 75% 55% / 0.10)<br/>· 行号与 Marker 统一宽度 Token"]
-        
+
         Router["DiffCodeViewer 视图路由"]
-        
+
         Unified["DiffCardUnifiedView (统一视图)<br/>· 真实文件语言高亮 (langFromFilename)<br/>· Intraline 词法分段语法高亮<br/>· 弹性自适应高度 (max-height: min(520px, 60vh))"]
-        
+
         Split["DiffCardSplitView (分栏视图)<br/>· 左右对偶双列配对器 (Line Pairing)<br/>· 占位行填充 (Filler Row)<br/>· 消除单行横向滚动撕裂"]
-        
+
         Widget["WidgetDiff.tsx (<widget-diff>)<br/>· 废除 filter 分流逻辑<br/>· 接入标准 Diff Tokens<br/>· 与 DiffCard 共享解析器"]
-        
+
         Controls["DiffHeaderControls (紧凑工具栏)<br/>· 窄屏响应式折叠菜单<br/>· Commit 按钮升级为 Primary + 校验"]
     end
 

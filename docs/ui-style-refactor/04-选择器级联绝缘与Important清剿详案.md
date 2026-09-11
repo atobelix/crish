@@ -1,15 +1,15 @@
 # 04 · 选择器级联绝缘与 Important 清剿详案
 
-> **方案版本**：v1.0.0 · 维度详案 04（选择器级联绝缘与 Important 清剿详案）  
-> **编制日期**：2026-08-30  
-> **责任域**：CSS Modules 作用域绝缘、特异性降权治理、纯全局泄漏清剿、模糊穿透废除与状态自治下发、暗色模式 Token 驱动归一、组件级 `!important` 清零、局部 Token 劫持拔除与圆角统一契约  
+> **方案版本**：v1.0.0 · 维度详案 04（选择器级联绝缘与 Important 清剿详案）
+> **编制日期**：2026-08-30
+> **责任域**：CSS Modules 作用域绝缘、特异性降权治理、纯全局泄漏清剿、模糊穿透废除与状态自治下发、暗色模式 Token 驱动归一、组件级 `!important` 清零、局部 Token 劫持拔除与圆角统一契约
 > **输入资产**：
 > - [`docs/ui-style-refactor/00-总方案-界面色彩平滑与差异面板视觉重构.md`](file:///c:/Software/conex/docs/ui-style-refactor/00-%E6%80%BB%E6%96%B9%E6%A1%88-%E7%95%8C%E9%9D%A2%E8%89%B2%E5%BD%A9%E5%B9%B3%E6%BB%91%E4%B8%8E%E5%B7%AE%E5%BC%82%E9%9D%A2%E6%9D%BF%E8%A7%86%E8%A7%89%E9%87%8D%E6%9E%84.md)
 > - [`docs/ui-style-refactor/00-定案-视觉样式与差异面板重构决策.md`](file:///c:/Software/conex/docs/ui-style-refactor/00-%E5%AE%9A%E6%A1%88-%E8%A7%86%E8%A7%89%E6%A0%B7%E5%BC%8F%E4%B8%8E%E5%B7%AE%E5%BC%82%E9%9D%A2%E6%9D%BF%E9%87%8D%E6%9E%84%E5%86%B3%E7%AD%96.md)
 > - [`docs/ui-style-refactor/independent-plans/04-cascading-isolation-and-important-clearing-plan.md`](file:///c:/Software/conex/docs/ui-style-refactor/independent-plans/04-cascading-isolation-and-important-clearing-plan.md)
 > - [`docs/ui-style-refactor/plan-reviews/01-ui-style-plans-cross-review-a.md`](file:///c:/Software/conex/docs/ui-style-refactor/plan-reviews/01-ui-style-plans-cross-review-a.md) ~ [`03-ui-style-plans-cross-review-c.md`](file:///c:/Software/conex/docs/ui-style-refactor/plan-reviews/03-ui-style-plans-cross-review-c.md) 评审定案
 > - [`docs/ui-style-refactor/audits/04-tokens-inheritance-and-conflicts-audit.md`](file:///c:/Software/conex/docs/ui-style-refactor/audits/04-tokens-inheritance-and-conflicts-audit.md)
-> - [`docs/ui-style-refactor/audits/05-runtime-cascading-and-visual-compliance-audit.md`](file:///c:/Software/conex/docs/ui-style-refactor/audits/05-runtime-cascading-and-visual-compliance-audit.md)  
+> - [`docs/ui-style-refactor/audits/05-runtime-cascading-and-visual-compliance-audit.md`](file:///c:/Software/conex/docs/ui-style-refactor/audits/05-runtime-cascading-and-visual-compliance-audit.md)
 > **实施纪律**：严格遵守 [`AGENTS.md`](file:///c:/Software/conex/AGENTS.md) §1（逻辑规划与反退避）、§12（Tooltip 胶囊化）、§13（输入框与焦点态 / ≤10% 柔和边框）、§14（现代 HSLA 与 Zero-Blue 铁律）、[`ANTI_OVERENGINEERING_GUARDRAILS.md`](file:///c:/Software/conex/ANTI_OVERENGINEERING_GUARDRAILS.md)。严禁执行 git 操作。
 
 ---

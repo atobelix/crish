@@ -1,9 +1,9 @@
 # Conex / Crish 界面视觉与差异面板重构独立方案 03
 # —— 差异面板容器到原子元素全链路重构落地方案
 
-> **文档标识**：`docs/ui-style-refactor/independent-plans/03-diff-panel-layout-and-syntax-highlighting-plan.md`  
-> **战役归属**：UI 视觉样式与差异面板重构战役（专项实施方案 03）  
-> **架构专家**：差异面板全链路布局与语法高亮重构总架构师（Diff Panel Specialist）  
+> **文档标识**：`docs/ui-style-refactor/independent-plans/03-diff-panel-layout-and-syntax-highlighting-plan.md`
+> **战役归属**：UI 视觉样式与差异面板重构战役（专项实施方案 03）
+> **架构专家**：差异面板全链路布局与语法高亮重构总架构师（Diff Panel Specialist）
 > **核心遵循**：
 > - `docs/ui-style-refactor/00-定案-视觉样式与差异面板重构决策.md`（DEL-16 ~ DEL-23）
 > - `docs/ui-style-refactor/audits/02-diff-panel-layout-and-style-audit.md`（BUG-01 ~ BUG-18）
