@@ -1,8 +1,8 @@
 # CSS 模块去硬编码与设计系统对齐落地详案
 
-> **文件路径**：`docs/chat-flow-systemic-remediation/plans/03-CSS模块去硬编码与设计系统对齐详案.md`  
-> **权威遵循**：仓库根目录 `AGENTS.md`（通用纪律 + 本仓专用 §12 Tooltip / §13 焦点态与阴影 / §14 色彩空间）、`.agents/LOGIC_PLAN_NO_RETREAT.md`（反退避全文与自检清单）、`00-对话流系统性净化与架构重塑总方案.md`。  
-> **核心原则**：纯逻辑规划、反退避、无工期人天人员排班、无 P0/P1 优先级划分，所有问题同权；穿透根因、净收敛、杜绝打补丁与应付。  
+> **文件路径**：`docs/chat-flow-systemic-remediation/plans/03-CSS模块去硬编码与设计系统对齐详案.md`
+> **权威遵循**：仓库根目录 `AGENTS.md`（通用纪律 + 本仓专用 §12 Tooltip / §13 焦点态与阴影 / §14 色彩空间）、`.agents/LOGIC_PLAN_NO_RETREAT.md`（反退避全文与自检清单）、`00-对话流系统性净化与架构重塑总方案.md`。
+> **核心原则**：纯逻辑规划、反退避、无工期人天人员排班、无 P0/P1 优先级划分，所有问题同权；穿透根因、净收敛、杜绝打补丁与应付。
 > **缺陷基准**：全面根治 `audits/03-UI样式Token化与规范对齐审计.md`（24 项缺陷）与 `audits/10-消息行组件CSS硬编码与暗黑闪白缺陷审计.md`（17 项缺陷）揭示的全部 41 项样式与架构断层。
 
 ---
@@ -216,20 +216,20 @@
 
 在深浅双色主题架构中，样式表在暗黑模式下呈现异常主要由以下 4 大根因诱发：
 
-1. **时序竞争态与亮色 Fallback 暴闪（Cold-Start White Flash）**：  
+1. **时序竞争态与亮色 Fallback 暴闪（Cold-Start White Flash）**：
    当元素声明类似 `var(--bg-card, #ffffff)` 或 `var(--border-subtle, hsl(35 8% 91%))` 时，在应用冷启动、WebView 挂载尚未完成主题属性（`html[data-theme='dark']`）注入的瞬间，浏览器引擎会无条件执行回退并渲染 `#ffffff`。当用户按下 Tab 键穿过界面元素时，`focus-visible.css` 中的 `#ffffff` 会在深黑底板上激发出刺眼的白色环闪。
-2. **容器色彩层级错位形成的“穿孔黑洞”（Visual Punch-through）**：  
+2. **容器色彩层级错位形成的“穿孔黑洞”（Visual Punch-through）**：
    `FlowPlanMilestone` 位于消息卡片内部（底色为 `--bg-card: #242424`），而序号圆点误用最外层 Shell 底色 `--bg-page`（暗黑为 `#0c0c0b`）。高亮度差（`#242424` vs `#0c0c0b`）使圆点呈现凹陷穿孔，破坏卡片纸面一致性。
-3. **旧式 `rgba(...)` 浅底半透明黑在深色底板上的湮灭（Contrast Obliteration）**：  
+3. **旧式 `rgba(...)` 浅底半透明黑在深色底板上的湮灭（Contrast Obliteration）**：
    `FlowPlanMilestone` 脊柱线使用 `rgba(0, 0, 0, 0.15)` 作为 `--border-color` 的回退。在暗黑底板上，15% 透明度的黑叠加在黑灰底板上对比度为 0，导致计划执行树纵向轴线瞬间消失。
-4. **文字裁切渐变混入深黑导致的“反向黑洞擦除”（Black Hole Erase）**：  
+4. **文字裁切渐变混入深黑导致的“反向黑洞擦除”（Black Hole Erase）**：
    `ReasoningRow` 扫光文字裁切高光混入 `#111827`，在暗黑底板上文字不仅没有发光，反而在周期性变黑被吞噬。
 
 ---
 
 ### 2. Fallback 治理三级刚性铁律
 
-- **铁律一【首选单真源原则：纯裸 Token 引用】**：  
+- **铁律一【首选单真源原则：纯裸 Token 引用】**：
   由于 `tokens.css` 在 `:root` 与 `html[data-theme='dark']` 中已实现 100% 变量闭环覆盖，业务 CSS 模块一律优先使用**无 fallback 的纯 Token 引用**。严禁书写任何具体 Hex、HSL 或 RGB 作为 fallback：
   ```css
   /* ❌ 违规：暗黑模式下触发闪白或对比度崩塌 */
@@ -244,7 +244,7 @@
   color: var(--text-primary);
   ```
 
-- **铁律二【自适应双 Token 兜底限制】**：  
+- **铁律二【自适应双 Token 兜底限制】**：
   若因跨上下文独立弹窗或极端边界必须提供 fallback，**严禁使用任何固定色彩值**，必须且仅能 fallback 至同等语义的深浅自适应系统 Token：
   ```css
   /* ❌ 违规：手写亮色/暗色具象兜底 */
@@ -256,7 +256,7 @@
   background: var(--bg-card, var(--bg-secondary));
   ```
 
-- **铁律三【全局底座规则剔除 `#ffffff` 兜底】**：  
+- **铁律三【全局底座规则剔除 `#ffffff` 兜底】**：
   在 `focus-visible.css` 全局键盘聚焦规则中，内层同心遮罩阴影彻底剔除 `#ffffff` 硬编码：
   ```diff
   --- a/apps/crish-desktop/src/styles/focus-visible.css
@@ -329,7 +329,7 @@
     box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
   }
   ```
-- **消除同一文件多套焦点环分裂（Unification in `ChatMessageRow`）**：  
+- **消除同一文件多套焦点环分裂（Unification in `ChatMessageRow`）**：
   统一收敛 `.userBubble:focus-visible`、`.followupChip*:focus-visible` 与 `.md-path-link:focus-visible`，彻底消灭 20% 翡翠绿光晕与非受控粗外环，统一使用 Conex §13 标准微环。
 - **全面补齐 5 类缺失焦点态定义的交互控件**：
   1. `ChatCard.module.css`：`.modelBadge:focus-visible`；
@@ -345,7 +345,7 @@
 
 - **严禁浏览器原生 HTML `title` 属性**：原生气泡渲染延迟大、外观陈旧且破坏暗黑模式沉浸感，严禁将其作为主交互提示；
 - **统一使用自定义 `<Tooltip>` 组件**：所有需要说明性悬停提示的可交互图标与按钮，统一由 `<Tooltip content="...">` 包裹；
-- **彻底根治 Tooltip 样式失明缺陷（`CacheMetricsBadge.module.css`）**：  
+- **彻底根治 Tooltip 样式失明缺陷（`CacheMetricsBadge.module.css`）**：
   剔除 `#f8fafc` 与 `#cbd5e1` 裸写，恢复标准 Token：
   ```diff
   --- a/apps/crish-desktop/src/components/chat-message-row/CacheMetricsBadge.module.css
@@ -357,7 +357,7 @@
   +  color: var(--text-primary);
      margin-bottom: 2px;
    }
-   
+
    .tooltipRow {
   -  color: var(--text-secondary, #cbd5e1);
   +  color: var(--text-secondary);
@@ -451,7 +451,7 @@
   +  color: var(--text-primary);
      margin-bottom: 2px;
    }
-   
+
    .tooltipRow {
   -  color: var(--text-secondary, #cbd5e1);
   +  color: var(--text-secondary);
@@ -532,7 +532,7 @@
   -  background-color: var(--accent-green-light);
   +  background-color: var(--color-success-bg);
    }
-   
+
    .gitDiffLineRow.deletion {
   -  background-color: var(--accent-red-light);
   +  background-color: var(--color-error-bg);

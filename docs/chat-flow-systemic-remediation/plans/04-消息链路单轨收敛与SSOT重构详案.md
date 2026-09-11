@@ -1,8 +1,8 @@
 # 消息链路单轨收敛与会话存储事务详案
 
-> **权威路径**：`docs/chat-flow-systemic-remediation/plans/04-消息链路单轨收敛与SSOT重构详案.md`  
-> **方案定位**：消息流全链路单轨收敛、会话隔离、存储事务控制与单一真理源（SSOT）架构重构落地详案（对齐总方案阶段一、阶段二、阶段四与阶段七）  
-> **指导思想**：纯逻辑规划、反退避、拒绝打补丁、问题同权、契约驱动、立体化闭环  
+> **权威路径**：`docs/chat-flow-systemic-remediation/plans/04-消息链路单轨收敛与SSOT重构详案.md`
+> **方案定位**：消息流全链路单轨收敛、会话隔离、存储事务控制与单一真理源（SSOT）架构重构落地详案（对齐总方案阶段一、阶段二、阶段四与阶段七）
+> **指导思想**：纯逻辑规划、反退避、拒绝打补丁、问题同权、契约驱动、立体化闭环
 > **纪律约束**：不排工期人天，不设 P0/P1 优先级划分，所有缺陷同权对待，严格按架构逻辑拓扑展开。严禁执行 git commit、git reset、git checkout。
 
 ---
@@ -403,7 +403,7 @@ try {
     const cardId = dispatchSkillContextCard(targetSessionId, resolvedSkill, prompt);
     if (cardId) transactionInjectedCardIds.push(cardId);
   }
-  
+
   // 2. 尝试执行消息入库与发送
   const enqueued = await enqueueChatMessage(targetSessionId, userMessage);
   if (!enqueued) {
@@ -536,7 +536,7 @@ export interface SessionState {
 for (const s of list) {
   if (!s?.id) continue;
   keepIds.add(s.id);
-  
+
   const msgs = (s.messages || []).map((m) =>
     m.sender === 'assistant' ? normalizeAssistantTimeline(m) : m
   );
@@ -858,7 +858,7 @@ renameSession: (sessionId: string, title: string) =>
 在 `sessionCrudActions.ts:441-451` 中：
 ```ts
 // 错误旧代码：
-// s.timestamp = nowIsoTimestamp(); 
+// s.timestamp = nowIsoTimestamp();
 
 // 正确重构：保持历史会话原本的物理时间戳不变！
 if (res.messages.length > 0) {

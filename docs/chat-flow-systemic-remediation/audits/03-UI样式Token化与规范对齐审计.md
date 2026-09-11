@@ -15,7 +15,7 @@
     background: color-mix(in srgb, var(--error-color) 15%, transparent);
     color: var(--error-color);
   }
-  
+
   .killBtn:hover {
     color: var(--error-color);
   }
@@ -54,7 +54,7 @@
   .gitDiffLineRow.addition {
     background-color: var(--accent-green-light);
   }
-  
+
   .gitDiffLineRow.deletion {
     background-color: var(--accent-red-light);
   }
@@ -149,7 +149,7 @@
   .assistantText :global(.md-task-box.checked::after) {
     border: solid var(--text-on-accent, hsl(0 0% 100%));
   }
-  
+
   .assistantText :global(.md-code-copy.is-copied) {
     color: var(--brand, hsl(160 84% 39%));
   }
@@ -168,7 +168,7 @@
     background: var(--brand-deep, #047857);
     color: #ffffff;
   }
-  
+
   .btnApprove {
     background: var(--brand, #10b981);
   }
@@ -186,7 +186,7 @@
     background: var(--brand, #10b981);
     box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--brand, #10b981) 22%, transparent);
   }
-  
+
   .agentResultBadge {
     background: color-mix(in srgb, var(--brand, #10b981) 12%, transparent);
     color: var(--brand-deep, #059669);
@@ -206,7 +206,7 @@
   .sendCircle {
     color: var(--text-on-brand, white);
   }
-  
+
   .sendBtnCircle svg,
   .sendCircle svg {
     color: var(--text-on-brand, white);
@@ -230,7 +230,7 @@
     outline: none;
     box-shadow: var(--focus-ring);
   }
-  
+
   .chatEmptyAction:focus-visible {
     outline: none;
     background: var(--control-soft-bg-active);
@@ -262,7 +262,7 @@
     background: transparent;
     ...
   }
-  
+
   .modelBadge:hover {
     background: var(--bg-hover);
     color: var(--text-primary);
@@ -312,12 +312,12 @@
 - **【断层事实（附带真实代码片段）】**：
   ```css
   animation: toolIndicatorFlip 100ms cubic-bezier(0.2, 0, 0, 1) forwards;
-  
+
   transition:
     max-width 0.22s cubic-bezier(0.22, 1, 0.36, 1),
     opacity 0.18s ease,
     margin-left 0.22s cubic-bezier(0.22, 1, 0.36, 1);
-  
+
   transition:
     color 0.15s ease,
     background 0.15s ease,

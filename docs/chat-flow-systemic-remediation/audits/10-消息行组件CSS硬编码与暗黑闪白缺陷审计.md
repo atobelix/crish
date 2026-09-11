@@ -1,6 +1,6 @@
 # 对话流消息行周边组件 CSS Module 硬编码与暗黑闪白纯缺陷审计报告
 
-> **权威路径**：`docs/chat-flow-systemic-remediation/audits/10-消息行组件CSS硬编码与暗黑闪白缺陷审计.md`  
+> **权威路径**：`docs/chat-flow-systemic-remediation/audits/10-消息行组件CSS硬编码与暗黑闪白缺陷审计.md`
 > **审计对象**：
 > 1. `apps/crish-desktop/src/components/chat-message-row/StreamingTableContainer.module.css`
 > 2. `apps/crish-desktop/src/components/chat-message-row/FlowArtifactChip.module.css`
@@ -188,7 +188,7 @@
      }
      ```
 - **危害后果 / 真实运行期隐患**：
-  直接违背 `tokens.css:402-404` 铁律纪律：“缓动正典二元组：standard 服务色彩/透明度常规过渡，emphasized 服务几何位移（快出型）。全仓 transition/animation 的曲线只允许引用这两个名字（或下方别名）；组件文件禁止内联 cubic-bezier。”  
+  直接违背 `tokens.css:402-404` 铁律纪律：“缓动正典二元组：standard 服务色彩/透明度常规过渡，emphasized 服务几何位移（快出型）。全仓 transition/animation 的曲线只允许引用这两个名字（或下方别名）；组件文件禁止内联 cubic-bezier。”
   此处组件文件私自硬编码写死 `cubic-bezier(0.16, 1, 0.3, 1)`，导致全局统一阻尼调节与 Reduced Motion 降级机制无法全局掌控折叠动效，且破坏了单一真理源（SSOT）原则。
 
 ---
@@ -276,7 +276,7 @@
   }
   ```
 - **危害后果 / 真实运行期隐患**：
-  在 Conex 规范中，`--bg-page` 是窗口最外层的基础底色（在暗黑模式下 `tokens.css:920` 为 `#0c0c0b`，接近极黑），而消息卡片与对话流容器的背景是 `--bg-card` 或 `--bg-secondary`（`#242424`）。  
+  在 Conex 规范中，`--bg-page` 是窗口最外层的基础底色（在暗黑模式下 `tokens.css:920` 为 `#0c0c0b`，接近极黑），而消息卡片与对话流容器的背景是 `--bg-card` 或 `--bg-secondary`（`#242424`）。
   当 `FlowPlanMilestone` 嵌套在 Assistant 消息卡片内部渲染时，步骤序号圆圈（`.flowPlanStepNum`）强行取用 `--bg-page`，导致步骤圆圈呈现为 `#0c0c0b`，仿佛在 `#242424` 的卡片底板上被硬生生抠出了一个深黑色的圆形空洞（Visual Punch-through），在暗黑模式下呈现明显的色彩断层和视觉穿孔。正典应使用宿主卡片底色 `var(--bg-card)` 或 `var(--bg-elevated)`。
 
 ---
