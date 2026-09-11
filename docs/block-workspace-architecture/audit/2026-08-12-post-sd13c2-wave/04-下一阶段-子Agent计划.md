@@ -66,8 +66,8 @@
 
 ## ② 计划方案 Agent（数量=表行数，写死）
 
-> **数量 = 5**（表有 **5** 行，**≥4**）。  
-> **其中 ≥2 为 SD/CONN 还债**——满足 §4.1.1（本表 **4 SD + 1 CONN**）。  
+> **数量 = 5**（表有 **5** 行，**≥4**）。
+> **其中 ≥2 为 SD/CONN 还债**——满足 §4.1.1（本表 **4 SD + 1 CONN**）。
 > **吸收未切黄带**：refs / os_watch / PaperList / persist_plugin / noteMdPrefixBridge / E2′。
 
 ### 禁派 · 本波已消化（整包重做）
@@ -223,8 +223,8 @@
 | 宜派   | `SD-20`（PaperList）· `CONN-E2′` · `SD-21`（persist **或** 桥）             |
 | 勿派   | 本波五包 / 本轮同开五包 / G2 总线 / E3 / C2 会计 / query / 14 / task_nested |
 
-**本波消化判定（钉死）**：`SD-13 Slash` / `SD-15` / `SD-16` / `CONN-C2` / `W6-A-S` = **已消化**。  
-**本轮同开判定（钉死）**：`SD-17` / `SD-13-R` / `W4-R` / `CONN-G2-int` / `A-MD(blockquote_nested_table)` = **已消化**。  
+**本波消化判定（钉死）**：`SD-13 Slash` / `SD-15` / `SD-16` / `CONN-C2` / `W6-A-S` = **已消化**。
+**本轮同开判定（钉死）**：`SD-17` / `SD-13-R` / `W4-R` / `CONN-G2-int` / `A-MD(blockquote_nested_table)` = **已消化**。
 **勿**写回 04 当未做。
 
 ---
