@@ -6,6 +6,7 @@ import {
   toolCommandIcon,
 } from '../../api/toolPresentation';
 import { Tooltip } from '../ui';
+import { AppIcon } from '../ui/icons';
 import {
   type ResolvedToolAction,
   extractFallbackParam,
@@ -64,7 +65,7 @@ export const ToolCallHeader: React.FC<ToolCallHeaderProps> = ({
   const isError = tc.status === 'error';
   const secondaryMeta = useMemo(() => resolveToolSecondaryMeta(tc), [tc]);
   const kind = useMemo(() => toolCommandType(tc), [tc]);
-  const KindIcon = useMemo(() => toolCommandIcon(kind), [kind]);
+  const kindIconName = useMemo(() => toolCommandIcon(kind), [kind]);
 
   const fullTooltip = filePath || tc.arguments || human || '';
 
@@ -99,7 +100,7 @@ export const ToolCallHeader: React.FC<ToolCallHeaderProps> = ({
           ) : isError ? (
             <span className={styles.toolErrorDot} aria-hidden="true" />
           ) : (
-            <KindIcon size={12} className={styles.toolKindIcon} />
+            <AppIcon name={kindIconName} size={12} className={styles.toolKindIcon} aria-hidden />
           )}
         </span>
         <span className={styles.toolRowText}>

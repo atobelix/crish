@@ -178,7 +178,7 @@ describe('ChatToolStack V1-γ 折叠单源渲染', () => {
       // 验证存在分隔圆点
       expect(container.querySelector('[aria-hidden="true"]')).not.toBeNull();
       // 验证展开折叠符号已被净化（不产生每一行的视觉噪音）
-      const chevron = container.querySelector('svg.lucide-chevron-right');
+      const chevron = container.querySelector('[data-icon="chevron-right"]');
       expect(chevron).toBeNull();
       // 验证文件读取工具默认不可展开（点击路径超链接直接导流至右侧栏检视）
       expect(head?.classList.contains('tool-row-head-static')).toBe(true);

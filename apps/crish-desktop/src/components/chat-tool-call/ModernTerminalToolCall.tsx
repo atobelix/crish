@@ -1,8 +1,8 @@
 import React, { useState, useMemo } from 'react';
-import { Copy, Check, FileText } from 'lucide-react';
 import { Tooltip } from '../ui';
 import { parseAnsi } from '../../utils/parseAnsi';
 import styles from './ModernToolCall.module.css';
+import { AppIcon } from '../ui/icons/index';
 
 export interface ModernTerminalToolCallProps {
   id?: string;
@@ -87,9 +87,9 @@ export const ModernTerminalToolCall: React.FC<ModernTerminalToolCallProps> = ({
               aria-label="复制命令行"
             >
               {copied ? (
-                <Check size={12} strokeWidth={2.4} className={styles.copiedCheckIcon} />
+                <AppIcon name="check" size={12} className={styles.copiedCheckIcon} />
               ) : (
-                <Copy size={12} strokeWidth={2} />
+                <AppIcon name="copy" size={12} />
               )}
             </button>
           </Tooltip>
@@ -102,9 +102,9 @@ export const ModernTerminalToolCall: React.FC<ModernTerminalToolCallProps> = ({
                 aria-label="复制终端输出"
               >
                 {copiedOutput ? (
-                  <Check size={12} strokeWidth={2.4} className={styles.copiedCheckIcon} />
+                  <AppIcon name="check" size={12} className={styles.copiedCheckIcon} />
                 ) : (
-                  <FileText size={12} strokeWidth={2} />
+                  <AppIcon name="file-text" size={12} />
                 )}
               </button>
             </Tooltip>

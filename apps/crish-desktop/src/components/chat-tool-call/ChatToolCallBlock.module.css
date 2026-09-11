@@ -145,12 +145,10 @@
   flex-shrink: 0;
   border-radius: var(--radius-xs, 4px);
   color: var(--text-tertiary);
-  opacity: 0.65;
   transition: opacity var(--transition-micro, 120ms ease), color var(--transition-micro, 120ms ease);
 }
 
 .toolRowChevronSlot.isToggle {
-  opacity: 0.65;
 }
 
 .toolRowHead:hover {
@@ -232,11 +230,9 @@
 @keyframes tool-dot-pulse {
   0%, 100% {
     transform: scale(0.85);
-    opacity: 0.6;
   }
   50% {
     transform: scale(1.1);
-    opacity: 0.95;
   }
 }
 
@@ -389,7 +385,6 @@
   cursor: pointer;
   padding: 0;
   flex-shrink: 0;
-  opacity: 0.75;
   transition:
     opacity var(--transition-fast, 150ms ease),
     background var(--transition-fast, 150ms ease);
@@ -1198,7 +1193,6 @@
   width: 22px;
   text-align: center;
   user-select: none;
-  opacity: 0.55;
   border-right: none;
   padding: 2px 0;
   flex-shrink: 0;
@@ -1221,7 +1215,7 @@
   white-space: pre;
   overflow-x: visible;
   flex: 1;
-  color: var(--diff-text-normal, var(--text-primary));
+  color: var(--text-primary);
   font-weight: var(--font-weight-code, 400);
 }
 
@@ -1263,7 +1257,6 @@
     transform: scale(1);
   }
   50% {
-    opacity: 0.6;
     transform: scale(0.85);
   }
 }
@@ -1293,7 +1286,6 @@
 @keyframes pulse-live-tool {
   0%, 100% {
     transform: scale(0.85);
-    opacity: 0.7;
   }
   50% {
     transform: scale(1.2);

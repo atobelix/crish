@@ -65,7 +65,7 @@ describe('PurposeBlock', () => {
     const { container } = render(
       <PurposeBlock purpose={purpose} toolsById={toolsById} />
     );
-    expect(container.querySelector('svg.lucide-check')).toBeNull();
+    expect(container.querySelector('[data-icon="check"]')).toBeNull();
     expect(container.innerHTML).not.toMatch(/getBoundingClientRect/);
     expect(container.querySelector('[data-flow-rail]')).toBeNull();
   });

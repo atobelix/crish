@@ -41,7 +41,7 @@ describe('ModernToolCall 极简黑白灰工具调用组件套件', () => {
       expect(screen.queryByText('Result')).toBeNull();
 
       // 绿色对勾呈现
-      const successIcon = container.querySelector('svg.lucide-check');
+      const successIcon = container.querySelector('[data-icon="check"]');
       expect(successIcon).toBeDefined();
     });
 

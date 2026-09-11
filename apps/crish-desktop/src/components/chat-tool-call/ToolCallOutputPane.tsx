@@ -1,10 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import {
-  Copy,
-  Check,
-  Download,
-  Terminal,
-} from 'lucide-react';
+
 import styles from './ChatToolCallBlock.module.css';
 import { Button, Tooltip } from '../ui';
 import type { FileDiff } from '../../store/types';
@@ -17,6 +12,7 @@ import {
   formatJsonIfApplicable,
 } from './toolOutputParser';
 import { isEditToolName } from '../../api/toolFeedbackDiff';
+import { AppIcon } from '../ui/icons/index';
 
 export interface ToolCallOutputPaneProps {
   toolId?: string;
@@ -170,7 +166,7 @@ export const ToolCallOutputPane: React.FC<ToolCallOutputPaneProps> = ({
                   size="sm"
                   className={styles.toolSectionActionBtn}
                   onClick={handleDownloadLog}
-                  icon={<Download size={12} />}
+                  icon={<AppIcon name="download" size={12} />}
                 >
                   下载日志
                 </Button>
@@ -186,9 +182,9 @@ export const ToolCallOutputPane: React.FC<ToolCallOutputPaneProps> = ({
                   onClick={handleCopy}
                   icon={
                     copied ? (
-                      <Check size={12} className={styles.copiedIcon} />
+                      <AppIcon name="check" size={12} className={styles.copiedIcon} />
                     ) : (
-                      <Copy size={12} />
+                      <AppIcon name="copy" size={12} />
                     )
                   }
                 >
@@ -208,7 +204,7 @@ export const ToolCallOutputPane: React.FC<ToolCallOutputPaneProps> = ({
                 size="sm"
                 className={styles.toolSectionActionBtn}
                 onClick={handleDownloadLog}
-                icon={<Download size={12} />}
+                icon={<AppIcon name="download" size={12} />}
               >
                 下载日志
               </Button>
@@ -223,9 +219,9 @@ export const ToolCallOutputPane: React.FC<ToolCallOutputPaneProps> = ({
               onClick={handleCopy}
               icon={
                 copied ? (
-                  <Check size={12} className={styles.copiedIcon} />
+                  <AppIcon name="check" size={12} className={styles.copiedIcon} />
                 ) : (
-                  <Copy size={12} />
+                  <AppIcon name="copy" size={12} />
                 )
               }
             >
@@ -288,9 +284,9 @@ export const ToolCallOutputPane: React.FC<ToolCallOutputPaneProps> = ({
                       onClick={handleCopy}
                       icon={
                         copied ? (
-                          <Check size={12} className={styles.copiedIcon} />
+                          <AppIcon name="check" size={12} className={styles.copiedIcon} />
                         ) : (
-                          <Copy size={12} />
+                          <AppIcon name="copy" size={12} />
                         )
                       }
                     >
@@ -356,7 +352,7 @@ export const ToolCallOutputPane: React.FC<ToolCallOutputPaneProps> = ({
                   e.stopPropagation();
                   onOpenTerminal();
                 }}
-                icon={<Terminal size={12} />}
+                icon={<AppIcon name="terminal" size={12} />}
               >
                 在命令检查器中查看完整日志
               </Button>

@@ -36,7 +36,7 @@ describe('PlanRoot', () => {
     expect(root).not.toBeNull();
     expect(root?.getAttribute('data-flow-plan')).toBe('plan-root');
     expect(container.querySelector('[title]')).toBeNull();
-    expect(container.querySelector('svg.lucide-check')).toBeNull();
+    expect(container.querySelector('[data-icon="check"]')).toBeNull();
     expect(container.querySelector('[data-flow-rail]')).toBeNull();
     expect(container.querySelector('.plan-progress-bar')).toBeNull();
     expect(container.textContent).toMatch(/任务已启动 · 计划模式/);
@@ -69,6 +69,6 @@ describe('PlanRoot', () => {
   it('已批准只改文案，仍无绿勾', () => {
     const { container } = render(<PlanRoot plan={plan({ status: 'success' })} />);
     expect(container.textContent).toMatch(/已批准/);
-    expect(container.querySelector('svg.lucide-check')).toBeNull();
+    expect(container.querySelector('[data-icon="check"]')).toBeNull();
   });
 });

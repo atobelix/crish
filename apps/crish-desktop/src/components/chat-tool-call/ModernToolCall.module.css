@@ -281,7 +281,7 @@
 }
 
 .copiedCheckIcon {
-  color: var(--color-success, var(--brand-deep, hsl(160 84% 30%)));
+  color: var(--color-success, var(--brand-deep));
 }
 
 .terminalDivider {

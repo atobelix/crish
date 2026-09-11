@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Code2, Check, Copy } from 'lucide-react';
+
 import styles from './ModernToolCall.module.css';
+import { AppIcon } from '../ui/icons/index';
 
 export interface ModernCodeBlockProps {
   filename?: string;
@@ -31,7 +32,7 @@ export const ModernCodeBlock: React.FC<ModernCodeBlockProps> = ({
     <div className={`${styles.codeBlockCard} ${className}`}>
       <div className={styles.codeBlockHead}>
         <div className={styles.codeBlockTag}>
-          <Code2 size={13} strokeWidth={2} />
+          <AppIcon name="code" size={13} />
           <span>{filename}</span>
         </div>
         <button
@@ -41,12 +42,12 @@ export const ModernCodeBlock: React.FC<ModernCodeBlockProps> = ({
         >
           {copied ? (
             <>
-              <Check size={12} strokeWidth={2.4} className={styles.copiedCheckIcon} />
+              <AppIcon name="check" size={12} className={styles.copiedCheckIcon} />
               <span>Copied!</span>
             </>
           ) : (
             <>
-              <Copy size={12} strokeWidth={2} />
+              <AppIcon name="copy" size={12} />
               <span>Copy</span>
             </>
           )}

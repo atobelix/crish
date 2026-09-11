@@ -1,7 +1,6 @@
 /**
  * 官方捆绑笔记扩展：registerView('note')，不是内核第 12 槽。
  */
-import { FileText } from 'lucide-react';
 import { viewRegistry, type ViewRenderContext } from '../../services/view-registry';
 import { createNotePaperView } from './noteViewFactory';
 import { NOTE_URI_RESOLVER } from './noteUri';
@@ -39,7 +38,7 @@ export function activateNotePaper(): () => void {
   const unregisterView = viewRegistry.registerView({
     id: 'note',
     title: noteViewTitle,
-    icon: FileText,
+    icon: 'notebook-pen',
     category: 'tool',
     singleton: true,
     component: createNotePaperView(),

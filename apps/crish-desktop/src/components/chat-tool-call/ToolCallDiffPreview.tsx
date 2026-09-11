@@ -1,9 +1,9 @@
 import React, { useState, useMemo } from 'react';
-import { FileCode, Copy, Check, ExternalLink } from 'lucide-react';
 import type { FileDiff } from '../../store/types';
 import styles from './ModernToolCall.module.css';
 import { highlightCodeSafe, langFromFilename } from '../../api/codeHighlight';
 import { Tooltip } from '../ui';
+import { AppIcon } from '../ui/icons/index';
 
 export interface ToolCallDiffPreviewProps {
   diff: FileDiff;
@@ -74,7 +74,7 @@ export const ToolCallDiffPreview: React.FC<ToolCallDiffPreviewProps> = ({
         aria-label={`查看差异：${diff.filePath}`}
       >
         <div className={styles.diffFileInfo}>
-          <FileCode size={15} className={styles.diffFileIcon} aria-hidden="true" />
+          <AppIcon name="file-code" size={15} className={styles.diffFileIcon} aria-hidden="true" />
           <Tooltip content={diff.filePath}>
             <span className={styles.diffFilename}>{diff.filePath}</span>
           </Tooltip>
@@ -97,9 +97,9 @@ export const ToolCallDiffPreview: React.FC<ToolCallDiffPreviewProps> = ({
                 aria-label="复制差异内容"
               >
                 {copied ? (
-                  <Check size={13} strokeWidth={2.4} className={styles.copiedCheckIcon} />
+                  <AppIcon name="check" size={13} className={styles.copiedCheckIcon} />
                 ) : (
-                  <Copy size={13} strokeWidth={2} />
+                  <AppIcon name="copy" size={13} />
                 )}
               </button>
             </Tooltip>
@@ -114,7 +114,7 @@ export const ToolCallDiffPreview: React.FC<ToolCallDiffPreviewProps> = ({
                   aria-label="在右侧面板查看完整差异"
                 >
                   <span>在右侧查看</span>
-                  <ExternalLink size={11} aria-hidden="true" />
+                  <AppIcon name="external-link" size={11} aria-hidden="true" />
                 </button>
               </Tooltip>
             )}

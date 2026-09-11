@@ -10,7 +10,7 @@
  * （InlineAgentPanel 渲染 ChatToolStack 形成的环形依赖）。
  */
 import React from 'react';
-import { Check, X } from 'lucide-react';
+
 import styles from './ChatToolCallBlock.module.css';
 import type {
   FileDiff,
@@ -20,6 +20,7 @@ import type {
 import type { ToolRenderItem } from '../../api/toolPresentation';
 import { Button } from '../ui';
 import { CompactToolRow } from './CompactToolRow';
+import { AppIcon } from '../ui/icons/index';
 
 export interface ChatToolStackActions {
   onOpenDiff?: ((diff: FileDiff) => void) | undefined;
@@ -93,7 +94,7 @@ function BatchApprovalBar({
           variant="primary"
           size="sm"
           onClick={() => onApprove(msgIds, toolIds)}
-          icon={<Check size={12} />}
+          icon={<AppIcon name="check" size={12} />}
         >
           全部批准
         </Button>
@@ -104,7 +105,7 @@ function BatchApprovalBar({
           variant="danger"
           size="sm"
           onClick={() => onDeny(msgIds, toolIds)}
-          icon={<X size={12} />}
+          icon={<AppIcon name="x" size={12} />}
         >
           全部拒绝
         </Button>

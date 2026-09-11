@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Copy, Check, Code2, AlignLeft } from 'lucide-react';
+
 import styles from './ChatToolCallBlock.module.css';
 import { Button, Tooltip } from '../ui';
 import {
@@ -7,6 +7,7 @@ import {
   isShellToolName,
   type ExtractedToolArgs,
 } from '../../api/toolPresentation';
+import { AppIcon } from '../ui/icons/index';
 
 const TOOL_INPUT_LINE_CAP = 1000;
 const TOOL_INPUT_BYTE_CAP = 128 * 1024;
@@ -116,9 +117,9 @@ export const ToolCallInputPane: React.FC<ToolCallInputPaneProps> = ({
                 onClick={handleCopy}
                 icon={
                   copied ? (
-                    <Check size={12} className={styles.copiedIcon} />
+                    <AppIcon name="check" size={12} className={styles.copiedIcon} />
                   ) : (
-                    <Copy size={12} />
+                    <AppIcon name="copy" size={12} />
                   )
                 }
               >
@@ -159,9 +160,9 @@ export const ToolCallInputPane: React.FC<ToolCallInputPaneProps> = ({
                 }}
                 icon={
                   viewMode === 'formatted' ? (
-                    <Code2 size={12} />
+                    <AppIcon name="code" size={12} />
                   ) : (
-                    <AlignLeft size={12} />
+                    <AppIcon name="align-left" size={12} />
                   )
                 }
               />
@@ -176,9 +177,9 @@ export const ToolCallInputPane: React.FC<ToolCallInputPaneProps> = ({
               onClick={handleCopy}
               icon={
                 copied ? (
-                  <Check size={12} className={styles.copiedIcon} />
+                  <AppIcon name="check" size={12} className={styles.copiedIcon} />
                 ) : (
-                  <Copy size={12} />
+                  <AppIcon name="copy" size={12} />
                 )
               }
             >

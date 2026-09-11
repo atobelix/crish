@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from 'react';
-import { ChevronRight, Check, X } from 'lucide-react';
+
 import { Tooltip } from '../ui';
 import styles from './ModernToolCall.module.css';
+import { AppIcon } from '../ui/icons/index';
 
 export interface ModernJsonToolCallProps {
   id?: string;
@@ -104,7 +105,7 @@ export const ModernJsonToolCall: React.FC<ModernJsonToolCallProps> = ({
         aria-label={`${displayActionText} ${paramPill ? paramPill : ''}`}
       >
         <span className={`${styles.chevron} ${isExpanded ? styles.isOpen : ''}`}>
-          <ChevronRight size={14} strokeWidth={2} aria-hidden="true" />
+          <AppIcon name="chevron-right" size={14} aria-hidden="true" />
         </span>
 
         <span className={styles.actionText}>{displayActionText}</span>
@@ -119,9 +120,9 @@ export const ModernJsonToolCall: React.FC<ModernJsonToolCallProps> = ({
 
         <span className={styles.statusIcon} aria-hidden="true">
           {isSuccess ? (
-            <Check size={13} strokeWidth={2.6} className={styles.statusIconSuccess} />
+            <AppIcon name="check" size={13} className={styles.statusIconSuccess} />
           ) : isError ? (
-            <X size={13} strokeWidth={2.6} className={styles.statusIconError} />
+            <AppIcon name="x" size={13} className={styles.statusIconError} />
           ) : isRunning ? (
             <span className={styles.pulseDot} />
           ) : null}
