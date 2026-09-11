@@ -1,7 +1,7 @@
 # 侧栏拖拽演进：全景焦点同步、视觉同构、空态作用域隔离与零抖动动力学方案 (Main Agent Stage 4 Plan)
 
-> **文档位置**：`docs/sidebar-session-drag-refactor/06-main-agent-stage4-plan.md`  
-> **战役阶段**：Stage 4 (Deep Interaction & Visual Homomorphism)  
+> **文档位置**：`docs/sidebar-session-drag-refactor/06-main-agent-stage4-plan.md`
+> **战役阶段**：Stage 4 (Deep Interaction & Visual Homomorphism)
 > **设计基准**：严格遵守 `AGENTS.md` §1（反退避）、§7（严禁补丁）、§7.1（立体验证纪律）、§8（反过度设计红线）。
 
 ---
@@ -45,12 +45,12 @@ if (target.kind === 'pane') {
   const root = getCompositionRoot();
   // 1. 执行二叉树分屏算子
   tree.splitSessionFromSidebar(sessionId, target.targetLeafId, target.region);
-  
+
   // 2. 获取新建/切分出的目标叶节点
   const latestTree = tree.getState().tree;
   const leaves = collectLeaves(latestTree.root);
   const targetLeaf = leaves.find((l) => l.tabs.some((t) => t.sessionId === sessionId));
-  
+
   // 3. 立即原子转移焦点并激活该会话实体
   if (targetLeaf) {
     tree.setActiveLeaf(targetLeaf.id);
@@ -98,7 +98,7 @@ if (target.kind === 'pane') {
      contain: layout paint;
      transform: translateZ(0);
    }
-   
+
    .sessionItemWrap {
      contain: strict;
      will-change: transform;

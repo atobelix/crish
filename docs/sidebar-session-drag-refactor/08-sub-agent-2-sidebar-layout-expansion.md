@@ -1,8 +1,8 @@
 # 侧栏所见即所得流式布局、多轨折叠彻底清退与文字重叠根治深度方案 (Sub-Agent 2 Plan)
 
-> **文档位置**：`docs/sidebar-session-drag-refactor/08-sub-agent-2-sidebar-layout-expansion.md`  
-> **战役阶段**：Stage 5 (WYSIWYG Sidebar Flow Layout & Text Overlap Root Fix)  
-> **负责专家**：高级 CSS 布局与侧栏架构专家 (Sub-Agent 2)  
+> **文档位置**：`docs/sidebar-session-drag-refactor/08-sub-agent-2-sidebar-layout-expansion.md`
+> **战役阶段**：Stage 5 (WYSIWYG Sidebar Flow Layout & Text Overlap Root Fix)
+> **负责专家**：高级 CSS 布局与侧栏架构专家 (Sub-Agent 2)
 > **架构基准**：严格遵守 [`AGENTS.md`](file:///c:/Software/conex/AGENTS.md) §1（逻辑规划与反退避）、§7（严禁补丁、绕过与作弊）、§7.1（立体验证纪律）、§8（反过度设计硬性红线）。
 
 ---
@@ -294,7 +294,7 @@ const visibleSessions = showAllGeneralSessions || generalSessions.length <= 10
 
 ### 3.2 自然伸长与整体下推流式方程（Natural Elongation & Push-Down Dynamics）
 
-设单行高度 $H_{\text{row}} = 28\text{px}$，行间距 $G = 3\text{px}$，单行物理步长 $S = H_{\text{row}} + G = 31\text{px}$。  
+设单行高度 $H_{\text{row}} = 28\text{px}$，行间距 $G = 3\text{px}$，单行物理步长 $S = H_{\text{row}} + G = 31\text{px}$。
 设各分区标题栏高度为 $H_{\text{header}} = 24\text{px}$，分区下边距为 $M_{\text{sec}} = 8\text{px}$，标题与列表间距为 $G_{\text{sec}} = 6\text{px}$。
 
 对于置顶区（Pinned Section）：
@@ -417,16 +417,16 @@ $$Y_{\text{general}} = H_{\text{pinned}} + H_{\text{projects}}$$
 graph TD
     A[Sidebar.tsx] --> B[SidebarSessionList.tsx]
     B --> C[useSidebarSessionList]
-    
+
     C --> D[useSessionGrouping]
     C --> E[useWindowedList]
     C --> F[useSessionSearch]
     C --> G[useSessionListDrag]
-    
+
     B --> H[PinnedSection]
     B --> I[ProjectsSection]
     B --> J[GeneralSection]
-    
+
     subgraph "净化后的清爽契约"
         H --> K[纯粹渲染 pinnedSessions]
         I --> L[纯粹渲染 byProjectId 各组全量 sessions]

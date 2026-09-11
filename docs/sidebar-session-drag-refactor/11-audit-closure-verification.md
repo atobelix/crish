@@ -1,11 +1,11 @@
 # Conex / Crish 客户端 15 项真实缺陷白盒闭环复审验收报告
 ## White-box Verification & Closure Audit Manifest
 
-> **报告文件**：`docs/sidebar-session-drag-refactor/11-audit-closure-verification.md`  
-> **复审对象**：《极度苛刻白盒审计报告》（`docs/sidebar-session-drag-refactor/10-harsh-audit-report.md`）揪出的全部 15 项真实缺陷  
-> **审计官角色**：最高级别白盒复审审计官（Chief Verification & Closure Auditor）  
-> **审计纪律**：零容忍、不讲客套、逐行核对 `文件路径:行号`、以自动化门禁与真实代码物理表现为唯一依据。  
-> **复审日期**：2026-09-02  
+> **报告文件**：`docs/sidebar-session-drag-refactor/11-audit-closure-verification.md`
+> **复审对象**：《极度苛刻白盒审计报告》（`docs/sidebar-session-drag-refactor/10-harsh-audit-report.md`）揪出的全部 15 项真实缺陷
+> **审计官角色**：最高级别白盒复审审计官（Chief Verification & Closure Auditor）
+> **审计纪律**：零容忍、不讲客套、逐行核对 `文件路径:行号`、以自动化门禁与真实代码物理表现为唯一依据。
+> **复审日期**：2026-09-02
 
 ---
 

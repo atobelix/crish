@@ -1,7 +1,7 @@
 # 会话消息流纯洁性与侧栏所见即所得流式布局方案 (Main Agent Stage 5 Plan)
 
-> **文档位置**：`docs/sidebar-session-drag-refactor/09-main-agent-stage5-plan.md`  
-> **战役阶段**：Stage 5 (Message Purity & WYSIWYG Sidebar Flow Layout)  
+> **文档位置**：`docs/sidebar-session-drag-refactor/09-main-agent-stage5-plan.md`
+> **战役阶段**：Stage 5 (Message Purity & WYSIWYG Sidebar Flow Layout)
 > **设计基准**：严格遵守 `AGENTS.md` §1（反退避）、§7（严禁补丁/作弊）、§7.1（立体验证纪律）、§8（反过度设计硬性红线）。
 
 ---

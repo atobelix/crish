@@ -1,10 +1,10 @@
 # Conex / Crish 客户端近期落地改动端到端白盒苛刻审计报告
 ## Ruthless Chief Auditor Code Review & Defect Manifest
 
-> **报告位置**：`docs/sidebar-session-drag-refactor/10-harsh-audit-report.md`  
-> **审计范围**：主对话非 AI 伪回复清退与瞬态错误态、侧栏所见即所得流式布局与重叠根治、拖拽消抖与跨域分屏/TabStrip 插排、Zero-Click 焦点转移与作用域隔离。  
-> **审计纪律**：零容忍、严禁客套与吹捧、只说缺陷与隐患、逐项提供代码位置 `文件路径:行号` 与物理逻辑证明。  
-> **审计日期**：2026-09-02  
+> **报告位置**：`docs/sidebar-session-drag-refactor/10-harsh-audit-report.md`
+> **审计范围**：主对话非 AI 伪回复清退与瞬态错误态、侧栏所见即所得流式布局与重叠根治、拖拽消抖与跨域分屏/TabStrip 插排、Zero-Click 焦点转移与作用域隔离。
+> **审计纪律**：零容忍、严禁客套与吹捧、只说缺陷与隐患、逐项提供代码位置 `文件路径:行号` 与物理逻辑证明。
+> **审计日期**：2026-09-02
 
 ---
 

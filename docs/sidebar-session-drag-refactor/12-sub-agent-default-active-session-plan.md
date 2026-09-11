@@ -1,10 +1,10 @@
 # 多分屏窗口默认空对话界面顽疾白盒根因分析与架构根治方案
 ## Multi-Split Pane Default Active Session & Lifecycle Convergence Architecture Plan
 
-> **文档定位**：`docs/sidebar-session-drag-refactor/12-sub-agent-default-active-session-plan.md`  
-> **战役背景**：Conex / Crish 桌面客户端多分屏二叉树布局与跨域会话拖拽体系深度治理  
-> **核心命题**：“多分屏窗口默认显示空对话界面（我们在 conex 中处理什么？），顶栏明明有会话 Tab，但只有鼠标点击该窗口之后才会显示实际界面”的顽疾白盒排查与架构根治  
-> **架构纪律**：遵循 [`AGENTS.md`](file:///c:/Software/conex/AGENTS.md) §1、§7、§7.1、§8，严禁表面打补丁，严禁使用盲目猜测，追求单一真理源（SSOT）与结构不变量（Invariant）自愈。  
+> **文档定位**：`docs/sidebar-session-drag-refactor/12-sub-agent-default-active-session-plan.md`
+> **战役背景**：Conex / Crish 桌面客户端多分屏二叉树布局与跨域会话拖拽体系深度治理
+> **核心命题**：“多分屏窗口默认显示空对话界面（我们在 conex 中处理什么？），顶栏明明有会话 Tab，但只有鼠标点击该窗口之后才会显示实际界面”的顽疾白盒排查与架构根治
+> **架构纪律**：遵循 [`AGENTS.md`](file:///c:/Software/conex/AGENTS.md) §1、§7、§7.1、§8，严禁表面打补丁，严禁使用盲目猜测，追求单一真理源（SSOT）与结构不变量（Invariant）自愈。
 
 ---
 
@@ -723,7 +723,7 @@ useEffect(() => {
     const chats = ownedChatLeaves(useLayoutTreeStore.getState().tree.root);
     const leaf = chats.find((l) => l.id === leafId);
     if (!leaf) return;
-    
+
     // 强化自愈：有 Tab 但无 activeTabId，主动激活首个 Tab
     let targetTabId = leaf.activeTabId;
     if (!targetTabId && leaf.tabs.length > 0) {
@@ -759,7 +759,7 @@ useEffect(() => {
   }
   // 统一经由 workspaceShellStore 或在触发树切分后立即完成三 Store 焦点与激活同步
   tree.splitTab(sourceLeafId, tabId, target.targetLeafId, target.region);
-  
+
   // 立即完成门面焦点联动与会话激活
   const root = useLayoutTreeStore.getState().tree.root;
   const leaves = ownedChatLeaves(root);
@@ -786,7 +786,7 @@ useEffect(() => {
   }
 
   clearLegacyOpenTabsMap();
-  
+
   // 核心补全：首帧工作区水合完毕后，立即同步活动叶的会话状态
   const activeLeafId = treeStore.activeLeafId;
   const chats = listChatLeaves(treeStore.tree.root);
@@ -906,7 +906,7 @@ describe('多分屏默认渲染集成测试（零点击即显示真实会话）'
       tabs: [{ tabId: 't-1', sessionId: 'sess-real', title: '真实会话', workspaceKey: 'ws' }],
       dock: createDefaultDock(),
     };
-    
+
     const { container } = render(
       <TreeLeafPanel
         leaf={brokenLeaf}

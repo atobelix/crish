@@ -1,7 +1,7 @@
 # 主 Agent 方案：会话级改动感知体系与 UI 组件库收敛全方案
 
-> **文档版本**：v1.0.0  
-> **所属战役**：`docs/session-changes-refactor/`  
+> **文档版本**：v1.0.0
+> **所属战役**：`docs/session-changes-refactor/`
 > **对应需求**：右侧抽屉面板改动默认收敛为「当前对话的改动（Session-Scoped Changes）」，彻底解除全局 Git 改动强制绑定，落实前端全面组件化与反硬编码铁律。
 
 ---
@@ -61,7 +61,7 @@ const activeFiles =
 ```mermaid
 graph TD
   A[用户交互与总览卡片 OverviewCard] --> B{改动视图作用域 Scope}
-  
+
   subgraph SessionScope[会话作用域: 默认且首要]
     B -->|默认模式 mode='session'| C[SessionChangesView]
     D[当前会话 SessionState] -->|messages.toolCalls| E[selectSessionDiffFiles 纯函数]
@@ -69,7 +69,7 @@ graph TD
     E --> G
     G -->|标准 FileDiff[]| C
   end
-  
+
   subgraph WorkspaceScope[工作区作用域: 按需次级]
     B -->|显式切换 mode='git'| H[WorkspaceGitChangesView]
     I[useOverviewState / gitApi] -->|git status| J[GitStatusResult]

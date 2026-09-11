@@ -1,10 +1,10 @@
 # 多分屏默认激活会话与零点击（Zero-Click）实时呈现终极融合详案 (Magnum Opus Edition)
 
-> **文档性质**：主子 Agent 联合深入分析与代码级工业实施总纲  
-> **权威落盘**：`c:/Software/conex/docs/sidebar-session-drag-refactor/14-final-integrated-plan-default-active-session.md`  
+> **文档性质**：主子 Agent 联合深入分析与代码级工业实施总纲
+> **权威落盘**：`c:/Software/conex/docs/sidebar-session-drag-refactor/14-final-integrated-plan-default-active-session.md`
 > **前序详案**：
 > - 子 Agent 详案：[`12-sub-agent-default-active-session-plan.md`](./12-sub-agent-default-active-session-plan.md) (540+ 行)
-> - 主 Agent 详案：[`13-main-agent-default-active-session-plan.md`](./13-main-agent-default-active-session-plan.md) (360+ 行)  
+> - 主 Agent 详案：[`13-main-agent-default-active-session-plan.md`](./13-main-agent-default-active-session-plan.md) (360+ 行)
 > **设计准则**：严格履行 `AGENTS.md` §1（反退避）、§7（零补丁、零伪兼容）、§7.1（立体验证纪律）。
 
 ---

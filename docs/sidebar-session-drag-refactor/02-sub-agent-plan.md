@@ -1,8 +1,8 @@
 # 侧栏会话列表拖拽重构与跨域分屏统一体系架构方案
 
-> **文档版本**：1.0.0  
-> **所属战役**：`sidebar-session-drag-refactor`  
-> **目标系统**：Conex / Crish 桌面客户端（`apps/crish-desktop`）  
+> **文档版本**：1.0.0
+> **所属战役**：`sidebar-session-drag-refactor`
+> **目标系统**：Conex / Crish 桌面客户端（`apps/crish-desktop`）
 > **设计基准**：严格遵守 `AGENTS.md` §1（反退避）、§7（零补丁/零作弊）、§7.1（立体验证纪律）、§8（反过度设计）
 
 ---
@@ -172,7 +172,7 @@ stateDiagram-v2
     IDLE --> PENDING: PointerDown (|dx|+|dy| < Threshold)
     PENDING --> IDLE: PointerUp / Cancel
     PENDING --> DRAGGING: Threshold Exceeded (|dx|+|dy| >= 4px)
-    
+
     state DRAGGING {
         [*] --> SIDEBAR_REORDER
         SIDEBAR_REORDER --> TAB_STRIP_INSERT: Pointer moves to PaneHeader
@@ -416,7 +416,7 @@ flowchart TD
     A[PointerUp on Pane Edge: targetLeafId, region] --> B{Is Session already open in a Leaf?}
     B -->|Yes: srcLeafId, tabId| C[Execute layoutTreeStore.splitTab]
     B -->|No: Unopened Session| D[Execute layoutTreeStore.splitSessionFromSidebar]
-    
+
     C --> E[Prune empty source leaf if needed]
     D --> F[Create new leaf with SessionTab and split branch]
     E --> G[Single Immutable Tree Update]

@@ -1,7 +1,7 @@
 # 主 Agent 方案：侧栏会话列表拖拽重构与跨域二叉树分屏统一架构方案
 
-> **方案密级**：核心架构方案  
-> **文档位置**：`docs/sidebar-session-drag-refactor/01-main-agent-plan.md`  
+> **方案密级**：核心架构方案
+> **文档位置**：`docs/sidebar-session-drag-refactor/01-main-agent-plan.md`
 > **设计原则**：1D 轴向同构、零打补丁、零伪兼容、拖拽运行期零 Store 污染、跨域分屏自洽互斥、立体验证闭环。
 
 ---

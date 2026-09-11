@@ -1,8 +1,8 @@
 # 分屏焦点联动、标签行视觉同构与跨域顶栏自由排序独立详案 (Sub-Agent Deep Design)
 
-> **文档定位**：`docs/sidebar-session-drag-refactor/04-sub-agent-1-focus-and-tabs.md`  
-> **所属战役**：`docs/sidebar-session-drag-refactor/` 侧栏会话列表拖拽重构与跨域分屏体系  
-> **架构契约**：严格遵循 [`AGENTS.md`](file:///c:/Software/conex/AGENTS.md) §1（逻辑规划与反退避）、§7（严禁补丁/作弊）、§7.1（立体验证纪律）、§8（反过度设计硬性红线）。  
+> **文档定位**：`docs/sidebar-session-drag-refactor/04-sub-agent-1-focus-and-tabs.md`
+> **所属战役**：`docs/sidebar-session-drag-refactor/` 侧栏会话列表拖拽重构与跨域分屏体系
+> **架构契约**：严格遵循 [`AGENTS.md`](file:///c:/Software/conex/AGENTS.md) §1（逻辑规划与反退避）、§7（严禁补丁/作弊）、§7.1（立体验证纪律）、§8（反过度设计硬性红线）。
 > **核心领域**：二叉树布局系统（[`layoutTreeStore`](file:///c:/Software/conex/apps/crish-desktop/src/store/layout-tree/layoutTreeStore.ts)）、工作区门面（[`workspaceShellStore`](file:///c:/Software/conex/apps/crish-desktop/src/store/workspace-shell/workspaceShellStore.ts)）、会话领域中心（[`sessionStore`](file:///c:/Software/conex/apps/crish-desktop/src/store/sessionStore.ts)）、跨域动力学路由（[`crossDomainDropRouter`](file:///c:/Software/conex/apps/crish-desktop/src/components/shell/drag-engine/crossDomainDropRouter.ts)）与顶栏组件（[`PaneHeader`](file:///c:/Software/conex/apps/crish-desktop/src/components/binary-tree/PaneHeader.tsx) / [`LeafToolTabStrip`](file:///c:/Software/conex/apps/crish-desktop/src/components/binary-tree/LeafToolTabStrip.tsx)）。
 
 ---
@@ -200,9 +200,9 @@
          └───► B. 目标为顶栏插入 (target.kind === 'strip')
                   │
                   ▼
-               [workspaceShellStore.openOrFocusSession(sessionId, { 
-                   activeLeafId: targetLeafId, 
-                   insertIdx: target.insertIdx 
+               [workspaceShellStore.openOrFocusSession(sessionId, {
+                   activeLeafId: targetLeafId,
+                   insertIdx: target.insertIdx
                })]
                   │
                   ├─ 1. 若全树已存在该 session:
@@ -659,8 +659,8 @@ export function commitSidebarSessionDrop(input: {
       workspaceKeyNow() ||
       GENERAL_FOLDER;
 
-    const targetLeaf = opts?.activeLeafId 
-      ? { id: opts.activeLeafId } 
+    const targetLeaf = opts?.activeLeafId
+      ? { id: opts.activeLeafId }
       : resolveActiveChatLeaf(get().lastChatLeafId);
 
     const result = treeOpenSession(sid, {
@@ -871,7 +871,7 @@ describe('Cross-Domain TabStrip Free Reorder & Focus Synchronization', () => {
     shell.splitSessionFromSidebar('sess-new-123', leafId, 'right');
 
     const nextTree = useLayoutTreeStore.getState();
-    const freshLeaf = collectLeaves(nextTree.tree.root).find(l => 
+    const freshLeaf = collectLeaves(nextTree.tree.root).find(l =>
       l.tabs.some(t => t.sessionId === 'sess-new-123')
     );
 

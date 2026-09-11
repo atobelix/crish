@@ -1,7 +1,7 @@
 # 多分屏默认激活会话与零点击（Zero-Click）实时渲染架构方案
 
-> **状态**：评审中（主 Agent 独立方案）  
-> **文档定位**：针对分屏窗口“默认显示空对话界面（我们在 conex 中处理什么？），只有点击之后才显示实际界面”的端到端根治方案。  
+> **状态**：评审中（主 Agent 独立方案）
+> **文档定位**：针对分屏窗口“默认显示空对话界面（我们在 conex 中处理什么？），只有点击之后才显示实际界面”的端到端根治方案。
 > **架构契约**：遵守 `AGENTS.md` §1（反退避）、§7（严禁补丁与伪兼容）、§7.1（立体验证纪律）。
 
 ---
@@ -140,14 +140,14 @@ const handleActivate = useCallback(
 function readActiveTab(leaf: LayoutLeaf): LeafSessionTab | undefined {
   const tabs = readLeafTabs(leaf);
   if (tabs.length === 0) return undefined;
-  
+
   const activeTabId = readActiveTabId(leaf);
   // 1. 若 activeTabId 有效且命中某 Tab，直接返回
   if (activeTabId) {
     const found = tabs.find((t) => t.tabId === activeTabId);
     if (found) return found;
   }
-  
+
   // 2. 核心架构自愈：若有真实 tabs 但 activeTabId 为空或失效，
   //    默认回退到第一个已存在的会话 Tab，绝对严禁让拥有会话的窗口退化为草稿空屏！
   return tabs[0];

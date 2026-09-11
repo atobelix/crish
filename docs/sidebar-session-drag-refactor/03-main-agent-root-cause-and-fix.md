@@ -1,8 +1,8 @@
 # 侧栏会话拖拽“无动静”白盒全链路根因剖析与系统级根治详案 (Master Diagnostic Edition)
 
-> **文档版本**：2.0.0 (Master Diagnostic Canon)  
-> **所属战役**：`docs/sidebar-session-drag-refactor/`  
-> **文档位置**：`docs/sidebar-session-drag-refactor/03-main-agent-root-cause-and-fix.md`  
+> **文档版本**：2.0.0 (Master Diagnostic Canon)
+> **所属战役**：`docs/sidebar-session-drag-refactor/`
+> **文档位置**：`docs/sidebar-session-drag-refactor/03-main-agent-root-cause-and-fix.md`
 > **排查范围**：浏览器原生 Pointer Events 流水线、GPU 硬件加速合成层、React 18 Fiber 协调机制、Zustand 状态树不可变事务、二叉树拓扑投影与视口几何索引。
 
 ---
@@ -348,14 +348,14 @@ flowchart TD
     A[Pointer Coordinates: clientX, clientY] --> B{document.elementFromPoint}
     B -->|Miss / Ghost| C[Fallback: elementsFromPoint Stack Search]
     B -->|Hit Node| D{Is Inside TabStrip?}
-    
+
     D -->|Yes| E[Domain: 'tab-strip']
     D -->|No| F{Is Inside PaneCanvas?}
-    
+
     F -->|Yes| G{Guard Check: M=1 and Dragging Active?}
     G -->|Blocked| H[Domain: 'outside' / Detached]
     G -->|Allowed| I[Domain: 'pane-split' 22% Edge]
-    
+
     F -->|No| J{Is Inside Sidebar?}
     J -->|Yes: Multi-Selector Check| K[Domain: 'sidebar']
     J -->|No| H
@@ -394,7 +394,7 @@ function createSidebarSessionGhost(rowLi: HTMLElement, rowRect: DOMRect): HTMLDi
   const ghost = rowLi.cloneNode(true) as HTMLDivElement;
   ghost.className = 'sidebar-drag-ghost';
   ghost.setAttribute('aria-hidden', 'true');
-  
+
   // 严格设置脱壳样式
   ghost.style.cssText = [
     'position: fixed',

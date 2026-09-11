@@ -1,7 +1,7 @@
 # 会话级改动隔离与全量组件化重构独立架构方案
 
-> **文件标识**：`docs/session-changes-refactor/independent-plans/01-子Agent-会话改动隔离与组件化方案.md`  
-> **任务类型**：独立架构设计方案（盲审基准）  
+> **文件标识**：`docs/session-changes-refactor/independent-plans/01-子Agent-会话改动隔离与组件化方案.md`
+> **任务类型**：独立架构设计方案（盲审基准）
 > **核心目标**：彻底切断右侧抽屉「改动」面板对 Git 全局未提交修改的错误绑定，确立「当前会话改动（Session-Scoped Changes）」为第一公民与默认纯净视图；全面清退文件内硬编码样式与逻辑，接入 `@/components/ui` 设计系统原子组件库；合理归位 Git 仓库改动的次级查看交互。
 
 ---

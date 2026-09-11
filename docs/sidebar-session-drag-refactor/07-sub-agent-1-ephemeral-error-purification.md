@@ -1,8 +1,8 @@
 # 主对话界面非 AI 伪回复彻底清退与瞬态进行时错误态（Volatile Ephemeral Status）独立深度架构方案
 
-> **文档定位**：`docs/sidebar-session-drag-refactor/07-sub-agent-1-ephemeral-error-purification.md`  
-> **所属战役**：`docs/sidebar-session-drag-refactor/` 侧栏会话列表拖拽重构与消息流纯洁性体系  
-> **架构契约**：严格遵循 [`AGENTS.md`](file:///c:/Software/conex/AGENTS.md) §1（逻辑规划与反退避）、§7（严禁补丁/作弊）、§7.1（立体验证纪律）、§8（反过度设计硬性红线）、§13（输入框与焦点态规范）、§14（色彩空间与现代 CSS 规范）。  
+> **文档定位**：`docs/sidebar-session-drag-refactor/07-sub-agent-1-ephemeral-error-purification.md`
+> **所属战役**：`docs/sidebar-session-drag-refactor/` 侧栏会话列表拖拽重构与消息流纯洁性体系
+> **架构契约**：严格遵循 [`AGENTS.md`](file:///c:/Software/conex/AGENTS.md) §1（逻辑规划与反退避）、§7（严禁补丁/作弊）、§7.1（立体验证纪律）、§8（反过度设计硬性红线）、§13（输入框与焦点态规范）、§14（色彩空间与现代 CSS 规范）。
 > **核心领域**：会话消息流纯洁性（Pure AI Conversation Stream）、流式生命周期事件系统（`chat-stream` / [`BridgeErrorPolicy`](file:///c:/Software/conex/apps/crish-desktop/src/api/chat-bridge/BridgeErrorPolicy.ts) / [`diagnosticHandlers`](file:///c:/Software/conex/apps/crish-desktop/src/api/chat-bridge/handlers/diagnosticHandlers.ts)）、非持久瞬态错误状态机（`ephemeralChatStore`）、消息列表底部进行时渲染插槽（[`ChatMessageList`](file:///c:/Software/conex/apps/crish-desktop/src/components/chat-message-list/ChatMessageList.tsx) / [`MessageVirtualizer`](file:///c:/Software/conex/apps/crish-desktop/src/components/chat-message-list/MessageVirtualizer.tsx) / `EphemeralStatusSlot`）。
 
 ---
@@ -417,7 +417,7 @@ function deriveErrorFingerprint(raw: unknown, kind: string): string {
 export function dispatchEphemeralError(sessionId: string, raw: unknown, kind: EphemeralErrorKind) {
   const message = formatUserFriendlyErrorMessage(raw, kind);
   const fingerprint = deriveErrorFingerprint(raw, kind);
-  
+
   useEphemeralChatStore.getState().setEphemeralStatus(sessionId, {
     id: fingerprint,
     kind,
@@ -757,7 +757,7 @@ EphemeralStatusSlot.displayName = 'EphemeralStatusSlot';
   ```typescript
   export function handleRunError(opts: HandleRunErrorOptions): { hadNetworkError: boolean } {
     const { sid, assistantMsgId, runId, message, kind, detail } = opts;
-    
+
     // 1. 记录可观测性诊断日志
     recordStreamDiag({
       sessionId: sid,

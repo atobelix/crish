@@ -1,7 +1,7 @@
 # 侧栏拖拽排序整体微抖动消除与多分屏空状态文字乱跳隔离方案 (Sub-Agent 2 Architecture Plan)
 
-> **文档定位**：`docs/sidebar-session-drag-refactor/05-sub-agent-2-jitter-and-empty-state.md`  
-> **战役阶段**：Stage 4 (Deep Interaction, Subpixel Anti-Jitter & Pane Scope Isolation)  
+> **文档定位**：`docs/sidebar-session-drag-refactor/05-sub-agent-2-jitter-and-empty-state.md`
+> **战役阶段**：Stage 4 (Deep Interaction, Subpixel Anti-Jitter & Pane Scope Isolation)
 > **设计基准**：严格遵守 `AGENTS.md` §1（逻辑规划与反退避）、§7（严禁补丁/作弊）、§7.1（立体验证纪律）、§8（反过度设计硬性红线）。
 
 ---
