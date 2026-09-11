@@ -1,8 +1,8 @@
 # 用量监控控制台全面对接系统已有组件与规范整改终极方案（同题竞争对决案）
 
-> **文档路径**：`docs/usage-system-migration/independent-plans/03-subagent-ui-redesign-plan.md`  
-> **文档定位**：战役核心技术与设计重构独立对决方案（同题对决裁决方案）  
-> **面向对象**：Conex / Crish 桌面端用量监控控制台全链路研发与代码重构  
+> **文档路径**：`docs/usage-system-migration/independent-plans/03-subagent-ui-redesign-plan.md`
+> **文档定位**：战役核心技术与设计重构独立对决方案（同题对决裁决方案）
+> **面向对象**：Conex / Crish 桌面端用量监控控制台全链路研发与代码重构
 > **整改核心目标**：彻底吸收用户现场批评，根除 26 条测试假数据残留；清退所有私造样式类、伪分段控制器与硬编码颜色；100% 原生对接系统原子组件（`SegmentedControl`、`SettingsCard`、`Button`、`Tooltip`）；彻底解决 X 轴叠字、百分比 3573.3% 暴涨、Y 轴文字挤压折行与 hover 粗暴变灰抖动四大灾难性视觉 Bug，建立真源、优雅、对称、高质感的标准控制台。
 
 ---
@@ -1206,7 +1206,7 @@ const headerMeta = (
   >
     刷新数据
   </Button>
-  
+
   {/* 真实空态下自动隐蔽清空按钮 */}
   {(dashboardData.totalInput > 0 || dashboardData.totalOutput > 0) && (
     <Button

@@ -1,7 +1,7 @@
 # 用量监控控制台系统性移植全链路落地完整方案（子 Agent 方案）
 
-> **文档定位**：战役独立方案（方案二 / 子 Agent 独立设计方案）  
-> **对决评审**：与主 Agent 方案（`01-main-agent-plan.md`）同题对决，接受横向架构评审与用户裁决  
+> **文档定位**：战役独立方案（方案二 / 子 Agent 独立设计方案）
+> **对决评审**：与主 Agent 方案（`01-main-agent-plan.md`）同题对决，接受横向架构评审与用户裁决
 > **核心铁律**：
 > 1. **全栈真落地闭环**：拒绝纯前端假骨架与脱水 Mock 数据，自研端到端后端采集、Group Commit 持久化、高性能时钟聚合与 Tauri IPC 契约；
 > 2. **历史资产平滑自愈**：首创 LocalStorage 存量用量向 SQLite 零摩擦幂等迁移器，杜绝用户历史数据清零；
@@ -83,7 +83,7 @@ flowchart TD
         GroupCommitActor["Group Commit Single-Writer Actor\n(5ms 窗口 / 50 批次聚合，零锁争用)"]
         UsageTable[(usage_records 专用时序台账\nSQLite B-Tree 索引覆盖)]
         LegacyMigrator["LocalStorage 存量平滑迁移器\n(启动自动导入，幂等去重)"]
-        
+
         subgraph AggregationEngine ["时序聚合引擎 (Time-Series Engine)"]
             HourlyAgg["24h 逐时滑动窗口桶化\n(Localtime 零填充补齐)"]
             DailyAgg["7d / 30d 逐日时间桶聚合"]
@@ -153,16 +153,16 @@ CREATE TABLE IF NOT EXISTS usage_records (
 );
 
 -- 高性能时序索引组合
-CREATE INDEX IF NOT EXISTS idx_usage_records_ts 
+CREATE INDEX IF NOT EXISTS idx_usage_records_ts
     ON usage_records(timestamp DESC);
 
-CREATE INDEX IF NOT EXISTS idx_usage_records_model_ts 
+CREATE INDEX IF NOT EXISTS idx_usage_records_model_ts
     ON usage_records(model, timestamp DESC);
 
-CREATE INDEX IF NOT EXISTS idx_usage_records_project_ts 
+CREATE INDEX IF NOT EXISTS idx_usage_records_project_ts
     ON usage_records(project_name, timestamp DESC);
 
-CREATE INDEX IF NOT EXISTS idx_usage_records_session 
+CREATE INDEX IF NOT EXISTS idx_usage_records_session
     ON usage_records(session_id, timestamp);
 ```
 
@@ -203,7 +203,7 @@ CREATE INDEX IF NOT EXISTS idx_usage_records_session
 - **时间范围**：$[T_{\text{now}} - 24 \times 3600 \times 1000, T_{\text{now}}]$
 - **SQL 分桶**：
   ```sql
-  SELECT 
+  SELECT
       ((timestamp + (:tz_offset * 60000)) / 3600000) * 3600000 - (:tz_offset * 60000) AS bucket_start,
       SUM(prompt_tokens) AS input_tokens,
       SUM(completion_tokens) AS output_tokens,

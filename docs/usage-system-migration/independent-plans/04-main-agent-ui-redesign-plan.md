@@ -1,6 +1,6 @@
 # 用量监控控制台界面与交互系统级重构方案（主 Agent 案）
 
-> **文档定位**：`docs/usage-system-migration/independent-plans/04-main-agent-ui-redesign-plan.md`  
+> **文档定位**：`docs/usage-system-migration/independent-plans/04-main-agent-ui-redesign-plan.md`
 > **关联依据**：用户现场 3 张真机截图反馈、工程既有设计资产库（`components/ui/` 与 `components/settings/SettingsUI.tsx`）、`AGENTS.md` 架构红线。
 
 ---
@@ -203,8 +203,8 @@ export function isTickVisible(index: number, total: number, range: string): bool
 #### 1. 百分比归一化修复
 ```ts
 // 修复 100 倍暴涨 Bug
-const ratio = m.percentage > 0 
-  ? m.percentage / 100 
+const ratio = m.percentage > 0
+  ? m.percentage / 100
   : (totalTokens > 0 ? m.tokens / totalTokens : 0);
 const formattedPct = `${(ratio * 100).toFixed(1)}%`;
 ```

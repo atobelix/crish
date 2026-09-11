@@ -1,8 +1,8 @@
 # 用量统计控制台系统性移植全链路落地方案（主 Agent 案）
 
-> **文档定位**：战役独立方案（方案一 / 主 Agent 独立起草）  
-> **对比对决**：与子 Agent 方案（`02-subagent-plan.md`）同题对决，接受架构评审与横向裁决  
-> **核心原则**：全栈真落地（前后端全链路真闭环）、拒绝前端伪样子/脱水 Mock、Design Tokens 严控膨胀（100% 优先复用已有系统 Token）、反过度设计与架构净收敛  
+> **文档定位**：战役独立方案（方案一 / 主 Agent 独立起草）
+> **对比对决**：与子 Agent 方案（`02-subagent-plan.md`）同题对决，接受架构评审与横向裁决
+> **核心原则**：全栈真落地（前后端全链路真闭环）、拒绝前端伪样子/脱水 Mock、Design Tokens 严控膨胀（100% 优先复用已有系统 Token）、反过度设计与架构净收敛
 
 ---
 
@@ -76,7 +76,7 @@ flowchart TB
 
     subgraph FrontendDesktop ["React 前端渲染层 (apps/crish-desktop)"]
         Transport["commandManifest.ts / usageApi.ts"]
-        
+
         subgraph ComponentsTree ["用量控制台组件树 (SettingsUsageTab)"]
             HeroCards["UsageHeroCards.tsx\n(6项宏观纯文本指标)"]
             TrendChart["UsageTrendChart.tsx\n(SVG样条/360°色相/1:1图例)"]
@@ -85,7 +85,7 @@ flowchart TB
             ModelDonut["UsageModelDistribution.tsx\n(4维占比环形图+列表)"]
             PriceModal["PriceConfigModal.tsx\n(单价配置与目录快照)"]
         end
-        
+
         Tokens["tokens.css (100% 复用系统标准 + 最小图表扩展)"]
     end
 
