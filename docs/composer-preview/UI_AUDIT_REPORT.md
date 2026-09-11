@@ -1,7 +1,7 @@
 # Conex Composer — UI / 视觉 / 动效 审计报告
 
-> **日期**: 2026-08-05  
-> **对照**: 用户提供的 Notion / 高级编辑器参考截图  
+> **日期**: 2026-08-05
+> **对照**: 用户提供的 Notion / 高级编辑器参考截图
 > **范围**: `src/styles/` 全部 22 个 CSS 文件 + 组件 TSX
 
 ---
@@ -117,7 +117,7 @@
 **问题**: 这些工具类在组件 TSX 中**几乎没有被使用**。
 
 具体来说：
-- `Editor.tsx` 的按钮用了 `motion-tap` ✅ 
+- `Editor.tsx` 的按钮用了 `motion-tap` ✅
 - 但 SlashMenu、BubbleMenu、BlockMenu 的 **TSX 组件中没有引用 motion 类**
 - `motion-lift` 定义了卡片悬浮抬升效果，但数据库的 KanbanCard、GalleryCard **没有使用它**
 - `motion-stagger` 定义了列表交错入场，但 SlashMenu 的列表项**没有使用它**

@@ -1,9 +1,9 @@
 # Test Infrastructure & Test Suite Specification
 
-**Target Workspace**: `C:\Software\conex\docs\composer-preview`  
-**Specification Baseline**: `SPEC-COMPOSER-PREVIEW-001` / `PROJECT.md`  
-**Authoritative Specification**: Notion-like Markdown Rendering Engine and Editor Test Infrastructure  
-**Last Updated**: 2026-08-04  
+**Target Workspace**: `C:\Software\conex\docs\composer-preview`
+**Specification Baseline**: `SPEC-COMPOSER-PREVIEW-001` / `PROJECT.md`
+**Authoritative Specification**: Notion-like Markdown Rendering Engine and Editor Test Infrastructure
+**Last Updated**: 2026-08-04
 
 ---
 

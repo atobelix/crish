@@ -1,8 +1,8 @@
 # Conex Composer — Phase 2 完整落地方案
 
-> **版本**: 2.0  
-> **日期**: 2026-08-05  
-> **状态**: 待执行  
+> **版本**: 2.0
+> **日期**: 2026-08-05
+> **状态**: 待执行
 > **前置文档**: 本文档接续 Phase 0 + Phase 1 已完成的基础设施与核心组件
 
 ---
@@ -475,7 +475,7 @@ ToggleHeadingView
 
 #### 2.5 ColumnLayoutView — 多列布局（~200 行）
 
-**文件**: `src/views/panel/ColumnLayoutView.tsx`  
+**文件**: `src/views/panel/ColumnLayoutView.tsx`
 **子组件**: `src/views/panel/ColumnView.tsx` (~60 行)
 
 **交互设计**:
@@ -577,8 +577,8 @@ function parseVideoUrl(url: string): { provider: string; embedUrl: string } {
 
 #### 4.1 KanbanView — 看板视图（~280 行）
 
-**文件**: `src/views/panel/database/KanbanView.tsx`  
-**子组件**: `src/views/panel/database/KanbanColumn.tsx` (~60 行)  
+**文件**: `src/views/panel/database/KanbanView.tsx`
+**子组件**: `src/views/panel/database/KanbanColumn.tsx` (~60 行)
 **子组件**: `src/views/panel/database/KanbanCard.tsx` (~40 行)
 
 **交互设计**（参考 Notion 看板）:
@@ -603,7 +603,7 @@ KanbanView
 
 #### 4.2 GalleryView — 画廊视图（~180 行）
 
-**文件**: `src/views/panel/database/GalleryView.tsx`  
+**文件**: `src/views/panel/database/GalleryView.tsx`
 **子组件**: `src/views/panel/database/GalleryCard.tsx` (~50 行)
 
 **交互设计**:
@@ -614,8 +614,8 @@ KanbanView
 
 #### 4.3 CalendarView — 日历视图（~250 行）
 
-**文件**: `src/views/panel/database/CalendarView.tsx`  
-**子组件**: `src/views/panel/database/CalendarDay.tsx` (~50 行)  
+**文件**: `src/views/panel/database/CalendarView.tsx`
+**子组件**: `src/views/panel/database/CalendarDay.tsx` (~50 行)
 **子组件**: `src/views/panel/database/CalendarEvent.tsx` (~30 行)
 
 **交互设计**:
@@ -636,7 +636,7 @@ KanbanView
 
 #### 4.5 FormView — 表单视图（~200 行）
 
-**文件**: `src/views/panel/database/FormView.tsx`  
+**文件**: `src/views/panel/database/FormView.tsx`
 **子组件**: `src/views/panel/database/FormField.tsx` (~80 行)
 
 **交互设计**:
@@ -863,22 +863,22 @@ styles/ui/
   ├── Step 1.1: 创建 extensions/ 目录结构
   ├── Step 1.2: 实现所有 Extension（按依赖顺序）
   └── Step 1.3: 更新 Editor.tsx 注册扩展
-  
+
 阶段 B: P0 核心体验（依赖阶段 A）
   ├── Step 2.1: SlashMenu Suggestion 集成
-  ├── Step 2.2: BlockMenu 右键集成  
+  ├── Step 2.2: BlockMenu 右键集成
   ├── Step 2.3: MathBlockView + MathInlineView
   ├── Step 2.4: ToggleHeadingView + ToggleListView
   ├── Step 2.5: ColumnLayoutView
   ├── Step 2.6: TOCBlockView
   ├── Step 2.7: DragHandle 插件
   └── Step 2.8: 链接交互增强
-  
+
 阶段 C: P1 多媒体（依赖阶段 A）
   ├── Step 3.1: VideoBlockView
   ├── Step 3.2: AudioBlockView
   └── Step 3.3: EmbedBlockView
-  
+
 阶段 D: P2 数据库视图（依赖阶段 A）
   ├── Step 4.1: KanbanView
   ├── Step 4.2: GalleryView
@@ -887,17 +887,17 @@ styles/ui/
   ├── Step 4.5: FormView
   ├── Step 4.6: RecordDetailPanel
   └── Step 4.7: PropertyEditor
-  
+
 阶段 E: P3 高级区块（依赖阶段 A）
   ├── Step 5.1~5.8: 各高级区块
-  
+
 阶段 F: P4 行内节点（依赖阶段 A + DatePicker UI）
   ├── Step 6.1~6.4: 行内节点 + DatePicker
-  
+
 阶段 G: CSS 补充 + 主题
   ├── Step 7: 新增 CSS 文件
   └── Step 8: 暗色主题
-  
+
 阶段 H: 集成测试 + 打磨
   ├── TypeScript 编译验证
   ├── 运行时 DevTools 验证
@@ -945,7 +945,7 @@ export function loadKaTeX() {
 ```tsx
 const MathRenderer: React.FC<{ formula: string; display: boolean }> = ({ formula, display }) => {
   const containerRef = useRef<HTMLDivElement>(null);
-  
+
   useEffect(() => {
     loadKaTeX().then(katex => {
       if (containerRef.current) {
@@ -957,7 +957,7 @@ const MathRenderer: React.FC<{ formula: string; display: boolean }> = ({ formula
       }
     });
   }, [formula, display]);
-  
+
   return <div ref={containerRef} className="math-renderer" />;
 };
 ```

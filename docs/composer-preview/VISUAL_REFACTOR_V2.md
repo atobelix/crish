@@ -1,7 +1,7 @@
 # Conex Composer — 视觉重构方案 V2
 
-> **日期**: 2026-08-05  
-> **触发**: 用户截图标注 + 高级参考对照  
+> **日期**: 2026-08-05
+> **触发**: 用户截图标注 + 高级参考对照
 > **定位**: 以参考图的「留白、克制、简约」理念为指导，不照抄视觉，借鉴设计原则
 
 ---
@@ -17,7 +17,7 @@
 - 空状态的背景 fallback 到了 iframe 默认的黑色
 - 输入框是标准 `<input type="url">` + 蓝色按钮，没有任何质感处理
 
-**重构方向**: 
+**重构方向**:
 空状态应该是一个**干净的灰色虚线框 + 居中的图标 + 一行提示**。输入框不应内嵌在面板里，而是用**跟随式输入**——用户点击空状态区域后，一个轻量的浮动输入条**从空状态区域正下方长出来**，类似 Notion 的链接粘贴交互：
 
 ```
@@ -48,7 +48,7 @@
 2. `motion.css:306` 的 `:where(button, a, input, textarea, select, [tabindex]):focus-visible` 设置了 `box-shadow: 0 0 0 4px var(--border-focus)`
 3. 浏览器默认的 `<div contenteditable>` focus outline
 
-**修复**: 
+**修复**:
 ```css
 /* ProseMirror 是 contenteditable div，它获得焦点是常态，不需要 focus ring */
 .ProseMirror:focus,
@@ -73,7 +73,7 @@
 
 **现状**: `field__input:focus` 使用 `border-color: var(--accent-blue)` + `box-shadow: 0 0 0 3px var(--bg-selected)`，在暖灰编辑器中非常扎眼。
 
-**参考 AGENTS.md 规则**: 
+**参考 AGENTS.md 规则**:
 > "Maximum 10% Focus Contrast Limit": 焦点/激活状态的边框灰度/深色程度不得超过基线背景文字对比度混合的 10%
 
 **修复**:
@@ -91,7 +91,7 @@
 
 **现状截图**: 语言选择器下拉宽 200px，有搜索框 + 滚动列表，但视觉上是一个「沉重的面板」悬浮在代码块上方。
 
-**重构**: 
+**重构**:
 - 下拉面板去掉外边框，只保留 `box-shadow`
 - 搜索框高度从 28px 减到 24px，内边距更紧凑
 - 列表项高度从 28px 减到 26px

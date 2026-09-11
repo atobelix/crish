@@ -1,9 +1,9 @@
 # TEST READY — Notion-like Markdown Rendering Engine and Editor Test Suite
 
-**Project Root**: `C:\Software\conex\docs\composer-preview`  
-**Status**: `READY`  
-**Established**: 2026-08-04  
-**Test Framework**: Vitest 3.x + JSDOM + React Testing Library  
+**Project Root**: `C:\Software\conex\docs\composer-preview`
+**Status**: `READY`
+**Established**: 2026-08-04
+**Test Framework**: Vitest 3.x + JSDOM + React Testing Library
 
 ---
 
