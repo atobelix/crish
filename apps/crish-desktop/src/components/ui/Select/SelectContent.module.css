@@ -43,7 +43,7 @@
 
 .contentMd,
 .size-md {
-  border-radius: 13px;
+  border-radius: var(--radius-xl, 12px);
   padding: 5px;
 }
 
@@ -111,7 +111,7 @@
   font-size: var(--font-size-md, 14px);
   min-height: 36px;
   height: 36px;
-  border-radius: 9px;
+  border-radius: var(--radius-lg, 8px);
 }
 
 /* 多行说明选项 */

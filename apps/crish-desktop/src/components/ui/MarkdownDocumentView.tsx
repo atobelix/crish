@@ -326,7 +326,7 @@ export const MarkdownDocumentView: React.FC<MarkdownDocumentViewProps> = React.m
               padding: 'var(--space-2, 8px) var(--space-3, 12px)',
               fontSize: 'var(--font-size-xs, 12px)',
               color: 'var(--text-secondary)',
-              backgroundColor: 'color-mix(in srgb, var(--text-primary) 3.5%, var(--bg-card))',
+              backgroundColor: 'var(--bg-card-hover)',
               border: '1px solid var(--border-subtle)',
               borderRadius: 'var(--radius-md, 6px)',
               marginBottom: 'var(--space-2, 8px)',

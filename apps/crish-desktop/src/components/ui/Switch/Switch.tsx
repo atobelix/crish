@@ -24,6 +24,7 @@ import React, {
   useState,
 } from 'react';
 import styles from './Switch.module.css';
+import { ICON_STROKE } from '../icons/iconTokens';
 
 export type SwitchSize = 'sm' | 'md' | 'lg';
 
@@ -270,7 +271,7 @@ export const Switch = forwardRef<HTMLButtonElement, SwitchProps>(function Switch
               cy="8"
               r="6"
               stroke="currentColor"
-              strokeWidth="2"
+              strokeWidth={ICON_STROKE.ui}
               strokeLinecap="round"
               strokeDasharray="28"
               strokeDashoffset="18"

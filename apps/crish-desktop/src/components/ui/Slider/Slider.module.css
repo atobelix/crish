@@ -61,7 +61,7 @@
   margin-left: -6px;
   border-radius: 50%;
   background-color: var(--bg-elevated);
-  border: 1.5px solid var(--brand);
+  border: var(--border-width-emphasis, 2px) solid var(--brand);
   box-shadow: 0 1px 3px color-mix(in srgb, var(--shadow-color) 15%, transparent);
   box-sizing: border-box;
   pointer-events: none;

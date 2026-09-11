@@ -4,6 +4,7 @@
  */
 import React from 'react';
 import styles from './PreviewCard.module.css';
+import { ICON_STROKE } from '../icons/iconTokens';
 import type { PreviewCardArrowProps } from './types';
 
 export const PreviewCardArrow: React.FC<PreviewCardArrowProps> = ({
@@ -42,7 +43,7 @@ export const PreviewCardArrow: React.FC<PreviewCardArrowProps> = ({
           className={styles.arrowStroke}
           d="M21 9 L15.9819 3.36153 C14.3897 1.57244 11.5927 1.57413 10.0026 3.36516 L5 9"
           stroke="currentColor"
-          strokeWidth="2"
+          strokeWidth={ICON_STROKE.ui}
           strokeLinecap="round"
         />
         {/* 2. 内层背景填充（深插入卡片内部 8.25px，遮蔽底边） */}

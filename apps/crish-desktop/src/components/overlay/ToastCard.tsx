@@ -1,8 +1,9 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import * as Lucide from 'lucide-react';
+
 import type { AppToast } from '../../services/toast/types';
 import { useSwipeDismiss } from './useSwipeDismiss';
 import styles from './ToastStackModern.module.css';
+import { AppIcon } from '../ui/icons';
 
 export interface ToastCardProps {
   toast: AppToast;
@@ -114,49 +115,25 @@ export const ToastCard: React.FC<ToastCardProps> = ({
     switch (toast.type) {
       case 'success':
         return (
-          <Lucide.CheckCircle2
-            size={16}
-            strokeWidth={2}
-            style={{ color: 'var(--text-success-strong, #059669)' }}
-            aria-hidden="true"
-          />
+          <AppIcon name="check-circle" size={16} style={{ color: 'var(--text-success-strong)' }} aria-hidden="true" />
         );
       case 'error':
         return (
-          <Lucide.AlertCircle
-            size={16}
-            strokeWidth={2}
-            style={{ color: 'var(--text-danger, #dc2626)' }}
-            aria-hidden="true"
-          />
+          <AppIcon name="alert-circle" size={16}
+            style={{ color: 'var(--text-danger)' }}
+            aria-hidden="true" />
         );
       case 'warning':
         return (
-          <Lucide.AlertTriangle
-            size={16}
-            strokeWidth={2}
-            style={{ color: 'var(--text-warning-strong, #c2410c)' }}
-            aria-hidden="true"
-          />
+          <AppIcon name="alert-triangle" size={16} style={{ color: 'var(--text-warning-strong)' }} aria-hidden="true" />
         );
       case 'loading':
         return (
-          <Lucide.Loader2
-            size={16}
-            strokeWidth={2}
-            className="animate-spin"
-            style={{ color: 'var(--brand, #10b981)' }}
-            aria-hidden="true"
-          />
+          <AppIcon name="loader" size={16} className="animate-spin" style={{ color: 'var(--brand)' }} aria-hidden="true" />
         );
       default:
         return (
-          <Lucide.Info
-            size={16}
-            strokeWidth={2}
-            style={{ color: 'var(--text-secondary, #555555)' }}
-            aria-hidden="true"
-          />
+          <AppIcon name="info" size={16} style={{ color: 'var(--text-secondary)' }} aria-hidden="true" />
         );
     }
   };
@@ -235,7 +212,7 @@ export const ToastCard: React.FC<ToastCardProps> = ({
               handleDismissAnimation();
             }}
           >
-            <Lucide.X size={13} strokeWidth={2} aria-hidden="true" />
+            <AppIcon name="x" size={13} aria-hidden="true" />
           </button>
         </div>
       </div>

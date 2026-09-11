@@ -81,7 +81,7 @@
   --tab-height: 28px;
   --tab-pad: 2px;
   --tab-gap: 2px;
-  --tab-outer-radius: var(--button-radius, 8px);
+  --tab-outer-radius: var(--button-radius, 7px);
   --tab-inner-radius: calc(var(--tab-outer-radius) - var(--tab-pad)); /* 6px */
   --tab-font-size: var(--font-size-sm, 13px);
   --tab-item-px: var(--space-2_5, 10px);

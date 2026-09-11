@@ -4,9 +4,10 @@
  * 目录选择副作用（openDirectoryDialogSafe + addProjectFromPath）由 useFirstRunWizard 提供。
  */
 import React from 'react';
-import * as Lucide from 'lucide-react';
+
 import styles from './overlay/FirstRunWizard.module.css';
 import { Button } from './ui';
+import { AppIcon } from './ui/icons/index';
 
 /** 本步用到的可访问 id（useId 生成，壳层透传） */
 export type WizardProjectStepIds = {
@@ -47,7 +48,7 @@ export const WizardProjectStep: React.FC<WizardProjectStepProps> = ({
       </p>
       {hasProject ? (
         <div className={styles.firstRunProjectOk} role="status">
-          <Lucide.FolderCheck size={16} aria-hidden="true" />
+          <AppIcon name="folder-check" size={16} aria-hidden="true" />
           <span>当前：{currentProjectLabel}</span>
         </div>
       ) : (
@@ -63,7 +64,7 @@ export const WizardProjectStep: React.FC<WizardProjectStepProps> = ({
             onClick={() => {
               void onPickFolder();
             }}
-            icon={<Lucide.FolderInput size={16} aria-hidden="true" />}
+            icon={<AppIcon name="folder-input" size={16} aria-hidden="true" />}
           >
             选择文件夹
           </Button>

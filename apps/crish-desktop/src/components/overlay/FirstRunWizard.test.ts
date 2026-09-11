@@ -32,6 +32,7 @@ vi.mock('../api/engineConfig', () => ({
 }));
 
 import {
+  DEFAULT_WIZARD_PROTOCOL,
   decideWizardKeySave,
   isFirstRunDone,
   isWizardModelIdError,
@@ -42,6 +43,7 @@ import {
   normalizeHandFilledModelId,
   prevWizardStep,
   shouldShowFirstRunWizard,
+  validateWizardConnectForm,
   validateWizardModelId,
   wizardActivatePageError,
   WIZARD_MODEL_ID_MAX_LEN,
@@ -70,10 +72,18 @@ describe('FirstRunWizard gate', () => {
   });
 
   it('hides and marks done when any profile has key', async () => {
-    saveProfiles(getDefaultProviderProfiles());
+    saveProfiles([
+      {
+        id: 'custom-demo',
+        name: '演示服务',
+        baseUrl: 'https://api.example.com/v1',
+        models: [],
+        hasKey: false,
+      },
+    ]);
     // PE-07 T07.4：setProfileKey 已改异步（config_secret_set 落 DPAPI；
     // 非 Tauri 环境降级为本地 hasKey 草稿标记，不落明文）
-    await setProfileKey('deepseek', 'sk-test');
+    await setProfileKey('custom-demo', 'sk-test');
     expect(shouldShowFirstRunWizard()).toBe(false);
     expect(localStorage.getItem(DONE_KEY)).toBe('1');
     expect(isFirstRunDone()).toBe(true);
@@ -85,19 +95,38 @@ describe('FirstRunWizard gate', () => {
     expect(shouldShowFirstRunWizard()).toBe(false);
   });
 
-  it('default seeds: opencode-go has deepseek-v4-flash; others empty (no mimo)', () => {
-    // Product SoT (profileCatalog DEFAULT_PROFILES): only opencode-go is
-    // pre-seeded with the intentional default model; other shells stay empty
-    // so users scan/hand-fill — never legacy mimo hardcode.
-    const defaults = getDefaultProviderProfiles();
-    const go = defaults.find((p) => p.id === 'opencode-go');
-    expect(go?.models).toEqual(['deepseek-v4-flash']);
-    for (const p of defaults) {
-      expect(p.models.includes('mimo-v2.5')).toBe(false);
-      if (p.id !== 'opencode-go') {
-        expect(p.models).toEqual([]);
-      }
-    }
+  it('default seeds: empty (neutral product, no third-party shells)', () => {
+    // 中立产品：DEFAULT_PROFILES 恒为空；用户在向导/设置自建服务商
+    expect(getDefaultProviderProfiles()).toEqual([]);
+    expect(shouldShowFirstRunWizard()).toBe(true);
+  });
+
+  it('validateWizardConnectForm requires name/baseUrl/key', () => {
+    expect(
+      validateWizardConnectForm({ name: '', baseUrl: 'https://x', apiKey: 'k', protocol: 'openai/chat' })
+    ).toMatchObject({ ok: false, error: expect.stringMatching(/名称/) });
+    expect(
+      validateWizardConnectForm({ name: 'n', baseUrl: '', apiKey: 'k', protocol: 'openai/chat' })
+    ).toMatchObject({ ok: false, error: expect.stringMatching(/Base URL/) });
+    expect(
+      validateWizardConnectForm({ name: 'n', baseUrl: 'ftp://x', apiKey: 'k', protocol: 'openai/chat' })
+    ).toMatchObject({ ok: false, error: expect.stringMatching(/http/) });
+    expect(
+      validateWizardConnectForm({ name: 'n', baseUrl: 'https://x/v1', apiKey: '', protocol: 'openai/chat' })
+    ).toMatchObject({ ok: false, error: expect.stringMatching(/密钥/) });
+    const ok = validateWizardConnectForm({
+      name: ' 本地 ',
+      baseUrl: ' https://api.example.com/v1 ',
+      apiKey: ' sk-x ',
+      protocol: '',
+    });
+    expect(ok).toEqual({
+      ok: true,
+      name: '本地',
+      baseUrl: 'https://api.example.com/v1',
+      apiKey: 'sk-x',
+      protocol: DEFAULT_WIZARD_PROTOCOL,
+    });
   });
 
   it('overlay is closed outside mounted wizard (soft-hint may show)', () => {

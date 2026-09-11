@@ -366,9 +366,9 @@ describe('ui/Button 样式与物理动效契约 (Button.module.css)', () => {
   const cssPath = path.resolve(__dirname, './Button.module.css');
   const cssContent = fs.readFileSync(cssPath, 'utf-8');
 
-  it('彻底清除 7px 奇数圆角，升级为 8px fallback', () => {
-    expect(cssContent).toContain('--btn-radius: var(--button-radius, 8px)');
-    expect(cssContent).not.toContain('var(--button-radius, 7px)');
+  it('钉死 7px fallback（用户裁决 U1），禁 8px 裸写 fallback', () => {
+    expect(cssContent).toContain('--btn-radius: var(--button-radius, 7px)');
+    expect(cssContent).not.toContain('var(--button-radius, 8px)');
   });
 
   it('彻底去除点击果冻弹性缩放 scale，保持平稳扎实交互', () => {

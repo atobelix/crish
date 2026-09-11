@@ -138,8 +138,28 @@ describe('契约测试：同心几何圆角与 Apple 物理动效防回潮 (DIM-
     expect(existsSync(tokensPath), 'tokens.css 必须物理存在').toBe(true);
 
     const tokensContent = readFileSync(tokensPath, 'utf8');
-    // 基础圆角定义存在（Phase 0: 7px, Phase 1: 8px）
-    expect(tokensContent).toMatch(/--button-radius:\s*(?:7px|8px);/);
+    // 按钮圆角基础档存在（Phase 0: 7px, Phase 1: 8px）。
+    // 形态演进：早期为字面值 `--button-radius: 8px`；BATCH-01 §4.4 收敛为
+    // 单一真源引用 `--button-radius: var(--radius-btn)`（:root 唯一权威定义 U1）。
+    // 故断言须同时接受两种形态，且对间接引用额外校验落点值 —— 比只认字面值更严：
+    // 前者只能证明"有个数字"，后者要求"引用链最终落到合法档位"。
+    const buttonRadiusLiteral = tokensContent.match(/--button-radius:\s*(\d+px);/);
+    const buttonRadiusAlias = tokensContent.match(/--button-radius:\s*var\(\s*(--[a-z0-9-]+)\s*\)/);
+    expect(
+      buttonRadiusLiteral || buttonRadiusAlias,
+      '--button-radius 须为字面值或 var() 单一真源引用'
+    ).toBeTruthy();
+    if (buttonRadiusAlias) {
+      // 间接形态：解析被引用的 token，校验其值仍落在合法档位（7px / 8px）
+      const refName = buttonRadiusAlias[1];
+      const refDef = tokensContent.match(
+        new RegExp(`${refName.replace(/[-]/g, '\\-')}:\\s*(\\d+px);`)
+      );
+      expect(refDef, `${refName} 须有字面定义（引用链不得悬空）`).toBeTruthy();
+      expect(['7px', '8px']).toContain(refDef?.[1]);
+    } else {
+      expect(['7px', '8px']).toContain(buttonRadiusLiteral?.[1]);
+    }
 
     // 若 Phase 2 动效 Token 已注入，断言其符合数学临界阻尼规范
     if (tokensContent.includes('--ease-critical-damping:')) {

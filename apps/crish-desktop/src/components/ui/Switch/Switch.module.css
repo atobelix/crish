@@ -41,7 +41,7 @@
   vertical-align: middle;
   border-radius: var(--radius-full, 9999px);
   border: 1px solid var(--border-subtle);
-  background: var(--switch-track-bg, color-mix(in srgb, var(--text-primary) 3.5%, var(--bg-card)));
+  background: var(--switch-track-bg);
   box-sizing: border-box;
   cursor: pointer;
   flex-shrink: 0;

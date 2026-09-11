@@ -116,6 +116,51 @@ export function wizardEmptyModelCatalogHint(hasProfile: boolean): string {
   return '本机目录为空：请手填供应商文档中的 model id，或稍后在设置中「获取列表」。不会预置任何远程演示模型。';
 }
 
+/** 中立向导默认协议（仅协议兼容，不绑官方域名） */
+export const DEFAULT_WIZARD_PROTOCOL = 'openai/chat';
+
+/** 密钥步页内字段校验（名称必填；URL/密钥按业务规则） */
+export type WizardConnectFormResult =
+  | {
+      ok: true;
+      name: string;
+      baseUrl: string;
+      apiKey: string;
+      protocol: string;
+    }
+  | { ok: false; error: string };
+
+/**
+ * 校验向导第 0 步连接表单。
+ * 名称必填；Base URL 必填且须为 http(s)；密钥非空；协议回落默认。
+ */
+export function validateWizardConnectForm(input: {
+  name: string;
+  baseUrl: string;
+  apiKey: string;
+  protocol: string;
+}): WizardConnectFormResult {
+  const name = String(input.name ?? '').trim();
+  const baseUrl = String(input.baseUrl ?? '').trim();
+  const apiKey = String(input.apiKey ?? '').trim();
+  const protocol =
+    String(input.protocol ?? '').trim() || DEFAULT_WIZARD_PROTOCOL;
+
+  if (!name) {
+    return { ok: false, error: '请填写服务商名称' };
+  }
+  if (!baseUrl) {
+    return { ok: false, error: '请填写 Base URL' };
+  }
+  if (!/^https?:\/\/.+/i.test(baseUrl)) {
+    return { ok: false, error: 'Base URL 需以 http:// 或 https:// 开头' };
+  }
+  if (!apiKey) {
+    return { ok: false, error: '请粘贴 API 密钥' };
+  }
+  return { ok: true, name, baseUrl, apiKey, protocol };
+}
+
 /** 密钥步 saveProfileKey 返回的已知 error code（宽字符串兼容未知支路） */
 export type WizardKeySaveErrorCode =
   | 'empty_key'
@@ -208,7 +253,11 @@ export type WizardStepMeta = {
 };
 
 export const WIZARD_STEP_META: readonly WizardStepMeta[] = [
-  { id: 0, title: '配置密钥', desc: '选择服务商并粘贴 API 密钥' },
+  {
+    id: 0,
+    title: '配置连接',
+    desc: '填写名称、Base URL、密钥与协议（不绑定第三方服务商）',
+  },
   { id: 1, title: '启用模型', desc: '手填或选择模型 id 并写入引擎' },
   { id: 2, title: '导入对话', desc: '可选：从 Claude Code / Codex 导入' },
   { id: 3, title: '选择项目', desc: '可选，也可稍后选择' },
@@ -224,7 +273,7 @@ export function wizardStepMeta(step: WizardStep): WizardStepMeta {
 /** 主按钮中文文案（按步密度区分，纯） */
 export function wizardPrimaryCtaLabel(step: WizardStep, busy: boolean): string {
   if (busy) return '处理中…';
-  if (step === 0) return '保存并继续';
+  if (step === 0) return '保存连接并继续';
   if (step === 1) return '启用并继续';
   if (step === 2) return '继续';
   if (step === 3) return '继续';

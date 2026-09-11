@@ -8,6 +8,7 @@
  */
 import React from 'react';
 import styles from './Badge.module.css';
+import { ICON_STROKE } from '../icons/iconTokens';
 
 export type BadgeTone =
   'neutral' | 'brand' | 'info' | 'success' | 'warning' | 'danger' | 'error';
@@ -105,7 +106,7 @@ export const Badge = React.forwardRef<HTMLSpanElement, BadgeProps>(
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
-              strokeWidth="2.5"
+              strokeWidth={ICON_STROKE.ui}
               strokeLinecap="round"
               aria-hidden="true"
             >

@@ -17,6 +17,7 @@ import React, { useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import * as DismissableLayer from '@radix-ui/react-dismissable-layer';
 import styles from './Dialog.module.css';
+import { ICON_STROKE } from '../icons/iconTokens';
 import { DialogOverlayContext } from './dialogOverlayContext';
 import { FocusTrap } from './focusTrap';
 import { useAnimatedPresence } from './useAnimatedPresence';
@@ -225,7 +226,7 @@ function CloseIcon() {
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="2.5"
+      strokeWidth={ICON_STROKE.ui}
       strokeLinecap="round"
       aria-hidden="true"
     >

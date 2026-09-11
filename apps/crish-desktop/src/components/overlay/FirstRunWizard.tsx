@@ -1,5 +1,5 @@
 /**
- * 正式版首次向导：密钥 → 模型（可手填）→ 导入对话（可选）→ 项目 → 开始
+ * 正式版首次向导：连接（名称/URL/密钥/协议）→ 模型（可手填）→ 导入对话（可选）→ 项目 → 开始
  *
  * 壳组件：步进轨道 / 状态行 / 页内 error / 页脚按钮 / 步内容装配。
  * 步进状态机见 useFirstRunWizard；校验/文案纯函数见 firstRunWizardLib；
@@ -7,13 +7,13 @@
  *
  * 契约：写入 providerProfiles（LS）+ activateProfileModel（ENGINE-CONFIG）。
  * 引导态只用页内 error/hint，成功路径禁止 toast。
- * 默认服务商不预置模型 id（无 mimo 硬编码 / 不发明远程演示默认）。
+ * 中立产品：不预置任何第三方服务商 / 不发明远程演示默认；协议层仅做接口兼容。
  * 模型步可「稍后手填」——由底栏 ModelPicker / needsModel soft-hint 接手。
  * 导入步可跳过，稍后在设置 · 账户完成。
  */
 
 import React, { useEffect, useId, useRef } from 'react';
-import * as Lucide from 'lucide-react';
+
 import styles from './FirstRunWizard.module.css';
 import { Button, Dialog } from '../ui';
 import { useFirstRunWizard } from '../useFirstRunWizard';
@@ -27,6 +27,7 @@ import {
   wizardPrimaryCtaLabel,
   wizardStepMeta,
 } from '../firstRunWizardLib';
+import { AppIcon } from '../ui/icons/index';
 
 type Props = {
   onDone: () => void;
@@ -37,7 +38,9 @@ export const FirstRunWizard: React.FC<Props> = ({ onDone, onOpenSettings }) => {
   const reactId = useId();
   const stepStatusId = `first-run-step-status-${reactId}`;
   const errorId = `first-run-error-${reactId}`;
-  const providerId = `first-run-provider-${reactId}`;
+  const nameId = `first-run-name-${reactId}`;
+  const baseUrlId = `first-run-base-url-${reactId}`;
+  const protocolId = `first-run-protocol-${reactId}`;
   const keyId = `first-run-key-${reactId}`;
   const modelIdField = `first-run-model-${reactId}`;
   const modelCustomId = `first-run-model-custom-${reactId}`;
@@ -46,8 +49,9 @@ export const FirstRunWizard: React.FC<Props> = ({ onDone, onOpenSettings }) => {
 
   const {
     step,
-    profiles,
-    profileId,
+    vendorName,
+    baseUrl,
+    protocol,
     apiKey,
     modelId,
     pathDraft,
@@ -58,7 +62,9 @@ export const FirstRunWizard: React.FC<Props> = ({ onDone, onOpenSettings }) => {
     hasProfiles,
     hasProject,
     currentProjectLabel,
-    setProfileId,
+    setVendorName,
+    setBaseUrl,
+    setProtocol,
     setApiKey,
     setModelId,
     setPathDraft,
@@ -84,7 +90,15 @@ export const FirstRunWizard: React.FC<Props> = ({ onDone, onOpenSettings }) => {
   const activeMeta = wizardStepMeta(step);
   const stepProgressLabel = `第 ${step + 1} / ${WIZARD_STEP_META.length} 步 · ${activeMeta.title}`;
   const fieldDescribedBy = error ? errorId : undefined;
-  const stepIds = { providerId, keyId, modelIdField, modelCustomId, pathId };
+  const stepIds = {
+    nameId,
+    baseUrlId,
+    protocolId,
+    keyId,
+    modelIdField,
+    modelCustomId,
+    pathId,
+  };
 
   // 弹窗基座（PE-05 T05.2 #6）：盖层/Esc 三层/焦点圈定/动画由基座与
   // useFirstRunWizard 接管；dismissible=false 强制步进（不可 Esc/遮罩关闭，
@@ -119,7 +133,7 @@ export const FirstRunWizard: React.FC<Props> = ({ onDone, onOpenSettings }) => {
               >
                 <span className={styles.firstRunStepNum} aria-hidden="true">
                   {isDone ? (
-                    <Lucide.Check size={14} strokeWidth={2.5} />
+                    <AppIcon name="check" size={14} />
                   ) : (
                     s.id + 1
                   )}
@@ -154,20 +168,27 @@ export const FirstRunWizard: React.FC<Props> = ({ onDone, onOpenSettings }) => {
           {step === 0 && (
             <WizardKeyStep
               ids={stepIds}
-              profiles={profiles}
-              profileId={profileId}
+              name={vendorName}
+              baseUrl={baseUrl}
               apiKey={apiKey}
+              protocol={protocol}
               busy={busy}
               error={error}
               describedBy={fieldDescribedBy}
-              onProfileChange={(id) => {
-                setProfileId(id);
-                // 切换服务商时清空模型；不自动采用列表首项（避免幽灵远程默认）
-                setModelId('');
+              onNameChange={(v) => {
+                setVendorName(v);
+                setError('');
+              }}
+              onBaseUrlChange={(v) => {
+                setBaseUrl(v);
                 setError('');
               }}
               onKeyChange={(v) => {
                 setApiKey(v);
+                setError('');
+              }}
+              onProtocolChange={(v) => {
+                setProtocol(v);
                 setError('');
               }}
               onEnter={() => {
@@ -221,11 +242,9 @@ export const FirstRunWizard: React.FC<Props> = ({ onDone, onOpenSettings }) => {
 
           {step === 4 && (
             <div className={styles.firstRunReady}>
-              <Lucide.CheckCircle2
-                size={28}
+              <AppIcon name="check-circle" size={28}
                 style={{ color: 'var(--text-secondary)' }}
-                aria-hidden="true"
-              />
+                aria-hidden="true" />
               <div style={{ fontWeight: 600, fontSize: 15 }}>可以开始了</div>
               <p
                 className={styles.firstRunHint}
@@ -267,7 +286,7 @@ export const FirstRunWizard: React.FC<Props> = ({ onDone, onOpenSettings }) => {
                 variant="primary"
                 size="md"
                 className={`${styles.firstRunBtn} ${styles.primary}`}
-                disabled={busy || (step === 0 && !hasProfiles)}
+                disabled={busy}
                 aria-busy={busy || undefined}
                 onClick={() => {
                   void advanceFromStep();

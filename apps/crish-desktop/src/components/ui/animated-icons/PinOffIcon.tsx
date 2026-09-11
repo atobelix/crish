@@ -14,6 +14,7 @@ import {
   useRef,
   type HTMLAttributes,
 } from 'react';
+import { ICON_STROKE } from '../icons/iconTokens';
 
 export interface PinOffIconHandle {
   startAnimation: () => void;
@@ -143,7 +144,7 @@ export const PinOffIcon = forwardRef<PinOffIconHandle, PinOffIconProps>(
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
-            strokeWidth="2"
+            strokeWidth={ICON_STROKE.ui}
             strokeLinecap="round"
             strokeLinejoin="round"
             animate={controls}

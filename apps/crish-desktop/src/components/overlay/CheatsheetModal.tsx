@@ -6,11 +6,12 @@
  * 行为保持：Esc/遮罩/关闭按钮关闭、搜索过滤分组。
  */
 import { useMemo, useState } from 'react';
-import * as Lucide from 'lucide-react';
+
 import styles from './CheatsheetModal.module.css';
 import { ShortcutService } from '../../services/ShortcutService';
 import type { ShortcutMeta } from '../../services/ShortcutRegistry';
 import { Dialog, Input } from '../ui';
+import { AppIcon } from '../ui/icons/index';
 
 interface CheatsheetModalProps {
   onClose: () => void;
@@ -54,7 +55,7 @@ export function CheatsheetModal({ onClose, isOpen = true }: CheatsheetModalProps
       onClose={onClose}
       title={
         <span className={styles.cheatsheetTitleWrap}>
-          <Lucide.Keyboard size={16} aria-hidden="true" />
+          <AppIcon name="keyboard" size={16} aria-hidden="true" />
           <span className={styles.cheatsheetTitle}>快捷键</span>
         </span>
       }

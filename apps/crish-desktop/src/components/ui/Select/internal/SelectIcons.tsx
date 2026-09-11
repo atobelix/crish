@@ -1,9 +1,17 @@
 import React from 'react';
+import { ICON_STROKE } from '../../icons/iconTokens';
 
 interface IconProps extends React.SVGAttributes<SVGElement> {
   size?: number | string;
   className?: string;
 }
+
+/**
+ * Select / Combobox 内部图标集。
+ * 线宽一律取自 iconTokens 的 ICON_STROKE.ui，禁止裸写数字——
+ * 四个图标同域同尺寸，任何一处的粗细差异都会在并排渲染时暴露。
+ */
+const STROKE = ICON_STROKE.ui;
 
 export function ChevronUpDownIcon({ size = 14, className, ...props }: IconProps) {
   return (
@@ -13,7 +21,7 @@ export function ChevronUpDownIcon({ size = 14, className, ...props }: IconProps)
       viewBox="0 0 16 16"
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.4"
+      strokeWidth={STROKE}
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
@@ -34,7 +42,7 @@ export function CheckIcon({ size = 14, className, ...props }: IconProps) {
       viewBox="0 0 16 16"
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.8"
+      strokeWidth={STROKE}
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
@@ -54,7 +62,7 @@ export function ClearIcon({ size = 12, className, ...props }: IconProps) {
       viewBox="0 0 16 16"
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.6"
+      strokeWidth={STROKE}
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
@@ -75,7 +83,7 @@ export function SearchIcon({ size = 14, className, ...props }: IconProps) {
       viewBox="0 0 16 16"
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.5"
+      strokeWidth={STROKE}
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"

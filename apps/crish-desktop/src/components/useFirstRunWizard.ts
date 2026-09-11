@@ -1,8 +1,8 @@
 /**
- * 首次向导步进状态机 hook：7 组状态（step / profiles / profileId / apiKey /
- * modelId / pathDraft / busy / error / projectTick）+ 步进逻辑收敛。
+ * 首次向导步进状态机 hook：连接表单（名称/URL/密钥/协议）+ 步进逻辑收敛。
  *
  * 职责：
+ * - 第 0 步：创建中立 custom 服务商并落盘密钥（无第三方预置）
  * - 步进前进/后退/跳步（advanceFromStep / goPrev / skipModelStep / skipImportStep）
  * - 盖层挂载标记维护（firstRunOverlayFlag）
  * - Esc 三层（有错误先清 → 上一步）
@@ -12,10 +12,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   activateProfileModel,
+  createCustomProfile,
   loadProfiles,
   saveProfileKey,
+  upsertProfile,
   type ProviderProfile,
 } from '../api/providerProfiles';
+import { ensureProviderShell } from './settings-models/catalogWriteGate';
 import {
   addProjectFromPath,
   getActiveProject,
@@ -25,12 +28,14 @@ import { openDirectoryDialogSafe } from '../api/openDirectoryDialog';
 import { fetchEngineStatus } from '../api/engineConfig';
 import { setFirstRunOverlayOpen } from './firstRunOverlayFlag';
 import {
+  DEFAULT_WIZARD_PROTOCOL,
   decideWizardKeySave,
   isWizardModelIdError,
   isWizardModelIdOk,
   markFirstRunDone,
   nextWizardStep,
   prevWizardStep,
+  validateWizardConnectForm,
   validateWizardModelId,
   wizardActivatePageError,
   wizardListedModels,
@@ -43,14 +48,16 @@ export type UseFirstRunWizardOptions = {
 
 export type UseFirstRunWizardResult = {
   step: WizardStep;
-  profiles: ProviderProfile[];
-  profileId: string;
+  /** 连接表单：厂商名称 */
+  vendorName: string;
+  baseUrl: string;
+  protocol: string;
   apiKey: string;
   modelId: string;
   pathDraft: string;
   busy: boolean;
   error: string;
-  /** 当前 profile（profileId 找不到时回落首个；无 profile → undefined） */
+  /** 刚创建/选中的 profile（模型步用） */
   activeProfile: ProviderProfile | undefined;
   listedModels: string[];
   hasListedModels: boolean;
@@ -59,7 +66,9 @@ export type UseFirstRunWizardResult = {
   hasProject: boolean;
   /** 已激活项目名或工作区路径（展示用） */
   currentProjectLabel: string;
-  setProfileId: (id: string) => void;
+  setVendorName: (v: string) => void;
+  setBaseUrl: (v: string) => void;
+  setProtocol: (v: string) => void;
   setApiKey: (v: string) => void;
   setModelId: (v: string) => void;
   setPathDraft: (v: string) => void;
@@ -84,9 +93,13 @@ export function useFirstRunWizard(
       return [];
     }
   });
-  const [profileId, setProfileId] = useState(() => profiles[0]?.id || '');
+  /** 连接表单（中立，无预置服务商 id） */
+  const [createdProfileId, setCreatedProfileId] = useState('');
+  const [vendorName, setVendorName] = useState('');
+  const [baseUrl, setBaseUrl] = useState('');
+  const [protocol, setProtocol] = useState(DEFAULT_WIZARD_PROTOCOL);
   const [apiKey, setApiKey] = useState('');
-  /** 模型 id：列表选择或手填；默认空（服务商不预置模型 / 不读引擎演示默认） */
+  /** 模型 id：列表选择或手填；默认空 */
   const [modelId, setModelId] = useState('');
   const [pathDraft, setPathDraft] = useState('');
   const [busy, setBusy] = useState(false);
@@ -119,10 +132,12 @@ export function useFirstRunWizard(
     return () => window.removeEventListener('keydown', onKey);
   }, [busy, error, step]);
 
-  const activeProfile = useMemo(
-    () => profiles.find((p) => p.id === profileId) || profiles[0],
-    [profiles, profileId],
-  );
+  const activeProfile = useMemo(() => {
+    if (createdProfileId) {
+      return profiles.find((p) => p.id === createdProfileId);
+    }
+    return profiles[0];
+  }, [profiles, createdProfileId]);
 
   // 空 catalog 守卫：规范化后无幽灵空串 / 不去首项当默认
   const listedModels = useMemo(
@@ -163,46 +178,77 @@ export function useFirstRunWizard(
   const advanceFromStep = async () => {
     setError('');
     if (step === 0) {
-      if (!hasProfiles || !profileId) {
-        setError('请选择服务商');
-        return;
-      }
-      const key = apiKey.trim();
-      if (!key) {
-        setError('请粘贴 API 密钥');
+      const checked = validateWizardConnectForm({
+        name: vendorName,
+        baseUrl,
+        apiKey,
+        protocol,
+      });
+      if (!checked.ok) {
+        setError(checked.error);
         return;
       }
       setBusy(true);
-      // 密钥步不强制模型：仅落盘密钥；模型在下一步手填（不读引擎默认）
-      const res = await saveProfileKey(profileId, key);
       try {
-        setProfiles(loadProfiles());
-      } catch {
-        /* keep previous */
+        const protocolCast = checked.protocol as ProviderProfile['protocol'];
+        let profile: ProviderProfile;
+        const existing = createdProfileId
+          ? loadProfiles().find((p) => p.id === createdProfileId)
+          : undefined;
+        if (existing) {
+          profile = {
+            ...existing,
+            name: checked.name,
+            baseUrl: checked.baseUrl,
+            protocol: protocolCast,
+          };
+          upsertProfile(profile);
+        } else {
+          profile = createCustomProfile({
+            name: checked.name,
+            baseUrl: checked.baseUrl,
+            protocol: protocolCast,
+          });
+        }
+        setCreatedProfileId(profile.id);
+        const shell = await ensureProviderShell({
+          providerId: profile.id,
+          displayName: profile.name,
+          baseUrl: profile.baseUrl,
+          protocol: profile.protocol,
+        });
+        if (!shell.ok) {
+          setError(shell.error || '写入服务商失败');
+          return;
+        }
+        const res = await saveProfileKey(profile.id, checked.apiKey);
+        try {
+          setProfiles(loadProfiles());
+        } catch {
+          /* keep previous */
+        }
+        const decision = decideWizardKeySave(res);
+        if (decision.action === 'block') {
+          setError(decision.error);
+          return;
+        }
+        setModelId('');
+        setStep(nextWizardStep(0));
+      } finally {
+        setBusy(false);
       }
-      setBusy(false);
-      const decision = decideWizardKeySave(res);
-      if (decision.action === 'block') {
-        // 页内 error；不 toast
-        setError(decision.error);
-        return;
-      }
-      // 密钥已落盘；可继续手填模型（不自动填列表首项）
-      setModelId('');
-      setStep(nextWizardStep(0));
       return;
     }
     if (step === 1) {
       const checked = validateWizardModelId(modelId);
       if (isWizardModelIdError(checked)) {
-        // 页内错误；不 toast
         setError(checked.error);
         return;
       }
-      // 成功支路：判别联合收窄到 modelId
       if (!isWizardModelIdOk(checked)) return;
+      const profileId = createdProfileId || activeProfile?.id || '';
       if (!profileId) {
-        setError('请选择服务商');
+        setError('请先完成连接配置');
         return;
       }
       setBusy(true);
@@ -213,13 +259,11 @@ export function useFirstRunWizard(
         setError(pageErr);
         return;
       }
-      // 成功不 toast；页内进入下一步（状态刷新不写入向导 model 默认）
       void fetchEngineStatus();
       setStep(nextWizardStep(1));
       return;
     }
     if (step === 2) {
-      // 导入步：可选，点「继续」即跳过未导入项
       setStep(nextWizardStep(2));
       return;
     }
@@ -236,7 +280,6 @@ export function useFirstRunWizard(
     setBusy(true);
     setError('');
     try {
-      // 首次向导：选择项目文件夹
       const path = await openDirectoryDialogSafe('选择项目文件夹');
       if (path) {
         addProjectFromPath(path);
@@ -251,8 +294,9 @@ export function useFirstRunWizard(
 
   return {
     step,
-    profiles,
-    profileId,
+    vendorName,
+    baseUrl,
+    protocol,
     apiKey,
     modelId,
     pathDraft,
@@ -265,7 +309,9 @@ export function useFirstRunWizard(
     modelInList,
     hasProject,
     currentProjectLabel,
-    setProfileId,
+    setVendorName,
+    setBaseUrl,
+    setProtocol,
     setApiKey,
     setModelId,
     setPathDraft,

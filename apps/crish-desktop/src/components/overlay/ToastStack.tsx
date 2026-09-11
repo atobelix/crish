@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
-import * as Lucide from 'lucide-react';
 import type { AppToast } from '../../hooks/useToastQueue';
 import styles from './ToastStack.module.css';
+import { AppIcon } from '../ui/icons/index';
 
 type Props = {
   toasts: AppToast[];
@@ -71,7 +71,7 @@ export const ToastStack = ({ toasts, onDismiss }: Props) => {
             aria-label="关闭通知"
             onClick={() => handleDismiss(toast)}
           >
-            <Lucide.X size={12} strokeWidth={2} aria-hidden="true" />
+            <AppIcon name="x" size={12} aria-hidden="true" />
           </button>
         </div>
       ))}

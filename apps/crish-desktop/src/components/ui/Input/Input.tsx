@@ -9,6 +9,7 @@
  */
 import React, { useId, useRef, useState } from 'react';
 import styles from './Input.module.css';
+import { ICON_STROKE } from '../icons/iconTokens';
 
 export type InputVariant = 'text' | 'search' | 'password' | 'default';
 export type InputSize = 'xs' | 'sm' | 'md' | 'lg';
@@ -300,7 +301,7 @@ function EyeIcon() {
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="2"
+      strokeWidth={ICON_STROKE.ui}
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
@@ -319,7 +320,7 @@ function EyeOffIcon() {
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="2"
+      strokeWidth={ICON_STROKE.ui}
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
@@ -339,7 +340,7 @@ function ClearIcon() {
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="2.5"
+      strokeWidth={ICON_STROKE.ui}
       strokeLinecap="round"
       aria-hidden="true"
     >

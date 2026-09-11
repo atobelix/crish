@@ -3,6 +3,7 @@ import { MenuAdapter } from './MenuAdapter';
 import type { SelectOption, SelectSize } from '../../Select/Select';
 import type { SelectOptionItem } from '../../Menu/types';
 import { convertSelectOptionsToSmartItems } from './schemaBridge';
+import { ICON_STROKE } from '../../icons/iconTokens';
 import styles from '../../Select/Select.module.css';
 
 export interface SelectAdapterProps {
@@ -186,7 +187,7 @@ function ChevronIcon() {
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="2"
+      strokeWidth={ICON_STROKE.ui}
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
@@ -204,7 +205,7 @@ function CheckIcon() {
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="2.5"
+      strokeWidth={ICON_STROKE.ui}
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"

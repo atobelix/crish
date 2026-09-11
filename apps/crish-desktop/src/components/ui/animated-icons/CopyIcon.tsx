@@ -14,6 +14,7 @@ import {
   useRef,
   type HTMLAttributes,
 } from 'react';
+import { ICON_STROKE } from '../icons/iconTokens';
 
 export interface CopyIconHandle {
   startAnimation: () => void;
@@ -150,7 +151,7 @@ export const CopyIcon = forwardRef<CopyIconHandle, CopyIconProps>(
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
-            strokeWidth="2"
+            strokeWidth={ICON_STROKE.ui}
             strokeLinecap="round"
             strokeLinejoin="round"
           >
