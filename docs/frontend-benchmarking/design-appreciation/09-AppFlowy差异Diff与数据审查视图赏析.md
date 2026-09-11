@@ -1,8 +1,8 @@
 # AppFlowy 紧凑型数据与差异审查视图 (Compact Diff & Inspector) 深度赏析
 
-> **报告定位**：Conex / Crish 前端对标顶峰工程美学赏析报告（AppFlowy Compact Diff & Inspector Engineering Appreciation）  
-> **赏析对象**：`reference/markdown_compare/AppFlowy/` 官方开源客户端（Flutter 前端、Flowy Infra 基础设施、Document Diff 算法引擎、ViewTitleBar 顶栏体系、自适应色彩与轻量浮层）  
-> **核心视角**：纯欣赏与工程美学视角，解构 32px~34px 单行多态 Header、5.5%~6% 极低反差柔和底色、词法级（Intraline）分词比对高亮、去警告横幅沉浸式交互背后的设计克制与工程智慧。  
+> **报告定位**：Conex / Crish 前端对标顶峰工程美学赏析报告（AppFlowy Compact Diff & Inspector Engineering Appreciation）
+> **赏析对象**：`reference/markdown_compare/AppFlowy/` 官方开源客户端（Flutter 前端、Flowy Infra 基础设施、Document Diff 算法引擎、ViewTitleBar 顶栏体系、自适应色彩与轻量浮层）
+> **核心视角**：纯欣赏与工程美学视角，解构 32px~34px 单行多态 Header、5.5%~6% 极低反差柔和底色、词法级（Intraline）分词比对高亮、去警告横幅沉浸式交互背后的设计克制与工程智慧。
 > **字符集规范**：UTF-8 无 BOM。
 
 ---

@@ -1,7 +1,7 @@
 # AFFiNE BlockSuite 极速富文本与 0-Re-render 渲染艺术深度赏析
 
-> **研究对象**：AFFiNE 核心协同块级编辑器框架 `BlockSuite`（位于 `reference/markdown_compare/AFFiNE/blocksuite/`）  
-> **核心主题**：0-Re-render 渲染哲学、Lit + Signals 微外科局部响应式、单例绝对坐标 DOM 直写悬浮把手、纯 CSS :hover 级联微交互、Shadowless Light DOM 选区穿透与 Slash 视口智能吸附  
+> **研究对象**：AFFiNE 核心协同块级编辑器框架 `BlockSuite`（位于 `reference/markdown_compare/AFFiNE/blocksuite/`）
+> **核心主题**：0-Re-render 渲染哲学、Lit + Signals 微外科局部响应式、单例绝对坐标 DOM 直写悬浮把手、纯 CSS :hover 级联微交互、Shadowless Light DOM 选区穿透与 Slash 视口智能吸附
 > **工程视角**：源码级剖析、架构证据链闭环、工程美学与渲染管线极限优化
 
 ---

@@ -1,8 +1,8 @@
 # DeepSeek-Harness 工作流状态机与多会话生命周期隔离深度源码解剖
 
-> **文档定位**：Conex / Crish 前端架构重构与对标 DeepSeek-Harness（DSH）工业级状态机、多会话隔离、DevTools 多轨时间线与白板纯净门闩深度解剖报告  
-> **数据支撑**：基于 `reference/deepseek-harness/` 目录下全部核心引擎与客户端源码（`packages/workflow/`、`packages/core/scope/`、`packages/core/session/`、`packages/client/ui-workflow-run/`、`packages/client/ui-trajectory/`、`packages/client/ui-conversation/` 等）及 Conex 桌面端组件源码（`apps/crish-desktop/`）  
-> **编写原则**：客观实证、纯前端与引擎代码路径精确锚定到「文件:行号」、零退避降级、深度长篇全景解剖  
+> **文档定位**：Conex / Crish 前端架构重构与对标 DeepSeek-Harness（DSH）工业级状态机、多会话隔离、DevTools 多轨时间线与白板纯净门闩深度解剖报告
+> **数据支撑**：基于 `reference/deepseek-harness/` 目录下全部核心引擎与客户端源码（`packages/workflow/`、`packages/core/scope/`、`packages/core/session/`、`packages/client/ui-workflow-run/`、`packages/client/ui-trajectory/`、`packages/client/ui-conversation/` 等）及 Conex 桌面端组件源码（`apps/crish-desktop/`）
+> **编写原则**：客观实证、纯前端与引擎代码路径精确锚定到「文件:行号」、零退避降级、深度长篇全景解剖
 > **字符集**：UTF-8 无 BOM
 
 ---

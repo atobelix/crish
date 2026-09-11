@@ -1,7 +1,7 @@
 # AppFlowy 原生级滚轮手势、动量中继与视口弹性分栏深度赏析
 
-> **分析目标**：深入解构 AppFlowy 前端（Flutter / Dart）在滚动视口、Split 分栏、手势调度、动量中继与非侵入式几何滚动条维度的原生级工程实现。  
-> **代码依据**：`reference/markdown_compare/AppFlowy/frontend/appflowy_flutter/` 核心组件源码。  
+> **分析目标**：深入解构 AppFlowy 前端（Flutter / Dart）在滚动视口、Split 分栏、手势调度、动量中继与非侵入式几何滚动条维度的原生级工程实现。
+> **代码依据**：`reference/markdown_compare/AppFlowy/frontend/appflowy_flutter/` 核心组件源码。
 > **核心视角**：纯技术欣赏与工程美学视角，穿透跨平台 GUI 在高频交互下的细节断层，品味其工业级质感与数学严谨性。
 
 ---

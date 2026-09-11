@@ -1,9 +1,9 @@
 # AppFlowy 双轨滚动链、Split 视口与防死锁深度源码解剖
 
-> **文档定位**：Conex / Crish 前端与客户端系统级重构专属对标解剖报告 (Agent 7: Dual-Track Scroll Chaining, Split Viewports & Anti-Deadlock Engine)  
-> **解剖对象**：`reference/markdown_compare/AppFlowy/` 滚动基座、多列分栏视口、双轨滚动链、手势分发与 AI 消息流吸底状态机源码  
-> **对标目标**：点对点根治 Conex `modelsSplit` 滚轮失效黑洞、嵌套视口死锁、浮层吞噬滚轮动量、以及 AI 消息流在 Markdown 异步渲染下吸底断开与高度坍塌等系统级顽疾  
-> **编写原则**：100% 真实源码行号（`path:line`）驱动、严密数学与物理公式推导、全状态机覆盖、拒绝退避与简化、追求工业级高质感与零死锁  
+> **文档定位**：Conex / Crish 前端与客户端系统级重构专属对标解剖报告 (Agent 7: Dual-Track Scroll Chaining, Split Viewports & Anti-Deadlock Engine)
+> **解剖对象**：`reference/markdown_compare/AppFlowy/` 滚动基座、多列分栏视口、双轨滚动链、手势分发与 AI 消息流吸底状态机源码
+> **对标目标**：点对点根治 Conex `modelsSplit` 滚轮失效黑洞、嵌套视口死锁、浮层吞噬滚轮动量、以及 AI 消息流在 Markdown 异步渲染下吸底断开与高度坍塌等系统级顽疾
+> **编写原则**：100% 真实源码行号（`path:line`）驱动、严密数学与物理公式推导、全状态机覆盖、拒绝退避与简化、追求工业级高质感与零死锁
 > **字符集**：UTF-8 无 BOM
 
 ---

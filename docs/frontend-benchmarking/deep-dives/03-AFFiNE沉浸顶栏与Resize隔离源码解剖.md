@@ -1,8 +1,8 @@
 # AFFiNE Workspace Shell、36px 沉浸顶栏与 Resize 隔离深度源码解剖
 
-> **文档定位**：前端架构深度对标报告（Agent 3 专项）  
-> **解剖目标**：AFFiNE（桌面端 Workspace Shell、36px/40px 沉浸顶栏、平嵌 TabStrip、Drag vs No-Drag 安全切分、全贴合无缝双栏消除 8px 灰槽、窗口 Resize 期间 Zero-JS 休眠与 `contain: strict` 渲染隔离）  
-> **源码基线**：`reference/markdown_compare/AFFiNE/packages/frontend/`（core/src/desktop, modules/app-tabs-header, modules/workbench, modules/app-sidebar, apps/electron, component/resize-panel 等）  
+> **文档定位**：前端架构深度对标报告（Agent 3 专项）
+> **解剖目标**：AFFiNE（桌面端 Workspace Shell、36px/40px 沉浸顶栏、平嵌 TabStrip、Drag vs No-Drag 安全切分、全贴合无缝双栏消除 8px 灰槽、窗口 Resize 期间 Zero-JS 休眠与 `contain: strict` 渲染隔离）
+> **源码基线**：`reference/markdown_compare/AFFiNE/packages/frontend/`（core/src/desktop, modules/app-tabs-header, modules/workbench, modules/app-sidebar, apps/electron, component/resize-panel 等）
 > **对标目标**：Conex / Crish Desktop 工作区外壳、顶栏一体化与渲染性能治理
 
 ---

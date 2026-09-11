@@ -1,9 +1,9 @@
 # AppFlowy 前端与客户端架构、目录与视图机制全景勘察报告
 
-> **文档定位**：Conex / Crish 前端系统级重构专属对标勘察报告 (AppFlowy Frontend Architecture Pioneer)  
-> **勘察对象**：`reference/markdown_compare/AppFlowy/` 前端与客户端完整源码（Flutter 客户端 + Rust 核心 SDK + packages UI 基础设施）  
-> **理论依据**：基于 `docs/frontend-architecture-review/` 目录下 3 份架构纲领文件（`00-前端全景诊断与Review评审军规.md`、`00-前端系统级重构与蜕变实施大纲.md`、`00-对标AFFiNE与AppFlowy借鉴与落地指南.md`）  
-> **编写原则**：100% 真实源码路径驱动、精确到代码行号（`path:line`）、客观实证、拒绝退避与降级、追求工业级高质感与高性能。  
+> **文档定位**：Conex / Crish 前端系统级重构专属对标勘察报告 (AppFlowy Frontend Architecture Pioneer)
+> **勘察对象**：`reference/markdown_compare/AppFlowy/` 前端与客户端完整源码（Flutter 客户端 + Rust 核心 SDK + packages UI 基础设施）
+> **理论依据**：基于 `docs/frontend-architecture-review/` 目录下 3 份架构纲领文件（`00-前端全景诊断与Review评审军规.md`、`00-前端系统级重构与蜕变实施大纲.md`、`00-对标AFFiNE与AppFlowy借鉴与落地指南.md`）
+> **编写原则**：100% 真实源码路径驱动、精确到代码行号（`path:line`）、客观实证、拒绝退避与降级、追求工业级高质感与高性能。
 > **字符集**：UTF-8 无 BOM。
 
 ---

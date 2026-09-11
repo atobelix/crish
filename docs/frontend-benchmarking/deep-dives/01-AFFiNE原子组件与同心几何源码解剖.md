@@ -1,8 +1,8 @@
 # AFFiNE 原子组件库、同心几何与设计系统深度源码解剖
 
-> **文档定位**：前端原子设计系统与视觉几何专项深度解剖报告  
-> **对标源码**：`reference/markdown_compare/AFFiNE/packages/frontend/component/src/ui/`、`src/theme/`、`src/styles/`、`blocksuite/affine/shared/src/theme/`  
-> **核心攻坚**：同心几何数学定理证明（$R_{outer} = R_{inner} + P$）、Vanilla-Extract 强类型变量参数化体系、变体与尺寸正交性矩阵、伪元素悬浮层与焦点环物理渲染、FLIP 动态滑块指示器、IME 组合事件安全防护、Conex「9999px 药丸圆角倒挂」与「裸交互标签」彻底根治蓝图  
+> **文档定位**：前端原子设计系统与视觉几何专项深度解剖报告
+> **对标源码**：`reference/markdown_compare/AFFiNE/packages/frontend/component/src/ui/`、`src/theme/`、`src/styles/`、`blocksuite/affine/shared/src/theme/`
+> **核心攻坚**：同心几何数学定理证明（$R_{outer} = R_{inner} + P$）、Vanilla-Extract 强类型变量参数化体系、变体与尺寸正交性矩阵、伪元素悬浮层与焦点环物理渲染、FLIP 动态滑块指示器、IME 组合事件安全防护、Conex「9999px 药丸圆角倒挂」与「裸交互标签」彻底根治蓝图
 > **篇幅规模**：1200+ 行深度解剖与生产级重构蓝图（UTF-8 无 BOM）
 
 ---

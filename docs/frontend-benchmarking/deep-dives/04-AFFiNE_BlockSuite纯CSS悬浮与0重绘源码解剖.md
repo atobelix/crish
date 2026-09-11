@@ -1,7 +1,7 @@
 # AFFiNE BlockSuite 纯 CSS 悬浮把手、0-Re-render 渲染模型与 IME 保护深度源码解剖
 
-> **文档定位**：前端架构深度对标解剖系列（Agent 4）  
-> **源码基准**：`reference/markdown_compare/AFFiNE/blocksuite/`（`affine/widgets/drag-handle`、`affine/widgets/slash-menu`、`affine/rich-text`、`affine/blocks/paragraph`、`framework/std/src/view`、`framework/std/src/inline`、`framework/store/src/reactive`、`framework/global/src/lit`）  
+> **文档定位**：前端架构深度对标解剖系列（Agent 4）
+> **源码基准**：`reference/markdown_compare/AFFiNE/blocksuite/`（`affine/widgets/drag-handle`、`affine/widgets/slash-menu`、`affine/rich-text`、`affine/blocks/paragraph`、`framework/std/src/view`、`framework/std/src/inline`、`framework/store/src/reactive`、`framework/global/src/lit`）
 > **对标目标**：深度剖析 AFFiNE BlockSuite 在 500+ Block 长文档交互下的超高性能渲染架构。解密单例悬浮把手（Singleton Drag Handle Widget）脱离 VDOM 绝对坐标 DOM 直写机制、纯 CSS `:hover` 微交互调度、Preact Signals 细粒度局部响应式（0-Re-render）、Shadowless Light DOM 原生选区穿透、Slash 菜单 Caret 视口吸附与 IME 输入法合成保护机制；点对点映射彻底根治 Conex 500 Block 鼠标滑动 10,000 次重绘雪崩与 IME 丢字跳标的落地工程蓝图。
 
 ---

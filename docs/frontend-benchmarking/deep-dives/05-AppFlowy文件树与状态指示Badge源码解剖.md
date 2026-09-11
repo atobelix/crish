@@ -1,9 +1,9 @@
 # AppFlowy 30px 呼吸感文件树与状态指示 Badge 深度源码解剖
 
-> **文档定位**：Conex / Crish 前端系统级重构专属对标解剖报告 (AppFlowy File Tree & Status Badge Pioneer)  
-> **解剖对象**：`reference/markdown_compare/AppFlowy/` 工作区、侧边栏、文件夹/文档树、状态指示徽章组件源码（Flutter 客户端 `appflowy_flutter`、UI 基础设施 `packages/flowy_infra_ui`、侧边栏导航与空间模块 `workspace/presentation/home/menu/`）  
-> **重构目标**：点对点映射彻底重塑 Conex 总览面板（`apps/crish-desktop/src/components/overview/`）的 36 改动文件列表（`buildGitTree` 算法、树状折叠/扁平双模切换、4px 微圆角矩形 Badge、3 色增删比例微条、`flex: 1` 视口弹性自适应）以及侧边栏会话历史树（`apps/crish-desktop/src/components/sidebar/`）的呼吸感排版与交互导轨。  
-> **理论与纪律依据**：基于 `AGENTS.md` 通用协作纪律、`docs/frontend-architecture-review/` 架构纲领；100% 真实源码路径与行号驱动（`path:line`），严禁降级、严禁退避。  
+> **文档定位**：Conex / Crish 前端系统级重构专属对标解剖报告 (AppFlowy File Tree & Status Badge Pioneer)
+> **解剖对象**：`reference/markdown_compare/AppFlowy/` 工作区、侧边栏、文件夹/文档树、状态指示徽章组件源码（Flutter 客户端 `appflowy_flutter`、UI 基础设施 `packages/flowy_infra_ui`、侧边栏导航与空间模块 `workspace/presentation/home/menu/`）
+> **重构目标**：点对点映射彻底重塑 Conex 总览面板（`apps/crish-desktop/src/components/overview/`）的 36 改动文件列表（`buildGitTree` 算法、树状折叠/扁平双模切换、4px 微圆角矩形 Badge、3 色增删比例微条、`flex: 1` 视口弹性自适应）以及侧边栏会话历史树（`apps/crish-desktop/src/components/sidebar/`）的呼吸感排版与交互导轨。
+> **理论与纪律依据**：基于 `AGENTS.md` 通用协作纪律、`docs/frontend-architecture-review/` 架构纲领；100% 真实源码路径与行号驱动（`path:line`），严禁降级、严禁退避。
 > **字符集**：UTF-8 无 BOM。
 
 ---

@@ -1,8 +1,8 @@
 # AFFiNE Seamless 沉浸式 Workspace Shell 桌面美学深度赏析
 
-> **报告版本**：v1.0.0  
-> **源码基准**：`reference/markdown_compare/AFFiNE/packages/frontend/core/src/`  
-> **核心模块**：`modules/app-tabs-header/`, `components/pure/header/`, `desktop/components/app-container/`, `modules/app-sidebar/`, `modules/workbench/view/`, `component/src/components/resize-panel/`  
+> **报告版本**：v1.0.0
+> **源码基准**：`reference/markdown_compare/AFFiNE/packages/frontend/core/src/`
+> **核心模块**：`modules/app-tabs-header/`, `components/pure/header/`, `desktop/components/app-container/`, `modules/app-sidebar/`, `modules/workbench/view/`, `component/src/components/resize-panel/`
 > **文档定位**：现代桌面客户端「一体化沉浸工作区外壳（Immersive Workspace Shell）」工程美学与微架构深度赏析报告
 
 ---

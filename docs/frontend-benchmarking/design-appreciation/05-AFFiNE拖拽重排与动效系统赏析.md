@@ -1,8 +1,8 @@
 # AFFiNE 极致流畅的拖拽重排与动效系统 (DND & Animations) 深度赏析
 
-> **报告标识**：AFFINE-DND-ANIMATION-DEEP-DIVE  
-> **研究对象**：`reference/markdown_compare/AFFiNE/` 源码库中的 DND 拖拽交互、Tab/Panel 重排、FLIP 物理边界计算、指示线形态变换与动效冻结机制  
-> **工程视角**：前端交互工程美学、微动效物理学、高刷新率手势渲染、跨框架状态协同  
+> **报告标识**：AFFINE-DND-ANIMATION-DEEP-DIVE
+> **研究对象**：`reference/markdown_compare/AFFiNE/` 源码库中的 DND 拖拽交互、Tab/Panel 重排、FLIP 物理边界计算、指示线形态变换与动效冻结机制
+> **工程视角**：前端交互工程美学、微动效物理学、高刷新率手势渲染、跨框架状态协同
 > **覆盖源码范围**：`packages/frontend/component/src/ui/dnd/`、`packages/frontend/core/src/modules/app-tabs-header/`、`packages/frontend/core/src/modules/workbench/view/split-view/`、`packages/frontend/component/src/components/resize-panel/`、`blocksuite/affine/data-view/src/core/utils/wc-dnd/`、`blocksuite/affine/widgets/drag-handle/`、`blocksuite/affine/components/src/drop-indicator/` 等核心模块。
 
 ---

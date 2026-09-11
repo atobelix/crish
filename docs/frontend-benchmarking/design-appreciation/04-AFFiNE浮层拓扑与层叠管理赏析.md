@@ -1,8 +1,8 @@
 # AFFiNE 分层浮层拓扑、多根 Portal 与层叠上下文管理深度赏析
 
-> **报告标识**：AFFINE-FLOATING-TOPOLOGY-STACKING-DEEP-DIVE  
-> **研究对象**：`reference/markdown_compare/AFFiNE/` 源码库中的浮层拓扑调度、多根 Portal 挂载、Safe Triangle 安全三角区向量检测、Tooltip 全局静默协议与层叠上下文（Stacking Context）治理体系  
-> **工程视角**：空间几何物理学、Web 组件层叠拓扑、无障碍焦点流转、微动效平滑生命周期、工业级非模态交互哲学  
+> **报告标识**：AFFINE-FLOATING-TOPOLOGY-STACKING-DEEP-DIVE
+> **研究对象**：`reference/markdown_compare/AFFiNE/` 源码库中的浮层拓扑调度、多根 Portal 挂载、Safe Triangle 安全三角区向量检测、Tooltip 全局静默协议与层叠上下文（Stacking Context）治理体系
+> **工程视角**：空间几何物理学、Web 组件层叠拓扑、无障碍焦点流转、微动效平滑生命周期、工业级非模态交互哲学
 > **覆盖核心源码**：
 >
 > - `packages/frontend/component/src/ui/menu/`（`index.ts`、`menu.types.ts`、`use-menu-item.tsx`、`styles.css.ts`、`desktop/root.tsx`、`desktop/sub.tsx`、`desktop/item.tsx`、`desktop/context-menu.tsx`）

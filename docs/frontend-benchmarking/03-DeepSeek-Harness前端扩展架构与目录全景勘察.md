@@ -1,8 +1,8 @@
 # DeepSeek-Harness 前端扩展架构、插槽机制与工作流视图全景勘察报告
 
-> **文档定位**：Conex / Crish 前端架构重构与对标 DeepSeek-Harness（DSH）工业级扩展架构深度全景勘察报告  
-> **数据支撑**：基于 `reference/deepseek-harness/` 目录下全部客户端与前端源码（`packages/client/`, `packages/web/`, `packages/workflow/`, `packages/core/`, `apps/web/` 等）及 `docs/frontend-architecture-review/` 的 27 份审查报告实证提炼  
-> **编写原则**：客观实证、纯前端代码路径精确锚定到「文件:行号」、零退避降级、深度长篇全景解剖  
+> **文档定位**：Conex / Crish 前端架构重构与对标 DeepSeek-Harness（DSH）工业级扩展架构深度全景勘察报告
+> **数据支撑**：基于 `reference/deepseek-harness/` 目录下全部客户端与前端源码（`packages/client/`, `packages/web/`, `packages/workflow/`, `packages/core/`, `apps/web/` 等）及 `docs/frontend-architecture-review/` 的 27 份审查报告实证提炼
+> **编写原则**：客观实证、纯前端代码路径精确锚定到「文件:行号」、零退避降级、深度长篇全景解剖
 > **字符集**：UTF-8 无 BOM
 
 ---

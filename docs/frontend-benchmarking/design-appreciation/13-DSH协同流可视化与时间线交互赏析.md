@@ -1,8 +1,8 @@
 # DeepSeek-Harness Agent 协同流可视化、多轨时序与极简时间线交互深度赏析
 
-> **作者**：Agent 13 (Front-End Architecture & Design Appreciation Specialist)  
-> **研究对象**：[`reference/deepseek-harness/`](file:///c:/Software/conex/reference/deepseek-harness/)  
-> **核心模块**：`packages/client/ui-trajectory/`, `packages/client/ui-conversation/`, `packages/client/ui-workflow-run/`, `packages/workflow/`  
+> **作者**：Agent 13 (Front-End Architecture & Design Appreciation Specialist)
+> **研究对象**：[`reference/deepseek-harness/`](file:///c:/Software/conex/reference/deepseek-harness/)
+> **核心模块**：`packages/client/ui-trajectory/`, `packages/client/ui-conversation/`, `packages/client/ui-workflow-run/`, `packages/workflow/`
 > **视角**：纯粹软件工程美学、时序可视化交互、无损状态投影与沉浸式极客体验
 
 ---

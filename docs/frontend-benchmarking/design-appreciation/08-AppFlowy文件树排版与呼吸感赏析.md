@@ -1,8 +1,8 @@
 # AppFlowy 桌面端人机工效学文件树与排版呼吸感深度赏析
 
-> **报告标识**：APPFLOWY-FILETREE-TYPOGRAPHY-BREATHING-DEEP-DIVE  
-> **研究对象**：`reference/markdown_compare/AppFlowy/` 源码库中的文件树信息架构、目录折叠机制、排版几何网格、微线条导轨、节点悬停工具栏、3-Way 拖拽插槽识别与触觉反馈系统  
-> **工程视角**：人机工效学（Ergonomics）、微像素排版几何学（Micro-Typography Geometry）、Flutter 响应式渲染树与 Rust 状态流协同、信息密度与呼吸节奏（Visual Cadence & Breathing Space）  
+> **报告标识**：APPFLOWY-FILETREE-TYPOGRAPHY-BREATHING-DEEP-DIVE
+> **研究对象**：`reference/markdown_compare/AppFlowy/` 源码库中的文件树信息架构、目录折叠机制、排版几何网格、微线条导轨、节点悬停工具栏、3-Way 拖拽插槽识别与触觉反馈系统
+> **工程视角**：人机工效学（Ergonomics）、微像素排版几何学（Micro-Typography Geometry）、Flutter 响应式渲染树与 Rust 状态流协同、信息密度与呼吸节奏（Visual Cadence & Breathing Space）
 > **核心源码覆盖**：
 >
 > - `lib/workspace/presentation/home/home_sizes.dart`

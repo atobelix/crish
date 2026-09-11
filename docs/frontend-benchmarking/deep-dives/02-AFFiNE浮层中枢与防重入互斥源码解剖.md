@@ -1,8 +1,8 @@
 # AFFiNE 浮层中枢、事件调度与 Tooltip 互斥深度源码解剖
 
-> **文档定位**：前端基建与浮层中枢专项深度解剖报告  
-> **对标源码**：`reference/markdown_compare/AFFiNE/packages/frontend/component/src/ui/menu/`、`tooltip/`、`popover/`、`modal/`  
-> **核心攻坚**：浮层调度算法、`modal={false}` 非模态哲学、Trigger 50ms 防重入冷却锁、Tooltip 全局静默互斥协议、二级飞出菜单 Safe Triangle 射线算法、Conex「四击关闭 Bug」彻底根治落地方案  
+> **文档定位**：前端基建与浮层中枢专项深度解剖报告
+> **对标源码**：`reference/markdown_compare/AFFiNE/packages/frontend/component/src/ui/menu/`、`tooltip/`、`popover/`、`modal/`
+> **核心攻坚**：浮层调度算法、`modal={false}` 非模态哲学、Trigger 50ms 防重入冷却锁、Tooltip 全局静默互斥协议、二级飞出菜单 Safe Triangle 射线算法、Conex「四击关闭 Bug」彻底根治落地方案
 > **篇幅规模**：1000+ 行深度解剖与生产级重构蓝图（UTF-8 无 BOM）
 
 ---

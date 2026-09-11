@@ -1,8 +1,8 @@
 # AFFiNE 多态视图（Page / Edgeless 白板）与画布统一架构深度赏析
 
-> **作者**：Agent 7  
-> **研究对象**：`reference/markdown_compare/AFFiNE`  
-> **核心聚焦**：`packages/frontend/core/src/modules/editor/`、`packages/frontend/core/src/blocksuite/`、`blocksuite/affine/`、`blocksuite/framework/std/src/gfx/`  
+> **作者**：Agent 7
+> **研究对象**：`reference/markdown_compare/AFFiNE`
+> **核心聚焦**：`packages/frontend/core/src/modules/editor/`、`packages/frontend/core/src/blocksuite/`、`blocksuite/affine/`、`blocksuite/framework/std/src/gfx/`
 > **视角**：纯欣赏与工程美学视角（Architectural Aesthetics & Deep Code Anatomy）
 
 ---

@@ -1,8 +1,8 @@
 # AFFiNE 前端架构、UI 目录与优秀机制全景勘察报告 (AFFiNE Architecture Pioneer)
 
-> **文档定位**：Conex / Crish 桌面客户端前端架构重构与对标 AFFiNE 工业级商业前端深度全景勘察报告  
-> **数据支撑**：基于 `reference/markdown_compare/AFFiNE/` 目录下全部前端源码（`packages/frontend/component/`, `packages/frontend/core/`, `packages/common/`, `blocksuite/` 等）及 `docs/frontend-architecture-review/` 的 27 份审查报告全量实证提炼  
-> **编写原则**：客观实证、纯前端代码路径精确锚定到「文件:行号」、零退避降级、深度长篇全景解剖  
+> **文档定位**：Conex / Crish 桌面客户端前端架构重构与对标 AFFiNE 工业级商业前端深度全景勘察报告
+> **数据支撑**：基于 `reference/markdown_compare/AFFiNE/` 目录下全部前端源码（`packages/frontend/component/`, `packages/frontend/core/`, `packages/common/`, `blocksuite/` 等）及 `docs/frontend-architecture-review/` 的 27 份审查报告全量实证提炼
+> **编写原则**：客观实证、纯前端代码路径精确锚定到「文件:行号」、零退避降级、深度长篇全景解剖
 > **字符集**：UTF-8 无 BOM
 
 ---

@@ -1,8 +1,8 @@
 # AppFlowy 精致微徽章 (Badge)、图标系统与极简状态指示深度赏析
 
-> **报告标识**：APPFLOWY-MICRO-BADGE-ICONOGRAPHY-STATUS-INDICATOR-DEEP-DIVE  
-> **研究对象**：`reference/markdown_compare/AppFlowy/` 源码库中的微徽章（Badges & Tags）、状态微条（Diff / Checklist Micro-bars）、图标对齐与光学校准系统（FlowySvg & FlowyText Strut）、20 色色谱体系（Badge Color Scheme）与微交互状态机  
-> **工程与美学视角**：微观人机工效学（Micro-Ergonomics）、亚像素级几何对齐（Subpixel Vector Alignment）、极简信息压缩艺术（Minimalist Information Density Compression）、色彩空间叠色物理学（Color Space Alpha Compositing & Pastel Luminance）  
+> **报告标识**：APPFLOWY-MICRO-BADGE-ICONOGRAPHY-STATUS-INDICATOR-DEEP-DIVE
+> **研究对象**：`reference/markdown_compare/AppFlowy/` 源码库中的微徽章（Badges & Tags）、状态微条（Diff / Checklist Micro-bars）、图标对齐与光学校准系统（FlowySvg & FlowyText Strut）、20 色色谱体系（Badge Color Scheme）与微交互状态机
+> **工程与美学视角**：微观人机工效学（Micro-Ergonomics）、亚像素级几何对齐（Subpixel Vector Alignment）、极简信息压缩艺术（Minimalist Information Density Compression）、色彩空间叠色物理学（Color Space Alpha Compositing & Pastel Luminance）
 > **核心源码覆盖**：
 >
 > - `packages/flowy_infra/lib/size.dart` (Corners / Spacing / FontSizes 几何标定)

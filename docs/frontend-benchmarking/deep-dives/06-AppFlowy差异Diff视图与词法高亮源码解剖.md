@@ -1,9 +1,9 @@
 # AppFlowy 紧凑 Diff 差异视图与词法高亮深度源码解剖
 
-> **文档定位**：Conex / Crish 前端系统级重构专属对标解剖报告 (AppFlowy Compact Diff & Intraline Lexical Highlight Pioneer)  
-> **解剖对象**：`reference/markdown_compare/AppFlowy/` 前端与客户端差异比对、代码审查、紧凑视图组件源码（Flutter 客户端 `appflowy_flutter`、共享 UI 基础设施 `packages/flowy_infra` / `packages/flowy_infra_ui`、文档差异算法 `document_diff.dart`）  
-> **重构目标**：点对点映射彻底重构 Conex Diff 面板（`apps/crish-desktop/src/components/diff/`），实现 32px~34px 单行紧凑 Header、5.5% 柔和低反差色板、词法级（Intraline）分词比对高亮，并消除冗余警告横幅，释放 55% 以上的垂直空间。  
-> **理论与纪律依据**：基于 `AGENTS.md` 通用协作纪律、`docs/frontend-architecture-review/` 架构纲领；100% 真实源码路径与行号驱动（`path:line`），严禁降级、严禁退避。  
+> **文档定位**：Conex / Crish 前端系统级重构专属对标解剖报告 (AppFlowy Compact Diff & Intraline Lexical Highlight Pioneer)
+> **解剖对象**：`reference/markdown_compare/AppFlowy/` 前端与客户端差异比对、代码审查、紧凑视图组件源码（Flutter 客户端 `appflowy_flutter`、共享 UI 基础设施 `packages/flowy_infra` / `packages/flowy_infra_ui`、文档差异算法 `document_diff.dart`）
+> **重构目标**：点对点映射彻底重构 Conex Diff 面板（`apps/crish-desktop/src/components/diff/`），实现 32px~34px 单行紧凑 Header、5.5% 柔和低反差色板、词法级（Intraline）分词比对高亮，并消除冗余警告横幅，释放 55% 以上的垂直空间。
+> **理论与纪律依据**：基于 `AGENTS.md` 通用协作纪律、`docs/frontend-architecture-review/` 架构纲领；100% 真实源码路径与行号驱动（`path:line`），严禁降级、严禁退避。
 > **字符集**：UTF-8 无 BOM。
 
 ---

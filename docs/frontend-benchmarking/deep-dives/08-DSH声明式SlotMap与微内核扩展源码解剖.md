@@ -1,7 +1,7 @@
 # DeepSeek-Harness 声明式 SlotMap、ComposedProps 与微内核扩展深度源码解剖
 
-> **文档定位**：前端架构深度对标解剖系列（Agent 8）  
-> **源码基准**：`reference/deepseek-harness/packages/client/`（`ui-slots`、`runtime`、`web-react`、`ui-layout`、`ui-conversation`、`ui-settings`）  
+> **文档定位**：前端架构深度对标解剖系列（Agent 8）
+> **源码基准**：`reference/deepseek-harness/packages/client/`（`ui-slots`、`runtime`、`web-react`、`ui-layout`、`ui-conversation`、`ui-settings`）
 > **对标目标**：解构 DeepSeek-Harness（下文简称 DSH）基于 SlotMap 的声明式插槽拓扑、ComposedProps 四份额强类型推导、`display: contents` 零布局污染挂载、纯内核几何求解器与 ViewRegistry 装配引擎；点对点映射 Conex 二叉树工作区解耦与微内核插件化收敛方案。
 
 ---
