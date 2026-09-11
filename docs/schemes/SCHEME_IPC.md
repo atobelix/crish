@@ -288,7 +288,7 @@ pub async fn core_run_task(
     attachments: Option<Vec<ChatAttachmentInput>>,
 ) -> Result<RunTaskResponse, CoreError> {
     let state = Arc::clone(state.inner());
-    
+
     // 1. Input Validation & Path Traversal Guards
     let run_id = run_id.trim().to_string();
     let session_id = session_id.trim().to_string();
@@ -303,7 +303,7 @@ pub async fn core_run_task(
     if !state.engine_ready() {
         return Err(CoreError::internal("Engine not ready: missing provider configuration"));
     }
-    
+
     // Enforce Single Active Run per Session Guard
     {
         let active_map = state.active_runs.lock().unwrap_or_else(|e| e.into_inner());
@@ -316,7 +316,7 @@ pub async fn core_run_task(
 
     // 3. Process Attachment Payloads into AgentMessage Blocks
     let mut message_blocks = Vec::new();
-    
+
     // Append user prompt text block if present
     if let Some(ref text) = prompt {
         let sanitized_text = sanitize_user_prompt(text);
@@ -353,7 +353,7 @@ pub async fn core_run_task(
 
     // Spawn execution loop in Tokio runtime...
     // [REF:IPC-011]
-    
+
     Ok(RunTaskResponse { run_id, session_id })
 }
 ```
@@ -416,24 +416,24 @@ pub enum AgentMessageRole {
 pub enum AgentMessageBlock {
     /// Text block containing Markdown prompt text
     Text { text: String },
-    
+
     /// Image attachment block with mime type and data URL or binary hash
-    Image { 
-        mime: String, 
+    Image {
+        mime: String,
         data_url: String,
         name: Option<String>,
     },
-    
+
     /// File attachment block with inline text or path reference
-    File { 
-        name: String, 
-        mime: String, 
+    File {
+        name: String,
+        mime: String,
         content: String,
     },
-    
+
     /// Tool execution call emitted by LLM
     ToolCall(ToolCallBlock),
-    
+
     /// Tool execution result returned by tool runner
     ToolResult {
         tool_call_id: String,
@@ -458,7 +458,7 @@ pub fn parse_attachment_into_block(att: &ChatAttachmentInput) -> Result<AgentMes
         let data_url = att.data_url.as_deref().ok_or_else(|| {
             CoreError::invalid_input(format!("Image attachment '{}' missing dataUrl payload", att.name))
         })?;
-        
+
         // Validate Data URL format (must begin with data:image/<mime>;base64,)
         if !data_url.starts_with("data:image/") || !data_url.contains(";base64,") {
             return Err(CoreError::invalid_input(format!(
@@ -544,7 +544,7 @@ pub async fn core_cancel_run(
     if cancel_mode == CancelMode::Force {
         // Trigger L3 AbortSignal immediately across async Tokio sub-tasks
         active.abort_signal.abort();
-        
+
         let mut bus = active.control_bus.lock().unwrap_or_else(|e| e.into_inner());
         bus.request_force_cancel(Some("User cancelled execution".to_string()), Some("ui".to_string()));
     } else {
@@ -623,7 +623,7 @@ pub fn sanitize_user_prompt(input: &str) -> String {
 /// Validates target file attachment path against path traversal attacks.
 pub fn validate_attachment_path(base_dir: &std::path::Path, target_path: &str) -> Result<std::path::PathBuf, CoreError> {
     let clean_relative = std::path::Path::new(target_path);
-    
+
     // Reject explicit parent directory traversal components
     if clean_relative.components().any(|c| c == std::path::Component::ParentDir) {
         return Err(CoreError::invalid_input(format!(
@@ -632,7 +632,7 @@ pub fn validate_attachment_path(base_dir: &std::path::Path, target_path: &str) -
     }
 
     let absolute_path = base_dir.join(clean_relative);
-    
+
     // Canonicalize path to resolve symlinks and confirm boundary
     if let Ok(canonical) = absolute_path.canonicalize() {
         if !canonical.starts_with(base_dir) {
@@ -677,7 +677,7 @@ pub fn register_if_enabled(builder: tauri::Builder<tauri::Wry>) -> tauri::Builde
     if !enabled {
         return builder;
     }
-    
+
     builder.plugin(tauri_plugin_mcp::init_with_config(
         tauri_plugin_mcp::PluginConfig::new("crish-agent-workbench".to_string())
             .start_socket_server(true)

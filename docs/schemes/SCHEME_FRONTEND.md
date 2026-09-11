@@ -12,7 +12,7 @@
 
 ## Executive Summary & Document Control
 
-This document provides the **exhaustive, production-grade technical specification** for the Frontend Component Layer of the **Tiptap Chat Composer** migration into `apps/crish-desktop`. 
+This document provides the **exhaustive, production-grade technical specification** for the Frontend Component Layer of the **Tiptap Chat Composer** migration into `apps/crish-desktop`.
 
 Following the directives established in the baseline SRS (`SRS_REQUIREMENTS.md`), the Round 1 Draft Blueprint (`DRAFT_BLUEPRINT.md`), and the approved Round 2 Master Plan (`MASTER_PLAN.md`), this scheme defines:
 1. **Component Hierarchy & File Boundaries**: Complete breakdown of the 5 core component files, custom extensions, and state hook under strict monorepo line-count guardrails.
@@ -145,7 +145,7 @@ export const TiptapComposerContainer: React.FC<TiptapComposerProps> = ({
   } = useTiptapComposerState({ sessionId, onSend, onStop });
 
   return (
-    <div 
+    <div
       className={`${styles.container} ${className || ''}`}
       data-empty-kind={emptyKind}
       data-disabled={disabled}
@@ -177,17 +177,17 @@ export const TiptapComposerContainer: React.FC<TiptapComposerProps> = ({
         <div className={styles.leftTools}>
           <Tooltip content="Add attachments or prompts">
             <div>
-              <ComposePlusMenu 
-                onSelectAttachment={(att) => setAttachments((prev) => [...prev, att])} 
+              <ComposePlusMenu
+                onSelectAttachment={(att) => setAttachments((prev) => [...prev, att])}
               />
             </div>
           </Tooltip>
 
           <Tooltip content="Execution permission mode">
             <div>
-              <PermissionModeMenu 
-                value={permissionMode} 
-                onChange={setPermissionMode} 
+              <PermissionModeMenu
+                value={permissionMode}
+                onChange={setPermissionMode}
               />
             </div>
           </Tooltip>

@@ -19,7 +19,7 @@
 ## Document Control & Executive Summary
 
 ### Executive Overview
-This document specifies the **Round 2 Master Technical Plan (`MASTER_PLAN.md`)** for migrating the standalone prototype **Tiptap Chat Composer** (`reference/chat-composer-tiptap`) into the production host application **Conex / Crish** (`apps/crish-desktop` and `apps/agent-workbench`). 
+This document specifies the **Round 2 Master Technical Plan (`MASTER_PLAN.md`)** for migrating the standalone prototype **Tiptap Chat Composer** (`reference/chat-composer-tiptap`) into the production host application **Conex / Crish** (`apps/crish-desktop` and `apps/agent-workbench`).
 
 Following a rigorous blind review and conflict-prevention audit of the baseline SRS (`SRS_REQUIREMENTS.md`) and Round 1 Draft Blueprint (`DRAFT_BLUEPRINT.md`), this Master Plan resolves all identified technical mismatches, state synchronization risks, z-index popover clipping, memory leak vectors, and CI governance red line conflicts.
 
@@ -386,7 +386,7 @@ export const TiptapComposerContainer: React.FC<TiptapComposerProps> = ({
   } = useTiptapComposerState({ sessionId, onSend, onStop });
 
   return (
-    <div 
+    <div
       className={`${styles.container} ${className || ''}`}
       data-empty-kind={emptyKind}
     >
@@ -411,12 +411,12 @@ export const TiptapComposerContainer: React.FC<TiptapComposerProps> = ({
 
       <div className={styles.footerActions}>
         <div className={styles.leftTools}>
-          <ComposePlusMenu 
-            onSelectAttachment={(att) => setAttachments((prev) => [...prev, att])} 
+          <ComposePlusMenu
+            onSelectAttachment={(att) => setAttachments((prev) => [...prev, att])}
           />
-          <PermissionModeMenu 
-            value={permissionMode} 
-            onChange={setPermissionMode} 
+          <PermissionModeMenu
+            value={permissionMode}
+            onChange={setPermissionMode}
           />
         </div>
 
@@ -431,7 +431,7 @@ export const TiptapComposerContainer: React.FC<TiptapComposerProps> = ({
               Send
             </button>
           </Tooltip>
-          
+
           <Tooltip content="Stop generation">
             <button
               type="button"
@@ -809,7 +809,7 @@ Phase 3 subagents MUST directly consume `MASTER_PLAN.md` to author the three dim
 
 ## Executive Summary & Document Control
 
-This document provides the **exhaustive, production-grade technical specification** for the Frontend Component Layer of the **Tiptap Chat Composer** migration into `apps/crish-desktop`. 
+This document provides the **exhaustive, production-grade technical specification** for the Frontend Component Layer of the **Tiptap Chat Composer** migration into `apps/crish-desktop`.
 
 Following the directives established in the baseline SRS (`SRS_REQUIREMENTS.md`), the Round 1 Draft Blueprint (`DRAFT_BLUEPRINT.md`), and the approved Round 2 Master Plan (`MASTER_PLAN.md`), this scheme defines:
 1. **Component Hierarchy & File Boundaries**: Complete breakdown of the 5 core component files, custom extensions, and state hook under strict monorepo line-count guardrails.
@@ -942,7 +942,7 @@ export const TiptapComposerContainer: React.FC<TiptapComposerProps> = ({
   } = useTiptapComposerState({ sessionId, onSend, onStop });
 
   return (
-    <div 
+    <div
       className={`${styles.container} ${className || ''}`}
       data-empty-kind={emptyKind}
       data-disabled={disabled}
@@ -974,17 +974,17 @@ export const TiptapComposerContainer: React.FC<TiptapComposerProps> = ({
         <div className={styles.leftTools}>
           <Tooltip content="Add attachments or prompts">
             <div>
-              <ComposePlusMenu 
-                onSelectAttachment={(att) => setAttachments((prev) => [...prev, att])} 
+              <ComposePlusMenu
+                onSelectAttachment={(att) => setAttachments((prev) => [...prev, att])}
               />
             </div>
           </Tooltip>
 
           <Tooltip content="Execution permission mode">
             <div>
-              <PermissionModeMenu 
-                value={permissionMode} 
-                onChange={setPermissionMode} 
+              <PermissionModeMenu
+                value={permissionMode}
+                onChange={setPermissionMode}
               />
             </div>
           </Tooltip>
@@ -1929,7 +1929,7 @@ pub async fn core_run_task(
     attachments: Option<Vec<ChatAttachmentInput>>,
 ) -> Result<RunTaskResponse, CoreError> {
     let state = Arc::clone(state.inner());
-    
+
     // 1. Input Validation & Path Traversal Guards
     let run_id = run_id.trim().to_string();
     let session_id = session_id.trim().to_string();
@@ -1944,7 +1944,7 @@ pub async fn core_run_task(
     if !state.engine_ready() {
         return Err(CoreError::internal("Engine not ready: missing provider configuration"));
     }
-    
+
     // Enforce Single Active Run per Session Guard
     {
         let active_map = state.active_runs.lock().unwrap_or_else(|e| e.into_inner());
@@ -1957,7 +1957,7 @@ pub async fn core_run_task(
 
     // 3. Process Attachment Payloads into AgentMessage Blocks
     let mut message_blocks = Vec::new();
-    
+
     // Append user prompt text block if present
     if let Some(ref text) = prompt {
         let sanitized_text = sanitize_user_prompt(text);
@@ -1994,7 +1994,7 @@ pub async fn core_run_task(
 
     // Spawn execution loop in Tokio runtime...
     // [REF:IPC-011]
-    
+
     Ok(RunTaskResponse { run_id, session_id })
 }
 ```
@@ -2057,24 +2057,24 @@ pub enum AgentMessageRole {
 pub enum AgentMessageBlock {
     /// Text block containing Markdown prompt text
     Text { text: String },
-    
+
     /// Image attachment block with mime type and data URL or binary hash
-    Image { 
-        mime: String, 
+    Image {
+        mime: String,
         data_url: String,
         name: Option<String>,
     },
-    
+
     /// File attachment block with inline text or path reference
-    File { 
-        name: String, 
-        mime: String, 
+    File {
+        name: String,
+        mime: String,
         content: String,
     },
-    
+
     /// Tool execution call emitted by LLM
     ToolCall(ToolCallBlock),
-    
+
     /// Tool execution result returned by tool runner
     ToolResult {
         tool_call_id: String,
@@ -2099,7 +2099,7 @@ pub fn parse_attachment_into_block(att: &ChatAttachmentInput) -> Result<AgentMes
         let data_url = att.data_url.as_deref().ok_or_else(|| {
             CoreError::invalid_input(format!("Image attachment '{}' missing dataUrl payload", att.name))
         })?;
-        
+
         // Validate Data URL format (must begin with data:image/<mime>;base64,)
         if !data_url.starts_with("data:image/") || !data_url.contains(";base64,") {
             return Err(CoreError::invalid_input(format!(
@@ -2185,7 +2185,7 @@ pub async fn core_cancel_run(
     if cancel_mode == CancelMode::Force {
         // Trigger L3 AbortSignal immediately across async Tokio sub-tasks
         active.abort_signal.abort();
-        
+
         let mut bus = active.control_bus.lock().unwrap_or_else(|e| e.into_inner());
         bus.request_force_cancel(Some("User cancelled execution".to_string()), Some("ui".to_string()));
     } else {
@@ -2264,7 +2264,7 @@ pub fn sanitize_user_prompt(input: &str) -> String {
 /// Validates target file attachment path against path traversal attacks.
 pub fn validate_attachment_path(base_dir: &std::path::Path, target_path: &str) -> Result<std::path::PathBuf, CoreError> {
     let clean_relative = std::path::Path::new(target_path);
-    
+
     // Reject explicit parent directory traversal components
     if clean_relative.components().any(|c| c == std::path::Component::ParentDir) {
         return Err(CoreError::invalid_input(format!(
@@ -2273,7 +2273,7 @@ pub fn validate_attachment_path(base_dir: &std::path::Path, target_path: &str) -
     }
 
     let absolute_path = base_dir.join(clean_relative);
-    
+
     // Canonicalize path to resolve symlinks and confirm boundary
     if let Ok(canonical) = absolute_path.canonicalize() {
         if !canonical.starts_with(base_dir) {
@@ -2318,7 +2318,7 @@ pub fn register_if_enabled(builder: tauri::Builder<tauri::Wry>) -> tauri::Builde
     if !enabled {
         return builder;
     }
-    
+
     builder.plugin(tauri_plugin_mcp::init_with_config(
         tauri_plugin_mcp::PluginConfig::new("crish-agent-workbench".to_string())
             .start_socket_server(true)
@@ -2758,7 +2758,7 @@ To guarantee draft isolation, the Tiptap Chat Composer implements an **automatic
  */
 useEffect(() => {
   const prevSessionId = prevSessionIdRef.current;
-  
+
   if (prevSessionId && prevSessionId !== sessionId) {
     // 1. Flush draft for outgoing session
     const currentMarkdown = getEditorMarkdown();
@@ -3042,7 +3042,7 @@ export function deserializeMarkdownToAst(markdown: string): ProseMirrorNodeJSON 
 
 function parseInlineText(text: string): ProseMirrorNodeJSON[] {
   const nodes: ProseMirrorNodeJSON[] = [];
-  
+
   // Regex parsing for @[label](id) mentions, **bold**, *italic*, `code`
   const mentionRegex = /@\[([^\]]+)\]\(([^)]+)\)/g;
   let lastIdx = 0;
@@ -3238,7 +3238,7 @@ All requirements specified in `SRS_REQUIREMENTS.md` and `MASTER_PLAN.md` map to 
 ### 1. Architectural Decoupling Rationale
 This document establishes the **Subagent Execution Manual & Task Guide (`SUBAGENT_TASK_GUIDE.md`)**, which decouples pure subagent operational guidance, prompt task cards, role allocations, and verification protocols from the core system architecture blueprints (`MASTER_PLAN.md`, `SCHEME_FRONTEND.md`, `SCHEME_IPC.md`, `SCHEME_DATA.md`).
 
-Main architecture plans focus on system designs, API contracts, database schemas, and data flow pipelines. Including machine-oriented subagent prompts directly in technical blueprints leads to prompt bloat, context dilution, and accidental leakage of implementation details across subagent domain boundaries. 
+Main architecture plans focus on system designs, API contracts, database schemas, and data flow pipelines. Including machine-oriented subagent prompts directly in technical blueprints leads to prompt bloat, context dilution, and accidental leakage of implementation details across subagent domain boundaries.
 
 Decoupling operational guidance into this dedicated manual achieves:
 1. **Context Isolation**: Subagents receive standalone, machine-actionable prompt cards containing only the necessary specs, boundary limits, and file write permissions for their specific task.
@@ -3464,7 +3464,7 @@ Author the Single Source of Truth (SSOT) TypeScript type definitions file (`comp
 
 - **Assigned Subagent Role**: `subagent-prosemirror-specialist` (Subagent 2)
 - **Execution Phase**: Phase T1 (Core Editor Field Development)
-- **Target File Paths**: 
+- **Target File Paths**:
   - `apps/crish-desktop/src/components/chat-composer/TiptapEditorField.tsx`
   - `apps/crish-desktop/src/components/chat-composer/TiptapEditorField.module.css`
 - **File Type Budget**: UI Component (Target: ~320 lines, Hard Cap: ≤ 500 lines)
@@ -3518,7 +3518,7 @@ Implement the core Tiptap ProseMirror editor field component (`TiptapEditorField
   - `apps/crish-desktop/src/components/chat-composer/TiptapSlashMenu.tsx`
   - `apps/crish-desktop/src/components/chat-composer/SlashExtension.ts`
   - `apps/crish-desktop/src/components/chat-composer/TiptapSlashMenu.module.css`
-- **File Type Budgets**: 
+- **File Type Budgets**:
   - `TiptapSlashMenu.tsx`: UI Component (Target: ~180 lines, Hard Cap: ≤ 500 lines)
   - `SlashExtension.ts`: Logic / Plugin (Target: ~100 lines, Hard Cap: ≤ 400 lines)
 - **Write Permissions**: `TiptapSlashMenu.tsx` (WRITE), `SlashExtension.ts` (WRITE), `TiptapSlashMenu.module.css` (WRITE). All other files (READ ONLY).

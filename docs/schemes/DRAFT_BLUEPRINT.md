@@ -13,7 +13,7 @@
 ## 1. Executive Summary & Migration Architecture
 
 ### 1.1 Executive Context
-This blueprint defines the Round 1 logical dispatch blueprint for migrating the standalone prototype **Tiptap Chat Composer** (`reference/chat-composer-tiptap`) into the production host application **Conex / Crish** (`apps/crish-desktop` and `apps/agent-workbench`). 
+This blueprint defines the Round 1 logical dispatch blueprint for migrating the standalone prototype **Tiptap Chat Composer** (`reference/chat-composer-tiptap`) into the production host application **Conex / Crish** (`apps/crish-desktop` and `apps/agent-workbench`).
 
 The current host composer implementation (`apps/crish-desktop/src/components/chat-composer/ComposerField.tsx`) relies on a standard HTML `<textarea>` element with basic auto-grow capabilities (`useAutoGrowTextarea.ts`). It lacks inline Markdown rich text formatting, Notion-style drag-and-drop node reordering, interactive task list checklists, structured slash (`/`) command menus, entity mentions (`@`), and clipboard image pasting.
 
@@ -359,7 +359,7 @@ export const TiptapComposerContainer: React.FC<TiptapComposerProps> = ({
   } = useTiptapComposerState({ sessionId, onSend, onStop });
 
   return (
-    <div 
+    <div
       className={`${styles.container} ${className || ''}`}
       data-empty-kind={emptyKind}
     >

@@ -13,7 +13,7 @@
 ## Document Control & Executive Summary
 
 ### Executive Overview
-This document specifies the **Round 2 Master Technical Plan (`MASTER_PLAN.md`)** for migrating the standalone prototype **Tiptap Chat Composer** (`reference/chat-composer-tiptap`) into the production host application **Conex / Crish** (`apps/crish-desktop` and `apps/agent-workbench`). 
+This document specifies the **Round 2 Master Technical Plan (`MASTER_PLAN.md`)** for migrating the standalone prototype **Tiptap Chat Composer** (`reference/chat-composer-tiptap`) into the production host application **Conex / Crish** (`apps/crish-desktop` and `apps/agent-workbench`).
 
 Following a rigorous blind review and conflict-prevention audit of the baseline SRS (`SRS_REQUIREMENTS.md`) and Round 1 Draft Blueprint (`DRAFT_BLUEPRINT.md`), this Master Plan resolves all identified technical mismatches, state synchronization risks, z-index popover clipping, memory leak vectors, and CI governance red line conflicts.
 
@@ -380,7 +380,7 @@ export const TiptapComposerContainer: React.FC<TiptapComposerProps> = ({
   } = useTiptapComposerState({ sessionId, onSend, onStop });
 
   return (
-    <div 
+    <div
       className={`${styles.container} ${className || ''}`}
       data-empty-kind={emptyKind}
     >
@@ -405,12 +405,12 @@ export const TiptapComposerContainer: React.FC<TiptapComposerProps> = ({
 
       <div className={styles.footerActions}>
         <div className={styles.leftTools}>
-          <ComposePlusMenu 
-            onSelectAttachment={(att) => setAttachments((prev) => [...prev, att])} 
+          <ComposePlusMenu
+            onSelectAttachment={(att) => setAttachments((prev) => [...prev, att])}
           />
-          <PermissionModeMenu 
-            value={permissionMode} 
-            onChange={setPermissionMode} 
+          <PermissionModeMenu
+            value={permissionMode}
+            onChange={setPermissionMode}
           />
         </div>
 
@@ -425,7 +425,7 @@ export const TiptapComposerContainer: React.FC<TiptapComposerProps> = ({
               Send
             </button>
           </Tooltip>
-          
+
           <Tooltip content="Stop generation">
             <button
               type="button"

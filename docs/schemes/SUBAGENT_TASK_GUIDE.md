@@ -15,7 +15,7 @@
 ### 1. Architectural Decoupling Rationale
 This document establishes the **Subagent Execution Manual & Task Guide (`SUBAGENT_TASK_GUIDE.md`)**, which decouples pure subagent operational guidance, prompt task cards, role allocations, and verification protocols from the core system architecture blueprints (`MASTER_PLAN.md`, `SCHEME_FRONTEND.md`, `SCHEME_IPC.md`, `SCHEME_DATA.md`).
 
-Main architecture plans focus on system designs, API contracts, database schemas, and data flow pipelines. Including machine-oriented subagent prompts directly in technical blueprints leads to prompt bloat, context dilution, and accidental leakage of implementation details across subagent domain boundaries. 
+Main architecture plans focus on system designs, API contracts, database schemas, and data flow pipelines. Including machine-oriented subagent prompts directly in technical blueprints leads to prompt bloat, context dilution, and accidental leakage of implementation details across subagent domain boundaries.
 
 Decoupling operational guidance into this dedicated manual achieves:
 1. **Context Isolation**: Subagents receive standalone, machine-actionable prompt cards containing only the necessary specs, boundary limits, and file write permissions for their specific task.
@@ -241,7 +241,7 @@ Author the Single Source of Truth (SSOT) TypeScript type definitions file (`comp
 
 - **Assigned Subagent Role**: `subagent-prosemirror-specialist` (Subagent 2)
 - **Execution Phase**: Phase T1 (Core Editor Field Development)
-- **Target File Paths**: 
+- **Target File Paths**:
   - `apps/crish-desktop/src/components/chat-composer/TiptapEditorField.tsx`
   - `apps/crish-desktop/src/components/chat-composer/TiptapEditorField.module.css`
 - **File Type Budget**: UI Component (Target: ~320 lines, Hard Cap: ≤ 500 lines)
@@ -295,7 +295,7 @@ Implement the core Tiptap ProseMirror editor field component (`TiptapEditorField
   - `apps/crish-desktop/src/components/chat-composer/TiptapSlashMenu.tsx`
   - `apps/crish-desktop/src/components/chat-composer/SlashExtension.ts`
   - `apps/crish-desktop/src/components/chat-composer/TiptapSlashMenu.module.css`
-- **File Type Budgets**: 
+- **File Type Budgets**:
   - `TiptapSlashMenu.tsx`: UI Component (Target: ~180 lines, Hard Cap: ≤ 500 lines)
   - `SlashExtension.ts`: Logic / Plugin (Target: ~100 lines, Hard Cap: ≤ 400 lines)
 - **Write Permissions**: `TiptapSlashMenu.tsx` (WRITE), `SlashExtension.ts` (WRITE), `TiptapSlashMenu.module.css` (WRITE). All other files (READ ONLY).

@@ -13,7 +13,7 @@
 ## Document Control & Executive Summary
 
 ### Executive Overview
-This document specifies the software requirements for migrating the prototype **Tiptap Chat Composer** (`reference/chat-composer-tiptap`) into the production host application **Conex / Crish** (`apps/crish-desktop` and `apps/agent-workbench`). 
+This document specifies the software requirements for migrating the prototype **Tiptap Chat Composer** (`reference/chat-composer-tiptap`) into the production host application **Conex / Crish** (`apps/crish-desktop` and `apps/agent-workbench`).
 
 The existing input field in `apps/crish-desktop` (`src/components/chat-composer/ComposerField.tsx`) relies on a standard single-element HTML `<textarea>` with basic auto-grow capabilities (`useAutoGrowTextarea`). While functional, it lacks inline rich-text formatting, Notion-style drag-and-drop reordering, interactive task list checklists, structured slash (`/`) command menus, and entity mentions (`@`).
 

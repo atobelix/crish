@@ -331,7 +331,7 @@ To guarantee draft isolation, the Tiptap Chat Composer implements an **automatic
  */
 useEffect(() => {
   const prevSessionId = prevSessionIdRef.current;
-  
+
   if (prevSessionId && prevSessionId !== sessionId) {
     // 1. Flush draft for outgoing session
     const currentMarkdown = getEditorMarkdown();
@@ -615,7 +615,7 @@ export function deserializeMarkdownToAst(markdown: string): ProseMirrorNodeJSON 
 
 function parseInlineText(text: string): ProseMirrorNodeJSON[] {
   const nodes: ProseMirrorNodeJSON[] = [];
-  
+
   // Regex parsing for @[label](id) mentions, **bold**, *italic*, `code`
   const mentionRegex = /@\[([^\]]+)\]\(([^)]+)\)/g;
   let lastIdx = 0;
