@@ -1,7 +1,7 @@
 ﻿# §1 修复抽查（F4 + 整节闭合）· FIX-§1-verification
 
-> 核查人：code-audit · 2026-09-08（America/New_York）  
-> 标准：`QUALITY-GATE.md` 可证伪  
+> 核查人：code-audit · 2026-09-08（America/New_York）
+> 标准：`QUALITY-GATE.md` 可证伪
 > 对照：`FIX-PROGRESS-§1.md`（F4 已关闭）
 
 ## 总裁定：**§1 闭合通过**
@@ -38,16 +38,16 @@
 
 ## F1–F3（沿用上一轮复检，未回退）
 
-- F1：falsify = `REPRO_F1_threw`；无根相对硬失败  
-- F2：入队先 assert；`resolveUserImageSrc` 先 assert（**R1 残留**：点击 `handleOpenPath(img.source)` 仍传原始 source——不阻断闭合，建议 §3/收尾统一 assert）  
-- F3：`normalize_list_pending_approvals_params` + 契约单测行为断言齐全  
+- F1：falsify = `REPRO_F1_threw`；无根相对硬失败
+- F2：入队先 assert；`resolveUserImageSrc` 先 assert（**R1 残留**：点击 `handleOpenPath(img.source)` 仍传原始 source——不阻断闭合，建议 §3/收尾统一 assert）
+- F3：`normalize_list_pending_approvals_params` + 契约单测行为断言齐全
 
 ---
 
 ## 放行说明
 
-- **§1：通过并闭合**  
-- **§3：可以开工**（路径/读盘/IPC 空参/Token 门禁前置已满足）  
-- 请 main 同步刷新过期的 `FIX-PROGRESS-sec1-rereview.md`（仍写 F4 未关闭），以免文档双轨  
+- **§1：通过并闭合**
+- **§3：可以开工**（路径/读盘/IPC 空参/Token 门禁前置已满足）
+- 请 main 同步刷新过期的 `FIX-PROGRESS-sec1-rereview.md`（仍写 F4 未关闭），以免文档双轨
 
 _文档由 code-audit 勾选 F4 并裁定 §1 闭合_

@@ -1,9 +1,9 @@
 # Crish 系统性修复 · 额度暂停交接文档
 
-> 日期：2026-09-08（America/New_York）  
-> 仓库：`C:\Software\conex` · 分支：`refactor/architecture` · 无 git remote  
-> 原因：用户额度不足，**主动停掉后台改码**，本文件供后续续跑（人或其他 agent）。  
-> 总方案：`docs/audit/SYSTEMATIC-FIX-PLAN.md`  
+> 日期：2026-09-08（America/New_York）
+> 仓库：`C:\Software\conex` · 分支：`refactor/architecture` · 无 git remote
+> 原因：用户额度不足，**主动停掉后台改码**，本文件供后续续跑（人或其他 agent）。
+> 总方案：`docs/audit/SYSTEMATIC-FIX-PLAN.md`
 > 质量闸门：`docs/audit/QUALITY-GATE.md`（实现 → 自测 → FIX-PROGRESS → code-audit 可证伪核查 → 无阻断才进下一节）
 
 ---
@@ -38,7 +38,7 @@
 
 - 功能：6.1 应急草稿读回、6.2 flush 形式化排空、6.3 生产 crypto 块 ID → 核查 **`[x]`**
 - 文档：`FIX-PROGRESS-§6.md`、`FIX-§6-verification.md`
-- **剩余 `[~]`**：`scripts/check-sec6-note-drain-entropy.mjs` 已有且本机 PASS，但 **根 `package.json` / `check:desktop` 正式挂名可能未完成**（后台挂名任务被中断）。  
+- **剩余 `[~]`**：`scripts/check-sec6-note-drain-entropy.mjs` 已有且本机 PASS，但 **根 `package.json` / `check:desktop` 正式挂名可能未完成**（后台挂名任务被中断）。
   **续跑第一步**：确认 `package.json` 是否含 `check:sec6-note-drain-entropy`；没有则挂上并去掉任何嵌入双扫；喊 code-audit 把 `[~]`→`[x]`。
 
 ### 3.2 §7 渲染纪律 — 落地被中断
@@ -59,7 +59,7 @@
 ## 4. 尚未开始（按方案逻辑顺序）
 
 ### §2.2 文档伪连通清零
-- 文档宣称的铁律必须有脚本/测试接线，否则改口；示例密钥改明显假值。  
+- 文档宣称的铁律必须有脚本/测试接线，否则改口；示例密钥改明显假值。
 - 可与 §9 一并做。
 
 ### §8 Rust / crates 与桌面边界对齐
@@ -67,30 +67,30 @@
 
 ### §9 防回潮总闸一次性装上
 须全部进 `check:desktop`（缺一失败），至少包括方案所列：
-1. 禁 chat-injection / 空 dispatch  
-2. 禁 localFileReader shell 读盘  
-3. 禁业务 CSS 裸 Hex / 双轨标题 token  
-4. 禁非视觉 dataUrl/绝对路径进 prompt  
-5. IPC 空参与错误码契约  
-6. preview postMessage 必须 origin 校验  
-7. 应急草稿生产调用 load 路径存在  
+1. 禁 chat-injection / 空 dispatch
+2. 禁 localFileReader shell 读盘
+3. 禁业务 CSS 裸 Hex / 双轨标题 token
+4. 禁非视觉 dataUrl/绝对路径进 prompt
+5. IPC 空参与错误码契约
+6. preview postMessage 必须 origin 校验
+7. 应急草稿生产调用 load 路径存在
 
 （部分已散落实现；§9 是**收齐+去嵌入双扫+文档一致**。）
 
 ### §10 验收闭环
-- `FIX-ACCEPTANCE.md`：§0 不变量 → 证据（路径/测试/门禁名）  
-- code-audit 再跑一轮 `secondary-checklist` 式总复核  
-- 三者一致才逻辑闭合；禁止兼容层假装完成  
+- `FIX-ACCEPTANCE.md`：§0 不变量 → 证据（路径/测试/门禁名）
+- code-audit 再跑一轮 `secondary-checklist` 式总复核
+- 三者一致才逻辑闭合；禁止兼容层假装完成
 
 ---
 
 ## 5. 建议续跑顺序（逻辑依赖，非排期）
 
-1. **收 §6 门禁挂名** → code-audit 升 `[x]`  
-2. **清点并完成 §7**（半成品收口或按 SCOUT 重做）→ 核查  
-3. **§8** crates/前端对齐  
-4. **§2.2 + §9** 文档与总闸  
-5. **§10** 验收文档 + 总复核  
+1. **收 §6 门禁挂名** → code-audit 升 `[x]`
+2. **清点并完成 §7**（半成品收口或按 SCOUT 重做）→ 核查
+3. **§8** crates/前端对齐
+4. **§2.2 + §9** 文档与总闸
+5. **§10** 验收文档 + 总复核
 
 过程中遵守 `QUALITY-GATE.md`；用户偏好多路**不占侧边栏**后台并行，但**上一节无阻断才进下一节**。
 
@@ -98,8 +98,8 @@
 
 ## 6. 已知摩擦（省额度技巧）
 
-- 根 `package.json` 写入多次被 Auto-review 拦截 → 可嵌入临时门禁再正式挂名，或用户本机手改三行脚本名。  
-- 本机连接偶发掉线 → 隔约 5 分钟再试即可，勿狂连。  
+- 根 `package.json` 写入多次被 Auto-review 拦截 → 可嵌入临时门禁再正式挂名，或用户本机手改三行脚本名。
+- 本机连接偶发掉线 → 隔约 5 分钟再试即可，勿狂连。
 - 仓库无 remote → 云端 agent 不好直接用；工作在本地 `C:\Software\conex`。
 
 ---
@@ -121,6 +121,6 @@ docs/audit/
 
 ## 8. 暂停时动作记录
 
-- 用户声明额度不足。  
-- main **停止**正在跑的 §6 挂名与 §7 三路后台任务。  
-- **未**宣称 §7–§10 完成。  
+- 用户声明额度不足。
+- main **停止**正在跑的 §6 挂名与 §7 三路后台任务。
+- **未**宣称 §7–§10 完成。

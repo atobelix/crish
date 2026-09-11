@@ -1,8 +1,8 @@
 # §5 修复抽查 · FIX-§5-verification
 
-> 核查人：code-audit · 2026-09-08（America/New_York）  
-> 标准：`QUALITY-GATE.md` 可证伪  
-> 对照：`FIX-PROGRESS-§5.md` · 前置 §4 已闭合  
+> 核查人：code-audit · 2026-09-08（America/New_York）
+> 标准：`QUALITY-GATE.md` 可证伪
+> 对照：`FIX-PROGRESS-§5.md` · 前置 §4 已闭合
 > **复检**：F5-1 回炉后（同日）
 
 ## 总裁定：**§5 已闭合**（无阻断 `[!]`）
@@ -74,19 +74,19 @@
 
 ## QUALITY-GATE 对照
 
-1. 意图可陈述 — 过  
-2. 无新旁路 — **过**（F5-1 已关）  
-3. 对称失败 — 过（缺 regenerate 不渲染）  
-4. 测试 — 过（源码契约 + 行为；16 PASS）  
-5. 门禁 — bes 已挂名  
+1. 意图可陈述 — 过
+2. 无新旁路 — **过**（F5-1 已关）
+3. 对称失败 — 过（缺 regenerate 不渲染）
+4. 测试 — 过（源码契约 + 行为；16 PASS）
+5. 门禁 — bes 已挂名
 6. 二次核查 — 本文件；**无 `[!]` → 闭合**
 
 ---
 
 ## 结论与交接
 
-- **§5 闭合**；F5-1 `[x]`。  
-- **@main 可开 §6**。  
+- **§5 闭合**；F5-1 `[x]`。
+- **@main 可开 §6**。
 - 可选：清 Virtualizer/Agent 行其它 noop；跟进 R5-2 `__none__`。
 
 _文档由 code-audit 可证伪复检生成_

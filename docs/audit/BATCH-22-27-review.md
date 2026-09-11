@@ -149,36 +149,36 @@
 
 ### P0（合入前必须）
 
-1. **附件路径读盘加边界**（B23-1 / B23-2）  
-   - `handlePathsSelected`：仅允许工作区根内路径，或显式「用户确认后读外部文件」。  
-   - 禁止对未校验路径调用 `workbench_run_shell`；优先受控 FS API。  
+1. **附件路径读盘加边界**（B23-1 / B23-2）
+   - `handlePathsSelected`：仅允许工作区根内路径，或显式「用户确认后读外部文件」。
+   - 禁止对未校验路径调用 `workbench_run_shell`；优先受控 FS API。
    - 拒绝 `..`、UNC 可疑形态、超长路径。
 
-2. **禁止非视觉模型下发 dataUrl/绝对路径**（B24-1 / B24-2）  
-   - 非视觉：只发文件名 + 「已附件，模型不可视」提示，不写 path/dataUrl。  
+2. **禁止非视觉模型下发 dataUrl/绝对路径**（B24-1 / B24-2）
+   - 非视觉：只发文件名 + 「已附件，模型不可视」提示，不写 path/dataUrl。
    - 用户消息持久化对 dataUrl 做截断/外置引用，避免会话库膨胀与路径残留。
 
 ### P1（尽快）
 
-3. **统一拖放唯一消费者**（B23-3 / B24-4）  
-   - ChatCard IPC / window / card / DropHost / Tiptap 五选一主路径，其余 `preventDefault` 后 return。  
+3. **统一拖放唯一消费者**（B23-3 / B24-4）
+   - ChatCard IPC / window / card / DropHost / Tiptap 五选一主路径，其余 `preventDefault` 后 return。
    - 加「同文件指纹去重」防双入队。
 
-4. **计划进度条订阅 store**（B23-5）  
+4. **计划进度条订阅 store**（B23-5）
    - `ChatComposerWrapper` 改为 `useSyncExternalStore` / selector 订阅 session，避免静默过期。
 
-5. **骨架 drag-region 收敛**（B27-1）  
+5. **骨架 drag-region 收敛**（B27-1）
    - 仅外层 `#skel-app` 保留；去掉 svg/caption 上的属性。
 
-6. **preview postMessage 校验 origin**（B26-1）  
+6. **preview postMessage 校验 origin**（B26-1）
    - 宿主只接受预览 iframe origin（代理源）；桥侧也可限制。
 
 ### P2（清理 / 加固）
 
-7. 删除或正式归档 `PlanGoalRibbons` 死路径（B23-8）。  
-8. 批注保存改为不可变更新（B24-3）。  
-9. DOMPurify 配置加协议单测（B24-5）。  
-10. 文档示例密钥改为明显假值（B25-1）。  
+7. 删除或正式归档 `PlanGoalRibbons` 死路径（B23-8）。
+8. 批注保存改为不可变更新（B24-3）。
+9. DOMPurify 配置加协议单测（B24-5）。
+10. 文档示例密钥改为明显假值（B25-1）。
 11. SVG 附件策略明确（栅格化或禁止）（B23-7）。
 
 ---

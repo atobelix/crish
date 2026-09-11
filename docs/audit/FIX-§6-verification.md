@@ -1,7 +1,7 @@
 # §6 修复抽查 · FIX-§6-verification
 
-> 核查人：code-audit · 2026-09-08（America/New_York）  
-> 标准：`QUALITY-GATE.md` 可证伪  
+> 核查人：code-audit · 2026-09-08（America/New_York）
+> 标准：`QUALITY-GATE.md` 可证伪
 > 对照：`FIX-PROGRESS-§6.md`（含续节）· 前置 §5 已闭合
 
 ## 总裁定：**有条件通过**（无功能阻断 `[!]`；门禁挂名 `[~]`）
@@ -13,7 +13,7 @@
 | §6.3 生产块 ID crypto | `[x]` | PROD 硬失败；弱熵仅 DEV/test helper |
 | 门禁 `check-sec6-note-drain-entropy` | `[~]` | 脚本独立 **SEC6 PASS**；**尚未**进 `package.json`/`check:desktop` |
 
-**正式闭合条件**：把 `check-sec6-note-drain-entropy` 挂入桌面总闸（main 自报补挂名）。  
+**正式闭合条件**：把 `check-sec6-note-drain-entropy` 挂入桌面总闸（main 自报补挂名）。
 **§7**：摸查/落地不因本 `[~]` 阻断；§9.7 全量应急草稿引用扫描属 §9，本轮不要求。
 
 ---
@@ -67,20 +67,20 @@
 
 ## QUALITY-GATE 对照
 
-1. 意图可陈述 — 过（§6.1–6.3）  
-2. 无新旁路 — 过（单套 storage；无生产弱熵轨；无伪两轮 flush）  
-3. 对称失败 — 过（loading 不读回；排空/缺熵 throw）  
-4. 测试非假绿 — 过（行为 + 源码契约）  
-5. 门禁可执行 — **部分**：脚本可跑绿；**总闸未接线 = 未完成**（记 `[~]`）  
+1. 意图可陈述 — 过（§6.1–6.3）
+2. 无新旁路 — 过（单套 storage；无生产弱熵轨；无伪两轮 flush）
+3. 对称失败 — 过（loading 不读回；排空/缺熵 throw）
+4. 测试非假绿 — 过（行为 + 源码契约）
+5. 门禁可执行 — **部分**：脚本可跑绿；**总闸未接线 = 未完成**（记 `[~]`）
 6. 二次核查 — 本文件；**无功能 `[!]`**
 
 ---
 
 ## 结论与交接
 
-- **§6 有条件通过**：6.1 / 6.2 / 6.3 代码与专项测过关。  
-- **@main**：请将 `check-sec6-note-drain-entropy` 挂入 `check:desktop`（或等价总闸）后喊一声，verification 该项 `[~]`→`[x]` 即可标 **§6 闭合**。  
-- §9.7 引用扫描仍归 §9。  
+- **§6 有条件通过**：6.1 / 6.2 / 6.3 代码与专项测过关。
+- **@main**：请将 `check-sec6-note-drain-entropy` 挂入 `check:desktop`（或等价总闸）后喊一声，verification 该项 `[~]`→`[x]` 即可标 **§6 闭合**。
+- §9.7 引用扫描仍归 §9。
 - §7 可继续。
 
 _文档由 code-audit 可证伪抽查生成_

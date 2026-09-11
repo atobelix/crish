@@ -1,8 +1,8 @@
 ﻿# Crish/conex 二次核查清单（BATCH-08～27）
 
-> 用途：main 主审文档落盘后，按本清单做独立复核。  
-> 仓库：`C:\Software\conex` · 分支：`refactor/architecture` · 无 git remote  
-> 范围：BATCH-08～BATCH-27 相关提交质量  
+> 用途：main 主审文档落盘后，按本清单做独立复核。
+> 仓库：`C:\Software\conex` · 分支：`refactor/architecture` · 无 git remote
+> 范围：BATCH-08～BATCH-27 相关提交质量
 > 状态：待主审完成后勾选
 
 ## 使用方式

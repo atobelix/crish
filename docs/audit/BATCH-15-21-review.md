@@ -110,15 +110,15 @@
 
 **严重**
 
-1. **`localFileReader.ts` 通过 `workbench_run_shell` 兜底读取任意本机路径**  
-   - 证据：`readLocalImageAsDataUrl` / `readLocalTextBestEffort` 在 `convertFileSrc` 失败后，把路径拼进 PowerShell `ReadAllBytes` 或 Unix `base64`/`head` 命令；仅做单引号加倍；无工作区边界、无路径 allowlist。  
-   - 单测 `localFileReader.test.ts` 只覆盖 `getMimeFromPath`。  
+1. **`localFileReader.ts` 通过 `workbench_run_shell` 兜底读取任意本机路径**
+   - 证据：`readLocalImageAsDataUrl` / `readLocalTextBestEffort` 在 `convertFileSrc` 失败后，把路径拼进 PowerShell `ReadAllBytes` 或 Unix `base64`/`head` 命令；仅做单引号加倍；无工作区边界、无路径 allowlist。
+   - 单测 `localFileReader.test.ts` 只覆盖 `getMimeFromPath`。
    - SVG 映射为 `image/svg+xml` 进入 dataUrl，后续若当 HTML 嵌入需额外注意。
 
 **中等**
 
-2. **`writeTextFile` / `toAssetUrl` 与 `readTextFile` 不对称**：本批为 `readTextFile` 增加 `if (!path) throw`；写与 asset URL 仍可能对 `resolveWorkspacePath` 返回的空串继续 invoke / `convertFileSrc`。  
-3. **`revealInOs` 使用原始 `filePath`**，未走 `resolveWorkspacePath`（同文件周边 API）。  
+2. **`writeTextFile` / `toAssetUrl` 与 `readTextFile` 不对称**：本批为 `readTextFile` 增加 `if (!path) throw`；写与 asset URL 仍可能对 `resolveWorkspacePath` 返回的空串继续 invoke / `convertFileSrc`。
+3. **`revealInOs` 使用原始 `filePath`**，未走 `resolveWorkspacePath`（同文件周边 API）。
 4. context-state 会话隔离与死态 cleanup 正向；双键暂存与大量 `swallow-ok` 仍增加排障成本。
 
 **轻微**

@@ -1,7 +1,7 @@
 ﻿# §3 修复抽查 · FIX-§3-verification
 
-> 核查人：code-audit · 2026-09-08（America/New_York）  
-> 标准：`QUALITY-GATE.md` 可证伪  
+> 核查人：code-audit · 2026-09-08（America/New_York）
+> 标准：`QUALITY-GATE.md` 可证伪
 > 对照：`FIX-PROGRESS-§3.md` · 前置 §1 已闭合
 
 ## 总裁定：**§3 有条件通过（无阻断 `[!]`）**
@@ -60,21 +60,21 @@
 
 ## QUALITY-GATE 对照
 
-1. 意图可陈述 — 过（§3.1–3.3 + F2）  
-2. 无新旁路 — 过（拖放/读盘走 assert；非视觉无 dataUrl 拼 prompt）  
-3. 对称失败 — 过（越界 skip；打开 toast；jsonl 坏行失败）  
-4. 测试非假绿 — 进度称 108 passed；门禁静态扫描有行为特征断言（非仅「不抛错」）  
-5. 门禁可执行 — 过（嵌入+独立）；正式挂名 `[~]`  
+1. 意图可陈述 — 过（§3.1–3.3 + F2）
+2. 无新旁路 — 过（拖放/读盘走 assert；非视觉无 dataUrl 拼 prompt）
+3. 对称失败 — 过（越界 skip；打开 toast；jsonl 坏行失败）
+4. 测试非假绿 — 进度称 108 passed；门禁静态扫描有行为特征断言（非仅「不抛错」）
+5. 门禁可执行 — 过（嵌入+独立）；正式挂名 `[~]`
 6. 二次核查 — 本文件；**无阻断 `[!]`**
 
 ---
 
 ## 结论与交接
 
-- **§3 通过，可进 §4。**  
-- 收尾（不挡节间放行）：  
-  1. package.json 正式挂 `check:no-nonvision-dataurl` 进 `check:desktop`，去掉伪嵌入（若仍嵌在 pseudo-dispatch）  
-  2. R3-1：`handleFilesSelected` 对 `File.path` 转发而非 continue  
+- **§3 通过，可进 §4。**
+- 收尾（不挡节间放行）：
+  1. package.json 正式挂 `check:no-nonvision-dataurl` 进 `check:desktop`，去掉伪嵌入（若仍嵌在 pseudo-dispatch）
+  2. R3-1：`handleFilesSelected` 对 `File.path` 转发而非 continue
   3. R3-2：缩略图落盘策略再收敛（可选）
 
 _文档由 code-audit 可证伪抽查生成_

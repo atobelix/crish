@@ -1,8 +1,8 @@
 ﻿# §4 修复抽查 · FIX-§4-verification
 
-> 核查人：code-audit · 2026-09-08（America/New_York）  
-> 标准：`QUALITY-GATE.md` 可证伪  
-> 对照：`FIX-PROGRESS-§4.md` · 前置 §3 有条件通过  
+> 核查人：code-audit · 2026-09-08（America/New_York）
+> 标准：`QUALITY-GATE.md` 可证伪
+> 对照：`FIX-PROGRESS-§4.md` · 前置 §3 有条件通过
 > 修订：同日追加核验 `check:blocked-executable-ssot` 正式挂名
 
 ## 总裁定：**§4 通过（门禁具名项已齐）**
@@ -33,11 +33,11 @@
 
 ## §4.1–4.3 / R3-1（沿用前轮，未回退）
 
-- origin 白名单 + 明确 `targetOrigin`；`sameOriginRequest` 单轨  
-- 骨架仅外层 drag-region  
-- 前后端可执行后缀同表 + 打开前拦截  
-- `handleFilesSelected` → `pathBatch` → `handlePathsSelected`  
-- `check:no-nonvision-dataurl` 已在 desktop  
+- origin 白名单 + 明确 `targetOrigin`；`sameOriginRequest` 单轨
+- 骨架仅外层 drag-region
+- 前后端可执行后缀同表 + 打开前拦截
+- `handleFilesSelected` → `pathBatch` → `handlePathsSelected`
+- `check:no-nonvision-dataurl` 已在 desktop
 
 **R4-1 `[~]`（不阻断）**：无 Origin 时接受 `Sec-Fetch-Site: none`——策略权衡，非双轨回潮。
 
@@ -49,7 +49,7 @@
 
 ## 结论
 
-- **§4 闭合通过**（原「有条件」中唯一具名 `[~]` 已消除）。  
+- **§4 闭合通过**（原「有条件」中唯一具名 `[~]` 已消除）。
 - §5 可继续；无需因本项回滚。
 
 _文档由 code-audit 追加核验并升格 bes `[x]`_

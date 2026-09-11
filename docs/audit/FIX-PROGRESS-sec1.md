@@ -1,7 +1,7 @@
 ﻿# §1 修复进度 · FIX-PROGRESS-§1
 
-> 日期：2026-09-07（America/New_York）  
-> 分支：refactor/architecture  
+> 日期：2026-09-07（America/New_York）
+> 分支：refactor/architecture
 > 范围：仅 SYSTEMATIC-FIX-PLAN §1（含跑通 §1 必需的最小调用方接线）
 
 ## 完成项

@@ -1,7 +1,7 @@
 # Crish/conex 系统性修复方案（BATCH-08～27 审计闭环）
 
-> 依据：`docs/audit/SUMMARY.md` + 三分报告 + `secondary-verification.md`（P0/P1 均已 `[x]` 确认）  
-> 约束：杜绝硬编码、杜绝双轨/多轨逻辑、杜绝功能伪连通、杜绝「兼容层」残留、设计样式只走 Token SSOT  
+> 依据：`docs/audit/SUMMARY.md` + 三分报告 + `secondary-verification.md`（P0/P1 均已 `[x]` 确认）
+> 约束：杜绝硬编码、杜绝双轨/多轨逻辑、杜绝功能伪连通、杜绝「兼容层」残留、设计样式只走 Token SSOT
 > 本文**仅描述逻辑执行顺序**：步骤之间是依赖关系，所列问题同权，不含排期、分工或「先做谁后做谁」的重要性排序表述。
 
 ---
@@ -159,20 +159,20 @@
 
 将下列检查全部挂入日常 `check:desktop`（或等价总闸），缺一则总闸失败：
 
-1. 禁止 `chat-injection` 路径与 stub `dispatch*` 被调用。  
-2. 禁止 `localFileReader` / 附件链路出现 `workbench_run_shell` 读盘。  
-3. 禁止业务 CSS 裸 Hex / 双轨 markdown 标题 token。  
-4. 禁止非视觉多模态路径拼接 `dataUrl` 或绝对盘符路径进 prompt。  
-5. IPC 空参与错误码契约测试。  
-6. preview postMessage 必须出现 origin 校验（静态扫描或单测）。  
+1. 禁止 `chat-injection` 路径与 stub `dispatch*` 被调用。
+2. 禁止 `localFileReader` / 附件链路出现 `workbench_run_shell` 读盘。
+3. 禁止业务 CSS 裸 Hex / 双轨 markdown 标题 token。
+4. 禁止非视觉多模态路径拼接 `dataUrl` 或绝对盘符路径进 prompt。
+5. IPC 空参与错误码契约测试。
+6. preview postMessage 必须出现 origin 校验（静态扫描或单测）。
 7. 应急草稿：存在生产调用 `loadEmergencyDraftSync`（或标记的恢复 API）的引用扫描。
 
 ---
 
 ## 10. 验收与审计闭环（逻辑终点）
 
-1. 对 §0 每条不变量做一次「证据复核」：路径、测试名、门禁脚本名写入 `docs/audit/FIX-ACCEPTANCE.md`。  
-2. `code-audit` 按 `secondary-checklist.md` 对修复后的树再跑一轮，差异写入 `secondary-verification.md` 追加节。  
+1. 对 §0 每条不变量做一次「证据复核」：路径、测试名、门禁脚本名写入 `docs/audit/FIX-ACCEPTANCE.md`。
+2. `code-audit` 按 `secondary-checklist.md` 对修复后的树再跑一轮，差异写入 `secondary-verification.md` 追加节。
 3. 仅当不变量、门禁、二次核查三者一致时，本修复方案视为逻辑闭合；否则回到对应章节补齐，禁止用兼容层或开关默认值假装闭合。
 
 ---
@@ -198,8 +198,8 @@
 
 ## 附录 B · 明确禁止的「修复姿势」
 
-- 用「兼容旧调用」保留 stub、双实现、feature flag 默认开旧轨。  
-- 用硬编码路径/密钥/字号「先跑通再改」。  
-- 只改调用方不改原语，或只改原语不改门禁。  
-- 文档宣称完成但 `check:desktop` 未覆盖。  
+- 用「兼容旧调用」保留 stub、双实现、feature flag 默认开旧轨。
+- 用硬编码路径/密钥/字号「先跑通再改」。
+- 只改调用方不改原语，或只改原语不改门禁。
+- 文档宣称完成但 `check:desktop` 未覆盖。
 - 为省事恢复 shell 读盘或 `postMessage('*')`。
