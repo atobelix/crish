@@ -1,7 +1,7 @@
 # 双 Agent 独立方案对比与最终架构裁决汇总
 
-**文档代号**：`ARCH-SYNTHESIS-20260905`  
-**归属目录**：`docs/markdown-editor/independent-plans/`  
+**文档代号**：`ARCH-SYNTHESIS-20260905`
+**归属目录**：`docs/markdown-editor/independent-plans/`
 **对比对象**：
 1. [01-架构师A-排版渲染与代码缩进独立方案.md](./01-架构师A-排版渲染与代码缩进独立方案.md)（侧重底层渲染几何、CSS包含块与 CommonMark 规范）
 2. [02-架构师B-交互体系与色彩层级独立方案.md](./02-架构师B-交互体系与色彩层级独立方案.md)（侧重状态机、交互模型、3% 灰度设计系统与组件工程化）

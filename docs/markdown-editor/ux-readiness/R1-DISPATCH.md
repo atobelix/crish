@@ -1,10 +1,10 @@
 # R1 融合编辑器重构 · 多 Agent 派工真源
 
-> **日期**：2026-08-03  
-> **波次**：R1（内核 + MD 子集 + 跨选）  
-> **执行规格**：`reference/chat-composer-component/docs/markdown-editor/ux-readiness/12-FUSED-EDITOR-REFACTOR-SPEC.md`  
-> **目标包**：`packages/conex-mdx`  
-> **调度策略**：一工单一 Agent · 只写所有权路径 · 合并前 DoD 全勾  
+> **日期**：2026-08-03
+> **波次**：R1（内核 + MD 子集 + 跨选）
+> **执行规格**：`reference/chat-composer-component/docs/markdown-editor/ux-readiness/12-FUSED-EDITOR-REFACTOR-SPEC.md`
+> **目标包**：`packages/conex-mdx`
+> **调度策略**：一工单一 Agent · 只写所有权路径 · 合并前 DoD 全勾
 
 ---
 
@@ -94,7 +94,7 @@ R1-09 补全测例 + 全量 typecheck/test  Wave4
 | Showcase 剧本 MD | `packages/conex-mdx/tests/fixtures/showcase-sample.md` | 从 `demo/showcase-sample.js` **抽出真实字符串**写入 `.md`，可被 `parse`/`setMarkdown` 直接吃 |
 | 负例 | `tests/fixtures/negatives/*.md` | 货币 `$5`、未闭合 `**` 等（真实文本，非 fake URL） |
 
-**禁止**：`http://example.com/fake-upload.png` 作为「上传成功」；无 `uploadImage` 端口时用 `blob:` 或拒绝并写死策略。  
+**禁止**：`http://example.com/fake-upload.png` 作为「上传成功」；无 `uploadImage` 端口时用 `blob:` 或拒绝并写死策略。
 **禁止**：AI `complete` 返回固定 lorem。
 
 ---

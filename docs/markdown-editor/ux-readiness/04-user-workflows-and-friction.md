@@ -1,12 +1,12 @@
 # 04 · 日常工作流与摩擦分析（User Workflows & Friction）
 
-> **类型**：可用性分析（Usability），**不是**功能清单打勾表  
-> **日期**：2026-08-03  
-> **产品定位**：Markdown 原生 + 块级 UX；日常写作（笔记 / 技术文档 / 研究记录）。**不是** Notion Database / CRM。  
-> **证据来源**：  
-> - 运行时：`reference/chat-composer-component/js/markdown-editor/*`（真实现）  
-> - 契约：`packages/conex-mdx`（类型 + stub；`mount` 尚未运行时）  
-> - 规格：`reference/.../docs/markdown-editor/`（愿景、CROSSCUTTING、feature-catalog、行源码、表、IME、导出）  
+> **类型**：可用性分析（Usability），**不是**功能清单打勾表
+> **日期**：2026-08-03
+> **产品定位**：Markdown 原生 + 块级 UX；日常写作（笔记 / 技术文档 / 研究记录）。**不是** Notion Database / CRM。
+> **证据来源**：
+> - 运行时：`reference/chat-composer-component/js/markdown-editor/*`（真实现）
+> - 契约：`packages/conex-mdx`（类型 + stub；`mount` 尚未运行时）
+> - 规格：`reference/.../docs/markdown-editor/`（愿景、CROSSCUTTING、feature-catalog、行源码、表、IME、导出）
 > **诚实边界**：以下「当前摩擦」按**架构与代码可推断**的用户感知撰写；未做受控可用性实验室。标注「推断」处可被实测推翻。
 
 ---
@@ -52,9 +52,9 @@
 
 **核心张力（贯穿全文）**：
 
-1. **块边界 contenteditable** 带来精致阅读与 DnD，但天然弱于「跨段连续选区 / 浏览器原生粘贴语义」。  
-2. **行源码聚焦**（Typora 气质）与「所见即所得折叠标记」之间，用户心智需要一贯教育。  
-3. **`editor.js` 编排巨石 + 分模块卫星** 已部分拆出（IME / demote / promote / height-lock / table / media），但协调一致性仍是摩擦之源。  
+1. **块边界 contenteditable** 带来精致阅读与 DnD，但天然弱于「跨段连续选区 / 浏览器原生粘贴语义」。
+2. **行源码聚焦**（Typora 气质）与「所见即所得折叠标记」之间，用户心智需要一贯教育。
+3. **`editor.js` 编排巨石 + 分模块卫星** 已部分拆出（IME / demote / promote / height-lock / table / media），但协调一致性仍是摩擦之源。
 4. **`@conex/mdx` 仍是脚手架**：桌面宿主尚未形成稳定「打开文档 → 写 → 导出」产品闭环时，部分工作流只能在 reference demo 上体验。
 
 ### 0.4 与相邻文档的分工
@@ -78,12 +78,12 @@
 
 日常写作工具的「好用」不是功能点数，而是：
 
-- **启动摩擦 ≈ 0**（光标已在可写处）  
-- **格式摩擦 ≈ 肌肉记忆**（快捷键 / `/` / 前缀，而不是找菜单）  
-- **认知摩擦 ≈ 0**（读态与写态不「换产品」）  
+- **启动摩擦 ≈ 0**（光标已在可写处）
+- **格式摩擦 ≈ 肌肉记忆**（快捷键 / `/` / 前缀，而不是找菜单）
+- **认知摩擦 ≈ 0**（读态与写态不「换产品」）
 - **恢复摩擦 ≈ 0**（撤销、导出、只读预览可信）
 
-Conex MD 的承诺是：**Notion 式块操作感 + Typora 式行源码 + GFM 可往返**，且**不做**数据库。  
+Conex MD 的承诺是：**Notion 式块操作感 + Typora 式行源码 + GFM 可往返**，且**不做**数据库。
 若某条工作流逼用户「先学会块模型才能写一段话」，则该工作流失败——与功能是否存在无关。
 
 ---
@@ -92,11 +92,11 @@ Conex MD 的承诺是：**Notion 式块操作感 + Typora 式行源码 + GFM 可
 
 每条工作流结构固定：
 
-1. 场景与用户意图  
-2. 理想路径（步数感）  
-3. 当前摩擦（架构推断 + 证据锚点）  
-4. 严重度  
-5. 设计修复方向  
+1. 场景与用户意图
+2. 理想路径（步数感）
+3. 当前摩擦（架构推断 + 证据锚点）
+4. 严重度
+5. 设计修复方向
 6. 验收体感（人话，非测试用例编号）
 
 ---
@@ -109,9 +109,9 @@ Conex MD 的承诺是：**Notion 式块操作感 + Typora 式行源码 + GFM 可
 
 #### 理想路径
 
-1. 打开文档 → 看到精致排版（或干净空白页与浅灰 placeholder）。  
-2. 光标已在首段或上次位置；键盘直接输入中文/英文。  
-3. 输入过程中段落保持「像正文」，不闪、不跳、不弹格式栏。  
+1. 打开文档 → 看到精致排版（或干净空白页与浅灰 placeholder）。
+2. 光标已在首段或上次位置；键盘直接输入中文/英文。
+3. 输入过程中段落保持「像正文」，不闪、不跳、不弹格式栏。
 4. 停顿后 autosave 静默发生；无「已保存」噪声（除非首次教育）。
 
 步数感：**0 次点击 + 1 次击键 = 在写**。
@@ -134,10 +134,10 @@ Conex MD 的承诺是：**Notion 式块操作感 + Typora 式行源码 + GFM 可
 
 #### 设计修复方向
 
-1. **默认焦点契约**：`mount` 后若 `viewOnly=false` 且文档有且仅有空段落 → 自动 enterEdit 首块并 `focus()`，无需点击。  
-2. **空文档纸感**：统一 min-height、行高、placeholder「输入 `/` 或 `、` 插入，或直接开写」——教育放在 placeholder，不弹气泡。  
-3. **宿主薄适配**：Desktop 只接 ports + lifecycle；禁止 host 每次 onChange 全量 re-mount。  
-4. **双运行时消歧**：文档与产品 UI 明确「生产写作用哪条运行时」；脚手架期禁止静默 fallback 到 stub。  
+1. **默认焦点契约**：`mount` 后若 `viewOnly=false` 且文档有且仅有空段落 → 自动 enterEdit 首块并 `focus()`，无需点击。
+2. **空文档纸感**：统一 min-height、行高、placeholder「输入 `/` 或 `、` 插入，或直接开写」——教育放在 placeholder，不弹气泡。
+3. **宿主薄适配**：Desktop 只接 ports + lifecycle；禁止 host 每次 onChange 全量 re-mount。
+4. **双运行时消歧**：文档与产品 UI 明确「生产写作用哪条运行时」；脚手架期禁止静默 fallback 到 stub。
 5. **上次光标**：同文档再开恢复 blockId + offset（可后置 S2，但空文档默认焦是 P0）。
 
 #### 验收体感
@@ -154,10 +154,10 @@ Conex MD 的承诺是：**Notion 式块操作感 + Typora 式行源码 + GFM 可
 
 #### 理想路径（多入口等价）
 
-- **前缀**：行首 `## ` 空格 promote 为 H2。  
-- **退格阶梯**：空标题 Backspace → 降级 H3→H2→H1→段落（不一次删整块）。  
-- **Slash / 、**：`、标题` / `/h2` 转类型。  
-- **快捷键（可选）**：`Mod+Alt+1..6` 或命令面板「设为标题 2」。  
+- **前缀**：行首 `## ` 空格 promote 为 H2。
+- **退格阶梯**：空标题 Backspace → 降级 H3→H2→H1→段落（不一次删整块）。
+- **Slash / 、**：`、标题` / `/h2` 转类型。
+- **快捷键（可选）**：`Mod+Alt+1..6` 或命令面板「设为标题 2」。
 - 失焦后立刻呈现对应字阶；**文档高度不因 `##` 灰标显隐而跳**。
 
 #### 当前摩擦（推断）
@@ -179,10 +179,10 @@ Conex MD 的承诺是：**Notion 式块操作感 + Typora 式行源码 + GFM 可
 
 #### 设计修复方向
 
-1. **保持退格阶梯金标准**，并在 UI 上让灰标 `###` 可点选减号式降级（可选弱 affordance，非页顶工具栏）。  
-2. **promote 失败反馈**：输入 `#` 无空格时灰标「松散」态，提示「空格确认标题」——不 toast 轰炸。  
-3. **命令面板条目**：「升/降一级标题」作用于当前块，服务不记 `#` 的用户。  
-4. **与 TOC 联动**：改 level 后 TOC 块刷新；若有侧栏大纲则高亮当前标题。  
+1. **保持退格阶梯金标准**，并在 UI 上让灰标 `###` 可点选减号式降级（可选弱 affordance，非页顶工具栏）。
+2. **promote 失败反馈**：输入 `#` 无空格时灰标「松散」态，提示「空格确认标题」——不 toast 轰炸。
+3. **命令面板条目**：「升/降一级标题」作用于当前块，服务不记 `#` 的用户。
+4. **与 TOC 联动**：改 level 后 TOC 块刷新；若有侧栏大纲则高亮当前标题。
 5. **禁止**页顶 Heading 下拉永久条（D16）；层级调整入口必须是上下文型。
 
 #### 验收体感
@@ -199,10 +199,10 @@ Conex MD 的承诺是：**Notion 式块操作感 + Typora 式行源码 + GFM 可
 
 #### 理想路径
 
-1. `- ` / `* ` / `1. ` 或 `/无序` 进入列表。  
-2. Enter → 同级新项，标记自动出现。  
-3. 空项 Enter → **退出列表**成普通段落（不留下幽灵 `*`）。  
-4. Tab / Shift+Tab 改 indent（扁平模型下改 `indent`）。  
+1. `- ` / `* ` / `1. ` 或 `/无序` 进入列表。
+2. Enter → 同级新项，标记自动出现。
+3. 空项 Enter → **退出列表**成普通段落（不留下幽灵 `*`）。
+4. Tab / Shift+Tab 改 indent（扁平模型下改 `indent`）。
 5. 任务列表 checkbox 在读态可点，写态不破坏组字。
 
 #### 当前摩擦（推断）
@@ -224,13 +224,13 @@ Conex MD 的承诺是：**Notion 式块操作感 + Typora 式行源码 + GFM 可
 
 #### 设计修复方向
 
-1. **统一退出语义矩阵**（必须写进键盘地图并实现一致）：  
-   - 空项 **Enter** → 退出列表为 paragraph  
-   - 空项 **Backspace** → 先去标记再 merge（阶梯）  
-   - 非空 Enter → 新项  
-2. **indent 视觉**：左侧缩进轨要稳定，禁止 Tab 时整行重挂导致跳动。  
-3. **连续输入性能**：新项 insert 走局部 reconcile，禁止 fullRender。  
-4. **教育**：placeholder「空项再按 Enter 结束列表」仅在列表空项出现一次级文案。  
+1. **统一退出语义矩阵**（必须写进键盘地图并实现一致）：
+   - 空项 **Enter** → 退出列表为 paragraph
+   - 空项 **Backspace** → 先去标记再 merge（阶梯）
+   - 非空 Enter → 新项
+2. **indent 视觉**：左侧缩进轨要稳定，禁止 Tab 时整行重挂导致跳动。
+3. **连续输入性能**：新项 insert 走局部 reconcile，禁止 fullRender。
+4. **教育**：placeholder「空项再按 Enter 结束列表」仅在列表空项出现一次级文案。
 5. **不做**自定义 bullet 皮肤商店；序列化统一 `-`。
 
 #### 验收体感
@@ -247,10 +247,10 @@ Conex MD 的承诺是：**Notion 式块操作感 + Typora 式行源码 + GFM 可
 
 #### 理想路径
 
-1. 鼠标拖蓝或 Shift+方向键形成跨段选区。  
-2. 复制得到：**内部块结构** + `text/plain` MD/纯文本 + 可选 `text/html` 消毒子集。  
-3. 粘贴到段落中间：首尾与上下文合并，中间块完整插入。  
-4. 粘贴到空块：直接展开为多块。  
+1. 鼠标拖蓝或 Shift+方向键形成跨段选区。
+2. 复制得到：**内部块结构** + `text/plain` MD/纯文本 + 可选 `text/html` 消毒子集。
+3. 粘贴到段落中间：首尾与上下文合并，中间块完整插入。
+4. 粘贴到空块：直接展开为多块。
 5. 一次撤销整次粘贴。
 
 #### 当前摩擦（推断）——**当前最大可用性债之一**
@@ -271,12 +271,12 @@ Conex MD 的承诺是：**Notion 式块操作感 + Typora 式行源码 + GFM 可
 
 #### 设计修复方向
 
-1. **明确产品选择（二选一，禁止半吊子）**：  
-   - **方案 A（推荐 v1）**：跨块拖选 = **块选**（高亮整块），复制序列化为 MD 多块；粘贴 = parse 多块插入。接受「不能选半段+整段+半段」直到 v1.1。  
-   - **方案 B（重）**：虚拟连续选区（自研 range）——成本高，见 02 专文。  
-2. **无论 A/B**：必须定义 `clipboard` 三通道：`text/plain`（MD）、内部 `application/x-conex-mdx-blocks`、消毒 `text/html`。  
-3. **块选 chrome**：左边 gutter 轻高亮，**禁止**厚蓝框手术台（A34）。  
-4. **粘贴事务**：单 history 条目；失败 partial 要可撤销。  
+1. **明确产品选择（二选一，禁止半吊子）**：
+   - **方案 A（推荐 v1）**：跨块拖选 = **块选**（高亮整块），复制序列化为 MD 多块；粘贴 = parse 多块插入。接受「不能选半段+整段+半段」直到 v1.1。
+   - **方案 B（重）**：虚拟连续选区（自研 range）——成本高，见 02 专文。
+2. **无论 A/B**：必须定义 `clipboard` 三通道：`text/plain`（MD）、内部 `application/x-conex-mdx-blocks`、消毒 `text/html`。
+3. **块选 chrome**：左边 gutter 轻高亮，**禁止**厚蓝框手术台（A34）。
+4. **粘贴事务**：单 history 条目；失败 partial 要可撤销。
 5. **教育**：若选方案 A，首次跨块选择时不气泡，但复制后粘贴结果必须「看起来对」。
 
 #### 验收体感
@@ -293,10 +293,10 @@ Conex MD 的承诺是：**Notion 式块操作感 + Typora 式行源码 + GFM 可
 
 #### 理想路径
 
-1. Ctrl+V。  
-2. 管道：`text/html` → 消毒 → 语义映射（h1–h6、ul/ol、a、strong/em、code、table 粗映射）→ blocks；若无 html 则 `text/plain` → MD 启发式 / 纯段。  
-3. 未知样式（字体色、span class）**丢弃**且不报错刷屏。  
-4. 危险标签 script/iframe 永不进入。  
+1. Ctrl+V。
+2. 管道：`text/html` → 消毒 → 语义映射（h1–h6、ul/ol、a、strong/em、code、table 粗映射）→ blocks；若无 html 则 `text/plain` → MD 启发式 / 纯段。
+3. 未知样式（字体色、span class）**丢弃**且不报错刷屏。
+4. 危险标签 script/iframe 永不进入。
 5. 大粘贴（>N 块）批量 commit，stagger 入场 ≤5（A25）。
 
 #### 当前摩擦（推断）
@@ -317,10 +317,10 @@ Conex MD 的承诺是：**Notion 式块操作感 + Typora 式行源码 + GFM 可
 
 #### 设计修复方向
 
-1. **单一 PastePipeline**（模块：`edit/paste-pipeline` 类职责）：优先级 `image files` > `internal blocks` > `text/html` > `text/plain`。  
-2. **HTML 映射表白名单**：只映射语义标签；其余扁平为 text。  
-3. **有损提示**：仅当丢表/丢图时轻 toast「已粘贴为纯文本结构（N 项未保留）」；普通加粗丢失可不提示。  
-4. **Word 档**：检测 `xmlns:o` / `mso-` → 走强化清洗；不承诺像素级版式。  
+1. **单一 PastePipeline**（模块：`edit/paste-pipeline` 类职责）：优先级 `image files` > `internal blocks` > `text/html` > `text/plain`。
+2. **HTML 映射表白名单**：只映射语义标签；其余扁平为 text。
+3. **有损提示**：仅当丢表/丢图时轻 toast「已粘贴为纯文本结构（N 项未保留）」；普通加粗丢失可不提示。
+4. **Word 档**：检测 `xmlns:o` / `mso-` → 走强化清洗；不承诺像素级版式。
 5. **永不**为贴 Word 引入永久页顶「粘贴选项」条；可用一次性小胶囊「保留文本 | 保留结构」。
 
 #### 验收体感
@@ -337,9 +337,9 @@ MDN 文档选两段+一个列表贴入，得到标题/段落/列表大致正确�
 
 #### 理想路径
 
-- **快捷键**：`Mod+B` / `Mod+I` / `Mod+\`` 切换 marks；`Mod+K` 链接。  
-- **源码**：输入 `**粗**`、`` `code` `` 即渲染（as-you-type），聚焦时标记可见策略见 03 专文。  
-- **无默认选区条**（D16 / F-CORE-08）：专业用户靠键；新手可靠 slash「链接」或命令面板。  
+- **快捷键**：`Mod+B` / `Mod+I` / `Mod+\`` 切换 marks；`Mod+K` 链接。
+- **源码**：输入 `**粗**`、`` `code` `` 即渲染（as-you-type），聚焦时标记可见策略见 03 专文。
+- **无默认选区条**（D16 / F-CORE-08）：专业用户靠键；新手可靠 slash「链接」或命令面板。
 - 读态：粗体字重、代码等宽底、链接可点（viewOnly 或修饰键策略清晰）。
 
 #### 当前摩擦（推断）
@@ -360,10 +360,10 @@ MDN 文档选两段+一个列表贴入，得到标题/段落/列表大致正确�
 
 #### 设计修复方向
 
-1. **单一 marks 模型**：存储 runs 或等价；DOM 与快捷键只走一套 commit（htmlToInlineMd / runs）。  
-2. **快捷键优先可见教育**：空段落 placeholder 不提；在「格式」命令面板分组列出。  
-3. **链接**：`Mod+K` 打开轻量 popover（URL + 文本），Esc 关，不进页顶栏。  
-4. **源码可见策略**与 03 专文对齐：聚焦显示标记 vs 折叠显示，二选一主路径，禁止块与块不一致。  
+1. **单一 marks 模型**：存储 runs 或等价；DOM 与快捷键只走一套 commit（htmlToInlineMd / runs）。
+2. **快捷键优先可见教育**：空段落 placeholder 不提；在「格式」命令面板分组列出。
+3. **链接**：`Mod+K` 打开轻量 popover（URL + 文本），Esc 关，不进页顶栏。
+4. **源码可见策略**与 03 专文对齐：聚焦显示标记 vs 折叠显示，二选一主路径，禁止块与块不一致。
 5. **禁用**默认常驻 `mdx-sel-bar`；若 features.selectionToolbar=true 才挂。
 
 #### 验收体感
@@ -380,10 +380,10 @@ MDN 文档选两段+一个列表贴入，得到标题/段落/列表大致正确�
 
 #### 理想路径
 
-1. `/代码` 或 \`\`\`+语言 promote/Enter。  
-2. 失焦：高亮阅读 + 右上弱「复制」；**无**上高亮下 textarea 双壳。  
-3. 聚焦：同卡片内完整 fence 源（含 \`\`\`lang）。  
-4. 改语言：chrome 语言选择或改 fence 首行。  
+1. `/代码` 或 \`\`\`+语言 promote/Enter。
+2. 失焦：高亮阅读 + 右上弱「复制」；**无**上高亮下 textarea 双壳。
+3. 聚焦：同卡片内完整 fence 源（含 \`\`\`lang）。
+4. 改语言：chrome 语言选择或改 fence 首行。
 5. 复制：始终复制**正文**（不含围栏）或可选「含围栏」——默认正文。
 
 #### 当前摩擦（推断）
@@ -404,10 +404,10 @@ MDN 文档选两段+一个列表贴入，得到标题/段落/列表大致正确�
 
 #### 设计修复方向
 
-1. **死守单表面**：读高亮 / 编辑 fence 互斥同一卡片（A23）。  
-2. **语言**：失焦 chrome 显示当前 lang；点击弹出过滤列表（ts/js/rs/py/sh…），写回 block.lang + 序列化。  
-3. **复制**：默认代码正文；Alt/Option+点击复制含围栏（高级，可不写进主 UI）。  
-4. **Tab**：代码块内插入空格/硬 Tab，不触发列表 indent。  
+1. **死守单表面**：读高亮 / 编辑 fence 互斥同一卡片（A23）。
+2. **语言**：失焦 chrome 显示当前 lang；点击弹出过滤列表（ts/js/rs/py/sh…），写回 block.lang + 序列化。
+3. **复制**：默认代码正文；Alt/Option+点击复制含围栏（高级，可不写进主 UI）。
+4. **Tab**：代码块内插入空格/硬 Tab，不触发列表 indent。
 5. **XSS**：高亮只当展示，序列化永不信任 HTML。
 
 #### 验收体感
@@ -424,11 +424,11 @@ MDN 文档选两段+一个列表贴入，得到标题/段落/列表大致正确�
 
 #### 理想路径
 
-1. `/表格` → 默认 3×2+header。  
-2. Tab 游走；末格 Tab 自动加行。  
-3. hover 表右/下出现 **+**（无「添加行」大按钮字）。  
-4. 右键：插入/删除/对齐；框选后合并/拆分。  
-5. 从 Excel 贴 TSV 填多格。  
+1. `/表格` → 默认 3×2+header。
+2. Tab 游走；末格 Tab 自动加行。
+3. hover 表右/下出现 **+**（无「添加行」大按钮字）。
+4. 右键：插入/删除/对齐；框选后合并/拆分。
+5. 从 Excel 贴 TSV 填多格。
 6. 序列化 GFM pipe；合并用 Conex 扩展或降级策略明示。
 
 #### 当前摩擦（推断）
@@ -449,12 +449,12 @@ MDN 文档选两段+一个列表贴入，得到标题/段落/列表大致正确�
 
 #### 设计修复方向
 
-1. **双轨诚实**：  
-   - **GFM 安全导出**：合并表 → 拆平或生成 HTML table 扩展，并在导出 UI 标明。  
-   - **Conex 完整导出**：保留 cells rowspan/colspan。  
-2. **失败可见**：合并非法用 A39 描边 + 中文 reason（已有 reasonZh 表，需冒到 UI）。  
-3. **填数流**：Tab 加行保持；粘贴 TSV 以选区左上角为锚。  
-4. **不做**嵌套表、单元格内再嵌列表（v1 边界清晰）。  
+1. **双轨诚实**：
+   - **GFM 安全导出**：合并表 → 拆平或生成 HTML table 扩展，并在导出 UI 标明。
+   - **Conex 完整导出**：保留 cells rowspan/colspan。
+2. **失败可见**：合并非法用 A39 描边 + 中文 reason（已有 reasonZh 表，需冒到 UI）。
+3. **填数流**：Tab 加行保持；粘贴 TSV 以选区左上角为锚。
+4. **不做**嵌套表、单元格内再嵌列表（v1 边界清晰）。
 5. **chrome 克制**：+ 按钮弱墨；禁 Bootstrap 蓝框（A18）。
 
 #### 验收体感
@@ -471,10 +471,10 @@ MDN 文档选两段+一个列表贴入，得到标题/段落/列表大致正确�
 
 #### 理想路径
 
-1. Ctrl+V 截图 → 立即占位 → uploadImage port → 替换为稳定 URL。  
-2. 拖放文件同样。  
-3. 无端口：本地 object URL 预览 + 弱提示「未配置上传，刷新可能丢失」。  
-4. alt/caption 可编；点击图不误进浏览器下载地狱。  
+1. Ctrl+V 截图 → 立即占位 → uploadImage port → 替换为稳定 URL。
+2. 拖放文件同样。
+3. 无端口：本地 object URL 预览 + 弱提示「未配置上传，刷新可能丢失」。
+4. alt/caption 可编；点击图不误进浏览器下载地狱。
 5. 失败：可重试，不插碎块。
 
 #### 当前摩擦（推断）
@@ -495,10 +495,10 @@ MDN 文档选两段+一个列表贴入，得到标题/段落/列表大致正确�
 
 #### 设计修复方向
 
-1. **诚实状态机**：`uploading | ready | broken | local-only` 可见弱标签。  
-2. **local-only 必须提示**一次级文案，禁止装作已保存到库。  
-3. **粘贴优先级**：clipboard 含 image file 时优先图，避免纯文本路径吞掉。  
-4. **宿主**：Desktop 默认 port 写到 workspace assets，返回相对路径可 round-trip。  
+1. **诚实状态机**：`uploading | ready | broken | local-only` 可见弱标签。
+2. **local-only 必须提示**一次级文案，禁止装作已保存到库。
+3. **粘贴优先级**：clipboard 含 image file 时优先图，避免纯文本路径吞掉。
+4. **宿主**：Desktop 默认 port 写到 workspace assets，返回相对路径可 round-trip。
 5. **不做**图床账号体系在编辑器内。
 
 #### 验收体感
@@ -515,9 +515,9 @@ Win+Shift+S 截图后 Ctrl+V，图在光标处；保存重开还在（配置了 
 
 #### 理想路径
 
-1. 插入 `@[toc]` / `/目录` → 自动收集标题。  
-2. 点击 TOC 项平滑（或 auto）滚到标题；当前节可选高亮。  
-3. 命令面板「跳转到标题…」模糊搜标题文本。  
+1. 插入 `@[toc]` / `/目录` → 自动收集标题。
+2. 点击 TOC 项平滑（或 auto）滚到标题；当前节可选高亮。
+3. 命令面板「跳转到标题…」模糊搜标题文本。
 4. 标题变更 TOC 自动更新（不写死 items 进 MD）。
 
 #### 当前摩擦（推断）
@@ -538,12 +538,12 @@ Win+Shift+S 截图后 Ctrl+V，图在光标处；保存重开还在（配置了 
 
 #### 设计修复方向
 
-1. **双层导航**：  
-   - 文内 TOC 块（MD 可携）  
-   - 可选宿主侧「大纲」抽屉（不进 MD）——命令面板也可列出标题  
-2. **锚点**：优先稳定 slug（标题文本规范化）+ 冲突后缀；改标题尽量保留 id（props.anchor）。  
-3. **滚动**：只滚 `mdx` scroller，behavior auto（A27），禁止全局 smooth 抢键盘。  
-4. **空标题**：TOC 显示「暂无标题」已有；保持冷静。  
+1. **双层导航**：
+   - 文内 TOC 块（MD 可携）
+   - 可选宿主侧「大纲」抽屉（不进 MD）——命令面板也可列出标题
+2. **锚点**：优先稳定 slug（标题文本规范化）+ 冲突后缀；改标题尽量保留 id（props.anchor）。
+3. **滚动**：只滚 `mdx` scroller，behavior auto（A27），禁止全局 smooth 抢键盘。
+4. **空标题**：TOC 显示「暂无标题」已有；保持冷静。
 5. **不做**Notion 式页面树数据库。
 
 #### 验收体感
@@ -560,10 +560,10 @@ Win+Shift+S 截图后 Ctrl+V，图在光标处；保存重开还在（配置了 
 
 #### 理想路径
 
-1. 键入合并为合理粒度（按词/按停顿/按 IME end），不是每字母一栈。  
-2. 结构操作（插表、合并单元格、slash 转块）一步一栈。  
-3. 撤销后 **选区/焦点** 尽量恢复。  
-4. 重做栈在新编辑后清空（标准）。  
+1. 键入合并为合理粒度（按词/按停顿/按 IME end），不是每字母一栈。
+2. 结构操作（插表、合并单元格、slash 转块）一步一栈。
+3. 撤销后 **选区/焦点** 尽量恢复。
+4. 重做栈在新编辑后清空（标准）。
 5. AI 写回若有：整次替换一步撤销。
 
 #### 当前摩擦（推断）
@@ -584,10 +584,10 @@ Win+Shift+S 截图后 Ctrl+V，图在光标处；保存重开还在（配置了 
 
 #### 设计修复方向
 
-1. **事务合并**：输入用 mergeKey（时间窗 + 同 blockId + 非结构）；结构变更强制新事务。  
-2. **撤销呈现**：优先局部 reconcile + 恢复 activeId；禁止无脑 fullRender（除非 setDoc）。  
-3. **选择栈深度与内存**：大文档差分 history（后置）或降低 clone 频率。  
-4. **IME**：硬挡 composition 入栈；compositionend 一次 commit。  
+1. **事务合并**：输入用 mergeKey（时间窗 + 同 blockId + 非结构）；结构变更强制新事务。
+2. **撤销呈现**：优先局部 reconcile + 恢复 activeId；禁止无脑 fullRender（除非 setDoc）。
+3. **选择栈深度与内存**：大文档差分 history（后置）或降低 clone 频率。
+4. **IME**：硬挡 composition 入栈；compositionend 一次 commit。
 5. **用户可见**：不需要做复杂时间旅行 UI；可靠的 Z/Y 优于花哨历史面板（历史面板 P2）。
 
 #### 验收体感
@@ -604,10 +604,10 @@ Win+Shift+S 截图后 Ctrl+V，图在光标处；保存重开还在（配置了 
 
 #### 理想路径
 
-1. 滚动流畅；块 hover 把手不改 gutter 宽度（A07）。  
-2. enterEdit / exitEdit **高度锁**（height-lock）→ 零 CLS。  
-3. slash 开闭不改变下方块几何（A08/A31 min-height）。  
-4. 插入块在视口外时 nearest 滚入，不 smooth 眩晕。  
+1. 滚动流畅；块 hover 把手不改 gutter 宽度（A07）。
+2. enterEdit / exitEdit **高度锁**（height-lock）→ 零 CLS。
+3. slash 开闭不改变下方块几何（A08/A31 min-height）。
+4. 插入块在视口外时 nearest 滚入，不 smooth 眩晕。
 5. 500+ 块后虚拟化（愿景 P2）仍保持滚动锚点。
 
 #### 当前摩擦（推断）
@@ -628,10 +628,10 @@ Win+Shift+S 截图后 Ctrl+V，图在光标处；保存重开还在（配置了 
 
 #### 设计修复方向
 
-1. **所有 enter/leave 表面强制 height-lock + scrollPreserve**。  
-2. **禁止**用 margin/height 动画块切换；只 opacity/transform。  
-3. **滚动容器单一事实**：文档 scroller API 内部化，浮层跟它听 scroll。  
-4. **性能预算**：输入路径禁止全文 innerHTML；>N 块开启窗虚拟化。  
+1. **所有 enter/leave 表面强制 height-lock + scrollPreserve**。
+2. **禁止**用 margin/height 动画块切换；只 opacity/transform。
+3. **滚动容器单一事实**：文档 scroller API 内部化，浮层跟它听 scroll。
+4. **性能预算**：输入路径禁止全文 innerHTML；>N 块开启窗虚拟化。
 5. **焦点环**仅控件（把手/按钮），不给整块行手术台描边。
 
 #### 验收体感
@@ -648,10 +648,10 @@ Win+Shift+S 截图后 Ctrl+V，图在光标处；保存重开还在（配置了 
 
 #### 理想路径
 
-1. compositionstart → 进入 composing；挡 promote/demote/leave morph/slash 误触发。  
-2. compositionupdate 保持 composing（部分 WebView 只发 update）。  
-3. compositionend → 一次 onSafeInput；可 promote（如 `、`）/ 入历史一次。  
-4. `、` 触发 slash 与 `/` 同权（中文硬需求）。  
+1. compositionstart → 进入 composing；挡 promote/demote/leave morph/slash 误触发。
+2. compositionupdate 保持 composing（部分 WebView 只发 update）。
+3. compositionend → 一次 onSafeInput；可 promote（如 `、`）/ 入历史一次。
+4. `、` 触发 slash 与 `/` 同权（中文硬需求）。
 5. Alt+↑↓ 移块不与系统 IME 快捷键死撞（Windows 要测）。
 
 #### 当前摩擦（推断）
@@ -672,10 +672,10 @@ Win+Shift+S 截图后 Ctrl+V，图在光标处；保存重开还在（配置了 
 
 #### 设计修复方向
 
-1. **所有输入热路径强制经 ImeGuard**；code review 门禁。  
-2. **顿号**：仅 compositionend 后扫描触发符；组字预览含顿号不打开面板。  
-3. **矩阵测试**：微软拼音 / 搜狗 / 微信输入法 × Win；macOS 原生拼音。  
-4. **不自绘 caret**（A35），避免与 IME 候选错位。  
+1. **所有输入热路径强制经 ImeGuard**；code review 门禁。
+2. **顿号**：仅 compositionend 后扫描触发符；组字预览含顿号不打开面板。
+3. **矩阵测试**：微软拼音 / 搜狗 / 微信输入法 × Win；macOS 原生拼音。
+4. **不自绘 caret**（A35），避免与 IME 候选错位。
 5. **文档**：在 keyboard-map 置顶「IME 安全」为 P0，而非附录。
 
 #### 验收体感
@@ -692,11 +692,11 @@ Win+Shift+S 截图后 Ctrl+V，图在光标处；保存重开还在（配置了 
 
 #### 理想路径
 
-1. 「复制为 Markdown」/「导出 .md」/ 文件即 MD 真相。  
-2. GFM 子集完美往返；Conex 扩展（callout、TOC、wiki、合并表）有：  
-   - pure-gfm 模式降级策略  
-   - 或扩展语法说明一行  
-3. 不导出内部 block id、不导出 UI 状态。  
+1. 「复制为 Markdown」/「导出 .md」/ 文件即 MD 真相。
+2. GFM 子集完美往返；Conex 扩展（callout、TOC、wiki、合并表）有：
+   - pure-gfm 模式降级策略
+   - 或扩展语法说明一行
+3. 不导出内部 block id、不导出 UI 状态。
 4. 图为可解析路径或上传后的 URL，而非 blob:。
 
 #### 当前摩擦（推断）
@@ -717,13 +717,13 @@ Win+Shift+S 截图后 Ctrl+V，图在光标处；保存重开还在（配置了 
 
 #### 设计修复方向
 
-1. **导出菜单三档**（命令面板即可，无页顶栏）：  
-   - 复制 Markdown（Conex）  
-   - 复制兼容 GFM（降级）  
-   - 下载 .md  
-2. **降级报告**：兼容模式若拆合并表/去 wiki，摘要「3 处已降级」。  
-3. **图检查**：导出前扫描 `blob:` / `local-only` → 阻断并提示先上传。  
-4. **默认文件即 MD**：Notebook 保存不写私有 JSON 为主（可并行 sidecar，但不替代）。  
+1. **导出菜单三档**（命令面板即可，无页顶栏）：
+   - 复制 Markdown（Conex）
+   - 复制兼容 GFM（降级）
+   - 下载 .md
+2. **降级报告**：兼容模式若拆合并表/去 wiki，摘要「3 处已降级」。
+3. **图检查**：导出前扫描 `blob:` / `local-only` → 阻断并提示先上传。
+4. **默认文件即 MD**：Notebook 保存不写私有 JSON 为主（可并行 sidecar，但不替代）。
 5. **不做**默认导出 PDF/Word 内核；交给宿主适配器。
 
 #### 验收体感
@@ -740,10 +740,10 @@ Win+Shift+S 截图后 Ctrl+V，图在光标处；保存重开还在（配置了 
 
 #### 理想路径
 
-1. `viewOnly=true`：无把手、无 slash、无编辑光标；仍有精致渲染。  
-2. 链接可点；任务勾选是否可点由宿主策略（纯审阅关，清单协作开）。  
-3. 代码可复制；表可横向滚不可改。  
-4. 与编辑态**同一套 read 渲染**，不是另一套 CSS 皮肤。  
+1. `viewOnly=true`：无把手、无 slash、无编辑光标；仍有精致渲染。
+2. 链接可点；任务勾选是否可点由宿主策略（纯审阅关，清单协作开）。
+3. 代码可复制；表可横向滚不可改。
+4. 与编辑态**同一套 read 渲染**，不是另一套 CSS 皮肤。
 5. 切回编辑无闪、不丢滚动位置。
 
 #### 当前摩擦（推断）
@@ -764,10 +764,10 @@ Win+Shift+S 截图后 Ctrl+V，图在光标处；保存重开还在（配置了 
 
 #### 设计修复方向
 
-1. **能力位矩阵**：`canEdit / canToggleTask / canCopy / canFollowLink` 拆开，不只一个 bool。  
-2. **视觉**：只读不增加水印式大字「只读」除非宿主要；可靠禁编比贴纸重要。  
-3. **命名**：产品文案用「查看」而非「预览/源码」。  
-4. **同一 render 管线**，仅关闭交互层。  
+1. **能力位矩阵**：`canEdit / canToggleTask / canCopy / canFollowLink` 拆开，不只一个 bool。
+2. **视觉**：只读不增加水印式大字「只读」除非宿主要；可靠禁编比贴纸重要。
+3. **命名**：产品文案用「查看」而非「预览/源码」。
+4. **同一 render 管线**，仅关闭交互层。
 5. **Esc**：只读下 Esc 关面板，不进入 exitEdit 怪状态。
 
 #### 验收体感
@@ -826,9 +826,9 @@ Win+Shift+S 截图后 Ctrl+V，图在光标处；保存重开还在（配置了 
 
 ### P6 · 肌肉记忆分层（Progressive power）
 
-- 新手：直接打字 + 空段 `/`  
-- 熟手：前缀 promote、快捷键 marks  
-- 专家：Ctrl+P、GFM 兼容导出、源码级 fence  
+- 新手：直接打字 + 空段 `/`
+- 熟手：前缀 promote、快捷键 marks
+- 专家：Ctrl+P、GFM 兼容导出、源码级 fence
 三层互不锁死；上层永不删除下层能力。
 
 ### P7 · 结构可逆（Reversible structure）
@@ -923,9 +923,9 @@ object URL 图、未 flush 的 autosave、只写内存的 onChange，对用户�
 
 **规则**：
 
-- 触发域：空段 / 规则允许的行首；避免句中 `/` 误开（路径、正则）。  
-- 成功后面板关、触发符消、焦点留在新块。  
-- 无结果：「未找到相关命令」+ 固定次文案（ux/slash-palette）。  
+- 触发域：空段 / 规则允许的行首；避免句中 `/` 误开（路径、正则）。
+- 成功后面板关、触发符消、焦点留在新块。
+- 无结果：「未找到相关命令」+ 固定次文案（ux/slash-palette）。
 - **不**承担应用级命令（设置、导出）——那些进 Ctrl+P。
 
 ### 6.3 Ctrl+P（命令面板）— 「我不知道点哪，或要全局动作」
@@ -941,9 +941,9 @@ object URL 图、未 flush 的 autosave、只写内存的 onChange，对用户�
 
 **规则**：
 
-- 打开键：Ctrl/Cmd+P；可同时 Ctrl+Shift+P（VS 气质）但不强制双面板。  
-- 分组：导航 | 插入 | 格式 | 导出 | AI（无 port 整组隐藏）。  
-- 模糊：中文 title + 英文 id/aliases（command-palette 已具备方向）。  
+- 打开键：Ctrl/Cmd+P；可同时 Ctrl+Shift+P（VS 气质）但不强制双面板。
+- 分组：导航 | 插入 | 格式 | 导出 | AI（无 port 整组隐藏）。
+- 模糊：中文 title + 英文 id/aliases（command-palette 已具备方向）。
 - **插入类命令**执行后应表现得像 slash：在当前块上下文插入，而不是文档末尾乱插。
 
 ### 6.4 快捷键 — 「高频肌肉记忆」
@@ -971,9 +971,9 @@ object URL 图、未 flush 的 autosave、只写内存的 onChange，对用户�
 
 **规则**：
 
-- **聚焦行**显示结构前缀 + 正文 marks 策略（见 03）。  
-- **代码块**聚焦 = 完整 fence，不是平行预览。  
-- **高级「查看全文源码」**若做：抽屉/命令，确认后可复制；默认不进主 IA。  
+- **聚焦行**显示结构前缀 + 正文 marks 策略（见 03）。
+- **代码块**聚焦 = 完整 fence，不是平行预览。
+- **高级「查看全文源码」**若做：抽屉/命令，确认后可复制；默认不进主 IA。
 - 源码修改提交必须经 parse，禁止把非法 MD 永久弄脏 Doc 而不提示。
 
 ### 6.6 冲突与抢键裁决（简表）
@@ -991,10 +991,10 @@ object URL 图、未 flush 的 autosave、只写内存的 onChange，对用户�
 
 做任何新入口前背诵：
 
-1. 这是 **光标处结构** 吗？→ Slash  
-2. 这是 **全局/导航/导出/AI** 吗？→ Ctrl+P  
-3. 这是 **每分钟会按** 的吗？→ 快捷键  
-4. 这是 **要看见 MD 字符** 才能安心吗？→ 行源码/fence  
+1. 这是 **光标处结构** 吗？→ Slash
+2. 这是 **全局/导航/导出/AI** 吗？→ Ctrl+P
+3. 这是 **每分钟会按** 的吗？→ 快捷键
+4. 这是 **要看见 MD 字符** 才能安心吗？→ 行源码/fence
 5. 四条都不像？→ **可能不该做**，或应进宿主壳而非编辑器
 
 ---
@@ -1009,8 +1009,8 @@ object URL 图、未 flush 的 autosave、只写内存的 onChange，对用户�
 | 端口诚实性 | 09, AI | 缺省 object URL / 隐藏不一致 | 缺省隐藏或 local-only 明示 |
 | 教育文案不足 | 02, 03, 13 | 行源/`、`/阶梯正确但零文案像 bug | 冷静 placeholder；禁连弹气泡 |
 
-竞品只借手感：Typora 行源、Notion 块/slash、Obsidian MD 真相、VS Code Ctrl+P、Linear 冷静密度。  
-**不借**：Database、默认双栏硬切换、整页 CE 巨石、页顶格式栏。  
+竞品只借手感：Typora 行源、Notion 块/slash、Obsidian MD 真相、VS Code Ctrl+P、Linear 冷静密度。
+**不借**：Database、默认双栏硬切换、整页 CE 巨石、页顶格式栏。
 Conex 签名：中文 `、`、左簇 chrome、宿主分离、GFM 可携。
 
 ---
@@ -1034,20 +1034,20 @@ Conex 签名：中文 `、`、左簇 chrome、宿主分离、GFM 可携。
 
 每步只记 **摩擦等级 + 一句话**；结果回填 `01-unfinished-inventory` / `08-decision-log`。
 
-1. 空白文档不点击，直接打「你好」——能写吗？  
-2. `、` 上屏后 slash？选「标题 2」稳吗？  
-3. 三列表项后空项 Enter——退出吗？  
-4. 拖蓝两段——发生什么？贴到记事本是什么？  
-5. 浏览器带列表粘贴——结构还在吗？  
-6. Mod+B 一词，失焦与导出 `**` 是否正确？  
-7. 代码块 20 行：改语言、复制、有无双壳？  
-8. 表 2×3：末格 Tab 加行？  
-9. 截图粘贴：提示诚实吗？  
-10. TOC 第二项跳对吗？  
-11. Mod+Z×3：粒度对吗？闪白吗？  
-12. 长文中部进出编辑：滚动跳吗？  
-13. 组字中途点另一块：已上屏字还在吗？  
-14. 兼容 GFM 导出：GitHub 可接受吗？  
+1. 空白文档不点击，直接打「你好」——能写吗？
+2. `、` 上屏后 slash？选「标题 2」稳吗？
+3. 三列表项后空项 Enter——退出吗？
+4. 拖蓝两段——发生什么？贴到记事本是什么？
+5. 浏览器带列表粘贴——结构还在吗？
+6. Mod+B 一词，失焦与导出 `**` 是否正确？
+7. 代码块 20 行：改语言、复制、有无双壳？
+8. 表 2×3：末格 Tab 加行？
+9. 截图粘贴：提示诚实吗？
+10. TOC 第二项跳对吗？
+11. Mod+Z×3：粒度对吗？闪白吗？
+12. 长文中部进出编辑：滚动跳吗？
+13. 组字中途点另一块：已上屏字还在吗？
+14. 兼容 GFM 导出：GitHub 可接受吗？
 15. viewOnly 乱按：文档变了吗？
 
 ---
@@ -1058,8 +1058,8 @@ Conex 签名：中文 `、`、左簇 chrome、宿主分离、GFM 可携。
 
 **若只能先做三件**：
 
-1. IME 全路径硬门禁（WF-13）  
-2. 块选 + MD 剪贴板 MVP（WF-04/05/14 地基）  
+1. IME 全路径硬门禁（WF-13）
+2. 块选 + MD 剪贴板 MVP（WF-04/05/14 地基）
 3. 撤销粒度 + 禁 fullRender 闪屏（WF-11/12）
 
 **目标叙事**：打开报告直接改中文 → 网页结论贴入仍是列表 → 表+图 → Ctrl+P 导出兼容 MD 给同事 → 无模式切换、无假保存、无「选不中两段」。
@@ -1115,9 +1115,9 @@ Conex 签名：中文 `、`、左簇 chrome、宿主分离、GFM 可携。
 | 图 / TOC / 命令面板 / 表合并 | `media/drop-paste.js` · `blocks/toc.js` · `ui/command-palette.js` · `table/merge.js` |
 | 包脚手架 | `packages/conex-mdx/*` |
 
-- 勿再派「列举功能有无」重复分析；下钻见 `02-multi-block-selection`、`06-clipboard-undo-find`。  
-- 实现派单绑定本文 **验收体感**，禁止只绑 F-ID。  
-- paste / selection / history **串行**；IME guard 为全局纪律。  
+- 勿再派「列举功能有无」重复分析；下钻见 `02-multi-block-selection`、`06-clipboard-undo-find`。
+- 实现派单绑定本文 **验收体感**，禁止只绑 F-ID。
+- paste / selection / history **串行**；IME guard 为全局纪律。
 - 未展开：协同、Database、虚拟滚动算法、AI 动作文案（见 feature-catalog 05 与非目标）。
 
 | 版本 | 日期 | 说明 |
