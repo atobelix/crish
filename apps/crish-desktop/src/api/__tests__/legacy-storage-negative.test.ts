@@ -20,7 +20,7 @@ const API_DIR = new URL('../', import.meta.url);
 
 function readSource(rel: string): string {
   // 先赋中间变量再进 new URL——内联模板会被 vitest transform 破坏路径解析
-  const target = new URL(rel, API_DIR);
+  const target = fileURLToPath(new URL(rel, API_DIR));
   return readFileSync(target, 'utf8');
 }
 

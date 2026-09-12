@@ -53,6 +53,8 @@
     "check:ui-layer": "node scripts/check-ui-layer.mjs",
     "check:line-counts": "node scripts/check-line-counts.mjs --all",
     "check:input-guard": "node scripts/check-input-guardrails.mjs",
+    "check:startup-budget": "node scripts/check-startup-budget.mjs",
+    "check:startup-reflow": "node scripts/check-reflow-guards.mjs",
     "check:text-color": "node scripts/check-text-color-tokens.mjs",
     "check:icon-ssot": "node scripts/check-icon-ssot.mjs",
     "check:line-width-ssot": "node scripts/check-line-width-ssot.mjs",
