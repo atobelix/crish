@@ -2,12 +2,15 @@ import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import { resolve } from 'node:path';
 import { createHash } from 'node:crypto';
+import { readFileSync, existsSync } from 'node:fs';
+import { join as joinPath } from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import net from 'node:net';
 import { PREVIEW_BRIDGE_SCRIPT } from './dev-server/previewBridgeScript';
 import { isSameOriginRequest } from './dev-server/sameOriginRequest';
 import { Readable } from 'node:stream';
 import { createRequire } from 'node:module';
+import { transformSync } from 'esbuild';
 
 /**
  * CSP 单一真源（06-步骤3 / T-G 批次 7.2）：
@@ -76,15 +79,23 @@ function cspPlugin(): Plugin {
       // dev 有 server 上下文（vite serve），build 无 → 按 mode 注入（唯一真源两端成立）
       const isDev = !!ctx.server;
       let content: string;
+      let transformedHtml = html;
+
+      // ACT-202：生产构建将 loader.css/js 内联为 CRP 关键资产（dev 保留外链便于断点调试）
+      if (!isDev) {
+        transformedHtml = inlineCriticalAssets(transformedHtml);
+      }
+
       if (isDev) {
         content = DEV_CSP;
       } else {
-        // 对 html 中无 src 的内联 <script> 计算 sha256（静态内容 hash 稳定；
-        // 未来内联 script 变更则 hash 自动跟随，无人工同步点）
+        // 对 html 中无 src 的内联 <script> 计算 sha256（含刚内联的 loader.js；
+        // 静态内容 hash 稳定；未来内联 script 变更则 hash 自动跟随，无人工同步点）
+        // INV-01：严禁 'unsafe-inline'；script-src 保留 'self' 保障模块脚本放行
         const hashes: string[] = [];
         const inlineRe = /<script\b(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g;
         let m: RegExpExecArray | null;
-        while ((m = inlineRe.exec(html))) {
+        while ((m = inlineRe.exec(transformedHtml))) {
           hashes.push(
             `'sha256-${createHash('sha256').update(m[1]).digest('base64')}'`,
           );
@@ -95,7 +106,7 @@ function cspPlugin(): Plugin {
         );
       }
       return {
-        html,
+        html: transformedHtml,
         tags: [
           {
             tag: 'meta',
@@ -109,6 +120,78 @@ function cspPlugin(): Plugin {
       };
     },
   };
+}
+
+/**
+ * CRP 关键资源编译期内联（ACT-202 · INV-OUT-201）：
+ * 将 index.html 对 /loader.css、/loader.js 的外链引用替换为内联
+ * <style id="crish-critical-css"> 与 <script id="crish-critical-js">。
+ * 压缩一律 esbuild transformSync（audits/05 §3.13-3：禁自制正则压缩）。
+ * 仅在 build 路径调用；文件缺失时保留原 HTML 并 warn（不阻断 dev）。
+ */
+function inlineCriticalAssets(html: string): string {
+  const publicDir = resolve(__dirname, 'public');
+  const cssPath = joinPath(publicDir, 'loader.css');
+  const jsPath = joinPath(publicDir, 'loader.js');
+
+  let minifiedCss = '';
+  let minifiedJs = '';
+  try {
+    if (existsSync(cssPath)) {
+      minifiedCss = transformSync(readFileSync(cssPath, 'utf-8'), {
+        minify: true,
+        loader: 'css',
+      }).code;
+    } else {
+      console.warn(`[crish-csp] loader.css 未找到: ${cssPath}`);
+    }
+    if (existsSync(jsPath)) {
+      minifiedJs = transformSync(readFileSync(jsPath, 'utf-8'), {
+        minify: true,
+        loader: 'js',
+        target: 'es2020',
+      }).code;
+    } else {
+      console.warn(`[crish-csp] loader.js 未找到: ${jsPath}`);
+    }
+  } catch (err) {
+    // 压缩失败时退回原始内容内联（仍消除外链往返；hash 由 cspPlugin 扫描计算）
+    console.warn(
+      '[crish-csp] esbuild 压缩 loader 失败，回退原始内容内联:',
+      err instanceof Error ? err.message : err,
+    );
+    try {
+      if (existsSync(cssPath)) minifiedCss = readFileSync(cssPath, 'utf-8');
+      if (existsSync(jsPath)) minifiedJs = readFileSync(jsPath, 'utf-8');
+    } catch {
+      /* swallow-ok: 保持外链 */
+    }
+  }
+
+  let out = html;
+  const cssLinkRe =
+    /<link\b[^>]*?href=["'][^"']*?loader\.css["'][^>]*?\/?>/i;
+  if (minifiedCss) {
+    const styleTag = `<style id="crish-critical-css">${minifiedCss}</style>`;
+    if (cssLinkRe.test(out)) {
+      out = out.replace(cssLinkRe, styleTag);
+    } else {
+      out = out.replace('</head>', `  ${styleTag}\n</head>`);
+    }
+  }
+
+  const jsScriptRe =
+    /<script\b[^>]*?src=["'][^"']*?loader\.js["'][^>]*?>\s*<\/script>/i;
+  if (minifiedJs) {
+    const scriptTag = `<script id="crish-critical-js">${minifiedJs}</script>`;
+    if (jsScriptRe.test(out)) {
+      out = out.replace(jsScriptRe, scriptTag);
+    } else {
+      out = out.replace('</head>', `  ${scriptTag}\n</head>`);
+    }
+  }
+
+  return out;
 }
 
 /**

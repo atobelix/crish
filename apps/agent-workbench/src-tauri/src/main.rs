@@ -79,6 +79,7 @@ mod note_commands;
 mod note_runtime;
 mod perf;
 mod power;
+mod preferences_commands;
 mod probe;
 mod process;
 mod pty;
@@ -94,6 +95,10 @@ mod server;
 mod session_commands;
 mod single_instance;
 mod status_diagnostics;
+// ACT-101 / CON-01：原生窗口隐式创建 + 首绘握手唤醒（Stage 1）
+mod window_handshake;
+// ACT-102：双 SQLite 并发装配（spawn_blocking + async 汇聚）
+mod db_setup;
 // T-D-13：子代理生产 spawner（SubagentSpawner 引擎侧接线；bin 模块，
 // 与 core_run_commands / engine 同目标，互引 crate:: 内部路径）
 mod sched;
@@ -156,6 +161,11 @@ macro_rules! command_registry {
 command_registry![
     // ── GUI 专属面（workbench_*，§2.3）──
     ("workbench_run_shell", process::workbench_run_shell),
+    // ACT-101 / CON-01：前端骨架屏首绘完成后的原子握手唤醒命令
+    (
+        "workbench_window_ready",
+        window_handshake::workbench_window_ready
+    ),
     // T-AB-08：后台任务查询面恢复（B01/B02；list/get_output/cancel 三命令，
     // 形状对齐前端 backgroundTasksApi.ts 解析层）
     (
@@ -508,6 +518,10 @@ command_registry![
         "usage_import_legacy_snapshot",
         usage_commands::usage_import_legacy_snapshot
     ),
+    // ── 偏好持久化（Token 与偏好 SSOT 战役 N3）──
+    ("prefs_get", preferences_commands::prefs_get),
+    ("prefs_set", preferences_commands::prefs_set),
+    ("prefs_delete", preferences_commands::prefs_delete),
 ];
 
 // ── D4a：子代理显式恢复与关闭命令壳（D4 §3.1 双端登记第 ① 步）──────
@@ -644,37 +658,9 @@ fn log_level_from_env() -> String {
     })
 }
 
-/// 打开会话数据库（`app_dir()/sessions.db`；失败降级内存库 + 记录诊断）。
-fn open_session_db(
-    diagnostics: &status_diagnostics::StatusDiagnostics,
-) -> session_commands::SharedDb {
-    let open_file = || -> Result<session_commands::SharedDb, String> {
-        let app_dir = crate::host_paths::app_dir().map_err(|e| e.to_string())?;
-        let db_path = app_dir.join("sessions.db");
-        let db =
-            conex_db::LocalDb::open(&db_path).map_err(|e| format!("{}: {}", e.kind, e.message))?;
-        tracing::info!(target: "db", path = %db_path.display(), "会话数据库已打开");
-        Ok(session_commands::SharedDb::new(db))
-    };
-
-    match open_file() {
-        Ok(shared) => shared,
-        Err(error) => {
-            // 失败降级：内存库 + db_ready=false（core_get_status 如实反映），
-            // 不阻断启动（PE-01 T01.2 诚实化）。
-            tracing::error!(
-                target: "db",
-                error = %error,
-                "[DB] 打开 sessions.db 失败，降级为内存库"
-            );
-            diagnostics.record("db", false, Some(format!("sessions.db 打开失败：{error}")));
-            let mem = conex_db::LocalDb::open_in_memory().expect("in-memory DB must always open");
-            let shared = session_commands::SharedDb::new(mem);
-            shared.set_ready(false);
-            shared
-        }
-    }
-}
+/// 打开会话数据库——**已物理切除**（Stage 1 ACT-102）。
+/// 现由 [`db_setup::setup_databases_concurrently`] 并发装配取代；
+/// 严禁回潮为 setup 内同步串行 open。
 
 fn main() {
     // setup 序列 ①（前置）：tracing 初始化在 Builder 装配之前，保证后续
@@ -738,34 +724,53 @@ fn main() {
             // ① 已完成（main 入口）；日志目录记录进诊断
             diagnostics.record("telemetry", true, Some(log_dir.display().to_string()));
 
-            // ② 会话数据库（SharedDb manage；Store 与命令共用同一 LocalDb 连接）
-            let shared_db = open_session_db(diagnostics);
+            // ①b ACT-101：窗口握手状态 + 1000ms 原生看门狗（RISK-MED-02）
+            // —— 必须在双库装配前托管：握手命令 / second-launch / 看门狗
+            // 三路共用 WindowHandshakeState.shown CAS 门闩。
+            // StatusDiagnostics 同步前置 manage：workbench_window_ready / 看门狗
+            // 均依赖 State<Arc<StatusDiagnostics>>，若拖到 ⑥ 才注入会 Command 错误。
+            let handshake = Arc::new(window_handshake::WindowHandshakeState::new());
+            app.manage(Arc::clone(&handshake));
+            app.manage(Arc::clone(diagnostics));
+            window_handshake::spawn_window_guard_dog(
+                app_handle.clone(),
+                window_handshake::DEFAULT_WATCHDOG_TIMEOUT,
+            );
+
+            // ② 双 SQLite 并发装配（ACT-102 / INV-02 Phase-1）：
+            // spawn_blocking 并发 open sessions.db + workspace.db；
+            // setup 为同步闭包且 SharedDb / NoteRuntime 必须在返回前
+            // manage —— 经 block_on 汇聚（内部仍并发，非串行 I/O）。
+            // 禁止回潮为同步串行 open_session_db + init_default。
+            let db_init = tauri::async_runtime::block_on(
+                db_setup::setup_databases_concurrently(
+                    setup_app_dir.clone(),
+                    Arc::clone(diagnostics),
+                ),
+            )
+            .map_err(|e| {
+                tracing::error!(target: "db", error = %e, "双库并发装配任务 join 失败");
+                e
+            })?;
+            let shared_db = db_init.session_db;
             let store: Arc<dyn orchestrator::persist::Store> =
                 Arc::new(orchestrator::persist::LocalDbStore::new(shared_db.local_db()));
 
-            // ②b Round7：笔记权威库（独立 workspace.db，与 sessions.db 分离）
-            // NoteRuntime::open → 进程级 SharedNoteRuntime；失败不阻断启动
-            // （工具 / IPC 返回 note.unwired，与 R6 未接线语义一致）
-            match note_runtime::init_default() {
-                Ok(path) => {
-                    diagnostics.record(
-                        "note_runtime",
-                        true,
-                        Some(path.display().to_string()),
-                    );
-                    if let Some(shared) = note_runtime::try_shared() {
-                        app.manage(shared);
-                    }
+            // ②b NoteRuntime（并发路径已打开；失败保持 unwired）
+            match db_init.note_runtime {
+                Some(shared) => {
+                    let path_display = shared.path().display().to_string();
+                    diagnostics.record("note_runtime", true, Some(path_display));
+                    app.manage(shared);
                 }
-                Err(error) => {
-                    tracing::error!(
-                        target: "note_runtime",
-                        error = %error,
-                        "NoteRuntime 打开失败（笔记工具/命令保持 unwired）"
-                    );
-                    diagnostics.record("note_runtime", false, Some(error));
+                None => {
+                    // 失败已在 db_setup 内记诊断（note_runtime error 分支）
                 }
             }
+
+            // ②c 双库装配完成 → 置位 db_ready 并通知握手等待者
+            // （含降级路径：完成即置位，窗口不因 db 失败而死锁）
+            handshake.mark_db_ready();
 
             // ③ 配置静态存储初始化（ApiConfigStore + 密钥槽）
             config::init_api_config_store();
@@ -851,8 +856,8 @@ fn main() {
                 crate::auth::AuthManager::new(setup_app_dir.clone(), auth_base_url);
             app.manage(auth_manager);
 
-            // ⑥ 状态诊断 manage（与 CoreRunState 共享同一实例）
-            app.manage(Arc::clone(diagnostics));
+            // ⑥ 状态诊断已在 ①b 前置 manage（与 CoreRunState 共享同一实例）；
+            //    此处不再重复 manage（Tauri manage 同类型重复注入会 panic）。
 
             // 事件桥（B6.3：workbench-run-event 通道；Tauri 发射器）——R3-02
             // 推送装配（D7 §9.2 方案 a）：PushAwareEmitter 装饰内层发射器

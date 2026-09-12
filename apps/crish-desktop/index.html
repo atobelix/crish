@@ -12,10 +12,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Crish · AI 工作台</title>
     
-    <!-- 首屏单图标加载屏 CSS & 多主题适配 (0ms 无缝加载；外链 /loader.css，CSP 阶段 A) -->
+    <!-- 首屏单图标加载屏 CSS & 多主题适配 (0ms 无缝加载；生产构建经 cspPlugin 内联为 #crish-critical-css) -->
     <link rel="stylesheet" href="/loader.css" />
 
-    <!-- 首屏前应用主题/字体栈，避免闪白；与 themeStore / fontStore 同源 key（外链 /loader.js，CSP 阶段 A） -->
+    <!-- 首屏前应用主题（只写镜像 crish_theme），避免闪白；生产构建内联为 #crish-critical-js（sha256 进 CSP） -->
     <script src="/loader.js"></script>
   </head>
   <body>

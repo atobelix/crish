@@ -65,10 +65,12 @@
 //! 验证（第二实例会 `exit(0)` 杀掉测试进程），故以同源 Win32 原语测试锁定
 //! 判定语义。
 
-use tauri::{Emitter, Manager};
+use tauri::Emitter;
 
 /// 主窗口 label：tauri.conf.json 未显式声明 → Tauri 2 默认 `"main"`。
 /// 窗口前置提示的查找键；常量测试锁定防漂移。
+/// （Stage 1：显现门闩收口至 window_handshake；本常量保留契约测试锚点。）
+#[allow(dead_code)]
 pub(crate) const MAIN_WINDOW_LABEL: &str = "main";
 
 /// 前端契约事件名（命名遵循仓库 `x://y` 惯例，如 `browser://state-changed`）。
@@ -99,20 +101,10 @@ pub(crate) fn on_second_instance<R: tauri::Runtime>(
         "检测到第二实例启动（本实例保持运行）：执行窗口前置提示"
     );
 
-    // 窗口前置 + 任务栏闪烁：show/unminimize 兜底最小化或隐藏状态，
-    // set_focus 尝试置前，request_user_attention 提供任务栏闪烁（Windows
-    // 前景锁可能抑制 set_focus，闪烁是用户可感知的兜底提示）。
-    if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
-        let _ = window.show();
-        let _ = window.unminimize();
-        let _ = window.set_focus();
-        let _ = window.request_user_attention(Some(tauri::UserAttentionType::Informational));
-    } else {
-        tracing::warn!(
-            target: "single-instance",
-            "主窗口未就绪，跳过窗口前置提示（事件仍照发）"
-        );
-    }
+    // 窗口前置 + 任务栏闪烁：禁止裸 show（visible:false 首绘握手竞态，
+    // audits/05 §3.13-15）——统一经 window_handshake::reveal_for_second_launch
+    // 与前端握手 / 看门狗共用 WINDOW_REVEALED CAS 门闩。
+    crate::window_handshake::reveal_for_second_launch(app);
 
     // 前端契约事件（载荷形状由 build_second_launch_payload 测试锁定）
     if let Err(error) = app.emit(EVENT_SECOND_LAUNCH, build_second_launch_payload(args, cwd)) {

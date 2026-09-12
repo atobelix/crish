@@ -75,6 +75,8 @@ pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
     commands: &[
         // ── GUI 专属面（workbench_*，§2.3）──
         entry("workbench_run_shell", "workbench", "gui", true),
+        // ACT-101 / CON-01：窗口首绘握手命令（workbench_window_ready）
+        entry("workbench_window_ready", "workbench", "gui", true),
         // PE-07 T07.3（C-02/C-03/C-04）：git 参数数组执行 + 参数 schema 白名单
         entry("workbench_git_run", "workbench", "gui", true),
         entry("workbench_pty_create", "workbench", "gui", true),
@@ -273,6 +275,10 @@ pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
         entry("usage_clear_history", "usage", "gui", true),
         entry("usage_record_delta", "usage", "gui", true),
         entry("usage_import_legacy_snapshot", "usage", "gui", true),
+        // ── 偏好持久化（Token 与偏好 SSOT 战役 N3）──
+        entry("prefs_get", "preferences", "engine", true),
+        entry("prefs_set", "preferences", "engine", true),
+        entry("prefs_delete", "preferences", "engine", true),
     ],
 };
 
@@ -308,7 +314,8 @@ mod tests {
     /// core_session_retract 登记（统一输入流收敛战役）后总数 124 → 125（注册面 120 → 121）；
     /// R7 收口 GUI fs 删除命令幽灵退役（R6-D5 后零消费）后总数 125 → 124（注册面 121 → 120）；
     /// computer_estop 退役后 123；note_document_recent 追加后 124；
-    /// 模型字典真源三命令追加后 127；core_jsonl_append 退役（零消费）后 126。
+    /// 模型字典真源三命令追加后 127；core_jsonl_append 退役（零消费）后 126；
+    /// workbench_window_ready（ACT-101 / CON-01）追加后 145 → 146。
     #[test]
     fn manifest_count_matches_registered_surface() {
         let total = COMMAND_MANIFEST.commands.len();
@@ -319,12 +326,12 @@ mod tests {
             .count();
         let pending = total - registered;
         assert_eq!(
-            total, 142,
-            "总数 142（131 基线 + 7 auth_* + 4 条 note_document_* 核心管理命令；与前端保持同步）"
+            total, 146,
+            "总数 146（145 + workbench_window_ready 窗口首绘握手；与前端保持同步）"
         );
         assert_eq!(
-            registered, 142,
-            "注册面 142（全部为 registered=true 实装命令）"
+            registered, 146,
+            "注册面 146（全部为 registered=true 实装命令）"
         );
         assert_eq!(pending, 0, "登记先行 0");
     }
@@ -446,8 +453,26 @@ mod tests {
     #[test]
     fn core_list_commands_returns_full_manifest() {
         let manifest = core_list_commands().unwrap();
-        assert_eq!(manifest.commands.len(), 142);
+        assert_eq!(manifest.commands.len(), 146);
         assert_eq!(manifest.contract_version, "1.0.0");
+    }
+
+    /// 偏好持久化三命令登记且 registered=true
+    #[test]
+    fn manifest_registers_preferences_commands() {
+        let by_name: std::collections::HashMap<&str, &CommandManifestEntry> = COMMAND_MANIFEST
+            .commands
+            .iter()
+            .map(|c| (c.name, c))
+            .collect();
+        for name in ["prefs_get", "prefs_set", "prefs_delete"] {
+            let entry = by_name
+                .get(name)
+                .unwrap_or_else(|| panic!("{name} 必须登记 manifest（Token与偏好SSOT战役 N3）"));
+            assert_eq!(entry.family, "preferences", "{name} 属 preferences 族");
+            assert_eq!(entry.surface, "engine", "{name} 属引擎契约面");
+            assert!(entry.registered, "{name} 已接线应 registered=true");
+        }
     }
 
     /// 多笔记四命令登记且 registered=true

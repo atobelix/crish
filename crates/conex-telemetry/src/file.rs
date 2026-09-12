@@ -47,15 +47,10 @@ pub struct FileConfig {
 /// 累计 open 系统调用次数（供单测 / N5-2 断言；生产仅观测）
 static SYSCALL_OPEN_COUNT: AtomicU64 = AtomicU64::new(0);
 
-/// 累计 open 系统调用次数（测试与性能断言用）。
+/// 累计 open 系统调用次数（测试与性能断言用；生产仅观测不消费）。
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn open_syscall_count() -> u64 {
     SYSCALL_OPEN_COUNT.load(Ordering::Relaxed)
-}
-
-/// 重置 open 计数（仅测试隔离用）。
-#[cfg(test)]
-pub(crate) fn reset_syscall_count() {
-    SYSCALL_OPEN_COUNT.store(0, Ordering::Relaxed);
 }
 
 /// B1-6 毒丸恢复计数原语：文件层降级恢复事件累计次数（锁毒化恢复 +

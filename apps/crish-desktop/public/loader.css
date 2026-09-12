@@ -1,3 +1,9 @@
+/* ==========================================================================
+   首屏单图标加载屏（CRP 内联面 · ACT-202）
+   编译期由 vite cspPlugin 内联为 <style id="crish-critical-css">。
+   新增/重构色值一律 hsl()/var()，零裸 Hex（BLK-01 新增代码口径）。
+   ========================================================================== */
+
 html,
 body {
   margin: 0;
@@ -10,34 +16,50 @@ body {
 
 :root {
   --loader-bg: hsl(35 8% 95.2%);
-  --loader-card-bg: linear-gradient(180deg, hsl(0 0% 100%) 0%, hsl(35 8% 95.2%) 100%);
-  --loader-border: rgba(0, 0, 0, 0.08);
-  --loader-line-stroke: #18181b;
-  --loader-text: #71717a;
-  --loader-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.08);
+  --loader-card-bg: linear-gradient(
+    180deg,
+    hsl(0 0% 100%) 0%,
+    hsl(35 8% 95.2%) 100%
+  );
+  --loader-border: hsl(0 0% 0% / 0.08);
+  --loader-line-stroke: hsl(240 6% 9%);
+  --loader-text: hsl(240 4% 46%);
+  --loader-shadow: 0 20px 40px -10px hsl(0 0% 0% / 0.08);
+  --loader-brand: hsl(160 84% 39%);
 }
 
 html[data-theme='light'],
 html[data-theme='default'],
 html.theme-light {
   --loader-bg: hsl(35 8% 95.2%);
-  --loader-card-bg: linear-gradient(180deg, hsl(0 0% 100%) 0%, hsl(35 8% 95.2%) 100%);
-  --loader-border: rgba(0, 0, 0, 0.08);
-  --loader-line-stroke: #18181b;
-  --loader-text: #71717a;
-  --loader-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.08);
+  --loader-card-bg: linear-gradient(
+    180deg,
+    hsl(0 0% 100%) 0%,
+    hsl(35 8% 95.2%) 100%
+  );
+  --loader-border: hsl(0 0% 0% / 0.08);
+  --loader-line-stroke: hsl(240 6% 9%);
+  --loader-text: hsl(240 4% 46%);
+  --loader-shadow: 0 20px 40px -10px hsl(0 0% 0% / 0.08);
+  --loader-brand: hsl(160 84% 39%);
 }
 
 html[data-theme='dark'],
 html.theme-dark {
-  --loader-bg: #1b1b1b;
-  --loader-card-bg: linear-gradient(180deg, #242424 0%, #1b1b1b 100%);
-  --loader-border: rgba(255, 255, 255, 0.08);
-  --loader-line-stroke: #f4f4f5;
-  --loader-text: #a1a1aa;
-  --loader-shadow: 0 20px 50px -10px rgba(0, 0, 0, 0.85);
+  --loader-bg: hsl(0 0% 10.6%);
+  --loader-card-bg: linear-gradient(
+    180deg,
+    hsl(0 0% 14.1%) 0%,
+    hsl(0 0% 10.6%) 100%
+  );
+  --loader-border: hsl(0 0% 100% / 0.08);
+  --loader-line-stroke: hsl(240 4% 96%);
+  --loader-text: hsl(240 5% 65%);
+  --loader-shadow: 0 20px 50px -10px hsl(0 0% 0% / 0.85);
+  --loader-brand: hsl(160 84% 39%);
 }
 
+/* 骨架根：高度自适应视口，禁止硬编码像素高 */
 .app-initial-loader {
   display: flex;
   flex-direction: column;
@@ -86,7 +108,7 @@ html.theme-dark {
 }
 
 .app-loader-green-dot {
-  fill: #10b981;
+  fill: var(--loader-brand);
   animation: loader-dot-pulse 1.8s ease-in-out infinite;
   transform-origin: 100px 35px;
 }
@@ -119,7 +141,7 @@ html.theme-dark {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background-color: #10b981;
+  background-color: var(--loader-brand);
   display: inline-block;
   animation: loader-dot-blink 1.2s infinite ease-in-out;
 }
