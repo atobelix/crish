@@ -218,6 +218,10 @@ if (entries.length === 0) {
 const budgetBytes = Math.round(budgetKb * 1024);
 const known = rows.filter((r) => r.bytes != null && staticVisited.has(r.key));
 const totalBytes = known.reduce((s, r) => s + r.bytes, 0);
+// 主预算锚定：isEntry 产物文件本身（对齐 check-dist 主入口）；静态图合计仅信息展示
+const entryFileBytes = rows
+  .filter((r) => r.isEntry && r.bytes != null)
+  .reduce((s, r) => s + r.bytes, 0);
 const missing = rows.filter((r) => r.bytes == null && staticVisited.has(r.key));
 
 // ── report ───────────────────────────────────────────────────────────────────
@@ -236,7 +240,10 @@ for (const r of rows) {
   console.log(`  [${tag}] ${r.key}  ${size}`);
 }
 console.log(
-  `entry graph JS/CSS 合计: ${totalBytes} B (${(totalBytes / 1024).toFixed(1)} KiB) / 预算 ${budgetKb} KiB`
+  `entry 文件合计: ${entryFileBytes} B (${(entryFileBytes / 1024).toFixed(1)} KiB) / 预算 ${budgetKb} KiB`
+);
+console.log(
+  `静态 import 图合计（信息）: ${totalBytes} B (${(totalBytes / 1024).toFixed(1)} KiB)`
 );
 
 const warnings = [];
@@ -250,19 +257,10 @@ if (missing.length > 0) {
   );
 }
 
-// 逐 entry soft check + 汇总 soft check（不点名 chat-bridge）
-for (const e of entries) {
-  const b = fileSizeFromManifestKey(e);
-  if (b != null && b > budgetBytes) {
-    const line =
-      `entry chunk 超软预算: ${e} = ${b} B (${(b / 1024).toFixed(1)} KiB) > ${budgetKb} KiB —— 仅 warning（未基线，勿 hard 180KB）`;
-    if (strict) errors.push(line);
-    else warnings.push(line);
-  }
-}
-if (totalBytes > budgetBytes) {
+// 主预算：entry 产物文件本身
+if (entryFileBytes > budgetBytes) {
   const line =
-    `entry graph 合计超软预算: ${totalBytes} B (${(totalBytes / 1024).toFixed(1)} KiB) > ${budgetKb} KiB —— warning（可调 BUDGET_KB 或拆 chunk）`;
+    `entry chunk 超软预算: ${entryFileBytes} B (${(entryFileBytes / 1024).toFixed(1)} KiB) > ${budgetKb} KiB —— warning（阈值可调 BUDGET_KB）`;
   if (strict) errors.push(line);
   else warnings.push(line);
 }
