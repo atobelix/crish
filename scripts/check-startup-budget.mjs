@@ -134,8 +134,10 @@ try {
 const distRoot = join(dirname(manifestPath), '..'); // .../dist
 
 function fileSizeFromManifestKey(key) {
-  // manifest key 相对 outDir；产物路径 = dist/<file>
-  const abs = join(distRoot, key);
+  const rec = manifest[key] || {};
+  // Vite manifest：file 字段为产物相对路径（如 assets/index-xxx.js）；key 可能是源码路径
+  const rel = rec.file || key;
+  const abs = join(distRoot, rel);
   try {
     return statSync(abs).size;
   } catch {
@@ -154,37 +156,57 @@ function collectEntryGraph(m) {
     if (rec && rec.isEntry) entries.push(key);
   }
 
-  const visited = new Set();
-  const queue = [...entries];
-  while (queue.length > 0) {
-    const key = queue.shift();
-    if (visited.has(key)) continue;
-    visited.add(key);
+  // 静态 import 图（首屏 parse 必付）
+  const staticVisited = new Set();
+  const staticQueue = [...entries];
+  while (staticQueue.length > 0) {
+    const key = staticQueue.shift();
+    if (staticVisited.has(key)) continue;
+    staticVisited.add(key);
     const rec = m[key];
     if (!rec) continue;
-    for (const dep of rec.imports || []) queue.push(dep);
-    // dynamicImports 仍属启动可触发面，纳入 soft 清单（不 hard 断言）
+    for (const dep of rec.imports || []) staticQueue.push(dep);
+  }
+
+  // 动态 import（预热/懒加载，仅列示不计入 entry 预算合计）
+  const dynamicVisited = new Set();
+  const dynQueue = [...staticVisited];
+  while (dynQueue.length > 0) {
+    const key = dynQueue.shift();
+    const rec = m[key];
+    if (!rec) continue;
     for (const dep of rec.dynamicImports || []) {
-      if (m[dep] && !visited.has(dep)) queue.push(dep);
+      if (!staticVisited.has(dep) && !dynamicVisited.has(dep)) {
+        dynamicVisited.add(dep);
+        dynQueue.push(dep);
+      }
     }
   }
 
   const rows = [];
-  for (const key of visited) {
+  for (const key of staticVisited) {
     const rec = m[key] || {};
-    const bytes = fileSizeFromManifestKey(key);
     rows.push({
       key,
-      bytes,
+      bytes: fileSizeFromManifestKey(key),
       isEntry: !!rec.isEntry,
-      isDynamicOnly: !rec.isEntry && visited.has(key) && !(rec.imports || []).length,
+      staticOnly: true,
+    });
+  }
+  for (const key of dynamicVisited) {
+    const rec = m[key] || {};
+    rows.push({
+      key,
+      bytes: fileSizeFromManifestKey(key),
+      isEntry: false,
+      staticOnly: false,
     });
   }
   rows.sort((a, b) => (b.bytes || 0) - (a.bytes || 0));
-  return { entries, rows };
+  return { entries, rows, staticVisited };
 }
 
-const { entries, rows } = collectEntryGraph(manifest);
+const { entries, rows, staticVisited } = collectEntryGraph(manifest);
 
 if (entries.length === 0) {
   console.warn(
@@ -194,9 +216,9 @@ if (entries.length === 0) {
 }
 
 const budgetBytes = Math.round(budgetKb * 1024);
-const known = rows.filter((r) => r.bytes != null);
+const known = rows.filter((r) => r.bytes != null && staticVisited.has(r.key));
 const totalBytes = known.reduce((s, r) => s + r.bytes, 0);
-const missing = rows.filter((r) => r.bytes == null);
+const missing = rows.filter((r) => r.bytes == null && staticVisited.has(r.key));
 
 // ── report ───────────────────────────────────────────────────────────────────
 console.log('=== startup budget（软门禁）===');
