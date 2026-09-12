@@ -632,7 +632,8 @@
   padding: 0 var(--space-2, 8px);
   font-size: var(--font-size-micro, 11px);
   font-family: var(--font-sans);
-  color: var(--text-tertiary);
+  /* 静置弱化态走 --text-faint 层级（tertiary 向底色混合 ~70%），hover/is-copied 提级。 */
+  color: var(--text-faint);
   background: transparent;
   box-shadow: none;
   border: 1px solid transparent;
@@ -642,7 +643,6 @@
   flex-shrink: 0;
   line-height: 1;
   user-select: none;
-  opacity: 0.7;
   transition:
     opacity var(--transition-fast, 150ms ease),
     background-color var(--transition-fast, 150ms ease),
@@ -719,17 +719,8 @@
   white-space: inherit;
 }
 
-.assistantText :global(.md-code-pre::-webkit-scrollbar) {
-  height: 4px;
-}
-
-.assistantText :global(.md-code-pre::-webkit-scrollbar-thumb) {
-  background: var(--tint-scrollbar-thumb);
-  border-radius: var(--radius-full, 9999px);
-}
-
-.assistantText :global(.md-code-pre::-webkit-scrollbar-track) {
-  background: transparent;
+.assistantText :global(.md-code-pre) {
+  --scrollbar-thumb-width: 4px;
 }
 
 .assistantText :global(.md-table-wrap) {

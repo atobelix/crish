@@ -261,22 +261,12 @@ const FlowScrubberInner: React.FC<FlowScrubberProps> = ({
   if (segments.length === 0) return null;
 
   const hasPinned = Boolean(pinnedIdSet && pinnedIdSet.size > 0);
-  const firstPinColor =
-    hasPinned && pinnedColors && Object.values(pinnedColors).length > 0
-      ? Object.values(pinnedColors)[0] || DEFAULT_PIN_COLOR
-      : DEFAULT_PIN_COLOR;
-
   return (
     <div
       ref={wrapperRef}
       className={styles.wrapper}
       data-flow-scrubber=""
       data-has-pinned={hasPinned ? 'true' : undefined}
-      style={
-        hasPinned
-          ? ({ '--scrubber-pinned-tint': firstPinColor } as React.CSSProperties)
-          : undefined
-      }
       aria-label="对话定位刻度"
       role="navigation"
     >

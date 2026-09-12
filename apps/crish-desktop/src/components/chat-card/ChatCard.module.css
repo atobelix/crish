@@ -127,7 +127,7 @@
 
 .modelText {
   font-size: var(--font-size-base);
-  font-weight: var(--font-weight-medium, 500);
+  font-weight: var(--font-weight-medium);
   color: var(--text-primary);
   display: inline-flex;
   align-items: center;
@@ -208,7 +208,7 @@
   backdrop-filter: blur(8px);
   color: var(--text-primary);
   font-size: var(--font-size-base, 14px);
-  font-weight: var(--font-weight-medium, 500);
+  font-weight: var(--font-weight-medium);
   pointer-events: none;
   border-radius: var(--radius-xl, 16px);
   box-shadow: inset 0 0 0 1px var(--border-color);
@@ -222,7 +222,7 @@
 .dropOverlayText {
   color: var(--text-secondary);
   font-size: var(--font-size-sm, 13px);
-  font-weight: var(--font-weight-medium, 500);
+  font-weight: var(--font-weight-medium);
   letter-spacing: 0.2px;
 }
 

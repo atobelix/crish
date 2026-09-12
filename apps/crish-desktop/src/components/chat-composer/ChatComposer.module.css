@@ -69,12 +69,12 @@
   border-radius: 12px;
   background: var(
     --color-warning-bg,
-    color-mix(in srgb, hsl(38, 90%, 50%) 4.5%, var(--bg-elevated))
+    color-mix(in srgb, var(--color-warning) 4.5%, var(--bg-elevated))
   );
   border: 1px solid
     color-mix(
       in srgb,
-      hsl(38, 90%, 50%) 16%,
+      var(--color-warning) 16%,
       var(--border-color)
     );
   box-shadow: 0 1px 3px var(--shadow-color);
@@ -93,7 +93,7 @@
 .flowPermissionBar:hover {
   border-color: color-mix(
     in srgb,
-    hsl(38, 90%, 50%) 22%,
+    var(--color-warning) 22%,
     var(--border-color)
   );
 }
@@ -823,7 +823,7 @@
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
   color: var(--text-on-overlay);
-  text-shadow: 0 1px 2px hsl(0 0% 0% / 0.6);
+  text-shadow: 0 1px 2px color-mix(in srgb, var(--shadow-color) 60%, transparent);
 }
 
 .attachProgressBorder {
@@ -964,7 +964,7 @@
   background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: var(--ann-radius-outer);
-  box-shadow: 0 16px 36px hsl(0 0% 0% / 0.08), 0 2px 8px hsl(0 0% 0% / 0.03);
+  box-shadow: 0 16px 36px color-mix(in srgb, var(--shadow-color) 8%, transparent), 0 2px 8px color-mix(in srgb, var(--shadow-color) 3%, transparent);
   padding: var(--ann-pad);
   display: flex;
   flex-direction: column;
@@ -1174,8 +1174,8 @@
   border-radius: var(--composer-radius-single, 20px);
   background: var(--bg-elevated);
   box-shadow:
-    0 1px 3px hsl(0 0% 0% / 0.015),
-    0 3px 8px -1px hsl(0 0% 0% / 0.02);
+    0 1px 3px color-mix(in srgb, var(--shadow-color) 1.5%, transparent),
+    0 3px 8px -1px color-mix(in srgb, var(--shadow-color) 2%, transparent);
   transition:
     border-color var(--transition-fast, 120ms ease),
     box-shadow var(--transition-fast, 120ms ease);
@@ -1199,8 +1199,8 @@
     var(--text-primary) 6%
   );
   box-shadow:
-    0 1px 4px hsl(0 0% 0% / 0.02),
-    0 4px 10px -1px hsl(0 0% 0% / 0.03);
+    0 1px 4px color-mix(in srgb, var(--shadow-color) 2%, transparent),
+    0 4px 10px -1px color-mix(in srgb, var(--shadow-color) 3%, transparent);
   outline: none;
 }
 
@@ -1212,8 +1212,8 @@
     var(--text-primary) 5%
   );
   box-shadow:
-    0 1px 3px hsl(0 0% 0% / 0.015),
-    0 3px 8px -1px hsl(0 0% 0% / 0.02);
+    0 1px 3px color-mix(in srgb, var(--shadow-color) 1.5%, transparent),
+    0 3px 8px -1px color-mix(in srgb, var(--shadow-color) 2%, transparent);
 }
 
 .inputMainLayout {

@@ -142,7 +142,7 @@ export const AttachmentCard: React.FC<AttachmentCardProps> = React.memo(
         : item.name || item.path || '附件';
 
       if (warnText) {
-        return `${baseName}（⚠️ ${warnText}）`;
+        return `${baseName}（警告: ${warnText}）`;
       }
       return baseName;
     }, [isImage, isImageMissing, isItemMissing, item.name, item.path, warnText]);

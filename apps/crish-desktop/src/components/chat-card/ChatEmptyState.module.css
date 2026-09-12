@@ -217,16 +217,16 @@
   width: 100%;
   box-shadow: none;
   transition:
-    background var(--transition-micro, 100ms ease),
-    border-color var(--transition-micro, 100ms ease),
-    color var(--transition-micro, 100ms ease);
+    background var(--transition-micro),
+    border-color var(--transition-micro),
+    color var(--transition-micro);
   box-sizing: border-box;
   outline: none;
 }
 
 .quickPromptLabel {
   font-size: var(--font-size-sm, 13px);
-  font-weight: var(--font-weight-semibold, 600);
+  font-weight: var(--font-weight-semibold);
   color: var(--text-primary);
   margin-right: var(--space-3, 12px);
   flex-shrink: 0;
@@ -240,7 +240,7 @@
   overflow: hidden;
   white-space: nowrap;
   flex: 1;
-  line-height: var(--line-height-base, 1.4);
+  line-height: var(--line-height-base);
 }
 
 .promptArrow {
@@ -248,8 +248,8 @@
   flex-shrink: 0;
   margin-left: auto;
   transition:
-    opacity var(--transition-micro, 100ms ease),
-    color var(--transition-micro, 100ms ease);
+    opacity var(--transition-micro),
+    color var(--transition-micro);
 }
 
 /* Hover 状态：不位移跳动、不染主题色，仅微背景响应与纯净发丝边框 */

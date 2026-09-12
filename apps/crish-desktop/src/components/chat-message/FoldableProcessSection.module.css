@@ -42,7 +42,13 @@
 }
 
 .controlBar:hover {
-  color: var(--text-secondary);
+  color: var(--text-primary);
+}
+
+.controlBar:hover .leadIcon,
+.controlBar:hover .summaryLabel,
+.controlBar:hover .chevron {
+  color: var(--text-primary);
 }
 
 /* 不可交互态（铁律四强制展开段 / 不可折叠段）：去掉指针与悬停反馈 */

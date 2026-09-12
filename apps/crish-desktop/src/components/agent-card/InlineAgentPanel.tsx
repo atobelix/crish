@@ -2,7 +2,7 @@
  * 主对话时间线内的协作 subagent 徽章（时间线行内徽章 §5.3 / reference subagent.css）。
  *
  * 契约：
- * - 废除内嵌完整输入框与上帝控件，改为时间线行内徽章：`⚡ <title> subagent 工作中 1.8秒`（带 5px 呼吸灯与双行链路追踪摘要）；
+ * - 废除内嵌完整输入框与上帝控件，改为时间线行内徽章：`<title> subagent 工作中 1.8秒`（带 5px 呼吸灯与双行链路追踪摘要）；
  * - 打开详情分流走 openAgentInSidePanel（侧栏 only，永不 setActiveAgentId / 新窗口）；
  * - 展开消息区具备独立 LEFT vertical rail，支持 AsyncMarkdownBlock 渲染已完成消息。
  */
@@ -38,6 +38,7 @@ import {
   resumeSubagent,
 } from '../../api/subagentRecoveryApi';
 import { resolveErrorKindLabel } from '../../api/continuity/continuityNotices';
+import { AppIcon } from '../ui/icons/index';
 
 export interface InlineAgentPanelProps {
   agent: SessionAgent;
@@ -180,7 +181,7 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
       role="region"
       aria-label={`${displayTitle}，${statusText}`}
     >
-      {/* Line 1: 闪电图标 ⚡ + 标题 + 运行状态与 5px 呼吸绿点 */}
+      {/* Line 1: 闪电图标 + 标题 + 运行状态与 5px 呼吸绿点 */}
       <button
         type="button"
         className={`${styles.flowSubagentLine1} flow-subagent__line1`}
@@ -188,7 +189,7 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
         aria-label={`${displayTitle}，${statusText}`}
       >
         <span className={`${styles.flowSubagentIcon} flow-subagent__icon`} aria-hidden>
-          ⚡
+          <AppIcon name="zap" size={13} aria-hidden />
         </span>
         <span className={`${styles.flowSubagentTitle} flow-subagent__title`}>
           {displayTitle}

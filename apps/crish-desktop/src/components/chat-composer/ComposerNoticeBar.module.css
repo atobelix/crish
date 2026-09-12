@@ -48,7 +48,7 @@
 /* 3. error 类型 */
 .noticeBar.error {
   border: 1px solid color-mix(in srgb, var(--color-error) 25%, var(--border-subtle));
-  background-color: color-mix(in srgb, var(--color-error) 4%, hsl(0 0% 100%));
+  background-color: color-mix(in srgb, var(--color-error) 4%, var(--bg-card));
 }
 
 :global(html[data-theme='dark']) .noticeBar.error {

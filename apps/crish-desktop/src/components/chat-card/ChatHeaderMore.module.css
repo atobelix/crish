@@ -19,8 +19,8 @@
   justify-content: center;
   cursor: pointer;
   transition:
-    background-color var(--transition-micro, 100ms ease-out),
-    color var(--transition-micro, 100ms ease-out);
+    background-color var(--transition-micro),
+    color var(--transition-micro);
   padding: 0;
   opacity: 1;
 }

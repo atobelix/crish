@@ -170,7 +170,7 @@ function createSuggestionRenderer(ctx: SuggestionRenderCtx) {
           });
           if (safeAnchor) {
             lastSuggestedSide = safeAnchor.suggestedSide;
-            // 🌟 关键修复 (DEC-06 / Task 4.1): 保全 suggestedSide 与 nearEdge 扩展属性
+            // 关键修复 (DEC-06 / Task 4.1): 保全 suggestedSide 与 nearEdge 扩展属性
             const extendedRect = Object.assign(
               new DOMRect(
                 safeAnchor.left,

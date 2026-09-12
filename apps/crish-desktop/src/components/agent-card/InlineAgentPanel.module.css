@@ -137,7 +137,7 @@
   overflow: hidden;
   position: relative;
   border: none;
-  border-left: 1px solid rgba(0, 0, 0, 0.10);
+  border-left: 1px solid var(--hairline-strong);
   background: transparent;
   box-shadow: none;
 }
@@ -197,7 +197,7 @@
 
 .inlineAgentHead:focus-visible {
   outline: none;
-  box-shadow: var(--focus-ring, 0 0 0 2px var(--tint-focus-ring));
+  box-shadow: var(--focus-ring);
 }
 
 .inlineAgentHeadActions {
@@ -299,7 +299,7 @@
   background: transparent;
   border: 1px solid var(--hairline, var(--border-subtle));
   color: var(--text-secondary);
-  line-height: var(--line-height-ui, 1.35);
+  line-height: var(--line-height-ui);
 }
 
 .inlineAgentBadgeRunning {
@@ -362,7 +362,7 @@
   display: grid;
   grid-template-rows: 0fr;
   transition: grid-template-rows
-    var(--transition-accordion, 220ms cubic-bezier(0.16, 1, 0.3, 1));
+    var(--transition-accordion);
 }
 
 .accordionWrapper[data-expanded='true'] {
@@ -372,7 +372,7 @@
 .accordionInner {
   overflow: hidden;
   opacity: 0;
-  transition: opacity var(--transition-fast, 150ms ease);
+  transition: opacity var(--transition-fast);
 }
 
 .accordionWrapper[data-expanded='true'] .accordionInner {
@@ -415,7 +415,7 @@
 
 .inlineAgentLink:focus-visible {
   outline: none;
-  box-shadow: var(--focus-ring, 0 0 0 2px var(--tint-focus-ring));
+  box-shadow: var(--focus-ring);
 }
 
 .inlineAgentToolbarHint {
@@ -523,7 +523,7 @@
 /*                                                    ?*/
 .inlineAgent.inlineAgentDense :global(.approval-card) {
   margin: 4px 0;
-  padding: 8px 8px 7px;
+  padding: var(--space-2);
   border-radius: var(--radius-lg);
   border-color: var(--hairline-strong, var(--border-color));
 }

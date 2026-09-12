@@ -116,7 +116,7 @@ describe('终态收敛：总结抵达后只外露工作时长与总结正文', (
     // 断言 ④：控制栏承载工作时长
     const bar = container.querySelector('[data-testid^="process-toggle-"]');
     expect(bar).not.toBeNull();
-    expect(bar?.textContent ?? '').toMatch(/工作\s/);
+    expect(bar?.textContent ?? '').toMatch(/已完成\s/);
   });
 
   it('用户手动展开过的分段被钉住：终态收敛不得无声冲掉用户裁决', () => {

@@ -12,9 +12,9 @@
   overflow: hidden;
   cursor: pointer;
   position: relative;
-  transition: border-color var(--transition-fast, 0.15s) ease,
-              background var(--transition-fast, 0.15s) ease,
-              box-shadow var(--transition-fast, 0.15s) ease;
+  transition: border-color var(--transition-fast) ease,
+              background var(--transition-fast) ease,
+              box-shadow var(--transition-fast) ease;
   user-select: none;
   -webkit-user-select: none;
   flex-shrink: 0;
@@ -141,7 +141,7 @@
 
 .missingBadge {
   font-size: var(--font-size-nano, 9px);
-  font-weight: var(--font-weight-medium, 500);
+  font-weight: var(--font-weight-medium);
   line-height: 1;
   color: var(--text-tertiary);
   letter-spacing: 0.02em;
@@ -195,7 +195,7 @@
 .fileName,
 .fileNameText {
   font-size: var(--font-size-sm, 12px);
-  font-weight: var(--font-weight-medium, 500);
+  font-weight: var(--font-weight-medium);
   color: var(--text-primary);
   line-height: 1.3;
   width: 100%;
@@ -214,8 +214,8 @@
 .fileMeta,
 .fileMetaText {
   font-size: var(--font-size-nano, 10px);
-  font-weight: var(--font-weight-normal, 400);
-  font-family: var(--font-mono, monospace);
+  font-weight: var(--font-weight-normal);
+  font-family: var(--font-mono);
   color: var(--text-tertiary);
   line-height: 1.2;
   white-space: nowrap;
@@ -244,7 +244,7 @@
   justify-content: center;
   z-index: var(--z-dock, 10);
   cursor: help;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  box-shadow: var(--shadow-sm);
   pointer-events: auto;
 }
 
@@ -270,9 +270,9 @@
   z-index: var(--z-dock, 10);
   backdrop-filter: blur(4px);
   transition:
-    background-color var(--transition-fast, 120ms ease),
-    color var(--transition-fast, 120ms ease),
-    transform var(--transition-fast, 120ms ease);
+    background-color var(--transition-fast),
+    color var(--transition-fast),
+    transform var(--transition-fast);
 }
 
 .fileRemove:hover,
@@ -330,8 +330,8 @@
 
 .badge {
   font-size: var(--font-size-nano, 9px);
-  font-weight: var(--font-weight-heavy, 700);
-  font-family: var(--font-mono, monospace);
+  font-weight: var(--font-weight-heavy);
+  font-family: var(--font-mono);
   color: var(--text-tertiary);
   max-width: 48px;
   overflow: hidden;

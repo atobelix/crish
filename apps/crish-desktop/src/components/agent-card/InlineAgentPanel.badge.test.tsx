@@ -61,7 +61,7 @@ describe('InlineAgentPanel Time-Line Inline Badge (§5.3)', () => {
     expect(root?.classList.contains('is-running')).toBe(true);
 
     // Line 1: 闪电图标、标题、工作中与 5px 呼吸绿点
-    expect(screen.getByText('⚡')).toBeDefined();
+    expect(container.querySelector('[data-icon="zap"]')).not.toBeNull();
     expect(screen.getByText(/并发性能与协议校验 subagent/)).toBeDefined();
     expect(screen.getByText(/工作中/)).toBeDefined();
     expect(container.querySelector('.flow-subagent__dot')).not.toBeNull();

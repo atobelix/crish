@@ -96,7 +96,7 @@
   border-radius: var(--radius-sm, 4px);
   border: 1px solid var(--hairline, var(--border-subtle));
   font-size: var(--font-size-xxs, 11px);
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: var(--font-mono);
   line-height: var(--line-height-base);
   color: var(--text-tertiary);
   background: transparent;
@@ -256,12 +256,12 @@
 
 .approvalCardBtn:focus-visible {
   outline: none;
-  box-shadow: var(--focus-ring, 0 0 0 2px var(--tint-focus-ring));
+  box-shadow: var(--focus-ring);
 }
 
 :global(.agent-card--dense) .approvalCard {
   margin: 4px 0;
-  padding: 8px 8px 7px;
+  padding: var(--space-2);
   border-radius: var(--radius-lg);
   border-color: var(--hairline-strong, var(--border-color));
 }

@@ -35,7 +35,7 @@
   max-width: min(var(--chat-col-max, 760px), 100%);
   margin-left: auto;
   margin-right: auto;
-  padding: 0 var(--chat-stream-pad-x, 20px);
+  padding: 0 var(--chat-stream-pad-x);
   box-sizing: border-box;
   min-width: 0;
   overflow-anchor: none;

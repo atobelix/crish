@@ -68,7 +68,7 @@ describe('FlowScrubber 源码钉', () => {
 
   it('FlowScrubber 无 emoji，固定提示无文字硬编码「已固定」', () => {
     const tsx = read('FlowScrubber.tsx');
-    expect(tsx).not.toMatch(/📌/);
+    expect(tsx).not.toMatch(/\u{1F4CC}/u);
     expect(tsx).not.toMatch(/已固定/);
   });
 });

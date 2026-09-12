@@ -125,11 +125,19 @@ export function useSectionElapsedMs(
   }, [isLive]);
 
   return useMemo(() => {
-    if (!startTime || startTime <= 0) return 0;
-    const raw = isLive
-      ? now - startTime
-      : (endTime ?? startTime + totalDurationMs) - startTime;
-    return Math.max(0, raw);
+    if (!startTime || startTime <= 0) {
+      return !isLive && totalDurationMs > 0 ? totalDurationMs : 0;
+    }
+    if (isLive) {
+      return Math.max(0, now - startTime);
+    }
+    if (endTime != null && endTime > startTime) {
+      return Math.max(0, endTime - startTime);
+    }
+    if (totalDurationMs > 0) {
+      return totalDurationMs;
+    }
+    return 0;
   }, [startTime, endTime, isLive, totalDurationMs, now]);
 }
 
@@ -249,7 +257,7 @@ export const FoldableProcessSection: React.FC<FoldableProcessSectionProps> = Rea
           onKeyDown={handleKeyDown}
           style={controlInteractive ? undefined : { cursor: 'default' }}
         >
-          <SectionLeadIcon metrics={metrics} />
+          {!showWorkTime && <SectionLeadIcon metrics={metrics} />}
           <span className={styles.summaryLabel}>{summaryText}</span>
           {controlInteractive ? (
             <span

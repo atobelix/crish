@@ -207,14 +207,14 @@ describe('FoldableProcessSection 控制栏工作时间', () => {
     expect(bar.textContent ?? '').not.toContain('工作');
   });
 
-  it('终态 → 控制栏定格为「工作 xx 时间」，标记 data-live=false', () => {
+  it('终态 → 控制栏定格为「已完成 xx 时间」，标记 data-live=false', () => {
     const bar = renderBar({
       showWorkTime: true,
       startTime: 1_700_000_000_000,
       endTime: 1_700_000_012_500,
     });
     expect(bar.getAttribute('data-live')).toBe('false');
-    expect(bar.textContent).toContain('工作 12.5 秒');
+    expect(bar.textContent).toContain('已完成 12.5 秒');
   });
 
   it('单思考段（不显示工作时间区域）→ 退化为「思考」', () => {
@@ -228,12 +228,25 @@ describe('FoldableProcessSection 控制栏工作时间', () => {
     expect(bar.textContent ?? '').not.toContain('工作');
   });
 
-  it('单工具调用段 → 退化为「已运行 N 条命令」', () => {
+  it('单工具调用段（命令行）→ 展示「已运行 N 条命令」', () => {
     const bar = renderBar({
       showWorkTime: false,
-      metrics: { toolCount: 1, thoughtCount: 0 },
+      metrics: { toolCount: 1, thoughtCount: 0, readFilesCount: 0, commandCount: 1 },
     });
     expect(bar.textContent).toContain('已运行 1 条命令');
+  });
+
+  it('工作时间段（showWorkTime=true）不得渲染前缀图标，工具描述段（showWorkTime=false）渲染主导图标', () => {
+    // 1. showWorkTime=true: 不得有任何前缀图标
+    const barWithTime = renderBar({ showWorkTime: true });
+    expect(barWithTime.querySelector('svg')).toBeNull();
+
+    // 2. showWorkTime=false: 存在对应主导动作图标
+    const barWithTools = renderBar({
+      showWorkTime: false,
+      metrics: { toolCount: 1, commandCount: 1, readFilesCount: 0, leadAction: 'command' },
+    });
+    expect(barWithTools.querySelector('svg[data-icon="terminal"]')).toBeInTheDocument();
   });
 
   it('负向断言：控制栏文案区绝不得出现「已深度思考」', () => {
