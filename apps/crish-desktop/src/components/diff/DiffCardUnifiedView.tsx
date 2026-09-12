@@ -4,7 +4,11 @@ import { AppErrorBoundary } from '../AppErrorBoundary';
 import { useVirtualScroll } from '../../hooks/useVirtualScroll';
 import type { FileDiff } from '../../store/types';
 import type { ChangeRenderItem, PlaceholderRenderItem } from './diffCardTypes';
-import { highlightCode, langFromFilename } from '../../api/codeHighlight';
+import { escapeHtml, highlightCode, langFromFilename } from '../../api/codeHighlight';
+import {
+  useDiffHighlightMap,
+  type DiffHighlightItem,
+} from '../../api/codeHighlightBatch';
 import {
   computeIntralinePair,
   type DiffWordToken,
@@ -22,8 +26,10 @@ function renderTokens(
   tokens: DiffWordToken[],
   targetType: 'added' | 'removed',
   fallbackText: string,
-  lang: string
+  lang: string,
+  hlHtml: string | undefined,
 ) {
+  const html = hlHtml ?? highlightCode(fallbackText, lang);
   if (!tokens || tokens.length === 0) {
     return (
       <span
@@ -32,7 +38,7 @@ function renderTokens(
           overflow: 'hidden',
         }}
         dangerouslySetInnerHTML={{
-          __html: highlightCode(fallbackText, lang),
+          __html: html,
         }}
       />
     );
@@ -86,7 +92,7 @@ function renderTokens(
           whiteSpace: 'pre',
         }}
         dangerouslySetInnerHTML={{
-          __html: highlightCode(fallbackText, lang),
+          __html: html,
         }}
       />
     </span>
@@ -97,6 +103,39 @@ interface DiffCardUnifiedViewProps {
   f: FileDiff;
   renderItems: UnifiedRenderItem[];
   onExpandBlock: (filePath: string, startIndex: number) => void;
+}
+
+function unifiedRowKey(
+  f: FileDiff,
+  oldLine: number | undefined,
+  newLine: number | undefined,
+  globalIdx: number,
+): string {
+  const oldLineNum = oldLine !== undefined ? String(oldLine) : '';
+  const newLineNum = newLine !== undefined ? String(newLine) : '';
+  return `${f.filePath}:${f.oldPath || ''}:${oldLineNum || 'del'}:${newLineNum || 'add'}:${globalIdx}`;
+}
+
+function collectUnifiedHighlightItems(
+  f: FileDiff,
+  renderItems: UnifiedRenderItem[],
+  startIndex: number,
+  endIndex: number,
+  codeLang: string,
+): DiffHighlightItem[] {
+  const items: DiffHighlightItem[] = [];
+  for (let globalIdx = startIndex; globalIdx < endIndex; globalIdx++) {
+    const item = renderItems[globalIdx];
+    if (!item || item.isCollapsedPlaceholder) continue;
+    const { change, oldLine, newLine, isHeader } = item.item;
+    if (isHeader) continue;
+    items.push({
+      id: unifiedRowKey(f, oldLine, newLine, globalIdx),
+      code: change.content,
+      language: codeLang,
+    });
+  }
+  return items;
 }
 
 export const DiffCardUnifiedView: React.FC<DiffCardUnifiedViewProps> = ({
@@ -123,6 +162,20 @@ export const DiffCardUnifiedView: React.FC<DiffCardUnifiedViewProps> = ({
 
   // 真实语言推导
   const codeLang = useMemo(() => langFromFilename(f.filePath), [f.filePath]);
+
+  // D8.3：可见行批高亮（短 sync / 长 worker highlight.batch）
+  const hlItems = useMemo(
+    () =>
+      collectUnifiedHighlightItems(
+        f,
+        renderItems,
+        startIndex,
+        endIndex,
+        codeLang,
+      ),
+    [f, renderItems, startIndex, endIndex, codeLang],
+  );
+  const hlMap = useDiffHighlightMap(hlItems);
 
   return (
     <AppErrorBoundary variant="compact" title="变更对比出错">
@@ -223,7 +276,8 @@ export const DiffCardUnifiedView: React.FC<DiffCardUnifiedViewProps> = ({
 
               const oldLineNum = oldLine !== undefined ? String(oldLine) : '';
               const newLineNum = newLine !== undefined ? String(newLine) : '';
-              const stableKey = `${f.filePath}:${f.oldPath || ''}:${oldLineNum || 'del'}:${newLineNum || 'add'}:${globalIdx}`;
+              const stableKey = unifiedRowKey(f, oldLine, newLine, globalIdx);
+              const hlHtml = hlMap.get(stableKey);
 
               return (
                 <div
@@ -244,7 +298,7 @@ export const DiffCardUnifiedView: React.FC<DiffCardUnifiedViewProps> = ({
                   <div className={styles.gutterMarker}>{marker}</div>
                   <div className={styles.lineText}>
                     {tokens ? (
-                      renderTokens(tokens, targetType, change.content, codeLang)
+                      renderTokens(tokens, targetType, change.content, codeLang, hlHtml)
                     ) : (
                       <span
                         style={{
@@ -252,7 +306,7 @@ export const DiffCardUnifiedView: React.FC<DiffCardUnifiedViewProps> = ({
                           overflow: 'hidden',
                         }}
                         dangerouslySetInnerHTML={{
-                          __html: highlightCode(change.content, codeLang),
+                          __html: hlHtml ?? escapeHtml(change.content),
                         }}
                       />
                     )}

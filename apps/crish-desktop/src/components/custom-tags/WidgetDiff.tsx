@@ -4,7 +4,11 @@ import { CustomTagErrorBoundary } from './CustomTagErrorBoundary';
 import type { ExtraComponentProps } from './CustomTagRegistry';
 import { Tooltip } from '../ui';
 import { AppIcon } from '../ui/icons/index';
-import { highlightCode, langFromFilename } from '../../api/codeHighlight';
+import { escapeHtml, langFromFilename } from '../../api/codeHighlight';
+import {
+  useDiffHighlightMap,
+  type DiffHighlightItem,
+} from '../../api/codeHighlightBatch';
 import { parseDiffText, buildSplitLinePairs } from '../../api/diffPairMatcher';
 
 export interface WidgetDiffProps extends ExtraComponentProps {
@@ -44,6 +48,26 @@ export const WidgetDiffInner: React.FC<WidgetDiffProps> = ({
     const targetPath = to || from || '';
     return langFromFilename(targetPath);
   }, [to, from]);
+
+  // D8.3：WidgetDiff 行批高亮（主路径 highlight.batch）
+  const hlItems = useMemo<DiffHighlightItem[]>(() => {
+    const out: DiffHighlightItem[] = [];
+    parsedLines.forEach((line, idx) => {
+      if (line.type === 'header') return;
+      out.push({ id: `u:${idx}`, code: line.text, language: codeLang });
+    });
+    splitPairs.forEach((pair, idx) => {
+      if (pair.isHeader) return;
+      if (pair.left) {
+        out.push({ id: `s:${idx}:L`, code: pair.left.text, language: codeLang });
+      }
+      if (pair.right) {
+        out.push({ id: `s:${idx}:R`, code: pair.right.text, language: codeLang });
+      }
+    });
+    return out;
+  }, [parsedLines, splitPairs, codeLang]);
+  const hlMap = useDiffHighlightMap(hlItems);
 
   const handleCopy = async () => {
     try {
@@ -163,7 +187,7 @@ export const WidgetDiffInner: React.FC<WidgetDiffProps> = ({
                   <span
                     className={styles.diffLineContent}
                     dangerouslySetInnerHTML={{
-                      __html: highlightCode(line.text, codeLang),
+                      __html: hlMap.get(`u:${idx}`) ?? escapeHtml(line.text),
                     }}
                   />
                 </div>
@@ -204,7 +228,9 @@ export const WidgetDiffInner: React.FC<WidgetDiffProps> = ({
                     <span
                       className={styles.diffLineContent}
                       dangerouslySetInnerHTML={{
-                        __html: left ? highlightCode(left.text, codeLang) : '',
+                        __html: left
+                          ? (hlMap.get(`s:${idx}:L`) ?? escapeHtml(left.text))
+                          : '',
                       }}
                     />
                   </div>
@@ -224,7 +250,9 @@ export const WidgetDiffInner: React.FC<WidgetDiffProps> = ({
                     <span
                       className={styles.diffLineContent}
                       dangerouslySetInnerHTML={{
-                        __html: right ? highlightCode(right.text, codeLang) : '',
+                        __html: right
+                          ? (hlMap.get(`s:${idx}:R`) ?? escapeHtml(right.text))
+                          : '',
                       }}
                     />
                   </div>

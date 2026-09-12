@@ -1,7 +1,11 @@
 import React, { useState, useMemo } from 'react';
 import type { FileDiff } from '../../store/types';
 import styles from './ModernToolCall.module.css';
-import { highlightCodeSafe, langFromFilename } from '../../api/codeHighlight';
+import { escapeHtml, langFromFilename } from '../../api/codeHighlight';
+import {
+  useDiffHighlightMap,
+  type DiffHighlightItem,
+} from '../../api/codeHighlightBatch';
 import { Tooltip } from '../ui';
 import { AppIcon } from '../ui/icons/index';
 
@@ -40,6 +44,18 @@ export const ToolCallDiffPreview: React.FC<ToolCallDiffPreviewProps> = ({
     : showAll
       ? changes.slice(0, DIFF_FLAT_EXPAND_MAX)
       : changes.slice(0, DIFF_FLAT_PREVIEW_LIMIT);
+
+  // D8.3：平铺可见行走 highlight.batch（短 sync / 长 worker）
+  const hlItems = useMemo<DiffHighlightItem[]>(
+    () =>
+      displayedChanges.map((change, i) => ({
+        id: `${diff.filePath}:flat:${i}`,
+        code: change.content,
+        language: codeLang,
+      })),
+    [displayedChanges, diff.filePath, codeLang],
+  );
+  const hlMap = useDiffHighlightMap(hlItems);
 
   const handleCopyDiff = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -157,7 +173,9 @@ export const ToolCallDiffPreview: React.FC<ToolCallDiffPreviewProps> = ({
               <pre
                 className={styles.diffLineContent}
                 dangerouslySetInnerHTML={{
-                  __html: highlightCodeSafe(change.content, codeLang),
+                  __html:
+                    hlMap.get(`${diff.filePath}:flat:${i}`) ??
+                    escapeHtml(change.content),
                 }}
               />
             </div>

@@ -18,8 +18,18 @@ import { ptyResize, ptyWrite } from '../../api/ptySessionApi';
 import { parseColorToOklch } from '../../api/oklchColorGuard';
 import { ResizeObserverManager } from '../../services/ResizeObserverManager';
 import { useLayoutAnimationStore } from '../../store/layoutAnimationStore';
+import { logger } from '../../services/LoggerService';
 import type { InteractiveXtermStatus } from './TerminalCard.xterm';
 import { startPtySession } from './ptyLifecycle';
+import {
+  createPtyWriteGate,
+  isTerminalHostHidden,
+  observeTerminalHostVisibility,
+  type PtyWriteGate,
+} from './ptyWriteGate';
+
+/** WebGL context 限次恢复上限（D8.4 / budget：WEBGL_RESTORE_MAX） */
+export const WEBGL_RESTORE_MAX = 3;
 
 /** 读取 CSS 变量，缺失或 SSR 时回落 fallback。支持多级 var(--x, fallback) 嵌套解包。 */
 function readCssVar(name: string, fallback = ''): string {
@@ -269,19 +279,67 @@ export function useXtermTerminal({
 
     term.open(container);
 
-    try {
-      const webgl = new WebglAddon();
-      webgl.onContextLoss(() => {
-        try {
-          webgl.dispose();
-        } catch {
-          /* swallow-ok: WebGL 上下文已丢失时 dispose 幂等降级 */
-        }
-      });
-      term.loadAddon(webgl);
-    } catch {
-      // swallow-ok: WebGL 不可用时静默降级 canvas 2d
-    }
+    // D8.4：WebGL 上下文丢失事件化 + 限次恢复 + 可观测降级（禁止静默永久 DOM）
+    let webglAddon: WebglAddon | null = null;
+    let webglRestoreCount = 0;
+    let disposed = false;
+
+    const loadWebglAddon = () => {
+      if (disposed) return;
+      try {
+        const webgl = new WebglAddon();
+        webglAddon = webgl;
+        webgl.onContextLoss(() => {
+          logger.warn(
+            `[useXtermTerminal] WebGL context lost (restoreCount=${webglRestoreCount})`,
+            {
+              module: 'useXtermTerminal',
+              sessionId: undefined,
+              runId: ptyIdRef.current ?? undefined,
+            },
+          );
+          try {
+            webgl.dispose();
+          } catch {
+            /* swallow-ok: WebGL 上下文已丢失时 dispose 幂等降级 */
+          }
+          if (webglAddon === webgl) webglAddon = null;
+          if (webglRestoreCount < WEBGL_RESTORE_MAX) {
+            webglRestoreCount += 1;
+            const attempt = webglRestoreCount;
+            window.setTimeout(() => {
+              if (disposed) return;
+              try {
+                loadWebglAddon();
+                logger.info(
+                  `[useXtermTerminal] WebGL restore attempt ${attempt}/${WEBGL_RESTORE_MAX}`,
+                  { module: 'useXtermTerminal' },
+                );
+              } catch {
+                /* 已在 loadWebglAddon 内降级 */
+              }
+            }, 50 * attempt);
+          } else {
+            logger.warn(
+              `[useXtermTerminal] WebGL restore exhausted (max=${WEBGL_RESTORE_MAX}); degraded to canvas/DOM renderer`,
+              { module: 'useXtermTerminal' },
+            );
+          }
+        });
+        term.loadAddon(webgl);
+      } catch (err) {
+        // WebGL 不可用 → canvas 2d 降级（可观测，非静默）
+        webglAddon = null;
+        logger.warn('[useXtermTerminal] WebGL unavailable; canvas fallback', {
+          module: 'useXtermTerminal',
+          err:
+            err instanceof Error
+              ? { message: err.message, name: err.name }
+              : { message: String(err) },
+        });
+      }
+    };
+    loadWebglAddon();
 
     let innerRaf = 0;
     const rafId = requestAnimationFrame(() => {
@@ -315,6 +373,7 @@ export function useXtermTerminal({
     termRef.current = term;
 
     return () => {
+      disposed = true;
       if (themeObserver) {
         themeObserver.disconnect();
       }
@@ -324,6 +383,12 @@ export function useXtermTerminal({
       cancelAnimationFrame(rafId);
       if (innerRaf) cancelAnimationFrame(innerRaf);
       dataDisp.dispose();
+      try {
+        webglAddon?.dispose();
+      } catch {
+        /* swallow-ok */
+      }
+      webglAddon = null;
       try {
         term.dispose();
       } catch {
@@ -341,11 +406,34 @@ export function useXtermTerminal({
   useEffect(() => {
     const term = termRef.current;
     const fitAddon = fitAddonRef.current;
+    const host = containerRef.current;
     if (!term || !fitAddon) return;
 
     let cancelled = false;
     let activePtyId: string | null = null;
     const disposables: (() => void)[] = [];
+
+    // D8.1：隐藏 tab write=0 门闩（history 独立记录，显现合并重放）
+    const gate: PtyWriteGate = createPtyWriteGate(
+      { write: (d) => term.write(d) },
+      isTerminalHostHidden(host),
+    );
+    const unobserve = host
+      ? observeTerminalHostVisibility(host, (hidden) => {
+          gate.setHidden(hidden);
+          if (!hidden) {
+            try {
+              fitAddonRef.current?.fit();
+            } catch {
+              /* swallow-ok */
+            }
+          }
+        })
+      : () => {};
+    disposables.push(() => {
+      unobserve();
+      gate.reset();
+    });
 
     const key = (sessionKey || '').trim() || '_global';
 
@@ -365,6 +453,7 @@ export function useXtermTerminal({
         activePtyId = id;
       },
       addDisposable: (fn) => disposables.push(fn),
+      writeOutput: (d) => gate.write(d),
     });
 
     return () => {

@@ -39,6 +39,11 @@ export interface StartPtySessionDeps {
   setActivePtyId: (id: string | null) => void;
   /** 收集 disposable（退出时清理订阅） */
   addDisposable: (fn: () => void) => void;
+  /**
+   * 输出写入通道（D8.1）：缺省直写 term.write；
+   * useXtermTerminal 注入 ptyWriteGate 实现隐藏 write=0。
+   */
+  writeOutput?: (data: string) => void;
 }
 
 /**
@@ -68,6 +73,7 @@ export async function startPtySession(deps: StartPtySessionDeps): Promise<void> 
     cancellation,
     setActivePtyId,
     addDisposable,
+    writeOutput,
   } = deps;
 
   onStatus('connecting');
@@ -164,14 +170,17 @@ export async function startPtySession(deps: StartPtySessionDeps): Promise<void> 
     ptyIdRef,
     onStatus,
     addDisposable,
+    writeOutput,
   });
 
   if (reused && ptyId) {
     // 复用 PTY 时，从环形历史缓冲重放已有屏幕输出，防止由于 PTY 空闲导致新终端空白
+    // D8.1：经 writeOutput（门闩）路径，隐藏 tab 不直接 term.write
+    const emit = writeOutput ?? ((d: string) => term.write(d));
     const history = getPtyOutputHistory(ptyId);
     if (history && history.length > 0) {
       for (const chunk of history) {
-        term.write(chunk);
+        emit(chunk);
       }
     }
     try {
@@ -296,6 +305,7 @@ function subscribePtyStreams(params: {
   ptyIdRef: { current: string | null };
   onStatus: (status: 'connecting' | 'ready' | 'missing' | 'error' | 'exited', detail?: string) => void;
   addDisposable: (fn: () => void) => void;
+  writeOutput?: (data: string) => void;
 }): void {
   const {
     term,
@@ -305,13 +315,15 @@ function subscribePtyStreams(params: {
     ptyIdRef,
     onStatus,
     addDisposable,
+    writeOutput,
   } = params;
   const activePtyId = ptyId;
+  const emit = writeOutput ?? ((d: string) => term.write(d));
 
   const unsubOut = subscribePtyOutput((p) => {
     if (cancellation.isCancelled() || p.ptyId !== activePtyId) return;
     try {
-      term.write(p.data);
+      emit(p.data);
     } catch {
       /* swallow-ok: 终端已销毁时输出帧丢弃，不阻断会话 */
     }

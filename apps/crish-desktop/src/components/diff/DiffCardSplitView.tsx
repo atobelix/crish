@@ -7,7 +7,11 @@ import type {
   SplitChangeRenderItem,
   PlaceholderRenderItem,
 } from './diffCardTypes';
-import { highlightCode, langFromFilename } from '../../api/codeHighlight';
+import { escapeHtml, highlightCode, langFromFilename } from '../../api/codeHighlight';
+import {
+  useDiffHighlightMap,
+  type DiffHighlightItem,
+} from '../../api/codeHighlightBatch';
 import {
   computeIntralinePair,
   type DiffWordToken,
@@ -25,8 +29,10 @@ function renderTokens(
   tokens: DiffWordToken[],
   targetType: 'added' | 'removed',
   fallbackText: string,
-  lang: string
+  lang: string,
+  hlHtml: string | undefined,
 ) {
+  const html = hlHtml ?? highlightCode(fallbackText, lang);
   if (!tokens || tokens.length === 0) {
     return (
       <span
@@ -36,7 +42,7 @@ function renderTokens(
           textOverflow: 'clip',
         }}
         dangerouslySetInnerHTML={{
-          __html: highlightCode(fallbackText, lang),
+          __html: html,
         }}
       />
     );
@@ -90,7 +96,7 @@ function renderTokens(
           whiteSpace: 'pre',
         }}
         dangerouslySetInnerHTML={{
-          __html: highlightCode(fallbackText, lang),
+          __html: html,
         }}
       />
     </span>
@@ -101,6 +107,50 @@ interface DiffCardSplitViewProps {
   f: FileDiff;
   renderItems: SplitRenderItem[];
   onExpandBlock: (filePath: string, startIndex: number) => void;
+}
+
+function splitRowKeys(
+  f: FileDiff,
+  oldLine: number | undefined,
+  newLine: number | undefined,
+  idx: number,
+): { stableKey: string; leftId: string; rightId: string } {
+  const oldLineNum = oldLine !== undefined ? String(oldLine) : '';
+  const newLineNum = newLine !== undefined ? String(newLine) : '';
+  const stableKey = `${f.filePath}:${f.oldPath || ''}:${oldLineNum || 'del'}:${newLineNum || 'add'}:${idx}`;
+  return {
+    stableKey,
+    leftId: `${stableKey}:L`,
+    rightId: `${stableKey}:R`,
+  };
+}
+
+function collectSplitHighlightItems(
+  f: FileDiff,
+  renderItems: SplitRenderItem[],
+  startIndex: number,
+  endIndex: number,
+  codeLang: string,
+): DiffHighlightItem[] {
+  const items: DiffHighlightItem[] = [];
+  for (let idx = startIndex; idx < endIndex; idx++) {
+    const item = renderItems[idx];
+    if (!item || item.isCollapsedPlaceholder) continue;
+    const { left, right } = item.pair;
+    const { leftId, rightId } = splitRowKeys(
+      f,
+      left?.oldLine,
+      right?.newLine,
+      idx,
+    );
+    if (left) {
+      items.push({ id: leftId, code: left.change.content, language: codeLang });
+    }
+    if (right) {
+      items.push({ id: rightId, code: right.change.content, language: codeLang });
+    }
+  }
+  return items;
 }
 
 export const DiffCardSplitView: React.FC<DiffCardSplitViewProps> = ({
@@ -127,6 +177,13 @@ export const DiffCardSplitView: React.FC<DiffCardSplitViewProps> = ({
   const visibleItems = renderItems.slice(startIndex, endIndex);
 
   const codeLang = useMemo(() => langFromFilename(f.filePath), [f.filePath]);
+
+  const hlItems = useMemo(
+    () =>
+      collectSplitHighlightItems(f, renderItems, startIndex, endIndex, codeLang),
+    [f, renderItems, startIndex, endIndex, codeLang],
+  );
+  const hlMap = useDiffHighlightMap(hlItems);
 
   return (
     <AppErrorBoundary variant="compact" title="变更对比出错">
@@ -213,11 +270,14 @@ export const DiffCardSplitView: React.FC<DiffCardSplitViewProps> = ({
                 rightTokens = pairResult.newTokens;
               }
 
-              const oldLine =
-                left?.oldLine !== undefined ? String(left.oldLine) : '';
-              const newLine =
-                right?.newLine !== undefined ? String(right.newLine) : '';
-              const stableKey = `${f.filePath}:${f.oldPath || ''}:${oldLine || 'del'}:${newLine || 'add'}:${idx}`;
+              const { stableKey, leftId, rightId } = splitRowKeys(
+                f,
+                left?.oldLine,
+                right?.newLine,
+                idx,
+              );
+              const leftHl = hlMap.get(leftId);
+              const rightHl = hlMap.get(rightId);
 
               return (
                 <div
@@ -237,7 +297,7 @@ export const DiffCardSplitView: React.FC<DiffCardSplitViewProps> = ({
                     <div className={styles.lineText}>
                       {left ? (
                         leftTokens ? (
-                          renderTokens(leftTokens, 'removed', leftText, codeLang)
+                          renderTokens(leftTokens, 'removed', leftText, codeLang, leftHl)
                         ) : (
                           <span
                             style={{
@@ -245,7 +305,7 @@ export const DiffCardSplitView: React.FC<DiffCardSplitViewProps> = ({
                               overflow: 'hidden',
                             }}
                             dangerouslySetInnerHTML={{
-                              __html: highlightCode(leftText, codeLang),
+                              __html: leftHl ?? escapeHtml(leftText),
                             }}
                           />
                         )
@@ -265,7 +325,7 @@ export const DiffCardSplitView: React.FC<DiffCardSplitViewProps> = ({
                     <div className={styles.lineText}>
                       {right ? (
                         rightTokens ? (
-                          renderTokens(rightTokens, 'added', rightText, codeLang)
+                          renderTokens(rightTokens, 'added', rightText, codeLang, rightHl)
                         ) : (
                           <span
                             style={{
@@ -273,7 +333,7 @@ export const DiffCardSplitView: React.FC<DiffCardSplitViewProps> = ({
                               overflow: 'hidden',
                             }}
                             dangerouslySetInnerHTML={{
-                              __html: highlightCode(rightText, codeLang),
+                              __html: rightHl ?? escapeHtml(rightText),
                             }}
                           />
                         )
