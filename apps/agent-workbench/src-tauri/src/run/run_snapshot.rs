@@ -136,10 +136,34 @@ impl CoreRunState {
     /// （事件序列锚点由 [Self::base_sequence_for] 懒计算兜底）。
     pub async fn run_restore(self: &Arc<Self>) -> Option<RestoreOutcome> {
         self.restore_started.store(true, Ordering::SeqCst);
-        match RestoreManager::new()
+        // 全局恢复排他租约（04 §6.2；conex-db session_meta 键）：
+        // 抢不到仍允许只读恢复（CAS 幂等兜底）；抢到则 finally 释放。
+        let lease_id = format!("restore-{}-{}", std::process::id(), now_ms_internal());
+        let leased = self
+            .local_db()
+            .and_then(|db| {
+                db.try_acquire_recovery_lease(&lease_id, None)
+                    .map(|ok| ok)
+                    .map_err(|e| {
+                        tracing::warn!(target: "restore", error = %e, "恢复租约抢占失败，降级 CAS 幂等路径");
+                        e
+                    })
+                    .ok()
+                    .flatten()
+            })
+            .unwrap_or(false);
+        if !leased {
+            tracing::warn!(target: "restore", "全局恢复租约未持有（他实例运行中或非 LocalDb），孤儿自愈依赖 CAS");
+        }
+        let restore_result = RestoreManager::new()
             .restore(self.store.as_ref(), self.snapshots.as_ref())
-            .await
-        {
+            .await;
+        if leased {
+            if let Some(db) = self.local_db() {
+                let _ = db.release_recovery_lease(&lease_id);
+            }
+        }
+        match restore_result {
             Ok(outcome) => {
                 // 1. 序列号预热（审计事件已落库口径，T08.8）
                 self.seed_sequences(&outcome).await;
