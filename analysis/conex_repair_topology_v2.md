@@ -1,9 +1,9 @@
 # Conex 全局依赖拓扑 DAG 修复图谱与 Round 1 ~ Round 9 深度实施计划
 
-> **文档编号**: `CONEX-TOPOLOGY-DAG-V2`  
-> **生成时间**: 2026-07-24  
-> **审计基准**: `C:\Software\conex\analysis\conex_gap_audits\` (下辖 6 份 Gap 诊断报告)  
-> **目标文件**: `C:\Software\conex\analysis\conex_repair_topology_v2.md`  
+> **文档编号**: `CONEX-TOPOLOGY-DAG-V2`
+> **生成时间**: 2026-07-24
+> **审计基准**: `C:\Software\conex\analysis\conex_gap_audits\` (下辖 6 份 Gap 诊断报告)
+> **目标文件**: `C:\Software\conex\analysis\conex_repair_topology_v2.md`
 > **合规遵循**: [AGENTS.md](file:///c:/Software/conex/.agents/AGENTS.md) 及 [ANTI_OVERENGINEERING_GUARDRAILS.md](file:///c:/Software/conex/ANTI_OVERENGINEERING_GUARDRAILS.md)
 
 ---
@@ -108,7 +108,7 @@ flowchart TD
     R1_3 --> R5_1
     R1_4 --> R4_1
     R1_5 --> R2_2
-    
+
     R2_1 --> R8_2
     R2_2 --> R8_1
     R2_3 --> R4_5

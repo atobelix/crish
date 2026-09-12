@@ -666,7 +666,7 @@ ledger_v2.json 划分为 6 大技术领域，审查确认各领域的 37 项 Iss
 审查矩阵表中提供的 erification_command 是否 100% 覆盖并能正确触发：
 
 1. **前端与 Agent Runtime 测试套件 (Vitest)**：
-   - 包含 25 个具体的 
+   - 包含 25 个具体的
 px vitest run ... 命令，精准定位至单文件测试，如 pps/crish-desktop/src/api/StreamRenderBuffer.test.ts、packages/agent-orchestrator/src/orchestrator.test.ts。
 2. **Rust Workspace 测试套件 (Cargo Test)**：
    - 包含 7 个 Rust 模块测试命令，涵盖 -p conex-stream、-p conex-compaction、-p conex-sandbox、-p conex-db、-p conex-diff、-p conex-fs 以及 Tauri 模块 pps/agent-workbench/src-tauri/Cargo.toml。

@@ -897,7 +897,7 @@ Cargo.toml:68-82 定义了 workspace 级公共依赖：
 ## 14 鏀硅繘浼樺厛绾х煩闃?
 鍩轰簬褰卞搷鑼冨洿 脳 涓ラ噸搴︾殑浜岀淮璇勪及锛屽缓璁互涓嬩紭鍏堢骇锛?
 ```
-涓ラ噸搴? 楂? | P0: npm publish, secret scan,     | P0: 鍏ㄩ噺 typecheck, 
+涓ラ噸搴? 楂? | P0: npm publish, secret scan,     | P0: 鍏ㄩ噺 typecheck,
      | coverage threshold, 静默模式     | 增量测试, build cache
  涓? | P0: daemon binary, audit 纭€?  | P1: OS 鐭╅樀, 闆嗘垚娴嬭瘯
      |                                  |

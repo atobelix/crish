@@ -648,11 +648,11 @@ function migrateOpenTabsMap(map: OpenSessionTabsMap): TabSurface[] {
 
 ### 10.2 阶段
 
-- M1：PR-1 chrome  
-- M2：PR-2 + PR-Dock + PR-3a 列车  
-- M3：PR-4 冷启动  
-- M4：PR-5 → PR-6  
-- M5：PR-7、PR-8、PR-9  
+- M1：PR-1 chrome
+- M2：PR-2 + PR-Dock + PR-3a 列车
+- M3：PR-4 冷启动
+- M4：PR-5 → PR-6
+- M5：PR-7、PR-8、PR-9
 
 ---
 
@@ -724,7 +724,7 @@ function migrateOpenTabsMap(map: OpenSessionTabsMap): TabSurface[] {
 PR-1 (chrome)
 PR-7 (native picker)     ── 全程可并行
 PR-5 (partition tests)   ── 可与 PR-1/7 并行；先于 PR-6
-PR-2 (TabSurface+close+sync+禁多chat拖) 
+PR-2 (TabSurface+close+sync+禁多chat拖)
   → PR-Dock (右坞)
   → PR-3a (ChatCard session)
 PR-4 (cold start)        ── 依赖 PR-2
@@ -946,7 +946,7 @@ gantt
 
 ## 19. Phase 2 — Conversation Unit 模型（多对话 + per-session 右坞）
 
-> **状态**：实施中（Round 1）。完整计划与 agent 进度：`docs/plans/2026-07-conversation-unit-shell.md`。  
+> **状态**：实施中（Round 1）。完整计划与 agent 进度：`docs/plans/2026-07-conversation-unit-shell.md`。
 > **原则**：不删除 / 不否定 Phase 1 历史（Adapter 宿主、TabSurface、冷启动门闩等仍有效）；本节约定 **在何处放开 Phase 1 约束**。
 
 ### 19.1 相对 Phase 1 的关键变化

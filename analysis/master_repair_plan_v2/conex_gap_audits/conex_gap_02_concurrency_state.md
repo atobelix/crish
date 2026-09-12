@@ -1,9 +1,9 @@
 # Phase 1 Gap 诊断报告 - Agent 2：并发与状态机域
 
-> **审计实施者**: Agent 2 (并发 / 状态机域专家)  
-> **诊断对象**: Conex 代码库 (`packages/agent-runtime`、`packages/agent-daemon`、`packages/agent-orchestrator`、`crates/`、`apps/crish-desktop`)  
-> **标杆参照**: `C:\Software\conex\analysis\reference_patch_audits\` (6 份开源标杆补丁审计报告：OpenCode, OpenCodex, Cline, Claude Code, Agent Frameworks, Desktop Runtimes)  
-> **报告路径**: `C:\Software\conex\analysis\conex_gap_audits\conex_gap_02_concurrency_state.md`  
+> **审计实施者**: Agent 2 (并发 / 状态机域专家)
+> **诊断对象**: Conex 代码库 (`packages/agent-runtime`、`packages/agent-daemon`、`packages/agent-orchestrator`、`crates/`、`apps/crish-desktop`)
+> **标杆参照**: `C:\Software\conex\analysis\reference_patch_audits\` (6 份开源标杆补丁审计报告：OpenCode, OpenCodex, Cline, Claude Code, Agent Frameworks, Desktop Runtimes)
+> **报告路径**: `C:\Software\conex\analysis\conex_gap_audits\conex_gap_02_concurrency_state.md`
 
 ---
 
@@ -285,7 +285,7 @@ if (forkMode === "background") {
   const onParentAbort = () => {
     options.cancelRun(handle.runId, "parent-run-aborted");
   };
-  
+
   if (parentRunSignal.aborted) {
     onParentAbort();
   } else {
@@ -318,18 +318,18 @@ cancelRun(runId: string, reason = "cancelled-by-user"): boolean {
 cancelRun(runId: string, reason = "cancelled-by-user"): boolean {
   const active = this.activeRuns.get(runId);
   if (!active) return false;
-  
+
   this.updateRun(active.run, "cancelling");
-  
+
   // 1. 中断 LLM Session Loop
   active.engine?.abort(reason);
-  
+
   // 2. 秒级级联清理该 Run 挂接的所有后台 Shell 进程
   const bgManager = this.options.getBackgroundCommandManager?.(active.run.cwd);
   if (bgManager) {
     bgManager.cancelAllForRun(runId, reason);
   }
-  
+
   this.emitToRun(active, "run-cancel-requested", { reason });
   return true;
 }
@@ -341,7 +341,7 @@ describe("User Abort Signal Cascade", () => {
   it("should terminate background subagents when parent run is cancelled long after tool execution finished", async () => {
     const parentController = new AbortController();
     const mockCancelRun = vi.fn();
-    
+
     // 1. 启动后台 Subagent
     const tool = createDaemonSubagentTool({
       parentRunId: "run-parent-01",
@@ -433,7 +433,7 @@ async refreshAccount(accountId: string): Promise<boolean> {
       account.expiresAt = Date.now() + response.expiresIn * 1000;
       account.status = "active";
       account.errorCount = 0;
-      
+
       const newGen = hashString(`${account.refreshToken}::${account.expiresAt}`);
       lock.release(newGen); // 写入新代际锁
       await this.persist();
@@ -557,7 +557,7 @@ async execute(input, context) {
   if (!permit) {
     return { text: `Denied: max concurrent exceeded (${maxConcurrent})` };
   }
-  
+
   // 所有初始化逻辑与 resolveMaybe 均在 permit 作用域内，抛错时 TypeScript using / Symbol.dispose 自动归还
   const provider = await resolveMaybe(options.provider, input, context);
   ...

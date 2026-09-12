@@ -11,7 +11,7 @@
 **关键发现**：
 - 所有 10 个 npm 包和 13 个 Rust crates 全部锁定在 `0.1.0`，从未递增
 - 内部包依赖使用了三种互不兼容的声明方式（`"*"`、`"file:../"`、硬编码 `"0.1.0"`），其中 `file:` 和 `"*"` 在发布后会直接导致消费者安装失败
-- Changeset 框架引入后从未投入使用，`.changeset/` 目录仅有 `config.json` 
+- Changeset 框架引入后从未投入使用，`.changeset/` 目录仅有 `config.json`
 - 唯一发布工作流 `release.yml` 仅构建 Tauri 二进制，不处理 npm 包发布
 - 所有包（除 `@crish/plugin-sdk` 外）均为 `private: true`，从未执行过 `npm publish`
 - 不存在版本同步脚本、发布脚本、publish 脚本等自动化工具
@@ -271,7 +271,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 当前完全不存在版本号递增的机制。根 `package.json:17-68` 的 50+ npm scripts 中，没有任何与版本管理或发布相关的定义。具体缺失：
 
 - 不存在 `"version:patch": "npm version patch -ws --no-git-tag-version && node scripts/sync-versions.js"`
-- 不存在 `"version:minor": "..."` 
+- 不存在 `"version:minor": "..."`
 - 不存在 `"version:major": "..."`
 - 不存在 `"release": "node scripts/release.mjs"`
 - 不存在 `"publish": "node scripts/publish.mjs"`

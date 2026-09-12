@@ -1,9 +1,9 @@
 # 标杆项目缺陷补丁深度分析报告：沙箱隔离与重型 IDE 架构 (OpenHands, Goose, VS Code)
 
-> **文档版本**: 1.2.0  
-> **审计日期**: 2026-07-24  
-> **目标项目**: `reference/openhands`, `reference/goose`, `reference/vscode`  
-> **输出路径**: `C:\Software\conex\analysis\reference_patch_audits\patch_analysis_06_sandboxes_and_heavy_ides.md`  
+> **文档版本**: 1.2.0
+> **审计日期**: 2026-07-24
+> **目标项目**: `reference/openhands`, `reference/goose`, `reference/vscode`
+> **输出路径**: `C:\Software\conex\analysis\reference_patch_audits\patch_analysis_06_sandboxes_and_heavy_ides.md`
 
 ---
 
@@ -243,7 +243,7 @@ impl ProcessTreeKiller {
     /// 跨平台安全杀灭目标进程及其所有子进程树
     pub async fn kill_tree(pid: u32, force: bool) -> Result<(), String> {
         info!(pid = pid, force = force, "Initiating process tree kill");
-        
+
         #[cfg(target_os = "windows")]
         {
             let mut cmd = Command::new("taskkill");
@@ -268,12 +268,12 @@ impl ProcessTreeKiller {
         {
             // POSIX 下优先 SIGTERM (15) 级联杀灭，超时后升级 SIGKILL (9)
             let sig = if force { "-9" } else { "-15" };
-            
+
             // 尝试对负 PID (Process Group ID) 发送信号
             let status = Command::new("kill")
                 .args([sig, &format!("-{}", pid)])
                 .status();
-            
+
             if status.is_err() || !status.unwrap().success() {
                 // 若进程组杀灭失败，退回到直接 kill PID
                 let _ = Command::new("kill").args([sig, &pid.to_string()]).status();
@@ -353,7 +353,7 @@ export class TextCoordinateMapper {
         if (byteOffset >= encoded.length) {
             return text.length;
         }
-        
+
         const decoder = new TextDecoder('utf-8');
         const slicedBytes = encoded.subarray(0, byteOffset);
         const decodedSubstr = decoder.decode(slicedBytes);
@@ -494,14 +494,14 @@ class SandboxContainerReaper:
             filters={"label": "conex.sandbox=true"}
         )
         now = time.time()
-        
+
         for container in containers:
             last_hb_str = container.labels.get("conex.last_heartbeat", "0")
             try:
                 last_hb = float(last_hb_str)
             except ValueError:
                 last_hb = 0.0
-                
+
             idle_duration = now - last_hb
             if idle_duration > self.max_idle_seconds:
                 print(f"[Reaper Alert] Container {container.short_id} idle for {idle_duration:.1f}s. Force removing...")
@@ -546,7 +546,7 @@ if __name__ == "__main__":
 - **推荐 Web Workers & WorkerPool**: 对于前端的巨型日志解析、LSP 位置映射计算，强力推荐使用 Web Workers 或轻量级 Worker Pool 进行线程剥离，切勿占用 UI 主渲染线程。
 
 ### 4.3 CI Governance 与代码门禁规范 (遵守 `AGENTS.md` Rule 1)
-- **分级行数硬阻断**: 
+- **分级行数硬阻断**:
   - UI 组件限制 $\le 500$ 行；
   - 业务逻辑限制 $\le 400$ 行；
   - 类型契约放宽至 $\le 800$ 行。

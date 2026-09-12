@@ -1,10 +1,10 @@
 # Conex 架构差距诊断报告 — Agent 3：Tool Call 容错域
 
-> **审计日期**：2026-07-24  
-> **审计 Agent**：Agent 3 (Tool Call 容错域专职审计)  
-> **目标代码库**：`packages/agent-runtime` | `packages/agent-daemon` | `packages/protocol` | `packages/shared-types`  
-> **参考标杆**：`C:\Software\conex\analysis\reference_patch_audits\` (涵盖 agno, pydantic-ai, crewai, smolagents, cline, claude-code 等 6 份标杆补丁报告)  
-> **报告输出路径**：`C:\Software\conex\analysis\conex_gap_audits\conex_gap_03_tool_call_fault_tolerance.md`  
+> **审计日期**：2026-07-24
+> **审计 Agent**：Agent 3 (Tool Call 容错域专职审计)
+> **目标代码库**：`packages/agent-runtime` | `packages/agent-daemon` | `packages/protocol` | `packages/shared-types`
+> **参考标杆**：`C:\Software\conex\analysis\reference_patch_audits\` (涵盖 agno, pydantic-ai, crewai, smolagents, cline, claude-code 等 6 份标杆补丁报告)
+> **报告输出路径**：`C:\Software\conex\analysis\conex_gap_audits\conex_gap_03_tool_call_fault_tolerance.md`
 > **架构合规指引**：严格遵循 [AGENTS.md](file:///c:/Software/conex/.agents/AGENTS.md) 及 [ANTI_OVERENGINEERING_GUARDRAILS.md](file:///c:/Software/conex/ANTI_OVERENGINEERING_GUARDRAILS.md) 中的反过度设计硬性红线。
 
 ---
@@ -405,7 +405,7 @@ async execute(
   const timeoutMs = context.timeoutMs ?? 30_000;
   const timeoutController = new AbortController();
   const timer = setTimeout(() => timeoutController.abort(new Error(`MCP tool ${name} timed out after ${timeoutMs}ms`)), timeoutMs);
-  
+
   // 组合 context.signal 与 timeoutSignal
   const combinedSignal = combineAbortSignals(context.signal, timeoutController.signal);
 

@@ -1,7 +1,7 @@
 # Agent 框架 Git 提交历史与真实源码缺陷补丁深度分析报告
-> 目标分析项目：`reference/agno` | `reference/pydantic-ai` | `reference/crewai` | `reference/smolagents`  
-> 报告输出路径：`C:\Software\conex\analysis\reference_patch_audits\patch_analysis_03_agent_frameworks.md`  
-> 审计工具：Git CLI / Python AST & Control Flow Inspection  
+> 目标分析项目：`reference/agno` | `reference/pydantic-ai` | `reference/crewai` | `reference/smolagents`
+> 报告输出路径：`C:\Software\conex\analysis\reference_patch_audits\patch_analysis_03_agent_frameworks.md`
+> 审计工具：Git CLI / Python AST & Control Flow Inspection
 > 对应项目版本：agno v2.8.0+, pydantic-ai v2.17.0+, crewai v1.15.5+, smolagents v1.27.0+
 
 ---
@@ -495,11 +495,11 @@ class A2ATransportClient:
             payload=payload,
             metadata=active_metadata,  # 显式打包
         )
-        
+
         # 将 Metadata 编码入 HTTP Headers / gRPC Metadata
         merged_headers = headers.copy() if headers else {}
         merged_headers["X-Agent-Metadata"] = json.dumps(active_metadata)
-        
+
         return await self._execute_remote_call(envelope, headers=merged_headers)
 ```
 
@@ -572,7 +572,7 @@ class LLMCallHookDispatcher:
         modified_response = raw_response
         for hook in self.after_llm_hooks:
             modified_response = hook(modified_response)
-            
+
         return modified_response
 ```
 

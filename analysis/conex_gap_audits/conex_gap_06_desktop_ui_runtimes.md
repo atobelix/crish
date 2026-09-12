@@ -1,9 +1,9 @@
 # Conex 深度 Gap 诊断报告 —— Agent 6：桌面 / UI / 唤醒域与应用运行时
 
-> **审计基准标杆**：`C:\Software\conex\analysis\reference_patch_audits\` 下 6 份标杆补丁报告（重点对比 `patch_analysis_05_desktop_agent_runtimes.md`）  
-> **受审 Conex 模块**：`apps/agent-workbench/src-tauri` (Tauri 2 桌面主进程), `apps/crish-desktop` (React / Vite 渲染进程 UI), `crates/conex-stream` (流式解析器), `packages/agent-runtime` (LLM 客户端与 Reasoning 协议)  
-> **报告保存路径**：`C:\Software\conex\analysis\conex_gap_audits\conex_gap_06_desktop_ui_runtimes.md`  
-> **诊断时间**：2026-07-24  
+> **审计基准标杆**：`C:\Software\conex\analysis\reference_patch_audits\` 下 6 份标杆补丁报告（重点对比 `patch_analysis_05_desktop_agent_runtimes.md`）
+> **受审 Conex 模块**：`apps/agent-workbench/src-tauri` (Tauri 2 桌面主进程), `apps/crish-desktop` (React / Vite 渲染进程 UI), `crates/conex-stream` (流式解析器), `packages/agent-runtime` (LLM 客户端与 Reasoning 协议)
+> **报告保存路径**：`C:\Software\conex\analysis\conex_gap_audits\conex_gap_06_desktop_ui_runtimes.md`
+> **诊断时间**：2026-07-24
 
 ---
 
@@ -332,7 +332,7 @@ fn os_secret_store_available(_path: &Path) -> Result<(), String> {
 ```typescript
 // apps/crish-desktop/src/api/providerProfiles.ts (L66-L68)
 const PROFILES_KEY = 'crish_provider_profiles_v1';
-/* ❌ 在 Web 模式、Demo 模式或跨进程同步时，ProviderProfile 结构体中的 apiKey 
+/* ❌ 在 Web 模式、Demo 模式或跨进程同步时，ProviderProfile 结构体中的 apiKey
    被直接 JSON.stringify 存入浏览器 localStorage，完全脱离了 Physical Guard */
 ```
 

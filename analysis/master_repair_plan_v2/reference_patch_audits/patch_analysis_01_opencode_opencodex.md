@@ -1,6 +1,6 @@
 # AI Coding Agent 核心缺陷与补丁深度分析报告
-> **目标项目**: `reference/opencode` 与 `reference/opencodex`  
-> **报告生成时间**: 2026-07-24  
+> **目标项目**: `reference/opencode` 与 `reference/opencodex`
+> **报告生成时间**: 2026-07-24
 > **审计范围**: Git 真实提交历史、漏洞/崩溃修正 Commit、网络与流式层、并发状态机、SQLite 存储、进程生命周期及跨平台兼容性源码。
 
 ---
@@ -61,7 +61,7 @@ if (
 }
 ```
 
-- **防御模式解析 (Defensive Pattern)**:  
+- **防御模式解析 (Defensive Pattern)**:
   **家族别名匹配模式 (Family Prefix Pattern)**。避免简单硬编码具体模型名，采用基于核心衍生家族词库（Family Array）的字符串包含校验，防止自定义/私有 OpenAI 代理转换时遗漏新模型（如 `codestral-latest`）。
 
 ---
@@ -102,7 +102,7 @@ export const isContextOverflow = (message: string) =>
   (patterns.some((pattern) => pattern.test(message)) || /^4(00|13)\s*(status code)?\s*\(no body\)/i.test(message))
 ```
 
-- **防御模式解析**:  
+- **防御模式解析**:
   **正向过滤与反向排除结合模式 (Exclusion-First Classification)**。在分类流式/网络错误时，先通过 `exclusions` 列表剔除“限流/服务忙”等临时性错误，再进行模式匹配。这防止了限流被当作 Context 超限而错误切除用户会话历史。
 
 ---
@@ -137,7 +137,7 @@ if (parent.message.role !== "user") throw new Error(`Assistant parent is not a u
 parents.push(parent)
 ```
 
-- **防御模式解析**:  
+- **防御模式解析**:
   **优雅退化与局部容错模式 (Graceful Degradation for Orphan Nodes)**。在树状/链式数据结构的反序列化与同步中，允许丢失中间节点。遇到 404 时将 orphan 节点加入 `removedMessages` 集合，避免单条消息被删除破坏整个 Timeline 的加载。
 
 ---
@@ -155,7 +155,7 @@ const OPENAI_HEADER_TIMEOUT_DEFAULT = 10_000 // 10 秒
 const OPENAI_HEADER_TIMEOUT_DEFAULT = 300_000 // 300 秒 (5 分钟)
 ```
 
-- **防御模式解析**:  
+- **防御模式解析**:
   **Reasoning 适配超时策略 (Reasoning-Aware Timeout Threshold)**。传统 LLM API 的 TTFT (Time-To-First-Token) 在 2~3 秒内；但带 Reasoning 链的模型（如 o1, o3, DeepSeek R1）可能在发送第一个 HTTP SSE 响应头之前思考 30~90 秒。将客户端 Header Timeout 提高到 300 秒，可彻底消除 Reasoning 阶段的 premature abort。
 
 ---
@@ -189,7 +189,7 @@ if (depth >= (cfg.subagent_depth ?? 1)) {
 }
 ```
 
-- **防御模式解析**:  
+- **防御模式解析**:
   **层级深度配额与回溯阻断 (Ancestor Depth Bounding Pattern)**。在允许 Agent 创建 Task/Subagent 时，必须沿 Ancestor 树计算深度。默认 `subagent_depth = 1` 强制禁止子 Agent 派生子 Agent，有效防御无线递归与配额爆破。
 
 ---
@@ -218,7 +218,7 @@ const ensureDir = Effect.fn("FileSystem.ensureDir")(function* (path: string) {
 })
 ```
 
-- **防御模式解析**:  
+- **防御模式解析**:
   **运行时 Bug 降级补救模式 (Runtime Workaround Pattern)**。针对特定 OS 与 Runtime 组合（Windows + Bun）的底层已知 Bug（EEXIST 异常），在捕获异常后重新做二次状态校验（`isDir(path)`），若目录确实已存在则视为成功。
 
 ---
@@ -246,7 +246,7 @@ function acceptKey(sessionID: string, directory: string) {
 const permissionState = createMemo(() => permission.ensureServerState(server()))
 ```
 
-- **防御模式解析**:  
+- **防御模式解析**:
   **多租户/命名空间隔离模式 (Scoped Namespace Isolation)**。所有的权限状态、Auto-Accept 决策都必须带有 `serverKey` 和 `directoryPath` 组成的复合主键，严禁使用扁平 Session ID 作为全局唯一键。
 
 ---
@@ -283,7 +283,7 @@ export function uniqueSummaryDiffs(diffs: SnapshotFileDiff[] | undefined) {
 }
 ```
 
-- **防御模式解析**:  
+- **防御模式解析**:
   **哈希集合线性去重模式 (Set-Assisted O(N) Deduplication)**。在前端组件处理大量 Stream 推送或复杂 Tool Call 生成的 Diff 文件列表时，将 `Array.prototype.some` (O(N^2)) 替换为 `Set.prototype.has` (O(N))，消除几十轮工具调用后的界面假死。
 
 ---
@@ -317,13 +317,13 @@ export function writeOAuthRefreshIntent(provider: string, accountId: string, gen
 export async function refreshAnthropicAccountWithLock(provider: string, accountId: string, def: ProviderDef, credential: OAuthCredentials) {
   const currentGen = credentialGeneration(credential);
   const existingIntent = readOAuthRefreshIntent(provider, accountId);
-  
+
   // 若磁盘上已经存在针对该代 Generation 的刷脸意图，说明已被消费或正在刷脸中，绝不再次发起 HTTP 请求
   if (existingIntent && existingIntent.generation === currentGen) {
     markAccountNeedsReauth(provider, accountId);
     throw new OAuthLoginRequiredError("Token refresh intent already consumed or in-flight");
   }
-  
+
   writeOAuthRefreshIntent(provider, accountId, currentGen);
   try {
     const fresh = await def.refresh(credential.refresh);
@@ -339,7 +339,7 @@ export async function refreshAnthropicAccountWithLock(provider: string, accountI
 }
 ```
 
-- **防御模式解析**:  
+- **防御模式解析**:
   **代际绑定持久化防重放锁 (Generation-Bound Intent Lock Pattern)**。由于 Anthropic 等 API 的 Refresh Token 具备严格的“单次使用即作废”特性，刷脸前必须将当前 Token 版本的 Hash (Generation) 原子化写入磁盘 Intent 文件。即使进程中途崩溃重启，也不会重复发送旧 Refresh Token 导致账号失效。
 
 ---
@@ -371,7 +371,7 @@ function handleStreamError(err: unknown, bytesReceived: number) {
 }
 ```
 
-- **防御模式解析**:  
+- **防御模式解析**:
   **基于数据传输状态的故障再分类模式 (State-Aware Failure Reclassification)**。区分请求未发送成功与“流传输中途断开”。若 `bytesReceived > 0`，证明服务器与鉴权均正常，属于网络层连接重置，应识别为 Transient 错误，避免误删可用账号池。
 
 ---
@@ -406,7 +406,7 @@ try {
 }
 ```
 
-- **防御模式解析**:  
+- **防御模式解析**:
   **语言无关的边界错误码探测模式 (Locale-Invariant Error Code Boundary Pattern)**。在解析 CLI 工具（如 Windows `sc.exe`）控制台输出时，严禁使用英文特定前缀（如 `FAILED`）。使用数字边界正则 `/\b1060\b/` 跨越操作系统多语言方言。
 
 ---
@@ -432,7 +432,7 @@ export function unbindThreadAccount(threadId: string, accountId: string) {
 }
 ```
 
-- **防御模式解析**:  
+- **防御模式解析**:
   **所有权保护解绑模式 (Ownership-Guarded Unbind Pattern)**。在异步并发系统中，防止延迟到达的失败清理回调（Late Failures）覆盖或删除已经由新请求建立的有效映射句柄。
 
 ---
@@ -475,7 +475,7 @@ function countRowsReadonly(dbPath: string, table: string): number | null {
 }
 ```
 
-- **防御模式解析**:  
+- **防御模式解析**:
   **Immutable URI 只读隔离模式 (Immutable SQLite Access Pattern)**。SQLite 的 `{ readonly: true }` 在 WAL 模式下如果遭遇无 SHM 侧车文件的数据库，依然会尝试写入创建 SHM 索引。通过 `SQLITE_OPEN_URI` 加 `immutable=1` 参数，确保只读扫描 0 磁盘写入。
 
 ---
@@ -519,7 +519,7 @@ export function applyCursorToolBudget(tools: Tool[], mode: string) {
 }
 ```
 
-- **防御模式解析**:  
+- **防御模式解析**:
   **序列化配额与动态降级模式 (Serialized Budgeting with Tool Search Fallback)**。在调用严格限制 Payload 大小的 Provider 时，先在本地模拟 Protobuf/JSON 编码字节大小，超限时优雅剔除低优先级工具，并在 System Prompt 中注入 `tool_search` 提示词告知模型按需调取。
 
 ---
@@ -554,7 +554,7 @@ export function updateServer(newConfig: OcxConfig) {
 }
 ```
 
-- **防御模式解析**:  
+- **防御模式解析**:
   **物理端口锁死模式 (Bound Port Retention Pattern)**。在服务支持 `port: 0` 动态分配端口的场景下，一旦首次 `listen` 成功，必须将 `server.port` 保存回运行时上下文。在 Reload/Update 时使用固定的物理端口重新绑定，防止客户端 Connection Refused。
 
 ---
@@ -579,7 +579,7 @@ export function resolveStallTimeoutSec(configuredSec: number | undefined): numbe
 }
 ```
 
-- **防御模式解析**:  
+- **防御模式解析**:
   **长心跳/长时间思考容忍模式 (Long-Inactivity Watchdog Tolerance)**。代理看门狗（Watchdog）的时间限制必须覆盖大模型 Reasoning / Deep Thinking 和 Web Search 侧车的最大安全等待时间。同时，任何来自 Upstream 适配器的 `{ type: "heartbeat" }` 事件均需重置该计时器。
 
 ---
@@ -598,7 +598,7 @@ graph TD
 
     B --> B1[Reasoning 首字延迟超时]
     B --> B2[Token 超限正则表达式判定错误]
-    
+
     C --> C1[OAuth Refresh Token 重放死锁]
     C --> C2[Subagent 无限递归派生]
     C --> C3[Late Failure 错删 Affinity 映射]

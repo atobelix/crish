@@ -1,8 +1,8 @@
 # Desktop Agent OS / 应用运行时缺陷补丁与源码深维审计报告
 
-> **受审目标项目**：`reference/hermes-agent` (Python Core + Electron Desktop + Ink TUI), `reference/DEEIX-Chat` (Go Backend + Next.js Desktop/PWA), `reference/cherry-studio` (Electron Main/Renderer + Patched AI SDK Layer)  
-> **审计目标归档路径**：`C:\Software\conex\analysis\reference_patch_audits\patch_analysis_05_desktop_agent_runtimes.md`  
-> **报告类型**：桌面端 Agent OS / 运行时高密度缺陷剖析与系统加固工程指南  
+> **受审目标项目**：`reference/hermes-agent` (Python Core + Electron Desktop + Ink TUI), `reference/DEEIX-Chat` (Go Backend + Next.js Desktop/PWA), `reference/cherry-studio` (Electron Main/Renderer + Patched AI SDK Layer)
+> **审计目标归档路径**：`C:\Software\conex\analysis\reference_patch_audits\patch_analysis_05_desktop_agent_runtimes.md`
+> **报告类型**：桌面端 Agent OS / 运行时高密度缺陷剖析与系统加固工程指南
 
 ---
 
@@ -100,7 +100,7 @@
   # hermes_state.py
   def get_ancestor_display_prefix(self, tip_session_id: str) -> List[Dict[str, Any]]:
       """
-      在行转换剥离 session_id 之前，直接在 DB 层面精确筛选 session_id != tip_session_id 
+      在行转换剥离 session_id 之前，直接在 DB 层面精确筛选 session_id != tip_session_id
       的真正祖先节点消息，杜绝长度切片带来的重复数据。
       """
       cursor = self.conn.cursor()
@@ -167,7 +167,7 @@
 
   def register_credential_file(skill_name: str, relative_path: str, hermes_home: str) -> Optional[str]:
       resolved_path = os.path.abspath(os.path.join(hermes_home, relative_path))
-      
+
       # 1. 经典 Path Traversal 校验
       if not resolved_path.startswith(os.path.abspath(hermes_home)):
           logger.error(f"Path traversal blocked: {relative_path}")
@@ -387,7 +387,7 @@
   func resolveInterruptedOutputUsage(input persistInterruptedMessageGenerationInput) (int64, int64) {
       estimatedOutputTokens := estimateTokens(input.AssistantText)
       estimatedReasoningTokens := estimateTokens(input.AssistantReasoningText)
-      
+
       // 若已有部分观测 Usage，取 Observed 与 Estimated 的最大值，防止低结算
       observedOutputTokens := input.Usage.OutputTokens
       observedReasoningTokens := input.Usage.ReasoningTokens

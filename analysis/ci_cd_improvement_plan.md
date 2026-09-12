@@ -214,7 +214,7 @@ filters:
 
 - **目标文件**: `.github/workflows/ci.yml`
 - **问题描述**: `ci.yml:122-123` 的 cargo audit 和 `ci.yml:132-133` 的 npm audit 均使用 `continue-on-error: true`，安全漏洞不会阻断流水线。没有 npm audit signatures 验证。
-- **修复策略**: 
+- **修复策略**:
   - npm audit: 移除 `continue-on-error: true`，对 `--audit-level=high`（当前 `ci.yml:133`）的失败阻断流水线
   - cargo audit: 升级 `actions-rust-lang/audit@v1` 到最新版本，设置 `deny-warnings: true`
   - 新增 `- run: npm audit signatures` 验证注册表签名完整性
@@ -270,7 +270,7 @@ filters:
 
 - **目标文件**: `.github/workflows/perf-test.yml`, `package.json`
 - **问题描述**: `perf-test.yml` 运行基准测试并生成报告，但报告只在 PR comment 中展示，不持久化。`ci.yml:192-197` 的 Rust bench 上传到 artifact 但未关联到历史基线。`package.json` 定义的 `bench:ci`（`package.json:37`）和 `perf:all`（`package.json:48`）在 CI 中未完整执行。
-- **修复策略**: 
+- **修复策略**:
   - 持久化基准测试结果到 GitHub Pages 或 S3：每次 main 分支的 perf 测试结果追加到历史数据集
   - 在 `perf-test.yml` 中增加 `benchmark` job 上传 JSON 结果到可查询存储
   - 在 `package.json` 中新增 `perf:ci` 脚本聚合 `bench:ci`、`bench:native-sla`、`bench:acceptance`、`bench:report`
@@ -319,7 +319,7 @@ filters:
 
 - **目标文件**: `.github/workflows/release.yml`（新增 `publish-npm` job）
 - **问题描述**: 项目完全缺失 npm 发布能力。6 个私有包（`@crish/shared-types`, `@crish/shared-utils`, `@crish/agent-runtime`, `@crish/agent-orchestrator`, `@crish/agent-daemon`, `@crish/decision-engine`）无法被外部使用。`package.json:2-4` 的 `"private": true` 阻止了根包发布，但工作空间包各自有 `"private": true`（如 `packages/agent-daemon/package.json:4`），需改为 `"private": false` 再选择性发布。
-- **修复策略**: 
+- **修复策略**:
   1. 在各子包的 `package.json` 中移除 `"private": true`（或保留部分包的私有属性，仅发布需要公开的包）
   2. 确保每个包的 `files` 字段（如 `packages/agent-daemon/package.json:21-23`）只包含 `dist/`
   3. 在 release.yml 中新增 `publish-npm` job，使用 GitHub OIDC trusted publishing（`id-token: write`）
@@ -331,7 +331,7 @@ filters:
 
 - **目标文件**: `package.json`, `scripts/`（新增 `scripts/version-bump.mjs`）
 - **问题描述**: 所有包硬编码 `"version": "0.1.0"`（各 `package.json` 的 version 字段），手动更新容易遗漏或导致版本不一致。`Cargo.toml:60` 的 workspace version 也是 `0.1.0`，但 crate 各自独立版本。
-- **修复策略**: 
+- **修复策略**:
   - 引入 `@changesets/cli` 或 `multi-semver-release` 做统一版本管理
   - 或在 `package.json` 中新增 `version:bump` 脚本：读取根 `package.json` 的 version，写入所有工作空间包的 `package.json`
   - 新增 `scripts/version-bump.mjs`：解析所有工作空间包的 package.json，统一设置 version 字段，并更新 `packages/agent-workbench/src-tauri/Cargo.toml` 的 tauri version
@@ -341,7 +341,7 @@ filters:
 
 - **目标文件**: `scripts/`（新增 `scripts/generate-changelog.mjs`）
 - **问题描述**: 项目完全没有 CHANGELOG.md 文件。`release.yml:61` 使用 `generate_release_notes: true`（自动生成），生成的 release notes 信息量不足（只有 commit 标题列表）。
-- **修复策略**: 
+- **修复策略**:
   - 为每个工作空间包创建初始 CHANGELOG.md
   - 新增 `scripts/generate-changelog.mjs`：基于 Conventional Commits 的 git log 生成 changelog 条目
   - 在 release pipeline 中，此脚本对比当前 tag 和前一个 tag 的 commit 范围，分类为 Features/Fixes/Breaking Changes
@@ -352,7 +352,7 @@ filters:
 
 - **目标文件**: `Dockerfile`（新增）, `.github/workflows/release.yml`（新增 job）
 - **问题描述**: 项目无 Dockerfile，daemon 和桌面应用无法以容器方式部署。`Cargo.toml:3-15` 的 Rust workspace 包含 `conex-db`（sqlite）、`conex-net`（网络）、`conex-sandbox`（沙箱）等 crate，适合在服务器环境以容器运行。
-- **修复策略**: 
+- **修复策略**:
   - 新增 `Dockerfile`（根据实际部署需求决定形态：daemon 容器 vs 全量应用容器）
   - 多阶段构建：第一阶段 `node:22` 构建 JS 产物 → 第二阶段最小 Node 运行时
   - 在 release workflow 中新增 `docker-build-push` job
@@ -364,7 +364,7 @@ filters:
 
 - **目标文件**: `.github/workflows/release.yml`
 - **问题描述**: 当前 release 创建为 `draft: true`（`release.yml:62`），要求人工审核后发布。但 draft release 缺少结构化信息（文件列表、安装说明、升级指引）。
-- **修复策略**: 
+- **修复策略**:
   - 保持 draft 模式（人工审核是安全实践），但增加 draft 的内容丰富度
   - Release body 包含：CHANGELOG 摘要、安装命令（`npm install -g @crish/agent-daemon`）、二进制下载链接、Docker pull 命令、升级注意事项
   - 对每个上传的 artifact 在 release body 中生成描述（如 `crish-daemon-linux-x64`、`Crish Desktop Setup 0.1.0.msi`）
@@ -388,7 +388,7 @@ filters:
 
 - **目标文件**: `.husky/pre-commit`, `.husky/pre-push`, `.lintstagedrc.json`
 - **问题描述**: `.husky/pre-push` 执行 `npm run typecheck && npm test`。`npm run typecheck`（`package.json:54`）只 cover crish-desktop 的 tsconfig，不是全量。`npm test`（`package.json:59`）运行全部 vitest 测试（含 e2e），本地环境因缺少 provider API key 会超时或失败。
-- **修复策略**: 
+- **修复策略**:
   - `pre-commit`: 保持 `npx lint-staged` 不变（当前正确且高效）
   - `pre-push`: 改为执行增量验证——`npm run typecheck` 保持对 crish-desktop 的验证，增加 `npx turbo run typecheck --filter=[$(git diff --name-only origin/main...HEAD | xargs dirname | sort -u)]` 的增量类型检查
   - 将 `npm test` 替换为 `npm run test:core`（只运行纯单元测试，不触发 e2e）
@@ -398,7 +398,7 @@ filters:
 
 - **目标文件**: `.github/dependabot.yml`, `.github/workflows/ci.yml`
 - **问题描述**: `.github/dependabot.yml:25` 忽略 `conex-stream` 但不说明原因。npm 更新限制 10 个并发 PR（`dependabot.yml:13`），cargo 限制 5 个（`dependabot.yml:23`）。无自动合并机制（即使已配置 `automerge` 标签）。
-- **修复策略**: 
+- **修复策略**:
   - 为 `dependabot.yml:25` 的 ignore 规则添加注释说明原因
   - 增加 `typescript` 和 `eslint` 到 npm 的 ignore 列表（这些应手动升级以避免 breaking changes）
   - 新增 `.github/workflows/auto-merge-deps.yml`：当 CI 通过时自动合并带有 `automerge` 标签的 dependabot PR（补丁版本自动合并，次要版本需要人工审核）

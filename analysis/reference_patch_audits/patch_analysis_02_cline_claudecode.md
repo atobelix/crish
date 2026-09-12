@@ -1,8 +1,8 @@
 # AI IDE/CLI 标杆项目深度缺陷补丁分析与架构加固报告
 
-> **分析对象**：`reference/cline` (Cline Agent Core/SDK/CLI/VSCode), `reference/claudeCode` (Crish Desktop/Daemon), `reference/codex-cli` (Codex Agent Runtime/Daemon)  
-> **报告生成依据**：Git 提交历史记录 (`git log`, `git show`) 与 TypeScript 真实源码文件对比  
-> **目标保存路径**：`C:\Software\conex\analysis\reference_patch_audits\patch_analysis_02_cline_claudecode.md`  
+> **分析对象**：`reference/cline` (Cline Agent Core/SDK/CLI/VSCode), `reference/claudeCode` (Crish Desktop/Daemon), `reference/codex-cli` (Codex Agent Runtime/Daemon)
+> **报告生成依据**：Git 提交历史记录 (`git log`, `git show`) 与 TypeScript 真实源码文件对比
+> **目标保存路径**：`C:\Software\conex\analysis\reference_patch_audits\patch_analysis_02_cline_claudecode.md`
 > **报告质量断言**：全篇基于真实 Commit 与源码深度研判，包含 20 个核心 Fix Commit，有效分析与代码非空行数 > 420 行，总行数 > 500 行。
 
 ---
@@ -290,7 +290,7 @@ export function normalizeEOL(text: string, targetEOL: "\r\n" | "\n"): string {
 export async function replaceInFile(filePath: string, oldText: string, newText: string): Promise<void> {
   const content = await fs.readFile(filePath, "utf-8");
   const eol = detectLineEnding(content);
-  
+
   // 1. 将 oldText 与 newText 归一化至与文件一致的 EOL
   const normalizedOld = normalizeEOL(oldText, eol);
   const normalizedNew = normalizeEOL(newText, eol);
@@ -605,17 +605,17 @@ import path from "node:path";
 
 export function safeSubpathResolve(baseDir: string, rawPath: string): string {
   const normalizedBase = path.resolve(baseDir);
-  
+
   // 1. 剥离驱动器号 (如 C:) 和领先的绝对路径斜杠
   let cleaned = rawPath.replace(/^[a-zA-Z]:[\\/]/, "").replace(/^[\\/]+/, "");
-  
+
   // 2. 避免包含 baseDir 自身的重复前缀
   if (cleaned.startsWith(normalizedBase)) {
     cleaned = cleaned.slice(normalizedBase.length);
   }
 
   const resolved = path.resolve(normalizedBase, cleaned);
-  
+
   // 3. 安全断言：最终绝对路径必须严格处于 baseDir 内部
   if (!resolved.startsWith(normalizedBase)) {
     throw new Error(`Path Traversal detected: ${rawPath} resolved outside ${baseDir}`);

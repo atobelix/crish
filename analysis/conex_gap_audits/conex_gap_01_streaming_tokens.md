@@ -1,7 +1,7 @@
 # Conex 核心 Gap 诊断报告 - Agent 1：流式 / Token 域
-> **受检目标**: Conex 代码库 (`packages/agent-runtime`, `crates/conex-stream`, `crates/conex-compaction`, `apps/crish-desktop`)  
-> **对比标杆**: `analysis/reference_patch_audits/` (Opencode / Opencodex / Cline / ClaudeCode / Frameworks 补丁审计)  
-> **诊断时间**: 2026-07-24  
+> **受检目标**: Conex 代码库 (`packages/agent-runtime`, `crates/conex-stream`, `crates/conex-compaction`, `apps/crish-desktop`)
+> **对比标杆**: `analysis/reference_patch_audits/` (Opencode / Opencodex / Cline / ClaudeCode / Frameworks 补丁审计)
+> **诊断时间**: 2026-07-24
 > **报告类型**: 架构级缺陷深度审计 & 修复方案建议 (Phase 1 Gap Audit)
 
 ---
@@ -87,16 +87,16 @@ fn parse_frame(bytes: &[u8], default_event: &Option<String>) -> SseFrame {
 // 修正 StreamRenderBuffer.ts 中的 safeCutPos
 function safeUnicodeCutPosition(text: string, preferredCut: number): number {
   if (preferredCut <= 0 || preferredCut >= text.length) return preferredCut;
-  
+
   // 1. 检查 preferredCut 是否正好切在 Surrogate Pair 中间 (High in preferredCut-1, Low in preferredCut)
   const prevCode = text.charCodeAt(preferredCut - 1);
   const currCode = text.charCodeAt(preferredCut);
-  
+
   // 如果前一个字符是 High Surrogate 并且当前字符是 Low Surrogate
   if (prevCode >= 0xD800 && prevCode <= 0xDBFF && currCode >= 0xDC00 && currCode <= 0xDFFF) {
     return preferredCut - 1; // 回退到 High Surrogate 之前
   }
-  
+
   return preferredCut;
 }
 ```
@@ -374,7 +374,7 @@ function balanceJsonContainers(text: string): string {
 ```typescript
 function balanceJsonContainersDefensive(text: string): string {
   let cleaned = text;
-  
+
   // 1. 如果以单数个反斜杠结尾，先剥离末尾危险的转义符
   if (/(?:^|[^\\])(?:\\\\)*\\$/.test(cleaned)) {
     cleaned = cleaned.slice(0, -1);

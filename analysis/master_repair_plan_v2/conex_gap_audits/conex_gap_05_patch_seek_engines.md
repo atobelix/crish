@@ -1,9 +1,9 @@
 # Conex Phase 1 Gap 诊断报告 - Agent 5：代码编辑 / Patch 寻址域
 
-> **审计实施者**：Agent 5 (Subagent)  
-> **审计对象**：`crates/conex-diff`、`crates/conex-fs`、`crates/conex-compaction`、`packages/shared-utils`、`packages/agent-runtime`、`apps/crish-desktop`  
-> **标杆参照**：`analysis/reference_patch_audits/` (Opencode/Codex, Cline/ClaudeCode, Coder, Desktop Runtimes, Sandboxes)  
-> **诊断日期**：2026-07-24  
+> **审计实施者**：Agent 5 (Subagent)
+> **审计对象**：`crates/conex-diff`、`crates/conex-fs`、`crates/conex-compaction`、`packages/shared-utils`、`packages/agent-runtime`、`apps/crish-desktop`
+> **标杆参照**：`analysis/reference_patch_audits/` (Opencode/Codex, Cline/ClaudeCode, Coder, Desktop Runtimes, Sandboxes)
+> **诊断日期**：2026-07-24
 > **状态**：COMPLETED (发现 4 项重大架构死角与缺陷)
 
 ---
@@ -125,7 +125,7 @@ pub fn seek_sequence(lines: &[&str], pattern: &[&str], start: usize) -> Option<S
 ### 3.3 缺陷与失配死角
 
 > [!WARNING]
-> **失配死角 1.1：Rust 侧缺失 `eof` (后缀窗口锚定) 机制**  
+> **失配死角 1.1：Rust 侧缺失 `eof` (后缀窗口锚定) 机制**
 > TS 侧 `seekSequence` 函数签名支持 `eof` 参数（[seek-sequence.ts:L192-L196](file:///c:/Software/conex/packages/shared-utils/src/file/seek-sequence.ts#L192-L196)）：
 > ```typescript
 > export function seekSequence(
@@ -138,7 +138,7 @@ pub fn seek_sequence(lines: &[&str], pattern: &[&str], start: usize) -> Option<S
 > 当 `eof: true` 时，`searchStart` 被强制锚定在 `maxStart`（即文件结尾窗口），用于处理文件末尾追加/替换场景。而 Rust 侧 `seek_sequence` ([seek_sequence.rs:L108](file:///c:/Software/conex/crates/conex-diff/src/seek_sequence.rs#L108)) 签名仅有 `start: usize`，完全缺少 `eof: bool` 控制逻辑！若 Tauri/IPC 侧调用 Rust 引擎执行 EOF 锚定寻址，两端行为发生偏离。
 
 > [!CAUTION]
-> **失配死角 1.2：返回值类型与诊断信息坍塌 (Diagnostic Collapse)**  
+> **失配死角 1.2：返回值类型与诊断信息坍塌 (Diagnostic Collapse)**
 > - TS 侧返回 `SeekSequenceResult` 对象：
 >   ```typescript
 >   export interface SeekSequenceResult {
@@ -151,9 +151,9 @@ pub fn seek_sequence(lines: &[&str], pattern: &[&str], start: usize) -> Option<S
 > - Rust 侧仅仅返回 `Option<SeekHit>`！一旦出现 Ambiguous，直接返回 `None`。上层 Rust 调用方无法得知到底是 0 个匹配还是 2 个匹配，导致日志排查与 UI 错误 Toast 产生误导。
 
 > [!IMPORTANT]
-> **失配死角 1.3：`splitLinesForSeek` 与 Rust `str::lines()` 换行符与空行切割偏移**  
-> TS 侧 `splitLinesForSeek` ([seek-sequence.ts:L245-L249](file:///c:/Software/conex/packages/shared-utils/src/file/seek-sequence.ts#L245-L249)) 采用 `normalizeEol(text).split("\n")`。若文本以 `\n` 结尾（如 `"line1\nline2\n"`），TS 分割出的数组长度为 3：`["line1", "line2", ""]`。  
-> 而 Rust 侧标准库 `str::lines()` 或传统的 `lines()` 迭代器会**自动剥离末尾换行符**，分割出的切片长度为 2：`["line1", "line2"]`。  
+> **失配死角 1.3：`splitLinesForSeek` 与 Rust `str::lines()` 换行符与空行切割偏移**
+> TS 侧 `splitLinesForSeek` ([seek-sequence.ts:L245-L249](file:///c:/Software/conex/packages/shared-utils/src/file/seek-sequence.ts#L245-L249)) 采用 `normalizeEol(text).split("\n")`。若文本以 `\n` 结尾（如 `"line1\nline2\n"`），TS 分割出的数组长度为 3：`["line1", "line2", ""]`。
+> 而 Rust 侧标准库 `str::lines()` 或传统的 `lines()` 迭代器会**自动剥离末尾换行符**，分割出的切片长度为 2：`["line1", "line2"]`。
 > 这直接导致对于带末尾换行符的文件：
 > 1. Haystack 数组长度在 TS 与 Rust 侧不一致。
 > 2. SeekHit 的 `index` 在两端产生 1 行偏移，引发 Apply 覆盖时错行或索引越界！
@@ -235,18 +235,18 @@ export function includeRequiredToolCallMessages(messages: AgentMessage[], firstK
 ### 4.3 缺陷与 400 报错隐患
 
 > [!CAUTION]
-> **缺陷 2.1：Rust 侧 `safe_drop_end` 缺乏 ID 级成对断言，产生 Orphan Tool Messages**  
-> 观察 Rust `Message` 结构体 ([conex_types::Message](file:///c:/Software/conex/crates/conex-types/src/lib.rs))，其仅包含 `role: String, content: String, images: Vec<String>`，**完全丢失了 `tool_call_id` 与 `tool_calls` 的结构化元数据**！  
+> **缺陷 2.1：Rust 侧 `safe_drop_end` 缺乏 ID 级成对断言，产生 Orphan Tool Messages**
+> 观察 Rust `Message` 结构体 ([conex_types::Message](file:///c:/Software/conex/crates/conex-types/src/lib.rs))，其仅包含 `role: String, content: String, images: Vec<String>`，**完全丢失了 `tool_call_id` 与 `tool_calls` 的结构化元数据**！
 > Rust `safe_drop_end` 函数仅仅凭 `role == "assistant"` 之后接 `role == "tool"` 进行线性扫描。一旦出现以下复杂场景：
 > 1. `assistant` 消息中发起了 2 个并发工具调用，但由于用户插队或自定义 UI 消息，`tool` 消息与 `assistant` 消息之间夹杂了 `user` 或 `is_custom_ui_msg` 消息；
-> 2. `safe_drop_end` 遇到 `role == "user"` 时判定终止，致使后面的 `tool` 消息没有被一起 drain 掉，留下了**孤立的 `tool` 消息 (Orphan Tool Result)**。  
+> 2. `safe_drop_end` 遇到 `role == "user"` 时判定终止，致使后面的 `tool` 消息没有被一起 drain 掉，留下了**孤立的 `tool` 消息 (Orphan Tool Result)**。
 > 此时消息列表被发送给 Provider 时，必定触发 **HTTP 400 报错**！
 
 > [!WARNING]
-> **缺陷 2.2：TS 侧 `includeRequiredToolCallMessages` 只有单向追溯，缺乏反向 Orphan Tool Call 保护**  
-> TS 侧 `includeRequiredToolCallMessages` 在计算 `firstKeptIndex` 时，如果保留的消息（`>= firstKeptIndex`）中包含 `tool-result`，它会向前移动 `firstKeptIndex` 把对应的 `tool-call` 消息也拉进来。  
-> **但是，它没有反向检查！**  
-> 假设 `firstKeptIndex` 落在了一条 `assistant` 消息（包含 `tool-call`）上，而该 `tool-call` 的 `tool-result` 刚好位于 `firstKeptIndex` 之前的被压缩消息段中（或者因超时/重试未生成）；或者 `firstKeptIndex` 正好切在了 `assistant` 与 `tool-result` 之间，导致 `assistant.tool_calls` 被保留，但其 `tool-result` 被移除，这就留下了**孤立的 `assistant.tool_calls` (Orphan Tool Call)**。  
+> **缺陷 2.2：TS 侧 `includeRequiredToolCallMessages` 只有单向追溯，缺乏反向 Orphan Tool Call 保护**
+> TS 侧 `includeRequiredToolCallMessages` 在计算 `firstKeptIndex` 时，如果保留的消息（`>= firstKeptIndex`）中包含 `tool-result`，它会向前移动 `firstKeptIndex` 把对应的 `tool-call` 消息也拉进来。
+> **但是，它没有反向检查！**
+> 假设 `firstKeptIndex` 落在了一条 `assistant` 消息（包含 `tool-call`）上，而该 `tool-call` 的 `tool-result` 刚好位于 `firstKeptIndex` 之前的被压缩消息段中（或者因超时/重试未生成）；或者 `firstKeptIndex` 正好切在了 `assistant` 与 `tool-result` 之间，导致 `assistant.tool_calls` 被保留，但其 `tool-result` 被移除，这就留下了**孤立的 `assistant.tool_calls` (Orphan Tool Call)**。
 > Anthropic Messages API 会立刻拒绝请求：`400 Invalid request: tool_use without matching tool_result`。
 
 ---
@@ -305,13 +305,13 @@ let mut items: Vec<DirectoryItem> = entries
 ### 5.3 缺陷与崩溃死角
 
 > [!CAUTION]
-> **死角 3.1：`resolve_under_root` 裸调用 `std::fs::canonicalize` 易导致 OS 异常与挂起**  
+> **死角 3.1：`resolve_under_root` 裸调用 `std::fs::canonicalize` 易导致 OS 异常与挂起**
 > `resolve_under_root` 两次无保护地调用 `std::fs::canonicalize`。在 Windows/POSIX 系统下：
 > - 如果 `input` 路径中包含循环软链接（Symlink Loop），OS 底层 API (`realpath` 或 `GetFinalPathNameByHandle`) 会直接返回 `std::io::ErrorKind::FilesystemLoop` (ELOOP) 错误，导致 `resolve_under_root` 抛出崩溃异常。
 > - 若涉及网络共享路径 (UNC path `\\server\share`) 或某些挂载卷上的畸形软链接，`canonicalize` 可能阻塞系统 I/O 线程数十秒。
 
 > [!CAUTION]
-> **死角 3.2：递归目录遍历未记录 Visited Paths，引发 Stack Overflow 崩溃**  
+> **死角 3.2：递归目录遍历未记录 Visited Paths，引发 Stack Overflow 崩溃**
 > 在 `directory.rs` 以及桌面端的递归文件扫描中，代码直接遍历 `read_dir`。如果用户项目内包含指向父级目录的软链接（例如 `node_modules/.bin/parent -> ../../`），当系统或 Agent 执行递归目录树建立时，由于**没有使用 `visited_set` 记录已遍历的真实 Path**，程序将陷入无限递归，迅速耗尽线程栈空间，触发 **Stack Overflow 进程直接 Crash**！
 
 ---
@@ -370,7 +370,7 @@ export interface FileDiff {
 ### 6.3 缺陷与坏代码误落盘死角
 
 > [!CAUTION]
-> **重大死角 4.1：`FileDiff` 结构缺失 `provisional` 状态，Accept 按钮误放行未完成代码**  
+> **重大死角 4.1：`FileDiff` 结构缺失 `provisional` 状态，Accept 按钮误放行未完成代码**
 > 1. `FileDiff` 接口中没有任何 `provisional?: boolean` 或 `isStreaming?: boolean` 标志。
 > 2. `classifyFileDiff(f)` 仅对 diff 的格式（是否纯新增、删除增补比对、路径安全）进行静态纯函数判断。
 > 3. 当 LLM 在流式生成一个 100 行的全量写文件 `write_to_file` 工具参数时，在吐出前 20 行代码时，`publishToolDiffs` 就会将这包含 20 行 `addition` 的临时 `FileDiff` 推入 `store`。
@@ -447,7 +447,7 @@ pub fn seek_sequence_full(
     let start = start.min(lines.len());
     let max_start = lines.len() - pattern.len();
     let search_start = if eof { max_start } else { start };
-    
+
     if search_start > max_start {
         return SeekResult { hit: None, match_count: 0, passes_tried: vec![] };
     }
@@ -662,10 +662,10 @@ pub(crate) fn list_directory_recursive_safe(
     if depth > max_depth {
         return Ok(vec![]);
     }
-    
+
     let canonical = safe_canonicalize(dir_path, 40)
         .map_err(|e| FileCommandError::new(ERR_READ_DIRECTORY, e.to_string()))?;
-        
+
     if !visited.insert(canonical) {
         // Already visited directory via symlink loop -> skip silently
         return Ok(vec![]);
@@ -674,7 +674,7 @@ pub(crate) fn list_directory_recursive_safe(
     let entries = std::fs::read_dir(dir_path).map_err(|e| {
         FileCommandError::new(ERR_READ_DIRECTORY, format!("Failed to read directory: {e}"))
     })?;
-    
+
     // Process items safely...
     Ok(vec![])
 }
@@ -713,7 +713,7 @@ export function classifyFileDiff(diff: FileDiff | null | undefined): ClassifyFil
   if (diff.provisional) {
     return { ok: false, reason: 'AI 仍在流式生成中，不可应用未完成改动' };
   }
-  
+
   const pathCheck = isSafeApplyPath(diff.filePath);
   if (pathCheck.ok === false) {
     return { ok: false, reason: pathCheck.reason };

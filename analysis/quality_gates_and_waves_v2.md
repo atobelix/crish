@@ -1,8 +1,8 @@
 # Conex 终极协同修复方案：质量门禁 (G0~G5) 与 Wave 调度规范 (v2)
 
-> **文档版本**：v2.0  
-> **更新时间**：2026-07-24  
-> **适用范围**：Conex 核心团队、全量 CI/CD 自动化构建流水线、多 Agent 协作工程规范  
+> **文档版本**：v2.0
+> **更新时间**：2026-07-24
+> **适用范围**：Conex 核心团队、全量 CI/CD 自动化构建流水线、多 Agent 协作工程规范
 > **存储位置**：`C:\Software\conex\analysis\quality_gates_and_waves_v2.md`
 
 ---
@@ -124,7 +124,7 @@ const CONFIG = {
     logic: { max: 400, warn: 350, hardBlock: 550, pattern: /\.(ts|js|jsx)$/ },
     typeDef: { max: 800, warn: 700, hardBlock: 900, pattern: /\.d\.ts$/ }
   },
-  
+
   // 规则 4: 上帝组件防爆判定 (God Component Limits)
   godComponent: {
     maxUseState: 12,
@@ -150,7 +150,7 @@ const CONFIG = {
 function calculateEffectiveSloc(content, filePath) {
   // 移除多行注释 /* ... */
   let cleanContent = content.replace(/\/\*[\s\S]*?\*\//g, '');
-  
+
   const lines = cleanContent.split(/\r?\n/);
   let effectiveLines = 0;
 
@@ -287,8 +287,8 @@ const { spawn, execSync } = require('child_process');
 const path = require('path');
 const process = require('process');
 
-const MODE = process.argv.includes('--mode') 
-  ? process.argv[process.argv.indexOf('--mode') + 1] 
+const MODE = process.argv.includes('--mode')
+  ? process.argv[process.argv.indexOf('--mode') + 1]
   : 'all';
 
 /**
@@ -346,7 +346,7 @@ async function testG3CascadeAbort() {
 
     child.on('exit', (code, signalReceived) => {
       console.log(`  -> Child exited with code: ${code}, signal: ${signalReceived}`);
-      
+
       // 等待 500ms 检查 OS 句柄与孤儿进程
       setTimeout(() => {
         const remainingChildren = getActiveChildProcessCount(process.pid);

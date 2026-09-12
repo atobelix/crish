@@ -620,7 +620,7 @@ node scripts/sync-versions.js
 用法：node scripts/publish.mjs [--dry-run]
 
 执行流程（按依赖拓扑排序）：
-1. shared-types → 2. shared-utils → 3. decision-engine → 4. agent-runtime → 
+1. shared-types → 2. shared-utils → 3. decision-engine → 4. agent-runtime →
 5. agent-orchestrator → 6. agent-daemon → 7. plugin-sdk
 
 每个包：

@@ -625,9 +625,9 @@ Layer 0（基础设施层）               Layer 1（工具层）               
    ```typescript
    // 替换前
    class PlannedProvider implements AgentProvider { ... }
-   
+
    // 替换后
-   const fauxProvider = new FauxAgentProvider("test-provider", 
+   const fauxProvider = new FauxAgentProvider("test-provider",
      ProviderEventSequence.text("mock response")
    );
    ```
@@ -636,7 +636,7 @@ Layer 0（基础设施层）               Layer 1（工具层）               
    ```typescript
    // 替换前
    const routes: ProviderRouteOffer[] = [/* 50 行手写对象 */];
-   
+
    // 替换后
    const routes = FixtureLoader.loadRouteConfig("priority-health-routing");
    ```
@@ -652,7 +652,7 @@ Layer 0（基础设施层）               Layer 1（工具层）               
    ```typescript
    // 替换前
    function shellTool(name = "shell"): AgentTool { ... }
-   
+
    // 替换后
    import { createMockTool } from '@crish/shared-utils/test/mockTools';
    const shellTool = createMockTool({ name: 'shell', concurrency: 'parallel' });
@@ -670,7 +670,7 @@ Layer 0（基础设施层）               Layer 1（工具层）               
    ```typescript
    // 替换前：314 行匿名类
    const mockGateway = new (class extends ProviderCallGateway { ... })();
-   
+
    // 替换后：2 行
    const mockGateway = new FauxProviderCallGateway();
    mockGateway.setDefaultSequence(ProviderEventSequence.text("hello"));

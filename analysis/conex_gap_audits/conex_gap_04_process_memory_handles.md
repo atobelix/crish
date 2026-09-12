@@ -1,8 +1,8 @@
 # Conex Architecture Gap Audit Report 04: Process, Memory, SQLite & Handle Lifecycle Domain
-**文档编号**: `CONEX-GAP-AUDIT-04`  
-**审计模块**: `crates/conex-sandbox`, `crates/conex-db`, `crates/conex-compaction`, `packages/agent-runtime`, `packages/agent-daemon`, `apps/crish-desktop`  
-**基准对照**: `C:\Software\conex\analysis\reference_patch_audits\` (标杆补丁报告 01~06)  
-**审计状态**: Complete  
+**文档编号**: `CONEX-GAP-AUDIT-04`
+**审计模块**: `crates/conex-sandbox`, `crates/conex-db`, `crates/conex-compaction`, `packages/agent-runtime`, `packages/agent-daemon`, `apps/crish-desktop`
+**基准对照**: `C:\Software\conex\analysis\reference_patch_audits\` (标杆补丁报告 01~06)
+**审计状态**: Complete
 
 ---
 
@@ -385,7 +385,7 @@ const RAW_PAYLOAD_LIMIT_BYTES = 32 * 1024; // 32KB 阈值
 
 export function pruneHistoricalToolOutputs(messages: AgentMessage[], activeWindowSize = 10): AgentMessage[] {
   const cutoffIndex = Math.max(0, messages.length - activeWindowSize);
-  
+
   return messages.map((msg, idx) => {
     // 仅针对 cutoffIndex 之前的历史工具输出消息进行瘦身
     if (idx >= cutoffIndex || msg.role !== "tool") {
@@ -540,7 +540,7 @@ export function buildWindowsPowerShellScript(userCommand: string): string {
     "$env:PYTHONUTF8='1'",
     "$env:PYTHONIOENCODING='utf-8'"
   ].join("; ");
-  
+
   const normalized = normalizePowerShellCommand(userCommand);
   const payload = Buffer.from(normalized, "utf8").toString("base64");
   return [

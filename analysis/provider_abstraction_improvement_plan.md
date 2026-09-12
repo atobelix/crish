@@ -576,7 +576,7 @@ steps:
       # 对 TS 端：检查生成的类型文件与 Schema 一致
       npm run schema:generate
       git diff --exit-code packages/agent-runtime/src/provider-stream-contract.generated.ts
-      
+
       # 对 Rust 端：检查生成的代码与 Schema 一致
       cd crates/conex-stream
       cargo run --bin schema-check
@@ -596,7 +596,7 @@ steps:
 export interface ProviderClass {
   /** Provider 的唯一标识 */
   readonly providerId: string;
-  
+
   /**
    * 构造一个 AgentProvider 实例。
    * @param options - 构造选项（包含凭证和配置）
@@ -623,7 +623,7 @@ export interface ProviderClassOptions {
  */
 export interface ProviderFactory {
   readonly providerId: string;
-  
+
   create(options: ProviderFactoryOptions): AgentProvider | Promise<AgentProvider>;
   dispose?(provider: AgentProvider): Promise<void>;
 }
@@ -645,7 +645,7 @@ export interface ProviderFactoryOptions {
 export interface EngineRegistration {
   engineId: string;
   engineClass: new () => Engine;
-  
+
   /**
    * 判断此 Engine 是否能处理给定的 Provider 定义。
    * 例如：engineId 匹配、URL pattern 匹配等。
@@ -661,29 +661,29 @@ export interface EngineRegistration {
 
 export class ProviderRegistrar {
   constructor(private registry: ProviderRegistryV2) {}
-  
+
   /**
    * 注册一个 Provider 类。
    * 适用于简单的 Provider 实现（无需异步初始化）。
    */
   registerClass<T extends ProviderClass>(ctor: T): void;
-  
+
   /**
    * 注册一个 Provider 工厂。
    * 适用于需要异步初始化或复杂配置的 Provider。
    */
   registerFactory(factory: ProviderFactory): void;
-  
+
   /**
    * 注册一个 Engine 类。
    */
   registerEngine(registration: EngineRegistration): void;
-  
+
   /**
    * 批量注册（用于 builtin 目录）。
    */
   registerBuiltin(): void;
-  
+
   /**
    * 取消注册并清理资源。
    */
@@ -804,7 +804,7 @@ export class ProviderRegistrar {
 ```typescript
 export class FauxProvider implements AgentProvider {
   readonly id: string;
-  
+
   constructor(
     id: string,
     private config?: FauxProviderConfig
@@ -812,19 +812,19 @@ export class FauxProvider implements AgentProvider {
 
   /** 预设事件序列 */
   setEvents(events: ProviderStreamContractEvent[]): void;
-  
+
   /** 预设错误 */
   setError(error: ProviderStreamError | Error): void;
-  
+
   /** 预设延迟 */
   setLatency(ms: number): void;
 
   /** 故障注入：在第 N 个事件后中断 */
   setFailAfter(n: number): void;
-  
+
   /** 重置状态 */
   reset(): void;
-  
+
   async *stream(request: AgentProviderRequest): AsyncIterable<ProviderStreamContractEvent> {
     if (this.config?.failAfter !== undefined && this.config.failAfter <= 0) {
       throw new Error("Simulated failure");
@@ -835,7 +835,7 @@ export class FauxProvider implements AgentProvider {
       yield event;
     }
   }
-  
+
   // 支持生命周期
   async init(): Promise<void> { /* 无操作 */ }
   async dispose(): Promise<void> { this.reset(); }
@@ -852,25 +852,25 @@ export interface FauxProviderConfig {
 export class RecordingProviderGateway implements ProviderGateway {
   readonly recordedPlans: ProviderGatewayPlan[] = [];
   readonly recordedResults: ProviderRouteResult[] = [];
-  
+
   constructor(private inner: ProviderGateway) {}
-  
+
   async planRoute(request: ProviderRouteRequest): Promise<ProviderGatewayPlan> {
     const plan = await this.inner.planRoute(request);
     this.recordedPlans.push(plan);
     return plan;
   }
-  
+
   async resolveProvider(request: ProviderRouteRequest): Promise<AgentProvider> {
     const result = await this.inner.resolveProvider(request);
     return result as AgentProvider;
   }
-  
+
   recordRouteResult(result: ProviderRouteResult): void {
     this.recordedResults.push(result);
     return this.inner.recordRouteResult(result);
   }
-  
+
   getLastPlan(): ProviderGatewayPlan | undefined {
     return this.recordedPlans[this.recordedPlans.length - 1];
   }
@@ -1117,7 +1117,7 @@ TS:   HTTP SSE → OpenAICompatibleEngine.parseStream() → ProviderStreamContra
 function createProviderFromPlan(plan, config): AgentProvider {
   const engineProvider = resolveProviderViaBridge(plan);  // 依赖全局单例
   if (engineProvider) return engineProvider;
-  
+
   if (shouldUseAnthropicProvider(...)) return createAnthropicProviderFromPlan(...);
   if (shouldUseGeminiProvider(...)) return createGeminiProviderFromPlan(...);
   return createOpenAICompatibleProviderFromPlan(...);      // 使用 @deprecated 类
