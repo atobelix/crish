@@ -214,19 +214,19 @@ describe('formatDurationLabel · 耗时文案边界穷举', () => {
 /* ────────────────────── formatProcessControlLabel ────────────────────── */
 
 describe('formatProcessControlLabel · 控制栏文案（2026-09-11 用户裁决）', () => {
-  it('多元素段 · 运行中 → 裸时长跳秒（无「工作」前缀）', () => {
+  it('多元素段 · 运行中 → 「正在处理 xx 时间」', () => {
     const m = { ...emptyMetrics(), thoughtCount: 1, toolCount: 1 };
-    expect(formatProcessControlLabel(m, true, 4_200, true)).toBe('4.2 秒');
+    expect(formatProcessControlLabel(m, true, 4_200, true)).toBe('正在处理 4.2 秒');
   });
 
-  it('多元素段 · 终态 → 「工作 xx 时间」', () => {
+  it('多元素段 · 终态 → 「已完成 xx 时间」', () => {
     const m = { ...emptyMetrics(), thoughtCount: 1, toolCount: 1 };
-    expect(formatProcessControlLabel(m, true, 12_500, false)).toBe('工作 12.5 秒');
+    expect(formatProcessControlLabel(m, true, 12_500, false)).toBe('已完成 12.5 秒');
   });
 
-  it('多元素段 · 终态跨分钟 → 「工作 m 分 s 秒」', () => {
+  it('多元素段 · 终态跨分钟 → 「已完成 m 分 s 秒」', () => {
     const m = { ...emptyMetrics(), thoughtCount: 1, toolCount: 3 };
-    expect(formatProcessControlLabel(m, true, 65_400, false)).toBe('工作 1 分 5 秒');
+    expect(formatProcessControlLabel(m, true, 65_400, false)).toBe('已完成 1 分 5 秒');
   });
 
   it('单思考段（不显示工作时间区域）→ 「思考」', () => {
@@ -263,7 +263,7 @@ describe('formatProcessControlLabel · 控制栏文案（2026-09-11 用户裁决
     }
   });
 
-  it('负向断言：旧岛中圆点拼接文案已彻底根除', () => {
+  it('工作时间段（showWorkTime=true）专一承载耗时，不含工具细分字样；后续工具段（showWorkTime=false）精准展示调用分类描述', () => {
     const m = {
       ...emptyMetrics(),
       editFilesCount: 2,
@@ -271,19 +271,24 @@ describe('formatProcessControlLabel · 控制栏文案（2026-09-11 用户裁决
       readFilesCount: 1,
       commandCount: 4,
       subagentCount: 1,
+      toolCount: 11,
     };
-    for (const capsule of [true, false]) {
-      for (const live of [true, false]) {
-        const out = formatProcessControlLabel(m, capsule, 5_000, live);
-        expect(out).not.toContain('\u00b7');
-        expect(out).not.toContain('已编辑');
-        expect(out).not.toContain('已搜索');
-        expect(out).not.toContain('已读取');
-        expect(out).not.toContain('已调度');
-        expect(out).not.toContain('已完成');
-        expect(out).not.toContain('中间处理过程');
-      }
+    // 1. showWorkTime=true: 承载工作耗时，绝不含工具细分字样
+    expect(formatProcessControlLabel(m, true, 5_000, true)).toBe('正在处理 5.0 秒');
+    expect(formatProcessControlLabel(m, true, 5_000, false)).toBe('已完成 5.0 秒');
+    for (const live of [true, false]) {
+      const out = formatProcessControlLabel(m, true, 5_000, live);
+      expect(out).not.toContain('\u00b7');
+      expect(out).not.toContain('已编辑');
+      expect(out).not.toContain('已搜索');
+      expect(out).not.toContain('已读取');
+      expect(out).not.toContain('已调度');
+      expect(out).not.toContain('中间处理过程');
     }
+
+    // 2. showWorkTime=false: 展示调用了多少工具、分别是什么类型的描述（2026-09-11 用户裁决）
+    const summary = formatProcessControlLabel(m, false, 5_000, false);
+    expect(summary).toBe('已调用 1 个子代理 · 已搜索 3 次 · 已读取 1 个文件 · 已编辑 2 个文件 · 已运行 4 条命令');
   });
 
   it('负向断言（源码级）：战役源码中「已深度思考」仅可存在于说明性注释，不得存在于可执行字面量', () => {

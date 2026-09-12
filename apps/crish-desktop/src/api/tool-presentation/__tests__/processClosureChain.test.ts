@@ -119,7 +119,7 @@ describe('节点 6 · 软收口全链路物证（收口 → 落盘 → 归一 �
     expect(spanMs).toBeLessThan(13_000);
     // 负向断言：旧口径 max(startTime) 只能得到 3s
     expect(spanMs).toBeGreaterThan(3_000 + 1_000);
-    expect(label).toMatch(/^工作 \d+(\.\d)? 秒$/);
+    expect(label).toMatch(/^已完成 \d+(\.\d)? 秒$/);
   });
 
   it('纯函数定值断言：缺失耗时按传入挂钟补齐（不依赖 Date.now）', () => {
@@ -158,10 +158,10 @@ describe('节点 6 · 软收口全链路物证（收口 → 落盘 → 归一 �
     expect(seg.defaultExpanded).toBe(false);
     expect(seg.isLive).toBe(false);
     expect(spanMs).toBe(12_000);
-    expect(label).toBe('工作 12.0 秒');
+    expect(label).toBe('已完成 12.0 秒');
   });
 
-  it('负向断言：单思考段不显示工作时间，退化为「思考」（D-05）', () => {
+  it('首个过程段（紧跟用户消息下方）承载整轮工作时间（2026-09-11 用户裁决）', () => {
     const msg: SessionMessage = {
       id: 'm-chain-3',
       sender: 'assistant',
@@ -181,24 +181,36 @@ describe('节点 6 · 软收口全链路物证（收口 → 落盘 → 归一 �
     } as SessionMessage;
 
     const { seg, label } = runChain(msg);
-    expect(seg.showWorkTime).toBe(false);
-    expect(label).toBe('思考');
-    expect(label).not.toMatch(/工作/);
+    expect(seg.showWorkTime).toBe(true);
+    expect(label).toBe('已完成 2.0 秒');
   });
 
-  it('负向断言：单工具段退化为「已运行 1 条命令」（D-05）', () => {
+  it('后续工具段（正文之后）展示工具动作描述「已运行 1 条命令」（2026-09-11 用户裁决）', () => {
     const msg: SessionMessage = {
       id: 'm-chain-4',
       sender: 'assistant',
       timestamp: T0,
-      text: '正文',
-      toolCalls: [toolCall('tc-1', T0, { status: 'success', durationMs: 4_000 })],
-      blocks: [blockTool('tc-1', T0), { type: 'text', content: '正文', turnIndex: 0 }],
+      text: '总结',
+      toolCalls: [toolCall('tc-1', T0 + 2_000, { name: 'run_command', status: 'success', durationMs: 4_000 })],
+      blocks: [
+        { type: 'thought', id: 'th-1', content: '思考一下', turnIndex: 0, startTime: T0, durationMs: 2_000 },
+        { type: 'text', content: '先输出部分正文', turnIndex: 0 },
+        blockTool('tc-1', T0 + 2_000),
+      ],
     } as SessionMessage;
 
-    const { label } = runChain(msg);
-    expect(label).toBe('已运行 1 条命令');
-    expect(label).not.toMatch(/工作/);
+    const segs = partitionTimelineSegments(msg.id, buildAssistantTimeline(msg), false, false);
+    const procSegs = segs.filter((s) => s.kind === 'process_section') as Array<{
+      id: string;
+      showWorkTime: boolean;
+      metrics: any;
+      items: any[];
+    }>;
+    expect(procSegs).toHaveLength(1);
+    expect(procSegs[0]?.showWorkTime).toBe(true);
+    expect(procSegs[0]?.items).toHaveLength(3);
+    const label = formatProcessControlLabel(procSegs[0]!.metrics, true, 6_000, false);
+    expect(label).toBe('已完成 6.0 秒');
   });
 
   it('负向断言：全链路文案不得出现已废除的「已深度思考」', () => {
@@ -238,7 +250,7 @@ describe('节点 6 · 软收口全链路物证（收口 → 落盘 → 归一 �
     // now 远早于 tc-2 的 startedAt（模拟系统时钟回拨）
     const { spanMs, label } = runChain(msg);
     expect(spanMs).toBeGreaterThanOrEqual(0);
-    expect(label).toMatch(/^工作 \d/);
+    expect(label).toMatch(/^已完成 \d/);
     expect(label).not.toContain('-');
   });
 });

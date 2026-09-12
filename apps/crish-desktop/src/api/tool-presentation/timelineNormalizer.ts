@@ -24,6 +24,7 @@ export {
   parseInlineThoughtAndText,
   type ParsedInlineItem,
 } from './inlineTagParser';
+import { isThoughtPlaceholder } from '../markdownRenderLite';
 export {
   timelineSignature,
   buildAssistantTimelineCached,
@@ -32,7 +33,7 @@ export {
 function pushFallbackTurns(msg: SessionMessage, items: AssistantTimelineItem[]): void {
   if (msg.thinkingTurns && msg.thinkingTurns.length > 0) {
     for (const tt of msg.thinkingTurns) {
-      if (tt.content?.trim() || tt.isStreaming) {
+      if (tt.content?.trim() && !isThoughtPlaceholder(tt.content)) {
         items.push({
           kind: 'thought',
           content: tt.content,
@@ -40,15 +41,17 @@ function pushFallbackTurns(msg: SessionMessage, items: AssistantTimelineItem[]):
           durationMs: tt.durationMs,
           isStreaming: tt.isStreaming,
           key: `thought-turn-${tt.turnIndex}`,
+          startTime: (tt as { startTime?: number }).startTime || msg.timestamp,
         });
       }
     }
-  } else if ((msg.thinking || '').trim()) {
+  } else if ((msg.thinking || '').trim() && !isThoughtPlaceholder(msg.thinking)) {
     items.push({
       kind: 'thought',
       content: msg.thinking || '',
       durationMs: msg.thinkingTime ? msg.thinkingTime * 1000 : undefined,
       key: 'thought-legacy',
+      startTime: msg.timestamp,
     });
   }
 }
@@ -110,8 +113,16 @@ export function buildAssistantTimeline(
       if (!toolBuf.length) return;
       const rendered = buildToolRenderItems(toolBuf);
       if (rendered.length) {
-        const firstStartedAt = toolBuf.find((t) => t.startedAt != null)?.startedAt;
-        const totalDuration = toolBuf.reduce((acc, t) => acc + (t.durationMs || 0), 0);
+        const firstStartedAt =
+          toolBuf.find((t) => t.startedAt != null)?.startedAt ?? msg.timestamp;
+        const totalDuration = toolBuf.reduce((acc, t) => {
+          const d =
+            t.durationMs ??
+            (t.finishedAt && t.startedAt && t.finishedAt >= t.startedAt
+              ? t.finishedAt - t.startedAt
+              : 0);
+          return acc + (d > 0 ? d : 0);
+        }, 0);
         items.push({
           kind: 'tools',
           items: rendered,
@@ -158,13 +169,14 @@ export function buildAssistantTimeline(
         } else if (b.type === 'thought') {
           flushTools();
           const thoughtContent = (b.content || '').trim();
-          if (thoughtContent || b.isStreaming) {
+          const isPlaceholder = isThoughtPlaceholder(thoughtContent);
+          if (!isPlaceholder && (thoughtContent || b.isStreaming)) {
             items.push({
               kind: 'thought',
               content: thoughtContent,
               id: b.id,
               turnIndex: b.turnIndex,
-              startTime: b.startTime,
+              startTime: b.startTime ?? msg.timestamp,
               durationMs: b.durationMs,
               isStreaming: b.isStreaming,
               isHistoricalCollapsed: b.isHistoricalCollapsed,
@@ -189,6 +201,8 @@ export function buildAssistantTimeline(
         } else if (b.type === 'tool_call' && b.id) {
           const tc = toolsById.get(b.id);
           if (tc) {
+            if (tc.startedAt == null && b.startTime != null) tc.startedAt = b.startTime;
+            if (tc.durationMs == null && b.durationMs != null) tc.durationMs = b.durationMs;
             toolBuf.push(tc);
             usedTools.add(b.id);
           }
@@ -212,13 +226,26 @@ export function buildAssistantTimeline(
       if (orphan.length) {
         const rendered = buildToolRenderItems(orphan);
         if (rendered.length) {
-          items.push({ kind: 'tools', items: rendered, key: 'tools-orphan' });
+          const firstStartedAt =
+            orphan.find((t) => t.startedAt != null)?.startedAt ?? msg.timestamp;
+          const totalDuration = orphan.reduce((acc, t) => {
+            const d =
+              t.durationMs ??
+              (t.finishedAt && t.startedAt && t.finishedAt >= t.startedAt
+                ? t.finishedAt - t.startedAt
+                : 0);
+            return acc + (d > 0 ? d : 0);
+          }, 0);
+          items.push({
+            kind: 'tools',
+            items: rendered,
+            key: 'tools-orphan',
+            startTime: firstStartedAt,
+            durationMs: totalDuration > 0 ? totalDuration : undefined,
+          });
         }
       }
-      if (!items.some((i) => i.kind === 'text') && (msg.text || '').trim()) {
-        pushParsedText(msg.text || '', undefined, msg.status === 'processing', items, thi, xi);
-      }
-      return enforceThoughtBeforeText(items);
+      return applyDurationFallback(msg, items);
     }
 
     // 历史无 blocks 消息兼容降级：按 injections -> thoughts -> tools -> text 顺序列出
@@ -229,19 +256,63 @@ export function buildAssistantTimeline(
     if (tools.length) {
       const rendered = buildToolRenderItems(tools);
       if (rendered.length) {
-        items.push({ kind: 'tools', items: rendered, key: 'tools-0' });
+        const firstStartedAt =
+          tools.find((t) => t.startedAt != null)?.startedAt ?? msg.timestamp;
+        const totalDuration = tools.reduce((acc, t) => {
+          const d =
+            t.durationMs ??
+            (t.finishedAt && t.startedAt && t.finishedAt >= t.startedAt
+              ? t.finishedAt - t.startedAt
+              : 0);
+          return acc + (d > 0 ? d : 0);
+        }, 0);
+        items.push({
+          kind: 'tools',
+          items: rendered,
+          key: 'tools-0',
+          startTime: firstStartedAt,
+          durationMs: totalDuration > 0 ? totalDuration : undefined,
+        });
       }
     }
     if ((msg.text || '').trim()) {
       pushParsedText(msg.text || '', undefined, msg.status === 'processing', items, thi, xi);
     }
-    return enforceThoughtBeforeText(items);
+    return applyDurationFallback(msg, items);
   } catch {
     if ((msg.text || '').trim()) {
       return [{ kind: 'text', content: msg.text || '', key: 'text-fallback' }];
     }
     return [];
   }
+}
+
+/**
+ * 历史/无打点耗时兜底：若全段子项耗时均为 0/undefined，但消息级记录了 thinkingTime（秒），
+ * 自动回填给首个过程项，杜绝终态「已完成 0.0 秒」虚假定格。
+ */
+function applyDurationFallback(
+  msg: SessionMessage,
+  items: AssistantTimelineItem[]
+): AssistantTimelineItem[] {
+  const totalRecordedDuration = items.reduce(
+    (acc, it) => acc + (it.durationMs || 0),
+    0
+  );
+  if (
+    totalRecordedDuration === 0 &&
+    typeof msg.thinkingTime === 'number' &&
+    msg.thinkingTime > 0
+  ) {
+    const fallbackMs = Math.round(msg.thinkingTime * 1000);
+    const firstProc = items.find(
+      (it) => it.kind === 'tools' || it.kind === 'thought'
+    );
+    if (firstProc) {
+      firstProc.durationMs = fallbackMs;
+    }
+  }
+  return enforceThoughtBeforeText(items);
 }
 
 /**

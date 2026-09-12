@@ -232,19 +232,65 @@ export function formatDurationLabel(ms: number): string {
 }
 
 /**
+ * 过程段工具动作分类与数量描述（2026-09-11 用户裁决）。
+ *
+ * 针对非工作时间过程段（紧跟正文后的工具段），精准展示调用了多少工具、分别是什么类型。
+ * 格式示例：
+ *   - 纯命令：`已运行 5 条命令`
+ *   - 混合：`已搜索 2 次 · 已运行 10 条命令`
+ *   - 纯读取：`已读取 3 个文件`
+ *   - 纯思考：`思考`
+ */
+export function formatProcessActionsSummary(metrics: ProcessSegmentMetrics): string {
+  if (metrics.toolCount === 0 && metrics.thoughtCount > 0) {
+    return '思考';
+  }
+
+  const parts: string[] = [];
+  if (metrics.subagentCount > 0) {
+    parts.push(`已调用 ${metrics.subagentCount} 个子代理`);
+  }
+  if (metrics.searchCount > 0) {
+    parts.push(`已搜索 ${metrics.searchCount} 次`);
+  }
+  if (metrics.readFilesCount > 0) {
+    parts.push(`已读取 ${metrics.readFilesCount} 个文件`);
+  }
+  if (metrics.editFilesCount > 0) {
+    parts.push(`已编辑 ${metrics.editFilesCount} 个文件`);
+  }
+  if (metrics.commandCount > 0) {
+    parts.push(`已运行 ${metrics.commandCount} 条命令`);
+  }
+
+  if (parts.length > 0) {
+    return parts.join(' · ');
+  }
+
+  if (metrics.toolCount > 0) {
+    return `已运行 ${metrics.toolCount} 条命令`;
+  }
+
+  if (metrics.thoughtCount > 0) {
+    return '思考';
+  }
+
+  return '处理过程';
+}
+
+/**
  * 过程段折叠控制栏文案（SSOT，2026-09-11 用户裁决）。
  *
  * 【裁决要点】
- *   1. 「工作多少秒是在当前的『已深度思考』那里」——控制栏只承载**工作时间**；
- *   2. 「思考就是思考，没有已深度思考这一说」——`已深度思考` 文案被彻底废除；
- *   3. 运行中：跳秒（裸时长，无前缀）；终态：「工作 xx 时间」；
- *   4. 单思考 / 单工具调用段（`showWorkTime=false`）：不显示工作时间区域，
- *      退化为极简语义标签「思考」/「已运行 N 条命令」。
+ *   1. 顶部控制栏（紧跟用户消息下方）是整轮唯一承载**工作时间**的位置；
+ *   2. 运行中：跳秒（「正在处理 xx 时间」）；终态：「已完成 xx 时间」；
+ *   3. 后续工具段（`showWorkTime=false`）：展示调用了多少工具、分别是什么类型的描述（formatProcessActionsSummary）；
+ *   4. 「已深度思考」与「工作 xx 秒」文案被彻底废除。
  *
  * @param metrics         段聚合度量
- * @param showWorkTime 是否显示工作时间区域（thoughtCount + toolCount >= 2）
+ * @param showWorkTime 是否显示工作时间区域（整轮首个过程段为 true）
  * @param elapsedMs       已计算好的耗时毫秒
- * @param isLive          是否运行中（true → 跳秒，无「工作」前缀）
+ * @param isLive          是否运行中（true → 正在处理，false → 已完成）
  */
 export function formatProcessControlLabel(
   metrics: ProcessSegmentMetrics,
@@ -254,12 +300,10 @@ export function formatProcessControlLabel(
 ): string {
   if (showWorkTime) {
     const duration = formatDurationLabel(elapsedMs);
-    return isLive ? duration : `工作 ${duration}`;
+    return isLive ? `正在处理 ${duration}` : `已完成 ${duration}`;
   }
 
-  if (metrics.thoughtCount > 0) return '思考';
-  if (metrics.toolCount > 0) return `已运行 ${metrics.toolCount} 条命令`;
-  return '处理过程';
+  return formatProcessActionsSummary(metrics);
 }
 
 /**

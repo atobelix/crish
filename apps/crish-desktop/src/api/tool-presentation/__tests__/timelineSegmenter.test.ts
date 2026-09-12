@@ -70,31 +70,37 @@ describe('partitionTimelineSegments · 基础切割', () => {
     expect(segs[0]!.kind).toBe('text_narrative');
   });
 
-  it('多段交错：过程1 → 正文1 → 过程2 → 正文2 → 过程3', () => {
+  it('多阶段过程与中间说明正文统筹并列归入单一过程段，仅尾部正文作为最终答案', () => {
     const items: AssistantTimelineItem[] = [
       thought('t1'),
       tools('k1', ['read_file']),
-      text('x1'),
+      text('x1', '中间过渡正文1'),
       thought('t2'),
       tools('k2', ['grep_search', 'view_file']),
-      text('x2'),
+      text('x2', '中间过渡正文2'),
       tools('k3', ['run_command']),
+      text('x3', '最终总结汇报'),
     ];
     const segs = partitionTimelineSegments('m1', items, false, false);
 
     expect(segs.map((s) => s.kind)).toEqual([
       'process_section',
       'text_narrative',
-      'process_section',
-      'text_narrative',
-      'process_section',
     ]);
     expect(segs.map((s) => s.id)).toEqual([
       'm1-proc-0',
       'm1-text-0',
-      'm1-proc-1',
-      'm1-text-1',
-      'm1-proc-2',
+    ]);
+    // 过程段内包含 7 项：思考、工具、中间正文并列同级（对齐用户标注图二）
+    const procSeg = segs[0] as { items: AssistantTimelineItem[] };
+    expect(procSeg.items.map((it) => it.key)).toEqual([
+      't1',
+      'k1',
+      'x1',
+      't2',
+      'k2',
+      'x2',
+      'k3',
     ]);
   });
 
@@ -135,7 +141,6 @@ describe('partitionTimelineSegments · 铁律一（后继正文必折叠）', ()
       thought('t1'),
       tools('k1', ['read_file']),
       text('x1'),
-      tools('k2', ['run_command']),
     ];
     const segs = partitionTimelineSegments('m1', items, false, false);
     const mid = segs[0] as { foldable: boolean; defaultExpanded: boolean; forceExpanded: boolean };
@@ -148,8 +153,8 @@ describe('partitionTimelineSegments · 铁律一（后继正文必折叠）', ()
     const items: AssistantTimelineItem[] = [
       thought('t1'),
       tools('k1', ['read_file']),
-      text('x1'),
       tools('k2', ['run_command']),
+      text('x1'),
     ];
     const segs = partitionTimelineSegments('m1', items, true, true);
     const mid = segs[0] as { foldable: boolean; defaultExpanded: boolean; isLive: boolean };
@@ -262,7 +267,7 @@ describe('partitionTimelineSegments · 铁律四（子代理可见性特权）',
  * 顶部工作工作时间区显示门槛（用户裁决 · 2026-09-11）
  *   只有一个思考 或 只有一个工具调用 → 工作时间区域与分割线一律不显示
  * ═══════════════════════════════════════════════════════════════════════════ */
-describe('partitionTimelineSegments · 工作时间区显示门槛', () => {
+describe('partitionTimelineSegments · 工作时间区唯一位置（2026-09-11 用户裁决）', () => {
   function capsuleOf(items: AssistantTimelineItem[], isTurnLive = false) {
     const segs = partitionTimelineSegments('m1', items, isTurnLive, false);
     const seg = segs.find((s) => s.kind === 'process_section') as
@@ -271,28 +276,29 @@ describe('partitionTimelineSegments · 工作时间区显示门槛', () => {
     return seg;
   }
 
-  it('单一思考 → showWorkTime=false', () => {
-    expect(capsuleOf([thought('t1', 1000)])?.showWorkTime).toBe(false);
-  });
-
-  it('单一工具调用 → showWorkTime=false', () => {
-    expect(capsuleOf([tools('k1', ['read_file'])])?.showWorkTime).toBe(false);
-  });
-
-  it('思考 + 工具 → showWorkTime=true', () => {
+  it('首个过程段（紧跟用户消息下方）→ showWorkTime=true（整轮唯一工作时间）', () => {
+    // 无论是单一思考、单一工具、还是混合，首个过程段均承载整轮工作时间
+    expect(capsuleOf([thought('t1', 1000)])?.showWorkTime).toBe(true);
+    expect(capsuleOf([tools('k1', ['read_file'])])?.showWorkTime).toBe(true);
     expect(capsuleOf([thought('t1'), tools('k1', ['read_file'])])?.showWorkTime).toBe(true);
-  });
-
-  it('两个工具（同一 tools 项）→ showWorkTime=true', () => {
     expect(capsuleOf([tools('k1', ['read_file', 'grep_search'])])?.showWorkTime).toBe(true);
   });
 
-  it('负向断言：注入项不参与胶囊门槛计数（仅注入不产出过程段）', () => {
-    const segs = partitionTimelineSegments('m1', [injection('i1'), thought('t1')], false, false);
-    const proc = segs.find((s) => s.kind === 'process_section') as
-      | { showWorkTime: boolean }
-      | undefined;
-    expect(proc?.showWorkTime).toBe(false);
+  it('过程中间正文与后续工具统筹并入同个过程段，showWorkTime 恒为 true', () => {
+    const items: AssistantTimelineItem[] = [
+      thought('t1'),
+      text('x1', '回答中间过渡正文'),
+      tools('k1', ['run_command', 'run_command']),
+    ];
+    const segs = partitionTimelineSegments('m1', items, false, false);
+    const procSections = segs.filter((s) => s.kind === 'process_section') as Array<{
+      id: string;
+      showWorkTime: boolean;
+      items: AssistantTimelineItem[];
+    }>;
+    expect(procSections).toHaveLength(1);
+    expect(procSections[0]?.showWorkTime).toBe(true);
+    expect(procSections[0]?.items).toHaveLength(3);
   });
 
   it('段起止时间戳：终态取段内最早 / 最晚 startTime', () => {

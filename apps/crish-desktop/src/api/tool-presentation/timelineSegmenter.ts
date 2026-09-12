@@ -43,15 +43,6 @@ function isProcessItem(item: AssistantTimelineItem): boolean {
   return item.kind === 'thought' || item.kind === 'tools';
 }
 
-/**
- * 顶部「工作工作时间区 + 虚线分割」的显示门槛（用户裁决 · 2026-09-11）。
- *
- * 只有一个思考 或 只有一个工具调用时，工作时间区域与分割线一律不显示；
- * 计数之和 ≥ 2 才显示。
- */
-function shouldShowWorkTime(thoughtCount: number, toolCount: number): boolean {
-  return thoughtCount + toolCount >= 2;
-}
 
 /**
  * 判断正文项是否具备实际内容（空正文不作为有效界标）。
@@ -79,7 +70,64 @@ export function partitionTimelineSegments(
   let textIndex = 0;
   let stateIndex = 0;
 
-  /** 当前累积的过程项缓冲 */
+  // 预扫描整轮所有过程项（thought / tools），计算整轮总耗时与跨度
+  let turnStart: number | undefined;
+  let turnEnd: number | undefined;
+  let turnTotalDurationMs = 0;
+  for (const it of items) {
+    if (!isProcessItem(it)) continue;
+    const t = (it as { startTime?: number }).startTime;
+    if (typeof t === 'number' && t > 0) {
+      if (turnStart === undefined || t < turnStart) turnStart = t;
+      const d = (it as { durationMs?: number }).durationMs;
+      const end = typeof d === 'number' && d > 0 ? t + d : t;
+      if (turnEnd === undefined || end > turnEnd) turnEnd = end;
+    }
+    const d = (it as { durationMs?: number }).durationMs;
+    if (typeof d === 'number' && d > 0) {
+      turnTotalDurationMs += d;
+    }
+  }
+
+  // 定位整轮时间线中最后一个过程项（thought / tools）的索引
+  let lastProcessIdx = -1;
+  for (let i = items.length - 1; i >= 0; i--) {
+    if (isProcessItem(items[i]!)) {
+      lastProcessIdx = i;
+      break;
+    }
+  }
+
+  // 分支 1：整轮无任何过程产出（纯文本 / 状态通知，如问答直出）
+  if (lastProcessIdx === -1) {
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i]!;
+      if (item.kind === 'injection') {
+        segments.push({
+          kind: 'state_notice',
+          id: `${msgId}-state-${stateIndex++}`,
+          item,
+        });
+      } else if (item.kind === 'text') {
+        if (!hasTextContent(item)) continue;
+        const isFinalAnswer = !hasLaterText(items, i);
+        segments.push({
+          kind: 'text_narrative',
+          id: `${msgId}-text-${textIndex++}`,
+          item,
+          isFinalAnswer,
+          isStreaming: hasStreamText && isFinalAnswer && isTurnLive,
+        });
+      }
+    }
+    return segments;
+  }
+
+  // 分支 2：存在过程产出（思考 / 工具调用）
+  // 0 <= i <= lastProcessIdx 之间的所有项（思考、工具组、以及过程中的过渡说明正文）
+  // 统筹归入过程段；仅 lastProcessIdx 之后的正文项作为最终总结（isFinalAnswer）。
+  // 若遭遇 injection（系统状态通知），作为物理界标独立冲出 state_notice，绝不被折叠吞掉。
+
   let buffer: AssistantTimelineItem[] = [];
 
   const flushProcessBuffer = (hasNextText: boolean): void => {
@@ -125,38 +173,46 @@ export function partitionTimelineSegments(
       return;
     }
 
-    // 段起止时间戳。
-    //   segStart = 段内子项最早 startTime；
-    //   segEnd   = 段内子项「最晚物理终点」= max(startTime + durationMs)。
-    //
-    // 【关键口径】末点必须计入末项自身的执行时长。历史实现取 max(startTime)，
-    // 等价于把「最后一项的运行时长」整体抹掉 —— 双工具段会只显示首工具的耗时，
-    // 单工具段恒为 0。终态定格必须锚定物理终点，而非起点。
-    //
-    // 段处于 isLive 时：endTime 留空（运行中，控制栏跳秒）。
+    // 段起止时间戳
     let segStart: number | undefined;
     let segEnd: number | undefined;
-    for (const it of current) {
-      const t = (it as { startTime?: number }).startTime;
-      if (typeof t === 'number' && t > 0) {
-        if (segStart === undefined || t < segStart) segStart = t;
-        const d = (it as { durationMs?: number }).durationMs;
-        const end = typeof d === 'number' && d > 0 ? t + d : t;
-        if (segEnd === undefined || end > segEnd) segEnd = end;
-      }
-    }
-    if (!isLive) {
-      // 子项均无 startTime / 终点退化为起点时，用聚合总耗时兜底（禁止恒 0 假象）
-      if (
-        segStart !== undefined &&
-        (segEnd === undefined || segEnd <= segStart) &&
-        metrics.totalDurationMs > 0
-      ) {
-        segEnd = segStart + metrics.totalDurationMs;
+
+    if (procIndex === 0) {
+      segStart = turnStart;
+      if (!isLive) {
+        if (
+          segStart !== undefined &&
+          (turnEnd === undefined || turnEnd <= segStart) &&
+          turnTotalDurationMs > 0
+        ) {
+          segEnd = segStart + turnTotalDurationMs;
+        } else {
+          segEnd = turnEnd;
+        }
+      } else {
+        segEnd = undefined;
       }
     } else {
-      // 活跃态：endTime 必须为空
-      segEnd = undefined;
+      for (const it of current) {
+        const t = (it as { startTime?: number }).startTime;
+        if (typeof t === 'number' && t > 0) {
+          if (segStart === undefined || t < segStart) segStart = t;
+          const d = (it as { durationMs?: number }).durationMs;
+          const end = typeof d === 'number' && d > 0 ? t + d : t;
+          if (segEnd === undefined || end > segEnd) segEnd = end;
+        }
+      }
+      if (!isLive) {
+        if (
+          segStart !== undefined &&
+          (segEnd === undefined || segEnd <= segStart) &&
+          metrics.totalDurationMs > 0
+        ) {
+          segEnd = segStart + metrics.totalDurationMs;
+        }
+      } else {
+        segEnd = undefined;
+      }
     }
 
     const seg: ProcessTimelineSegment = {
@@ -166,7 +222,7 @@ export function partitionTimelineSegments(
       metrics,
       startTime: segStart,
       endTime: segEnd,
-      showWorkTime: shouldShowWorkTime(metrics.thoughtCount, metrics.toolCount),
+      showWorkTime: true,
       foldable,
       defaultExpanded,
       forceExpanded,
@@ -175,52 +231,60 @@ export function partitionTimelineSegments(
     segments.push(seg);
   };
 
-  for (let i = 0; i < items.length; i++) {
+  for (let i = 0; i <= lastProcessIdx; i++) {
     const item = items[i]!;
+
+    if (item.kind === 'injection') {
+      flushProcessBuffer(hasLaterText(items, i));
+      segments.push({
+        kind: 'state_notice',
+        id: `${msgId}-state-${stateIndex++}`,
+        item,
+      });
+      continue;
+    }
+
+    if (item.kind === 'text') {
+      if (!hasTextContent(item)) continue;
+      buffer.push(item);
+      continue;
+    }
 
     if (isProcessItem(item)) {
       buffer.push(item);
       continue;
     }
+  }
 
-    // 命中注入项：系统状态通知，作为物理界标冲掉前置过程段后本体常驻平铺
+  // 冲出过程缓冲：判断 lastProcessIdx 之后是否存在非空正文（最终总结）
+  const hasFinalText = hasLaterText(items, lastProcessIdx);
+  flushProcessBuffer(hasFinalText);
+
+  // 处理 lastProcessIdx 之后的项（最终总结正文与状态通知）
+  for (let i = lastProcessIdx + 1; i < items.length; i++) {
+    const item = items[i]!;
+
     if (item.kind === 'injection') {
-      flushProcessBuffer(hasLaterText(items, i));
-      const stateSeg: StateNoticeTimelineSegment = {
+      segments.push({
         kind: 'state_notice',
         id: `${msgId}-state-${stateIndex++}`,
         item,
-      };
-      segments.push(stateSeg);
+      });
       continue;
     }
 
-    // 命中正文项：作为物理界标，先冲掉前置过程段
     if (item.kind === 'text') {
-      if (!hasTextContent(item)) {
-        // 空正文不构成界标，但也不吞掉它（交由宿主渲染层决定是否显示）
-        continue;
-      }
-
-      // 判断该正文之后是否还有正文（用于 isFinalAnswer 与铁律一的 hasNextText）
+      if (!hasTextContent(item)) continue;
       const isFinalAnswer = !hasLaterText(items, i);
-
-      // 冲掉缓冲：此正文是其后继，故 hasNextText = true（铁律一）
-      flushProcessBuffer(true);
-
-      const textSeg: TextTimelineSegment = {
+      segments.push({
         kind: 'text_narrative',
         id: `${msgId}-text-${textIndex++}`,
         item,
         isFinalAnswer,
         isStreaming: hasStreamText && isFinalAnswer && isTurnLive,
-      };
-      segments.push(textSeg);
+      });
     }
   }
-
-  // 收尾：尾部残留过程段（无后继正文）
-  flushProcessBuffer(false);
 
   return segments;
 }
