@@ -96,10 +96,16 @@ pub struct LocalDb {
 /// （03-方案-书签历史入conex-db目标表 §3.2，纯建表 + 索引，零既有列改动）；
 /// v9：events 补 run_id 列 + idx_events_run 索引、session_agents 补 sub_session_id 列；
 /// v10：新增 usage_records 时序流水表及 4 组复合时序索引（用量监控系统全链路移植）；
-/// v11：新增 app_preferences 偏好存储表（设计Token与偏好SSOT端到端重构 B1）。
-pub const LATEST_VERSION: u32 = 11;
+/// v11：新增 app_preferences 偏好存储表（设计Token与偏好SSOT端到端重构 B1）；
+/// v12：DROP session_messages 双触发器 + sessions.body_version CAS 列 +
+/// idx_events_session_type / idx_sessions_updated（D3 写单轨：批末重算 message_count）。
+pub const LATEST_VERSION: u32 = 12;
 /// session_meta 中登记的 schema 版本字符串（与 PRAGMA user_version 保持一致）。
-pub const SCHEMA_VERSION_STRING: &str = "11";
+pub const SCHEMA_VERSION_STRING: &str = "12";
+/// 写连接 PRAGMA cache_size（负值 = KiB；写侧 8 MiB，D0 预算源命名常量）。
+pub const WRITE_CONN_CACHE_SIZE_KIB: i64 = -8000;
+/// 读连接 PRAGMA cache_size（负值 = KiB；读侧 4 MiB）。
+pub const READER_CONN_CACHE_SIZE_KIB: i64 = -4000;
 /// 孤儿会话宽限期（毫秒）：updated_at 距今小于该值的会话不被清理（PE-08 T08.2）。
 pub const ORPHAN_GRACE_MS: i64 = 300_000;
 /// session_meta 中可配宽限期的键。
@@ -118,19 +124,28 @@ impl LocalDb {
         })?;
         let _ = conn.busy_timeout(std::time::Duration::from_millis(5000));
 
-        // 启用 WAL 模式优化与 busy_timeout
-        let _ = conn.execute_batch(
-            "PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA busy_timeout = 5000;",
-        );
+        // 主连接：FK ON + WAL + NORMAL + busy_timeout + cache_size（读者侧）
+        let _ = conn.execute_batch(&format!(
+            "PRAGMA foreign_keys = ON;
+             PRAGMA journal_mode = WAL;
+             PRAGMA synchronous = NORMAL;
+             PRAGMA busy_timeout = 5000;
+             PRAGMA cache_size = {READER_CONN_CACHE_SIZE_KIB};"
+        ));
 
         let write_conn = Connection::open(path_ref).map_err(|e| DbFailure {
             message: format!("failed to open writer database: {e}"),
             kind: DbFailureKind::Open,
         })?;
         let _ = write_conn.busy_timeout(std::time::Duration::from_millis(5000));
-        let _ = write_conn.execute_batch(
-            "PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA busy_timeout = 5000;",
-        );
+        // 写连接：spawn 前必须 FK ON（否则组提交 Actor 上 FK 级联失效，05-S2）
+        let _ = write_conn.execute_batch(&format!(
+            "PRAGMA foreign_keys = ON;
+             PRAGMA journal_mode = WAL;
+             PRAGMA synchronous = NORMAL;
+             PRAGMA busy_timeout = 5000;
+             PRAGMA cache_size = {WRITE_CONN_CACHE_SIZE_KIB};"
+        ));
         let writer = DbWriteHandle::spawn(write_conn, GroupCommitConfig::default());
 
         let reader_pool = match ReaderPool::open(path_ref, ReaderPoolConfig::default()) {
@@ -156,20 +171,41 @@ impl LocalDb {
     }
 
     /// Open an in-memory database (for testing).
+    ///
+    /// 主连接与 Writer 共享同一 shared-cache 内存库（`file:...?mode=memory&cache=shared`），
+    /// 保证组提交 Actor 写入对读路径 / 主连接可见（此前两个独立 `:memory:` 库
+    /// 互不可见——写 Actor 形同虚设，属既有半接线缺陷）。
     pub fn open_in_memory() -> Result<Self, DbFailure> {
-        let conn = Connection::open_in_memory().map_err(|e| DbFailure {
+        use rusqlite::OpenFlags;
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static MEM_SEQ: AtomicU64 = AtomicU64::new(0);
+        let seq = MEM_SEQ.fetch_add(1, Ordering::Relaxed);
+        let uri = format!(
+            "file:conex_mem_{}_{seq}?mode=memory&cache=shared",
+            std::process::id()
+        );
+        let flags = OpenFlags::SQLITE_OPEN_URI
+            | OpenFlags::SQLITE_OPEN_READ_WRITE
+            | OpenFlags::SQLITE_OPEN_CREATE;
+        let conn = Connection::open_with_flags(&uri, flags).map_err(|e| DbFailure {
             message: format!("failed to open in-memory database: {e}"),
             kind: DbFailureKind::Open,
         })?;
         let _ = conn.busy_timeout(std::time::Duration::from_millis(5000));
-        let _ = conn.execute_batch("PRAGMA busy_timeout = 5000;");
+        let _ = conn.execute_batch(
+            "PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;
+             PRAGMA cache_size = -4000;",
+        );
 
-        let writer_conn = Connection::open_in_memory().map_err(|e| DbFailure {
+        let writer_conn = Connection::open_with_flags(&uri, flags).map_err(|e| DbFailure {
             message: format!("failed to open in-memory writer: {e}"),
             kind: DbFailureKind::Open,
         })?;
         let _ = writer_conn.busy_timeout(std::time::Duration::from_millis(5000));
-        let _ = writer_conn.execute_batch("PRAGMA busy_timeout = 5000;");
+        let _ = writer_conn.execute_batch(
+            "PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;
+             PRAGMA cache_size = -8000;",
+        );
         let writer = DbWriteHandle::spawn(writer_conn, GroupCommitConfig::default());
 
         let reader_pool = Arc::new(ReaderPool::from_connections(
@@ -218,6 +254,22 @@ impl LocalDb {
         R: Send + 'static,
     {
         self.writer.write(f).await
+    }
+
+    /// 阻塞写桥（同步域方法改道组提交 Writer）。
+    ///
+    /// 域方法保持同步签名，内部 oneshot 等待 `writer.write_blocking` 批提交结果。
+    /// **必须**在非 async 上下文调用（`spawn_blocking` 线程 / 普通测试线程）；
+    /// async 上下文请先 `tokio::task::spawn_blocking`。
+    ///
+    /// 注意：写闭包运行于组提交 Actor 的 `BEGIN IMMEDIATE` 事务内，
+    /// 闭包内**禁止**再开 `transaction()` / `BEGIN`（会嵌套失败）。
+    pub fn write_blocking<F, R>(&self, f: F) -> Result<R, DbFailure>
+    where
+        F: FnOnce(&mut Connection) -> Result<R, DbFailure> + Send + 'static,
+        R: Send + 'static,
+    {
+        self.writer.write_blocking(f)
     }
 
     /// 只读查询（优先调度至 ReaderPool 8 槽位无锁并发读取，无池时平滑回退主连接）

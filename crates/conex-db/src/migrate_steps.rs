@@ -478,3 +478,48 @@ pub(crate) fn step_10_to_11(tx: &rusqlite::Transaction<'_>) -> Result<(), rusqli
 pub(crate) fn migrate_v10_to_v11(tx: &rusqlite::Transaction<'_>) -> Result<(), rusqlite::Error> {
     step_10_to_11(tx)
 }
+
+/// v11 → v12：SQLite 写单轨配套迁移（D3-4 / D3-5）。
+///
+/// - DROP `trg_session_messages_insert` / `trg_session_messages_delete`
+///   （message_count 改由 `save_session_body` 批末单次重算，禁止双轨）；
+/// - `sessions` 补 `body_version INTEGER NOT NULL DEFAULT 0`（CAS 锚点）；
+/// - 新建 `idx_events_session_type` / `idx_sessions_updated`（D3-5）。
+/// 纯 DDL + ADD COLUMN（无表重建；对齐 v5–v11 无 DROP TABLE 策略）。
+pub(crate) fn step_11_to_12(tx: &rusqlite::Transaction<'_>) -> Result<(), rusqlite::Error> {
+    // DROP 双触发器（幂等；旧库可能有，新库无）
+    tx.execute_batch(
+        "DROP TRIGGER IF EXISTS trg_session_messages_insert;
+         DROP TRIGGER IF EXISTS trg_session_messages_delete;",
+    )?;
+
+    // sessions.body_version（col-check 幂等）
+    let cols = table_columns(tx, "sessions")?;
+    if !cols.iter().any(|c| c == "body_version") {
+        tx.execute_batch(
+            "ALTER TABLE sessions ADD COLUMN body_version INTEGER NOT NULL DEFAULT 0;",
+        )?;
+    }
+
+    // D3-5 索引（IF NOT EXISTS 幂等；events 缺表时跳过——对齐 v9 col-check 幂等模式，
+    // 旧 fixture / 残缺库不因缺表迁移崩溃）
+    let has_events: i64 = tx.query_row(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='events'",
+        [],
+        |r| r.get(0),
+    )?;
+    if has_events > 0 {
+        tx.execute_batch(
+            "CREATE INDEX IF NOT EXISTS idx_events_session_type ON events(session_id, event_type, sequence);",
+        )?;
+    }
+    tx.execute_batch(
+        "CREATE INDEX IF NOT EXISTS idx_sessions_updated ON sessions(updated_at, id);",
+    )?;
+    Ok(())
+}
+
+#[allow(dead_code)]
+pub(crate) fn migrate_v11_to_v12(tx: &rusqlite::Transaction<'_>) -> Result<(), rusqlite::Error> {
+    step_11_to_12(tx)
+}

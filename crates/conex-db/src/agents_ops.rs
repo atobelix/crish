@@ -24,17 +24,21 @@ impl LocalDb {
         status: &str,
         ended_at: Option<i64>,
     ) -> Result<usize, DbFailure> {
-        let conn = self.conn.lock().map_err(|e| DbFailure {
-            message: format!("lock poisoned: {e}"),
-            kind: DbFailureKind::Lock,
-        })?;
-        conn.execute(
-            "UPDATE session_agents
-             SET status = ?3, ended_at = COALESCE(ended_at, ?4)
-             WHERE session_id = ?1 AND subagent_run_id = ?2",
-            rusqlite::params![session_id, subagent_run_id, status, ended_at],
-        )
-        .map_err(|e| self.latch_error("update_session_agent_status", e))
+        let session_id = session_id.to_string();
+        let subagent_run_id = subagent_run_id.to_string();
+        let status = status.to_string();
+        self.write_blocking(move |conn| {
+            conn.execute(
+                "UPDATE session_agents
+                 SET status = ?3, ended_at = COALESCE(ended_at, ?4)
+                 WHERE session_id = ?1 AND subagent_run_id = ?2",
+                rusqlite::params![session_id, subagent_run_id, status, ended_at],
+            )
+            .map_err(|e| DbFailure {
+                message: format!("update_session_agent_status: {e}"),
+                kind: DbFailureKind::Other("update_session_agent_status".to_string()),
+            })
+        })
     }
 
     /// 单行更新 subagent_path_json（set_subagent_path 用）。
@@ -47,17 +51,21 @@ impl LocalDb {
         subagent_run_id: &str,
         path_json: &str,
     ) -> Result<usize, DbFailure> {
-        let conn = self.conn.lock().map_err(|e| DbFailure {
-            message: format!("lock poisoned: {e}"),
-            kind: DbFailureKind::Lock,
-        })?;
-        conn.execute(
-            "UPDATE session_agents
-             SET subagent_path_json = ?3
-             WHERE session_id = ?1 AND subagent_run_id = ?2",
-            rusqlite::params![session_id, subagent_run_id, path_json],
-        )
-        .map_err(|e| self.latch_error("update_session_agent_path", e))
+        let session_id = session_id.to_string();
+        let subagent_run_id = subagent_run_id.to_string();
+        let path_json = path_json.to_string();
+        self.write_blocking(move |conn| {
+            conn.execute(
+                "UPDATE session_agents
+                 SET subagent_path_json = ?3
+                 WHERE session_id = ?1 AND subagent_run_id = ?2",
+                rusqlite::params![session_id, subagent_run_id, path_json],
+            )
+            .map_err(|e| DbFailure {
+                message: format!("update_session_agent_path: {e}"),
+                kind: DbFailureKind::Other("update_session_agent_path".to_string()),
+            })
+        })
     }
 
     /// 单行 upsert（spawn 落库用）。全 18 列 `INSERT ... ON CONFLICT(session_id,
@@ -69,58 +77,60 @@ impl LocalDb {
     /// PK 冲突会删除旧行并触发 session_agent_messages 的 FK 级联清空该 agent
     /// 全部消息；ON CONFLICT DO UPDATE 保留旧行与 messages。
     pub fn upsert_session_agent(&self, row: &SessionAgent) -> Result<(), DbFailure> {
-        let conn = self.conn.lock().map_err(|e| DbFailure {
-            message: format!("lock poisoned: {e}"),
-            kind: DbFailureKind::Lock,
-        })?;
-        conn.execute(
-            "INSERT INTO session_agents (
-                session_id, agent_id, subagent_run_id, parent_session_id, parent_run_id,
-                parent_tool_call_id, description, mode, status, summary,
-                started_at, ended_at, depth, subagent_path_json,
-                task_type, display_label, allowed_write_paths_json,
-                sub_session_id
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)
-            ON CONFLICT(session_id, agent_id) DO UPDATE SET
-                subagent_run_id = excluded.subagent_run_id,
-                parent_session_id = excluded.parent_session_id,
-                parent_run_id = excluded.parent_run_id,
-                parent_tool_call_id = excluded.parent_tool_call_id,
-                description = excluded.description,
-                mode = excluded.mode,
-                status = excluded.status,
-                summary = excluded.summary,
-                started_at = excluded.started_at,
-                ended_at = excluded.ended_at,
-                depth = excluded.depth,
-                subagent_path_json = excluded.subagent_path_json,
-                task_type = excluded.task_type,
-                display_label = excluded.display_label,
-                allowed_write_paths_json = excluded.allowed_write_paths_json,
-                sub_session_id = excluded.sub_session_id",
-            rusqlite::params![
-                row.parent_session_id,
-                row.id,
-                row.subagent_run_id,
-                row.parent_session_id,
-                row.parent_run_id,
-                row.parent_tool_call_id,
-                row.description,
-                row.mode,
-                row.status,
-                row.summary,
-                row.started_at,
-                row.ended_at,
-                row.depth,
-                row.subagent_path_json,
-                row.task_type,
-                row.display_label,
-                row.allowed_write_paths_json,
-                row.sub_session_id.clone().unwrap_or_default(),
-            ],
-        )
-        .map_err(|e| self.latch_error("upsert_session_agent", e))?;
-        Ok(())
+        let row = row.clone();
+        self.write_blocking(move |conn| {
+            conn.execute(
+                "INSERT INTO session_agents (
+                    session_id, agent_id, subagent_run_id, parent_session_id, parent_run_id,
+                    parent_tool_call_id, description, mode, status, summary,
+                    started_at, ended_at, depth, subagent_path_json,
+                    task_type, display_label, allowed_write_paths_json,
+                    sub_session_id
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)
+                ON CONFLICT(session_id, agent_id) DO UPDATE SET
+                    subagent_run_id = excluded.subagent_run_id,
+                    parent_session_id = excluded.parent_session_id,
+                    parent_run_id = excluded.parent_run_id,
+                    parent_tool_call_id = excluded.parent_tool_call_id,
+                    description = excluded.description,
+                    mode = excluded.mode,
+                    status = excluded.status,
+                    summary = excluded.summary,
+                    started_at = excluded.started_at,
+                    ended_at = excluded.ended_at,
+                    depth = excluded.depth,
+                    subagent_path_json = excluded.subagent_path_json,
+                    task_type = excluded.task_type,
+                    display_label = excluded.display_label,
+                    allowed_write_paths_json = excluded.allowed_write_paths_json,
+                    sub_session_id = excluded.sub_session_id",
+                rusqlite::params![
+                    row.parent_session_id,
+                    row.id,
+                    row.subagent_run_id,
+                    row.parent_session_id,
+                    row.parent_run_id,
+                    row.parent_tool_call_id,
+                    row.description,
+                    row.mode,
+                    row.status,
+                    row.summary,
+                    row.started_at,
+                    row.ended_at,
+                    row.depth,
+                    row.subagent_path_json,
+                    row.task_type,
+                    row.display_label,
+                    row.allowed_write_paths_json,
+                    row.sub_session_id.clone().unwrap_or_default(),
+                ],
+            )
+            .map_err(|e| DbFailure {
+                message: format!("upsert_session_agent: {e}"),
+                kind: DbFailureKind::Other("upsert_session_agent".to_string()),
+            })?;
+            Ok(())
+        })
     }
 }
 

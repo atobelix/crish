@@ -185,93 +185,94 @@ impl LocalDb {
         Ok(messages)
     }
 
-    /// 全量保存会话的协作子 agent（先删后插，事务原子）。
+    /// 全量保存会话的协作子 agent（先删后插）。经组提交 Writer
+    /// （外层 Actor `BEGIN IMMEDIATE` 事务原子；闭包内不开嵌套 transaction）。
     pub fn save_session_agents(
         &self,
         session_id: &str,
         agents: &[SessionAgent],
     ) -> Result<(), DbFailure> {
-        let mut conn = self.conn.lock().map_err(|e| DbFailure {
-            message: format!("lock poisoned: {e}"),
-            kind: DbFailureKind::Lock,
-        })?;
-
-        let tx = conn
-            .transaction()
-            .map_err(|e| self.latch_error("save_session_agents_tx", e))?;
-
-        // 级联 FK 会自动清理 session_agent_messages
-        tx.execute(
-            "DELETE FROM session_agents WHERE session_id = ?1",
-            rusqlite::params![session_id],
-        )
-        .map_err(|e| self.latch_error("save_session_agents_delete", e))?;
-
-        for agent in agents {
-            tx.execute(
-                "INSERT INTO session_agents (
-                    session_id, agent_id, subagent_run_id, parent_session_id, parent_run_id,
-                    parent_tool_call_id, description, mode, status, summary,
-                    started_at, ended_at, depth, subagent_path_json,
-                    task_type, display_label, allowed_write_paths_json,
-                    sub_session_id
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
-                rusqlite::params![
-                    session_id,
-                    agent.id,
-                    agent.subagent_run_id,
-                    agent.parent_session_id,
-                    agent.parent_run_id,
-                    agent.parent_tool_call_id,
-                    agent.description,
-                    agent.mode,
-                    agent.status,
-                    agent.summary,
-                    agent.started_at,
-                    agent.ended_at,
-                    agent.depth,
-                    agent.subagent_path_json,
-                    agent.task_type,
-                    agent.display_label,
-                    agent.allowed_write_paths_json,
-                    agent.sub_session_id.clone().unwrap_or_default(),
-                ],
+        let session_id = session_id.to_string();
+        let agents = agents.to_vec();
+        self.write_blocking(move |conn| {
+            // 级联 FK 会自动清理 session_agent_messages
+            conn.execute(
+                "DELETE FROM session_agents WHERE session_id = ?1",
+                rusqlite::params![session_id],
             )
-            .map_err(|e| self.latch_error("save_session_agents_insert", e))?;
+            .map_err(|e| DbFailure {
+                message: format!("save_session_agents_delete: {e}"),
+                kind: DbFailureKind::Other("save_session_agents".to_string()),
+            })?;
 
-            for (seq, msg) in agent.messages.iter().enumerate() {
-                let seq_i64 = seq as i64;
-                tx.execute(
-                    "INSERT INTO session_agent_messages (
-                        session_id, agent_id, seq, id, sender, text, thinking, timestamp, status,
-                        stream_text_offset, thinking_time, tool_calls_json,
-                        blocks_json, tool_call_results_json
-                    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+            for agent in &agents {
+                conn.execute(
+                    "INSERT INTO session_agents (
+                        session_id, agent_id, subagent_run_id, parent_session_id, parent_run_id,
+                        parent_tool_call_id, description, mode, status, summary,
+                        started_at, ended_at, depth, subagent_path_json,
+                        task_type, display_label, allowed_write_paths_json,
+                        sub_session_id
+                    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
                     rusqlite::params![
                         session_id,
                         agent.id,
-                        seq_i64,
-                        msg.id,
-                        msg.sender,
-                        msg.text,
-                        msg.thinking,
-                        msg.timestamp,
-                        msg.status,
-                        msg.stream_text_offset,
-                        msg.thinking_time,
-                        msg.tool_calls_json,
-                        msg.blocks_json,
-                        msg.tool_call_results_json,
+                        agent.subagent_run_id,
+                        agent.parent_session_id,
+                        agent.parent_run_id,
+                        agent.parent_tool_call_id,
+                        agent.description,
+                        agent.mode,
+                        agent.status,
+                        agent.summary,
+                        agent.started_at,
+                        agent.ended_at,
+                        agent.depth,
+                        agent.subagent_path_json,
+                        agent.task_type,
+                        agent.display_label,
+                        agent.allowed_write_paths_json,
+                        agent.sub_session_id.clone().unwrap_or_default(),
                     ],
                 )
-                .map_err(|e| self.latch_error("save_session_agents_msg_insert", e))?;
+                .map_err(|e| DbFailure {
+                    message: format!("save_session_agents_insert: {e}"),
+                    kind: DbFailureKind::Other("save_session_agents".to_string()),
+                })?;
+
+                for (seq, msg) in agent.messages.iter().enumerate() {
+                    let seq_i64 = seq as i64;
+                    conn.execute(
+                        "INSERT INTO session_agent_messages (
+                            session_id, agent_id, seq, id, sender, text, thinking, timestamp, status,
+                            stream_text_offset, thinking_time, tool_calls_json,
+                            blocks_json, tool_call_results_json
+                        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+                        rusqlite::params![
+                            session_id,
+                            agent.id,
+                            seq_i64,
+                            msg.id,
+                            msg.sender,
+                            msg.text,
+                            msg.thinking,
+                            msg.timestamp,
+                            msg.status,
+                            msg.stream_text_offset,
+                            msg.thinking_time,
+                            msg.tool_calls_json,
+                            msg.blocks_json,
+                            msg.tool_call_results_json,
+                        ],
+                    )
+                    .map_err(|e| DbFailure {
+                        message: format!("save_session_agents_msg_insert: {e}"),
+                        kind: DbFailureKind::Other("save_session_agents".to_string()),
+                    })?;
+                }
             }
-        }
-
-        tx.commit()
-            .map_err(|e| self.latch_error("save_session_agents_commit", e))?;
-
-        Ok(())
+            Ok(())
+        })
     }
 }
 

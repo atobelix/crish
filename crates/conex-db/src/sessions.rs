@@ -13,19 +13,20 @@ impl LocalDb {
     /// 宽限期形同虚设，boot 窗口的 keepIds 缺失会直接命中这些行。
     /// 现在自愈行与普通行一样享受宽限期保护。
     pub fn insert_session(&self, id: &str, title: &str) -> Result<(), DbFailure> {
-        let conn = self.conn.lock().map_err(|e| DbFailure {
-            message: format!("lock poisoned: {e}"),
-            kind: DbFailureKind::Lock,
-        })?;
-
-        conn.execute(
-            "INSERT OR IGNORE INTO sessions (id, title, updated_at)
-             VALUES (?1, ?2, strftime('%s','now') * 1000)",
-            rusqlite::params![id, title],
-        )
-        .map_err(|e| self.latch_error("insert_session", e))?;
-
-        Ok(())
+        let id = id.to_string();
+        let title = title.to_string();
+        self.write_blocking(move |conn| {
+            conn.execute(
+                "INSERT OR IGNORE INTO sessions (id, title, updated_at)
+                 VALUES (?1, ?2, strftime('%s','now') * 1000)",
+                rusqlite::params![id, title],
+            )
+            .map_err(|e| DbFailure {
+                message: format!("insert_session: {e}"),
+                kind: DbFailureKind::Other("insert_session".to_string()),
+            })?;
+            Ok(())
+        })
     }
 
     // ===== Stream B: Session 持久化方法 =====
@@ -33,53 +34,53 @@ impl LocalDb {
     /// 幂等写入会话索引条目。
     /// 使用 `ON CONFLICT DO UPDATE` 而非 `INSERT OR REPLACE`，避免触发
     /// `ON DELETE CASCADE` 误删 session_messages / session_agents。
-    /// `message_count` / `created_at` 不被覆盖（由触发器 / 创建时维护）。
+    /// `message_count` / `created_at` 不被覆盖（由 save_session_body 批末重算维护）。
     pub fn upsert_session_entry(&self, entry: &SessionIndexEntry) -> Result<(), DbFailure> {
-        let conn = self.conn.lock().map_err(|e| DbFailure {
-            message: format!("lock poisoned: {e}"),
-            kind: DbFailureKind::Lock,
-        })?;
+        let entry = entry.clone();
+        self.write_blocking(move |conn| {
+            let is_pinned: i64 = entry.is_pinned.into();
+            let is_archived: i64 = entry.is_archived.into();
+            let hydrated: Option<i64> = entry.hydrated_from_engine.map(|b| b.into());
 
-        let is_pinned: i64 = entry.is_pinned.into();
-        let is_archived: i64 = entry.is_archived.into();
-        let hydrated: Option<i64> = entry.hydrated_from_engine.map(|b| b.into());
-
-        conn.execute(
-            "INSERT INTO sessions (
-                id, title, folder, is_pinned, is_archived, branch_parent_id,
-                timestamp, updated_at, pinned_message_ids,
-                engine_cursor, engine_last_run_id, hydrated_from_engine
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
-            ON CONFLICT(id) DO UPDATE SET
-                title = excluded.title,
-                folder = excluded.folder,
-                is_pinned = excluded.is_pinned,
-                is_archived = excluded.is_archived,
-                branch_parent_id = excluded.branch_parent_id,
-                timestamp = excluded.timestamp,
-                updated_at = excluded.updated_at,
-                pinned_message_ids = excluded.pinned_message_ids,
-                engine_cursor = excluded.engine_cursor,
-                engine_last_run_id = excluded.engine_last_run_id,
-                hydrated_from_engine = excluded.hydrated_from_engine",
-            rusqlite::params![
-                entry.id,
-                entry.title,
-                entry.folder,
-                is_pinned,
-                is_archived,
-                entry.branch_parent_id,
-                entry.timestamp,
-                entry.updated_at,
-                entry.pinned_message_ids,
-                entry.engine_cursor,
-                entry.engine_last_run_id,
-                hydrated,
-            ],
-        )
-        .map_err(|e| self.latch_error("upsert_session_entry", e))?;
-
-        Ok(())
+            conn.execute(
+                "INSERT INTO sessions (
+                    id, title, folder, is_pinned, is_archived, branch_parent_id,
+                    timestamp, updated_at, pinned_message_ids,
+                    engine_cursor, engine_last_run_id, hydrated_from_engine
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+                ON CONFLICT(id) DO UPDATE SET
+                    title = excluded.title,
+                    folder = excluded.folder,
+                    is_pinned = excluded.is_pinned,
+                    is_archived = excluded.is_archived,
+                    branch_parent_id = excluded.branch_parent_id,
+                    timestamp = excluded.timestamp,
+                    updated_at = excluded.updated_at,
+                    pinned_message_ids = excluded.pinned_message_ids,
+                    engine_cursor = excluded.engine_cursor,
+                    engine_last_run_id = excluded.engine_last_run_id,
+                    hydrated_from_engine = excluded.hydrated_from_engine",
+                rusqlite::params![
+                    entry.id,
+                    entry.title,
+                    entry.folder,
+                    is_pinned,
+                    is_archived,
+                    entry.branch_parent_id,
+                    entry.timestamp,
+                    entry.updated_at,
+                    entry.pinned_message_ids,
+                    entry.engine_cursor,
+                    entry.engine_last_run_id,
+                    hydrated,
+                ],
+            )
+            .map_err(|e| DbFailure {
+                message: format!("upsert_session_entry: {e}"),
+                kind: DbFailureKind::Other("upsert_session_entry".to_string()),
+            })?;
+            Ok(())
+        })
     }
 
     /// 列出所有会话索引条目，按 `updated_at` 降序（最近更新在前）。
@@ -127,18 +128,18 @@ impl LocalDb {
 
     /// 删除会话（级联删除 messages / agents / agent_messages，由 ON DELETE CASCADE 保证）。
     pub fn delete_session(&self, session_id: &str) -> Result<(), DbFailure> {
-        let conn = self.conn.lock().map_err(|e| DbFailure {
-            message: format!("lock poisoned: {e}"),
-            kind: DbFailureKind::Lock,
-        })?;
-
-        conn.execute(
-            "DELETE FROM sessions WHERE id = ?1",
-            rusqlite::params![session_id],
-        )
-        .map_err(|e| self.latch_error("delete_session", e))?;
-
-        Ok(())
+        let session_id = session_id.to_string();
+        self.write_blocking(move |conn| {
+            conn.execute(
+                "DELETE FROM sessions WHERE id = ?1",
+                rusqlite::params![session_id],
+            )
+            .map_err(|e| DbFailure {
+                message: format!("delete_session: {e}"),
+                kind: DbFailureKind::Other("delete_session".to_string()),
+            })?;
+            Ok(())
+        })
     }
 
     /// 读取会话级元数据键。
@@ -158,54 +159,59 @@ impl LocalDb {
         })
     }
 
-    /// 写入会话级元数据键（幂等 upsert）。
+    /// 写入会话级元数据键（幂等 upsert）。经组提交 Writer。
     pub fn set_session_meta(&self, key: &str, value: &str) -> Result<(), DbFailure> {
-        let conn = self.conn.lock().map_err(|e| DbFailure {
-            message: format!("lock poisoned: {e}"),
-            kind: DbFailureKind::Lock,
-        })?;
-
-        conn.execute(
-            "INSERT INTO session_meta (key, value) VALUES (?1, ?2)
-             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-            rusqlite::params![key, value],
-        )
-        .map_err(|e| self.latch_error("set_session_meta", e))?;
-
-        Ok(())
+        let key = key.to_string();
+        let value = value.to_string();
+        self.write_blocking(move |conn| {
+            conn.execute(
+                "INSERT INTO session_meta (key, value) VALUES (?1, ?2)
+                 ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                rusqlite::params![key, value],
+            )
+            .map_err(|e| DbFailure {
+                message: format!("set_session_meta: {e}"),
+                kind: DbFailureKind::Other("set_session_meta".to_string()),
+            })?;
+            Ok(())
+        })
     }
 
-    /// 会话级元数据原子更新（单次锁内读改写；F3 #9 配额 try_consume 用）——
-    /// 并发调用序列化于连接互斥，compare-and-consume 原子生效。
+    /// 会话级元数据原子更新（单写闭包内读改写；F3 #9 配额 try_consume 用）——
+    /// 并发调用序列化于组提交 Actor 单写事务，compare-and-consume 原子生效。
     /// 返回写入的新值；`update` 返回 None = 更新被拒绝（未写入）。
     pub fn update_session_meta<F>(&self, key: &str, update: F) -> Result<Option<String>, DbFailure>
     where
-        F: FnOnce(Option<&str>) -> Option<String>,
+        F: FnOnce(Option<&str>) -> Option<String> + Send + 'static,
     {
-        let conn = self.conn.lock().map_err(|e| DbFailure {
-            message: format!("lock poisoned: {e}"),
-            kind: DbFailureKind::Lock,
-        })?;
+        let key = key.to_string();
+        self.write_blocking(move |conn| {
+            let current = conn
+                .query_row(
+                    "SELECT value FROM session_meta WHERE key = ?1",
+                    rusqlite::params![key],
+                    |row| row.get::<_, String>(0),
+                )
+                .optional()
+                .map_err(|e| DbFailure {
+                    message: format!("get_session_meta_row: {e}"),
+                    kind: DbFailureKind::Other("update_session_meta".to_string()),
+                })?;
 
-        let current = conn
-            .query_row(
-                "SELECT value FROM session_meta WHERE key = ?1",
-                rusqlite::params![key],
-                |row| row.get::<_, String>(0),
+            let Some(new_value) = update(current.as_deref()) else {
+                return Ok(None);
+            };
+            conn.execute(
+                "INSERT INTO session_meta (key, value) VALUES (?1, ?2)
+                 ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                rusqlite::params![key, new_value],
             )
-            .optional()
-            .map_err(|e| self.latch_error("get_session_meta_row", e))?;
-
-        let Some(new_value) = update(current.as_deref()) else {
-            return Ok(None);
-        };
-        conn.execute(
-            "INSERT INTO session_meta (key, value) VALUES (?1, ?2)
-             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-            rusqlite::params![key, new_value],
-        )
-        .map_err(|e| self.latch_error("update_session_meta", e))?;
-        Ok(Some(new_value))
+            .map_err(|e| DbFailure {
+                message: format!("update_session_meta: {e}"),
+                kind: DbFailureKind::Other("update_session_meta".to_string()),
+            })?;
+            Ok(Some(new_value))
+        })
     }
 
     /// 清理不在 `active_ids` 中的会话（孤儿清理）。
@@ -232,6 +238,8 @@ impl LocalDb {
     /// 空 keepIds 的显式清空语义由壳层守卫（guard_cleanup_keep + confirm_empty）
     /// 把关；库层对空 keepIds 仍执行上述护栏 + 宽限期保护。
     pub fn cleanup_orphan_sessions(&self, active_ids: &[String]) -> Result<usize, DbFailure> {
+        // D3 豁免：跨表不变量（sessions + runs + pending_inputs COUNT 前后对比）
+        // 保留主连接事务路径——不与组提交 Writer 抢锁形态。
         let mut conn = self.conn.lock().map_err(|e| DbFailure {
             message: format!("lock poisoned: {e}"),
             kind: DbFailureKind::Lock,
@@ -315,19 +323,19 @@ impl LocalDb {
         Ok((total_before - total_after) as usize)
     }
 
-    /// 更新会话的 `updated_at` 为当前 epoch ms。
+    /// 更新会话的 `updated_at` 为当前 epoch ms。经组提交 Writer。
     pub fn touch_session(&self, session_id: &str) -> Result<(), DbFailure> {
-        let conn = self.conn.lock().map_err(|e| DbFailure {
-            message: format!("lock poisoned: {e}"),
-            kind: DbFailureKind::Lock,
-        })?;
-
-        conn.execute(
-            "UPDATE sessions SET updated_at = strftime('%s','now') * 1000 WHERE id = ?1",
-            rusqlite::params![session_id],
-        )
-        .map_err(|e| self.latch_error("touch_session", e))?;
-
-        Ok(())
+        let session_id = session_id.to_string();
+        self.write_blocking(move |conn| {
+            conn.execute(
+                "UPDATE sessions SET updated_at = strftime('%s','now') * 1000 WHERE id = ?1",
+                rusqlite::params![session_id],
+            )
+            .map_err(|e| DbFailure {
+                message: format!("touch_session: {e}"),
+                kind: DbFailureKind::Other("touch_session".to_string()),
+            })?;
+            Ok(())
+        })
     }
 }

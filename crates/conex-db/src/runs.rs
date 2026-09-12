@@ -108,7 +108,7 @@ pub struct PendingInput {
 }
 
 impl LocalDb {
-    /// 插入（或覆盖）一条 run 记录。
+    /// 插入（或覆盖）一条 run 记录。经组提交 Writer。
     pub fn insert_run(
         &self,
         run_id: &str,
@@ -117,29 +117,34 @@ impl LocalDb {
         end_reason: Option<&str>,
         cursor: i64,
     ) -> Result<(), DbFailure> {
-        let conn = self.conn.lock().map_err(|e| DbFailure {
-            message: format!("lock poisoned: {e}"),
-            kind: DbFailureKind::Lock,
-        })?;
-        let now = now_millis();
-        conn.execute(
-            "INSERT OR REPLACE INTO runs (run_id, session_id, status, end_reason, cursor, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-            rusqlite::params![
-                run_id,
-                session_id,
-                status.as_str(),
-                end_reason,
-                cursor,
-                now,
-                now
-            ],
-        )
-        .map_err(|e| self.latch_error("insert_run", e))?;
-        Ok(())
+        let run_id = run_id.to_string();
+        let session_id = session_id.to_string();
+        let status_lit = status.as_str().to_string();
+        let end_reason = end_reason.map(|s| s.to_string());
+        self.write_blocking(move |conn| {
+            let now = now_millis();
+            conn.execute(
+                "INSERT OR REPLACE INTO runs (run_id, session_id, status, end_reason, cursor, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                rusqlite::params![
+                    run_id,
+                    session_id,
+                    status_lit,
+                    end_reason,
+                    cursor,
+                    now,
+                    now
+                ],
+            )
+            .map_err(|e| DbFailure {
+                message: format!("insert_run: {e}"),
+                kind: DbFailureKind::Other("insert_run".to_string()),
+            })?;
+            Ok(())
+        })
     }
 
-    /// 更新 run 状态（end_reason 为 None 时保留旧值；cursor 为 Some 时写入）。
+    /// 更新 run 状态（end_reason 为 None 时保留旧值；cursor 为 Some 时写入）。经组提交 Writer。
     pub fn update_run_status(
         &self,
         run_id: &str,
@@ -147,21 +152,25 @@ impl LocalDb {
         end_reason: Option<&str>,
         cursor: Option<i64>,
     ) -> Result<(), DbFailure> {
-        let conn = self.conn.lock().map_err(|e| DbFailure {
-            message: format!("lock poisoned: {e}"),
-            kind: DbFailureKind::Lock,
-        })?;
-        conn.execute(
-            "UPDATE runs SET
-                status = ?2,
-                end_reason = COALESCE(?3, end_reason),
-                cursor = COALESCE(?4, cursor),
-                updated_at = ?5
-             WHERE run_id = ?1",
-            rusqlite::params![run_id, status.as_str(), end_reason, cursor, now_millis()],
-        )
-        .map_err(|e| self.latch_error("update_run_status", e))?;
-        Ok(())
+        let run_id = run_id.to_string();
+        let status_lit = status.as_str().to_string();
+        let end_reason = end_reason.map(|s| s.to_string());
+        self.write_blocking(move |conn| {
+            conn.execute(
+                "UPDATE runs SET
+                    status = ?2,
+                    end_reason = COALESCE(?3, end_reason),
+                    cursor = COALESCE(?4, cursor),
+                    updated_at = ?5
+                 WHERE run_id = ?1",
+                rusqlite::params![run_id, status_lit, end_reason, cursor, now_millis()],
+            )
+            .map_err(|e| DbFailure {
+                message: format!("update_run_status: {e}"),
+                kind: DbFailureKind::Other("update_run_status".to_string()),
+            })?;
+            Ok(())
+        })
     }
 
     /// 按 run_id 读取单条记录（persist.rs 测试用）。
@@ -180,42 +189,53 @@ impl LocalDb {
         .map_err(|e| self.latch_error("get_run", e))
     }
 
-    /// 保存 run 级 usage/cache 统计（P5 §3.1.4，v5 列）。
+    /// 保存 run 级 usage/cache 统计（P5 §3.1.4，v5 列）。经组提交 Writer。
     ///
     /// `UPDATE runs SET ...`，缺行静默跳过（不报错）；
     /// hit_ratio / write_ratio 可派生（不落库），warm_until_ms NULL 兼容。
     pub fn save_run_usage(&self, run_id: &str, stats: RunCacheStats) -> Result<(), DbFailure> {
-        let conn = self.conn.lock().map_err(|e| DbFailure {
-            message: format!("lock poisoned: {e}"),
-            kind: DbFailureKind::Lock,
-        })?;
-        conn.execute(
-            "UPDATE runs SET
-                prompt_tokens = ?2,
-                completion_tokens = ?3,
-                total_tokens = ?4,
-                cache_read_tokens = ?5,
-                cache_write_tokens = ?6,
-                cache_miss_tokens = ?7,
-                sample_count = ?8,
-                missed_tokens = ?9,
-                warm_until_ms = ?10
-             WHERE run_id = ?1",
-            rusqlite::params![
-                run_id,
-                stats.prompt_tokens as i64,
-                stats.completion_tokens as i64,
-                stats.total_tokens as i64,
-                stats.cache_read_tokens as i64,
-                stats.cache_write_tokens as i64,
-                stats.cache_miss_tokens as i64,
-                stats.sample_count as i64,
-                stats.missed_tokens as i64,
-                stats.warm_until_ms.map(|v| v as i64),
-            ],
-        )
-        .map_err(|e| self.latch_error("save_run_usage", e))?;
-        Ok(())
+        let run_id = run_id.to_string();
+        let prompt = stats.prompt_tokens as i64;
+        let completion = stats.completion_tokens as i64;
+        let total = stats.total_tokens as i64;
+        let cache_read = stats.cache_read_tokens as i64;
+        let cache_write = stats.cache_write_tokens as i64;
+        let cache_miss = stats.cache_miss_tokens as i64;
+        let sample_count = stats.sample_count as i64;
+        let missed = stats.missed_tokens as i64;
+        let warm_until = stats.warm_until_ms.map(|v| v as i64);
+        self.write_blocking(move |conn| {
+            conn.execute(
+                "UPDATE runs SET
+                    prompt_tokens = ?2,
+                    completion_tokens = ?3,
+                    total_tokens = ?4,
+                    cache_read_tokens = ?5,
+                    cache_write_tokens = ?6,
+                    cache_miss_tokens = ?7,
+                    sample_count = ?8,
+                    missed_tokens = ?9,
+                    warm_until_ms = ?10
+                 WHERE run_id = ?1",
+                rusqlite::params![
+                    run_id,
+                    prompt,
+                    completion,
+                    total,
+                    cache_read,
+                    cache_write,
+                    cache_miss,
+                    sample_count,
+                    missed,
+                    warm_until,
+                ],
+            )
+            .map_err(|e| DbFailure {
+                message: format!("save_run_usage: {e}"),
+                kind: DbFailureKind::Other("save_run_usage".to_string()),
+            })?;
+            Ok(())
+        })
     }
 
     /// 读取 run 级 usage/cache 统计（v5 列）。
@@ -311,7 +331,7 @@ impl LocalDb {
         Ok(runs)
     }
 
-    /// 保存一条待处理输入（按 id 幂等覆盖）。
+    /// 保存一条待处理输入（按 id 幂等覆盖）。经组提交 Writer。
     pub fn save_pending_input(
         &self,
         id: &str,
@@ -319,17 +339,22 @@ impl LocalDb {
         run_id: Option<&str>,
         payload: &str,
     ) -> Result<(), DbFailure> {
-        let conn = self.conn.lock().map_err(|e| DbFailure {
-            message: format!("lock poisoned: {e}"),
-            kind: DbFailureKind::Lock,
-        })?;
-        conn.execute(
-            "INSERT OR REPLACE INTO pending_inputs (id, session_id, run_id, payload, created_at)
-             VALUES (?1, ?2, ?3, ?4, ?5)",
-            rusqlite::params![id, session_id, run_id, payload, now_millis()],
-        )
-        .map_err(|e| self.latch_error("save_pending_input", e))?;
-        Ok(())
+        let id = id.to_string();
+        let session_id = session_id.to_string();
+        let run_id = run_id.map(|s| s.to_string());
+        let payload = payload.to_string();
+        self.write_blocking(move |conn| {
+            conn.execute(
+                "INSERT OR REPLACE INTO pending_inputs (id, session_id, run_id, payload, created_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5)",
+                rusqlite::params![id, session_id, run_id, payload, now_millis()],
+            )
+            .map_err(|e| DbFailure {
+                message: format!("save_pending_input: {e}"),
+                kind: DbFailureKind::Other("save_pending_input".to_string()),
+            })?;
+            Ok(())
+        })
     }
 
     /// 加载某会话的全部待处理输入（FIFO：创建时间升序，含 id 决胜）。
@@ -363,19 +388,21 @@ impl LocalDb {
         Ok(inputs)
     }
 
-    /// 删除一条待处理输入（返回是否实际删除了行）。
+    /// 删除一条待处理输入（返回是否实际删除了行）。经组提交 Writer。
     pub fn delete_pending_input(&self, id: &str) -> Result<bool, DbFailure> {
-        let conn = self.conn.lock().map_err(|e| DbFailure {
-            message: format!("lock poisoned: {e}"),
-            kind: DbFailureKind::Lock,
-        })?;
-        let deleted = conn
-            .execute(
-                "DELETE FROM pending_inputs WHERE id = ?1",
-                rusqlite::params![id],
-            )
-            .map_err(|e| self.latch_error("delete_pending_input", e))?;
-        Ok(deleted > 0)
+        let id = id.to_string();
+        self.write_blocking(move |conn| {
+            let deleted = conn
+                .execute(
+                    "DELETE FROM pending_inputs WHERE id = ?1",
+                    rusqlite::params![id],
+                )
+                .map_err(|e| DbFailure {
+                    message: format!("delete_pending_input: {e}"),
+                    kind: DbFailureKind::Other("delete_pending_input".to_string()),
+                })?;
+            Ok(deleted > 0)
+        })
     }
 }
 

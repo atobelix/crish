@@ -108,6 +108,9 @@ pub fn ensure_cas_schema(conn: &Connection) -> Result<(), rusqlite::Error> {
 }
 
 // ===== LocalDb CAS GC 方法面 =====
+//
+// D3-6 / D3-1：写路径一律经组提交 Writer（`write_blocking` 短临界区）；
+// 纯读走 `read()`（ReaderPool / 主连接回退）；GC 扫描不得全程持主 Mutex。
 
 impl LocalDb {
     pub fn put_blob(&self, bytes: &[u8]) -> Result<String, DbFailure> {
@@ -122,53 +125,113 @@ impl LocalDb {
     ) -> Result<String, DbFailure> {
         let hash = compute_sha256_hex(bytes);
         let size = bytes.len() as i64;
-        let conn = self.conn.lock().map_err(|e| DbFailure {
-            message: format!("lock poisoned: {e}"),
-            kind: DbFailureKind::Lock,
+        let bytes_owned = bytes.to_vec();
+        let hash_owned = hash.clone();
+        let storage_type = storage_type.to_string();
+        let path_owned = path.to_string();
+        self.write_blocking(move |conn| {
+            put_blob_conn(
+                conn,
+                &hash_owned,
+                size,
+                &bytes_owned,
+                &storage_type,
+                &path_owned,
+            )
+            .map_err(|e| DbFailure {
+                message: format!("put_blob: {e}"),
+                kind: DbFailureKind::Other("put_blob".to_string()),
+            })
         })?;
-        put_blob_conn(&conn, &hash, size, bytes, storage_type, path)
-            .map_err(|e| self.latch_error("put_blob", e))?;
         Ok(hash)
     }
 
+    /// 读 Blob 内容（ReaderPool）；若命中软删除隔离行则经 Writer 反隔离自愈。
     pub fn get_blob(&self, hash: &str) -> Result<Option<Vec<u8>>, DbFailure> {
-        let conn = self.conn.lock().map_err(|e| DbFailure {
-            message: format!("lock poisoned: {e}"),
-            kind: DbFailureKind::Lock,
-        })?;
-        get_blob_conn(&conn, hash).map_err(|e| self.latch_error("get_blob", e))
+        let hash_owned = hash.to_string();
+        let row: Option<(Option<Vec<u8>>, Option<String>)> = self
+            .read(move |conn| {
+                conn.query_row(
+                    "SELECT bytes, marked_for_delete_at FROM blob_cas WHERE hash = ?1",
+                    params![hash_owned],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                )
+                .optional()
+                .map_err(|e| DbFailure {
+                    message: format!("get_blob: {e}"),
+                    kind: DbFailureKind::Other("get_blob".to_string()),
+                })
+            })?;
+
+        let Some((bytes, marked_for_delete_at)) = row else {
+            return Ok(None);
+        };
+        if marked_for_delete_at.is_some() {
+            let h = hash.to_string();
+            self.write_blocking(move |conn| {
+                unquarantine_blob_conn(conn, &h).map_err(|e| DbFailure {
+                    message: format!("get_blob_heal: {e}"),
+                    kind: DbFailureKind::Other("get_blob".to_string()),
+                })
+            })?;
+        }
+        Ok(bytes)
     }
 
+    /// 读元数据并自愈（反隔离）：读走 ReaderPool，写走 Writer。
     pub fn get_blob_meta(&self, hash: &str) -> Result<Option<CasBlobRow>, DbFailure> {
-        let conn = self.conn.lock().map_err(|e| DbFailure {
-            message: format!("lock poisoned: {e}"),
-            kind: DbFailureKind::Lock,
+        let hash_owned = hash.to_string();
+        let meta = self.read(move |conn| {
+            get_blob_meta_conn(conn, &hash_owned, false).map_err(|e| DbFailure {
+                message: format!("get_blob_meta: {e}"),
+                kind: DbFailureKind::Other("get_blob_meta".to_string()),
+            })
         })?;
-        get_blob_meta_conn(&conn, hash, true).map_err(|e| self.latch_error("get_blob_meta", e))
+        let Some(mut meta) = meta else {
+            return Ok(None);
+        };
+        if meta.marked_for_delete_at.is_some() {
+            let h = hash.to_string();
+            self.write_blocking(move |conn| {
+                unquarantine_blob_conn(conn, &h).map_err(|e| DbFailure {
+                    message: format!("get_blob_meta_heal: {e}"),
+                    kind: DbFailureKind::Other("get_blob_meta".to_string()),
+                })
+            })?;
+            meta.marked_for_delete_at = None;
+        }
+        Ok(Some(meta))
     }
 
+    /// 纯读元数据（不自愈），走 ReaderPool。
     pub fn peek_blob_meta(&self, hash: &str) -> Result<Option<CasBlobRow>, DbFailure> {
-        let conn = self.conn.lock().map_err(|e| DbFailure {
-            message: format!("lock poisoned: {e}"),
-            kind: DbFailureKind::Lock,
-        })?;
-        get_blob_meta_conn(&conn, hash, false).map_err(|e| self.latch_error("peek_blob_meta", e))
+        let hash_owned = hash.to_string();
+        self.read(move |conn| {
+            get_blob_meta_conn(conn, &hash_owned, false).map_err(|e| DbFailure {
+                message: format!("peek_blob_meta: {e}"),
+                kind: DbFailureKind::Other("peek_blob_meta".to_string()),
+            })
+        })
     }
 
     pub fn unquarantine_blob(&self, hash: &str) -> Result<bool, DbFailure> {
-        let conn = self.conn.lock().map_err(|e| DbFailure {
-            message: format!("lock poisoned: {e}"),
-            kind: DbFailureKind::Lock,
-        })?;
-        unquarantine_blob_conn(&conn, hash).map_err(|e| self.latch_error("unquarantine_blob", e))
+        let hash_owned = hash.to_string();
+        self.write_blocking(move |conn| {
+            unquarantine_blob_conn(conn, &hash_owned).map_err(|e| DbFailure {
+                message: format!("unquarantine_blob: {e}"),
+                kind: DbFailureKind::Other("unquarantine_blob".to_string()),
+            })
+        })
     }
 
     pub fn pin_blob(&self, hash: &str, pinned: bool) -> Result<bool, DbFailure> {
-        let conn = self.conn.lock().map_err(|e| DbFailure {
-            message: format!("lock poisoned: {e}"),
-            kind: DbFailureKind::Lock,
-        })?;
-        pin_blob_conn(&conn, hash, pinned).map_err(|e| self.latch_error("pin_blob", e))
+        let hash_owned = hash.to_string();
+        self.write_blocking(move |conn| {
+            pin_blob_conn(conn, &hash_owned, pinned).map_err(|e| DbFailure {
+                message: format!("pin_blob: {e}"),
+                kind: DbFailureKind::Other("pin_blob".to_string()),
+            })
+        })
     }
 
     pub fn link_block_attachment(
@@ -177,12 +240,15 @@ impl LocalDb {
         block_id: &str,
         hash: &str,
     ) -> Result<(), DbFailure> {
-        let conn = self.conn.lock().map_err(|e| DbFailure {
-            message: format!("lock poisoned: {e}"),
-            kind: DbFailureKind::Lock,
-        })?;
-        link_block_attachment_conn(&conn, doc_id, block_id, hash)
-            .map_err(|e| self.latch_error("link_block_attachment", e))
+        let doc_id = doc_id.to_string();
+        let block_id = block_id.to_string();
+        let hash = hash.to_string();
+        self.write_blocking(move |conn| {
+            link_block_attachment_conn(conn, &doc_id, &block_id, &hash).map_err(|e| DbFailure {
+                message: format!("link_block_attachment: {e}"),
+                kind: DbFailureKind::Other("link_block_attachment".to_string()),
+            })
+        })
     }
 
     pub fn unlink_block_attachment(
@@ -191,12 +257,15 @@ impl LocalDb {
         block_id: &str,
         hash: &str,
     ) -> Result<bool, DbFailure> {
-        let conn = self.conn.lock().map_err(|e| DbFailure {
-            message: format!("lock poisoned: {e}"),
-            kind: DbFailureKind::Lock,
-        })?;
-        unlink_block_attachment_conn(&conn, doc_id, block_id, hash)
-            .map_err(|e| self.latch_error("unlink_block_attachment", e))
+        let doc_id = doc_id.to_string();
+        let block_id = block_id.to_string();
+        let hash = hash.to_string();
+        self.write_blocking(move |conn| {
+            unlink_block_attachment_conn(conn, &doc_id, &block_id, &hash).map_err(|e| DbFailure {
+                message: format!("unlink_block_attachment: {e}"),
+                kind: DbFailureKind::Other("unlink_block_attachment".to_string()),
+            })
+        })
     }
 
     pub fn list_block_attachments(
@@ -204,12 +273,14 @@ impl LocalDb {
         doc_id: &str,
         block_id: &str,
     ) -> Result<Vec<String>, DbFailure> {
-        let conn = self.conn.lock().map_err(|e| DbFailure {
-            message: format!("lock poisoned: {e}"),
-            kind: DbFailureKind::Lock,
-        })?;
-        list_block_attachments_conn(&conn, doc_id, block_id)
-            .map_err(|e| self.latch_error("list_block_attachments", e))
+        let doc_id = doc_id.to_string();
+        let block_id = block_id.to_string();
+        self.read(move |conn| {
+            list_block_attachments_conn(conn, &doc_id, &block_id).map_err(|e| DbFailure {
+                message: format!("list_block_attachments: {e}"),
+                kind: DbFailureKind::Other("list_block_attachments".to_string()),
+            })
+        })
     }
 
     pub fn link_snapshot_attachment(
@@ -218,12 +289,17 @@ impl LocalDb {
         snapshot_id: &str,
         blob_hash: &str,
     ) -> Result<(), DbFailure> {
-        let conn = self.conn.lock().map_err(|e| DbFailure {
-            message: format!("lock poisoned: {e}"),
-            kind: DbFailureKind::Lock,
-        })?;
-        link_snapshot_attachment_conn(&conn, doc_id, snapshot_id, blob_hash)
-            .map_err(|e| self.latch_error("link_snapshot_attachment", e))
+        let doc_id = doc_id.to_string();
+        let snapshot_id = snapshot_id.to_string();
+        let blob_hash = blob_hash.to_string();
+        self.write_blocking(move |conn| {
+            link_snapshot_attachment_conn(conn, &doc_id, &snapshot_id, &blob_hash).map_err(|e| {
+                DbFailure {
+                    message: format!("link_snapshot_attachment: {e}"),
+                    kind: DbFailureKind::Other("link_snapshot_attachment".to_string()),
+                }
+            })
+        })
     }
 
     pub fn link_undo_blob(
@@ -232,67 +308,150 @@ impl LocalDb {
         undo_step_id: &str,
         blob_hash: &str,
     ) -> Result<(), DbFailure> {
-        let conn = self.conn.lock().map_err(|e| DbFailure {
-            message: format!("lock poisoned: {e}"),
-            kind: DbFailureKind::Lock,
-        })?;
-        link_undo_blob_conn(&conn, session_id, undo_step_id, blob_hash)
-            .map_err(|e| self.latch_error("link_undo_blob", e))
+        let session_id = session_id.to_string();
+        let undo_step_id = undo_step_id.to_string();
+        let blob_hash = blob_hash.to_string();
+        self.write_blocking(move |conn| {
+            link_undo_blob_conn(conn, &session_id, &undo_step_id, &blob_hash).map_err(|e| {
+                DbFailure {
+                    message: format!("link_undo_blob: {e}"),
+                    kind: DbFailureKind::Other("link_undo_blob".to_string()),
+                }
+            })
+        })
     }
 
     pub fn count_blobs(&self) -> Result<usize, DbFailure> {
-        let conn = self.conn.lock().map_err(|e| DbFailure {
-            message: format!("lock poisoned: {e}"),
-            kind: DbFailureKind::Lock,
+        let count: i64 = self.read(|conn| {
+            conn.query_row("SELECT COUNT(*) FROM blob_cas", [], |r| r.get(0))
+                .map_err(|e| DbFailure {
+                    message: format!("count_blobs: {e}"),
+                    kind: DbFailureKind::Other("count_blobs".to_string()),
+                })
         })?;
-        let count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM blob_cas", [], |r| r.get(0))
-            .map_err(|e| self.latch_error("count_blobs", e))?;
         Ok(count as usize)
     }
 
     pub fn count_quarantined_blobs(&self) -> Result<usize, DbFailure> {
-        let conn = self.conn.lock().map_err(|e| DbFailure {
-            message: format!("lock poisoned: {e}"),
-            kind: DbFailureKind::Lock,
-        })?;
-        let count: i64 = conn
-            .query_row(
+        let count: i64 = self.read(|conn| {
+            conn.query_row(
                 "SELECT COUNT(*) FROM blob_cas WHERE marked_for_delete_at IS NOT NULL",
                 [],
                 |r| r.get(0),
             )
-            .map_err(|e| self.latch_error("count_quarantined_blobs", e))?;
+            .map_err(|e| DbFailure {
+                message: format!("count_quarantined_blobs: {e}"),
+                kind: DbFailureKind::Other("count_quarantined_blobs".to_string()),
+            })
+        })?;
         Ok(count as usize)
     }
 
     pub fn mark_quarantine_orphans(&self, config: &CasGcConfig) -> Result<Vec<String>, DbFailure> {
-        let conn = self.conn.lock().map_err(|e| DbFailure {
-            message: format!("lock poisoned: {e}"),
-            kind: DbFailureKind::Lock,
-        })?;
-        mark_quarantine_orphans_conn(&conn, config)
-            .map_err(|e| self.latch_error("mark_quarantine_orphans", e))
+        let config = config.clone();
+        self.write_blocking(move |conn| {
+            mark_quarantine_orphans_conn(conn, &config).map_err(|e| DbFailure {
+                message: format!("mark_quarantine_orphans: {e}"),
+                kind: DbFailureKind::Other("mark_quarantine_orphans".to_string()),
+            })
+        })
     }
 
     pub fn purge_expired_quarantined(
         &self,
         config: &CasGcConfig,
     ) -> Result<Vec<String>, DbFailure> {
-        let conn = self.conn.lock().map_err(|e| DbFailure {
-            message: format!("lock poisoned: {e}"),
-            kind: DbFailureKind::Lock,
+        let config = config.clone();
+        // 短写临界区：批量 DELETE + 过期租约清扫在 Writer 事务内；
+        // 外置文件 unlink 放到事务提交后（避免长窗口持写连接）。
+        let (purged, files_to_delete) = self.write_blocking(move |conn| {
+            purge_expired_quarantined_conn(conn, &config).map_err(|e| DbFailure {
+                message: format!("purge_expired_quarantined: {e}"),
+                kind: DbFailureKind::Other("purge_expired_quarantined".to_string()),
+            })
         })?;
-        purge_expired_quarantined_conn(&conn, config)
-            .map_err(|e| self.latch_error("purge_expired_quarantined", e))
+
+        for file_path in files_to_delete {
+            let p = std::path::Path::new(&file_path);
+            if p.exists() {
+                if let Err(e) = std::fs::remove_file(p) {
+                    tracing::warn!(target: "conex_db", "CAS GC 物理删除外置文件失败 `{file_path}`: {e}");
+                } else {
+                    tracing::info!(target: "conex_db", "CAS GC 物理删除外置文件成功 `{file_path}`");
+                }
+            }
+        }
+        Ok(purged)
     }
 
+    /// 统计经 ReaderPool / 主连接回退；标记与物理清除各走一次 Writer 短事务
+    /// （不在完整扫描期间持主 Mutex，D3-6 / 05-G2）。
     pub fn run_cas_gc(&self, config: &CasGcConfig) -> Result<GcScanStats, DbFailure> {
-        let conn = self.conn.lock().map_err(|e| DbFailure {
-            message: format!("lock poisoned: {e}"),
-            kind: DbFailureKind::Lock,
-        })?;
-        run_cas_gc_conn(&conn, config).map_err(|e| self.latch_error("run_cas_gc", e))
+        let cfg = config.clone();
+        let grace_param = format!("-{} seconds", cfg.creation_grace_secs);
+        let (total_blobs_scanned, pinned_protected, lease_protected, reference_protected, grace_protected) =
+            self.read(move |conn| -> Result<(usize, usize, usize, usize, usize), DbFailure> {
+                let total: i64 = conn
+                    .query_row("SELECT COUNT(*) FROM blob_cas", [], |r| r.get(0))
+                    .map_err(|e| DbFailure {
+                        message: format!("run_cas_gc total: {e}"),
+                        kind: DbFailureKind::Other("run_cas_gc".to_string()),
+                    })?;
+                let pinned: i64 = conn
+                    .query_row("SELECT COUNT(*) FROM blob_cas WHERE pinned = 1", [], |r| {
+                        r.get(0)
+                    })
+                    .map_err(|e| DbFailure {
+                        message: format!("run_cas_gc pinned: {e}"),
+                        kind: DbFailureKind::Other("run_cas_gc".to_string()),
+                    })?;
+                let lease: i64 = conn
+                    .query_row(
+                        "SELECT COUNT(DISTINCT blob_hash) FROM active_blob_leases WHERE expires_at > datetime('now')",
+                        [],
+                        |r| r.get(0),
+                    )
+                    .unwrap_or(0);
+                let reference: i64 = conn
+                    .query_row(
+                        r#"
+                        SELECT COUNT(DISTINCT b.hash) FROM blob_cas b
+                        WHERE EXISTS (SELECT 1 FROM block_attachments a WHERE a.hash = b.hash)
+                           OR EXISTS (SELECT 1 FROM doc_snapshots_attachments s WHERE s.blob_hash = b.hash)
+                           OR EXISTS (SELECT 1 FROM session_undo_blobs u WHERE u.blob_hash = b.hash)
+                        "#,
+                        [],
+                        |r| r.get(0),
+                    )
+                    .unwrap_or(0);
+                let grace: i64 = conn
+                    .query_row(
+                        "SELECT COUNT(*) FROM blob_cas WHERE (pinned = 0 OR pinned IS NULL) AND created_at > datetime('now', ?1)",
+                        params![grace_param],
+                        |r| r.get(0),
+                    )
+                    .unwrap_or(0);
+                Ok((
+                    total as usize,
+                    pinned as usize,
+                    lease as usize,
+                    reference as usize,
+                    grace as usize,
+                ))
+            })?;
+
+        let quarantined_hashes = self.mark_quarantine_orphans(&cfg)?;
+        let purged_hashes = self.purge_expired_quarantined(&cfg)?;
+
+        Ok(GcScanStats {
+            total_blobs_scanned,
+            reference_protected,
+            lease_protected,
+            pinned_protected,
+            grace_protected,
+            quarantined_hashes,
+            purged_hashes,
+        })
     }
 }
 
@@ -481,11 +640,23 @@ pub fn link_undo_blob_conn(
     Ok(())
 }
 
+/// 批量标记 SQL 的 IN 列表分片大小（SQLite 变量上限友好）。
+const CAS_GC_BATCH_CHUNK: usize = 200;
+
+/// 为 `IN (?, ?, …)` 生成占位符串。
+fn in_placeholders(n: usize) -> String {
+    (0..n)
+        .map(|_| "?".to_string())
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
 pub fn mark_quarantine_orphans_conn(
     conn: &Connection,
     config: &CasGcConfig,
 ) -> Result<Vec<String>, rusqlite::Error> {
     let grace_param = format!("-{} seconds", config.creation_grace_secs);
+    // NOT EXISTS 替代 NOT IN DISTINCT（05-Q4）；候选扫描无写锁定长窗口。
     let mut stmt = conn.prepare(
         r#"
         SELECT b.hash FROM blob_cas b
@@ -493,17 +664,18 @@ pub fn mark_quarantine_orphans_conn(
             b.marked_for_delete_at IS NULL
             AND (b.pinned = 0 OR b.pinned IS NULL)
             AND b.created_at <= datetime('now', ?1)
-            AND b.hash NOT IN (
-                SELECT DISTINCT hash FROM block_attachments WHERE hash IS NOT NULL
+            AND NOT EXISTS (
+                SELECT 1 FROM block_attachments a WHERE a.hash = b.hash
             )
-            AND b.hash NOT IN (
-                SELECT DISTINCT blob_hash FROM doc_snapshots_attachments WHERE blob_hash IS NOT NULL
+            AND NOT EXISTS (
+                SELECT 1 FROM doc_snapshots_attachments s WHERE s.blob_hash = b.hash
             )
-            AND b.hash NOT IN (
-                SELECT DISTINCT blob_hash FROM session_undo_blobs WHERE blob_hash IS NOT NULL
+            AND NOT EXISTS (
+                SELECT 1 FROM session_undo_blobs u WHERE u.blob_hash = b.hash
             )
-            AND b.hash NOT IN (
-                SELECT DISTINCT blob_hash FROM active_blob_leases WHERE expires_at > datetime('now')
+            AND NOT EXISTS (
+                SELECT 1 FROM active_blob_leases l
+                WHERE l.blob_hash = b.hash AND l.expires_at > datetime('now')
             )
         "#,
     )?;
@@ -514,27 +686,35 @@ pub fn mark_quarantine_orphans_conn(
     }
     drop(stmt);
 
+    // 批量 UPDATE … WHERE hash IN (…)（05-G2 / D3-6）：分片避免变量上限。
     let mut marked = Vec::new();
-    for hash in candidate_hashes {
-        let count = conn.execute(
+    for chunk in candidate_hashes.chunks(CAS_GC_BATCH_CHUNK) {
+        let ph = in_placeholders(chunk.len());
+        let sql = format!(
             r#"
             UPDATE blob_cas
             SET marked_for_delete_at = CURRENT_TIMESTAMP, updated_at = datetime('now')
-            WHERE hash = ?1 AND marked_for_delete_at IS NULL
-            "#,
-            params![hash],
-        )?;
+            WHERE marked_for_delete_at IS NULL AND hash IN ({ph})
+            "#
+        );
+        let mut stmt = conn.prepare(&sql)?;
+        let count = stmt.execute(rusqlite::params_from_iter(chunk.iter()))?;
         if count > 0 {
-            marked.push(hash);
+            marked.extend_from_slice(chunk);
         }
     }
     Ok(marked)
 }
 
+/// 扫描 + 批量物理清除过期隔离 Blob。
+///
+/// 返回 `(purged_hashes, files_to_delete)`：外置文件的 `unlink` 由调用方在
+/// 事务提交后执行（禁止在 Writer 事务内做磁盘 IO）。
+/// 顺带（05-G6）：清除已过期的 `active_blob_leases` 行。
 pub fn purge_expired_quarantined_conn(
     conn: &Connection,
     config: &CasGcConfig,
-) -> Result<Vec<String>, rusqlite::Error> {
+) -> Result<(Vec<String>, Vec<String>), rusqlite::Error> {
     let quarantine_param = format!("-{} seconds", config.quarantine_duration_secs);
     let mut stmt = conn.prepare(
         r#"
@@ -543,17 +723,18 @@ pub fn purge_expired_quarantined_conn(
             b.marked_for_delete_at IS NOT NULL
             AND b.marked_for_delete_at <= datetime('now', ?1)
             AND (b.pinned = 0 OR b.pinned IS NULL)
-            AND b.hash NOT IN (
-                SELECT DISTINCT hash FROM block_attachments WHERE hash IS NOT NULL
+            AND NOT EXISTS (
+                SELECT 1 FROM block_attachments a WHERE a.hash = b.hash
             )
-            AND b.hash NOT IN (
-                SELECT DISTINCT blob_hash FROM doc_snapshots_attachments WHERE blob_hash IS NOT NULL
+            AND NOT EXISTS (
+                SELECT 1 FROM doc_snapshots_attachments s WHERE s.blob_hash = b.hash
             )
-            AND b.hash NOT IN (
-                SELECT DISTINCT blob_hash FROM session_undo_blobs WHERE blob_hash IS NOT NULL
+            AND NOT EXISTS (
+                SELECT 1 FROM session_undo_blobs u WHERE u.blob_hash = b.hash
             )
-            AND b.hash NOT IN (
-                SELECT DISTINCT blob_hash FROM active_blob_leases WHERE expires_at > datetime('now')
+            AND NOT EXISTS (
+                SELECT 1 FROM active_blob_leases l
+                WHERE l.blob_hash = b.hash AND l.expires_at > datetime('now')
             )
         "#,
     )?;
@@ -575,27 +756,25 @@ pub fn purge_expired_quarantined_conn(
     }
     drop(stmt);
 
+    // 批量 DELETE … WHERE hash IN (…)（05-G2 / D3-6）
     let mut purged = Vec::new();
-    for hash in to_purge {
-        let count = conn.execute("DELETE FROM blob_cas WHERE hash = ?1", params![hash])?;
+    for chunk in to_purge.chunks(CAS_GC_BATCH_CHUNK) {
+        let ph = in_placeholders(chunk.len());
+        let sql = format!("DELETE FROM blob_cas WHERE hash IN ({ph})");
+        let mut stmt = conn.prepare(&sql)?;
+        let count = stmt.execute(rusqlite::params_from_iter(chunk.iter()))?;
         if count > 0 {
-            purged.push(hash);
+            purged.extend_from_slice(chunk);
         }
     }
 
-    // 物理 unlink 孤儿外置文件，彻底根除外置文件物理泄漏
-    for file_path in files_to_delete {
-        let p = std::path::Path::new(&file_path);
-        if p.exists() {
-            if let Err(e) = std::fs::remove_file(p) {
-                tracing::warn!(target: "conex_db", "CAS GC 物理删除外置文件失败 `{file_path}`: {e}");
-            } else {
-                tracing::info!(target: "conex_db", "CAS GC 物理删除外置文件成功 `{file_path}`");
-            }
-        }
-    }
+    // 05-G6：顺带清除过期租约行（与 purge 同一短写事务）
+    let _ = conn.execute(
+        "DELETE FROM active_blob_leases WHERE expires_at <= datetime('now')",
+        [],
+    );
 
-    Ok(purged)
+    Ok((purged, files_to_delete))
 }
 
 pub fn run_cas_gc_conn(
@@ -637,7 +816,16 @@ pub fn run_cas_gc_conn(
         .unwrap_or(0);
 
     let quarantined_hashes = mark_quarantine_orphans_conn(conn, config)?;
-    let purged_hashes = purge_expired_quarantined_conn(conn, config)?;
+    let (purged_hashes, files_to_delete) = purge_expired_quarantined_conn(conn, config)?;
+    // 外置文件 unlink 与 LocalDb::purge_expired_quarantined 一致（事务外）
+    for file_path in files_to_delete {
+        let p = std::path::Path::new(&file_path);
+        if p.exists() {
+            if let Err(e) = std::fs::remove_file(p) {
+                tracing::warn!(target: "conex_db", "CAS GC 物理删除外置文件失败 `{file_path}`: {e}");
+            }
+        }
+    }
 
     Ok(GcScanStats {
         total_blobs_scanned: total_blobs_scanned as usize,
@@ -671,8 +859,12 @@ pub fn spawn_cas_gc_loop(
                 }
                 _ = timer.tick() => {
                     tracing::debug!(target: "conex_db", "开始执行周期性 CAS GC 扫描...");
-                    match db.run_cas_gc(&config) {
-                        Ok(stats) => {
+                    // run_cas_gc 走 write_blocking（blocking_send）——必须 spawn_blocking，
+                    // 禁止在 async 上下文直接调用（会 panic）。
+                    let db = db.clone();
+                    let config = config.clone();
+                    match tokio::task::spawn_blocking(move || db.run_cas_gc(&config)).await {
+                        Ok(Ok(stats)) => {
                             if !stats.quarantined_hashes.is_empty() || !stats.purged_hashes.is_empty() {
                                 tracing::info!(
                                     target: "conex_db",
@@ -684,8 +876,11 @@ pub fn spawn_cas_gc_loop(
                                 );
                             }
                         }
-                        Err(e) => {
+                        Ok(Err(e)) => {
                             tracing::error!(target: "conex_db", "CAS GC 执行失败: {e}");
+                        }
+                        Err(join_err) => {
+                            tracing::error!(target: "conex_db", "CAS GC spawn_blocking join 失败: {join_err}");
                         }
                     }
                 }

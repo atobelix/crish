@@ -150,52 +150,52 @@ impl LocalDb {
             self.warn_missing_blocks_table("insert_block");
             return Ok(());
         }
-        let conn = self.conn.lock().map_err(|e| DbFailure {
-            message: format!("lock poisoned: {e}"),
-            kind: DbFailureKind::Lock,
-        })?;
-        let dropped_json = serde_json::to_string(&row.dropped_message_ids).map_err(|e| {
-            let failure = DbFailure {
-                message: format!("insert_block_dropped_json: {e}"),
-                kind: DbFailureKind::Other("insert_block_dropped_json".to_string()),
-            };
-            self.set_failure(failure.clone());
-            failure
-        })?;
-        conn.execute(
-            "INSERT OR IGNORE INTO compression_blocks (
-                session_id, block_id, sequence, generation, prev_block_id,
-                dropped_message_ids, first_kept_message_id, summary,
-                summary_is_llm, tokens_before, tokens_after, dropped_at_ms,
-                state, summary_json, schema_version, height, tier, attempts,
-                created_at, updated_at
-             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13,
-                ?14, ?15, ?16, ?17, ?18, ?19, ?20)",
-            rusqlite::params![
-                row.session_id,
-                row.block_id,
-                row.sequence as i64,
-                row.generation as i64,
-                row.prev_block_id,
-                dropped_json,
-                row.first_kept_message_id,
-                row.summary,
-                row.summary_is_llm as i64,
-                row.tokens_before as i64,
-                row.tokens_after as i64,
-                row.dropped_at_ms,
-                row.state.as_str(),
-                row.summary_json,
-                row.schema_version as i64,
-                row.height as i64,
-                row.tier,
-                row.attempts as i64,
-                row.created_at,
-                row.updated_at,
-            ],
-        )
-        .map_err(|e| self.latch_error("insert_block", e))?;
-        Ok(())
+        let row = row.clone();
+        self.write_blocking(move |conn| {
+            let dropped_json = serde_json::to_string(&row.dropped_message_ids).map_err(|e| {
+                DbFailure {
+                    message: format!("insert_block_dropped_json: {e}"),
+                    kind: DbFailureKind::Other("insert_block_dropped_json".to_string()),
+                }
+            })?;
+            conn.execute(
+                "INSERT OR IGNORE INTO compression_blocks (
+                    session_id, block_id, sequence, generation, prev_block_id,
+                    dropped_message_ids, first_kept_message_id, summary,
+                    summary_is_llm, tokens_before, tokens_after, dropped_at_ms,
+                    state, summary_json, schema_version, height, tier, attempts,
+                    created_at, updated_at
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13,
+                    ?14, ?15, ?16, ?17, ?18, ?19, ?20)",
+                rusqlite::params![
+                    row.session_id,
+                    row.block_id,
+                    row.sequence as i64,
+                    row.generation as i64,
+                    row.prev_block_id,
+                    dropped_json,
+                    row.first_kept_message_id,
+                    row.summary,
+                    row.summary_is_llm as i64,
+                    row.tokens_before as i64,
+                    row.tokens_after as i64,
+                    row.dropped_at_ms,
+                    row.state.as_str(),
+                    row.summary_json,
+                    row.schema_version as i64,
+                    row.height as i64,
+                    row.tier,
+                    row.attempts as i64,
+                    row.created_at,
+                    row.updated_at,
+                ],
+            )
+            .map_err(|e| DbFailure {
+                message: format!("insert_block: {e}"),
+                kind: DbFailureKind::Other("insert_block".to_string()),
+            })?;
+            Ok(())
+        })
     }
 
     /// 压缩块状态推进（T-16 两阶段写协议阶段二：调度器成功后调用）。
@@ -215,28 +215,33 @@ impl LocalDb {
             self.warn_missing_blocks_table("update_block_state");
             return Ok(());
         }
-        let conn = self.conn.lock().map_err(|e| DbFailure {
-            message: format!("lock poisoned: {e}"),
-            kind: DbFailureKind::Lock,
-        })?;
-        conn.execute(
-            "UPDATE compression_blocks
-             SET state = ?3, summary_json = ?4, height = ?5, attempts = ?6,
-                 summary_is_llm = (CASE WHEN ?3 = 'committed' THEN 1 ELSE 0 END),
-                 updated_at = ?7
-             WHERE session_id = ?1 AND block_id = ?2",
-            rusqlite::params![
-                session_id,
-                block_id,
-                state.as_str(),
-                summary_json,
-                height as i64,
-                attempts as i64,
-                now_ms(),
-            ],
-        )
-        .map_err(|e| self.latch_error("update_block_state", e))?;
-        Ok(())
+        let session_id = session_id.to_string();
+        let block_id = block_id.to_string();
+        let state_lit = state.as_str().to_string();
+        let summary_json = summary_json.map(|s| s.to_string());
+        self.write_blocking(move |conn| {
+            conn.execute(
+                "UPDATE compression_blocks
+                 SET state = ?3, summary_json = ?4, height = ?5, attempts = ?6,
+                     summary_is_llm = (CASE WHEN ?3 = 'committed' THEN 1 ELSE 0 END),
+                     updated_at = ?7
+                 WHERE session_id = ?1 AND block_id = ?2",
+                rusqlite::params![
+                    session_id,
+                    block_id,
+                    state_lit,
+                    summary_json,
+                    height as i64,
+                    attempts as i64,
+                    now_ms(),
+                ],
+            )
+            .map_err(|e| DbFailure {
+                message: format!("update_block_state: {e}"),
+                kind: DbFailureKind::Other("update_block_state".to_string()),
+            })?;
+            Ok(())
+        })
     }
 
     /// 按 (session_id, block_id) 读取单行（缺表返回 Ok(None)）。

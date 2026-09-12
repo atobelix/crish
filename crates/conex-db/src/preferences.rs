@@ -62,35 +62,39 @@ impl LocalDb {
         })
     }
 
-    /// 写入或更新偏好（记录指定的时间戳 updated_at）。
+    /// 写入或更新偏好（记录指定的时间戳 updated_at）。经组提交 Writer。
     pub fn set_preference(&self, key: &str, value: &str, updated_at: i64) -> Result<(), DbFailure> {
-        let conn = self.conn.lock().map_err(|e| DbFailure {
-            message: format!("lock poisoned: {e}"),
-            kind: DbFailureKind::Lock,
-        })?;
-
-        conn.execute(
-            "INSERT INTO app_preferences (key, value, updated_at) VALUES (?1, ?2, ?3)
-             ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
-            rusqlite::params![key, value, updated_at],
-        )
-        .map_err(|e| self.latch_error("set_preference_exec", e))?;
-
-        Ok(())
+        let key = key.to_string();
+        let value = value.to_string();
+        self.write_blocking(move |conn| {
+            conn.execute(
+                "INSERT INTO app_preferences (key, value, updated_at) VALUES (?1, ?2, ?3)
+                 ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
+                rusqlite::params![key, value, updated_at],
+            )
+            .map_err(|e| DbFailure {
+                message: format!("set_preference: {e}"),
+                kind: DbFailureKind::Other("set_preference".to_string()),
+            })?;
+            Ok(())
+        })
     }
 
-    /// 删除指定偏好的 key（返回是否有行被删除）。
+    /// 删除指定偏好的 key（返回是否有行被删除）。经组提交 Writer。
     pub fn delete_preference(&self, key: &str) -> Result<bool, DbFailure> {
-        let conn = self.conn.lock().map_err(|e| DbFailure {
-            message: format!("lock poisoned: {e}"),
-            kind: DbFailureKind::Lock,
-        })?;
-
-        let count = conn
-            .execute("DELETE FROM app_preferences WHERE key = ?1", rusqlite::params![key])
-            .map_err(|e| self.latch_error("delete_preference_exec", e))?;
-
-        Ok(count > 0)
+        let key = key.to_string();
+        self.write_blocking(move |conn| {
+            let count = conn
+                .execute(
+                    "DELETE FROM app_preferences WHERE key = ?1",
+                    rusqlite::params![key],
+                )
+                .map_err(|e| DbFailure {
+                    message: format!("delete_preference: {e}"),
+                    kind: DbFailureKind::Other("delete_preference".to_string()),
+                })?;
+            Ok(count > 0)
+        })
     }
 }
 

@@ -45,60 +45,134 @@ impl LocalDb {
         })
     }
 
-    /// 全量保存会话正文（先删后插，事务原子）。
-    /// 触发器自动维护 `message_count`。
+    /// 全量保存会话正文（显式 rebase API：先删后插）。
+    ///
+    /// 经组提交 Writer 提交（外层 Actor `BEGIN IMMEDIATE` 事务保证原子）。
+    /// 批末单次重算 `message_count`（v12 后双触发器已 DROP，不再依赖触发器双轨）。
+    /// 兼容旧调用：不传 `batch_version` 时跳过 CAS（见
+    /// [Self::save_session_body_versioned] 的「禁止静默当 CAS 通过」——
+    /// 缺参路径显式文档化为非 CAS 全量 rebase，导入/恢复/自愈用）。
     pub fn save_session_body(
         &self,
         session_id: &str,
         messages: &[SessionMessage],
     ) -> Result<(), DbFailure> {
-        let mut conn = self.conn.lock().map_err(|e| DbFailure {
-            message: format!("lock poisoned: {e}"),
-            kind: DbFailureKind::Lock,
-        })?;
+        self.save_session_body_versioned(session_id, messages, None)
+    }
 
-        let tx = conn
-            .transaction()
-            .map_err(|e| self.latch_error("save_session_body_tx", e))?;
-
-        tx.execute(
-            "DELETE FROM session_messages WHERE session_id = ?1",
-            rusqlite::params![session_id],
-        )
-        .map_err(|e| self.latch_error("save_session_body_delete", e))?;
-
-        for (seq, msg) in messages.iter().enumerate() {
-            let seq_i64 = seq as i64;
-            tx.execute(
-                "INSERT INTO session_messages (
-                    session_id, seq, id, sender, text, thinking, timestamp, status,
-                    stream_text_offset, thinking_time, tool_calls_json,
-                    blocks_json, tool_call_results_json, usage_json
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
-                rusqlite::params![
-                    session_id,
-                    seq_i64,
-                    msg.id,
-                    msg.sender,
-                    msg.text,
-                    msg.thinking,
-                    msg.timestamp,
-                    msg.status,
-                    msg.stream_text_offset,
-                    msg.thinking_time,
-                    msg.tool_calls_json,
-                    msg.blocks_json,
-                    msg.tool_call_results_json,
-                    msg.usage,
-                ],
+    /// 带 CAS 的会话正文保存（D3-4 / DEL-8）。
+    ///
+    /// - `batch_version = Some(v)`：要求 `sessions.body_version < v` 才写入；
+    ///   过期写返回 [`DbFailureKind::CasConflict`]（可识别错误，禁止静默 Ok）。
+    /// - `batch_version = None`：显式非 CAS 全量 rebase（导入 / 损坏恢复 / 测试）。
+    ///
+    /// 写路径经组提交 Writer；闭包内不再开 `transaction()`（外层已 BEGIN IMMEDIATE）。
+    pub fn save_session_body_versioned(
+        &self,
+        session_id: &str,
+        messages: &[SessionMessage],
+        batch_version: Option<i64>,
+    ) -> Result<(), DbFailure> {
+        let session_id = session_id.to_string();
+        let messages = messages.to_vec();
+        self.write_blocking(move |conn| {
+            // 自愈补建会话行（与 session_commands::self_heal 同源，防 FK 失败）
+            conn.execute(
+                "INSERT OR IGNORE INTO sessions (id, title, updated_at)
+                 VALUES (?1, '', strftime('%s','now') * 1000)",
+                rusqlite::params![session_id],
             )
-            .map_err(|e| self.latch_error("save_session_body_insert", e))?;
-        }
+            .map_err(|e| DbFailure {
+                message: format!("save_session_body_self_heal: {e}"),
+                kind: DbFailureKind::Other("save_session_body".to_string()),
+            })?;
 
-        tx.commit()
-            .map_err(|e| self.latch_error("save_session_body_commit", e))?;
+            // CAS：读当前 body_version，过期批次拒绝
+            if let Some(batch_version) = batch_version {
+                let current: i64 = conn
+                    .query_row(
+                        "SELECT body_version FROM sessions WHERE id = ?1",
+                        rusqlite::params![session_id],
+                        |row| row.get::<_, i64>(0),
+                    )
+                    .map_err(|e| DbFailure {
+                        message: format!("save_session_body_cas_read: {e}"),
+                        kind: DbFailureKind::Other("save_session_body".to_string()),
+                    })?;
+                if batch_version <= current {
+                    return Err(DbFailure {
+                        message: format!(
+                            "CAS conflict: batch_version {batch_version} <= body_version {current}"
+                        ),
+                        kind: DbFailureKind::CasConflict,
+                    });
+                }
+            }
 
-        Ok(())
+            conn.execute(
+                "DELETE FROM session_messages WHERE session_id = ?1",
+                rusqlite::params![session_id],
+            )
+            .map_err(|e| DbFailure {
+                message: format!("save_session_body_delete: {e}"),
+                kind: DbFailureKind::Other("save_session_body".to_string()),
+            })?;
+
+            for (seq, msg) in messages.iter().enumerate() {
+                let seq_i64 = seq as i64;
+                conn.execute(
+                    "INSERT INTO session_messages (
+                        session_id, seq, id, sender, text, thinking, timestamp, status,
+                        stream_text_offset, thinking_time, tool_calls_json,
+                        blocks_json, tool_call_results_json, usage_json
+                    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+                    rusqlite::params![
+                        session_id,
+                        seq_i64,
+                        msg.id,
+                        msg.sender,
+                        msg.text,
+                        msg.thinking,
+                        msg.timestamp,
+                        msg.status,
+                        msg.stream_text_offset,
+                        msg.thinking_time,
+                        msg.tool_calls_json,
+                        msg.blocks_json,
+                        msg.tool_call_results_json,
+                        msg.usage,
+                    ],
+                )
+                .map_err(|e| DbFailure {
+                    message: format!("save_session_body_insert: {e}"),
+                    kind: DbFailureKind::Other("save_session_body".to_string()),
+                })?;
+            }
+
+            // 批末单次：重算 message_count + 推进 body_version（v12 触发器退役）
+            if let Some(batch_version) = batch_version {
+                conn.execute(
+                    "UPDATE sessions SET
+                        message_count = (SELECT COUNT(*) FROM session_messages WHERE session_id = ?1),
+                        body_version = ?2
+                     WHERE id = ?1",
+                    rusqlite::params![session_id, batch_version],
+                )
+            } else {
+                conn.execute(
+                    "UPDATE sessions SET
+                        message_count = (SELECT COUNT(*) FROM session_messages WHERE session_id = ?1)
+                     WHERE id = ?1",
+                    rusqlite::params![session_id],
+                )
+            }
+            .map_err(|e| DbFailure {
+                message: format!("save_session_body_count: {e}"),
+                kind: DbFailureKind::Other("save_session_body".to_string()),
+            })?;
+
+            Ok(())
+        })
     }
 }
 

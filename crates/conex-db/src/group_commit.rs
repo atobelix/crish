@@ -193,6 +193,44 @@ impl DbWriteHandle {
         .await
     }
 
+    /// 阻塞写桥：同步外观提交写闭包至组提交 Actor 并等待批提交结果。
+    ///
+    /// 供域方法（`append_event` / `save_session_body` 等同步签名）改道 Writer。
+    /// **必须**从非 async 上下文调用（`spawn_blocking` 线程 / 普通测试线程）；
+    /// 在 async 上下文调用会因 `blocking_send` / `blocking_recv` panic——
+    /// 调用方应先 `spawn_blocking`（与 `persist.rs` / `session_commands` 既有模式一致）。
+    pub fn write_blocking<F, R>(&self, f: F) -> Result<R, DbFailure>
+    where
+        F: FnOnce(&mut rusqlite::Connection) -> Result<R, DbFailure> + Send + 'static,
+        R: Send + 'static,
+    {
+        let (tx, rx) = oneshot::channel();
+        let task = WriteTask {
+            op: Box::new(move |conn| f(conn).map(|r| Box::new(r) as Box<dyn Any + Send>)),
+            respond_to: tx,
+        };
+
+        // blocking_send：在非 async 上下文（spawn_blocking / 独立线程）安全；
+        // async 上下文会 panic——这是有意的硬边界，防误用死锁。
+        self.sender.blocking_send(task).map_err(|_| DbFailure {
+            message: "Single writer actor channel is closed".to_string(),
+            kind: DbFailureKind::Other("writer_closed".to_string()),
+        })?;
+
+        let res = rx.blocking_recv().map_err(|_| DbFailure {
+            message: "Single writer actor dropped response channel".to_string(),
+            kind: DbFailureKind::Other("channel_dropped".to_string()),
+        })??;
+
+        match res.downcast::<R>() {
+            Ok(val) => Ok(*val),
+            Err(_) => Err(DbFailure {
+                message: "Internal error: downcast write result failed".to_string(),
+                kind: DbFailureKind::Other("downcast_failed".to_string()),
+            }),
+        }
+    }
+
     /// 获取当前统计指标快照。
     pub fn stats(&self) -> GroupCommitStats {
         self.stats.snapshot()

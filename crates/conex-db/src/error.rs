@@ -25,6 +25,8 @@ pub enum DbFailureKind {
     ImportFolderSerialize,
     /// 导入索引解析失败
     ImportIndexParse,
+    /// 会话正文 CAS 冲突（batch_version 过期/陈旧写批次被拒）
+    CasConflict,
     /// 其它操作名（保留 String 兼容）
     Other(String),
 }
@@ -40,6 +42,7 @@ impl DbFailureKind {
             DbFailureKind::Open => "open",
             DbFailureKind::ImportFolderSerialize => "import_folder_serialize",
             DbFailureKind::ImportIndexParse => "import_index_parse",
+            DbFailureKind::CasConflict => "cas_conflict",
             DbFailureKind::Other(name) => name.as_str(),
         }
     }

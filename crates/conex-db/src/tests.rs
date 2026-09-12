@@ -216,6 +216,47 @@ fn append_event_created_at_millisecond_precision() {
 }
 
 #[test]
+fn save_session_body_cas_conflict_rejects_stale_batch() {
+    let db = LocalDb::open_in_memory().unwrap();
+    db.upsert_session_entry(&sample_entry("s1")).unwrap();
+
+    // 首批 batch_version=1 成功
+    db.save_session_body_versioned("s1", &[sample_message("m1", "user", 1)], Some(1))
+        .unwrap();
+    let list = db.list_sessions().unwrap();
+    assert_eq!(list[0].message_count, 1);
+
+    // 陈旧批次 batch_version=1（<= 当前 body_version=1）→ CasConflict
+    let err = db
+        .save_session_body_versioned("s1", &[sample_message("m-stale", "user", 2)], Some(1))
+        .unwrap_err();
+    assert_eq!(err.kind, crate::error::DbFailureKind::CasConflict);
+
+    // 更新批次 batch_version=2 成功
+    db.save_session_body_versioned(
+        "s1",
+        &[sample_message("m2", "user", 3), sample_message("m3", "assistant", 4)],
+        Some(2),
+    )
+    .unwrap();
+    let list2 = db.list_sessions().unwrap();
+    assert_eq!(list2[0].message_count, 2);
+}
+
+#[test]
+fn reserve_sequence_single_stmt_returns_monotonic() {
+    let db = LocalDb::open_in_memory().unwrap();
+    db.insert_session("s1", "S").unwrap();
+    // 冷路径 seed + 热路径 RETURNING：1,2,3 连续单调
+    assert_eq!(db.reserve_sequence("s1").unwrap(), 1);
+    assert_eq!(db.reserve_sequence("s1").unwrap(), 2);
+    assert_eq!(db.reserve_sequence("s1").unwrap(), 3);
+    // seed 只抬高不回退
+    db.seed_sequence("s1", 10).unwrap();
+    assert_eq!(db.reserve_sequence("s1").unwrap(), 10);
+}
+
+#[test]
 fn duplicate_event_sequence_fails() {
     let db = LocalDb::open_in_memory().unwrap();
     db.insert_session("s1", "Session").unwrap();
@@ -224,8 +265,8 @@ fn duplicate_event_sequence_fails() {
     // Same session_id + sequence should fail (UNIQUE constraint)
     let result = db.append_event("s1", 1, "msg2", "{}", None);
     assert!(result.is_err());
-    // Failure latch should be set
-    assert!(db.get_failure().is_some());
+    // D3 写单轨：错误经组提交 Actor oneshot 回传（Result 为 Err）；
+    // failure latch 为 DB 级致命故障闩（open 失败等），单条约束冲突不强制 latch。
 }
 
 #[test]

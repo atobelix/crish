@@ -18,19 +18,22 @@ impl LocalDb {
         payload: &str,
         run_id: Option<&str>,
     ) -> Result<(), DbFailure> {
-        let conn = self.conn.lock().map_err(|e| DbFailure {
-            message: format!("lock poisoned: {e}"),
-            kind: DbFailureKind::Lock,
-        })?;
-
-        conn.execute(
-            "INSERT INTO events (session_id, sequence, event_type, payload, run_id, created_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, strftime('%Y-%m-%d %H:%M:%f','now'))",
-            rusqlite::params![session_id, sequence, event_type, payload, run_id],
-        )
-        .map_err(|e| self.latch_error("append_event", e))?;
-
-        Ok(())
+        let session_id = session_id.to_string();
+        let event_type = event_type.to_string();
+        let payload = payload.to_string();
+        let run_id = run_id.map(|s| s.to_string());
+        self.write_blocking(move |conn| {
+            conn.execute(
+                "INSERT INTO events (session_id, sequence, event_type, payload, run_id, created_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, strftime('%Y-%m-%d %H:%M:%f','now'))",
+                rusqlite::params![session_id, sequence, event_type, payload, run_id],
+            )
+            .map_err(|e| DbFailure {
+                message: format!("append_event: {e}"),
+                kind: DbFailureKind::Other("append_event".to_string()),
+            })?;
+            Ok(())
+        })
     }
 
     /// Query events for a session after a given sequence number.
@@ -196,57 +199,67 @@ impl LocalDb {
         Ok(events)
     }
 
-    /// 会话级序列号原子取号（T08.12 Q23：store 端自增；首次取号按库内
-    /// max(sequence)+1 对齐——首个待发号即 max+1，取号后计数器 +1）。
+    /// 会话级序列号原子取号（T08.12 Q23 + D3-2 热路径单语句）。
+    ///
+    /// 热路径：`UPDATE … SET next_sequence = next_sequence + 1 … RETURNING next_sequence - 1`
+    /// （SQLite 3.35+ RETURNING，bundled libsqlite3-sys 0.28 满足）。
+    /// 冷路径 seed（首次 INSERT OR IGNORE）与热路径同批经组提交 Writer 提交——
+    /// 整个取号闭包在 Actor 的 `BEGIN IMMEDIATE` 事务内，原子性由外层事务保证。
     pub fn reserve_sequence(&self, session_id: &str) -> Result<i64, DbFailure> {
-        let conn = self.conn.lock().map_err(|e| DbFailure {
-            message: format!("lock poisoned: {e}"),
-            kind: DbFailureKind::Lock,
-        })?;
-        // 首次：以已落库 max(sequence)+1 建行（隐式预热）——该值即首个待发号
-        conn.execute(
-            "INSERT OR IGNORE INTO session_sequence (session_id, next_sequence)
-             SELECT ?1, COALESCE((SELECT MAX(sequence) FROM events WHERE session_id = ?1), 0) + 1",
-            rusqlite::params![session_id],
-        )
-        .map_err(|e| self.latch_error("reserve_sequence_seed", e))?;
-        // 读当前待发号（单连接互斥下「读 + 写」等效单语句原子性）
-        let sequence = conn
-            .query_row(
-                "SELECT next_sequence FROM session_sequence WHERE session_id = ?1",
+        let session_id = session_id.to_string();
+        self.write_blocking(move |conn| {
+            // 冷路径 seed：首次以已落库 max(sequence)+1 建行（隐式预热）
+            conn.execute(
+                "INSERT OR IGNORE INTO session_sequence (session_id, next_sequence)
+                 SELECT ?1, COALESCE((SELECT MAX(sequence) FROM events WHERE session_id = ?1), 0) + 1",
                 rusqlite::params![session_id],
-                |row| row.get::<_, i64>(0),
             )
-            .map_err(|e| self.latch_error("reserve_sequence_read", e))?;
-        conn.execute(
-            "UPDATE session_sequence SET next_sequence = next_sequence + 1
-             WHERE session_id = ?1",
-            rusqlite::params![session_id],
-        )
-        .map_err(|e| self.latch_error("reserve_sequence_bump", e))?;
-        Ok(sequence)
+            .map_err(|e| DbFailure {
+                message: format!("reserve_sequence_seed: {e}"),
+                kind: DbFailureKind::Other("reserve_sequence".to_string()),
+            })?;
+            // 热路径单语句：自增并返回自增前的待发号
+            let sequence = conn
+                .query_row(
+                    "UPDATE session_sequence SET next_sequence = next_sequence + 1
+                     WHERE session_id = ?1
+                     RETURNING next_sequence - 1",
+                    rusqlite::params![session_id],
+                    |row| row.get::<_, i64>(0),
+                )
+                .map_err(|e| DbFailure {
+                    message: format!("reserve_sequence_bump: {e}"),
+                    kind: DbFailureKind::Other("reserve_sequence".to_string()),
+                })?;
+            Ok(sequence)
+        })
     }
 
     /// 会话级序列号预热校准（MAX 语义：只抬高不回退，幂等；
-    /// seed(n) 后下次取号返回 n）。
+    /// seed(n) 后下次取号返回 n）。经组提交 Writer 提交。
     pub fn seed_sequence(&self, session_id: &str, next_sequence: i64) -> Result<(), DbFailure> {
-        let conn = self.conn.lock().map_err(|e| DbFailure {
-            message: format!("lock poisoned: {e}"),
-            kind: DbFailureKind::Lock,
-        })?;
-        conn.execute(
-            "INSERT OR IGNORE INTO session_sequence (session_id, next_sequence) VALUES (?1, 1)",
-            rusqlite::params![session_id],
-        )
-        .map_err(|e| self.latch_error("seed_sequence_seed", e))?;
-        conn.execute(
-            "UPDATE session_sequence
-             SET next_sequence = MAX(next_sequence, ?2)
-             WHERE session_id = ?1",
-            rusqlite::params![session_id, next_sequence],
-        )
-        .map_err(|e| self.latch_error("seed_sequence_set", e))?;
-        Ok(())
+        let session_id = session_id.to_string();
+        self.write_blocking(move |conn| {
+            conn.execute(
+                "INSERT OR IGNORE INTO session_sequence (session_id, next_sequence) VALUES (?1, 1)",
+                rusqlite::params![session_id],
+            )
+            .map_err(|e| DbFailure {
+                message: format!("seed_sequence_seed: {e}"),
+                kind: DbFailureKind::Other("seed_sequence".to_string()),
+            })?;
+            conn.execute(
+                "UPDATE session_sequence
+                 SET next_sequence = MAX(next_sequence, ?2)
+                 WHERE session_id = ?1",
+                rusqlite::params![session_id, next_sequence],
+            )
+            .map_err(|e| DbFailure {
+                message: format!("seed_sequence_set: {e}"),
+                kind: DbFailureKind::Other("seed_sequence".to_string()),
+            })?;
+            Ok(())
+        })
     }
 }
 

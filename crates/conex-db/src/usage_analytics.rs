@@ -186,59 +186,57 @@ pub fn local_hour(timestamp_ms: i64, tz_offset_minutes: i32) -> u32 {
 // ─────────────────────────────────────────────────────────────────────────────
 
 impl LocalDb {
-    /// 插入一条用量记录
+    /// 插入一条用量记录。经组提交 Writer。
     pub fn insert_usage_record(&self, input: InsertUsageRecordInput) -> Result<i64, DbFailure> {
-        let conn = self.conn.lock().map_err(|e| DbFailure {
-            message: format!("lock poisoned: {e}"),
-            kind: DbFailureKind::Lock,
-        })?;
+        self.write_blocking(move |conn| {
+            let timestamp = if input.timestamp <= 0 {
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_millis() as i64)
+                    .unwrap_or(0)
+            } else {
+                input.timestamp
+            };
 
-        let timestamp = if input.timestamp <= 0 {
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_millis() as i64)
-                .unwrap_or(0)
-        } else {
-            input.timestamp
-        };
-
-        conn.execute(
-            "INSERT INTO usage_records (
-                session_id, run_id, project_name, model, provider,
-                prompt_tokens, completion_tokens, cache_read_tokens, cache_write_tokens,
-                cost_cny, cost_usd, timestamp
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12);",
-            params![
-                input.session_id,
-                input.run_id,
-                input.project_name,
-                input.model,
-                input.provider,
-                input.prompt_tokens as i64,
-                input.completion_tokens as i64,
-                input.cache_read_tokens as i64,
-                input.cache_write_tokens as i64,
-                input.cost_cny,
-                input.cost_usd,
-                timestamp,
-            ],
-        )
-        .map_err(|e| self.latch_error("insert_usage_record", e))?;
-
-        Ok(conn.last_insert_rowid())
+            conn.execute(
+                "INSERT INTO usage_records (
+                    session_id, run_id, project_name, model, provider,
+                    prompt_tokens, completion_tokens, cache_read_tokens, cache_write_tokens,
+                    cost_cny, cost_usd, timestamp
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12);",
+                params![
+                    input.session_id,
+                    input.run_id,
+                    input.project_name,
+                    input.model,
+                    input.provider,
+                    input.prompt_tokens as i64,
+                    input.completion_tokens as i64,
+                    input.cache_read_tokens as i64,
+                    input.cache_write_tokens as i64,
+                    input.cost_cny,
+                    input.cost_usd,
+                    timestamp,
+                ],
+            )
+            .map_err(|e| DbFailure {
+                message: format!("insert_usage_record: {e}"),
+                kind: DbFailureKind::Other("insert_usage_record".to_string()),
+            })?;
+            Ok(conn.last_insert_rowid())
+        })
     }
 
-    /// 清空本机全部用量记录
+    /// 清空本机全部用量记录。经组提交 Writer。
     pub fn clear_usage_history(&self) -> Result<(), DbFailure> {
-        let conn = self.conn.lock().map_err(|e| DbFailure {
-            message: format!("lock poisoned: {e}"),
-            kind: DbFailureKind::Lock,
-        })?;
-
-        conn.execute("DELETE FROM usage_records;", [])
-            .map_err(|e| self.latch_error("clear_usage_history", e))?;
-
-        Ok(())
+        self.write_blocking(move |conn| {
+            conn.execute("DELETE FROM usage_records;", [])
+                .map_err(|e| DbFailure {
+                    message: format!("clear_usage_history: {e}"),
+                    kind: DbFailureKind::Other("clear_usage_history".to_string()),
+                })?;
+            Ok(())
+        })
     }
 
     /// 存量 LocalStorage 快照平滑迁移（幂等，成功导入返回 true，已迁移过返回 false）

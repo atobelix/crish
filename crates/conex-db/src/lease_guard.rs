@@ -123,81 +123,91 @@ impl BlobLeaseGuard {
 
 impl LocalDb {
     /// 获取持久化活数据保护租约（向 `active_blob_leases` 写入行，默认 30 分钟）。
+    /// 经组提交 Writer。
     pub fn acquire_blob_lease(
         &self,
         blob_hash: &str,
         holder: Option<&str>,
         duration: Option<Duration>,
     ) -> Result<ActiveBlobLease, DbFailure> {
-        let conn = self.conn.lock().map_err(|e| DbFailure {
-            message: format!("lock poisoned: {e}"),
-            kind: DbFailureKind::Lock,
-        })?;
-        acquire_blob_lease_conn(&conn, blob_hash, holder, duration)
-            .map_err(|e| self.latch_error("acquire_blob_lease", e))
+        let blob_hash = blob_hash.to_string();
+        let holder = holder.map(|s| s.to_string());
+        self.write_blocking(move |conn| {
+            acquire_blob_lease_conn(conn, &blob_hash, holder.as_deref(), duration).map_err(|e| {
+                DbFailure {
+                    message: format!("acquire_blob_lease: {e}"),
+                    kind: DbFailureKind::Other("acquire_blob_lease".to_string()),
+                }
+            })
+        })
     }
 
-    /// 续期指定租约（延长指定时长或默认 30 分钟）。
+    /// 续期指定租约（延长指定时长或默认 30 分钟）。经组提交 Writer。
     pub fn renew_blob_lease(
         &self,
         lease_id: &str,
         duration: Option<Duration>,
     ) -> Result<bool, DbFailure> {
-        let conn = self.conn.lock().map_err(|e| DbFailure {
-            message: format!("lock poisoned: {e}"),
-            kind: DbFailureKind::Lock,
-        })?;
-        renew_blob_lease_conn(&conn, lease_id, duration)
-            .map_err(|e| self.latch_error("renew_blob_lease", e))
+        let lease_id = lease_id.to_string();
+        self.write_blocking(move |conn| {
+            renew_blob_lease_conn(conn, &lease_id, duration).map_err(|e| DbFailure {
+                message: format!("renew_blob_lease: {e}"),
+                kind: DbFailureKind::Other("renew_blob_lease".to_string()),
+            })
+        })
     }
 
-    /// 释放指定租约 ID。
+    /// 释放指定租约 ID。经组提交 Writer。
     pub fn release_blob_lease(&self, lease_id: &str) -> Result<bool, DbFailure> {
-        let conn = self.conn.lock().map_err(|e| DbFailure {
-            message: format!("lock poisoned: {e}"),
-            kind: DbFailureKind::Lock,
-        })?;
-        release_blob_lease_conn(&conn, lease_id)
-            .map_err(|e| self.latch_error("release_blob_lease", e))
+        let lease_id = lease_id.to_string();
+        self.write_blocking(move |conn| {
+            release_blob_lease_conn(conn, &lease_id).map_err(|e| DbFailure {
+                message: format!("release_blob_lease: {e}"),
+                kind: DbFailureKind::Other("release_blob_lease".to_string()),
+            })
+        })
     }
 
-    /// 释放某个 Hash 下的所有租约（在附件合入 `block_attachments` 后调用）。
+    /// 释放某个 Hash 下的所有租约（在附件合入 `block_attachments` 后调用）。经组提交 Writer。
     pub fn release_blob_leases_for_hash(&self, blob_hash: &str) -> Result<usize, DbFailure> {
-        let conn = self.conn.lock().map_err(|e| DbFailure {
-            message: format!("lock poisoned: {e}"),
-            kind: DbFailureKind::Lock,
-        })?;
-        release_blob_leases_for_hash_conn(&conn, blob_hash)
-            .map_err(|e| self.latch_error("release_blob_leases_for_hash", e))
+        let blob_hash = blob_hash.to_string();
+        self.write_blocking(move |conn| {
+            release_blob_leases_for_hash_conn(conn, &blob_hash).map_err(|e| DbFailure {
+                message: format!("release_blob_leases_for_hash: {e}"),
+                kind: DbFailureKind::Other("release_blob_leases_for_hash".to_string()),
+            })
+        })
     }
 
-    /// 检查持久化表中 Hash 是否处于有效租约保护期内。
+    /// 检查持久化表中 Hash 是否处于有效租约保护期内。读路径经 [`LocalDb::read`]。
     pub fn is_blob_leased(&self, blob_hash: &str) -> Result<bool, DbFailure> {
-        let conn = self.conn.lock().map_err(|e| DbFailure {
-            message: format!("lock poisoned: {e}"),
-            kind: DbFailureKind::Lock,
-        })?;
-        is_blob_leased_conn(&conn, blob_hash).map_err(|e| self.latch_error("is_blob_leased", e))
+        let blob_hash = blob_hash.to_string();
+        self.read(move |conn| {
+            is_blob_leased_conn(conn, &blob_hash).map_err(|e| DbFailure {
+                message: format!("is_blob_leased: {e}"),
+                kind: DbFailureKind::Other("is_blob_leased".to_string()),
+            })
+        })
     }
 
-    /// 清理持久化表中所有已过期的租约记录，返回清理行数。
+    /// 清理持久化表中所有已过期的租约记录，返回清理行数。经组提交 Writer。
     pub fn sweep_expired_blob_leases(&self) -> Result<usize, DbFailure> {
-        let conn = self.conn.lock().map_err(|e| DbFailure {
-            message: format!("lock poisoned: {e}"),
-            kind: DbFailureKind::Lock,
-        })?;
-        sweep_expired_blob_leases_conn(&conn)
-            .map_err(|e| self.latch_error("sweep_expired_blob_leases", e))
+        self.write_blocking(move |conn| {
+            sweep_expired_blob_leases_conn(conn).map_err(|e| DbFailure {
+                message: format!("sweep_expired_blob_leases: {e}"),
+                kind: DbFailureKind::Other("sweep_expired_blob_leases".to_string()),
+            })
+        })
     }
 
-    /// 列出当前所有未过期的活跃持久化租约。
+    /// 列出当前所有未过期的活跃持久化租约。读路径经 [`LocalDb::read`]。
     pub fn list_active_blob_leases(&self) -> Result<Vec<ActiveBlobLease>, DbFailure> {
-        let conn = self.conn.lock().map_err(|e| DbFailure {
-            message: format!("lock poisoned: {e}"),
-            kind: DbFailureKind::Lock,
-        })?;
-        list_active_blob_leases_conn(&conn)
-            .map_err(|e| self.latch_error("list_active_blob_leases", e))
+        self.read(|conn| {
+            list_active_blob_leases_conn(conn).map_err(|e| DbFailure {
+                message: format!("list_active_blob_leases: {e}"),
+                kind: DbFailureKind::Other("list_active_blob_leases".to_string()),
+            })
+        })
     }
 }
 

@@ -140,7 +140,8 @@ pub(crate) fn create_v5_schema() -> &'static str {
         engine_cursor INTEGER,
         engine_last_run_id TEXT,
         hydrated_from_engine INTEGER,
-        created_at INTEGER NOT NULL DEFAULT (strftime('%s','now') * 1000)
+        created_at INTEGER NOT NULL DEFAULT (strftime('%s','now') * 1000),
+        body_version INTEGER NOT NULL DEFAULT 0
     ) WITHOUT ROWID;
 
     CREATE TABLE IF NOT EXISTS events (
@@ -153,6 +154,10 @@ pub(crate) fn create_v5_schema() -> &'static str {
         PRIMARY KEY (session_id, sequence),
         FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
     ) WITHOUT ROWID;
+
+    -- D3-5 索引：events 按类型过滤 / sessions 按 updated_at 排序
+    CREATE INDEX IF NOT EXISTS idx_events_session_type ON events(session_id, event_type, sequence);
+    CREATE INDEX IF NOT EXISTS idx_sessions_updated ON sessions(updated_at, id);
 
     CREATE TABLE IF NOT EXISTS runs (
         run_id TEXT PRIMARY KEY,
@@ -259,17 +264,10 @@ pub(crate) fn create_v5_schema() -> &'static str {
         value TEXT NOT NULL
     ) WITHOUT ROWID;
 
-    CREATE TRIGGER IF NOT EXISTS trg_session_messages_insert
-    AFTER INSERT ON session_messages
-    BEGIN
-        UPDATE sessions SET message_count = message_count + 1 WHERE id = NEW.session_id;
-    END;
-
-    CREATE TRIGGER IF NOT EXISTS trg_session_messages_delete
-    AFTER DELETE ON session_messages
-    BEGIN
-        UPDATE sessions SET message_count = message_count - 1 WHERE id = OLD.session_id;
-    END;
+    -- D3-4 / DEL-3：双触发器退役（v12）。message_count 由 save_session_body
+    -- 批末单次重算；ensure 路径幂等 DROP，禁止重建。
+    DROP TRIGGER IF EXISTS trg_session_messages_insert;
+    DROP TRIGGER IF EXISTS trg_session_messages_delete;
 
     -- CAS 活数据与垃圾回收表（Batch 2 Unit 2.2：CAS GC、租约与多源联合引用）
     CREATE TABLE IF NOT EXISTS blob_cas (
