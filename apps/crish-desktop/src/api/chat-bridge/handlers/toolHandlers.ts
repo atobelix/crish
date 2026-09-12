@@ -30,12 +30,12 @@ export function onToolEnd(
 ): void {
   const { callbacks, approvalFlow, tryResumeFinish } = env;
   const resultPayload = envelope.raw.result ?? envelope.raw;
-  const { id, text, isError, diffs } = toolResultFields(resultPayload);
+  const { id, text, isError, diffs, durationMs } = toolResultFields(resultPayload);
   if (!id || !id.trim()) return;
   const toolId = id.trim();
   approvalFlow.dispatch({ type: 'tool_end', toolId });
-  if (isError) callbacks.onToolError(toolId, text || 'failed');
-  else callbacks.onToolSuccess(toolId, text || '', diffs);
+  if (isError) callbacks.onToolError(toolId, text || 'failed', durationMs);
+  else callbacks.onToolSuccess(toolId, text || '', diffs, durationMs);
   tryResumeFinish();
 }
 

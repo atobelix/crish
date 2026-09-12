@@ -116,6 +116,17 @@ export function stripThoughtPlaceholders(text: string): string {
   return result;
 }
 
+/**
+ * 判定一段文本是否仅为无实质内容的思考占位符（如「正在处理…」、「正在思考中...」等）。
+ */
+export function isThoughtPlaceholder(text: string | null | undefined): boolean {
+  if (!text) return true;
+  const trimmed = text.trim();
+  if (!trimmed) return true;
+  if (/^正在(处理|思考中)[….\s]*$/.test(trimmed)) return true;
+  return stripThoughtPlaceholders(trimmed).trim().length === 0;
+}
+
 export interface ThoughtStripperFrame {
   /** 本帧应 append 给 DOM 的显示增量（可为空串） */
   appended: string;

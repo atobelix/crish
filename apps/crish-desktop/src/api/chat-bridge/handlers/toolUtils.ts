@@ -24,16 +24,23 @@ function stringifyUnknown(v: unknown): string {
   }
 }
 
-/** tool-result 基础字段：id（toolCallId 优先）、isError（含 error 真值）、text、filePath */
+/** tool-result 基础字段：id（toolCallId 优先）、isError（含 error 真值）、text、filePath、durationMs */
 function toolResultBasics(result: unknown): {
   id: string;
   text: string;
   isError: boolean;
   filePath?: string;
+  durationMs?: number;
 } {
   const r = isRecord(result) ? result : {};
   const id = String(r.toolCallId ?? r.id ?? r.tool_call_id ?? '').trim();
   const isError = Boolean(r.isError) || (r.error != null && r.error !== false);
+  const durationMs =
+    typeof r.duration_ms === 'number' && Number.isFinite(r.duration_ms)
+      ? r.duration_ms
+      : typeof r.durationMs === 'number' && Number.isFinite(r.durationMs)
+        ? r.durationMs
+        : undefined;
   let text = '';
   if (typeof r.output === 'string') {
     text = r.output;
@@ -55,7 +62,13 @@ function toolResultBasics(result: unknown): {
     else if (typeof o.filePath === 'string' && o.filePath.trim())
       filePath = o.filePath.trim();
   }
-  return { id, text, isError, ...(filePath ? { filePath } : {}) };
+  return {
+    id,
+    text,
+    isError,
+    ...(filePath ? { filePath } : {}),
+    ...(durationMs !== undefined ? { durationMs } : {}),
+  };
 }
 
 export function toolCallFields(call: unknown): {
@@ -94,9 +107,10 @@ export function toolResultFields(result: unknown): {
   isError: boolean;
   diffs?: FileDiff[];
   filePath?: string;
+  durationMs?: number;
 } {
   const basics = toolResultBasics(result);
-  const { id, text, isError } = basics;
+  const { id, text, isError, durationMs } = basics;
   let filePath = basics.filePath;
 
   const r = isRecord(result) ? result : ({} as Record<string, unknown>);
@@ -134,5 +148,12 @@ export function toolResultFields(result: unknown): {
     if (parsed.length) diffs = parsed;
   }
 
-  return { id, text, isError, diffs, filePath };
+  return {
+    id,
+    text,
+    isError,
+    diffs,
+    filePath,
+    ...(durationMs !== undefined ? { durationMs } : {}),
+  };
 }

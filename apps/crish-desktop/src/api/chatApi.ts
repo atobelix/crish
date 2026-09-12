@@ -100,8 +100,8 @@ export interface StreamCallbacks {
     args: string,
     explanation: string
   ) => void;
-  onToolSuccess: (toolId: string, output: string, diffs?: FileDiff[]) => void;
-  onToolError: (toolId: string, error: string) => void;
+  onToolSuccess: (toolId: string, output: string, diffs?: FileDiff[], durationMs?: number) => void;
+  onToolError: (toolId: string, error: string, durationMs?: number) => void;
   onChunk: (chunk: string) => void;
   onComplete: () => void;
   /**

@@ -256,7 +256,16 @@ describe('回读面：usage_json → cacheMetrics（R6-D5 回放链）', () => {
     expect(m?.status).toBe('completed');
     expect(m?.streamTextOffset).toBe(2);
     expect(m?.thinkingTime).toBe(3);
-    expect(m?.blocks).toEqual([{ type: 'text', content: 'hi' }]);
+    expect(m?.blocks).toEqual([
+      {
+        id: 'thought-legacy',
+        type: 'thought',
+        content: 'thought',
+        durationMs: 3000,
+        turnIndex: 0,
+      },
+      { type: 'text', content: 'hi', turnIndex: 0 },
+    ]);
     expect(m?.cacheMetrics?.metrics?.hitRate).toBeCloseTo(0.75);
   });
 });

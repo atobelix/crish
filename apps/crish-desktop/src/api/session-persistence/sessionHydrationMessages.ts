@@ -78,6 +78,16 @@ function parseToolCall(raw: unknown): MessageToolCall | null {
   if (o.approvalMeta && typeof o.approvalMeta === 'object') {
     tc.approvalMeta = o.approvalMeta as MessageToolApprovalMeta;
   }
+  const startedAt = asFiniteNumber(o.startedAt);
+  if (startedAt != null) tc.startedAt = startedAt;
+  const finishedAt = asFiniteNumber(o.finishedAt);
+  if (finishedAt != null) tc.finishedAt = finishedAt;
+  const durationMs = asFiniteNumber(o.durationMs);
+  if (durationMs != null) {
+    tc.durationMs = durationMs;
+  } else if (startedAt != null && finishedAt != null && finishedAt >= startedAt) {
+    tc.durationMs = finishedAt - startedAt;
+  }
   return tc;
 }
 
@@ -103,6 +113,18 @@ export function parseSessionMessage(raw: unknown): SessionMessage | null {
 
   if (typeof o.text === 'string') msg.text = o.text;
   if (typeof o.thinking === 'string') msg.thinking = o.thinking;
+  if (Array.isArray(o.thinkingTurns) && o.thinkingTurns.length) {
+    msg.thinkingTurns = o.thinkingTurns
+      .filter((tt): tt is Record<string, unknown> => Boolean(tt && typeof tt === 'object'))
+      .map((tt) => ({
+        turnIndex: typeof tt.turnIndex === 'number' ? tt.turnIndex : 0,
+        content: typeof tt.content === 'string' ? tt.content : '',
+        ...(typeof tt.durationMs === 'number' ? { durationMs: tt.durationMs } : {}),
+        ...(typeof tt.id === 'string' ? { id: tt.id } : {}),
+        ...(typeof tt.isStreaming === 'boolean' ? { isStreaming: tt.isStreaming } : {}),
+        ...(typeof tt.startTime === 'number' ? { startTime: tt.startTime } : {}),
+      }));
+  }
   if (
     typeof o.status === 'string' &&
     MSG_STATUSES.has(o.status as NonNullable<SessionMessage['status']>)
@@ -133,11 +155,15 @@ export function parseSessionMessage(raw: unknown): SessionMessage | null {
         typeof bo.turnIndex === 'number' && Number.isFinite(bo.turnIndex)
           ? bo.turnIndex
           : undefined;
+      const bStart = asFiniteNumber(bo.startTime);
+      const bDur = asFiniteNumber(bo.durationMs);
       if (bo.type === 'text') {
         blocks.push({
           type: 'text',
           content: typeof bo.content === 'string' ? bo.content : '',
           ...(bTurn !== undefined ? { turnIndex: bTurn } : {}),
+          ...(bStart != null ? { startTime: bStart } : {}),
+          ...(bDur != null ? { durationMs: bDur } : {}),
         });
       } else if (bo.type === 'tool_call') {
         const bid = typeof bo.id === 'string' ? bo.id : undefined;
@@ -145,19 +171,18 @@ export function parseSessionMessage(raw: unknown): SessionMessage | null {
           type: 'tool_call',
           ...(bid !== undefined ? { id: bid } : {}),
           ...(bTurn !== undefined ? { turnIndex: bTurn } : {}),
+          ...(bStart != null ? { startTime: bStart } : {}),
+          ...(bDur != null ? { durationMs: bDur } : {}),
         });
       } else if (bo.type === 'thought') {
         const bid = typeof bo.id === 'string' ? bo.id : undefined;
-        const dur =
-          typeof bo.durationMs === 'number' && Number.isFinite(bo.durationMs)
-            ? bo.durationMs
-            : undefined;
         blocks.push({
           type: 'thought',
           content: typeof bo.content === 'string' ? bo.content : '',
           ...(bid !== undefined ? { id: bid } : {}),
           ...(bTurn !== undefined ? { turnIndex: bTurn } : {}),
-          ...(dur !== undefined ? { durationMs: dur } : {}),
+          ...(bStart != null ? { startTime: bStart } : {}),
+          ...(bDur != null ? { durationMs: bDur } : {}),
           ...(typeof bo.isStreaming === 'boolean'
             ? { isStreaming: bo.isStreaming }
             : {}),
@@ -173,6 +198,8 @@ export function parseSessionMessage(raw: unknown): SessionMessage | null {
           ...(bid !== undefined ? { id: bid } : {}),
           ...(bo.injection ? { injection: bo.injection as any } : {}),
           ...(bTurn !== undefined ? { turnIndex: bTurn } : {}),
+          ...(bStart != null ? { startTime: bStart } : {}),
+          ...(bDur != null ? { durationMs: bDur } : {}),
         });
       }
     }

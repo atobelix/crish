@@ -122,35 +122,21 @@ describe('rematerializeMarkdownHtml', () => {
 
 describe('readCodeBlockIndent', () => {
   beforeEach(() => {
-    localStorage.clear();
     useSettingsStore.setState({ appSettings: null });
   });
 
   afterEach(() => {
-    localStorage.clear();
     useSettingsStore.setState({ appSettings: null });
   });
 
-  it('store 优先于 LS', () => {
-    localStorage.setItem(
-      'crish_settings',
-      JSON.stringify({ markdown: { codeBlockIndent: '    ' } })
-    );
+  it('store 存在值时优先读取', () => {
     useSettingsStore.setState({
       appSettings: { markdown: { codeBlockIndent: '\t' } } as never,
     });
     expect(readCodeBlockIndent()).toBe('\t');
   });
 
-  it('store 空时读 LS', () => {
-    localStorage.setItem(
-      'crish_settings',
-      JSON.stringify({ markdown: { codeBlockIndent: '    ' } })
-    );
-    expect(readCodeBlockIndent()).toBe('    ');
-  });
-
-  it('皆空回落 2 空格', () => {
+  it('store 为空或未就绪时回落 2 空格', () => {
     expect(readCodeBlockIndent()).toBe('  ');
   });
 });

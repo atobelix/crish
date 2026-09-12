@@ -275,6 +275,7 @@ export function applyToolCallPatches(
     id: string;
     status: any;
     output?: string;
+    durationMs?: number;
   }>
 ): void {
   const sid = requireExistingSessionId(sessionId);
