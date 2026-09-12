@@ -50,6 +50,7 @@ import {
   persistAllSessionsRust,
   persistAllSessionsSyncViaLocalStorage,
 } from './sessionRustDb';
+import { loadSessionAgents, saveSessionAgents } from './sessionRustDbSql';
 import { invokeResult } from '../tauriInvoke';
 import { prepareSessionsForUi } from '../sessionTitle';
 
@@ -950,6 +951,97 @@ describe('T2-1 剥镜像：save_session_body 失败→可感知降级，不再�
   });
 });
 
+describe('D-F06 偏离 #2 收尾：agents LS 镜像双轨剥离（SQLite 唯一权威）', () => {
+  const agent = {
+    id: 'ag1',
+    subagentRunId: 'r1',
+    parentSessionId: 's1',
+    parentRunId: 'pr1',
+    description: 'd',
+    mode: 'research' as const,
+    status: 'completed' as const,
+    messages: [],
+    startedAt: 1,
+    depth: 0,
+    subagentPath: ['ag1'],
+  };
+
+  it('saveSessionAgents invoke 失败 → errorStore 留痕 + 不写 LS agents 镜像', async () => {
+    const { call } = makeFakeDb();
+    installFakeTransport(call);
+    // 预热 invoke 懒加载（与既有先例一致）
+    await invokeResult('list_sessions');
+    mockTauriError('save_session_agents', new Error('sqlite busy'));
+    const logSpy = vi.spyOn(userFacingErrors, 'logInternalError');
+
+    await saveSessionAgents('s1', [agent]);
+
+    expect(logSpy).toHaveBeenCalledWith(
+      'persist-degraded-ls',
+      expect.objectContaining({
+        command: 'save_session_agents',
+        sessionId: 's1',
+      })
+    );
+    // 剥双轨：失败不静默回退写 LS agents
+    expect(localStorage.getItem(SESSION_AGENTS_PREFIX + 's1')).toBeNull();
+  });
+
+  it('saveSessionAgents 空列表 invoke 失败 → 不刷 LS agents 空键/[]', async () => {
+    const { call } = makeFakeDb();
+    installFakeTransport(call);
+    await invokeResult('list_sessions');
+    // 预置残存 agents 键：失败不得用 [] 覆盖（与正文「清空不刷 []」同构）
+    const legacy = JSON.stringify([agent]);
+    localStorage.setItem(SESSION_AGENTS_PREFIX + 's1', legacy);
+    mockTauriError('save_session_agents', new Error('sqlite busy'));
+    const logSpy = vi.spyOn(userFacingErrors, 'logInternalError');
+
+    await saveSessionAgents('s1', []);
+
+    expect(logSpy).toHaveBeenCalledWith(
+      'persist-degraded-ls',
+      expect.objectContaining({
+        command: 'save_session_agents',
+        sessionId: 's1',
+      })
+    );
+    // 残键原样保留（不写 []、不擦除——删除语义仅由孤儿清理承担）
+    expect(localStorage.getItem(SESSION_AGENTS_PREFIX + 's1')).toBe(legacy);
+  });
+
+  it('loadSessionAgents invoke missing → 返回空 + persist-degraded-ls（不再回退 LS agents）', async () => {
+    // 不安装 transport → invoke missing；历史 LS agents 键仍在，但权威在 SQLite，
+    // load 失败仅 errorStore 留痕，不把 LS 当 agents 源静默回灌。
+    localStorage.setItem(SESSION_AGENTS_PREFIX + 's-fallback-cut', JSON.stringify([agent]));
+    const logSpy = vi.spyOn(userFacingErrors, 'logInternalError');
+
+    const agents = await loadSessionAgents('s-fallback-cut');
+    expect(agents).toEqual([]);
+    expect(logSpy).toHaveBeenCalledWith(
+      'persist-degraded-ls',
+      expect.objectContaining({
+        command: 'load_session_agents',
+        sessionId: 's-fallback-cut',
+      })
+    );
+  });
+
+  it('SQLite 主路径 persist 成功：agents 落库且不镜像 LS（与正文同构）', async () => {
+    const { db, call } = makeFakeDb();
+    installFakeTransport(call);
+    const s = sess('s1', [msg('m1', 'user')], { agents: [agent] });
+    await persistAllSessionsRust([s], 's1', [DEFAULT_SESSION_FOLDER], {
+      sessionsToIndex,
+    });
+
+    // SQLite 侧正常写入
+    expect(db.sessions.get('s1')?.agents).toHaveLength(1);
+    // 不再镜像 LS agents
+    expect(localStorage.getItem(SESSION_AGENTS_PREFIX + 's1')).toBeNull();
+  });
+});
+
 describe('S1 降级可感知：persistenceStatus 状态推进（D-05）', () => {
   beforeEach(() => {
     // errorStore 为全局单例：复位健康态，并解决历史残留的降级专名条目，
@@ -1152,15 +1244,29 @@ describe('清空消息持久化与防僵尸复活事务（DEF-03 / DEF-SESS-12�
     );
   });
 
-  it('probe 失败回退也不写 LS 正文（D-F06 降级仅内存留痕）：有消息会话残键/缺键均不落新正文', async () => {
+  it('probe 失败回退也不写 LS 正文/agents（D-F06 + 偏离 #2）：降级仅内存留痕', async () => {
     // 不安装 transport → probe missing → persistAllSessionsLocalFallback
-    const s = sess('s-degraded', [msg('m1', 'user')]);
+    const agent = {
+      id: 'ag1',
+      subagentRunId: 'r1',
+      parentSessionId: 's-degraded',
+      parentRunId: 'pr1',
+      description: 'd',
+      mode: 'research' as const,
+      status: 'completed' as const,
+      messages: [],
+      startedAt: 1,
+      depth: 0,
+      subagentPath: ['ag1'],
+    };
+    const s = sess('s-degraded', [msg('m1', 'user')], { agents: [agent] });
     await persistAllSessionsRust([s], 's-degraded', [DEFAULT_SESSION_FOLDER], {
       sessionsToIndex,
     });
 
-    // 正文键不得被创建（降级时仅内存 store + errorStore 留痕）
+    // 正文/agents 键均不得被创建（D-F06 + 偏离 #2：降级时仅内存 store + errorStore 留痕）
     expect(localStorage.getItem(SESSION_BODY_PREFIX + 's-degraded')).toBeNull();
+    expect(localStorage.getItem(SESSION_AGENTS_PREFIX + 's-degraded')).toBeNull();
     // 索引壳仍写（侧栏元数据过渡期契约不变）
     expect(localStorage.getItem(SESSION_INDEX_KEY)).not.toBeNull();
   });

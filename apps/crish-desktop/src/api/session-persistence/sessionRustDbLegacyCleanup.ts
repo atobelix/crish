@@ -157,8 +157,8 @@ export async function cleanupLegacyLocalStorageSessionsGuarded(): Promise<Legacy
 
   // 3. 逐会话校验：LS 有数据且 SQLite 无对应（缺会话 / 正文空）→ 保留
   for (const id of lsIds) {
-    // D-F06：lsLoadSessionBody 为最小只读迁移面（写口已删）——此处仅判定
-    // 「LS 是否仍持有唯一副本」，不构成正文权威双轨。
+    // D-F06：lsLoadSessionBody / lsLoadSessionAgents 均为最小只读迁移面
+    //（写口已删）——此处仅判定「LS 是否仍持有唯一副本」，不构成权威双轨。
     const lsBody = lsLoadSessionBody(id);
     const lsAgents = lsLoadSessionAgents(id);
     const hasLsData = lsBody.length > 0 || lsAgents.length > 0;

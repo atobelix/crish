@@ -22,7 +22,6 @@ import {
   lsLoadSessionIndex,
   lsSaveActiveSessionId,
   lsSaveFolderOrder,
-  lsSaveSessionAgents,
   lsSaveSessionIndex,
 } from './sessionRustDbFallback';
 import {
@@ -141,8 +140,9 @@ export async function ensureSessionBodyHydrated(sessionId: string): Promise<{
  *   - 仅对 targetActiveId 发起 1 次 body + 1 次 agents（活跃会话全量水合）
  *   - 其余历史会话 → 轻量懒壳（messages: [], messagesHydrated: false）
  *   - 正常路径 IPC 常数上界 K = 5：list + meta(active) + body + agents + meta(folder)
- *   - invoke 缺失时 loadSessionAgents 内部回退 localStorage；正文（D-F06）
- *     不再回退 LS——失败经 errorStore 留痕并返回空，降级仅内存留痕
+ *   - invoke 缺失时 loadSessionAgents 与 loadSessionBody 同构（D-F06 正文 +
+ *     偏离 #2 收尾 agents）：均不再回退 LS——失败经 errorStore 留痕并返回空，
+ *     降级仅内存留痕
  *
  * 空壳剪枝兼容（防侧栏丢会话）：「默认标题 + messageCount>0 的未水合懒壳」
  * 会被 prepareSessionsForUi 误剪——将此类懒壳 ID 并入 keepIds（方案 A）。
@@ -387,10 +387,11 @@ export async function persistAllSessionsRust(
 /**
  * localStorage 同步回退：仅在 invoke 不可用时使用。
  * 索引已由调用方（persistAllSessionsRust）写入 localStorage，此处仅写
- * agents/meta。D-F06：正文写口已删——降级时不再把 LS 当正文权威写口，
- * 正文不落新数据（仅内存 store + errorStore 留痕，persist-degraded-ls）；
- * 既有残存正文键的孤儿**删除**仍保留（删除语义：不在 keep 集合的会话
- * 其镜像键清除，与 N1-2 守卫对齐），但绝不向正文键写入/覆盖任何内容。
+ * meta。D-F06：正文写口已删；偏离 #2 收尾：agents 写口（lsSaveSessionAgents）
+ * 亦已物理删除——降级时不再把 LS 当正文/agents 权威写口，两者均不落新数据
+ * （仅内存 store + errorStore 留痕，persist-degraded-ls）；
+ * 既有残存正文/agents 键的孤儿**删除**仍保留（删除语义：不在 keep 集合的会话
+ * 其镜像键清除，与 N1-2 守卫对齐），但绝不向正文/agents 键写入/覆盖任何内容。
  */
 function persistAllSessionsLocalFallback(
   sessions: SessionState[],
@@ -403,15 +404,12 @@ function persistAllSessionsLocalFallback(
   );
   const keep = new Set(list.map((s) => s.id).filter(Boolean) as string[]);
 
-  // 写入 keep 集合中的 agents（正文已无写口，D-F06）
-  for (const s of list) {
-    if (!s?.id) continue;
-    lsSaveSessionAgents(s.id, s.agents || []);
-  }
+  // agents 写口已删（D-F06 偏离 #2）：SQLite save_session_agents 为唯一权威，
+  // 降级仅 errorStore 留痕（由 saveSessionAgents 失败分支承担），此处不写 LS。
 
   // 孤儿清理（N1-2 守卫：空 keep 不清除——与 Rust guard_cleanup_keep
-  // 语义对齐，boot 窗口 / 全删场景不得清空 LS 镜像）。D-F06：仅剩删除
-  // 语义（移除不在 keep 中的残键），不再有任何正文写入。
+  // 语义对齐，boot 窗口 / 全删场景不得清空 LS 镜像）。D-F06 + 偏离 #2：仅剩删除
+  // 语义（移除不在 keep 中的 body/agents 残键），不再有任何正文/agents 写入。
   if (keep.size > 0) {
     try {
       const keys: string[] = [];

@@ -27,11 +27,9 @@ import {
 import {
   lsLoadActiveSessionId,
   lsLoadFolderOrder,
-  lsLoadSessionAgents,
   lsLoadSessionIndex,
   lsSaveActiveSessionId,
   lsSaveFolderOrder,
-  lsSaveSessionAgents,
 } from './sessionRustDbFallback';
 import {
   SESSION_ACTIVE_KEY,
@@ -141,24 +139,38 @@ export async function saveSessionBody(
 
 /**
  * 加载会话下的协作子 agent。
+ * 命令缺失/失败 → 不再静默回退 LS agents（D-F06 偏离 #2 收尾，与正文同构）：
+ * SQLite 为 agents 唯一权威，失败经 errorStore 数据面留痕并返回空数组；
+ * lsLoadSessionAgents 仅供 30 天清理护栏唯一副本判定（最小只读迁移面）。
  */
 export async function loadSessionAgents(
   sessionId: string
 ): Promise<SessionAgent[]> {
   if (!sessionId?.trim() || isPendingDraft(sessionId)) return [];
   // Wave C（D-F03）：LS 截断标志读面已随 sessionAgentsTruncation 整模块删除；
-  // SQLite 主路径全量保存，回退 LS 时仅有配额保护线无标志留痕。
+  // SQLite 主路径全量保存。
   const res = await invokeResult<RustSessionAgent[]>('load_session_agents', {
     sessionId,
   });
   if (res.status === 'ok')
     return hydrateSessionAgents(fromRustSessionAgents(res.data || []));
-  return lsLoadSessionAgents(sessionId);
+  // D-F06 偏离 #2：缺/错命令不再回退 lsLoadSessionAgents（该读面降格为
+  // 清理护栏专用，见 sessionRustDbFallback 头注）。失败改走 errorStore 数据面带。
+  logInternalError('persist-degraded-ls', {
+    command: 'load_session_agents',
+    sessionId,
+    status: res.status,
+  });
+  return [];
 }
 
 /**
  * 保存会话下的协作子 agent。
  * I-DRAFT：PENDING_DRAFT 哨兵永不写 agents。
+ *
+ * D-F06 偏离 #2 收尾（与正文同构）：SQLite 为唯一落点，命令缺失/错误不改写
+ * LS agents 镜像，失败经 errorStore 数据面带呈现（persist-degraded-ls）。
+ * lsSaveSessionAgents 写口已物理删除，严禁恢复。
  *
  * P18（AA-07）语义变更：SQLite 主路径全量保存，不再 slice——
  * Rust 侧 save_session_agents 无数量上限，第 41 个起的子代理及其消息不再
@@ -171,7 +183,7 @@ export async function saveSessionAgents(
 ): Promise<void> {
   if (!sessionId?.trim() || isPendingDraft(sessionId)) return;
   if (!agents || agents.length === 0) {
-    // 空列表仍调 invoke 让 Rust 侧清空；missing 时回退到 localStorage
+    // 空列表仍调 invoke 让 Rust 侧清空；missing/error 时仅留痕，不写 LS
     const res = await invokeResult<void>('save_session_agents', {
       sessionId,
       agents: [],
@@ -182,7 +194,6 @@ export async function saveSessionAgents(
       sessionId,
       status: res.status,
     });
-    lsSaveSessionAgents(sessionId, []);
     return;
   }
   const rustAgents = agents.map(toRustSessionAgent);
@@ -198,13 +209,13 @@ export async function saveSessionAgents(
     }
     return;
   }
-  // P1-F1：降级可观测（agents 降级不涉及正文分叉，无需打降级戳）
+  // D-F06 偏离 #2：缺/错命令不再回退写 LS agents。失败改走 errorStore 数据面带
+  //（persist-degraded-ls 经 logInternalError 推入 errorStore → 可感知降级，非静默）。
   logInternalError('persist-degraded-ls', {
     command: 'save_session_agents',
     sessionId,
     status: res.status,
   });
-  lsSaveSessionAgents(sessionId, agents);
 }
 
 /**

@@ -12,6 +12,10 @@
  *     降级时仅在内存 store + errorStore 留痕，不再落新正文。
  *     lsLoadSessionBody 降格为**最小只读迁移面**（无配对写口）：仅供
  *     30 天清理护栏判定「LS 是否仍持有唯一副本」与迁移期历史数据读取。
+ *   - 收尾轮（D-F06 偏离 #2）：**agents 写口（lsSaveSessionAgents）已物理删除**，
+ *     SQLite save_session_agents 为 agents 唯一权威；降级仅 errorStore 留痕。
+ *     lsLoadSessionAgents 同构降格为最小只读迁移面（无配对写口），仅供
+ *     cleanupLegacyLocalStorageSessionsGuarded 唯一副本判定。
  */
 
 import { isPendingDraftSessionId as isPendingDraft } from '@crish/shared-types';
@@ -27,7 +31,6 @@ import {
 import {
   SESSION_ACTIVE_KEY,
   SESSION_AGENTS_PREFIX,
-  SESSION_AGENTS_SAVE_CAP,
   SESSION_BODY_PREFIX,
   SESSION_FOLDER_KEY,
   SESSION_INDEX_KEY,
@@ -141,6 +144,15 @@ export function lsLoadSessionBody(sessionId: string): SessionMessage[] {
 // SQLite Upsert 为正文唯一权威；降级时仅在内存 store + errorStore 留痕，
 // 严禁恢复任何「LS 正文写口 / 第二写口」。
 
+/**
+ * 只读加载 LS agents（D-F06 偏离 #2 收尾后为**最小只读迁移面**，无配对写口）。
+ *
+ * 仅供 cleanupLegacyLocalStorageSessionsGuarded——30 天清理护栏判定
+ * 「LS 是否仍持有该会话唯一 agents 副本」（P0-1/N0-1 保留决策）。
+ * 生产 agents 权威在 SQLite；本函数**不再是** load_session_agents 失败时的
+ * 静默回退源（该回退已随本收尾轮删除，失败改走 errorStore 数据面）。
+ * 写口 lsSaveSessionAgents 已物理删除，严禁恢复。
+ */
 export function lsLoadSessionAgents(sessionId: string): SessionAgent[] {
   try {
     const raw = localStorage.getItem(SESSION_AGENTS_PREFIX + sessionId);
@@ -153,32 +165,9 @@ export function lsLoadSessionAgents(sessionId: string): SessionAgent[] {
   }
 }
 
-export function lsSaveSessionAgents(
-  sessionId: string,
-  agents: SessionAgent[]
-): void {
-  try {
-    if (!agents || agents.length === 0) {
-      localStorage.removeItem(SESSION_AGENTS_PREFIX + sessionId);
-      return;
-    }
-    // Wave C（D-F03）：LS 镜像受配额保护线约束仍 slice；截断标志已随
-    // sessionAgentsTruncation 整模块删除（SQLite 主路径全量保存）。
-    if (agents.length > SESSION_AGENTS_SAVE_CAP) {
-      localStorage.setItem(
-        SESSION_AGENTS_PREFIX + sessionId,
-        JSON.stringify(agents.slice(0, SESSION_AGENTS_SAVE_CAP))
-      );
-      return;
-    }
-    localStorage.setItem(
-      SESSION_AGENTS_PREFIX + sessionId,
-      JSON.stringify(agents)
-    );
-  } catch {
-    /* swallow-ok: quota 超限时 agents 写失败不影响会话主体 */
-  }
-}
+// D-F06 偏离 #2 收尾（session-integrity-repair）：lsSaveSessionAgents 已物理删除。
+// SQLite save_session_agents 为 agents 唯一权威；降级时仅 errorStore 留痕，
+// 严禁恢复任何「LS agents 写口 / 第二写口」。
 
 export function lsLoadActiveSessionId(): string | null {
   try {
