@@ -6,45 +6,43 @@ use conex_types::SessionMessage;
 
 impl LocalDb {
     /// 加载会话正文消息（按 seq 升序）。
+    /// 读路径经 [`LocalDb::read`]：优先 ReaderPool 并发读，无池时回退主连接。
     pub fn load_session_body(&self, session_id: &str) -> Result<Vec<SessionMessage>, DbFailure> {
-        let conn = self.conn.lock().map_err(|e| DbFailure {
-            message: format!("lock poisoned: {e}"),
-            kind: DbFailureKind::Lock,
-        })?;
+        self.read(|conn| {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT id, sender, text, thinking, timestamp, status,
+                            stream_text_offset, thinking_time, tool_calls_json,
+                            blocks_json, tool_call_results_json, usage_json
+                     FROM session_messages
+                     WHERE session_id = ?1
+                     ORDER BY seq ASC",
+                )
+                .map_err(|e| self.latch_error("load_session_body_prepare", e))?;
 
-        let mut stmt = conn
-            .prepare(
-                "SELECT id, sender, text, thinking, timestamp, status,
-                        stream_text_offset, thinking_time, tool_calls_json,
-                        blocks_json, tool_call_results_json, usage_json
-                 FROM session_messages
-                 WHERE session_id = ?1
-                 ORDER BY seq ASC",
-            )
-            .map_err(|e| self.latch_error("load_session_body_prepare", e))?;
-
-        let messages = stmt
-            .query_map(rusqlite::params![session_id], |row| {
-                Ok(SessionMessage {
-                    id: row.get(0)?,
-                    sender: row.get(1)?,
-                    text: row.get(2)?,
-                    thinking: row.get(3)?,
-                    timestamp: row.get(4)?,
-                    status: row.get(5)?,
-                    stream_text_offset: row.get(6)?,
-                    thinking_time: row.get(7)?,
-                    tool_calls_json: row.get(8)?,
-                    blocks_json: row.get(9)?,
-                    tool_call_results_json: row.get(10)?,
-                    usage: row.get(11)?,
+            let messages = stmt
+                .query_map(rusqlite::params![session_id], |row| {
+                    Ok(SessionMessage {
+                        id: row.get(0)?,
+                        sender: row.get(1)?,
+                        text: row.get(2)?,
+                        thinking: row.get(3)?,
+                        timestamp: row.get(4)?,
+                        status: row.get(5)?,
+                        stream_text_offset: row.get(6)?,
+                        thinking_time: row.get(7)?,
+                        tool_calls_json: row.get(8)?,
+                        blocks_json: row.get(9)?,
+                        tool_call_results_json: row.get(10)?,
+                        usage: row.get(11)?,
+                    })
                 })
-            })
-            .map_err(|e| self.latch_error("load_session_body_map", e))?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| self.latch_error("load_session_body_collect", e))?;
+                .map_err(|e| self.latch_error("load_session_body_map", e))?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| self.latch_error("load_session_body_collect", e))?;
 
-        Ok(messages)
+            Ok(messages)
+        })
     }
 
     /// 全量保存会话正文（先删后插，事务原子）。

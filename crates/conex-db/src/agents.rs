@@ -42,38 +42,36 @@ pub(crate) fn map_agent_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Session
 
 impl LocalDb {
     /// 加载会话下的协作子 agent（含每个 agent 的消息，按 seq 升序）。
+    /// 读路径经 [`LocalDb::read`]：优先 ReaderPool 并发读，无池时回退主连接。
     pub fn load_session_agents(&self, session_id: &str) -> Result<Vec<SessionAgent>, DbFailure> {
-        let conn = self.conn.lock().map_err(|e| DbFailure {
-            message: format!("lock poisoned: {e}"),
-            kind: DbFailureKind::Lock,
-        })?;
+        self.read(|conn| {
+            let mut agent_stmt = conn
+                .prepare(
+                    "SELECT agent_id, subagent_run_id, parent_session_id, parent_run_id,
+                            parent_tool_call_id, description, mode, status, summary,
+                            started_at, ended_at, depth, subagent_path_json,
+                            task_type, display_label, allowed_write_paths_json,
+                            sub_session_id
+                     FROM session_agents
+                     WHERE session_id = ?1
+                     ORDER BY started_at ASC, agent_id ASC",
+                )
+                .map_err(|e| self.latch_error("load_session_agents_prepare", e))?;
 
-        let mut agent_stmt = conn
-            .prepare(
-                "SELECT agent_id, subagent_run_id, parent_session_id, parent_run_id,
-                        parent_tool_call_id, description, mode, status, summary,
-                        started_at, ended_at, depth, subagent_path_json,
-                        task_type, display_label, allowed_write_paths_json,
-                        sub_session_id
-                 FROM session_agents
-                 WHERE session_id = ?1
-                 ORDER BY started_at ASC, agent_id ASC",
-            )
-            .map_err(|e| self.latch_error("load_session_agents_prepare", e))?;
+            let agent_rows: Vec<SessionAgent> = agent_stmt
+                .query_map(rusqlite::params![session_id], map_agent_row)
+                .map_err(|e| self.latch_error("load_session_agents_map", e))?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| self.latch_error("load_session_agents_collect", e))?;
 
-        let agent_rows: Vec<SessionAgent> = agent_stmt
-            .query_map(rusqlite::params![session_id], map_agent_row)
-            .map_err(|e| self.latch_error("load_session_agents_map", e))?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| self.latch_error("load_session_agents_collect", e))?;
+            // 为每个 agent 单独查询消息
+            let mut agents = agent_rows;
+            for agent in &mut agents {
+                agent.messages = self.load_agent_messages(conn, session_id, &agent.id)?;
+            }
 
-        // 为每个 agent 单独查询消息
-        let mut agents = agent_rows;
-        for agent in &mut agents {
-            agent.messages = self.load_agent_messages(&conn, session_id, &agent.id)?;
-        }
-
-        Ok(agents)
+            Ok(agents)
+        })
     }
 
     /// 加载全部 status='running' 的会话协作子代理行（PERSIST-02 P1-3：
@@ -83,26 +81,24 @@ impl LocalDb {
     /// 轻量定位查询：只返回 (session_id, subagent_run_id) 键对，不加载
     /// 行内容与消息——归一写面（[Self::update_session_agent_status]）
     /// 不需要行内容；消息面由既有加载 API 承担。
+    /// 读路径经 [`LocalDb::read`]：优先 ReaderPool 并发读，无池时回退主连接。
     pub fn load_running_session_agents(&self) -> Result<Vec<(String, String)>, DbFailure> {
-        let conn = self.conn.lock().map_err(|e| DbFailure {
-            message: format!("lock poisoned: {e}"),
-            kind: DbFailureKind::Lock,
-        })?;
+        self.read(|conn| {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT session_id, subagent_run_id
+                     FROM session_agents
+                     WHERE status = 'running'",
+                )
+                .map_err(|e| self.latch_error("load_running_session_agents_prepare", e))?;
 
-        let mut stmt = conn
-            .prepare(
-                "SELECT session_id, subagent_run_id
-                 FROM session_agents
-                 WHERE status = 'running'",
-            )
-            .map_err(|e| self.latch_error("load_running_session_agents_prepare", e))?;
-
-        let rows = stmt
-            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
-            .map_err(|e| self.latch_error("load_running_session_agents_map", e))?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| self.latch_error("load_running_session_agents_collect", e))?;
-        Ok(rows)
+            let rows = stmt
+                .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+                .map_err(|e| self.latch_error("load_running_session_agents_map", e))?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| self.latch_error("load_running_session_agents_collect", e))?;
+            Ok(rows)
+        })
     }
 
     /// 查询扩展（T-D-09）：按父会话 + 状态过滤加载子代理行（kill_all
@@ -110,40 +106,38 @@ impl LocalDb {
     ///
     /// 与 [Self::load_session_agents] 的差异仅在 WHERE 条件；消息照常
     /// 逐个加载，行为与全量加载完全一致（messages 一并带回）。
+    /// 读路径经 [`LocalDb::read`]：优先 ReaderPool 并发读，无池时回退主连接。
     pub fn load_session_agents_by_parent_status(
         &self,
         parent_session_id: &str,
         status: &str,
     ) -> Result<Vec<SessionAgent>, DbFailure> {
-        let conn = self.conn.lock().map_err(|e| DbFailure {
-            message: format!("lock poisoned: {e}"),
-            kind: DbFailureKind::Lock,
-        })?;
+        self.read(|conn| {
+            let mut agent_stmt = conn
+                .prepare(
+                    "SELECT agent_id, subagent_run_id, parent_session_id, parent_run_id,
+                            parent_tool_call_id, description, mode, status, summary,
+                            started_at, ended_at, depth, subagent_path_json,
+                            task_type, display_label, allowed_write_paths_json,
+                            sub_session_id
+                     FROM session_agents
+                     WHERE parent_session_id = ?1 AND status = ?2
+                     ORDER BY started_at ASC, agent_id ASC",
+                )
+                .map_err(|e| self.latch_error("load_session_agents_by_parent_status_prepare", e))?;
 
-        let mut agent_stmt = conn
-            .prepare(
-                "SELECT agent_id, subagent_run_id, parent_session_id, parent_run_id,
-                        parent_tool_call_id, description, mode, status, summary,
-                        started_at, ended_at, depth, subagent_path_json,
-                        task_type, display_label, allowed_write_paths_json,
-                        sub_session_id
-                 FROM session_agents
-                 WHERE parent_session_id = ?1 AND status = ?2
-                 ORDER BY started_at ASC, agent_id ASC",
-            )
-            .map_err(|e| self.latch_error("load_session_agents_by_parent_status_prepare", e))?;
+            let agent_rows: Vec<SessionAgent> = agent_stmt
+                .query_map(rusqlite::params![parent_session_id, status], map_agent_row)
+                .map_err(|e| self.latch_error("load_session_agents_by_parent_status_map", e))?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| self.latch_error("load_session_agents_by_parent_status_collect", e))?;
 
-        let agent_rows: Vec<SessionAgent> = agent_stmt
-            .query_map(rusqlite::params![parent_session_id, status], map_agent_row)
-            .map_err(|e| self.latch_error("load_session_agents_by_parent_status_map", e))?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| self.latch_error("load_session_agents_by_parent_status_collect", e))?;
-
-        let mut agents = agent_rows;
-        for agent in &mut agents {
-            agent.messages = self.load_agent_messages(&conn, parent_session_id, &agent.id)?;
-        }
-        Ok(agents)
+            let mut agents = agent_rows;
+            for agent in &mut agents {
+                agent.messages = self.load_agent_messages(conn, parent_session_id, &agent.id)?;
+            }
+            Ok(agents)
+        })
     }
 
     /// 加载单个子代理的消息（session_agent_messages，按 seq 升序）。
