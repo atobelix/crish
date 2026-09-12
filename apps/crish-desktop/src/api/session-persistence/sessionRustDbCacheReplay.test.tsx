@@ -41,7 +41,7 @@ import {
   loadSessionBody,
   persistAllSessionsRust,
 } from './sessionRustDb';
-import { lsLoadSessionBody } from './sessionRustDbFallback';
+import { hasNonEmptyLegacySessionBody } from './sessionRustDbFallback';
 import * as userFacingErrors from '../userFacingErrors';
 import { computeCacheMetricsFromUsage } from '../chat-bridge/handlers/messageHandlers';
 import { CacheMetricsBadge } from '../../components/chat-message-row/CacheMetricsBadge';
@@ -338,102 +338,26 @@ describe('端到端：persist → hydrate 恢复出 cacheMetrics（徽标回放�
   });
 });
 
-// ── localStorage 只读迁移面：整条消息 JSON 中的 cacheMetrics 保留 ──────────────
+// ── LS 清理护栏：键非空判定（D-F06 收尾，无 lsLoad 全文读面） ──────────────
 
-describe('lsLoadSessionBody 只读迁移面：cacheMetrics 保留（R6-D5 / D-F06）', () => {
-  it('LS JSON 数组路径：cacheMetrics 读回保留（迁移面直读，不经 loadSessionBody）', () => {
-    // D-F06 后 loadSessionBody 不再静默回退 LS——cacheMetrics 形状守卫逻辑
-    // 仍由 lsLoadSessionBody（30 天清理护栏 / 迁移读取）承载，直测该面。
+describe('hasNonEmptyLegacySessionBody 护栏键判定（D-F06 收尾）', () => {
+  it('JSON 数组非空 / 空数组 / JSONL 非空', () => {
     localStorage.setItem(
       SESSION_BODY_PREFIX + 's1',
-      JSON.stringify([
-        {
-          id: 'm1',
-          sender: 'assistant',
-          text: 'hi',
-          timestamp: 1,
-          cacheMetrics: {
-            metrics: {
-              cacheReadTokens: 9000,
-              hitRate: 0.75,
-              inputTotal: 12000,
-            },
-            source: 'engine-message-end',
-          },
-        },
-        { id: 'm2', sender: 'user', text: 'q', timestamp: 2 },
-      ])
+      JSON.stringify([{ id: 'm1', sender: 'user', timestamp: 1 }])
     );
-
-    const msgs = lsLoadSessionBody('s1');
-    expect(msgs).toHaveLength(2);
-    expect(msgs[0]?.cacheMetrics).toEqual({
-      metrics: { cacheReadTokens: 9000, hitRate: 0.75, inputTotal: 12000 },
-      source: 'engine-message-end',
-    });
-    expect(msgs[1]?.cacheMetrics).toBeUndefined();
-  });
-
-  it('LS JSONL 路径：cacheMetrics 读回保留', () => {
-    const line1 = JSON.stringify({
-      id: 'm1',
-      sender: 'assistant',
-      text: 'hi',
-      timestamp: 1,
-      cacheMetrics: {
-        metrics: { cacheReadTokens: 9000, hitRate: 0.75, inputTotal: 12000 },
-        source: 'engine-message-end',
-      },
-    });
-    const line2 = JSON.stringify({
-      id: 'm2',
-      sender: 'user',
-      text: 'q',
-      timestamp: 2,
-    });
-    localStorage.setItem(SESSION_BODY_PREFIX + 's1', `${line1}\n${line2}\n`);
-
-    const msgs = lsLoadSessionBody('s1');
-    expect(msgs).toHaveLength(2);
-    expect(msgs[0]?.cacheMetrics?.metrics?.cacheReadTokens).toBe(9000);
-    expect(msgs[0]?.cacheMetrics?.source).toBe('engine-message-end');
-    expect(msgs[1]?.cacheMetrics).toBeUndefined();
-  });
-
-  it('LS 坏 cacheMetrics 形状（metrics 为 null / source 非法）→ 不挂载，消息其余字段正常', () => {
+    localStorage.setItem(SESSION_BODY_PREFIX + 's2', '[]');
     localStorage.setItem(
-      SESSION_BODY_PREFIX + 's1',
-      JSON.stringify([
-        {
-          id: 'm1',
-          sender: 'assistant',
-          text: 'bad-metrics-null',
-          timestamp: 1,
-          cacheMetrics: { metrics: null, source: 'engine-message-end' },
-        },
-        {
-          id: 'm2',
-          sender: 'assistant',
-          text: 'bad-source',
-          timestamp: 2,
-          cacheMetrics: {
-            metrics: { cacheReadTokens: 9000 },
-            source: 'unknown-source',
-          },
-        },
-      ])
+      SESSION_BODY_PREFIX + 's3',
+      '{"id":"m1"}\n{"id":"m2"}\n'
     );
-
-    const msgs = lsLoadSessionBody('s1');
-    expect(msgs[0]?.text).toBe('bad-metrics-null');
-    expect(msgs[0]?.cacheMetrics).toBeUndefined();
-    expect(msgs[1]?.text).toBe('bad-source');
-    expect(msgs[1]?.cacheMetrics).toBeUndefined();
+    expect(hasNonEmptyLegacySessionBody('s1')).toBe(true);
+    expect(hasNonEmptyLegacySessionBody('s2')).toBe(false);
+    expect(hasNonEmptyLegacySessionBody('s3')).toBe(true);
+    expect(hasNonEmptyLegacySessionBody('missing')).toBe(false);
   });
 
-  it('D-F06：invoke missing 时 loadSessionBody 不再回退 LS 正文（返回空 + errorStore 留痕）', async () => {
-    // 不安装 transport → invoke missing；历史 LS 键仍在，但正文权威在 SQLite，
-    // load 失败仅 errorStore 留痕，不把 LS 当正文源静默回灌。
+  it('invoke missing 时 loadSessionBody 不回退 LS 正文（返回空 + errorStore 留痕）', async () => {
     localStorage.setItem(
       SESSION_BODY_PREFIX + 's-fallback-cut',
       JSON.stringify([

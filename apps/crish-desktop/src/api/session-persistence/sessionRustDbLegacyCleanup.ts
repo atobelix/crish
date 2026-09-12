@@ -13,8 +13,8 @@ import {
   type RustSessionAgent,
 } from './sessionRustDbWire';
 import {
-  lsLoadSessionBody,
-  lsLoadSessionAgents,
+  hasNonEmptyLegacySessionAgents,
+  hasNonEmptyLegacySessionBody,
 } from './sessionRustDbFallback';
 import {
   SESSION_ACTIVE_KEY,
@@ -157,11 +157,9 @@ export async function cleanupLegacyLocalStorageSessionsGuarded(): Promise<Legacy
 
   // 3. 逐会话校验：LS 有数据且 SQLite 无对应（缺会话 / 正文空）→ 保留
   for (const id of lsIds) {
-    // D-F06：lsLoadSessionBody / lsLoadSessionAgents 均为最小只读迁移面
-    //（写口已删）——此处仅判定「LS 是否仍持有唯一副本」，不构成权威双轨。
-    const lsBody = lsLoadSessionBody(id);
-    const lsAgents = lsLoadSessionAgents(id);
-    const hasLsData = lsBody.length > 0 || lsAgents.length > 0;
+    // D-F06 收尾：护栏用键非空判定，不再解析 LS 全文（无 lsLoad* 读面）
+    const hasLsData =
+      hasNonEmptyLegacySessionBody(id) || hasNonEmptyLegacySessionAgents(id);
     if (!hasLsData) {
       // LS 镜像为空：删除无风险（key 缺失时 removeItem 为 no-op）
       removeLegacyKeys(
@@ -188,8 +186,10 @@ export async function cleanupLegacyLocalStorageSessionsGuarded(): Promise<Legacy
       bodyRes.status === 'ok' && (bodyRes.data || []).length > 0;
     const sqliteAgentsOk =
       agentsRes.status === 'ok' && (agentsRes.data || []).length > 0;
-    const bodyRisk = lsBody.length > 0 && !sqliteBodyOk;
-    const agentsRisk = lsAgents.length > 0 && !sqliteAgentsOk;
+    const bodyRisk =
+      hasNonEmptyLegacySessionBody(id) && !sqliteBodyOk;
+    const agentsRisk =
+      hasNonEmptyLegacySessionAgents(id) && !sqliteAgentsOk;
     if (bodyRisk || agentsRisk) {
       preserved.push(id);
       continue;

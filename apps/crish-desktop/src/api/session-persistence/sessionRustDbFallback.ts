@@ -2,30 +2,16 @@
  * sessionRustDb 子模块 · Fallback：localStorage 同步回退路径
  *
  * 职责（同步 IO，无 invoke）：
- *   - 当 Tauri invoke 不可用（浏览器 / 旧壳 / 测试 missing 状态）时，索引 /
- *     agents / active / folder 走 localStorage 同步读写兜底。
- *   - 这层回退只读 / 写 localStorage，不再触碰 IndexedDB 或磁盘镜像（已删除）。
- *   - 降级戳（P1-F1 / F5-01）写面已在维度 1（D2）随读面（T2-1）一并删除，
- *     persist 路径保留一次性 cleanup 清除历史残留的 crish_degraded_* 键。
- *   - Wave C（D-F06，session-integrity-repair）：**正文写口已物理删除**
- *     （lsSaveSessionBody 不复存在）——SQLite Upsert 为正文唯一权威，
- *     降级时仅在内存 store + errorStore 留痕，不再落新正文。
- *     lsLoadSessionBody 降格为**最小只读迁移面**（无配对写口）：仅供
- *     30 天清理护栏判定「LS 是否仍持有唯一副本」与迁移期历史数据读取。
- *   - 收尾轮（D-F06 偏离 #2）：**agents 写口（lsSaveSessionAgents）已物理删除**，
- *     SQLite save_session_agents 为 agents 唯一权威；降级仅 errorStore 留痕。
- *     lsLoadSessionAgents 同构降格为最小只读迁移面（无配对写口），仅供
- *     cleanupLegacyLocalStorageSessionsGuarded 唯一副本判定。
+ *   - 索引 / active / folder 的 localStorage 同步读写兜底。
+ *   - **正文与 agents 无读写口**（D-F06）：SQLite 为唯一权威；
+ *     30 天清理护栏仅用键存在性/非空判定，不再解析全文。
+ *   - 降级时仅内存 store + errorStore 留痕。
  */
 
 import { isPendingDraftSessionId as isPendingDraft } from '@crish/shared-types';
-import type { MessageCacheState } from '@crish/shared-types';
 import {
-  hydrateSessionAgents,
   parseFolderOrder,
-  parseSessionAgents,
   parseSessionIndexList,
-  parseSessionMessage,
   safeParseJson,
 } from './sessionHydration';
 import {
@@ -36,7 +22,6 @@ import {
   SESSION_INDEX_KEY,
   type SessionIndexEntry,
 } from './sessionPersistenceTypes';
-import type { SessionAgent, SessionMessage } from '../../store/layoutStore';
 
 export function lsLoadSessionIndex(): SessionIndexEntry[] {
   try {
@@ -60,114 +45,42 @@ export function lsSaveSessionIndex(entries: SessionIndexEntry[]): void {
 }
 
 /**
- * 从原始存盘 JSON 恢复 cacheMetrics（R6-D5 回放面，localStorage 只读迁移面）。
- * 历史写口（lsSaveSessionBody，已随 D-F06 删除）整条 JSON.stringify
- * SessionMessage（含 cacheMetrics），而 parseSessionMessage 是白名单守卫
- * 不携带该字段 → 读回时重新挂载，与 SQLite usage_json 回读
- * （fromRustSessionMessage）行为对齐。
- * MessageCacheState 形状守卫：metrics 非空对象 + source 枚举合法才挂载，
- * 其余情况原样返回（坏数据不传播）。
- */
-function attachStoredCacheMetrics(
-  parsed: SessionMessage | null,
-  raw: unknown
-): SessionMessage | null {
-  if (!parsed) return null;
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return parsed;
-  const cache = (raw as Record<string, unknown>).cacheMetrics;
-  if (!cache || typeof cache !== 'object' || Array.isArray(cache))
-    return parsed;
-  const cm = cache as Record<string, unknown>;
-  const metrics = cm.metrics;
-  if (!metrics || typeof metrics !== 'object' || Array.isArray(metrics))
-    return parsed;
-  const source = cm.source;
-  if (
-    source !== 'engine-message-end' &&
-    source !== 'degraded-direct' &&
-    source !== null
-  ) {
-    return parsed;
-  }
-  parsed.cacheMetrics = {
-    metrics: metrics as MessageCacheState['metrics'],
-    source: source as MessageCacheState['source'],
-  };
-  return parsed;
-}
-
-/**
- * 只读加载 LS 正文（D-F06 后为**最小只读迁移面**，无配对写口）。
+ * LS 正文键是否仍持有非空数据（清理护栏判定，不解析全文）。
  *
- * 仅供两类消费方：
- *   1. cleanupLegacyLocalStorageSessionsGuarded——30 天清理护栏判定
- *      「LS 是否仍持有该会话唯一副本」（P0-1/N0-1 保留决策）；
- *   2. 迁移期历史数据读取（JSON 数组与 JSONL 双历史格式）。
- * 生产正文权威在 SQLite；本函数**不再是** load_session_body 失败时的
- * 静默回退源（该回退已随 D-F06 删除，失败改走 errorStore 数据面）。
+ * 读失败/坏 JSON → `true`（无法确认则保留，防唯一副本误删）。
  */
-export function lsLoadSessionBody(sessionId: string): SessionMessage[] {
+export function hasNonEmptyLegacySessionBody(sessionId: string): boolean {
   try {
     const raw = localStorage.getItem(SESSION_BODY_PREFIX + sessionId);
-    if (!raw) return [];
-    // 兼容 JSON 数组与 JSONL 两种历史格式
-    if (raw.trimStart().startsWith('[')) {
-      const parsed = safeParseJson<unknown>(raw, null);
-      if (!Array.isArray(parsed)) return [];
-      const out: SessionMessage[] = [];
-      for (const item of parsed) {
-        const m = attachStoredCacheMetrics(parseSessionMessage(item), item);
-        if (m) out.push(m);
-      }
-      return out;
+    if (!raw) return false;
+    const t = raw.trimStart();
+    if (t.startsWith('[')) {
+      const arr = safeParseJson<unknown[] | null>(raw, null);
+      return Array.isArray(arr) && arr.length > 0;
     }
-    // JSONL 路径：用 parseSessionMessage 逐行解析（与 sessionHydration 历史行为一致）
-    const out: SessionMessage[] = [];
-    for (const line of raw.split(/\r?\n/)) {
-      const t = line.trim();
-      if (!t) continue;
-      try {
-        const item = JSON.parse(t);
-        const m = attachStoredCacheMetrics(parseSessionMessage(item), item);
-        if (m) out.push(m);
-      } catch {
-        /* swallow-ok: 单行损坏跳过，不阻断整批回放 */
-      }
-    }
-    return out;
+    return raw.split(/\r?\n/).some((line) => line.trim().length > 0);
   } catch {
-    return [];
+    return true;
   }
 }
-
-// D-F06（session-integrity-repair Wave C）：lsSaveSessionBody 已物理删除。
-// SQLite Upsert 为正文唯一权威；降级时仅在内存 store + errorStore 留痕，
-// 严禁恢复任何「LS 正文写口 / 第二写口」。
 
 /**
- * 只读加载 LS agents（D-F06 偏离 #2 收尾后为**最小只读迁移面**，无配对写口）。
- *
- * 仅供 cleanupLegacyLocalStorageSessionsGuarded——30 天清理护栏判定
- * 「LS 是否仍持有该会话唯一 agents 副本」（P0-1/N0-1 保留决策）。
- * 生产 agents 权威在 SQLite；本函数**不再是** load_session_agents 失败时的
- * 静默回退源（该回退已随本收尾轮删除，失败改走 errorStore 数据面）。
- * 写口 lsSaveSessionAgents 已物理删除，严禁恢复。
+ * LS agents 键是否仍持有非空数据（清理护栏判定，不解析全文）。
  */
-export function lsLoadSessionAgents(sessionId: string): SessionAgent[] {
+export function hasNonEmptyLegacySessionAgents(sessionId: string): boolean {
   try {
     const raw = localStorage.getItem(SESSION_AGENTS_PREFIX + sessionId);
-    if (!raw) return [];
-    return hydrateSessionAgents(
-      parseSessionAgents(safeParseJson<unknown>(raw, null))
-    );
+    if (!raw) return false;
+    const arr = safeParseJson<unknown[] | null>(raw, null);
+    return Array.isArray(arr) && arr.length > 0;
   } catch {
-    return [];
+    return true;
   }
 }
 
-// D-F06 偏离 #2 收尾（session-integrity-repair）：lsSaveSessionAgents 已物理删除。
-// SQLite save_session_agents 为 agents 唯一权威；降级时仅 errorStore 留痕，
-// 严禁恢复任何「LS agents 写口 / 第二写口」。
+// D-F06：lsSaveSessionBody / lsSaveSessionAgents / lsLoadSessionBody /
+// lsLoadSessionAgents 已全部物理删除。SQLite 为正文与 agents 唯一权威；
+// 迁移直接读 raw key 字符串交给 Rust import；清理护栏用 hasNonEmptyLegacy*。
 
 export function lsLoadActiveSessionId(): string | null {
   try {

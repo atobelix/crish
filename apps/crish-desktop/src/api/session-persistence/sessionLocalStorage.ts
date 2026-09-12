@@ -28,14 +28,11 @@ import { prepareSessionsForUi } from '../sessionTitle';
 
 import {
   asNonEmptyString,
-  clearQuotaTruncation,
-  markQuotaTruncated,
 } from './sessionQuota';
 
 import {
   SESSION_ACTIVE_KEY,
   SESSION_AGENTS_PREFIX,
-  SESSION_AGENTS_SAVE_CAP,
   SESSION_BODY_PREFIX,
   SESSION_FOLDER_KEY,
   SESSION_INDEX_KEY,
@@ -96,39 +93,8 @@ export function loadSessionBody(sessionId: string): SessionMessage[] {
   return parseSessionMessages(parsed);
 }
 
-/**
- * LS 正文写口（**迁移/配额单测专用**，禁止生产双轨调用）。
- *
- * D-F06：生产正文权威 = SQLite `save_session_body`（sessionRustDbSql）。
- * 本函数仅保留给 `sessionLocalStorage.test` / 迁移模块内测；不经
- * `sessionPersistence` 门面转发。
- */
-export function saveSessionBody(
-  sessionId: string,
-  messages: SessionMessage[]
-): void {
-  const id = asNonEmptyString(sessionId);
-  // I-DRAFT：哨兵永不写 body
-  if (!id || isPendingDraft(id)) return;
-  const msgs = messages || [];
-  const key = SESSION_BODY_PREFIX + id;
-
-  try {
-    localStorage.setItem(key, JSON.stringify(msgs));
-    // 全量写成功 = quota 已释放 → 恢复：清除历史截断标志
-    clearQuotaTruncation(id);
-  } catch {
-    // swallow-ok: quota — 保留最后 100 条兜底落盘
-    const fallback = msgs.slice(-100);
-    try {
-      localStorage.setItem(key, JSON.stringify(fallback));
-      // 截断落盘 → 置位截断标志（P1-F3）：不再静默无痕，hydrate 可提示
-      markQuotaTruncated(id);
-    } catch {
-      /* swallow-ok: quota 耗尽时截断落盘也失败，尽力降级（截断标志随主体写失败跳过） */
-    }
-  }
-}
+// D-F06 收尾：saveSessionBody / saveSessionAgents 已物理删除（无迁移写口）。
+// 配额截断历史契约由 sessionLocalStorage.test 内联 helper 覆盖；生产权威=SQLite。
 
 export function deleteSessionBody(sessionId: string): void {
   const id = asNonEmptyString(sessionId);
@@ -154,46 +120,7 @@ export function loadSessionAgents(sessionId: string): SessionAgent[] {
   return hydrateSessionAgents(list);
 }
 
-/**
- * LS agents 写口（**迁移/配额单测专用**，禁止生产双轨调用）。
- *
- * D-F06 偏离 #2 收尾：生产 agents 权威 = SQLite `save_session_agents`。
- * 本函数仅保留给 LS 模块单测；不经 `sessionPersistence` 门面转发。
- */
-export function saveSessionAgents(
-  sessionId: string,
-  agents: SessionAgent[]
-): void {
-  const id = asNonEmptyString(sessionId);
-  // I-DRAFT：哨兵永不写 agents
-  if (!id || isPendingDraft(id)) return;
-  if (!agents?.length) {
-    try {
-      localStorage.removeItem(SESSION_AGENTS_PREFIX + id);
-    } catch {
-      /* swallow-ok: 空 agents 清理失败残留无害键 */
-    }
-    return;
-  }
-  // Wave C（D-F03）：LS 受配额保护线约束仍 slice 落盘；截断标志已删
-  //（SQLite 主路径全量保存，LS 截断不再置位 crish_agents_truncated_*）。
-  if (agents.length > SESSION_AGENTS_SAVE_CAP) {
-    try {
-      localStorage.setItem(
-        SESSION_AGENTS_PREFIX + id,
-        JSON.stringify(agents.slice(0, SESSION_AGENTS_SAVE_CAP))
-      );
-    } catch {
-      /* swallow-ok: quota 超限时 agents 截断落盘尽力而为 */
-    }
-    return;
-  }
-  try {
-    localStorage.setItem(SESSION_AGENTS_PREFIX + id, JSON.stringify(agents));
-  } catch {
-    /* swallow-ok: quota 超限时 agents 全量写尽力而为，失败留引擎侧数据 */
-  }
-}
+// D-F06 收尾：saveSessionAgents 已物理删除（无迁移写口）。生产权威=SQLite。
 
 export function loadActiveSessionId(): string | null {
   const raw = localStorage.getItem(SESSION_ACTIVE_KEY);

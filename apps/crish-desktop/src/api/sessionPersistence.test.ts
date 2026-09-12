@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+﻿import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.hoisted(() => {
   if (
@@ -63,13 +63,44 @@ import {
   sessionsToIndex,
   type SessionIndexEntry,
 } from './sessionPersistence';
-// D-F06：LS 正文/agents 写口不经门面转发；本文件为 LS 模块单测，直连模块。
-import {
-  saveSessionAgents,
-  saveSessionBody,
-} from './session-persistence/sessionLocalStorage';
 import { EMPTY_SESSION_TITLE } from './sessionTitle';
 import { PENDING_DRAFT_SESSION_ID } from '../store/draftSession';
+
+/** 测试内联 LS 写口（D-F06 后生产无 saveSessionBody/Agents；仅测历史键行为）。 */
+function seedLsBody(id: string, messages: SessionMessage[]): void {
+  if (!id || id === PENDING_DRAFT_SESSION_ID) return;
+  try {
+    localStorage.setItem(SESSION_BODY_PREFIX + id, JSON.stringify(messages));
+  } catch {
+    /* swallow */
+  }
+}
+function seedLsAgents(
+  id: string,
+  agents: Array<{ id: string; [k: string]: unknown }>
+): void {
+  if (!id || id === PENDING_DRAFT_SESSION_ID) return;
+  if (!agents?.length) {
+    try {
+      localStorage.removeItem(SESSION_AGENTS_PREFIX + id);
+    } catch {
+      /* swallow */
+    }
+    return;
+  }
+  try {
+    localStorage.setItem(
+      SESSION_AGENTS_PREFIX + id,
+      JSON.stringify(
+        agents.length > SESSION_AGENTS_SAVE_CAP
+          ? agents.slice(0, SESSION_AGENTS_SAVE_CAP)
+          : agents
+      )
+    );
+  } catch {
+    /* swallow */
+  }
+}
 
 function baseMsg(
   partial: Partial<SessionMessage> & Pick<SessionMessage, 'id' | 'sender'>
@@ -453,13 +484,13 @@ describe('localStorage load/save shape guards', () => {
     localStorage.setItem(SESSION_BODY_PREFIX + 's1', '{not-json-array');
     expect(loadSessionBody('s1')).toEqual([]);
 
-    saveSessionBody('s2', msgs);
+    seedLsBody('s2', msgs);
     expect(loadSessionBody('s2')).toEqual(msgs);
   });
 
   it('deleteSessionBody removes body + agents', () => {
-    saveSessionBody('d1', [baseMsg({ id: 'm', sender: 'user' })]);
-    saveSessionAgents('d1', [
+    seedLsBody('d1', [baseMsg({ id: 'm', sender: 'user' })]);
+    seedLsAgents('d1', [
       {
         id: 'ag',
         subagentRunId: 'r',
@@ -504,7 +535,7 @@ describe('localStorage load/save shape guards', () => {
     expect(agents![0]!.status).toBe('stopped');
   });
 
-  it('saveSessionAgents removes key when empty; caps length', () => {
+  it('seedLsAgents removes key when empty; caps length', () => {
     const make = (i: number) => ({
       id: `ag${i}`,
       subagentRunId: `r${i}`,
@@ -518,15 +549,15 @@ describe('localStorage load/save shape guards', () => {
       depth: 0,
       subagentPath: [`ag${i}`],
     });
-    saveSessionAgents('s', [make(1)]);
+    seedLsAgents('s', [make(1)]);
     expect(localStorage.getItem(SESSION_AGENTS_PREFIX + 's')).toBeTruthy();
-    saveSessionAgents('s', []);
+    seedLsAgents('s', []);
     expect(localStorage.getItem(SESSION_AGENTS_PREFIX + 's')).toBeNull();
 
     const many = Array.from({ length: SESSION_AGENTS_SAVE_CAP + 10 }, (_, i) =>
       make(i)
     );
-    saveSessionAgents('s', many);
+    seedLsAgents('s', many);
     const stored = JSON.parse(
       localStorage.getItem(SESSION_AGENTS_PREFIX + 's')!
     );
@@ -623,7 +654,7 @@ describe('sessionsToIndex / hydrate / persist edges', () => {
         messageCount: 2,
       },
     ]);
-    saveSessionBody(id, msgs);
+    seedLsBody(id, msgs);
     saveActiveSessionId('ghost-remote-not-in-index');
     saveFolderOrder([DEFAULT_SESSION_FOLDER]);
 
@@ -682,7 +713,7 @@ describe('sessionsToIndex / hydrate / persist edges', () => {
       baseEntry(ghostB, EMPTY_SESSION_TITLE, 0),
       baseEntry(contentId, '真实标题', 1),
     ]);
-    saveSessionBody(contentId, [
+    seedLsBody(contentId, [
       baseMsg({ id: 'm1', sender: 'user', text: 'hello hydrate' }),
     ]);
 
@@ -700,7 +731,7 @@ describe('sessionsToIndex / hydrate / persist edges', () => {
       baseEntry(ghostB, EMPTY_SESSION_TITLE, 0),
       baseEntry(contentId, '真实标题', 1),
     ]);
-    saveSessionBody(contentId, [
+    seedLsBody(contentId, [
       baseMsg({ id: 'm1', sender: 'user', text: 'hello hydrate' }),
     ]);
     saveActiveSessionId(''); // 清除 active
@@ -761,7 +792,7 @@ describe('sessionsToIndex / hydrate / persist edges', () => {
         messageCount: 0,
       },
     ]);
-    saveSessionBody('old', [baseMsg({ id: 'm', sender: 'user', text: 'x' })]);
+    seedLsBody('old', [baseMsg({ id: 'm', sender: 'user', text: 'x' })]);
     await persistAllSessions([], '', []);
     expect(loadSessionIndex()).toEqual([]);
     // N1-2 守卫：空 keep 不清除 LS 正文镜像（防 boot 窗口误删），但索引已清空，hydrate 不会凭空恢复会话
@@ -854,10 +885,10 @@ describe('sessionsToIndex / hydrate / persist edges', () => {
         },
       ])
     );
-    saveSessionBody(PENDING_DRAFT_SESSION_ID, [
+    seedLsBody(PENDING_DRAFT_SESSION_ID, [
       baseMsg({ id: 'md', sender: 'user', text: 'should not hydrate' }),
     ]);
-    saveSessionBody(contentId, [
+    seedLsBody(contentId, [
       baseMsg({ id: 'm1', sender: 'user', text: 'hello hydrate' }),
     ]);
     saveActiveSessionId(PENDING_DRAFT_SESSION_ID);
@@ -871,10 +902,10 @@ describe('sessionsToIndex / hydrate / persist edges', () => {
     expect(h.activeSessionId).toBeNull();
   });
 
-  it('I-DRAFT: saveActiveSessionId / saveSessionBody no-op for sentinel', () => {
+  it('I-DRAFT: saveActiveSessionId / seedLsBody no-op for sentinel', () => {
     saveActiveSessionId(PENDING_DRAFT_SESSION_ID);
     expect(loadActiveSessionId()).toBeNull();
-    saveSessionBody(PENDING_DRAFT_SESSION_ID, [
+    seedLsBody(PENDING_DRAFT_SESSION_ID, [
       baseMsg({ id: 'm', sender: 'user', text: 'x' }),
     ]);
     expect(

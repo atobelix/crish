@@ -57,8 +57,8 @@ export {
   saveSessionIndex,
   sessionsToIndex,
 } from './session-persistence/sessionLocalStorage';
-// D-F06 收尾：LS 正文/agents 写口不再经门面转发（SQLite 为唯一权威写路径）。
-// sessionLocalStorage.saveSessionBody/Agents 仅限迁移/配额单测模块内使用。
+// D-F06 收尾：LS 正文/agents 写口与全文读口均已删除；SQLite 为唯一权威。
+// 清理护栏用 hasNonEmptyLegacy*（sessionRustDbFallback）；迁移直接读 raw key。
 
 // ── Stream D 新增：SQLite 持久化层 + 数据迁移 ──────────────────────────────
 // 对齐 sessionRustDb 当前导出面（F-A 收尾）：loadSessionAgents / saveSessionAgents /
