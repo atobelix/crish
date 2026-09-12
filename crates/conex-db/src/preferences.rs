@@ -13,57 +13,53 @@ pub struct AppPreferenceRow {
 
 impl LocalDb {
     /// 读取单条偏好（若 key 不存在返回 None）。
+    /// 读路径经 [`LocalDb::read`]：优先 ReaderPool 并发读，无池时回退主连接。
     pub fn get_preference(&self, key: &str) -> Result<Option<AppPreferenceRow>, DbFailure> {
-        let conn = self.conn.lock().map_err(|e| DbFailure {
-            message: format!("lock poisoned: {e}"),
-            kind: DbFailureKind::Lock,
-        })?;
+        self.read(|conn| {
+            let mut stmt = conn
+                .prepare("SELECT key, value, updated_at FROM app_preferences WHERE key = ?1")
+                .map_err(|e| self.latch_error("get_preference_prepare", e))?;
 
-        let mut stmt = conn
-            .prepare("SELECT key, value, updated_at FROM app_preferences WHERE key = ?1")
-            .map_err(|e| self.latch_error("get_preference_prepare", e))?;
-
-        let row = stmt
-            .query_row(rusqlite::params![key], |r| {
-                Ok(AppPreferenceRow {
-                    key: r.get(0)?,
-                    value: r.get(1)?,
-                    updated_at: r.get(2)?,
+            let row = stmt
+                .query_row(rusqlite::params![key], |r| {
+                    Ok(AppPreferenceRow {
+                        key: r.get(0)?,
+                        value: r.get(1)?,
+                        updated_at: r.get(2)?,
+                    })
                 })
-            })
-            .optional()
-            .map_err(|e| self.latch_error("get_preference_row", e))?;
+                .optional()
+                .map_err(|e| self.latch_error("get_preference_row", e))?;
 
-        Ok(row)
+            Ok(row)
+        })
     }
 
     /// 读取全量偏好（按 key 升序返回）。
+    /// 读路径经 [`LocalDb::read`]：优先 ReaderPool 并发读，无池时回退主连接。
     pub fn list_preferences(&self) -> Result<Vec<AppPreferenceRow>, DbFailure> {
-        let conn = self.conn.lock().map_err(|e| DbFailure {
-            message: format!("lock poisoned: {e}"),
-            kind: DbFailureKind::Lock,
-        })?;
+        self.read(|conn| {
+            let mut stmt = conn
+                .prepare("SELECT key, value, updated_at FROM app_preferences ORDER BY key ASC")
+                .map_err(|e| self.latch_error("list_preferences_prepare", e))?;
 
-        let mut stmt = conn
-            .prepare("SELECT key, value, updated_at FROM app_preferences ORDER BY key ASC")
-            .map_err(|e| self.latch_error("list_preferences_prepare", e))?;
-
-        let rows = stmt
-            .query_map([], |r| {
-                Ok(AppPreferenceRow {
-                    key: r.get(0)?,
-                    value: r.get(1)?,
-                    updated_at: r.get(2)?,
+            let rows = stmt
+                .query_map([], |r| {
+                    Ok(AppPreferenceRow {
+                        key: r.get(0)?,
+                        value: r.get(1)?,
+                        updated_at: r.get(2)?,
+                    })
                 })
-            })
-            .map_err(|e| self.latch_error("list_preferences_query", e))?;
+                .map_err(|e| self.latch_error("list_preferences_query", e))?;
 
-        let mut result = Vec::new();
-        for item in rows {
-            result.push(item.map_err(|e| self.latch_error("list_preferences_row", e))?);
-        }
+            let mut result = Vec::new();
+            for item in rows {
+                result.push(item.map_err(|e| self.latch_error("list_preferences_row", e))?);
+            }
 
-        Ok(result)
+            Ok(result)
+        })
     }
 
     /// 写入或更新偏好（记录指定的时间戳 updated_at）。

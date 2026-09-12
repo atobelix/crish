@@ -83,48 +83,46 @@ impl LocalDb {
     }
 
     /// 列出所有会话索引条目，按 `updated_at` 降序（最近更新在前）。
+    /// 读路径经 [`LocalDb::read`]：优先 ReaderPool 并发读，无池时回退主连接。
     pub fn list_sessions(&self) -> Result<Vec<SessionIndexEntry>, DbFailure> {
-        let conn = self.conn.lock().map_err(|e| DbFailure {
-            message: format!("lock poisoned: {e}"),
-            kind: DbFailureKind::Lock,
-        })?;
+        self.read(|conn| {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT id, title, folder, is_pinned, is_archived, branch_parent_id,
+                            timestamp, updated_at, message_count, pinned_message_ids,
+                            engine_cursor, engine_last_run_id, hydrated_from_engine
+                     FROM sessions
+                     ORDER BY updated_at DESC, id ASC",
+                )
+                .map_err(|e| self.latch_error("list_sessions_prepare", e))?;
 
-        let mut stmt = conn
-            .prepare(
-                "SELECT id, title, folder, is_pinned, is_archived, branch_parent_id,
-                        timestamp, updated_at, message_count, pinned_message_ids,
-                        engine_cursor, engine_last_run_id, hydrated_from_engine
-                 FROM sessions
-                 ORDER BY updated_at DESC, id ASC",
-            )
-            .map_err(|e| self.latch_error("list_sessions_prepare", e))?;
-
-        let entries = stmt
-            .query_map([], |row| {
-                let is_pinned: i64 = row.get(3)?;
-                let is_archived: i64 = row.get(4)?;
-                let hydrated: Option<i64> = row.get(12)?;
-                Ok(SessionIndexEntry {
-                    id: row.get(0)?,
-                    title: row.get(1)?,
-                    folder: row.get(2)?,
-                    is_pinned: is_pinned != 0,
-                    is_archived: is_archived != 0,
-                    branch_parent_id: row.get(5)?,
-                    timestamp: row.get(6)?,
-                    updated_at: row.get(7)?,
-                    message_count: row.get(8)?,
-                    pinned_message_ids: row.get(9)?,
-                    engine_cursor: row.get(10)?,
-                    engine_last_run_id: row.get(11)?,
-                    hydrated_from_engine: hydrated.map(|v| v != 0),
+            let entries = stmt
+                .query_map([], |row| {
+                    let is_pinned: i64 = row.get(3)?;
+                    let is_archived: i64 = row.get(4)?;
+                    let hydrated: Option<i64> = row.get(12)?;
+                    Ok(SessionIndexEntry {
+                        id: row.get(0)?,
+                        title: row.get(1)?,
+                        folder: row.get(2)?,
+                        is_pinned: is_pinned != 0,
+                        is_archived: is_archived != 0,
+                        branch_parent_id: row.get(5)?,
+                        timestamp: row.get(6)?,
+                        updated_at: row.get(7)?,
+                        message_count: row.get(8)?,
+                        pinned_message_ids: row.get(9)?,
+                        engine_cursor: row.get(10)?,
+                        engine_last_run_id: row.get(11)?,
+                        hydrated_from_engine: hydrated.map(|v| v != 0),
+                    })
                 })
-            })
-            .map_err(|e| self.latch_error("list_sessions_map", e))?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| self.latch_error("list_sessions_collect", e))?;
+                .map_err(|e| self.latch_error("list_sessions_map", e))?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| self.latch_error("list_sessions_collect", e))?;
 
-        Ok(entries)
+            Ok(entries)
+        })
     }
 
     /// 删除会话（级联删除 messages / agents / agent_messages，由 ON DELETE CASCADE 保证）。
@@ -144,22 +142,20 @@ impl LocalDb {
     }
 
     /// 读取会话级元数据键。
+    /// 读路径经 [`LocalDb::read`]：优先 ReaderPool 并发读，无池时回退主连接。
     pub fn get_session_meta(&self, key: &str) -> Result<Option<String>, DbFailure> {
-        let conn = self.conn.lock().map_err(|e| DbFailure {
-            message: format!("lock poisoned: {e}"),
-            kind: DbFailureKind::Lock,
-        })?;
+        self.read(|conn| {
+            let mut stmt = conn
+                .prepare("SELECT value FROM session_meta WHERE key = ?1")
+                .map_err(|e| self.latch_error("get_session_meta_prepare", e))?;
 
-        let mut stmt = conn
-            .prepare("SELECT value FROM session_meta WHERE key = ?1")
-            .map_err(|e| self.latch_error("get_session_meta_prepare", e))?;
+            let value = stmt
+                .query_row(rusqlite::params![key], |row| row.get::<_, String>(0))
+                .optional()
+                .map_err(|e| self.latch_error("get_session_meta_row", e))?;
 
-        let value = stmt
-            .query_row(rusqlite::params![key], |row| row.get::<_, String>(0))
-            .optional()
-            .map_err(|e| self.latch_error("get_session_meta_row", e))?;
-
-        Ok(value)
+            Ok(value)
+        })
     }
 
     /// 写入会话级元数据键（幂等 upsert）。
