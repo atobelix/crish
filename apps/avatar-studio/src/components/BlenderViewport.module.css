@@ -54,7 +54,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 7px;
+  border-radius: var(--radius-btn);
   border: none;
   background: transparent;
   color: var(--text-secondary);
