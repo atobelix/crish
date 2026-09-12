@@ -74,10 +74,16 @@ fn assistant_tool_call_msg(thought: &str) -> AgentMessage {
 }
 
 fn tool_result_msg() -> AgentMessage {
+    tool_result_msg_for("call_1")
+}
+
+/// 指定 call_id 的 Tool 结果消息（W04 成对性守门要求 tool_call_id 与
+/// assistant ToolCall.id 严格一致——fixture 不得制造孤儿）
+fn tool_result_msg_for(call_id: &str) -> AgentMessage {
     message(
         AgentMessageRole::Tool,
         vec![AgentMessageBlock::ToolResult {
-            tool_call_id: "call_1".to_string(),
+            tool_call_id: call_id.to_string(),
             tool_name: "read_file".to_string(),
             output: ToolOutput::text("文件内容"),
             is_error: false,
@@ -182,7 +188,18 @@ fn deepseek_request_body_never_contains_cache_control_key() {
         Arc::new(user_msg("读一下 /a 文件")),
         Arc::new(assistant_tool_call_msg("")),
         Arc::new(tool_result_msg()),
-        Arc::new(assistant_tool_call_msg("推理过程")),
+        // W04 成对性守门：末条 assistant 为纯思考回合（不带 ToolCall——
+        // 否则须再补 tool_result；本测试焦点是 cache_control 全省略）
+        Arc::new(message(
+            AgentMessageRole::Assistant,
+            vec![
+                AgentMessageBlock::Thought {
+                    text: "推理过程".to_string(),
+                    redacted: None,
+                },
+                text_block("已完成读取"),
+            ],
+        )),
         Arc::new(user_msg("继续")),
     ];
     let context = RequestBuildContext {
@@ -289,6 +306,9 @@ fn deepseek_request_body_tool_call_messages_have_reasoning_content_key() {
     let messages: Vec<Arc<AgentMessage>> = vec![
         Arc::new(user_msg("调用工具")),
         Arc::new(assistant_tool_call_msg("")),
+        // W04 成对性守门：assistant ToolCall 必须有对应 Tool 结果，否则
+        // build 入口的 Fail-Closed 闸会拦截（本测试焦点是 reasoning_content 键）
+        Arc::new(tool_result_msg()),
     ];
     let context = RequestBuildContext {
         system_prompt: None,
@@ -426,7 +446,7 @@ fn deepseek_proxy_outbound_sanitizes_history_reasoning_content() {
             client_message_id: None,
             content: None,
         },
-        tool_result_msg(),
+        tool_result_msg_for("call_ds_init"),
         AgentMessage {
             id: "m-asst-2".to_string(),
             role: AgentMessageRole::Assistant,

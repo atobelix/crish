@@ -7,3 +7,7 @@ node scripts/check-guard-system.mjs
 # B6 设置域 token 消费面棘轮（0.1s×2；拦截裸兜底/内联硬编码回写）
 node scripts/check-token-fallback-drift.mjs
 node scripts/check-inline-style-hardcode.mjs
+# 会话完整性防腐探针（详案 06 Wave D · A/B/C）
+node scripts/check-session-message-upsert.mjs
+node scripts/check-tool-pairing-invariants.mjs
+node scripts/check-db-write-bypass.mjs

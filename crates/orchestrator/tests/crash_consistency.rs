@@ -25,7 +25,6 @@
 mod common;
 
 use std::collections::HashMap;
-use std::io::Write;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
@@ -141,8 +140,8 @@ async fn crash_restore_interrupts_in_flight_runs_with_status_mapping() {
         .await
         .unwrap();
     // DM-08：已终态 run 的事件流补齐 run-terminal 事件（completed 收口必有
-    // 终态事件落库；G-29 反向对账「记录 completed 但事件无 run-terminal」
-    // 不误报，见 restore_reconcile_no_false_positive 语义）
+    // 终态事件落库；事件权威路径对有终态事件的 completed 不误伤，见
+    // restore_g29_event_authoritative_correct_routing 语义）
     store
         .append_event(
             "s1",
@@ -179,12 +178,11 @@ async fn crash_restore_interrupts_in_flight_runs_with_status_mapping() {
     // 终态保真：不打断、不追加审计
     assert_eq!(by_id["r_done"].status, RunStatus::Completed);
     assert_eq!(by_id["r_done"].end_reason.as_deref(), Some("stop"));
-    // DM-08（G-29）：正常场景对账零冲突（completed 有 terminal 事件、
-    // 被打断 run 无 terminal 事件）
+    // 04 §5：正常场景无孤儿工具自愈
     assert!(
-        outcome.reconcile_conflicts.is_empty(),
-        "正常场景对账零冲突：{:?}",
-        outcome.reconcile_conflicts
+        outcome.healed_orphan_tools.is_empty(),
+        "正常场景无孤儿自愈：{:?}",
+        outcome.healed_orphan_tools
     );
 
     // 审计记录：previousStatus 可追溯，错误文案按路径区分
@@ -289,11 +287,11 @@ async fn crash_restore_audit_sequences_contiguous_and_cursor_consistent() {
     // 终态 run 不打断、cursor 保真
     assert_eq!(by_id["r_prev"].status, RunStatus::Completed);
     assert_eq!(by_id["r_prev"].cursor, 2);
-    // DM-08（G-29）：正常场景对账零冲突（completed 有 terminal、打断无 terminal）
+    // 04 §5：正常场景无孤儿工具自愈
     assert!(
-        outcome.reconcile_conflicts.is_empty(),
-        "正常场景对账零冲突：{:?}",
-        outcome.reconcile_conflicts
+        outcome.healed_orphan_tools.is_empty(),
+        "正常场景无孤儿自愈：{:?}",
+        outcome.healed_orphan_tools
     );
 }
 
@@ -471,11 +469,11 @@ async fn crash_restore_does_not_reemit_terminal_events() {
         .filter(|e| e.event_type == "run-terminal")
         .count();
     assert_eq!(terminal_count, 1, "恢复后 run-terminal 仍只有一条");
-    // DM-08（G-29）：正常场景对账零冲突
+    // 04 §5：正常场景无孤儿工具自愈
     assert!(
-        restored.reconcile_conflicts.is_empty(),
-        "正常场景对账零冲突：{:?}",
-        restored.reconcile_conflicts
+        restored.healed_orphan_tools.is_empty(),
+        "正常场景无孤儿自愈：{:?}",
+        restored.healed_orphan_tools
     );
 
     // 恢复后的终态记录再驱动 → TerminalImmutable（不产生第二个终态事件）
@@ -1262,66 +1260,13 @@ async fn flow_spawn_then_crash_does_not_double_spawn() {
     );
 }
 
-// ── DM-08（G-29）终态矛盾对账 + 三分类归属契约 ────────────────────
-// 对账观测面 LogCapture（对齐 session-loop/tests/observability.rs 与
-// conex-note-runtime B1 毒化测三要素形态：正常返回 + 日志捕获 + 计数）。
+// ── G-29 事件权威前置决策 + 三分类归属契约 ──────────────────────
 
-/// 捕获日志的内存缓冲（fmt writer 共享同一缓冲）。
-#[derive(Default)]
-struct LogCapture {
-    lines: Mutex<Vec<String>>,
-}
-
-impl LogCapture {
-    fn push(&self, line: &str) {
-        self.lines.lock().unwrap().push(line.to_string());
-    }
-    fn snapshot(&self) -> Vec<String> {
-        self.lines.lock().unwrap().clone()
-    }
-}
-
-/// fmt writer：Arc 包装共享缓冲。
-struct ArcWriter(Arc<LogCapture>);
-
-impl Write for ArcWriter {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        // fmt 会以行调用；按行切分逐行记录
-        let text = String::from_utf8_lossy(buf);
-        for line in text.lines() {
-            self.0.push(line);
-        }
-        Ok(buf.len())
-    }
-    fn flush(&mut self) -> std::io::Result<()> {
-        Ok(())
-    }
-}
-
-/// 在捕获 subscriber（WARN 级）下执行异步闭包，返回 (结果, 捕获行)。
-/// tracing::subscriber::set_default 为线程局部；tokio::test 默认
-/// current_thread runtime，restore 的 warn 与测试同线程 → 必被捕获。
-async fn with_capture_async<F, R>(f: F) -> (R, Vec<String>)
-where
-    F: std::future::Future<Output = R>,
-{
-    let capture = Arc::new(LogCapture::default());
-    let writer = capture.clone();
-    let subscriber = tracing_subscriber::fmt()
-        .with_writer(move || ArcWriter(writer.clone()))
-        .with_max_level(tracing::Level::WARN)
-        .with_ansi(false)
-        .finish();
-    let _guard = tracing::subscriber::set_default(subscriber);
-    let result = f.await;
-    let lines = capture.snapshot();
-    (result, lines)
-}
-
-/// DM-08 验收④（G-29 主矛盾）：events 有 run-terminal(completed) 但 runs
-/// 记录仍 running → restore 打断后对账上报（warn + 计数），**不自动修正**。
+/// G-29 根治（04 §4.2）：events 有 run-terminal(completed) 但 runs 记录
+/// 仍 running → 前置事件权威决策**单向强制覆盖** runs 表为 completed，
+/// 绝不打断、绝不写 run-interrupted 虚假审计事件。
 #[tokio::test]
-async fn restore_reconcile_terminal_vs_record_reports_conflict() {
+async fn restore_g29_terminal_conflict_mandatory_overwrite() {
     let (mem, store) = setup();
     // 矛盾 fixture：r_crash 在 runs 表仍是 running（in-flight），但事件流
     // 已落 run-terminal(completed)——崩溃窗口「事件先于记录」的终态矛盾
@@ -1344,51 +1289,41 @@ async fn restore_reconcile_terminal_vs_record_reports_conflict() {
         .await
         .unwrap();
 
-    let (outcome, lines) = with_capture_async(async {
-        RestoreManager::new()
-            .restore(store.as_ref(), &NoSnapshots)
-            .await
-            .unwrap()
-    })
-    .await;
+    let outcome = RestoreManager::new()
+        .restore(store.as_ref(), &NoSnapshots)
+        .await
+        .unwrap();
 
-    // 三要素：正常返回 + 日志捕获 + 计数
-    assert_eq!(outcome.mode, RestoreMode::FullReplay, "对账不阻塞 restore");
-    assert_eq!(
-        outcome.reconcile_conflicts.len(),
-        1,
-        "矛盾上报计数 = 1（只上报不修正）：{:?}",
-        outcome.reconcile_conflicts
-    );
-    let conflict = &outcome.reconcile_conflicts[0];
-    assert_eq!(conflict.run_id, "r_crash");
-    assert_eq!(conflict.session_id, "s1");
-    assert_eq!(conflict.event_terminal, "completed", "事件说 completed");
-    assert_eq!(conflict.record_status, "failed", "打断后记录说 failed");
-    assert!(
-        lines.iter().any(|l| l.contains("G-29 终态矛盾对账")),
-        "warn 日志应捕获：{lines:?}"
-    );
-    // 不自动修正：runs 表状态保持打断结果（failed + daemon-restarted），
-    // 事件行不改写——矛盾仅上报
+    // 04 §10.2 test_g29_terminal_conflict_mandatory_overwrite 三要素：
+    // 1. runs[0].status == Completed（事件权威单向覆盖）
     let runs = mem.runs();
-    assert_eq!(runs[0].status, RunStatus::Failed);
-    assert_eq!(runs[0].end_reason.as_deref(), Some(INTERRUPTED_REASON));
-    let events = mem.events();
-    assert_eq!(
-        events
-            .iter()
-            .filter(|e| e.event_type == "run-terminal")
-            .count(),
-        1,
-        "run-terminal 不重发"
+    assert_eq!(runs[0].status, RunStatus::Completed, "runs 表被物理覆写为 completed");
+    // 2. outcome.interrupted.is_empty() == true（绝不打断）
+    assert!(
+        outcome.interrupted.is_empty(),
+        "有终态事件的 run 绝不打断：{:?}",
+        outcome.interrupted
     );
+    // 3. 零虚假 run-interrupted 事件
+    let audit_count = mem
+        .events()
+        .iter()
+        .filter(|e| e.event_type == "run-interrupted")
+        .count();
+    assert_eq!(audit_count, 0, "零虚假 run-interrupted 事件");
+    // 4. run-terminal 不重发（保持 1 条）
+    let terminal_count = mem
+        .events()
+        .iter()
+        .filter(|e| e.event_type == "run-terminal")
+        .count();
+    assert_eq!(terminal_count, 1, "run-terminal 不重发");
 }
 
-/// DM-08（G-29 反向）：runs 记录 completed 但事件流无 run-terminal →
-/// 对账上报（记录说完成、事件无终态），**不自动修正**。
+/// G-29 反向纠偏（04 §4.2 Case3）：runs 记录 completed 但事件流无
+/// run-terminal → 强制降级为 Failed（unbacked-completed），消除反向脑裂。
 #[tokio::test]
-async fn restore_reconcile_completed_without_terminal_reports_conflict() {
+async fn restore_g29_unbacked_completed_run_demoted() {
     let (mem, store) = setup();
     // 反向矛盾 fixture：runs 表记录 completed，但事件流无 run-terminal
     store
@@ -1396,39 +1331,33 @@ async fn restore_reconcile_completed_without_terminal_reports_conflict() {
         .await
         .unwrap();
 
-    let (outcome, lines) = with_capture_async(async {
-        RestoreManager::new()
-            .restore(store.as_ref(), &NoSnapshots)
-            .await
-            .unwrap()
-    })
-    .await;
+    let outcome = RestoreManager::new()
+        .restore(store.as_ref(), &NoSnapshots)
+        .await
+        .unwrap();
 
+    // 04 §10.2 test_g29_unbacked_completed_run_demoted：
+    // 1. runs[0].status == Failed
+    assert_eq!(mem.runs()[0].status, RunStatus::Failed);
+    // 2. end_reason == unbacked-completed
     assert_eq!(
-        outcome.reconcile_conflicts.len(),
-        1,
-        "反向矛盾上报计数 = 1：{:?}",
-        outcome.reconcile_conflicts
+        mem.runs()[0].end_reason.as_deref(),
+        Some("unbacked-completed")
     );
-    let conflict = &outcome.reconcile_conflicts[0];
-    assert_eq!(conflict.run_id, "r_done");
-    assert_eq!(
-        conflict.event_terminal, "run-terminal",
-        "无 terminal 事件 → event_terminal 回退事件类型名"
-    );
-    assert_eq!(conflict.record_status, "completed");
+    // 3. 不进 interrupted（unbacked-completed 是纠偏而非打断）
     assert!(
-        lines.iter().any(|l| l.contains("G-29 终态矛盾对账")),
-        "warn 日志应捕获：{lines:?}"
+        outcome.interrupted.is_empty(),
+        "unbacked-completed 纠偏不进 interrupted：{:?}",
+        outcome.interrupted
     );
-    // 不自动修正：completed 记录原样保留（不打断、不改写）
-    assert_eq!(mem.runs()[0].status, RunStatus::Completed);
+    // 4. 内存 outcome 与 DB 一致
+    assert_eq!(outcome.runs[0].status, RunStatus::Failed);
 }
 
-/// DM-08（G-29）：正常场景零误报——completed 有 terminal 事件、in-flight
-/// 无 terminal 事件 → 对账零冲突、无 warn，打断语义不变。
+/// G-29 正常场景（04 §4.2）：completed 有 terminal 事件、in-flight 无
+/// terminal 事件 → 事件权威路径正确分流：终态保真 + 打断照常。
 #[tokio::test]
-async fn restore_reconcile_no_false_positive() {
+async fn restore_g29_event_authoritative_correct_routing() {
     let (mem, store) = setup();
     store
         .insert_run("r_ok", "s1", RunStatus::Completed, Some("stop"), 1)
@@ -1449,26 +1378,17 @@ async fn restore_reconcile_no_false_positive() {
         .await
         .unwrap();
 
-    let (outcome, lines) = with_capture_async(async {
-        RestoreManager::new()
-            .restore(store.as_ref(), &NoSnapshots)
-            .await
-            .unwrap()
-    })
-    .await;
+    let outcome = RestoreManager::new()
+        .restore(store.as_ref(), &NoSnapshots)
+        .await
+        .unwrap();
 
-    assert!(
-        outcome.reconcile_conflicts.is_empty(),
-        "正常场景零误报：{:?}",
-        outcome.reconcile_conflicts
-    );
-    assert!(
-        !lines.iter().any(|l| l.contains("G-29 终态矛盾对账")),
-        "正常场景不应有对账 warn：{lines:?}"
-    );
-    // 打断照常发生（对账为纯新增校验，不改变打断语义）
+    // 有终态事件 → 保真，不打断、不改写
+    assert_eq!(outcome.runs[0].status, RunStatus::Completed);
+    // 无终态事件 + in-flight → 打断照常
     assert_eq!(outcome.interrupted.len(), 1);
     assert_eq!(outcome.interrupted[0].run_id, "r_run");
+    assert_eq!(outcome.runs[1].status, RunStatus::Failed);
     let _ = mem;
 }
 

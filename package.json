@@ -98,7 +98,9 @@
     "check:repo-integrity": "node scripts/check-repo-integrity.mjs",
     "check:guard-system": "node scripts/check-guard-system.mjs",
     "check:token-ssot": "node scripts/check-token-ssot.mjs",
-    "check:tokens-all": "node scripts/check-tokens-all.mjs"
+    "check:tokens-all": "node scripts/check-tokens-all.mjs",
+    "check:session-upsert": "node scripts/check-session-message-upsert.mjs",
+    "check:tool-pairing": "node scripts/check-tool-pairing-invariants.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.21.0",

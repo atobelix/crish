@@ -51,6 +51,7 @@ use super::schema::canonicalize_schema;
 use super::tools::ToolChoice;
 use super::vendor::ReasoningEffort;
 use super::{RequestBuildContext, ThinkingIntensity};
+use crate::error::RequestBuildError;
 use crate::request::build::dialect::{
     self, assemble_thinking_dialect, DialectBuildOptions, ThinkingDialectFormat,
 };
@@ -189,12 +190,104 @@ pub fn build_anthropic_request_body(
 
     // 4. messages
     let mut messages = to_anthropic_messages(context);
+    // W04 · 出站成对性 Fail-Closed 守门（详案 02 §3.4 轨一）：在 messages
+    // 序列化完成后、进入请求体前刚性拦截孤儿 tool_use——严禁静默伪造
+    // tool_result 垫片。Debug/CI panic（Fail-Fast 暴露内核断裂）；Release
+    // tracing::error! 后中止组包（绝不产出带毒请求体）。
+    fail_closed_anthropic_pairing_gate(&messages);
     if bp_plan.messages {
         inject_last_message_cache_control(&mut messages);
     }
     body.insert("messages".to_string(), json!(messages));
 
     Value::Object(body)
+}
+
+/// 检测 Anthropic wire 消息序列中的孤儿 tool_use（纯只读，不改写不伪造）。
+///
+/// 遍历 messages：assistant content 中 `type:"tool_use"` 的 `id` 记入 pending；
+/// user content 中 `type:"tool_result"` 的 `tool_use_id` 消去对应 pending。
+/// 遍历结束后 pending 非空 → 孤儿（上游 Anthropic API 将 400：
+/// `each tool_use block must have a corresponding tool_result block`）。
+/// 返回排序后的孤儿 ID 列表（顺序稳定，供会话循环补齐重试逐 ID 对账）。
+pub fn detect_anthropic_unpaired_tool_calls(messages: &[Value]) -> Vec<String> {
+    let mut pending: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    for msg in messages {
+        let role = msg.get("role").and_then(Value::as_str).unwrap_or_default();
+        let Some(content) = msg.get("content").and_then(Value::as_array) else {
+            continue;
+        };
+        for block in content {
+            let block_type = block.get("type").and_then(Value::as_str).unwrap_or_default();
+            if role == "assistant" && block_type == "tool_use" {
+                if let Some(id) = block.get("id").and_then(Value::as_str) {
+                    if !id.trim().is_empty() {
+                        pending.insert(id.to_string());
+                    }
+                }
+            } else if role == "user" && block_type == "tool_result" {
+                if let Some(tool_use_id) = block.get("tool_use_id").and_then(Value::as_str) {
+                    pending.remove(tool_use_id);
+                }
+            }
+        }
+    }
+    pending.into_iter().collect()
+}
+
+/// Anthropic 出站成对性校验入口（详案 02 §3.4 分级守门）。
+///
+/// - **Debug / CI（`debug_assertions`）**：检测到孤儿 → 立即 panic（Fail-Fast，
+///   迫使开发者在内核层根治，而非在导线层掩盖）；
+/// - **Release**：返回 [RequestBuildError::UnpairedToolCalls]（含排序
+///   `orphan_ids`）并 `tracing::error!` 结构化日志——调用方（会话循环出站
+///   组装处）据此执行「本地合成补齐 → 单次重试组包」；仍失败则标记会话
+///   `wire_pairing_poisoned`。**禁止**在导线层静默插入假 tool_result。
+pub fn validate_anthropic_tool_pairing(messages: &[Value]) -> Result<(), RequestBuildError> {
+    let orphan_ids = detect_anthropic_unpaired_tool_calls(messages);
+    if orphan_ids.is_empty() {
+        return Ok(());
+    }
+    let err = RequestBuildError::UnpairedToolCalls {
+        protocol: "anthropic",
+        orphan_ids,
+    };
+    #[cfg(debug_assertions)]
+    {
+        panic!("Anthropic 导线层校验拦截到孤儿工具调用！{err:?}");
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        tracing::error!(
+            target: "agent_provider::wire_pairing",
+            protocol = "anthropic",
+            error = %err,
+            orphan_ids = ?err.orphan_ids(),
+            "导线层刚性拦截带毒请求出站（禁止静默伪造 tool_result；调用方须走补齐重试闭环）"
+        );
+        return Err(err);
+    }
+    #[allow(unreachable_code)]
+    Ok(())
+}
+
+/// build 入口接线的 fail-closed 守门（Debug panic / Release error + 拒绝产出）。
+///
+/// `build_anthropic_request_body` 返回签名保持 `Value`（既有 ~100 调用面零
+/// 破坏）：Release 下一旦拦截即 `tracing::error!` 并 panic——语义为「带毒
+/// 请求体绝不静默出站」；会话循环侧须优先捕获 [validate_anthropic_tool_pairing]
+/// 的 `Err(UnpairedToolCalls)` 走补齐重试，正常路径不会抵达本函数的错误分支。
+fn fail_closed_anthropic_pairing_gate(messages: &[Value]) {
+    if let Err(err) = validate_anthropic_tool_pairing(messages) {
+        tracing::error!(
+            target: "agent_provider::wire_pairing",
+            protocol = "anthropic",
+            error = %err,
+            orphan_ids = ?err.orphan_ids(),
+            "build_anthropic 入口守门拦截：拒绝构造带毒请求体"
+        );
+        panic!("Anthropic 导线层入口守门拦截到孤儿工具调用（带毒请求体禁止出站）：{err:?}");
+    }
 }
 
 /// 在最后一条 user 或 tool 消息的末尾块上注入 cache_control

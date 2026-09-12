@@ -96,7 +96,7 @@ pub mod codes {
     pub const CONTEXT_LENGTH_EXCEEDED: &str = "context.length_exceeded";
     pub const CONTEXT_COMPACTION_FAILED: &str = "context.compaction_failed";
     pub const CONTEXT_HEAL_FAILED: &str = "context.heal_failed";
-    // ── tool 域（7 正式码）──
+    // ── tool 域（10 正式码；原 7 + 中断/取消/未知 3，session-integrity-repair 02 §4.1）──
     pub const TOOL_NOT_FOUND: &str = "tool.not_found";
     pub const TOOL_INVALID_INPUT: &str = "tool.invalid_input";
     pub const TOOL_EXECUTION_FAILED: &str = "tool.execution_failed";
@@ -110,6 +110,13 @@ pub mod codes {
     /// 与越权拒绝 tool.write_not_allowed 语义独立——白名单放行但被占用
     /// 仍返回本码。F8-02：由 agent-tools 局部码并入注册表）
     pub const TOOL_WRITE_PATH_CONFLICT: &str = "tool.write_path_conflict";
+    /// 工具在派发执行前被用户取消或控制意图终止（SP-1 / 流末尾中断；
+    /// session-integrity-repair 02 §4.1 F01）
+    pub const TOOL_ABORTED_BEFORE_DISPATCH: &str = "tool.aborted_before_dispatch";
+    /// 工具在执行批次中因兄弟工具失败或级联取消而被终止
+    pub const TOOL_CANCELLED: &str = "tool.cancelled";
+    /// 进程异常退出或冷启动恢复时检测到未决工具调用，结果不可知（自愈修复）
+    pub const TOOL_OUTCOME_UNKNOWN: &str = "tool.outcome_unknown";
     // ── browser 域（9 正式码，17 文档 §1.3 + R-9-2/R-8/U-12）──
     /// 浏览器恢复中（R-9-2：进程启动/崩溃重启期间工具不可用，可重试）
     pub const TOOL_BROWSER_NOT_READY: &str = "tool.browser.not_ready";
@@ -707,6 +714,40 @@ static CRISH_ERROR_REGISTRY: Lazy<HashMap<&'static str, CrishErrorInfo>> = Lazy:
             retryable: false,
             is_public: true,
             action: "action.tool.wait_retry",
+        },
+    );
+    // session-integrity-repair 02 §4.1 F01：中断/取消/未知三码注册
+    m.insert(
+        codes::TOOL_ABORTED_BEFORE_DISPATCH,
+        CrishErrorInfo {
+            code: codes::TOOL_ABORTED_BEFORE_DISPATCH,
+            title: "工具分发前已中止",
+            category: CrishErrorCategory::Permanent,
+            retryable: false,
+            is_public: true,
+            action: "请求已被用户或控制总线中止，无需重试",
+        },
+    );
+    m.insert(
+        codes::TOOL_CANCELLED,
+        CrishErrorInfo {
+            code: codes::TOOL_CANCELLED,
+            title: "工具已被取消",
+            category: CrishErrorCategory::Permanent,
+            retryable: false,
+            is_public: true,
+            action: "兄弟工具执行失败或批处理取消，跳过执行",
+        },
+    );
+    m.insert(
+        codes::TOOL_OUTCOME_UNKNOWN,
+        CrishErrorInfo {
+            code: codes::TOOL_OUTCOME_UNKNOWN,
+            title: "工具结果未知（崩溃自愈）",
+            category: CrishErrorCategory::Permanent,
+            retryable: false,
+            is_public: true,
+            action: "系统冷启动恢复自动合成未闭合调用，继续会话",
         },
     );
     // ── browser 域（9 正式码：17 文档 §1.3，R-9-2/R-8/U-12 语义）──

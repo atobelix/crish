@@ -97,20 +97,23 @@ pub struct InterruptedRun {
     pub timestamp: i64,
 }
 
-/// 终态矛盾对账条目（G-29 / DM-08）：事件流 run-terminal 与 runs 记录
-/// 终态矛盾时显式上报（只上报不修正——自动修正语义归恢复策略后续裁决）。
+/// 恢复期孤儿工具自愈记录（Healed Tool Record）：冷启动时对悬挂工具调用
+/// 强制补齐 ToolStart/ToolEnd 包络后的成果物证（04 §5）。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ReconcileConflict {
-    /// 矛盾 run
-    pub run_id: String,
+pub struct HealedToolRecord {
     /// 所属会话
     pub session_id: String,
-    /// 事件流记录的终态（run-terminal payload 的 terminal 字面量；
-    /// payload 无法解析时回退事件类型名）
-    pub event_terminal: String,
-    /// runs 表记录的状态字面量（打断终态或原终态）
-    pub record_status: String,
+    /// 归属 run（若可追溯）
+    pub run_id: Option<String>,
+    /// 工具调用 id
+    pub call_id: String,
+    /// 工具名
+    pub tool_name: String,
+    /// 是否补齐了缺失的 tool-start（true = 原先连 ToolStart 都没有）
+    pub synthesized_tool_start: bool,
+    /// 自愈时间戳（epoch ms）
+    pub healed_at: i64,
 }
 
 /// 恢复结果
@@ -139,9 +142,9 @@ pub struct RestoreOutcome {
     /// 已加载快照的代数（无快照 = 0；T08.6：恢复成功后立即保存快照时
     /// 以 generation+1 续接）
     pub snapshot_generation: u64,
-    /// G-29 终态矛盾对账（DM-08）：恢复时发现的事件流 run-terminal 与
-    /// runs 记录终态矛盾清单（只读校验，显式上报不自动修正；空 = 无矛盾）
-    pub reconcile_conflicts: Vec<ReconcileConflict>,
+    /// 冷启动孤儿工具自愈成果（04 §5）：对悬挂工具调用强制补齐
+    /// ToolStart/ToolEnd 包络后的记录清单（空 = 无孤儿需自愈）
+    pub healed_orphan_tools: Vec<HealedToolRecord>,
 }
 
 /// 恢复错误

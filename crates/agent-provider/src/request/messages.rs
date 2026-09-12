@@ -27,6 +27,7 @@ use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
 use conex_types::tool::SystemPromptWireMode;
 use serde_json::{json, Map, Value};
 
+use crate::error::RequestBuildError;
 use crate::request::cache::CacheControl;
 use crate::request::compat::empty_content_wire_value;
 use crate::request::schema::canonical_json_string;
@@ -644,6 +645,68 @@ fn system_prompt_message(
             cache_control: None,
         },
     }
+}
+
+/// 检测 OpenAI chat wire 消息序列中的孤儿 tool_calls（纯只读，不改写不伪造）。
+///
+/// 遍历 wire 消息：assistant 的 `tool_calls[]` 各项 `id` 记入 pending；
+/// `role:"tool"` 消息的 `tool_call_id` 消去对应 pending。遍历结束后 pending
+/// 非空 → 孤儿（上游 OpenAI 将 400：`messages with role 'tool' must follow
+/// messages with role 'assistant'`）。返回排序后的孤儿 ID 列表（顺序稳定，
+/// 供会话循环补齐重试逐 ID 对账）。
+pub fn detect_chat_unpaired_tool_calls(messages: &[ChatMessage]) -> Vec<String> {
+    let mut pending: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    for msg in messages {
+        if msg.role == "assistant" {
+            for call in &msg.tool_calls {
+                if let Some(id) = call.get("id").and_then(Value::as_str) {
+                    if !id.trim().is_empty() {
+                        pending.insert(id.to_string());
+                    }
+                }
+            }
+        } else if msg.role == "tool" {
+            if let Some(tool_call_id) = msg.tool_call_id.as_deref() {
+                pending.remove(tool_call_id);
+            }
+        }
+    }
+    pending.into_iter().collect()
+}
+
+/// OpenAI chat 出站成对性校验入口（详案 02 §3.4 分级守门 · 轨二）。
+///
+/// - **Debug / CI（`debug_assertions`）**：检测到孤儿 → 立即 panic（Fail-Fast）；
+/// - **Release**：返回 [RequestBuildError::UnpairedToolCalls]（含排序
+///   `orphan_ids`）并 `tracing::error!` 结构化日志——调用方（会话循环出站
+///   组装处）据此执行「本地合成补齐 → 单次重试组包」；仍失败则标记会话
+///   `wire_pairing_poisoned`。**禁止**在导线层静默插入假 tool 结果。
+pub fn validate_chat_tool_pairing(messages: &[ChatMessage]) -> Result<(), RequestBuildError> {
+    let orphan_ids = detect_chat_unpaired_tool_calls(messages);
+    if orphan_ids.is_empty() {
+        return Ok(());
+    }
+    let err = RequestBuildError::UnpairedToolCalls {
+        protocol: "openai_chat",
+        orphan_ids,
+    };
+    #[cfg(debug_assertions)]
+    {
+        panic!("OpenAI 导线层校验拦截到孤儿工具调用！{err:?}");
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        tracing::error!(
+            target: "agent_provider::wire_pairing",
+            protocol = "openai_chat",
+            error = %err,
+            orphan_ids = ?err.orphan_ids(),
+            "导线层刚性拦截带毒请求出站（禁止静默伪造 tool_result；调用方须走补齐重试闭环）"
+        );
+        return Err(err);
+    }
+    #[allow(unreachable_code)]
+    Ok(())
 }
 
 #[cfg(test)]

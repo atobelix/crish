@@ -5,9 +5,8 @@
 use std::collections::HashMap;
 use std::fmt;
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
 
-use conex_db::{PendingInput, RunStatus, StoredRun};
+use conex_db::{PendingInput, StoredRun};
 use serde::{Deserialize, Serialize};
 
 use crate::now_ms;
@@ -80,27 +79,6 @@ impl From<&StoredRun> for SnapshotRun {
     }
 }
 
-impl SnapshotRun {
-    /// 还原为库内 run 记录（裁决 D3：未知字面量放宽为 Unknown 透传，
-    /// 与 DB 行路径一致——fail-closed → fail-open 保真，快照不再拒绝加载）
-    pub fn to_stored_run(&self) -> Result<StoredRun, SnapshotError> {
-        let status = match RunStatus::from_str(&self.status) {
-            Ok(status) => status,
-            // 未知字面量原样保留（快照往返一致，as_str 原样读回）
-            Err(_) => RunStatus::Unknown(self.status.clone()),
-        };
-        Ok(StoredRun {
-            run_id: self.run_id.clone(),
-            session_id: self.session_id.clone(),
-            status,
-            end_reason: self.end_reason.clone(),
-            cursor: self.cursor,
-            created_at: self.created_at,
-            updated_at: self.updated_at,
-        })
-    }
-}
-
 /// 快照中的待处理输入（serde 形状，与 conex-db PendingInput 同构）
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -126,19 +104,6 @@ impl From<&PendingInput> for SnapshotPendingInput {
             run_id: input.run_id.clone(),
             payload: input.payload.clone(),
             created_at: input.created_at,
-        }
-    }
-}
-
-impl SnapshotPendingInput {
-    /// 还原为库内待处理输入
-    pub fn to_pending_input(&self) -> PendingInput {
-        PendingInput {
-            id: self.id.clone(),
-            session_id: self.session_id.clone(),
-            run_id: self.run_id.clone(),
-            payload: self.payload.clone(),
-            created_at: self.created_at,
         }
     }
 }
@@ -214,19 +179,6 @@ impl StateSnapshot {
             return false;
         }
         self.checksum == self.compute_checksum()
-    }
-
-    /// 还原库内 run 记录
-    pub fn to_stored_runs(&self) -> Result<Vec<StoredRun>, SnapshotError> {
-        self.runs.iter().map(SnapshotRun::to_stored_run).collect()
-    }
-
-    /// 还原库内待处理输入
-    pub fn to_pending_inputs(&self) -> Vec<PendingInput> {
-        self.pending_inputs
-            .iter()
-            .map(SnapshotPendingInput::to_pending_input)
-            .collect()
     }
 
     /// 计算除 checksum 字段外规范化 JSON 的 FNV-1a 64 校验和（十六进制）

@@ -40,6 +40,9 @@
 | `npm run check:swallowed-errors-frontend` | 前端吞错审计 |
 | `npm run check:async-commands` | U-BLOCK：壳 fs 命令 async + 工具 spawn_blocking 纪律 |
 | `npm run check:gatekeeper-shared` | U-GATE：生产路径禁 per-call `CommandGatekeeper::new` |
+| `npm run check:session-upsert` | 探针 A：session_messages / session_agents 全量清空刚性拦截（详案 06 §5.1） |
+| `npm run check:tool-pairing` | 探针 B：工具成对 / converge 孤儿守卫 / restore 消极对账绝迹（详案 06 §5.2） |
+| `node scripts/check-db-write-bypass.mjs` | 探针 C：conex-db 写旁路扫描 + 业务豁免清零（详案 06 §5.3；尚无独立 npm 别名） |
 
 ## E2E 与专项
 

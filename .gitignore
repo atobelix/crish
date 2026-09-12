@@ -536,3 +536,6 @@ orchestrator-snapshot.json.prev
 !scripts/check-gatekeeper-shared.mjs
 !scripts/check-async-commands.mjs
 !scripts/check-store-islands.mjs
+# 会话完整性战役 · 探针 A/B 入库放行（详案 06 Wave D4；惯例同上）
+!scripts/check-session-message-upsert.mjs
+!scripts/check-tool-pairing-invariants.mjs

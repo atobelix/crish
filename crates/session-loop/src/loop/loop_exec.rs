@@ -307,6 +307,10 @@ impl AgentSessionLoop {
         // 全部收敛路径的唯一收口；current_turn_index 为 None 时幂等无操作，
         // 与各收敛路径显式挂接并存不重复发射）
         handlers::emit_missing_turn_end(&mut self.state);
+        // Tier-2（02 §3.2 L05）：converge 是全部退出分支唯一收口——在
+        // mem::take 移交前强制工具成对性差集对账，100% 封闭漏网孤儿
+        //（幂等闸：已有 ToolEnd 的 call_id 不重复发事件）
+        handlers::reconcile_orphan_tool_calls(&mut self.state, &decision);
         let reason = decision.reason;
         let error = decision.error.clone();
         let diagnostic = decision.diagnostic.clone();

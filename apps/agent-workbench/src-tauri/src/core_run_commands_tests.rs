@@ -4110,8 +4110,8 @@ fn restore_outcome_with(
         last_sequence: 0,
         snapshot_note: None,
         snapshot_generation: 0,
-        // DM-08（G-29）：对账字段（测试构造零矛盾）
-        reconcile_conflicts: Vec::new(),
+        // 04 §5：孤儿工具自愈成果（测试构造零自愈）
+        healed_orphan_tools: Vec::new(),
     }
 }
 

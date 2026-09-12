@@ -11,7 +11,9 @@
 //!    #13：失败回合信息保留供模型参考，污染与否交模型判断，不再由引擎过滤）；
 //!    queued/processing/streaming/pending/空串 一律跳过；
 //! 2. 角色映射：`sender` ∈ {user, assistant} 一一对应，其余角色跳过
-//!    （System/Tool 是 run 内瞬态角色，跨 run 不应回传，有意为之）；
+//!    （schema CHECK 仅允许 user|assistant；**不引入第三种 sender**——
+//!    契约补丁 02 §3.3：Tool 结果经 assistant 载荷保真，孤儿在出口
+//!    成对差集自愈为内存 Tool 消息，不写 `sender='tool'` 库行）；
 //! 3. 块保真优先：`blocks_json` 可解析为 `AgentMessageBlock` 序列时直接用；
 //!    否则（含前端 timeline 形状与老数据无块）用 text/thinking/
 //!    tool_calls_json/tool_call_results_json 合成兜底；
@@ -19,13 +21,18 @@
 //!    唯一例外是规则 1 的 error 终态 failed-turn 标记（D7 §3.6 扩展）；
 //! 5. 尾部约束：序列必须以 user 消息收尾，最后一条非 user 时截断到
 //!    最后一个 user 消息；无 user 消息 → 空序列；
-//! 6. 排序：按入参数组顺序原样保留，timestamp 乱序不重排。
+//! 6. 排序：按入参数组顺序原样保留，timestamp 乱序不重排；
+//! 7. 出口成对差集自愈（02 §3.3）：truncate 后扫描 assistant 上的
+//!    ToolCall，若缺对应 ToolResult，在内存中紧跟该 assistant 合成
+//!    `AgentMessageRole::Tool` 消息（仅存在于本轮 conversation / wire
+//!    组包；错误码 `codes::TOOL_OUTCOME_UNKNOWN`）。
 //!
 //! 宽容水合：单条映射失败（角色未知 / 状态未完成 / 无可映射内容 / 载荷
 //! 解析失败）只跳过该条或降级对应字段，不中断整体映射。
 
 use std::sync::Arc;
 
+use conex_types::error::codes;
 use conex_types::history::HistoryMessage;
 use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole, ToolCallBlock};
 use conex_types::tool::ToolOutput;
@@ -35,7 +42,8 @@ use serde::Deserialize;
 ///
 /// 返回 `Vec<Arc<AgentMessage>>`，与 `AgentSessionLoop::with_initial_conversation_arc`
 /// （loop/mod.rs:329）的 `Vec<Arc<AgentMessage>>` 参数零拷贝对接；
-/// 输出保持入参顺序（规则 6），且已完成尾部 user 截断（规则 5）。
+/// 输出保持入参顺序（规则 6），已完成尾部 user 截断（规则 5）与
+/// 孤儿 ToolCall 出口自愈（规则 7）。
 pub fn hydrate_history(history: Vec<HistoryMessage>) -> Vec<Arc<AgentMessage>> {
     let mut messages: Vec<Arc<AgentMessage>> = Vec::new();
     for entry in history {
@@ -45,6 +53,7 @@ pub fn hydrate_history(history: Vec<HistoryMessage>) -> Vec<Arc<AgentMessage>> {
         }
     }
     truncate_to_last_user(&mut messages);
+    repair_orphan_tool_calls(&mut messages);
     messages
 }
 
@@ -321,6 +330,80 @@ fn truncate_to_last_user(messages: &mut Vec<Arc<AgentMessage>>) {
     }
 }
 
+/// 出口成对差集自愈（规则 7 / 02 §3.3）：扫描 assistant 上的 ToolCall，
+/// 若导线所需 ToolResult 块缺失，则在内存中紧跟该 assistant 合成
+/// `AgentMessageRole::Tool` 消息。
+///
+/// 契约约束：
+/// - **不扩展 sender 枚举**：合成消息仅存在于本轮 conversation / wire 组包，
+///   不写回 `sender='tool'` 库行（schema CHECK 仅 user|assistant）；
+/// - 错误码 `codes::TOOL_OUTCOME_UNKNOWN`（跨 run 悬挂，结果不可知）；
+/// - 幂等：已含 ToolResult 的 call_id 不再合成。
+///
+/// 插入位置：紧随携带孤儿调用的 assistant 之后——若该 assistant 是序列
+/// 尾条（截断后尾部为 user 时不会发生；截断后尾条为 assistant 时插入其后），
+/// 仍保持调用→结果相邻，不破坏「结果紧随调用」协议位置。
+fn repair_orphan_tool_calls(messages: &mut Vec<Arc<AgentMessage>>) {
+    use std::collections::HashSet;
+
+    let mut answered: HashSet<String> = HashSet::new();
+    for msg in messages.iter() {
+        for block in &msg.blocks {
+            if let AgentMessageBlock::ToolResult { tool_call_id, .. } = block {
+                answered.insert(tool_call_id.clone());
+            }
+        }
+    }
+
+    // 收集孤儿（按出现序），随后一次性插入——避免边扫边插打乱索引
+    let mut repairs: Vec<(usize, AgentMessage)> = Vec::new();
+    for (idx, msg) in messages.iter().enumerate() {
+        if msg.role != AgentMessageRole::Assistant {
+            continue;
+        }
+        for call in msg.tool_calls() {
+            if answered.contains(&call.id) {
+                continue;
+            }
+            answered.insert(call.id.clone());
+            let synthesized = AgentMessage {
+                id: format!("hydrate-tool-result-{}", call.id),
+                role: AgentMessageRole::Tool,
+                created_at: msg.created_at.clone(),
+                blocks: vec![AgentMessageBlock::ToolResult {
+                    tool_call_id: call.id.clone(),
+                    tool_name: call.tool_name.clone(),
+                    output: ToolOutput::text(format!(
+                        "outcome unknown after history hydration: {}",
+                        codes::TOOL_OUTCOME_UNKNOWN
+                    )),
+                    is_error: true,
+                }],
+                metadata: Some(serde_json::json!({
+                    "synthesized": true,
+                    "errorCode": codes::TOOL_OUTCOME_UNKNOWN,
+                    "hydrateSelfHeal": true,
+                })),
+                client_message_id: None,
+                content: None,
+            };
+            repairs.push((idx, synthesized));
+        }
+    }
+
+    if repairs.is_empty() {
+        return;
+    }
+    tracing::info!(
+        repaired = repairs.len(),
+        "hydrate 出口成对差集自愈：为孤儿 ToolCall 合成内存 Tool 消息"
+    );
+    // 从后往前插入，保持前面索引有效
+    for (idx, message) in repairs.into_iter().rev() {
+        messages.insert(idx + 1, Arc::new(message));
+    }
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // 衔接说明（T-28 ↔ T-30 接线点，只注释不接线：with_initial_conversation_arc
 // 属 T-33 文件域 loop/mod.rs，本模块不触碰）
@@ -444,6 +527,73 @@ mod tests {
             msg("ok", "user", Some("正常"), None),
         ];
         assert_eq!(ids(&hydrate_history(history)), ["ok"]);
+    }
+
+    /// 规则 7（02 §3.3）：assistant 带 ToolCall 且无对应 ToolResult →
+    /// 出口差集自愈合成内存 Tool 消息（不扩展 sender；errorCode=OUTCOME_UNKNOWN）
+    #[test]
+    fn orphan_tool_call_synthesized_as_memory_tool_message() {
+        let mut a1 = msg("a1", "assistant", Some("调用工具"), Some("completed"));
+        a1.tool_calls_json = Some(
+            r#"[{"id":"c1","name":"shell_command","arguments":"{\"command\":\"ls\"}"}]"#.into(),
+        );
+        let history = vec![
+            msg("u1", "user", Some("跑一下"), None),
+            a1,
+            msg("u2", "user", Some("继续"), None),
+        ];
+        let hydrated = hydrate_history(history);
+        assert_eq!(ids(&hydrated), ["u1", "a1", "hydrate-tool-result-c1", "u2"]);
+        let tool_msg = &hydrated[2];
+        assert_eq!(tool_msg.role, AgentMessageRole::Tool);
+        assert!(matches!(
+            &tool_msg.blocks[0],
+            AgentMessageBlock::ToolResult {
+                tool_call_id,
+                is_error: true,
+                ..
+            } if tool_call_id == "c1"
+        ));
+        let meta = tool_msg.metadata.as_ref().expect("合成消息带标记");
+        assert_eq!(meta.get("errorCode"), Some(&serde_json::json!(codes::TOOL_OUTCOME_UNKNOWN)));
+        assert_eq!(meta.get("synthesized"), Some(&serde_json::json!(true)));
+    }
+
+    /// 规则 7 幂等：已有 ToolResult 的调用不再合成
+    #[test]
+    fn paired_tool_call_not_repaired() {
+        let mut a1 = msg("a1", "assistant", Some("调用工具"), Some("completed"));
+        a1.tool_calls_json =
+            Some(r#"[{"id":"c1","name":"shell_command","arguments":"{}"}]"#.into());
+        a1.tool_call_results_json = Some(r#"[{"id":"c1","output":"ok","isError":false}]"#.into());
+        let history = vec![
+            msg("u1", "user", Some("跑一下"), None),
+            a1,
+            msg("u2", "user", Some("继续"), None),
+        ];
+        let hydrated = hydrate_history(history);
+        assert_eq!(ids(&hydrated), ["u1", "a1", "u2"], "已配对不得插入 Tool 消息");
+    }
+
+    /// 规则 7：blocks_json 保真路径的孤儿同样自愈
+    #[test]
+    fn orphan_from_blocks_json_repaired() {
+        let mut a1 = msg("a1", "assistant", None, Some("completed"));
+        a1.blocks_json = Some(
+            r#"[{"type":"tool-call","id":"c9","toolName":"shell_command","input":{"command":"ls"}}]"#
+                .into(),
+        );
+        let history = vec![
+            msg("u1", "user", Some("q"), None),
+            a1,
+            msg("u2", "user", Some("继续"), None),
+        ];
+        let hydrated = hydrate_history(history);
+        assert_eq!(
+            ids(&hydrated),
+            ["u1", "a1", "hydrate-tool-result-c9", "u2"]
+        );
+        assert_eq!(hydrated[2].role, AgentMessageRole::Tool);
     }
 
     #[test]

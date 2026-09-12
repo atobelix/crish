@@ -56,6 +56,28 @@ fn assistant_with_thought_and_tool(text: &str, thinking: &str) -> AgentMessage {
     }
 }
 
+/// 无 ToolCall 的纯文本/思考 assistant 消息（交替约束测试用——避免触发
+/// W04 成对性守门：交替测试的 fixture 不应携带孤儿 tool_use）
+fn assistant_with_text_and_thought(text: &str, thinking: &str) -> AgentMessage {
+    AgentMessage {
+        id: "a1".to_string(),
+        role: AgentMessageRole::Assistant,
+        created_at: "2026-01-01T00:00:00Z".to_string(),
+        blocks: vec![
+            AgentMessageBlock::Thought {
+                text: thinking.to_string(),
+                redacted: None,
+            },
+            AgentMessageBlock::Text {
+                text: text.to_string(),
+            },
+        ],
+        metadata: None,
+        client_message_id: None,
+        content: None,
+    }
+}
+
 fn tool_result_message(call_id: &str, output: &str, is_error: bool) -> AgentMessage {
     AgentMessage {
         id: "t1".to_string(),
@@ -294,8 +316,8 @@ fn anthropic_headers_shape() {
 #[test]
 fn consecutive_assistant_messages_get_user_separator() {
     let messages: Vec<Arc<AgentMessage>> = vec![
-        Arc::new(assistant_with_thought_and_tool("第一段", "想法A")),
-        Arc::new(assistant_with_thought_and_tool("第二段", "想法B")),
+        Arc::new(assistant_with_text_and_thought("第一段", "想法A")),
+        Arc::new(assistant_with_text_and_thought("第二段", "想法B")),
     ];
     let msgs: &'static [Arc<AgentMessage>] = Box::leak(messages.into_boxed_slice());
     let opts = AnthropicRequestOptions {
@@ -329,7 +351,7 @@ fn consecutive_assistant_messages_get_user_separator() {
 
 #[test]
 fn leading_assistant_gets_user_prefix() {
-    let messages: Vec<Arc<AgentMessage>> = vec![Arc::new(assistant_with_thought_and_tool(
+    let messages: Vec<Arc<AgentMessage>> = vec![Arc::new(assistant_with_text_and_thought(
         "直接开场",
         "思考",
     ))];
@@ -404,4 +426,113 @@ fn tool_choice_shape_and_tools() {
         json!({ "type": "ephemeral" })
     );
     assert_eq!(body["tool_choice"], json!({ "type": "auto" }));
+}
+
+// ── W04：出站成对性 Fail-Closed 守门（详案 02 §3.4 轨一）──
+// 检测函数 detect_anthropic_unpaired_tool_calls 为纯只读面，任何构建模式
+// 下均可直接断言孤儿 ID；validate_* 的 panic/Err 分级行为见注释。
+
+/// 成对完整对话：detect 返回空、build 正常产出且请求体 messages 通过检测
+#[test]
+fn pairing_gate_paired_conversation_passes() {
+    let (opts, context) = full_context();
+    let body = build_anthropic_request_body(&opts, &context);
+    let messages = body["messages"].as_array().expect("messages 数组");
+    assert!(
+        detect_anthropic_unpaired_tool_calls(messages).is_empty(),
+        "成对完整对话不应检出孤儿：{messages:?}"
+    );
+}
+
+/// 孤儿 tool_use（assistant 有 tool_use、缺对应 user tool_result）：
+/// detect 返回排序后的孤儿 ID 列表（供会话循环补齐重试对账）。
+/// 注意：不得经 build_anthropic_request_body——Debug 下其内部守门会 panic
+/// （Fail-Fast）；Release 下拒绝组包。校验 API 面即 validate_*/detect_*。
+#[test]
+fn pairing_gate_detects_orphan_tool_use() {
+    let messages = vec![
+        json!({ "role": "user", "content": [{ "type": "text", "text": "读文件" }] }),
+        json!({
+            "role": "assistant",
+            "content": [
+                { "type": "text", "text": "好的" },
+                { "type": "tool_use", "id": "call_orphan", "name": "read_file", "input": {} }
+            ]
+        }),
+    ];
+    let orphans = detect_anthropic_unpaired_tool_calls(&messages);
+    assert_eq!(orphans, ["call_orphan"]);
+}
+
+/// 多孤儿 ID 排序稳定（BTreeSet 语义）：补齐重试路径依赖确定顺序逐 ID 对账
+#[test]
+fn pairing_gate_orphan_ids_sorted_stable() {
+    let messages = vec![
+        json!({
+            "role": "assistant",
+            "content": [
+                { "type": "tool_use", "id": "call_z", "name": "a", "input": {} },
+                { "type": "tool_use", "id": "call_a", "name": "b", "input": {} },
+                { "type": "tool_use", "id": "call_m", "name": "c", "input": {} }
+            ]
+        }),
+        json!({
+            "role": "user",
+            "content": [{ "type": "tool_result", "tool_use_id": "call_m", "content": "ok" }]
+        }),
+    ];
+    let orphans = detect_anthropic_unpaired_tool_calls(&messages);
+    assert_eq!(orphans, ["call_a", "call_z"]);
+}
+
+/// 部分闭合：同批次多 tool_use 仅一条被 tool_result 回答 → 仅余孤儿进列表
+#[test]
+fn pairing_gate_partial_closure_leaves_only_unanswered() {
+    let messages = vec![
+        json!({
+            "role": "assistant",
+            "content": [
+                { "type": "tool_use", "id": "call_done", "name": "a", "input": {} },
+                { "type": "tool_use", "id": "call_open", "name": "b", "input": {} }
+            ]
+        }),
+        json!({
+            "role": "user",
+            "content": [{ "type": "tool_result", "tool_use_id": "call_done", "content": "ok" }]
+        }),
+    ];
+    let orphans = detect_anthropic_unpaired_tool_calls(&messages);
+    assert_eq!(orphans, ["call_open"]);
+}
+
+/// validate 在 debug_assertions 下对孤儿立即 panic（Fail-Fast，CI 硬阻断）。
+/// Release 下同一输入返回 Err(UnpairedToolCalls)——两种分级行为互斥编译，
+/// 本测试仅覆盖 CI/debug 路径的 panic 语义。
+#[test]
+#[should_panic(expected = "Anthropic 导线层校验拦截到孤儿工具调用")]
+fn pairing_gate_validate_panics_on_orphan_in_debug() {
+    let messages = vec![json!({
+        "role": "assistant",
+        "content": [{ "type": "tool_use", "id": "call_x", "name": "a", "input": {} }]
+    })];
+    let _ = validate_anthropic_tool_pairing(&messages);
+}
+
+/// 从完整对话剔除 Tool 结果消息后的 wire 等价物：assistant 带 tool_use、
+/// 无后续 user tool_result → 检出孤儿（模拟 Tier-1/2 失守时历史直接透传导线层）
+#[test]
+fn pairing_gate_missing_tool_result_message_detected() {
+    let wire = vec![
+        json!({ "role": "user", "content": [{ "type": "text", "text": "查一下 /tmp/a.txt" }] }),
+        json!({
+            "role": "assistant",
+            "content": [
+                { "type": "thinking", "thinking": "先想想路径" },
+                { "type": "text", "text": "我来读取" },
+                { "type": "tool_use", "id": "call_1", "name": "read_file", "input": { "path": "/tmp/a.txt" } }
+            ]
+        }),
+    ];
+    let orphans = detect_anthropic_unpaired_tool_calls(&wire);
+    assert_eq!(orphans, ["call_1"]);
 }

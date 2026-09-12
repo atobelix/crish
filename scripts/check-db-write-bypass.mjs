@@ -107,17 +107,20 @@ const exemptions = JSON.parse(readFileSync(exemptionPath, 'utf8'));
 const EXEMPT_FILES = new Set(Object.keys(exemptions.files ?? {}));
 const EXEMPT_FNS = new Set(Object.keys(exemptions.functions ?? {}));
 
-// ── §5.3 加固：业务写旁路清零；启动导入/迁移豁免按 category 允许 ────────────
-// 业务函数（运行期高频写）不得驻留豁免；启动 DDL/一次性导入允许登记在案。
-const BUSINESS_FN_KEYS = [];
+// ── §5.3 加固：零业务豁免断言（详案 06 · Wave D3）───────────────────────────
+// 业务写函数不得驻留豁免表；files 仅允许冷启动 DDL 迁移 / 骨架 / 测试。
+const BUSINESS_FN_KEYS = [
+  'cleanup_orphan_sessions',
+  'import_from_localstorage',
+  'import_bookmarks',
+  'import_history',
+  'import_legacy_usage_snapshot',
+];
 const ALLOWED_FILE_KEYS = new Set([
   'migrate.rs',
   'migrate_steps.rs',
   'schema.rs',
   'lib.rs',
-  // 启动一次性导入（跨表事务；Wave A4 完成后应物理删除豁免）
-  'import.rs',
-  'imported.rs',
   // 骨架测试文件
   'tests.rs',
   'tests_concurrency.rs',
@@ -125,28 +128,12 @@ const ALLOWED_FILE_KEYS = new Set([
   'tests_usage.rs',
   'tests_cas_gc.rs',
 ]);
-const ALLOWED_FN_CATEGORIES = new Set([
-  'startup_migrate',
-  'startup_import',
-  'skeleton',
-  'test',
-  'cross_table_invariant',
-]);
 const WRITE_BRIDGE_MIN = 40;
 
 const businessFnHits = BUSINESS_FN_KEYS.filter((k) => EXEMPT_FNS.has(k));
-// functions 豁免若 category 不在允许集合 → 视为非法业务豁免
-for (const [fnKey, meta] of Object.entries(exemptions.functions ?? {})) {
-  const cat = meta?.category;
-  if (cat && !ALLOWED_FN_CATEGORIES.has(cat)) {
-    businessFnHits.push(fnKey);
-  }
-}
-const disallowedFileHits = [...EXEMPT_FILES].filter((k) => {
-  if (ALLOWED_FILE_KEYS.has(k) || /^tests.*\.rs$/.test(k)) return false;
-  const cat = exemptions.files?.[k]?.category;
-  return !(cat && ALLOWED_FN_CATEGORIES.has(cat));
-});
+const disallowedFileHits = [...EXEMPT_FILES].filter(
+  (k) => !ALLOWED_FILE_KEYS.has(k) && !/^tests.*\.rs$/.test(k),
+);
 
 const WRITE_RE =
   /\b(INSERT\s+(OR\s+(REPLACE|IGNORE)\s+)?INTO\b|UPDATE\s+\w+\s+SET\b|DELETE\s+FROM\b|REPLACE\s+INTO\b)/i;

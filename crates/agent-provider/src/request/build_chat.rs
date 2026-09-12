@@ -14,7 +14,8 @@ use crate::request::cache::{
     CacheMechanism,
 };
 use crate::request::messages::{
-    to_chat_messages_with_compat, ChatMessage, ReasoningContentMode, WireCompat,
+    to_chat_messages_with_compat, validate_chat_tool_pairing, ChatMessage, ReasoningContentMode,
+    WireCompat,
 };
 use crate::request::tools::{to_cache_aware_tool, to_chat_tool_choice, ToolChoice};
 
@@ -126,6 +127,22 @@ pub fn build_chat_completions_request_body(
         context.wire_mode,
         wire_compat,
     );
+
+    // W04 · 出站成对性 Fail-Closed 守门（详案 02 §3.4 轨二）：在 wire 消息
+    // 映射完成后刚性拦截孤儿 tool_calls——严禁静默伪造 tool 结果垫片。
+    // Debug/CI panic（Fail-Fast 暴露内核断裂）；Release tracing::error! 后
+    // 拒绝组包（绝不产出带毒请求体）。会话循环侧应优先调用
+    // [validate_chat_tool_pairing] 走「补齐后单次重试」闭环。
+    if let Err(err) = validate_chat_tool_pairing(&wire) {
+        tracing::error!(
+            target: "agent_provider::wire_pairing",
+            protocol = "openai_chat",
+            error = %err,
+            orphan_ids = ?err.orphan_ids(),
+            "build_chat 入口守门拦截：拒绝构造带毒请求体"
+        );
+        panic!("OpenAI 导线层入口守门拦截到孤儿工具调用（带毒请求体禁止出站）：{err:?}");
+    }
 
     // 出站清洗保障（代理兼容模式 / Omit 模式）：
     // 彻底清除历史 assistant 消息中的 reasoning_content，杜绝第三方代理因未定义字段报 400

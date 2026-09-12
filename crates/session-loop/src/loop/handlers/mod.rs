@@ -40,7 +40,13 @@ pub(crate) mod prepare_turn;
 pub(crate) mod steering_evaluation;
 pub(crate) mod stream_error;
 pub(crate) mod streaming;
+pub(crate) mod tool_pairing;
 pub(crate) mod turn_complete;
+
+// 工具成对性闭环（02 §3.1/§3.2）：Tier-1 就地合成 + Tier-2 converge 守门
+pub(crate) use tool_pairing::{
+    reconcile_orphan_tool_calls, synthesize_and_record_interrupted_calls,
+};
 
 /// 消息 id 计数器（同毫秒内多次生成保证唯一）
 static MESSAGE_ID_COUNTER: AtomicU64 = AtomicU64::new(0);

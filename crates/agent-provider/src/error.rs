@@ -372,6 +372,47 @@ fn transport_error_kind<E: std::error::Error + Send + Sync + 'static>(
     ProviderSourceError::StreamInterrupted
 }
 
+/// 请求构建期错误（导线层 Fail-Closed 守门，详案 02 §3.4 / §4.3 · W04）
+///
+/// 与网络层 [ProviderError]（分类管线输入）正交：本枚举仅在**请求体组装阶段**
+/// 由出站成对性校验产生。唯一正式变体 [RequestBuildError::UnpairedToolCalls]：
+/// 携带协议轨标识与孤儿 call_id 稳定排序列表，供会话循环侧按 ID 做
+/// 「本地合成补齐 → 单次重试组包」对账（02 §3.4 契约补丁第 4 条）。
+/// 严禁在导线层或上层静默插入假 tool_result 欺骗上游 API。
+#[derive(Debug, Clone, PartialEq, Error)]
+pub enum RequestBuildError {
+    /// 未配对的孤儿工具调用（导线层刚性拦截，拒绝带毒请求出站）
+    #[error("导线层拦截到未配对的孤儿工具调用（协议：{protocol}，孤儿 ID 列表：{orphan_ids:?}）")]
+    UnpairedToolCalls {
+        /// 协议轨标识：`"anthropic"` | `"openai_chat"`
+        protocol: &'static str,
+        /// 孤儿 call_id 列表（检测阶段排序产出，顺序稳定，供补齐重试逐 ID 对账）
+        orphan_ids: Vec<String>,
+    },
+    /// 其他请求构建错误
+    #[error("其他请求构建错误：{0}")]
+    Other(String),
+}
+
+impl RequestBuildError {
+    /// 孤儿 call_id 列表访问器（仅 [RequestBuildError::UnpairedToolCalls] 携带；
+    /// 会话循环「补齐后重试」路径据此对账——返回空切片表示非成对性错误）
+    pub fn orphan_ids(&self) -> &[String] {
+        match self {
+            RequestBuildError::UnpairedToolCalls { orphan_ids, .. } => orphan_ids,
+            RequestBuildError::Other(_) => &[],
+        }
+    }
+
+    /// 协议轨标识（仅 UnpairedToolCalls 携带；其余返回 None）
+    pub fn protocol(&self) -> Option<&'static str> {
+        match self {
+            RequestBuildError::UnpairedToolCalls { protocol, .. } => Some(protocol),
+            RequestBuildError::Other(_) => None,
+        }
+    }
+}
+
 #[cfg(test)]
 #[path = "error_tests.rs"]
 mod tests;

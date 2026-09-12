@@ -2,13 +2,14 @@
 // （原 restore.rs 535-817 区间原样迁入，公开面经 restore.rs `pub use`
 // 重导出，语义零改动）。
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
+use std::str::FromStr;
 
 use conex_db::RunStatus;
 use conex_types::events::AgentEvent;
 
 use super::{
-    ReconcileConflict, RestoreError, RestoreMode, RestoreOutcome, CANCEL_INTERRUPTED_ERROR,
+    HealedToolRecord, RestoreError, RestoreMode, RestoreOutcome, CANCEL_INTERRUPTED_ERROR,
     INTERRUPTED_ERROR, INTERRUPTED_REASON, RUN_INTERRUPTED_EVENT,
 };
 use crate::now_ms;
@@ -29,9 +30,13 @@ impl RestoreManager {
     /// 流程：
     /// 1. 快照加载（checksum 校验；损坏回退备份快照；无快照 → 全量重放）；
     /// 2. 从 Store 全量扫描 runs；
-    /// 3. in-flight run → 终态 interrupted（update_run_status +
-    ///    `run-interrupted` 审计事件，previousStatus 可追溯）；
-    ///    blocked 与其它终态记录原样保留不打断；
+    /// 3. **事件权威前置决策**（04 §4.2 契约补丁）：先批量拉齐全部
+    ///    `run-terminal` 事件，再单遍收敛——有终态事件则单向覆盖 runs 表
+    ///    （绝不打断、绝不写 run-interrupted）；无终态且在途才打断；
+    ///    无终态且 Completed → unbacked Failed 纠偏；Unknown 保真；
+    /// 3b. session_agents 残留 running 归一；
+    /// 3c. 冷启动孤儿工具自愈（04 §5）：ToolStart 无 ToolEnd → CAS 幂等
+    ///    补齐 ToolEnd（ToolOutcomeUnknown）；
     /// 4. 会话记录组装（快照会话 ∪ run 派生会话）；
     /// 5. 增量流：lastSequence 后事件重放（session-leaf-moved 重放叶子
     ///    移动；last_sequence 推进到最大序列，作为后续增量流锚点）；
@@ -55,83 +60,158 @@ impl RestoreManager {
         // 2. runs 全量扫描（run 表为权威数据源）
         let mut runs = store.query_runs().await?;
 
-        // 3. in-flight → interrupted（previousStatus 审计）；未知字面量
-        //    保真保留（is_inflight 已滤）并显式上报
+        // 3. 事件权威前置决策（04 §4.2 契约补丁：先批量拉齐全部
+        //    run-terminal，再单遍收敛；禁止 per-run N+1）
+        let terminal_by_key = load_terminal_map(store, &runs).await?;
+
         let mut interrupted = Vec::new();
         let mut unknown_status_runs = Vec::new();
         for run in runs.iter_mut() {
-            if !is_inflight(run.status.clone()) {
-                // 未知字面量：不打断、不改写，显式上报（裁决 D3 诚实滞留）
-                if let RunStatus::Unknown(literal) = &run.status {
-                    tracing::warn!(
+            let terminal_payload = terminal_by_key
+                .get(&(run.session_id.clone(), run.run_id.clone()))
+                .map(|s| s.as_str());
+
+            if let Some(payload_str) = terminal_payload {
+                // ─────────────────────────────────────────────────────
+                // 分支 A：events 表存在终态事件 → 事件流已权威收口（SSOT）
+                // ─────────────────────────────────────────────────────
+                let event_terminal_str = serde_json::from_str::<serde_json::Value>(payload_str)
+                    .ok()
+                    .and_then(|v| {
+                        v.get("terminal")
+                            .and_then(serde_json::Value::as_str)
+                            .map(str::to_string)
+                    })
+                    .unwrap_or_else(|| "run-terminal".to_string());
+
+                let authoritative_status = match RunStatus::from_str(&event_terminal_str) {
+                    Ok(s) => s,
+                    Err(_) => {
+                        // 契约补丁：无法解析的终态字面量 → Unknown 保真，禁止臆造 Failed
+                        RunStatus::Unknown(event_terminal_str)
+                    }
+                };
+
+                if run.status != authoritative_status {
+                    // 物化表落后或撕裂：单向权威强制覆盖 runs 表！
+                    tracing::info!(
                         target: "restore",
                         run_id = %run.run_id,
-                        status = %literal,
-                        "未知状态字面量保留（不打断、不改写）"
+                        session_id = %run.session_id,
+                        old_status = %run.status.as_str(),
+                        authoritative_status = %authoritative_status.as_str(),
+                        "G-29 根治：依据 events 表法定终态强制单向收敛覆盖 runs 表记录"
                     );
-                    unknown_status_runs.push((run.run_id.clone(), literal.clone()));
+
+                    store
+                        .update_run_status(
+                            &run.run_id,
+                            authoritative_status.clone(),
+                            None, // 保留原 end_reason
+                            None,
+                        )
+                        .await?;
+
+                    run.status = authoritative_status;
+                    run.updated_at = now_ms();
                 }
+                // 关键断言：绝对不打断！绝对不写 run-interrupted 虚假审计事件！
                 continue;
             }
-            let previous_status = run.status.clone();
-            let (db_status, error) = match previous_status {
-                // 取消流程被打断 → cancelled；其余 in-flight → failed
-                RunStatus::Cancelling => (RunStatus::Cancelled, CANCEL_INTERRUPTED_ERROR),
-                _ => (RunStatus::Failed, INTERRUPTED_ERROR),
-            };
 
-            // 审计事件：previousStatus 落库，终态变化可追溯
-            let record = super::InterruptedRun {
-                run_id: run.run_id.clone(),
-                session_id: run.session_id.clone(),
-                previous_status: previous_status.as_str().to_string(),
-                status: db_status.as_str().to_string(),
-                reason: INTERRUPTED_REASON.to_string(),
-                error: error.to_string(),
-                timestamp: now_ms(),
-            };
-            // DM-05：payload 补顶层 type 键——run-interrupted 非 AgentEvent
-            // 枚举成员（不扩枚举，保持自定义审计事件形态），读侧 D8
-            // fallback 以 type 键路由；InterruptedRun 自身带 runId/sessionId
-            // 字段，归属可还原
-            let mut payload = serde_json::to_value(&record)
-                .map_err(|e| RestoreError::new("serialize_interrupted", e.to_string()))?;
-            if let Some(obj) = payload.as_object_mut() {
-                obj.insert(
-                    "type".to_string(),
-                    serde_json::Value::String(RUN_INTERRUPTED_EVENT.to_string()),
+            // ─────────────────────────────────────────────────────────
+            // 分支 B：events 表不存在 run-terminal 事件 → 依据状态机规则决断
+            // ─────────────────────────────────────────────────────────
+            if is_inflight(run.status.clone()) {
+                // 确属崩溃打断的在途任务：执行真实打断流程
+                let previous_status = run.status.clone();
+                let (db_status, error) = match previous_status {
+                    // 取消流程被打断 → cancelled；其余 in-flight → failed
+                    RunStatus::Cancelling => (RunStatus::Cancelled, CANCEL_INTERRUPTED_ERROR),
+                    _ => (RunStatus::Failed, INTERRUPTED_ERROR),
+                };
+
+                // 审计事件：previousStatus 落库，终态变化可追溯
+                let record = super::InterruptedRun {
+                    run_id: run.run_id.clone(),
+                    session_id: run.session_id.clone(),
+                    previous_status: previous_status.as_str().to_string(),
+                    status: db_status.as_str().to_string(),
+                    reason: INTERRUPTED_REASON.to_string(),
+                    error: error.to_string(),
+                    timestamp: now_ms(),
+                };
+                // DM-05：payload 补顶层 type 键——run-interrupted 非 AgentEvent
+                // 枚举成员（不扩枚举，保持自定义审计事件形态），读侧 D8
+                // fallback 以 type 键路由；InterruptedRun 自身带 runId/sessionId
+                // 字段，归属可还原
+                let mut payload = serde_json::to_value(&record)
+                    .map_err(|e| RestoreError::new("serialize_interrupted", e.to_string()))?;
+                if let Some(obj) = payload.as_object_mut() {
+                    obj.insert(
+                        "type".to_string(),
+                        serde_json::Value::String(RUN_INTERRUPTED_EVENT.to_string()),
+                    );
+                }
+                let payload = serde_json::to_string(&payload)
+                    .map_err(|e| RestoreError::new("serialize_interrupted", e.to_string()))?;
+                let sequence = next_sequence(store, &run.session_id).await?;
+                // T08.4：打断路径写 cursor = 审计事件前会话最大已落库序列
+                // （sequence-1，T08.8 的 sequence 口径）
+                let cursor = sequence.saturating_sub(1);
+                store
+                    .update_run_status(
+                        &run.run_id,
+                        db_status.clone(),
+                        Some(INTERRUPTED_REASON),
+                        Some(cursor as i64),
+                    )
+                    .await?;
+                // DM-05：落库 run_id 列 = 被打断 run 的真实 run_id（DM-03
+                // Store::append_event 签名已落地；读侧按 run 查询可命中）
+                store
+                    .append_event(
+                        &run.session_id,
+                        sequence,
+                        RUN_INTERRUPTED_EVENT,
+                        &payload,
+                        Some(&run.run_id),
+                    )
+                    .await?;
+                run.status = db_status;
+                run.end_reason = Some(INTERRUPTED_REASON.to_string());
+                run.cursor = cursor as i64;
+                run.updated_at = now_ms();
+                interrupted.push(record);
+            } else if run.status == RunStatus::Completed {
+                // 反向脑裂修正：物化表声称 completed，但 events 表无任何终态事件！
+                tracing::warn!(
+                    target: "restore",
+                    run_id = %run.run_id,
+                    session_id = %run.session_id,
+                    "检测到无事件背书的非法完成态 (Unbacked-Completed)，强制收敛降级为 Failed"
                 );
+                store
+                    .update_run_status(
+                        &run.run_id,
+                        RunStatus::Failed,
+                        Some("unbacked-completed"),
+                        None,
+                    )
+                    .await?;
+                run.status = RunStatus::Failed;
+                run.end_reason = Some("unbacked-completed".to_string());
+                run.updated_at = now_ms();
+            } else if let RunStatus::Unknown(literal) = &run.status {
+                // D3 裁决：未知字面量保真透传
+                tracing::warn!(
+                    target: "restore",
+                    run_id = %run.run_id,
+                    status = %literal,
+                    "未知状态字面量保留（不打断、不改写）"
+                );
+                unknown_status_runs.push((run.run_id.clone(), literal.clone()));
             }
-            let payload = serde_json::to_string(&payload)
-                .map_err(|e| RestoreError::new("serialize_interrupted", e.to_string()))?;
-            let sequence = next_sequence(store, &run.session_id).await?;
-            // T08.4：打断路径写 cursor = 审计事件前会话最大已落库序列
-            // （sequence-1，T08.8 的 sequence 口径）
-            let cursor = sequence.saturating_sub(1);
-            store
-                .update_run_status(
-                    &run.run_id,
-                    db_status.clone(),
-                    Some(INTERRUPTED_REASON),
-                    Some(cursor as i64),
-                )
-                .await?;
-            // DM-05：落库 run_id 列 = 被打断 run 的真实 run_id（DM-03
-            // Store::append_event 签名已落地；读侧按 run 查询可命中）
-            store
-                .append_event(
-                    &run.session_id,
-                    sequence,
-                    RUN_INTERRUPTED_EVENT,
-                    &payload,
-                    Some(&run.run_id),
-                )
-                .await?;
-            run.status = db_status;
-            run.end_reason = Some(INTERRUPTED_REASON.to_string());
-            run.cursor = cursor as i64;
-            run.updated_at = now_ms();
-            interrupted.push(record);
         }
 
         // 3b. session_agents 残留 running 归一（PERSIST-02 P1-3）：子代理
@@ -175,24 +255,6 @@ impl RestoreManager {
             }
         }
 
-        // 3c. G-29 终态矛盾对账（DM-08）：只读校验 events 表 run-terminal
-        // 与 runs 记录终态的矛盾，显式上报（tracing::warn + outcome 计数），
-        // **不自动修正**（不翻写 runs 表、不改事件——修正语义归恢复策略
-        // 后续裁决）。注意：打断循环已就地更新 run.status（failed/cancelled），
-        // 对账看到的是打断后终态——「事件说 completed、记录说 failed」矛盾
-        // 即在本步暴露。
-        let reconcile_conflicts = reconcile_terminal_conflicts(store, &runs).await?;
-        for conflict in &reconcile_conflicts {
-            tracing::warn!(
-                target: "restore",
-                run_id = %conflict.run_id,
-                session_id = %conflict.session_id,
-                event_terminal = %conflict.event_terminal,
-                record_status = %conflict.record_status,
-                "G-29 终态矛盾对账：事件流 run-terminal 与 runs 记录终态矛盾（只上报不修正）"
-            );
-        }
-
         // 4. 会话记录组装（快照会话 ∪ run 派生会话）
         let mut sessions: Vec<SessionRecord> = snapshot
             .as_ref()
@@ -210,6 +272,12 @@ impl RestoreManager {
                 });
             }
         }
+
+        // 4b. 冷启动孤儿工具自愈（04 §5）：ToolStart 无 ToolEnd → CAS 幂等
+        //     补齐 ToolEnd（ToolOutcomeUnknown）。lease API 尚未在 conex-db
+        //     合并——按「可选调用+编译可空」：先做 CAS 存在性排查（04 §6.3
+        //     防线二），杜绝重复合成。会话集合取自已组装的 sessions。
+        let healed_orphan_tools = heal_orphaned_tool_calls(store, &sessions).await?;
 
         // 5. 增量流：lastSequence 后事件重放（会话树叶子移动 + 压缩护栏
         //    重建）+ 锚点推进
@@ -299,7 +367,7 @@ impl RestoreManager {
             last_sequence,
             snapshot_note,
             snapshot_generation: snapshot.as_ref().map(|snap| snap.generation).unwrap_or(0),
-            reconcile_conflicts,
+            healed_orphan_tools,
         })
     }
 }
@@ -338,65 +406,221 @@ async fn next_sequence(store: &dyn Store, session_id: &str) -> Result<u64, Store
     Ok(store.max_sequence(session_id).await? + 1)
 }
 
-/// G-29 终态矛盾对账（DM-08）：只读校验 events 表 run-terminal 与 runs
-/// 记录终态的矛盾（**只上报不修正**——不翻写 runs 表、不改事件）。
+/// 批量拉齐全部 run-terminal 事件（04 §4.2 契约补丁：禁止 per-run N+1）。
 ///
-/// 语义（对账范围刻意收敛，防误报）：
-/// - **事件说终态、记录说失败/取消**：runs 终态字面量为 failed / cancelled
-///   （含本次被打断的 run）但 events 存在该 run 的 run-terminal 事件 →
-///   事件流已完成收口、记录却为失败/取消，矛盾；
-/// - **记录说完成、事件无终态**：runs 终态字面量为 completed 但 events
-///   无该 run 的 run-terminal 事件 → 记录说完成、事件流无终态，矛盾；
-/// - **不检查 failed 的「无 terminal」反向**：写失败收场
-///   （event-store-write-failed，T12.7）合法无 run-terminal 事件，不误报；
-/// - **不检查 cancelled 的「无 terminal」反向**：取消路径终态事件面未
-///   定（cancel.rs 域），避免误报；
-/// - **不检查 Unknown 字面量**：诚实未知（裁决 D3），不臆断。
-///
-/// 1C-2：每 run 一次 `query_events_by_type(.., "run-terminal", 0, Some(1))`
-/// ——SQL 下推 event_type 过滤，只返回匹配的 1 条事件（替代原
-/// `query_events_by_run(.., None)` 全量加载后内存 `find`）。冷启动恢复
-/// 查询开销从 O(runs × run_events) 降为 O(runs)。
-async fn reconcile_terminal_conflicts(
+/// 返回 `(session_id, run_id) → payload` 映射。当前 Store 面无跨会话批量
+/// 查询 API——先按**唯一 session_id** 去重后逐会话拉齐（O(=sessions) 而非
+/// O(runs)），对齐「批量签名优先、Store 限制时 HashMap 缓存」口径。
+async fn load_terminal_map(
     store: &dyn Store,
     runs: &[conex_db::StoredRun],
-) -> Result<Vec<ReconcileConflict>, StoreError> {
-    let mut conflicts = Vec::new();
+) -> Result<HashMap<(String, String), String>, StoreError> {
+    let mut terminal_by_key: HashMap<(String, String), String> = HashMap::new();
+    let mut seen_sessions: HashSet<&str> = HashSet::new();
     for run in runs {
-        let terminal_events = store
-            .query_events_by_type(&run.session_id, &run.run_id, "run-terminal", 0, Some(1))
-            .await?;
-        let terminal = terminal_events.first().map(|e| e.payload.as_str());
-        let has_terminal = terminal.is_some();
-        // 事件流终态字面量：payload terminal 键优先，解析失败回退事件类型名
-        let event_terminal = || {
-            terminal
-                .and_then(|p| serde_json::from_str::<serde_json::Value>(p).ok())
-                .and_then(|v| {
-                    v.get("terminal")
-                        .and_then(serde_json::Value::as_str)
-                        .map(str::to_string)
-                })
-                .unwrap_or_else(|| "run-terminal".to_string())
-        };
-        let mismatch = match &run.status {
-            // 事件说终态、记录说失败/取消 → 矛盾
-            RunStatus::Failed | RunStatus::Cancelled => has_terminal,
-            // 记录说完成、事件流无终态 → 矛盾
-            RunStatus::Completed => !has_terminal,
-            // Unknown / 中间态：打断语义已处理，对账不介入
-            _ => false,
-        };
-        if mismatch {
-            conflicts.push(ReconcileConflict {
-                run_id: run.run_id.clone(),
-                session_id: run.session_id.clone(),
-                event_terminal: event_terminal(),
-                record_status: run.status.as_str().to_string(),
+        if !seen_sessions.insert(run.session_id.as_str()) {
+            continue;
+        }
+        // 会话级拉齐：query_events 不限类型，内存过滤 run-terminal——
+        // 会话事件量在恢复路径可接受；Store 无「session+type 而非
+        // session+run+type」的下推面，待 Store 扩展后再优化为 SQL 过滤
+        let events = store.query_events(&run.session_id, 0, None).await?;
+        for e in events {
+            if e.event_type == "run-terminal" {
+                if let Some(event_run_id) = e.run_id {
+                    terminal_by_key.insert((run.session_id.clone(), event_run_id), e.payload);
+                }
+            }
+        }
+    }
+    Ok(terminal_by_key)
+}
+
+/// 从 tool-start / tool-end 事件 payload 提取 call.id（顶层 `call.id` /
+/// `result.id`；缺失返回 None）。
+fn extract_call_id(payload: &str, is_start: bool) -> Option<String> {
+    let v: serde_json::Value = serde_json::from_str(payload).ok()?;
+    if is_start {
+        v.get("call")
+            .and_then(|c| c.get("id"))
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_string)
+    } else {
+        v.get("result")
+            .and_then(|r| r.get("id"))
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_string)
+            .or_else(|| {
+                // 兼容顶层 id（部分历史载荷）
+                v.get("id")
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_string)
+            })
+    }
+}
+
+/// 从 tool-start 事件 payload 提取 toolName。
+fn extract_tool_name(payload: &str) -> Option<String> {
+    let v: serde_json::Value = serde_json::from_str(payload).ok()?;
+    v.get("call")
+        .and_then(|c| c.get("toolName"))
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_string)
+}
+
+/// 冷启动孤儿工具自愈引擎（04 §5）。
+///
+/// 探测：ToolStart 无 ToolEnd 的悬挂调用 → CAS 幂等补齐 ToolEnd
+/// （载荷 `ToolOutcomeUnknown`）。
+/// **租约口径**：Store 抽象层无 LocalDb 租约 API；多实例互斥优先由宿主在
+/// 调 `restore` 前获取 `LocalDb::try_acquire_recovery_lease`（conex-db 已落地），
+/// 本函数对任意 Store 保持 CAS 幂等（04 §6.3 防线二）。
+async fn heal_orphaned_tool_calls(
+    store: &dyn Store,
+    sessions: &[SessionRecord],
+) -> Result<Vec<HealedToolRecord>, RestoreError> {
+    let mut healed = Vec::new();
+    for session in sessions {
+        let session_id = session.session_id.clone();
+        // 会话级拉齐 tool-start / tool-end（一次 query_events，内存分类）
+        let events = store.query_events(&session_id, 0, None).await?;
+        let mut started: HashMap<String, (Option<String>, Option<String>)> = HashMap::new();
+        // call_id → (tool_name, run_id)
+        let mut ended: HashSet<String> = HashSet::new();
+        for e in &events {
+            if e.event_type == "tool-start" {
+                if let Some(call_id) = extract_call_id(&e.payload, true) {
+                    let tool_name = extract_tool_name(&e.payload);
+                    started.insert(call_id, (tool_name, e.run_id.clone()));
+                }
+            } else if e.event_type == "tool-end" {
+                if let Some(call_id) = extract_call_id(&e.payload, false) {
+                    ended.insert(call_id);
+                }
+            }
+        }
+
+        // 孤儿集 = ToolStart \ ToolEnd
+        let mut orphan_ids: Vec<&String> =
+            started.keys().filter(|id| !ended.contains(*id)).collect();
+        orphan_ids.sort(); // 确定性顺序（测试可断言）
+        for call_id in orphan_ids {
+            let (tool_name, run_id) = started[call_id].clone();
+            let tool_name = tool_name.unwrap_or_else(|| "unknown".to_string());
+
+            // CAS 存在性排查（04 §6.3 防线二）：重查 tool-end 是否已存在
+            // （防并发/重复恢复窗口）。存在 → 幂等放弃。
+            // 已在会话级 events 快照中分类完毕——若 orphan_ids 排除逻辑
+            // 正确则此处 ended 不含 call_id；但为防自愈窗口内另一实例已
+            // 追加，再做一次会话级重查（读侧幂等，代价可接受）。
+            let recheck = store.query_events(&session_id, 0, None).await?;
+            let already_healed = recheck
+                .iter()
+                .filter(|e| e.event_type == "tool-end")
+                .any(|e| extract_call_id(&e.payload, false).as_deref() == Some(call_id.as_str()));
+            if already_healed {
+                tracing::debug!(
+                    target: "restore",
+                    session_id = %session_id,
+                    call_id = %call_id,
+                    "孤儿工具自愈 CAS 命中已存在 tool-end，幂等放弃"
+                );
+                continue;
+            }
+
+            let healed_at = now_ms();
+            let batch_id = format!(
+                "healed-batch-{}",
+                run_id.as_deref().unwrap_or("unknown")
+            );
+
+            // 序列分配：reserve_sequence 原子取号（会话内单调）
+            let seq_start = store.reserve_sequence(&session_id).await?;
+
+            // 补齐 ToolEnd（ToolOutcomeUnknown）
+            let tool_end = AgentEvent::ToolEnd {
+                session_id: session_id.clone(),
+                batch_id: batch_id.clone(),
+                result: conex_types::ToolBatchResult {
+                    id: call_id.clone(),
+                    tool_name: tool_name.clone(),
+                    output: conex_types::ToolOutput {
+                        text: Some(
+                            "Execution outcome unknown: daemon or host process terminated \
+                             abnormally before tool completion."
+                                .to_string(),
+                        ),
+                        json: Some(serde_json::json!({
+                            "code": "ToolOutcomeUnknown",
+                            "reason": "process-crash-interrupted",
+                            "orphanCallId": call_id,
+                            "healedAt": chrono_like_iso8601(healed_at),
+                        })),
+                        artifacts: None,
+                    },
+                    is_error: true,
+                    duration_ms: 0,
+                },
+                timestamp: chrono_like_iso8601(healed_at),
+                attempt: Some(1),
+                deduplicated: None,
+                executed_input: None,
+            };
+            let payload = serde_json::to_string(&tool_end)
+                .map_err(|e| RestoreError::new("serialize_tool_end", e.to_string()))?;
+            store
+                .append_event(
+                    &session_id,
+                    seq_start,
+                    "tool-end",
+                    &payload,
+                    run_id.as_deref(),
+                )
+                .await?;
+            // reserve_sequence 已推进会话计数器（下次取号 = seq_start+1），
+            // 无需额外 seed
+
+            tracing::info!(
+                target: "restore",
+                session_id = %session_id,
+                call_id = %call_id,
+                tool_name = %tool_name,
+                "冷启动孤儿工具自愈：补齐 ToolEnd（ToolOutcomeUnknown）"
+            );
+
+            healed.push(HealedToolRecord {
+                session_id: session_id.clone(),
+                run_id,
+                call_id: call_id.clone(),
+                tool_name,
+                synthesized_tool_start: false, // ToolStart 已存在，仅补 ToolEnd
+                healed_at,
             });
         }
     }
-    Ok(conflicts)
+    Ok(healed)
+}
+
+/// epoch ms → UTC ISO8601（轻量格式化，避免引入 chrono）。
+fn chrono_like_iso8601(ms: i64) -> String {
+    // 用 UTC 简化：只做毫秒→秒转换与格式化（恢复自愈载荷可读即可）
+    let secs = ms.div_euclid(1_000);
+    let millis = ms.rem_euclid(1_000);
+    // Civil from days (Howard Hinnant algorithm)
+    let days = secs.div_euclid(86_400);
+    let sod = secs.rem_euclid(86_400);
+    let (h, m, s) = (sod / 3600, (sod % 3600) / 60, sod % 60);
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z.rem_euclid(146_097);
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let mo = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = if mo <= 2 { y + 1 } else { y };
+    format!("{y:04}-{mo:02}-{d:02}T{h:02}:{m:02}:{s:02}.{millis:03}Z")
 }
 
 /// blocked 类终态 reason（B4.5 goal 语义：goal-blocked / goal-max-rounds /

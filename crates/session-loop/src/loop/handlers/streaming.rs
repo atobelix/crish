@@ -16,6 +16,7 @@
 //!   6. 安全点（stream 结束且消息已落盘，不丢本轮输出，01 §2.4 步骤 6）；
 //!   7. 分类分派（01 §2.4 步骤 7）。
 
+use conex_types::error::codes;
 use conex_types::events::{AgentEvent, TurnUsage};
 use conex_types::message::{
     AgentMessage, AgentMessageBlock, AgentMessageMetadataKind, AgentMessageRole, ToolCallBlock,
@@ -34,7 +35,8 @@ use crate::stream::{
 use super::super::end::EndDecision;
 use super::super::handlers::{
     check_control, clamp_max_tokens, dispatch, emit_missing_turn_end, estimate_context,
-    new_message_id, HandlerOutcome, LoopState,
+    last_assistant_with_tool_calls, new_message_id, synthesize_and_record_interrupted_calls,
+    HandlerOutcome, LoopState,
 };
 use super::super::LoopError;
 use super::{no_tool_calls, stream_error};
@@ -268,14 +270,41 @@ async fn consume_classify(
             // message-delta，避免与实时 delta 双发）
             commit_message_with_deltas(state, message);
 
+            // Tier-1（02 §3.1.2 DEL-02/03）：commit 后中断不得裸退——
+            // 携带 tool_calls 的已落盘 assistant 必须就地合成 ToolResult
+            // 再退出，消除流末尾孤儿泄漏。
+            let has_tool_calls = !tool_calls.is_empty();
+
             if aborted || consumed.stop_reason() == Some(ConsumeStopReason::Aborted) {
                 // abort 后 partial salvage：消息已 commit（stopReason=aborted
                 // 标注）→ ABORT 收场，内容保留（01 §2.4 步骤 5 / 01 §五.9）
+                if has_tool_calls {
+                    if let Some(assistant) = last_assistant_with_tool_calls(state) {
+                        let assistant = assistant.clone();
+                        synthesize_and_record_interrupted_calls(
+                            state,
+                            &assistant,
+                            codes::TOOL_ABORTED_BEFORE_DISPATCH,
+                            "streaming aborted by user or provider before tool execution",
+                        );
+                    }
+                }
                 return streaming_aborted(state);
             }
 
             // 6. 安全点（stream 结束且消息已落盘，不丢本轮输出，01 §2.4 步骤 6）
             if let Some(end) = check_control(state)? {
+                if has_tool_calls {
+                    if let Some(assistant) = last_assistant_with_tool_calls(state) {
+                        let assistant = assistant.clone();
+                        synthesize_and_record_interrupted_calls(
+                            state,
+                            &assistant,
+                            codes::TOOL_ABORTED_BEFORE_DISPATCH,
+                            "run control triggered termination at stream completion",
+                        );
+                    }
+                }
                 return Ok(HandlerOutcome::end(end));
             }
 
