@@ -34,6 +34,8 @@ import { Sidebar } from './components/sidebar/Sidebar';
 import { SidebarToggle } from './components/sidebar/SidebarHeader';
 import { AppTopBar } from './components/AppTopBar';
 import { SessionTabDragProvider } from './components/shell/SessionTabDragContext';
+// REDLINE-403：首屏核心工作区静态同步导入，消除 Suspense 悬挂闪烁
+import { BinaryTreeWorkspace } from './components/binary-tree/BinaryTreeWorkspace';
 
 // D2-3：仅 DEV 懒加载；旗标关闭时不 import chunk、无 interval / store
 const DevHealthOverlayLazy = import.meta.env.DEV
@@ -63,13 +65,6 @@ function DevHealthOverlayMount() {
     </Suspense>
   );
 }
-
-// 二叉树工作区（重构后默认入口；代码分割避免影响旧路径首屏）
-const BinaryTreeWorkspace = lazy(() =>
-  import('./components/binary-tree/BinaryTreeWorkspace').then((m) => ({
-    default: m.BinaryTreeWorkspace,
-  }))
-);
 
 // ── 非关键路径组件：代码分割，按需加载 ──
 
@@ -237,12 +232,12 @@ function App() {
                 aria-label="工作区面板"
               >
                 <AppErrorBoundary compact title="工作区出错">
+                  {/* Coordinator 已在挂载前 applyAtomicCommit + hydrateWorkspaceShell；
+                      shellReady 常规路径为 true；fallback 兜底仍显示骨架 */}
                   {!shellReady ? (
                     <SkeletonFallback height={400} />
                   ) : (
-                    <Suspense fallback={<SkeletonFallback height={400} />}>
-                      <BinaryTreeWorkspace />
-                    </Suspense>
+                    <BinaryTreeWorkspace />
                   )}
                 </AppErrorBoundary>
               </div>

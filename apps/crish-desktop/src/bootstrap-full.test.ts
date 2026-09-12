@@ -107,13 +107,14 @@ describe('bootstrapFull 行为', () => {
     vi.clearAllMocks();
   });
 
-  it('启动调用 ensureModelsCatalogLoaded，且 bundled 快照仍并行拉取', async () => {
+  it('启动调用 ensureModelsCatalogLoaded，且 bundled 快照仍并行拉取；不盲 scaleUp', async () => {
     await bootstrapFull();
     expect(mocks.ensureModelsCatalogLoaded).toHaveBeenCalledTimes(1);
     expect(mocks.fetchCatalogSnapshot).toHaveBeenCalledTimes(1);
     expect(mocks.fetchDescribeEffortsSnapshot).toHaveBeenCalledTimes(1);
     expect(mocks.ensureEngineConnected).toHaveBeenCalledTimes(1);
-    expect(mocks.scaleUpPool).toHaveBeenCalledTimes(1);
+    // ACT-604：bootstrapFull 不再无条件 scaleUpPool（按需由 maybeJitSpawn 扩容）
+    expect(mocks.scaleUpPool).not.toHaveBeenCalled();
     expect(mocks.initOAuthTokenScheduler).toHaveBeenCalledTimes(1);
   });
 
@@ -124,18 +125,18 @@ describe('bootstrapFull 行为', () => {
     });
     const setItem = vi.spyOn(localStorage, 'setItem');
     await bootstrapFull();
-    expect(mocks.scaleUpPool).toHaveBeenCalledTimes(1);
+    expect(mocks.scaleUpPool).not.toHaveBeenCalled();
     const written = setItem.mock.calls.map((c) => String(c[0]));
     for (const key of LS_SEED_KEYS) {
       expect(written).not.toContain(key);
     }
   });
 
-  it('ensureModelsCatalogLoaded 抛错时不写 LS 种子、不阻断后续 scaleUpPool', async () => {
+  it('ensureModelsCatalogLoaded 抛错时不写 LS 种子、不阻断后续任务', async () => {
     mocks.ensureModelsCatalogLoaded.mockRejectedValue(new Error('yaml 读失败'));
     const setItem = vi.spyOn(localStorage, 'setItem');
     await bootstrapFull();
-    expect(mocks.scaleUpPool).toHaveBeenCalledTimes(1);
+    expect(mocks.scaleUpPool).not.toHaveBeenCalled();
     const written = setItem.mock.calls.map((c) => String(c[0]));
     for (const key of LS_SEED_KEYS) {
       expect(written).not.toContain(key);

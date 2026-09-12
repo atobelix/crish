@@ -9,8 +9,6 @@ import { syncTelemetryData } from '../api/storeAccess';
 import { telemetry } from '../services/TelemetryService';
 import { isDemoModeFast } from '../createSsrGlobals';
 import type { AppSettings } from '../store/types';
-import { hydrateWorkspaceShell } from './hydrateWorkspaceShell';
-import { waitLayoutTreeHydration } from '../store/layout-tree';
 import { getCompositionRoot } from './compositionRoot';
 
 /** Devtools / internal globals attached to window */
@@ -46,9 +44,9 @@ export async function winCtl(
 
 export interface UseAppBootstrapOptions {
   /**
-   * Optional React-owned setter; when omitted, bootstrap writes via
-   * `getCompositionRoot().layout.setAppSettings` (command path).
-   * App.tsx may still pass store setter for backward compatibility.
+   * Settings hydration is owned by UnifiedAppHydrationCoordinator
+   * (entry-core preload → applyAtomicCommit). Setter kept for API compat;
+   * AppBootstrap no longer performs getSettings / disk-write on startup.
    */
   setAppSettings?: (settings: AppSettings) => void;
   productShell: boolean;
@@ -57,12 +55,12 @@ export interface UseAppBootstrapOptions {
 }
 
 export function useAppBootstrap({
-  setAppSettings,
+  setAppSettings: _setAppSettings,
   productShell: _productShell,
-  uiSize,
-  shellChromeMode,
+  uiSize: _uiSize,
+  shellChromeMode: _shellChromeMode,
 }: UseAppBootstrapOptions) {
-  // 1. Initial window globals & document metadata
+  // 1. Window globals & document metadata
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const w = window as CrishWindow;
@@ -80,32 +78,11 @@ export function useAppBootstrap({
     }
   }, []);
 
-  // 2. Persistence & services initialization
+  // 2. Session persistence init (layout tree hydrate is Coordinator-owned)
   useEffect(() => {
     import('../store/layoutStore').then(({ initLayoutStorePersistence }) =>
       initLayoutStorePersistence()
     );
-  }, []);
-
-  // 2b. Shell chrome 冷启动门闩（默认 clean draft；设置可 restore）
-  // 必须等 layout-tree persist rehydrate 完成，否则脏多 leaf 会覆盖 resetTree
-  useLayoutEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        await waitLayoutTreeHydration();
-        if (cancelled) return;
-        hydrateWorkspaceShell();
-      } catch (e) {
-        console.warn('[hydrateWorkspaceShell]', e);
-        if (!cancelled) {
-          getCompositionRoot().shell.setShellReady(true);
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
   }, []);
 
   useEffect(() => {
@@ -116,7 +93,6 @@ export function useAppBootstrap({
   }, []);
 
   // 异常退出：静默处理，不再弹窗打扰用户。
-  // 默认开启错误数据采集，用户可在设置中关闭；关闭时直接清空旧日志。
   useEffect(() => {
     if (!telemetry.hasPreviousCrash()) return;
     void (async () => {
@@ -130,7 +106,6 @@ export function useAppBootstrap({
           telemetry.clear();
         }
       } catch {
-        // 读取设置失败时仍按默认开启处理
         telemetry.sendReport();
       }
     })();
@@ -141,13 +116,17 @@ export function useAppBootstrap({
     return () => cleanup();
   }, []);
 
-  // 3. Session folder rebinds（D5 收敛：直写 recipe 换 rebindSessionFolders action；
-  // layoutStore 自订阅已删除——folder 镜像写路径收为「启动一次 + crish-project-changed」）
+  // 3. Session folder rebind：Store 就绪事件驱动（ACT-405，铲除双 rAF）。
+  //    启动一次 + crish-project-changed；isLayoutReady 后微任务执行 rebind。
   useLayoutEffect(() => {
+    let disposed = false;
+    let rebindScheduled = false;
+
     const rebind = () => {
       try {
-        import('../api/projectStore').then(
+        void import('../api/projectStore').then(
           ({ listProjects, rememberProjectFolderAlias }) => {
+            if (disposed) return;
             const projects = listProjects();
             for (const p of projects) rememberProjectFolderAlias(p.id, p.path);
             getCompositionRoot().session.getState().rebindSessionFolders(projects);
@@ -158,84 +137,44 @@ export function useAppBootstrap({
       }
     };
 
-    let raf1: number | null = null;
-    let raf2: number | null = null;
-    raf1 = window.requestAnimationFrame(() => {
-      raf2 = window.requestAnimationFrame(() => {
-        rebind();
+    // microtask 驱动：避免双 rAF 33~50ms 盲等；布局 Store 已在 Coordinator 预置 isHydrated
+    const scheduleRebind = () => {
+      if (rebindScheduled || disposed) return;
+      rebindScheduled = true;
+      queueMicrotask(() => {
+        rebindScheduled = false;
+        if (!disposed) rebind();
       });
-    });
+    };
 
+    scheduleRebind();
     window.addEventListener('crish-project-changed', rebind);
     return () => {
-      if (raf1 !== null) window.cancelAnimationFrame(raf1);
-      if (raf2 !== null) window.cancelAnimationFrame(raf2);
+      disposed = true;
       window.removeEventListener('crish-project-changed', rebind);
     };
   }, []);
 
-
-  // 6. Theme, Font, and Settings bootstrap
+  // 4. Fonts bootstrap + theme/indent projections（settings 水合由 Coordinator 完成）
   useEffect(() => {
     void import('../api/fontStore').then(({ bootstrapFonts }) =>
       bootstrapFonts()
     );
-    // D3：主题订阅投影（settingsStore.appSettings.theme → DOM + crish_theme 单一写端）。
-    // 启动播种（原 applyTheme + persistTheme 双写）已抽为该投影的首次执行。
     const unsubTheme = import('../store/themeProjection').then(
       ({ initThemeProjection }) => initThemeProjection()
     );
     const unsubIndent = import('../store/codeIndentProjection').then(
       ({ initCodeIndentProjection }) => initCodeIndentProjection()
     );
-    const initApp = async () => {
-      try {
-        const { clientApi } = await import('../api/clientApi');
-        const { readStoredTheme } = await import('../api/themeStore');
-        const settings = await clientApi.getSettings();
-        if (settings) {
-          // 启动自愈：若本地已存明确主题偏好且与磁盘不一致，以本地最新操作为准并自愈磁盘
-          const localTheme = readStoredTheme();
-          if (localTheme && settings.theme !== localTheme) {
-            settings.theme = localTheme;
-            void clientApi.saveSettingsEx('__global__', 'global', {
-              theme: localTheme,
-            });
-          }
-          // Bootstrap command: prefer prop when App wires React setter; else layout facade
-          if (setAppSettings) {
-            setAppSettings(settings);
-          } else {
-            getCompositionRoot().layout.setAppSettings(settings);
-          }
-          if (settings.fonts) {
-            const { setFontPreferences, normalizeFontPrefs } =
-              await import('../api/fontStore');
-            await setFontPreferences(normalizeFontPrefs(settings.fonts));
-          }
-          if (typeof settings.tabModeEnabled === 'boolean') {
-            getCompositionRoot().layout.setTabModeEnabled(
-              settings.tabModeEnabled
-            );
-          } else {
-            getCompositionRoot().layout.setTabModeEnabled(true);
-          }
-        }
-      } catch (err) {
-        console.error('Failed to load settings or providers on startup', err);
-      }
-    };
-    void initApp();
+    // 启动期严禁 settings 反写磁盘（REDLINE-402 / ACT-402）；
+    // 设置真源 = Coordinator.applyAtomicCommit → settingsStore.appSettings。
     return () => {
       void unsubTheme.then((unsub) => unsub());
       void unsubIndent.then((unsub) => unsub());
     };
-  }, [setAppSettings]);
+  }, []);
 
-  // 7. Backend daemon engine initialization 已归一至 useEngineBootstrap（T06.8）：
-  //    引擎启动门闩 = transport「核心已初始化」（isReady / onStatus / waitUntilConnected）。
-  // 7b. 旧明文密钥一次性迁移（PE-07 T07.4-B；幂等标记门控，失败不阻断启动）
-  // syncActiveProfileToEngine 已按 F5/C6 整体删除（密钥生效仅限用户主动路径）。
+  // 5. 旧明文密钥一次性迁移（幂等标记门控，失败不阻断启动）
   useEffect(() => {
     let cancelled = false;
     void import('../api/providerProfiles').then(({ migrateLegacyProfiles }) => {
@@ -247,29 +186,7 @@ export function useAppBootstrap({
     };
   }, []);
 
-  // 8. Root data-attributes setup (fallback if not handled by visualThemeController)
-  useEffect(() => {
-    const size = uiSize || 'medium';
-    const chrome = shellChromeMode || 'classic';
-    const root = document.documentElement;
-    root.setAttribute('data-ui-size', size);
-    const density =
-      size === 'small'
-        ? 'compact'
-        : size === 'large'
-          ? 'comfortable'
-          : 'default';
-    root.setAttribute('data-density', density);
-    root.setAttribute('data-shell-chrome', chrome);
-    document.body.setAttribute('data-ui-size', size);
-    document.body.setAttribute('data-density', density);
-    document.body.setAttribute('data-shell-chrome', chrome);
-  }, [uiSize, shellChromeMode]);
-
-  // 8b. Fullscreen attribute（BATCH-02）：html[data-fullscreen] 供 shell safe-area / gutter 消费。
-  // 本版 @tauri-apps/api/window 无 onFullscreenChanged 专函；对齐 WindowControls 的
-  // onResized→isMaximized 范式重读 isFullscreen；另始终挂浏览器 fullscreenchange 降级。
-  // jsdom / 非 Tauri 环境全路径 try/catch，不得抛未捕获异常。
+  // 6. Fullscreen attribute（html[data-fullscreen]）
   useEffect(() => {
     if (typeof document === 'undefined') return;
     let disposed = false;
@@ -286,7 +203,6 @@ export function useAppBootstrap({
       applyFullscreen(Boolean(document.fullscreenElement));
     };
     document.addEventListener('fullscreenchange', onBrowserFullscreenChange);
-    // 初始播种一次浏览器态（默认非全屏 → false）
     applyFullscreen(Boolean(document.fullscreenElement));
 
     void (async () => {
@@ -294,7 +210,6 @@ export function useAppBootstrap({
         const mod = await import('@tauri-apps/api/window');
         if (disposed) return;
         const win = mod.getCurrentWindow();
-        // 特征探测：未来 API 若补上 onFullscreenChanged 则优先走专函
         const maybeFullscreenWin = win as typeof win & {
           onFullscreenChanged?: (
             handler: (event: { payload: boolean }) => void
@@ -316,7 +231,6 @@ export function useAppBootstrap({
             }
           });
         }
-        // 初始化再读一次 Tauri 真值（覆盖浏览器默认 false）
         try {
           applyFullscreen(await win.isFullscreen());
         } catch {
@@ -341,14 +255,14 @@ export function useAppBootstrap({
     };
   }, []);
 
-  // 9. App mode attribute
+  // 7. App mode attribute
   useEffect(() => {
     const mode = isDemoModeFast() ? 'demo' : 'normal';
     document.body.setAttribute('data-app-mode', mode);
     document.documentElement.setAttribute('data-app-mode', mode);
   }, []);
 
-  // 10. Telemetry subscription
+  // 8. Telemetry subscription
   useEffect(() => {
     const unsubPromise = import('../api/clientApi').then(({ clientApi }) =>
       clientApi.subscribeTelemetry((data) => {
@@ -360,17 +274,14 @@ export function useAppBootstrap({
     };
   }, []);
 
-  // 11. Pick workspace UI event listener
+  // 9. Pick workspace UI event listener
   useEffect(() => {
     return onUiEvent('pick-workspace', () => {
       void pickWorkspaceFolder();
     });
   }, []);
 
-  // 12. 二叉树布局迁移：旧 columns/groups → 新 LayoutTree
-  // 触发条件：新 store 处于默认状态 + localStorage 存在旧布局数据
-  // 幂等：本次会话仅执行一次；新 store 已有自定义布局则跳过
-  // 安全：任何步骤失败都静默回退（不阻断启动），结果可 undo
+  // 10. 二叉树布局迁移：旧 columns/groups → 新 LayoutTree
   useEffect(() => {
     let cancelled = false;
     void import('../store/layout-tree/migration').then(

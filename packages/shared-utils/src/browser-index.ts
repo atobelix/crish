@@ -66,10 +66,12 @@ export {
 export { LruCache, BoundedMapCache } from './cache';
 export type { CacheProvider, CacheBudget, SizeEstimator } from './cache';
 
-export { MemoryManager, memoryManager } from './memory-manager';
+export { MemoryManager, memoryManager, DEFAULT_ABSOLUTE_LIMITS } from './memory-manager';
 export type {
   MemoryPressureLevel,
   MemoryManagerOptions,
+  AbsoluteMemoryLimits,
+  MemoryPressureEvent,
 } from './memory-manager';
 
 export { ObjectPool } from './object-pool';

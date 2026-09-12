@@ -171,11 +171,17 @@ impl PendingSink for QueuePendingSink {
 
 /// AgentEvent 适配事件槽（TimerEvent → AgentEvent 单点映射；
 /// 缓冲 + 日志，事件面经 engine.rs `forward_drained_timer_events`
-/// 周期 drain 转发到 EventBridge（P4，30 方案 §4）——本层不直接
-/// 依赖事件桥，转发由引擎装配面持有，缓冲供测试断言与调试观测）
+/// drain 转发到 EventBridge（P4，30 方案 §4）——本层不直接
+/// 依赖事件桥，转发由引擎装配面持有，缓冲供测试断言与调试观测）。
+///
+/// Stage 6（ACT-602）：内嵌 `tokio::sync::Notify`，`emit` 即 `notify_one`；
+/// main.rs drain 协程挂起于 `notified().await`，无事件时 0 Hz 待机
+/// （取代旧 500ms 盲 sleep tick）。
 pub(crate) struct AgentEventSink {
     /// 已发射事件缓冲（drain 转发 / 测试断言）
     buffered: Mutex<Vec<AgentEvent>>,
+    /// 事件写入唤醒句柄（main.rs drain 协程消费；permit 语义防丢唤醒）
+    notify: Arc<tokio::sync::Notify>,
 }
 
 impl AgentEventSink {
@@ -183,12 +189,18 @@ impl AgentEventSink {
     pub(crate) fn new() -> Self {
         Self {
             buffered: Mutex::new(Vec::new()),
+            notify: Arc::new(tokio::sync::Notify::new()),
         }
+    }
+
+    /// 唤醒句柄（main.rs drain 协程持有 clone；与 emit 同一 Notify 实例）
+    pub(crate) fn wake_notify(&self) -> Arc<tokio::sync::Notify> {
+        Arc::clone(&self.notify)
     }
 
     /// 取走缓冲事件（drain 转发 helper（engine.rs）与测试断言消费；
     /// Vec::take 语义，空缓冲返回空集；生产消费方 = main.rs drain
-    /// 任务（批 3 装配轮已接线，500ms tick 经 engine.rs
+    /// 任务（Stage 6 Notify 事件驱动，经 engine.rs
     /// [crate::engine::forward_drained_timer_events] 转发））
     pub(crate) fn drain(&self) -> Vec<AgentEvent> {
         std::mem::take(&mut *self.buffered.lock().unwrap_or_else(|e| e.into_inner()))
@@ -230,6 +242,8 @@ impl EventSink for AgentEventSink {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .push(agent_event);
+        // ACT-602：唤醒 main.rs drain 协程（permit 未被消费则挂起方立即醒来）
+        self.notify.notify_one();
     }
 }
 

@@ -20,6 +20,7 @@ import { clearLegacyOpenTabsMap } from '../api/workspaceChromeTabs';
 import type { LayoutTree } from '../store/layout-tree/types';
 import { triggerSessionMessageHydrateIfNeeded } from '../store/sessionCrudActions';
 import { isPendingDraft } from '../store/draftSession';
+import { staggeredIdleQueue } from '../services/idle/StaggeredIdleQueue';
 
 /** @deprecated use RESTORE_LAST_WORKSPACE_SETTING_KEY */
 const RESTORE_KEY = RESTORE_LAST_WORKSPACE_SETTING_KEY;
@@ -116,7 +117,7 @@ export function hydrateWorkspaceShell(): void {
     treeStore.setTree(result.tree);
   }
 
-  // 🌟 冷启动自愈扫描：确保全树所有拥有 Tab 的 ChatLeaf 均具备有效 activeTabId
+  // 冷启动自愈扫描：确保全树所有拥有 Tab 的 ChatLeaf 均具备有效 activeTabId
   const currentTree = treeStore.tree;
   let hasRepaired = false;
   const listChat = (layoutTreePkg as { listChatLeaves?: (root: unknown) => Array<{ id: string; tabs: Array<{ tabId: string }>; activeTabId?: string }> })
@@ -145,11 +146,29 @@ export function hydrateWorkspaceShell(): void {
     }
   }
 
-  // 遍历所有 ChatLeaf 的首选活动 Tab，自动预流水合，消除刷新后显示空屏需手动点击的缺陷
+  // 遍历所有 ChatLeaf 的首选活动 Tab，自动预流水合（消除刷新后空屏）。
+  // ACT-406 / REDLINE-406：激活叶同步水合；非激活叶经 staggeredIdleQueue
+  // 串行时间切片，根除多分屏同步并发 trigger 惊群。
   for (const leaf of chatLeaves as Array<{ id: string; tabs?: Array<{ tabId: string; sessionId?: string }>; activeTabId?: string }>) {
     const activeTab = leaf.tabs?.find((t) => t.tabId === leaf.activeTabId) || leaf.tabs?.[0];
-    if (activeTab?.sessionId && !isPendingDraft(activeTab.sessionId)) {
+    if (!activeTab?.sessionId || isPendingDraft(activeTab.sessionId)) {
+      continue;
+    }
+
+    if (leaf.id === activeLeafId) {
       triggerSessionMessageHydrateIfNeeded(activeTab.sessionId);
+    } else {
+      const targetSessionId = activeTab.sessionId;
+      staggeredIdleQueue
+        .enqueue(
+          async () => {
+            await triggerSessionMessageHydrateIfNeeded(targetSessionId);
+          },
+          { name: `hydrate-pane-${leaf.id}`, priority: 1 }
+        )
+        .catch(() => {
+          /* 非激活分片水合失败不阻断 shell 就绪 */
+        });
     }
   }
 

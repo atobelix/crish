@@ -994,27 +994,33 @@ fn main() {
                 agent_provider::models::ModelCatalog::bundled(),
             )));
 
-            // 30 方案 P4：timer/cron 缓冲事件 drain 任务（500ms tick 调
-            // 引擎转发 helper——缓冲事件 → 信封直发事件桥，A10 N-05 断头路
-            // 消除；延迟 ≤ 500ms，drain 为 Vec::take 语义，空缓冲零开销；
-            // 对齐 watchdog spawn 先例：tauri runtime 内无限循环 + 周期 sleep）
+            // 30 方案 P4 + Stage 6 ACT-602：timer/cron 事件 drain 改为
+            // tokio::sync::Notify 事件驱动——sink.emit 即 notify_one，
+            // 无事件时协程挂起于 notified().await（待机 0 Hz），取代旧
+            // 500ms 盲 sleep 循环。drain 仍为 Vec::take 语义，空缓冲零开销；
+            // 双 sink 各自持 Notify，select 任一唤醒后两路都 drain（防漏）
             {
                 let timer_sink = core_state.timer_event_sink();
                 let sched_sink = core_state.scheduler_event_sink();
                 let drain_bridge = bridge.clone();
+                let timer_notify = timer_sink.wake_notify();
+                let sched_notify = sched_sink.wake_notify();
                 tauri::async_runtime::spawn(async move {
                     loop {
-                        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                        tokio::select! {
+                            _ = timer_notify.notified() => {}
+                            _ = sched_notify.notified() => {}
+                        }
                         engine::forward_drained_timer_events(&timer_sink, &drain_bridge);
                         engine::forward_drained_scheduler_events(&sched_sink, &drain_bridge);
                     }
                 });
             }
 
-            // R3-02：推送决策合并桶 drain（500ms，对齐上方 timer/cron drain
-            // 先例——PushAwareEmitter::flush 到点产出合并直推；延迟 ≤ 500ms，
-            // 空缓冲零开销，[push::pusher::PushAwareEmitter::flush] Vec::take
-            // 语义）
+            // R3-02：推送决策合并桶 drain（500ms 保守周期——Push 到期驱动
+            // 需 next_expiry_ms + 入队 Notify 完整接线，Stage 6 允许保留
+            // 最小正确性；PushAwareEmitter::flush 到点产出合并直推；
+            // 空缓冲零开销，[push::pusher::PushAwareEmitter::flush] Vec::take 语义）
             {
                 let push_emitter = Arc::clone(&push_aware);
                 tauri::async_runtime::spawn(async move {
@@ -1035,8 +1041,9 @@ fn main() {
             // 无终态事件导致的卡死/孤儿条目消除。幂等，可随时启动）
             core_state.spawn_run_reaper_loop();
 
-            // PTY 30s 周期 GC 协程：回收超期游离会话（>2h 无输出）与 Dead 会话
-            pty::spawn_pty_gc_loop(app.handle().clone());
+            // PTY GC：Stage 6 ACT-605——setup 不再盲启 30s 周期协程；
+            // 首次 workbench_pty_create 成功后经 notify_pty_activity 惰性
+            // CAS 拉起，注册表连续两拍为空时主动自销毁（待机 0 Hz）。
 
             // setup 完成标记（PE-01 T01.2：initialized 如实反映）
             core_state.mark_initialized();

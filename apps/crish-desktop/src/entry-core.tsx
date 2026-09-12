@@ -2,11 +2,11 @@
  * entry-core.tsx — 单入口启动协调器（Single-Pass Startup Coordinator · ACT-301）
  *
  * 拍平原 main.tsx 四阶动态 import 瀑布，聚合首屏核心依赖为静态闭包，
- * 消除微任务挂起延迟。Stage 3 因果边界（DAG-02）：
- * - 仅负责装配与挂载 React 根树；
- * - 严禁在本路径发起业务数据水合 IPC；
+ * 消除微任务挂起延迟。Stage 3/4 编排闭环（DAG-02 根治）：
+ * - createRoot 前经 UnifiedAppHydrationCoordinator.preloadHydrationSnapshot 单拍预取；
+ * - applyAtomicCommit 先 setState 再 hydrateShell，再挂载 React 根树；
  * - FCP 前 Worker = 0（由既有 WorkerPool lazyInit 保证）；
- * - 业务连接 / 目录水合 / OAuth 由 idle 交接至 bootstrap-full / Stage 4。
+ * - 业务连接 / OAuth 由 idle 交接至 bootstrap-full。
  *
  * 源文件扩展名铁律：含 JSX，必须为 .tsx（entry-core.ts / 旧稿称谓废除）。
  */
@@ -31,6 +31,7 @@ import {
 } from './extensions/conversation-flow';
 import { memoryManager } from '@crish/shared-utils/browser';
 import { logger } from './services/LoggerService';
+import { UnifiedAppHydrationCoordinator } from './app/UnifiedAppHydrationCoordinator';
 import './index.css';
 
 export interface StartupCoordinatorOptions {
@@ -104,10 +105,42 @@ export class StartupCoordinator {
         throw new Error('Fatal: #root container element missing in index.html');
       }
 
-      // 7. 内存管理器
+      // 7. 内存管理器（ACT-606：绝对阈值 + apps 层熔断注入）
+      //    packages 只发 pressure 事件；level 3 时清空空闲预热队列
+      memoryManager.onPressure((evt) => {
+        if (evt.level === 3) {
+          void import('./services/idle/StaggeredIdleQueue')
+            .then(({ staggeredIdleQueue }) => {
+              staggeredIdleQueue.clear();
+            })
+            .catch(() => {
+              /* 队列模块未加载时无队列可清，静默 */
+            });
+        }
+      });
       memoryManager.start();
 
-      // 8. 单拍同步挂载 React 根树（不含业务数据水合）
+      // 8. Stage 4：createRoot 前 preloadHydrationSnapshot + 单拍原子 Commit
+      void this.hydrateAndMount(rootElement, t0, options);
+    } catch (err) {
+      this.handleFatalStartupError(err);
+    }
+  }
+
+  /**
+   * Stage 4 编排闭环：预取 → applyAtomicCommit（先 setState 再 hydrateShell）→ 挂载。
+   * 软超时 fallback 由 Coordinator 保证；异常时走致命降级。
+   */
+  private static async hydrateAndMount(
+    rootElement: HTMLElement,
+    t0: number,
+    options?: StartupCoordinatorOptions
+  ): Promise<void> {
+    try {
+      const coordinator = UnifiedAppHydrationCoordinator.getInstance();
+      const snapshot = await coordinator.preloadHydrationSnapshot();
+      coordinator.applyAtomicCommit(snapshot);
+
       const root = createRoot(rootElement);
       root.render(
         <StrictMode>
@@ -136,7 +169,7 @@ export class StartupCoordinator {
         }
       }
 
-      // 9. 首帧：解除 .preload 门闩 + 解锁 WorkerPool JIT + 闲时交接
+      // 首帧：解除 .preload 门闩 + 解锁 WorkerPool JIT + 闲时交接
       requestAnimationFrame(() => {
         document.documentElement.classList.remove('preload');
         window.__crish_perf = {
@@ -170,49 +203,122 @@ export class StartupCoordinator {
   }
 
   /**
-   * 闲时交接：bootstrap-core 残余（性能属性 / 平台检测）+ 视图 chunk 预热 + bootstrap-full。
-   * 不阻塞已有 UI。
+   * 闲时交接（Stage 6 ACT-601）：bootstrap-core 残余 + 5 大视图 Chunk 预热
+   * + bootstrap-full，统一经 StaggeredIdleQueue 分片调度。
+   * 禁止 rIC timeout 整批强刷（CUT-03）；maxWaitMs 兜底防饿死（可配置）。
    */
   private static handoffToIdlePhase(): void {
-    const idleTask = () => {
-      void import('./bootstrap-core')
-        .then((m) => m.bootstrapCore())
-        .catch((e) => {
-          logger.warn('[StartupCoordinator] bootstrap-core 失败 (非致命):', {
+    // 兜底最坏延迟：默认 10s；可用 window 注入覆盖（0 禁用）
+    const injectedMaxWait =
+      typeof window !== 'undefined'
+        ? (window as { __CRISH_IDLE_MAX_WAIT_MS__?: number })
+            .__CRISH_IDLE_MAX_WAIT_MS__
+        : undefined;
+    const maxWaitMs =
+      typeof injectedMaxWait === 'number' && Number.isFinite(injectedMaxWait)
+        ? injectedMaxWait
+        : 10_000;
+
+    void import('./services/idle/StaggeredIdleQueue')
+      .then(({ staggeredIdleQueue }) => {
+        // bootstrap-core 残余（优先级 0，先于视图预热）
+        staggeredIdleQueue
+          .enqueue(
+            async () => {
+              const m = await import('./bootstrap-core');
+              await m.bootstrapCore();
+            },
+            { name: 'bootstrap:core', priority: 0, maxWaitMs }
+          )
+          .catch((e) => {
+            logger.warn(
+              '[StartupCoordinator] bootstrap-core 失败 (非致命):',
+              {
+                module: 'StartupCoordinator',
+                err:
+                  e instanceof Error
+                    ? { message: e.message, stack: e.stack, name: e.name }
+                    : { message: String(e) },
+              }
+            );
+          });
+
+        // 与旧 Promise.allSettled 列表一一对应的 5 大视图 Chunk（真实路径）
+        const secondaryViews: Array<{ name: string; loader: () => Promise<unknown> }> = [
+          { name: 'DiffCard', loader: () => import('./components/diff/DiffCard') },
+          { name: 'FilesCard', loader: () => import('./components/files/FilesCard') },
+          { name: 'OverviewCard', loader: () => import('./components/overview/OverviewCard') },
+          { name: 'PreviewCard', loader: () => import('./components/workspace/PreviewCard') },
+          { name: 'RuntimePanel', loader: () => import('./components/workspace/RuntimePanel') },
+        ];
+        for (const view of secondaryViews) {
+          staggeredIdleQueue
+            .enqueue(
+              async () => {
+                const start = performance.now();
+                await view.loader();
+                const duration = performance.now() - start;
+                if (duration > 40) {
+                  console.warn(
+                    `[Prefetch] ${view.name} 求值耗时偏高: ${duration.toFixed(1)}ms`
+                  );
+                }
+              },
+              { name: `prefetch:${view.name}`, priority: 1, maxWaitMs }
+            )
+            .catch(() => {
+              /* 预热失败非致命：视图仍可在真实打开时按需加载 */
+            });
+        }
+
+        // bootstrap-full：与预热共享预算守卫，优先级 0
+        staggeredIdleQueue
+          .enqueue(
+            async () => {
+              const m = await import('./bootstrap-full');
+              await m.bootstrapFull();
+            },
+            { name: 'bootstrap:full', priority: 0, maxWaitMs }
+          )
+          .catch((e) => {
+            logger.warn(
+              '[StartupCoordinator] bootstrap-full 失败 (非致命):',
+              {
+                module: 'StartupCoordinator',
+                err:
+                  e instanceof Error
+                    ? { message: e.message, stack: e.stack, name: e.name }
+                    : { message: String(e) },
+              }
+            );
+          });
+      })
+      .catch((e) => {
+        // StaggeredIdleQueue 模块加载失败：回退直接执行（最小正确性）
+        logger.warn(
+          '[StartupCoordinator] StaggeredIdleQueue 加载失败，回退直调 (非致命):',
+          {
             module: 'StartupCoordinator',
             err:
               e instanceof Error
                 ? { message: e.message, stack: e.stack, name: e.name }
                 : { message: String(e) },
-          });
-        });
-
-      Promise.allSettled([
-        import('./components/diff/DiffCard'),
-        import('./components/files/FilesCard'),
-        import('./components/overview/OverviewCard'),
-        import('./components/workspace/PreviewCard'),
-        import('./components/workspace/RuntimePanel'),
-      ]).catch(() => {});
-
-      void import('./bootstrap-full')
-        .then((m) => m.bootstrapFull())
-        .catch((e) => {
-          logger.warn('[StartupCoordinator] bootstrap-full 失败 (非致命):', {
-            module: 'StartupCoordinator',
-            err:
-              e instanceof Error
-                ? { message: e.message, stack: e.stack, name: e.name }
-                : { message: String(e) },
-          });
-        });
-    };
-
-    if ('requestIdleCallback' in window) {
-      requestIdleCallback(idleTask, { timeout: 2000 });
-    } else {
-      setTimeout(idleTask, 800);
-    }
+          }
+        );
+        void import('./bootstrap-core')
+          .then((m) => m.bootstrapCore())
+          .catch(() => {});
+        Promise.allSettled([
+          import('./components/diff/DiffCard'),
+          import('./components/files/FilesCard'),
+          import('./components/overview/OverviewCard'),
+          import('./components/workspace/PreviewCard'),
+          import('./components/workspace/RuntimePanel'),
+        ]).catch(() => {});
+        void import('./bootstrap-full')
+          .then((m) => m.bootstrapFull())
+          .catch(() => {});
+      });
   }
 
   /**

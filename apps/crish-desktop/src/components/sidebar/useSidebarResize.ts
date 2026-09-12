@@ -46,43 +46,25 @@ export function useSidebarResize() {
 
         if (unmounted) return;
 
+        // DESIGN Token 常量直读：挂载热路径禁止 getComputedStyle（REDLINE-404 / ACT-404）
+        let targetWidth = SIDEBAR_WIDTH_DEFAULT;
         if (
           typeof restoredWidth === 'number' &&
           restoredWidth >= SIDEBAR_WIDTH_MIN &&
           restoredWidth <= SIDEBAR_WIDTH_MAX
         ) {
-          document.documentElement.style.setProperty(
-            '--sidebar-width',
-            `${restoredWidth}px`
-          );
-          document.documentElement.style.setProperty(
-            '--sidebar-visible-width',
-            `${restoredWidth}px`
-          );
-          setSidebarWidthPx(restoredWidth);
-          return;
+          targetWidth = restoredWidth;
         }
 
-        const cssW = parseInt(
-          getComputedStyle(document.documentElement).getPropertyValue(
-            '--sidebar-width'
-          ),
-          10
+        document.documentElement.style.setProperty(
+          '--sidebar-width',
+          `${targetWidth}px`
         );
-        if (!Number.isNaN(cssW) && cssW >= SIDEBAR_WIDTH_MIN) {
-          const visibleW = Math.min(cssW, SIDEBAR_WIDTH_MAX);
-          document.documentElement.style.setProperty(
-            '--sidebar-visible-width',
-            `${visibleW}px`
-          );
-          setSidebarWidthPx(visibleW);
-        } else {
-          document.documentElement.style.setProperty(
-            '--sidebar-visible-width',
-            `${SIDEBAR_WIDTH_DEFAULT}px`
-          );
-          setSidebarWidthPx(SIDEBAR_WIDTH_DEFAULT);
-        }
+        document.documentElement.style.setProperty(
+          '--sidebar-visible-width',
+          `${targetWidth}px`
+        );
+        setSidebarWidthPx(targetWidth);
       } catch {
         /* ignore */
       }
@@ -171,16 +153,8 @@ export function useSidebarResize() {
     document.body.classList.add('is-resizing');
     document.body.classList.add('sidebar-resizing');
     const startX = e.clientX;
-    const cssW = parseInt(
-      getComputedStyle(document.documentElement).getPropertyValue(
-        '--sidebar-width'
-      ),
-      10
-    );
-    const startWidth =
-      Number.isFinite(cssW) && cssW > 0
-        ? cssW
-        : sidebarWidthPx || SIDEBAR_WIDTH_DEFAULT;
+    // 拖拽起点宽度取自 React state（禁止 getComputedStyle 回读 CSSOM）
+    const startWidth = sidebarWidthPx || SIDEBAR_WIDTH_DEFAULT;
     const layout = getCompositionRoot().layout;
     let isCurrentlyCollapsed = layout.getSidebarCollapsed();
     const handlePointerMove = (moveEvent: PointerEvent) => {

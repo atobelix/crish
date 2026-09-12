@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
 /**
- * R9-T10：AppBootstrap useEffect 顺序测试（结构分析）
+ * Stage 4：AppBootstrap 结构分析（收敛后）
  *
- * Shell redesign 后：额外增加
- * - useLayoutEffect：waitLayoutTreeHydration + hydrateWorkspaceShell
- * - useEffect：layout-tree migration 等
- *
- * 本测试断言当前源码中 effect 数量与关键入口存在，避免回归丢 bootstrap。
+ * 变更要点：
+ * - hydrateWorkspaceShell / waitLayoutTreeHydration 已上提至 UnifiedAppHydrationCoordinator；
+ * - 启动期 getSettings + saveSettingsEx 反写已物理切除（REDLINE-402）；
+ * - 双 rAF rebind 铲除，改 microtask 驱动；
+ * - data-ui-size 重复属性写入删除（visualThemeController 单点）。
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
@@ -59,7 +59,7 @@ function buildCombinedOrder(): EffectEntry[] {
   return [...engine, ...app];
 }
 
-describe('AppBootstrap — 结构分析 (R9-T10 + shell hydrate)', () => {
+describe('AppBootstrap — Stage 4 结构收敛', () => {
   const combined = buildCombinedOrder();
   const app = extractEffects(APP_SRC, 'AppBootstrap.ts');
   const engine = extractEffects(ENGINE_SRC, 'useEngineBootstrap.ts');
@@ -69,45 +69,54 @@ describe('AppBootstrap — 结构分析 (R9-T10 + shell hydrate)', () => {
     expect(engine.every((e) => e.type === 'useEffect')).toBe(true);
   });
 
-  it('AppBootstrap effect 数量（含 shell hydrate layout effect）', () => {
-    // 2026-07 shell redesign：hydrateWorkspaceShell useLayoutEffect + migration useEffect
-    // T06.10：E13 手动 resize class 双写已删除（WindowResizeBridge 接管）
-    // PE-07 T07.4-B：+1（7b 旧明文密钥迁移 migrateLegacyProfiles）→ 18
-    // WS→IPC 迁移（T06.8）：AppBootstrap 引擎初始化 effect 3/7 归一至 useEngineBootstrap → 16
-    // layout-token BATCH-02：+1 data-fullscreen 接线 → 16 / combined 18
-    expect(app.length).toBeGreaterThanOrEqual(16);
-    expect(app.length).toBe(16);
+  it('AppBootstrap effect 收敛为 14（原 16：hydrate 上提 + data-ui-size 删除）', () => {
+    expect(app.length).toBe(14);
   });
 
-  it('combined = engine + app', () => {
+  it('combined = engine + app = 16', () => {
     expect(combined).toHaveLength(engine.length + app.length);
-    expect(combined).toHaveLength(18);
+    expect(combined).toHaveLength(16);
   });
 
-  it('useLayoutEffect：shell hydrate + project folder rebind', () => {
-    const layoutEffects = app.filter((e) => e.type === 'useLayoutEffect');
-    expect(layoutEffects).toHaveLength(2);
-    const previews = layoutEffects.map((e) => e.bodyPreview).join(' | ');
-    expect(previews).toMatch(/hydrateWorkspaceShell|waitLayoutTreeHydration/);
-    expect(previews).toMatch(/rebind|projectStore/);
+  it('hydrateWorkspaceShell 已上提至 Coordinator，AppBootstrap 不再持有', () => {
+    expect(APP_SRC).not.toContain('hydrateWorkspaceShell');
+    expect(APP_SRC).not.toContain('waitLayoutTreeHydration');
+  });
+
+  it('启动期禁止 saveSettingsEx 反写（REDLINE-402）；settings 水合由 Coordinator 独占', () => {
+    expect(APP_SRC).not.toContain('saveSettingsEx');
+    // 双偏好通道收口：AppBootstrap 不再发起 settings 启动水合 effect
+    expect(APP_SRC).not.toContain('initApp');
+    expect(APP_SRC).not.toMatch(/settings\.theme\s*=\s*localTheme/);
+  });
+
+  it('双 rAF 已铲除，rebind 改 microtask 驱动（ACT-405）', () => {
+    expect(APP_SRC).not.toMatch(
+      /requestAnimationFrame\s*\(\s*\(\)\s*=>\s*\{[\s\S]*requestAnimationFrame/
+    );
+    expect(APP_SRC).toContain('crish-project-changed');
+    expect(APP_SRC).toContain('rebindSessionFolders');
+    expect(APP_SRC).toContain('queueMicrotask');
+  });
+
+  it('data-ui-size 重复属性写入已删除（visualThemeController 单点）', () => {
+    expect(APP_SRC).not.toContain('data-ui-size');
   });
 
   it('关键 bootstrap 入口仍存在', () => {
-    const body = APP_SRC;
-    expect(body).toContain('initLayoutStorePersistence');
-    expect(body).toContain('bootstrapServices');
-    expect(body).toContain('bootstrapStores');
-    expect(body).toContain('hydrateWorkspaceShell');
-    expect(body).toContain('waitLayoutTreeHydration');
-    expect(body).toContain('pickWorkspaceFolder');
-    expect(body).toContain('initThemeProjection');
-    expect(body).toContain('initCodeIndentProjection');
+    expect(APP_SRC).toContain('initLayoutStorePersistence');
+    expect(APP_SRC).toContain('bootstrapServices');
+    expect(APP_SRC).toContain('bootstrapStores');
+    expect(APP_SRC).toContain('pickWorkspaceFolder');
+    expect(APP_SRC).toContain('initThemeProjection');
+    expect(APP_SRC).toContain('initCodeIndentProjection');
+    expect(APP_SRC).toContain('bootstrapFonts');
   });
 
-  it('T06.10：E13 手动 window-resizing class 双写已删除（WindowResizeBridge 单一接管）', () => {
-    const body = APP_SRC;
-    expect(body).not.toContain('window-resizing');
-    expect(body).not.toContain("classList.add('window-resizing')");
+  it('useLayoutEffect：仅剩 project folder rebind', () => {
+    const layoutEffects = app.filter((e) => e.type === 'useLayoutEffect');
+    expect(layoutEffects).toHaveLength(1);
+    expect(layoutEffects[0]?.bodyPreview).toMatch(/rebind|projectStore/);
   });
 
   it('engine bootstrap 仍在 combined 前端', () => {
@@ -115,18 +124,15 @@ describe('AppBootstrap — 结构分析 (R9-T10 + shell hydrate)', () => {
     expect(combined[1]?.file).toBe('useEngineBootstrap.ts');
   });
 
-  it('T-A-1：bootstrapStores 装配后快照桥已绑定（防注入点被误删）', () => {
+  it('T-A-1：bootstrapStores 装配后快照桥已绑定', () => {
     expect(BOOTSTRAP_STORES_SRC).toContain('bindMessageSnapshotsOps(');
-    expect(BOOTSTRAP_STORES_SRC).toContain("new MessageSnapshots()");
+    expect(BOOTSTRAP_STORES_SRC).toContain('new MessageSnapshots()');
     expect(BOOTSTRAP_STORES_SRC).toContain("logger.warn('[Snapshots] bridge bind failed");
   });
 
-  it('D5：AppBootstrap 无 layoutStore 自订阅（folder rebind 收敛为 action，防环纪律删除）', () => {
-    // rebind 直写 recipe 已迁 rebindSessionFolders action；prevSessions 引用
-    // 比较防环订阅必须整体删除（结构保障替代纪律）
+  it('D5：AppBootstrap 无 layoutStore 自订阅', () => {
     expect(APP_SRC).not.toContain('useLayoutStore.subscribe');
     expect(APP_SRC).not.toContain('prevSessions');
-    // 触发点 = 启动双 rAF + crish-project-changed 事件（订阅删除后仍完整）
     expect(APP_SRC).toContain('crish-project-changed');
     expect(APP_SRC).toContain('rebindSessionFolders');
   });

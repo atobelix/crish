@@ -673,6 +673,13 @@ pub(crate) fn run_gc_sweep(now_ms: u64) -> Vec<String> {
     to_kill
 }
 
+/// 活跃 PTY 数量唯一真理源：直接读注册表长度（锁内一致）。
+/// create 入表、kill/sweep 出表、kill_all 清空——全部天然维护同一计数，
+/// 无独立 ACTIVE_PTY_COUNT 可漂移泄漏（ACT-605 / 审计 05 §3.13-7）。
+pub(crate) fn active_session_count() -> usize {
+    registry().lock().map(|reg| reg.len()).unwrap_or(0)
+}
+
 pub(crate) fn kill_session(pty_id: &str) -> Result<(), CoreError> {
     let mut reg = registry()
         .lock()

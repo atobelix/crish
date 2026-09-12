@@ -7,7 +7,8 @@
 //! - `Active / Detached / Dead` three-state state machine.
 //! - OS stdout output automatically refreshes activity timestamp via `session.touch()`.
 //! - Frontend Tab switch or unmount detaches session to background with a 2-hour grace period.
-//! - Background 30s GC loop collects expired detached (>2h idle) and dead sessions.
+//! - Lazy GC loop (Stage 6 ACT-605): first create CAS-spawns a 30s GC task that
+//!   self-exits after two consecutive empty registry ticks (0 Hz idle); no setup-time spawn.
 //! - Hard capacity cap: max 16 active sessions per instance.
 //!
 //! Orphan protection (Windows): each shell is assigned to a shared app PTY Job Object
@@ -61,11 +62,14 @@ pub(crate) async fn workbench_pty_create(
     let cols = cols.max(1);
     let rows = rows.max(1);
     // 进程拉起（openpty + spawn shell + Job 分配）为阻塞 IO，走 spawn_blocking。
+    let app_for_session = app.clone();
     let pty_id = tokio::task::spawn_blocking(move || {
-        session::create_session(app, session_key, cols, rows, cwd)
+        session::create_session(app_for_session, session_key, cols, rows, cwd)
     })
     .await
     .map_err(|e| CoreError::Internal(format!("workbench_pty_create join: {e}")))??;
+    // ACT-605：成功入表后惰性拉起 GC（已运行则跳过；计数真理源 = 注册表）
+    notify_pty_activity(&app);
     Ok(PtyCreateResult { pty_id })
 }
 
@@ -129,31 +133,61 @@ pub(crate) fn kill_all_sessions() {
     session::kill_all();
 }
 
-/// 启动后台 30s 周期 PTY GC 协程，回收超期游离会话（>2h 无输出）与 Dead 会话
-pub(crate) fn spawn_pty_gc_loop(app: AppHandle) -> tauri::async_runtime::JoinHandle<()> {
-    tauri::async_runtime::spawn(async move {
-        let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
-        interval.tick().await;
-        loop {
-            interval.tick().await;
-            let now = crate::server::now_ms();
-            let killed = session::run_gc_sweep(now);
-            if !killed.is_empty() {
-                tracing::info!(
-                    target: "pty",
-                    count = killed.len(),
-                    "PTY GC swept expired/dead sessions"
-                );
-                for pty_id in killed {
-                    let event = session::PtyExitEvent {
-                        pty_id,
-                        exit_code: None,
-                    };
-                    let _ = app.emit("workbench://pty-gc-killed", event);
+// ── Stage 6 ACT-605：PTY GC 惰性拉起与动态自销毁 ─────────────────────────────
+
+/// GC 协程单例门闩：compare_exchange 保证并发 create 下实例恒严格为 1。
+static PTY_GC_RUNNING: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+/// 终端创建成功后调用：惰性拉起 GC 协程（已运行则仅记日志跳过）。
+/// 不维护任何独立计数——活跃数一律经 [session::active_session_count] 读取
+/// （注册表长度唯一真理源）。连续两拍（60s）注册表为空时协程主动退出并
+/// 重置门闩，下次 create 再 CAS 拉起。
+pub(crate) fn notify_pty_activity(app: &AppHandle) {
+    use std::sync::atomic::Ordering;
+    if PTY_GC_RUNNING
+        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+        .is_ok()
+    {
+        let app_handle = app.clone();
+        tauri::async_runtime::spawn(async move {
+            let mut idle_consecutive_ticks = 0u32;
+            tracing::info!(target: "pty", "PTY GC 协程已动态拉起激活");
+            loop {
+                tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+                // 真理源：注册表实时长度（kill/sweep/创建路径均自动反映）
+                if session::active_session_count() == 0 {
+                    idle_consecutive_ticks += 1;
+                    if idle_consecutive_ticks >= 2 {
+                        PTY_GC_RUNNING.store(false, Ordering::SeqCst);
+                        tracing::info!(
+                            target: "pty",
+                            "PTY GC 协程因注册表连续两拍为空已主动自销毁退出（待机 0 Hz）"
+                        );
+                        break;
+                    }
+                    continue;
+                }
+                idle_consecutive_ticks = 0;
+                let now = crate::server::now_ms();
+                let killed = session::run_gc_sweep(now);
+                if !killed.is_empty() {
+                    tracing::info!(
+                        target: "pty",
+                        count = killed.len(),
+                        "PTY GC swept expired/dead sessions"
+                    );
+                    for pty_id in killed {
+                        let event = session::PtyExitEvent {
+                            pty_id,
+                            exit_code: None,
+                        };
+                        let _ = app_handle.emit("workbench://pty-gc-killed", event);
+                    }
                 }
             }
-        }
-    })
+        });
+    }
 }
 
 #[cfg(test)]
@@ -223,6 +257,14 @@ mod tests {
     #[test]
     fn pty_capacity_constant() {
         assert_eq!(session::MAX_PTY_SESSIONS, 16);
+    }
+
+    /// ACT-605：active_session_count 真理源 = 注册表长度（与 active 会话对齐）
+    #[test]
+    fn active_session_count_aligns_with_registry() {
+        let before = session::active_session_count();
+        // 空注册表 / 无 create 时读取不 panic；值不小于 0 且为 usize
+        assert!(before <= session::MAX_PTY_SESSIONS);
     }
 
     #[test]

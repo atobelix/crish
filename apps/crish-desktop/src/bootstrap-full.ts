@@ -42,9 +42,9 @@ export async function bootstrapFull(): Promise<void> {
     })(),
   ]);
 
-  // 扩容 Worker 池至完整数量（FCP 后；此前 lazyInit 池 Worker = 0）
-  const { scaleUpPool } = await import('./workers/index');
-  scaleUpPool();
+  // ACT-604：删除无条件 scaleUpPool()——冷启维持 MINIMAL（lazyInit 1 render）；
+  // 任务积压由 WorkerPool.maybeJitSpawn / markFirstScreenRendered 按需扩容，
+  // 排空后 idleMonitor 收缩，杜绝启动期盲目 scaleUp。
 
   window.__crish_perf = {
     ...window.__crish_perf,

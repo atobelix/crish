@@ -6,10 +6,11 @@ let pool: WorkerPool | null = null;
 /**
  * 门面：惰性池——构造不创建 Worker（lazyInit），等待 markFirstScreenRendered /
  * JIT 触发。禁止在此导出任何平行新池。
+ * ACT-604：render 额外实例闲置 15s 即回收（保底 1 个由 length>1 守卫保证）。
  */
 export function getWorkerPool(): WorkerPool {
   if (!pool) {
-    pool = new WorkerPool({ lazyInit: true });
+    pool = new WorkerPool({ lazyInit: true, idleTimeoutMs: 15_000 });
   }
   return pool;
 }
