@@ -3,6 +3,7 @@ import type {
   UiSize,
   ShellChromeMode,
 } from '../store/layout-helpers/store-types';
+import { tokenRuntimeController } from './TokenRuntimeController';
 
 export const UI_SCALE_MAP: Record<UiSize, string> = {
   small: '0.9',
@@ -29,7 +30,7 @@ export function initVisualPresentationController(): () => void {
     const root = document.documentElement;
     root.setAttribute('data-ui-size', size);
     root.setAttribute('data-density', UI_DENSITY_MAP[size] || 'default');
-    root.style.setProperty('--ui-scale', UI_SCALE_MAP[size] || '1.0');
+    tokenRuntimeController.setUiScale(size);
   };
 
   const applyShellChrome = (mode: ShellChromeMode) => {

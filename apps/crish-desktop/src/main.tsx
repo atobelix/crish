@@ -5,7 +5,6 @@ import { memoryManager } from '@crish/shared-utils/browser';
 import { logger } from './services/LoggerService';
 import '@xterm/xterm/css/xterm.css';
 import './index.css';
-import { SIDEBAR_WIDTH_DEFAULT, CHAT_COL_MAX } from './constants/layout';
 import {
   registerBuiltInViews,
   type ViewFactoryMap,
@@ -115,15 +114,9 @@ initVisualPresentationController();
 // 🌟 主题与个性化皮肤同步水合（彻底斩断 useEffect 延迟与二次跳变）
 bootstrapTheme();
 
-// CSS token runtime injection — keeps JS source of truth in sync with CSS
-document.documentElement.style.setProperty(
-  '--sidebar-width',
-  `${SIDEBAR_WIDTH_DEFAULT}px`
-);
-document.documentElement.style.setProperty(
-  '--chat-col-max',
-  `${CHAT_COL_MAX}px`
-);
+// --sidebar-width / --chat-col-max 的 JS boot 写入已删除（2026-09-12）：
+// tokens.css 静态默认（260px / 760px）与 constants/layout.ts 镜像常量同值，
+// 静态默认即唯一来源（a_class_multi_writer 消解 + T7 别名收敛第一批）。
 
 async function startup() {
   // 微内核生命周期前置：显式注册 Conex 全量内置视图与插槽，彻底消除 ESM 模块加载副作用依赖

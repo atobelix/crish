@@ -31,6 +31,8 @@ export type StreamToolLive = {
   status?: MessageToolCallStatus;
   output?: string;
   startedAt?: number;
+  durationMs?: number;
+  finishedAt?: number;
   approvalMeta?: MessageToolCall['approvalMeta'];
   images?: MessageImageRef[];
 };
@@ -126,6 +128,8 @@ function toolLiveEqual(a: StreamToolLive, b: StreamToolLive): boolean {
     a.status === b.status &&
     a.output === b.output &&
     a.startedAt === b.startedAt &&
+    a.durationMs === b.durationMs &&
+    a.finishedAt === b.finishedAt &&
     a.approvalMeta === b.approvalMeta &&
     a.images === b.images
   );

@@ -258,6 +258,7 @@ export interface SessionActions {
       id: string;
       status: MessageToolCallStatus;
       output?: string;
+      durationMs?: number;
     }>
   ) => void;
   /**

@@ -438,28 +438,22 @@ export class TokenRuntimeController {
       tokens['--surface-paper'] = bgPrimary;
       tokens['--surface-card'] = bgCard;
       tokens['--surface-elevated'] = bgElevated;
-      tokens['--bg-paper'] = bgPrimary;
-      tokens['--bg-primary'] = bgPrimary;
-      tokens['--bg-secondary'] = bgSecondary;
       tokens['--bg-tertiary'] = bgTertiary;
-      tokens['--bg-card'] = bgCard;
-      tokens['--bg-elevated'] = bgElevated;
+      // T7 别名收敛（2026-09-12）：--bg-primary/--bg-secondary/--bg-card/--bg-elevated/
+      // --bg-paper/--bg-workspace/--shell-inset-bg/--terminal-* 已不再由 JS 写入——
+      // tokens.css 静态链以 surface-* 为独立源派生它们（--bg-primary: var(--surface-paper) 等），
+      // JS 只需写独立侧。同值多写是 a_class_multi_writer 同类问题。
       tokens['--shell-chrome-bg'] = shellChromeBg;
       tokens['--text-primary'] = finalFg;
       tokens['--text-secondary'] = finalSec;
       tokens['--text-tertiary'] = finalTert;
       tokens['--border-color'] = borderColor;
       tokens['--border-subtle'] = borderSubtle;
-      tokens['--bg-workspace'] = bgPrimary;
-      tokens['--shell-inset-bg'] = bgPrimary;
       tokens['--control-mix-color'] = mixColor;
       tokens['--control-soft-bg'] = `color-mix(in srgb, ${controlSoftBase} ${softBgPct}, ${bgSecondary})`;
       tokens['--control-soft-bg-hover'] = `color-mix(in srgb, ${controlSoftBase} ${softHoverPct}, ${bgSecondary})`;
       tokens['--control-soft-bg-active'] = `color-mix(in srgb, ${controlSoftBase} ${softActivePct}, ${bgSecondary})`;
       tokens['--composer-bg'] = composerBg;
-      tokens['--terminal-bg'] = bgCard;
-      tokens['--terminal-fg'] = finalFg;
-      tokens['--terminal-cmd'] = finalFg;
       tokens['--accent-green-light-adaptive'] = greenLight;
       tokens['--accent-red-light-adaptive'] = redLight;
     }
@@ -487,33 +481,27 @@ export class TokenRuntimeController {
       }
 
       // 全仓唯一合法注入点：显式受控注入，满足 style-contract 静态同源契约与精准应用
+      // （T7 别名收敛后只写独立侧：surface-* / text-* / border-* / control-* / composer-bg /
+      //   accent-* / bg-tertiary / shell-chrome-bg / font-size-adjust；
+      //   bg-primary/secondary/card/elevated/paper/workspace、shell-inset-bg、terminal-*
+      //   由 tokens.css 静态链从 surface-* 派生，不再注入）
       if (tokens['--font-size-adjust']) root.style.setProperty('--font-size-adjust', tokens['--font-size-adjust']);
       if (tokens['--surface-chrome']) root.style.setProperty('--surface-chrome', tokens['--surface-chrome']);
       if (tokens['--surface-paper']) root.style.setProperty('--surface-paper', tokens['--surface-paper']);
       if (tokens['--surface-card']) root.style.setProperty('--surface-card', tokens['--surface-card']);
       if (tokens['--surface-elevated']) root.style.setProperty('--surface-elevated', tokens['--surface-elevated']);
-      if (tokens['--bg-paper']) root.style.setProperty('--bg-paper', tokens['--bg-paper']);
-      if (tokens['--bg-primary']) root.style.setProperty('--bg-primary', tokens['--bg-primary']);
-      if (tokens['--bg-secondary']) root.style.setProperty('--bg-secondary', tokens['--bg-secondary']);
       if (tokens['--bg-tertiary']) root.style.setProperty('--bg-tertiary', tokens['--bg-tertiary']);
-      if (tokens['--bg-card']) root.style.setProperty('--bg-card', tokens['--bg-card']);
-      if (tokens['--bg-elevated']) root.style.setProperty('--bg-elevated', tokens['--bg-elevated']);
       if (tokens['--shell-chrome-bg']) root.style.setProperty('--shell-chrome-bg', tokens['--shell-chrome-bg']);
       if (tokens['--text-primary']) root.style.setProperty('--text-primary', tokens['--text-primary']);
       if (tokens['--text-secondary']) root.style.setProperty('--text-secondary', tokens['--text-secondary']);
       if (tokens['--text-tertiary']) root.style.setProperty('--text-tertiary', tokens['--text-tertiary']);
       if (tokens['--border-color']) root.style.setProperty('--border-color', tokens['--border-color']);
       if (tokens['--border-subtle']) root.style.setProperty('--border-subtle', tokens['--border-subtle']);
-      if (tokens['--bg-workspace']) root.style.setProperty('--bg-workspace', tokens['--bg-workspace']);
-      if (tokens['--shell-inset-bg']) root.style.setProperty('--shell-inset-bg', tokens['--shell-inset-bg']);
       if (tokens['--control-mix-color']) root.style.setProperty('--control-mix-color', tokens['--control-mix-color']);
       if (tokens['--control-soft-bg']) root.style.setProperty('--control-soft-bg', tokens['--control-soft-bg']);
       if (tokens['--control-soft-bg-hover']) root.style.setProperty('--control-soft-bg-hover', tokens['--control-soft-bg-hover']);
       if (tokens['--control-soft-bg-active']) root.style.setProperty('--control-soft-bg-active', tokens['--control-soft-bg-active']);
       if (tokens['--composer-bg']) root.style.setProperty('--composer-bg', tokens['--composer-bg']);
-      if (tokens['--terminal-bg']) root.style.setProperty('--terminal-bg', tokens['--terminal-bg']);
-      if (tokens['--terminal-fg']) root.style.setProperty('--terminal-fg', tokens['--terminal-fg']);
-      if (tokens['--terminal-cmd']) root.style.setProperty('--terminal-cmd', tokens['--terminal-cmd']);
       if (tokens['--accent-green-light-adaptive']) root.style.setProperty('--accent-green-light-adaptive', tokens['--accent-green-light-adaptive']);
       if (tokens['--accent-red-light-adaptive']) root.style.setProperty('--accent-red-light-adaptive', tokens['--accent-red-light-adaptive']);
 
