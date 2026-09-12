@@ -70,8 +70,11 @@ function buildCodeFenceHtml(
     });
     breadcrumb = `<span class="md-code-breadcrumb">${parts.join('<span class="md-code-breadcrumb-separator">/</span>')}</span>`;
   }
-  const actions = `<div class="md-code-actions">${langBadge}<button type="button" class="md-code-copy" aria-label="复制代码" title="复制代码">复制</button></div>`;
-  return `<div class="md-code-block"${blockAttr}>${breadcrumb}${actions}<pre class="md-code-pre hljs"><code class="language-${escapeHtml(langClean)}">${inner}</code></pre></div>`;
+  const leftContent = breadcrumb || langBadge;
+  const rightLang = breadcrumb ? langBadge : '';
+  const actions = `<div class="md-code-actions">${rightLang}<button type="button" class="md-code-copy" aria-label="复制代码" title="复制代码">复制</button></div>`;
+  const header = `<div class="md-code-header"><div class="md-code-header-left">${leftContent}</div>${actions}</div>`;
+  return `<div class="md-code-block"${blockAttr}>${header}<pre class="md-code-pre hljs"><code class="language-${escapeHtml(langClean)}">${inner}</code></pre></div>`;
 }
 
 /**

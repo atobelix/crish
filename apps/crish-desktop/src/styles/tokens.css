@@ -25,7 +25,6 @@ html.preload *:not(.app-initial-loader, .app-initial-loader *)::after {
 
   /* 悬空兼容易错别名兜底安全网 */
   --color-text-dim: var(--text-tertiary);
-  --color-text-secondary: var(--text-secondary);
 }
 
 /* --- CONEX UI tokens pure neutral grays (no blue/purple tint) --- */
@@ -286,17 +285,23 @@ html[data-theme='light'] {
    *        --text-success-strong  4.5:1  */
   --color-active: #15803d;
 
-  /* syntax highlighting light */
-  --syntax-keyword: #7c6fdb;
-  --syntax-string: #0d9488;
-  --syntax-number: #c2410c;
-  --syntax-title: #2563eb;
-  --syntax-builtin: #ca8a04;
-  --syntax-attr: #db2777;
-  --syntax-comment: var(--text-tertiary);
-  --syntax-addition: #16a34a;
-  --syntax-deletion: #dc2626;
-  --syntax-meta: var(--text-secondary);
+  /* syntax highlighting light (sRGB fallback; progressive enhancement via @supports) */
+  --syntax-keyword: #b20037;
+  --syntax-type: #00618b;
+  --syntax-operator: #3b485e;
+  --syntax-punctuation: #6b727e;
+  --syntax-string: #006925;
+  --syntax-number: #a43200;
+  --syntax-constant: #00663f;
+  --syntax-title: #0043ac;
+  --syntax-builtin: #7525a1;
+  --syntax-property: #9d2602;
+  --syntax-attr: #9d2602;
+  --syntax-variable: #232933;
+  --syntax-comment: #737b87;
+  --syntax-meta: #554a88;
+  --syntax-addition: #006b00;
+  --syntax-deletion: #b30018;
 
   --terminal-bg: var(--bg-card, #ffffff);
   --terminal-fg: var(--text-primary, #111111);
@@ -344,7 +349,12 @@ html[data-theme='light'] {
   --composer-radius-single: 20px;
   --composer-radius-multi: var(--radius-3xl);
   --composer-pad-x: 12px;
-  --chat-stream-pad-x: var(--space-5, 20px);
+  /* 用户裁决（2026-09-11）：固定 20px，不随密度缩放。
+   * 理由：① 该值喂给 chatScrollGeometry 的滚动数学（TS 常量 CHAT_SCROLL_PAD_X=20），
+   *   密度可变的值会使几何测量变成时序依赖；② 它是消息流与地板槽的对齐值，
+   *   对齐方必须同步缩放才允许变，而 --chat-col-max 固定；③ 密度缩放的是控件，
+   *   不是布局骨架。双源同值由 dual-source-values.test.ts 守护。 */
+  --chat-stream-pad-x: 20px;
   --chat-bubble-radius: 16px;
   --composer-attach-card-radius: var(--radius-xl, 12px);
   --composer-attach-card-border: 1px solid var(--border-subtle);
@@ -514,15 +524,17 @@ html[data-theme='light'] {
   --md-code-inline-padding: 0.15em 0.4em;
   --md-code-inline-size: 0.9em;
 
-  --md-code-block-bg: hsl(30 2.5% 96%);
-  --md-code-block-border: var(--border-subtle);
-  --md-code-block-radius: 8px;
+  --md-code-block-bg: hsl(30 2.5% 97%);
+  --md-code-block-border: hsl(0 0% 88%);
+  --md-code-block-radius: 12px;
   --md-code-block-padding: 12px 14px;
   --md-code-font: var(--font-mono);
-  --md-code-font-size: 12.5px;
+  --md-code-font-size: 13px;
   --md-code-tab-size: 2;
-  --md-code-header-bg: hsl(30 2.5% 94%);
-  --md-code-copy-hover-bg: var(--bg-card);
+  --md-code-header-bg: hsl(30 2.5% 95%);
+  --md-code-header-border: hsl(0 0% 90%);
+  --md-code-header-fg: hsl(0 0% 45%);
+  --md-code-copy-hover-bg: hsl(0 0% 91%);
 
   --md-path-link-bg: transparent;
   --md-path-link-fg: var(--text-secondary);
@@ -696,7 +708,6 @@ html[data-theme='light'] {
   --space-3: 12px;
   --space-4: 16px;
   --space-5: 20px;
-  --chat-stream-pad-x: var(--space-5, 20px);
   --space-6: 24px;
   --space-7: 28px;
   --space-8: 32px;
@@ -1044,17 +1055,23 @@ html[data-theme='dark'] {
   --ui-text-warning: #ffa94d;
 
 
-  /* syntax highlighting dark */
-  --syntax-keyword: #c4b5fd;
-  --syntax-string: #5eead4;
-  --syntax-number: #fdba74;
-  --syntax-title: #93c5fd;
-  --syntax-builtin: #fde047;
-  --syntax-attr: #f9a8d4;
-  --syntax-comment: #8b8b8b;
-  --syntax-addition: #4ade80;
-  --syntax-deletion: #f87171;
-  --syntax-meta: #a3a3a3;
+  /* syntax highlighting dark (sRGB fallback; progressive enhancement via @supports) */
+  --syntax-keyword: #ff8b9a;
+  --syntax-type: #3be1e1;
+  --syntax-operator: #95b5d6;
+  --syntax-punctuation: #777a80;
+  --syntax-string: #f5cc58;
+  --syntax-number: #2bdeff;
+  --syntax-constant: #98e188;
+  --syntax-title: #58d0ff;
+  --syntax-builtin: #c4a0ff;
+  --syntax-property: #ffa85d;
+  --syntax-attr: #ffa85d;
+  --syntax-variable: #c2d2ec;
+  --syntax-comment: #737b87;
+  --syntax-meta: #a693c9;
+  --syntax-addition: #84de7a;
+  --syntax-deletion: #ff7972;
 
   /* --- Composer Attachment Card Tokens (Dark) --- */
   --composer-attach-card-size: 52px;
@@ -1112,14 +1129,16 @@ html[data-theme='dark'] {
   --md-code-inline-padding: 0.15em 0.4em;
   --md-code-inline-size: 0.9em;
 
-  --md-code-block-bg: hsl(0 0% 10%);
-  --md-code-block-border: hsl(0 0% 18%);
-  --md-code-block-radius: 8px;
+  --md-code-block-bg: hsl(0 0% 3.5%);
+  --md-code-block-border: rgba(255, 255, 255, 0.08);
+  --md-code-block-radius: 12px;
   --md-code-block-padding: 12px 14px;
   --md-code-font: var(--font-mono);
-  --md-code-font-size: 12.5px;
+  --md-code-font-size: 13px;
   --md-code-tab-size: 2;
-  --md-code-header-bg: hsl(0 0% 11%);
+  --md-code-header-bg: hsl(0 0% 6.5%);
+  --md-code-header-border: rgba(255, 255, 255, 0.06);
+  --md-code-header-fg: hsl(0 0% 70%);
   --md-code-copy-hover-bg: hsl(0 0% 16%);
 
   --md-path-link-bg: transparent;
@@ -1290,7 +1309,13 @@ html[data-theme='dark'] {
 
 /* UI Size Gear    14px      small   11px    */
 /*       /              token +          */
-[data-ui-size='small'] {
+/* 密度档选择器必须带元素限定（html 前缀 → 特异性 0,1,1）：
+ * 若写成无元素限定的属性选择器（特异性 0,1,0），会被上方基础/亮色块的
+ * html[data-theme='light']（0,1,1）在层叠中压制 ——
+ * 结果是「亮色主题下密度档静默失效、暗色下正常」的主题相关不一致。
+ * 同特异性下靠源码序取胜（密度档在文件更靠后），故两主题下密度档均正确生效。
+ * 由 layout-contract.test.ts 的 G-CASCADE 断言守护。 */
+html[data-ui-size='small'] {
   --settings-sidebar-width: 220px;
   --header-height: 32px;
 
@@ -1354,7 +1379,7 @@ html[data-theme='dark'] {
   --md-table-font-size: 12px;
 }
 
-[data-ui-size='large'] {
+html[data-ui-size='large'] {
   --settings-sidebar-width: 260px;
   --header-height: 40px;
 
@@ -1449,6 +1474,28 @@ html[data-theme='dark'] {
   --usage-heat-4: var(--brand, #10b981);
 }
 
+/* ── 产品色板层（非主题语义色，用户裁决 2026-09-11 允许扩充） ──────────────
+ * 钉选取色器的色轮与色相条是产品功能色板：同一物理颜色在亮/暗主题下不变，
+ * 因此只在此声明一次（不进亮/暗块）。
+ * 与 colorPickerUtils.ts 的 PRESET_PIN_COLORS 构成双源 —— 同值由
+ * dual-source-values.test.ts 守护（TS 侧驱动选中态逻辑，CSS 侧驱动渲染）。
+ * 语义区分：
+ *   --pin-palette-* = 预设钉选色轮（5 色，conic-gradient 玫红回环复用）
+ *   --pin-hue-*     = 自定义取色 HSV 色相条（6 谱色，linear-gradient 红回环复用） */
+:root {
+  --pin-palette-rose: #f43f5e;
+  --pin-palette-amber: #f59e0b;
+  --pin-palette-sky: #0ea5e9;
+  --pin-palette-violet: #8b5cf6;
+  --pin-palette-pink: #ec4899;
+  --pin-hue-red: #ff0000;
+  --pin-hue-yellow: #ffff00;
+  --pin-hue-green: #00ff00;
+  --pin-hue-cyan: #00ffff;
+  --pin-hue-blue: #0000ff;
+  --pin-hue-magenta: #ff00ff;
+}
+
 @supports (color: oklch(0 0 0)) {
   :root {
     --usage-color-brand: oklch(0.72 0.16 150);
@@ -1529,4 +1576,64 @@ html[data-perf-tier='eco'] {
   font-family: 'Segoe UI', -apple-system, var(--font-sans);
   font-variant-numeric: tabular-nums;
   font-feature-settings: 'tnum' 1;
+}
+
+/* ==========================================================================
+   OKLCH 感知均匀色彩渐进增强 (Progressive Enhancement via @supports)
+   现代 WebView2 / Chromium 111+ 自动激活；老旧引擎回退到上方 sRGB Hex / HSL
+   ========================================================================== */
+@supports (color: oklch(0 0 0)) {
+  :root,
+  [data-theme='light'] {
+    --syntax-keyword: oklch(0.48 0.20 15);
+    --syntax-type: oklch(0.44 0.15 220);
+    --syntax-operator: oklch(0.40 0.04 260);
+    --syntax-punctuation: oklch(0.55 0.02 260);
+    --syntax-string: oklch(0.45 0.14 150);
+    --syntax-number: oklch(0.48 0.18 55);
+    --syntax-constant: oklch(0.42 0.16 170);
+    --syntax-title: oklch(0.42 0.18 260);
+    --syntax-builtin: oklch(0.45 0.19 310);
+    --syntax-property: oklch(0.46 0.16 35);
+    --syntax-attr: oklch(0.46 0.16 35);
+    --syntax-variable: oklch(0.28 0.02 260);
+    --syntax-comment: oklch(0.58 0.02 260);
+    --syntax-meta: oklch(0.45 0.10 290);
+    --syntax-addition: oklch(0.45 0.18 142);
+    --syntax-deletion: oklch(0.48 0.20 25);
+
+    --md-code-block-bg: oklch(0.975 0.002 90);
+    --md-code-block-border: oklch(0.880 0.005 90);
+    --md-code-header-bg: oklch(0.955 0.004 90);
+    --md-code-header-border: oklch(0.900 0.005 90);
+    --md-code-header-fg: oklch(0.450 0.015 260);
+    --md-code-copy-hover-bg: oklch(0.910 0.008 90);
+  }
+
+  :root[data-theme='dark'],
+  [data-theme='dark'] {
+    --syntax-keyword: oklch(0.80 0.17 15);
+    --syntax-type: oklch(0.83 0.13 195);
+    --syntax-operator: oklch(0.76 0.06 250);
+    --syntax-punctuation: oklch(0.58 0.01 260);
+    --syntax-string: oklch(0.86 0.14 90);
+    --syntax-number: oklch(0.83 0.14 215);
+    --syntax-constant: oklch(0.84 0.14 140);
+    --syntax-title: oklch(0.82 0.15 240);
+    --syntax-builtin: oklch(0.79 0.18 295);
+    --syntax-property: oklch(0.82 0.15 55);
+    --syntax-attr: oklch(0.82 0.15 55);
+    --syntax-variable: oklch(0.86 0.04 260);
+    --syntax-comment: oklch(0.58 0.02 260);
+    --syntax-meta: oklch(0.70 0.08 300);
+    --syntax-addition: oklch(0.82 0.16 142);
+    --syntax-deletion: oklch(0.75 0.18 25);
+
+    --md-code-block-bg: oklch(0.13 0.005 260);
+    --md-code-block-border: oklch(0.24 0.008 260 / 0.7);
+    --md-code-header-bg: oklch(0.16 0.006 260);
+    --md-code-header-border: oklch(0.22 0.008 260 / 0.6);
+    --md-code-header-fg: oklch(0.72 0.015 260);
+    --md-code-copy-hover-bg: oklch(0.25 0.010 260);
+  }
 }

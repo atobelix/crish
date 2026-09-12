@@ -13,7 +13,7 @@
 html[data-theme="dark"] .elevation-2,
 html[data-theme="dark"] .elevation-3,
 html[data-theme="dark"] .elevation-4 {
-  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.02) 0%, transparent 100%);
+  background-image: linear-gradient(180deg, color-mix(in srgb, var(--text-primary) 2%, transparent) 0%, transparent 100%);
 }
 
 /*    S7-3         tokens.css    tokens.css    token       */
@@ -235,14 +235,35 @@ html[data-theme="dark"] .elevation-4 {
    5. 20 组 --syntax-* 双引擎语法高亮全局基座 (Syntect + Highlight.js)
    ========================================================================== */
 
-/* 1. Keyword 关键字与类型声明 */
+/* 1. Keyword 关键字控制流 */
 .hljs-keyword,
-.hljs-type,
-.hljs-operator,
 .hljs-selector-tag,
 .source .keyword,
 .source .storage {
   color: var(--syntax-keyword);
+}
+
+/* 1.1 Type 类型声明与结构体 (增量解耦) */
+.hljs-type,
+.source .entity.name.type,
+.source .entity.name.class,
+.source .entity.name.struct,
+.source .support.type {
+  color: var(--syntax-type, var(--syntax-keyword));
+}
+
+/* 1.2 Operator 逻辑与算术运算符 (增量解耦) */
+.hljs-operator,
+.source .keyword.operator {
+  color: var(--syntax-operator, var(--syntax-keyword));
+}
+
+/* 1.3 Punctuation 结构标点与括号 (增量解耦，弱化沉浸) */
+.hljs-punctuation,
+.source .punctuation,
+.source .punctuation.separator,
+.source .meta.brace {
+  color: var(--syntax-punctuation, var(--syntax-meta));
 }
 
 /* 2. String 字符串与正则 */
@@ -256,24 +277,25 @@ html[data-theme="dark"] .elevation-4 {
   color: var(--syntax-string);
 }
 
-/* 3. Number 数值与常量 */
+/* 3. Number 数值与度量 */
 .hljs-number,
-.hljs-literal,
-.hljs-link,
-.source .constant.numeric,
-.source .constant.language {
+.source .constant.numeric {
   color: var(--syntax-number);
 }
 
-/* 4. Title / Function / Class 标题与函数名 */
+/* 3.1 Constant 常量与布尔值 (增量解耦) */
+.hljs-literal,
+.hljs-link,
+.source .constant.language {
+  color: var(--syntax-constant, var(--syntax-number));
+}
+
+/* 4. Title / Function 标题与函数名 */
 .hljs-title,
 .hljs-title.function_,
 .hljs-title.class_,
 .hljs-section,
-.source .entity.name.function,
-.source .entity.name.type,
-.source .entity.name.class,
-.source .entity.name.struct {
+.source .entity.name.function {
   color: var(--syntax-title);
 }
 
@@ -281,22 +303,33 @@ html[data-theme="dark"] .elevation-4 {
 .hljs-built_in,
 .hljs-selector-id,
 .hljs-selector-class,
-.source .support.type,
 .source .support.class,
 .source .support.function,
 .source .support.constant {
   color: var(--syntax-builtin);
 }
 
-/* 6. Attr / Property 属性与标签 */
+/* 6. Attr 标签属性与名称 */
 .hljs-attr,
 .hljs-attribute,
 .hljs-tag,
 .hljs-name,
 .source .entity.other.attribute-name,
-.source .entity.name.tag,
-.source .variable.other.property {
+.source .entity.name.tag {
   color: var(--syntax-attr);
+}
+
+/* 6.1 Property 对象成员与CSS变量 (增量解耦) */
+.source .variable.other.property,
+.source .support.type.property-name {
+  color: var(--syntax-property, var(--syntax-attr));
+}
+
+/* 6.2 Variable 形参与局部变量 (增量解耦) */
+.hljs-params,
+.hljs-variable,
+.source .variable.parameter {
+  color: var(--syntax-variable, var(--syntax-meta));
 }
 
 /* 7. Comment 代码注释 */
@@ -321,11 +354,9 @@ html[data-theme="dark"] .elevation-4 {
   color: var(--syntax-deletion);
 }
 
-/* 10. Meta / Params 元信息与参数 */
+/* 10. Meta 预处理与元信息 */
 .hljs-meta,
-.hljs-params,
-.source .meta,
-.source .punctuation.separator {
+.source .meta {
   color: var(--syntax-meta);
 }
 

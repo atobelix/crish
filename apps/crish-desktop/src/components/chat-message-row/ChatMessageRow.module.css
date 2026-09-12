@@ -505,9 +505,31 @@
 .assistantText :global(.md-code-block) {
   position: relative;
   margin: 0.85em 0;
-  border-radius: var(--md-code-block-radius, 8px);
+  border-radius: var(--md-code-block-radius, 12px);
   border: 1px solid var(--md-code-block-border, var(--border-subtle));
   background: var(--md-code-block-bg);
+  overflow: hidden;
+  box-shadow: 0 0 0 1px var(--md-code-block-border, var(--border-subtle));
+}
+
+/* 实体顶栏：左标题/面包屑，右操作，高度 34px，自适应背景与微弱下边框 */
+.assistantText :global(.md-code-header) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2, 8px);
+  height: 34px;
+  padding: 0 var(--space-2, 8px) 0 var(--space-3, 12px);
+  background: var(--md-code-header-bg, var(--tint-hover));
+  border-bottom: 1px solid var(--md-code-header-border, var(--border-subtle));
+  user-select: none;
+}
+
+.assistantText :global(.md-code-header-left) {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1_5, 6px);
+  min-width: 0;
   overflow: hidden;
 }
 
@@ -518,10 +540,19 @@
   padding: var(--space-1_5, 6px) var(--space-3, 12px);
   font-family: var(--font-mono);
   font-size: var(--font-size-xs, 12px);
-  color: var(--text-secondary);
+  color: var(--md-code-header-fg, var(--text-secondary));
   background: var(--md-code-header-bg);
   border-bottom: 1px solid var(--border-subtle);
   user-select: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.assistantText :global(.md-code-header .md-code-breadcrumb) {
+  padding: 0;
+  background: transparent;
+  border-bottom: none;
 }
 
 .assistantText :global(.md-code-breadcrumb-segment) {
@@ -533,19 +564,23 @@
 }
 
 .assistantText :global(.md-code-breadcrumb-file) {
-  color: var(--text-primary);
+  color: var(--md-code-header-fg, var(--text-primary));
   font-weight: var(--font-weight-medium, 500);
 }
 
-/* 代码块右上角操作中枢：语言在左，复制在右，flex 自动排布彻底消除重叠 */
+/* 代码块操作中枢：在 Header 内静态排列，降级时绝对定位排布 */
 .assistantText :global(.md-code-actions) {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1_5, 6px);
+  flex-shrink: 0;
+}
+
+.assistantText :global(.md-code-block > .md-code-actions) {
   position: absolute;
   top: 6px;
   right: 8px;
   z-index: 5;
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1_5, 6px);
   pointer-events: none;
 }
 
@@ -558,7 +593,7 @@
   align-items: center;
   font-family: var(--font-mono);
   font-size: var(--font-size-micro, 11px);
-  color: var(--text-tertiary);
+  color: var(--md-code-header-fg, var(--text-tertiary));
   text-transform: lowercase;
   user-select: none;
   pointer-events: none;
@@ -566,6 +601,14 @@
   border-radius: var(--radius-sm, 4px);
   background: var(--tint-active);
   line-height: 1.3;
+}
+
+.assistantText :global(.md-code-header-left .md-code-lang) {
+  padding: 0;
+  font-size: var(--font-size-xs, 12px);
+  background: transparent;
+  color: var(--md-code-header-fg, var(--text-secondary));
+  letter-spacing: 0.02em;
 }
 
 /* 兼容无 .md-code-actions 外壳的旧结构降级绝对定位 */
@@ -580,26 +623,27 @@
   align-items: center;
   justify-content: center;
   gap: var(--space-1, 4px);
-  height: 22px;
+  height: 24px;
   padding: 0 var(--space-2, 8px);
   font-size: var(--font-size-micro, 11px);
   font-family: var(--font-sans, inherit);
-  color: var(--text-secondary);
-  background: var(--bg-card);
-  box-shadow: var(--shadow-sm);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm, 4px);
+  color: var(--md-code-header-fg, var(--text-secondary));
+  background: transparent;
+  box-shadow: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm, 5px);
   cursor: pointer;
   white-space: nowrap;
   flex-shrink: 0;
   line-height: 1;
   user-select: none;
-  opacity: 0;
+  opacity: 0.85;
   transition:
     opacity var(--transition-fast, 150ms ease),
     background-color var(--transition-fast, 150ms ease),
     color var(--transition-fast, 150ms ease),
-    border-color var(--transition-fast, 150ms ease);
+    border-color var(--transition-fast, 150ms ease),
+    transform 100ms ease;
 }
 
 .assistantText :global(.md-code-copy::before) {
@@ -633,13 +677,17 @@
 .assistantText :global(.md-code-copy:hover) {
   background: var(--md-code-copy-hover-bg);
   color: var(--text-primary);
-  border-color: var(--border-color);
+  border-color: var(--border-subtle, var(--border-color));
+}
+
+.assistantText :global(.md-code-copy:active) {
+  transform: scale(0.96);
 }
 
 .assistantText :global(.md-code-copy.is-copied) {
   color: var(--brand);
   border-color: color-mix(in srgb, var(--brand) 40%, transparent);
-  background: color-mix(in srgb, var(--brand) 8%, var(--bg-card));
+  background: color-mix(in srgb, var(--brand) 12%, var(--bg-card));
   opacity: 1;
 }
 
@@ -647,12 +695,27 @@
   margin: 0;
   padding: var(--md-code-block-padding, 12px 14px);
   overflow-x: auto;
+  overscroll-behavior-x: contain;
   font-family: var(--md-code-font, var(--font-mono));
-  font-size: var(--md-code-font-size, 12.5px);
-  line-height: 1.55;
+  font-size: var(--md-code-font-size, 13px);
+  line-height: 1.625;
   tab-size: var(--md-code-tab-size, 2);
   color: var(--text-primary);
   background: transparent;
+}
+
+.assistantText :global(.md-code-pre::-webkit-scrollbar) {
+  height: 4px;
+}
+
+.assistantText :global(.md-code-pre::-webkit-scrollbar-thumb) {
+  background: var(--tint-scrollbar-thumb);
+  border-radius: var(--radius-full, 9999px);
+}
+
+.assistantText :global(.md-code-pre::-webkit-scrollbar-track) {
+  background: transparent;
+}
 }
 
 .assistantText :global(.md-table-wrap) {
@@ -1009,13 +1072,13 @@
   /* 钉选色轮调色板：与 PRESET_PIN_COLORS 对齐；翡翠绿位走 brand token fallback */
   /* ssot-color-ignore: pin-color-wheel */
   background: conic-gradient(
-    #f43f5e 0deg,
-    #f59e0b 60deg,
+    var(--pin-palette-rose) 0deg,
+    var(--pin-palette-amber) 60deg,
     var(--brand) 120deg,
-    #0ea5e9 180deg,
-    #8b5cf6 240deg,
-    #ec4899 300deg,
-    #f43f5e 360deg
+    var(--pin-palette-sky) 180deg,
+    var(--pin-palette-violet) 240deg,
+    var(--pin-palette-pink) 300deg,
+    var(--pin-palette-rose) 360deg
   );
   cursor: pointer;
   padding: 0;
@@ -1088,13 +1151,13 @@
   /* ssot-color-ignore: pin-hue-slider */
   background: linear-gradient(
     to right,
-    #ff0000 0%,
-    #ffff00 17%,
-    #00ff00 33%,
-    #00ffff 50%,
-    #0000ff 67%,
-    #ff00ff 83%,
-    #ff0000 100%
+    var(--pin-hue-red) 0%,
+    var(--pin-hue-yellow) 17%,
+    var(--pin-hue-green) 33%,
+    var(--pin-hue-cyan) 50%,
+    var(--pin-hue-blue) 67%,
+    var(--pin-hue-magenta) 83%,
+    var(--pin-hue-red) 100%
   );
   cursor: pointer;
   margin: 0;

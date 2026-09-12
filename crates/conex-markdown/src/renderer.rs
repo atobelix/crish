@@ -1133,16 +1133,28 @@ fn build_code_fence_html_shell(lang: &str, file_path: Option<&str>, inner: Strin
         String::new()
     };
 
+    let (left_content, right_lang) = if !breadcrumb.is_empty() {
+        (breadcrumb, lang_badge)
+    } else {
+        (lang_badge, String::new())
+    };
+
     let actions = format!(
         "<div class=\"md-code-actions\">{}<button type=\"button\" class=\"md-code-copy\" title=\"复制\" aria-label=\"复制代码\">复制</button></div>",
-        lang_badge
+        right_lang
+    );
+
+    let header = format!(
+        "<div class=\"md-code-header\"><div class=\"md-code-header-left\">{}</div>{}</div>",
+        left_content,
+        actions
     );
 
     format!(
         "<div class=\"md-code-block\"{}>{}{}<pre class=\"md-code-pre hljs\"><code class=\"language-{}\">{}</code></pre></div>",
         block_attr,
-        breadcrumb,
-        actions,
+        header,
+        "",
         escape_html(lang),
         inner
     )
