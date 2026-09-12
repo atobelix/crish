@@ -102,13 +102,17 @@ fn guard_cleanup_keep(active_ids: &[String], confirm_empty: bool) -> Result<(), 
 /// 自愈写正文（T08.1）：先 `INSERT OR IGNORE` 补建会话行（空标题），再全量替换正文。
 /// 等价于「`INSERT OR IGNORE INTO sessions (id, title) VALUES (?1, '')` 再写正文」，
 /// 避免 FK 失败；upsert 主路径失败时的兜底，不改变「索引先行」语义。
+///
+/// `batch_version`（D3-4 / DEL-8）：`Some(v)` 走 CAS（过期批次返回可识别
+/// CasConflict，禁止静默 Ok）；`None` = 显式非 CAS rebase（导入/恢复/旧前端兼容）。
 fn self_heal_then_save_body(
     db: &LocalDb,
     session_id: &str,
     messages: &[SessionMessage],
+    batch_version: Option<i64>,
 ) -> Result<(), DbFailure> {
     db.insert_session(session_id, "")?;
-    db.save_session_body(session_id, messages)
+    db.save_session_body_versioned(session_id, messages, batch_version)
 }
 
 #[tauri::command]
@@ -137,18 +141,23 @@ pub async fn load_session_body(
     Ok(messages)
 }
 
+/// `batch_version`：批次版本戳（CAS 防线 2；前端 camelCase 自动映射）。
+/// 缺省 = 显式非 CAS 全量 rebase（导入/恢复/自愈路径）——禁止将缺参静默当作 CAS 通过。
 #[tauri::command]
 pub async fn save_session_body(
     session_id: String,
     messages: Vec<SessionMessage>,
+    batch_version: Option<i64>,
     db_state: State<'_, SharedDb>,
 ) -> Result<(), CoreError> {
     require_session_id(&session_id)?;
     let db = db_state.inner().local_db();
-    tokio::task::spawn_blocking(move || self_heal_then_save_body(&db, &session_id, &messages))
-        .await
-        .map_err(|e| CoreError::Internal(format!("save_session_body join: {e}")))?
-        .map_err(map_db_err)?;
+    tokio::task::spawn_blocking(move || {
+        self_heal_then_save_body(&db, &session_id, &messages, batch_version)
+    })
+    .await
+    .map_err(|e| CoreError::Internal(format!("save_session_body join: {e}")))?
+    .map_err(map_db_err)?;
     Ok(())
 }
 
