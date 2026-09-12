@@ -110,7 +110,7 @@ export const SkillCardList: React.FC<SkillCardListProps> = ({
         aria-live="polite"
       >
         <div>无匹配 · 共 {skills.length} 个技能</div>
-        <div className={`${styles.skillsDiscoverActions} skills-discover-actions`} style={{ justifyContent: 'flex-start' }}>
+        <div className={`${styles.skillsDiscoverActions} skills-discover-actions`}>
           <Tooltip content={EMPTY_FILTER_HINT}>
             <Button
               type="button"
@@ -129,21 +129,7 @@ export const SkillCardList: React.FC<SkillCardListProps> = ({
 
   return (
     <aside className={`${styles.skillsRail} skills-rail`} aria-labelledby={listLabelId}>
-      <div
-        id={listLabelId}
-        className="sr-only"
-        style={{
-          position: 'absolute',
-          width: 1,
-          height: 1,
-          padding: 0,
-          margin: -1,
-          overflow: 'hidden',
-          clip: 'rect(0,0,0,0)',
-          whiteSpace: 'nowrap',
-          border: 0,
-        }}
-      >
+      <div id={listLabelId} className="sr-only">
         技能列表
       </div>
       <div

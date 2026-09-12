@@ -5,7 +5,6 @@
 
 /*                  --z-settings-dialog  */
 .skillsDiscoverOverlay {
-  --dialog-z: var(--z-modal);
 }
 
 /*                       */
@@ -21,9 +20,9 @@
   display: flex;
   align-items: center;
   gap: var(--space-1_5);
-  padding: 3px 2px;
+  padding: var(--space-0_5);
   border-radius: 0;
-  border-bottom: 1px solid var(--border-subtle);
+  border-bottom: var(--hairline-width) solid var(--border-subtle);
   cursor: pointer;
   font-size: var(--font-size-xs);
   min-height: 26px;
@@ -34,7 +33,7 @@
 }
 
 .skillsDiscoverItem:hover {
-  background: var(--bg-hover);
+  background: var(--tint-hover);
 }
 
 .skillsDiscoverName {
@@ -56,10 +55,10 @@
 
 /*    create   paths    / manual         */
 .skillsCreateBox {
-  padding: 2px 0 6px;
+  padding: var(--space-0_5) 0 var(--space-1_5);
   border-radius: 0;
   border: none;
-  border-bottom: 1px solid var(--border-subtle);
+  border-bottom: var(--hairline-width) solid var(--border-subtle);
   background: transparent;
   display: flex;
   flex-direction: column;

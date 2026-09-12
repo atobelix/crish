@@ -27,9 +27,9 @@
 
 .mcpStatusPill {
   font-size: var(--font-size-xxs);
-  padding: 0 6px;
-  border-radius: 999px;
-  border: 1px solid var(--border-color);
+  padding: 0 var(--space-1_5);
+  border-radius: var(--radius-full);
+  border: var(--hairline-width) solid var(--border-subtle);
   color: var(--text-tertiary);
   background: transparent;
   line-height: 1.5;
@@ -106,8 +106,8 @@
 
 .mcpRow {
   border: none;
-  border-bottom: var(--hairline-width, 1px) solid var(--hairline, var(--border-subtle));
-  padding: 2px 0;
+  border-bottom: var(--hairline-width) solid var(--border-subtle);
+  padding: var(--space-0_5) 0;
   background: transparent;
 }
 
@@ -159,10 +159,10 @@
 }
 
 .mcpStateBadge {
-  font-size: var(--font-size-xxs, 11px);
-  padding: 0 6px;
-  border-radius: 999px;
-  border: 1px solid var(--border-color);
+  font-size: var(--font-size-xxs);
+  padding: 0 var(--space-1_5);
+  border-radius: var(--radius-full);
+  border: var(--hairline-width) solid var(--border-subtle);
   color: var(--text-tertiary);
   line-height: 1.5;
   flex-shrink: 0;
@@ -228,8 +228,8 @@
 
 .mcpTools {
   margin-top: var(--space-0_5);
-  padding: 2px 0 2px 13px;
-  border-top: var(--hairline-width, 1px) solid var(--hairline, var(--border-subtle));
+  padding: var(--space-0_5) 0 var(--space-0_5) var(--space-3);
+  border-top: var(--hairline-width) solid var(--border-subtle);
 }
 
 .mcpTools ul {
@@ -272,20 +272,20 @@
   display: flex;
   align-items: center;
   gap: var(--space-1_5);
-  padding: 6px 0;
+  padding: var(--space-1_5) 0;
   font-size: var(--font-size-xs);
   color: var(--text-tertiary);
 }
 
 .mcpAddBox {
-  padding: 2px 0 6px;
+  padding: var(--space-0_5) 0 var(--space-1_5);
   border: none;
-  border-bottom: 1px solid var(--border-subtle);
+  border-bottom: var(--hairline-width) solid var(--border-subtle);
   background: transparent;
   display: flex;
   flex-direction: column;
   gap: var(--space-1_5);
-  border-top: var(--hairline-width, 1px) solid var(--hairline, var(--border-subtle));
+  border-top: var(--hairline-width) solid var(--border-subtle);
 }
 
 .mcpAddRow {
@@ -325,7 +325,7 @@
 .mcpAddGrid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 10px 12px;
+  gap: var(--space-2_5) var(--space-3);
 }
 
 .mcpAddGrid label {
