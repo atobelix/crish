@@ -26,6 +26,8 @@ import { useAppShortcuts } from './app/AppShortcuts';
 import { AppGlobalDialogs, SkeletonFallback } from './app/AppGlobalDialogs';
 import { useWorkspaceShellStore } from './store/workspace-shell';
 import { navigateToSurface } from './store/surfaceRouter';
+import { usePreferencesHydration } from './hooks/usePreferencesHydration';
+import { isDeveloperEngineUiEnabled } from './api/productMode';
 
 // ── 关键路径组件：同步导入，与 App 同 chunk ──
 import { Sidebar } from './components/sidebar/Sidebar';
@@ -49,7 +51,7 @@ function DevHealthOverlayMount() {
   try {
     on =
       localStorage.getItem('crish_dev_health') === '1' ||
-      localStorage.getItem('crish_show_engine_settings') === '1';
+      isDeveloperEngineUiEnabled();
   } catch {
     /* swallow-ok: dev 旗标读取失败时保持默认关闭（仅影响调试面板挂载） */
   }
@@ -72,6 +74,7 @@ const BinaryTreeWorkspace = lazy(() =>
 // ── 非关键路径组件：代码分割，按需加载 ──
 
 function App() {
+  const { isHydrated } = usePreferencesHydration();
   const platformAdaptation = usePlatformAdaptation({
     autoApplyRender: true,
     autoStartEngine: true,
@@ -82,6 +85,8 @@ function App() {
   const sidebarCollapsed = useLayoutStore((s) => s.sidebarCollapsed);
   const setSidebarCollapsed = useLayoutStore((s) => s.setSidebarCollapsed);
   const chatMainSurface = useLayoutStore((s) => s.chatMainSurface) ?? 'chat';
+  const uiSize = useLayoutStore((s) => s.uiSize);
+  const shellChromeMode = useLayoutStore((s) => s.shellChromeMode);
   const showSettingsOverlay = useSettingsUiStore((s) => s.showSettingsOverlay);
   const setShowSettingsOverlay = useSettingsUiStore(
     (s) => s.setShowSettingsOverlay
@@ -111,9 +116,12 @@ function App() {
   const engineReady = useEngineBootstrap();
 
   // App startup & service hydration
+  // T16 密度档复活：真实 store 订阅值透传，驱动 body[data-ui-size] 生效
   useAppBootstrap({
     setAppSettings,
     productShell,
+    uiSize,
+    shellChromeMode,
   });
 
   // Global keybindings
@@ -159,6 +167,7 @@ function App() {
       <div
         className={`app-container ${appModeClass}`}
         data-engine-ready={engineReady ? 'true' : 'false'}
+        data-preferences-hydrated={isHydrated ? 'true' : 'false'}
         data-first-run={showFirstRun ? 'true' : 'false'}
         data-sidebar-collapsed={sidebarCollapsed ? 'true' : 'false'}
         data-perf-level={
