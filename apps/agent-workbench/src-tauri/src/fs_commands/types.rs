@@ -5,7 +5,6 @@ pub(crate) const MAX_TEXT_FILE_BYTES: usize = 4 * 1024 * 1024;
 pub(crate) const DEFAULT_MAX_TEXT_FILE_LINES: usize = 2_000;
 pub(crate) const MAX_TEXT_FILE_LINES: usize = 20_000;
 pub(crate) const BINARY_SCAN_BYTES: usize = 8192;
-pub(crate) const READ_CHUNK_BYTES: usize = 8192;
 
 pub(crate) const ERR_INTERNAL: &str = "internal_error";
 pub(crate) const ERR_NOT_FOUND: &str = "path_not_found";
@@ -48,6 +47,13 @@ pub(crate) struct SelectFolderResult {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ListDirectoryResult {
     pub(crate) items: Vec<DirectoryItem>,
+    /// U-BLOCK / D0：条目数超硬限时为 true（items 已截断至 limit）
+    pub(crate) truncated: bool,
+    /// 超限时给出下一窗口起点（items.len()）；未截断为 None
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) cursor: Option<usize>,
+    /// 过滤后全量条目数（含被截断部分）；与 items.len() 在未截断时相等
+    pub(crate) total: usize,
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]

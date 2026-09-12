@@ -73,8 +73,18 @@ impl Tool for DiffTextTool {
             })?;
             let pa = resolve_workspace_path(&ctx.workspace_root, &a)?;
             let pb = resolve_workspace_path(&ctx.workspace_root, &b)?;
-            let old_text = read_file_text(&pa)?;
-            let new_text = read_file_text(&pb)?;
+            // U-BLOCK：文件读取经 spawn_blocking
+            let (old_text, new_text) = {
+                let pa = pa.clone();
+                let pb = pb.clone();
+                tokio::task::spawn_blocking(move || {
+                    Ok::<_, ToolError>((read_file_text(&pa)?, read_file_text(&pb)?))
+                })
+                .await
+                .map_err(|e| {
+                    ToolError::execution_failed("diff_text", format!("spawn_blocking: {e}"))
+                })??
+            };
             let label_a = display_path(&ctx.workspace_root, &pa);
             let label_b = display_path(&ctx.workspace_root, &pb);
             (old_text, new_text, label_a, label_b, "files")

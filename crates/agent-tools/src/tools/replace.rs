@@ -107,9 +107,20 @@ impl Tool for MultiReplaceFileTool {
         let reservation = crate::explore_quota::reserve_explore_docs_quota(ctx)?;
 
         // 4. 读入 + 解码（BOM 探测；二进制拒绝——对齐 diff.rs:111-116 语义）
-        let bytes = std::fs::read(&file_path).map_err(|e| {
-            ToolError::execution_failed(MULTI_REPLACE_TOOL_NAME, format!("{display}: {e}"))
-        })?;
+        // U-BLOCK：同步读经 spawn_blocking
+        let bytes = {
+            let file_path = file_path.clone();
+            let display = display.clone();
+            tokio::task::spawn_blocking(move || {
+                std::fs::read(&file_path).map_err(|e| {
+                    ToolError::execution_failed(MULTI_REPLACE_TOOL_NAME, format!("{display}: {e}"))
+                })
+            })
+            .await
+            .map_err(|e| {
+                ToolError::execution_failed(MULTI_REPLACE_TOOL_NAME, format!("spawn_blocking: {e}"))
+            })??
+        };
         let decoded = decode_text(&bytes);
         if decoded.is_binary {
             return Err(ToolError::execution_failed(
@@ -188,9 +199,20 @@ impl Tool for MultiReplaceFileTool {
 
         // 9. 一次性原子落盘（同目录临时文件 + rename；Windows 先 remove 再 rename）
         //    编码解析/编码直接复用 fs.rs 的 pub(crate) 实现（F5 本地镜像已去重）
+        //    U-BLOCK：原子写经 spawn_blocking
         let encoding = crate::tools::fs::resolve_write_encoding(&file_path, None)?;
         let out_bytes = crate::tools::fs::encode_text(&new_text, &encoding)?;
-        atomic_write(&file_path, &out_bytes)?;
+        {
+            let file_path = file_path.clone();
+            tokio::task::spawn_blocking(move || atomic_write(&file_path, &out_bytes))
+                .await
+                .map_err(|e| {
+                    ToolError::execution_failed(
+                        MULTI_REPLACE_TOOL_NAME,
+                        format!("spawn_blocking: {e}"),
+                    )
+                })??;
+        }
         // 写盘成功：提交占用（Drop 不再回滚）
         if let Some(mut r) = reservation {
             r.commit();

@@ -95,6 +95,7 @@ impl ProjectTreeTool {
 }
 
 /// 工具入参（解析 + 校验 + 钳制后的结构化参数）
+#[derive(Clone)]
 struct ProjectTreeParams {
     /// resolve_workspace_path 规范化后的树根（canonical）
     root: PathBuf,
@@ -532,7 +533,15 @@ impl Tool for ProjectTreeTool {
             max_items,
             max_depth_content,
         };
-        let (entry, cache_hit) = TreeCache::get_or_build(&params);
+        // U-BLOCK：目录树构建经 spawn_blocking
+        let (entry, cache_hit) = {
+            let params = params.clone();
+            tokio::task::spawn_blocking(move || TreeCache::get_or_build(&params))
+                .await
+                .map_err(|e| {
+                    ToolError::execution_failed("project_tree", format!("spawn_blocking: {e}"))
+                })?
+        };
         let render = render_tree(&entry, &params);
         Ok(serde_json::json!({
             "root": entry.root_display,

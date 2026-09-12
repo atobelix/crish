@@ -38,6 +38,8 @@
 | `npm run check:input-guard` | 输入框四态防倒退 + binary-tree 条带动效单轨守卫（幽灵 token / 布局属性 keyframes 拦截） |
 | `npm run check:ui-layer` | 前端分层解耦检查 |
 | `npm run check:swallowed-errors-frontend` | 前端吞错审计 |
+| `npm run check:async-commands` | U-BLOCK：壳 fs 命令 async + 工具 spawn_blocking 纪律 |
+| `npm run check:gatekeeper-shared` | U-GATE：生产路径禁 per-call `CommandGatekeeper::new` |
 
 ## E2E 与专项
 

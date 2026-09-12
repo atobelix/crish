@@ -154,7 +154,8 @@ impl Default for BuiltinToolConfig {
     fn default() -> Self {
         Self {
             default_shell_timeout_ms: 30_000,
-            default_shell_max_output_bytes: 200_000,
+            // D0/U-BUDGET：预算定义收敛至 conex-shared::perf_budget（数值不变）
+            default_shell_max_output_bytes: conex_shared::perf_budget::SHELL_MAX_OUTPUT_BYTES_DEFAULT,
             trash_root: None,
             audit_sink: None,
             subagent_spawner: None,
@@ -492,7 +493,11 @@ pub(crate) fn snapshot_tag(path: &Path) -> Option<String> {
 /// 文本解码结果（简化版 decodeTextBuffer）
 pub(crate) struct DecodedText {
     pub text: String,
+    /// U-READ 后 read_file 改走 windowed_read；本字段仍由 replace/tests 消费
+    #[cfg_attr(not(test), allow(dead_code))]
     pub encoding: String,
+    /// 同上：read_file 路径已迁出；replace/tests 仍可读
+    #[cfg_attr(not(test), allow(dead_code))]
     pub has_bom: bool,
     /// 二进制标记：内容含 NUL 字节无法按文本读取
     pub is_binary: bool,

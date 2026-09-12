@@ -105,7 +105,10 @@ pub use middleware::{
     AfterExecuteResult, BeforeExecuteResult, MiddlewareTimeoutConfig, ToolExecutionContext,
     ToolMiddleware,
 };
-pub use permission::{decide, decide_command_with_revert, PermissionMode, PermissionVerdict};
+pub use permission::{
+    decide, decide_analysis_with_revert, decide_command, decide_command_with_revert,
+    PermissionMode, PermissionVerdict,
+};
 pub use streaming::{
     terminal_only, with_progress, ContentBlock, ToolProgress, ToolStream, ToolStreamItem,
 };

@@ -67,6 +67,8 @@ conex-search = { path = "../../../crates/conex-search" }
 conex-fs = { path = "../../../crates/conex-fs" }
 conex-db = { path = "../../../crates/conex-db" }
 conex-markdown = { path = "../../../crates/conex-markdown" }
+# U-BLOCK / D0：FS_LIST_DIRECTORY_DEFAULT_LIMIT 等预算常量唯一定义面（仅消费）
+conex-shared = { path = "../../../crates/conex-shared" }
 dirs = "6"
 # Round7：真实笔记后端（DocSession + workspace.db 投影；独立于 sessions.db）
 conex-note-runtime = { path = "../../../crates/conex-note-runtime" }

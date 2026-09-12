@@ -12,6 +12,7 @@ pub mod impact;
 pub mod path_normalizer;
 pub mod trash;
 pub mod watch;
+pub mod windowed_read;
 
 pub use atomic_write::{atomic_write, atomic_write_file, AtomicWriteState, AtomicWriteTx};
 pub use path_normalizer::ConexPathNormalizer;
@@ -20,6 +21,10 @@ pub use path_utils::{
     safe_canonicalize, strip_verbatim_prefix, SymlinkResolveError,
 };
 pub use watch::{glob_match, is_internal_atomic_transient_path, watcher_filter};
+pub use windowed_read::{
+    clamp_window_text_by_chars, windowed_read, WindowEncoding, WindowReadError, WindowReadOptions,
+    WindowReadResult, DEFAULT_BINARY_PROBE_BYTES,
+};
 
 pub mod path_utils {
     use anyhow::{bail, Result};

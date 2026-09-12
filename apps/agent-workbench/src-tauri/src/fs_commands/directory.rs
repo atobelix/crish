@@ -1,5 +1,8 @@
 use std::time::UNIX_EPOCH;
 
+// U-BLOCK / D0：条目上限唯一定义面 = conex-shared::perf_budget
+use conex_shared::perf_budget::FS_LIST_DIRECTORY_DEFAULT_LIMIT;
+
 use crate::fs_commands::types::{
     DirectoryItem, FileCommandError, ListDirectoryResult, WorkspaceFsGuard, ERR_NOT_DIRECTORY,
     ERR_READ_DIRECTORY,
@@ -71,5 +74,23 @@ pub(crate) fn list_directory_with_guard(
         _ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
     });
 
-    Ok(ListDirectoryResult { items })
+    // U-BLOCK：硬上限 + 向后兼容扩字段（truncated/cursor/total）——
+    // 前端只读 items 时行为不变；超限时响应体积有界
+    let total = items.len();
+    if total > FS_LIST_DIRECTORY_DEFAULT_LIMIT {
+        items.truncate(FS_LIST_DIRECTORY_DEFAULT_LIMIT);
+        Ok(ListDirectoryResult {
+            items,
+            truncated: true,
+            cursor: Some(FS_LIST_DIRECTORY_DEFAULT_LIMIT),
+            total,
+        })
+    } else {
+        Ok(ListDirectoryResult {
+            items,
+            truncated: false,
+            cursor: None,
+            total,
+        })
+    }
 }

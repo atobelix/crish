@@ -26,14 +26,6 @@ use std::sync::Arc;
 /// 未注入回收站根时的兜底目录名（工作区下）
 pub(crate) const DEFAULT_TRASH_DIR_NAME: &str = ".crish-trash";
 
-/// 解析执行期回收站根：构造期注入优先，否则回退工作区 `.crish-trash`
-fn trash_service_for(config_root: &Option<PathBuf>, ctx: &ToolContext) -> TrashService {
-    let root = config_root
-        .clone()
-        .unwrap_or_else(|| ctx.workspace_root.join(DEFAULT_TRASH_DIR_NAME));
-    TrashService::new(root)
-}
-
 /// 删除文件工具：删除工作区文件到回收站（可恢复）
 pub(crate) struct DeleteFileTool {
     def: ToolDefinition,
@@ -196,28 +188,51 @@ async fn execute_delete(
     // 守卫随函数结束自动释放（任何错误路径均释放，不残留记账）
     let _claim = claim_write_guard(ctx, &path_str, ClaimMode::Delete)?;
 
-    let metadata = std::fs::metadata(&target)
-        .map_err(|e| ToolError::execution_failed(tool_name, format!("{display}: {e}")))?;
-    if require_file && !metadata.is_file() {
-        return Err(ToolError::execution_failed(
-            tool_name,
-            format!("Path is not a file: {display}"),
-        ));
-    }
-    if !require_file && !metadata.is_dir() {
-        return Err(ToolError::execution_failed(
-            tool_name,
-            format!("Path is not a directory: {display}"),
-        ));
-    }
-
     let backup = optional_bool(&args, "backup").unwrap_or(true);
-    // I2-S8：删除前影响面预检（文件数 / 大小 / 跨目录），随工具结果与审计日志输出
-    let impact = conex_fs::impact::assess(std::slice::from_ref(&target));
-    let service = trash_service_for(&trash_root, ctx);
-    let entry = service
-        .trash_file(&target, backup)
-        .map_err(|e| ToolError::execution_failed(tool_name, format!("{display}: {e}")))?;
+    // ToolContext 非 Send：回收站根在闭包外解析（与 trash_service_for 同语义）
+    let effective_trash_root =
+        trash_root.unwrap_or_else(|| ctx.workspace_root.join(DEFAULT_TRASH_DIR_NAME));
+    let tool_name_owned = tool_name.to_string();
+    // U-BLOCK：同步 metadata / impact / trash 全路径经 spawn_blocking（INV-B3）
+    let (impact, entry, trash_root_path) = {
+        let target = target.clone();
+        let display = display.clone();
+        tokio::task::spawn_blocking(move || -> Result<
+            (
+                conex_fs::impact::ImpactAssessment,
+                conex_fs::trash::TrashEntry,
+                PathBuf,
+            ),
+            ToolError,
+        > {
+            let metadata = std::fs::metadata(&target).map_err(|e| {
+                ToolError::execution_failed(&tool_name_owned, format!("{display}: {e}"))
+            })?;
+            if require_file && !metadata.is_file() {
+                return Err(ToolError::execution_failed(
+                    &tool_name_owned,
+                    format!("Path is not a file: {display}"),
+                ));
+            }
+            if !require_file && !metadata.is_dir() {
+                return Err(ToolError::execution_failed(
+                    &tool_name_owned,
+                    format!("Path is not a directory: {display}"),
+                ));
+            }
+            // I2-S8：删除前影响面预检（文件数 / 大小 / 跨目录），随工具结果与审计日志输出
+            let impact = conex_fs::impact::assess(std::slice::from_ref(&target));
+            let service = TrashService::new(effective_trash_root);
+            let entry = service.trash_file(&target, backup).map_err(|e| {
+                ToolError::execution_failed(&tool_name_owned, format!("{display}: {e}"))
+            })?;
+            let root = service.root().to_path_buf();
+            drop(service);
+            Ok((impact, entry, root))
+        })
+        .await
+        .map_err(|e| ToolError::execution_failed(tool_name, format!("spawn_blocking: {e}")))??
+    };
     // I2-S8：删除接管审计事件（decision=redirected，影响面来自预检）——
     // 经审计 sink 发射（引擎侧接线后汇入事件流落库；未接线 no-op）；
     // tool_call_id 取执行上下文真值（LK-03：工具执行 → 审计携带真实调用 id）
@@ -244,7 +259,7 @@ async fn execute_delete(
     Ok(delete_output(
         &entry,
         &display,
-        service.root(),
+        &trash_root_path,
         backup,
         impact,
     ))

@@ -26,24 +26,43 @@ pub(crate) async fn select_folder<R: tauri::Runtime>(
 /// 列出目录（PE-07 T07.2：无 workspace_root 参数，根由 WorkspaceRegistry 解析）。
 ///
 /// wire 名 = `workbench_list_directory`（T-F 06：分裂标签统一，显式 rename）。
+/// U-BLOCK：async + spawn_blocking——tokio worker 不被同步目录 IO 占满。
 #[tauri::command(rename = "workbench_list_directory")]
-pub(crate) fn list_directory(
+pub(crate) async fn list_directory(
     app: tauri::AppHandle,
     path: String,
 ) -> Result<types::ListDirectoryResult, FileCommandError> {
-    directory::list_directory(&app, path)
+    let result = tokio::task::spawn_blocking(move || directory::list_directory(&app, path))
+        .await
+        .map_err(|e| {
+            FileCommandError::new(
+                types::ERR_INTERNAL,
+                format!("list_directory task failed: {e}"),
+            )
+        })?;
+    result
 }
 
 /// 读取文件内容（PE-07 T07.2：无 workspace_root 参数，根由 WorkspaceRegistry 解析）。
 ///
 /// wire 名 = `workbench_read_file_content`（T-F 06：分裂标签统一，显式 rename）。
+/// U-BLOCK：async + spawn_blocking。
 #[tauri::command(rename = "workbench_read_file_content")]
-pub(crate) fn read_file_content(
+pub(crate) async fn read_file_content(
     app: tauri::AppHandle,
     path: String,
     max_lines: Option<usize>,
 ) -> Result<types::ReadFileContentResult, FileCommandError> {
-    read::read_file_content(&app, path, max_lines)
+    let result =
+        tokio::task::spawn_blocking(move || read::read_file_content(&app, path, max_lines))
+            .await
+            .map_err(|e| {
+                FileCommandError::new(
+                    types::ERR_INTERNAL,
+                    format!("read_file_content task failed: {e}"),
+                )
+            })?;
+    result
 }
 
 /// 写入文件内容（PE-07 T07.2：无 workspace_root 参数，根由 WorkspaceRegistry 解析）。
@@ -52,14 +71,26 @@ pub(crate) fn read_file_content(
 /// （已存在且未显式 overwrite=true → file_exists 错误）；Option<bool> 让
 /// 未传参调用方保持「默认拒绝覆盖」语义（与前端 workspaceFsApi 同步）。
 /// wire 名 = `workbench_write_file_content`（T-F 06：分裂标签统一，显式 rename）。
+/// U-BLOCK：async + spawn_blocking。
 #[tauri::command(rename = "workbench_write_file_content")]
-pub(crate) fn write_file_content(
+pub(crate) async fn write_file_content(
     app: tauri::AppHandle,
     path: String,
     content: String,
     overwrite: Option<bool>,
 ) -> Result<types::WriteFileContentResult, FileCommandError> {
-    write::write_file_content(&app, path, content, overwrite.unwrap_or(false))
+    let overwrite = overwrite.unwrap_or(false);
+    let result = tokio::task::spawn_blocking(move || {
+        write::write_file_content(&app, path, content, overwrite)
+    })
+    .await
+    .map_err(|e| {
+        FileCommandError::new(
+            types::ERR_INTERNAL,
+            format!("write_file_content task failed: {e}"),
+        )
+    })?;
+    result
 }
 
 /// 发现技能（PE-07 T07.2：workspace_path / extra_dirs 经注册表包含性校验）。
@@ -314,6 +345,27 @@ mod tests {
         let missing = temp.path().join("no-such-root");
         let err = WorkspaceFsGuard::new(&missing).expect_err("unreachable root must be rejected");
         assert_eq!(err.code, types::ERR_INTERNAL);
+    }
+
+    /// U-BLOCK / D0：目录条目超硬限时截断并给出 truncated/cursor/total
+    #[test]
+    fn list_directory_truncates_over_limit() {
+        let temp = TestDir::new();
+        let root = temp.path().join("workspace");
+        fs::create_dir(&root).expect("create root");
+        // 超过 FS_LIST_DIRECTORY_DEFAULT_LIMIT（2000）+ 1
+        for i in 0..(conex_shared::perf_budget::FS_LIST_DIRECTORY_DEFAULT_LIMIT + 1) {
+            fs::write(root.join(format!("f{i:04}.txt")), b"x").expect("write file");
+        }
+
+        let result = list_directory_at_root(&root, "").expect("list dir");
+        assert_eq!(result.items.len(), conex_shared::perf_budget::FS_LIST_DIRECTORY_DEFAULT_LIMIT);
+        assert!(result.truncated);
+        assert_eq!(result.cursor, Some(conex_shared::perf_budget::FS_LIST_DIRECTORY_DEFAULT_LIMIT));
+        assert_eq!(
+            result.total,
+            conex_shared::perf_budget::FS_LIST_DIRECTORY_DEFAULT_LIMIT + 1
+        );
     }
 
     // ── T-EG-05：overwrite 语义（默认拒绝覆盖，与工具侧 write_file 对齐）──

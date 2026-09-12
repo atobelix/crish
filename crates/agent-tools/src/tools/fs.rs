@@ -7,15 +7,16 @@
 use crate::context::ToolContext;
 use crate::definition::{Tool, ToolDefinition, ToolError};
 use crate::tools::{
-    clamp_text_by_lines, decode_text, display_path, epoch_millis, optional_string, require_string,
+    clamp_text_by_lines, display_path, epoch_millis, optional_string, require_string,
     resolve_workspace_path, snapshot_tag,
 };
 use crate::write_paths::{check_write_allowance_for_ctx, claim_write_guard, ClaimMode};
 use async_trait::async_trait;
+use conex_fs::{windowed_read, WindowReadOptions, DEFAULT_BINARY_PROBE_BYTES};
 use std::path::Path;
 
-/// 读文件默认字符上限（对齐 TS read 工具默认 maxBytes）
-pub(crate) const DEFAULT_READ_MAX_BYTES: usize = 256_000;
+/// 读文件默认字符上限（D0/U-BUDGET：定义收敛至 conex-shared::perf_budget）
+pub(crate) use conex_shared::perf_budget::READ_FILE_MAX_BYTES_DEFAULT as DEFAULT_READ_MAX_BYTES;
 
 /// 读文件默认单次最大行数（对齐 REQ 示例 800）
 pub(crate) const DEFAULT_READ_MAX_LINES: usize = 800;
@@ -72,21 +73,6 @@ impl Tool for ReadFileTool {
         let file_path = resolve_workspace_path(&ctx.workspace_root, &path_str)?;
         let display = display_path(&ctx.workspace_root, &file_path);
 
-        let metadata = std::fs::metadata(&file_path)
-            .map_err(|e| ToolError::execution_failed("read_file", format!("{display}: {e}")))?;
-        if metadata.is_dir() {
-            return Err(ToolError::execution_failed(
-                "read_file",
-                format!("Path is a directory, not a file: {display}"),
-            ));
-        }
-        if !metadata.is_file() {
-            return Err(ToolError::execution_failed(
-                "read_file",
-                format!("Path is not a file: {display}"),
-            ));
-        }
-
         // T-CF-01：入参解析——行窗口（1-indexed 闭区间）/ 续读偏移 / 行数与字符双上限；
         // startLine>endLine 为结构化入参错误
         let start_line = parse_line_arg(&args, "startLine", false)?.unwrap_or(1);
@@ -102,121 +88,194 @@ impl Tool for ReadFileTool {
             }
         }
 
-        let bytes = std::fs::read(&file_path)
-            .map_err(|e| ToolError::execution_failed("read_file", format!("{display}: {e}")))?;
-        let decoded = decode_text(&bytes);
+        // U-BLOCK：同步 IO 全路径经 spawn_blocking（06-SR01 / 10-T1）
+        // U-READ：唯一窗口读实现 = conex_fs::windowed_read（禁整文件 std::fs::read）
+        let outcome = {
+            let file_path = file_path.clone();
+            let display = display.clone();
+            tokio::task::spawn_blocking(move || -> Result<ReadFileOutcome, ToolError> {
+                let metadata = std::fs::metadata(&file_path)
+                    .map_err(|e| ToolError::execution_failed("read_file", format!("{display}: {e}")))?;
+                if metadata.is_dir() {
+                    return Err(ToolError::execution_failed(
+                        "read_file",
+                        format!("Path is a directory, not a file: {display}"),
+                    ));
+                }
+                if !metadata.is_file() {
+                    return Err(ToolError::execution_failed(
+                        "read_file",
+                        format!("Path is not a file: {display}"),
+                    ));
+                }
 
-        // T-CF-01：二进制文件引用形态（替代报错拒绝）——text 置空，附提示
-        if decoded.is_binary {
-            return Ok(serde_json::json!({
+                let opts = WindowReadOptions {
+                    start_line,
+                    end_line: end_line_arg,
+                    content_offset,
+                    max_lines,
+                    max_file_bytes: None,
+                    binary_probe_bytes: DEFAULT_BINARY_PROBE_BYTES,
+                    reject_binary: false,
+                    strict_encoding: false,
+                    allow_utf16: true,
+                };
+                let r = windowed_read(&file_path, &opts).map_err(|e| {
+                    ToolError::execution_failed("read_file", format!("{display}: {e}"))
+                })?;
+
+                if r.is_binary {
+                    return Ok(ReadFileOutcome::Binary {
+                        file_bytes: r.file_bytes,
+                        end_line_echo: end_line_arg.unwrap_or(start_line),
+                    });
+                }
+
+                let (shown, shown_lines, _) =
+                    clamp_text_by_lines(&r.text, max_bytes, max_lines);
+                let window_start0 = r.window_start_line.saturating_sub(1);
+                let next_content_offset = (window_start0 + shown_lines).min(r.total_lines);
+                let char_truncated = r.text.chars().count() > max_bytes;
+                let content_truncated = next_content_offset < r.total_lines;
+                let end_line_echo =
+                    end_line_arg.unwrap_or(window_start0.saturating_add(max_lines));
+                let out_of_range = window_start0 >= r.total_lines;
+
+                Ok(ReadFileOutcome::Text {
+                    total_lines: r.total_lines,
+                    total_chars: r.total_chars,
+                    encoding: r.encoding.as_str().to_string(),
+                    has_bom: r.has_bom,
+                    file_bytes: r.file_bytes,
+                    shown,
+                    char_truncated,
+                    content_truncated,
+                    next_content_offset,
+                    end_line_echo,
+                    out_of_range,
+                })
+            })
+            .await
+            .map_err(|e| ToolError::execution_failed("read_file", format!("spawn_blocking: {e}")))??
+        };
+
+        match outcome {
+            // T-CF-01：二进制文件引用形态（替代报错拒绝）——text 置空，附提示
+            ReadFileOutcome::Binary {
+                file_bytes,
+                end_line_echo,
+            } => Ok(serde_json::json!({
                 "path": display,
                 "kind": "file",
-                "bytes": bytes.len(),
-                "size": bytes.len(),
-                "encoding": decoded.encoding,
+                "bytes": file_bytes,
+                "size": file_bytes,
+                "encoding": "binary",
                 "hasBom": false,
                 "binary": true,
                 "lineCount": 0,
                 "totalChars": 0,
                 "shownChars": 0,
                 "startLine": start_line,
-                "endLine": end_line_arg.unwrap_or(start_line),
+                "endLine": end_line_echo,
                 "truncated": false,
                 "content_truncated": false,
                 "nextContentOffset": 0,
                 "hint": "二进制文件无法按文本读取，请使用 file_stat / 系统查看器打开",
                 "text": "",
-            }));
+            })),
+            ReadFileOutcome::Text {
+                total_lines,
+                total_chars,
+                encoding,
+                has_bom,
+                file_bytes,
+                shown,
+                char_truncated,
+                content_truncated,
+                next_content_offset,
+                end_line_echo,
+                out_of_range,
+            } => {
+                let tag = snapshot_tag(&file_path).unwrap_or_default();
+                let mut header = format!(
+                    "path: {display}\nsnapshotTag: {tag}\nencoding: {encoding}\nlines: {total_lines}\nstartLine: {start_line}, endLine: {end_line_echo}\n",
+                );
+                if char_truncated {
+                    header.push_str(&format!(
+                        "truncated: true (showing {} of {total_chars} chars; file has {file_bytes} bytes)\n",
+                        shown.chars().count(),
+                    ));
+                }
+                if content_truncated {
+                    header.push_str(&format!(
+                        "content_truncated: true (nextContentOffset: {next_content_offset}, {} lines remaining)\n",
+                        total_lines.saturating_sub(next_content_offset),
+                    ));
+                }
+                if out_of_range {
+                    header.push_str(&format!(
+                        "window out of range: requested window starts beyond file end ({total_lines} lines)\n",
+                    ));
+                }
+                header.push_str("---\n");
+
+                let text = if char_truncated {
+                    format!("{header}{shown}\n... truncated ...")
+                } else if content_truncated {
+                    format!(
+                        "{header}{shown}\n... {} lines remaining, use contentOffset to continue ...",
+                        total_lines.saturating_sub(next_content_offset),
+                    )
+                } else {
+                    format!("{header}{shown}")
+                };
+
+                Ok(serde_json::json!({
+                    "path": display,
+                    "kind": "file",
+                    "bytes": file_bytes,
+                    "encoding": encoding,
+                    "hasBom": has_bom,
+                    "lineCount": total_lines,
+                    "startLine": start_line,
+                    "endLine": end_line_echo,
+                    "totalChars": total_chars,
+                    "shownChars": shown.chars().count(),
+                    "snapshotTag": tag,
+                    "truncated": char_truncated,
+                    "content_truncated": content_truncated,
+                    "nextContentOffset": next_content_offset,
+                    "hint": if out_of_range {
+                        Some(format!("请求的行窗口超出文件末尾（文件共 {total_lines} 行）"))
+                    } else {
+                        None
+                    },
+                    "text": text,
+                }))
+            }
         }
-
-        // 行优先读取：解码 → 按 \n 切行 → 应用窗口与偏移 → 双重钳制
-        let lines: Vec<&str> = decoded.text.lines().collect();
-        let total_lines = lines.len();
-        let total_chars = decoded.text.chars().count();
-
-        // 窗口起点：startLine-1 与 contentOffset 取大（续读偏移可平移窗口）；
-        // 窗口终点：显式 endLine（1-indexed 闭区间 → 0-based 半开同值），
-        // 缺省 = 窗口起点 + maxLines；越界钳制到文件末尾并保证空窗口合法
-        let window_start = (start_line - 1).max(content_offset);
-        let window_end = end_line_arg
-            .unwrap_or(window_start.saturating_add(max_lines))
-            .min(total_lines)
-            .max(window_start);
-        let window_text = if window_start >= total_lines {
-            String::new()
-        } else {
-            lines[window_start..window_end].join("\n")
-        };
-
-        // maxLines 行数钳制 + maxBytes 字符预算钳制（回退完整行边界）
-        let (shown, shown_lines, _) = clamp_text_by_lines(&window_text, max_bytes, max_lines);
-        // nextContentOffset = 累计已返回完整行数（不超文件总行数）
-        let next_content_offset = (window_start + shown_lines).min(total_lines);
-        // 两个标志语义分离：truncated 仅表示字符预算截断；content_truncated 表示还有行未返回
-        let char_truncated = window_text.chars().count() > max_bytes;
-        let content_truncated = next_content_offset < total_lines;
-        let end_line_echo = end_line_arg.unwrap_or(window_start.saturating_add(max_lines));
-        let out_of_range = window_start >= total_lines;
-
-        let tag = snapshot_tag(&file_path).unwrap_or_default();
-        let mut header = format!(
-            "path: {display}\nsnapshotTag: {tag}\nencoding: {}\nlines: {total_lines}\nstartLine: {start_line}, endLine: {end_line_echo}\n",
-            decoded.encoding,
-        );
-        if char_truncated {
-            header.push_str(&format!(
-                "truncated: true (showing {} of {total_chars} chars; file has {} bytes)\n",
-                shown.chars().count(),
-                bytes.len(),
-            ));
-        }
-        if content_truncated {
-            header.push_str(&format!(
-                "content_truncated: true (nextContentOffset: {next_content_offset}, {} lines remaining)\n",
-                total_lines - next_content_offset,
-            ));
-        }
-        if out_of_range {
-            header.push_str(&format!(
-                "window out of range: requested window starts beyond file end ({total_lines} lines)\n",
-            ));
-        }
-        header.push_str("---\n");
-
-        let text = if char_truncated {
-            format!("{header}{shown}\n... truncated ...")
-        } else if content_truncated {
-            format!(
-                "{header}{shown}\n... {} lines remaining, use contentOffset to continue ...",
-                total_lines - next_content_offset,
-            )
-        } else {
-            format!("{header}{shown}")
-        };
-
-        Ok(serde_json::json!({
-            "path": display,
-            "kind": "file",
-            "bytes": bytes.len(),
-            "encoding": decoded.encoding,
-            "hasBom": decoded.has_bom,
-            "lineCount": total_lines,
-            "startLine": start_line,
-            "endLine": end_line_echo,
-            "totalChars": total_chars,
-            "shownChars": shown.chars().count(),
-            "snapshotTag": tag,
-            "truncated": char_truncated,
-            "content_truncated": content_truncated,
-            "nextContentOffset": next_content_offset,
-            "hint": if out_of_range {
-                Some(format!("请求的行窗口超出文件末尾（文件共 {total_lines} 行）"))
-            } else {
-                None
-            },
-            "text": text,
-        }))
     }
+}
+
+/// U-READ：spawn_blocking 内的读结果（避免在闭包内组装大 JSON）
+enum ReadFileOutcome {
+    Binary {
+        file_bytes: u64,
+        end_line_echo: usize,
+    },
+    Text {
+        total_lines: usize,
+        total_chars: usize,
+        encoding: String,
+        has_bom: bool,
+        file_bytes: u64,
+        shown: String,
+        char_truncated: bool,
+        content_truncated: bool,
+        next_content_offset: usize,
+        end_line_echo: usize,
+        out_of_range: bool,
+    },
 }
 
 /// 解析可选行号/上限入参：必须为非负整数；
@@ -340,10 +399,22 @@ impl Tool for WriteFileTool {
         let encoding = resolve_write_encoding(&file_path, requested.as_deref())?;
         let bytes = encode_text(&content, &encoding)?;
 
-        conex_fs::path_utils::ensure_parent_dir(&file_path)
-            .map_err(|e| ToolError::execution_failed("write_file", format!("{display}: {e}")))?;
-        std::fs::write(&file_path, &bytes)
-            .map_err(|e| ToolError::execution_failed("write_file", format!("{display}: {e}")))?;
+        // U-BLOCK：ensure_parent_dir + 写盘均经 spawn_blocking
+        let write_path = file_path.clone();
+        let write_bytes = bytes.clone();
+        let write_display = display.clone();
+        tokio::task::spawn_blocking(move || {
+            conex_fs::path_utils::ensure_parent_dir(&write_path).map_err(|e| {
+                ToolError::execution_failed("write_file", format!("{write_display}: {e}"))
+            })?;
+            std::fs::write(&write_path, &write_bytes).map_err(|e| {
+                ToolError::execution_failed("write_file", format!("{write_display}: {e}"))
+            })
+        })
+        .await
+        .map_err(|e| {
+            ToolError::execution_failed("write_file", format!("spawn_blocking: {e}"))
+        })??;
         // 写盘成功：提交占用（Drop 不再回滚）
         if let Some(mut r) = reservation {
             r.commit();
@@ -513,58 +584,71 @@ impl Tool for ListDirTool {
         let dir = resolve_workspace_path(&ctx.workspace_root, &path_str)?;
         let display = display_path(&ctx.workspace_root, &dir);
 
-        let metadata = std::fs::metadata(&dir)
-            .map_err(|e| ToolError::execution_failed("list_dir", format!("{display}: {e}")))?;
-        if !metadata.is_dir() {
-            return Err(ToolError::execution_failed(
-                "list_dir",
-                format!("Path is not a directory: {display}"),
-            ));
-        }
+        // U-BLOCK：目录枚举经 spawn_blocking
+        let items = {
+            let dir = dir.clone();
+            let display = display.clone();
+            tokio::task::spawn_blocking(move || -> Result<Vec<DirEntry>, ToolError> {
+                let metadata = std::fs::metadata(&dir)
+                    .map_err(|e| {
+                        ToolError::execution_failed("list_dir", format!("{display}: {e}"))
+                    })?;
+                if !metadata.is_dir() {
+                    return Err(ToolError::execution_failed(
+                        "list_dir",
+                        format!("Path is not a directory: {display}"),
+                    ));
+                }
 
-        let mut items: Vec<DirEntry> = Vec::new();
-        let entries = std::fs::read_dir(&dir)
-            .map_err(|e| ToolError::execution_failed("list_dir", format!("{display}: {e}")))?;
-        for entry in entries.flatten() {
-            let name = entry.file_name().to_string_lossy().into_owned();
-            let meta = entry.metadata();
-            let is_dir = meta.as_ref().map(|m| m.is_dir()).unwrap_or(false);
-            let is_file = meta.as_ref().map(|m| m.is_file()).unwrap_or(false);
-            let kind = if is_dir {
-                "directory"
-            } else if is_file {
-                "file"
-            } else {
-                "other"
-            };
-            // T-CF-03：path = 相对目录根的相对路径（/ 分隔）；目录条目带尾部 /
-            let rel_path = display_path(&dir, &dir.join(&name));
-            let path = if is_dir && !rel_path.is_empty() {
-                format!("{rel_path}/")
-            } else {
-                rel_path
-            };
-            // T-CF-03：count 仅目录条目统计直接子项数，读失败 -1（宽容）
-            let count = if is_dir {
-                Some(count_direct_children(&dir.join(&name)))
-            } else {
-                None
-            };
-            items.push(DirEntry {
-                name,
-                path,
-                kind,
-                is_file,
-                is_directory: is_dir,
-                count,
-                size: meta.as_ref().map(|m| m.len()).unwrap_or(0),
-                mtime: epoch_millis(meta.as_ref().ok().and_then(|m| m.modified().ok())),
-            });
-        }
-        // 对齐 TS：按 kind 名称 + 条目名排序（directory < file < other）
-        items.sort_by(|a, b| {
-            format!("{}:{}", a.kind, a.name).cmp(&format!("{}:{}", b.kind, b.name))
-        });
+                let mut items: Vec<DirEntry> = Vec::new();
+                let entries = std::fs::read_dir(&dir).map_err(|e| {
+                    ToolError::execution_failed("list_dir", format!("{display}: {e}"))
+                })?;
+                for entry in entries.flatten() {
+                    let name = entry.file_name().to_string_lossy().into_owned();
+                    let meta = entry.metadata();
+                    let is_dir = meta.as_ref().map(|m| m.is_dir()).unwrap_or(false);
+                    let is_file = meta.as_ref().map(|m| m.is_file()).unwrap_or(false);
+                    let kind = if is_dir {
+                        "directory"
+                    } else if is_file {
+                        "file"
+                    } else {
+                        "other"
+                    };
+                    let rel_path = display_path(&dir, &dir.join(&name));
+                    let path = if is_dir && !rel_path.is_empty() {
+                        format!("{rel_path}/")
+                    } else {
+                        rel_path
+                    };
+                    let count = if is_dir {
+                        Some(count_direct_children(&dir.join(&name)))
+                    } else {
+                        None
+                    };
+                    items.push(DirEntry {
+                        name,
+                        path,
+                        kind,
+                        is_file,
+                        is_directory: is_dir,
+                        count,
+                        size: meta.as_ref().map(|m| m.len()).unwrap_or(0),
+                        mtime: epoch_millis(meta.as_ref().ok().and_then(|m| m.modified().ok())),
+                    });
+                }
+                // 对齐 TS：按 kind 名称 + 条目名排序（directory < file < other）
+                items.sort_by(|a, b| {
+                    format!("{}:{}", a.kind, a.name).cmp(&format!("{}:{}", b.kind, b.name))
+                });
+                Ok(items)
+            })
+            .await
+            .map_err(|e| {
+                ToolError::execution_failed("list_dir", format!("spawn_blocking: {e}"))
+            })??
+        };
 
         let text = if items.is_empty() {
             "(empty directory)".to_string()
@@ -636,8 +720,20 @@ impl Tool for FileStatTool {
         let target = resolve_workspace_path(&ctx.workspace_root, &path_str)?;
         let display = display_path(&ctx.workspace_root, &target);
 
-        let metadata = std::fs::metadata(&target)
-            .map_err(|e| ToolError::execution_failed("file_stat", format!("{display}: {e}")))?;
+        // U-BLOCK：metadata 经 spawn_blocking
+        let metadata = {
+            let target = target.clone();
+            let display = display.clone();
+            tokio::task::spawn_blocking(move || {
+                std::fs::metadata(&target).map_err(|e| {
+                    ToolError::execution_failed("file_stat", format!("{display}: {e}"))
+                })
+            })
+            .await
+            .map_err(|e| {
+                ToolError::execution_failed("file_stat", format!("spawn_blocking: {e}"))
+            })??
+        };
         let is_file = metadata.is_file();
         let is_dir = metadata.is_dir();
         let kind = if is_dir {

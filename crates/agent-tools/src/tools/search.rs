@@ -18,7 +18,8 @@ use std::path::{Path, PathBuf};
 /// 搜索默认上限（对齐 TS search_files 默认值）
 const DEFAULT_MAX_MATCHES: u64 = 200;
 const DEFAULT_MAX_FILES: u64 = 2_000;
-const DEFAULT_MAX_FILE_BYTES: u64 = 512_000;
+// D0/U-BUDGET：单文件字节上限定义收敛至 conex-shared::perf_budget（行为不变）
+use conex_shared::perf_budget::SEARCH_MAX_FILE_BYTES_DEFAULT;
 /// 递归深度上限
 pub(crate) const MAX_WALK_DEPTH: usize = 16;
 
@@ -123,7 +124,7 @@ impl Tool for GrepSearchTool {
             .unwrap_or_default();
         let max_matches = optional_u64(&args, "maxMatches").unwrap_or(DEFAULT_MAX_MATCHES);
         let max_files = optional_u64(&args, "maxFiles").unwrap_or(DEFAULT_MAX_FILES);
-        let max_file_bytes = optional_u64(&args, "maxFileBytes").unwrap_or(DEFAULT_MAX_FILE_BYTES);
+        let max_file_bytes = optional_u64(&args, "maxFileBytes").unwrap_or(SEARCH_MAX_FILE_BYTES_DEFAULT);
 
         // 正则编译失败按入参非法处理（对齐 TS new RegExp 抛错语义）
         let matcher = if use_regex {
@@ -135,90 +136,100 @@ impl Tool for GrepSearchTool {
             None
         };
 
-        let root_display = display_path(&root, &root);
-        let mut matches: Vec<GrepMatch> = Vec::new();
-        let mut files: Vec<FileMatch> = Vec::new();
-        let mut visited_files: u64 = 0;
-        let mut truncated = false;
+        // U-BLOCK：目录遍历 + 文件读取经 spawn_blocking（06-SR01）
+        let (matches, files, visited_files, truncated) = {
+            let query = query.clone();
+            let root = root.clone();
+            let glob = glob.clone();
+            let exclude_globs = exclude_globs.clone();
+            let matcher = matcher.clone();
+            tokio::task::spawn_blocking(move || {
+                let root_display = display_path(&root, &root);
+                let _ = root_display;
+                let mut matches: Vec<GrepMatch> = Vec::new();
+                let mut files: Vec<FileMatch> = Vec::new();
+                let mut visited_files: u64 = 0;
+                let mut truncated = false;
 
-        // 行命中判定：返回命中的字节偏移（行级模式用于列号，文件级模式只判是否命中）。
-        // 大小写不敏感分支经 char 级折叠换算回原始行字节偏移（见 case_insensitive_char_column），
-        // 保证偏移恒位于 char 边界——折叠变长/变短（İ 2B→3B、ﬀ 3B→2B）不产生越界偏移
-        let line_hit = |line: &str| -> Option<usize> {
-            if let Some(re) = &matcher {
-                re.find(line).map(|m| m.start())
-            } else if case_sensitive {
-                line.find(&query)
-            } else {
-                case_insensitive_char_column(line, &query).map(|col| {
-                    line.char_indices()
-                        .nth(col - 1)
-                        .map(|(b, _)| b)
-                        .unwrap_or(line.len())
-                })
-            }
-        };
+                let line_hit = |line: &str| -> Option<usize> {
+                    if let Some(re) = &matcher {
+                        re.find(line).map(|m| m.start())
+                    } else if case_sensitive {
+                        line.find(&query)
+                    } else {
+                        case_insensitive_char_column(line, &query).map(|col| {
+                            line.char_indices()
+                                .nth(col - 1)
+                                .map(|(b, _)| b)
+                                .unwrap_or(line.len())
+                        })
+                    }
+                };
 
-        for file in walk_files(&root, glob.as_deref(), &exclude_globs, max_files) {
-            visited_files += 1;
-            let metadata = match std::fs::metadata(&file) {
-                Ok(m) => m,
-                Err(_) => continue,
-            };
-            if metadata.len() > max_file_bytes {
-                continue;
-            }
-            let bytes = match std::fs::read(&file) {
-                Ok(b) => b,
-                Err(_) => continue,
-            };
-            if bytes.contains(&0u8) {
-                continue; // 二进制文件跳过
-            }
-            let text = String::from_utf8_lossy(&bytes);
-            let display = display_path(&root, &file);
-            if match_per_line {
-                // 行级模式：逐行输出命中（现状行为）
-                for (idx, raw_line) in text.split('\n').enumerate() {
-                    let line = raw_line.strip_suffix('\r').unwrap_or(raw_line);
-                    if let Some(byte_offset) = line_hit(line) {
-                        matches.push(GrepMatch {
-                            path: display.clone(),
-                            line: idx + 1,
-                            // 防御层：字节偏移换算列号不 panic（非 char 边界回退到最近边界）
-                            column: char_boundary_column(line, byte_offset),
-                            text: line.trim().to_string(),
-                        });
-                        if matches.len() as u64 >= max_matches {
-                            truncated = true;
+                for file in walk_files(&root, glob.as_deref(), &exclude_globs, max_files) {
+                    visited_files += 1;
+                    let metadata = match std::fs::metadata(&file) {
+                        Ok(m) => m,
+                        Err(_) => continue,
+                    };
+                    if metadata.len() > max_file_bytes {
+                        continue;
+                    }
+                    let bytes = match std::fs::read(&file) {
+                        Ok(b) => b,
+                        Err(_) => continue,
+                    };
+                    if bytes.contains(&0u8) {
+                        continue;
+                    }
+                    let text = String::from_utf8_lossy(&bytes);
+                    let display = display_path(&root, &file);
+                    if match_per_line {
+                        for (idx, raw_line) in text.split('\n').enumerate() {
+                            let line = raw_line.strip_suffix('\r').unwrap_or(raw_line);
+                            if let Some(byte_offset) = line_hit(line) {
+                                matches.push(GrepMatch {
+                                    path: display.clone(),
+                                    line: idx + 1,
+                                    column: char_boundary_column(line, byte_offset),
+                                    text: line.trim().to_string(),
+                                });
+                                if matches.len() as u64 >= max_matches {
+                                    truncated = true;
+                                    break;
+                                }
+                            }
+                        }
+                        if truncated {
                             break;
+                        }
+                    } else {
+                        let hit_lines = text
+                            .split('\n')
+                            .map(|raw| raw.strip_suffix('\r').unwrap_or(raw))
+                            .filter(|line| line_hit(line).is_some())
+                            .count();
+                        if hit_lines > 0 {
+                            files.push(FileMatch {
+                                path: display,
+                                match_count: hit_lines,
+                            });
+                            if files.len() as u64 >= max_matches {
+                                truncated = true;
+                                break;
+                            }
                         }
                     }
                 }
-                if truncated {
-                    break;
-                }
-            } else {
-                // 文件级模式（grep -l）：只统计命中行数，文件路径去重（每文件一个条目）
-                let hit_lines = text
-                    .split('\n')
-                    .map(|raw| raw.strip_suffix('\r').unwrap_or(raw))
-                    .filter(|line| line_hit(line).is_some())
-                    .count();
-                if hit_lines > 0 {
-                    files.push(FileMatch {
-                        path: display,
-                        match_count: hit_lines,
-                    });
-                    // 文件级与行级共用 maxMatches 上限，文件级按文件数计
-                    if files.len() as u64 >= max_matches {
-                        truncated = true;
-                        break;
-                    }
-                }
-            }
-        }
+                (matches, files, visited_files, truncated)
+            })
+            .await
+            .map_err(|e| {
+                ToolError::execution_failed("grep_search", format!("spawn_blocking: {e}"))
+            })?
+        };
 
+        let root_display = display_path(&root, &root);
         let result_count = if match_per_line {
             matches.len()
         } else {
@@ -246,7 +257,6 @@ impl Tool for GrepSearchTool {
         } else if files.is_empty() {
             "(no matches)".to_string()
         } else {
-            // 文件级：每行一个「路径:命中行数」
             files
                 .iter()
                 .map(|f| format!("{}:{}", f.path, f.match_count))
@@ -485,9 +495,21 @@ impl Tool for FuzzyFindTool {
         let case_sensitive = optional_bool(&args, "caseSensitive").unwrap_or(false);
 
         let root_str = root.to_string_lossy().into_owned();
-        let indexed = conex_search::walker::build_directory_index(&root_str);
-        let matcher = conex_search::fuzzy::FuzzyMatcher::new(case_sensitive);
-        let hits = conex_search::search::search_files(&query, &indexed, limit, &matcher);
+        // U-BLOCK：目录索引 + 模糊搜索经 spawn_blocking
+        let (indexed_len, hits) = {
+            let query = query.clone();
+            let root_str = root_str.clone();
+            tokio::task::spawn_blocking(move || {
+                let indexed = conex_search::walker::build_directory_index(&root_str);
+                let matcher = conex_search::fuzzy::FuzzyMatcher::new(case_sensitive);
+                let hits = conex_search::search::search_files(&query, &indexed, limit, &matcher);
+                (indexed.len(), hits)
+            })
+            .await
+            .map_err(|e| {
+                ToolError::execution_failed("fuzzy_find", format!("spawn_blocking: {e}"))
+            })?
+        };
 
         let root_display = display_path(&root, &root);
         let items: Vec<serde_json::Value> = hits
@@ -513,7 +535,7 @@ impl Tool for FuzzyFindTool {
             "query": query,
             "root": root_display,
             "limit": limit,
-            "indexedFiles": indexed.len(),
+            "indexedFiles": indexed_len,
             "hits": items,
             "text": text,
         }))

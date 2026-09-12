@@ -125,14 +125,26 @@ impl Tool for DecompressContextTool {
                 .expect("can_write_file 已保证注入");
             let resolved = resolver.resolve(&ctx.session_id, None);
             let dir = resolved.dir.dir.clone();
-            std::fs::create_dir_all(&dir).map_err(|e| {
-                ToolError::execution_failed("decompress_context", format!("创建产出目录失败: {e}"))
-            })?;
             let file_name = format!("{}.txt", sanitize_session_id(&block_id));
             let file_path = dir.join(file_name);
-            std::fs::write(&file_path, content.text.as_bytes()).map_err(|e| {
-                ToolError::execution_failed("decompress_context", format!("写文件失败: {e}"))
-            })?;
+            let path_for_write = file_path.clone();
+            let payload = content.text.clone();
+            // U-BLOCK：create_dir_all + write 经 spawn_blocking（INV-B3）
+            tokio::task::spawn_blocking(move || {
+                std::fs::create_dir_all(&dir).map_err(|e| {
+                    ToolError::execution_failed(
+                        "decompress_context",
+                        format!("创建产出目录失败: {e}"),
+                    )
+                })?;
+                std::fs::write(&path_for_write, payload.as_bytes()).map_err(|e| {
+                    ToolError::execution_failed("decompress_context", format!("写文件失败: {e}"))
+                })
+            })
+            .await
+            .map_err(|e| {
+                ToolError::execution_failed("decompress_context", format!("spawn_blocking: {e}"))
+            })??;
             let byte_count = content.text.len();
             let note = "原文已落文件（原始字节，不经 clean 清洗管线）；取回后如需精确片段可 inline=true + full=true";
             return Ok(serde_json::json!({
