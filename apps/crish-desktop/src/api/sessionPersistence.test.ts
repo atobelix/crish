@@ -706,7 +706,7 @@ describe('sessionsToIndex / hydrate / persist edges', () => {
     expect(hNull.activeSessionId).toBeNull();
   });
 
-  it('persistAllSessions writes index/body and purges orphan bodies', async () => {
+  it('persistAllSessions writes index/agents/meta and purges orphan keys（D-F06：不再写正文镜像）', async () => {
     localStorage.setItem(
       SESSION_BODY_PREFIX + 'orphan',
       JSON.stringify([baseMsg({ id: 'o', sender: 'user', text: 'gone' })])
@@ -734,7 +734,11 @@ describe('sessionsToIndex / hydrate / persist edges', () => {
     await persistAllSessions([s], 'keep', [DEFAULT_SESSION_FOLDER]);
 
     expect(loadSessionIndex().map((e) => e.id)).toEqual(['keep']);
-    expect(loadSessionBody('keep')).toHaveLength(2);
+    // D-F06 剥双轨：persist 降级回退不再写 LS 正文镜像（SQLite 为正文权威）
+    expect(
+      localStorage.getItem(SESSION_BODY_PREFIX + 'keep')
+    ).toBeNull();
+    // 孤儿删除语义保留：不在 keep 集合的残键清除
     expect(loadSessionBody('orphan')).toEqual([]);
     expect(localStorage.getItem(SESSION_AGENTS_PREFIX + 'orphan')).toBeNull();
     expect(loadActiveSessionId()).toBe('keep');
@@ -803,7 +807,9 @@ describe('sessionsToIndex / hydrate / persist edges', () => {
       localStorage.getItem(SESSION_BODY_PREFIX + PENDING_DRAFT_SESSION_ID)
     ).toBeNull();
     expect(loadActiveSessionId()).toBeNull();
-    expect(loadSessionBody('keep-real')).toHaveLength(1);
+    // D-F06：persist 降级回退不再写 LS 正文镜像——真实会话同样不落正文键
+    expect(localStorage.getItem(SESSION_BODY_PREFIX + 'keep-real')).toBeNull();
+    expect(loadSessionBody('keep-real')).toEqual([]);
   });
 
   it('I-DRAFT: hydrate drops dirty draft index entry; prunes empty shells when active null', () => {

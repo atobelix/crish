@@ -13,8 +13,9 @@
  *      conex-db tests.rs usage_json fixture 同形）；无指标不写 usage 键。
  *   2. 回读面：usage_json → 复用 computeCacheMetricsFromUsage 重派生
  *      （C9 口径唯一真源）；null/坏 JSON/全零 → 不挂载（C15：隐藏而非 0%）。
- *   3. localStorage 回退路径：整条消息 JSON 中的 cacheMetrics 读回保留
- *      （形状守卫，source 枚举合法才挂载）。
+ *   3. localStorage 只读迁移面（D-F06）：整条消息 JSON 中的 cacheMetrics
+ *      读回保留（形状守卫，source 枚举合法才挂载）；loadSessionBody 不再
+ *      静默回退 LS 正文，失败仅 errorStore 留痕。
  *   4. 徽标末端：回放派生的 metrics 可直接被 CacheMetricsBadge 消费
  *      （hitRatio 优先、hitRate 兼容别名回退）。
  *
@@ -23,7 +24,7 @@
  * 前端按 P5 S4 审计修正的契约（线上键 camelCase `usage`）先行实现写入面，
  * 待 Rust 侧补字段后生效（serde 未知字段静默丢弃，不影响既有路径）。
  */
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import React from 'react';
 import { render, screen } from '@testing-library/react';
 import { mockTauriCommand } from '../../test-setup';
@@ -40,6 +41,8 @@ import {
   loadSessionBody,
   persistAllSessionsRust,
 } from './sessionRustDb';
+import { lsLoadSessionBody } from './sessionRustDbFallback';
+import * as userFacingErrors from '../userFacingErrors';
 import { computeCacheMetricsFromUsage } from '../chat-bridge/handlers/messageHandlers';
 import { CacheMetricsBadge } from '../../components/chat-message-row/CacheMetricsBadge';
 
@@ -335,11 +338,12 @@ describe('端到端：persist → hydrate 恢复出 cacheMetrics（徽标回放�
   });
 });
 
-// ── localStorage 回退路径：整条消息 JSON 中的 cacheMetrics 保留 ──────────────
+// ── localStorage 只读迁移面：整条消息 JSON 中的 cacheMetrics 保留 ──────────────
 
-describe('localStorage 回退路径：cacheMetrics 保留（R6-D5）', () => {
-  it('invoke missing → LS JSON 数组路径：cacheMetrics 读回保留', async () => {
-    // 不安装 transport → 默认 missing → loadSessionBody 走 LS 回退
+describe('lsLoadSessionBody 只读迁移面：cacheMetrics 保留（R6-D5 / D-F06）', () => {
+  it('LS JSON 数组路径：cacheMetrics 读回保留（迁移面直读，不经 loadSessionBody）', () => {
+    // D-F06 后 loadSessionBody 不再静默回退 LS——cacheMetrics 形状守卫逻辑
+    // 仍由 lsLoadSessionBody（30 天清理护栏 / 迁移读取）承载，直测该面。
     localStorage.setItem(
       SESSION_BODY_PREFIX + 's1',
       JSON.stringify([
@@ -361,7 +365,7 @@ describe('localStorage 回退路径：cacheMetrics 保留（R6-D5）', () => {
       ])
     );
 
-    const msgs = await loadSessionBody('s1');
+    const msgs = lsLoadSessionBody('s1');
     expect(msgs).toHaveLength(2);
     expect(msgs[0]?.cacheMetrics).toEqual({
       metrics: { cacheReadTokens: 9000, hitRate: 0.75, inputTotal: 12000 },
@@ -370,7 +374,7 @@ describe('localStorage 回退路径：cacheMetrics 保留（R6-D5）', () => {
     expect(msgs[1]?.cacheMetrics).toBeUndefined();
   });
 
-  it('LS JSONL 路径：cacheMetrics 读回保留', async () => {
+  it('LS JSONL 路径：cacheMetrics 读回保留', () => {
     const line1 = JSON.stringify({
       id: 'm1',
       sender: 'assistant',
@@ -389,14 +393,14 @@ describe('localStorage 回退路径：cacheMetrics 保留（R6-D5）', () => {
     });
     localStorage.setItem(SESSION_BODY_PREFIX + 's1', `${line1}\n${line2}\n`);
 
-    const msgs = await loadSessionBody('s1');
+    const msgs = lsLoadSessionBody('s1');
     expect(msgs).toHaveLength(2);
     expect(msgs[0]?.cacheMetrics?.metrics?.cacheReadTokens).toBe(9000);
     expect(msgs[0]?.cacheMetrics?.source).toBe('engine-message-end');
     expect(msgs[1]?.cacheMetrics).toBeUndefined();
   });
 
-  it('LS 坏 cacheMetrics 形状（metrics 为 null / source 非法）→ 不挂载，消息其余字段正常', async () => {
+  it('LS 坏 cacheMetrics 形状（metrics 为 null / source 非法）→ 不挂载，消息其余字段正常', () => {
     localStorage.setItem(
       SESSION_BODY_PREFIX + 's1',
       JSON.stringify([
@@ -420,11 +424,34 @@ describe('localStorage 回退路径：cacheMetrics 保留（R6-D5）', () => {
       ])
     );
 
-    const msgs = await loadSessionBody('s1');
+    const msgs = lsLoadSessionBody('s1');
     expect(msgs[0]?.text).toBe('bad-metrics-null');
     expect(msgs[0]?.cacheMetrics).toBeUndefined();
     expect(msgs[1]?.text).toBe('bad-source');
     expect(msgs[1]?.cacheMetrics).toBeUndefined();
+  });
+
+  it('D-F06：invoke missing 时 loadSessionBody 不再回退 LS 正文（返回空 + errorStore 留痕）', async () => {
+    // 不安装 transport → invoke missing；历史 LS 键仍在，但正文权威在 SQLite，
+    // load 失败仅 errorStore 留痕，不把 LS 当正文源静默回灌。
+    localStorage.setItem(
+      SESSION_BODY_PREFIX + 's-fallback-cut',
+      JSON.stringify([
+        { id: 'm1', sender: 'user', text: 'legacy', timestamp: 1 },
+      ])
+    );
+    const logSpy = vi.spyOn(userFacingErrors, 'logInternalError');
+
+    const msgs = await loadSessionBody('s-fallback-cut');
+    expect(msgs).toEqual([]);
+    expect(logSpy).toHaveBeenCalledWith(
+      'persist-degraded-ls',
+      expect.objectContaining({
+        command: 'load_session_body',
+        sessionId: 's-fallback-cut',
+      })
+    );
+    vi.restoreAllMocks();
   });
 });
 

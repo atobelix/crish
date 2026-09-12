@@ -28,7 +28,6 @@ import {
   lsLoadActiveSessionId,
   lsLoadFolderOrder,
   lsLoadSessionAgents,
-  lsLoadSessionBody,
   lsLoadSessionIndex,
   lsSaveActiveSessionId,
   lsSaveFolderOrder,
@@ -73,7 +72,9 @@ export async function listSessions(): Promise<SessionIndexEntry[]> {
 
 /**
  * 加载会话正文消息。
- * 命令缺失 → 回退 localStorage。
+ * 命令缺失/失败 → 不再静默回退 LS 正文（D-F06 剥双轨）：SQLite 为正文
+ * 唯一权威，失败经 errorStore 数据面留痕并返回空数组；已在内存 store
+ * 中的活跃会话正文不受影响（内存即降级留痕）。
  */
 export async function loadSessionBody(
   sessionId: string
@@ -82,14 +83,22 @@ export async function loadSessionBody(
   const res = await invokeResult<RustSessionMessage[]>('load_session_body', {
     sessionId,
   });
-  // P1-F3（F5-03）：LS quota 截断标志 → 数据面日志提示（提示 UI 最小化，仅日志；
-  // 数据面暴露走 sessionQuota.hasQuotaTruncation）。标志存在意味着某次
+  // P1-F3（F5-03）：历史 LS quota 截断标志 → 数据面日志提示（提示 UI 最小化，仅日志；
+  // 数据面暴露走 sessionQuota.hasQuotaTruncation）。标志存在意味着迁移前某次
   // LS 写入因 quota 超限被截断为最后 100 条，旧消息静默丢失——必须留痕。
   if (hasQuotaTruncation(sessionId)) {
     logInternalError('ls-quota-truncated', { sessionId });
   }
   if (res.status === 'ok') return fromRustSessionMessages(res.data || []);
-  return lsLoadSessionBody(sessionId);
+  // D-F06：缺/错命令不再回退 lsLoadSessionBody（该读面降格为迁移专用，
+  // 见 sessionRustDbFallback 头注）。失败改走 errorStore 数据面带（与
+  // save 路径 persist-degraded-ls 同一专名，command 区分读/写面）。
+  logInternalError('persist-degraded-ls', {
+    command: 'load_session_body',
+    sessionId,
+    status: res.status,
+  });
+  return [];
 }
 
 /**

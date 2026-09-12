@@ -3,7 +3,7 @@
  *
  * NA-A1 partialize ∩ {sessions, sessionsById} = ∅
  * NA-A2 生产 merge 不回灌 sessions
- * NA-A4 beforeunload 同步路径 lsSaveSessionBody = 0
+ * NA-A4 beforeunload 同步路径不写 LS 正文（D-F06 后写口已物理删除）
  * NA-A5 deleteSession 后 composerDrafts 无该 id
  * 旧键迁移：含 sessions 的壳键被剥离；损坏键 removeItem
  */
@@ -15,7 +15,6 @@ import {
 import {
   persistAllSessionsSyncViaLocalStorage,
 } from '../api/session-persistence/sessionRustDbHydrate';
-import { lsSaveSessionBody } from '../api/session-persistence/sessionRustDbFallback';
 import {
   DEFAULT_SESSION_FOLDER,
   SESSION_ACTIVE_KEY,
@@ -120,7 +119,12 @@ describe('U-PERSIST-A · NA-A4 beforeunload meta-only', () => {
   });
 
   it('已有 LS body 残留时 beforeunload 不覆盖/不删除 body 键（A-3 不触碰 SESSION_BODY_PREFIX）', () => {
-    lsSaveSessionBody('s1', [msg('pre')]);
+    // D-F06 后 lsSaveSessionBody 写口已物理删除——历史残留键直接以原始
+    // localStorage 形态种入（模拟迁移期遗留数据），断言 beforeunload 不触碰。
+    localStorage.setItem(
+      SESSION_BODY_PREFIX + 's1',
+      JSON.stringify([msg('pre')])
+    );
     const s = sess('s1', [msg('m1'), msg('m2')]);
     persistAllSessionsSyncViaLocalStorage([s], 's1', [DEFAULT_SESSION_FOLDER]);
     // 票 A：beforeunload 不再写 body；既有键保持不动（不擦不写）

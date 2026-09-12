@@ -23,7 +23,6 @@ import {
   lsSaveActiveSessionId,
   lsSaveFolderOrder,
   lsSaveSessionAgents,
-  lsSaveSessionBody,
   lsSaveSessionIndex,
 } from './sessionRustDbFallback';
 import {
@@ -142,7 +141,8 @@ export async function ensureSessionBodyHydrated(sessionId: string): Promise<{
  *   - 仅对 targetActiveId 发起 1 次 body + 1 次 agents（活跃会话全量水合）
  *   - 其余历史会话 → 轻量懒壳（messages: [], messagesHydrated: false）
  *   - 正常路径 IPC 常数上界 K = 5：list + meta(active) + body + agents + meta(folder)
- *   - invoke 缺失时 loadSessionBody/Agents 内部回退 localStorage
+ *   - invoke 缺失时 loadSessionAgents 内部回退 localStorage；正文（D-F06）
+ *     不再回退 LS——失败经 errorStore 留痕并返回空，降级仅内存留痕
  *
  * 空壳剪枝兼容（防侧栏丢会话）：「默认标题 + messageCount>0 的未水合懒壳」
  * 会被 prepareSessionsForUi 误剪——将此类懒壳 ID 并入 keepIds（方案 A）。
@@ -386,7 +386,11 @@ export async function persistAllSessionsRust(
 
 /**
  * localStorage 同步回退：仅在 invoke 不可用时使用。
- * 索引已由调用方（persistAllSessionsRust）写入 localStorage，此处仅写 body/agents/meta。
+ * 索引已由调用方（persistAllSessionsRust）写入 localStorage，此处仅写
+ * agents/meta。D-F06：正文写口已删——降级时不再把 LS 当正文权威写口，
+ * 正文不落新数据（仅内存 store + errorStore 留痕，persist-degraded-ls）；
+ * 既有残存正文键的孤儿**删除**仍保留（删除语义：不在 keep 集合的会话
+ * 其镜像键清除，与 N1-2 守卫对齐），但绝不向正文键写入/覆盖任何内容。
  */
 function persistAllSessionsLocalFallback(
   sessions: SessionState[],
@@ -399,21 +403,15 @@ function persistAllSessionsLocalFallback(
   );
   const keep = new Set(list.map((s) => s.id).filter(Boolean) as string[]);
 
-  // 写入 keep 集合中的 body / agents（真实未水合懒壳不覆盖，防擦掉已有 LS 正文；已水合/活跃/显式清空则同步持久化）
+  // 写入 keep 集合中的 agents（正文已无写口，D-F06）
   for (const s of list) {
     if (!s?.id) continue;
-    const msgs = (s.messages || []).map((m) =>
-      m.sender === 'assistant' ? normalizeAssistantTimeline(m) : m
-    );
-    const shouldSaveBody = msgs.length > 0 || !isLazySessionShell(s, activeSessionId);
-    if (shouldSaveBody) {
-      lsSaveSessionBody(s.id, msgs);
-    }
     lsSaveSessionAgents(s.id, s.agents || []);
   }
 
-  // 清理孤儿（N1-2 守卫：空 keep 不清除——与 Rust guard_cleanup_keep
-  // 语义对齐，boot 窗口 / 全删场景不得清空 LS 镜像）
+  // 孤儿清理（N1-2 守卫：空 keep 不清除——与 Rust guard_cleanup_keep
+  // 语义对齐，boot 窗口 / 全删场景不得清空 LS 镜像）。D-F06：仅剩删除
+  // 语义（移除不在 keep 中的残键），不再有任何正文写入。
   if (keep.size > 0) {
     try {
       const keys: string[] = [];

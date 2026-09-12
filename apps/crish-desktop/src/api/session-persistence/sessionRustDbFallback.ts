@@ -2,11 +2,16 @@
  * sessionRustDb 子模块 · Fallback：localStorage 同步回退路径
  *
  * 职责（同步 IO，无 invoke）：
- *   - 当 Tauri invoke 不可用（浏览器 / 旧壳 / 测试 missing 状态）时，所有
- *     API 降级到 localStorage 同步读写。保证 dev / test 环境与渐进迁移期不阻塞。
+ *   - 当 Tauri invoke 不可用（浏览器 / 旧壳 / 测试 missing 状态）时，索引 /
+ *     agents / active / folder 走 localStorage 同步读写兜底。
  *   - 这层回退只读 / 写 localStorage，不再触碰 IndexedDB 或磁盘镜像（已删除）。
  *   - 降级戳（P1-F1 / F5-01）写面已在维度 1（D2）随读面（T2-1）一并删除，
  *     persist 路径保留一次性 cleanup 清除历史残留的 crish_degraded_* 键。
+ *   - Wave C（D-F06，session-integrity-repair）：**正文写口已物理删除**
+ *     （lsSaveSessionBody 不复存在）——SQLite Upsert 为正文唯一权威，
+ *     降级时仅在内存 store + errorStore 留痕，不再落新正文。
+ *     lsLoadSessionBody 降格为**最小只读迁移面**（无配对写口）：仅供
+ *     30 天清理护栏判定「LS 是否仍持有唯一副本」与迁移期历史数据读取。
  */
 
 import { isPendingDraftSessionId as isPendingDraft } from '@crish/shared-types';
@@ -52,10 +57,11 @@ export function lsSaveSessionIndex(entries: SessionIndexEntry[]): void {
 }
 
 /**
- * 从原始存盘 JSON 恢复 cacheMetrics（R6-D5 回放面，localStorage 回退路径）。
- * lsSaveSessionBody 整条 JSON.stringify SessionMessage（含 cacheMetrics），
- * 而 parseSessionMessage 是白名单守卫不携带该字段 → 读回时重新挂载，
- * 与 SQLite usage_json 回读（fromRustSessionMessage）行为对齐。
+ * 从原始存盘 JSON 恢复 cacheMetrics（R6-D5 回放面，localStorage 只读迁移面）。
+ * 历史写口（lsSaveSessionBody，已随 D-F06 删除）整条 JSON.stringify
+ * SessionMessage（含 cacheMetrics），而 parseSessionMessage 是白名单守卫
+ * 不携带该字段 → 读回时重新挂载，与 SQLite usage_json 回读
+ * （fromRustSessionMessage）行为对齐。
  * MessageCacheState 形状守卫：metrics 非空对象 + source 枚举合法才挂载，
  * 其余情况原样返回（坏数据不传播）。
  */
@@ -87,6 +93,16 @@ function attachStoredCacheMetrics(
   return parsed;
 }
 
+/**
+ * 只读加载 LS 正文（D-F06 后为**最小只读迁移面**，无配对写口）。
+ *
+ * 仅供两类消费方：
+ *   1. cleanupLegacyLocalStorageSessionsGuarded——30 天清理护栏判定
+ *      「LS 是否仍持有该会话唯一副本」（P0-1/N0-1 保留决策）；
+ *   2. 迁移期历史数据读取（JSON 数组与 JSONL 双历史格式）。
+ * 生产正文权威在 SQLite；本函数**不再是** load_session_body 失败时的
+ * 静默回退源（该回退已随 D-F06 删除，失败改走 errorStore 数据面）。
+ */
 export function lsLoadSessionBody(sessionId: string): SessionMessage[] {
   try {
     const raw = localStorage.getItem(SESSION_BODY_PREFIX + sessionId);
@@ -121,19 +137,9 @@ export function lsLoadSessionBody(sessionId: string): SessionMessage[] {
   }
 }
 
-export function lsSaveSessionBody(
-  sessionId: string,
-  messages: SessionMessage[]
-): void {
-  try {
-    localStorage.setItem(
-      SESSION_BODY_PREFIX + sessionId,
-      JSON.stringify(messages)
-    );
-  } catch {
-    /* swallow-ok: quota 超限时正文尽力写，失败保留引擎侧数据 */
-  }
-}
+// D-F06（session-integrity-repair Wave C）：lsSaveSessionBody 已物理删除。
+// SQLite Upsert 为正文唯一权威；降级时仅在内存 store + errorStore 留痕，
+// 严禁恢复任何「LS 正文写口 / 第二写口」。
 
 export function lsLoadSessionAgents(sessionId: string): SessionAgent[] {
   try {

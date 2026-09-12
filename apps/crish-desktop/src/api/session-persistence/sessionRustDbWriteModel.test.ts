@@ -1133,7 +1133,7 @@ describe('清空消息持久化与防僵尸复活事务（DEF-03 / DEF-SESS-12�
     expect(db.sessions.get('s-trunc')?.messages).toHaveLength(1);
   });
 
-  it('localStorage 回退路径下已清空会话同步写入空消息镜像，根除 LS 僵尸消息', async () => {
+  it('localStorage 回退路径不再写正文镜像（D-F06）：清空会话不刷 LS body，残键原样保留', async () => {
     // 模拟 invoke 不可用（未安装 transport）走回退路径
     localStorage.setItem(
       SESSION_BODY_PREFIX + 's-cleared',
@@ -1145,7 +1145,24 @@ describe('清空消息持久化与防僵尸复活事务（DEF-03 / DEF-SESS-12�
       sessionsToIndex,
     });
 
-    expect(localStorage.getItem(SESSION_BODY_PREFIX + 's-cleared')).toBe('[]');
+    // D-F06 剥双轨：降级回退不再把 LS 当正文写口——残存历史键原样保留
+    // （不写 []、不擦除）；「僵尸复活」经 loadSessionBody 不再回退 LS 结构性消除。
+    expect(localStorage.getItem(SESSION_BODY_PREFIX + 's-cleared')).toBe(
+      JSON.stringify([msg('m1', 'user')])
+    );
+  });
+
+  it('probe 失败回退也不写 LS 正文（D-F06 降级仅内存留痕）：有消息会话残键/缺键均不落新正文', async () => {
+    // 不安装 transport → probe missing → persistAllSessionsLocalFallback
+    const s = sess('s-degraded', [msg('m1', 'user')]);
+    await persistAllSessionsRust([s], 's-degraded', [DEFAULT_SESSION_FOLDER], {
+      sessionsToIndex,
+    });
+
+    // 正文键不得被创建（降级时仅内存 store + errorStore 留痕）
+    expect(localStorage.getItem(SESSION_BODY_PREFIX + 's-degraded')).toBeNull();
+    // 索引壳仍写（侧栏元数据过渡期契约不变）
+    expect(localStorage.getItem(SESSION_INDEX_KEY)).not.toBeNull();
   });
 
   it('isLazySessionShell 判定准则边界穷举测试', () => {

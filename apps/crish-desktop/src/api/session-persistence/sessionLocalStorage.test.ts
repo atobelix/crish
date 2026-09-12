@@ -140,22 +140,31 @@ describe('P1-F3：LS quota 截断标志与恢复（T5.3）', () => {
     expect(loadSessionBody('s3')).toHaveLength(120);
   });
 
-  it('4. 标志存在时 hydrate 链触发 ls-quota-truncated 日志 + 数据面暴露（先红：当前无日志）', async () => {
+  it('4. 标志存在时 hydrate 链触发 ls-quota-truncated 日志 + 数据面暴露；D-F06 后不再回退 LS 正文', async () => {
     // 模拟历史截断留下的标志（数据面状态）
     markQuotaTruncated('s4');
-    // 截断态落盘：LS 正文仅剩最后 100 条
+    // 截断态落盘：LS 正文仅剩最后 100 条（历史残留，迁移面仍可读）
     localStorage.setItem(SESSION_BODY_PREFIX + 's4', JSON.stringify(msgs(100)));
     const logSpy = vi.spyOn(userFacingErrors, 'logInternalError');
 
-    // hydrate 链（invoke 未注册 → missing → LS 回退正文）
+    // hydrate 链（invoke 未注册 → missing → D-F06：不再回退 LS 正文）
     const body = await loadSessionBodyRust('s4');
 
-    // 修复前：sessionRustDb.loadSessionBody 不读标志、无日志 → logSpy 未调用，用例红
+    // 截断留痕日志仍触发（历史数据丢失可感知）
     expect(logSpy).toHaveBeenCalledWith('ls-quota-truncated', {
       sessionId: 's4',
     });
     // 数据面暴露：截断标志可被 hydrate/UI 层读取
     expect(hasQuotaTruncation('s4')).toBe(true);
-    expect(body).toHaveLength(100);
+    // D-F06：正文权威在 SQLite，invoke 失败返回空（不把 LS 当正文源），
+    // 失败另经 persist-degraded-ls errorStore 留痕
+    expect(body).toEqual([]);
+    expect(logSpy).toHaveBeenCalledWith(
+      'persist-degraded-ls',
+      expect.objectContaining({
+        command: 'load_session_body',
+        sessionId: 's4',
+      })
+    );
   });
 });
