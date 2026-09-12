@@ -25,7 +25,7 @@ export function createSessionStateActions<T extends SessionStoreSlice>(
   set: SessionImmerSet<T>
 ): Pick<
   SessionActions,
-  'setSessions' | 'patchSession' | 'clearSessionMessages'
+  'setSessions' | 'patchSession' | 'clearSessionMessages' | 'evictSessionMessages'
 > {
   return {
     /**
@@ -98,6 +98,25 @@ export function createSessionStateActions<T extends SessionStoreSlice>(
         sess.messages = [];
         sess.messagesHydrated = true;
         state.sessionsById[sessionId] = sess;
+      }),
+
+    /**
+     * 软驱逐已水合消息（D5 / FE-INV-8）。
+     * 恢复为 ACT-502 懒壳：messages=[]、messagesHydrated=false、
+     * **删除 hydratedFromEngine**——否则 needsEngineMessageHydrate 恒 false。
+     * 仅改内存；不调用 saveSessionBody（空数组不得写库）。
+     */
+    evictSessionMessages: (sessionIds: readonly string[]) =>
+      set((state) => {
+        for (const id of sessionIds) {
+          if (!id) continue;
+          const sess = getSessionForWrite(state, id);
+          if (!sess) continue;
+          sess.messages = [];
+          sess.messagesHydrated = false;
+          delete sess.hydratedFromEngine;
+          state.sessionsById[id] = sess;
+        }
       }),
   };
 }

@@ -94,7 +94,8 @@
   }
 }
 
-/* 活跃单元格呼吸脉冲边框反馈 (挂载在根容器契约 data-table-streaming='true') */
+/* 活跃单元格呼吸脉冲边框反馈 (挂载在根容器契约 data-table-streaming='true')
+ * 12-T1：去掉常驻 will-change（无限脉冲 + 错误合成层）；动画仅 outline/bg。 */
 .tableContainerRoot[data-table-streaming='true'] .tableScrollViewport table tbody tr:last-child td:last-child,
 .tableContainerRoot[data-table-streaming='true'] .tableScrollViewport :global(.md-table) tbody tr:last-child td:last-child,
 .tableContainerRoot[data-table-streaming='true'] .tableScrollViewport :global(.md-table) tbody tr:last-child :global(.md-td:last-child) {
@@ -104,21 +105,18 @@
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-color) 18%, transparent);
   background-color: var(--stream-table-active-bg, color-mix(in srgb, var(--accent-color) 6%, transparent));
   animation: md-table-pulse 1.6s var(--stream-anim-easing) infinite;
-  will-change: outline-color, box-shadow, background-color;
 }
 
 /* 节能模式与无障碍性能分档适配 */
 :global(html[data-perf-tier='eco']) .tableContainerRoot[data-table-streaming='true'] .tableScrollViewport table tbody tr:last-child td:last-child,
 :global(html[data-perf-tier='eco']) .tableContainerRoot[data-table-streaming='true'] .tableScrollViewport :global(.md-table) tbody tr:last-child td:last-child {
   animation: none;
-  will-change: auto;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .tableContainerRoot[data-table-streaming='true'] .tableScrollViewport table tbody tr:last-child td:last-child,
   .tableContainerRoot[data-table-streaming='true'] .tableScrollViewport :global(.md-table) tbody tr:last-child td:last-child {
     animation: none;
-    will-change: auto;
   }
 }
 

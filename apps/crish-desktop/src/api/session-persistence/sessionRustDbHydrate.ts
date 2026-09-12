@@ -272,6 +272,39 @@ export async function hydrateSessionsFromRust(): Promise<{
 
 // ── 复合 API：persistAllSessionsRust ────────────────────────────────────────
 
+/** 上次成功 saveSessionBody 的消息指纹（D3-4 dirty 检测） */
+const lastSavedBodyFingerprint = new Map<string, string>();
+
+function bodyFingerprint(msgs: SessionState['messages']): string {
+  // 引用优先：同数组引用直接命中
+  // 内容级：id + status + text 长度 + thinking 长度（避免全量 stringify）
+  const parts: string[] = [String(msgs.length)];
+  for (const m of msgs || []) {
+    parts.push(
+      m.id,
+      m.status ?? '',
+      String(m.text?.length ?? 0),
+      String(m.thinking?.length ?? 0),
+    );
+  }
+  return parts.join('|');
+}
+
+/** 非 dirty 则跳过 save；首帧无快照视为 dirty。 */
+function isSessionBodyDirty(sessionId: string, msgs: SessionState['messages']): boolean {
+  const fp = bodyFingerprint(msgs);
+  return lastSavedBodyFingerprint.get(sessionId) !== fp;
+}
+
+function markSessionBodySaved(sessionId: string, msgs: SessionState['messages']): void {
+  lastSavedBodyFingerprint.set(sessionId, bodyFingerprint(msgs));
+}
+
+/** 测试专用：清空 dirty 快照，避免跨用例串扰。 */
+export function __resetSessionBodyDirtyForTests(): void {
+  lastSavedBodyFingerprint.clear();
+}
+
 /**
  * 全量持久化所有会话到 SQLite（per-session invoke，避免单次 IPC 携带所有数据）。
  *
@@ -285,6 +318,7 @@ export async function hydrateSessionsFromRust(): Promise<{
  *     任务按发起序落库，后发批次最终落库；saveSessionBody 落库前做版本
  *     CAS，陈旧批次直接丢弃不覆盖。350ms debounce / boot 回灌 / 手动触发
  *     全部经本入口，版本戳覆盖全部 save_session_body 调用路径。
+ *   - D3-4：非 dirty body 不重发（isSessionBodyDirty）。
  *
  * 命令缺失时回退到 localStorage 同步路径（persistAllSessionsSync 等价行为）。
  */
@@ -341,6 +375,9 @@ export async function persistAllSessionsRust(
     // 彻底修复 msgs.length === 0 跳过 saveSessionBody 导致的“清空后刷新僵尸复活”漏洞：
     // 仅对真实未水合的懒壳跳过；当会话处于活跃/已水合状态或用户显式清空时，
     // 必须调用 saveSessionBody(s.id, msgs, batchVersion) 清空 SQLite 底层存储。
+    //
+    // D3-4 / 票 B：非 dirty 会话不重发 body（引用比较 + 消息指纹）。
+    // 首次（无 lastSavedSnapshot）视为 dirty，确保 boot 写全量。
     const keepIds = new Set<string>();
     const bodyJobs: Promise<void>[] = [];
     for (const s of list) {
@@ -350,8 +387,12 @@ export async function persistAllSessionsRust(
         m.sender === 'assistant' ? normalizeAssistantTimeline(m) : m
       );
       const shouldSaveBody = msgs.length > 0 || !isLazySessionShell(s, activePersistable);
-      if (shouldSaveBody) {
-        bodyJobs.push(saveSessionBody(s.id, msgs, batchVersion));
+      if (shouldSaveBody && isSessionBodyDirty(s.id, msgs)) {
+        bodyJobs.push(
+          saveSessionBody(s.id, msgs, batchVersion).then(() => {
+            markSessionBodySaved(s.id, msgs);
+          }),
+        );
       }
       bodyJobs.push(saveSessionAgents(s.id, s.agents || []));
     }

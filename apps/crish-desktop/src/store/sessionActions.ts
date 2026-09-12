@@ -167,6 +167,8 @@ export interface SessionActions {
   ) => void;
   /** 清空会话消息（不删会话） */
   clearSessionMessages: (sessionId: string) => void;
+  /** 软驱逐已水合消息（D5）：恢复懒壳，不写库、不触发空 body save */
+  evictSessionMessages: (sessionIds: readonly string[]) => void;
   updateMessageText: (
     sessionId: string,
     messageId: string,

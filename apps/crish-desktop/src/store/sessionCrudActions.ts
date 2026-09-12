@@ -73,6 +73,7 @@ export function createSessionCrudActions<T extends SessionStoreSlice>(
   | 'setSessions'
   | 'patchSession'
   | 'clearSessionMessages'
+  | 'evictSessionMessages'
 > {
   // 草稿态 actions 由子模块提供；createSession 传入以避免循环导入。
   // 先声明 createSession（下方 actions 对象内定义），再经引用注入 draft actions。
@@ -168,6 +169,16 @@ export function createSessionCrudActions<T extends SessionStoreSlice>(
         });
         return;
       }
+      // D5：切换成功后异步软驱逐非活跃已水合消息（动态 import 防 store 环依赖）
+      queueMicrotask(() => {
+        void import('../api/session-persistence/sessionMessageEvict')
+          .then((m) => {
+            m.evictInactiveHydratedSessionsWithGuards(nextId, new Set());
+          })
+          .catch(() => {
+            /* 驱逐失败不影响切换 */
+          });
+      });
       if (!isDemoMode()) {
         const sess = getSessionById(get(), nextId);
         if (sess) {

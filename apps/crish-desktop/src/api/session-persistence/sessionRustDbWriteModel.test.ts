@@ -48,6 +48,7 @@ import {
   hydrateSessionsFromRust,
   isLazySessionShell,
   persistAllSessionsRust,
+  __resetSessionBodyDirtyForTests,
   persistAllSessionsSyncViaLocalStorage,
 } from './sessionRustDb';
 import { loadSessionAgents, saveSessionAgents } from './sessionRustDbSql';
@@ -255,6 +256,7 @@ function installFakeTransport(call: ReturnType<typeof vi.fn>): void {
 
 beforeEach(() => {
   localStorage.clear();
+  __resetSessionBodyDirtyForTests();
 });
 
 afterEach(() => {
@@ -845,7 +847,7 @@ describe('懒壳保护窗口与清理（P10 现状）', () => {
 });
 
 describe('写路径：每次 commit 全量重写（F7 全量替换语义）', () => {
-  it('重复 commit 全量重写 body/agents（无增量脏签名）', async () => {
+  it('重复 commit 全量重写 body/agents（D3-4 dirty：内容变才写）', async () => {
     const { db, call } = makeFakeDb();
     installFakeTransport(call);
 
@@ -857,22 +859,22 @@ describe('写路径：每次 commit 全量重写（F7 全量替换语义）', ()
       call.mock.calls.filter((c) => c[0] === 'save_session_body').length;
     expect(saves()).toBe(1);
 
-    // 内容未变 → Stream D 契约：仍全量重写（无增量签名去重）
+    // 内容未变 → D3-4 dirty：不重发 body
     await persistAllSessionsRust([s], 's1', [DEFAULT_SESSION_FOLDER], {
       sessionsToIndex,
     });
-    expect(saves()).toBe(2);
+    expect(saves()).toBe(1);
 
-    // 追加消息 → 继续全量重写
+    // 追加消息 → dirty：继续写
     const s2 = sess('s1', [...s.messages, msg('m3', 'user')]);
     await persistAllSessionsRust([s2], 's1', [DEFAULT_SESSION_FOLDER], {
       sessionsToIndex,
     });
-    expect(saves()).toBe(3);
+    expect(saves()).toBe(2);
     expect(db.sessions.get('s1')?.messages).toHaveLength(3);
   });
 
-  it('重复 persist 重复写（无持久化签名去重）', async () => {
+  it('重复 persist 相同内容不重复写（D3-4 dirty 去重）', async () => {
     const { call } = makeFakeDb();
     installFakeTransport(call);
     const s = sess('s1', [msg('m1', 'user')]);
@@ -882,11 +884,11 @@ describe('写路径：每次 commit 全量重写（F7 全量替换语义）', ()
     const saves = () =>
       call.mock.calls.filter((c) => c[0] === 'save_session_body').length;
     expect(saves()).toBe(1);
-    // 同一内容再次 commit → Stream D 契约：仍重写
+    // 同一内容再次 commit → dirty 去重，不重发
     await persistAllSessionsRust([s], 's1', [DEFAULT_SESSION_FOLDER], {
       sessionsToIndex,
     });
-    expect(saves()).toBe(2);
+    expect(saves()).toBe(1);
   });
 });
 

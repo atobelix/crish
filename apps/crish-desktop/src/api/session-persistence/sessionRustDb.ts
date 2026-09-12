@@ -52,4 +52,5 @@ export {
   isLazySessionShell,
   persistAllSessionsRust,
   persistAllSessionsSyncViaLocalStorage,
+  __resetSessionBodyDirtyForTests,
 } from './sessionRustDbHydrate';
