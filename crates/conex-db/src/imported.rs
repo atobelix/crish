@@ -8,8 +8,9 @@
 //! - 幂等写入：`INSERT OR IGNORE`（书签主键 (url, name)、历史主键
 //!   (url, visited_at)，与解析层去重键逐字节对齐）——重复导入（含跨批次
 //!   重导）天然跳过，统计经 [`ImportedWriteStats`] 返回供 UI 明示；
-//! - 分批事务：每 [`IMPORT_BATCH_SIZE`]（1000）条一个事务，避免长事务锁
-//!   （03-方案 §2.3 分批语义）；
+//! - 分批 Writer 事务：每 [`IMPORT_BATCH_SIZE`]（1000）条一次
+//!   `write_blocking` 组提交（Actor 单写通道内分段提交，避免长事务锁；
+//!   03-方案 §2.3 分批语义 + D-P13 改道）；
 //! - 缺表降级（R12/P2-1 纪律，对齐 blocks.rs:13-30）：读写面先探测
 //!   sqlite_master（每连接缓存一次），缺表时查询返回空集、写入返回
 //!   Ok(空统计)，配 `tracing::warn!`——绝不 SQL 报错 latch 死库。
@@ -106,7 +107,9 @@ impl LocalDb {
         );
     }
 
-    /// 书签落库（03-方案 §2.3）：单批 [IMPORT_BATCH_SIZE] 条一个事务 +
+    /// 书签落库（03-方案 §2.3）：单批 [IMPORT_BATCH_SIZE] 条一个 Writer
+    /// 事务（D-P13：改道 `write_blocking`，每批一次 Actor 组提交，保留
+    /// 分段提交语义；废除主连接裸锁与嵌套 `conn.transaction()`）+
     /// `INSERT OR IGNORE` 幂等——同 (url, name) 重导跳过（`skipped_dupes`
     /// 计数供 UI 明示）。缺表降级返回 Ok(空统计)。
     pub fn import_bookmarks(
@@ -117,54 +120,12 @@ impl LocalDb {
             self.warn_missing_imported_tables("import_bookmarks");
             return Ok(ImportedWriteStats::default());
         }
-        let mut conn = self.conn.lock().map_err(|e| DbFailure {
-            message: format!("lock poisoned: {e}"),
-            kind: DbFailureKind::Lock,
-        })?;
         let mut stats = ImportedWriteStats::default();
         for chunk in rows.chunks(IMPORT_BATCH_SIZE) {
-            let tx = conn
-                .transaction()
-                .map_err(|e| self.latch_error("import_bookmarks_tx", e))?;
-            {
-                let mut stmt = tx
-                    .prepare(
-                        "INSERT OR IGNORE INTO imported_bookmarks
-                         (url, name, folder_path_json, guid, source, imported_at)
-                         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-                    )
-                    .map_err(|e| self.latch_error("import_bookmarks_prepare", e))?;
-                for row in chunk {
-                    let folder_path_json =
-                        serde_json::to_string(&row.folder_path).map_err(|e| {
-                            let failure = DbFailure {
-                                message: format!("import_bookmarks_folder_json: {e}"),
-                                kind: DbFailureKind::Other(
-                                    "import_bookmarks_folder_json".to_string(),
-                                ),
-                            };
-                            self.set_failure(failure.clone());
-                            failure
-                        })?;
-                    let changed = stmt
-                        .execute(rusqlite::params![
-                            row.url,
-                            row.name,
-                            folder_path_json,
-                            row.guid,
-                            row.source,
-                            row.imported_at,
-                        ])
-                        .map_err(|e| self.latch_error("import_bookmarks_exec", e))?;
-                    if changed > 0 {
-                        stats.inserted += 1;
-                    } else {
-                        stats.skipped_dupes += 1;
-                    }
-                }
-            }
-            tx.commit()
-                .map_err(|e| self.latch_error("import_bookmarks_commit", e))?;
+            let chunk_owned = chunk.to_vec();
+            let chunk_stats =
+                self.write_blocking(move |conn| import_bookmarks_chunk_conn(conn, &chunk_owned))?;
+            stats.merge(&chunk_stats);
         }
         Ok(stats)
     }
@@ -179,42 +140,12 @@ impl LocalDb {
             self.warn_missing_imported_tables("import_history");
             return Ok(ImportedWriteStats::default());
         }
-        let mut conn = self.conn.lock().map_err(|e| DbFailure {
-            message: format!("lock poisoned: {e}"),
-            kind: DbFailureKind::Lock,
-        })?;
         let mut stats = ImportedWriteStats::default();
         for chunk in rows.chunks(IMPORT_BATCH_SIZE) {
-            let tx = conn
-                .transaction()
-                .map_err(|e| self.latch_error("import_history_tx", e))?;
-            {
-                let mut stmt = tx
-                    .prepare(
-                        "INSERT OR IGNORE INTO imported_history
-                         (url, visited_at, title, source, imported_at)
-                         VALUES (?1, ?2, ?3, ?4, ?5)",
-                    )
-                    .map_err(|e| self.latch_error("import_history_prepare", e))?;
-                for row in chunk {
-                    let changed = stmt
-                        .execute(rusqlite::params![
-                            row.url,
-                            row.visited_at,
-                            row.title,
-                            row.source,
-                            row.imported_at,
-                        ])
-                        .map_err(|e| self.latch_error("import_history_exec", e))?;
-                    if changed > 0 {
-                        stats.inserted += 1;
-                    } else {
-                        stats.skipped_dupes += 1;
-                    }
-                }
-            }
-            tx.commit()
-                .map_err(|e| self.latch_error("import_history_commit", e))?;
+            let chunk_owned = chunk.to_vec();
+            let chunk_stats =
+                self.write_blocking(move |conn| import_history_chunk_conn(conn, &chunk_owned))?;
+            stats.merge(&chunk_stats);
         }
         Ok(stats)
     }
@@ -332,6 +263,89 @@ fn history_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ImportedHistory
         source: row.get(3)?,
         imported_at: row.get(4)?,
     })
+}
+
+/// 书签单批落库连接级纯函数（D-P13：供 `write_blocking` 闭包调用；
+/// 绝对禁止捕获 `LocalDb` / 开启 `conn.transaction()`——外层 Actor 已持
+/// `BEGIN IMMEDIATE`，整批在同一事务内原子提交）。
+fn import_bookmarks_chunk_conn(
+    conn: &rusqlite::Connection,
+    chunk: &[ImportedBookmarkRow],
+) -> Result<ImportedWriteStats, DbFailure> {
+    let mut stats = ImportedWriteStats::default();
+    let mut stmt = conn
+        .prepare(
+            "INSERT OR IGNORE INTO imported_bookmarks
+             (url, name, folder_path_json, guid, source, imported_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        )
+        .map_err(|e| DbFailure {
+            message: format!("import_bookmarks_prepare: {e}"),
+            kind: DbFailureKind::Other("import_bookmarks".to_string()),
+        })?;
+    for row in chunk {
+        let folder_path_json = serde_json::to_string(&row.folder_path).map_err(|e| DbFailure {
+            message: format!("import_bookmarks_folder_json: {e}"),
+            kind: DbFailureKind::Other("import_bookmarks_folder_json".to_string()),
+        })?;
+        let changed = stmt
+            .execute(rusqlite::params![
+                row.url,
+                row.name,
+                folder_path_json,
+                row.guid,
+                row.source,
+                row.imported_at,
+            ])
+            .map_err(|e| DbFailure {
+                message: format!("import_bookmarks_exec: {e}"),
+                kind: DbFailureKind::Other("import_bookmarks".to_string()),
+            })?;
+        if changed > 0 {
+            stats.inserted += 1;
+        } else {
+            stats.skipped_dupes += 1;
+        }
+    }
+    Ok(stats)
+}
+
+/// 历史单批落库连接级纯函数（同 [import_bookmarks_chunk_conn] 纪律）。
+fn import_history_chunk_conn(
+    conn: &rusqlite::Connection,
+    chunk: &[ImportedHistoryRow],
+) -> Result<ImportedWriteStats, DbFailure> {
+    let mut stats = ImportedWriteStats::default();
+    let mut stmt = conn
+        .prepare(
+            "INSERT OR IGNORE INTO imported_history
+             (url, visited_at, title, source, imported_at)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+        )
+        .map_err(|e| DbFailure {
+            message: format!("import_history_prepare: {e}"),
+            kind: DbFailureKind::Other("import_history".to_string()),
+        })?;
+    for row in chunk {
+        let changed = stmt
+            .execute(rusqlite::params![
+                row.url,
+                row.visited_at,
+                row.title,
+                row.source,
+                row.imported_at,
+            ])
+            .map_err(|e| DbFailure {
+                message: format!("import_history_exec: {e}"),
+                kind: DbFailureKind::Other("import_history".to_string()),
+            })?;
+        if changed > 0 {
+            stats.inserted += 1;
+        } else {
+            stats.skipped_dupes += 1;
+        }
+    }
+    Ok(stats)
 }
 
 #[cfg(test)]

@@ -1,9 +1,11 @@
 //! 协作子代理域：session_agents 表（含 session_agent_messages）的读与全量快照写。
 //!
-//! 写面约定（11-T3 单行定点写收束）：
+//! 写面约定（11-T3 单行定点写收束 + ADD-01 增量收束）：
 //! - **全量保存 [Self::save_session_agents] 仅快照面**（session_commands.rs:238-247
-//!   前端显式保存 / 导入 + 测试面）；先删后插会触发 session_agent_messages
-//!   FK 级联清空，且与引擎并发写构成「后写者覆盖先写者新增行」竞态；
+//!   前端显式保存 / 导入 + 测试面）；**禁止**先删后插——旧路径经 FK CASCADE
+//!   抹白 session_agent_messages 全部历史，且与引擎并发写构成「后写者覆盖
+//!   先写者新增行」竞态；改为 `ON CONFLICT(session_id, agent_id) DO UPDATE`
+//!   增量 Upsert + `agent_id NOT IN` 移除差集；
 //! - **单行定点写与状态流转操作抽取至 [crate::agents_ops]**：[Self::upsert_session_agent]、
 //!   [Self::update_session_agent_status]、[Self::update_session_agent_path]。
 
@@ -185,8 +187,20 @@ impl LocalDb {
         Ok(messages)
     }
 
-    /// 全量保存会话的协作子 agent（先删后插）。经组提交 Writer
-    /// （外层 Actor `BEGIN IMMEDIATE` 事务原子；闭包内不开嵌套 transaction）。
+    /// 全量保存会话的协作子 agent（快照面：增量 Upsert + 移除差集）。
+    /// 经组提交 Writer（外层 Actor `BEGIN IMMEDIATE` 事务原子；闭包内不开
+    /// 嵌套 transaction）。
+    ///
+    /// ADD-01 契约：**禁止**无条件 `DELETE FROM session_agents WHERE
+    /// session_id = ?1` 先删后插——旧路径经 FK `ON DELETE CASCADE` 把
+    /// `session_agent_messages` 全部历史瞬时抹白。改为：
+    /// 1. `ON CONFLICT(session_id, agent_id) DO UPDATE` 增量 Upsert（冲突以
+    ///    载荷覆盖，不触发级联）；
+    /// 2. 消息面同步 `ON CONFLICT(session_id, agent_id, seq) DO UPDATE` +
+    ///    条件尾部收缩（`seq >= len`）；
+    /// 3. 移除差集：仅删除「本次列表未包含」的 `(session_id, agent_id)` 行
+    ///    （级联仅作用于确要移除的行，属预期语义）；空列表 = 显式清空该
+    ///    会话全部子代理元数据（允许级联清消息）。
     pub fn save_session_agents(
         &self,
         session_id: &str,
@@ -195,85 +209,165 @@ impl LocalDb {
         let session_id = session_id.to_string();
         let agents = agents.to_vec();
         self.write_blocking(move |conn| {
-            // 级联 FK 会自动清理 session_agent_messages
-            conn.execute(
-                "DELETE FROM session_agents WHERE session_id = ?1",
-                rusqlite::params![session_id],
-            )
-            .map_err(|e| DbFailure {
-                message: format!("save_session_agents_delete: {e}"),
-                kind: DbFailureKind::Other("save_session_agents".to_string()),
-            })?;
-
-            for agent in &agents {
-                conn.execute(
-                    "INSERT INTO session_agents (
-                        session_id, agent_id, subagent_run_id, parent_session_id, parent_run_id,
-                        parent_tool_call_id, description, mode, status, summary,
-                        started_at, ended_at, depth, subagent_path_json,
-                        task_type, display_label, allowed_write_paths_json,
-                        sub_session_id
-                    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
-                    rusqlite::params![
-                        session_id,
-                        agent.id,
-                        agent.subagent_run_id,
-                        agent.parent_session_id,
-                        agent.parent_run_id,
-                        agent.parent_tool_call_id,
-                        agent.description,
-                        agent.mode,
-                        agent.status,
-                        agent.summary,
-                        agent.started_at,
-                        agent.ended_at,
-                        agent.depth,
-                        agent.subagent_path_json,
-                        agent.task_type,
-                        agent.display_label,
-                        agent.allowed_write_paths_json,
-                        agent.sub_session_id.clone().unwrap_or_default(),
-                    ],
-                )
-                .map_err(|e| DbFailure {
-                    message: format!("save_session_agents_insert: {e}"),
-                    kind: DbFailureKind::Other("save_session_agents".to_string()),
-                })?;
-
-                for (seq, msg) in agent.messages.iter().enumerate() {
-                    let seq_i64 = seq as i64;
-                    conn.execute(
-                        "INSERT INTO session_agent_messages (
-                            session_id, agent_id, seq, id, sender, text, thinking, timestamp, status,
-                            stream_text_offset, thinking_time, tool_calls_json,
-                            blocks_json, tool_call_results_json
-                        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
-                        rusqlite::params![
-                            session_id,
-                            agent.id,
-                            seq_i64,
-                            msg.id,
-                            msg.sender,
-                            msg.text,
-                            msg.thinking,
-                            msg.timestamp,
-                            msg.status,
-                            msg.stream_text_offset,
-                            msg.thinking_time,
-                            msg.tool_calls_json,
-                            msg.blocks_json,
-                            msg.tool_call_results_json,
-                        ],
-                    )
-                    .map_err(|e| DbFailure {
-                        message: format!("save_session_agents_msg_insert: {e}"),
-                        kind: DbFailureKind::Other("save_session_agents".to_string()),
-                    })?;
-                }
-            }
-            Ok(())
+            save_session_agents_conn(conn, &session_id, &agents)
         })
     }
+}
+
+/// 连接级纯函数：session_agents 快照写（增量 Upsert + 消息 Upsert/尾部
+/// 收缩 + 移除差集）。供 [LocalDb::save_session_agents] 与
+/// [`crate::import::import_from_localstorage`] 共用（SSOT，防两份口径漂移）。
+///
+/// 仅接收 `&mut Connection`，禁止捕获 LocalDb / 调用 `self.*` / 开嵌套
+/// transaction——外层写 Actor 已持 `BEGIN IMMEDIATE`。
+pub(crate) fn save_session_agents_conn(
+    conn: &mut rusqlite::Connection,
+    session_id: &str,
+    agents: &[SessionAgent],
+) -> Result<(), DbFailure> {
+    for agent in agents {
+        conn.execute(
+            "INSERT INTO session_agents (
+                session_id, agent_id, subagent_run_id, parent_session_id, parent_run_id,
+                parent_tool_call_id, description, mode, status, summary,
+                started_at, ended_at, depth, subagent_path_json,
+                task_type, display_label, allowed_write_paths_json,
+                sub_session_id
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)
+            ON CONFLICT(session_id, agent_id) DO UPDATE SET
+                subagent_run_id = excluded.subagent_run_id,
+                parent_session_id = excluded.parent_session_id,
+                parent_run_id = excluded.parent_run_id,
+                parent_tool_call_id = excluded.parent_tool_call_id,
+                description = excluded.description,
+                mode = excluded.mode,
+                status = excluded.status,
+                summary = excluded.summary,
+                started_at = excluded.started_at,
+                ended_at = excluded.ended_at,
+                depth = excluded.depth,
+                subagent_path_json = excluded.subagent_path_json,
+                task_type = excluded.task_type,
+                display_label = excluded.display_label,
+                allowed_write_paths_json = excluded.allowed_write_paths_json,
+                sub_session_id = excluded.sub_session_id",
+            rusqlite::params![
+                session_id,
+                agent.id,
+                agent.subagent_run_id,
+                agent.parent_session_id,
+                agent.parent_run_id,
+                agent.parent_tool_call_id,
+                agent.description,
+                agent.mode,
+                agent.status,
+                agent.summary,
+                agent.started_at,
+                agent.ended_at,
+                agent.depth,
+                agent.subagent_path_json,
+                agent.task_type,
+                agent.display_label,
+                agent.allowed_write_paths_json,
+                agent.sub_session_id.clone().unwrap_or_default(),
+            ],
+        )
+        .map_err(|e| DbFailure {
+            message: format!("save_session_agents_upsert: {e}"),
+            kind: DbFailureKind::Other("save_session_agents".to_string()),
+        })?;
+
+        for (seq, msg) in agent.messages.iter().enumerate() {
+            let seq_i64 = seq as i64;
+            conn.execute(
+                "INSERT INTO session_agent_messages (
+                    session_id, agent_id, seq, id, sender, text, thinking, timestamp, status,
+                    stream_text_offset, thinking_time, tool_calls_json,
+                    blocks_json, tool_call_results_json
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+                ON CONFLICT(session_id, agent_id, seq) DO UPDATE SET
+                    id = excluded.id,
+                    sender = excluded.sender,
+                    text = excluded.text,
+                    thinking = excluded.thinking,
+                    timestamp = excluded.timestamp,
+                    status = excluded.status,
+                    stream_text_offset = excluded.stream_text_offset,
+                    thinking_time = excluded.thinking_time,
+                    tool_calls_json = excluded.tool_calls_json,
+                    blocks_json = excluded.blocks_json,
+                    tool_call_results_json = excluded.tool_call_results_json",
+                rusqlite::params![
+                    session_id,
+                    agent.id,
+                    seq_i64,
+                    msg.id,
+                    msg.sender,
+                    msg.text,
+                    msg.thinking,
+                    msg.timestamp,
+                    msg.status,
+                    msg.stream_text_offset,
+                    msg.thinking_time,
+                    msg.tool_calls_json,
+                    msg.blocks_json,
+                    msg.tool_call_results_json,
+                ],
+            )
+            .map_err(|e| DbFailure {
+                message: format!("save_session_agents_msg_upsert: {e}"),
+                kind: DbFailureKind::Other("save_session_agents".to_string()),
+            })?;
+        }
+
+        // 条件尾部收缩：载荷消息数 < 现存行数时清理多余 seq（常规追加匹配 0 行）
+        let new_len = agent.messages.len() as i64;
+        conn.execute(
+            "DELETE FROM session_agent_messages
+             WHERE session_id = ?1 AND agent_id = ?2 AND seq >= ?3",
+            rusqlite::params![session_id, agent.id, new_len],
+        )
+        .map_err(|e| DbFailure {
+            message: format!("save_session_agents_msg_diff_shrink: {e}"),
+            kind: DbFailureKind::Other("save_session_agents".to_string()),
+        })?;
+    }
+
+    // 移除差集：仅删除本次列表未包含的 agent 行（禁止无条件全删）
+    if agents.is_empty() {
+        // 空列表 = 用户显式清空该会话全部子代理元数据（允许级联清消息）
+        conn.execute(
+            "DELETE FROM session_agents WHERE session_id = ?1",
+            rusqlite::params![session_id],
+        )
+        .map_err(|e| DbFailure {
+            message: format!("save_session_agents_clear: {e}"),
+            kind: DbFailureKind::Other("save_session_agents".to_string()),
+        })?;
+    } else {
+        let keep_ids: Vec<&str> = agents.iter().map(|a| a.id.as_str()).collect();
+        let placeholders = (0..keep_ids.len())
+            .map(|i| format!("?{}", i + 2))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let sql = format!(
+            "DELETE FROM session_agents
+             WHERE session_id = ?1 AND agent_id NOT IN ({placeholders})"
+        );
+        let mut params: Vec<Box<dyn rusqlite::ToSql>> = Vec::with_capacity(1 + keep_ids.len());
+        params.push(Box::new(session_id.to_string()));
+        for id in &keep_ids {
+            params.push(Box::new((*id).to_string()));
+        }
+        let param_refs: Vec<&dyn rusqlite::ToSql> =
+            params.iter().map(|p| p.as_ref()).collect();
+        conn.execute(&sql, param_refs.as_slice())
+            .map_err(|e| DbFailure {
+                message: format!("save_session_agents_removal_diff: {e}"),
+                kind: DbFailureKind::Other("save_session_agents".to_string()),
+            })?;
+    }
+    Ok(())
 }
 
 /// 宽容解析 agent 数组：坏元素跳过，整体不失败。
@@ -422,7 +516,7 @@ mod tests {
                     &format!("run-{i}"),
                     "completed",
                     "s1",
-                    Some(100 + i as i64),
+                    Some(100 + i),
                     None,
                     vec![msg(&format!("m{i}"), "user", i)],
                 )

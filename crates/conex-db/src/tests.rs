@@ -6,8 +6,46 @@
 use super::*;
 use crate::messages::parse_session_messages_flexible;
 use conex_types::{SessionAgent, SessionIndexEntry, SessionMessage};
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
+
+/// 真实临时 WAL 文件库守卫（open_temp_wal_for_test 尚未落地，先用
+/// 与 tests_concurrency 同源的 tempfile 真库模式；禁止用纯内存库冒充
+/// 持久化 Upsert / Diff Shrink 验收）。
+struct TempWalDbGuard {
+    path: std::path::PathBuf,
+}
+
+impl Drop for TempWalDbGuard {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.path);
+        let _ = std::fs::remove_file(format!("{}-wal", self.path.display()));
+        let _ = std::fs::remove_file(format!("{}-shm", self.path.display()));
+        if let Some(parent) = self.path.parent() {
+            let _ = std::fs::remove_dir_all(parent);
+        }
+    }
+}
+
+/// 打开真实临时 WAL 文件库（LocalDb::open → 完整迁移链 + 单写 Actor + ReaderPool）。
+fn open_temp_wal_db() -> (LocalDb, TempWalDbGuard) {
+    static TEST_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let id = TEST_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let dir = std::env::temp_dir().join(format!(
+        "conex_msg_body_{}_{}_{}",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos(),
+        id
+    ));
+    std::fs::create_dir_all(&dir).expect("create temp dir");
+    let path = dir.join("sessions.db");
+    let db = LocalDb::open(&path).expect("open temp wal db");
+    (db, TempWalDbGuard { path })
+}
 
 #[test]
 fn open_in_memory_and_migrate() {
@@ -217,7 +255,7 @@ fn append_event_created_at_millisecond_precision() {
 
 #[test]
 fn save_session_body_cas_conflict_rejects_stale_batch() {
-    let db = LocalDb::open_in_memory().unwrap();
+    let (db, _guard) = open_temp_wal_db();
     db.upsert_session_entry(&sample_entry("s1")).unwrap();
 
     // 首批 batch_version=1 成功
@@ -231,11 +269,16 @@ fn save_session_body_cas_conflict_rejects_stale_batch() {
         .save_session_body_versioned("s1", &[sample_message("m-stale", "user", 2)], Some(1))
         .unwrap_err();
     assert_eq!(err.kind, crate::error::DbFailureKind::CasConflict);
+    // 冲突批次不得污染正文
+    assert_eq!(db.load_session_body("s1").unwrap().len(), 1);
 
     // 更新批次 batch_version=2 成功
     db.save_session_body_versioned(
         "s1",
-        &[sample_message("m2", "user", 3), sample_message("m3", "assistant", 4)],
+        &[
+            sample_message("m2", "user", 3),
+            sample_message("m3", "assistant", 4),
+        ],
         Some(2),
     )
     .unwrap();
@@ -387,31 +430,42 @@ fn save_and_load_session_body() {
     assert_eq!(loaded[1].sender, "assistant");
 }
 
+/// 追加语义：短数组 → 长数组时 Diff Shrink 匹配 0 行，尾部仅新增 Upsert。
 #[test]
-fn save_session_body_replaces() {
-    let db = LocalDb::open_in_memory().unwrap();
+fn save_session_body_append_grows_and_keeps_prefix() {
+    let (db, _guard) = open_temp_wal_db();
     db.upsert_session_entry(&sample_entry("s1")).unwrap();
+
     db.save_session_body("s1", &[sample_message("m1", "user", 1)])
         .unwrap();
-    // 再次保存覆盖
+    assert_eq!(db.load_session_body("s1").unwrap().len(), 1);
+    assert_eq!(db.list_sessions().unwrap()[0].message_count, 1);
+
+    // 追加：前缀 m1 保持，新增 m2 / m3
     db.save_session_body(
         "s1",
         &[
-            sample_message("m2", "user", 2),
-            sample_message("m3", "assistant", 3),
+            sample_message("m1", "user", 1),
+            sample_message("m2", "assistant", 2),
+            sample_message("m3", "user", 3),
         ],
     )
     .unwrap();
 
     let loaded = db.load_session_body("s1").unwrap();
-    assert_eq!(loaded.len(), 2);
-    assert_eq!(loaded[0].id, "m2");
+    assert_eq!(loaded.len(), 3, "追加后物理行数 = 新长度");
+    assert_eq!(loaded[0].id, "m1");
+    assert_eq!(loaded[1].id, "m2");
+    assert_eq!(loaded[2].id, "m3");
+    assert_eq!(db.list_sessions().unwrap()[0].message_count, 3);
 }
 
+/// 覆盖语义：同长度数组按 (session_id, seq) Upsert 全字段（含 id/sender/text）。
 #[test]
-fn trigger_maintains_message_count() {
-    let db = LocalDb::open_in_memory().unwrap();
+fn save_session_body_upsert_overwrites_all_fields() {
+    let (db, _guard) = open_temp_wal_db();
     db.upsert_session_entry(&sample_entry("s1")).unwrap();
+
     db.save_session_body(
         "s1",
         &[
@@ -421,14 +475,130 @@ fn trigger_maintains_message_count() {
     )
     .unwrap();
 
-    let list = db.list_sessions().unwrap();
-    assert_eq!(list[0].message_count, 2);
+    // 同长度再保存：同 seq 位置全字段被 excluded 覆盖
+    let mut m1 = sample_message("m1-x", "assistant", 10);
+    m1.text = Some("overwritten".into());
+    db.save_session_body("s1", &[m1, sample_message("m3", "user", 3)])
+        .unwrap();
 
-    // save_session_body 替换为 1 条：先 delete(-2) 再 insert(+1) = -1
+    let loaded = db.load_session_body("s1").unwrap();
+    assert_eq!(loaded.len(), 2, "同长度覆盖不增不减行");
+    assert_eq!(loaded[0].id, "m1-x", "id 全字段覆盖");
+    assert_eq!(loaded[0].sender, "assistant", "sender 全字段覆盖");
+    assert_eq!(
+        loaded[0].text.as_deref(),
+        Some("overwritten"),
+        "text 全字段覆盖"
+    );
+    assert_eq!(loaded[1].id, "m3");
+    assert_eq!(db.list_sessions().unwrap()[0].message_count, 2);
+}
+
+/// Diff Shrink 收缩语义：长数组 → 短数组时仅删 seq >= 新长度的尾部。
+#[test]
+fn save_session_body_diff_shrink_removes_tail() {
+    let (db, _guard) = open_temp_wal_db();
+    db.upsert_session_entry(&sample_entry("s1")).unwrap();
+
+    db.save_session_body(
+        "s1",
+        &[
+            sample_message("m1", "user", 1),
+            sample_message("m2", "assistant", 2),
+            sample_message("m3", "user", 3),
+        ],
+    )
+    .unwrap();
+    assert_eq!(db.list_sessions().unwrap()[0].message_count, 3);
+
+    // 收缩：保留前缀 m1，物理删除 seq >= 1 的尾部
+    db.save_session_body("s1", &[sample_message("m1", "user", 1)])
+        .unwrap();
+
+    let loaded = db.load_session_body("s1").unwrap();
+    assert_eq!(loaded.len(), 1, "Diff Shrink 后仅剩前缀");
+    assert_eq!(loaded[0].id, "m1");
+    assert_eq!(
+        db.list_sessions().unwrap()[0].message_count,
+        1,
+        "message_count 绝对赋值 = messages.len()"
+    );
+}
+
+/// 清空语义：空数组 + Diff Shrink(seq >= 0) 清空该会话全部消息行。
+#[test]
+fn save_session_body_clear_empty_array_empties_session() {
+    let (db, _guard) = open_temp_wal_db();
+    db.upsert_session_entry(&sample_entry("s1")).unwrap();
+
+    db.save_session_body(
+        "s1",
+        &[
+            sample_message("m1", "user", 1),
+            sample_message("m2", "user", 2),
+        ],
+    )
+    .unwrap();
+    assert_eq!(db.load_session_body("s1").unwrap().len(), 2);
+
+    // 显式清空（空数组）：seq >= 0 删净 + message_count = 0
+    db.save_session_body("s1", &[]).unwrap();
+
+    assert!(db.load_session_body("s1").unwrap().is_empty());
+    assert_eq!(db.list_sessions().unwrap()[0].message_count, 0);
+}
+
+/// 覆盖 + 收缩组合：既有字段覆盖又有尾部收缩，端到端行数与内容一致。
+#[test]
+fn save_session_body_replace_with_shrink_combined() {
+    let (db, _guard) = open_temp_wal_db();
+    db.upsert_session_entry(&sample_entry("s1")).unwrap();
+    db.save_session_body(
+        "s1",
+        &[
+            sample_message("m1", "user", 1),
+            sample_message("m2", "assistant", 2),
+            sample_message("m3", "user", 3),
+        ],
+    )
+    .unwrap();
+    // 再次保存：覆盖 m1 全字段 + 收缩删除 m2/m3
+    let mut m1 = sample_message("m1b", "assistant", 20);
+    m1.text = Some("rewritten".into());
+    db.save_session_body("s1", &[m1]).unwrap();
+
+    let loaded = db.load_session_body("s1").unwrap();
+    assert_eq!(loaded.len(), 1, "覆盖 + 收缩后仅 1 行");
+    assert_eq!(loaded[0].id, "m1b");
+    assert_eq!(loaded[0].text.as_deref(), Some("rewritten"));
+    assert_eq!(db.list_sessions().unwrap()[0].message_count, 1);
+}
+
+/// message_count 绝对赋值：与序列长度严格相等（追加 / 收缩 / 清空三段）。
+#[test]
+fn message_count_absolute_assign_tracks_len() {
+    let (db, _guard) = open_temp_wal_db();
+    db.upsert_session_entry(&sample_entry("s1")).unwrap();
+
+    // 追加：2 条
+    db.save_session_body(
+        "s1",
+        &[
+            sample_message("m1", "user", 1),
+            sample_message("m2", "assistant", 2),
+        ],
+    )
+    .unwrap();
+    assert_eq!(db.list_sessions().unwrap()[0].message_count, 2);
+
+    // 收缩：1 条（旧「先 delete(-2) 再 insert(+1)」触发器双轨口径已退役）
     db.save_session_body("s1", &[sample_message("m-only", "user", 10)])
         .unwrap();
-    let list3 = db.list_sessions().unwrap();
-    assert_eq!(list3[0].message_count, 1);
+    assert_eq!(db.list_sessions().unwrap()[0].message_count, 1);
+
+    // 清空：0 条
+    db.save_session_body("s1", &[]).unwrap();
+    assert_eq!(db.list_sessions().unwrap()[0].message_count, 0);
 }
 
 #[test]
@@ -641,4 +811,275 @@ fn parse_session_messages_flexible_handles_bad_jsonl() {
     let msgs = parse_session_messages_flexible(raw);
     assert_eq!(msgs.len(), 1);
     assert_eq!(msgs[0].id, "m1");
+}
+
+// ===== 全局恢复排他租约（04 详案 §6.2：session_meta 键，零 DDL） =====
+
+#[test]
+fn recovery_lease_acquire_exclusive_renew_release_flow() {
+    let db = LocalDb::open_in_memory().unwrap();
+
+    // 首次抢占成功
+    assert!(db.try_acquire_recovery_lease("proc-a", None).unwrap());
+    // 他人未过期抢占被拒
+    assert!(!db.try_acquire_recovery_lease("proc-b", None).unwrap());
+    // 同一实例未过期重抢也被拒（须走 renew）
+    assert!(!db.try_acquire_recovery_lease("proc-a", None).unwrap());
+
+    // 持有者可续期；他人续期被拒
+    assert!(db.renew_recovery_lease("proc-a", None).unwrap());
+    assert!(!db.renew_recovery_lease("proc-b", None).unwrap());
+
+    // 他人释放失败；持有者释放成功；释放后可被他人抢占
+    assert!(!db.release_recovery_lease("proc-b").unwrap());
+    assert!(db.release_recovery_lease("proc-a").unwrap());
+    assert!(db.get_session_meta(RECOVERY_LEASE_KEY).unwrap().is_none());
+    assert!(db.try_acquire_recovery_lease("proc-b", None).unwrap());
+}
+
+#[test]
+fn recovery_lease_expired_can_be_taken_over() {
+    let db = LocalDb::open_in_memory().unwrap();
+
+    // 以极短 TTL 抢占，等待其过期
+    assert!(db.try_acquire_recovery_lease("proc-a", Some(1)).unwrap());
+    std::thread::sleep(std::time::Duration::from_millis(10));
+
+    // 过期后他人可接管（Fail-Safe TTL 容灾）
+    assert!(db.try_acquire_recovery_lease("proc-b", None).unwrap());
+    // 过期租约上原持有者续期失败（已易主）
+    assert!(!db.renew_recovery_lease("proc-a", None).unwrap());
+    assert!(db.release_recovery_lease("proc-b").unwrap());
+}
+
+// ===== ADD-01：save_session_agents 增量 Upsert + 移除差集（禁级联抹白）=====
+
+fn sample_agent(id: &str, status: &str, messages: Vec<SessionMessage>) -> SessionAgent {
+    SessionAgent {
+        id: id.into(),
+        subagent_run_id: format!("run-{id}"),
+        parent_session_id: "s1".into(),
+        parent_run_id: format!("prun-{id}"),
+        parent_tool_call_id: None,
+        description: format!("desc-{id}"),
+        mode: "explore".into(),
+        status: status.into(),
+        summary: None,
+        messages,
+        started_at: 100,
+        ended_at: None,
+        depth: Some(1),
+        subagent_path_json: None,
+        task_type: None,
+        display_label: None,
+        allowed_write_paths_json: None,
+        sub_session_id: None,
+    }
+}
+
+/// ADD-01 物证：save_session_agents 仅更新元数据（状态流转）后，
+/// session_agent_messages 历史消息必须完整存活——零级联抹白。
+#[test]
+fn save_session_agents_metadata_update_preserves_messages() {
+    let (db, _guard) = open_temp_wal_db();
+    db.upsert_session_entry(&sample_entry("s1")).unwrap();
+
+    let mut a1 = sample_agent(
+        "a1",
+        "running",
+        vec![
+            sample_message("am1", "assistant", 1),
+            sample_message("am2", "user", 2),
+        ],
+    );
+    db.save_session_agents("s1", std::slice::from_ref(&a1))
+        .unwrap();
+
+    // 状态流转 running → completed（快照仍携带全部消息）
+    a1.status = "completed".into();
+    a1.ended_at = Some(300);
+    db.save_session_agents("s1", &[a1]).unwrap();
+
+    let rows = db.load_session_agents("s1").unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].status, "completed");
+    assert_eq!(rows[0].ended_at, Some(300));
+    assert_eq!(
+        rows[0].messages.len(),
+        2,
+        "状态更新后子代理历史消息必须存活（零级联抹白）"
+    );
+    assert_eq!(rows[0].messages[0].id, "am1");
+    assert_eq!(rows[0].messages[1].id, "am2");
+}
+
+/// 消息 Upsert + 尾部收缩：短数组覆盖长数组时多余 seq 被清理，内容以载荷为准。
+#[test]
+fn save_session_agents_message_upsert_and_tail_shrink() {
+    let (db, _guard) = open_temp_wal_db();
+    db.upsert_session_entry(&sample_entry("s1")).unwrap();
+
+    let a1 = sample_agent(
+        "a1",
+        "running",
+        vec![
+            sample_message("am1", "assistant", 1),
+            sample_message("am2", "assistant", 2),
+            sample_message("am3", "assistant", 3),
+        ],
+    );
+    db.save_session_agents("s1", std::slice::from_ref(&a1))
+        .unwrap();
+
+    // 缩短为 2 条 + 更新首条内容
+    let mut shorter = a1.clone();
+    shorter.messages = vec![
+        {
+            let mut m = sample_message("am1", "assistant", 1);
+            m.text = Some("updated".into());
+            m
+        },
+        sample_message("am2x", "user", 2),
+    ];
+    db.save_session_agents("s1", &[shorter]).unwrap();
+
+    let rows = db.load_session_agents("s1").unwrap();
+    assert_eq!(rows[0].messages.len(), 2, "尾部收缩清理多余 seq");
+    assert_eq!(rows[0].messages[0].text.as_deref(), Some("updated"));
+    assert_eq!(rows[0].messages[1].id, "am2x");
+}
+
+/// 移除差集：本次列表未包含的 agent 行被删除（级联仅作用于确要移除的行）；
+/// 保留行的消息不受影响。
+#[test]
+fn save_session_agents_removal_diff_set() {
+    let (db, _guard) = open_temp_wal_db();
+    db.upsert_session_entry(&sample_entry("s1")).unwrap();
+
+    let a1 = sample_agent(
+        "a1",
+        "completed",
+        vec![sample_message("am1", "assistant", 1)],
+    );
+    let a2 = sample_agent("a2", "running", vec![sample_message("bm1", "assistant", 1)]);
+    db.save_session_agents("s1", &[a1.clone(), a2]).unwrap();
+    assert_eq!(db.load_session_agents("s1").unwrap().len(), 2);
+
+    // 仅保留 a1：a2 应被移除差集删除（其消息随之级联），a1 消息存活
+    db.save_session_agents("s1", &[a1]).unwrap();
+    let rows = db.load_session_agents("s1").unwrap();
+    assert_eq!(rows.len(), 1, "未包含的 agent 行被移除");
+    assert_eq!(rows[0].id, "a1");
+    assert_eq!(rows[0].messages.len(), 1, "保留行消息不受差集影响");
+}
+
+/// 空列表 = 显式清空该会话全部子代理元数据（允许级联清消息）。
+#[test]
+fn save_session_agents_empty_list_clears_session() {
+    let (db, _guard) = open_temp_wal_db();
+    db.upsert_session_entry(&sample_entry("s1")).unwrap();
+    db.save_session_agents(
+        "s1",
+        &[sample_agent(
+            "a1",
+            "completed",
+            vec![sample_message("am1", "assistant", 1)],
+        )],
+    )
+    .unwrap();
+
+    db.save_session_agents("s1", &[]).unwrap();
+    assert!(
+        db.load_session_agents("s1").unwrap().is_empty(),
+        "空列表显式清空全部子代理"
+    );
+}
+
+// ===== 导入路径 Upsert：冲突以载荷覆盖 + 差集（DEL-05 / DEL-05b）=====
+
+/// 导入幂等 + 覆盖：重复导入时 session_messages / session_agents 以载荷
+/// DO UPDATE，且载荷未包含的 agent 被移除差集删除（无全量 DELETE 毁窗）。
+#[test]
+fn import_agents_and_messages_upsert_with_removal_diff() {
+    let (db, _guard) = open_temp_wal_db();
+
+    let index = serde_json::json!([{
+        "id": "s1",
+        "title": "T",
+        "updatedAt": 1,
+        "messageCount": 1,
+    }])
+    .to_string();
+
+    let agent_json = |ids: &[&str], msg_ids: &[&str]| -> String {
+        let list: Vec<serde_json::Value> = ids
+            .iter()
+            .map(|id| {
+                let msgs: Vec<serde_json::Value> = msg_ids
+                    .iter()
+                    .map(|mid| {
+                        serde_json::json!({
+                            "id": mid,
+                            "sender": "assistant",
+                            "text": format!("text-{mid}"),
+                            "timestamp": 1,
+                        })
+                    })
+                    .collect();
+                serde_json::json!({
+                    "id": id,
+                    "subagentRunId": format!("run-{id}"),
+                    "parentSessionId": "s1",
+                    "parentRunId": format!("prun-{id}"),
+                    "description": format!("desc-{id}"),
+                    "mode": "explore",
+                    "status": "completed",
+                    "messages": msgs,
+                    "startedAt": 0,
+                })
+            })
+            .collect();
+        serde_json::to_string(&list).unwrap()
+    };
+
+    // 首次导入：a1+a2，消息 am1/am2
+    let body = serde_json::json!([
+        {"id": "m1", "sender": "user", "text": "hi", "timestamp": 100},
+        {"id": "m2", "sender": "assistant", "text": "hello", "timestamp": 200},
+    ])
+    .to_string();
+    let mut bodies = HashMap::new();
+    bodies.insert("s1".to_string(), body);
+    let mut agents_map = HashMap::new();
+    agents_map.insert("s1".to_string(), agent_json(&["a1", "a2"], &["am1", "am2"]));
+
+    db.import_from_localstorage(&index, bodies.clone(), agents_map, None, &[])
+        .unwrap();
+    assert_eq!(db.load_session_agents("s1").unwrap().len(), 2);
+    assert_eq!(db.load_session_body("s1").unwrap().len(), 2);
+
+    // 二次导入：body 缩短为 1 条；agents 仅 a1 且消息缩为 1 条
+    let body2 = serde_json::json!([
+        {"id": "m1x", "sender": "user", "text": "hi2", "timestamp": 100},
+    ])
+    .to_string();
+    let mut bodies2 = HashMap::new();
+    bodies2.insert("s1".to_string(), body2);
+    let mut agents_map2 = HashMap::new();
+    agents_map2.insert("s1".to_string(), agent_json(&["a1"], &["am1x"]));
+
+    db.import_from_localstorage(&index, bodies2, agents_map2, None, &[])
+        .unwrap();
+
+    // 消息：载荷覆盖 + 尾部收缩
+    let body_loaded = db.load_session_body("s1").unwrap();
+    assert_eq!(body_loaded.len(), 1);
+    assert_eq!(body_loaded[0].id, "m1x");
+
+    // agents：a2 被移除差集删除；a1 消息以载荷覆盖并收缩
+    let agents_loaded = db.load_session_agents("s1").unwrap();
+    assert_eq!(agents_loaded.len(), 1, "载荷未包含的 agent 被移除差集删除");
+    assert_eq!(agents_loaded[0].id, "a1");
+    assert_eq!(agents_loaded[0].messages.len(), 1);
+    assert_eq!(agents_loaded[0].messages[0].id, "am1x");
 }

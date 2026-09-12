@@ -40,30 +40,29 @@ impl LocalDb {
     ///
     /// `limit` 限制返回条数（修复无界查询性能问题，对齐 Stream B 6.3）。
     /// 传 `None` 等价于无限制（兼容旧行为），但推荐显式传 `Some(n)`。
+    ///
+    /// 读路径经 [`LocalDb::read`]（ReaderPool 8 槽位，无池回退主连接）；
+    /// 闭包内刚性 `.collect()` 物化，游标在闭包返回前即刻释放——杜绝
+    /// Oldest Active Read Mark 把持 WAL 导致 Checkpoint 饥饿（03 详案 §4.1）。
     pub fn query_events(
         &self,
         session_id: &str,
         after_sequence: i64,
         limit: Option<i64>,
     ) -> Result<Vec<StoredEvent>, DbFailure> {
-        let conn = self.conn.lock().map_err(|e| DbFailure {
-            message: format!("lock poisoned: {e}"),
-            kind: DbFailureKind::Lock,
-        })?;
-
-        let mut stmt = conn
-            .prepare(
-                "SELECT session_id, sequence, event_type, payload, run_id, created_at
-                 FROM events WHERE session_id = ?1 AND sequence > ?2
-                 ORDER BY sequence ASC LIMIT ?3",
-            )
-            .map_err(|e| self.latch_error("query_events_prepare", e))?;
-
+        let sid = session_id.to_string();
         let limit_value = limit.unwrap_or(i64::MAX);
-        let events = stmt
-            .query_map(
-                rusqlite::params![session_id, after_sequence, limit_value],
-                |row| {
+        self.read(move |conn| {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT session_id, sequence, event_type, payload, run_id, created_at
+                     FROM events WHERE session_id = ?1 AND sequence > ?2
+                     ORDER BY sequence ASC LIMIT ?3",
+                )
+                .map_err(|e| self.latch_error("query_events_prepare", e))?;
+
+            let events = stmt
+                .query_map(rusqlite::params![sid, after_sequence, limit_value], |row| {
                     Ok(StoredEvent {
                         session_id: row.get(0)?,
                         sequence: row.get(1)?,
@@ -72,13 +71,13 @@ impl LocalDb {
                         run_id: row.get(4)?,
                         created_at: row.get(5)?,
                     })
-                },
-            )
-            .map_err(|e| self.latch_error("query_events_map", e))?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| self.latch_error("query_events_collect", e))?;
-
-        Ok(events)
+                })
+                .map_err(|e| self.latch_error("query_events_map", e))?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| self.latch_error("query_events_collect", e))?;
+            drop(stmt);
+            Ok(events)
+        })
     }
 
     /// 按 run 归属过滤查询会话内事件（SQL 下推，走 idx_events_run 索引）：
@@ -87,6 +86,7 @@ impl LocalDb {
     ///
     /// run_id 为 NULL 的行（会话域事件）恒不命中本查询（SQL NULL 比较
     /// 语义）；按会话全量读取请用 [Self::query_events]。
+    /// 读路径经 ReaderPool，闭包内 `.collect()` 物化即时释放游标。
     pub fn query_events_by_run(
         &self,
         session_id: &str,
@@ -94,39 +94,38 @@ impl LocalDb {
         after_sequence: i64,
         limit: Option<i64>,
     ) -> Result<Vec<StoredEvent>, DbFailure> {
-        let conn = self.conn.lock().map_err(|e| DbFailure {
-            message: format!("lock poisoned: {e}"),
-            kind: DbFailureKind::Lock,
-        })?;
-
-        let mut stmt = conn
-            .prepare(
-                "SELECT session_id, sequence, event_type, payload, run_id, created_at
-                 FROM events WHERE session_id = ?1 AND run_id = ?2 AND sequence > ?3
-                 ORDER BY sequence ASC LIMIT ?4",
-            )
-            .map_err(|e| self.latch_error("query_events_by_run_prepare", e))?;
-
+        let sid = session_id.to_string();
+        let rid = run_id.to_string();
         let limit_value = limit.unwrap_or(i64::MAX);
-        let events = stmt
-            .query_map(
-                rusqlite::params![session_id, run_id, after_sequence, limit_value],
-                |row| {
-                    Ok(StoredEvent {
-                        session_id: row.get(0)?,
-                        sequence: row.get(1)?,
-                        event_type: row.get(2)?,
-                        payload: row.get(3)?,
-                        run_id: row.get(4)?,
-                        created_at: row.get(5)?,
-                    })
-                },
-            )
-            .map_err(|e| self.latch_error("query_events_by_run_map", e))?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| self.latch_error("query_events_by_run_collect", e))?;
+        self.read(move |conn| {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT session_id, sequence, event_type, payload, run_id, created_at
+                     FROM events WHERE session_id = ?1 AND run_id = ?2 AND sequence > ?3
+                     ORDER BY sequence ASC LIMIT ?4",
+                )
+                .map_err(|e| self.latch_error("query_events_by_run_prepare", e))?;
 
-        Ok(events)
+            let events = stmt
+                .query_map(
+                    rusqlite::params![sid, rid, after_sequence, limit_value],
+                    |row| {
+                        Ok(StoredEvent {
+                            session_id: row.get(0)?,
+                            sequence: row.get(1)?,
+                            event_type: row.get(2)?,
+                            payload: row.get(3)?,
+                            run_id: row.get(4)?,
+                            created_at: row.get(5)?,
+                        })
+                    },
+                )
+                .map_err(|e| self.latch_error("query_events_by_run_map", e))?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| self.latch_error("query_events_by_run_collect", e))?;
+            drop(stmt);
+            Ok(events)
+        })
     }
 
     /// 会话内最大已落库 sequence（1C-1：恢复路径 SQL MAX 下推，避免全量
@@ -135,17 +134,17 @@ impl LocalDb {
     /// SQL 为 `SELECT COALESCE(MAX(sequence), 0) FROM events WHERE
     /// session_id = ?1`——与 [Self::reserve_sequence] 的隐式预热口径一致
     ///（取号路径的 `COALESCE(MAX(sequence),0)+1` 同源）。
+    /// 读路径经 ReaderPool，不阻塞写入 Actor。
     pub fn max_sequence(&self, session_id: &str) -> Result<i64, DbFailure> {
-        let conn = self.conn.lock().map_err(|e| DbFailure {
-            message: format!("lock poisoned: {e}"),
-            kind: DbFailureKind::Lock,
-        })?;
-        conn.query_row(
-            "SELECT COALESCE(MAX(sequence), 0) FROM events WHERE session_id = ?1",
-            rusqlite::params![session_id],
-            |row| row.get::<_, i64>(0),
-        )
-        .map_err(|e| self.latch_error("max_sequence", e))
+        let sid = session_id.to_string();
+        self.read(move |conn| {
+            conn.query_row(
+                "SELECT COALESCE(MAX(sequence), 0) FROM events WHERE session_id = ?1",
+                rusqlite::params![sid],
+                |row| row.get::<_, i64>(0),
+            )
+            .map_err(|e| self.latch_error("max_sequence", e))
+        })
     }
 
     /// 按 run 归属 + event_type 过滤查询会话内事件（1C-2：SQL 下推
@@ -155,6 +154,7 @@ impl LocalDb {
     ///
     /// `after_sequence` 开区间（> after）；`limit` 直下推；run_id 为 NULL
     /// 的会话域事件恒不命中（SQL NULL 比较语义）。
+    /// 读路径经 ReaderPool，闭包内 `.collect()` 物化即时释放游标。
     pub fn query_events_by_type(
         &self,
         session_id: &str,
@@ -163,40 +163,40 @@ impl LocalDb {
         after_sequence: i64,
         limit: Option<i64>,
     ) -> Result<Vec<StoredEvent>, DbFailure> {
-        let conn = self.conn.lock().map_err(|e| DbFailure {
-            message: format!("lock poisoned: {e}"),
-            kind: DbFailureKind::Lock,
-        })?;
-
-        let mut stmt = conn
-            .prepare(
-                "SELECT session_id, sequence, event_type, payload, run_id, created_at
-                 FROM events WHERE session_id = ?1 AND run_id = ?2 AND sequence > ?3
-                 AND event_type = ?4
-                 ORDER BY sequence ASC LIMIT ?5",
-            )
-            .map_err(|e| self.latch_error("query_events_by_type_prepare", e))?;
-
+        let sid = session_id.to_string();
+        let rid = run_id.to_string();
+        let etype = event_type.to_string();
         let limit_value = limit.unwrap_or(i64::MAX);
-        let events = stmt
-            .query_map(
-                rusqlite::params![session_id, run_id, after_sequence, event_type, limit_value],
-                |row| {
-                    Ok(StoredEvent {
-                        session_id: row.get(0)?,
-                        sequence: row.get(1)?,
-                        event_type: row.get(2)?,
-                        payload: row.get(3)?,
-                        run_id: row.get(4)?,
-                        created_at: row.get(5)?,
-                    })
-                },
-            )
-            .map_err(|e| self.latch_error("query_events_by_type_map", e))?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| self.latch_error("query_events_by_type_collect", e))?;
+        self.read(move |conn| {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT session_id, sequence, event_type, payload, run_id, created_at
+                     FROM events WHERE session_id = ?1 AND run_id = ?2 AND sequence > ?3
+                     AND event_type = ?4
+                     ORDER BY sequence ASC LIMIT ?5",
+                )
+                .map_err(|e| self.latch_error("query_events_by_type_prepare", e))?;
 
-        Ok(events)
+            let events = stmt
+                .query_map(
+                    rusqlite::params![sid, rid, after_sequence, etype, limit_value],
+                    |row| {
+                        Ok(StoredEvent {
+                            session_id: row.get(0)?,
+                            sequence: row.get(1)?,
+                            event_type: row.get(2)?,
+                            payload: row.get(3)?,
+                            run_id: row.get(4)?,
+                            created_at: row.get(5)?,
+                        })
+                    },
+                )
+                .map_err(|e| self.latch_error("query_events_by_type_map", e))?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| self.latch_error("query_events_by_type_collect", e))?;
+            drop(stmt);
+            Ok(events)
+        })
     }
 
     /// 会话级序列号原子取号（T08.12 Q23 + D3-2 热路径单语句）。

@@ -239,102 +239,110 @@ impl LocalDb {
         })
     }
 
-    /// 存量 LocalStorage 快照平滑迁移（幂等，成功导入返回 true，已迁移过返回 false）
+    /// 存量 LocalStorage 快照平滑迁移（幂等，成功导入返回 true，已迁移过返回 false）。
+    ///
+    /// 写路径经组提交 Writer（D-P15：废除主连接裸锁写循环；幂等检查、
+    /// 批量 INSERT 与迁移标记同处 Actor 的 `BEGIN IMMEDIATE` 事务内，
+    /// check-then-write 原子生效；闭包禁 `self` / 禁嵌套事务）。
     pub fn import_legacy_usage_snapshot(
         &self,
         snapshot: &serde_json::Value,
     ) -> Result<bool, DbFailure> {
-        let conn = self.conn.lock().map_err(|e| DbFailure {
-            message: format!("lock poisoned: {e}"),
-            kind: DbFailureKind::Lock,
-        })?;
-
-        // 检查 session_meta 标记
-        let already_imported: bool = conn
-            .query_row(
-                "SELECT COUNT(*) FROM session_meta WHERE key = 'legacy_usage_migrated_v10';",
-                [],
-                |r| r.get::<_, i64>(0),
-            )
-            .map(|cnt| cnt > 0)
-            .unwrap_or(false);
-
-        if already_imported {
-            return Ok(false);
-        }
-
-        let days = snapshot.get("days").and_then(|d| d.as_array());
-        if let Some(day_list) = days {
-            for item in day_list {
-                let day_str = item.get("day").and_then(|s| s.as_str()).unwrap_or("");
-                let input = item.get("input").and_then(|n| n.as_u64()).unwrap_or(0);
-                let output = item.get("output").and_then(|n| n.as_u64()).unwrap_or(0);
-                let cost = item.get("cost").and_then(|n| n.as_f64()).unwrap_or(0.0);
-                let cache_read = item.get("cacheRead").and_then(|n| n.as_u64()).unwrap_or(0);
-                let cache_write = item.get("cacheWrite").and_then(|n| n.as_u64()).unwrap_or(0);
-
-                if day_str.is_empty() {
-                    continue;
-                }
-
-                // 将 YYYY-MM-DD 解析为当日正午时间戳（12:00:00 UTC）
-                let parts: Vec<&str> = day_str.split('-').collect();
-                if parts.len() != 3 {
-                    continue;
-                }
-                let y: i32 = parts[0].parse().unwrap_or(1970);
-                let m: u32 = parts[1].parse().unwrap_or(1);
-                let d: u32 = parts[2].parse().unwrap_or(1);
-
-                const DAYS_BEFORE_MONTH: [i64; 12] =
-                    [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
-                let is_leap = (y % 4 == 0 && y % 100 != 0) || (y % 400 == 0);
-                let m_idx = ((m as usize).saturating_sub(1)).min(11);
-                let mut days_in_year = DAYS_BEFORE_MONTH[m_idx] + (d as i64 - 1);
-                if is_leap && m > 2 {
-                    days_in_year += 1;
-                }
-                let mut total_days = 0i64;
-                for yr in 1970..y {
-                    let yr_leap = (yr % 4 == 0 && yr % 100 != 0) || (yr % 400 == 0);
-                    total_days += if yr_leap { 366 } else { 365 };
-                }
-                total_days += days_in_year;
-                let timestamp = total_days * 86_400_000 + 12 * 3_600_000;
-
-                conn.execute(
-                    "INSERT INTO usage_records (
-                        session_id, run_id, project_name, model, provider,
-                        prompt_tokens, completion_tokens, cache_read_tokens, cache_write_tokens,
-                        cost_cny, cost_usd, timestamp
-                    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12);",
-                    params![
-                        "legacy-session",
-                        None::<String>,
-                        "legacy",
-                        "legacy-aggregated",
-                        "default",
-                        input as i64,
-                        output as i64,
-                        cache_read as i64,
-                        cache_write as i64,
-                        cost * 7.25, // 估算折合人民币
-                        cost,
-                        timestamp,
-                    ],
+        let snapshot = snapshot.clone();
+        self.write_blocking(move |conn| {
+            // 检查 session_meta 标记
+            let already_imported: bool = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM session_meta WHERE key = 'legacy_usage_migrated_v10';",
+                    [],
+                    |r| r.get::<_, i64>(0),
                 )
-                .map_err(|e| self.latch_error("import_legacy_snapshot_item", e))?;
+                .map(|cnt| cnt > 0)
+                .unwrap_or(false);
+
+            if already_imported {
+                return Ok(false);
             }
-        }
 
-        // 写入 session_meta 迁移标记
-        conn.execute(
-            "INSERT OR REPLACE INTO session_meta (key, value) VALUES ('legacy_usage_migrated_v10', '1');",
-            [],
-        )
-        .map_err(|e| self.latch_error("set_legacy_usage_migrated_flag", e))?;
+            let days = snapshot.get("days").and_then(|d| d.as_array());
+            if let Some(day_list) = days {
+                for item in day_list {
+                    let day_str = item.get("day").and_then(|s| s.as_str()).unwrap_or("");
+                    let input = item.get("input").and_then(|n| n.as_u64()).unwrap_or(0);
+                    let output = item.get("output").and_then(|n| n.as_u64()).unwrap_or(0);
+                    let cost = item.get("cost").and_then(|n| n.as_f64()).unwrap_or(0.0);
+                    let cache_read = item.get("cacheRead").and_then(|n| n.as_u64()).unwrap_or(0);
+                    let cache_write = item.get("cacheWrite").and_then(|n| n.as_u64()).unwrap_or(0);
 
-        Ok(true)
+                    if day_str.is_empty() {
+                        continue;
+                    }
+
+                    // 将 YYYY-MM-DD 解析为当日正午时间戳（12:00:00 UTC）
+                    let parts: Vec<&str> = day_str.split('-').collect();
+                    if parts.len() != 3 {
+                        continue;
+                    }
+                    let y: i32 = parts[0].parse().unwrap_or(1970);
+                    let m: u32 = parts[1].parse().unwrap_or(1);
+                    let d: u32 = parts[2].parse().unwrap_or(1);
+
+                    const DAYS_BEFORE_MONTH: [i64; 12] =
+                        [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
+                    let is_leap = (y % 4 == 0 && y % 100 != 0) || (y % 400 == 0);
+                    let m_idx = ((m as usize).saturating_sub(1)).min(11);
+                    let mut days_in_year = DAYS_BEFORE_MONTH[m_idx] + (d as i64 - 1);
+                    if is_leap && m > 2 {
+                        days_in_year += 1;
+                    }
+                    let mut total_days = 0i64;
+                    for yr in 1970..y {
+                        let yr_leap = (yr % 4 == 0 && yr % 100 != 0) || (yr % 400 == 0);
+                        total_days += if yr_leap { 366 } else { 365 };
+                    }
+                    total_days += days_in_year;
+                    let timestamp = total_days * 86_400_000 + 12 * 3_600_000;
+
+                    conn.execute(
+                        "INSERT INTO usage_records (
+                            session_id, run_id, project_name, model, provider,
+                            prompt_tokens, completion_tokens, cache_read_tokens, cache_write_tokens,
+                            cost_cny, cost_usd, timestamp
+                        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12);",
+                        params![
+                            "legacy-session",
+                            None::<String>,
+                            "legacy",
+                            "legacy-aggregated",
+                            "default",
+                            input as i64,
+                            output as i64,
+                            cache_read as i64,
+                            cache_write as i64,
+                            cost * 7.25, // 估算折合人民币
+                            cost,
+                            timestamp,
+                        ],
+                    )
+                    .map_err(|e| DbFailure {
+                        message: format!("import_legacy_snapshot_item: {e}"),
+                        kind: DbFailureKind::Other("import_legacy_usage_snapshot".to_string()),
+                    })?;
+                }
+            }
+
+            // 写入 session_meta 迁移标记
+            conn.execute(
+                "INSERT OR REPLACE INTO session_meta (key, value) VALUES ('legacy_usage_migrated_v10', '1');",
+                [],
+            )
+            .map_err(|e| DbFailure {
+                message: format!("set_legacy_usage_migrated_flag: {e}"),
+                kind: DbFailureKind::Other("import_legacy_usage_snapshot".to_string()),
+            })?;
+
+            Ok(true)
+        })
     }
 
     /// 查询用量全景仪表盘数据

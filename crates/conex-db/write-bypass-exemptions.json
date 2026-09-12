@@ -1,7 +1,7 @@
 {
-  "$comment": "D3 DEL-1 conn.lock 写旁路扫描豁免表（机器可读 SSOT）。scripts/check-db-write-bypass.mjs 读取本表；新增豁免必须登记 reason 与 category。",
-  "version": 1,
-  "updated": "2026-09-13",
+  "$comment": "D3 DEL-1 conn.lock 写旁路扫描豁免表（机器可读 SSOT）。scripts/check-db-write-bypass.mjs 读取本表；新增豁免必须登记 reason 与 category。2026-09-12 清退（version 2）：cleanup_orphan_sessions / import_from_localstorage / import_bookmarks / import_history / import_legacy_usage_snapshot 与 files.import.rs / files.imported.rs 已全部改道 write_blocking（P05 导入改道 + 本批 D-P07~D-P16 收口），业务豁免清零；仅留启动迁移 DDL / 骨架 / 测试。",
+  "version": 2,
+  "updated": "2026-09-12",
   "files": {
     "migrate.rs": {
       "reason": "启动迁移链：版本化 DDL / user_version 事务 / 备份编排，低频且需主连接跨版本一致性",
@@ -15,14 +15,6 @@
       "reason": "DDL 模板与 ensure 路径（create_v5_schema 等），非运行期业务写",
       "category": "startup_migrate"
     },
-    "import.rs": {
-      "reason": "localStorage 一次性批量导入（跨表事务，保留主连接合理路径）",
-      "category": "startup_import"
-    },
-    "imported.rs": {
-      "reason": "浏览器书签/历史一次性批量导入（低频跨表事务）",
-      "category": "startup_import"
-    },
     "lib.rs": {
       "reason": "open PRAGMA / read() 主锁回退骨架 / write() API——非业务域写",
       "category": "skeleton"
@@ -34,10 +26,6 @@
     "tests_cas_gc.rs": { "reason": "CAS GC 测试", "category": "test" }
   },
   "functions": {
-    "cleanup_orphan_sessions": {
-      "reason": "跨表不变量：COUNT 前后对比 + 宽限期/豁免名单，保留主连接",
-      "category": "cross_table_invariant"
-    },
     "migrate": {
       "reason": "启动迁移入口（conn.lock 编排链）",
       "category": "startup_migrate"
@@ -57,22 +45,6 @@
     "user_version": {
       "reason": "PRAGMA user_version 读（迁移窗口）",
       "category": "startup_migrate"
-    },
-    "import_from_localstorage": {
-      "reason": "一次性导入入口",
-      "category": "startup_import"
-    },
-    "import_bookmarks": {
-      "reason": "书签批量导入",
-      "category": "startup_import"
-    },
-    "import_history": {
-      "reason": "历史批量导入",
-      "category": "startup_import"
-    },
-    "import_legacy_usage_snapshot": {
-      "reason": "legacy 用量快照导入",
-      "category": "startup_import"
     }
   }
 }

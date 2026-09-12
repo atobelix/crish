@@ -1,10 +1,11 @@
-//! CAS 活数据垃圾回收（GC）、租约隔离与反隔离自愈全套破坏性测试套件。
+//! CAS 活数据垃圾回收（GC）、租约隔离与显式反隔离全套破坏性测试套件。
 //!
 //! 覆盖场景（Batch 2 Unit 2.2 + ROUND-3-IMPROVEMENT-02 §7.1 TEST-02/TEST-03）：
 //! 1. 多源联合引用安全网扫描（Block 附件、CRDT 快照历史、Undo 栈引用）；
 //! 2. 30 分钟活数据保护租约（BlobLeaseGuard 与 active_blob_leases 表）；
 //! 3. 7 天软删除隔离期（仅标记 marked_for_delete_at，严禁即时物理删除）；
-//! 4. 读取阶段反隔离自愈（Un-quarantine on Read）；
+//! 4. 读路径纯读纪律（get_blob/get_blob_meta 不自愈；显式 unquarantine /
+//!    重挂引用反隔离——03 §3.3 重入死锁解耦后契约）；
 //! 5. Pinned 置顶与新建宽限期保护；
 //! 6. 全生命周期 Undo 恢复与租约转合入测试。
 
@@ -286,7 +287,7 @@ fn test_quarantine_unhealed_purged_after_7_days() {
 }
 
 #[test]
-fn test_unquarantine_self_healing_on_read() {
+fn test_get_blob_pure_read_no_heal_explicit_unquarantine_heals() {
     let db = LocalDb::open_in_memory().unwrap();
     let payload = b"critical-healed-attachment";
     let h = db.put_blob(payload).unwrap();
@@ -302,32 +303,41 @@ fn test_unquarantine_self_healing_on_read() {
         "必须处于软删除隔离期"
     );
 
-    // 用户通过 get_blob 读取内容 -> 触发反隔离自愈！
+    // 03 §3.3：get_blob 为纯读——隔离期内依然可读，但绝不发起读中写自愈
+    // （读中 write_blocking 在写 Actor 线程被间接调用会 100% 重入死锁）。
     let read_data = db
         .get_blob(&h)
         .unwrap()
         .expect("blob must be readable during quarantine");
     assert_eq!(read_data, payload);
 
-    // 验证反隔离自愈：marked_for_delete_at 已原子恢复为 NULL
+    // 标记必须原样保留（needing_unquarantine 由调用方据 marked_for_delete_at 判断）
+    let meta_after_read = db.peek_blob_meta(&h).unwrap().unwrap();
+    assert!(
+        meta_after_read.marked_for_delete_at.is_some(),
+        "纯读路径严禁清除隔离标记！"
+    );
+
+    // 显式反隔离路径（重挂引用 / unquarantine_blob）才生效
+    assert!(db.unquarantine_blob(&h).unwrap());
     let meta_after = db.peek_blob_meta(&h).unwrap().unwrap();
     assert!(
         meta_after.marked_for_delete_at.is_none(),
-        "读取必须自动完成反隔离自愈！"
+        "显式 unquarantine 必须完成反隔离！"
     );
 
-    // 模拟隔离期满（8 天）再次 GC：因为已自愈，绝不被误杀物理删除！
+    // 模拟隔离期满（8 天）再次 GC：因为已反隔离，绝不被误杀物理删除！
     let purge_cfg = CasGcConfig {
         quarantine_duration_secs: 0,
-        creation_grace_secs: 300, // 宽限期保护已自愈数据
+        creation_grace_secs: 300, // 宽限期保护已反隔离数据
     };
     let purged = db.purge_expired_quarantined(&purge_cfg).unwrap();
-    assert!(purged.is_empty(), "已自愈的数据绝不可被物理清除");
+    assert!(purged.is_empty(), "已反隔离的数据绝不可被物理清除");
     assert_eq!(db.count_blobs().unwrap(), 1);
 }
 
 #[test]
-fn test_unquarantine_self_healing_on_meta_read() {
+fn test_get_blob_meta_pure_read_no_heal() {
     let db = LocalDb::open_in_memory().unwrap();
     let h = db.put_blob(b"meta-heal-data").unwrap();
 
@@ -340,11 +350,12 @@ fn test_unquarantine_self_healing_on_meta_read() {
         .marked_for_delete_at
         .is_some());
 
-    // get_blob_meta 默认触发反隔离自愈
+    // 03 §3.3：get_blob_meta 同为纯读——标记原样返回，不自愈不写库
     let meta = db.get_blob_meta(&h).unwrap().unwrap();
-    assert!(meta.marked_for_delete_at.is_none());
+    assert!(meta.marked_for_delete_at.is_some(), "纯读严禁清除隔离标记");
 
-    // 再次 peek 确认已持久化自愈
+    // 显式反隔离后 peek 确认已持久化
+    assert!(db.unquarantine_blob(&h).unwrap());
     let peeked = db.peek_blob_meta(&h).unwrap().unwrap();
     assert!(peeked.marked_for_delete_at.is_none());
 }

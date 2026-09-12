@@ -217,6 +217,10 @@ impl LocalDb {
     /// 清理不在 `active_ids` 中的会话（孤儿清理）。
     /// 返回被删除的会话数。
     ///
+    /// 写路径经组提交 Writer（`write_blocking`，D-P11：废除主连接裸锁
+    /// 事务旁路与嵌套 `conn.transaction()`；COUNT 前后对比与删除同处
+    /// Actor 的 `BEGIN IMMEDIATE` 事务内，原子性由外层事务保证）。
+    ///
     /// 安全护栏（P0-2 / PERSIST-03 P1-1 升级 P0 修复，2026-08-07）：
     /// - **宽限期**（F4/PE-08 T08.2）：`updated_at` 距今小于 `ORPHAN_GRACE_MS`
     ///   的行跳过删除（值可由 session_meta `orphan_grace_ms` 覆盖）；
@@ -238,89 +242,8 @@ impl LocalDb {
     /// 空 keepIds 的显式清空语义由壳层守卫（guard_cleanup_keep + confirm_empty）
     /// 把关；库层对空 keepIds 仍执行上述护栏 + 宽限期保护。
     pub fn cleanup_orphan_sessions(&self, active_ids: &[String]) -> Result<usize, DbFailure> {
-        // D3 豁免：跨表不变量（sessions + runs + pending_inputs COUNT 前后对比）
-        // 保留主连接事务路径——不与组提交 Writer 抢锁形态。
-        let mut conn = self.conn.lock().map_err(|e| DbFailure {
-            message: format!("lock poisoned: {e}"),
-            kind: DbFailureKind::Lock,
-        })?;
-
-        let tx = conn
-            .transaction()
-            .map_err(|e| self.latch_error("cleanup_orphan_tx", e))?;
-
-        // 宽限期（PE-08 T08.2）：updated_at 距今小于该值的会话不被清理。
-        // 值可从 session_meta 的 orphan_grace_ms 覆盖（默认 ORPHAN_GRACE_MS）。
-        let grace_ms: i64 = tx
-            .query_row(
-                "SELECT value FROM session_meta WHERE key = ?1",
-                rusqlite::params![ORPHAN_GRACE_MS_KEY],
-                |row| row.get::<_, String>(0),
-            )
-            .ok()
-            .and_then(|v| v.parse::<i64>().ok())
-            .unwrap_or(ORPHAN_GRACE_MS);
-        let now_ms = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_millis() as i64)
-            .unwrap_or(0);
-        let grace_cutoff = now_ms - grace_ms;
-
-        // 豁免条件（两个删除分支共用）：引擎子代理会话 + 活动 run 会话 +
-        // 未决 pending 输入。hydrated_from_engine 为 NULL（普通会话）时
-        // COALESCE 取 0 → 可删。
-        let protected = "COALESCE(hydrated_from_engine, 0) != 1
-            AND NOT EXISTS (
-                SELECT 1 FROM runs r
-                WHERE r.session_id = sessions.id
-                  AND r.status IN (
-                      'queued','initializing','running','awaiting-approval',
-                      'completing','cancelling'
-                  )
-            )
-            AND NOT EXISTS (
-                SELECT 1 FROM pending_inputs p
-                WHERE p.session_id = sessions.id
-            )";
-
-        let total_before: i64 = tx
-            .query_row("SELECT COUNT(*) FROM sessions", [], |row| row.get(0))
-            .map_err(|e| self.latch_error("cleanup_orphan_count_before", e))?;
-
-        if active_ids.is_empty() {
-            // 空 keepIds 的全表清理由壳层守卫（confirm_empty）把关；
-            // 库层仍执行宽限期 + 豁免保护（近宽限期内新建 / 引擎 / 活动 run 保留）。
-            tx.execute(
-                &format!("DELETE FROM sessions WHERE updated_at < ?1 AND {protected}"),
-                rusqlite::params![grace_cutoff],
-            )
-            .map_err(|e| self.latch_error("cleanup_orphan_delete_all", e))?;
-        } else {
-            // 构造 IN (?, ?, ...) 占位符
-            let placeholders: Vec<String> =
-                (0..active_ids.len()).map(|_| "?".to_string()).collect();
-            let sql = format!(
-                "DELETE FROM sessions WHERE id NOT IN ({}) AND updated_at < ?{} AND {protected}",
-                placeholders.join(", "),
-                active_ids.len() + 1
-            );
-            let mut params: Vec<&dyn rusqlite::ToSql> = active_ids
-                .iter()
-                .map(|s| s as &dyn rusqlite::ToSql)
-                .collect();
-            params.push(&grace_cutoff);
-            tx.execute(&sql, params.as_slice())
-                .map_err(|e| self.latch_error("cleanup_orphan_delete", e))?;
-        }
-
-        let total_after: i64 = tx
-            .query_row("SELECT COUNT(*) FROM sessions", [], |row| row.get(0))
-            .map_err(|e| self.latch_error("cleanup_orphan_count_after", e))?;
-
-        tx.commit()
-            .map_err(|e| self.latch_error("cleanup_orphan_commit", e))?;
-
-        Ok((total_before - total_after) as usize)
+        let ids = active_ids.to_vec();
+        self.write_blocking(move |conn| cleanup_orphan_sessions_conn(conn, &ids))
     }
 
     /// 更新会话的 `updated_at` 为当前 epoch ms。经组提交 Writer。
@@ -338,4 +261,204 @@ impl LocalDb {
             Ok(())
         })
     }
+
+    // ===== 全局恢复排他租约（04 详案 §6.2：session_meta 键承载，零 DDL） =====
+
+    /// 原子抢占全局恢复排他租约（TTL 默认 [`RECOVERY_LEASE_TTL_MS`] = 30s）。
+    ///
+    /// 经 [`Self::update_session_meta`] 的写 Actor 串行化闭包实现 CAS：
+    /// 租约不存在或已过期 → 抢占成功（写入 `instance_id` + 过期戳）；
+    /// 租约未过期且被他人持有 → 拒绝（返回 `false`，调用方应安全跳过
+    /// 事件合成、以只读模式加载）。同一实例未过期时重抢同样被拒——
+    /// 续期请走 [`Self::renew_recovery_lease`]。
+    pub fn try_acquire_recovery_lease(
+        &self,
+        instance_id: &str,
+        ttl_ms: Option<i64>,
+    ) -> Result<bool, DbFailure> {
+        let instance_id = instance_id.to_string();
+        let ttl = ttl_ms.unwrap_or(crate::RECOVERY_LEASE_TTL_MS);
+        let result = self.update_session_meta(crate::RECOVERY_LEASE_KEY, move |current| {
+            let now_ms = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis() as i64)
+                .unwrap_or(0);
+            if let Some(val_str) = current {
+                if let Ok(v) = serde_json::from_str::<serde_json::Value>(val_str) {
+                    if let Some(exp) = v.get("expiresAt").and_then(|e| e.as_i64()) {
+                        if now_ms < exp {
+                            // 租约未过期且被他人持有：抢占拒绝
+                            return None;
+                        }
+                    }
+                }
+            }
+            let lease_payload = serde_json::json!({
+                "instanceId": instance_id,
+                "acquiredAt": now_ms,
+                "expiresAt": now_ms + ttl,
+            });
+            Some(lease_payload.to_string())
+        })?;
+        Ok(result.is_some())
+    }
+
+    /// 续期自己持有的全局恢复租约（TTL 默认 30s）。
+    /// 仅当当前持有者为 `instance_id` 时续期成功；租约不存在 / 已易主 /
+    /// 已过期 → `false`（应重新 [`Self::try_acquire_recovery_lease`]）。
+    pub fn renew_recovery_lease(
+        &self,
+        instance_id: &str,
+        ttl_ms: Option<i64>,
+    ) -> Result<bool, DbFailure> {
+        let instance_id = instance_id.to_string();
+        let ttl = ttl_ms.unwrap_or(crate::RECOVERY_LEASE_TTL_MS);
+        let result = self.update_session_meta(crate::RECOVERY_LEASE_KEY, move |current| {
+            let val_str = current?;
+            let v: serde_json::Value = serde_json::from_str(val_str).ok()?;
+            if v.get("instanceId").and_then(|e| e.as_str()) != Some(instance_id.as_str()) {
+                return None;
+            }
+            let now_ms = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis() as i64)
+                .unwrap_or(0);
+            let lease_payload = serde_json::json!({
+                "instanceId": instance_id,
+                "acquiredAt": v.get("acquiredAt").and_then(|e| e.as_i64()).unwrap_or(now_ms),
+                "expiresAt": now_ms + ttl,
+            });
+            Some(lease_payload.to_string())
+        })?;
+        Ok(result.is_some())
+    }
+
+    /// 释放自己持有的全局恢复租约（条件删除：仅持有者匹配时清除）。
+    /// 返回 `true` 表示本次确实删除了租约行。
+    pub fn release_recovery_lease(&self, instance_id: &str) -> Result<bool, DbFailure> {
+        let instance_id = instance_id.to_string();
+        self.write_blocking(move |conn| {
+            let current: Option<String> = conn
+                .query_row(
+                    "SELECT value FROM session_meta WHERE key = ?1",
+                    rusqlite::params![crate::RECOVERY_LEASE_KEY],
+                    |row| row.get::<_, String>(0),
+                )
+                .optional()
+                .map_err(|e| DbFailure {
+                    message: format!("release_recovery_lease_read: {e}"),
+                    kind: DbFailureKind::Other("release_recovery_lease".to_string()),
+                })?;
+            let holder_matches = current
+                .as_deref()
+                .and_then(|val_str| serde_json::from_str::<serde_json::Value>(val_str).ok())
+                .and_then(|v| {
+                    v.get("instanceId")
+                        .and_then(|e| e.as_str())
+                        .map(|s| s == instance_id)
+                })
+                .unwrap_or(false);
+            if !holder_matches {
+                return Ok(false);
+            }
+            conn.execute(
+                "DELETE FROM session_meta WHERE key = ?1",
+                rusqlite::params![crate::RECOVERY_LEASE_KEY],
+            )
+            .map_err(|e| DbFailure {
+                message: format!("release_recovery_lease_delete: {e}"),
+                kind: DbFailureKind::Other("release_recovery_lease".to_string()),
+            })?;
+            Ok(true)
+        })
+    }
+}
+
+/// 孤儿会话清理连接级纯函数（D-P11：供 `write_blocking` 闭包调用；
+/// 绝对禁止捕获 `LocalDb` / 调用 `self.*` / 开启 `conn.transaction()`——
+/// 外层 Actor 已持 `BEGIN IMMEDIATE`，本函数直接在其事务内顺序执行）。
+pub(crate) fn cleanup_orphan_sessions_conn(
+    conn: &rusqlite::Connection,
+    active_ids: &[String],
+) -> Result<usize, DbFailure> {
+    // 宽限期（PE-08 T08.2）：updated_at 距今小于该值的会话不被清理。
+    // 值可从 session_meta 的 orphan_grace_ms 覆盖（默认 ORPHAN_GRACE_MS）。
+    let grace_ms: i64 = conn
+        .query_row(
+            "SELECT value FROM session_meta WHERE key = ?1",
+            rusqlite::params![ORPHAN_GRACE_MS_KEY],
+            |row| row.get::<_, String>(0),
+        )
+        .ok()
+        .and_then(|v| v.parse::<i64>().ok())
+        .unwrap_or(ORPHAN_GRACE_MS);
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0);
+    let grace_cutoff = now_ms - grace_ms;
+
+    // 豁免条件（两个删除分支共用）：引擎子代理会话 + 活动 run 会话 +
+    // 未决 pending 输入。hydrated_from_engine 为 NULL（普通会话）时
+    // COALESCE 取 0 → 可删。
+    let protected = "COALESCE(hydrated_from_engine, 0) != 1
+            AND NOT EXISTS (
+                SELECT 1 FROM runs r
+                WHERE r.session_id = sessions.id
+                  AND r.status IN (
+                      'queued','initializing','running','awaiting-approval',
+                      'completing','cancelling'
+                  )
+            )
+            AND NOT EXISTS (
+                SELECT 1 FROM pending_inputs p
+                WHERE p.session_id = sessions.id
+            )";
+
+    let total_before: i64 = conn
+        .query_row("SELECT COUNT(*) FROM sessions", [], |row| row.get(0))
+        .map_err(|e| DbFailure {
+            message: format!("cleanup_orphan_count_before: {e}"),
+            kind: DbFailureKind::Other("cleanup_orphan_sessions".to_string()),
+        })?;
+
+    if active_ids.is_empty() {
+        // 空 keepIds 的全表清理由壳层守卫（confirm_empty）把关；
+        // 库层仍执行宽限期 + 豁免保护（近宽限期内新建 / 引擎 / 活动 run 保留）。
+        conn.execute(
+            &format!("DELETE FROM sessions WHERE updated_at < ?1 AND {protected}"),
+            rusqlite::params![grace_cutoff],
+        )
+        .map_err(|e| DbFailure {
+            message: format!("cleanup_orphan_delete_all: {e}"),
+            kind: DbFailureKind::Other("cleanup_orphan_sessions".to_string()),
+        })?;
+    } else {
+        // 构造 IN (?, ?, ...) 占位符
+        let placeholders: Vec<String> = (0..active_ids.len()).map(|_| "?".to_string()).collect();
+        let sql = format!(
+            "DELETE FROM sessions WHERE id NOT IN ({}) AND updated_at < ?{} AND {protected}",
+            placeholders.join(", "),
+            active_ids.len() + 1
+        );
+        let mut params: Vec<&dyn rusqlite::ToSql> = active_ids
+            .iter()
+            .map(|s| s as &dyn rusqlite::ToSql)
+            .collect();
+        params.push(&grace_cutoff);
+        conn.execute(&sql, params.as_slice())
+            .map_err(|e| DbFailure {
+                message: format!("cleanup_orphan_delete: {e}"),
+                kind: DbFailureKind::Other("cleanup_orphan_sessions".to_string()),
+            })?;
+    }
+
+    let total_after: i64 = conn
+        .query_row("SELECT COUNT(*) FROM sessions", [], |row| row.get(0))
+        .map_err(|e| DbFailure {
+            message: format!("cleanup_orphan_count_after: {e}"),
+            kind: DbFailureKind::Other("cleanup_orphan_sessions".to_string()),
+        })?;
+
+    Ok((total_before - total_after) as usize)
 }

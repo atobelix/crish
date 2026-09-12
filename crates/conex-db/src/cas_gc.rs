@@ -11,9 +11,12 @@
 //!    - 阶段 1：无全域引用的孤儿仅标记 `marked_for_delete_at = CURRENT_TIMESTAMP`，
 //!      进入 7 天隔离期，**严禁即时物理删除**；
 //!    - 阶段 2：仅当处于隔离期超过 7 天（可配置）且依然无引用的孤儿，才执行物理删除；
-//! 3. 读取阶段反隔离自愈（Un-quarantine on Read）：
-//!    - 任何读取（`get_blob`）若命中处于软删除隔离期的 Blob，
-//!      原子清除 `marked_for_delete_at = NULL` 恢复为正常状态。
+//! 3. 读路径纯读纪律（03 §3.3 / 重入死锁解耦，取代旧「读中自愈」契约）：
+//!    - `get_blob` / `get_blob_meta` 为 ReaderPool **纯读**——禁止在读路径
+//!      发起 `write_blocking`（若被写 Actor 间接调用会 100% 重入死锁）；
+//!    - 隔离期内 Blob 依然可读；反隔离由显式写路径处理：重挂引用
+//!      （`link_*` 连接级纯函数自带 `unquarantine_blob_conn`）或显式
+//!      `unquarantine_blob`；隔离生命周期由独立 GC 任务裁决。
 
 use super::schema::create_v5_schema;
 use super::{DbFailure, DbFailureKind, LocalDb};
@@ -146,61 +149,40 @@ impl LocalDb {
         Ok(hash)
     }
 
-    /// 读 Blob 内容（ReaderPool）；若命中软删除隔离行则经 Writer 反隔离自愈。
+    /// 读 Blob 内容（ReaderPool 纯读，D-P/03 §3.3：**禁止**读中发起
+    /// `write_blocking` 自愈——读闭包若在写 Actor 线程被间接调用会引发
+    /// 100% 重入死锁）。隔离期内的 Blob 依然可读；反隔离由显式路径处理：
+    /// 重挂引用（`link_*` 连接级纯函数自带 `unquarantine_blob_conn`）或
+    /// 显式 [`Self::unquarantine_blob`]；隔离生命周期由独立 GC 任务
+    /// （[`Self::run_cas_gc`] / [`Self::purge_expired_quarantined`]）裁决。
     pub fn get_blob(&self, hash: &str) -> Result<Option<Vec<u8>>, DbFailure> {
         let hash_owned = hash.to_string();
-        let row: Option<(Option<Vec<u8>>, Option<String>)> = self
-            .read(move |conn| {
-                conn.query_row(
-                    "SELECT bytes, marked_for_delete_at FROM blob_cas WHERE hash = ?1",
-                    params![hash_owned],
-                    |r| Ok((r.get(0)?, r.get(1)?)),
-                )
-                .optional()
-                .map_err(|e| DbFailure {
-                    message: format!("get_blob: {e}"),
-                    kind: DbFailureKind::Other("get_blob".to_string()),
-                })
-            })?;
-
-        let Some((bytes, marked_for_delete_at)) = row else {
-            return Ok(None);
-        };
-        if marked_for_delete_at.is_some() {
-            let h = hash.to_string();
-            self.write_blocking(move |conn| {
-                unquarantine_blob_conn(conn, &h).map_err(|e| DbFailure {
-                    message: format!("get_blob_heal: {e}"),
-                    kind: DbFailureKind::Other("get_blob".to_string()),
-                })
-            })?;
-        }
-        Ok(bytes)
+        self.read(move |conn| {
+            conn.query_row(
+                "SELECT bytes FROM blob_cas WHERE hash = ?1",
+                params![hash_owned],
+                |r| r.get(0),
+            )
+            .optional()
+            .map_err(|e| DbFailure {
+                message: format!("get_blob: {e}"),
+                kind: DbFailureKind::Other("get_blob".to_string()),
+            })
+        })
     }
 
-    /// 读元数据并自愈（反隔离）：读走 ReaderPool，写走 Writer。
+    /// 读元数据（ReaderPool 纯读，不自愈）。命中隔离行时
+    /// `marked_for_delete_at` 原样返回——调用方据其判断
+    /// `needing_unquarantine`；反隔离走 [`Self::unquarantine_blob`] 或
+    /// 重挂引用路径。语义与 [`Self::peek_blob_meta`] 一致（保留双名兼容）。
     pub fn get_blob_meta(&self, hash: &str) -> Result<Option<CasBlobRow>, DbFailure> {
         let hash_owned = hash.to_string();
-        let meta = self.read(move |conn| {
+        self.read(move |conn| {
             get_blob_meta_conn(conn, &hash_owned, false).map_err(|e| DbFailure {
                 message: format!("get_blob_meta: {e}"),
                 kind: DbFailureKind::Other("get_blob_meta".to_string()),
             })
-        })?;
-        let Some(mut meta) = meta else {
-            return Ok(None);
-        };
-        if meta.marked_for_delete_at.is_some() {
-            let h = hash.to_string();
-            self.write_blocking(move |conn| {
-                unquarantine_blob_conn(conn, &h).map_err(|e| DbFailure {
-                    message: format!("get_blob_meta_heal: {e}"),
-                    kind: DbFailureKind::Other("get_blob_meta".to_string()),
-                })
-            })?;
-            meta.marked_for_delete_at = None;
-        }
-        Ok(Some(meta))
+        })
     }
 
     /// 纯读元数据（不自愈），走 ReaderPool。

@@ -110,6 +110,11 @@ pub const READER_CONN_CACHE_SIZE_KIB: i64 = -4000;
 pub const ORPHAN_GRACE_MS: i64 = 300_000;
 /// session_meta 中可配宽限期的键。
 pub const ORPHAN_GRACE_MS_KEY: &str = "orphan_grace_ms";
+/// 全局恢复排他租约的 session_meta 标准键名（04 详案 §6.2；零 DDL，
+/// 载荷为 `{instanceId, acquiredAt, expiresAt}` JSON）。
+pub const RECOVERY_LEASE_KEY: &str = "global_recovery_lease";
+/// 全局恢复排他租约默认 TTL：30 秒（04 详案 §6.2 硬性锁定）。
+pub const RECOVERY_LEASE_TTL_MS: i64 = 30_000;
 /// 迁移备份目录后缀：DROP 前整库拷贝 `sessions.db.bak-v{n}`，保留最近 2 份。
 const BACKUP_KEEP: usize = 2;
 
