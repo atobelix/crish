@@ -57,7 +57,7 @@
   min-width: 220px; /* 容器约束·不入 token */
   max-width: min(280px, calc(100vw - 16px)); /* 容器约束·不入 token */
   max-height: min(
-    var(--radix-popover-content-available-height, 360px),
+    var(--radix-popover-content-available-height),
     70vh,
     360px
   );

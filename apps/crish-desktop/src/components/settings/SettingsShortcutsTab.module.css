@@ -15,7 +15,7 @@
 .shortcutSearch {
   appearance: none;
   -webkit-appearance: none;
-  border-radius: var(--button-radius, 7px);
+  border-radius: var(--button-radius);
   box-shadow: none;
 }
 

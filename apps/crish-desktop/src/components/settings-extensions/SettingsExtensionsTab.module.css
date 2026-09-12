@@ -110,7 +110,7 @@
 .actions :global(button) {
   appearance: none;
   -webkit-appearance: none;
-  border-radius: var(--button-radius, 7px);
+  border-radius: var(--button-radius);
 }
 
 .inlinePanel {
@@ -147,7 +147,7 @@
 .detailActions :global(button) {
   appearance: none;
   -webkit-appearance: none;
-  border-radius: var(--button-radius, 7px);
+  border-radius: var(--button-radius);
 }
 
 /* 类名含 coverContent：命中 overlay-scrollbar 出口，禁写 scrollbar-width */

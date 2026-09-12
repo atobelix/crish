@@ -148,7 +148,7 @@
   appearance: none;
   -webkit-appearance: none;
   border: var(--hairline-width) solid var(--border-subtle);
-  border-radius: var(--button-radius, 7px);
+  border-radius: var(--button-radius);
   box-shadow: none;
 }
 

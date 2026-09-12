@@ -932,7 +932,7 @@
 }
 
 .mrdModalityChipActive:hover {
-  background: color-mix(in srgb, var(--brand) 90%, #000);
+  background: color-mix(in srgb, var(--brand) 90%, var(--shadow-color));
   color: var(--text-on-accent);
 }
 
