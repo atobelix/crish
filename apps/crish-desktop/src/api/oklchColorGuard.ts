@@ -93,8 +93,67 @@ export function getContrastGuardedText(bgPrimaryColor: string, isDark?: boolean)
   }
 }
 
+export interface ContrastGuardedTokens {
+  isDarkBg: boolean;
+  textPrimary: string;
+  textSecondary: string;
+  textTertiary: string;
+}
+
 /**
- * Updates CSS Custom Properties for text dynamically based on the current skin's background
+ * 色彩对比度防崩算法纯函数
+ * 严禁依赖字符串相等反推，使用纯布尔逻辑判定明暗
+ */
+export function computeContrastGuardedTokens(
+  bgPrimaryColor: string,
+  isDarkTheme?: boolean,
+  options?: { isCustomSkin?: boolean; explicitTextPrimary?: string }
+): ContrastGuardedTokens | null {
+  const isCustom = options?.isCustomSkin ?? false;
+  const explicitFg = options?.explicitTextPrimary;
+
+  // 官方预设且已显式提供字色时，官方预设已满足 WCAG 规范，保持原汁原味，不作侵入式覆盖
+  if (!isCustom && explicitFg) {
+    return null;
+  }
+
+  let isLightBg = true;
+  try {
+    const oklch = parseColorToOklch(bgPrimaryColor, isDarkTheme);
+    if (!Number.isNaN(oklch.l)) {
+      isLightBg = oklch.l > 0.52;
+    } else {
+      isLightBg = typeof isDarkTheme === 'boolean' ? !isDarkTheme : true;
+    }
+  } catch {
+    isLightBg = typeof isDarkTheme === 'boolean' ? !isDarkTheme : true;
+  }
+
+  const isDarkBg = !isLightBg;
+
+  return {
+    isDarkBg,
+    textPrimary: isLightBg ? 'hsl(35, 12%, 11%)' : 'hsl(0, 0%, 94%)',
+    textSecondary: isDarkBg ? 'hsl(0, 0%, 72%)' : 'hsl(35, 8%, 34%)',
+    textTertiary: isDarkBg ? 'hsl(0, 0%, 50%)' : 'hsl(35, 6%, 52%)',
+  };
+}
+
+type TokenPropertySetter = (name: string, value: string) => void;
+
+let activeTokenSetter: TokenPropertySetter = (name, value) => {
+  if (typeof document !== 'undefined') {
+    document.documentElement.style.setProperty(name, value);
+  }
+};
+
+export function setTokenRuntimeSetter(setter: TokenPropertySetter): void {
+  activeTokenSetter = setter;
+}
+
+/**
+ * 动态根据当前背景更新文字对比度保护 Token
+ * 委托受控 TokenRuntimeController 注入，明暗判定采用纯布尔逻辑
  */
 export function applyTextContrastGuard(
   bgPrimaryColor: string,
@@ -103,26 +162,12 @@ export function applyTextContrastGuard(
 ): void {
   if (typeof window === 'undefined') return;
 
-  const isCustom = options?.isCustomSkin ?? false;
-  const explicitFg = options?.explicitTextPrimary;
-
-  // 官方预设且已显式提供字色时，官方预设已满足 WCAG 规范，保持原汁原味，不作侵入式覆盖
-  if (!isCustom && explicitFg) {
+  const guarded = computeContrastGuardedTokens(bgPrimaryColor, isDark, options);
+  if (!guarded) {
     return;
   }
 
-  const root = document.documentElement;
-  const textPrimary = getContrastGuardedText(bgPrimaryColor, isDark);
-
-  root.style.setProperty('--text-primary', textPrimary);
-
-  const isComputedDark = textPrimary === 'hsl(0, 0%, 94%)';
-
-  if (isComputedDark) {
-    root.style.setProperty('--text-secondary', 'hsl(0, 0%, 72%)');
-    root.style.setProperty('--text-tertiary', 'hsl(0, 0%, 50%)');
-  } else {
-    root.style.setProperty('--text-secondary', 'hsl(35, 8%, 34%)');
-    root.style.setProperty('--text-tertiary', 'hsl(35, 6%, 52%)');
-  }
+  activeTokenSetter('--text-primary', guarded.textPrimary);
+  activeTokenSetter('--text-secondary', guarded.textSecondary);
+  activeTokenSetter('--text-tertiary', guarded.textTertiary);
 }

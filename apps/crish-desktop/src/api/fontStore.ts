@@ -149,13 +149,10 @@ export function applyFontStacks(prefs: FontPreferences, platform: PlatformId = d
   html.style.setProperty('--font-sans', uiStack);
   html.style.setProperty('--font-mono', monoStack);
   html.style.setProperty('--font-mono-features', lig);
-  html.style.setProperty('--md-font-family', uiStack);
-  html.style.setProperty('--md-font-sans', uiStack);
-  html.style.setProperty('--md-text-font', uiStack);
-  html.style.setProperty('--md-font-mono', monoStack);
-  html.style.setProperty('--md-code-font', monoStack);
-  html.style.setProperty('--sep-font-sans', uiStack);
-  html.style.setProperty('--sep-font-mono', monoStack);
+  // T7 别名收敛（2026-09-12）：--md-font-family/--md-font-sans/--md-text-font/
+  // --md-font-mono/--md-code-font/--sep-font-sans/--sep-font-mono 不再由 JS 写入——
+  // tokens.css 静态已改为 var(--font-sans/--font-mono, 兜底栈) 派生，用户字体偏好
+  // 经 --font-sans/--font-mono 单点流入全部字体消费族。
 
   html.setAttribute('data-ui-font', p.uiFont.startsWith('local:') ? 'local' : p.uiFont);
   html.setAttribute('data-mono-font', p.monoFont.startsWith('local:') ? 'local' : p.monoFont);

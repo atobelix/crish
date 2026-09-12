@@ -1,7 +1,8 @@
 /**
- * 外观主题：皮肤预设（调色板数据文件）。
- * 各皮肤色板常量（约 225 处 hex/hsl），运行时通过 root.style.setProperty 注入 CSS 变量，
- * 天然构成 tokens 的运行时数据源。按 PE-05 T05.5.1 约定不做逐处 token 化。
+ * 外观主题：皮肤预设（调色板纯数据定义）。
+ * 本文件仅作为底层基础色板（Palette）的静态预设数据源，严禁包含任何硬编码覆盖语义 token 的运行时逻辑。
+ * 所有语义 token（如 surface、background、text、border、control-soft 等）严格由 CSS 规范与
+ * TokenRuntimeController 统一规范化派生，确保单真源与设计系统解耦。
  */
 
 /** 单个皮肤预设的色板结构 */

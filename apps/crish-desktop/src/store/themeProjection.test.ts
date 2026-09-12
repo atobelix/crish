@@ -2,15 +2,18 @@
 /**
  * themeProjection 单测（D3 主题收敛段一，T-E 批次 5）。
  *
- * settingsStore.appSettings.theme 变化 → setTheme（DOM + crish_theme 缓存 +
+ * settingsStore.appSettings.theme 变化 → setTheme（DOM 应用 + Commit Ack 镜像 +
  * crish-theme-changed 事件）。断言：
- * - 切换 → data-theme 属性 + crish_theme 键写入（DOM 侧）；
+ * - 切换 → data-theme 属性立即生效；
+ * - crish_theme 镜像仅在 preferences Commit Ack 成功后写入（失败清理）；
  * - 同值重复触发跳过（幂等）；
  * - 卸载后退订（后续 setAppSettings 不再写 DOM）。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useSettingsStore } from './settingsStore';
 import { initThemeProjection } from './themeProjection';
+import { preferencesClient } from '../api/preferences/preferencesClient';
+import { THEME_KEY } from '../api/themeTypes';
 
 let unsub: (() => void) | null = null;
 
@@ -39,10 +42,12 @@ beforeEach(() => {
 afterEach(() => {
   unsub?.();
   unsub = null;
+  vi.restoreAllMocks();
 });
 
 describe('themeProjection — settingsStore.theme 订阅投影', () => {
-  it('setAppSettings(theme) → 投影立即应用 DOM data-theme + 写 crish_theme 缓存', () => {
+  it('setAppSettings(theme) → 投影立即应用 DOM data-theme；镜像待 Commit Ack', () => {
+    vi.spyOn(preferencesClient, 'setPreference').mockResolvedValue(undefined);
     unsub = initThemeProjection();
     useSettingsStore.getState().setAppSettings({
       theme: 'dark',
@@ -51,26 +56,58 @@ describe('themeProjection — settingsStore.theme 订阅投影', () => {
     } as never);
 
     expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
-    expect(localStorage.getItem('crish_theme')).toBeNull();
+    // Commit Ack 前同步断言：镜像不得乐观写入
+    expect(localStorage.getItem(THEME_KEY)).toBeNull();
   });
 
-  it('同 theme 值重复触发 → 不重复写（幂等跳过）', () => {
+  it('Commit Ack 成功后写入 crish_theme 镜像', async () => {
+    vi.spyOn(preferencesClient, 'setPreference').mockResolvedValue(undefined);
     unsub = initThemeProjection();
     useSettingsStore.getState().setAppSettings({
       theme: 'dark',
       hideThinkingBlock: true,
       tabModeEnabled: true,
     } as never);
-    const writes = 1;
+
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(localStorage.getItem(THEME_KEY)).toBe('dark');
+  });
+
+  it('Commit Ack 失败时清理镜像', async () => {
+    vi.spyOn(preferencesClient, 'setPreference').mockRejectedValue(
+      new Error('sqlite offline'),
+    );
+    unsub = initThemeProjection();
+    useSettingsStore.getState().setAppSettings({
+      theme: 'dark',
+      hideThinkingBlock: true,
+      tabModeEnabled: true,
+    } as never);
+
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(localStorage.getItem(THEME_KEY)).toBeNull();
+  });
+
+  it('同 theme 值重复触发 → 不重复写（幂等跳过）', () => {
+    vi.spyOn(preferencesClient, 'setPreference').mockResolvedValue(undefined);
+    unsub = initThemeProjection();
+    useSettingsStore.getState().setAppSettings({
+      theme: 'dark',
+      hideThinkingBlock: true,
+      tabModeEnabled: true,
+    } as never);
+    const prefSpy = vi.mocked(preferencesClient.setPreference);
+    const callsAfterFirst = prefSpy.mock.calls.length;
     // 再 set 一次同值（模拟 settings 轮询回灌）
     useSettingsStore.getState().setAppSettings({
       theme: 'dark',
       hideThinkingBlock: true,
       tabModeEnabled: true,
     } as never);
-    expect(localStorage.getItem('crish_theme')).toBeNull();
+    expect(prefSpy.mock.calls.length).toBe(callsAfterFirst);
     expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
-    expect(writes).toBe(1);
   });
 
   it('卸载退订：后续 setAppSettings 不再应用 DOM', () => {
@@ -94,7 +131,6 @@ describe('themeProjection — settingsStore.theme 订阅投影', () => {
       tabModeEnabled: true,
     } as never);
     expect(document.documentElement.getAttribute('data-theme')).toBe('default');
-    expect(localStorage.getItem('crish_theme')).toBeNull();
   });
 });
 
