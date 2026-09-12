@@ -26,12 +26,14 @@
 use conex_compaction::clean_output::{clean_output, CleanupOptions};
 use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
 use serde_json::{json, Map, Value};
+use std::sync::Arc;
 
 use super::messages::{stringify_tool_output, user_message_content, ChatContent, ChatContentPart};
 use super::schema::canonicalize_schema;
 use super::tools::{ToolChoice, ToolDefinition};
 use super::vendor::{ReasoningEffort, ThinkingIntensity};
 use super::RequestBuildContext;
+use crate::error::RequestBuildError;
 use crate::request::build::dialect::{
     self, assemble_thinking_dialect, DialectBuildOptions, ThinkingDialectFormat,
 };
@@ -123,7 +125,145 @@ pub fn build_gemini_request_body(
         );
     }
 
+    // W04 · 出站成对性 Fail-Closed 守门（详案 02 §3.4 轨三补齐）：在 contents
+    // 组装完成后刚性拦截孤儿 functionCall——严禁静默伪造 functionResponse
+    // 垫片。Debug/CI panic（Fail-Fast 暴露内核断裂）；Release tracing::error!
+    // 后中止组包（绝不产出带毒请求体）。会话循环侧应优先调用
+    // [validate_gemini_tool_pairing] 走「补齐后单次重试」闭环。
+    fail_closed_gemini_pairing_gate(context.messages);
+
     Value::Object(body)
+}
+
+/// 检测 Gemini wire contents 中的孤儿 functionCall（纯只读，不改写不伪造）。
+///
+/// Gemini functionCall / functionResponse 无独立 call_id，按 **函数名 + 出现
+/// 顺序计数** 配对：同名多次调用按顺序与同名多次 response 一一配对；剩余未
+/// 配对的 functionCall → 孤儿（上游 Gemini API 将 400 / INVALID_ARGUMENT）。
+/// 返回排序后的孤儿合成 ID 列表（`{name}#{occurrence}`，顺序稳定，供会话循环
+/// 补齐重试逐 ID 对账）。
+///
+/// **禁止假阴性误伤**：同名多次调用全部被同名 response 覆盖时不报孤儿；
+/// 仅当该名字的 call 计数 > response 计数时，多余部分（按出现顺序）为孤儿。
+pub fn detect_gemini_unpaired_tool_calls(messages: &[Arc<AgentMessage>]) -> Vec<String> {
+    // 按出现顺序收集 functionCall / functionResponse 的 (name, global_order)
+    let mut calls: Vec<(String, usize)> = Vec::new();
+    let mut responses: Vec<(String, usize)> = Vec::new();
+    let mut order: usize = 0;
+
+    for msg in messages {
+        let msg: &AgentMessage = msg;
+        match msg.role {
+            AgentMessageRole::Assistant => {
+                for block in &msg.blocks {
+                    if let AgentMessageBlock::ToolCall(call) = block {
+                        let name = call.tool_name.trim();
+                        if !name.is_empty() {
+                            calls.push((name.to_string(), order));
+                            order += 1;
+                        }
+                    }
+                }
+                // 历史水合兜底：assistant 同体 ToolResult 块
+                for block in &msg.blocks {
+                    if let AgentMessageBlock::ToolResult { tool_name, .. } = block {
+                        let name = tool_name.trim();
+                        if !name.is_empty() {
+                            responses.push((name.to_string(), order));
+                            order += 1;
+                        }
+                    }
+                }
+            }
+            AgentMessageRole::Tool => {
+                for block in &msg.blocks {
+                    if let AgentMessageBlock::ToolResult { tool_name, .. } = block {
+                        let name = tool_name.trim();
+                        if !name.is_empty() {
+                            responses.push((name.to_string(), order));
+                            order += 1;
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    // 同名配对：按出现顺序 FIFO，多出的 call 为孤儿
+    use std::collections::{BTreeMap, BTreeSet};
+    let mut response_pool: BTreeMap<String, usize> = BTreeMap::new();
+    for (name, _) in &responses {
+        *response_pool.entry(name.clone()).or_insert(0) += 1;
+    }
+
+    let mut call_seen: BTreeMap<String, usize> = BTreeMap::new();
+    let mut orphans: BTreeSet<String> = BTreeSet::new();
+    for (name, _) in &calls {
+        let seen = call_seen.entry(name.clone()).or_insert(0);
+        let available = response_pool.get(name).copied().unwrap_or(0);
+        if *seen >= available {
+            orphans.insert(format!("{name}#{seen}"));
+        }
+        *seen += 1;
+    }
+
+    orphans.into_iter().collect()
+}
+
+/// Gemini 出站成对性校验入口（详案 02 §3.4 分级守门 · 轨三补齐）。
+///
+/// - **Debug / CI（`debug_assertions`）**：检测到孤儿 → 立即 panic（Fail-Fast，
+///   迫使开发者在内核层根治，而非在导线层掩盖）；
+/// - **Release**：返回 [RequestBuildError::UnpairedToolCalls]（含排序
+///   `orphan_ids`）并 `tracing::error!` 结构化日志——调用方（会话循环出站
+///   组装处）据此执行「本地合成补齐 → 单次重试组包」；仍失败则标记会话
+///   `wire_pairing_poisoned`。**禁止**在导线层静默插入假 functionResponse。
+pub fn validate_gemini_tool_pairing(messages: &[Arc<AgentMessage>]) -> Result<(), RequestBuildError> {
+    let orphan_ids = detect_gemini_unpaired_tool_calls(messages);
+    if orphan_ids.is_empty() {
+        return Ok(());
+    }
+    let err = RequestBuildError::UnpairedToolCalls {
+        protocol: "gemini",
+        orphan_ids,
+    };
+    #[cfg(debug_assertions)]
+    {
+        panic!("Gemini 导线层校验拦截到孤儿工具调用！{err:?}");
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        tracing::error!(
+            target: "agent_provider::wire_pairing",
+            protocol = "gemini",
+            error = %err,
+            orphan_ids = ?err.orphan_ids(),
+            "导线层刚性拦截带毒请求出站（禁止静默伪造 functionResponse；调用方须走补齐重试闭环）"
+        );
+        return Err(err);
+    }
+    #[allow(unreachable_code)]
+    Ok(())
+}
+
+/// build 入口接线的 fail-closed 守门（Debug panic / Release error + 拒绝产出）。
+///
+/// `build_gemini_request_body` 返回签名保持 `Value`（既有调用面零破坏）：
+/// Release 下一旦拦截即 `tracing::error!` 并 panic——语义为「带毒请求体绝不
+/// 静默出站」；会话循环侧须优先捕获 [validate_gemini_tool_pairing] 的
+/// `Err(UnpairedToolCalls)` 走补齐重试，正常路径不会抵达本函数的错误分支。
+fn fail_closed_gemini_pairing_gate(messages: &[Arc<AgentMessage>]) {
+    if let Err(err) = validate_gemini_tool_pairing(messages) {
+        tracing::error!(
+            target: "agent_provider::wire_pairing",
+            protocol = "gemini",
+            error = %err,
+            orphan_ids = ?err.orphan_ids(),
+            "build_gemini 入口守门拦截：拒绝构造带毒请求体"
+        );
+        panic!("Gemini 导线层入口守门拦截到孤儿工具调用（带毒请求体禁止出站）：{err:?}");
+    }
 }
 
 /// Gemini 差异化请求头（对齐 01 R2 "Gemini Authorization 与 x-goog-api-key 的差异化头组装"）。

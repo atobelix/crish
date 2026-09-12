@@ -461,3 +461,105 @@ fn minimal_body_has_model_and_empty_contents() {
         assert!(body.get(key).is_none(), "{key} 缺省不应出现：{body}");
     }
 }
+
+// ── 成对性 Fail-Closed 守门（详案 02 §3.4 轨三）──
+
+/// 同名多次调用全部被同名 response 覆盖 → 无孤儿（禁止假阴性误伤）
+#[test]
+fn pairing_gate_same_name_multiple_calls_fully_covered() {
+    let call1 = assistant_tool_call("get_weather", json!({ "city": "上海" }));
+    let call2 = assistant_tool_call("get_weather", json!({ "city": "北京" }));
+    let result1 = tool_result("get_weather", "call_1", "晴 25 度");
+    let result2 = tool_result("get_weather", "call_1", "阴 18 度");
+    let messages: Vec<Arc<AgentMessage>> = vec![
+        Arc::new(user_msg("查天气")),
+        Arc::new(call1),
+        Arc::new(call2),
+        Arc::new(result1),
+        Arc::new(result2),
+    ];
+    let orphans = detect_gemini_unpaired_tool_calls(&messages);
+    assert!(
+        orphans.is_empty(),
+        "同名多次调用全部被覆盖不应报孤儿：{orphans:?}"
+    );
+}
+
+/// 同名多次调用仅部分被 response 覆盖 → 多余部分为孤儿
+#[test]
+fn pairing_gate_same_name_partial_coverage_leaves_orphan() {
+    let call1 = assistant_tool_call("get_weather", json!({ "city": "上海" }));
+    let call2 = assistant_tool_call("get_weather", json!({ "city": "北京" }));
+    let result1 = tool_result("get_weather", "call_1", "晴 25 度");
+    let messages: Vec<Arc<AgentMessage>> = vec![
+        Arc::new(user_msg("查天气")),
+        Arc::new(call1),
+        Arc::new(call2),
+        Arc::new(result1),
+    ];
+    let orphans = detect_gemini_unpaired_tool_calls(&messages);
+    assert_eq!(orphans, ["get_weather#1"], "第二次调用应为孤儿：{orphans:?}");
+}
+
+/// 不同名调用各自独立配对，互不干扰
+#[test]
+fn pairing_gate_different_names_independent_pairing() {
+    let call_a = assistant_tool_call("read_file", json!({ "path": "a.txt" }));
+    let call_b = assistant_tool_call("get_weather", json!({ "city": "上海" }));
+    let result_b = tool_result("get_weather", "call_1", "晴");
+    let messages: Vec<Arc<AgentMessage>> = vec![
+        Arc::new(user_msg("操作")),
+        Arc::new(call_a),
+        Arc::new(call_b),
+        Arc::new(result_b),
+    ];
+    let orphans = detect_gemini_unpaired_tool_calls(&messages);
+    assert_eq!(orphans, ["read_file#0"], "read_file 无 response 应为孤儿：{orphans:?}");
+}
+
+/// 空 name 的 call 不参与配对（归入孤儿检测面之外，不误伤）
+#[test]
+fn pairing_gate_empty_name_call_excluded() {
+    let call = assistant_tool_call("", json!({}));
+    let messages: Vec<Arc<AgentMessage>> = vec![Arc::new(user_msg("hi")), Arc::new(call)];
+    let orphans = detect_gemini_unpaired_tool_calls(&messages);
+    assert!(
+        orphans.is_empty(),
+        "空 name call 不参与配对检测：{orphans:?}"
+    );
+}
+
+/// validate 在 debug_assertions 下对孤儿立即 panic（Fail-Fast，CI 硬阻断）。
+/// Release 下同一输入返回 Err(UnpairedToolCalls)——两种分级行为互斥编译，
+/// 本测试仅覆盖 CI/debug 路径的 panic 语义。
+#[test]
+#[should_panic(expected = "Gemini 导线层校验拦截到孤儿工具调用")]
+fn pairing_gate_validate_panics_on_orphan_in_debug() {
+    let call = assistant_tool_call("read_file", json!({ "path": "a.txt" }));
+    let messages: Vec<Arc<AgentMessage>> = vec![Arc::new(user_msg("读文件")), Arc::new(call)];
+    let _ = validate_gemini_tool_pairing(&messages);
+}
+
+/// build 入口在孤儿输入下 Fail-Closed（Debug 下 panic，与 Anthropic/Chat 轨同构）
+/// 注意：不得经 detect 断言——build 内部 validate 守门会 panic
+#[test]
+#[should_panic(expected = "Gemini 导线层校验拦截到孤儿工具调用")]
+fn build_gemini_fail_closed_on_orphan() {
+    let call = assistant_tool_call("read_file", json!({ "path": "a.txt" }));
+    let messages: Vec<Arc<AgentMessage>> = vec![Arc::new(user_msg("读文件")), Arc::new(call)];
+    let _ = build_gemini_request_body(&GeminiRequestOptions::default(), &context_for(&messages));
+}
+
+/// 成对完整对话经 detect 确认无孤儿（正向回归）
+#[test]
+fn pairing_gate_paired_conversation_no_orphans() {
+    let call = assistant_tool_call("get_weather", json!({ "city": "上海" }));
+    let result = tool_result("get_weather", "call_1", "晴 25 度");
+    let messages: Vec<Arc<AgentMessage>> = vec![
+        Arc::new(user_msg("查天气")),
+        Arc::new(call),
+        Arc::new(result),
+    ];
+    let orphans = detect_gemini_unpaired_tool_calls(&messages);
+    assert!(orphans.is_empty(), "成对完整对话不应检出孤儿：{orphans:?}");
+}

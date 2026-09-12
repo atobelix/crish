@@ -38,10 +38,10 @@ use agent_provider::models::{
 };
 use agent_provider::request::{
     build_anthropic_request_body, build_chat_completions_request_body, build_gemini_request_body,
-    build_responses_request_body, ensure_outbound_modalities, AnthropicRequestOptions,
-    BreakpointPlan, CacheMechanism, CachePolicy, CacheRetention, ChatCompletionsRequestOptions,
-    GeminiRequestOptions, RequestBuildContext, ToolDefinition as WireToolDefinition, TtlBucket,
-    WireProtocol,
+    build_responses_request_body, ensure_outbound_modalities, validate_gemini_tool_pairing,
+    AnthropicRequestOptions, BreakpointPlan, CacheMechanism, CachePolicy, CacheRetention,
+    ChatCompletionsRequestOptions, GeminiRequestOptions, RequestBuildContext,
+    ToolDefinition as WireToolDefinition, TtlBucket, WireProtocol,
 };
 #[cfg(test)]
 use agent_provider::request::ReasoningContentMode;
@@ -234,12 +234,18 @@ impl HttpProviderCall {
     /// 既有 [request_options]/[request_body]。思考字典与方言来自同一剖面
     /// （plans/04 §3.1：四条出站都走 `assemble_thinking_dialect`）。
     /// `profile` 由调用方传入单次查询结果，禁止本函数内再查。
+    ///
+    /// **Release 成对性闭环（详案 02 §3.4 契约补丁第 4 条）**：gemini 轨在
+    /// build 前优先调用 [validate_gemini_tool_pairing]；Release 下捕获
+    /// `UnpairedToolCalls` → `tracing::error!` 记录 orphan_ids 后优雅返回
+    /// `Err`（**不在此层伪造** tool 结果，也**不 panic**）。Debug 下 validate
+    /// 对孤儿立即 panic（Fail-Fast，与 Anthropic/Chat 轨同构）。
     pub(crate) fn request_body_for(
         &self,
         protocol: WireProtocol,
         request: &ProviderRequest<'_>,
         profile: &protocol::CatalogRequestProfile,
-    ) -> serde_json::Value {
+    ) -> Result<serde_json::Value, ClassifiedStreamError> {
         let context = self.build_context(request);
         match protocol {
             WireProtocol::Anthropic => {
@@ -252,9 +258,27 @@ impl HttpProviderCall {
                     thinking_format: profile.thinking_format,
                     ..Default::default()
                 };
-                build_anthropic_request_body(&options, &context)
+                Ok(build_anthropic_request_body(&options, &context))
             }
             WireProtocol::Gemini => {
+                // Release 成对性前置校验：validate 返回 Err 时不调 build、不伪造，
+                // 记录 orphan_ids 后优雅失败（Debug 下 validate 内部 panic）
+                if let Err(err) = validate_gemini_tool_pairing(context.messages) {
+                    // validate 在 Debug 下已 panic；此处仅 Release 可达
+                    tracing::error!(
+                        target: "agent_provider::wire_pairing",
+                        protocol = "gemini",
+                        error = %err,
+                        orphan_ids = ?err.orphan_ids(),
+                        "engine_provider 出站前置校验拦截：拒绝构造带毒请求体（不伪造，不 panic）"
+                    );
+                    return Err(ClassifiedStreamError {
+                        kind: ProviderErrorKind::InvalidRequest,
+                        message: format!("gemini wire pairing poisoned: {}", err),
+                        retryable: false,
+                        retry_after_ms: None,
+                    });
+                }
                 let options = GeminiRequestOptions {
                     model: Some(self.config.model.clone()),
                     max_output_tokens: request.max_tokens.map(u64::from),
@@ -263,15 +287,15 @@ impl HttpProviderCall {
                     thinking_format: profile.thinking_format,
                     ..Default::default()
                 };
-                build_gemini_request_body(&options, &context)
+                Ok(build_gemini_request_body(&options, &context))
             }
             WireProtocol::Chat => {
                 let options = self.request_options(request, profile);
-                build_chat_completions_request_body(&options, &context)
+                Ok(build_chat_completions_request_body(&options, &context))
             }
             WireProtocol::Responses => {
                 let options = self.request_options(request, profile);
-                build_responses_request_body(&options, &context)
+                Ok(build_responses_request_body(&options, &context))
             }
         }
     }
@@ -285,6 +309,7 @@ impl HttpProviderCall {
     ) -> serde_json::Value {
         let profile = protocol::catalog_request_profile(&self.config);
         self.request_body_for(protocol, request, &profile)
+            .expect("request_body_for 构建失败")
     }
 
     /// 请求构建上下文（消息 0 深拷贝借用，PE-09 T09.3 阶段 1）
@@ -391,8 +416,9 @@ impl ProviderCall for HttpProviderCall {
         }
 
         // 4. 构建请求体（四轨同轨：body/URL/parser 同以 profile.protocol 为键；
-        //    profile 以参数传入，单次查询）
-        let body = self.request_body_for(protocol, request, &profile);
+        //    profile 以参数传入，单次查询）。Release 下 gemini 轨成对性失败 →
+        //    ClassifiedStreamError 优雅出流（不 panic、不伪造；详案 02 §3.4）。
+        let body = self.request_body_for(protocol, request, &profile)?;
         let url = protocol::provider_url_for(&self.config, protocol);
 
         // 5. HTTP 请求（共享连接池；tokio::select! 强打断竞速）

@@ -47,7 +47,10 @@ pub use build_anthropic::{
     detect_anthropic_unpaired_tool_calls, validate_anthropic_tool_pairing,
     AnthropicRequestOptions, ANTHROPIC_VERSION, DEFAULT_ANTHROPIC_MAX_OUTPUT,
 };
-pub use build_gemini::{build_gemini_request_body, gemini_request_headers, GeminiRequestOptions};
+pub use build_gemini::{
+    build_gemini_request_body, detect_gemini_unpaired_tool_calls, gemini_request_headers,
+    validate_gemini_tool_pairing, GeminiRequestOptions,
+};
 pub use cache::{
     affinity_header, allocate_breakpoints, apply_cache_controls, build_cache_policy,
     cache_control_for_ttl, infer_cache_capability, retention_wire_value, text_to_parts_with_cc,
