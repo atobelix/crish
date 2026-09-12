@@ -183,7 +183,7 @@ describe('P1-D2 persist 熔断：截断态禁止回写 SQLite', () => {
     expect(db.sessions.get('s1')?.messages ?? []).toHaveLength(2);
   });
 
-  it('同步镜像路径（beforeunload）同样熔断：截断态不写 LS body', () => {
+  it('同步镜像路径（beforeunload）meta-only：永不写 LS body（U-PERSIST-A A-3）', () => {
     const truncated = sess('s1', [msg('m1'), msg('m2')], {
       hydratedFromEngine: true,
       hydrateTruncated: true,
@@ -193,11 +193,11 @@ describe('P1-D2 persist 熔断：截断态禁止回写 SQLite', () => {
       DEFAULT_SESSION_FOLDER,
     ]);
 
-    // 修复前：同步路径照常写 LS 镜像 → 本断言红
+    // 票 A：beforeunload 不再写 LS body——截断与完整态均 body=0
     expect(localStorage.getItem(SESSION_BODY_PREFIX + 's1')).toBeNull();
   });
 
-  it('同步镜像路径：完整态正常写 LS body', () => {
+  it('同步镜像路径：完整态同样不写 LS body（票 A 收口）', () => {
     const complete = sess('s1', [msg('m1'), msg('m2')], {
       hydratedFromEngine: true,
       hydrateTruncated: false,
@@ -207,6 +207,6 @@ describe('P1-D2 persist 熔断：截断态禁止回写 SQLite', () => {
       DEFAULT_SESSION_FOLDER,
     ]);
 
-    expect(localStorage.getItem(SESSION_BODY_PREFIX + 's1')).not.toBeNull();
+    expect(localStorage.getItem(SESSION_BODY_PREFIX + 's1')).toBeNull();
   });
 });

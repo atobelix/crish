@@ -21,6 +21,7 @@ import {
   type SessionActivatableStore,
   type StoreApiLike,
 } from './layout-helpers/store-persistence';
+import { ensureSessionStoreShellKeyMigrated } from '../api/session-persistence/sessionShellKeyMigration';
 
 export interface SessionStoreState {
   sessions: SessionState[];
@@ -38,6 +39,13 @@ export type SessionStore = SessionStoreState & SessionActions;
 
 export type SessionFacadeState = SessionStoreState;
 export type SessionFacade = SessionStore;
+
+/**
+ * U-PERSIST-A（D4 票 A）：persist 键在 create 前完成一次迁移——
+ * 旧全量 sessions 镜像剥离为轻量 meta 壳；正文唯一来源 = SQLite hydrate。
+ * 零兼容读：merge 永不接受 persisted.sessions/sessionsById。
+ */
+ensureSessionStoreShellKeyMigrated();
 
 /**
  * 物理独立 SessionStore 实例 (彻底清除 autoIndexMiddleware 隐式全量重构)
@@ -61,12 +69,31 @@ export const useSessionStore = create<SessionStore>()(
         })),
         {
           name: 'crish_session_store',
+          // 票 A：partialize 仅轻量 meta 壳——sessions/sessionsById 物理切除（DEL-5）
           partialize: (s) => ({
-            sessions: s.sessions,
             folderOrder: s.folderOrder,
             activeSessionId: s.activeSessionId,
             composerDrafts: s.composerDrafts,
           }),
+          // 零兼容读：即使旧键残留 sessions 字段，merge 也绝不并回内存
+          merge: (persisted, current) => {
+            const p = (persisted ?? {}) as Record<string, unknown>;
+            return {
+              ...current,
+              activeSessionId:
+                typeof p.activeSessionId === 'string'
+                  ? p.activeSessionId
+                  : current.activeSessionId,
+              folderOrder: Array.isArray(p.folderOrder)
+                ? (p.folderOrder as string[])
+                : current.folderOrder,
+              composerDrafts:
+                p.composerDrafts && typeof p.composerDrafts === 'object'
+                  ? (p.composerDrafts as Record<string, string>)
+                  : current.composerDrafts,
+              // sessions / sessionsById 一律以内存初始值为准，禁止 LS 回灌
+            };
+          },
         }
       )
     ),

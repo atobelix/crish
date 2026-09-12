@@ -357,6 +357,13 @@ export function createSessionCrudActions<T extends SessionStoreSlice>(
         clearMessageSnapshots(id);
         useStreamingStore.getState().clearSession(id);
 
+        // U-PERSIST-A A-5：删除会话成功路径必须对称清 draft（08-M5）
+        set((state) => {
+          if (state.composerDrafts && state.composerDrafts[id] !== undefined) {
+            delete state.composerDrafts[id];
+          }
+        });
+
         // 若当前活动会话发生了焦点转移且切入具体真实会话，触发必要的工作区激活与懒加载
         if (isDeletingActive && !isDemoMode()) {
           const newActiveId = get().activeSessionId;

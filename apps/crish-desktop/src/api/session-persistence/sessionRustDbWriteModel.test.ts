@@ -574,12 +574,12 @@ describe('真相源切换：LS 索引优先 / SQLite 提供正文（过渡期契
     // SQLite 侧正常写入
     expect(db.sessions.get('s1')?.messages).toHaveLength(1);
 
-    // beforeunload 同步路径（T3 兜底，非 Rust 主路径）：仍镜像正文与索引
+    // U-PERSIST-A 票 A：beforeunload 同步路径 meta-only——不再镜像正文（A-3）
     persistAllSessionsSyncViaLocalStorage([s], 's1', [DEFAULT_SESSION_FOLDER], {
       sessionsToIndex,
     });
     expect(localStorage.getItem(SESSION_INDEX_KEY)).not.toBeNull();
-    expect(localStorage.getItem(SESSION_BODY_PREFIX + 's1')).not.toBeNull();
+    expect(localStorage.getItem(SESSION_BODY_PREFIX + 's1')).toBeNull();
   });
 
   it('清理未完成时：Rust 主路径写 LS 索引、不再写 LS body 镜像（T2-1 剥镜像）', async () => {

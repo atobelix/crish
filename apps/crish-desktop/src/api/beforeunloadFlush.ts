@@ -3,7 +3,8 @@
  *
  * 注册 beforeunload + pagehide 拦截器，在页面卸载前同步刷出所有内存数据：
  * - 流式文本批处理器（StreamTextBatcher）全部 flushNow
- * - 会话数据同步写入 localStorage（不 debounce）
+ * - 会话 meta（active_session_id / folder_order / 索引壳）同步写入 localStorage
+ *   （U-PERSIST-A 票 A：**不再**镜像全量 messages——正文走 SQLite debounce）
  * - 未发送错误日志写入 localStorage
  *
  * 注意：beforeunload 事件中只能使用同步 API（localStorage 同步，IndexedDB 不行）。
@@ -85,6 +86,8 @@ export function installBeforeunloadFlush(): () => void {
   const handler = () => {
     flushAllStreamBatchers();
 
+    // 票 A：meta-only 同步镜像——不再传全量 body 写口；正文由 350ms debounce
+    // persistAllSessionsRust 承担（既有语义）。sessions 仅用于索引壳投影。
     const state = getSessionStoreState();
     persistAllSessionsSync(state.sessions, state.activeSessionId, state.folderOrder);
 

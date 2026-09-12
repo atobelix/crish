@@ -446,16 +446,20 @@ function persistAllSessionsLocalFallback(
 // ── 同步辅助：供 beforeunload flush 使用 ───────────────────────────────────
 
 /**
- * 同步持久化全部会话（beforeunload 场景，禁止 await）。
+ * 同步 meta-only 持久化（beforeunload 场景，禁止 await）。
  *
- * 此函数始终走 localStorage（同步），因为 beforeunload 事件中无法 await IPC。
- * Rust 侧数据由后续 persistAllSessionsRust 在正常生命周期内同步。
- * 注（PS-03 T3.2）：本路径不调用 save_session_body（无 IPC），故无需批次
- * 版本戳；SQLite 侧由后续异步 persist 带版本写入（版本戳覆盖全部
- * save_session_body 调用路径：350ms debounce / boot 回灌 / 手动触发）。
+ * U-PERSIST-A（D4 票 A）裁决：beforeunload 主动镜像**不再**写全量
+ * messages（lsSaveSessionBody）——那是 LS 正文第二写口，与票 A「单轨
+ * SQLite 正文出口」冲突。正文丢帧窗口由 350ms debounce + 异步
+ * persistAllSessionsRust 承担（既有语义）。
+ *
+ * 本路径只写：
+ *   - active_session_id / folder_order（session_meta 壳）
+ *   - 可选索引壳（sessionsToIndex 投影，无 body）
+ * 禁止触碰 SESSION_BODY_PREFIX / SESSION_AGENTS_PREFIX（A-3/A-4）。
  */
 export function persistAllSessionsSyncViaLocalStorage(
-  sessions: SessionState[],
+  _sessions: SessionState[],
   activeSessionId: string,
   folderOrder: string[],
   options?: {
@@ -463,16 +467,16 @@ export function persistAllSessionsSyncViaLocalStorage(
   }
 ): void {
   // I-DRAFT：sync flush 同样剔除 PENDING_DRAFT
-  const list = (sessions || []).filter(
+  const list = (_sessions || []).filter(
     (s) => Boolean(s?.id) && !isPendingDraft(s.id)
   );
-  const keep = new Set(list.map((s) => s.id).filter(Boolean) as string[]);
   const activePersistable =
     activeSessionId && !isPendingDraft(activeSessionId) ? activeSessionId : '';
 
   // D2：persist 前一次性清理历史残留的 crish_degraded_* 键（模块级 once 幂等）
   cleanupDegradedMarkerKeys();
 
+  // 索引壳（仅元数据投影，不含 body）
   if (options?.sessionsToIndex) {
     try {
       lsSaveSessionIndex(options.sessionsToIndex(list));
@@ -481,44 +485,7 @@ export function persistAllSessionsSyncViaLocalStorage(
     }
   }
 
-  for (const s of list) {
-    if (!s?.id) continue;
-    const msgs = (s.messages || []).map((m) =>
-      m.sender === 'assistant' ? normalizeAssistantTimeline(m) : m
-    );
-    // beforeunload 同步路径：真实未水合懒壳跳过，防覆盖已有正文；已水合/活跃/显式清空正常镜像；
-    // P1-D2 熔断：未完整（截断）会话同样跳过，防截断态固化 LS 镜像
-    const shouldSaveBody =
-      !isHydrateTruncated(s) &&
-      (msgs.length > 0 || !isLazySessionShell(s, activePersistable));
-    if (shouldSaveBody) {
-      lsSaveSessionBody(s.id, msgs);
-    }
-    lsSaveSessionAgents(s.id, s.agents || []);
-  }
-
-  // 清理孤儿（N1-2 守卫：空 keep 不清除——beforeunload 同步路径同样
-  // 对齐 Rust guard_cleanup_keep 语义，boot 窗口不得清空 LS 镜像）
-  if (keep.size > 0) {
-    try {
-      const keys: string[] = [];
-      for (let i = 0; i < localStorage.length; i++) {
-        const k = localStorage.key(i);
-        if (k) keys.push(k);
-      }
-      for (const k of keys) {
-        let id: string | null = null;
-        if (k.startsWith(SESSION_BODY_PREFIX))
-          id = k.slice(SESSION_BODY_PREFIX.length);
-        else if (k.startsWith(SESSION_AGENTS_PREFIX))
-          id = k.slice(SESSION_AGENTS_PREFIX.length);
-        if (id != null && !keep.has(id)) localStorage.removeItem(k);
-      }
-    } catch {
-      /* swallow-ok: 清理孤儿键失败时残留无害键，下次清理重试 */
-    }
-  }
-
+  // meta-only：不再写 body / agents，也不再以 LS body 键做孤儿清理（A-3/A-4）
   lsSaveActiveSessionId(activePersistable);
   lsSaveFolderOrder(folderOrder || []);
 }
