@@ -241,6 +241,7 @@ export function createToolPatchQueue(opts: {
         arguments: args,
         explanation,
         status,
+        startedAt: Date.now(),
         ...(approvalMeta ? { approvalMeta } : {}),
       },
       status === 'pending_approval'

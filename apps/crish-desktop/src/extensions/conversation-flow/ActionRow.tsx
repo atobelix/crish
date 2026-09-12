@@ -11,7 +11,8 @@ import { extractToolCommand } from '../../api/tool-presentation/toolArgsNormaliz
 import { toolHumanLabel } from '../../api/tool-presentation/toolHumanDescriptions';
 import { fullToolOutput } from '../../api/tool-presentation/toolOutputSanitizer';
 import type { MessageToolCall } from '../../store/types';
-import { TOOL_OUTPUT_DOM_CHAR_CAP, TOOL_OUTPUT_PIXEL_CAP } from '../../workers';
+import { TOOL_OUTPUT_DOM_CHAR_CAP } from '../../workers';
+import { FLOW_OUTPUT_STYLE } from './flowOutputStyle';
 import { ArtifactChip } from './ArtifactChip';
 import { actionPathOf } from './narrativeModel';
 import styles from './narrative.module.css';
@@ -72,10 +73,7 @@ export function ActionRow({
   ]
     .filter(Boolean)
     .join(' · ');
-  const outputMax = {
-    ['--flow-output-max' as string]: `${TOOL_OUTPUT_PIXEL_CAP}px`,
-    maxHeight: TOOL_OUTPUT_PIXEL_CAP,
-  };
+  const outputMax = FLOW_OUTPUT_STYLE;
 
   return (
     <div

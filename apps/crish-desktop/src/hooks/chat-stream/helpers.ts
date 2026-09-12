@@ -20,9 +20,7 @@ import {
 import type { MessageToolCall } from '../../store/types';
 import type { StreamToolCallPatch } from '../../api/streamTextBatcher';
 import type { TerminalToolReason, TerminalToolPatch } from './types';
-import { getCompositionRoot } from '../../app/compositionRoot';
-import { useEphemeralChatStore } from '../../store/ephemeralChatStore';
-import { useContinuityUiStore } from '../../api/continuity/continuityUiStore';
+
 
 type PublishToolDiffsFn =
   typeof import('../../api/publishToolDiffs').publishToolDiffs;
@@ -148,6 +146,21 @@ export function commitToolPatchToSession(
       : lite?.startedAt !== undefined
         ? lite.startedAt
         : existing?.startedAt;
+  const durationMs =
+    'durationMs' in patch && patch.durationMs !== undefined
+      ? patch.durationMs
+      : lite?.durationMs !== undefined
+        ? lite.durationMs
+        : existing?.durationMs;
+  let resolvedDurationMs = durationMs;
+  if (
+    resolvedDurationMs === undefined &&
+    (status === 'success' || status === 'error') &&
+    typeof startedAt === 'number' &&
+    startedAt > 0
+  ) {
+    resolvedDurationMs = Math.max(0, Date.now() - startedAt);
+  }
 
   if (existing) {
     const updates: Partial<MessageToolCall> = {};
@@ -160,6 +173,10 @@ export function commitToolPatchToSession(
     if (approvalMeta !== undefined) updates.approvalMeta = approvalMeta;
     if (diffs !== undefined) updates.diffs = diffs;
     if (startedAt !== undefined) updates.startedAt = startedAt;
+    if (resolvedDurationMs !== undefined) updates.durationMs = resolvedDurationMs;
+    if (status === 'success' || status === 'error') {
+      updates.finishedAt = Date.now();
+    }
     updateMessageToolCall(sessionId, messageId, toolId, updates);
   } else {
     addMessageToolCall(sessionId, messageId, {
@@ -172,6 +189,8 @@ export function commitToolPatchToSession(
       ...(approvalMeta !== undefined ? { approvalMeta } : {}),
       ...(diffs !== undefined ? { diffs } : {}),
       ...(startedAt !== undefined ? { startedAt } : {}),
+      ...(resolvedDurationMs !== undefined ? { durationMs: resolvedDurationMs } : {}),
+      ...(status === 'success' || status === 'error' ? { finishedAt: Date.now() } : {}),
     });
   }
 }
@@ -327,70 +346,7 @@ export function isSessionAiBusy(opts: {
   );
 }
 
-/**
- * 用户物理发送瞬间的绝对自愈扫除器：
- * 1. 检查物理句柄：若无真实 live stream，判定任何历史 processing/queued 均为脏数据；
- * 2. 原子清扫历史残余，将 assistant processing 结算为 error（保留已有的 partial 文本，无文本则提示连接已断开）；
- *    将 user processing / queued 结算为 completed；
- * 3. 同步清空该会话的瞬态错误状态与重试 notice；
- * 4. 彻底打通发送主路径，确保新轮次 100% 成功发起，绝不打回！
- */
-export function settleStaleSessionProcessingMessages(
-  sessionId: string,
-  hasLiveStream: boolean
-): { healedCount: number; clearedQueueCount: number } {
-  if (hasLiveStream) {
-    // 存在真实活动物理流，不干预正常并发控制
-    return { healedCount: 0, clearedQueueCount: 0 };
-  }
-
-  const root = getCompositionRoot();
-  const session = root.session.getState();
-  const currentSession = session.sessionsById[sessionId];
-  if (!currentSession || !Array.isArray(currentSession.messages)) {
-    return { healedCount: 0, clearedQueueCount: 0 };
-  }
-
-  let healedCount = 0;
-  let clearedQueueCount = 0;
-
-  for (const msg of currentSession.messages) {
-    if (msg.status === 'processing') {
-      if (msg.sender === 'assistant') {
-        const hasText = Boolean((msg.text || '').trim());
-        session.setSessionMessageStatus(
-          sessionId,
-          msg.id,
-          'error',
-          undefined,
-          {
-            force: true,
-            errorDetail: {
-              message: hasText ? '上一轮生成异常中断' : '未收到回复内容（连接已断开）',
-              kind: 'stream_abort',
-            },
-          }
-        );
-      } else {
-        session.setSessionMessageStatus(sessionId, msg.id, 'completed', undefined, { force: true });
-      }
-      healedCount++;
-    } else if (msg.status === 'queued') {
-      session.setSessionMessageStatus(sessionId, msg.id, 'completed', undefined, { force: true });
-      clearedQueueCount++;
-    }
-  }
-
-  // 同步清理瞬态错误与重试 store
-  try {
-    useEphemeralChatStore.getState().clearEphemeralStatus(sessionId);
-    useContinuityUiStore.getState().clearRetryNotice(sessionId);
-  } catch {
-    /* ignore */
-  }
-
-  return { healedCount, clearedQueueCount };
-}
+export { settleStaleSessionProcessingMessages } from './staleSessionHealer';
 
 /** 忙 → follow_up；闲 → start。永不返回 force abort。 */
 export function decideSendWhileRunning(

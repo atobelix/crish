@@ -5,7 +5,7 @@
 import { lazy, Suspense, type ReactElement } from 'react';
 import type { ActionNode } from '@crish/conversation-flow';
 import type { SessionAgent } from '../../store/types';
-import { TOOL_OUTPUT_PIXEL_CAP } from '../../workers';
+import { FLOW_OUTPUT_STYLE } from './flowOutputStyle';
 import styles from './narrative.module.css';
 
 const InlineAgentPanel = lazy(async () => {
@@ -24,10 +24,7 @@ export function SubagentBlock({
   parentSessionId,
   action,
 }: SubagentBlockProps): ReactElement {
-  const outputMax = {
-    ['--flow-output-max' as string]: `${TOOL_OUTPUT_PIXEL_CAP}px`,
-    maxHeight: TOOL_OUTPUT_PIXEL_CAP,
-  };
+  const outputMax = FLOW_OUTPUT_STYLE;
 
   return (
     <div

@@ -265,7 +265,7 @@ export function useRunStreamingAssistant(
           onTerminalLine: (_line) => {
             // No-op: Terminal store decoupled from AI stream outputs (DIM-07)
           },
-          onToolSuccess: (toolId, output, diffs) => {
+          onToolSuccess: (toolId, output, diffs, durationMs) => {
             if (!assertLive()) return;
             handleToolSuccess({
               sid,
@@ -274,16 +274,19 @@ export function useRunStreamingAssistant(
               output,
               diffs,
               toolNames,
+              durationMs,
               queueToolCallPatch,
             });
           },
-          onToolError: (toolId, error) => {
+          onToolError: (toolId, error, durationMs) => {
             if (!assertLive()) return;
             handleToolError({
               sid,
+              assistantMsgId,
               toolId,
               error,
               toolNames,
+              durationMs,
               queueToolCallPatch,
             });
           },

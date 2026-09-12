@@ -3,7 +3,7 @@
  * live 计时 ≤ 1Hz；查阅器仍走 thoughtInspector。
  */
 import { useEffect, useState, type ReactElement } from 'react';
-import { TOOL_OUTPUT_PIXEL_CAP } from '../../workers';
+import { FLOW_OUTPUT_STYLE } from './flowOutputStyle';
 import { clipThinkingPreview } from './narrativeModel';
 import styles from './narrative.module.css';
 
@@ -47,10 +47,7 @@ export function ThinkingBlock({
         ? `${(durationMs / 1000).toFixed(1)}s`
         : '';
 
-  const outputMax = {
-    ['--flow-output-max' as string]: `${TOOL_OUTPUT_PIXEL_CAP}px`,
-    maxHeight: TOOL_OUTPUT_PIXEL_CAP,
-  };
+  const outputMax = FLOW_OUTPUT_STYLE;
 
   return (
     <div

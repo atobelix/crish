@@ -159,6 +159,7 @@ export function handleToolSuccess(opts: {
   output: string;
   diffs: FileDiff[] | undefined;
   toolNames: Record<string, string>;
+  durationMs?: number;
   queueToolCallPatch: (
     toolId: string,
     patch: StreamToolCallPatch,
@@ -172,6 +173,7 @@ export function handleToolSuccess(opts: {
     output,
     diffs,
     toolNames,
+    durationMs: explicitDurationMs,
     queueToolCallPatch,
   } = opts;
   const { name, args } = resolveToolIdentity({
@@ -187,6 +189,17 @@ export function handleToolSuccess(opts: {
     output: displayOut,
     structuredDiffs: diffs,
   });
+  const existingTc = buildMessageIndex(getSessionById(sid))
+    .get(assistantMsgId)
+    ?.toolCalls?.find((t) => t.id === toolId);
+  const startedAt = existingTc?.startedAt;
+  const durationMs =
+    typeof explicitDurationMs === 'number' && explicitDurationMs >= 0
+      ? explicitDurationMs
+      : startedAt && startedAt > 0
+        ? Math.max(0, Date.now() - startedAt)
+        : undefined;
+
   queueToolCallPatch(
     toolId,
     {
@@ -195,6 +208,8 @@ export function handleToolSuccess(opts: {
       status: 'success',
       output: displayOut || output || '完成',
       diffs: resolvedDiffs.length ? resolvedDiffs : undefined,
+      ...(durationMs !== undefined ? { durationMs } : {}),
+      ...(startedAt !== undefined ? { startedAt } : {}),
     },
     true
   );
@@ -209,17 +224,46 @@ export function handleToolError(opts: {
   toolId: string;
   error: string;
   toolNames: Record<string, string>;
+  assistantMsgId?: string;
+  durationMs?: number;
   queueToolCallPatch: (
     toolId: string,
     patch: StreamToolCallPatch,
     immediate?: boolean
   ) => void;
 }): void {
-  const { toolId, error, queueToolCallPatch } = opts;
+  const {
+    sid,
+    toolId,
+    error,
+    queueToolCallPatch,
+    assistantMsgId,
+    durationMs: explicitDurationMs,
+  } = opts;
+  let durationMs: number | undefined =
+    typeof explicitDurationMs === 'number' && explicitDurationMs >= 0
+      ? explicitDurationMs
+      : undefined;
+  let startedAt: number | undefined;
+  if (assistantMsgId) {
+    const existingTc = buildMessageIndex(getSessionById(sid))
+      .get(assistantMsgId)
+      ?.toolCalls?.find((t) => t.id === toolId);
+    startedAt = existingTc?.startedAt;
+    if (durationMs === undefined && startedAt && startedAt > 0) {
+      durationMs = Math.max(0, Date.now() - startedAt);
+    }
+  }
   const clean = sanitizeToolDisplayOutput(error || '');
   queueToolCallPatch(
     toolId,
-    { id: toolId, status: 'error', output: clean || error || '失败' },
+    {
+      id: toolId,
+      status: 'error',
+      output: clean || error || '失败',
+      ...(durationMs !== undefined ? { durationMs } : {}),
+      ...(startedAt !== undefined ? { startedAt } : {}),
+    },
     true
   );
 }

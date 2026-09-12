@@ -78,14 +78,20 @@ describe('decideSendWhileRunning / isSessionAiBusy (W8-3 follow_up)', () => {
     expect(decideSendWhileRunning(false)).toBe('start');
   });
 
-  it('isSessionAiBusy: live stream 或 processing 助手', () => {
+  it('isSessionAiBusy: live stream 时判定忙，hasLiveStream 为 false 时禁止判定 busy（防死锁不变量）', () => {
     expect(isSessionAiBusy({ hasLiveStream: true, messages: [] })).toBe(true);
+    expect(
+      isSessionAiBusy({
+        hasLiveStream: true,
+        messages: [{ sender: 'assistant', status: 'processing' }],
+      })
+    ).toBe(true);
     expect(
       isSessionAiBusy({
         hasLiveStream: false,
         messages: [{ sender: 'assistant', status: 'processing' }],
       })
-    ).toBe(true);
+    ).toBe(false);
     expect(
       isSessionAiBusy({
         hasLiveStream: false,
