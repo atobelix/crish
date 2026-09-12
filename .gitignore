@@ -431,6 +431,8 @@ apps/agent-workbench/src-tauri/gen/*
 !scripts/check-guard-system.mjs
 !scripts/check-tokens-all.mjs
 !scripts/token-registry.json
+# D0/U-BUDGET 性能预算 SSOT 门禁必须入库（check:desktop 依赖；同 382 行 `*.mjs` 忽略）
+!scripts/check-perf-budgets.mjs
 # 2026-09-11 补放行（由 check-guard-system 的 unreleased_guard 指标发现）：
 # 以下守卫脚本此前被 381 行 `*.mjs` 吞掉、从未入库 —— 本地存在、clone 后消失，
 # 属「防御体系无法生长」的结构性缺陷。门禁脚本是资产，一律放行。
@@ -530,3 +532,7 @@ orchestrator-snapshot.json.prev
 # 必须可被 git 跟踪，否则 CI checkout 后门禁缺失；惯例同上 T-E 批次放行）
 !scripts/check-token-fallback-drift.mjs
 !scripts/check-inline-style-hardcode.mjs
+!scripts/check-db-write-bypass.mjs
+!scripts/check-gatekeeper-shared.mjs
+!scripts/check-async-commands.mjs
+!scripts/check-store-islands.mjs

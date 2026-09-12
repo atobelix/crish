@@ -20,6 +20,8 @@
 pub mod frame;
 pub mod gate;
 pub mod input;
+// D0 / U-BUDGET：性能预算单一真源（INV-8）；全仓 re-export 语义
+pub mod perf_budget;
 pub mod time;
 
 pub use frame::{
