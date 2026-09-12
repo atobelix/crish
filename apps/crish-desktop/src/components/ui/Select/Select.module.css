@@ -4,7 +4,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-2, 8px);
+  gap: var(--space-2);
   width: 100%;
   min-height: 0;
   border: 1px solid var(--border-color);
@@ -17,8 +17,8 @@
   user-select: none;
   position: relative;
   transition:
-    background-color var(--transition-micro, 100ms ease),
-    border-color var(--transition-micro, 100ms ease);
+    background-color var(--transition-micro),
+    border-color var(--transition-micro);
 }
 
 .trigger:hover:not(:disabled) {
@@ -36,7 +36,7 @@
 }
 
 .trigger:disabled {
-  opacity: var(--opacity-disabled, 0.45);
+  opacity: var(--opacity-disabled);
   cursor: not-allowed;
   background: var(--bg-secondary);
 }
@@ -47,8 +47,8 @@
   height: 28px;
   min-height: 28px;
   padding: 0 8px;
-  font-size: var(--font-size-xs, 12px);
-  border-radius: var(--radius-md, 6px);
+  font-size: var(--font-size-xs);
+  border-radius: var(--radius-md);
 }
 
 .triggerMd,
@@ -56,8 +56,8 @@
   height: 32px;
   min-height: 32px;
   padding: 0 10px;
-  font-size: var(--font-size-sm, 13px);
-  border-radius: var(--radius-lg, 8px);
+  font-size: var(--font-size-sm);
+  border-radius: var(--radius-lg);
 }
 
 .triggerLg,
@@ -65,8 +65,8 @@
   height: 40px;
   min-height: 40px;
   padding: 0 14px;
-  font-size: var(--font-size-md, 14px);
-  border-radius: var(--radius-xl, 10px);
+  font-size: var(--font-size-md);
+  border-radius: var(--radius-xl);
 }
 
 /* 变体 */
@@ -107,7 +107,7 @@
   flex-shrink: 0;
   color: var(--text-tertiary);
   margin-left: auto;
-  transition: transform var(--transition-micro, 120ms ease), color var(--transition-micro, 120ms ease);
+  transition: transform var(--transition-micro), color var(--transition-micro);
 }
 
 .trigger:hover:not(:disabled) .chevron {
@@ -124,7 +124,7 @@
   background: transparent;
   color: var(--text-tertiary);
   cursor: pointer;
-  transition: background-color var(--transition-micro, 100ms ease), color var(--transition-micro, 100ms ease);
+  transition: background-color var(--transition-micro), color var(--transition-micro);
 }
 
 .clearBtn:hover {
@@ -147,7 +147,7 @@
 /* 浮层 */
 .content {
   position: fixed;
-  z-index: var(--z-dropdown, 300);
+  z-index: var(--z-dropdown);
   background: var(--bg-card);
   border: 1px solid var(--border-color);
   box-shadow:
@@ -165,7 +165,7 @@
   min-width: min(160px, calc(100vw - 16px));
   max-width: min(420px, calc(100vw - 16px));
   width: var(--anchor-width, auto);
-  animation: cds-popover-enter var(--transition-popover-enter, 150ms cubic-bezier(0.16, 1, 0.3, 1)) forwards;
+  animation: cds-popover-enter var(--transition-popover-enter) forwards;
 }
 
 .contentSm {
@@ -193,17 +193,17 @@
 .item {
   display: flex;
   align-items: center;
-  gap: var(--space-2, 8px);
+  gap: var(--space-2);
   width: 100%;
   border: none;
   background: transparent;
   text-align: left;
   padding: 6px 10px;
-  border-radius: var(--sep-item-radius, 8px);
+  border-radius: var(--sep-item-radius);
   min-height: 32px;
   height: auto;
   font-family: inherit;
-  font-size: var(--font-size-sm, 13px);
+  font-size: var(--font-size-sm);
   color: var(--text-primary);
   cursor: pointer;
   box-sizing: border-box;
@@ -211,25 +211,25 @@
   user-select: none;
   outline: none;
   transition:
-    background-color var(--transition-micro, 100ms ease),
-    color var(--transition-micro, 100ms ease);
+    background-color var(--transition-micro),
+    color var(--transition-micro);
 }
 
 .itemSm {
   padding: 4px 8px;
-  font-size: var(--font-size-xs, 12px);
+  font-size: var(--font-size-xs);
   min-height: 26px;
 }
 
 .itemMd {
   padding: 6px 10px;
-  font-size: var(--font-size-sm, 13px);
+  font-size: var(--font-size-sm);
   min-height: 32px;
 }
 
 .itemLg {
   padding: 8px 12px;
-  font-size: var(--font-size-md, 14px);
+  font-size: var(--font-size-md);
   min-height: 38px;
 }
 
@@ -250,7 +250,7 @@
 .item[aria-disabled='true'] {
   color: var(--text-tertiary);
   cursor: not-allowed;
-  opacity: var(--opacity-disabled, 0.45);
+  opacity: var(--opacity-disabled);
 }
 
 .itemDisabled:hover {
@@ -273,7 +273,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  line-height: var(--line-height-ui, 1.35);
+  line-height: var(--line-height-ui);
 }
 
 .textCol {
@@ -286,9 +286,9 @@
 }
 
 .title {
-  font-size: var(--font-size-sm, 13px);
+  font-size: var(--font-size-sm);
   font-weight: 500;
-  line-height: var(--line-height-ui, 1.35);
+  line-height: var(--line-height-ui);
   color: var(--text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -296,24 +296,24 @@
 }
 
 .desc {
-  font-size: var(--font-size-xs, 11px);
+  font-size: var(--font-size-xs);
   font-weight: 400;
-  line-height: var(--line-height-ui, 1.35);
+  line-height: var(--line-height-ui);
   color: var(--text-secondary);
   word-break: break-word;
   white-space: normal;
 }
 
 .itemHint {
-  font-size: var(--font-size-xs, 11px);
+  font-size: var(--font-size-xs);
   color: var(--text-tertiary);
   flex-shrink: 0;
 }
 
 .itemShortcut {
-  font-size: var(--font-size-xs, 11px);
+  font-size: var(--font-size-xs);
   color: var(--text-tertiary);
-  font-family: var(--font-mono, monospace);
+  font-family: var(--font-mono);
   flex-shrink: 0;
   margin-left: auto;
 }
@@ -336,7 +336,7 @@
 
 .groupLabel {
   padding: 4px 10px;
-  font-size: var(--font-size-xs, 11px);
+  font-size: var(--font-size-xs);
   font-weight: 500;
   color: var(--text-tertiary);
   user-select: none;

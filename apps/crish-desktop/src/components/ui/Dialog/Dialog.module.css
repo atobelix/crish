@@ -37,7 +37,7 @@
   max-height: calc(100vh - var(--space-8));
   background: var(--bg-card);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-2xl, 16px);
+  border-radius: var(--radius-2xl);
   box-shadow:
     0 0 0 1px color-mix(in srgb, var(--border-color) 70%, transparent),
     0 24px 48px -12px color-mix(in srgb, var(--shadow-color) 16%, transparent),

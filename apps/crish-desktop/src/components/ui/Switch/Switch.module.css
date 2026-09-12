@@ -6,21 +6,21 @@
 .container {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-2, 8px);
+  gap: var(--space-2);
   user-select: none;
 }
 
 .container[data-disabled] {
-  opacity: var(--opacity-disabled, 0.45);
+  opacity: var(--opacity-disabled);
   cursor: not-allowed;
 }
 
 .label {
-  font-size: var(--font-size-sm, 13px);
+  font-size: var(--font-size-sm);
   color: var(--text-secondary);
   cursor: pointer;
-  line-height: var(--line-height-ui, 1.35);
-  transition: color var(--transition-micro, 100ms ease-out);
+  line-height: var(--line-height-ui);
+  transition: color var(--transition-micro);
 }
 
 .container:hover:not([data-disabled]) .label {
@@ -39,7 +39,7 @@
   line-height: 0;
   font-size: 0;
   vertical-align: middle;
-  border-radius: var(--radius-full, 9999px);
+  border-radius: var(--radius-full);
   border: 1px solid var(--border-subtle);
   background: var(--switch-track-bg);
   box-sizing: border-box;
@@ -48,9 +48,9 @@
   outline: none;
   overflow: visible;
   transition:
-    background-color var(--duration-fast, 150ms) cubic-bezier(0.4, 0, 0.2, 1),
-    border-color var(--duration-fast, 150ms) cubic-bezier(0.4, 0, 0.2, 1),
-    box-shadow var(--duration-fast, 150ms) cubic-bezier(0.4, 0, 0.2, 1);
+    background-color var(--duration-fast) cubic-bezier(0.4, 0, 0.2, 1),
+    border-color var(--duration-fast) cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow var(--duration-fast) cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* 消除鼠标点击残留黑圈 */
@@ -134,7 +134,7 @@
 }
 
 .track:disabled {
-  opacity: var(--opacity-disabled, 0.45);
+  opacity: var(--opacity-disabled);
   cursor: not-allowed;
 }
 
@@ -149,7 +149,7 @@
   left: var(--thumb-pad);
   width: var(--thumb-d);
   height: var(--thumb-d);
-  border-radius: var(--radius-full, 9999px);
+  border-radius: var(--radius-full);
   background: var(--switch-thumb-bg);
   box-shadow:
     /* Layer 1: 0.5px 发丝微收边，界定边缘轮廓 */

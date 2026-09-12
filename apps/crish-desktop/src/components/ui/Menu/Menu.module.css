@@ -2,11 +2,11 @@
 
 /* wrapper 才和全屏 Dialog 面板同级；只给 .menuContent 设 z 压不住 isolation:isolate 的壳 */
 :global([data-radix-popper-content-wrapper]):has(.menuContent) {
-  z-index: var(--z-dropdown, 300);
+  z-index: var(--z-dropdown);
 }
 
 .menuContent {
-  z-index: var(--z-dropdown, 100);
+  z-index: var(--z-dropdown);
   outline: none;
   pointer-events: auto;
   min-width: 180px;
@@ -23,7 +23,7 @@
   overscroll-behavior: contain;
 
   padding: 6px;
-  border-radius: var(--sep-radius-outer, 14px);
+  border-radius: var(--sep-radius-outer);
   border: 1px solid var(--border-color);
   background: var(--bg-elevated);
   box-shadow: var(--shadow-lg);
@@ -34,7 +34,7 @@
 }
 
 .menuContent[data-state='open'] {
-  animation: cds-popover-enter var(--transition-popover-enter, 180ms cubic-bezier(0.16, 1, 0.3, 1)) forwards;
+  animation: cds-popover-enter var(--transition-popover-enter) forwards;
 }
 
 .menuContent[data-state='closed'] {
@@ -44,7 +44,7 @@
 
 .menuTitle {
   padding: 4px 10px;
-  font-size: var(--font-size-xs, 11px);
+  font-size: var(--font-size-xs);
   color: var(--text-tertiary);
   font-weight: 500;
   border-bottom: 1px solid var(--border-subtle);
@@ -62,16 +62,16 @@
 .menuItem {
   display: flex;
   align-items: center;
-  gap: var(--space-2, 8px);
+  gap: var(--space-2);
   border: none;
   background: transparent;
   text-align: left;
   padding: 8px 10px;
-  border-radius: var(--sep-item-radius, 8px);
+  border-radius: var(--sep-item-radius);
   min-height: 32px;
   height: auto;
   font-family: inherit;
-  font-size: var(--font-size-sm, 13px);
+  font-size: var(--font-size-sm);
   color: var(--text-primary);
   cursor: pointer;
   box-sizing: border-box;
@@ -80,9 +80,9 @@
   user-select: none;
   outline: none;
   transition:
-    background var(--transition-micro, 100ms ease),
-    color var(--transition-micro, 100ms ease),
-    box-shadow var(--transition-micro, 100ms ease);
+    background var(--transition-micro),
+    color var(--transition-micro),
+    box-shadow var(--transition-micro);
 }
 
 /* Hover 状态：采用微背景 tint-hover，边框绝不加深变黑 */
@@ -110,7 +110,7 @@
 .menuItemDisabled {
   color: var(--text-tertiary);
   cursor: not-allowed;
-  opacity: var(--opacity-disabled, 0.45);
+  opacity: var(--opacity-disabled);
 }
 
 .menuItemDisabled:hover {
@@ -150,8 +150,8 @@
 
 .menuItemLabel {
   display: block;
-  font-size: var(--font-size-sm, 13px);
-  line-height: var(--line-height-ui, 1.35);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-ui);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -159,21 +159,21 @@
 
 .menuItemDescription {
   display: block;
-  font-size: var(--font-size-xs, 11px);
+  font-size: var(--font-size-xs);
   color: var(--text-tertiary);
-  line-height: var(--line-height-ui, 1.35);
+  line-height: var(--line-height-ui);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: normal;
 }
 
 .menuItemShortcut {
-  font-size: var(--font-size-xs, 11px);
-  font-family: var(--font-mono, monospace);
+  font-size: var(--font-size-xs);
+  font-family: var(--font-mono);
   color: var(--text-tertiary);
   padding: 1px 4px;
   background: var(--tint-subtle);
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-sm);
   letter-spacing: 0.5px;
   flex-shrink: 0;
   margin-left: auto;

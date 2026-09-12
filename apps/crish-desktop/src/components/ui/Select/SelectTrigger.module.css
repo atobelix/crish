@@ -4,7 +4,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-2, 8px);
+  gap: var(--space-2);
   width: 100%;
   border: 1px solid var(--border-color);
   background: var(--bg-card);
@@ -16,8 +16,8 @@
   user-select: none;
   position: relative;
   transition:
-    background-color var(--transition-micro, 100ms ease),
-    border-color var(--transition-micro, 100ms ease);
+    background-color var(--transition-micro),
+    border-color var(--transition-micro);
 }
 
 .trigger:hover:not(:disabled) {
@@ -35,7 +35,7 @@
 }
 
 .trigger:disabled {
-  opacity: var(--opacity-disabled, 0.45);
+  opacity: var(--opacity-disabled);
   cursor: not-allowed;
   background: var(--bg-secondary);
 }
@@ -46,7 +46,7 @@
   height: 28px;
   min-height: 28px;
   padding: 0 8px;
-  font-size: var(--font-size-xs, 12px);
+  font-size: var(--font-size-xs);
   border-radius: 8px;
 }
 
@@ -55,8 +55,8 @@
   height: 32px;
   min-height: 32px;
   padding: 0 10px;
-  font-size: var(--font-size-sm, 13px);
-  border-radius: var(--radius-lg, 8px);
+  font-size: var(--font-size-sm);
+  border-radius: var(--radius-lg);
 }
 
 .triggerLg,
@@ -64,7 +64,7 @@
   height: 38px;
   min-height: 38px;
   padding: 0 12px;
-  font-size: var(--font-size-md, 14px);
+  font-size: var(--font-size-md);
   border-radius: 10px;
 }
 
@@ -106,7 +106,7 @@
   flex-shrink: 0;
   color: var(--text-tertiary);
   margin-left: auto;
-  transition: transform var(--transition-micro, 120ms ease), color var(--transition-micro, 120ms ease);
+  transition: transform var(--transition-micro), color var(--transition-micro);
 }
 
 .trigger:hover:not(:disabled) .chevron {
@@ -123,7 +123,7 @@
   background: transparent;
   color: var(--text-tertiary);
   cursor: pointer;
-  transition: background-color var(--transition-micro, 100ms ease), color var(--transition-micro, 100ms ease);
+  transition: background-color var(--transition-micro), color var(--transition-micro);
 }
 
 .clearBtn:hover {

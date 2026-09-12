@@ -15,22 +15,22 @@
 
 /* 四级尺寸 Token 映射 */
 .xs {
-  --scrollbar-width: var(--scrollbar-width-xs, 6px);
+  --scrollbar-width: var(--scrollbar-width-xs);
   --scrollbar-button-height: 8px;
 }
 
 .sm {
-  --scrollbar-width: var(--scrollbar-width-sm, 7px);
+  --scrollbar-width: var(--scrollbar-width-sm);
   --scrollbar-button-height: 8px;
 }
 
 .md {
-  --scrollbar-width: var(--scrollbar-width-md, 9px);
+  --scrollbar-width: var(--scrollbar-width-md);
   --scrollbar-button-height: 8px;
 }
 
 .lg {
-  --scrollbar-width: var(--scrollbar-width-lg, 11px);
+  --scrollbar-width: var(--scrollbar-width-lg);
   --scrollbar-button-height: 10px;
 }
 
@@ -117,7 +117,7 @@
   justify-content: center;
   cursor: pointer;
   outline: none;
-  border-radius: var(--radius-xs, 2px);
+  border-radius: var(--radius-xs);
   transition: color 120ms ease, opacity 120ms ease;
   user-select: none;
   touch-action: none;
@@ -145,7 +145,7 @@
 /* 物理真空隔离带：固定 2px 净空缓冲 */
 .safeGap {
   width: 100%;
-  height: var(--scrollbar-track-safe-gap, 2px);
+  height: var(--scrollbar-track-safe-gap);
   flex-shrink: 0;
 }
 
@@ -164,7 +164,7 @@
   top: 0;
   left: 0;
   width: 100%;
-  border-radius: var(--scrollbar-thumb-radius, var(--radius-full, 9999px));
+  border-radius: var(--scrollbar-thumb-radius, var(--radius-full));
   background: var(--scrollbar-thumb-bg);
   transition: background 120ms ease;
   cursor: grab;
@@ -195,7 +195,7 @@
 
 /* 水平方向物理隔离带 */
 .safeGapHorizontal {
-  width: var(--scrollbar-track-safe-gap, 2px);
+  width: var(--scrollbar-track-safe-gap);
   height: 100%;
   flex-shrink: 0;
 }
@@ -215,7 +215,7 @@
   top: 0;
   left: 0;
   height: 100%;
-  border-radius: var(--scrollbar-thumb-radius, var(--radius-full, 9999px));
+  border-radius: var(--scrollbar-thumb-radius, var(--radius-full));
   background: var(--scrollbar-thumb-bg);
   transition: background 120ms ease;
   cursor: grab;

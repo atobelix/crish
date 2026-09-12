@@ -6,8 +6,8 @@
 .badge {
   --badge-h: 20px;
   --badge-px: 6px;
-  --badge-fs: var(--font-size-xs, 12px);
-  --badge-radius: var(--radius-sm, 4px);
+  --badge-fs: var(--font-size-xs);
+  --badge-radius: var(--radius-sm);
   --badge-bg: var(--control-soft-bg);
   --badge-fg: var(--text-secondary);
   --badge-border: transparent;
@@ -18,12 +18,12 @@
   box-sizing: border-box;
   height: var(--badge-h);
   padding: 0 var(--badge-px);
-  gap: var(--space-1, 4px);
+  gap: var(--space-1);
   font-family: 'Segoe UI', -apple-system, var(--font-sans);
   font-variant-numeric: tabular-nums;
   font-feature-settings: 'tnum' 1;
   font-size: var(--badge-fs);
-  font-weight: var(--font-weight-normal, 400);
+  font-weight: var(--font-weight-normal);
   line-height: 1;
   color: var(--badge-fg);
   background-color: var(--badge-bg);
@@ -39,21 +39,21 @@
 .badge[data-size='xs'] {
   --badge-h: 18px;
   --badge-px: 5px;
-  --badge-fs: var(--font-size-xxs, 11px);
+  --badge-fs: var(--font-size-xxs);
 }
 
 .sizeSm,
 .badge[data-size='sm'] {
   --badge-h: 20px;
   --badge-px: 6px;
-  --badge-fs: var(--font-size-xs, 12px);
+  --badge-fs: var(--font-size-xs);
 }
 
 .sizeMd,
 .badge[data-size='md'] {
   --badge-h: 24px;
   --badge-px: 8px;
-  --badge-fs: var(--font-size-sm, 13px);
+  --badge-fs: var(--font-size-sm);
 }
 
 /*      (Tone)     */
@@ -129,15 +129,15 @@
   width: 14px;
   height: 14px;
   padding: 0;
-  margin-left: var(--space-0_5, 2px);
+  margin-left: var(--space-0_5);
   margin-right: -2px;
   border: none;
-  border-radius: var(--radius-xs, 2px);
+  border-radius: var(--radius-xs);
   background: transparent;
   color: inherit;
   cursor: pointer;
   opacity: 0.7;
-  transition: opacity var(--transition-micro, 120ms) ease;
+  transition: opacity var(--transition-micro) ease;
 }
 
 .removeButton:hover {
