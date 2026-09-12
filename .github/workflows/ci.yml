@@ -89,6 +89,10 @@ jobs:
       - run: npm run check:token-consistency
       # 收敛硬闸（X1/R9）：被跟踪运行时产物与波次命名文件必须归零
       - run: node scripts/check-convergence-metrics.mjs
+      # U-GATE 防御探针（detail-D2 §6.3）：生产 .rs 禁止 per-call
+      # CommandGatekeeper::new()（测试/`conex-sandbox` 单测白名单）；
+      # 与 new() 清零同票落地，防回潮。
+      - run: npm run check:gatekeeper-shared
 
   vitest-fast:
     runs-on: ubuntu-latest
@@ -130,6 +134,10 @@ jobs:
       - run: npm run build:shared-types
       - run: npm run build:desktop
       - run: node scripts/check-dist.mjs --max-app-kb 500 --csp-enforce
+      # 启动体积门禁（D9-A / U-START-GATE · 16-P2）：entry + 静态图合计 fail。
+      # 必须在 build:desktop 之后（依赖 dist/.vite/manifest.json）；--strict 使
+      # 超预算 exit 1（禁 warn 永久化，评审 F9）。deny 命中任何模式 exit 1。
+      - run: node scripts/check-startup-budget.mjs --strict
       # chunk 环检测（R2-4 C1）：依赖构建产物 dist/（脚本默认 apps/crish-desktop/dist），
       # 必须在此构建后 job 执行——lint job 无 dist，接线过去会因「dist 目录不存在」直接红
       - run: npm run check:chunk-cycles
