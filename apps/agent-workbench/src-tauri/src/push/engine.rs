@@ -305,6 +305,11 @@ impl PushDecisionEngine {
             .collect()
     }
 
+    /// 最近合并桶到期时刻（供 Notify 驱动 drain loop 计算 sleep 上限）
+    pub fn next_expiry_ms(&self, now_ms: u64) -> Option<u64> {
+        self.coalesce.next_expiry_ms(now_ms)
+    }
+
     /// 强制 drain 全部桶（应用退出/会话切换兜底；正常运行请用 [Self::flush]）
     pub fn flush_all(&mut self, now_ms: u64) -> Vec<PushDecision> {
         self.coalesce

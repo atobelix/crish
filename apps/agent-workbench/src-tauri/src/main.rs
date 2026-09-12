@@ -1017,15 +1017,23 @@ fn main() {
                 });
             }
 
-            // R3-02：推送决策合并桶 drain（500ms 保守周期——Push 到期驱动
-            // 需 next_expiry_ms + 入队 Notify 完整接线，Stage 6 允许保留
-            // 最小正确性；PushAwareEmitter::flush 到点产出合并直推；
-            // 空缓冲零开销，[push::pusher::PushAwareEmitter::flush] Vec::take 语义）
+            // R3-02：推送决策合并桶 drain —— Notify + next_expiry_ms 事件驱动
+            // （取代旧 500ms 固定 sleep；无桶时最长 60s 挂起，入桶即唤醒）
             {
                 let push_emitter = Arc::clone(&push_aware);
                 tauri::async_runtime::spawn(async move {
+                    let wake = push_emitter.wake_notify();
                     loop {
-                        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                        let now = server::now_ms();
+                        let wait_ms = push_emitter
+                            .next_expiry_ms(now)
+                            .map(|exp| exp.saturating_sub(now))
+                            .unwrap_or(60_000)
+                            .clamp(10, 60_000);
+                        tokio::select! {
+                            _ = tokio::time::sleep(std::time::Duration::from_millis(wait_ms)) => {}
+                            _ = wake.notified() => {}
+                        }
                         push_emitter.flush(server::now_ms());
                     }
                 });

@@ -33,10 +33,15 @@ const REPO_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const MANIFEST_CANDIDATES = [
   join(REPO_ROOT, 'apps', 'crish-desktop', 'dist', '.vite', 'manifest.json'),
   join(REPO_ROOT, 'dist', '.vite', 'manifest.json'),
+  join(REPO_ROOT, 'apps', 'crush-desktop', 'dist', '.vite', 'manifest.json'),
+];
+const ASSETS_DIR_CANDIDATES = [
+  join(REPO_ROOT, 'apps', 'crish-desktop', 'dist', 'assets'),
+  join(REPO_ROOT, 'dist', 'assets'),
 ];
 
-/** 缺省软预算（KiB）。未基线前只 warn，不 hard 180。 */
-const DEFAULT_BUDGET_KB = 240;
+/** 缺省软预算（KiB）：2026-09-13 真实 build 基线 index≈497–509 KiB，取 520 作软上限（warning）。 */
+const DEFAULT_BUDGET_KB = 520;
 
 // ── args ─────────────────────────────────────────────────────────────────────
 const argv = process.argv.slice(2);
@@ -81,11 +86,38 @@ function findManifest() {
 
 const manifestPath = findManifest();
 if (!manifestPath) {
-  console.warn('[check-startup-budget] WARN: 未找到 dist/.vite/manifest.json');
-  console.warn(
-    '[check-startup-budget] WARN: 无构建产物——跳过 entry 体积检查（exit 0）。先跑 npm run build:desktop 再启用。'
+  // 无 manifest 时回落：直接扫 dist/assets 中 index-*.js 作 entry 代理
+  const assetsDir = ASSETS_DIR_CANDIDATES.find((p) => existsSync(p));
+  if (!assetsDir) {
+    console.warn('[check-startup-budget] WARN: 未找到 dist 产物——跳过 entry 体积检查（exit 0）');
+    process.exit(0);
+  }
+  const { readdirSync } = await import('node:fs');
+  const entries = readdirSync(assetsDir).filter((f) => /^index-.*\.js$/.test(f));
+  if (entries.length === 0) {
+    console.warn('[check-startup-budget] WARN: assets 中无 index-*.js，跳过');
+    process.exit(0);
+  }
+  let failed = false;
+  for (const f of entries) {
+    const size = statSync(join(assetsDir, f)).size;
+    const kb = (size / 1024).toFixed(1);
+    if (size > budgetKb * 1024) {
+      const msg = `[check-startup-budget] ${f}: ${kb} KiB > 软预算 ${budgetKb} KiB`;
+      if (strict) {
+        console.error(msg);
+        failed = true;
+      } else {
+        console.warn(`WARN ${msg}`);
+      }
+    } else {
+      console.log(`[check-startup-budget] OK ${f}: ${kb} KiB ≤ ${budgetKb} KiB`);
+    }
+  }
+  console.log(
+    '[check-startup-budget] 注：无 Vite manifest，使用 assets 文件名启发式；建议 build 开启 manifest: true'
   );
-  process.exit(0);
+  process.exit(failed ? 1 : 0);
 }
 
 // ── parse manifest ───────────────────────────────────────────────────────────

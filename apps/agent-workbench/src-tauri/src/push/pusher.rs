@@ -310,6 +310,8 @@ pub struct PushAwareEmitter {
     /// 时钟源（epoch 毫秒；测试注入固定时钟防时刻敏感——静默时段/
     /// 窗口边界随真实墙钟漂移，生产用 [now_ms]）
     now: Box<dyn Fn() -> u64 + Send + Sync>,
+    /// 合并桶入队/变更唤醒（drain loop 事件驱动，取代固定 500ms sleep）
+    wake: Arc<tokio::sync::Notify>,
 }
 
 impl PushAwareEmitter {
@@ -329,6 +331,20 @@ impl PushAwareEmitter {
             engine: Mutex::new(PushDecisionEngine::default()),
             dispatcher,
             now,
+            wake: Arc::new(tokio::sync::Notify::new()),
+        }
+    }
+
+    /// drain loop 用：等待合并桶入队或到期唤醒
+    pub fn wake_notify(&self) -> Arc<tokio::sync::Notify> {
+        Arc::clone(&self.wake)
+    }
+
+    /// 最近合并桶到期时刻；无桶返回 None
+    pub fn next_expiry_ms(&self, now_ms: u64) -> Option<u64> {
+        match self.engine.lock() {
+            Ok(engine) => engine.next_expiry_ms(now_ms),
+            Err(_) => None,
         }
     }
 
@@ -356,7 +372,13 @@ impl PushAwareEmitter {
         };
         let now = (self.now)();
         let decisions = match self.engine.lock() {
-            Ok(mut engine) => engine.decide(&event, &ctx, now),
+            Ok(mut engine) => {
+                let decisions = engine.decide(&event, &ctx, now);
+                if engine.next_expiry_ms(now).is_some() {
+                    self.wake.notify_one();
+                }
+                decisions
+            }
             Err(_) => {
                 tracing::error!(target: "push", "决策引擎锁损坏（poisoned），跳过事件");
                 return;

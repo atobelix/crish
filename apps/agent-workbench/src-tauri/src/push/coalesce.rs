@@ -289,6 +289,16 @@ impl CoalesceState {
         self.buckets.values().map(|b| b.items.len() + 1).sum()
     }
 
+    /// 最近一个合并桶的到期时刻（epoch ms）。无待合并桶返回 None。
+    /// 已到期桶返回 `now_ms`（调用方应立即 flush）。
+    pub fn next_expiry_ms(&self, now_ms: u64) -> Option<u64> {
+        self.buckets
+            .values()
+            .map(|b| b.first.arrived_at_ms.saturating_add(b.window_ms))
+            .min()
+            .map(|t| t.max(now_ms))
+    }
+
     fn accumulate(&mut self, pending: PendingPush) {
         let (bucket_key, window_ms) = match pending.scene {
             SceneId::SubagentCompleted => (

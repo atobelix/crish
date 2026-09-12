@@ -734,6 +734,8 @@ export default defineConfig({
     target: 'es2022',
     outDir: 'dist',
     emptyOutDir: true,
+    // 供 check-startup-budget.mjs 依赖图谱门禁（无 manifest 时脚本走 assets 启发式）
+    manifest: true,
     // chunk 体积门禁（06-步骤2）：与 chunkSizeGatePlugin 同值（单真源）；
     // reporter 的同名阈值确保"超限即告警"与"超限即抛错"口径一致（1100 降噪开关退役）
     chunkSizeWarningLimit: CHUNK_SIZE_GATE_KB,
