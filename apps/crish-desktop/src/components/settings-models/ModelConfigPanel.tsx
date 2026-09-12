@@ -46,13 +46,7 @@ export const ModelConfigPanel: React.FC<{
       {/* ── 1. 基础配置：展示名称 / 上下文长度 / 最大输出 Token ── */}
       <div className={`${styles.mrdCfgFields} mrd-cfg-fields`}>
         <label className={`${styles.mrdCfgLabel} mrd-cfg-label`}>
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-            }}
-          >
+          <div className={styles.mrdCfgLabelHeader}>
             <span>展示名称</span>
           </div>
           <Input

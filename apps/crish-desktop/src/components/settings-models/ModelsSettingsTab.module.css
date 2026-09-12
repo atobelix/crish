@@ -266,6 +266,26 @@
   background: var(--tint-hover);
 }
 
+.mrdModelRow.isExpanded,
+.mrdModelRow:global(.is-expanded) {
+  cursor: default;
+}
+
+.mrdModelRow.isExpanded:hover,
+.mrdModelRow:global(.is-expanded):hover {
+  background: transparent;
+}
+
+.mrdModelRow.isExpanded .mrdModelRowInner {
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: background-color var(--transition-micro);
+}
+
+.mrdModelRow.isExpanded .mrdModelRowInner:hover {
+  background: var(--tint-hover);
+}
+
 .mrdModelRow.isOff,
 .mrdModelRow:global(.is-off) {
   opacity: 0.55;
@@ -299,26 +319,49 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.mrdModelMeta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex-shrink: 0;
 }
 
 .mrdCtxPill {
   font-size: var(--font-size-xxs);
-  padding: 1px var(--space-1_5); /* 布局约束，不入刻度 */
+  padding: 0 var(--space-1_5);
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
   border-radius: var(--radius-full);
   border: var(--hairline-width) solid var(--border-subtle);
-  background: transparent;
+  background: var(--tint-subtle);
   color: var(--text-secondary);
   font-family: var(--font-mono);
-  line-height: 1.3;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
 }
 
 .mrdCapTag {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--radius-xs);
   color: var(--text-tertiary);
-
   cursor: help;
+  transition:
+    color var(--transition-fast),
+    background-color var(--transition-fast);
+}
+
+.mrdCapTag:hover {
+  color: var(--text-primary);
+  background: var(--tint-hover);
 }
 
 .mrdModelActions {
@@ -805,43 +848,41 @@
 .credentialsStatusConfigured {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-1);
-  font-size: var(--font-size-xxs);
+  gap: var(--space-1_5);
+  font-size: var(--font-size-xs);
   color: var(--text-secondary);
-  background: var(--tint-subtle);
-  border: var(--hairline-width) solid var(--border-subtle);
-  padding: var(--space-0_5) var(--space-2);
-  border-radius: var(--radius-full);
+  background: transparent;
+  border: none;
+  padding: 0;
   font-weight: var(--font-weight-normal);
 }
 
 .credentialsStatusUnconfigured {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-1);
-  font-size: var(--font-size-xxs);
+  gap: var(--space-1_5);
+  font-size: var(--font-size-xs);
   color: var(--text-tertiary);
-  background: var(--tint-subtle);
-  border: var(--hairline-width) solid var(--border-subtle);
-  padding: var(--space-0_5) var(--space-2);
-  border-radius: var(--radius-full);
+  background: transparent;
+  border: none;
+  padding: 0;
   font-weight: var(--font-weight-normal);
 }
 
 .credentialsStatusDotActive {
-  width: var(--space-1);
-  height: var(--space-1);
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   background-color: var(--brand);
   flex-shrink: 0;
 }
 
 .credentialsStatusDotMuted {
-  width: var(--space-1);
-  height: var(--space-1);
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   background-color: var(--text-tertiary);
-  opacity: 0.5;
+  opacity: 0.6;
   flex-shrink: 0;
 }
 
@@ -995,7 +1036,7 @@
   transition: background var(--transition-fast), color var(--transition-fast);
 }
 
-.mrdCurrencyBtn:hover {
+.mrdCurrencyBtn:hover:not(.mrdCurrencyBtnActive) {
   color: var(--text-primary);
   background: var(--tint-hover);
 }
@@ -1004,6 +1045,11 @@
   background: color-mix(in srgb, var(--brand) 15%, transparent);
   color: var(--brand);
   font-weight: var(--font-weight-semibold);
+}
+
+.mrdCurrencyBtnActive:hover {
+  background: color-mix(in srgb, var(--brand) 22%, transparent);
+  color: var(--brand);
 }
 
 /* ── 8. 详情头部与思考推理配置（从 ProfileHeader / ModelThinkingEditor 抽离） ── */

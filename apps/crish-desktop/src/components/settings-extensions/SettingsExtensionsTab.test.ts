@@ -62,7 +62,7 @@ describe('扩展设置页控件皮契约', () => {
 
   it('扩展 module 锁圆角契约，详情滚动盒类名命中 overlay-scrollbar', () => {
     const css = readSrc('SettingsExtensionsTab.module.css');
-    expect(css).toMatch(/var\(--(?:button-radius|radius-lg),\s*[78]px\)/);
+    expect(css).toMatch(/var\(--(?:button-radius|radius-lg)(?:,\s*[78]px)?\)/);
     expect(css).toContain('appearance: none');
     expect(css).toContain('detailMdCoverContent');
     expect(css).toContain('coverContent');

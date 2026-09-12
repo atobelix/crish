@@ -121,7 +121,7 @@ export const ModelList: React.FC<{
                 <span className={`${styles.mrdModelName} mrd-model-name`}>
                   {display}
                 </span>
-                <div className="mrd-model-meta">
+                <div className={`${styles.mrdModelMeta} mrd-model-meta`}>
                   {showCtx && (
                     <span className={`${styles.mrdCtxPill} mrd-ctx-pill`}>
                       {liveCtxLabel}

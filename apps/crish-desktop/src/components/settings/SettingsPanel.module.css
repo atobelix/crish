@@ -348,7 +348,6 @@
 /* 全屏壳层叠只挂 overlay；内部 Menu portal 进此节点。
  * popper wrapper 统一继承全局 --z-dropdown */
 .settingsCoverOverlay {
-  --dialog-z: var(--z-modal);
 }
 
 .settingsCoverOverlay :global([data-radix-popper-content-wrapper]) {

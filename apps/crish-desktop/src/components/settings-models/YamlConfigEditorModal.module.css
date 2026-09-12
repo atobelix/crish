@@ -135,15 +135,44 @@
   user-select: none;
 }
 
-/* 搜索框尺寸约束（样式完全由 UI Input 原子组件提供） */
+/* 搜索框尺寸约束与工具栏极简形态（未激活/未选中态融入纸面，不显眼突兀） */
 .searchBar {
-  width: 240px;
+  width: 220px;
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  transition:
+    background-color var(--transition-fast) ease,
+    border-color var(--transition-fast) ease,
+    width var(--transition-fast) ease;
+}
+
+/* 鼠标悬停但未聚焦时，给出极柔和底色，不突兀 */
+.searchBar:hover:not(:focus) {
+  background: var(--tint-hover) !important;
+  border-color: color-mix(in srgb, var(--border-subtle) 40%, transparent) !important;
+}
+
+/* 激活、聚焦或有搜索内容时展开宽度并呈现柔和底色与边框 */
+.searchBar:focus,
+.searchBar:focus-visible,
+.searchBar[data-has-value='true'] {
+  width: 275px;
+  background: var(--bg-card) !important;
+  border-color: color-mix(in srgb, var(--border-color) 92%, var(--text-primary) 8%) !important;
+  box-shadow: none !important;
+}
+
+/* 包含内容时右侧预留安全避让间距，防止文字与后缀按钮组重叠 */
+.searchBar[data-has-value='true'] {
+  padding-right: 106px !important;
 }
 
 .searchSuffix {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-1);
+  gap: var(--space-0_5);
+  pointer-events: auto;
 }
 
 .searchCount {
@@ -167,14 +196,15 @@
   color: var(--text-tertiary);
   cursor: pointer;
   padding: 0;
+  pointer-events: auto;
   transition:
     color var(--transition-micro),
-    background var(--transition-micro);
+    background-color var(--transition-micro);
 }
 
 .searchNavBtn:hover:not(:disabled) {
   color: var(--text-primary);
-  background: var(--tint-hover);
+  background-color: var(--tint-hover);
 }
 
 .searchNavBtn:disabled {

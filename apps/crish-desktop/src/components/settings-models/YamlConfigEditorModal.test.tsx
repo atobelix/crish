@@ -49,20 +49,24 @@ describe('YamlConfigEditorModal (模型 YAML 编辑器弹窗)', () => {
     });
   });
 
-  it('正确渲染弹窗标题、路径及地道的状态提示文案', async () => {
+  it('正确渲染弹窗标题、动态状态指示及功能工具栏', async () => {
     render(<YamlConfigEditorModal open={true} onClose={vi.fn()} />);
 
     await waitFor(() => {
-      expect(screen.getByText('模型能力与参数配置 (models.yaml)')).toBeTruthy();
+      expect(screen.getByText('模型能力与参数配置')).toBeTruthy();
     });
 
-    expect(screen.getByText('/mock/path/models.yaml')).toBeTruthy();
-    // 检查状态文案不含中英混杂的 Tab 为 2 空格
-    expect(screen.getByText(/缩进 2 空格/)).toBeTruthy();
-    expect(screen.getByText(/快捷键/)).toBeTruthy();
+    // 状态指示位于标题旁边且为纯实点动态状态（无文本陈列，通过 aria-label 与 Tooltip 呈现）
+    expect(screen.getByRole('status', { name: '已与磁盘同步' })).toBeTruthy();
+
+    // 标题下方功能行：搜索框与工具按钮
+    expect(screen.getByPlaceholderText('在配置中查找 (Ctrl+F)...')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /显示代码行数/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /开启自动换行/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /复制全部内容/ })).toBeTruthy();
   });
 
-  it('顶部工具栏包含撤回、刷新与恢复内置模板按钮', async () => {
+  it('底栏包含撤回、刷新与恢复内置模板按钮', async () => {
     render(<YamlConfigEditorModal open={true} onClose={vi.fn()} />);
 
     await waitFor(() => {
@@ -79,8 +83,8 @@ describe('YamlConfigEditorModal (模型 YAML 编辑器弹窗)', () => {
 
     // 初始状态下内容未修改，撤回按钮应当 disabled
     expect(undoBtn.hasAttribute('disabled')).toBe(true);
-    // 右侧指示已与磁盘同步
-    expect(screen.getByText('已与磁盘同步')).toBeTruthy();
+    // 标题旁边指示已与磁盘同步
+    expect(screen.getByRole('status', { name: '已与磁盘同步' })).toBeTruthy();
   });
 
   it('编辑内容后撤回按钮可用，点击可撤回修改', async () => {
@@ -97,12 +101,12 @@ describe('YamlConfigEditorModal (模型 YAML 编辑器弹窗)', () => {
     // 修改后撤回按钮亮起
     const undoBtn = screen.getByRole('button', { name: /撤回/ });
     expect(undoBtn.hasAttribute('disabled')).toBe(false);
-    expect(screen.getByText('有未保存修改')).toBeTruthy();
+    expect(screen.getByRole('status', { name: '有未保存修改' })).toBeTruthy();
 
     // 点击撤回
     fireEvent.click(undoBtn);
     expect(textarea.value).toBe('version: 1\nproviders: []\n');
-    expect(screen.getByText('已与磁盘同步')).toBeTruthy();
+    expect(screen.getByRole('status', { name: '已与磁盘同步' })).toBeTruthy();
     expect(undoBtn.hasAttribute('disabled')).toBe(true);
   });
 
@@ -179,5 +183,28 @@ describe('YamlConfigEditorModal (模型 YAML 编辑器弹窗)', () => {
     fireEvent.click(abandonBtn);
 
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it('行号开关控制行号显示，搜索框支持关键词查找', async () => {
+    render(<YamlConfigEditorModal open={true} onClose={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /显示代码行数/ })).toBeTruthy();
+    });
+
+    const toggleLineBtn = screen.getByRole('button', { name: /显示代码行数/ });
+    // 默认不开启行号
+    expect(screen.queryByText('1', { selector: '._gutterLine_f230ef' })).toBeNull();
+
+    // 点击开启行号
+    fireEvent.click(toggleLineBtn);
+    expect(screen.getByRole('button', { name: /隐藏代码行数/ })).toBeTruthy();
+
+    // 搜索框输入与导航
+    const searchInput = screen.getByPlaceholderText('在配置中查找 (Ctrl+F)...');
+    fireEvent.change(searchInput, { target: { value: 'providers' } });
+
+    // 存在匹配结果
+    expect(screen.getByText(/1 \/ 1/)).toBeTruthy();
   });
 });

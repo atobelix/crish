@@ -226,7 +226,7 @@ export const SettingsSecurityTab: React.FC = () => {
                 );
               })}
               {extraCount > 0 && !showAllPaths ? (
-                <div style={{ padding: '8px 20px' }}>
+                <div className={styles.morePathsWrapper}>
                   <button
                     type="button"
                     className="settings-chip-btn"
@@ -237,7 +237,7 @@ export const SettingsSecurityTab: React.FC = () => {
                 </div>
               ) : null}
               {showAllPaths && extraCount > 0 ? (
-                <div style={{ padding: '8px 20px' }}>
+                <div className={styles.morePathsWrapper}>
                   <button
                     type="button"
                     className="settings-chip-btn"
@@ -321,21 +321,8 @@ export const SettingsSecurityTab: React.FC = () => {
                 </Tooltip>
               ) : null}
               {showClearConfirm ? (
-                <div
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '0.5rem',
-                    flexWrap: 'wrap',
-                  }}
-                >
-                  <span
-                    style={{
-                      fontSize: '0.8125rem',
-                      color: 'var(--color-text-secondary)',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
+                <div className={styles.confirmClearGroup}>
+                  <span className={styles.confirmClearPrompt}>
                     确定清除所有白名单命令？此操作不可撤销
                   </span>
                   <Button

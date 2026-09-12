@@ -97,7 +97,6 @@
  * tokens */
 
 .rulesEditorOverlay {
-  --dialog-z: var(--z-modal);
 }
 
 .rulesEditorDialog {

@@ -10,11 +10,14 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { SettingsQuickMenu } from './SettingsQuickMenu';
 import { useSettingsUiStore } from '../../store/settingsUiStore';
+import { resetThemeStore } from '../../api/themeStore';
 
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
   localStorage.clear();
+  resetThemeStore();
+  document.documentElement.removeAttribute('data-theme');
   useSettingsUiStore.setState({ showSettingsOverlay: false });
 });
 

@@ -30,6 +30,7 @@ vi.mock('../../api/clientApi', () => ({
 
 vi.mock('../../api/projectStore', () => ({
   getWorkspacePath: () => '__global__',
+  GENERAL_FOLDER: '对话',
 }));
 
 vi.mock('../../services/toast/ToastContext', () => ({

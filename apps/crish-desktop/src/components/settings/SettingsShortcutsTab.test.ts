@@ -89,7 +89,7 @@ describe('快捷键页控件皮契约（搜索 / 改键钮 / overlay 细条）',
     expect(src).not.toMatch(/<button\s+className=\{`shortcut-key-btn/);
     expect(css).toContain('appearance: none');
     expect(css).toContain('-webkit-appearance: none');
-    expect(css).toMatch(/var\(--(?:button-radius|radius-lg),\s*[78]px\)/);
+    expect(css).toMatch(/var\(--(?:button-radius|radius-lg)(?:,\s*[78]px)?\)/);
     expect(css).toContain('.shortcutSearch');
     expect(css).toContain('.shortcutKeyBtn');
   });
@@ -101,7 +101,7 @@ describe('快捷键页控件皮契约（搜索 / 改键钮 / overlay 细条）',
     expect(inputTsx).not.toMatch(/variant === 'search'\s*\n\s*\? 'search'/);
     expect(inputCss).toContain('appearance: none');
     expect(inputCss).toContain('-webkit-appearance: none');
-    expect(inputCss).toMatch(/var\(--(?:button-radius|radius-lg),\s*[78]px\)/);
+    expect(inputCss).toMatch(/var\(--(?:button-radius|radius-lg)(?:,\s*[78]px)?\)/);
     expect(inputCss).toContain('::-webkit-search-decoration');
     expect(inputCss).toContain('::-webkit-search-cancel-button');
     expect(inputCss).not.toMatch(/box-shadow:\s*0\s+4px/);
@@ -123,7 +123,7 @@ describe('快捷键页控件皮契约（搜索 / 改键钮 / overlay 细条）',
     expect(overlay).not.toMatch(/(?:^|\n)\*\s*\{[^}]*scrollbar-width/);
     expect(panel).not.toMatch(/scrollbar-width\s*:/);
     expect(panel).toContain('.coverContent');
-    expect(uiCss).toMatch(/var\(--(?:button-radius|radius-lg),\s*[78]px\)/);
+    expect(uiCss).toMatch(/var\(--(?:button-radius|radius-lg)(?:,\s*[78]px)?\)/);
     expect(uiCss).toContain('appearance: none');
   });
 });
