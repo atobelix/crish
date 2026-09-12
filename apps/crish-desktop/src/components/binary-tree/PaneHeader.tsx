@@ -26,15 +26,8 @@ import { useLayoutTreeStore, collectLeaves } from '../../store/layout-tree';
 import { getCompositionRoot } from '../../app/compositionRoot';
 import { isPendingDraft, mintDraftSessionId } from '../../store/draftSession';
 import { useSessionTabDrag } from '../shell/SessionTabDragContext';
-import {
-  CLOSE_HIT_PAD_PX,
-  DRAG_THRESHOLD_PX,
-  NON_TAB_SPACE_PX,
-  TAB_GAP_PX,
-  TAB_HEIGHT_PX,
-  TAB_WIDTH_MAX_PX,
-  TAB_WIDTH_MIN_PX,
-} from '../../utils/tabStripGeometry';
+import { DRAG_THRESHOLD_PX, NON_TAB_SPACE_PX, TAB_GAP_PX } from '../../utils/tabStripGeometry';
+import { paneTabStripVars } from './tabStripVars';
 import { DURATION_FAST_MS, readTransitionMs } from '../../utils/motionTokens';
 import { useTablistKeyboard } from '../../hooks/useTablistKeyboard';
 import { ResizeObserverManager } from '../../services/ResizeObserverManager';
@@ -463,16 +456,7 @@ export const PaneHeader: React.FC<PaneHeaderProps> = React.memo(
         <div
           ref={containerRef}
           className={styles.tabsContainer}
-          style={
-            {
-              '--tab-height': `${TAB_HEIGHT_PX}px`,
-              '--tab-gap': `${TAB_GAP_PX}px`,
-              '--tab-width-max': `${TAB_WIDTH_MAX_PX}px`,
-              '--tab-width-min': `${TAB_WIDTH_MIN_PX}px`,
-              '--tab-close-hit-pad': `${CLOSE_HIT_PAD_PX}px`,
-              '--tab-item-width': `${effectiveTabWidth}px`,
-            } as React.CSSProperties
-          }
+          style={paneTabStripVars(effectiveTabWidth)}
           data-locked={lockedTabWidth != null ? 'true' : 'false'}
           data-booted={booted ? 'true' : 'false'}
           onScroll={handleScroll}

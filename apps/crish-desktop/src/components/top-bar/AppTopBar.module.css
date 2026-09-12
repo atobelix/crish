@@ -1,16 +1,18 @@
 /**
- * AppTopBar — 流内 36px 顶栏，挂在 .workspaces-column 第一子位。
- * 只覆盖工作区列；视觉规格对齐参考里的 .tree-pane-header：
- * 透明分界、无下边框，顶栏与下方画布是一整片连续的「大矩形」，卡片浮在其上。
+ * AppTopBar — 绝对浮层顶栏（36px），挂在 .workspaces-column 第一子位。
+ * 仅覆盖工作区列顶部，绝不横跨左侧 Sidebar；
+ * pointer-events: none 允许点击穿透到底层 PaneHeader，仅 .trail（窗控与帮助）响应事件；
+ * 物理不占文档流高度，实现标签条与窗控单轨同层整合。
  */
 
 .topBar {
-  position: relative;
-  width: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
   height: var(--header-height, 36px);
   min-height: var(--header-height, 36px);
   max-height: var(--header-height, 36px);
-  flex-shrink: 0;
   display: flex;
   align-items: center;
   background: transparent;
@@ -20,7 +22,8 @@
   user-select: none;
   -webkit-app-region: no-drag;
   app-region: no-drag;
-  pointer-events: auto;
+  pointer-events: none;
+  z-index: var(--z-sticky, 20);
 }
 
 .spacer {
@@ -34,6 +37,7 @@
 
 .trail {
   flex: 0 0 auto;
+  flex-shrink: 0;
   height: 100%;
   display: flex;
   align-items: center;

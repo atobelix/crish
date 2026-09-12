@@ -12,8 +12,7 @@
 
 /*
  * 外壳「大矩形」：铺满的灰底画板。
- * 叶子卡片「小矩形」浮在它上面，靠这里的内边距留出四周落差。
- * BATCH-02：对称外槽 --shell-canvas-gutter；.canvas 保持 padding:0 以保 Sash 0–100%。
+ * 工作区容器四周完全无 padding（零落差），确保贴边。
  */
 .section {
   position: relative;
@@ -26,7 +25,7 @@
   flex-direction: column;
   overflow: hidden;
   background: var(--bg-workspace, var(--bg-primary));
-  padding: var(--shell-canvas-gutter, 8px);
+  padding: 0;
   box-sizing: border-box;
 }
 
@@ -112,8 +111,8 @@
   z-index: 160;
   pointer-events: auto;
   transition:
-    background-color var(--transition-micro, 120ms) ease,
-    color var(--transition-micro, 120ms) ease;
+    background-color var(--transition-micro) ease,
+    color var(--transition-micro) ease;
 }
 
 .topSidePanelBtn:hover {
@@ -216,7 +215,7 @@
   position: absolute;
   background: transparent;
   pointer-events: none;
-  transition: background var(--transition-fast, 150ms ease-out);
+  transition: background var(--transition-fast);
 }
 
 .sashHorizontal::after {
@@ -316,7 +315,7 @@
   font-weight: var(--font-weight-medium);
 }
 
-/* Leaf body：对话列 +（坞未折叠时）内部 resizer + 抽屉。卡片皮肤 token 不动。 */
+/* Leaf body：对话列 +（坞未折叠时）内部 resizer + 抽屉。卡片皮肤 token 不动。禁带边框 */
 
 .leafBody {
   flex: 1 1 0%;
@@ -331,12 +330,11 @@
   padding-top: 0;
   margin-top: 0;
   background: var(--bg-card);
-  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   /* box-shadow:
     0 1px 3px hsl(0 0% 0% / 0.03),
     0 4px 12px hsl(0 0% 0% / 0.02); */
-  transition: border-color var(--transition-fast, 150ms ease-out);
+  transition: border-color var(--transition-fast);
 }
 
 .leafBody[data-dock-open='true'] {

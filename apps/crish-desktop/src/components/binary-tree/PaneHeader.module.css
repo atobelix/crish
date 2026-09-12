@@ -9,9 +9,9 @@
  * 5. 等宽锁定仅经 --tab-item-width 单变量通道，禁止 !important 覆盖块。
  * 几何数值来自 utils/tabStripGeometry，由组件根节点注入 custom properties。
  *
- * 边缘避让（BATCH-02 后续）：AppTopBar 已流内化到 workspaces-column 之上，
- * 二叉树不再被绝对顶栏/窗控覆盖——右侧窗控/交通灯避让由 AppTopBar 承担，
- * PaneHeader 仅保留左侧折叠态 SidebarToggle 浮层的左缘避让。
+ * 边缘避让：
+ * - 左侧：折叠态 SidebarToggle 浮层挂在 main-layout 左缘，顶行最左叶子让出空间；
+ * - 右侧：AppTopBar 窗控浮层位于顶栏右侧，顶行最右叶子通过 Design Tokens 严格避让。
  */
 
 .paneHeader {
@@ -45,8 +45,13 @@
   padding-left: var(--edge-reserve-left-macos);
 }
 
-/* 右缘：AppTopBar 已流内化承担窗控/交通灯避让，PaneHeader 不再做 top-row 右缘让位，
- * 基础 .paneHeader padding: 0 4px 即可 */
+/* 右缘：恢复顶行最右叶子节点的右缘避让规则，严格引用 Design Tokens，严禁裸写魔术数字 */
+:global([data-top-row="true"][data-right-edge="true"]) .paneHeader {
+  padding-right: var(--edge-reserve-right-win);
+}
+:global([data-platform="macos"]) :global([data-top-row="true"][data-right-edge="true"]) .paneHeader {
+  padding-right: var(--edge-reserve-right-macos);
+}
 
 .tabsContainer {
   flex: 1 1 auto;

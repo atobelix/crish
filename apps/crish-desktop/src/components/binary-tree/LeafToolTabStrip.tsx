@@ -21,11 +21,7 @@ import { Tooltip } from '../ui';
 import { ResizeObserverManager } from '../../services/ResizeObserverManager';
 import { viewRegistry } from '../../services/view-registry';
 import { SidePanelNavToolbar } from './SidePanelNavToolbar';
-import {
-  TAB_GAP_PX,
-  TAB_HEIGHT_PX,
-  TOOL_TAB_WIDTH_MAX_PX,
-} from '../../utils/tabStripGeometry';
+import { toolTabStripVars } from './tabStripVars';
 import { DURATION_FAST_MS, readTransitionMs } from '../../utils/motionTokens';
 import { useNonPassiveWheel } from '../../hooks/useNonPassiveWheel';
 import { useTablistKeyboard } from '../../hooks/useTablistKeyboard';
@@ -321,13 +317,7 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
         data-is-empty={isEmpty ? 'true' : 'false'}
         data-tauri-drag-region="false"
         data-booted={booted ? 'true' : 'false'}
-        style={
-          {
-            '--tab-height': `${TAB_HEIGHT_PX}px`,
-            '--tab-gap': `${TAB_GAP_PX}px`,
-            '--tool-tab-width-max': `${TOOL_TAB_WIDTH_MAX_PX}px`,
-          } as React.CSSProperties
-        }
+        style={toolTabStripVars()}
       >
         {/* Row 1: Tab Strip（高度与全局顶栏同源） */}
         <div

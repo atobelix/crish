@@ -51,7 +51,7 @@
   height: 28px;
   min-height: 28px;
   max-height: 28px;
-  padding: 0 12px 0 10px;
+  padding: 0 var(--space-1) 0 var(--space-2);
   box-sizing: border-box;
 }
 
@@ -177,7 +177,7 @@
   height: 28px;
   min-height: 28px;
   max-height: 28px;
-  padding: 0 12px 0 10px;
+  padding: 0 var(--space-1) 0 var(--space-2);
   box-sizing: border-box;
 }
 
@@ -284,8 +284,8 @@
   display: flex;
   flex-direction: column;
   gap: 3px; /* Standard 3px vertical gap between individual conversation capsule items */
-  padding-left: var(--space-2_5);
-  padding-right: var(--space-2);
+  padding-left: 0;
+  padding-right: 0;
   contain: layout paint;
   transform: translateZ(0);
   -webkit-transform: translateZ(0);
@@ -312,7 +312,7 @@
   min-height: 28px;
   max-height: 28px;
   border-radius: var(--radius-lg);
-  padding: 0 4px 0 10px;
+  padding: 0 var(--space-1) 0 var(--space-8);
   font-size: var(--font-size-base);
   color: var(--text-secondary);
   background: transparent;
@@ -549,7 +549,7 @@
 }
 
 .sessionItem.isRenaming {
-  padding: 4px 8px 4px 10px;
+  padding: var(--space-1) var(--space-2) var(--space-1) var(--space-8);
   background: transparent;
   box-shadow: 0 0 0 1.5px var(--focus-border-color);
 }
