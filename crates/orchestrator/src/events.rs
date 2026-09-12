@@ -2100,10 +2100,16 @@ mod tests {
     /// 压缩事件经 drive_outcome 落库 → compression_blocks 同步写入块行：
     /// block_id = record.id、sequence = 事件序列号、generation = 事件计数
     /// （首次 = 1）、dropped 清单、state = awaiting（details 未织入时缺省）。
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn drive_outcome_writes_compression_block_row() {
         let db = conex_db::LocalDb::open_in_memory().unwrap();
-        db.insert_session("s1", "s1").unwrap();
+        {
+            let db = db.clone();
+            tokio::task::spawn_blocking(move || db.insert_session("s1", "s1"))
+                .await
+                .unwrap()
+                .unwrap();
+        }
         let store: Arc<dyn Store> = Arc::new(LocalDbStore::new(db.clone()));
         let manager = RunManager::new(store.clone());
         let mut run = manager.start_run("s1", "r_compact").await.unwrap();
@@ -2174,10 +2180,16 @@ mod tests {
 
     /// 块行幂等：drive 重放（同事件再次驱动）不产生重复行——INSERT OR
     /// IGNORE 语义在 drive 面成立。
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn drive_outcome_compression_block_replay_idempotent() {
         let db = conex_db::LocalDb::open_in_memory().unwrap();
-        db.insert_session("s1", "s1").unwrap();
+        {
+            let db = db.clone();
+            tokio::task::spawn_blocking(move || db.insert_session("s1", "s1"))
+                .await
+                .unwrap()
+                .unwrap();
+        }
         let store: Arc<dyn Store> = Arc::new(LocalDbStore::new(db.clone()));
         let manager = RunManager::new(store.clone());
 

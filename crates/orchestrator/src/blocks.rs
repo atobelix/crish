@@ -50,8 +50,17 @@ pub async fn persist_compression_block(
     let Some(db) = store.as_local_db() else {
         return Ok(());
     };
-    let row = build_block_row(&db, session_id, record, sequence)?;
-    db.insert_block(&row).map_err(db_store_error)
+    // insert_block / count_compression_events 走 write_blocking/读锁：
+    // 必须从 spawn_blocking 调用，禁止在 async worker 上直接 blocking_send。
+    let db2 = db.clone();
+    let session_id = session_id.to_string();
+    let record = record.clone();
+    tokio::task::spawn_blocking(move || {
+        let row = build_block_row(&db2, &session_id, &record, sequence)?;
+        db2.insert_block(&row).map_err(db_store_error)
+    })
+    .await
+    .map_err(|e| StoreError::new("insert_block", format!("spawn_blocking join: {e}")))?
 }
 
 /// 摘要任务完成回调落库面（T-42；两阶段写协议阶段二——会话级协调器

@@ -77,11 +77,6 @@ impl SharedGatekeeper {
             gatekeeper: &conex_sandbox::gatekeeper::SHARED_GATEKEEPER,
         }
     }
-
-    /// 便捷访问（与旧 API 形状兼容：`state.gatekeeper` 为 &CommandGatekeeper）。
-    pub fn get(&self) -> &conex_sandbox::gatekeeper::CommandGatekeeper {
-        self.gatekeeper
-    }
 }
 
 impl Default for SharedGatekeeper {

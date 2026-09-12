@@ -1323,10 +1323,16 @@ mod tests {
 
     /// DM-03：LocalDbStore query_events_by_run 端到端（SQLite 层过滤，
     /// 依赖 DM-01 v9 run_id 列）。
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn local_db_store_query_events_by_run_roundtrip() {
         let db = LocalDb::open_in_memory().unwrap();
-        db.insert_session("s1", "s1").unwrap();
+        {
+            let db = db.clone();
+            tokio::task::spawn_blocking(move || db.insert_session("s1", "s1"))
+                .await
+                .unwrap()
+                .unwrap();
+        }
         let store = LocalDbStore::new(db);
         store
             .append_event("s1", 1, "agent-start", "{}", Some("r1"))
