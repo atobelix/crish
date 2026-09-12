@@ -82,13 +82,6 @@ export const ModelConfigEditor: React.FC<ModelConfigEditorProps> = ({
     <section
       className={`${styles.modelsDetail} models-detail`}
       aria-label={pc.selected ? `服务商 · ${pc.selectedLabel}` : '服务商'}
-      style={{
-        overflow: 'hidden',
-        display: 'flex',
-        flexDirection: 'column',
-        height: '100%',
-        minHeight: 0,
-      }}
     >
       {!pc.selected ? (
         <div className={`${styles.mrdEmpty} mrd-empty`}>
@@ -97,30 +90,12 @@ export const ModelConfigEditor: React.FC<ModelConfigEditorProps> = ({
             : '在左侧选择一个服务商'}
         </div>
       ) : (
-        <div
-          className={`${styles.mrdBody} mrd-body`}
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            flex: '1 1 0',
-            minHeight: 0,
-            height: '100%',
-            gap: 'var(--space-3, 12px)',
-          }}
-        >
+        <div className={`${styles.mrdBody} mrd-body`}>
           {/* ─────────────────────────────────────────────────────────────
            * 段一：置顶固定头部（服务商名称、编辑、删除与 API Key 凭证）
            * 注入弹性上限 min(45%, 240px) 与局部滚动，防极小视口物理截断按钮 (DEF-GEO-01)
            * ───────────────────────────────────────────────────────────── */}
-          <div
-            className={`${styles.mrdPinnedHeader || ''} mrd-pinned-header`}
-            style={{
-              flexShrink: 0,
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 'var(--space-3, 12px)',
-            }}
-          >
+          <div className={`${styles.mrdPinnedHeader} mrd-pinned-header`}>
             {/* Detail header */}
             <ProfileHeader
               selected={pc.selected}
@@ -154,15 +129,7 @@ export const ModelConfigEditor: React.FC<ModelConfigEditorProps> = ({
            * 段二：置顶固定操作栏（搜索框常驻、检测/扫描按钮及手填新增抽屉）
            * 无论模型列表如何滚动，搜索工具栏永远吸顶可见，无需滑回顶部
            * ───────────────────────────────────────────────────────────── */}
-          <div
-            className={`${styles.mrdActionBar || ''} mrd-action-bar`}
-            style={{
-              flexShrink: 0,
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 'var(--space-2_5, 10px)',
-            }}
-          >
+          <div className={`${styles.mrdActionBar} mrd-action-bar`}>
             {/* Model list header (包含搜索过滤、扫描与新增按钮) */}
             <ModelListHeader
               checkBusy={mc.checkBusy}
@@ -200,18 +167,7 @@ export const ModelConfigEditor: React.FC<ModelConfigEditorProps> = ({
            * 3. models tab 下 SettingsPanel.handleRootWheel 已 early return，
            *    此处无需再 stopPropagation（原 onWheel 冗余，已移除）
            * ───────────────────────────────────────────────────────────── */}
-          <div
-            className={`${styles.mrdModelListScroll || ''} mrd-model-list-scroll`}
-            style={{
-              flex: '1 1 0',
-              minHeight: 0,
-              overflowY: 'auto',
-              overflowX: 'hidden',
-              overscrollBehavior: 'contain',
-              scrollbarGutter: 'stable',
-              paddingRight: '2px',
-            }}
-          >
+          <div className={`${styles.mrdModelListScroll} mrd-model-list-scroll`}>
             <ModelList
               providerId={pc.selected.id}
               modelsList={mc.modelsList}

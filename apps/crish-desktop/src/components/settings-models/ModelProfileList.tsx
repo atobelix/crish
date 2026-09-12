@@ -295,13 +295,12 @@ export const ModelsCascadeSelect: React.FC<ModelsCascadeSelectProps> = ({
           bare
           type="button"
           className={styles.cascadeSelectTrigger}
-          style={{ minWidth: '220px', justifyContent: 'space-between' }}
           aria-haspopup="menu"
           aria-expanded={open}
         >
           <span className={styles.cascadeSelectValue}>{activeLabel}</span>
           <AppIcon name="chevron-down" size={14}
-            style={{ flexShrink: 0 }} />
+            className={styles.cascadeChev} />
         </Button>
       }
     >
@@ -368,10 +367,11 @@ export const ModelsCascadeSelect: React.FC<ModelsCascadeSelectProps> = ({
                 }}
               >
                 <span
-                  style={{
-                    fontWeight: isCurrentActive ? '500' : 'normal',
-                    flex: 1,
-                  }}
+                  className={
+                    isCurrentActive
+                      ? `${styles.cascadeRowLabel} ${styles.cascadeRowLabelActive}`
+                      : styles.cascadeRowLabel
+                  }
                 >
                   {cleanLabel}
                 </span>
@@ -472,15 +472,13 @@ export const ModelProfileList: React.FC<ModelProfileListProps> = ({
                     }
                   >
                     <span
-                      className={`${styles.mrlItemDot} mrl-item-dot`}
-                      style={{
-                        background: !keyOk
-                          ? 'var(--color-warning)'
+                      className={`${styles.mrlItemDot} mrl-item-dot ${
+                        !keyOk
+                          ? styles.mrlItemDotNoKey
                           : !enabled
-                            ? 'var(--text-tertiary)'
-                            : 'var(--color-active)',
-                        opacity: !enabled ? 0.6 : 1,
-                      }}
+                            ? styles.mrlItemDotDisabled
+                            : styles.mrlItemDotOn
+                      }`}
                     />
                   </Tooltip>
                 </div>

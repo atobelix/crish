@@ -179,7 +179,7 @@ export const ScanResultsModal: React.FC<ScanResultsModalProps> = ({
             onChange={(e) => setFilterQuery(e.target.value)}
             clearable
             onClear={() => setFilterQuery('')}
-            style={{ width: '150px' }}
+            className={styles.searchInputWrapper}
           />
           <div className={styles.quickActions}>
             <Button type="button" variant="plain" size="xs" onClick={handleSelectAll}>

@@ -42,14 +42,7 @@ export const ModelListHeader: React.FC<{
             size="sm"
             disabled={checkBusy}
             onClick={() => void runCheck()}
-            style={{
-              height: '28px',
-              width: '28px',
-              padding: '0',
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
+            className={styles.mrdHeaderIconBtn}
             aria-label="检查连通性"
             icon={
               checkBusy ? (
@@ -68,14 +61,7 @@ export const ModelListHeader: React.FC<{
             size="sm"
             disabled={scanBusy}
             onClick={() => void runScan()}
-            style={{
-              height: '28px',
-              width: '28px',
-              padding: '0',
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
+            className={styles.mrdHeaderIconBtn}
             aria-label="自动获取"
             icon={
               scanBusy ? (
@@ -95,7 +81,7 @@ export const ModelListHeader: React.FC<{
           onChange={(e) => setModelFilter(e.target.value)}
           clearable
           onClear={() => setModelFilter('')}
-          style={{ width: '150px' }}
+          className={styles.mrdSearchInputWrapper}
         />
         <Tooltip content="手动添加模型">
           <Button
@@ -106,14 +92,7 @@ export const ModelListHeader: React.FC<{
               setManualOpen(!manualOpen);
               setAddDraft(emptyAddDraft());
             }}
-            style={{
-              height: '28px',
-              width: '28px',
-              padding: '0',
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
+            className={styles.mrdHeaderIconBtn}
             aria-label="添加模型"
             icon={<AppIcon name="plus" size={13} />}
           />

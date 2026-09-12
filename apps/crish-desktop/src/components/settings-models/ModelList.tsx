@@ -115,7 +115,6 @@ export const ModelList: React.FC<{
               if (expanded) closeConfig();
               else openConfigFor(m);
             }}
-            style={{ cursor: 'pointer' }}
           >
             <div className={`${styles.mrdModelRowInner} mrd-model-row-inner`}>
               <div className={`${styles.mrdModelInfo} mrd-model-info`}>
@@ -171,24 +170,16 @@ export const ModelList: React.FC<{
                     }
                   >
                     <span
-                      style={{
-                        fontSize: '11px',
-                        fontWeight: 500,
-                        padding: '1px 5px',
-                        borderRadius: '4px',
-                        userSelect: 'none',
-                        lineHeight: '16px',
-                        background: lastTest.ok
-                          ? 'color-mix(in srgb, var(--accent-green) 12%, transparent)'
-                          : 'color-mix(in srgb, var(--accent-red) 12%, transparent)',
-                        color: !lastTest.ok
-                          ? 'var(--accent-red)'
+                      className={styles.mrdLatencyBadge}
+                      data-latency={
+                        !lastTest.ok
+                          ? 'fail'
                           : (lastTest.latencyMs || 0) < 400
-                            ? 'var(--accent-green)'
+                            ? 'fast'
                             : (lastTest.latencyMs || 0) < 1200
-                              ? 'var(--accent-orange)'
-                              : 'var(--accent-red)',
-                      }}
+                              ? 'mid'
+                              : 'slow'
+                      }
                     >
                       {lastTest.ok
                         ? `${lastTest.latencyMs}ms`
@@ -207,11 +198,7 @@ export const ModelList: React.FC<{
                     size="sm"
                     aria-label="检查连通性"
                     disabled={testBusy === `${providerId}::${m}`}
-                    style={{
-                      padding: '0 5px',
-                      height: '26px',
-                      color: 'var(--text-tertiary)',
-                    }}
+                    className={styles.mrdRowMiniBtn}
                     onClick={(e) => {
                       e.stopPropagation();
                       void runTest(m);
@@ -263,13 +250,11 @@ export const ModelList: React.FC<{
                     variant="ghost"
                     size="sm"
                     aria-label={CONFIGURE_LABEL}
-                    style={{
-                      padding: '0 5px',
-                      height: '26px',
-                      color: expanded
-                        ? 'var(--accent-primary)'
-                        : 'var(--text-tertiary)',
-                    }}
+                    className={
+                      expanded
+                        ? `${styles.mrdRowMiniBtn} ${styles.mrdRowMiniBtnActive}`
+                        : styles.mrdRowMiniBtn
+                    }
                     onClick={(e) => {
                       e.stopPropagation();
                       if (expanded) closeConfig();
@@ -284,12 +269,7 @@ export const ModelList: React.FC<{
                     variant="ghost"
                     size="sm"
                     aria-label={DELETE_LABEL}
-                    className="mrd-delete-btn"
-                    style={{
-                      padding: '0 5px',
-                      height: '26px',
-                      color: 'var(--text-tertiary)',
-                    }}
+                    className={`mrd-delete-btn ${styles.mrdRowMiniBtn}`}
                     onClick={(e) => {
                       e.stopPropagation();
                       void runAsLocalMutation(async () => {

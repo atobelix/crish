@@ -90,38 +90,17 @@ export const ModelThinkingEditor: React.FC<ModelThinkingEditorProps> = ({
 
       {enabled && (
         <div className={styles.mrdThinkingTable}>
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr 1fr 48px',
-              gap: '6px',
-              alignItems: 'center',
-              fontSize: '11px',
-              color: 'var(--text-tertiary)',
-              paddingBottom: '2px',
-            }}
-          >
+          <div className={styles.mrdThinkingHeader}>
             <span>界面档位名称</span>
             <span>API参数值</span>
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'flex-end',
-                gap: '2px',
-              }}
-            >
+            <div className={styles.mrdThinkingHeaderActions}>
               <Tooltip content="添加档位">
                 <Button
                   type="button"
                   variant="ghost"
                   size="xs"
                   onClick={handleAddRow}
-                  style={{
-                    padding: '0 3px',
-                    height: '20px',
-                    color: 'var(--text-tertiary)',
-                  }}
+                  className={styles.mrdThinkingMiniBtn}
                   icon={<AppIcon name="plus" size={12} />}
                   aria-label="添加档位"
                 />
@@ -132,11 +111,7 @@ export const ModelThinkingEditor: React.FC<ModelThinkingEditorProps> = ({
                   variant="ghost"
                   size="xs"
                   onClick={handleResetPresets}
-                  style={{
-                    padding: '0 3px',
-                    height: '20px',
-                    color: 'var(--text-tertiary)',
-                  }}
+                  className={styles.mrdThinkingMiniBtn}
                   icon={<AppIcon name="rotate-ccw" size={12} />}
                   aria-label="重置推荐档位"
                 />
@@ -144,16 +119,7 @@ export const ModelThinkingEditor: React.FC<ModelThinkingEditorProps> = ({
             </div>
           </div>
           {rows.map(([lbl, val]) => (
-            <div
-              key={lbl}
-              className={styles.mrdThinkingRow}
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '1fr 1fr 48px',
-                gap: '6px',
-                alignItems: 'center',
-              }}
-            >
+            <div key={lbl} className={styles.mrdThinkingRow}>
               <Input
                 size="sm"
                 value={lbl}
@@ -166,7 +132,7 @@ export const ModelThinkingEditor: React.FC<ModelThinkingEditorProps> = ({
                 placeholder="如 low / high"
                 onChange={(e) => handleUpdateValue(lbl, e.target.value)}
               />
-              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <div className={styles.mrdThinkingHeaderActions}>
                 <Tooltip content="删除档位">
                   <Button
                     type="button"
@@ -174,11 +140,7 @@ export const ModelThinkingEditor: React.FC<ModelThinkingEditorProps> = ({
                     size="sm"
                     aria-label="删除档位"
                     onClick={() => handleDeleteRow(lbl)}
-                    style={{
-                      padding: '0 4px',
-                      height: '26px',
-                      color: 'var(--text-tertiary)',
-                    }}
+                    className={styles.mrdThinkingDeleteBtn}
                     icon={<AppIcon name="trash" size={12} />}
                   />
                 </Tooltip>

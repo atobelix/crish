@@ -301,7 +301,7 @@ export const ModelsSettingsTab: React.FC<Props> = ({ _onBlockingOverlayChange })
           type="button"
           variant="secondary"
           size="sm"
-          icon={<AppIcon name="file-code" size={13} style={{ opacity: 0.8 }} aria-hidden />}
+          icon={<AppIcon name="file-code" size={13} className={styles.yamlConfigIcon} aria-hidden />}
           onClick={() => setYamlEditorOpen(true)}
           aria-label="在内置编辑器中编辑模型配置文件 (models.yaml)"
         >
@@ -383,7 +383,7 @@ export const ModelsSettingsTab: React.FC<Props> = ({ _onBlockingOverlayChange })
                   width={14}
                   height={14}
                   alt=""
-                  style={{ flexShrink: 0, objectFit: 'contain' }}
+                  className={styles.openerIcon}
                 />
               ) : (
                 <AppIcon name="folder-open" size={13} aria-hidden />
@@ -413,7 +413,7 @@ export const ModelsSettingsTab: React.FC<Props> = ({ _onBlockingOverlayChange })
   return (
     <SettingsPage title="模型" meta={headerMeta} fillViewport>
       {/* Default model */}
-      <div style={{ flexShrink: 0 }}>
+      <div className={styles.mrdDefaultSection}>
         <SettingsSection title="默认模型">
         <SettingsCard>
           <SettingsRow
