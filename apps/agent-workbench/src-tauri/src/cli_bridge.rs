@@ -98,7 +98,7 @@ fn run_workbench_cli_raw(
         return Err(format!("unsupported workbench CLI command: {command}"));
     }
 
-    let gatekeeper = conex_sandbox::gatekeeper::CommandGatekeeper::new();
+    let gatekeeper = &*conex_sandbox::gatekeeper::SHARED_GATEKEEPER;
     let extra_refs: Vec<&str> = extra_args.iter().map(|s| s.as_str()).collect();
     if gatekeeper.check_command(command, &extra_refs) == conex_sandbox::gatekeeper::GatekeeperResult::Blocked
         || extra_args.iter().any(|a| gatekeeper.patterns().is_match(a))

@@ -94,7 +94,7 @@ pub(crate) fn open_host_target(
     let args = opener_args(candidate, &resolved_target).map_err(to_core_error)?;
 
     let command_display = resolved.command.display().to_string();
-    let gatekeeper = conex_sandbox::gatekeeper::CommandGatekeeper::new();
+    let gatekeeper = &*conex_sandbox::gatekeeper::SHARED_GATEKEEPER;
     let args_strs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
     if gatekeeper.check_command(&command_display, &args_strs)
         == conex_sandbox::gatekeeper::GatekeeperResult::Blocked
@@ -177,7 +177,7 @@ fn open_with_shortcut(
         ResolvedOpenTarget::Url(u) => u.clone(),
     };
 
-    let gatekeeper = conex_sandbox::gatekeeper::CommandGatekeeper::new();
+    let gatekeeper = &*conex_sandbox::gatekeeper::SHARED_GATEKEEPER;
     if gatekeeper.check_command(lnk_path, &[&file_arg])
         == conex_sandbox::gatekeeper::GatekeeperResult::Blocked
         || gatekeeper.patterns().is_match(lnk_path)
@@ -301,7 +301,7 @@ pub(crate) fn open_path_with_default_app(path: String) -> Result<HostOpenResult,
         )));
     }
 
-    let gatekeeper = conex_sandbox::gatekeeper::CommandGatekeeper::new();
+    let gatekeeper = &*conex_sandbox::gatekeeper::SHARED_GATEKEEPER;
     // P1-S5：`&`/`|` 等 cmd 元字符路径一律拒绝——`cmd /C start "" <target>`
     // 形态下 target 含 `&` 会被 cmd 二次解释为命令分隔（F6-02 注入链：
     // 无空格含 `&` 的已存在路径），门禁静态正则只覆盖毁灭性命令，

@@ -23,7 +23,6 @@ use crate::tools::{
     resolve_workspace_path,
 };
 use async_trait::async_trait;
-use conex_sandbox::gatekeeper::CommandGatekeeper;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -227,19 +226,23 @@ impl ShellCommandTool {
         let resource_monitor = optional_bool(args, "resourceMonitor").unwrap_or(false);
 
         // 权限集中评估（P1 权限归一 A2/D8：命令判定唯一链 =
-        // decide_command_with_revert，与执行器 call_verdict 同链——不再存在
+        // decide_analysis_with_revert，与执行器 call_verdict 同链——不再存在
         // 第二套命令评估实现；门禁层上下文感知（工作区越界 / 危险形态 →
         // RequiresApproval）折算为 requires_approval 入链；工具级形态机制
         // （物理红线 / Plan 阻断 / 删除重定向 / CD 拦截）保持为工具行为，
         // 不构成平行 allow/deny 判定）
-        let gatekeeper = CommandGatekeeper::new();
-        let gate_result = gatekeeper.check_command_with_context(
-            &command,
-            &[],
-            &gate_path(&cwd),
-            &gate_path(workspace_root),
-        );
+        // U-GATE / 14-SB2：analyze 恰 1 次 → 沿链传递门禁 + decide + 工具形态
         let analysis = conex_sandbox::semantics::analyze(&command);
+        let full_line = command.clone();
+        let gate_result = conex_sandbox::gatekeeper::SHARED_GATEKEEPER
+            .check_command_with_context_and_analysis(
+                &analysis,
+                &command,
+                &[],
+                &full_line,
+                &gate_path(&cwd),
+                &gate_path(workspace_root),
+            );
 
         // 1. 物理红线（门禁层 Blocked = 静态清单 + 语义 Redline）与系统核心
         //    关键目录：一律 Deny（S2/S4 定理，任何权限模式不可豁免）
@@ -299,8 +302,8 @@ impl ShellCommandTool {
         //    ToolExecutor 默认同源，保证 pre/during 判定同链同果）
         let requires_approval =
             gate_result == conex_sandbox::gatekeeper::GatekeeperResult::RequiresApproval;
-        let verdict = crate::permission::decide_command_with_revert(
-            &command,
+        let verdict = crate::permission::decide_analysis_with_revert(
+            &analysis,
             false,
             requires_approval,
             ctx.permission_mode,

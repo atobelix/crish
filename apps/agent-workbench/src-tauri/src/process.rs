@@ -74,7 +74,7 @@ pub(crate) async fn workbench_run_shell(
         std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
     };
 
-    let gatekeeper = conex_sandbox::gatekeeper::CommandGatekeeper::new();
+    let gatekeeper = &*conex_sandbox::gatekeeper::SHARED_GATEKEEPER;
     let cwd_str = cwd.to_string_lossy();
     let root_str = workspace_root.to_string_lossy();
 

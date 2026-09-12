@@ -170,16 +170,18 @@ pub fn command_allowed_for_task_type(task_type: &str, command_line: &str) -> boo
     match task_type {
         "commit" => first_token(cmd) == "git",
         "implementation" => {
-            use conex_sandbox::gatekeeper::{CommandGatekeeper, GatekeeperResult};
+            use conex_sandbox::gatekeeper::{GatekeeperResult, SHARED_GATEKEEPER};
             use conex_sandbox::semantics::{analyze, CommandClass};
             // 语义层分类：非普通命令（红线/危险/删除/回退/间接/cd 形态）一律拒绝
-            if analyze(cmd).overall_class != CommandClass::Normal {
+            let analysis = analyze(cmd);
+            if analysis.overall_class != CommandClass::Normal {
                 return false;
             }
             // 既有门禁兜底：网络发布 / 提权 / 强推等需审批形态不进默认集
             // （子代理需要时走权限申请通道，T-D-14）
+            // U-GATE：共享实例，禁止 per-call new()
             matches!(
-                CommandGatekeeper::new().check_command(cmd, &[]),
+                SHARED_GATEKEEPER.check_command_with_analysis(&analysis, cmd, &[], cmd),
                 GatekeeperResult::Allowed
             )
         }

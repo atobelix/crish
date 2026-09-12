@@ -7,6 +7,9 @@ pub use semantics::{
 pub mod gatekeeper {
     use regex::RegexSet;
     use serde::{Deserialize, Serialize};
+    use std::sync::LazyLock;
+
+    use crate::semantics::SemanticAnalysis;
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
     #[serde(rename_all = "camelCase")]
@@ -15,6 +18,11 @@ pub mod gatekeeper {
         Blocked,
         RequiresApproval,
     }
+
+    /// 进程级共享门禁实例（14-SB1 / U-GATE）：正则集固定、无运行时配置依赖。
+    /// 生产路径禁止 per-call `CommandGatekeeper::new()`；测试代码仍可 `new()`。
+    pub static SHARED_GATEKEEPER: LazyLock<CommandGatekeeper> =
+        LazyLock::new(CommandGatekeeper::new);
 
     pub struct CommandGatekeeper {
         blocked_patterns: RegexSet,
@@ -80,9 +88,20 @@ pub mod gatekeeper {
             } else {
                 format!("{cmd} {}", args.join(" "))
             };
-
-            // 1. 语义与 AST 分析（红线最高优先级，100% 拦截）
             let analysis = crate::semantics::analyze(&full_line);
+            self.check_command_with_analysis(&analysis, cmd, args, &full_line)
+        }
+
+        /// 复用调用方已算好的 `SemanticAnalysis`（14-SB2 / U-GATE：prepare 路径 analyze 恰 1 次）。
+        /// `analysis` 必须针对与 `full_line` 同一命令行计算。
+        pub fn check_command_with_analysis(
+            &self,
+            analysis: &SemanticAnalysis,
+            cmd: &str,
+            args: &[&str],
+            full_line: &str,
+        ) -> GatekeeperResult {
+            // 1. 语义与 AST 分析（红线最高优先级，100% 拦截）
             if analysis
                 .segments
                 .iter()
@@ -94,7 +113,7 @@ pub mod gatekeeper {
 
             // 2. 静态红线清单兜底（第一层：Format-Volume / dd 写设备等确定性毁灭目标）
             if self.blocked_patterns.is_match(cmd)
-                || self.blocked_patterns.is_match(&full_line)
+                || self.blocked_patterns.is_match(full_line)
                 || args.iter().any(|arg| self.blocked_patterns.is_match(arg))
             {
                 return GatekeeperResult::Blocked;
@@ -115,7 +134,7 @@ pub mod gatekeeper {
 
             // 4. 既有审批正则清单
             if self.approval_patterns.is_match(cmd)
-                || self.approval_patterns.is_match(&full_line)
+                || self.approval_patterns.is_match(full_line)
                 || args.iter().any(|arg| self.approval_patterns.is_match(arg))
             {
                 return GatekeeperResult::RequiresApproval;
@@ -133,7 +152,26 @@ pub mod gatekeeper {
             cwd: &str,
             workspace_root: &str,
         ) -> GatekeeperResult {
-            let base_result = self.check_command(cmd, args);
+            let full_line = if args.is_empty() {
+                cmd.to_string()
+            } else {
+                format!("{cmd} {}", args.join(" "))
+            };
+            let analysis = crate::semantics::analyze(&full_line);
+            self.check_command_with_context_and_analysis(&analysis, cmd, args, &full_line, cwd, workspace_root)
+        }
+
+        /// 上下文感知门禁 + 复用已算 analysis（U-GATE：prepare 单次 analyze）。
+        pub fn check_command_with_context_and_analysis(
+            &self,
+            analysis: &SemanticAnalysis,
+            cmd: &str,
+            args: &[&str],
+            full_line: &str,
+            cwd: &str,
+            workspace_root: &str,
+        ) -> GatekeeperResult {
+            let base_result = self.check_command_with_analysis(analysis, cmd, args, full_line);
             if base_result == GatekeeperResult::Blocked {
                 return GatekeeperResult::Blocked;
             }
@@ -175,6 +213,36 @@ pub mod gatekeeper {
 #[cfg(test)]
 mod tests {
     use super::gatekeeper::{CommandGatekeeper, GatekeeperResult};
+
+    /// U-GATE 跨层探针（FM-8）：SHARED_GATEKEEPER 为进程级唯一实例；
+    /// check_command_with_analysis 与 check_command 判定字节级一致。
+    #[test]
+    fn shared_gatekeeper_is_singleton_and_analysis_reuse_matches() {
+        use super::gatekeeper::SHARED_GATEKEEPER;
+        let a: &CommandGatekeeper = &SHARED_GATEKEEPER;
+        let b: &CommandGatekeeper = &SHARED_GATEKEEPER;
+        assert_eq!(a as *const _, b as *const _, "SHARED_GATEKEEPER 必须为同一地址");
+
+        for cmd in ["git status", "rm -rf /", "git push --force", "sudo rm -rf /"] {
+            let direct = SHARED_GATEKEEPER.check_command(cmd, &[]);
+            let analysis = super::semantics::analyze(cmd);
+            let full = cmd.to_string();
+            let via = SHARED_GATEKEEPER.check_command_with_analysis(&analysis, cmd, &[], &full);
+            assert_eq!(direct, via, "analysis 复用判定须与直接 check 一致: {cmd}");
+        }
+    }
+
+    /// analyze 复用路径：Blocked 命令经 with_analysis 仍为 Blocked（INV-B2 前置）
+    #[test]
+    fn check_command_with_analysis_preserves_redline_block() {
+        use super::gatekeeper::SHARED_GATEKEEPER;
+        let cmd = "rm -rf /";
+        let analysis = super::semantics::analyze(cmd);
+        assert_eq!(
+            SHARED_GATEKEEPER.check_command_with_analysis(&analysis, cmd, &[], cmd),
+            GatekeeperResult::Blocked
+        );
+    }
 
     #[test]
     fn blocks_rm_rf_root() {

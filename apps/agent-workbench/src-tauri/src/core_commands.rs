@@ -66,16 +66,21 @@ impl Default for SharedSearchState {
     }
 }
 
-/// 共享命令闸门状态（编译一次，跨命令复用）。
+/// 共享命令闸门状态（U-GATE：包装进程级 SHARED_GATEKEEPER，不再 per-call new()）。
 pub struct SharedGatekeeper {
-    pub gatekeeper: CommandGatekeeper,
+    pub gatekeeper: &'static conex_sandbox::gatekeeper::CommandGatekeeper,
 }
 
 impl SharedGatekeeper {
     pub fn new() -> Self {
         Self {
-            gatekeeper: CommandGatekeeper::new(),
+            gatekeeper: &conex_sandbox::gatekeeper::SHARED_GATEKEEPER,
         }
+    }
+
+    /// 便捷访问（与旧 API 形状兼容：`state.gatekeeper` 为 &CommandGatekeeper）。
+    pub fn get(&self) -> &conex_sandbox::gatekeeper::CommandGatekeeper {
+        self.gatekeeper
     }
 }
 
