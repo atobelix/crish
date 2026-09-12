@@ -13,6 +13,7 @@ use super::super::{
     LoopState,
 };
 use super::fatal::fatal_provider_error;
+use crate::r#loop::summary_dispatch::summarize_via_blocking;
 /// 溢出压缩阶梯重试上限（E2 F2 层 2 / D1 §3.5.1：1→2，替代 pi
 /// `_overflowRecoveryAttempted` 单次语义——压缩后仍超限时重试第二次是
 /// 真实恢复：第二次重试前 keep_recent_tokens 阶梯下调（20K→12K→8K，
@@ -151,12 +152,35 @@ pub(crate) async fn compression_ladder(
     } else {
         conex_compaction::compaction::StubPolicy::LlmRequired
     };
+    // D10-A / DEL-9 + M4：摘要经 spawn_blocking 预计算一次（summarize_via_blocking
+    // 单源 helper）；shape 失败的 tighter 重试**复用同一 precomputed summary**
+    // （禁止第二次完整 summarize / 2× LLM——13-M4）。
+    let summarize_precomputed = if let Some(summarizer) = state.compaction.summarizer.clone() {
+        match engine.preview_compaction(&state.conversation, &policy) {
+            Some(preview) => {
+                let wall_ms = state
+                    .options
+                    .summary
+                    .summary_dispatch
+                    .as_ref()
+                    .map(|c| c.max_wall_ms)
+                    .unwrap_or(crate::r#loop::summary_dispatch::LOOP_SUMMARY_MAX_WALL_MS);
+                Some(
+                    summarize_via_blocking(summarizer, preview.dropped, preview.existing, wall_ms)
+                        .await,
+                )
+            }
+            None => None,
+        }
+    } else {
+        None
+    };
     let mut plan = engine.compact_agent_messages_with_stub_policy(
         &state.conversation,
         budget_tokens as usize,
         &policy,
-        state.compaction.summarizer.as_deref(),
         stub_policy,
+        summarize_precomputed.clone(),
     );
     if plan.llm_unavailable {
         // E2 F1 L3：LLM 摘要不可用（无 Summarizer / 同步失败）且无豁免 →
@@ -174,7 +198,8 @@ pub(crate) async fn compression_ladder(
         return fatal_provider_error(state, classified);
     }
     // T-36 引擎兜底（评审 02 P1-7）：压缩产物的协议形状护栏——无 system
-    // 且链后首条非 user → 若 cut 落在 assistant 上，尝试更紧凑保留预算收敛至 user 头部
+    // 且链后首条非 user → 若 cut 落在 assistant 上，尝试更紧凑保留预算收敛至 user 头部。
+    // M4：tighter 重试复用 summarize_precomputed（不再二次 LLM）。
     if !compaction_shape_ok(&plan.messages) {
         if let Some(first_non_summary_idx) = plan.messages.iter().position(|m| {
             m.role != conex_types::message::AgentMessageRole::System
@@ -193,8 +218,8 @@ pub(crate) async fn compression_ladder(
                     &state.conversation,
                     budget_tokens as usize,
                     &tighter_policy,
-                    state.compaction.summarizer.as_deref(),
                     stub_policy,
+                    summarize_precomputed,
                 );
                 if compaction_shape_ok(&tighter_plan.messages)
                     && !tighter_plan.dropped_ids.is_empty()

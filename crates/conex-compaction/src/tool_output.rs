@@ -21,10 +21,12 @@
 use crate::compaction::{CompactionThresholds, ThresholdDecision};
 use crate::count_tokens;
 
-/// 默认最大行数（对齐 opencode MAX_LINES=2000）
-pub const TOOL_OUTPUT_MAX_LINES_DEFAULT: usize = 2_000;
-/// 默认最大字节数（对齐 opencode MAX_BYTES=50KB）
-pub const TOOL_OUTPUT_MAX_BYTES_DEFAULT: usize = 50 * 1024;
+// D0/U-BUDGET：G8 默认双阈值定义收敛至 conex-shared::perf_budget（行为不变）
+// 对齐 opencode MAX_LINES=2000 / MAX_BYTES=50KB；接线主责 D10
+pub use conex_shared::perf_budget::{
+    G8_TOOL_OUTPUT_MAX_BYTES_DEFAULT as TOOL_OUTPUT_MAX_BYTES_DEFAULT,
+    G8_TOOL_OUTPUT_MAX_LINES_DEFAULT as TOOL_OUTPUT_MAX_LINES_DEFAULT,
+};
 /// 截断标记占用的预算预留（行 1 行 + 字节 96 + 分隔符 4；标记文案含计数）
 const MARKER_LINE_RESERVE: usize = 1;
 const MARKER_BYTES_RESERVE: usize = 96;

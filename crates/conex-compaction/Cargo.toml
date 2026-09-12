@@ -19,3 +19,5 @@ serde_json = { workspace = true }
 # 需要序列化（camelCase，进 events 表）
 serde = { workspace = true }
 conex-types = { path = "../conex-types" }
+# D0/U-BUDGET：G8 默认双阈值定义收敛至 perf_budget（仅 re-export，行为不变）
+conex-shared = { path = "../conex-shared" }

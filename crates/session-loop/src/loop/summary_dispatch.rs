@@ -778,11 +778,32 @@ pub(crate) async fn run_summary_task(
 }
 
 /// 单次摘要调用（墙钟上限内；阻塞调用经 spawn_blocking 承接——trait 为
-/// 同步签名，真实实现可能涉及网络往返，不占用主循环 worker）
+/// 同步签名，真实实现可能涉及网络往返，不占用主循环 worker）。
+/// D10-A：收敛到 [summarize_via_blocking] 单源实现。
 async fn summarize_once(task: &SummaryDispatchTask, max_wall_ms: u64) -> Result<String, String> {
-    let summarizer = task.summarizer.clone();
-    let dropped = task.dropped.clone();
-    let existing = task.existing.clone();
+    summarize_via_blocking(
+        task.summarizer.clone(),
+        task.dropped.clone(),
+        task.existing.clone(),
+        max_wall_ms,
+    )
+    .await
+}
+
+/// 摘要 spawn_blocking 单源 helper（D10-A / U-SUMMARY · OVL-06）。
+///
+/// 与后台 [summarize_once] 同源：`spawn_blocking` + `tokio::time::timeout`
+/// 墙钟承接同步 Summarizer（trait 为同步签名，实现可能网络往返）。
+/// **禁止**在 compaction / dispatch 侧再写第二份阻塞纪律——预检/边界/
+/// 溢出路径一律经本 helper 预计算摘要后传入引擎
+/// `compact_agent_messages_with_stub_policy` 的 `summarize_precomputed`
+/// （DEL-9：run loop 无同步 summarize 直调）。
+pub(crate) async fn summarize_via_blocking(
+    summarizer: Arc<dyn Summarizer>,
+    dropped: Vec<AgentMessage>,
+    existing: Option<String>,
+    max_wall_ms: u64,
+) -> Result<String, String> {
     let call =
         tokio::task::spawn_blocking(move || summarizer.summarize(&dropped, existing.as_deref()));
     match tokio::time::timeout(Duration::from_millis(max_wall_ms), call).await {
@@ -1552,5 +1573,56 @@ mod tests {
                 .unwrap_or(false),
             "episode 1 以 spawned 开头（事件面完整）：{before:?}"
         );
+    }
+
+    // ── D10-A / summarize_via_blocking 单源 helper ────────────────────
+
+    /// 成功路径：spawn_blocking + 墙钟内返回 Ok（与 summarize_once 同源）
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn summarize_via_blocking_success_returns_text() {
+        let summarizer = Arc::new(RecordingSummarizer {
+            calls: std::sync::Mutex::new(Vec::new()),
+            result: std::sync::Mutex::new(Ok(valid_json("compacted-summary-1-1"))),
+        });
+        let text = summarize_via_blocking(summarizer, dropped_messages(), None, 5_000)
+            .await
+            .expect("成功摘要必须 Ok");
+        assert!(
+            validate_summary_document(&text, 4096).is_ok(),
+            "helper 返回必须是合法 Schema V1 JSON"
+        );
+    }
+
+    /// 失败透传：Summarizer Err → Err（不吞错误）
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn summarize_via_blocking_propagates_err() {
+        let summarizer = Arc::new(RecordingSummarizer {
+            calls: std::sync::Mutex::new(Vec::new()),
+            result: std::sync::Mutex::new(Err("摘要器失败".to_string())),
+        });
+        let err = summarize_via_blocking(summarizer, dropped_messages(), None, 5_000)
+            .await
+            .expect_err("失败摘要必须 Err");
+        assert!(err.contains("摘要器失败"), "错误文本透传：{err}");
+    }
+
+    /// 墙钟：挂起调用超过 max_wall_ms → Err 超时文案（不永久挂起）
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn summarize_via_blocking_wall_clock_timeout() {
+        struct Hung;
+        impl Summarizer for Hung {
+            fn summarize(
+                &self,
+                _dropped: &[AgentMessage],
+                _existing: Option<&str>,
+            ) -> Result<String, String> {
+                std::thread::sleep(Duration::from_millis(2_000));
+                Ok(valid_json("compacted-summary-1-1"))
+            }
+        }
+        let err = summarize_via_blocking(Arc::new(Hung), dropped_messages(), None, 50)
+            .await
+            .expect_err("超时必须 Err");
+        assert!(err.contains("超时"), "超时文案含「超时」：{err}");
     }
 }

@@ -44,7 +44,7 @@ use super::handlers::{compaction_shape_ok, new_message_id, streaming, LoopState}
 use super::SessionLoopOptions;
 use crate::cache_tracker::CacheStatsTracker;
 use crate::r#loop::summary_coordinator::SessionSummaryCoordinator;
-use crate::r#loop::summary_dispatch::SummaryDispatch;
+use crate::r#loop::summary_dispatch::{SummaryDispatch, summarize_via_blocking};
 
 // ── P4 预算层（阶段 2-2/2-3）：估算 + 钳制 ─────────────────────────────
 
@@ -281,12 +281,35 @@ pub(crate) async fn compact_with_llm_guard(
         StubPolicy::LlmRequired
     };
     let engine = CompactionEngine::new(0);
+    // D10-A / DEL-9：摘要经 spawn_blocking 预计算（summarize_via_blocking
+    // 单源 helper），引擎只消费 precomputed——run loop 无同步 summarize 直调。
+    // preview 与引擎 cut 同源；preview None = 无压缩动作（引擎将 noop）。
+    let summarize_precomputed = if let Some(summarizer) = state.compaction.summarizer.clone() {
+        match engine.preview_compaction(&state.conversation, policy) {
+            Some(preview) => {
+                let wall_ms = state
+                    .options
+                    .summary
+                    .summary_dispatch
+                    .as_ref()
+                    .map(|c| c.max_wall_ms)
+                    .unwrap_or(crate::r#loop::summary_dispatch::LOOP_SUMMARY_MAX_WALL_MS);
+                Some(
+                    summarize_via_blocking(summarizer, preview.dropped, preview.existing, wall_ms)
+                        .await,
+                )
+            }
+            None => None,
+        }
+    } else {
+        None
+    };
     let plan = engine.compact_agent_messages_with_stub_policy(
         &state.conversation,
         budget_tokens as usize,
         policy,
-        state.compaction.summarizer.as_deref(),
         stub_policy,
+        summarize_precomputed,
     );
     if plan.llm_unavailable {
         // E2 F1 L1：Summarizer 缺失 / 摘要失败且 LLM 强制 → 不压缩、等待

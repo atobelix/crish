@@ -18,6 +18,17 @@ pub struct CompactionEngine {
     max_tokens: usize,
 }
 
+/// 压缩预览（D10-A）：[CompactionEngine::preview_compaction] 的产出——
+/// 「本可压缩的应丢消息 + 既有摘要文本」。供调用方在主压缩方法之前
+/// 经 spawn_blocking 异步预计算摘要（session-loop summarize_via_blocking）。
+#[derive(Debug, Clone)]
+pub struct CompactionPreview {
+    /// 本可压缩的应丢消息（值克隆；与主方法 cut 同源）
+    pub dropped: Vec<AgentMessage>,
+    /// 既有摘要文本（链尾最近一条非空 compacted-summary 文本）
+    pub existing: Option<String>,
+}
+
 impl CompactionEngine {
     pub fn new(max_tokens: usize) -> Self {
         Self { max_tokens }
@@ -247,6 +258,13 @@ impl CompactionEngine {
     /// 本签名等价 [Self::compact_agent_messages_with_stub_policy] 的
     /// [StubPolicy::StubAllowed]（现状语义，向后兼容——无 Summarizer /
     /// 摘要失败降级 stub）。
+    ///
+    /// **兼容 wrapper（测试 / 手动压缩路径）**：内部同步调用 summarizer
+    /// （preview + summarize → precomputed）；async run loop 主路径不走本
+    /// 方法——经 [Self::preview_compaction] + session-loop
+    /// `summarize_via_blocking`（spawn_blocking）预计算后调
+    /// [Self::compact_agent_messages_with_stub_policy]（DEL-9：run loop
+    /// 无同步 summarize 直调）。
     pub fn compact_agent_messages(
         &self,
         messages: &[Arc<AgentMessage>],
@@ -254,32 +272,43 @@ impl CompactionEngine {
         policy: &CompactionPolicy,
         summarizer: Option<&dyn Summarizer>,
     ) -> CompactionPlan {
+        // 同步 preview + summarize（仅本 wrapper / 手动命令路径；run loop 不经此）
+        let summarize_precomputed = summarizer.and_then(|s| {
+            self.preview_compaction(messages, policy)
+                .map(|preview| s.summarize(&preview.dropped, preview.existing.as_deref()))
+        });
         self.compact_agent_messages_with_stub_policy(
             messages,
             budget_tokens,
             policy,
-            summarizer,
             StubPolicy::StubAllowed,
+            summarize_precomputed,
         )
     }
 
     /// 压缩对话（带 [StubPolicy] 决策面，E2 F1）
     ///
     /// 流程与 [Self::compact_agent_messages] 一致；差异仅在摘要不可用
-    /// （无 Summarizer / Err / 非 JSON / 超预算）时的行为：
+    /// （无预计算摘要 / Err / 非 JSON / 超预算）时的行为：
     ///
     /// - [StubPolicy::StubAllowed]：降级中性 stub（与旧签名一致）；
     /// - [StubPolicy::LlmRequired]：**放弃压缩**（messages = 原序列），
     ///   [CompactionPlan::llm_unavailable] = true，且 dropped_ids 携带
     ///   「本可压缩的应丢 id」——上层按路径决策（预检等待 / 溢出 fatal /
     ///   豁免 stub），并可用 dropped_ids 发起后台补摘要（F2 层 1）。
+    ///
+    /// **D10-A / DEL-9**：本方法不再裸调 `summarizer.summarize`——摘要
+    /// 结果经 `summarize_precomputed` 注入。async run loop（预检/边界/
+    /// 溢出）经 [Self::preview_compaction] + session-loop
+    /// `summarize_via_blocking`（spawn_blocking + 墙钟）预计算后传入；
+    /// `None` = 无摘要可用（按 stub_policy 决策）。
     pub fn compact_agent_messages_with_stub_policy(
         &self,
         messages: &[Arc<AgentMessage>],
         budget_tokens: usize,
         policy: &CompactionPolicy,
-        summarizer: Option<&dyn Summarizer>,
         stub_policy: StubPolicy,
+        summarize_precomputed: Option<Result<String, String>>,
     ) -> CompactionPlan {
         // 1C-9：入口单次遍历计算 tokens_before，同时按 cut 边界预累加
         // dropped_tokens（被丢弃消息的 token 数），供后续 tokens_after 增量
@@ -326,21 +355,8 @@ impl CompactionEngine {
             .sum();
         let mut dropped_ids: Vec<String> = dropped_arcs.iter().map(|m| m.id.clone()).collect();
 
-        // 迭代合并：T-07 取链尾最后一条非空摘要文本（stub 或 md 渲染
-        // 皆可）作为 existing 传入摘要器（R-G：链文本 = 该块文档的
-        // md 渲染 / stub 中性文本；existing 由调用方按表优先仲裁）
-        let existing = messages[..cut]
-            .iter()
-            .filter(|m| m.id.starts_with("compacted-summary"))
-            .filter_map(|m| {
-                let text = m.text();
-                if text.is_empty() {
-                    None
-                } else {
-                    Some(text)
-                }
-            })
-            .next_back();
+        // （existing 摘要文本提取已随摘要调用移至 preview_compaction——
+        // 本方法只消费 summarize_precomputed，不再计算 existing；DEL-9）
 
         // T-09：折叠推导——fold_index = 链长 + 1（B3 只增）；块 id 与
         // 摘要消息 id 同名（R-B：`compacted-summary-{gen}-{fold}`）；
@@ -354,55 +370,58 @@ impl CompactionEngine {
         let fold_index = chain_count + 1;
         let block_id = format!("compacted-summary-{generation}-{fold_index}");
 
-        // 摘要生成（T-13）：同步单次尝试（R-F）；成功且输出为 Schema V1
-        // JSON 文档 → md 渲染进链（summary_is_llm=true，state=committed）；
-        // 其余（非 JSON / 超预算 / Err / 无注入）按 [StubPolicy] 决策：
+        // 摘要生成（T-13 / D10-A）：R-F 语义 = 「阻塞池内单次尝试 + 墙钟」；
+        // 摘要结果经 summarize_precomputed 注入（run loop 预检/边界/溢出经
+        // summarize_via_blocking spawn_blocking 预计算；本方法不再裸调
+        // summarizer.summarize——DEL-9）。成功且输出为 Schema V1 JSON 文档
+        // → md 渲染进链（summary_is_llm=true，state=committed）；其余
+        // （非 JSON / 超预算 / Err / 无注入）按 [StubPolicy] 决策：
         // StubAllowed → 中性 stub（R-C 永不改写，state=awaiting；
         // 原文不保留，保守语义）；LlmRequired → 放弃压缩（E2 F1，
         // llm_unavailable=true，禁止纯丢弃式线性压缩）
-        let dropped_slice: Vec<AgentMessage> = dropped_arcs.iter().map(|m| (**m).clone()).collect();
         let stub = || {
             truncate_summary(
                 &stub_placeholder(&block_id, dropped_ids.len(), generation),
                 policy.max_summary_tokens,
             )
         };
-        let (summary, summary_is_llm, llm_unavailable) = if let Some(summarizer) = summarizer {
-            match summarizer.summarize(&dropped_slice, existing.as_deref()) {
-                Ok(text) => {
-                    // 字节预算 = max_summary_tokens × 4（ASCII 4 字符/token、
-                    // CJK 3 字节/字符 ≤ 4 字节/token 的保守上界）
-                    match crate::summary_document::validate_summary_document(
-                        &text,
-                        policy.max_summary_tokens.saturating_mul(4),
-                    ) {
-                        Ok(doc) => (
-                            truncate_summary(
-                                &crate::summary_document::summary_to_markdown(&doc),
-                                policy.max_summary_tokens,
+        let (summary, summary_is_llm, llm_unavailable) =
+            if let Some(summary_result) = summarize_precomputed {
+                match summary_result {
+                    Ok(text) => {
+                        // 字节预算 = max_summary_tokens × 4（ASCII 4 字符/token、
+                        // CJK 3 字节/字符 ≤ 4 字节/token 的保守上界）
+                        match crate::summary_document::validate_summary_document(
+                            &text,
+                            policy.max_summary_tokens.saturating_mul(4),
+                        ) {
+                            Ok(doc) => (
+                                truncate_summary(
+                                    &crate::summary_document::summary_to_markdown(&doc),
+                                    policy.max_summary_tokens,
+                                ),
+                                true,
+                                false,
                             ),
-                            true,
-                            false,
-                        ),
-                        Err(_) if stub_policy == StubPolicy::LlmRequired => {
-                            return llm_blocked_plan(messages, cut, &dropped_ids, tokens_before);
+                            Err(_) if stub_policy == StubPolicy::LlmRequired => {
+                                return llm_blocked_plan(messages, cut, &dropped_ids, tokens_before);
+                            }
+                            Err(_) => (stub(), false, false),
                         }
-                        Err(_) => (stub(), false, false),
                     }
+                    Err(_) if stub_policy == StubPolicy::LlmRequired => {
+                        return llm_blocked_plan(messages, cut, &dropped_ids, tokens_before);
+                    }
+                    Err(_) => (stub(), false, false),
                 }
-                Err(_) if stub_policy == StubPolicy::LlmRequired => {
+            } else {
+                // 无预计算摘要（E2 F1 L1）：LlmRequired 下不产生
+                // stub——放弃压缩等待 LLM 可用；StubAllowed 下保持现状
+                if stub_policy == StubPolicy::LlmRequired {
                     return llm_blocked_plan(messages, cut, &dropped_ids, tokens_before);
                 }
-                Err(_) => (stub(), false, false),
-            }
-        } else {
-            // 无 Summarizer 注入（E2 F1 L1）：LlmRequired 下不产生
-            // stub——放弃压缩等待 LLM 可用；StubAllowed 下保持现状
-            if stub_policy == StubPolicy::LlmRequired {
-                return llm_blocked_plan(messages, cut, &dropped_ids, tokens_before);
-            }
-            (stub(), false, false)
-        };
+                (stub(), false, false)
+            };
 
         // 组装：system + 链全查（按原始顺序）+ 新摘要 + 保留段（T-08）
         let mut result: Vec<Arc<AgentMessage>> = messages[..cut]
@@ -618,7 +637,10 @@ impl CompactionEngine {
     }
 
     /// 紧急二次预检（Emergency Preflight）：
-    /// 在追加消息或会话后，若当前对话总估算仍超预算，强制执行兜底压缩
+    /// 在追加消息或会话后，若当前对话总估算仍超预算，强制执行兜底压缩。
+    ///
+    /// 兼容 wrapper：内部同步 preview + summarize（仅本方法 / 测试路径；
+    /// run loop 主路径不经此——经 preview + summarize_via_blocking 预计算）。
     pub fn emergency_preflight(
         &self,
         messages: &[Arc<AgentMessage>],
@@ -626,12 +648,16 @@ impl CompactionEngine {
         policy: &CompactionPolicy,
         summarizer: Option<&dyn Summarizer>,
     ) -> CompactionPlan {
+        let summarize_precomputed = summarizer.and_then(|s| {
+            self.preview_compaction(messages, policy)
+                .map(|preview| s.summarize(&preview.dropped, preview.existing.as_deref()))
+        });
         let mut plan = self.compact_agent_messages_with_stub_policy(
             messages,
             budget_tokens,
             policy,
-            summarizer,
             StubPolicy::StubAllowed,
+            summarize_precomputed,
         );
         if plan.tokens_after > budget_tokens as u64 && !plan.messages.is_empty() {
             let block_id = format!(
@@ -659,6 +685,54 @@ impl CompactionEngine {
                 .map(|m| m.id.clone());
         }
         plan
+    }
+
+    /// 压缩预览（D10-A）：返回「本可压缩的应丢消息 + 既有摘要文本」，
+    /// 供调用方在调用 [Self::compact_agent_messages_with_stub_policy]
+    /// **之前**经 spawn_blocking 异步预计算摘要（summarize_via_blocking）。
+    ///
+    /// cut 计算与主方法同源（同一纯逻辑），返回 Some 当且仅当主方法
+    /// 会进入摘要分支（有合法切割点且有可丢消息）；None = 无压缩动作
+    /// （主方法将 noop）。`dropped` 为值克隆（Summarizer trait 借
+    /// `&[AgentMessage]`）；克隆成本远低于摘要网络往返，可接受。
+    pub fn preview_compaction(
+        &self,
+        messages: &[Arc<AgentMessage>],
+        policy: &CompactionPolicy,
+    ) -> Option<CompactionPreview> {
+        if messages.is_empty() {
+            return None;
+        }
+        let cut = find_cut_point_inner(
+            messages,
+            policy.keep_recent_tokens,
+            policy.min_recent_turns,
+            policy.tool_pair_protection,
+        )?;
+        let dropped_arcs: Vec<Arc<AgentMessage>> = messages[..cut]
+            .iter()
+            .filter(|m| {
+                m.role != AgentMessageRole::System && !m.id.starts_with("compacted-summary")
+            })
+            .cloned()
+            .collect();
+        if dropped_arcs.is_empty() {
+            return None;
+        }
+        let existing = messages[..cut]
+            .iter()
+            .filter(|m| m.id.starts_with("compacted-summary"))
+            .filter_map(|m| {
+                let text = m.text();
+                if text.is_empty() {
+                    None
+                } else {
+                    Some(text)
+                }
+            })
+            .next_back();
+        let dropped: Vec<AgentMessage> = dropped_arcs.iter().map(|m| (**m).clone()).collect();
+        Some(CompactionPreview { dropped, existing })
     }
 
     /// 阈值判定单点：`estimate >= budget_tokens`（T-33 预检触发用，

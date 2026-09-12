@@ -43,7 +43,7 @@ pub mod compaction {
 pub use cut_point::{
     enforce_tool_batch_closure, KEEP_RECENT_TOKENS_DEFAULT, MIN_RECENT_TURNS_DEFAULT,
 };
-pub use engine::CompactionEngine;
+pub use engine::{CompactionEngine, CompactionPreview};
 pub use plan::{
     CompactionPlan, CompactionPolicy, StubPolicy, Summarizer, MAX_SUMMARY_TOKENS_DEFAULT,
 };
