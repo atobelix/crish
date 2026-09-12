@@ -1,3 +1,8 @@
+// bounds.ts — 前端缓存/容量预算的 package 导出面（数值真源）。
+// D0/U-BUDGET 关系：应用侧经 apps/crish-desktop/src/api/perfBudgets.ts 转口消费；
+// Rust 侧引擎缓存预算见 crates/conex-shared/src/perf_budget.rs（跨端不要求逐字节相等，
+// 但同端禁止第二份数值定义）。本文件数值变更须另票 + 同步 check-perf-budgets。
+
 export const MAX_SESSIONS = 200;
 export const MAX_MESSAGES_PER_SESSION = 500;
 export const MAX_AGENTS_PER_SESSION = 40;

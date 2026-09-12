@@ -13,6 +13,10 @@
 import { invokeResult, type InvokeResult } from './tauriInvoke';
 import { logger } from '../services/LoggerService';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+// D0/U-BUDGET：环形缓冲预算定义收敛至 perfBudgets 镜像（仅 re-export，行为不变）
+import { PTY_HISTORY_MAX_BYTES } from './perfBudgets';
+
+export { PTY_HISTORY_MAX_BYTES };
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -48,8 +52,7 @@ const exitFanout = createFanout<PtyExitPayload>();
 const gcKilledFanout = createFanout<PtyExitPayload>();
 
 // ── PTY Output History Ring Buffer ────────────────────────────────────
-
-export const PTY_HISTORY_MAX_BYTES = 256 * 1024; // 256KB 环形缓冲
+// PTY_HISTORY_MAX_BYTES 定义见 perfBudgets.ts（D0 SoT 镜像；此处仅 re-export）
 
 export type PtyHistoryEntry = {
   chunks: string[];

@@ -5,9 +5,10 @@ import { ToolCallInputPane } from './ToolCallInputPane';
 import { ToolCallOutputPane } from './ToolCallOutputPane';
 import { extractImageRefs, fullToolOutput } from '../../api/toolPresentation';
 import { toolStatusZh } from './chatToolCallUtils';
+// D0/U-BUDGET：cap 定义收敛至 perfBudgets 镜像（仅 re-export，展示逻辑不改）
+import { TOOL_OUTPUT_LINE_CAP, TOOL_OUTPUT_BYTE_CAP } from '../../api/perfBudgets';
 
-export const TOOL_OUTPUT_LINE_CAP = 2000;
-export const TOOL_OUTPUT_BYTE_CAP = 256 * 1024;
+export { TOOL_OUTPUT_LINE_CAP, TOOL_OUTPUT_BYTE_CAP };
 
 export interface ToolCallOutputProps {
   tc: {
