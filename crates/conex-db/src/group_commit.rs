@@ -106,21 +106,11 @@ pub struct DbWriteHandle {
 impl DbWriteHandle {
     /// 创建并启动组提交 Single Writer Actor。
     ///
-    /// 接收一个专有的 SQLite 写连接所有权，并在后台 Tokio 任务中循环批处理。
+    /// 接收一个专有的 SQLite 写连接所有权，并在**独立 OS 线程**中循环批处理
+    /// （禁止挂在调用方 tokio runtime 上：否则 async 上下文 `write_blocking`
+    /// 与 actor 同 runtime 会在 current_thread 下死锁/panic）。
     pub fn spawn(conn: rusqlite::Connection, config: GroupCommitConfig) -> Self {
-        if tokio::runtime::Handle::try_current().is_ok() {
-            let (sender, receiver) = mpsc::channel(config.channel_capacity);
-            let stats = Arc::new(StatsInner::default());
-            let stats_clone = Arc::clone(&stats);
-
-            tokio::spawn(async move {
-                run_actor_loop(conn, receiver, config, stats_clone).await;
-            });
-
-            Self { sender, stats }
-        } else {
-            Self::spawn_dedicated_thread(conn, config, None)
-        }
+        Self::spawn_dedicated_thread(conn, config, None)
     }
 
     /// 在专有的独立 OS 线程中启动 Single Writer Actor（隔绝通用异步运行时抖动）。
@@ -195,11 +185,27 @@ impl DbWriteHandle {
 
     /// 阻塞写桥：同步外观提交写闭包至组提交 Actor 并等待批提交结果。
     ///
-    /// 供域方法（`append_event` / `save_session_body` 等同步签名）改道 Writer。
-    /// **必须**从非 async 上下文调用（`spawn_blocking` 线程 / 普通测试线程）；
-    /// 在 async 上下文调用会因 `blocking_send` / `blocking_recv` panic——
-    /// 调用方应先 `spawn_blocking`（与 `persist.rs` / `session_commands` 既有模式一致）。
+    /// - 非 async：直接 `blocking_send` + `blocking_recv`。
+    /// - async 上下文：整段 submit+wait 移到临时 OS 线程（无 runtime TLS），
+    ///   避免 `blocking_send` panic；actor 在独立 OS 线程上可并行处理。
     pub fn write_blocking<F, R>(&self, f: F) -> Result<R, DbFailure>
+    where
+        F: FnOnce(&mut rusqlite::Connection) -> Result<R, DbFailure> + Send + 'static,
+        R: Send + 'static,
+    {
+        if tokio::runtime::Handle::try_current().is_ok() {
+            let handle = self.clone();
+            return std::thread::spawn(move || handle.write_blocking_inner(f))
+                .join()
+                .map_err(|_| DbFailure {
+                    message: "write_blocking offload thread panicked".to_string(),
+                    kind: DbFailureKind::Other("writer_join_failed".to_string()),
+                })?;
+        }
+        self.write_blocking_inner(f)
+    }
+
+    fn write_blocking_inner<F, R>(&self, f: F) -> Result<R, DbFailure>
     where
         F: FnOnce(&mut rusqlite::Connection) -> Result<R, DbFailure> + Send + 'static,
         R: Send + 'static,
@@ -210,8 +216,6 @@ impl DbWriteHandle {
             respond_to: tx,
         };
 
-        // blocking_send：在非 async 上下文（spawn_blocking / 独立线程）安全；
-        // async 上下文会 panic——这是有意的硬边界，防误用死锁。
         self.sender.blocking_send(task).map_err(|_| DbFailure {
             message: "Single writer actor channel is closed".to_string(),
             kind: DbFailureKind::Other("writer_closed".to_string()),
