@@ -137,6 +137,7 @@ export function NoteLeafHost(ctx: ViewRenderContext): React.ReactElement {
           <NotePaperStrictPanel
             key={activeDocId}
             docId={activeDocId}
+            title={docManager.activeDoc?.title || '未命名笔记'}
             hydrateTransport={paper.resolvedStrictTransport}
             slashIntentSink={paper.slashBinding.sink}
             slashWriteMode={paper.slashBinding.mode}

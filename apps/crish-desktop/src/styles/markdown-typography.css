@@ -832,7 +832,7 @@ html[data-theme='dark'] {
 .conex-markdown .md-code-pre,
 :is(.conex-markdown, .md-rendered) .md-code-pre {
   margin: 0;
-  padding: var(--md-code-block-padding, var(--space-3, 12px) var(--space-4, 16px));
+  padding: var(--md-code-block-padding, var(--space-2, 8px) var(--space-3, 12px));
   overflow-x: auto;
   overscroll-behavior-x: contain;
   font-family: var(--font-mono);

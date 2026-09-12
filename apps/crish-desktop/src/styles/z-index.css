@@ -22,6 +22,7 @@
   /* Level 5: 全局模态、设置面板与通知吐司 */
   --z-modal: 1000;
   --z-toast: var(--z-modal);
+  --dialog-z: var(--z-modal);
 
   /* Level 6: 顶级悬浮提示与光标胶囊 */
   --z-tooltip: 9000;

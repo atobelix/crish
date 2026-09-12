@@ -527,7 +527,7 @@ html[data-theme='light'] {
   --md-code-block-bg: var(--bg-card);
   --md-code-block-border: var(--border-subtle);
   --md-code-block-radius: var(--radius-lg, 8px);
-  --md-code-block-padding: var(--space-3, 12px) var(--space-4, 16px);
+  --md-code-block-padding: var(--space-2, 8px) var(--space-3, 12px);
   --md-code-font: var(--font-mono);
   --md-code-font-size: var(--font-size-xs, 12px);
   --md-code-tab-size: 2;
@@ -1132,7 +1132,7 @@ html[data-theme='dark'] {
   --md-code-block-bg: var(--bg-card);
   --md-code-block-border: var(--border-subtle);
   --md-code-block-radius: var(--radius-lg, 8px);
-  --md-code-block-padding: var(--space-3, 12px) var(--space-4, 16px);
+  --md-code-block-padding: var(--space-2, 8px) var(--space-3, 12px);
   --md-code-font: var(--font-mono);
   --md-code-font-size: var(--font-size-xs, 12px);
   --md-code-tab-size: 2;
@@ -1494,6 +1494,23 @@ html[data-ui-size='large'] {
   --pin-hue-cyan: #00ffff;
   --pin-hue-blue: #0000ff;
   --pin-hue-magenta: #ff00ff;
+}
+
+/* ── B 类运行期量 · 静态默认声明（消除「静态不可知」与「靠兜底存活」）────────
+ * 规则：默认值必须与「未注入时的历史行为」等价（invalid → unset → initial），
+ * 或与 style-contract 钉死的兜底形态一致；无法确证者不入此表（见 token-registry.json 备注）。
+ * 索引：scripts/token-registry.json 的 bClass[].staticDefault 与本块一一对应。 */
+:root {
+  --tooltip-translate: translate(0); /* style-contract 钉死形态 */
+  --tree-level: 0;
+  --toast-index: 0;
+  --toast-offset-y: 0px;
+  --sidebar-visible-width: 260px; /* 与 --sidebar-width 静态默认一致 */
+  --font-mono-features: normal;
+  --files-list-ratio: 35%; /* preferencesSchema defaultValue 0.35 */
+  --flow-output-max: 600px; /* 消费点历史兜底 600px，行为等价 */
+  --anchor-width: auto; /* 未注入时等价于历史 invalid→auto */
+  --transform-origin: center; /* 未注入时等价于历史 invalid→initial(50% 50%) */
 }
 
 @supports (color: oklch(0 0 0)) {

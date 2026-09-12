@@ -12,7 +12,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import React, { Suspense, useSyncExternalStore } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import * as projectStore from '../../api/projectStore';
 import * as noteApi from '../../api/noteApi';
 import { createMemoryNoteTransport } from '../../api/noteApi';
@@ -428,7 +428,7 @@ describe('CONN-EXT · 扩展叶工厂 / 注销（≠ EL · ≠ 打开完成 · �
     // 抽屉中初始相对时间为 10 分钟前
     const drawer = screen.getByTestId('note-sidebar-drawer');
     expect(drawer).toBeInTheDocument();
-    expect(screen.getByText('抽屉联动测试笔记')).toBeInTheDocument();
+    expect(within(drawer).getByText('抽屉联动测试笔记')).toBeInTheDocument();
     const timeEl = drawer.querySelector('time');
     expect(timeEl?.textContent).toMatch(/10分钟前|10 分钟前/);
 

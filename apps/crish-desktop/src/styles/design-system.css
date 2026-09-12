@@ -107,7 +107,7 @@ html[data-theme="dark"] .elevation-4 {
 
 .md-code-pre {
   margin: 0;
-  padding: 12px 14px;
+  padding: var(--md-code-block-padding, var(--space-2, 8px) var(--space-3, 12px));
   overflow-x: auto;
   font-family: var(--font-mono, monospace);
   font-size: var(--font-size-xs, 12px);

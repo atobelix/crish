@@ -788,7 +788,7 @@ button.badge:focus-visible {
   border: var(--hairline-width, 1px) solid
     var(--md-code-border, var(--border-color));
   border-radius: var(--radius-sm, 5px);
-  padding: var(--space-3, 12px);
+  padding: var(--md-code-block-padding, var(--space-2, 8px) var(--space-3, 12px));
   margin-top: var(--space-2, 8px);
   margin-bottom: var(--space-2, 8px);
   tab-size: var(--md-code-tab-size, 2);
