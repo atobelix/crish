@@ -223,7 +223,7 @@ export class UnifiedAppHydrationCoordinator {
         'medium');
 
     const shellChromeMode = parseShellChromeMode(
-      rawSettings.shellChromeMode ??
+      (rawSettings as { shellChromeMode?: unknown }).shellChromeMode ??
         (rawPrefs.shell_chrome_mode as unknown) ??
         'classic'
     );
