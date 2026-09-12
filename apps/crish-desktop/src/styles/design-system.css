@@ -344,7 +344,7 @@ html[data-theme="dark"] .elevation-4 {
 .hljs-doctag,
 .source .comment {
   color: var(--syntax-comment);
-  font-style: italic;
+  font-style: normal;
 }
 
 /* 8. Addition Diff 增量代码 */

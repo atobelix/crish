@@ -607,7 +607,7 @@ html[data-theme='dark'] {
   border: 1px solid var(--md-code-block-border, var(--border-subtle));
   background: var(--md-code-block-bg);
   overflow: hidden;
-  box-shadow: 0 0 0 1px var(--md-code-block-border, var(--border-subtle));
+  box-shadow: none;
 }
 
 /* 实体顶栏：左标题/面包屑，右操作，高度 34px，自适应背景与微弱下边框 */
@@ -633,6 +633,10 @@ html[data-theme='dark'] {
   gap: var(--space-1_5, 6px);
   min-width: 0;
   overflow: hidden;
+  font-family: var(--md-code-font, var(--font-mono));
+  font-size: var(--font-size-xs, 12px);
+  font-weight: var(--font-weight-normal, 400);
+  color: var(--md-code-header-fg, var(--text-tertiary));
 }
 
 /* 面包屑在 Header 内流式排布，保持独立时兼容 padding 与底边 */
@@ -643,9 +647,10 @@ html[data-theme='dark'] {
   align-items: center;
   gap: var(--space-1, 4px);
   padding: var(--space-1_5, 6px) var(--space-3, 12px);
-  font-family: var(--md-font-mono);
+  font-family: var(--md-code-font, var(--font-mono));
   font-size: var(--font-size-xs, 12px);
-  color: var(--md-code-header-fg, var(--text-secondary));
+  font-weight: var(--font-weight-normal, 400);
+  color: var(--md-code-header-fg, var(--text-tertiary));
   background: var(--tint-hover);
   border-bottom: 1px solid var(--border-subtle);
   user-select: none;
@@ -675,8 +680,8 @@ html[data-theme='dark'] {
 .md-rendered .md-code-breadcrumb-file,
 .conex-markdown .md-code-breadcrumb-file,
 :is(.conex-markdown, .md-rendered) .md-code-breadcrumb-file {
-  color: var(--md-code-header-fg, var(--text-primary));
-  font-weight: var(--font-weight-medium, 500);
+  color: var(--text-secondary);
+  font-weight: var(--font-weight-normal, 400);
 }
 
 /* 代码块操作中枢：在 Header 内静态排列，降级时绝对定位排布 */
@@ -831,15 +836,30 @@ html[data-theme='dark'] {
 .conex-markdown .md-code-pre,
 :is(.conex-markdown, .md-rendered) .md-code-pre {
   margin: 0;
-  padding: 12px 14px;
+  padding: var(--md-code-block-padding, 14px 16px);
   overflow-x: auto;
   overscroll-behavior-x: contain;
-  font-family: var(--md-font-mono);
-  font-size: var(--md-code-font-size, 13px);
+  font-family: var(--md-code-font, var(--font-mono)) !important;
+  font-size: var(--md-code-font-size, 12.5px);
+  font-weight: var(--font-weight-code, 400) !important;
   line-height: 1.625;
   tab-size: var(--md-code-tab-size, 2);
   color: var(--text-primary);
   background: transparent;
+}
+
+.md-rendered .md-code-pre code,
+.conex-markdown .md-code-pre code,
+:is(.conex-markdown, .md-rendered) .md-code-pre code,
+.md-rendered .md-code-pre code *,
+.conex-markdown .md-code-pre code *,
+:is(.conex-markdown, .md-rendered) .md-code-pre code * {
+  font-family: var(--md-code-font, var(--font-mono)) !important;
+  font-size: inherit;
+  font-weight: var(--font-weight-code, 400) !important;
+  line-height: inherit;
+  letter-spacing: normal;
+  font-style: normal;
 }
 
 :is(.conex-markdown, .md-rendered) .md-code-pre::-webkit-scrollbar {

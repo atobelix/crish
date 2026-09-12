@@ -509,7 +509,7 @@
   border: 1px solid var(--md-code-block-border, var(--border-subtle));
   background: var(--md-code-block-bg);
   overflow: hidden;
-  box-shadow: 0 0 0 1px var(--md-code-block-border, var(--border-subtle));
+  box-shadow: none;
 }
 
 /* 实体顶栏：左标题/面包屑，右操作，高度 34px，自适应背景与微弱下边框 */
@@ -564,8 +564,8 @@
 }
 
 .assistantText :global(.md-code-breadcrumb-file) {
-  color: var(--md-code-header-fg, var(--text-primary));
-  font-weight: var(--font-weight-medium, 500);
+  color: var(--text-secondary);
+  font-weight: var(--font-weight-normal, 400);
 }
 
 /* 代码块操作中枢：在 Header 内静态排列，降级时绝对定位排布 */
@@ -700,15 +700,26 @@
 
 .assistantText :global(.md-code-pre) {
   margin: 0;
-  padding: var(--md-code-block-padding, 12px 14px);
+  padding: var(--md-code-block-padding, 14px 16px);
   overflow-x: auto;
   overscroll-behavior-x: contain;
-  font-family: var(--md-code-font, var(--font-mono));
-  font-size: var(--md-code-font-size, 13px);
+  font-family: var(--md-code-font, var(--font-mono)) !important;
+  font-size: var(--md-code-font-size, 12.5px);
+  font-weight: var(--font-weight-code, 400) !important;
   line-height: 1.625;
   tab-size: var(--md-code-tab-size, 2);
   color: var(--text-primary);
   background: transparent;
+}
+
+.assistantText :global(.md-code-pre code),
+.assistantText :global(.md-code-pre code *) {
+  font-family: var(--md-code-font, var(--font-mono)) !important;
+  font-size: inherit;
+  font-weight: var(--font-weight-code, 400) !important;
+  line-height: inherit;
+  letter-spacing: normal;
+  font-style: normal;
 }
 
 .assistantText :global(.md-code-pre::-webkit-scrollbar) {
