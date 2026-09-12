@@ -14,14 +14,13 @@
  */
 import { describe, expect, it } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { join, resolve } from 'node:path';
 
-const API_DIR = new URL('../', import.meta.url);
+// vitest 下 import.meta.url 可能非 file: scheme；用 cwd 锚定 apps/crish-desktop
+const API_DIR = resolve(process.cwd(), 'src/api');
 
 function readSource(rel: string): string {
-  // 先赋中间变量再进 new URL——内联模板会被 vitest transform 破坏路径解析
-  const target = fileURLToPath(new URL(rel, API_DIR));
-  return readFileSync(target, 'utf8');
+  return readFileSync(join(API_DIR, rel), 'utf8');
 }
 
 describe('T5 负向断言：确定的死面已被物理切除', () => {
@@ -42,7 +41,7 @@ describe('T5 负向断言：确定的死面已被物理切除', () => {
 
   it('minimalConfig.ts 已被彻底物理切除（文件物理消亡且不可导入）', () => {
     // BLK-02 / ACT-305：升级为消亡物理不存在断言，杜绝 ENOENT 崩溃
-    const targetPath = fileURLToPath(new URL('../store/minimalConfig.ts', API_DIR));
+    const targetPath = join(API_DIR, '../store/minimalConfig.ts');
     expect(existsSync(targetPath)).toBe(false);
     expect(() => {
       readFileSync(targetPath, 'utf8');
@@ -50,7 +49,7 @@ describe('T5 负向断言：确定的死面已被物理切除', () => {
   });
 
   it('bootstrap-orchestrator.ts 已被彻底物理切除', () => {
-    const targetPath = fileURLToPath(new URL('../../bootstrap-orchestrator.ts', API_DIR));
+    const targetPath = join(API_DIR, '../../bootstrap-orchestrator.ts');
     expect(existsSync(targetPath)).toBe(false);
   });
 
