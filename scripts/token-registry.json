@@ -1,0 +1,352 @@
+{
+  "_doc": [
+    "真源唯一化登记表（T1 产出）。消费者：scripts/check-token-ssot.mjs",
+    "A 类 = 设计 Token，只允许 tokens.css（+ 授权外置源）声明，JS 严禁写入。",
+    "B 类 = 运行期量，由 JS 唯一写入，但必须在 tokens.css 有静态默认声明，并在本表登记。",
+    "componentIslands = 组件私有命名空间前缀（不得与全局 A/B 类同名）。",
+    "数据来源：2026-09-11 对 apps/crish-desktop/src 的实测扫描（setProperty + TSX style 对象两种注入形态）。",
+    "纪律：本表条目只能收紧；白名单条目数纳入棘轮（whitelist_size）。"
+  ],
+  "aClass": {
+    "source": "apps/crish-desktop/src/styles/tokens.css",
+    "authorizedExtraSources": ["apps/crish-desktop/src/styles/z-index.css"],
+    "forbidJsWrite": true
+  },
+  "authorizedExtraSources": [
+    "apps/crish-desktop/src/styles/z-index.css"
+  ],
+  "bClass": [
+    {
+      "name": "--sidebar-width",
+      "writer": "apps/crish-desktop/src/components/sidebar/useSidebarResize.ts",
+      "writerExtra": ["apps/crish-desktop/src/main.tsx"],
+      "consumer": "apps/crish-desktop/src/components/sidebar/*.module.css",
+      "staticDefault": "260px",
+      "note": "用户拖拽驱动的运行期量；与 --sidebar-visible-width 不同名不同义，勿混用。"
+    },
+    {
+      "name": "--sidebar-visible-width",
+      "writer": "apps/crish-desktop/src/components/sidebar/useSidebarResize.ts",
+      "consumer": "apps/crish-desktop/src/components/sidebar/Sidebar.module.css",
+      "staticDefault": "260px"
+    },
+    {
+      "name": "--leaf-dock-width",
+      "writer": "apps/crish-desktop/src/components/binary-tree/LeafDockResizer.tsx",
+      "writerExtra": [
+        "apps/crish-desktop/src/components/binary-tree/TreeLeafPanel.tsx",
+        "apps/crish-desktop/src/hooks/useTreeResize.ts"
+      ],
+      "consumer": "apps/crish-desktop/src/components/binary-tree/*.module.css",
+      "staticDefault": null,
+      "note": "动态测量值（clamp(200, min(w*0.7, ratio*w)))，无安全静态默认；JS 启动即注入。staticDefault 待真机核定。"
+    },
+    {
+      "name": "--anchor-width",
+      "writer": "apps/crish-desktop/src/components/ui/Select/useFloatingPosition.ts",
+      "consumer": "apps/crish-desktop/src/components/ui/Select/SelectContent.module.css",
+      "staticDefault": "auto",
+      "note": "浮动定位测量量；未注入时 auto 与历史 invalid 行为等价。"
+    },
+    {
+      "name": "--transform-origin",
+      "writer": "apps/crish-desktop/src/components/ui/Select/useFloatingPosition.ts",
+      "consumer": "apps/crish-desktop/src/components/ui/Select/*.module.css",
+      "staticDefault": "center",
+      "note": "自定义属性名与同名 CSS 属性不同，勿混淆；未注入时 center 与历史 invalid→initial 等价。"
+    },
+    {
+      "name": "--font-mono-features",
+      "writer": "apps/crish-desktop/src/api/fontStore.ts",
+      "consumer": "apps/crish-desktop/src/styles/tokens.css",
+      "staticDefault": "normal",
+      "note": "字体连字/字距特性开关，属运行期偏好而非设计刻度。"
+    },
+    {
+      "name": "--tab-item-width",
+      "writer": "apps/crish-desktop/src/components/binary-tree/PaneHeader.tsx",
+      "consumer": "apps/crish-desktop/src/components/binary-tree/PaneHeader.module.css",
+      "staticDefault": null,
+      "note": " PaneHeader 启动即注入（effectiveTabWidth），无安全静态默认。"
+    },
+    {
+      "name": "--tab-width-max",
+      "writer": "apps/crish-desktop/src/components/binary-tree/PaneHeader.tsx",
+      "consumer": "apps/crish-desktop/src/components/binary-tree/PaneHeader.module.css",
+      "staticDefault": null,
+      "note": "PaneHeader 启动即注入（TAB_WIDTH_MAX_PX），无安全静态默认。"
+    },
+    {
+      "name": "--tab-width-min",
+      "writer": "apps/crish-desktop/src/components/binary-tree/PaneHeader.tsx",
+      "consumer": "apps/crish-desktop/src/components/binary-tree/PaneHeader.module.css",
+      "staticDefault": null,
+      "note": "staticDefault 待 T6 核定（当前 tokens.css 无静态声明）。"
+    },
+    {
+      "name": "--tab-close-hit-pad",
+      "writer": "apps/crish-desktop/src/components/binary-tree/PaneHeader.tsx",
+      "consumer": "apps/crish-desktop/src/components/binary-tree/PaneHeader.module.css",
+      "staticDefault": null
+    },
+    {
+      "name": "--tab-height",
+      "writer": "apps/crish-desktop/src/components/binary-tree/PaneHeader.tsx",
+      "consumer": "apps/crish-desktop/src/components/binary-tree/PaneHeader.module.css",
+      "staticDefault": null
+    },
+    {
+      "name": "--tool-tab-width-max",
+      "writer": "apps/crish-desktop/src/components/binary-tree/LeafToolTabStrip.tsx",
+      "consumer": "apps/crish-desktop/src/components/binary-tree/LeafToolTabStrip.module.css",
+      "staticDefault": null
+    },
+    {
+      "name": "--tree-level",
+      "writer": "apps/crish-desktop/src/components/custom-tags/FileTree.tsx",
+      "consumer": "apps/crish-desktop/src/components/custom-tags/custom-tags.module.css",
+      "staticDefault": "0",
+      "note": "缩进层级索引；消费侧应 calc(var(--tree-level) * <步长 token>)。"
+    },
+    {
+      "name": "--files-list-ratio",
+      "writer": "apps/crish-desktop/src/components/files/FilesCard.tsx",
+      "consumer": "apps/crish-desktop/src/components/files/FilesCard.module.css",
+      "staticDefault": "35%",
+      "note": "与 preferencesSchema.files_list_ratio defaultValue 0.35 对齐（注入形态为 `${ratio}%`）。"
+    },
+    {
+      "name": "--tick-pin-color",
+      "writer": "apps/crish-desktop/src/components/chat-message-list/FlowScrubber.tsx",
+      "consumer": "apps/crish-desktop/src/components/chat-message-list/FlowScrubber.module.css",
+      "staticDefault": null,
+      "note": "值来自产品调色板（见 audits/03-待裁决扩档需求.md）。"
+    },
+    {
+      "name": "--tooltip-card-bg",
+      "writer": "apps/crish-desktop/src/components/chat-message-list/FlowScrubber.tsx",
+      "consumer": "apps/crish-desktop/src/components/chat-message-list/FlowScrubber.module.css",
+      "staticDefault": null
+    },
+    {
+      "name": "--tooltip-card-border",
+      "writer": "apps/crish-desktop/src/components/chat-message-list/FlowScrubber.tsx",
+      "consumer": "apps/crish-desktop/src/components/chat-message-list/FlowScrubber.module.css",
+      "staticDefault": null
+    },
+    {
+      "name": "--tooltip-translate",
+      "writer": "apps/crish-desktop/src/components/ui/Tooltip/Tooltip.tsx",
+      "consumer": "apps/crish-desktop/src/components/ui/Tooltip/Tooltip.module.css",
+      "staticDefault": "translate(0)",
+      "note": "style-contract.test.ts:486-491 已钉死必须有静态兜底 translate(0) 形态。"
+    },
+    {
+      "name": "--tooltip-arrow-offset",
+      "writer": "apps/crish-desktop/src/components/ui/Tooltip/Tooltip.tsx",
+      "consumer": "apps/crish-desktop/src/components/ui/Tooltip/Tooltip.module.css",
+      "staticDefault": null
+    },
+    {
+      "name": "--active-pin-color",
+      "writer": "apps/crish-desktop/src/components/chat-message-row/PinActionWithPicker.tsx",
+      "consumer": "apps/crish-desktop/src/components/chat-message-row/ChatMessageRow.module.css",
+      "staticDefault": null
+    },
+    {
+      "name": "--user-bubble-pin-color",
+      "writer": "apps/crish-desktop/src/components/chat-message-row/ChatUserMessageRow.tsx",
+      "consumer": "apps/crish-desktop/src/components/chat-message-row/ChatMessageRow.module.css",
+      "staticDefault": null
+    },
+    {
+      "name": "--palette-pure-hue",
+      "writer": "apps/crish-desktop/src/components/chat-message-row/PinActionWithPicker.tsx",
+      "consumer": "apps/crish-desktop/src/components/chat-message-row/ChatMessageRow.module.css",
+      "staticDefault": null
+    },
+    {
+      "name": "--flow-output-max",
+      "writer": "apps/crish-desktop/src/extensions/conversation-flow/ThinkingBlock.tsx",
+      "writerExtra": [
+        "apps/crish-desktop/src/extensions/conversation-flow/ActionRow.tsx",
+        "apps/crish-desktop/src/extensions/conversation-flow/SubagentBlock.tsx"
+      ],
+      "consumer": "apps/crish-desktop/src/extensions/conversation-flow/narrative.module.css",
+      "staticDefault": "600px"
+    },
+    {
+      "name": "--toast-index",
+      "writer": "apps/crish-desktop/src/components/overlay/ToastCard.tsx",
+      "consumer": "apps/crish-desktop/src/components/overlay/ToastStackModern.module.css",
+      "staticDefault": "0"
+    },
+    {
+      "name": "--toast-offset-y",
+      "writer": "apps/crish-desktop/src/components/overlay/ToastCard.tsx",
+      "consumer": "apps/crish-desktop/src/components/overlay/ToastStackModern.module.css",
+      "staticDefault": "0px"
+    },
+    {
+      "name": "--composer-max-lines",
+      "writer": "apps/crish-desktop/src/components/chat-composer/ComposerField.tsx",
+      "consumer": "apps/crish-desktop/src/components/chat-composer/ChatComposer.module.css",
+      "staticDefault": null,
+      "note": "2026-09-11 补登（b_class_drift 清零）；经 data-composer-max-lines 与 style 对象双通道注入。"
+    },
+    {
+      "name": "--composer-line-height",
+      "writer": "apps/crish-desktop/src/components/chat-composer/ComposerField.tsx",
+      "writerExtra": ["apps/crish-desktop/src/components/chat-composer/TiptapComposerField.tsx"],
+      "consumer": "apps/crish-desktop/src/components/chat-composer/ChatComposer.module.css",
+      "staticDefault": null,
+      "note": "2026-09-11 补登（b_class_drift 清零）；ComposerField 与 TiptapComposerField 为互斥实现，各自注入。"
+    },
+    {
+      "name": "--toast-frontmost-height",
+      "writer": "apps/crish-desktop/src/components/overlay/ToastCard.tsx",
+      "consumer": "apps/crish-desktop/src/components/overlay/ToastStackModern.module.css",
+      "staticDefault": null,
+      "note": "2026-09-11 补登（b_class_drift 清零）。"
+    },
+    {
+      "name": "--toast-height",
+      "writer": "apps/crish-desktop/src/components/overlay/ToastCard.tsx",
+      "consumer": "apps/crish-desktop/src/components/overlay/ToastStackModern.module.css",
+      "staticDefault": null,
+      "note": "2026-09-11 补登（b_class_drift 清零）。"
+    },
+    {
+      "name": "--toast-swipe-movement-x",
+      "writer": "apps/crish-desktop/src/components/overlay/ToastCard.tsx",
+      "consumer": "apps/crish-desktop/src/components/overlay/ToastStackModern.module.css",
+      "staticDefault": "0px",
+      "note": "滑动位移量；未注入时 0px 与历史 invalid 行为等价（无位移）。"
+    },
+    {
+      "name": "--toast-swipe-movement-y",
+      "writer": "apps/crish-desktop/src/components/overlay/ToastCard.tsx",
+      "consumer": "apps/crish-desktop/src/components/overlay/ToastStackModern.module.css",
+      "staticDefault": "0px",
+      "note": "滑动位移量；未注入时 0px 与历史 invalid 行为等价（无位移）。"
+    }
+  ],
+  "componentIslands": [
+    { "prefix": "--badge-", "owner": "apps/crish-desktop/src/components/ui/Badge/Badge.module.css" },
+    { "prefix": "--tab-", "owner": "apps/crish-desktop/src/components/ui/Tabs/Tabs.module.css", "note": "与 B 类 --tab-item-width/--tab-width-max 前缀冲突，需 T9 改名为 --tabs-* 或 --pane-tab-*。" },
+    { "prefix": "--seg-", "owner": "apps/crish-desktop/src/components/ui/SegmentedControl/SegmentedControl.module.css" },
+    { "prefix": "--track-", "owner": "apps/crish-desktop/src/components/ui/Switch/Switch.module.css" },
+    { "prefix": "--thumb-", "owner": "apps/crish-desktop/src/components/ui/Switch/Switch.module.css" },
+    { "prefix": "--stretch-", "owner": "apps/crish-desktop/src/components/ui/Switch/Switch.module.css" },
+    { "prefix": "--spinner-", "owner": "apps/crish-desktop/src/components/ui/Switch/Switch.module.css" },
+    { "prefix": "--ann-", "owner": "apps/crish-desktop/src/components/chat-composer/ChatComposer.module.css" },
+    { "prefix": "--np-", "owner": "apps/crish-desktop/src/components/note-paper/NotePaperPanel.module.css" },
+    { "prefix": "--empty-", "owner": "apps/crish-desktop/src/components/workspace/WorkspaceEmptyState.module.css" },
+    { "prefix": "--plan-", "owner": "apps/crish-desktop/src/components/chat-message-row/FlowPlanMilestone.module.css" },
+    { "prefix": "--scrubber-", "owner": "apps/crish-desktop/src/components/chat-message-list/FlowScrubber.module.css" }
+  ],
+  "themingApis": [
+    {
+      "family": "--btn-*",
+      "owner": "apps/crish-desktop/src/components/ui/Button/Button.module.css",
+      "documentedOverrides": [
+        "apps/crish-desktop/src/components/diff/DiffCard.module.css",
+        "apps/crish-desktop/src/components/sidebar/SidebarNav.module.css",
+        "apps/crish-desktop/src/components/workspace/PreviewCard.module.css"
+      ],
+      "note": "2026-09-12 定性：Button 的 custom-prop 主题化 API。各容器按场景覆写 --btn-*（值有意不同：diff 22px 高、preview 11px 字号等），同一语义在多文件出现属合法上下文主题化，非双源。新增覆写方须登记到 documentedOverrides。"
+    },
+    {
+      "family": "--dialog-width",
+      "owner": "apps/crish-desktop/src/components/ui/Dialog/Dialog.module.css",
+      "documentedOverrides": [
+        "apps/crish-desktop/src/components/overlay/FirstRunWizard.module.css",
+        "apps/crish-desktop/src/components/settings/SettingsRulesTab.module.css"
+      ],
+      "note": "2026-09-12 定性：ui/Dialog 的宽度配置通道（Dialog 消费 var(--dialog-width)，各对话框按自身布局覆写；值不同属有意）。--dialog-z 已随死定义清退移除（值恒等于兜底 var(--z-modal)）。"
+    }
+  ],
+  "sizeTiers": [
+    {
+      "name": "--scrollbar-width",
+      "defaultOwner": "apps/crish-desktop/src/styles/tokens.css",
+      "tierOwner": "apps/crish-desktop/src/components/ui/ScrollArea/ScrollArea.module.css",
+      "note": "滚动条尺寸分级系统：tokens.css 持全局默认（--scrollbar-width-md），ScrollArea 按 xs/sm/md/lg 分级覆写。"
+    },
+    {
+      "name": "--scrollbar-thumb-width",
+      "defaultOwner": "apps/crish-desktop/src/styles/tokens.css",
+      "tierOwner": "apps/crish-desktop/src/components/chat-message-row/ChatMessageRow.module.css + apps/crish-desktop/src/styles/markdown-typography.css",
+      "note": "代码块滚动条细条 4px 域覆盖（overlay-scrollbar.css 出口的 --scrollbar-thumb-width 通道）。"
+    },
+    {
+      "name": "--seg-outer-radius",
+      "defaultOwner": "apps/crish-desktop/src/styles/tokens.css",
+      "tierOwner": "apps/crish-desktop/src/components/ui/SegmentedControl/SegmentedControl.module.css",
+      "note": "SegmentedControl 尺寸分级外半径（含 --radius-btn 默认档）。"
+    },
+    {
+      "name": "--seg-inner-radius",
+      "defaultOwner": "apps/crish-desktop/src/styles/tokens.css",
+      "tierOwner": "apps/crish-desktop/src/components/ui/SegmentedControl/SegmentedControl.module.css",
+      "note": "SegmentedControl 尺寸分级内半径（由外半径派生 calc）。"
+    }
+  ],
+  "variantScopes": [
+    {
+      "ownerFile": "styles/markdown-typography.css",
+      "tokenPrefix": "--md-",
+      "note": "2026-09-12 定性：markdown 双模态排版变体架构（Document/Chat，[data-md-variant] 特异性 (0,2,0)）。变体块对 --md-* 的重定义是上下文排版模式，非竞争真源；tokens.css 亮/暗块是基础真源。迁移方向（D30）：mdtypo 更优 token 化值上浮 tokens.css 后，base/dark 定义块已删除（2026-09-12，47 行，零渲染变化——(0,1,0) 从未胜过 (0,1,1)）。"
+    }
+  ],
+  "externallyInjected": [
+    "--radix-popover-content-available-height",
+    "--radix-popover-content-transform-origin"
+  ],
+  "pendingClassification": {
+    "note": "以下 token 当前被 JS 写入且属于 A 类（tokens.css 有声明）→ 属 P1/P2 违规，**严禁登记为 B 类掩盖**，须由 T7 改为 CSS 内派生（JS 只写参数）后清除。",
+    "aClassWrittenByJs": [
+      "--accent-green-light-adaptive",
+      "--accent-red-light-adaptive",
+      "--bg-card",
+      "--bg-elevated",
+      "--bg-paper",
+      "--bg-primary",
+      "--bg-secondary",
+      "--bg-tertiary",
+      "--bg-workspace",
+      "--border-color",
+      "--border-subtle",
+      "--composer-bg",
+      "--control-mix-color",
+      "--control-soft-bg",
+      "--control-soft-bg-active",
+      "--control-soft-bg-hover",
+      "--font-size-adjust",
+      "--shell-chrome-bg",
+      "--shell-inset-bg",
+      "--surface-card",
+      "--surface-chrome",
+      "--surface-elevated",
+      "--surface-paper",
+      "--terminal-bg",
+      "--terminal-cmd",
+      "--terminal-fg",
+      "--text-primary",
+      "--text-secondary",
+      "--text-tertiary"
+    ],
+    "aClassFontTokensWrittenByJs": [
+      "--font-mono",
+      "--font-sans",
+      "--md-code-font",
+      "--md-code-tab-size",
+      "--md-font-family",
+      "--md-font-mono",
+      "--md-font-sans",
+      "--md-text-font",
+      "--sep-font-mono",
+      "--sep-font-sans"
+    ]
+  }
+}

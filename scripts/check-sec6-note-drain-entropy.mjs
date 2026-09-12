@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env node
+#!/usr/bin/env node
 /**
  * SYSTEMATIC-FIX-PLAN §6 门禁（本路：flush 排空 + 块 ID 生产熵）
  *

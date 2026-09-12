@@ -15,7 +15,8 @@
  * 基线 ratchet：
  * - 实测 > 登记 → FAIL（新增即拦）；实测 ≤ 登记 → 通过（存量按分维文档收敛）；
  * - `--update`：把当前三项实测值写回标记区（提升基线必须显式、有意）；
- * - 首次运行（基线文件缺失）→ 自动写入初始基线并 exit 0（MVP 接入，避免全红门禁）；
+ * - 基线缺失 → **FAIL**（2026-09-11 硬化：旧行为"自动建线并 exit 0"等价于
+ *   「删除基线文件即可静默禁用门禁」，是真实绕过漏洞；建线须显式 `--update`）；
  * - 基线格式：`docs/layout-token-system/基线记录/layout-token-baseline.md`
  *   标记区 `<metric> <count>`，与 check-token-consistency 同形。
  *
@@ -370,13 +371,24 @@ if (!isDirectRun) {
 
   const baseline = readBaseline();
   if (baseline === null) {
-    // 首次运行：自动生成基线并 exit 0（MVP 接入，避免无基线全红门禁）
-    writeBaseline(metrics);
-    console.log(
-      `\n[check-layout-tokens] 首次运行：已生成初始基线 ${relative(REPO_ROOT, BASELINE_PATH).split(sep).join('/')}`
+    // 硬化（2026-09-11）：基线缺失 = FAIL，不再自动建线。
+    // 理由：旧行为「自动生成基线并 exit 0」等价于「删除基线文件即可静默禁用本门禁」——
+    // 是一个真实的绕过漏洞（无产出即无违规）。建线必须由人显式发起（--update），
+    // 使「门禁被关闭」这件事在提交历史里留下痕迹，而不是无声发生。
+    console.error(
+      `[check-layout-tokens] FAIL: 基线文件缺失或标记区非法：${relative(REPO_ROOT, BASELINE_PATH).split(sep).join('/')}`
     );
-    console.log('[check-layout-tokens] 后续运行将 ratchet 比对；如需刷新基线请显式运行 --update。');
-    process.exit(0);
+    console.error('');
+    console.error('  缺失基线的两种合法来源：');
+    console.error('    ① 首次接入本门禁 → 显式运行 `node scripts/check-layout-tokens.mjs --update` 建立基线；');
+    console.error('    ② 基线被误删 → 从版本库恢复该文件（`git checkout -- <baseline>`）。');
+    console.error('  禁止以「基线不存在」为由让门禁静默通过。');
+    console.error('');
+    console.error('  当前实测值（供建线参考）：');
+    for (const [k, v] of Object.entries(metrics)) {
+      console.error(`    ${k} = ${v}`);
+    }
+    process.exit(1);
   }
   if (baseline.__malformed) {
     console.error(

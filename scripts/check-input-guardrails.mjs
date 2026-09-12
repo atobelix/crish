@@ -636,8 +636,10 @@ export function runCheckFileSuite(targetErrors = errors) {
         message: '必须使用 var(--border-subtle) 细边框，严禁硬编码',
       },
       {
-        includes: 'border-radius: var(--radius-md, 6px);',
-        message: '必须使用标准圆角',
+        // 2026-09-11 放宽：裸兜底清退（T3）后消费点形如 var(--radius-md)，
+        // 静态默认已由 tokens.css 提供；两种形态均视为「标准圆角」。
+        regex: /border-radius:\s*var\(--radius-md(?:\s*,\s*6px)?\);/,
+        message: '必须使用标准圆角（--radius-md；兜底可选）',
       },
       {
         regex: /\.input:focus[^{]*\{[^}]*box-shadow:\s*none;/,
@@ -657,8 +659,9 @@ export function runCheckFileSuite(targetErrors = errors) {
         message: '必须使用 var(--border-subtle) 细边框',
       },
       {
-        includes: 'border-radius: var(--radius-md, 6px);',
-        message: '必须使用标准圆角',
+        // 2026-09-11 放宽：同上，兼容裸兜底清退后的 var(--radius-md) 形态。
+        regex: /border-radius:\s*var\(--radius-md(?:\s*,\s*6px)?\);/,
+        message: '必须使用标准圆角（--radius-md；兜底可选）',
       },
       {
         regex: /\.nativeTextarea:focus[^{]*\{[^}]*box-shadow:\s*none;/,
