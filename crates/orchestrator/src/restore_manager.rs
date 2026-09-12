@@ -35,8 +35,9 @@ impl RestoreManager {
     ///    （绝不打断、绝不写 run-interrupted）；无终态且在途才打断；
     ///    无终态且 Completed → unbacked Failed 纠偏；Unknown 保真；
     /// 3b. session_agents 残留 running 归一；
-    /// 3c. 冷启动孤儿工具自愈（04 §5）：ToolStart 无 ToolEnd → CAS 幂等
-    ///    补齐 ToolEnd（ToolOutcomeUnknown）；
+    /// 3c. 冷启动孤儿工具自愈（04 §5 / D-3）：ToolStart 无 ToolEnd → CAS
+    ///    幂等补齐 ToolEnd；声明但连 ToolStart 都无 → 补齐 ToolStart+ToolEnd
+    ///    （ToolOutcomeUnknown）；
     /// 4. 会话记录组装（快照会话 ∪ run 派生会话）；
     /// 5. 增量流：lastSequence 后事件重放（session-leaf-moved 重放叶子
     ///    移动；last_sequence 推进到最大序列，作为后续增量流锚点）；
@@ -273,8 +274,10 @@ impl RestoreManager {
             }
         }
 
-        // 4b. 冷启动孤儿工具自愈（04 §5）：ToolStart 无 ToolEnd → CAS 幂等
-        //     补齐 ToolEnd（ToolOutcomeUnknown）。lease API 尚未在 conex-db
+        // 4b. 冷启动孤儿工具自愈（04 §5 / D-3）：ToolStart 无 ToolEnd → CAS
+        //     幂等补齐 ToolEnd（ToolOutcomeUnknown）；Assistant 声明但连
+        //     ToolStart 都无（message-end / session_messages）→ 全包络补齐
+        //     ToolStart+ToolEnd。lease API 尚未在 conex-db
         //     合并——按「可选调用+编译可空」：先做 CAS 存在性排查（04 §6.3
         //     防线二），杜绝重复合成。会话集合取自已组装的 sessions。
         let healed_orphan_tools = heal_orphaned_tool_calls(store, &sessions).await?;
@@ -468,10 +471,115 @@ fn extract_tool_name(payload: &str) -> Option<String> {
         .map(str::to_string)
 }
 
+/// 从 tool_calls_json / blocks_json 提取声明的工具调用（call_id, tool_name）。
+///
+/// 兼容两种物化形状：
+/// - `tool_calls_json`：`[{id, name|toolName, arguments|input}]`（前端
+///   MessageToolCall 子集，对齐 hydrate LegacyToolCall）；
+/// - `blocks_json`：`AgentMessageBlock::ToolCall` 数组（现代块形态）。
+///
+/// 宽容解析：坏条目跳过；整体不可解析返回空。
+fn extract_declared_tool_calls(
+    tool_calls_json: Option<&str>,
+    blocks_json: Option<&str>,
+) -> Vec<(String, String)> {
+    let mut out: Vec<(String, String)> = Vec::new();
+    if let Some(json) = tool_calls_json {
+        if let Ok(items) = serde_json::from_str::<Vec<serde_json::Value>>(json) {
+            for item in items {
+                let id = item
+                    .get("id")
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_string);
+                let name = item
+                    .get("name")
+                    .or_else(|| item.get("toolName"))
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_string);
+                if let (Some(id), Some(name)) = (id, name) {
+                    out.push((id, name));
+                }
+            }
+        }
+    }
+    if let Some(json) = blocks_json {
+        if let Ok(blocks) = serde_json::from_str::<Vec<conex_types::AgentMessageBlock>>(json) {
+            for b in blocks {
+                if let conex_types::AgentMessageBlock::ToolCall(call) = b {
+                    out.push((call.id, call.tool_name));
+                }
+            }
+        }
+    }
+    out
+}
+
+/// 从 tool_call_results_json 提取已带结果的 call_id 集合（消息级已收口）。
+///
+/// 条目形状 `[{id|toolCallId, ...}]`；坏条目跳过。
+fn extract_resolved_call_ids(tool_call_results_json: Option<&str>) -> HashSet<String> {
+    let mut out = HashSet::new();
+    let Some(json) = tool_call_results_json else {
+        return out;
+    };
+    if let Ok(items) = serde_json::from_str::<Vec<serde_json::Value>>(json) {
+        for item in items {
+            if let Some(id) = item
+                .get("id")
+                .or_else(|| item.get("toolCallId"))
+                .and_then(serde_json::Value::as_str)
+            {
+                out.insert(id.to_string());
+            }
+        }
+    }
+    out
+}
+
+/// 从 message-end 事件 payload 提取声明的工具调用与归属 run。
+///
+/// payload 为 AgentEventEnvelope 扁平 JSON（含 type=message-end 与 message
+/// 全文）；解析失败返回空。
+fn extract_declared_from_message_end(payload: &str, run_id: Option<String>) -> Vec<(String, String, Option<String>)> {
+    let Ok(v) = serde_json::from_str::<serde_json::Value>(payload) else {
+        return Vec::new();
+    };
+    // 信封扁平形态：message 直接在顶层
+    let Some(msg) = v.get("message") else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    // blocks[] 中的 tool-call 块
+    if let Some(blocks) = msg.get("blocks").and_then(|b| b.as_array()) {
+        for b in blocks {
+            if b.get("type").and_then(serde_json::Value::as_str) == Some("tool-call") {
+                let id = b.get("id").and_then(serde_json::Value::as_str);
+                let name = b.get("toolName").and_then(serde_json::Value::as_str);
+                if let (Some(id), Some(name)) = (id, name) {
+                    out.push((id.to_string(), name.to_string(), run_id.clone()));
+                }
+            }
+        }
+    }
+    out
+}
+
 /// 冷启动孤儿工具自愈引擎（04 §5）。
 ///
-/// 探测：ToolStart 无 ToolEnd 的悬挂调用 → CAS 幂等补齐 ToolEnd
-/// （载荷 `ToolOutcomeUnknown`）。
+/// 探测两类悬挂调用并 CAS 幂等补齐（载荷 `ToolOutcomeUnknown`）：
+/// 1. **仅缺 ToolEnd**（ToolStart 已存在）：只补 ToolEnd（既有路径）；
+/// 2. **连 ToolStart 都缺**（Assistant 声明 tool_calls 但 events 无
+///    tool-start，04 §5.2 / D-3）：先合成 ToolStart 再追加 ToolEnd，
+///    保证事件包络严格成对。
+///
+/// 声明源（只读，不改 session_messages）：
+/// - `as_local_db().load_session_body`（生产 LocalDb；InMemory 替身为 None 时
+///   跳过）→ `tool_calls_json` / `blocks_json`；
+/// - 回退：events 中 `message-end` 载荷的 blocks（tests / 无 LocalDb 面）。
+///
+/// 消息级已有 `tool_call_results_json` 条目的 call_id 视为已收口，跳过
+/// （02 契约补丁：禁止对已终态 call_id 重复合成）。
+///
 /// **租约口径**：Store 抽象层无 LocalDb 租约 API；多实例互斥优先由宿主在
 /// 调 `restore` 前获取 `LocalDb::try_acquire_recovery_lease`（conex-db 已落地），
 /// 本函数对任意 Store 保持 CAS 幂等（04 §6.3 防线二）。
@@ -482,11 +590,16 @@ async fn heal_orphaned_tool_calls(
     let mut healed = Vec::new();
     for session in sessions {
         let session_id = session.session_id.clone();
-        // 会话级拉齐 tool-start / tool-end（一次 query_events，内存分类）
+        // 会话级拉齐 tool-start / tool-end / message-end（一次 query_events）
         let events = store.query_events(&session_id, 0, None).await?;
         let mut started: HashMap<String, (Option<String>, Option<String>)> = HashMap::new();
         // call_id → (tool_name, run_id)
         let mut ended: HashSet<String> = HashSet::new();
+        // 声明集（消息侧）：call_id → (tool_name, run_id)
+        let mut declared: HashMap<String, (String, Option<String>)> = HashMap::new();
+        // 消息级已收口（tool_call_results_json）：跳过合成
+        let mut message_resolved: HashSet<String> = HashSet::new();
+
         for e in &events {
             if e.event_type == "tool-start" {
                 if let Some(call_id) = extract_call_id(&e.payload, true) {
@@ -497,108 +610,230 @@ async fn heal_orphaned_tool_calls(
                 if let Some(call_id) = extract_call_id(&e.payload, false) {
                     ended.insert(call_id);
                 }
+            } else if e.event_type == "message-end" {
+                for (id, name, run_id) in extract_declared_from_message_end(&e.payload, e.run_id.clone()) {
+                    declared.insert(id, (name, run_id));
+                }
             }
         }
 
-        // 孤儿集 = ToolStart \ ToolEnd
-        let mut orphan_ids: Vec<&String> =
-            started.keys().filter(|id| !ended.contains(*id)).collect();
-        orphan_ids.sort(); // 确定性顺序（测试可断言）
-        for call_id in orphan_ids {
-            let (tool_name, run_id) = started[call_id].clone();
-            let tool_name = tool_name.unwrap_or_else(|| "unknown".to_string());
-
-            // CAS 存在性排查（04 §6.3 防线二）：重查 tool-end 是否已存在
-            // （防并发/重复恢复窗口）。存在 → 幂等放弃。
-            // 已在会话级 events 快照中分类完毕——若 orphan_ids 排除逻辑
-            // 正确则此处 ended 不含 call_id；但为防自愈窗口内另一实例已
-            // 追加，再做一次会话级重查（读侧幂等，代价可接受）。
-            let recheck = store.query_events(&session_id, 0, None).await?;
-            let already_healed = recheck
-                .iter()
-                .filter(|e| e.event_type == "tool-end")
-                .any(|e| extract_call_id(&e.payload, false).as_deref() == Some(call_id.as_str()));
-            if already_healed {
-                tracing::debug!(
-                    target: "restore",
-                    session_id = %session_id,
-                    call_id = %call_id,
-                    "孤儿工具自愈 CAS 命中已存在 tool-end，幂等放弃"
-                );
-                continue;
+        // 首选：session_messages 物化视图（as_local_db 下转；InMemory 跳过）
+        if let Some(db) = store.as_local_db() {
+            if let Ok(messages) = db.load_session_body(&session_id) {
+                for m in &messages {
+                    if m.sender != "assistant" {
+                        continue;
+                    }
+                    for (id, name) in extract_declared_tool_calls(
+                        m.tool_calls_json.as_deref(),
+                        m.blocks_json.as_deref(),
+                    ) {
+                        // 已有 run_id（来自 message-end）优先保留；无则 None
+                        declared
+                            .entry(id)
+                            .and_modify(|slot| slot.0 = name.clone())
+                            .or_insert((name, None));
+                    }
+                    message_resolved.extend(extract_resolved_call_ids(
+                        m.tool_call_results_json.as_deref(),
+                    ));
+                }
             }
+        }
 
-            let healed_at = now_ms();
-            let batch_id = format!(
-                "healed-batch-{}",
-                run_id.as_deref().unwrap_or("unknown")
-            );
+        // 孤儿集 A：ToolStart \ ToolEnd（仅补 ToolEnd）
+        let mut orphans_end_only: Vec<String> = started
+            .keys()
+            .filter(|id| !ended.contains(*id))
+            .cloned()
+            .collect();
+        orphans_end_only.sort(); // 确定性顺序（测试可断言）
 
-            // 序列分配：reserve_sequence 原子取号（会话内单调）
-            let seq_start = store.reserve_sequence(&session_id).await?;
+        // 孤儿集 B：声明 \ ToolStart \ ToolEnd（补全包络 ToolStart+ToolEnd）
+        // 跳过消息级已有结果的 call_id（02 幂等闸）
+        let mut orphans_full: Vec<String> = declared
+            .keys()
+            .filter(|id| {
+                !started.contains_key(*id)
+                    && !ended.contains(*id)
+                    && !message_resolved.contains(*id)
+            })
+            .cloned()
+            .collect();
+        orphans_full.sort();
 
-            // 补齐 ToolEnd（ToolOutcomeUnknown）
-            let tool_end = AgentEvent::ToolEnd {
-                session_id: session_id.clone(),
-                batch_id: batch_id.clone(),
-                result: conex_types::ToolBatchResult {
-                    id: call_id.clone(),
-                    tool_name: tool_name.clone(),
-                    output: conex_types::ToolOutput {
-                        text: Some(
-                            "Execution outcome unknown: daemon or host process terminated \
-                             abnormally before tool completion."
-                                .to_string(),
-                        ),
-                        json: Some(serde_json::json!({
-                            "code": "ToolOutcomeUnknown",
-                            "reason": "process-crash-interrupted",
-                            "orphanCallId": call_id,
-                            "healedAt": chrono_like_iso8601(healed_at),
-                        })),
-                        artifacts: None,
-                    },
-                    is_error: true,
-                    duration_ms: 0,
-                },
-                timestamp: chrono_like_iso8601(healed_at),
-                attempt: Some(1),
-                deduplicated: None,
-                executed_input: None,
-            };
-            let payload = serde_json::to_string(&tool_end)
-                .map_err(|e| RestoreError::new("serialize_tool_end", e.to_string()))?;
-            store
-                .append_event(
-                    &session_id,
-                    seq_start,
-                    "tool-end",
-                    &payload,
-                    run_id.as_deref(),
-                )
-                .await?;
-            // reserve_sequence 已推进会话计数器（下次取号 = seq_start+1），
-            // 无需额外 seed
+        // 先处理仅缺 ToolEnd（既有路径语义不变），再处理全包络
+        for call_id in orphans_end_only {
+            let (tool_name, run_id) = started[&call_id].clone();
+            let tool_name = tool_name.unwrap_or_else(|| "unknown".to_string());
+            if let Some((healed_at, _)) = heal_one_orphan(
+                store,
+                &session_id,
+                &call_id,
+                &tool_name,
+                run_id.as_deref(),
+                None,
+                false,
+            )
+            .await?
+            {
+                healed.push(HealedToolRecord {
+                    session_id: session_id.clone(),
+                    run_id,
+                    call_id,
+                    tool_name,
+                    synthesized_tool_start: false,
+                    healed_at,
+                });
+            }
+        }
 
-            tracing::info!(
-                target: "restore",
-                session_id = %session_id,
-                call_id = %call_id,
-                tool_name = %tool_name,
-                "冷启动孤儿工具自愈：补齐 ToolEnd（ToolOutcomeUnknown）"
-            );
-
-            healed.push(HealedToolRecord {
-                session_id: session_id.clone(),
-                run_id,
-                call_id: call_id.clone(),
-                tool_name,
-                synthesized_tool_start: false, // ToolStart 已存在，仅补 ToolEnd
-                healed_at,
-            });
+        for call_id in orphans_full {
+            let (tool_name, run_id) = declared[&call_id].clone();
+            if let Some((healed_at, synthesized_start)) = heal_one_orphan(
+                store,
+                &session_id,
+                &call_id,
+                &tool_name,
+                run_id.as_deref(),
+                Some(serde_json::Value::Object(serde_json::Map::new())),
+                true,
+            )
+            .await?
+            {
+                healed.push(HealedToolRecord {
+                    session_id: session_id.clone(),
+                    run_id,
+                    call_id,
+                    tool_name,
+                    synthesized_tool_start: synthesized_start,
+                    healed_at,
+                });
+            }
         }
     }
     Ok(healed)
+}
+
+/// 单孤儿 CAS 幂等补齐（04 §5.2-5.3 / §6.3 防线二）。
+///
+/// `need_tool_start = true` 时先 CAS 检查并合成 ToolStart，再补 ToolEnd。
+/// `input` 为合成 ToolStart 的入参（None = 空对象）。
+/// 返回 `Some((healed_at_ms, synthesized_start))` 表示实际写入 ToolEnd；
+/// `None` = CAS 幂等放弃。
+#[allow(clippy::too_many_arguments)]
+async fn heal_one_orphan(
+    store: &dyn Store,
+    session_id: &str,
+    call_id: &str,
+    tool_name: &str,
+    run_id: Option<&str>,
+    input: Option<serde_json::Value>,
+    need_tool_start: bool,
+) -> Result<Option<(i64, bool)>, RestoreError> {
+    // CAS 存在性排查（04 §6.3 防线二）：重查 tool-end 是否已存在
+    // （防并发/重复恢复窗口）。存在 → 幂等放弃。
+    let recheck = store.query_events(session_id, 0, None).await?;
+    let already_healed = recheck
+        .iter()
+        .filter(|e| e.event_type == "tool-end")
+        .any(|e| extract_call_id(&e.payload, false).as_deref() == Some(call_id));
+    if already_healed {
+        tracing::debug!(
+            target: "restore",
+            session_id = %session_id,
+            call_id = %call_id,
+            "孤儿工具自愈 CAS 命中已存在 tool-end，幂等放弃"
+        );
+        return Ok(None);
+    }
+
+    // 全包络路径：若 ToolStart 仍缺失则先合成
+    let has_tool_start = recheck
+        .iter()
+        .filter(|e| e.event_type == "tool-start")
+        .any(|e| extract_call_id(&e.payload, true).as_deref() == Some(call_id));
+    let mut synthesized_start = false;
+    if need_tool_start && !has_tool_start {
+        let healed_at = now_ms();
+        let batch_id = format!("healed-batch-{}", run_id.unwrap_or("unknown"));
+        let seq = store.reserve_sequence(session_id).await?;
+        let tool_start = AgentEvent::ToolStart {
+            session_id: session_id.to_string(),
+            batch_id,
+            call: conex_types::ToolBatchCall {
+                id: call_id.to_string(),
+                tool_name: tool_name.to_string(),
+                summary: "Synthesized tool start during crash recovery".to_string(),
+                input: input.unwrap_or(serde_json::json!({})),
+                category: conex_types::ToolCategory::Internal,
+                concurrency: conex_types::ToolConcurrency::Sequential,
+            },
+            timestamp: chrono_like_iso8601(healed_at),
+            turn_index: None,
+        };
+        let payload = serde_json::to_string(&tool_start)
+            .map_err(|e| RestoreError::new("serialize_tool_start", e.to_string()))?;
+        store
+            .append_event(session_id, seq, "tool-start", &payload, run_id)
+            .await?;
+        synthesized_start = true;
+        tracing::info!(
+            target: "restore",
+            session_id = %session_id,
+            call_id = %call_id,
+            tool_name = %tool_name,
+            "冷启动孤儿工具自愈：合成 ToolStart（全包络）"
+        );
+    }
+
+    // 补齐 ToolEnd（ToolOutcomeUnknown）——统一尾步
+    let healed_at = now_ms();
+    let batch_id = format!("healed-batch-{}", run_id.unwrap_or("unknown"));
+    let seq = store.reserve_sequence(session_id).await?;
+    let tool_end = AgentEvent::ToolEnd {
+        session_id: session_id.to_string(),
+        batch_id,
+        result: conex_types::ToolBatchResult {
+            id: call_id.to_string(),
+            tool_name: tool_name.to_string(),
+            output: conex_types::ToolOutput {
+                text: Some(
+                    "Execution outcome unknown: daemon or host process terminated \
+                     abnormally before tool completion."
+                        .to_string(),
+                ),
+                json: Some(serde_json::json!({
+                    "code": "ToolOutcomeUnknown",
+                    "reason": "process-crash-interrupted",
+                    "orphanCallId": call_id,
+                    "healedAt": chrono_like_iso8601(healed_at),
+                })),
+                artifacts: None,
+            },
+            is_error: true,
+            duration_ms: 0,
+        },
+        timestamp: chrono_like_iso8601(healed_at),
+        attempt: Some(1),
+        deduplicated: None,
+        executed_input: None,
+    };
+    let payload = serde_json::to_string(&tool_end)
+        .map_err(|e| RestoreError::new("serialize_tool_end", e.to_string()))?;
+    store
+        .append_event(session_id, seq, "tool-end", &payload, run_id)
+        .await?;
+
+    tracing::info!(
+        target: "restore",
+        session_id = %session_id,
+        call_id = %call_id,
+        tool_name = %tool_name,
+        synthesized_tool_start = synthesized_start,
+        "冷启动孤儿工具自愈：补齐 ToolEnd（ToolOutcomeUnknown）"
+    );
+    Ok(Some((healed_at, synthesized_start)))
 }
 
 /// epoch ms → UTC ISO8601（轻量格式化，避免引入 chrono）。

@@ -36,9 +36,10 @@ use async_trait::async_trait;
 use conex_db::{LocalDb, PendingInput, RunStatus, StoredRun};
 use conex_test_utils::TempWorkspace;
 use conex_types::error::ProviderErrorKind;
-use conex_types::events::RunTerminalStatus;
+use conex_types::events::{AgentEvent, RunTerminalStatus};
+use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole, ToolCallBlock};
 use conex_types::session::AgentEndReason;
-use conex_types::SessionAgent;
+use conex_types::{SessionAgent, SessionMessage};
 use orchestrator::events::{drive_outcome, EventQueue};
 use orchestrator::flow_graph::{
     FlowDeclaration, FlowNode, FlowNodeState, FlowReportKind, FlowScheduler, FLOW_RELEASED_KEY,
@@ -1477,4 +1478,436 @@ async fn run_events_attribution_contract_goal_excluded_tail_included() {
         ],
         "按会话查询含全部三类（run 收尾区 + 轮次域 + 会话域），sequence 升序"
     );
+}
+
+// ── 04 §5 / D-3：孤儿工具全包络自愈（ToolStart 缺失补齐 + 仅缺 ToolEnd） ──
+
+/// 构造 message-end 事件 payload（AgentEventEnvelope 扁平形态，含
+/// tool-call blocks），模拟 Assistant 声明 tool_calls 已落 events。
+fn message_end_with_tool_calls(session: &str, calls: &[(&str, &str)]) -> String {
+    let blocks: Vec<AgentMessageBlock> = calls
+        .iter()
+        .map(|(id, name)| {
+            AgentMessageBlock::ToolCall(ToolCallBlock {
+                id: id.to_string(),
+                tool_name: name.to_string(),
+                input: serde_json::json!({}),
+            })
+        })
+        .collect();
+    let event = AgentEvent::MessageEnd {
+        session_id: session.to_string(),
+        message: std::sync::Arc::new(AgentMessage {
+            id: "m-assist-1".to_string(),
+            role: AgentMessageRole::Assistant,
+            created_at: "2026-09-12T00:00:00.000Z".to_string(),
+            blocks,
+            metadata: None,
+            client_message_id: None,
+            content: None,
+        }),
+        turn_index: None,
+    };
+    serde_json::to_string(&event).unwrap()
+}
+
+/// 构造 tool-start 事件 payload（AgentEvent 扁平形态）
+fn tool_start_payload(session: &str, call_id: &str, tool_name: &str) -> String {
+    let event = AgentEvent::ToolStart {
+        session_id: session.to_string(),
+        batch_id: "b1".to_string(),
+        call: conex_types::ToolBatchCall {
+            id: call_id.to_string(),
+            tool_name: tool_name.to_string(),
+            summary: "run".to_string(),
+            input: serde_json::json!({}),
+            category: conex_types::ToolCategory::Internal,
+            concurrency: conex_types::ToolConcurrency::Sequential,
+        },
+        timestamp: "2026-09-12T00:00:00.000Z".to_string(),
+        turn_index: None,
+    };
+    serde_json::to_string(&event).unwrap()
+}
+
+/// D-3 全包络场景：Assistant 经 message-end 声明 tool_calls，events 连
+/// ToolStart 都无 → 恢复后补齐 ToolStart + ToolEnd（TOOL_OUTCOME_UNKNOWN），
+/// 且幂等（二次恢复不再合成）。
+#[tokio::test]
+async fn restore_heals_full_envelope_when_tool_start_missing() {
+    let (mem, store) = setup();
+    store
+        .insert_run("r1", "s1", RunStatus::Running, None, 0)
+        .await
+        .unwrap();
+    // 崩溃现场：仅 message-end（Assistant 声明 c1），无 tool-start / tool-end
+    store
+        .append_event(
+            "s1",
+            1,
+            "message-end",
+            &message_end_with_tool_calls("s1", &[("c1", "read_file")]),
+            Some("r1"),
+        )
+        .await
+        .unwrap();
+
+    let outcome = RestoreManager::new()
+        .restore(store.as_ref(), &NoSnapshots)
+        .await
+        .unwrap();
+
+    // 全包络补齐记录
+    assert_eq!(
+        outcome.healed_orphan_tools.len(),
+        1,
+        "全包络孤儿恰好自愈一条：{:?}",
+        outcome.healed_orphan_tools
+    );
+    let rec = &outcome.healed_orphan_tools[0];
+    assert_eq!(rec.call_id, "c1");
+    assert_eq!(rec.tool_name, "read_file");
+    assert!(rec.synthesized_tool_start, "连 ToolStart 都缺 → 合成");
+    assert_eq!(rec.run_id.as_deref(), Some("r1"));
+
+    // events 物理包络：tool-start 与 tool-end 各恰一条，call.id 对齐
+    let events = mem.events();
+    let starts: Vec<_> = events
+        .iter()
+        .filter(|e| e.event_type == "tool-start")
+        .collect();
+    let ends: Vec<_> = events
+        .iter()
+        .filter(|e| e.event_type == "tool-end")
+        .collect();
+    assert_eq!(starts.len(), 1, "补齐一条 tool-start");
+    assert_eq!(ends.len(), 1, "补齐一条 tool-end");
+    assert!(
+        ends[0].payload.contains("ToolOutcomeUnknown"),
+        "tool-end 载荷含 ToolOutcomeUnknown"
+    );
+    assert!(
+        ends[0].payload.contains("\"id\":\"c1\"") || ends[0].payload.contains("\"id\": \"c1\""),
+        "tool-end result.id = c1"
+    );
+
+    // 幂等：二次恢复不再合成（CAS 命中已存在 tool-end）
+    let again = RestoreManager::new()
+        .restore(store.as_ref(), &NoSnapshots)
+        .await
+        .unwrap();
+    assert!(
+        again.healed_orphan_tools.is_empty(),
+        "二次恢复幂等：{:?}",
+        again.healed_orphan_tools
+    );
+    let ends_after = mem
+        .events()
+        .iter()
+        .filter(|e| e.event_type == "tool-end")
+        .count();
+    assert_eq!(ends_after, 1, "tool-end 不重复追加");
+}
+
+/// D-3 仅缺 ToolEnd 既有路径：ToolStart 已存在 → 只补 ToolEnd，
+/// synthesized_tool_start=false。
+#[tokio::test]
+async fn restore_heals_tool_end_only_when_tool_start_exists() {
+    let (mem, store) = setup();
+    store
+        .insert_run("r1", "s1", RunStatus::Running, None, 0)
+        .await
+        .unwrap();
+    // 崩溃现场：tool-start 已落，tool-end 缺失
+    store
+        .append_event(
+            "s1",
+            1,
+            "tool-start",
+            &tool_start_payload("s1", "c2", "write_file"),
+            Some("r1"),
+        )
+        .await
+        .unwrap();
+
+    let outcome = RestoreManager::new()
+        .restore(store.as_ref(), &NoSnapshots)
+        .await
+        .unwrap();
+
+    assert_eq!(outcome.healed_orphan_tools.len(), 1);
+    let rec = &outcome.healed_orphan_tools[0];
+    assert_eq!(rec.call_id, "c2");
+    assert!(!rec.synthesized_tool_start, "ToolStart 已存在，仅补 ToolEnd");
+
+    // 不额外合成 tool-start
+    let starts = mem
+        .events()
+        .iter()
+        .filter(|e| e.event_type == "tool-start")
+        .count();
+    assert_eq!(starts, 1, "不再合成第二条 tool-start");
+    let ends = mem
+        .events()
+        .iter()
+        .filter(|e| e.event_type == "tool-end")
+        .count();
+    assert_eq!(ends, 1, "补齐 tool-end");
+}
+
+/// 全包络混合场景：c_missing 连 ToolStart 都缺（message-end 声明）、
+/// c_endonly 仅缺 ToolEnd、c_ok 包络完整——恢复后恰好补齐两条孤儿，
+/// 完整对不误伤。
+#[tokio::test]
+async fn restore_heals_mixed_orphan_and_complete_envelopes() {
+    let (mem, store) = setup();
+    store
+        .insert_run("r1", "s1", RunStatus::Running, None, 0)
+        .await
+        .unwrap();
+    // c_missing：message-end 声明，无任何 tool 事件
+    // c_endonly：tool-start 有，tool-end 无
+    // c_ok：tool-start + tool-end 完整
+    store
+        .append_event(
+            "s1",
+            1,
+            "message-end",
+            &message_end_with_tool_calls(
+                "s1",
+                &[("c_missing", "search"), ("c_endonly", "shell"), ("c_ok", "read")],
+            ),
+            Some("r1"),
+        )
+        .await
+        .unwrap();
+    store
+        .append_event(
+            "s1",
+            2,
+            "tool-start",
+            &tool_start_payload("s1", "c_endonly", "shell"),
+            Some("r1"),
+        )
+        .await
+        .unwrap();
+    store
+        .append_event(
+            "s1",
+            3,
+            "tool-start",
+            &tool_start_payload("s1", "c_ok", "read"),
+            Some("r1"),
+        )
+        .await
+        .unwrap();
+    store
+        .append_event(
+            "s1",
+            4,
+            "tool-end",
+            r#"{"type":"tool-end","sessionId":"s1","batchId":"b1","result":{"id":"c_ok","toolName":"read","output":{"text":"done"},"isError":false,"durationMs":1},"timestamp":"2026-09-12T00:00:00.000Z"}"#,
+            Some("r1"),
+        )
+        .await
+        .unwrap();
+
+    let outcome = RestoreManager::new()
+        .restore(store.as_ref(), &NoSnapshots)
+        .await
+        .unwrap();
+
+    let mut healed_ids: Vec<&str> = outcome
+        .healed_orphan_tools
+        .iter()
+        .map(|r| r.call_id.as_str())
+        .collect();
+    healed_ids.sort();
+    assert_eq!(
+        healed_ids,
+        vec!["c_endonly", "c_missing"],
+        "恰好两条孤儿；c_ok 完整不误伤：{:?}",
+        outcome.healed_orphan_tools
+    );
+    let by_id: HashMap<&str, bool> = outcome
+        .healed_orphan_tools
+        .iter()
+        .map(|r| (r.call_id.as_str(), r.synthesized_tool_start))
+        .collect();
+    assert!(by_id["c_missing"], "连 ToolStart 都缺 → 合成 start");
+    assert!(!by_id["c_endonly"], "仅缺 ToolEnd → 不合成 start");
+
+    // 每个孤儿 call 的 tool-start / tool-end 成对（全包络不变量）
+    let events = mem.events();
+    for call_id in ["c_missing", "c_endonly", "c_ok"] {
+        let s = events
+            .iter()
+            .filter(|e| e.event_type == "tool-start" && e.payload.contains(call_id))
+            .count();
+        let t = events
+            .iter()
+            .filter(|e| e.event_type == "tool-end" && e.payload.contains(call_id))
+            .count();
+        assert_eq!(s, 1, "{call_id} 恰一条 tool-start");
+        assert_eq!(t, 1, "{call_id} 恰一条 tool-end");
+    }
+}
+
+/// LocalDb 全包络：session_messages 物化视图携带 tool_calls_json 声明，
+/// events 无 tool-start → 恢复后经 as_local_db 读声明并补齐双事件。
+#[tokio::test]
+async fn restore_heals_full_envelope_from_session_messages_localdb() {
+    let dir = std::env::temp_dir().join(format!(
+        "conex_crash_heal_msg_{}_{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis()
+    ));
+    std::fs::create_dir_all(&dir).unwrap();
+    let db_path = dir.join("sessions.db");
+
+    // 阶段一：写入 session_messages（Assistant 声明 c_msg）+ in-flight run
+    {
+        let db = LocalDb::open(&db_path).unwrap();
+        db.insert_session("s1", "s1").unwrap();
+        db.save_session_body(
+            "s1",
+            &[SessionMessage {
+                id: "m1".to_string(),
+                sender: "assistant".to_string(),
+                text: None,
+                thinking: None,
+                timestamp: 1_700_000_000_000,
+                status: None,
+                stream_text_offset: None,
+                thinking_time: None,
+                tool_calls_json: Some(
+                    r#"[{"id":"c_msg","name":"read_file","arguments":"{}"}]"#.to_string(),
+                ),
+                blocks_json: None,
+                tool_call_results_json: None,
+                usage: None,
+            }],
+        )
+        .unwrap();
+        let store = LocalDbStore::new(db);
+        store
+            .insert_run("r1", "s1", RunStatus::Running, None, 0)
+            .await
+            .unwrap();
+        // events 完全无 tool-start（崩溃于工具调度前）
+    }
+
+    // 阶段二：重启恢复
+    let db = LocalDb::open(&db_path).unwrap();
+    let store = LocalDbStore::new(db);
+    let outcome = RestoreManager::new()
+        .restore(&store, &NoSnapshots)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        outcome.healed_orphan_tools.len(),
+        1,
+        "session_messages 声明驱动全包络自愈：{:?}",
+        outcome.healed_orphan_tools
+    );
+    let rec = &outcome.healed_orphan_tools[0];
+    assert_eq!(rec.call_id, "c_msg");
+    assert_eq!(rec.tool_name, "read_file");
+    assert!(rec.synthesized_tool_start);
+
+    // events 物理包络成对
+    let events = store.query_events("s1", 0, None).await.unwrap();
+    let starts = events
+        .iter()
+        .filter(|e| e.event_type == "tool-start")
+        .count();
+    let ends = events
+        .iter()
+        .filter(|e| e.event_type == "tool-end")
+        .count();
+    assert_eq!(starts, 1, "补齐 tool-start");
+    assert_eq!(ends, 1, "补齐 tool-end");
+
+    // 幂等二次恢复
+    let again = RestoreManager::new()
+        .restore(&store, &NoSnapshots)
+        .await
+        .unwrap();
+    assert!(again.healed_orphan_tools.is_empty(), "二次恢复幂等");
+
+    drop(store);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// 消息级已有 tool_call_results_json → 跳过合成（02 幂等闸：已终态
+/// call_id 禁止再发 ToolStart/ToolEnd）。
+#[tokio::test]
+async fn restore_skips_declared_call_with_message_level_result() {
+    let dir = std::env::temp_dir().join(format!(
+        "conex_crash_heal_res_{}_{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis()
+    ));
+    std::fs::create_dir_all(&dir).unwrap();
+    let db_path = dir.join("sessions.db");
+
+    {
+        let db = LocalDb::open(&db_path).unwrap();
+        db.insert_session("s1", "s1").unwrap();
+        db.save_session_body(
+            "s1",
+            &[SessionMessage {
+                id: "m1".to_string(),
+                sender: "assistant".to_string(),
+                text: None,
+                thinking: None,
+                timestamp: 1_700_000_000_000,
+                status: None,
+                stream_text_offset: None,
+                thinking_time: None,
+                tool_calls_json: Some(r#"[{"id":"c_done","name":"read_file","arguments":"{}"}]"#.to_string()),
+                blocks_json: None,
+                tool_call_results_json: Some(r#"[{"id":"c_done","output":"ok","isError":false}]"#.to_string()),
+                usage: None,
+            }],
+        )
+        .unwrap();
+        let store = LocalDbStore::new(db);
+        store
+            .insert_run("r1", "s1", RunStatus::Running, None, 0)
+            .await
+            .unwrap();
+    }
+
+    let db = LocalDb::open(&db_path).unwrap();
+    let store = LocalDbStore::new(db);
+    let outcome = RestoreManager::new()
+        .restore(&store, &NoSnapshots)
+        .await
+        .unwrap();
+
+    assert!(
+        outcome.healed_orphan_tools.is_empty(),
+        "消息级已有结果的 call 不合成：{:?}",
+        outcome.healed_orphan_tools
+    );
+    let events = store.query_events("s1", 0, None).await.unwrap();
+    assert!(
+        !events.iter().any(|e| e.event_type == "tool-start"),
+        "不合成 tool-start"
+    );
+    assert!(
+        !events.iter().any(|e| e.event_type == "tool-end"),
+        "不合成 tool-end"
+    );
+
+    drop(store);
+    let _ = std::fs::remove_dir_all(&dir);
 }
