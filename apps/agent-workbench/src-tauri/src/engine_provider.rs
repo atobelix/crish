@@ -38,10 +38,11 @@ use agent_provider::models::{
 };
 use agent_provider::request::{
     build_anthropic_request_body, build_chat_completions_request_body, build_gemini_request_body,
-    build_responses_request_body, ensure_outbound_modalities, validate_gemini_tool_pairing,
-    AnthropicRequestOptions, BreakpointPlan, CacheMechanism, CachePolicy, CacheRetention,
-    ChatCompletionsRequestOptions, GeminiRequestOptions, RequestBuildContext,
-    ToolDefinition as WireToolDefinition, TtlBucket, WireProtocol,
+    build_responses_request_body, ensure_outbound_modalities, validate_anthropic_pairing_from_context,
+    validate_chat_pairing_from_messages, validate_gemini_tool_pairing, AnthropicRequestOptions,
+    BreakpointPlan, CacheMechanism, CachePolicy, CacheRetention, ChatCompletionsRequestOptions,
+    GeminiRequestOptions, RequestBuildContext, ToolDefinition as WireToolDefinition, TtlBucket,
+    WireProtocol,
 };
 #[cfg(test)]
 use agent_provider::request::ReasoningContentMode;
@@ -235,11 +236,11 @@ impl HttpProviderCall {
     /// （plans/04 §3.1：四条出站都走 `assemble_thinking_dialect`）。
     /// `profile` 由调用方传入单次查询结果，禁止本函数内再查。
     ///
-    /// **Release 成对性闭环（详案 02 §3.4 契约补丁第 4 条）**：gemini 轨在
-    /// build 前优先调用 [validate_gemini_tool_pairing]；Release 下捕获
+    /// **Release 成对性闭环（详案 02 §3.4 契约补丁第 4 条）**：Anthropic / Chat /
+    /// Gemini 轨在 build 前优先做 context 级预检；Release 下捕获
     /// `UnpairedToolCalls` → `tracing::error!` 记录 orphan_ids 后优雅返回
     /// `Err`（**不在此层伪造** tool 结果，也**不 panic**）。Debug 下 validate
-    /// 对孤儿立即 panic（Fail-Fast，与 Anthropic/Chat 轨同构）。
+    /// 对孤儿立即 panic（Fail-Fast）。
     pub(crate) fn request_body_for(
         &self,
         protocol: WireProtocol,
@@ -249,6 +250,21 @@ impl HttpProviderCall {
         let context = self.build_context(request);
         match protocol {
             WireProtocol::Anthropic => {
+                if let Err(err) = validate_anthropic_pairing_from_context(&context) {
+                    tracing::error!(
+                        target: "agent_provider::wire_pairing",
+                        protocol = "anthropic",
+                        error = %err,
+                        orphan_ids = ?err.orphan_ids(),
+                        "engine_provider 出站前置校验拦截：拒绝构造带毒请求体（不伪造，不 panic）"
+                    );
+                    return Err(ClassifiedStreamError {
+                        kind: ProviderErrorKind::InvalidRequest,
+                        message: format!("anthropic wire pairing poisoned: {}", err),
+                        retryable: false,
+                        retry_after_ms: None,
+                    });
+                }
                 let options = AnthropicRequestOptions {
                     model: Some(self.config.model.clone()),
                     stream: Some(self.config.stream),
@@ -290,6 +306,24 @@ impl HttpProviderCall {
                 Ok(build_gemini_request_body(&options, &context))
             }
             WireProtocol::Chat => {
+                if let Err(err) = validate_chat_pairing_from_messages(
+                    context.system_prompt.as_deref(),
+                    context.messages,
+                ) {
+                    tracing::error!(
+                        target: "agent_provider::wire_pairing",
+                        protocol = "openai_chat",
+                        error = %err,
+                        orphan_ids = ?err.orphan_ids(),
+                        "engine_provider 出站前置校验拦截：拒绝构造带毒请求体（不伪造，不 panic）"
+                    );
+                    return Err(ClassifiedStreamError {
+                        kind: ProviderErrorKind::InvalidRequest,
+                        message: format!("openai_chat wire pairing poisoned: {}", err),
+                        retryable: false,
+                        retry_after_ms: None,
+                    });
+                }
                 let options = self.request_options(request, profile);
                 Ok(build_chat_completions_request_body(&options, &context))
             }

@@ -271,6 +271,17 @@ pub fn validate_anthropic_tool_pairing(messages: &[Value]) -> Result<(), Request
     Ok(())
 }
 
+/// 出站前从 [RequestBuildContext] 直接成对性预检（不经过 build 入口 panic tripwire）。
+///
+/// Debug：孤儿 → panic（Fail-Fast）；Release：返回 `Err(UnpairedToolCalls)`。
+/// 供 engine_provider 在调用 `build_anthropic_request_body` 前软失败拦截。
+pub fn validate_anthropic_pairing_from_context(
+    context: &RequestBuildContext,
+) -> Result<(), RequestBuildError> {
+    let messages = to_anthropic_messages(context);
+    validate_anthropic_tool_pairing(&messages)
+}
+
 /// build 入口接线的 fail-closed 守门（Debug panic / Release error + 拒绝产出）。
 ///
 /// `build_anthropic_request_body` 返回签名保持 `Value`（既有 ~100 调用面零

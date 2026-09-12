@@ -44,8 +44,9 @@ pub use build::{
 };
 pub use build_anthropic::{
     anthropic_request_headers, build_anthropic_headers, build_anthropic_request_body,
-    detect_anthropic_unpaired_tool_calls, validate_anthropic_tool_pairing,
-    AnthropicRequestOptions, ANTHROPIC_VERSION, DEFAULT_ANTHROPIC_MAX_OUTPUT,
+    detect_anthropic_unpaired_tool_calls, validate_anthropic_pairing_from_context,
+    validate_anthropic_tool_pairing, AnthropicRequestOptions, ANTHROPIC_VERSION,
+    DEFAULT_ANTHROPIC_MAX_OUTPUT,
 };
 pub use build_gemini::{
     build_gemini_request_body, detect_gemini_unpaired_tool_calls, gemini_request_headers,
@@ -63,8 +64,9 @@ pub use compat::{empty_content_wire_value, resolve_developer_role, resolve_max_t
 pub use messages::{
     detect_chat_unpaired_tool_calls, ensure_content_modalities, ensure_outbound_modalities,
     stringify_tool_output, system_prompt_as_user_prefix, to_chat_messages,
-    to_chat_messages_with_compat, to_responses_input_items, validate_chat_tool_pairing,
-    ChatContent, ChatContentPart, ChatMessage, ReasoningContentMode, WireCompat,
+    to_chat_messages_with_compat, to_responses_input_items, validate_chat_pairing_from_messages,
+    validate_chat_tool_pairing, ChatContent, ChatContentPart, ChatMessage, ReasoningContentMode,
+    WireCompat,
 };
 pub use schema::{canonical_json_string, canonicalize_schema};
 pub use tools::{

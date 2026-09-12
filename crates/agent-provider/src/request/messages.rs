@@ -709,6 +709,23 @@ pub fn validate_chat_tool_pairing(messages: &[ChatMessage]) -> Result<(), Reques
     Ok(())
 }
 
+/// 从 AgentMessage 序列做 chat 轨成对性预检（tool_calls/tool 映射与推理模式无关）。
+///
+/// Debug：孤儿 → panic；Release：`Err(UnpairedToolCalls)`。供 engine_provider
+/// 在 build 前软失败拦截（不经过 build 入口 tripwire）。
+pub fn validate_chat_pairing_from_messages(
+    system_prompt: Option<&str>,
+    messages: &[std::sync::Arc<AgentMessage>],
+) -> Result<(), RequestBuildError> {
+    let wire = to_chat_messages(
+        system_prompt,
+        messages,
+        ReasoningContentMode::Omit,
+        SystemPromptWireMode::NativeSystemRole,
+    );
+    validate_chat_tool_pairing(&wire)
+}
+
 #[cfg(test)]
 #[path = "messages_tests.rs"]
 mod tests;
