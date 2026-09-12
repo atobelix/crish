@@ -11,6 +11,8 @@
  * 4. 其余一律 parseErr，由 EventRouter 显式登记 unknown-case（可观测，不静默吞）。
  *
  * resolveEventType 为纯信封类型抽取（type/event/kind 别名），供 onMsg 预过滤使用。
+ * parseResolvedEvent 为已解析信封的解析入口（D6.1）：调用方若已持有
+ * resolveEventType 结果，可直接传入避免二次 resolve。
  */
 import {
   parseEngineEvent,
@@ -58,10 +60,16 @@ export interface LegacyEnvelope {
 export type BridgeEventEnvelope =
   EngineEnvelope<EngineEventType> | LegacyEnvelope;
 
+/** resolveEventType 返回的已解析信封形状（D6.1 共享 envelope） */
+export interface ResolvedEventEnvelope {
+  type: string;
+  raw: Record<string, unknown>;
+}
+
 /** 纯信封类型抽取：type/event/kind 别名，trim 后返回；非对象/空 type 返回 null */
 export function resolveEventType(
   event: unknown
-): { type: string; raw: Record<string, unknown> } | null {
+): ResolvedEventEnvelope | null {
   if (!event || typeof event !== 'object' || Array.isArray(event)) return null;
   const raw = event as Record<string, unknown>;
   const type = String(raw.type ?? raw.event ?? raw.kind ?? '').trim();
@@ -84,14 +92,13 @@ function isLegacyEventType(type: string): type is LegacyEventType {
   return (LEGACY_EVENT_TYPES as readonly string[]).includes(type);
 }
 
-/** 单一解析入口：返回已收窄的分派信封；未知形态 parseErr（由调用方登记） */
-export function parseBridgeEvent(
-  input: unknown
+/**
+ * 单一解析入口（已解析信封版，D6.1）：入参为 resolveEventType 已产出的
+ * `{ type, raw }`，不再二次 resolve——dataPlaneRouter / EventRouter 共享此入口。
+ */
+export function parseResolvedEvent(
+  envelope: ResolvedEventEnvelope
 ): ParseResult<BridgeEventEnvelope> {
-  const envelope = resolveEventType(input);
-  if (!envelope) {
-    return parseErr('engine event is not an object or missing type');
-  }
   const raw = envelope.raw;
   const type = envelope.type;
 
@@ -125,4 +132,15 @@ export function parseBridgeEvent(
   }
 
   return parseErr(engine.error || `unknown engine event type '${type}'`);
+}
+
+/** 单一解析入口：返回已收窄的分派信封；未知形态 parseErr（由调用方登记） */
+export function parseBridgeEvent(
+  input: unknown
+): ParseResult<BridgeEventEnvelope> {
+  const envelope = resolveEventType(input);
+  if (!envelope) {
+    return parseErr('engine event is not an object or missing type');
+  }
+  return parseResolvedEvent(envelope);
 }

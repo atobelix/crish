@@ -2,14 +2,16 @@
  * 事件路由器 —— IPC 平铺事件经单一解析入口进 Record<EventType, Handler> 分派表（T7）。
  *
  * - onMsg 仅做信封预过滤（runId 归属；sequence 由引擎单通道保证，前端
- *   不校验——F5-12 收口删除游标死代码）后交给 parseBridgeEvent；
- * - parseBridgeEvent 为唯一解析入口：优先 T6 生成解析器 parseEngineEvent，
+ *   不校验——F5-12 收口删除游标死代码）后交给 parseResolvedEvent；
+ * - parseResolvedEvent 为唯一解析入口：优先 T6 生成解析器 parseEngineEvent，
  *   宽容形态（缺信封字段、text-delta / run-* 别名）在 handlers/eventParser 收敛；
  * - 分派走 handlers/dispatch 的 engineDispatchTable（41 键全覆盖）与
  *   legacyDispatchTable（subagent-* / error），handler 入参为具体事件信封类型；
  * - 复合因果 Key 去重矩阵（FIN-06 / DIM-02）：实时轨 message-delta 100% 直通放行，
  *   工具事件按 `${type}:${turn}:${toolId}` 隔离，因果时序缓冲 pendingToolEnds 防乱序到达；
  * - 消费侧 per-run 去重集合 consumedEvents 具备 2000 条上限的 FIFO 淘汰机制，防内存泄漏。
+ * - D6.1 单 parse：数据面事件（task / timer / cron-fired 族）在 resolveEventType 后
+ *   立即短路，不再进入 parseResolvedEvent——由 dataPlaneRouter 独立消费（恰 1 次 parse）。
  */
 import type { StreamCallbacks } from '../chatApi';
 import { logInternalError } from '../userFacingErrors';
@@ -18,7 +20,7 @@ import { ApprovalFlowMachine } from '../approvalFlowMachine';
 import { messageBelongsToRun } from './handlers/eventUtils';
 import { resolveEventType } from './handlers/eventType';
 import {
-  parseBridgeEvent,
+  parseResolvedEvent,
   type BridgeEventEnvelope,
 } from './handlers/eventParser';
 import { dispatchEvent } from './handlers/dispatch';
@@ -149,7 +151,6 @@ export class EventRouter {
   /** 主路径分派：入参为具体事件信封类型（engine 或 legacy），未知形态不达此方法 */
   handleAgentEvent(envelope: BridgeEventEnvelope): void {
     if (this.state.cancelled || this.state.finished) return;
-    if (isDataPlaneEventType(envelope.type)) return;
 
     // 维护当前活跃轮次
     if (envelope.type === 'turn-start') {
@@ -220,11 +221,18 @@ export class EventRouter {
     if (!envelope) return;
     const raw = envelope.raw;
 
+    // D6.1：数据面事件由 dataPlaneRouter 恒等消费恰 1 次 parse；
+    // per-run 路由器立即短路，禁止二次 parseResolvedEvent。
+    if (isDataPlaneEventType(envelope.type)) {
+      return;
+    }
+
     if (!messageBelongsToRun(raw.runId, this.runId)) return;
 
-    let parsed: ReturnType<typeof parseBridgeEvent>;
+    let parsed: ReturnType<typeof parseResolvedEvent>;
     try {
-      parsed = parseBridgeEvent(raw);
+      // 共享 envelope：不再 parseBridgeEvent(raw) 二次 resolve
+      parsed = parseResolvedEvent(envelope);
     } catch (e) {
       this.registerUnknownEvent(raw, 'parser threw: ' + String(e));
       return;

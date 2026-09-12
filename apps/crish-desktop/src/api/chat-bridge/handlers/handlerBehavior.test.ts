@@ -72,7 +72,8 @@ function makeEnv() {
   };
 }
 
-/** 锁定无副作用：全部回调、finish、tryResumeFinish、client.send 未调用，状态与审批机不变 */
+/** 锁定无副作用：全部回调、finish、tryResumeFinish、client.send 未调用，状态与审批机不变
+ * 例外：turn-start 会安全步进 activeTurnIndex（D6.1 去重 turn 键）——允许该字段存在。 */
 function expectNoSideEffects(env: HandlerEnv): void {
   const { callbacks, approvalFlow, finish, tryResumeFinish, client, state } =
     env;
@@ -96,6 +97,9 @@ function expectNoSideEffects(env: HandlerEnv): void {
     assistantThought: '',
     unsub: null,
     endTimer: null,
+    ...(state.activeTurnIndex !== undefined
+      ? { activeTurnIndex: state.activeTurnIndex }
+      : {}),
   });
 }
 
