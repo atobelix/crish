@@ -353,13 +353,23 @@ impl ModelCatalog {
     ///
     /// v2 文件级包装（schema §3.4：version / schema / updatedAt / entries），
     /// 解析失败即 panic——转录错误由"catalog.json serde 全量解析"单测钉死。
+    ///
+    /// **Stage 1 / ACT-104**：解析产物经 [`OnceLock`] 进程级缓存——首次
+    /// 调用完成 serde 反序列化后，后续调用仅 `clone`（Arc 共享条目表），
+    /// 避免重复解析。State 契约仍为 `Arc<RwLock<ModelCatalog>>`（可变
+    /// 刷新 / `upsert_from_scan` 兼容）；**禁止**用只读 OnceCell 替换 State。
     pub fn bundled() -> Self {
-        let file: ModelCatalogFile = serde_json::from_str(include_str!("catalog.json"))
-            .expect("内置 catalog.json 必须可解析（serde 全量解析测试钉死转录错误）");
-        Self {
-            entries: file.entries,
-            version: 0,
-        }
+        static BUNDLED: std::sync::OnceLock<ModelCatalog> = std::sync::OnceLock::new();
+        BUNDLED
+            .get_or_init(|| {
+                let file: ModelCatalogFile = serde_json::from_str(include_str!("catalog.json"))
+                    .expect("内置 catalog.json 必须可解析（serde 全量解析测试钉死转录错误）");
+                ModelCatalog {
+                    entries: file.entries,
+                    version: 0,
+                }
+            })
+            .clone()
     }
 
     /// 解析跨平台用户主目录下的 `~/.conex/models.yaml` 物理真源路径。

@@ -1,18 +1,20 @@
-//! 日志文件层（PE-04 T04.1-1 建 / T04.6-1 扩展）。
+//! 日志文件层（PE-04 T04.1-1 建 / T04.6-1 扩展 / Stage 1 ACT-103 常驻句柄）。
 //!
 //! 轮转策略（**决策记录，PE-04 T04.6**）：
 //! - **时间维度**：按日单文件 `{prefix}.{YYYYMMDD}.log`，日期变化即切换
 //!   新文件、不覆盖历史（T04.1-1 现状，满足「按日轮转」）；
-//! - **体积维度**（本任务新增）：单文件超过 [`MAX_SINGLE_FILE_BYTES`]
+//! - **体积维度**（T04.6-1）：单文件超过 [`MAX_SINGLE_FILE_BYTES`]
 //!   （10MB）切分到 `{prefix}.{YYYYMMDD}.{n}.log`（按日+大小双条件）；
 //!   单条日志超过 [`MAX_LOG_LINE_BYTES`]（8KB）在写入前截断；
-//! - **总量维度**（本任务新增）：[`cleanup_logs`] 启动时执行一次——
+//! - **总量维度**（T04.6-1）：[`cleanup_logs`] 启动时执行一次——
 //!   普通日志保留 [`LogRetention::max_age_days`]（7）天、目录总量不超过
 //!   [`LogRetention::max_total_bytes`]（50MB），crash 文件保留最近
 //!   [`LogRetention::crash_keep_count`]（3）个。
 //!
-//! **不引入新依赖**（PE-10 约束）：tracing-appender 的依赖声明由 PE-10
-//! 统一落，此处用现有 std 实现全部轮转/清理能力，无需等待。
+//! **常驻句柄（ACT-103 / Stage 1）**：当日首次打开后复用 `fs::File` 句柄
+//! 追加写；仅跨自然日（UTC 零点）或分片字节数突破 [`MAX_SINGLE_FILE_BYTES`]
+//! 时才关闭并重开。正常写路径零 `open`/`metadata` 系统调用——字节数在
+//! 内存 `AtomicU64` 维护，禁止每条日志 open+stat+close。
 //!
 //! 失败策略：文件打开失败 → 返回空目标（[`FileSink::Null`]）且不 panic
 //! ——日志不可用不能阻断应用启动（PE-04 R3）。
@@ -21,7 +23,7 @@ use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use tracing_subscriber::fmt::writer::MakeWriter;
 
@@ -42,17 +44,18 @@ pub struct FileConfig {
     pub file_name_prefix: String,
 }
 
-/// 按日 + 大小双条件轮转写入器（T04.1-1 按日 / T04.6-1 加大小上限）。
-///
-/// 每次写调用打开当日文件句柄（append 模式），日期变化时自然写入新
-/// 文件（文件名带 UTC 日期键，天然不覆盖历史）；当日文件超过
-/// [`MAX_SINGLE_FILE_BYTES`] 时切分到 `{prefix}.{YYYYMMDD}.{n}.log`。
-/// 性能代价：每条记录多一次 open/close 系统调用——本阶段可接受；
-/// tracing-appender 接入后改为独立线程 + 非阻塞写（待 PE-10 声明依赖）。
-pub(crate) struct DailyFileWriter {
-    dir: PathBuf,
-    prefix: String,
-    state: Mutex<DailyState>,
+/// 累计 open 系统调用次数（供单测 / N5-2 断言；生产仅观测）
+static SYSCALL_OPEN_COUNT: AtomicU64 = AtomicU64::new(0);
+
+/// 累计 open 系统调用次数（测试与性能断言用）。
+pub(crate) fn open_syscall_count() -> u64 {
+    SYSCALL_OPEN_COUNT.load(Ordering::Relaxed)
+}
+
+/// 重置 open 计数（仅测试隔离用）。
+#[cfg(test)]
+pub(crate) fn reset_syscall_count() {
+    SYSCALL_OPEN_COUNT.store(0, Ordering::Relaxed);
 }
 
 /// B1-6 毒丸恢复计数原语：文件层降级恢复事件累计次数（锁毒化恢复 +
@@ -68,14 +71,34 @@ pub(crate) fn file_layer_recovery_count() -> u64 {
     FILE_LAYER_RECOVERIES.load(Ordering::Relaxed)
 }
 
-/// 文件层滚动状态。
-struct DailyState {
-    /// 当前文件名对应的日期键（YYYYMMDD）；`None` = 尚未写入
-    day_key: Option<String>,
-    /// 当日分片号（0 = 未分片；超过大小上限后递增）
+/// 常驻文件句柄状态机（ACT-103）。
+struct OpenHandleState {
+    /// 对应日期键（YYYYMMDD）
+    day_key: String,
+    /// 当日分片号（0 = 主分片，>0 = 切分分片）
     part: u32,
-    /// 是否已打印过打开失败（防每个事件刷屏）
+    /// 已写入字节数（内存计数；Atomic 共享给 FileSink）
+    written_bytes: Arc<AtomicU64>,
+}
+
+/// 写入器状态保护结构
+struct DailyState {
+    /// 当前常驻句柄的文件描述符（None = 尚未初次打开或已降级）
+    ///
+    /// 注意：持有 File 本体；写路径经 `try_clone` 派生的 sink 写同一
+    /// OS 文件（append 模式），元数据仅在首次打开 / 轮转时读取一次。
+    file: Option<fs::File>,
+    /// 常驻元数据（日期 / 分片 / 字节计数）
+    meta: Option<OpenHandleState>,
+    /// 是否已报错（去重保护）
     error_reported: bool,
+}
+
+/// 长效文件日志写入器（常驻句柄 + 跨天/超大小轮转）。
+pub(crate) struct DailyFileWriter {
+    dir: PathBuf,
+    prefix: String,
+    state: Mutex<DailyState>,
 }
 
 impl DailyFileWriter {
@@ -84,8 +107,8 @@ impl DailyFileWriter {
             dir,
             prefix,
             state: Mutex::new(DailyState {
-                day_key: None,
-                part: 0,
+                file: None,
+                meta: None,
                 error_reported: false,
             }),
         }
@@ -101,26 +124,129 @@ impl DailyFileWriter {
                 .join(format!("{}.{}.{}.log", self.prefix, today, part))
         }
     }
+
+    /// 确保目录存在（慢路径调用一次；失败降级 Null）
+    fn ensure_dir(&self, state: &mut DailyState) -> bool {
+        if let Err(e) = fs::create_dir_all(&self.dir) {
+            if !state.error_reported {
+                state.error_reported = true;
+                tracing::error!("日志文件层不可用，降级为空目标：{e}");
+            }
+            FILE_LAYER_RECOVERIES.fetch_add(1, Ordering::Relaxed);
+            return false;
+        }
+        true
+    }
+
+    /// 打开或复用常驻句柄（核心无损状态机；ACT-103）
+    fn acquire_handle(&self, today: &str) -> io::Result<FileSink> {
+        let mut state = self.state.lock().unwrap_or_else(|e| {
+            tracing::error!("日志文件层 state 锁中毒，按恢复模式继续：{e}");
+            FILE_LAYER_RECOVERIES.fetch_add(1, Ordering::Relaxed);
+            e.into_inner()
+        });
+
+        // 判定是否需要轮转：无句柄 / 跨天 / 写满分片
+        let needs_rotate = match (state.file.as_ref(), state.meta.as_ref()) {
+            (Some(_), Some(meta)) => {
+                meta.day_key != today || meta.written_bytes.load(Ordering::Relaxed)
+                    >= MAX_SINGLE_FILE_BYTES
+            }
+            _ => true,
+        };
+
+        if !needs_rotate {
+            // 快速路径：clone 常驻 File 句柄（同一 OS 文件，append）；
+            // 零磁盘查找、零 metadata、零 open 系统调用。
+            if let (Some(file), Some(meta)) = (state.file.as_ref(), state.meta.as_ref()) {
+                let cloned = file.try_clone()?;
+                return Ok(FileSink::File {
+                    file: cloned,
+                    written: Arc::clone(&meta.written_bytes),
+                });
+            }
+        }
+
+        // 慢速路径：跨天更替、首次拉起或触碰 10MB 分片上限
+        if !self.ensure_dir(&mut state) {
+            return Ok(FileSink::Null);
+        }
+
+        let next_part = match state.meta.as_ref() {
+            Some(meta) if meta.day_key == today => meta.part + 1,
+            _ => 0,
+        };
+
+        // 从 next_part 起找第一个未超上限的分片（正常路径 0 次循环；
+        // 预写入超限文件 / 连续 write 后首次 acquire 时可能 1+ 次）
+        let mut part = next_part;
+        loop {
+            let path = self.file_path(today, part);
+            SYSCALL_OPEN_COUNT.fetch_add(1, Ordering::Relaxed);
+            match open_log_file(&path) {
+                Ok(f) => {
+                    let size = f.metadata().map(|m| m.len()).unwrap_or(0);
+                    if size >= MAX_SINGLE_FILE_BYTES {
+                        // 当前分片已达体积上限 → 切分到下一个分片
+                        part += 1;
+                        continue;
+                    }
+                    // 内存计数初始化为文件当前大小（唯一一次 metadata）
+                    let written = Arc::new(AtomicU64::new(size));
+                    let cloned = f.try_clone()?;
+                    state.error_reported = false;
+                    state.file = Some(f);
+                    state.meta = Some(OpenHandleState {
+                        day_key: today.to_string(),
+                        part,
+                        written_bytes: Arc::clone(&written),
+                    });
+                    return Ok(FileSink::File {
+                        file: cloned,
+                        written,
+                    });
+                }
+                Err(e) => {
+                    // 写失败不 panic：降级为空目标，仅首次打印原因
+                    // （error_reported 去重防刷屏，REV-02 口径保留）；
+                    // 计数不受去重影响（每次降级都累计）
+                    if !state.error_reported {
+                        tracing::error!("日志文件层不可用，降级为空目标：{e}");
+                        state.error_reported = true;
+                    }
+                    FILE_LAYER_RECOVERIES.fetch_add(1, Ordering::Relaxed);
+                    return Ok(FileSink::Null);
+                }
+            }
+        }
+    }
 }
 
-/// 写入目标：真实文件，或空目标（打开失败时降级，保证 writer 恒可用）。
+/// 写入目标：真实文件（常驻句柄 clone + 共享字节计数），或空目标。
 /// `pub(crate)`：出现在公共 trait（MakeWriter）关联类型中，不能为私有。
 pub(crate) enum FileSink {
-    File(std::fs::File),
+    File {
+        file: fs::File,
+        written: Arc<AtomicU64>,
+    },
     Null,
 }
 
 impl Write for FileSink {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         match self {
-            FileSink::File(f) => f.write(buf),
+            FileSink::File { file, written } => {
+                let n = file.write(buf)?;
+                written.fetch_add(n as u64, Ordering::Relaxed);
+                Ok(n)
+            }
             FileSink::Null => Ok(buf.len()),
         }
     }
 
     fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
         match self {
-            FileSink::File(f) => {
+            FileSink::File { file, written } => {
                 if buf.len() > MAX_LOG_LINE_BYTES {
                     // 单条上限（T04.6-1）：超长行截断到 8KB，防止单条爆量。
                     // 截断实现放 write_all（tracing fmt 经 write_fmt → write_all
@@ -138,9 +264,13 @@ impl Write for FileSink {
                     if !out.ends_with(b"\n") {
                         out.push(b'\n');
                     }
-                    f.write_all(&out)
+                    file.write_all(&out)?;
+                    written.fetch_add(out.len() as u64, Ordering::Relaxed);
+                    Ok(())
                 } else {
-                    f.write_all(buf)
+                    file.write_all(buf)?;
+                    written.fetch_add(buf.len() as u64, Ordering::Relaxed);
+                    Ok(())
                 }
             }
             FileSink::Null => Ok(()),
@@ -149,7 +279,7 @@ impl Write for FileSink {
 
     fn flush(&mut self) -> io::Result<()> {
         match self {
-            FileSink::File(f) => f.flush(),
+            FileSink::File { file, .. } => file.flush(),
             FileSink::Null => Ok(()),
         }
     }
@@ -159,44 +289,10 @@ impl MakeWriter<'_> for DailyFileWriter {
     type Writer = FileSink;
 
     fn make_writer(&self) -> Self::Writer {
-        let mut state = self.state.lock().unwrap_or_else(|e| {
-            tracing::error!("日志文件层 state 锁中毒，按恢复模式继续：{e}");
-            FILE_LAYER_RECOVERIES.fetch_add(1, Ordering::Relaxed);
-            e.into_inner()
-        });
         let today = today_key();
-        // 日期变化 → 重置分片号（新文件开始，实现按日轮转）
-        if state.day_key.as_deref() != Some(today.as_str()) {
-            state.day_key = Some(today.clone());
-            state.part = 0;
-        }
-        // 大小轮转（T04.6-1）：从当前分片起找第一个未超上限的文件
-        // （正常路径 0 次循环；上限边界必落在某分片末尾，见 MAX_SINGLE_FILE_BYTES）
-        loop {
-            let path = self.file_path(&today, state.part);
-            match open_log_file(&path) {
-                Ok(f) => {
-                    let size = f.metadata().map(|m| m.len()).unwrap_or(0);
-                    if size >= MAX_SINGLE_FILE_BYTES {
-                        // 当前分片已达体积上限 → 切分到下一个分片
-                        state.part += 1;
-                        continue;
-                    }
-                    state.error_reported = false;
-                    return FileSink::File(f);
-                }
-                Err(e) => {
-                    // 写失败不 panic：降级为空目标，仅首次打印原因
-                    // （error_reported 去重防刷屏，REV-02 口径保留）；
-                    // 计数不受去重影响（每次降级都累计）
-                    if !state.error_reported {
-                        tracing::error!("日志文件层不可用，降级为空目标：{e}");
-                        state.error_reported = true;
-                    }
-                    FILE_LAYER_RECOVERIES.fetch_add(1, Ordering::Relaxed);
-                    return FileSink::Null;
-                }
-            }
+        match self.acquire_handle(&today) {
+            Ok(sink) => sink,
+            Err(_) => FileSink::Null,
         }
     }
 }
@@ -422,7 +518,7 @@ fn civil_from_days(days_since_epoch: i64) -> (i64, u32, u32) {
 
 #[cfg(test)]
 mod tests {
-    // G2 禁令豁免：测试临时目录清理（非产品删除路径，可恢复语义不适用）。
+    // G2 禁令豁免：测试临时目录清理（非产品删除路径，恢复语义不适用）。
     #![allow(clippy::disallowed_methods)]
 
     use super::*;
@@ -505,13 +601,14 @@ mod tests {
     fn file_sink_truncates_oversized_line() {
         let dir = temp_dir("trunc");
         let path = dir.join("t.log");
-        let sink = FileSink::File(
-            fs::OpenOptions::new()
+        let sink = FileSink::File {
+            file: fs::OpenOptions::new()
                 .create(true)
                 .append(true)
                 .open(&path)
                 .unwrap(),
-        );
+            written: Arc::new(AtomicU64::new(0)),
+        };
         let mut sink = sink;
         let big = vec![b'a'; MAX_LOG_LINE_BYTES * 2];
         sink.write_all(&big).unwrap();
@@ -530,13 +627,14 @@ mod tests {
     fn file_sink_keeps_short_line() {
         let dir = temp_dir("short");
         let path = dir.join("t.log");
-        let sink = FileSink::File(
-            fs::OpenOptions::new()
+        let sink = FileSink::File {
+            file: fs::OpenOptions::new()
                 .create(true)
                 .append(true)
                 .open(&path)
                 .unwrap(),
-        );
+            written: Arc::new(AtomicU64::new(0)),
+        };
         let mut sink = sink;
         let line = b"hello world\n";
         sink.write_all(line).unwrap();
@@ -567,14 +665,48 @@ mod tests {
 
         let sink = writer.make_writer();
         assert!(
-            matches!(sink, FileSink::File(_)),
+            matches!(sink, FileSink::File { .. }),
             "日志目录可写时不应降级为空目标"
         );
         assert!(
             dir.join(format!("workbench.{today}.1.log")).exists(),
             "超限后应切分到分片 1"
         );
-        assert_eq!(writer.state.lock().unwrap().part, 1, "分片号应为 1");
+        {
+            let state = writer.state.lock().unwrap();
+            let meta = state.meta.as_ref().expect("应有常驻元数据");
+            assert_eq!(meta.part, 1, "分片号应为 1");
+        }
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// ACT-103：连续多次 make_writer 复用常驻句柄——open 计数仅 +1
+    /// （N5-2 目标：50 次写 open 增量 = 1）
+    #[test]
+    fn resident_handle_reuse_limits_opens() {
+        let _serial = RECOVERY_TEST_LOCK.lock().unwrap();
+        let dir = temp_dir("resident");
+        let writer = DailyFileWriter::new(dir.clone(), "workbench".to_string());
+
+        // 首次 acquire 打开 1 次
+        let mut sink = writer.make_writer();
+        sink.write_all(b"line-0\n").unwrap();
+        let opens_after_first = open_syscall_count();
+
+        // 后续 49 次：快速路径 clone，零 open
+        for i in 1..50u32 {
+            let mut s = writer.make_writer();
+            let line = format!("line-{i}\n");
+            s.write_all(line.as_bytes()).unwrap();
+        }
+        let opens_after_50 = open_syscall_count();
+        assert_eq!(
+            opens_after_50 - opens_after_first,
+            0,
+            "常驻句柄复用：后续 49 次写不得触发 open（first={} total={}）",
+            opens_after_first,
+            opens_after_50
+        );
         let _ = fs::remove_dir_all(&dir);
     }
 
@@ -748,7 +880,7 @@ mod tests {
         let (sink, lines) = with_capture(|| writer.make_writer());
 
         assert!(
-            matches!(sink, FileSink::File(_)),
+            matches!(sink, FileSink::File { .. }),
             "毒化后仍正常返回可写文件 sink"
         );
         let joined = lines.join("\n");
