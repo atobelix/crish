@@ -8,9 +8,9 @@
  */
 
 .container {
-  --tab-spring-bezier: cubic-bezier(0.2, 0, 0, 1);
-  --tab-duration: 200ms;
-  --tab-press-duration: 100ms;
+  --seg-spring-bezier: cubic-bezier(0.2, 0, 0, 1);
+  --seg-duration: 200ms;
+  --seg-press-duration: 100ms;
 
   position: relative;
   display: inline-flex;
@@ -128,8 +128,8 @@
   transform-origin: center center;
 
   transition:
-    transform var(--tab-duration) var(--tab-spring-bezier),
-    width var(--tab-duration) var(--tab-spring-bezier),
+    transform var(--seg-duration) var(--seg-spring-bezier),
+    width var(--seg-duration) var(--seg-spring-bezier),
     opacity 120ms ease;
 }
 
@@ -224,13 +224,13 @@
   height: 100%;
   transform: scale(1) translateY(0);
   transform-origin: center center;
-  transition: transform var(--tab-duration) var(--tab-spring-bezier);
+  transition: transform var(--seg-duration) var(--seg-spring-bezier);
 }
 
 /* 按压弹性微压缩 (Scale 0.97 + 下沉 1px) */
 .item:active:not(:disabled) .itemInner {
   transform: scale(0.97) translateY(1px);
-  transition: transform var(--tab-press-duration) ease-in-out;
+  transition: transform var(--seg-press-duration) ease-in-out;
 }
 
 .itemIcon {

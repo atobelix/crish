@@ -12,7 +12,7 @@ import { logInternalError } from '../../api/userFacingErrors';
 import type { ViewMode } from './hooks/useFilePreview';
 import { AppIcon } from '../ui/icons/index';
 
-function getOpenerIcon(op: HostOpener, size = 14) {
+export function getOpenerIcon(op: HostOpener, size = 14) {
   if (op.iconDataUrl)
     return (
       <img

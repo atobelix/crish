@@ -127,7 +127,6 @@
   flex-direction: row;
   overflow: hidden;
   background: var(--bg-card);
-  --diff-gutter-bg: var(--bg-card);
 }
 
 .contentPane {

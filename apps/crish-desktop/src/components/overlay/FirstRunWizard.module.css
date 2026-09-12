@@ -3,7 +3,6 @@
 
 /*     --dialog-z        */
 .firstRunOverlay {
-  --dialog-z: var(--z-modal);
 }
 
 /*          min(480px, 100%)   +     /   */

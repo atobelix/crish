@@ -1,9 +1,7 @@
 .cheatsheetOverlay {
-  --dialog-z: var(--z-modal);
 }
 
 .cheatsheetModal {
-  --dialog-width: 480px;
   background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-xl, 14px);

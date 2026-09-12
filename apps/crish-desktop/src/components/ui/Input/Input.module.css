@@ -143,6 +143,11 @@
   pointer-events: none;
 }
 
+/* 防御性对齐：当存在 inputAction (清空/密码切换) 时，自动将 inputSuffix 向左平移避让，刚性杜绝图标重叠 */
+.inputShell:has(.inputAction) .inputSuffix {
+  right: calc(var(--space-2) + 22px);
+}
+
 .inputAction {
   position: absolute;
   right: var(--space-1);

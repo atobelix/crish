@@ -4,7 +4,7 @@
  * ## 规范落地（DETAIL-PLAN-05）
  * - 严格锁定 32px 物理高度，与 DiffHeaderControls / FilesCard 像素级一致；
  * - 彻底清除 W5-B/strict、rev=4 等脱水调试探针；
- * - 左侧：侧栏开关 [≡] + 文档图标 [📄] + 行内可编辑标题 (EditableTitle) + 独立 20x20px Chevron 下拉触点 + 保存状态徽标 (Zero-Blue 翡翠绿)；
+ * - 左侧：侧栏开关 [≡] + 文档图标 + 行内可编辑标题 (EditableTitle) + 独立 20x20px Chevron 下拉触点 + 保存状态徽标 (Zero-Blue 翡翠绿)；
  * - 右侧：等宽字数统计 (tabular-nums) + 斜杠快捷键入口 [/] + 全文复制 + 导出 .md + 刷新 + 关闭（彻底拔除常驻清空按钮与 ConfirmDialog，杜绝误触恐慌）；
  * - 全量换装自定义 Tooltip 组件，彻底清退原生 HTML title (BUG-V06)；
  * - 刚性保全测试桩：note-paper-strict-open-slash、note-paper-strict-refresh、note-paper-strict-close。

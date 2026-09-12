@@ -48,13 +48,13 @@
   border: 1px solid var(--border-subtle);
   border-radius: var(--tab-outer-radius);
   padding: var(--tab-pad);
-  gap: var(--tab-gap);
+  gap: var(--tabs-gap);
 }
 
 /* 变体：line 下划线模式 */
 .listLine {
   background-color: transparent;
-  gap: var(--tab-gap);
+  gap: var(--tabs-gap);
 }
 
 .listLine[data-orientation='horizontal'] {
@@ -69,7 +69,7 @@
 .sizeXs {
   --tab-height: 24px;
   --tab-pad: 2px;
-  --tab-gap: 2px;
+  --tabs-gap: 2px;
   --tab-outer-radius: var(--radius-md);
   --tab-inner-radius: calc(var(--tab-outer-radius) - var(--tab-pad)); /* 4px */
   --tab-font-size: var(--font-size-xs);
@@ -80,7 +80,7 @@
 .sizeSm {
   --tab-height: 28px;
   --tab-pad: 2px;
-  --tab-gap: 2px;
+  --tabs-gap: 2px;
   --tab-outer-radius: var(--button-radius);
   --tab-inner-radius: calc(var(--tab-outer-radius) - var(--tab-pad)); /* 6px */
   --tab-font-size: var(--font-size-sm);
@@ -91,7 +91,7 @@
 .sizeMd {
   --tab-height: 32px;
   --tab-pad: 2px;
-  --tab-gap: 2px;
+  --tabs-gap: 2px;
   --tab-outer-radius: var(--radius-lg);
   --tab-inner-radius: calc(var(--tab-outer-radius) - var(--tab-pad)); /* 6px */
   --tab-font-size: var(--font-size-base);
@@ -102,7 +102,7 @@
 .sizeLg {
   --tab-height: 38px;
   --tab-pad: 4px;
-  --tab-gap: 4px;
+  --tabs-gap: 4px;
   --tab-outer-radius: var(--radius-xl);
   --tab-inner-radius: calc(var(--tab-outer-radius) - var(--tab-pad)); /* 6px */
   --tab-font-size: var(--font-size-md);

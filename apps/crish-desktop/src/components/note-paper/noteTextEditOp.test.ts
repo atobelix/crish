@@ -104,17 +104,18 @@ describe('computeTextEditOp', () => {
     });
   });
 
-  it('emoji_surrogate_pairs_are_single_scalars', () => {
-    // '👍' 为 2 个 UTF-16 码元、1 个 Unicode 标量：偏移必须按标量计
-    expect(computeTextEditOp('b1', '👍', '👍!')).toEqual({
+  it('surrogate_pairs_are_single_scalars', () => {
+    // 4 字节字符为 2 个 UTF-16 码元、1 个 Unicode 标量：偏移必须按标量计
+    const scalarChar = '\u{1F44D}';
+    expect(computeTextEditOp('b1', scalarChar, `${scalarChar}!`)).toEqual({
       op: 'text_edit',
       id: 'b1',
       start: 1,
       end: 1,
       insert: '!',
     });
-    // 删除 emoji：end - start = 1（而非 UTF-16 的 2）
-    expect(computeTextEditOp('b1', 'a👍b', 'ab')).toEqual({
+    // 删除 4 字节字符：end - start = 1（而非 UTF-16 的 2）
+    expect(computeTextEditOp('b1', `a${scalarChar}b`, 'ab')).toEqual({
       op: 'text_edit',
       id: 'b1',
       start: 1,
@@ -149,7 +150,7 @@ describe('computeTextEditOp', () => {
       ['你好世界', '你好'],
       ['', 'seed'],
       ['seed', ''],
-      ['👍🏻混合text', '👍🏻混合text!'],
+      ['\u{1F44D}\u{1F3FB}混合text', '\u{1F44D}\u{1F3FB}混合text!'],
     ];
     for (const [oldText, newText] of cases) {
       const op = computeTextEditOp('b1', oldText, newText);

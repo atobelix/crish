@@ -7,6 +7,7 @@ import { ToastProvider } from '../../services/toast/ToastContext';
 import * as workspaceFsApi from '../../api/workspaceFsApi';
 import * as hostOpenersApi from '../../api/hostOpenersApi';
 import * as gitApi from '../../api/gitApi';
+import * as preferencesApi from '../../api/preferences';
 import { useTerminalStore } from '../../store/terminalStore';
 
 vi.mock('../diff/DiffCardUnifiedView', () => ({
@@ -295,6 +296,9 @@ describe('FileViewerCard 单轨差异比对与模式响应', () => {
 
   it('10. 支持工具栏自动换行切换按钮并向 VirtualPlainCodeViewer 传递 wordWrap 属性', async () => {
     localStorage.removeItem('crish:file-viewer-word-wrap');
+    const setPrefSpy = vi
+      .spyOn(preferencesApi.preferencesClient, 'setPreference')
+      .mockResolvedValue();
 
     render(
       <ToastProvider>
@@ -315,7 +319,7 @@ describe('FileViewerCard 单轨差异比对与模式响应', () => {
     });
 
     expect(viewer.getAttribute('data-wordwrap')).toBe('false');
-    expect(localStorage.getItem('crish:file-viewer-word-wrap')).toBe('false');
+    expect(setPrefSpy).toHaveBeenCalledWith('file_viewer_word_wrap', false);
 
     // 再次点击切换为开启
     await act(async () => {
@@ -323,7 +327,7 @@ describe('FileViewerCard 单轨差异比对与模式响应', () => {
     });
 
     expect(viewer.getAttribute('data-wordwrap')).toBe('true');
-    expect(localStorage.getItem('crish:file-viewer-word-wrap')).toBe('true');
+    expect(setPrefSpy).toHaveBeenCalledWith('file_viewer_word_wrap', true);
   });
 
   it('11. 当打开 JSON 文件时渲染格式化按钮，点击格式化后显示缩进内容并可还原', async () => {
