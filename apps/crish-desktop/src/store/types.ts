@@ -763,6 +763,11 @@ export interface SessionState {
   /** 标记该会话是否已经完成从底层 SQLite/Engine 的消息回灌或用户显式清空操作 */
   messagesHydrated?: boolean;
   /**
+   * 索引层消息计数（Stage 5b ACT-502）：懒壳未拉正文时供剪枝兼容判定
+   * 「未水合但有实质内容」（prepareSessionsForUi keepIds 扩展用）。
+   */
+  messageCount?: number;
+  /**
    * 引擎懒水合「未完整」标记（P1-D2）：hydrate 分页拉全超限/异常截断时置位。
    * 置位期间持久化熔断——禁止截断态正文经 save_session_body 先删后插回写 SQLite
    * （不可逆）；分页拉全成功（truncated=false）时自然清除。

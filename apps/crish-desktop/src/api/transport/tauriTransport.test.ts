@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mockTauriCommand, mockTauriError } from '../../test-setup';
 import {
   CORE_GET_STATUS,
+  ENGINE_READY_EVENT_TYPE,
   RUN_EVENT_CHANNEL,
   TauriTransport,
 } from './tauriTransport';
@@ -354,9 +355,9 @@ describe('TauriTransport', () => {
     });
   });
 
-  // ── waitUntilConnected（职责 8：core_get_status 轮询）───────
+  // ── waitUntilConnected（职责 8 · Stage 5a ACT-501 响应式握手）──
 
-  it('engineReady=false → true：轮询探测到就绪后返回 true', async () => {
+  it('engineReady=false → true：短退避 Fast-Probe 探测到就绪后返回 true', async () => {
     let calls = 0;
     mockTauriCommand(CORE_GET_STATUS, () => ({ engineReady: ++calls > 1 }));
 
@@ -369,6 +370,21 @@ describe('TauriTransport', () => {
   it('dbReady 别名同样判定就绪', async () => {
     mockTauriCommand(CORE_GET_STATUS, () => ({ dbReady: true }));
     await expect(transport.waitUntilConnected(200)).resolves.toBe(true);
+  });
+
+  it('engine-ready Native Push：事件 0ms 命中握手（无需等待 probe 轮询）', async () => {
+    // probe 永不就绪——仅事件路径应结算 connected
+    mockTauriCommand(CORE_GET_STATUS, () => ({ engineReady: false }));
+    const pending = transport.waitUntilConnected(1000);
+    // 等 listen 挂上后 emit engine-ready
+    await vi.waitFor(() =>
+      expect(eventMock.handlers.has(RUN_EVENT_CHANNEL)).toBe(true)
+    );
+    emitRunEvent(
+      JSON.stringify({ type: ENGINE_READY_EVENT_TYPE, engineReady: true })
+    );
+    await expect(pending).resolves.toBe(true);
+    expect(transport.isReady()).toBe(true);
   });
 
   it('一直未就绪 → 超时返回 false，状态转 failed', async () => {
@@ -390,6 +406,12 @@ describe('TauriTransport', () => {
   it('就绪后再次调用直接返回 true', async () => {
     mockTauriCommand(CORE_GET_STATUS, () => ({ engineReady: true }));
     await transport.waitUntilConnected(200);
+    await expect(transport.waitUntilConnected(200)).resolves.toBe(true);
+  });
+
+  it('core_get_status 经 BOOTSTRAP_PROBE_ALLOWLIST 无条件放行（清单未拉取也可 probe）', async () => {
+    // 构造后未 waitUntilConnected → 清单未延迟拉取；probe 仍应可调用
+    mockTauriCommand(CORE_GET_STATUS, () => ({ engineReady: true }));
     await expect(transport.waitUntilConnected(200)).resolves.toBe(true);
   });
 

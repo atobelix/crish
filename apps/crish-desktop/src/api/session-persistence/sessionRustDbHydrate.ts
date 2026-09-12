@@ -2,8 +2,9 @@
  * sessionRustDb 子模块 · Hydrate/Persist：复合 API 面
  *
  * 职责：
- *   - hydrateSessionsFromRust：boot 时一次性加载全部会话（index + bodies + agents）
- *     （T2-1 剥镜像：正文直连 SQLite，不再有降级戳分叉恢复读面）
+ *   - hydrateSessionsFromRust：boot 时索引 + 仅活跃会话 body/agents 懒水合
+ *     （Stage 5b ACT-502：IPC 常数上界 K=5，历史会话保持轻量懒壳）
+ *   - ensureSessionBodyHydrated：会话切换 JIT 懒水合（配合 Generation Token）
  *   - persistAllSessionsRust：全量持久化（per-session invoke，写队列 + 版本戳 CAS）
  *   - persistAllSessionsSyncViaLocalStorage：beforeunload 同步镜像（禁止 await）
  */
@@ -49,6 +50,7 @@ import {
 import { coerceSessionTimestamp } from '../sessionTime';
 import { prepareSessionsForUi } from '../sessionTitle';
 import { normalizeAssistantTimeline } from '../toolPresentation';
+import { logger, toErrMeta } from '../../services/LoggerService';
 
 /**
  * 判断是否为未水合的远程懒壳（未访问、未水合、无消息）。
@@ -86,25 +88,67 @@ function hasDegradedMarker(sessionId: string): boolean {
 }
 
 /**
- * 从存储层加载全部会话（index + bodies + agents），构造 SessionState[]。
+ * 单调递增 Generation Token（AAI-03 / ACT-502）：会话切换 / 懒水合竞态防线。
+ * 每次显式切换自增；过期异步响应对比 token 不一致即丢弃，严禁写主视口。
+ */
+let activeSwitchGeneration = 0;
+
+/** 领取新一代切换 token（单调递增） */
+export function bumpHydrateGeneration(): number {
+  activeSwitchGeneration += 1;
+  return activeSwitchGeneration;
+}
+
+/** 当前最新 token（测试钩子 / 调用方对账用） */
+export function currentHydrateGeneration(): number {
+  return activeSwitchGeneration;
+}
+
+/** token 是否仍是最新（true=可提交；false=过期响应必须丢弃） */
+export function isHydrateGenerationCurrent(gen: number): boolean {
+  return gen === activeSwitchGeneration;
+}
+
+/**
+ * 会话切换 / 懒水合 JIT 拉取：仅加载指定会话的 body + agents。
+ * 调用方负责 Generation Token 对账——本函数只做 IO，不碰 store。
+ */
+export async function ensureSessionBodyHydrated(sessionId: string): Promise<{
+  messages: SessionState['messages'];
+  agents: NonNullable<SessionState['agents']>;
+}> {
+  if (!sessionId || isPendingDraft(sessionId)) {
+    return { messages: [], agents: [] };
+  }
+  const [messages, agents] = await Promise.all([
+    loadSessionBody(sessionId),
+    loadSessionAgents(sessionId),
+  ]);
+  return {
+    messages: sanitizeMessagesForHydrate(messages),
+    agents,
+  };
+}
+
+/**
+ * 从存储层加载会话索引 + 仅活跃会话 body/agents，历史会话保持轻量懒壳
+ * （Stage 5b ACT-502：IPC 常数上界 K=5，消除 O(N) 正文拉取风暴）。
  *
  * 索引加载策略（Stream D 过渡期）：
  *   1. 优先读 localStorage 索引（侧栏元数据真相源，由 persistAllSessionsRust 维护）
  *   2. localStorage 为空时回退到 SQLite list_sessions（30 天清理后或新装机场景）
  *   3. 两者都为空 → 返回空会话列表
  *
- * bodies / agents 加载策略：
- *   - 优先 SQLite（load_session_body / load_session_agents）
- *   - invoke 缺失时回退 localStorage
+ * body / agents 加载策略（ACT-502）：
+ *   - 仅对 targetActiveId 发起 1 次 body + 1 次 agents（活跃会话全量水合）
+ *   - 其余历史会话 → 轻量懒壳（messages: [], messagesHydrated: false）
+ *   - 正常路径 IPC 常数上界 K = 5：list + meta(active) + body + agents + meta(folder)
+ *   - invoke 缺失时 loadSessionBody/Agents 内部回退 localStorage
  *
- * 索引 + body 分叉策略设计意图（维度 2 一致性校验）：
- *   LS 索引与 SQLite body 由不同写入路径维护，过渡期可能出现分叉（索引有条目
- *   但 body 为空）。hydrate 完成后做一致性校验：索引中存在但 body 为空且无降级
- *   戳标记的会话记录 logInternalError 警告（scope: hydrate-degraded-index-body-mismatch）。
- *   降级戳存在意味着该会话在降级期间创建、空 body 是设计内行为，不报警。
+ * 空壳剪枝兼容（防侧栏丢会话）：「默认标题 + messageCount>0 的未水合懒壳」
+ * 会被 prepareSessionsForUi 误剪——将此类懒壳 ID 并入 keepIds（方案 A）。
  *
- * 注意：此 API 在 boot 时调用一次。为兼容现有 store 初始化（同步 seedSessions），
- * seedSessions 仍调用同步回退路径；此 async 版本供 store-persistence 使用。
+ * 时间戳：一律经 coerceSessionTimestamp 归一为合法 ISO 串（CON-02）。
  */
 export async function hydrateSessionsFromRust(): Promise<{
   sessions: SessionState[];
@@ -131,54 +175,72 @@ export async function hydrateSessionsFromRust(): Promise<{
     .filter((e) => e.id && !isPendingDraft(e.id))
     .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
 
-  // 并行加载每个会话的 body 与 agents
-  const sessions: SessionState[] = await Promise.all(
-    ordered.map(async (e) => {
-      const [messages, agents] = await Promise.all([
-        loadSessionBody(e.id),
-        loadSessionAgents(e.id),
-      ]);
-      const sanitized = sanitizeMessagesForHydrate(messages);
-      const state: SessionState = {
-        id: e.id,
-        title: e.title,
-        folder: e.folder,
-        isPinned: e.isPinned,
-        isArchived: e.isArchived,
-        timestamp: coerceSessionTimestamp(e.id, e.timestamp, sanitized),
-        messages: sanitized,
-        messagesHydrated: true,
-        agents,
-        ...(e.branchParentId !== undefined
-          ? { branchParentId: e.branchParentId }
-          : {}),
-        ...(e.pinnedMessageIds?.length
-          ? { pinnedMessageIds: e.pinnedMessageIds }
-          : {}),
-        ...(e.engineCursor !== undefined
-          ? { engineCursor: e.engineCursor }
-          : {}),
-        ...(e.engineLastRunId !== undefined
-          ? { engineLastRunId: e.engineLastRunId }
-          : {}),
-        ...(e.hydratedFromEngine !== undefined
-          ? { hydratedFromEngine: e.hydratedFromEngine }
-          : {}),
-        // importMeta 仅存 localStorage 索引；SQLite 行无此列，从 LS 索引水合时带回
-        ...(e.importMeta ? { importMeta: e.importMeta } : {}),
-      };
-      return state;
-    })
-  );
+  // 2. 解析首屏活跃会话（meta ×1）
+  const activeRaw = await getSessionMeta('active_session_id');
+  const active = activeRaw && !isPendingDraft(activeRaw) ? activeRaw : null;
+  const targetActiveId =
+    active && ordered.some((e) => e.id === active)
+      ? active
+      : ordered[0]?.id || null;
 
-  // 维度 2 一致性校验：LS 索引 + SQLite body 分叉策略校验。
-  // 设计意图：LS 索引是侧栏元数据真相源，SQLite 是 body 真相源。两者由不同
-  // 写入路径维护（persistAllSessionsRust 同时写 LS 索引 + SQLite body）。
-  // 如果索引中存在某会话但 body 加载结果为空（msgs.length === 0）且无降级戳
-  // 标记（crish_degraded_<id>），说明索引与 body 出现了不一致——可能由
-  // 写入中断 / 孤儿残留 / 迁移期数据丢失引起。降级戳（T2-1 已删写面）存在
-  // 意味着该会话在降级期间创建、空 body 是设计内行为，不报警。
+  // 3. 仅活跃会话拉 body + agents（K=5 收口；历史懒壳零 IPC）
+  let activeMessages: SessionState['messages'] = [];
+  let activeAgents: NonNullable<SessionState['agents']> = [];
+  if (targetActiveId) {
+    try {
+      const loaded = await ensureSessionBodyHydrated(targetActiveId);
+      activeMessages = loaded.messages;
+      activeAgents = loaded.agents;
+    } catch (err) {
+      logger.error('[hydrate] active session bundle load failed', {
+        module: 'hydrate',
+        sessionId: targetActiveId,
+        err: toErrMeta(err),
+      });
+    }
+  }
+
+  // 4. 单遍内存装配：活跃全量 + 历史懒壳
+  const sessions: SessionState[] = ordered.map((e) => {
+    const isActive = e.id === targetActiveId;
+    const safeTimestamp = coerceSessionTimestamp(
+      e.id,
+      e.timestamp,
+      isActive ? activeMessages : []
+    );
+    const base: SessionState = {
+      id: e.id,
+      title: e.title,
+      folder: e.folder,
+      isPinned: e.isPinned,
+      isArchived: e.isArchived,
+      timestamp: safeTimestamp,
+      messages: isActive ? activeMessages : [],
+      messagesHydrated: isActive,
+      agents: isActive ? activeAgents : [],
+      messageCount: e.messageCount,
+      ...(e.branchParentId !== undefined
+        ? { branchParentId: e.branchParentId }
+        : {}),
+      ...(e.pinnedMessageIds?.length
+        ? { pinnedMessageIds: e.pinnedMessageIds }
+        : {}),
+      ...(e.engineCursor !== undefined ? { engineCursor: e.engineCursor } : {}),
+      ...(e.engineLastRunId !== undefined
+        ? { engineLastRunId: e.engineLastRunId }
+        : {}),
+      ...(e.hydratedFromEngine !== undefined
+        ? { hydratedFromEngine: e.hydratedFromEngine }
+        : {}),
+      // importMeta 仅存 localStorage 索引；SQLite 行无此列，从 LS 索引水合时带回
+      ...(e.importMeta ? { importMeta: e.importMeta } : {}),
+    };
+    return base;
+  });
+
+  // 5. 维度 2 一致性校验：仅对已水合（非懒壳）会话做 index-body 分叉校验
   for (const s of sessions) {
+    if (s.messagesHydrated !== true) continue;
     if (s.messages.length === 0 && !hasDegradedMarker(s.id)) {
       logInternalError('hydrate-degraded-index-body-mismatch', {
         sessionId: s.id,
@@ -189,12 +251,18 @@ export async function hydrateSessionsFromRust(): Promise<{
     }
   }
 
-  const activeRaw = await getSessionMeta('active_session_id');
-  const active = activeRaw && !isPendingDraft(activeRaw) ? activeRaw : null;
-  // prepareSessionsForUi：加载后 prune 非 keep 空壳
-  const prepared = prepareSessionsForUi(sessions, active);
+  // 6. 剪枝兼容（方案 A）：未水合但 messageCount>0 的懒壳并入 keepIds，
+  //    防止 prepareSessionsForUi 将其当幽灵空壳误剪（侧栏丢会话）。
+  const lazyKeepIds = sessions
+    .filter((s) => s.messagesHydrated === false && (s.messageCount ?? 0) > 0)
+    .map((s) => s.id);
+  const prepared = prepareSessionsForUi(sessions, targetActiveId, {
+    keepIds: [...lazyKeepIds, ...(targetActiveId ? [targetActiveId] : [])],
+  });
   const activeSessionId =
-    active && prepared.some((s) => s.id === active) ? active : null;
+    targetActiveId && prepared.some((s) => s.id === targetActiveId)
+      ? targetActiveId
+      : null;
   const folderOrderRaw = await getSessionMeta('folder_order');
   const folderOrder = parseFolderOrder(
     safeParseJson<unknown>(folderOrderRaw, null)

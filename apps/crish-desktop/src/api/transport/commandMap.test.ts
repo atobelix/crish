@@ -149,8 +149,14 @@ describe('commandMap', () => {
           ['list_sessions', true],
         ])
       );
-      // 'core_get_status' 不在 mock 清单中 → null
-      expect(resolveTauriCommand('core_get_status')).toBeNull();
+      // 'core_read_session_events' 不在 mock 清单 → null（引导探针白名单仅放行
+      // core_get_status / workbench_window_ready，不受清单漂移影响）
+      expect(resolveTauriCommand('core_read_session_events')).toBeNull();
+      // 引导探针白名单：清单漂移时仍无条件放行（CON-07 加固面）
+      expect(resolveTauriCommand('core_get_status')).toBe('core_get_status');
+      expect(resolveTauriCommand('workbench_window_ready')).toBe(
+        'workbench_window_ready'
+      );
       // 清单内命令正常解析
       expect(resolveTauriCommand('core_get_run_snapshot')).toBe(
         'core_get_run_snapshot'

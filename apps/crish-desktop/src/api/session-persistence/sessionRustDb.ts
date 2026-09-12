@@ -44,7 +44,11 @@ export {
 } from './sessionRustDbSql';
 
 export {
+  bumpHydrateGeneration,
+  currentHydrateGeneration,
+  ensureSessionBodyHydrated,
   hydrateSessionsFromRust,
+  isHydrateGenerationCurrent,
   isLazySessionShell,
   persistAllSessionsRust,
   persistAllSessionsSyncViaLocalStorage,

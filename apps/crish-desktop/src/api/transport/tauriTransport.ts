@@ -6,13 +6,18 @@
  * - send（职责 6）→ invokeTyped(cmd, payload)（fire-and-forget 语义，错误仍上抛）
  * - onMessage（职责 7）→ 懒订阅 `listen('workbench-run-event', e => listener(e.payload))`
  *   （03 §3.1 前端替换点；订阅模式对齐 ptySessionApi.ts:201-234 的懒加载 fanout）
- * - waitUntilConnected（职责 8）→ core_get_status 轮询（engineReady/dbReady 判定）
+ * - waitUntilConnected（职责 8）→ Stage 5a 响应式握手（ACT-501）：
+ *   先挂 `workbench-run-event` 监听（engine-ready Native Push 0ms 命中），
+ *   再 Fast-Probe `core_get_status` 兜底（事件丢失窗口防护），未就绪时
+ *   短指数退避自愈（10ms → 50ms 封顶）——废除旧 250ms 固定盲等轮询；
  * - onStatus（职责 2）→ 「核心已初始化」布尔投影（connecting/connected/failed）
  * - stop → 退订事件通道 + 复位状态
  *
  * 事件载荷形状：Rust B6.3 emit 完整事件 JSON，顶层平铺
  * `{ type, runId, sessionId, sequence, ...事件字段 }`（03 §3.1:190-191），
  * 逐字透传，不做归一化（EventRouter.onMsg 直进 handleAgentEvent）。
+ * 引擎就绪广播（Stage 5a）：`{ type: 'engine-ready', engineReady: true, ... }`
+ * 在透传给订阅者的同时，由 Transport 内部识别并标记 connected。
  *
  * 不依赖 WebSocket：无心跳、无重连（进程内核心，断连即应用退出）。
  */
@@ -29,16 +34,27 @@ import { logger, toErrMeta } from '../../services/LoggerService';
 /** workbench-run-event：Rust 事件 emit 通道（03 §3.1，对齐旧 lifecycle.rs:287-303 模式） */
 export const RUN_EVENT_CHANNEL = 'workbench-run-event';
 
-/** core_get_status：核心初始化状态查询（03 §3.2 B） */
+/** core_get_status：核心初始化状态查询（03 §3.2 B；Stage 5a Fast-Probe 载体） */
 export const CORE_GET_STATUS = 'core_get_status';
 
+/** engine-ready Native Push 事件 type（Stage 5a ACT-501，Rust setup 末尾广播） */
+export const ENGINE_READY_EVENT_TYPE = 'engine-ready';
+
 const DEFAULT_TIMEOUT_MS = 30_000;
-const DEFAULT_POLL_INTERVAL_MS = 250;
+/**
+ * 握手探测退避（Stage 5a ACT-501）：废除旧 250ms 固定盲等——
+ * 初始 10ms、按 1.5× 增长、50ms 封顶；`pollIntervalMs` 仍可注入加速测试。
+ */
+const INITIAL_PROBE_BACKOFF_MS = 10;
+const MAX_PROBE_BACKOFF_MS = 50;
 
 export interface TauriTransportOptions {
-  /** 轮询间隔（测试可注入小值加速）。默认 250ms。 */
+  /**
+   * 探测初始退避间隔（测试可注入小值加速）。默认 10ms。
+   * Stage 5a：主路径优先 engine-ready 事件 + 短退避 probe，不再固定 250ms 轮询。
+   */
   pollIntervalMs?: number;
-  /** request 默认超时。默认 30s。 */
+  /** request 默认超时 / 握手总超时。默认 30s。 */
   timeoutMs?: number;
 }
 
@@ -144,18 +160,21 @@ export class TauriTransport {
 
   private unlistenEvents: (() => void) | null = null;
   private listenStarting: Promise<void> | null = null;
+  /** 握手探测退避定时器（Stage 5a：短退避自愈，stop 时清除） */
+  private probeTimer: ReturnType<typeof setTimeout> | null = null;
+  /** waitUntilConnected 挂起解析器（engine-ready 事件 / probe 任一命中即结算） */
+  private readyResolvers: Array<(ok: boolean) => void> = [];
 
-  private readonly pollIntervalMs: number;
+  private readonly initialProbeBackoffMs: number;
   private readonly timeoutMs: number;
 
   constructor(opts: TauriTransportOptions = {}) {
-    this.pollIntervalMs = opts.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
+    this.initialProbeBackoffMs =
+      opts.pollIntervalMs ?? INITIAL_PROBE_BACKOFF_MS;
     this.timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-    // PE-03 T03.1：启动即拉取命令清单（core_list_commands，失败回退内置快照），
+    // 命令清单拉取推迟到握手成立之后（ACT-05-10）：消除冷启动初期冗余
+    // IPC；内置快照兜底已可支撑 call/request 校验（resolveTauriCommand）。
     // 成功后对照 commandMap——不一致仅 logger.warn，不崩（幽灵回归门禁）。
-    void initCommandManifest().then(() => {
-      checkCommandMapConsistency();
-    });
   }
 
   // ── Transport 接口 ──────────────────────────────────────────
@@ -166,6 +185,7 @@ export class TauriTransport {
    *
    * - 命令不在 manifest registered 面内 → `{ status: 'missing' }`（显式 missing，
    *   不 invoke；登记先行命令 registered=false 亦在此列，调用方显式降级）；
+   *   引导探针白名单（BOOTSTRAP_PROBE_ALLOWLIST）无条件放行（CON-07 加固面）；
    * - error 为暂态失败（核心启动竞态等）时自动重试一次后返回最终结果；
    * - 调用方按三态处理（不再依赖旧宽松包装吞 null 的语义）。
    */
@@ -240,52 +260,120 @@ export class TauriTransport {
   }
 
   /**
-   * 等待核心就绪：core_get_status 轮询（职责 8）。
-   * engineReady/dbReady 任一为 true → 'connected' + true；超时 → 'failed' + false。
+   * 等待核心就绪（职责 8 · Stage 5a ACT-501 响应式握手）：
+   * 1. 先挂 `workbench-run-event` 监听（消除 Rust engine-ready emit 早于
+   *    前端 listen 的事件丢失窗口）；
+   * 2. listen 完成后 0ms Fast-Probe `core_get_status`（probe 兜底：事件
+   *    已丢但核心就绪时立即命中）；
+   * 3. 未就绪 → 短指数退避自愈（10ms → 50ms 封顶，严禁 250ms 盲等）；
+   * 4. engine-ready 事件 / probe 任一命中 → 'connected' + true；
+   *    超时 → 'failed' + false。
    */
   async waitUntilConnected(timeoutMs?: number): Promise<boolean> {
     if (this.stopped) return false;
     if (this.ready) return true;
 
-    const deadline = Date.now() + Math.max(0, timeoutMs ?? this.timeoutMs);
+    const effectiveTimeout = Math.max(0, timeoutMs ?? this.timeoutMs);
+    const deadline = Date.now() + effectiveTimeout;
     this.setStatus('connecting');
 
-    let lastErr: Error | undefined;
-    while (Date.now() < deadline) {
-      if (this.stopped) return false;
-      try {
-        // PE-03 T03.2：④ 类内部直调消除——waitUntilConnected 复用唯一通道 call
-        // （清单校验 → invoke → 暂态重试），不再裸调 invokeTyped。
-        const res = await this.call<unknown>(CORE_GET_STATUS, {});
-        if (res.status === 'ok' && isCoreReady(res.data)) {
-          this.ready = true;
-          this.setStatus('connected');
-          return true;
-        }
-        if (res.status !== 'ok' && res.status !== 'missing') {
-          lastErr = new Error(`${res.kind}: ${res.message}`);
-        }
-      } catch (e) {
-        lastErr = e instanceof Error ? e : new Error(String(e));
-      }
-      if (this.stopped) return false;
-      await new Promise((r) => setTimeout(r, this.pollIntervalMs));
-    }
+    // ① 必须先挂 Native Push 监听（消除事件丢失窗口；幂等，与 onMessage 共享订阅）
+    await this.ensureEventSubscription();
+    if (this.stopped) return false;
+    if (this.ready) return true;
 
-    const timeoutErr =
-      lastErr ??
-      new Error(
-        `核心未就绪（${Math.max(0, timeoutMs ?? this.timeoutMs)}ms 超时）`
+    return new Promise<boolean>((resolve) => {
+      let settled = false;
+      let currentBackoff = Math.min(
+        this.initialProbeBackoffMs,
+        MAX_PROBE_BACKOFF_MS
       );
-    this.setStatus('failed', timeoutErr);
-    return false;
+      const settle = (ok: boolean): void => {
+        if (settled) return;
+        settled = true;
+        this.readyResolvers = this.readyResolvers.filter((r) => r !== settle);
+        resolve(ok);
+      };
+      this.readyResolvers.push(settle);
+
+      const scheduleProbe = (): void => {
+        if (settled || this.stopped) return;
+        this.probeTimer = setTimeout(runProbe, currentBackoff);
+      };
+
+      const runProbe = async (): Promise<void> => {
+        if (settled || this.stopped) {
+          if (!settled && this.stopped) settle(false);
+          return;
+        }
+        if (this.ready) {
+          settle(true);
+          return;
+        }
+        if (Date.now() >= deadline) {
+          this.setStatus(
+            'failed',
+            new Error(`核心未就绪（${effectiveTimeout}ms 超时）`)
+          );
+          settle(false);
+          return;
+        }
+        try {
+          const ok = await this.probeOnce(deadline, effectiveTimeout);
+          if (ok) {
+            settle(true);
+            return;
+          }
+        } catch {
+          /* probeOnce 已吞错；继续退避循环 */
+        }
+        if (settled || this.stopped) {
+          if (!settled && this.stopped) settle(false);
+          return;
+        }
+        if (this.ready) {
+          settle(true);
+          return;
+        }
+        if (Date.now() >= deadline) {
+          this.setStatus(
+            'failed',
+            new Error(`核心未就绪（${effectiveTimeout}ms 超时）`)
+          );
+          settle(false);
+          return;
+        }
+        // 短退避自愈：1.5× 增长、50ms 封顶（ACT-501，废除 250ms 盲等）
+        currentBackoff = Math.min(
+          currentBackoff * 1.5,
+          MAX_PROBE_BACKOFF_MS
+        );
+        scheduleProbe();
+      };
+
+      // ② 0ms Fast-Probe（listen 已挂，即使 engine-ready 丢失也能命中）
+      void runProbe();
+    });
   }
 
-  /** 停止：退订事件通道 + 复位状态（幂等） */
+  /** 停止：退订事件通道 + 清探测定时器 + 复位状态（幂等） */
   stop(): void {
     if (this.stopped) return;
     this.stopped = true;
     this.ready = false;
+    if (this.probeTimer) {
+      clearTimeout(this.probeTimer);
+      this.probeTimer = null;
+    }
+    const resolvers = this.readyResolvers;
+    this.readyResolvers = [];
+    for (const r of resolvers) {
+      try {
+        r(false);
+      } catch {
+        /* ignore */
+      }
+    }
     this.teardownEventSubscription();
     this.setStatus('disconnected');
   }
@@ -299,6 +387,56 @@ export class TauriTransport {
   }
 
   // ── 内部实现 ────────────────────────────────────────────────
+
+  /**
+   * 0ms Fast-Probe：调用 `core_get_status` 读取微内核当前状态机。
+   * 就绪 → markConnected + true；未就绪 / 报错 → false（不抛，由调用方退避重试）。
+   * 引导探针经 BOOTSTRAP_PROBE_ALLOWLIST 无条件放行（CON-07 加固面）。
+   */
+  private async probeOnce(
+    _deadline: number,
+    _effectiveTimeout: number
+  ): Promise<boolean> {
+    if (this.stopped || this.ready) return this.ready;
+    try {
+      const res = await this.call<unknown>(CORE_GET_STATUS, {});
+      if (res.status === 'ok' && isCoreReady(res.data)) {
+        this.markConnected();
+        return true;
+      }
+    } catch {
+      /* 暂态失败：由退避循环自愈 */
+    }
+    return this.ready;
+  }
+
+  /**
+   * 握手成立（Stage 5a）：engine-ready Native Push / Fast-Probe 任一命中。
+   * 标记 connected + 结算全部挂起 waitUntilConnected + 延迟拉取命令清单
+   * （ACT-05-10：消除冷启动初期冗余 IPC）。
+   */
+  private markConnected(): void {
+    if (this.ready || this.stopped) return;
+    this.ready = true;
+    if (this.probeTimer) {
+      clearTimeout(this.probeTimer);
+      this.probeTimer = null;
+    }
+    this.setStatus('connected');
+    const resolvers = this.readyResolvers;
+    this.readyResolvers = [];
+    for (const r of resolvers) {
+      try {
+        r(true);
+      } catch {
+        /* ignore */
+      }
+    }
+    // 延迟拉取清单 + 幽灵回归对照（失败回退内置快照，不崩）
+    void initCommandManifest().then(() => {
+      checkCommandMapConsistency();
+    });
+  }
 
   /**
    * 带超时的 call 包装（request 专用）：超时抛「Tauri request timeout」。
@@ -349,6 +487,14 @@ export class TauriTransport {
                 ? (payload as Record<string, unknown>)
                 : null;
           if (!parsed) return;
+          // Stage 5a ACT-501：engine-ready Native Push 0ms 命中握手
+          //（同时仍透传给业务订阅者——事件载荷逐字透传不变）
+          if (
+            parsed.type === ENGINE_READY_EVENT_TYPE ||
+            isCoreReady(parsed)
+          ) {
+            this.markConnected();
+          }
           for (const cb of this.messageListeners) {
             try {
               cb(parsed);

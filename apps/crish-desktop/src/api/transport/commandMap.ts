@@ -22,6 +22,19 @@ import { isRegisteredCommand } from './commandManifest';
 import { logger } from '../../services/LoggerService';
 
 /**
+ * 引导探针白名单（Stage 5a / CON-07 加固面，ACT-501）。
+ * 握手路径的 `core_get_status` Fast-Probe 与窗口首绘握手
+ * `workbench_window_ready` 无条件放行——切断未来清单逻辑漂移把引导探针
+ * 卷入「清单未拉取 → 无法调用 → 无法握手 → 清单永远不拉取」鸡生蛋依赖。
+ * 注意：BUILTIN_COMMAND_MANIFEST 已含两命令；本 Bypass 是防御性加固，
+ * 非死锁解除的唯一依赖。
+ */
+export const BOOTSTRAP_PROBE_ALLOWLIST: ReadonlySet<string> = new Set([
+  'core_get_status',
+  'workbench_window_ready',
+]);
+
+/**
  * 纯命令名白名单（T18：WS 双命名空间已删除，条目全部为命令名直传）。
  * 调用方以命令名调用 transport；本清单供
  * [checkCommandMapConsistency] 的幽灵回归门禁使用（每条必须 ∈ 清单 registered 命令）。
@@ -55,8 +68,12 @@ export const COMMAND_NAME_ALLOWLIST: ReadonlySet<string> = new Set([
  * registered 面内校验，命中则原样放行，否则 → null（显式 missing，
  * Tauri 路径抛「命令不可用」，不静默兜底）。
  * 已无 WS 消息 type → 命令名的映射层（双命名空间已消除）。
+ *
+ * Stage 5a（ACT-501 / CON-07）：引导探针白名单无条件放行（防清单时序
+ * 鸡生蛋）；其余命令仍走清单校验。
  */
 export function resolveTauriCommand(cmd: string): string | null {
+  if (BOOTSTRAP_PROBE_ALLOWLIST.has(cmd)) return cmd;
   return isRegisteredCommand(cmd) ? cmd : null;
 }
 
