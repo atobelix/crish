@@ -69,6 +69,7 @@ const MIX_SKIP_FILE_NAMES = [
   'tokens.css',
   'themeStore.ts',
   'themePersonalization.ts',
+  'TokenRuntimeController.ts',
   'design-system.css',
 ];
 
@@ -375,7 +376,9 @@ describe('批次 2 · ⑥ 注入 token 名 ∈ 静态定义名（双层同源约
     const themeStore =
       readFile('src/api/themeStore.ts') +
       '\n' +
-      readFile('src/api/themePersonalization.ts');
+      readFile('src/api/themePersonalization.ts') +
+      '\n' +
+      readFile('src/services/TokenRuntimeController.ts');
     const injected = [
       ...new Set(
         [...themeStore.matchAll(/setProperty\('(--[\w-]+)'/g)].map((m) => m[1])
@@ -393,7 +396,9 @@ describe('批次 2 · ⑦ 固定值双源同值（双层同源约束 2）', () =
     const themeStore =
       readFile('src/api/themeStore.ts') +
       '\n' +
-      readFile('src/api/themePersonalization.ts');
+      readFile('src/api/themePersonalization.ts') +
+      '\n' +
+      readFile('src/services/TokenRuntimeController.ts');
     expect(themeStore).not.toContain("setProperty('--bg-hover'");
     expect(themeStore).not.toContain("setProperty('--bg-active'");
   });
@@ -402,7 +407,9 @@ describe('批次 2 · ⑦ 固定值双源同值（双层同源约束 2）', () =
     const ts =
       readFile('src/api/themeStore.ts') +
       '\n' +
-      readFile('src/api/themePersonalization.ts');
+      readFile('src/api/themePersonalization.ts') +
+      '\n' +
+      readFile('src/services/TokenRuntimeController.ts');
     const softBg = ts.match(
       /softBgPct = isDarkPreset \? '([^']+)' : '([^']+)'/
     );
@@ -519,8 +526,10 @@ describe('设置按钮圆角 7px 契约（用户锁，survey 04）', () => {
     const seg = readFile(
       'src/components/ui/SegmentedControl/SegmentedControl.module.css'
     );
-    expect(button).toContain('--btn-radius: var(--button-radius, 7px)');
-    expect(seg).toContain('--seg-outer-radius: var(--button-radius, 7px)');
+    // 2026-09-12 适配 T8 兜底清退：7px 用户锁由 tokens.css 的 --radius-btn: 7px 单点守护
+    // （见上方 it），消费点一律无兜底直连 var(--button-radius) / var(--seg-outer-radius)。
+    expect(button).toContain('--btn-radius: var(--button-radius)');
+    expect(seg).toContain('--seg-outer-radius: var(--button-radius)');
     expect(seg).toContain('--seg-inner-radius: calc(var(--seg-outer-radius) - var(--seg-pad))');
     expect(seg).toContain('border-radius: var(--seg-outer-radius)');
     expect(seg).toContain('border-radius: var(--seg-inner-radius)');

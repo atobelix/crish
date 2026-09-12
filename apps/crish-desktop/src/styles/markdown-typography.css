@@ -5,81 +5,9 @@
    权威命名空间: .conex-markdown, .md-rendered
    规范约束: 100% Design Tokens 驱动、零裸 Hex、现代 color-mix / hsl 语法
    ========================================================================== */
-
 /* ==========================================================================
    一、Markdown 专属语义化 Design Tokens
    ========================================================================== */
-:root {
-  /* --- 1. 排版字阶与行高基准 --- */
-  --md-font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
-  --md-font-mono: var(--font-mono, SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace);
-  --md-line-height-body: 1.68;
-  --md-paragraph-margin-bottom: 0.88em;
-
-  /* --- 2. 标题体系基准 --- */
-  --md-heading-font-weight: 600;
-  --md-heading-color: var(--text-primary);
-  --md-h1-size: 1.85em;
-  --md-h1-margin: 0.85em 0 0.36em;
-  --md-h1-border: 1px solid var(--border-subtle);
-  --md-h2-size: 1.45em;
-  --md-h2-margin: 0.75em 0 0.30em;
-  --md-h2-border: 1px solid var(--border-subtle);
-  --md-h3-size: 1.25em;
-  --md-h3-margin: 0.65em 0 0.26em;
-  --md-h4-size: 1.1em;
-  --md-h4-margin: 0.55em 0 0.22em;
-  --md-h5-size: 1em;
-  --md-h5-margin: 0.45em 0 0.18em;
-  --md-h6-size: 0.9em;
-  --md-h6-margin: 0.38em 0 0.15em;
-
-  /* --- 3. 表格系统基准 (彻底解决列宽粘连与截图崩溃) --- */
-  --md-table-border: var(--border-color);
-  --md-table-radius: var(--radius-lg, 8px);
-  --md-table-header-bg: color-mix(in srgb, var(--text-primary) 3.5%, var(--bg-card));
-  --md-table-header-fg: var(--text-primary);
-  --md-table-cell-padding: 10px 14px;
-  --md-table-cell-padding-compact: var(--space-1_5, 6px) var(--space-2_5, 10px);
-  --md-table-row-alt-bg: color-mix(in srgb, var(--text-primary) 1.5%, transparent);
-  --md-table-row-hover-bg: color-mix(in srgb, var(--text-primary) 3%, var(--bg-card));
-
-  /* --- 4. 列表与引用系统基准 --- */
-  --md-list-padding-left: 1.6em;
-  --md-list-item-margin: 0.28em 0;
-  --md-quote-border: 3px solid var(--border-color);
-  --md-quote-bg: var(--tint-subtle);
-  --md-quote-padding: 0.45em 0 0.45em 1.1em;
-  --md-quote-margin: 0.68em 0;
-
-  /* --- 5. 行内微排版与交互胶囊 --- */
-  --md-code-inline-bg: color-mix(in srgb, var(--text-primary) 3.5%, var(--bg-card));
-  --md-code-inline-fg: var(--text-primary);
-  --md-code-inline-radius: 4px;
-  --md-code-inline-padding: 0.15em 0.4em;
-  --md-code-inline-size: 0.9em;
-
-  --md-path-link-bg: transparent;
-  --md-path-link-fg: var(--text-secondary);
-  --md-path-link-border: transparent;
-
-  /* --- 6. 链接体系 --- */
-  --md-link-color: var(--brand-deep);
-  --md-link-hover-color: var(--brand);
-  --md-link-underline-offset: 3px;
-  --md-link-underline-color: color-mix(in srgb, var(--md-link-color) 35%, transparent);
-}
-
-html[data-theme='dark'] {
-  --md-table-header-bg: hsl(0 0% 13%);
-  --md-table-row-alt-bg: color-mix(in srgb, var(--text-primary) 2.5%, transparent);
-  --md-table-row-hover-bg: hsl(0 0% 15%);
-  --md-code-inline-bg: color-mix(in srgb, var(--text-primary) 5%, var(--bg-card));
-  --md-code-inline-fg: var(--text-primary);
-  --md-link-color: var(--brand);
-  --md-link-hover-color: hsl(160 84% 55%);
-}
-
 /* ==========================================================================
    二、顶级通用命名空间与容器基准 (Reset & Base)
    ========================================================================== */
@@ -94,14 +22,12 @@ html[data-theme='dark'] {
   word-break: break-word;
   overflow-wrap: break-word;
 }
-
 /* --- Document 模式排版变体 (Long Document Mode: 精致留白与边距) --- */
 :is(.conex-markdown, .md-rendered)[data-md-variant='document'] {
   padding: var(--space-2_5, 10px) var(--space-3, 12px) var(--space-5, 20px);
   width: 100%;
   box-sizing: border-box;
 }
-
 /* --- Chat 模式排版变体 (Compact Bubble Mode: 气泡紧凑) --- */
 :is(.conex-markdown, .md-rendered)[data-md-variant='chat'] {
   padding: 0;
@@ -109,16 +35,13 @@ html[data-theme='dark'] {
 :is(.conex-markdown, .md-rendered)[data-md-variant='chat'] > :last-child {
   margin-bottom: 0 !important;
 }
-
 /* 消除子级首项向上塌陷 */
 :is(.conex-markdown, .md-rendered) > :first-child {
   margin-top: 0 !important;
 }
-
 /* ==========================================================================
    三、表格物理排版与极细行间分割线（去除沉重框线，极细细线在行间）
    ========================================================================== */
-
 /* 外壳 .md-rendered .md-table-wrap */
 .md-rendered .md-table-wrap,
 .conex-markdown .md-table-wrap,
@@ -136,7 +59,6 @@ html[data-theme='dark'] {
   container-name: mdTableWrap;
   -webkit-overflow-scrolling: touch;
 }
-
 /* 内部表格 .md-rendered .md-table */
 .md-rendered .md-table,
 .conex-markdown .md-table,
@@ -152,7 +74,6 @@ html[data-theme='dark'] {
   font-variant-numeric: tabular-nums;
   box-sizing: border-box;
 }
-
 /* 吸顶表头 .md-rendered .md-th */
 .md-rendered .md-th,
 .conex-markdown .md-th,
@@ -169,7 +90,6 @@ html[data-theme='dark'] {
   box-sizing: border-box;
   white-space: nowrap;
 }
-
 /* 单元格与极细行间细线 */
 .md-rendered .md-td,
 .conex-markdown .md-td,
@@ -181,25 +101,21 @@ html[data-theme='dark'] {
   word-break: break-word;
   overflow-wrap: break-word;
 }
-
 /* 首末列边缘对齐 (Edge Alignment) */
 :is(.conex-markdown, .md-rendered) :is(.md-th, th):first-child,
 :is(.conex-markdown, .md-rendered) :is(.md-td, td):first-child {
   padding-left: 2px;
 }
-
 :is(.conex-markdown, .md-rendered) :is(.md-th, th):last-child,
 :is(.conex-markdown, .md-rendered) :is(.md-td, td):last-child {
   padding-right: 2px;
 }
-
 /* 末行单元格维持极细细线闭合 */
 .md-rendered .md-tr:last-child .md-td,
 .conex-markdown .md-tr:last-child .md-td,
 :is(.conex-markdown, .md-rendered) :is(.md-tr:last-child, tr:last-child) :is(.md-td, td) {
   border-bottom: 1px solid var(--border-subtle);
 }
-
 /* 斑马纹收敛为极简透明，仅保留行悬停轻微反馈 */
 .md-rendered .md-tr-alt,
 .md-rendered tbody tr:nth-child(even),
@@ -208,13 +124,11 @@ html[data-theme='dark'] {
 :is(.conex-markdown, .md-rendered) :is(.md-tr-alt, tbody tr:nth-child(even)) {
   background-color: transparent;
 }
-
 /* 行悬停极微反馈 */
 :is(.conex-markdown, .md-rendered) tbody :is(.md-tr:hover, tr:hover) {
   background-color: var(--tint-subtle);
   transition: background-color var(--transition-fast, 120ms ease);
 }
-
 /* 表格容器查询响应式适配 (Container Queries) */
 @container mdTableWrap (max-width: 540px) {
   :is(.conex-markdown, .md-rendered) :is(.md-table, table) {
@@ -225,11 +139,9 @@ html[data-theme='dark'] {
     padding: var(--md-table-cell-padding-compact);
   }
 }
-
 /* ==========================================================================
    四、列表与标题排版基准
    ========================================================================== */
-
 /* 列表 .md-ul, .md-ol */
 .md-rendered .md-ul,
 .md-rendered .md-ol,
@@ -241,7 +153,6 @@ html[data-theme='dark'] {
   margin: 0.36em 0;
   box-sizing: border-box;
 }
-
 /* 列表项 .md-li */
 .md-rendered .md-li,
 .conex-markdown .md-li,
@@ -249,13 +160,11 @@ html[data-theme='dark'] {
   margin: var(--md-list-item-margin);
   line-height: var(--md-line-height-body);
 }
-
 /* 嵌套列表 */
 :is(.conex-markdown, .md-rendered) :is(.md-ul-nested, ul ul, ol ul, ul ol, ol ol) {
   margin: 0.18em 0;
   padding-left: 1.4em;
 }
-
 /* 分割线 .md-hr */
 .md-rendered .md-hr,
 .conex-markdown .md-hr,
@@ -266,7 +175,6 @@ html[data-theme='dark'] {
   height: 0;
   box-sizing: content-box;
 }
-
 /* 段落基准 .md-p */
 .md-rendered .md-p,
 .conex-markdown .md-p,
@@ -276,7 +184,6 @@ html[data-theme='dark'] {
   line-height: var(--md-line-height-body);
   letter-spacing: 0.005em;
 }
-
 /* 标题基准 H1 ~ H6 */
 .md-rendered .md-h1,
 .conex-markdown .md-h1,
@@ -287,7 +194,6 @@ html[data-theme='dark'] {
   line-height: 1.25;
   color: var(--md-heading-color);
 }
-
 .md-rendered .md-h2,
 .conex-markdown .md-h2,
 :is(.conex-markdown, .md-rendered) :is(.md-h2, h2) {
@@ -297,7 +203,6 @@ html[data-theme='dark'] {
   line-height: 1.3;
   color: var(--md-heading-color);
 }
-
 .md-rendered .md-h3,
 .conex-markdown .md-h3,
 :is(.conex-markdown, .md-rendered) :is(.md-h3, h3) {
@@ -307,7 +212,6 @@ html[data-theme='dark'] {
   line-height: 1.35;
   color: var(--md-heading-color);
 }
-
 .md-rendered .md-h4,
 .conex-markdown .md-h4,
 :is(.conex-markdown, .md-rendered) :is(.md-h4, h4) {
@@ -317,7 +221,6 @@ html[data-theme='dark'] {
   line-height: 1.38;
   color: var(--md-heading-color);
 }
-
 .md-rendered .md-h5,
 .conex-markdown .md-h5,
 :is(.conex-markdown, .md-rendered) :is(.md-h5, h5) {
@@ -327,7 +230,6 @@ html[data-theme='dark'] {
   line-height: 1.4;
   color: var(--md-heading-color);
 }
-
 .md-rendered .md-h6,
 .conex-markdown .md-h6,
 :is(.conex-markdown, .md-rendered) :is(.md-h6, h6) {
@@ -337,11 +239,9 @@ html[data-theme='dark'] {
   line-height: 1.4;
   color: var(--text-secondary);
 }
-
 /* ==========================================================================
    五、双模态排版变体架构 (Document vs Chat)
    ========================================================================== */
-
 /* --------------------------------------------------------------------------
    变体 A: Document 模式 (.md-rendered[data-md-variant="document"])
    类似 Typora / GitHub 长文档排版规范，专用于文档阅读面 (FilePreview, SkillDetailPreview)
@@ -363,7 +263,6 @@ html[data-theme='dark'] {
   --md-list-item-margin: 0.30em 0;
   max-width: min(920px, 100%);
 }
-
 .md-rendered[data-md-variant="document"] :is(.md-h1, h1),
 .conex-markdown[data-md-variant="document"] :is(.md-h1, h1),
 [data-md-variant="document"] :is(.conex-markdown, .md-rendered) :is(.md-h1, h1) {
@@ -373,7 +272,6 @@ html[data-theme='dark'] {
   border-bottom: var(--md-h1-border);
   line-height: 1.25;
 }
-
 .md-rendered[data-md-variant="document"] :is(.md-h2, h2),
 .conex-markdown[data-md-variant="document"] :is(.md-h2, h2),
 [data-md-variant="document"] :is(.conex-markdown, .md-rendered) :is(.md-h2, h2) {
@@ -383,7 +281,6 @@ html[data-theme='dark'] {
   border-bottom: var(--md-h2-border);
   line-height: 1.3;
 }
-
 .md-rendered[data-md-variant="document"] .md-p,
 .md-rendered[data-md-variant="document"] :is(.md-p, p),
 .conex-markdown[data-md-variant="document"] .md-p,
@@ -392,7 +289,6 @@ html[data-theme='dark'] {
   margin-bottom: var(--md-paragraph-margin-bottom);
   line-height: var(--md-line-height-body);
 }
-
 /* --------------------------------------------------------------------------
    变体 B: Chat 模式 (.md-rendered[data-md-variant="chat"])
    面向对话流气泡紧凑排版，高密度、防溢出、末段贴底消除多余内边距
@@ -414,7 +310,6 @@ html[data-theme='dark'] {
   --md-list-item-margin: 0.22em 0;
   max-width: 100%;
 }
-
 .md-rendered[data-md-variant="chat"] :is(.md-h1, h1),
 .conex-markdown[data-md-variant="chat"] :is(.md-h1, h1),
 [data-md-variant="chat"] :is(.conex-markdown, .md-rendered) :is(.md-h1, h1) {
@@ -424,7 +319,6 @@ html[data-theme='dark'] {
   border-bottom: none;
   line-height: 1.3;
 }
-
 .md-rendered[data-md-variant="chat"] :is(.md-h2, h2),
 .conex-markdown[data-md-variant="chat"] :is(.md-h2, h2),
 [data-md-variant="chat"] :is(.conex-markdown, .md-rendered) :is(.md-h2, h2) {
@@ -434,7 +328,6 @@ html[data-theme='dark'] {
   border-bottom: none;
   line-height: 1.32;
 }
-
 .md-rendered[data-md-variant="chat"] .md-p,
 .md-rendered[data-md-variant="chat"] :is(.md-p, p),
 .conex-markdown[data-md-variant="chat"] .md-p,
@@ -443,47 +336,38 @@ html[data-theme='dark'] {
   margin-bottom: var(--md-paragraph-margin-bottom);
   line-height: var(--md-line-height-body);
 }
-
 /* 容器铁律：消除最后一个子元素的外边距溢出 */
 :is(.conex-markdown, .md-rendered) > :last-child,
 .md-rendered[data-md-variant="chat"] > :last-child,
 [data-md-variant="chat"] :is(.conex-markdown, .md-rendered) > :last-child {
   margin-bottom: 0 !important;
 }
-
 /* 混合排版相邻规则：避免某些地方空行过大 */
 /* 标题紧随段落/列表/表格之后：顶部留白充足明确区分章节 */
 :is(.conex-markdown, .md-rendered) :is(.md-p, p, .md-ul, ul, .md-ol, ol, .md-table-wrap) + :is(.md-h1, .md-h2, .md-h3, .md-h4, .md-h5, .md-h6, h1, h2, h3, h4, h5, h6) {
   margin-top: 0.65em;
 }
-
 /* 标题紧随正文/列表/表格：去除多余外顶边距，紧密归属 */
 :is(.conex-markdown, .md-rendered) :is(.md-h1, .md-h2, .md-h3, .md-h4, .md-h5, .md-h6, h1, h2, h3, h4, h5, h6) + :is(.md-p, p, .md-ul, ul, .md-ol, ol, .md-table-wrap) {
   margin-top: 0;
 }
-
 /* 段落紧随列表/表格：过渡平滑，消除段前空洞 */
 :is(.conex-markdown, .md-rendered) :is(.md-p, p) + :is(.md-ul, ul, .md-ol, ol, .md-table-wrap) {
   margin-top: 0.15em;
 }
-
 :is(.conex-markdown, .md-rendered) :is(.md-ul, ul, .md-ol, ol, .md-table-wrap) + :is(.md-p, p) {
   margin-top: 0.35em;
 }
-
 /* 分割线与相邻元素平滑过渡，消除空行重叠 */
 :is(.conex-markdown, .md-rendered) :is(.md-p, p, .md-ul, ul, .md-ol, ol) + :is(.md-hr, hr) {
   margin-top: 0.55em;
 }
-
 :is(.conex-markdown, .md-rendered) :is(.md-hr, hr) + :is(.md-h1, .md-h2, .md-h3, .md-h4, .md-h5, .md-h6, h1, h2, h3, h4, h5, h6) {
   margin-top: 0.55em;
 }
-
 /* ==========================================================================
    六、通用 Markdown 块与行内微排版
    ========================================================================== */
-
 /* --- 引用块 (Blockquote) --- */
 .md-rendered .md-quote,
 .conex-markdown .md-quote,
@@ -496,11 +380,9 @@ html[data-theme='dark'] {
   color: var(--text-secondary);
   box-sizing: border-box;
 }
-
 :is(.conex-markdown, .md-rendered) :is(.md-quote, blockquote) > :last-child {
   margin-bottom: 0 !important;
 }
-
 /* --- 行内代码与快捷键胶囊 (Inline Code & Kbd) --- */
 .md-rendered .md-inline-code,
 .conex-markdown .md-inline-code,
@@ -519,7 +401,6 @@ html[data-theme='dark'] {
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
 }
-
 .md-rendered .md-kbd,
 .conex-markdown .md-kbd,
 :is(.conex-markdown, .md-rendered) :is(.md-kbd, kbd) {
@@ -535,7 +416,6 @@ html[data-theme='dark'] {
   line-height: 1.2;
   white-space: nowrap;
 }
-
 /* --- 本地文件路径交互微胶囊 (.md-path-link: 纯净文本减法，去除描边与背景色，自然下划线) --- */
 .md-rendered .md-path-link,
 .conex-markdown .md-path-link,
@@ -562,23 +442,19 @@ html[data-theme='dark'] {
     color var(--transition-fast, 120ms ease),
     text-decoration-color var(--transition-fast, 120ms ease);
 }
-
 :is(.conex-markdown, .md-rendered) .md-path-link:hover {
   background: transparent;
   color: var(--text-primary);
   text-decoration-color: var(--text-primary);
 }
-
 :is(.conex-markdown, .md-rendered) .md-path-link:active {
   background: transparent;
   color: var(--text-primary);
 }
-
 :is(.conex-markdown, .md-rendered) .md-path-link:focus-visible {
   outline: none;
   text-decoration-color: var(--text-primary);
 }
-
 /* --- 链接体系 (Links) --- */
 .md-rendered .md-a,
 .conex-markdown .md-a,
@@ -591,12 +467,10 @@ html[data-theme='dark'] {
     color var(--transition-fast, 150ms ease),
     text-decoration-color var(--transition-fast, 150ms ease);
 }
-
 :is(.conex-markdown, .md-rendered) :is(.md-a:hover, a:hover) {
   color: var(--md-link-hover-color);
   text-decoration-color: var(--md-link-hover-color);
 }
-
 /* --- 代码块容器与头部元信息 (.md-code-block & .md-code-header) --- */
 .md-rendered .md-code-block,
 .conex-markdown .md-code-block,
@@ -609,7 +483,6 @@ html[data-theme='dark'] {
   overflow: hidden;
   box-shadow: none;
 }
-
 /* 实体顶栏：左标题/面包屑，右操作，高度 32px，无缝背景 */
 .md-rendered .md-code-header,
 .conex-markdown .md-code-header,
@@ -624,7 +497,6 @@ html[data-theme='dark'] {
   border-bottom: 1px solid var(--md-code-header-border, transparent);
   user-select: none;
 }
-
 .md-rendered .md-code-header-left,
 .conex-markdown .md-code-header-left,
 :is(.conex-markdown, .md-rendered) .md-code-header-left {
@@ -638,7 +510,6 @@ html[data-theme='dark'] {
   font-weight: var(--font-weight-normal, 400);
   color: var(--text-tertiary);
 }
-
 /* 面包屑在 Header 内流式排布，保持独立时兼容 padding 与底边 */
 .md-rendered .md-code-breadcrumb,
 .conex-markdown .md-code-breadcrumb,
@@ -658,32 +529,27 @@ html[data-theme='dark'] {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-
 :is(.conex-markdown, .md-rendered) .md-code-header .md-code-breadcrumb {
   padding: 0;
   background: transparent;
   border-bottom: none;
 }
-
 .md-rendered .md-code-breadcrumb-segment,
 .conex-markdown .md-code-breadcrumb-segment,
 :is(.conex-markdown, .md-rendered) .md-code-breadcrumb-segment {
   color: var(--text-tertiary);
 }
-
 .md-rendered .md-code-breadcrumb-separator,
 .conex-markdown .md-code-breadcrumb-separator,
 :is(.conex-markdown, .md-rendered) .md-code-breadcrumb-separator {
   color: var(--border-color);
 }
-
 .md-rendered .md-code-breadcrumb-file,
 .conex-markdown .md-code-breadcrumb-file,
 :is(.conex-markdown, .md-rendered) .md-code-breadcrumb-file {
   color: var(--text-primary);
   font-weight: var(--font-weight-medium, 500);
 }
-
 /* 代码块操作中枢：在 Header 内静态排列，降级时绝对定位排布 */
 .md-rendered .md-code-actions,
 .conex-markdown .md-code-actions,
@@ -693,7 +559,6 @@ html[data-theme='dark'] {
   gap: var(--space-1_5, 6px);
   flex-shrink: 0;
 }
-
 :is(.conex-markdown, .md-rendered) .md-code-block > .md-code-actions {
   position: absolute;
   top: 6px;
@@ -701,20 +566,17 @@ html[data-theme='dark'] {
   z-index: 5;
   pointer-events: none;
 }
-
 .md-rendered .md-code-actions > *,
 .conex-markdown .md-code-actions > *,
 :is(.conex-markdown, .md-rendered) .md-code-actions > * {
   pointer-events: auto;
 }
-
 :is(.conex-markdown, .md-rendered) .md-code-actions .md-code-copy,
 :is(.conex-markdown, .md-rendered) .md-code-header .md-code-copy {
   position: static;
   top: auto;
   right: auto;
 }
-
 .md-rendered .md-code-lang,
 .conex-markdown .md-code-lang,
 :is(.conex-markdown, .md-rendered) .md-code-lang {
@@ -731,7 +593,6 @@ html[data-theme='dark'] {
   background: var(--tint-active);
   line-height: 1.3;
 }
-
 :is(.conex-markdown, .md-rendered) .md-code-header-left .md-code-lang {
   padding: 0;
   font-size: var(--font-size-xs, 12px);
@@ -739,14 +600,12 @@ html[data-theme='dark'] {
   color: var(--text-tertiary);
   letter-spacing: 0.02em;
 }
-
 /* 兼容无 .md-code-actions 外壳的旧结构降级绝对定位 */
 :is(.conex-markdown, .md-rendered) > .md-code-lang {
   position: absolute;
   top: 6px;
   right: 76px;
 }
-
 .md-rendered .md-code-copy,
 .conex-markdown .md-code-copy,
 :is(.conex-markdown, .md-rendered) .md-code-copy {
@@ -758,7 +617,8 @@ html[data-theme='dark'] {
   padding: 0 var(--space-2, 8px);
   font-size: var(--font-size-micro, 11px);
   font-family: var(--font-sans);
-  color: var(--text-tertiary);
+  /* 静置弱化态走 --text-faint 层级（tertiary 向底色混合 ~70%），hover/is-copied 提级。 */
+  color: var(--text-faint);
   background: transparent;
   box-shadow: none;
   border: 1px solid transparent;
@@ -768,14 +628,12 @@ html[data-theme='dark'] {
   flex-shrink: 0;
   line-height: 1;
   user-select: none;
-  opacity: 0.7;
   transition:
     opacity var(--transition-fast, 150ms ease),
     background-color var(--transition-fast, 150ms ease),
     color var(--transition-fast, 150ms ease),
     border-color var(--transition-fast, 150ms ease);
 }
-
 .md-rendered .md-code-copy::before,
 .conex-markdown .md-code-copy::before,
 :is(.conex-markdown, .md-rendered) .md-code-copy::before {
@@ -788,21 +646,18 @@ html[data-theme='dark'] {
   -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z'/%3E%3Cpath d='M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z'/%3E%3C/svg%3E") no-repeat center / contain;
   mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z'/%3E%3Cpath d='M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z'/%3E%3C/svg%3E") no-repeat center / contain;
 }
-
 .md-rendered .md-code-copy.is-copied::before,
 .conex-markdown .md-code-copy.is-copied::before,
 :is(.conex-markdown, .md-rendered) .md-code-copy.is-copied::before {
   -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill-rule='evenodd' d='M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z'/%3E%3C/svg%3E");
   mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill-rule='evenodd' d='M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z'/%3E%3C/svg%3E");
 }
-
 /* 兼容无 .md-code-actions 外壳的旧结构降级绝对定位 */
 :is(.conex-markdown, .md-rendered) > .md-code-copy {
   position: absolute;
   top: 6px;
   right: 8px;
 }
-
 :is(.conex-markdown, .md-rendered) .md-code-block:hover .md-code-copy,
 .md-rendered .md-code-block:hover .md-code-copy,
 .conex-markdown .md-code-block:hover .md-code-copy,
@@ -811,14 +666,12 @@ html[data-theme='dark'] {
 .conex-markdown .md-code-copy:focus-visible {
   opacity: 1;
 }
-
 :is(.conex-markdown, .md-rendered) .md-code-copy:hover {
   background: var(--md-code-copy-hover-bg, var(--tint-hover));
   color: var(--text-primary);
   border-color: var(--border-subtle);
   opacity: 1;
 }
-
 :is(.conex-markdown, .md-rendered) .md-code-copy.is-copied,
 .md-rendered .md-code-copy.is-copied,
 .conex-markdown .md-code-copy.is-copied {
@@ -827,7 +680,6 @@ html[data-theme='dark'] {
   background: color-mix(in srgb, var(--brand) 12%, var(--bg-card));
   opacity: 1;
 }
-
 .md-rendered .md-code-pre,
 .conex-markdown .md-code-pre,
 :is(.conex-markdown, .md-rendered) .md-code-pre {
@@ -842,7 +694,6 @@ html[data-theme='dark'] {
   color: var(--text-primary);
   background: transparent;
 }
-
 .md-rendered .md-code-pre code,
 .conex-markdown .md-code-pre code,
 :is(.conex-markdown, .md-rendered) .md-code-pre code {
@@ -851,20 +702,11 @@ html[data-theme='dark'] {
   line-height: inherit;
   white-space: inherit;
 }
-
-:is(.conex-markdown, .md-rendered) .md-code-pre::-webkit-scrollbar {
-  height: 4px;
+/* 代码块滚动条走 overlay-scrollbar.css 唯一出口的域覆盖通道（细条 4px），
+ * thumb/track/安全空隙全部由全局出口提供；禁止在域外新增私有 webkit 伪元素块。 */
+:is(.conex-markdown, .md-rendered) .md-code-pre {
+  --scrollbar-thumb-width: 4px;
 }
-
-:is(.conex-markdown, .md-rendered) .md-code-pre::-webkit-scrollbar-thumb {
-  background: var(--tint-scrollbar-thumb);
-  border-radius: var(--radius-full, 9999px);
-}
-
-:is(.conex-markdown, .md-rendered) .md-code-pre::-webkit-scrollbar-track {
-  background: transparent;
-}
-
 /* --- GFM 任务清单列表 --- */
 .md-rendered .md-task-item,
 .conex-markdown .md-task-item,
@@ -876,7 +718,6 @@ html[data-theme='dark'] {
   margin: var(--md-list-item-margin) 0;
   margin-left: -1.35em;
 }
-
 .md-rendered .md-task-box,
 .conex-markdown .md-task-box,
 :is(.conex-markdown, .md-rendered) .md-task-box {
@@ -893,14 +734,12 @@ html[data-theme='dark'] {
   box-sizing: border-box;
   flex-shrink: 0;
 }
-
 .md-rendered .md-task-box.checked,
 .conex-markdown .md-task-box.checked,
 :is(.conex-markdown, .md-rendered) .md-task-box.checked {
   background: var(--brand);
   border-color: var(--brand);
 }
-
 .md-rendered .md-task-box.checked::after,
 .conex-markdown .md-task-box.checked::after,
 :is(.conex-markdown, .md-rendered) .md-task-box.checked::after {
@@ -911,14 +750,12 @@ html[data-theme='dark'] {
   border-width: 0 var(--md-task-check-stroke, 2px) var(--md-task-check-stroke, 2px) 0;
   transform: rotate(45deg) translate(-0.5px, -0.5px);
 }
-
 .md-rendered .md-task-item.done,
 .conex-markdown .md-task-item.done,
 :is(.conex-markdown, .md-rendered) .md-task-item.done {
   text-decoration: line-through;
   color: var(--text-tertiary);
 }
-
 /* --- 多媒体与行内文字强调 --- */
 .md-rendered .md-img,
 .conex-markdown .md-img,
@@ -931,20 +768,17 @@ html[data-theme='dark'] {
   margin: 0.8em 0;
   display: block;
 }
-
 .md-rendered .md-strong,
 .conex-markdown .md-strong,
 :is(.conex-markdown, .md-rendered) :is(.md-strong, strong) {
   font-weight: 600;
   color: var(--text-primary);
 }
-
 .md-rendered .md-em,
 .conex-markdown .md-em,
 :is(.conex-markdown, .md-rendered) :is(.md-em, em) {
   font-style: italic;
 }
-
 .md-rendered .md-del,
 .conex-markdown .md-del,
 :is(.conex-markdown, .md-rendered) :is(.md-del, del) {

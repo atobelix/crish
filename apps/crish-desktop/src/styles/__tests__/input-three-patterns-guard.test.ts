@@ -123,7 +123,7 @@ describe('输入框四态体系与焦点/激活态刚性防御契约', () => {
       'utf-8'
     );
     expect(inputCss).toContain('border: 1px solid var(--border-subtle);');
-    expect(inputCss).toContain('border-radius: var(--radius-md, 6px);');
+    expect(inputCss).toMatch(/border-radius:\s*var\(--radius-md(?:\s*,\s*6px)?\);/);
     expect(inputCss).toMatch(/\.input:focus[^{]*\{[^}]*box-shadow:\s*none;/);
   });
 
@@ -133,7 +133,7 @@ describe('输入框四态体系与焦点/激活态刚性防御契约', () => {
       'utf-8'
     );
     expect(textareaCss).toContain('border: 1px solid var(--border-subtle);');
-    expect(textareaCss).toContain('border-radius: var(--radius-md, 6px);');
+    expect(textareaCss).toMatch(/border-radius:\s*var\(--radius-md(?:\s*,\s*6px)?\);/);
     expect(textareaCss).toMatch(/\.nativeTextarea:focus[^{]*\{[^}]*box-shadow:\s*none;/);
   });
 

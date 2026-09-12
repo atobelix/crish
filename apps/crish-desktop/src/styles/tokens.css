@@ -1,18 +1,18 @@
 /* ==========================================================================
-   冷启动全局动画门闩（Zero-FOUC Latch）
-   在应用启动和初次水合完成前，强制冻结全量组件过渡与动画，杜绝视觉蠕动
-   🌟 显式排除 .app-initial-loader，保护开屏加载动画正常运转
+   冷启动骨架局部门闩（ACT-203 · Zero-FOUC Latch）
+   废除历史 `html.preload *` 通配（StyleResolver Universal Rule Bucket 全树
+   NeedsStyleRecalc）。仅针对首绘骨架容器挂载过渡抑制；骨架自身呼吸/脉冲
+   动画由 loader.css 显式驱动，不受本门闩抑制。
+   loader.js 仍加 .preload 仅为兼容既有解闩调用（main.tsx remove），不再
+   驱动任何通配规则。解闩时序（双帧 rAF）属 Stage 4 / INV-04。
    ========================================================================== */
-html.preload *:not(.app-initial-loader, .app-initial-loader *),
-html.preload *:not(.app-initial-loader, .app-initial-loader *)::before,
-html.preload *:not(.app-initial-loader, .app-initial-loader *)::after {
+.skeleton-latched .app-initial-loader,
+.skeleton-latched #skel-app {
   -webkit-transition: none !important;
   -moz-transition: none !important;
   -ms-transition: none !important;
   -o-transition: none !important;
   transition: none !important;
-  animation-duration: 0s !important;
-  animation-delay: 0s !important;
 }
 
 :root {
@@ -62,7 +62,6 @@ html[data-theme='light'] {
   --bg-workspace: var(--surface-paper);
   --bg-page: var(--surface-paper);
   --bg-canvas: var(--surface-paper);
-  --bg-paper: var(--surface-paper, hsl(30 2.5% 98.5%));
   --composer-attach-card-bg: var(--surface-card);
   --composer-attach-remove-bg: color-mix(in srgb, var(--surface-card) 72%, transparent);
   --composer-attach-remove-border: color-mix(in srgb, var(--border-color) 70%, transparent);
@@ -203,8 +202,8 @@ html[data-theme='light'] {
   --sep-item-padding-h: 10px;
   --sep-item-gap: 2px;
 
-  --sep-font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --sep-font-mono: SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
+  --sep-font-sans: var(--font-sans, 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
+  --sep-font-mono: var(--font-mono, SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace);
 
   --sep-bg-panel-solid: #ffffff;
   --sep-bg-item-hover: var(--tint-hover);
@@ -483,8 +482,7 @@ html[data-theme='light'] {
      ========================================================================== */
 
   /* --- 1. Markdown 排版与正文体系 (Light) --- */
-  --md-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
-  --md-font-sans: var(--md-font-family);
+  --md-font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif);
   --md-font-mono: var(--font-mono, "IBM Plex Mono", "JetBrains Mono", monospace);
   --md-line-height-body: 1.68;
   --md-paragraph-margin-bottom: 0.88em;
@@ -795,7 +793,6 @@ html[data-theme='dark'] {
   --bg-elevated: var(--surface-elevated);
   --bg-subtle: var(--surface-chrome);
   --bg-workspace: var(--surface-paper);
-  --bg-paper: var(--surface-paper, var(--bg-primary));
   --shell-inset-bg: var(--bg-workspace, var(--bg-primary));
   --bg-page: var(--surface-paper);
   --bg-canvas: var(--surface-paper);
@@ -1088,8 +1085,7 @@ html[data-theme='dark'] {
      ========================================================================== */
 
   /* --- 1. Markdown 排版与正文体系 (Dark) --- */
-  --md-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
-  --md-font-sans: var(--md-font-family);
+  --md-font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif);
   --md-font-mono: var(--font-mono, "IBM Plex Mono", "JetBrains Mono", monospace);
   --md-line-height-body: 1.68;
   --md-paragraph-margin-bottom: 0.88em;
@@ -1505,6 +1501,8 @@ html[data-ui-size='large'] {
   --tree-level: 0;
   --toast-index: 0;
   --toast-offset-y: 0px;
+  --toast-swipe-movement-x: 0px;
+  --toast-swipe-movement-y: 0px;
   --sidebar-visible-width: 260px; /* 与 --sidebar-width 静态默认一致 */
   --font-mono-features: normal;
   --files-list-ratio: 35%; /* preferencesSchema defaultValue 0.35 */
