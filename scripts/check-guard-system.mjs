@@ -54,8 +54,6 @@ const UNWIRED_ALLOWLIST = [
   { name: 'check-sec7-gfm-emoji.mjs', reason: '安全专题，待评估接入 CI' },
   { name: 'check-layoutstore-actions.mjs', reason: '专题结构断言，待评估接入 CI' },
   { name: 'check-ui-negative-churn.mjs', reason: '基线内嵌于脚本，待迁移为标记区基线后接入' },
-  { name: 'check-token-fallback-drift.mjs', reason: 'B6-T23 新门禁：设置域兜底漂移棘轮；接线（package.json/husky）归 B5/T14 波次，避免与并行会话撞 package.json' },
-  { name: 'check-inline-style-hardcode.mjs', reason: 'B6-T23 新门禁：设置域内联硬编码棘轮；接线（package.json/husky）归 B5/T14 波次，避免与并行会话撞 package.json' },
 ];
 
 const GUIDE_TEXT = {

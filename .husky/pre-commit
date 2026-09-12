@@ -1,2 +1,9 @@
 git diff --check
 node scripts/check-conflict-markers.mjs
+# 仓库完整性（.git 元数据缺失 / git 不可用时的假 diff 防呆）
+node scripts/check-repo-integrity.mjs
+# 防御体系自审（接线缺口 / 静默建线绕过 / 守卫损坏）
+node scripts/check-guard-system.mjs
+# B6 设置域 token 消费面棘轮（0.1s×2；拦截裸兜底/内联硬编码回写）
+node scripts/check-token-fallback-drift.mjs
+node scripts/check-inline-style-hardcode.mjs
