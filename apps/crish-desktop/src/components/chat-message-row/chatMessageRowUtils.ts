@@ -131,6 +131,29 @@ export function toolStackSharedPropsEqual(
   );
 }
 
+/**
+ * 行级 toolStack 比较（D7.3 / FE-INV-5）：
+ * expandedTools 按 messageId 从 expandedToolsByMessage 切片后做引用比较——
+ * 单卡 toggle 只换目标消息槽位引用，其它行 Object.is 相等 → 0 重渲染。
+ */
+export function rowToolStackSharedPropsEqual(
+  a: ChatToolStackSharedProps,
+  b: ChatToolStackSharedProps,
+  msgId: string
+): boolean {
+  const aExp =
+    a.expandedToolsByMessage?.[msgId] ?? a.expandedTools;
+  const bExp =
+    b.expandedToolsByMessage?.[msgId] ?? b.expandedTools;
+  return (
+    aExp === bExp &&
+    a.approvalBusy === b.approvalBusy &&
+    a.pendingApprovalMsgId === b.pendingApprovalMsgId &&
+    a.agents === b.agents &&
+    a.activeSessionId === b.activeSessionId
+  );
+}
+
 export function focusChatComposer(): void {
   const scope =
     document.querySelector<HTMLElement>('.chat-body') ??
@@ -262,7 +285,13 @@ export function assistantRowPropsEqual(
     prev.planApproved === next.planApproved &&
     prev.isLastAssistant === next.isLastAssistant &&
     prev.followUpDismissed === next.followUpDismissed &&
-    toolStackSharedPropsEqual(prev.toolStackProps, next.toolStackProps) &&
+    // D7.3：行级展开态按 msgId 切片比较——单卡 toggle 只换目标消息槽位，
+    // 其它行 Object.is 相等 → 0 重渲染（FE-INV-5）。
+    rowToolStackSharedPropsEqual(
+      prev.toolStackProps,
+      next.toolStackProps,
+      prev.msg.id
+    ) &&
     prev.onTogglePin === next.onTogglePin &&
     prev.onRegenerate === next.onRegenerate &&
     prev.onBranch === next.onBranch &&

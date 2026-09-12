@@ -240,8 +240,12 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
     // ── 分段唯一权威：`partitionTimelineSegments`（四铁律裁决） ──
     const hasStreamText = Boolean(streamText != null && streamText.length > 0);
     const segments: TimelineSegment[] = useMemo(
-      () => partitionTimelineSegments(msg.id, linearItems, isLiveTurn, hasStreamText),
-      [msg.id, linearItems, isLiveTurn, hasStreamText]
+      () =>
+        partitionTimelineSegments(msg.id, linearItems, isLiveTurn, hasStreamText, {
+          msgTimestamp: msg.timestamp,
+          totalTurnDurationSec: msg.thinkingTime,
+        }),
+      [msg.id, linearItems, isLiveTurn, hasStreamText, msg.timestamp, msg.thinkingTime]
     );
 
     // ── 分段展开态字典（受控） ──
@@ -378,35 +382,47 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
       (seg) => seg.kind === 'process_section' && seg.isLive && seg.showWorkTime
     );
 
+    /**
+     * 流式注入面收窄（D7.2 / FE-INV-6）：
+     * 仅当本项是活跃流式尾块且确实处于流式时才注入 streamingTextContent；
+     * 历史卡 / 非活跃项恒为 undefined——保证引用稳定，不被 streamText 每帧新建字符串击穿 memo。
+     */
+    const activeStreamSlice = useMemo(() => {
+      if (!streaming || !streamText) return undefined;
+      if (
+        msg.streamTextOffset &&
+        msg.streamTextOffset > 0 &&
+        streamText.length >= msg.streamTextOffset
+      ) {
+        return streamText.slice(msg.streamTextOffset);
+      }
+      return streamText;
+    }, [streaming, streamText, msg.streamTextOffset]);
+
     // 分段渲染项：由 `ProcessItemRenderer` 承载（唯一渲染路径）
     const renderSegmentItem = useCallback(
-      (item: AssistantTimelineItem, _index: number) => (
-        <ProcessItemRenderer
-          item={item}
-          msgId={msg.id}
-          status={msg.status}
-          isThinkingMsg={isThinkingMsg}
-          thoughtDefaultOpen={thoughtDefaultOpen}
-          renderThought={renderThought}
-          renderTools={renderTools}
-          toolStackProps={toolStackProps}
-          streamPhase={streamPhaseRef.current}
-          hasFinalAnswer={Boolean(displayMsg.text?.trim() || streamText?.trim())}
-          isStreamingText={streaming && item === streamingTextItem}
-          streamingTextContent={
-            msg.streamTextOffset &&
-            msg.streamTextOffset > 0 &&
-            streamText &&
-            streamText.length >= msg.streamTextOffset
-              ? streamText.slice(msg.streamTextOffset)
-              : streamText
-          }
-        />
-      ),
+      (item: AssistantTimelineItem, _index: number) => {
+        const isThisStreaming = Boolean(streaming && item === streamingTextItem);
+        return (
+          <ProcessItemRenderer
+            item={item}
+            msgId={msg.id}
+            status={msg.status}
+            isThinkingMsg={isThinkingMsg}
+            thoughtDefaultOpen={thoughtDefaultOpen}
+            renderThought={renderThought}
+            renderTools={renderTools}
+            toolStackProps={toolStackProps}
+            streamPhase={streamPhaseRef.current}
+            hasFinalAnswer={Boolean(displayMsg.text?.trim() || streamText?.trim())}
+            isStreamingText={isThisStreaming}
+            streamingTextContent={isThisStreaming ? activeStreamSlice : undefined}
+          />
+        );
+      },
       [
         msg.id,
         msg.status,
-        msg.streamTextOffset,
         isThinkingMsg,
         thoughtDefaultOpen,
         renderThought,
@@ -416,6 +432,7 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
         streamText,
         streaming,
         streamingTextItem,
+        activeStreamSlice,
       ]
     );
 
@@ -517,8 +534,26 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
 
           if (seg.kind === 'text_narrative') {
             const item = seg.item;
-            const isThisStreaming = streaming && item === streamingTextItem;
+            const isThisStreaming = Boolean(
+              streaming && item === streamingTextItem
+            );
             textCursor += 1;
+            // 仅活跃流式项注入；历史项 undefined（引用稳定，FE-INV-6）。
+            // offset 语义与原版一致：textCursor>1 时才应用 streamTextOffset 切片。
+            let narrativeContent: string | undefined;
+            if (isThisStreaming) {
+              if (
+                textCursor > 1 &&
+                msg.streamTextOffset &&
+                msg.streamTextOffset > 0 &&
+                streamText &&
+                streamText.length >= msg.streamTextOffset
+              ) {
+                narrativeContent = streamText.slice(msg.streamTextOffset);
+              } else {
+                narrativeContent = streamText;
+              }
+            }
             return (
               <ProcessItemRenderer
                 key={seg.id}
@@ -533,15 +568,7 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
                 streamPhase={streamPhaseRef.current}
                 hasFinalAnswer={seg.isFinalAnswer}
                 isStreamingText={isThisStreaming}
-                streamingTextContent={
-                  msg.streamTextOffset &&
-                  msg.streamTextOffset > 0 &&
-                  streamText &&
-                  streamText.length >= msg.streamTextOffset &&
-                  textCursor > 1
-                    ? streamText.slice(msg.streamTextOffset)
-                    : streamText
-                }
+                streamingTextContent={narrativeContent}
               />
             );
           }

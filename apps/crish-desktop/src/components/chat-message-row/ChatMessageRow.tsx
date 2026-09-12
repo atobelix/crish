@@ -20,6 +20,7 @@ import {
   buildToolStackHostProps,
   copyTextBestEffort,
   toolStackSharedPropsEqual,
+  rowToolStackSharedPropsEqual,
 } from './chatMessageRowUtils';
 
 import {
@@ -48,6 +49,7 @@ export {
   buildToolStackHostProps,
   copyTextBestEffort,
   toolStackSharedPropsEqual,
+  rowToolStackSharedPropsEqual,
   ChatUserMessageRow,
   type ChatUserMessageRowProps,
   ChatAssistantMessageRow,

@@ -13,6 +13,8 @@ import { DEFAULT_PIN_COLOR } from '../chat-message-row/colorPickerUtils';
 const EMPTY_PINNED_IDS: string[] = [];
 const EMPTY_PINNED_ITEMS: PinnedItem[] = [];
 const EMPTY_PINNED_COLORS: Record<string, string> = {};
+/** 稳定空展开 map：共享 toolStackProps.expandedTools 槽位恒引用，不随 toggle 击穿全列表 */
+const EMPTY_TOOLS: Record<string, boolean> = {};
 
 /**
  * Build pin-bar items from pinned ids + full session messages.
@@ -106,7 +108,7 @@ export function useChatMessageState({
   onBatchDeny,
 }: UseChatMessageStateOptions) {
   const [expandedToolsBySession, setExpandedToolsBySession] = useState<
-    Record<string, Record<string, boolean>>
+    Record<string, Record<string, Record<string, boolean>>>
   >({});
   const [expandedUserMsgsBySession, setExpandedUserMsgsBySession] = useState<
     Record<string, Record<string, boolean>>
@@ -116,6 +118,11 @@ export function useChatMessageState({
   >({});
 
   const sessionKey = activeSessionId || '_';
+  /**
+   * 会话级展开 map：sessionId → messageId → toolId → open。
+   * D7.3（FE-INV-5）：toggle 只不可变更新目标消息槽位，其余消息的
+   * expandedTools 引用保持稳定，单卡展开不击穿其它行 memo。
+   */
   const expandedTools = useMemo(
     () => expandedToolsBySession[sessionKey] ?? {},
     [expandedToolsBySession, sessionKey]
@@ -177,15 +184,30 @@ export function useChatMessageState({
     [activeSessionId, pinnedIdSet, pinMessage, unpinMessage]
   );
 
+  /**
+   * 工具展开 toggle（D7.3 per-message）。
+   * `msgId` 为必填第二参（可选签名兼容旧调用点）：只写 `msgTools[toolId]`，
+   * 其余消息的 map 引用不变——单卡展开时其它行 `expandedTools` Object.is 相等。
+   */
   const toggleTool = useCallback(
-    (toolId: string, currentlyOpen: boolean) => {
-      setExpandedToolsBySession((prev) => ({
-        ...prev,
-        [sessionKey]: {
-          ...(prev[sessionKey] ?? {}),
-          [toolId]: !currentlyOpen,
-        },
-      }));
+    (toolId: string, currentlyOpen: boolean, msgId?: string) => {
+      const mid = msgId ?? '';
+      setExpandedToolsBySession((prev) => {
+        const sessionMap = prev[sessionKey] ?? {};
+        const msgTools = sessionMap[mid] ?? {};
+        // 目标槽位值未变 → 返回原引用（幂等，不触发重渲染）
+        if (msgTools[toolId] === !currentlyOpen) return prev;
+        return {
+          ...prev,
+          [sessionKey]: {
+            ...sessionMap,
+            [mid]: {
+              ...msgTools,
+              [toolId]: !currentlyOpen,
+            },
+          },
+        };
+      });
     },
     [sessionKey]
   );
@@ -296,7 +318,10 @@ export function useChatMessageState({
     (): ChatToolStackSharedProps => ({
       agents,
       activeSessionId,
-      expandedTools,
+      // D7.3：会话级嵌套展开 map；行装配层按 msgId 切片为 expandedTools。
+      // 共享 expandedTools 槽位保持稳定空对象引用（不因 toggle 击穿全列表）。
+      expandedTools: EMPTY_TOOLS,
+      expandedToolsByMessage: expandedTools,
       onToggleTool: toggleTool,
       approvalBusy,
       pendingApprovalMsgId,

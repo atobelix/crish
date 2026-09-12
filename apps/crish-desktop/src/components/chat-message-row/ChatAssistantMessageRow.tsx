@@ -94,17 +94,27 @@ const ChatAssistantMessageRowInner: React.FC<
     msg.blocks,
     isThinkingMsg,
     hideThinkingBlock,
-    toolStackProps?.expandedTools,
+    toolStackProps?.expandedToolsByMessage?.[msg.id] ??
+      toolStackProps?.expandedTools,
     virtualScrollManager,
   ]);
 
-  // 增强 toolStackProps：工具展开/收起时立即作废旧测高，由宿主 RO 重测并触发 actualTick
+  // 增强 toolStackProps：
+  // D7.3（FE-INV-5）：expandedTools 按 msgId 从 expandedToolsByMessage 切片注入，
+  // 其它消息 toggle 时本行 expandedTools 引用稳定；onToggleTool 绑定 msg.id。
+  // D7.4：对象引用稳定（useMemo），供下游 ProcessItemRenderer / 工具链 memo 短路。
   const augmentedToolStackProps = useMemo(() => {
     if (!toolStackProps) return toolStackProps;
+    const perMessage =
+      toolStackProps.expandedToolsByMessage?.[msg.id] ??
+      toolStackProps.expandedTools;
     return {
       ...toolStackProps,
+      expandedTools: perMessage,
+      // 切片后的嵌套 map 不再下传（避免下游误读全会话 map）
+      expandedToolsByMessage: undefined,
       onToggleTool: (toolId: string, currentlyOpen: boolean) => {
-        toolStackProps.onToggleTool?.(toolId, currentlyOpen);
+        toolStackProps.onToggleTool?.(toolId, currentlyOpen, msg.id);
         virtualScrollManager?.invalidateActual(msg.id);
       },
       onToggleInjection: (injectionId: string, currentlyOpen: boolean) => {

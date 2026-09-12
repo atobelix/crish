@@ -500,3 +500,143 @@ describe('工具密集会话全链重渲染（T4.4：= 工具事件数，而非�
     expect(mockAmdRenders).toEqual(['前置稳定文本']);
   });
 });
+
+// ──────────────────────────────────────────────
+describe('单卡展开隔离（D7.3 / FE-INV-5：其它消息 0 渲染）', () => {
+  it('rowToolStackSharedPropsEqual：单卡 toggle 只换目标消息槽位引用，其它行 shallow 相等', async () => {
+    const { rowToolStackSharedPropsEqual } = await import(
+      '../components/chat-message-row/chatMessageRowUtils'
+    );
+
+    const emptyTools = {};
+    const msgAExpanded = { 'tool-a': true };
+    const msgBExpanded = { 'tool-b': false };
+
+    // 会话级嵌套展开 map：A 已展开、B 未展开
+    const byMessageV1 = {
+      'msg-a': msgAExpanded,
+      'msg-b': msgBExpanded,
+    };
+    const sharedV1 = {
+      agents: [],
+      activeSessionId: 'sess-x',
+      expandedTools: emptyTools,
+      expandedToolsByMessage: byMessageV1,
+      onToggleTool: () => {},
+      approvalBusy: false,
+    } as unknown as ChatToolStackSharedProps;
+
+    // toggle msg-a 的 tool-a → 只换 msg-a 槽位；msg-b 引用不变
+    const byMessageV2 = {
+      'msg-a': { 'tool-a': false },
+      'msg-b': msgBExpanded, // 同一引用
+    };
+    const sharedV2 = {
+      ...sharedV1,
+      expandedToolsByMessage: byMessageV2,
+    } as unknown as ChatToolStackSharedProps;
+
+    // 目标行（msg-a）：expandedTools 切片变化 → 不相等（须重渲染）
+    expect(
+      rowToolStackSharedPropsEqual(sharedV1, sharedV2, 'msg-a')
+    ).toBe(false);
+    // 其它行（msg-b）：切片引用不变 → 相等（0 重渲染）
+    expect(
+      rowToolStackSharedPropsEqual(sharedV1, sharedV2, 'msg-b')
+    ).toBe(true);
+  });
+
+  it('assistantRowPropsEqual：单卡展开时其它消息行 props shallow 相等（0 重渲染探针）', async () => {
+    const { assistantRowPropsEqual } = await import(
+      '../components/chat-message-row/chatMessageRowUtils'
+    );
+
+    const SID = 'sess-iso';
+    const msgA: SessionMessage = {
+      id: 'asst-a',
+      sender: 'assistant',
+      text: 'A 正文',
+      thinking: '',
+      timestamp: 1,
+      status: 'completed',
+      toolCalls: [{ id: 't-a', name: 'read_file', arguments: '{}', status: 'success' }],
+      blocks: [{ type: 'text', content: 'A 正文' }],
+    };
+    const msgB: SessionMessage = {
+      id: 'asst-b',
+      sender: 'assistant',
+      text: 'B 正文',
+      thinking: '',
+      timestamp: 2,
+      status: 'completed',
+      toolCalls: [{ id: 't-b', name: 'read_file', arguments: '{}', status: 'success' }],
+      blocks: [{ type: 'text', content: 'B 正文' }],
+    };
+
+    const baseRow = {
+      msg: msgB,
+      isFollowUp: false,
+      isPinned: false,
+      isSearchHit: false,
+      isThinkingMsg: false,
+      hideThinkingBlock: false,
+      inPlanMode: false,
+      planApproved: false,
+      isLastAssistant: true,
+      onTogglePin: vi.fn(),
+      onBranch: vi.fn(),
+      onOpenDiff: vi.fn(),
+      setPermissionMode: vi.fn(),
+      setPlanApproved: vi.fn(),
+      messageIndex: 1,
+      virtualScrollManager: null,
+    };
+
+    const msgBExpanded = { 't-b': false };
+
+    // 会话级嵌套展开 map：A 已展开、B 未展开（B 槽位跨两版共享同一引用）
+    const byMessageV1 = {
+      'asst-a': { 't-a': false } as Record<string, boolean>,
+      'asst-b': msgBExpanded,
+    };
+    const byMessageV2 = {
+      'asst-a': { 't-a': true } as Record<string, boolean>, // A 展开（新引用）
+      'asst-b': msgBExpanded, // 同一引用
+    };
+
+    const sharedV1 = {
+      agents: [],
+      activeSessionId: SID,
+      expandedTools: {},
+      expandedToolsByMessage: byMessageV1,
+      onToggleTool: vi.fn(),
+      approvalBusy: false,
+    } as unknown as ChatToolStackSharedProps;
+    const sharedV2 = {
+      ...sharedV1,
+      expandedToolsByMessage: byMessageV2,
+    } as unknown as ChatToolStackSharedProps;
+
+    // B 行：msg / 其它 props 不变，仅 expandedToolsByMessage 外层换、B 槽位同引用 → 相等
+    expect(
+      assistantRowPropsEqual(
+        { ...baseRow, toolStackProps: sharedV1 },
+        { ...baseRow, toolStackProps: sharedV2 }
+      )
+    ).toBe(true);
+
+    // A 行：A 槽位变化 → 不等
+    const rowA = {
+      ...baseRow,
+      msg: msgA,
+      isLastAssistant: false,
+      messageIndex: 0,
+    };
+    expect(
+      assistantRowPropsEqual(
+        { ...rowA, toolStackProps: sharedV1 },
+        { ...rowA, toolStackProps: sharedV2 }
+      )
+    ).toBe(false);
+  });
+});

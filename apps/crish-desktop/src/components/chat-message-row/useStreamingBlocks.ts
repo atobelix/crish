@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useRef } from 'react';
+import { useMemo, useRef } from 'react';
 import { IncrementalBlockSplitter } from '../../api/markdown/IncrementalBlockSplitter';
 import { speculativeCloseBlock } from '../../api/markdown/SpeculativeVirtualCloser';
 
@@ -35,17 +35,51 @@ export function hash16(str: string): string {
   return `${p1}${p2}`;
 }
 
+function makeSealedDescriptor(
+  text: string,
+  index: number,
+  messageId: string
+): ParsedBlockDescriptor {
+  return {
+    key: `${messageId}-blk-${index}-${hash16(text)}`,
+    text,
+    index,
+    isSealed: true,
+  };
+}
+
+function makeActiveDescriptor(
+  text: string,
+  index: number,
+  messageId: string
+): ParsedBlockDescriptor {
+  return {
+    key: `${messageId}-blk-${index}-active`,
+    text,
+    virtualClosedText: speculativeCloseBlock(text),
+    index,
+    isSealed: false,
+  };
+}
+
+interface IncrementalState {
+  messageId: string | null;
+  splitter: IncrementalBlockSplitter | null;
+  /** 上一帧已消费的全文长度（仅在前缀增长时有效） */
+  prevText: string;
+  /** 已封口块描述符（按 index 对齐；封口时 hash 恰一次） */
+  sealed: ParsedBlockDescriptor[];
+}
+
 /**
  * 渐进词法分块与无缝双缓冲协调 Hook
  *
- * 核心机制：
- * 1. 使用 IncrementalBlockSplitter 将累积 Markdown 增量切分为独立语法块；
- * 2. 语义哈希稳定 Key 策略：
- *    - 封口块：`${msgId}-blk-${index}-${hash16}`
- *    - 活跃草稿块：`${msgId}-blk-${tailIndex}-active`
- * 3. 活跃草稿块通过 SpeculativeVirtualCloser 实施纯内存投机虚拟补全；
- * 4. sealedCacheRef 维持已封口块的对象引用稳定，确保 React.memo 协调阶段 100% 拦截重渲染；
- * 5. useMemo 为纯计算派生，已提交状态通过 useLayoutEffect 同步，完全符合 React 19 规范。
+ * 核心机制（D7.1 真增量化）：
+ * 1. useRef 持有 IncrementalBlockSplitter 实例；messageId 变更时重建；
+ * 2. 流式热路径只 appendChunk(delta)，禁止每帧全量 split；
+ * 3. 冷路径（首帧 / 回放 / isStreaming=false / 非前缀重写）允许一次全量；
+ * 4. 封口块 hash16 恰一次写入 descriptor，后续帧引用相等短路；
+ * 5. 活跃草稿块通过 SpeculativeVirtualCloser 实施纯内存投机虚拟补全。
  *
  * @param fullText 累积的流式 Markdown 文本
  * @param isStreaming 是否处于流式传输中
@@ -56,87 +90,123 @@ export function useStreamingBlocks(
   isStreaming: boolean,
   messageId: string
 ): StreamingBlocksResult {
-  const sealedCacheRef = useRef<ParsedBlockDescriptor[]>([]);
-  const prevMessageIdRef = useRef<string>(messageId);
+  const stateRef = useRef<IncrementalState>({
+    messageId: null,
+    splitter: null,
+    prevText: '',
+    sealed: [],
+  });
 
   const blocksResult = useMemo<StreamingBlocksResult>(() => {
+    const st = stateRef.current;
+
     if (!fullText) {
+      st.messageId = messageId;
+      st.splitter = null;
+      st.prevText = '';
+      st.sealed = [];
       return { blocks: [] };
     }
 
-    const rawBlocks = IncrementalBlockSplitter.split(fullText);
-    const totalBlocks = rawBlocks.length;
+    const isPrefixGrowth =
+      st.messageId === messageId &&
+      st.splitter != null &&
+      fullText.startsWith(st.prevText) &&
+      fullText.length >= st.prevText.length;
 
-    if (totalBlocks === 0) {
-      return { blocks: [] };
-    }
-
-    const result: ParsedBlockDescriptor[] = [];
-    const isSameMessage = prevMessageIdRef.current === messageId;
-    const cachedSealed = isSameMessage ? sealedCacheRef.current : [];
-
-    for (let i = 0; i < totalBlocks; i += 1) {
-      const blockText = rawBlocks[i] ?? '';
-      const isLastBlock = i === totalBlocks - 1;
-      const isSealed = !isStreaming || !isLastBlock;
-
-      if (isSealed) {
-        const blockHash = hash16(blockText);
-        const key = `${messageId}-blk-${i}-${blockHash}`;
-        const cached = cachedSealed[i];
-
-        if (
-          cached &&
-          cached.isSealed &&
-          cached.key === key &&
-          cached.text === blockText
-        ) {
-          // 复用上一次已封口块的对象引用（保证 React.memo 0 重绘）
-          result.push(cached);
-        } else {
-          const desc: ParsedBlockDescriptor = {
-            key,
-            text: blockText,
-            index: i,
-            isSealed: true,
-          };
-          result.push(desc);
+    // 冷路径：首帧 / messageId 变更 / 非流式重建 / 非前缀重写
+    if (!isPrefixGrowth) {
+      const splitter = new IncrementalBlockSplitter();
+      if (isStreaming) {
+        // 流式冷路径：append 后不 flush，保持与热路径一致的 sealed/draft 切分
+        splitter.appendChunk(fullText);
+        const sealedTexts = splitter.getSealedBlocks();
+        const sealed = sealedTexts.map((t, i) =>
+          makeSealedDescriptor(t, i, messageId)
+        );
+        const draft = splitter.getPendingDraft();
+        const blocks = [...sealed];
+        if (draft.trim().length > 0) {
+          blocks.push(makeActiveDescriptor(draft, sealed.length, messageId));
         }
-      } else {
-        // 活跃尾块草稿：进行纯内存投机虚拟补全
-        const key = `${messageId}-blk-${i}-active`;
-        const virtualClosed = speculativeCloseBlock(blockText);
-        const desc: ParsedBlockDescriptor = {
-          key,
-          text: blockText,
-          virtualClosedText: virtualClosed,
-          index: i,
-          isSealed: false,
+        stateRef.current = {
+          messageId,
+          splitter,
+          prevText: fullText,
+          sealed,
         };
-        result.push(desc);
+        return { blocks };
+      }
+
+      // 非流式：一次全量 split（flush 封口全部）
+      const rawBlocks = IncrementalBlockSplitter.split(fullText);
+      const sealed = rawBlocks.map((t, i) =>
+        makeSealedDescriptor(t, i, messageId)
+      );
+      stateRef.current = {
+        messageId,
+        splitter: null,
+        prevText: fullText,
+        sealed,
+      };
+      return { blocks: sealed };
+    }
+
+    // ── 热路径：仅追加 delta ──
+    const stSplitter = st.splitter!;
+    const delta = fullText.slice(st.prevText.length);
+    if (delta.length > 0) {
+      stSplitter.appendChunk(delta);
+      st.prevText = fullText;
+    }
+
+    if (!isStreaming) {
+      // 封口帧：flush 草稿尾块并全部封口（hash 恰一次）
+      const allTexts = stSplitter.flush();
+      const sealed = allTexts.map((t, i) => {
+        const prev = st.sealed[i];
+        if (prev && prev.isSealed && prev.text === t) {
+          return prev;
+        }
+        return makeSealedDescriptor(t, i, messageId);
+      });
+      stateRef.current = {
+        messageId,
+        splitter: null,
+        prevText: fullText,
+        sealed,
+      };
+      return { blocks: sealed };
+    }
+
+    // 流式帧：已封口块复用 descriptor；仅尾块新建
+    const sealedTexts = stSplitter.getSealedBlocks();
+    const sealedCount = sealedTexts.length;
+    const sealed: ParsedBlockDescriptor[] = new Array(sealedCount);
+    let changed = st.sealed.length !== sealedCount;
+    for (let i = 0; i < sealedCount; i += 1) {
+      const text = sealedTexts[i] ?? '';
+      const prev = st.sealed[i];
+      if (prev && prev.isSealed && prev.text === text) {
+        sealed[i] = prev;
+      } else {
+        sealed[i] = makeSealedDescriptor(text, i, messageId);
+        changed = true;
       }
     }
+    if (changed) {
+      st.sealed = sealed;
+    }
 
-    return { blocks: result };
+    const draft = stSplitter.getPendingDraft();
+    const blocks: ParsedBlockDescriptor[] = changed || delta.length > 0
+      ? sealed.slice()
+      : sealed.slice();
+    if (draft.trim().length > 0) {
+      blocks.push(makeActiveDescriptor(draft, sealedCount, messageId));
+    }
+    return { blocks };
   }, [fullText, isStreaming, messageId]);
-
-  useLayoutEffect(() => {
-    if (prevMessageIdRef.current !== messageId) {
-      prevMessageIdRef.current = messageId;
-      sealedCacheRef.current = [];
-    }
-
-    const currentBlocks = blocksResult.blocks;
-    if (!fullText || currentBlocks.length === 0) {
-      sealedCacheRef.current = [];
-      return;
-    }
-
-    // 更新已封口块的缓存切片
-    sealedCacheRef.current = isStreaming
-      ? currentBlocks.slice(0, Math.max(0, currentBlocks.length - 1))
-      : currentBlocks;
-  }, [fullText, isStreaming, messageId, blocksResult.blocks]);
 
   return blocksResult;
 }

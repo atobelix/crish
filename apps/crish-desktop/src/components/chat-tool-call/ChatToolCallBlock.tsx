@@ -49,8 +49,21 @@ export interface ChatToolStackProps {
   msgId?: string;
   agents: SessionAgent[];
   activeSessionId: string;
+  /**
+   * 本消息的工具展开 map（toolId → open）。
+   * D7.3（FE-INV-5）：由行装配层按 messageId 从 expandedToolsByMessage 切片注入；
+   * 其它消息 toggle 时本 map 引用保持稳定。
+   */
   expandedTools: Record<string, boolean>;
-  onToggleTool: (toolId: string, currentlyOpen: boolean) => void;
+  /**
+   * 会话级嵌套展开 store（sessionId 已切片为当前会话）：
+   * messageId → toolId → open。供行装配层按 msgId 切片；不直接下传 CompactToolRow。
+   */
+  expandedToolsByMessage?: Record<string, Record<string, boolean>>;
+  /**
+   * 工具展开 toggle。第三参 msgId 由行装配层绑定（FE-INV-5 per-message）。
+   */
+  onToggleTool: (toolId: string, currentlyOpen: boolean, msgId?: string) => void;
   onToggleInjection?: ((injectionId: string, currentlyOpen: boolean) => void) | undefined;
   approvalBusy: boolean;
   pendingApprovalMsgId?: string | undefined;
@@ -206,11 +219,37 @@ function renderToolStackItems(
   return segments;
 }
 
-export const ChatToolStack: React.FC<ChatToolStackProps> = (props) => {
-  const { items, msgId } = props;
+/**
+ * D7.4：React.memo + 显式比较器——items/msgId 引用稳定时跳过整栈重渲染。
+ * expandedTools / onToggleTool / actions 引用由上游装配层保证稳定（D7.3 + useMemo）。
+ */
+export function chatToolStackPropsEqual(
+  a: ChatToolStackProps,
+  b: ChatToolStackProps
+): boolean {
   return (
-    <div className={`${styles.toolStack} tool-stack`}>
-      {renderToolStackItems(items, msgId, props)}
-    </div>
+    a.items === b.items &&
+    a.msgId === b.msgId &&
+    a.agents === b.agents &&
+    a.activeSessionId === b.activeSessionId &&
+    a.expandedTools === b.expandedTools &&
+    a.onToggleTool === b.onToggleTool &&
+    a.onToggleInjection === b.onToggleInjection &&
+    a.approvalBusy === b.approvalBusy &&
+    a.pendingApprovalMsgId === b.pendingApprovalMsgId &&
+    a.actions === b.actions
   );
-};
+}
+
+export const ChatToolStack: React.FC<ChatToolStackProps> = React.memo(
+  function ChatToolStack(props) {
+    const { items, msgId } = props;
+    return (
+      <div className={`${styles.toolStack} tool-stack`}>
+        {renderToolStackItems(items, msgId, props)}
+      </div>
+    );
+  },
+  chatToolStackPropsEqual
+);
+ChatToolStack.displayName = 'ChatToolStack';

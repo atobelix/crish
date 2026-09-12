@@ -37,15 +37,35 @@ export interface CompactToolRowProps {
   vsm?: VirtualScrollManager | null | undefined;
 }
 
-export const CompactToolRow: React.FC<CompactToolRowProps> = ({
-  tc,
-  rowKey,
-  msgId,
-  props,
-  prevTc,
-  scrollerRef,
-  vsm,
-}) => {
+/**
+ * D7.4：React.memo——tc / props 引用稳定时跳过单行重渲染。
+ * 比较器字段与 chatToolStackPropsEqual 同法（显式字段，禁伪 memo）。
+ */
+export function compactToolRowPropsEqual(
+  a: CompactToolRowProps,
+  b: CompactToolRowProps
+): boolean {
+  return (
+    a.tc === b.tc &&
+    a.rowKey === b.rowKey &&
+    a.msgId === b.msgId &&
+    a.prevTc === b.prevTc &&
+    a.scrollerRef === b.scrollerRef &&
+    a.vsm === b.vsm &&
+    a.props === b.props
+  );
+}
+
+export const CompactToolRow: React.FC<CompactToolRowProps> = React.memo(
+  function CompactToolRow({
+    tc,
+    rowKey,
+    msgId,
+    props,
+    prevTc,
+    scrollerRef,
+    vsm,
+  }) {
   const {
     agents,
     activeSessionId,
@@ -289,4 +309,8 @@ export const CompactToolRow: React.FC<CompactToolRowProps> = ({
       ) : null}
     </div>
   );
-};
+  },
+  compactToolRowPropsEqual
+);
+
+CompactToolRow.displayName = 'CompactToolRow';
