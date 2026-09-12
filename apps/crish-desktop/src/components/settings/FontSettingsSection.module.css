@@ -1,19 +1,19 @@
 .monoControlRow {
   display: flex;
   align-items: center;
-  gap: var(--space-3, 12px);
+  gap: var(--space-3);
 }
 
 .settingsRowCheck {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  font-size: var(--font-size-sm, 13px);
+  gap: var(--space-1_5);
+  font-size: var(--font-size-sm);
   color: var(--text-secondary);
   cursor: pointer;
   user-select: none;
   white-space: nowrap;
-  height: 28px;
+  height: var(--control-height-sm);
 }
 
 .settingsRowCheck input {

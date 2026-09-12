@@ -38,10 +38,10 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: var(--space-2, 8px);
-  height: var(--header-height, 36px);
-  min-height: var(--header-height, 36px);
-  padding: 0 var(--space-3, 12px);
+  gap: var(--space-2);
+  height: var(--header-height);
+  min-height: var(--header-height);
+  padding: 0 var(--space-3);
   /* border-bottom: 0.5px solid var(--border-color); */
   background: var(--bg-workspace, var(--bg-primary));
   flex-shrink: 0;
@@ -58,22 +58,22 @@
 .navBack {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-2, 8px);
-  height: var(--control-height-lg, 32px);
-  padding: 0 var(--space-3, 12px) 0 var(--space-2_5, 10px);
-  border: 1px solid transparent;
-  border-radius: var(--radius-xl, 12px);
+  gap: var(--space-2);
+  height: var(--control-height-lg);
+  padding: 0 var(--space-3) 0 var(--space-2_5);
+  border: var(--hairline-width) solid transparent;
+  border-radius: var(--radius-xl);
   background: transparent;
   color: var(--text-secondary);
   font-family: inherit;
-  font-size: var(--font-size-sm, 13px);
+  font-size: var(--font-size-sm);
   font-weight: var(--font-weight-normal);
   cursor: pointer;
   flex-shrink: 0;
   box-shadow: none;
   width: 100%;
   text-align: left;
-  margin-bottom: var(--space-1, 4px);
+  margin-bottom: var(--space-1);
 }
 
 .navBack:hover {
@@ -85,8 +85,8 @@
 .sidebarTopActions {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1_5, 6px);
-  margin-bottom: var(--space-1, 4px);
+  gap: var(--space-1_5);
+  margin-bottom: var(--space-1);
 }
 
 .sidebarBackBtn {
@@ -109,18 +109,18 @@
   position: relative;
   display: flex;
   align-items: center;
-  gap: var(--space-2, 8px);
+  gap: var(--space-2);
   width: 100%;
-  height: var(--control-height, 32px);
-  min-height: var(--control-height, 32px);
+  height: var(--control-height);
+  min-height: var(--control-height);
   box-sizing: border-box;
-  margin: var(--space-1, 4px) 0 var(--space-2, 8px);
-  padding: 0 8px;
-  border-radius: var(--radius-lg, 8px);
+  margin: var(--space-1) 0 var(--space-2);
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-lg);
   background: transparent;
   border: none;
   box-shadow: none;
-  transition: background var(--transition-micro, 120ms) ease;
+  transition: background var(--transition-micro);
   flex-shrink: 0;
   cursor: text;
 }
@@ -139,7 +139,7 @@
   flex-shrink: 0;
   color: var(--text-tertiary);
   pointer-events: none;
-  transition: color var(--transition-micro, 120ms) ease;
+  transition: color var(--transition-micro);
 }
 
 .searchWrap:focus-within .searchIco {
@@ -161,7 +161,7 @@
   appearance: none;
   -webkit-appearance: none;
   font-family: inherit;
-  font-size: var(--font-size-base, 14px);
+  font-size: var(--font-size-base);
   color: var(--text-primary);
   box-sizing: border-box;
   line-height: normal;
@@ -185,18 +185,18 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
+  width: var(--icon-size-lg);
+  height: var(--icon-size-lg);
   flex-shrink: 0;
   border: none;
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-tertiary);
   cursor: pointer;
   padding: 0;
   transition:
-    background var(--transition-micro, 120ms) ease,
-    color var(--transition-micro, 120ms) ease;
+    background var(--transition-micro),
+    color var(--transition-micro);
 }
 
 .searchClear:hover {
@@ -210,14 +210,14 @@
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: var(--space-0_5, 2px);
-  padding: 8px 0;
+  gap: var(--space-0_5);
+  padding: var(--space-2) 0;
 }
 
 .navEmpty {
-  font-size: var(--font-size-xs, 12px);
+  font-size: var(--font-size-xs);
   color: var(--text-tertiary);
-  padding: var(--space-3, 12px) var(--space-2_5, 10px);
+  padding: var(--space-3) var(--space-2_5);
 }
 
 /* 3. 布局主体 */
@@ -235,12 +235,12 @@
 
 /* 4. 侧栏导航 (240px) */
 .coverNav {
-  width: var(--settings-sidebar-width, 240px);
+  width: var(--settings-sidebar-width);
   flex-shrink: 0;
   height: 100%;
   background: var(--bg-workspace, var(--bg-primary));
   /* border-right: 1px solid var(--border-color); */
-  padding: 8px 10px;
+  padding: var(--space-2) var(--space-2_5);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -249,11 +249,11 @@
 }
 
 .navGroup {
-  font-size: var(--font-size-xs, 11px);
+  font-size: var(--font-size-xs);
   font-weight: var(--font-weight-normal);
   letter-spacing: var(--letter-spacing-wide);
   color: var(--text-tertiary);
-  padding: 10px 10px 4px;
+  padding: var(--space-2_5) var(--space-2_5) var(--space-1);
   text-transform: none;
 }
 
@@ -267,10 +267,10 @@
   border-radius: var(--radius-lg) 0 0 0;
   border: none;
   box-shadow: none;
-  padding: 24px 32px 32px;
+  padding: var(--space-6) var(--space-8) var(--space-8);
   display: flex;
   flex-direction: column;
-  gap: var(--space-3_5, 14px);
+  gap: var(--space-3_5);
   position: relative;
   background: var(--bg-elevated, var(--bg-card));
   overflow-y: auto;
@@ -289,28 +289,28 @@
 .coverContent[data-settings-tab="models"] {
   overflow: hidden;
   overscroll-behavior: none;
-  padding: 20px 32px 24px;
+  padding: var(--space-5) var(--space-8) var(--space-6);
 }
 
 .sidebarTab {
   display: flex;
   align-items: center;
-  gap: var(--space-2, 8px);
-  padding: 6px 10px;
-  border-radius: var(--radius-lg, 8px);
-  border: 1px solid transparent;
+  gap: var(--space-2);
+  padding: var(--space-1_5) var(--space-2_5);
+  border-radius: var(--radius-lg);
+  border: var(--hairline-width) solid transparent;
   cursor: pointer;
-  font-size: var(--font-size-sm, 13px);
+  font-size: var(--font-size-sm);
   font-weight: var(--font-weight-normal);
   text-align: left;
   width: 100%;
   background: transparent;
   color: var(--text-secondary);
   transition:
-    background var(--transition-micro, 100ms ease-out),
-    color var(--transition-micro, 100ms ease-out);
+    background var(--transition-micro),
+    color var(--transition-micro);
   box-sizing: border-box;
-  min-height: 32px;
+  min-height: var(--control-height);
 }
 
 .sidebarTab:hover {
@@ -320,18 +320,18 @@
 
 .sidebarTab.active {
   background: var(--bg-card);
-  border: 1px solid var(--border-subtle);
+  border: var(--hairline-width) solid var(--border-subtle);
   box-shadow: var(--shadow-sm);
   color: var(--text-primary);
-  font-weight: var(--font-weight-medium, 500);
+  font-weight: var(--font-weight-medium);
 }
 
 .sidebarTabIco {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: calc(var(--icon-size, 16px) + var(--space-1, 4px));
-  height: calc(var(--icon-size, 16px) + var(--space-1, 4px));
+  width: calc(var(--icon-size) + var(--space-1));
+  height: calc(var(--icon-size) + var(--space-1));
   flex-shrink: 0;
   color: inherit;
   opacity: 0.88;
@@ -348,11 +348,11 @@
 /* 全屏壳层叠只挂 overlay；内部 Menu portal 进此节点。
  * popper wrapper 统一继承全局 --z-dropdown */
 .settingsCoverOverlay {
-  --dialog-z: var(--z-modal, 1000);
+  --dialog-z: var(--z-modal);
 }
 
 .settingsCoverOverlay :global([data-radix-popper-content-wrapper]) {
-  z-index: var(--z-dropdown, 300);
+  z-index: var(--z-dropdown);
 }
 
 /*           */

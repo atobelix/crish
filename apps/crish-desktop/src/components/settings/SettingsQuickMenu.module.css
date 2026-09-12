@@ -12,8 +12,8 @@
   background: transparent;
   border: none;
   cursor: pointer;
-  padding: 8px 12px;
-  border-radius: var(--radius-lg, 12px);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-lg);
   color: var(--text-secondary);
   font-family: inherit;
   font-size: var(--font-size-sm);
@@ -47,15 +47,15 @@
 .sbQuickMenu {
   z-index: var(--z-modal);
   background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg, 12px);
-  box-shadow: var(--sep-shadow);
+  border: var(--hairline-width) solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-dropdown);
   padding: var(--space-1_5);
   display: flex;
   flex-direction: column;
   gap: var(--space-0_5);
-  min-width: 220px;
-  max-width: min(280px, calc(100vw - 16px));
+  min-width: 220px; /* 容器约束·不入 token */
+  max-width: min(280px, calc(100vw - 16px)); /* 容器约束·不入 token */
   max-height: min(
     var(--radix-popover-content-available-height, 360px),
     70vh,
@@ -72,13 +72,13 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  padding: 8px 6px 10px;
+  padding: var(--space-2) var(--space-1_5) var(--space-2_5);
 }
 
 .sbQuickLabel {
   font-size: var(--font-size-xs);
   color: var(--text-tertiary);
-  padding: 0 8px;
+  padding: 0 var(--space-2);
 }
 
 .sbQuickSegment {
@@ -91,9 +91,9 @@
 }
 
 .sbQuickDivider {
-  margin: 4px 6px;
+  margin: var(--space-1) var(--space-1_5);
   border: none;
-  border-bottom: 1px solid var(--border-subtle);
+  border-bottom: var(--hairline-width) solid var(--border-subtle);
   height: 0;
   padding: 0;
 }
@@ -104,9 +104,9 @@
   justify-content: flex-start;
   gap: var(--space-2);
   width: 100%;
-  min-height: 32px;
-  padding: var(--space-1_5, 6px) var(--space-2_5, 10px);
-  border-radius: var(--radius-md, 6px);
+  min-height: var(--control-height);
+  padding: var(--space-1_5) var(--space-2_5);
+  border-radius: var(--radius-md);
   font-size: var(--font-size-sm);
   color: var(--text-primary);
   border: none;
@@ -134,7 +134,7 @@
 
 .sbQuickItem:focus-visible {
   outline: none;
-  box-shadow: var(--focus-ring, 0 0 0 2px var(--tint-focus-ring));
+  box-shadow: var(--focus-ring);
   color: var(--text-primary);
 }
 

@@ -169,7 +169,7 @@ export const PriceConfigModal: React.FC<{
             onChange={(e) => setPriceFilter(e.target.value)}
             clearable
             onClear={() => setPriceFilter('')}
-            style={{ width: '150px' }}
+            className={styles.searchInputWrapper}
           />
 
           <div className={styles.currencySwitch}>

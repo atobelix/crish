@@ -275,7 +275,6 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
         ref={rootRef}
         className={`${styles.settingsPanel} ${styles.settingsDialogBody}`}
         data-testid="settings-panel"
-        data-density="compact"
         onWheel={handleRootWheel}
       >
         <header
@@ -286,7 +285,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
           <WindowControls onClose={onClose} />
         </header>
 
-        <div className={styles.coverBody} data-density="compact">
+        <div className={styles.coverBody}>
           <SettingsSidebar
             aria={{
               baseId,
@@ -322,7 +321,6 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
             aria-label={activeLabel}
             aria-labelledby={activeTabBtnId}
             data-settings-tab={safeActiveTab}
-            data-density="compact"
           >
             <Suspense
               key={`tab-${safeActiveTab}-suspense`}

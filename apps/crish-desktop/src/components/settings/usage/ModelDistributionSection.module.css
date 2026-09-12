@@ -2,19 +2,19 @@
   display: flex;
   flex-direction: column;
   background: var(--bg-card);
-  border-bottom: 1px solid var(--border-subtle);
+  border-bottom: var(--hairline-width) solid var(--border-subtle);
 }
 
 .splitHeader {
-  padding: 20px 22px 4px;
+  padding: var(--space-5) var(--space-5) var(--space-1);
   display: flex;
   align-items: center;
   justify-content: space-between;
 }
 
 .blockTitle {
-  font-size: 14px;
-  font-weight: 600;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
   color: var(--text-primary);
   letter-spacing: -0.015em;
 }
@@ -22,8 +22,8 @@
 .splitBody {
   display: flex;
   align-items: center;
-  padding: 10px 22px 20px;
-  gap: 24px;
+  padding: var(--space-2_5) var(--space-5) var(--space-5);
+  gap: var(--space-6);
 }
 
 /* 左侧圆饼图面板 */
@@ -34,7 +34,7 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 14px;
+  gap: var(--space-3_5);
 }
 
 .donutBox {
@@ -62,7 +62,7 @@
   fill: none;
   stroke-width: 24;
   cursor: pointer;
-  transition: stroke-width 180ms ease, filter 180ms ease;
+  transition: stroke-width var(--transition-normal), filter var(--transition-normal);
 }
 
 .donutCenterContent {
@@ -75,24 +75,24 @@
 }
 
 .donutCenterLbl {
-  font-size: 11px;
-  font-weight: 500;
+  font-size: var(--font-size-xxs);
+  font-weight: var(--font-weight-medium);
   color: var(--text-tertiary);
   margin-bottom: 1px;
 }
 
 .donutCenterVal {
-  font-size: 19px;
-  font-weight: 700;
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-heavy);
   color: var(--text-primary);
   letter-spacing: -0.025em;
   font-family: var(--font-sans);
   font-variant-numeric: tabular-nums;
-  line-height: 1.15;
+  line-height: var(--line-height-dense);
 }
 
 .donutCenterUnit {
-  font-size: 10.5px;
+  font-size: var(--font-size-xxs);
   color: var(--text-tertiary);
 }
 
@@ -100,7 +100,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: var(--space-2_5);
   flex-wrap: wrap;
   max-width: 210px;
 }
@@ -108,8 +108,8 @@
 .legendMiniItem {
   display: flex;
   align-items: center;
-  gap: 5px;
-  font-size: 11px;
+  gap: var(--space-1);
+  font-size: var(--font-size-xxs);
   color: var(--text-secondary);
   max-width: 120px;
   overflow: hidden;
@@ -132,10 +132,10 @@
 
 /* 中间非贯穿分割线 */
 .splitDivider {
-  width: 1px;
+  width: var(--hairline-width);
   align-self: stretch;
   background: var(--border-subtle);
-  margin: 6px 0;
+  margin: var(--space-1_5) 0;
 }
 
 /* 右侧模型用量胶囊进度列表 */
@@ -147,10 +147,10 @@
 .capsuleList {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2, 8px);
+  gap: var(--space-2);
   overflow-y: auto;
   max-height: 228px;
-  padding-right: 6px;
+  padding-right: var(--space-1_5);
 }
 
 .modelCapsuleRow {
@@ -158,12 +158,12 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 14px;
-  border-radius: var(--usage-capsule-outer-radius, 9px);
+  padding: 0 var(--space-3_5);
+  border-radius: var(--usage-capsule-outer-radius);
   background: var(--bg-card-subtle);
   cursor: pointer;
   overflow: hidden;
-  transition: background 120ms ease;
+  transition: background var(--transition-fast);
   height: 38px;
   flex-shrink: 0;
   box-sizing: border-box;
@@ -171,17 +171,17 @@
 
 .modelCapsuleRow:hover,
 .modelCapsuleRowHovered {
-  background: var(--bg-hover);
+  background: var(--tint-hover);
 }
 
 .capsuleBarBg {
   position: absolute;
-  left: var(--usage-capsule-pad, 3px);
-  top: var(--usage-capsule-pad, 3px);
-  bottom: var(--usage-capsule-pad, 3px);
-  max-width: calc(100% - (var(--usage-capsule-pad, 3px) * 2));
-  border-radius: var(--usage-capsule-inner-radius, 6px);
-  transition: width 240ms ease;
+  left: var(--usage-capsule-pad);
+  top: var(--usage-capsule-pad);
+  bottom: var(--usage-capsule-pad);
+  max-width: calc(100% - (var(--usage-capsule-pad) * 2));
+  border-radius: var(--usage-capsule-inner-radius);
+  transition: width var(--transition-normal);
   pointer-events: none;
   z-index: 1;
 }
@@ -191,7 +191,7 @@
   z-index: 2;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   flex: 1;
   min-width: 0;
 }
@@ -205,8 +205,8 @@
 
 .capsuleModelName {
   font-family: var(--font-sans);
-  font-size: 13px;
-  font-weight: 600;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
   color: var(--text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -219,33 +219,33 @@
   z-index: 2;
   display: flex;
   align-items: baseline;
-  gap: 10px;
+  gap: var(--space-2_5);
   font-variant-numeric: tabular-nums;
   flex-shrink: 0;
-  margin-left: 8px;
+  margin-left: var(--space-2);
 }
 
 .capsuleTokenVal {
   font-family: var(--font-sans);
   font-variant-numeric: tabular-nums;
-  font-size: 13.5px;
-  font-weight: 600;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
   color: var(--text-primary);
 }
 
 .capsulePctTag {
-  font-size: 12px;
-  font-weight: 500;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
   color: var(--text-secondary);
   min-width: 38px;
   text-align: right;
 }
 
 .emptyModels {
-  padding: 24px;
+  padding: var(--space-6);
   text-align: center;
   color: var(--text-tertiary);
-  font-size: 12.5px;
+  font-size: var(--font-size-xs);
 }
 
 @media (max-width: 720px) {
@@ -255,7 +255,7 @@
   }
   .splitDivider {
     width: 100%;
-    height: 1px;
+    height: var(--hairline-width);
   }
   .donutPanel {
     width: 100%;

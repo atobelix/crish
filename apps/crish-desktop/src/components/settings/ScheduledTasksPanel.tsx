@@ -177,7 +177,7 @@ export const ScheduledTasksPanel: React.FC<Props> = ({ onBackToChat }) => {
             {workflows.length > 0 ? `${workflows.length} 条` : ' '}
           </span>
         </div>
-        <div style={{ position: 'relative' }}>
+        <div className={styles.createBtnWrapper}>
           <Button
             ref={createBtnRef}
             type="button"

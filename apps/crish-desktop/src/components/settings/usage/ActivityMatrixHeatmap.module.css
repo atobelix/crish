@@ -1,8 +1,8 @@
 .activitySection {
-  padding: 20px 22px;
+  padding: var(--space-5);
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: var(--space-3_5);
   background: var(--bg-card);
   position: relative;
 }
@@ -11,13 +11,13 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 28px;
-  gap: 12px;
+  min-height: var(--control-height-sm);
+  gap: var(--space-3);
 }
 
 .blockTitle {
-  font-size: 14px;
-  font-weight: 600;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
   color: var(--text-primary);
   letter-spacing: -0.015em;
 }
@@ -25,14 +25,14 @@
 .activityHeaderControls {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .activityLegend {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  font-size: 10.5px;
+  gap: var(--space-1);
+  font-size: var(--font-size-xxs);
   color: var(--text-tertiary);
   user-select: none;
 }
@@ -40,26 +40,26 @@
 .activityLegendCell {
   width: 9px;
   height: 9px;
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
 }
 
 .activityGridWrapper {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-1_5);
 }
 
 .matrixRowsContainer {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-1);
   width: 100%;
 }
 
 .matrixRowLine {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   width: 100%;
 }
 
@@ -68,22 +68,22 @@
   display: flex;
   flex-direction: column;
   justify-content: center;
-  line-height: 1.25;
+  line-height: var(--line-height-tight);
   width: 46px;
   flex-shrink: 0;
   user-select: none;
 }
 
 .yAxisTitle {
-  font-size: 11px;
-  font-weight: 500;
+  font-size: var(--font-size-xxs);
+  font-weight: var(--font-weight-medium);
   color: var(--text-secondary);
   font-family: var(--font-sans);
   font-variant-numeric: tabular-nums;
 }
 
 .yAxisSub {
-  font-size: 9.5px;
+  font-size: var(--font-size-xxs);
   color: var(--text-tertiary);
   font-family: var(--font-mono);
 }
@@ -91,20 +91,20 @@
 .cellsRow {
   flex: 1;
   display: grid;
-  gap: 4.5px;
+  gap: var(--space-1);
   min-width: 0;
   align-items: center;
   justify-items: center;
 }
 
-/* 正方形微圆角磁贴：严守 1:1 纯正正方形，圆角 3.5px 连续柔和，间隙 4.5px 疏朗呼吸 */
+/* 正方形微圆角磁贴：严守 1:1 纯正正方形，圆角连续柔和，间距疏朗呼吸 */
 .activityCell {
   aspect-ratio: 1 / 1;
   width: 100%;
   max-width: 18px;
-  border-radius: var(--radius-xs, 2px);
+  border-radius: var(--radius-xs);
   cursor: pointer;
-  transition: transform 120ms ease;
+  transition: transform var(--transition-fast);
   transform-origin: center;
   outline: none;
 }
@@ -112,15 +112,15 @@
 .activityCell:hover,
 .activityCell:focus-visible {
   transform: scale(1.15);
-  box-shadow: 0 0 0 1px var(--tint-highlight);
+  box-shadow: 0 0 0 var(--hairline-width) var(--tint-highlight);
   position: relative;
-  z-index: 5;
+  z-index: 2;
 }
 
 .activityXAxisWrapper {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   width: 100%;
 }
 
@@ -132,9 +132,9 @@
 .activityXAxis {
   flex: 1;
   display: grid;
-  gap: 4.5px;
+  gap: var(--space-1);
   min-width: 0;
-  font-size: 10px;
+  font-size: var(--font-size-xxs);
   color: var(--text-tertiary);
   user-select: none;
   font-family: var(--font-mono);
@@ -144,7 +144,7 @@
 .xAxisColLabel {
   overflow: visible;
   white-space: nowrap;
-  line-height: 1;
+  line-height: var(--line-height-none);
 }
 
 .xAxisColFirst {
@@ -165,72 +165,71 @@
 
 /* 5 级活动热力颜色标尺 (对齐 tokens.css 语义变量) */
 .actLvl0 {
-  background: var(--usage-heat-0, color-mix(in srgb, var(--border-color) 40%, transparent));
+  background: var(--usage-heat-0);
 }
 
 .actLvl1 {
-  background: var(--usage-heat-1, color-mix(in srgb, var(--brand) 25%, transparent));
+  background: var(--usage-heat-1);
 }
 
 .actLvl2 {
-  background: var(--usage-heat-2, color-mix(in srgb, var(--brand) 50%, transparent));
+  background: var(--usage-heat-2);
 }
 
 .actLvl3 {
-  background: var(--usage-heat-3, color-mix(in srgb, var(--brand) 75%, transparent));
+  background: var(--usage-heat-3);
 }
 
 .actLvl4 {
   background: var(--usage-heat-4, var(--brand));
 }
 
-
 /* 活动下属统计指标网格：纯净纯文字排版，零卡片无边框无 hover */
 .activityStatsGrid {
-  margin-top: 14px;
-  padding-top: 14px;
-  border-top: 1px solid var(--border-subtle);
+  margin-top: var(--space-3_5);
+  padding-top: var(--space-3_5);
+  border-top: var(--hairline-width) solid var(--border-subtle);
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 14px 20px;
+  gap: var(--space-3_5) var(--space-5);
 }
 
 .actStatItem {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-1);
   min-width: 0;
 }
 
 .actStatLabel {
-  font-size: 12px;
+  font-size: var(--font-size-xs);
   color: var(--text-tertiary);
   letter-spacing: -0.01em;
 }
 
 .actStatVal {
-  font-size: 15px;
-  font-weight: 600;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
   color: var(--text-primary);
   font-variant-numeric: tabular-nums;
   display: flex;
   align-items: baseline;
-  gap: 4px;
+  gap: var(--space-1);
   letter-spacing: -0.02em;
 }
 
 .actStatValCode {
   font-family: var(--font-sans);
-  font-size: 13px;
-  font-weight: 500;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .actStatUnit {
-  font-size: 11.5px;
-  font-weight: 400;
+  font-size: var(--font-size-xxs);
+  font-weight: var(--font-weight-normal);
   color: var(--text-tertiary);
 }
 

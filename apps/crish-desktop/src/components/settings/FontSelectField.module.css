@@ -1,7 +1,8 @@
 .settingsSelect {
   position: relative;
-  min-width: 140px;
-  max-width: 280px;
+  /* 140px 表单最小宽，扩档裁决见 audits/03 §七 */
+  min-width: 140px; /* 刻度外裸值：140px 授权保留，待 T26 落 --form-field-min-width（本域共 7 处） */
+  max-width: 280px; /* 刻度外裸值：无既有档，授权保留 */
 }
 
 .settingsSelect.disabled {
@@ -20,24 +21,24 @@
   display: inline-flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--space-2);
   flex: 1;
   min-width: 0;
-  height: 28px;
-  min-height: 28px;
-  padding: 0 10px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md, 6px);
+  height: var(--control-height-sm);
+  min-height: var(--control-height-sm);
+  padding: 0 var(--space-2_5);
+  border: var(--hairline-width) solid var(--border-subtle);
+  border-radius: var(--radius-md);
   background: var(--bg-card);
   color: var(--text-primary);
   font-family: inherit;
-  font-size: var(--font-size-sm, 13px);
+  font-size: var(--font-size-sm);
   font-weight: var(--font-weight-normal);
   cursor: pointer;
   outline: none;
   box-shadow: none;
   box-sizing: border-box;
-  transition: border-color 0.12s ease, background-color 0.12s ease;
+  transition: border-color var(--transition-fast), background-color var(--transition-fast);
 }
 
 .settingsSelectTrigger:hover:not(:disabled) {
@@ -49,7 +50,7 @@
 .settingsSelectTrigger:focus-visible,
 .settingsSelectTrigger[aria-expanded='true'] {
   background: var(--tint-hover);
-  border-color: color-mix(in srgb, var(--border-color) 92%, var(--text-primary) 8%);
+  border-color: var(--focus-border-color);
   outline: none;
 }
 
@@ -70,32 +71,32 @@
 .settingsSelectChev {
   flex-shrink: 0;
   color: var(--text-tertiary);
-  transition: transform var(--transition-micro, 0.15s ease);
+  transition: transform var(--transition-micro);
 }
 
 .settingsSelectMenu {
   background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
+  border: var(--hairline-width) solid var(--border-subtle);
+  border-radius: var(--radius-xl);
   box-shadow: var(--shadow-dropdown);
-  padding: 4px;
+  padding: var(--space-1);
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-0_5);
   overflow: hidden;
   box-sizing: border-box;
-  z-index: var(--z-dropdown-menu, 2000);
+  z-index: var(--z-dropdown-menu);
 }
 
 /* 顶部搜索条与操作栏 */
 .searchHeader {
   display: flex;
   align-items: center;
-  gap: 4px;
-  height: 30px;
-  min-height: 30px;
-  padding: 0 4px;
-  border-radius: 8px;
+  gap: var(--space-1);
+  height: var(--control-height-sm);
+  min-height: var(--control-height-sm);
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-lg);
   background: var(--bg-primary, var(--bg-workspace));
   flex-shrink: 0;
   box-sizing: border-box;
@@ -112,7 +113,7 @@
 
 .searchIcon {
   position: absolute;
-  left: 6px;
+  left: var(--space-1_5);
   color: var(--text-tertiary);
   pointer-events: none;
   flex-shrink: 0;
@@ -122,12 +123,12 @@
 .searchInput:focus,
 .searchInput:focus-visible {
   width: 100%;
-  height: 22px;
+  height: 22px; /* 刻度外裸值：无既有档，授权保留 */
   border: none;
   background: transparent;
-  padding: 0 24px 0 24px;
+  padding: 0 var(--space-6) 0 var(--space-6);
   font-family: inherit;
-  font-size: var(--font-size-xs, 12px);
+  font-size: var(--font-size-xs);
   color: var(--text-primary);
   outline: none;
   box-shadow: none;
@@ -140,19 +141,19 @@
 
 .customApplyBtn {
   position: absolute;
-  right: 2px;
+  right: var(--space-0_5);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
+  width: 18px; /* 刻度外裸值：无既有档，授权保留 */
+  height: 18px; /* 刻度外裸值：无既有档，授权保留 */
   padding: 0;
   border: none;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--accent-color, var(--brand-deep));
   cursor: pointer;
-  transition: background-color 0.12s ease;
+  transition: background-color var(--transition-fast);
 }
 
 .customApplyBtn:hover {
@@ -163,16 +164,16 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
+  width: 22px; /* 刻度外裸值：无既有档，授权保留 */
+  height: 22px; /* 刻度外裸值：无既有档，授权保留 */
   padding: 0;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--text-tertiary);
   cursor: pointer;
   flex-shrink: 0;
-  transition: background-color 0.12s ease, color 0.12s ease;
+  transition: background-color var(--transition-fast), color var(--transition-fast);
 }
 
 .actionBtn:hover:not(:disabled) {
@@ -187,7 +188,7 @@
 
 .spinIcon {
   transform-origin: center center;
-  animation: font-spin 0.8s linear infinite;
+  animation: font-spin var(--transition-spin) infinite;
   color: var(--accent-color, var(--brand-deep));
 }
 
@@ -205,16 +206,16 @@
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-0_5);
   min-height: 0;
-  padding: 2px 0;
+  padding: var(--space-0_5) 0;
   overscroll-behavior: contain;
 }
 
 .groupHeader {
-  font-size: var(--font-size-xxs, 11px);
+  font-size: var(--font-size-xxs);
   color: var(--text-tertiary);
-  padding: 6px 8px 2px;
+  padding: var(--space-1_5) var(--space-2) var(--space-0_5);
   user-select: none;
 }
 
@@ -222,21 +223,21 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--space-2);
   width: 100%;
-  height: 30px;
-  min-height: 30px;
+  height: var(--control-height-sm);
+  min-height: var(--control-height-sm);
   border: none;
   background: transparent;
   text-align: left;
-  padding: 0 8px;
-  border-radius: 6px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-md);
   cursor: pointer;
   font-family: inherit;
   color: var(--text-primary);
-  font-size: var(--font-size-sm, 13px);
+  font-size: var(--font-size-sm);
   font-weight: var(--font-weight-normal);
-  transition: background-color 0.12s ease;
+  transition: background-color var(--transition-fast);
   box-sizing: border-box;
 }
 
@@ -248,7 +249,7 @@
 .settingsSelectItem.isActive {
   background: var(--tint-hover);
   color: var(--text-primary);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
 }
 
 .settingsSelectItemLabel {
@@ -269,21 +270,21 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 16px 8px;
+  padding: var(--space-4) var(--space-2);
   text-align: center;
-  gap: 4px;
-  font-size: var(--font-size-xs, 12px);
+  gap: var(--space-1);
+  font-size: var(--font-size-xs);
   color: var(--text-tertiary);
 }
 
 .emptySub {
-  font-size: var(--font-size-xxs, 11px);
+  font-size: var(--font-size-xxs);
   color: var(--text-tertiary);
 }
 
 .highlightMark {
   background: var(--tint-highlight);
   color: var(--text-primary);
-  border-radius: 2px;
-  padding: 0 1px;
+  border-radius: var(--radius-xs);
+  padding: 0 1px; /* 刻度外裸值：1px 无既有档，授权保留 */
 }

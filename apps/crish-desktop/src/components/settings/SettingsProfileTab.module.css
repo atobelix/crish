@@ -34,5 +34,5 @@
 }
 
 .settingsImportBody {
-  padding: 16px 20px;
+  padding: var(--space-4) var(--space-5);
 }

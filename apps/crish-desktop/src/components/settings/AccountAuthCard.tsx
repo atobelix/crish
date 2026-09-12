@@ -132,7 +132,7 @@ export const AccountAuthCard: React.FC = () => {
                   <div className={styles.userEmail}>{user?.email}</div>
                 </div>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div className={styles.userCardActions}>
                 <span className={styles.statusPill}>
                   <span className={styles.statusDot} />
                   云端协同就绪

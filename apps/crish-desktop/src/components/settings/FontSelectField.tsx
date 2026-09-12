@@ -181,7 +181,6 @@ export const FontSelectField: React.FC<Props> = ({
   return (
     <div
       className={`${styles.settingsSelect} ${className || ''} ${disabled ? styles.disabled : ''}`}
-      data-density="compact"
     >
       <div className={styles.settingsSelectTriggerRow}>
         <Menu

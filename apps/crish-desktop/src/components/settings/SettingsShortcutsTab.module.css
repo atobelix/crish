@@ -3,7 +3,7 @@
 .controlGroup {
   display: flex;
   align-items: center;
-  gap: var(--space-2, 8px);
+  gap: var(--space-2);
 }
 
 .controlGroup :global(button) {
@@ -27,46 +27,41 @@
   min-width: 92px;
   height: 28px;
   padding: 0 10px;
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: var(--font-size-xs, 12px);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
   font-variant-numeric: tabular-nums;
-  font-weight: var(--font-weight-medium, 500);
+  font-weight: var(--font-weight-medium);
   letter-spacing: 0.02em;
-  border-radius: var(--button-radius, 7px);
+  border-radius: var(--button-radius);
   background-color: var(--bg-card);
   color: var(--text-primary);
-  border: 1px solid var(--border-color);
-  box-shadow:
-    0 1px 2px color-mix(in srgb, var(--shadow-color) 4%, transparent),
-    0 1px 1px color-mix(in srgb, var(--shadow-color) 2%, transparent);
+  border: var(--hairline-width) solid var(--border-subtle);
   cursor: pointer;
   box-sizing: border-box;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   transition:
-    background-color var(--transition-micro, 100ms) ease-out,
-    border-color var(--transition-micro, 100ms) ease-out,
-    box-shadow var(--transition-micro, 100ms) ease-out;
+    background-color var(--transition-fast),
+    border-color var(--transition-fast);
 }
 
 .shortcutKeyBtn:hover:not(:disabled) {
-  background-color: var(--bg-card);
+  background-color: var(--tint-hover);
   border-color: var(--border-color);
-  box-shadow: var(--shadow-sm);
 }
 
 .shortcutKeyBtn:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
-  border-color: color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
+  box-shadow: 0 0 0 var(--hairline-width) var(--focus-ring-color);
+  border-color: var(--focus-border-color);
 }
 
 /* 录制态：Emerald 活态焦点环与无障碍对比度 */
 .shortcutKeyBtn.recording {
   outline: none;
   border-color: var(--brand);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand) 20%, transparent);
+  box-shadow: 0 0 0 var(--hairline-width) var(--brand);
   background-color: color-mix(in srgb, var(--brand) 4%, var(--bg-card));
   color: var(--brand-deep);
 }

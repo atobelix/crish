@@ -9,10 +9,10 @@
 
 .schedInChat {
   width: 100%;
-  max-width: min(var(--chat-col-max, 840px), 100%);
+  max-width: min(var(--chat-col-max), 100%);
   margin-left: auto;
   margin-right: auto;
-  padding: 32px 24px 64px;
+  padding: var(--space-8) var(--space-6) calc(var(--space-8) * 2);
   box-sizing: border-box;
 }
 
@@ -37,7 +37,7 @@
 
 .schedInChatTitles h3 {
   margin: 0;
-  font-size: var(--font-size-lg, 16px);
+  font-size: var(--font-size-lg);
   font-weight: var(--font-weight-medium);
   color: var(--text-primary);
   line-height: var(--line-height-tight);
@@ -68,8 +68,8 @@
 
 .schedStatusLine {
   font-size: var(--font-size-xs);
-  line-height: 1.35;
-  margin: 0 0 8px;
+  line-height: var(--line-height-ui);
+  margin: 0 0 var(--space-2);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -115,16 +115,16 @@
   border-radius: var(--radius-btn);
 }
 
-/*                                                                ?select */
+/* select */
 .schedForm {
-  border: 1px solid var(--border-color);
+  border: var(--hairline-width) solid var(--border-subtle);
   border-radius: var(--radius-2xl);
   background: transparent;
-  padding: 14px 14px 12px;
+  padding: var(--space-3_5) var(--space-3_5) var(--space-3);
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-  margin: 4px 0 14px;
+  margin: var(--space-1) 0 var(--space-3_5);
   box-sizing: border-box;
 }
 
@@ -154,26 +154,23 @@
 .schedFieldInput {
   width: 100%;
   box-sizing: border-box;
-  min-height: 36px;
-  padding: 8px 12px;
+  min-height: var(--control-height);
+  padding: var(--space-2) var(--space-3);
   border: none;
   border-radius: var(--radius-xl);
-  background: var(--bg-primary);
+  background: var(--bg-card);
   color: var(--text-primary);
   font: inherit;
   font-size: var(--font-size-sm);
   outline: none;
-  box-shadow: 0 0 0 1px var(--hairline, var(--border-subtle));
+  box-shadow: 0 0 0 var(--hairline-width) var(--border-subtle);
   transition: box-shadow var(--transition-micro);
 }
 
-.schedFieldInput:focus {
-  box-shadow: 0 0 0 1px var(--focus-border-color);
-}
-
+.schedFieldInput:focus,
 .schedFieldInput:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 1.5px var(--focus-border-color);
+  box-shadow: 0 0 0 var(--hairline-width) var(--focus-border-color);
 }
 
 .schedFieldTextarea {
@@ -181,7 +178,7 @@
   height: 120px;
   border: none;
   resize: none;
-  line-height: 1.45;
+  line-height: var(--line-height-body);
   padding-top: var(--space-2_5);
 }
 
@@ -202,15 +199,14 @@
 .schedSelect :global(.settings-select-trigger),
 .schedField :global(.settings-select-trigger) {
   width: 100%;
-  min-height: 36px;
-  height: 36px;
+  min-height: var(--control-height);
+  height: var(--control-height);
   border: none;
   border-radius: var(--radius-xl);
   background: var(--bg-primary);
-  box-shadow: 0 0 0 1px var(--hairline, var(--border-subtle));
-  padding: 0 10px 0 12px;
+  box-shadow: 0 0 0 var(--hairline-width) var(--hairline, var(--border-subtle));
+  padding: 0 var(--space-2_5) 0 var(--space-3);
 }
-
 
 .schedFormActions {
   display: flex;
@@ -224,7 +220,7 @@
   flex-direction: column;
   align-items: flex-start;
   gap: var(--space-1);
-  padding: 16px 0;
+  padding: var(--space-4) 0;
   color: var(--text-tertiary);
   font-size: var(--font-size-sm);
   text-align: left;
@@ -234,7 +230,7 @@
   flex-direction: row;
   align-items: center;
   gap: var(--space-2_5);
-  padding: 12px 0;
+  padding: var(--space-3) 0;
 }
 
 .schedEmptySub {
@@ -257,10 +253,10 @@
   gap: var(--space-1_5);
   align-items: center;
   border: none;
-  border-bottom: 1px solid var(--border-subtle);
+  border-bottom: var(--hairline-width) solid var(--border-subtle);
   border-radius: 0;
   background: transparent;
-  padding: 6px 0;
+  padding: var(--space-1_5) 0;
 }
 
 .schedList > .schedItem:last-child {
@@ -268,9 +264,9 @@
 }
 
 .schedItem.schedItemDense {
-  min-height: 32px;
+  min-height: var(--control-height);
   align-items: center;
-  padding: 5px 0;
+  padding: var(--space-1) 0;
 }
 
 .schedItemDense .schedItemPrompt {
@@ -294,7 +290,7 @@
 .schedItemMeta {
   font-size: var(--font-size-xs);
   color: var(--text-tertiary);
-  margin-top: 1px;
+  margin-top: var(--space-0_5);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -313,7 +309,7 @@
 .schedRuns {
   margin-top: var(--space-4);
   padding-top: var(--space-3);
-  border-top: 1px solid var(--border-subtle);
+  border-top: var(--hairline-width) solid var(--border-subtle);
 }
 
 .schedRunsH {
@@ -325,4 +321,8 @@
 
 .schedRunItem .schedItemName {
   font-weight: var(--font-weight-medium);
+}
+
+.createBtnWrapper {
+  position: relative;
 }

@@ -15,9 +15,9 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--border-subtle);
+  gap: var(--space-3);
+  padding-bottom: var(--space-3);
+  border-bottom: var(--hairline-width) solid var(--border-subtle);
   flex-shrink: 0;
 }
 
@@ -32,19 +32,19 @@
   display: grid;
   grid-template-columns: minmax(120px, 2fr) minmax(70px, 1fr) minmax(70px, 1fr) minmax(70px, 1fr) 105px 84px;
   align-items: center;
-  padding: 6px 12px;
-  gap: 8px;
+  padding: var(--space-1_5) var(--space-3);
+  gap: var(--space-2);
   box-sizing: border-box;
 }
 
 /* 表头：纯净文本，标准 500 字重，统一系统字体 */
 .tableHeader {
-  font-size: 12px;
-  font-weight: 500;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
   color: var(--text-secondary);
-  border-bottom: 1px solid var(--border-subtle);
+  border-bottom: var(--hairline-width) solid var(--border-subtle);
   flex-shrink: 0;
-  padding: 8px 12px;
+  padding: var(--space-2) var(--space-3);
 }
 
 /* 列表主体：带稳定滚动槽 */
@@ -57,12 +57,12 @@
 /* 价格行：默认透明，hover 柔和高光 */
 .tableRow {
   background: transparent;
-  border-bottom: 1px solid color-mix(in srgb, var(--border-subtle) 40%, transparent);
-  transition: background 120ms ease;
+  border-bottom: var(--hairline-width) solid color-mix(in srgb, var(--border-subtle) 40%, transparent);
+  transition: background var(--transition-fast);
 }
 
 .tableRow:hover {
-  background: var(--bg-hover);
+  background: var(--tint-hover);
 }
 
 .colCell {
@@ -74,24 +74,24 @@
 /* 对齐模型界面的输入框效果，背景色始终固定为纯白 #ffffff，字体字重标准统一 */
 .cellInput {
   width: 100%;
-  height: 30px;
-  min-height: 30px;
-  padding: 0 10px;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md, 6px);
-  font-size: 13px;
+  height: var(--control-height-sm);
+  min-height: var(--control-height-sm);
+  padding: 0 var(--space-2_5);
+  border: var(--hairline-width) solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
   font-family: var(--font-sans);
-  font-weight: 400;
+  font-weight: var(--font-weight-normal);
   background: var(--bg-card);
   color: var(--text-primary);
   outline: none;
   box-sizing: border-box;
-  transition: border-color 120ms ease;
+  transition: border-color var(--transition-fast);
 }
 
 .cellInput::placeholder {
   color: var(--text-tertiary);
-  font-size: 12px;
+  font-size: var(--font-size-xs);
 }
 
 .cellInput:hover:not(:focus) {
@@ -104,27 +104,27 @@
   outline: none;
   background: var(--bg-card);
   box-shadow: none;
-  border-color: color-mix(in srgb, var(--border-color) 92%, var(--text-primary) 8%);
+  border-color: var(--focus-border-color);
 }
 
 .rowActions {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 4px;
+  gap: var(--space-1);
   width: 100%;
 }
 
 .emptyTip {
   text-align: center;
-  padding: 48px 0;
-  font-size: 13px;
+  padding: calc(var(--space-10) + var(--space-2)) 0;
+  font-size: var(--font-size-sm);
   color: var(--text-tertiary);
 }
 
 /* 底部新增行：与 tableRow 完全相同栅格与内边距，顶部细分界线 */
 .addRow {
-  border-top: 1px solid var(--border-subtle);
+  border-top: var(--hairline-width) solid var(--border-subtle);
   background: transparent;
   flex-shrink: 0;
 }
@@ -140,19 +140,19 @@
 /* 建议匹配下拉浮层 */
 .suggestionsDropdown {
   position: absolute;
-  bottom: calc(100% + 4px);
+  bottom: calc(100% + var(--space-1));
   left: 0;
   min-width: 100%;
   width: max-content;
   max-width: 260px;
   background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md, 6px);
-  box-shadow: var(--shadow-md);
+  border: var(--hairline-width) solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-dropdown);
   max-height: 180px;
   overflow-y: auto;
-  z-index: 50;
-  padding: 4px;
+  z-index: var(--z-dropdown);
+  padding: var(--space-1);
   box-sizing: border-box;
 }
 
@@ -168,20 +168,24 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 5px 8px;
-  border-radius: var(--radius-sm, 4px);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  font-size: 12px;
-  gap: 8px;
+  font-size: var(--font-size-xs);
+  gap: var(--space-2);
   color: var(--text-primary);
-  transition: background 120ms ease;
+  transition: background var(--transition-fast);
 }
 
 .suggestionItem:hover {
-  background: var(--bg-hover);
+  background: var(--tint-hover);
 }
 
 .suggestionItemMeta {
   color: var(--text-tertiary);
-  font-size: 11px;
+  font-size: var(--font-size-xxs);
+}
+
+.searchInputWrapper {
+  width: 150px; /* 布局约束，不入刻度（同 audits/03 §七 150px 登记） */
 }

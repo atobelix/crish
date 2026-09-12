@@ -14,13 +14,13 @@
 .formRow {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-1_5);
 }
 
 .formLabel {
-  font-size: var(--font-size-xs, 12px);
+  font-size: var(--font-size-xs);
   color: var(--text-secondary);
-  font-weight: var(--font-weight-medium, 500);
+  font-weight: var(--font-weight-medium);
 }
 
 
@@ -28,17 +28,17 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-top: 4px;
+  margin-top: var(--space-1);
 }
 
 .loginHint {
-  font-size: var(--font-size-xs, 12px);
+  font-size: var(--font-size-xs);
   color: var(--text-tertiary);
   line-height: 1.4;
 }
 
 .errorText {
-  font-size: var(--font-size-xs, 12px);
+  font-size: var(--font-size-xs);
   color: var(--text-danger);
 }
 
@@ -47,21 +47,27 @@
   align-items: center;
   justify-content: space-between;
   padding-bottom: var(--space-3);
-  border-bottom: 1px solid var(--border-subtle);
+  border-bottom: var(--hairline-width) solid var(--border-subtle);
+}
+
+.userCardActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
 }
 
 .userInfo {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .userAvatar {
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-full, 9999px);
+  width: 36px; /* 刻度外裸值：无既有档，授权保留 */
+  height: 36px; /* 刻度外裸值：无既有档，授权保留 */
+  border-radius: var(--radius-full);
   background: var(--bg-secondary);
-  border: 1px solid var(--border-subtle);
+  border: var(--hairline-width) solid var(--border-subtle);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -71,43 +77,43 @@
 .userMeta {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-0_5);
 }
 
 .userName {
-  font-size: var(--font-size-sm, 13px);
-  font-weight: var(--font-weight-semibold, 600);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
   color: var(--text-primary);
 }
 
 .userEmail {
-  font-size: var(--font-size-xs, 12px);
+  font-size: var(--font-size-xs);
   color: var(--text-tertiary);
 }
 
 .statusPill {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 2px 8px;
-  border-radius: var(--radius-full, 9999px);
+  gap: var(--space-1_5);
+  padding: var(--space-0_5) var(--space-2);
+  border-radius: var(--radius-full);
   background: var(--color-success-bg);
   color: var(--text-success);
-  font-size: 11px;
-  font-weight: var(--font-weight-medium, 500);
+  font-size: var(--font-size-xxs);
+  font-weight: var(--font-weight-medium);
 }
 
 .statusDot {
-  width: 6px;
-  height: 6px;
-  border-radius: var(--radius-full, 9999px);
+  width: var(--space-1_5);
+  height: var(--space-1_5);
+  border-radius: var(--radius-full);
   background: var(--text-success);
 }
 
 .deviceListSection {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .deviceListHeader {
@@ -117,8 +123,8 @@
 }
 
 .deviceListTitle {
-  font-size: var(--font-size-xs, 12px);
-  font-weight: var(--font-weight-medium, 500);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
   color: var(--text-secondary);
 }
 
@@ -126,16 +132,16 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 12px;
-  border-radius: var(--radius-md, 6px);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
   background: var(--bg-secondary);
-  border: 1px solid var(--border-subtle);
+  border: var(--hairline-width) solid var(--border-subtle);
 }
 
 .deviceLeft {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-2_5);
 }
 
 .deviceIcon {
@@ -145,18 +151,18 @@
 }
 
 .deviceName {
-  font-size: var(--font-size-xs, 12px);
-  font-weight: var(--font-weight-medium, 500);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
   color: var(--text-primary);
 }
 
 .deviceMeta {
-  font-size: 11px;
+  font-size: var(--font-size-xxs);
   color: var(--text-tertiary);
 }
 
 .emptyDevices {
-  font-size: var(--font-size-xs, 12px);
+  font-size: var(--font-size-xs);
   color: var(--text-tertiary);
-  padding: 8px 0;
+  padding: var(--space-2) 0;
 }

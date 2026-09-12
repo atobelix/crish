@@ -1,15 +1,15 @@
 .wlRow {
   display: flex;
-  gap: var(--space-3, 12px);
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--border-subtle);
+  gap: var(--space-3);
+  padding: var(--space-2_5) var(--space-3_5);
+  border-bottom: var(--hairline-width) solid var(--border-subtle);
   align-items: center;
 }
 
 .wlRowNoBorder {
   display: flex;
-  gap: var(--space-3, 12px);
-  padding: 10px 14px;
+  gap: var(--space-3);
+  padding: var(--space-2_5) var(--space-3_5);
   align-items: center;
 }
 
@@ -43,7 +43,7 @@
 }
 
 .actionBtn {
-  border-radius: var(--radius-md, 6px);
+  border-radius: var(--radius-md);
 }
 
 .presetGroup {
@@ -57,18 +57,18 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  height: 28px;
-  min-height: 28px;
-  padding: 0 10px;
-  border-radius: var(--radius-md, 6px);
-  border: 1px solid var(--border-color);
+  height: var(--control-height-sm);
+  min-height: var(--control-height-sm);
+  padding: 0 var(--space-2_5);
+  border-radius: var(--radius-md);
+  border: var(--hairline-width) solid var(--border-subtle);
   background: var(--bg-card);
   color: var(--text-secondary);
-  font-size: var(--font-size-xs, 12px);
+  font-size: var(--font-size-xs);
   font-family: inherit;
   cursor: pointer;
   box-sizing: border-box;
-  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
 }
 
 .presetChip:hover:not(:disabled) {
@@ -85,4 +85,21 @@
 .cmdSpan {
   font-family: var(--font-mono);
   font-size: var(--font-size-sm);
+}
+
+.morePathsWrapper {
+  padding: var(--space-2) var(--space-5);
+}
+
+.confirmClearGroup {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.confirmClearPrompt {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  white-space: nowrap;
 }

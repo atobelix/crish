@@ -9,10 +9,10 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  padding: 8px 12px;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-lg, 8px);
-  background: var(--tint-hover, transparent);
+  padding: var(--space-2) var(--space-3);
+  border: var(--hairline-width) solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--tint-hover);
 }
 
 .importRootRow {
@@ -28,40 +28,40 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-0_5);
 }
 
 .importRootLabel {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1_5);
   font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-medium, 500);
+  font-weight: var(--font-weight-medium);
   color: var(--text-secondary);
 }
 
 .importRootBadge {
-  font-size: 10px;
-  font-weight: 500;
-  padding: 1px 6px;
-  border-radius: 999px;
+  font-size: var(--font-size-xxs);
+  font-weight: var(--font-weight-medium);
+  padding: 1px var(--space-1_5);
+  border-radius: var(--radius-full);
   background: var(--tint-divider);
   color: var(--text-primary);
 }
 
 .importRootBadgeMuted {
-  font-size: 10px;
-  font-weight: 500;
-  padding: 1px 6px;
-  border-radius: 999px;
-  background: var(--bg-tertiary, transparent);
+  font-size: var(--font-size-xxs);
+  font-weight: var(--font-weight-medium);
+  padding: 1px var(--space-1_5);
+  border-radius: var(--radius-full);
+  background: var(--bg-tertiary);
   color: var(--text-tertiary);
 }
 
 .importRootPath {
   font-size: var(--font-size-xs);
   color: var(--text-tertiary);
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: var(--font-mono);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -72,7 +72,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-1, 4px);
+  gap: var(--space-1);
   flex-shrink: 0;
 }
 
@@ -87,14 +87,14 @@
   margin: 0;
   font-size: var(--font-size-xs);
   color: var(--text-tertiary);
-  line-height: var(--line-height-ui, 1.35);
+  line-height: var(--line-height-ui);
 }
 
 .importStatus {
   margin: 0;
   font-size: var(--font-size-xs);
   color: var(--text-secondary);
-  line-height: var(--line-height-ui, 1.35);
+  line-height: var(--line-height-ui);
 }
 
 .importError {
@@ -103,7 +103,7 @@
   color: var(--text-secondary);
   background: var(--bg-tertiary);
   border-radius: var(--radius-lg);
-  padding: 8px 10px;
+  padding: var(--space-2) var(--space-2_5);
 }
 
 .importListToolbar {
@@ -127,17 +127,22 @@
   flex-direction: column;
   max-height: min(280px, 40vh);
   overflow: auto;
-  border: 1px solid var(--border-color);
+  border: var(--hairline-width) solid var(--border-subtle);
   border-radius: var(--radius-lg);
-  background: var(--bg-primary);
+  background: var(--bg-card);
 }
 
 .importItem {
   display: flex;
   align-items: flex-start;
   gap: var(--space-2);
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--border-subtle, var(--border-color));
+  padding: var(--space-2_5) var(--space-3);
+  border-bottom: var(--hairline-width) solid var(--border-subtle);
+  transition: background-color var(--transition-fast);
+}
+
+.importItem:hover {
+  background-color: var(--tint-hover);
 }
 
 .importItem:last-child {
@@ -145,9 +150,9 @@
 }
 
 .importCheck {
-  margin-top: 2px;
-  width: 16px;
-  height: 16px;
+  margin-top: var(--space-0_5);
+  width: var(--space-4);
+  height: var(--space-4);
   flex-shrink: 0;
   accent-color: var(--text-primary);
   cursor: pointer;
@@ -155,8 +160,8 @@
 
 .importCheck:focus-visible {
   outline: none;
-  box-shadow: var(--focus-ring, 0 0 0 2px var(--tint-divider));
-  border-radius: var(--radius-xs, 2px);
+  box-shadow: var(--focus-ring);
+  border-radius: var(--radius-xs);
 }
 
 .importItemBody {
@@ -164,13 +169,13 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-0_5);
 }
 
 .importItemTitle {
   font-size: var(--font-size-sm);
   color: var(--text-primary);
-  font-weight: var(--font-weight-medium, 500);
+  font-weight: var(--font-weight-medium);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -181,7 +186,7 @@
   color: var(--text-tertiary);
   display: flex;
   flex-wrap: wrap;
-  gap: 6px 10px;
+  gap: var(--space-1_5) var(--space-2_5);
 }
 
 .importItemSource {
@@ -189,7 +194,7 @@
 }
 
 .importEmpty {
-  padding: 14px 12px;
+  padding: var(--space-3_5) var(--space-3);
   font-size: var(--font-size-sm);
   color: var(--text-tertiary);
   text-align: center;
@@ -203,13 +208,13 @@
   gap: var(--space-2);
 }
 
-/* wizard                    roots    */
+/* wizard roots */
 .importRootWizard {
   gap: var(--space-2);
 }
 
 .importRootWizard .importRoots {
-  padding: 8px 10px;
+  padding: var(--space-2) var(--space-2_5);
 }
 
 .importRootWizard .importList {
@@ -217,5 +222,5 @@
 }
 
 .importRootWizard .importItem {
-  padding: 8px 10px;
+  padding: var(--space-2) var(--space-2_5);
 }

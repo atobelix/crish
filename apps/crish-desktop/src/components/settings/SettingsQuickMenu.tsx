@@ -255,7 +255,7 @@ export const SettingsQuickMenu: React.FC<SettingsQuickMenuProps> = ({
     : (trigger ?? defaultTrigger);
 
   return (
-    <div className={styles.sbQuickWrap} ref={rootRef} data-density="compact">
+    <div className={styles.sbQuickWrap} ref={rootRef}>
       <Menu
         key={anchorTick}
         openState={{ open, onOpenChange: handleOpenChange }}
@@ -281,7 +281,6 @@ export const SettingsQuickMenu: React.FC<SettingsQuickMenuProps> = ({
           role="menu"
           aria-label="快捷设置"
           aria-orientation="vertical"
-          data-density="compact"
           onKeyDownCapture={onMenuKeyDown}
           onMouseDown={(e) => e.stopPropagation()}
         >

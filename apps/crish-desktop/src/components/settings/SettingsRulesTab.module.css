@@ -1,21 +1,21 @@
 .headerMetaRow {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .sectionRow {
   display: flex;
-  gap: var(--space-3, 12px);
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--border-subtle);
+  gap: var(--space-3);
+  padding: var(--space-2_5) var(--space-3_5);
+  border-bottom: var(--hairline-width) solid var(--border-subtle);
   align-items: center;
 }
 
 .sectionRowNoBorder {
   display: flex;
-  gap: var(--space-3, 12px);
-  padding: 10px 14px;
+  gap: var(--space-3);
+  padding: var(--space-2_5) var(--space-3_5);
   align-items: center;
 }
 
@@ -49,7 +49,7 @@
 }
 
 .actionBtn {
-  border-radius: var(--radius-md, 6px);
+  border-radius: var(--radius-md);
 }
 
 .presetGroup {
@@ -63,39 +63,38 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  height: 28px;
-  min-height: 28px;
-  padding: 0 10px;
+  height: var(--control-height-sm);
+  min-height: var(--control-height-sm);
+  padding: 0 var(--space-2_5);
   border-radius: var(--radius-btn);
-  border: 1px solid var(--border-color);
+  border: var(--hairline-width) solid var(--border-subtle);
   background: var(--bg-card);
-  color: var(--text-primary);
-  font-size: var(--font-size-xs, 12px);
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
   font-family: inherit;
   cursor: pointer;
   box-sizing: border-box;
-  box-shadow: 0 1px 2px color-mix(in srgb, var(--shadow-color) 3%, transparent);
   transition:
-    background-color var(--transition-micro, 100ms) ease,
-    border-color var(--transition-micro, 100ms) ease,
-    box-shadow var(--transition-micro, 100ms) ease;
+    background-color var(--transition-fast),
+    border-color var(--transition-fast),
+    color var(--transition-fast);
 }
 
 .presetChip:hover:not(:disabled) {
-  background: var(--bg-card);
+  background: var(--tint-hover);
   border-color: var(--border-color);
-  box-shadow: var(--shadow-sm);
+  color: var(--text-primary);
 }
 
 .presetChip:disabled {
-  opacity: var(--opacity-disabled, 0.45);
+  opacity: var(--opacity-disabled);
   cursor: not-allowed;
   box-shadow: none;
 }
 
-/*        PE-05 T05.2 #7
- *     settings-dialog        ui/Dialog
- *        /  /           tokens */
+/* PE-05 T05.2 #7
+ * settings-dialog ui/Dialog
+ * tokens */
 
 .rulesEditorOverlay {
   --dialog-z: var(--z-modal);
@@ -115,13 +114,13 @@
   width: 100%;
   min-height: 320px;
   height: 380px;
-  padding: 12px 14px;
+  padding: var(--space-3) var(--space-3_5);
   font-size: var(--font-size-sm);
   font-family: var(--font-mono);
-  line-height: 1.6;
+  line-height: var(--line-height-body);
   resize: none;
   border-radius: var(--radius-md);
-  border: 1px solid var(--border-subtle);
+  border: var(--hairline-width) solid var(--border-subtle);
   background: var(--bg-primary);
   color: var(--text-primary);
   box-sizing: border-box;
@@ -134,7 +133,7 @@
 .rulesEditorTextarea:focus,
 .rulesEditorTextarea:focus-visible {
   outline: none;
-  border-color: var(--border-color);
+  border-color: var(--focus-border-color);
   background: var(--bg-card);
   box-shadow: none;
 }

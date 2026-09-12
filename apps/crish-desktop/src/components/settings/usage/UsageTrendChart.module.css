@@ -1,9 +1,9 @@
 .chartContainer {
-  padding: 20px 22px;
+  padding: var(--space-5);
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  border-bottom: 1px solid var(--border-subtle);
+  gap: var(--space-3);
+  border-bottom: var(--hairline-width) solid var(--border-subtle);
   background: var(--bg-card);
 }
 
@@ -11,12 +11,12 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 28px;
+  min-height: var(--control-height-sm);
 }
 
 .blockTitle {
-  font-size: 14px;
-  font-weight: 600;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
   color: var(--text-primary);
   letter-spacing: -0.015em;
 }
@@ -25,7 +25,7 @@
   position: relative;
   width: 100%;
   height: 175px;
-  margin-top: 4px;
+  margin-top: var(--space-1);
 }
 
 /* HTML 纯净 Y 轴刻度，彻底脱离 SVG 纵横拉伸形变与叠字 */
@@ -42,14 +42,14 @@
 
 .yTick {
   position: absolute;
-  right: 6px;
-  font-size: 10px;
+  right: var(--space-1_5);
+  font-size: var(--font-size-xxs);
   color: var(--text-tertiary);
   font-family: 'Segoe UI', -apple-system, var(--font-sans);
   font-variant-numeric: tabular-nums;
   font-feature-settings: 'tnum' 1;
   transform: translateY(-50%);
-  line-height: 1;
+  line-height: var(--line-height-none);
   white-space: nowrap;
 }
 
@@ -61,13 +61,13 @@
 
 .gridLine {
   stroke: color-mix(in srgb, var(--border-subtle) 65%, transparent);
-  stroke-width: 1;
+  stroke-width: var(--hairline-width);
   stroke-dasharray: 4 4;
 }
 
 .axisLine {
   stroke: var(--border-subtle);
-  stroke-width: 1;
+  stroke-width: var(--hairline-width);
 }
 
 /* 统一高精度平滑折线：精致轻盈 1.4px ~ 1.8px，精神挺拔、层次分明 */
@@ -75,61 +75,61 @@
   fill: none;
   stroke-linejoin: round;
   stroke-linecap: round;
-  transition: opacity 200ms ease, stroke-width 120ms ease;
+  transition: opacity var(--transition-normal), stroke-width var(--transition-fast);
 }
 
 .pathArea {
-  transition: opacity 200ms ease;
+  transition: opacity var(--transition-normal);
 }
 
 .chartCrosshair {
   position: absolute;
-  top: 10px;
-  bottom: 24px;
-  width: 1px;
+  top: var(--space-2_5);
+  bottom: var(--space-6);
+  width: var(--hairline-width);
   background: var(--tint-strong);
   pointer-events: none;
-  border-left: 1px dashed var(--border-color);
+  border-left: var(--hairline-width) dashed var(--border-subtle);
 }
 
 /* 自定义悬浮卡片 (符合系统 Tooltip 规范，同心圆角: outer=8px, pad=8px，防边缘溢出截断) */
 .chartTooltipCard {
   position: absolute;
-  top: 10px;
+  top: var(--space-2_5);
   background: var(--bg-elevated, var(--bg-card));
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg, 8px);
+  border: var(--hairline-width) solid var(--border-subtle);
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-popover, var(--shadow-md));
-  padding: 8px 12px;
-  font-size: 11px;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-size-xxs);
   pointer-events: none;
   white-space: nowrap;
-  z-index: 25;
+  z-index: var(--z-popover);
   display: flex;
   flex-direction: column;
-  gap: 4.5px;
+  gap: var(--space-1);
 }
 
 .tooltipHeader {
-  font-size: 10.5px;
+  font-size: var(--font-size-xxs);
   color: var(--text-tertiary);
-  border-bottom: 1px solid var(--border-subtle);
-  padding-bottom: 4px;
-  margin-bottom: 2px;
+  border-bottom: var(--hairline-width) solid var(--border-subtle);
+  padding-bottom: var(--space-1);
+  margin-bottom: var(--space-0_5);
 }
 
 .tooltipRow {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  line-height: 1.4;
+  gap: var(--space-4);
+  line-height: var(--line-height-base);
 }
 
 .tooltipRowLeft {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1_5);
   color: var(--text-secondary);
 }
 
@@ -137,7 +137,7 @@
   font-family: 'Segoe UI', -apple-system, var(--font-sans);
   font-variant-numeric: tabular-nums;
   font-feature-settings: 'tnum' 1;
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
   color: var(--text-primary);
 }
 
@@ -145,9 +145,9 @@
 .chartXAxis {
   position: relative;
   height: 18px;
-  margin-top: 4px;
+  margin-top: var(--space-1);
   color: var(--text-tertiary);
-  font-size: 10.5px;
+  font-size: var(--font-size-xxs);
   user-select: none;
 }
 
@@ -161,7 +161,7 @@
 }
 
 .tickNow {
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
   color: var(--text-primary);
 }
 
@@ -169,10 +169,10 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 12px;
-  font-size: 11.5px;
+  gap: var(--space-3);
+  font-size: var(--font-size-xxs);
   color: var(--text-secondary);
-  padding-top: 4px;
+  padding-top: var(--space-1);
   user-select: none;
   flex-wrap: wrap;
 }
@@ -180,15 +180,15 @@
 .legendItem {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1_5);
   cursor: pointer;
-  padding: 3px 8px;
-  border-radius: var(--radius-sm, 4px);
-  transition: all 140ms ease;
+  padding: var(--space-0_5) var(--space-2);
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-fast);
 }
 
 .legendItem:hover {
-  background: var(--bg-hover);
+  background: var(--tint-hover);
   color: var(--text-primary);
 }
 
@@ -202,7 +202,7 @@
   height: 8px;
   flex-shrink: 0;
   display: block;
-  transition: transform 140ms ease;
+  transition: transform var(--transition-fast);
 }
 
 .legendItem:hover .legendSvg {
@@ -215,5 +215,5 @@
   align-items: center;
   justify-content: center;
   color: var(--text-tertiary);
-  font-size: 12.5px;
+  font-size: var(--font-size-xs);
 }

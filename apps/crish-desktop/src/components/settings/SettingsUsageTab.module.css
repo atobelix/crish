@@ -3,13 +3,13 @@
 .headerTools {
   display: flex;
   align-items: center;
-  gap: var(--space-3, 12px);
+  gap: var(--space-3);
 }
 
 .usageDashboardCard {
   background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-xl, 12px);
+  border: var(--hairline-width) solid var(--border-subtle);
+  border-radius: var(--radius-xl);
   box-shadow: var(--shadow-sm);
   overflow: hidden;
   display: flex;
@@ -21,38 +21,38 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 22px;
-  border-top: 1px solid var(--border-subtle);
+  padding: var(--space-3) var(--space-5);
+  border-top: var(--hairline-width) solid var(--border-subtle);
   background: var(--bg-card);
 }
 
 /* 骨架屏驱动状态 */
 .skeletonContainer {
-  padding: 24px 22px;
+  padding: var(--space-6) var(--space-5);
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--space-4);
 }
 
 .skeletonHeader {
   height: 60px;
   background: var(--bg-subtle);
-  border-radius: var(--radius-md, 6px);
-  animation: shimmer var(--transition-skeleton, 1.5s ease-in-out) infinite;
+  border-radius: var(--radius-md);
+  animation: shimmer var(--transition-skeleton) infinite;
 }
 
 .skeletonChart {
   height: 180px;
   background: var(--bg-subtle);
-  border-radius: var(--radius-md, 6px);
-  animation: shimmer var(--transition-skeleton, 1.5s ease-in-out) infinite;
+  border-radius: var(--radius-md);
+  animation: shimmer var(--transition-skeleton) infinite;
 }
 
 .skeletonSection {
   height: 140px;
   background: var(--bg-subtle);
-  border-radius: var(--radius-md, 6px);
-  animation: shimmer var(--transition-skeleton, 1.5s ease-in-out) infinite;
+  border-radius: var(--radius-md);
+  animation: shimmer var(--transition-skeleton) infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
