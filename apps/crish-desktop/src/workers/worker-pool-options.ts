@@ -20,6 +20,12 @@ export interface WorkerPoolOptions {
   workerUrlOverrides?: Partial<Record<WorkerType, string>>;
   idleTimeoutMs?: number;
   taskTimeoutMs?: number;
+  /**
+   * ACT-302：冷启 FCP 前 Zero-Worker 门禁。
+   * true 时构造函数不 initWorkers；任务只入队，待 markFirstScreenRendered
+   * 后按需 JIT 创建。默认 false（保持既有同步创建语义）。
+   */
+  lazyInit?: boolean;
 }
 
 export interface WorkerEntry {

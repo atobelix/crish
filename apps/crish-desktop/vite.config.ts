@@ -35,9 +35,11 @@ const PROD_CSP_BASE =
   "worker-src 'self' blob:; frame-src 'self' http://localhost:* http://127.0.0.1:* http://*.localhost https://*.localhost asset: http://asset.localhost https://asset.localhost data: blob:; " +
   "frame-ancestors 'self'; form-action 'self'; object-src 'none'; base-uri 'self'";
 
-// chunk 体积门禁阈值（06-步骤2，2026-08-10 拆分后实测校准"先拆分后定阈值"）：
-// 全局最大 chunk = vendor-lucide 553.1 kB（图标集，超出拆分面），取 600 留 ~8% 余量；
-// vendor-tiptap 381.3 kB / vendor-xterm 441.0 kB / chat-bridge 479.0 kB 均低于阈值。
+// chunk 体积门禁阈值（06-步骤2 + Stage 3 ACT-304 三元拆分后重测）：
+// 全局最大候选：chat-provider-catalog ~562 kB / vendor-xterm ~441 kB /
+// vendor-tiptap ~419 kB / index(entry) ~432 kB —— 均低于 600 hard 门禁。
+// 旧稿「chat-bridge 674.4 kB CI 阻断」已撤销；三元拆分后
+// chat-bridge-transport ~140 kB / chat-stream-core ~19 kB / catalog ~562 kB。
 // 阈值 = 抛错门禁（chunkSizeGatePlugin），与 vite:reporter 的 chunkSizeWarningLimit
 // 同值（单真源），避免 reporter 默认 500 对 lucide 误报。
 const CHUNK_SIZE_GATE_KB = 600;
@@ -775,14 +777,41 @@ export default defineConfig({
             if (n.includes('dompurify')) return 'vendor-dompurify';
             if (n.includes('@chenglou')) return 'vendor-pretext';
           }
-          // Business-stable splits (async-heavy chat-bridge/stream cores)
-          if (n.includes('/src/api/chatBridge')) return 'chat-bridge';
+          // ── ACT-304 三元解构：catalog / stream / transport（顺序敏感）──
+          // 2.1 模型目录元数据独立切块（惰性加载，严禁渗入传输协议）
+          if (
+            n.includes('/src/api/providerProfiles') ||
+            n.includes('/src/api/provider-profiles') ||
+            n.includes('/src/api/modelCatalog') ||
+            n.includes('/src/api/modelCatalogTypes') ||
+            n.includes('/src/api/modelCatalogPure') ||
+            n.includes('/src/api/modelCatalogMeta') ||
+            n.includes('/src/api/modelCatalogIpc') ||
+            n.includes('catalog.json')
+          ) {
+            return 'chat-provider-catalog';
+          }
+
+          // 2.2 流式差异计算与重放恢复核心独立切块
           if (
             n.includes('/src/api/StreamRenderBuffer') ||
-            n.includes('/src/services/StreamRecovery')
+            n.includes('/src/services/StreamRecovery') ||
+            n.includes('/src/api/chat-bridge/dataPlaneRouter') ||
+            n.includes('/src/api/chat-bridge/eventDedupe') ||
+            n.includes('/src/api/chat-bridge/streamSession') ||
+            n.includes('/src/api/chat-bridge/streamFinishControl')
           ) {
             return 'chat-stream-core';
           }
+
+          // 2.3 传输协议层核心（IPC 握手 / EventRouter / ConnectionLifecycle）
+          if (
+            n.includes('/src/api/chatBridge') ||
+            n.includes('/src/api/chat-bridge/')
+          ) {
+            return 'chat-bridge-transport';
+          }
+
           if (n.includes('/src/workers/')) return 'vendor-workers';
         },
       },

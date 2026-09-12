@@ -61,22 +61,26 @@ const vendorTiptap = [];
 const vendorXterm = [];
 for (const c of listJsChunks()) {
   console.log(`  ${c.name}  ${c.bytes}`);
+  // Stage 3 后 entry-core 静态聚合 App → 主包为 index-*.js（无独立 App-*.js）
   if (/^App-.*\.js$/.test(c.name)) appChunk = c;
+  if (/^index-.*\.js$/.test(c.name) && (!appChunk || c.bytes > appChunk.bytes)) {
+    appChunk = c;
+  }
   if (/^vendor-tiptap-.*\.js$/.test(c.name)) vendorTiptap.push(c);
   if (/^vendor-xterm-.*\.js$/.test(c.name)) vendorXterm.push(c);
 }
 console.log(`chunk 总数（js）：${listJsChunks().length}`);
 
-// ---- 强制断言：App chunk < maxAppKb ----
+// ---- 强制断言：主入口/App chunk < maxAppKb ----
 const appLimitBytes = maxAppKb * 1024;
 if (!appChunk) {
-  fail(`App chunk 缺失：dist/assets 下无 App-*.js（manualChunks 拆分失效？）`);
+  fail(`主入口/App chunk 缺失：dist/assets 下无 App-*.js 或 index-*.js（entry 产物异常？）`);
 } else if (appChunk.bytes >= appLimitBytes) {
   fail(
-    `App chunk 超限：${appChunk.name} = ${appChunk.bytes} B >= ${appLimitBytes} B（${maxAppKb} KiB 目标）—— 需进一步拆分`
+    `主入口/App chunk 超限：${appChunk.name} = ${appChunk.bytes} B >= ${appLimitBytes} B（${maxAppKb} KiB 目标）—— 需进一步拆分`
   );
 } else {
-  console.log(`App chunk ${appChunk.name} = ${appChunk.bytes} B < ${appLimitBytes} B ✓`);
+  console.log(`主入口/App chunk ${appChunk.name} = ${appChunk.bytes} B < ${appLimitBytes} B ✓`);
 }
 
 // ---- 强制断言：vendor 拆分落地 ----

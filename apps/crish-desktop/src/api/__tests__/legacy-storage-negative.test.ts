@@ -1,4 +1,3 @@
-// @vitest-environment node
 /**
  * T5 存储幽灵读与零调用桩物理清退 — 负向断言（静态 fs 契约）。
  *
@@ -6,15 +5,16 @@
  *   - localStorageApi.ts 不再存在 migrateLegacyKeys
  *   - themeStore.ts 不再存在 disposeSolarTimer
  *   - themeStore.ts 不再 re-export getDynamicSolarAdjustments（仅 themePersonalization 内部使用）
- *   - minimalConfig.ts 不再出现 4 个幽灵读 key
+ *   - store/minimalConfig.ts 已被彻底物理删除（BLK-02 / ACT-305 消亡断言）
  *   - localStorageApi.ts 的 registeredKeys 真源仍然存在且可解析
  *
  * 采用 fs 静态断言（new URL(rel, import.meta.url)，不依赖 process.cwd）。
- * 若任一项被违反，对应 expect(...).not.toContain(...) / toContain(...) 将 FAIL，
- * 因此本测试不是「恒绿测试」。
+ * 若任一项被违反，对应 expect(...).not.toContain(...) / toContain(...) / existsSync
+ * 将 FAIL，因此本测试不是「恒绿测试」。
  */
 import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 const API_DIR = new URL('../', import.meta.url);
 
@@ -40,12 +40,18 @@ describe('T5 负向断言：确定的死面已被物理切除', () => {
     expect(src).not.toContain('getDynamicSolarAdjustments');
   });
 
-  it('minimalConfig.ts 已物理删除 4 个幽灵读 key', () => {
-    const src = readSource('../store/minimalConfig.ts');
-    expect(src).not.toContain('crish_shell_chrome');
-    expect(src).not.toContain('crish_sidebar_collapsed');
-    expect(src).not.toContain('crish_ui_size');
-    expect(src).not.toContain('crish_tab_mode');
+  it('minimalConfig.ts 已被彻底物理切除（文件物理消亡且不可导入）', () => {
+    // BLK-02 / ACT-305：升级为消亡物理不存在断言，杜绝 ENOENT 崩溃
+    const targetPath = fileURLToPath(new URL('../store/minimalConfig.ts', API_DIR));
+    expect(existsSync(targetPath)).toBe(false);
+    expect(() => {
+      readFileSync(targetPath, 'utf8');
+    }).toThrow();
+  });
+
+  it('bootstrap-orchestrator.ts 已被彻底物理切除', () => {
+    const targetPath = fileURLToPath(new URL('../../bootstrap-orchestrator.ts', API_DIR));
+    expect(existsSync(targetPath)).toBe(false);
   });
 
   it('registeredKeys 真源仍然存在且可解析（未被误删）', () => {

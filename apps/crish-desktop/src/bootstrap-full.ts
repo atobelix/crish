@@ -32,9 +32,17 @@ export async function bootstrapFull(): Promise<void> {
         /* 失败：store 空树 + lastError + catalog-changed；Picker 空列表，不得回落 LS 种子。 */
       });
     })(),
+
+    // 4. OAuth token 调度器（自 bootstrap-core 闲时迁移；Stage 3 首屏不拉起）
+    (async () => {
+      const { initOAuthTokenScheduler } = await import(
+        './api/oauthTokenManager'
+      );
+      initOAuthTokenScheduler();
+    })(),
   ]);
 
-  // 扩容 Worker 池至完整数量
+  // 扩容 Worker 池至完整数量（FCP 后；此前 lazyInit 池 Worker = 0）
   const { scaleUpPool } = await import('./workers/index');
   scaleUpPool();
 

@@ -18,13 +18,27 @@ export class WorkerPool {
   private dedupCache = new Map<string, { taskId: string; ts: number }>();
   private taskIdCounter = 0;
   private idleTimer: ReturnType<typeof setInterval> | null = null;
+  /** ACT-302：FCP 门闩——false 时禁止 createWorker（只入队） */
+  private isFirstScreenRendered = false;
 
   constructor(options?: Partial<WorkerPoolOptions> & { minimal?: boolean }) {
     const base = options?.minimal ? MINIMAL_OPTIONS : DEFAULT_OPTIONS;
     const { minimal: _minimal, ...rest } = options || {};
     this.options = { ...base, ...rest };
-    this.initWorkers();
+    if (!this.options.lazyInit) {
+      this.initWorkers();
+    }
     this.startIdleMonitor();
+  }
+
+  /**
+   * ACT-302：FCP 已达成通知。由 entry-core.tsx 的 rAF 回调调用；
+   * 置门闩并消化积压队列（触发 JIT 派生）。
+   */
+  markFirstScreenRendered(): void {
+    if (this.isFirstScreenRendered) return;
+    this.isFirstScreenRendered = true;
+    this.drainQueue();
   }
 
   private initWorkers(): void {
@@ -39,6 +53,40 @@ export class WorkerPool {
       for (let i = 0; i < count; i++) {
         this.createWorker(type, url);
       }
+    }
+  }
+
+  private targetCountFor(type: WorkerType): number {
+    switch (type) {
+      case 'render': return this.options.renderWorkers;
+      case 'compute': return this.options.computeWorkers;
+      case 'io': return this.options.ioWorkers;
+      case 'network': return this.options.networkWorkers;
+    }
+  }
+
+  private urlFor(type: WorkerType): string {
+    const override = this.options.workerUrlOverrides?.[type];
+    if (override) return override;
+    switch (type) {
+      case 'render': return new URL('./render-worker.ts', import.meta.url).href;
+      case 'compute': return new URL('./compute-worker.ts', import.meta.url).href;
+      case 'io': return new URL('./io-worker.ts', import.meta.url).href;
+      case 'network': return new URL('./compute-worker.ts', import.meta.url).href;
+    }
+  }
+
+  /**
+   * ACT-302 JIT：FCP 前禁止创建；FCP 后按需补 1 个 render Worker（或对应类型上限内）。
+   * 不创建平行池，增量落在本类。
+   */
+  private maybeJitSpawn(type: WorkerType): void {
+    if (!this.isFirstScreenRendered) return;
+    if (this.findIdleWorker(type)) return;
+    const existing = this.entries.filter((e) => e.type === type).length;
+    const target = this.targetCountFor(type);
+    if (existing < target) {
+      this.createWorker(type, this.urlFor(type));
     }
   }
 
@@ -187,6 +235,7 @@ export class WorkerPool {
   }
 
   private enqueueTask(task: Task<unknown>): void {
+    this.maybeJitSpawn(task.workerType);
     const canDispatch = this.tryDispatchDirect(task);
     if (!canDispatch) {
       this.taskQueue.push(task);
@@ -349,6 +398,9 @@ export class WorkerPool {
    * 可通过 `new WorkerPool({ computeWorkers: N })` 显式启用。
    */
   scaleUp(): void {
+    // FCP 前（lazyInit + 未 markFirstScreenRendered）禁止扩容，保持 Worker = 0
+    if (this.options.lazyInit && !this.isFirstScreenRendered) return;
+
     const current = new Map<WorkerType, number>();
     for (const e of this.entries) {
       current.set(e.type, (current.get(e.type) || 0) + 1);

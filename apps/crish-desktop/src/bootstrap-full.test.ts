@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
     path: 'C:\\Users\\tester\\.conex\\models.yaml',
   })),
   scaleUpPool: vi.fn(),
+  initOAuthTokenScheduler: vi.fn(),
 }));
 
 vi.mock('./api/chatBridge', () => ({
@@ -37,6 +38,10 @@ vi.mock('./api/thinkingGear', () => ({
 
 vi.mock('./api/modelsCatalogStore', () => ({
   ensureModelsCatalogLoaded: mocks.ensureModelsCatalogLoaded,
+}));
+
+vi.mock('./api/oauthTokenManager', () => ({
+  initOAuthTokenScheduler: mocks.initOAuthTokenScheduler,
 }));
 
 vi.mock('./workers/index', () => ({
@@ -95,6 +100,7 @@ describe('bootstrapFull 行为', () => {
       path: 'C:\\Users\\tester\\.conex\\models.yaml',
     });
     mocks.scaleUpPool.mockReset();
+    mocks.initOAuthTokenScheduler.mockReset();
   });
 
   afterEach(() => {
@@ -108,6 +114,7 @@ describe('bootstrapFull 行为', () => {
     expect(mocks.fetchDescribeEffortsSnapshot).toHaveBeenCalledTimes(1);
     expect(mocks.ensureEngineConnected).toHaveBeenCalledTimes(1);
     expect(mocks.scaleUpPool).toHaveBeenCalledTimes(1);
+    expect(mocks.initOAuthTokenScheduler).toHaveBeenCalledTimes(1);
   });
 
   it('ensureModelsCatalogLoaded 返回 ok:false 时不写 LS 种子键，且不阻断 bootstrap', async () => {

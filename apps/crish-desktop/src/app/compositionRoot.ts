@@ -250,8 +250,8 @@ function buildDefaultRoot(): CompositionRoot {
   // store/layout-tree → services/view-registry 反向边。
   // layout-tree 内部（dropDetection / conversationUnit / operations /
   // treePanelAccess）改为调用注入的 isPrimaryPanel，不再直引 viewRegistry。
-  // 时序安全：registerBuiltInViews 已在 main.tsx startup 最先执行（注册
-  // view），随后 bootstrap-orchestrator 调用本函数注入 checker；任何
+  // 时序安全：registerBuiltInViews 已在 entry-core startup 最先执行（注册
+  // view），随后 bootstrap 链路调用本函数注入 checker；任何
   // tree 操作都在渲染后才可能触发 isPrimaryPanel，故未注入窗口无风险。
   setPrimaryPanelChecker((panelId: string) => viewRegistry.isPrimary(panelId));
 
