@@ -271,6 +271,31 @@ function fromRustSessionMessage(
   };
   const parsed = parseSessionMessage(normalized);
   if (!parsed) return null;
+  // 历史兼容：thinking + thinkingTime（秒）→ thought-legacy 块，避免仅
+  // blocksJson 时 durationMs 在 normalize 链丢失（cacheReplay 回读契约）。
+  if (
+    parsed.sender === 'assistant' &&
+    typeof parsed.thinking === 'string' &&
+    parsed.thinking.trim() &&
+    !(parsed.blocks || []).some((b) => b.type === 'thought')
+  ) {
+    const thinkingTimeSec =
+      typeof rust.thinkingTime === 'number' && Number.isFinite(rust.thinkingTime)
+        ? rust.thinkingTime
+        : undefined;
+    parsed.blocks = [
+      {
+        id: 'thought-legacy',
+        type: 'thought',
+        content: parsed.thinking,
+        turnIndex: 0,
+        ...(thinkingTimeSec != null
+          ? { durationMs: Math.round(thinkingTimeSec * 1000) }
+          : {}),
+      },
+      ...(parsed.blocks || []),
+    ];
+  }
   // 徽标回放：usage_json 回读 → 派生 cacheMetrics（守卫是白名单不携带该字段，
   // 因此在守卫之后挂载；无 usage → 不写字段，渲染层隐藏）
   const cacheMetrics = cacheStateFromUsageJson(rust.usage);
