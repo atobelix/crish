@@ -143,13 +143,11 @@ impl CoreRunState {
             .local_db()
             .and_then(|db| {
                 db.try_acquire_recovery_lease(&lease_id, None)
-                    .map(|ok| ok)
                     .map_err(|e| {
                         tracing::warn!(target: "restore", error = %e, "恢复租约抢占失败，降级 CAS 幂等路径");
                         e
                     })
                     .ok()
-                    .flatten()
             })
             .unwrap_or(false);
         if !leased {
