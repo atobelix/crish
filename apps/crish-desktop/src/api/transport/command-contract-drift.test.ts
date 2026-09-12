@@ -197,9 +197,10 @@ function extractFrontendInvokeNames(): {
  *  幽灵清零后应趋空，新增豁免必须同轮登记 changelog） */
 const GHOST_EXEMPTIONS: ReadonlySet<string> = new Set([
   // ── 动态拼接面（04 ⑥-7：运行时映射，非静态字面量）──
-  // core_run_control / core_cancel_run：runControlClient.ts:104-105 由
-  // `{ type: 'run-control' | 'cancel-run' }` 运行时映射命令名后经
-  // transport.send(cmd, rest) 发送（产品路径只走 compositionRoot.runControl）
+  // core_run_control：runControlClient.ts 由 `{ type: 'run-control' }`
+  // 映射命令名后经 transport.send(cmd, rest) 发送（产品路径只走
+  // compositionRoot.runControl；Wave C 后 cancel-run 双线已删）
+  // core_cancel_run：daemonClient.cancelRunCommand 仍保留直接 invoke 面
   'core_run_control',
   'core_cancel_run',
   // ── 多端与查询面（F-03 DM-07 恢复激活，供多端与调试消费）──

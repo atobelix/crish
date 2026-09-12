@@ -26,7 +26,7 @@
  * 拆分结构（G-03 HARD 治理，2026-08-13）：
  *   - sessionRustDbWire.ts     JS ↔ Rust 形状转换层（纯函数）
  *   - sessionRustDbFallback.ts localStorage 同步回退 + 降级戳
- *   - sessionRustDbSql.ts      SQLite invoke API 面 + 写竞态防线（队列 + 版本戳 CAS）
+ *   - sessionRustDbSql.ts      SQLite invoke API 面 + 写竞态防线（队列 + 版本戳；Wave C 后无内存 CAS）
  *   - sessionRustDbHydrate.ts  hydrate / persist 复合 API
  *   本门面仅 re-export 公开 API，调用方零改动（含 sessionSharedHelpers 的
  *   setPersistenceStatus 接线与 ConnectionLifecycle 动态 import 面）。

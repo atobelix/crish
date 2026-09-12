@@ -65,7 +65,7 @@ export function useStreamCallbacks(
    * 停止生成：默认 L2 cooperative；force=true 时 L3。
    * UI 默认 Stop → handleStopGeneration()；强制取消 → handleForceCancelGeneration()。
    * 共享 wire：api/streamStop.dispatchStreamStopCancel → createStreamCancel / compositionRoot
-   *（TRANSITIONAL：daemon L2 未全量时仍成对 cancel-run.mode）。
+   *（Wave C：core_run_control 单一命令面，cancel-run 双线已删）。
    * 本函数保留 chat 专属 partials（buffer / goalMode / message status / telemetry）。
    */
   const finalizeStopGeneration = (force: boolean) => {

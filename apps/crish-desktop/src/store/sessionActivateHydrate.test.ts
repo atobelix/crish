@@ -215,7 +215,7 @@ describe('setActiveSessionId — lazy engine message hydrate', () => {
     expect(hydrateMock).not.toHaveBeenCalled();
   });
 
-  it('truncated hydrate（分页超限截断）：会话置 hydrateTruncated=true，persist 熔断防截断态固化', async () => {
+  it('truncated hydrate（分页超限截断）：会话置 hydrateTruncated=true（诊断标记）', async () => {
     const remote = emptyRemoteShell({
       id: 'engine-sess-trunc',
       title: '截断远程会话',

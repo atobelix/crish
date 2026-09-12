@@ -33,11 +33,6 @@ import {
 } from './sessionQuota';
 
 import {
-  clearAgentsTruncation,
-  markAgentsTruncated,
-} from './sessionAgentsTruncation';
-
-import {
   SESSION_ACTIVE_KEY,
   SESSION_AGENTS_PREFIX,
   SESSION_AGENTS_SAVE_CAP,
@@ -136,8 +131,7 @@ export function deleteSessionBody(sessionId: string): void {
   try {
     localStorage.removeItem(bodyKey);
     localStorage.removeItem(agentsKey);
-    // P18：agents 镜像删除时同步清截断标志，防残留误报
-    clearAgentsTruncation(id);
+    // Wave C（D-F03）：agents 截断标志已随 sessionAgentsTruncation 整模块删除
   } catch {
     /* swallow-ok: 删除镜像尽力而为，失败残留无害键 */
   }
@@ -163,26 +157,19 @@ export function saveSessionAgents(
   if (!agents?.length) {
     try {
       localStorage.removeItem(SESSION_AGENTS_PREFIX + id);
-      clearAgentsTruncation(id);
     } catch {
       /* swallow-ok: 空 agents 清理失败残留无害键 */
     }
     return;
   }
-  // P18（AA-07）：LS 受配额保护线约束，截断落盘时置位截断标志（留痕不静默）；
-  // 未超上限全量落盘并清除历史标志（恢复策略，同 P1-F3 quota 口径）。
+  // Wave C（D-F03）：LS 受配额保护线约束仍 slice 落盘；截断标志已删
+  //（SQLite 主路径全量保存，LS 截断不再置位 crish_agents_truncated_*）。
   if (agents.length > SESSION_AGENTS_SAVE_CAP) {
     try {
       localStorage.setItem(
         SESSION_AGENTS_PREFIX + id,
         JSON.stringify(agents.slice(0, SESSION_AGENTS_SAVE_CAP))
       );
-      markAgentsTruncated(id, {
-        cap: SESSION_AGENTS_SAVE_CAP,
-        total: agents.length,
-        saved: SESSION_AGENTS_SAVE_CAP,
-        at: Date.now(),
-      });
     } catch {
       /* swallow-ok: quota 超限时 agents 截断落盘尽力而为 */
     }
@@ -190,7 +177,6 @@ export function saveSessionAgents(
   }
   try {
     localStorage.setItem(SESSION_AGENTS_PREFIX + id, JSON.stringify(agents));
-    clearAgentsTruncation(id);
   } catch {
     /* swallow-ok: quota 超限时 agents 全量写尽力而为，失败留引擎侧数据 */
   }

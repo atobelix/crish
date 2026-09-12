@@ -6,7 +6,7 @@
  *     命令缺失（浏览器 / 旧壳 / 测试环境）→ 回退到 localStorage 同步路径（Fallback 子模块）
  *   - P18（AA-07）子代理超软上限 meta 留痕（readAgentsOverCapMeta）
  *
- * 写竞态防线已拆到 sessionRustDbWriteGuard；
+ * 写竞态防线（串行队列 + 批次版本戳）已拆到 sessionRustDbWriteGuard；
  * 旧 localStorage 清理已拆到 sessionRustDbLegacyCleanup；
  * 此处 re-export 以保持对外 import 路径不变。
  */
@@ -43,29 +43,15 @@ import {
 } from './sessionPersistenceTypes';
 import { invokeResult } from '../tauriInvoke';
 import { logInternalError } from '../userFacingErrors';
-import { logger } from '../../services/LoggerService';
 import { hasQuotaTruncation } from './sessionQuota';
-import { readAgentsTruncation } from './sessionAgentsTruncation';
 import {
   hydrateSessionAgents,
   parseFolderOrder,
   safeParseJson,
 } from './sessionHydration';
-import {
-  recordWrittenBodyVersion,
-  writtenBodyVersion,
-} from './sessionRustDbWriteGuard';
 
-// re-export 写竞态防线（拆分自本文件，对外路径不变）
-export {
-  enqueuePersist,
-  isHydrateTruncated,
-  nextBatchVersion,
-} from './sessionRustDbWriteGuard';
-export {
-  recordWrittenBodyVersion,
-  writtenBodyVersion,
-} from './sessionRustDbWriteGuard';
+// re-export 写竞态防线（拆分自本文件，对外路径不变；Wave C 后仅队列+版本戳）
+export { enqueuePersist, nextBatchVersion } from './sessionRustDbWriteGuard';
 // re-export 旧 localStorage 清理（拆分自本文件，对外路径不变）
 export {
   cleanupLegacyLocalStorageSessionsGuarded,
@@ -107,15 +93,13 @@ export async function loadSessionBody(
 }
 
 /**
- * 全量保存会话正文（先删后插，事务原子）。
+ * 全量保存会话正文（增量 Upsert 由 Rust 侧承接）。
  * T2-1 剥镜像：SQLite 为唯一落点，命令缺失/错误不改写 LS、不打降级戳，
  * 失败经 errorStore 数据面带呈现（persist-degraded-ls，非静默回退）。
  * I-DRAFT：PENDING_DRAFT 哨兵永不写 body。
  *
- * @param batchVersion 批次版本戳（CAS 防线 2，裁决 R9 单调递增版本号）。
- * 落库前检查该会话已落库的最高版本，陈旧批次（版本 ≤ 已落库版本）直接
- * 丢弃不覆盖；版本随 IPC 参数传递，Rust 侧可据此实现 updated_at CAS
- * （任务书 T3.2 ③，Rust 命令面改动不在本实现轮范围）。
+ * @param batchVersion 批次版本戳（R9 单调递增，随 IPC 传递；Wave C 后内存侧
+ * 不再做 CAS 丢弃——后端 Upsert 为唯一写安全源）。
  */
 export async function saveSessionBody(
   sessionId: string,
@@ -126,26 +110,12 @@ export async function saveSessionBody(
   const msgs = messages || [];
   const rustMessages = msgs.map(toRustSessionMessage);
 
-  // CAS：该会话已有更高版本批次落库 → 本批次为陈旧批次，直接丢弃不覆盖
-  //（任何并发窗口下旧批次晚到都不得回滚新批次）。
-  const written = writtenBodyVersion(sessionId);
-  if (batchVersion <= written) {
-    logger.warn(
-      `[sessionPersistence] 丢弃陈旧写批次 v${batchVersion}（会话 ${sessionId} 已落库 v${written}）`,
-      {
-        module: 'sessionPersistence',
-      },
-    );
-    return;
-  }
-
   const res = await invokeResult<void>('save_session_body', {
     sessionId,
     messages: rustMessages,
     batchVersion,
   });
   if (res.status === 'ok') {
-    recordWrittenBodyVersion(sessionId, batchVersion);
     // T2-1 剥镜像：SQLite 落库成功 = 唯一落点，不再镜像到 LS，
     // 也不再清除降级戳（无镜像即无降级戳语义）。
     return;
@@ -167,18 +137,8 @@ export async function loadSessionAgents(
   sessionId: string
 ): Promise<SessionAgent[]> {
   if (!sessionId?.trim() || isPendingDraft(sessionId)) return [];
-  // P18（AA-07）：LS 镜像截断标志 → 数据面日志留痕（与 P1-F3 quota 截断同款
-  // 暴露口径）。标志存在意味着某次 LS 镜像写入被配额保护线截断（saved < total），
-  // 回退 LS 展示时数据不完整；SQLite 主路径为全量保存，不属于永久丢失。
-  const trunc = readAgentsTruncation(sessionId);
-  if (trunc) {
-    logInternalError('ls-agents-truncated', {
-      sessionId,
-      cap: trunc.cap,
-      total: trunc.total,
-      saved: trunc.saved,
-    });
-  }
+  // Wave C（D-F03）：LS 截断标志读面已随 sessionAgentsTruncation 整模块删除；
+  // SQLite 主路径全量保存，回退 LS 时仅有配额保护线无标志留痕。
   const res = await invokeResult<RustSessionAgent[]>('load_session_agents', {
     sessionId,
   });

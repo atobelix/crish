@@ -30,7 +30,6 @@ import {
   cleanupOrphanSessions,
   enqueuePersist,
   getSessionMeta,
-  isHydrateTruncated,
   listSessions,
   loadSessionAgents,
   loadSessionBody,
@@ -350,9 +349,7 @@ export async function persistAllSessionsRust(
       const msgs = (s.messages || []).map((m) =>
         m.sender === 'assistant' ? normalizeAssistantTimeline(m) : m
       );
-      const shouldSaveBody =
-        !isHydrateTruncated(s) &&
-        (msgs.length > 0 || !isLazySessionShell(s, activePersistable));
+      const shouldSaveBody = msgs.length > 0 || !isLazySessionShell(s, activePersistable);
       if (shouldSaveBody) {
         bodyJobs.push(saveSessionBody(s.id, msgs, batchVersion));
       }
@@ -408,9 +405,7 @@ function persistAllSessionsLocalFallback(
     const msgs = (s.messages || []).map((m) =>
       m.sender === 'assistant' ? normalizeAssistantTimeline(m) : m
     );
-    const shouldSaveBody =
-      !isHydrateTruncated(s) &&
-      (msgs.length > 0 || !isLazySessionShell(s, activeSessionId));
+    const shouldSaveBody = msgs.length > 0 || !isLazySessionShell(s, activeSessionId);
     if (shouldSaveBody) {
       lsSaveSessionBody(s.id, msgs);
     }

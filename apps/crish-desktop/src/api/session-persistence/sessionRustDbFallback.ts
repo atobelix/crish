@@ -28,10 +28,6 @@ import {
   SESSION_INDEX_KEY,
   type SessionIndexEntry,
 } from './sessionPersistenceTypes';
-import {
-  clearAgentsTruncation,
-  markAgentsTruncated,
-} from './sessionAgentsTruncation';
 import type { SessionAgent, SessionMessage } from '../../store/layoutStore';
 
 export function lsLoadSessionIndex(): SessionIndexEntry[] {
@@ -158,30 +154,21 @@ export function lsSaveSessionAgents(
   try {
     if (!agents || agents.length === 0) {
       localStorage.removeItem(SESSION_AGENTS_PREFIX + sessionId);
-      clearAgentsTruncation(sessionId);
       return;
     }
+    // Wave C（D-F03）：LS 镜像受配额保护线约束仍 slice；截断标志已随
+    // sessionAgentsTruncation 整模块删除（SQLite 主路径全量保存）。
     if (agents.length > SESSION_AGENTS_SAVE_CAP) {
-      // P18（AA-07）：LS 镜像受配额保护线约束，截断落盘时置位截断标志
-      // （记录 total/saved/cap 事实），不再静默丢弃——数据面可提示。
       localStorage.setItem(
         SESSION_AGENTS_PREFIX + sessionId,
         JSON.stringify(agents.slice(0, SESSION_AGENTS_SAVE_CAP))
       );
-      markAgentsTruncated(sessionId, {
-        cap: SESSION_AGENTS_SAVE_CAP,
-        total: agents.length,
-        saved: SESSION_AGENTS_SAVE_CAP,
-        at: Date.now(),
-      });
       return;
     }
-    // 未超上限：全量落盘并清除历史截断标志（恢复策略，同 P1-F3 quota 口径）
     localStorage.setItem(
       SESSION_AGENTS_PREFIX + sessionId,
       JSON.stringify(agents)
     );
-    clearAgentsTruncation(sessionId);
   } catch {
     /* swallow-ok: quota 超限时 agents 写失败不影响会话主体 */
   }

@@ -1112,11 +1112,13 @@ describe('清空消息持久化与防僵尸复活事务（DEF-03 / DEF-SESS-12�
     expect(db.sessions.get('remote-lazy')?.messages).toHaveLength(1);
   });
 
-  it('截断会话（hydrateTruncated: true）触发熔断守卫，跳过 save_session_body', async () => {
+  it('截断会话（hydrateTruncated: true）Wave C 后熔断已删，正常 save_session_body', async () => {
+    // Wave C（D-F01）：isHydrateTruncated 熔断物理删除——后端 Upsert 为写安全源，
+    // 前端不再以截断态跳过正文回写。本用例锁死熔断不得回潮。
     const { db, call } = makeFakeDb();
     installFakeTransport(call);
 
-    const truncSess = sess('s-trunc', [], {
+    const truncSess = sess('s-trunc', [msg('m1', 'user')], {
       hydratedFromEngine: true,
       hydrateTruncated: true,
     });
@@ -1127,7 +1129,8 @@ describe('清空消息持久化与防僵尸复活事务（DEF-03 / DEF-SESS-12�
     const saves = call.mock.calls.filter(
       (c) => c[0] === 'save_session_body' && c[1]?.sessionId === 's-trunc'
     );
-    expect(saves).toHaveLength(0);
+    expect(saves).toHaveLength(1);
+    expect(db.sessions.get('s-trunc')?.messages).toHaveLength(1);
   });
 
   it('localStorage 回退路径下已清空会话同步写入空消息镜像，根除 LS 僵尸消息', async () => {

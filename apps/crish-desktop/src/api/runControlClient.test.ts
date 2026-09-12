@@ -1,26 +1,27 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const { sendMock } = vi.hoisted(() => ({
+  sendMock: vi.fn(async () => undefined),
+}));
+
+vi.mock('./transport', () => ({
+  getTransport: () => ({ send: sendMock }),
+}));
+
 import {
-  buildCancelRunWireMessage,
   buildRunControlWireMessage,
   cancelModeForLevel,
   dispatchRunControl,
   requestFollowUp,
   requestSoftInject,
-  sendTerminateDualWire,
-  TRANSITIONAL_DUAL_CANCEL_RUN_WIRE,
 } from './runControlClient';
 import { RUN_CONTROL_LEVEL } from '@crish/shared-types';
 import { getControlMetrics, resetControlMetrics } from './controlMetrics';
 
-vi.mock('./transport', () => ({
-  getTransport: () => {
-    throw new Error('no-transport-in-unit');
-  },
-}));
-
 describe('runControlClient', () => {
   beforeEach(() => {
     resetControlMetrics();
+    sendMock.mockClear();
   });
 
   it('cancelModeForLevel maps L2/L3 only', () => {
@@ -30,7 +31,7 @@ describe('runControlClient', () => {
     expect(cancelModeForLevel(RUN_CONTROL_LEVEL.L3)).toBe('force');
   });
 
-  it('dispatchRunControl records L1/L2/L3 metrics even without daemon', async () => {
+  it('dispatchRunControl records L1/L2/L3 metrics', async () => {
     await dispatchRunControl({ level: RUN_CONTROL_LEVEL.L1 });
     await dispatchRunControl({ level: RUN_CONTROL_LEVEL.L2, runId: 'r1' });
     await dispatchRunControl({ level: RUN_CONTROL_LEVEL.L3, runId: 'r2' });
@@ -57,83 +58,39 @@ describe('runControlClient', () => {
     });
   });
 
-  it('buildCancelRunWireMessage 带 mode 扩展字段', () => {
-    expect(buildCancelRunWireMessage('run-x', 'cooperative')).toEqual({
-      type: 'cancel-run',
-      runId: 'run-x',
-      mode: 'cooperative',
+  it('dispatchRunControl L2 仅发单一 core_run_control（Wave C 双线已删）', async () => {
+    const ok = await dispatchRunControl({
+      level: RUN_CONTROL_LEVEL.L2,
+      runId: 'run-pair',
+      sessionId: 'sess-p',
+      reason: 'ui-stop',
     });
-    expect(buildCancelRunWireMessage('run-x', 'force')).toEqual({
-      type: 'cancel-run',
-      runId: 'run-x',
-      mode: 'force',
-    });
-  });
-
-  it('sendTerminateDualWire pairs run-control then cancel-run.mode (transitional)', async () => {
-    expect(TRANSITIONAL_DUAL_CANCEL_RUN_WIRE).toBe(true);
-    const send = vi.fn();
-    const ok = await sendTerminateDualWire(
-      { send },
-      {
-        level: RUN_CONTROL_LEVEL.L2,
-        runId: 'run-pair',
-        sessionId: 'sess-p',
-        reason: 'ui-stop',
-      },
-      'cooperative'
-    );
     expect(ok).toBe(true);
-    expect(send).toHaveBeenCalledTimes(2);
-    expect(send.mock.calls[0]![0]).toEqual({
-      type: 'run-control',
+    expect(sendMock).toHaveBeenCalledTimes(1);
+    expect(sendMock).toHaveBeenCalledWith('core_run_control', {
       level: 'cooperative_stop',
       runId: 'run-pair',
       sessionId: 'sess-p',
       reason: 'ui-stop',
     });
-    expect(send.mock.calls[1]![0]).toEqual({
-      type: 'cancel-run',
-      runId: 'run-pair',
-      mode: 'cooperative',
-    });
   });
 
-  it('sendTerminateDualWire L3 force pairs force_cancel + mode=force', async () => {
-    const send = vi.fn();
-    await sendTerminateDualWire(
-      { send },
-      { level: RUN_CONTROL_LEVEL.L3, runId: 'run-f', reason: 'ui-force-cancel' },
-      'force'
-    );
-    expect(send).toHaveBeenNthCalledWith(1, {
-      type: 'run-control',
+  it('dispatchRunControl L3 force 仅发单一 core_run_control（不附 cancel-run）', async () => {
+    const ok = await dispatchRunControl({
+      level: RUN_CONTROL_LEVEL.L3,
+      runId: 'run-f',
+      reason: 'ui-force-cancel',
+    });
+    expect(ok).toBe(true);
+    expect(sendMock).toHaveBeenCalledTimes(1);
+    expect(sendMock).toHaveBeenCalledWith('core_run_control', {
       level: 'force_cancel',
       runId: 'run-f',
       reason: 'ui-force-cancel',
     });
-    expect(send).toHaveBeenNthCalledWith(2, {
-      type: 'cancel-run',
-      runId: 'run-f',
-      mode: 'force',
-    });
   });
 
-  it('sendTerminateDualWire without runId only sends run-control', async () => {
-    const send = vi.fn();
-    await sendTerminateDualWire(
-      { send },
-      { level: RUN_CONTROL_LEVEL.L2, reason: 'ui-stop' },
-      'cooperative'
-    );
-    expect(send).toHaveBeenCalledTimes(1);
-    expect(send.mock.calls[0]![0]).toMatchObject({
-      type: 'run-control',
-      level: 'cooperative_stop',
-    });
-  });
-
-  it('requestFollowUp 为 L1 + payload.kind=follow_up（不附 cancel-run）', async () => {
+  it('requestFollowUp 为 L1 + payload.kind=follow_up（单 wire）', async () => {
     await requestFollowUp({
       sessionId: 'sess-1',
       runId: 'run-1',
@@ -144,6 +101,8 @@ describe('runControlClient', () => {
     expect(m.run_control_L1).toBe(1);
     expect(m.run_control_L2).toBe(0);
     expect(m.run_control_L3).toBe(0);
+    expect(sendMock).toHaveBeenCalledTimes(1);
+    expect(sendMock.mock.calls[0]![0]).toBe('core_run_control');
     expect(
       buildRunControlWireMessage({
         level: RUN_CONTROL_LEVEL.L1,

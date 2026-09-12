@@ -6,10 +6,10 @@
  * - L2 cooperative_stop：默认 Stop，协作收尾
  * - L3 force_cancel：强制取消（二次确认 / Shift+点击 / 长按）
  *
- * ## Wire 策略（C3.1 transport 路径）
- * - Canonical 协议：`run-control`（命令名 core_run_control）。
- * - 过渡双线保留：L2/L3 终止经 {@link sendTerminateDualWire} **成对**发送
- *   core_run_control + core_cancel_run（Rust 侧两条命令均已在 manifest 注册面内）。
+ * ## Wire 策略（C3.1 transport 路径 · Wave C D-F07 收敛）
+ * - Canonical 协议：`run-control`（命令名 core_run_control）**唯一出站命令**。
+ * - 过渡双线（`cancel-run` / `core_cancel_run` 成对发送）已物理删除；
+ *   L2/L3 终止同样仅发 `run-control`。
  * - 产品路径只走本模块 / `compositionRoot.runControl`；禁止 UI 直发取消命令。
  *
  * 3. 本地 EventBus 镜像 `run:control` 便于观测（不替代核心真相）
@@ -46,7 +46,7 @@ export type RunControlRequest = {
   payload?: RunControlIntent['payload'];
 };
 
-/** wire level → cancel mode（仅终止类有意义） */
+/** wire level → cancel mode（仅终止类有意义；流内 cancel 路径用，不触发第二 wire） */
 export function cancelModeForLevel(level: RunControlLevel): StreamCancelMode | null {
   if (level === RUN_CONTROL_LEVEL.L2) return 'cooperative';
   if (level === RUN_CONTROL_LEVEL.L3) return 'force';
@@ -71,97 +71,23 @@ export function buildRunControlWireMessage(req: RunControlRequest): Record<strin
   };
 }
 
-/** cancel-run 扩展：mode 供 daemon 区分 soft/hard（旧端忽略） */
-export function buildCancelRunWireMessage(
-  runId: string,
-  mode: StreamCancelMode
-): Record<string, unknown> {
-  return {
-    type: 'cancel-run',
-    runId,
-    mode,
-  };
-}
-
-/**
- * Feature flag：L2/L3 是否仍附带 `cancel-run.mode`（过渡双线）。
- * Canonical 仅 `run-control`；关 flag 前须 E0 live Stop 证明 daemon L2 已接。
- * @see architecture-dedup-inventory #4
- */
-export const TRANSITIONAL_DUAL_CANCEL_RUN_WIRE = true as const;
-
-type DaemonSendClient = {
-  send: (msg: Record<string, unknown>) => unknown;
-};
-
-/**
- * WS 消息 type → transport 命令名（03 §3.2；命令名以 commandManifest 为准）：
- * - 'run-control' → core_run_control
- * - 'cancel-run'  → core_cancel_run
- * 未知 type → 空操作（不 invoke）。
- */
-function wireTypeToCommand(type: string): string | null {
-  if (type === 'run-control') return 'core_run_control';
-  if (type === 'cancel-run') return 'core_cancel_run';
-  return null;
-}
-
 /** 把 WS 形状 wire 消息经 transport.send 发出（剥离 type 后按命令名调用） */
 function sendWireViaTransport(
   transport: Transport,
   msg: Record<string, unknown>,
 ): Promise<void> {
   const type = String(msg.type ?? '');
-  const cmd = wireTypeToCommand(type);
-  if (!cmd) return Promise.resolve();
+  // Wave C（D-F07）：唯一出站命令 = core_run_control；cancel-run 双线已删
+  if (type !== 'run-control') return Promise.resolve();
   const { type: _type, ...rest } = msg;
-  return transport.send(cmd, rest);
-}
-
-/**
- * **唯一** L2/L3 双线发送点：始终成对（或 flag 关闭后仅 run-control）。
- * 勿在其它模块再手写 `cancel-run` / 第二套 pairing。
- *
- * 顺序固定：
- * 1. `{ type: 'run-control', level: cooperative_stop|force_cancel, ... }`
- * 2. 若 {@link TRANSITIONAL_DUAL_CANCEL_RUN_WIRE} 且有 runId：
- *    `{ type: 'cancel-run', runId, mode: cooperative|force }`
- *
- * L1 不走此函数（无 cancel-run）。
- */
-export async function sendTerminateDualWire(
-  client: DaemonSendClient,
-  req: RunControlRequest,
-  mode: StreamCancelMode
-): Promise<boolean> {
-  let sent = false;
-
-  try {
-    await Promise.resolve(client.send(buildRunControlWireMessage(req)));
-    sent = true;
-  } catch {
-    /* ignore */
-  }
-
-  const runId = req.runId || undefined;
-  if (TRANSITIONAL_DUAL_CANCEL_RUN_WIRE && runId) {
-    try {
-      await Promise.resolve(client.send(buildCancelRunWireMessage(runId, mode)));
-      sent = true;
-    } catch {
-      /* ignore */
-    }
-  }
-
-  return sent;
+  return transport.send('core_run_control', rest);
 }
 
 /**
  * 向核心发送控制意图；失败不抛（UI 仍可本地收口）。
  * 返回是否至少成功发出一条命令。
  *
- * L2/L3 经 {@link sendTerminateDualWire}（过渡双线唯一配对点）。
- * L1 仅 `run-control`（永不附 cancel-run）。
+ * L0–L3 一律仅发 `run-control`（core_run_control 单一命令面）。
  */
 export async function dispatchRunControl(req: RunControlRequest): Promise<boolean> {
   const intent = createRunControlIntent(req.level, {
@@ -189,17 +115,6 @@ export async function dispatchRunControl(req: RunControlRequest): Promise<boolea
     return false;
   }
 
-  // 终止类：单一 helper 成对双线（metrics 仍只记一次 level）
-  const mode = cancelModeForLevel(req.level);
-  if (mode) {
-    return sendTerminateDualWire(
-      { send: (msg) => sendWireViaTransport(transport, msg) },
-      req,
-      mode
-    );
-  }
-
-  // L0/L1：仅 run-control
   try {
     await sendWireViaTransport(transport, buildRunControlWireMessage(req));
     return true;

@@ -39,7 +39,7 @@ export type SessionHydrateResult = {
   /**
    * 水合「未完整」截断标记（P1-D2）：分页拉全超过页数上限或游标停滞
    * （引擎异常 hasMore 恒真）时置位。消费方（store）据此刻画 SessionState
-   * hydrateTruncated，persist 熔断禁止截断态正文回写 SQLite（不可逆）。
+   * hydrateTruncated 作诊断标记；Wave C 后 persist 熔断已删（后端 Upsert）。
    */
   truncated?: boolean;
   /** 最近一次 runId（若可解析），供 H3 拉 usage */
