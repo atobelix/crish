@@ -1832,6 +1832,27 @@ async fn restore_heals_full_envelope_from_session_messages_localdb() {
     assert_eq!(starts, 1, "补齐 tool-start");
     assert_eq!(ends, 1, "补齐 tool-end");
 
+    // 04 §5.4：自愈结果回写 session_messages.tool_call_results_json
+    {
+        let reloaded = store
+            .as_local_db()
+            .expect("LocalDbStore 下转")
+            .load_session_body("s1")
+            .unwrap();
+        let results_json = reloaded[0]
+            .tool_call_results_json
+            .as_deref()
+            .expect("回写 tool_call_results_json");
+        assert!(
+            results_json.contains("c_msg"),
+            "结果条目含 call_id: {results_json}"
+        );
+        assert!(
+            results_json.contains("isError") || results_json.contains("is_error"),
+            "结果标记错误: {results_json}"
+        );
+    }
+
     // 幂等二次恢复
     let again = RestoreManager::new()
         .restore(&store, &NoSnapshots)

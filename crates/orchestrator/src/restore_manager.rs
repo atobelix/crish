@@ -572,10 +572,9 @@ fn extract_declared_from_message_end(payload: &str, run_id: Option<String>) -> V
 ///    tool-start，04 §5.2 / D-3）：先合成 ToolStart 再追加 ToolEnd，
 ///    保证事件包络严格成对。
 ///
-/// 声明源（只读，不改 session_messages）：
-/// - `as_local_db().load_session_body`（生产 LocalDb；InMemory 替身为 None 时
-///   跳过）→ `tool_calls_json` / `blocks_json`；
-/// - 回退：events 中 `message-end` 载荷的 blocks（tests / 无 LocalDb 面）。
+/// 声明源：`as_local_db().load_session_body`（生产 LocalDb）→ `tool_calls_json` /
+/// `blocks_json`；回退 `message-end` 事件载荷。自愈成功后可选回写
+/// `session_messages.tool_call_results_json`（04 §5.4）。
 ///
 /// 消息级已有 `tool_call_results_json` 条目的 call_id 视为已收口，跳过
 /// （02 契约补丁：禁止对已终态 call_id 重复合成）。
@@ -677,6 +676,7 @@ async fn heal_orphaned_tool_calls(
             )
             .await?
             {
+                write_healed_result_to_messages(store, &session_id, &call_id, &tool_name);
                 healed.push(HealedToolRecord {
                     session_id: session_id.clone(),
                     run_id,
@@ -701,6 +701,7 @@ async fn heal_orphaned_tool_calls(
             )
             .await?
             {
+                write_healed_result_to_messages(store, &session_id, &call_id, &tool_name);
                 healed.push(HealedToolRecord {
                     session_id: session_id.clone(),
                     run_id,
@@ -834,6 +835,87 @@ async fn heal_one_orphan(
         "冷启动孤儿工具自愈：补齐 ToolEnd（ToolOutcomeUnknown）"
     );
     Ok(Some((healed_at, synthesized_start)))
+}
+
+/// 自愈成功后把合成结果写回 `session_messages.tool_call_results_json`（04 §5.4）。
+///
+/// 仅 LocalDb 路径生效；失败仅告警不回滚 events（events 已是权威，正文视图
+/// 允许短暂落后，下次 hydrate 合成仍可出站）。幂等：call_id 已在结果集则跳过。
+fn write_healed_result_to_messages(
+    store: &dyn Store,
+    session_id: &str,
+    call_id: &str,
+    tool_name: &str,
+) {
+    let Some(db) = store.as_local_db() else {
+        return;
+    };
+    let Ok(mut messages) = db.load_session_body(session_id) else {
+        tracing::warn!(
+            target: "restore",
+            session_id = %session_id,
+            call_id = %call_id,
+            "自愈正文回写跳过：load_session_body 失败"
+        );
+        return;
+    };
+    let mut changed = false;
+    for m in messages.iter_mut().filter(|m| m.sender == "assistant") {
+        let declares = extract_declared_tool_calls(
+            m.tool_calls_json.as_deref(),
+            m.blocks_json.as_deref(),
+        )
+        .iter()
+        .any(|(id, _)| id == call_id);
+        if !declares {
+            continue;
+        }
+        let resolved = extract_resolved_call_ids(m.tool_call_results_json.as_deref());
+        if resolved.contains(call_id) {
+            continue;
+        }
+        let mut results: Vec<serde_json::Value> = m
+            .tool_call_results_json
+            .as_deref()
+            .and_then(|j| serde_json::from_str::<Vec<serde_json::Value>>(j).ok())
+            .unwrap_or_default();
+        results.push(serde_json::json!({
+            "toolCallId": call_id,
+            "toolName": tool_name,
+            "content": "Execution outcome unknown: crash recovery synthesized tool result.",
+            "isError": true,
+        }));
+        match serde_json::to_string(&results) {
+            Ok(s) => {
+                m.tool_call_results_json = Some(s);
+                changed = true;
+            }
+            Err(e) => {
+                tracing::warn!(target: "restore", error = %e, "自愈正文回写：序列化结果失败");
+                return;
+            }
+        }
+        break;
+    }
+    if !changed {
+        return;
+    }
+    if let Err(e) = db.save_session_body(session_id, &messages) {
+        tracing::warn!(
+            target: "restore",
+            session_id = %session_id,
+            call_id = %call_id,
+            error = %e,
+            "自愈正文回写 session_messages 失败（events 已闭合，hydrate 仍可合成）"
+        );
+    } else {
+        tracing::info!(
+            target: "restore",
+            session_id = %session_id,
+            call_id = %call_id,
+            "自愈结果已回写 session_messages.tool_call_results_json"
+        );
+    }
 }
 
 /// epoch ms → UTC ISO8601（轻量格式化，避免引入 chrono）。
