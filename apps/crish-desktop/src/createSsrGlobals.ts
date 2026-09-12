@@ -65,6 +65,13 @@ declare global {
     useLayoutStore?: unknown;
     useSessionStore?: unknown;
     __storeUpdateCount?: number;
+    /** 启动实测报告（纯文字关键耗时） */
+    crishStartupReport?: (opts?: {
+      log?: boolean;
+      record?: boolean;
+      history?: boolean;
+      copy?: boolean;
+    }) => string;
   }
   interface Navigator {
     deviceMemory?: number;

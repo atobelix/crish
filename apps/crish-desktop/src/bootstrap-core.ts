@@ -33,5 +33,8 @@ export async function bootstrapCore(): Promise<void> {
   coreReady = true;
   window.__crish_coreReady = true;
   window.__crish_perf = { ...window.__crish_perf, coreReady: performance.now() };
+  void import('./services/startup/startupMetrics').then((m) =>
+    m.markStartupPhase('coreReady')
+  );
   console.debug(`[perf] bootstrapCore: ${performance.now() - start}ms`);
 }

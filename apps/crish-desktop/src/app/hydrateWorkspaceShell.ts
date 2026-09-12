@@ -81,6 +81,9 @@ export function hydrateWorkspaceShell(): void {
   if (!restore) {
     applySafeCleanColdStart();
     root.shell.setShellReady(true);
+    void import('../services/startup/startupMetrics').then((m) =>
+      m.markStartupPhase('shellReady')
+    );
     return;
   }
 
@@ -159,10 +162,17 @@ export function hydrateWorkspaceShell(): void {
       triggerSessionMessageHydrateIfNeeded(activeTab.sessionId);
     } else {
       const targetSessionId = activeTab.sessionId;
+      void import('../services/startup/startupMetrics').then((m) =>
+        m.markPaneHydrateEnqueued()
+      );
       staggeredIdleQueue
         .enqueue(
           async () => {
+            const t0 = performance.now();
             await triggerSessionMessageHydrateIfNeeded(targetSessionId);
+            void import('../services/startup/startupMetrics').then((m) =>
+              m.markPaneHydrateDone(performance.now() - t0)
+            );
           },
           { name: `hydrate-pane-${leaf.id}`, priority: 1 }
         )
@@ -174,6 +184,9 @@ export function hydrateWorkspaceShell(): void {
 
   clearLegacyOpenTabsMap();
   root.shell.setShellReady(true);
+  void import('../services/startup/startupMetrics').then((m) =>
+    m.markStartupPhase('shellReady')
+  );
 }
 
 export function setRestoreLastWorkspace(value: boolean): void {

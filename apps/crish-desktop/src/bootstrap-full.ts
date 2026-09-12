@@ -50,5 +50,8 @@ export async function bootstrapFull(): Promise<void> {
     ...window.__crish_perf,
     fullReady: performance.now(),
   };
+  void import('./services/startup/startupMetrics').then((m) =>
+    m.markStartupPhase('bootstrapFullDone')
+  );
   console.debug(`[perf] bootstrapFull: ${performance.now() - start}ms`);
 }

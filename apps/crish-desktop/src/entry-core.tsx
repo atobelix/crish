@@ -32,7 +32,14 @@ import {
 import { memoryManager } from '@crish/shared-utils/browser';
 import { logger } from './services/LoggerService';
 import { UnifiedAppHydrationCoordinator } from './app/UnifiedAppHydrationCoordinator';
+import {
+  markStartupEntry,
+  markStartupPhase,
+} from './services/startup/startupMetrics';
 import './index.css';
+
+// 实测对比：entry 模块求值即锚定 t0（crishStartupReport 可读）
+markStartupEntry();
 
 export interface StartupCoordinatorOptions {
   enableDevPerformanceMarks?: boolean;
@@ -139,6 +146,7 @@ export class StartupCoordinator {
     try {
       const coordinator = UnifiedAppHydrationCoordinator.getInstance();
       const snapshot = await coordinator.preloadHydrationSnapshot();
+      markStartupPhase('preloadSnapshotDone');
       coordinator.applyAtomicCommit(snapshot);
 
       const root = createRoot(rootElement);
@@ -154,6 +162,7 @@ export class StartupCoordinator {
       );
 
       const tMounted = performance.now();
+      markStartupPhase('reactMounted', tMounted);
       window.__crish_perf = {
         ...window.__crish_perf,
         startupEvaluationMs: tMounted - t0,
@@ -172,6 +181,7 @@ export class StartupCoordinator {
       // 首帧：解除 .preload 门闩 + 解锁 WorkerPool JIT + 闲时交接
       requestAnimationFrame(() => {
         document.documentElement.classList.remove('preload');
+        markStartupPhase('reactInteractiveReady');
         window.__crish_perf = {
           ...window.__crish_perf,
           reactInteractiveReady: performance.now(),
