@@ -669,6 +669,13 @@
   right: 8px;
 }
 
+.assistantText :global(.md-code-actions .md-code-copy),
+.assistantText :global(.md-code-header .md-code-copy) {
+  position: static;
+  top: auto;
+  right: auto;
+}
+
 .assistantText :global(.md-code-block:hover .md-code-copy),
 .assistantText :global(.md-code-copy:focus-visible) {
   opacity: 1;
@@ -715,7 +722,6 @@
 
 .assistantText :global(.md-code-pre::-webkit-scrollbar-track) {
   background: transparent;
-}
 }
 
 .assistantText :global(.md-table-wrap) {

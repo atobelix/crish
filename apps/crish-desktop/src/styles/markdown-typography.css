@@ -703,6 +703,13 @@ html[data-theme='dark'] {
   pointer-events: auto;
 }
 
+:is(.conex-markdown, .md-rendered) .md-code-actions .md-code-copy,
+:is(.conex-markdown, .md-rendered) .md-code-header .md-code-copy {
+  position: static;
+  top: auto;
+  right: auto;
+}
+
 .md-rendered .md-code-lang,
 .conex-markdown .md-code-lang,
 :is(.conex-markdown, .md-rendered) .md-code-lang {

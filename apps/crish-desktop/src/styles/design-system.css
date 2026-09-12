@@ -147,6 +147,13 @@ html[data-theme="dark"] .elevation-4 {
     border-color var(--transition-fast, 150ms ease);
 }
 
+.md-code-header .md-code-copy,
+.md-code-actions .md-code-copy {
+  position: static;
+  top: auto;
+  right: auto;
+}
+
 .md-code-copy::before {
   content: '';
   display: block;

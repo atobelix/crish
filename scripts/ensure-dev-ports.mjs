@@ -13,26 +13,32 @@ import { execSync } from 'node:child_process';
 const TARGET_PORTS = [5174, 4000];
 const SAFE_PROCESS_NAMES = ['node', 'node.exe', 'crish-agent-workbench', 'crish-agent-workbench.exe', 'vite'];
 
-function isPortInUse(port) {
-  return new Promise((resolve) => {
-    const server = createServer();
-    server.once('error', (err) => {
-      if (err.code === 'EADDRINUSE') {
-        resolve(true);
-      } else {
+async function isPortInUse(port) {
+  const checkHost = (host) =>
+    new Promise((resolve) => {
+      const server = createServer();
+      server.once('error', (err) => {
+        resolve(err.code === 'EADDRINUSE');
+      });
+      server.once('listening', () => {
+        server.close(() => resolve(false));
+      });
+      try {
+        server.listen(port, host);
+      } catch {
         resolve(false);
       }
     });
-    server.once('listening', () => {
-      server.close(() => resolve(false));
-    });
-    server.listen(port, '127.0.0.1');
-  });
+
+  const inUse4 = await checkHost('127.0.0.1');
+  if (inUse4) return true;
+  const inUse6 = await checkHost('::1').catch(() => false);
+  return inUse6;
 }
 
 function getPidsOnPortWindows(port) {
   try {
-    const output = execSync(`netstat -ano -p tcp`, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+    const output = execSync(`netstat -ano`, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
     const lines = output.split('\n');
     const pids = new Set();
     for (const line of lines) {
@@ -94,11 +100,10 @@ async function main() {
 
   for (const port of TARGET_PORTS) {
     const inUse = await isPortInUse(port);
-    if (!inUse) continue;
-
     const pids = isWin ? getPidsOnPortWindows(port) : getPidsOnPortUnix(port);
-    if (pids.length === 0) continue;
+    if (!inUse && pids.length === 0) continue;
 
+    let killed = false;
     for (const pid of pids) {
       const procName = isWin ? getProcessNameWindows(pid) : '';
       const isKillable = !procName || SAFE_PROCESS_NAMES.some((name) => procName.includes(name.toLowerCase()));
@@ -106,9 +111,13 @@ async function main() {
       if (isKillable) {
         console.log(`[ensure-dev-ports] 端口 ${port} 被残留进程 PID ${pid} (${procName || 'unknown'}) 占用，正在自动清理...`);
         killPid(pid);
+        killed = true;
       } else {
         console.warn(`[ensure-dev-ports] 警告: 端口 ${port} 被非开发进程 PID ${pid} (${procName}) 占用，请手动检查。`);
       }
+    }
+    if (killed) {
+      await new Promise((resolve) => setTimeout(resolve, 250));
     }
   }
 }
