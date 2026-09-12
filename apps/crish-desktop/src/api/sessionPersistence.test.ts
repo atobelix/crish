@@ -59,12 +59,15 @@ import {
   sanitizeMessagesForHydrate,
   saveActiveSessionId,
   saveFolderOrder,
-  saveSessionAgents,
-  saveSessionBody,
   saveSessionIndex,
   sessionsToIndex,
   type SessionIndexEntry,
 } from './sessionPersistence';
+// D-F06：LS 正文/agents 写口不经门面转发；本文件为 LS 模块单测，直连模块。
+import {
+  saveSessionAgents,
+  saveSessionBody,
+} from './session-persistence/sessionLocalStorage';
 import { EMPTY_SESSION_TITLE } from './sessionTitle';
 import { PENDING_DRAFT_SESSION_ID } from '../store/draftSession';
 

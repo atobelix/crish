@@ -96,6 +96,13 @@ export function loadSessionBody(sessionId: string): SessionMessage[] {
   return parseSessionMessages(parsed);
 }
 
+/**
+ * LS 正文写口（**迁移/配额单测专用**，禁止生产双轨调用）。
+ *
+ * D-F06：生产正文权威 = SQLite `save_session_body`（sessionRustDbSql）。
+ * 本函数仅保留给 `sessionLocalStorage.test` / 迁移模块内测；不经
+ * `sessionPersistence` 门面转发。
+ */
 export function saveSessionBody(
   sessionId: string,
   messages: SessionMessage[]
@@ -147,6 +154,12 @@ export function loadSessionAgents(sessionId: string): SessionAgent[] {
   return hydrateSessionAgents(list);
 }
 
+/**
+ * LS agents 写口（**迁移/配额单测专用**，禁止生产双轨调用）。
+ *
+ * D-F06 偏离 #2 收尾：生产 agents 权威 = SQLite `save_session_agents`。
+ * 本函数仅保留给 LS 模块单测；不经 `sessionPersistence` 门面转发。
+ */
 export function saveSessionAgents(
   sessionId: string,
   agents: SessionAgent[]
