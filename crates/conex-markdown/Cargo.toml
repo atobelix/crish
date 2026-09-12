@@ -16,6 +16,8 @@ syntect = { workspace = true }
 ammonia = { workspace = true }
 moka = { workspace = true }
 once_cell = { workspace = true }
+# D0/U-BUDGET：缓存字节预算定义收敛至 perf_budget（仅 re-export；builder 不动）
+conex-shared = { path = "../conex-shared" }
 # G5 清理（2026-08-03）：url/serde/serde_json 无任何引用（渲染纯逻辑，cargo machete 实证）
 regex = "1"
 thiserror.workspace = true

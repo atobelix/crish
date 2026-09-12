@@ -590,13 +590,13 @@ mod tests {
             vec!["subagent-started", "subagent-ended"],
             "started/ended 落库且各一次，progress 不落库"
         );
-        // 序列连续（store 端原子计数器，T08.12）：progress 也取号（2）但
-        // 不落库，故落库序列为 1 与 3——无空洞语义 = 取号连续，非落库连续
+        // T-D1-A（NoPersist-first）：progress 不取号——落库序列连续
+        // started=1、ended=2（progress 无序号空洞）
         let seqs: Vec<u64> = stored.iter().map(|e| e.sequence).collect();
         assert_eq!(
             seqs,
-            vec![1, 3],
-            "started=1、progress 取号 2 不落库、ended=3"
+            vec![1, 2],
+            "started=1、progress 不取号、ended=2（NoPersist-first 无空洞）"
         );
     }
 

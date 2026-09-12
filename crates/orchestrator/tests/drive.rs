@@ -29,10 +29,15 @@ fn assert_type_order(events: &[SequencedEvent], expected: &[&str]) {
     assert_eq!(actual, expected);
 }
 
-/// 断言事件序列连续（1..=n，终态唯一性前提）
+/// 断言**持久化**事件序列连续（1..=n；T-D1-A 后 NoPersist 不取号，
+/// 共享 last_reserved 镜像——只对 persisted==true 的子集断言连续性）
 fn assert_sequences_continuous(events: &[SequencedEvent]) {
-    let seqs: Vec<u64> = events.iter().map(|e| e.sequence).collect();
-    assert_eq!(seqs, (1..=events.len() as u64).collect::<Vec<_>>());
+    let seqs: Vec<u64> = events
+        .iter()
+        .filter(|e| e.persisted)
+        .map(|e| e.sequence)
+        .collect();
+    assert_eq!(seqs, (1..=seqs.len() as u64).collect::<Vec<_>>());
 }
 
 /// start_run：注册即落库，queued → initializing → running（05 §5.4 主路径）
@@ -123,9 +128,10 @@ async fn full_lifecycle_queued_to_completed_emits_terminal_sequence() {
         other => panic!("终态事件类型不符：{other:?}"),
     }
 
-    // 序列游标推进到末事件
-    assert_eq!(run.cursor, 6);
-    assert_eq!(queue.next_sequence(), 7, "序列分配应连续无空洞");
+    // 序列游标推进到末**持久化**事件（T-D1-A：NoPersist 不推进 cursor）
+    // agent-start=1, message-end=2, agent-end=3, run-terminal=4
+    assert_eq!(run.cursor, 4);
+    assert_eq!(queue.next_sequence(), 5, "持久化取号连续无空洞");
 
     // 持久化分流：delta 不落库，其余全落库
     assert_eq!(
