@@ -1,0 +1,260 @@
+﻿
+## --md-font-family  [DIFF(2 种值,需改名/裁决)]
+   tokens:443  =  -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microso
+   tokens:1011  =  -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microso
+   mdtypo:6  =  var(--font-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif)
+
+## --md-font-mono  [DIFF(2 种值,需改名/裁决)]
+   tokens:445  =  var(--font-mono, "IBM Plex Mono", "JetBrains Mono", monospace)
+   tokens:1013  =  var(--font-mono, "IBM Plex Mono", "JetBrains Mono", monospace)
+   mdtypo:7  =  var(--font-mono, SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace)
+
+## --md-line-height-body  [DIFF(2 种值,需改名/裁决)]
+   tokens:446  =  1.68
+   tokens:1014  =  1.68
+   mdtypo:8  =  1.68
+   mdtypo:335  =  1.68
+   mdtypo:383  =  1.65
+
+## --md-paragraph-margin-bottom  [DIFF(3 种值,需改名/裁决)]
+   tokens:447  =  0.88em
+   tokens:1015  =  0.88em
+   mdtypo:9  =  0.88em
+   mdtypo:336  =  0.92em
+   mdtypo:384  =  0.82em
+
+## --md-heading-font-weight  [SAME(可删重复)]
+   tokens:471  =  600
+   tokens:1039  =  600
+   mdtypo:12  =  600
+
+## --md-heading-color  [DIFF(3 种值,需改名/裁决)]
+   tokens:473  =  var(--text-primary, hsl(0 0% 7%))
+   tokens:1041  =  var(--text-primary, hsl(0 0% 94%))
+   mdtypo:13  =  var(--text-primary)
+
+## --md-h1-size  [DIFF(2 种值,需改名/裁决)]
+   tokens:456  =  1.85em
+   tokens:1024  =  1.85em
+   mdtypo:14  =  1.85em
+   mdtypo:337  =  1.85em
+   mdtypo:385  =  1.45em
+
+## --md-h1-margin  [DIFF(3 种值,需改名/裁决)]
+   tokens:457  =  0.85em 0 0.36em
+   tokens:1025  =  0.85em 0 0.36em
+   mdtypo:15  =  0.85em 0 0.36em
+   mdtypo:338  =  0.95em 0 0.40em
+   mdtypo:386  =  0.65em 0 0.26em
+
+## --md-h1-border  [DIFF(2 种值,需改名/裁决)]
+   tokens:458  =  1px solid var(--border-subtle)
+   tokens:1026  =  1px solid var(--border-subtle)
+   mdtypo:16  =  1px solid var(--border-subtle)
+   mdtypo:339  =  1px solid var(--border-subtle)
+   mdtypo:387  =  none
+
+## --md-h2-size  [DIFF(2 种值,需改名/裁决)]
+   tokens:459  =  1.45em
+   tokens:1027  =  1.45em
+   mdtypo:17  =  1.45em
+   mdtypo:340  =  1.45em
+   mdtypo:388  =  1.25em
+
+## --md-h2-margin  [DIFF(3 种值,需改名/裁决)]
+   tokens:460  =  0.75em 0 0.30em
+   tokens:1028  =  0.75em 0 0.30em
+   mdtypo:18  =  0.75em 0 0.30em
+   mdtypo:341  =  0.85em 0 0.32em
+   mdtypo:389  =  0.55em 0 0.22em
+
+## --md-h2-border  [DIFF(2 种值,需改名/裁决)]
+   tokens:461  =  1px solid var(--border-subtle)
+   tokens:1029  =  1px solid var(--border-subtle)
+   mdtypo:19  =  1px solid var(--border-subtle)
+   mdtypo:342  =  1px solid var(--border-subtle)
+   mdtypo:390  =  none
+
+## --md-h3-size  [SAME(可删重复)]
+   tokens:462  =  1.25em
+   tokens:1030  =  1.25em
+   mdtypo:20  =  1.25em
+
+## --md-h3-margin  [SAME(可删重复)]
+   tokens:463  =  0.65em 0 0.26em
+   tokens:1031  =  0.65em 0 0.26em
+   mdtypo:21  =  0.65em 0 0.26em
+
+## --md-h4-size  [DIFF(2 种值,需改名/裁决)]
+   tokens:464  =  1.10em
+   tokens:1032  =  1.10em
+   mdtypo:22  =  1.1em
+
+## --md-h4-margin  [SAME(可删重复)]
+   tokens:465  =  0.55em 0 0.22em
+   tokens:1033  =  0.55em 0 0.22em
+   mdtypo:23  =  0.55em 0 0.22em
+
+## --md-h5-size  [DIFF(2 种值,需改名/裁决)]
+   tokens:466  =  1.00em
+   tokens:1034  =  1.00em
+   mdtypo:24  =  1em
+
+## --md-h5-margin  [SAME(可删重复)]
+   tokens:467  =  0.45em 0 0.18em
+   tokens:1035  =  0.45em 0 0.18em
+   mdtypo:25  =  0.45em 0 0.18em
+
+## --md-h6-size  [DIFF(2 种值,需改名/裁决)]
+   tokens:468  =  0.90em
+   tokens:1036  =  0.90em
+   mdtypo:26  =  0.9em
+
+## --md-h6-margin  [SAME(可删重复)]
+   tokens:469  =  0.38em 0 0.15em
+   tokens:1037  =  0.38em 0 0.15em
+   mdtypo:27  =  0.38em 0 0.15em
+
+## --md-table-border  [DIFF(2 种值,需改名/裁决)]
+   tokens:526  =  var(--hairline-strong, var(--border-color))
+   tokens:1094  =  var(--hairline-strong, var(--border-color))
+   mdtypo:30  =  var(--border-color)
+
+## --md-table-radius  [SAME(可删重复)]
+   tokens:532  =  var(--radius-lg, 8px)
+   tokens:1100  =  var(--radius-lg, 8px)
+   mdtypo:31  =  var(--radius-lg, 8px)
+
+## --md-table-header-bg  [DIFF(3 种值,需改名/裁决)]
+   tokens:527  =  color-mix(in srgb, var(--text-primary) 3.5%, var(--bg-card))
+   tokens:1095  =  hsl(0 0% 12%)
+   mdtypo:32  =  color-mix(in srgb, var(--text-primary) 3.5%, var(--bg-card))
+   mdtypo:66  =  hsl(0 0% 13%)
+
+## --md-table-header-fg  [SAME(可删重复)]
+   tokens:537  =  var(--text-primary)
+   tokens:1105  =  var(--text-primary)
+   mdtypo:33  =  var(--text-primary)
+
+## --md-table-cell-padding  [SAME(可删重复)]
+   tokens:530  =  10px 14px
+   tokens:1098  =  10px 14px
+   mdtypo:34  =  10px 14px
+
+## --md-table-cell-padding-compact  [DIFF(2 种值,需改名/裁决)]
+   tokens:531  =  7px 10px
+   tokens:1099  =  7px 10px
+   mdtypo:35  =  var(--space-1_5, 6px) var(--space-2_5, 10px)
+
+## --md-table-row-alt-bg  [DIFF(3 种值,需改名/裁决)]
+   tokens:528  =  color-mix(in srgb, var(--text-primary) 1.8%, transparent)
+   tokens:1096  =  color-mix(in srgb, var(--text-primary) 1.8%, transparent)
+   mdtypo:36  =  color-mix(in srgb, var(--text-primary) 1.5%, transparent)
+   mdtypo:67  =  color-mix(in srgb, var(--text-primary) 2.5%, transparent)
+
+## --md-table-row-hover-bg  [DIFF(3 种值,需改名/裁决)]
+   tokens:529  =  color-mix(in srgb, var(--text-primary) 4%, transparent)
+   tokens:1097  =  color-mix(in srgb, var(--text-primary) 4%, transparent)
+   mdtypo:37  =  color-mix(in srgb, var(--text-primary) 3%, var(--bg-card))
+   mdtypo:68  =  hsl(0 0% 15%)
+
+## --md-list-padding-left  [DIFF(2 种值,需改名/裁决)]
+   tokens:506  =  1.6em
+   tokens:1074  =  1.6em
+   mdtypo:40  =  1.6em
+   mdtypo:343  =  1.6em
+   mdtypo:391  =  1.4em
+
+## --md-list-item-margin  [DIFF(3 种值,需改名/裁决)]
+   tokens:507  =  0.28em 0
+   tokens:1075  =  0.28em 0
+   mdtypo:41  =  0.28em 0
+   mdtypo:344  =  0.30em 0
+   mdtypo:392  =  0.22em 0
+
+## --md-quote-border  [SAME(可删重复)]
+   tokens:511  =  3px solid var(--border-color)
+   tokens:1079  =  3px solid var(--border-color)
+   mdtypo:42  =  3px solid var(--border-color)
+
+## --md-quote-bg  [DIFF(3 种值,需改名/裁决)]
+   tokens:514  =  color-mix(in srgb, var(--text-primary) 2%, transparent)
+   tokens:1082  =  color-mix(in srgb, var(--text-primary) 3%, transparent)
+   mdtypo:43  =  var(--tint-subtle)
+
+## --md-quote-padding  [SAME(可删重复)]
+   tokens:516  =  0.45em 0 0.45em 1.1em
+   tokens:1084  =  0.45em 0 0.45em 1.1em
+   mdtypo:44  =  0.45em 0 0.45em 1.1em
+
+## --md-quote-margin  [SAME(可删重复)]
+   tokens:517  =  0.68em 0
+   tokens:1085  =  0.68em 0
+   mdtypo:45  =  0.68em 0
+
+## --md-code-inline-bg  [DIFF(2 种值,需改名/裁决)]
+   tokens:478  =  color-mix(in srgb, var(--text-primary) 3.5%, var(--bg-card))
+   tokens:1046  =  color-mix(in srgb, var(--text-primary) 5%, var(--bg-card))
+   mdtypo:48  =  color-mix(in srgb, var(--text-primary) 3.5%, var(--bg-card))
+   mdtypo:69  =  color-mix(in srgb, var(--text-primary) 5%, var(--bg-card))
+
+## --md-code-inline-fg  [SAME(可删重复)]
+   tokens:479  =  var(--text-primary)
+   tokens:1047  =  var(--text-primary)
+   mdtypo:49  =  var(--text-primary)
+   mdtypo:70  =  var(--text-primary)
+
+## --md-code-inline-radius  [SAME(可删重复)]
+   tokens:480  =  4px
+   tokens:1048  =  4px
+   mdtypo:50  =  4px
+
+## --md-code-inline-padding  [SAME(可删重复)]
+   tokens:481  =  0.15em 0.4em
+   tokens:1049  =  0.15em 0.4em
+   mdtypo:51  =  0.15em 0.4em
+
+## --md-code-inline-size  [SAME(可删重复)]
+   tokens:482  =  0.9em
+   tokens:1050  =  0.9em
+   mdtypo:52  =  0.9em
+
+## --md-path-link-bg  [SAME(可删重复)]
+   tokens:496  =  transparent
+   tokens:1064  =  transparent
+   mdtypo:54  =  transparent
+
+## --md-path-link-fg  [SAME(可删重复)]
+   tokens:497  =  var(--text-secondary)
+   tokens:1065  =  var(--text-secondary)
+   mdtypo:55  =  var(--text-secondary)
+
+## --md-path-link-border  [SAME(可删重复)]
+   tokens:498  =  transparent
+   tokens:1066  =  transparent
+   mdtypo:56  =  transparent
+
+## --md-link-color  [DIFF(4 种值,需改名/裁决)]
+   tokens:520  =  var(--brand-deep, hsl(160 84% 30%))
+   tokens:1088  =  var(--brand, hsl(160 84% 39%))
+   mdtypo:59  =  var(--brand-deep)
+   mdtypo:71  =  var(--brand)
+
+## --md-link-hover-color  [DIFF(3 种值,需改名/裁决)]
+   tokens:521  =  var(--brand, hsl(160 84% 39%))
+   tokens:1089  =  hsl(160 84% 55%)
+   mdtypo:60  =  var(--brand)
+   mdtypo:72  =  hsl(160 84% 55%)
+
+## --md-link-underline-offset  [SAME(可删重复)]
+   tokens:522  =  3px
+   tokens:1090  =  3px
+   mdtypo:61  =  3px
+
+## --md-link-underline-color  [SAME(可删重复)]
+   tokens:523  =  color-mix(in srgb, var(--md-link-color) 35%, transparent)
+   tokens:1091  =  color-mix(in srgb, var(--md-link-color) 35%, transparent)
+   mdtypo:62  =  color-mix(in srgb, var(--md-link-color) 35%, transparent)
+
+SUMMARY same=21 diff=25
+
