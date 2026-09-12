@@ -47,15 +47,18 @@
 
 /*           className   --dialog-width         */
 .dialogSm {
-  width: var(--dialog-width, 320px);
+  --dialog-width: 320px; /* 组件尺寸语义：本地自包含（F2 收敛，原真源散落 SettingsRulesTab） */
+  width: var(--dialog-width);
 }
 
 .dialogMd {
-  width: var(--dialog-width, 480px);
+  --dialog-width: 480px; /* 组件尺寸语义：本地自包含（F2 收敛，原真源散落 SettingsRulesTab） */
+  width: var(--dialog-width);
 }
 
 .dialogLg {
-  width: var(--dialog-width, 640px);
+  --dialog-width: 640px; /* 组件尺寸语义：本地自包含（F2 收敛，原真源散落 SettingsRulesTab） */
+  width: var(--dialog-width);
 }
 
 /*        SettingsPanel            

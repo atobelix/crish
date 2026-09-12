@@ -7,12 +7,12 @@
 .textareaWrap {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1, 4px);
+  gap: var(--space-1);
 }
 
 .textareaLabel {
-  font-size: var(--font-size-xs, 12px);
-  font-weight: var(--font-weight-normal, 400);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-normal);
   color: var(--text-secondary);
 }
 
@@ -30,18 +30,18 @@
   resize: none;
   box-sizing: border-box;
   width: 100%;
-  padding: var(--space-2, 8px) var(--space-3, 12px);
+  padding: var(--space-2) var(--space-3);
   font-family: var(--font-sans);
-  font-size: var(--font-size-base, 14px);
+  font-size: var(--font-size-base);
   line-height: var(--line-height-body);
   color: var(--text-primary);
   background: color-mix(in srgb, var(--bg-primary) 40%, var(--bg-card));
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md, 6px);
+  border-radius: var(--radius-md);
   outline: none;
   transition:
-    border-color var(--transition-micro, 120ms) ease,
-    background var(--transition-micro, 120ms) ease;
+    border-color var(--transition-micro) ease,
+    background var(--transition-micro) ease;
 }
 
 .nativeTextarea::placeholder {
@@ -65,22 +65,22 @@
 
 .nativeTextarea:disabled {
   cursor: not-allowed;
-  opacity: var(--opacity-disabled, 0.45);
+  opacity: var(--opacity-disabled);
 }
 
 /*       */
 .textareaSm {
   min-height: 44px;
-  padding: var(--space-1_5, 6px) var(--space-2_5, 10px);
-  font-size: var(--font-size-sm, 13px);
-  border-radius: var(--radius-md, 6px);
+  padding: var(--space-1_5) var(--space-2_5);
+  font-size: var(--font-size-sm);
+  border-radius: var(--radius-md);
 }
 
 .textareaLg {
   min-height: 72px;
-  padding: var(--space-3, 12px) var(--space-4, 16px);
-  font-size: var(--font-size-md, 15px);
-  border-radius: var(--radius-lg, 8px);
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--font-size-md);
+  border-radius: var(--radius-lg);
 }
 
 .textareaWrapError .nativeTextarea {
@@ -95,12 +95,12 @@
 
 .textareaError {
   margin: 0;
-  font-size: var(--font-size-xs, 12px);
+  font-size: var(--font-size-xs);
   color: var(--color-error);
 }
 
 .textareaHint {
   margin: 0;
-  font-size: var(--font-size-xs, 12px);
+  font-size: var(--font-size-xs);
   color: var(--text-tertiary);
 }

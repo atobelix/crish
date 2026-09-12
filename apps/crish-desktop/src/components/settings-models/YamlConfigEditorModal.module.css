@@ -92,145 +92,130 @@
   color: var(--text-primary);
 }
 
-.modalTitleIcon {
-  color: var(--brand-primary);
+.modalTitleText {
+  letter-spacing: var(--letter-spacing-tight);
 }
 
-.dirtyDot {
-  display: inline-block;
-  width: var(--space-1_5);
+/* 动态状态指示点（纯实点指示，无多余胶囊与文字，对齐系统状态点规范） */
+.dynamicStatusDot {
+  width: var(--space-1_5); /* 6px 实点 */
   height: var(--space-1_5);
-  border-radius: 50%;
-  background-color: var(--warning-color);
-  margin-left: var(--space-1);
-  vertical-align: middle;
-  flex-shrink: 0;
-}
-
-.modalSubHeader {
-  margin-top: var(--space-0_5);
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.filePathBadge {
+  border-radius: var(--radius-full);
   display: inline-block;
-  font-family: var(--font-mono);
-  font-size: var(--font-size-xxs);
-  color: var(--text-tertiary);
-  background: var(--bg-secondary);
-  padding: var(--space-0_5) var(--space-1_5);
-  border-radius: var(--radius-sm);
-  border: var(--hairline-width) solid var(--border-subtle);
-  max-width: 480px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  flex-shrink: 0;
+  cursor: help;
+  transition: background-color var(--transition-fast);
 }
 
-/* ── 顶部辅助工具栏 ───────────────────────────────────────────────── */
+.dynamicStatusDot[data-status='synced'] {
+  background-color: var(--brand);
+}
+
+.dynamicStatusDot[data-status='dirty'] {
+  background-color: var(--warning-color);
+}
+
+.dynamicStatusDot[data-status='saving'] {
+  background-color: var(--brand);
+}
+
+.dynamicStatusDot[data-status='error'] {
+  background-color: var(--color-error);
+  cursor: pointer;
+}
+
+/* ── 标题下方功能行 (无侵入细线，平整融入纸面) ─────────────────────── */
 .editorToolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--space-2) var(--space-4);
-  border-bottom: var(--hairline-width) solid var(--border-subtle);
-  background: var(--bg-secondary);
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-4) 0;
+  background: var(--bg-card);
   user-select: none;
 }
 
-.toolbarLeft {
-  display: flex;
+/* 搜索框尺寸约束（样式完全由 UI Input 原子组件提供） */
+.searchBar {
+  width: 240px;
+}
+
+.searchSuffix {
+  display: inline-flex;
   align-items: center;
-  gap: var(--space-1_5);
+  gap: var(--space-1);
 }
 
-.toolbarDivider {
-  width: var(--hairline-width);
-  height: 14px; /* 布局约束，不入刻度 */
-  background: var(--border-subtle);
-  margin: 0 var(--space-1);
+.searchCount {
+  font-size: var(--font-size-xxs);
+  font-family: var(--md-code-font, var(--font-mono));
+  font-feature-settings: var(--font-mono-features);
+  color: var(--text-tertiary);
+  user-select: none;
+  padding-right: var(--space-0_5);
 }
 
-.undoBtnActive {
-  color: var(--brand-primary);
-  border-color: color-mix(in srgb, var(--brand-primary) 30%, var(--border-subtle));
+.searchNavBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: none;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  padding: 0;
+  transition:
+    color var(--transition-micro),
+    background var(--transition-micro);
 }
 
-.resetTemplateBtn {
-  color: var(--text-secondary);
-}
-
-.resetTemplateBtn:hover:not(:disabled) {
+.searchNavBtn:hover:not(:disabled) {
   color: var(--text-primary);
+  background: var(--tint-hover);
+}
+
+.searchNavBtn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
 }
 
 .toolbarRight {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
-}
-
-.toolbarInfo {
-  font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
-  font-family: 'Segoe UI', -apple-system, var(--font-sans);
-  font-variant-numeric: tabular-nums;
-  font-feature-settings: 'tnum' 1;
-}
-
-.syncStatusClean,
-.syncStatusDirty {
-  display: inline-flex;
-  align-items: center;
   gap: var(--space-1_5);
+}
+
+.toolbarBtn {
   font-size: var(--font-size-xs);
-  line-height: 1;
-  font-variant-numeric: tabular-nums;
-  padding: var(--space-0_5) var(--space-1_5);
-  border-radius: var(--radius-sm);
 }
 
-.syncStatusClean {
-  color: var(--text-tertiary);
+.toolbarBtnActive {
+  font-size: var(--font-size-xs);
+  color: var(--brand) !important;
+  background: color-mix(in srgb, var(--brand) 12%, transparent) !important;
 }
 
-.syncStatusDirty {
-  color: var(--warning-color);
-  background: color-mix(in srgb, var(--warning-color) 8%, transparent);
-}
-
-.syncStatusDot {
-  width: var(--space-1_5);
-  height: var(--space-1_5);
-  border-radius: 50%;
-  background: currentColor;
-  display: inline-block;
-  flex-shrink: 0;
-}
-
-/* ── 双层同步代码编辑器视口 ───────────────────────────────────────── */
+/* ── 双层同步代码编辑器视口 (纯净无外环) ─────────────────────────── */
 .editorViewport {
+  --editor-line-height: 22px;
   display: flex;
   height: 60vh;
   min-height: 380px;
   position: relative;
   background: var(--bg-card);
-  border-bottom: var(--hairline-width) solid var(--border-subtle);
   overflow: hidden;
+  outline: none;
+  border: none;
 }
 
-.editorViewport:focus-within {
-  box-shadow: inset 0 0 0 1px var(--focus-border-color);
-}
-
-/* 行号栏 Gutter */
+/* 行号栏 Gutter：无背景、无硬性分割线，遵循系统代码字体配置 */
 .gutter {
-  width: 46px;
+  width: 44px;
   flex-shrink: 0;
-  background: var(--bg-secondary);
-  border-right: var(--hairline-width) solid var(--border-subtle);
+  background: transparent;
   overflow: hidden;
   user-select: none;
   box-sizing: border-box;
@@ -238,12 +223,13 @@
 }
 
 .gutterLine {
-  height: 20px; /* 布局约束，不入刻度 */
-  line-height: 20px;
-  font-family: 'Segoe UI', -apple-system, var(--font-mono);
-  font-size: var(--font-size-xs);
+  height: var(--editor-line-height);
+  line-height: var(--editor-line-height);
+  font-family: var(--md-code-font, var(--font-mono));
+  font-feature-settings: var(--font-mono-features);
+  font-size: var(--md-code-font-size, var(--font-size-xs));
+  font-weight: var(--font-weight-code);
   font-variant-numeric: tabular-nums;
-  font-feature-settings: 'tnum' 1;
   color: var(--text-tertiary);
   text-align: right;
   padding-right: var(--space-2_5);
@@ -253,7 +239,7 @@
 .editorGutter .gutterLine.gutterLineError {
   background: color-mix(in srgb, var(--color-error) 25%, transparent);
   color: var(--danger-color);
-  font-weight: 700;
+  font-weight: var(--font-weight-heavy);
 }
 
 /* 双层编辑舞台容器 */
@@ -265,20 +251,22 @@
   overflow: hidden;
 }
 
-/* 背景语法高亮层 */
+/* 背景语法高亮层：遵循系统代码字体配置 */
 .highlightLayer {
   position: absolute;
   inset: 0;
   margin: 0;
   box-sizing: border-box;
   padding: var(--space-3) var(--space-4);
-  font-family: var(--font-mono);
-  font-size: var(--font-size-sm);
-  line-height: 20px;
+  font-family: var(--md-code-font, var(--font-mono));
+  font-feature-settings: var(--font-mono-features);
+  font-size: var(--md-code-font-size, var(--font-size-xs));
+  font-weight: var(--font-weight-code);
+  line-height: var(--editor-line-height);
+  tab-size: var(--md-code-tab-size);
   white-space: pre;
   word-wrap: normal;
   overflow-wrap: normal;
-  tab-size: 2;
   overflow: hidden;
   pointer-events: none;
   user-select: none;
@@ -290,24 +278,28 @@
   font-family: inherit;
   font-size: inherit;
   line-height: inherit;
+  font-feature-settings: inherit;
+  font-weight: inherit;
   background: transparent;
   padding: 0;
 }
 
-/* 前景输入捕获层 */
+/* 前景输入捕获层：遵循系统代码字体配置 */
 .textareaInput {
   position: absolute;
   inset: 0;
   margin: 0;
   box-sizing: border-box;
   padding: var(--space-3) var(--space-4);
-  font-family: var(--font-mono);
-  font-size: var(--font-size-sm);
-  line-height: 20px;
+  font-family: var(--md-code-font, var(--font-mono));
+  font-feature-settings: var(--font-mono-features);
+  font-size: var(--md-code-font-size, var(--font-size-xs));
+  font-weight: var(--font-weight-code);
+  line-height: var(--editor-line-height);
+  tab-size: var(--md-code-tab-size);
   white-space: pre;
   word-wrap: normal;
   overflow-wrap: normal;
-  tab-size: 2;
   border: none;
   outline: none;
   resize: none;
@@ -315,17 +307,63 @@
   color: transparent;
   caret-color: var(--text-primary);
   overflow: auto;
-  z-index: 1;
 }
 
-/* ── 底栏与错误横幅 ───────────────────────────────────────────────── */
+/* 自动换行控制 */
+.editorStage[data-wrap='true'] .highlightLayer,
+.editorStage[data-wrap='true'] .textareaInput {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.editorStage[data-wrap='false'] .highlightLayer,
+.editorStage[data-wrap='false'] .textareaInput {
+  white-space: pre;
+  word-wrap: normal;
+  overflow-wrap: normal;
+}
+
+/* ── 底栏与操作区 ─────────────────────────────────────────────────── */
 .modalFooter {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: var(--space-3);
   padding: var(--space-2_5) var(--space-4);
   width: 100%;
   box-sizing: border-box;
+}
+
+.footerLeft {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  flex: 1;
+}
+
+.footerActionGroup {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1_5);
+}
+
+.footerBtn {
+  border-radius: var(--button-radius) !important;
+  font-size: var(--font-size-xs);
+  height: var(--control-height-sm);
+  font-weight: var(--font-weight-normal);
+  transition:
+    background-color var(--transition-fast),
+    border-color var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.footerRight {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
 }
 
 .errorBanner {
@@ -353,6 +391,25 @@
   white-space: nowrap;
 }
 
+.errorInlineTag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 2px var(--space-2);
+  background: var(--color-error-bg);
+  border: var(--hairline-width) solid var(--color-error-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-error);
+  font-size: var(--font-size-xxs);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color var(--transition-micro);
+}
+
+.errorInlineTag:hover {
+  background: color-mix(in srgb, var(--color-error) 18%, transparent);
+}
+
 .successIndicator {
   display: flex;
   align-items: center;
@@ -360,12 +417,6 @@
   color: var(--color-success);
   font-size: var(--font-size-xs);
   font-weight: 500;
-}
-
-.footerActions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
 }
 
 /* 服务面失败横幅（missing / error）：非交互、不可点击跳转 */

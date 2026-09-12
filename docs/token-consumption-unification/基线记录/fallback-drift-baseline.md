@@ -4,6 +4,6 @@
 > 语义：实测 > 基线 → FAIL；实测 ≤ 基线 → 通过（存量按 B6 收敛）。
 
 <!-- BASELINE_START -->
-bare_fallback_refs 10
-contradictory_fallback_refs 3
+bare_fallback_refs 7
+contradictory_fallback_refs 0
 <!-- BASELINE_END -->
