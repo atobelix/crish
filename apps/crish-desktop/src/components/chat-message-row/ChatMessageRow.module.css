@@ -505,23 +505,23 @@
 .assistantText :global(.md-code-block) {
   position: relative;
   margin: 0.85em 0;
-  border-radius: var(--md-code-block-radius, 12px);
+  border-radius: var(--md-code-block-radius, var(--radius-lg, 8px));
   border: 1px solid var(--md-code-block-border, var(--border-subtle));
   background: var(--md-code-block-bg);
   overflow: hidden;
   box-shadow: none;
 }
 
-/* 实体顶栏：左标题/面包屑，右操作，高度 34px，自适应背景与微弱下边框 */
+/* 实体顶栏：左标题/面包屑，右操作，高度 32px，无缝背景与边框 */
 .assistantText :global(.md-code-header) {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2, 8px);
-  height: 34px;
+  height: var(--card-header-min-height, 32px);
   padding: 0 var(--space-2, 8px) 0 var(--space-3, 12px);
-  background: var(--md-code-header-bg, var(--tint-hover));
-  border-bottom: 1px solid var(--md-code-header-border, var(--border-subtle));
+  background: var(--md-code-header-bg, transparent);
+  border-bottom: 1px solid var(--md-code-header-border, transparent);
   user-select: none;
 }
 
@@ -531,17 +531,22 @@
   gap: var(--space-1_5, 6px);
   min-width: 0;
   overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs, 12px);
+  font-weight: var(--font-weight-normal, 400);
+  color: var(--text-tertiary);
 }
 
 .assistantText :global(.md-code-breadcrumb) {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: var(--space-1, 4px);
   padding: var(--space-1_5, 6px) var(--space-3, 12px);
   font-family: var(--font-mono);
   font-size: var(--font-size-xs, 12px);
-  color: var(--md-code-header-fg, var(--text-secondary));
-  background: var(--md-code-header-bg);
+  font-weight: var(--font-weight-normal, 400);
+  color: var(--text-tertiary);
+  background: var(--tint-hover);
   border-bottom: 1px solid var(--border-subtle);
   user-select: none;
   white-space: nowrap;
@@ -564,8 +569,8 @@
 }
 
 .assistantText :global(.md-code-breadcrumb-file) {
-  color: var(--text-secondary);
-  font-weight: var(--font-weight-normal, 400);
+  color: var(--text-primary);
+  font-weight: var(--font-weight-medium, 500);
 }
 
 /* 代码块操作中枢：在 Header 内静态排列，降级时绝对定位排布 */
@@ -593,7 +598,7 @@
   align-items: center;
   font-family: var(--font-mono);
   font-size: var(--font-size-micro, 11px);
-  color: var(--md-code-header-fg, var(--text-tertiary));
+  color: var(--text-tertiary);
   text-transform: lowercase;
   user-select: none;
   pointer-events: none;
@@ -607,7 +612,7 @@
   padding: 0;
   font-size: var(--font-size-xs, 12px);
   background: transparent;
-  color: var(--md-code-header-fg, var(--text-secondary));
+  color: var(--text-tertiary);
   letter-spacing: 0.02em;
 }
 
@@ -623,27 +628,26 @@
   align-items: center;
   justify-content: center;
   gap: var(--space-1, 4px);
-  height: 24px;
+  height: var(--control-height-xs, 22px);
   padding: 0 var(--space-2, 8px);
   font-size: var(--font-size-micro, 11px);
-  font-family: var(--font-sans, inherit);
-  color: var(--md-code-header-fg, var(--text-secondary));
+  font-family: var(--font-sans);
+  color: var(--text-tertiary);
   background: transparent;
   box-shadow: none;
   border: 1px solid transparent;
-  border-radius: var(--radius-sm, 5px);
+  border-radius: var(--radius-sm, 4px);
   cursor: pointer;
   white-space: nowrap;
   flex-shrink: 0;
   line-height: 1;
   user-select: none;
-  opacity: 0.85;
+  opacity: 0.7;
   transition:
     opacity var(--transition-fast, 150ms ease),
     background-color var(--transition-fast, 150ms ease),
     color var(--transition-fast, 150ms ease),
-    border-color var(--transition-fast, 150ms ease),
-    transform 100ms ease;
+    border-color var(--transition-fast, 150ms ease);
 }
 
 .assistantText :global(.md-code-copy::before) {
@@ -682,13 +686,10 @@
 }
 
 .assistantText :global(.md-code-copy:hover) {
-  background: var(--md-code-copy-hover-bg);
+  background: var(--md-code-copy-hover-bg, var(--tint-hover));
   color: var(--text-primary);
-  border-color: var(--border-subtle, var(--border-color));
-}
-
-.assistantText :global(.md-code-copy:active) {
-  transform: scale(0.96);
+  border-color: var(--border-subtle);
+  opacity: 1;
 }
 
 .assistantText :global(.md-code-copy.is-copied) {
@@ -700,26 +701,22 @@
 
 .assistantText :global(.md-code-pre) {
   margin: 0;
-  padding: var(--md-code-block-padding, 14px 16px);
+  padding: var(--md-code-block-padding, var(--space-3, 12px) var(--space-4, 16px));
   overflow-x: auto;
   overscroll-behavior-x: contain;
-  font-family: var(--md-code-font, var(--font-mono)) !important;
-  font-size: var(--md-code-font-size, 12.5px);
-  font-weight: var(--font-weight-code, 400) !important;
-  line-height: 1.625;
+  font-family: var(--font-mono);
+  font-size: var(--md-code-font-size, var(--font-size-xs, 12px));
+  line-height: var(--line-height-body, 1.55);
   tab-size: var(--md-code-tab-size, 2);
   color: var(--text-primary);
   background: transparent;
 }
 
-.assistantText :global(.md-code-pre code),
-.assistantText :global(.md-code-pre code *) {
-  font-family: var(--md-code-font, var(--font-mono)) !important;
+.assistantText :global(.md-code-pre code) {
+  font-family: inherit;
   font-size: inherit;
-  font-weight: var(--font-weight-code, 400) !important;
   line-height: inherit;
-  letter-spacing: normal;
-  font-style: normal;
+  white-space: inherit;
 }
 
 .assistantText :global(.md-code-pre::-webkit-scrollbar) {

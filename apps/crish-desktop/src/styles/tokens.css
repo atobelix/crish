@@ -526,15 +526,15 @@ html[data-theme='light'] {
 
   --md-code-block-bg: var(--bg-card);
   --md-code-block-border: var(--border-subtle);
-  --md-code-block-radius: var(--radius-xl, 12px);
-  --md-code-block-padding: 14px 16px;
+  --md-code-block-radius: var(--radius-lg, 8px);
+  --md-code-block-padding: var(--space-3, 12px) var(--space-4, 16px);
   --md-code-font: var(--font-mono);
-  --md-code-font-size: 12.5px;
+  --md-code-font-size: var(--font-size-xs, 12px);
   --md-code-tab-size: 2;
-  --md-code-header-bg: var(--tint-hover);
-  --md-code-header-border: var(--border-subtle);
+  --md-code-header-bg: transparent;
+  --md-code-header-border: transparent;
   --md-code-header-fg: var(--text-tertiary);
-  --md-code-copy-hover-bg: var(--bg-card);
+  --md-code-copy-hover-bg: var(--tint-hover);
 
   --md-path-link-bg: transparent;
   --md-path-link-fg: var(--text-secondary);
@@ -1131,14 +1131,14 @@ html[data-theme='dark'] {
 
   --md-code-block-bg: var(--bg-card);
   --md-code-block-border: var(--border-subtle);
-  --md-code-block-radius: var(--radius-xl, 12px);
-  --md-code-block-padding: 14px 16px;
+  --md-code-block-radius: var(--radius-lg, 8px);
+  --md-code-block-padding: var(--space-3, 12px) var(--space-4, 16px);
   --md-code-font: var(--font-mono);
-  --md-code-font-size: 12.5px;
+  --md-code-font-size: var(--font-size-xs, 12px);
   --md-code-tab-size: 2;
-  --md-code-header-bg: color-mix(in srgb, var(--text-primary) 3.5%, var(--bg-card));
-  --md-code-header-border: var(--border-subtle);
-  --md-code-header-fg: var(--text-secondary);
+  --md-code-header-bg: transparent;
+  --md-code-header-border: transparent;
+  --md-code-header-fg: var(--text-tertiary);
   --md-code-copy-hover-bg: var(--tint-hover);
 
   --md-path-link-bg: transparent;
