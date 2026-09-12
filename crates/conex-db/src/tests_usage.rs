@@ -6,7 +6,7 @@ use crate::usage_analytics::*;
 #[test]
 fn migration_v10_creates_usage_records_table_and_indexes() {
     let db = LocalDb::open_in_memory().unwrap();
-    assert_eq!(db.user_version().unwrap(), 10);
+    assert_eq!(db.user_version().unwrap(), LATEST_VERSION);
 
     let conn = db.conn.lock().unwrap();
     let has_table: i64 = conn
