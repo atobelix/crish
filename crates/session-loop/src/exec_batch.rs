@@ -562,7 +562,8 @@ impl BatchRunner<'_> {
                 tool_name: call.tool_name.clone(),
                 is_error: r.error_kind.is_some(),
                 duration_ms: r.duration_ms,
-                output: r.output.clone(),
+                // U-OUT-RS：Arc::clone 浅拷贝（refcount+1），消除深 clone
+                output: Arc::clone(&r.output),
                 error_code: r.error_kind.map(|k| k.error_code().to_string()),
                 error_message: r.error_message.clone(),
                 // EV-09（D-03）：原子要素透传（attempt/dedup/实际入参/打点）

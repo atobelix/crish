@@ -756,6 +756,13 @@ pub(crate) async fn run_task_impl(
         permission_mode: permission_mode
             .as_deref()
             .map(|mode| PermissionMode::from_engine_str(Some(mode))),
+        // U-OUT-RS / T-D1-D（N6）：生产装配显式 Some——禁止仅靠
+        // `..Default::default()` 隐式继承（旧路径 None）；常量来自 D0
+        // conex-shared::perf_budget::TOOL_OUTPUT_BUDGET_BYTES_DEFAULT（64KiB
+        // 事件载荷预算）。测试注入 None 仍合法（工具级 200KB 覆盖保留）。
+        output_budget_bytes: Some(
+            conex_shared::perf_budget::TOOL_OUTPUT_BUDGET_BYTES_DEFAULT,
+        ),
         ..ToolBatchOptions::default()
     };
     // 用户消息（clientMessageId 透传，03 §5.3-4；多模态 content 桥——
@@ -1180,14 +1187,19 @@ pub(crate) async fn compact_now_impl(
         ));
     };
     // 6. 压缩（LlmRequired：无 Summarizer / 摘要失败 → 放弃压缩，禁止
-    //    纯丢弃式 stub，E2 F1）
+    //    纯丢弃式 stub，E2 F1）。D10-A：引擎不再裸调 summarizer——经
+    //    preview + 同步 summarize 预计算后传入 precomputed（手动压缩命令
+    //    为同步上下文；async run loop 主路径经 summarize_via_blocking）。
     let engine = conex_compaction::CompactionEngine::new(budget as usize);
+    let summarize_precomputed = engine
+        .preview_compaction(&conversation, &policy)
+        .map(|preview| summarizer.summarize(&preview.dropped, preview.existing.as_deref()));
     let plan = engine.compact_agent_messages_with_stub_policy(
         &conversation,
         budget as usize,
         &policy,
-        Some(summarizer.as_ref()),
         StubPolicy::LlmRequired,
+        summarize_precomputed,
     );
     if plan.llm_unavailable {
         return Err(CoreError::InvalidInput(

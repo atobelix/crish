@@ -92,7 +92,8 @@ impl ToolExecutor {
                     tool_name: call.tool_name.clone(),
                     is_error: true,
                     duration_ms: 0,
-                    output: serde_json::Value::Null,
+                    // U-OUT-RS：出口 Arc——Null 也走共享边界
+                    output: Arc::new(serde_json::Value::Null),
                     error_code: Some("tool.cancelled".to_string()),
                     error_message: Some("aborted".to_string()),
                     // EV-09（D-03）：未执行路径原子要素留空
@@ -108,7 +109,8 @@ impl ToolExecutor {
                     tool_name: call.tool_name.clone(),
                     is_error: r.error_kind.is_some(),
                     duration_ms: r.duration_ms,
-                    output: r.output.clone(),
+                    // U-OUT-RS：Arc::clone 浅拷贝（refcount+1），消除深 clone
+                    output: Arc::clone(&r.output),
                     error_code: r.error_kind.map(|k| k.error_code().to_string()),
                     error_message: r.error_message.clone(),
                     // EV-09（D-03）：原子要素透传（attempt/dedup/实际入参/打点）
@@ -679,6 +681,7 @@ impl ToolExecutor {
                 })
                 .await;
         }
+        // U-OUT-RS：ok() 内部包 Arc——出口共享边界自此建立
         let mut r = ClassifiedToolResult::ok(&call.id, &call.tool_name, tool_result.output, 0);
         r.attempt = attempt;
         r.deduplicated = true;
@@ -700,6 +703,7 @@ impl ToolExecutor {
         occurred_at_ms: u64,
         recorded: Vec<ToolEvent>,
     ) -> (ClassifiedToolResult, Vec<ToolEvent>) {
+        // U-OUT-RS：中间件链仍操作 Value；ok() 收口时包 Arc 作出口共享
         let final_output = self
             .apply_on_result_chain(tool, &exec_input, tool_result.output, mw_ctx)
             .await;

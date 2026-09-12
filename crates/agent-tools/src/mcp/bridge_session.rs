@@ -17,6 +17,7 @@
 
 use crate::definition::{ToolDefinition, ToolError};
 use crate::mcp::servers::McpServerConfig;
+use conex_shared::perf_budget::MCP_STDOUT_MAX_LINE_BYTES;
 use conex_types::error::codes;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -471,15 +472,82 @@ fn runtime_state_code(state: McpServerRuntimeState) -> u8 {
 /// stdout 读线程：行分隔 JSON-RPC 消息 → 按 id 投递到挂起请求
 ///
 /// EOF（进程退出 / stdout 关闭）→ 标记会话退出，释放全部挂起请求。
+/// U-MEM（10-M1）：单行累计超 [`MCP_STDOUT_MAX_LINE_BYTES`] →
+/// `mark_exited("stdout line too long")`（connection_failed 语义，非静默），
+/// 替换无界 `lines().next_line()` 形态。
 fn spawn_reader(session: &Arc<McpServerSession>, stdout: tokio::process::ChildStdout) {
     let session = session.clone();
     tokio::spawn(async move {
-        let mut lines = BufReader::new(stdout).lines();
-        while let Ok(Some(line)) = lines.next_line().await {
-            handle_response_line(&session, &line);
+        let mut reader = BufReader::new(stdout);
+        let mut line_buf: Vec<u8> = Vec::with_capacity(8 * 1024);
+        loop {
+            line_buf.clear();
+            // 有界读：累计超限 → connection_failed（非静默）
+            let read_result = read_line_bounded(&mut reader, &mut line_buf).await;
+            match read_result {
+                Ok(Some(())) => {
+                    // 去掉末尾 \n / \r\n
+                    if line_buf.last() == Some(&b'\n') {
+                        line_buf.pop();
+                    }
+                    if line_buf.last() == Some(&b'\r') {
+                        line_buf.pop();
+                    }
+                    match std::str::from_utf8(&line_buf) {
+                        Ok(line) => handle_response_line(&session, line),
+                        Err(_) => {
+                            // 非 UTF-8 行：容忍并忽略（与非 JSON 行同语义）
+                        }
+                    }
+                }
+                Ok(None) => break, // EOF
+                Err(()) => {
+                    // 行长超限：连接失败收场（10-M1 非静默）
+                    session.mark_exited("stdout line too long");
+                    return;
+                }
+            }
         }
         session.mark_exited("stdout 关闭（进程退出或通道中断）");
     });
+}
+
+/// 有界读一行：累计字节超 [`MCP_STDOUT_MAX_LINE_BYTES`] → `Err(())`；
+/// 正常行读完（含 `\n`）→ `Ok(Some(()))`；EOF 且无残留 → `Ok(None)`。
+///
+/// 实现：`fill_buf`/`consume` 逐块推进（BufReader 内缓冲不残留未消费字节，
+/// 与 shell 流式路径同构）；单行触顶立即返回，禁止无界 `next_line()`。
+async fn read_line_bounded<R: tokio::io::AsyncBufRead + Unpin>(
+    reader: &mut R,
+    line_buf: &mut Vec<u8>,
+) -> Result<Option<()>, ()> {
+    loop {
+        let buf = reader.fill_buf().await.map_err(|_| ())?;
+        if buf.is_empty() {
+            return if line_buf.is_empty() {
+                Ok(None)
+            } else {
+                // 最后一行无换行符：按完整行返回（EOF 收口）
+                Ok(Some(()))
+            };
+        }
+        // 在 buf 中找 \n
+        if let Some(pos) = buf.iter().position(|&b| b == b'\n') {
+            line_buf.extend_from_slice(&buf[..=pos]);
+            reader.consume(pos + 1);
+            if line_buf.len() > MCP_STDOUT_MAX_LINE_BYTES {
+                return Err(());
+            }
+            return Ok(Some(()));
+        }
+        // 无换行：整块入 buf，检查上限
+        line_buf.extend_from_slice(buf);
+        let n = buf.len();
+        reader.consume(n);
+        if line_buf.len() > MCP_STDOUT_MAX_LINE_BYTES {
+            return Err(());
+        }
+    }
 }
 
 /// 单行分发：无 id（notification / 对端请求）忽略；有 id → 投递

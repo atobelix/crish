@@ -145,12 +145,24 @@ pub fn decide_command_with_revert(
     mode: PermissionMode,
     policy: &crate::revert::RevertPolicy,
 ) -> PermissionVerdict {
-    use conex_sandbox::semantics::{analyze, CommandClass};
+    use conex_sandbox::semantics::analyze;
     let analysis = analyze(command_line);
+    decide_analysis_with_revert(&analysis, dangerous, requires_approval, mode, policy)
+}
+
+/// 复用调用方已算 `SemanticAnalysis`（U-GATE：prepare 路径 analyze 恰 1 次）。
+pub fn decide_analysis_with_revert(
+    analysis: &conex_sandbox::semantics::SemanticAnalysis,
+    dangerous: bool,
+    requires_approval: bool,
+    mode: PermissionMode,
+    policy: &crate::revert::RevertPolicy,
+) -> PermissionVerdict {
+    use conex_sandbox::semantics::CommandClass;
     if analysis.overall_class == CommandClass::Redline {
         return PermissionVerdict::Deny;
     }
-    if let Some(verdict) = policy.gate_verdict(&analysis, mode) {
+    if let Some(verdict) = policy.gate_verdict(analysis, mode) {
         return verdict;
     }
     decide(dangerous, requires_approval, mode)

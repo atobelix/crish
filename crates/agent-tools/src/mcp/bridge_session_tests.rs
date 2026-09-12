@@ -112,3 +112,43 @@ async fn poisoned_session_request_returns_error_not_panic() {
         .unwrap_err();
     assert_eq!(err.code(), "mcp.connection_failed");
 }
+
+/// U-MEM / 10-M1：read_line_bounded 正常行读完（含 \n）→ Ok(Some)
+#[tokio::test]
+async fn read_line_bounded_normal_line() {
+    let data = b"{\"id\":1}\n{\"id\":2}\n";
+    let mut reader = BufReader::new(&data[..]);
+    let mut buf = Vec::new();
+    assert!(matches!(
+        read_line_bounded(&mut reader, &mut buf).await,
+        Ok(Some(()))
+    ));
+    assert_eq!(&buf[..], b"{\"id\":1}\n");
+    buf.clear();
+    assert!(matches!(
+        read_line_bounded(&mut reader, &mut buf).await,
+        Ok(Some(()))
+    ));
+    assert_eq!(&buf[..], b"{\"id\":2}\n");
+    buf.clear();
+    assert!(matches!(
+        read_line_bounded(&mut reader, &mut buf).await,
+        Ok(None)
+    ));
+}
+
+/// U-MEM / 10-M1：超 MCP_STDOUT_MAX_LINE_BYTES 单行 → Err（connection_failed 语义）
+#[tokio::test]
+async fn read_line_bounded_over_limit_errors() {
+    use conex_shared::perf_budget::MCP_STDOUT_MAX_LINE_BYTES;
+    // 构造超限单行：MAX+1 字节 'a' + '\n'——读满上限后多 1 字节即 Err
+    let limit_plus = MCP_STDOUT_MAX_LINE_BYTES + 1;
+    let data = vec![b'a'; limit_plus + 1];
+    let mut reader = BufReader::with_capacity(64 * 1024, &data[..]);
+    let mut buf = Vec::new();
+    let result = read_line_bounded(&mut reader, &mut buf).await;
+    assert!(
+        matches!(result, Err(())),
+        "超 MCP_STDOUT_MAX_LINE_BYTES 单行必须 Err（connection_failed，非静默）"
+    );
+}

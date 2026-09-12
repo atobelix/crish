@@ -28,6 +28,8 @@ use super::shell_invoke::{
     base64_encode, build_shell_invocation, build_windows_powershell_script, parse_mode, ShellMode,
 };
 use super::shell_output::{clamp_output_bytes, format_command_result, high_output_suggestion};
+use super::shell_output::OutputAccumulator;
+use conex_shared::perf_budget::{SHELL_ACCUM_HARD_CAP_FACTOR, SHELL_MAX_OUTPUT_BYTES_DEFAULT};
 
 fn tool() -> ShellCommandTool {
     ShellCommandTool::new(30_000, 200_000, None)
@@ -1596,4 +1598,32 @@ async fn shell_output_spills_to_log_root_when_truncated() {
     let log_path_str = res["logPath"].as_str().unwrap();
     let log_path = std::path::PathBuf::from(log_path_str);
     assert!(log_path.exists(), "溢出日志文件应已落盘");
+}
+
+/// U-MEM / 10-S1：OutputAccumulator 完成前内存 hard_cap——累计超
+/// `SHELL_MAX_OUTPUT_BYTES_DEFAULT * SHELL_ACCUM_HARD_CAP_FACTOR` 后
+/// 停止 bytes 增长（overflowed=true），preview 继续有界累积（INV-B5）
+#[test]
+fn output_accumulator_hard_cap_bounds_memory() {
+    let hard_cap = SHELL_MAX_OUTPUT_BYTES_DEFAULT * SHELL_ACCUM_HARD_CAP_FACTOR;
+    let mut acc = OutputAccumulator::new();
+    let chunk = vec![b'x'; 64 * 1024];
+    // 超过 hard_cap 的累计追加
+    for _ in 0..((hard_cap / (64 * 1024)) + 4) {
+        acc.append(&chunk, 0);
+    }
+    assert!(acc.overflowed(), "超 hard_cap 后必须触顶标记");
+    let (_text, truncated) = acc.preview_text(SHELL_MAX_OUTPUT_BYTES_DEFAULT);
+    assert!(truncated, "hard_cap 触顶后 preview_text 必须报告截断");
+}
+
+/// U-MEM：hard_cap 内正常累积不触顶（小输出零行为变化回归）
+#[test]
+fn output_accumulator_under_hard_cap_no_overflow() {
+    let mut acc = OutputAccumulator::new();
+    acc.append(b"hello world", 0);
+    assert!(!acc.overflowed(), "hard_cap 内不得触顶");
+    let (text, truncated) = acc.preview_text(SHELL_MAX_OUTPUT_BYTES_DEFAULT);
+    assert!(!truncated, "限内输出不得截断");
+    assert_eq!(text, "hello world");
 }

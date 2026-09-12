@@ -149,8 +149,18 @@ pub(crate) async fn handle(
     Ok(HandlerOutcome::continue_run())
 }
 
-/// 工具结果 → tool 角色消息（ToolResult 块，01 §2.8 步骤 5）
+/// 工具结果 → tool 角色消息（ToolResult 块，01 §2.8 步骤 5）。
+///
+/// **G8 正常路径（U-G8 / DEL-10）**：写入 conversation 前对 `output.text`
+/// 走 [`truncate_tool_output`]（双阈值 2000 行 / 50KiB，与 emergency 同一
+/// 算法两处调用）；截断留痕写入消息 `metadata.g8ToolOutputTruncation`。
 fn tool_result_message(result: &ClassifiedToolResult) -> AgentMessage {
+    let (output, truncation) = tool_output_from_result(result);
+    let metadata = truncation.map(|record| {
+        serde_json::json!({
+            "g8ToolOutputTruncation": record,
+        })
+    });
     AgentMessage {
         id: format!("tool-result-{}", result.id),
         role: AgentMessageRole::Tool,
@@ -158,41 +168,52 @@ fn tool_result_message(result: &ClassifiedToolResult) -> AgentMessage {
         blocks: vec![AgentMessageBlock::ToolResult {
             tool_call_id: result.id.clone(),
             tool_name: result.tool_name.clone(),
-            output: tool_output_from_result(result),
+            output,
             is_error: result.error_kind.is_some(),
         }],
-        metadata: None,
+        metadata,
         client_message_id: None,
         content: None,
     }
 }
 
-/// 分类结果 → ToolOutput（成功：透传输出值；失败：文本 + 错误码结构）
-fn tool_output_from_result(result: &ClassifiedToolResult) -> ToolOutput {
-    if result.is_ok() {
-        if result.output.is_null() {
+/// 分类结果 → ToolOutput + 可选 G8 截断留痕
+/// （成功：透传输出值；失败：文本 + 错误码结构）
+///
+/// 文本字段统一经 [`apply_g8_tool_output_truncation`]（正常工具记录路径）；
+/// emergency 压缩路径的二次截断仍在 `conex-compaction` 引擎侧（CON-6
+/// 同一算法两处调用，非双实现）。
+fn tool_output_from_result(result: &ClassifiedToolResult) -> (
+    ToolOutput,
+    Option<conex_compaction::tool_output::ToolOutputTruncationRecord>,
+) {
+    // D1 Arc 出口（ClassifiedToolResult.output = Arc<Value>）：读路径
+    // as_ref 解引用，不碰装配行
+    let raw: &serde_json::Value = result.output.as_ref();
+    let mut output = if result.is_ok() {
+        if raw.is_null() {
             ToolOutput::empty()
-        } else if let Some(text) = result.output.as_str() {
+        } else if let Some(text) = raw.as_str() {
             ToolOutput::text(text.to_string())
-        } else if let Some(obj) = result.output.as_object() {
+        } else if let Some(obj) = raw.as_object() {
             // 对象形态：仅当含 text/json/artifacts 已知键时按 ToolOutput
             // 结构解析，否则整体作为 json 输出承载（避免未知键被吞）
             let has_known = ["text", "json", "artifacts"]
                 .iter()
                 .any(|k| obj.contains_key(*k));
             if has_known {
-                serde_json::from_value(result.output.clone()).unwrap_or_default()
+                serde_json::from_value(raw.clone()).unwrap_or_default()
             } else {
                 ToolOutput {
                     text: None,
-                    json: Some(result.output.clone()),
+                    json: Some(raw.clone()),
                     artifacts: None,
                 }
             }
         } else {
             ToolOutput {
                 text: None,
-                json: Some(result.output.clone()),
+                json: Some(raw.clone()),
                 artifacts: None,
             }
         }
@@ -205,7 +226,42 @@ fn tool_output_from_result(result: &ClassifiedToolResult) -> ToolOutput {
             })),
             artifacts: None,
         }
+    };
+    let truncation = apply_g8_tool_output_truncation(result, &mut output);
+    (output, truncation)
+}
+
+/// G8：正常工具结果路径截断（写 conversation 前；限额 =
+/// [`ToolOutputTruncationLimits::default`] = D0 perf_budget 2000 行 / 50KiB）。
+///
+/// 仅处理 `output.text`（json/artifacts 不经 G8——语义分列：执行器
+/// `output_budget_bytes` 归 U-OUT-RS，前端 hardCap 归 U-OUT-FE）。
+/// 返回 `Some(record)` 当且仅当发生截断（留痕不静默丢弃）。
+fn apply_g8_tool_output_truncation(
+    result: &ClassifiedToolResult,
+    output: &mut ToolOutput,
+) -> Option<conex_compaction::tool_output::ToolOutputTruncationRecord> {
+    let text = output.text.as_mut()?;
+    let trunc = conex_compaction::tool_output::truncate_tool_output(
+        text,
+        &conex_compaction::tool_output::ToolOutputTruncationLimits::default(),
+    );
+    if !trunc.truncated {
+        return None;
     }
+    let record = conex_compaction::tool_output::ToolOutputTruncationRecord::from_result(&trunc);
+    tracing::info!(
+        target: "run",
+        tool_name = %result.tool_name,
+        tool_call_id = %result.id,
+        dropped_lines = record.dropped_lines,
+        original_bytes = record.original_bytes,
+        truncated_bytes = record.truncated_bytes,
+        tokens_saved = record.tokens_saved,
+        "G8 工具输出截断（正常路径）"
+    );
+    *text = trunc.text;
+    Some(record)
 }
 
 /// 工具事件 → AgentEvent（ToolBatchResult 组装，前端硬依赖 03 §5.1-7/8）
@@ -424,8 +480,12 @@ fn emit_tool_events(state: &mut LoopState, events: &[ToolEvent]) {
 
 /// 工具事件结束载荷 → ToolOutput（与 tool 角色消息共用语义：
 /// 成功透传输出；失败 text=错误文案 + json={code,kind}）
+///
+/// U-OUT-RS：入参为 `&Arc<Value>`（ToolEnd 出口共享边界）；映射到
+/// AgentEvent/消息时仍需 owned ToolOutput——本处一次深 clone 收口，
+/// 不扩 IPC 全链 Arc（归 D6/D11）。
 fn tool_output_from_parts(
-    output: &serde_json::Value,
+    output: &Arc<serde_json::Value>,
     is_error: bool,
     error_code: Option<&str>,
     error_message: &Option<String>,
@@ -450,17 +510,17 @@ fn tool_output_from_parts(
             .iter()
             .any(|k| obj.contains_key(*k));
         if has_known {
-            return serde_json::from_value(output.clone()).unwrap_or_default();
+            return serde_json::from_value((**output).clone()).unwrap_or_default();
         }
         return ToolOutput {
             text: None,
-            json: Some(output.clone()),
+            json: Some((**output).clone()),
             artifacts: None,
         };
     }
     ToolOutput {
         text: None,
-        json: Some(output.clone()),
+        json: Some((**output).clone()),
         artifacts: None,
     }
 }

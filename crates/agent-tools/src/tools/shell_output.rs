@@ -12,11 +12,11 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::io::{AsyncBufRead, AsyncBufReadExt, BufReader};
 
 use super::shell_invoke::decode_console_bytes;
-
-/// 流式输出内存预览上限（T-AB-01：头部/尾部各 24KB，结果侧不驻留全量字节）
-const PREVIEW_HEAD_BYTES: usize = 24 * 1024;
-/// 流式输出内存预览上限（T-AB-01：尾部 24KB）
-const PREVIEW_TAIL_BYTES: usize = 24 * 1024;
+// D0/U-BUDGET：预算定义收敛至 conex-shared::perf_budget（仅 re-export，行为不变）
+use conex_shared::perf_budget::{
+    SHELL_ACCUM_HARD_CAP_FACTOR, SHELL_MAX_OUTPUT_BYTES_DEFAULT,
+    SHELL_PREVIEW_HEAD_BYTES as PREVIEW_HEAD_BYTES, SHELL_PREVIEW_TAIL_BYTES as PREVIEW_TAIL_BYTES,
+};
 
 /// 超时结果构造（T-AB-02：sync 树杀路径与 S1 流式路径共用同一形状——
 /// timedOut=true + 超时文案，对齐改造前语义，防两路径漂移）
@@ -114,18 +114,28 @@ pub(crate) fn epoch_millis_now() -> u64 {
         .unwrap_or(0)
 }
 
-/// 流式输出累积器（T-AB-01）
+/// 流式输出累积器（T-AB-01 / U-MEM）
 ///
 /// - `bytes`：全量字节——clamp 与截断落盘（T-AB-03）需要，命令完成后即释放；
+///   **U-MEM hard_cap**：增长上限 = `SHELL_MAX_OUTPUT_BYTES_DEFAULT × SHELL_ACCUM_HARD_CAP_FACTOR`
+///   （默认 800KB），超限后停止 extend（仅继续有界 preview），防止完成前无界驻留（10-S1）；
 /// - `preview`：有界内存预览（头 24KB + 尾 24KB）——截断时结果侧展示内容，
 ///   原始全量字节不驻留结果；
 /// - `lines` / `last_output_at_ms`：行计数与最近输出时间（后台化预留，
-///   R-AB3 资源监控消费）。
+///   R-AB3 资源监控消费）；
+/// - `overflowed`：hard_cap 触顶标记（preview_text 与 truncated 判定消费）。
 pub(crate) struct OutputAccumulator {
     bytes: Vec<u8>,
     preview: BoundedPreview,
     lines: u64,
     last_output_at_ms: u64,
+    /// hard_cap 触顶：bytes 增长已停止（10-S1 / U-MEM）
+    overflowed: bool,
+}
+
+/// 全量字节 hard_cap（完成前内存上界）
+fn accum_hard_cap() -> usize {
+    SHELL_MAX_OUTPUT_BYTES_DEFAULT * SHELL_ACCUM_HARD_CAP_FACTOR
 }
 
 impl OutputAccumulator {
@@ -135,12 +145,25 @@ impl OutputAccumulator {
             preview: BoundedPreview::new(),
             lines: 0,
             last_output_at_ms: 0,
+            overflowed: false,
         }
     }
 
     /// 追加一个数据块（更新全量字节 / 有界预览 / 行计数 / 最近输出时间）
+    ///
+    /// U-MEM：bytes 增长受 hard_cap 约束——触顶后仅继续 preview / lines，
+    /// 禁止无界 `bytes.extend`（完成前内存峰值有界，INV-B5）。
     pub(crate) fn append(&mut self, chunk: &[u8], now_ms: u64) {
-        self.bytes.extend_from_slice(chunk);
+        let cap = accum_hard_cap();
+        if self.bytes.len() < cap {
+            let take = (cap - self.bytes.len()).min(chunk.len());
+            self.bytes.extend_from_slice(&chunk[..take]);
+            if take < chunk.len() {
+                self.overflowed = true;
+            }
+        } else {
+            self.overflowed = true;
+        }
         self.preview.append(chunk);
         self.lines += chunk.iter().filter(|&&b| b == b'\n').count() as u64;
         if !chunk.is_empty() {
@@ -148,15 +171,29 @@ impl OutputAccumulator {
         }
     }
 
+    /// hard_cap 是否已触顶（bytes 增长停止）
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub(crate) fn overflowed(&self) -> bool {
+        self.overflowed
+    }
+
     /// 预览文本：头 24KB + 截断标记 + 尾 24KB（未截断时为全量）
-    fn preview_text(&self, max_output_bytes: usize) -> (String, bool) {
-        if self.bytes.len() <= max_output_bytes {
+    /// pub(crate)：U-MEM hard_cap 探针单测消费（shell_tests）
+    pub(crate) fn preview_text(&self, max_output_bytes: usize) -> (String, bool) {
+        if self.bytes.len() <= max_output_bytes && !self.overflowed {
             return (decode_console_bytes(&self.bytes), false);
         }
-        let omitted = self
-            .bytes
-            .len()
-            .saturating_sub(self.preview.head.len() + self.preview.tail.len());
+        // overflowed 或超预算：展示有界预览 + 截断标记
+        let omitted = if self.overflowed {
+            // hard_cap 触顶后真实总量未知——用已收 bytes 表达下限
+            self.bytes
+                .len()
+                .saturating_sub(self.preview.head.len() + self.preview.tail.len())
+        } else {
+            self.bytes
+                .len()
+                .saturating_sub(self.preview.head.len() + self.preview.tail.len())
+        };
         let text = format!(
             "{}\n\n[output truncated: {omitted} bytes omitted]\n\n{}",
             decode_console_bytes(&self.preview.head),

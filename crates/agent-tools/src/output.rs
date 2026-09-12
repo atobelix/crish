@@ -12,9 +12,10 @@
 //! 序列化包含字段值——本实现以 05 §2.5 测试语义为准（artifacts 数组整体 JSON 序列化）。
 
 use serde_json::Value;
+// D0/U-BUDGET：正文预算默认值定义收敛至 conex-shared::perf_budget（行为不变）
+// 镜像语义：对齐 TS DEFAULT_INLINE_CHARS=24000 的量级
+pub use conex_shared::perf_budget::TOOL_INLINE_BYTES_DEFAULT as DEFAULT_INLINE_BYTES;
 
-/// 正文预算默认值（字节，对齐 TS DEFAULT_INLINE_CHARS=24000 的量级）
-pub const DEFAULT_INLINE_BYTES: usize = 24_000;
 /// 头部占比默认值（对齐 TS DEFAULT_HEAD_RATIO=0.4）
 pub const DEFAULT_HEAD_RATIO: f64 = 0.4;
 /// 头部占比允许区间（对齐 TS clampRatio：0.2..=0.8）

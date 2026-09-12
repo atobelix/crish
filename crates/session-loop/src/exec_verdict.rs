@@ -259,7 +259,8 @@ pub(crate) fn mark_rest_cancelled(
             tool_name: call.tool_name.clone(),
             is_error: true,
             duration_ms: 0,
-            output: serde_json::Value::Null,
+            // U-OUT-RS：出口 Arc——Null 也走共享边界
+            output: Arc::new(serde_json::Value::Null),
             error_code: Some("tool.cancelled".to_string()),
             error_message: Some("cancelled: sibling failure".to_string()),
             // EV-09（D-03）：未执行路径原子要素留空

@@ -53,7 +53,7 @@ fn approval_resolved_expired_maps_to_agent_event() {
             tool_name: "shell_command".into(),
             is_error: true,
             duration_ms: 0,
-            output: serde_json::Value::Null,
+            output: serde_json::Value::Null.into(),
             error_code: Some("tool.approval_expired".into()),
             error_message: Some("approval expired".into()),
             attempt: Some(1),
@@ -95,7 +95,7 @@ fn tool_result_message_id_derivation_documented() {
         tool_name: "echo".into(),
         error_kind: None,
         error_message: None,
-        output: serde_json::json!({"ok": true}),
+        output: serde_json::json!({"ok": true}).into(),
         duration_ms: 1,
         attempt: 1,
         deduplicated: false,
@@ -117,7 +117,7 @@ fn tool_result_message_id_derivation_documented() {
         tool_name: "echo".into(),
         error_kind: None,
         error_message: None,
-        output: serde_json::json!({"ok": true}),
+        output: serde_json::json!({"ok": true}).into(),
         duration_ms: 1,
         attempt: 1,
         deduplicated: false,
@@ -139,5 +139,88 @@ fn tool_result_message_id_derivation_documented() {
         })
         .id,
         "同 tool-call id 派生相同消息 id（F3-10 现状契约：冲突形态已知）"
+    );
+}
+
+/// G8 正常路径（U-G8 / DEL-10）：超限工具输出在写 conversation 前被
+/// head+标记+tail 截断；留痕写入消息 metadata.g8ToolOutputTruncation。
+#[test]
+fn g8_normal_path_truncates_oversize_tool_text() {
+    // 超默认字节阈值（50KiB）：单行长文本必截断
+    let oversized = "x".repeat(
+        conex_compaction::tool_output::TOOL_OUTPUT_MAX_BYTES_DEFAULT + 1_024,
+    );
+    let ok = ClassifiedToolResult {
+        id: "call_g8".into(),
+        tool_name: "shell_command".into(),
+        error_kind: None,
+        error_message: None,
+        output: serde_json::json!(oversized).into(),
+        duration_ms: 1,
+        attempt: 1,
+        deduplicated: false,
+        executed_input: None,
+        occurred_at_ms: None,
+    };
+    let message = tool_result_message(&ok);
+    let AgentMessageBlock::ToolResult { output, .. } = &message.blocks[0] else {
+        panic!("tool 角色消息应含 ToolResult 块");
+    };
+    let text = output.text.as_deref().expect("截断后仍应有 text");
+    assert!(
+        text.len() < oversized.len(),
+        "G8 正常路径必须截断超限文本（原 {} → 现 {}）",
+        oversized.len(),
+        text.len()
+    );
+    assert!(
+        text.contains("截断") || text.contains("..."),
+        "截断文本必须携带可见标记（留痕不静默丢弃）"
+    );
+    // 留痕：metadata 记录截断计数
+    let meta = message
+        .metadata
+        .as_ref()
+        .expect("发生截断时 metadata 必须携带 g8 留痕");
+    let record = meta
+        .get("g8ToolOutputTruncation")
+        .expect("metadata.g8ToolOutputTruncation 必须存在");
+    assert_eq!(
+        record.get("truncated").and_then(|v| v.as_bool()),
+        Some(true)
+    );
+    assert!(
+        record
+            .get("originalBytes")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0)
+            > 0,
+        "留痕必须含 originalBytes"
+    );
+}
+
+/// G8 正常路径：限内短输出不截断、不写留痕（零行为变化回归锚）。
+#[test]
+fn g8_normal_path_leaves_short_tool_text_untouched() {
+    let ok = ClassifiedToolResult {
+        id: "call_short".into(),
+        tool_name: "echo".into(),
+        error_kind: None,
+        error_message: None,
+        output: serde_json::json!("ok").into(),
+        duration_ms: 1,
+        attempt: 1,
+        deduplicated: false,
+        executed_input: None,
+        occurred_at_ms: None,
+    };
+    let message = tool_result_message(&ok);
+    let AgentMessageBlock::ToolResult { output, .. } = &message.blocks[0] else {
+        panic!("tool 角色消息应含 ToolResult 块");
+    };
+    assert_eq!(output.text.as_deref(), Some("ok"), "限内文本不得被改写");
+    assert!(
+        message.metadata.is_none(),
+        "未截断不得写 g8 留痕 metadata（避免污染零截断路径）"
     );
 }

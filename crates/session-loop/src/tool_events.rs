@@ -35,8 +35,10 @@
 //! > 终值仍由 tool-end 承载；`ToolProgress`（agent-tools 流式协议类型）保留。
 
 use agent_tools::permission::PermissionMode;
+use conex_shared::perf_budget::TOOL_OUTPUT_BUDGET_BYTES_DEFAULT;
 use conex_types::tool::{ToolCategory, ToolConcurrency};
 use serde_json::Value;
+use std::sync::Arc;
 use std::time::Duration;
 
 /// 工具批处理事件（执行器产出，供主循环/编排层翻译为 AgentEvent）
@@ -81,13 +83,17 @@ pub enum ToolEvent {
         decision: ApprovalDecision,
     },
     /// 单工具结束（携带完整分类结果：成功输出 / 错误码+文案）
+    ///
+    /// U-OUT-RS / T-D1-D：`output` 为 `Arc<Value>`——执行器出口共享边界，
+    /// exec_batch/exec_single 对同一 output 的拷贝为浅 clone（refcount+1），
+    /// 消除多份深 clone。IPC 全链 Arc 扩展归 D6/D11（本维不扩）。
     ToolEnd {
         call_id: String,
         tool_name: String,
         is_error: bool,
         duration_ms: u64,
-        /// 成功时的结构化输出（null 表示无输出）
-        output: Value,
+        /// 成功时的结构化输出（null 表示无输出）；Arc 共享，出口浅 clone
+        output: Arc<Value>,
         /// 错误码（is_error 时有值，如 tool.execution_failed）
         error_code: Option<String>,
         /// 错误文案（is_error 时有值）
@@ -229,6 +235,9 @@ impl ToolErrorKind {
 /// EV-09（D-03）原子要素：attempt/deduplicated/executed_input/occurred_at_ms
 /// 随本结构从执行器（exec_single / exec_batch）透传到翻译层
 /// （executing_tools.rs），落 ToolEnd 事件载荷。
+///
+/// U-OUT-RS / T-D1-D：`output` 为 `Arc<Value>`——执行器出口共享边界，
+/// 与 ToolEvent::ToolEnd 共享同一所有权，消除出口层多份深 clone。
 #[derive(Debug, Clone)]
 pub struct ClassifiedToolResult {
     /// 对应 ToolBatchCall.id
@@ -239,8 +248,8 @@ pub struct ClassifiedToolResult {
     pub error_kind: Option<ToolErrorKind>,
     /// 错误文案
     pub error_message: Option<String>,
-    /// 成功时的工具输出（JSON）
-    pub output: Value,
+    /// 成功时的工具输出（JSON）；Arc 共享边界（出口浅 clone）
+    pub output: Arc<Value>,
     /// 执行耗时（未执行语义保持 0：abort/denied/expired/blocked/not-found）
     pub duration_ms: u64,
     /// 审批重试 attempt 序号（首 attempt=1；审批重试后终态=2）
@@ -273,7 +282,7 @@ impl ClassifiedToolResult {
             tool_name: tool_name.into(),
             error_kind: Some(kind),
             error_message: Some(message.into()),
-            output: serde_json::Value::Null,
+            output: Arc::new(serde_json::Value::Null),
             duration_ms,
             attempt: 1,
             deduplicated: false,
@@ -294,7 +303,7 @@ impl ClassifiedToolResult {
             tool_name: tool_name.into(),
             error_kind: None,
             error_message: None,
-            output,
+            output: Arc::new(output),
             duration_ms,
             attempt: 1,
             deduplicated: false,
@@ -313,9 +322,12 @@ pub struct ToolBatchOptions {
     pub fail_strategy: FailStrategy,
     /// 是否启用审批（配合 ApprovalGate）
     pub approval_enabled: bool,
-    /// 单工具输出预算（字节；None 不截断，默认 None）。
-    /// 透传 agent-tools executor 的 summarize 截断语义（T06.4.2 补缺省，
-    /// 修复 tool_exec.rs 中硬编码 None 的死配置）
+    /// 单工具输出预算（字节；None 不截断）。
+    ///
+    /// U-OUT-RS / T-D1-D：**默认 Some(TOOL_OUTPUT_BUDGET_BYTES_DEFAULT)**
+    /// （D0 常量 64KiB 事件载荷预算）。生产装配点（run_launch）显式
+    /// `Some`，禁止仅靠 `..Default::default()` 隐式继承；测试若需无预算
+    /// 须**显式**传 `None`。透传 agent-tools executor 的 summarize 截断语义。
     pub output_budget_bytes: Option<usize>,
     /// 权限模式（R4 T10）：显式设置时按工具 dangerous 标记 + 模式做三态
     /// 判定（ask 问询 / plan 拒绝写类 / full-access 放行）；None = 既有
@@ -340,7 +352,9 @@ impl Default for ToolBatchOptions {
             timeout: Duration::from_secs(60),
             fail_strategy: FailStrategy::ContinueDrain,
             approval_enabled: false,
-            output_budget_bytes: None,
+            // U-OUT-RS / T-D1-D：默认 Some——防测试/旁路装配漏网无预算
+            //（生产 run_launch 仍须显式写 Some，N6 负向断言）
+            output_budget_bytes: Some(TOOL_OUTPUT_BUDGET_BYTES_DEFAULT),
             permission_mode: None,
             approval_timeout: None,
             max_parallel: None,
