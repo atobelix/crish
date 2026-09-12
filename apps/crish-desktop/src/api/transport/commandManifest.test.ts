@@ -77,8 +77,10 @@ describe('commandManifest', () => {
       // 用量监控与时序分析五命令追加（126 → 131）
       // 多笔记综合管理体系四命令追加（131 → 135）
       // 用户账号与云端设备管理面七命令追加（135 → 142）
-      expect(registered).toBe(142);
-      expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(142);
+      // 偏好持久化面三命令追加（142 → 145，prefs_get / prefs_set / prefs_delete）
+      // 首绘就绪握手命令追加（145 → 146，workbench_window_ready）
+      expect(registered).toBe(146);
+      expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(146);
     });
 
     it('命令名唯一', () => {
@@ -149,6 +151,10 @@ describe('commandManifest', () => {
       expect(isRegisteredCommand('usage_clear_history')).toBe(true);
       expect(isRegisteredCommand('usage_record_delta')).toBe(true);
       expect(isRegisteredCommand('usage_import_legacy_snapshot')).toBe(true);
+      // 偏好持久化面三命令已接线
+      expect(isRegisteredCommand('prefs_get')).toBe(true);
+      expect(isRegisteredCommand('prefs_set')).toBe(true);
+      expect(isRegisteredCommand('prefs_delete')).toBe(true);
       // 未知名
       expect(isRegisteredCommand('nope')).toBe(false);
     });
@@ -293,8 +299,8 @@ describe('commandManifest', () => {
     it('断言二式：双端总数一致（总数一致 + 一式子集 ⇒ registered 全等）', () => {
       const rust = rustManifestOnce();
       const total = rust.registered.length + rust.pending.length;
-      expect(total).toBe(142);
-      expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(142);
+      expect(total).toBe(146);
+      expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(146);
     });
 
     it('断言三式：登记先行（registered=false）名集合双向一致', () => {

@@ -142,7 +142,7 @@ function extractFrontendInvokeNames(): {
   // 命令形态前缀：抽取到的字面量必须是命令名形态（tauriInvoke.ts 内部
   // `invoke(cmd, args)` 变量参数调用、`status: 'ok'` 等通用字符串不是命令）
   const COMMAND_PREFIX_RE =
-    /^(core_|workbench_|config_|provider_|multi_device_|browser_|note_|usage_|auth_|list_|get_|load_|save_|set_|import_|cleanup_|touch_|upsert_|trash_|catalog_|create-|update-|delete-|list-|trigger-|computer_|kill_|resume_)/;
+    /^(core_|workbench_|config_|provider_|multi_device_|browser_|note_|usage_|auth_|prefs_|list_|get_|load_|save_|set_|import_|cleanup_|touch_|upsert_|trash_|catalog_|create-|update-|delete-|list-|trigger-|computer_|kill_|resume_)/;
   const constRe = /\bconst\s+[A-Z][A-Z0-9_]*\s*=\s*'([a-z][a-z0-9_-]*)'/g;
   const templateRe =
     /\b(invoke|invokeTyped|invokeResult|transport\.request|transport\.send)\s*\(\s*`/g;
@@ -215,6 +215,8 @@ const GHOST_EXEMPTIONS: ReadonlySet<string> = new Set([
   'workbench_select_folder',
   // workbench_http_request：原生通用出站代理通道，保留供扩展与备用网络探测
   'workbench_http_request',
+  // workbench_window_ready：窗口首绘显现门闩（Stage 1/2：由 public/loader.js 骨架屏直出调用，非 src/ 静态字面量）
+  'workbench_window_ready',
   // ── 退役面（computer-panel 旧投屏残留已物理删除，Rust 侧命令面仍登记）──
   // computer_session_enable / computer_session_disable / computer_status：
   // 原生浏览器与面板标准化战役（决策 1 同类退役）——computer-panel 前端壳

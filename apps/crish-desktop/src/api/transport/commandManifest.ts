@@ -58,6 +58,7 @@ export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
   contractVersion: COMMAND_MANIFEST_CONTRACT_VERSION,
   commands: [
     // ── GUI 专属面（workbench_*，§2.3）──
+    entry('workbench_window_ready', 'workbench', 'gui'),
     entry('workbench_run_shell', 'workbench', 'gui'),
     // PE-07 T07.3（C-02/C-03）：git 参数数组执行 + 参数 schema 白名单
     entry('workbench_git_run', 'workbench', 'gui'),
@@ -250,6 +251,10 @@ export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
     entry('usage_clear_history', 'usage', 'gui'),
     entry('usage_record_delta', 'usage', 'gui'),
     entry('usage_import_legacy_snapshot', 'usage', 'gui'),
+    // ── 偏好持久化面（SSOT N3：prefs_* 双端 1:1 对齐）──
+    entry('prefs_get', 'preferences', 'engine'),
+    entry('prefs_set', 'preferences', 'engine'),
+    entry('prefs_delete', 'preferences', 'engine'),
   ],
 };
 
