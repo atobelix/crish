@@ -525,3 +525,8 @@ orchestrator-snapshot.json.prev
 !reference/markdown-editor/compliance-report-baseline.json
 !reference/markdown-editor/perf.mjs
 !reference/markdown-editor/scripts/**
+
+# B6 设置域清零战役 · 新增兜底漂移/内联硬编码门禁入库放行（门禁脚本是资产，
+# 必须可被 git 跟踪，否则 CI checkout 后门禁缺失；惯例同上 T-E 批次放行）
+!scripts/check-token-fallback-drift.mjs
+!scripts/check-inline-style-hardcode.mjs
