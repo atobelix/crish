@@ -94,7 +94,8 @@ impl ToolExecutor {
                     duration_ms: 0,
                     // U-OUT-RS：出口 Arc——Null 也走共享边界
                     output: Arc::new(serde_json::Value::Null),
-                    error_code: Some("tool.cancelled".to_string()),
+                    // Tier-1（02 §4.1）：统一 codes::TOOL_CANCELLED 常量
+                    error_code: Some(conex_types::error::codes::TOOL_CANCELLED.to_string()),
                     error_message: Some("aborted".to_string()),
                     // EV-09（D-03）：未执行路径原子要素留空
                     attempt: None,

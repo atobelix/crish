@@ -31,8 +31,8 @@ use std::sync::Arc;
 
 use super::super::end::EndDecision;
 use super::super::handlers::{
-    check_control, dispatch, last_assistant_with_tool_calls, record_message, HandlerOutcome,
-    LoopState,
+    check_control, dispatch, last_assistant_with_tool_calls, record_message,
+    synthesize_and_record_interrupted_calls, HandlerOutcome, LoopState,
 };
 use super::super::LoopError;
 
@@ -47,7 +47,18 @@ pub(crate) async fn handle(
     approval: Option<Arc<dyn ApprovalGate>>,
 ) -> Result<HandlerOutcome, LoopError> {
     // 1. abort / 控制意图检查（L3 强停可立即中断）
+    // Tier-1（02 §3.1.1 DEL-01）：SP-1 前置打断不得裸退——先就地合成
+    // 未派发调用的 ToolResult 再退出，消除孤儿泄漏。
     if let Some(end) = check_control(state)? {
+        if let Some(assistant) = last_assistant_with_tool_calls(state) {
+            let assistant = assistant.clone();
+            synthesize_and_record_interrupted_calls(
+                state,
+                &assistant,
+                codes::TOOL_ABORTED_BEFORE_DISPATCH,
+                "tool execution aborted before dispatch",
+            );
+        }
         return Ok(HandlerOutcome::end(end));
     }
 

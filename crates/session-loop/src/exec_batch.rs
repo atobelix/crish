@@ -180,13 +180,23 @@ impl ToolExecutor {
         events.push(ToolEvent::BatchEnd { batch_id });
 
         // 防御性兜底：正常路径下（含取消路径）全部结果应有值；
-        // debug 构建断言暴露遗漏路径，生产保持降级容错（不回退 panic）
+        // debug 构建断言暴露遗漏路径，生产保持降级容错（不回退 panic）。
+        // Tier-1（02 §3.1.3 DEL-04）：缺失项绑定 calls[i] 真值 id/tool_name，
+        // 彻底消除 ("","") 空串伪造（空串 id 无法与任何调用配对）。
         debug_assert!(results.iter().all(Option::is_some));
         let results = results
             .into_iter()
-            .map(|r| {
+            .enumerate()
+            .map(|(i, r)| {
                 r.unwrap_or_else(|| {
-                    ClassifiedToolResult::error("", "", ToolErrorKind::Cancelled, "cancelled", 0)
+                    let call = &calls[i];
+                    ClassifiedToolResult::error(
+                        &call.id,
+                        &call.tool_name,
+                        ToolErrorKind::Cancelled,
+                        "cancelled: execution aborted or skipped",
+                        0,
+                    )
                 })
             })
             .collect();

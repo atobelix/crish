@@ -183,11 +183,16 @@ pub enum ToolErrorKind {
     SoftDeny,
     /// 因 abort / 兄弟失败被取消
     Cancelled,
+    /// 分发前中止（session-integrity-repair 02 §4.2：SP-1 / 流末尾中断）
+    AbortedBeforeDispatch,
+    /// 崩溃恢复结果未知（冷启动自愈合成）
+    OutcomeUnknown,
 }
 
 impl ToolErrorKind {
     /// 非 fatal 的审批/控制类错误（softDeny/timedOut/cancelled/
-    /// approval_expired/user_denied/approval_required，01 §五.8 排除清单）
+    /// approval_expired/user_denied/approval_required，01 §五.8 排除清单；
+    /// 02 §4.2 追加 AbortedBeforeDispatch / OutcomeUnknown）
     /// ——永不致命。
     pub fn is_never_fatal(self) -> bool {
         matches!(
@@ -198,6 +203,8 @@ impl ToolErrorKind {
                 | ToolErrorKind::ApprovalRequired
                 | ToolErrorKind::SoftDeny
                 | ToolErrorKind::Cancelled
+                | ToolErrorKind::AbortedBeforeDispatch
+                | ToolErrorKind::OutcomeUnknown
         )
     }
 
@@ -214,18 +221,21 @@ impl ToolErrorKind {
         tool_fatal_on_error
     }
 
-    /// 错误码（对齐 wire 协议 tool.* 域，03 §5.1-7）
+    /// 错误码（对齐 wire 协议 tool.* 域，03 §5.1-7；02 §4.2 对齐 F01 常量）
     pub fn error_code(self) -> &'static str {
+        use conex_types::error::codes;
         match self {
-            ToolErrorKind::NotFound => "tool.not_found",
-            ToolErrorKind::InvalidInput => "tool.invalid_input",
-            ToolErrorKind::ExecutionFailed => "tool.execution_failed",
+            ToolErrorKind::NotFound => codes::TOOL_NOT_FOUND,
+            ToolErrorKind::InvalidInput => codes::TOOL_INVALID_INPUT,
+            ToolErrorKind::ExecutionFailed => codes::TOOL_EXECUTION_FAILED,
             ToolErrorKind::Timeout => "tool.timeout",
             ToolErrorKind::UserDenied => "tool.user_denied",
             ToolErrorKind::ApprovalExpired => "tool.approval_expired",
             ToolErrorKind::ApprovalRequired => "tool.requires_approval",
             ToolErrorKind::SoftDeny => "tool.soft_deny",
-            ToolErrorKind::Cancelled => "tool.cancelled",
+            ToolErrorKind::Cancelled => codes::TOOL_CANCELLED,
+            ToolErrorKind::AbortedBeforeDispatch => codes::TOOL_ABORTED_BEFORE_DISPATCH,
+            ToolErrorKind::OutcomeUnknown => codes::TOOL_OUTCOME_UNKNOWN,
         }
     }
 }

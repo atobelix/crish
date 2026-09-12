@@ -261,7 +261,9 @@ pub(crate) fn mark_rest_cancelled(
             duration_ms: 0,
             // U-OUT-RS：出口 Arc——Null 也走共享边界
             output: Arc::new(serde_json::Value::Null),
-            error_code: Some("tool.cancelled".to_string()),
+            // Tier-1（02 §3.1.3 DEL-05）：统一 codes::TOOL_CANCELLED 常量，
+            // 废除字面量 "tool.cancelled"
+            error_code: Some(conex_types::error::codes::TOOL_CANCELLED.to_string()),
             error_message: Some("cancelled: sibling failure".to_string()),
             // EV-09（D-03）：未执行路径原子要素留空
             attempt: None,
