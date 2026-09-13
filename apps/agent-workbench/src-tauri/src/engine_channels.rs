@@ -699,6 +699,8 @@ pub(crate) struct BridgeLiveSink {
     bridge: Arc<BufferedRunEventBridge>,
     /// 本 run 标识（信封 runId 注入）
     run_id: String,
+    /// 真缓冲：上次 flush 时间戳 ms（D1-E）
+    last_flush_ms: std::sync::atomic::AtomicU64,
 }
 
 impl BridgeLiveSink {
@@ -707,6 +709,28 @@ impl BridgeLiveSink {
         Self {
             bridge,
             run_id: run_id.into(),
+            last_flush_ms: std::sync::atomic::AtomicU64::new(0),
+        }
+    }
+
+    /// 真缓冲：距上次 flush 超过 LIVE_FLUSH_INTERVAL_MS 才冲刷，使缓冲层生效。
+    /// message-end / run-terminal 等 Critical 事件仍可被调用方在更高层 flush。
+    fn maybe_flush_live(&self) {
+        use std::sync::atomic::Ordering;
+        const LIVE_FLUSH_INTERVAL_MS: u64 = 8;
+        let now_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0);
+        let last = self.last_flush_ms.load(Ordering::Relaxed);
+        if now_ms.saturating_sub(last) >= LIVE_FLUSH_INTERVAL_MS {
+            if self
+                .last_flush_ms
+                .compare_exchange(last, now_ms, Ordering::Relaxed, Ordering::Relaxed)
+                .is_ok()
+            {
+                let _ = self.bridge.flush();
+            }
         }
     }
 }
@@ -714,10 +738,10 @@ impl BridgeLiveSink {
 impl LiveEventSink for BridgeLiveSink {
     fn push_live(&self, event: AgentEvent) {
         // 信封：{event, runId: Some, sequence: None}（DIM-01 实时轨）
+        // D1-E 真缓冲：入队后仅时间窗 flush，禁止每事件立即 flush
         let envelope = AgentEventEnvelope::new(event, Some(self.run_id.clone()), None);
         self.bridge.emit(&envelope);
-        // 实时通道立即发射
-        self.bridge.flush();
+        self.maybe_flush_live();
     }
 }
 

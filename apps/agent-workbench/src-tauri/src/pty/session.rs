@@ -456,26 +456,36 @@ pub(crate) fn create_session(
     }
 
     // Reader + wait thread. Emits output then exit; marks Dead on EOF / error.
+    // 02-X2 / D8.2：PTY 输出合批——同 ptyId 在 64KB 或短读（突发结束）时合并 emit。
     let emit_id = pty_id.clone();
     let app_reader = app.clone();
     thread::Builder::new()
         .name(format!("pty-read-{pty_id}"))
         .spawn(move || {
+            const BATCH_MAX_BYTES: usize = 64 * 1024;
             let mut buf = [0u8; 8192];
             let mut decoder = Utf8ChunkBuffer::new();
+            let mut pending: String = String::new();
+
+            let mut flush_pending = |pending: &mut String| {
+                if pending.is_empty() {
+                    return;
+                }
+                let _ = app_reader.emit(
+                    "workbench://pty-output",
+                    PtyOutputEvent {
+                        pty_id: emit_id.clone(),
+                        data: std::mem::take(pending),
+                    },
+                );
+            };
+
             loop {
                 match reader.read(&mut buf) {
                     Ok(0) => {
                         let flushed = decoder.flush_lossy();
-                        if !flushed.is_empty() {
-                            let _ = app_reader.emit(
-                                "workbench://pty-output",
-                                PtyOutputEvent {
-                                    pty_id: emit_id.clone(),
-                                    data: flushed,
-                                },
-                            );
-                        }
+                        pending.push_str(&flushed);
+                        flush_pending(&mut pending);
                         // 子进程退出
                         if let Ok(reg) = registry().lock() {
                             if let Some(sess) = reg.get(&emit_id) {
@@ -492,33 +502,16 @@ pub(crate) fn create_session(
                             }
                         }
                         let data = decoder.push(&buf[..n]);
-                        if !data.is_empty() {
-                            tracing::trace!(
-                                target: "pty",
-                                pty_id = %emit_id,
-                                bytes = n,
-                                "pty output chunk"
-                            );
-                            let _ = app_reader.emit(
-                                "workbench://pty-output",
-                                PtyOutputEvent {
-                                    pty_id: emit_id.clone(),
-                                    data,
-                                },
-                            );
+                        pending.push_str(&data);
+                        // 满窗或短读（当前可读数据耗尽）→ 合并 emit
+                        if pending.len() >= BATCH_MAX_BYTES || n < buf.len() {
+                            flush_pending(&mut pending);
                         }
                     }
                     Err(e) => {
                         let flushed = decoder.flush_lossy();
-                        if !flushed.is_empty() {
-                            let _ = app_reader.emit(
-                                "workbench://pty-output",
-                                PtyOutputEvent {
-                                    pty_id: emit_id.clone(),
-                                    data: flushed,
-                                },
-                            );
-                        }
+                        pending.push_str(&flushed);
+                        flush_pending(&mut pending);
                         tracing::debug!(
                             target: "pty",
                             pty_id = %emit_id,
