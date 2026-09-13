@@ -19,6 +19,7 @@ import {
 } from '../../store/streamingStore';
 import type { MessageToolCall } from '../../store/types';
 import type { StreamToolCallPatch } from '../../api/streamTextBatcher';
+import { TOOL_OUTPUT_BYTE_CAP } from '../../api/perfBudgets';
 import type { TerminalToolReason, TerminalToolPatch } from './types';
 
 
@@ -124,12 +125,18 @@ export function commitToolPatchToSession(
     lite?.status ||
     existing?.status ||
     'running') as MessageToolCall['status'];
-  const output =
+  let output =
     patch.output !== undefined
       ? patch.output
       : lite?.output !== undefined
         ? lite.output
         : existing?.output;
+  // D5 / U-OUT-FE：store 写入 hardCap（与 Rust 同源 TOOL_OUTPUT_BYTE_CAP）
+  if (typeof output === 'string' && output.length > TOOL_OUTPUT_BYTE_CAP) {
+    output =
+      output.slice(0, TOOL_OUTPUT_BYTE_CAP) +
+      `\n…[truncated ${output.length - TOOL_OUTPUT_BYTE_CAP} chars]`;
+  }
   const approvalMeta =
     'approvalMeta' in patch && patch.approvalMeta !== undefined
       ? patch.approvalMeta
@@ -293,6 +300,32 @@ export function snapshotStreamTextToSession(
     }
   }
   return text;
+}
+
+/**
+ * 流式思考快照提交至 sessionStore。
+ * 在工具启动前或首个正文 token 抵达（思考结束、吐字开始）时调用，
+ * 锁定当前思考轮次的真实思考耗时（durationMs），杜绝后续吐字阶段的耗时污染思考耗时。
+ */
+export function snapshotStreamThinkingToSession(
+  sessionId: string,
+  messageId: string
+): string | undefined {
+  const thinking = getStreamThinking(sessionId, messageId);
+  if (thinking && thinking.trim()) {
+    const msg = getSessionById(sessionId)?.messages?.find(
+      (m: SessionMessage) => m.id === messageId
+    );
+    if (msg?.thinking !== thinking) {
+      const lastThought =
+        msg?.thinkingTurns?.[msg.thinkingTurns.length - 1] ||
+        msg?.blocks?.filter((b) => b.type === 'thought').pop();
+      const activeTurn = lastThought?.turnIndex ?? 0;
+      updateMessageThinking(sessionId, messageId, thinking, activeTurn);
+    }
+    return thinking;
+  }
+  return undefined;
 }
 
 export function resolveStreamSessionId(

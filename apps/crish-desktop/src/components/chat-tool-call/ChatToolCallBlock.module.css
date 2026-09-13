@@ -144,11 +144,10 @@
   transition: color var(--transition-micro, 120ms ease);
 }
 
-/* 100ms 原地替换指示翻转契约 */
+/* 100ms 原地替换指示翻转契约；非常驻 will-change（仅动画中短暂提升） */
 .toolRow[data-in-place-flipping="true"] .toolRowIcoSlot,
 .toolRow.inPlaceFlipping .toolRowIcoSlot {
   animation: toolIndicatorFlip 100ms cubic-bezier(0.2, 0, 1) forwards;
-  will-change: transform, opacity;
 }
 
 @keyframes toolIndicatorFlip {
