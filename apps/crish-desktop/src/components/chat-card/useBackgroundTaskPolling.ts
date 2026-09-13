@@ -5,7 +5,7 @@
  * 的 `bgTasks`（4s 轮询 + 数据面事件刷新），消除与 03-V2 双轮询重复 IPC。
  */
 import type { BackgroundTaskInfo } from '../../api/backgroundTasksApi';
-import { useEngineState } from '../../useEngineState';
+import { useEngineState } from '../../hooks/useEngineState';
 
 export interface UseBackgroundTaskPollingOptions {
   sessionId?: string;
@@ -34,7 +34,7 @@ export function useBackgroundTaskPolling(
   if (!enabled || !sessionId || sessionId.startsWith('__pending')) {
     return [];
   }
-  return engine.bgTasks.filter((t) => {
+  return engine.bgTasks.filter((t: BackgroundTaskInfo) => {
     return Boolean(t.sessionId && t.sessionId === sessionId);
   });
 }
@@ -43,9 +43,10 @@ export function useBackgroundTaskPolling(
 export function filterActiveBackgroundTasks(
   tasks: readonly BackgroundTaskInfo[]
 ): BackgroundTaskInfo[] {
-  return tasks.filter((t) => {
+  return tasks.filter((t: BackgroundTaskInfo) => {
     if (!t) return false;
-    const status = String(t.status || '').toLowerCase();
+    const raw = t as unknown as Record<string, unknown>;
+    const status = String(raw.status ?? '').toLowerCase();
     return status === 'running' || status === 'pending' || status === 'queued';
   });
 }
