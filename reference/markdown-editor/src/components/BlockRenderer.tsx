@@ -23,7 +23,7 @@ import {
   type EditorState,
 } from '../core/EditorStore';
 import { useTableStore } from '../core/TableStore';
-import { parseTableAlignments } from '../core/TableOperations';
+import { isTableHeaderRow, readTableAlignments } from '../core/tableIdentity';
 import { renderMathToHtml } from '../core/renderTheme';
 // B4 N5：复制按钮剪贴板工具 + 引用前缀剥离（与导出投影器共享单源）
 import {
@@ -1282,7 +1282,6 @@ function CodeBlock({
   const softRender = useSoftRender(index, store);
   // B4：围栏上下文（lang/内容区间/首行锚点）——未闭合或缩进代码为 null
   const fenceCtx = useFenceContext(index, store);
-  const lineNo = getCodeLineNumber(index, fenceCtx, store);
   const effectiveTokens = React.useMemo(() => {
     if (
       !block.inlineTokens ||
@@ -1563,26 +1562,21 @@ function TableRowBlock({
   activeState,
   tableId,
 }: BlockRendererComponentProps) {
-  const isHeaderRow = tableId === `table-${index}`;
+  // 表头判定唯一入口（I5）：经身份查询，不再由 `tableId === \`table-${index}\`` 二次推导
+  const isHeaderRow = isTableHeaderRow(tableId, index);
   const containerRef = React.useRef<HTMLDivElement | null>(null);
   const isSyncingRef = React.useRef(false);
 
-  // 自动初始化该表的对齐规则 (如果尚未缓存)
+  // 自动初始化该表的对齐规则（如果尚未缓存）——
+  // 经身份查询取对齐，渲染层**不再解码身份字符串**（原 `/^table-(\d+)$/` 已移除）
   React.useEffect(() => {
     if (!tableId) return;
+    const aligns = readTableAlignments(tableId);
+    if (aligns.length === 0) return;
     const store = useTableStore.getState();
-    if (!store.tableAlignments[tableId]) {
-      const match = tableId.match(/^table-(\d+)$/);
-      if (match) {
-        const headerIdx = parseInt(match[1], 10);
-        const sepLine = useEditorStore.getState().getLine(headerIdx + 1);
-        if (sepLine) {
-          const aligns = parseTableAlignments(sepLine);
-          if (aligns.length > 0) {
-            store.setTableAlignments(tableId, aligns);
-          }
-        }
-      }
+    // 自愈：缺失**或列数不符**（脏状态）→ 用身份注册表的对齐重写（TableStore.getAlignmentsFor）
+    if (!store.getAlignmentsFor(tableId, aligns.length)) {
+      store.setTableAlignments(tableId, aligns);
     }
   }, [tableId]);
 

@@ -20,9 +20,18 @@ import { useTableStore } from '../core/TableStore';
 import { MarkdownParser } from '../core/parser';
 import type { CalloutType } from '../core/ast';
 import { HeightMap, HeightOracle, classifyLine } from '../core/HeightMap';
+// Alcove 复刻（Seg B）：活动行块类型徽标（视口右上角类型提示）
+import { BlockTypeBadge } from './BlockTypeBadge';
+// Alcove 复刻（Seg D）：frontmatter 属性卡（检测 + 行角色 + 视觉浮层）
+import {
+  detectFrontmatterRange,
+  frontmatterRoleFor,
+  type FrontmatterRole,
+} from '../core/frontmatter';
+import { FrontmatterChrome } from './FrontmatterChrome';
 
 // 引入块区间拓扑与 Callout 上下文支持
-import { BlockIntervalTree, type CalloutContext } from '../core/BlockIntervalTree';
+import { type CalloutContext } from '../core/BlockIntervalTree';
 import { LRUCache } from '../core/LRUCache';
 
 const calloutContextCache = new LRUCache<string, CalloutContext | null>(1000);
@@ -118,6 +127,7 @@ import { setCellContent } from '../core/TableOperations';
 import { metrics } from '../core/metrics';
 // W3-3（S-EL-11）：M6 表格列宽定型登记点（perf suite 表格流式场景读判）
 import { recordTableWidthSettle } from '../core/tableSettle';
+import { resolveTableId } from '../core/tableIdentity';
 // B2 查找替换（05 高频项 N6）：查找替换面板（搜索/高亮/跳转/替换/
 // 计数）挂载于引擎根容器内，快捷键 Ctrl+F/Ctrl+H 自监听
 import { FindReplacePanel } from './FindReplacePanel';
@@ -203,6 +213,11 @@ const SEARCH_LINE_BG = 'hsl(45 100% 50% / 0.10)';
 
 // B3 折叠占位行摘要截断长度（占位行文本仅作视觉提示，超长截断防撑行）
 const FOLD_SUMMARY_MAX_CHARS = 48;
+
+// Alcove 布局：正文换行列宽（参考视频 640 逻辑窗口 - 44×2 页边距 = 552）。
+// CSS 侧 .editor-content-column 的 max-width 必须同值——单一知识点双侧
+// 引用，修改时必须同步；oracle wrap 模型以本值为准。
+export const CONTENT_COLUMN_WIDTH = 552;
 
 // W1-2（D-3）滚动跟随边缘阈值（px）：scroll 事件判定「用户是否在尾部」——
 // 距底部 ≤ FOLLOW_EDGE_PX 视为贴底（follow），超过即离开（paused）。
@@ -460,6 +475,7 @@ const LineItem = React.memo(
     decorations,
     rowDecorationVersion,
     useGpuLayer,
+    frontmatterRole,
   }: {
     index: number;
     lineText: string;
@@ -483,6 +499,9 @@ const LineItem = React.memo(
     // virtual-row-gpu-dirty（will-change: transform 独立层，方案 D）。
     // 布尔 prop 引用稳定，不破坏 React.memo 命中。
     useGpuLayer?: boolean;
+    // Alcove 复刻（Seg D）：frontmatter 行角色（open/body/close）——
+    // 命中时行容器附加 is-frontmatter-row 类（token 透明化 + 属性卡浮层）
+    frontmatterRole?: FrontmatterRole | null;
   }) => {
     // C3 直刷冻结快照（dirty 覆盖渲染路径，09 §4 C3 代码级落实）：
     // 干净渲染时把「本次 BlockRenderer 元素」存入 ref；dirty 渲染时返回
@@ -527,21 +546,10 @@ const LineItem = React.memo(
       (d) => d.kind === 'search'
     );
 
-    const tableId = store((state) => {
-      if (!lineText.trim().startsWith('|')) return undefined;
-      let firstTableIndex = index;
-      while (firstTableIndex > 0) {
-        // 经访问器读上一行（R3-B1：不读物化 state.lines——尾段非空时
-        // 物化会执行 concat；getLine 是双段惰性视图，语义与物化视图一致）
-        const prevLine = state.getLine(firstTableIndex - 1);
-        if (prevLine && prevLine.trim().startsWith('|')) {
-          firstTableIndex--;
-        } else {
-          break;
-        }
-      }
-      return `table-${firstTableIndex}`;
-    });
+    // 表格稳定身份（ADR-3 / 裁决 R18）：由 tableIdentity 统一解析——
+    // 身份与行号**解耦**（内容签名 + 位置兜底），故表格上方插入/删除行不再改变身份；
+    // 渲染层亦不再需要解码身份格式（表头判定/分隔行/列对齐一律经身份查询）。
+    const tableId = store((state) => resolveTableId(state.getLine, index));
 
     const calloutCtx = React.useMemo(() => {
       if (!/^ {0,3}>\s?/.test(lineText)) return null;
@@ -613,11 +621,17 @@ const LineItem = React.memo(
       ? (frozenContentRef.current ?? freshContent)
       : freshContent;
 
+    // Alcove 复刻（Seg D）：frontmatter 行在虚拟行内叠属性卡浮层
+    // （token 透明化由 .is-frontmatter-row 类接管，浮层 pointer-events
+    //  none 不挡点击/选区；活动行回落源码由 CSS 处理）
+    const fmChrome =
+      frontmatterRole && frontmatterRole !== 'close' ? (
+        <FrontmatterChrome role={frontmatterRole} raw={lineText} />
+      ) : null;
+
     // B2 搜索行内联背景：仅命中行附加淡黄底色（useMemo 保持引用
     // 稳定——依赖只有行类型与搜索标记，变化时才换新对象，不影响
     // React.memo 命中）；class is-search-line 同时保留供宿主自定义
-    const isTableRow =
-      lineNode.type === 'table_row' || lineNode.type === 'table_separator';
     const rowStyle = React.useMemo(
       () => ({
         position: 'absolute' as const,
@@ -641,10 +655,11 @@ const LineItem = React.memo(
         ref={rowRef}
         // P3 B5 GPU 类拼接：useGpuLayer=false 时退化为原 virtual-row 单类
         // （contain/will-change 全部移除，一行回退到纯 position 定位通道）
-        className={`virtual-row${useGpuLayer ? ' virtual-row-gpu' : ''}${streamingDirty && useGpuLayer ? ' virtual-row-gpu-dirty' : ''}${activeState ? ' is-active-line' : ''}${hasSearchDecoration ? ' is-search-line' : ''}`.trim()}
+        className={`virtual-row${useGpuLayer ? ' virtual-row-gpu' : ''}${streamingDirty && useGpuLayer ? ' virtual-row-gpu-dirty' : ''}${activeState ? ' is-active-line' : ''}${hasSearchDecoration ? ' is-search-line' : ''}${frontmatterRole ? ' is-frontmatter-row is-frontmatter-' + frontmatterRole : ''}`.trim()}
         style={rowStyle}
       >
         {rowContent}
+        {fmChrome}
       </div>
     );
   }
@@ -903,6 +918,21 @@ export const MarkdownEngine = React.forwardRef<
   const selectionStart = engineStore((state) => state.selectionStart);
   const selectionEnd = engineStore((state) => state.selectionEnd);
 
+  // Alcove 复刻（Seg H）：空文档判定——≤1 行且无有效内容时展示启动页
+  // （非 memo：内容/光标订阅已驱动本组件重渲染，直接计算即最新）
+  const docIsEmpty =
+    lineCount <= 1 &&
+    (lineCount === 0 ||
+      (engineStore.getState().getLine(0) ?? '').trim().length === 0);
+
+  // Alcove 复刻（Seg D）：frontmatter 区间（视图层检测，parser 不动；
+  // 依赖双段内容引用——内容变更即重算）
+  const frontmatterRange = React.useMemo(() => {
+    const s = engineStore.getState();
+    return detectFrontmatterRange((i) => s.getLine(i), s.getLineCount());
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
+  }, [mainLines, streamTail]);
+
   useLayoutEffect(() => {
     // 增量维护：remove 只清受影响行 bucket、add 只写新区间跨行 bucket
     // ——光标/选区/搜索变化 O(受影响行)，不触碰全文（06 §2）。
@@ -981,11 +1011,14 @@ export const MarkdownEngine = React.forwardRef<
     });
   }
 
-  // 容器可用宽度 → oracle 的 wrap 模型基准（左右 padding 16×2 + 滚动条 8 ≈ 40）
+  // 容器可用宽度 → oracle 的 wrap 模型基准（Alcove 布局：内容列 640px 居中，
+  // 容器左右 padding 44×2 + 滚动条补偿 8；列宽取 min(可用宽, 640)）
   useLayoutEffect(() => {
     const el = parentRef.current;
     if (el && oracleRef.current)
-      oracleRef.current.setContainerWidth(el.clientWidth - 40);
+      oracleRef.current.setContainerWidth(
+        Math.min(el.clientWidth - 96, CONTENT_COLUMN_WIDTH)
+      );
   }, []);
 
   // Virtualization setup: fixed size = 28px perfectly aligns with grid paper CSS
@@ -1549,15 +1582,16 @@ export const MarkdownEngine = React.forwardRef<
   );
 
   // 滚动位置 → 视口首行（OutlinePanel 当前章节高亮用）：
-  // HeightMap.indexAt 二分（像素 → 行），topOffset 28 = 容器 padding-top
-  // 14px + 内容 div margin-top 14px（09 §4 C1 换算口径）
+  // HeightMap.indexAt 二分（像素 → 行），topOffset 64 = 容器 padding-top
+  // 64px（Alcove 布局顶部留白，内容 div margin 归零——09 §4 C1 换算口径
+  // 的 28 = 14+14 已随布局升级同步为 64）
   const resolveScrollLine = useCallback((scrollTop: number) => {
     const hm = heightMapRef.current;
     // P3 B1：OutlinePanel 传入的是物理 scrollTop——先逆映射为逻辑
     const logicTop = scrollMapRef.current
       ? scrollMapRef.current.inverse(scrollTop)
       : scrollTop;
-    return hm ? hm.indexAt(logicTop, 28) : 0;
+    return hm ? hm.indexAt(logicTop, 64) : 0;
   }, []);
 
   // ── B3 大纲标题提取（HeadingIndex extract 回调注入）──
@@ -2296,6 +2330,9 @@ export const MarkdownEngine = React.forwardRef<
   const handlePaste = useCallback(
     (e: React.ClipboardEvent<HTMLDivElement>) => {
       if (readOnly) return;
+      // 双保险：已被输入层（HiddenInput 原生监听，粘贴单一所有者）处理过
+      // 的 paste 事件不再处理——防二次插入双写（2026-09-13 表格双写回归）。
+      if (e.nativeEvent.defaultPrevented) return;
       const cd = e.clipboardData;
       if (!cd) return;
       const s = engineStore.getState();
@@ -2481,14 +2518,16 @@ export const MarkdownEngine = React.forwardRef<
           height: '100%',
           overflowX: 'hidden',
           overflowY: 'auto',
-          padding: '14px 1rem',
+          padding: '64px 44px 120px',
           position: 'relative',
         }}
       >
         {/* C1 契约：内容容器主轴高度由 virtualizer.containerRef 命令式管理
-            （applyContainerSize 写总高，免 React 提交），style 不写 height；
-            marginTop 14px 为横向装饰属性，保留。P3 B1：contentDivRef 双挂
-            （tanstack 回调 ref 无 .current——物理总高覆盖经本 ref） */}
+            （applyContainerSize 写总高，免 React 提交），style 不写 height。
+            Alcove 布局：顶部留白 64px 收进容器 padding-top，内容 div 不再
+            另加 marginTop；水平居中列宽 552px（CONTENT_COLUMN_WIDTH 同源）。
+            P3 B1：contentDivRef 双挂（tanstack 回调 ref 无 .current——物理
+            总高覆盖经本 ref） */}
         <div
           ref={(node) => {
             virtualizer.containerRef(node);
@@ -2496,11 +2535,10 @@ export const MarkdownEngine = React.forwardRef<
           }}
           style={{
             width: '100%',
-            maxWidth: '100%',
-            minWidth: '100%',
+            maxWidth: `${CONTENT_COLUMN_WIDTH}px`,
             boxSizing: 'border-box',
             position: 'relative',
-            marginTop: '14px',
+            margin: '0 auto',
           }}
         >
           {(() => {
@@ -2557,17 +2595,33 @@ export const MarkdownEngine = React.forwardRef<
                   rowDecorationVersion={decorations.getRowVersion(index)}
                   // P3 B5：GPU 合成开关（B+C+D 组合，false 一行回退）
                   useGpuLayer={useGpuLayer}
+                  // Alcove 复刻（Seg D）：frontmatter 行角色（属性卡）
+                  frontmatterRole={frontmatterRoleFor(index, frontmatterRange)}
                 />
               );
             });
           })()}
         </div>
 
+        {/* Alcove 复刻（Seg H）：空文档启动页——全空时显示居中 Markdown
+            风格字标（**Crish** + Markdown Editor）；pointer-events 穿透，
+            点击仍落到底层容器进入编辑态 */}
+        {docIsEmpty && (
+          <div className="empty-doc-splash" aria-hidden="true">
+            <div className="splash-wordmark">
+              <span className="splash-marks">**</span>Crish
+              <span className="splash-marks">**</span>
+            </div>
+            <div className="splash-subtitle">Markdown Editor</div>
+          </div>
+        )}
+
         {/* R5 readOnly：只读渲染模式不渲染输入层（光标/选区高亮/隐藏
             输入框）——原生 DOM 选区替代引擎自绘选区，点击/键盘/拖选/
             粘贴全部不生效；滚动/虚拟化/token 映射不受影响 */}
         {!readOnly && (
           <>
+            <BlockTypeBadge store={engineStore} />
             <TableToolbar />
             <CursorLayer
               containerRef={parentRef}

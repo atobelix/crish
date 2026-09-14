@@ -21,6 +21,22 @@ interface TableState {
   setTableWidths: (tableId: string, widths: number[]) => void;
   setTableScrollLeft: (tableId: string, scrollLeft: number) => void;
   setTableAlignments: (tableId: string, alignments: ColumnAlignment[]) => void;
+  /**
+   * 自愈读取：列数不符即视为脏状态并丢弃（返回 `undefined`），由调用方重算。
+   *
+   * 背景（根因断层 D3 / 症状 S7）：视图状态以表格身份为键，而列数可能因
+   * 增删列、表头编辑、身份迁移而与该表当前列数不一致；直接读取会得到
+   * 「长度错位」的数组，导致列宽串列、对齐错位。
+   * 权威：docs/table-systemic-remediation/03-分维-表格语义模型与身份SSOT.md
+   */
+  getWidthsFor: (tableId: string, cols: number) => number[] | undefined;
+  /** 自愈读取：同 `getWidthsFor`，作用于列对齐。 */
+  getAlignmentsFor: (tableId: string, cols: number) => ColumnAlignment[] | undefined;
+  /**
+   * 清理已不存在表格的视图状态（整文替换 / 文档大幅收缩后调用）。
+   * @returns 被移除的 tableId 列表
+   */
+  pruneTables: (activeIds: ReadonlySet<string>) => string[];
   setSelectedCell: (cell: CellSelection | null) => void;
   setCellEditing: (isEditing: boolean) => void;
   setDraggingCell: (isDragging: boolean) => void;
@@ -31,7 +47,7 @@ interface TableState {
   clearCellSelection: () => void;
 }
 
-export const useTableStore = create<TableState>((set) => ({
+export const useTableStore = create<TableState>((set, get) => ({
   tableWidths: {},
   tableScrollLeft: {},
   tableAlignments: {},
@@ -73,6 +89,45 @@ export const useTableStore = create<TableState>((set) => ({
         [tableId]: alignments,
       },
     })),
+  getWidthsFor: (tableId, cols) => {
+    // 经 zustand 的 get() 读状态——不可写 `useTableStore.getState()`：
+    // 那会让本 const 在自身初始化器中被引用，TS 无法推断类型（TS7022），
+    // 并连锁把 useTableStore 退化为 any，波及全部消费点。
+    const widths = get().tableWidths[tableId];
+    if (!widths || widths.length !== cols) return undefined;
+    return widths;
+  },
+  getAlignmentsFor: (tableId, cols) => {
+    const alignments = get().tableAlignments[tableId];
+    if (!alignments || alignments.length !== cols) return undefined;
+    return alignments;
+  },
+  pruneTables: (activeIds) => {
+    const removed: string[] = [];
+    set((state) => {
+      const nextWidths = { ...state.tableWidths };
+      const nextScroll = { ...state.tableScrollLeft };
+      const nextAlign = { ...state.tableAlignments };
+      for (const key of Object.keys(nextWidths)) {
+        if (!activeIds.has(key)) {
+          delete nextWidths[key];
+          removed.push(key);
+        }
+      }
+      for (const key of Object.keys(nextScroll)) {
+        if (!activeIds.has(key)) delete nextScroll[key];
+      }
+      for (const key of Object.keys(nextAlign)) {
+        if (!activeIds.has(key)) delete nextAlign[key];
+      }
+      return {
+        tableWidths: nextWidths,
+        tableScrollLeft: nextScroll,
+        tableAlignments: nextAlign,
+      };
+    });
+    return removed;
+  },
   setSelectedCell: (cell) =>
     set(() => ({
       selectedCell: cell,

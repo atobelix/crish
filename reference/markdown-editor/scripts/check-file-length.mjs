@@ -89,7 +89,7 @@ export const PROTECTED = {
     reason: '全局样式单文件；本战役 T3/T6 新增岛样式后应下调 ceiling，禁止继续增长',
   },
   'src/components/BlockRenderer.tsx': {
-    ceiling: 1806,
+    ceiling: 1801,
     reason: '块级渲染器总表；本战役 T1/T3 改造表格块后应下调 ceiling',
   },
   'src/core/measure.ts': {

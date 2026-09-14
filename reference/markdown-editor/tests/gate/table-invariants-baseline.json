@@ -1,15 +1,15 @@
 {
   "note": "表格不变量棘轮基线。由 scripts/check-table-invariants.mjs --update-baseline 生成；基线只允许单向收紧（不得回退）。权威定义见 docs/table-systemic-remediation/00-总方案 §6。",
-  "updatedAt": "2026-09-14T14:58:09.615Z",
+  "updatedAt": "2026-09-14T15:24:19.174Z",
   "metrics": {
     "headerDerivationSites": {
-      "value": 1,
+      "value": 0,
       "direction": "down",
       "target": 0,
       "phase": "T2"
     },
     "identityUpwardProbes": {
-      "value": 2,
+      "value": 0,
       "direction": "down",
       "target": 0,
       "phase": "T2"

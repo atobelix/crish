@@ -48,11 +48,15 @@ describe('表格不变量门禁 · 指标注册表', () => {
     }
   });
 
-  it('已达标指标不得多于计划允许（T0 基线期只允许 nativeTableElements 达标）', () => {
-    // 这是「防止门禁被写成恒真」的护栏：T0 时现状只有 1 项天然达标。
-    // 后续波次收敛后，把此处上限按实际进度上调（只允许上调，不得下调）。
+  it('已达标指标不得超过当前战役进度允许的上限', () => {
+    // 这是「防止门禁被写成恒真」的护栏：上限按战役实际进度**只允许上调**，不得下调。
+    //   基线期（T0）：1（仅 nativeTableElements 天然达标）
+    //   T2 完成后：3（+ headerDerivationSites / identityUpwardProbes）
+    // 每次上调都必须在提交信息与 00-总方案 §12 续航锚点中留痕。
+    const MET_PROGRESS_CAP = 3;
     const met = runChecks().filter((r) => r.value === r.target);
-    expect(met.length).toBeLessThanOrEqual(1);
+    expect(met.length).toBeLessThanOrEqual(MET_PROGRESS_CAP);
+    expect(met.length).toBeGreaterThanOrEqual(1);
   });
 });
 
