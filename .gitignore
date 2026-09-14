@@ -324,6 +324,11 @@ reference/markdown-editor/package-lock.json
 reference/ui-replica-refactored/node_modules/
 reference/ui-replica-refactored/dist/
 
+# Interactive Table (交互表格1:1复刻设计资产)
+!reference/Interactive Table/
+!reference/Interactive Table/**
+reference/Interactive Table/node_modules/
+
 # newui (keep for state-driven refactoring)
 !reference/newui/
 !reference/newui/**
@@ -637,3 +642,9 @@ orchestrator-snapshot.json.prev
 !scripts/check-swallowed-errors.mjs
 !scripts/check-ui-layer.mjs
 !scripts/check-unwrap-baseline.mjs
+# markdown-editor 表格不变量棘轮基线入库放行（2026-09-14）：
+# `/reference/**/*.json`（本文件第 441 行）会连带忽略该基线，而
+# `tests/gate/table-invariants.test.ts` 断言「基线必须存在」——
+# 不放行则全新 clone / CI checkout 上该契约测试必然失败（门禁形同虚设）。
+# 权威：reference/markdown-editor/docs/table-systemic-remediation/08-分维-验收矩阵与防回归门禁.md §8.1
+!reference/markdown-editor/tests/gate/table-invariants-baseline.json

@@ -1,0 +1,103 @@
+{
+  "note": "表格不变量棘轮基线。由 scripts/check-table-invariants.mjs --update-baseline 生成；基线只允许单向收紧（不得回退）。权威定义见 docs/table-systemic-remediation/00-总方案 §6。",
+  "updatedAt": "2026-09-14T14:58:09.615Z",
+  "metrics": {
+    "headerDerivationSites": {
+      "value": 1,
+      "direction": "down",
+      "target": 0,
+      "phase": "T2"
+    },
+    "identityUpwardProbes": {
+      "value": 2,
+      "direction": "down",
+      "target": 0,
+      "phase": "T2"
+    },
+    "exportTableWrapper": {
+      "value": 0,
+      "direction": "up",
+      "target": 1,
+      "phase": "T7"
+    },
+    "toolbarNonIconLabels": {
+      "value": 16,
+      "direction": "down",
+      "target": 0,
+      "phase": "T6"
+    },
+    "nativeTableElements": {
+      "value": 0,
+      "direction": "down",
+      "target": 0,
+      "phase": "T3"
+    },
+    "rowLevelScrollOverflowRules": {
+      "value": 1,
+      "direction": "down",
+      "target": 0,
+      "phase": "T3"
+    },
+    "lastRowScrollbarHacks": {
+      "value": 6,
+      "direction": "down",
+      "target": 0,
+      "phase": "T3"
+    },
+    "selectionInsetShadowSites": {
+      "value": 4,
+      "direction": "down",
+      "target": 0,
+      "phase": "T5"
+    },
+    "perCellWidthWritebackSites": {
+      "value": 2,
+      "direction": "down",
+      "target": 0,
+      "phase": "T3"
+    },
+    "oracleTableReadsWidths": {
+      "value": 0,
+      "direction": "up",
+      "target": 1,
+      "phase": "T4"
+    }
+  },
+  "pendingRuntime": [
+    {
+      "id": "I1-runtime",
+      "label": "单横向滚动所有者实例计数",
+      "phase": "T3"
+    },
+    {
+      "id": "I2",
+      "label": "列宽无震荡（重复测量恒等）",
+      "phase": "T4"
+    },
+    {
+      "id": "I3",
+      "label": "表格高度上报源计数 == 1",
+      "phase": "T4"
+    },
+    {
+      "id": "I4",
+      "label": "表格上方增删行后列宽/对齐/选区不变",
+      "phase": "T2"
+    },
+    {
+      "id": "I6",
+      "label": "选区单矩形与角单元格几何一致（≤1px）",
+      "phase": "T5"
+    },
+    {
+      "id": "I7",
+      "label": "增删行列后选区重映射",
+      "phase": "T5"
+    },
+    {
+      "id": "I8",
+      "label": "无同一源码行重复渲染（含行序完整性）",
+      "phase": "T4"
+    }
+  ]
+}

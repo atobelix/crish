@@ -45,7 +45,13 @@ export const METRICS = [
     label: '表头语义推导处数（I5）',
     direction: 'down',
     target: 0,
-    phase: 'T1',
+    // 归属波次由 T1 调整为 T2（2026-09-14）：
+    //   T1 只产出 TableModel 本体（src/core/tableModel.ts，纯逻辑 + 单测）；
+    //   消费方切换（BlockRenderer 的 isHeaderRow）与身份消费点切换同属 T2
+    //   （裁决 R3：T2 只改 MarkdownEngine.tsx:548-562 的身份推导块）。
+    //   另：BlockRenderer.tsx 在 check-file-length 的例外名单内（ceiling 冻结），
+    //   T1 期间不得为其增加行数——接线随 T3 重构该文件的表格渲染一并完成。
+    phase: 'T2',
   },
   {
     id: 'identityUpwardProbes',
