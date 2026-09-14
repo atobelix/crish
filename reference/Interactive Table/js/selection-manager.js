@@ -212,6 +212,12 @@ window.InteractiveTable.SelectionManager = class SelectionManager {
     this.updateRangeSelection(minR, maxR, minC, maxC);
   }
 
+  selectRange(minR, maxR, minC, maxC) {
+    this.clearSelection();
+    this.mode = 'RANGE_SELECTED';
+    this.updateRangeSelection(minR, maxR, minC, maxC);
+  }
+
   selectSingleCell(cellInfo) {
     this.clearSelection();
     this.mode = 'CELL_SELECTED';
