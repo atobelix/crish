@@ -171,53 +171,67 @@ window.InteractiveTable.TableRenderer = class TableRenderer {
 
       const targetEl = (e.target && e.target instanceof Element) ? e.target : document.body;
 
-      // 1. 单元格定位与双手柄联动显隐 (用户批注 media_1789394859394.png)
+      // 1. 单元格定位与双手柄联动显隐 (消除手柄与单元格之间的悬停盲区)
       const cell = targetEl.closest('td, th');
       const isInsideThisTable = cell && this.root.contains(cell);
 
+      // 左侧感应带判定：光标处于表格左侧边框及向外延伸 35px 范围内
+      const isInLeftGutterZone = mouseX >= tableRect.left - 35 && mouseX <= tableRect.left + 15 &&
+                                 mouseY >= tableRect.top - 5 && mouseY <= tableRect.bottom + 5;
+
+      // 顶部感应带判定：光标处于表格顶部边框及向上延伸 25px 范围内
+      const isInTopGutterZone = mouseY >= tableRect.top - 25 && mouseY <= tableRect.top + 15 &&
+                                mouseX >= tableRect.left - 5 && mouseX <= tableRect.right + 5;
+
+      let activeRowIdx = null;
+      let activeColIdx = null;
+
       if (isInsideThisTable) {
         const isHeader = cell.tagName.toLowerCase() === 'th';
-        const row = isHeader ? -1 : parseInt(cell.dataset.row, 10);
-        const col = parseInt(cell.dataset.col, 10);
-
-        // 联动显示对应列手柄 (顶部横短线)
-        colBtns.forEach(b => {
-          if (parseInt(b.dataset.col, 10) === col || b.classList.contains('active')) {
-            b.classList.add('visible');
-          } else {
-            b.classList.remove('visible');
+        activeRowIdx = isHeader ? -1 : parseInt(cell.dataset.row, 10);
+        activeColIdx = parseInt(cell.dataset.col, 10);
+      } else if (isInLeftGutterZone) {
+        // 在左侧手柄感应区内：计算光标纵向落在哪个 tr 范围内
+        const allTrs = Array.from(table.querySelectorAll('tr'));
+        allTrs.forEach(tr => {
+          const r = tr.getBoundingClientRect();
+          if (mouseY >= r.top && mouseY <= r.bottom) {
+            const isHeader = tr.classList.contains('header-row') || tr.parentElement.tagName.toLowerCase() === 'thead';
+            activeRowIdx = isHeader ? -1 : parseInt(tr.dataset.row, 10);
           }
         });
-
-        // 联动显示对应行手柄 (左侧竖短线)
-        rowBtns.forEach(b => {
-          if (parseInt(b.dataset.row, 10) === row || b.classList.contains('active')) {
-            b.classList.add('visible');
-          } else {
-            b.classList.remove('visible');
-          }
-        });
-      } else {
-        // 鼠标不在单元格内部时：若悬停在手柄自身上则保持显示，否则隐藏未激活手柄
-        const hoveredColBtn = targetEl.closest('.col-handle-btn');
-        const hoveredRowBtn = targetEl.closest('.row-handle-btn');
-
-        colBtns.forEach(b => {
-          if (b === hoveredColBtn || b.classList.contains('active')) {
-            b.classList.add('visible');
-          } else {
-            b.classList.remove('visible');
-          }
-        });
-
-        rowBtns.forEach(b => {
-          if (b === hoveredRowBtn || b.classList.contains('active')) {
-            b.classList.add('visible');
-          } else {
-            b.classList.remove('visible');
+      } else if (isInTopGutterZone) {
+        // 在顶部手柄感应区内：计算光标横向落在哪个 th 范围内
+        const allThs = Array.from(table.querySelectorAll('thead th, tbody tr:first-child td'));
+        allThs.forEach((th, cIdx) => {
+          const r = th.getBoundingClientRect();
+          if (mouseX >= r.left && mouseX <= r.right) {
+            activeColIdx = cIdx;
           }
         });
       }
+
+      // 如果悬停在手柄自身上，则保持激活
+      const hoveredColBtn = targetEl.closest('.col-handle-btn');
+      const hoveredRowBtn = targetEl.closest('.row-handle-btn');
+
+      colBtns.forEach(b => {
+        const colIdx = parseInt(b.dataset.col, 10);
+        if (colIdx === activeColIdx || b === hoveredColBtn || b.classList.contains('active')) {
+          b.classList.add('visible');
+        } else {
+          b.classList.remove('visible');
+        }
+      });
+
+      rowBtns.forEach(b => {
+        const rowIdx = parseInt(b.dataset.row, 10);
+        if (rowIdx === activeRowIdx || b === hoveredRowBtn || b.classList.contains('active')) {
+          b.classList.add('visible');
+        } else {
+          b.classList.remove('visible');
+        }
+      });
 
       // 2. 右侧加列条 (#add-column-btn) 显隐逻辑 (用户批注 media_1789395718900.png 鼠标停在右侧空白区域也可以显示)：
       // 满足以下任一条件均平滑保持显示：

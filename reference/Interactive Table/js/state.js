@@ -105,6 +105,62 @@ window.InteractiveTable.TableState = class TableState {
     this.notify('range-cleared');
   }
 
+  // 批量更新二维数据矩阵 (用于剪贴板 TSV 粘贴、批量导入)
+  // 支持自动按需扩展列与行，单次事务入栈，确保高性能与无损撤销
+  batchUpdateMatrix(startRow, startCol, matrix) {
+    if (!matrix || matrix.length === 0) return { endRow: startRow, endCol: startCol };
+
+    this.pushHistory();
+
+    const maxPasteRows = matrix.length;
+    let maxPasteCols = 0;
+    matrix.forEach(row => {
+      if (row.length > maxPasteCols) maxPasteCols = row.length;
+    });
+
+    const neededCols = startCol + maxPasteCols;
+    const isStartHeader = startRow === -1;
+    const bodyRowsNeeded = isStartHeader ? (maxPasteRows - 1) : (startRow + maxPasteRows);
+
+    // 1. 自动向右扩展所需列数
+    while (this.state.columns.length < neededCols) {
+      const newColId = 'col_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4);
+      this.state.columns.push({ id: newColId, width: 190 });
+      this.state.headers.push('');
+      this.state.rows.forEach(r => r.cells.push(''));
+    }
+
+    // 2. 自动向下扩展所需数据行数
+    while (this.state.rows.length < bodyRowsNeeded) {
+      const newRowId = 'row_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4);
+      const cells = new Array(this.state.columns.length).fill('');
+      this.state.rows.push({ id: newRowId, cells });
+    }
+
+    // 3. 填充数据
+    for (let rIdx = 0; rIdx < matrix.length; rIdx++) {
+      const targetRow = startRow + rIdx;
+      const rowData = matrix[rIdx];
+
+      for (let cIdx = 0; cIdx < rowData.length; cIdx++) {
+        const targetCol = startCol + cIdx;
+        const val = rowData[cIdx];
+
+        if (targetRow === -1) {
+          this.state.headers[targetCol] = val;
+        } else if (targetRow >= 0 && this.state.rows[targetRow]) {
+          this.state.rows[targetRow].cells[targetCol] = val;
+        }
+      }
+    }
+
+    this.notify('matrix-updated');
+
+    const endRow = startRow + maxPasteRows - 1;
+    const endCol = startCol + maxPasteCols - 1;
+    return { endRow, endCol };
+  }
+
   // ------------------------- 列操作 -------------------------
   insertColumn(targetIndex, headerText = '', fillValue = '') {
     this.pushHistory();

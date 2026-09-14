@@ -27,16 +27,6 @@ window.InteractiveTable.RowManager = class RowManager {
   }
 
   syncHandlesPosition() {
-    const table = this.root.querySelector('.notion-table');
-    if (!table) return;
-
-    const trElements = table.querySelectorAll('tr');
-    trElements.forEach((tr, idx) => {
-      const rowBtn = this.root.querySelector(`.row-handle-btn[data-tr-index="${idx}"]`);
-      if (rowBtn && tr) {
-        const top = tr.offsetTop + tr.offsetHeight / 2 - 11;
-        rowBtn.style.top = `${top}px`;
-      }
-    });
+    window.__interactiveTableApp?.renderer?.mountHandles();
   }
 };

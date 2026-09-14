@@ -71,6 +71,8 @@ window.InteractiveTable.DragDropManager = class DragDropManager {
     // 表头行 (row = -1) 不支持拖拽重排
     if (rowBtn && parseInt(rowBtn.dataset.row, 10) < 0) return;
 
+    e.preventDefault();
+
     this.startX = e.clientX;
     this.startY = e.clientY;
     this.isDragging = false;

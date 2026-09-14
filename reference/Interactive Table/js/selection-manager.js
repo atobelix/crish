@@ -160,6 +160,24 @@ window.InteractiveTable.SelectionManager = class SelectionManager {
 
     // 框选态与单选态快捷操作
     if (this.mode === 'RANGE_SELECTED' || this.mode === 'CELL_SELECTED') {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
+        e.preventDefault();
+        this.selectAll();
+        return;
+      }
+
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') {
+        e.preventDefault();
+        if (this.activeCell) {
+          if (this.activeCell.isHeader) {
+            this.state.duplicateColumn(this.activeCell.col);
+          } else {
+            this.state.duplicateRow(this.activeCell.row);
+          }
+        }
+        return;
+      }
+
       if (e.key === 'Delete' || e.key === 'Backspace') {
         e.preventDefault();
         if (this.selectedRange) {
@@ -182,6 +200,16 @@ window.InteractiveTable.SelectionManager = class SelectionManager {
         }
       }
     }
+  }
+
+  selectAll() {
+    const data = this.state.get();
+    const minR = data.hasHeaderRow ? -1 : 0;
+    const maxR = data.rows.length - 1;
+    const minC = 0;
+    const maxC = data.columns.length - 1;
+    this.mode = 'RANGE_SELECTED';
+    this.updateRangeSelection(minR, maxR, minC, maxC);
   }
 
   selectSingleCell(cellInfo) {

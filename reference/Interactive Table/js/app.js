@@ -12,7 +12,8 @@
     DragDropManager,
     DividerInserter,
     ColumnManager,
-    RowManager
+    RowManager,
+    ClipboardManager
   } = window.InteractiveTable;
 
   class InteractiveTableApp {
@@ -40,7 +41,7 @@
       // 4. 单元格选区与内联编辑解耦管理器 (单击选区/双击编辑/拖拽超出变框选)
       this.selectionManager = new SelectionManager(this.state, this.root);
 
-      // 5. 行列手柄拖拽排序管理器 (严格还原图二)
+      // 5. 行列手柄拖拽排序管理器 (严格对齐行列双模态拖拽)
       this.dragDropManager = new DragDropManager(this.state, this.root, this.contextMenu);
 
       // 6. 边框扩展像素灰变蓝与加号插入线 (严格还原图三与图四)
@@ -52,14 +53,19 @@
       // 8. 行管理器 (行菜单)
       this.rowManager = new RowManager(this.state, this.root, this.contextMenu);
 
-      // 9. 绑定快速加列/加行与全局快捷键
+      // 9. 剪贴板 TSV 互通管理器 (Excel / Word / Sheets 无缝互通与自动扩充)
+      this.clipboardManager = new ClipboardManager(this.state, this.root, this.selectionManager);
+
+      // 10. 绑定快速加列/加行与全局快捷键
       this.bindGlobalEvents();
 
-      // 10. 订阅状态机变化，自动更新视图
+      // 11. 订阅状态机变化，自动更新视图
       this.state.subscribe((_, actionType) => {
         if (actionType !== 'cell-updated') {
           this.renderer.render();
-          this.selectionManager.clearSelection();
+          if (actionType !== 'matrix-updated') {
+            this.selectionManager.clearSelection();
+          }
         }
       });
 
