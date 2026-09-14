@@ -1,0 +1,221 @@
+/* ==========================================================================
+   drag-drop.css - 行列手柄选中与拖拽排序视觉系统 (严格还原图二与落点感知)
+   包含无阴影真实质感克隆、两列/两行缝隙贯穿落点指示线、原位淡化幽灵
+   ========================================================================== */
+
+/* ---------------- 列拖拽视觉 (拖拽时原手柄保持灰色短线，不用 6 点蓝胶囊) ---------------- */
+.col-handle-btn.dragging {
+  background: transparent !important;
+  box-shadow: none !important;
+  opacity: 0.6 !important;
+  cursor: grabbing !important;
+}
+
+.col-handle-btn.dragging .col-handle-bar {
+  display: block !important;
+  background-color: var(--handle-color) !important;
+}
+
+.col-handle-btn.dragging .handle-dots-grid {
+  display: none !important;
+}
+
+/* 被拖动的原列文字半透明淡化 (Ghost 效果) */
+.notion-table th.col-ghost,
+.notion-table td.col-ghost {
+  color: #c4c4c2 !important;
+  background-color: rgba(247, 246, 245, 0.7) !important;
+}
+
+/* ---------------- 行拖拽视觉 (拖拽时原手柄保持灰色短线，不用 6 点蓝胶囊) ---------------- */
+.row-handle-btn.dragging {
+  background: transparent !important;
+  box-shadow: none !important;
+  opacity: 0.6 !important;
+  cursor: grabbing !important;
+}
+
+.row-handle-btn.dragging .row-handle-bar {
+  display: block !important;
+  background-color: var(--handle-color) !important;
+}
+
+.row-handle-btn.dragging .handle-dots-grid {
+  display: none !important;
+}
+
+/* 被拖动行的 Ghost 效果 */
+.notion-table tr.row-ghost td {
+  color: #c4c4c2 !important;
+  background-color: rgba(247, 246, 245, 0.7) !important;
+}
+
+/* 全局拖拽抓手光标锁定 (用户批注 media_1789394651714.png) */
+body.is-dragging-table,
+body.is-dragging-table * {
+  cursor: grabbing !important;
+}
+
+/* ---------------- 拖拽浮动镜像 (WYSIWYG Floating Drag Proxy - 去掉阴影，显示顶部/左侧短线手柄) ---------------- */
+.drag-floating-proxy {
+  position: fixed;
+  pointer-events: none;
+  z-index: 9999;
+  border: 2px solid var(--border-focus);
+  background-color: #ffffff;
+  box-shadow: none !important; /* 用户特别指明：阴影去掉，看着不好看 */
+  opacity: 0.95;
+  cursor: grabbing !important;
+  box-sizing: border-box;
+  overflow: visible;
+}
+
+/* 浮动层顶部居中短线手柄 (列拖拽 - 用户批注 media_1789394651714.png) */
+.drag-floating-proxy .proxy-handle-bar-top {
+  position: absolute;
+  top: -8px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 24px;
+  height: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.drag-floating-proxy .proxy-handle-bar-top .proxy-handle-line {
+  width: 16px;
+  height: 3px;
+  background-color: var(--handle-color);
+  border-radius: 2px;
+}
+
+/* 浮动层左侧居中短线手柄 (行拖拽) */
+.drag-floating-proxy .proxy-handle-bar-left {
+  position: absolute;
+  left: -8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 8px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.drag-floating-proxy .proxy-handle-bar-left .proxy-handle-line {
+  width: 3px;
+  height: 16px;
+  background-color: var(--handle-color);
+  border-radius: 2px;
+}
+
+.drag-floating-proxy table {
+  border-collapse: collapse;
+  table-layout: fixed;
+  background-color: #ffffff;
+  width: 100%;
+  font-family: inherit;
+  font-size: 20px;
+  line-height: 1.4;
+  margin: 0;
+  padding: 0;
+}
+
+.drag-floating-proxy th,
+.drag-floating-proxy td {
+  border: 1px solid var(--border-color);
+  padding: 10px 14px;
+  box-sizing: border-box;
+  vertical-align: middle;
+  text-align: left;
+  white-space: normal;
+  word-break: break-word;
+  background-color: #ffffff;
+  color: var(--text-primary);
+}
+
+.drag-floating-proxy th {
+  font-weight: 600;
+}
+
+.drag-floating-proxy td {
+  font-weight: 400;
+}
+
+/* ---------------- 拖拽落点指示线 (Drop Slot Lines - 精准指示落在哪两行/两列之间) ---------------- */
+/* 垂直列落点贯穿线 */
+.drag-slot-line-vertical {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background-color: var(--border-focus);
+  z-index: 60;
+  pointer-events: none;
+  transform: translateX(-50%);
+  display: none;
+}
+
+.drag-slot-line-vertical::before {
+  content: '';
+  position: absolute;
+  top: -4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 8px;
+  height: 8px;
+  background-color: var(--border-focus);
+  border-radius: 50%;
+}
+
+.drag-slot-line-vertical::after {
+  content: '';
+  position: absolute;
+  bottom: -4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 8px;
+  height: 8px;
+  background-color: var(--border-focus);
+  border-radius: 50%;
+}
+
+/* 水平行落点贯穿线 */
+.drag-slot-line-horizontal {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background-color: var(--border-focus);
+  z-index: 60;
+  pointer-events: none;
+  transform: translateY(-50%);
+  display: none;
+}
+
+.drag-slot-line-horizontal::before {
+  content: '';
+  position: absolute;
+  left: -4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 8px;
+  height: 8px;
+  background-color: var(--border-focus);
+  border-radius: 50%;
+}
+
+.drag-slot-line-horizontal::after {
+  content: '';
+  position: absolute;
+  right: -4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 8px;
+  height: 8px;
+  background-color: var(--border-focus);
+  border-radius: 50%;
+}

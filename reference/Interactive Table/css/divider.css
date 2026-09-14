@@ -1,0 +1,171 @@
+/* ==========================================================================
+   divider.css - 边框扩展感应带与加号插入线 (严格还原图三与图四)
+   - 距离边线 16px 以内：显示灰色圆圈加号 (图三)
+   - 距离边线 4px 以内：灰色变为亮蓝色实心加号，同时贯穿一条 2px 亮蓝指示线 (图四)
+   ========================================================================== */
+
+/* ---------------- 垂直列分割线指示控件 (Column Divider) ---------------- */
+.col-divider-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  pointer-events: none;
+  z-index: 30;
+  display: none;
+  transform: translateX(-50%);
+  transition: background-color 0.12s ease;
+}
+
+/* 图三状态：纯色不透明灰色指示线 (距离线 4px ~ 16px) - 指定纯灰度 #CACACA，无透明度 */
+.col-divider-line.gray {
+  display: block !important;
+  background-color: #CACACA;
+  pointer-events: auto !important;
+  cursor: pointer;
+}
+
+/* 图四状态：高亮蓝色指示线 (距离线 <= 4px) */
+.col-divider-line.blue {
+  display: block !important;
+  background-color: var(--border-focus);
+  pointer-events: auto !important;
+  cursor: pointer;
+}
+
+/* 扩展点击热区：让用户点击细线时轻松命中，绝不穿透到下方单元格 */
+.col-divider-line::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -8px;
+  right: -8px;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.col-divider-badge {
+  position: absolute;
+  top: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  transform: translate(-50%, -50%);
+  z-index: 40;
+  user-select: none;
+  cursor: pointer;
+  box-sizing: border-box;
+  transition: background-color 0.12s ease, box-shadow 0.12s ease;
+  pointer-events: auto;
+}
+
+/* 图三状态：纯色不透明灰色圆圈加号 (距离线 4px ~ 16px) - 指定纯色 #CACACA 实心底色，白加号 */
+.col-divider-badge.gray {
+  display: flex !important;
+  background-color: #CACACA;
+  color: #ffffff;
+}
+
+/* 图四状态：高亮蓝色圆圈加号 (距离线 <= 4px) */
+.col-divider-badge.blue {
+  display: flex !important;
+  background-color: var(--border-focus);
+  color: #ffffff;
+  box-shadow: 0 1px 4px rgba(35, 131, 226, 0.4);
+}
+
+.col-divider-badge .badge-icon {
+  font-size: 15px;
+  line-height: 1;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ---------------- 水平行分割线指示控件 (Row Divider) ---------------- */
+.row-divider-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  pointer-events: none;
+  z-index: 30;
+  display: none;
+  transform: translateY(-50%);
+  transition: background-color 0.12s ease;
+}
+
+/* 图三状态：纯色不透明灰色指示线 (距离线 4px ~ 16px) - 指定纯灰度 #CACACA，无透明度 */
+.row-divider-line.gray {
+  display: block !important;
+  background-color: #CACACA;
+  pointer-events: auto !important;
+  cursor: pointer;
+}
+
+/* 图四状态：高亮蓝色指示线 (距离线 <= 4px) */
+.row-divider-line.blue {
+  display: block !important;
+  background-color: var(--border-focus);
+  pointer-events: auto !important;
+  cursor: pointer;
+}
+
+/* 扩展点击热区：横向细线上下扩展 8px 点击响应区 */
+.row-divider-line::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -8px;
+  bottom: -8px;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.row-divider-badge {
+  position: absolute;
+  left: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  transform: translate(-50%, -50%);
+  z-index: 40;
+  user-select: none;
+  cursor: pointer;
+  box-sizing: border-box;
+  transition: background-color 0.12s ease, box-shadow 0.12s ease;
+  pointer-events: auto;
+}
+
+/* 图三状态：纯色不透明灰色圆圈加号 (距离线 4px ~ 16px) - 指定纯色 #CACACA 实心底色 */
+.row-divider-badge.gray {
+  display: flex !important;
+  background-color: #CACACA;
+  color: #ffffff;
+}
+
+/* 图四状态：高亮蓝色圆圈加号 (距离线 <= 4px) */
+.row-divider-badge.blue {
+  display: flex !important;
+  background-color: var(--border-focus);
+  color: #ffffff;
+  box-shadow: 0 1px 4px rgba(35, 131, 226, 0.4);
+}
+
+.row-divider-badge .badge-icon {
+  font-size: 15px;
+  line-height: 1;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}

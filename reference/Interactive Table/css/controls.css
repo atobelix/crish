@@ -1,0 +1,338 @@
+/* ==========================================================================
+   controls.css - 行手柄、列手柄、添加列条与添加行条
+   1. 行手柄与列手柄均表现为单条线段 (横线与竖线)
+   2. 激活/拖拽时变为图示的 6 点蓝色胶囊徽标 (:::)
+   3. 仅在对应行列 Hover 时显示，骑线居中对齐
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   1. 左侧行操作手柄 (Row Handle) - 单个竖线线段 |
+   -------------------------------------------------------------------------- */
+.row-handle-gutter {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  pointer-events: none;
+  z-index: 15;
+}
+
+.row-handle-btn {
+  position: absolute;
+  width: 18px;
+  height: 22px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.12s ease, background-color 0.12s ease;
+  user-select: none;
+  background: transparent;
+  border: none;
+  left: 0;
+  transform: translate(-50%, -50%);
+}
+
+/* 仅在对应行 Hover 或手柄激活时显现 */
+.row-handle-btn.visible,
+.row-handle-btn:hover,
+.row-handle-btn.active,
+.row-handle-btn.dragging {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.row-handle-btn:hover {
+  background-color: var(--handle-bg-hover);
+}
+
+.row-handle-btn:active,
+.row-handle-btn.dragging {
+  cursor: grabbing;
+}
+
+/* 单根竖线线段 (用户特别指明：行的那个不是两个线段，是一个小线段) */
+.row-handle-bar {
+  width: 3px;
+  height: 15px;
+  background-color: var(--handle-color);
+  border-radius: 2px;
+  transition: background-color 0.12s ease;
+  pointer-events: none;
+}
+
+.row-handle-btn:hover .row-handle-bar {
+  background-color: var(--handle-hover-color);
+}
+
+/* 激活菜单时：保持极简优雅短线，加深底色与短线色彩，不用 6 个小白点 (用户反馈 media_1789395201341.png) */
+.row-handle-btn.active {
+  background-color: var(--handle-bg-hover) !important;
+  border-radius: 4px;
+}
+
+.row-handle-btn.active .row-handle-bar {
+  display: block !important;
+  background-color: var(--handle-hover-color) !important;
+}
+
+.row-handle-btn.active .handle-dots-grid {
+  display: none !important;
+}
+
+/* 拖拽时：保持灰色短线，不用 6 点蓝胶囊 (用户特别指明) */
+.row-handle-btn.dragging {
+  background-color: transparent !important;
+  box-shadow: none !important;
+  opacity: 1 !important;
+}
+
+.row-handle-btn.dragging .row-handle-bar {
+  display: block !important;
+  background-color: var(--handle-hover-color) !important;
+}
+
+.row-handle-btn.dragging .handle-dots-grid {
+  display: none !important;
+}
+
+/* --------------------------------------------------------------------------
+   2. 顶部列操作手柄 (Column Handle) - 单个横向线段 -
+   -------------------------------------------------------------------------- */
+.col-handle-bar-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 0;
+  pointer-events: none;
+  z-index: 15;
+}
+
+.col-handle-btn {
+  position: absolute;
+  width: 24px;
+  height: 14px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.12s ease, background-color 0.12s ease;
+  user-select: none;
+  background: transparent;
+  border: none;
+  top: 0;
+  transform: translate(-50%, -50%);
+}
+
+.col-handle-btn.visible,
+.col-handle-btn:hover,
+.col-handle-btn.active,
+.col-handle-btn.dragging {
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+
+.row-handle-btn.visible,
+.row-handle-btn:hover,
+.row-handle-btn.active {
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+
+.col-handle-btn:hover {
+  background-color: var(--handle-bg-hover);
+}
+
+.col-handle-btn:active,
+.col-handle-btn.dragging {
+  cursor: grabbing;
+}
+
+/* 单根横向线段 */
+.col-handle-bar {
+  width: 16px;
+  height: 3px;
+  background-color: var(--handle-color);
+  border-radius: 2px;
+  transition: background-color 0.12s ease;
+  pointer-events: none;
+}
+
+.col-handle-btn:hover .col-handle-bar {
+  background-color: var(--handle-hover-color);
+}
+
+/* 激活菜单时：保持极简优雅短线，加深底色与短线色彩，不用 6 个小白点 */
+.col-handle-btn.active {
+  background-color: var(--handle-bg-hover) !important;
+  border-radius: 4px;
+}
+
+.col-handle-btn.active .col-handle-bar {
+  display: block !important;
+  background-color: var(--handle-hover-color) !important;
+}
+
+.col-handle-btn.active .handle-dots-grid {
+  display: none !important;
+}
+
+/* 拖拽时：保持横向灰色短线，不模仿 6 点蓝胶囊 (用户特别指明) */
+.col-handle-btn.dragging {
+  background-color: transparent !important;
+  box-shadow: none !important;
+  opacity: 1 !important;
+}
+
+.col-handle-btn.dragging .col-handle-bar {
+  display: block !important;
+  background-color: var(--handle-hover-color) !important;
+}
+
+.col-handle-btn.dragging .handle-dots-grid {
+  display: none !important;
+}
+
+/* 6 点阵图标 (::: 结构) */
+.handle-dots-grid {
+  display: none;
+  grid-template-columns: repeat(3, 2.5px);
+  grid-template-rows: repeat(2, 2.5px);
+  gap: 2.5px;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.col-handle-btn.active .handle-dots-grid,
+.row-handle-btn.active .handle-dots-grid {
+  display: grid;
+}
+
+.handle-dot {
+  width: 2.5px;
+  height: 2.5px;
+  background-color: #ffffff;
+  border-radius: 50%;
+}
+
+/* --------------------------------------------------------------------------
+   3. 右侧添加列条 (Add Column Strip)
+   高度贯穿整个表格全高 (与 add-row-strip 贯穿全宽一致，用户批注 media_1789394534708.png)
+   -------------------------------------------------------------------------- */
+.add-column-strip {
+  position: absolute;
+  right: -24px;
+  top: 0;
+  bottom: 0;
+  width: 18px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background-color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  user-select: none;
+  color: var(--text-muted);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease, background-color 0.12s ease;
+  box-sizing: border-box;
+  z-index: 10;
+}
+
+.add-column-strip.visible,
+.add-column-strip:hover {
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+
+.add-column-strip:hover {
+  background-color: var(--bg-hover);
+  border-color: #d0d0ce;
+  color: var(--text-primary);
+}
+
+.add-column-strip .plus-icon {
+  font-size: 14px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+/* --------------------------------------------------------------------------
+   4. 底部添加行条 (Add Row Strip)
+   仅在最底下一行单元格内 Hover 时出现
+   -------------------------------------------------------------------------- */
+.add-row-strip {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -24px;
+  height: 18px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background-color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  user-select: none;
+  color: var(--text-muted);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease, background-color 0.12s ease;
+  box-sizing: border-box;
+  z-index: 10;
+}
+
+.add-row-strip.visible,
+.add-row-strip:hover {
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+
+.add-row-strip:hover {
+  background-color: var(--bg-hover);
+  border-color: #d0d0ce;
+  color: var(--text-primary);
+}
+
+.add-row-strip .plus-icon {
+  font-size: 14px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+/* --------------------------------------------------------------------------
+   5. 列宽微调拖拽线 (Column Resizer)
+   -------------------------------------------------------------------------- */
+.col-resizer {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  bottom: 0;
+  width: 6px;
+  cursor: col-resize;
+  user-select: none;
+  z-index: 8;
+}
+
+.col-resizer:hover,
+.col-resizer.resizing {
+  background-color: var(--border-focus);
+}

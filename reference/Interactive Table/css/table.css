@@ -1,0 +1,98 @@
+/* ==========================================================================
+   table.css - 表格主体、单元格排版、选区高亮与编辑态解耦
+   ========================================================================== */
+
+.table-outer-container {
+  display: inline-block;
+  position: relative;
+  vertical-align: top;
+  padding-bottom: 40px;
+  padding-right: 40px;
+}
+
+.notion-table-wrapper {
+  display: flex;
+  align-items: flex-start;
+  position: relative;
+}
+
+.table-content-area {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+/* 核心表格 */
+.notion-table {
+  border-collapse: collapse;
+  table-layout: fixed;
+  background-color: #ffffff;
+  color: var(--text-primary);
+  font-size: 20px;
+  line-height: 1.4;
+  user-select: none; /* 默认禁止原生文本选取，由 selection-manager 掌控框选与编辑 */
+}
+
+/* 单元格基准排版 */
+.notion-table th,
+.notion-table td {
+  border: 1px solid var(--border-color);
+  padding: 10px 14px;
+  height: 52px;
+  box-sizing: border-box;
+  vertical-align: middle;
+  text-align: left;
+  position: relative;
+  white-space: normal;
+  word-break: break-word;
+  outline: none;
+  cursor: cell; /* 默认显示表格单元格选择十字或指针 */
+  transition: background-color 0.1s ease;
+}
+
+/* 表头行样式 - 浅灰底色与字重 */
+.notion-table th,
+.notion-table tr.header-row td {
+  background-color: var(--bg-header);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* 表头列样式 (如果开启) */
+.notion-table.has-header-col tr td:first-child {
+  background-color: var(--bg-header);
+  font-weight: 600;
+}
+
+/* 单个单元格聚焦选中态 (仅外框蓝色，未进入编辑模式) */
+.notion-table td.cell-selected,
+.notion-table th.cell-selected {
+  background-color: var(--bg-selected) !important;
+}
+
+.notion-table td.cell-focused,
+.notion-table th.cell-focused {
+  box-shadow: inset 0 0 0 2px var(--border-focus);
+  z-index: 2;
+}
+
+/* 单元格文字编辑模式 (光标可见，允许原生文本输入与选区) */
+.notion-table td.editing,
+.notion-table th.editing {
+  user-select: text !important;
+  cursor: text !important;
+  background-color: #ffffff !important;
+  box-shadow: inset 0 0 0 2px var(--border-focus) !important;
+  z-index: 5;
+}
+
+/* 多单元格矩形框选连续外包围框 (Notion 风格 selection overlay) */
+.selection-range-box {
+  position: absolute;
+  border: 2px solid var(--border-focus);
+  background-color: rgba(35, 131, 226, 0.08);
+  pointer-events: none;
+  z-index: 15;
+  box-sizing: border-box;
+  display: none;
+}
