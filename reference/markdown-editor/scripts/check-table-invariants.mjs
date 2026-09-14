@@ -128,16 +128,77 @@ export const METRICS = [
   },
 ];
 
-/** 运行时/DOM 类不变量——尚未实现，登记以免静默略过 */
-export const PENDING_RUNTIME_INVARIANTS = [
-  { id: 'I1-runtime', label: '单横向滚动所有者实例计数', phase: 'T3' },
-  { id: 'I2', label: '列宽无震荡（重复测量恒等）', phase: 'T4' },
-  { id: 'I3', label: '表格高度上报源计数 == 1', phase: 'T4' },
-  { id: 'I4', label: '表格上方增删行后列宽/对齐/选区不变', phase: 'T2' },
-  { id: 'I6', label: '选区单矩形与角单元格几何一致（≤1px）', phase: 'T5' },
-  { id: 'I7', label: '增删行列后选区重映射', phase: 'T5' },
-  { id: 'I8', label: '无同一源码行重复渲染（含行序完整性）', phase: 'T4' },
+/**
+ * 运行时 / DOM 类不变量登记表（**禁止静默略过**）。
+ *
+ * `status` 语义（2026-09-14 T4 引入）：
+ *   - `asserted`：已有可运行断言落地（`assertedBy` 必须给出测试文件路径，
+ *     由 `tests/gate/table-invariants.test.ts` 校验文件存在——防止「登记了
+ *     断言落点但文件根本不存在」这类空头承诺）；
+ *   - `pending`：尚未落地，`phase` 给出归属波次。
+ *
+ * 说明：T4 之前本表只有 `pending` 一种状态（旧名 `PENDING_RUNTIME_INVARIANTS`），
+ * 故保留同名别名以免既有引用失效；新代码请用 `RUNTIME_INVARIANTS`。
+ */
+export const RUNTIME_INVARIANTS = [
+  {
+    id: 'I1-runtime',
+    label: '单横向滚动所有者实例计数',
+    phase: 'T3',
+    status: 'pending',
+  },
+  {
+    id: 'I2',
+    label: '列宽无震荡（重复测量恒等）',
+    phase: 'T4',
+    // 分配器确定性 + 探针零写入（jsdom）已落地；浏览器侧「同一（内容、
+    // 容器宽）连续 3 个 epoch 的栅格模板恒等」属物理验收（A3/A7），
+    // 待 `npm run test:measure` / `npm run test:perf` 波次。
+    status: 'asserted',
+    assertedBy: 'tests/unit/table-island-wiring.test.ts',
+  },
+  {
+    id: 'I3',
+    label: '表格高度上报源计数 == 1',
+    phase: 'T4',
+    // jsdom 引擎级：岛高上报计数只增于岛根 RO、稳定后不再增长；区间内部行
+    // 不成虚拟项（宿主行承载整表高度）。浏览器侧计数 == 1 待物理波次。
+    status: 'asserted',
+    assertedBy: 'tests/unit/table-island-wiring.test.ts',
+  },
+  {
+    id: 'I4',
+    label: '表格上方增删行后列宽/对齐/选区不变',
+    phase: 'T2',
+    status: 'pending',
+  },
+  {
+    id: 'I6',
+    label: '选区单矩形与角单元格几何一致（≤1px）',
+    phase: 'T5',
+    status: 'pending',
+  },
+  {
+    id: 'I7',
+    label: '增删行列后选区重映射',
+    phase: 'T5',
+    status: 'pending',
+  },
+  {
+    id: 'I8',
+    label: '无同一源码行重复渲染（含行序完整性）',
+    phase: 'T4',
+    // jsdom 引擎级：岛内 `data-line-index` 与源码表行一一对应、无重复，
+    // 且 `data-index` 仍全局唯一（岛内行不占用该属性）。
+    status: 'asserted',
+    assertedBy: 'tests/unit/table-island-wiring.test.ts',
+  },
 ];
+
+/** 兼容别名（T4 之前的口径）：仅 `pending` 项。 */
+export const PENDING_RUNTIME_INVARIANTS = RUNTIME_INVARIANTS.filter(
+  (i) => i.status === 'pending'
+);
 
 // ── 工具 ─────────────────────────────────────────────────────
 
@@ -295,8 +356,12 @@ function main() {
   console.log('');
   console.log(`  达标 ${met}/${measurable} 指标（其余为现状待收敛项，见各指标 [phase]）`);
   console.log(
-    `  运行时类不变量待后续波次补入 ${PENDING_RUNTIME_INVARIANTS.length} 项：` +
-      PENDING_RUNTIME_INVARIANTS.map((p) => `${p.id}(${p.phase})`).join(' / ')
+    `  运行时类不变量登记 ${RUNTIME_INVARIANTS.length} 项（已断言 ` +
+      `${RUNTIME_INVARIANTS.filter((p) => p.status === 'asserted').length} / 待波次 ` +
+      `${PENDING_RUNTIME_INVARIANTS.length}）：` +
+      RUNTIME_INVARIANTS.map(
+        (p) => `${p.id}(${p.status === 'asserted' ? '✓' : p.phase})`
+      ).join(' / ')
   );
 
   if (updateBaseline) {
@@ -306,7 +371,7 @@ function main() {
         '基线只允许单向收紧（不得回退）。权威定义见 docs/table-systemic-remediation/00-总方案 §6。',
       updatedAt: new Date().toISOString(),
       metrics: Object.fromEntries(results.map((r) => [r.id, { value: r.value, direction: r.direction, target: r.target, phase: r.phase }])),
-      pendingRuntime: PENDING_RUNTIME_INVARIANTS,
+      runtimeInvariants: RUNTIME_INVARIANTS,
     };
     writeFileSync(BASELINE_PATH, JSON.stringify(payload, null, 2) + '\n', 'utf-8');
     console.log(`\n✓ 已冻结基线（${results.length} 指标）→ tests/gate/table-invariants-baseline.json`);

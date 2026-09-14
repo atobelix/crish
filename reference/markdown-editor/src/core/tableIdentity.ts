@@ -328,5 +328,17 @@ export function tableIdentityCount(): number {
   return registry.size;
 }
 
+/**
+ * 表格行**文本口径**的唯一判定入口（`trim().startsWith('|')`）。
+ *
+ * 口径来源：`MarkdownEngine.tsx` 旧实现（`01-分维` C16 登记：不以 `|` 开头的
+ * 裸管道行会被本口径误判为非表格行；parser 另有 `pipeCount>=3` 的裸行成表
+ * 判定，二者未对齐，属 T8 收敛项）。T4 的表格区间索引与 `resolveTableId`
+ * 必须共用本函数，避免出现第二套区间口径。
+ */
+export function isTableRowText(text: string): boolean {
+  return text.trim().startsWith('|');
+}
+
 /** 类型再导出，便于消费方只依赖本模块。 */
 export type { ColumnAlignment };

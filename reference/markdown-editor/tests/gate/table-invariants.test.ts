@@ -11,10 +11,11 @@
 //   ④ 登记运行时类不变量，防止「未实现」被静默略过。
 // ============================================================
 import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import {
   METRICS,
   PENDING_RUNTIME_INVARIANTS,
+  RUNTIME_INVARIANTS,
   findRegressions,
   loadBaseline,
   runChecks,
@@ -151,7 +152,10 @@ describe('表格不变量门禁 · 运行时类不变量登记', () => {
       expect(METRICS.map((m) => m.id), `静态指标 ${id} 缺失`).toContain(id);
     }
     // 运行时侧覆盖：I1-runtime、I2、I3、I4、I6、I7、I8
-    const runtimeIds = PENDING_RUNTIME_INVARIANTS.map((p) => p.id);
+    // （T4 起改用**全量**登记表——已断言项不再出现在兼容别名
+    //  PENDING_RUNTIME_INVARIANTS 中，覆盖校验必须看全量，否则「已断言」
+    //  会被误判为「未登记」）
+    const runtimeIds = RUNTIME_INVARIANTS.map((p) => p.id);
     for (const id of ['I1-runtime', 'I2', 'I3', 'I4', 'I6', 'I7', 'I8']) {
       expect(runtimeIds, `运行时不变量 ${id} 未登记`).toContain(id);
       expect(covered, `不变量 ${id} 不在 I1–I10 覆盖集`).toContain(id);
@@ -201,5 +205,91 @@ describe('表格岛 · 结构契约（T3 / I1 的静态形态）', () => {
     // 岛不得引用 parser（行解析唯一真源在 MarkdownEngine / parser）
     expect(tsx).not.toContain("from '../core/parser'");
     expect(tsx).not.toContain('parseLine');
+  });
+});
+
+describe('表格不变量门禁 · 运行时登记表自洽（T4）', () => {
+  it('每项都声明合法 status，且已断言项给出**存在**的断言落点', () => {
+    expect(RUNTIME_INVARIANTS.length).toBeGreaterThan(0);
+    for (const inv of RUNTIME_INVARIANTS) {
+      expect(['asserted', 'pending'], `${inv.id} status 非法`).toContain(inv.status);
+      if (inv.status === 'asserted') {
+        expect(inv.assertedBy, `${inv.id} 已断言但缺 assertedBy`).toBeTruthy();
+        // 防「登记了落点但文件根本不存在」的空头承诺
+        expect(
+          existsSync(new URL(`../../${inv.assertedBy}`, import.meta.url)),
+          `${inv.id} 的断言落点不存在：${inv.assertedBy}`
+        ).toBe(true);
+      } else {
+        expect(KNOWN_PHASES, `${inv.id} 待波次但 phase 非法`).toContain(inv.phase);
+      }
+    }
+  });
+
+  it('T4 落地的 I2 / I3 / I8 已从「待波次」转为「已断言」', () => {
+    const byId = new Map(RUNTIME_INVARIANTS.map((i) => [i.id, i]));
+    for (const id of ['I2', 'I3', 'I8']) {
+      expect(byId.get(id)?.status, `${id} 未标记为已断言`).toBe('asserted');
+    }
+    // 兼容别名只含待波次项（旧引用不会看到已断言项）
+    expect(PENDING_RUNTIME_INVARIANTS.map((i) => i.id)).not.toContain('I2');
+  });
+});
+
+describe('表格岛 · T4 接线契约（静态形态）', () => {
+  const read = (p: string): string =>
+    readFileSync(new URL(`../../${p}`, import.meta.url), 'utf-8');
+  const stripComments = (s: string): string =>
+    s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+
+  it('岛内行与旧路径**共用同一逐行派生单元**（SSOT，杜绝第二套行解析）', () => {
+    const row = read('src/components/TableIslandRow.tsx');
+    expect(row).toContain("from '../core/lineUnit'");
+    expect(row).toContain('deriveLineUnit');
+    // 岛内行不得自行解析源码
+    expect(row).not.toContain('parseLine');
+    expect(row).not.toContain("from '../core/parser'");
+    // 旧路径同样经该单元（两路径同源）
+    expect(read('src/components/MarkdownEngine.tsx')).toContain('deriveLineUnit');
+  });
+
+  it('I8 防回归：岛内行**不得**声明 `data-index`（该属性要求全局唯一）', () => {
+    const row = stripComments(read('src/components/TableIslandRow.tsx'));
+    expect(row).not.toContain('data-index');
+    // 岛内行的唯一标识走 `data-line-index`
+    expect(row).toContain('data-line-index');
+  });
+
+  it('I3 静态形态：岛高上报登记点在岛组件内**恰好一处**', () => {
+    const tsx = stripComments(read('src/components/TableBlock.tsx'));
+    const calls = tsx.match(/recordIslandHeightReport\s*\(/g) ?? [];
+    expect(calls).toHaveLength(1);
+  });
+
+  it('接线单元全部门控于开关（关闭即旧路径零变化）', () => {
+    const wiring = read('src/components/useTableIslandWiring.ts');
+    expect(wiring).toContain('isTableIslandEnabled');
+    expect(wiring).toContain('rangeExtractor');
+    expect(wiring).toContain('applyHeightProtocol');
+    // 开关守卫数量 ≥ 3（hostAt / rangeExtractor / 高度协议各自短路）
+    expect((wiring.match(/isTableIslandEnabled\(\)/g) ?? []).length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('引擎接线：单一虚拟项折叠 + 高度协议接在 syncTo 之后 + 循环跳过岛宿主', () => {
+    const me = read('src/components/MarkdownEngine.tsx');
+    expect(me).toContain('defaultRangeExtractor');
+    expect(me).toContain('rangeExtractor');
+    expect(me).toContain('TableIslandHost');
+    expect(me).toContain('applyHeightProtocol');
+    // 批量测量循环必须跳过岛宿主行（防两个测量源打架，I3）
+    expect(me).toContain('islandWiring.hostAt(item.index)');
+    // 岛路径下引擎侧列宽定型让位（ADR-4：列宽由岛内探针一次测量定义）
+    expect(me).toMatch(/isTableIslandEnabled\(\)\) return;/);
+  });
+
+  it('岛内窗口化与行高前缀表落在 core（可单测），不在组件内私藏', () => {
+    const island = read('src/core/tableIsland.ts');
+    expect(island).toContain('class RowTopIndex');
+    expect(island).toContain('allocateColWidths');
   });
 });

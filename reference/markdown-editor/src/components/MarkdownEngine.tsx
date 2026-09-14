@@ -5,7 +5,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { useVirtualizer } from '@tanstack/react-virtual';
+import { useVirtualizer, defaultRangeExtractor } from '@tanstack/react-virtual';
 import { BlockRenderer } from './BlockRenderer';
 import { HiddenInput, indexFromClientPoint } from './HiddenInput';
 import { CursorLayer } from './CursorLayer';
@@ -13,12 +13,10 @@ import { SelectionHighlight } from './SelectionHighlight';
 import { TableToolbar } from './TableToolbar';
 import {
   useEditorStore,
-  type EditorState,
   type EditorStore,
 } from '../core/EditorStore';
 import { useTableStore, tableColWidthsAtLine } from '../core/TableStore';
 import { MarkdownParser } from '../core/parser';
-import type { CalloutType } from '../core/ast';
 import { HeightMap, HeightOracle, classifyLine } from '../core/HeightMap';
 // Alcove 复刻（Seg B）：活动行块类型徽标（视口右上角类型提示）
 import { BlockTypeBadge } from './BlockTypeBadge';
@@ -29,83 +27,14 @@ import {
   type FrontmatterRole,
 } from '../core/frontmatter';
 import { FrontmatterChrome } from './FrontmatterChrome';
+// T4 表格岛接线（ADR-2 单容器 / ADR-5 高度单源）：岛组件 + 引擎侧接线单元
+import { TableIslandHost } from './TableIslandHost';
+import { useTableIslandWiring, type TableIslandWiring } from './useTableIslandWiring';
+// T4 共享逐行派生单元（SSOT）：旧路径 LineItem 与岛内行共用同一派生口径
+import { deriveLineUnit, getLineState } from '../core/lineUnit';
+// T4 岛开关（默认关闭；开关关闭时旧逐行路径零变化）
+import { isTableIslandEnabled } from '../core/tableIsland';
 
-// 引入块区间拓扑与 Callout 上下文支持
-import { type CalloutContext } from '../core/BlockIntervalTree';
-import { LRUCache } from '../core/LRUCache';
-
-const calloutContextCache = new LRUCache<string, CalloutContext | null>(1000);
-
-/** 获取当前行的 Callout 上下文（支持任意长度多行 Callout 向上继承，无 50 行截断） */
-function getCalloutContext(
-  getLine: (i: number) => string,
-  index: number
-): CalloutContext | null {
-  const line = getLine(index);
-  if (!line || !/^ {0,3}>\s?/.test(line)) return null;
-
-  const cacheKey = `${index}:${line}`;
-  const cached = calloutContextCache.get(cacheKey);
-  if (cached !== undefined) {
-    return cached;
-  }
-
-  const headerMatch = line.match(
-    /^ {0,3}>\s*\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\](?:\s+(.*))?$/i
-  );
-  if (headerMatch) {
-    const res: CalloutContext = {
-      type: headerMatch[1].toLowerCase() as CalloutType,
-      title: headerMatch[2]?.trim() || '',
-      isHeader: true,
-    };
-    calloutContextCache.set(cacheKey, res);
-    return res;
-  }
-
-  // 快速前驱检查：如果前一行就是 Callout，本行以 O(1) 立即继承
-  if (index > 0) {
-    const prevLine = getLine(index - 1);
-    if (prevLine && /^ {0,3}>\s?/.test(prevLine)) {
-      const prevKey = `${index - 1}:${prevLine}`;
-      const prevCtx = calloutContextCache.get(prevKey);
-      if (prevCtx) {
-        const res: CalloutContext = {
-          type: prevCtx.type,
-          title: prevCtx.title,
-          isHeader: false,
-        };
-        calloutContextCache.set(cacheKey, res);
-        return res;
-      }
-    }
-  }
-
-  // 向上连续扫描连续引用行，彻底消除 50 行截断限制
-  let prevIdx = index - 1;
-  while (prevIdx >= 0) {
-    const prevLine = getLine(prevIdx);
-    if (!prevLine || !/^ {0,3}>\s?/.test(prevLine)) {
-      break;
-    }
-    const prevMatch = prevLine.match(
-      /^ {0,3}>\s*\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\](?:\s+(.*))?$/i
-    );
-    if (prevMatch) {
-      const res: CalloutContext = {
-        type: prevMatch[1].toLowerCase() as CalloutType,
-        title: prevMatch[2]?.trim() || '',
-        isHeader: false,
-      };
-      calloutContextCache.set(cacheKey, res);
-      return res;
-    }
-    prevIdx--;
-  }
-
-  calloutContextCache.set(cacheKey, null);
-  return null;
-}
 // W1-1（D-4）：不可直刷 chunk 的 rAF 帧批缓冲（500 token/s → ≤60 提交/s）
 import { StreamBuffer } from '../core/StreamBuffer';
 // R5-D 装饰层统一（06 §2）：active/选区/搜索统一进 DecorationSet——
@@ -145,32 +74,12 @@ import { FoldState, FOLD_PLACEHOLDER_HEIGHT } from '../core/foldState';
 import { resolveRenderMode, type RenderMode } from '../core/rowSurface';
 // B3 双段行视图 diff（大纲索引/折叠平移的编辑定位）：共享原语
 import { lineAt, lineCountOf } from '../core/EditorStore';
-// P3 B2（plan-A2 方案 B 样式预演）：流式末行未闭合行内标记检测纯函数
-// （只读派生、数据层零篡改）+ 预演提示上下文（LineItem 注入、
-// InlineRenderer 的 text token 消费——零新 DOM 节点）
-import { decorateIncompleteInline } from '../core/decorateIncompleteInline';
+// P3 B2 预演提示上下文（LineItem 注入、InlineRenderer 的 text token 消费——
+// 零新 DOM 节点）；未闭合行内标记检测纯函数已随 T4 下沉到共享派生单元
+// `src/core/lineUnit.ts`（与岛内行共用同一口径）
 import { InlinePreviewContext } from './InlineRenderer';
 
-/**
- * 行状态惰性访问器（R3-B1 访问器切换）：store 目前只暴露了
- * getLine/getLineCount/getLineIndex，未暴露行状态访问器——此处镜像
- * getLine 的「主数组 + 流式尾段」双段边界语义（EditorStore.getLine 的
- * 实现：尾段为空 → 直接读主数组；非空 → 尾段「接管」主数组末行，
- * i ≥ boundary = main.length - 1 时从尾段相对下标 i - boundary 取）：
- * - 尾段为空（常规编辑/加载路径）：直接读主状态数组（全量，零额外开销）；
- * - 尾段非空（append 流式期间）：按边界取尾段状态，全程不触读物化
- *   codeBlockState 视图（尾段非空时物化会执行 concat 过渡成本）。
- * 渲染热路径（LineItem 取行/主组件 estimateSize/批量测量）统一经
- * store.getState().getLine(i) + 本访问器取行内容与状态，绝不读
- * state.lines / state.codeBlockState 物化数组（R3-B1 验收）。
- */
-function getLineState(s: EditorState, i: number): CodeState {
-  if (s.streamTailCodeState.length === 0) return s.mainCodeState[i];
-  const boundary = s.mainLines.length - 1;
-  return i < boundary
-    ? s.mainCodeState[i]
-    : s.streamTailCodeState[i - boundary];
-}
+
 
 // ── C3 流式直刷 DOM（08 方案优化补充 §1 招 1 限定版 / 09 方案修订终版 §4 C3）──
 // 直刷仅限「纯文本末行」：行内无任何可构成 CommonMark 语法的字符，
@@ -511,77 +420,8 @@ const LineItem = React.memo(
     // flush 后 dirty 清除 → 按最新 lineText 全新渲染，DOM 与 store 收敛。
     const frozenContentRef = useRef<React.ReactElement | null>(null);
 
-    // R5-D：行级装饰查询（行范围 = 本行字符区间 [offset, offset + 行长)；
-    // 闭区间相交谓词在 DecorationSet.query 内实现——旧 selector 的
-    // active/选区判定逐分支等价迁移，行为零变化）
-    const lineDecorations = React.useMemo(
-      () => decorations.query(offset, offset + lineText.length),
-      // R6-C：依赖从全局 decorationVersion 降为本行行版本——本行装饰
-      // 内容变化（行版本递增）时重查，其他行装饰变化不触发本行重查；
-      // decorations 为可变结构，行内变更不可见，必须经行版本驱动重查
-      // （与下方批量测量 effect 的语义依赖注释同款）
-      // oxlint-disable-next-line react-hooks/exhaustive-deps
-      [decorations, rowDecorationVersion, offset, lineText.length]
-    );
-
-    // R5-D：activeState 派生（props 结构兼容旧 selector 输出）：
-    // - selection 装饰 → { cursor, selStart, selEnd }——cursor 取选区
-    //   末端（占位：有选区分支的消费方 InlineRenderer / checkIsActive
-    //   不读 cursor，与旧语义一致，值仅保持结构完整）；
-    // - active 装饰（选区折叠的光标）→ { cursor }（selStart/selEnd 缺省）；
-    // - 无装饰 → null（非活动行）。
-    const activeState = React.useMemo(() => {
-      const sel = lineDecorations.find((d) => d.kind === 'selection');
-      if (sel) {
-        return { cursor: sel.to, selStart: sel.from, selEnd: sel.to };
-      }
-      const active = lineDecorations.find((d) => d.kind === 'active');
-      return active ? { cursor: active.from } : null;
-    }, [lineDecorations]);
-
-    // 搜索高亮（05 高频项预留）：命中 search 装饰的行打 is-search-line
-    // class——宿主可经 CSS 定制行级标记；token 级高亮渲染属 R5-C 渲染域，
-    // 本轮为「API + 简单高亮 class」接入点
-    const hasSearchDecoration = lineDecorations.some(
-      (d) => d.kind === 'search'
-    );
-
-    // 表格稳定身份（ADR-3 / 裁决 R18）：由 tableIdentity 统一解析——
-    // 身份与行号**解耦**（内容签名 + 位置兜底），故表格上方插入/删除行不再改变身份；
-    // 渲染层亦不再需要解码身份格式（表头判定/分隔行/列对齐一律经身份查询）。
-    const tableId = store((state) => resolveTableId(state.getLine, index));
-
-    const calloutCtx = React.useMemo(() => {
-      if (!/^ {0,3}>\s?/.test(lineText)) return null;
-      return getCalloutContext((i) => store.getState().getLine(i), index);
-    }, [lineText, index, store]);
-
-    const lineNode = MarkdownParser.parseLine(
-      lineText,
-      offset,
-      isCode,
-      0,
-      null,
-      false,
-      null,
-      null,
-      false,
-      null,
-      calloutCtx ? calloutCtx.type : null,
-      calloutCtx ? calloutCtx.title : null,
-      calloutCtx ? calloutCtx.isHeader : false
-    );
-
     // P3 B2 流式末行判定（plan-A2 §3 作用范围）：预演仅作用于「流式会话
     // 进行中的文档末行」——编辑态/非末行/代码行一律不预演。
-    // - 末行判定 = streamingDirty（直刷协议扩展：直刷行并入，纯文本行
-    //   无预演候选标记，decorateIncompleteInline 自然短路）∪ store.
-    //   streamActive 为 true（流式会话进行中，stop-flush 前，W2-1 D-1 换源
-    //   ——旧判定 streamOp !== null；只读快路径 streamOp 恒 null 但
-    //   streamActive 照常置位，预演对只读流式会话同样生效）且本行为
-    //   文档末行（append 逐 chunk 增长，末行即流式写入目标行）；
-    // - 纯派生：只读行文本与行状态，不写 store、不产新 token——undo/
-    //   编辑/序列化/光标测量（data-token 映射）零影响。
     // 流式会话进行中的末行订阅（无条件 hook——与 streamingDirty 的并集
     // 在订阅结果之上合并，不得短路 hook 调用：直刷期间 streamingDirty 为
     // true，若直接 `!!streamingDirty || store(...)` 会跳过订阅 → flush 后
@@ -590,15 +430,58 @@ const LineItem = React.memo(
       (s) => s.streamActive === true && index === s.getLineCount() - 1
     );
     const isStreamingTail = !!streamingDirty || streamTailFlag;
-    // 单趟 O(行长) 扫描（流式末行才执行；编辑态/代码行短路零开销）
-    const previewDecoration = React.useMemo(
-      () => decorateIncompleteInline(lineText, isStreamingTail, isCode),
-      [lineText, isCode, isStreamingTail]
+
+    // 表格稳定身份（ADR-3 / 裁决 R18）：由 tableIdentity 统一解析——
+    // 身份与行号**解耦**（内容签名 + 位置兜底），故表格上方插入/删除行不再改变身份；
+    // 渲染层亦不再需要解码身份格式（表头判定/分隔行/列对齐一律经身份查询）。
+    // 保留既有**订阅**语义（身份变化即刷新），并把结果传入派生单元
+    // （避免派生单元二次探测同一身份）。
+    const tableId = store((state) => resolveTableId(state.getLine, index));
+
+    // T4 共享逐行派生单元（SSOT，src/core/lineUnit.ts）：行级装饰查询 /
+    // activeState / 搜索命中 / callout 上下文 / parser 行节点 / 流式预演 /
+    // 表格身份全部经 `deriveLineUnit` 一次派生——**与岛内行（TableIslandRow）
+    // 共用同一口径**，杜绝同一源码行在两条路径下得到不同 token。
+    //
+    // 依赖口径与迁移前逐字一致（R6-C）：行级版本 `rowDecorationVersion` 驱动
+    // 重派生（本行装饰内容变化才重派生，其他行装饰变化 → memo 命中）。
+    const getLine = React.useCallback(
+      (i: number) => store.getState().getLine(i),
+      [store]
     );
+
+    const unit = React.useMemo(
+      () =>
+        deriveLineUnit({
+          index,
+          lineText,
+          offset,
+          isCode,
+          decorations,
+          rowDecorationVersion,
+          getLine,
+          isStreamingTail,
+          tableId,
+        }),
+      // decorations 为可变结构（行内变更不可见），必须经行版本驱动重派生
+      // oxlint-disable-next-line react-hooks/exhaustive-deps
+      [
+        index,
+        lineText,
+        offset,
+        isCode,
+        decorations,
+        rowDecorationVersion,
+        getLine,
+        isStreamingTail,
+        tableId,
+      ]
+    );
+
+    const { lineNode, activeState, hasSearchDecoration } = unit;
     // 上下文值稳定化：非预演恒为 null（引用稳定——memo 命中不受影响）；
     // 预演期间逐 chunk 更新（预演段随流式文本增长）
-    const previewContextValue =
-      previewDecoration.hint !== undefined ? previewDecoration : null;
+    const previewContextValue = unit.previewHint;
 
     const freshContent = (
       // P3 B2：预演提示经 React context 注入（Provider 不产生 DOM 节点，
@@ -1018,11 +901,29 @@ export const MarkdownEngine = React.forwardRef<
       );
   }, []);
 
+  // ── T4 表格岛接线（ADR-2 单容器 / ADR-5 高度单源）────────────────────────
+  // `islandWiringRef`：`useVirtualizer` 的 `estimateSize`/`rangeExtractor` 选项
+  // 在实例创建期即被捕获，而接线单元（`useTableIslandWiring`）需要
+  // `virtualizer` 本身——故经 ref 单向引用，避免循环依赖。首帧 ref 尚未赋值时
+  // 自动回落旧逐行路径（开关默认关闭时全程走该路径，行为零变化）。
+  const islandWiringRef = useRef<TableIslandWiring | null>(null);
+
   // Virtualization setup: fixed size = 28px perfectly aligns with grid paper CSS
   const virtualizer = useVirtualizer({
     count: lineCount,
     getScrollElement: () => parentRef.current,
+    // T4（ADR-2）：表格区间折叠为单一虚拟项——`rangeExtractor` 把区间内部行
+    // 从窗口剔除、只保留宿主行（窗口落在表内部时注入宿主行）。开关关闭时
+    // 恒等返回默认窗口（旧路径零变化）。
+    rangeExtractor: (range) =>
+      islandWiringRef.current
+        ? islandWiringRef.current.rangeExtractor(range)
+        : defaultRangeExtractor(range),
     estimateSize: (i) => {
+      // T4（ADR-2/ADR-5）：岛路径的行高口径——岛宿主行 = 整表高度（实测优先、
+      // 否则初值估算），区间内部行 = 0（表格高度的唯一来源是岛宿主行，I3）。
+      const islandH = islandWiringRef.current?.estimateSizeAt(i);
+      if (islandH !== null && islandH !== undefined) return islandH;
       // 行高来源优先级：HeightMap 存储值（实测回填 / 插入时预测）→ oracle 即时预测。
       // （R2-D 核实结论：tanstack count 变化不会清空 itemSizeCache（virtual-core
       // getMeasurements 仅在 !enabled / lanes 变化时清缓存），estimateSize 只对
@@ -1138,6 +1039,7 @@ export const MarkdownEngine = React.forwardRef<
     useCachedMeasurements: true,
   });
 
+
   // ── C3 流式直刷状态（ref 级，不触发渲染）──
   // pendingStreamRef：已直写 DOM、尚未提交 store 的累积文本（直刷会话
   // 的延迟提交缓冲，与 C4 尾段互为镜像——直刷 flush 一次性 appendText）；
@@ -1189,6 +1091,27 @@ export const MarkdownEngine = React.forwardRef<
   // scrollFollowRef：prop 的 ref 镜像（评估/事件处理闭包引用，避免依赖
   // 展开进 useCallback 依赖链）。
   const followStateRef = useRef<'follow' | 'paused'>('follow');
+  // ── T4 表格岛接线单元（ADR-2 单容器 / ADR-4 列宽 / ADR-5 高度单源）────────
+  // 契约：区间索引（单一虚拟项折叠）/ 岛高上报回调 / 高度协议（岛头=岛高、
+  // 内部行=0）/ 行高估算。全部以 `isTableIslandEnabled()` 为门——开关关闭时
+  // 逐个函数短路，旧逐行路径零变化（`00-总方案` §9.2 规则 2）。
+  const islandWiring = useTableIslandWiring({
+    store: engineStore,
+    virtualizer,
+    heightMapRef,
+    scrollElRef: parentRef,
+    followStateRef,
+    foldStateRef,
+    oracleRef,
+  });
+  islandWiringRef.current = islandWiring;
+
+  // 岛路径的列宽定型落点（ADR-4 §3.5）：写 TableStore 真源 + M6 引擎登记点
+  // （perf 口径与旧路径一致，不得静默丢计数）。
+  const islandOnColWidths = useCallback((tableId: string, widths: number[]) => {
+    useTableStore.getState().setTableWidths(tableId, widths);
+    recordTableWidthSettle(tableId);
+  }, []);
   const followPendingRef = useRef(false);
   const scrollFollowRef = useRef(scrollFollow);
   scrollFollowRef.current = scrollFollow;
@@ -1898,11 +1821,18 @@ export const MarkdownEngine = React.forwardRef<
       // ADR-4/5：表格行按真实列宽逐列估算（断层 D5）
       return oracle.predict(classifyLine(raw, st), raw, st, tableColWidthsAtLine(s.getLine, i));
     });
+    // T4 高度协议（ADR-5 §3.6 / §3.7 第 ③ 步）：`syncTo` 会把新追加的行填上
+    // 预测高（含表内行），故必须在 syncTo **之后**重写「岛宿主行 = 整表高度、
+    // 区间内部行 = 0」——表格高度的唯一来源是岛宿主行（I3）。开关关闭时空操作。
+    islandWiring.applyHeightProtocol(virtualizer.getVirtualItems());
     const scrollEl = parentRef.current;
     const currentScrollTop = scrollEl ? scrollEl.scrollTop : 0;
     let deltaHeightAbove = 0;
 
     for (const item of virtualizer.getVirtualItems()) {
+      // T4：岛宿主行**不参与**逐行测量——它的高度由岛根自测量上报（唯一上报源，
+      // I3 的守卫）；此处若再测一次 `offsetHeight`，同一高度就会有两个写者。
+      if (islandWiring.hostAt(item.index)) continue;
       const el = rowRefs.current.get(item.index);
       // 已卸载行（DOM 已断开）直接从注册表剔除，防 stale 条目污染批量测量
       if (!el || !el.isConnected) {
@@ -1981,6 +1911,11 @@ export const MarkdownEngine = React.forwardRef<
     // 非流式（streamActive 为 false）→ 既有闭合定型路径（零变化，非流式
     // + 表格为文档尾的 nextLn === null 闭合语义保持）。
     try {
+      // T4（ADR-4）：岛路径下**列宽由岛内离屏探针一次测量定义**（固有宽，
+      // 与当前列宽无关 ⇒ 无自增强收缩），引擎侧的原 `scrollWidth` 定型路径
+      // 整体让位——否则同一张表会有两个列宽写者（I2 震荡的直接来源）。
+      // 开关关闭时本守卫不生效，旧路径逐字保留。
+      if (isTableIslandEnabled()) return;
       const st = engineStore.getState();
       // W0-2 / W1-3 门禁分流（W2-1 D-1 换源，streamActive 消费先例同
       // 本文件 356-357 行）：流式会话中（streamActive === true）走 W1-3
@@ -2397,8 +2332,12 @@ export const MarkdownEngine = React.forwardRef<
     if (!parentRef.current) return;
 
     // Prevent table separator from being clicked. Redirect to previous row (table header)
+    // T4（ADR-2）：岛内行不提供 `data-index`（该属性要求全局唯一，岛宿主行已占用），
+    // 故先查岛内行的 `data-line-index`（更内层、更精确），未命中再回落虚拟行。
     const clickedLineIndex = parseInt(
-      target.closest('[data-index]')?.getAttribute('data-index') || '-1',
+      target.closest('[data-line-index]')?.getAttribute('data-line-index') ??
+        target.closest('[data-index]')?.getAttribute('data-index') ??
+        '-1',
       10
     );
     if (
@@ -2572,6 +2511,37 @@ export const MarkdownEngine = React.forwardRef<
                     rowRef={registerRowRef}
                     onUnfold={unfold}
                     useGpuLayer={useGpuLayer}
+                  />
+                );
+              }
+              // T4 表格岛（ADR-2）：岛宿主行 = 该表**唯一**的虚拟项——
+              // 区间内部行已由 `rangeExtractor` 折叠剔除（不成项），整表交由
+              // `TableBlock` 渲染（岛内自带窗口化与列宽栅格）。开关关闭时
+              // `hostAt` 恒 null，本分支不参与（旧逐行路径零变化）。
+              const islandRange = islandWiring.hostAt(index);
+              if (islandRange) {
+                return (
+                  <TableIslandHost
+                    key={index}
+                    range={islandRange}
+                    visibleTop={(virtualizer.scrollOffset ?? 0) - virtualRow.start}
+                    visibleHeight={parentRef.current?.clientHeight ?? 0}
+                    colWidths={tableWidthsMap[islandRange.id]}
+                    decorations={decorations}
+                    decorationVersion={decorationVersion}
+                    store={engineStore}
+                    streamTailLine={s.streamActive === true ? s.getLineCount() - 1 : null}
+                    estimateRowHeight={islandWiring.estimateRowHeight}
+                    onIslandHeight={islandWiring.onIslandHeight(islandRange.startLine)}
+                    onColWidths={islandOnColWidths}
+                    rowRef={registerRowRef}
+                    useGpuLayer={useGpuLayer}
+                    // 岛根是横向滚动唯一所有者（I1）：store 仅作跨挂载连续性载体，
+                    // 故按需读取、不订阅（避免每个横向滚动像素触发引擎重渲染）。
+                    scrollLeft={useTableStore.getState().tableScrollLeft[islandRange.id]}
+                    onScrollLeftChange={(left: number) =>
+                      useTableStore.getState().setTableScrollLeft(islandRange.id, left)
+                    }
                   />
                 );
               }
