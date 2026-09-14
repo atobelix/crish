@@ -48,6 +48,7 @@ window.InteractiveTable.ClipboardManager = class ClipboardManager {
     const stateData = this.state.get();
 
     // 1. 如果有选区范围 (单单元格或多单元格矩形选区)
+    const TableState = window.InteractiveTable.TableState;
     if (selMgr.selectedRange) {
       const { minR, maxR, minC, maxC } = selMgr.selectedRange;
       const matrix = [];
@@ -55,9 +56,9 @@ window.InteractiveTable.ClipboardManager = class ClipboardManager {
         const rowData = [];
         for (let c = minC; c <= maxC; c++) {
           if (r === -1) {
-            rowData.push(stateData.headers[c] !== undefined ? String(stateData.headers[c]) : '');
+            rowData.push(TableState ? TableState.getCellValue(stateData.headers[c]) : String(stateData.headers[c] || ''));
           } else if (stateData.rows[r]) {
-            rowData.push(stateData.rows[r].cells[c] !== undefined ? String(stateData.rows[r].cells[c]) : '');
+            rowData.push(TableState ? TableState.getCellValue(stateData.rows[r].cells[c]) : String(stateData.rows[r].cells[c] || ''));
           } else {
             rowData.push('');
           }
@@ -70,9 +71,8 @@ window.InteractiveTable.ClipboardManager = class ClipboardManager {
     // 2. 如果当前聚焦单个单元格
     if (selMgr.activeCell) {
       const { row, col, isHeader } = selMgr.activeCell;
-      const val = isHeader
-        ? (stateData.headers[col] !== undefined ? String(stateData.headers[col]) : '')
-        : (stateData.rows[row]?.cells[col] !== undefined ? String(stateData.rows[row].cells[col]) : '');
+      const raw = isHeader ? stateData.headers[col] : stateData.rows[row]?.cells[col];
+      const val = TableState ? TableState.getCellValue(raw) : String(raw || '');
       return [[val]];
     }
 
@@ -82,9 +82,8 @@ window.InteractiveTable.ClipboardManager = class ClipboardManager {
       const isHeader = activeCellEl.tagName.toLowerCase() === 'th';
       const row = isHeader ? -1 : parseInt(activeCellEl.dataset.row, 10);
       const col = parseInt(activeCellEl.dataset.col, 10);
-      const val = isHeader
-        ? (stateData.headers[col] !== undefined ? String(stateData.headers[col]) : '')
-        : (stateData.rows[row]?.cells[col] !== undefined ? String(stateData.rows[row].cells[col]) : '');
+      const raw = isHeader ? stateData.headers[col] : stateData.rows[row]?.cells[col];
+      const val = TableState ? TableState.getCellValue(raw) : String(raw || '');
       return [[val]];
     }
 

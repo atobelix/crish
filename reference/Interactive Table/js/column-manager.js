@@ -26,6 +26,7 @@ window.InteractiveTable.ColumnManager = class ColumnManager {
         if (window.__interactiveTableApp?.dragDropManager?.justDragged) return;
         e.stopPropagation();
         const colIndex = parseInt(colBtn.dataset.col, 10);
+        window.__interactiveTableApp?.selectionManager?.selectColumn(colIndex);
         this.contextMenu.openColumnMenu(colBtn, colIndex);
       }
     });

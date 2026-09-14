@@ -20,118 +20,48 @@
 
 .row-handle-btn {
   position: absolute;
-  width: 18px;
-  height: 22px;
-  border-radius: 4px;
+  width: 20px;
+  height: 28px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: grab;
   pointer-events: none;
   opacity: 0;
-  transition: opacity 0.12s ease, background-color 0.12s ease;
+  transition: opacity 0.12s ease;
   user-select: none;
   background: transparent;
   border: none;
+  padding: 0;
   left: 0;
   transform: translate(-50%, -50%);
-}
-
-/* 仅在对应行 Hover 或手柄激活时显现 */
-.row-handle-btn.visible,
-.row-handle-btn:hover,
-.row-handle-btn.active,
-.row-handle-btn.dragging {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.row-handle-btn:hover {
-  background-color: var(--handle-bg-hover);
-}
-
-.row-handle-btn:active,
-.row-handle-btn.dragging {
-  cursor: grabbing;
-}
-
-/* 单根竖线线段 (用户特别指明：行的那个不是两个线段，是一个小线段) */
-.row-handle-bar {
-  width: 3px;
-  height: 15px;
-  background-color: var(--handle-color);
-  border-radius: 2px;
-  transition: background-color 0.12s ease;
-  pointer-events: none;
-}
-
-.row-handle-btn:hover .row-handle-bar {
-  background-color: var(--handle-hover-color);
-}
-
-/* 激活菜单时：保持极简优雅短线，加深底色与短线色彩，不用 6 个小白点 (用户反馈 media_1789395201341.png) */
-.row-handle-btn.active {
-  background-color: var(--handle-bg-hover) !important;
-  border-radius: 4px;
-}
-
-.row-handle-btn.active .row-handle-bar {
-  display: block !important;
-  background-color: var(--handle-hover-color) !important;
-}
-
-.row-handle-btn.active .handle-dots-grid {
-  display: none !important;
-}
-
-/* 拖拽时：保持灰色短线，不用 6 点蓝胶囊 (用户特别指明) */
-.row-handle-btn.dragging {
-  background-color: transparent !important;
-  box-shadow: none !important;
-  opacity: 1 !important;
-}
-
-.row-handle-btn.dragging .row-handle-bar {
-  display: block !important;
-  background-color: var(--handle-hover-color) !important;
-}
-
-.row-handle-btn.dragging .handle-dots-grid {
-  display: none !important;
-}
-
-/* --------------------------------------------------------------------------
-   2. 顶部列操作手柄 (Column Handle) - 单个横向线段 -
-   -------------------------------------------------------------------------- */
-.col-handle-bar-container {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 0;
-  pointer-events: none;
-  z-index: 15;
+  z-index: 20;
 }
 
 .col-handle-btn {
   position: absolute;
-  width: 24px;
-  height: 14px;
-  border-radius: 4px;
+  width: 28px;
+  height: 20px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: grab;
   pointer-events: none;
   opacity: 0;
-  transition: opacity 0.12s ease, background-color 0.12s ease;
+  transition: opacity 0.12s ease;
   user-select: none;
   background: transparent;
   border: none;
+  padding: 0;
   top: 0;
   transform: translate(-50%, -50%);
+  z-index: 20;
 }
 
+.row-handle-btn.visible,
+.row-handle-btn:hover,
+.row-handle-btn.active,
+.row-handle-btn.dragging,
 .col-handle-btn.visible,
 .col-handle-btn:hover,
 .col-handle-btn.active,
@@ -140,88 +70,128 @@
   pointer-events: auto !important;
 }
 
-.row-handle-btn.visible,
-.row-handle-btn:hover,
-.row-handle-btn.active {
-  opacity: 1 !important;
-  pointer-events: auto !important;
-}
-
-.col-handle-btn:hover {
-  background-color: var(--handle-bg-hover);
-}
-
+.row-handle-btn:active,
+.row-handle-btn.dragging,
 .col-handle-btn:active,
 .col-handle-btn.dragging {
   cursor: grabbing;
 }
 
-/* 单根横向线段 */
-.col-handle-bar {
-  width: 16px;
-  height: 3px;
-  background-color: var(--handle-color);
-  border-radius: 2px;
-  transition: background-color 0.12s ease;
-  pointer-events: none;
-}
-
-.col-handle-btn:hover .col-handle-bar {
-  background-color: var(--handle-hover-color);
-}
-
-/* 激活菜单时：保持极简优雅短线，加深底色与短线色彩，不用 6 个小白点 */
-.col-handle-btn.active {
-  background-color: var(--handle-bg-hover) !important;
-  border-radius: 4px;
-}
-
-.col-handle-btn.active .col-handle-bar {
-  display: block !important;
-  background-color: var(--handle-hover-color) !important;
-}
-
-.col-handle-btn.active .handle-dots-grid {
-  display: none !important;
-}
-
-/* 拖拽时：保持横向灰色短线，不模仿 6 点蓝胶囊 (用户特别指明) */
-.col-handle-btn.dragging {
-  background-color: transparent !important;
-  box-shadow: none !important;
-  opacity: 1 !important;
-}
-
-.col-handle-btn.dragging .col-handle-bar {
-  display: block !important;
-  background-color: var(--handle-hover-color) !important;
-}
-
-.col-handle-btn.dragging .handle-dots-grid {
-  display: none !important;
-}
-
-/* 6 点阵图标 (::: 结构) */
-.handle-dots-grid {
-  display: none;
-  grid-template-columns: repeat(3, 2.5px);
-  grid-template-rows: repeat(2, 2.5px);
-  gap: 2.5px;
+/* 胶囊底板 */
+.handle-capsule {
+  position: relative;
+  display: flex;
   align-items: center;
   justify-content: center;
+  border-radius: 999px;
+  background-color: transparent;
+  transition: background-color 0.18s cubic-bezier(0.2, 0, 0, 1), transform 0.15s ease;
+}
+
+.row-capsule {
+  width: 13px;
+  height: 22px;
+}
+
+.col-capsule {
+  width: 22px;
+  height: 13px;
+}
+
+/* 悬停与激活时胶囊背景展开为微灰椭圆 */
+.row-handle-btn:hover .handle-capsule,
+.row-handle-btn.active .handle-capsule,
+.col-handle-btn:hover .handle-capsule,
+.col-handle-btn.active .handle-capsule {
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+/* 拖拽时胶囊变为经典纯蓝 */
+.row-handle-btn.dragging .handle-capsule,
+.col-handle-btn.dragging .handle-capsule {
+  background-color: #2383e2 !important;
+}
+
+/* 未触摸时：横条/短线 (颜色 #CACACA) */
+.handle-bar {
+  position: absolute;
+  background-color: var(--handle-color, #CACACA);
+  border-radius: 2px;
+  opacity: 1;
+  transform: scale(1);
+  transition: opacity 0.18s cubic-bezier(0.2, 0, 0, 1), transform 0.18s cubic-bezier(0.2, 0, 0, 1), background-color 0.12s ease;
   pointer-events: none;
 }
 
-.col-handle-btn.active .handle-dots-grid,
-.row-handle-btn.active .handle-dots-grid {
-  display: grid;
+.row-bar {
+  width: 2.5px;
+  height: 12px;
 }
 
-.handle-dot {
+.col-bar {
+  width: 12px;
+  height: 2.5px;
+}
+
+/* 触摸、激活或拖拽时，横条平滑收缩淡出 */
+.row-handle-btn:hover .handle-bar,
+.row-handle-btn.active .handle-bar,
+.row-handle-btn.dragging .handle-bar,
+.col-handle-btn:hover .handle-bar,
+.col-handle-btn.active .handle-bar,
+.col-handle-btn.dragging .handle-bar {
+  opacity: 0;
+  transform: scale(0.3);
+}
+
+/* 触摸后蜕变为三个精致小圆点 */
+.handle-dots {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transform: scale(0.4);
+  transition: opacity 0.18s cubic-bezier(0.2, 0, 0, 1), transform 0.18s cubic-bezier(0.2, 0, 0, 1);
+  pointer-events: none;
+}
+
+.row-dots {
+  flex-direction: column;
+  gap: 2.5px;
+}
+
+.col-dots {
+  flex-direction: row;
+  gap: 2.5px;
+}
+
+.handle-dots .dot {
   width: 2.5px;
   height: 2.5px;
-  background-color: #ffffff;
   border-radius: 50%;
+  background-color: #666666;
+  transition: background-color 0.18s cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* 触摸与激活时，三点舒展呈现 */
+.row-handle-btn:hover .handle-dots,
+.row-handle-btn.active .handle-dots,
+.col-handle-btn:hover .handle-dots,
+.col-handle-btn.active .handle-dots {
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* 拖拽时：三点变白 */
+.row-handle-btn.dragging .handle-dots,
+.col-handle-btn.dragging .handle-dots {
+  opacity: 1 !important;
+  transform: scale(1) !important;
+}
+
+.row-handle-btn.dragging .handle-dots .dot,
+.col-handle-btn.dragging .handle-dots .dot {
+  background-color: #ffffff !important;
 }
 
 /* --------------------------------------------------------------------------
@@ -258,7 +228,7 @@
 
 .add-column-strip:hover {
   background-color: var(--bg-hover);
-  border-color: #d0d0ce;
+  border-color: #F2F2F0;
   color: var(--text-primary);
 }
 
@@ -305,7 +275,7 @@
 
 .add-row-strip:hover {
   background-color: var(--bg-hover);
-  border-color: #d0d0ce;
+  border-color: #F2F2F0;
   color: var(--text-primary);
 }
 

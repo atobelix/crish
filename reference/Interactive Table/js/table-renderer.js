@@ -15,6 +15,53 @@ window.InteractiveTable.TableRenderer = class TableRenderer {
     this.bindHoverEvents();
   }
 
+  formatCellStyle(style = {}) {
+    const parts = [];
+    if (style.bold) parts.push('font-weight: 600;');
+    if (style.italic) parts.push('font-style: italic;');
+    
+    const decors = [];
+    if (style.underline) decors.push('underline');
+    if (style.strike) decors.push('line-through');
+    if (decors.length > 0) parts.push(`text-decoration: ${decors.join(' ')};`);
+
+    if (style.color) parts.push(`color: ${style.color};`);
+    if (style.bg) parts.push(`background-color: ${style.bg};`);
+    if (style.align) parts.push(`text-align: ${style.align};`);
+    if (style.vAlign) parts.push(`vertical-align: ${style.vAlign};`);
+
+    return parts.length > 0 ? `style="${parts.join(' ')}"` : '';
+  }
+
+  renderCell(rowIdx, colIdx, rawData, isHeader = false) {
+    const TableState = window.InteractiveTable.TableState;
+    const value = TableState ? TableState.getCellValue(rawData) : String(rawData || '');
+    const style = TableState ? TableState.getCellStyle(rawData) : {};
+    const styleAttr = this.formatCellStyle(style);
+
+    const isHidden = this.state.isMergeHidden(rowIdx, colIdx);
+    if (isHidden) {
+      return `<td data-row="${rowIdx}" data-col="${colIdx}" class="cell-merged-hidden" style="display: none;"></td>`;
+    }
+
+    const merge = this.state.getMergeAt(rowIdx, colIdx);
+    let spanAttrs = '';
+    let mergeClass = '';
+    if (merge && merge.minR === rowIdx && merge.minC === colIdx) {
+      const rowspan = merge.maxR - merge.minR + 1;
+      const colspan = merge.maxC - merge.minC + 1;
+      if (rowspan > 1) spanAttrs += ` rowspan="${rowspan}"`;
+      if (colspan > 1) spanAttrs += ` colspan="${colspan}"`;
+      mergeClass = ' cell-merged-master';
+    }
+
+    if (isHeader) {
+      return `<th data-row="-1" data-col="${colIdx}" class="${mergeClass}" ${spanAttrs} ${styleAttr}>${value}<div class="col-resizer" data-col="${colIdx}" title="按住拖拽调整列宽"></div></th>`;
+    }
+
+    return `<td data-row="${rowIdx}" data-col="${colIdx}" class="${mergeClass}" ${spanAttrs} ${styleAttr}>${value}</td>`;
+  }
+
   render() {
     const data = this.state.get();
 
@@ -32,7 +79,7 @@ window.InteractiveTable.TableRenderer = class TableRenderer {
     if (data.hasHeaderRow) {
       theadHtml = `
         <thead>
-          <tr data-row="-1" class="header-row">${data.headers.map((headerText, colIdx) => `<th data-row="-1" data-col="${colIdx}">${headerText}<div class="col-resizer" data-col="${colIdx}" title="按住拖拽调整列宽"></div></th>`).join('')}</tr>
+          <tr data-row="-1" class="header-row">${data.headers.map((h, colIdx) => this.renderCell(-1, colIdx, h, true)).join('')}</tr>
         </thead>
       `;
     }
@@ -40,7 +87,7 @@ window.InteractiveTable.TableRenderer = class TableRenderer {
     tbodyHtml = `
       <tbody>
         ${data.rows.map((row, rowIdx) => `
-          <tr data-row="${rowIdx}">${row.cells.map((cellText, colIdx) => `<td data-row="${rowIdx}" data-col="${colIdx}">${cellText}</td>`).join('')}</tr>
+          <tr data-row="${rowIdx}">${row.cells.map((c, colIdx) => this.renderCell(rowIdx, colIdx, c, false)).join('')}</tr>
         `).join('')}
       </tbody>
     `;
@@ -98,24 +145,36 @@ window.InteractiveTable.TableRenderer = class TableRenderer {
     const topBorderCenterY = (tableRect.top + 0.5) - cRect.top;
     const leftBorderCenterX = (tableRect.left + 0.5) - cRect.left;
 
-    const dotsHtml = `
-      <div class="handle-dots-grid">
-        <div class="handle-dot"></div><div class="handle-dot"></div><div class="handle-dot"></div>
-        <div class="handle-dot"></div><div class="handle-dot"></div><div class="handle-dot"></div>
+    const buildColHandleHtml = () => `
+      <div class="handle-capsule col-capsule">
+        <div class="handle-bar col-bar"></div>
+        <div class="handle-dots col-dots">
+          <span class="dot"></span>
+          <span class="dot"></span>
+          <span class="dot"></span>
+        </div>
       </div>
     `;
 
-    // 1. 渲染顶部列手柄 (单根横线 -，严格居中骑在表头顶水平边框线和各列几何中心)
+    const buildRowHandleHtml = () => `
+      <div class="handle-capsule row-capsule">
+        <div class="handle-bar row-bar"></div>
+        <div class="handle-dots row-dots">
+          <span class="dot"></span>
+          <span class="dot"></span>
+          <span class="dot"></span>
+        </div>
+      </div>
+    `;
+
+    // 1. 渲染顶部列手柄 (单根横线 -，未触摸细横条，触摸变椭圆胶囊+3点，拖动变蓝底白点)
     const headerCells = Array.from(table.querySelectorAll('thead th, tbody tr:first-child td'));
     data.columns.forEach((_, colIdx) => {
       const colBtn = document.createElement('button');
       colBtn.className = 'col-handle-btn';
       colBtn.dataset.col = colIdx;
-      colBtn.title = '按住拖动排序，点击打开选项';
-      colBtn.innerHTML = `
-        <div class="col-handle-bar"></div>
-        ${dotsHtml}
-      `;
+      colBtn.title = '点击选中列，按住拖动排序';
+      colBtn.innerHTML = buildColHandleHtml();
       colContainer.appendChild(colBtn);
 
       const targetCell = headerCells[colIdx];
@@ -127,7 +186,7 @@ window.InteractiveTable.TableRenderer = class TableRenderer {
       }
     });
 
-    // 2. 渲染左侧行手柄 (单根竖线 |，严格居中骑在表格最左侧边框线和各行几何中心)
+    // 2. 渲染左侧行手柄 (单根竖线 |，未触摸细条，触摸变椭圆胶囊+3点，拖动变蓝底白点)
     const allTrs = Array.from(table.querySelectorAll('tr'));
     allTrs.forEach((tr, trIdx) => {
       const isHeader = tr.classList.contains('header-row') || tr.parentElement.tagName.toLowerCase() === 'thead';
@@ -138,11 +197,8 @@ window.InteractiveTable.TableRenderer = class TableRenderer {
       rowBtn.dataset.row = rowIndex;
       rowBtn.dataset.isHeader = isHeader ? 'true' : 'false';
       rowBtn.dataset.trIndex = trIdx;
-      rowBtn.title = '按住拖动排序，点击打开选项';
-      rowBtn.innerHTML = `
-        <div class="row-handle-bar"></div>
-        ${dotsHtml}
-      `;
+      rowBtn.title = '点击选中行，按住拖动排序';
+      rowBtn.innerHTML = buildRowHandleHtml();
       rowGutter.appendChild(rowBtn);
 
       const trRect = tr.getBoundingClientRect();

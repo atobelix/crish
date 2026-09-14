@@ -247,3 +247,143 @@
   border: 1px solid rgba(0, 0, 0, 0.06);
   flex-shrink: 0;
 }
+
+/* ==========================================================================
+   Excel 风格双层单元格右键菜单与格式工具栏 (Mini Formatting Bar)
+   ========================================================================== */
+
+.cell-excel-popover {
+  width: 420px;
+  padding: 8px 10px;
+}
+
+/* 顶部微型格式工具栏 */
+.mini-format-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 2px;
+  padding: 4px 2px 6px 2px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.mini-format-toolbar::-webkit-scrollbar {
+  display: none;
+}
+
+.format-btn-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.format-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 5px;
+  border: 1px solid transparent;
+  background: transparent;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: rgba(0, 0, 0, 0.75);
+  transition: all 0.12s ease;
+  position: relative;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+.format-btn:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+  color: rgba(0, 0, 0, 0.95);
+}
+
+.format-btn.active {
+  background-color: rgba(35, 131, 226, 0.12);
+  border-color: rgba(35, 131, 226, 0.3);
+  color: #2383e2;
+}
+
+.toolbar-divider {
+  width: 1px;
+  height: 18px;
+  background-color: rgba(0, 0, 0, 0.08);
+  margin: 0 4px;
+  flex-shrink: 0;
+}
+
+.menu-tier-divider {
+  height: 1px;
+  background-color: rgba(0, 0, 0, 0.08);
+  margin: 4px 0 6px 0;
+}
+
+/* 调色按钮与色标 */
+.color-dropdown-btn {
+  height: 28px;
+}
+
+.color-indicator-bar {
+  width: 14px;
+  height: 2.5px;
+  border-radius: 1px;
+  margin-top: 1px;
+}
+
+/* 调色盘气泡浮层 */
+.color-picker-popover {
+  width: 210px;
+  padding: 8px;
+  z-index: 1010;
+}
+
+.color-palette-title {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: rgba(0, 0, 0, 0.45);
+  margin-bottom: 6px;
+  padding-left: 2px;
+}
+
+.color-swatches-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+}
+
+.color-swatch-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 4px 2px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.12s ease;
+}
+
+.color-swatch-item:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+.color-swatch-circle {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  box-sizing: border-box;
+  transition: transform 0.12s ease;
+}
+
+.color-swatch-item:hover .color-swatch-circle {
+  transform: scale(1.15);
+}
+
+.color-swatch-name {
+  font-size: 10.5px;
+  color: rgba(0, 0, 0, 0.65);
+  white-space: nowrap;
+}

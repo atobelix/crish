@@ -63,7 +63,14 @@
       this.state.subscribe((_, actionType) => {
         if (actionType !== 'cell-updated') {
           this.renderer.render();
-          if (actionType !== 'matrix-updated') {
+          if (actionType === 'cell-style-updated' || actionType === 'cells-merged' || actionType === 'cells-split') {
+            if (this.selectionManager.selectedRange) {
+              const { minR, maxR, minC, maxC } = this.selectionManager.selectedRange;
+              requestAnimationFrame(() => {
+                this.selectionManager.updateRangeSelection(minR, maxR, minC, maxC);
+              });
+            }
+          } else if (actionType !== 'matrix-updated') {
             this.selectionManager.clearSelection();
           }
         }

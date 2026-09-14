@@ -26,8 +26,24 @@ window.InteractiveTable.TableState = class TableState {
         { id: 'row_2', cells: ['0.2', 'Steady', '0.6'] },
         { id: 'row_3', cells: ['0.5', 'Direct', '1.5'] },
         { id: 'row_4', cells: ['1.2', 'Alternating', '3.6'] }
-      ]
+      ],
+      merges: [] // 合并单元格注册表 [{ id, minR, maxR, minC, maxC }]
     };
+    if (!this.state.merges) this.state.merges = [];
+  }
+
+  // 静态工具：安全提取值与样式
+  static getCellValue(raw) {
+    if (raw === null || raw === undefined) return '';
+    if (typeof raw === 'object') return raw.value ?? '';
+    return String(raw);
+  }
+
+  static getCellStyle(raw) {
+    if (raw && typeof raw === 'object' && raw.style) {
+      return raw.style;
+    }
+    return {};
   }
 
   // 获取当前状态快照
@@ -75,34 +91,167 @@ window.InteractiveTable.TableState = class TableState {
     return true;
   }
 
-  // ------------------------- 单元格编辑 -------------------------
+  // ------------------------- 单元格编辑与样式 -------------------------
+  getCellValue(r, c) {
+    if (r === -1) return TableState.getCellValue(this.state.headers[c]);
+    return TableState.getCellValue(this.state.rows[r]?.cells[c]);
+  }
+
+  getCellStyle(r, c) {
+    if (r === -1) return TableState.getCellStyle(this.state.headers[c]);
+    return TableState.getCellStyle(this.state.rows[r]?.cells[c]);
+  }
+
   updateCell(rowIndex, colIndex, value, isHeader = false) {
     this.pushHistory();
     if (isHeader) {
-      this.state.headers[colIndex] = value;
+      const currentStyle = TableState.getCellStyle(this.state.headers[colIndex]);
+      this.state.headers[colIndex] = Object.keys(currentStyle).length > 0
+        ? { value, style: currentStyle }
+        : value;
     } else {
       if (this.state.rows[rowIndex]) {
-        this.state.rows[rowIndex].cells[colIndex] = value;
+        const currentStyle = TableState.getCellStyle(this.state.rows[rowIndex].cells[colIndex]);
+        this.state.rows[rowIndex].cells[colIndex] = Object.keys(currentStyle).length > 0
+          ? { value, style: currentStyle }
+          : value;
       }
     }
     this.notify('cell-updated');
   }
 
-  // 批量清空指定区域内的所有单元格
+  // 批量应用样式修饰 (加粗、倾斜、下划线、删除线、文字颜色、背景填充、水平垂直对齐)
+  applyCellStyle(range, patch) {
+    if (!range || !patch) return;
+    this.pushHistory();
+    const { minR, maxR, minC, maxC } = range;
+    for (let r = minR; r <= maxR; r++) {
+      for (let c = minC; c <= maxC; c++) {
+        if (r === -1) {
+          const raw = this.state.headers[c];
+          const val = TableState.getCellValue(raw);
+          const style = { ...TableState.getCellStyle(raw), ...patch };
+          this.state.headers[c] = { value: val, style };
+        } else if (this.state.rows[r]) {
+          const raw = this.state.rows[r].cells[c];
+          const val = TableState.getCellValue(raw);
+          const style = { ...TableState.getCellStyle(raw), ...patch };
+          this.state.rows[r].cells[c] = { value: val, style };
+        }
+      }
+    }
+    this.notify('cell-style-updated');
+  }
+
+  // 清除指定区域的格式样式 (保留文本内容)
+  clearCellStyle(range) {
+    if (!range) return;
+    this.pushHistory();
+    const { minR, maxR, minC, maxC } = range;
+    for (let r = minR; r <= maxR; r++) {
+      for (let c = minC; c <= maxC; c++) {
+        if (r === -1) {
+          this.state.headers[c] = TableState.getCellValue(this.state.headers[c]);
+        } else if (this.state.rows[r]) {
+          this.state.rows[r].cells[c] = TableState.getCellValue(this.state.rows[r].cells[c]);
+        }
+      }
+    }
+    this.notify('cell-style-updated');
+  }
+
+  // 批量清空指定区域内的所有单元格 (保留单元格样式)
   clearCellsRange(minRow, maxRow, minCol, maxCol) {
     this.pushHistory();
     for (let r = minRow; r <= maxRow; r++) {
-      if (r === -1) {
-        for (let c = minCol; c <= maxCol; c++) {
-          this.state.headers[c] = '';
-        }
-      } else if (this.state.rows[r]) {
-        for (let c = minCol; c <= maxCol; c++) {
-          this.state.rows[r].cells[c] = '';
+      for (let c = minCol; c <= maxCol; c++) {
+        if (r === -1) {
+          const style = TableState.getCellStyle(this.state.headers[c]);
+          this.state.headers[c] = Object.keys(style).length > 0 ? { value: '', style } : '';
+        } else if (this.state.rows[r]) {
+          const style = TableState.getCellStyle(this.state.rows[r].cells[c]);
+          this.state.rows[r].cells[c] = Object.keys(style).length > 0 ? { value: '', style } : '';
         }
       }
     }
     this.notify('range-cleared');
+  }
+
+  // ------------------------- 单元格合并与拆分 -------------------------
+  getMerges() {
+    return this.state.merges || [];
+  }
+
+  getMergeAt(r, c) {
+    const merges = this.getMerges();
+    return merges.find(m => r >= m.minR && r <= m.maxR && c >= m.minC && c <= m.maxC) || null;
+  }
+
+  isMergeMaster(r, c) {
+    const m = this.getMergeAt(r, c);
+    return m ? (m.minR === r && m.minC === c) : false;
+  }
+
+  isMergeHidden(r, c) {
+    const m = this.getMergeAt(r, c);
+    return m ? !(m.minR === r && m.minC === c) : false;
+  }
+
+  mergeRange(range) {
+    if (!range) return false;
+    const { minR, maxR, minC, maxC } = range;
+    const count = (maxR - minR + 1) * (maxC - minC + 1);
+    if (count < 2) return false;
+
+    this.pushHistory();
+    this.state.merges = this.state.merges || [];
+
+    // 移除与当前区域有重叠的旧合并块
+    this.state.merges = this.state.merges.filter(m => {
+      const overlapR = !(m.maxR < minR || m.minR > maxR);
+      const overlapC = !(m.maxC < minC || m.minC > maxC);
+      return !(overlapR && overlapC);
+    });
+
+    const newMerge = {
+      id: 'merge_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+      minR,
+      maxR,
+      minC,
+      maxC
+    };
+    this.state.merges.push(newMerge);
+    this.notify('cells-merged');
+    return true;
+  }
+
+  splitMerge(rangeOrMergeId) {
+    this.state.merges = this.state.merges || [];
+    if (this.state.merges.length === 0) return false;
+
+    this.pushHistory();
+    let removed = false;
+
+    if (typeof rangeOrMergeId === 'string') {
+      const initLen = this.state.merges.length;
+      this.state.merges = this.state.merges.filter(m => m.id !== rangeOrMergeId);
+      removed = this.state.merges.length < initLen;
+    } else if (rangeOrMergeId) {
+      const { minR, maxR, minC, maxC } = rangeOrMergeId;
+      const initLen = this.state.merges.length;
+      this.state.merges = this.state.merges.filter(m => {
+        const overlapR = !(m.maxR < minR || m.minR > maxR);
+        const overlapC = !(m.maxC < minC || m.minC > maxC);
+        return !(overlapR && overlapC);
+      });
+      removed = this.state.merges.length < initLen;
+    }
+
+    if (removed) {
+      this.notify('cells-split');
+      return true;
+    }
+    return false;
   }
 
   // 批量更新二维数据矩阵 (用于剪贴板 TSV 粘贴、批量导入)
@@ -147,9 +296,11 @@ window.InteractiveTable.TableState = class TableState {
         const val = rowData[cIdx];
 
         if (targetRow === -1) {
-          this.state.headers[targetCol] = val;
+          const currentStyle = TableState.getCellStyle(this.state.headers[targetCol]);
+          this.state.headers[targetCol] = Object.keys(currentStyle).length > 0 ? { value: val, style: currentStyle } : val;
         } else if (targetRow >= 0 && this.state.rows[targetRow]) {
-          this.state.rows[targetRow].cells[targetCol] = val;
+          const currentStyle = TableState.getCellStyle(this.state.rows[targetRow].cells[targetCol]);
+          this.state.rows[targetRow].cells[targetCol] = Object.keys(currentStyle).length > 0 ? { value: val, style: currentStyle } : val;
         }
       }
     }

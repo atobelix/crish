@@ -36,6 +36,41 @@ window.InteractiveTable.SelectionManager = class SelectionManager {
     document.addEventListener('mouseup', this.onMouseUp);
     this.root.addEventListener('dblclick', this.onDoubleClick);
     document.addEventListener('keydown', this.onKeyDown);
+    this.root.addEventListener('contextmenu', this.onContextMenu.bind(this));
+  }
+
+  onContextMenu(e) {
+    const cell = e.target.closest('td, th');
+    if (!cell) return;
+
+    if (e.target.closest('.col-handle-btn, .row-handle-btn, .add-column-strip, .add-row-strip, .col-divider-badge, .row-divider-badge, .col-resizer')) {
+      return;
+    }
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    const cellInfo = this.getCellInfo(cell);
+    if (!cellInfo) return;
+
+    const isInsideRange = this.selectedRange &&
+      cellInfo.row >= this.selectedRange.minR &&
+      cellInfo.row <= this.selectedRange.maxR &&
+      cellInfo.col >= this.selectedRange.minC &&
+      cellInfo.col <= this.selectedRange.maxC;
+
+    if (!isInsideRange) {
+      this.selectSingleCell(cellInfo);
+    }
+
+    const range = this.selectedRange || {
+      minR: cellInfo.row,
+      maxR: cellInfo.row,
+      minC: cellInfo.col,
+      maxC: cellInfo.col
+    };
+
+    window.__interactiveTableApp?.contextMenu?.openCellContextMenu(e.clientX, e.clientY, cellInfo, range);
   }
 
   getRangeBox() {
@@ -58,6 +93,8 @@ window.InteractiveTable.SelectionManager = class SelectionManager {
   }
 
   onMouseDown(e) {
+    if (e.button === 2) return; // 忽略鼠标右键
+
     // 忽略手柄、添加条、分割线、加号徽标与弹窗点击
     if (e.target.closest('.col-handle-btn, .row-handle-btn, .add-column-strip, .add-row-strip, .col-divider-badge, .row-divider-badge, .col-divider-line, .row-divider-line, .notion-popover')) {
       return;
@@ -218,6 +255,24 @@ window.InteractiveTable.SelectionManager = class SelectionManager {
     this.updateRangeSelection(minR, maxR, minC, maxC);
   }
 
+  selectColumn(colIndex) {
+    this.clearSelection();
+    const data = this.state.get();
+    const minR = data.hasHeaderRow ? -1 : 0;
+    const maxR = data.rows.length - 1;
+    this.mode = 'RANGE_SELECTED';
+    this.updateRangeSelection(minR, maxR, colIndex, colIndex);
+  }
+
+  selectRow(rowIndex) {
+    this.clearSelection();
+    const data = this.state.get();
+    const minC = 0;
+    const maxC = data.columns.length - 1;
+    this.mode = 'RANGE_SELECTED';
+    this.updateRangeSelection(rowIndex, rowIndex, minC, maxC);
+  }
+
   selectSingleCell(cellInfo) {
     this.clearSelection();
     this.mode = 'CELL_SELECTED';
@@ -277,7 +332,9 @@ window.InteractiveTable.SelectionManager = class SelectionManager {
     let minLeft = Infinity, minTop = Infinity, maxRight = -Infinity, maxBottom = -Infinity;
 
     cells.forEach(cell => {
+      if (cell.classList.contains('cell-merged-hidden') || cell.style.display === 'none') return;
       const rect = cell.getBoundingClientRect();
+      if (rect.width === 0 && rect.height === 0) return;
       minLeft = Math.min(minLeft, rect.left);
       minTop = Math.min(minTop, rect.top);
       maxRight = Math.max(maxRight, rect.right);

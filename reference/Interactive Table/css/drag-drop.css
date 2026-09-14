@@ -3,45 +3,12 @@
    包含无阴影真实质感克隆、两列/两行缝隙贯穿落点指示线、原位淡化幽灵
    ========================================================================== */
 
-/* ---------------- 列拖拽视觉 (拖拽时原手柄保持灰色短线，不用 6 点蓝胶囊) ---------------- */
-.col-handle-btn.dragging {
-  background: transparent !important;
-  box-shadow: none !important;
-  opacity: 0.6 !important;
-  cursor: grabbing !important;
-}
-
-.col-handle-btn.dragging .col-handle-bar {
-  display: block !important;
-  background-color: var(--handle-color) !important;
-}
-
-.col-handle-btn.dragging .handle-dots-grid {
-  display: none !important;
-}
-
-/* 被拖动的原列文字半透明淡化 (Ghost 效果) */
-.notion-table th.col-ghost,
-.notion-table td.col-ghost {
-  color: #c4c4c2 !important;
-  background-color: rgba(247, 246, 245, 0.7) !important;
-}
-
-/* ---------------- 行拖拽视觉 (拖拽时原手柄保持灰色短线，不用 6 点蓝胶囊) ---------------- */
+/* ---------------- 列与行拖拽手柄 ---------------- */
+.col-handle-btn.dragging,
 .row-handle-btn.dragging {
-  background: transparent !important;
-  box-shadow: none !important;
-  opacity: 0.6 !important;
   cursor: grabbing !important;
-}
-
-.row-handle-btn.dragging .row-handle-bar {
-  display: block !important;
-  background-color: var(--handle-color) !important;
-}
-
-.row-handle-btn.dragging .handle-dots-grid {
-  display: none !important;
+  opacity: 1 !important;
+  z-index: 25 !important;
 }
 
 /* 被拖动行的 Ghost 效果 */

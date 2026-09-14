@@ -21,6 +21,7 @@ window.InteractiveTable.RowManager = class RowManager {
         e.stopPropagation();
         const rowIndex = parseInt(rowBtn.dataset.row, 10);
         const isHeader = rowBtn.dataset.isHeader === 'true';
+        window.__interactiveTableApp?.selectionManager?.selectRow(rowIndex);
         this.contextMenu.openRowMenu(rowBtn, rowIndex, isHeader);
       }
     });
