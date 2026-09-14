@@ -54,6 +54,39 @@ const UNWIRED_ALLOWLIST = [
   { name: 'check-sec7-gfm-emoji.mjs', reason: '安全专题，待评估接入 CI' },
   { name: 'check-layoutstore-actions.mjs', reason: '专题结构断言，待评估接入 CI' },
   { name: 'check-ui-negative-churn.mjs', reason: '基线内嵌于脚本，待迁移为标记区基线后接入' },
+  // ── 以下 6 条为 2026-09-14 实测登记（此前经本地 check:desktop 聚合运行，CI 未接线）──
+  // 接入前提：**先修好**，否则接进 ci-mid 的 desktop-guards 会让 PR 全红。
+  // 修好后必须从本豁免名单移除并接入 .github/workflows/ci-mid.yml 的 desktop-guards job。
+  {
+    name: 'check-color-ssot.mjs',
+    reason:
+      '实测 FAIL：假 Token 兜底 var(--x, hsl(...)) 未清零（apps/crish-desktop/src/**/entry-core.tsx:352-375 等）。清退后接入 desktop-guards',
+  },
+  {
+    name: 'check-line-width-ssot.mjs',
+    reason:
+      '实测 FAIL：2 处线条宽度越界（components/chat-tool-call/FoldableToolGroup.module.css:116 的 1.5px 不在契约：常规 1px / 强调 2px）。修复后接入 desktop-guards',
+  },
+  {
+    name: 'check-token-ssot.mjs',
+    reason:
+      '实测 FAIL：js_inject_a_class 23 > 基线 0（硬失败，JS 直接注入 A 类设计 Token）；另 documented_api_defs 27 > 26。清零后接入 desktop-guards',
+  },
+  {
+    name: 'check-tokens-all.mjs',
+    reason:
+      '聚合门禁：因 check-line-width-ssot 的 2 处违规而 FAIL（见该条）。随其修复后一并接入 desktop-guards',
+  },
+  {
+    name: 'check-frontend-convergence.mjs',
+    reason:
+      '实测 FAIL：业务样式表 3 处 !important（shell/sessionTabDrag.module.css:115、sidebar/Sidebar.module.css:47,48）。修复后接入 desktop-guards',
+  },
+  {
+    name: 'check-conex-db-size.mjs',
+    reason:
+      '实测 FAIL：crates/conex-db/src/usage_analytics.rs 825 行 > 600（最大 mod 1085 > 600）。拆分后接入 desktop-guards',
+  },
 ];
 
 const GUIDE_TEXT = {

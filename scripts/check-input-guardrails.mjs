@@ -19,6 +19,23 @@
  * - 杜绝按钮与输入框果冻弹性缩放 (Jelly bounce)
  *
  * 违规即 Exit 1 阻断 CI 与本地提交。
+ *
+ * 用法：
+ *   node scripts/check-input-guardrails.mjs
+ *   node scripts/check-input-guardrails.mjs --guide <metric>   打印该指标的正确做法（未知/缺省 metric → 列出可用指标并 exit 1）
+ *
+ * 指标名 = 本脚本 FAIL 输出中的规则标签（[<标签>]），一一对应：
+ *   form_contract_assertion[形态校验失败/倒退拦截] · guard_target_missing[文件缺失] ·
+ *   hardcoded_dark_border[硬色边框拦截] · focus_dark_mix_over_10[高对比度焦点环拦截] ·
+ *   focus_shadow_over_1_5px[粗重投影拦截] · form_four_focus_shadow[形态 ④ 焦点外框拦截] ·
+ *   form_four_non_transparent_bg[形态 ④ 背景拦截] · form_four_missing_declaration[形态 ④ 缺失强制声明] ·
+ *   form_four_minimalist_violation[形态 ④ 极简约束拦截] · form_four_container_leak[形态 ④ 容器联动拦截] ·
+ *   missing_border_reset[默认边框未重置拦截] · button_active_dark_border[按钮激活纯黑边框拦截] ·
+ *   extreme_pill_radius[极端圆角拦截] · hard_right_angle[生硬直角拦截] · bizarre_radius[奇葩野值圆角拦截] ·
+ *   jelly_bounce[果冻效果拦截] · bespoke_native_input[TSX组件规范拦截] ·
+ *   ghost_motion_token[幽灵 token 拦截] · layout_keyframes_animation[布局属性动画拦截]
+ *
+ * 注：--guide 仅在直接运行时生效（本模块被 check-token-ssot / check-layout-tokens 导入复用解析器）。
  */
 
 import fs from 'fs';
@@ -1337,6 +1354,188 @@ export function runGuardrails() {
   return errors;
 }
 
+// ── 指引（--guide <metric>）─────────────────────────────────────────────────
+// 输出契约（五元规约）：违反项 · 文件:行号 · 当前值 · 阈值 · 正确做法。
+// 指标名 = 本脚本 FAIL 输出中的规则标签（[<标签>]），一一对应。
+function argVal(name) {
+  const i = process.argv.indexOf(name);
+  return i >= 0 ? process.argv[i + 1] : undefined;
+}
+
+const GUIDE_FLAG = process.argv.includes('--guide');
+const GUIDE = argVal('--guide');
+
+const GUIDE_TEXT = {
+  form_contract_assertion: [
+    '违反项：形态 ①②③④ 具名文件的刚性断言未成立（FAIL 标签 [形态校验失败] / [倒退拦截]）。',
+    '当前值：runCheckFileSuite 中某条断言不成立（FAIL 行已给出「描述 + 断言」）；阈值：全部断言 100% 成立。',
+    '正确做法：按 FAIL 行给出的描述把声明补回对应类的规则体，禁止删断言绕过：',
+    '  形态 ①：.navItem[role="search"] { background: transparent; border: none; }',
+    '          .navItem input[type="search"] { border: none; box-shadow: none; }',
+    '  形态 ③：border: 1px solid var(--border-subtle); border-radius: var(--radius-md);  且 :focus { box-shadow: none; }',
+    '  形态 ④：border: none; outline: none; box-shadow: none; background: transparent;',
+    '权威出处：AGENTS.md §19（输入框四态体系与全生命周期防倒退铁律）；守护单测 src/components/ui/Input/input-three-patterns-guard.test.ts。',
+    '注意：断言为精确串/正则匹配；等价的其它写法（如圆角写成 var(--radius-md, 6px)）已按 D29 放宽为两种形态皆可，其余仍会 FAIL。',
+  ],
+  guard_target_missing: [
+    '违反项：断言目标文件不存在（FAIL 标签 [文件缺失]）。',
+    '当前值：文件缺失；阈值：文件必须存在。',
+    '正确做法：从版本库恢复该文件（git checkout -- <FAIL 行给出的路径>）。',
+    '若确属合法搬迁：必须同步修正 runCheckFileSuite 中的路径与对应断言 —— 禁止以「文件不在」为由删除断言。',
+  ],
+  hardcoded_dark_border: [
+    '违反项：输入框 border 声明里出现纯黑/硬色（FAIL 标签 [硬色边框拦截]，规则 A）。',
+    '当前值：border/border-color 命中 #000000 / #000 / #111111 / #111 / rgb(0,0,0) / black；阈值：0 命中。',
+    '正确做法：改用 Design Token 的柔和边框：',
+    '  错误：border: 1px solid #000;',
+    '  正确：border: 1px solid var(--border-subtle);   // 或 color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%)',
+    '权威出处：AGENTS.md §13（禁止粗、深、实心黑边）；AGENTS.md §19 形态 ③（细边框 var(--border-subtle)）。',
+  ],
+  focus_dark_mix_over_10: [
+    '违反项：焦点/激活态混入过高文本纯黑（FAIL 标签 [高对比度焦点环拦截]，规则 1）。',
+    '当前值：color-mix 中 var(--text-primary) 等文本色的混入百分比（无显式百分比时按 50% 计）；阈值：≤ 10%（AGENTS.md §13）。',
+    '正确做法：把混入量压到 ≤ 10%，常规元素优先 3%~6%：',
+    '  错误：border-color: color-mix(in srgb, var(--border-color) 40%, var(--text-primary) 60%);',
+    '  正确：border-color: color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);',
+    '禁止在 border/outline 声明里裸写 var(--text-primary) / #000 / black（RAW_DARK_BORDER 分支同样拦截）。',
+    '权威出处：AGENTS.md §13「焦点对比度上限约 10%」。',
+  ],
+  focus_shadow_over_1_5px: [
+    '违反项：输入框焦点态出现粗重外扩投影或同心光晕（FAIL 标签 [粗重投影拦截]，规则 2）。',
+    '当前值：box-shadow 的 spread > 1.5px，或 offset 均为 0 且 blur > 1.5px（同心光晕）；阈值：≤ 1.5px。',
+    '正确做法：焦点态不加重投影；确需柔和提示时用带偏移的小半径阴影，或直接 box-shadow: none：',
+    '  错误：box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.2);',
+    '  正确：box-shadow: none;   或   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);',
+    '例外：NotePaperPanel 的 :global(input):focus-visible 走 05-C 纸面软环规范（--np-focus-edge 6%），由 notePaperFocusRing.contract.test.ts 锁定。',
+    '权威出处：AGENTS.md §13（默认不要重阴影）；AGENTS.md §19 形态 ④（全态只有光标闪烁）。',
+  ],
+  form_four_focus_shadow: [
+    '违反项：形态 ④ 输入框在 :focus / :hover 态声明了外框阴影（FAIL 标签 [形态 ④ 焦点外框拦截]）。',
+    '当前值：焦点/悬浮规则体内 box-shadow ≠ none；阈值：全态 box-shadow: none。',
+    '正确做法：删除该阴影声明，显式写回 none，让焦点只由光标闪烁提示：',
+    '  .searchInput:focus, .searchInput:focus-visible { border: none; outline: none; box-shadow: none; background: transparent; }',
+    '权威出处：AGENTS.md §19 形态 ④「全态只有光标闪烁，其他什么变化也没有」。',
+  ],
+  form_four_non_transparent_bg: [
+    '违反项：形态 ④ 输入框声明了非透明背景（FAIL 标签 [形态 ④ 背景拦截]）。',
+    '当前值：background / background-color 不是 transparent / none；阈值：必须为 transparent。',
+    '正确做法：去掉底色，让浮层背景透出：',
+    '  错误：background: var(--bg-card);',
+    '  正确：background: transparent;',
+    '权威出处：AGENTS.md §19 形态 ④；AGENTS.md §19 形态 ①（常态无底色，直接平铺在侧栏）。',
+  ],
+  form_four_missing_declaration: [
+    '违反项：形态 ④ 输入框常态规则体缺少强制四项声明（FAIL 标签 [形态 ④ 缺失强制声明]）。',
+    '当前值：缺少 border: none / background: transparent / box-shadow: none / outline: none 中的一项或多项；阈值：四项必须显式齐全。',
+    '正确做法：在常态基础规则（非 :focus/:hover）里一次补齐四项：',
+    '  .searchInput { border: none; outline: none; box-shadow: none; background: transparent; }',
+    '权威出处：AGENTS.md §19 形态 ④（强制 border/outline/box-shadow/background 四件套）。',
+  ],
+  form_four_minimalist_violation: [
+    '违反项：形态 ④ 输入框出现非极简的边框/轮廓/阴影（FAIL 标签 [形态 ④ 极简约束拦截]）。',
+    '当前值：border / border-color / outline / box-shadow 为非零非透明值（浅灰 var(--border-color) 也算违规）；阈值：全态 border:none + outline:none + box-shadow:none。',
+    '正确做法：删除可见边框/轮廓/阴影，仅保留光标：',
+    '  .searchInput { border: none; outline: none; box-shadow: none; background: transparent; }',
+    '注意：伪元素（::placeholder / ::selection / ::-webkit-*）不参与该断言；容器类（Icon/ClearBtn/Wrapper/Container/Header/Btn）也不判定为形态 ④。',
+    '权威出处：AGENTS.md §19 形态 ④。',
+  ],
+  form_four_container_leak: [
+    '违反项：承载形态 ④ 的容器（.titleContainer / .renameContainer / *Title*Container 等）声明了边框或阴影（FAIL 标签 [形态 ④ 容器联动拦截]）。',
+    '当前值：容器规则体内出现非零非透明 border / 非 none 的 box-shadow；阈值：容器严禁声明 border 与 box-shadow。',
+    '正确做法：把边框/阴影从容器上删除（需要区分层级时用间距或背景差，不要画框）：',
+    '  .renameContainer { /* 不要写 border / box-shadow */ }',
+    '权威出处：AGENTS.md §19 形态 ④（浮层内绝不产生任何边框、高亮或阴影）。',
+  ],
+  missing_border_reset: [
+    '违反项：输入框规则体定义了视觉外观却完全没声明 border（FAIL 标签 [默认边框未重置拦截]，规则 E）。',
+    '当前值：规则体含 height/padding/background/font/color/box-shadow/appearance 但无任何 border* 声明；阈值：必须显式重置或声明 border。',
+    '正确做法：显式写 border: none（形态 ①/④ 极简型）或规范细边框（形态 ③）：',
+    '  形态 ④：.searchInput { border: none; }',
+    '  形态 ③：.input { border: 1px solid var(--border-subtle); }',
+    '不写 border 会继承浏览器原生 2px 凹陷重边框，因此本规则为硬拦截。',
+    '权威出处：AGENTS.md §19 形态 ③/④。',
+  ],
+  button_active_dark_border: [
+    '违反项：按钮 :active / .active 态出现硬编码纯黑边框或纯黑投影环（FAIL 标签 [按钮激活纯黑边框拦截]，规则 4）。',
+    '当前值：border/border-color 或 box-shadow 命中 #000000 / #000 / #111111 / #111 / rgb(0,0,0) / black / var(--text-primary)；阈值：0 命中。',
+    '正确做法：激活态用克制的 token 混色，且混入文本色 ≤ 10%：',
+    '  错误：.btn:active { box-shadow: 0 0 0 2px var(--text-primary); }',
+    '  正确：.btn:active { box-shadow: 0 0 0 1px color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%); }',
+    '权威出处：AGENTS.md §13（克制的激活边框：禁止粗、深、实心黑边）。',
+  ],
+  extreme_pill_radius: [
+    '违反项：普通输入框/卡片声明了药丸级极端圆角（FAIL 标签 [极端圆角拦截]，规则 C）。',
+    '当前值：border-radius 为 9999px / 999px / 50%；阈值：仅系统级浮动 Badge / Pill / 全局主底栏（ChatComposer）允许。',
+    '正确做法：接入 Design Tokens 圆角阶梯，并与相邻容器保持视觉一致：',
+    '  错误：border-radius: 9999px;',
+    '  正确：border-radius: var(--radius-lg);   // 8px；侧栏搜索框与相邻侧栏条目一致',
+    '权威出处：AGENTS.md §20「严禁离谱极端圆角」（4px / 6px / 8px / 12px / 16px 标尺）。',
+  ],
+  hard_right_angle: [
+    '违反项：输入框声明 0px/1px 生硬直角（FAIL 标签 [生硬直角拦截]，规则 C）。',
+    '当前值：border-radius 恰为 0 / 0px / 1px 且规则体不含 border: none（reset 层豁免）；阈值：必须接入微圆角 token。',
+    '正确做法：改为就近的圆角阶梯值：',
+    '  错误：border-radius: 0;',
+    '  正确：border-radius: var(--radius-sm);   // 4px；小尺寸内嵌控件与相邻小元素一致',
+    '若该控件确为无边框极简型（border: none），请显式写出 border: none，本规则会自动豁免。',
+    '权威出处：AGENTS.md §20「严禁出现生硬刺眼的 0px/1px 方角」。',
+  ],
+  bizarre_radius: [
+    '违反项：输入框声明脱离 Design Tokens 阶梯的奇葩圆角值（FAIL 标签 [奇葩野值圆角拦截]，规则 C）。',
+    '当前值：border-radius 命中 17/19/23/27/29/31/37/41/43/47 px 等野值；阈值：仅允许 2/4/6/8/12/16px 阶梯。',
+    '正确做法：替换为最近的阶梯 token：',
+    '  错误：border-radius: 17px;',
+    '  正确：border-radius: var(--radius-lg);   // 8px（就近归位，必要时同步调整相邻元素）',
+    '阶梯定义：--radius-xs: 2px · --radius-sm: 4px · --radius-md: 6px · --radius-lg: 8px · --radius-xl: 12px。',
+    '权威出处：AGENTS.md §20「严禁出现 17px、23px 等脱离 Design Tokens 阶梯的奇葩自由数字」。',
+  ],
+  jelly_bounce: [
+    '违反项：按钮/输入框 :active 态声明果冻弹性缩放（FAIL 标签 [果冻效果拦截]，规则 D）。',
+    '当前值：:active 规则体内命中 scale: 0.8x / 0.9x 或 transform: ... scale(0.8x|0.9x)；阈值：0 命中。',
+    '正确做法：删除点击缩放，只保留颜色/背景的克制反馈：',
+    '  错误：.btn:active { transform: scale(0.96); }',
+    '  正确：.btn:active { background: var(--btn-active-bg); }',
+    '权威出处：AGENTS.md §20 第 3 条（刚性阻断按钮果冻弹跳 :active scale(0.96)）。',
+  ],
+  bespoke_native_input: [
+    '违反项：TSX 中私写原生 <input>（FAIL 标签 [TSX组件规范拦截]）。',
+    '当前值：<input> 命中且所在文件不在形态白名单（SidebarNav / ChatComposer / ModelBadgePickerMenu / SessionInlineRename / EditableTitle / DiffCard …）；阈值：表单配置项必须 0 命中。',
+    '正确做法：改用原子组件，禁止自造轮子：',
+    '  错误：<input className="myInput" value={v} onChange={onChange} />',
+    '  正确：import { Input } from "@/components/ui";  →  <Input value={v} onChange={onChange} />',
+    '若该处确属已裁决的形态 ①②④，请把文件加入 scanTsxForBespokeInputs 的 isAllowedForm 白名单（须说明形态归属），而不是留在裸写状态。',
+    '权威出处：AGENTS.md §19 形态 ③（必须强制使用原子 <Input> 组件）；AGENTS.md §20 第 3 条。',
+  ],
+  ghost_motion_token: [
+    '违反项：binary-tree 组件 CSS 引用了不存在的动效 token（FAIL 标签 [幽灵 token 拦截]）。',
+    '当前值：命中 --dur-fast / --ease-default；阈值：0 命中。',
+    '正确做法：改用 tokens.css 的真实阶梯：',
+    '  错误：transition: width 200ms --ease-default;',
+    '  正确：transition: width var(--duration-fast) var(--ease-out);',
+    '权威出处：apps/crish-desktop/src/components/binary-tree/ 单一真理路径守卫（scanStripMotionGuards）；token 阶梯见 src/styles/tokens.css。',
+  ],
+  layout_keyframes_animation: [
+    '违反项：binary-tree 组件 CSS 的 @keyframes 里动画了布局属性（FAIL 标签 [布局属性动画拦截]）。',
+    '当前值：@keyframes 体内命中 width / max-width / min-width / height / flex / flex-basis / padding* / margin* / top / left / right / bottom / border-width；阈值：0 命中。',
+    '正确做法：条带几何展开/收拢走 transition 单轨（@starting-style 入场 / [data-leaving] 离场），keyframes 只允许 transform / opacity / 色彩：',
+    '  错误：@keyframes expand { from { width: 0 } to { width: 120px } }',
+    '  正确：.strip { transition: transform var(--duration-fast) var(--ease-out); }  /* 或 @starting-style { opacity: 0 } */',
+    '权威出处：apps/crish-desktop/src/components/binary-tree/ 单一真理路径守卫（scanStripMotionGuards）。',
+  ],
+};
+
+function printGuide(metric) {
+  const g = GUIDE_TEXT[metric];
+  if (!g) {
+    console.error(`[check-input-guardrails] 未知指标：${metric}`);
+    console.error(`可用：${Object.keys(GUIDE_TEXT).join(', ')}`);
+    process.exit(1);
+  }
+  console.log(`[check-input-guardrails] 正确做法 · ${metric}\n`);
+  for (const l of g) console.log(`  ${l}`);
+  process.exit(0);
+}
+
 const isDirectRun = process.argv[1] && (
   import.meta.url.endsWith(process.argv[1].replace(/\\/g, '/')) ||
   fileURLToPath(import.meta.url) === path.resolve(process.argv[1])
@@ -1344,6 +1543,8 @@ const isDirectRun = process.argv[1] && (
 
 
 if (isDirectRun) {
+  // 指引模式：仅直接运行时生效，导入方（check-token-ssot / check-layout-tokens）的 argv 不触发。
+  if (GUIDE_FLAG) printGuide(GUIDE);
   const resultErrors = runGuardrails();
   if (resultErrors.length > 0) {
     console.error(`\n❌ 输入框防倒退门禁检测未通过！发现 ${resultErrors.length} 处违规：`);

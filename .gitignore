@@ -175,11 +175,45 @@ apps/agent-workbench/src-tauri/gen/*
 **/diff_css.txt
 
 # Antigravity/CDP/local dev temp logs and reports
-*.txt
-*.json
-*.html
-*.png
-*.mjs
+# W9-C 收窄（2026-09-13）：原为全局裸 `*.txt/*.json/*.html/*.png/*.mjs`，会误伤源码树下的
+# 数据资产（曾致 apps/crish-desktop/src/services/modelsAutofillBaselineData.json 从未入库）。
+# 改为「根目录散落产物 + 已知临时/报告/参考/测试目录」显式锚定（不再全局裸匹配）；
+# 源码树 apps/**/src、packages/**/src 下的 .json 恒视为资产，末尾显式放行（见本条末两行）。
+/*.txt
+/*.json
+/*.html
+/*.png
+/*.mjs
+/apps/**/*.html
+/apps/**/.crish-trash/**
+/apps/*/.oxlintrc.json
+/apps/*/orchestrator-snapshot.json
+/analysis/**/*.json
+/analysis/**/*.html
+/crates/**/tests/**/*.json
+/docs/**/*.json
+/docs/**/*.html
+/docs/**/*.mjs
+/docs/**/*.png
+/exports/**/*.json
+/exports/**/*.html
+/exports/**/*.mjs
+/exports/**/*.png
+/reference/**/*.json
+/reference/**/*.html
+/reference/**/*.mjs
+/reference/**/*.png
+/reference/**/*.txt
+/scripts/**/*.mjs
+/scripts/**/*.txt
+/tests/**/*.json
+/_agent_patches/**
+/blackhole/**
+/model-price-data/**
+/temp_ai_test_workspace/**
+/.claude/**/*.json
+!apps/**/src/**/*.json
+!packages/**/src/**/*.json
 !docs/**/*.md
 !docs/**/*.txt
 !analysis/**/*.md
@@ -188,7 +222,7 @@ apps/agent-workbench/src-tauri/gen/*
 !apps/agent-workbench/src-tauri/capabilities/*.json
 !package.json
 !tsconfig.json
-!crates/agent-provider/src/models/catalog.json
+# 注：`!crates/agent-provider/src/models/catalog.json` 已合并至本文件下半部分唯一一处（W9-C，去重）
 
 # Legacy root planning docs moved into docs/archive (keep untracked)
 docs/archive/legacy/0613-0055-plan.md
@@ -375,11 +409,45 @@ apps/agent-workbench/src-tauri/gen/*
 **/diff_css.txt
 
 # Antigravity/CDP/local dev temp logs and reports
-*.txt
-*.json
-*.html
-*.png
-*.mjs
+# W9-C 收窄（2026-09-13）：原为全局裸 `*.txt/*.json/*.html/*.png/*.mjs`，会误伤源码树下的
+# 数据资产（曾致 apps/crish-desktop/src/services/modelsAutofillBaselineData.json 从未入库）。
+# 改为「根目录散落产物 + 已知临时/报告/参考/测试目录」显式锚定（不再全局裸匹配）；
+# 源码树 apps/**/src、packages/**/src 下的 .json 恒视为资产，末尾显式放行（见本条末两行）。
+/*.txt
+/*.json
+/*.html
+/*.png
+/*.mjs
+/apps/**/*.html
+/apps/**/.crish-trash/**
+/apps/*/.oxlintrc.json
+/apps/*/orchestrator-snapshot.json
+/analysis/**/*.json
+/analysis/**/*.html
+/crates/**/tests/**/*.json
+/docs/**/*.json
+/docs/**/*.html
+/docs/**/*.mjs
+/docs/**/*.png
+/exports/**/*.json
+/exports/**/*.html
+/exports/**/*.mjs
+/exports/**/*.png
+/reference/**/*.json
+/reference/**/*.html
+/reference/**/*.mjs
+/reference/**/*.png
+/reference/**/*.txt
+/scripts/**/*.mjs
+/scripts/**/*.txt
+/tests/**/*.json
+/_agent_patches/**
+/blackhole/**
+/model-price-data/**
+/temp_ai_test_workspace/**
+/.claude/**/*.json
+!apps/**/src/**/*.json
+!packages/**/src/**/*.json
 # T-E 批次 5 门禁脚本入库放行（check:store-writes / check:store-facade 及其基线——
 # 门禁脚本是资产，必须可被 git 跟踪，否则 CI checkout 后门禁缺失）
 !scripts/check-no-raw-setstate.mjs
@@ -539,3 +607,12 @@ orchestrator-snapshot.json.prev
 # 会话完整性战役 · 探针 A/B 入库放行（详案 06 Wave D4；惯例同上）
 !scripts/check-session-message-upsert.mjs
 !scripts/check-tool-pairing-invariants.mjs
+# W9-C 源资产门禁入库放行（门禁脚本是资产；同 `/scripts/**/*.mjs` 忽略，
+# 不放行则 CI checkout 后缺失、check-model-config-ssot 委派链断裂）
+!scripts/check-source-assets-tracked.mjs
+# W9-A/D 词表镜像门禁 + W8 总门禁入库放行（同上：不放行则 CI checkout 后缺失）
+!scripts/check-thinking-vocabulary-ssot.mjs
+!scripts/check-model-config-ssot.mjs
+# provider 单轨门禁入库放行（同上：不放行则 CI checkout 后缺失，
+# 且会被 check-guard-system 的 unreleased_guard 零容忍指标判定为未入库）
+!scripts/check-provider-single-track.mjs

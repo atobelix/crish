@@ -163,3 +163,44 @@ jobs:
       - run: node scripts/check-unwrap-baseline.mjs
       - run: node scripts/check-swallowed-errors.mjs
       - run: node scripts/check-crate-size.mjs
+
+  # 桌面端守卫接线（check-guard-system 的 unwired_guard 收口）：
+  # 下列门禁此前只在本地 `check:desktop` 聚合里跑，CI 未接线 →
+  # 被 check-guard-system 判定为 unwired_guard 并阻塞全仓 pre-commit。
+  # 已实测：这 19 条在本仓当前状态全部 exit 0，且**不依赖构建产物**（只读源码树），
+  # 故安全接入中层（合并前全量验证）。
+  # 仍未接入的 6 条（color-ssot / conex-db-size / convergence / line-width-ssot /
+  # token-ssot / tokens-all）当前**实测失败**，属存量债务；已登记在
+  # scripts/check-guard-system.mjs 的 UNWIRED_ALLOWLIST（含具体违规位置），
+  # 修复后必须移出豁免并接入本 job。
+  desktop-guards:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      # 静态/契约类守卫（按域分组，便于定位失败）
+      - run: node scripts/check-async-commands.mjs
+      - run: node scripts/check-blocked-executable-ssot.mjs
+      - run: node scripts/check-no-nonvision-dataurl.mjs
+      - run: node scripts/check-no-pseudo-dispatch.mjs
+      - run: node scripts/check-reflow-guards.mjs
+      - run: node scripts/check-sec6-note-drain-entropy.mjs
+      - run: node scripts/check-perf-budgets.mjs
+      # 设计 Token / 样式契约类
+      - run: node scripts/check-icon-ssot.mjs
+      - run: node scripts/check-input-guardrails.mjs
+      - run: node scripts/check-layout-geometry.mjs
+      - run: node scripts/check-layout-tokens.mjs
+      - run: node scripts/check-markdown-style-compliance.mjs
+      - run: node scripts/check-preferences-ssot.mjs
+      - run: node scripts/check-text-color-tokens.mjs
+      - run: node scripts/check-tooltip-hygiene.mjs
+      # 架构 / SSOT 类
+      - run: node scripts/check-store-islands.mjs
+      - run: node scripts/check-provider-single-track.mjs
+      - run: node scripts/check-thinking-vocabulary-ssot.mjs
+      - run: node scripts/check-source-assets-tracked.mjs

@@ -8,14 +8,39 @@
  *    - 存在 `spawn_blocking`；
  *    - 裸 `std::fs::` 仅允许出现在 `spawn_blocking` 闭包内（深度追踪）。
  *
+ * 用法：
+ *   node scripts/check-async-commands.mjs
+ *   node scripts/check-async-commands.mjs --guide <metric>
+ *     → 打印该指标的正确做法（五元规约：违反项 · 文件:行号 · 当前值 · 阈值 · 正确做法）；
+ *       未知或缺省 metric → 列出可用指标并 exit 1。
+ *
+ * 指标名（= FAIL 输出的两类违规，一一对应）：
+ *   non_async_fs_command      壳 fs 三命令非 async，或缺 async fn / 缺 spawn_blocking（U-BLOCK / DEL-1）
+ *   bare_std_fs_in_execute    重 IO 工具 async fn execute 内裸 std::fs（未包 spawn_blocking）或整文件缺 spawn_blocking（U-BLOCK / DEL-9 / INV-B3）
+ *
+ * 注：--guide 仅在直接运行时生效（本模块若被 import，不劫持导入方流程）。
+ *
  * 退出码：0 = 通过；1 = 发现违规。
  */
 import { readFileSync } from "node:fs";
-import { join, dirname } from "node:path";
+import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const violations = [];
+
+// ── --guide 解析（增量添加，不影响无 flag 的既有行为） ────────────────────────
+function argVal(name) {
+  const i = process.argv.indexOf(name);
+  return i >= 0 ? process.argv[i + 1] : undefined;
+}
+
+const GUIDE_FLAG = process.argv.includes("--guide");
+const GUIDE = argVal("--guide");
+const isDirectRun =
+  !!process.argv[1] &&
+  (import.meta.url.endsWith(process.argv[1].replace(/\\/g, "/")) ||
+    fileURLToPath(import.meta.url) === resolve(process.argv[1]));
 
 function stripTestRegions(src) {
   const lines = src.split(/\r?\n/);
@@ -50,6 +75,71 @@ function stripTestRegions(src) {
   }
   return kept.join("\n");
 }
+
+// ── 正确做法指引（--guide <metric>）────────────────────────────────────────
+const GUIDE_TEXT = {
+  non_async_fs_command: [
+    '违反项：壳 fs 命令不是 async（DEL-1），或三命令缺 async fn / 缺 spawn_blocking（U-BLOCK）。',
+    '文件:行号 / 当前值：FAIL 列表逐条给出 `<file>[:<line>]: <说明>`；当前值 = 违规条数。',
+    '阈值：0。壳 fs 三命令（list_directory / read_file_content / write_file_content）必须全部 async + 内部 spawn_blocking。',
+    '',
+    '正确做法：`pub(crate) fn` → `pub(crate) async fn`，同步 IO 核心整体移入 tokio::task::spawn_blocking 闭包。',
+    '  仓库现存正确范例（apps/agent-workbench/src-tauri/src/fs_commands/mod.rs:29-40，照抄）：',
+    '    /// U-BLOCK：async + spawn_blocking——tokio worker 不被同步目录 IO 占满。',
+    '    #[tauri::command]',
+    '    pub(crate) async fn list_directory<R: tauri::Runtime>(app: AppHandle<R>, path: String) -> ... {',
+    '        let result = tokio::task::spawn_blocking(move || directory::list_directory(&app, path))',
+    '            .await',
+    '            .map_err(|e| /* 沿用既有错误映射，勿改错误码 */)?;',
+    '        ...',
+    '    }',
+    '  要点：闭包入参用值语义 move（PathBuf / String / Vec<u8>）；非 Send 部分在闭包外准备；',
+    '        错误码与响应形状零变化；wire 键 workbench_list_directory / workbench_read_file_content /',
+    '        workbench_write_file_content 保持不变。禁止「先留同步兼容分支再改」。',
+    '  白名单：workbench_discover_skills 允许保持同步（脚本内 WHITELIST）。',
+    '权威文档：docs/performance-audit/materials/plans/detail-D2-阻塞IO与Gatekeeper.md §3.1（第 128-166 行）。',
+    '复核：node scripts/check-async-commands.mjs  # 期望 OK',
+  ],
+  bare_std_fs_in_execute: [
+    '违反项：agent-tools 重 IO 工具 `async fn execute` 内出现裸 `std::fs::`（未包 spawn_blocking），',
+    '        或整个 execute 体缺 spawn_blocking（U-BLOCK / DEL-9 / INV-B3）。',
+    '文件:行号 / 当前值：FAIL 列表逐条给出 `<file>[:<line>]: <说明>`；当前值 = 违规条数。',
+    '阈值：0（async 路径不得直调同步 std::fs；相关工具文件须至少一处 spawn_blocking）。',
+    '',
+    '正确做法：把同步 IO 全路径整体 move 进 tokio::task::spawn_blocking 闭包，await 后再做业务组装。',
+    '  仓库现存正确范例（crates/agent-tools/src/tools/fs.rs:93-97，照抄）：',
+    '    let outcome = {',
+    '        let file_path = file_path.clone();',
+    '        let display = display.clone();',
+    '        tokio::task::spawn_blocking(move || -> Result<ReadFileOutcome, ToolError> {',
+    '            let metadata = std::fs::metadata(&file_path)',
+    '                .map_err(|e| ToolError::execution_failed("read_file", format!("{display}: {e}")))?;',
+    '            ... // 同步 std::fs 全部留在这里',
+    '        })',
+    '        .await',
+    '        .map_err(|e| ToolError::execution_failed("read_file", format!("spawn_blocking: {e}")))?',
+    '    };',
+    '  要点：闭包入参 move（PathBuf / Vec<u8> / String）；AbortToken 检查留在闭包外循环点；',
+    '        行为语义（错误码 / 输出形状）零变化；薄封装函数若仅 .await 委托给已包 spawn 的 helper 则合规。',
+    '  覆盖文件：crates/agent-tools/src/tools/{fs,search,replace,diff,project_tree,delete,decompress_context}.rs。',
+    '权威文档：docs/performance-audit/materials/plans/detail-D2-阻塞IO与Gatekeeper.md §3.1（第 138-151 行，DEL-9）。',
+    '复核：node scripts/check-async-commands.mjs  # 期望 OK（tools spawn_blocking skeleton）',
+  ],
+};
+
+function printGuide(metric) {
+  const g = GUIDE_TEXT[metric];
+  if (!g) {
+    console.error(`[check-async-commands] 未知指标：${metric}`);
+    console.error(`可用：${Object.keys(GUIDE_TEXT).join(", ")}`);
+    process.exit(1);
+  }
+  console.log(`[check-async-commands] 正确做法 · ${metric}\n`);
+  for (const l of g) console.log(`  ${l}`);
+  process.exit(0);
+}
+
+if (isDirectRun && GUIDE_FLAG) printGuide(GUIDE);
 
 // ── 1. 壳 fs_commands 三命令必须 async ──
 {

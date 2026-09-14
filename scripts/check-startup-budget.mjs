@@ -28,6 +28,7 @@
  *   node scripts/check-startup-budget.mjs --strict
  *   node scripts/check-startup-budget.mjs --budget-kb 520 --static-graph-kb 1800
  *   node scripts/check-startup-budget.mjs --deny chat-provider-catalog
+ *   node scripts/check-startup-budget.mjs --guide <metric>
  *   STATIC_GRAPH_DENY=a,b node scripts/check-startup-budget.mjs --strict
  *
  * 退出码：
@@ -71,6 +72,9 @@ let budgetKb = Number.parseFloat(process.env.BUDGET_KB || '') || DEFAULT_BUDGET_
 let staticGraphKb =
   Number.parseFloat(process.env.STATIC_GRAPH_BUDGET_KB || '') || DEFAULT_STATIC_GRAPH_BUDGET_KB;
 let strict = false;
+/** --guide <metric>：仅打印该指标的正确做法后退出，不参与任何体积判定 */
+let guideRequested = false;
+let guideMetric = null;
 /** --manifest 覆盖（测试夹具注入假 manifest；生产不传，走候选路径探测） */
 let manifestOverride = null;
 /** deny 名单：缺省 + env + --deny 追加（去重） */
@@ -114,6 +118,9 @@ for (let i = 0; i < argv.length; i++) {
     manifestOverride = p;
   } else if (a === '--strict') {
     strict = true;
+  } else if (a === '--guide') {
+    guideRequested = true;
+    guideMetric = argv[++i] ?? null;
   } else if (a === '--help' || a === '-h') {
     console.log(
       '用法: node scripts/check-startup-budget.mjs [--budget-kb N] [--static-graph-kb N] [--deny name]... [--manifest path] [--strict]\n' +
@@ -140,6 +147,92 @@ if (!Number.isFinite(staticGraphKb) || staticGraphKb <= 0) {
   );
   process.exit(2);
 }
+
+// ── 正确做法指引（--guide）────────────────────────────────────────────────────
+// 增量契约：仅在显式 `--guide` 时生效，不触碰任何阈值、判定分支与普通运行退出码。
+// 指标名取自本脚本真实的 FAIL / WARN 信号（判定字段 entryFileBytes / totalBytes /
+// denyHits / missing / manifestPath / manifest 解析失败）。
+const GUIDE_TEXT = {
+  entry_budget: [
+    '违反项：entry 产物文件合计超预算（判定字段：scripts/check-startup-budget.mjs 的 `entryFileBytes > budgetBytes`）。',
+    '文件:行号：报告 `entries (N):` 段中的 `[entry] <key>  <B> (<KiB>)` 行；产物实体为 apps/crish-desktop/dist/assets/index-*.js。',
+    '当前值：报告行 `entry 文件合计: <N> B (<X> KiB) / 预算 <budgetKb> KiB`。',
+    '阈值：缺省 520 KiB，唯一真源 crates/conex-shared/src/perf_budget.rs:139 `STARTUP_ENTRY_BUDGET_KB = 520`。',
+    '正确做法：',
+    '  ① 先复现并读报告：node scripts/check-startup-budget.mjs  → 看 `[entry]` 行与 `entry 文件合计` 行；',
+    '  ② 把入口可延迟的模块改为动态加载（`const m = await import("./heavy")`），或断掉 entry → 大 chunk 的静态边；',
+    '  ③ 验证：node scripts/check-startup-budget.mjs --strict  → 必须 exit 0；',
+    '  ④ 禁止在脚本内另立阈值数值，也禁止在 CI 用 --budget-kb / env BUDGET_KB 放宽阈值来「通过」；',
+    '     阈值调整必须改 perf_budget.rs 真源并同步 apps/crish-desktop/src/api/perfBudgets.ts 镜像。',
+    '参考：docs/performance-audit/materials/plans/detail-D9D10-启动门禁与压缩.md §1.1 D9-A。',
+  ],
+  static_graph_budget: [
+    '违反项：entry 静态 import 图 JS 合计超预算（判定字段：scripts/check-startup-budget.mjs 的 `totalBytes > staticGraphBudgetBytes`）。',
+    '文件:行号：报告 `entry graph chunks (N):` 段按字节倒序，`[import] <key>  <B> (<KiB>)` 行即体积来源。',
+    '当前值：报告行 `静态 import 图合计: <N> B (<X> KiB) / 预算 <staticGraphKb> KiB`。',
+    '阈值：缺省 1800 KiB（过渡值），真源 crates/conex-shared/src/perf_budget.rs:143 `STARTUP_STATIC_GRAPH_BUDGET_KB_TRANSITION = 1800`；断边验收后由 D9-B 冻结到 :146 `..._FROZEN = 900`。',
+    '正确做法：',
+    '  ① node scripts/check-startup-budget.mjs  → 取报告里最大的若干 `[import]` 行作为收敛目标；',
+    '  ② 对这些 chunk 断静态边 / 改懒加载（示例：把 catalog 静态 import 改为 `await import("./providerCatalog")`）；',
+    '  ③ 验证：node scripts/check-startup-budget.mjs --strict  → 必须 exit 0；',
+    '  ④ 禁止上调过渡阈值放行，也禁止用 --static-graph-kb / env STATIC_GRAPH_BUDGET_KB 在 CI 里放宽。',
+    '参考：docs/performance-audit/materials/plans/detail-D9D10-启动门禁与压缩.md §1.1 D9-B「断三处上游静态边」、§1.2 DEL-8。',
+  ],
+  deny_hit: [
+    '违反项：entry 静态图中出现被禁 chunk key 子串（判定字段：scripts/check-startup-budget.mjs 的 `denyHits`）。',
+    '文件:行号：FAIL 行 `[check-startup-budget] FAIL: 静态图 deny 名单命中: <key> 命中 «<deny>»` 已给出 key 与命中子串。',
+    '当前值/阈值：deny 是硬违规 —— 命中数必须为 0，任何模式（含非 strict）都 exit 1，不随 --strict 缓冲。',
+    '正确做法：',
+    '  ① 修法 = 断掉该 chunk 的静态边，把它移出 entry 静态 import 图（改 `await import(...)` 懒加载）；',
+    '  ② 禁止把名字从名单里删掉来「通过」——名单由 DEFAULT_STATIC_GRAPH_DENY（脚本）叠加 env STATIC_GRAPH_DENY 与 --deny 得到；',
+    '  ③ 验证：node scripts/check-startup-budget.mjs 与 `--strict` 两次运行均不应再出现 deny 行。',
+    '参考：docs/performance-audit/materials/plans/detail-D9D10-启动门禁与压缩.md §1.1 D9-A（断边验收后名单含 chat-provider-catalog）。',
+  ],
+  missing_files: [
+    '违反项：manifest 条目指向的产物文件缺失（判定字段：scripts/check-startup-budget.mjs 的 `missing`）。',
+    '文件:行号：WARN 行 `[check-startup-budget] WARN: <N> 个 manifest 条目对应文件缺失（构建不完整？）: <key>, ...` 逐项列出 key。',
+    '当前值/阈值：缺失条目数应为 0；缺失会让体积合计偏小，门禁结论不可信（假绿）。',
+    '正确做法：',
+    '  ① 重新完整构建：npm run build:desktop（不要只跑增量/中断后复用 dist）；',
+    '  ② 确认 apps/crish-desktop/vite.config.ts 的 build.manifest = true，且 dist 未被手工清理；',
+    '  ③ 禁止手工补写 manifest 或伪造产物文件；',
+    '  ④ 验证：node scripts/check-startup-budget.mjs  → WARN 行消失。',
+  ],
+  no_manifest: [
+    '违反项：未找到 dist 产物 / Vite manifest，门禁跳过并 exit 0（判定字段：scripts/check-startup-budget.mjs 的 `manifestPath` 为 null）。',
+    '文件:行号：脚本按顺序探测 apps/crish-desktop/dist/.vite/manifest.json → dist/.vite/manifest.json → apps/crush-desktop/dist/.vite/manifest.json。',
+    '当前值/阈值：跳过 ≠ 通过 —— 此时体积断言完全未执行。',
+    '正确做法：',
+    '  ① 先构建再跑门禁：npm run build:desktop && node scripts/check-startup-budget.mjs --strict；',
+    '  ② CI 顺序固定为 build:desktop → check-dist → node scripts/check-startup-budget.mjs --strict（见 D9-A 接线）；',
+    '  ③ 若确无 manifest 而只有 assets，脚本会退化为 index-*.js 文件名启发式，报告末尾会打印提示 —— 该模式不覆盖静态图合计预算。',
+    '参考：docs/performance-audit/materials/plans/detail-D9D10-启动门禁与压缩.md §1.1 D9-A「接线」。',
+  ],
+  manifest_parse_error: [
+    '违反项：Vite manifest 不是合法 JSON（判定点：scripts/check-startup-budget.mjs 中 `JSON.parse(readFileSync(manifestPath))` 的 catch 分支）。',
+    '文件:行号：FAIL 行 `[check-startup-budget] FAIL: manifest 解析失败 <相对路径>: <e.message>` 已给出路径与解析器报错位置。',
+    '当前值/阈值：解析失败 = exit 1，不降级为 warn。',
+    '正确做法：',
+    '  ① 最常见成因是构建中断留下被截断的 manifest → 删除 dist 后重新 `npm run build:desktop`；',
+    '  ② 自查语法：node -e "JSON.parse(require(\'fs\').readFileSync(\'apps/crish-desktop/dist/.vite/manifest.json\',\'utf8\'))"；',
+    '  ③ 禁止手工修补 manifest 内容（它是构建产物）。',
+  ],
+};
+
+function printGuide(metric) {
+  const g = GUIDE_TEXT[metric];
+  if (!g) {
+    console.error(`[check-startup-budget] 未知指标：${metric ?? '(未提供)'}`);
+    console.error(`可用：${Object.keys(GUIDE_TEXT).join(', ')}`);
+    console.error('  用法：node scripts/check-startup-budget.mjs --guide <metric>');
+    process.exit(1);
+  }
+  console.log(`[check-startup-budget] 正确做法 · ${metric}\n`);
+  for (const l of g) console.log(`  ${l}`);
+  process.exit(0);
+}
+
+if (guideRequested) printGuide(guideMetric);
 
 // ── locate manifest ──────────────────────────────────────────────────────────
 function findManifest() {

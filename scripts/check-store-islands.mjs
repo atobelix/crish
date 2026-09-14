@@ -9,7 +9,7 @@
  *   3. 生产 src/ 不得 getItem('crish_session_store') 后访问 .sessions（兼容读）
  *   4. 本维新增 TODO/FIXME = 0（票 A 收口文件）
  *
- * Run: node scripts/check-store-islands.mjs
+ * Run: node scripts/check-store-islands.mjs [--guide <metric>]
  *      npm run check:store-islands
  */
 import { readFileSync, readdirSync, statSync } from 'node:fs';
@@ -30,6 +30,103 @@ const TICKET_A_FILES = [
   join(DESKTOP_SRC, 'store', 'sessionCrudActions.ts'),
   join(REPO_ROOT, 'scripts', 'check-store-islands.mjs'),
 ];
+
+// ── 正确做法指引（--guide <metric>；纯增量，不影响既有判定与退出码）──────
+// 指标名 = 本脚本 violations[].rule 的真实标识符（见下方各 violations.push）。
+const GUIDE_INDEX = process.argv.indexOf('--guide');
+const GUIDE = GUIDE_INDEX >= 0 ? process.argv[GUIDE_INDEX + 1] : undefined;
+
+const GUIDE_TEXT = {
+  partialize_missing_file: [
+    '违反项：`partialize_missing_file`（scripts/check-store-islands.mjs:121）· apps/crish-desktop/src/store/sessionStore.ts',
+    '当前值：文件不存在；阈值：文件必须存在且含显式 partialize。',
+    '正确做法：从版本库恢复该文件（git checkout -- apps/crish-desktop/src/store/sessionStore.ts）；',
+    '  若确实已迁移到新路径，则同步更新本脚本:21 的 SESSION_STORE 常量与:31 的票 A 收口文件清单，不得只删文件。',
+    '参考：docs/performance-audit/materials/plans/detail-D4D5-前端持久化与内存.md §2.1（票 A）。',
+  ],
+  partialize_not_found: [
+    '违反项：`partialize_not_found`（scripts/check-store-islands.mjs:130）· apps/crish-desktop/src/store/sessionStore.ts',
+    '当前值：未匹配到 `partialize: (s) => ({ … })` 对象字面量；阈值：必须显式存在对象字面量。',
+    '正确做法：persist 选项显式写对象字面量（`partialize: (s) => s` 无法静态枚举，会被判失败），',
+    '  落地形态（sessionStore.ts:70 附近）：',
+    '    partialize: (s) => ({',
+    '      folderOrder: s.folderOrder,',
+    '      activeSessionId: s.activeSessionId,',
+    '      composerDrafts: s.composerDrafts,',
+    '    }),',
+    '参考：detail-D4D5 §2.1（票 A · partialize 物理收窄）。',
+  ],
+  partialize_has_sessions: [
+    '违反项：`partialize_has_sessions` · apps/crish-desktop/src/store/sessionStore.ts · partialize 返回对象含禁止键 "sessions"/"sessionsById"',
+    '位置：sessionStore.ts:70-74（partialize 对象字面量）；当前值：partialize 键集 ∩ {sessions, sessionsById} ≠ ∅；阈值：= ∅。',
+    '正确做法：物理删除这两个键（不是写空数组、不是 skipHydration 技巧），正文改由 SQLite hydrate 承载：',
+    '    partialize: (s) => ({',
+    '      folderOrder: s.folderOrder,',
+    '      activeSessionId: s.activeSessionId,',
+    '      composerDrafts: s.composerDrafts,',
+    '    }),',
+    '参考：detail-D4D5 §2.1（A-1 / DEL-5）；docs/performance-audit/92-修复总方案.md §5 反例 2。',
+  ],
+  merge_rehydrates_sessions: [
+    '违反项：`merge_rehydrates_sessions` · apps/crish-desktop/src/store/sessionStore.ts · merge 将 persisted.sessions 并回内存',
+    '位置：sessionStore.ts 的 merge 选项（约 :76-92）；当前值：merge 体内出现 p.sessions / persisted.sessions 作赋值右侧；阈值：0 次。',
+    '正确做法：merge 只并回轻量 meta 字段，sessions / sessionsById 一律取内存初值（零兼容读 A-2）：',
+    '    merge: (persisted, current) => {',
+    '      const p = (persisted ?? {}) as Record<string, unknown>;',
+    '      return {',
+    '        ...current,',
+    '        activeSessionId: typeof p.activeSessionId === \'string\' ? p.activeSessionId : current.activeSessionId,',
+    '        folderOrder: Array.isArray(p.folderOrder) ? (p.folderOrder as string[]) : current.folderOrder,',
+    '        composerDrafts:',
+    '          p.composerDrafts && typeof p.composerDrafts === \'object\'',
+    '            ? (p.composerDrafts as Record<string, string>)',
+    '            : current.composerDrafts,',
+    '      };',
+    '    },',
+    '参考：detail-D4D5 §2.1（零兼容读）；NA-A2。',
+  ],
+  write_sessions_to_shell_key: [
+    '违反项：`write_sessions_to_shell_key` · <file>:<line> · setItem(\'crish_session_store\', …) payload 含 sessions',
+    '当前值：该行 setItem payload 含 `sessions:`；阈值：0（LS 岛双写禁止）。',
+    '正确做法：删除对 crish_session_store 的 sessions 写入；会话正文持久化走 SQLite（Rust 侧）。',
+    '  壳键只允许写轻量 meta。若是一次性剥离旧键，改为删除而非写回：',
+    '    localStorage.removeItem(\'crish_session_store\');',
+    '  该删除动作只允许出现在迁移器 apps/crish-desktop/src/api/session-persistence/sessionShellKeyMigration.ts。',
+    '参考：detail-D4D5 §2.1 第 2 条；NA-A2。',
+  ],
+  read_sessions_from_shell_key: [
+    '违反项：`read_sessions_from_shell_key` · <file>:<line> · getItem(\'crish_session_store\') 后访问 .sessions',
+    '位置：本脚本按「getItem(键) 起 3 行窗口」或「引用键名起 5 行窗口」检测 .sessions 字段访问；',
+    '  当前值：窗口内出现 .sessions；阈值：0（唯一豁免：sessionShellKeyMigration.ts）。',
+    '正确做法：删除兼容读，只取轻量 meta，正文由 sessionRustDbHydrate.ts 从 SQLite hydrate：',
+    '    const persisted = JSON.parse(localStorage.getItem(\'crish_session_store\') ?? \'{}\');',
+    '    const { folderOrder, activeSessionId, composerDrafts } = persisted; // 不读 .sessions',
+    '参考：detail-D4D5 §2.1（零兼容读 A-2）；NA-A2。',
+  ],
+  ticket_a_todo: [
+    '违反项：`ticket_a_todo` · <file>:<line> · 票 A 收口文件残留 TODO/FIXME 标记',
+    '位置：本脚本:25-32 的 TICKET_A_FILES（sessionStore.ts / beforeunloadFlush.ts / sessionRustDbHydrate.ts /',
+    '  sessionShellKeyMigration.ts / sessionCrudActions.ts）；当前值：该行含待办标记；阈值：0。',
+    '正确做法：能当场改完的改完并删除标记；确实无法在本票内收口的，转为缺口台账条目',
+    '  （docs/performance-audit/materials/plans/detail-D4D5-前端持久化与内存.md 缺口台账），不得留在收口文件里。',
+    '参考：docs/performance-audit/92-修复总方案.md §6「门禁假路径」禁止项。',
+  ],
+};
+
+function printGuide(metric) {
+  const g = GUIDE_TEXT[metric];
+  if (!g) {
+    console.error(`[check-store-islands] 未知指标：${metric ?? '(未给出)'}`);
+    console.error(`可用：${Object.keys(GUIDE_TEXT).join(', ')}`);
+    process.exit(1);
+  }
+  console.log(`[check-store-islands] 正确做法 · ${metric}\n`);
+  for (const l of g) console.log(`  ${l}`);
+  process.exit(0);
+}
+
+if (GUIDE_INDEX >= 0) printGuide(GUIDE);
+
 
 function toPosix(p) {
   return normalize(p).split(sep).join('/');

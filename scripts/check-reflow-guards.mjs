@@ -16,6 +16,12 @@
  * 用法：
  *   node scripts/check-reflow-guards.mjs
  *   node scripts/check-reflow-guards.mjs --strict
+ *   node scripts/check-reflow-guards.mjs --guide <metric>   打印该指标的正确做法（未知/缺省 metric → 列出可用指标并 exit 1）
+ *
+ * 指标（= FAIL/WARN 行的规则名）：
+ *   startup_forced_reflow   启动关键路径 getComputedStyle
+ *   preload_wildcard_latch  html.preload * 裸通配
+ *   idle_callback_timeout   requestIdleCallback(..., { timeout })
  *
  * 退出码：0 = 无 error（warn 不挡）；1 = 有 error；2 = 参数错误
  */
@@ -79,6 +85,62 @@ const GET_COMPUTED_STYLE_ALLOWLIST = new Set([
 
 /** html.preload 门闩授权：选择器必须含 app-initial-loader 排除 */
 const PRELOAD_EXCLUSION = ':not(.app-initial-loader';
+
+// ── 指引（--guide <metric>）──────────────────────────────────────────────────
+// 输出契约（五元规约）：违反项 · 文件:行号 · 当前值 · 阈值 · 正确做法。
+function argVal(name) {
+  const i = process.argv.indexOf(name);
+  return i >= 0 ? process.argv[i + 1] : undefined;
+}
+
+const GUIDE_FLAG = process.argv.includes('--guide');
+const GUIDE = argVal('--guide');
+
+const GUIDE_TEXT = {
+  startup_forced_reflow: [
+    '违反项：启动关键路径文件调用 getComputedStyle（FAIL 行：getComputedStyle 启动关键路径违规 · <file>:<line>）。',
+    '当前值：该文件命中 getComputedStyle 调用（本次实测扫描 7873 文件 / 启动关键路径命中 33 文件）；阈值：启动关键路径上命中数 = 0。',
+    '判定面：STARTUP_CRITICAL_RES（main.tsx / App.tsx / bootstrap-*.ts / index.css / styles/** / themeStore.ts / fontStore.ts / visualThemeController.ts …）。',
+    '正确做法：启动期一律不读布局；需要的值改为静态常量或设计 token，交互期（点击/拖拽/ResizeObserver 回调）再读。',
+    '  错误：const h = window.getComputedStyle(el).height;   // 启动期同步读 → 强制 reflow',
+    '  正确：const h = STATIC_HEIGHT;                        // 或把读取移入回调：new ResizeObserver(() => { /* 此处读 */ }).observe(el);',
+    '确证「只读一次 CSS 变量且不触发启动 reflow」的极少数场景，逐条登记到 GET_COMPUTED_STYLE_ALLOWLIST 并写明理由（该名单只能收紧）。',
+    '权威出处：docs/startup-performance-audit/06-空闲预热与后台协程争抢详案.md §4.7.3（ACT-701）；docs/startup-performance-audit/audits/04-立体验证模型与防御门禁审计报告.md §3.3。',
+  ],
+  preload_wildcard_latch: [
+    '违反项：CSS 出现 html.preload * 裸通配（FAIL 行：html.preload 裸通配 · <file>:<line>）。',
+    '当前值：选择器头部命中 html.preload *；阈值：裸通配命中数 = 0（唯一授权形态是带 app-initial-loader 排除的冷启动 FOUC 门闩）。',
+    '机理：该通配会把 loader 在内的整棵子树冻结在「无过渡/无动画」态，首屏样式重算被放大。',
+    '正确做法（授权写法，tokens.css 首屏 latch）：',
+    '  html.preload *:not(.app-initial-loader, .app-initial-loader *) { transition: none !important; animation: none !important; }',
+    '若只是要抑制某个局部的过渡，把选择器收窄到该局部类名（如 html.preload .myPanel *），禁止整树通配。',
+    '权威出处：docs/startup-performance-audit/06-空闲预热与后台协程争抢详案.md §4.7.3（FORBIDDEN_WILDCARD_LATCH）。',
+  ],
+  idle_callback_timeout: [
+    '违反项：requestIdleCallback 传入 { timeout }（非 --strict 为 WARN；--strict 下升为 FAIL）。',
+    '当前值（实测现行犯）：packages/shared-utils/src/hardware-profile.ts:281；阈值：带 timeout 的 requestIdleCallback 命中数 = 0。',
+    '机理：timeout 会在忙帧后强制入队，削弱 idle 语义并可能把非关键工作提前到首屏窗口。',
+    '正确做法二选一：',
+    '  ① 去掉 timeout：requestIdleCallback(fn);',
+    '  ② 确实需要「最迟多久执行」的语义 → 改用宏任务并显式控频：setTimeout(fn, 2000);（由调用方排队/去抖）',
+    '  错误：requestIdleCallback(fn, { timeout: 2000 });',
+    '权威出处：docs/startup-performance-audit/06-空闲预热与后台协程争抢详案.md §4.7.3（FORBIDDEN_IDLE_TIMEOUT）。',
+  ],
+};
+
+function printGuide(metric) {
+  const g = GUIDE_TEXT[metric];
+  if (!g) {
+    console.error(`[check-reflow-guards] 未知指标：${metric}`);
+    console.error(`可用：${Object.keys(GUIDE_TEXT).join(', ')}`);
+    process.exit(1);
+  }
+  console.log(`[check-reflow-guards] 正确做法 · ${metric}\n`);
+  for (const l of g) console.log(`  ${l}`);
+  process.exit(0);
+}
+
+if (GUIDE_FLAG) printGuide(GUIDE);
 
 // ── argv ─────────────────────────────────────────────────────────────────────
 const argv = process.argv.slice(2);
