@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { resolveTableId } from './tableIdentity';
 
 export interface CellSelection {
   tableId: string;
@@ -194,3 +195,23 @@ export const useTableStore = create<TableState>((set, get) => ({
       selectedCell: null,
     })),
 }));
+
+/**
+ * 按行号取该行所属表格的**列宽真源**（ADR-4 / ADR-5）。
+ *
+ * 供高度预言机使用：表格行高预测必须按**真实列宽**逐列估算，
+ * 否则列宽定型后预测必然失配（根因断层 D5 → 症状 S8 行位置与实际高度错位）。
+ *
+ * @param getLine 行文本访问器（惰性；由调用方注入，避免本模块反向依赖 EditorStore）
+ * @param lineIndex 目标行号
+ * @returns 已定型的列宽数组；该行不属于表格 / 列宽尚未定型时返回 `undefined`
+ */
+export function tableColWidthsAtLine(
+  getLine: (i: number) => string,
+  lineIndex: number
+): readonly number[] | undefined {
+  const id = resolveTableId(getLine, lineIndex);
+  if (!id) return undefined;
+  const widths = useTableStore.getState().tableWidths[id];
+  return widths && widths.length > 0 ? widths : undefined;
+}

@@ -53,8 +53,9 @@ describe('表格不变量门禁 · 指标注册表', () => {
     // 这是「防止门禁被写成恒真」的护栏：上限按战役实际进度**只允许上调**，不得下调。
     //   基线期（T0）：1（仅 nativeTableElements 天然达标）
     //   T2 完成后：3（+ headerDerivationSites / identityUpwardProbes）
+    //   T4a 完成后：4（+ oracleTableReadsWidths）
     // 每次上调都必须在提交信息与 00-总方案 §12 续航锚点中留痕。
-    const MET_PROGRESS_CAP = 3;
+    const MET_PROGRESS_CAP = 4;
     const met = runChecks().filter((r) => r.value === r.target);
     expect(met.length).toBeLessThanOrEqual(MET_PROGRESS_CAP);
     expect(met.length).toBeGreaterThanOrEqual(1);

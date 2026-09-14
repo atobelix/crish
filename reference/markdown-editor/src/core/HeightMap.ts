@@ -46,8 +46,45 @@ const CORR_MIN = 0.7;
 const CORR_MAX = 1.4;
 
 /** 表格单元格文字行高 21px（14px × line-height 1.5）与上下 padding 合计 12px（index.css .token-table-cell） */
+// 表格单元格内距（与 index.css .token-table-cell padding 1:1 同步——
+// 改 CSS 内距必须同步这里，虚拟化行高/列宽预测才不漂移）
 const TABLE_CELL_HEIGHT = 21;
-const TABLE_CELL_PAD = 12;
+const TABLE_CELL_PAD_X = 16; // 水平内距（列宽估算，两侧）
+const TABLE_CELL_PAD_Y = 20; // 垂直内距合计（行高预测）
+
+/**
+ * 表格行的**逐列**最长内容段（宽字符加权，CJK/全角按 1.8 计）。
+ *
+ * 用于「列宽真源」路径（ADR-4/ADR-5）：有真实列宽时按各列可用宽分别估算 wrap 行数，
+ * 再取最大值——旧模型只取全局最长段配「容器宽均分」，不知道真实列宽（断层 D5）。
+ *
+ * 切分口径与 `tableModel.splitRowCells` 对齐：以 `|` 为界；行首为 `|` 时丢弃前导空段。
+ */
+function measureCellSegments(raw: string): number[] {
+  const segs: number[] = [];
+  let seg = 0;
+  let started = false;
+  for (let i = 0; i < raw.length; i++) {
+    const code = raw.charCodeAt(i);
+    if (code === 124) {
+      if (!started) {
+        started = true; // 行首管道：其前的前导段丢弃
+      } else {
+        segs.push(seg);
+      }
+      seg = 0;
+    } else {
+      started = true;
+      if (code >= 0x2e80 || (code >= 0x1100 && code <= 0x11ff) || (code >= 0xff01 && code <= 0xff60)) {
+        seg += 1.8;
+      } else {
+        seg += 1;
+      }
+    }
+  }
+  if (started) segs.push(seg);
+  return segs;
+}
 
 // ── 轻量行分类器 ──
 
@@ -219,10 +256,17 @@ export class HeightOracle {
   /**
    * 预测行高：
    * - 表格分隔行恒为 0（index.css .line-table-separator 高度 0）；
-   * - 表格行按「列宽近似 × 每格文本 wrap」预测（问题 8）；
+   * - 表格行按「列宽 × 每格文本 wrap」预测（问题 8）——
+   *   **提供 `tableWidths`（列宽真源，ADR-4）时按真实列宽逐列估算**，
+   *   否则回退到「容器宽均分」旧模型（逐字保留，零回归）；
    * - 其余按「类型倍率 × wrap 长度模型」预测。
    */
-  predict(kind: LineKind, raw: string, _codeState: CodeState | boolean): number {
+  predict(
+    kind: LineKind,
+    raw: string,
+    _codeState: CodeState | boolean,
+    tableWidths?: readonly number[]
+  ): number {
     this.stats.predicted++;
     if (kind === 'table_separator') return 0;
     const len = raw.length;
@@ -247,10 +291,29 @@ export class HeightOracle {
       }
       if (seg > maxSeg) maxSeg = seg;
       const cols = Math.max(1, pipes - 1);
-      // 每列内容宽度 = 列宽 - 左右 padding 24px；wrap 行数按最长单元格估算
-      const colPerRow = Math.max(5, Math.floor((this.containerWidth - TABLE_CELL_PAD * 2 * cols) / cols / this.charWidth));
+
       let rows = 1;
-      if (maxSeg > colPerRow) rows += Math.ceil((maxSeg - colPerRow) / Math.max(1, colPerRow - 5));
+      if (tableWidths && tableWidths.length > 0) {
+        // 列宽真源路径（ADR-4/ADR-5）：逐列按该列真实可用宽估算 wrap 行数，取最大。
+        // 修掉根因断层 D5：旧模型按 `containerWidth/cols` 均分估算，**完全不知道真实列宽**，
+        // 列宽定型后预测必然失配（症状 S8 行位置与实际高度错位）。
+        const segs = measureCellSegments(raw);
+        for (let c = 0; c < tableWidths.length; c++) {
+          const w = tableWidths[c];
+          if (!Number.isFinite(w) || w <= 0) continue;
+          const usable = Math.max(this.charWidth * 5, w - TABLE_CELL_PAD_X * 2);
+          const perRow = Math.max(5, Math.floor(usable / this.charWidth));
+          const s = segs[c] ?? 0;
+          if (s > perRow) {
+            rows = Math.max(rows, 1 + Math.ceil((s - perRow) / Math.max(1, perRow - 5)));
+          }
+        }
+      } else {
+        // 回退路径：与 ADR-4 落地前**逐字一致**（列宽未知时的保守估算）
+        const colPerRow = Math.max(5, Math.floor((this.containerWidth - TABLE_CELL_PAD_X * 2 * cols) / cols / this.charWidth));
+        if (maxSeg > colPerRow) rows += Math.ceil((maxSeg - colPerRow) / Math.max(1, colPerRow - 5));
+      }
+
       const brMatches = raw.match(/<br\s*\/?>/gi);
       if (brMatches && brMatches.length > 0) {
         const cells = raw.split('|');
@@ -261,7 +324,7 @@ export class HeightOracle {
         }
         rows = Math.max(rows, maxCellBrs + 1);
       }
-      const base = Math.max(this.lineHeight * TYPE_MULTIPLIER[kind], rows * TABLE_CELL_HEIGHT + TABLE_CELL_PAD);
+      const base = Math.max(this.lineHeight * TYPE_MULTIPLIER[kind], rows * TABLE_CELL_HEIGHT + TABLE_CELL_PAD_Y);
       return base * this.correction[kind];
     }
     if (kind === 'math') {
@@ -272,9 +335,6 @@ export class HeightOracle {
     if (kind === 'code') {
       // 代码行高度物理恒等于 lineHeight (28px)，行内水平滚动不折行，杜绝预测误差与空白断档
       return this.lineHeight;
-    }
-    if (kind === 'table_separator') {
-      return 0;
     }
     // 通用 wrap 长度模型（CM6 heightForLine 同款）：带 CJK 宽字符权重
     const visualLen = getVisualCharLength(raw);

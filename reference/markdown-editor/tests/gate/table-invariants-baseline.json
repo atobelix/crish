@@ -1,6 +1,6 @@
 {
   "note": "表格不变量棘轮基线。由 scripts/check-table-invariants.mjs --update-baseline 生成；基线只允许单向收紧（不得回退）。权威定义见 docs/table-systemic-remediation/00-总方案 §6。",
-  "updatedAt": "2026-09-14T15:46:28.964Z",
+  "updatedAt": "2026-09-14T15:56:40.708Z",
   "metrics": {
     "headerDerivationSites": {
       "value": 0,
@@ -57,7 +57,7 @@
       "phase": "T8"
     },
     "oracleTableReadsWidths": {
-      "value": 0,
+      "value": 1,
       "direction": "up",
       "target": 1,
       "phase": "T4"

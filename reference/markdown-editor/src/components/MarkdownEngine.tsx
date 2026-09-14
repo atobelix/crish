@@ -16,7 +16,7 @@ import {
   type EditorState,
   type EditorStore,
 } from '../core/EditorStore';
-import { useTableStore } from '../core/TableStore';
+import { useTableStore, tableColWidthsAtLine } from '../core/TableStore';
 import { MarkdownParser } from '../core/parser';
 import type { CalloutType } from '../core/ast';
 import { HeightMap, HeightOracle, classifyLine } from '../core/HeightMap';
@@ -998,15 +998,12 @@ export const MarkdownEngine = React.forwardRef<
   if (foldStateRef.current === null) {
     foldStateRef.current = new FoldState({
       predictHeight: (line) => {
-        // 行高重预测（折叠行展开/泄漏恢复的备份缺失回退）：
-        // 经访问器读当前行内容 + oracle 预测（与批量测量同源口径）
+        // 行高重预测（折叠行展开/泄漏恢复的备份缺失回退）：经访问器读当前行内容
+        // + oracle 预测（同源口径）；ADR-4/5：传入列宽真源（表格按真实列宽估算）
         const s = engineStore.getState();
         const raw = s.getLine(line) ?? '';
         const st = getLineState(s, line);
-        return (
-          oracleRef.current?.predict(classifyLine(raw, st), raw, st) ??
-          FOLD_PLACEHOLDER_HEIGHT
-        );
+        return oracleRef.current?.predict(classifyLine(raw, st), raw, st, tableColWidthsAtLine(s.getLine, line)) ?? FOLD_PLACEHOLDER_HEIGHT;
       },
     });
   }
@@ -1052,7 +1049,7 @@ export const MarkdownEngine = React.forwardRef<
       const kind = classifyLine(raw, st);
       if (kind === 'table_separator') return 0;
       if (oracle)
-        return Math.round(oracle.predict(kind, raw, st));
+        return Math.round(oracle.predict(kind, raw, st, tableColWidthsAtLine(s.getLine, i)));
       return 28;
     },
     overscan: 40, // Buffer for smooth scrolling
@@ -1809,6 +1806,10 @@ export const MarkdownEngine = React.forwardRef<
     ? virtualItems[0].index + '-' + virtualItems[virtualItems.length - 1].index
     : '';
 
+  // 表格列宽真源订阅（ADR-4 / ADR-5）：列宽定型后必须触发**一次重测**——
+  // 否则高度是按旧列宽测得的，定型后不再重测（根因断层 D6 → 症状 S4/S8）。
+  const tableWidthsMap = useTableStore((s) => s.tableWidths);
+
   // P3 B5（A5 渲染分层 L3 Canvas 接缝——预留消费点，本轮不实际切渲染）：
   // 渲染模式判定（rowSurface.resolveRenderMode，触发条件登记 = readOnly &&
   // 行数 ≥ 阈值 && 'canvas' 注册表存在，见 rowSurface.ts）。当前 Canvas 层
@@ -1894,7 +1895,8 @@ export const MarkdownEngine = React.forwardRef<
     hm.syncTo(s.getLineCount(), (i) => {
       const raw = s.getLine(i) ?? '';
       const st = getLineState(s, i);
-      return oracle.predict(classifyLine(raw, st), raw, st);
+      // ADR-4/5：表格行按真实列宽逐列估算（断层 D5）
+      return oracle.predict(classifyLine(raw, st), raw, st, tableColWidthsAtLine(s.getLine, i));
     });
     const scrollEl = parentRef.current;
     const currentScrollTop = scrollEl ? scrollEl.scrollTop : 0;
@@ -1911,7 +1913,8 @@ export const MarkdownEngine = React.forwardRef<
       if (raw === undefined) continue;
       const st = getLineState(s, item.index);
       const kind = classifyLine(raw, st);
-      const predicted = oracle.predict(kind, raw, st);
+      // ADR-4/5：传入列宽真源，使「预测」与「实测」同口径（校准才有意义）
+      const predicted = oracle.predict(kind, raw, st, tableColWidthsAtLine(s.getLine, item.index));
       const measured = el.offsetHeight;
 
       // table_separator 物理高度在非激活态恒为 0（激活编辑态为 measured > 0）
@@ -2197,6 +2200,7 @@ export const MarkdownEngine = React.forwardRef<
     windowKey,
     flushStreamBuffer,
     decorationVersion,
+    tableWidthsMap,
   ]);
 
   // ── B3 内容变更增量维护：大纲索引平移/重建 + 折叠区间平移/行高批量修正 ──
@@ -2221,10 +2225,7 @@ export const MarkdownEngine = React.forwardRef<
           const st = engineStore.getState();
           const raw = st.getLine(line) ?? '';
           const code = getLineState(st, line);
-          return (
-            oracleRef.current?.predict(classifyLine(raw, code), raw, code) ??
-            FOLD_PLACEHOLDER_HEIGHT
-          );
+          return oracleRef.current?.predict(classifyLine(raw, code), raw, code, tableColWidthsAtLine(st.getLine, line)) ?? FOLD_PLACEHOLDER_HEIGHT;
         },
       });
     }

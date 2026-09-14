@@ -81,7 +81,7 @@ export const PROTECTED = {
     reason: '键盘/选区/输入法单一宿主；拆分需先抽出键位表与事务派发，另立战役',
   },
   'src/components/MarkdownEngine.tsx': {
-    ceiling: 2672,
+    ceiling: 2663,
     reason: '虚拟化 + 批量测量 + 行渲染编排；本战役 T4 只允许改测量区段，拆分另立战役',
   },
   'src/index.css': {
