@@ -82,6 +82,14 @@ export interface TableBlockProps {
   estimateRowHeight: (lineIndex: number) => number;
   /** 岛高上报——**唯一**上报源（I3）：岛根 RO 回调触发 */
   onIslandHeight: (height: number) => void;
+  /**
+   * 行高实测样本（**不是**高度上报——不改任何行的 HeightMap 高度）：
+   * 供引擎把岛内行的实测高回喂 `HeightOracle.calibrate`，使表格行的行高预测
+   * 与旧逐行路径同样收敛（旧路径每行都是虚拟项、会被批量循环测量并校准；
+   * 岛路径下内部行不成虚拟项，若不回喂则预测永远停在初值 → 首轮滚动时
+   * 岛高随实测细化而漂移）。
+   */
+  onRowHeightMeasured?: (lineIndex: number, height: number) => void;
   /** 列宽定型回调：探针测量 + 分配器算出新列宽时调用（仅实际变化时） */
   onColWidths: (widths: number[]) => void;
   /** 受控横向滚动（与 `TableStore.tableScrollLeft` 同源） */
@@ -116,6 +124,7 @@ export const TableBlock: React.FC<TableBlockProps> = ({
   streamTailLine,
   estimateRowHeight,
   onIslandHeight,
+  onRowHeightMeasured,
   onColWidths,
   scrollLeft,
   onScrollLeftChange,
@@ -317,7 +326,11 @@ export const TableBlock: React.FC<TableBlockProps> = ({
         if (!Number.isFinite(lineIndex)) continue;
         const box = entry.borderBoxSize?.[0];
         const h = box ? box.blockSize : target.offsetHeight;
-        if (index.setHeight(lineIndex - startLine, h)) changed = true;
+        if (index.setHeight(lineIndex - startLine, h)) {
+          changed = true;
+          // 实测样本回喂预言机（只调预测模型，不写任何行高——I3 不受影响）
+          onRowHeightMeasured?.(lineIndex, h);
+        }
       }
       if (changed) setRowEpoch((v) => v + 1);
     });
@@ -325,7 +338,7 @@ export const TableBlock: React.FC<TableBlockProps> = ({
       ro.observe(row);
     }
     return () => ro.disconnect();
-  }, [index, startLine, win.startRow, win.endRow]);
+  }, [index, startLine, win.startRow, win.endRow, onRowHeightMeasured]);
 
   // ── 横向滚动（岛根是唯一滚动所有者）──────────────────────────────────────
   // 受控 scrollLeft → 岛容器；rAF 守卫避免「写回 → scroll 事件 → 再写回」回环。

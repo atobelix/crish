@@ -2514,10 +2514,9 @@ export const MarkdownEngine = React.forwardRef<
                   />
                 );
               }
-              // T4 表格岛（ADR-2）：岛宿主行 = 该表**唯一**的虚拟项——
-              // 区间内部行已由 `rangeExtractor` 折叠剔除（不成项），整表交由
-              // `TableBlock` 渲染（岛内自带窗口化与列宽栅格）。开关关闭时
-              // `hostAt` 恒 null，本分支不参与（旧逐行路径零变化）。
+              // T4 表格岛（ADR-2）：岛宿主行 = 该表**唯一**的虚拟项——区间内部行已由
+              // `rangeExtractor` 折叠剔除（不成项），整表交由 `TableIslandHost` 渲染。
+              // 开关关闭时 `hostAt` 恒 null，本分支不参与（旧逐行路径零变化）。
               const islandRange = islandWiring.hostAt(index);
               if (islandRange) {
                 return (
@@ -2533,6 +2532,7 @@ export const MarkdownEngine = React.forwardRef<
                     streamTailLine={s.streamActive === true ? s.getLineCount() - 1 : null}
                     estimateRowHeight={islandWiring.estimateRowHeight}
                     onIslandHeight={islandWiring.onIslandHeight(islandRange.startLine)}
+                    onRowHeightMeasured={islandWiring.onRowHeightMeasured}
                     onColWidths={islandOnColWidths}
                     rowRef={registerRowRef}
                     useGpuLayer={useGpuLayer}

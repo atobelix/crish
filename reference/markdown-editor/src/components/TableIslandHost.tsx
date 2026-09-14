@@ -53,6 +53,8 @@ export interface TableIslandHostProps {
   estimateRowHeight: (lineIndex: number) => number;
   /** 岛高上报（唯一上报源，I3） */
   onIslandHeight: (height: number) => void;
+  /** 岛内行实测样本（回喂预言机校准，不改行高） */
+  onRowHeightMeasured?: (lineIndex: number, height: number) => void;
   /** 列宽定型回调（ADR-4 §3.5）：`(tableId, widths)`——宿主按身份转发 */
   onColWidths: (tableId: string, widths: number[]) => void;
   /** 行注册（外层虚拟化的行元素注册表） */
@@ -73,6 +75,7 @@ export const TableIslandHost: React.FC<TableIslandHostProps> = ({
   streamTailLine,
   estimateRowHeight,
   onIslandHeight,
+  onRowHeightMeasured,
   onColWidths,
   rowRef,
   useGpuLayer,
@@ -111,6 +114,7 @@ export const TableIslandHost: React.FC<TableIslandHostProps> = ({
       streamTailLine={streamTailLine}
       estimateRowHeight={estimateRowHeight}
       onIslandHeight={onIslandHeight}
+      onRowHeightMeasured={onRowHeightMeasured}
       onColWidths={handleColWidths}
       scrollLeft={scrollLeft}
       onScrollLeftChange={onScrollLeftChange}

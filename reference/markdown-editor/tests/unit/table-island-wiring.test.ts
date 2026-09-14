@@ -31,6 +31,11 @@ import {
   MarkdownEngine,
   type MarkdownEngineHandle,
 } from '../../src/components/MarkdownEngine';
+import {
+  useTableIslandWiring,
+  type TableIslandWiring,
+} from '../../src/components/useTableIslandWiring';
+import type { HeightMap, HeightOracle } from '../../src/core/HeightMap';
 import { createEditorStore, type EditorStore } from '../../src/core/EditorStore';
 import { useTableStore } from '../../src/core/TableStore';
 import { resetTableIdentities } from '../../src/core/tableIdentity';
@@ -287,5 +292,102 @@ describe('T4 表格岛接线 · 开关开启（ADR-2 单一虚拟项 / I1 / I8�
     // jsdom 无布局：探针 rect 恒 0 → 岛跳过定型（绝不写 0 宽）
     expect(getIslandGridWriteStats().totalCalls).toBe(0);
     expect(useTableStore.getState().tableWidths).toEqual({});
+  });
+});
+
+/**
+ * 接线单元直测（不经完整引擎）：用一个探针组件调用 `useTableIslandWiring`，
+ * 把返回值暴露出来逐项断言。覆盖 `rangeExtractor` 折叠 / `hostAt` 宿主判定 /
+ * `estimateSizeAt` 内部行零高 / `onRowHeightMeasured` 预言机校准回喂。
+ */
+describe('T4 表格岛接线单元 · 直测（useTableIslandWiring）', () => {
+  const TABLE_DOC_LINES = TABLE_DOC.split('\n');
+
+  function mountWiring() {
+    const store = createEditorStore();
+    store.getState().setText(TABLE_DOC);
+    const calibrated: Array<{ kind: string; predicted: number; measured: number }> = [];
+    const oracle = {
+      predict: () => 42,
+      calibrate: (kind: string, predicted: number, measured: number) => {
+        calibrated.push({ kind, predicted, measured });
+      },
+    };
+    const heightMap = { getHeight: () => undefined, setHeight: () => false, flush: () => {} };
+    const virtualizer = { getVirtualItems: () => [], resizeItem: () => {} };
+    let wiring: TableIslandWiring | null = null;
+    const Probe = () => {
+      wiring = useTableIslandWiring({
+        store,
+        virtualizer,
+        heightMapRef: { current: heightMap as unknown as HeightMap },
+        scrollElRef: { current: null },
+        followStateRef: { current: 'paused' },
+        foldStateRef: { current: null },
+        oracleRef: { current: oracle as unknown as HeightOracle },
+      });
+      return null;
+    };
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    mountedRoots.push(root);
+    act(() => {
+      root.render(React.createElement(Probe));
+    });
+    return { wiring: () => wiring!, calibrated, store };
+  }
+
+  it('`hostAt` 只认宿主行；`rangeExtractor` 把表格区间折叠为宿主行', () => {
+    setTableIslandEnabled(true);
+    const { wiring } = mountWiring();
+    expect(wiring().hostAt(TABLE_START)?.startLine).toBe(TABLE_START);
+    expect(wiring().hostAt(TABLE_START + 1)).toBeNull(); // 分隔行 = 内部行
+    expect(wiring().hostAt(0)).toBeNull(); // 非表格行
+    const items = wiring().rangeExtractor({
+      startIndex: 0,
+      endIndex: TABLE_DOC_LINES.length - 1,
+      overscan: 0,
+      count: TABLE_DOC_LINES.length,
+    });
+    // 区间内部行被折叠，宿主行保留；非表格行原样
+    expect(items).toEqual([0, 1, TABLE_START, 6, 7]);
+  });
+
+  it('`estimateSizeAt`：宿主行给高度、内部行给 0、非表格行不接管', () => {
+    setTableIslandEnabled(true);
+    const { wiring } = mountWiring();
+    expect(typeof wiring().estimateSizeAt(TABLE_START)).toBe('number');
+    expect(wiring().estimateSizeAt(TABLE_START + 1)).toBe(0);
+    expect(wiring().estimateSizeAt(TABLE_START + 2)).toBe(0);
+    expect(wiring().estimateSizeAt(0)).toBeNull();
+  });
+
+  it('开关关闭时全部短路（hostAt null / 窗口恒等 / 内部行不接管）', () => {
+    setTableIslandEnabled(false);
+    const { wiring } = mountWiring();
+    expect(wiring().hostAt(TABLE_START)).toBeNull();
+    expect(wiring().estimateSizeAt(TABLE_START + 1)).toBeNull();
+    const items = wiring().rangeExtractor({
+      startIndex: 0,
+      endIndex: TABLE_DOC_LINES.length - 1,
+      overscan: 0,
+      count: TABLE_DOC_LINES.length,
+    });
+    expect(items).toEqual([0, 1, 2, 3, 4, 5, 6, 7]); // 默认窗口（未折叠）
+  });
+
+  it('`onRowHeightMeasured` 只把**表格数据行**的实测样本回喂校准（I3 不受影响）', () => {
+    setTableIslandEnabled(true);
+    const { wiring, calibrated } = mountWiring();
+    // 数据行（行 4）：回喂一次，predicted 为当前预测、measured 为实测
+    wiring().onRowHeightMeasured(TABLE_START + 2, 42);
+    expect(calibrated).toHaveLength(1);
+    expect(calibrated[0]).toEqual({ kind: 'table_row', predicted: 42, measured: 42 });
+    // 分隔行（行 3）：恒 0 高，不参与校准
+    wiring().onRowHeightMeasured(TABLE_START + 1, 0);
+    // 非表格行（行 0）：不参与
+    wiring().onRowHeightMeasured(0, 28);
+    expect(calibrated).toHaveLength(1);
   });
 });

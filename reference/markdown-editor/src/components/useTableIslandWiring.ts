@@ -69,6 +69,12 @@ export interface TableIslandWiring {
   onIslandHeight: (startLine: number) => (height: number) => void;
   /** 单行高估算（岛内窗口化的行高来源；与 HeightMap 同源口径）。 */
   estimateRowHeight: (lineIndex: number) => number;
+  /**
+   * 岛内行实测样本 → `HeightOracle.calibrate`（**只校准预测模型，不写行高**）。
+   * 旧逐行路径的校准来自批量测量循环；岛路径下内部行不成虚拟项，故必须由岛内
+   * 行级 RO 回喂，否则表格行预测永远停在初值（首轮滚动岛高漂移的直接原因）。
+   */
+  onRowHeightMeasured: (lineIndex: number, height: number) => void;
   /** 岛高初值估算（岛实测上报前的占位高度）。 */
   estimateIslandHeight: (range: TableRangeInfo) => number;
   /**
@@ -169,6 +175,21 @@ export function useTableIslandWiring(
     [estimateRowHeight]
   );
 
+  /** 行实测样本回喂（仅表格数据行；分隔行恒 0 高，不参与校准）。 */
+  const onRowHeightMeasured = React.useCallback(
+    (lineIndex: number, height: number) => {
+      const oracle = oracleRef.current;
+      if (!oracle || !Number.isFinite(height) || height <= 0) return;
+      const s = store.getState();
+      const raw = s.getLine(lineIndex) ?? '';
+      const st = getLineState(s, lineIndex);
+      if (classifyLine(raw, st) !== 'table_row') return;
+      // 口径与旧路径批量测量循环一致：predict（含当前修正系数）→ calibrate
+      oracle.calibrate('table_row', estimateRowHeight(lineIndex), height);
+    },
+    [store, oracleRef, estimateRowHeight]
+  );
+
   // ── ② 高度单源：岛宿主行承载整表高度，内部行一律 0（I3）──────────────────
   /** 内部行置 0（HeightMap + tanstack 测量缓存两侧；已为 0 时零写入）。 */
   const zeroInternalRows = React.useCallback(
@@ -264,6 +285,7 @@ export function useTableIslandWiring(
     rangeExtractor,
     onIslandHeight,
     estimateRowHeight,
+    onRowHeightMeasured,
     estimateIslandHeight,
     applyHeightProtocol,
     estimateSizeAt,
