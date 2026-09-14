@@ -30,8 +30,14 @@ import React from 'react';
 import type { EditorStore } from '../core/EditorStore';
 import type { DecorationSet } from '../core/DecorationSet';
 import { STABLE_EPSILON } from '../core/HeightMap';
+import { useTableStore } from '../core/TableStore';
 import { isTableHeaderRow } from '../core/tableIdentity';
 import { splitRowCells } from '../core/tableModel';
+import {
+  buildColLefts,
+  computeSelectionRect,
+  toRelativeRange,
+} from '../core/tableSelectionRect';
 import {
   RowTopIndex,
   allocateColWidths,
@@ -188,6 +194,38 @@ export const TableBlock: React.FC<TableBlockProps> = ({
     // oxlint-disable-next-line react-hooks/exhaustive-deps
     [rowCount, rowEpoch, visibleTop, visibleHeight, index]
   );
+
+  // ── T5 选区单矩形（ADR-6 / I6）────────────────────────────────────────────
+  // 旧范式：每个命中格各自 `inset box-shadow` 拼边（N 段互不相识的边框，D7）；
+  // 岛范式：**一个**覆盖层矩形，几何 = 「角单元格并集」经行/列前缀求交。
+  // 身份折算：视图状态里的选区仍是**绝对行号**（I7 的改造在 T5b），此处经
+  // `toRelativeRange` 确定性折算为表内相对行号并钳制（越界不崩、不画到表外）。
+  const selectedCell = useTableStore((s) => s.selectedCell);
+  const colLefts = React.useMemo(() => buildColLefts(colWidths), [colWidths]);
+  const selectionRect = React.useMemo(() => {
+    if (!selectedCell || selectedCell.tableId !== tableId) return null;
+    // 编辑态（单元格就地编辑）不画选区矩形——与旧路径 `is-cell-editing` 一致
+    if (selectedCell.isEditing) return null;
+    const rel = toRelativeRange(
+      selectedCell.startLine,
+      selectedCell.endLine,
+      startLine,
+      endLine
+    );
+    return computeSelectionRect(
+      {
+        startRow: rel.startRow,
+        endRow: rel.endRow,
+        startCol: selectedCell.startCol,
+        endCol: selectedCell.endCol,
+      },
+      index.tops() as unknown as readonly number[],
+      colLefts
+    );
+    // rowEpoch 是 `index.tops()` 的**显式失效令牌**（`RowTopIndex` 为可变结构，
+    // 实测回填后引用不变、内容已变，无法用引用比较判定失效）——与上方 win 同款。
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCell, tableId, startLine, endLine, colLefts, index, rowEpoch]);
 
   const topSpacer = win.startRow > 0 ? index.top(win.startRow) : 0;
   const bottomSpacer = Math.max(0, index.total() - index.top(win.endRow + 1));
@@ -410,6 +448,21 @@ export const TableBlock: React.FC<TableBlockProps> = ({
             </span>
           ))}
         </div>
+        {/* T5 选区单矩形覆盖层（ADR-6）：整表**恰好一个**，几何与角单元格一致；
+            `pointer-events: none` 不拦截单元格交互；仅非编辑态绘制。 */}
+        {selectionRect && (
+          <div
+            className="table-island-selection"
+            data-table-id={tableId}
+            aria-hidden="true"
+            style={{
+              left: selectionRect.left,
+              top: selectionRect.top,
+              width: selectionRect.width,
+              height: selectionRect.height,
+            }}
+          />
+        )}
         {topSpacer > 0 && (
           <div
             className="table-island-spacer"

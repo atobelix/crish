@@ -122,3 +122,33 @@
   width: 100%;
   pointer-events: none;
 }
+
+/* 岛轨：作为**岛内局部坐标**的定位上下文（探针与选区覆盖层共用同一坐标空间） */
+.table-island-track {
+  position: relative;
+  width: max-content;
+  min-width: 100%;
+}
+
+/* T5 选区**单矩形**覆盖层（ADR-6 / I6）：整表恰好一个。
+   几何 = 角单元格并集（岛内局部坐标）；描边规格对齐 `05-分维` §3.3 / F-Vis-7：
+   **2px 方角、无填充**，颜色取既有令牌 `--blue-selection-border`（与旧范式
+   `index.css:508` 同色，仅厚度按参考帧规格 +0.5px）；边框画在 border-box 内侧 ⇒
+   覆盖层外缘与角单元格外缘重合（实测 Δ ≤ 1px）。
+   `pointer-events: none`：覆盖层不拦截单元格点击/拖选。 */
+.table-island-selection {
+  position: absolute;
+  box-sizing: border-box;
+  border: 2px solid var(--blue-selection-border);
+  border-radius: 0;
+  background: transparent;
+  pointer-events: none;
+  z-index: var(--z-selection);
+}
+
+/* 岛内**抑制**旧路径的逐格拼边（T5 单矩形化）：旧路径（`.line-table` 作用域）
+   不受影响——T8 清退旧路径时一并删除 `InlineRenderer` 内的拼边分支。 */
+.table-island .token-table-cell.is-cell-selected {
+  box-shadow: none !important;
+  border-radius: 0;
+}

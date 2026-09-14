@@ -293,3 +293,35 @@ describe('表格岛 · T4 接线契约（静态形态）', () => {
     expect(island).toContain('allocateColWidths');
   });
 });
+
+describe('表格岛 · T5 选区单矩形契约（静态形态）', () => {
+  const read = (p: string): string =>
+    readFileSync(new URL(`../../${p}`, import.meta.url), 'utf-8');
+
+  it('岛用**单矩形覆盖层**（ADR-6），而非逐格 inset 拼边', () => {
+    const tsx = read('src/components/TableBlock.tsx');
+    // 覆盖层由纯几何单元驱动
+    expect(tsx).toContain('computeSelectionRect');
+    expect(tsx).toContain('table-island-selection');
+    // 岛组件内不得出现逐格 inset 拼边（旧范式 D7）——注释里描述旧范式不算
+    const code = tsx.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    expect(code).not.toContain('inset ');
+    expect(code).not.toContain('boxShadow');
+  });
+
+  it('岛内**中和**旧路径逐格拼边（否则覆盖层与 per-cell 边框双画）', () => {
+    const css = read('src/styles/table-island.css');
+    const selBlock =
+      css.match(/\.table-island [^{]*is-cell-selected[^{]*\{([^}]*)\}/)?.[1] ?? '';
+    expect(selBlock).toContain('box-shadow: none');
+  });
+
+  it('选区几何为**纯函数**（可单测，且不与行号漂移耦合）', () => {
+    const mod = read('src/core/tableSelectionRect.ts');
+    expect(mod).toContain('export function computeSelectionRect');
+    expect(mod).toContain('export function toRelativeRange');
+    // 纯逻辑：不得依赖 DOM / React
+    expect(mod).not.toContain('document.');
+    expect(mod).not.toContain("from 'react'");
+  });
+});
