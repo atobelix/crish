@@ -616,3 +616,24 @@ orchestrator-snapshot.json.prev
 # provider 单轨门禁入库放行（同上：不放行则 CI checkout 后缺失，
 # 且会被 check-guard-system 的 unreleased_guard 零容忍指标判定为未入库）
 !scripts/check-provider-single-track.mjs
+# 守卫脚本显式放行补齐（2026-09-14）：
+# 下列守卫此前**仅靠「已被 git 跟踪」间接避免被 `*.mjs` 全局规则忽略**——
+# 该兜底不可靠：git 在 `commit --only <paths>` 等场景使用**临时索引**，
+# 跟踪状态丢失时 `git check-ignore` 会把这些脚本判为忽略，
+# 使 check-guard-system 的 unreleased_guard（零容忍）在提交时误报并阻塞提交。
+# 纪律（守卫自身指引）：scripts/ 下的守卫脚本必须**逐条显式放行**，不得依赖跟踪状态。
+!scripts/check-chunk-cycles.mjs
+!scripts/check-clippy-baseline.mjs
+!scripts/check-conex-db-size.mjs
+!scripts/check-convergence-metrics.mjs
+!scripts/check-crate-size.mjs
+!scripts/check-css-encoding.mjs
+!scripts/check-layout-tokens.mjs
+!scripts/check-layoutstore-actions.mjs
+!scripts/check-lr-t1-memory-prod-ban.mjs
+!scripts/check-no-as-any-store.mjs
+!scripts/check-reflow-guards.mjs
+!scripts/check-startup-budget.mjs
+!scripts/check-swallowed-errors.mjs
+!scripts/check-ui-layer.mjs
+!scripts/check-unwrap-baseline.mjs
