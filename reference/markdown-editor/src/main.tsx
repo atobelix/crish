@@ -1,7 +1,16 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+import '@fontsource/inter/400.css';
+import '@fontsource/inter/500.css';
+import '@fontsource/inter/600.css';
+import '@fontsource/inter/700.css';
 import './index.css';
+import './App.css';
+// 表格岛样式（战役 table-systemic-remediation T3 / ADR-2）：必须**后于**
+// index.css / App.css 导入，才能在同名特异性下覆盖 `.line-table-row` 的 flex。
+import './styles/table-island.css';
 import App from './App.tsx';
+import { RealShell } from './components/shell/RealShell';
 import { useEditorStore } from './core/EditorStore';
 import { useTableStore } from './core/TableStore';
 import { metrics } from './core/metrics';
@@ -37,8 +46,10 @@ window.__CRISH_METRICS__ = {
   },
 };
 
+// 入口分流：真实软件壳为默认界面；?demo=1 进入演示装置
+// （流式工具条/文档库/导出/大纲等历史调试 chrome，仅供测试与演示）。
+const isDemo = new URLSearchParams(window.location.search).has('demo');
+
 createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>
+  <StrictMode>{isDemo ? <App /> : <RealShell />}</StrictMode>
 );

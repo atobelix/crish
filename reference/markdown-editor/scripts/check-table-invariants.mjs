@@ -86,14 +86,20 @@ export const METRICS = [
     label: '行级 overflow-x 规则数（I1）',
     direction: 'down',
     target: 0,
-    phase: 'T3',
+    // 归属波次 T3 → T8（2026-09-14 相位修正）：
+    //   T3 交付岛（`TableBlock.tsx` + `styles/table-island.css`）**与旧路径并行**，
+    //   开关默认关闭（`00-总方案` §9.2 规则 2），故旧路径的 `.line-table{overflow-x}`
+    //   必须保留；真正的**删除**发生在 T8（旧路径清退）。T3 的结构契约由
+    //   tests/gate/table-invariants.test.ts 的「岛单滚动所有者」断言承担。
+    phase: 'T8',
   },
   {
     id: 'lastRowScrollbarHacks',
     label: 'table-last-row 滚动条 hack 处数（I1）',
     direction: 'down',
     target: 0,
-    phase: 'T3',
+    // 同上：T3 阶段旧路径仍在（开关默认关闭），hack 随 T8 旧路径清退一并删除。
+    phase: 'T8',
   },
   {
     id: 'selectionInsetShadowSites',
@@ -107,7 +113,11 @@ export const METRICS = [
     label: 'per-cell 列宽写回处数（ADR-4）',
     direction: 'down',
     target: 0,
-    phase: 'T3',
+    // 归属波次 T3 → T8（2026-09-14 相位修正）：
+    //   岛的列宽走栅格模板（grid 忽略 flex），故岛**不受**该写回影响；
+    //   但旧路径仍需它，删除属 T8。岛侧的结构契约见
+    //   tests/gate/table-invariants.test.ts（岛用 buildGridTemplate 驱动列宽）。
+    phase: 'T8',
   },
   {
     id: 'oracleTableReadsWidths',

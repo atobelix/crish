@@ -25,9 +25,18 @@ import path from 'path';
 const SRC_DIR = path.resolve(__dirname, '../../src');
 const INDEX_CSS = fs.readFileSync(path.join(SRC_DIR, 'index.css'), 'utf-8');
 const APP_CSS = fs.readFileSync(path.join(SRC_DIR, 'App.css'), 'utf-8');
+// 表格岛样式（战役 table-systemic-remediation T3 / ADR-2）：
+// 岛刻意**独立成文件**（而非追加进 index.css）——index.css 在
+// scripts/check-file-length.mjs 的例外名单内（ceiling 冻结），
+// 且岛样式需后于 index.css / App.css 导入以覆盖 `.line-table-row` 的 flex。
+const TABLE_ISLAND_CSS = fs.readFileSync(
+  path.join(SRC_DIR, 'styles', 'table-island.css'),
+  'utf-8'
+);
 const CSS_FILES: Array<[string, string]> = [
   ['index.css', INDEX_CSS],
   ['App.css', APP_CSS],
+  ['styles/table-island.css', TABLE_ISLAND_CSS],
 ];
 
 /** 扫描 src 下全部 tsx 文件（含子目录），拼接 className 静态引用点文本 */
@@ -112,7 +121,6 @@ const INLINE_STYLE_EXEMPTIONS: Record<string, string> = {
   'selection-layer': 'SelectionHighlight.tsx（选区层容器，内联 style）',
   'selection-rect': 'SelectionHighlight.tsx（选区矩形，内联 backgroundColor: var(--blue-selection)）',
   'truncation-indicator': 'BlockRenderer.tsx（截断指示，data-ignore-measure）',
-  'cursor-caret': 'CursorLayer.tsx（光标，内联 backgroundColor: var(--black)）',
   'a11y-live-region': 'HiddenInput.tsx（无障碍实时区）',
   'blockquote-rendered': 'BlockRenderer.tsx（块引用渲染体）',
   'blockquote-source': 'BlockRenderer.tsx（块引用原文保留）',
@@ -207,10 +215,11 @@ describe('G6 CSS 契约（静态文本断言版）', () => {
     const sourceOf = (name: string) =>
       COMPONENT_SOURCES.find(([n]) => n === name)?.[1] ?? '';
 
-    // 光标：内联 backgroundColor: var(--black)（CursorLayer）
+    // 光标：writer 同款平滑滑行——transform 定位 + 挂载帧禁过渡；
+    // 类样式移交 App.css（.cursor-caret transition var(--ease-cursor-ms)）
     const cursor = sourceOf('CursorLayer.tsx');
-    expect(cursor).toContain('className="cursor-caret custom-cursor-blink"');
-    expect(cursor).toContain("backgroundColor: 'var(--black)'");
+    expect(cursor).toContain('transform: `translate3d(');
+    expect(cursor).toContain("'var(--z-cursor)'");
 
     // 选区矩形：内联 backgroundColor: var(--blue-selection)（SelectionHighlight）
     const sel = sourceOf('SelectionHighlight.tsx');

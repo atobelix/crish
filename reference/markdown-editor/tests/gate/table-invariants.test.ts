@@ -11,6 +11,7 @@
 //   ④ 登记运行时类不变量，防止「未实现」被静默略过。
 // ============================================================
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
 import {
   METRICS,
   PENDING_RUNTIME_INVARIANTS,
@@ -154,5 +155,50 @@ describe('表格不变量门禁 · 运行时类不变量登记', () => {
       expect(runtimeIds, `运行时不变量 ${id} 未登记`).toContain(id);
       expect(covered, `不变量 ${id} 不在 I1–I10 覆盖集`).toContain(id);
     }
+  });
+});
+
+describe('表格岛 · 结构契约（T3 / I1 的静态形态）', () => {
+  const read = (p: string): string =>
+    readFileSync(new URL(`../../${p}`, import.meta.url), 'utf-8');
+
+  /** 剥离注释后再做结构断言——注释里提到 `overflow-x` 不构成滚动所有者 */
+  const stripComments = (s: string): string =>
+    s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+
+  it('岛样式**恰好一个**横向滚动所有者（I1 的静态形态）', () => {
+    const css = stripComments(read('src/styles/table-island.css'));
+    expect(css.match(/overflow-x\s*:/g) ?? []).toHaveLength(1);
+  });
+
+  it('岛组件自身不声明任何滚动（滚动所有权归样式类）', () => {
+    const tsx = stripComments(read('src/components/TableBlock.tsx'));
+    expect(tsx.match(/overflow-x|overflowX/g) ?? []).toEqual([]);
+  });
+
+  it('岛的行容器**不得**成为滚动所有者', () => {
+    const css = read('src/styles/table-island.css');
+    const rowBlock = css.match(/\.table-island-row\s*\{([^}]*)\}/)?.[1] ?? '';
+    expect(rowBlock).not.toContain('overflow');
+  });
+
+  it('岛用栅格模板驱动列宽（ADR-4 唯一列宽真源），而非 per-cell flex 写回', () => {
+    const tsx = read('src/components/TableBlock.tsx');
+    expect(tsx).toContain('buildGridTemplate');
+    expect(tsx).toContain('gridTemplateColumns');
+    // 不得出现 per-cell flex 写回（旧路径形态）
+    expect(tsx.includes('flex: `0 0 ')).toBe(false);
+  });
+
+  it('特性开关**默认关闭**（B 期新渲染路径必须可一键关闭，§9.2 规则 2）', async () => {
+    const mod = await import('../../src/core/tableIsland');
+    expect(mod.isTableIslandEnabled()).toBe(false);
+  });
+
+  it('岛内的行数据由外层装配（不自行解析源码，避免第二套行解析）', () => {
+    const tsx = read('src/components/TableBlock.tsx');
+    // 岛不得引用 parser（行解析唯一真源在 MarkdownEngine / parser）
+    expect(tsx).not.toContain("from '../core/parser'");
+    expect(tsx).not.toContain('parseLine');
   });
 });

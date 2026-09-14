@@ -1,0 +1,65 @@
+/* ============================================================
+   表格岛样式（战役 table-systemic-remediation · T3 / ADR-2）
+   权威：docs/table-systemic-remediation/04-分维-单容器渲染与测量时序.md
+
+   与旧逐行路径（`index.css` 的 `.line-table`）的差别：
+     - 旧：每行一个 `overflow-x: auto` 容器（N 行 = N 个滚动所有者）
+     - 岛：**整表一个**滚动所有者；行是岛内栅格行，共用列宽模板
+   本文件在 `main.tsx` 中于 `index.css` / `App.css` **之后**导入，
+   故同名特异性下岛规则生效（`display: grid` 覆盖 `.line-table-row` 的 `flex`）。
+
+   注：旧路径的规则在 T8（旧路径清退）前**保持不动**——特性开关默认关闭时
+   岛不参与渲染，两套样式互不干扰。
+   ============================================================ */
+
+/* 岛容器 = 该表**唯一**的横向滚动所有者 */
+.table-island {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  box-sizing: border-box;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-medium) transparent;
+}
+
+.table-island::-webkit-scrollbar {
+  height: 6px;
+}
+
+.table-island::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.table-island::-webkit-scrollbar-thumb {
+  background: var(--border-medium);
+  border-radius: 3px;
+}
+
+.table-island::-webkit-scrollbar-thumb:hover {
+  background: var(--text-secondary);
+}
+
+/* 岛内行：栅格容器，列宽由内联 `grid-template-columns` 下发（ADR-4 唯一列宽真源）。
+   不得再声明任何 overflow（I1：滚动所有权唯一）。 */
+.table-island-row {
+  display: grid;
+  align-items: stretch;
+  position: relative;
+  width: max-content;
+  min-width: 100%;
+  min-height: 28px;
+  box-sizing: border-box;
+  border-bottom: 1px solid var(--hairline-h);
+}
+
+/* 栅格项必须允许收缩，否则长内容会撑破列宽模板 */
+.table-island-row > * {
+  min-width: 0;
+}
+
+/* 窗口化占位块（仅窗口化启用时出现）：维持滚动高度，不参与列宽 */
+.table-island-spacer {
+  width: 100%;
+  pointer-events: none;
+}
