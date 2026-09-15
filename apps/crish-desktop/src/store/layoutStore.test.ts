@@ -1,6 +1,16 @@
 /**
  * layoutStore 单测：安全默认、空工作区种子、无 ghost 面板、类型保真 helpers。
- * 操作全局 singleton 后尽量复位，避免污染其他门面测试。
+ *
+ * ## 域拆分（2026-09-15 对齐）
+ *
+ * `useLayoutStore` 已纯化为**壳层布局域**（uiSize / tabModeEnabled /
+ * shellChromeMode / chatMainSurface / sidebarCollapsed / hydrationComplete）。
+ * 原单体 store 的其余状态已物理拆分：
+ * - `workspaces` / `activeWorkspaceIndex` / `draggedTab` / `dropPreview` → `useWorkspaceStore`
+ * - `activeAgentId` / `panelAgentId` / `activeSessionId` / `sessionsById` → `useSessionStore`
+ *
+ * 本文件仍覆盖 layoutStore 自身的纯函数与 chrome action；跨域不变量分别断言到
+ * 对应 store（不再从 useLayoutStore 读已迁走的字段）。
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import {
@@ -11,7 +21,8 @@ import {
   DEFAULT_WORKSPACE_ID,
   ensureNonEmptyWorkspaces,
   finiteNumber,
-  isparseSettingsTab,
+  isSettingsTabType as is,
+  parseSettingsTab,
   parseUiSize,
   sanitizeActiveWorkers,
   sanitizeSessionSeed,
@@ -22,39 +33,47 @@ import {
   useLayoutStore,
   type UiSize,
 } from './layoutStore';
+import { useWorkspaceStore } from './workspaceStore';
+import { useSessionStore } from './sessionStore';
 import { useSettingsUiStore } from './settingsUiStore';
 import type { } from './types';
 import type { WorkspaceState } from './types';
 
 function snapshotChrome() {
-  const s = useLayoutStore.getState();
+  const layout = useLayoutStore.getState();
+  const workspace = useWorkspaceStore.getState();
+  const session = useSessionStore.getState();
   return {
-    uiSize: s.uiSize,
-    tabModeEnabled: s.tabModeEnabled,
-    sidebarCollapsed: s.sidebarCollapsed,
-    workspacesLen: s.workspaces.length,
-    activeWorkspaceIndex: s.activeWorkspaceIndex,
-    activeAgentId: s.activeAgentId,
-    panelAgentId: s.panelAgentId,
+    uiSize: layout.uiSize,
+    tabModeEnabled: layout.tabModeEnabled,
+    sidebarCollapsed: layout.sidebarCollapsed,
+    workspacesLen: workspace.workspaces.length,
+    activeWorkspaceIndex: workspace.activeWorkspaceIndex,
+    activeAgentId: session.activeAgentId,
+    panelAgentId: session.panelAgentId,
   };
 }
 
 const chrome0 = snapshotChrome();
 
 afterEach(() => {
-  const s = useLayoutStore.getState();
-  s.setUiSize(chrome0.uiSize);
-  s.setTabModeEnabled(chrome0.tabModeEnabled);
-  s.setSidebarCollapsed(chrome0.sidebarCollapsed);
-  useLayoutStore.setState((st) => {
-    st.activeAgentId = null;
-    st.panelAgentId = null;
-    // 确保工作区非空
-    if (!st.workspaces.length) {
-      st.workspaces = seedInitialWorkspaces();
-      st.activeWorkspaceIndex = 0;
-    }
-  });
+  // layoutStore（壳层 chrome）
+  const layout = useLayoutStore.getState();
+  layout.setUiSize(chrome0.uiSize);
+  layout.setTabModeEnabled(chrome0.tabModeEnabled);
+  layout.setSidebarCollapsed(chrome0.sidebarCollapsed);
+
+  // sessionStore（agent 焦点）
+  useSessionStore.setState({ activeAgentId: null, panelAgentId: null });
+
+  // workspaceStore：确保工作区非空
+  const workspace = useWorkspaceStore.getState();
+  if (!workspace.workspaces.length) {
+    useWorkspaceStore.setState({
+      workspaces: seedInitialWorkspaces(),
+      activeWorkspaceIndex: 0,
+    });
+  }
 });
 
 // ── pure helpers ────────────────────────────────────────────────────────────
@@ -281,14 +300,12 @@ describe('empty workspace seed & no ghost panels', () => {
 
 // ── live store behavior ─────────────────────────────────────────────────────
 
-describe('useLayoutStore initial invariants', () => {
-  it('starts with non-empty workspaces, clamped index, no agent ghosts', () => {
-    const s = useLayoutStore.getState();
+describe('store initial invariants（域拆分后各域自证）', () => {
+  it('workspaceStore：工作区非空、索引钳制、无 agent 幽灵卡', () => {
+    const s = useWorkspaceStore.getState();
     expect(s.workspaces.length).toBeGreaterThanOrEqual(1);
     expect(s.activeWorkspaceIndex).toBeGreaterThanOrEqual(0);
     expect(s.activeWorkspaceIndex).toBeLessThan(s.workspaces.length);
-    expect(s.activeAgentId).toBeNull();
-    expect(s.panelAgentId).toBeNull();
     expect(s.draggedTab).toBeNull();
     expect(s.dropPreview).toBeNull();
 
@@ -299,16 +316,31 @@ describe('useLayoutStore initial invariants', () => {
     );
     expect(ids).not.toContain('settings');
     expect(ids).not.toContain('runtime');
+    // 别名归一化：browser 必须已被收敛为 preview，不得作为卡片 id 存活
+    expect(ids).not.toContain('browser');
+  });
+
+  it('sessionStore：agent 焦点无幽灵 + 活动会话保真', () => {
+    const s = useSessionStore.getState();
+    expect(s.activeAgentId).toBeNull();
+    expect(s.panelAgentId).toBeNull();
     // active session fidelity
     if (s.activeSessionId && s.activeSessionId !== '__pending_draft__') {
       expect(s.sessionsById[s.activeSessionId]?.id).toBe(s.activeSessionId);
     }
   });
 
-  it('uiSize is a legal UiSize', () => {
-    const size = useLayoutStore.getState().uiSize;
+  it('layoutStore：uiSize 合法、chrome 字段就位', () => {
+    const s = useLayoutStore.getState();
     const ok: UiSize[] = ['small', 'medium', 'large'];
-    expect(ok).toContain(size);
+    expect(ok).toContain(s.uiSize);
+    expect(typeof s.tabModeEnabled).toBe('boolean');
+    expect(typeof s.sidebarCollapsed).toBe('boolean');
+    expect(typeof s.hydrationComplete).toBe('boolean');
+    // 已迁走的域不得回流到壳层 store
+    expect(s).not.toHaveProperty('workspaces');
+    expect(s).not.toHaveProperty('activeSessionId');
+    expect(s).not.toHaveProperty('sessionsById');
   });
 
   it('settingsActiveTab is a known tab', () => {

@@ -35,11 +35,13 @@ describe('store-initializers', () => {
   });
 
   it('sanitizeTokenUsage handles null/undefined and boundary values', () => {
+    // costStatus 为引擎账三态唯一渲染真源（store-types.ts:65，δ / 41020bc97 引入）
     expect(sanitizeTokenUsage(null)).toEqual({
       input: 0,
       inputMax: 160000,
       output: 0,
       outputMax: 40000,
+      costStatus: 'unpriced',
       cost: 0,
     });
     expect(sanitizeTokenUsage({ input: -5, inputMax: 0 })).toEqual({
@@ -47,6 +49,7 @@ describe('store-initializers', () => {
       inputMax: 1,
       output: 0,
       outputMax: 40000,
+      costStatus: 'unpriced',
       cost: 0,
     });
   });

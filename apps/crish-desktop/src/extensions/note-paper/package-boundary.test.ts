@@ -203,11 +203,12 @@ describe('08 包边界（绿 ≠ 打开完成 ≠ 关 EL ≠ 独立软件已拆�
   });
 
   it('builtinViewFactories 键仍是 10 内置；登记器不焊激活 / 死 CTA / 裸 IPC', () => {
-    const main = readFileSync(
-      join(REPO_ROOT, 'apps/crish-desktop/src/main.tsx'),
+    // 工厂表真源是 builtinViewFactories.tsx（不再内联于 main.tsx）
+    const factories = readFileSync(
+      join(REPO_ROOT, 'apps/crish-desktop/src/builtinViewFactories.tsx'),
       'utf8'
     );
-    const block = main.match(
+    const block = factories.match(
       /const builtinViewFactories:\s*ViewFactoryMap\s*=\s*\{([\s\S]*?)\n\};/
     );
     expect(block).not.toBeNull();
@@ -217,6 +218,8 @@ describe('08 包边界（绿 ≠ 打开完成 ≠ 关 EL ≠ 独立软件已拆�
       ),
     ].map((m) => m[1] ?? m[2]);
     expect(keys).toEqual([...BUILTIN_IDS]);
+    // 决策 1 视图路由收敛：browser 已并入 preview
+    expect(keys).not.toContain('browser');
 
     const registrar = readFileSync(
       join(

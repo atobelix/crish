@@ -265,15 +265,43 @@ export function createSessionMessageActionsCore<T extends SessionStoreSlice>(
         const hit = getSessionMessage(state, sessionId, messageId);
         if (!hit) return;
         const msg = hit.message;
-        msg.thinking = thinking;
-        if (!msg.blocks) msg.blocks = [];
-        if (!msg.thinkingTurns) msg.thinkingTurns = [];
 
         const cleanTurn =
           typeof turnIndex === 'number' && Number.isFinite(turnIndex)
             ? Math.max(0, Math.floor(turnIndex))
             : 0;
         const thoughtKey = `thought-turn-${cleanTurn}`;
+
+        /**
+         * 零副作用短路（既有契约；41020bc97 重写本函数时误删，此处回归）。
+         *
+         * 同字符串重复调用不得替换状态树：流式重复 chunk 与重复渲染会高频命中，
+         * 且因 durationMs 依赖 Date.now()，immer 的引用相等永远无法自动短路，
+         * 每次命中都会 produce 出一棵全新的消息树（无谓渲染放大源）。
+         *
+         * 轮次维度：仅当**本轮次**的思考文本与时间线块都已按该字符串物化时才短路。
+         * 数组整体缺省（历史消息无轮次结构）视为无可维护结构，同样短路；
+         * 数组存在但缺本轮次时不短路——否则跨轮次同文本会吞掉新一轮的思考块。
+         */
+        if (msg.thinking === thinking) {
+          const turnMaterialized =
+            msg.thinkingTurns?.some(
+              (tt) => tt.turnIndex === cleanTurn && tt.content === thinking
+            ) ?? true;
+          const blockMaterialized =
+            msg.blocks?.some(
+              (b) =>
+                b.type === 'thought' &&
+                (b.id === thoughtKey || b.turnIndex === cleanTurn) &&
+                b.content === thinking
+            ) ?? true;
+          if (turnMaterialized && blockMaterialized) return;
+        }
+
+        msg.thinking = thinking;
+        if (!msg.blocks) msg.blocks = [];
+        if (!msg.thinkingTurns) msg.thinkingTurns = [];
+
         const now = Date.now();
 
         // 1. 同步维护 thinkingTurns（持久化与重水合权威源）

@@ -83,7 +83,9 @@ describe('ui/Input', () => {
     const css = readFileSync(join(cssDir, 'Input.module.css'), 'utf8');
     expect(css).toContain('appearance: none');
     expect(css).toContain('-webkit-appearance: none');
-    expect(css).toMatch(/var\(--(?:button-radius|radius-lg),\s*[78]px\)/);
+    // 兜底清零（B6-T18）后契约升级：消费面零字面量兜底，圆角真值由 tokens.css 单点提供
+    expect(css).toContain('border-radius: var(--button-radius);');
+    expect(css).not.toMatch(/var\(--(?:button-radius|radius-lg),\s*[78]px\)/);
     expect(css).toContain('::-webkit-search-decoration');
     expect(css).toContain('::-webkit-search-cancel-button');
     expect(css).toContain('box-shadow: none');

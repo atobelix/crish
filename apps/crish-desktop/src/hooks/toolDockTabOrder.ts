@@ -1,10 +1,22 @@
 /**
- * 右坞工具 tab 纯排序 / unit 作用域辅助。
- * 供 useToolDockTabDrag 与单测共用，无 store 副作用。
- * @see docs/plans/2026-07-conversation-unit-shell.md R2 B2
+ * 右坞工具 tab 纯排序辅助。
+ *
+ * ## 历史与现状（2026-09-15 清理）
+ *
+ * 本模块原含 `listToolLeafIdsInUnit` / `findToolLeafIdForPanel` 两个「按 session 定位
+ * tool 叶」的辅助函数，服务于 useToolDockTabDrag + RightToolDockHeader 的坞内拖拽。
+ * 该设计已在 v3 布局模型（LAYOUT_TREE_VERSION = 3）下被废止：
+ *
+ * - `LayoutLeaf.panelId` 收紧为字面量 `'chat'`（layout-tree/types.ts:26），
+ *   树上**只允许 chat 叶**，「tool 叶」在类型层即不可构造；
+ * - 会话身份从叶字段迁到 `tabs[].sessionId`（types.ts:3、:147）；
+ * - 坞改为挂在 `LayoutLeaf.dock` 上（types.ts:38），
+ *   `store/layout-tree/treePanelAccess.ts:32-33` 明令「禁止再 split 出全局 tool leaf」。
+ *
+ * 因此二者被收敛为恒空桩后已无任何生产调用方（消费方 useToolDockTabDrag /
+ * RightToolDockHeader 均已移除），恒空桩属「空占位」红线，故整体删除；
+ * 对应的架构不变量改由 toolDockTabOrder.test.ts 的守卫用例锁定。
  */
-
-import type { LayoutNode } from '../store/layout-tree/types';
 
 /**
  * 将 `fromId` 移到 `beforeId` 之前；`beforeId` 为 null / 不存在时移到末尾。
@@ -38,33 +50,4 @@ export function reorderOpenPanelIds(
     return openPanelIds as string[];
   }
   return next;
-}
-
-/**
- * 列出某 session Conversation Unit 内全部 tool leaf id。
- * 用于拖拽落点域限制：工具 tab 只能落在本 unit 的 tool 域。
- */
-export function listToolLeafIdsInUnit(
-  _root: LayoutNode,
-  _sessionId: string
-): Set<string> {
-  void _root;
-  void _sessionId;
-  // 坞已下树，会话树上没有 tool 叶。
-  return new Set();
-}
-
-/**
- * 在 unit 内查找持有指定 panelId 的 tool leaf。
- * 拖拽源 leaf 优先用此结果，避免 header 所在 leaf 与 tab 实际所在 leaf 不一致。
- */
-export function findToolLeafIdForPanel(
-  _root: LayoutNode,
-  _sessionId: string,
-  _panelId: string
-): string | null {
-  void _root;
-  void _sessionId;
-  void _panelId;
-  return null;
 }

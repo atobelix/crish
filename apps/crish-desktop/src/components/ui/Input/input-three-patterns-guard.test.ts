@@ -121,7 +121,9 @@ describe('输入框四态体系与焦点/激活态刚性防御契约', () => {
       'utf-8'
     );
     expect(inputCss).toContain('border: 1px solid var(--border-subtle);');
-    expect(inputCss).toContain('border-radius: var(--radius-md, 6px);');
+    // 兜底清零（B6-T18 / 提交 45a9dce56）后：消费面零字面量兜底，真值单点在 tokens.css
+    expect(inputCss).toContain('border-radius: var(--radius-md);');
+    expect(inputCss).not.toMatch(/border-radius:\s*var\(--radius-md\s*,/);
     expect(inputCss).toMatch(/\.input:focus[^{]*\{[^}]*box-shadow:\s*none;/);
   });
 
@@ -131,7 +133,8 @@ describe('输入框四态体系与焦点/激活态刚性防御契约', () => {
       'utf-8'
     );
     expect(textareaCss).toContain('border: 1px solid var(--border-subtle);');
-    expect(textareaCss).toContain('border-radius: var(--radius-md, 6px);');
+    expect(textareaCss).toContain('border-radius: var(--radius-md);');
+    expect(textareaCss).not.toMatch(/border-radius:\s*var\(--radius-md\s*,/);
     expect(textareaCss).toMatch(/\.nativeTextarea:focus[^{]*\{[^}]*box-shadow:\s*none;/);
   });
 

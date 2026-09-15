@@ -6,6 +6,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { readEntryChainSource } from '../../test-utils/entryChainSources';
 
 const DIR =
   typeof import.meta.dirname === 'string'
@@ -72,23 +73,33 @@ describe('conversation-flow extension import 边界', () => {
     expect(src).not.toMatch(/PermissionBar/);
   });
 
-  it('registerBuiltInViews 11 名单无 conversation-flow view id', () => {
+  it('registerBuiltInViews 10 名单无 conversation-flow view id', () => {
     const src = readFileSync(BUILTIN_REGISTRAR, 'utf8');
     expect(src).not.toMatch(/id:\s*['"]conversation-flow['"]/);
-    expect(src).toMatch(/全部 11 个/);
+    expect(src).toMatch(/全部 10 个/);
     const ids = [...src.matchAll(/^\s*id:\s*['"]([^'"]+)['"]/gm)].map(
       (m) => m[1]
     );
-    expect(ids).toHaveLength(11);
+    expect(ids).toHaveLength(10);
+    // 决策 1 视图路由收敛：browser 已并入 preview，不得回归
+    expect(ids).not.toContain('browser');
     expect(ids).not.toContain('conversation-flow');
   });
 
-  it('main.tsx 不把 conversation-flow 写进 builtinViewFactories', () => {
-    const src = readFileSync(join(DESKTOP_SRC, 'main.tsx'), 'utf8');
-    expect(src).not.toMatch(/builtinViewFactories[\s\S]*?conversation-flow/);
+  it('入口链把 conversation-flow 当扩展激活（而非内置视图工厂），且不 registerView', () => {
+    // 装配点在 entry-core.tsx（ACT-301 单拍装配后 main.tsx 仅转发）⇒ 扫整条入口链
+    const src = readEntryChainSource();
     expect(src).toMatch(/shouldActivateOfficialConversationFlow\s*\(/);
     expect(src).toMatch(/activateConversationFlow\s*\(/);
     expect(src).not.toMatch(/\bregisterView\s*\(/);
+
+    // 内置视图工厂表必须无 conversation-flow（精确扫定义模块，不用整链正则：
+    // 整链会同时命中 import 语句，断言失真）
+    const factoriesSrc = readFileSync(
+      join(DESKTOP_SRC, 'builtinViewFactories.tsx'),
+      'utf8'
+    );
+    expect(factoriesSrc).not.toContain('conversation-flow');
   });
 
   it('host.tsx / activate.ts 不 registerView', () => {

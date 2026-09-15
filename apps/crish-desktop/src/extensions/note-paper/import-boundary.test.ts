@@ -8,6 +8,10 @@ import { dirname, extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { NOTE_LEAF_HONESTY_ATTRS } from './honesty';
+import {
+  entryChainPaths,
+  readEntryChainSource,
+} from '../../test-utils/entryChainSources';
 
 const DIR =
   typeof import.meta.dirname === 'string'
@@ -20,6 +24,7 @@ const ACTIVATION_FILES = [
   join(DESKTOP_SRC, 'services/view-registry/registerBuiltInViews.tsx'),
   join(DESKTOP_SRC, 'services/view-registry/registerBuiltInViews.ts'),
   join(DESKTOP_SRC, 'main.tsx'),
+  join(DESKTOP_SRC, 'entry-core.tsx'),
 ] as const;
 
 /** 三包深路径：公开桶与 css export 合法；包名后接 /src/ 或相对 packages/.../src 非法 */
@@ -191,7 +196,18 @@ describe('note-paper extension import 边界', () => {
     expect(collectDeepPathHits(product)).toEqual([]);
   });
 
-  it('registerBuiltInViews / main.tsx 激活点无深路径、无 note 内置键', () => {
+  it('registerBuiltInViews / 入口链 激活点无深路径、无 note 内置键', () => {
+    // 入口链 = main.tsx → entry-core.tsx（ACT-301 后装配点在 entry-core）
+    const entrySrc = readEntryChainSource();
+    expect(collectDeepPathHits(entryChainPaths())).toEqual([]);
+    expect(entrySrc).toMatch(/activateNotePaper\s*\(/);
+    const builtinIdx = entrySrc.indexOf(
+      'registerBuiltInViews(builtinViewFactories)'
+    );
+    const activateIdx = entrySrc.indexOf('activateNotePaper()');
+    expect(builtinIdx).toBeGreaterThan(-1);
+    expect(activateIdx).toBeGreaterThan(builtinIdx);
+
     for (const file of ACTIVATION_FILES) {
       const src = readFileSync(file, 'utf8');
       expect(collectDeepPathHits([file]), file).toEqual([]);
@@ -199,17 +215,14 @@ describe('note-paper extension import 边界', () => {
         expect(src).not.toMatch(/registerView\s*\(\s*['"]note['"]/);
         expect(src).not.toMatch(/id:\s*['"]note['"]/);
       }
-      if (file.endsWith('main.tsx')) {
-        expect(src).not.toMatch(/builtinViewFactories[\s\S]*?\bnote\s*:/);
-        expect(src).toMatch(/activateNotePaper\s*\(/);
-        const builtinIdx = src.indexOf(
-          'registerBuiltInViews(builtinViewFactories)'
-        );
-        const activateIdx = src.indexOf('activateNotePaper()');
-        expect(builtinIdx).toBeGreaterThan(-1);
-        expect(activateIdx).toBeGreaterThan(builtinIdx);
-      }
     }
+
+    // note 不是内置槽：工厂表定义模块必须无 note 键
+    const factoriesSrc = readFileSync(
+      join(DESKTOP_SRC, 'builtinViewFactories.tsx'),
+      'utf8'
+    );
+    expect(factoriesSrc).not.toMatch(/\bnote\s*:/);
   });
 
   it('产品叶 / productLeafBindings 不再从 components/workspace 拉活资产', () => {

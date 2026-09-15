@@ -17,6 +17,7 @@ import {
   setOfficialConversationFlowActivateForTesting,
   shouldActivateOfficialConversationFlow,
 } from './activate';
+import { readEntryChainSource } from '../../test-utils/entryChainSources';
 
 const DIR =
   typeof import.meta.dirname === 'string'
@@ -247,11 +248,12 @@ describe('S1/S2 契约锁', () => {
 
     const activateSrc = readFileSync(join(DIR, 'activate.ts'), 'utf8');
     expect(activateSrc).not.toMatch(/officialOverride\s*\?\?\s*true/);
-    const mainSrc = readFileSync(join(DESKTOP_SRC, 'main.tsx'), 'utf8');
-    expect(mainSrc).toMatch(
+    // 装配点在 entry-core.tsx（ACT-301 单拍装配后 main.tsx 仅转发）⇒ 扫整条入口链
+    const entrySrc = readEntryChainSource();
+    expect(entrySrc).toMatch(
       /if\s*\(\s*shouldActivateOfficialConversationFlow\s*\(\s*\)\s*\)/
     );
-    const guarded = mainSrc.match(
+    const guarded = entrySrc.match(
       /if\s*\(\s*shouldActivateOfficialConversationFlow\s*\(\s*\)\s*\)\s*\{([^}]*)\}/
     );
     expect(guarded?.[1]).toMatch(/activateConversationFlow\s*\(/);
@@ -271,9 +273,15 @@ describe('S1/S2 契约锁', () => {
     expect(registrar).not.toMatch(/id:\s*['"]note['"]/);
     expect(registrar).not.toMatch(/id:\s*['"]conversation-flow['"]/);
 
-    const mainSrc = readFileSync(join(DESKTOP_SRC, 'main.tsx'), 'utf8');
-    const keys = factoryKeys(mainSrc);
+    // 工厂表真源是 builtinViewFactories.tsx（不再内联于 main.tsx）
+    const factoriesSrc = readFileSync(
+      join(DESKTOP_SRC, 'builtinViewFactories.tsx'),
+      'utf8'
+    );
+    const keys = factoryKeys(factoriesSrc);
     expect(keys).toEqual([...BUILTIN_IDS]);
+    expect(keys).toHaveLength(10);
+    expect(keys).not.toContain('browser');
     expect(keys).not.toContain('note');
     expect(keys).not.toContain('conversation-flow');
   });

@@ -1,4 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+// 会话域（sessions / activeAgentId / panelAgentId / createSession）已从 layoutStore
+// 物理拆分到独立 SessionStore 实例（sessionStore.ts:24-36）；本文件断言的是会话域状态。
+import { useSessionStore } from '../store/sessionStore';
+// 布局域（workspaces / togglePanel / setTabModeEnabled）在 workspaceStore；
+// closeAgentSidePanel 同时改会话域焦点与工作区卡片，故两域都要读。
+import { useWorkspaceStore } from '../store/workspaceStore';
+// setTabModeEnabled 属壳层 chrome（layoutStore），togglePanel 属布局域（workspaceStore）
 import { useLayoutStore } from '../store/layoutStore';
 import {
   AGENT_SIDE_PANEL_CARD_ID,
@@ -311,13 +318,13 @@ describe('openAgentPanel pure helpers', () => {
 
   describe('pure helpers do not touch session store', () => {
     it('plan / title / id gen leave activeAgentId & panelAgentId unchanged', () => {
-      const st = useLayoutStore.getState();
+      const st = useSessionStore.getState();
       if (!st.sessions.length) {
         st.createSession({ title: 'pure-guard', id: `pure-${Date.now()}` });
       }
-      const sid = useLayoutStore.getState().sessions[0]?.id;
+      const sid = useSessionStore.getState().sessions[0]?.id;
       if (sid) st.setActiveSessionId(sid);
-      useLayoutStore.setState({ panelAgentId: 'keep-me', activeAgentId: null });
+      useSessionStore.setState({ panelAgentId: 'keep-me', activeAgentId: null });
 
       // 纯路径
       planOpenAgentInSidePanel({
@@ -332,7 +339,7 @@ describe('openAgentPanel pure helpers', () => {
       shouldReuseAgentPanelFocus('keep-me', 'keep-me', null);
       resolveAgentPanelOpenTarget([{ id: 'solo' }]);
 
-      const after = useLayoutStore.getState();
+      const after = useSessionStore.getState();
       expect(after.panelAgentId).toBe('keep-me');
       expect(after.activeAgentId).toBeNull();
     });
@@ -341,11 +348,11 @@ describe('openAgentPanel pure helpers', () => {
 
 describe('openAgentPanel — 侧栏 only，无主列覆盖', () => {
   beforeEach(() => {
-    const st = useLayoutStore.getState();
+    const st = useSessionStore.getState();
     if (!st.sessions.length) {
       st.createSession({ title: 'agent-panel-test', id: `apt-sess-${Date.now()}` });
     }
-    const sid = useLayoutStore.getState().sessions[0]?.id;
+    const sid = useSessionStore.getState().sessions[0]?.id;
     if (sid) st.setActiveSessionId(sid);
     // 经 API 清焦点（setActiveAgentId(null) 仅清主列字段）
     clearAgentPanelFocus();
@@ -353,7 +360,7 @@ describe('openAgentPanel — 侧栏 only，无主列覆盖', () => {
 
   it('openAgentInSidePanel 只写 panelAgentId，activeAgentId 恒 null', () => {
     openAgentInSidePanel('agent-x');
-    const st = useLayoutStore.getState();
+    const st = useSessionStore.getState();
     expect(st.panelAgentId).toBe('agent-x');
     expect(st.activeAgentId).toBeNull();
     expect(isAgentSidePanelFocused('agent-x')).toBe(true);
@@ -362,7 +369,7 @@ describe('openAgentPanel — 侧栏 only，无主列覆盖', () => {
   it('openAgentPanelBrowse 清 panel 焦点且不开主列 agent', () => {
     openAgentInSidePanel('agent-x');
     openAgentPanelBrowse();
-    const st = useLayoutStore.getState();
+    const st = useSessionStore.getState();
     expect(st.panelAgentId).toBeNull();
     expect(st.activeAgentId).toBeNull();
   });
@@ -370,14 +377,14 @@ describe('openAgentPanel — 侧栏 only，无主列覆盖', () => {
   it('browseAgentSidePanel 与 browse 等价', () => {
     openAgentInSidePanel('agent-y');
     browseAgentSidePanel();
-    expect(useLayoutStore.getState().panelAgentId).toBeNull();
-    expect(useLayoutStore.getState().activeAgentId).toBeNull();
+    expect(useSessionStore.getState().panelAgentId).toBeNull();
+    expect(useSessionStore.getState().activeAgentId).toBeNull();
   });
 
   it('clearAgentPanelFocus 同时清 panel/active', () => {
-    useLayoutStore.setState({ panelAgentId: 'a1', activeAgentId: null });
+    useSessionStore.setState({ panelAgentId: 'a1', activeAgentId: null });
     clearAgentPanelFocus();
-    const st = useLayoutStore.getState();
+    const st = useSessionStore.getState();
     expect(st.panelAgentId).toBeNull();
     expect(st.activeAgentId).toBeNull();
   });
@@ -385,19 +392,19 @@ describe('openAgentPanel — 侧栏 only，无主列覆盖', () => {
   it('openAgentInSidePanel 空 id 不写 store', () => {
     clearAgentPanelFocus();
     openAgentInSidePanel('');
-    expect(useLayoutStore.getState().panelAgentId).toBeNull();
+    expect(useSessionStore.getState().panelAgentId).toBeNull();
   });
 
   it('openAgentInSidePanel 空白 id 不写 store（trim）', () => {
     clearAgentPanelFocus();
     openAgentInSidePanel('   \t  ');
-    expect(useLayoutStore.getState().panelAgentId).toBeNull();
-    expect(useLayoutStore.getState().activeAgentId).toBeNull();
+    expect(useSessionStore.getState().panelAgentId).toBeNull();
+    expect(useSessionStore.getState().activeAgentId).toBeNull();
   });
 
   it('openAgentInSidePanel trim agentId', () => {
     openAgentInSidePanel('  agent-trim  ');
-    expect(useLayoutStore.getState().panelAgentId).toBe('agent-trim');
+    expect(useSessionStore.getState().panelAgentId).toBe('agent-trim');
     expect(isAgentSidePanelFocused('agent-trim')).toBe(true);
     expect(isAgentSidePanelFocused('  agent-trim  ')).toBe(true);
   });
@@ -406,42 +413,42 @@ describe('openAgentPanel — 侧栏 only，无主列覆盖', () => {
     openAgentInSidePanel('dup-1');
     openAgentInSidePanel('dup-1');
     openAgentInSidePanel('  dup-1  ');
-    const st = useLayoutStore.getState();
+    const st = useSessionStore.getState();
     expect(st.panelAgentId).toBe('dup-1');
     expect(st.activeAgentId).toBeNull();
     expect(isAgentSidePanelFocused('dup-1')).toBe(true);
   });
 
   it('closeAgentSidePanel 清焦点（不强制 chat）', () => {
-    const ws = useLayoutStore.getState().workspaces[0];
+    const ws = useWorkspaceStore.getState().workspaces[0];
     expect(ws).toBeTruthy();
     const group = ws!.columns[0]?.groups[0];
     expect(group).toBeTruthy();
     openAgentInSidePanel('agent-z');
     closeAgentSidePanel(ws!.id, group!.id);
-    const st = useLayoutStore.getState();
+    const st = useSessionStore.getState();
     expect(st.panelAgentId).toBeNull();
     expect(st.activeAgentId).toBeNull();
   });
 
   it('closeAgentSidePanel 在多工具组落到左侧邻居，不重开/不切主列 chat', () => {
-    const st = useLayoutStore.getState();
+    const st = useWorkspaceStore.getState();
     const ws = st.workspaces[0];
     expect(ws).toBeTruthy();
     // 合并工具标签，保证 files/agent/terminal 同组
-    st.setTabModeEnabled(true);
+    useLayoutStore.getState().setTabModeEnabled(true);
     st.togglePanel(ws!.id, 'files', true);
     st.togglePanel(ws!.id, 'agent', true);
     st.togglePanel(ws!.id, 'terminal', true);
 
-    const live = useLayoutStore.getState().workspaces.find((w) => w.id === ws!.id)!;
+    const live = useWorkspaceStore.getState().workspaces.find((w) => w.id === ws!.id)!;
     const toolCol = live.columns.find((c) => !c.id.includes('chat'));
     expect(toolCol).toBeTruthy();
     // 找到含 agent 的组
     const group = toolCol!.groups.find((g) => g.cards.some((c) => c.id === 'agent'));
     expect(group).toBeTruthy();
     // 强制同组为 files|agent|terminal 且 active=agent
-    useLayoutStore.setState((draft: any) => {
+    useWorkspaceStore.setState((draft: any) => {
       const w = draft.workspaces.find((x: any) => x.id === ws!.id);
       const col = w?.columns.find((c: any) => !c.id.includes('chat'));
       if (!col) return;
@@ -455,14 +462,14 @@ describe('openAgentPanel — 侧栏 only，无主列覆盖', () => {
       ];
     });
 
-    const chatColBefore = useLayoutStore
+    const chatColBefore = useWorkspaceStore
       .getState()
       .workspaces.find((w) => w.id === ws!.id)!
       .columns.find((c) => c.id.includes('chat'));
     const chatActiveBefore = chatColBefore?.groups[0]?.activeCardId;
     const chatCardsBefore = chatColBefore?.groups[0]?.cards.map((c) => c.id) ?? [];
     openAgentInSidePanel('agent-close-side');
-    const groupId = useLayoutStore
+    const groupId = useWorkspaceStore
       .getState()
       .workspaces.find((w) => w.id === ws!.id)!
       .columns.find((c) => !c.id.includes('chat'))!
@@ -470,11 +477,11 @@ describe('openAgentPanel — 侧栏 only，无主列覆盖', () => {
 
     closeAgentSidePanel(ws!.id, groupId);
 
-    const after = useLayoutStore.getState();
+    const after = useSessionStore.getState();
     expect(after.panelAgentId).toBeNull();
     expect(after.activeAgentId).toBeNull();
 
-    const wsAfter = after.workspaces.find((w) => w.id === ws!.id)!;
+    const wsAfter = useWorkspaceStore.getState().workspaces.find((w) => w.id === ws!.id)!;
     const toolAfter = wsAfter.columns.find((c) => !c.id.includes('chat'));
     const gAfter = toolAfter?.groups.find((g) => g.id === groupId) ?? toolAfter?.groups[0];
     // agent tab 已关
@@ -489,14 +496,14 @@ describe('openAgentPanel — 侧栏 only，无主列覆盖', () => {
   });
 
   it('closeAgentSidePanel 关唯一 agent 收空组，不把 chat 注入工具列', () => {
-    const st = useLayoutStore.getState();
+    const st = useWorkspaceStore.getState();
     const ws = st.workspaces[0];
     expect(ws).toBeTruthy();
-    st.setTabModeEnabled(true);
+    useLayoutStore.getState().setTabModeEnabled(true);
     st.togglePanel(ws!.id, 'agent', true);
 
     // 工具列只留 agent
-    useLayoutStore.setState((draft) => {
+    useWorkspaceStore.setState((draft) => {
       const w = draft.workspaces.find((x) => x.id === ws!.id);
       const col = w?.columns.find((c) => !c.id.includes('chat'));
       if (!col) return;
@@ -510,28 +517,28 @@ describe('openAgentPanel — 侧栏 only，无主列覆盖', () => {
       ];
     });
 
-    const groupId = useLayoutStore
+    const groupId = useWorkspaceStore
       .getState()
       .workspaces.find((w) => w.id === ws!.id)!
       .columns.find((c) => !c.id.includes('chat'))!
       .groups[0]!.id;
 
-    const chatBefore = useLayoutStore
+    const chatBefore = useWorkspaceStore
       .getState()
       .workspaces.find((w) => w.id === ws!.id)!
       .columns.find((c) => c.id.includes('chat'))!;
     const chatCardsBefore = chatBefore.groups[0]?.cards.map((c) => c.id) ?? [];
     const chatActiveBefore = chatBefore.groups[0]?.activeCardId;
-    const colCountBefore = useLayoutStore
+    const colCountBefore = useWorkspaceStore
       .getState()
       .workspaces.find((w) => w.id === ws!.id)!.columns.length;
 
     openAgentInSidePanel('solo-agent');
     closeAgentSidePanel(ws!.id, groupId);
 
-    const after = useLayoutStore.getState().workspaces.find((w) => w.id === ws!.id)!;
-    expect(useLayoutStore.getState().panelAgentId).toBeNull();
-    expect(useLayoutStore.getState().activeAgentId).toBeNull();
+    const after = useWorkspaceStore.getState().workspaces.find((w) => w.id === ws!.id)!;
+    expect(useSessionStore.getState().panelAgentId).toBeNull();
+    expect(useSessionStore.getState().activeAgentId).toBeNull();
 
     // 空工具列应收掉；绝不在工具位塞 chat
     const toolCols = after.columns.filter((c) => !c.id.includes('chat'));
@@ -553,17 +560,17 @@ describe('openAgentPanel — 侧栏 only，无主列覆盖', () => {
   it('closeAgentSidePanel 空/空白 wsId|groupId 仍清焦点且不抛', () => {
     openAgentInSidePanel('keep-clear');
     expect(() => closeAgentSidePanel('', 'g1')).not.toThrow();
-    expect(useLayoutStore.getState().panelAgentId).toBeNull();
+    expect(useSessionStore.getState().panelAgentId).toBeNull();
 
     openAgentInSidePanel('keep-clear-2');
     expect(() => closeAgentSidePanel('ws1', '  ')).not.toThrow();
-    expect(useLayoutStore.getState().panelAgentId).toBeNull();
-    expect(useLayoutStore.getState().activeAgentId).toBeNull();
+    expect(useSessionStore.getState().panelAgentId).toBeNull();
+    expect(useSessionStore.getState().activeAgentId).toBeNull();
   });
 
   it('isAgentSidePanelFocused 在 activeAgentId 非空时返回 false（主列路径非法）', () => {
     // 直接写 store 模拟脏状态（API 路径不会出现）
-    useLayoutStore.setState({ panelAgentId: 'a1', activeAgentId: 'a1' });
+    useSessionStore.setState({ panelAgentId: 'a1', activeAgentId: 'a1' });
     expect(isAgentSidePanelFocused('a1')).toBe(false);
   });
 
@@ -593,49 +600,49 @@ describe('openAgentPanel — 侧栏 only，无主列覆盖', () => {
 
   it('openAgentInSidePanel 经 setActiveAgentId 改写后仍保持主列 null', () => {
     // sessionActions.setActiveAgentId(非 null) 会改写到 panel
-    useLayoutStore.getState().setActiveAgentId('legacy-agent');
-    expect(useLayoutStore.getState().activeAgentId).toBeNull();
-    expect(useLayoutStore.getState().panelAgentId).toBe('legacy-agent');
+    useSessionStore.getState().setActiveAgentId('legacy-agent');
+    expect(useSessionStore.getState().activeAgentId).toBeNull();
+    expect(useSessionStore.getState().panelAgentId).toBe('legacy-agent');
     // 再用正式 API 打开另一 agent
     openAgentInSidePanel('side-only');
-    expect(useLayoutStore.getState().activeAgentId).toBeNull();
-    expect(useLayoutStore.getState().panelAgentId).toBe('side-only');
+    expect(useSessionStore.getState().activeAgentId).toBeNull();
+    expect(useSessionStore.getState().panelAgentId).toBe('side-only');
   });
 
   it('openAgentInSidePanel 切会话后重设 panel（setActiveSessionId 会清 panel）', () => {
-    const st = useLayoutStore.getState();
+    const st = useSessionStore.getState();
     const a = st.createSession({ title: 'sess-a', id: `apt-a-${Date.now()}` });
     const b = st.createSession({ title: 'sess-b', id: `apt-b-${Date.now()}` });
     st.setActiveSessionId(a);
     openAgentInSidePanel('on-a');
-    expect(useLayoutStore.getState().panelAgentId).toBe('on-a');
+    expect(useSessionStore.getState().panelAgentId).toBe('on-a');
 
     openAgentInSidePanel('on-b', { sessionId: b });
-    const after = useLayoutStore.getState();
+    const after = useSessionStore.getState();
     expect(after.activeSessionId).toBe(b);
     expect(after.panelAgentId).toBe('on-b');
     expect(after.activeAgentId).toBeNull();
   });
 
   it('openAgentPanelBrowse 可带 sessionId 切换且 panel 为浏览态', () => {
-    const st = useLayoutStore.getState();
+    const st = useSessionStore.getState();
     const a = st.createSession({ title: 'browse-a', id: `apt-ba-${Date.now()}` });
     const b = st.createSession({ title: 'browse-b', id: `apt-bb-${Date.now()}` });
     st.setActiveSessionId(a);
     openAgentInSidePanel('will-clear');
     openAgentPanelBrowse({ sessionId: b });
-    const after = useLayoutStore.getState();
+    const after = useSessionStore.getState();
     expect(after.activeSessionId).toBe(b);
     expect(after.panelAgentId).toBeNull();
     expect(after.activeAgentId).toBeNull();
   });
 
   it('空白 sessionId 不切会话', () => {
-    const st = useLayoutStore.getState();
+    const st = useSessionStore.getState();
     const sid = st.activeSessionId;
     openAgentInSidePanel('keep-sess', { sessionId: '   ' });
-    expect(useLayoutStore.getState().activeSessionId).toBe(sid);
-    expect(useLayoutStore.getState().panelAgentId).toBe('keep-sess');
+    expect(useSessionStore.getState().activeSessionId).toBe(sid);
+    expect(useSessionStore.getState().panelAgentId).toBe('keep-sess');
   });
 
   it('open 派发 open-agent-panel 事件（含 agentId）；browse 无 agentId', () => {
@@ -671,7 +678,7 @@ describe('openAgentPanel — 侧栏 only，无主列覆盖', () => {
     ];
     for (const op of ops) {
       op();
-      expect(useLayoutStore.getState().activeAgentId).toBeNull();
+      expect(useSessionStore.getState().activeAgentId).toBeNull();
     }
   });
 
@@ -686,8 +693,8 @@ describe('openAgentPanel — 侧栏 only，无主列覆盖', () => {
       openAgentInSidePanel('  ');
       const agentEv = events.filter((e) => e.type === 'crish-open-agent-panel');
       expect(agentEv.length).toBe(0);
-      expect(useLayoutStore.getState().activeAgentId).toBeNull();
-      expect(useLayoutStore.getState().panelAgentId).toBeNull();
+      expect(useSessionStore.getState().activeAgentId).toBeNull();
+      expect(useSessionStore.getState().panelAgentId).toBeNull();
     } finally {
       spy.mockRestore();
     }

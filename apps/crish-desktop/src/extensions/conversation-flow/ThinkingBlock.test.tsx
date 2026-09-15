@@ -2,14 +2,12 @@
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { useThoughtInspectorStore } from '../../store/thoughtInspectorStore';
 import { THINKING_PREVIEW_CHARS } from './narrativeModel';
 import { ThinkingBlock } from './ThinkingBlock';
 
 describe('ThinkingBlock', () => {
   afterEach(() => {
     cleanup();
-    useThoughtInspectorStore.getState().closeThoughtInspector();
   });
 
   const long = '思'.repeat(80);
@@ -76,11 +74,17 @@ describe('ThinkingBlock', () => {
     expect(container.querySelector('[data-flow-expanded="false"]')).not.toBeNull();
   });
 
-  it('无放大查阅器按钮，无原生 title', () => {
+  it('无放大查阅器按钮，无原生 title（查阅器已随 thoughtInspectorStore 移除）', () => {
     const { container } = render(
       <ThinkingBlock content={long} messageId="m1" />
     );
     expect(container.querySelector('[title]')).toBeNull();
     expect(screen.queryByLabelText('查看完整思考链')).toBeNull();
+    // 查阅器入口不得回归（store 已删除，禁止重新引入悬浮放大入口）
+    expect(container.querySelector('[data-thought-inspector]')).toBeNull();
+    expect(container.querySelector('[data-flow-inspector]')).toBeNull();
+    expect(
+      screen.queryByRole('button', { name: /放大|查阅|完整思考链/ })
+    ).toBeNull();
   });
 });

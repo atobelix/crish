@@ -41,7 +41,7 @@ export function resetBuiltInViewsRegistrationFlagForTesting(): void {
  * @param factories 由调用方注入的 lazy factory map（main.tsx startup）。
  *   key 为视图 id（chat/terminal/preview/overview/files/diff/runtime/agent/
  *   flow-dag/file-viewer）；value 为返回 `React.ComponentType<ViewRenderContext>`
- *   的 factory。缺失的 id 跳过注册（防御；调用方应提供全部 11 个槽位，browser 并入 preview 后实际注册 10 个）。
+ *   的 factory。缺失的 id 跳过注册（防御；调用方应提供全部 10 个槽位）。
  *   browser 已并入 preview（决策 1 视图路由收敛），不再注册独立 browser 视图。
  */
 export function registerBuiltInViews(factories: ViewFactoryMap): void {

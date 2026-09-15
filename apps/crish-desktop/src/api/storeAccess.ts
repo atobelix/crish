@@ -63,6 +63,9 @@ import {
   type DraggedTabState,
 } from '../store/workspaceStore';
 import { normalizeSessionId } from './store-access/sessionAccess';
+// 面板 key 归一化的单一真源（settings/runtime 浮层剔除 + browser→preview / plan→tasks 别名）。
+// 直接引叶模块而非 layout-helpers barrel：避免经由 store-initializers 等重模块形成环。
+import { resolveWorkspacePanelKey } from '../store/layout-helpers/ui-panel';
 
 export {
   getSessionById,
@@ -149,14 +152,19 @@ export function workspaceHasCard(
   return findPanelCardLocation(workspace, cardId) !== undefined;
 }
 
+/**
+ * 归一化待聚焦/打开的面板 id。
+ *
+ * 委托 `resolveWorkspacePanelKey`（唯一别名真源），不再就地维护第二份别名表——
+ * 历史上两份已漂移（本处漏了 runtime 守卫，导致运行时面板可被塞进列）。
+ * 语义映射：null/空/浮层 → undefined（无卡片可聚焦）。
+ */
 export function resolvePanelCardId(
   cardId: string | null | undefined
 ): string | undefined {
   const id = normalizeSessionId(cardId);
   if (!id) return undefined;
-  if (id === 'settings') return undefined;
-  if (id === 'plan') return 'tasks';
-  return id;
+  return resolveWorkspacePanelKey(id) ?? undefined;
 }
 
 export function getWorkspaceById(

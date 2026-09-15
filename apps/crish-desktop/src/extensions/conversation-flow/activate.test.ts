@@ -3,8 +3,7 @@
  * 对话流扩展激活 / 注销。jsdom 绿 ≠ 叙事 UI 完成 ≠ 默认开。
  */
 import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type React from 'react';
 import {
@@ -20,11 +19,10 @@ import {
   setOfficialConversationFlowActivateForTesting,
   shouldActivateOfficialConversationFlow,
 } from './activate';
-
-const DIR =
-  typeof import.meta.dirname === 'string'
-    ? import.meta.dirname
-    : dirname(fileURLToPath(import.meta.url));
+import {
+  DESKTOP_SRC_DIR,
+  readEntryChainSource,
+} from '../../test-utils/entryChainSources';
 
 const stubComponent: React.FC<ViewRenderContext> = () => null;
 const stubFactory = () => stubComponent;
@@ -42,6 +40,13 @@ const testFactories: ViewFactoryMap = {
   'file-viewer': stubFactory,
 };
 
+/**
+ * 内置视图 id 清单（真源：services/view-registry/registerBuiltInViews.tsx）。
+ *
+ * `browser` 已于「决策 1 视图路由收敛」并入 `preview`，不再注册独立视图
+ * （registerBuiltInViews.tsx:44-45）⇒ 名单为 10 项，且必须反向断言 browser 缺席，
+ * 防其被重新注册回来。
+ */
 const BUILTIN_IDS = [
   'chat',
   'terminal',
@@ -51,7 +56,6 @@ const BUILTIN_IDS = [
   'diff',
   'runtime',
   'agent',
-  'browser',
   'flow-dag',
   'file-viewer',
 ] as const;
@@ -92,6 +96,8 @@ describe('conversation-flow activate / deactivate（S1 槽可卸）', () => {
     for (const id of BUILTIN_IDS) {
       expect(ids).toContain(id);
     }
+    // 决策 1 视图路由收敛：browser 已并入 preview，不得回归为独立视图
+    expect(ids).not.toContain('browser');
     expect(ids).not.toContain('conversation-flow');
   });
 
@@ -126,17 +132,32 @@ describe('conversation-flow activate / deactivate（S1 槽可卸）', () => {
     expect(slotCore.getSingle('workspace.chat.composerAbove')).toBeUndefined();
   });
 
-  it('main.tsx 在 builtins 之后条件调用 activateConversationFlow', () => {
-    const mainSrc = readFileSync(join(DIR, '../../main.tsx'), 'utf8');
-    const builtinIdx = mainSrc.indexOf(
+  it('入口链在 builtins 之后条件调用 activateConversationFlow', () => {
+    // 装配点在 entry-core.tsx（ACT-301 单拍装配后 main.tsx 仅转发）
+    const entrySrc = readEntryChainSource();
+    const builtinIdx = entrySrc.indexOf(
       'registerBuiltInViews(builtinViewFactories)'
     );
-    const activateIdx = mainSrc.indexOf('activateConversationFlow()');
+    const activateIdx = entrySrc.indexOf('activateConversationFlow()');
     expect(builtinIdx).toBeGreaterThan(-1);
     expect(activateIdx).toBeGreaterThan(builtinIdx);
-    expect(mainSrc).toMatch(/shouldActivateOfficialConversationFlow\s*\(/);
-    expect(mainSrc).not.toMatch(
-      /builtinViewFactories[\s\S]*conversation-flow/
+    expect(entrySrc).toMatch(/shouldActivateOfficialConversationFlow\s*\(/);
+  });
+
+  it('conversation-flow 不是内置视图：工厂表 10 槽不含它', () => {
+    // 精确扫工厂表定义模块（而非整条入口链）：整链正则会把 import 语句也纳入，
+    // 断言失真（entry-core 同时 import 了 builtinViewFactories 与扩展激活）。
+    const factoriesSrc = readFileSync(
+      join(DESKTOP_SRC_DIR, 'builtinViewFactories.tsx'),
+      'utf8'
     );
+    expect(factoriesSrc).not.toContain('conversation-flow');
+    expect(factoriesSrc).not.toContain('conversation_flow');
+    // 10 槽全量（迁移清单铁律：严禁缩减）
+    const slotKeys = [...factoriesSrc.matchAll(/^ {2}'?([a-z][a-z-]*)'?:/gm)].map(
+      (m) => m[1]
+    );
+    expect(slotKeys).toHaveLength(10);
+    expect(slotKeys).not.toContain('browser');
   });
 });

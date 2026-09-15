@@ -103,13 +103,15 @@ describe('S7 · Artifact Notebook 源码钉', () => {
     expect(tool).not.toMatch(/ArtifactChip|ArtifactNotebook|data-flow-artifact-notebook/);
   });
 
-  it('不改 registerBuiltInViews 11 名单', () => {
+  it('不改 registerBuiltInViews 10 名单', () => {
     const src = readFileSync(
       join(DESKTOP_SRC, 'services/view-registry/registerBuiltInViews.tsx'),
       'utf8'
     );
     const ids = [...src.matchAll(/^\s*id:\s*['"]([^'"]+)['"]/gm)].map((m) => m[1]);
-    expect(ids).toHaveLength(11);
+    // 决策 1 视图路由收敛：browser 已并入 preview ⇒ 名单 10 项
+    expect(ids).toHaveLength(10);
+    expect(ids).not.toContain('browser');
     expect(ids).not.toContain('note');
     expect(ids).not.toContain('conversation-flow');
     expect(ids).not.toContain('artifact-notebook');

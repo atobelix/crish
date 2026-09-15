@@ -2,7 +2,7 @@
  * layoutHelpers 纯函数单测：不碰 layoutStore / zustand。
  * 覆盖：面板放置、焦点、空工作区收尾、split 边缘几何。
  */
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   adjustSameGroupReorderIndex,
   afterCardRemovedFromGroup,
@@ -44,6 +44,29 @@ import {
   DIFF_LIST_MAX,
 } from './layoutHelpers';
 import type { CardGroupState, FileDiff, WorkspaceState } from './types';
+import {
+  registerBuiltInViews,
+  resetBuiltInViewsRegistrationFlagForTesting,
+  viewRegistry,
+} from '../services/view-registry';
+
+/**
+ * 视图标题的唯一真源是 viewRegistry（registerBuiltInViews 注册的 ViewDefinition.title）。
+ * getPanelTitle 已收敛为对 viewRegistry.getTitle 的薄委托，不再自带静态标题表
+ * （避免「标题表 + 注册表」双写者）。故本文件必须先注册内置视图，
+ * 断言才对的是**生产真值**而非空注册表的 id 兜底。
+ * 传空 factory map：全部回落到 fallbackComponent，仅注册元数据（title/icon/category）。
+ */
+beforeAll(() => {
+  resetBuiltInViewsRegistrationFlagForTesting();
+  viewRegistry.clear();
+  registerBuiltInViews({});
+});
+
+afterAll(() => {
+  viewRegistry.clear();
+  resetBuiltInViewsRegistrationFlagForTesting();
+});
 
 // ── fixtures ────────────────────────────────────────────────────────────────
 

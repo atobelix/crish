@@ -15,6 +15,7 @@ import {
 } from '../../services/view-registry';
 import type { ViewRenderContext } from '../../services/view-registry';
 import { activateNotePaper, deactivateNotePaper } from './activate';
+import { readEntryChainSource } from '../../test-utils/entryChainSources';
 
 const DIR =
   typeof import.meta.dirname === 'string'
@@ -112,27 +113,34 @@ describe('note-paper activate / deactivate（02 F1–F3 / F5 / F12）', () => {
     expect(resolved.params?.docId).toBe('abc');
   });
 
-  it('F12 main 启动路径在 builtins 之后调用 activateNotePaper', () => {
-    const mainSrc = readFileSync(join(DIR, '../../main.tsx'), 'utf8');
-    const builtinIdx = mainSrc.indexOf(
+  it('F12 入口链在 builtins 之后调用 activateNotePaper', () => {
+    // 装配点在 entry-core.tsx（ACT-301 单拍装配后 main.tsx 仅转发）⇒ 扫整条入口链
+    const entrySrc = readEntryChainSource();
+    const builtinIdx = entrySrc.indexOf(
       'registerBuiltInViews(builtinViewFactories)'
     );
-    const activateIdx = mainSrc.indexOf('activateNotePaper()');
+    const activateIdx = entrySrc.indexOf('activateNotePaper()');
     expect(builtinIdx).toBeGreaterThan(-1);
     expect(activateIdx).toBeGreaterThan(builtinIdx);
-    expect(mainSrc).not.toMatch(/builtinViewFactories[\s\S]*\bnote\s*:/);
+
+    // 内置视图工厂表不得把 note 当内置槽（精确扫定义模块，不用整链正则）
+    const factoriesSrc = readFileSync(
+      join(DIR, '../../builtinViewFactories.tsx'),
+      'utf8'
+    );
+    expect(factoriesSrc).not.toMatch(/\bnote\s*:/);
   });
 
-  it('N1 registerBuiltInViews 源码无 id: note，注释仍是 11', () => {
+  it('N1 registerBuiltInViews 源码无 id: note，注释仍是 10', () => {
     const src = readFileSync(
       join(DIR, '../../services/view-registry/registerBuiltInViews.tsx'),
       'utf8'
     );
     expect(src).not.toMatch(/id:\s*['"]note['"]/);
-    expect(src).toMatch(/全部 11 个/);
+    expect(src).toMatch(/全部 10 个/);
   });
 
-  it('ViewRegistry.test 仍断言 11 内置、不含 note', () => {
+  it('ViewRegistry.test 仍断言 10 内置、不含 note', () => {
     const src = readFileSync(
       join(DIR, '../../services/view-registry/ViewRegistry.test.ts'),
       'utf8'

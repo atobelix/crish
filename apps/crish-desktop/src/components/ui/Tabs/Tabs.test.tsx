@@ -323,11 +323,14 @@ describe('ui/Tabs', () => {
     expect(CSS_SRC).toContain('transform: scale(0.97) translateY(1px)');
 
     // 4. 同心圆角几何体系 R_inner = R_outer - Padding
+    //    兜底清零（B6-T18 / 提交 45a9dce56）后：四档消费面一律零字面量兜底，
+    //    真值唯一定义在 tokens.css（--radius-md 6px / --button-radius 7px / --radius-lg 8px / --radius-xl 12px）
     expect(CSS_SRC).toContain('--tab-inner-radius: calc(var(--tab-outer-radius) - var(--tab-pad))');
-    expect(CSS_SRC).toContain('--tab-outer-radius: var(--radius-md, 6px)');
-    expect(CSS_SRC).toContain('--tab-outer-radius: var(--button-radius, 7px)');
-    expect(CSS_SRC).toContain('--tab-outer-radius: var(--radius-lg, 8px)');
-    expect(CSS_SRC).toContain('--tab-outer-radius: var(--radius-xl, 12px)');
+    expect(CSS_SRC).toContain('--tab-outer-radius: var(--radius-md)');
+    expect(CSS_SRC).toContain('--tab-outer-radius: var(--button-radius)');
+    expect(CSS_SRC).toContain('--tab-outer-radius: var(--radius-lg)');
+    expect(CSS_SRC).toContain('--tab-outer-radius: var(--radius-xl)');
+    expect(CSS_SRC).not.toMatch(/--tab-outer-radius:\s*var\(--(?:radius-md|radius-lg|radius-xl|button-radius)\s*,/);
 
     // 5. 焦点环与减弱动画兜底
     expect(CSS_SRC).toContain('color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%)');
