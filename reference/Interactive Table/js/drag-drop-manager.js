@@ -130,7 +130,11 @@ window.InteractiveTable.DragDropManager = class DragDropManager {
     document.body.style.userSelect = 'none';
     document.body.classList.add('is-dragging-table');
 
-    this.activeHandle.classList.add('active', 'dragging');
+    // 拖拽激活时：原手柄完全隐去，视觉焦点聚焦在跟随鼠标的虚拟 DOM 上
+    if (this.activeHandle) {
+      this.activeHandle.style.opacity = '0';
+      this.activeHandle.style.pointerEvents = 'none';
+    }
     this.applyGhost(true);
 
     const table = this.root.querySelector('.notion-table');
@@ -150,6 +154,8 @@ window.InteractiveTable.DragDropManager = class DragDropManager {
     const proxy = document.createElement('div');
     proxy.className = 'drag-floating-proxy';
 
+    const TableState = window.InteractiveTable.TableState;
+
     if (this.dragType === 'COLUMN') {
       const headerCells = this.getHeaderCells(table);
       const sourceTh = headerCells[this.fromIndex];
@@ -161,13 +167,16 @@ window.InteractiveTable.DragDropManager = class DragDropManager {
       this.grabOffsetX = this.startX - thRect.left;
       this.grabOffsetY = this.startY - thRect.top;
 
+      const rawHeader = data.headers[this.fromIndex];
+      const headerVal = TableState ? TableState.getCellValue(rawHeader) : String(rawHeader || '');
+
       let theadHtml = '';
       if (data.hasHeaderRow) {
         theadHtml = `
           <thead>
             <tr style="height: ${sourceTh.offsetHeight}px;">
-              <th style="width: ${colWidth}px; height: ${sourceTh.offsetHeight}px; border-bottom: 1px solid var(--border-color);">
-                ${data.headers[this.fromIndex] || ''}
+              <th style="width: ${colWidth}px; height: ${sourceTh.offsetHeight}px;">
+                ${headerVal}
               </th>
             </tr>
           </thead>
@@ -179,11 +188,12 @@ window.InteractiveTable.DragDropManager = class DragDropManager {
           ${data.rows.map((row, rIdx) => {
             const td = table.querySelector(`tbody tr[data-row="${rIdx}"] td[data-col="${this.fromIndex}"]`);
             const h = td ? td.offsetHeight : 52;
-            const isLast = rIdx === data.rows.length - 1;
+            const rawCell = row.cells[this.fromIndex];
+            const cellVal = TableState ? TableState.getCellValue(rawCell) : String(rawCell || '');
             return `
               <tr style="height: ${h}px;">
-                <td style="width: ${colWidth}px; height: ${h}px; ${isLast ? 'border-bottom: none;' : 'border-bottom: 1px solid var(--border-color);'}">
-                  ${row.cells[this.fromIndex] || ''}
+                <td style="width: ${colWidth}px; height: ${h}px;">
+                  ${cellVal}
                 </td>
               </tr>
             `;
@@ -192,10 +202,16 @@ window.InteractiveTable.DragDropManager = class DragDropManager {
       `;
 
       proxy.innerHTML = `
-        <div class="proxy-handle-bar-top">
-          <div class="proxy-handle-line"></div>
+        <div class="proxy-capsule-handle proxy-capsule-col">
+          <div class="handle-capsule dragging">
+            <div class="handle-dots">
+              <span class="dot"></span>
+              <span class="dot"></span>
+              <span class="dot"></span>
+            </div>
+          </div>
         </div>
-        <table style="width: ${colWidth}px;">
+        <table>
           <colgroup><col style="width: ${colWidth}px;"></colgroup>
           ${theadHtml}
           ${tbodyHtml}
@@ -219,18 +235,25 @@ window.InteractiveTable.DragDropManager = class DragDropManager {
       this.grabOffsetY = this.startY - trRect.top;
 
       proxy.innerHTML = `
-        <div class="proxy-handle-bar-left">
-          <div class="proxy-handle-line"></div>
+        <div class="proxy-capsule-handle proxy-capsule-row">
+          <div class="handle-capsule dragging">
+            <div class="handle-dots">
+              <span class="dot"></span>
+              <span class="dot"></span>
+              <span class="dot"></span>
+            </div>
+          </div>
         </div>
-        <table style="width: ${tableRect.width}px;">
+        <table>
           <colgroup>
             ${colWidths.map(w => `<col style="width: ${w}px;">`).join('')}
           </colgroup>
           <tbody>
             <tr style="height: ${rowHeight}px;">
-              ${data.rows[this.fromIndex].cells.map((cellText, cIdx) => `
-                <td style="width: ${colWidths[cIdx]}px; height: ${rowHeight}px;">${cellText}</td>
-              `).join('')}
+              ${data.rows[this.fromIndex].cells.map((rawCell, cIdx) => {
+                const cellVal = TableState ? TableState.getCellValue(rawCell) : String(rawCell || '');
+                return `<td style="width: ${colWidths[cIdx]}px; height: ${rowHeight}px;">${cellVal}</td>`;
+              }).join('')}
             </tr>
           </tbody>
         </table>
@@ -401,6 +424,8 @@ window.InteractiveTable.DragDropManager = class DragDropManager {
     }
 
     if (this.activeHandle) {
+      this.activeHandle.style.opacity = '';
+      this.activeHandle.style.pointerEvents = '';
       this.activeHandle.classList.remove('active', 'dragging');
       this.activeHandle = null;
     }

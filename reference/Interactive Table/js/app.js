@@ -44,8 +44,8 @@
       // 5. 行列手柄拖拽排序管理器 (严格对齐行列双模态拖拽)
       this.dragDropManager = new DragDropManager(this.state, this.root, this.contextMenu);
 
-      // 6. 边框扩展像素灰变蓝与加号插入线 (严格还原图三与图四)
-      this.dividerInserter = new DividerInserter(this.state, this.root);
+      // 6. 边框细线与加号插入线已按需求移除，避免误触与阻碍尺寸调节
+      this.dividerInserter = null;
 
       // 7. 列管理器 (列宽微调、列菜单)
       this.columnManager = new ColumnManager(this.state, this.root, this.contextMenu);
@@ -66,6 +66,7 @@
           if (actionType === 'cell-style-updated' || actionType === 'cells-merged' || actionType === 'cells-split') {
             if (this.selectionManager.selectedRange) {
               const { minR, maxR, minC, maxC } = this.selectionManager.selectedRange;
+              this.selectionManager.updateRangeSelection(minR, maxR, minC, maxC);
               requestAnimationFrame(() => {
                 this.selectionManager.updateRangeSelection(minR, maxR, minC, maxC);
               });

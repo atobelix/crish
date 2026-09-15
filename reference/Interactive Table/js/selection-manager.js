@@ -74,10 +74,10 @@ window.InteractiveTable.SelectionManager = class SelectionManager {
   }
 
   getRangeBox() {
-    if (!this.rangeBox) {
+    const contentArea = this.root.querySelector('.table-content-area');
+    if (!this.rangeBox || !this.root.contains(this.rangeBox)) {
       this.rangeBox = document.createElement('div');
       this.rangeBox.className = 'selection-range-box';
-      const contentArea = this.root.querySelector('.table-content-area');
       if (contentArea) contentArea.appendChild(this.rangeBox);
     }
     return this.rangeBox;
@@ -95,15 +95,9 @@ window.InteractiveTable.SelectionManager = class SelectionManager {
   onMouseDown(e) {
     if (e.button === 2) return; // 忽略鼠标右键
 
-    // 忽略手柄、添加条、分割线、加号徽标与弹窗点击
-    if (e.target.closest('.col-handle-btn, .row-handle-btn, .add-column-strip, .add-row-strip, .col-divider-badge, .row-divider-badge, .col-divider-line, .row-divider-line, .notion-popover')) {
+    // 忽略手柄、添加条与弹窗点击
+    if (e.target.closest('.col-handle-btn, .row-handle-btn, .add-column-strip, .add-row-strip, .notion-popover')) {
       return;
-    }
-
-    const dividerInserter = window.__interactiveTableApp?.dividerInserter;
-    if (dividerInserter) {
-      if (dividerInserter.activeColDivider && dividerInserter.activeColDivider.dist <= 4) return;
-      if (dividerInserter.activeRowDivider && dividerInserter.activeRowDivider.dist <= 4) return;
     }
 
     const cellInfo = this.getCellInfo(e.target);
@@ -146,12 +140,26 @@ window.InteractiveTable.SelectionManager = class SelectionManager {
       window.getSelection()?.removeAllRanges();
       this.mode = 'RANGE_SELECTED';
 
-      const minR = Math.min(this.dragOriginCell.row, currentCell.row);
-      const maxR = Math.max(this.dragOriginCell.row, currentCell.row);
-      const minC = Math.min(this.dragOriginCell.col, currentCell.col);
-      const maxC = Math.max(this.dragOriginCell.col, currentCell.col);
+      // 考虑拖拽起始单元格与目标单元格若属于合并块时的真实物理几何边界
+      const originMerge = this.state.getMergeAt ? this.state.getMergeAt(this.dragOriginCell.row, this.dragOriginCell.col) : null;
+      const targetMerge = this.state.getMergeAt ? this.state.getMergeAt(currentCell.row, currentCell.col) : null;
 
-      this.updateRangeSelection(minR, maxR, minC, maxC);
+      const originMinR = originMerge ? originMerge.minR : this.dragOriginCell.row;
+      const originMaxR = originMerge ? originMerge.maxR : this.dragOriginCell.row;
+      const originMinC = originMerge ? originMerge.minC : this.dragOriginCell.col;
+      const originMaxC = originMerge ? originMerge.maxC : this.dragOriginCell.col;
+
+      const targetMinR = targetMerge ? targetMerge.minR : currentCell.row;
+      const targetMaxR = targetMerge ? targetMerge.maxR : currentCell.row;
+      const targetMinC = targetMerge ? targetMerge.minC : currentCell.col;
+      const targetMaxC = targetMerge ? targetMerge.maxC : currentCell.col;
+
+      const rawMinR = Math.min(originMinR, targetMinR);
+      const rawMaxR = Math.max(originMaxR, targetMaxR);
+      const rawMinC = Math.min(originMinC, targetMinC);
+      const rawMaxC = Math.max(originMaxC, targetMaxC);
+
+      this.updateRangeSelection(rawMinR, rawMaxR, rawMinC, rawMaxC);
     }
   }
 
@@ -273,9 +281,36 @@ window.InteractiveTable.SelectionManager = class SelectionManager {
     this.updateRangeSelection(rowIndex, rowIndex, minC, maxC);
   }
 
+  expandRangeForMerges(range) {
+    if (!range || !this.state.getMerges) return { ...range };
+    const merges = this.state.getMerges();
+    if (!merges || merges.length === 0) return { ...range };
+
+    let { minR, maxR, minC, maxC } = range;
+    let expanded = true;
+
+    // 迭代级联外扩，直到当前矩形不再与任何合并单元格发生边缘截断相交
+    while (expanded) {
+      expanded = false;
+      for (const m of merges) {
+        // 判断当前选区与该合并块是否有交集
+        const overlapR = !(m.maxR < minR || m.minR > maxR);
+        const overlapC = !(m.maxC < minC || m.minC > maxC);
+
+        if (overlapR && overlapC) {
+          if (m.minR < minR) { minR = m.minR; expanded = true; }
+          if (m.maxR > maxR) { maxR = m.maxR; expanded = true; }
+          if (m.minC < minC) { minC = m.minC; expanded = true; }
+          if (m.maxC > maxC) { maxC = m.maxC; expanded = true; }
+        }
+      }
+    }
+
+    return { minR, maxR, minC, maxC };
+  }
+
   selectSingleCell(cellInfo) {
     this.clearSelection();
-    this.mode = 'CELL_SELECTED';
     
     let el = cellInfo.el;
     if (!el) {
@@ -287,17 +322,20 @@ window.InteractiveTable.SelectionManager = class SelectionManager {
     if (!el) return;
 
     this.activeCell = { row: cellInfo.row, col: cellInfo.col, el, isHeader: cellInfo.isHeader };
-    el.classList.add('cell-focused');
+    this.mode = 'CELL_SELECTED';
 
-    this.selectedRange = {
-      minR: cellInfo.row,
-      maxR: cellInfo.row,
-      minC: cellInfo.col,
-      maxC: cellInfo.col
-    };
+    // 统一样式口径：无论是单选还是多选，统一由 updateRangeSelection 绘制带 2px 纯蓝描边的连续外包围框
+    this.updateRangeSelection(cellInfo.row, cellInfo.row, cellInfo.col, cellInfo.col);
   }
 
   updateRangeSelection(minR, maxR, minC, maxC) {
+    // 关键核心：自适应级联外扩，自动吞并相交的合并单元格，保证选区永不出现缺角与漏选白块
+    const expanded = this.expandRangeForMerges({ minR, maxR, minC, maxC });
+    minR = expanded.minR;
+    maxR = expanded.maxR;
+    minC = expanded.minC;
+    maxC = expanded.maxC;
+
     this.selectedRange = { minR, maxR, minC, maxC };
 
     // 关键：清除单个单元格的 cell-focused 边框，确保多选时只显示统一的连续外包围框，杜绝出现双重框

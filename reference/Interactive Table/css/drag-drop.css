@@ -23,77 +23,98 @@ body.is-dragging-table * {
   cursor: grabbing !important;
 }
 
-/* ---------------- 拖拽浮动镜像 (WYSIWYG Floating Drag Proxy - 去掉阴影，显示顶部/左侧短线手柄) ---------------- */
+/* ---------------- 拖拽浮动镜像 (WYSIWYG Floating Drag Proxy - 四周完整闭合 2px 蓝描边) ---------------- */
 .drag-floating-proxy {
   position: fixed;
   pointer-events: none;
   z-index: 9999;
-  border: 2px solid var(--border-focus);
+  border: 2px solid var(--border-focus) !important;
   background-color: #ffffff;
-  box-shadow: none !important; /* 用户特别指明：阴影去掉，看着不好看 */
-  opacity: 0.95;
+  box-shadow: 0 4px 16px rgba(35, 131, 226, 0.12) !important;
+  opacity: 0.96;
   cursor: grabbing !important;
   box-sizing: border-box;
   overflow: visible;
+  border-radius: 2px;
 }
 
-/* 浮动层顶部居中短线手柄 (列拖拽 - 用户批注 media_1789394651714.png) */
-.drag-floating-proxy .proxy-handle-bar-top {
+/* 浮动层专属激活态蓝色胶囊手柄 (与虚拟 DOM 边框中线 100% 居中骑线对齐) */
+.proxy-capsule-handle.proxy-capsule-col {
   position: absolute;
-  top: -8px;
+  top: -7px;
   left: 50%;
   transform: translateX(-50%);
-  width: 24px;
-  height: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   pointer-events: none;
+  z-index: 10;
 }
 
-.drag-floating-proxy .proxy-handle-bar-top .proxy-handle-line {
-  width: 16px;
-  height: 3px;
-  background-color: var(--handle-color);
-  border-radius: 2px;
-}
-
-/* 浮动层左侧居中短线手柄 (行拖拽) */
-.drag-floating-proxy .proxy-handle-bar-left {
+.proxy-capsule-handle.proxy-capsule-row {
   position: absolute;
-  left: -8px;
+  left: -7px;
   top: 50%;
   transform: translateY(-50%);
-  width: 8px;
-  height: 24px;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.proxy-capsule-handle.proxy-capsule-col .handle-capsule {
+  width: 22px;
+  height: 13px;
+  background-color: #2383e2 !important;
+  border-radius: 999px;
   display: flex;
   align-items: center;
   justify-content: center;
-  pointer-events: none;
+  box-shadow: 0 1px 3px rgba(35, 131, 226, 0.4);
 }
 
-.drag-floating-proxy .proxy-handle-bar-left .proxy-handle-line {
-  width: 3px;
-  height: 16px;
-  background-color: var(--handle-color);
-  border-radius: 2px;
+.proxy-capsule-handle.proxy-capsule-row .handle-capsule {
+  width: 13px;
+  height: 22px;
+  background-color: #2383e2 !important;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 3px rgba(35, 131, 226, 0.4);
+}
+
+.proxy-capsule-handle .handle-dots {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  opacity: 1 !important;
+}
+
+.proxy-capsule-handle.proxy-capsule-row .handle-dots {
+  flex-direction: column;
+}
+
+.proxy-capsule-handle .handle-dots .dot {
+  width: 2.5px;
+  height: 2.5px;
+  border-radius: 50%;
+  background-color: #ffffff !important;
+  opacity: 1 !important;
 }
 
 .drag-floating-proxy table {
   border-collapse: collapse;
   table-layout: fixed;
-  background-color: #ffffff;
-  width: 100%;
+  background-color: transparent;
+  width: 100% !important;
+  height: 100% !important;
   font-family: inherit;
   font-size: 20px;
   line-height: 1.4;
   margin: 0;
   padding: 0;
+  border: none !important;
 }
 
 .drag-floating-proxy th,
 .drag-floating-proxy td {
-  border: 1px solid var(--border-color);
   padding: 10px 14px;
   box-sizing: border-box;
   vertical-align: middle;
@@ -102,6 +123,17 @@ body.is-dragging-table * {
   word-break: break-word;
   background-color: #ffffff;
   color: var(--text-primary);
+  border: none !important;
+}
+
+/* 内部仅保留行间/列间内部分隔线，绝不侵占或遮挡外层容器 2px 蓝色描边 */
+.drag-floating-proxy tr:not(:last-child) th,
+.drag-floating-proxy tr:not(:last-child) td {
+  border-bottom: 1px solid var(--border-color) !important;
+}
+
+.drag-floating-proxy td:not(:last-child) {
+  border-right: 1px solid var(--border-color) !important;
 }
 
 .drag-floating-proxy th {

@@ -253,11 +253,92 @@
    ========================================================================== */
 
 .cell-excel-popover {
-  width: 420px;
+  width: 288px;
   padding: 8px 10px;
 }
 
-/* 顶部微型格式工具栏 */
+/* 顶部微型格式工具栏 (拆分为上下两行) */
+.mini-format-toolbar.two-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 2px 0 6px 0;
+  overflow: visible;
+}
+
+.format-toolbar-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 3px;
+  width: 100%;
+}
+
+.toolbar-row-divider {
+  height: 1px;
+  background-color: rgba(0, 0, 0, 0.06);
+  margin: 1px 0;
+}
+
+/* 高级字号调节控件 (Scrubbable Number Input) */
+.font-size-scrubber {
+  display: inline-flex;
+  align-items: center;
+  height: 26px;
+  border-radius: 5px;
+  background-color: rgba(0, 0, 0, 0.04);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  padding: 0 4px;
+  gap: 1px;
+  user-select: none;
+  transition: all 0.15s ease;
+  box-sizing: border-box;
+}
+
+.font-size-scrubber:hover {
+  background-color: rgba(0, 0, 0, 0.07);
+  border-color: rgba(35, 131, 226, 0.4);
+}
+
+.font-size-scrubber:focus-within {
+  background-color: #ffffff;
+  border-color: #2383e2;
+  box-shadow: 0 0 0 2px rgba(35, 131, 226, 0.15);
+}
+
+.scrubber-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(0, 0, 0, 0.55);
+  cursor: ew-resize;
+  padding: 0 2px;
+  line-height: 1;
+  user-select: none;
+}
+
+.font-size-input {
+  width: 22px;
+  height: 20px;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(0, 0, 0, 0.85);
+  text-align: center;
+  padding: 0;
+  margin: 0;
+  font-family: inherit;
+}
+
+.scrubber-unit {
+  font-size: 10px;
+  color: rgba(0, 0, 0, 0.4);
+  user-select: none;
+  padding-right: 1px;
+  line-height: 1;
+}
+
 .mini-format-toolbar {
   display: flex;
   align-items: center;

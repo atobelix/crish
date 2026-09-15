@@ -28,7 +28,7 @@
   cursor: grab;
   pointer-events: none;
   opacity: 0;
-  transition: opacity 0.12s ease;
+  transition: top 0.22s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.15s ease;
   user-select: none;
   background: transparent;
   border: none;
@@ -36,6 +36,7 @@
   left: 0;
   transform: translate(-50%, -50%);
   z-index: 20;
+  will-change: top, opacity;
 }
 
 .col-handle-btn {
@@ -48,7 +49,7 @@
   cursor: grab;
   pointer-events: none;
   opacity: 0;
-  transition: opacity 0.12s ease;
+  transition: left 0.22s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.15s ease;
   user-select: none;
   background: transparent;
   border: none;
@@ -56,6 +57,14 @@
   top: 0;
   transform: translate(-50%, -50%);
   z-index: 20;
+  will-change: left, opacity;
+}
+
+.row-handle-btn.no-transition,
+.col-handle-btn.no-transition,
+.row-handle-btn.dragging,
+.col-handle-btn.dragging {
+  transition: none !important;
 }
 
 .row-handle-btn.visible,

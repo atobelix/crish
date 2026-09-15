@@ -25,10 +25,11 @@ window.InteractiveTable.TableRenderer = class TableRenderer {
     if (style.strike) decors.push('line-through');
     if (decors.length > 0) parts.push(`text-decoration: ${decors.join(' ')};`);
 
-    if (style.color) parts.push(`color: ${style.color};`);
-    if (style.bg) parts.push(`background-color: ${style.bg};`);
+    if (style.color) parts.push(`color: ${style.color} !important;`);
+    if (style.bg) parts.push(`background-color: ${style.bg} !important;`);
     if (style.align) parts.push(`text-align: ${style.align};`);
     if (style.vAlign) parts.push(`vertical-align: ${style.vAlign};`);
+    if (style.fontSize) parts.push(`font-size: ${style.fontSize}px !important;`);
 
     return parts.length > 0 ? `style="${parts.join(' ')}"` : '';
   }
@@ -167,133 +168,203 @@ window.InteractiveTable.TableRenderer = class TableRenderer {
       </div>
     `;
 
-    // 1. 渲染顶部列手柄 (单根横线 -，未触摸细横条，触摸变椭圆胶囊+3点，拖动变蓝底白点)
-    const headerCells = Array.from(table.querySelectorAll('thead th, tbody tr:first-child td'));
-    data.columns.forEach((_, colIdx) => {
-      const colBtn = document.createElement('button');
-      colBtn.className = 'col-handle-btn';
-      colBtn.dataset.col = colIdx;
-      colBtn.title = '点击选中列，按住拖动排序';
-      colBtn.innerHTML = buildColHandleHtml();
-      colContainer.appendChild(colBtn);
+    // 1. 创建单个高质感丝滑滑动的顶部列手柄 (Sliding Column Handle)
+    const colBtn = document.createElement('button');
+    colBtn.className = 'col-handle-btn col-slider-handle';
+    colBtn.dataset.col = '0';
+    colBtn.title = '点击选中列，按住拖动排序';
+    colBtn.innerHTML = buildColHandleHtml();
+    colBtn.style.top = `${topBorderCenterY}px`;
+    colContainer.appendChild(colBtn);
+    this.slidingColBtn = colBtn;
 
-      const targetCell = headerCells[colIdx];
-      if (targetCell) {
-        const thRect = targetCell.getBoundingClientRect();
-        const centerX = (thRect.left + thRect.right) / 2 - cRect.left;
-        colBtn.style.left = `${centerX}px`;
-        colBtn.style.top = `${topBorderCenterY}px`;
-      }
-    });
-
-    // 2. 渲染左侧行手柄 (单根竖线 |，未触摸细条，触摸变椭圆胶囊+3点，拖动变蓝底白点)
-    const allTrs = Array.from(table.querySelectorAll('tr'));
-    allTrs.forEach((tr, trIdx) => {
-      const isHeader = tr.classList.contains('header-row') || tr.parentElement.tagName.toLowerCase() === 'thead';
-      const rowIndex = isHeader ? -1 : parseInt(tr.dataset.row, 10);
-
-      const rowBtn = document.createElement('button');
-      rowBtn.className = 'row-handle-btn';
-      rowBtn.dataset.row = rowIndex;
-      rowBtn.dataset.isHeader = isHeader ? 'true' : 'false';
-      rowBtn.dataset.trIndex = trIdx;
-      rowBtn.title = '点击选中行，按住拖动排序';
-      rowBtn.innerHTML = buildRowHandleHtml();
-      rowGutter.appendChild(rowBtn);
-
-      const trRect = tr.getBoundingClientRect();
-      const centerY = (trRect.top + trRect.bottom) / 2 - cRect.top;
-      rowBtn.style.top = `${centerY}px`;
-      rowBtn.style.left = `${leftBorderCenterX}px`;
-    });
+    // 2. 创建单个高质感丝滑滑动的左侧行手柄 (Sliding Row Handle)
+    const rowBtn = document.createElement('button');
+    rowBtn.className = 'row-handle-btn row-slider-handle';
+    rowBtn.dataset.row = '0';
+    rowBtn.dataset.isHeader = data.hasHeaderRow ? 'true' : 'false';
+    rowBtn.title = '点击选中行，按住拖动排序';
+    rowBtn.innerHTML = buildRowHandleHtml();
+    rowBtn.style.left = `${leftBorderCenterX}px`;
+    rowGutter.appendChild(rowBtn);
+    this.slidingRowBtn = rowBtn;
   }
 
   bindHoverEvents() {
     document.addEventListener('mousemove', (e) => {
       const data = this.state.get();
       const table = this.root.querySelector('.notion-table');
-      if (!table) return;
+      const contentArea = this.root.querySelector('.table-content-area');
+      if (!table || !contentArea) return;
 
-      const colBtns = this.root.querySelectorAll('.col-handle-btn');
-      const rowBtns = this.root.querySelectorAll('.row-handle-btn');
+      const colBtn = this.slidingColBtn || this.root.querySelector('.col-handle-btn');
+      const rowBtn = this.slidingRowBtn || this.root.querySelector('.row-handle-btn');
+      if (!colBtn || !rowBtn) return;
+
       const addColBtn = this.root.querySelector('#add-column-btn');
       const addRowBtn = this.root.querySelector('#add-row-btn');
 
       const maxCol = data.columns.length - 1;
       const maxRow = data.rows.length - 1;
       const tableRect = table.getBoundingClientRect();
+      const cRect = contentArea.getBoundingClientRect();
       const mouseX = e.clientX;
       const mouseY = e.clientY;
 
       const targetEl = (e.target && e.target instanceof Element) ? e.target : document.body;
 
-      // 1. 单元格定位与双手柄联动显隐 (消除手柄与单元格之间的悬停盲区)
-      const cell = targetEl.closest('td, th');
-      const isInsideThisTable = cell && this.root.contains(cell);
+      // 如果上下文菜单打开且锚定在手柄上，或者手柄正在拖拽中，锁定当前手柄位置与状态
+      const isColLocked = colBtn.classList.contains('active') || colBtn.classList.contains('dragging');
+      const isRowLocked = rowBtn.classList.contains('active') || rowBtn.classList.contains('dragging');
 
-      // 左侧感应带判定：光标处于表格左侧边框及向外延伸 35px 范围内
+      // 悬停在手柄自身判定
+      const hoveredColBtn = !!targetEl.closest('.col-handle-btn');
+      const hoveredRowBtn = !!targetEl.closest('.row-handle-btn');
+
+      // 单元格与表格范围判定
+      const cell = targetEl.closest('td, th');
+      const isInsideTableRect = (
+        mouseX >= tableRect.left && mouseX <= tableRect.right &&
+        mouseY >= tableRect.top && mouseY <= tableRect.bottom
+      );
+      const isInsideThisTable = (cell && this.root.contains(cell)) || isInsideTableRect;
+
+      // 左侧感应带：光标处于表格左侧边框及向外延伸 35px 范围内
       const isInLeftGutterZone = mouseX >= tableRect.left - 35 && mouseX <= tableRect.left + 15 &&
                                  mouseY >= tableRect.top - 5 && mouseY <= tableRect.bottom + 5;
 
-      // 顶部感应带判定：光标处于表格顶部边框及向上延伸 25px 范围内
+      // 顶部感应带：光标处于表格顶部边框及向上延伸 25px 范围内
       const isInTopGutterZone = mouseY >= tableRect.top - 25 && mouseY <= tableRect.top + 15 &&
                                 mouseX >= tableRect.left - 5 && mouseX <= tableRect.right + 5;
 
-      let activeRowIdx = null;
-      let activeColIdx = null;
+      // 表格整体感应区（消除单元格之间与边框缝隙的盲区）
+      const isInTableHoverZone = (
+        mouseX >= tableRect.left - 35 && mouseX <= tableRect.right + 20 &&
+        mouseY >= tableRect.top - 25 && mouseY <= tableRect.bottom + 20
+      );
 
-      if (isInsideThisTable) {
-        const isHeader = cell.tagName.toLowerCase() === 'th';
-        activeRowIdx = isHeader ? -1 : parseInt(cell.dataset.row, 10);
-        activeColIdx = parseInt(cell.dataset.col, 10);
-      } else if (isInLeftGutterZone) {
-        // 在左侧手柄感应区内：计算光标纵向落在哪个 tr 范围内
-        const allTrs = Array.from(table.querySelectorAll('tr'));
-        allTrs.forEach(tr => {
-          const r = tr.getBoundingClientRect();
-          if (mouseY >= r.top && mouseY <= r.bottom) {
-            const isHeader = tr.classList.contains('header-row') || tr.parentElement.tagName.toLowerCase() === 'thead';
-            activeRowIdx = isHeader ? -1 : parseInt(tr.dataset.row, 10);
+      // 1. 列手柄位置计算与丝滑滑动 (Horizontal Glide)
+      if (!isColLocked) {
+        let activeColIdx = null;
+
+        if (hoveredColBtn) {
+          activeColIdx = parseInt(colBtn.dataset.col, 10);
+        } else if (isInsideThisTable || isInTopGutterZone || (isInLeftGutterZone && mouseY <= tableRect.top + 30)) {
+          // 根据光标物理横坐标匹配列（精确且天然兼容合并单元格）
+          const headerCells = Array.from(table.querySelectorAll('thead th, tbody tr:first-child td'));
+          for (let i = 0; i < headerCells.length; i++) {
+            const r = headerCells[i].getBoundingClientRect();
+            if (mouseX >= r.left && mouseX <= r.right) {
+              activeColIdx = i;
+              break;
+            }
           }
-        });
-      } else if (isInTopGutterZone) {
-        // 在顶部手柄感应区内：计算光标横向落在哪个 th 范围内
-        const allThs = Array.from(table.querySelectorAll('thead th, tbody tr:first-child td'));
-        allThs.forEach((th, cIdx) => {
-          const r = th.getBoundingClientRect();
-          if (mouseX >= r.left && mouseX <= r.right) {
-            activeColIdx = cIdx;
+          if (activeColIdx === null) {
+            if (mouseX < tableRect.left + 30) activeColIdx = 0;
+            else if (mouseX > tableRect.right - 30) activeColIdx = maxCol;
           }
-        });
+        }
+
+        if (activeColIdx !== null && activeColIdx >= 0 && activeColIdx <= maxCol && (isInTableHoverZone || hoveredColBtn)) {
+          const headerCells = Array.from(table.querySelectorAll('thead th, tbody tr:first-child td'));
+          const targetTh = headerCells[activeColIdx];
+          if (targetTh) {
+            const thRect = targetTh.getBoundingClientRect();
+            const targetX = (thRect.left + thRect.right) / 2 - cRect.left;
+            const topBorderCenterY = (tableRect.top + 0.5) - cRect.top;
+
+            const wasVisible = colBtn.classList.contains('visible');
+
+            if (!wasVisible) {
+              colBtn.classList.add('no-transition');
+              colBtn.style.left = `${targetX}px`;
+              colBtn.style.top = `${topBorderCenterY}px`;
+              colBtn.dataset.col = activeColIdx;
+              void colBtn.offsetWidth; // 触发回流
+              colBtn.classList.remove('no-transition');
+              colBtn.classList.add('visible');
+            } else {
+              colBtn.style.left = `${targetX}px`;
+              colBtn.style.top = `${topBorderCenterY}px`;
+              colBtn.dataset.col = activeColIdx;
+              colBtn.classList.add('visible');
+            }
+          }
+        } else if (!hoveredColBtn) {
+          colBtn.classList.remove('visible');
+        }
       }
 
-      // 如果悬停在手柄自身上，则保持激活
-      const hoveredColBtn = targetEl.closest('.col-handle-btn');
-      const hoveredRowBtn = targetEl.closest('.row-handle-btn');
+      // 2. 行手柄位置计算与丝滑滑动 (Vertical Glide)
+      if (!isRowLocked) {
+        let activeRowIdx = null;
+        let isHeaderRow = false;
 
-      colBtns.forEach(b => {
-        const colIdx = parseInt(b.dataset.col, 10);
-        if (colIdx === activeColIdx || b === hoveredColBtn || b.classList.contains('active')) {
-          b.classList.add('visible');
-        } else {
-          b.classList.remove('visible');
+        if (hoveredRowBtn) {
+          activeRowIdx = parseInt(rowBtn.dataset.row, 10);
+          isHeaderRow = rowBtn.dataset.isHeader === 'true';
+        } else if (isInsideThisTable || isInLeftGutterZone || (isInTopGutterZone && mouseX <= tableRect.left + 30)) {
+          // 根据光标物理纵坐标匹配行（精确且天然兼容合并单元格）
+          const allTrs = Array.from(table.querySelectorAll('tr'));
+          for (let i = 0; i < allTrs.length; i++) {
+            const tr = allTrs[i];
+            const r = tr.getBoundingClientRect();
+            if (mouseY >= r.top && mouseY <= r.bottom) {
+              const isH = tr.classList.contains('header-row') || tr.parentElement.tagName.toLowerCase() === 'thead';
+              activeRowIdx = isH ? -1 : parseInt(tr.dataset.row, 10);
+              isHeaderRow = isH;
+              break;
+            }
+          }
+          if (activeRowIdx === null) {
+            if (mouseY < tableRect.top + 30) {
+              activeRowIdx = data.hasHeaderRow ? -1 : 0;
+              isHeaderRow = data.hasHeaderRow;
+            } else if (mouseY > tableRect.bottom - 30) {
+              activeRowIdx = maxRow;
+              isHeaderRow = false;
+            }
+          }
         }
-      });
 
-      rowBtns.forEach(b => {
-        const rowIdx = parseInt(b.dataset.row, 10);
-        if (rowIdx === activeRowIdx || b === hoveredRowBtn || b.classList.contains('active')) {
-          b.classList.add('visible');
-        } else {
-          b.classList.remove('visible');
+        if (activeRowIdx !== null && (isInTableHoverZone || hoveredRowBtn)) {
+          let targetTr = null;
+          if (isHeaderRow || activeRowIdx === -1) {
+            targetTr = table.querySelector('thead tr, tr.header-row');
+          } else {
+            targetTr = table.querySelector(`tbody tr[data-row="${activeRowIdx}"]`);
+          }
+
+          if (targetTr) {
+            const trRect = targetTr.getBoundingClientRect();
+            const targetY = (trRect.top + trRect.bottom) / 2 - cRect.top;
+            const leftBorderCenterX = (tableRect.left + 0.5) - cRect.left;
+
+            const wasVisible = rowBtn.classList.contains('visible');
+
+            if (!wasVisible) {
+              rowBtn.classList.add('no-transition');
+              rowBtn.style.top = `${targetY}px`;
+              rowBtn.style.left = `${leftBorderCenterX}px`;
+              rowBtn.dataset.row = activeRowIdx;
+              rowBtn.dataset.isHeader = isHeaderRow ? 'true' : 'false';
+              void rowBtn.offsetWidth; // 触发回流
+              rowBtn.classList.remove('no-transition');
+              rowBtn.classList.add('visible');
+            } else {
+              rowBtn.style.top = `${targetY}px`;
+              rowBtn.style.left = `${leftBorderCenterX}px`;
+              rowBtn.dataset.row = activeRowIdx;
+              rowBtn.dataset.isHeader = isHeaderRow ? 'true' : 'false';
+              rowBtn.classList.add('visible');
+            }
+          }
+        } else if (!hoveredRowBtn) {
+          rowBtn.classList.remove('visible');
         }
-      });
+      }
 
-      // 2. 右侧加列条 (#add-column-btn) 显隐逻辑 (用户批注 media_1789395718900.png 鼠标停在右侧空白区域也可以显示)：
-      // 满足以下任一条件均平滑保持显示：
-      // - 鼠标直接 hover 在 #add-column-btn 上
-      // - 鼠标在最右列单元格内
-      // - 鼠标在表格右侧空白感应扩展区 (tableRect.right - 10 <= mouseX <= tableRect.right + 70，且纵向处于表格高度范围内)
+      // 3. 右侧加列条 (#add-column-btn) 显隐逻辑
       const isOverAddCol = !!targetEl.closest('#add-column-btn');
       const isOverLastColCell = isInsideThisTable && parseInt(cell.dataset.col, 10) === maxCol;
       const isInRightZone = mouseX >= tableRect.right - 10 && mouseX <= tableRect.right + 70 &&
@@ -305,11 +376,7 @@ window.InteractiveTable.TableRenderer = class TableRenderer {
         addColBtn?.classList.remove('visible');
       }
 
-      // 3. 底部加行条 (#add-row-btn) 显隐逻辑 (用户批注 media_1789395718900.png 鼠标停在底部空白区域也可以显示)：
-      // 满足以下任一条件均平滑保持显示：
-      // - 鼠标直接 hover 在 #add-row-btn 上
-      // - 鼠标在最底行单元格内
-      // - 鼠标在表格底部空白感应扩展区 (tableRect.bottom - 10 <= mouseY <= tableRect.bottom + 70，且横向处于表格宽度范围内)
+      // 4. 底部加行条 (#add-row-btn) 显隐逻辑
       const isOverAddRow = !!targetEl.closest('#add-row-btn');
       const isOverLastRowCell = isInsideThisTable && cell.tagName.toLowerCase() !== 'th' && parseInt(cell.dataset.row, 10) === maxRow;
       const isInBottomZone = mouseY >= tableRect.bottom - 10 && mouseY <= tableRect.bottom + 70 &&
@@ -323,10 +390,10 @@ window.InteractiveTable.TableRenderer = class TableRenderer {
     });
 
     document.addEventListener('mouseleave', () => {
-      const colBtns = this.root.querySelectorAll('.col-handle-btn');
-      const rowBtns = this.root.querySelectorAll('.row-handle-btn');
-      colBtns.forEach(b => { if (!b.classList.contains('active')) b.classList.remove('visible'); });
-      rowBtns.forEach(b => { if (!b.classList.contains('active')) b.classList.remove('visible'); });
+      const colBtn = this.slidingColBtn || this.root.querySelector('.col-handle-btn');
+      const rowBtn = this.slidingRowBtn || this.root.querySelector('.row-handle-btn');
+      if (colBtn && !colBtn.classList.contains('active')) colBtn.classList.remove('visible');
+      if (rowBtn && !rowBtn.classList.contains('active')) rowBtn.classList.remove('visible');
 
       this.root.querySelector('#add-column-btn')?.classList.remove('visible');
       this.root.querySelector('#add-row-btn')?.classList.remove('visible');

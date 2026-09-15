@@ -50,6 +50,9 @@ window.InteractiveTable.ColumnManager = class ColumnManager {
       document.body.style.cursor = 'col-resize';
       document.body.style.userSelect = 'none';
 
+      const colBtn = this.root.querySelector('.col-handle-btn');
+      if (colBtn) colBtn.classList.add('no-transition');
+
       document.addEventListener('mousemove', this.onMouseMove);
       document.addEventListener('mouseup', this.onMouseUp);
     });
@@ -78,6 +81,9 @@ window.InteractiveTable.ColumnManager = class ColumnManager {
     const resizers = this.root.querySelectorAll('.col-resizer.resizing');
     resizers.forEach(r => r.classList.remove('resizing'));
 
+    const colBtn = this.root.querySelector('.col-handle-btn');
+    if (colBtn) colBtn.classList.remove('no-transition');
+
     document.body.style.cursor = '';
     document.body.style.userSelect = '';
     document.removeEventListener('mousemove', this.onMouseMove);
@@ -90,13 +96,15 @@ window.InteractiveTable.ColumnManager = class ColumnManager {
     const table = this.root.querySelector('.notion-table');
     if (!table) return;
 
-    const headerCells = table.querySelectorAll('th, tr.header-row td');
-    headerCells.forEach((th, idx) => {
-      const colBtn = this.root.querySelector(`.col-handle-btn[data-col="${idx}"]`);
-      if (colBtn && th) {
-        const left = th.offsetLeft + th.offsetWidth / 2;
+    const colBtn = this.root.querySelector('.col-handle-btn');
+    if (colBtn) {
+      const activeCol = parseInt(colBtn.dataset.col, 10);
+      const headerCells = Array.from(table.querySelectorAll('th, tr.header-row td'));
+      const targetTh = headerCells[activeCol];
+      if (targetTh) {
+        const left = targetTh.offsetLeft + targetTh.offsetWidth / 2;
         colBtn.style.left = `${left}px`;
       }
-    });
+    }
   }
 };

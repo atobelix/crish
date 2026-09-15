@@ -357,22 +357,13 @@ window.InteractiveTable.ContextMenuManager = class ContextMenuManager {
   }
 
   applyColor(type, targetIndex, colorType, colorVal) {
+    const patchKey = colorType === 'text' ? 'color' : 'bg';
     if (type === 'column') {
-      const cells = document.querySelectorAll(`[data-col="${targetIndex}"]`);
-      cells.forEach(cell => {
-        if (colorType === 'text') cell.style.color = colorVal;
-        else cell.style.backgroundColor = colorVal;
-      });
+      const rowCount = this.state.get().rows.length;
+      this.state.applyCellStyle({ minR: -1, maxR: rowCount - 1, minC: targetIndex, maxC: targetIndex }, { [patchKey]: colorVal });
     } else {
-      const tr = targetIndex === -1
-        ? document.querySelector('thead tr, tr.header-row')
-        : document.querySelectorAll('tbody tr')[targetIndex];
-      if (tr) {
-        tr.querySelectorAll('td, th').forEach(cell => {
-          if (colorType === 'text') cell.style.color = colorVal;
-          else cell.style.backgroundColor = colorVal;
-        });
-      }
+      const colCount = this.state.get().columns.length;
+      this.state.applyCellStyle({ minR: targetIndex, maxR: targetIndex, minC: 0, maxC: colCount - 1 }, { [patchKey]: colorVal });
     }
   }
 
@@ -425,84 +416,100 @@ window.InteractiveTable.ContextMenuManager = class ContextMenuManager {
     });
 
     const sampleStyle = state.getCellStyle ? state.getCellStyle(row, col) : {};
+    const currentFontSize = sampleStyle.fontSize || 20;
 
     const menu = document.createElement('div');
     menu.className = 'notion-popover cell-excel-popover';
 
     menu.innerHTML = `
-      <!-- 1. 顶部快捷格式微型工具条 (Mini Formatting Bar) -->
-      <div class="mini-format-toolbar">
-        <div class="format-btn-group">
-          <button type="button" class="format-btn ${sampleStyle.bold ? 'active' : ''}" data-format="bold" title="加粗 (Bold)">
-            ${Icons ? Icons.get('TextBoldIcon', 15) : 'B'}
-          </button>
-          <button type="button" class="format-btn ${sampleStyle.italic ? 'active' : ''}" data-format="italic" title="斜体 (Italic)">
-            ${Icons ? Icons.get('TextItalicIcon', 15) : 'I'}
-          </button>
-          <button type="button" class="format-btn ${sampleStyle.underline ? 'active' : ''}" data-format="underline" title="下划线 (Underline)">
-            ${Icons ? Icons.get('TextUnderlineIcon', 15) : 'U'}
-          </button>
-          <button type="button" class="format-btn ${sampleStyle.strike ? 'active' : ''}" data-format="strike" title="删除线 (Strikethrough)">
-            ${Icons ? Icons.get('TextStrikethroughIcon', 15) : 'S'}
-          </button>
-        </div>
-
-        <div class="toolbar-divider"></div>
-
-        <div class="format-btn-group">
-          <button type="button" class="format-btn color-dropdown-btn" data-color-target="color" title="文字颜色">
-            ${Icons ? Icons.get('TextColorIcon', 15) : 'A'}
-            <span class="color-indicator-bar" style="background-color: ${sampleStyle.color || '#37352f'};"></span>
-          </button>
-          <button type="button" class="format-btn color-dropdown-btn" data-color-target="bg" title="背景填充色">
-            ${Icons ? Icons.get('PaintBucketIcon', 15) : 'Fill'}
-            <span class="color-indicator-bar" style="background-color: ${sampleStyle.bg || 'transparent'};"></span>
-          </button>
-        </div>
-
-        <div class="toolbar-divider"></div>
-
-        <div class="format-btn-group">
-          <button type="button" class="format-btn ${sampleStyle.align === 'left' || !sampleStyle.align ? 'active' : ''}" data-format="align" data-val="left" title="左对齐">
-            ${Icons ? Icons.get('TextAlignLeftIcon', 15) : 'L'}
-          </button>
-          <button type="button" class="format-btn ${sampleStyle.align === 'center' ? 'active' : ''}" data-format="align" data-val="center" title="居中对齐">
-            ${Icons ? Icons.get('TextAlignCenterIcon', 15) : 'C'}
-          </button>
-          <button type="button" class="format-btn ${sampleStyle.align === 'right' ? 'active' : ''}" data-format="align" data-val="right" title="右对齐">
-            ${Icons ? Icons.get('TextAlignRightIcon', 15) : 'R'}
-          </button>
-        </div>
-
-        <div class="toolbar-divider"></div>
-
-        <div class="format-btn-group">
-          <button type="button" class="format-btn ${sampleStyle.vAlign === 'top' ? 'active' : ''}" data-format="vAlign" data-val="top" title="顶端对齐">
-            ${Icons ? Icons.get('AlignTopIcon', 15) : 'T'}
-          </button>
-          <button type="button" class="format-btn ${sampleStyle.vAlign === 'middle' || !sampleStyle.vAlign ? 'active' : ''}" data-format="vAlign" data-val="middle" title="垂直居中">
-            ${Icons ? Icons.get('AlignVerticalCenterIcon', 15) : 'M'}
-          </button>
-          <button type="button" class="format-btn ${sampleStyle.vAlign === 'bottom' ? 'active' : ''}" data-format="vAlign" data-val="bottom" title="底端对齐">
-            ${Icons ? Icons.get('AlignBottomIcon', 15) : 'B'}
-          </button>
-        </div>
-
-        ${canMerge || hasMergeInside ? `
-          <div class="toolbar-divider"></div>
-          <div class="format-btn-group">
-            ${canMerge ? `
-              <button type="button" class="format-btn" data-action="merge" title="合并单元格">
-                ${Icons ? Icons.get('TableCellsMergeIcon', 15) : 'M'}
-              </button>
-            ` : ''}
-            ${hasMergeInside ? `
-              <button type="button" class="format-btn" data-action="split" title="取消合并单元格">
-                ${Icons ? Icons.get('TableCellsSplitIcon', 15) : 'S'}
-              </button>
-            ` : ''}
+      <!-- 1. 顶部快捷格式微型工具条 (Mini Formatting Bar - 拆分为上下两行) -->
+      <div class="mini-format-toolbar two-rows">
+        <!-- 第一行: 字号调节器 + 文本样式 + 调色盘 -->
+        <div class="format-toolbar-row">
+          <!-- 字号高级交互控件: 支持键盘直接输入、滚轮微调、左右拖拽连续调节 (Scrubbable Number Input) -->
+          <div class="font-size-scrubber" title="按住左右拖拽调节字号，或在框内滚动滚轮">
+            <span class="scrubber-label" title="按住左右拖拽调节字号">Tt</span>
+            <input type="text" class="font-size-input" value="${currentFontSize}" maxlength="2" title="输入字号 (9-72px)" />
+            <span class="scrubber-unit">px</span>
           </div>
-        ` : ''}
+
+          <div class="toolbar-divider"></div>
+
+          <div class="format-btn-group">
+            <button type="button" class="format-btn ${sampleStyle.bold ? 'active' : ''}" data-format="bold" title="加粗 (Bold)">
+              ${Icons ? Icons.get('TextBoldIcon', 15) : 'B'}
+            </button>
+            <button type="button" class="format-btn ${sampleStyle.italic ? 'active' : ''}" data-format="italic" title="斜体 (Italic)">
+              ${Icons ? Icons.get('TextItalicIcon', 15) : 'I'}
+            </button>
+            <button type="button" class="format-btn ${sampleStyle.underline ? 'active' : ''}" data-format="underline" title="下划线 (Underline)">
+              ${Icons ? Icons.get('TextUnderlineIcon', 15) : 'U'}
+            </button>
+            <button type="button" class="format-btn ${sampleStyle.strike ? 'active' : ''}" data-format="strike" title="删除线 (Strikethrough)">
+              ${Icons ? Icons.get('TextStrikethroughIcon', 15) : 'S'}
+            </button>
+          </div>
+
+          <div class="toolbar-divider"></div>
+
+          <div class="format-btn-group">
+            <button type="button" class="format-btn color-dropdown-btn" data-color-target="color" title="文字颜色">
+              ${Icons ? Icons.get('TextColorIcon', 15) : 'A'}
+              <span class="color-indicator-bar" style="background-color: ${sampleStyle.color || '#37352f'};"></span>
+            </button>
+            <button type="button" class="format-btn color-dropdown-btn" data-color-target="bg" title="背景填充色">
+              ${Icons ? Icons.get('PaintBucketIcon', 15) : 'Fill'}
+              <span class="color-indicator-bar" style="background-color: ${sampleStyle.bg || 'transparent'};"></span>
+            </button>
+          </div>
+        </div>
+
+        <div class="toolbar-row-divider"></div>
+
+        <!-- 第二行: 水平对齐组 + 垂直对齐组 + 合并拆分 -->
+        <div class="format-toolbar-row">
+          <div class="format-btn-group" title="水平对齐">
+            <button type="button" class="format-btn ${sampleStyle.align === 'left' || !sampleStyle.align ? 'active' : ''}" data-format="align" data-val="left" title="靠左对齐">
+              ${Icons ? Icons.get('TextAlignLeftIcon', 15) : 'L'}
+            </button>
+            <button type="button" class="format-btn ${sampleStyle.align === 'center' ? 'active' : ''}" data-format="align" data-val="center" title="水平居中">
+              ${Icons ? Icons.get('TextAlignCenterIcon', 15) : 'C'}
+            </button>
+            <button type="button" class="format-btn ${sampleStyle.align === 'right' ? 'active' : ''}" data-format="align" data-val="right" title="靠右对齐">
+              ${Icons ? Icons.get('TextAlignRightIcon', 15) : 'R'}
+            </button>
+          </div>
+
+          <div class="toolbar-divider"></div>
+
+          <div class="format-btn-group" title="垂直对齐">
+            <button type="button" class="format-btn ${sampleStyle.vAlign === 'top' ? 'active' : ''}" data-format="vAlign" data-val="top" title="顶端对齐">
+              ${Icons ? Icons.get('AlignTopIcon', 15) : 'T'}
+            </button>
+            <button type="button" class="format-btn ${sampleStyle.vAlign === 'middle' || !sampleStyle.vAlign ? 'active' : ''}" data-format="vAlign" data-val="middle" title="垂直居中">
+              ${Icons ? Icons.get('AlignVerticalCenterIcon', 15) : 'M'}
+            </button>
+            <button type="button" class="format-btn ${sampleStyle.vAlign === 'bottom' ? 'active' : ''}" data-format="vAlign" data-val="bottom" title="底端对齐">
+              ${Icons ? Icons.get('AlignBottomIcon', 15) : 'B'}
+            </button>
+          </div>
+
+          ${canMerge || hasMergeInside ? `
+            <div class="toolbar-divider"></div>
+            <div class="format-btn-group">
+              ${canMerge ? `
+                <button type="button" class="format-btn" data-action="merge" title="合并单元格">
+                  ${Icons ? Icons.get('TableCellsMergeIcon', 15) : 'M'}
+                </button>
+              ` : ''}
+              ${hasMergeInside ? `
+                <button type="button" class="format-btn" data-action="split" title="取消合并单元格">
+                  ${Icons ? Icons.get('TableCellsSplitIcon', 15) : 'S'}
+                </button>
+              ` : ''}
+            </div>
+          ` : ''}
+        </div>
       </div>
 
       <div class="menu-tier-divider"></div>
@@ -527,21 +534,13 @@ window.InteractiveTable.ContextMenuManager = class ContextMenuManager {
 
         <div class="menu-divider"></div>
 
-        <div class="menu-item" data-action="insert-row-above">
-          <span class="menu-item-icon">${Icons ? Icons.get('ArrowUp02Icon', 16) : '↑'}</span>
-          <span class="menu-item-text">在上方插入行</span>
-        </div>
         <div class="menu-item" data-action="insert-row-below">
-          <span class="menu-item-icon">${Icons ? Icons.get('ArrowDown02Icon', 16) : '↓'}</span>
-          <span class="menu-item-text">在下方插入行</span>
-        </div>
-        <div class="menu-item" data-action="insert-col-left">
-          <span class="menu-item-icon">${Icons ? Icons.get('ArrowLeft02Icon', 16) : '←'}</span>
-          <span class="menu-item-text">在左侧插入列</span>
+          <span class="menu-item-icon">${Icons ? Icons.get('InsertRowIcon', 16) : '↓'}</span>
+          <span class="menu-item-text">插入行</span>
         </div>
         <div class="menu-item" data-action="insert-col-right">
-          <span class="menu-item-icon">${Icons ? Icons.get('ArrowRight02Icon', 16) : '→'}</span>
-          <span class="menu-item-text">在右侧插入列</span>
+          <span class="menu-item-icon">${Icons ? Icons.get('InsertColumnIcon', 16) : '→'}</span>
+          <span class="menu-item-text">插入列</span>
         </div>
 
         ${canMerge || hasMergeInside ? `
@@ -612,6 +611,83 @@ window.InteractiveTable.ContextMenuManager = class ContextMenuManager {
   }
 
   bindCellMenuInteractions(menu, targetRange, cellInfo) {
+    // 0. 字号调节器三模合一交互逻辑 (键盘直接敲击 / 滚轮微调 / 鼠标按住左右拖拽调节)
+    const scrubberEl = menu.querySelector('.font-size-scrubber');
+    const inputEl = scrubberEl?.querySelector('.font-size-input');
+    if (scrubberEl && inputEl) {
+      let currentVal = parseInt(inputEl.value || '20', 10);
+      const clampSize = (v) => Math.max(9, Math.min(72, Math.round(v)));
+
+      const applyNewSize = (newVal) => {
+        newVal = clampSize(newVal);
+        inputEl.value = newVal;
+        currentVal = newVal;
+        this.state.applyCellStyle(targetRange, { fontSize: newVal });
+      };
+
+      // (1) 键盘直接敲击输入
+      inputEl.addEventListener('click', (e) => {
+        e.stopPropagation();
+        inputEl.select();
+      });
+      inputEl.addEventListener('keydown', (e) => {
+        e.stopPropagation();
+        if (e.key === 'Enter') {
+          inputEl.blur();
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          applyNewSize(currentVal + 1);
+        } else if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          applyNewSize(currentVal - 1);
+        }
+      });
+      inputEl.addEventListener('blur', () => {
+        const parsed = parseInt(inputEl.value, 10);
+        applyNewSize(isNaN(parsed) ? 20 : parsed);
+      });
+      inputEl.addEventListener('change', () => {
+        const parsed = parseInt(inputEl.value, 10);
+        applyNewSize(isNaN(parsed) ? 20 : parsed);
+      });
+
+      // (2) 鼠标在输入框区域内滚轮微调 (向上一格 +1px, 向下一格 -1px)
+      scrubberEl.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const delta = e.deltaY < 0 ? 1 : -1;
+        applyNewSize(currentVal + delta);
+      }, { passive: false });
+
+      // (3) 鼠标在标签或控件上按住左右拖拽调节 (Scrubbable Drag)
+      scrubberEl.addEventListener('mousedown', (e) => {
+        if (e.target === inputEl) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const startX = e.clientX;
+        const initialVal = currentVal;
+        document.body.style.cursor = 'ew-resize';
+
+        const onScrubMove = (moveEv) => {
+          const deltaX = moveEv.clientX - startX;
+          const step = Math.round(deltaX / 3);
+          const nextVal = clampSize(initialVal + step);
+          if (nextVal !== currentVal) {
+            applyNewSize(nextVal);
+          }
+        };
+
+        const onScrubEnd = () => {
+          document.body.style.cursor = '';
+          window.removeEventListener('mousemove', onScrubMove);
+          window.removeEventListener('mouseup', onScrubEnd);
+        };
+
+        window.addEventListener('mousemove', onScrubMove);
+        window.addEventListener('mouseup', onScrubEnd);
+      });
+    }
+
     // 1. 顶部工具栏交互
     menu.querySelector('.mini-format-toolbar')?.addEventListener('click', (e) => {
       const btn = e.target.closest('.format-btn');
@@ -806,6 +882,10 @@ window.InteractiveTable.ContextMenuManager = class ContextMenuManager {
       e.stopPropagation();
       const val = item.dataset.val;
       this.state.applyCellStyle(targetRange, { [colorTarget]: val });
+      if (anchorBtn) {
+        const bar = anchorBtn.querySelector('.color-indicator-bar');
+        if (bar) bar.style.backgroundColor = val || (colorTarget === 'color' ? '#37352f' : 'transparent');
+      }
       this.close();
     });
   }

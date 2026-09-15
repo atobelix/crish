@@ -72,7 +72,6 @@
 
 .notion-table td.cell-focused,
 .notion-table th.cell-focused {
-  box-shadow: inset 0 0 0 2px var(--border-focus);
   z-index: 2;
 }
 
