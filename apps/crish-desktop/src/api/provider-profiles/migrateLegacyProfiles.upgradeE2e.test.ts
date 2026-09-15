@@ -26,6 +26,24 @@ import {
   resetLegacyMigrationForTests,
 } from './migrateLegacyProfiles';
 
+/**
+ * 同 migrateLegacyProfiles.test.ts：本文件测迁移 e2e，与「apply 内部走哪条路」
+ * 正交，故把 `configProfileApply` 转发回旧命令字面量以复用既有
+ * `mockTauriCommand` 断言；树路径由 rustProfileStore.applyTree.test.ts 覆盖。
+ */
+vi.mock('./rustProfileStore', async () => {
+  const actual =
+    await vi.importActual<typeof import('./rustProfileStore')>('./rustProfileStore');
+  const { invokeTyped } = await vi.importActual<
+    typeof import('../tauriInvoke')
+  >('../tauriInvoke');
+  return {
+    ...actual,
+    configProfileApply: (args: Record<string, unknown>) =>
+      invokeTyped('config_profile_apply', args),
+  };
+});
+
 const uiEventsMock = vi.hoisted(() => ({ emitUiEvent: vi.fn() }));
 vi.mock('../uiEvents', () => ({ emitUiEvent: uiEventsMock.emitUiEvent }));
 

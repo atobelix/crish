@@ -21,6 +21,25 @@ import {
   scanLocalStorageForPlaintextKeys,
 } from './migrateLegacyProfiles';
 
+/**
+ * 迁移测试与「apply 内部走哪条路」**正交**：期 1 起 `configProfileApply` 内部改走
+ * 统一树，但本文件只关心「迁移是否调用 apply 且入参正确」。这里把该导出转发回
+ * `invokeTyped('config_profile_apply')`，使既有 `mockTauriCommand` 断言继续有效；
+ * 树路径本身由 `rustProfileStore.applyTree.test.ts` 覆盖。
+ */
+vi.mock('./rustProfileStore', async () => {
+  const actual =
+    await vi.importActual<typeof import('./rustProfileStore')>('./rustProfileStore');
+  const { invokeTyped } = await vi.importActual<
+    typeof import('../tauriInvoke')
+  >('../tauriInvoke');
+  return {
+    ...actual,
+    configProfileApply: (args: Record<string, unknown>) =>
+      invokeTyped('config_profile_apply', args),
+  };
+});
+
 type ApplyArgs = { profileId: string; apiKey?: string; baseUrl?: string; model?: string };
 
 /** mock invoke 的返回值即命令 data（invokeTyped 负责外层 { status, data } 包装） */

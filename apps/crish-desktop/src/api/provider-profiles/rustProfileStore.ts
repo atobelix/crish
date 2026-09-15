@@ -12,6 +12,12 @@
  */
 
 import { invokeTyped, type InvokeTypedResult } from '../tauriInvoke';
+import { readModelsYamlIpc, writeModelsYamlIpc } from '../modelsCatalogIpc';
+import type {
+  ModelSpec,
+  ModelsYamlTree,
+  ProviderSpec,
+} from '../modelsCatalogTypes';
 
 export type ConfigSecretStatus = {
   ok: boolean;
@@ -92,6 +98,50 @@ export function configSecretReveal(
 }
 
 /**
+ * 期 1 特性开关：**已移除**。
+ *
+ * 原设计「开关置 0 → 回旧命令路径」不成立：旧命令 `config_profile_apply` 已退役
+ * （`main.rs` 无注册、`command_manifest.rs` 无条目），回滚到它等于回滚到不可用
+ * 路径；而把它改成「显式失败」后开关也没有功能价值。回滚手段 = `git revert`。
+ * 移除的另一个原因：模块级可变开关在共享 jsdom 测试环境下会跨文件互扰。
+ */
+
+/**
+ * 把「活动 profile + model」写进统一树（**纯函数**，可单测）。
+ *
+ * 语义对齐旧 `config_profile_apply`：把某 profile 置为活动模型。
+ * provider / model 不存在则各构造最小项（`ModelSpec.enabled` 必填）；
+ * `activeModel` 仅在拿到非空 model 时改写（不臆造选择）。
+ */
+export function applySelectionToTree(
+  tree: ModelsYamlTree,
+  args: { profileId: string; baseUrl?: string; model?: string }
+): ModelsYamlTree {
+  const modelId = (args.model ?? '').trim();
+  const existing = tree.providers[args.profileId];
+  const models: ModelSpec[] = existing ? [...existing.models] : [];
+  if (modelId && !models.some((m) => m.id === modelId)) {
+    models.push({ id: modelId, displayName: modelId, enabled: true });
+  }
+  const provider: ProviderSpec = {
+    ...(existing ?? {}),
+    displayName: existing?.displayName ?? args.profileId,
+    protocol: existing?.protocol ?? 'openai/chat',
+    stream: existing?.stream ?? true,
+    enabled: existing?.enabled ?? true,
+    ...(args.baseUrl ? { baseUrl: args.baseUrl } : {}),
+    models,
+  };
+  return {
+    version: 2,
+    activeModel: modelId
+      ? { providerId: args.profileId, modelId }
+      : (tree.activeModel ?? null),
+    providers: { ...tree.providers, [args.profileId]: provider },
+  };
+}
+
+/**
  * config_profile_apply：把 profile 配置应用到引擎（T07.4-A.3，终态名冻结 F5）——
  * apiKey 落 DPAPI 凭据槽，baseUrl/model 落引擎配置，返回脱敏状态（仅 last4）。
  */
@@ -99,12 +149,83 @@ export function configProfileApply(
   args: ConfigProfileApplyArgs
 ): Promise<InvokeTypedResult<ConfigProfileApplyResult>> {
   const { profileId, ...rest } = args;
-  return invokeTyped<ConfigProfileApplyResult>('config_profile_apply', {
-    profileId,
-    ...(rest.apiKey !== undefined ? { apiKey: rest.apiKey } : {}),
-    ...(rest.baseUrl !== undefined ? { baseUrl: rest.baseUrl } : {}),
-    ...(rest.model !== undefined ? { model: rest.model } : {}),
-  });
+  return applyViaUnifiedTree(profileId, rest);
+}
+
+/** 空树（首次写入用；对应后端 `content_revision(None)` = `"missing"`）。 */
+const EMPTY_TREE: ModelsYamlTree = { version: 2, activeModel: null, providers: {} };
+
+const APPLY_TREE_MAX_ATTEMPTS = 3;
+
+/**
+ * 统一树路径（迁移方案 03 §四期 1）。
+ *
+ * 旧命令 `config_profile_apply` 已退役（`main.rs` 无注册、`command_manifest.rs`
+ * 无条目），调用恒得 `missing` ⇒ 配置迁移 / 切换活动模型 / 密钥激活同步全部失败
+ * （实证 2026-09-15）。凭据仍走 `config_secret_set`（DPAPI，明文不出 webview）；
+ * 树写入走 `workbench_apply_models_config` 的 CAS，冲突用后端回传的
+ * `currentRevision` 重试。fail-closed：任一环失败显式返回。
+ */
+async function applyViaUnifiedTree(
+  profileId: string,
+  rest: { apiKey?: string; baseUrl?: string; model?: string }
+): Promise<InvokeTypedResult<ConfigProfileApplyResult>> {
+  if (rest.apiKey !== undefined) {
+    const secret = await configSecretSet(profileId, rest.apiKey);
+    if (secret.status === 'missing') return { status: 'missing' };
+    if (secret.status === 'error') {
+      return {
+        status: 'error',
+        kind: secret.kind,
+        message: secret.message,
+        ...(secret.currentRevision
+          ? { currentRevision: secret.currentRevision }
+          : {}),
+      };
+    }
+  }
+
+  let expectedRevision: string | undefined;
+  for (let attempt = 0; attempt < APPLY_TREE_MAX_ATTEMPTS; attempt += 1) {
+    const read = await readModelsYamlIpc();
+    if (!read.ok) {
+      if (read.kind === 'MISSING') return { status: 'missing' };
+      return { status: 'error', kind: read.kind, message: read.error };
+    }
+    const tree = applySelectionToTree(read.data.tree ?? EMPTY_TREE, {
+      profileId,
+      ...(rest.baseUrl !== undefined ? { baseUrl: rest.baseUrl } : {}),
+      ...(rest.model !== undefined ? { model: rest.model } : {}),
+    });
+    const write = await writeModelsYamlIpc(
+      tree,
+      expectedRevision ?? read.data.revision
+    );
+    if (write.ok) {
+      const state = write.data.credentialStates?.[profileId];
+      return {
+        status: 'ok',
+        data: {
+          ok: true,
+          profileId,
+          hasApiKey: state?.hasKey === true,
+          apiKeyLast4: state?.apiKeyLast4 ?? null,
+          ...(rest.model !== undefined ? { model: rest.model } : {}),
+          ...(rest.baseUrl !== undefined ? { baseUrl: rest.baseUrl } : {}),
+        },
+      };
+    }
+    if (write.kind === 'MISSING') return { status: 'missing' };
+    if (write.kind !== 'REVISION_CONFLICT' || !write.currentRevision) {
+      return { status: 'error', kind: write.kind, message: write.error };
+    }
+    expectedRevision = write.currentRevision;
+  }
+  return {
+    status: 'error',
+    kind: 'REVISION_CONFLICT',
+    message: 'REVISION_CONFLICT：重试次数耗尽',
+  };
 }
 
 export type ProbePingResult = {

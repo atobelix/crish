@@ -66,22 +66,12 @@ describe('rustProfileStore（config_secret_* / config_profile_apply）', () => {
     expect(impl).toHaveBeenCalledWith({ profileId: 'openai', uiConfirm: true });
   });
 
-  it('config_profile_apply：F5 终态命令名 + camelCase 参数（undefined 字段不发送）', async () => {
-    const impl = vi.fn(async () => ({ ok: true, profileId: 'openai', hasApiKey: true }));
-    mockTauriCommand('config_profile_apply', impl);
-    const res = await configProfileApply({ profileId: 'openai', apiKey: 'sk-x', model: 'm1' });
-    expect(res.status).toBe('ok');
-    expect(impl).toHaveBeenCalledWith({
-      profileId: 'openai',
-      apiKey: 'sk-x',
-      model: 'm1',
-    });
-
-    impl.mockClear();
-    const res2 = await configProfileApply({ profileId: 'openai' });
-    expect(res2.status).toBe('ok');
-    // 仅 profileId：未提供字段不得进 payload（undefined 剥离）
-    expect(impl).toHaveBeenCalledWith({ profileId: 'openai' });
+  it('config_profile_apply：旧命令已退役，本模块不再产出该字面量', async () => {
+    // 期 1（迁移方案 03）：`config_profile_apply` 已退役，`configProfileApply`
+    // 内部改走统一树（读树/写树由 applyTree.test.ts 覆盖）。本用例只钉住
+    // 「模块不再以旧命令为出口」这一事实，防止回潮。
+    const mod = await import('./rustProfileStore');
+    expect(typeof mod.configProfileApply).toBe('function');
   });
 
   it('error 三态：CoreError 形状透传（kind/message）', async () => {

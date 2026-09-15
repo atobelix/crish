@@ -137,7 +137,10 @@ function extractFrontendInvokeNames(): {
   const names = new Set<string>();
   let dynamicTemplates = 0;
   const callRe =
-    /\b(invoke|invokeTyped|invokeResult|tryInvokeTauri|(?:getTransport\(\)|transport)\.(?:request|send|call))\b(?!\s*,)/g;
+    // `callSnapshot` = modelsCatalogIpc 的命令调用薄封装（`callSnapshot('cmd', args, ...)`）。
+    // 漏掉它会把「经该封装调用」的命令误判为幽灵命令（实证 2026-09-15：
+    // workbench_read_models_yaml / workbench_apply_models_config 已被消费却仍报幽灵）。
+    /\b(invoke|invokeTyped|invokeResult|tryInvokeTauri|callSnapshot|(?:getTransport\(\)|transport)\.(?:request|send|call))\b(?!\s*,)/g;
   const cmdRe = /'([a-z][a-z0-9_-]*)'/g;
   // 命令形态前缀：抽取到的字面量必须是命令名形态（tauriInvoke.ts 内部
   // `invoke(cmd, args)` 变量参数调用、`status: 'ok'` 等通用字符串不是命令）
@@ -239,9 +242,19 @@ describe('T-F 06 T5.1 命令契约漂移总门禁', () => {
   });
 
   it('断言一（零断链）：前端 invoke 字面量全部 ∈ Rust 注册键集', () => {
+    // 引擎侧 REST API（经 `transport.request` 调用）**不是 Tauri 命令**：它们由
+    // 引擎自身的契约面守护，不适用本门禁的 Rust 注册键集。实证 2026-09-15：
+    // `config_get` / `config_update` 是 engineConfigIO 的引擎配置读写面
+    // （`transport.request('config_get')` / `'config_update'`），此前被误报为断链。
+    const ENGINE_API_EXEMPTIONS: ReadonlySet<string> = new Set([
+      'config_get',
+      'config_update',
+    ]);
     const { names } = extractFrontendInvokeNames();
     const registered = new Set([...registry, ...manifestRegistered]);
-    const broken = names.filter((n) => !registered.has(n));
+    const broken = names.filter(
+      (n) => !registered.has(n) && !ENGINE_API_EXEMPTIONS.has(n)
+    );
     expect(
       broken,
       `前端调用名不在 Rust 注册面（断链）：${broken.join(', ')}` +
