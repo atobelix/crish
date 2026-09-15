@@ -253,7 +253,10 @@ function fillProviderHoles(yaml: ProviderSpec, ls: ProviderSpec): ProviderSpec {
 
 function modelFromLs(pid: string, modelId: string, ls: LsBundle): ModelSpec {
   const meta = ls.meta.get(`${pid}::${modelId.toLowerCase()}`);
-  const price = ls.prices.get(modelId.toLowerCase());
+  // 价格**不**取自扁平价表 `crish_model_prices_v1`：该表键 = 裸 modelId、无 provider
+  // 维度，按它给「所有持有该 id 的供应商」各写一份价即等于猜身份（裁决 ③ 禁止）。
+  // 该表的迁移由 `modelPricingSource.migrateLegacyLsPrices()` 独占负责
+  // （唯一持有者规则 + 失败保留原值 + 备份键），此处只取 provider 作用域内的 LS meta 价。
   const spec: ModelSpec = { id: modelId, enabled: meta?.enabled !== false };
 
   const displayName = typeof meta?.displayName === 'string' ? meta.displayName.trim() : '';
@@ -268,7 +271,7 @@ function modelFromLs(pid: string, modelId: string, ls: LsBundle): ModelSpec {
   if (thinking) spec.thinking = thinking;
   const modalities = modalitiesFromMeta(meta);
   if (modalities) spec.modalities = modalities;
-  const pricing = pricingFrom(meta, price);
+  const pricing = pricingFrom(meta);
   if (pricing) spec.pricing = pricing;
   return spec;
 }
@@ -339,22 +342,22 @@ function modalitiesFromMeta(
   return { input, output: ['text'] };
 }
 
+/** LS meta 价 → 树 `PricingConfig`（**provider 作用域内**，键 `pid::modelId`）。 */
 function pricingFrom(
-  meta: Record<string, unknown> | undefined,
-  price: Record<string, unknown> | undefined
+  meta: Record<string, unknown> | undefined
 ): PricingConfig | undefined {
   const mp =
     meta && isPlainObject(meta.pricing) ? (meta.pricing as Record<string, unknown>) : undefined;
-  const input = pickNum(mp?.input, mp?.inputPerMTok, price?.inputPerMTok, price?.input);
-  const output = pickNum(mp?.output, mp?.outputPerMTok, price?.outputPerMTok, price?.output);
-  const cacheRead = pickNum(mp?.cacheRead, mp?.cacheReadPerMTok, price?.cacheReadPerMTok, price?.cacheRead);
-  const cacheWrite = pickNum(mp?.cacheWrite, mp?.cacheWritePerMTok, price?.cacheWritePerMTok, price?.cacheWrite);
-  const perImage = pickNum(mp?.perImage, mp?.perImageCost, price?.perImageCost, price?.perImage);
+  const input = pickNum(mp?.input, mp?.inputPerMTok);
+  const output = pickNum(mp?.output, mp?.outputPerMTok);
+  const cacheRead = pickNum(mp?.cacheRead, mp?.cacheReadPerMTok);
+  const cacheWrite = pickNum(mp?.cacheWrite, mp?.cacheWritePerMTok);
+  const perImage = pickNum(mp?.perImage, mp?.perImageCost);
   if (input == null && output == null && cacheRead == null && cacheWrite == null && perImage == null) {
     return undefined;
   }
   const currency: PricingConfig['currency'] =
-    mp?.currency === 'USD' || mp?.currency === 'CNY' ? mp.currency : price?.currency === 'CNY' ? 'CNY' : 'USD';
+    mp?.currency === 'USD' || mp?.currency === 'CNY' ? mp.currency : 'USD';
   const out: PricingConfig = { currency };
   if (input != null) out.input = input;
   if (output != null) out.output = output;

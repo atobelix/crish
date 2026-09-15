@@ -31,6 +31,22 @@ export async function bootstrapFull(): Promise<void> {
       await ensureModelsCatalogLoaded().catch(() => {
         /* 失败：store 空树 + lastError + catalog-changed；Picker 空列表，不得回落 LS 种子。 */
       });
+
+      // 3b. 退役价表 `crish_model_prices_v1` 一次性迁移（价格轨收敛，见
+      //     docs/provider-single-track-convergence/05-…§4 期 2）。
+      //     必须在树加载**之后**：迁移需要按二元组身份解析「唯一持有者」；
+      //     树未加载时该函数自身返回 skipped 且不动 LS（幂等，可重复调用）。
+      //     放在启动期而非仅价格页挂载——否则用户不开该页面时旧价永不迁移，
+      //     价格页会把用户的既有单价呈现成「字典预估」（等同丢价）。
+      try {
+        const { migrateLegacyLsPrices } = await import(
+          './api/modelPricingSource'
+        );
+        await migrateLegacyLsPrices();
+      } catch (e) {
+        // 迁移失败不阻塞启动：原 LS 键保持不动，由价格页挂载时重试并显式提示
+        console.warn('[pricing] 旧价表迁移失败（原值已保留）：', e);
+      }
     })(),
 
     // 4. OAuth token 调度器（自 bootstrap-core 闲时迁移；Stage 3 首屏不拉起）

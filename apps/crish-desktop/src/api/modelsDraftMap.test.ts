@@ -173,6 +173,58 @@ describe('删除、关闭和缺省分别表达', () => {
   });
 });
 
+/**
+ * 用户裁决「模型字典只做参考，实际以用户配置为准」的落库安全点：
+ * 编辑已有模型时补丁不含 pricing，树中原有 pricing 必须原样保留。
+ * 钉死 updateModel 的合并语义，防止日后改成「全量替换」把用户价格清掉
+ * （ModelList 的启用/停用开关就只发 `{ enabled }`）。
+ */
+describe('updateModel 合并语义：缺省键不动', () => {
+  it('补丁不含 pricing → 树中原有 pricing 逐字段保持不变', () => {
+    const saved = updateModel(TREE, 'Acme', 'Shared', { displayName: 'Only' })
+      .providers.Acme!.models[0]!;
+    expect(saved.pricing).toEqual(MODEL.pricing);
+    expect(saved.pricing).not.toBeUndefined();
+    expect(saved.displayName).toBe('Only');
+  });
+
+  it('补丁不含 pricing → 其它未触及字段也全部保持（含 tiers 与 headers）', () => {
+    const saved = updateModel(TREE, 'Acme', 'Shared', { enabled: false })
+      .providers.Acme!.models[0]!;
+    expect(saved.pricing).toEqual(MODEL.pricing);
+    expect(saved.pricing!.tiers).toEqual(MODEL.pricing!.tiers);
+    expect(saved.headers).toEqual(MODEL.headers);
+    expect(saved.contextWindow).toBe(MODEL.contextWindow);
+  });
+
+  it('树中本来无 pricing 时，缺省键不会凭空造出 pricing', () => {
+    const bare: ModelSpec = { id: 'Bare', enabled: true };
+    const tree = {
+      ...TREE,
+      providers: { Acme: { ...TREE.providers.Acme!, models: [bare] } },
+    };
+    const saved = updateModel(tree, 'Acme', 'Bare', { displayName: 'N' })
+      .providers.Acme!.models[0]!;
+    expect(Object.hasOwn(saved, 'pricing')).toBe(false);
+  });
+
+  it('明确 pricing: undefined 仍表达删除（区分「不动」与「清空」）', () => {
+    const saved = updateModel(TREE, 'Acme', 'Shared', { pricing: undefined })
+      .providers.Acme!.models[0]!;
+    expect(Object.hasOwn(saved, 'pricing')).toBe(false);
+  });
+
+  it('补丁含 pricing 时整体替换（不做嵌套逐字段合并，故「清空某维度」生效）', () => {
+    const saved = updateModel(TREE, 'Acme', 'Shared', {
+      pricing: { currency: 'USD', output: 2 },
+    }).providers.Acme!.models[0]!;
+    expect(saved.pricing).toEqual({ currency: 'USD', output: 2 });
+    // 原有 input / tiers 随整体替换消失：这是刻意语义，不是缺陷
+    expect(saved.pricing).not.toHaveProperty('input');
+    expect(saved.pricing).not.toHaveProperty('tiers');
+  });
+});
+
 describe('无猜测输入验证', () => {
   it.each([
     '-1.5',

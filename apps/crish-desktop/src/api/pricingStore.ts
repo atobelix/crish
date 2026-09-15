@@ -1,14 +1,32 @@
 /**
- * pricingStore hub — Token pricing 装配层（T4-11 SR-06-R1 拆分后）。
+ * pricingStore hub — Token pricing 装配层（T4-11 SR-06-R1 拆分后；
+ * 战役 docs/provider-single-track-convergence/ 阶段 3 静态表清零 + 价格轨合流）。
  *
  * 本文件为拆分后的 hub（re-export + 装配），保持所有消费方 import 路径不变。
  * 子模块职责：
- * - pricingTypes.ts：类型契约 + 常量 + DEFAULT_PRICES
- * - pricingCatalogDataA/B/C.ts：CATALOG_CACHE_RATES 静态表（按厂商分组）
- * - pricingResolver.ts：目录条目查找 + 运行时快照状态
- * - pricingStore.ts（本文件）：用户价表存储 + 4D 解析/估算 + 缓存选项/TTL
+ * - pricingTypes.ts：类型契约 + 常量（**无任何出厂价副本**）
+ * - pricingResolver.ts：出厂字典快照状态 + 按模型 id 精确查表（字典内 id 唯一）
+ * - modelPricingSource.ts：**用户声明价唯一读口**（统一树 `ModelSpec.pricing`）
+ *   + 价格页名单投影 + 旧 LS 价表一次性迁移
+ * - pricingStore.ts（本文件）：4D 解析/估算 + 缓存选项/TTL
  *
- * 顶部注释（v2/v3/v4 裁决全文）见 pricingTypes.ts。
+ * 定价唯一源（裁决：用户声明覆盖 + 出厂字典预估兜底）：
+ *   树 `ModelSpec.pricing`（用户声明，权威）→ 出厂字典快照（**预估**，只读参考）
+ *   → `null`（未收录）。
+ * 旧 localStorage 扁平价表 `crish_model_prices_v1` **退役**（`loadPrices` /
+ * `savePrices` / `upsertPrice` / `hasUserSavedPrices` 已删除，键常量保留供
+ * `modelPricingSource.migrateLegacyLsPrices` 一次性迁移使用）。
+ *
+ * 真源唯一性（裁决 ①）：出厂数据唯一来源 = 出厂能力字典（Rust `catalog.json`，
+ * 编译期打包），经 `workbench_read_capability_dictionary` 注入运行时快照。
+ * 前端**零本地副本**：`pricingCatalogData*.ts` 六份静态表与 `DEFAULT_PRICES`
+ * 已物理删除。
+ *
+ * 身份与「未收录」（裁决 ③ + 阶段 3 关键不变量）：模型身份 =
+ * `(providerId, modelId)` 二元组；树未声明且快照未注入/未命中 = 「未收录」，
+ * 估算函数返回 **`null`**（`0` 只表示「已知且确实为 0 成本」，如写免费条目）。
+ *
+ * 顶部注释（v2/v3/v4/v5 裁决全文）见 pricingTypes.ts。
  */
 
 // ── re-export：类型契约与常量 ──────────────────────────────────────────────
@@ -18,12 +36,12 @@ export type {
   CacheTtlMode,
   CachePriceOpts,
   CatalogTier,
-  CatalogModelEntry4d,
   CatalogSnapshotPrice,
   CatalogCacheSnapshot,
   Resolved4dPrices,
 } from './pricingTypes';
 
+// ── re-export：常量 ────────────────────────────────────────────────────────
 export {
   PRICES_KEY,
   CACHE_OPTS_KEY,
@@ -31,26 +49,23 @@ export {
   DEFAULT_CACHE_READ_MULTIPLIER,
   DEFAULT_CACHE_WRITE_MULTIPLIER,
   DEFAULT_CACHE_TTL_MODE,
-  DEFAULT_PRICES,
 } from './pricingTypes';
 
-// ── re-export：目录解析器与快照状态 ────────────────────────────────────────
-export { CATALOG_CACHE_RATES } from './pricingResolver';
-export { resolveCatalogEntry } from './pricingResolver';
+// ── re-export：出厂字典快照解析器与快照状态 ────────────────────────────────
 export { resolveSnapshotPrice } from './pricingResolver';
 export { applyCatalogCacheSnapshot } from './pricingResolver';
 export { clearCatalogCacheSnapshot } from './pricingResolver';
+export { catalogSnapshotVersion } from './pricingResolver';
 export { resolveCatalogCachePrices } from './pricingResolver';
 
-// ── 本 hub 实现：用户价表存储 + 估算 + 缓存选项 ────────────────────────────
+// ── 本 hub 实现：树用户声明价消费 + 估算 + 缓存选项 ────────────────────────
+import type { ModelRef } from './modelsCatalogTypes';
 import {
-  PRICES_KEY,
   CACHE_OPTS_KEY,
   CACHE_TTL_MODE_KEY,
   DEFAULT_CACHE_READ_MULTIPLIER,
   DEFAULT_CACHE_WRITE_MULTIPLIER,
   DEFAULT_CACHE_TTL_MODE,
-  DEFAULT_PRICES,
   type ModelPrice,
   type CachePriceOpts,
   type CacheTtlMode,
@@ -58,69 +73,65 @@ import {
   type CatalogTier,
   type Resolved4dPrices,
 } from './pricingTypes';
-import {
-  resolveCatalogEntry,
-  resolveSnapshotPrice,
-} from './pricingResolver';
-
-export function loadPrices(): ModelPrice[] {
-  try {
-    const raw = localStorage.getItem(PRICES_KEY);
-    if (!raw) return [...DEFAULT_PRICES];
-    const arr = JSON.parse(raw);
-    return Array.isArray(arr) && arr.length ? arr : [...DEFAULT_PRICES];
-  } catch {
-    return [...DEFAULT_PRICES];
-  }
-}
-
-export function savePrices(list: ModelPrice[]) {
-  localStorage.setItem(PRICES_KEY, JSON.stringify(list));
-}
-
-export function upsertPrice(entry: ModelPrice) {
-  const list = loadPrices().filter((p) => p.model !== entry.model);
-  list.push(entry);
-  savePrices(list);
-  return list;
-}
+import { resolveSnapshotPrice } from './pricingResolver';
+import { resolveUserPricing } from './modelPricingSource';
 
 /**
- * 精确+模糊匹配模型价格，未找到返回 null。
+ * 用户声明价查找（树 `ModelSpec.pricing` 投影为 `ModelPrice` 形状）。
+ *
+ * **唯一**用户价来源 = 统一树（旧 LS 扁平价表已退役）；无声明 → `null`。
+ * 声明未给出输入/输出单价时同样返回 `null` —— `ModelPrice` 的两个必填字段
+ * 在树侧缺省即「未配置」，与「0 费率」语义不同，**禁止补零**（补零会被 UI
+ * 渲染成免费，比空白更危险）；此场景下回退链自然落到字典预估。
+ *
+ * 身份：`(providerId, modelId)` 二元组（`modelRefKey`）；**禁止** substring /
+ * 模糊回退（裁决 ③）。
  */
-export function resolveModelPrice(model: string): ModelPrice | null {
-  const prices = loadPrices();
-  const exact = prices.find((p) => p.model === model);
-  if (exact) return exact;
-  const fuzzy = prices.find(
-    (p) => model.includes(p.model) || p.model.includes(model)
-  );
-  return fuzzy ?? null;
+export function resolveModelPrice(ref: ModelRef): ModelPrice | null {
+  const pricing = resolveUserPricing(ref);
+  if (!pricing) return null;
+  if (pricing.input === undefined || pricing.output === undefined) return null;
+  return {
+    model: ref.modelId,
+    inputPerMTok: pricing.input,
+    outputPerMTok: pricing.output,
+    cacheReadPerMTok: pricing.cacheRead,
+    cacheWritePerMTok: pricing.cacheWrite,
+    currency: pricing.currency,
+    billingUnit:
+      pricing.unit === undefined
+        ? undefined
+        : pricing.unit === 'per_image'
+          ? 'per_image'
+          : 'token',
+    perImageCost: pricing.perImage,
+  };
 }
 
 /**
  * 查询模型币种（v4；供展示层标注，不做汇率换算）。
- * 优先级：用户编辑价表 currency（用户可覆盖）→ 目录条目 currency → null（未知）。
+ * 优先级：树用户声明 currency（用户可覆盖）→ 出厂字典快照 currency
+ * → null（未知 / 未收录）。**不得**猜测币种。
  */
-export function getModelCurrency(model: string): Currency | null {
-  const hit = resolveModelPrice(model);
-  if (hit?.currency) return hit.currency;
-  return resolveCatalogEntry(model)?.currency ?? null;
+export function getModelCurrency(ref: ModelRef): Currency | null {
+  const user = resolveUserPricing(ref);
+  if (user?.currency) return user.currency;
+  return resolveSnapshotPrice(ref)?.currency ?? null;
 }
 
 /**
  * 2D 估算：不考虑 cache（向下兼容）。
- * v4：目录模型未在用户价表时由目录绝对价兜底（如 kimi-k3/qwen3-8-max）；
- * P1B：按估算 input 长度落档（tieredPricing，超档用高档价）；
- * 返回值 = 模型自身币种金额（CNY 模型为人民币），展示层用 getModelCurrency 标注。
+ * 回退链：树用户声明 → 出厂字典快照（预估）。
+ * 返回值 = 模型自身币种金额（CNY 模型为人民币），展示层用 getModelCurrency 标注；
+ * **未收录 → `null`**（禁止返回 0 冒充「免费」）。
  */
 export function estimateCostUsd(
-  model: string,
+  ref: ModelRef,
   inputTokens: number,
   outputTokens: number
-): number {
-  const p = resolve4dPricesForTokens(model, inputTokens);
-  if (!p) return 0;
+): number | null {
+  const p = resolve4dPricesForTokens(ref, inputTokens);
+  if (!p) return null;
   return (
     (inputTokens / 1e6) * p.inputPerMTok +
     (outputTokens / 1e6) * p.outputPerMTok
@@ -128,67 +139,63 @@ export function estimateCostUsd(
 }
 
 /**
- * 四指标价格解析（v4 回退链，任务书裁决）：
- *   输入/输出价：用户编辑价表（覆盖）→ 运行时快照（Rust 目录真源）→
- *     目录绝对价 → null（不估算）。
- *   缓存读价：运行时快照 → 目录绝对价（null = 未获取）→ 用户扩展字段 → 全局乘数。
- *   缓存写价：运行时快照（无免费位语义，绝对值直用）→ 目录条目
- *     （cacheWriteFree → 0；TTL=1h 且有条目 1h 档 → 用 1h 写价）
- *     → 用户扩展字段 → 全局乘数。
- * 存储费不入前端（服务端核算）；tieredPricing 档位匹配见 [resolve4dPricesForTokens]。
+ * 四指标价格解析（v5 回退链 + 价格轨合流）：
+ *   输入/输出价：树用户声明（覆盖）→ 出厂字典快照（预估兜底）→ null（未收录）。
+ *   缓存读价：树用户声明 → 出厂字典快照 → 全局乘数。
+ *   缓存写价：树用户声明 → 出厂字典快照（写免费 → 0；TTL=1h 且有条目 1h 档 →
+ *     用 1h 写价）→ 全局乘数。
+ * 用户声明**逐字段**覆盖（用户声明权威：已声明字段一律直取，不因字典有值而让位）；
+ * 未声明字段才落字典。存储费不入前端（服务端核算）；tieredPricing 档位匹配见
+ * [resolve4dPricesForTokens]。**无静态表分支**：快照缺席即未收录。
  */
-export function resolve4dPrices(model: string): Resolved4dPrices | null {
-  const hit = resolveModelPrice(model);
-  const entry = resolveCatalogEntry(model);
-  const snap = resolveSnapshotPrice(model);
+export function resolve4dPrices(ref: ModelRef): Resolved4dPrices | null {
+  const user = resolveUserPricing(ref);
+  const snap = resolveSnapshotPrice(ref);
   const opts = loadCachePriceOpts();
 
-  const inputPerMTok =
-    hit?.inputPerMTok ?? snap?.inputPerMTok ?? entry?.inputPerMTok;
-  const outputPerMTok =
-    hit?.outputPerMTok ?? snap?.outputPerMTok ?? entry?.outputPerMTok;
+  const inputPerMTok = user?.input ?? snap?.inputPerMTok;
+  const outputPerMTok = user?.output ?? snap?.outputPerMTok;
   if (inputPerMTok == null || outputPerMTok == null) return null;
 
-  const currency: Currency = hit?.currency ?? entry?.currency ?? 'USD';
+  const currency: Currency = user?.currency ?? snap?.currency ?? 'USD';
   const ttlMode = loadCacheTtlMode();
 
   let source: Resolved4dPrices['source'] = 'multiplier';
 
   // 缓存读价回退链
   let cacheReadPerMTok: number;
-  if (snap?.readPerMTok != null) {
+  if (user?.cacheRead != null) {
+    cacheReadPerMTok = user.cacheRead;
+    source = 'user';
+  } else if (snap?.readPerMTok != null) {
     cacheReadPerMTok = snap.readPerMTok;
     source = 'snapshot';
-  } else if (entry && entry.cacheReadPerMTok != null) {
-    cacheReadPerMTok = entry.cacheReadPerMTok;
-    source = 'catalog';
-  } else if (hit?.cacheReadPerMTok !== undefined) {
-    cacheReadPerMTok = hit.cacheReadPerMTok;
-    source = 'user';
   } else {
     cacheReadPerMTok = inputPerMTok * opts.cacheReadMultiplier;
   }
 
   // 缓存写价回退链（source 以写价来源为准）
+  const hasWrite1hTier = snap?.writePerMTok1h != null;
   let cacheWritePerMTok: number;
   let cacheWriteFree = false;
-  let hasWrite1hTier = false;
-  if (snap?.writePerMTok != null) {
-    cacheWritePerMTok = snap.writePerMTok;
-    source = 'snapshot';
-  } else if (entry) {
-    cacheWriteFree = entry.cacheWriteFree;
-    cacheWritePerMTok = entry.cacheWriteFree ? 0 : entry.cacheWritePerMTok;
-    if (entry.cacheWritePerMTok1h !== undefined) {
-      hasWrite1hTier = true;
-      if (ttlMode === '1h') {
-        cacheWritePerMTok = entry.cacheWritePerMTok1h;
-      }
-    }
-    source = 'catalog';
-  } else if (hit?.cacheWritePerMTok !== undefined) {
-    cacheWritePerMTok = hit.cacheWritePerMTok;
+  if (user?.cacheWrite != null) {
+    cacheWritePerMTok = user.cacheWrite;
     source = 'user';
+  } else if (snap) {
+    const snapWrite = snap.writePerMTok5m ?? snap.writePerMTok;
+    if (snap.writeFree === true) {
+      cacheWriteFree = true;
+      cacheWritePerMTok = 0;
+      source = 'snapshot';
+    } else if (snapWrite != null) {
+      cacheWritePerMTok = snapWrite;
+      source = 'snapshot';
+    } else {
+      cacheWritePerMTok = inputPerMTok * opts.cacheWriteMultiplier;
+    }
+    if (hasWrite1hTier && ttlMode === '1h') {
+      cacheWritePerMTok = snap.writePerMTok1h!;
+    }
   } else {
     cacheWritePerMTok = inputPerMTok * opts.cacheWriteMultiplier;
   }
@@ -207,16 +214,14 @@ export function resolve4dPrices(model: string): Resolved4dPrices | null {
 
 /**
  * 输入长度分档命中（P1B / DEEPCHECK-05 #8 前端消费面）：
- * 快照 tiered 优先于静态表 tiered；半开区间 [minTokens, maxTokens)，
- * maxTokens 缺省 = 无上界。无档 / 不落档 → null（沿用基础四价）。
+ * 档位来自出厂字典快照（唯一来源）；半开区间 [minTokens, maxTokens)，
+ * maxTokens 缺省 = 无上界。无档 / 不落档 / 未收录 → null（沿用基础四价）。
  */
 export function resolveTierForTokens(
-  model: string,
+  ref: ModelRef,
   inputTokens: number
 ): CatalogTier | null {
-  const tiers =
-    resolveSnapshotPrice(model)?.tiered ??
-    resolveCatalogEntry(model)?.tiered;
+  const tiers = resolveSnapshotPrice(ref)?.tiered;
   if (!tiers || tiers.length === 0) return null;
   return (
     tiers.find(
@@ -228,37 +233,23 @@ export function resolveTierForTokens(
 }
 
 /**
- * 用户是否显式保存过价表（PRICES_KEY 有记录）。
- *
- * LS 为空时 `loadPrices` 返回 [DEFAULT_PRICES] 仅作展示兜底——默认价表是
- * 目录基础价的镜像（grok-4.5 2/6 等），**不构成用户覆盖**：目录分档语义
- * （tieredPricing）照常生效。用户显式保存（设置页编辑 / upsertPrice）后
- * 才视为接管：整表（含默认行）覆盖目录，含分档。
- */
-function hasUserSavedPrices(): boolean {
-  try {
-    return localStorage.getItem(PRICES_KEY) !== null;
-  } catch {
-    return false;
-  }
-}
-
-/**
  * 分档四价解析：基础 [resolve4dPrices] 结果上按估算 input 长度落档，
  * 档内覆盖价替换（未覆盖字段沿用基础价）。
  *
- * 用户**显式保存**价表后，命中的模型整条不落档（用户显式定价覆盖目录
- * 全部语义，含分档）；纯默认价表（未编辑）下目录档位照常生效。
+ * 判据**按模型**：该模型在树里有 `pricing` 声明 ⇒ 整条不落档（用户显式定价
+ * 覆盖目录全部语义，含分档）；无声明（含仅有字典预估）⇒ 字典档位照常生效。
+ * 旧实现的全局判据「LS 价表键存在性」已随价表退役删除——那会让任一模型的
+ * 价格编辑影响**所有**模型的分档语义。
  */
 export function resolve4dPricesForTokens(
-  model: string,
+  ref: ModelRef,
   inputTokens: number
 ): Resolved4dPrices | null {
-  const base = resolve4dPrices(model);
+  const base = resolve4dPrices(ref);
   if (!base) return null;
-  // 用户显式保存的价表命中 → 用户覆盖，跳过档位匹配
-  if (resolveModelPrice(model) && hasUserSavedPrices()) return base;
-  const tier = resolveTierForTokens(model, inputTokens);
+  // 树用户声明命中 → 用户覆盖，跳过档位匹配
+  if (resolveUserPricing(ref)) return base;
+  const tier = resolveTierForTokens(ref, inputTokens);
   if (!tier) return base;
   return {
     ...base,
@@ -277,23 +268,25 @@ export function resolve4dPricesForTokens(
  *   cost = nonCached * Pin + completion * Pout
  *        + cacheWrite * Pcw + cacheRead * Pcr
  *
- * Pcr/Pcw 由 resolve4dPrices 按 v4 回退链解析：
- *   运行时快照 → 目录静态表绝对四价（写免费 → 0；TTL=1h 时用 Anthropic 1h 档）
- *   → 用户编辑价表扩展字段 → 全局乘数兜底（× Pin）→ 无价 → 返回 0（不估算）。
+ * Pcr/Pcw 由 resolve4dPrices 按回退链解析：
+ *   树用户声明（覆盖）→ 出厂字典快照（写免费 → 0；TTL=1h 时用 Anthropic 1h 档）
+ *   → 全局乘数兜底（× Pin）。
+ * **未收录 → `null`**（阶段 3 关键不变量：不得返回 0 —— 0 会被 UI 渲染成
+ * 「免费」，比空白更危险；0 仅表示已知且确实为 0 成本）。
  * P1B：按估算 input 长度（promptTokens）落 tieredPricing 档，超档用高档价
  * （DEEPCHECK-05 #8：长上下文成本低估 ≈45% 修复）。
  * 返回值 = 模型自身币种金额（CNY 模型为人民币；函数名 Usd 为历史遗留，
  * 展示层用 getModelCurrency() 标注币种）。
  */
 export function estimateCostUsd4d(
-  model: string,
+  ref: ModelRef,
   promptTokens: number,
   completionTokens: number,
   cacheReadTokens: number,
   cacheWriteTokens: number
-): number {
-  const p = resolve4dPricesForTokens(model, promptTokens);
-  if (!p) return 0;
+): number | null {
+  const p = resolve4dPricesForTokens(ref, promptTokens);
+  if (!p) return null;
 
   const nonCached = Math.max(
     0,
@@ -310,22 +303,24 @@ export function estimateCostUsd4d(
 /**
  * 估算缓存节省的费用：max(0, 全量 2D 成本 - 4D 实际成本)。
  * 2D/4D 同币种口径（模型自身币种），差值同币种。
+ * **任一侧未收录 → `null`**（不得以 0 表示「省了 0 元」）。
  */
 export function estimateSavingsUsd(
-  model: string,
+  ref: ModelRef,
   promptTokens: number,
   completionTokens: number,
   cacheReadTokens: number,
   cacheWriteTokens: number
-): number {
-  const full = estimateCostUsd(model, promptTokens, completionTokens);
+): number | null {
+  const full = estimateCostUsd(ref, promptTokens, completionTokens);
   const actual = estimateCostUsd4d(
-    model,
+    ref,
     promptTokens,
     completionTokens,
     cacheReadTokens,
     cacheWriteTokens
   );
+  if (full == null || actual == null) return null;
   return Math.max(0, full - actual);
 }
 

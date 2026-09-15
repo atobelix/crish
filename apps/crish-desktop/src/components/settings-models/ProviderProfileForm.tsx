@@ -173,9 +173,8 @@ export const ProviderProfileForm: React.FC<{
 
       {!isCollapsed && (
         <div className={styles.credentialsBody}>
-          {/* 自定义服务商厂商名称输入 */}
-          {selected.id.startsWith('custom-') && (
-            <div className={styles.mrdField}>
+          {/* 服务商厂商名称输入（所有服务商均可改名——不与厂商 id 绑定） */}
+          <div className={styles.mrdField}>
               <label className={styles.mrdFieldLabel}>
                 厂商名称 <span className={styles.mrdRequiredStar}>*</span>
               </label>
@@ -193,8 +192,7 @@ export const ProviderProfileForm: React.FC<{
                   }
                 }}
               />
-            </div>
-          )}
+          </div>
 
           {/* Base URL */}
           <div className={styles.mrdField}>

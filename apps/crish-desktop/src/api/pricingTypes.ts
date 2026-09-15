@@ -5,14 +5,24 @@
  * 并保持与 v1 estimateCostUsd（2D）完全向下兼容。
  *
  * v3 新增缓存费率三级优先（P5 §3.5.1，T-48）：
- *   per-model 目录价（CATALOG_CACHE_RATES 静态表 + catalog_get 快照）
+ *   per-model 目录价（出厂能力字典运行时快照）
  *   → 用户编辑价表扩展字段 → 全局乘数兜底。
  * 数据源：00-vendor-model-pricing-catalog.md（2026-08-02）。
  *
- * v4（R3 A3 专项「模型目录与定价 v2」）四指标数据驱动：
- *   CATALOG_CACHE_RATES 由「28 模型乘数表」升级为「御十家全量绝对四价表」
- *   （权威数据源：docs/cache-optimization/10-model-catalog-v2/04-master-model-list.md，
- *   2026-08-03；字段语义：docs/.../03-catalog-v2-schema.md §2 C 组）。
+ * v4（R3 A3 专项「模型目录与定价 v2」）四指标数据驱动。
+ *
+ * v5（战役 docs/provider-single-track-convergence/ 阶段 3，裁决 ①③）：
+ *   **前端零本地副本**——六份静态定价表（`pricingCatalogData*.ts`）与
+ *   `DEFAULT_PRICES` 已物理删除；出厂数据唯一来源 = 出厂能力字典
+ *   （Rust `crates/agent-provider/src/models/catalog.json`，编译期打包），
+ *   经 `workbench_read_capability_dictionary` → `toCatalogCacheSnapshot` →
+ *   `applyCatalogCacheSnapshot` 注入运行时快照。
+ *   快照索引键 = **模型 id**（出厂字典内 id 唯一：156 id / 0 跨厂商重复，
+ *   由 Rust `ssot_convergence_tests::dictionary_model_ids_are_unique_keys` 钉死）；
+ *   配置树侧身份仍是 `(providerId, modelId)` 二元组（`modelRefKey`）。
+ *   禁止 substring / 模糊回退参与价格决议。
+ *   「未收录」（快照未注入或未命中）在**类型上**与「0 成本」区分：
+ *   估算函数返回 `null`，禁止回退静态表、禁止以 0 冒充。
  *
  *   本层关键裁决（详见轮末汇总物）：
  *   1. 币种：**不做汇率折算**。每条目录价带 `currency`（USD/CNY），
@@ -31,13 +41,13 @@
  *   5. 存储费（storagePricePer1mHour：Gemini 4.50/1.00、GLM 0 限时免费至
  *      2026-08-31、豆包 0.017 等）**不入前端成本**——服务端核算，前端不估。
  *   6. 回退链（四指标解析优先级）：
- *      运行时快照（catalog_get 下发绝对缓存价）
- *      → 目录静态表（本文件全量绝对四价）
+ *      运行时出厂字典快照（`workbench_read_capability_dictionary` 下发绝对价）
  *      → 用户编辑价表扩展字段（cacheReadPerMTok/cacheWritePerMTok）
  *      → 全局乘数兜底（cacheReadMultiplier/cacheWriteMultiplier × 输入价）
- *      → 无价 → resolver 返回 null，估算函数返回 0（不估算）。
+ *      → 无价 → resolver 返回 null，估算函数返回 **null（未收录）**
+ *        ——不得返回 0（0 = 已知且确实为 0 成本，如写免费条目）。
  *   7. 长度分档（tieredPricing）消费（P1B 修复，DEEPCHECK-05 #8）：
- *      **不再"不入前端"**——Rust catalog 快照与静态表条目均携带 tiered 档，
+ *      **不再"不入前端"**——Rust 快照条目携带 tiered 档，
  *      `resolve4dPricesForTokens` / 估算函数按估算 input 长度（promptTokens）
  *      落档：命中档位时档内价覆盖（未覆盖字段沿用基础四价），档位边界
  *      半开区间 [minTokens, maxTokens)，无上界档即长上下文档 2x 档。
@@ -110,80 +120,55 @@ export interface CatalogTier {
 }
 
 /**
- * per-model 目录条目（四指标绝对价，per_1M tokens，模型自身币种）。
+ * per-model 出厂字典条目（四指标绝对价，per_1M tokens，模型自身币种）。
  *
- * 字段语义对齐 catalog v2 schema §2 C 组：
+ * 字段语义对齐 catalog v2 schema §2 C 组（Rust `ModelCatalogEntry`）：
  * - `cacheReadPerMTok`：缓存命中单价；null = 官方未获取/无缓存折扣语义
  *   （如 OpenAI pro 档「无缓存折扣（未明确）」，禁止 0 占位）。
- * - `cacheWritePerMTok`：通用写价（Anthropic 条目 = 5m 档写价）；
+ * - `cacheWritePerMTok`：通用写价；
  *   写免费 = 0 + cacheWriteFree:true 双字段齐出（schema §1.3 三态）。
  * - `cacheWritePerMTok1h`：Anthropic 1h 档写价（schema cacheWritePrice1h）。
  * - `currency`：必填（schema §1.2），目录内不换算。
- * - `tiered`：长度分档（P1B 起随目录下发/静态表收录；估算按 input 长度落档）。
+ * - `tiered`：长度分档（估算按 input 长度落档）。
+ *
+ * v5：本类型描述的是**出厂字典条目**（Rust 真源），前端不再持有任何本地
+ * 实例（静态表已物理删除）；运行时消费一律经 [CatalogSnapshotPrice] 快照。
  */
-export interface CatalogModelEntry4d {
-  /** 未缓存输入价（USD/CNY per 1M tokens） */
-  inputPerMTok: number;
-  /** 输出价 */
-  outputPerMTok: number;
-  /** 缓存命中单价；null = 未获取（禁 0 占位） */
-  cacheReadPerMTok: number | null;
-  /** 缓存写价（写免费 = 0；Anthropic = 5m 档） */
-  cacheWritePerMTok: number;
-  /** 写免费显式位（true = 写免费） */
-  cacheWriteFree: boolean;
-  /** Anthropic 1h 档写价（TTL=1h 时启用；其余厂商无此字段） */
-  cacheWritePerMTok1h?: number;
-  /** 币种（USD / CNY） */
-  currency: Currency;
-  /** 长度分档（DEEPCHECK-05 #8：估算落档消费；缺省 = 无档） */
-  tiered?: CatalogTier[];
-}
 
-/** 运行时快照单模型价格（catalog_get 下发条目映射；可选字段缺失 = 回退下级） */
+/** 运行时快照单模型价格（出厂字典只读投影；可选字段缺失 = 回退下级） */
 export interface CatalogSnapshotPrice {
-  /** 未缓存输入价（缺省 = 回退静态表/用户价表） */
+  /** 未缓存输入价（缺省 = 回退用户价表/下级） */
   inputPerMTok?: number;
   /** 输出价 */
   outputPerMTok?: number;
-  /** 缓存命中单价（null = 未收录；缺失 = 回退下级） */
+  /** 缓存命中单价（null 语义 = 出厂字典未收录 → 字段缺失） */
   readPerMTok?: number;
-  /** 缓存写价（写免费条目 = 0；缺失 = 回退下级） */
+  /** 通用写价（出厂字典 cacheWritePrice；缺失 = 未收录） */
   writePerMTok?: number;
+  /** Anthropic 5m TTL 写价（出厂字典 cacheWritePrice5m） */
+  writePerMTok5m?: number;
+  /** Anthropic 1h TTL 写价（出厂字典 cacheWritePrice1h；TTL=1h 档启用） */
+  writePerMTok1h?: number;
+  /** 写免费显式位（出厂字典 cacheWriteFree；true = 写入不计费） */
+  writeFree?: boolean;
+  /** 币种（出厂字典 currency；缺失 = 未知，展示层不得猜测） */
+  currency?: Currency;
   /** 长度分档（P1B：估算按 input 长度落档） */
   tiered?: CatalogTier[];
 }
 
-/** 运行时目录快照（P3 `catalog_get` 下发；版本号失效语义） */
+/**
+ * 运行时出厂字典快照（`workbench_read_capability_dictionary` 下发；版本号失效语义）。
+ *
+ * v5：索引键 = **模型 id**（出厂字典内唯一，按 id 查找不含猜测）。
+ * 同键被不同价主张 → 整键作废（fail-closed「未收录」），**不得**任选一个。
+ * **禁止** substring / 前缀后缀 / 模糊回退索引。
+ */
 export interface CatalogCacheSnapshot {
   version: number;
-  /** model → 四价（绝对值优先于静态费率表） */
+  /** 模型 id → 四价（出厂字典绝对值；同键不同价者已整键作废） */
   prices: Record<string, CatalogSnapshotPrice>;
 }
-
-/**
- * Official-ish defaults (USD / 1M tokens) — user-editable.
- *
- * 数据来源：docs/cache-optimization/00-vendor-model-pricing-catalog.md（2026-08-02）：
- * - gpt-5.6：§2.2（litellm 副本口径，input 5e-06 / output 3e-05）
- * - deepseek-v4-flash / deepseek-v4-pro：§3.1
- * - claude-haiku-4-5 / claude-sonnet-4-5 / claude-opus-4-5：§1.1
- * - glm-5.2：§4.1（官方直连 USD 价）
- * - grok-4.5：§6.1
- * 注：v4 起目录表（CATALOG_CACHE_RATES）已含御十家全量绝对四价，本表仅作
- * 用户可编辑的 2D 兜底与覆盖层；Kimi（§5.1）、MiniMax（§7.1）、豆包（§9.1）
- * 官方价为 CNY，Qwen 命中价未获取（§11.3），均不纳入本 USD 表。
- */
-export const DEFAULT_PRICES: ModelPrice[] = [
-  { model: 'gpt-5.6', inputPerMTok: 5, outputPerMTok: 30 },
-  { model: 'deepseek-v4-flash', inputPerMTok: 0.14, outputPerMTok: 0.28 },
-  { model: 'deepseek-v4-pro', inputPerMTok: 0.435, outputPerMTok: 0.87 },
-  { model: 'claude-haiku-4-5', inputPerMTok: 1, outputPerMTok: 5 },
-  { model: 'claude-sonnet-4-5', inputPerMTok: 3, outputPerMTok: 15 },
-  { model: 'claude-opus-4-5', inputPerMTok: 5, outputPerMTok: 25 },
-  { model: 'glm-5.2', inputPerMTok: 1.4, outputPerMTok: 4.4 },
-  { model: 'grok-4.5', inputPerMTok: 2, outputPerMTok: 6 },
-];
 
 /** 四指标解析结果（v4；估算消费的唯一入口形态） */
 export interface Resolved4dPrices {
@@ -197,10 +182,10 @@ export interface Resolved4dPrices {
   cacheWritePerMTok: number;
   /** 目录写免费位（true = 写免费；快照/用户/乘数来源为 false） */
   cacheWriteFree: boolean;
-  /** 币种（目录标注或用户价表覆盖；缺省 USD） */
+  /** 币种（快照标注或用户价表覆盖；两者都缺省时回落 USD 字面量） */
   currency: Currency;
-  /** 缓存价来源（调试/测试）：snapshot / catalog / user / multiplier */
-  source: 'snapshot' | 'catalog' | 'user' | 'multiplier';
-  /** 目录条目是否带 1h 写价档（Anthropic；TTL=1h 时启用） */
+  /** 缓存价来源（调试/测试）：snapshot / user / multiplier */
+  source: 'snapshot' | 'user' | 'multiplier';
+  /** 快照条目是否带 1h 写价档（Anthropic；TTL=1h 时启用） */
   hasWrite1hTier: boolean;
 }

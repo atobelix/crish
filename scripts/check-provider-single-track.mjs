@@ -764,6 +764,7 @@ const D8_KNOWN_DEBT = new Map([
     'apps/crish-desktop/src/api/import/importRootSettings.ts',
     'apps/crish-desktop/src/api/localStorageApi.ts',
     'apps/crish-desktop/src/api/modelCatalogMeta.ts',
+    'apps/crish-desktop/src/api/modelPricingSource.ts',
     'apps/crish-desktop/src/api/modelsLsImport.ts',
     'apps/crish-desktop/src/api/previewBrowserStore.ts',
     'apps/crish-desktop/src/api/pricingStore.ts',

@@ -14,7 +14,6 @@ import {
 } from './modelsLsImport';
 import { modelsCatalogStore, resetModelsCatalogMirror, selectModel } from './modelsCatalogStore';
 import { DEFAULT_PROTOCOL } from './modelsNormalize';
-import { DEFAULT_PRICES } from './pricingTypes';
 import * as profilePersistence from './provider-profiles/profileStorePersistence';
 import type {
   ModelsYamlTree,
@@ -28,6 +27,22 @@ const PROFILES_KEY = 'crish_provider_profiles_v1';
 const META_KEY = 'crish_model_meta_v1';
 const PRICES_KEY = 'crish_model_prices_v1';
 const SECRET = 'sk-plain-secret-must-not-appear';
+
+/**
+ * 出厂字典（Rust catalog.json）模型 id 抽样：导入**不得**把字典价目写进 yaml。
+ * 前端零本地副本（`pricingCatalogData*.ts` / `DEFAULT_PRICES` 已物理删除），
+ * 故此处显式列举字典 id 作为「不得发明」断言集（取代旧 DEFAULT_PRICES 派生集）。
+ */
+const DICTIONARY_MODEL_IDS = [
+  'gpt-5.6-sol',
+  'claude-sonnet-4-5',
+  'deepseek-v4-pro',
+  'glm-5-2',
+  'grok-4.5',
+  'kimi-k3',
+  'qwen3-8-max',
+  'gemini-3-5-flash',
+];
 
 function readSnapshot(providers: Record<string, ProviderSpec>) {
   return {
@@ -216,7 +231,7 @@ describe('ensureLsImported（一次性 LS→yaml）', () => {
     expect(payload).not.toContain('ls-high');
   });
 
-  it('缺 LS 键 → 不把 DEFAULT_PRICES / 128000 写入', async () => {
+  it('缺 LS 键 → 不把出厂字典价目 / 128000 写入', async () => {
     localStorage.setItem(
       PROFILES_KEY,
       JSON.stringify([
@@ -246,9 +261,9 @@ describe('ensureLsImported（一次性 LS→yaml）', () => {
     const payload = JSON.stringify(tree);
     expect(payload).not.toMatch(/\b128000\b/);
     // 字典价目模型不得经导入混入（结构断言：供应商集合精确）
-    for (const price of DEFAULT_PRICES) {
-      if (price.model !== 'deepseek-v4-flash') {
-        expect(payload).not.toContain(`"${price.model}"`);
+    for (const model of DICTIONARY_MODEL_IDS) {
+      if (model !== 'deepseek-v4-flash') {
+        expect(payload).not.toContain(`"${model}"`);
       }
     }
 
@@ -260,9 +275,9 @@ describe('ensureLsImported（一次性 LS→yaml）', () => {
     expect(mirrorModel.contextWindow).toBeUndefined();
     const mirror = JSON.stringify(mirrorTree);
     expect(mirror).not.toMatch(/\b128000\b/);
-    for (const price of DEFAULT_PRICES) {
-      if (price.model !== 'deepseek-v4-flash') {
-        expect(mirror).not.toContain(`"${price.model}"`);
+    for (const model of DICTIONARY_MODEL_IDS) {
+      if (model !== 'deepseek-v4-flash') {
+        expect(mirror).not.toContain(`"${model}"`);
       }
     }
 
@@ -276,8 +291,8 @@ describe('ensureLsImported（一次性 LS→yaml）', () => {
     expect(saveEmpty).not.toHaveBeenCalled();
     const emptyText = JSON.stringify(modelsCatalogStore.getState().tree);
     expect(emptyText).not.toMatch(/\b128000\b/);
-    for (const price of DEFAULT_PRICES) {
-      expect(emptyText).not.toContain(`"${price.model}"`);
+    for (const model of DICTIONARY_MODEL_IDS) {
+      expect(emptyText).not.toContain(`"${model}"`);
     }
   });
 

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { loadPrices, type ModelPrice } from '../../api/pricingStore';
+import { migrateLegacyLsPrices } from '../../api/modelPricingSource';
 import {
   clearUsageHistory,
   getUsageDashboardData,
@@ -21,14 +21,6 @@ interface Props {
   _onBlockingOverlayChange?: (open: boolean) => void;
 }
 
-function safeLoadPrices(): { list: ModelPrice[]; error: string | null } {
-  try {
-    return { list: loadPrices(), error: null };
-  } catch (err) {
-    return { list: [], error: String(err) };
-  }
-}
-
 const RANGE_OPTIONS = [
   { value: '24h', label: '近 24 小时' },
   { value: '7d', label: '近 7 日' },
@@ -42,9 +34,18 @@ export const SettingsUsageTab: React.FC<Props> = () => {
   const [loading, setLoading] = useState(true);
 
   const [pricesModalOpen, setPricesModalOpen] = useState(false);
-  const [priceList, setPriceList] = useState<ModelPrice[]>(
-    () => safeLoadPrices().list
-  );
+
+  /**
+   * 退役价表一次性迁移（幂等；树未加载则跳过且不动 LS）。
+   * 失败不阻断用量页渲染——显式提示，由用户重试。
+   */
+  useEffect(() => {
+    void migrateLegacyLsPrices()
+      .then((r) => {
+        if (r.migrated > 0) showToast(`已迁移 ${r.migrated} 条旧单价到模型配置`);
+      })
+      .catch((err) => showToast(`旧单价迁移失败：${String(err)}`));
+  }, [showToast]);
 
   const [confirmGate, renderConfirmGate] = useConfirmGate();
 
@@ -183,8 +184,6 @@ export const SettingsUsageTab: React.FC<Props> = () => {
 
       <PriceConfigModal
         open={pricesModalOpen}
-        priceList={priceList}
-        onListChange={setPriceList}
         onClose={() => setPricesModalOpen(false)}
       />
 

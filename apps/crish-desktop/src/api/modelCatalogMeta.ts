@@ -9,8 +9,11 @@
  *   `modelsCatalogStore`）：读经 `selectModel` / `selectEffectiveContextWindow`，
  *   写经 `modelsCatalogStore.updateModel`。本键不再持久化这两个字段，
  *   以消除「LS 与树双写漂移」。
- * - 键形状沿用本仓既有惯例 `providerId::modelId`（与 `modelCatalogMeta` 历史键、
- *   `modelRefKey` 同形语义），裸 `modelId` 不参与身份解析（裁决 ③）。
+ * - 键形状沿用本键**历史形状** `providerId::modelId`（登记于
+ *   `scripts/check-provider-single-track.mjs` D5_WHITELIST 的「LS meta 键空间」）。
+ *   **注意**：它与模型身份键 `modelRefKey`（JSON 二元组）**不同形**——本键只是
+ *   本探测结果面的私有 localStorage 键空间，不参与身份决议；任何**身份**语义
+ *   一律走 `modelRefKey`，裸 `modelId` 不参与身份解析（裁决 ③）。
  *
  * 引入 memoryMetaCache 单例内存镜像，杜绝 O(N*M) 同步反序列化雪崩
  * （耗时从 200ms 骤降至 <0.2ms）。写入操作自动同步内存与 LocalStorage，

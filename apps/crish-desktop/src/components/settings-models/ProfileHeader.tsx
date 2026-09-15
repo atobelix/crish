@@ -13,8 +13,15 @@ import { prepareCatalogWrite } from './catalogWriteGate';
 import styles from './ModelsSettingsTab.module.css';
 
 /**
- * 详情头部：重命名标题 / 启用状态按钮 / 自定义服务商删除确认组。
- * 启用与删除以统一树为准（updateProvider / removeProvider），同时把旧档案
+ * 详情头部：重命名标题 / 启用状态按钮 / 服务商删除确认组。
+ *
+ * **所有服务商一律可重命名、可删除**——删除与重命名是配置树 provider 的通用操作
+ * （`modelsCatalogStore.removeProvider` / `updateProvider`），**不**与厂商 id 绑定。
+ * 历史实现用 `id.startsWith('custom-')` 把预设供应商（id = 厂商名，如
+ * `deepseek` / `ollama`）判为「不可删除」，导致用户无法清理不需要的供应商；
+ * 该门禁已移除（用户裁决 2026-09-15）。
+ *
+ * 启用与删除以统一树为准（`updateProvider` / `removeProvider`），同时把旧档案
  * 存储的同名字段一并更新——它仍是扫描与连通性 IPC 的凭据载体。
  */
 export const ProfileHeader: React.FC<{
@@ -72,7 +79,7 @@ export const ProfileHeader: React.FC<{
   return (
     <div className={styles.mrdHead}>
       <div className={styles.mrdHeadLeft}>
-        {editingName && selected.id.startsWith('custom-') ? (
+        {editingName ? (
           <Input
             className={styles.nameEditInput}
             size="sm"
@@ -100,7 +107,7 @@ export const ProfileHeader: React.FC<{
             }}
             
           />
-        ) : selected.id.startsWith('custom-') ? (
+        ) : (
           <Tooltip content="点击重命名服务商">
             <h3
               className={styles.mrdTitleClickable}
@@ -112,14 +119,11 @@ export const ProfileHeader: React.FC<{
               {selectedLabel}
             </h3>
           </Tooltip>
-        ) : (
-          <h3 className={styles.mrdTitle}>{selectedLabel}</h3>
         )}
       </div>
 
       <div className={styles.mrdHeadRight}>
-        {selected.id.startsWith('custom-') && (
-          <div className={styles.mrdDeleteAnchor}>
+        <div className={styles.mrdDeleteAnchor}>
             {confirmDeleteId === selected.id ? (
               <div className={styles.confirmDeleteBubble}>
                 <span className={styles.confirmDeletePrompt}>确定删除？</span>
@@ -157,7 +161,6 @@ export const ProfileHeader: React.FC<{
               </Tooltip>
             )}
           </div>
-        )}
 
         <Tooltip
           content={

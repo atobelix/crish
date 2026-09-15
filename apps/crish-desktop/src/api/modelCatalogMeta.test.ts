@@ -1,33 +1,82 @@
+// @vitest-environment jsdom
+/**
+ * modelCatalogMeta：**探测结果面**（`lastTest`）+ 统一配置树为配置唯一权威。
+ *
+ * 单轨收敛后的新语义（本文件钉的就是它）：
+ * - `crish_model_meta_v1` 只存 `lastTest`；**不是** enabled / contextLength /
+ *   能力 / 协议的声明真源，落盘 JSON 里不得出现这些字段；
+ * - `enabled` / `contextLength` 唯一权威 = `modelsCatalogStore`
+ *   （`getState().loaded` + `modelIndex.get(modelRefKey(...))`）；
+ * - 旧写口 setModelEnabled / setModelDisplayName / setModelCapability /
+ *   setModelContextLength / setModelThinkingLevel 已物理删除，仅剩
+ *   `upsertModelMetaExport`（enabled / contextLength → 树，lastTest → LS）。
+ */
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { onUiEvent } from './uiEvents';
+import { guessContextLength } from './modelCatalogPure';
 import {
   _getMemoryMetaCacheSnapshot,
-  formatModelDisplayName,
   getModelMeta,
   purgeMetaForProfile,
   purgeOrphanMetaKeys,
   resetModelMetaCache,
-  setModelCapability,
-  setModelContextLength,
-  setModelDisplayName,
-  setModelEnabled,
-  setModelThinkingLevel,
   upsertModelMetaExport,
 } from './modelCatalogMeta';
+import { modelsCatalogStore } from './modelsCatalogStore';
+import { modelRefKey } from './modelsCatalogTypes';
+import type { ModelMeta } from './modelCatalogTypes';
+import type { ModelSpec, ProviderSpec } from './modelsCatalogTypes';
+import { catalogSnapshot } from '../test-utils/modelsCatalogSnapshot';
 
-// Node vitest 环境（vitest.config.ts unit 默认为 node）补齐 StorageEvent
-if (typeof globalThis.StorageEvent === 'undefined') {
-  // @ts-expect-error test env polyfill
-  globalThis.StorageEvent = class StorageEvent {
-    type: string;
-    key?: string | null;
-    newValue?: string | null;
-    constructor(type: string, init?: { key?: string; newValue?: string }) {
-      this.type = type;
-      this.key = init?.key ?? null;
-      this.newValue = init?.newValue ?? null;
-    }
-  };
+const META_KEY = 'crish_model_meta_v1';
+const SRC = readFileSync(
+  join(dirname(fileURLToPath(import.meta.url)), 'modelCatalogMeta.ts'),
+  'utf8'
+);
+
+type LastTest = NonNullable<ModelMeta['lastTest']>;
+
+function lastTest(seed: number): LastTest {
+  return { ok: true, latencyMs: seed, at: 1_700_000_000_000 + seed };
+}
+
+/** 落盘 JSON（本键唯一合法内容面 = 探测结果字典） */
+function storedMap(): Record<string, unknown> {
+  return JSON.parse(localStorage.getItem(META_KEY) ?? '{}') as Record<
+    string,
+    unknown
+  >;
+}
+
+function storedRecord(
+  profileId: string,
+  model: string
+): Record<string, unknown> {
+  return (storedMap()[`${profileId}::${model}`] ?? {}) as Record<
+    string,
+    unknown
+  >;
+}
+
+function provider(models: ModelSpec[]): ProviderSpec {
+  return { protocol: 'openai/chat', enabled: true, stream: false, models };
+}
+
+/**
+ * 注入统一树（同目录既有惯例：`resetForTesting` + `acceptSnapshot`；
+ * 回执夹具走 test-utils 的 `catalogSnapshot` 单一工厂）。
+ */
+function installTree(providers: Record<string, ProviderSpec>): void {
+  modelsCatalogStore.resetForTesting();
+  modelsCatalogStore.acceptSnapshot(
+    catalogSnapshot({
+      tree: { version: 2, activeModel: null, providers },
+      revision: 'revision-0',
+    })
+  );
 }
 
 /** 跨环境（node vs jsdom）安全的 Storage spy 适配 */
@@ -41,333 +90,467 @@ const spyStorageSetItem = () =>
     ? vi.spyOn(Storage.prototype, 'setItem')
     : vi.spyOn(localStorage, 'setItem');
 
-describe('modelCatalogMeta with In-Memory Cache', () => {
-  beforeEach(() => {
-    localStorage.clear();
+beforeEach(() => {
+  localStorage.clear();
+  resetModelMetaCache();
+  modelsCatalogStore.resetForTesting();
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  modelsCatalogStore.resetForTesting();
+});
+
+describe('getModelMeta 默认值（树未 loaded）', () => {
+  it('enabled 默认 true；contextLength 回落 guessContextLength 的真实取值', () => {
+    expect(modelsCatalogStore.getState().loaded).toBe(false);
+
+    const known = getModelMeta('provider-1', 'deepseek-v4-flash');
+    expect(known).toEqual({
+      profileId: 'provider-1',
+      model: 'deepseek-v4-flash',
+      enabled: true,
+      contextLength: 1_048_576,
+    });
+    expect(known.contextLength).toBe(guessContextLength('deepseek-v4-flash'));
+
+    // 无已知映射的自建 id：回落 undefined（不发明值、不做 128K 腰斩）
+    const custom = getModelMeta('provider-1', 'my-custom-ft-2026');
+    expect(custom.enabled).toBe(true);
+    expect(custom.contextLength).toBeUndefined();
+    expect(custom.contextLength).toBe(guessContextLength('my-custom-ft-2026'));
+    expect(custom).not.toHaveProperty('lastTest');
+  });
+});
+
+describe('统一配置树是 enabled / contextLength 的唯一权威', () => {
+  it('树 loaded 时读树的 enabled / contextWindow；树无声明则回落默认', () => {
+    installTree({
+      'provider-1': provider([
+        { id: 'gpt-4o', enabled: false, contextWindow: 65_536 },
+        { id: 'o3', enabled: true },
+      ]),
+    });
+    expect(modelsCatalogStore.getState().loaded).toBe(true);
+    expect(
+      modelsCatalogStore
+        .getState()
+        .modelIndex.has(modelRefKey({ providerId: 'provider-1', modelId: 'gpt-4o' }))
+    ).toBe(true);
+
+    expect(getModelMeta('provider-1', 'gpt-4o')).toEqual({
+      profileId: 'provider-1',
+      model: 'gpt-4o',
+      enabled: false,
+      contextLength: 65_536,
+    });
+
+    // 树里无 contextWindow → 回落纯启发式
+    const o3 = getModelMeta('provider-1', 'o3');
+    expect(o3.enabled).toBe(true);
+    expect(o3.contextLength).toBe(guessContextLength('o3'));
+
+    // 树里没有该模型 → 无声明即启用
+    expect(getModelMeta('provider-1', 'not-in-tree').enabled).toBe(true);
+
+    // 身份精确：大小写不匹配即「树无声明」，不跨身份兜底
+    expect(getModelMeta('Provider-1', 'gpt-4o').enabled).toBe(true);
+    expect(getModelMeta('provider-1', 'GPT-4o').enabled).toBe(true);
+  });
+
+  it('树重新加载后立即生效（读树是实时读，不是启动快照）', () => {
+    installTree({
+      'provider-1': provider([{ id: 'm', enabled: true, contextWindow: 1_000 }]),
+    });
+    expect(getModelMeta('provider-1', 'm')).toMatchObject({
+      enabled: true,
+      contextLength: 1_000,
+    });
+
+    installTree({
+      'provider-1': provider([
+        { id: 'm', enabled: false, contextWindow: 2_000 },
+      ]),
+    });
+    expect(getModelMeta('provider-1', 'm')).toMatchObject({
+      enabled: false,
+      contextLength: 2_000,
+    });
+  });
+
+  it('LS 里残留的 enabled / contextLength / capabilities / protocol 一律不读', () => {
+    localStorage.setItem(
+      META_KEY,
+      JSON.stringify({
+        'provider-1::gpt-4o': {
+          profileId: 'provider-1',
+          model: 'gpt-4o',
+          enabled: true,
+          contextLength: 128_000,
+          capabilities: { image: true },
+          protocol: 'openai/chat',
+          lastTest: { ok: false, at: 5, error: 'boom' },
+        },
+      })
+    );
     resetModelMetaCache();
+    installTree({
+      'provider-1': provider([
+        { id: 'gpt-4o', enabled: false, contextWindow: 65_536 },
+      ]),
+    });
+
+    const meta = getModelMeta('provider-1', 'gpt-4o');
+    expect(meta.enabled).toBe(false); // 不信 LS 的 enabled: true
+    expect(meta.contextLength).toBe(65_536); // 不信 LS 的 128000
+    expect(meta).not.toHaveProperty('capabilities');
+    expect(meta).not.toHaveProperty('protocol');
+    // 探测结果面仍来自 LS
+    expect(meta.lastTest).toEqual({ ok: false, at: 5, error: 'boom' });
+  });
+});
+
+describe('落盘面只允许探测结果（负向断言）', () => {
+  it('落盘 JSON 里不含 enabled / contextLength / capabilities / protocol', () => {
+    upsertModelMetaExport('provider-1', 'model-x', { lastTest: lastTest(1) });
+
+    const record = storedRecord('provider-1', 'model-x');
+    expect(Object.keys(record)).toEqual(['lastTest']);
+    for (const field of [
+      'enabled',
+      'contextLength',
+      'capabilities',
+      'protocol',
+      'displayName',
+      'defaultThinkingLevel',
+      'maxOutputTokens',
+      'modalities',
+      'thinking',
+      'pricing',
+    ]) {
+      expect(record).not.toHaveProperty(field);
+      expect(localStorage.getItem(META_KEY)).not.toContain(`"${field}"`);
+    }
   });
 
-  afterEach(() => {
-    vi.restoreAllMocks();
+  it('upsert 同时传 enabled / contextLength 时落盘内容仍只有 lastTest', () => {
+    upsertModelMetaExport('provider-1', 'model-x', { lastTest: lastTest(2) });
+    const before = localStorage.getItem(META_KEY);
+    expect(before).toContain('"lastTest"');
+
+    const updateSpy = vi
+      .spyOn(modelsCatalogStore, 'updateModel')
+      .mockResolvedValue({ ok: true });
+    upsertModelMetaExport('provider-1', 'model-x', {
+      enabled: false,
+      contextLength: 32_768,
+      lastTest: lastTest(3),
+    });
+
+    expect(updateSpy).toHaveBeenCalledTimes(1);
+    const record = storedRecord('provider-1', 'model-x');
+    expect(Object.keys(record)).toEqual(['lastTest']);
+    expect(record.lastTest).toEqual(lastTest(3));
+    expect(localStorage.getItem(META_KEY)).not.toContain('"enabled"');
+    expect(localStorage.getItem(META_KEY)).not.toContain('"contextLength"');
+  });
+});
+
+describe('upsertModelMetaExport 的写路由', () => {
+  it('enabled / contextLength 不落 LS，路由到树 updateModel（contextLength → contextWindow）', () => {
+    const setItemSpy = spyStorageSetItem();
+    const updateSpy = vi
+      .spyOn(modelsCatalogStore, 'updateModel')
+      .mockResolvedValue({ ok: true });
+
+    upsertModelMetaExport('provider-1', 'model-x', { enabled: false });
+    expect(updateSpy).toHaveBeenNthCalledWith(1, 'provider-1', 'model-x', {
+      enabled: false,
+    });
+
+    upsertModelMetaExport('provider-1', 'model-x', { contextLength: 128_000 });
+    expect(updateSpy).toHaveBeenNthCalledWith(2, 'provider-1', 'model-x', {
+      contextWindow: 128_000,
+    });
+
+    upsertModelMetaExport('provider-1', 'model-x', {
+      enabled: true,
+      contextLength: 65_536,
+    });
+    expect(updateSpy).toHaveBeenNthCalledWith(3, 'provider-1', 'model-x', {
+      enabled: true,
+      contextWindow: 65_536,
+    });
+
+    expect(updateSpy).toHaveBeenCalledTimes(3);
+    // 不写 LS：meta 键一次都没被 setItem，内容仍为空
+    expect(
+      setItemSpy.mock.calls.filter(([key]) => key === META_KEY)
+    ).toHaveLength(0);
+    expect(localStorage.getItem(META_KEY)).toBeNull();
+  });
+});
+
+describe('lastTest 落盘、内存镜像与 UI 事件广播', () => {
+  it('lastTest → 落 LS + 同步内存镜像 + 广播 model-meta-changed（不触树写）', () => {
+    const updateSpy = vi
+      .spyOn(modelsCatalogStore, 'updateModel')
+      .mockResolvedValue({ ok: true });
+    const received: unknown[] = [];
+    const off = onUiEvent('model-meta-changed', (detail) => {
+      received.push(detail);
+    });
+
+    const lt = lastTest(7);
+    const meta = upsertModelMetaExport('provider-1', 'model-x', {
+      lastTest: lt,
+    });
+
+    expect(meta.profileId).toBe('provider-1');
+    expect(meta.model).toBe('model-x');
+    expect(meta.enabled).toBe(true);
+    expect(meta.lastTest).toEqual(lt);
+    expect(storedMap()).toEqual({ 'provider-1::model-x': { lastTest: lt } });
+    expect(_getMemoryMetaCacheSnapshot()).toEqual({
+      'provider-1::model-x': { lastTest: lt },
+    });
+    expect(updateSpy).not.toHaveBeenCalled();
+    expect(received).toEqual([
+      { profileId: 'provider-1', model: 'model-x', enabled: true },
+    ]);
+
+    off();
+  });
+});
+
+describe('memoryMetaCache 单例内存镜像机制', () => {
+  it('内存镜像命中：后续读取不重复执行 localStorage.getItem', () => {
+    upsertModelMetaExport('provider-1', 'model-a', { lastTest: lastTest(1) });
+    expect(_getMemoryMetaCacheSnapshot()).not.toBeNull();
+
+    const getItemSpy = spyStorageGetItem();
+    for (let i = 0; i < 50; i++) {
+      getModelMeta('provider-1', 'model-a');
+    }
+    expect(getItemSpy).toHaveBeenCalledTimes(0);
   });
 
-  describe('基础元数据存取与默认值', () => {
-    it('未设置元数据时返回正确的默认值', () => {
-      const meta = getModelMeta('provider-1', 'deepseek-v4-flash');
-      expect(meta.profileId).toBe('provider-1');
-      expect(meta.model).toBe('deepseek-v4-flash');
-      expect(meta.enabled).toBe(true);
-      expect(meta.contextLength).toBe(1_048_576);
-    });
+  it('resetModelMetaCache 清空镜像，下次读取重新加载并读到真实落盘值', () => {
+    const lt = lastTest(9);
+    upsertModelMetaExport('provider-1', 'model-b', { lastTest: lt });
+    expect(_getMemoryMetaCacheSnapshot()).not.toBeNull();
 
-    it('setModelEnabled 能够正确写入并读取', () => {
-      setModelEnabled('provider-1', 'gpt-4o', false);
-      const meta = getModelMeta('provider-1', 'gpt-4o');
-      expect(meta.enabled).toBe(false);
+    resetModelMetaCache();
+    expect(_getMemoryMetaCacheSnapshot()).toBeNull();
 
-      setModelEnabled('provider-1', 'gpt-4o', true);
-      const updated = getModelMeta('provider-1', 'gpt-4o');
-      expect(updated.enabled).toBe(true);
-    });
-
-    it('setModelDisplayName 正确修剪空白，纯空白转为 undefined', () => {
-      setModelDisplayName('provider-1', 'gpt-4o', '   GPT-4 Omni Custom   ');
-      let meta = getModelMeta('provider-1', 'gpt-4o');
-      expect(meta.displayName).toBe('GPT-4 Omni Custom');
-      expect(formatModelDisplayName('provider-1', 'gpt-4o')).toBe('GPT-4 Omni Custom');
-
-      // 空白修剪后清空
-      setModelDisplayName('provider-1', 'gpt-4o', '    ');
-      meta = getModelMeta('provider-1', 'gpt-4o');
-      expect(meta.displayName).toBeUndefined();
-      expect(formatModelDisplayName('provider-1', 'gpt-4o')).toBe('gpt-4o');
-    });
-
-    it('支持能力标记、上下文与思考档位更新', () => {
-      setModelCapability('provider-1', 'model-x', 'image', true);
-      setModelContextLength('provider-1', 'model-x', 128_000);
-      setModelThinkingLevel('provider-1', 'model-x', 'high');
-
-      const meta = getModelMeta('provider-1', 'model-x');
-      expect(meta.capabilities?.image).toBe(true);
-      expect(meta.contextLength).toBe(128_000);
-      expect(meta.defaultThinkingLevel).toBe('high');
-    });
-
-    it('存量 vision 能力键在首次读取时一次性迁移为 image（幂等）', () => {
-      // 预置存量数据：仅含旧 vision 键
-      localStorage.setItem(
-        'crish_model_meta_v1',
-        JSON.stringify({
-          'provider-1::legacy-model': {
-            profileId: 'provider-1',
-            model: 'legacy-model',
-            enabled: true,
-            capabilities: { tools: true, vision: true, reasoning: false },
-          },
-          'provider-1::mixed-model': {
-            profileId: 'provider-1',
-            model: 'mixed-model',
-            enabled: true,
-            capabilities: { vision: false, image: true },
-          },
-        })
-      );
-      resetModelMetaCache();
-
-      const legacy = getModelMeta('provider-1', 'legacy-model');
-      expect(legacy.capabilities?.image).toBe(true);
-      expect((legacy.capabilities as Record<string, unknown>).vision).toBeUndefined();
-
-      // 双键并存（vision:false + image:true）→ image 保持 true，vision 清除
-      const mixed = getModelMeta('provider-1', 'mixed-model');
-      expect(mixed.capabilities?.image).toBe(true);
-      expect((mixed.capabilities as Record<string, unknown>).vision).toBeUndefined();
-
-      // 迁移写回存储：LS 中不再存在 vision 键
-      const stored = JSON.parse(
-        localStorage.getItem('crish_model_meta_v1') ?? '{}'
-      ) as Record<string, { capabilities: Record<string, unknown> }>;
-      expect(stored['provider-1::legacy-model']?.capabilities?.vision).toBeUndefined();
-      expect(stored['provider-1::legacy-model']?.capabilities?.image).toBe(true);
-
-      // 幂等：再次重载读取结果不变
-      resetModelMetaCache();
-      expect(getModelMeta('provider-1', 'legacy-model').capabilities?.image).toBe(true);
-    });
-  });
-
-  describe('memoryMetaCache 单例内存镜像机制', () => {
-    it('内存缓存命中：后续读取不重复执行 localStorage.getItem', () => {
-      // 预置数据
-      setModelEnabled('provider-1', 'model-a', true);
-
-      // spy localStorage.getItem
-      const getItemSpy = spyStorageGetItem();
-
-      // 首次读取：由于 setModelEnabled 已经写穿透，memoryMetaCache 应该已有数据
-      expect(_getMemoryMetaCacheSnapshot()).not.toBeNull();
-      const meta1 = getModelMeta('provider-1', 'model-a');
-      expect(meta1.enabled).toBe(true);
-
-      // 多次密集读取
-      for (let i = 0; i < 50; i++) {
-        getModelMeta('provider-1', 'model-a');
-      }
-
-      // 期间应当 0 次调用 getItem
-      expect(getItemSpy).toHaveBeenCalledTimes(0);
-    });
-
-    it('resetModelMetaCache 会清空内存镜像并在下次读取时触发重新加载', () => {
-      setModelEnabled('provider-1', 'model-b', false);
-      expect(_getMemoryMetaCacheSnapshot()).not.toBeNull();
-
-      resetModelMetaCache();
-      expect(_getMemoryMetaCacheSnapshot()).toBeNull();
-
-      const getItemSpy = spyStorageGetItem();
-      const meta = getModelMeta('provider-1', 'model-b');
-      expect(meta.enabled).toBe(false);
-      expect(getItemSpy).toHaveBeenCalledTimes(1);
-    });
-
-    it('Devil-06: 连续执行 2,000 次 getModelMeta，主线程耗时必须严格小于 5ms', () => {
-      // 预先初始化若干模型数据
-      for (let i = 0; i < 20; i++) {
-        setModelEnabled('provider-1', `model-bench-${i}`, i % 2 === 0);
-      }
-
-      // JIT 预热消除冷启动延迟
-      for (let i = 0; i < 200; i++) {
-        getModelMeta('provider-1', `model-bench-${i % 20}`);
-      }
-
-      const t0 = performance.now();
-      for (let i = 0; i < 2000; i++) {
-        const m = `model-bench-${i % 20}`;
-        getModelMeta('provider-1', m);
-      }
-      const elapsed = performance.now() - t0;
-
-      // 验证极速内存直读（通常 < 1ms，门禁要求 < 5ms）
-      expect(elapsed).toBeLessThan(5);
-    });
-  });
-
-  describe('UI 事件广播联动（model-meta-changed）', () => {
-    it('setModelEnabled 变更时精准广播 model-meta-changed 事件', () => {
-      const received: unknown[] = [];
-      const off = onUiEvent('model-meta-changed', (detail) => {
-        received.push(detail);
-      });
-
-      setModelEnabled('provider-x', 'claude-3-7-sonnet', false);
-
-      expect(received).toHaveLength(1);
-      expect(received[0]).toEqual({
-        profileId: 'provider-x',
-        model: 'claude-3-7-sonnet',
-        enabled: false,
-        displayName: undefined,
-      });
-
-      off();
-    });
-
-    it('setModelDisplayName 变更时广播带 displayName 的事件', () => {
-      const received: unknown[] = [];
-      const off = onUiEvent('model-meta-changed', (detail) => {
-        received.push(detail);
-      });
-
-      setModelDisplayName('provider-y', 'deepseek-r1', 'DeepSeek R1 Thinking');
-
-      expect(received).toHaveLength(1);
-      expect(received[0]).toEqual({
-        profileId: 'provider-y',
-        model: 'deepseek-r1',
-        enabled: true,
-        displayName: 'DeepSeek R1 Thinking',
-      });
-
-      off();
-    });
-
-    it('upsertModelMetaExport 同样触发事件广播', () => {
-      const received: unknown[] = [];
-      const off = onUiEvent('model-meta-changed', (detail) => {
-        received.push(detail);
-      });
-
-      upsertModelMetaExport('provider-z', 'qwen-2.5-max', {
-        enabled: true,
-        displayName: '通义千问 Max',
-      });
-
-      expect(received).toHaveLength(1);
-      expect(received[0]).toEqual({
-        profileId: 'provider-z',
-        model: 'qwen-2.5-max',
-        enabled: true,
-        displayName: '通义千问 Max',
-      });
-
-      off();
+    const getItemSpy = spyStorageGetItem();
+    const meta = getModelMeta('provider-1', 'model-b');
+    expect(getItemSpy).toHaveBeenCalledTimes(1);
+    expect(meta.lastTest).toEqual(lt);
+    expect(_getMemoryMetaCacheSnapshot()).toEqual({
+      'provider-1::model-b': { lastTest: lt },
     });
   });
 
-  describe('跨窗口 StorageEvent 监听与失效机制', () => {
-    it('接收到 crish_model_meta_v1 键的 storage 事件时自动使内存缓存过期', () => {
-      setModelEnabled('provider-1', 'model-sync', true);
-      expect(_getMemoryMetaCacheSnapshot()).not.toBeNull();
-
-      // 派发 StorageEvent
-      window.dispatchEvent(
-        new StorageEvent('storage', {
-          key: 'crish_model_meta_v1',
-          newValue: JSON.stringify({}),
-        })
-      );
-
-      // 内存缓存应该已被清空为 null
-      expect(_getMemoryMetaCacheSnapshot()).toBeNull();
-    });
-
-    it('接收到其他不相干 key 的 storage 事件不会清空内存缓存', () => {
-      setModelEnabled('provider-1', 'model-sync', true);
-      expect(_getMemoryMetaCacheSnapshot()).not.toBeNull();
-
-      window.dispatchEvent(
-        new StorageEvent('storage', {
-          key: 'some_other_key',
-          newValue: '123',
-        })
-      );
-
-      expect(_getMemoryMetaCacheSnapshot()).not.toBeNull();
-    });
-  });
-
-  describe('异常防御与边界保护', () => {
-    it('LocalStorage 数据损坏（非法 JSON）时静默回退为空对象，不崩溃', () => {
-      localStorage.setItem('crish_model_meta_v1', '{ invalid json ...');
-      resetModelMetaCache();
-
-      const meta = getModelMeta('provider-1', 'unknown-model');
-      expect(meta.enabled).toBe(true);
-      expect(meta.model).toBe('unknown-model');
-    });
-
-    it('LocalStorage 存储非对象类型时安全回退', () => {
-      localStorage.setItem('crish_model_meta_v1', '"a primitive string"');
-      resetModelMetaCache();
-
-      const meta = getModelMeta('provider-1', 'unknown-model');
-      expect(meta.enabled).toBe(true);
-    });
-
-    it('LocalStorage.setItem 抛错时写入不崩溃，内存镜像依然更新', () => {
-      spyStorageSetItem().mockImplementation(() => {
-        throw new Error('QuotaExceededError');
+  it('Devil-06: 连续执行 2,000 次 getModelMeta，主线程耗时必须严格小于 5ms', () => {
+    for (let i = 0; i < 20; i++) {
+      upsertModelMetaExport('provider-1', `model-bench-${i}`, {
+        lastTest: lastTest(i),
       });
+    }
 
-      expect(() => {
-        setModelEnabled('provider-1', 'model-fail', false);
-      }).not.toThrow();
+    // JIT 预热消除冷启动延迟
+    for (let i = 0; i < 200; i++) {
+      getModelMeta('provider-1', `model-bench-${i % 20}`);
+    }
 
-      // 内存镜像依然有效
-      expect(getModelMeta('provider-1', 'model-fail').enabled).toBe(false);
-    });
+    const t0 = performance.now();
+    for (let i = 0; i < 2000; i++) {
+      getModelMeta('provider-1', `model-bench-${i % 20}`);
+    }
+    const elapsed = performance.now() - t0;
+
+    // 验证极速内存直读（通常 < 1ms，门禁要求 < 5ms）
+    expect(elapsed).toBeLessThan(5);
+  });
+});
+
+describe('跨窗口 StorageEvent 监听与失效机制', () => {
+  it('接收到 crish_model_meta_v1 键的 storage 事件时自动使内存缓存过期', () => {
+    upsertModelMetaExport('provider-1', 'model-sync', { lastTest: lastTest(1) });
+    expect(_getMemoryMetaCacheSnapshot()).not.toBeNull();
+
+    window.dispatchEvent(
+      new StorageEvent('storage', {
+        key: META_KEY,
+        newValue: JSON.stringify({}),
+      })
+    );
+
+    expect(_getMemoryMetaCacheSnapshot()).toBeNull();
+    // 失效后下次读取重新落盘读取，且读到的是真实存量
+    const getItemSpy = spyStorageGetItem();
+    expect(getModelMeta('provider-1', 'model-sync').lastTest).toEqual(
+      lastTest(1)
+    );
+    expect(getItemSpy).toHaveBeenCalledTimes(1);
   });
 
-  describe('孤儿 meta 键清扫（档案删除 / 历史迁移残留）', () => {
-    it('purgeMetaForProfile：删除目标档案全部前缀键，其余档案不受影响', () => {
-      setModelEnabled('provider-1', 'model-a', true);
-      setModelEnabled('provider-1', 'model-b', false);
-      setModelEnabled('provider-2', 'model-x', true);
+  it('接收到其他不相干 key 的 storage 事件不会清空内存缓存', () => {
+    upsertModelMetaExport('provider-1', 'model-sync', { lastTest: lastTest(1) });
+    const before = _getMemoryMetaCacheSnapshot();
+    expect(before).not.toBeNull();
 
-      purgeMetaForProfile('provider-1');
+    window.dispatchEvent(
+      new StorageEvent('storage', {
+        key: 'some_other_key',
+        newValue: '123',
+      })
+    );
 
-      const stored = JSON.parse(
-        localStorage.getItem('crish_model_meta_v1') ?? '{}'
-      ) as Record<string, unknown>;
-      expect(stored['provider-1::model-a']).toBeUndefined();
-      expect(stored['provider-1::model-b']).toBeUndefined();
-      expect(stored['provider-2::model-x']).toBeDefined();
+    expect(_getMemoryMetaCacheSnapshot()).toBe(before);
+  });
+});
 
-      // 幂等：再次清扫零写回零异常
-      purgeMetaForProfile('provider-1');
-      expect(getModelMeta('provider-2', 'model-x').enabled).toBe(true);
+describe('异常防御与边界保护', () => {
+  it('LocalStorage 数据损坏（非法 JSON）时静默回退为空对象，不崩溃', () => {
+    localStorage.setItem(META_KEY, '{ invalid json ...');
+    resetModelMetaCache();
+
+    const meta = getModelMeta('provider-1', 'unknown-model');
+    expect(meta.enabled).toBe(true);
+    expect(meta.model).toBe('unknown-model');
+    expect(meta.contextLength).toBe(guessContextLength('unknown-model'));
+    expect(meta).not.toHaveProperty('lastTest');
+    expect(_getMemoryMetaCacheSnapshot()).toEqual({});
+  });
+
+  it('LocalStorage 存储非对象类型时安全回退', () => {
+    localStorage.setItem(META_KEY, '"a primitive string"');
+    resetModelMetaCache();
+    expect(getModelMeta('provider-1', 'unknown-model').enabled).toBe(true);
+    expect(_getMemoryMetaCacheSnapshot()).toEqual({});
+
+    localStorage.setItem(META_KEY, 'null');
+    resetModelMetaCache();
+    expect(getModelMeta('provider-1', 'unknown-model').enabled).toBe(true);
+    expect(_getMemoryMetaCacheSnapshot()).toEqual({});
+  });
+
+  it('LocalStorage.setItem 抛错时写入不崩溃，内存镜像依然更新', () => {
+    const setItemSpy = spyStorageSetItem().mockImplementation(() => {
+      throw new Error('QuotaExceededError');
     });
 
-    it('purgeOrphanMetaKeys：清除不在白名单的档案前缀键，含畸形键', () => {
-      setModelEnabled('live-a', 'm1', true);
-      setModelEnabled('live-b', 'm2', true);
-      setModelEnabled('orphan-x', 'm3', true);
-      setModelEnabled('orphan-y', 'm4', true);
-      // 无档案前缀的畸形键（历史脏数据）
-      const map = JSON.parse(
-        localStorage.getItem('crish_model_meta_v1') ?? '{}'
-      ) as Record<string, unknown>;
-      map['bare-key'] = { profileId: 'orphan-z', model: 'm5', enabled: true };
-      localStorage.setItem('crish_model_meta_v1', JSON.stringify(map));
-      resetModelMetaCache();
+    const lt = lastTest(4);
+    expect(() => {
+      upsertModelMetaExport('provider-1', 'model-fail', { lastTest: lt });
+    }).not.toThrow();
 
-      purgeOrphanMetaKeys(new Set(['live-a', 'live-b']));
+    // 真实尝试过落盘（否则本用例不成立），但 LS 内容确为空
+    expect(setItemSpy).toHaveBeenCalledWith(META_KEY, expect.any(String));
+    expect(localStorage.getItem(META_KEY)).toBeNull();
 
-      const stored = JSON.parse(
-        localStorage.getItem('crish_model_meta_v1') ?? '{}'
-      ) as Record<string, unknown>;
-      expect(stored['live-a::m1']).toBeDefined();
-      expect(stored['live-b::m2']).toBeDefined();
-      expect(stored['orphan-x::m3']).toBeUndefined();
-      expect(stored['orphan-y::m4']).toBeUndefined();
-      expect(stored['bare-key']).toBeUndefined();
-
-      // 幂等：无孤儿时零写回
-      purgeOrphanMetaKeys(new Set(['live-a', 'live-b']));
-      expect(getModelMeta('live-a', 'm1').enabled).toBe(true);
+    // 内存镜像依然有效
+    expect(_getMemoryMetaCacheSnapshot()).toEqual({
+      'provider-1::model-fail': { lastTest: lt },
     });
+    expect(getModelMeta('provider-1', 'model-fail').lastTest).toEqual(lt);
+  });
+});
+
+describe('孤儿探测键清扫（档案删除 / 历史迁移残留）', () => {
+  it('purgeMetaForProfile：删除目标档案全部前缀键，其余档案不受影响；幂等零广播', () => {
+    const a = lastTest(1);
+    const b = lastTest(2);
+    const x = lastTest(3);
+    upsertModelMetaExport('provider-1', 'model-a', { lastTest: a });
+    upsertModelMetaExport('provider-1', 'model-b', { lastTest: b });
+    upsertModelMetaExport('provider-2', 'model-x', { lastTest: x });
+
+    const events: unknown[] = [];
+    const off = onUiEvent('model-meta-changed', (detail) => {
+      events.push(detail);
+    });
+
+    purgeMetaForProfile('provider-1');
+
+    expect(storedMap()).toEqual({ 'provider-2::model-x': { lastTest: x } });
+    expect(_getMemoryMetaCacheSnapshot()).toEqual({
+      'provider-2::model-x': { lastTest: x },
+    });
+    expect(events).toEqual([
+      { profileId: 'provider-1', model: '', enabled: true },
+    ]);
+
+    // 幂等：再次清扫零写回零广播
+    purgeMetaForProfile('provider-1');
+    expect(storedMap()).toEqual({ 'provider-2::model-x': { lastTest: x } });
+    expect(events).toHaveLength(1);
+
+    off();
+  });
+
+  it('purgeOrphanMetaKeys：清除白名单外档案键与畸形键（无 :: / 空档案前缀）', () => {
+    const m1 = lastTest(1);
+    const m2 = lastTest(2);
+    upsertModelMetaExport('live-a', 'm1', { lastTest: m1 });
+    upsertModelMetaExport('live-b', 'm2', { lastTest: m2 });
+    upsertModelMetaExport('orphan-x', 'm3', { lastTest: lastTest(3) });
+
+    const map = storedMap();
+    map['bare-key'] = { lastTest: lastTest(4) }; // 无 :: 的历史脏键
+    map['::m9'] = { lastTest: lastTest(5) }; // 空档案前缀
+    localStorage.setItem(META_KEY, JSON.stringify(map));
+    resetModelMetaCache();
+
+    const events: unknown[] = [];
+    const off = onUiEvent('model-meta-changed', (detail) => {
+      events.push(detail);
+    });
+
+    purgeOrphanMetaKeys(new Set(['live-a', 'live-b']));
+
+    expect(storedMap()).toEqual({
+      'live-a::m1': { lastTest: m1 },
+      'live-b::m2': { lastTest: m2 },
+    });
+    expect(events).toHaveLength(1);
+
+    // 幂等：无孤儿时零写回
+    const frozen = localStorage.getItem(META_KEY);
+    purgeOrphanMetaKeys(new Set(['live-a', 'live-b']));
+    expect(localStorage.getItem(META_KEY)).toBe(frozen);
+    expect(events).toHaveLength(1);
+
+    off();
+  });
+});
+
+describe('退役写口不可复活（源码文本负向断言）', () => {
+  it('modelCatalogMeta.ts 不再导出任何 setModel* 写口，且唯一写口/读口在位', () => {
+    for (const name of [
+      'setModelEnabled',
+      'setModelDisplayName',
+      'setModelCapability',
+      'setModelContextLength',
+      'setModelThinkingLevel',
+    ]) {
+      expect(SRC).not.toContain(`export function ${name}`);
+      expect(SRC).not.toContain(`export const ${name}`);
+    }
+    // 泛化哨兵：任何新造的 setModel* 导出同样不允许
+    expect(SRC).not.toMatch(/export\s+(?:function|const)\s+setModel\w+/);
+
+    // 反向哨兵：唯一写口与清扫口必须在位（防「文件被清空也算绿」）
+    for (const kept of [
+      'export function upsertModelMetaExport',
+      'export function getModelMeta',
+      'export function purgeMetaForProfile',
+      'export function purgeOrphanMetaKeys',
+      'export function resetModelMetaCache',
+    ]) {
+      expect(SRC).toContain(kept);
+    }
   });
 });

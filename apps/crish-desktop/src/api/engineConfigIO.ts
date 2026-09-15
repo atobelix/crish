@@ -26,7 +26,9 @@ const MAX_RECENT = 12;
 
 /**
  * 最近使用模型：**身份 = (providerId, modelId) 二元组**（裁决 ③）。
- * 存储形状为 `providerId::modelId` 字符串数组（沿用本仓既有 `::` 键惯例）。
+ * 存储形状为**本仓唯一身份键** `modelRefKey`（JSON 二元组字符串，如
+ * `["ollama","ornith"]`）的字符串数组——**不是** `providerId::modelId` 模板拼接，
+ * 也不得引入第三种连接格式（D5 身份键防线）。
  * 裸 modelId 一律不得参与身份解析——同名模型可同时存在于多个供应商。
  */
 function readStoredRecent(): unknown[] {
@@ -65,7 +67,7 @@ function resolveUniqueProviderId(modelId: string): string | null {
 }
 
 /**
- * 读取最近使用模型键（`providerId::modelId`）。
+ * 读取最近使用模型键（`modelRefKey` = JSON 二元组）。
  *
  * 存量裸 id 的一次性幂等迁移：能由统一树解析出唯一供应商 → 迁移为二元组；
  * 歧义/未知 → 丢弃（不得猜）。树未加载时不改写存储（保留原值待下次迁移），
@@ -100,7 +102,7 @@ export function loadRecentModels(): string[] {
 }
 
 /**
- * 记录一次最近使用（`providerId::modelId`）。
+ * 记录一次最近使用（`modelRefKey` = JSON 二元组）。
  * 显式 providerId 优先；缺省时由统一树解析唯一供应商；无法确定身份 → 不写入
  * （裸 modelId 永不落库）。
  */

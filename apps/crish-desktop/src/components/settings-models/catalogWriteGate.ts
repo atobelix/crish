@@ -86,11 +86,20 @@ export async function defaultLocalMutation<T>(
   return await fn();
 }
 
-/** 手填草稿 → addModel 输入。不写 thinking 空对象、不写 apiKey；映射只产出规范字段。 */
+/**
+ * 手填草稿 → addModel 输入。不写 thinking 空对象、不写 apiKey；映射只产出规范字段。
+ *
+ * 价格闸门（用户裁决「模型字典只做参考，实际以用户配置为准」）：
+ * 字典/探针预估价只作界面提示，草稿里出现 `pricing` 不等于用户声明过价格，
+ * 故此处**默认拒收** `pricing`——只有用户显式编辑价格（`pricingExplicit === true`）
+ * 才把它当作用户声明写进补丁。默认拒绝而非默认放行：将来新增调用方忘记置标记
+ * 时也不会把参考价泄漏进统一树。
+ */
 export function addDraftToModelInput(
   id: string,
   draft: AddModelDraft
 ): Partial<ModelSpec> & { id: string } {
-  const patch = draftToModelPatch(draft);
-  return { id, ...patch };
+  const declared: AddModelDraft = { ...draft };
+  if (draft.pricingExplicit !== true) delete declared.pricing;
+  return { id, ...draftToModelPatch(declared) };
 }

@@ -143,6 +143,46 @@ fn model_identity_is_provider_and_model_pair() {
     assert!(catalog.lookup("gamma", "shared-model").is_none());
 }
 
+/// 不变量 3 补充：出厂字典内 `model id` 是**唯一键**（前端按 id 查表的前提）。
+///
+/// 前端 `pricingResolver` / `toCatalogCacheSnapshot` 按 `model id` 索引出厂字典
+/// （配置树的 `providerId` 与字典厂商是两个命名空间，无法直接作二元组查找）。
+/// 该做法**只在不变量成立时**才不含猜测：若同一 id 在多个厂商下出现且价格不一致，
+/// 按 id 查表就会任选一个 ⇒ 必须在此钉死，不成立时本条变红而不是静默出错。
+#[test]
+fn dictionary_model_ids_are_unique_keys() {
+    let bundled = ModelCatalog::bundled();
+    let mut by_id: std::collections::BTreeMap<String, Vec<(String, Option<f64>, Option<f64>)>> =
+        std::collections::BTreeMap::new();
+    for (_, entry) in bundled.iter_entries() {
+        by_id.entry(entry.model.clone()).or_default().push((
+            entry.vendor.clone(),
+            entry.input_price,
+            entry.output_price,
+        ));
+    }
+
+    assert!(
+        by_id.len() > 100,
+        "出厂字典条目过少（{}），夹具失效", by_id.len()
+    );
+
+    let conflicting: Vec<String> = by_id
+        .iter()
+        .filter(|(_, rows)| {
+            let first = rows.first().map(|r| (r.1, r.2));
+            rows.iter().any(|r| Some((r.1, r.2)) != first)
+        })
+        .map(|(id, _)| id.clone())
+        .collect();
+
+    assert!(
+        conflicting.is_empty(),
+        "出厂字典出现同 id 不同价的条目（{conflicting:?}）：按 id 查表会任选一个，\
+         必须改为按 (厂商, id) 查找或修数据"
+    );
+}
+
 /// 不变量 4：运行期快照无独立读盘路径（源码形状断言）。
 ///
 /// 两条路径曾造成「修订撕裂」与「第二读面」，必须保持物理删除状态：

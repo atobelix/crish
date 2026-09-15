@@ -13,13 +13,16 @@ import {
 } from './provider-profiles/rustProfileStore';
 import {
   applyCatalogCacheSnapshot,
-  type CatalogCacheSnapshot,
-  type CatalogSnapshotPrice,
-  type CatalogTier,
-} from './pricingStore';
+} from './pricingResolver';
+import type {
+  CatalogCacheSnapshot,
+  CatalogSnapshotPrice,
+  CatalogTier,
+} from './pricingTypes';
 import { logger } from '../services/LoggerService';
 import { errorStore } from '../services/ErrorStore';
 import { normalizeModelIdText } from './modelCatalogPure';
+import { modelRefKey } from './modelsCatalogTypes';
 import { upsertModelMetaExport, getModelMeta } from './modelCatalogMeta';
 import type {
   CatalogModelEntry,
@@ -101,9 +104,27 @@ function toCatalogTierWire(
 }
 
 /**
- * catalog_get wire → pricingStore 快照（纯转换，可单测）。
- * 索引键：model 主键 + apiModel 别名（点号异形兼容）；null 价 = 未收录 → 缺失
- * （回退下级解析链）；tieredPricing 映射为分档消费结构。
+ * 出厂能力字典 wire → pricingStore 快照（纯转换，可单测）。
+ *
+ * 索引键 = **模型 id**（含 `apiModel` 点号异形别名）。
+ *
+ * 注意：索引键**不是** `modelRefKey({ providerId, modelId })` —— 配置树侧的身份键
+ * 与本快照的索引键是两个不同口径，见下。
+ *
+ * 为什么可以按 id 索引（而不是 `(providerId, modelId)` 二元组）：
+ * 出厂字典是**厂商维度的出厂目录**，而配置树的 `providerId` 是用户侧供应商键
+ * （`custom-ms983y2d` / `ollama` / `deepseek` …），两者**不同命名空间**
+ * （字典厂商为 `openai` / `google` / `dashscope` / `kimi` …），配置树的
+ * `ProviderSpec` 也没有 vendor 字段（`crates/agent-provider/src/models/catalog_types.rs:48-73`）。
+ * 实测字典内 **156 个模型 id、0 个跨厂商重复**（`catalog.json` 全量统计），
+ * 故 id 在字典内是**唯一键**——按 id 查找**不含任何猜测**。
+ *
+ * 不变量守卫：若某 id 出现多条且价格不一致（字典不变量被破坏），
+ * **丢弃该 id 的全部条目**（fail-closed「未收录」）并显式告警，
+ * **绝不**任选一个。该不变量另由 Rust 侧
+ * `models/ssot_convergence_tests.rs` 的 `dictionary_model_ids_are_unique_keys` 钉死。
+ *
+ * 无 substring / 前缀后缀 / 模糊回退；null 价 = 未收录 → 字段缺失。
  */
 export function toCatalogCacheSnapshot(
   wire: CatalogSnapshotWire | null | undefined
@@ -115,9 +136,14 @@ export function toCatalogCacheSnapshot(
       prices,
     };
   }
+
+  /** 同 id 多条时用于冲突判定：签名相同视为同一条目的重复投影，不同则冲突。 */
+  const seen = new Map<string, string>();
+
   for (const entry of wire.entries) {
     const model = normalizeModelIdText(entry?.model);
     if (!model) continue;
+    const tiers = toCatalogTierWire(entry.tieredPricing);
     const price: CatalogSnapshotPrice = {
       ...(typeof entry.inputPrice === 'number'
         ? { inputPerMTok: entry.inputPrice }
@@ -131,15 +157,49 @@ export function toCatalogCacheSnapshot(
       ...(typeof entry.cacheWritePrice === 'number'
         ? { writePerMTok: entry.cacheWritePrice }
         : {}),
-      ...(toCatalogTierWire(entry.tieredPricing)
-        ? { tiered: toCatalogTierWire(entry.tieredPricing) }
+      ...(typeof entry.cacheWritePrice5m === 'number'
+        ? { writePerMTok5m: entry.cacheWritePrice5m }
         : {}),
+      ...(typeof entry.cacheWritePrice1h === 'number'
+        ? { writePerMTok1h: entry.cacheWritePrice1h }
+        : {}),
+      ...(entry.cacheWriteFree === true ? { writeFree: true } : {}),
+      ...(entry.currency === 'USD' || entry.currency === 'CNY'
+        ? { currency: entry.currency }
+        : {}),
+      ...(tiers ? { tiered: tiers } : {}),
     };
-    prices[model] = price;
-    // apiModel 别名（点号异形，如 gemini-3.1-pro-preview）→ 同一价格索引
+    const signature = JSON.stringify(price);
+    // 主 id 与别名共用**同一键命名空间**（查找时都按 id 查），故共用同一张签名表，
+    // 冲突语义一致：同一键被不同价主张 → 该键作废（fail-closed「未收录」）。
+    const claim = (key: string): boolean => {
+      const previous = seen.get(key);
+      if (previous === '\u0000CONFLICT') return false;
+      if (previous !== undefined && previous !== signature) {
+        logger.error(
+          `出厂能力字典出现同键不同价的条目（key=${key}），该键按「未收录」处理`
+        );
+        delete prices[key];
+        seen.set(key, '\u0000CONFLICT');
+        return false;
+      }
+      seen.set(key, signature);
+      prices[key] = price;
+      return true;
+    };
+
+    claim(model);
+
+    // apiModel 别名（点号异形，如 gemini-3.1-pro-preview）→ 同一价格索引。
+    //
+    // **同样 fail-closed**：字典里存在多组别名被不同条目主张且价格不同的情况
+    // （实测 19 组，例如 `glm-4.5-air` 同时被 `glm-4-5-air`(USD) 与
+    // `glm-4-5-air-cny`(CNY) 主张），也存在别名撞其他条目主 id 的情况。
+    // 旧实现用「先到先得」(`!prices[apiModel]`) ⇒ 命中结果取决于 `entries` 顺序
+    // = **静默任选**，与主 id 的守卫精神相反。现由 `claim` 统一处置。
     const apiModel = normalizeModelIdText(entry.apiModel);
-    if (apiModel && apiModel !== model && !prices[apiModel]) {
-      prices[apiModel] = price;
+    if (apiModel && apiModel !== model) {
+      claim(apiModel);
     }
   }
   return {

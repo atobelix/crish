@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { ManualAddForm } from './ManualAddForm';
 import { emptyAddDraft, type AddModelDraft } from './modelsIpcHelpers';
+import { addDraftToModelInput } from './catalogWriteGate';
 
 function ManualAddWrapper({
   runScan = vi.fn().mockResolvedValue(undefined),
@@ -34,6 +35,94 @@ function ManualAddWrapper({
     />
   );
 }
+
+/**
+ * 真实链路捕获器：把表单当前草稿经价格闸门转成落树补丁，供断言。
+ * 复刻 useModelProfilesState.handleManualAdd 的 `addDraftToModelInput` 调用。
+ */
+function CaptureWrapper({
+  onCapture,
+  providerVendor = 'deepseek',
+  scannedModels = ['deepseek-v4-pro'],
+}: {
+  onCapture: (draft: AddModelDraft, patch: Record<string, unknown>) => void;
+  providerVendor?: string;
+  scannedModels?: string[];
+}) {
+  const [draft, setDraft] = useState<AddModelDraft>(emptyAddDraft());
+
+  return (
+    <ManualAddForm
+      addDraft={draft}
+      setAddDraft={setDraft}
+      handleManualAdd={() =>
+        onCapture(
+          draft,
+          addDraftToModelInput(draft.modelId.trim(), draft) as Record<
+            string,
+            unknown
+          >
+        )
+      }
+      setManualOpen={vi.fn()}
+      providerVendor={providerVendor}
+      scannedModels={scannedModels}
+      existingModels={[]}
+    />
+  );
+}
+
+describe('ManualAddForm 手动新增：字典参考价不落树（用户裁决：字典只做参考）', () => {
+  it('负向断言：手动输入已知模型 ID 后未编辑价格 → 落树补丁不含 pricing 键', () => {
+    const captured: { draft: AddModelDraft; patch: Record<string, unknown> }[] =
+      [];
+    render(
+      <CaptureWrapper
+        onCapture={(draft, patch) => captured.push({ draft, patch })}
+      />
+    );
+
+    const input = screen.getByPlaceholderText('输入或选择，如 gpt-5.6-sol');
+    fireEvent.change(input, { target: { value: 'deepseek-v4-pro' } });
+    // 失焦触发智能预填（含字典参考价）
+    fireEvent.blur(input);
+
+    fireEvent.click(screen.getByRole('button', { name: '添加模型' }));
+
+    const { draft, patch } = captured.at(-1)!;
+
+    // 参考价确实进了草稿 —— 界面提示可用
+    expect(draft.pricing).toBeDefined();
+    expect(draft.pricing!.input).toBe('3');
+    // 但预填绝不构成用户声明
+    expect(draft.pricingExplicit).not.toBe(true);
+    // 落树补丁不含 pricing —— 负向断言
+    expect(Object.hasOwn(patch, 'pricing')).toBe(false);
+    // 非价格预填仍落树
+    expect(patch['displayName']).toBe('DeepSeek V4 Pro');
+    expect(patch['contextWindow']).toBe(1048576);
+  });
+
+  it('负向断言：选定在线建议（同样触发字典预填）后补丁仍不含 pricing', () => {
+    const captured: { draft: AddModelDraft; patch: Record<string, unknown> }[] =
+      [];
+    render(
+      <CaptureWrapper
+        onCapture={(draft, patch) => captured.push({ draft, patch })}
+      />
+    );
+
+    const input = screen.getByPlaceholderText('输入或选择，如 gpt-5.6-sol');
+    fireEvent.focus(input);
+    fireEvent.click(screen.getAllByText('deepseek-v4-pro')[0]!);
+
+    fireEvent.click(screen.getByRole('button', { name: '添加模型' }));
+
+    const { draft, patch } = captured.at(-1)!;
+    expect(draft.pricing).toBeDefined();
+    expect(Object.hasOwn(patch, 'pricing')).toBe(false);
+  });
+});
 
 describe('ManualAddForm (手动添加模型与配置面板 1:1 对齐一等公民)', () => {
   it('移除右上角旧独立按钮，在模型 ID 行内联在线获取按钮', () => {

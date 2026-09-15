@@ -353,6 +353,13 @@ export function addModel(
   return updateProvider(tree, id, { models: [...provider.models, model] });
 }
 
+/**
+ * 模型补丁合并语义（逐字段浅合并，缺省键不动）：
+ * - 补丁**不含**某键 → 树中该键原值保持不变（如 `{ enabled: checked }` 不会清掉 pricing）；
+ * - 补丁含 `key: undefined` 自有键 → 明确删除该键（`definedClone` 过滤 undefined）；
+ * - 补丁含 `pricing` → 整个 pricing 对象替换（不做嵌套逐字段合并），
+ *   这是「清空某价格维度」得以生效的机制：`pricingFromDraft` 会省略空维度。
+ */
 export function updateModel(
   tree: ModelsYamlTree,
   providerId: string,

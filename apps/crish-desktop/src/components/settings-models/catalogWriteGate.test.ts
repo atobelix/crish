@@ -12,6 +12,7 @@ import { mockTauriCommand } from '../../test-setup';
 import {
   DEFAULT_YAML_PROTOCOL,
   YAML_PROTOCOL_SELECT_OPTIONS,
+  addDraftToModelInput,
   ensureProviderShell,
   protocolForProviderWrite,
 } from './catalogWriteGate';
@@ -23,9 +24,12 @@ import {
 import {
   modelsCatalogStore,
   resetModelsCatalogMirror,
+  selectModel,
   selectProvider,
 } from '../../api/modelsCatalogStore';
 import { resetLsImportForTesting } from '../../api/modelsLsImport';
+import { calculateAutofillDraft } from './manualAddAutofill';
+import { emptyAddDraft } from './modelsIpcHelpers';
 
 const CATALOG_PATH = 'C:\\Users\\tester\\.conex\\models.yaml';
 
@@ -100,5 +104,179 @@ describe('catalogWriteGate 协议 SSOT 派生', () => {
     // 提交给内核事务的规范树亦为 SSOT 默认协议（序列化在内核）
     const tree = submittedTree as { providers: Record<string, { protocol: string }> } | null;
     expect(tree?.providers['custom-x']?.protocol).toBe(DEFAULT_PROTOCOL);
+  });
+});
+
+/**
+ * 用户裁决「模型字典只做参考，实际以用户配置为准」的落库闸门：
+ * 手动新增走完真实 store 落盘后，统一树里不得出现字典预估价。
+ */
+describe('addDraftToModelInput 价格闸门（默认拒收参考价）', () => {
+  beforeEach(() => {
+    resetModelsCatalogMirror();
+    resetLsImportForTesting();
+    localStorage.clear();
+  });
+
+  function mockCatalog(readTree: unknown) {
+    let submitted: unknown = null;
+    mockTauriCommand('workbench_read_models_yaml', () => ({
+      path: CATALOG_PATH,
+      revision: 'revision-0',
+      content: '',
+      template: '',
+      credentialStates: {},
+      parseError: null,
+      tree: readTree,
+    }));
+    mockTauriCommand('workbench_apply_models_config', (args) => {
+      submitted = (args as { tree: unknown }).tree;
+      return {
+        path: CATALOG_PATH,
+        revision: 'revision-1',
+        content: '',
+        template: '',
+        credentialStates: {},
+        parseError: null,
+        tree: submitted,
+      };
+    });
+    return () => submitted as { providers: Record<string, { models: unknown[] }> } | null;
+  }
+
+  it('负向断言：手动新增 + 未编辑价格 → 落树补丁与持久化树都不含 pricing', async () => {
+    const getSubmitted = mockCatalog({
+      version: 2,
+      activeModel: null,
+      providers: {},
+    });
+    await ensureProviderShell({
+      providerId: 'deepseek',
+      displayName: 'DeepSeek',
+      baseUrl: 'https://api.deepseek.com',
+      protocol: 'openai/chat',
+    });
+
+    // 真实链路：字典预填 → 闸门 → addModel
+    const draft = calculateAutofillDraft(
+      'deepseek-v4-pro',
+      'deepseek',
+      emptyAddDraft()
+    );
+    const input = addDraftToModelInput('deepseek-v4-pro', draft);
+    expect(Object.hasOwn(input, 'pricing')).toBe(false);
+
+    const res = await modelsCatalogStore.addModel('deepseek', input);
+    expect(res.ok).toBe(true);
+
+    const persisted = getSubmitted();
+    const model = persisted?.providers['deepseek']?.models[0] as Record<
+      string,
+      unknown
+    >;
+    expect(model).toBeTruthy();
+    expect(Object.hasOwn(model!, 'pricing')).toBe(false);
+    expect(model!['displayName']).toBe('DeepSeek V4 Pro');
+    // 内存镜像同样不得有 pricing
+    expect(Object.hasOwn(selectModel('deepseek', 'deepseek-v4-pro')!, 'pricing')).toBe(
+      false
+    );
+  });
+
+  it('正向断言：用户显式声明价格 → 落树补丁与持久化树都含正确 pricing', async () => {
+    const getSubmitted = mockCatalog({
+      version: 2,
+      activeModel: null,
+      providers: {},
+    });
+    await ensureProviderShell({
+      providerId: 'deepseek',
+      displayName: 'DeepSeek',
+      baseUrl: 'https://api.deepseek.com',
+      protocol: 'openai/chat',
+    });
+
+    const input = addDraftToModelInput('user-priced', {
+      ...emptyAddDraft(),
+      modelId: 'user-priced',
+      contextWindow: '128000',
+      pricing: { currency: 'CNY', input: '3', output: '12' },
+      pricingExplicit: true,
+    });
+    expect(input.pricing).toEqual({
+      currency: 'CNY',
+      input: 3,
+      output: 12,
+    });
+
+    const res = await modelsCatalogStore.addModel('deepseek', input);
+    expect(res.ok).toBe(true);
+
+    const model = getSubmitted()?.providers['deepseek']?.models[0] as Record<
+      string,
+      unknown
+    >;
+    expect(model!['pricing']).toEqual({
+      currency: 'CNY',
+      input: 3,
+      output: 12,
+    });
+  });
+
+  it('安全点：编辑已有模型且未动价格 → 持久化树中原有 pricing 保持不变', async () => {
+    const existingPricing = {
+      currency: 'CNY',
+      unit: 'per_1m_tokens',
+      input: 3,
+      output: 12,
+      cacheRead: 0.3,
+    };
+    const getSubmitted = mockCatalog({
+      version: 2,
+      activeModel: null,
+      providers: {
+        deepseek: {
+          displayName: 'DeepSeek',
+          baseUrl: 'https://api.deepseek.com',
+          protocol: 'openai/chat',
+          stream: true,
+          enabled: true,
+          models: [
+            {
+              id: 'deepseek-v4-pro',
+              displayName: 'DeepSeek V4 Pro',
+              enabled: true,
+              contextWindow: 1048576,
+              pricing: existingPricing,
+            },
+          ],
+        },
+      },
+    });
+
+    const loaded = await modelsCatalogStore.ensureLoaded();
+    expect(loaded).toBe(true);
+    expect(selectModel('deepseek', 'deepseek-v4-pro')?.pricing).toEqual(
+      existingPricing
+    );
+
+    // 真实场景：模型列表启用/停用开关只发 { enabled }，不含 pricing
+    const res = await modelsCatalogStore.updateModel(
+      'deepseek',
+      'deepseek-v4-pro',
+      { enabled: false }
+    );
+    expect(res.ok).toBe(true);
+
+    const persisted = getSubmitted()?.providers['deepseek']?.models[0] as Record<
+      string,
+      unknown
+    >;
+    expect(persisted!['pricing']).toEqual(existingPricing);
+    expect(persisted!['enabled']).toBe(false);
+    // 内存镜像同步保持
+    expect(selectModel('deepseek', 'deepseek-v4-pro')?.pricing).toEqual(
+      existingPricing
+    );
   });
 });

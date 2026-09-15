@@ -672,6 +672,7 @@ describe('modelCatalog', () => {
       version: 7,
       entries: [
         {
+          provider: 'deepseek',
           model: 'deepseek-v4-flash',
           inputPrice: 0.14,
           outputPrice: 0.28,
@@ -679,6 +680,7 @@ describe('modelCatalog', () => {
           cacheWritePrice: 0.0,
         },
         {
+          provider: 'google',
           model: 'gemini-3-1-pro',
           apiModel: 'gemini-3.1-pro-preview',
           inputPrice: 2.0,
@@ -696,6 +698,7 @@ describe('modelCatalog', () => {
         },
         // null 价 = 未收录（禁 0 占位）
         {
+          provider: 'openai',
           model: 'gpt-5.5-pro',
           inputPrice: 30.0,
           outputPrice: 180.0,
@@ -708,7 +711,17 @@ describe('modelCatalog', () => {
     it('toCatalogCacheSnapshot：四价 + apiModel 别名 + tiered + null 价语义', () => {
       const snap = toCatalogCacheSnapshot(wire);
       expect(snap.version).toBe(7);
-      // 主键与 apiModel 别名同价索引
+      // 索引键 = **模型 id**（出厂字典内 id 唯一：156 个 id / 0 个跨厂商重复，
+      // 由 Rust `ssot_convergence_tests::dictionary_model_ids_are_unique_keys` 钉死）；
+      // apiModel 别名（点号异形）同价。
+      expect(Object.keys(snap.prices).sort()).toEqual(
+        [
+          'deepseek-v4-flash',
+          'gemini-3-1-pro',
+          'gemini-3.1-pro-preview',
+          'gpt-5.5-pro',
+        ].sort()
+      );
       expect(snap.prices['deepseek-v4-flash']).toMatchObject({
         inputPerMTok: 0.14,
         readPerMTok: 0.0028,
@@ -721,7 +734,7 @@ describe('modelCatalog', () => {
       expect(snap.prices['gemini-3.1-pro-preview']).toBe(
         snap.prices['gemini-3-1-pro']
       );
-      // null 价 → 字段缺失（回退下级解析链）
+      // null 价 → 字段缺失（未收录，回退下级解析链）
       expect(snap.prices['gpt-5.5-pro']).not.toHaveProperty('readPerMTok');
       expect(snap.prices['gpt-5.5-pro']).toMatchObject({
         inputPerMTok: 30,
@@ -744,7 +757,9 @@ describe('modelCatalog', () => {
       const ok = await fetchCatalogSnapshot();
       expect(ok).toBe(true);
       // 快照注入后：四价取快照真源（source=snapshot）
-      expect(resolve4dPrices('deepseek-v4-flash')).toMatchObject({
+      expect(
+        resolve4dPrices({ providerId: 'deepseek', modelId: 'deepseek-v4-flash' })
+      ).toMatchObject({
         inputPerMTok: 0.14,
         cacheReadPerMTok: 0.0028,
         source: 'snapshot',
@@ -780,7 +795,9 @@ describe('modelCatalog', () => {
         // 三种失败都必须显式告警（禁止静默吞咽）
         expect(errorLog).toHaveBeenCalled();
         // 失败期间不得注入任何快照（快照保持空 → 消费面呈现「未收录」）
-        expect(resolve4dPrices('deepseek-v4-flash')?.source).not.toBe('snapshot');
+        expect(
+          resolve4dPrices({ providerId: 'deepseek', modelId: 'deepseek-v4-flash' })
+        ).toBeNull();
       } finally {
         errorLog.mockRestore();
       }

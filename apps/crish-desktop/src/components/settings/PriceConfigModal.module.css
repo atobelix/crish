@@ -189,3 +189,53 @@
 .searchInputWrapper {
   width: 150px; /* 布局约束，不入刻度（同 audits/03 §七 150px 登记） */
 }
+
+/* ── 价格来源徽标与模型身份（名单真源 = 统一树；见 modelPricingSource.ts） ── */
+
+.modelIdentity {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.modelName {
+  color: var(--text-primary);
+  font-size: var(--font-size-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.modelMeta {
+  color: var(--text-tertiary);
+  font-size: var(--font-size-xxs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sourceBadge {
+  display: inline-block;
+  margin-top: 2px;
+  padding: 0 4px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-tertiary);
+  font-size: var(--font-size-xxs);
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.source_user {
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+
+.source_estimate {
+  color: var(--text-tertiary);
+}
+
+.source_none {
+  color: var(--text-faint);
+}

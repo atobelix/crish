@@ -47,6 +47,10 @@ import {
   pushRecentModel,
   validateEngineBaseUrl,
 } from './engineConfig';
+// 期望值一律经身份键真源生成，杜绝硬编码 JSON 字面量（防实现漂移）
+import { parseRecentModelKey, recentModelKey } from './engineConfigHelpers';
+import { modelsCatalogStore } from './modelsCatalogStore';
+import type { ModelsYamlTree, ProviderSpec } from './modelsCatalogTypes';
 
 describe('normalizeEngineConfigText', () => {
   it('trims ASCII and full-width spaces with NFC', () => {
@@ -360,19 +364,171 @@ describe('parseEngineStatusFromRaw', () => {
   });
 });
 
+const RECENT_LS_KEY = 'crish_recent_models';
+
+/** 供应商夹具：最小合法 ProviderSpec（normalizeModelsTree 只校验这些字段）。 */
+function provider(models: string[]): ProviderSpec {
+  return {
+    protocol: 'openai/chat',
+    stream: true,
+    enabled: true,
+    models: models.map((id) => ({ id, enabled: true })),
+  };
+}
+
+/**
+ * 注入统一树：走 store 公开的 acceptSnapshot（与 modelsCatalogStore.test.ts /
+ * modelsCatalogLive.test.ts 同一路径），不做任何 `as any` 类型绕过。
+ */
+function installTree(providers: Record<string, string[]>): void {
+  const tree: ModelsYamlTree = {
+    version: 2,
+    activeModel: null,
+    providers: Object.fromEntries(
+      Object.entries(providers).map(([providerId, models]) => [
+        providerId,
+        provider(models),
+      ]),
+    ),
+  };
+  modelsCatalogStore.acceptSnapshot({
+    path: 'memory/models.yaml',
+    content: '',
+    revision: 'revision-0',
+    tree,
+    credentialStates: {},
+    template: '',
+  });
+}
+
+function storedRecent(): unknown {
+  const raw = localStorage.getItem(RECENT_LS_KEY);
+  return raw === null ? null : JSON.parse(raw);
+}
+
 describe('loadRecentModels / pushRecentModel / modelsForPicker (LS)', () => {
   beforeEach(() => {
     localStorage.clear();
+    // 树注入 = 显式 acceptSnapshot；未加载态由 resetForTesting 保证
+    modelsCatalogStore.resetForTesting();
   });
 
-  it('persists recent models with normalize + cap behavior', () => {
+  it('树未加载且未给 providerId 时不猜身份：不落库', () => {
+    expect(modelsCatalogStore.getState().loaded).toBe(false);
     expect(loadRecentModels()).toEqual([]);
-    expect(pushRecentModel('  ')).toEqual([]);
-    expect(pushRecentModel('m1')).toEqual(['m1']);
-    expect(pushRecentModel('m2')).toEqual(['m2', 'm1']);
-    expect(pushRecentModel('m1')).toEqual(['m1', 'm2']);
-    expect(modelsForPicker('m3')).toEqual(['m3', 'm1', 'm2']);
+    expect(pushRecentModel('m1')).toEqual([]);
+    // 真实副作用断言：LS 未被写入
+    expect(localStorage.getItem(RECENT_LS_KEY)).toBeNull();
+    // 空白 model 同样不得落库
+    expect(pushRecentModel('   ')).toEqual([]);
+    expect(localStorage.getItem(RECENT_LS_KEY)).toBeNull();
+  });
+
+  it('唯一持有该 modelId 的供应商被解析为二元组身份键', () => {
+    installTree({ p1: ['m1', 'm2'] });
+    const key1 = recentModelKey('p1', 'm1');
+    const key2 = recentModelKey('p1', 'm2');
+    expect(pushRecentModel('m1')).toEqual([key1]);
+    expect(pushRecentModel('m2')).toEqual([key2, key1]);
+    expect(loadRecentModels()).toEqual([key2, key1]);
+    // 落库形状即身份键（非裸 id），且可被 parseRecentModelKey 反解
+    expect(storedRecent()).toEqual([key2, key1]);
+    expect(parseRecentModelKey(key1)).toEqual({ providerId: 'p1', modelId: 'm1' });
+  });
+
+  it('显式 providerId 优先于树解析结果', () => {
+    installTree({ p1: ['m1'] });
+    const out = pushRecentModel('m1', 'p2');
+    expect(out).toHaveLength(1);
+    // 用分量断言而非字符串比较（比 toBe 更稳）
+    expect(parseRecentModelKey(out[0])).toEqual({ providerId: 'p2', modelId: 'm1' });
+    expect(out[0]).not.toBe(recentModelKey('p1', 'm1'));
+    // providerId 两侧空白被规范化
+    const trimmed = pushRecentModel('m1', '  p3  ');
+    expect(parseRecentModelKey(trimmed[0])).toEqual({
+      providerId: 'p3',
+      modelId: 'm1',
+    });
+    expect(trimmed).toHaveLength(2);
+  });
+
+  it('同一 modelId 属于多个供应商时拒绝猜测：返回现状且不写入', () => {
+    installTree({ p1: ['m1'], p2: ['m1'] });
+    // 0/多解 → 不猜，也不落库
+    expect(pushRecentModel('m1')).toEqual([]);
+    expect(localStorage.getItem(RECENT_LS_KEY)).toBeNull();
+    // 显式身份仍可写入
+    const explicit = pushRecentModel('m1', 'p1');
+    expect(explicit).toEqual([recentModelKey('p1', 'm1')]);
+    const written = localStorage.getItem(RECENT_LS_KEY);
+    // 歧义请求只返回现状：不追加、不改写存储
+    expect(pushRecentModel('m1')).toEqual([recentModelKey('p1', 'm1')]);
+    expect(localStorage.getItem(RECENT_LS_KEY)).toBe(written);
+    // 树中不存在的 modelId 同样不猜
+    expect(pushRecentModel('ghost')).toEqual([recentModelKey('p1', 'm1')]);
+    expect(localStorage.getItem(RECENT_LS_KEY)).toBe(written);
+  });
+
+  it('去重 + 置顶 + MAX_RECENT = 12 截断', () => {
+    const ids = Array.from({ length: 13 }, (_, i) => `r${i}`);
+    installTree({ p1: ids });
+    for (const id of ids) pushRecentModel(id);
+    const capped = loadRecentModels();
+    expect(capped).toHaveLength(12);
+    expect(capped[0]).toBe(recentModelKey('p1', 'r12'));
+    expect(capped).not.toContain(recentModelKey('p1', 'r0'));
+
+    // 重复推送 → 去重且置顶，总数不增长
+    const key5 = recentModelKey('p1', 'r5');
+    expect(pushRecentModel('r5')).toEqual([
+      key5,
+      ...capped.filter((key) => key !== key5),
+    ]);
+    expect(loadRecentModels()).toHaveLength(12);
+
+    // 置顶最旧一条后，被挤出的正是队尾那条
+    expect(pushRecentModel('r0')[0]).toBe(recentModelKey('p1', 'r0'));
+    const after = loadRecentModels();
+    expect(after).toHaveLength(12);
+    expect(after).not.toContain(recentModelKey('p1', 'r1'));
+    expect(new Set(after).size).toBe(12);
+  });
+
+  it('存量裸 id 一次性迁移为二元组并回写；歧义 / 未知则丢弃', () => {
+    localStorage.setItem(RECENT_LS_KEY, JSON.stringify(['m1', 'ghost', '  ']));
+    installTree({ p1: ['m1'] });
+    expect(loadRecentModels()).toEqual([recentModelKey('p1', 'm1')]);
+    expect(storedRecent()).toEqual([recentModelKey('p1', 'm1')]);
+
+    // 幂等：再次读取不改变结果与存储
+    const migrated = localStorage.getItem(RECENT_LS_KEY);
+    expect(loadRecentModels()).toEqual([recentModelKey('p1', 'm1')]);
+    expect(localStorage.getItem(RECENT_LS_KEY)).toBe(migrated);
+
+    // 歧义裸 id → 丢弃并回写空列表
+    localStorage.setItem(RECENT_LS_KEY, JSON.stringify(['m1']));
+    installTree({ p1: ['m1'], p2: ['m1'] });
+    expect(loadRecentModels()).toEqual([]);
+    expect(localStorage.getItem(RECENT_LS_KEY)).toBe('[]');
+
+    // 树未加载：裸 id 不进返回列表，也不改写存储（留待下次迁移）
+    localStorage.setItem(RECENT_LS_KEY, JSON.stringify(['m1']));
+    modelsCatalogStore.resetForTesting();
+    expect(loadRecentModels()).toEqual([]);
+    expect(storedRecent()).toEqual(['m1']);
+  });
+
+  it('modelsForPicker 返回裸 modelId 列表，且 current 置顶', () => {
+    installTree({ p1: ['m1', 'm2', 'm3'] });
+    pushRecentModel('m1');
+    pushRecentModel('m2');
+    expect(modelsForPicker('m3')).toEqual(['m3', 'm2', 'm1']);
     expect(modelsForPicker('m1')).toEqual(['m1', 'm2']);
+    // 展示面是裸 modelId，绝不是身份键字符串
+    expect(modelsForPicker('m3').every((x) => parseRecentModelKey(x) === null)).toBe(
+      true,
+    );
+    expect(modelsForPicker('m3')).not.toContain(recentModelKey('p1', 'm1'));
     // 不因空 picker 注入演示 id
     localStorage.clear();
     expect(modelsForPicker()).toEqual([]);
@@ -380,9 +536,9 @@ describe('loadRecentModels / pushRecentModel / modelsForPicker (LS)', () => {
   });
 
   it('ignores corrupt LS JSON', () => {
-    localStorage.setItem('crish_recent_models', '{not-json');
+    localStorage.setItem(RECENT_LS_KEY, '{not-json');
     expect(loadRecentModels()).toEqual([]);
-    localStorage.setItem('crish_recent_models', JSON.stringify({ x: 1 }));
+    localStorage.setItem(RECENT_LS_KEY, JSON.stringify({ x: 1 }));
     expect(loadRecentModels()).toEqual([]);
   });
 });
