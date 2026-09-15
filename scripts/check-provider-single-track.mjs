@@ -157,6 +157,18 @@ const GUIDE_TEXT = {
     '  ④ 复现：node scripts/check-provider-single-track.mjs。',
     '参考：docs/provider-single-track-convergence/02-执行拓扑与防御网方案.md D9 行。',
   ],
+  D11: [
+    '违反项：命令注册面漂移（FAIL 前缀 D11）——① manifest 声明面与 main.rs `command_registry!` 实装面不一致；② 前端注册表（tauri-command-registry.ts）与 manifest 不齐；③ 前端内置快照（commandManifest.ts）与 manifest 不齐；④ 任一侧重复登记。',
+    '文件:行号：四方权威 —— apps/agent-workbench/src-tauri/src/command_manifest.rs（`entry("name","family","surface",registered)`）/ apps/agent-workbench/src-tauri/src/main.rs（`command_registry![("name", path), ...]`）/ apps/agent-workbench/src/core/tauri-command-registry.ts（`command: ...`）/ apps/crish-desktop/src/api/transport/commandManifest.ts（`entry("name", ...)`）。',
+    '当前值/阈值：四方命令名集合必须两两相等（当前 142 条），且各侧内部无重名。',
+    '正确做法：',
+    '  ① 改注册面（新增 / 退役 / 改名）必须**四处同步**：main.rs 宏 + command_manifest.rs 条目 + 前端注册表 + 前端内置快照；',
+    '  ② wire 键 = manifest 登记名；函数名与 wire 键不一致必须显式 `#[tauri::command(rename = "...")]`，禁止函数名隐式成为 wire 键；',
+    '  ③ 退役命令四处同时删——实证漂移形态之一就是「旧命令族只删一侧、另一侧仍留」（2026-09-15：前端注册表缺 15 条，含 auth_* / note_document_* / prefs_* / workbench_window_ready）；',
+    '  ④ 条数注释与测试锁定值必须随批次更新——陈旧条数（如「73 = 69 + 4」）会让读者误判对齐状态；',
+    '  ⑤ 复现：node scripts/check-provider-single-track.mjs。',
+    '参考：command_manifest.rs 模块头「维护规则」；docs/provider-single-track-convergence/02-执行拓扑与防御网方案.md D11 行。',
+  ],
   D12: [
     '违反项：① 门禁清单引用了**不存在**的脚本（package.json / FULL_CHECK_COMMANDS.md 与磁盘不一致，干净检出后门禁直接断裂）；② 门禁脚本被 `.gitignore` **永久排除**（存在但永远进不了库的幽灵脚本）。',
     '文件:行号：FAIL 逐条给出相对仓库根的脚本路径；判据来源 = package.json `scripts` 的引用 + FULL_CHECK_COMMANDS.md 反引号内命令 + 本脚本自身。',
@@ -746,6 +758,109 @@ const D8_KNOWN_DEBT = new Map([
     fail(`D9: ${testRel} 缺少负向断言：${missing.map((n) => n.name).join(' / ')}`);
   } else {
     ok('D9: 思考交接三条路径均有断言钉死');
+  }
+}
+
+/* ── D11 注册防线（四方命令集合对齐；Rust 声明面与实装面一致） ───── */
+
+{
+  // 四方权威（全部可静态解析，无需构建产物）：
+  //   A 声明面 = command_manifest.rs 的 entry("name","family","surface",registered)
+  //   B 实装面 = main.rs 的 command_registry![("name", path), ...]（wire 键字面量）
+  //   C 前端注册表 = tauri-command-registry.ts 的 command: '...'
+  //   D 前端内置快照 = crish-desktop commandManifest.ts 的 entry('name', ...)
+  // 缺陷形态：删命令漏改一处 / 新增命令只登记一侧 / 条数注释与实况脱节。
+  const manifestRel = 'apps/agent-workbench/src-tauri/src/command_manifest.rs';
+  const mainRel = 'apps/agent-workbench/src-tauri/src/main.rs';
+  const registryRel = 'apps/agent-workbench/src/core/tauri-command-registry.ts';
+  const snapshotRel = 'apps/crish-desktop/src/api/transport/commandManifest.ts';
+
+  const manifestEntries = [
+    ...read(manifestRel).matchAll(
+      /\bentry\(\s*"([^"]+)"\s*,\s*"([^"]+)"\s*,\s*"([^"]+)"\s*,\s*(true|false)/g,
+    ),
+  ].map((m) => ({ name: m[1], registered: m[4] === 'true' }));
+
+  const mainSrc = read(mainRel);
+  const macroStart = mainSrc.indexOf('command_registry![');
+  const macroTail = macroStart === -1 ? '' : mainSrc.slice(macroStart);
+  const macroEnd = macroTail.indexOf('\n];');
+  const macroBody = macroEnd === -1 ? macroTail : macroTail.slice(0, macroEnd);
+  const wiredNames = [...macroBody.matchAll(/\(\s*"([^"]+)"\s*,/g)].map((m) => m[1]);
+
+  const registryNames = [...read(registryRel).matchAll(/command:\s*'([^']+)'/g)].map((m) => m[1]);
+  const snapshotNames = [...read(snapshotRel).matchAll(/\bentry\('([^']+)'/g)].map((m) => m[1]);
+
+  const uniq = (list) => [...new Set(list)];
+  const diff = (a, b) => {
+    const other = new Set(b);
+    return uniq(a).filter((x) => !other.has(x));
+  };
+
+  const manifestNames = manifestEntries.map((e) => e.name);
+  const manifestRegistered = manifestEntries.filter((e) => e.registered).map((e) => e.name);
+
+  // ① 声明面（registered=true）↔ 实装面：任一方向缺失都是「登记与实际脱节」
+  const declaredNotWired = diff(manifestRegistered, wiredNames);
+  const wiredNotDeclared = diff(wiredNames, manifestRegistered);
+  if (declaredNotWired.length > 0 || wiredNotDeclared.length > 0) {
+    fail(
+      `D11: manifest 声明面与 main.rs command_registry! 实装面不一致——` +
+        ` 声明未实装：${declaredNotWired.join(' / ') || '（无）'}；` +
+        ` 实装未声明：${wiredNotDeclared.join(' / ') || '（无）'}。` +
+        ` 改注册面必须同步 command_manifest.rs 条目与 registered 标志`
+    );
+  } else {
+    ok(`D11: manifest 声明面与 main.rs command_registry! 实装面一致（${uniq(wiredNames).length} 条）`);
+  }
+
+  // ② 前端注册表全量对齐（双向）
+  const feMissing = diff(manifestNames, registryNames);
+  const feExtra = diff(registryNames, manifestNames);
+  if (feMissing.length > 0 || feExtra.length > 0) {
+    fail(
+      `D11: ${registryRel} 与 manifest 不一致——` +
+        ` 前端缺登记：${feMissing.join(' / ') || '（无）'}；` +
+        ` 前端多登记：${feExtra.join(' / ') || '（无）'}。` +
+        ` 该文件头部声明与 manifest / 内置快照「三方对齐」，缺一即漂移`
+    );
+  } else {
+    ok(`D11: 前端注册表与 manifest 全量对齐（${uniq(registryNames).length} 条）`);
+  }
+
+  // ③ 前端内置快照全量对齐（双向）
+  const snapMissing = diff(manifestNames, snapshotNames);
+  const snapExtra = diff(snapshotNames, manifestNames);
+  if (snapMissing.length > 0 || snapExtra.length > 0) {
+    fail(
+      `D11: ${snapshotRel} 与 manifest 不一致——` +
+        ` 快照缺登记：${snapMissing.join(' / ') || '（无）'}；` +
+        ` 快照多登记：${snapExtra.join(' / ') || '（无）'}`
+    );
+  } else {
+    ok(`D11: 前端内置快照与 manifest 全量对齐（${uniq(snapshotNames).length} 条）`);
+  }
+
+  // ④ 四方各自无重名（重复登记会让条数公式与运行时对照同时失真）
+  const dupReports = [];
+  for (const [label, list] of [
+    ['manifest', manifestNames],
+    ['main.rs 实装面', wiredNames],
+    ['前端注册表', registryNames],
+    ['前端内置快照', snapshotNames],
+  ]) {
+    const seen = new Set();
+    const dups = new Set();
+    for (const n of list) {
+      if (seen.has(n)) dups.add(n);
+      seen.add(n);
+    }
+    if (dups.size > 0) dupReports.push(`${label}: ${[...dups].join(' / ')}`);
+  }
+  if (dupReports.length > 0) {
+    fail(`D11: 命令重复登记——${dupReports.join('；')}`);
+  } else {
+    ok('D11: 四方命令名各自唯一（无重复登记）');
   }
 }
 

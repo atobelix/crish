@@ -20,10 +20,14 @@ export interface RegisteredTauriCommand {
   owner?: string;
 }
 
-// B6.4 注册面（73 = 注册面 69 + 登记先行 4；与 command_manifest.rs
-// `COMMAND_MANIFEST` 及前端 `BUILTIN_COMMAND_MANIFEST` 三方对齐）：
+// 注册面（142 条 = 与 command_manifest.rs `COMMAND_MANIFEST`、
+// main.rs `command_registry!` 及前端 `BUILTIN_COMMAND_MANIFEST` 四方对齐；
+// 条数与集合一致性由 scripts/check-provider-single-track.mjs 的 D11 防线守护）：
 // - 注册面：`command_registry!` 宏已注册的命令，status=implemented；
 // - 登记先行（registered=false）：已登记未接线，tauriRegistration=not-registered。
+// 2026-09-15 更正：此前注释记为「73 = 注册面 69 + 登记先行 4」，实为陈旧数字，
+// 且本表实际缺 15 条（auth_* ×7 / note_document_* ×4 / prefs_* ×3 /
+// workbench_window_ready），已补齐——D11 首扫命中。
 export const REGISTERED_TAURI_COMMANDS: readonly RegisteredTauriCommand[] = [
   // ── GUI 专属面（workbench_*，§2.3）──
   {
@@ -208,16 +212,11 @@ export const REGISTERED_TAURI_COMMANDS: readonly RegisteredTauriCommand[] = [
     status: 'implemented',
     feature: 'network environment detection',
   },
-  // ── 配置族（§2.2-C，F5 终态名：config_get/config_update/config_secret_*）──
+  // ── 供应商隔离凭据与完整配置事务 ──
   {
-    command: 'config_get',
+    command: 'workbench_apply_models_config',
     status: 'implemented',
-    feature: 'provider config read',
-  },
-  {
-    command: 'config_update',
-    status: 'implemented',
-    feature: 'provider config update',
+    feature: '模型配置事务提交',
   },
   {
     command: 'config_secret_set',
@@ -238,11 +237,6 @@ export const REGISTERED_TAURI_COMMANDS: readonly RegisteredTauriCommand[] = [
     command: 'config_secret_clear',
     status: 'implemented',
     feature: 'secret removal',
-  },
-  {
-    command: 'config_profile_apply',
-    status: 'implemented',
-    feature: 'provider profile apply',
   },
   {
     command: 'config_secret_reveal',
@@ -423,25 +417,35 @@ export const REGISTERED_TAURI_COMMANDS: readonly RegisteredTauriCommand[] = [
     status: 'implemented',
     feature: 'DAG flow snapshot read',
   },
-  {
-    command: 'catalog_get',
-    status: 'implemented',
-    feature: 'model catalog read',
-  },
-  {
-    command: 'catalog_refresh',
-    status: 'implemented',
-    feature: 'model catalog refresh',
-  },
   { command: 'trash_list', status: 'implemented', feature: 'trash list' },
   { command: 'trash_purge', status: 'implemented', feature: 'trash purge' },
   { command: 'trash_restore', status: 'implemented', feature: 'trash restore' },
   // ── 用量监控域（usage_commands 模块，wire 名蛇形）──
-  { command: 'usage_get_dashboard_data', status: 'implemented', feature: 'usage dashboard data' },
-  { command: 'usage_get_activity_matrix', status: 'implemented', feature: 'usage activity matrix' },
-  { command: 'usage_clear_history', status: 'implemented', feature: 'usage history clear' },
-  { command: 'usage_record_delta', status: 'implemented', feature: 'usage delta record' },
-  { command: 'usage_import_legacy_snapshot', status: 'implemented', feature: 'usage legacy snapshot import' },
+  {
+    command: 'usage_get_dashboard_data',
+    status: 'implemented',
+    feature: 'usage dashboard data',
+  },
+  {
+    command: 'usage_get_activity_matrix',
+    status: 'implemented',
+    feature: 'usage activity matrix',
+  },
+  {
+    command: 'usage_clear_history',
+    status: 'implemented',
+    feature: 'usage history clear',
+  },
+  {
+    command: 'usage_record_delta',
+    status: 'implemented',
+    feature: 'usage delta record',
+  },
+  {
+    command: 'usage_import_legacy_snapshot',
+    status: 'implemented',
+    feature: 'usage legacy snapshot import',
+  },
   // ── workflow 域六条（F9 T-CF-14，wire 名 kebab-case）──
   {
     command: 'create-workflow',
@@ -659,6 +663,85 @@ export const REGISTERED_TAURI_COMMANDS: readonly RegisteredTauriCommand[] = [
     command: 'workbench_pty_ping',
     status: 'implemented',
     feature: 'workbench PTY ping liveness',
+  },
+  // ── D11 注册防线对齐补齐（2026-09-15）──
+  // 此前本表缺下列 15 条：三方（command_manifest.rs / main.rs `command_registry!`
+  // / 前端 BUILTIN_COMMAND_MANIFEST）各 142 条，本表只有 127，违反本文件头部
+  // 「三方对齐」契约。描述按命令名与 manifest 的 family/surface 归纳。
+  {
+    command: 'workbench_window_ready',
+    status: 'implemented',
+    feature: 'window ready handshake',
+  },
+  {
+    command: 'auth_login',
+    status: 'implemented',
+    feature: 'authentication sign-in',
+  },
+  {
+    command: 'auth_logout',
+    status: 'implemented',
+    feature: 'authentication sign-out',
+  },
+  {
+    command: 'auth_get_session',
+    status: 'implemented',
+    feature: 'authentication session read',
+  },
+  {
+    command: 'auth_refresh_token',
+    status: 'implemented',
+    feature: 'authentication token refresh',
+  },
+  {
+    command: 'auth_list_devices',
+    status: 'implemented',
+    feature: 'paired device list',
+  },
+  {
+    command: 'auth_revoke_device',
+    status: 'implemented',
+    feature: 'paired device revocation',
+  },
+  {
+    command: 'auth_get_relay_ticket',
+    status: 'implemented',
+    feature: 'relay ticket issue',
+  },
+  {
+    command: 'note_document_list',
+    status: 'implemented',
+    feature: 'note document list',
+  },
+  {
+    command: 'note_document_create',
+    status: 'implemented',
+    feature: 'note document create',
+  },
+  {
+    command: 'note_document_rename',
+    status: 'implemented',
+    feature: 'note document rename',
+  },
+  {
+    command: 'note_document_delete',
+    status: 'implemented',
+    feature: 'note document delete',
+  },
+  {
+    command: 'prefs_get',
+    status: 'implemented',
+    feature: 'user preferences read',
+  },
+  {
+    command: 'prefs_set',
+    status: 'implemented',
+    feature: 'user preferences write',
+  },
+  {
+    command: 'prefs_delete',
+    status: 'implemented',
+    feature: 'user preferences delete',
   },
 ];
 

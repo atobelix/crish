@@ -158,17 +158,29 @@ describe('Tauri command registry', () => {
 
     expect([...registered]).toEqual(wired);
     // 用量监控面五命令追加（126 → 131）
-    expect(registered.size).toBe(131);
+    expect(registered.has('workbench_apply_models_config')).toBe(true);
+    for (const retired of [
+      'config_get',
+      'config_update',
+      'config_profile_apply',
+      'catalog_get',
+      'catalog_refresh',
+    ]) {
+      expect(registered.has(retired)).toBe(false);
+    }
   });
 
-  it('keeps the surface: 131 registered commands plus 0 registered-first entries', () => {
+  it('keeps every declared command registered without placeholder entries', () => {
     const wired = REGISTERED_TAURI_COMMANDS.filter(shouldHaveTauriRegistration);
     const pending = REGISTERED_TAURI_COMMANDS.filter(
       (entry) => !shouldHaveTauriRegistration(entry)
     );
 
-    expect(REGISTERED_TAURI_COMMANDS).toHaveLength(131);
-    expect(wired).toHaveLength(131);
+    const actual = extractRegisteredTauriCommands(
+      readFileSync(rustMainPath, 'utf8')
+    );
+    expect(REGISTERED_TAURI_COMMANDS).toHaveLength(actual.length);
+    expect(wired).toHaveLength(actual.length);
     expect(pending).toHaveLength(0);
     expect(pending.map((entry) => entry.command).sort()).toEqual([]);
   });
@@ -251,8 +263,13 @@ describe('Tauri command registry', () => {
       isProductCapabilityCommand
     );
 
-    // 校准：全量 131 条 registered 命令（含 models_yaml 三命令与 usage 五命令）
-    expect(productCommands).toHaveLength(131);
+    // 校准：全量 142 条 registered 命令（含 models_yaml 三命令与 usage 五命令）。
+    // 2026-09-15 更正：131 为陈旧值——旧 config/catalog 命令族 5 条
+    // （config_get / config_profile_apply / config_update / catalog_get /
+    // catalog_refresh）随单轨收敛退役；另新增 workbench_apply_models_config、
+    // workbench_window_ready、auth_* ×7、note_document_* ×4、prefs_* ×3。
+    // 条数与四方集合一致性由 scripts/check-provider-single-track.mjs 的 D11 守护。
+    expect(productCommands).toHaveLength(142);
     expect(
       productCommands.every(
         (entry) => commandCapabilityStatus(entry) !== UNSUPPORTED_CODE
