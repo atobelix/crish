@@ -1,4 +1,3 @@
-pub(crate) mod dialog;
 pub(crate) mod directory;
 pub(crate) mod read;
 pub(crate) mod skills;
@@ -7,21 +6,6 @@ pub(crate) mod write;
 
 pub(crate) use crate::core_error::CoreError;
 pub(crate) use types::FileCommandError;
-
-/// 原生目录选择器：唯一「新授权」入口（PE-07 T07.2）。
-/// 选中路径 → WorkspaceRegistry::register(Dialog) → 返回 canonical 路径。
-/// 错误协议统一 `CoreError {kind, detail}`（F4 F1-02 / PS-04 T4.5）。
-///
-/// `R: tauri::Runtime` 泛型：测试注入 MockRuntime 可直接调用（先例
-/// core_commands.rs:170-177），生产走 Wry。
-/// wire 名 = `workbench_select_folder`（T-F 06：分裂标签统一——函数名与 wire 键
-/// 不一致必须显式 rename，禁止函数名隐式成为 wire 键）。
-#[tauri::command(rename = "workbench_select_folder")]
-pub(crate) async fn select_folder<R: tauri::Runtime>(
-    app: tauri::AppHandle<R>,
-) -> Result<types::SelectFolderResult, CoreError> {
-    dialog::select_folder(app).await
-}
 
 /// 列出目录（PE-07 T07.2：无 workspace_root 参数，根由 WorkspaceRegistry 解析）。
 ///
@@ -120,7 +104,7 @@ mod tests {
 
     use crate::fs_commands::types::WorkspaceFsGuard;
     use crate::fs_commands::types::{self, FileCommandError, ReadPolicy, MAX_TEXT_FILE_BYTES};
-    use crate::fs_commands::{dialog, directory, read, write};
+    use crate::fs_commands::{directory, read, write};
 
     struct TestDir {
         path: PathBuf,
@@ -509,60 +493,53 @@ mod tests {
 
     // ── PS-04 T4.5（F4 F1-02）：错误协议统一 CoreError ──
 
-    /// T4.5-R2（红 → 绿）：`select_folder` 错误路径统一 CoreError——
-    /// 注册表未托管 → `Internal`；选中路径在已授权根外 → `InvalidInput`。
-    /// 注：对话框 UI 在单元测试环境不可驱动（会阻塞等待用户），错误映射面
-    /// 经 `register_picked_folder`（select_folder 的后半段，生产同一代码）断言。
+    /// T4.5-R2（红 → 绿）：原生目录选择链（`workbench_select*` 命令 +
+    /// `dialog::select_folder` / `dialog::register_picked_folder`）已于
+    /// 2026-09-15 真漂移债务清零时**物理切除**（前端目录选择统一走
+    /// plugin-dialog，生产代码零消费）。
+    ///
+    /// 原断言钉的是被退役链路的错误映射面：注册表未托管 → `CoreError::Internal`、
+    /// 非法路径 → `CoreError::InvalidInput`、合法路径 → canonical 注册成功。
+    /// 第一条随 `register_picked_folder` 退役（同类未托管映射面由
+    /// `discover_skills_outside_root_returns_core_error` 继续守护）；后两条改钉其
+    /// 底层真源 `WorkspaceRegistry::register`——授权/拒绝语义不随命令退役而变。
+    /// 另加「实现面不得复活」负向不变量。
     #[test]
     fn select_folder_error_paths_use_core_error_protocol() {
         use crate::workspace::{RegisterSource, WorkspaceRegistry};
         let temp = TestDir::new();
         let auth_root = temp.path().join("auth");
-        let outside = temp.path().join("outside");
         fs::create_dir_all(&auth_root).expect("create auth root");
-        fs::create_dir(&outside).expect("create outside dir");
 
-        // 注册表未托管 → Internal（命令级不 panic，kind 可分类）
-        let bare = tauri::test::mock_builder()
-            .build(tauri::test::mock_context(tauri::test::noop_assets()))
-            .expect("bare mock app");
-        let err = dialog::register_picked_folder(bare.handle(), outside.clone())
-            .expect_err("未托管注册表必须拒绝");
-        let json = serde_json::to_value(&err).expect("错误必须可序列化");
-        assert_eq!(
-            json.get("kind").and_then(|v| v.as_str()),
-            Some("Internal"),
-            "未托管注册表应为 CoreError::Internal（当前形态 {json}）"
+        // 退役链路物理切除（needle 分片拼接，避免断言文案自身命中源文本）
+        let removed = concat!("workbench_select", "_folder");
+        assert!(
+            !include_str!("mod.rs").contains(removed),
+            "已退役命令 {removed} 严禁在实现面复活"
         );
 
-        // 路径非法（不是目录）→ InvalidInput（路径/注册表类；Dialog 手势
-        // 选中的目录本身无条件授权，非法目标才是拒绝面）
         let config_dir = temp.path().join("config");
         fs::create_dir_all(&config_dir).expect("create config dir");
         let reg = WorkspaceRegistry::init_with_config_dir(&config_dir).expect("init registry");
         reg.register(&auth_root, RegisterSource::Dialog)
             .expect("dialog register auth_root");
-        let app = tauri::test::mock_builder()
-            .manage(reg)
-            .build(tauri::test::mock_context(tauri::test::noop_assets()))
-            .expect("mock app");
+
+        // 路径非法（不是目录）→ 授权注册表拒绝（原 CoreError::InvalidInput 映射面）
         let not_a_dir = temp.path().join("file.txt");
         fs::write(&not_a_dir, "x").expect("write file");
-        let err = dialog::register_picked_folder(app.handle(), not_a_dir.clone())
-            .expect_err("非目录路径必须拒绝");
-        let json = serde_json::to_value(&err).expect("错误必须可序列化");
-        assert_eq!(
-            json.get("kind").and_then(|v| v.as_str()),
-            Some("InvalidInput"),
-            "非法路径应为 CoreError::InvalidInput（当前形态 {json}）"
+        assert!(
+            reg.register(&not_a_dir, RegisterSource::Dialog).is_err(),
+            "非目录路径必须被授权注册表拒绝"
         );
 
         // 合法目录（授权根内）→ 注册成功（路径返回 canonical）
-        let ok = dialog::register_picked_folder(app.handle(), auth_root.clone())
+        let ok = reg
+            .register(&auth_root, RegisterSource::Dialog)
             .expect("授权根内应注册成功");
-        assert_eq!(
-            ok.path.as_deref(),
-            Some(auth_root.to_string_lossy().as_ref())
+        assert!(
+            types::path_is_same_or_child(&ok, &auth_root),
+            "授权根内注册应返回 canonical 路径：{}",
+            ok.display()
         );
     }
 

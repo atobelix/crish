@@ -187,7 +187,9 @@ impl ComputerOps for RealComputerSession {
             // 1C-7：gate_check（Win32 API + UIA COM 调用）在阻塞线程执行
             gate_check_inner(&perception, &gate)?;
             let mut session = inner.lock().expect("电脑会话锁损坏");
-            session.dispatch(&action)
+            // 该层无中止令牌：显式声明「不中止」语义，走唯一真源入口
+            // `dispatch_with_abort`（`dispatch` 兼容 shim 已物理删除）。
+            session.dispatch_with_abort(&action, || false)
         })
         .await
         .map_err(|e| SessionError::Init(format!("派发任务失败: {e}")))??;

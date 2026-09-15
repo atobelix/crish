@@ -37,12 +37,6 @@ impl FileCommandError {
     }
 }
 
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct SelectFolderResult {
-    pub(crate) path: Option<String>,
-}
-
 #[derive(Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ListDirectoryResult {

@@ -1,8 +1,8 @@
 //! G03 产出根两级配置与清理（T-EG-12）：路径隔离 + 校验
 //!
 //! 两级配置（REQ-EG-现状分析.md 6.4-6.5 草案）：
-//! - **全局**：壳层设置 `agentOutputsRoot`（[OutputsRootConfig] 托管状态，
-//!   默认 `.agent-outputs`，对齐 `TrashRootConfig` 注入形态，
+//! - **全局**：[OutputsRootConfig] 托管状态（main.rs 装配注入，默认
+//!   `.agent-outputs`，对齐 `TrashRootConfig` 注入形态，
 //!   core_run_commands.rs:2814）——满足 REQ-G03「用户可自定义默认根」；
 //! - **会话级**：session_meta `"{session_id}:output_root"`（可覆盖，
 //!   resolve_output_dir 下次调用生效，G01 工具侧消费）。
@@ -17,6 +17,14 @@
 //! 产出目录 → `.agent-outputs/<session_id>` 走 conex-fs trash 删除接管
 //! （trash.rs:26-29 铁律，不直接 remove）→ 通知用户（清理结果 + 回收站
 //! 位置）。链路入口 [cleanup_session_outputs]（delete_session 调用）。
+//!
+//! 命令面退役登记（2026-09-15 真漂移债务清零）：`config_get_outputs_root` /
+//! `config_set_outputs_root` / `set_session_output_root` 三条命令（含
+//! `OutputsRootConfigResponse` / `OutputsRootConfig::set` / `effective_outputs_root`
+//! / `set_outputs_config` 辅助项）已**物理切除**——前端 `agentOutputsRoot`
+//! 设置面不存在，生产代码零消费。产出根**解析能力**
+//! （[resolve_outputs_root] + [OutputsRootConfig] 托管状态）保留，供工具侧
+//! 默认根与清理链消费。
 
 use std::path::{Component, Path, PathBuf};
 use std::sync::Mutex;
@@ -31,7 +39,6 @@ pub(crate) const DEFAULT_OUTPUTS_DIR_NAME: &str = ".agent-outputs";
 ///
 /// T-F 06 退役登记：仅随 delete_session 清理链使用（测试直调保留），
 /// 与命令一同保留待存储架构裁决后恢复。
-#[allow(dead_code)]
 pub(crate) const SESSION_META_KEY_OUTPUT_DIR: &str = "output_dir";
 /// 会话级产出根覆盖键（`{session_id}:output_root`，G03 会话级配置）
 pub(crate) const SESSION_META_KEY_OUTPUT_ROOT: &str = "output_root";
@@ -83,13 +90,6 @@ impl OutputsRootConfig {
         let inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         (inner.root.clone(), inner.allow_outputs_outside_workspace)
     }
-
-    /// 写入配置（调用方已完成校验）
-    pub(crate) fn set(&self, root: Option<PathBuf>, allow_outside: bool) {
-        let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
-        inner.root = root;
-        inner.allow_outputs_outside_workspace = allow_outside;
-    }
 }
 
 /// 解析产出根（纯函数，可独立单测；G03 校验唯一实现）：
@@ -128,110 +128,6 @@ pub(crate) fn resolve_outputs_root(
     ))
 }
 
-/// config_get_outputs_root 返回（camelCase 对齐前端设置面）
-#[derive(Debug, Clone, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct OutputsRootConfigResponse {
-    /// 全局配置根（原样：相对或绝对；None = 未设置走默认）
-    pub root: Option<String>,
-    /// 是否允许产出根位于工作区外（安全红线，默认 false）
-    pub allow_outputs_outside_workspace: bool,
-    /// 当前生效的产出根（对活动工作区解析后；工作区不可用 → None）
-    pub effective_root: Option<String>,
-}
-
-/// 读取全局产出根配置（G03：agentOutputsRoot；默认 `.agent-outputs`）
-#[tauri::command]
-pub(crate) fn config_get_outputs_root(
-    app: tauri::AppHandle,
-) -> Result<OutputsRootConfigResponse, CoreError> {
-    let (root, allow_outside) = outputs_config(&app);
-    let effective_root = effective_outputs_root(&app, root.as_deref(), allow_outside);
-    Ok(OutputsRootConfigResponse {
-        root: root.map(|p| p.to_string_lossy().into_owned()),
-        allow_outputs_outside_workspace: allow_outside,
-        effective_root,
-    })
-}
-
-/// 设置全局产出根配置（G03：用户可自定义默认产出根；REQ-G03 验收）。
-///
-/// - `root = Some`：相对 → 原样存入（解析时 join 活动工作区）；绝对 →
-///   即时校验（工作区外拒绝，除非 `allowOutputsOutsideWorkspace=true`）；
-/// - `root = None`：清空覆盖，回落默认 `.agent-outputs`；
-/// - 校验失败 → InvalidInput（配置不被改写）。
-#[tauri::command]
-pub(crate) fn config_set_outputs_root(
-    app: tauri::AppHandle,
-    root: Option<String>,
-    allow_outputs_outside_workspace: Option<bool>,
-) -> Result<OutputsRootConfigResponse, CoreError> {
-    let allow_outside = allow_outputs_outside_workspace.unwrap_or(false);
-    let parsed = root
-        .as_deref()
-        .map(Path::new)
-        .filter(|p| !p.as_os_str().is_empty());
-    // 校验先行（纯函数语义；活动工作区不可用 → 拒绝写入，不静默退化）
-    let guard = crate::workspace::resolve_guard(&app, "").map_err(|e| {
-        CoreError::Internal(format!(
-            "工作区不可用（产出根配置）：{}: {}",
-            e.code, e.message
-        ))
-    })?;
-    let resolved = resolve_outputs_root(parsed, guard.root(), allow_outside)
-        .map_err(CoreError::invalid_input)?;
-    set_outputs_config(&app, parsed.map(PathBuf::from), allow_outside)?;
-    Ok(OutputsRootConfigResponse {
-        root: root.filter(|r| !r.trim().is_empty()),
-        allow_outputs_outside_workspace: allow_outside,
-        effective_root: Some(resolved.to_string_lossy().into_owned()),
-    })
-}
-
-/// 设置会话级产出根覆盖（G03：session_meta `{session_id}:output_root`，
-/// resolve_output_dir 下次调用生效；`root=None` 清空覆盖回落全局默认）。
-///
-/// 与全局同一校验：产出根必须位于工作区内
-/// （`allowOutputsOutsideWorkspace=false` 不可覆盖，REQ-EG-现状分析.md:701）。
-#[tauri::command]
-pub(crate) async fn set_session_output_root(
-    app: tauri::AppHandle,
-    session_id: String,
-    root: Option<String>,
-    db_state: tauri::State<'_, crate::session_commands::SharedDb>,
-) -> Result<(), CoreError> {
-    if session_id.trim().is_empty() {
-        return Err(CoreError::invalid_input("session_id must not be empty"));
-    }
-    let (_, allow_outside) = outputs_config(&app);
-    let parsed = root
-        .as_deref()
-        .map(Path::new)
-        .filter(|p| !p.as_os_str().is_empty());
-    let guard = crate::workspace::resolve_guard(&app, "").map_err(|e| {
-        CoreError::Internal(format!(
-            "工作区不可用（会话产出根配置）：{}: {}",
-            e.code, e.message
-        ))
-    })?;
-    resolve_outputs_root(parsed, guard.root(), allow_outside).map_err(CoreError::invalid_input)?;
-    let Some(value) = root.filter(|v| !v.trim().is_empty()) else {
-        // 清空覆盖：不写键（get 返回 None → 工具侧回落全局/默认）
-        return Ok(());
-    };
-    let key = session_meta_key_of(&session_id, SESSION_META_KEY_OUTPUT_ROOT);
-    let db = db_state.inner().local_db();
-    tokio::task::spawn_blocking(move || db.set_session_meta(&key, &value))
-        .await
-        .map_err(|e| CoreError::Internal(format!("set_session_output_root join: {e}")))?
-        .map_err(|e| {
-            CoreError::Internal(format!(
-                "set_session_output_root: {}: {}",
-                e.kind, e.message
-            ))
-        })
-}
-
 /// 会话删除清理结果（T-EG-12：清理通知载荷）
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct SessionOutputsCleanup {
@@ -256,7 +152,6 @@ pub(crate) struct SessionOutputsCleanup {
 ///
 /// T-F 06 退役登记：仅随 delete_session 使用（测试直调 cleanup_session_outputs_at
 /// 保留），与命令一同保留待存储架构裁决后恢复。
-#[allow(dead_code)]
 pub(crate) fn cleanup_session_outputs(
     app: &tauri::AppHandle,
     session_id: &str,
@@ -423,33 +318,6 @@ fn outputs_config(app: &tauri::AppHandle) -> (Option<PathBuf>, bool) {
         Some(state) => state.get(),
         None => (None, false),
     }
-}
-
-/// 全局产出根托管状态写入（未托管 → 结构化错误，不静默丢弃配置）
-fn set_outputs_config(
-    app: &tauri::AppHandle,
-    root: Option<PathBuf>,
-    allow_outside: bool,
-) -> Result<(), CoreError> {
-    let Some(state) = app.try_state::<OutputsRootConfig>() else {
-        return Err(CoreError::Internal(
-            "产出根配置未托管（main.rs 未 manage OutputsRootConfig）".to_string(),
-        ));
-    };
-    state.set(root, allow_outside);
-    Ok(())
-}
-
-/// 当前生效产出根（对活动工作区解析；工作区不可用 → None，不阻断读取）
-fn effective_outputs_root(
-    app: &tauri::AppHandle,
-    configured: Option<&Path>,
-    allow_outside: bool,
-) -> Option<String> {
-    let guard = crate::workspace::resolve_guard(app, "").ok()?;
-    resolve_outputs_root(configured, guard.root(), allow_outside)
-        .ok()
-        .map(|p| p.to_string_lossy().into_owned())
 }
 
 #[cfg(test)]

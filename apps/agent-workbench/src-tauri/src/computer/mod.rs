@@ -1,9 +1,9 @@
-//! 电脑操作会话槽（06 遗留⑨：ComputerSlot 命令面托管 + 工具装配接线面）
+//! 电脑操作会话槽（06 遗留⑨：ComputerSlot 托管状态 + 工具装配接线面）
 //!
 //! ## 定位
 //! 软件内 AI 协同浏览器的电脑操作会话槽：**进程级单例**（main.rs ⑧e 装配段
-//! `app.manage(Arc<ComputerSlot>)`），承载会话级显式开启与会话互斥及命令面：
-//! - [`ComputerSlot`]：会话级显式开启（[`SessionEnablement`]）+ 会话互斥门
+//! `app.manage(Arc<ComputerSlot>)`），承载会话级开启态与会话互斥：
+//! - [`ComputerSlot`]：会话级开启态（[`SessionEnablement`]）+ 会话互斥门
 //!   （[`ActivationGate`]，S3）并经
 //!   `register_computer_tools` 后置注册 12 个 `computer_*` 工具（06 文档 §3.1，
 //!   维度 1 收敛后 13→12，已移除 `computer_estop`，三段守卫：①会话注入+开启态合并
@@ -12,8 +12,16 @@
 //!   （键名常量 `conex_computer::security::COMPUTER_USE_ENABLED_KEY`，04 §4.1
 //!   持久化范式对齐 conex-types/src/timer.rs:43 的 session_meta 键约定）；
 //! - 状态事件：`computer://state-changed`（payload `{ enabled?, mode?, reason? }`，
-//!   前端契约 computerSessionApi.ts；由 [ActivationGate] 状态迁移与开启/停用
-//!   广播）。
+//!   前端契约 computerSessionApi.ts；由 [ActivationGate] 状态迁移与停止广播）。
+//!
+//! ## 命令面退役登记（2026-09-15 真漂移债务清零 · 物理切除）
+//! `computer_session_enable` / `computer_session_disable` / `computer_status`
+//! 三条命令及其**专属**辅助项（`SessionPayload` / `StatusPayload` /
+//! `ComputerError::Exclusive` / `ComputerError::as_command_err` 与
+//! [ComputerSlot] 上仅被这三条命令消费的 `new` / `enable` / `disable` / `status`）
+//! 已从实现面**物理删除**——computer-panel 前端面（computerSessionApi /
+//! ComputerPanel / useComputerSession）已物理删除，生产代码零消费。
+//! 恢复接线时按四方登记流程重新注册并重写实现。
 //!
 //! ## 挂载判据（06 文档 §3.1 / security.rs `tool_mount_allowed`）
 //! 未开启（或未注入判据）→ [ComputerSlot::register_tools] 零注册返回 Ok——
@@ -23,7 +31,7 @@
 //! ## 接线点登记（main.rs 装配注释指向本模块头）
 //! - **接线点①（engine.rs 并行在途）**：engine 增 `computer_slot` 字段/装配/
 //!   访问器后，main.rs ⑧e 托管改为 `core_state.engine().computer_slot()` 取用
-//!   同一实例——命令访问面（`State<Arc<ComputerSlot>>`）不变；
+//!   同一实例；
 //! - **接线点②（工具装配）**：[ComputerSlot::register_tools] 为
 //!   `register_computer_tools` 后置注册入口（守卫注入：enablement/activation
 //!   两件套 + 真实会话注入面 [ComputerSlot::set_session]；维度 1 收敛后三段守卫：
@@ -33,7 +41,7 @@
 //!   `request_browser` / 互斥守卫（18 §6.3 两向生效）。
 //!
 //! ## 惰性恢复（04 §4.1 第 2 点）
-//! 构造不读库；首次访问（status / enable / disable / register_tools）时
+//! 构造不读库；首次访问（register_tools / on_run_stopped）时
 //! 经 [ComputerSlot::ensure_restored] 从 session_meta 恢复开启态（
 //! `restore_from_session_meta`，幂等一次性）。恢复为开启 → 同步请求桌面激活
 //! （重启后互斥门处于 Idle，可成功；若被浏览器占用则保持开启态、工具被互斥
@@ -50,7 +58,7 @@ use crate::core_event_bridge::Emitter;
 use agent_tools::definition::ToolError;
 #[cfg(test)]
 use agent_tools::registry::ToolRegistry;
-use conex_computer::activation::{ActivationError, ActivationGate, SessionMode};
+use conex_computer::activation::{ActivationGate, SessionMode};
 use conex_computer::security::COMPUTER_USE_ENABLED_KEY;
 use conex_computer::SessionEnablement;
 use conex_computer_tools::session::ComputerOps;
@@ -74,21 +82,6 @@ fn mode_str(mode: SessionMode) -> &'static str {
     }
 }
 
-/// enable / disable 命令返回载荷（契约：`{ enabled: boolean }`）。
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub(crate) struct SessionPayload {
-    pub enabled: bool,
-}
-
-/// status 命令返回载荷（契约：`{ enabled, mode, reason? }`）。
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub(crate) struct StatusPayload {
-    pub enabled: bool,
-    pub mode: &'static str,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub reason: Option<String>,
-}
-
 /// 状态事件载荷（`computer://state-changed`；字段可选——事件只携带变更域，
 /// 前端兼容解析，computerSessionApi.ts `ComputerStateEventPayload`）。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -101,29 +94,12 @@ pub(crate) struct StateChangePayload {
     pub reason: Option<String>,
 }
 
-/// 命令面结构化错误（06 文档 §5 码表消费面；命令层映射为
-/// `tool.session.exclusive:<...>` / `tool.computer.not_ready:<...>`）。
+/// 会话槽持久化错误（06 文档 §5 码表消费面；`tool.computer.not_ready`）。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum ComputerError {
-    /// 会话互斥（浏览器活跃）：跨线共享码 `tool.session.exclusive`（18 §6.3）。
-    Exclusive { current: SessionMode },
     /// session_meta 持久化失败：`tool.computer.not_ready`（对齐 browser 的
     /// not_ready gating 语义）。
     Persist(String),
-}
-
-impl ComputerError {
-    /// 映射为命令面错误串（结构化码前缀，前端按码路由提示）。
-    pub(crate) fn as_command_err(&self) -> String {
-        match self {
-            ComputerError::Exclusive { current } => format!(
-                "tool.session.exclusive: 会话互斥：当前{current}，无法激活电脑操作会话（浏览器活跃中，请先停止浏览器会话）"
-            ),
-            ComputerError::Persist(reason) => {
-                format!("tool.computer.not_ready: 电脑操作状态持久化失败：{reason}")
-            }
-        }
-    }
 }
 
 /// session_meta 持久化适配（`computer_use_enabled` 键读写；04 §4.1）。
@@ -140,7 +116,7 @@ pub(crate) struct LocalDbComputerMetaStore {
 }
 
 impl LocalDbComputerMetaStore {
-    /// 用本地库构造（main.rs ⑧e 装配传入 `shared_db.local_db()`）。
+    /// 用本地库构造（engine_build 装配传入 `shared_db.local_db()`）。
     pub(crate) fn new(db: LocalDb) -> Self {
         Self { db }
     }
@@ -192,14 +168,14 @@ impl ComputerMetaStore for MemoryComputerMetaStore {
     }
 }
 
-/// 电脑操作会话槽（进程级单例；命令面 + 工具装配接线面）。
+/// 电脑操作会话槽（进程级单例；托管状态 + 工具装配接线面）。
 ///
 /// 并发纪律：全部守卫为原子/锁内同步操作（无跨 await 持锁面），
 /// 方法可经 `Arc` 跨线程共享；事件发射为尽力而为（发射器缺失时静默跳过）。
 pub(crate) struct ComputerSlot {
     /// session_meta 持久化适配（`computer_use_enabled` 键读写）
     meta: Arc<dyn ComputerMetaStore>,
-    /// 会话级显式开启状态机（新会话默认关闭，未开启零注册）
+    /// 会话级开启状态机（新会话默认关闭，未开启零注册）
     enablement: Arc<SessionEnablement>,
     /// 会话互斥门（S3：与浏览器共享，两向生效；桌面态 = 本会话活跃）
     activation: Arc<ActivationGate>,
@@ -213,12 +189,7 @@ pub(crate) struct ComputerSlot {
 }
 
 impl ComputerSlot {
-    /// 构造会话槽（main.rs ⑧e 装配；惰性恢复，构造不读库）。
-    pub(crate) fn new(meta: Arc<LocalDbComputerMetaStore>) -> Self {
-        Self::from_store(meta)
-    }
-
-    /// 构造会话槽（自定义存储适配：测试注入 / 引擎自定义持久化面）。
+    /// 构造会话槽（自定义存储适配：engine 装配 / 测试注入）。
     pub(crate) fn from_store(meta: Arc<dyn ComputerMetaStore>) -> Self {
         Self {
             meta,
@@ -230,8 +201,8 @@ impl ComputerSlot {
         }
     }
 
-    /// 挂接状态事件发射器（幂等：重复挂接覆盖旧值；main.rs ⑧e 与命令面
-    /// 启动前即挂订阅，enable/disable 不丢事件）。
+    /// 挂接状态事件发射器（幂等：重复挂接覆盖旧值；main.rs ⑧e 在
+    /// 恢复/停止转换前即挂订阅，状态事件不丢）。
     pub(crate) fn attach_emitter(&self, emitter: Arc<dyn Emitter>) {
         *self.emitter.lock().unwrap_or_else(|e| {
             tracing::error!(target: "computer", "emitter 锁中毒，按恢复模式继续：{e}");
@@ -287,48 +258,6 @@ impl ComputerSlot {
         }
     }
 
-    /// 显式开启（仅用户显式操作；Agent 无权自开）。
-    ///
-    /// 流程：互斥检查（浏览器活跃 → `tool.session.exclusive`）→
-    /// 开启状态机（重复开启按幂等吸收）→ session_meta 落盘
-    /// `computer_use_enabled=true` → `computer://state-changed` 广播。
-    pub(crate) fn enable(&self) -> Result<(), ComputerError> {
-        self.ensure_restored();
-        self.activation.request_desktop().map_err(|e| match e {
-            ActivationError::Exclusive { current, .. } => ComputerError::Exclusive { current },
-        })?;
-        // SessionEnablement::enable 幂等吸收，始终 Ok(())，已删除不可达 NotEnabled 分支
-        let _ = self.enablement.enable();
-        self.persist(true)?;
-        self.emit(&StateChangePayload {
-            enabled: Some(true),
-            mode: Some("desktop"),
-            reason: None,
-        });
-        Ok(())
-    }
-
-    /// 停用（04 §4.1 解除授权；幂等——未开启时停用仅落盘关闭态）。
-    ///
-    /// 释放互斥门（仅本会话活跃时；浏览器活跃时不动浏览器状态）→ 关闭
-    /// 状态机（原因登记）→ 落盘 `computer_use_enabled=false` → 广播。
-    pub(crate) fn disable(&self, reason: Option<String>) -> Result<(), ComputerError> {
-        self.ensure_restored();
-        let was_active = self.activation.current().is_desktop();
-        if was_active {
-            self.activation.release();
-        }
-        self.enablement
-            .disable(reason.clone().unwrap_or_else(|| "用户停用".to_string()));
-        self.persist(false)?;
-        self.emit(&StateChangePayload {
-            enabled: Some(false),
-            mode: Some(mode_str(self.activation.current())),
-            reason,
-        });
-        Ok(())
-    }
-
     /// run 级停止桥接（维度 1 收敛：替代原 estop，普通停止语义）。
     ///
     /// 由 [spawn_computer_stop_watcher] 在 run 级 abort_signal 触发后调用：
@@ -347,16 +276,6 @@ impl ComputerSlot {
             mode: Some(mode_str(self.activation.current())),
             reason: Some("run 级停止".to_string()),
         });
-    }
-
-    /// 状态查询（挂载恢复 / 诊断面；触发惰性恢复）。
-    pub(crate) fn status(&self) -> StatusPayload {
-        self.ensure_restored();
-        StatusPayload {
-            enabled: self.enablement.enabled(),
-            mode: mode_str(self.activation.current()),
-            reason: self.enablement.disabled_reason(),
-        }
     }
 
     /// 后置注册 `computer_*` 工具族（接线点② engine 装配入口）。
@@ -385,7 +304,7 @@ impl ComputerSlot {
     }
 
     /// session_meta 落盘（失败 → not_ready 语义；内存态已变更不回滚——
-    /// 重启回退关闭态为安全默认，命令层可见错误提示）。
+    /// 重启回退关闭态为安全默认）。
     fn persist(&self, enabled: bool) -> Result<(), ComputerError> {
         self.meta
             .persist_enabled(enabled)
@@ -452,22 +371,25 @@ mod tests {
     /// 内存库槽（真实 LocalDbComputerMetaStore 读写面）。
     fn in_memory_slot() -> (Arc<ComputerSlot>, LocalDb) {
         let db = LocalDb::open_in_memory().expect("内存库打开应成功");
-        let slot = Arc::new(ComputerSlot::new(Arc::new(LocalDbComputerMetaStore::new(
-            db.clone(),
-        ))));
+        let slot = Arc::new(ComputerSlot::from_store(Arc::new(
+            LocalDbComputerMetaStore::new(db.clone()),
+        )));
         (slot, db)
     }
 
-    /// 持久化失败的存储替身（命令面 not_ready 错误路径）。
-    struct FailingStore;
-
-    impl ComputerMetaStore for FailingStore {
-        fn load_enabled(&self) -> Result<bool, String> {
-            Ok(false)
-        }
-        fn persist_enabled(&self, _enabled: bool) -> Result<(), String> {
-            Err("磁盘只读（测试注入）".to_string())
-        }
+    /// 预置 session_meta 开启态的内存库槽。
+    ///
+    /// 命令面物理切除后，开启态的唯一生产入口是惰性恢复
+    /// （[ComputerSlot::ensure_restored]，由 register_tools / on_run_stopped 触发），
+    /// 因此测试统一经此装配面建立开启态。
+    fn slot_with_meta(enabled: bool) -> (Arc<ComputerSlot>, LocalDb) {
+        let (slot, db) = in_memory_slot();
+        db.set_session_meta(
+            COMPUTER_USE_ENABLED_KEY,
+            if enabled { "true" } else { "false" },
+        )
+        .expect("预置开启标记");
+        (slot, db)
     }
 
     /// 注册后按名排序清单（list_definitions 按 name 升序；与
@@ -501,11 +423,10 @@ mod tests {
         );
     }
 
-    /// 挂载判据：显式开启后注册全部 12 工具，名称与 ALL_TOOL_NAMES 一致。
+    /// 挂载判据：开启态下注册全部 12 工具，名称与 ALL_TOOL_NAMES 一致。
     #[test]
-    fn enable_mounts_all_12_tools() {
-        let (slot, _db) = in_memory_slot();
-        slot.enable().expect("开启不应失败");
+    fn enabled_slot_mounts_all_12_tools() {
+        let (slot, _db) = slot_with_meta(true);
         let mut registry = ToolRegistry::new();
         slot.register_tools(&mut registry).expect("注册不应失败");
         assert_eq!(registered_names(&registry), sorted_all_tool_names());
@@ -515,8 +436,7 @@ mod tests {
     /// 重复注册幂等（06 文档 §3.2：同名跳过不报冲突，注册数不变）。
     #[test]
     fn register_tools_twice_is_idempotent() {
-        let (slot, _db) = in_memory_slot();
-        slot.enable().expect("开启不应失败");
+        let (slot, _db) = slot_with_meta(true);
         let mut registry = ToolRegistry::new();
         slot.register_tools(&mut registry)
             .expect("首次注册不应失败");
@@ -529,34 +449,25 @@ mod tests {
     /// 挂载 12 工具（跨实例恢复，04 §4.1 第 2 点）。
     #[test]
     fn restore_enabled_from_session_meta_mounts_all() {
-        let db = LocalDb::open_in_memory().expect("内存库打开应成功");
-        db.set_session_meta(COMPUTER_USE_ENABLED_KEY, "true")
-            .expect("预置开启标记");
-        let slot = Arc::new(ComputerSlot::new(Arc::new(LocalDbComputerMetaStore::new(
-            db,
-        ))));
-        let status = slot.status();
-        assert!(status.enabled, "恢复后应为开启态");
-        assert_eq!(status.mode, "desktop", "恢复开启应同步激活桌面会话");
+        let (slot, _db) = slot_with_meta(true);
         let mut registry = ToolRegistry::new();
         slot.register_tools(&mut registry).expect("注册不应失败");
+        assert!(slot.enablement().enabled(), "恢复后应为开启态");
+        assert!(
+            slot.activation().current().is_desktop(),
+            "恢复开启应同步激活桌面会话"
+        );
         assert_eq!(registered_names(&registry), sorted_all_tool_names());
     }
 
     /// 惰性恢复：`computer_use_enabled=false` → 恢复关闭态 → 零注册。
     #[test]
     fn restore_disabled_from_session_meta_mounts_zero() {
-        let db = LocalDb::open_in_memory().expect("内存库打开应成功");
-        db.set_session_meta(COMPUTER_USE_ENABLED_KEY, "false")
-            .expect("预置关闭标记");
-        let slot = Arc::new(ComputerSlot::new(Arc::new(LocalDbComputerMetaStore::new(
-            db,
-        ))));
-        let status = slot.status();
-        assert!(!status.enabled, "恢复后应为关闭态");
-        assert_eq!(status.mode, "idle");
+        let (slot, _db) = slot_with_meta(false);
         let mut registry = ToolRegistry::new();
         slot.register_tools(&mut registry).expect("零注册应返回 Ok");
+        assert!(!slot.enablement().enabled(), "恢复后应为关闭态");
+        assert_eq!(slot.activation().current(), SessionMode::Idle);
         assert!(registered_names(&registry).is_empty());
     }
 
@@ -564,98 +475,29 @@ mod tests {
     #[test]
     fn missing_meta_defaults_disabled_idle() {
         let (slot, _db) = in_memory_slot();
-        let status = slot.status();
-        assert!(!status.enabled);
-        assert_eq!(status.mode, "idle");
-        assert_eq!(status.reason, None, "从未开启不应有关闭原因");
-    }
-
-    /// enable：落盘 `computer_use_enabled=true` + 状态反射（enabled/mode）。
-    #[test]
-    fn enable_persists_true_and_status_reflects() {
-        let (slot, db) = in_memory_slot();
-        slot.enable().expect("开启不应失败");
-        let persisted = db
-            .get_session_meta(COMPUTER_USE_ENABLED_KEY)
-            .expect("读库不应失败");
-        assert_eq!(persisted.as_deref(), Some("true"));
-        let status = slot.status();
-        assert!(status.enabled);
-        assert_eq!(status.mode, "desktop");
-    }
-
-    /// 重复开启幂等（命令面吸收严格状态机错误；状态保持开启）。
-    #[test]
-    fn enable_twice_is_idempotent() {
-        let (slot, _db) = in_memory_slot();
-        slot.enable().expect("首次开启不应失败");
-        slot.enable().expect("重复开启应幂等返回 Ok");
-        assert!(slot.status().enabled);
-        assert_eq!(slot.status().mode, "desktop");
-    }
-
-    /// disable：释放互斥门回 Idle + 落盘 false + 原因登记（幂等：未开启
-    /// 时停用仅落盘关闭态）。
-    #[test]
-    fn disable_releases_persists_and_records_reason() {
-        let (slot, db) = in_memory_slot();
-        slot.enable().expect("开启不应失败");
-        slot.disable(Some("测试停用".to_string()))
-            .expect("停用不应失败");
+        let mut registry = ToolRegistry::new();
+        slot.register_tools(&mut registry).expect("零注册应返回 Ok");
+        assert!(!slot.enablement().enabled());
+        assert_eq!(slot.activation().current(), SessionMode::Idle);
         assert_eq!(
-            db.get_session_meta(COMPUTER_USE_ENABLED_KEY)
-                .expect("读库不应失败")
-                .as_deref(),
-            Some("false")
-        );
-        let status = slot.status();
-        assert!(!status.enabled);
-        assert_eq!(status.mode, "idle");
-        assert_eq!(status.reason.as_deref(), Some("测试停用"));
-        assert!(
-            !slot.activation().current().is_active(),
-            "停用后互斥门应回 Idle"
-        );
-        // 幂等：未开启时再次停用不报错
-        slot.disable(None).expect("重复停用应幂等返回 Ok");
-    }
-
-    /// 互斥共享（S3）：浏览器活跃时 enable 拒绝（tool.session.exclusive），
-    /// 零状态变更（开启态不动、落盘键不变）——守卫在审批与状态变更之前。
-    #[test]
-    fn enable_rejected_when_browser_active() {
-        let (slot, db) = in_memory_slot();
-        slot.activation()
-            .request_browser()
-            .expect("浏览器激活应成功（Idle → Browser）");
-        let err = slot.enable().expect_err("浏览器活跃时必须拒绝开启");
-        assert_eq!(
-            err,
-            ComputerError::Exclusive {
-                current: SessionMode::BrowserActive
-            }
-        );
-        assert!(!slot.status().enabled, "拒绝时不得变更开启态");
-        assert_eq!(slot.status().mode, "browser");
-        assert_eq!(
-            db.get_session_meta(COMPUTER_USE_ENABLED_KEY)
-                .expect("读库不应失败"),
+            slot.enablement().disabled_reason(),
             None,
-            "拒绝时不得落盘"
+            "从未开启不应有关闭原因"
         );
-        assert!(
-            err.as_command_err().starts_with("tool.session.exclusive:"),
-            "错误串：{}",
-            err.as_command_err()
-        );
+        assert!(registered_names(&registry).is_empty());
     }
 
     /// on_run_stopped：释放互斥门 → 关闭开启态 → 落盘 false（维度 1 收敛：
     /// 替代原 estop，普通停止语义，不置急停旗）。
     #[test]
     fn on_run_stopped_releases_and_persists() {
-        let (slot, db) = in_memory_slot();
-        slot.enable().expect("开启不应失败");
+        let (slot, db) = slot_with_meta(true);
+        let mut registry = ToolRegistry::new();
+        slot.register_tools(&mut registry).expect("恢复注册不应失败");
+        assert!(
+            slot.activation().current().is_desktop(),
+            "恢复后应处于桌面活跃态"
+        );
         slot.on_run_stopped();
         assert_eq!(
             db.get_session_meta(COMPUTER_USE_ENABLED_KEY)
@@ -664,45 +506,43 @@ mod tests {
             Some("false"),
             "停止后开启态必须落盘关闭（恢复需重新显式开启）"
         );
-        let status = slot.status();
-        assert!(!status.enabled);
-        assert_eq!(status.mode, "idle");
-        assert_eq!(status.reason.as_deref(), Some("run 级停止"));
+        assert!(!slot.enablement().enabled());
+        assert_eq!(slot.activation().current(), SessionMode::Idle);
+        assert_eq!(
+            slot.enablement().disabled_reason().as_deref(),
+            Some("run 级停止")
+        );
     }
 
-    /// 状态事件广播（`computer://state-changed`）：enable/disable 各发一次，
-    /// 载荷形状 `{ enabled, mode, reason? }` 与前端契约一致。
+    /// 状态事件广播（`computer://state-changed`）：惰性恢复与 run 级停止各发
+    /// 一次，载荷形状 `{ enabled, mode, reason? }` 与前端契约一致。
     #[test]
     fn state_changed_events_emitted_on_transitions() {
-        let (slot, _db) = in_memory_slot();
+        let (slot, _db) = slot_with_meta(true);
         let events = Arc::new(Mutex::new(Vec::new()));
         slot.attach_emitter(Arc::new(TestEmitter(Arc::clone(&events))));
-        slot.enable().expect("开启不应失败");
-        slot.disable(Some("测试".to_string()))
-            .expect("停用不应失败");
+        let mut registry = ToolRegistry::new();
+        slot.register_tools(&mut registry).expect("恢复注册不应失败");
+        slot.on_run_stopped();
         let events = events.lock().unwrap_or_else(|e| e.into_inner());
-        assert_eq!(events.len(), 2, "enable 与 disable 各广播一次");
+        assert_eq!(events.len(), 2, "恢复与停止各广播一次");
         let first: serde_json::Value = serde_json::from_str(&events[0]).expect("事件 JSON");
         assert_eq!(first["enabled"], true);
         assert_eq!(first["mode"], "desktop");
         let second: serde_json::Value = serde_json::from_str(&events[1]).expect("事件 JSON");
         assert_eq!(second["enabled"], false);
         assert_eq!(second["mode"], "idle");
-        assert_eq!(second["reason"], "测试");
+        assert_eq!(second["reason"], "run 级停止");
     }
 
     /// 惰性恢复广播：恢复即发一次状态事件（启动前已挂订阅，面板可收）。
     #[test]
     fn restore_emits_state_changed() {
-        let db = LocalDb::open_in_memory().expect("内存库打开应成功");
-        db.set_session_meta(COMPUTER_USE_ENABLED_KEY, "true")
-            .expect("预置开启标记");
-        let slot = Arc::new(ComputerSlot::new(Arc::new(LocalDbComputerMetaStore::new(
-            db,
-        ))));
+        let (slot, _db) = slot_with_meta(true);
         let events = Arc::new(Mutex::new(Vec::new()));
         slot.attach_emitter(Arc::new(TestEmitter(Arc::clone(&events))));
-        let _ = slot.status();
+        let mut registry = ToolRegistry::new();
+        slot.register_tools(&mut registry).expect("恢复注册不应失败");
         let events = events.lock().unwrap_or_else(|e| e.into_inner());
         assert_eq!(events.len(), 1);
         let payload: serde_json::Value = serde_json::from_str(&events[0]).expect("事件 JSON");
@@ -710,17 +550,40 @@ mod tests {
         assert_eq!(payload["mode"], "desktop");
     }
 
-    /// 持久化失败 → not_ready 语义（`tool.computer.not_ready:<原因>`）。
+    /// 命令面退役负向不变量（2026-09-15 真漂移债务清零 · 物理切除）：
+    /// `computer_session_enable` / `computer_session_disable` / `computer_status`
+    /// 三条命令及其**专属**辅助项（`SessionPayload` / `StatusPayload` /
+    /// `ComputerError::Exclusive` / `ComputerError::as_command_err` 与槽方法
+    /// `new` / `enable` / `disable` / `status`）已从实现面物理删除——前端
+    /// computer-panel 面已物理删除，生产代码零消费。
+    ///
+    /// 原 5 条断言钉的正是这三条命令的行为（命令体 = 槽方法薄封装），随命令一并
+    /// 退役，逐条对账见本轮汇报：
+    /// - `enable_persists_true_and_status_reflects`（落盘 true + 状态反射）；
+    /// - `enable_twice_is_idempotent`（重复开启幂等）；
+    /// - `disable_releases_persists_and_records_reason`（释放互斥门 + 落盘 false
+    ///   + 原因登记）——三条不变量由 `on_run_stopped_releases_and_persists` 继续守护；
+    /// - `enable_rejected_when_browser_active`（浏览器活跃 → `tool.session.exclusive`）；
+    /// - `persist_failure_maps_to_not_ready`（落盘失败 → `tool.computer.not_ready`）。
+    ///
+    /// 注册面负向断言见 `tests/config_command_names_contract.rs`。
     #[test]
-    fn persist_failure_maps_to_not_ready() {
-        let slot = Arc::new(ComputerSlot::from_store(Arc::new(FailingStore)));
-        let err = slot.enable().expect_err("落盘失败必须报错");
-        assert!(matches!(err, ComputerError::Persist(_)));
-        assert!(
-            err.as_command_err().starts_with("tool.computer.not_ready:"),
-            "错误串：{}",
-            err.as_command_err()
-        );
+    fn retired_computer_command_surface_is_physically_removed() {
+        // needle 分片拼接：避免断言文案自身命中源文本
+        let source = include_str!("mod.rs");
+        for removed in [
+            concat!("struct Session", "Payload"),
+            concat!("struct Status", "Payload"),
+            concat!("fn as_command", "_err"),
+            concat!("pub(crate) fn en", "able("),
+            concat!("pub(crate) fn dis", "able("),
+            concat!("pub(crate) fn stat", "us("),
+        ] {
+            assert!(
+                !source.contains(removed),
+                "已退役命令面 {removed} 严禁在实现面复活"
+            );
+        }
     }
 
     #[test]

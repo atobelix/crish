@@ -43,7 +43,6 @@ mod command_manifest;
 // 接线点登记见 computer/mod.rs 模块头）
 mod commands;
 mod computer;
-mod computer_commands;
 mod config;
 mod core_commands;
 mod core_error;
@@ -455,10 +454,10 @@ command_registry![
         browser_commands::browser_list_history
     ),
     // ── 电脑操作会话命令：computer_session_enable / computer_session_disable /
-    //    computer_status 已退役（四方同步移除，computer-panel 前端面
-    //    computerSessionApi / ComputerPanel / useComputerSession 均已物理删除，
-    //    生产代码零消费）；ComputerSlot 托管状态与 computer_commands 实现体
-    //    保留（内联测试直调），恢复接线时按四方登记流程重新注册 ──
+    //    computer_status 已退役并**物理删除**（四方同步移除 + 实现体
+    //    computer_commands.rs 删除；前端 computerSessionApi / ComputerPanel /
+    //    useComputerSession 已物理删除，生产代码零消费）。恢复接线须走四方
+    //    登记流程重新注册，不得靠注释或 #[allow(dead_code)] 续命 ──
     // ── Round7+：笔记双引擎 IPC（noteApi / noteHydrateIpc / noteMirrorIpc）──
     (
         "note_document_apply_md",
@@ -792,7 +791,8 @@ fn main() {
             app.manage(core_run_commands::TrashRootConfig::default());
 
             // ④c 全局产出根配置注入（G03 T-EG-12：agentOutputsRoot 默认
-            // `.agent-outputs`；命令侧可经 config_set_outputs_root 覆盖，
+            // `.agent-outputs`；`config_set_outputs_root` 等设置面命令已随
+            // 单轨收敛退役并物理删除，产出根现由配置树 / 默认值唯一决定，
             // 校验保证产出根位于工作区内）
             app.manage(outputs_config::OutputsRootConfig::default());
 

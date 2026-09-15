@@ -91,7 +91,8 @@ mod probe {
     pub fn session_probe() -> Result<(), String> {
         let mut session = ComputerSession::new().map_err(|e| format!("会话初始化失败: {e}"))?;
         let result = session
-            .dispatch(&Action::CursorPosition)
+            // 冒烟探针无中止需求：显式声明「不中止」，走唯一真源入口。
+            .dispatch_with_abort(&Action::CursorPosition, || false)
             .map_err(|e| format!("光标查询失败: {e}"))?;
         let ActionResult::CursorPosition(pos) = result else {
             return Err(format!("预期光标位置结果, 实得 {result:?}"));

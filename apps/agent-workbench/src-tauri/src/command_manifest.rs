@@ -242,9 +242,9 @@ pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
         entry("browser_list_bookmarks", "browser", "engine", true),
         entry("browser_list_history", "browser", "engine", true),
         // ── 电脑操作会话命令：computer_session_enable / computer_session_disable /
-        //    computer_status 已退役（四方同步移除；computer-panel 前端面已
-        //    物理删除，生产代码零消费）。ComputerSlot 托管状态与实现体保留，
-        //    恢复接线时重新走四方登记 ──
+        //    computer_status 已退役并**物理删除**（四方同步移除 + 实现体
+        //    computer_commands.rs 删除；computer-panel 前端面已物理删除，
+        //    生产代码零消费）。恢复接线须重新走四方登记，不得靠注释续命 ──
         // ── Round7+：笔记双引擎 IPC（noteApi / noteHydrateIpc / noteMirrorIpc）──
         entry("note_document_apply_md", "note", "engine", true),
         entry("note_query_blocks", "note", "engine", true),

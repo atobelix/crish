@@ -467,7 +467,7 @@ pub(crate) fn create_session(
             let mut decoder = Utf8ChunkBuffer::new();
             let mut pending: String = String::new();
 
-            let mut flush_pending = |pending: &mut String| {
+            let flush_pending = |pending: &mut String| {
                 if pending.is_empty() {
                     return;
                 }

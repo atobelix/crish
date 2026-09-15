@@ -162,3 +162,56 @@ fn retired_drift_debt_commands_are_not_registered() {
         );
     }
 }
+
+/// 真漂移退役面（2026-09-15 · 物理切除）：退役命令的**实现面**严禁残留——
+/// 命令函数体、专属载荷结构、专属辅助函数已物理删除，不得以注释 /
+/// `#[allow(dead_code)]` / `#[cfg(test)]` 掩盖。与
+/// `retired_drift_debt_commands_are_not_registered` 的注册面断言构成
+/// 「实现面 + 注册面」双面不变量（防退役命令复活）。
+#[test]
+fn retired_drift_debt_command_implementations_are_physically_removed() {
+    let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    let read = |rel: &str| std::fs::read_to_string(src.join(rel)).unwrap_or_default();
+
+    // 逐文件实现体扫描（needle 用「定义形态」而非裸名，避免误伤退役登记注释）
+    for (rel, needle) in [
+        ("commands.rs", "fn workbench_http_request"),
+        ("config/mod.rs", "fn resolve_model"),
+        ("fs_commands/mod.rs", "async fn select_folder"),
+        ("fs_commands/dialog.rs", "fn register_picked_folder"),
+        ("outputs_config.rs", "fn config_get_outputs_root"),
+        ("outputs_config.rs", "fn config_set_outputs_root"),
+        ("outputs_config.rs", "fn set_session_output_root"),
+        ("outputs_config.rs", "fn set_outputs_config"),
+        ("outputs_config.rs", "fn effective_outputs_root"),
+        ("outputs_config.rs", "struct OutputsRootConfigResponse"),
+        ("fs_commands/types.rs", "struct SelectFolderResult"),
+        ("computer/mod.rs", "struct SessionPayload"),
+        ("computer/mod.rs", "struct StatusPayload"),
+        ("computer/mod.rs", "fn as_command_err"),
+    ] {
+        assert!(
+            !read(rel).contains(needle),
+            "{rel} 中已退役命令实现 {needle} 严禁残留（物理切除后不得复活）"
+        );
+    }
+
+    // 整体空壳文件连同 `mod` 声明切除（`src/computer_commands.rs` /
+    // `src/fs_commands/dialog.rs`）；`computer_commands.rs` 若仅余 0 长度占位，
+    // 表示 main.rs 的 `mod computer_commands;` 声明待属主同步删除。
+    let computer_commands = read("computer_commands.rs");
+    for needle in [
+        "computer_session_enable",
+        "computer_session_disable",
+        "computer_status",
+    ] {
+        assert!(
+            !computer_commands.contains(needle),
+            "src/computer_commands.rs 中已退役命令 {needle} 严禁残留"
+        );
+    }
+    assert!(
+        !src.join("fs_commands/dialog.rs").exists(),
+        "已退役目录选择链实现文件 src/fs_commands/dialog.rs 必须物理切除"
+    );
+}

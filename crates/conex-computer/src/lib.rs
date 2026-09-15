@@ -66,9 +66,8 @@ pub enum ActionResult {
 ///
 /// 动作派发唯一真源为 [`dispatch_with_abort`](Self::dispatch_with_abort)（单路径）：
 /// `Action::validate`(API 空间边界)→ `ScaleSpec` 换算到物理坐标(含物理回检钳制)
-/// → 后端注入;`CursorPosition` 走物理→API 反向换算。[`dispatch`](Self::dispatch)
-/// 为兼容 shim（`|| false` 委托），新代码与 `RealComputerSession` 生产路径已透传
-/// `abort_token` 经 `dispatch_with_abort`（端到端单路径闭合）。
+/// → 后端注入;`CursorPosition` 走物理→API 反向换算。无中止需求方（如工具层
+/// 会话）显式传 `|| false`，**不存在**第二入口或兼容 shim。
 #[cfg(windows)]
 pub struct ComputerSession {
     backend: action::inject::OsInputBackend,
@@ -102,7 +101,7 @@ impl ComputerSession {
     /// `set_abort_checker(Some) → 核心派发（参数校验 → 坐标换算 → 注入，作用域内
     /// 持有中止查询）→ clear`，`OsInputBackend` 内所有 5ms 切片均委托该查询
     ///（未注入时 `aborted()==false`）。`RealComputerSession` 已透传 `abort_token`
-    ///经本方法，端到端单路径闭合；`dispatch` 为兼容 shim 仅委托 `|| false`，无独立语义。
+    ///经本方法，端到端单路径闭合。
     pub fn dispatch_with_abort<F>(
         &mut self,
         action: &Action,
@@ -205,22 +204,6 @@ impl ComputerSession {
         })();
         self.backend.set_abort_checker(None);
         result
-    }
-
-    /// 兼容 shim：无中止查询的派发，委托到唯一真源 `dispatch_with_abort(|| false)`
-    ///
-    /// 审计04 §I1 评估：`dispatch_with_abort` 为唯一真源（单路径），`dispatch`
-    /// 仅为历史签名兼容。`RealComputerSession` 生产路径已透传 `abort_token` 经
-    /// `dispatch_with_abort`（端到端单路径闭合），故本方法无独立语义，仅
-    /// `smoke.rs` 探针等无需中止的单测保留兼容调用；标记 `#[deprecated]` 引导
-    /// 新代码迁移，语义严格等价 `dispatch_with_abort(|| false)`，不新增双入口
-    /// 语义重复。保留单入口期间，调用链已收敛到单一真源。
-    #[deprecated(
-        since = "0.5.0",
-        note = "兼容 shim，无中止查询；新代码请用 `dispatch_with_abort` 注入 `abort_token`，单路径语义见其文档"
-    )]
-    pub fn dispatch(&mut self, action: &Action) -> Result<ActionResult, SessionError> {
-        self.dispatch_with_abort(action, || false)
     }
 
     /// 当前布局表(显示器清单 / 虚拟桌面边界)

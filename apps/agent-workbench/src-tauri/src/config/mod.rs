@@ -11,7 +11,6 @@ use agent_provider::model_store::{
     CommittedModels, ModelsChange, ModelsSnapshot, ModelsStore, ModelsStoreError,
     ResolvedModelConfig,
 };
-use agent_provider::models::ModelRef;
 use tauri::{Emitter, Manager};
 
 pub(crate) use credentials::*;
@@ -71,10 +70,6 @@ pub(crate) fn models_store() -> Result<Arc<ModelsStore>, ModelsStoreError> {
 
 pub(crate) fn current_snapshot() -> Result<Arc<CommittedModels>, ModelsStoreError> {
     models_store()?.committed()
-}
-
-pub(crate) fn resolve_model(reference: &ModelRef) -> Result<ResolvedModelConfig, ModelsStoreError> {
-    models_store()?.resolve_model(reference)
 }
 
 pub(crate) fn resolve_active_model() -> Result<Option<ResolvedModelConfig>, ModelsStoreError> {
