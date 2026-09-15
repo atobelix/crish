@@ -14,7 +14,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
 import { useAgentToolApproval } from '../hooks/useAgentToolApproval';
-import { useLayoutStore } from '../store/storeAccess';
+// 会话域（sessions / activeSessionId / agent 消息）在独立 SessionStore 实例；
+// layoutStore 已纯化为壳层 chrome 域（无 sessions 字段）。
+import { useSessionStore } from '../store/storeAccess';
 import { getCommandPermissions, getSessionAgent } from './storeAccess';
 import type {
   MessageToolCall,
@@ -30,6 +32,12 @@ const { chatBridgeMock } = vi.hoisted(() => ({
 }));
 
 vi.mock('./chatBridge', () => chatBridgeMock);
+
+// 失败提示已收敛为模块内直取 toast.show（不再是调用方传入的第 3 参回调）：
+// useAgentToolApproval(parentSessionId, agentId) 内部 showToast = toast.show。
+vi.mock('../services/toast/ToastContext', () => ({
+  toast: { show: vi.fn() },
+}));
 
 function makeToolCall(
   id: string,
@@ -56,7 +64,7 @@ function seedAgentSession(agentId: string, messages: SessionMessage[]) {
     messages,
     startedAt: 1,
   };
-  useLayoutStore.setState((st) => {
+  useSessionStore.setState((st) => {
     st.sessions.push({
       id: sid,
       title: '子 agent 审批测试',
@@ -82,7 +90,7 @@ beforeEach(() => {
   vi.useFakeTimers();
   chatBridgeMock.engineApproveTool.mockReset();
   chatBridgeMock.engineDenyTool.mockReset();
-  useLayoutStore.setState((st) => {
+  useSessionStore.setState((st) => {
     st.sessions = [];
     st.activeSessionId = '';
   });
@@ -102,10 +110,10 @@ describe('useAgentToolApproval 允许 / 拒绝动作', () => {
         toolCalls: [makeToolCall('tc-1')],
       },
     ]);
-    const toast = vi.fn();
-    const { result } = renderHook(() =>
-      useAgentToolApproval(sid, agentId, toast)
-    );
+    const { toast } = await import('../services/toast/ToastContext');
+    const showSpy = vi.mocked(toast.show);
+    showSpy.mockClear();
+    const { result } = renderHook(() => useAgentToolApproval(sid, agentId));
 
     await act(async () => {
       result.current.onApprovalAllow('tc-1', 'm1');
@@ -117,7 +125,7 @@ describe('useAgentToolApproval 允许 / 拒绝动作', () => {
     expect(readAgentTool(sid, agentId, 'tc-1')?.status).toBe('running');
     expect(readAgentTool(sid, agentId, 'tc-1')?.output).toBe('执行中…');
     expect(result.current.approvalBusy).toBe(false);
-    expect(toast).not.toHaveBeenCalled();
+    expect(showSpy).not.toHaveBeenCalled();
   });
 
   it('onApprovalAllow remember=true：命令前缀写入白名单', async () => {
@@ -176,10 +184,10 @@ describe('useAgentToolApproval 允许 / 拒绝动作', () => {
         toolCalls: [makeToolCall('tc-1')],
       },
     ]);
-    const toast = vi.fn();
-    const { result } = renderHook(() =>
-      useAgentToolApproval(sid, agentId, toast)
-    );
+    const { toast } = await import('../services/toast/ToastContext');
+    const showSpy = vi.mocked(toast.show);
+    showSpy.mockClear();
+    const { result } = renderHook(() => useAgentToolApproval(sid, agentId));
 
     await act(async () => {
       result.current.onApprovalAllow('tc-1', 'm1');
@@ -188,7 +196,7 @@ describe('useAgentToolApproval 允许 / 拒绝动作', () => {
 
     expect(readAgentTool(sid, agentId, 'tc-1')?.status).toBe('error');
     expect(readAgentTool(sid, agentId, 'tc-1')?.output).toBe('批准失败');
-    expect(toast).toHaveBeenCalledWith('批准失败，请重试');
+    expect(showSpy).toHaveBeenCalledWith('批准失败，请重试');
     expect(result.current.approvalBusy).toBe(false);
   });
 
@@ -202,10 +210,10 @@ describe('useAgentToolApproval 允许 / 拒绝动作', () => {
         toolCalls: [makeToolCall('tc-1')],
       },
     ]);
-    const toast = vi.fn();
-    const { result } = renderHook(() =>
-      useAgentToolApproval(sid, agentId, toast)
-    );
+    const { toast } = await import('../services/toast/ToastContext');
+    const showSpy = vi.mocked(toast.show);
+    showSpy.mockClear();
+    const { result } = renderHook(() => useAgentToolApproval(sid, agentId));
 
     await act(async () => {
       result.current.onApprovalDeny('tc-1', 'm1');
@@ -216,7 +224,7 @@ describe('useAgentToolApproval 允许 / 拒绝动作', () => {
       'pending_approval'
     );
     expect(readAgentTool(sid, agentId, 'tc-1')?.output).toBe('拒绝未送达');
-    expect(toast).toHaveBeenCalledWith('拒绝未送达，请重试');
+    expect(showSpy).toHaveBeenCalledWith('拒绝未送达，请重试');
   });
 
   it('approvalBusy 期间重复点击被忽略（防双发）', async () => {
@@ -335,7 +343,7 @@ describe('useAgentToolApproval 绑定与解绑', () => {
     );
     const sidA = `parentA-${Math.random().toString(36).slice(2, 8)}`;
     const sidB = `parentB-${Math.random().toString(36).slice(2, 8)}`;
-    useLayoutStore.setState((st) => {
+    useSessionStore.setState((st) => {
       st.sessions.push(
         {
           id: sidA,

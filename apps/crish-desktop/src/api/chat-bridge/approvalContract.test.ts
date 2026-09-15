@@ -159,9 +159,13 @@ describe('审批链路契约：工具 requires_approval → 挂起 → 用户裁
     router.onMsg(toolEndEvent('tc-1'));
     expect(approvalFlow.snapshot().inflightCount).toBe(0);
     expect(approvalFlow.shouldBlockTerminal()).toBe(false);
+    // onToolSuccess 权威签名 4 参（chatApi.ts:103）：
+    // (toolId, output, diffs?, durationMs?)——tool-end 平铺事件不含 diffs/durationMs
+    // 时显式传 undefined 占位（toolHandlers.ts:38 无条件 4 参调用）。
     expect(callbacks.onToolSuccess).toHaveBeenCalledWith(
       'tc-1',
       'ok',
+      undefined,
       undefined
     );
 

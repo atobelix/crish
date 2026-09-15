@@ -19,7 +19,9 @@ import {
   screen,
 } from '@testing-library/react';
 import { ApprovalSection } from '../components/workspace/ApprovalSection';
-import { useLayoutStore } from '../store/storeAccess';
+// 会话域（sessions / activeSessionId / agent 消息）在独立 SessionStore 实例；
+// layoutStore 已纯化为壳层 chrome 域（无 sessions 字段）。
+import { useSessionStore } from '../store/storeAccess';
 import type { PendingApprovalInfo } from './engineStatus';
 import type { SessionMessage } from '../store/types';
 
@@ -32,6 +34,17 @@ const { chatBridgeMock } = vi.hoisted(() => ({
 
 vi.mock('./chatBridge', () => chatBridgeMock);
 
+// ApprovalSection 已收敛 toast 通道：不再接收 `onShowToast` prop，
+// 改为组件内 `const { showToast } = useToast()`（ApprovalSection.tsx:1,20）。
+// 打桩 hook 而非注入回调，保持「失败反馈走全局 toast」真实链路。
+const { toastSpies } = vi.hoisted(() => ({
+  toastSpies: { showToast: vi.fn(), show: vi.fn() },
+}));
+vi.mock('../services/toast/ToastContext', () => ({
+  useToast: () => ({ showToast: toastSpies.showToast }),
+  toast: { show: toastSpies.show },
+}));
+
 const approval = (
   overrides: Partial<PendingApprovalInfo> = {}
 ): PendingApprovalInfo => ({
@@ -43,7 +56,7 @@ const approval = (
 
 function seedPendingSession() {
   const sid = `sess-${Math.random().toString(36).slice(2, 10)}`;
-  useLayoutStore.setState((st) => {
+  useSessionStore.setState((st) => {
     st.sessions.push({
       id: sid,
       title: '待确认会话',
@@ -73,7 +86,7 @@ function seedPendingSession() {
 }
 
 function readToolStatus(sid: string, toolId: string) {
-  return useLayoutStore
+  return useSessionStore
     .getState()
     .sessions.find((s) => s.id === sid)
     ?.messages.flatMap((m) => m.toolCalls ?? [])
@@ -81,24 +94,24 @@ function readToolStatus(sid: string, toolId: string) {
 }
 
 function renderSection(approvals: PendingApprovalInfo[]) {
-  const onShowToast = vi.fn();
   const onFocusSession = vi.fn();
   const utils = render(
     <ApprovalSection
       approvals={approvals}
       countLabel={approvals.length > 0 ? `${approvals.length} 项` : null}
-      onShowToast={onShowToast}
       onFocusSession={onFocusSession}
     />
   );
-  return { onShowToast, onFocusSession, ...utils };
+  return { onShowToast: toastSpies.showToast, onFocusSession, ...utils };
 }
 
 afterEach(() => {
   cleanup();
   chatBridgeMock.engineApproveTool.mockReset();
   chatBridgeMock.engineDenyTool.mockReset();
-  useLayoutStore.setState((st) => {
+  toastSpies.showToast.mockReset();
+  toastSpies.show.mockReset();
+  useSessionStore.setState((st) => {
     st.sessions = [];
     st.activeSessionId = '';
   });

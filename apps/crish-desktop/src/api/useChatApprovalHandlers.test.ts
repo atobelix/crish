@@ -15,7 +15,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
 import { useChatApprovalHandlers } from '../components/chat-card/useChatApprovalHandlers';
-import { useLayoutStore } from '../store/storeAccess';
+// 会话域（sessions / activeSessionId / agent 消息）在独立 SessionStore 实例；
+// layoutStore 已纯化为壳层 chrome 域（无 sessions 字段）。
+import { useSessionStore } from '../store/storeAccess';
 import { reindexSessionsById } from '../store/sessionIndex';
 import { getCommandPermissions } from './storeAccess';
 import type {
@@ -32,6 +34,12 @@ const { chatBridgeMock } = vi.hoisted(() => ({
 }));
 
 vi.mock('./chatBridge', () => chatBridgeMock);
+
+// toast 通道已升级：`useChatApprovalHandlers` 不再接收 `onShowToast` 回调，
+// 改为执行器内直取模块单例 `toast.show`（useChatApprovalExecutor.ts:32,88,119）。
+// 故打桩模块而非注入回调——保持「失败反馈走全局 toast」这一真实链路。
+const { toastMock } = vi.hoisted(() => ({ toastMock: { show: vi.fn() } }));
+vi.mock('../services/toast/ToastContext', () => ({ toast: toastMock }));
 
 function makeToolCall(
   id: string,
@@ -51,7 +59,7 @@ function pendingMsg(id: string, toolCalls: MessageToolCall[]): SessionMessage {
 
 function seedSession(messages: SessionMessage[], agents: SessionAgent[] = []) {
   const sid = `sess-${Math.random().toString(36).slice(2, 10)}`;
-  useLayoutStore.setState((st) => {
+  useSessionStore.setState((st) => {
     st.sessions.push({
       id: sid,
       title: '审批测试',
@@ -69,7 +77,7 @@ function seedSession(messages: SessionMessage[], agents: SessionAgent[] = []) {
 }
 
 function readTool(sid: string, msgId: string, toolId: string) {
-  return useLayoutStore
+  return useSessionStore
     .getState()
     .sessions.find((s) => s.id === sid)
     ?.messages.find((m) => m.id === msgId)
@@ -77,17 +85,15 @@ function readTool(sid: string, msgId: string, toolId: string) {
 }
 
 function renderApproval(sid: string) {
-  const toast = vi.fn();
   const utils = renderHook(() => {
-    const sess = useLayoutStore.getState().sessions.find((s) => s.id === sid);
+    const sess = useSessionStore.getState().sessions.find((s) => s.id === sid);
     return useChatApprovalHandlers({
       activeSessionId: sid,
       messages: sess?.messages ?? [],
       agents: sess?.agents ?? [],
-      onShowToast: toast,
     });
   });
-  return { ...utils, toast };
+  return { ...utils, toast: toastMock.show };
 }
 
 import { inFlightApprovalRegistry } from './chat-approval/inFlightApprovalRegistry';
@@ -97,7 +103,8 @@ beforeEach(() => {
   inFlightApprovalRegistry.clearForTest();
   chatBridgeMock.engineApproveTool.mockReset();
   chatBridgeMock.engineDenyTool.mockReset();
-  useLayoutStore.setState((st) => {
+  toastMock.show.mockReset();
+  useSessionStore.setState((st) => {
     st.sessions = [];
     st.activeSessionId = '';
   });
@@ -279,7 +286,7 @@ describe('useChatApprovalHandlers 单个允许 / 拒绝动作', () => {
     expect(result.current.isToolBusy?.('tc-1')).toBe(true);
 
     // 模拟在请求飞行期间，外部事件已将状态推进至 success
-    useLayoutStore.setState((st) => {
+    useSessionStore.setState((st) => {
       const tc = st.sessions
         .find((s) => s.id === sid)
         ?.messages.find((m) => m.id === 'm1')
@@ -320,7 +327,7 @@ describe('useChatApprovalHandlers 单个允许 / 拒绝动作', () => {
     });
 
     // 模拟在请求飞行期间，外部事件已将状态推进至 running
-    useLayoutStore.setState((st) => {
+    useSessionStore.setState((st) => {
       const tc = st.sessions
         .find((s) => s.id === sid)
         ?.messages.find((m) => m.id === 'm1')
@@ -469,7 +476,7 @@ describe('useChatApprovalHandlers approval-resolved 恢复', () => {
     expect(result.current.pendingApprovalCount).toBe(1);
 
     // 模拟 approval-resolved（allow）事件落地后 store 更新为终态
-    useLayoutStore.setState((st) => {
+    useSessionStore.setState((st) => {
       const m = st.sessions.find((s) => s.id === sid)?.messages[0];
       const tc = m?.toolCalls?.find((t) => t.id === 'tc-1');
       if (tc) {
