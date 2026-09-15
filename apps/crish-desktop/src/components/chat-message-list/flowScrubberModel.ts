@@ -149,6 +149,58 @@ export function countScrubberTicks(segments: readonly ScrubberSegment[]): number
   return n;
 }
 
+/**
+ * 轨道刻度的像素节距 = 刻度本体 2px（`FlowScrubber.module.css` 的
+ * `.tick { height: 2px }`）+ 轨道列间距 8px（`.root { gap: 8px }`）。
+ * 用于由轨道可用高度反推「最多能排下多少枚刻度」。
+ */
+export const SCRUBBER_TICK_PITCH_PX = 10;
+
+/**
+ * 有界刻度渲染：按轨道可用容量聚合刻度。
+ *
+ * 存在理由（缺陷修复，2026-09-15）：
+ * 轨道是**固定高度条带**（`.wrapper` 绝对定位 top:0/bottom:0，`.root` 竖直
+ * flex 居中堆叠固定 2px 高的 `.tick`），并不按文档高度比例布局——
+ * `buildScrubberSegments` 算出的 `flex` / `heightPercent` 在 DOM 中无消费方
+ * （`.gap { display: none }`、`.tickSlot { flex: 0 0 auto }`、
+ * `data-height-percent` 无 CSS 引用）。因此轨道可容纳的刻度数由**轨道像素
+ * 高度**决定，与消息数无关。
+ *
+ * 不做聚合的后果（实测，N=6000 条消息）：
+ *   ① 轨道产出 ~1.5×N 个 DOM 节点，而每次滚动提交都要协调它们
+ *      ⇒ 单次提交渲染 49ms、每帧 189ms（是 16.7ms 帧预算的 11 倍）；
+ *      短路轨道渲染后每帧回落到 25ms 且**与 N 无关**（300→6000 持平）；
+ *   ② 刻度总高（N×10px）远超轨道高度，溢出到视口之外（`.root` 为
+ *      `overflow: visible`）⇒ 超出容量的刻度既看不见也点不到。
+ *
+ * 聚合语义：每桶取**首个**刻度为代表（跳转与悬停预览均指向该轮次）；
+ * **已固定（pinned）的刻度一律保留**——固定标记是显式用户资产，不得因
+ * 降采样丢失。gap 段在 DOM 中 `display: none`、无布局作用，聚合路径不再保留。
+ *
+ * @param segments 原始分段
+ * @param maxTicks 轨道可容纳的刻度上限（由像素高度 / 节距推得）
+ * @param isPinned 判断某刻度是否必须保留（默认不保留额外刻度）
+ */
+export function capScrubberSegments(
+  segments: readonly ScrubberSegment[],
+  maxTicks: number,
+  isPinned?: (id: string) => boolean
+): ScrubberSegment[] {
+  const tickTotal = countScrubberTicks(segments);
+  if (maxTicks < 1 || tickTotal <= maxTicks) return segments.slice();
+  const stride = Math.ceil(tickTotal / maxTicks);
+  const out: ScrubberSegment[] = [];
+  let seen = 0;
+  for (const seg of segments) {
+    if (seg.type !== 'tick') continue;
+    const keep = seen % stride === 0 || Boolean(isPinned?.(seg.tick.id));
+    seen += 1;
+    if (keep) out.push(seg);
+  }
+  return out;
+}
+
 export function formatTickTooltip(opts: {
   snippet: string;
   flowOn: boolean;

@@ -1,11 +1,13 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 import type { SessionMessage } from '../../store/types';
 import type { VirtualScrollManager } from '../../api/VirtualScrollManager';
 import styles from './FlowScrubber.module.css';
 import {
   USER_BUBBLE_SELECTOR,
+  SCRUBBER_TICK_PITCH_PX,
   buildScrubberSegments,
+  capScrubberSegments,
   isConversationFlowOn,
   readPurposeLabel,
   scrollToScrubberTarget,
@@ -34,6 +36,13 @@ interface ActiveHoverState {
   targetY: number;
 }
 
+/** 轨道容量下限：极矮轨道也至少给用户几枚可点刻度 */
+const MIN_SCRUBBER_TICKS = 6;
+/** 轨道容量上限：防御异常超高轨道导致 DOM 再次无界 */
+const MAX_SCRUBBER_TICKS = 200;
+/** 首帧未测得轨道高度前的保守缺省（jsdom 下 clientHeight 恒 0） */
+const DEFAULT_SCRUBBER_RAIL_HEIGHT_PX = 600;
+
 const FlowScrubberInner: React.FC<FlowScrubberProps> = ({
   messages,
   manager,
@@ -57,8 +66,42 @@ const FlowScrubberInner: React.FC<FlowScrubberProps> = ({
     [messages, manager, totalHeight]
   );
 
-  const scroller = scrollerRef.current;
-  const flowOn = isConversationFlowOn(scroller);
+  // 轨道可用高度：刻度数上限由**像素容量**决定，与消息数无关（见
+  // capScrubberSegments 注释）。首帧未测得前用保守缺省值（jsdom 下
+  // clientHeight 恒 0，测试环境亦走该分支）。
+  const [railHeight, setRailHeight] = useState(0);
+  useLayoutEffect(() => {
+    const wrap = wrapperRef.current;
+    if (!wrap) return;
+    const measure = () => setRailHeight(wrap.clientHeight);
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(wrap);
+    return () => ro.disconnect();
+  }, []);
+
+  const maxTicks = Math.max(
+    MIN_SCRUBBER_TICKS,
+    Math.min(
+      MAX_SCRUBBER_TICKS,
+      Math.floor(
+        (railHeight > 0 ? railHeight : DEFAULT_SCRUBBER_RAIL_HEIGHT_PX) /
+          SCRUBBER_TICK_PITCH_PX
+      )
+    )
+  );
+
+  // 有界刻度渲染：超出轨道容量的刻度既不可见又使每次提交的协调成本随消息
+  // 数线性增长。带固定标记（pinned）的刻度无条件保留。
+  const renderedSegments = useMemo(
+    () =>
+      capScrubberSegments(segments, maxTicks, (id) =>
+        Boolean(pinnedIdSet?.has(id))
+      ),
+    [segments, maxTicks, pinnedIdSet]
+  );
+
   void Tooltip;
 
   const onJump = useCallback(
@@ -71,11 +114,7 @@ const FlowScrubberInner: React.FC<FlowScrubberProps> = ({
   );
 
   const handleTickPointerEnter = useCallback(
-    (
-      tick: ScrubberTick,
-      purpose: string | undefined,
-      el: HTMLElement
-    ) => {
+    (tick: ScrubberTick, el: HTMLElement) => {
       if (leaveTimerRef.current != null) {
         window.clearTimeout(leaveTimerRef.current);
         leaveTimerRef.current = null;
@@ -87,6 +126,16 @@ const FlowScrubberInner: React.FC<FlowScrubberProps> = ({
       const rawY = tickRect.top - wrapRect.top + tickRect.height / 2;
       // 边界钳制，确保卡片在顶部和底部不会越界被遮挡
       const clampedY = Math.max(70, Math.min(wrapRect.height - 70, rawY));
+
+      // purpose 按需读取（悬停时单次），绝不在渲染期为每个刻度读取：
+      // readPurposeLabel 内部是 root.querySelector('[data-msg-id="…"] [data-flow-purpose]')
+      // —— 全子树 DOM 查询。历史实现在 render 里对每个刻度调用一次 ⇒ 每次提交
+      // 成本 = 用户消息数 × 子树节点数（N=6000 时约 2700 万次节点访问，
+      // 单次提交渲染 49ms），而 purpose 仅被下方悬浮卡片消费。
+      const scrollerEl = scrollerRef.current;
+      const purpose = isConversationFlowOn(scrollerEl)
+        ? readPurposeLabel(scrollerEl, tick.nextAssistantId)
+        : undefined;
 
       const nextState: ActiveHoverState = {
         tick,
@@ -108,7 +157,7 @@ const FlowScrubberInner: React.FC<FlowScrubberProps> = ({
         }, 60);
       }
     },
-    [activeHover]
+    [activeHover, scrollerRef]
   );
 
   const handleTickPointerLeave = useCallback(() => {
@@ -256,9 +305,9 @@ const FlowScrubberInner: React.FC<FlowScrubberProps> = ({
       io?.disconnect();
       mo?.disconnect();
     };
-  }, [activeClass, manager, scrollerRef, segments]);
+  }, [activeClass, manager, scrollerRef, renderedSegments]);
 
-  if (segments.length === 0) return null;
+  if (renderedSegments.length === 0) return null;
 
   const hasPinned = Boolean(pinnedIdSet && pinnedIdSet.size > 0);
   return (
@@ -271,7 +320,7 @@ const FlowScrubberInner: React.FC<FlowScrubberProps> = ({
       role="navigation"
     >
       <div className={styles.root} data-flow-scrubber-track="">
-        {segments.map((seg) =>
+        {renderedSegments.map((seg) =>
           seg.type === 'gap' ? (
             <div
               key={seg.key}
@@ -288,10 +337,6 @@ const FlowScrubberInner: React.FC<FlowScrubberProps> = ({
 
               const tickStyle = isPinned
                 ? ({ '--tick-pin-color': pinColor } as React.CSSProperties)
-                : undefined;
-
-              const purpose = flowOn
-                ? readPurposeLabel(scroller, seg.tick.nextAssistantId)
                 : undefined;
 
               const ariaLabel = seg.tick.assistantSnippet
@@ -318,11 +363,7 @@ const FlowScrubberInner: React.FC<FlowScrubberProps> = ({
                     aria-expanded={isCurrentHovered}
                     onClick={() => onJump(seg.tick.id)}
                     onMouseEnter={(e) =>
-                      handleTickPointerEnter(
-                        seg.tick,
-                        purpose,
-                        e.currentTarget
-                      )
+                      handleTickPointerEnter(seg.tick, e.currentTarget)
                     }
                     onMouseLeave={handleTickPointerLeave}
                   />

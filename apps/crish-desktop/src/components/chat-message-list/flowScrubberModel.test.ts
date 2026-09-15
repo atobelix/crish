@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { VirtualScrollManager } from '../../api/VirtualScrollManager';
 import {
   buildScrubberSegments,
+  capScrubberSegments,
   countScrubberTicks,
   formatTickTooltip,
   isConversationFlowOn,
@@ -153,5 +154,65 @@ describe('flowScrubberModel', () => {
       expect(tickSeg.tick.assistantSnippet).toContain('方案如下');
       expect(tickSeg.tick.assistantSnippet).not.toContain('**');
     }
+  });
+});
+
+describe('capScrubberSegments（有界刻度渲染）', () => {
+  /** 构造 n 个「用户 + 助手」交替轮次的分段 */
+  function segsOf(n: number) {
+    const list = [];
+    for (let i = 0; i < n; i++) {
+      list.push(msg(`u${i}`, 'user', `问 ${i}`), msg(`a${i}`, 'assistant', `答 ${i}`));
+    }
+    return buildScrubberSegments(list, () => 100);
+  }
+
+  it('刻度数未超容量时原样返回（小会话零行为变化）', () => {
+    const segs = segsOf(5);
+    expect(countScrubberTicks(segs)).toBe(5);
+    const capped = capScrubberSegments(segs, 5);
+    expect(capped).toHaveLength(segs.length);
+    expect(countScrubberTicks(capped)).toBe(5);
+    const capped2 = capScrubberSegments(segs, 50);
+    expect(countScrubberTicks(capped2)).toBe(5);
+  });
+
+  it('超出容量时按步长聚合，刻度数收敛到容量内', () => {
+    const segs = segsOf(1000);
+    expect(countScrubberTicks(segs)).toBe(1000);
+    const capped = capScrubberSegments(segs, 50);
+    const ticks = countScrubberTicks(capped);
+    expect(ticks).toBeLessThanOrEqual(50);
+    expect(ticks).toBeGreaterThan(0);
+    // 聚合后只保留 tick 段（gap 在 DOM 中 display:none，无布局作用）
+    expect(capped.every((s) => s.type === 'tick')).toBe(true);
+  });
+
+  it('每桶以首个刻度为代表，且保持原有顺序', () => {
+    const segs = segsOf(10);
+    const capped = capScrubberSegments(segs, 5);
+    const ids = capped.map((s) => (s.type === 'tick' ? s.tick.id : ''));
+    // stride = ceil(10/5) = 2 ⇒ 代表为 u0,u2,u4,u6,u8
+    expect(ids).toEqual(['u0', 'u2', 'u4', 'u6', 'u8']);
+  });
+
+  it('带固定标记的刻度一律保留（降采样不得丢用户显式资产）', () => {
+    const segs = segsOf(20);
+    const pinned = new Set(['u1', 'u17']);
+    const capped = capScrubberSegments(segs, 4, (id) => pinned.has(id));
+    const ids = capped.map((s) => (s.type === 'tick' ? s.tick.id : ''));
+    expect(ids).toContain('u1');
+    expect(ids).toContain('u17');
+    // 顺序仍为原始顺序
+    const order = segsOf(20)
+      .filter((s) => s.type === 'tick')
+      .map((s) => (s.type === 'tick' ? s.tick.id : ''));
+    const expected = order.filter((id) => ids.includes(id));
+    expect(ids).toEqual(expected);
+  });
+
+  it('容量非法（<1）时视为不需要聚合，原样返回', () => {
+    const segs = segsOf(30);
+    expect(capScrubberSegments(segs, 0)).toHaveLength(segs.length);
   });
 });
