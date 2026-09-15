@@ -23,13 +23,14 @@ import React from 'react';
 import { TableBlock } from '../../src/components/TableBlock';
 import { createEditorStore, type EditorStore } from '../../src/core/EditorStore';
 import { useTableStore } from '../../src/core/TableStore';
+import type { CellSelection } from '../../src/core/tableSelection';
+import { observeTableRange, resetTableIdentities } from '../../src/core/tableIdentity';
 import { DecorationSet } from '../../src/core/DecorationSet';
 
 (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
 
 /** 4 行 × 2 列表（表区间 = 行 2..5：表头 / 分隔 / 两行数据）。 */
 const DOC = ['# T', '', '| a | b |', '| --- | --- |', '| 1 | 2 |', '| 3 | 4 |'].join('\n');
-const TABLE_ID = 't-test';
 const START = 2;
 const END = 5;
 /** 列宽 100 + 200；行高恒 40 → rowTops = [0,40,80,120,160]。 */
@@ -39,6 +40,7 @@ const ROW_H = 40;
 const mountedRoots: Root[] = [];
 
 beforeEach(() => {
+  resetTableIdentities();
   useTableStore.setState({ ...useTableStore.getState(), selectedCell: null });
 });
 
@@ -49,29 +51,33 @@ afterEach(() => {
   mountedRoots.length = 0;
   document.body.innerHTML = '';
   useTableStore.setState({ ...useTableStore.getState(), selectedCell: null });
+  resetTableIdentities();
 });
 
-function mountIsland() {
+function mountIsland(text = DOC) {
   const store: EditorStore = createEditorStore();
-  store.getState().setText(DOC);
+  store.getState().setText(text);
   const decorations = new DecorationSet({ findLineIndex: () => 0 });
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = createRoot(container);
   mountedRoots.push(root);
-  act(() => {
+  const getLine = (i: number) => store.getState().getLine(i) ?? '';
+  const tableId = observeTableRange(START, END, getLine);
+  const render = (startLine = START) => act(() => {
+    const endLine = startLine + END - START;
+    expect(observeTableRange(startLine, endLine, getLine)).toBe(tableId);
     root.render(
       React.createElement(TableBlock, {
-        tableId: TABLE_ID,
-        startLine: START,
-        endLine: END,
-        separatorLine: START + 1,
+        tableId,
+        startLine,
+        endLine,
+        separatorLine: startLine + 1,
         cols: COL_WIDTHS.length,
         colWidths: COL_WIDTHS,
         visibleTop: 0,
         visibleHeight: 400,
-        getLine: (i: number) => store.getState().getLine(i) ?? '',
-        isCodeAt: () => 'none',
+        getLine,
         decorations,
         decorationVersion: 0,
         store,
@@ -82,26 +88,18 @@ function mountIsland() {
       })
     );
   });
-  return container;
+  render();
+  return { container, tableId, store, render };
 }
 
-const select = (patch: Partial<{
-  tableId: string;
-  startLine: number;
-  endLine: number;
-  startCol: number;
-  endCol: number;
-  isEditing: boolean;
-}>) => {
+const select = (tableId: string, patch: Partial<CellSelection>) => {
   act(() => {
     useTableStore.setState({
       ...useTableStore.getState(),
       selectedCell: {
-        tableId: TABLE_ID,
-        startLine: START,
-        endLine: START,
-        startCol: 0,
-        endCol: 0,
+        tableId,
+        anchor: { row: 0, col: 0 },
+        focus: { row: 0, col: 0 },
         isEditing: false,
         ...patch,
       },
@@ -113,13 +111,13 @@ const overlays = () => Array.from(document.querySelectorAll<HTMLElement>('.table
 
 describe('T5 岛内选区单矩形覆盖层（ADR-6 / I6）', () => {
   it('无选区时零覆盖层', () => {
-    const container = mountIsland();
+    const { container } = mountIsland();
     expect(container.querySelectorAll('.table-island-selection').length).toBe(0);
   });
 
   it('单格选区 → 恰好一个覆盖层，几何 = 该格', () => {
-    const container = mountIsland();
-    select({ startCol: 1, endCol: 1, endLine: START });
+    const { container, tableId } = mountIsland();
+    select(tableId, { anchor: { row: 0, col: 1 }, focus: { row: 0, col: 1 } });
     const els = overlays();
     expect(els.length).toBe(1);
     const s = els[0].style;
@@ -130,39 +128,77 @@ describe('T5 岛内选区单矩形覆盖层（ADR-6 / I6）', () => {
   });
 
   it('2×2 选区 → 仍是**一个**矩形（角单元格并集），而非 N 段拼边', () => {
-    mountIsland();
-    select({ startLine: START, endLine: START + 2, startCol: 0, endCol: 1 });
+    const { tableId } = mountIsland();
+    select(tableId, { anchor: { row: 0, col: 0 }, focus: { row: 1, col: 1 } });
     const els = overlays();
     expect(els.length).toBe(1);
     const s = els[0].style;
-    // 行 0..2（相对）= 表头 + 分隔 + 首行数据 → 高 3×40；列 0..1 → 宽 300
+    // 语义行 0..1 对应源码行 0..2；此桩故意给分隔行 40px，验证映射不会错位。
     expect([s.left, s.top, s.width, s.height]).toEqual(['0px', '0px', '300px', '120px']);
   });
 
   it('反向拖拽（右下 → 左上）几何与正向恒等', () => {
-    mountIsland();
-    select({ startLine: START + 2, endLine: START, startCol: 1, endCol: 0 });
+    const { tableId } = mountIsland();
+    select(tableId, { anchor: { row: 1, col: 1 }, focus: { row: 0, col: 0 } });
     const s = overlays()[0].style;
     expect([s.left, s.top, s.width, s.height]).toEqual(['0px', '0px', '300px', '120px']);
   });
 
   it('编辑态（单元格就地编辑）不画覆盖层——与旧路径 `is-cell-editing` 一致', () => {
-    mountIsland();
-    select({ isEditing: true });
+    const { tableId } = mountIsland();
+    select(tableId, { isEditing: true });
     expect(overlays().length).toBe(0);
   });
 
   it('异表选区不画（身份隔离：tableId 不匹配）', () => {
-    mountIsland();
-    select({ tableId: 't-other' });
+    const { tableId } = mountIsland();
+    select(tableId, { tableId: 't-other' });
     expect(overlays().length).toBe(0);
   });
 
   it('越界选区被钳制在表内（不画到表外、不产生负尺寸）', () => {
-    mountIsland();
-    select({ startLine: START - 10, endLine: START + 99, startCol: -3, endCol: 99 });
+    const { tableId } = mountIsland();
+    select(tableId, { anchor: { row: -10, col: -3 }, focus: { row: 99, col: 99 } });
     const s = overlays()[0].style;
     expect([s.left, s.top, s.width, s.height]).toEqual(['0px', '0px', '300px', '160px']);
+  });
+
+  it('首条数据行的相对行号跳过分隔行，覆盖层落在数据格', () => {
+    const { tableId } = mountIsland();
+    select(tableId, { anchor: { row: 1, col: 0 }, focus: { row: 1, col: 0 } });
+    const s = overlays()[0].style;
+    expect([s.left, s.top, s.width, s.height]).toEqual(['0px', '80px', '100px', '40px']);
+  });
+
+  it('表上方插行后选区身份与岛内几何保持原数据格', () => {
+    const { tableId, store, render } = mountIsland();
+    select(tableId, { anchor: { row: 1, col: 1 }, focus: { row: 1, col: 1 } });
+    const before = overlays()[0].getAttribute('style');
+    act(() => store.getState().applyChange(0, 0, 'above\n'));
+    render(START + 1);
+    expect(useTableStore.getState().selectedCell).toEqual({
+      tableId,
+      anchor: { row: 1, col: 1 },
+      focus: { row: 1, col: 1 },
+      isEditing: false,
+    });
+    expect(overlays()[0].getAttribute('style')).toBe(before);
+  });
+
+  it('身份条目缺失时不以旧行号或另一张表补画选区', () => {
+    const { tableId } = mountIsland();
+    resetTableIdentities();
+    select(tableId, { focus: { row: 1, col: 1 } });
+    expect(overlays()).toHaveLength(0);
+  });
+
+  it('表外引用定义改名会重新派生同一表格中的链接', () => {
+    const text = DOC.replace('| 1 | 2 |', '| [cell][target] | 2 |') + '\n\n[target]: /before';
+    const { container, store } = mountIsland(text);
+    expect(container.querySelectorAll('.interactive-link')).toHaveLength(1);
+    const from = text.lastIndexOf('[target]');
+    act(() => store.getState().applyChange(from, from + '[target]'.length, '[other]'));
+    expect(container.querySelectorAll('.interactive-link')).toHaveLength(0);
   });
 
   it('岛内抑制旧路径逐格拼边（否则覆盖层与 per-cell 边框双画）', () => {

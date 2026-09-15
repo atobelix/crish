@@ -22,6 +22,7 @@
 // 基线（修复前实测，2026-08-11 入库）：候选 87 行，可直刷 13 行 = 14.9%。
 // 修复后断言：覆盖率 ≥ 基线 + 20pp（S-T-2-02 验收），并登记实测值。
 
+import './helpers/layout-fixture';
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';

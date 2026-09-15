@@ -198,7 +198,7 @@ const MATRIX: SyntaxMatrixRow[] = [
   {
     name: '列表（bullet / number）',
     positive: {
-      md: '- a\n1. b',
+      md: '- a\n1. b\n2) c',
       rows: [
         L('body', {
           tokens: [T('list_bullet'), T('text', { content: 'a' })],
@@ -206,26 +206,27 @@ const MATRIX: SyntaxMatrixRow[] = [
         L('body', {
           tokens: [T('list_number'), T('text', { content: 'b' })],
         }),
+        L('body', { tokens: [T('list_number'), T('text', { content: 'c' })] }),
       ],
     },
     negative: {
-      // 括号有序列表不是列表语法（CommonMark 仅 `.`）
-      md: '1) a',
-      rows: [L('body', { tokens: [T('text', { content: '1) a' })] })],
+      // CommonMark 同时支持点和右括号；标记与内容之间缺空白才是反例。
+      md: '1)a',
+      rows: [L('body', { tokens: [T('text', { content: '1)a' })] })],
     },
     edge: {
       // 嵌套缩进列表（第二级缩进由渲染层承担，AST 均产 list_bullet）
       md: '- a\n  - b',
       rows: [
         L('body', { tokens: [T('list_bullet'), T('text')] }),
-        L('body', { tokens: [T('list_bullet'), T('text', { content: 'b' })] }),
+        L('body', { tokens: [T('text', { content: '' }), T('list_bullet'), T('text', { content: 'b' })] }),
       ],
     },
   },
   {
     name: '任务列表（R1 强化）',
     positive: {
-      md: '- [x] done\n- [ ] todo',
+      md: '- [x] done\n- [ ] todo\n- [x]',
       rows: [
         L('body', {
           tokens: [T('list_task', { isChecked: true }), T('text', { content: 'done' })],
@@ -233,14 +234,16 @@ const MATRIX: SyntaxMatrixRow[] = [
         L('body', {
           tokens: [T('list_task', { isChecked: false }), T('text', { content: 'todo' })],
         }),
+        // 空任务标签仍保留同一个任务令牌，不另走 bullet + checkbox 路径。
+        L('body', { tokens: [T('list_task', { isChecked: true }), T('text', { content: '' })] }),
       ],
     },
     negative: {
-      // 无任务文本时回退为 bullet + checkbox 组合
-      md: '- [x]',
+      // 非法复选框状态保持普通列表内容。
+      md: '- [z] nope',
       rows: [
         L('body', {
-          tokens: [T('list_bullet'), T('checkbox', { isChecked: true })],
+          tokens: [T('list_bullet'), T('text', { content: '[z] nope' })],
         }),
       ],
     },
@@ -661,7 +664,7 @@ const MATRIX: SyntaxMatrixRow[] = [
       md: '![alt](/img.png)',
       rows: [
         L('body', {
-          tokens: [T('image', { content: '🖼️ alt', url: '/img.png' })],
+          tokens: [T('image', { content: 'alt', url: '/img.png' })],
         }),
       ],
     },
@@ -677,7 +680,7 @@ const MATRIX: SyntaxMatrixRow[] = [
       rows: [
         L('body', {
           tokens: [
-            T('image', { content: '🖼️ 图片', url: '/img' }),
+            T('image', { content: '图片', url: '/img' }),
             T('text', { content: ' !' }),
             T('link', { content: 'a', url: '/r' }),
           ],

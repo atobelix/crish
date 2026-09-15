@@ -22,7 +22,7 @@
  *   ④ **§3.3 岛内窗口化**：行数超阈值时只渲染视口附近的行（R1 的直接缓解），
  *      窗口外由等高哨兵维持滚动高度；窗口行号↔像素换算走 `RowTopIndex` 前缀表。
  *
- * 行内容访问（`getLine` / `isCodeAt`）与偏移：行偏移取 `store` 的 `lineOffsets`
+ * 行内容访问与偏移：行偏移取 `store` 的 `lineOffsets`
  * 前缀树（与 `MarkdownEngine` 同源，O(log n) 读一次起始行）后按行序累加，避免逐行
  * 反向查询；行内 token 与活动态一律由 `TableIslandRow` 经 `deriveLineUnit` 派生。
  */
@@ -31,6 +31,7 @@ import type { EditorStore } from '../core/EditorStore';
 import type { DecorationSet } from '../core/DecorationSet';
 import { STABLE_EPSILON } from '../core/HeightMap';
 import { useTableStore } from '../core/TableStore';
+import { selectionToLines } from '../core/tableSelection';
 import { isTableHeaderRow } from '../core/tableIdentity';
 import { splitRowCells } from '../core/tableModel';
 import {
@@ -47,14 +48,6 @@ import {
   recordIslandHeightReport,
 } from '../core/tableIsland';
 import { TableIslandRow } from './TableIslandRow';
-
-/**
- * 行状态类型。此处刻意用**内联** `import(...)` 类型引用，而非顶层 `import type`
- * 语句从 parser 模块引入：门禁 `tests/gate/table-invariants.test.ts` 断言本文件
- * 不得出现 parser 的顶层导入（防「岛内出现第二套行解析」）。`CodeState` 只是
- * 类型契约，不引入运行时依赖，也不构成任何解析路径。
- */
-type IslandCodeState = import('../core/parser').CodeState;
 
 export interface TableBlockProps {
   /** 表格稳定身份（`tableIdentity.resolveTableId` 产出） */
@@ -74,8 +67,6 @@ export interface TableBlockProps {
   visibleHeight: number;
   /** 行内容访问器（惰性） */
   getLine: (i: number) => string;
-  /** 行状态访问器（主控用 `lineUnit.getLineState` 包装） */
-  isCodeAt: (i: number) => IslandCodeState;
   /** 共享装饰集（引擎注入） */
   decorations: DecorationSet;
   /** 全局装饰版本：变化即岛重渲染信号（行级版本由岛内读取） */
@@ -123,7 +114,6 @@ export const TableBlock: React.FC<TableBlockProps> = ({
   visibleTop,
   visibleHeight,
   getLine,
-  isCodeAt,
   decorations,
   decorationVersion,
   store,
@@ -135,6 +125,8 @@ export const TableBlock: React.FC<TableBlockProps> = ({
   scrollLeft,
   onScrollLeftChange,
 }) => {
+  // 文档上下文变化也可能来自表格之外的引用定义，必须驱动岛内行重新派生。
+  store((state) => state.contextVersion);
   const rootRef = React.useRef<HTMLDivElement | null>(null);
   const trackRef = React.useRef<HTMLDivElement | null>(null);
   const probeRef = React.useRef<HTMLDivElement | null>(null);
@@ -198,17 +190,19 @@ export const TableBlock: React.FC<TableBlockProps> = ({
   // ── T5 选区单矩形（ADR-6 / I6）────────────────────────────────────────────
   // 旧范式：每个命中格各自 `inset box-shadow` 拼边（N 段互不相识的边框，D7）；
   // 岛范式：**一个**覆盖层矩形，几何 = 「角单元格并集」经行/列前缀求交。
-  // 身份折算：视图状态里的选区仍是**绝对行号**（I7 的改造在 T5b），此处经
-  // `toRelativeRange` 确定性折算为表内相对行号并钳制（越界不崩、不画到表外）。
+  // 选区行号不含分隔行，岛内高度索引仍为源码行序。先经选区模型取得源码
+  // 区间，再投影到岛内几何行序，避免把第一条数据行误画到分隔行上。
   const selectedCell = useTableStore((s) => s.selectedCell);
   const colLefts = React.useMemo(() => buildColLefts(colWidths), [colWidths]);
   const selectionRect = React.useMemo(() => {
     if (!selectedCell || selectedCell.tableId !== tableId) return null;
     // 编辑态（单元格就地编辑）不画选区矩形——与旧路径 `is-cell-editing` 一致
     if (selectedCell.isEditing) return null;
+    const lines = selectionToLines(selectedCell);
+    if (!lines) return null;
     const rel = toRelativeRange(
-      selectedCell.startLine,
-      selectedCell.endLine,
+      lines.startLine,
+      lines.endLine,
       startLine,
       endLine
     );
@@ -216,8 +210,8 @@ export const TableBlock: React.FC<TableBlockProps> = ({
       {
         startRow: rel.startRow,
         endRow: rel.endRow,
-        startCol: selectedCell.startCol,
-        endCol: selectedCell.endCol,
+        startCol: lines.startCol,
+        endCol: lines.endCol,
       },
       index.tops() as unknown as readonly number[],
       colLefts
@@ -225,7 +219,7 @@ export const TableBlock: React.FC<TableBlockProps> = ({
     // rowEpoch 是 `index.tops()` 的**显式失效令牌**（`RowTopIndex` 为可变结构，
     // 实测回填后引用不变、内容已变，无法用引用比较判定失效）——与上方 win 同款。
     // oxlint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedCell, tableId, startLine, endLine, colLefts, index, rowEpoch]);
+  }, [selectedCell, tableId, startLine, endLine, separatorLine, colLefts, index, rowEpoch]);
 
   const topSpacer = win.startRow > 0 ? index.top(win.startRow) : 0;
   const bottomSpacer = Math.max(0, index.total() - index.top(win.endRow + 1));
@@ -417,7 +411,7 @@ export const TableBlock: React.FC<TableBlockProps> = ({
         index={lineIndex}
         lineText={lineText}
         offset={offset}
-        isCode={isCodeAt(lineIndex)}
+        context={store.getState().getLineContext(lineIndex)}
         tableId={tableId}
         isHeader={lineIndex === headerLine}
         isSeparator={separatorLine !== null && lineIndex === separatorLine}

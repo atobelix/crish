@@ -30,6 +30,9 @@ export interface AutocompleteCandidate {
   cursorOffset?: number;
   /** 候选附加说明（渲染为弱化说明文字） */
   detail?: string;
+  /** 候选图标种类（Alcove 补全卡片行首图标；缺省 = 无图标）。
+   *   'file' = 文档（wiki 链接），'tag' = 标签，'mention' = 成员 */
+  iconKind?: 'file' | 'tag' | 'mention';
 }
 
 /** 候选源：触发字符 + 候选列表 */
@@ -119,6 +122,30 @@ export const MENTION_DEMO_CANDIDATES: AutocompleteCandidate[] = [
 
 registerAutocompleteSource({ trigger: '@', candidates: MENTION_DEMO_CANDIDATES });
 
+// ── Alcove 复刻（Seg C）演示源：'[' wiki 链接 + '#' 标签 ──
+// 触发字符单字符（'[' 承担 '[[' wiki 语法；双括号由 findAutocompleteTriggerInLine
+// 的「同字符放行」边界处理，第二个 '[' 起即视为触发点）。
+
+/** 内置 '[[' wiki 文档候选（与视频演示文档同名，供 1:1 视觉对照） */
+export const WIKI_DEMO_CANDIDATES: AutocompleteCandidate[] = [
+  { label: 'Convexity', detail: '笔记', iconKind: 'file' },
+  { label: 'Convex Hull', detail: '笔记', iconKind: 'file' },
+  { label: 'Crossing the minimum', detail: '笔记', iconKind: 'file' },
+  { label: 'Gradient methods', detail: '笔记', iconKind: 'file' },
+  { label: 'Path of steepest descent', detail: '笔记', iconKind: 'file' },
+];
+
+/** 内置 '#' 标签候选 */
+export const TAG_DEMO_CANDIDATES: AutocompleteCandidate[] = [
+  { label: 'math/optimization', iconKind: 'tag' },
+  { label: 'math/convexity', iconKind: 'tag' },
+  { label: 'math/progress', iconKind: 'tag' },
+  { label: 'notes/gradient-descent', iconKind: 'tag' },
+];
+
+registerAutocompleteSource({ trigger: '[', candidates: WIKI_DEMO_CANDIDATES });
+registerAutocompleteSource({ trigger: '#', candidates: TAG_DEMO_CANDIDATES });
+
 // ============================================================
 // 触发检测 / 候选过滤 / 替换构建（全部纯函数，供单测）
 // ============================================================
@@ -145,9 +172,11 @@ export function findAutocompleteTriggerInLine(
     // 空白终止扫描（query 不含空白；\n 不会出现在行文本中，防御保留）
     if (ch === '\n' || /\s/.test(ch)) break;
     if (triggerSet.has(ch)) {
-      // 词边界判定：触发字符左侧必须是行首或空白（防 'foo@bar' 误触）
+      // 词边界判定：触发字符左侧必须是行首或空白（防 'foo@bar' 误触）。
+      // 例外：左侧为同一触发字符时放行——成对语法（'[[' wiki、'##' 标签
+      // 速记）的第二个字符视为真正的触发点（Alcove 复刻行为）。
       const before = p > 1 ? lineText[p - 2] : '';
-      if (before === '' || /\s/.test(before)) {
+      if (before === '' || /\s/.test(before) || before === ch) {
         return {
           trigger: ch,
           query: lineText.substring(p, cursorInLine),

@@ -1,25 +1,28 @@
 @import 'katex/dist/katex.min.css';
 
 :root {
-  /* ── 1. Conex 核心色彩体系 (现代空格 HSL 语法，0.4% M + 0.8% Y 米黄偏橙微暖，纯灰阶演化) ── */
-  --parchment: hsl(30 2.5% 95.5%);
+  /* ── 1. Alcove 风格色彩体系（全幅纯白画布 + 近黑墨色 + 克制灰阶，空格 HSL）──
+   * 取色来源：参考视频逐帧像素采样（scratch/alcove-sample.mjs）。
+   * 墨色 #1e1e20 / 语法灰 #717174 / 幽灵灰 #b9b9be / 强调蓝 #2e6fdf /
+   * 高亮黄 #feefb4 / 行内代码底 #f4f4f4 / 表头底 #f6f6f6 */
+  --parchment: hsl(0 0% 100%);
   --ivory: hsl(0 0% 100%);
-  --warm-sand: hsl(30 2.5% 86%);
-  --border-soft: hsl(30 2.5% 91%);
-  --inline-code-bg: color-mix(in srgb, hsl(0 0% 0%) 3%, var(--white));
-  --near-black: hsl(0 0% 8%);
-  --dark-warm: hsl(0 0% 20%);
-  --olive: hsl(0 0% 33%);
-  --stone: hsl(0 0% 46%);
-  --brand: oklch(0.6959 0.149 162.48);
-  --brand-light: oklch(0.76 0.13 162.48);
-  --brand-focus: oklch(0.6959 0.149 162.48 / 0.25);
-  --brand-surface: oklch(0.6959 0.149 162.48 / 0.08);
-  --tag-calm-bg: oklch(0.6959 0.149 162.48 / 0.08);
-  --tag-standard-bg: oklch(0.6959 0.149 162.48 / 0.12);
+  --warm-sand: hsl(240 2% 91%);
+  --border-soft: hsl(240 2% 94%);
+  --inline-code-bg: hsl(240 2% 96%);
+  --near-black: hsl(240 2% 12%);
+  --dark-warm: hsl(240 2% 20%);
+  --olive: hsl(240 2% 38%);
+  --stone: hsl(240 1.5% 45%);
+  --brand: hsl(217 76% 52%);
+  --brand-light: hsl(217 76% 62%);
+  --brand-focus: hsl(217 76% 52% / 0.25);
+  --brand-surface: hsl(217 76% 52% / 0.08);
+  --tag-calm-bg: hsl(240 2% 95%);
+  --tag-standard-bg: hsl(240 2% 93%);
   --danger-color: hsl(359 53% 35.5%);
-  /* 纯灰度柔和代码与公式块底色 (相对于阅读底色纯黑混入 2%，零色彩倾向) */
-  --code-bg: color-mix(in srgb, hsl(0 0% 0%) 2%, var(--white));
+  /* 代码围栏极浅灰底；块级公式无底色（Alcove：公式直接排在白底上） */
+  --code-bg: hsl(240 2% 97%);
 
   /* ── 2. 既有 CSS 契约变量映射 (严格满足 css-contract G6.6 门禁) ── */
   --bg-theme: var(--parchment);
@@ -32,41 +35,101 @@
   --text-muted: var(--stone);
   --gray-90: var(--warm-sand);
 
-  /* 暖色调强调与高亮 (柔和琥珀荧光色阶，绝不刺眼，清晰可辨) */
-  --yellow-tint-2: hsl(45 100% 50% / 0.28);
-  --yellow-text: hsl(38 75% 22%);
+  /* Alcove 高亮：实底暖黄荧光 + 文字回墨色（视频采样 #feefb4） */
+  --yellow-tint-2: hsl(45 93% 85%);
+  --yellow-text: hsl(240 2% 12%);
 
-  /* 现代出版级高品质油墨蓝选区高亮 (明晰澄澈，与主流专业笔记/编辑器对齐，绝不遮挡文字) */
-  --selection-bg: hsl(212 100% 50% / 0.12);
-  --blue-selection: hsl(212 100% 50% / 0.12);
-  --blue-selection-border: hsl(212 90% 52%);
+  /* 强调蓝选区：文字选中实带 α≈0.30（视频采样 #bdd2f5） */
+  --selection-bg: hsl(217 76% 52% / 0.3);
+  --blue-selection: hsl(217 76% 52% / 0.3);
+  --blue-selection-border: hsl(217 76% 52%);
 
   /* 暖调柔和边框与交互态 (3% 纯黑微量混入纯白底) */
   --border-subtle: var(--border-soft);
   --border-medium: var(--warm-sand);
-  --border-focus: color-mix(in srgb, var(--border-medium) 90%, var(--black) 10%);
+  --border-focus: var(--brand);
   --interactive-hover: color-mix(in srgb, hsl(0 0% 0%) 3%, var(--white));
   --interactive-active: color-mix(in srgb, hsl(0 0% 0%) 6%, var(--white));
 
-  /* 滚动条背景与滑块配色 (H=30 S=2.5% 二元灰度) */
-  --scrollbar-track: var(--parchment);
-  --scrollbar-thumb: hsl(30 2.5% 90%);
-  --scrollbar-thumb-hover: hsl(30 2.5% 78%);
-  /* 列表与多级缩进发丝引导线配色 (纯净优雅中性灰) */
-  --list-guide-line: hsl(220 13% 88%);
+  /* 滚动条：浮层式——轨道全透，滑块极淡、悬停加深 */
+  --scrollbar-track: hsl(0 0% 100%);
+  --scrollbar-thumb: hsl(240 2% 0% / 0.14);
+  --scrollbar-thumb-hover: hsl(240 2% 0% / 0.28);
+  /* 列表与多级缩进发丝引导线配色 (Alcove 极浅中性灰) */
+  --list-guide-line: hsl(240 2% 90%);
 
-  /* 现代任务复选框与列表微件配色 (对齐主流现代笔记/Obsidian/Notion) */
-  --task-checked-bg: hsl(217 91% 60%);
-  --task-checked-border: hsl(217 91% 60%);
-  --task-unchecked-border: hsl(215 16% 75%);
-  --task-unchecked-hover: hsl(215 16% 55%);
-  --list-bullet-color: hsl(215 14% 50%);
+  /* 现代任务复选框与列表微件配色（Alcove：蓝底白勾 + 浅灰描边空框） */
+  --task-checked-bg: hsl(217 76% 52%);
+  --task-checked-border: hsl(217 76% 52%);
+  --task-unchecked-border: hsl(220 13% 78%);
+  --task-unchecked-hover: hsl(220 13% 62%);
+  --list-bullet-color: hsl(240 2% 26%);
 
-  /* ── 3. 字体系统解耦 ── */
+  /* ── Alcove 新增语义令牌（组件层一律引用，禁字面量）── */
+  /* 活动行语法标记墨灰（视频 == 采样 #717174） */
+  --syntax-ink: hsl(240 1.5% 45%);
+  /* 补全幽灵提示 / 启动页 ** 装饰灰（视频采样 #b9b9be / #8a8e92） */
+  --syntax-ghost: hsl(240 2% 74%);
+  /* 已完成任务删除线墨（蓝灰 slate） */
+  --strike-ink: hsl(220 8% 64%);
+  /* 表格：表头底 / 竖发丝线 / 横发丝线（视频采样 #f6f6f6 / #e6e6e8 / #efeff0） */
+  --table-header-bg: hsl(240 2% 96.5%);
+  --hairline-v: hsl(240 2% 91%);
+  --hairline-h: hsl(240 2% 93.5%);
+  /* 引用竖条（Alcove 浅灰细条） */
+  --quote-bar: hsl(240 2% 87%);
+  /* Callout 中性卡底（视频采样 #f0f5f1 微绿灰） */
+  --callout-card-bg: hsl(140 12% 96%);
+  /* 补全卡片：选中行底 / 卡片描边 */
+  --menu-selected-bg: hsl(240 2% 94%);
+  --menu-border: hsl(240 2% 92%);
+
+  /* z-index 阶梯（L2.1 层叠单一命名源）：数值 = 既有渲染序，零行为变化。
+   * 组件层严禁 zIndex 数字字面量（check-design-tokens 拦截），一律引用本阶梯。 */
+  --z-underlay: 0;     /* 文档内局部堆叠基线（图表底图 / 幽灵层） */
+  --z-cell-hover: 2;   /* 表格单元格悬停/选中态（局部堆叠） */
+  --z-cell-edit: 4;    /* 表格单元格就地编辑态 */
+  --z-table-cell: 3;   /* 表格单元格内浮层（单格描边提升） */
+  --z-selection: 10;   /* 选区自绘高亮层 / 表格填充柄 */
+  --z-cursor: 50;      /* 自绘光标层 */
+  --z-input: 100;      /* 隐藏 IME 输入框（视觉透明、组合期承载） */
+  --z-toolbar: 120;    /* 表格工具条 */
+  --z-panel: 500;      /* 侧挂面板（大纲 / 查找替换） */
+  --z-overlay: 9000;   /* 全屏 overlay（拖放指示） */
+  --z-menu: 9999;      /* 上下文菜单 / 全局 toast */
+  --z-scrim: 100;      /* 页面级遮罩（loading overlay） */
+  --z-titlebar: 600;   /* 独立软件自绘顶栏 */
+  /* 动效 token（writer 同款 80ms 平滑滑行；参数集中禁魔术数字） */
+  --ease-cursor-ms: 80ms;
+  /* 任务前缀等宽槽位宽度（渲染契约：幽灵字符流对齐，可按字体覆盖） */
+  --task-marker-ch: 6ch;
+
+  /* ── 3. 字体系统解耦（Alcove：几何无衬线 Inter 为主墨字体） ── */
+  --font-sans: "Inter", "InterVariable", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
   --font-serif: "TsangerJinKai02", "Source Han Serif SC", "Source Han Serif CN", "Noto Serif SC", "Songti SC", Charter, Georgia, serif;
-  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
   --font-mono: "JetBrains Mono", "Fira Code", "SF Mono", Consolas, Monaco, monospace;
   --grid-size: 28px;
+
+  /* ── 列表缩进几何（战役 wysiwyg-layout-remediation T1/T4）──
+     这四个是**默认基线**：LayoutMetrics 挂载时会用**实测值**覆盖
+     --marker-slot / --marker-gap / --indent-unit / --line-height-px
+     （探针在正文同源 CSS 上下文中实测，见 src/core/layout/LayoutMetrics.ts）。
+     几何量只有两个合法来源：这里的设计令牌，或 LayoutMetrics 的实测——
+     禁止在组件里写字面量（ADR-5）。 */
+  /* 有序标记槽预留的位数（设计令牌：槽宽由它派生）。
+     为什么是 3：标记槽宽必须**恒定**才能保证内容列零跳变，故不能按文档实际
+     最宽标记自适应（那会让内容列随编辑抖动）。3 位覆盖 1–999 项的有序列表；
+     超过 999 的标记会向左溢出，被行级 paint containment 裁剪——这是登记在案
+     的有界退化（`04-分维` §6 风险 R7），不是静默错误。 */
+  --list-marker-digits: 3;
+  --list-level-count: 1;
+  --list-quote-depth: 0;
+  --marker-slot: 22px; /* 标记槽宽——bullet / ordered / task 三种 marker 共用 */
+  --marker-gap: 4.4px; /* 标记槽右缘与内容左缘的间隙（= 一个空格前进量） */
+  --indent-unit: 26.4px; /* 一个列表嵌套层级的物理宽（= marker-slot + marker-gap） */
+  --line-height-px: 28px; /* 行盒高（实测回写，供测量层与预言机读取） */
+  /* 标记槽内「源码 ↔ 视觉」交叉揭示时长——零跳变：只换槽内图层，不动布局 */
+  --marker-reveal-ms: 90ms;
 }
 
 * {
@@ -128,18 +191,16 @@ body {
   background-color: var(--bg-theme);
 }
 
-/* 现代化平坦优雅纸张容器 (Conex 纸墨质感与微光柔和多层投影) */
+/* 现代化平坦优雅纸张容器（Alcove：全幅纯白画布，无纸张卡片装饰） */
 .grid-paper {
   position: relative;
-  width: min(880px, 94vw);
-  max-width: 880px;
-  height: min(calc(100vh - 108px), 940px);
+  width: 100%;
+  max-width: none;
+  height: 100%;
   background-color: var(--white);
-  border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-  box-shadow:
-    0 1px 2px hsl(0 0% 0% / 0.02),
-    0 4px 16px hsl(0 0% 0% / 0.04);
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
   display: flex;
   overflow: hidden;
   transition: all 0.2s ease;
@@ -188,38 +249,38 @@ body {
   padding: 0;
 }
 
-/* 标题视觉层级与微调字距 (保持 grid-size 继承，消除测量错位) */
+/* 标题视觉层级与微调字距（Alcove 编辑排版：H1 24 / H2 19 / H3 16，保持 grid-size 继承消除测量错位） */
 .line-h1 {
-  font-size: 1.65rem;
+  font-size: 24px;
   font-weight: 700;
   letter-spacing: -0.02em;
   color: var(--near-black);
 }
 .line-h2 {
-  font-size: 1.35rem;
-  font-weight: 600;
-  letter-spacing: -0.015em;
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.012em;
   color: var(--near-black);
 }
 .line-h3 {
-  font-size: 1.18rem;
+  font-size: 16px;
   font-weight: 600;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.008em;
   color: var(--near-black);
 }
 .line-h4 {
-  font-size: 1.05rem;
+  font-size: 14.5px;
   font-weight: 600;
   letter-spacing: -0.005em;
   color: var(--dark-warm);
 }
 .line-h5 {
-  font-size: 0.95rem;
+  font-size: 13.5px;
   font-weight: 600;
   color: var(--text-secondary);
 }
 .line-h6 {
-  font-size: 0.88rem;
+  font-size: 12.5px;
   font-weight: 600;
   color: var(--text-muted);
 }
@@ -301,13 +362,13 @@ body {
 }
 
 .line-quote {
-  border-left: 2px solid var(--warm-sand);
+  border-left: 2px solid var(--quote-bar);
   padding-left: 14px;
   margin: 4px 0;
-  color: var(--olive);
+  color: var(--text-primary);
   background-color: transparent;
   border-radius: 0;
-  font-style: italic;
+  font-style: normal;
 }
 
 .line-list {
@@ -381,7 +442,7 @@ body {
   display: flex;
   align-items: stretch;
   position: relative;
-  border-bottom: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--hairline-h);
   border-left: none;
   background-color: transparent;
   min-height: 28px;
@@ -391,10 +452,11 @@ body {
 }
 
 .table-header-row {
-  background-color: var(--ivory);
-  border-bottom: 1px solid var(--border-medium);
-  font-weight: 500;
-  color: var(--stone);
+  /* Alcove 表格：浅灰表头 + 墨色加粗文字 + 竖发丝分列（视频采样 #f6f6f6） */
+  background-color: var(--table-header-bg);
+  border-bottom: 1px solid var(--hairline-v);
+  font-weight: 600;
+  color: var(--text-primary);
 }
 
 .line-table-separator {
@@ -430,10 +492,10 @@ body {
   position: relative;
   display: inline-flex;
   align-items: center;
-  padding: 6px 14px;
+  padding: 10px 16px;
   box-sizing: border-box;
-  min-height: 28px;
-  border-right: none;
+  min-height: 40px;
+  border-right: 1px solid var(--hairline-v);
   cursor: cell;
   user-select: text;
   transition: background-color 0.12s ease;
@@ -459,11 +521,13 @@ body {
   background-color: color-mix(in srgb, black 2%, var(--white));
 }
 
-/* 单元格单选态 (Single Click: Cell Selected Mode) */
+/* 单元格单选态 (Single Click: Cell Selected Mode)——Alcove 口径：
+ * 白底 + 强调蓝描边（无底色填充），描边承载选中语义 */
 .token-table-cell.is-cell-selected {
-  background-color: var(--selection-bg) !important;
+  background-color: transparent !important;
   outline: none !important;
-  z-index: 2;
+  box-shadow: inset 0 0 0 1.5px var(--blue-selection-border);
+  z-index: var(--z-cell-hover);
   position: relative;
   border-radius: 2px;
 }
@@ -477,7 +541,7 @@ body {
   background-color: var(--white) !important;
   outline: none !important;
   box-shadow: 0 0 0 1.5px var(--border-focus), 0 0 0 1px var(--border-focus) !important;
-  z-index: 4;
+  z-index: var(--z-cell-edit);
   border-radius: 2px;
   cursor: text;
 }
@@ -500,7 +564,7 @@ body {
   border: 1px solid var(--white);
   border-radius: 1px;
   cursor: crosshair;
-  z-index: 10;
+  z-index: var(--z-selection);
 }
 
 /* 表格浮动工具栏 (Excel / Notion 风格操作条) */
@@ -615,9 +679,9 @@ body {
 }
 
 .interactive-link {
-  color: hsl(210 85% 48%);
+  color: var(--brand);
   text-decoration: underline;
-  text-decoration-color: hsl(210 85% 75%);
+  text-decoration-color: hsl(217 76% 52% / 0.35);
   text-underline-offset: 2.5px;
   position: relative;
   padding: 0 2px;
@@ -626,8 +690,8 @@ body {
 }
 
 .interactive-link:hover {
-  color: hsl(210 95% 38%);
-  text-decoration-color: hsl(210 95% 45%);
+  color: hsl(217 80% 42%);
+  text-decoration-color: hsl(217 80% 42% / 0.6);
 }
 
 .markdown-preview-image {
@@ -640,6 +704,13 @@ body {
   box-shadow: 0 1px 3px hsl(30 2.5% 10% / 0.08);
   border: 1px solid var(--border-medium);
   margin: 2px 4px;
+}
+
+.outline-chip-icon {
+  display: inline-flex;
+  align-items: center;
+  margin-right: 4px;
+  color: var(--text-secondary);
 }
 
 .image-fallback-badge {
@@ -660,38 +731,38 @@ body {
   opacity: 0.7;
 }
 
-/* ── Callout / Admonition 语法块规范 ── */
+/* ── Callout / Admonition 语法块规范（Alcove：整卡浅底圆角，无左色条） ── */
 .line-callout {
-  border-left: 3.5px solid var(--callout-border, hsl(210 100% 50%));
-  background-color: var(--callout-bg, hsl(210 50% 97% / 0.5));
+  border-left: none;
+  background-color: var(--callout-bg, var(--callout-card-bg));
   padding-left: 12px;
   box-sizing: border-box;
-  border-radius: 0 4px 4px 0;
+  border-radius: 8px;
 }
 
 .line-callout.callout-note {
-  --callout-border: hsl(210 100% 56%);
-  --callout-bg: hsl(210 100% 97% / 0.6);
+  --callout-border: hsl(210 60% 92%);
+  --callout-bg: hsl(210 60% 96%);
 }
 
 .line-callout.callout-tip {
-  --callout-border: hsl(150 70% 40%);
-  --callout-bg: hsl(150 60% 97% / 0.6);
+  --callout-border: hsl(150 40% 92%);
+  --callout-bg: hsl(150 30% 96%);
 }
 
 .line-callout.callout-important {
-  --callout-border: hsl(270 70% 55%);
-  --callout-bg: hsl(270 60% 97% / 0.6);
+  --callout-border: hsl(270 50% 93%);
+  --callout-bg: hsl(270 45% 96.5%);
 }
 
 .line-callout.callout-warning {
-  --callout-border: hsl(35 90% 50%);
-  --callout-bg: hsl(35 90% 96% / 0.6);
+  --callout-border: hsl(35 70% 92%);
+  --callout-bg: hsl(35 75% 95.5%);
 }
 
 .line-callout.callout-caution {
-  --callout-border: hsl(0 80% 55%);
-  --callout-bg: hsl(0 80% 97% / 0.6);
+  --callout-border: hsl(0 70% 94%);
+  --callout-bg: hsl(0 70% 96.5%);
 }
 
 .line-callout .token-blockquote-prefix .blockquote-bar {
@@ -704,7 +775,7 @@ body {
   gap: 8px;
   font-weight: 600;
   font-size: 0.92em;
-  color: var(--callout-border);
+  color: var(--text-primary);
   user-select: none;
   height: var(--grid-size);
   line-height: var(--grid-size);
@@ -751,7 +822,8 @@ body {
   box-sizing: border-box;
 }
 .style-mark {
-  font-weight: 500;
+  font-weight: 600;
+  font-style: italic;
   color: var(--yellow-text);
   background-color: var(--yellow-tint-2);
   padding: 0 4px;
@@ -787,28 +859,48 @@ body {
   box-shadow: 0 0 0 2px var(--border-focus);
 }
 
-/* Syntax hiding logic for Live Preview (Obsidian style) */
+/* 混合渲染的**定义性行为**（战役 hybrid-render-restore · H1/H2）：
+   语法标记默认隐藏；光标/选区所在的 token 显形其定界符，未激活区域保持渲染。
+   参考真源：Alcove 编辑态（scratch/alcove-key/t13.0.png——光标停在 `ste|` 内时
+   反引号显形，同行 `**measured**` 仍渲染）。显形粒度是 **token / 块前缀级**，
+   不是整行切源码（不破坏同一内容列与折行）。
+   反回潮门禁见 tests/gate/hybrid-render.test.ts——本组规则不得再被删除。 */
 .syntax-hidden {
   display: none;
 }
 
-.is-active-token .syntax-hidden,
-.is-empty-token .syntax-hidden {
+/* H1 行内 token：定界符显形，渲染面让位 */
+.is-active-token > .syntax-hidden,
+.is-empty-token > .syntax-hidden {
   display: inline;
   color: var(--text-muted);
 }
 
-.is-active-line .token-heading-prefix .syntax-hidden {
-  display: inline;
-  color: var(--text-muted);
-}
-
-.is-active-line .token-heading-prefix .syntax-content {
+.is-active-token > .syntax-content {
   display: none;
 }
 
-.is-active-token .syntax-content,
-.is-active-token .math-preview {
+/* H2 块级前缀：整行激活即显形（光标常落在正文内，不在前缀 token 内）。
+   前缀 token 自带定宽（`width: len ch` / 定宽标记槽），故内容列零位移。 */
+.is-active-line .token-heading-prefix > .syntax-hidden,
+.is-active-line .token-blockquote-prefix > .syntax-hidden {
+  display: inline;
+  color: var(--text-muted);
+}
+
+.is-active-line .token-heading-prefix > .syntax-content,
+.is-active-line .token-blockquote-prefix > .syntax-content {
+  display: none;
+}
+
+/* 表格单元格编辑面：保留（战役 table-systemic-remediation §6），与正文规则作用域隔离 */
+.token-table-cell.is-cell-editing .is-active-token > .syntax-hidden,
+.token-table-cell.is-cell-editing .is-empty-token > .syntax-hidden {
+  display: inline;
+  color: var(--text-muted);
+}
+
+.token-table-cell.is-cell-editing .is-active-token > .syntax-content {
   display: none;
 }
 
@@ -849,9 +941,9 @@ body {
 
 .line-blockquote {
   position: relative;
-  border-left: 2px solid var(--list-guide-line);
+  border-left: 2px solid var(--quote-bar);
   padding-left: 12px;
-  color: var(--olive);
+  color: var(--text-primary);
   background-color: transparent;
   border-radius: 0;
   box-sizing: border-box;
@@ -866,27 +958,13 @@ body {
   display: none;
 }
 
-.virtual-row:not(.is-active-line) .line-blockquote .token-blockquote-prefix,
-.line-blockquote:not(.is-active-line) .token-blockquote-prefix {
+.line-blockquote .token-blockquote-prefix {
   display: inline-block;
-  width: 0 !important;
+  width: 0;
   overflow: hidden;
   vertical-align: top;
 }
 
-.virtual-row.is-active-line .line-blockquote:not(.line-callout),
-.line-blockquote.is-active-line:not(.line-callout) {
-  border-left: none !important;
-  padding-left: 0 !important;
-}
-
-.virtual-row.is-active-line .line-blockquote .token-blockquote-prefix,
-.line-blockquote.is-active-line .token-blockquote-prefix {
-  display: inline-flex;
-  width: auto !important;
-  overflow: visible;
-  vertical-align: top;
-}
 .editor-scroll-container {
   overflow-anchor: none;
 }
@@ -956,118 +1034,30 @@ body {
   margin-right: 4px;
 }
 
-/* 列表多级缩进引导线 (极细 0.5px，全行贯通 0 缝隙，保持 inline-block 确保精确图素测量) */
-.syntax-indent {
-  white-space: pre;
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  vertical-align: top;
-  height: var(--grid-size);
-  line-height: var(--grid-size);
-  box-sizing: border-box;
-  flex-shrink: 0;
-}
-
-.syntax-indent-guide {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 0.5px;
-  background-color: var(--list-guide-line);
-  opacity: 0.45;
-  pointer-events: none;
-  user-select: none;
-}
-
-/* 列表多级树状分支指引：保持纯净竖向参考线（对齐主流 Obsidian/VS Code 排版），消除横向分支毛刺造成层级指代混乱 */
-.syntax-indent-guide.syntax-indent-guide-current::after {
-  display: none;
-}
-
-/* 列表符号居中与等宽槽位 (2em 等宽槽位，中轴线 1em 几何绝对对齐) */
-.token-list-bullet {
-  color: var(--text-muted);
-  font-weight: 600;
-  white-space: pre;
-}
-
-.token-list-bullet .token-bullet-char {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: var(--grid-size);
-  height: var(--grid-size);
-  text-align: center;
-  font-size: 1.1em;
-  line-height: 1;
-  user-select: none;
-  box-sizing: border-box;
-  color: var(--list-bullet-color, hsl(215 14% 50%));
-}
-
-.token-list-bullet .bullet-space {
-  display: none;
-}
-
-.token-list-number {
-  color: var(--text-muted);
-  font-weight: 600;
-  white-space: pre;
-}
-
-.token-list-task {
-  color: var(--text-muted);
-  white-space: pre;
-}
-
-.task-checkbox-wrapper {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 2em;
-  height: var(--grid-size);
-  margin: 0;
-  cursor: pointer;
-  user-select: none;
-  vertical-align: top;
-  box-sizing: border-box;
-}
-
-.task-checkbox-svg {
-  flex-shrink: 0;
-  display: block;
-  transition: transform 0.12s ease;
-}
-
-.task-checkbox-wrapper:hover .task-checkbox-svg rect[fill="transparent"] {
-  stroke: var(--task-unchecked-hover, hsl(215 16% 55%));
-}
-
-.task-checkbox-wrapper:hover .task-checkbox-svg {
-  transform: scale(1.05);
-}
+/* 列表缩进与标记槽样式已按域拆分到 `src/styles/list-indent.css`
+   （战役 wysiwyg-layout-remediation T4；导入顺序见 `src/main.tsx`）——index.css
+   已超行数保护天花板，域拆分是唯一合法出口（禁止继续增长）。 */
 
 .task-checkbox-wrapper:active .task-checkbox-svg {
   transform: scale(0.95);
 }
 
-/* 任务列表已完成样式 (对齐主流高品质笔记软件：删除线与柔和置灰) */
+/* 任务列表已完成样式 (Alcove 口径：删除线配蓝灰 slate 墨，置灰不刺眼) */
 .line-block.is-task-completed,
 .is-task-completed {
-  color: var(--text-muted);
+  color: var(--strike-ink);
 }
 
 .line-block.is-task-completed .token-list-task ~ span:not(.syntax-hidden) {
   text-decoration: line-through;
-  text-decoration-color: var(--text-muted);
-  color: var(--text-muted);
+  text-decoration-color: var(--strike-ink);
+  color: var(--strike-ink);
 }
 
 .line-block.is-task-completed .token-list-task ~ span .style-bold,
 .line-block.is-task-completed .token-list-task ~ span .style-italic,
 .line-block.is-task-completed .token-list-task ~ span .style-inline-code {
-  color: var(--text-muted);
+  color: var(--strike-ink);
 }
 
 .task-space {
@@ -1108,61 +1098,18 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  z-index: 2;
+  z-index: var(--z-cell-hover);
   pointer-events: auto;
   cursor: pointer;
 }
 
-/* 引用前缀混合渲染：行激活或 token 激活时展开为源码 `> `，非激活态呈现原版优雅竖导线 */
-.is-active-line .token-blockquote-prefix .syntax-hidden,
-.is-active-token.token-blockquote-prefix .syntax-hidden {
-  display: inline !important;
-  color: var(--text-muted);
-}
 
-.is-active-line .token-blockquote-prefix .syntax-content,
-.is-active-token.token-blockquote-prefix .syntax-content {
-  display: none !important;
-}
+/* 列表标记的源码 ↔ 视觉切换由 .list-marker-slot 内部的定宽叠放图层承担
+   （ADR-8 零跳变：槽宽恒定，切换只发生在槽内）——此处**不再**有任何
+   display 切换规则；旧实现在此处用 !important 把三种 marker 的源码/视觉
+   互相顶掉，同时三种 marker 宽度各异，导致内容列在激活态切换时移动。 */
 
-/* 列表与任务复选框混合渲染：光标移入或选中该区域时展开源码，非激活态维持视觉组件 */
-.is-active-token.token-list-task .syntax-hidden,
-.is-active-token.token-list-bullet .syntax-hidden,
-.is-active-token.token-list-number .syntax-hidden {
-  display: inline !important;
-  color: var(--text-muted);
-}
-
-.is-active-token.token-list-task .syntax-content,
-.is-active-token.token-list-bullet .syntax-content,
-.is-active-token.token-list-number .syntax-content {
-  display: none !important;
-}
-
-/* 任务列表项源码态天然基线守恒（Baseline Invariance） */
-/* 处于源码编辑态或选区覆盖态时：卸载 inline-flex 居中容器，回归纯文本 IFC 基线排版 */
-.is-active-line .interactive-checkbox.is-active-token,
-.is-active-token.interactive-checkbox,
-.is-active-token.token-list-task {
-  display: inline !important;
-  height: auto !important;
-  line-height: inherit !important;
-  vertical-align: baseline !important;
-  font-weight: normal !important;
-  color: var(--text-muted) !important;
-}
-
-.is-active-line .interactive-checkbox.is-active-token .syntax-hidden,
-.is-active-token.interactive-checkbox .syntax-hidden,
-.is-active-token.token-list-task .syntax-hidden {
-  display: inline !important;
-  vertical-align: baseline !important;
-}
-
-/* 结构性前缀与列表符号默认正常文档流 inline-flex，绝对定位彻底归零 */
-.token-list-bullet .syntax-content,
-.token-list-number .syntax-content,
-.token-list-task .syntax-content,
+/* 引用前缀仍走「激活展开源码」形态（块引用标记不在本次缩进域内） */
 .token-blockquote-prefix .syntax-content {
   display: inline-flex;
   height: var(--grid-size);
@@ -1188,65 +1135,6 @@ body {
   font-family: 'Times New Roman', serif;
 }
 
-/* Inline Math & KaTeX rendering */
-.token-math-wrapper {
-  display: inline;
-  vertical-align: baseline;
-}
-.token-math-wrapper .math-preview {
-  display: inline;
-  vertical-align: baseline;
-}
-.token-math-wrapper .math-source {
-  display: none;
-  font-family: var(--font-mono);
-  color: var(--text-muted);
-}
-.is-active-token.token-math-wrapper .math-preview {
-  display: none !important;
-}
-.is-active-token.token-math-wrapper .math-source {
-  display: inline !important;
-}
-
-/* Block Math KaTeX */
-.math-block-collapsed {
-  height: 0 !important;
-  min-height: 0 !important;
-  overflow: hidden !important;
-  padding: 0 !important;
-  margin: 0 !important;
-  border: none !important;
-}
-
-.line-math-block {
-  text-align: center;
-  font-size: 1.1em;
-  background: var(--code-bg);
-  padding: calc(var(--grid-size) / 4) 0;
-  position: relative;
-  box-sizing: border-box;
-}
-.line-math-block [data-copy-button="math"] {
-  display: none;
-}
-.line-math-block .math-block-rendered {
-  display: block;
-}
-.line-math-block .math-block-source {
-  display: none;
-  font-family: var(--font-mono);
-  color: var(--text-muted);
-  text-align: center;
-}
-.is-active-line .line-math-block .math-block-rendered,
-.is-active-line.line-math-block .math-block-rendered {
-  display: none !important;
-}
-.is-active-line .line-math-block .math-block-source,
-.is-active-line.line-math-block .math-block-source {
-  display: block !important;
-}
 
 .style-kbd {
   font-family: var(--font-mono);
@@ -1272,26 +1160,12 @@ body {
 .style-footnote {
   font-size: 0.75em;
   vertical-align: super;
-  color: var(--text-secondary);
+  color: var(--brand);
 }
 
 .token-heading-prefix {
   color: var(--text-muted);
   font-weight: 600;
-}
-.token-list-bullet {
-  color: var(--text-muted);
-  font-weight: 600;
-  white-space: pre;
-}
-.token-list-number {
-  color: var(--text-muted);
-  font-weight: 600;
-  white-space: pre;
-}
-.token-list-task {
-  color: var(--text-muted);
-  white-space: pre;
 }
 .token-comment {
   color: var(--text-muted);
@@ -1404,11 +1278,11 @@ body {
   left: 0;
   right: 0;
   bottom: 0;
-  background: hsl(30 2.5% 95.5% / 0.85);
+  background: hsl(0 0% 100% / 0.85);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 100;
+  z-index: var(--z-scrim);
   font-size: 1.1rem;
   font-weight: 600;
   color: var(--text-secondary);
@@ -1450,6 +1324,14 @@ body {
 .token-table-cell:not(.is-cell-editing) .hr-source {
   display: none !important;
 }
+
+/* 隔离的对称面：正文 H1 的 `.is-active-token > .syntax-content` 让位规则
+   若泄漏进未编辑的单元格，会与上面的源码隔离叠加成「源码不可见 + 内容被让位」
+   ⇒ 单元格空白（跨表拖选时格内 token 可被判为 isSelected）。此处显式撤销让位，
+   只恢复内容面自身的 display，不改变其类型。 */
+.token-table-cell:not(.is-cell-editing) .is-active-token > .syntax-content {
+  display: inline !important;
+}
 .token-table-cell:not(.is-cell-editing) .math-block-rendered,
 .token-table-cell:not(.is-cell-editing) .code-fence-rendered,
 .token-table-cell:not(.is-cell-editing) .hr-rendered {
@@ -1460,15 +1342,16 @@ body {
   display: inline-block !important;
 }
 
-/* ── 顶部控制栏现代统一设计系统（28px 高度网格、统一 3% 纯灰悬停、零 raw hex） ── */
+/* ── 顶部控制栏（Alcove 极简口径：白底发丝线扁条，控件浮于画布之上） ── */
 .top-bar-header {
-  width: min(1040px, 96vw);
+  width: 100%;
   background: var(--ivory);
-  border: 1px solid var(--border-medium);
-  border-radius: 8px;
-  padding: 8px 12px;
-  margin-bottom: 10px;
-  box-shadow: 0 1px 3px hsl(30 2.5% 10% / 0.04);
+  border: none;
+  border-bottom: 1px solid var(--border-subtle);
+  border-radius: 0;
+  padding: 6px 12px;
+  margin-bottom: 0;
+  box-shadow: none;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -1736,7 +1619,7 @@ body {
   font-size: 12px;
   border-radius: 20px;
   box-shadow: 0 4px 16px hsl(0 0% 0% / 0.18);
-  z-index: 9999;
+  z-index: var(--z-menu);
   animation: toast-fade-in 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   pointer-events: none;
 }
@@ -1810,4 +1693,172 @@ body {
   background: var(--code-bg);
   border-radius: 10px;
   border: 1px solid var(--border-soft);
+}
+
+/* ── Alcove 复刻 · Seg B：活动行块类型徽标（视口右上角，随行类型切换） ── */
+.block-type-badge {
+  position: fixed;
+  top: 56px;
+  right: 26px;
+  z-index: var(--z-toolbar);
+  min-width: 28px;
+  height: 28px;
+  padding: 0 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  background: var(--ivory);
+  border: 1px solid var(--menu-border);
+  border-radius: 8px;
+  box-shadow: 0 1px 4px hsl(240 2% 0% / 0.06);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--syntax-ink);
+  user-select: none;
+  pointer-events: none;
+}
+
+/* ── Alcove 复刻 · Seg H：空文档启动页（居中 Markdown 风格字标） ── */
+.empty-doc-splash {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  pointer-events: none;
+  user-select: none;
+}
+
+.empty-doc-splash .splash-wordmark {
+  font-family: var(--font-sans);
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+}
+
+.empty-doc-splash .splash-marks {
+  font-family: var(--font-sans);
+  font-weight: 700;
+  color: var(--syntax-ghost);
+}
+
+.empty-doc-splash .splash-subtitle {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  color: var(--syntax-ink);
+}
+
+/* ── Alcove 复刻 · Seg D：Frontmatter Properties 属性卡 ──
+ * 行内 token 透明化（ghost 模式，光标/选区/点击映射零破坏），
+ * 浮层叠出属性卡形态；活动行回落源码态（浮层隐藏 + token 恢复可见，
+ * 与代码围栏 active 源码切换同模式）。
+ * 注意：透明化只作用于 token 容器 .line-block（浮层 .frontmatter-chrome
+ * 是行的兄弟节点，禁止被波及——曾经以 `*` 全透明误伤浮层自身）。 */
+.is-frontmatter-row:not(.is-active-line) .line-block,
+.is-frontmatter-row:not(.is-active-line) .line-block * {
+  color: transparent !important;
+}
+
+.is-frontmatter-row.is-active-line .frontmatter-chrome {
+  display: none;
+}
+
+.frontmatter-chrome {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+  user-select: none;
+  box-sizing: border-box;
+}
+
+/* frontmatter 行角色类（body 行容器；open 行宽度铺满列） */
+.frontmatter-body {
+  gap: 8px;
+}
+
+.frontmatter-open {
+  gap: 6px;
+  padding-left: 1px;
+}
+
+.fm-chevron {
+  font-size: 10px;
+  line-height: 1;
+  color: var(--text-muted);
+}
+
+.fm-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.fm-edit-pill {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--tag-standard-bg);
+  color: var(--text-secondary);
+}
+
+.fm-type-icon {
+  flex: none;
+  width: 16px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1;
+  color: var(--text-muted);
+}
+
+.fm-key {
+  flex: none;
+  width: 88px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fm-value {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fm-wiki {
+  color: var(--brand);
+  text-decoration: underline;
+  text-decoration-color: hsl(217 76% 52% / 0.35);
+  text-underline-offset: 2px;
+}
+
+.fm-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--tag-standard-bg);
+  color: var(--text-primary);
+}
+
+.fm-tag-hash {
+  margin-right: 3px;
+  color: var(--text-muted);
 }

@@ -24,6 +24,7 @@
 // 坐标 + offsetHeight stub（jsdom 无布局，行高固定 28px）。
 // @vitest-environment jsdom
 
+import './helpers/layout-fixture';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';

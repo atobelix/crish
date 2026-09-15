@@ -1,107 +1,68 @@
-/**
- * P2-A1 键盘增强（任务 3 验收）：PageUp/PageDown 翻页 + Ctrl+Home/End 文档首尾
- *
- * - pageNavigationTarget 纯函数（HiddenInput.tsx 导出）：视口顶/底行 ± 页行数
- *   的目标行计算（已挂载行几何 = HeightMap.indexAt 像素→行的 DOM 等价实现），
- *   覆盖各种视口位置/边界/空挂载；
- * - Ctrl+Home/End 的 store 层语义（HiddenInput 分支为 setCursorPos(0) /
- *   setCursorPos(textLength) 薄封装，此处验证落点与边界行为）。
- */
-import { describe, it, expect } from 'vitest';
+// @vitest-environment jsdom
+/** 翻页按视口像素位移与权威 HeightMap 定位，字符落点另等原生 DOM 命中。 */
+import { afterEach, describe, it, expect } from 'vitest';
 import { createEditorStore } from '../../src/core/EditorStore';
-import {
-  pageNavigationTarget,
-  type MountedLineGeom,
-} from '../../src/components/HiddenInput';
+import { pageDestination } from '../../src/core/editing/viewportNavigation';
+import { viewportFixture, type ViewportFixture } from './viewport-fixture';
 
-/** 构造连续挂载行几何：index 从 0 起、行高固定、top 从 baseTop 起 */
-function rows(
-  count: number,
-  height: number,
-  baseTop = 0
-): MountedLineGeom[] {
-  const out: MountedLineGeom[] = [];
-  for (let i = 0; i < count; i++) {
-    const top = baseTop + i * height;
-    out.push({
-      index: i,
-      start: 0,
-      length: 0,
-      left: 0,
-      top,
-      bottom: top + height,
-      height,
+const fixtures: ViewportFixture[] = [];
+function view(options: Parameters<typeof viewportFixture>[1] = {}) {
+  const fixture = viewportFixture(Array(200).fill('abcdef').join('\n'), { height: 280, mounted: [], ...options });
+  fixtures.push(fixture);
+  return fixture;
+}
+afterEach(() => { for (const fixture of fixtures.splice(0)) fixture.dispose(); });
+
+describe('PageUp/PageDown 真实视口目标', () => {
+  it('PageDown 从光标所在视觉位置向下一屏，保留目标行内位置', () => {
+    const fixture = view();
+    fixture.container.scrollTop = 2800;
+    expect(pageDestination(fixture.container, fixture.viewport, 154, 'down')).toEqual({
+      line: 115, direction: 'down', withinLine: 14,
     });
-  }
-  return out;
-}
-
-/** 视口从某行开始（scrollTop 对齐行边界）时的挂载子集（虚拟化窗口） */
-function viewportRows(
-  all: MountedLineGeom[],
-  fromIdx: number,
-  toIdx: number
-): MountedLineGeom[] {
-  return all.filter((m) => m.index >= fromIdx && m.index <= toIdx);
-}
-
-describe('pageNavigationTarget（PageUp/PageDown 目标行计算）', () => {
-  // 200 行、行高 28、scrollTop=2800 → 视口顶行 100，clientHeight 280 → 底行 109
-  const all = rows(200, 28);
-
-  it('PageDown：目标行 = 视口底行 + 页行数', () => {
-    const mounted = viewportRows(all, 95, 110); // 视口覆盖 [95, 110]
-    const target = pageNavigationTarget('down', 2800, 280, 200, mounted);
-    // 视口顶行 = 第一个 bottom > 2800 的行 = 100（top 2800, bottom 2828）
-    // 视口底行 = 最后一个 top < 3080 的行 = 109（top 3052 < 3080, bottom 3080）
-    // 页行数 = 109 - 100 = 9 → 目标 109 + 9 = 118
-    expect(target).toBe(118);
   });
 
-  it('PageUp：目标行 = 视口顶行 − 页行数', () => {
-    const mounted = viewportRows(all, 95, 110);
-    const target = pageNavigationTarget('up', 2800, 280, 200, mounted);
-    expect(target).toBe(100 - 9);
+  it('PageUp 与向下翻页使用同一像素位移口径', () => {
+    const fixture = view();
+    fixture.container.scrollTop = 2800;
+    expect(pageDestination(fixture.container, fixture.viewport, 154, 'up')).toEqual({
+      line: 95, direction: 'up', withinLine: 14,
+    });
   });
 
-  it('文档首：PageUp 收敛到 0（视口已在首屏）', () => {
-    const mounted = viewportRows(all, 0, 10);
-    // scrollTop 0：视口顶行 0，页行数 = 10 → max(0, 0-10) = 0
-    expect(pageNavigationTarget('up', 0, 280, 200, mounted)).toBe(0);
+  it('文档首的上翻目标由高度表钳制到首行', () => {
+    const fixture = view();
+    expect(pageDestination(fixture.container, fixture.viewport, 14, 'up')?.line).toBe(0);
   });
 
-  it('文档尾：PageDown 收敛到 lineCount-1（视口已在末屏）', () => {
-    const mounted = viewportRows(all, 190, 199);
-    // 视口底行 199，页行数 = 9 → min(199, 199+9) = 199
-    expect(pageNavigationTarget('down', 5320, 280, 200, mounted)).toBe(199);
+  it('文档尾的下翻目标由高度表钳制到末行', () => {
+    const fixture = view();
+    fixture.container.scrollTop = 5320;
+    expect(pageDestination(fixture.container, fixture.viewport, 266, 'down')?.line).toBe(199);
   });
 
-  it('行高不均匀（多行块）：页行数按顶底行号差近似，仍收敛', () => {
-    // 混合行高：普通 28 + 代码块 84（3 倍高）
-    const mixed: MountedLineGeom[] = [];
-    let top = 0;
-    for (let i = 0; i < 60; i++) {
-      const h = i % 10 === 3 ? 84 : 28; // 每 10 行一个 3 倍高行
-      mixed.push({ index: i, start: 0, length: 0, left: 0, top, bottom: top + h, height: h });
-      top += h;
-    }
-    // scrollTop 840：顶行 = 第一个 bottom > 840 的行
-    const target = pageNavigationTarget('up', 840, 560, 60, mixed);
-    expect(target).toBeGreaterThanOrEqual(0);
-    expect(target).toBeLessThanOrEqual(59);
+  it('非均匀行高定位到确切目标，不再用顶底行号差估计页行数', () => {
+    const fixture = view({ height: 560, heights: Array.from({ length: 200 }, (_, i) => i % 10 === 3 ? 84 : 28) });
+    fixture.container.scrollTop = 840;
+    expect(pageDestination(fixture.container, fixture.viewport, 100, 'up')).toEqual({
+      line: 11, direction: 'up', withinLine: 16,
+    });
   });
 
-  it('边界：lineCount 0 / 挂载空 → 0', () => {
-    expect(pageNavigationTarget('down', 0, 280, 0, [])).toBe(0);
-    expect(pageNavigationTarget('up', 0, 280, 100, [])).toBe(0);
+  it('没有挂载行也不虚构首行；没有视口高度则明确等待布局', () => {
+    const fixture = view();
+    fixture.container.scrollTop = 2800;
+    expect(pageDestination(fixture.container, fixture.viewport, 154, 'up')?.line).toBe(95);
+    const unavailable = view({ height: 0 });
+    expect(pageDestination(unavailable.container, unavailable.viewport, 0, 'down')).toBeNull();
   });
 
-  it('边界：scrollTop 处于两行之间（非对齐）时顶行取覆盖行', () => {
-    const mounted = viewportRows(all, 10, 20);
-    // scrollTop = 10*28 + 14 = 294（第 10 行中段）：第一个 bottom > 294 = 行 10；
-    // 视口底 = 294 + 280 = 574：最后一个 top < 574 = 行 20 → 页行数 10
-    // PageDown 目标 = 20 + 10 = 30
-    expect(pageNavigationTarget('down', 294, 280, 200, mounted)).toBe(30);
+  it('滚动处于行中间时仍保留像素位置，不额外多跳一屏', () => {
+    const fixture = view();
+    fixture.container.scrollTop = 294;
+    expect(pageDestination(fixture.container, fixture.viewport, 0, 'down')).toEqual({
+      line: 20, direction: 'down', withinLine: 14,
+    });
   });
 });
 

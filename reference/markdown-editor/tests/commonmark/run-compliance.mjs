@@ -18,18 +18,14 @@
  *   同时写入 tests/commonmark/compliance-report.json。
  *   可选参数：--summary 仅打印摘要；--out <path> 指定报告文件路径。
  */
-import { createRequire } from 'node:module';
-import { readFileSync, writeFileSync, existsSync, mkdtempSync } from 'node:fs';
-import { pathToFileURL } from 'node:url';
+import { createServer } from 'vite';
+import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 /** 仓库根：reference/markdown-editor */
 const repoRoot = path.resolve(__dirname, '..', '..');
-const require = createRequire(path.join(repoRoot, 'package.json'));
-const tsMod = require('typescript');
 
 /** 章节名归一化：官方 spec 章节名 → 任务约定章节名 */
 const SECTION_ALIAS = {
@@ -66,44 +62,22 @@ const SECTION_ORDER = [
   'Textual content',
 ];
 
-/**
- * 用 TypeScript transpileModule 把引擎源码编译为 ESM，加载到临时目录。
- * parser.ts 的运行时依赖：LRUCache.ts + InlineRuler.ts（R5-B：INLINE_RULES
- * 数组迁移为 ruler 初始注册表，行内扫描经 InlineRuler 派发）。
- * ./ast 为类型导入，编译期擦除。
- */
+/** 通过项目真实模块解析器加载源码，依赖与产品构建使用同一条解析路径。 */
 async function loadEngine() {
-  const transpile = (relPath) =>
-    tsMod.transpileModule(readFileSync(path.join(repoRoot, relPath), 'utf8'), {
-      compilerOptions: {
-        module: tsMod.ModuleKind.ESNext,
-        target: tsMod.ScriptTarget.ES2022,
-      },
-    }).outputText;
-
-  const dir = mkdtempSync(path.join(os.tmpdir(), 'conex-r0-'));
-  writeFileSync(path.join(dir, 'LRUCache.mjs'), transpile('src/core/LRUCache.ts'));
-  writeFileSync(
-    path.join(dir, 'InlineRuler.mjs'),
-    transpile('src/core/InlineRuler.ts')
-  );
-  writeFileSync(
-    path.join(dir, 'parser.mjs'),
-    transpile('src/core/parser.ts')
-      .replace("'./LRUCache'", "'./LRUCache.mjs'")
-      .replace("'./InlineRuler'", "'./InlineRuler.mjs'")
-  );
-  writeFileSync(
-    path.join(dir, 'astToHtml.mjs'),
-    transpile('tests/commonmark/astToHtml.ts')
-  );
-  const { MarkdownParser } = await import(
-    pathToFileURL(path.join(dir, 'parser.mjs')).href
-  );
-  const { astToHtml, normalizeHtml } = await import(
-    pathToFileURL(path.join(dir, 'astToHtml.mjs')).href
-  );
-  return { MarkdownParser, astToHtml, normalizeHtml };
+  const server = await createServer({
+    root: repoRoot,
+    configFile: false,
+    optimizeDeps: { noDiscovery: true, include: [] },
+    server: { middlewareMode: true, hmr: false, watch: null },
+    appType: 'custom',
+  });
+  try {
+    const { MarkdownParser } = await server.ssrLoadModule('/src/core/parser.ts');
+    const { astToHtml, normalizeHtml } = await server.ssrLoadModule('/tests/commonmark/astToHtml.ts');
+    return { MarkdownParser, astToHtml, normalizeHtml };
+  } finally {
+    await server.close();
+  }
 }
 
 /** 候选 examples.json 路径（R0-A 并行产出的共享位置） */

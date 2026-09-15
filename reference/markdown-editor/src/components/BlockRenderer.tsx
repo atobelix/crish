@@ -17,6 +17,7 @@ import type { LineNode, InlineNode, LineType, CalloutType } from '../core/ast';
 import type { CodeState } from '../core/parser';
 import { checkIsActive, type ActiveState } from '../core/measure';
 import { InlineRenderer } from './InlineRenderer';
+import { ListLineContent } from './ListLineContent';
 import {
   useEditorStore,
   type EditorStore,
@@ -24,7 +25,7 @@ import {
 } from '../core/EditorStore';
 import { useTableStore } from '../core/TableStore';
 import { isTableHeaderRow, readTableAlignments } from '../core/tableIdentity';
-import { renderMathToHtml } from '../core/renderTheme';
+import { MathPreview } from './MathPreview';
 // B4 N5：复制按钮剪贴板工具 + 引用前缀剥离（与导出投影器共享单源）
 import {
   copyTextToClipboard,
@@ -835,85 +836,53 @@ function getFenceEndForStart(state: EditorState, startIndex: number): number {
   return end;
 }
 
-/** 查找包含 index 的闭合数学围栏区间 [start, end] */
-function getMathFenceRange(
-  state: EditorState,
-  index: number
-): { start: number; end: number } | null {
-  const { mainCodeState, streamTailCodeState, mainLines } = state;
-  const boundary = mainLines.length - 1;
-  const stateAt = (i: number): CodeState =>
-    streamTailCodeState.length === 0
-      ? mainCodeState[i]
-      : i < boundary
-        ? mainCodeState[i]
-        : streamTailCodeState[i - boundary];
-
-  const currentSt = stateAt(index);
-  if (
-    currentSt !== 'math_fence_start' &&
-    currentSt !== 'math_block' &&
-    currentSt !== 'math_fence_end'
-  ) {
-    return null;
-  }
-
-  let start = -1;
-  let end = -1;
-
-  if (currentSt === 'math_fence_start') {
-    start = index;
-    end = getFenceEndForStart(state, start);
-  } else {
-    const { mainFenceLines, streamTailFenceLines } = state;
-    let lo = 0;
-    let hi = mainFenceLines.length;
-    while (lo < hi) {
-      const mid = (lo + hi) >> 1;
-      if (mainFenceLines[mid] < index) lo = mid + 1;
-      else hi = mid;
-    }
-    start = lo > 0 ? mainFenceLines[lo - 1] : -1;
-    const tailLimit = index - boundary;
-    lo = 0;
-    hi = streamTailFenceLines.length;
-    while (lo < hi) {
-      const mid = (lo + hi) >> 1;
-      if (streamTailFenceLines[mid] < tailLimit) lo = mid + 1;
-      else hi = mid;
-    }
-    if (lo > 0) {
-      const abs = boundary + streamTailFenceLines[lo - 1];
-      if (abs > start) start = abs;
-    }
-
-    if (currentSt === 'math_fence_end') {
-      end = index;
-    } else {
-      end = getFenceEndForStart(state, start);
-    }
-  }
-
-  if (start === -1 || end === -1 || start >= end) return null;
-  if (stateAt(start) !== 'math_fence_start' || stateAt(end) !== 'math_fence_end') {
-    return null;
-  }
-
-  return { start, end };
+interface MathFenceSnapshot {
+  formula: string;
+  sourceStart: number;
+  sourceEnd: number;
+  closed: boolean;
 }
 
-/** 判定数学围栏整体是否处于活跃编辑状态（光标或选区落在 [start, end] 内） */
-function isMathFenceActive(
-  state: EditorState,
-  range: { start: number; end: number },
-  activeState: ActiveState | null | undefined
-): boolean {
-  if (!activeState) return false;
-  const startOffset = state.lineOffsets.getOffset(range.start);
-  const endOffset = state.lineOffsets.getOffset(range.end);
-  const endLineLen = (state.getLine(range.end) ?? '').length;
-  const totalLen = endOffset + endLineLen - startOffset;
-  return checkIsActive(startOffset, totalLen, activeState);
+/** 源区间来自已解析数学行；非公式行不会被吞入未闭合预览。 */
+function createMathFenceSelector(index: number): (state: EditorState) => MathFenceSnapshot {
+  let mainLines: string[] | undefined;
+  let tailLines: string[] | undefined;
+  let mainStates: CodeState[] | undefined;
+  let tailStates: CodeState[] | undefined;
+  let snapshot: MathFenceSnapshot | undefined;
+  return (state) => {
+    const sourceStart = state.lineOffsets.getOffset(index);
+    if (snapshot && mainLines === state.mainLines && tailLines === state.streamTail &&
+      mainStates === state.mainCodeState && tailStates === state.streamTailCodeState &&
+      snapshot.sourceStart === sourceStart) return snapshot;
+    mainLines = state.mainLines;
+    tailLines = state.streamTail;
+    mainStates = state.mainCodeState;
+    tailStates = state.streamTailCodeState;
+    const content: string[] = [];
+    let end = index + 1;
+    while (end < state.getLineCount() && getLineCodeState(state, end) === 'math_block') {
+      // 与静态导出的公式体完全同源：剥引用前缀，保留其余空白和换行。
+      content.push(stripBlockquotePrefix(state.getLine(end)));
+      end++;
+    }
+    const closed = end < state.getLineCount() && getLineCodeState(state, end) === 'math_fence_end';
+    const last = closed ? end : Math.max(index, end - 1);
+    const sourceEnd = state.lineOffsets.getOffset(last) + state.getLine(last).length;
+    const formula = content.join('\n');
+    if (!snapshot || snapshot.formula !== formula || snapshot.sourceStart !== sourceStart ||
+      snapshot.sourceEnd !== sourceEnd || snapshot.closed !== closed) {
+      snapshot = { formula, sourceStart, sourceEnd, closed };
+    }
+    return snapshot;
+  };
+}
+
+/** 光标与选区更新不重建公式体；内容变化才由所在实例的订阅刷新。 */
+function useMathFenceSnapshot(index: number, store?: EditorStore): MathFenceSnapshot {
+  const editorStore = store ?? useEditorStore;
+  const selector = React.useMemo(() => createMathFenceSelector(index), [index]);
+  return editorStore(selector);
 }
 
 /** 计算代码行在当前代码块内的行号（1 起算，兼容已闭合与软渲染未闭合） */
@@ -992,7 +961,6 @@ function CodeFenceStartBlock({
   store,
 }: BlockRendererComponentProps) {
   const lang = extractFenceLang(block.raw);
-  const langOffset = lang ? Math.max(0, block.raw.indexOf(lang)) : block.length;
   const isActive = checkIsActive(lineOffset, block.length, activeState ?? null);
   const editorStore = store ?? useEditorStore;
 
@@ -1009,10 +977,11 @@ function CodeFenceStartBlock({
     <div className="line-block line-code-fence line-code-fence-start">
       <div
         className={`code-fence-rendered ${isActive ? 'is-active-token' : ''}`.trim()}
+        data-source-role={isActive ? 'preview' : 'atomic'}
         data-token-start={lineOffset}
         data-token-length={block.length}
       >
-        <span className="code-lang-pill" data-sub-offset={langOffset}>
+        <span className="code-lang-pill" data-source-role="preview">
           {lang}
         </span>
         <CopyButton
@@ -1023,6 +992,7 @@ function CodeFenceStartBlock({
       </div>
       <div
         className="code-fence-source"
+        data-source-role={isActive ? 'text' : 'hidden'}
         data-token-start={lineOffset}
         data-token-length={block.length}
       >
@@ -1042,11 +1012,13 @@ function CodeFenceEndBlock({
     <div className="line-block line-code-fence line-code-fence-end">
       <div
         className={`code-fence-rendered ${isActive ? 'is-active-token' : ''}`.trim()}
+        data-source-role={isActive ? 'preview' : 'atomic'}
         data-token-start={lineOffset}
         data-token-length={block.length}
       />
       <div
         className="code-fence-source"
+        data-source-role={isActive ? 'text' : 'hidden'}
         data-token-start={lineOffset}
         data-token-length={block.length}
       >
@@ -1056,211 +1028,78 @@ function CodeFenceEndBlock({
   );
 }
 
-function MathFenceStartBlock({
-  block,
-  index = 0,
-  lineOffset = 0,
-  activeState,
-  store,
-}: BlockRendererComponentProps) {
-  const editorStore = store ?? useEditorStore;
-  const state = editorStore.getState();
-  const range = getMathFenceRange(state, index);
-  const isFenceActive = range
-    ? isMathFenceActive(state, range, activeState)
-    : checkIsActive(lineOffset, block.length, activeState ?? null);
-  const calloutClass = block.calloutType
-    ? ` line-callout callout-${block.calloutType}`
-    : '';
-
-  if (range && !isFenceActive) {
-    return (
-      <div
-        className="line-block line-code-fence line-code-fence-start math-block-collapsed"
-        data-token-start={lineOffset}
-        data-token-length={block.length}
-      />
-    );
-  }
-
+/** 数学源文本独占源位置；预览永不声明同一区间的可编辑字符。 */
+function mathSourceLine(block: LineNode, lineOffset: number, softRender = false) {
   return (
     <div
-      className={`line-block line-code line-math-block is-active-line${calloutClass}`}
+      className={`math-block-source${softRender ? ' math-soft-text' : ''}`}
       data-token-start={lineOffset}
       data-token-length={block.length}
+      data-source-role="text"
     >
-      <div
-        className="math-block-source"
-        data-token-start={lineOffset}
-        data-token-length={block.length}
-      >
-        {block.raw || <br />}
-      </div>
+      {block.raw || <br />}
     </div>
   );
 }
 
-function MathFenceEndBlock({
-  block,
-  index = 0,
-  lineOffset = 0,
-  activeState,
-  store,
+function MathFenceStartBlock({
+  block, index = 0, lineOffset = 0, store,
 }: BlockRendererComponentProps) {
-  const editorStore = store ?? useEditorStore;
-  const state = editorStore.getState();
-  const range = getMathFenceRange(state, index);
-  const isFenceActive = range
-    ? isMathFenceActive(state, range, activeState)
-    : checkIsActive(lineOffset, block.length, activeState ?? null);
-  const calloutClass = block.calloutType
-    ? ` line-callout callout-${block.calloutType}`
-    : '';
-
-  if (range && !isFenceActive) {
-    return (
-      <div
-        className="line-block line-code-fence line-code-fence-end math-block-collapsed"
-        data-token-start={lineOffset}
-        data-token-length={block.length}
-      />
-    );
-  }
-
+  const snapshot = useMathFenceSnapshot(index, store);
+  const calloutClass = block.calloutType ? ` line-callout callout-${block.calloutType}` : '';
   return (
     <div
-      className={`line-block line-code line-math-block is-active-line${calloutClass}`}
-      data-token-start={lineOffset}
-      data-token-length={block.length}
+      className={`line-block line-code line-math-block math-block-row math-block-preview-row${calloutClass}${snapshot.closed ? '' : ' is-soft-render'}`}
+      data-math-part="start"
     >
-      <div
-        className="math-block-source"
-        data-token-start={lineOffset}
-        data-token-length={block.length}
-      >
-        {block.raw || <br />}
-      </div>
+      <MathPreview
+        formula={snapshot.formula}
+        displayMode
+        className="math-block-rendered"
+        sourceStart={snapshot.sourceStart}
+        sourceEnd={snapshot.sourceEnd}
+      />
+      {mathSourceLine(block, lineOffset)}
+      {snapshot.closed && <CopyButton dataAttr="math" label="复制公式（LaTeX）" onClick={() => void copyTextToClipboard(snapshot.formula)} />}
+    </div>
+  );
+}
+
+function MathFenceEndBlock({ block, lineOffset = 0 }: BlockRendererComponentProps) {
+  const calloutClass = block.calloutType ? ` line-callout callout-${block.calloutType}` : '';
+  return (
+    <div className={`line-block line-code line-math-block math-block-row${calloutClass}`} data-math-part="end">
+      {mathSourceLine(block, lineOffset)}
     </div>
   );
 }
 
 function MathBlock({
-  block,
-  index = 0,
-  lineOffset = 0,
-  activeState,
-  store,
+  block, index = 0, lineOffset = 0, store,
 }: BlockRendererComponentProps) {
-  const softRender = useSoftRender(index, store);
-  const calloutClass = block.calloutType
-    ? ` line-callout callout-${block.calloutType}`
-    : '';
-
-  if (softRender) {
-    return (
-      <div
-        className={`line-block line-math-block line-code is-soft-render${calloutClass}`}
-      >
-        <span
-          className="math-soft-text"
-          data-token-start={lineOffset}
-          data-token-length={block.length}
-        >
-          {block.raw || <br />}
-        </span>
-      </div>
-    );
-  }
-
   const editorStore = store ?? useEditorStore;
-  const state = editorStore.getState();
-  const range = getMathFenceRange(state, index);
-
-  if (range) {
-    const isFenceActive = isMathFenceActive(state, range, activeState);
-    if (!isFenceActive) {
-      if (index === range.start + 1) {
-        const lines = getFenceBlockLines(editorStore, range.start + 1, range.end);
-        const formula = lines.join('\n').trim();
-        const katexHtml = formula ? renderMathToHtml(formula, true) : '<br />';
-
-        return (
-          <div
-            className={`line-block line-math-block${calloutClass}`}
-            data-token-start={lineOffset}
-            data-token-length={block.length}
-          >
-            <div
-              className="math-block-rendered"
-              dangerouslySetInnerHTML={{ __html: katexHtml }}
-              data-token-start={lineOffset}
-              data-token-length={block.length}
-            />
-            <CopyButton
-              dataAttr="math"
-              label="复制公式（LaTeX）"
-              onClick={() => void copyTextToClipboard(formula)}
-            />
-          </div>
-        );
-      } else {
-        return (
-          <div
-            className="line-block line-math-block math-block-collapsed"
-            data-token-start={lineOffset}
-            data-token-length={block.length}
-          />
-        );
-      }
-    }
-  }
-
-  let formula = block.raw.trim();
-  let bMatch;
-  while ((bMatch = formula.match(/^\s*>\s?/))) {
-    formula = formula.substring(bMatch[0].length);
-  }
-  formula = formula.trim();
-
-  if (!range) {
-    const katexHtml = formula ? renderMathToHtml(formula, true) : '<br />';
-    return (
-      <div className={`line-block line-math-block${calloutClass}`}>
-        <div
-          className="math-block-rendered"
-          dangerouslySetInnerHTML={{ __html: katexHtml }}
-          data-token-start={lineOffset}
-          data-token-length={block.length}
-        />
-        <div
-          className="math-block-source"
-          data-token-start={lineOffset}
-          data-token-length={block.length}
-        >
-          {block.raw || <br />}
-        </div>
-        <CopyButton
-          dataAttr="math"
-          label="复制公式（LaTeX）"
-          onClick={() => void copyTextToClipboard(formula)}
-        />
-      </div>
-    );
-  }
-
+  const belongsToFence = editorStore(state => getLineCodeState(state, index) === 'math_block');
+  const softRender = useSoftRender(index, store);
+  const formula = stripBlockquotePrefix(block.raw).trim();
+  const calloutClass = block.calloutType ? ` line-callout callout-${block.calloutType}` : '';
   return (
     <div
-      className={`line-block line-code line-math-block is-active-line${calloutClass}`}
-      data-token-start={lineOffset}
-      data-token-length={block.length}
+      className={`line-block line-code line-math-block math-block-row${calloutClass}${softRender ? ' is-soft-render' : ''}`}
+      data-math-part="body"
     >
-      <div
-        className="math-block-source"
-        data-token-start={lineOffset}
-        data-token-length={block.length}
-      >
-        {block.raw || <br />}
-      </div>
+      {!belongsToFence && (
+        <>
+          <MathPreview
+            formula={formula}
+            displayMode
+            className="math-block-rendered"
+            sourceStart={lineOffset}
+            sourceEnd={lineOffset + block.length}
+          />
+          <CopyButton dataAttr="math" label="复制公式（LaTeX）" onClick={() => void copyTextToClipboard(formula)} />
+        </>
+      )}
+      {mathSourceLine(block, lineOffset, softRender)}
     </div>
   );
 }
@@ -1391,15 +1230,29 @@ function HeadingBlock({
   rtl,
 }: BlockRendererComponentProps) {
   const level = block.headingLevel || 1;
+  const isList = block.listDepth !== undefined;
   const calloutClass = block.calloutType
     ? ` line-callout callout-${block.calloutType}${block.isCalloutHeader ? ' callout-header' : ''}`
     : '';
-  const className = `line-block line-h${level}${calloutClass}`;
+  // 标题行也必须携带行激活信号：块级前缀（`#`）的混合渲染显形由
+  // `.is-active-line .token-heading-prefix > .syntax-hidden` 承担
+  // （战役 hybrid-render-restore · H2）。其余两条行路径（:1290 引用/callout、
+  // :1511 主行）早已挂该信号，标题路径此前缺失 ⇒ 前缀永不显形。
+  const isLineActive = checkIsActive(lineOffset, block.length, activeState ?? null);
+  const className = `line-block${isList ? '' : ` line-h${level}`}${calloutClass}${isLineActive ? ' is-active-line' : ''}`;
   return (
     // B5 bidi：整行 RTL（标题行级 dir——isRtlLine 对含前缀的整行检测，
     // 标题前缀 # 为 ASCII，不影响 RTL 判定；LTR 行无 dir 属性）
     <div className={className} dir={rtl ? 'rtl' : undefined}>
-      {block.inlineTokens && (
+      {isList ? (
+        <ListLineContent
+          block={block}
+          tokens={block.inlineTokens}
+          lineOffset={lineOffset}
+          activeState={activeState}
+          bodyClassName={`line-h${level}`}
+        />
+      ) : block.inlineTokens && (
         <InlineRenderer
           tokens={block.inlineTokens}
           lineOffset={lineOffset}
@@ -1661,8 +1514,9 @@ export const DefaultBlockRenderer = function DefaultBlockRenderer({
   }
 
   const isLineActive = checkIsActive(lineOffset, block.length, activeState ?? null);
+  const isList = block.listDepth !== undefined;
   const isTaskCompleted = block.inlineTokens?.some(
-    (t) => t.type === 'list_task' && t.isChecked
+    (t) => t.type.startsWith('list_') && t.isChecked
   );
   const taskCompletedClass = isTaskCompleted ? ' is-task-completed' : '';
   const calloutClass = block.calloutType
@@ -1689,7 +1543,7 @@ export const DefaultBlockRenderer = function DefaultBlockRenderer({
     );
   }
 
-  const level = block.blockquoteLevel || 0;
+  const level = isList ? 0 : block.blockquoteLevel || 0;
   const bqClass = level > 0 ? ' line-blockquote' : '';
   const bqStyle: React.CSSProperties | undefined =
     level > 0
@@ -1715,7 +1569,13 @@ export const DefaultBlockRenderer = function DefaultBlockRenderer({
       dir={rtl ? 'rtl' : undefined}
       style={bqStyle}
     >
-      {tokensToRender && tokensToRender.length > 0 ? (
+      {isList ? (
+        <ListLineContent block={block} tokens={tokensToRender} lineOffset={lineOffset} activeState={activeState}>
+          {isTruncated && (
+            <span className="truncation-indicator" data-ignore-measure>⋯ 已折叠 {truncatedLength} 字符</span>
+          )}
+        </ListLineContent>
+      ) : tokensToRender && tokensToRender.length > 0 ? (
         <>
           <InlineRenderer
             tokens={tokensToRender}

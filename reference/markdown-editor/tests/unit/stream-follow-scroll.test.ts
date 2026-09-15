@@ -22,6 +22,7 @@
 // 计数（用户手势不是引擎主动修改）。
 // @vitest-environment jsdom
 
+import './helpers/layout-fixture';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';

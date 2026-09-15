@@ -21,6 +21,7 @@
 //    两者合并保证「直刷 vs parseLine 逐字符一致」。
 // @vitest-environment jsdom
 
+import './helpers/layout-fixture';
 import { describe, it, expect } from 'vitest';
 import { isPlainTextLine } from '../../src/components/MarkdownEngine';
 import { MarkdownParser } from '../../src/core/parser';

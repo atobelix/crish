@@ -23,6 +23,7 @@
 // 虚拟化窗口 + measure 模块 mock 固定坐标。
 // @vitest-environment jsdom
 
+import './helpers/layout-fixture';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';

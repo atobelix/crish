@@ -26,7 +26,6 @@
  * 行级版本：本行装饰内容变化才重派生），此处只作为入参契约显式化。
  */
 import type { InlineNode, LineNode } from './ast';
-import { getCalloutContext } from './calloutContext';
 import {
   decorateIncompleteInline,
   type IncompleteInlineDecoration,
@@ -35,6 +34,7 @@ import type { Decoration, DecorationSet } from './DecorationSet';
 import type { EditorState } from './EditorStore';
 import type { ActiveState } from './measure';
 import { MarkdownParser, type CodeState } from './parser';
+import type { LineParseContext } from './DocumentContext';
 import { resolveTableId } from './tableIdentity';
 
 /**
@@ -50,11 +50,7 @@ import { resolveTableId } from './tableIdentity';
  * （`LineItem` / `estimateSize` / 批量测量）必须共用同一访问器口径。
  */
 export function getLineState(s: EditorState, i: number): CodeState {
-  if (s.streamTailCodeState.length === 0) return s.mainCodeState[i];
-  const boundary = s.mainLines.length - 1;
-  return i < boundary
-    ? s.mainCodeState[i]
-    : s.streamTailCodeState[i - boundary];
+  return s.documentContext.codeStateAt(i);
 }
 
 /** 逐行渲染数据（旧路径与岛路径共用的唯一形状）。 */
@@ -77,7 +73,7 @@ export interface LineUnitInput {
   lineText: string;
   /** 该行在文档中的起始偏移 */
   offset: number;
-  isCode: CodeState;
+  context: LineParseContext;
   /** 共享装饰集（引擎注入） */
   decorations: DecorationSet;
   /** 本行装饰版本（调用方 memo 依赖；本模块不消费，仅契约显式化） */
@@ -85,6 +81,13 @@ export interface LineUnitInput {
   getLine: (i: number) => string;
   /** 流式直刷末行标记（预演候选） */
   isStreamingTail: boolean;
+  /**
+   * 本行的列表归属（战役 wysiwyg-layout-remediation T3/ADR-2）。
+   *
+   * 列表嵌套深度是**文档级容器状态**，无法从单行推出；调用方经
+   * `MarkdownParser.computeListInfoWindow` 按渲染窗口算好后逐行注入。
+   * 缺省 = 不在任何列表容器内（无列表上下文的调用场景）。
+   */
   /**
    * 已知的表格身份（**岛路径必须传**）。
    *
@@ -124,31 +127,11 @@ export function deriveActiveState(
 
 /** 行内 token 派生（callout 上下文 → parser）。行解析唯一真源 = `MarkdownParser`。 */
 export function deriveLineNode(input: {
-  index: number;
   lineText: string;
   offset: number;
-  isCode: CodeState;
-  getLine: (i: number) => string;
+  context: LineParseContext;
 }): LineNode {
-  const { index, lineText, offset, isCode, getLine } = input;
-  const calloutCtx = /^ {0,3}>\s?/.test(lineText)
-    ? getCalloutContext(getLine, index)
-    : null;
-  return MarkdownParser.parseLine(
-    lineText,
-    offset,
-    isCode,
-    0,
-    null,
-    false,
-    null,
-    null,
-    false,
-    null,
-    calloutCtx ? calloutCtx.type : null,
-    calloutCtx ? calloutCtx.title : null,
-    calloutCtx ? calloutCtx.isHeader : false
-  );
+  return MarkdownParser.parseLineWithContext(input.lineText, input.offset, input.context);
 }
 
 /** 逐行渲染数据的唯一派生入口（旧路径与岛路径共用）。 */
@@ -157,7 +140,7 @@ export function deriveLineUnit(input: LineUnitInput): LineUnit {
     index,
     lineText,
     offset,
-    isCode,
+    context,
     decorations,
     getLine,
     isStreamingTail,
@@ -167,10 +150,14 @@ export function deriveLineUnit(input: LineUnitInput): LineUnit {
   const activeState = deriveActiveState(lineDecorations);
   const hasSearchDecoration = lineDecorations.some((d) => d.kind === 'search');
 
-  const lineNode = deriveLineNode({ index, lineText, offset, isCode, getLine });
+  const lineNode = deriveLineNode({
+    lineText,
+    offset,
+    context,
+  });
 
   // 流式末行预演：单趟 O(行长) 扫描；非末行短路零开销；非预演恒 null（引用稳定）
-  const preview = decorateIncompleteInline(lineText, isStreamingTail, isCode);
+  const preview = decorateIncompleteInline(lineText, isStreamingTail, context.codeState);
   const previewHint = preview.hint !== undefined ? preview : null;
 
   return {
@@ -180,6 +167,27 @@ export function deriveLineUnit(input: LineUnitInput): LineUnit {
     previewHint,
     tableId: input.tableId ?? resolveTableId(getLine, index),
   };
+}
+
+/**
+ * 渲染窗口的列表归属（战役 wysiwyg-layout-remediation T3/ADR-2）。
+ *
+ * 容器栈是**文档级**状态（同一行在不同前文下层级不同），无法从单行推出；
+ * 运行时渲染不走全量 `computeLineOffsets`，故按渲染窗口求值——「向后找栈必
+ * 为空的锚点 + 从锚点重放到窗口末尾」，代价 O(窗口长 + 到锚点距离)。与全量
+ * 路径共用同一 `ListContainerStack`。
+ *
+ * 返回 Map（行号 → 归属）：调用方按虚拟项行号直接取，避免下标换算。
+ */
+export function windowLineContexts(
+  state: EditorState,
+  windowFrom: number,
+  windowTo: number,
+): Map<number, LineParseContext> {
+  const contexts = new Map<number, LineParseContext>();
+  const end = Math.min(windowTo, state.getLineCount());
+  for (let i = Math.max(0, windowFrom); i < end; i++) contexts.set(i, state.getLineContext(i));
+  return contexts;
 }
 
 /** 行内 token 的便捷取用（岛路径渲染 `InlineRenderer` 需要）。 */

@@ -16,6 +16,7 @@
 // 挂载模式仿 selection-protect（jsdom + FakeResizeObserver + measure mock）。
 // @vitest-environment jsdom
 
+import './helpers/layout-fixture';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -230,14 +231,13 @@ describe('W1-1 StreamBuffer 引擎内接线（D-4 帧聚合）', () => {
     expect(appendSpy.mock.calls.length).toBe(totalAfterEnd);
   });
 
-  it('交叉顺序专项（R-2）：buffer 有累积时直刷先 flush buffer 再直写，提交序 = 到达序', () => {
+  it('交叉顺序专项（R-2）：帧队列保留后续到达顺序，不写入旧末行', () => {
     const store = createEditorStore();
     store.getState().setText('seed');
     const { getHandle } = mountEngine(store);
     const appendSpy = vi.spyOn(store.getState(), 'appendText');
 
-    // 序列：直刷 a → 降级 b（入 buffer，帧未到）→ 直刷 c（交叉：buffer
-    // 非空时直刷必须先提交 b 再直写 c）→ 降级 d（入 buffer）→ streamEnd
+    // 队列非空后所有后续内容继续入队，避免刷新队列后误用旧末行引用。
     // W2-2 调整：d 原为 '42'（数字当时在禁集，天然降级）；数字放开后不再
     // 构成降级触发，改用仍禁的 `&` 保持「混合路径 + 提交序」测试意图。
     act(() => {
@@ -249,13 +249,14 @@ describe('W1-1 StreamBuffer 引擎内接线（D-4 帧聚合）', () => {
     });
     expect(store.getState().getText()).toBe('seedalpha'); // 'alpha' 已提交；'\n第2段' 待帧
     act(() => {
-      getHandle().streamAppend('beta'); // 直刷：buffer 非空 → 先提交 '\n第2段' 再直写
+      getHandle().streamAppend('beta');
     });
-    expect(store.getState().getText()).toBe('seedalpha\n第2段'); // 'beta' 直刷待 flush
+    expect(store.getState().getText()).toBe('seedalpha');
     act(() => {
-      getHandle().streamAppend('&42'); // 降级：先提交 pending('beta') 再入 buffer
+      getHandle().streamAppend('&42');
     });
-    expect(store.getState().getText()).toBe('seedalpha\n第2段beta');
+    expect(store.getState().getText()).toBe('seedalpha');
+    expect(appendSpy.mock.calls.map(call => call[0])).toEqual(['alpha']);
     act(() => {
       getHandle().streamEnd();
     });

@@ -19,7 +19,6 @@
 import React from 'react';
 import type { EditorStore } from '../core/EditorStore';
 import type { DecorationSet } from '../core/DecorationSet';
-import { getLineState } from '../core/lineUnit';
 import type { TableRangeInfo } from '../core/tableIslandRanges';
 import { TableBlock } from './TableBlock';
 
@@ -107,7 +106,6 @@ export const TableIslandHost: React.FC<TableIslandHostProps> = ({
       visibleTop={visibleTop}
       visibleHeight={visibleHeight}
       getLine={(i: number) => store.getState().getLine(i)}
-      isCodeAt={(i: number) => getLineState(store.getState(), i)}
       decorations={decorations}
       decorationVersion={decorationVersion}
       store={store}

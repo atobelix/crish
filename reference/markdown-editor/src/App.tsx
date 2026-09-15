@@ -1,7 +1,6 @@
 import {
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState,
 } from 'react';
@@ -760,10 +759,10 @@ function App() {
         </div>
       )}
 
-      {/* 纸张（既有 grid-paper 布局保留，扩展为主画幅） */}
+      {/* 全幅纯白画布（Alcove 口径：无纸张卡片，编辑器铺满内容区） */}
       <div
         className="grid-paper"
-        style={{ width: 'min(880px, 94vw)', height: 'calc(100vh - 84px)' }}
+        style={{ width: '100%', flex: 1, minHeight: 0 }}
       >
         <MarkdownEngine ref={engineRef} />
         <ContextMenu />

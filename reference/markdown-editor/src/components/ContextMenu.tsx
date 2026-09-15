@@ -17,9 +17,21 @@ import {
 import { useTableStore } from '../core/TableStore';
 import { useEditorStore, type EditorStore } from '../core/EditorStore';
 import {
+  lineToRow,
+  selectionToLines,
+  type RemapBounds,
+  type TableStructOp,
+} from '../core/tableSelection';
+import {
   buildAutocompleteReplace,
   type AutocompleteCandidate,
 } from '../core/autocomplete';
+// Alcove 复刻（Seg C）：补全卡片行图标（wiki 文档 / 标签 / 成员）
+import {
+  FileText as FileTextIcon,
+  Hash as HashIcon,
+  AtSign as AtSignIcon,
+} from 'lucide-react';
 
 interface ContextMenuState {
   x: number;
@@ -45,6 +57,88 @@ interface AutocompleteMenuState {
   candidates: AutocompleteCandidate[];
   /** 触发时绑定的 store 实例（多实例安全；缺省回退全局单例） */
   store?: EditorStore;
+}
+
+/** 表内相对行数（分隔行不占行号）。 */
+function rowCountOf(range: TableRange): number {
+  return range.lines.length - (range.separatorLineIndex >= 0 ? 1 : 0);
+}
+
+/**
+ * 表内相对**行下标** → 表内相对**行序**（分隔行不占行号）。
+ * 经权威 `lineToRow` 折算，禁止本地 `startLine + row`（§3.1 唯一换算入口）。
+ */
+function relativeRowOf(range: TableRange, lineIdx: number): number | null {
+  const start = range.startLineIndex;
+  if (start === undefined) return null;
+  const sep = range.separatorLineIndex >= 0 ? start + range.separatorLineIndex : null;
+  return lineToRow(start + lineIdx, start, start + range.lines.length - 1, sep);
+}
+
+/**
+ * 结构操作 → `applyStructOp` 入参（T5b / I7 重映射；坐标一律**表内相对**）。
+ *
+ * 位置来源（不新建第二套推导，`at` 即操作真正使用的插入位/删除位）：
+ *   - 插入类：取操作**之后**的文本 + 操作自身落定的光标位置（`insertRow` 的
+ *     `above`/`below` 特判、`insertColumn` 的 `left`/`right` 换算都在操作内部完成）；
+ *   - 删除类：取操作**之前**的表区间（`deleteRow`/`deleteColumn` 直接以
+ *     `activeLineIndex`/`activeCellIndex` 为删除下标）；
+ *   - `bounds` 取操作**之后**的表行/列数（拿不到时不传，`remapSelection` 退化为不钳制）。
+ * 非结构操作（对齐 / 清空 / 粘贴）返回 `null`。
+ */
+function structOpFor(
+  action: string,
+  table: TableRange,
+  res: TableOperationResult
+): { op: TableStructOp; bounds?: RemapBounds } | null {
+  const afterRange = (): TableRange | null => findTableRange(res.newText, res.newCursorPos);
+  switch (action) {
+    case 'merge-cells':
+      return { op: { kind: 'merge' } };
+    case 'unmerge-cells':
+      return { op: { kind: 'unmerge' } };
+    case 'insert-row-above':
+    case 'insert-row-below': {
+      const after = afterRange();
+      if (!after) return null;
+      const at = relativeRowOf(after, after.activeLineIndex);
+      if (at === null) return null;
+      return {
+        op: { kind: 'insertRow', at },
+        bounds: { rows: rowCountOf(after), cols: after.columnCount },
+      };
+    }
+    case 'insert-col-left':
+    case 'insert-col-right': {
+      const after = afterRange();
+      if (!after) return null;
+      // 新列占据操作落定光标所在的列下标
+      return {
+        op: { kind: 'insertCol', at: after.activeCellIndex },
+        bounds: { rows: rowCountOf(after), cols: after.columnCount },
+      };
+    }
+    case 'delete-row': {
+      // 删到只剩 1 行 → TableOperations 整表删除（TableOperations.ts:245-250）
+      if (table.lines.length <= 2) return { op: { kind: 'deleteTable' } };
+      const at = relativeRowOf(table, table.activeLineIndex);
+      if (at === null) return null;
+      return {
+        op: { kind: 'deleteRow', at },
+        bounds: { rows: rowCountOf(table) - 1, cols: table.columnCount },
+      };
+    }
+    case 'delete-col': {
+      // 删到只剩 1 列 → TableOperations 整表删除（TableOperations.ts:323-328）
+      if (table.columnCount <= 1) return { op: { kind: 'deleteTable' } };
+      return {
+        op: { kind: 'deleteCol', at: table.activeCellIndex },
+        bounds: { rows: rowCountOf(table), cols: table.columnCount - 1 },
+      };
+    }
+    default:
+      return null;
+  }
 }
 
 /**
@@ -88,20 +182,17 @@ function applyTableAction(
     return;
   }
   if (action === 'copy-cell') {
-    const sel = useTableStore.getState().selectedCell;
-    if (sel) {
-      const minLine = Math.min(sel.startLine, sel.endLine);
-      const maxLine = Math.max(sel.startLine, sel.endLine);
-      const minCol = Math.min(sel.startCol, sel.endCol);
-      const maxCol = Math.max(sel.startCol, sel.endCol);
-      const lines = useEditorStore.getState().lines;
+    // 读源码行需文档绝对行号 → 经 `selectionToLines` 折算；null = 身份未观测过 → 视为无选区
+    const lines = selectionToLines(useTableStore.getState().selectedCell);
+    if (lines) {
+      const editorState = useEditorStore.getState();
       const copiedRows: string[] = [];
-      for (let r = minLine; r <= maxLine; r++) {
-        const lineText = lines[r] || '';
+      for (let r = lines.startLine; r <= lines.endLine; r++) {
+        const lineText = editorState.getLine(r) ?? '';
         if (/^\|?[\s:-]*[-]+[\s:-]*\|/.test(lineText.trim())) continue;
         const { cells } = parseRowCells(lineText);
         const selectedRowCells: string[] = [];
-        for (let c = minCol; c <= maxCol; c++) {
+        for (let c = lines.startCol; c <= lines.endCol; c++) {
           selectedRowCells.push((cells[c] || '').trim());
         }
         copiedRows.push(selectedRowCells.join('\t'));
@@ -145,16 +236,17 @@ function applyTableAction(
   let res: TableOperationResult | null = null;
   switch (action) {
     case 'merge-cells': {
-      const sel = useTableStore.getState().selectedCell;
-      if (sel) {
-        res = mergeSelectedCells(text, sel.startLine, sel.startCol, sel.endLine, sel.endCol);
+      // 合并以绝对行号为输入 → `selectionToLines` 折算；null = 身份未观测过 → 不动作
+      const lines = selectionToLines(useTableStore.getState().selectedCell);
+      if (lines) {
+        res = mergeSelectedCells(text, lines.startLine, lines.startCol, lines.endLine, lines.endCol);
       }
       break;
     }
     case 'unmerge-cells': {
-      const sel = useTableStore.getState().selectedCell;
-      if (sel) {
-        res = unmergeCells(text, sel.startLine, sel.startCol);
+      const lines = selectionToLines(useTableStore.getState().selectedCell);
+      if (lines) {
+        res = unmergeCells(text, lines.startLine, lines.startCol);
       }
       break;
     }
@@ -163,10 +255,12 @@ function applyTableAction(
     case 'align-right': {
       const sel = useTableStore.getState().selectedCell;
       const align = action.replace('align-', '') as 'left' | 'center' | 'right';
-      res = setColumnAlign(text, cursorPos, align, sel?.startCol);
-      if (sel) {
+      // 列下标与文档行号无关（列坐标系同源）：`anchor.col` 对应旧 `startCol`
+      const col = sel?.anchor.col;
+      res = setColumnAlign(text, cursorPos, align, col);
+      if (sel && col !== undefined) {
         const curAligns = [...(useTableStore.getState().tableAlignments[sel.tableId] || [])];
-        curAligns[sel.startCol] = align;
+        curAligns[col] = align;
         useTableStore.getState().setTableAlignments(sel.tableId, curAligns);
       }
       break;
@@ -200,6 +294,9 @@ function applyTableAction(
     return;
   }
   applyTableResult(text, state, table, res);
+  // I7：结构操作**成功后**重映射选区（唯一入口；坐标一律表内相对）
+  const remap = structOpFor(action, table, res);
+  if (remap) useTableStore.getState().applyStructOp(remap.op, remap.bounds);
   finish();
 }
 
@@ -321,7 +418,7 @@ export const ContextMenu: React.FC = () => {
 
   const menuStyle = {
     position: 'fixed',
-    zIndex: 9999,
+    zIndex: 'var(--z-menu)',
     backgroundColor: 'var(--white)',
     border: '1px solid var(--border-medium)',
     boxShadow: '0 4px 12px hsl(0 0% 0% / 0.1)',
@@ -332,76 +429,124 @@ export const ContextMenu: React.FC = () => {
     color: 'var(--text-primary)',
   } as const;
 
-  // —— 自动补全候选菜单（B5 项 2：候选列表 UI，ContextMenu 复用）——
+  // —— 自动补全候选菜单（B5 项 2：候选列表 UI，ContextMenu 复用；
+  //      Alcove 复刻 Seg C：白卡圆角 + 行图标 + 高亮行圆角药丸）——
   if (autocompleteState) {
+    const acard = {
+      position: 'fixed',
+      zIndex: 'var(--z-menu)',
+      top: `${autocompleteState.y}px`,
+      left: `${autocompleteState.x}px`,
+      backgroundColor: 'var(--white)',
+      border: '1px solid var(--menu-border)',
+      boxShadow: '0 4px 16px hsl(240 2% 0% / 0.08), 0 1px 3px hsl(240 2% 0% / 0.05)',
+      borderRadius: '10px',
+      padding: '4px',
+      width: 'min(340px, 72vw)',
+      maxHeight: '320px',
+      overflowY: 'auto',
+      fontFamily: 'var(--font-sans)',
+    } as const;
     return (
       <div
         className="context-menu"
         data-autocomplete-menu
-        style={{
-          ...menuStyle,
-          top: `${autocompleteState.y}px`,
-          left: `${autocompleteState.x}px`,
-        }}
+        style={acard}
         onClick={(e) => e.stopPropagation()}
         onContextMenu={(e) => {
           e.preventDefault();
           e.stopPropagation();
         }}
       >
-        <style>{`
-          .context-menu-item {
-            padding: 6px 12px;
-            cursor: pointer;
-          }
-          .context-menu-item:hover {
-            background-color: var(--border-subtle);
-          }
-        `}</style>
-        <div
-          data-autocomplete-header
-          style={{
-            padding: '4px 12px 6px',
-            fontSize: '12px',
-            color: 'var(--text-muted)',
-            borderBottom: '1px solid var(--border-subtle)',
-            marginBottom: '4px',
-          }}
-        >
-          {autocompleteState.trigger}「{autocompleteState.query}」
-        </div>
-        {autocompleteState.candidates.map((c, i) => (
-          <div
-            key={`${c.label}-${i}`}
-            data-autocomplete-item
-            data-active={i === activeIdx ? 'true' : 'false'}
-            className="context-menu-item"
-            style={
-              i === activeIdx
-                ? { backgroundColor: 'var(--border-subtle)' }
-                : undefined
-            }
-            onMouseEnter={() => setActiveIdx(i)}
-            onClick={(e) => {
-              e.stopPropagation();
-              selectCandidate(i);
-            }}
-          >
-            {c.label}
-            {c.detail && (
-              <span
-                style={{
-                  float: 'right',
-                  marginLeft: '12px',
-                  color: 'var(--text-muted)',
-                  fontSize: '12px',
-                }}
-              >
-                {c.detail}
+        {autocompleteState.candidates.map((c, i) => {
+          const active = i === activeIdx;
+          const icon = (() => {
+            if (c.iconKind === 'file')
+              return (
+                <FileTextIcon
+                  size={14}
+                  strokeWidth={1.8}
+                  style={{ color: 'var(--text-secondary)' }}
+                />
+              );
+            if (c.iconKind === 'tag')
+              return (
+                <HashIcon
+                  size={14}
+                  strokeWidth={1.8}
+                  style={{ color: 'var(--text-secondary)' }}
+                />
+              );
+            if (c.iconKind === 'mention')
+              return (
+                <AtSignIcon
+                  size={14}
+                  strokeWidth={1.8}
+                  style={{ color: 'var(--text-secondary)' }}
+                />
+              );
+            return null;
+          })();
+          return (
+            <div
+              key={`${c.label}-${i}`}
+              data-autocomplete-item
+              data-active={active ? 'true' : 'false'}
+              className="context-menu-item"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                height: 34,
+                padding: '0 8px',
+                margin: '1px 2px',
+                borderRadius: 8,
+                cursor: 'pointer',
+                fontSize: 14.5,
+                lineHeight: 1,
+                color: 'var(--text-primary)',
+                backgroundColor: active ? 'var(--menu-selected-bg)' : 'transparent',
+              }}
+              onMouseEnter={() => setActiveIdx(i)}
+              onClick={(e) => {
+                e.stopPropagation();
+                selectCandidate(i);
+              }}
+            >
+              {icon && (
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: 20,
+                    height: 20,
+                    borderRadius: 6,
+                    flexShrink: 0,
+                    backgroundColor: 'var(--interactive-hover)',
+                  }}
+                >
+                  {icon}
+                </span>
+              )}
+              <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {c.label}
               </span>
-            )}
-          </div>
-        ))}
+              {c.detail && (
+                <span
+                  style={{
+                    marginLeft: 'auto',
+                    flexShrink: 0,
+                    color: 'var(--text-muted)',
+                    fontSize: 12,
+                  }}
+                >
+                  {c.detail}
+                </span>
+              )}
+            </div>
+          );
+        })}
       </div>
     );
   }

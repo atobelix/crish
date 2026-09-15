@@ -1,7 +1,8 @@
-import React, { useLayoutEffect, useState, useEffect } from 'react';
+import React, { useLayoutEffect, useState } from 'react';
 import { useEditorStore, type EditorStore } from '../core/EditorStore';
 import { useTableStore } from '../core/TableStore';
 import { getCoordinatesFromIndex, toContainerCoords } from '../core/measure';
+import { useGeometryVersion } from './useGeometryVersion';
 
 interface CursorLayerProps {
   containerRef: React.RefObject<HTMLDivElement | null>;
@@ -25,6 +26,7 @@ export const CursorLayer: React.FC<CursorLayerProps> = ({
   // R5：绑定实例 store（缺省回退全局单例）；zustand 的 useStore 在
   // store 引用变化时自动切换订阅（useSyncExternalStore 重订阅语义）
   const editorStore = store ?? useEditorStore;
+  const geometryVersion = useGeometryVersion(containerRef, layoutDeps);
   const cursorPos = editorStore(state => state.cursorPos);
   const selectionStart = editorStore(state => state.selectionStart);
   const selectionEnd = editorStore(state => state.selectionEnd);
@@ -37,64 +39,29 @@ export const CursorLayer: React.FC<CursorLayerProps> = ({
     height: number;
     bottom: number;
   } | null>(null);
-  const [hasSelection, setHasSelection] = useState(false);
-
-  useEffect(() => {
-    const handleSelectionChange = () => {
-      const selection = window.getSelection();
-      setHasSelection(selection ? selection.toString().length > 0 : false);
-    };
-    document.addEventListener('selectionchange', handleSelectionChange);
-    return () =>
-      document.removeEventListener('selectionchange', handleSelectionChange);
-  }, []);
-
-  // Sync physical coordinates synchronously BEFORE browser paint to eliminate 1-frame lag
+  // 与输入宿主共享布局版本：每次布局提交直接实测，不按帧数猜测挂载时机。
   useLayoutEffect(() => {
-    if (!containerRef.current) return;
-
-    let rAF: number;
-    let retries = 0;
-    const updateCoords = () => {
-      const rect = getCoordinatesFromIndex(cursorPos, containerRef.current);
-      if (rect && containerRef.current) {
-        // 视口坐标 → 容器内容坐标（与 HiddenInput 共用同一换算，测量结果
-        // 由 measure 模块的同帧缓存共享：本组件与 HiddenInput 同帧仅一次全量测量）
-        setCoords(toContainerCoords(rect, containerRef.current));
-      } else if (retries < 10) {
-        retries++;
-        rAF = requestAnimationFrame(updateCoords);
-      } else {
-        // If we still can't find it after 10 frames, just clear the cursor
-        // It might be outside the virtualized viewport.
-        setCoords(null);
-      }
-    };
-    updateCoords();
-
-    return () => {
-      if (rAF) cancelAnimationFrame(rAF);
-    };
-  }, [cursorPos, selectionStart, selectionEnd, containerRef, layoutDeps, decorationVersion]);
+    const container = containerRef.current;
+    const rect = container ? getCoordinatesFromIndex(cursorPos, container) : null;
+    setCoords(rect && container ? toContainerCoords(rect, container) : null);
+  }, [editorStore, cursorPos, selectionStart, selectionEnd, containerRef, layoutDeps, decorationVersion, geometryVersion]);
 
   // Do not show the cursor if there is a text selection, or IME composing, or if in cell selection mode (not editing)
   const isCellSelectionMode = Boolean(selectedCell && !selectedCell.isEditing);
-  if (!coords || hasSelection || isComposing || isCellSelectionMode) {
+  if (!coords || selectionStart !== selectionEnd || isComposing || isCellSelectionMode) {
     return null;
   }
 
   return (
     <div
-      key={cursorPos}
       className="cursor-caret custom-cursor-blink"
       style={{
         position: 'absolute',
-        top: `${coords.top}px`,
-        left: `${coords.left}px`,
+        transform: `translate3d(${coords.left}px, ${coords.top}px, 0)`,
         height: `${coords.height}px`,
         width: '1px',
         backgroundColor: 'var(--black)',
-        zIndex: 50,
+        zIndex: 'var(--z-cursor)',
         pointerEvents: 'none',
       }}
     />

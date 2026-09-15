@@ -20,8 +20,10 @@
  * 默认主题 = 现有 CSS 变量值（var(--xxx) 引用）：CSS 变量仍是唯一
  * 定义源，token 只是其具名别名，默认状态行为零变化。
  */
-import katex from 'katex';
 import { LRUCache } from './LRUCache';
+import { defaultMathRenderer, type MathRenderer } from './mathRenderer';
+import { cancelledMathPreview, dispatchMathPreview } from './mathPreviewRuntime';
+export type { MathRenderer } from './mathRenderer';
 
 /** 主题颜色 token（均引用现有 CSS 变量，见 src/index.css :root） */
 export interface RenderThemeColors {
@@ -118,26 +120,17 @@ export function getRenderTheme(): RenderTheme {
 // 数学引擎注入点
 // ============================================================
 
-/**
- * 数学渲染器签名：(formula, display) => html。
- * display = true 表示块级数学（displayMode）。
- */
-export type MathRenderer = (formula: string, displayMode: boolean) => string;
-
-/** 默认数学渲染器：KaTeX（renderToString + throwOnError: false 兜底原文） */
-const defaultMathRenderer: MathRenderer = (formula, displayMode) => {
-  try {
-    return katex.renderToString(formula, {
-      throwOnError: false,
-      displayMode,
-    });
-  } catch {
-    return formula;
-  }
-};
-
 // 模块级当前数学渲染器（KaTeX 默认；可换 MathJax/自研）
 let currentMathRenderer: MathRenderer = defaultMathRenderer;
+let mathRendererRevision = 0;
+const mathRendererListeners = new Set<() => void>();
+interface PendingMathPreview {
+  promise: Promise<string>;
+  controller: AbortController;
+  consumers: number;
+  settled: boolean;
+}
+const pendingMathPreviews = new Map<string, PendingMathPreview>();
 
 // ── R6-C 公式渲染缓存 ──
 // 缓存键 = displayMode 前缀 + formula（displayMode 影响输出，必须入键）。
@@ -151,7 +144,7 @@ const mathRenderCache = new LRUCache<string, string>(MATH_RENDER_CACHE_CAPACITY)
  *  渲染器下（宿主换 MathJax/自研引擎后公式 HTML 必须全新生成）。 */
 export function setMathRenderer(renderer: MathRenderer | null): void {
   currentMathRenderer = renderer ?? defaultMathRenderer;
-  mathRenderCache.clear();
+  clearMathRenderCache();
 }
 
 /** 读取当前数学渲染器（测试/宿主自检用） */
@@ -162,6 +155,61 @@ export function getMathRenderer(): MathRenderer {
 /** 清空公式渲染缓存（测试清理 / 宿主主动失效场景）。 */
 export function clearMathRenderCache(): void {
   mathRenderCache.clear();
+  for (const request of pendingMathPreviews.values()) request.controller.abort();
+  pendingMathPreviews.clear();
+  mathRendererRevision++;
+  for (const listener of mathRendererListeners) listener();
+}
+
+/** 预览订阅渲染配置；主题注入与同步静态导出契约保持不变。 */
+export function subscribeMathRenderer(listener: () => void): () => void {
+  mathRendererListeners.add(listener);
+  return () => { mathRendererListeners.delete(listener); };
+}
+
+export function getMathRendererRevision(): number { return mathRendererRevision; }
+
+/** 异步预览与同步导出共用同一缓存和已注册函数，过期配置结果不得写回。 */
+export function requestMathPreviewHtml(formula: string, displayMode = false, signal?: AbortSignal): Promise<string> {
+  if (signal?.aborted) return Promise.reject(cancelledMathPreview());
+  if (!formula) return Promise.resolve('');
+  const key = (displayMode ? 'block:' : 'inline:') + formula;
+  const cached = mathRenderCache.get(key);
+  if (cached !== undefined) return Promise.resolve(cached);
+  let request = pendingMathPreviews.get(key);
+  if (!request || request.controller.signal.aborted) {
+    const revision = mathRendererRevision;
+    const controller = new AbortController();
+    const promise = dispatchMathPreview(currentMathRenderer, formula, displayMode, controller.signal).then(html => {
+      if (revision === mathRendererRevision) mathRenderCache.set(key, html);
+      return html;
+    });
+    request = { promise, controller, consumers: 0, settled: false };
+    pendingMathPreviews.set(key, request);
+    const owned = request;
+    const release = () => {
+      owned.settled = true;
+      if (pendingMathPreviews.get(key) === owned) pendingMathPreviews.delete(key);
+    };
+    void promise.then(release, release);
+  }
+  const shared = request;
+  shared.consumers++;
+  return new Promise((resolve, reject) => {
+    let listening = true;
+    const detach = () => {
+      listening = false;
+      signal?.removeEventListener('abort', cancel);
+      shared.consumers--;
+      if (shared.consumers === 0 && !shared.settled) shared.controller.abort();
+    };
+    const cancel = () => { if (listening) { detach(); reject(cancelledMathPreview()); } };
+    signal?.addEventListener('abort', cancel, { once: true });
+    void shared.promise.then(
+      html => { if (listening) { detach(); resolve(html); } },
+      error => { if (listening) { detach(); reject(error); } },
+    );
+  });
 }
 
 /**

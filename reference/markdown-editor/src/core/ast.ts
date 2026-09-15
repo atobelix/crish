@@ -1,3 +1,5 @@
+import type { ListMarkerOccurrence } from './layout/IndentModel';
+
 export type LineType = 
     | 'body'
     | 'heading'
@@ -41,6 +43,10 @@ export type InlineType =
     | 'string'
     | 'keyword'
     | 'html_element'
+    // 原始 HTML 标签行内 token：自闭合 / 孤立 / 闭合标签（CommonMark raw HTML
+    // 逐字节透传语义，parser matchRawHtmlTag 单源判定产出）——渲染层原样输出，
+    // <br> 形态由渲染层特判为真实换行。
+    | 'html_tag'
     // HTML 块内容行内 token（R1-D）：raw = 行原文，渲染层原样透传——
     // 与 html_element/html_tag 的行内语义同族，但属于块级早退产物（不解析）。
     | 'html'
@@ -52,7 +58,18 @@ export interface InlineNode {
     type: InlineType;
     raw: string;
     content: string;
+    /** 内容在原始 token 中的起点和源码长度，由解析器提供，不由渲染器搜索。 */
+    contentOffset?: number;
+    contentSourceLength?: number;
+    /** 每个显示边界对应的内容源码偏移；null 表示原子实体内部没有插入点。 */
+    sourceBoundaries?: readonly (number | null)[];
     indent?: string;
+    /**
+     * 列表标记所在的**容器嵌套深度**（0 起，由 `ListContext` 容器栈产出）。
+     * 渲染层缩进阶梯 = `depth * var(--indent-unit)` 的唯一输入——
+     * 深度相同必得同宽，与源码缩进字符数、与邻行内容均无关（ADR-3）。
+     */
+    depth?: number;
     marker?: string;
     url?: string;
     isChecked?: boolean;
@@ -81,11 +98,31 @@ export interface LineNode {
     calloutType?: CalloutType;
     calloutTitle?: string;
     isCalloutHeader?: boolean;
-    listIndent?: number;
+    // ── 列表归属（战役 wysiwyg-layout-remediation T3 / ADR-1 / ADR-2）──
+    // 唯一缩进语义是**列宽**（tab 按停靠 4 展开，CommonMark §Tabs）——
+    // 旧实现的 `listIndent`（字符数）已物理删除：以字符数表达缩进会让
+    // 渲染层无法还原真实缩进量（实测 `\t- b` 渲染缩进 0px）。
+    /** 列表标记本身（不含标记后空白），如 `-` / `1.` / `- [x]` */
     listPrefix?: string;
-    // 列表项延续（R1.5-B）：空行后缩进 ≥ 列表项内容缩进列的 body 行——
-    // 与普通 body 行区分：属于同一列表项的新段落（例 256/258），
-    // 投影器据此并入同一 <li> 的第二个 <p>（普通 body 行为 undefined）。
+    /** 列表标记行的前导缩进列宽（仅 marker 行携带） */
+    indentColumns?: number;
+    /**
+     * 本行所属列表容器的**内容缩进列**（CommonMark §5.2 content indent）——
+     * marker 行与延续行都携带，供缩进代码块判定与投影层归属判定使用。
+     */
+    contentIndentColumns?: number;
+    /**
+     * 整数嵌套层级（0 起）——由 `ListContext` 容器栈产出，是渲染层缩进阶梯的
+     * **唯一输入**。渲染层不再做任何缩进数值比较（旧实现 `listIndent > indent`
+     * 会把 1 空格缩进的同级项误判为子列表）。
+     */
+    listDepth?: number;
+    /** 本行实际打开的列表容器轨迹；紧凑列表可以包含多个层级。 */
+    listMarkers?: readonly ListMarkerOccurrence[];
+    /**
+     * 列表项延续行：非标记行但归属列表项内容（spec 例 256/258/262/277）——
+     * 投影器据此并入同一 `<li>` 的后续块（普通 body 行为 undefined）。
+     */
     listContinuation?: boolean;
     inlineTokens: InlineNode[];
     length: number;

@@ -32,6 +32,7 @@
 // 依赖它——stub 为固定列宽使测宽循环确定性产出 [CELL_WIDTH, ...]）。
 // @vitest-environment jsdom
 
+import './helpers/layout-fixture';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';

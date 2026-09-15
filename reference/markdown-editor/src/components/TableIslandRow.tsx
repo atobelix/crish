@@ -23,6 +23,7 @@
 import React from 'react';
 import type { DecorationSet } from '../core/DecorationSet';
 import { deriveLineUnit, lineTokens } from '../core/lineUnit';
+import type { LineParseContext } from '../core/DocumentContext';
 import { InlinePreviewContext, InlineRenderer } from './InlineRenderer';
 
 /**
@@ -31,7 +32,6 @@ import { InlinePreviewContext, InlineRenderer } from './InlineRenderer';
  * 不得出现 parser 的顶层导入（防「岛内出现第二套行解析」）。`CodeState` 只是
  * 类型契约，不引入运行时依赖，也不构成任何解析路径。
  */
-type IslandCodeState = import('../core/parser').CodeState;
 
 export interface TableIslandRowProps {
   /** 源码绝对行号（岛内行的唯一标识：`key` 与 `data-line-index` 同源，I8）。 */
@@ -41,7 +41,7 @@ export interface TableIslandRowProps {
   /** 本行在文档中的起始偏移（`InlineRenderer` 需要；岛根按行序累加得出）。 */
   offset: number;
   /** 行状态（`lineUnit.getLineState` 包装产物）。 */
-  isCode: IslandCodeState;
+  context: LineParseContext;
   /** 表格稳定身份（岛根已有值，逐行透传，供单元格交互使用）。 */
   tableId: string;
   /** 是否表头行（`tableIdentity.isTableHeaderRow` 唯一入口判定，I5）。 */
@@ -65,7 +65,7 @@ export const TableIslandRow: React.FC<TableIslandRowProps> = React.memo(
     index,
     lineText,
     offset,
-    isCode,
+    context,
     tableId,
     isHeader,
     isSeparator,
@@ -86,7 +86,7 @@ export const TableIslandRow: React.FC<TableIslandRowProps> = React.memo(
           index,
           lineText,
           offset,
-          isCode,
+          context,
           decorations,
           rowDecorationVersion,
           getLine,
@@ -99,7 +99,7 @@ export const TableIslandRow: React.FC<TableIslandRowProps> = React.memo(
         rowDecorationVersion,
         offset,
         lineText,
-        isCode,
+        context,
         isStreamingTail,
         tableId,
         getLine,

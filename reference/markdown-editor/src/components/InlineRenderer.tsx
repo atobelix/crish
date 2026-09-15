@@ -1,8 +1,9 @@
 import * as React from 'react';
 import type { InlineNode } from '../core/ast';
-import { type ActiveState, locateRowIndexByPhysicalBisection } from '../core/measure';
+import type { ListMarkerOccurrence } from '../core/layout/IndentModel';
+import { type ActiveState, getSourceIndexFromPoint } from '../core/measure';
 // R5-C：数学渲染统一走注入点（renderTheme 模块级；KaTeX 默认，可替换）
-import { renderMathToHtml } from '../core/renderTheme';
+import { InlineMath } from './InlineMath';
 // P3 B2（plan-A2 方案 B 样式预演）：未闭合行内标记检测结果类型——
 // 预演提示经 InlinePreviewContext 由 MarkdownEngine 的 LineItem 注入
 import {
@@ -11,8 +12,59 @@ import {
 } from '../core/decorateIncompleteInline';
 
 import { useTableStore } from '../core/TableStore';
-import { useEditorStore } from '../core/EditorStore';
-import { doubleClickWordSelection, indexFromClientPoint } from './HiddenInput';
+import { getTableIdentity } from '../core/tableIdentity';
+import { isSingleCell, lineToRow, normalizeSelection } from '../core/tableSelection';
+import { getEditorViewport } from '../core/editorViewport';
+import { doubleClickWordSelection } from './HiddenInput';
+
+/**
+ * 任务复选框矢量字形（SSOT）：list_task 前缀与行内 [x] checkbox 共用同一
+ * 渲染——尺寸/描边/配色只在此定义（--task-* token），严禁再复制 SVG。
+ */
+const TaskCheckboxGlyph: React.FC<{ checked: boolean }> = ({ checked }) => (
+  <svg
+    width="15"
+    height="15"
+    viewBox="0 0 16 16"
+    fill="none"
+    className="task-checkbox-svg"
+    data-source-role="preview"
+  >
+    {checked ? (
+      <>
+        <rect
+          x="1"
+          y="1"
+          width="14"
+          height="14"
+          rx="3.5"
+          fill="var(--task-checked-bg, hsl(217 91% 60%))"
+          stroke="var(--task-checked-border, hsl(217 91% 60%))"
+          strokeWidth="1.2"
+        />
+        <path
+          d="M4.5 8.2L7 10.7L11.5 5.5"
+          stroke="hsl(0 0% 100%)"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </>
+    ) : (
+      <rect
+        x="1.5"
+        y="1.5"
+        width="13"
+        height="13"
+        rx="3.5"
+        fill="transparent"
+        stroke="var(--task-unchecked-border, hsl(215 16% 75%))"
+        strokeWidth="1.4"
+      />
+    )}
+  </svg>
+);
+import { Image as ImageIcon } from 'lucide-react';
 
 /**
  * P3 B2 显示层乐观补全（plan-A2 方案 B 样式预演）：
@@ -36,35 +88,13 @@ const PREVIEW_CLASS_BY_HINT: Record<IncompleteInlineHint, string> = {
   math: 'is-preview-math',
 };
 
-function computeIndentGuides(
-  indentLen: number,
-  lineIndex?: number
-): { indentStep: number; indentGuidesCount: number } {
-  if (indentLen <= 0) return { indentStep: 2, indentGuidesCount: 0 };
-  let indentStep = 2;
-  if (indentLen % 3 === 0 && indentLen % 2 !== 0) {
-    indentStep = 3;
-  } else if (indentLen >= 6 && indentLen % 3 === 0) {
-    const prevLine =
-      lineIndex !== undefined && lineIndex > 0
-        ? useEditorStore.getState().getLine(lineIndex - 1)
-        : null;
-    const prevIndent = prevLine
-      ? (prevLine.match(/^ +/)?.[0]?.length || 0)
-      : 0;
-    indentStep = prevIndent === 3 || prevIndent === 6 ? 3 : 2;
-  }
-  const indentGuidesCount = Math.floor(indentLen / indentStep);
-  return { indentStep, indentGuidesCount };
-}
-
 const ImagePreviewWidget: React.FC<{ url: string; alt: string }> = ({ url, alt }) => {
   const [hasError, setHasError] = React.useState(false);
 
   if (hasError || !url) {
     return (
       <span className="image-fallback-badge" title={url || '无图片地址'}>
-        <span aria-hidden="true">🖼️</span>
+        <ImageIcon size={14} aria-hidden />
         <span>{alt || '图片'}</span>
         <span className="image-fallback-hint">(无法加载)</span>
       </span>
@@ -88,10 +118,55 @@ interface InlineRendererProps {
   activeState?: ActiveState | null;
   tableId?: string;
   lineIndex?: number;
+  listMarkers?: readonly ListMarkerOccurrence[];
 }
 
+/**
+ * 一个标记只占当前层的一格。祖先缩进由列表行容器统一排布，不能在每个
+ * 标记内部重复累计深度。标记源码是原子区间，预览字形不产生字符边界；
+ * 移动光标或选中前缀均不切换源码层，复选框也始终保持可操作。
+ */
+const ListMarkerToken: React.FC<{
+  start: number;
+  len: number;
+  className: string;
+  style?: React.CSSProperties;
+  depth: number;
+  sourceText: string;
+  visual: React.ReactNode;
+  align: 'center' | 'end';
+}> = ({
+  start,
+  len,
+  className,
+  style,
+  depth,
+  sourceText,
+  visual,
+  align,
+}) => (
+  <span
+    data-token-start={start}
+    data-token-length={len}
+    data-source-role="atomic"
+    data-list-marker-depth={depth}
+    className={`list-marker ${className}`}
+    style={style}
+  >
+    <span className={`list-marker-slot is-align-${align}`}>
+      <span className="marker-source" data-source-role="hidden">
+        {sourceText}
+      </span>
+      <span className="marker-visual" data-source-role="preview">
+        {visual}
+      </span>
+    </span>
+  </span>
+);
+
 export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
-  ({ tokens, lineOffset, activeState, tableId, lineIndex }) => {
+  ({ tokens, lineOffset, activeState, tableId, lineIndex, listMarkers }) => {
+    const listMarkersByOffset = listMarkers && new Map(listMarkers.map(marker => [marker.sourceStart, marker]));
     const tableWidths = useTableStore(state => tableId ? state.tableWidths[tableId] : null);
     const tableAlignments = useTableStore(state => tableId ? state.tableAlignments[tableId] : null);
     const selectedCell = useTableStore(state => state.selectedCell);
@@ -258,15 +333,15 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
               const selMin = Math.min(activeState.selStart!, activeState.selEnd!);
               const selMax = Math.max(activeState.selStart!, activeState.selEnd!);
               isSelected = start < selMax && (start + len) > selMin;
-              // 划词选中区域时统一展开源码模式（混合渲染核心不变量：选区覆盖处皆为源码，所见即所得，零只渲染开倒车）
-              isActive = isSelected;
+              // 选区只改变高亮，不能打开多个公式编辑面或改变正文几何。
+              isActive = token.type === 'math'
+                ? isSelected && selMin >= start && selMax <= start + len
+                : isSelected && !token.type.startsWith('list_') && token.type !== 'blockquote_prefix' && token.type !== 'heading_prefix';
             } else {
               // 聚焦光标单点模式：支持键盘左移、边缘点击等触发源码编辑
-              if (token.type === 'list_bullet' || token.type === 'list_number') {
-                isActive = activeState.cursor >= start && activeState.cursor < start + len;
-              } else if (token.type === 'list_task') {
-                // 光标在任务项前缀区间内（键盘移动/边缘点击）触发源码模式；光标移至正文则恢复控件
-                isActive = activeState.cursor >= start && activeState.cursor < start + len;
+              if (token.type.startsWith('list_')) {
+                // 列表前缀是原子交互面，光标与选区都不能将控件切成源码。
+                isActive = false;
               } else if (token.type === 'blockquote_prefix') {
                 // 引用行激活时呈现源码模式 `> `
                 isActive = true;
@@ -300,46 +375,16 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
 
           // Specialized KaTeX rendering for math formulas
           if (token.type === 'math') {
-            const isDisplay = token.raw.startsWith('$$');
-            const formula = token.content || '';
-            const katexHtml = renderMathToHtml(formula, isDisplay);
-            const prefix = isDisplay ? '$$' : '$';
-            const suffix = isDisplay ? '$$' : '$';
-
             return (
-              <span
-                key={key}
-                data-token-start={start}
-                data-token-length={len}
-                className={`${finalClassName} token-math-wrapper`}
-                style={token.style}
-              >
-                <span
-                  className="math-preview"
-                  dangerouslySetInnerHTML={{ __html: katexHtml }}
-                />
-                <span data-sub-offset={0} className="math-source syntax-hidden">
-                  <span className="syntax-delimiter">{prefix}</span>
-                  <span
-                    data-sub-offset={prefix.length}
-                    className="token-content"
-                  >
-                    {formula}
-                  </span>
-                  <span
-                    data-sub-offset={prefix.length + formula.length}
-                    className="syntax-delimiter"
-                  >
-                    {suffix}
-                  </span>
-                </span>
+              <span key={key} data-token-start={start} data-token-length={len} className={finalClassName}>
+                <InlineMath token={token} start={start} className="" active={isActive} />
               </span>
             );
           }
 
           if (token.type === 'image') {
             const url = token.url || '';
-            const alt = token.content ? token.content.replace(/^🖼️\s*/, '') : '图片';
+            const alt = token.content || '图片';
             return (
               <span
                 key={key}
@@ -388,16 +433,24 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
                 key={key}
                 data-token-start={start}
                 data-token-length={len}
+                data-source-role="text"
+                data-source-boundaries={token.sourceBoundaries ? JSON.stringify(token.sourceBoundaries) : undefined}
                 className={finalClassName}
                 style={token.style}
               >
-                {isActive ? token.raw : token.content}
+                {token.content}
               </span>
             );
           }
 
           if (token.type === 'table_cell') {
             const colIndex = colIndexCounter++;
+            // 表格状态使用不含分隔行的相对行号；源码行号只经语义模型换算。
+            const identity = getTableIdentity(tableId);
+            const rowIndex = identity && lineIndex !== undefined
+              ? lineToRow(lineIndex, identity.startLine, identity.endLine, identity.separatorLine)
+              : null;
+            const cell = rowIndex === null ? null : { row: rowIndex, col: colIndex };
 
             // 从属合并单元格 (isMergedSlave: > 或 ^)：在非源码激活态下彻底隐藏
             if (token.isMergedSlave && !isActive) {
@@ -408,6 +461,7 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
                   data-token-length={len}
                   data-col-index={colIndex}
                   data-line-index={lineIndex}
+                  data-row-index={rowIndex ?? undefined}
                   data-table-id={tableId}
                   className="token-table-cell token-table-cell-slave"
                   style={{ display: 'none' }}
@@ -442,44 +496,37 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
               cellStyle.textAlign = 'left';
             }
             
-            const isCellSelected = selectedCell &&
-              lineIndex !== undefined &&
-              tableId === selectedCell.tableId &&
-              lineIndex >= Math.min(selectedCell.startLine, selectedCell.endLine) &&
-              lineIndex <= Math.max(selectedCell.startLine, selectedCell.endLine) &&
-              colIndex >= Math.min(selectedCell.startCol, selectedCell.endCol) &&
-              colIndex <= Math.max(selectedCell.startCol, selectedCell.endCol);
-              
-            const isCellEditing = isCellSelected && selectedCell?.isEditing && selectedCell.startLine === selectedCell.endLine && selectedCell.startCol === selectedCell.endCol;
+            const cellSelection = selectedCell?.tableId === tableId ? selectedCell : null;
+            const bounds = cellSelection ? normalizeSelection(cellSelection) : null;
+            const isCellSelected = rowIndex !== null && bounds !== null &&
+              rowIndex >= bounds.r0 && rowIndex <= bounds.r1 &&
+              colIndex >= bounds.c0 && colIndex <= bounds.c1;
+
+            const isCellEditing = isCellSelected && cellSelection !== null &&
+              cellSelection.isEditing && isSingleCell(cellSelection);
 
             let selectionShadow = '';
             let isBottomRight = false;
-            if (isCellSelected) {
+            if (isCellSelected && bounds && cellSelection) {
               if (isCellEditing) {
                 finalClassName += ' is-cell-editing';
               } else {
                 finalClassName += ' is-cell-selected';
                 const shadows = [];
-                const minLine = Math.min(selectedCell.startLine, selectedCell.endLine);
-                const maxLine = Math.max(selectedCell.startLine, selectedCell.endLine);
-                const minCol = Math.min(selectedCell.startCol, selectedCell.endCol);
-                const maxCol = Math.max(selectedCell.startCol, selectedCell.endCol);
-                
                 const borderToken = 'var(--border-focus)';
-                const isSingleCell = minLine === maxLine && minCol === maxCol;
-                if (isSingleCell) {
+                if (isSingleCell(cellSelection)) {
                   selectionShadow = `0 0 0 1.5px ${borderToken}`;
                   cellStyle.borderRadius = '2px';
-                  cellStyle.zIndex = 3;
+                  cellStyle.zIndex = 'var(--z-table-cell)';
                   isBottomRight = true;
                 } else {
-                  if (lineIndex === minLine) shadows.push(`inset 0 1.5px 0 0 ${borderToken}`);
-                  if (lineIndex === maxLine) shadows.push(`inset 0 -1.5px 0 0 ${borderToken}`);
-                  if (colIndex === minCol) shadows.push(`inset 1.5px 0 0 0 ${borderToken}`);
-                  if (colIndex === maxCol) shadows.push(`inset -1.5px 0 0 0 ${borderToken}`);
+                  if (rowIndex === bounds.r0) shadows.push(`inset 0 1.5px 0 0 ${borderToken}`);
+                  if (rowIndex === bounds.r1) shadows.push(`inset 0 -1.5px 0 0 ${borderToken}`);
+                  if (colIndex === bounds.c0) shadows.push(`inset 1.5px 0 0 0 ${borderToken}`);
+                  if (colIndex === bounds.c1) shadows.push(`inset -1.5px 0 0 0 ${borderToken}`);
 
                   selectionShadow = shadows.join(', ');
-                  if (lineIndex === maxLine && (colIndex === maxCol || (!!token.colSpan && colIndex + token.colSpan - 1 >= maxCol))) {
+                  if (rowIndex === bounds.r1 && (colIndex === bounds.c1 || (!!token.colSpan && colIndex + token.colSpan - 1 >= bounds.c1))) {
                     finalClassName += ' is-selection-bottom-right';
                     isBottomRight = true;
                   }
@@ -497,31 +544,31 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
                 data-token-length={len}
                 data-col-index={colIndex}
                 data-line-index={lineIndex}
+                data-row-index={rowIndex ?? undefined}
                 data-table-id={tableId}
                 className={finalClassName}
                 style={cellStyle}
                 onMouseDown={(e) => {
-                  if (e.button === 2) return; // Ignore right click
+                  if (e.button === 2 || !cell || !tableId) return;
 
                   const tableStore = useTableStore.getState();
-                  const editorStore = useEditorStore.getState();
+                  const editorContainer = e.currentTarget.closest<HTMLElement>('.editor-scroll-container');
+                  if (!editorContainer) return;
+                  const editorStore = getEditorViewport(editorContainer)?.store.getState();
+                  if (!editorStore) return;
 
                   // 1. Shift+Click: 扩展单元格多选范围
-                  if (e.shiftKey && selectedCell && selectedCell.tableId === tableId) {
-                    tableStore.updateCellSelectionEnd(lineIndex ?? -1, colIndex);
+                  const currentSelection = tableStore.selectedCell;
+                  if (e.shiftKey && currentSelection?.tableId === tableId) {
+                    tableStore.enterCellSelection(tableId, currentSelection.anchor, cell);
                     e.preventDefault?.();
                     return;
                   }
 
                   // 2. 单元格处于编辑模式 (isCellEditing)：支持单元格内精确物理定位与划词拖选
                   if (isCellEditing) {
-                    const targetIdx = locateRowIndexByPhysicalBisection(
-                      e.currentTarget,
-                      e.clientX,
-                      start,
-                      len,
-                      e.clientY
-                    ) ?? start;
+                    const targetIdx = getSourceIndexFromPoint(e.clientX, e.clientY, e.currentTarget);
+                    if (targetIdx === null) return;
                     const clampedIdx = Math.max(start, Math.min(start + len, targetIdx));
                     editorStore.setSelection(clampedIdx, clampedIdx);
                     editorStore.setCursorPos(clampedIdx);
@@ -535,7 +582,7 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
 
                     e.preventDefault?.();
                     setTimeout(() => {
-                      const input = document.querySelector('textarea') as HTMLTextAreaElement;
+                      const input = editorContainer.querySelector('textarea');
                       if (input) input.focus({ preventScroll: true });
                     }, 0);
                     return;
@@ -544,35 +591,28 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
                   // 3. 单元格已单选且二次点击同一单元格：进入就地文本编辑
                   if (
                     isCellSelected &&
-                    !selectedCell?.isEditing &&
-                    selectedCell?.startLine === selectedCell?.endLine &&
-                    selectedCell?.startCol === selectedCell?.endCol &&
-                    selectedCell?.startLine === lineIndex &&
-                    selectedCell?.startCol === colIndex
+                    cellSelection &&
+                    !cellSelection.isEditing &&
+                    isSingleCell(cellSelection)
                   ) {
-                    tableStore.enterCellEdit(tableId || '', lineIndex ?? -1, colIndex);
+                    tableStore.enterCellEdit({ tableId, ...cell });
                     tableStore.setDraggingCell(false);
 
-                    const targetIdx = locateRowIndexByPhysicalBisection(
-                      e.currentTarget,
-                      e.clientX,
-                      start,
-                      len,
-                      e.clientY
-                    ) ?? start;
+                    const targetIdx = getSourceIndexFromPoint(e.clientX, e.clientY, e.currentTarget);
+                    if (targetIdx === null) return;
                     const clampedIdx = Math.max(start, Math.min(start + len, targetIdx));
                     editorStore.setSelection(clampedIdx, clampedIdx);
                     editorStore.setCursorPos(clampedIdx);
                     e.preventDefault?.();
                     setTimeout(() => {
-                      const input = document.querySelector('textarea') as HTMLTextAreaElement;
+                      const input = editorContainer.querySelector('textarea');
                       if (input) input.focus({ preventScroll: true });
                     }, 0);
                     return;
                   }
 
                   // 4. 单击/拖选进入单元格选择模式（支持从该单元格向外拖选多单元格）
-                  tableStore.enterCellSelection(tableId || '', lineIndex ?? -1, colIndex);
+                  tableStore.enterCellSelection(tableId, cell);
                   tableStore.setDraggingCell(true);
                   window.getSelection()?.removeAllRanges();
                   editorStore.setSelection(start, start);
@@ -580,22 +620,23 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
                   e.preventDefault?.();
 
                   setTimeout(() => {
-                    const input = document.querySelector('textarea') as HTMLTextAreaElement;
+                    const input = editorContainer.querySelector('textarea');
                     if (input) input.focus({ preventScroll: true });
                   }, 0);
                 }}
                 onMouseEnter={() => {
                   const tableStore = useTableStore.getState();
-                  if (tableStore.isDraggingCell) {
-                    tableStore.updateCellSelectionEnd(lineIndex ?? -1, colIndex);
+                  if (cell && tableStore.isDraggingCell && tableStore.selectedCell?.tableId === tableId) {
+                    tableStore.updateCellSelectionEnd(cell);
                     window.getSelection()?.removeAllRanges();
                   }
                 }}
                 onMouseMove={() => {
                   const tableStore = useTableStore.getState();
-                  if (tableStore.isDraggingCell && tableStore.selectedCell) {
-                    if (tableStore.selectedCell.endLine !== lineIndex || tableStore.selectedCell.endCol !== colIndex) {
-                      tableStore.updateCellSelectionEnd(lineIndex ?? -1, colIndex);
+                  const selection = tableStore.selectedCell;
+                  if (cell && selection && tableStore.isDraggingCell && selection.tableId === tableId) {
+                    if (selection.focus.row !== cell.row || selection.focus.col !== cell.col) {
+                      tableStore.updateCellSelectionEnd(cell);
                       window.getSelection()?.removeAllRanges();
                     }
                   }
@@ -605,32 +646,34 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
                   const tableStore = useTableStore.getState();
                   if (tableStore.isDraggingCell) {
                     tableStore.setDraggingCell(false);
-                    tableStore.updateCellSelectionEnd(lineIndex ?? -1, colIndex);
+                    if (cell && tableStore.selectedCell?.tableId === tableId) {
+                      tableStore.updateCellSelectionEnd(cell);
+                    }
                     (window as any).__CRISH_LAST_DRAG_END_TIME = Date.now();
                   }
                 }}
                 onDoubleClick={(e) => {
-                  window.getSelection()?.removeAllRanges();
+                  if (!cell || !tableId) return;
                   const tableStore = useTableStore.getState();
-                  const editorStore = useEditorStore.getState();
-                  const targetIdx = locateRowIndexByPhysicalBisection(
-                    e.currentTarget,
-                    e.clientX,
-                    start,
-                    len,
-                    e.clientY
-                  ) ?? start;
-                  const clampedIdx = Math.max(start, Math.min(start + len, targetIdx));
+                  const editorContainer = e.currentTarget.closest<HTMLElement>('.editor-scroll-container');
+                  if (!editorContainer) return;
+                  const editorStore = getEditorViewport(editorContainer)?.store.getState();
+                  if (!editorStore) return;
+                  const targetIdx = getSourceIndexFromPoint(e.clientX, e.clientY, e.currentTarget);
+                  if (!isCellEditing || targetIdx !== null) window.getSelection()?.removeAllRanges();
 
                   if (!isCellEditing) {
-                    tableStore.enterCellEdit(
-                      tableId || '',
-                      lineIndex ?? -1,
-                      colIndex
-                    );
+                    tableStore.enterCellEdit({ tableId, ...cell });
+                    // 进入编辑不依赖文字命中。start 是解析器给出的单元格内容边界，
+                    // 空格或空单元格也能从此开始输入，不以猜测像素替代命中结果。
+                    const clampedIdx = targetIdx === null
+                      ? start
+                      : Math.max(start, Math.min(start + len, targetIdx));
                     editorStore.setSelection(clampedIdx, clampedIdx);
                     editorStore.setCursorPos(clampedIdx);
                   } else {
+                    if (targetIdx === null) return;
+                    const clampedIdx = Math.max(start, Math.min(start + len, targetIdx));
                     // 已处于就地编辑状态：双击触发单元格内词级划词选区
                     const cellText = token.raw || '';
                     const offsetInCell = clampedIdx - start;
@@ -642,13 +685,13 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
                       editorStore.setCursorPos(clampedIdx);
                     }
                   }
-                  const input = (document.querySelector('.hidden-input') ||
-                    document.querySelector('textarea')) as HTMLTextAreaElement;
+                  const input = (editorContainer.querySelector('.hidden-input') ||
+                    editorContainer.querySelector('textarea')) as HTMLTextAreaElement | null;
                   if (input) input.focus({ preventScroll: true });
                 }}
                 onContextMenu={(e) => {
                   // Shift + 右键：放行 Chrome 原生上下文菜单（识别复制/搜索/翻译）
-                  if (e.shiftKey) return;
+                  if (e.shiftKey || !cell || !tableId) return;
 
                   // Prevent default context menu and trigger our custom one
                   e.preventDefault();
@@ -657,7 +700,7 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
                   const tableStore = useTableStore.getState();
                   // If cell is not selected, select it first
                   if (!isCellSelected) {
-                    tableStore.enterCellSelection(tableId || '', lineIndex ?? -1, colIndex);
+                    tableStore.enterCellSelection(tableId, cell);
                   }
                   
                   // Dispatch custom event to ContextMenu component
@@ -690,237 +733,65 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
             );
           }
 
-          // Specialized handling for lists (list_number, list_bullet, list_task)
-          // Preserves full physical character offset alignment, zero artificial layout boxes
-          if (token.type === 'list_number') {
-            const indentLen = token.indent ? token.indent.length : 0;
-            const { indentStep, indentGuidesCount } = computeIndentGuides(
-              indentLen,
-              lineIndex
-            );
-
-            return (
-              <span
-                key={key}
-                data-token-start={start}
-                data-token-length={len}
-                className={finalClassName}
-                style={token.style}
-              >
-                {token.indent ? (
-                  <span
-                    className="syntax-indent"
-                    data-sub-offset={0}
-                    style={{
-                      width: `calc(var(--grid-size) * ${indentGuidesCount})`,
-                    }}
-                  >
-                    <span className="syntax-hidden" data-sub-offset={0}>
-                      {token.indent}
-                    </span>
-                    {Array.from({ length: indentGuidesCount }).map((_, i) => (
-                      <span
-                        key={i}
-                        className={`syntax-indent-guide${i === indentGuidesCount - 1 ? ' syntax-indent-guide-current' : ''}`}
-                        style={{
-                          left: `calc(${i} * var(--grid-size) + var(--grid-size) / 2 - 0.25px)`,
-                        }}
-                        aria-hidden="true"
-                      />
-                    ))}
-                  </span>
-                ) : null}
-                <span
-                  className="syntax-marker"
-                  data-sub-offset={indentLen}
-                >
-                  {token.indent ? (token.marker || token.raw.slice(indentLen)) : token.raw}
-                </span>
-              </span>
-            );
-          }
-
-          if (token.type === 'list_bullet') {
-            const indentLen = token.indent ? token.indent.length : 0;
-            const { indentStep, indentGuidesCount } = computeIndentGuides(
-              indentLen,
-              lineIndex
-            );
-
-            return (
-              <span
-                key={key}
-                data-token-start={start}
-                data-token-length={len}
-                className={finalClassName}
-                style={token.style}
-              >
-                {token.indent && (
-                  <span
-                    className="syntax-indent"
-                    data-sub-offset={0}
-                    style={{
-                      width: `calc(var(--grid-size) * ${indentGuidesCount})`,
-                    }}
-                  >
-                    <span className="syntax-hidden" data-sub-offset={0}>
-                      {token.indent}
-                    </span>
-                    {Array.from({ length: indentGuidesCount }).map((_, i) => (
-                      <span
-                        key={i}
-                        className={`syntax-indent-guide${i === indentGuidesCount - 1 ? ' syntax-indent-guide-current' : ''}`}
-                        style={{
-                          left: `calc(${i} * var(--grid-size) + var(--grid-size) / 2 - 0.25px)`,
-                        }}
-                        aria-hidden="true"
-                      />
-                    ))}
-                  </span>
-                )}
-                <span
-                  className="syntax-hidden"
-                  data-sub-offset={indentLen}
-                >
-                  {token.marker || token.raw.slice(indentLen)}
-                </span>
-                <span
-                  className="syntax-content"
-                  data-sub-offset={indentLen}
-                >
-                  <span className="token-bullet-char" aria-hidden="true">
-                    •
-                  </span>
-                  <span className="bullet-space">{' '}</span>
-                </span>
-              </span>
-            );
-          }
-
-          if (token.type === 'list_task') {
-            const indentLen = token.indent ? token.indent.length : 0;
-            const { indentStep, indentGuidesCount } = computeIndentGuides(
-              indentLen,
-              lineIndex
-            );
-
+          if (token.type === 'list_number' || token.type === 'list_bullet' || token.type === 'list_task') {
+            const occurrence = listMarkersByOffset?.get(token.localOffset);
+            if (!occurrence) throw new Error('列表标记必须携带解析器的容器轨迹');
+            const { markerStart, contentStart, marker, depth } = occurrence;
+            const taskRange = marker.taskRange;
             const handleTaskClick = (e: React.MouseEvent) => {
-              if (start !== undefined) {
-                // 核心交互区点击：功能优先，直接切换完成状态（彻底移除边缘模糊判定，兼容 [x] 与 [X]）
-                e.stopPropagation();
-                e.preventDefault();
-                const state = useEditorStore.getState();
-                const match = token.raw.match(/\[([xX\s])\]/);
-                const markerOffset =
-                  match && match.index !== undefined
-                    ? match.index
-                    : token.raw.indexOf(token.isChecked ? '[x]' : '[ ]');
-                const newMarker = token.isChecked ? '[ ]' : '[x]';
-                if (markerOffset >= 0) {
-                  const from = start + markerOffset;
-                  const to = from + 3;
-                  const cur = state.cursorPos;
-                  state.applyChange(from, to, newMarker, { cursorAfter: cur });
-                }
-              }
+              e.stopPropagation();
+              e.preventDefault();
+              const container = e.currentTarget.closest<HTMLElement>('.editor-scroll-container');
+              if (!container || !taskRange || container.dataset.readonly === 'true') return;
+              const viewport = getEditorViewport(container);
+              viewport?.flushPending();
+              const state = viewport?.store.getState();
+              if (!state || state.readOnly) return;
+              // 任务范围来自解析器；事务同时保留方向选区，不挪动正文光标。
+              state.applyChange(
+                lineOffset + markerStart + taskRange.from,
+                lineOffset + markerStart + taskRange.to,
+                token.isChecked ? '[ ]' : '[x]',
+                { selectionAfter: { anchor: state.anchorPos, head: state.headPos }, merge: 'none' },
+              );
             };
             return (
-              <span
+              <ListMarkerToken
                 key={key}
-                data-token-start={start}
-                data-token-length={len}
+                start={lineOffset + markerStart}
+                len={contentStart - markerStart}
                 className={finalClassName}
                 style={token.style}
-              >
-                {token.indent && (
-                  <span
-                    className="syntax-indent"
-                    data-sub-offset={0}
-                    style={{
-                      width: `calc(var(--grid-size) * ${indentGuidesCount})`,
-                    }}
-                  >
-                    <span className="syntax-hidden" data-sub-offset={0}>
-                      {token.indent}
-                    </span>
-                    {Array.from({ length: indentGuidesCount }).map((_, i) => (
-                      <span
-                        key={i}
-                        className={`syntax-indent-guide${i === indentGuidesCount - 1 ? ' syntax-indent-guide-current' : ''}`}
-                        style={{
-                          left: `calc(${i} * var(--grid-size) + var(--grid-size) / 2 - 0.25px)`,
-                        }}
-                        aria-hidden="true"
-                      />
-                    ))}
-                  </span>
-                )}
-                <span
-                  className="syntax-hidden"
-                  data-sub-offset={indentLen}
-                >
-                  {token.marker || token.raw.slice(indentLen)}
-                </span>
-                <span
-                  className="syntax-content"
-                  data-sub-offset={indentLen}
-                >
-                  <span
-                    className="task-checkbox-wrapper"
-                    onClick={handleTaskClick}
-                    role="checkbox"
-                    aria-checked={token.isChecked}
-                    title={token.isChecked ? '已完成（单击切换）' : '未完成（单击切换）'}
-                  >
-                    <svg
-                      width="15"
-                      height="15"
-                      viewBox="0 0 16 16"
-                      fill="none"
-                      className="task-checkbox-svg"
-                    >
-                      {token.isChecked ? (
-                        <>
-                          <rect
-                            x="1"
-                            y="1"
-                            width="14"
-                            height="14"
-                            rx="3.5"
-                            fill="var(--task-checked-bg, hsl(217 91% 60%))"
-                            stroke="var(--task-checked-border, hsl(217 91% 60%))"
-                            strokeWidth="1.2"
-                          />
-                          <path
-                            d="M4.5 8.2L7 10.7L11.5 5.5"
-                            stroke="hsl(0 0% 100%)"
-                            strokeWidth="1.8"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        </>
-                      ) : (
-                        <rect
-                          x="1.5"
-                          y="1.5"
-                          width="13"
-                          height="13"
-                          rx="3.5"
-                          fill="transparent"
-                          stroke="var(--task-unchecked-border, hsl(215 16% 75%))"
-                          strokeWidth="1.4"
-                        />
-                      )}
-                    </svg>
-                  </span>
-                  <span
-                    className="task-space"
-                    data-sub-offset={len - 1}
-                  >
-                    {' '}
-                  </span>
-                </span>
-              </span>
+                depth={depth}
+                sourceText={token.raw.slice(markerStart - token.localOffset, contentStart - token.localOffset)}
+                visual={
+                  <>
+                    {marker.kind === 'ol' && (
+                      <span className="token-number-char" data-source-role="preview" aria-hidden="true">
+                        {marker.structuralPrefix}
+                      </span>
+                    )}
+                    {!taskRange && marker.kind !== 'ol' && (
+                      <span className="token-bullet-char" data-source-role="preview" aria-hidden="true">•</span>
+                    )}
+                    {taskRange && (
+                      <button
+                        className="task-checkbox-wrapper"
+                        type="button"
+                        data-source-role="preview"
+                        onMouseDown={e => { e.preventDefault(); e.stopPropagation(); }}
+                        onClick={handleTaskClick}
+                        role="checkbox"
+                        aria-checked={!!token.isChecked}
+                        aria-label={token.isChecked ? '标记为未完成' : '标记为已完成'}
+                      >
+                        <TaskCheckboxGlyph checked={!!token.isChecked} />
+                      </button>
+                    )}
+                  </>
+                }
+                align={marker.kind === 'ol' ? 'end' : 'center'}
+              />
             );
           }
 
@@ -949,15 +820,36 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
             );
           }
 
+          if (token.type === 'checkbox') {
+            // 行内 [x] 任务标记：矢量复选框（与 list_task 同一 Glyph——SSOT）；
+            // 语法原文恒以 syntax-hidden 承载（测量/选区 data 映射不变）
+            return (
+              <span
+                key={key}
+                data-token-start={start}
+                data-token-length={len}
+                className={finalClassName}
+                style={token.style}
+              >
+                <span className="syntax-hidden" data-sub-offset={0}>
+                  {token.raw}
+                </span>
+                <span className="syntax-content" data-sub-offset={len - 1}>
+                  <TaskCheckboxGlyph checked={!!token.isChecked} />
+                </span>
+              </span>
+            );
+          }
+
           // If it's a token with `content` different from `raw`
           if (token.content !== undefined && token.content !== token.raw) {
-            const isListPrefix = ['blockquote_prefix'].includes(token.type);
-            const prefixLen = token.raw.indexOf(token.content);
-            if (!isListPrefix && prefixLen >= 0 && token.content !== '') {
-              // Substring case (e.g. **bold**)
+            const prefixLen = token.contentOffset;
+            if (prefixLen !== undefined) {
+              // 内容边界来自解析器，属性值和重复文字不会改变源码定位。
+              const sourceLength = token.contentSourceLength ?? token.content.length;
               const prefix = token.raw.substring(0, prefixLen);
               const suffix = token.raw.substring(
-                prefixLen + token.content.length
+                prefixLen + sourceLength
               );
               return (
                 <span
@@ -972,7 +864,11 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
                       {prefix}
                     </span>
                   )}
-                  <span data-sub-offset={prefixLen}>
+                  <span
+                    data-sub-offset={prefixLen}
+                    data-source-role="text"
+                    data-source-boundaries={token.sourceBoundaries ? JSON.stringify(token.sourceBoundaries) : undefined}
+                  >
                     {token.children ? (
                       <InlineRenderer
                         tokens={token.children}
@@ -985,7 +881,7 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
                   </span>
                   {suffix && (
                     <span
-                      data-sub-offset={prefixLen + token.content.length}
+                      data-sub-offset={prefixLen + sourceLength}
                       className="syntax-hidden"
                     >
                       {suffix}

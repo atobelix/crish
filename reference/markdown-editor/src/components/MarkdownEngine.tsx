@@ -6,8 +6,9 @@ import React, {
   useState,
 } from 'react';
 import { useVirtualizer, defaultRangeExtractor } from '@tanstack/react-virtual';
-import { BlockRenderer } from './BlockRenderer';
-import { HiddenInput, indexFromClientPoint } from './HiddenInput';
+import { EditorLine } from './EditorLine';
+import { HiddenInput } from './HiddenInput';
+import { useGeometryVersion } from './useGeometryVersion';
 import { CursorLayer } from './CursorLayer';
 import { SelectionHighlight } from './SelectionHighlight';
 import { TableToolbar } from './TableToolbar';
@@ -17,6 +18,9 @@ import {
 } from '../core/EditorStore';
 import { useTableStore, tableColWidthsAtLine } from '../core/TableStore';
 import { MarkdownParser } from '../core/parser';
+import { bindEditorViewport, indexFromClientPoint } from '../core/editorViewport';
+// 排版度量真源接线（T1/T7）：几何量的唯一实测来源 + 预言机同步
+import { useLayoutMetrics } from '../core/layout/useLayoutMetrics';
 import { HeightMap, HeightOracle, classifyLine } from '../core/HeightMap';
 // Alcove 复刻（Seg B）：活动行块类型徽标（视口右上角类型提示）
 import { BlockTypeBadge } from './BlockTypeBadge';
@@ -24,14 +28,12 @@ import { BlockTypeBadge } from './BlockTypeBadge';
 import {
   detectFrontmatterRange,
   frontmatterRoleFor,
-  type FrontmatterRole,
 } from '../core/frontmatter';
-import { FrontmatterChrome } from './FrontmatterChrome';
 // T4 表格岛接线（ADR-2 单容器 / ADR-5 高度单源）：岛组件 + 引擎侧接线单元
 import { TableIslandHost } from './TableIslandHost';
 import { useTableIslandWiring, type TableIslandWiring } from './useTableIslandWiring';
 // T4 共享逐行派生单元（SSOT）：旧路径 LineItem 与岛内行共用同一派生口径
-import { deriveLineUnit, getLineState } from '../core/lineUnit';
+import { getLineState, windowLineContexts } from '../core/lineUnit';
 // T4 岛开关（默认关闭；开关关闭时旧逐行路径零变化）
 import { isTableIslandEnabled } from '../core/tableIsland';
 
@@ -43,9 +45,8 @@ import {
   DecorationSet,
   applyCursorSelectionDecorations,
 } from '../core/DecorationSet';
-import { clearContainerMeasurementCache } from '../core/measure';
+import { disposeContainerMeasurementCache } from '../core/measure';
 
-import { type CodeState } from '../core/parser';
 // P3 B1 scroll factor：逻辑↔物理滚动高度分段映射（超长文档防浏览器高度触顶）
 import { ScrollMap } from '../core/scrollMap';
 // B4 N9：只读复制为 Markdown——DOM 选区 → 源码偏移映射 + getText 切片
@@ -56,7 +57,6 @@ import { setCellContent } from '../core/TableOperations';
 import { metrics } from '../core/metrics';
 // W3-3（S-EL-11）：M6 表格列宽定型登记点（perf suite 表格流式场景读判）
 import { recordTableWidthSettle } from '../core/tableSettle';
-import { resolveTableId } from '../core/tableIdentity';
 // B2 查找替换（05 高频项 N6）：查找替换面板（搜索/高亮/跳转/替换/
 // 计数）挂载于引擎根容器内，快捷键 Ctrl+F/Ctrl+H 自监听
 import { FindReplacePanel } from './FindReplacePanel';
@@ -77,7 +77,6 @@ import { lineAt, lineCountOf } from '../core/EditorStore';
 // P3 B2 预演提示上下文（LineItem 注入、InlineRenderer 的 text token 消费——
 // 零新 DOM 节点）；未闭合行内标记检测纯函数已随 T4 下沉到共享派生单元
 // `src/core/lineUnit.ts`（与岛内行共用同一口径）
-import { InlinePreviewContext } from './InlineRenderer';
 
 
 
@@ -118,7 +117,6 @@ const EMPTY_SEARCH_RANGES: readonly SearchRange[] = [];
 // B2 搜索命中行内联背景（index.css 为引擎样式域外，is-search-line
 // class 已打（宿主可自定义），此处用主题色系内联兜底保证开箱可见；
 // 与 --yellow-tint-2 同族淡黄，护眼对比度约束内）
-const SEARCH_LINE_BG = 'hsl(45 100% 50% / 0.10)';
 
 // B3 折叠占位行摘要截断长度（占位行文本仅作视觉提示，超长截断防撑行）
 const FOLD_SUMMARY_MAX_CHARS = 48;
@@ -362,191 +360,6 @@ export interface MarkdownEngineHandle {
 // - props 只传 index（数字）+ 内容字段（lineText/offset/isCode）+ 稳定 rowRef，
 //   virtualRow 新对象字面量引发的 memo 失效被根治：滚动/光标变化帧行内容不变时
 //   全部 memo 命中，React 仅挂载/卸载窗口边界行（01 问题 6 §6.2-C）。
-const LineItem = React.memo(
-  ({
-    index,
-    lineText,
-    offset,
-    isCode,
-    rowRef,
-    streamingDirty,
-    store,
-    // R5-D：共享装饰集 + 版本号——active/选区/搜索统一数据源（LineItem
-    // 不再订阅 cursorPos/selection*，改经装饰集行级 query 派生；光标/
-    // 选区/搜索变化 → 行版本递增 → 本行查询刷新；无变化帧（滚动/内容
-    // 未变）props 全等 → memo 命中，零重渲染）。
-    // R6-C 粒度修正：memo 依赖从「全局 decorationVersion」降为「本行
-    // 行版本 rowDecorationVersion」（decorationVersion 每帧递增的回归
-    // 根因：append 平移光标 → 全窗口 memo 失效 → 可见 math 块每帧重跑
-    // KaTeX）。行版本只在「该行装饰内容变化」时递增（DecorationSet
-    // add/remove 影响行 bump）——光标平移只 bump 光标行，其他行版本
-    // 不变 → memo 命中。
-    decorations,
-    rowDecorationVersion,
-    useGpuLayer,
-    frontmatterRole,
-  }: {
-    index: number;
-    lineText: string;
-    offset: number;
-    isCode: CodeState;
-    rowRef: (el: HTMLElement | null) => void;
-    // R5：行渲染单元的 store 绑定（内容/activeState 经实例读取；多实例
-    // 场景缺省传全局单例——LineItem 是模块级 memo 组件，store 引用稳定）。
-    store: EditorStore;
-    // R5-D：共享装饰集（由引擎维护并注入，见 MarkdownEngine 接线）；
-    // R6-C：行级装饰版本（引擎渲染时读 decorations.getRowVersion(index)
-    // 注入——本行装饰内容变化的单调版本，非全局版本）
-    decorations: DecorationSet;
-    rowDecorationVersion: number;
-    // C3 dirty 协议：直刷期间本行 props 行文本滞后于 DOM（直刷文本尚未
-    // 提交 store）。为 true 时本行进入冻结渲染（见 frozenContentRef），
-    // 并打上 data-streaming-dirty 标记（调试/巡检可见）。
-    streamingDirty?: boolean;
-    // P3 B5（A5 渲染分层 L2）：GPU 合成开关——true 时行容器附加
-    // virtual-row-gpu（contain: paint，方案 C）；dirty 行附加
-    // virtual-row-gpu-dirty（will-change: transform 独立层，方案 D）。
-    // 布尔 prop 引用稳定，不破坏 React.memo 命中。
-    useGpuLayer?: boolean;
-    // Alcove 复刻（Seg D）：frontmatter 行角色（open/body/close）——
-    // 命中时行容器附加 is-frontmatter-row 类（token 透明化 + 属性卡浮层）
-    frontmatterRole?: FrontmatterRole | null;
-  }) => {
-    // C3 直刷冻结快照（dirty 覆盖渲染路径，09 §4 C3 代码级落实）：
-    // 干净渲染时把「本次 BlockRenderer 元素」存入 ref；dirty 渲染时返回
-    // 该同引用元素——React 对同一元素引用（props 对象 Object.is 相等）
-    // 直接跳过子树协调，BlockRenderer/InlineRenderer 不再重跑，DOM 上
-    // 已直刷的文本原样保留，杜绝「React 用旧 lineText 覆盖直刷文本」。
-    // flush 后 dirty 清除 → 按最新 lineText 全新渲染，DOM 与 store 收敛。
-    const frozenContentRef = useRef<React.ReactElement | null>(null);
-
-    // P3 B2 流式末行判定（plan-A2 §3 作用范围）：预演仅作用于「流式会话
-    // 进行中的文档末行」——编辑态/非末行/代码行一律不预演。
-    // 流式会话进行中的末行订阅（无条件 hook——与 streamingDirty 的并集
-    // 在订阅结果之上合并，不得短路 hook 调用：直刷期间 streamingDirty 为
-    // true，若直接 `!!streamingDirty || store(...)` 会跳过订阅 → flush 后
-    // hook 数变化 → React 报「rendered fewer hooks」）
-    const streamTailFlag = store(
-      (s) => s.streamActive === true && index === s.getLineCount() - 1
-    );
-    const isStreamingTail = !!streamingDirty || streamTailFlag;
-
-    // 表格稳定身份（ADR-3 / 裁决 R18）：由 tableIdentity 统一解析——
-    // 身份与行号**解耦**（内容签名 + 位置兜底），故表格上方插入/删除行不再改变身份；
-    // 渲染层亦不再需要解码身份格式（表头判定/分隔行/列对齐一律经身份查询）。
-    // 保留既有**订阅**语义（身份变化即刷新），并把结果传入派生单元
-    // （避免派生单元二次探测同一身份）。
-    const tableId = store((state) => resolveTableId(state.getLine, index));
-
-    // T4 共享逐行派生单元（SSOT，src/core/lineUnit.ts）：行级装饰查询 /
-    // activeState / 搜索命中 / callout 上下文 / parser 行节点 / 流式预演 /
-    // 表格身份全部经 `deriveLineUnit` 一次派生——**与岛内行（TableIslandRow）
-    // 共用同一口径**，杜绝同一源码行在两条路径下得到不同 token。
-    //
-    // 依赖口径与迁移前逐字一致（R6-C）：行级版本 `rowDecorationVersion` 驱动
-    // 重派生（本行装饰内容变化才重派生，其他行装饰变化 → memo 命中）。
-    const getLine = React.useCallback(
-      (i: number) => store.getState().getLine(i),
-      [store]
-    );
-
-    const unit = React.useMemo(
-      () =>
-        deriveLineUnit({
-          index,
-          lineText,
-          offset,
-          isCode,
-          decorations,
-          rowDecorationVersion,
-          getLine,
-          isStreamingTail,
-          tableId,
-        }),
-      // decorations 为可变结构（行内变更不可见），必须经行版本驱动重派生
-      // oxlint-disable-next-line react-hooks/exhaustive-deps
-      [
-        index,
-        lineText,
-        offset,
-        isCode,
-        decorations,
-        rowDecorationVersion,
-        getLine,
-        isStreamingTail,
-        tableId,
-      ]
-    );
-
-    const { lineNode, activeState, hasSearchDecoration } = unit;
-    // 上下文值稳定化：非预演恒为 null（引用稳定——memo 命中不受影响）；
-    // 预演期间逐 chunk 更新（预演段随流式文本增长）
-    const previewContextValue = unit.previewHint;
-
-    const freshContent = (
-      // P3 B2：预演提示经 React context 注入（Provider 不产生 DOM 节点，
-      // 零 DOM 结构变化；BlockRenderer 各渲染器共享同一提示——text token
-      // 命中预演段时追加 is-preview-* 类，闭合切换即同一节点的类微调）
-      <InlinePreviewContext.Provider value={previewContextValue}>
-        <BlockRenderer
-          block={lineNode}
-          index={index}
-          lineOffset={offset}
-          activeState={activeState}
-          tableId={tableId}
-        />
-      </InlinePreviewContext.Provider>
-    );
-    if (!streamingDirty) {
-      frozenContentRef.current = freshContent;
-    }
-    const rowContent = streamingDirty
-      ? (frozenContentRef.current ?? freshContent)
-      : freshContent;
-
-    // Alcove 复刻（Seg D）：frontmatter 行在虚拟行内叠属性卡浮层
-    // （token 透明化由 .is-frontmatter-row 类接管，浮层 pointer-events
-    //  none 不挡点击/选区；活动行回落源码由 CSS 处理）
-    const fmChrome =
-      frontmatterRole && frontmatterRole !== 'close' ? (
-        <FrontmatterChrome role={frontmatterRole} raw={lineText} />
-      ) : null;
-
-    // B2 搜索行内联背景：仅命中行附加淡黄底色（useMemo 保持引用
-    // 稳定——依赖只有行类型与搜索标记，变化时才换新对象，不影响
-    // React.memo 命中）；class is-search-line 同时保留供宿主自定义
-    const rowStyle = React.useMemo(
-      () => ({
-        position: 'absolute' as const,
-        left: 0,
-        width: '100%',
-        maxWidth: '100%',
-        minWidth: '100%',
-        boxSizing: 'border-box' as const,
-        minHeight: lineNode.type === 'table_separator' ? '0px' : '28px',
-        ...(hasSearchDecoration ? { backgroundColor: SEARCH_LINE_BG } : null),
-      }),
-      [lineNode.type, hasSearchDecoration]
-    );
-
-    return (
-      <div
-        data-index={index}
-        data-line-start={offset}
-        data-line-length={lineText.length}
-        data-streaming-dirty={streamingDirty ? 'true' : undefined}
-        ref={rowRef}
-        // P3 B5 GPU 类拼接：useGpuLayer=false 时退化为原 virtual-row 单类
-        // （contain/will-change 全部移除，一行回退到纯 position 定位通道）
-        className={`virtual-row${useGpuLayer ? ' virtual-row-gpu' : ''}${streamingDirty && useGpuLayer ? ' virtual-row-gpu-dirty' : ''}${activeState ? ' is-active-line' : ''}${hasSearchDecoration ? ' is-search-line' : ''}${frontmatterRole ? ' is-frontmatter-row is-frontmatter-' + frontmatterRole : ''}`.trim()}
-        style={rowStyle}
-      >
-        {rowContent}
-        {fmChrome}
-      </div>
-    );
-  }
-);
 
 /**
  * B3 折叠占位行（N3 折叠区间，方案 B：保留行 + 渲染跳过）：
@@ -563,6 +376,8 @@ const LineItem = React.memo(
 const FoldPlaceholderRow = React.memo(
   ({
     index,
+    sourceStart,
+    sourceEnd,
     foldedCount,
     summary,
     rowRef,
@@ -572,6 +387,8 @@ const FoldPlaceholderRow = React.memo(
     useGpuLayer,
   }: {
     index: number;
+    sourceStart: number;
+    sourceEnd: number;
     foldedCount: number;
     summary: string;
     rowRef: (el: HTMLElement | null) => void;
@@ -593,6 +410,9 @@ const FoldPlaceholderRow = React.memo(
       <div
         data-index={index}
         data-fold-placeholder="true"
+        data-token-start={sourceStart}
+        data-token-length={sourceEnd - sourceStart}
+        data-source-role="atomic"
         ref={rowRef}
         className={`virtual-row${useGpuLayer ? ' virtual-row-gpu' : ''}`.trim()}
         style={rowStyle}
@@ -751,6 +571,7 @@ export const MarkdownEngine = React.forwardRef<
   ref
 ) {
   const parentRef = useRef<HTMLDivElement>(null);
+  const geometryVersion = useGeometryVersion(parentRef);
   // R5 实例绑定：所有订阅/命令式读取统一经 engineStore（缺省回退全局
   // 单例）；zustand 的 useStore 在 store 引用变化时自动切换订阅。
   const engineStore = store ?? useEditorStore;
@@ -800,6 +621,7 @@ export const MarkdownEngine = React.forwardRef<
   const cursorPos = engineStore((state) => state.cursorPos);
   const selectionStart = engineStore((state) => state.selectionStart);
   const selectionEnd = engineStore((state) => state.selectionEnd);
+  const contextVersion = engineStore((state) => state.contextVersion);
 
   // Alcove 复刻（Seg H）：空文档判定——≤1 行且无有效内容时展示启动页
   // （非 memo：内容/光标订阅已驱动本组件重渲染，直接计算即最新）
@@ -832,7 +654,6 @@ export const MarkdownEngine = React.forwardRef<
     );
     decorations.remove('search');
     for (const r of searchRanges) decorations.add(r.from, r.to, 'search');
-    clearContainerMeasurementCache(parentRef.current);
     setDecorationVersion((v) => v + 1);
   }, [decorations, cursorPos, selectionStart, selectionEnd, searchRanges]);
 
@@ -891,15 +712,9 @@ export const MarkdownEngine = React.forwardRef<
     });
   }
 
-  // 容器可用宽度 → oracle 的 wrap 模型基准（Alcove 布局：内容列 640px 居中，
-  // 容器左右 padding 44×2 + 滚动条补偿 8；列宽取 min(可用宽, 640)）
-  useLayoutEffect(() => {
-    const el = parentRef.current;
-    if (el && oracleRef.current)
-      oracleRef.current.setContainerWidth(
-        Math.min(el.clientWidth - 96, CONTENT_COLUMN_WIDTH)
-      );
-  }, []);
+  // 排版度量真源接线（T1/T7，ADR-5）：LayoutMetrics 实测行高 / 字宽 / 标记槽宽，
+  // 经 CSS 自定义属性写回容器并同步行高预言机——CSS 与 TS 消费同一批数字。
+  const layoutSnapshot = useLayoutMetrics(parentRef, contentDivRef, oracleRef);
 
   // ── T4 表格岛接线（ADR-2 单容器 / ADR-5 高度单源）────────────────────────
   // `islandWiringRef`：`useVirtualizer` 的 `estimateSize`/`rangeExtractor` 选项
@@ -910,6 +725,7 @@ export const MarkdownEngine = React.forwardRef<
 
   // Virtualization setup: fixed size = 28px perfectly aligns with grid paper CSS
   const virtualizer = useVirtualizer({
+    enabled: layoutSnapshot.measurements !== null,
     count: lineCount,
     getScrollElement: () => parentRef.current,
     // T4（ADR-2）：表格区间折叠为单一虚拟项——`rangeExtractor` 把区间内部行
@@ -949,9 +765,7 @@ export const MarkdownEngine = React.forwardRef<
       // correction 可能非整数）经取整后写 transform，杜绝亚像素抖动
       const kind = classifyLine(raw, st);
       if (kind === 'table_separator') return 0;
-      if (oracle)
-        return Math.round(oracle.predict(kind, raw, st, tableColWidthsAtLine(s.getLine, i)));
-      return 28;
+      return oracle!.predict(kind, raw, st, tableColWidthsAtLine(s.getLine, i));
     },
     overscan: 40, // Buffer for smooth scrolling
     // P3 B1 scroll factor 接线（review-P3 高危修订已内化）：
@@ -1038,6 +852,15 @@ export const MarkdownEngine = React.forwardRef<
     directDomUpdatesMode: useGpuLayer ? 'transform' : 'position',
     useCachedMeasurements: true,
   });
+
+  const registerContentRef = useCallback((node: HTMLDivElement | null) => {
+    virtualizer.containerRef(node);
+    contentDivRef.current = node;
+  }, [virtualizer]);
+
+  useLayoutEffect(() => {
+    if (layoutSnapshot.measurements) virtualizer.measure();
+  }, [layoutSnapshot.version, layoutSnapshot.measurements, virtualizer]);
 
 
   // ── C3 流式直刷状态（ref 级，不触发渲染）──
@@ -1218,6 +1041,52 @@ export const MarkdownEngine = React.forwardRef<
     followPendingRef.current = true;
   }, [flushStreamInternal]);
 
+  useLayoutEffect(() => {
+    const container = parentRef.current;
+    if (!container) return;
+    const unbind = bindEditorViewport(container, {
+      store: engineStore,
+      flushPending: flushStreamBuffer,
+      revealLine: (index) => virtualizer.scrollToIndex(index, { align: 'auto' }),
+      lineAtClientY: (clientY) => {
+        const content = contentDivRef.current;
+        if (!content) return 0;
+        const physical = clientY - content.getBoundingClientRect().top;
+        const logical = scrollMapRef.current?.inverse(physical) ?? physical;
+        return heightMapRef.current?.indexAt(logical, 0) ?? 0;
+      },
+      lineClientBounds: (index) => {
+        const map = heightMapRef.current;
+        const content = contentDivRef.current;
+        const height = map?.getHeight(index);
+        if (!map || !content || height === undefined) return null;
+        const origin = content.getBoundingClientRect().top;
+        const top = map.getOffset(index);
+        const project = (y: number) => scrollMapRef.current?.apply(y) ?? y;
+        return { top: origin + project(top), bottom: origin + project(top + height) };
+      },
+      adjacentLine: (index, direction) => {
+        const map = heightMapRef.current;
+        if (!map) return null;
+        const edge = map.getOffset(index) + (direction === 'down' ? map.getHeight(index) ?? 0 : 0);
+        let low = direction === 'down' ? index + 1 : 0;
+        let high = direction === 'down' ? map.lineCount : index;
+        while (low < high) {
+          const middle = (low + high) >>> 1;
+          const value = map.getOffset(middle) + (direction === 'down' ? map.getHeight(middle) ?? 0 : 0);
+          if (direction === 'down' ? value <= edge : value < edge) low = middle + 1;
+          else high = middle;
+        }
+        const result = direction === 'down' ? low : low - 1;
+        return result >= 0 && result < map.lineCount && (map.getHeight(result) ?? 0) > 0 ? result : null;
+      },
+    });
+    return () => {
+      unbind();
+      disposeContainerMeasurementCache(container);
+    };
+  }, [engineStore, flushStreamBuffer, virtualizer]);
+
   // 直刷行可见性判定（O(1)：HeightMap.indexAt 二分像素→行）：
   // 用于「滚动到尾部触达 dirty 行 → flush」与直刷会话起点初值。
   const isRowInVisibleViewport = useCallback((rowIdx: number): boolean => {
@@ -1254,6 +1123,11 @@ export const MarkdownEngine = React.forwardRef<
         streamSessionActiveRef.current = true;
         streamSessionStartLenRef.current = engineStore.getState().textLength;
       }
+      // 已排队的内容拥有后续到达顺序，不能刷新后继续使用旧末行 DOM。
+      if (streamBufferRef.current!.pending > 0) {
+        streamBufferRef.current!.push(chunk);
+        return;
+      }
       const s = engineStore.getState();
       const lastIdx = s.getLineCount() - 1;
 
@@ -1272,7 +1146,7 @@ export const MarkdownEngine = React.forwardRef<
         const rowEl = rowRefs.current.get(lastIdx);
         tokenEl =
           rowEl && rowEl.isConnected
-            ? rowEl.querySelector<HTMLElement>('[data-token-start]')
+            ? rowEl.querySelector<HTMLElement>('[data-source-role="text"][data-token-start]')
             : null;
       }
 
@@ -1281,10 +1155,13 @@ export const MarkdownEngine = React.forwardRef<
         !chunk.includes('\n') &&
         merged.length <= DIRECT_STREAM_MAX_LINE_CHARS &&
         isPlainTextLine(merged) &&
-        // 「LineNode �?text token」的块级保证：围栏内/缩进代码/数学�?
-        // HTML 块内�?看似纯文�?行不算纯文本行（CodeState 权威判定�?
+        !/[\\&]/.test(merged) &&
+        // 只有同一源码版本的普通文本叶片允许直刷，块内文字交由正常解析。
         getLineState(s, lastIdx) === 'none' &&
         tokenEl !== null &&
+        tokenEl.childNodes.length === 1 && tokenEl.firstChild?.nodeType === Node.TEXT_NODE &&
+        tokenEl.textContent === domLast &&
+        Number(tokenEl.dataset.tokenStart) === s.lineOffsets.getOffset(lastIdx) &&
         // P3 B3 选区保护（plan-A3 方案 B 主）：引擎选区与末行相交、或
         // 光标位于末行行中（用户正在编辑/选中末尾区域）→ 降级走常规
         // append 路径——直刷写 DOM 会与用户选区/光标错位（B6 M3 已实测
@@ -1299,15 +1176,14 @@ export const MarkdownEngine = React.forwardRef<
         );
 
       if (canDirect) {
-        // W1-1（D-4 顺序不变量，交叉场景）：buffer 非空说明其内容早于
-        // 本 chunk 到达（帧回调未到）——先 flushStreamBuffer()（直刷累积
-        // P 先提交、buffer 累积 B 后提交）再直写本 chunk（成为新 P），
-        // store 提交顺序 = 到达顺序（R-2）。buffer 空时直接直刷，
-        // 同步零提交红利完全保留（无 flush 开销）。
-        if (streamBufferRef.current!.pending > 0) flushStreamBuffer();
+        // 只在帧队列为空且叶片仍对应当前末行时追加，保留 Text 节点身份。
         // 直写 DOM（命令式，绕过 React）：向纯文本 token span 追加；
         // 光标跟随节流（08 §1 招 1 风险修正）属 R5 宿主侧，本层不越权。
-        tokenEl!.textContent = (tokenEl!.textContent ?? '') + chunk;
+        const rendered = (tokenEl!.textContent ?? '') + chunk;
+        (tokenEl!.firstChild as Text).appendData(chunk);
+        // 同步发布显示源码的区间，投影不能观察到新文字配旧长度。
+        tokenEl!.setAttribute('data-token-length', String(rendered.length));
+        tokenEl!.closest('[data-line-start]')?.setAttribute('data-line-length', String(rendered.length));
         pendingStreamRef.current += chunk;
         dirtyRefs.current.add(lastIdx);
         // 会话起点记录直刷行可见性：用户本就在尾部（可见）时，滚动事件
@@ -1762,7 +1638,7 @@ export const MarkdownEngine = React.forwardRef<
   useLayoutEffect(() => {
     const hm = heightMapRef.current;
     const oracle = oracleRef.current;
-    if (!hm || !oracle) return;
+    if (!hm || !oracle?.ready) return;
     // W1-2（D-3）滚动跟随评估（声明序在 effect 开头：流式会话中表格
     // 定型门禁（streamActive 为 false → 早退）位于本 effect 中段，评估
     // 必须在此之前执行；贴底写 scrollTop = scrollHeight 为物理直写，
@@ -2304,13 +2180,9 @@ export const MarkdownEngine = React.forwardRef<
   const handleContainerClick = (e: React.MouseEvent) => {
     // R5 readOnly：只读模式点击不移动光标（光标定位链路整体短路）——
     // 原生 DOM 文本选区/选择复制不受影响（浏览器默认行为，不 preventDefault）。
-    if (readOnly) return;
+    if (readOnly || e.defaultPrevented || e.nativeEvent.defaultPrevented) return;
     const st = engineStore.getState();
 
-    // If we just finished a drag selection, ignore the synthetic click
-    const timeSinceDragEnd = Date.now() - ((window as any).__CRISH_LAST_DRAG_END_TIME || 0);
-    if (timeSinceDragEnd < 400) return;
-    if (st.selectionStart !== st.selectionEnd && timeSinceDragEnd < 600) return;
 
     const target = e.target as HTMLElement;
 
@@ -2355,29 +2227,12 @@ export const MarkdownEngine = React.forwardRef<
       }
     }
 
-    // 优先采用 mousedown 时在未展开 DOM 上计算的预先锚定索引，
-    // 杜绝点击后语法展开导致光标吸附到新出现的隐藏语法标记（如 ### 或 **）上
-    const preClick = (window as any).__CRISH_PRE_CLICK_INDEX;
-    let exactIndex: number;
-    if (
-      preClick &&
-      Math.abs(e.clientX - preClick.x) <= 8 &&
-      Math.abs(e.clientY - preClick.y) <= 8 &&
-      Date.now() - preClick.time < 1200
-    ) {
-      exactIndex = preClick.index;
-      (window as any).__CRISH_PRE_CLICK_INDEX = null;
-    } else {
-      exactIndex = indexFromClientPoint(
-        e.clientX,
-        e.clientY,
-        parentRef.current,
-        st,
-        clickedLineIndex >= 0 ? clickedLineIndex : undefined
-      );
-    }
-    setCursorPos(exactIndex);
+    const exactIndex = indexFromClientPoint(e.clientX, e.clientY, parentRef.current);
+    if (exactIndex !== null) setCursorPos(exactIndex);
   };
+
+  const layoutDeps = `${contextVersion}:${geometryVersion}:` + virtualizer.getVirtualItems()
+    .map(item => `${item.index}:${item.start}:${item.size}`).join('|');
 
   return (
     <div
@@ -2469,10 +2324,7 @@ export const MarkdownEngine = React.forwardRef<
             P3 B1：contentDivRef 双挂（tanstack 回调 ref 无 .current——物理
             总高覆盖经本 ref） */}
         <div
-          ref={(node) => {
-            virtualizer.containerRef(node);
-            contentDivRef.current = node;
-          }}
+          ref={registerContentRef}
           style={{
             width: '100%',
             maxWidth: `${CONTENT_COLUMN_WIDTH}px`,
@@ -2489,8 +2341,18 @@ export const MarkdownEngine = React.forwardRef<
             // 均换新引用），与物化视图语义一致。同一渲染帧内 store
             // 不会变更（React 同步渲染），快照取一次即可。
             const s = engineStore.getState();
-            return virtualizer.getVirtualItems().map((virtualRow) => {
+            // 实时投影消费加载、编辑和追加共用的文档上下文。
+            const virtualItems = virtualizer.getVirtualItems();
+            const contextWindow = windowLineContexts(
+              s,
+              virtualItems.length > 0 ? virtualItems[0].index : 0,
+              virtualItems.length > 0
+                ? virtualItems[virtualItems.length - 1].index + 1
+                : 0
+            );
+            return virtualItems.map((virtualRow) => {
               const index = virtualRow.index;
+              const context = contextWindow.get(index)!;
               // B3 折叠渲染接线（方案 B：保留行 + 渲染跳过）：折叠区间内
               // 行保留在 HeightMap 槽位（行号/令牌映射零漂移），隐藏行
               // 跳过渲染（0 高行不物化 DOM——展开时无结构变更、无损恢复）；
@@ -2506,6 +2368,8 @@ export const MarkdownEngine = React.forwardRef<
                   <FoldPlaceholderRow
                     key={index}
                     index={index}
+                    sourceStart={s.lineOffsets.getOffset(index)}
+                    sourceEnd={s.lineOffsets.getOffset(activeFold.endLine) + s.getLine(activeFold.endLine).length}
                     foldedCount={activeFold.endLine - index + 1}
                     summary={summary}
                     rowRef={registerRowRef}
@@ -2547,14 +2411,13 @@ export const MarkdownEngine = React.forwardRef<
               }
               const lineText = s.getLine(index);
               const offset = s.lineOffsets.getOffset(index);
-              const isCode = getLineState(s, index);
               return (
-                <LineItem
+                <EditorLine
                   key={index}
                   index={index}
                   lineText={lineText}
                   offset={offset}
-                  isCode={isCode}
+                  context={context}
                   streamingDirty={dirtyRefs.current.has(index)}
                   rowRef={registerRowRef}
                   store={engineStore}
@@ -2596,33 +2459,21 @@ export const MarkdownEngine = React.forwardRef<
             <TableToolbar />
             <CursorLayer
               containerRef={parentRef}
-              // layoutDeps 紧凑化（01 问题 2 §2.2-C 的布局陷阱消除）：不再每帧生成
-              // 「全部虚拟项 start 的巨型字符串」，改为「窗口首尾 index + 行数 + 总高」
-              // 稳定签名——纯滚动位置帧该签名不变 → CursorLayer 零重测零全扫；
-              // 窗口变化/行高回填（总高变化）时才重测。光标坐标是容器内容坐标
-              // （与行 top 同空间），滚动时内容坐标不变，视觉天然跟随，无需逐帧重测。
-              layoutDeps={(() => {
-                const items = virtualizer.getVirtualItems();
-                const hm = heightMapRef.current;
-                const first = items.length ? items[0].index : -1;
-                const last = items.length ? items[items.length - 1].index : -1;
-                const totalH = hm ? Math.round(hm.totalHeight * 10) : 0;
-                return `${first}-${last}-${lineCount}-${totalH}`;
-              })()}
+              layoutDeps={layoutDeps}
               store={engineStore}
               decorationVersion={decorationVersion}
             />
             <HiddenInput
               containerRef={parentRef}
               store={engineStore}
+              layoutDeps={layoutDeps}
               decorationVersion={decorationVersion}
             />
-            {/* R5-D：选区高亮消费统一装饰集（selection 装饰 + 版本号），
-                不再直读 store 选区字段 */}
+            {/* 三层共用文档端点与挂载/几何版本。 */}
             <SelectionHighlight
               containerRef={parentRef}
               store={engineStore}
-              decorations={decorations}
+              layoutDeps={layoutDeps}
               decorationVersion={decorationVersion}
             />
           </>

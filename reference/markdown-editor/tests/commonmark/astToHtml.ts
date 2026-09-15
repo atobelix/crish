@@ -13,9 +13,11 @@
  *    CommonMark 文本渲染的差异（计 FAIL），不得折叠为纯文本掩盖差异。
  * 4. 行内原始 HTML（html_element / html_tag）按 CommonMark 语义原样透传
  *    （不转义、不重组），与 Raw HTML 章节的期望一致。
- * 5. 行级块结构全部为确定性映射；登记偏差点有「列表行按 listIndent
- *    启发式分组 + listContinuation 消费 + li 内缩进代码块」与
- *    「缩进代码块合并」（见 README「偏差点登记」）。
+ * 5. 行级块结构全部为确定性映射。列表分层依据 AST 的整数 `listDepth`
+ *    （由引擎列表容器栈产出，战役 wysiwyg-layout-remediation T3/ADR-2）
+ *    与 `contentIndentColumns`——投影器不做任何缩进数值比较来推断嵌套。
+ *    登记偏差点有「缩进代码块合并」与「围栏投影的容器边界」
+ *    （见 README「偏差点登记」）。
  */
 import type {
   MarkdownDocument,
@@ -97,21 +99,6 @@ function stripIndentColumns(s: string, limit: number = 4): string {
   return s.substring(i);
 }
 
-/** 字符串的渲染列宽（tab 按停靠 4 展开，与引擎 textColumns 同语义） */
-function textColumns(s: string): number {
-  let col = 0;
-  for (const ch of s) {
-    if (ch === ' ') {
-      col++;
-    } else if (ch === '\t') {
-      col += 4 - (col % 4);
-    } else {
-      col++;
-    }
-  }
-  return col;
-}
-
 /** 行首缩进列宽（tab 按停靠 4 展开，与引擎 leadingIndentColumns 同语义） */
 function leadingIndentColumns(s: string): number {
   let col = 0;
@@ -127,44 +114,15 @@ function leadingIndentColumns(s: string): number {
   return col;
 }
 
-/** 剥离 up to 4 列前导空白（引擎 stripFourColumns 镜像，列表标记段判定用） */
-function stripFourColumns(s: string): string {
-  return stripIndentColumns(s, 4);
-}
-
 /**
- * 列表标记段信息（引擎 listMarkerInfo 的投影器镜像）：行首为列表标记
- * （task / 项目符号 / 有序）时返回标记前缀与「内容缩进列偏移」——
- * 标记段列宽 = 标记字符 + 标记后空白（tab 停靠 4）；特例（规范规则 #2/#3）：
- * 标记后无内容（空项）或标记后空白 ≥5 列（首块为缩进代码）时，
- * 内容缩进列 = 标记宽 W + 1（spec 例 273/274/279 语义）。
- */
-function listMarkerInfo(
-  content: string
-): { prefix: string; markerWidth: number } | null {
-  const m = /^([-*+]\s*\[[xX\s]\])[ \t]+|^([-*+])[ \t]+|^(\d+\.)[ \t]+/.exec(
-    content
-  );
-  if (!m) return null;
-  const prefix = m[1] ?? m[2] ?? m[3];
-  const markerSeg = m[0];
-  const wPlusN = textColumns(markerSeg);
-  const n = wPlusN - prefix.length;
-  if (n >= 5 || content.slice(markerSeg.length) === '') {
-    return { prefix, markerWidth: prefix.length + 1 };
-  }
-  return { prefix, markerWidth: wPlusN };
-}
-
-/**
- * 列表项内容缩进列（spec §5.2 例 257/258/271/273/274 实证）：
- * = 行首缩进列 + 标记段宽——引擎 listCtx.markerWidth 的投影器镜像，
- * 供列表项延续 / li 内缩进代码的归属判定与剥列基准。
+ * 列表项内容缩进列（spec §5.2 content indent）。
+ *
+ * 引擎的列表容器栈已把该值算好并落在 `contentIndentColumns`（marker 行与
+ * 延续行都携带）——投影器直接读取，不再按行原文重算标记段宽（旧实现是
+ * 引擎 listMarkerInfo 的第二份副本，战役 T3/ADR-2 后已删除）。
  */
 function listContentIndent(line: LineNode): number {
-  const bqContent = stripBlockquotePrefix(line.raw);
-  const info = listMarkerInfo(stripFourColumns(bqContent));
-  return leadingIndentColumns(bqContent) + (info ? info.markerWidth : 0);
+  return line.contentIndentColumns ?? 0;
 }
 
 /**
@@ -339,19 +297,22 @@ interface ListItemAcc {
 }
 
 /**
- * 列表容器投影（R1.5-C 增强）：支持嵌套（listIndent 分层递归，并入当前
- * 项作为块）、松散列表（项间空行 / 项内多块空行分隔 → 段落包 <p>）、
+ * 列表容器投影：**按 `listDepth` 整数分层递归**（引擎列表容器栈产出的
+ * 嵌套层级真源，战役 wysiwyg-layout-remediation T3/ADR-2）——同一层
+ * （depth 相同）的连续同种 marker 行归入同一个 `<ul>`/`<ol>`，depth 更大
+ * 者递归为当前 `<li>` 内**真正嵌套**的子列表。投影器不做任何缩进数值
+ * 比较来推断嵌套（AST 已携带层级，这里是忠实投影而非语义补偿）。
+ *
+ * 另支持：松散列表（项间空行 / 项内多块空行分隔 → 段落包 <p>）、
  * 项内多段落（listContinuation / 空行后 body → 同一 li 的第二个 <p>，
  * spec 例 256/258/262/277）、li 内缩进代码块（空行后缩进 ≥ 内容缩进 + 4
  * 的 code 行 → <pre><code>，剥「内容缩进 + 4」列，spec 例 264/270/271）、
  * 紧邻 body 延续（无空行 → 空格并入当前段，spec 例 260/279 形态）。
- * 引擎 AST 行级无容器节点，这是 CommonMark 语义的忠实投影
- * （README 偏差点登记更新）。
  */
 function renderListGroup(lines: LineNode[], start: number, out: string[]): number {
   const first = lines[start];
   const kind = listKind(first);
-  const indent = first.listIndent ?? 0;
+  const depth = first.listDepth ?? 0;
   const bq = first.blockquoteLevel ?? 0;
   const items: ListItemAcc[] = [];
   let j = start;
@@ -412,14 +373,15 @@ function renderListGroup(lines: LineNode[], start: number, out: string[]): numbe
         const nl = lines[next];
         const nIndent = leadingIndentColumns(stripBlockquotePrefix(nl.raw));
         const nKind = listKind(nl);
-        const nListIndent = nl.listIndent ?? 0;
+        const nDepth = nl.listDepth;
         const last = items[items.length - 1];
-        // 成员判定：同级同种列表项 / 嵌套列表项 / 列表项延续 /
+        // 成员判定：本层同种列表项 / 更深层列表项 / 列表项延续 /
         // 紧邻归属 body（列缩进 ≥ 内容缩进）/ li 内缩进代码
         const isMember =
           (nKind !== null &&
-            nListIndent >= indent &&
-            (nListIndent > indent || nKind === kind)) ||
+            nDepth !== undefined &&
+            nDepth >= depth &&
+            (nDepth > depth || nKind === kind)) ||
           nl.listContinuation === true ||
           (nl.type === 'body' && last !== undefined && nIndent >= last.contentIndent) ||
           (nl.type === 'code' && last !== undefined && nIndent >= last.contentIndent + 4);
@@ -455,13 +417,13 @@ function renderListGroup(lines: LineNode[], start: number, out: string[]): numbe
       break;
     }
 
-    if (ln.listIndent === undefined) break;
+    if (ln.listDepth === undefined) break;
 
-    // 列表标记行（task / 项目符号 / 有序）：新项或嵌套递归
+    // 列表标记行（task / 项目符号 / 有序）：新项或更深层递归
     if (listKind(ln) !== null) {
-      if ((ln.listIndent ?? 0) < indent) break;
-      if ((ln.listIndent ?? 0) > indent) {
-        // 嵌套子列表（递归，从更大 indent 开始）——并入当前项作为块
+      if (ln.listDepth < depth) break; // 回到更外层：本组结束
+      if (ln.listDepth > depth) {
+        // 更深层子列表（递归，从更大 listDepth 开始）——并入当前项作为块
         const sub: string[] = [];
         const end = renderListGroup(lines, j, sub);
         const last = items[items.length - 1];
@@ -493,10 +455,9 @@ function renderListGroup(lines: LineNode[], start: number, out: string[]): numbe
       continue;
     }
 
-    // 非标记行：列表项延续（普通 body）——按列缩进判定归属。listIndent
-    // 对普通 body 恒为 0 不可靠（R1.5-B 起 parseNormalLine 全行输出
-    // listIndent），以「列缩进 ≥ 当前项内容缩进」镜像引擎的列表上下文
-    // 判定（spec §5.2）。
+    // 非标记行：列表项延续（普通 body）——以「列缩进 ≥ 当前项内容缩进列」
+    // 判定归属，内容缩进列来自 AST 的 contentIndentColumns（引擎列表
+    // 容器栈的单一真源，spec §5.2）。
     if (ln.type === 'body') {
       const last = items[items.length - 1];
       if (last !== undefined && ln.raw.trim() !== '' && colIndent >= last.contentIndent) {
@@ -687,7 +648,8 @@ function renderIndentCodeBlock(
  * 行级映射：body→<p>、heading→<h{n}>、hr→<hr />、blockquote 按行级
  * blockquoteLevel 开合容器、围栏代码→<pre><code>（renderFencedBlock）、
  * 缩进代码→连续 code 行合并为单个 <pre><code>（renderIndentCodeBlock）、
- * table_row→<tr><td>、列表行→<ul>/<ol><li>（listIndent 启发式分组；
+ * table_row→<tr><td>、列表行→<ul>/<ol><li>（按 listDepth 整数分层递归，
+ * 同层同种归入同一容器、更深层为真正嵌套的子列表；
  * listContinuation → 同 li 第二个 <p>，li 内缩进代码 → <pre><code>）。
  */
 export function astToHtml(doc: MarkdownDocument): string {
@@ -732,7 +694,8 @@ export function astToHtml(doc: MarkdownDocument): string {
         out.push(stripBlockquotePrefix(line.raw) + '\n');
         break;
       case 'body':
-        if (line.listIndent !== undefined && listKind(line) !== null) {
+        // 列表标记行（listDepth 由引擎容器栈产出）→ 列表容器投影
+        if (line.listDepth !== undefined && listKind(line) !== null) {
           i = renderListGroup(lines, i, out);
           continue;
         }
@@ -745,7 +708,7 @@ export function astToHtml(doc: MarkdownDocument): string {
           const parts: string[] = [];
           while (j < lines.length && lines[j].type === 'body') {
             const l = lines[j];
-            if (l.listIndent !== undefined && listKind(l) !== null) break;
+            if (l.listDepth !== undefined && listKind(l) !== null) break;
             if ((l.blockquoteLevel ?? 0) !== bq) break;
             if (l.raw.trim() === '') break; // 空行阻断段落
             parts.push(renderLineInline(l));

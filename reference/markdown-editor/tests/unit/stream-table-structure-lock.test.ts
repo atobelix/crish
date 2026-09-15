@@ -29,6 +29,7 @@
 // 28px × 行数）与用户滚动模拟（原 setter + scroll 事件 + rAF 帧推进）。
 // @vitest-environment jsdom
 
+import './helpers/layout-fixture';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';

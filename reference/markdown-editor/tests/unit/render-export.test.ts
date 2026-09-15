@@ -18,6 +18,7 @@
 // 不污染其它测试文件（与 render-registry.test.ts 同款清理协议）。
 // @vitest-environment jsdom
 
+import './helpers/layout-fixture';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -489,11 +490,11 @@ describe('复制按钮', () => {
     expect(c2.querySelector('.is-soft-render')).not.toBeNull();
   });
 
-  it('公式复制：math_block 按钮复制 LaTeX 源（token raw）', () => {
+  it('公式复制：常驻预览所在的起始围栏复制完整 LaTeX 源', () => {
     const store = storeWithText('$$\nE=mc^2\n$$');
-    const container = mountBlock(lineNode(store, 1, 'math_block'), {
-      index: 1,
-      lineOffset: offsetOf(store, 1),
+    const container = mountBlock(lineNode(store, 0, 'math_fence_start'), {
+      index: 0,
+      lineOffset: offsetOf(store, 0),
       store,
     });
     const btn = container.querySelector('[data-copy-button="math"]');
@@ -504,9 +505,9 @@ describe('复制按钮', () => {
 
   it('未闭合 math 围栏（软渲染）无公式复制按钮', () => {
     const store = storeWithText('$$\nE=mc^2');
-    const container = mountBlock(lineNode(store, 1, 'math_block'), {
-      index: 1,
-      lineOffset: offsetOf(store, 1),
+    const container = mountBlock(lineNode(store, 0, 'math_fence_start'), {
+      index: 0,
+      lineOffset: offsetOf(store, 0),
       store,
     });
     expect(container.querySelector('[data-copy-button="math"]')).toBeNull();
@@ -567,7 +568,9 @@ describe('readOnly 复制为 Markdown（N9）', () => {
     const mathWrap = document.createElement('span');
     mathWrap.setAttribute('data-token-start', '5');
     mathWrap.setAttribute('data-token-length', '8');
+    mathWrap.setAttribute('data-source-role', 'atomic');
     const preview = document.createElement('span');
+    preview.setAttribute('data-source-role', 'preview');
     preview.textContent = 'x+y';
     mathWrap.appendChild(preview);
     const br = document.createElement('br');

@@ -22,6 +22,7 @@
 // measure mock 固定坐标；本文件不测表格，无需 scrollWidth stub）。
 // @vitest-environment jsdom
 
+import './helpers/layout-fixture';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';

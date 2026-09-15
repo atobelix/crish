@@ -1,10 +1,25 @@
 import type { LineNode, InlineNode, MarkdownDocument, CalloutType } from './ast';
 import { LRUCache } from './LRUCache';
+import { decodeHTMLStrict } from 'entities';
+import { projectInlineText, projectCodeText, isEscapablePunctuation, type InlineTextProjection } from './inlineTextProjection';
 // 行内规则插件体系（06 分析 §1）：INLINE_RULES 数组迁移为 ruler 注册表——
 // 内置规则初始注册见 buildInlineRuler，宿主自定义语法（@mention 等）经
 // InlineRuler.register 全局注册，无需改动 parser 核心。
 import { InlineRuler } from './InlineRuler';
 import type { InlineRule, InlineRuleContext } from './InlineRuler';
+// 缩进语义单一真源（战役 wysiwyg-layout-remediation T2/ADR-1）：列宽坐标系、
+// 列表标记识别、内容缩进列计算全仓唯一定义——parser 不再自带副本。
+import {
+  leadingColumns,
+  matchListMarker,
+  isListMarkerStart,
+  isThematicBreak,
+} from './layout/IndentModel';
+// 嵌套层级真源（T3/ADR-2）：CommonMark §5.2 列表容器栈，产出整数 listDepth。
+import { ListContext as ListContainerStack, type ListLineResult } from './layout/ListContext';
+import { DocumentContextIndex, type LineParseContext, type ScannedLine, type ScanSnapshot, type OpenBlock } from './DocumentContext';
+import { scanReferenceDefinition } from './referenceDefinition';
+import { isTableSeparator } from './blockSyntax';
 
 export type CodeState =
   | 'none'
@@ -29,23 +44,37 @@ type BlockKind =
   'blank' | 'body' | 'list' | 'table' | 'heading' | 'hr' | 'code' | 'other';
 
 /**
- * 列表上下文（R1.5-B 正确性回补）：computeLineOffsets 在列表标记行记忆的
- * 「列表项内容缩进列」（markerWidth）——CommonMark §5.2：列表项后续块必须
- * 缩进到「标记后首个内容字符所在列」（例 256/258 实证：`- one` 需 2 列、
- * ` -    one` 需 6 列、`1.  foo` 需 4 列）。空行后首行与之比较：
- * - 缩进 ≥ markerWidth → 列表项延续（新段落，例 256/258/262/277）；
- * - 缩进 ≥ markerWidth + 4 → li 内缩进代码块（例 264/270/271）；
- * - 缩进 < markerWidth → 出列表（例 255/257）。
- * listContexts 数组逐行携带延续标志（indent 供 parseNormalLine 输出
- * listIndent 与 listContinuation）；行级缓存键包含上下文，防同文本行
- * 跨文档串扰。
+ * 逐行列表归属（T3 / ADR-2）：由 `ListContainerStack` 在 computeLineOffsets 的
+ * 主循环末尾逐行产出，随 parseLine 注入。
+ *
+ * 三个字段的分工：
+ * - `depth`：整数嵌套层级（0 起，-1 = 不在列表容器内）——渲染层缩进阶梯的
+ *   **唯一输入**，渲染层不再做任何数值比较（断层 G7）；
+ * - `contentIndentColumns`：本行所属容器的内容缩进列（CommonMark §5.2）——
+ *   缩进代码块判定与投影层归属判定共用；
+ * - `continuation`：本行是否为「非标记行但归属列表项内容」（延续行）——
+ *   投影层据此并入同一 `<li>` 的后续块。
  */
-export interface ListContext {
-  /** 列表标记行的前导缩进列（延续行 listIndent 的输出值） */
-  indent: number;
-  /** 列表项内容缩进列（出列表判定的基准列） */
-  markerWidth: number;
-}
+export type LineListInfo = ListLineResult;
+
+/** 不在列表容器内的统一值（冻结复用，避免热路径分配） */
+export const NO_LIST_INFO: LineListInfo = Object.freeze({
+  depth: -1,
+  contentIndentColumns: -1,
+  continuation: false,
+  afterBlank: false,
+  markers: Object.freeze([]),
+  blockquoteLevel: 0,
+  contentOffset: 0,
+  contentColumn: 0,
+  content: '',
+  lazy: false,
+  containerClosed: false,
+});
+const PLAIN_LINE_CONTEXT: ScannedLine['context'] = Object.freeze({
+  codeState: 'none', listInfo: NO_LIST_INFO, setextLevel: 0, isRefDefLine: false,
+  lazyInherit: null, codeLang: null, calloutType: null, calloutTitle: null, isCalloutHeader: false,
+});
 
 /** scanTokens 返回：ok 携带 token 列表与消费长度；失败时由调用方按失败签名记忆 */
 type ScanOutcome =
@@ -57,222 +86,6 @@ interface InlineCloseRule {
   close: string;
   type: string;
 }
-
-/**
- * 命名实体表（02 §2.6）：HTML5 常用命名实体的子集，覆盖 CommonMark 0.31.2
- * 官方套件全部用例（nbsp/amp/copy/AElig/Dcaron/frac34/HilbertSpace/
- * DifferentialD/ClockwiseContourIntegral/ngE/ouml/quot 等）与常用 Latin-1、
- * 希腊字母、标点符号实体。值统一用 Unicode 转义序列，规避源码编码风险。
- */
-const NAMED_ENTITIES: Record<string, string> = {
-  // 基础
-  amp: '&',
-  lt: '<',
-  gt: '>',
-  quot: '"',
-  apos: "'",
-  nbsp: '\u00A0',
-  // Latin-1 常用
-  copy: '\u00A9',
-  reg: '\u00AE',
-  trade: '\u2122',
-  cent: '\u00A2',
-  pound: '\u00A3',
-  yen: '\u00A5',
-  euro: '\u20AC',
-  curren: '\u00A4',
-  sect: '\u00A7',
-  para: '\u00B6',
-  micro: '\u00B5',
-  middot: '\u00B7',
-  times: '\u00D7',
-  divide: '\u00F7',
-  deg: '\u00B0',
-  plusmn: '\u00B1',
-  sup1: '\u00B9',
-  sup2: '\u00B2',
-  sup3: '\u00B3',
-  frac12: '\u00BD',
-  frac14: '\u00BC',
-  frac34: '\u00BE',
-  iexcl: '\u00A1',
-  iquest: '\u00BF',
-  laquo: '\u00AB',
-  raquo: '\u00BB',
-  ordf: '\u00AA',
-  ordm: '\u00BA',
-  not: '\u00AC',
-  shy: '\u00AD',
-  macr: '\u00AF',
-  acute: '\u00B4',
-  cedil: '\u00B8',
-  uml: '\u00A8',
-  circ: '\u02C6',
-  tilde: '\u02DC',
-  szlig: '\u00DF',
-  // Latin-1 字母
-  AElig: '\u00C6',
-  Aacute: '\u00C1',
-  Acirc: '\u00C2',
-  Agrave: '\u00C0',
-  Aring: '\u00C5',
-  Atilde: '\u00C3',
-  Auml: '\u00C4',
-  Ccedil: '\u00C7',
-  ETH: '\u00D0',
-  Eacute: '\u00C9',
-  Ecirc: '\u00CA',
-  Egrave: '\u00C8',
-  Euml: '\u00CB',
-  Iacute: '\u00CD',
-  Icirc: '\u00CE',
-  Igrave: '\u00CC',
-  Iuml: '\u00CF',
-  Ntilde: '\u00D1',
-  Oacute: '\u00D3',
-  Ocirc: '\u00D4',
-  Ograve: '\u00D2',
-  Oslash: '\u00D8',
-  Otilde: '\u00D5',
-  Ouml: '\u00D6',
-  THORN: '\u00DE',
-  Uacute: '\u00DA',
-  Ucirc: '\u00DB',
-  Ugrave: '\u00D9',
-  Uuml: '\u00DC',
-  Yacute: '\u00DD',
-  aacute: '\u00E1',
-  acirc: '\u00E2',
-  agrave: '\u00E0',
-  aring: '\u00E5',
-  atilde: '\u00E3',
-  auml: '\u00E4',
-  ccedil: '\u00E7',
-  eth: '\u00F0',
-  eacute: '\u00E9',
-  ecirc: '\u00EA',
-  egrave: '\u00E8',
-  euml: '\u00EB',
-  iacute: '\u00ED',
-  icirc: '\u00EE',
-  igrave: '\u00EC',
-  iuml: '\u00EF',
-  ntilde: '\u00F1',
-  oacute: '\u00F3',
-  ocirc: '\u00F4',
-  ograve: '\u00F2',
-  oslash: '\u00F8',
-  otilde: '\u00F5',
-  ouml: '\u00F6',
-  thorn: '\u00FE',
-  uacute: '\u00FA',
-  ucirc: '\u00FB',
-  ugrave: '\u00F9',
-  uuml: '\u00FC',
-  yacute: '\u00FD',
-  yuml: '\u00FF',
-  // 希腊字母
-  Alpha: '\u0391',
-  Beta: '\u0392',
-  Gamma: '\u0393',
-  Delta: '\u0394',
-  Epsilon: '\u0395',
-  Zeta: '\u0396',
-  Eta: '\u0397',
-  Theta: '\u0398',
-  Iota: '\u0399',
-  Kappa: '\u039A',
-  Lambda: '\u039B',
-  Mu: '\u039C',
-  Nu: '\u039D',
-  Xi: '\u039E',
-  Omicron: '\u039F',
-  Pi: '\u03A0',
-  Rho: '\u03A1',
-  Sigma: '\u03A3',
-  Tau: '\u03A4',
-  Upsilon: '\u03A5',
-  Phi: '\u03A6',
-  Chi: '\u03A7',
-  Psi: '\u03A8',
-  Omega: '\u03A9',
-  alpha: '\u03B1',
-  beta: '\u03B2',
-  gamma: '\u03B3',
-  delta: '\u03B4',
-  epsilon: '\u03B5',
-  zeta: '\u03B6',
-  eta: '\u03B7',
-  theta: '\u03B8',
-  iota: '\u03B9',
-  kappa: '\u03BA',
-  lambda: '\u03BB',
-  mu: '\u03BC',
-  nu: '\u03BD',
-  xi: '\u03BE',
-  omicron: '\u03BF',
-  pi: '\u03C0',
-  rho: '\u03C1',
-  sigmaf: '\u03C2',
-  sigma: '\u03C3',
-  tau: '\u03C4',
-  upsilon: '\u03C5',
-  phi: '\u03C6',
-  chi: '\u03C7',
-  psi: '\u03C8',
-  omega: '\u03C9',
-  // 常用符号
-  hellip: '\u2026',
-  mdash: '\u2014',
-  ndash: '\u2013',
-  lsquo: '\u2018',
-  rsquo: '\u2019',
-  ldquo: '\u201C',
-  rdquo: '\u201D',
-  bull: '\u2022',
-  dagger: '\u2020',
-  Dagger: '\u2021',
-  permil: '\u2030',
-  larr: '\u2190',
-  uarr: '\u2191',
-  rarr: '\u2192',
-  darr: '\u2193',
-  harr: '\u2194',
-  ne: '\u2260',
-  le: '\u2264',
-  ge: '\u2265',
-  infin: '\u221E',
-  sum: '\u2211',
-  prod: '\u220F',
-  radic: '\u221A',
-  int: '\u222B',
-  part: '\u2202',
-  nabla: '\u2207',
-  isin: '\u2208',
-  notin: '\u2209',
-  ni: '\u220B',
-  forall: '\u2200',
-  exist: '\u2203',
-  empty: '\u2205',
-  and: '\u2227',
-  or: '\u2228',
-  equiv: '\u2261',
-  cong: '\u2245',
-  sim: '\u223C',
-  asymp: '\u2248',
-  prop: '\u221D',
-  lowast: '\u2217',
-  minus: '\u2212',
-  lowbar: '\u005F',
-  prime: '\u2032',
-  Prime: '\u2033',
-  // 套件特殊实体（0.31.2 用例所需）
-  HilbertSpace: '\u210B',
-  DifferentialD: '\u2146',
-  ClockwiseContourIntegral: '\u2232',
-  ngE: '\u2267\u0338',
-  Dcaron: '\u010E',
-};
 
 /**
  * 引用链接定义表（02 §2.3）：label 归一化（3.1.4：去首尾空白、内部空白折叠
@@ -331,872 +144,228 @@ export class MarkdownParser {
     return 'line_' + (this.idCounter++).toString(36);
   }
 
+  public static createDocumentContext(): DocumentContextIndex {
+    return new DocumentContextIndex((getLine, index, count, before) =>
+      this.scanLineContext(getLine, index, count, before));
+  }
+
+  public static parseLineWithContext(line: string, offset: number, context: LineParseContext): LineNode {
+    const info = context.listInfo;
+    const node = this.parseLine(line, offset, context.codeState, context.setextLevel,
+      context.refDefs, context.isRefDefLine, info, context.lazyInherit, context.blockEnd,
+      context.codeLang, context.calloutType, context.calloutTitle, context.isCalloutHeader);
+    const first = info.markers[0];
+    return {
+      ...node,
+      listMarkers: info.markers.length ? info.markers : undefined,
+      listPrefix: first?.marker.prefix,
+      indentColumns: first?.indentColumns,
+      listDepth: first?.depth ?? (info.depth >= 0 ? info.depth : undefined),
+      contentIndentColumns: info.depth >= 0 ? info.contentIndentColumns : undefined,
+      listContinuation: info.continuation && info.afterBlank && node.type === 'body' ? true : undefined,
+      blockquoteLevel: info.blockquoteLevel || undefined,
+    };
+  }
+
   public static parse(text: string): MarkdownDocument {
-    const {
-      offsets,
-      codeBlockState,
-      setextLevels,
-      listContexts,
-      lazyContinuation,
-      fenceLangs,
-      calloutTypes,
-      calloutTitles,
-      isCalloutHeaders,
-    } = this.computeLineOffsets(text);
     const lines = text.split('\n');
-    const lineNodes: LineNode[] = new Array(lines.length);
-    // 引用链接定义预扫描（02 §2.3）：定义表随 parse 调用创建（文档级隔离——
-    // 多文档各 parse 各建，不跨文档共享）；返回每行「是否为定义行」标志。
-    const { refs, flags } = this.collectReferenceDefinitions(
-      lines,
-      codeBlockState
-    );
-    for (let i = 0; i < lines.length; i++) {
-      // 定义行不是段落：修正 Setext 预扫描的误判
-      // （`[foo]: /url\n===` → `===` 是正文而非 Setext 下划线，spec 例 25）。
-      if (flags[i] && setextLevels[i] > 0) {
-        setextLevels[i] = 0;
-        if (i + 1 < setextLevels.length) setextLevels[i + 1] = 0;
-      }
-      // Setext 上下文标志（0=普通行 / 1|2=Setext 标题内容行 / -1=Setext 下划线行）
-      // 由预扫描 computeSetextContexts 产出，随 parseLine 传入——
-      // 「标题身份由上下文决定、而非解析后回写」是 review-02 §7.1 的修正要求。
-      lineNodes[i] = this.parseLine(
-        lines[i],
-        offsets[i],
-        codeBlockState[i],
-        setextLevels[i],
-        refs,
-        flags[i],
-        // 列表项延续上下文（R1.5-B）：computeLineOffsets 判定为「空行后
-        // 列表项延续」的行携带列表缩进，parseLine 据此标记 listIndent/
-        // listContinuation（普通行为 null）。
-        listContexts[i],
-        // 懒延续继承层级（B8a）：无块引用标记（或标记层数不足）的段落
-        // 延续行继承前一非空白块引用段落行的容器层级（null = 非懒延续）。
-        lazyContinuation[i],
-        // B8c：行尾硬换行上下文——本行是否为「块结束」（无后继行或下一行
-        // 为空白行）：硬换行不发生在块末尾（spec 例 644/645），块末行尾的
-        // 尾随空白/反斜杠保持文本语义。近似判定（列表项/标题后紧邻行的
-        // 精确块边界超出行级模型，登记偏差）。
-        i === lines.length - 1 || lines[i + 1].trim() === '',
-        // W2-5：围栏代码行的高亮语言键（computeLineOffsets 扫描产出；
-        // 非代码行/无语言围栏为 null）
-        fenceLangs[i],
-        calloutTypes ? calloutTypes[i] : null,
-        calloutTitles ? calloutTitles[i] : null,
-        isCalloutHeaders ? isCalloutHeaders[i] : false
-      );
-    }
-    return {
-      lines: lineNodes,
-    };
+    const context = this.createDocumentContext();
+    context.update((i) => lines[i], lines.length, 0, 0, lines.length);
+    let offset = 0;
+    return { lines: lines.map((line, i) => {
+      const node = this.parseLineWithContext(line, offset, context.get(i));
+      offset += line.length + 1;
+      return node;
+    }) };
   }
-
-  /** 引用定义表快照 id 计数器（文档级隔离 + 缓存键区分） */
-  private static refTableCounter = 0;
-
-  /**
-   * 引用链接定义预扫描（02 §2.3 / review-02 §7.3）：
-   * - 收集 `[label]: destination "title"`（≤3 前导空格；label 不含未转义 `]`），
-   *   label 归一化（3.1.4：空白折叠 + 大小写折叠 + 实体解码，转义不折叠）后入表；
-   * - 定义行与参与行标记 flags（parseLine 零输出为 'empty' 行）；
-   * - 支持 destination/title 跨行（`[foo]:\n/url`、`[foo]:\n<url>\n'title'`、
-   *   title 跨行到闭合引号）与「首次定义优先」（重复 label 只记第一处）；
-   * - 不支持 label 跨行（`[\nfoo\n]:`，02 登记偏差）；
-   * - 定义不能打断段落（`Foo\n[bar]: /baz` → 段落延续，spec 例 22）；
-   * - 代码块（fence/indent）内不收集。
-   * 返回值：refs（无定义时为 null，渲染路径 parseLine 不传表即按文本回退）。
-   */
-  private static collectReferenceDefinitions(
-    lines: string[],
-    codeBlockState: CodeState[]
-  ): { refs: RefDefTable | null; flags: boolean[] } {
-    const n = lines.length;
-    const flags: boolean[] = new Array(n).fill(false);
-    const table = new Map<string, RefDefinition>();
-    let anyDef = false;
-    // 多行定义状态机：needDest（`[foo]:` 后等 destination 行）/
-    // needTitle（dest 行后等 title 行）/ inTitle（title 跨行收集）
-    let mode: 'none' | 'needDest' | 'needTitle' | 'inTitle' = 'none';
-    let defLabel = '';
-    let defUrl = '';
-    let defStart = -1;
-    let titleQuote = '';
-    let titleContent = '';
-    // title 跨行收集时，开引号后紧跟行尾换行（例 5）→ 首个续行前补 `\n`
-    let titleLeadNewline = false;
-    // 上一非代码行是否为「段落形态」（定义不能打断段落）
-    let prevParagraphish = false;
-
-    const register = (label: string, url: string, title?: string) => {
-      const key = this.normalizeRefLabel(label);
-      if (!table.has(key)) {
-        table.set(key, {
-          // 目标/标题：实体解码（跳过 \&）→ 转义还原（\* → *、\b 保留）
-          url: this.unescapePunctuation(this.decodeEntitiesInString(url)),
-          ...(title !== undefined
-            ? {
-                title: this.unescapePunctuation(
-                  this.decodeEntitiesInString(title)
-                ),
-              }
-            : {}),
-        });
-        anyDef = true;
-      }
-    };
-
-    for (let i = 0; i < n; i++) {
-      const inCode = codeBlockState[i] !== 'none';
-      const stripped = this.stripBlockquoteContext(lines[i]);
-      const content = stripped.content;
-      const isBlank = content.trim() === '';
-
-      if (inCode) {
-        mode = 'none';
-        prevParagraphish = false;
-        continue;
-      }
-
-      if (mode === 'inTitle') {
-        // title 跨行：当前行找闭合引号（例 5：`'title\nline1\nline2\n'`）
-        const closeIdx = content.indexOf(titleQuote);
-        if (closeIdx !== -1) {
-          titleContent += content.slice(0, closeIdx);
-          register(defLabel, defUrl, titleContent);
-          flags[i] = true;
-          mode = 'none';
-          prevParagraphish = false;
-          titleLeadNewline = false;
-        } else {
-          // 开引号在行尾（例 5）：首个续行前补 `\n`
-          titleContent += (titleLeadNewline ? '\n' : '') + content + '\n';
-          titleLeadNewline = false;
-          flags[i] = true;
-        }
-        continue;
-      }
-
-      if (mode === 'needTitle') {
-        // dest 行之后：可选 title 行（引号形式，可跨行）
-        const t = content.match(
-          /^ {0,3}("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\((?:[^)\\]|\\.)*\))[ \t]*$/
-        );
-        if (t) {
-          const q = t[1][0];
-          const inner = t[1].slice(1, -1);
-          if (t[1].endsWith(q)) {
-            register(defLabel, defUrl, inner);
-            mode = 'none';
-            prevParagraphish = false;
-          } else {
-            // 未闭合（行尾是开引号）：进入跨行收集
-            titleQuote = q;
-            titleContent = inner;
-            mode = 'inTitle';
-            prevParagraphish = false;
-          }
-          flags[i] = true;
-        } else if (isBlank) {
-          // 空行：定义无 title 结束（空行本身不是定义行）
-          register(defLabel, defUrl);
-          mode = 'none';
-          prevParagraphish = false;
-        } else {
-          // 非法续行：整条定义作废，撤销已标行
-          for (let j = defStart; j < i; j++) flags[j] = false;
-          mode = 'none';
-          prevParagraphish = true;
-        }
-        continue;
-      }
-
-      if (mode === 'needDest') {
-        // `[foo]:` 之后：当前行必须是 destination（`<...>` 或裸 URL 单段）
-        const d = content.match(
-          /^ {0,3}(<[^<>\n\x00-\x1F]*>|[^ \t\n\r\f<>]+)[ \t]*$/
-        );
-        if (d && !isBlank) {
-          defUrl = d[1];
-          if (defUrl.startsWith('<')) defUrl = defUrl.slice(1, -1);
-          flags[i] = true;
-          mode = 'needTitle';
-          prevParagraphish = false;
-        } else {
-          // 空行或非法行：定义作废（例 8：`[foo]:` + 空行 → 正文）
-          flags[defStart] = false;
-          mode = 'none';
-          prevParagraphish = !isBlank;
-        }
-        continue;
-      }
-
-      // —— 普通行：尝试单行定义 / 进入 pending ——
-      // label 支持转义 `\]`（`[Foo*bar\]]:...`，spec 例 3）
-      const single = content.match(/^ {0,3}\[((?:[^\]\\]|\\.)+)\]:[ \t]*(.*)$/);
-      if (single && !prevParagraphish) {
-        const label = single[1];
-        const rest = single[2].trim();
-        if (rest === '') {
-          // `[foo]:` 空目标：等待下一行 destination（例 2/4/7）
-          defLabel = label;
-          defStart = i;
-          flags[i] = true;
-          mode = 'needDest';
-          prevParagraphish = false;
-          continue;
-        }
-        const full = rest.match(
-          /^(<[^<>\n\x00-\x1F]*>|[^ \t\n\r\f<>]+)(?:[ \t]+("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\((?:[^)\\]|\\.)*\)))?[ \t]*$/
-        );
-        if (full) {
-          let url = full[1];
-          if (url.startsWith('<')) url = url.slice(1, -1);
-          const titleRaw = full[2];
-          if (titleRaw) {
-            const q = titleRaw[0];
-            if (titleRaw.endsWith(q)) {
-              register(label, url, titleRaw.slice(1, -1));
-            } else {
-              // 行尾未闭合开引号：跨行收集（例 5 `[foo]: /url '`）
-              defLabel = label;
-              defUrl = url;
-              defStart = i;
-              titleQuote = q;
-              // 开引号后紧跟行尾换行：续行前需补 `\n`（title 以换行开头）
-              titleContent = titleRaw.length > 1 ? titleRaw.slice(1) : '';
-              titleLeadNewline = true;
-              mode = 'inTitle';
-              flags[i] = true;
-              prevParagraphish = false;
-              continue;
-            }
-          } else {
-            register(label, url);
-          }
-          flags[i] = true;
-          prevParagraphish = false;
-          continue;
-        }
-        // 非法（例 10 `<bar>(baz)`、例 18 多余内容）：按正文。
-        // 例外：dest 后跟单个未闭合开引号 → title 跨行收集（例 5 `[foo]: /url '`）
-        const openTitle = rest.match(
-          /^(<[^<>\n\x00-\x1F]*>|[^ \t\n\r\f<>]+)[ \t]+('|")$/
-        );
-        if (openTitle) {
-          let url = openTitle[1];
-          if (url.startsWith('<')) url = url.slice(1, -1);
-          defLabel = label;
-          defUrl = url;
-          defStart = i;
-          titleQuote = openTitle[2];
-          titleContent = '';
-          titleLeadNewline = true;
-          mode = 'inTitle';
-          flags[i] = true;
-          prevParagraphish = false;
-          continue;
-        }
-        prevParagraphish = true;
-        continue;
-      }
-      mode = 'none';
-      prevParagraphish = !isBlank && this.isParagraphishLine(content);
-    }
-
-    return {
-      refs: anyDef ? { id: ++this.refTableCounter, table } : null,
-      flags,
-    };
-  }
-
-  /**
-   * 行首形态是否为「段落」（引用定义打断判定 + 定义行/标题等排除）：
-   * 空行、hr、Setext 下划线形态（`===`/`---`）、ATX 标题、列表、表格、
-   * 已标记的定义行都不是段落。
-   */
-  private static isParagraphishLine(content: string): boolean {
-    const s = content.replace(/^ {0,3}/, '');
-    if (!s.trim()) return false;
-    if (/^([-*+_]){3,}[ \t]*$/.test(s)) return false;
-    if (/^(=+|-+)[ \t]*$/.test(s)) return false;
-    if (/^#{1,6}(?:[ \t]|$)/.test(s)) return false;
-    if (/^([-*+]\s*\[[xX\s]\])\s+/.test(s)) return false;
-    if (/^([-*+])\s+/.test(s)) return false;
-    if (/^(\d+\.)\s+/.test(s)) return false;
-    if (/^\|?(\s*:?-+:?\s*\|)+\s*:?-+:?\s*\|?$/.test(s)) return false;
-    const pipeCount = (s.match(/\|/g) || []).length;
-    if ((pipeCount >= 1 && s.trim().startsWith('|')) || pipeCount >= 2) {
-      return false;
-    }
-    return true;
-  }
-
-  /**
-   * label 归一化（CommonMark 3.1.4）：去首尾空白、内部空白折叠为单空格、
-   * 大小写折叠（toLowerCase）、实体解码；反斜杠转义不折叠（例 64：
-   * `[foo\!]` 不匹配 `[foo!]` 定义）。
-   */
   private static normalizeRefLabel(s: string): string {
     return this.decodeEntitiesInString(
       s.replace(/\s+/g, ' ').trim().toLowerCase()
     );
   }
 
-  public static computeLineOffsets(text: string): {
-    offsets: number[];
-    codeBlockState: CodeState[];
-    setextLevels: number[];
-    listContexts: (ListContext | null)[];
-    // B8a：懒延续行继承的块引用层级（null = 非懒延续行）——无块引用标记
-    // （或标记层数不足）的段落延续行按 spec 5.2 Laziness 规则继承前一
-    // 非空白块引用段落行的容器层级，供 parseLine 覆盖文本前缀计算值。
-    lazyContinuation: (number | null)[];
-    // W2-5：围栏代码行的高亮语言键（python/sql/bash，null = 无语言回退
-    // JS 关键字集）——围栏扫描在 fence_start 行从 info 串提取，块内
-    // code 行继承（含空行），fence_end 归 null。供 parseLine 按语言
-    // 分发关键字表（S-T-2-08）。
-    fenceLangs: (string | null)[];
-    // Callout 提示块类型与标题追踪（> [!NOTE] 等）
-    calloutTypes: (CalloutType | null)[];
-    calloutTitles: (string | null)[];
-    isCalloutHeaders: boolean[];
-  } {
+  public static computeLineOffsets(text: string) {
     const lines = text.split('\n');
-    const offsets = new Array(lines.length);
-    const codeBlockState: CodeState[] = new Array(lines.length);
-    // R1.5-B：逐行列表延续上下文（仅「空行后列表项延续」行非 null）
-    const listContexts: (ListContext | null)[] = new Array(lines.length).fill(
-      null
-    );
-    // B8a：逐行懒延续层级（默认非懒延续）
-    const lazyContinuation: (number | null)[] = new Array(lines.length).fill(
-      null
-    );
-    // W2-5：逐行围栏语言键（默认无语言；仅围栏代码内容行非 null）
-    const fenceLangs: (string | null)[] = new Array(lines.length).fill(null);
-    const calloutTypes: (CalloutType | null)[] = new Array(lines.length).fill(
-      null
-    );
-    const calloutTitles: (string | null)[] = new Array(lines.length).fill(null);
-    const isCalloutHeaders: boolean[] = new Array(lines.length).fill(false);
-    let currentCallout: {
-      type: CalloutType;
-      title: string;
-      level: number;
-    } | null = null;
-
-    let currentOffset = 0;
-    let inCodeBlock = false;
-    let inMathBlock = false;
-    // 围栏状态（02 §7.3/§7.4 修复）：记录开围栏的标记字符与长度——
-    // CommonMark 关闭围栏必须同字符（反引号/波浪线不可混用）且长度 ≥ 开栏长度
-    // （```` 开栏不能被 ``` 关闭，spec Fenced code "at least as long as"）；
-    // 取代旧的 `startsWith('```')` 布尔切换（3 反引号会错误关闭 4 反引号、
-    // ` ``` js` 信息串行被错误当作关闭行，02 §7.2 实证 FENCE34/FENCEINFO）。
-    // B8a：增加 level 字段——围栏跨行要求块引用层级一致（spec 例 237：
-    // 引用内开栏后无标记行 → 围栏随容器结束，无前缀行是新围栏/普通行）。
-    let fenceState: {
-      marker: string;
-      length: number;
-      level: number;
-    } | null = null;
-    // W2-5：当前打开的围栏的（规范化）语言键——fence_start 行从 info 串
-    // 提取，块内 code 行（含空行）继承；fence 关闭/强制终止时归 null。
-    let fenceLang: string | null = null;
-    // 数学块起始行的块引用层级（B8a：与围栏同一致性语义）
-    let mathFenceLevel = 0;
-    // 缩进代码块状态（02 §2.2）：连续 ≥4 空格缩进行合并为一个代码块，
-    // 块内空行保持状态（CommonMark：空行仍是代码块的一部分）。
-    // B8a：增加 level 字段——缩进代码跨行同样要求块引用层级一致
-    // （spec 例 252：`>     code` 的块止于空行，`>    not code` 是新容器）。
-    let inIndentCode = false;
-    let indentCodeLevel = 0;
-    // 上一非空白行的块级形态记忆（见 BlockKind 注释）——行级模型无容器状态，
-    // 用轻量行首形态分类近似「上一行是什么」，不依赖 parseLine（避免递归依赖）。
-    let prevBlockKind: BlockKind = 'blank';
-    // HTML 块状态（02 §2.5 / R1-D）：inHtmlBlock 为块内标记，htmlType 记录
-    // 当前块类型（1-7，决定结束条件）——type 1-5 遇匹配闭合行退出、
-    // type 6/7 遇空行退出（空行本身不是块，标记 'none'，CommonMark 4.6）。
-    let inHtmlBlock = false;
-    let htmlType = 0;
-    // R1.5-B 列表上下文记忆：最近列表标记行的内容缩进列（markerWidth）——
-    // 空行后首行缩进与之比较，判定「列表项延续 / li 内代码块 / 出列表」。
-    let listCtx: ListContext | null = null;
-    // 上一行是否为空白行：列表延续与 li 内代码块的判定只作用于
-    // 「空行后首行」（紧邻延续由 prevBlockKind === 'list' 单独接管，
-    // 代码块不能打断段落——spec §5.2 例 264 语义）。
-    let justBlank = false;
-    // B8a：懒延续判定的「前一非空白行是块引用内打开的段落」记忆——
-    // prevParagraphOpen = 前一行是 body 行且其块引用层级 ≥1（段落已打开）；
-    // prevBqLevel = 该行继承后的层级（懒延续行继续传递，例 233 三行链）。
-    let prevParagraphOpen = false;
-    let prevBqLevel = 0;
-
-    for (let i = 0; i < lines.length; i++) {
-      offsets[i] = currentOffset;
-      // 块引用前缀剥离（与 parseNormalLine 同一正则 `^ {0,3}>\s?`）：缩进判定发生
-      // 在前缀剥离之后（`>     code` → 块引用内缩进代码）。B8a：前缀限至多
-      // 3 空格缩进（spec 例 231——`    > foo` 是缩进代码块，不再是块引用）。
-      const { level: bqSelfLevel, content: bqContent } =
-        this.stripBlockquoteContext(lines[i]);
-      const trimmed = bqContent.trim();
-
-      // Callout 提示块判定与延续（CommonMark / GFM Alert 语法）
-      const calloutMatch = trimmed.match(
-        /^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\](?:\s+(.*))?$/i
-      );
-      if (bqSelfLevel > 0 && calloutMatch) {
-        currentCallout = {
-          type: calloutMatch[1].toLowerCase() as CalloutType,
-          title: calloutMatch[2]?.trim() || '',
-          level: bqSelfLevel,
-        };
-        calloutTypes[i] = currentCallout.type;
-        calloutTitles[i] = currentCallout.title;
-        isCalloutHeaders[i] = true;
-      } else if (
-        currentCallout &&
-        bqSelfLevel >= currentCallout.level &&
-        lines[i].trim() !== ''
-      ) {
-        calloutTypes[i] = currentCallout.type;
-        calloutTitles[i] = currentCallout.title;
-        isCalloutHeaders[i] = false;
-      } else if (
-        bqSelfLevel < (currentCallout?.level ?? 1) ||
-        lines[i].trim() === ''
-      ) {
-        currentCallout = null;
-      }
-
-      // —— B8a：懒延续判定（spec 5.2 Laziness 规则 2）——
-      // 前一非空白行是块引用内打开的段落（body 且层级 ≥1）且本行非空行后的
-      // 首行（空行阻断懒延续，例 248），且本行的标记层数**不足**（bqSelfLevel
-      // < prevBqLevel——标记层数足够时按自身层级解析，`> q\n> > deep` 的
-      // 第二行自身 2 层不懒延续），且本行剥离自身标记后的内容属于
-      // 「段落延续文本」（缩进代码不能打断段落、hr/ATX/表格/列表/围栏/
-      // HTML 块等块结构可打断）→ 本行继承前一行的块引用层级。
-      // 例 250/251：嵌套引用中可省略任意数量的 `>`（`> bar` 自身 1 层、
-      // 懒延续到 `>>> foo` 的 3 层容器——继承以段落层级为准）。
-      let lazyInherit: number | null = null;
-      if (prevParagraphOpen && !justBlank && bqSelfLevel < prevBqLevel) {
-        if (this.isParagraphContinuationText(bqContent, prevBlockKind)) {
-          lazyInherit = prevBqLevel;
-          lazyContinuation[i] = lazyInherit;
-        }
-      }
-
-      // 围栏形态判定（开/关共用，trim 后行）：反引号 run ≥3（info 串不允许
-      // 含反引号——spec 原文：backtick fences 的 info string 不能含 backtick，
-      // ` ``` aa `` ` 整行不是围栏，退化为段落）或波浪线 run ≥3（info 串无限制，
-      // `~~~ aa ``` ~~~` 合法）。
-      // B8c（spec 例 134/137）：开/闭围栏行允许至多 3 空格缩进——前导缩进
-      // ≥4 列（tab 按停靠 4 展开）的行不是围栏形态（`    ``` 是缩进代码块
-      // 的内容，spec 例 134）；开围栏行 1-3 空格缩进合法（spec 例 131-133，
-      // 开行缩进量的内容剥除属投影器配合项）。indentCols 在剥离块引用
-      // 前缀后的内容行上计算（`> ``` 为 0 列、`>   ``` 为 2 列）。
-      const indentCols = this.leadingIndentColumns(bqContent);
-      const fenceOpen =
-        indentCols <= 3 ? /^(```+)([^`]*)$|^(~~~+).*$/.exec(trimmed) : null;
-      // HTML 块内行：优先级最高——fence/math/缩进代码判定全部让路
-      // （spec 4.6：「HTML 块内的 HTML 若可被识别为 start condition 将
-      // 原样透传、不改变解析器状态」——`<div>` 块内的 ``` 围栏行、`<pre>`
-      // 形态行均按 html 原样处理，spec 例 161/148）。
-      if (inHtmlBlock) {
-        if (this.htmlBlockEndCondition(htmlType, bqContent)) {
-          inHtmlBlock = false;
-          htmlType = 0;
-          if (bqContent.trim() === '') {
-            // type 6/7 空行结束块：空行本身不是块内容，按普通空行处理
-            // （`<hr>\n\nok` 的中间空行是 'none'，spec：end condition 是
-            // 「line is followed by a blank line」——块止于空行之前）。
-            codeBlockState[i] = 'none';
-            justBlank = true;
-            if (prevBlockKind !== 'list') prevBlockKind = 'blank';
-          } else {
-            // type 1-5 结束行（行内含闭合标记）：该行仍是块的最后一行。
-            codeBlockState[i] = 'html_block';
-            prevBlockKind = 'code';
-          }
-        } else {
-          codeBlockState[i] = 'html_block';
-          // 块形态记作 code 类：块后 ≥4 空格行允许开始缩进代码
-          // （type 7 单行块后 `    foo` → 缩进代码，与 CommonMark 一致）。
-          prevBlockKind = 'code';
-        }
-      } else if (
-        inCodeBlock &&
-        fenceState &&
-        bqSelfLevel !== fenceState.level &&
-        // 空行不在此强制关闭（空行懒匹配所有容器——fence 内空行保持，
-        // 后续非空行若不匹配容器则触发关闭并回写这些空行，见下）
-        trimmed !== ''
-      ) {
-        // —— B8a：围栏跨行容器层级不匹配（spec 例 237）——
-        // 引用内开栏（`> ```` ）后紧跟无标记行：块引用容器在无标记行处
-        // 结束，围栏随容器一起终止（围栏内容必须全在容器内），本行
-        // 重新按普通行判定（可能自身开启新围栏，如例 237 的第三行 ````）。
-        // spec（Fenced code blocks 章节）实证：`> ````\n> aaa\n\nbbb` 的
-        // 空行也不属于 fence 内容——关闭时回写 fence 内尾随空行为 none。
-        inCodeBlock = false;
-        fenceState = null;
-        fenceLang = null;
-        this.closeBlockTrailingBlanks(lines, codeBlockState, i);
-        if (!inMathBlock && fenceOpen) {
-          codeBlockState[i] = 'fence_start';
-          fenceState = {
-            marker: fenceOpen[1] !== undefined ? '`' : '~',
-            length: (fenceOpen[1] ?? fenceOpen[3]).length,
-            level: bqSelfLevel,
-          };
-          // W2-5：从 info 串提取语言（反引号 info 在 [2]；波浪线开栏的
-          // info 无捕获组——原正则 `^(~~~+).*$` 未捕获，从 trimmed 剥 run）
-          fenceLang = this.normalizeFenceLang(
-            fenceOpen[1] !== undefined
-              ? fenceOpen[2]
-              : trimmed.replace(/^~+/, '')
-          );
-          fenceLangs[i] = fenceLang;
-          inCodeBlock = true;
-        } else {
-          // 非围栏形态行：落到下方的普通行判定链
-          codeBlockState[i] = 'none';
-          prevBlockKind = this.guessBlockKind(bqContent, prevBlockKind);
-          inIndentCode = false;
-        }
-      } else if (
-        inMathBlock &&
-        bqSelfLevel !== mathFenceLevel &&
-        trimmed !== ''
-      ) {
-        // —— B8a：数学块跨行容器层级不匹配（与围栏同一致性语义）——
-        // `> $$` 开数学块后无标记行 → 数学块随容器终止，本行按普通行处理；
-        // 数学块内尾随空行同样回写（与围栏规则一致）。
-        inMathBlock = false;
-        this.closeBlockTrailingBlanks(lines, codeBlockState, i);
-        if (trimmed === '$$') {
-          codeBlockState[i] = 'math_fence_start';
-          mathFenceLevel = bqSelfLevel;
-          inMathBlock = true;
-        } else if (trimmed === '') {
-          codeBlockState[i] = 'none';
-          justBlank = true;
-          if (prevBlockKind !== 'list') prevBlockKind = 'blank';
-        } else {
-          codeBlockState[i] = 'none';
-          prevBlockKind = this.guessBlockKind(bqContent, prevBlockKind);
-          inIndentCode = false;
-        }
-      } else if (!inMathBlock && fenceOpen) {
-        if (!inCodeBlock) {
-          // 开围栏：记录标记字符、run 长度与起始行块引用层级（B8a——
-          // 后续行的关闭/跨容器判定以「同字符 + run 长度 ≥ 开栏长度 +
-          // 层级一致」为准，spec 例 237）。
-          codeBlockState[i] = 'fence_start';
-          fenceState = {
-            marker: fenceOpen[1] !== undefined ? '`' : '~',
-            length: (fenceOpen[1] ?? fenceOpen[3]).length,
-            level: bqSelfLevel,
-          };
-          // W2-5：从 info 串提取语言（反引号 info 在 [2]；波浪线开栏的
-          // info 无捕获组——原正则 `^(~~~+).*$` 未捕获，从 trimmed 剥 run）
-          fenceLang = this.normalizeFenceLang(
-            fenceOpen[1] !== undefined
-              ? fenceOpen[2]
-              : trimmed.replace(/^~+/, '')
-          );
-          fenceLangs[i] = fenceLang;
-          inCodeBlock = true;
-        } else if (fenceState) {
-          // 代码块内：仅「同字符 + run 长度 ≥ 开栏长度 + 行内除尾随空白
-          // 无信息串」才关闭；` ``` js`（信息串）与 3 反引号关 4 反引号
-          // 均保持 code（spec：closing fence 不能有 info string）。
-          // 判定经 isFenceClose 共享函数（P2-A1 fence 单源化：与 EditorStore
-          // 增量状态机共用同一完整关闭条件，消除 fence_end 行尾插入的
-          // 增量/重扫分歧——见 isFenceClose 定义注释）。
-          if (isFenceClose(trimmed, fenceState.marker, fenceState.length)) {
-            codeBlockState[i] = 'fence_end';
-            fenceState = null;
-            fenceLang = null;
-            fenceLangs[i] = null;
-            inCodeBlock = false;
-          } else {
-            codeBlockState[i] = 'code';
-            fenceLangs[i] = fenceLang;
-          }
-        } else {
-          // 防御：理论上不会出现「inCodeBlock 但无状态」的中间态
-          codeBlockState[i] = 'code';
-          fenceLangs[i] = fenceLang;
-        }
-        // 围栏代码块内缩进不生效（CommonMark）；fence 判定先于缩进代码，
-        // 且 `    ```（4 空格）已由 B8c 围栏缩进门挡在围栏形态之外——
-        // 落入下方缩进代码判定（spec 例 134，02 §7.2 登记偏差已修复）。
-        inIndentCode = false;
-        prevBlockKind = 'code';
-      } else if (!inCodeBlock && trimmed === '$$') {
-        if (!inMathBlock) {
-          codeBlockState[i] = 'math_fence_start';
-          // B8a：记录数学块起始行的块引用层级（跨容器一致性判定用）
-          mathFenceLevel = bqSelfLevel;
-          inMathBlock = true;
-        } else {
-          codeBlockState[i] = 'math_fence_end';
-          inMathBlock = false;
-        }
-        inIndentCode = false;
-        prevBlockKind = 'code';
-      } else if (inCodeBlock) {
-        codeBlockState[i] = 'code';
-        // W2-5：围栏内行（含空行）继承当前围栏语言键
-        fenceLangs[i] = fenceLang;
-        inIndentCode = false;
-        prevBlockKind = 'code';
-      } else if (inMathBlock) {
-        codeBlockState[i] = 'math_block';
-        inIndentCode = false;
-        prevBlockKind = 'code';
-      } else {
-        // —— 缩进代码块判定（02 §2.2）——
-        const indent = this.leadingIndentColumns(bqContent);
-        if (inIndentCode) {
-          // —— B8a：缩进代码块跨行容器层级不匹配（spec 例 252）——
-          // 引用内缩进代码（`>     code`）止于容器变化处：无标记行/空行
-          // 的层级与开块行不同 → 代码块结束，本行重新走下方判定链
-          // （空行按空行处理、`    bar` 在文档根开新代码块，例 236）。
-          if (indentCodeLevel !== 0 && bqSelfLevel !== indentCodeLevel) {
-            inIndentCode = false;
-            indentCodeLevel = 0;
-          }
-        }
-        if (inIndentCode) {
-          // 块内：空行与 ≥4 空格缩进行保持状态；非缩进行结束代码块。
-          if (trimmed === '' || indent >= 4) {
-            codeBlockState[i] = 'indent_code';
-          } else {
-            // 非缩进行结束代码块：该行按普通行处理（可能开启 HTML 块——
-            // CommonMark 中缩进代码块后的 `</div>` 行是 type 6 块）。
-            inIndentCode = false;
-            indentCodeLevel = 0;
-            const htmlStart = this.matchHtmlBlockStart(
-              bqContent,
-              prevBlockKind
-            );
-            if (htmlStart) {
-              codeBlockState[i] = 'html_block';
-              inHtmlBlock = true;
-              htmlType = htmlStart.type;
-              if (this.htmlBlockEndCondition(htmlStart.type, bqContent)) {
-                inHtmlBlock = false;
-                htmlType = 0;
-              }
-              prevBlockKind = 'code';
-            } else {
-              codeBlockState[i] = 'none';
-              prevBlockKind = this.guessBlockKind(bqContent, prevBlockKind);
-            }
-          }
-        } else if (trimmed === '') {
-          // 空行：不进入缩进代码；段落/表格上下文重置（段落打断规则失效，
-          // `para\n\n    code` 是代码块），列表上下文保持
-          // （`- item\n\n    bar` 仍是松散列表延续）。
-          codeBlockState[i] = 'none';
-          justBlank = true;
-          if (prevBlockKind !== 'list') prevBlockKind = 'blank';
-        } else if (indent >= 4) {
-          const afterIndent = this.stripFourColumns(bqContent);
-          if (lazyInherit !== null) {
-            // —— B8a：懒延续行（spec 例 238）——
-            // `> foo\n    - bar`：4 空格缩进行在前一非空白行是块引用段落时
-            // 是「段落延续文本」（缩进代码不能打断段落、列表标记缩进过深
-            // 无法开项——spec 说明实证），必须按 body 延续解析，嵌套列表/
-            // 缩进代码判定全部让路（缩进代码块只在段落未打开时成立）。
-            codeBlockState[i] = 'none';
-            inIndentCode = false;
-            prevBlockKind = 'body';
-          } else if (this.isListMarkerStart(afterIndent)) {
-            // 去缩进后以列表标记开头 → 嵌套列表/列表延续，按 body 解析。
-            // 任务书简化：无条件列表优先（登记偏差——CommonMark 中文档级
-            // `    - foo` 期望缩进代码，行级模型无列表容器状态无法区分）。
-            codeBlockState[i] = 'none';
-            inIndentCode = false;
-            prevBlockKind = 'list';
-            // R1.5-B：嵌套列表标记 → 列表上下文更新为嵌套列表（空行后
-            // 延续以嵌套列表的内容缩进列为基准，而非外层列表）。
-            const nestedInfo = this.listMarkerInfo(afterIndent);
-            if (nestedInfo) {
-              const ctxIndent = this.leadingIndentColumns(bqContent);
-              listCtx = {
-                indent: ctxIndent,
-                markerWidth: ctxIndent + nestedInfo.markerWidth,
-              };
-            }
-          } else if (prevBlockKind === 'list' && justBlank && listCtx) {
-            // —— R1.5-B：空行后的列表上下文（spec 例 255-258/264 语义）——
-            if (indent >= listCtx.markerWidth + 4) {
-              // 缩进 ≥ 内容缩进 + 4：li 内缩进代码块（例 264：`- Foo\n\n
-              //       bar` → 6 列 = 内容缩进 2 + 4）。空行分隔是必要条件——
-              // 紧邻缩进行（R1-A2b）按段落延续处理，代码块不能打断段落。
-              codeBlockState[i] = 'indent_code';
-              inIndentCode = true;
-              indentCodeLevel = bqSelfLevel;
-              prevBlockKind = 'code';
-            } else if (indent >= listCtx.markerWidth) {
-              // 内容缩进 ≤ 缩进 < 内容缩进 + 4：列表项延续（例 256/258）——
-              // 行按 body 解析并携带列表上下文（listIndent + listContinuation）。
-              codeBlockState[i] = 'none';
-              inIndentCode = false;
-              listContexts[i] = {
-                indent: listCtx.indent,
-                markerWidth: listCtx.markerWidth,
-              };
-              prevBlockKind = 'list';
-            } else {
-              // 缩进 < 内容缩进：出列表（例 255/257）。≥4 缩进的出列行按
-              // 缩进代码块处理（例 257：`     two` → `<pre><code> two`）。
-              listCtx = null;
-              inIndentCode = false;
-              codeBlockState[i] = 'indent_code';
-              inIndentCode = true;
-              indentCodeLevel = bqSelfLevel;
-              prevBlockKind = 'code';
-            }
-          } else if (
-            prevBlockKind === 'body' ||
-            prevBlockKind === 'list' ||
-            prevBlockKind === 'table'
-          ) {
-            // 段落打断规则（`Foo\n    bar` → 段落延续）、列表延续
-            // （`- item\n    cont`）、表格优先（GFM 允许缩进表格）→ 均不进代码；
-            // prevBlockKind 保持不变（延续可能有多行）。
-            codeBlockState[i] = 'none';
-            inIndentCode = false;
-          } else {
-            // 进入缩进代码块（上一行是空行 / 标题 / 分隔线 / 代码 / 块引用等）。
-            codeBlockState[i] = 'indent_code';
-            inIndentCode = true;
-            indentCodeLevel = bqSelfLevel;
-            prevBlockKind = 'code';
-          }
-        } else {
-          // HTML 块 start 判定（缩进 <4、非空行）：type 1-6 可打断段落，
-          // 判定独立于 prevBlockKind（`Foo\n<div>` 中 div 是新块，spec 例 185）；
-          // type 7 段落保护在 matchHtmlBlockStart 内部（prevBlockKind 为
-          // body/list 时禁用——`Foo\n<a href="bar">` 中 a 行是段落延续，
-          // spec 例 187；列表延续同理由行级模型无容器状态登记为偏差）。
-          const htmlStart = this.matchHtmlBlockStart(bqContent, prevBlockKind);
-          if (htmlStart) {
-            codeBlockState[i] = 'html_block';
-            inHtmlBlock = true;
-            htmlType = htmlStart.type;
-            // 首行同时满足 end condition → 单行块（`<!-- c -->`、
-            // `<!DOCTYPE html>`、`<style>p{color:red;}</style>` 等）。
-            if (this.htmlBlockEndCondition(htmlStart.type, bqContent)) {
-              inHtmlBlock = false;
-              htmlType = 0;
-            }
-            prevBlockKind = 'code';
-          } else {
-            // 先做轻量块级形态分类：列表标记行记录列表上下文（R1.5-B）；
-            // 「段落形态」行在空行后且缩进 ≥ 内容缩进时是列表项延续
-            // （例 256/258/262/277）——hr/ATX/表格等形态让路（保持既有语义）。
-            const g = this.guessBlockKind(bqContent, prevBlockKind);
-            if (g === 'list') {
-              const info = this.listMarkerInfo(
-                this.stripFourColumns(bqContent)
-              );
-              if (info) {
-                // 内容缩进列 = 前导缩进 + 标记段列宽（spec §5.2 例 257/258）
-                listCtx = {
-                  indent,
-                  markerWidth: indent + info.markerWidth,
-                };
-              }
-              codeBlockState[i] = 'none';
-              prevBlockKind = 'list';
-            } else if (
-              g === 'body' &&
-              prevBlockKind === 'list' &&
-              justBlank &&
-              listCtx &&
-              indent >= listCtx.markerWidth
-            ) {
-              // 空行后首行缩进 ≥ 内容缩进：列表项延续（新段落）——
-              // 行按 body 解析并携带列表上下文（listIndent + listContinuation）。
-              codeBlockState[i] = 'none';
-              listContexts[i] = {
-                indent: listCtx.indent,
-                markerWidth: listCtx.markerWidth,
-              };
-              prevBlockKind = 'list';
-            } else {
-              if (
-                prevBlockKind === 'list' &&
-                justBlank &&
-                listCtx &&
-                indent < listCtx.markerWidth
-              ) {
-                // 缩进 < 内容缩进：出列表（例 255），记忆清除防后续误续
-                listCtx = null;
-              }
-              codeBlockState[i] = 'none';
-              prevBlockKind = g;
-            }
-          }
-        }
-      }
-
-      // R1.5-B：非空行在迭代末尾重置「上一行空白」记忆——justBlank 语义是
-      // 「上一行（i-1）为空白行」，必须在下一行迭代开始时保持有效，
-      // 因此重置放在迭代末尾而非开头。
-      // B8a：同步维护懒延续判定的「块引用段落打开」记忆——非空行按本行
-      // 最终形态（prevBlockKind 由各分支设置）更新；空行关闭段落
-      // （`> bar\n\nbaz` 中 baz 不懒延续，spec 例 248）。懒延续行自身
-      // 也是 body 段落（例 233 三行链由此逐行传递）。
-      if (trimmed !== '') {
-        justBlank = false;
-        prevBqLevel = lazyInherit !== null ? lazyInherit : bqSelfLevel;
-        prevParagraphOpen = prevBlockKind === 'body' && prevBqLevel >= 1;
-      } else {
-        prevParagraphOpen = false;
-        prevBqLevel = 0;
-      }
-
-      currentOffset += lines[i].length + 1; // +1 for \n
-    }
-
-    // Setext 预扫描（紧随 computeLineOffsets 状态机，单趟 O(n)）：
-    // 产出每行的 Setext 上下文标志，供 parseLine 消费（见 §2.1 与 review-02 §7.1）。
-    // B8a：懒延续行不参与 Setext——`> bar\nbaz\n---` 中 baz 是块引用段落
-    // 的延续行，`---` 对其不构成 Setext 下划线（否则 baz 被误升级为标题）。
-    const setextLevels = this.computeSetextContexts(
-      lines,
-      codeBlockState,
-      lazyContinuation
-    );
-
+    const index = this.createDocumentContext();
+    index.update((i) => lines[i], lines.length, 0, 0, lines.length);
+    const contexts = lines.map((_, i) => index.get(i));
+    let offset = 0;
     return {
-      offsets,
-      codeBlockState,
-      setextLevels,
-      listContexts,
-      lazyContinuation,
-      fenceLangs,
-      calloutTypes,
-      calloutTitles,
-      isCalloutHeaders,
+      offsets: lines.map((line) => { const value = offset; offset += line.length + 1; return value; }),
+      codeBlockState: contexts.map((context) => context.codeState),
+      setextLevels: contexts.map((context) => context.setextLevel),
+      listInfos: contexts.map((context) => context.listInfo),
+      lazyContinuation: contexts.map((context) => context.lazyInherit),
+      fenceLangs: contexts.map((context) => context.codeLang),
+      calloutTypes: contexts.map((context) => context.calloutType),
+      calloutTitles: contexts.map((context) => context.calloutTitle),
+      isCalloutHeaders: contexts.map((context) => context.isCalloutHeader),
     };
   }
 
-  /**
-   * 围栏 info 串 → 高亮语言键（W2-5）：取首个空白分隔 token 并小写化；
-   * python/sql/bash（含常见别名）返回规范化键，其余（含 js 系别名与
-   * 未识别语言）一律归 null——null 回退 JS 关键字集（与语言无关的
-   * 既有高亮行为完全一致），且与行级渲染路径（LineItem 不传 lang）
-   * 共享同一缓存键，无重复缓存条目。
-   */
+  /** 唯一块状态转移；全量、局部编辑、追加和实时行投影均消费它的结果。 */
+  private static scanLineContext(
+    getLine: (index: number) => string,
+    index: number,
+    lineCount: number,
+    before: ScanSnapshot,
+  ): ScannedLine {
+    const source = getLine(index);
+    // 字母起始且没有表格管道的根段落不可能开启任何块语法；同一状态转移
+    // 直接确认正文，避免百万行普通文本重复分配容器和运行块标记匹配器。
+    if (before.block === null && before.containers.frames.length === 0 &&
+      before.definitionRemaining === 0 && before.callout === null &&
+      /^[A-Za-z]/.test(source) && source.indexOf('|') === -1) {
+      return {
+        context: PLAIN_LINE_CONTEXT,
+        after: {
+          ...before,
+          containers: before.containers.paragraphOpen && !before.containers.previousBlank
+            ? before.containers : { ...before.containers, paragraphOpen: true, previousBlank: false },
+          paragraphStart: before.containers.paragraphOpen ? before.paragraphStart : index,
+        },
+      };
+    }
+    const interrupts = (content: string, column: number) =>
+      leadingColumns(content, column) <= 3 &&
+      (this.matchHtmlBlockStart(content, before.containers.paragraphOpen ? 'body' : 'blank') !== null ||
+        this.guessBlockKind(content, 'body') === 'table');
+    let stack = new ListContainerStack(before.containers);
+    let prefix = stack.accept({ source, verbatim: before.block !== null, interruptsParagraph: interrupts });
+    let block: OpenBlock | null = before.block;
+    let closeTrailingBlanks = false;
+    if (block && (prefix.containerClosed ||
+      (block.kind === 'indent' && prefix.content.trim() !== '' &&
+        leadingColumns(prefix.content, prefix.contentColumn) < 4))) {
+      closeTrailingBlanks = prefix.containerClosed && (block.kind === 'fence' || block.kind === 'math');
+      block = null;
+      stack = new ListContainerStack(before.containers);
+      stack.setParagraphOpen(false);
+      prefix = stack.accept({ source, interruptsParagraph: interrupts });
+    }
+    const content = prefix.content;
+    const trimmed = content.trim();
+    const indent = leadingColumns(content, prefix.contentColumn);
+    const wasParagraph = before.containers.paragraphOpen && !prefix.containerClosed &&
+      prefix.markers.length === 0;
+    let codeState: CodeState = 'none';
+    let codeLang: string | null = null;
+    let paragraph = false;
+    let paragraphStart = -1;
+    let definitionRemaining = Math.max(0, before.definitionRemaining - 1);
+    let definition: ScannedLine['definition'];
+    let dependencyEnd: number | undefined;
+    let headingFrom: number | undefined;
+    let headingLevel: number | undefined;
+    let setextLevel = 0;
+    let isRefDefLine = before.definitionRemaining > 0;
+    let callout = before.callout;
+    let isCalloutHeader = false;
+
+    if (block?.kind === 'html') {
+      const end = this.htmlBlockEndCondition(block.htmlType!, content);
+      codeState = end && trimmed === '' ? 'none' : 'html_block';
+      if (end) block = null;
+    } else if (block?.kind === 'fence') {
+      if (indent <= 3 && isFenceClose(trimmed, block.marker!, block.length!)) {
+        codeState = 'fence_end';
+        block = null;
+      } else {
+        codeState = 'code';
+        codeLang = block.language ?? null;
+      }
+    } else if (block?.kind === 'math') {
+      codeState = trimmed === '$$' ? 'math_fence_end' : 'math_block';
+      if (codeState === 'math_fence_end') block = null;
+    } else if (block?.kind === 'indent') {
+      codeState = 'indent_code';
+    } else if (!isRefDefLine) {
+      // 定义只在段落起点尝试。前向依赖会使后续增删从定义起点重放。
+      const containerSnapshot = stack.snapshot();
+      const reference = !wasParagraph && trimmed.startsWith('[')
+        ? scanReferenceDefinition((line) => {
+            if (line === index) return content;
+            const scope = new ListContainerStack(containerSnapshot);
+            scope.setParagraphOpen(false);
+            const nested = scope.accept({ source: getLine(line) });
+            return nested.containerClosed ? null : nested.content;
+          }, index, lineCount)
+        : null;
+      if (reference) {
+        dependencyEnd = reference.dependencyEnd;
+        if (reference.label !== undefined && reference.url !== undefined) {
+          isRefDefLine = true;
+          definitionRemaining = reference.lines - 1;
+          definition = {
+            label: this.normalizeRefLabel(reference.label),
+            value: {
+              url: this.unescapePunctuation(this.decodeEntitiesInString(reference.url)),
+              ...(reference.title !== undefined
+                ? { title: this.unescapePunctuation(this.decodeEntitiesInString(reference.title)) } : {}),
+            },
+          };
+        }
+      }
+      if (!isRefDefLine && trimmed !== '') {
+        const underline = indent <= 3 && prefix.markers.length === 0 &&
+          !prefix.lazy && wasParagraph ? /^(=+|-+)[ \t\r]*$/.exec(trimmed) : null;
+        const fence = indent <= 3 ? /^(```+)([^`]*)$|^(~~~+).*$/.exec(trimmed) : null;
+        const html = indent <= 3 ? this.matchHtmlBlockStart(content, wasParagraph ? 'body' : 'blank') : null;
+        if (underline && before.paragraphStart >= 0) {
+          setextLevel = -1;
+          headingLevel = underline[1][0] === '=' ? 1 : 2;
+          headingFrom = before.paragraphStart;
+        } else if (fence) {
+          codeState = 'fence_start';
+          codeLang = this.normalizeFenceLang(fence[1] !== undefined ? fence[2] : trimmed.replace(/^~+/, ''));
+          block = {
+            kind: 'fence', marker: fence[1] !== undefined ? '`' : '~',
+            length: (fence[1] ?? fence[3]).length, language: codeLang,
+            quoteDepth: prefix.blockquoteLevel, listDepth: prefix.depth,
+          };
+        } else if (trimmed === '$$') {
+          codeState = 'math_fence_start';
+          block = { kind: 'math', quoteDepth: prefix.blockquoteLevel, listDepth: prefix.depth };
+        } else if (html) {
+          codeState = 'html_block';
+          if (!this.htmlBlockEndCondition(html.type, content)) block = {
+            kind: 'html', htmlType: html.type, quoteDepth: prefix.blockquoteLevel, listDepth: prefix.depth,
+          };
+        } else if (indent >= 4 && !wasParagraph) {
+          codeState = 'indent_code';
+          block = { kind: 'indent', quoteDepth: prefix.blockquoteLevel, listDepth: prefix.depth };
+        } else {
+          const kind = this.guessBlockKind(content, wasParagraph ? 'body' : 'blank');
+          paragraph = prefix.lazy || (kind === 'body' && !isThematicBreak(content, prefix.contentColumn));
+          if (paragraph) paragraphStart = wasParagraph ? before.paragraphStart : index;
+        }
+      }
+    }
+    if (codeState === 'none' && prefix.blockquoteLevel > 0) {
+      const alert = /^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\](?:\s+(.*))?$/i.exec(trimmed);
+      if (alert) {
+        callout = { type: alert[1].toLowerCase() as CalloutType, title: alert[2]?.trim() ?? '', level: prefix.blockquoteLevel };
+        isCalloutHeader = true;
+      }
+    }
+    if (callout && (prefix.blockquoteLevel < callout.level || source.trim() === '')) callout = null;
+    stack.setParagraphOpen(paragraph);
+    // 无容器的普通行共享空归属对象，百万行正文不分配百万份空轨迹。
+    const listInfo = prefix.depth < 0 && prefix.blockquoteLevel === 0 && !prefix.lazy
+      ? NO_LIST_INFO : prefix;
+    return {
+      context: {
+        codeState, listInfo, setextLevel, isRefDefLine,
+        lazyInherit: prefix.lazy && prefix.blockquoteLevel > 0 ? prefix.blockquoteLevel : null,
+        codeLang, calloutType: callout?.type ?? null, calloutTitle: callout?.title ?? null, isCalloutHeader,
+      },
+      after: { containers: stack.snapshot(), block, paragraphStart, definitionRemaining, callout },
+      ...(definition ? { definition } : {}),
+      ...(dependencyEnd !== undefined ? { dependencyEnd } : {}),
+      ...(headingFrom !== undefined ? { headingFrom, headingLevel } : {}),
+      ...(closeTrailingBlanks ? { closeTrailingBlanks: true } : {}),
+    };
+  }
   private static normalizeFenceLang(info: string): string | null {
     const first = info.trim().split(/\s+/)[0]?.toLowerCase();
     if (!first) return null;
@@ -1229,179 +398,8 @@ export class MarkdownParser {
       : this.CODE_KEYWORD_JS;
   }
 
-  /**
-   * 回写围栏/数学块内尾随空行（B8a，spec「A code block can have all empty
-   * lines」的对偶）：容器因层级不匹配而强制关闭时，块内尾随的空白行
-   * 不属于块内容（spec 实证：`> ````\n> aaa\n\nbbb` 的 fence 内容只有
-   * `aaa`，空行随容器终止归文档根）。从 i-1 起向前把连续的空行 code/
-   * math_block 状态回写为 none（空行懒匹配所有容器——容器在下一非空行
-   * 处回溯闭合，空行随之出块）。
-   */
-  private static closeBlockTrailingBlanks(
-    lines: string[],
-    codeBlockState: CodeState[],
-    i: number
-  ): void {
-    for (let j = i - 1; j >= 0; j--) {
-      if (codeBlockState[j] !== 'code' && codeBlockState[j] !== 'math_block') {
-        break;
-      }
-      if (lines[j].trim() !== '') break;
-      codeBlockState[j] = 'none';
-    }
-  }
 
-  /**
-   * 剥离块引用前缀（与 parseLine / parseNormalLine / parseCodeLine 同一
-   * 正则 `^ {0,3}>\s?`），返回前缀层级与剥离后的内容——Setext 判定必须
-   * 发生在前缀剥离之后（02-解析器正确性.md §2.1 冲突点）。
-   * B8c（spec 例 231）：marker 前至多 3 空格缩进——`    > foo`（4 空格）
-   * 不再是块引用，落入缩进代码块判定（CommonMark：>3 空格缩进的 `>`
-   * 行按缩进代码块处理）。贪婪 `\s*` 吞缩进的旧行为（`> >     > Even`
-   * 剥成 3 层）为非 CommonMark 注册行为，B8a 已登记偏差，本轮收紧——
-   * tests/unit/fuzz-document-typography.test.ts 的 3 层断言需同步
-   * （测试断言更新登记，tests/ 域禁碰）；投影器 stripBlockquotePrefix
-   * 同步收紧属 B8c 登记配合项（tests/commonmark/ 只读域）。
-   */
-  private static stripBlockquoteContext(line: string): {
-    level: number;
-    content: string;
-  } {
-    let level = 0;
-    let content = line;
-    let m: RegExpMatchArray | null;
-    while ((m = content.match(/^ {0,3}>\s?/))) {
-      level++;
-      content = content.substring(m[0].length);
-    }
-    return { level, content };
-  }
 
-  /**
-   * 计算行首缩进列宽（spec §Tabs：tab 按停靠 4 展开——`  →foo` = 2+4 = 6 列 ≥4 → 代码；
-   * ` →foo` = 1+4 = 5 列 ≥4 → 代码；`  foo` = 2 列 <4 → 普通行）。
-   * 只扫描行首连续空格/tab，遇到首个非空白字符即停。
-   */
-  private static leadingIndentColumns(s: string): number {
-    let col = 0;
-    for (let i = 0; i < s.length; i++) {
-      if (s[i] === ' ') {
-        col++;
-      } else if (s[i] === '\t') {
-        col += 4 - (col % 4);
-      } else {
-        break;
-      }
-    }
-    return col;
-  }
-
-  /**
-   * 剥离 4 列缩进（CommonMark：缩进代码块内容 = 行内容减去 4 空格缩进；
-   * 超过 4 列的缩进保留进内容，如 8 空格 → 内容 `    foo`）。
-   * 供「去缩进后行首是否为列表标记」判定使用。
-   */
-  private static stripFourColumns(s: string): string {
-    let col = 0;
-    let i = 0;
-    while (i < s.length && col < 4) {
-      if (s[i] === ' ') {
-        col++;
-        i++;
-      } else if (s[i] === '\t') {
-        col += 4 - (col % 4);
-        i++;
-      } else {
-        break;
-      }
-    }
-    return s.substring(i);
-  }
-
-  /**
-   * 去缩进后行首是否为列表标记（task / 项目符号 / 有序，与 parseNormalLine 的
-   * 列表判定正则一致）。行首必须是标记本身（无 `\s*` 前缀）——剥 4 列后
-   * 仍以空格开头的内容（如 6 空格缩进）不算列表标记，文档级进入缩进代码。
-   */
-  private static isListMarkerStart(s: string): boolean {
-    return (
-      /^([-*+]\s*\[[xX\s]\])\s+/.test(s) ||
-      /^([-*+])\s+/.test(s) ||
-      /^(\d+\.)\s+/.test(s)
-    );
-  }
-
-  /**
-   * 列表标记信息（R1.5-B）：行首为列表标记（task / 项目符号 / 有序，与
-   * parseNormalLine / guessBlockKind 同一正则族——task 优先于项目符号、
-   * 项目符号优先于有序）时，返回标记前缀与「标记段列宽」（标记字符 +
-   * 标记后空白，tab 按停靠 4 展开）。列表项内容缩进列 = 前导缩进 +
-   * 标记段列宽（CommonMark §5.2 例 257/258 实证：`-    one` 的延续块需
-   * 缩进 5 列、` -    one` 需 6 列、`1.  foo` 需 4 列）。
-   * 特例（规范规则 #2/#3）：标记后无内容（空项，`-   `）或标记后空白
-   * ≥5 列（首块为缩进代码，`1.     x`）时，内容缩进列 = 标记宽 W + 1
-   * （例 273/274/279 语义）。
-   */
-  private static listMarkerInfo(
-    content: string
-  ): { prefix: string; markerWidth: number } | null {
-    const m = /^([-*+]\s*\[[xX\s]\])[ \t]+|^([-*+])[ \t]+|^(\d+\.)[ \t]+/.exec(
-      content
-    );
-    if (!m) return null;
-    const prefix = m[1] ?? m[2] ?? m[3];
-    // 标记段 = 标记字符 + 标记后空白（W + N 列）
-    const markerSeg = m[0];
-    const wPlusN = this.textColumns(markerSeg);
-    const n = wPlusN - prefix.length;
-    // 标记后无内容（空项）或空白 ≥5 列（首块为缩进代码）→ 内容缩进 = W + 1
-    if (n >= 5 || content.slice(markerSeg.length) === '') {
-      return { prefix, markerWidth: prefix.length + 1 };
-    }
-    return { prefix, markerWidth: wPlusN };
-  }
-
-  /** 字符串的渲染列宽（tab 按停靠 4 展开，与 leadingIndentColumns 同语义） */
-  private static textColumns(s: string): number {
-    let col = 0;
-    for (const ch of s) {
-      if (ch === ' ') {
-        col++;
-      } else if (ch === '\t') {
-        col += 4 - (col % 4);
-      } else {
-        col++;
-      }
-    }
-    return col;
-  }
-
-  /**
-   * 段落延续文本判定（B8a，spec 5.2 Laziness 规则 2）：
-   * 行（已剥离自身块引用标记）在「块引用段落已打开」的上下文中是否属于
-   * 段落延续文本——是则允许懒延续（无标记行继承块引用层级）。
-   * 判定语义「若补上块引用标记后会被解析为段落内容」：
-   * - ≥4 空格缩进：一律是段落延续文本——缩进代码块不能打断段落，
-   *   列表标记缩进过深无法开项（spec 例 238：`> foo\n    - bar`）；
-   * - <4 空格：排除可打断段落的块结构——hr / ATX 标题 / Setext 下划线
-   *   （前一行是段落时）/ 表格 / 列表标记 / 围栏 / HTML 块（type 1-6）。
-   * 空行不算段落延续文本（懒延续要求紧跟段落，例 248）。
-   */
-  private static isParagraphContinuationText(
-    content: string,
-    prevBlockKind: BlockKind
-  ): boolean {
-    if (!content.trim()) return false;
-    if (this.leadingIndentColumns(content) >= 4) return true;
-    const s = content.replace(/^ {0,3}/, '');
-    // 围栏形态（与 computeLineOffsets 的 fenceOpen 同一判定基线：
-    // trim 后反引号 run ≥3 且 info 串不含反引号 / 波浪线 run ≥3）
-    if (/^(```+)([^`]*)$/.test(s) || /^(~~~+).*$/.test(s)) return false;
-    // HTML 块 start（type 1-6 可打断段落；type 7 在段落后是段落延续——
-    // matchHtmlBlockStart 对 prevBlockKind==='body' 已禁用 type 7）
-    if (this.matchHtmlBlockStart(content, prevBlockKind)) return false;
-    return this.guessBlockKind(content, prevBlockKind) === 'body';
-  }
 
   /**
    * 轻量行首形态分类（computeLineOffsets 专用，供缩进代码判定的「上一行」上下文）：
@@ -1435,19 +433,17 @@ export class MarkdownParser {
   private static guessBlockKind(line: string, prev: BlockKind): BlockKind {
     const s = line.replace(/^ {0,3}/, '');
     if (!s.trim()) return 'blank';
-    if (/^([-*+_]){3,}\s*$/.test(s)) return 'hr';
+    if (isThematicBreak(s)) return 'hr';
     if (/^=+[ \t]*$/.test(s)) return prev === 'body' ? 'heading' : 'body';
     if (/^#{1,6}\s/.test(s)) return 'heading';
     const pipeCount = MarkdownParser.countStructuralPipes(s);
     if (
-      /^\|?(\s*:?-+:?\s*\|)+\s*:?-+:?\s*\|?$/.test(s) ||
+      isTableSeparator(s) ||
       (pipeCount >= 2 && (s.trim().startsWith('|') || s.trim().endsWith('|') || pipeCount >= 3))
     ) {
       return 'table';
     }
-    if (/^([-*+]\s*\[[xX\s]\])\s+/.test(s)) return 'list';
-    if (/^([-*+])\s+/.test(s)) return 'list';
-    if (/^(\d+\.)\s+/.test(s)) return 'list';
+    if (matchListMarker(s)) return 'list';
     return 'body';
   }
 
@@ -1499,7 +495,7 @@ export class MarkdownParser {
     content: string,
     prevBlockKind: BlockKind
   ): { type: number } | null {
-    if (this.isListMarkerStart(content)) return null;
+    if (isListMarkerStart(content)) return null;
     for (let t = 0; t < this.HTML_BLOCK_START_RE.length; t++) {
       if (this.HTML_BLOCK_START_RE[t].test(content)) return { type: t + 1 };
     }
@@ -1633,77 +629,7 @@ export class MarkdownParser {
     return null;
   }
 
-  /**
-   * 判断「剥离块引用前缀后的内容行」是否可解释为段落（Setext 标题内容行候选）：
-   * CommonMark 要求标题文本行不得被解释为 code fence / ATX 标题 / 块引用 /
-   * 主题分隔线 / 列表项 / HTML 块，且首行缩进不得超过 3 个空格。
-   * 行级模型的镜像判定：逐项排除 hr / ATX / 表格 / 列表形态。
-   */
-  private static isSetextContentLine(content: string): boolean {
-    // 空行 / 纯空白行不是段落
-    if (!content || !content.trim()) return false;
-    // >3 空格（或制表符）缩进行是缩进代码候选，不是段落
-    if (/^ {4,}/.test(content) || content.startsWith('\t')) return false;
-    // 主题分隔线（hr）不是段落
-    if (/^(\s*[-*+_]){3,}\s*$/.test(content)) return false;
-    // ATX 标题不是段落
-    if (/^#{1,6}\s+/.test(content)) return false;
-    // 表格（行级启发式：表格分隔行 / 含管道行）——表格上下文不受 Setext 影响
-    if (/^\|?(\s*:?-+:?\s*\|)+\s*:?-+:?\s*\|?$/.test(content)) return false;
-    const pipeCount = (content.match(/\|/g) || []).length;
-    if ((pipeCount >= 1 && content.trim().startsWith('|')) || pipeCount >= 2) {
-      return false;
-    }
-    // 列表项（任务 / 项目符号 / 有序）是独立容器，不允许被 Setext 下划线升级
-    if (/^(\s*)([-*+]\s*\[[xX\s]\])\s+/.test(content)) return false;
-    if (/^(\s*)([-*+])\s+/.test(content)) return false;
-    if (/^(\s*)(\d+\.)\s+/.test(content)) return false;
-    return true;
-  }
 
-  /**
-   * Setext 上下文预扫描（02 §2.1 方案 + review-02 §7.1 修正）：
-   * 第 i 行是标题内容（其下一行是 `===`/`---` 下划线且本行可解释为段落）
-   * → setextLevels[i] = 1|2（标题层级由下划线字符决定）；
-   * 下划线行本身 → setextLevels[i] = -1（零输出行）。
-   * 优先级：hr 在「上一行非段落」时成立、Setext 在「上一行是段落」时成立、
-   * 表格分隔线必含 `|` 天然避让——三者由本预扫描按 02 §2.1 顺序裁决。
-   * 块引用懒延续（`> foo` 后裸 `---`）不构成 Setext（02 登记偏差）。
-   */
-  private static computeSetextContexts(
-    lines: string[],
-    codeBlockState: CodeState[],
-    // B8a：懒延续行数组（null = 非懒延续）——懒延续行是块引用段落的
-    // 延续内容，不能作为 Setext 标题内容行（`> bar\nbaz\n---` 的 baz）。
-    lazyContinuation: (number | null)[] | null = null
-  ): number[] {
-    const n = lines.length;
-    const setextLevels: number[] = new Array(n).fill(0);
-    // CommonMark setext heading underline：≤3 前导空格 + 全 = 或全 - + 任意尾随空白
-    const underlineRe = /^ {0,3}(=+|-+)[ \t]*$/;
-    for (let i = 0; i + 1 < n; i++) {
-      // 围栏 / 数学 / 代码块内的行不参与 Setext
-      if (codeBlockState[i] !== 'none' || codeBlockState[i + 1] !== 'none') {
-        continue;
-      }
-      // B8a：懒延续行不参与 Setext（其「段落」身份在块引用容器内，
-      // 裸下划线行对其不构成 Setext 下划线——CommonMark 5.2 Laziness：
-      // `> bar\nbaz\n---` 中 --- 是文档根 hr，baz 不是标题内容）
-      if (lazyContinuation && lazyContinuation[i] !== null) {
-        continue;
-      }
-      const prev = this.stripBlockquoteContext(lines[i]);
-      const next = this.stripBlockquoteContext(lines[i + 1]);
-      // 块引用层级必须一致：裸下划线接 `> 段落` 是懒延续，不算（02 已知偏差）
-      if (prev.level !== next.level) continue;
-      const u = next.content.match(underlineRe);
-      if (!u) continue;
-      if (!this.isSetextContentLine(prev.content)) continue;
-      setextLevels[i] = u[1][0] === '=' ? 1 : 2;
-      setextLevels[i + 1] = -1;
-    }
-    return setextLevels;
-  }
 
   private static astCache = new LRUCache<string, LineNode>(50_000);
   public static cacheHits = 0;
@@ -1729,11 +655,12 @@ export class MarkdownParser {
     refDefs: RefDefTable | null = null,
     // 本行是否为引用定义行（零输出）
     isRefDefLine: boolean = false,
-    // 列表项延续上下文（R1.5-B）：computeLineOffsets 判定为「空行后列表项
-    // 延续」的行携带列表缩进；null = 非延续行。必须进缓存键——同文本行
-    // 在有无列表上下文下产出不同节点（listIndent/listContinuation），
+    // 逐行列表归属（T3/ADR-2，computeLineOffsets / computeListInfoWindow 产物）：
+    // 整数嵌套层级 + 内容缩进列 + 延续标志。必须进缓存键——同文本行在有无
+    // 列表归属下产出不同节点（listDepth/contentIndentColumns/listContinuation），
     // 不进键会导致跨文档缓存串扰（例 256 的 `  two` 与普通 `  two`）。
-    listContext: ListContext | null = null,
+    // `null` = 显式「无列表上下文」，内部规范化为 NO_LIST_INFO。
+    listInfo: LineListInfo | null = null,
     // 懒延续继承层级（B8a）：null = 非懒延续行。必须进缓存键——同文本行
     // 在「块引用段落懒延续」与「文档根普通行」下产出不同 blockquoteLevel
     // （例 247 的 `baz` 与文档根 `baz`），不进键会跨文档缓存串扰。
@@ -1761,6 +688,7 @@ export class MarkdownParser {
     // token 偏移为行内相对值（与文档偏移解耦），因此命中节点可直接复用结构。
     // 全局规则注册表版本（R5-B）：register/unregister 自定义语法后，同文本行
     // 的解析结果可能改变——版本进键防跨注册版本串扰（与 refDefs.id 同原则）。
+    const listInfoNorm = listInfo ?? NO_LIST_INFO;
     const cacheKey =
       codeState +
       ':' +
@@ -1772,9 +700,15 @@ export class MarkdownParser {
       ':' +
       InlineRuler.getGlobalVersion() +
       ':' +
-      (listContext
-        ? 'L' + listContext.indent + ',' + listContext.markerWidth
-        : 'Lx') +
+      'L' +
+      listInfoNorm.depth +
+      ',' +
+      listInfoNorm.contentIndentColumns +
+      (listInfoNorm.continuation ? 'c' : '-') +
+      // afterBlank 必须进键：同文本行（`  two`）在「空行后」与「紧邻延续」
+      // 两种上下文下产出不同的 listContinuation（投影层语义），不进键会
+      // 跨上下文串扰。
+      (listInfoNorm.afterBlank ? 'b' : '-') +
       ':' +
       (lazyInherit !== null ? 'B' + lazyInherit : 'Bx') +
       ':' +
@@ -1969,7 +903,7 @@ export class MarkdownParser {
       localOffset,
       setextLevel,
       refDefs,
-      listContext,
+      listInfo,
       lazyInherit,
       blockEnd,
       calloutType,
@@ -2155,9 +1089,10 @@ export class MarkdownParser {
     setextLevel: number = 0,
     // 引用链接定义表（文档级隔离，见 parseLine 注释）
     refDefs: RefDefTable | null = null,
-    // 列表项延续上下文（R1.5-B）：computeLineOffsets 判定为「空行后列表项
-    // 延续」的行携带列表缩进——输出 listIndent + listContinuation 标志。
-    listContext: ListContext | null = null,
+    // 逐行列表归属（T3/ADR-2）：整数嵌套层级 + 内容缩进列 + 延续标志，
+    // 由列表容器栈逐行产出（全量路径 computeLineOffsets / 渲染路径
+    // computeListInfoWindow）。`null` = 无列表上下文。
+    listInfo: LineListInfo | null = null,
     // 懒延续继承层级（B8a）：非 null 时本行是块引用段落的懒延续行——
     // 跳过全部块级判定（hr/ATX/表格/列表），按段落文本行内解析
     // （spec 5.2 Laziness，例 238：`    - bar` 是段落文本而非列表）。
@@ -2169,225 +1104,84 @@ export class MarkdownParser {
     calloutTitle: string | null = null,
     isCalloutHeader: boolean = false
   ): LineNode {
+    const info = listInfo ?? new ListContainerStack().accept({ source: lineText });
     const tokens: InlineNode[] = [];
     let pos = 0;
+    let lineType: 'heading' | 'body' | 'hr' | 'blockquote' | 'table_row' | 'table_separator' = 'body';
+    let headingLevel = setextLevel > 0 ? setextLevel : 0;
+    const isSetextHeading = setextLevel > 0;
+    if (isSetextHeading) lineType = 'heading';
+    const firstMarker = info.markers[0];
+    const markerIndentColumns = firstMarker?.indentColumns ?? 0;
+    const listPrefix = firstMarker?.marker.prefix ?? '';
+    const blockquoteLevel = lazyInherit ?? info.blockquoteLevel;
+    const remainingTextForPrefix = info.content || lineText.slice(info.contentOffset);
 
-    if (!lineText) {
-      return {
-        id: this.generateId(),
-        type: 'empty',
-        raw: '',
-        inlineTokens: [
-          { type: 'text', raw: '', content: '', localOffset: 0, length: 0 },
-        ],
-        localOffset: localOffset,
-        length: 0,
-      };
-    }
-
-    let lineType:
-      | 'heading'
-      | 'body'
-      | 'hr'
-      | 'blockquote'
-      | 'table_row'
-      | 'table_separator' = 'body';
-    let headingLevel = 0;
-    let listIndent = 0;
-    let listPrefix = '';
-    let blockquoteLevel = 0;
-
-    // Setext 标题内容行：预扫描已确认「下一行是 ===/--- 且本行是段落」，
-    // 直接按 heading 解析，headingLevel 由下划线字符（= 或 -）决定。
-    const isSetextHeading = setextLevel >= 1;
-    if (isSetextHeading) {
-      lineType = 'heading';
-      headingLevel = setextLevel;
-    }
-
-    // Parse blockquote prefixes first
-    let remainingTextForPrefix = lineText;
-    let blockquoteMatch;
-    // 前缀正则 `^ {0,3}>\s?`（B8c 收紧：marker 前至多 3 空格缩进，
-    // spec 例 231——见 stripBlockquoteContext 注释）
-    while ((blockquoteMatch = remainingTextForPrefix.match(/^ {0,3}>\s?/))) {
-      blockquoteLevel++;
-      pos += blockquoteMatch[0].length;
-      remainingTextForPrefix = remainingTextForPrefix.substring(
-        blockquoteMatch[0].length
-      );
-    }
-    // B8a：懒延续行以继承层级覆盖文本前缀计算值（spec 5.2 Laziness——
-    // 例 251：`> bar` 自身 1 层，懒延续到 `>>> foo` 的 3 层容器）
-    if (lazyInherit !== null) blockquoteLevel = lazyInherit;
-
-    if (pos > 0) {
+    const appendPrefix = (from: number, to: number) => {
+      if (to <= from) return;
+      const raw = lineText.slice(from, to);
+      tokens.push(raw.includes('>')
+        ? { type: 'blockquote_prefix', raw, content: '', localOffset: from, length: raw.length }
+        : { type: 'text', raw, content: '', localOffset: from, length: raw.length,
+            contentOffset: 0, contentSourceLength: raw.length, sourceBoundaries: [raw.length] });
+    };
+    // marker 的源码范围和深度只读容器轨迹；不再对同一行重识别列表。
+    for (const occurrence of info.markers) {
+      appendPrefix(pos, occurrence.sourceStart);
+      const marker = occurrence.marker;
+      const raw = lineText.slice(occurrence.sourceStart, occurrence.sourceEnd);
       tokens.push({
-        type: 'blockquote_prefix',
-        raw: lineText.substring(0, pos),
-        content: '',
-        localOffset: 0,
-        length: pos,
+        type: marker.kind === 'task' ? 'list_task' : marker.kind === 'ol' ? 'list_number' : 'list_bullet',
+        raw,
+        content: marker.kind === 'ul' ? '•' : marker.prefix,
+        indent: lineText.slice(occurrence.sourceStart, occurrence.markerStart),
+        depth: occurrence.depth,
+        marker: marker.prefix + ' ',
+        isChecked: !!marker.taskRange && /[xX]/.test(lineText.slice(
+          occurrence.markerStart + marker.taskRange.from,
+          occurrence.markerStart + marker.taskRange.to)),
+        localOffset: occurrence.sourceStart,
+        length: raw.length,
       });
+      pos = occurrence.sourceEnd;
     }
-
-    // —— B8a：纯块引用标记行（空引用行，spec 例 239-241/244）——
-    // 剥完全部前缀后无内容（`>` / `>  ` / `> >`）：输出 empty 节点。
-    // 投影器对 empty 行不产出内容但保持 blockquote 容器开合（例 244：
-    // `> foo\n>\n> bar` 的空 `>` 行阻断段落合并，产出两个 <p>）。
-    // raw 保留原文供覆盖守恒与编辑回写。
-    if (remainingTextForPrefix.trim() === '') {
+    if (info.contentOffset > pos) {
+      appendPrefix(pos, info.contentOffset);
+      pos = info.contentOffset;
+    }
+    if (lineText.slice(pos).trim() === '' && info.markers.length === 0) {
       return {
-        id: this.generateId(),
-        type: 'empty',
-        raw: lineText,
-        blockquoteLevel: blockquoteLevel > 0 ? blockquoteLevel : undefined,
-        calloutType: calloutType ?? undefined,
-        calloutTitle: calloutTitle ?? undefined,
-        inlineTokens: [
-          {
-            type: 'text',
-            raw: lineText,
-            content: lineText,
-            localOffset: 0,
-            length: lineText.length,
-          },
-        ],
-        length: lineText.length,
-        localOffset,
+        id: this.generateId(), type: 'empty', raw: lineText,
+        blockquoteLevel: blockquoteLevel || undefined,
+        calloutType: calloutType ?? undefined, calloutTitle: calloutTitle ?? undefined,
+        inlineTokens: tokens.length ? tokens : [{ type: 'text', raw: lineText, content: lineText,
+          localOffset: 0, length: lineText.length }],
+        length: lineText.length, localOffset,
       };
     }
 
-    // Setext 标题内容行跳过全部块级判定（hr/ATX/表格/列表），直接进入行内解析；
-    // 普通行维持原有判定顺序：hr → ATX → 表格 → 列表（02 §2.1 第 3 点）。
-    // B8a：懒延续行同理跳过块级判定（段落延续文本语义，spec 5.2 Laziness）。
-    if (!isSetextHeading && lazyInherit === null) {
-      let isHr = false;
+    if (!isSetextHeading && lazyInherit === null && !info.lazy) {
       const nestedText = lineText.slice(pos);
-      const nestedLocalOffset = pos;
-
-      if (nestedText.length <= 10000) {
-        const hrMatch = nestedText.match(/^(\s*[-*+_]){3,}\s*$/);
-        if (hrMatch) {
-          lineType = 'hr';
-          pos += nestedText.length;
-          isHr = true;
-          // hr 行其余代码不再产出 token，这里补一个覆盖整段的文本 token，
-          // 保证 inlineTokens 的 [localOffset, localOffset+length] 拼接恰好覆盖 [0, raw.length]（覆盖守恒）。
-          tokens.push({
-            type: 'text',
-            raw: nestedText,
-            content: nestedText,
-            localOffset: nestedLocalOffset,
-            length: nestedText.length,
-          });
-        }
-      }
-
-      if (!isHr) {
-        const headingMatch = nestedText.match(/^ {0,3}(#{1,6})\s+/);
-        if (headingMatch) {
+      if (isThematicBreak(nestedText, info.contentColumn)) {
+        lineType = 'hr';
+        tokens.push({ type: 'text', raw: nestedText, content: nestedText,
+          localOffset: pos, length: nestedText.length });
+        pos = lineText.length;
+      } else {
+        const heading = /^ {0,3}(#{1,6})(?:[ \t]+|$)/.exec(nestedText);
+        if (heading) {
           lineType = 'heading';
-          headingLevel = headingMatch[1].length;
-          const prefixLen = headingMatch[0].length;
-          tokens.push({
-            type: 'heading_prefix',
-            raw: headingMatch[0],
-            content: '',
-            localOffset: nestedLocalOffset,
-            length: prefixLen,
-          });
-          pos += prefixLen;
-        } else {
-          // 表格分隔行检测（优先判定）：- | - 或 | --- | --- | 仅包含破折号、冒号、空白与管道符
-          let isTableSep = false;
-          if (nestedText.length <= 10000) {
-            const tableSeparatorMatch = nestedText.match(
-              /^\|?(\s*:?-+:?\s*\|)+\s*:?-+:?\s*\|?$/
-            );
-            if (tableSeparatorMatch) {
-              lineType = 'table_separator';
-              isTableSep = true;
-            }
-          }
-
-          if (!isTableSep) {
-            // 列表项检测（优先于普通表格行）：CommonMark/GFM 铁律——列表前缀（- , * , + , 1. , - [ ]）
-            // 拥有更高排版优先级，行内包含 ||spoiler|| 或 | 绝不可将列表项误判为表格
-            let isList = false;
-            const taskMatch = nestedText.match(/^(\s*)([-*+]\s*\[[xX\s]\])\s+/);
-            if (taskMatch) {
-              isList = true;
-              const prefixLen = taskMatch[0].length;
-              const indent = taskMatch[1];
-              const checkRaw = taskMatch[2];
-              const isChecked =
-                checkRaw.includes('x') || checkRaw.includes('X');
-              listIndent = indent.length;
-              listPrefix = checkRaw;
-              tokens.push({
-                type: 'list_task',
-                raw: taskMatch[0],
-                content: isChecked ? '☑' : '☐',
-                indent: indent,
-                marker: checkRaw + ' ',
-                isChecked,
-                localOffset: nestedLocalOffset,
-                length: prefixLen,
-              });
-              pos += prefixLen;
-            } else {
-              const bulletMatch = nestedText.match(/^(\s*)([-*+])\s+/);
-              if (bulletMatch) {
-                isList = true;
-                const prefixLen = bulletMatch[0].length;
-                const indent = bulletMatch[1];
-                listIndent = indent.length;
-                listPrefix = bulletMatch[2];
-                tokens.push({
-                  type: 'list_bullet',
-                  raw: bulletMatch[0],
-                  content: '•',
-                  indent: indent,
-                  marker: bulletMatch[2] + ' ',
-                  localOffset: nestedLocalOffset,
-                  length: prefixLen,
-                });
-                pos += prefixLen;
-              } else {
-                const numberMatch = nestedText.match(/^(\s*)(\d+\.)\s+/);
-                if (numberMatch) {
-                  isList = true;
-                  const prefixLen = numberMatch[0].length;
-                  const indent = numberMatch[1];
-                  listIndent = indent.length;
-                  listPrefix = numberMatch[2];
-                  tokens.push({
-                    type: 'list_number',
-                    raw: numberMatch[0],
-                    content: numberMatch[0],
-                    indent: indent,
-                    marker: numberMatch[2] + ' ',
-                    localOffset: nestedLocalOffset,
-                    length: prefixLen,
-                  });
-                  pos += prefixLen;
-                }
-              }
-            }
-
-            if (!isList && nestedText.length <= 10000) {
-              const pipeCount = MarkdownParser.countStructuralPipes(nestedText);
-              const trimmedNested = nestedText.trim();
-              if (
-                pipeCount >= 2 &&
-                (trimmedNested.startsWith('|') ||
-                  trimmedNested.endsWith('|') ||
-                  pipeCount >= 3)
-              ) {
-                lineType = 'table_row';
-              }
-            }
+          headingLevel = heading[1].length;
+          tokens.push({ type: 'heading_prefix', raw: heading[0], content: '',
+            localOffset: pos, length: heading[0].length });
+          pos += heading[0].length;
+        } else if (nestedText.length <= 10000 && info.markers.length === 0) {
+          if (isTableSeparator(nestedText)) {
+            lineType = 'table_separator';
+          } else {
+            const count = this.countStructuralPipes(nestedText);
+            const trimmed = nestedText.trim();
+            if (count >= 2 && (trimmed.startsWith('|') || trimmed.endsWith('|') || count >= 3)) lineType = 'table_row';
           }
         }
       }
@@ -2476,16 +1270,20 @@ export class MarkdownParser {
       }
     }
 
-    // R1.5-B：空行后列表项延续（例 256/258/262/277）——行仍是普通段落
-    // （body），但携带列表容器上下文：listIndent = 列表缩进 + listContinuation
-    // 标志，投影器据此把该行并入同一 <li> 的第二个 <p>（AST 层与普通
-    // body 行区分，例 255 的 `<markerWidth` 行无标志即出列表）。
-    // Setext 标题 / hr / 表格等块级形态优先（保持既有语义，0 回归）。
+    // 列表归属落地（T3/ADR-2）：非标记行但归属列表项内容（延续行）——
+    // 行仍是普通段落（body），但携带 listDepth / contentIndentColumns /
+    // listContinuation，投影器据此把该行并入同一 <li> 的后续块
+    // （spec 例 256/258/262/277）。Setext 标题 / hr / 表格等块级形态优先。
+    // 注意：投影层的 `listContinuation` 语义是「**空行后**的列表项新段落」
+    // （spec 例 256 的 `<li><p>one</p><p>two</p></li>`），与归属语义
+    // `listInfo.continuation`（含紧邻延续与 lazy continuation）**不同**——
+    // `- one\n  two` 是同一段落内的紧邻延续（`<li>one two</li>`），
+    // 必须靠 `afterBlank` 区分，否则投影会多插一个 `<p>`。
     const isListContinuation =
-      listContext !== null && lineType === 'body' && !isSetextHeading;
-    if (isListContinuation) {
-      listIndent = listContext.indent;
-    }
+      info.continuation &&
+      info.afterBlank &&
+      lineType === 'body' &&
+      !isSetextHeading;
 
     let effectiveCalloutType = calloutType;
     let effectiveCalloutTitle = calloutTitle;
@@ -2510,8 +1308,15 @@ export class MarkdownParser {
       calloutType: effectiveCalloutType ?? undefined,
       calloutTitle: effectiveCalloutTitle ?? undefined,
       isCalloutHeader: effectiveIsCalloutHeader ? true : undefined,
-      listIndent: listPrefix !== undefined ? listIndent : undefined,
       listPrefix: listPrefix ? listPrefix : undefined,
+      // 列表归属（T3/ADR-2）：marker 行带 indentColumns（标记前导缩进列宽）；
+      // 所有归属列表的行（marker 行与延续行）都带 contentIndentColumns 与
+      // 整数 listDepth——渲染层缩进阶梯的唯一输入（不再做数值比较）。
+      indentColumns:
+        listPrefix !== undefined ? markerIndentColumns : undefined,
+      contentIndentColumns:
+        info.contentIndentColumns >= 0 ? info.contentIndentColumns : undefined,
+      listDepth: info.depth >= 0 ? info.depth : undefined,
       listContinuation: isListContinuation ? true : undefined,
       inlineTokens: finalTokens,
       localOffset,
@@ -2683,7 +1488,7 @@ export class MarkdownParser {
   private static matchCodeSpan(
     text: string,
     pos: number
-  ): { raw: string; content: string; length: number } | null {
+  ): (InlineTextProjection & { raw: string; length: number; contentOffset: number; contentSourceLength: number }) | null {
     if (text[pos] !== '`') return null;
     let openLen = 0;
     while (pos + openLen < text.length && text[pos + openLen] === '`') {
@@ -2699,11 +1504,13 @@ export class MarkdownParser {
         }
         if (run === openLen) {
           const raw = text.substring(pos, j + run);
+          const projected = projectCodeText(text.substring(pos + openLen, j));
           return {
             raw,
-            content: this.normalizeCodeSpanContent(
-              text.substring(pos + openLen, j)
-            ),
+            content: projected.content,
+            contentOffset: openLen + projected.contentOffset,
+            contentSourceLength: projected.sourceLength,
+            sourceBoundaries: projected.sourceBoundaries,
             length: j + run - pos,
           };
         }
@@ -2713,24 +1520,6 @@ export class MarkdownParser {
       }
     }
     return null;
-  }
-
-  /**
-   * 代码 span 内容归一化（CommonMark 6.1）：换行 → 空格；若结果以空格
-   * 开头且以空格结尾、且非全空格，则首尾各剥一个空格
-   * （`` ` `` ` `` → `` `` ` ``，spec 例 330；`` `  ``  ` `` → `` `` ` ``）。
-   */
-  private static normalizeCodeSpanContent(s: string): string {
-    const c = s.replace(/\r\n|\r|\n/g, ' ');
-    if (
-      c.length >= 2 &&
-      c[0] === ' ' &&
-      c[c.length - 1] === ' ' &&
-      c.trim() !== ''
-    ) {
-      return c.slice(1, -1);
-    }
-    return c;
   }
 
   /**
@@ -2759,7 +1548,7 @@ export class MarkdownParser {
   private static tryMatchInlineLink(
     text: string,
     i: number
-  ): { raw: string; content: string; url: string; end: number } | null {
+  ): (InlineTextProjection & { raw: string; url: string; end: number; contentOffset: number; contentSourceLength: number }) | null {
     if (text[i] !== '[') return null;
     const label = this.matchLinkLabel(text, i);
     if (!label) return null;
@@ -2782,7 +1571,9 @@ export class MarkdownParser {
     const end = label.end + 2 + m[0].length;
     return {
       raw: text.slice(i, end),
-      content: text.slice(i + 1, label.end),
+      ...projectInlineText(text.slice(i + 1, label.end), (source, index) => this.matchEntityAt(source, index)),
+      contentOffset: 1,
+      contentSourceLength: label.end - i - 1,
       url: urlField,
       end,
     };
@@ -2800,7 +1591,7 @@ export class MarkdownParser {
     text: string,
     i: number,
     refDefs: RefDefTable | null
-  ): { raw: string; content: string; url: string; end: number } | null {
+  ): (InlineTextProjection & { raw: string; url: string; end: number; contentOffset: number; contentSourceLength: number }) | null {
     if (text[i] !== '[') return null;
     const label = this.matchLinkLabel(text, i);
     if (!label) return null;
@@ -2822,8 +1613,9 @@ export class MarkdownParser {
       def.url + (def.title !== undefined ? ' "' + def.title + '"' : '');
     return {
       raw: text.slice(i, end),
-      // 渲染文本：label 原文经转义还原（`[Foo*bar\]]` → `Foo*bar]`）
-      content: this.unescapePunctuation(labelRaw),
+      ...projectInlineText(labelRaw, (source, index) => this.matchEntityAt(source, index)),
+      contentOffset: 1,
+      contentSourceLength: labelRaw.length,
       url: urlField,
       end,
     };
@@ -2854,10 +1646,12 @@ export class MarkdownParser {
       type: string,
       regex: RegExp,
       autolink?: 'uri' | 'email'
-    ): Omit<InlineRule<RefDefTable | null>, 'priority'> => ({
+    ): Omit<InlineRule<RefDefTable | null>, 'priority'> => {
+      const indexedRegex = regex.hasIndices ? regex : new RegExp(regex.source, regex.flags + 'd');
+      return ({
       name,
       match: (text, pos) => {
-        const m = regex.exec(slice(text, pos));
+        const m = indexedRegex.exec(slice(text, pos));
         if (!m || m.index !== 0) return null;
         const raw = m[0];
         let content = '';
@@ -2868,7 +1662,7 @@ export class MarkdownParser {
         if (type === 'image') {
           // 链接目标内实体解码（02 §2.6 冲突点：`[a](url?x=1&amp;y=2)` → href 含 &）
           url = MarkdownParser.decodeEntitiesInString(m[2]);
-          content = '🖼️ ' + (m[1] || '图片');
+          content = m[1] || '图片';
         } else if (type === 'link') {
           content = m[1];
           // 自动链接：url 即捕获的地址原文；邮件自动链接的 href 语义带 mailto: 前缀。
@@ -2880,7 +1674,8 @@ export class MarkdownParser {
                 : MarkdownParser.decodeEntitiesInString(m[2]);
         } else if (type === 'checkbox') {
           isChecked = raw.includes('x') || raw.includes('X');
-          content = isChecked ? '☑' : '☐';
+          // 图形呈现归渲染层（矢量复选框），token 只携带语义（L2.2）
+          content = '';
         } else if (type === 'footnote') {
           content = m[1];
         } else if (type === 'code') {
@@ -2890,9 +1685,16 @@ export class MarkdownParser {
         } else {
           content = raw;
         }
-        return { type, raw, content, url, isChecked, length: raw.length };
+        const contentGroup = type === 'code' ? 2 :
+          ['image', 'link', 'footnote', 'sub', 'sup', 'math'].includes(type) ? 1 : 0;
+        const [contentOffset, contentEnd] = m.indices![contentGroup] ?? [0, raw.length];
+        return {
+          type, raw, content, url, isChecked, length: raw.length,
+          contentOffset, contentSourceLength: contentEnd - contentOffset,
+        };
       },
-    });
+      });
+    };
 
     // —— 起止符规则工厂：exact-match 互斥 + `_` 围挡校验 + 失败记忆短路 + 递归解析 ——
     const startCloseRule = (
@@ -2973,6 +1775,8 @@ export class MarkdownParser {
             pos + start.length,
             pos + res.length - close.length
           ),
+          contentOffset: start.length,
+          contentSourceLength: res.length - start.length - close.length,
           children: res.tokens,
           length: res.length,
         };
@@ -2998,6 +1802,9 @@ export class MarkdownParser {
             type: 'code',
             raw: span.raw,
             content: span.content,
+            contentOffset: span.contentOffset,
+            contentSourceLength: span.contentSourceLength,
+            sourceBoundaries: span.sourceBoundaries,
             length: span.length,
           };
         },
@@ -3013,6 +1820,9 @@ export class MarkdownParser {
                 type: 'link',
                 raw: link.raw,
                 content: link.content,
+                contentOffset: link.contentOffset,
+                contentSourceLength: link.contentSourceLength,
+                sourceBoundaries: link.sourceBoundaries,
                 url: link.url,
                 length: link.raw.length,
               }
@@ -3036,6 +1846,9 @@ export class MarkdownParser {
                 type: 'link',
                 raw: link.raw,
                 content: link.content,
+                contentOffset: link.contentOffset,
+                contentSourceLength: link.contentSourceLength,
+                sourceBoundaries: link.sourceBoundaries,
                 url: link.url,
                 length: link.raw.length,
               }
@@ -3208,7 +2021,7 @@ export class MarkdownParser {
 
   /**
    * 在字符串 s 的 i 位置尝试匹配实体引用（02 §2.6）：
-   * 命名实体 `&name;`（名字 2~32 字符，查 NAMED_ENTITIES）与数值实体
+   * 命名实体 `&name;`（HTML5 完整实体表）与数值实体
    * `&#d;`（十进制 1~7 位）/ `&#xH;`（十六进制 1~6 位，x 大小写均可）。
    * 未定义命名实体 / 缺分号 / 数字超长 → 返回 null（保持字面）。
    */
@@ -3216,37 +2029,10 @@ export class MarkdownParser {
     s: string,
     i: number
   ): { value: string; length: number } | null {
-    const slice = s.slice(i);
-    const named = /^&([A-Za-z][A-Za-z0-9]{1,31});/.exec(slice);
-    if (named) {
-      const v = NAMED_ENTITIES[named[1]];
-      return v !== undefined ? { value: v, length: named[0].length } : null;
-    }
-    const dec = /^&#([0-9]{1,7});/.exec(slice);
-    if (dec) {
-      return {
-        value: this.codePointToChar(Number(dec[1])),
-        length: dec[0].length,
-      };
-    }
-    const hex = /^&#[xX]([0-9A-Fa-f]{1,6});/.exec(slice);
-    if (hex) {
-      return {
-        value: this.codePointToChar(parseInt(hex[1], 16)),
-        length: hex[0].length,
-      };
-    }
-    return null;
-  }
-
-  /**
-   * 数值实体码点 → 字符（CommonMark：0、代理区、>0x10FFFF 一律替换为 U+FFFD）。
-   */
-  private static codePointToChar(cp: number): string {
-    if (cp === 0 || cp > 0x10ffff || (cp >= 0xd800 && cp <= 0xdfff)) {
-      return '\uFFFD';
-    }
-    return String.fromCodePoint(cp);
+    const match = /^&(?:[A-Za-z][A-Za-z0-9]{1,31}|#[0-9]{1,7}|#[xX][0-9A-Fa-f]{1,6});/.exec(s.slice(i));
+    if (!match) return null;
+    const value = decodeHTMLStrict(match[0]);
+    return value === match[0] ? null : { value, length: match[0].length };
   }
 
   /**
@@ -3279,44 +2065,11 @@ export class MarkdownParser {
   }
 
   /**
-   * flushText 专用解码（review-02 §7.6 修正）：content 与 raw 并行推进。
-   * 转义边界在扫描期已消费（`\&` → content 中的 `&`），flush 时只能对照
-   * raw 识别：raw 中 `\&` 位置的 & 跳过解码；raw 中裸 & 位置尝试实体匹配。
-   */
-  private static decodeTextEntities(raw: string, content: string): string {
-    let out = '';
-    let ri = 0;
-    let ci = 0;
-    while (ci < content.length) {
-      if (ri < raw.length && raw[ri] === '\\' && raw[ri + 1] === '&') {
-        // 转义 &：content 对应字符原样保留（不解码）
-        out += content[ci];
-        ri += 2;
-        ci += 1;
-        continue;
-      }
-      if (content[ci] === '&') {
-        const r = this.matchEntityAt(content, ci);
-        if (r) {
-          out += r.value;
-          ri += r.length;
-          ci += r.length;
-          continue;
-        }
-      }
-      out += content[ci];
-      ri += 1;
-      ci += 1;
-    }
-    return out;
-  }
-
-  /**
    * 反斜杠转义还原（CommonMark 可转义标点）：`\x`（x 为可转义标点）→ x；
    * 其余 `\x`（x 非标点，如 `\b`）原样保留。
    */
   private static unescapePunctuation(s: string): string {
-    return s.replace(/\\([!"#$%&'()*+,\-./:;<=>?@[\\\]^_`{|}~])/g, '$1');
+    return projectInlineText(s, null).content;
   }
 
   // —— `_` 强调围挡校验（CommonMark 0.31.2 Rule 9/10/11/12）——
@@ -3362,63 +2115,25 @@ export class MarkdownParser {
     let i = startIndex + start.length;
     const innerTokens: InlineNode[] = [];
     let currentRawText = '';
-    let currentContentText = '';
 
     const flushText = () => {
       if (currentRawText.length > 0) {
+        const projected = isAtomicContext
+          ? { content: currentRawText }
+          : projectInlineText(currentRawText, (source, index) => this.matchEntityAt(source, index));
         innerTokens.push({
           type: 'text',
           raw: currentRawText,
-          // 实体解码（02 §2.6）：仅解码 content、raw 保留原文（覆盖守恒不受影响）；
-          // code/math 原子上下文内不解码（CommonMark：code span 内实体保持字面）。
-          content: isAtomicContext
-            ? currentContentText
-            : this.decodeTextEntities(currentRawText, currentContentText),
+          ...projected,
           localOffset: localOffset + i - currentRawText.length,
           length: currentRawText.length,
         });
         currentRawText = '';
-        currentContentText = '';
       }
     };
 
-    const isMathContext = rule && rule.type === 'math';
     const isCodeContext = rule && rule.type === 'code';
-    const isAtomicContext = isMathContext || isCodeContext;
-    const ESCAPABLE_PUNCTUATION = new Set([
-      '!',
-      '"',
-      '#',
-      '$',
-      '%',
-      '&',
-      "'",
-      '(',
-      ')',
-      '*',
-      '+',
-      ',',
-      '-',
-      '.',
-      '/',
-      ':',
-      ';',
-      '<',
-      '=',
-      '>',
-      '?',
-      '@',
-      '[',
-      '\\',
-      ']',
-      '^',
-      '_',
-      '`',
-      '{',
-      '|',
-      '}',
-      '~',
-    ]);
+    const isAtomicContext = rule?.type === 'math' || isCodeContext;
 
     // 行内规则扫描上下文（ruler.scan 调用参数，06 分析 §1）：递归帧一份，
     // 供规则 match 访问引用定义表 / 失败位图记忆 / 内层递归入口——
@@ -3444,14 +2159,12 @@ export class MarkdownParser {
     while (i < text.length) {
       if (text[i] === '\\' && i + 1 < text.length) {
         const nextChar = text[i + 1];
-        if (!isMathContext && ESCAPABLE_PUNCTUATION.has(nextChar)) {
+        if (!isAtomicContext && isEscapablePunctuation(nextChar)) {
           currentRawText += text.substring(i, i + 2); // keep \x in raw
-          currentContentText += nextChar; // only unescaped char in content
           i += 2;
           continue;
         } else {
           currentRawText += text[i];
-          currentContentText += text[i];
           i++;
           continue;
         }
@@ -3510,7 +2223,6 @@ export class MarkdownParser {
       // In atomic contexts like math or code, do NOT parse nested markdown/HTML rules!
       if (isAtomicContext) {
         currentRawText += text[i];
-        currentContentText += text[i];
         i++;
         continue;
       }
@@ -3582,6 +2294,8 @@ export class MarkdownParser {
                       i + tag.raw.length,
                       i + res.length - closeTag.length
                     ),
+                    contentOffset: tag.raw.length,
+                    contentSourceLength: res.length - tag.raw.length - closeTag.length,
                     children: res.tokens,
                     localOffset: localOffset + i,
                     length: res.length,
@@ -3609,7 +2323,7 @@ export class MarkdownParser {
             // raw 原样透传（html_tag 语义，CommonMark raw HTML 逐字节输出）
             flushText();
             innerTokens.push({
-              type: 'html_tag' as InlineNode['type'],
+              type: 'html_tag',
               raw: tag.raw,
               content: tag.raw,
               localOffset: localOffset + i,
@@ -3632,6 +2346,9 @@ export class MarkdownParser {
             type: inlineMatch.type as InlineNode['type'],
             raw: inlineMatch.raw,
             content: inlineMatch.content,
+            contentOffset: inlineMatch.contentOffset,
+            contentSourceLength: inlineMatch.contentSourceLength,
+            sourceBoundaries: inlineMatch.sourceBoundaries,
             url: inlineMatch.url,
             isChecked: inlineMatch.isChecked,
             children: inlineMatch.children,
@@ -3654,7 +2371,6 @@ export class MarkdownParser {
         }
 
         currentRawText += text.substring(i, i + runLen);
-        currentContentText += text.substring(i, i + runLen);
         i += runLen;
       }
     }

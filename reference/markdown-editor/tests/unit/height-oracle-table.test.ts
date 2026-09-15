@@ -9,11 +9,10 @@
 // ============================================================
 import { describe, expect, it } from 'vitest';
 import { HeightOracle } from '../../src/core/HeightMap';
+import { TEST_LAYOUT_MEASUREMENTS } from './helpers/layout-metrics-data';
 
 function oracle() {
-  const o = new HeightOracle();
-  o.setMetrics(28, 8.4, 800);
-  return o;
+  return new HeightOracle({ ...TEST_LAYOUT_MEASUREMENTS, asciiAdvance: 8.4 });
 }
 
 describe('HeightOracle · 表格分隔行', () => {

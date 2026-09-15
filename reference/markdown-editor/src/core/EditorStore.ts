@@ -1,5 +1,7 @@
 import { create, type StoreApi, type UseBoundStore } from 'zustand';
-import { isFenceClose, type CodeState } from './parser';
+import { MarkdownParser, type CodeState } from './parser';
+import type { DocumentContextIndex, LineParseContext } from './DocumentContext';
+import { computeListCommand, type ListCommand } from './editing/listCommands';
 import { LineOffsetTree } from './SegmentTree';
 import { metrics } from './metrics';
 
@@ -190,325 +192,7 @@ function inferAnchorHead(
   return { anchorPos: selStart, headPos: cursor };
 }
 
-/**
- * 块级形态记忆（镜像 parser.ts 的 BlockKind）：缩进代码判定需要「上一非空白行」
- * 的形态上下文——段落打断 / 列表延续 / 表格优先都依赖它（computeLineOffsets
- * 02 §2.2 冲突点）。增量状态机没有 parser 的全局扫描上下文，因此把该判定
- * 的私有辅助逻辑镜像到本文件，与 parser 保持逐分支一致。
- */
-type BlockKind =
-  'blank' | 'body' | 'list' | 'table' | 'heading' | 'hr' | 'code' | 'other';
-
-/** 剥离块引用前缀（与 parser.stripBlockquoteContext 同一正则 `^ {0,3}>\s?`——
- * B8c 配合收紧：marker 前至多 3 空格缩进，4 空格缩进的 `>` 行不是引用
- * （spec 例 231 语义，增量与全量重扫同规）。 */
-function stripBlockquoteContext(line: string): string {
-  let content = line;
-  let m: RegExpMatchArray | null;
-  while ((m = content.match(/^ {0,3}>\s?/))) {
-    content = content.substring(m[0].length);
-  }
-  return content;
-}
-
-/**
- * 计算行首缩进列宽（镜像 parser.leadingIndentColumns）：tab 按停靠 4 展开
- * （`  →foo` = 2+4 = 6 列 ≥4 → 代码；`  foo` = 2 列 <4 → 普通行）。
- */
-function leadingIndentColumns(s: string): number {
-  let col = 0;
-  for (let i = 0; i < s.length; i++) {
-    if (s[i] === ' ') {
-      col++;
-    } else if (s[i] === '\t') {
-      col += 4 - (col % 4);
-    } else {
-      break;
-    }
-  }
-  return col;
-}
-
-/** 剥离 4 列缩进（镜像 parser.stripFourColumns），供列表标记判定使用 */
-function stripFourColumns(s: string): string {
-  let col = 0;
-  let i = 0;
-  while (i < s.length && col < 4) {
-    if (s[i] === ' ') {
-      col++;
-      i++;
-    } else if (s[i] === '\t') {
-      col += 4 - (col % 4);
-      i++;
-    } else {
-      break;
-    }
-  }
-  return s.substring(i);
-}
-
-/** 去缩进后行首是否为列表标记（镜像 parser.isListMarkerStart） */
-function isListMarkerStart(s: string): boolean {
-  return (
-    /^([-*+]\s*\[[xX\s]\])\s+/.test(s) ||
-    /^([-*+])\s+/.test(s) ||
-    /^(\d+\.)\s+/.test(s)
-  );
-}
-
-/**
- * 轻量行首形态分类（镜像 parser.guessBlockKind）：只做行首前缀匹配，
- * 不解析内容——供缩进代码判定的「上一行」上下文使用。
- */
-function guessBlockKind(line: string, prev: BlockKind): BlockKind {
-  const s = line.replace(/^ {0,3}/, '');
-  if (!s.trim()) return 'blank';
-  if (/^([-*+_]){3,}\s*$/.test(s)) return 'hr';
-  if (/^=+[ \t]*$/.test(s)) return prev === 'body' ? 'heading' : 'body';
-  if (/^#{1,6}\s/.test(s)) return 'heading';
-  const pipeCount = (s.match(/\|/g) || []).length;
-  if (
-    /^\|?(\s*:?-+:?\s*\|)+\s*:?-+:?\s*\|?$/.test(s) ||
-    (pipeCount >= 1 && s.trim().startsWith('|')) ||
-    pipeCount >= 2
-  ) {
-    return 'table';
-  }
-  if (/^([-*+]\s*\[[xX\s]\])\s+/.test(s)) return 'list';
-  if (/^([-*+])\s+/.test(s)) return 'list';
-  if (/^(\d+\.)\s+/.test(s)) return 'list';
-  return 'body';
-}
-
-/**
- * 逻辑行 / 行状态访问器：支持「主数组 + 流式尾段」双段逻辑视图的惰性读取
- * （append 尾段零拷贝方案，R2-A P5/08 招 2：getLine(i) = i < 主数组边界
- * ? mainLines[i] : streamTail[i - 边界]）。编辑路径的增量推断函数全部
- * 访问器化，从而在尾段存在时也能用同一套推断逻辑（无需物化全量数组）。
- */
 type LineAccessor = (i: number) => string;
-type StateAccessor = (i: number) => CodeState;
-
-/**
- * 从编辑点之前的旧行推断「上一非空白行形态」（增量起点上下文）：
- * 从 before-1 向前扫描，跳过空行（空行把非列表上下文重置为 blank——
- * 与 parser 空行分支 `if (prevBlockKind !== 'list') prevBlockKind = 'blank'`
- * 语义一致），首个非空行按旧状态归类（code 类状态 → 'code'，'none' →
- * guessBlockKind）。文档开头无前置行时按 'blank' 处理。
- * 访问器化：lines/codeBlockState 数组改由 getLine/getState 提供（R2-A 尾段）。
- */
-function inferPrevBlockKind(
-  getLine: LineAccessor,
-  getState: StateAccessor,
-  before: number
-): BlockKind {
-  let sawBlank = false;
-  for (let j = before - 1; j >= 0; j--) {
-    const content = stripBlockquoteContext(getLine(j));
-    if (content.trim() === '') {
-      sawBlank = true;
-      continue;
-    }
-    let kind: BlockKind;
-    if (getState(j) !== 'none') {
-      kind = 'code';
-    } else {
-      kind = guessBlockKind(content, 'blank');
-    }
-    // 空行把非列表上下文重置为 blank（列表延续记忆保持）
-    if (sawBlank) return kind === 'list' ? 'list' : 'blank';
-    return kind;
-  }
-  return 'blank';
-}
-
-/**
- * 从编辑点之前的旧行推断「是否处于缩进代码块内」（增量起点上下文）：
- * 向前扫描旧状态数组——'indent_code' 行（含块内空行，空行在块内同样保持
- * indent_code 状态）说明编辑点之前处于缩进代码块；'none' 空行继续向前
- * （空行保持记忆，可能越过空行链命中代码块）；其他情况一律视为块外。
- */
-function inferInIndentCode(
-  getLine: LineAccessor,
-  getState: StateAccessor,
-  before: number
-): boolean {
-  for (let j = before - 1; j >= 0; j--) {
-    const st = getState(j);
-    if (st === 'indent_code') return true;
-    if (st !== 'none') return false;
-    if (stripBlockquoteContext(getLine(j)).trim() !== '') return false;
-  }
-  return false;
-}
-
-// —— 围栏形态判定（P2-A1 fence 单源化：镜像 parser.computeLineOffsets）——
-// 开栏正则与 parser.ts 的 fenceOpen 同源（trim 后行）：反引号 run ≥3
-// （info 串不允许含反引号——` ``` aa `` ` 整行不是围栏，退化为段落）或
-// 波浪线 run ≥3（info 串无限制）。关闭判定经 parser 导出的 isFenceClose
-// 共享函数（同字符 + run ≥ 开栏长度 + 仅尾随空白），增量状态机与全量
-// 重扫共用同一判定，不再各自维护（旧 `trimmed.startsWith('```')` 布尔
-// 翻转在 fence_end 行尾插入 / 波浪线围栏场景与重扫分歧——KNOWN-DEFECT，
-// P2 现状盘点项 2；startsWith 只认反引号且不校验关闭条件，已废弃）。
-const FENCE_OPEN_RE = /^(```+)([^`]*)$|^(~~~+).*$/;
-
-// —— HTML 块判定镜像（parser.computeLineOffsets 02 §2.5 / R1-D，
-// CommonMark 4.6 spec 0.31.2）——
-// type 1-5 的 start condition（下标 + 1 = 类型号）：
-// 1. <script|<pre|<style|<textarea + 空白/>/行尾（大小写不敏感）；
-// 2. <!--；3. <?；4. <! + ASCII 大写字母；5. <![CDATA[。
-const HTML_BLOCK_START_RE: RegExp[] = [
-  /^ {0,3}<(script|pre|style|textarea)(?=[ \t]|>|$)/i,
-  /^ {0,3}<!--/,
-  /^ {0,3}<\?/,
-  /^ {0,3}<![A-Z]/,
-  /^ {0,3}<!\[CDATA\[/,
-];
-// type 6：< 或 </ + 块级标签名单 + 空白/`>`/`/>`/行尾（大小写不敏感）。
-const HTML_BLOCK_TYPE6_RE = new RegExp(
-  '^ {0,3}<\\/?(?:address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|frame|frameset|h[1-6]|head|header|hr|html|iframe|legend|li|link|main|menu|menuitem|nav|noframes|ol|optgroup|option|p|param|search|section|summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul)(?=[ \\t]|/?>|$)',
-  'i'
-);
-
-/**
- * 单行完整 HTML 标签判定（B8c 配合：镜像 parser.matchRawHtmlTag 的
- * open/close 分支，6.11 严格文法单源）——旧宽松 `[^>]*` 属性串副本已
- * 移除（增量路径曾与全量重扫分歧）。闭合标签无属性；开标签 = tagName
- * + attrs* + 空白 + 可选 `/` + `>`；属性名合法字符集、引号值规则与
- * parser 逐字一致（`<a h*#ref>` / `</a href>` / `<a href="\"">` 等
- * 非法标签行返回 null——spec 例 619/622/624/632 语义）。
- */
-function matchSingleTagLine(
-  s: string
-): { tagName: string; kind: 'open' | 'close' } | null {
-  const close = /^<\/[A-Za-z][A-Za-z0-9-]*[ \t]*>/.exec(s);
-  if (close) {
-    return {
-      tagName: close[0].slice(2).replace(/[ \t]*>$/, ''),
-      kind: 'close',
-    };
-  }
-  const open =
-    /^<([A-Za-z][A-Za-z0-9-]*)((?:[ \t]+[A-Za-z_:][A-Za-z0-9_.:-]*(?:[ \t]*=[ \t]*(?:"[^"]*"|'[^']*'|[^ \t"'=<>`]+))?)*)[ \t]*(\/)?>/.exec(
-      s
-    );
-  if (open) {
-    return { tagName: open[1], kind: 'open' };
-  }
-  return null;
-}
-
-/**
- * HTML 块 start condition 判定（镜像 parser.matchHtmlBlockStart）：
- * - type 1-6 可打断段落，判定独立于 prevBlockKind（`Foo\n<div>` 中 div 是新块）；
- * - type 7 不可打断段落（`Foo\n<a href="bar">` 中 a 行是段落延续）；
- * - type 7 的「完整标签行」必须通过 6.11 严格文法（matchSingleTagLine）——
- *   B8c 配合项：与 parser 的 matchRawHtmlTag 同规，非法标签行按段落文本
- *   处理（spec 例 619/622/624/632）；
- * - 列表标记行（`- <div>`）不进 HTML 块（行级模型无容器状态，登记偏差）。
- * 入参约定：content 已剥离块引用前缀、缩进 <4 列、非空行。
- */
-function matchHtmlBlockStart(
-  content: string,
-  prevBlockKind: BlockKind
-): { type: number } | null {
-  if (isListMarkerStart(content)) return null;
-  for (let t = 0; t < HTML_BLOCK_START_RE.length; t++) {
-    if (HTML_BLOCK_START_RE[t].test(content)) return { type: t + 1 };
-  }
-  if (HTML_BLOCK_TYPE6_RE.test(content)) return { type: 6 };
-  if (prevBlockKind === 'body' || prevBlockKind === 'list') return null;
-  // type 7：整行（≤3 前导空格 + 标签 + 尾随空白）必须是单个合法
-  // open/close 标签；script/pre/style/textarea 由 type 1 接管
-  // （`</script>` 单独成行按普通段落处理，与 spec 一致）。
-  {
-    const lineContent = content.replace(/^ {0,3}/, '');
-    const tag = matchSingleTagLine(lineContent);
-    if (tag && (tag.kind === 'open' || tag.kind === 'close')) {
-      const name = tag.tagName.toLowerCase();
-      if (
-        name !== 'script' &&
-        name !== 'pre' &&
-        name !== 'style' &&
-        name !== 'textarea'
-      ) {
-        return { type: 7 };
-      }
-    }
-    return null;
-  }
-}
-
-/**
- * HTML 块 end condition（镜像 parser.htmlBlockEndCondition）：
- * type 1 行内含 script/pre/style/textarea 任一闭合标签即结束；
- * type 2/3/4/5 行内含对应闭合串即结束；type 6/7 遇空行结束
- * （空行本身不是块内容，由调用方标记 'none'）。
- */
-function htmlBlockEndCondition(type: number, content: string): boolean {
-  switch (type) {
-    case 1:
-      return /<\/script>|<\/pre>|<\/style>|<\/textarea>/i.test(content);
-    case 2:
-      return content.includes('-->');
-    case 3:
-      return content.includes('?>');
-    case 4:
-      return content.includes('>');
-    case 5:
-      return content.includes(']]>');
-    case 6:
-    case 7:
-      return content.trim() === '';
-    default:
-      return true;
-  }
-}
-
-/**
- * 从旧行/旧状态回推「编辑点之前是否处于 HTML 块内」及其块类型：
- * CodeState 数组只记录 'html_block'（不记录 type 1-7），而结束条件
- * 依赖块类型——因此取编辑点之前连续 html_block 运行段，用
- * matchHtmlBlockStart / htmlBlockEndCondition 正向仿真，得到进入
- * 编辑点时的 inHtmlBlock 与 htmlType（与 parser 语义一致）。
- * 运行段内可能包含多个相邻块（type 1-5 单行块接 type 6 块等），
- * 仿真逐行推进可正确定位「编辑点所属块」的类型。
- */
-function inferHtmlBlockState(
-  getLine: LineAccessor,
-  getState: StateAccessor,
-  before: number
-): { inHtmlBlock: boolean; htmlType: number } {
-  let runStart = before - 1;
-  if (runStart < 0 || getState(runStart) !== 'html_block') {
-    return { inHtmlBlock: false, htmlType: 0 };
-  }
-  while (runStart > 0 && getState(runStart - 1) === 'html_block') {
-    runStart--;
-  }
-  let inHtml = false;
-  let htmlType = 0;
-  for (let j = runStart; j < before; j++) {
-    const content = stripBlockquoteContext(getLine(j));
-    if (inHtml) {
-      if (htmlBlockEndCondition(htmlType, content)) {
-        inHtml = false;
-        htmlType = 0;
-      }
-    } else {
-      const start = matchHtmlBlockStart(content, 'code');
-      if (start) {
-        inHtml = true;
-        htmlType = start.type;
-        if (htmlBlockEndCondition(htmlType, content)) {
-          inHtml = false;
-          htmlType = 0;
-        }
-      }
-    }
-  }
-  return { inHtmlBlock: inHtml, htmlType };
-}
 
 export interface EditorOperation {
   startLineIdx: number;
@@ -601,6 +285,10 @@ export interface StreamOp {
 }
 
 export interface EditorState {
+  documentContext: DocumentContextIndex;
+  contextVersion: number;
+  getLineContext: (index: number) => LineParseContext;
+  runListCommand: (command: ListCommand) => boolean;
   // —— 双段存储（R2-A 尾段零拷贝 / 08 招 2）——
   // 主数组：常规编辑/加载的权威行存储；LineOffsetTree 始终与之保持
   // 逻辑全量一致（append 时增量更新触及块，见 appendText）。
@@ -702,6 +390,14 @@ export interface EditorState {
   flushStreamTail: () => void;
 
   setText: (text: string) => void;
+  /**
+   * 全文内容替换权威单门（L1.2 SSOT 收敛）：整档文本替换，内部经
+   * dispatchSet 的「纯内容替换声明」分支收敛为最小 diff 事务（undo 一步、
+   * lineOffsets/textLength/块状态全量一致）。产品码严禁再经
+   * setState({ lines }) 直改（check-ssot 拦截）——本方法为唯一合法入口。
+   * opts.cursorAfter 提供时替换后精确落点光标（表格操作「替换+落点」两步并一步）。
+   */
+  replaceWholeDoc: (newText: string, opts?: { cursorAfter?: number }) => void;
   setCursorPos: (pos: number) => void;
   setSelection: (start: number, end: number) => void;
   /** R4-B：只移动选区活动端（head），锚点（anchor）保持不动——Shift+方向键
@@ -773,6 +469,8 @@ export interface EditorState {
 export interface ApplyChangeOptions {
   meta?: 'stream';
   cursorAfter?: number;
+  /** 与文本原子提交的方向选区，历史记录同时保存。 */
+  selectionAfter?: { anchor: number; head: number };
   merge?: 'typing' | 'delete' | 'none';
 }
 
@@ -782,6 +480,30 @@ export interface ApplyChangeOptions {
 // 深拷贝（LineOffsetTree.clone 已改 COW 浅拷贝，见 SegmentTree.ts）。
 // 本函数返回的数组均为「主数组形态」（编辑路径前置 flushStreamTail，
 // 调用时尾段恒为空，见各编辑方法）。
+function fenceState(state: CodeState): boolean {
+  return state === 'fence_start' || state === 'fence_end' ||
+    state === 'math_fence_start' || state === 'math_fence_end';
+}
+function fenceLowerBound(lines: readonly number[], value: number): number {
+  let low = 0, high = lines.length;
+  while (low < high) { const mid = (low + high) >>> 1; if (lines[mid] < value) low = mid + 1; else high = mid; }
+  return low;
+}
+/** 围栏行索引只是解析上下文的投影；未改变的索引数组保持引用稳定。 */
+function updateFenceProjection(
+  lines: number[], from: number, oldTo: number, newTo: number,
+  getState: (line: number) => CodeState, delta: number,
+): number[] {
+  const first = fenceLowerBound(lines, from);
+  const last = fenceLowerBound(lines, oldTo);
+  const changed: number[] = [];
+  for (let i = from; i < newTo; i++) if (fenceState(getState(i))) changed.push(i);
+  if (delta === 0 && changed.length === last - first && changed.every((line, i) => line === lines[first + i])) return lines;
+  const result = lines.slice(0, first).concat(changed);
+  for (let i = last; i < lines.length; i++) result.push(lines[i] + delta);
+  return result;
+}
+
 function updateLinesIncremental(
   lines: string[],
   lineOffsets: LineOffsetTree,
@@ -789,371 +511,27 @@ function updateLinesIncremental(
   startLineIdx: number,
   deleteCount: number,
   newLines: string[],
-  fenceLines: number[] = []
+  fenceLines: number[],
+  documentContext: DocumentContextIndex,
 ) {
-  const newLinesArr = [...lines];
-  newLinesArr.splice(startLineIdx, deleteCount, ...newLines);
-
+  const newLinesArr = lines.slice(0, startLineIdx).concat(newLines, lines.slice(startLineIdx + deleteCount));
   const newOffsets = lineOffsets.clone();
-  newOffsets.updateLines(
-    startLineIdx,
-    deleteCount,
-    newLines.map((l) => l.length + 1)
-  );
-
-  const newCodeState = [...codeBlockState];
-  const lineDelta = newLines.length - deleteCount;
-  // newFenceLines 惰性构建（R2-E）：快速路径（编辑未触及任何 fence 行）
-  // 零拷贝复用旧引用，见收敛段注释；非快速路径在函数尾部一次性组装
-  // （原生 slice 拷贝前缀 + 扫描区新 fence + 收敛段平移后缀）。
-  let newFenceLines: number[];
-  // 扫描区（编辑点起至收敛/文档尾）内新 fence 行收集器：同样惰性分配，
-  // 量级 = 扫描区长度（常规击键为 0~1 行），永不触碰前缀 fence。
-  let scannedFences: number[] | null = null;
-  let scannedFencePushed = false;
-
-  newCodeState.splice(
-    startLineIdx,
-    deleteCount,
-    ...new Array<CodeState>(newLines.length).fill('none')
-  );
-
-  // —— 二分定位编辑点前最后一个 fence（fenceLines 升序）——
-  let low = 0,
-    high = fenceLines.length - 1;
-  let splitIdx = 0;
-  while (low <= high) {
-    const mid = (low + high) >> 1;
-    if (fenceLines[mid] < startLineIdx) {
-      splitIdx = mid + 1;
-      low = mid + 1;
-    } else {
-      high = mid - 1;
-    }
+  newOffsets.updateLines(startLineIdx, deleteCount, newLines.map((line) => line.length + 1));
+  documentContext.update((i) => newLinesArr[i], newLinesArr.length, startLineIdx, deleteCount, newLines.length);
+  const newCodeState = codeBlockState.slice(0, startLineIdx)
+    .concat(new Array<CodeState>(newLines.length).fill('none'), codeBlockState.slice(startLineIdx + deleteCount));
+  for (let i = documentContext.changedFrom; i < documentContext.changedTo; i++) {
+    newCodeState[i] = documentContext.codeStateAt(i);
   }
-
-  // —— O(1) 前缀状态恢复（R2-E：替代原 O(splitIdx) 线性重放）——
-  // fenceLines 严格交替（证明：inCodeBlock/inMathBlock 只会在 fence 行
-  // 翻转；code 围栏与 math 围栏互斥识别——parser 语义「code 块内 $$ 按
-  // code 处理、math 块内 ``` 按 math_block 处理」，且 html 块内 fence
-  // 判定让路，故 fenceLines 内相邻 fence 必然分属一开一闭）。因此
-  // 「处理完 fenceLines[splitIdx-1] 后的累计状态」= 该行类型隐含状态
-  // （fence_start→code、fence_end→none、math_fence_start→math、
-  // math_fence_end→none），编辑点入状态 = 处理完最后一个前缀 fence 的
-  // 状态——读最后一个前缀 fence 的类型即得，无需 parity 数组。
-  // splitIdx = 0（编辑点前无 fence）时入状态恒为双 false。
-  let inCodeBlock = false;
-  let inMathBlock = false;
-  // 开栏状态镜像（P2-A1 fence 单源化）：CodeState 不记录开栏的标记字符与
-  // run 长度，而关闭判定需要它们——从「编辑点前最后一个前缀 fence 行」
-  // 的原文提取（该行在编辑点之前、未被编辑触及，内容权威）。前缀 fence
-  // 为 fence_start 时其行必匹配 FENCE_OPEN_RE（该行当初就是这样被判定
-  // 为开栏的），提取失败仅为防御（代码块保持 in，关闭判定退化为永不
-  // 匹配——与 parser 的「inCodeBlock 但无状态」防御分支同向，见下）。
-  let fenceState: { marker: string; length: number } | null = null;
-  if (splitIdx > 0) {
-    const lastPrefixFenceIdx = fenceLines[splitIdx - 1];
-    const lastPrefixFenceState = codeBlockState[lastPrefixFenceIdx];
-    if (lastPrefixFenceState === 'fence_start') {
-      inCodeBlock = true;
-      const fenceContent = stripBlockquoteContext(lines[lastPrefixFenceIdx]);
-      const fenceOpen = FENCE_OPEN_RE.exec(fenceContent.trim());
-      if (fenceOpen) {
-        fenceState = {
-          marker: fenceOpen[1] !== undefined ? '`' : '~',
-          length: (fenceOpen[1] ?? fenceOpen[3]).length,
-        };
-      }
-    } else if (lastPrefixFenceState === 'math_fence_start') inMathBlock = true;
-    // fence_end / math_fence_end → 围栏已闭合，两状态保持 false
-  }
-  // 缩进代码块状态（镜像 parser.computeLineOffsets）：行首 ≥4 列缩进（tab
-  // 停靠 4 展开）且非空 → 'indent_code'；块内空行保持；非缩进行退出。
-  let inIndentCode = inferInIndentCode(
-    (i) => lines[i],
-    (i) => codeBlockState[i],
-    startLineIdx
-  );
-  // HTML 块状态（镜像 parser）：inHtmlBlock 为块内标记，htmlType 记录
-  // 块类型（1-7，决定结束条件）——CodeState 不记录类型，从编辑点之前
-  // 连续 html_block 运行段回推（inferHtmlBlockState）。
-  const inferredHtml = inferHtmlBlockState(
-    (i) => lines[i],
-    (i) => codeBlockState[i],
-    startLineIdx
-  );
-  let inHtmlBlock = inferredHtml.inHtmlBlock;
-  let htmlType = inferredHtml.htmlType;
-  // 上一非空白行形态记忆（段落打断 / 列表延续 / 表格优先判定所需）
-  let prevBlockKind = inferPrevBlockKind(
-    (i) => lines[i],
-    (i) => codeBlockState[i],
-    startLineIdx
-  );
-
-  let i = startLineIdx;
-  let converged = false;
-
-  for (; i < newLinesArr.length; i++) {
-    // 块引用前缀剥离（与 parser 同一正则 `^ {0,3}>\s?`——B8c 收紧：
-    // marker 前至多 3 空格缩进，4 空格缩进的 `>` 行不剥前缀、落入
-    // 缩进代码判定（spec 例 231）；缩进判定发生在前缀剥离之后）
-    let content = newLinesArr[i];
-    let bMatch;
-    while ((bMatch = content.match(/^ {0,3}>\s?/))) {
-      content = content.substring(bMatch[0].length);
-    }
-    const trimmed = content.trim();
-
-    const oldState = newCodeState[i]; // pre-filled with shifted old states for i >= startLineIdx + newLines.length
-
-    let newState: CodeState = 'none';
-
-    if (inHtmlBlock) {
-      // —— HTML 块内：优先级最高（镜像 parser）——fence/math/缩进代码
-      // 判定全部让路（spec 4.6：HTML 块内的 ``` 围栏行、`<pre>` 形态行
-      // 均按 html 原样处理）。type 1-5 遇闭合串退出（结束行仍是块的最后
-      // 一行）；type 6/7 遇空行退出（空行本身不是块内容，标记 'none'）。
-      if (htmlBlockEndCondition(htmlType, content)) {
-        inHtmlBlock = false;
-        htmlType = 0;
-        if (trimmed === '') {
-          newState = 'none';
-          if (prevBlockKind !== 'list') prevBlockKind = 'blank';
-        } else {
-          newState = 'html_block';
-          prevBlockKind = 'code';
-        }
-      } else {
-        newState = 'html_block';
-        // 块形态记作 code 类：块后 ≥4 空格行允许开始缩进代码
-        // （type 7 单行块后 `    foo` → 缩进代码，与 CommonMark 一致）。
-        prevBlockKind = 'code';
-      }
-    } else if (
-      !inMathBlock &&
-      // B8c 配合：围栏形态行补「开栏缩进 ≤3 列」门槛（镜像 parser 的
-      // indentCols <= 3——4 空格缩进的 ``` 行是缩进代码候选而非围栏，
-      // spec 例 134；增量与全量重扫一致，见 updateLinesIncremental）。
-      leadingIndentColumns(content) <= 3 &&
-      FENCE_OPEN_RE.test(trimmed)
-    ) {
-      // P2-A1 fence 单源化：开/关判定镜像 parser.computeLineOffsets——
-      // 开栏行记录 marker/length（fenceState），块内 fence 形态行仅当
-      // isFenceClose（同字符 + run ≥ 开栏长度 + 仅尾随空白）才关闭；
-      // ` ```INS`（fence_end 行尾插入）与 ` ``` js`（info 串）均保持
-      // code——根治 KNOWN-DEFECT（旧 startsWith('```') 布尔翻转在这些
-      // 场景把行误判为 fence_end，增量与重扫两套状态机分歧）。
-      if (!inCodeBlock) {
-        newState = 'fence_start';
-        inCodeBlock = true;
-        const fenceOpen = FENCE_OPEN_RE.exec(trimmed);
-        fenceState = {
-          marker: fenceOpen![1] !== undefined ? '`' : '~',
-          length: (fenceOpen![1] ?? fenceOpen![3]).length,
-        };
-      } else if (
-        fenceState &&
-        isFenceClose(trimmed, fenceState.marker, fenceState.length)
-      ) {
-        newState = 'fence_end';
-        inCodeBlock = false;
-        fenceState = null;
-      } else {
-        newState = 'code';
-      }
-      // 围栏代码块内缩进不生效（CommonMark）：fence 判定先于缩进代码
-      inIndentCode = false;
-      prevBlockKind = 'code';
-    } else if (!inCodeBlock && trimmed === '$$') {
-      if (!inMathBlock) {
-        newState = 'math_fence_start';
-        inMathBlock = true;
-      } else {
-        newState = 'math_fence_end';
-        inMathBlock = false;
-      }
-      inIndentCode = false;
-      prevBlockKind = 'code';
-    } else {
-      if (inCodeBlock) {
-        newState = 'code';
-        inIndentCode = false;
-        prevBlockKind = 'code';
-      } else if (inMathBlock) {
-        newState = 'math_block';
-        inIndentCode = false;
-        prevBlockKind = 'code';
-      } else {
-        // —— 缩进代码块判定（镜像 parser.computeLineOffsets「其余情况」分支）——
-        const indent = leadingIndentColumns(content);
-        if (inIndentCode) {
-          // 块内：空行与 ≥4 列缩进行保持状态；非缩进行结束代码块
-          if (trimmed === '' || indent >= 4) {
-            newState = 'indent_code';
-          } else {
-            // 非缩进行结束代码块：该行按普通行处理（可能开启 HTML 块——
-            // CommonMark 中缩进代码块后的 `</div>` 行是 type 6 块）。
-            inIndentCode = false;
-            const htmlStart = matchHtmlBlockStart(content, prevBlockKind);
-            if (htmlStart) {
-              newState = 'html_block';
-              inHtmlBlock = true;
-              htmlType = htmlStart.type;
-              // 首行同时满足 end condition → 单行块
-              // （`<!-- c -->`、`<!DOCTYPE html>` 等，块即开即闭）。
-              if (htmlBlockEndCondition(htmlType, content)) {
-                inHtmlBlock = false;
-                htmlType = 0;
-              }
-              prevBlockKind = 'code';
-            } else {
-              newState = 'none';
-              prevBlockKind = guessBlockKind(content, prevBlockKind);
-            }
-          }
-        } else if (trimmed === '') {
-          // 空行：不进入缩进代码；段落/表格上下文重置，列表上下文保持
-          newState = 'none';
-          if (prevBlockKind !== 'list') prevBlockKind = 'blank';
-        } else if (indent >= 4) {
-          const afterIndent = stripFourColumns(content);
-          if (isListMarkerStart(afterIndent)) {
-            // 去缩进后以列表标记开头 → 嵌套列表/列表延续，按 body 解析
-            newState = 'none';
-            inIndentCode = false;
-            prevBlockKind = 'list';
-          } else if (
-            prevBlockKind === 'body' ||
-            prevBlockKind === 'list' ||
-            prevBlockKind === 'table'
-          ) {
-            // 段落打断规则 / 列表延续 / 表格优先 → 均不进代码块；
-            // prevBlockKind 保持不变（延续可能有多行）
-            newState = 'none';
-            inIndentCode = false;
-          } else {
-            // 进入缩进代码块（上一行是空行 / 标题 / 分隔线 / 代码等）
-            newState = 'indent_code';
-            inIndentCode = true;
-            prevBlockKind = 'code';
-          }
-        } else {
-          // —— HTML 块 start 判定（缩进 <4、非空行，镜像 parser）——
-          // type 1-6 可打断段落，判定独立于 prevBlockKind；type 7 段落
-          // 保护在 matchHtmlBlockStart 内部（prevBlockKind 为 body/list
-          // 时禁用——`Foo\n<a href="bar">` 中 a 行是段落延续）。
-          const htmlStart = matchHtmlBlockStart(content, prevBlockKind);
-          if (htmlStart) {
-            newState = 'html_block';
-            inHtmlBlock = true;
-            htmlType = htmlStart.type;
-            if (htmlBlockEndCondition(htmlType, content)) {
-              inHtmlBlock = false;
-              htmlType = 0;
-            }
-            prevBlockKind = 'code';
-          } else {
-            newState = 'none';
-            prevBlockKind = guessBlockKind(content, prevBlockKind);
-          }
-        }
-      }
-    }
-
-    newCodeState[i] = newState;
-
-    // 仅四态行记入 fenceLines（P2-A1 fence 单源化修正）：fence 形态行
-    // 判为 code 时（如 ` ```INS` 带 info 串不闭合）**不**记录——fenceLines
-    // 的「严格交替」不变量（前缀状态恢复与 BlockRenderer 软渲染判定依赖）
-    // 只对围栏边界行成立，形态行计入会破坏交替性（前缀恢复会把状态为
-    // code 的形态行误当作围栏边界，恢复出错误的 inCodeBlock）。
-    if (
-      newState === 'fence_start' ||
-      newState === 'fence_end' ||
-      newState === 'math_fence_start' ||
-      newState === 'math_fence_end'
-    ) {
-      scannedFencePushed = true;
-      // 惰性创建：常规击键（无 fence 行被触及）不分配
-      if (!scannedFences) scannedFences = [];
-      scannedFences.push(i);
-    }
-
-    if (i >= startLineIdx + newLines.length) {
-      if (newState === oldState) {
-        // Check prompt requirement: "扫描到下一个 fence 行即停，且只有当编辑行非 fence 时才成立"
-        // If we found a match and it's a fence, we technically converge since parity doesn't change.
-        // But to strictly follow the prompt, if the edited lines had no fences and we hit the same state, we can stop.
-        // Actually newState === oldState guarantees convergence for all subsequent lines.
-        converged = true;
-        i++;
-        break;
-      }
-    }
-  }
-
-  // —— newFenceLines 组装（R2-E：前缀 O(log) / 快速路径 O(1)）——
-  if (converged) {
-    // Append remaining fences
-    // Find where we left off in the old fenceLines array
-    let oldFenceStartIdx = splitIdx;
-    while (
-      oldFenceStartIdx < fenceLines.length &&
-      fenceLines[oldFenceStartIdx] < i - lineDelta
-    ) {
-      oldFenceStartIdx++;
-    }
-    if (
-      lineDelta === 0 &&
-      !scannedFencePushed &&
-      oldFenceStartIdx === splitIdx
-    ) {
-      // —— 零拷贝快速路径（R2-E，每击键主路径）——
-      // 三个条件逐项对应「fence 内容不变」的证明：
-      // 1) lineDelta === 0：行数未变，新旧行号一一对齐；
-      // 2) !scannedFencePushed：扫描区（编辑点至收敛点）无任何 fence 行
-      //    （新行 fence 或旧行 fence 被重放均会置位）；
-      // 3) oldFenceStartIdx === splitIdx：收敛点之前无旧 fence（若有，
-      //    无论被重放（类型未变）还是被丢弃（类型已变，如编辑点开启
-      //    html 块吞掉其后 fence），都不能共享引用）。
-      // 三者齐备时新旧数组逐项一致（前缀原样 + 后缀 +0 平移原样），
-      // 直接复用旧引用零拷贝——fenceLines 全链路只整体替换、绝不就地
-      // 变更（appendText/flushStreamTail/本函数均遵守），共享引用安全；
-      // zustand 订阅语义：引用未变即视为无变更，fence 确实未变，正确。
-      newFenceLines = fenceLines;
-    } else {
-      // 常规路径：原生 slice 一次拷贝前缀（O(splitIdx) 单次内存拷贝，
-      // 仅在 fence 行被编辑触及时发生，量级 = 受影响 fence 数）+ 扫描区
-      // 新 fence + 收敛段剩余 fence +lineDelta 平移（保持原收敛处理不变）
-      const nfl = fenceLines.slice(0, splitIdx);
-      if (scannedFences) nfl.push(...scannedFences);
-      for (let j = oldFenceStartIdx; j < fenceLines.length; j++) {
-        nfl.push(fenceLines[j] + lineDelta);
-      }
-      newFenceLines = nfl;
-    }
-  } else {
-    // 未收敛（扫描到文档尾）：前缀 + 扫描区全部 fence（无平移段）
-    const nfl = fenceLines.slice(0, splitIdx);
-    if (scannedFences) nfl.push(...scannedFences);
-    newFenceLines = nfl;
-  }
-
-  // Current text length calculation from LineOffsetTree
-  const lastLineIdx = newLinesArr.length - 1;
-  const newTextLength =
-    lastLineIdx >= 0
-      ? newOffsets.getOffset(lastLineIdx) + newLinesArr[lastLineIdx].length
-      : 0;
-
-  // 返回主数组形态（调用方 spread 进 set 的 partial，不含视图键）
+  const delta = newLines.length - deleteCount;
+  const newFenceLines = updateFenceProjection(fenceLines, documentContext.changedFrom,
+    documentContext.changedTo - delta, documentContext.changedTo, (i) => newCodeState[i], delta);
+  const last = newLinesArr.length - 1;
   return {
-    mainLines: newLinesArr,
-    lineOffsets: newOffsets,
-    mainCodeState: newCodeState,
-    textLength: newTextLength,
+    mainLines: newLinesArr, lineOffsets: newOffsets, mainCodeState: newCodeState,
     mainFenceLines: newFenceLines,
+    textLength: last >= 0 ? newOffsets.getOffset(last) + newLinesArr[last].length : 0,
+    documentContext, contextVersion: documentContext.version,
   };
 }
 
@@ -1326,6 +704,8 @@ function flushStreamTail(state: EditorState): Partial<EditorState> | null {
     streamTail: EMPTY_TAIL,
     streamTailCodeState: EMPTY_STATE_TAIL,
     streamTailFenceLines: EMPTY_FENCE_TAIL,
+    documentContext: state.documentContext,
+    contextVersion: state.contextVersion,
   };
 }
 
@@ -1626,6 +1006,8 @@ function buildEditorStore(
 ): UseBoundStore<StoreApi<EditorState>> {
   // 分块加载代际计数（实例内局部，见上方注释）
   let currentLoadGeneration = 0;
+  const initialContext = MarkdownParser.createDocumentContext();
+  initialContext.update(() => '', 1, 0, 0, 1);
 
   const store = create<EditorState>((_set, get) => {
     // R6-P1 惰性视图：初始 state 先以完整数据对象构造（含视图字段占位，
@@ -1634,6 +1016,23 @@ function buildEditorStore(
     // （数据字段会遮蔽原型 getter，且会被 zustand Object.assign 固化
     // 成 stale 数据属性，见 lazyViewProto 注释）
     const state: EditorState = {
+      documentContext: initialContext,
+      contextVersion: initialContext.version,
+      getLineContext: (index) => get().documentContext.get(index),
+      runListCommand: (command) => {
+        const current = get();
+        const edit = computeListCommand({
+          lineCount: current.getLineCount(), lineOffsets: current.lineOffsets,
+          getLine: current.getLine,
+          getCodeState: (index) => current.getLineContext(index).codeState,
+          getListInfo: (index) => current.getLineContext(index).listInfo,
+        }, { anchor: current.anchorPos, head: current.headPos }, command);
+        if (!edit) return false;
+        if (edit.from !== edit.to || edit.insert !== '') current.applyChange(edit.from, edit.to, edit.insert, {
+          selectionAfter: edit.selectionAfter, merge: 'none',
+        });
+        return true;
+      },
       mainLines: [''],
       streamTail: EMPTY_TAIL,
       mainCodeState: ['none'],
@@ -1767,6 +1166,16 @@ function buildEditorStore(
         });
       },
 
+      // L1.2 SSOT 收敛：全文内容替换权威单门（语义注释见接口声明）。
+      // dispatchSet 的 isPlainContentReplace 分支把 { lines } 声明收敛为
+      // applyChange 事务；文本未变时回落权威整档重置路径（与既有行为一致）。
+      replaceWholeDoc: (newText, opts) => {
+        dispatchSet({ lines: newText.split('\n') });
+        if (opts && typeof opts.cursorAfter === 'number') {
+          get().setCursorPos(opts.cursorAfter);
+        }
+      },
+
       setText: (text) => {
         const generation = ++currentLoadGeneration;
         dispatchSet(() => {
@@ -1780,7 +1189,8 @@ function buildEditorStore(
               0,
               0,
               lines,
-              []
+              [],
+              MarkdownParser.createDocumentContext()
             );
             return {
               ...res,
@@ -1817,7 +1227,8 @@ function buildEditorStore(
             0,
             0,
             firstChunk,
-            []
+            [],
+            MarkdownParser.createDocumentContext()
           );
 
           let currentIdx = FIRST_CHUNK_LINES;
@@ -1839,7 +1250,8 @@ function buildEditorStore(
                 s.mainLines.length,
                 0,
                 chunk,
-                s.mainFenceLines
+                s.mainFenceLines,
+                s.documentContext
               );
               return { ...updated };
             });
@@ -2060,10 +1472,14 @@ function buildEditorStore(
             plan.startLineIdx,
             plan.deleteCount,
             plan.insertedLines,
-            s.mainFenceLines
+            s.mainFenceLines,
+            s.documentContext
           );
 
-          const newPos = opts?.cursorAfter ?? plan.newCursor;
+          const newPos = Math.max(0, Math.min(res.textLength, opts?.selectionAfter?.head ?? opts?.cursorAfter ?? plan.newCursor));
+          const newAnchor = Math.max(0, Math.min(res.textLength, opts?.selectionAfter?.anchor ?? newPos));
+          const newSelectionStart = Math.min(newAnchor, newPos);
+          const newSelectionEnd = Math.max(newAnchor, newPos);
 
           const newOp: EditorOperation = {
             startLineIdx: plan.startLineIdx,
@@ -2073,8 +1489,8 @@ function buildEditorStore(
             selectionStartBefore: s.selectionStart,
             selectionEndBefore: s.selectionEnd,
             cursorAfter: newPos,
-            selectionStartAfter: newPos,
-            selectionEndAfter: newPos,
+            selectionStartAfter: newSelectionStart,
+            selectionEndAfter: newSelectionEnd,
             timestamp: Date.now(),
             meta: opts?.meta,
             // B6 位置级字段（只增不改：undo/redo 兼容层不读，供日志/同步）
@@ -2180,12 +1596,12 @@ function buildEditorStore(
             // 重新记账并复置信号）。
             streamActive: adjustedStreamOp !== null,
             cursorPos: newPos,
-            selectionStart: newPos,
-            selectionEnd: newPos,
+            selectionStart: newSelectionStart,
+            selectionEnd: newSelectionEnd,
             // R4-B：事务后选区收敛——锚点 = 活动端 = 落点。覆盖输入 / 删除选区
             // 后光标落点语义统一：head/anchor 任意顺序的选区（反向选区同样）在
             // 编辑后坍缩为单点，后续 Shift 扩展从落点重新建立方向。
-            anchorPos: newPos,
+            anchorPos: newAnchor,
             headPos: newPos,
             assoc: computeAssocForLines(
               res.lineOffsets,
@@ -2268,8 +1684,6 @@ function buildEditorStore(
           // 双段换算经共享原语 lineAt（P2-A1 回修 2 去重）。
           const getLineAt: LineAccessor = (i) =>
             lineAt(mainLines, streamTail, i);
-          const getStateAt: StateAccessor = (i) =>
-            lineAt(s.mainCodeState, s.streamTailCodeState, i);
 
           // —— 追加点锚定（01 问题 5 方案 5.2 / R3-A）——
           // userEditingTail：光标落在逻辑末行内（非全文末尾）+ 用户有活跃编辑。
@@ -2309,215 +1723,12 @@ function buildEditorStore(
           }
           const newSegmentLines = combined.split('\n');
 
-          // —— 状态机基线（与旧 appendText 一致，访问器化后兼容尾段视图）——
-          // 「进入合并行的状态」由旧行 [0, lastLineIdx) 决定（末行本身将被
-          // 合并内容替换——若末行是结束块的空行，该空行在合并后可能消失，
-          // 不能把它当作块已退出的依据）；块类型由连续 html_block 运行段
-          // 仿真得出（CodeState 不记录类型，见 inferHtmlBlockState）。
-          // P2-A1 fence 单源化：fence/math 基线改为经 fence 行集合二分回推
-          // （旧实现按 lastLineIdx 自身状态推断：若旧行是 fence_start/math 开栏
-          // 行，合并后行仍为开栏形态时应由段循环重新判定开栏，而非沿用旧行
-          // 的块内状态——旧推断在该场景把合并行误判为 code/fence_end，与全量
-          // 重扫分歧；本次与 updateLinesIncremental 同源修正）。
-          let inCodeBlock = false;
-          let inMathBlock = false;
-          // 开栏状态（marker/length）：从最近 fence_start 行原文提取（该行未
-          // 被本次追加触及，内容权威）；块内行（fenceIdx 为 fence_start 且
-          // lastLineIdx 其后）无法从单行回推时保持 null——仅影响「块内 fence
-          // 形态行」的关闭判定，与 parser 的防御分支同向（fenceState 为 null
-          // 时块内 fence 形态行按 code 处理，见段循环）。
-          let fenceState: { marker: string; length: number } | null = null;
-          {
-            // 双段 fence 行集合（mainFenceLines + 尾段相对行号平移 boundary，
-            // 各自升序、拼接后整体升序）二分定位 < lastLineIdx 的最近 fence 行。
-            let lo = 0;
-            let hi = s.mainFenceLines.length;
-            while (lo < hi) {
-              const mid = (lo + hi) >> 1;
-              if (s.mainFenceLines[mid] < lastLineIdx) lo = mid + 1;
-              else hi = mid;
-            }
-            let fenceIdx = lo > 0 ? s.mainFenceLines[lo - 1] : -1;
-            for (let k = s.streamTailFenceLines.length - 1; k >= 0; k--) {
-              const abs = boundary + s.streamTailFenceLines[k];
-              if (abs < lastLineIdx) {
-                if (abs > fenceIdx) fenceIdx = abs;
-                break;
-              }
-            }
-            if (fenceIdx >= 0) {
-              const st = getStateAt(fenceIdx);
-              if (st === 'fence_start') {
-                inCodeBlock = true;
-                const fenceOpen = FENCE_OPEN_RE.exec(
-                  stripBlockquoteContext(getLineAt(fenceIdx)).trim()
-                );
-                if (fenceOpen) {
-                  fenceState = {
-                    marker: fenceOpen[1] !== undefined ? '`' : '~',
-                    length: (fenceOpen[1] ?? fenceOpen[3]).length,
-                  };
-                }
-              } else if (st === 'fence_end') {
-                inCodeBlock = false;
-              } else if (st === 'math_fence_start') {
-                inMathBlock = true;
-              } else if (st === 'math_fence_end') {
-                inMathBlock = false;
-              }
-            }
-          }
-          // 缩进代码块状态：末行状态为 'indent_code' 时视为块内（块内空行保持）
-          let inIndentCode = false;
-          // HTML 块状态：从旧行回推——增量语义与 updateLinesIncremental 一致
-          const inferredHtml = inferHtmlBlockState(
-            getLineAt,
-            getStateAt,
-            lastLineIdx
-          );
-          let inHtmlBlock = inferredHtml.inHtmlBlock;
-          let htmlType = inferredHtml.htmlType;
-          // HTML 块 start（type 7 段落保护）所需的「上一非空白行形态」记忆
-          let prevBlockKind = inferPrevBlockKind(
-            getLineAt,
-            getStateAt,
-            lastLineIdx
-          );
-          const currentState = getStateAt(lastLineIdx);
-          if (currentState === 'indent_code') inIndentCode = true;
-
-          const segmentCodeStates = new Array(newSegmentLines.length);
-          for (let i = 0; i < newSegmentLines.length; i++) {
-            const trimmed = newSegmentLines[i].trim();
-            // HTML 块判定使用块引用剥离后的内容（与 parser 一致）
-            const htmlContent = stripBlockquoteContext(newSegmentLines[i]);
-            if (inHtmlBlock) {
-              // —— HTML 块内（优先级最高：fence/math/缩进代码判定全部让路）——
-              if (htmlBlockEndCondition(htmlType, htmlContent)) {
-                inHtmlBlock = false;
-                htmlType = 0;
-                if (htmlContent.trim() === '') {
-                  // type 6/7 空行结束块：空行本身不是块内容
-                  segmentCodeStates[i] = 'none';
-                  if (prevBlockKind !== 'list') prevBlockKind = 'blank';
-                } else {
-                  // type 1-5 结束行（行内含闭合标记）：该行仍是块的最后一行
-                  segmentCodeStates[i] = 'html_block';
-                  prevBlockKind = 'code';
-                }
-              } else {
-                segmentCodeStates[i] = 'html_block';
-                prevBlockKind = 'code';
-              }
-            } else if (
-              !inMathBlock &&
-              // B8c 配合：围栏形态行补「开栏缩进 ≤3 列」门槛（与
-              // updateLinesIncremental 同规，镜像 parser 的 indentCols <= 3——
-              // 4 空格缩进的 ``` 行是缩进代码候选而非围栏，spec 例 134）。
-              leadingIndentColumns(htmlContent) <= 3 &&
-              FENCE_OPEN_RE.test(htmlContent.trim())
-            ) {
-              // P2-A1 fence 单源化（镜像 parser / updateLinesIncremental）：
-              // 判定输入 = 块引用剥离后 trim（htmlContent 与 parser 的
-              // bqContent 同源；旧实现用未剥离的 trimmed，`> ``` ` 块引用
-              // 围栏行在段状态机内不被识别，与重扫分歧——一并修正）。
-              // 开栏记录 marker/length；块内 fence 形态行仅当 isFenceClose
-              // 才关闭（` ```INS` / ` ``` js` 保持 code）——根治 appendText
-              // 路径的 KNOWN-DEFECT（旧布尔翻转在 fence_end 行尾追加时把
-              // 合并行误判为 fence_end，与全量重扫分歧）。
-              if (!inCodeBlock) {
-                segmentCodeStates[i] = 'fence_start';
-                inCodeBlock = true;
-                const fenceOpen = FENCE_OPEN_RE.exec(htmlContent.trim());
-                fenceState = {
-                  marker: fenceOpen![1] !== undefined ? '`' : '~',
-                  length: (fenceOpen![1] ?? fenceOpen![3]).length,
-                };
-              } else if (
-                fenceState &&
-                isFenceClose(trimmed, fenceState.marker, fenceState.length)
-              ) {
-                segmentCodeStates[i] = 'fence_end';
-                inCodeBlock = false;
-                fenceState = null;
-              } else {
-                segmentCodeStates[i] = 'code';
-              }
-              inIndentCode = false;
-              prevBlockKind = 'code';
-            } else if (!inCodeBlock && trimmed === '$$') {
-              segmentCodeStates[i] = inMathBlock
-                ? 'math_fence_end'
-                : 'math_fence_start';
-              inMathBlock = !inMathBlock;
-              inIndentCode = false;
-              prevBlockKind = 'code';
-            } else if (inCodeBlock) {
-              segmentCodeStates[i] = 'code';
-              inIndentCode = false;
-              prevBlockKind = 'code';
-            } else if (inMathBlock) {
-              segmentCodeStates[i] = 'math_block';
-              inIndentCode = false;
-              prevBlockKind = 'code';
-            } else {
-              // —— 缩进代码块判定（与 updateLinesIncremental 同规则）——
-              const indent = leadingIndentColumns(newSegmentLines[i]);
-              if (inIndentCode) {
-                // 块内：空行与 ≥4 列缩进行保持；非缩进行结束代码块
-                if (trimmed === '' || indent >= 4) {
-                  segmentCodeStates[i] = 'indent_code';
-                } else {
-                  // 非缩进行结束代码块：该行可能开启 HTML 块
-                  inIndentCode = false;
-                  const htmlStart = matchHtmlBlockStart(
-                    htmlContent,
-                    prevBlockKind
-                  );
-                  if (htmlStart) {
-                    segmentCodeStates[i] = 'html_block';
-                    inHtmlBlock = true;
-                    htmlType = htmlStart.type;
-                    if (htmlBlockEndCondition(htmlType, htmlContent)) {
-                      inHtmlBlock = false;
-                      htmlType = 0;
-                    }
-                    prevBlockKind = 'code';
-                  } else {
-                    segmentCodeStates[i] = 'none';
-                    prevBlockKind = guessBlockKind(htmlContent, prevBlockKind);
-                  }
-                }
-              } else if (trimmed !== '' && indent >= 4) {
-                segmentCodeStates[i] = 'indent_code';
-                inIndentCode = true;
-                prevBlockKind = 'code';
-              } else if (trimmed === '') {
-                // 空行：不进入缩进代码；段落/表格上下文重置，列表上下文保持
-                segmentCodeStates[i] = 'none';
-                if (prevBlockKind !== 'list') prevBlockKind = 'blank';
-              } else {
-                // —— HTML 块 start 判定（缩进 <4、非空行，镜像 parser）——
-                const htmlStart = matchHtmlBlockStart(
-                  htmlContent,
-                  prevBlockKind
-                );
-                if (htmlStart) {
-                  segmentCodeStates[i] = 'html_block';
-                  inHtmlBlock = true;
-                  htmlType = htmlStart.type;
-                  if (htmlBlockEndCondition(htmlType, htmlContent)) {
-                    inHtmlBlock = false;
-                    htmlType = 0;
-                  }
-                  prevBlockKind = 'code';
-                } else {
-                  segmentCodeStates[i] = 'none';
-                  prevBlockKind = guessBlockKind(htmlContent, prevBlockKind);
-                }
-              }
-            }
-          }
+          // 追加只重放被扩展的末行及其依赖，不扫描主文档前缀。
+          const documentContext = s.documentContext;
+          const appendedLineCount = lastLineIdx + newSegmentLines.length;
+          const contextLine: LineAccessor = (i) => i < lastLineIdx ? getLineAt(i) : newSegmentLines[i - lastLineIdx];
+          documentContext.update(contextLine, appendedLineCount, lastLineIdx, 1, newSegmentLines.length);
+          const segmentCodeStates = newSegmentLines.map((_, i) => documentContext.codeStateAt(lastLineIdx + i));
 
           // —— 新尾段（主数组不动，零拷贝）——
           // 尾段为空：新尾段 = 拼接段；非空：替换尾段末行（旧尾段末行已被
@@ -2531,20 +1742,24 @@ function buildEditorStore(
               ? segmentCodeStates
               : s.streamTailCodeState.slice(0, -1).concat(segmentCodeStates);
 
-          // 尾段内 fence 相对行号：旧相对行号不变（尾段起点仍为 boundary），
-          // 新段行相对行号 = (tailLen - 1) + i（尾段非空）/ i（尾段为空）。
-          const newTailFence = s.streamTailFenceLines.slice();
-          for (let i = 0; i < newSegmentLines.length; i++) {
-            const st = segmentCodeStates[i];
-            if (
-              st === 'fence_start' ||
-              st === 'fence_end' ||
-              st === 'math_fence_start' ||
-              st === 'math_fence_end'
-            ) {
-              newTailFence.push(tailLen === 0 ? i : tailLen - 1 + i);
-            }
+          // 依赖重放可能改变末行之前的围栏；仅发生变化时才复制主状态数组。
+          let mainCodeState = s.mainCodeState;
+          for (let i = documentContext.changedFrom; i < lastLineIdx; i++) {
+            const code = documentContext.codeStateAt(i);
+            if (i < boundary) {
+              if (mainCodeState[i] !== code) {
+                if (mainCodeState === s.mainCodeState) mainCodeState = mainCodeState.slice();
+                mainCodeState[i] = code;
+              }
+            } else newTailCode[i - boundary] = code;
           }
+          const mainFenceLines = documentContext.changedFrom < boundary
+            ? updateFenceProjection(s.mainFenceLines, documentContext.changedFrom, boundary, boundary,
+                (i) => mainCodeState[i], 0)
+            : s.mainFenceLines;
+          const tailFrom = Math.max(0, documentContext.changedFrom - boundary);
+          const newTailFence = updateFenceProjection(s.streamTailFenceLines, tailFrom,
+            tailLen, newTailCode.length, (i) => newTailCode[i], newTailCode.length - tailLen);
 
           // —— 树更新（COW：clone 浅拷贝 + 触及末块；树始终与逻辑全量一致，
           // 既有测试断言 lineOffsets.toArray 全量）——
@@ -2622,10 +1837,12 @@ function buildEditorStore(
           return {
             mainLines,
             streamTail: newTail,
-            mainCodeState: s.mainCodeState,
+            mainCodeState,
             streamTailCodeState: newTailCode,
-            mainFenceLines: s.mainFenceLines,
+            mainFenceLines,
             streamTailFenceLines: newTailFence,
+            documentContext,
+            contextVersion: documentContext.version,
             lineOffsets: newOffsets,
             textLength,
             streamOp: nextStreamOp,
@@ -2737,7 +1954,8 @@ function buildEditorStore(
               op.startLineIdx,
               op.insertedLineCount,
               op.removedLines,
-              cur.mainFenceLines
+              cur.mainFenceLines,
+              cur.documentContext
             );
 
             // Forward op to redo stack（以「撤销时刻的当前状态」为基准重建
@@ -2838,7 +2056,8 @@ function buildEditorStore(
             op.startLineIdx,
             op.insertedLineCount,
             op.removedLines,
-            base.mainFenceLines
+            base.mainFenceLines,
+            base.documentContext
           );
 
           // —— B6 位置级字段（整行区间，redo 后文档坐标）——
@@ -2984,7 +2203,26 @@ function buildEditorStore(
         }
       }
     }
-    const normalized = normalizeSetStatePartial(resolved);
+    let normalized = normalizeSetStatePartial(resolved);
+    // 完整文档装载声明也建立同一上下文，调用方传入的旧状态数组不能成为第二套语法真源。
+    if (normalized && typeof normalized === 'object' &&
+      ('mainLines' in normalized || 'streamTail' in normalized) && !('documentContext' in normalized)) {
+      const declaration = normalized as Partial<EditorState>;
+      const main = declaration.mainLines ?? current.mainLines;
+      const tail = declaration.streamTail ?? current.streamTail;
+      const count = lineCountOf(main.length, tail.length);
+      const context = MarkdownParser.createDocumentContext();
+      context.update((i) => lineAt(main, tail, i), count, 0, 0, count);
+      const mainCode = main.map((_, i) => i < count ? context.codeStateAt(i) : 'none' as CodeState);
+      const boundary = main.length - 1;
+      const tailCode = tail.map((_, i) => context.codeStateAt(boundary + i));
+      normalized = {
+        ...declaration, documentContext: context, contextVersion: context.version,
+        mainCodeState: mainCode, streamTailCodeState: tailCode,
+        mainFenceLines: mainCode.flatMap((code, i) => fenceState(code) ? [i] : []),
+        streamTailFenceLines: tailCode.flatMap((code, i) => fenceState(code) ? [i] : []),
+      };
+    }
     // P2-A1 回修 3：旧 if/else 两分支完全相同（历史遗留——前身 if 分支
     // 为 materializeViews 产物，移除后未合并），合并为单语句
     rawSetState(normalized as never, replace as never);

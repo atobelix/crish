@@ -79,7 +79,7 @@ const PANEL_STYLE: React.CSSProperties = {
   position: 'absolute',
   top: 8,
   right: 8,
-  zIndex: 500,
+  zIndex: 'var(--z-panel)',
   display: 'flex',
   flexDirection: 'column',
   gap: 6,

@@ -25,6 +25,7 @@
 // 语义验证方法：每一行先经 MarkdownParser.parseLine 实测（以 parseLine
 // 实际行为为准，不凭常识推断），再与直刷模拟逐字符比对。
 
+import './helpers/layout-fixture';
 import { describe, it, expect } from 'vitest';
 import { isPlainTextLine } from '../../src/components/MarkdownEngine';
 import { MarkdownParser } from '../../src/core/parser';

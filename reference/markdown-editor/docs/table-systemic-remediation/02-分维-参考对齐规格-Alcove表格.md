@@ -1,12 +1,12 @@
 # 02 分维：参考对齐规格（Alcove 表格）
 
-> 上位：`00-总方案-表格子系统端到端重构.md`（§4 目标态）。  
-> **参考真源**：`MfZ0WQ9JdqGd6QP6.mp4`（66.13s / 1280×800 / h264 / 3968 帧）。  
-> **参考产品身份实证**：片尾 splash「Alcove — Markdown Editor」→ `scratch/_vidframes/t66.png`。  
-> **用户标注帧**：`reference/PotPlayerMini64_*.png`（18 张，按创建时间即视频时间序）。  
+> 上位：`00-总方案-表格子系统端到端重构.md`（§4 目标态）。
+> **参考真源**：`MfZ0WQ9JdqGd6QP6.mp4`（66.13s / 1280×800 / h264 / 3968 帧）。
+> **参考产品身份实证**：片尾 splash「Alcove — Markdown Editor」→ `scratch/_vidframes/t66.png`。
+> **用户标注帧**：`reference/PotPlayerMini64_*.png`（18 张，按创建时间即视频时间序）。
 > 本文件是**目标态的可测规格**：每条规格必须能落成断言（落点见 `08-分维`）。
 
-> ⚠️ **资产可见性提示（重要）**：下表大部分资产**不入库**——`reference/markdown-editor/reference/*.png` 被 `.gitignore:439`（`/reference/**/*.png`）忽略，`scratch/` 被 `.gitignore:239,541` 忽略；`MfZ0WQ9JdqGd6QP6.mp4` 是否入库以其自身跟踪状态为准。  
+> ⚠️ **资产可见性提示（重要）**：下表大部分资产**不入库**——`reference/markdown-editor/reference/*.png` 被 `.gitignore:439`（`/reference/**/*.png`）忽略，`scratch/` 被 `.gitignore:239,541` 忽略；`MfZ0WQ9JdqGd6QP6.mp4` 是否入库以其自身跟踪状态为准。
 > 因此**在全新克隆上这些文件不存在**。若本文件描述的规格需要重新采样，须**重新获取参考视频**并按 §1 的抽取方式重建资产；不得因资产缺失而放弃对应规格（**效果锁**，见 `00-总方案` §1）。
 
 

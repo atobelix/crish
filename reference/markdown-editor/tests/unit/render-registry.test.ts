@@ -18,7 +18,7 @@
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { act } from 'react';
-import { createRoot } from 'react-dom/client';
+import { createRoot, type Root } from 'react-dom/client';
 import React from 'react';
 import {
   BlockRenderer,
@@ -35,6 +35,7 @@ import {
   getMathRenderer,
   getRenderTheme,
   renderMathToHtml,
+  requestMathPreviewHtml,
   setMathRenderer,
   setRenderTheme,
   type RenderTheme,
@@ -45,6 +46,7 @@ import {
 
 // —— 本文件注册的自定义渲染器类型（afterEach 统一清理） ——
 const registeredTypes: LineType[] = [];
+const renderedRoots: Root[] = [];
 
 function registerGlobal(type: LineType, renderer: typeof DefaultBlockRenderer): void {
   registerBlockRenderer(type, renderer);
@@ -52,6 +54,7 @@ function registerGlobal(type: LineType, renderer: typeof DefaultBlockRenderer): 
 }
 
 afterEach(() => {
+  act(() => { for (const root of renderedRoots.splice(0)) root.unmount(); });
   while (registeredTypes.length > 0) {
     unregisterBlockRenderer(registeredTypes.pop()!);
   }
@@ -68,6 +71,7 @@ function renderBlock(
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = createRoot(container);
+  renderedRoots.push(root);
   const fullBlock: LineNode = {
     id: 't',
     raw: '',
@@ -259,12 +263,14 @@ describe('setMathRenderer 注入点', () => {
     expect(mock).not.toHaveBeenCalled();
   });
 
-  it('块级渲染（math_block）与行内渲染（math token）都走注入点', () => {
+  it('块级渲染（math_block）与行内渲染（math token）都走注入点', async () => {
     const mock = vi.fn(() => '<span class="mock-math">M</span>');
     setMathRenderer(mock);
-    // 块级：MathBlock 默认注册表渲染器调用 renderMathToHtml(trim 后公式, true)
-    renderBlock({ type: 'math_block', raw: '$$a+b$$', length: 8 });
+    // 块级预览异步计算，静态导出和宿主注入仍走同一渲染器。
+    const blockContainer = renderBlock({ type: 'math_block', raw: '$$a+b$$', length: 8 });
+    await act(async () => { await requestMathPreviewHtml('$$a+b$$', true); });
     expect(mock).toHaveBeenCalledWith('$$a+b$$', true);
+    expect(blockContainer.querySelector('.mock-math')).not.toBeNull();
     // 行内：InlineRenderer math token（heading 行承载 $x$）
     const mathToken = {
       type: 'math' as const,
@@ -285,6 +291,7 @@ describe('setMathRenderer 注入点', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     const root = createRoot(container);
+    renderedRoots.push(root);
     act(() => {
       root.render(
         React.createElement(BlockRenderer, {
@@ -295,6 +302,7 @@ describe('setMathRenderer 注入点', () => {
         })
       );
     });
+    await act(async () => { await requestMathPreviewHtml('x', false); });
     expect(mock).toHaveBeenCalledWith('x', false);
     expect(container.querySelector('.mock-math')).not.toBeNull();
   });

@@ -12,12 +12,20 @@ import type { LineNode } from '../../src/core/ast';
  * 非 code 行终止），引擎 AST 层已正确，此处按引擎语义断言。
  */
 
-/** 便捷断言辅助：取行的 type / bq / listIndent / headingLevel 快照 */
+/**
+ * 便捷断言辅助：取行的 type / bq / 列表归属 / headingLevel 快照。
+ *
+ * 战役 wysiwyg-layout-remediation（ADR-1/ADR-2）：`listIndent`（缩进**字符数**）
+ * 已物理删除，替换为三个语义明确的字段——`indentColumns`（标记前导缩进**列宽**）、
+ * `contentIndentColumns`（容器内容缩进列）、`listDepth`（整数嵌套层级）。
+ */
 function snap(line: LineNode) {
   return {
     type: line.type,
     bq: line.blockquoteLevel,
-    listIndent: line.listIndent,
+    indentColumns: line.indentColumns,
+    contentIndentColumns: line.contentIndentColumns,
+    listDepth: line.listDepth,
     listContinuation: line.listContinuation,
     headingLevel: line.headingLevel,
   };
@@ -137,7 +145,12 @@ describe('B8a 块引用语义：空引用行（例 239-241/244/249）', () => {
 describe('B8a 块引用语义：引用内列表', () => {
   it('`> - foo` 列表判定在引用前缀剥离后（例 235 前半）', () => {
     const r = MarkdownParser.parse('> - foo\n');
-    expect(snap(r.lines[0])).toMatchObject({ type: 'body', bq: 1, listIndent: 0 });
+    expect(snap(r.lines[0])).toMatchObject({
+      type: 'body',
+      bq: 1,
+      indentColumns: 0,
+      listDepth: 0,
+    });
     expect(
       r.lines[0].inlineTokens?.some((t) => t.type === 'list_bullet')
     ).toBe(true);

@@ -23,6 +23,7 @@
 // （按元素类别上报尺寸）+ measure 模块 mock + offsetHeight stub。
 // @vitest-environment jsdom
 
+import './helpers/layout-fixture';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';

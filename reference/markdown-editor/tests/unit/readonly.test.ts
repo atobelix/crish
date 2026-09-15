@@ -14,6 +14,7 @@
 //   新内容——这正是 readOnly 渲染层「增量更新可见」的驱动源；
 // - 只读语义（append 不进 undo、不移动光标）在 store 层验证。
 
+import './helpers/layout-fixture';
 import { describe, it, expect } from 'vitest';
 import { renderToString } from 'react-dom/server';
 import React from 'react';

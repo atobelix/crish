@@ -459,19 +459,19 @@ describe('迁移零回归：现有语法 AST 断言矩阵', () => {
     // —— 链接 / 图片 / 自动链接 / 引用 ——
     { name: '内联链接', md: '[link](https://a.b)', tokens: [T('link', { content: 'link', url: 'https://a.b' })] },
     { name: '内联链接优先于 checkbox', md: '[x](https://a.b)', tokens: [T('link', { content: 'x', url: 'https://a.b' })] },
-    { name: '图片', md: '![alt](img.png)', tokens: [T('image', { content: '🖼️ alt', url: 'img.png' })] },
+    { name: '图片', md: '![alt](img.png)', tokens: [T('image', { content: 'alt', url: 'img.png' })] },
     { name: 'URI 自动链接', md: '<https://x.com>', tokens: [T('link', { content: 'https://x.com', url: 'https://x.com' })] },
     { name: '邮件自动链接', md: '<a@b.com>', tokens: [T('link', { content: 'a@b.com', url: 'mailto:a@b.com' })] },
     { name: '引用链接', md: '[foo]: /url\n\n[foo]', tokens: [T('link', { content: 'foo', url: '/url' })], line: 2 },
     // —— checkbox / footnote ——
     { name: 'checkbox 勾选', md: 'a [x] b', tokens: [
       T('text', { content: 'a ' }),
-      T('checkbox', { content: '☑', isChecked: true }),
+      T('checkbox', { content: '', isChecked: true }),
       T('text', { content: ' b' }),
     ] },
     { name: 'checkbox 未勾选', md: 'a [ ] b', tokens: [
       T('text', { content: 'a ' }),
-      T('checkbox', { content: '☐', isChecked: false }),
+      T('checkbox', { content: '', isChecked: false }),
       T('text', { content: ' b' }),
     ] },
     { name: 'footnote', md: '[^1] note', tokens: [

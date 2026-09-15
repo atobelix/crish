@@ -27,6 +27,10 @@ export interface InlineMatch {
   raw: string;
   /** 渲染内容（实体解码 / 转义还原只发生在 content） */
   content: string;
+  /** 词法消费产生的内容源码区间与显示边界。 */
+  contentOffset?: number;
+  contentSourceLength?: number;
+  sourceBoundaries?: readonly (number | null)[];
   /** 消费长度（= raw.length，扫描循环按它推进扫描位置） */
   length: number;
   /** 起止符规则的递归解析产物（正则/原子规则无此字段） */

@@ -23,14 +23,11 @@ import React from 'react';
 import { useEditorStore } from '../../src/core/EditorStore';
 import { LineOffsetTree } from '../../src/core/SegmentTree';
 import { getArrowNavigationIndex } from '../../src/core/measure';
+import { viewportFixture, type ViewportFixture } from './viewport-fixture';
+import { indexFromClientPoint } from '../../src/core/editorViewport';
 import {
   HiddenInput,
-  indexFromClientPoint,
-  estimateLineIndexFromContentY,
-  predictColumn,
   DRAG_THRESHOLD_PX,
-  type IndexDataLayer,
-  type MountedLineGeom,
 } from '../../src/components/HiddenInput';
 
 // measure 模块部分 mock：jsdom 无布局，固定测量结果（coords 恒非 null →
@@ -78,105 +75,46 @@ function resetStore() {
 // —— DOM 构造辅助（jsdom 无布局：rect 显式注入）——
 
 const ROW_HEIGHT = 28;
-
-// 行元素：data-* 定位属性 + 视口坐标 rect mock
-function makeRow(index: number, start: number, length: number, top: number) {
-  const el = document.createElement('div');
-  el.setAttribute('data-index', String(index));
-  el.setAttribute('data-line-start', String(start));
-  el.setAttribute('data-line-length', String(length));
-  Object.defineProperty(el, 'getBoundingClientRect', {
-    configurable: true,
-    value: () => ({
-      top,
-      left: 0,
-      right: 500,
-      bottom: top + ROW_HEIGHT,
-      height: ROW_HEIGHT,
-      width: 500,
-      x: 0,
-      y: top,
-      toJSON: () => ({}),
-    }),
-  });
-  return el;
-}
-
-// 容器 rect mock（视口坐标：top/left 为 0，高度 = 已挂载行总高）
-function mockContainerRect(el: HTMLElement, height: number) {
-  Object.defineProperty(el, 'getBoundingClientRect', {
-    configurable: true,
-    value: () => ({
-      top: 0,
-      left: 0,
-      right: 500,
-      bottom: height,
-      height,
-      width: 500,
-      x: 0,
-      y: 0,
-      toJSON: () => ({}),
-    }),
-  });
-}
-
-// 当前测试挂载的 React root（afterEach 必须 unmount——否则组件监听器
-// （window mousemove/mouseup）残留触发旧组件 setState，产生 act 警告与
-// 状态污染）
 let mountedRoot: Root | null = null;
+const activeFixtures: ViewportFixture[] = [];
 
-// 挂载 HiddenInput 到 body 下容器（containerRef 指向该容器），并构造前 n 行
-// 的挂载行 DOM（rect mock 注入几何；其余行视为虚拟化视口外未挂载）。
-// 显式设 fontSize=14px 使列预测字宽确定（14 × 0.6 = 8.4 等宽）。
-function mountWithRows(text: string, mountCount?: number) {
-  const lines = text.split('\n');
-  const n = mountCount ?? lines.length;
-  const container = document.createElement('div');
-  container.style.fontSize = '14px';
-  document.body.appendChild(container);
-  const root: Root = createRoot(container);
-  mountedRoot = root;
-  const containerRef = {
-    current: container,
-  } as React.RefObject<HTMLDivElement | null>;
-  act(() => {
-    root.render(React.createElement(HiddenInput, { containerRef }));
-  });
-  act(() => {
-    useEditorStore.getState().setText(text);
-  });
-  let offset = 0;
-  for (let i = 0; i < n; i++) {
-    container.appendChild(makeRow(i, offset, lines[i].length, i * ROW_HEIGHT));
-    offset += lines[i].length + 1;
-  }
-  mockContainerRect(container, n * ROW_HEIGHT);
-  return {
-    container,
-    root,
-    getTextarea: () =>
-      container.querySelector('textarea') as HTMLTextAreaElement,
-  };
+function makeFixture(text: string, options: Parameters<typeof viewportFixture>[1] = {}) {
+  const fixture = viewportFixture(text, options);
+  activeFixtures.push(fixture);
+  return fixture;
 }
 
-// 不构造行 DOM 的简单挂载（Shift 接线等不依赖行几何的用例）
-function mountPlain() {
-  const container = document.createElement('div');
-  document.body.appendChild(container);
-  const root: Root = createRoot(container);
-  mountedRoot = root;
-  const containerRef = {
-    current: container,
-  } as React.RefObject<HTMLDivElement | null>;
-  act(() => {
-    root.render(React.createElement(HiddenInput, { containerRef }));
+afterEach(() => {
+  if (mountedRoot) act(() => mountedRoot!.unmount());
+  mountedRoot = null;
+  for (const fixture of activeFixtures.splice(0)) fixture.dispose();
+  window.getSelection()?.removeAllRanges();
+});
+
+// 行高由真实 HeightMap 保存；浏览器命中与 DOM 映射使用明确的原生夹具。
+function mountWithRows(text: string, mountCount?: number) {
+  const count = mountCount ?? text.split('\n').length;
+  const fixture = makeFixture(text, {
+    store: useEditorStore, height: count * ROW_HEIGHT,
+    mounted: Array.from({ length: count }, (_, index) => index),
   });
-  return {
-    container,
-    root,
-    getTextarea: () =>
-      container.querySelector('textarea') as HTMLTextAreaElement,
-  };
+  const container = fixture.container;
+  const host = document.createElement('div');
+  container.append(host);
+  const root = createRoot(host);
+  mountedRoot = root;
+  const containerRef = { current: container };
+  let version = 0;
+  const layout = () => act(() => root.render(React.createElement(HiddenInput, {
+    containerRef, store: useEditorStore, layoutDeps: String(++version),
+  })));
+  layout();
+  return { container, root, fixture, layout, getTextarea: () => host.querySelector('textarea')! };
+}
+
+// 不需要几何的键盘语义仍使用独立输入宿主。
+function mountPlain() {
+  return mountWithRows(useEditorStore.getState().getText());
 }
 
 // —— 鼠标事件派发辅助（mousedown 挂容器 / mousemove、mouseup 挂 window）——
@@ -228,187 +166,119 @@ function fireKeyDown(ta: HTMLTextAreaElement, key: string, shiftKey: boolean) {
 }
 
 // 由文本行数组构造数据层（行 i 偏移 = 前缀累计，与 store 行偏移语义一致）
-function makeDataLayer(lines: string[]): IndexDataLayer {
-  const lengths = lines.map((l) => l.length + 1);
-  return {
-    getLine: (i: number) => lines[i],
-    getLineCount: () => lines.length,
-    lineOffsets: new LineOffsetTree(lengths),
-  };
-}
 
-describe('R4-G 拖选纯几何：predictColumn（R2-F 列保持复用）', () => {
-  const W = { ascii: 8.4, cjk: 16.8 };
-
-  it('relX ≤ 0 回行首；空行回行首', () => {
-    expect(predictColumn('hello', 0, W)).toBe(0);
-    expect(predictColumn('hello', -5, W)).toBe(0);
-    expect(predictColumn('', 10, W)).toBe(0);
+describe('R4-G 原生横向命中：保留原字宽场景的操作语义', () => {
+  it('文字之前命中可见首端；编辑器之外不猜位置；空正文保留唯一边界', () => {
+    const view = makeFixture('hello');
+    view.fragments(0, [{ from: 0, to: 5, x: 30, y: 0, height: 28, stops: [0, 8.4, 16.8, 25.2, 33.6, 42] }]);
+    expect(indexFromClientPoint(0, 14, view.container)).toBe(0);
+    expect(indexFromClientPoint(-5, 14, view.container)).toBeNull();
+    const empty = makeFixture('', { left: 600 });
+    expect(indexFromClientPoint(610, 14, empty.container)).toBe(0);
   });
 
-  it('等宽 ASCII：按累加宽度逼近最近列', () => {
-    expect(predictColumn('hello', 8.4, W)).toBe(1);
-    expect(predictColumn('hello', 8.4 * 2, W)).toBe(2);
-    expect(predictColumn('hello', 8.4 * 2 + 1, W)).toBe(2);
+  it('ASCII 定位消费浏览器实际字符边界', () => {
+    const view = makeFixture('hello');
+    view.fragments(0, [{ from: 0, to: 5, x: 0, y: 0, height: 28, stops: [0, 8.4, 16.8, 25.2, 33.6, 42] }]);
+    expect(indexFromClientPoint(8.4, 14, view.container)).toBe(1);
+    expect(indexFromClientPoint(16.8, 14, view.container)).toBe(2);
+    expect(indexFromClientPoint(17.8, 14, view.container)).toBe(2);
   });
 
-  it('超出行宽回行尾', () => {
-    expect(predictColumn('hello', 1000, W)).toBe(5);
-    expect(predictColumn('hello', 8.4 * 5, W)).toBe(5);
+  it('行内右侧空白命中行尾，越过编辑器边界则返回未命中', () => {
+    const view = makeFixture('hello');
+    expect(indexFromClientPoint(499, 14, view.container)).toBe(5);
+    expect(indexFromClientPoint(50, 14, view.container)).toBe(5);
+    expect(indexFromClientPoint(1000, 14, view.container)).toBeNull();
   });
 
-  it('全角混排：全角占 2 倍宽但计 1 列', () => {
-    // '中a'：中 = 16.8（2 列宽但 1 列位）、a = 8.4
-    expect(predictColumn('中a', 16.8, W)).toBe(1); // '中' 之后
-    expect(predictColumn('中a', 16.8 + 8.4, W)).toBe(2); // 行尾
-    expect(predictColumn('中a', 8.4, W)).toBe(0); // 等距归前（p=0 dist 与 p=1 相等）
-    expect(predictColumn('中a', 12, W)).toBe(1); // 偏向 '中' 后侧
+  it('中文与拉丁混排由原生实际位置决定，不使用统一宽字符倍数', () => {
+    const view = makeFixture('中a');
+    view.fragments(0, [{ from: 0, to: 2, x: 0, y: 0, height: 28, stops: [0, 16.8, 25.2] }]);
+    expect(indexFromClientPoint(16.8, 14, view.container)).toBe(1);
+    expect(indexFromClientPoint(25.2, 14, view.container)).toBe(2);
+    expect(indexFromClientPoint(8.4, 14, view.container)).toBe(0);
+    expect(indexFromClientPoint(12, 14, view.container)).toBe(1);
   });
 
-  it('Tab 按 4 倍等宽近似', () => {
-    expect(predictColumn('a\tb', 8.4, W)).toBe(1);
-    expect(predictColumn('a\tb', 8.4 + 4 * 8.4, W)).toBe(2);
-  });
-});
-
-describe('R4-G 拖选纯几何：estimateLineIndexFromContentY（视口内命中 + 视口外估算）', () => {
-  const mounted3: MountedLineGeom[] = [
-    { index: 0, start: 0, length: 3, left: 0, top: 0, bottom: 28, height: 28 },
-    { index: 1, start: 4, length: 3, left: 0, top: 28, bottom: 56, height: 28 },
-    { index: 2, start: 8, length: 3, left: 0, top: 56, bottom: 84, height: 28 },
-  ];
-
-  it('视口内：命中包含 Y 的行（分界线归上侧行）', () => {
-    expect(estimateLineIndexFromContentY(10, 5, mounted3)).toBe(0);
-    expect(estimateLineIndexFromContentY(28, 5, mounted3)).toBe(0); // 行 0 底边
-    expect(estimateLineIndexFromContentY(29, 5, mounted3)).toBe(1);
-    expect(estimateLineIndexFromContentY(35, 5, mounted3)).toBe(1);
-    expect(estimateLineIndexFromContentY(56, 5, mounted3)).toBe(1); // 行 1 底边
-    expect(estimateLineIndexFromContentY(83, 5, mounted3)).toBe(2);
-    expect(estimateLineIndexFromContentY(84, 5, mounted3)).toBe(2); // 行 2 底边
-  });
-
-  it('视口上方：首行几何向上推算，clamp 到 0', () => {
-    expect(estimateLineIndexFromContentY(-14, 5, mounted3)).toBe(0);
-    expect(estimateLineIndexFromContentY(-100, 5, mounted3)).toBe(0);
-  });
-
-  it('视口下方：末行几何向下推算（虚拟化断选修复），clamp 到 lineCount-1', () => {
-    // Y=200：below = floor((200-84)/28) = 4 → 2+4 = 6 → clamp 4（lineCount 5）
-    expect(estimateLineIndexFromContentY(200, 5, mounted3)).toBe(4);
-    // Y=112：below = floor(28/28) = 1 → 3
-    expect(estimateLineIndexFromContentY(112, 5, mounted3)).toBe(3);
-    // Y=84 边界：below = 0 → 2
-    expect(estimateLineIndexFromContentY(84, 5, mounted3)).toBe(2);
-    // 大文档 10 行：Y=500 → below = 14 → 2+14 = 16 → clamp 9
-    expect(estimateLineIndexFromContentY(500, 10, mounted3)).toBe(9);
-  });
-
-  it('多行块行高差异：按边界行实际高估算（滚动后精确命中接管）', () => {
-    const multi: MountedLineGeom[] = [
-      { index: 2, start: 8, length: 3, left: 0, top: 0, bottom: 56, height: 56 },
-      { index: 3, start: 12, length: 3, left: 0, top: 56, bottom: 84, height: 28 },
-    ];
-    expect(estimateLineIndexFromContentY(20, 10, multi)).toBe(2);
-    expect(estimateLineIndexFromContentY(-10, 10, multi)).toBe(1); // 高 56 → 向上 1 行
-    expect(estimateLineIndexFromContentY(200, 10, multi)).toBe(7); // 3+floor(116/28)
-  });
-
-  it('边界：无已挂载行 / 空文档回退 0', () => {
-    expect(estimateLineIndexFromContentY(50, 5, [])).toBe(0);
-    expect(estimateLineIndexFromContentY(50, 0, mounted3)).toBe(0);
+  it('Tab 的停靠由浏览器布局决定，不固定为四个字符前进量', () => {
+    const view = makeFixture('a\tb');
+    view.fragments(0, [{ from: 0, to: 3, x: 0, y: 0, height: 28, stops: [0, 8.4, 33.6, 42] }]);
+    expect(indexFromClientPoint(8.4, 14, view.container)).toBe(1);
+    expect(indexFromClientPoint(33.6, 14, view.container)).toBe(2);
   });
 });
 
-describe('R4-G 坐标 → 索引：indexFromClientPoint', () => {
-  afterEach(() => {
-    delete (document as any).caretRangeFromPoint;
-    document.body.innerHTML = '';
+describe('R4-G 纵向定位：宿主 HeightMap 是唯一行号真源', () => {
+  it('已挂载区间使用半开行盒，边界归属于下一行', () => {
+    const view = makeFixture('a\nb\nc\nd\ne', { mounted: [0, 1, 2] });
+    const at = view.viewport.lineAtClientY;
+    expect([10, 28, 29, 35, 56, 83, 84].map(at)).toEqual([0, 1, 1, 1, 2, 2, 3]);
   });
 
-  it('精确路径：caretRangeFromPoint 命中 → token 起始 + 节点内偏移', () => {
-    const container = document.createElement('div');
-    document.body.appendChild(container);
-    mockContainerRect(container, ROW_HEIGHT);
-    const row = makeRow(0, 0, 5, 0);
-    const token = document.createElement('span');
-    token.setAttribute('data-token-start', '0');
-    token.setAttribute('data-token-length', '5');
-    const textNode = document.createTextNode('hello');
-    token.appendChild(textNode);
-    row.appendChild(token);
-    container.appendChild(row);
+  it('视口上方按权威偏移钳制到文档首行', () => {
+    const view = makeFixture('a\nb\nc\nd\ne');
+    expect(view.viewport.lineAtClientY(-14)).toBe(0);
+    expect(view.viewport.lineAtClientY(-100)).toBe(0);
+  });
 
-    const range = document.createRange();
-    range.setStart(textNode, 2);
-    range.collapse(true);
-    Object.defineProperty(document, 'caretRangeFromPoint', {
-      configurable: true,
-      value: () => range,
+  it('视口下方按完整行高表定位，不能从最后挂载行向外推算', () => {
+    const view = makeFixture('a\nb\nc\nd\ne', { mounted: [0, 1, 2] });
+    expect(view.viewport.lineAtClientY(200)).toBe(4);
+    expect(view.viewport.lineAtClientY(112)).toBe(4);
+    expect(view.viewport.lineAtClientY(84)).toBe(3);
+    expect(view.viewport.lineAtClientY(500)).toBe(4);
+  });
+
+  it('非均匀行高的未挂载区间仍使用实际高度表', () => {
+    const view = makeFixture(Array(10).fill('x').join('\n'), {
+      heights: [10, 10, 56, 28, 20, 40, 16, 80, 12, 28], mounted: [2, 3],
     });
-
-    const data = makeDataLayer(['hello']);
-    expect(indexFromClientPoint(10, 10, container, data)).toBe(2);
+    expect(view.viewport.lineAtClientY(20)).toBe(2);
+    expect(view.viewport.lineAtClientY(-10)).toBe(0);
+    expect(view.viewport.lineAtClientY(200)).toBe(7);
   });
 
-  it('精确路径返回 null 时回退几何（防御：命中测试失败不抛错）', () => {
-    const container = document.createElement('div');
-    document.body.appendChild(container);
-    mockContainerRect(container, ROW_HEIGHT * 3);
-    for (let i = 0; i < 3; i++) {
-      container.appendChild(makeRow(i, i * 4, 3, i * ROW_HEIGHT));
-    }
-    Object.defineProperty(document, 'caretRangeFromPoint', {
-      configurable: true,
-      value: () => null,
-    });
-    const data = makeDataLayer(['aaa', 'bbb', 'ccc']);
-    expect(indexFromClientPoint(0, 42, container, data)).toBe(4);
+  it('无挂载行仍可定位目标行，但字符位置必须等待真实 DOM', () => {
+    const view = makeFixture('a\nb\nc', { mounted: [] });
+    expect(view.viewport.lineAtClientY(50)).toBe(1);
+    expect(indexFromClientPoint(10, 50, view.container)).toBeNull();
+    const empty = makeFixture('', { left: 600 });
+    expect(empty.viewport.lineAtClientY(50)).toBe(0);
+  });
+});
+
+describe('R4-G 坐标到源码：indexFromClientPoint', () => {
+  it('原生命中直接映射 token 起始与节点边界', () => {
+    const view = makeFixture('hello');
+    expect(indexFromClientPoint(20, 14, view.container)).toBe(2);
+    expect(view.viewport.flushPending).toHaveBeenCalledOnce();
   });
 
-  it('几何回退（无布局环境/未命中）：视口内行命中 + 列预测', () => {
-    const container = document.createElement('div');
-    container.style.fontSize = '14px';
-    document.body.appendChild(container);
-    mockContainerRect(container, ROW_HEIGHT * 3);
-    for (let i = 0; i < 3; i++) {
-      container.appendChild(makeRow(i, i * 4, 3, i * ROW_HEIGHT));
-    }
-    const data = makeDataLayer(['aaa', 'bbb', 'ccc']);
-    // 行 1 行首（relX 0 → 列 0）
-    expect(indexFromClientPoint(0, 42, container, data)).toBe(4);
-    // 行 1 行尾（clientX 100 超行宽 25.2 → 列 3）
-    expect(indexFromClientPoint(100, 42, container, data)).toBe(7);
-    // 行 0
-    expect(indexFromClientPoint(0, 14, container, data)).toBe(0);
-    // 行 2 行首
-    expect(indexFromClientPoint(0, 70, container, data)).toBe(8);
+  it('原生命中缺失时返回 null，不把失败转换为猜出的源码位置', () => {
+    const view = makeFixture('aaa\nbbb');
+    vi.mocked((document as any).caretPositionFromPoint).mockReturnValue(null);
+    expect(indexFromClientPoint(0, 42, view.container)).toBeNull();
   });
 
-  it('几何回退：视口外（容器下方）估算末行行尾', () => {
-    const container = document.createElement('div');
-    container.style.fontSize = '14px';
-    document.body.appendChild(container);
-    mockContainerRect(container, ROW_HEIGHT * 3);
-    for (let i = 0; i < 3; i++) {
-      container.appendChild(makeRow(i, i * 4, 3, i * ROW_HEIGHT));
-    }
-    const data = makeDataLayer(['aaa', 'bbb', 'ccc']);
-    // Y=100 超容器底 84 → 末行（行 2）；clientX 100 → 列 3 → 8+3=11（文末）
-    expect(indexFromClientPoint(100, 100, container, data)).toBe(11);
+  it('真实挂载行的行首行尾和跨行命中保持准确', () => {
+    const view = makeFixture('aaa\nbbb\nccc');
+    expect(indexFromClientPoint(0, 42, view.container)).toBe(4);
+    expect(indexFromClientPoint(100, 42, view.container)).toBe(7);
+    expect(indexFromClientPoint(0, 14, view.container)).toBe(0);
+    expect(indexFromClientPoint(0, 70, view.container)).toBe(8);
   });
 
-  it('未挂载行（视口外目标）：行几何估算到行首', () => {
-    const container = document.createElement('div');
-    container.style.fontSize = '14px';
-    document.body.appendChild(container);
-    mockContainerRect(container, ROW_HEIGHT * 3);
-    for (let i = 0; i < 3; i++) {
-      container.appendChild(makeRow(i, i * 4, 3, i * ROW_HEIGHT));
-    }
-    const data = makeDataLayer(['aaa', 'bbb', 'ccc', 'ddd']);
-    // 行 3 未挂载：Y=100 → below = 0 → 末行 2；Y=140 → below = 2 → 行 3
-    expect(indexFromClientPoint(0, 140, container, data)).toBe(12);
+  it('视口外没有原生命中时不制造末行行尾', () => {
+    const view = makeFixture('aaa\nbbb\nccc');
+    expect(indexFromClientPoint(100, 100, view.container)).toBeNull();
+  });
+
+  it('未挂载目标先无字符位置，挂载后同一坐标准确映射', () => {
+    const view = makeFixture('aaa\nbbb\nccc\nddd', { mounted: [0, 1], height: 140 });
+    expect(indexFromClientPoint(0, 98, view.container)).toBeNull();
+    view.mount([0, 1, 3]);
+    expect(indexFromClientPoint(0, 98, view.container)).toBe(12);
   });
 });
 
@@ -519,8 +389,8 @@ describe('R4-G 拖选状态机（组件级 mousedown/mousemove/mouseup 序列）
     expect(container.style.userSelect).toBe('');
   });
 
-  it('视口外拖选：边缘滚动步进 + 行几何估算（虚拟化断选修复）', () => {
-    const { container } = mountWithRows(
+  it('视口外拖选等待权威目标挂载，释放鼠标后仍完成最后的真实命中', () => {
+    const { container, fixture, layout } = mountWithRows(
       'aaa\nbbb\nccc\nddd\neee\nfff\nggg\nhhh\niii\njjj',
       3 // 只挂载前 3 行，其余视口外未挂载
     );
@@ -530,20 +400,27 @@ describe('R4-G 拖选状态机（组件级 mousedown/mousemove/mouseup 序列）
     act(() => {
       fireMouseMove(0, 500); // 越出容器底（mock 高 84）
     });
-    const s = useEditorStore.getState();
-    // 锚点 = mousedown 位置（行 1 行首 4）；head = 估算末行行首（行 9 → 4×9）
+    let s = useEditorStore.getState();
+    // 当前没有目标 DOM，只保留锚点与待完成坐标，不跳到猜测的文档末行。
     expect(s.anchorPos).toBe(4);
-    expect(s.headPos).toBe(36);
-    expect(s.cursorPos).toBe(36);
+    expect(s.headPos).toBe(4);
+    expect(s.cursorPos).toBe(4);
     expect(s.selectionStart).toBe(4);
-    expect(s.selectionEnd).toBe(36);
+    expect(s.selectionEnd).toBe(4);
+    expect(fixture.viewport.revealLine).toHaveBeenLastCalledWith(4);
     act(() => {
       fireMouseUp(0, 500);
     });
     expect(container.style.userSelect).toBe('');
+    fixture.mount([1, 4]);
+    layout();
+    s = useEditorStore.getState();
+    expect(s.anchorPos).toBe(4);
+    expect(s.headPos).toBe(16);
+    expect(s.selectionEnd).toBe(16);
   });
 
-  it('视口上方拖选：向上估算 clamp 到文档首行', () => {
+  it('视口上方拖选：边缘原生命中保持文档首行边界', () => {
     const { container } = mountWithRows('aaa\nbbb\nccc');
     act(() => {
       fireMouseDown(container, 0, 70); // 行 2

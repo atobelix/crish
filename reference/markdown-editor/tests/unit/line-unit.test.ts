@@ -24,7 +24,7 @@ import {
   lineTokens,
   type LineUnitInput,
 } from '../../src/core/lineUnit';
-import { MarkdownParser } from '../../src/core/parser';
+import { MarkdownParser, type CodeState } from '../../src/core/parser';
 import { resolveTableId } from '../../src/core/tableIdentity';
 
 /** 行内偏移一律落到 0 号 bucket 的装饰集（行范围查询语义与行号无关，足够驱动派生） */
@@ -33,16 +33,26 @@ function makeDecorations(): DecorationSet {
 }
 
 /** deriveLineUnit 入参构造器（默认：非流式、无装饰、非代码行） */
-function unitInput(over: Partial<LineUnitInput> & { lineText: string }): LineUnitInput {
+function lineContext(getLine: (i: number) => string, index: number, codeState?: CodeState) {
+  const document = MarkdownParser.createDocumentContext();
+  document.update(getLine, index + 1, 0, 0, index + 1);
+  const context = document.get(index);
+  return codeState ? { ...context, codeState } : context;
+}
+function nodeInput(input: {
+  index: number; lineText: string; offset: number; getLine: (i: number) => string; codeState?: CodeState;
+}) {
+  return { lineText: input.lineText, offset: input.offset,
+    context: lineContext(input.getLine, input.index, input.codeState) };
+}
+function unitInput(over: Partial<LineUnitInput> & { lineText: string; codeState?: CodeState }): LineUnitInput {
+  const { codeState, ...input } = over;
+  const getLine = over.getLine ?? (() => over.lineText);
+  const index = over.index ?? 0;
   return {
-    index: 0,
-    offset: 0,
-    isCode: 'none',
-    decorations: makeDecorations(),
-    rowDecorationVersion: 0,
-    getLine: () => over.lineText,
-    isStreamingTail: false,
-    ...over,
+    index, offset: 0, decorations: makeDecorations(), rowDecorationVersion: 0,
+    getLine, isStreamingTail: false, ...input,
+    context: over.context ?? lineContext(getLine, index, codeState),
   };
 }
 
@@ -114,39 +124,39 @@ describe('逐行派生 · deriveActiveState（三态 + 优先级）', () => {
 
 describe('逐行派生 · deriveLineNode（行解析唯一真源 = MarkdownParser.parseLine）', () => {
   it('表格数据行 → table_row，行内 token 为 pipe/cell 交替形态', () => {
-    const node = deriveLineNode({
+    const node = deriveLineNode(nodeInput({
       index: 0,
       lineText: '| a | b |',
       offset: 0,
-      isCode: 'none',
+      codeState: 'none',
       getLine: () => '| a | b |',
-    });
+    }));
     expect(node.type).toBe('table_row');
     expect(node.inlineTokens[0].type).toBe('table_pipe');
     expect(node.inlineTokens.some((t) => t.type === 'table_cell')).toBe(true);
   });
 
   it('表格分隔行 → table_separator', () => {
-    const node = deriveLineNode({
+    const node = deriveLineNode(nodeInput({
       index: 0,
       lineText: '| --- | --- |',
       offset: 0,
-      isCode: 'none',
+      codeState: 'none',
       getLine: () => '| --- | --- |',
-    });
+    }));
     expect(node.type).toBe('table_separator');
     expect(node.inlineTokens[0].type).toBe('table_pipe');
   });
 
   it('与 MarkdownParser.parseLine 同源（type / raw / 行内 token 形态一致）', () => {
     const text = '| a | b |';
-    const node = deriveLineNode({
+    const node = deriveLineNode(nodeInput({
       index: 0,
       lineText: text,
       offset: 0,
-      isCode: 'none',
+      codeState: 'none',
       getLine: () => text,
-    });
+    }));
     const direct = MarkdownParser.parseLine(text, 0, 'none');
     expect(node.type).toBe(direct.type);
     expect(node.raw).toBe(direct.raw);
@@ -155,22 +165,22 @@ describe('逐行派生 · deriveLineNode（行解析唯一真源 = MarkdownParse
 
   it('普通段落 → body；空行 → empty', () => {
     expect(
-      deriveLineNode({ index: 0, lineText: 'hello', offset: 0, isCode: 'none', getLine: () => 'hello' })
+      deriveLineNode(nodeInput({ index: 0, lineText: 'hello', offset: 0, codeState: 'none', getLine: () => 'hello' }))
         .type
     ).toBe('body');
     expect(
-      deriveLineNode({ index: 0, lineText: '', offset: 0, isCode: 'none', getLine: () => '' }).type
+      deriveLineNode(nodeInput({ index: 0, lineText: '', offset: 0, codeState: 'none', getLine: () => '' })).type
     ).toBe('empty');
   });
 
   it('offset 与 length 回填到行节点（渲染层 data-offset 依赖）', () => {
-    const node = deriveLineNode({
+    const node = deriveLineNode(nodeInput({
       index: 0,
       lineText: '| a | b |',
       offset: 42,
-      isCode: 'none',
+      codeState: 'none',
       getLine: () => '| a | b |',
-    });
+    }));
     expect(node.localOffset).toBe(42);
     expect(node.length).toBe('| a | b |'.length);
   });
@@ -178,13 +188,13 @@ describe('逐行派生 · deriveLineNode（行解析唯一真源 = MarkdownParse
   it('callout 头行：经 getLine 注入上下文后行节点携带 calloutType / calloutTitle / isCalloutHeader', () => {
     const lines = ['> [!WARNING] 注意', '> 正文甲'];
     const getLine = (i: number) => lines[i] ?? '';
-    const head = deriveLineNode({
+    const head = deriveLineNode(nodeInput({
       index: 0,
       lineText: lines[0],
       offset: 0,
-      isCode: 'none',
+      codeState: 'none',
       getLine,
-    });
+    }));
     expect(head.type).toBe('body');
     expect(head.calloutType).toBe('warning');
     expect(head.calloutTitle).toBe('注意');
@@ -196,39 +206,39 @@ describe('逐行派生 · deriveLineNode（行解析唯一真源 = MarkdownParse
   it('callout 延续行：继承头行上下文但 isCalloutHeader 非 true', () => {
     const lines = ['> [!WARNING] 注意', '> 正文甲'];
     const getLine = (i: number) => lines[i] ?? '';
-    const body = deriveLineNode({
+    const body = deriveLineNode(nodeInput({
       index: 1,
       lineText: lines[1],
       offset: 0,
-      isCode: 'none',
+      codeState: 'none',
       getLine,
-    });
+    }));
     expect(body.calloutType).toBe('warning');
     expect(body.calloutTitle).toBe('注意');
     expect(body.isCalloutHeader).not.toBe(true);
   });
 
   it('普通引用行（非 callout）→ calloutType 为 undefined', () => {
-    const node = deriveLineNode({
+    const node = deriveLineNode(nodeInput({
       index: 0,
       lineText: '> 普通引用乙',
       offset: 0,
-      isCode: 'none',
+      codeState: 'none',
       getLine: () => '> 普通引用乙',
-    });
+    }));
     expect(node.type).toBe('body');
     expect(node.calloutType).toBeUndefined();
     expect(node.isCalloutHeader).not.toBe(true);
   });
 
   it('非引用行不触发 callout 探测（calloutType 恒 undefined）', () => {
-    const node = deriveLineNode({
+    const node = deriveLineNode(nodeInput({
       index: 0,
       lineText: '正文丙',
       offset: 0,
-      isCode: 'none',
+      codeState: 'none',
       getLine: () => '正文丙',
-    });
+    }));
     expect(node.calloutType).toBeUndefined();
   });
 });
@@ -266,13 +276,13 @@ describe('逐行派生 · previewHint（流式末行预演）', () => {
     }
   });
 
-  it('代码语义行（isCode ≠ none）即使流式末行也不预演', () => {
+  it('代码语义行（codeState ≠ none）即使流式末行也不预演', () => {
     expect(
-      deriveLineUnit(unitInput({ lineText: '**bold', isStreamingTail: true, isCode: 'code' }))
+      deriveLineUnit(unitInput({ lineText: '**bold', isStreamingTail: true, codeState: 'code' }))
         .previewHint
     ).toBeNull();
     expect(
-      deriveLineUnit(unitInput({ lineText: '**bold', isStreamingTail: true, isCode: 'fence_start' }))
+      deriveLineUnit(unitInput({ lineText: '**bold', isStreamingTail: true, codeState: 'fence_start' }))
         .previewHint
     ).toBeNull();
   });
@@ -309,11 +319,11 @@ describe('逐行派生 · deriveLineUnit 字段派生', () => {
   it('tableId：表格行恒经 resolveTableId(getLine, index) 解析，非表格行 undefined', () => {
     const lines = ['| a | b |', '| --- | --- |', '| 1 | 2 |', '段落丁'];
     const getLine = (i: number) => lines[i] ?? '';
-    const base = { offset: 0, isCode: 'none' as const, decorations: makeDecorations(), rowDecorationVersion: 0, getLine, isStreamingTail: false };
+    const base = { offset: 0, codeState: 'none' as const, decorations: makeDecorations(), rowDecorationVersion: 0, getLine, isStreamingTail: false };
 
-    const host = deriveLineUnit({ ...base, index: 0, lineText: lines[0] });
-    const inner = deriveLineUnit({ ...base, index: 2, lineText: lines[2] });
-    const para = deriveLineUnit({ ...base, index: 3, lineText: lines[3] });
+    const host = deriveLineUnit(unitInput({ ...base, index: 0, lineText: lines[0] }));
+    const inner = deriveLineUnit(unitInput({ ...base, index: 2, lineText: lines[2] }));
+    const para = deriveLineUnit(unitInput({ ...base, index: 3, lineText: lines[3] }));
 
     expect(typeof host.tableId).toBe('string');
     expect(host.tableId).toBe(resolveTableId(getLine, 0)); // 唯一入口：无 tableId 入参可覆盖
@@ -336,16 +346,16 @@ describe('逐行派生 · deriveLineUnit 字段派生', () => {
     const getLine = (i: number) => lines[i] ?? '';
     const ds = makeDecorations();
     ds.add(0, 3, 'selection');
-    const unit = deriveLineUnit({
+    const unit = deriveLineUnit(unitInput({
       index: 0,
       lineText: lines[0],
       offset: 0,
-      isCode: 'none',
+      codeState: 'none',
       decorations: ds,
       rowDecorationVersion: 0,
       getLine,
       isStreamingTail: false,
-    });
+    }));
     expect(unit.lineNode.type).toBe('table_row');
     expect(typeof unit.tableId).toBe('string');
     expect(unit.activeState).toEqual({ cursor: 3, selStart: 0, selEnd: 3 });

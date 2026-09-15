@@ -1,15 +1,16 @@
 /**
- * G6 CSS 契约门禁（C2）——静态文本断言版
+ * G6 CSS 契约门禁（C2）——真实导入图与语法树静态检查
  *
  * 依据：docs/analysis/03-测试门禁体系.md §7（class-inventory 静态扫描 +
  * style-contract 关键样式契约）与 09 修订 §3；任务书 G6 要点。
  *
  * 实现口径（与设计文档的差异及理由，诚实登记）：
- * - 本文件为「静态文本断言」版：直接读 src/index.css / App.css / 组件源码
- *   文本，断言选择器存在性、关键样式字面量、:root 变量表与颜色字面量门禁；
+ * - 从 main.tsx 的运行时导入图收集 CSS，包含 CSS @import；组件类名按
+ *   TypeScript 语法树及有限字面量类型提取，不把变量名或模板残段当作类名。
+ *   断言选择器存在性、关键样式、:root 变量表与颜色字面量门禁；
  *   jsdom 动态求值（getComputedStyle）版归渲染层 RTL（G3）域，不在此处。
  * - 现实修正：组件引用的类中 cursor-caret / truncation-indicator /
- *   selection-rect / a11y-live-region / virtual-row 等 18 个类没有全局 CSS
+ *   selection-rect / a11y-live-region / virtual-row 等类没有独占的全局 CSS
  *   选择器定义——样式全部由组件内联 style 提供（INLINE_STYLE_EXEMPTIONS
  *   登记表 + G6.3 内联样式证据断言）。故引用覆盖护栏采用
  *   「B − A ⊆ 豁免清单」口径：新增未登记类引用会炸本测试（CSS 清理护栏），
@@ -21,57 +22,170 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'fs';
 import path from 'path';
+import { createRequire } from 'node:module';
+import ts from 'typescript';
+import { parse as parseCss } from 'postcss';
 
 const SRC_DIR = path.resolve(__dirname, '../../src');
 const INDEX_CSS = fs.readFileSync(path.join(SRC_DIR, 'index.css'), 'utf-8');
-const APP_CSS = fs.readFileSync(path.join(SRC_DIR, 'App.css'), 'utf-8');
-// 表格岛样式（战役 table-systemic-remediation T3 / ADR-2）：
-// 岛刻意**独立成文件**（而非追加进 index.css）——index.css 在
-// scripts/check-file-length.mjs 的例外名单内（ceiling 冻结），
-// 且岛样式需后于 index.css / App.css 导入以覆盖 `.line-table-row` 的 flex。
-const TABLE_ISLAND_CSS = fs.readFileSync(
-  path.join(SRC_DIR, 'styles', 'table-island.css'),
-  'utf-8'
-);
-const CSS_FILES: Array<[string, string]> = [
-  ['index.css', INDEX_CSS],
-  ['App.css', APP_CSS],
-  ['styles/table-island.css', TABLE_ISLAND_CSS],
-];
+const COMPILER_OPTIONS: ts.CompilerOptions = {
+  target: ts.ScriptTarget.ESNext,
+  module: ts.ModuleKind.ESNext,
+  moduleResolution: ts.ModuleResolutionKind.Bundler,
+  jsx: ts.JsxEmit.ReactJSX,
+  allowImportingTsExtensions: true,
+  noEmit: true,
+};
+const ENTRY = path.join(SRC_DIR, 'main.tsx');
+const PROGRAM = ts.createProgram([ENTRY], COMPILER_OPTIONS);
 
-/** 扫描 src 下全部 tsx 文件（含子目录），拼接 className 静态引用点文本 */
-function readComponentSources(): Array<[string, string]> {
-  const out: Array<[string, string]> = [];
-  const walk = (dir: string) => {
-    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-      const full = path.join(dir, entry.name);
-      if (entry.isDirectory()) walk(full);
-      else if (entry.name.endsWith('.tsx'))
-        out.push([entry.name, fs.readFileSync(full, 'utf-8')]);
-    }
-  };
-  walk(SRC_DIR);
-  return out;
+function insideSource(file: string): boolean {
+  const relative = path.relative(SRC_DIR, file);
+  return relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
 }
-const COMPONENT_SOURCES = readComponentSources();
 
-/** 提取 CSS 文本中的类选择器（.xxx-* 形态；排除数值/版本号误匹配如 .015em） */
+/** 只沿真实运行时导入边读取样式，未被入口引入的 CSS 不能替产品补契约。 */
+function readLoadedStyles(): Map<string, string> {
+  const styles = new Map<string, string>();
+  const visited = new Set<string>();
+  const sources = new Map(PROGRAM.getSourceFiles().map(source => [path.resolve(source.fileName), source]));
+  const loadCss = (file: string) => {
+    if (styles.has(file)) return;
+    const text = fs.readFileSync(file, 'utf-8');
+    styles.set(file, text);
+    parseCss(text, { from: file }).walkAtRules('import', rule => {
+      const imported = /^(?:url\(\s*)?['"]([^'"]+)['"]/.exec(rule.params)?.[1];
+      if (!imported || /^(?:https?:|data:|\/\/)/.test(imported)) return;
+      loadCss(imported.startsWith('.')
+        ? path.resolve(path.dirname(file), imported)
+        : createRequire(file).resolve(imported));
+    });
+  };
+  const visitSource = (file: string) => {
+    if (visited.has(file)) return;
+    visited.add(file);
+    const source = sources.get(file);
+    if (!source) return;
+    const follow = (specifier: string) => {
+      if (specifier.endsWith('.css')) {
+        loadCss(specifier.startsWith('.')
+          ? path.resolve(path.dirname(file), specifier)
+          : createRequire(file).resolve(specifier));
+      } else if (specifier.startsWith('.')) {
+        const resolved = ts.resolveModuleName(specifier, file, COMPILER_OPTIONS, ts.sys).resolvedModule;
+        if (resolved && insideSource(resolved.resolvedFileName)) visitSource(path.resolve(resolved.resolvedFileName));
+      }
+    };
+    const walk = (node: ts.Node) => {
+      if (ts.isImportDeclaration(node) && !node.importClause?.isTypeOnly && ts.isStringLiteral(node.moduleSpecifier)) {
+        follow(node.moduleSpecifier.text);
+      } else if (ts.isExportDeclaration(node) && !node.isTypeOnly && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) {
+        follow(node.moduleSpecifier.text);
+      } else if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword &&
+        node.arguments[0] && ts.isStringLiteral(node.arguments[0])) {
+        follow(node.arguments[0].text);
+      }
+      ts.forEachChild(node, walk);
+    };
+    walk(source);
+  };
+  visitSource(ENTRY);
+  return styles;
+}
+
+const LOADED_CSS = readLoadedStyles();
+// 外部库的选择器参与导入图；颜色令牌纪律仍只约束项目自身维护的 CSS。
+const CSS_FILES = [...LOADED_CSS].filter(([file]) => insideSource(file));
+const SOURCE_FILES = PROGRAM.getSourceFiles().filter(source => insideSource(source.fileName));
+const COMPONENT_SOURCES: Array<[string, string]> = SOURCE_FILES
+  .filter(source => source.fileName.endsWith('.tsx'))
+  .map(source => [path.basename(source.fileName), source.text]);
+
+/** 仅检查 CSS 规则的选择器，不从声明值、注释或资源 URL 中捡取伪类名。 */
 function extractClassSelectors(cssText: string): Set<string> {
   const set = new Set<string>();
-  for (const m of cssText.matchAll(/\.([A-Za-z_][A-Za-z0-9_-]*)(?=\s*[{:,.>~+])/g)) {
-    set.add(m[1]);
-  }
+  parseCss(cssText).walkRules(rule => {
+    for (const match of rule.selector.matchAll(/\.(-?[_A-Za-z][_A-Za-z0-9-]*)/g)) set.add(match[1]);
+  });
   return set;
 }
 
-/** 收集 index.css + App.css + 组件内 <style> 块的全部类选择器 → 集合 A */
-function collectDefinedClasses(): Set<string> {
-  const all: string[] = CSS_FILES.map(([, text]) => text);
-  for (const [, text] of COMPONENT_SOURCES) {
-    for (const m of text.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)) {
-      all.push(m[1]);
+/** 字面量求值：解析实际赋值与有限联合，不把未知字符串插值拆成半截类名。 */
+function createLiteralReader(program: ts.Program, sources: readonly ts.SourceFile[]) {
+  const checker = program.getTypeChecker();
+  const assignments = new Map<ts.Symbol, ts.Expression[]>();
+  const unknown = '\u0000';
+  const symbolAt = (node: ts.Node) => {
+    const symbol = checker.getSymbolAtLocation(node);
+    return symbol && (symbol.flags & ts.SymbolFlags.Alias) ? checker.getAliasedSymbol(symbol) : symbol;
+  };
+  const collect = (node: ts.Node) => {
+    let name: ts.Node | undefined;
+    let value: ts.Expression | undefined;
+    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer) {
+      name = node.name; value = node.initializer;
+    } else if (ts.isBinaryExpression(node) && ts.isIdentifier(node.left) &&
+      [ts.SyntaxKind.EqualsToken, ts.SyntaxKind.PlusEqualsToken].includes(node.operatorToken.kind)) {
+      name = node.left; value = node.right;
     }
-  }
+    const symbol = name && symbolAt(name);
+    if (symbol && value) assignments.set(symbol, [...(assignments.get(symbol) ?? []), value]);
+    ts.forEachChild(node, collect);
+  };
+  sources.forEach(collect);
+  const finiteType = (type: ts.Type): string[] => {
+    if (type.isStringLiteral() || type.isNumberLiteral()) return [String(type.value)];
+    return type.isUnion() ? type.types.flatMap(finiteType) : [];
+  };
+  const join = (a: string[], b: string[]) => [...new Set(a.flatMap(left => b.map(right => left + right)))];
+  const read = (node: ts.Expression, seen = new Set<ts.Symbol>()): string[] => {
+    if (ts.isStringLiteralLike(node) || ts.isNumericLiteral(node)) return [node.text];
+    if (ts.isParenthesizedExpression(node) || ts.isAsExpression(node) || ts.isNonNullExpression(node) ||
+      ts.isTypeAssertionExpression(node) || ts.isSatisfiesExpression(node)) return read(node.expression, seen);
+    if (ts.isConditionalExpression(node)) return [...read(node.whenTrue, seen), ...read(node.whenFalse, seen)];
+    if (ts.isTemplateExpression(node)) {
+      let values = [node.head.text];
+      for (const span of node.templateSpans) values = join(join(values, read(span.expression, seen)), [span.literal.text]);
+      return values;
+    }
+    if (ts.isBinaryExpression(node)) {
+      if (node.operatorToken.kind === ts.SyntaxKind.PlusToken) return join(read(node.left, seen), read(node.right, seen));
+      if (node.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken) return ['', ...read(node.right, seen)];
+      if ([ts.SyntaxKind.BarBarToken, ts.SyntaxKind.QuestionQuestionToken].includes(node.operatorToken.kind)) {
+        return [...read(node.left, seen), ...read(node.right, seen)];
+      }
+    }
+    if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === 'trim') {
+      return read(node.expression.expression, seen).map(value => value.trim());
+    }
+    if (ts.isIdentifier(node)) {
+      const symbol = symbolAt(node);
+      if (symbol && assignments.has(symbol)) {
+        if (seen.has(symbol)) return [unknown];
+        const next = new Set(seen).add(symbol);
+        return [...new Set(assignments.get(symbol)!.flatMap(value => read(value, next)))];
+      }
+    }
+    const values = finiteType(checker.getTypeAtLocation(node));
+    return values.length ? values : [unknown];
+  };
+  return read;
+}
+
+const READ_LITERAL = createLiteralReader(PROGRAM, SOURCE_FILES);
+
+/** 收集入口加载的样式与组件内真实 <style> 文本。 */
+function collectDefinedClasses(): Set<string> {
+  const all: string[] = [...LOADED_CSS.values()];
+  const visit = (node: ts.Node) => {
+    if (ts.isJsxElement(node) && node.openingElement.tagName.getText() === 'style') {
+      for (const child of node.children) {
+        if (ts.isJsxExpression(child) && child.expression) all.push(...READ_LITERAL(child.expression));
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  SOURCE_FILES.forEach(visit);
   const set = new Set<string>();
   for (const text of all) {
     for (const c of extractClassSelectors(text)) set.add(c);
@@ -79,45 +193,41 @@ function collectDefinedClasses(): Set<string> {
   return set;
 }
 
-/** 提取组件 className 字面量（含模板拼接的静态段）→ 集合 B 的一部分 */
-function extractComponentClassLiterals(): Set<string> {
+/** 只从 className 语法节点取值；标识符的名字本身从不成为候选类名。 */
+function extractComponentClassLiterals(
+  sources = SOURCE_FILES,
+  read = READ_LITERAL
+): Set<string> {
   const set = new Set<string>();
-  for (const [, text] of COMPONENT_SOURCES) {
-    // 双引号字面量（无模板）：className="line-block"
-    for (const m of text.matchAll(/className="([^"]*)"/g)) {
-      for (const w of m[1].matchAll(/[A-Za-z_][A-Za-z0-9_-]*/g)) set.add(w[0]);
+  const visit = (node: ts.Node) => {
+    if (ts.isJsxAttribute(node) && node.name.getText() === 'className' && node.initializer) {
+      const expression = ts.isJsxExpression(node.initializer) ? node.initializer.expression : node.initializer;
+      if (expression) for (const value of read(expression)) {
+        for (const word of value.split(/\s+/)) if (/^[A-Za-z_][A-Za-z0-9_-]*$/.test(word)) set.add(word);
+      }
     }
-    // 模板字面量：className={`a ${cond ? 'b' : 'c'} d`}（允许 `.trim()` 等后缀）——
-    // ${...} 动态段整体移除（动态类单独登记），静态段词元保留
-    for (const m of text.matchAll(/className=\{`([^`]*)`[^}]*\}/g)) {
-      const lit = m[1].replace(/\$\{[^}]*\}/g, ' ');
-      for (const w of lit.matchAll(/[A-Za-z_][A-Za-z0-9_-]*/g)) set.add(w[0]);
-    }
-  }
+    ts.forEachChild(node, visit);
+  };
+  sources.forEach(visit);
   return set;
 }
 
-/**
- * 动态拼接 / 映射表产出的类（不在 className 字面量里直写，任务书 G6 要点 2）：
- * - is-active-line：MarkdownEngine 模板 `virtual-row ${activeState ? 'is-active-line' : ''}`
- * - is-active-token：InlineRenderer/BlockRenderer checkIsActive 拼接产物
- * - is-search-line：搜索装饰行标记
- * - table-header-row：表格表头行标记
- */
-const DYNAMIC_COMPONENT_CLASSES = [
-  'is-active-line',
-  'is-active-token',
-  'is-search-line',
-  'table-header-row',
-] as const;
+const REFERENCED_CLASSES = extractComponentClassLiterals();
+
+/** 已退休的组件类逐项留痕；不为它们添加无布局职责的 CSS 占位规则。 */
+const RETIRED_COMPONENT_CLASSES: Record<string, string> = {
+  'syntax-marker': '三种列表标记已由固定 list-marker-slot 承载，组件不再输出旧通用标记类。',
+  'token-content': '渲染器按明确的源码叶片与 syntax-content 输出，不再生成旧内容包装类。',
+  'task-space': '任务标记空隙由统一槽与 marker-gap 承担，组件不再生成额外空格节点。',
+};
 
 /**
  * 内联样式豁免清单（类名 → 组件）：组件引用但无全局 CSS 选择器定义，
  * 样式全部由组件内联 style 提供。新增豁免项必须先更新本表与 G6.3 证据断言。
  */
 const INLINE_STYLE_EXEMPTIONS: Record<string, string> = {
-  'virtual-row': 'MarkdownEngine.tsx（虚拟化行，内联 style 定位）',
-  'is-search-line': 'MarkdownEngine.tsx（搜索装饰行，内联 style 高亮）',
+  'virtual-row': 'EditorLine.tsx / TableIslandHost.tsx（虚拟化行，内联 style 定位）',
+  'is-search-line': 'EditorLine.tsx（搜索装饰行，内联 style 高亮）',
   'selection-layer': 'SelectionHighlight.tsx（选区层容器，内联 style）',
   'selection-rect': 'SelectionHighlight.tsx（选区矩形，内联 backgroundColor: var(--blue-selection)）',
   'truncation-indicator': 'BlockRenderer.tsx（截断指示，data-ignore-measure）',
@@ -126,8 +236,6 @@ const INLINE_STYLE_EXEMPTIONS: Record<string, string> = {
   'blockquote-source': 'BlockRenderer.tsx（块引用原文保留）',
   'line-table': 'BlockRenderer.tsx（表格 flex 容器）',
   'syntax-delimiter': 'InlineRenderer.tsx（定界符结构类）',
-  'syntax-marker': 'InlineRenderer.tsx（列表标记结构类）',
-  'token-content': 'InlineRenderer.tsx（token 内容结构类）',
   'code-soft-text': '软渲染纯文本行（BlockRenderer 分支）',
   'math-soft-text': '软渲染公式行（BlockRenderer 分支）',
   'is-soft-render': '软渲染行标记（BlockRenderer 分支）',
@@ -135,10 +243,35 @@ const INLINE_STYLE_EXEMPTIONS: Record<string, string> = {
   'context-menu-divider': 'ContextMenu.tsx（菜单分隔线）',
   'task-checkbox-wrapper': 'InlineRenderer.tsx（任务项复选框包裹）',
   'task-checkbox-svg': 'InlineRenderer.tsx（任务项复选框图标）',
-  'task-space': 'InlineRenderer.tsx（任务项前缀空格）',
   'blockquote-bar': 'InlineRenderer.tsx（块引用导线条）',
   'blockquote-space': 'InlineRenderer.tsx（块引用前缀空格）',
 };
+
+/** 有明确共享样式所有者的结构类，不要求重复一份同内容选择器。 */
+const SHARED_STYLE_CLASSES: Record<string, { component: string; owner: string; reason: string }> = {
+  'is-align-center': { component: 'InlineRenderer.tsx', owner: 'list-marker-slot', reason: '居中是标记槽的默认对齐，只有 end 状态需要覆盖。' },
+  'math-block-row': { component: 'BlockRenderer.tsx', owner: 'line-math-block', reason: '公式源码行结构标记，行盒样式由 line-math-block 统一提供。' },
+  'math-block-preview-row': { component: 'BlockRenderer.tsx', owner: 'math-block-rendered', reason: '标识承担公式预览的行，预览布局由 math-block-rendered 提供。' },
+  'math-preview-content': { component: 'MathPreview.tsx', owner: 'katex', reason: 'KaTeX 输出宿主；子树排版由入口导入的 KaTeX 样式负责。' },
+  'style-checkbox': { component: 'InlineRenderer.tsx', owner: 'interactive-checkbox', reason: '同一复选框同时携带语义类与交互类，外观由 interactive-checkbox 和矢量图形负责。' },
+  'token-html-element': { component: 'InlineRenderer.tsx', owner: 'line-block', reason: '行内 HTML 容器继承正文行盒，特殊标签另带 style-* 类，不再给容器定义第二套排版。' },
+  'callout-header': { component: 'BlockRenderer.tsx', owner: 'callout-header-banner', reason: '标记 callout 首行，实际头部内容由 callout-header-banner 绘制。' },
+  'is-frontmatter-open': { component: 'EditorLine.tsx', owner: 'is-frontmatter-row', reason: '元数据起始行语义；源码透明化统一由 is-frontmatter-row 管理。' },
+  'is-frontmatter-body': { component: 'EditorLine.tsx', owner: 'is-frontmatter-row', reason: '元数据内容行语义；源码透明化统一由 is-frontmatter-row 管理。' },
+  'is-frontmatter-close': { component: 'EditorLine.tsx', owner: 'is-frontmatter-row', reason: '元数据结束行语义；源码透明化统一由 is-frontmatter-row 管理。' },
+};
+
+/** 探针源码仅保存在内存中，用来验证门禁能拒绝真实缺样式并排除误提取。 */
+function fixtureClasses(text: string): Set<string> {
+  const file = path.join(SRC_DIR, '__css_contract_fixture__.tsx');
+  const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const options = { ...COMPILER_OPTIONS, noLib: true };
+  const host = ts.createCompilerHost(options);
+  const getSourceFile = host.getSourceFile.bind(host);
+  host.getSourceFile = (name, ...args) => path.resolve(name) === file ? source : getSourceFile(name, ...args);
+  const program = ts.createProgram([file], options, host);
+  return extractComponentClassLiterals([source], createLiteralReader(program, [source]));
+}
 
 /** 剥离 CSS 注释（块注释 + 行注释），供颜色字面量门禁扫描 */
 function stripCssComments(cssText: string): string {
@@ -147,8 +280,36 @@ function stripCssComments(cssText: string): string {
     .replace(/^\s*\/\/.*$/gm, '');
 }
 
-describe('G6 CSS 契约（静态文本断言版）', () => {
+describe('G6 CSS 契约（导入图与语法树静态断言）', () => {
   const defined = collectDefinedClasses();
+
+  it('G6.0 样式来自真实入口导入图，包含列表、公式与表格独立样式', () => {
+    const loaded = CSS_FILES.map(([file]) => path.relative(SRC_DIR, file).replaceAll('\\', '/'));
+    expect(loaded).toEqual(expect.arrayContaining([
+      'styles/list-indent.css', 'styles/math-editing.css', 'styles/table-island.css',
+    ]));
+    expect(defined.has('katex')).toBe(true);
+  });
+
+  it('语法树解析条件、赋值和有限模板值，不把变量名、注释、模板残段当类', () => {
+    const classes = fixtureClasses([
+      '// className="from-comment"',
+      'function View(className: string, align: "center" | "end", active: boolean) {',
+      '  let result = "base";',
+      '  if (active) result += " is-active-token";',
+      '  return <span className={`${className} fixed is-align-${align} ${active ? "shown" : "hidden"} ${result}`.trim()} />;',
+      '}',
+    ].join('\n'));
+    expect([...classes].sort()).toEqual([
+      'base', 'fixed', 'hidden', 'is-active-token', 'is-align-center', 'is-align-end', 'shown',
+    ]);
+  });
+
+  it('真实字面量缺失样式仍会被拦截，声明值与注释不能冒充类选择器', () => {
+    const classes = fixtureClasses('const view = <span className="present missing-style" />;');
+    const styles = extractClassSelectors('.present { content: ".missing-style"; } /* .missing-style {} */');
+    expect([...classes].filter(name => !styles.has(name))).toEqual(['missing-style']);
+  });
 
   it('G6.1 关键契约类必须存在于 CSS 定义集合（选择器存在性扫描）', () => {
     // 任务书点名的核心契约类：.line-block / .line-heading 系 / .token-* 系 /
@@ -184,13 +345,9 @@ describe('G6 CSS 契约（静态文本断言版）', () => {
 
   it('G6.2 引用覆盖护栏：组件 className ⊆ CSS 定义 ∪ 内联豁免清单', () => {
     // B − A − 豁免 = ∅：删除 class 会先炸本测试（CSS 清理护栏）
-    const referenced = new Set([
-      ...extractComponentClassLiterals(),
-      ...DYNAMIC_COMPONENT_CLASSES,
-    ]);
-    const unregistered = [...referenced]
+    const unregistered = [...REFERENCED_CLASSES]
       .filter((c) => !defined.has(c))
-      .filter((c) => !(c in INLINE_STYLE_EXEMPTIONS));
+      .filter((c) => !(c in INLINE_STYLE_EXEMPTIONS) && !(c in SHARED_STYLE_CLASSES));
     expect(
       unregistered,
       `组件引用但无 CSS 定义且未登记豁免: ${unregistered.join(', ')}`
@@ -198,17 +355,27 @@ describe('G6 CSS 契约（静态文本断言版）', () => {
   });
 
   it('G6.3 豁免清单反向护栏：登记项必须仍被组件引用（防死清单）', () => {
-    const referenced = new Set([
-      ...extractComponentClassLiterals(),
-      ...DYNAMIC_COMPONENT_CLASSES,
-    ]);
-    const stale = Object.keys(INLINE_STYLE_EXEMPTIONS).filter(
-      (c) => !referenced.has(c)
+    const stale = [...Object.keys(INLINE_STYLE_EXEMPTIONS), ...Object.keys(SHARED_STYLE_CLASSES)].filter(
+      (c) => !REFERENCED_CLASSES.has(c)
     );
     expect(
       stale,
       `豁免清单中已无组件引用的死项（应移出清单）: ${stale.join(', ')}`
     ).toEqual([]);
+  });
+
+  it('已退休类有逐项原因且不再被组件输出，共享样式类有真实所有者', () => {
+    for (const [name, reason] of Object.entries(RETIRED_COMPONENT_CLASSES)) {
+      expect(reason.trim().length).toBeGreaterThan(0);
+      expect(REFERENCED_CLASSES.has(name), `${name} 已退休：${reason}`).toBe(false);
+    }
+    for (const [name, contract] of Object.entries(SHARED_STYLE_CLASSES)) {
+      expect(contract.reason.trim().length).toBeGreaterThan(0);
+      const source = SOURCE_FILES.find(file => path.basename(file.fileName) === contract.component);
+      expect(source, `${name} 的声明组件必须存在`).toBeDefined();
+      expect(extractComponentClassLiterals([source!]).has(name)).toBe(true);
+      expect(defined.has(contract.owner), `${name} 的共享样式所有者 ${contract.owner} 必须真实存在`).toBe(true);
+    }
   });
 
   it('G6.4 内联豁免类样式证据：登记的关键类确有内联样式兜底', () => {

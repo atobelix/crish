@@ -137,21 +137,21 @@ export const SAMPLE_DOCS_MAP = new Map<string, MarkdownSampleDoc>(
 export const MULTI_STREAM_PRESETS: readonly MultiStreamPreset[] = [
   {
     id: 'multi-triad',
-    title: '🚀 核心技术三部曲：系统架构 + 数理学术 + 企业报表',
+    title: '核心技术三部曲：系统架构 + 数理学术 + 企业报表',
     shortTitle: '三部曲连跑',
     description: '连续流式渲染系统架构（01）、数理学术（02）与复杂报表（03），验证高负载多组件流式演进稳定度。',
     docIds: ['01-engineering', '02-math', '03-tables'],
   },
   {
     id: 'multi-interactive',
-    title: '⚡ 交互与极限防御组：敏捷看板 + 边缘语法 + AI 剧本',
+    title: '交互与极限防御组：敏捷看板 + 边缘语法 + AI 剧本',
     shortTitle: '交互极限连跑',
     description: '连续流式渲染知识看板（04）、边缘用例（06）与 AI 推送剧本（05），验证动态任务项与边界语法稳定性。',
     docIds: ['04-pkm', '06-edge', '05-streaming'],
   },
   {
     id: 'multi-all',
-    title: '🌟 全模态大满贯：全部 6 大专业篇章连续流式输出',
+    title: '全模态大满贯：全部 6 大专业篇章连续流式输出',
     shortTitle: '全篇大满贯连跑',
     description: '从 AI 剧本、系统工程、数理论文、企业报表、敏捷看板到边缘防御，一气呵成全量连续流式渲染！',
     docIds: ['05-streaming', '01-engineering', '02-math', '03-tables', '04-pkm', '06-edge'],
@@ -195,7 +195,7 @@ export function buildStreamingContent(targetId: string): {
     parts.push(
       `# 流式渲染演示（AI 模拟输出）：多篇全流程渲染测试 —— ${preset.shortTitle}\n\n` +
       `> 本次流式测试由多个核心领域专业篇章连续无缝注入，全面压测引擎连续状态机平稳度与内存收敛。\n` +
-      `> 包含篇章：${preset.docIds.map((id) => SAMPLE_DOCS_MAP.get(id)?.shortTitle).filter(Boolean).join(' ➔ ')}。\n`
+      `> 包含篇章：${preset.docIds.map((id) => SAMPLE_DOCS_MAP.get(id)?.shortTitle).filter(Boolean).join(' → ')}。\n`
     );
 
     for (const docId of preset.docIds) {

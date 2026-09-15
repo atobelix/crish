@@ -16,6 +16,7 @@
 // 的 className 引用护栏），面板样式全内联、颜色只走 var(--...) 主题变量。
 
 import React, { useEffect, useMemo, useState } from 'react';
+import { ListTree } from 'lucide-react';
 import {
   findHeadingSection,
   type HeadingEntry,
@@ -37,7 +38,7 @@ const PANEL_STYLE: React.CSSProperties = {
   position: 'absolute',
   top: 10,
   right: 28,
-  zIndex: 500,
+  zIndex: 'var(--z-panel)',
   width: 240,
   maxHeight: '60%',
   display: 'flex',
@@ -58,7 +59,7 @@ const COLLAPSED_PILL_STYLE: React.CSSProperties = {
   position: 'absolute',
   top: 10,
   right: 28,
-  zIndex: 500,
+  zIndex: 'var(--z-panel)',
   display: 'inline-flex',
   alignItems: 'center',
   gap: 6,
@@ -222,7 +223,8 @@ export const OutlinePanel: React.FC<OutlinePanelProps> = ({
         title="点击展开大纲面板"
         aria-label="展开大纲面板"
       >
-        <span>📑 大纲</span>
+        <span className="outline-chip-icon" aria-hidden="true"><ListTree size={13} /></span>
+        <span>大纲</span>
         <span style={{ opacity: 0.7, fontSize: 10 }}>
           {headings.length ? `${headings.length}` : '0'}
         </span>

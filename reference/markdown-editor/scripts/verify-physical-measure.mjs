@@ -17,6 +17,18 @@ import { chromium } from 'playwright';
 const TARGET_URL = process.env.TEST_URL || 'http://localhost:5173/';
 const TOLERANCE_PX = 0.5; // 刚性物理对齐阈值：0.5 像素以内
 
+
+/** 行滚动定位（Alcove 布局感知）：行真实 DOM 偏移 + 容器 padding-top。
+ * 旧口径按 `行号 * 28` 直接算 scrollTop——容器顶部留白升级为 64px 后
+ * 过期（行偏移含 padding-top）。行已虚拟化挂载时用 offsetTop（精确），
+ * 未挂载时回落 行号*28 + padding-top（单行高 28px 场景等价）。 */
+function scrollTopForLine(container, lineIdx, margin = 150) {
+  const padTop = parseFloat(window.getComputedStyle(container).paddingTop || '0');
+  const row = container.querySelector(`[data-index="${lineIdx}"]`);
+  const base = row ? row.offsetTop + padTop : lineIdx * 28 + padTop;
+  return Math.max(0, base - margin);
+}
+
 async function runDefenseSuite() {
   console.log('================================================================');
   console.log('🛡️  启动真实 Chromium 物理测量计算与交互状态机防御套件');
@@ -36,6 +48,15 @@ async function runDefenseSuite() {
   try {
     await page.goto(TARGET_URL, { waitUntil: 'domcontentloaded', timeout: 15000 });
     await page.waitForSelector('.editor-scroll-container', { timeout: 10000 });
+    await page.evaluate(() => {
+      // Alcove 布局感知的行滚动定位（容器顶部留白 64px；行偏移 = 行 offsetTop + padding-top）
+      window.__scrollTopForLine = (container, lineIdx, margin = 150) => {
+        const padTop = parseFloat(window.getComputedStyle(container).paddingTop || '0');
+        const row = container.querySelector(`[data-index="${lineIdx}"]`);
+        const base = row ? row.offsetTop + padTop : lineIdx * 28 + padTop;
+        return Math.max(0, base - margin);
+      };
+    });
     
     // 等待字体加载与 DOM 挂载完全稳定
     await page.evaluate(async () => {
@@ -140,7 +161,7 @@ async function runDefenseSuite() {
           for (let i = 0; i < Math.min(200, totalLines); i++) {
             const lineText = store.getLine(i);
             if (lineText && sc.matcher(lineText)) {
-              container.scrollTop = i * 28;
+              container.scrollTop = window.__scrollTopForLine(container, i, 0);
               container.dispatchEvent(new Event('scroll'));
               await waitForFrame(100);
               rows = Array.from(document.querySelectorAll(sc.selector));
@@ -881,7 +902,7 @@ async function runDefenseSuite() {
           const targetLineIdx = target.findLineIdx();
           if (targetLineIdx >= 0) {
             // 通过 scrollTop 定位并将目标行置于可视区
-            container.scrollTop = Math.max(0, targetLineIdx * 28 - 150);
+            container.scrollTop = window.__scrollTopForLine(container, targetLineIdx, 150);
             await waitForFrame(50);
 
             const activeRow = document.querySelector(
@@ -978,7 +999,7 @@ async function runDefenseSuite() {
         }
 
         if (targetLineIdx !== -1) {
-          container.scrollTop = Math.max(0, targetLineIdx * 28 - 150);
+          container.scrollTop = window.__scrollTopForLine(container, targetLineIdx, 150);
           await waitForFrame(80);
 
           const lineText = st.getLine(targetLineIdx);
@@ -1064,7 +1085,7 @@ async function runDefenseSuite() {
         }
 
         if (taskLineIdx !== -1) {
-          container.scrollTop = Math.max(0, taskLineIdx * 28 - 150);
+          container.scrollTop = window.__scrollTopForLine(container, taskLineIdx, 150);
           await waitForFrame(80);
 
           const rowEl = document.querySelector(`.virtual-row[data-index="${taskLineIdx}"]`);
@@ -1139,7 +1160,7 @@ async function runDefenseSuite() {
         }
 
         if (l68 !== -1 && l69 !== -1 && l70 !== -1) {
-          container.scrollTop = Math.max(0, l68 * 28 - 100);
+          container.scrollTop = window.__scrollTopForLine(container, l68, 100);
           await waitForFrame(80);
 
           const r68 = document.querySelector(`.virtual-row[data-index="${l68}"]`);
@@ -1246,7 +1267,7 @@ async function runDefenseSuite() {
         }
 
         if (nestedListIdx !== -1) {
-          container.scrollTop = Math.max(0, nestedListIdx * 28 - 150);
+          container.scrollTop = window.__scrollTopForLine(container, nestedListIdx, 150);
           await waitForFrame(80);
 
           const rowEl = document.querySelector(`.virtual-row[data-index="${nestedListIdx}"]`);
@@ -1285,7 +1306,7 @@ async function runDefenseSuite() {
         }
 
         if (codeContentIdx !== -1) {
-          container.scrollTop = Math.max(0, codeContentIdx * 28 - 150);
+          container.scrollTop = window.__scrollTopForLine(container, codeContentIdx, 150);
           await waitForFrame(80);
 
           const rowEl = document.querySelector(`.virtual-row[data-index="${codeContentIdx}"]`);
@@ -1331,7 +1352,7 @@ async function runDefenseSuite() {
         }
 
         if (targetIdx !== -1) {
-          container.scrollTop = Math.max(0, targetIdx * 28 - 100);
+          container.scrollTop = window.__scrollTopForLine(container, targetIdx, 100);
           await waitForFrame(80);
 
           const off1 = st.lineOffsets.getOffset(targetIdx);

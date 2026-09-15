@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 /**
  * B2 词级跳选（Ctrl+Arrow / 双击选词）单元测试
  *
@@ -11,15 +12,15 @@
  * 3. store 集成：真实 EditorStore 上词级目标 + Shift 扩展
  *    （moveHead：anchor 不动 head 到词边界）的端到端语义。
  */
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect } from 'vitest';
 import { createEditorStore } from '../../src/core/EditorStore';
 import {
   wordNavigation,
   doubleClickWordSelection,
-  estimateScrollTopForLine,
-  type MountedLineGeom,
 } from '../../src/components/HiddenInput';
 import { wordBoundary } from '../../src/core/search';
+import { revealEditorLine } from '../../src/core/editorViewport';
+import { viewportFixture, type ViewportFixture } from './viewport-fixture';
 
 describe('wordNavigation（Ctrl+Arrow 行级目标计算）', () => {
   // 三行文档：行 0 'hello world' [0,11) 行 1 '渲染引擎' [12,16)
@@ -217,61 +218,48 @@ describe('词边界函数与搜索全词判定共用同一模型（单源）', (
   });
 });
 
-describe('越视口滚入：estimateScrollTopForLine（Ctrl+End 等跳转的几何外推）', () => {
-  // 视口内行几何：行 100-109 已挂载（28px 行高，top 从 2800 起）
-  const rows: MountedLineGeom[] = Array.from({ length: 10 }, (_, i) => {
-    const idx = 100 + i;
-    const top = 2800 + i * 28;
-    return {
-      index: idx,
-      start: 0,
-      length: 0,
-      left: 0,
-      top,
-      bottom: top + 28,
-      height: 28,
-    };
-  });
-  const first = rows[0];
-  const last = rows[rows.length - 1];
+describe('越视口滚入：权威宿主 revealLine', () => {
+  const fixtures: ViewportFixture[] = [];
+  function make(count: number, heights?: number[]) {
+    const fixture = viewportFixture(Array(count).fill('x').join('\n'), { heights, height: 280, mounted: [] });
+    fixtures.push(fixture);
+    return fixture;
+  }
+  afterEach(() => { for (const fixture of fixtures.splice(0)) fixture.dispose(); });
 
-  it('目标行在视口内 → null（交由精确测量分支）', () => {
-    expect(
-      estimateScrollTopForLine(first, last, 105, 280, 100000)
-    ).toBeNull();
+  it('目标行已在视口内时保持滚动位置，仍由同一宿主处理', () => {
+    const fixture = make(200);
+    fixture.container.scrollTop = 2800;
+    revealEditorLine(fixture.container, 105);
+    expect(fixture.container.scrollTop).toBe(2800);
+    expect(fixture.viewport.revealLine).toHaveBeenCalledWith(105);
   });
 
-  it('目标行在视口下方：末行几何向下外推，对齐视口底部', () => {
-    // 目标行 18805：末行（109, bottom 3080）下推 18696 行 × 28，
-    // 对齐视口底部（-280）+ 40 边距；scrollHeight 足够大无钳制
-    const target = estimateScrollTopForLine(
-      first,
-      last,
-      18805,
-      280,
-      10_000_000
-    );
-    expect(target).toBe(3080 + (18805 - 109) * 28 - 280 + 40);
+  it('视口下方远端目标按真实高度表对齐，不从最后挂载行外推', () => {
+    const fixture = make(19000, Array.from({ length: 19000 }, (_, i) => i % 7 === 0 ? 45 : 28));
+    fixture.container.scrollTop = 2800;
+    revealEditorLine(fixture.container, 18805);
+    expect(fixture.viewport.revealLine).toHaveBeenCalledWith(18805);
+    expect(fixture.container.scrollTop).toBe(fixture.heights.getOffset(18806) - 280);
   });
 
-  it('目标行在视口上方：首行几何向上外推（留 40px 上边距）', () => {
-    // 目标行 50：首行（100, top 2800）上推 50 行 × 28 + 40
-    const target = estimateScrollTopForLine(first, last, 50, 280, 100000);
-    expect(target).toBe(2800 - (100 - 50) * 28 - 40);
+  it('视口上方目标直接使用行顶部，不额外添加 40px 补偿', () => {
+    const fixture = make(200);
+    fixture.container.scrollTop = 2800;
+    revealEditorLine(fixture.container, 50);
+    expect(fixture.container.scrollTop).toBe(fixture.heights.getOffset(50));
   });
 
-  it('目标行在文档首（行 0）：上推出界钳制到 0（不产生负滚动）', () => {
-    // 2800 - 100×28 - 40 = -40 → 钳 0
-    const target = estimateScrollTopForLine(first, last, 0, 280, 100000);
-    expect(target).toBe(0);
+  it('文档首目标由宿主精确定位到 0，不出现负滚动', () => {
+    const fixture = make(200);
+    fixture.container.scrollTop = 2800;
+    revealEditorLine(fixture.container, 0);
+    expect(fixture.container.scrollTop).toBe(0);
   });
 
-  it('滚动范围钳制到 [0, scrollHeight - clientHeight]', () => {
-    // 文档总高 420px（15 行 × 28）：clientHeight 280 → maxScroll 140，
-    // 目标行 1000 的推算出界 → 钳到 140
-    const sFirst: MountedLineGeom = { ...first, top: 0, index: 0 };
-    const sLast: MountedLineGeom = { ...last, top: 252, index: 9 };
-    const target = estimateScrollTopForLine(sFirst, sLast, 1000, 280, 420);
-    expect(target).toBe(140);
+  it('滚动范围由宿主钳制，输入层不自行推算越界像素', () => {
+    const fixture = make(15);
+    revealEditorLine(fixture.container, 1000);
+    expect(fixture.container.scrollTop).toBe(140);
   });
 });

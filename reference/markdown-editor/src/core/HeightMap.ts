@@ -7,6 +7,9 @@
 // 样本校准与 Epsilon 稳定护栏）。
 
 import type { CodeState } from './parser';
+// 排版度量真源（战役 wysiwyg-layout-remediation T1/ADR-5）：行高 / 字宽 /
+// 内容宽 / CJK 权重全部由实测派生，本模块不再持有几何字面量。
+import type { LayoutMeasurements } from './layout/LayoutMetrics';
 
 // ── 基础常量 ──
 
@@ -25,7 +28,15 @@ export type LineKind =
   | 'code'
   | 'math';
 
-/** 类型倍率（任务书口径）：heading 1.3× / 表格行 1.2× / 代码 1.0× / 正文 1.0× */
+/**
+ * 行盒高倍率。
+ *
+ * 口径说明（修正旧注释与实现矛盾）：标题**不是** 1.3×——`index.css` 的
+ * `.line-h1/.line-h2/.line-h3` 只放大 `font-size`，`line-height` 仍继承
+ * `var(--grid-size)`（28px），故标题行盒高与正文相同，倍率 1.0 才是对的
+ * （旧注释写「heading 1.3×」而代码写 1.0，是文档与实现漂移，已按实现纠正）。
+ * 表格行与公式块按各自盒模型单独计算，不走本表。
+ */
 const TYPE_MULTIPLIER: Record<LineKind, number> = {
   body: 1,
   heading: 1.0,
@@ -60,7 +71,7 @@ const TABLE_CELL_PAD_Y = 20; // 垂直内距合计（行高预测）
  *
  * 切分口径与 `tableModel.splitRowCells` 对齐：以 `|` 为界；行首为 `|` 时丢弃前导空段。
  */
-function measureCellSegments(raw: string): number[] {
+function measureCellSegments(raw: string, cjkRatio: number): number[] {
   const segs: number[] = [];
   let seg = 0;
   let started = false;
@@ -76,7 +87,7 @@ function measureCellSegments(raw: string): number[] {
     } else {
       started = true;
       if (code >= 0x2e80 || (code >= 0x1100 && code <= 0x11ff) || (code >= 0xff01 && code <= 0xff60)) {
-        seg += 1.8;
+        seg += cjkRatio;
       } else {
         seg += 1;
       }
@@ -159,13 +170,21 @@ function classifyShape(raw: string): LineKind {
 
 // ── 行高预测器（HeightOracle）──
 
-/** 计算字符串视觉当量长度（CJK 宽字符按 1.8x ASCII 计算，保证折行预测准确） */
-export function getVisualCharLength(text: string): number {
+/**
+ * CJK 视觉当量权重 = 实测 CJK 前进量 ÷ 实测 ASCII 平均前进量。
+ *
+ * 旧实现把 1.8 这个经验值写死在四处（本文件两处 + 表格列预测 + 测量层），
+ * 字体一换全链同时漂移且无单一改点。现在只在**这里**由 `LayoutMetrics`
+ * 的实测值派生（ADR-5：几何量只有「实测」与「设计令牌」两个合法来源）。
+ */
+/** 计算字符串视觉当量长度（CJK 按实测宽度比加权，保证折行预测准确） */
+export function getVisualCharLength(text: string, metrics: Pick<LayoutMeasurements, 'asciiAdvance' | 'cjkAdvance'>): number {
+  const w = metrics.cjkAdvance / metrics.asciiAdvance;
   let len = 0;
   for (let i = 0; i < text.length; i++) {
     const code = text.charCodeAt(i);
     if (code >= 0x2e80 || (code >= 0x1100 && code <= 0x11ff) || (code >= 0xff01 && code <= 0xff60)) {
-      len += 1.8;
+      len += w;
     } else {
       len += 1;
     }
@@ -180,16 +199,19 @@ export function getVisualCharLength(text: string): number {
  * 不可预测部分（表格单元格 wrap、数学块等）由实测样本经 calibrate 反馈修正系数收敛。
  */
 export class HeightOracle {
-  /** 基础行高（与 index.css --grid-size: 28px 对齐） */
-  lineHeight = 28;
-  /** 等宽字符平均宽度（14px 等宽字体 ≈ 8.4px；挂载时可经 setMetrics 按实测刷新） */
-  charWidth = 8.4;
-  /** 内容可用宽度（引擎挂载时按容器实测设置，默认 800） */
-  containerWidth = 800;
+  /** 基础行高；未就绪的0表示未知，predict不会消费它。 */
+  lineHeight = 0;
+  /** ASCII 平均字符宽度（同上） */
+  charWidth = 0;
+  /** 内容可用宽度（同上） */
+  containerWidth = 0;
+  private measurements: LayoutMeasurements | null = null;
+  private cjkRatio = 0;
+  get ready(): boolean { return this.measurements !== null; }
 
   /** wrap 模型参数：每行字符数 / 溢出步长（度量变化时重算） */
-  private perRow = 95;
-  private step = 90;
+  private perRow = 1;
+  private step = 1;
 
   /** 每类型修正系数：predict 输出 = 基础预测 × 修正系数（calibrate 实测反馈收敛） */
   private correction: Record<LineKind, number> = this.freshCorrection();
@@ -197,8 +219,8 @@ export class HeightOracle {
   /** 自测统计（诊断与验收报告用） */
   readonly stats = { predicted: 0, measured: 0, skipped: 0, calibrated: 0 };
 
-  constructor() {
-    this.recomputeWrap();
+  constructor(measurements?: LayoutMeasurements) {
+    if (measurements) this.setMeasurements(measurements);
   }
 
   /** 修正系数初始表 */
@@ -217,24 +239,24 @@ export class HeightOracle {
     this.step = Math.max(1, this.perRow - 5);
   }
 
-  /** 更新全局度量（容器宽度 / 字体度量），任意一项变化即重置校准样本 */
-  setMetrics(lineHeight?: number, charWidth?: number, containerWidth?: number): void {
-    let changed = false;
-    if (lineHeight !== undefined && lineHeight !== this.lineHeight) { this.lineHeight = lineHeight; changed = true; }
-    if (charWidth !== undefined && charWidth !== this.charWidth) { this.charWidth = charWidth; changed = true; }
-    if (containerWidth !== undefined && containerWidth !== this.containerWidth) {
-      this.containerWidth = Math.max(160, containerWidth);
-      changed = true;
-    }
-    if (changed) {
-      this.recomputeWrap();
-      this.resetCorrection();
-    }
+  /** 只接受当前实例的完整快照；null 是明确未就绪，不是假定像素。 */
+  setMeasurements(measurements: LayoutMeasurements | null): void {
+    if (measurements === this.measurements) return;
+    if (measurements && ![measurements.lineHeight, measurements.asciiAdvance, measurements.cjkAdvance, measurements.contentWidth]
+      .every(value => Number.isFinite(value) && value > 0)) throw new Error('行高预测需要有效的排版度量快照');
+    this.measurements = measurements;
+    this.lineHeight = measurements?.lineHeight ?? 0;
+    this.charWidth = measurements?.asciiAdvance ?? 0;
+    this.containerWidth = measurements?.contentWidth ?? 0;
+    this.cjkRatio = measurements ? measurements.cjkAdvance / measurements.asciiAdvance : 0;
+    if (measurements) this.recomputeWrap();
+    this.resetCorrection();
   }
 
   /** 仅刷新容器宽度（引擎挂载/缩放时调用） */
   setContainerWidth(width: number): void {
-    this.setMetrics(undefined, undefined, width);
+    if (!this.measurements) throw new Error('排版度量尚未就绪');
+    this.setMeasurements({ ...this.measurements, contentWidth: width });
   }
 
   /**
@@ -267,6 +289,7 @@ export class HeightOracle {
     _codeState: CodeState | boolean,
     tableWidths?: readonly number[]
   ): number {
+    if (!this.measurements) throw new Error('排版度量尚未就绪，宿主必须暂停虚拟行预测');
     this.stats.predicted++;
     if (kind === 'table_separator') return 0;
     const len = raw.length;
@@ -283,7 +306,7 @@ export class HeightOracle {
           seg = 0;
         } else {
           if (code >= 0x2e80 || (code >= 0x1100 && code <= 0x11ff) || (code >= 0xff01 && code <= 0xff60)) {
-            seg += 1.8;
+            seg += this.cjkRatio;
           } else {
             seg += 1;
           }
@@ -297,7 +320,7 @@ export class HeightOracle {
         // 列宽真源路径（ADR-4/ADR-5）：逐列按该列真实可用宽估算 wrap 行数，取最大。
         // 修掉根因断层 D5：旧模型按 `containerWidth/cols` 均分估算，**完全不知道真实列宽**，
         // 列宽定型后预测必然失配（症状 S8 行位置与实际高度错位）。
-        const segs = measureCellSegments(raw);
+        const segs = measureCellSegments(raw, this.cjkRatio);
         for (let c = 0; c < tableWidths.length; c++) {
           const w = tableWidths[c];
           if (!Number.isFinite(w) || w <= 0) continue;
@@ -337,7 +360,7 @@ export class HeightOracle {
       return this.lineHeight;
     }
     // 通用 wrap 长度模型（CM6 heightForLine 同款）：带 CJK 宽字符权重
-    const visualLen = getVisualCharLength(raw);
+    const visualLen = getVisualCharLength(raw, this.measurements);
     let rows = 1;
     if (visualLen > this.perRow) rows += Math.ceil((visualLen - this.perRow) / this.step);
     return rows * this.lineHeight * TYPE_MULTIPLIER[kind] * this.correction[kind];

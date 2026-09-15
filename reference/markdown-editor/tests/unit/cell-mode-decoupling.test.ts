@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { useTableStore } from '../../src/core/TableStore';
+import { lineToRow } from '../../src/core/tableSelection';
 import { navigateTable, clearCell, setCellContent, findTableRange } from '../../src/core/tableOperations';
 
 describe('Table Cell Mode Decoupling (Selection Mode vs Edit Mode)', () => {
@@ -15,40 +16,40 @@ describe('Table Cell Mode Decoupling (Selection Mode vs Edit Mode)', () => {
   ].join('\n');
 
   it('1. Single click activates Cell Selection Mode (isEditing = false)', () => {
-    useTableStore.getState().enterCellSelection('table-1', 2, 0);
+    useTableStore.getState().enterCellSelection('table-1', { row: 1, col: 0 });
 
     const selected = useTableStore.getState().selectedCell;
     expect(selected).not.toBeNull();
     expect(selected?.tableId).toBe('table-1');
-    expect(selected?.startLine).toBe(2);
-    expect(selected?.startCol).toBe(0);
+    expect(selected?.anchor).toEqual({ row: 1, col: 0 });
+    expect(selected?.focus).toEqual({ row: 1, col: 0 });
     expect(selected?.isEditing).toBe(false);
   });
 
   it('2. Double click activates Cell Edit Mode (isEditing = true)', () => {
-    useTableStore.getState().enterCellEdit('table-1', 2, 1);
+    useTableStore.getState().enterCellEdit({ tableId: 'table-1', row: 1, col: 1 });
 
     const selected = useTableStore.getState().selectedCell;
     expect(selected).not.toBeNull();
     expect(selected?.tableId).toBe('table-1');
-    expect(selected?.startLine).toBe(2);
-    expect(selected?.startCol).toBe(1);
+    expect(selected?.anchor).toEqual({ row: 1, col: 1 });
+    expect(selected?.focus).toEqual({ row: 1, col: 1 });
     expect(selected?.isEditing).toBe(true);
   });
 
   it('3. In edit mode, exitCellEdit returns cleanly to Cell Selection Mode (isEditing = false)', () => {
-    useTableStore.getState().enterCellEdit('table-1', 2, 1);
+    useTableStore.getState().enterCellEdit({ tableId: 'table-1', row: 1, col: 1 });
     expect(useTableStore.getState().selectedCell?.isEditing).toBe(true);
 
     useTableStore.getState().exitCellEdit();
     const selected = useTableStore.getState().selectedCell;
-    expect(selected?.startLine).toBe(2);
-    expect(selected?.startCol).toBe(1);
+    expect(selected?.anchor).toEqual({ row: 1, col: 1 });
+    expect(selected?.focus).toEqual({ row: 1, col: 1 });
     expect(selected?.isEditing).toBe(false);
   });
 
   it('4. clearCellSelection clears all cell focus', () => {
-    useTableStore.getState().enterCellSelection('table-1', 2, 0);
+    useTableStore.getState().enterCellSelection('table-1', { row: 1, col: 0 });
     expect(useTableStore.getState().selectedCell).not.toBeNull();
 
     useTableStore.getState().clearCellSelection();
@@ -65,13 +66,20 @@ describe('Table Cell Mode Decoupling (Selection Mode vs Edit Mode)', () => {
     expect(tableInfo).not.toBeNull();
     expect(tableInfo?.activeCellIndex).toBe(1); // Moved to Beta (col 1)
 
-    // Verify updating store keeps isEditing = false
+    // 导航返回源码行号；选区模型只存不含分隔行的相对行号。
+    const row = lineToRow(
+      tableInfo!.absoluteLineIndex ?? tableInfo!.activeLineIndex,
+      0,
+      markdownTable.split('\n').length - 1,
+      tableInfo!.separatorLineIndex
+    );
+    expect(row).toBe(1);
     useTableStore.getState().enterCellSelection(
       'table-1',
-      tableInfo!.absoluteLineIndex ?? tableInfo!.activeLineIndex,
-      tableInfo!.activeCellIndex
+      { row: row!, col: tableInfo!.activeCellIndex }
     );
-    expect(useTableStore.getState().selectedCell?.startCol).toBe(1);
+    expect(useTableStore.getState().selectedCell?.anchor).toEqual({ row: 1, col: 1 });
+    expect(useTableStore.getState().selectedCell?.focus).toEqual({ row: 1, col: 1 });
     expect(useTableStore.getState().selectedCell?.isEditing).toBe(false);
   });
 
@@ -102,7 +110,7 @@ describe('Table Cell Mode Decoupling (Selection Mode vs Edit Mode)', () => {
 
     expect(cleared.newText).toContain('|  | Beta | Gamma |');
     // Store remains in selection mode
-    useTableStore.getState().enterCellSelection('table-1', 2, 0);
+    useTableStore.getState().enterCellSelection('table-1', { row: 1, col: 0 });
     expect(useTableStore.getState().selectedCell?.isEditing).toBe(false);
   });
 
@@ -111,7 +119,7 @@ describe('Table Cell Mode Decoupling (Selection Mode vs Edit Mode)', () => {
     const replaced = setCellContent(markdownTable, alphaIndex, 'X');
 
     expect(replaced.newText).toContain('| X | Beta | Gamma |');
-    useTableStore.getState().enterCellEdit('table-1', 2, 0);
+    useTableStore.getState().enterCellEdit({ tableId: 'table-1', row: 1, col: 0 });
     expect(useTableStore.getState().selectedCell?.isEditing).toBe(true);
   });
 });

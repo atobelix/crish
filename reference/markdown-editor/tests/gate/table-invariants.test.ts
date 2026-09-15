@@ -250,7 +250,9 @@ describe('表格岛 · T4 接线契约（静态形态）', () => {
     expect(row).not.toContain('parseLine');
     expect(row).not.toContain("from '../core/parser'");
     // 旧路径同样经该单元（两路径同源）
-    expect(read('src/components/MarkdownEngine.tsx')).toContain('deriveLineUnit');
+    expect(read('src/components/MarkdownEngine.tsx')).toContain("import { EditorLine } from './EditorLine'");
+    expect(read('src/components/EditorLine.tsx')).toContain('deriveLineUnit');
+    expect(read('src/components/EditorLine.tsx')).toContain("from '../core/lineUnit'");
   });
 
   it('I8 防回归：岛内行**不得**声明 `data-index`（该属性要求全局唯一）', () => {

@@ -64,6 +64,7 @@ node tests/commonmark/run-compliance.mjs --summary   # 仅打印摘要
 | `heading` | `<h{n}>内联</h{n}>`（n = headingLevel） |
 | `hr` | `<hr />` |
 | `blockquote`（行级 blockquoteLevel） | 按层级连续行合并开合 `<blockquote>` 容器 |
+| `body` + 列表标记（`listDepth` / `contentIndentColumns`） | `<ul>` / `<ol>` + `<li>`：按整数 `listDepth` 分层递归——同层（depth 相同）连续同种 marker 行归入同一容器，depth 更大者为当前 `<li>` 内的嵌套子列表；`listContinuation` 行并入同一 `<li>`（后续 `<p>`），li 内缩进代码行 → `<pre><code>`。**嵌套只认 `listDepth`，不做缩进数值比较**（见「偏差点一：已消除」） |
 | `code`（围栏内，B8b 配合项） | `<pre><code>内容\n</code></pre>`；围栏信息串取首个词 → `class="language-…"`（` ``` ` 与 `~~~` 开栏同规——B8c 配合项，spec 例 143/146）；内容行按行原文投影、`\n` 连接并以 `\n` 结尾（空块除外）。B8c 配合项：内容行剥 up to 开栏缩进列（开栏行允许 1-3 空格缩进，spec 例 131-133；开栏缩进在剥离引用前缀后的行上计算）。剥引用前缀仅限「行引用层级与围栏一致」的内容行（围栏内 ` >` 是内容，spec 例 119/120）；遇非 code 行（body/empty 等）即终止交还主循环（spec 例 237/128：引用容器边界/段落打断结束围栏，不吞行）；未闭合围栏剔除引擎文档尾幻影空 code 行（spec 例 126/127/137/237） |
 | `code`（缩进代码块，R1-A2d / B8b 配合项） | 连续 `code` 行合并为单个 `<pre><code>内容\n</code></pre>`；每行剥离引用前缀后剥 up to 4 列缩进（tab 按停靠 4 展开），`\n` 连接并以 `\n` 结尾；块尾空白行（trim 后为空）剔除，块内空白行保留（剥缩进后可能残留空白，如 spec 例 112）。**合并仅限同 blockquoteLevel 的连续行**——跨容器/跨引用层级不合并（spec 例 236：引用内与文档级各成一块） |
 | `table_row` | `<tr><td>…</td></tr>`（table_separator 跳过；CommonMark 无表格语义，仅为完整映射） |
@@ -89,21 +90,32 @@ node tests/commonmark/run-compliance.mjs --summary   # 仅打印摘要
 
 ## 偏差点登记
 
-### 偏差点一：列表行启发式分组（`astToHtml.ts` 的 `renderListGroup`）
+### 偏差点一：列表分层——**已消除**（`astToHtml.ts` 的 `renderListGroup`）
 
-引擎 AST 无列表容器节点，只有带 `listIndent` / `listPrefix` 的行。投影器把
-**连续、同种类（ul/ol）、同 listIndent、同引用层级**的列表行归入一个
-`<ul>` / `<ol>` 容器，每行一个 `<li>`。由此产生的与 CommonMark 的结构差异
-（如实计 FAIL）：
+**状态：已消除（战役 wysiwyg-layout-remediation T3/ADR-2 之后）。**
 
-- 嵌套列表（`- a\n  - b`）投影为两个并列 `<ul>`，而非嵌套容器；
-- 松散/紧凑列表语义不承载（blank 行隔开的项拆成两个 `<ul>`，且项内无 `<p>` 包裹）；
-- 多行列表项不合并；
-- 任务复选框标记 `[x]` 作为结构令牌跳过（GFM 扩展，CommonMark 期望中
-  `[x]` 是内容 → 计 FAIL，如实暴露差异）。
+原偏差点：引擎 AST 无列表容器节点，只有带「缩进字符数」语义的 `listIndent`
+字段，投影器只能按「连续 + 同种类 + 同 listIndent + 同引用层级」启发式分组，
+导致嵌套列表（`- a\n  - b`）投影为两个并列 `<ul>` 而非嵌套容器。
 
-其余投影均为确定性结构映射，无第二处偏差点。ordered 列表 `listPrefix`
-序号 > 1 时投影 `start="N"` 属性（AST 存储的序号，非补造）。
+**消除依据**：引擎 AST 现已携带列表归属的**整数嵌套层级** `listDepth`
+（由 `src/core/layout/ListContext.ts` 的容器栈按 CommonMark §5.2 产出，
+`src/core/ast.ts` 的 `LineNode.listDepth`），以及内容缩进列
+`contentIndentColumns`。旧的 `listIndent`（缩进字符数）字段已物理删除。
+投影器据此改为**按 `listDepth` 整数分层递归**：同一层（depth 相同）的连续
+同种 marker 行归入同一 `<ul>`/`<ol>`，depth 更大者递归为当前 `<li>` 内
+真正嵌套的子列表；列表项归属判定改用 `contentIndentColumns`
+（`列缩进 ≥ 内容缩进列`）。**这是把 AST 已携带的结构字段忠实投影出来，
+不是语义补偿**——投影器仍不做任何缩进数值比较来推断嵌套。
+
+由此转 PASS 的形态：`- a\n  - b`（嵌套 `<ul>`）、`- a\n - b`（1 空格为
+**同级**两项，旧启发式误判为子列表）、有序/无序混层嵌套、深度 ≥3 的多层
+嵌套。松散/紧凑列表与项内 `<p>` 包裹仍按原规则承载（`listContinuation`
+消费，语义未变）。任务标记 `[x]` 仍作为结构令牌跳过（GFM 扩展，
+CommonMark 期望中 `[x]` 是内容 → 如实计 FAIL）。
+
+ordered 列表 `listPrefix` 序号 > 1 时投影 `start="N"` 属性（AST 存储的
+序号，非补造）。**不再有其它列表分层偏差点。**
 
 ### 偏差点二：缩进代码块合并投影（`astToHtml.ts` 的 `renderIndentCodeBlock`，R1-A2d / B8b）
 

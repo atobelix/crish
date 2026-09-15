@@ -1,17 +1,16 @@
-import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from 'react';
 import {
   useEditorStore,
-  snapToGraphemeBoundary,
   type EditorStore,
   type EditorState,
 } from '../core/EditorStore';
 import {
   getCoordinatesFromIndex,
   getGlobalIndexFromDOMNode,
-  getArrowNavigationIndex,
   toContainerCoords,
-  locateRowIndexByPhysicalBisection,
+  getSourceIndexFromPoint,
   syncDOMSelection,
+  domSelectionMatchesModel,
 } from '../core/measure';
 import { useTableStore } from '../core/TableStore';
 import {
@@ -20,7 +19,17 @@ import {
   clearCell,
   setCellContent,
   parseRowCells,
+  type TableRange,
 } from '../core/TableOperations';
+// T5b（ADR-6 / I7）：单元格选区身份 = 表内相对坐标（row 含表头行、分隔行不占行号）；
+// 换算 / 归一化一律经 tableSelection 纯函数（唯一入口），不得自行推 min/max。
+import { lineToRow, normalizeSelection, isSingleCell, selectionToLines } from '../core/tableSelection';
+import { getTableIdentity } from '../core/tableIdentity';
+import { boundaryNavigationTarget, normalizeSelectionEndpoints } from '../core/editing/selectionNavigation';
+import { ViewportNavigation } from '../core/editing/viewportNavigation';
+import { textIndentCommand } from '../core/editing/textIndentCommand';
+import { getEditorViewport, indexFromClientPoint, revealEditorLine } from '../core/editorViewport';
+import { useGeometryVersion } from './useGeometryVersion';
 import { buildPasteText } from '../core/htmlToMarkdown';
 import type { LineOffsetTree } from '../core/SegmentTree';
 // B2 词级跳选（05 高频项 / P2 项 3）：词边界函数与搜索的全词判定
@@ -45,32 +54,14 @@ interface HiddenInputProps {
   store?: EditorStore;
   /** 装饰版本号：语法展开/折叠切换时驱动 IME 输入框重新实测物理定位 */
   decorationVersion?: number;
+  /** 与光标层共享的挂载窗口及几何版本。 */
+  layoutDeps?: string;
 }
 
-// ============================================================
-// 拖选坐标驱动（R4-G，04 编辑深度扩展 §3.3 方案 3：CM6 MouseSelection 简化版）
-// ============================================================
-// 设计：拖选 = 坐标驱动状态机——mousedown 记起点坐标，mousemove 超移动阈值
-// （DRAG_THRESHOLD_PX）后进入拖选态：锚点 = 按下位置定位的光标位，head 由
-// 「坐标 → 索引」持续更新（store.moveHead，anchor 不动——反向拖选天然正确，
-// 04 §3.2 S1 修复），mouseup 结算。
-// 「坐标 → 索引」单一真源 indexFromClientPoint：
-// - 精确路径：caretRangeFromPoint → getGlobalIndexFromDOMNode（视口内命中，
-//   token 级精确——与 MarkdownEngine handleContainerClick 同款链路）；
-// - 几何路径（视口空白 / 目标行未挂载 / 无布局环境）：行几何估算——已挂载
-//   行区间内定位或边界行 + 行高近似推算行号（虚拟化视口外断选修复，
-//   04 §3.2 S2），列用字符宽度 Oracle 累加逼近（R2-F 列保持思路复用，
-//   measure.ts predictColumn 同款算法）；
-// - 视口外拖选：mousemove 压入/越出容器边缘时按距离步进滚动（CM6
-//   dragScrollSpeed 简化版），滚动后目标行挂载即被精确路径接管。
-// 拖选期间以引擎自绘高亮（SelectionHighlight）替代原生 DOM 选区：
-// userSelect none + removeAllRanges 抑制浏览器原生选区（原生选区依赖 DOM
-// 存在，虚拟化视口外必然断选）。纯几何函数（predictColumn /
-// estimateLineIndexFromContentY）导出供单测。
-// 与点击定位（MarkdownEngine handleContainerClick）的协调：mousedown 无
-// 副作用（不移动光标不清选区），mousemove 超阈值才进拖选态——纯点击场景
-// 零干预，click 定位独占；拖选结束以 __CRISH_LAST_DRAG_END_TIME 抑制合成
-// click（既有机制，MarkdownEngine.tsx:532 检查）。
+// 拖选的锚点来自按下时的原生命中，活动端始终由同一源码投影更新。
+// 挂载缺口只保存目标行及行内坐标，布局就绪后再完成，绝不猜字符位置。
+// 视口边缘滚动期间持续保留当前手势；释放后也结算最后一次真实命中。
+// 合成 click 由本容器的一次性标志消费，新的鼠标手势立即恢复正常点击。
 
 /** 拖选激活移动阈值（px）：mousedown 后 mousemove 超过该距离才进入拖选态，
  *  区分「点击定位」（click 由 MarkdownEngine handleContainerClick 处理）与
@@ -80,296 +71,6 @@ export const DRAG_THRESHOLD_PX = 3;
 const EDGE_SCROLL_MARGIN = 16;
 /** 单次 mousemove 最大滚动步长（px）：随距离线性增减（CM6 dragScrollSpeed） */
 const EDGE_SCROLL_MAX_STEP = 12;
-/** 已挂载行几何快照（视口内 + overscan；按 DOM 序 = 行号升序） */
-export interface MountedLineGeom {
-  /** 逻辑行号（data-index） */
-  index: number;
-  /** 行首全局偏移（data-line-start） */
-  start: number;
-  /** 行文本长度（data-line-length，不含换行符） */
-  length: number;
-  /** 行左缘（视口坐标，列预测基准） */
-  left: number;
-  /** 行顶 / 行底（容器内容坐标，与滚动解耦） */
-  top: number;
-  bottom: number;
-  height: number;
-  /** 行 DOM 节点（物理二分实测入口） */
-  el?: HTMLElement;
-}
-
-/** 宽字符判定（全角按 2 倍等宽近似；镜像 measure.ts:753-763 列保持口径） */
-function isWideChar(code: number): boolean {
-  return (
-    (code >= 0x1100 && code <= 0x11ff) ||
-    (code >= 0x2e80 && code <= 0x9fff) ||
-    (code >= 0xac00 && code <= 0xd7a3) ||
-    (code >= 0xf900 && code <= 0xff60) ||
-    (code >= 0x20000 && code <= 0x3fffd)
-  );
-}
-
-/** 单字符预测宽度：Tab 按 4 倍等宽近似（源码中极少见，仅用于列估计） */
-function charAdvance(code: number, w: { ascii: number; cjk: number }): number {
-  if (code === 9) return w.ascii * 4;
-  return isWideChar(code) ? w.cjk : w.ascii;
-}
-
-/**
- * 目标行列预测（R2-F 列保持思路复用，镜像 measure.ts:816-830 predictColumn）：
- * 以鼠标 X（相对行左缘）为参照，沿目标行文本按等宽/全角字宽累加，返回与
- * relX 最接近的字符位置——等宽/全角混排行中累加比「relX / 字宽」直接除法
- * 误差更小（全角占 2 倍宽但计 1 列）。relX ≤ 0 回行首；超出行宽回行尾。
- */
-// oxlint-disable-next-line react/only-export-components
-export function predictColumn(
-  lineText: string,
-  relX: number,
-  widths: { ascii: number; cjk: number }
-): number {
-  if (relX <= 0) return 0;
-  let best = 0;
-  let bestDist = Infinity;
-  let acc = 0;
-  for (let p = 0; p <= lineText.length; p++) {
-    if (p > 0) acc += charAdvance(lineText.charCodeAt(p - 1), widths);
-    const dist = Math.abs(acc - relX);
-    if (dist < bestDist) {
-      bestDist = dist;
-      best = p;
-    }
-  }
-  return best;
-}
-
-/**
- * 内容坐标 Y → 行号（纯函数：视口内命中 + 视口外估算，04 §3.3 方案 3）：
- * - 落在已挂载行覆盖区间内：行内定位（第一个 bottom ≥ Y 的行）；
- * - 视口上方：首行几何向上推算（above = ceil(ΔY / 首行高)）；
- * - 视口下方：末行几何向下推算（below = floor(ΔY / 末行高)）；
- * - 无已挂载行：回退第 0 行。
- * 多行块（代码/表格）行高差异引入的估算误差由「滚动后行挂载 →
- * caretRangeFromPoint 精确命中」接管（R2-F scrollTargetLineIntoView 同款
- * 思路）；行号收敛到 [0, lineCount-1]。mounted 按 top 升序（DOM 序 = 视觉序）。
- */
-// oxlint-disable-next-line react/only-export-components
-export function estimateLineIndexFromContentY(
-  contentY: number,
-  lineCount: number,
-  mounted: MountedLineGeom[]
-): number {
-  if (lineCount <= 0) return 0;
-  if (mounted.length === 0) return 0;
-  const first = mounted[0];
-  const last = mounted[mounted.length - 1];
-  if (contentY < first.top) {
-    const above = Math.ceil((first.top - contentY) / Math.max(1, first.height));
-    return Math.max(0, first.index - above);
-  }
-  if (contentY > last.bottom) {
-    const below = Math.floor(
-      (contentY - last.bottom) / Math.max(1, last.height)
-    );
-    return Math.min(lineCount - 1, last.index + below);
-  }
-  // 已挂载区间内：二分定位「第一个 bottom ≥ contentY」的行
-  let lo = 0;
-  let hi = mounted.length - 1;
-  let ans = 0;
-  while (lo <= hi) {
-    const mid = (lo + hi) >> 1;
-    if (mounted[mid].bottom >= contentY) {
-      ans = mid;
-      hi = mid - 1;
-    } else {
-      lo = mid + 1;
-    }
-  }
-  return mounted[ans].index;
-}
-
-/** 拖选坐标 → 索引所需的数据层（store 快照的结构化子集，便于单测注入） */
-export interface IndexDataLayer {
-  getLine: (i: number) => string;
-  getLineCount: () => number;
-  lineOffsets: LineOffsetTree;
-}
-
-/**
- * 越视口目标 scrollTop 纯计算（几何外推公式，供单测）：
- * - 目标行在视口上方：以首行几何向上外推（留 SCROLL_EDGE_MARGIN 边距）；
- * - 目标行在视口下方：以末行几何向下外推，目标行对齐视口底部；
- * - 目标行已在视口区间内 → null（无需滚动，交由精确测量分支越界滚动）。
- * 返回钳制到 [0, maxScrollTop] 的 scrollTop。
- */
-// oxlint-disable-next-line react/only-export-components
-export function estimateScrollTopForLine(
-  first: MountedLineGeom,
-  last: MountedLineGeom,
-  lineIdx: number,
-  clientHeight: number,
-  scrollHeight: number
-): number | null {
-  if (lineIdx >= first.index && lineIdx <= last.index) return null;
-  let targetTop: number;
-  if (lineIdx < first.index) {
-    // 目标行在视口上方：以首行几何向上外推（留 40px 上边距）
-    targetTop = first.top - (first.index - lineIdx) * first.height - 40;
-  } else {
-    // 目标行在视口下方：以末行几何向下外推，目标行对齐视口底部
-    targetTop =
-      last.bottom + (lineIdx - last.index) * last.height - clientHeight + 40;
-  }
-  const maxTop = Math.max(0, scrollHeight - clientHeight);
-  return Math.min(maxTop, Math.max(0, targetTop));
-}
-
-/**
- * 光标行滚入视口（B2 发现并修复的越视口导航缺陷）：光标测量失败且
- * 目标行未挂载（虚拟化视口外跳转——Ctrl+End/PageDown/搜索跳转到长
- * 文档首尾）时，用已挂载行几何外推目标 scrollTop（O(1)：首/末行
- * 几何 ± 行高 × 行距），滚动后下一帧行挂载即被精确测量接管——与
- * 拖选视口外估算（estimateLineIndexFromContentY）同一「几何近似 →
- * 挂载后精确」架构思路。修复前：测量 10 帧失败 → HiddenInput 卸载
- * textarea → 键盘输入/词级导航整体失效（长文档 Ctrl+End 后无法输入）。
- * 行已在视口内（lineIdx 落在挂载区间）时为空操作（滚动由精确测量
- * 分支的越界滚动接管，避免双写）。
- */
-// oxlint-disable-next-line react/only-export-components
-export function scrollLineIntoViewByGeometry(
-  container: HTMLElement,
-  lineIdx: number
-): void {
-  const mounted = collectMountedLines(
-    container,
-    container.getBoundingClientRect()
-  );
-  if (mounted.length === 0) return;
-  const first = mounted[0];
-  const last = mounted[mounted.length - 1];
-  const targetTop = estimateScrollTopForLine(
-    first,
-    last,
-    lineIdx,
-    container.clientHeight,
-    container.scrollHeight
-  );
-  if (targetTop === null) return;
-  container.scrollTop = targetTop;
-}
-
-// 已挂载行几何收集（视口内行元素 → 几何快照；仅几何回退路径调用，
-// 视口内正常拖选走 caretRangeFromPoint 精确命中，零额外扫描）
-function collectMountedLines(
-  container: HTMLElement,
-  cr: DOMRect
-): MountedLineGeom[] {
-  const rows = container.querySelectorAll('[data-line-start]');
-  const out: MountedLineGeom[] = [];
-  for (let i = 0; i < rows.length; i++) {
-    const el = rows[i] as HTMLElement;
-    const index = parseInt(el.getAttribute('data-index') || '-1', 10);
-    if (index < 0) continue;
-    const r = el.getBoundingClientRect();
-    out.push({
-      index,
-      start: parseInt(el.getAttribute('data-line-start') || '0', 10),
-      length: parseInt(el.getAttribute('data-line-length') || '0', 10),
-      left: r.left,
-      top: r.top - cr.top + container.scrollTop,
-      bottom: r.bottom - cr.top + container.scrollTop,
-      height: r.height,
-      el,
-    });
-  }
-  return out;
-}
-
-// 容器内容左缘（视口坐标）：目标行未挂载（视口外）时用作列预测基准
-function contentLeftOf(container: HTMLElement, cr: DOMRect): number {
-  const cs = window.getComputedStyle(container);
-  return cr.left + container.scrollLeft + (parseFloat(cs.paddingLeft) || 0);
-}
-
-// 字符宽度 Oracle 回退（无布局环境/未挂载时）：0.6 × 字号等宽 + 2 倍全角
-// （与 measure.ts:794-796 回退同口径；等宽栈下与实测误差 ≤ 1 字符）
-function fallbackCharWidths(container: HTMLElement): {
-  ascii: number;
-  cjk: number;
-} {
-  const fs = parseFloat(window.getComputedStyle(container).fontSize) || 14;
-  const ascii = fs * 0.6;
-  return { ascii, cjk: ascii * 2 };
-}
-
-/**
- * 坐标 → 索引（拖选状态机单一真源）：
- * 1. 精确路径：caretRangeFromPoint 浏览器命中测试（视口内 token 级）；
- * 2. 物理二分实测：命中行 DOM 真实 TextNode Range 精确二分定位（零字体猜测误差）；
- * 3. 几何回退：行几何估算（视口空白 / 目标行未挂载 / 无布局环境）。
- * 返回文档索引（几何回退保证非空；行号收敛 [0, lineCount-1]）。
- */
-// oxlint-disable-next-line react/only-export-components
-export function indexFromClientPoint(
-  clientX: number,
-  clientY: number,
-  container: HTMLElement,
-  data: IndexDataLayer,
-  hintLineIndex?: number
-): number {
-  const cr = container.getBoundingClientRect();
-  const mounted = collectMountedLines(container, cr);
-  let lineIdx = hintLineIndex;
-  if (lineIdx === undefined || lineIdx < 0 || lineIdx >= data.getLineCount()) {
-    const contentY = clientY - cr.top + container.scrollTop;
-    lineIdx = estimateLineIndexFromContentY(
-      contentY,
-      data.getLineCount(),
-      mounted
-    );
-  }
-  const lineText = data.getLine(lineIdx) ?? '';
-  const lineStart = data.lineOffsets.getOffset(lineIdx);
-  const lineGeom = mounted.find((m) => m.index === lineIdx);
-
-  // 1. 物理二分优先：基于真实挂载 DOM 文本节点的 Range 测量，亚像素级物理贴合 (|ΔX| ≤ 0.5px)
-  // 彻底免疫 caretRangeFromPoint 在前缀语法（### / > ）、空隙与行末的飘移问题
-  if (lineGeom && lineGeom.el) {
-    const bisectIdx = locateRowIndexByPhysicalBisection(
-      lineGeom.el,
-      clientX,
-      lineStart,
-      lineText.length,
-      clientY
-    );
-    if (bisectIdx !== null) return bisectIdx;
-  }
-
-  // 2. 次级回退：caretRangeFromPoint（若物理二分未命中可见文本）
-  if (typeof document.caretRangeFromPoint === 'function') {
-    try {
-      const range = document.caretRangeFromPoint(clientX, clientY);
-      if (range && range.startContainer) {
-        const idx = getGlobalIndexFromDOMNode(
-          range.startContainer,
-          range.startOffset,
-          container
-        );
-        if (idx !== null) return idx;
-      }
-    } catch {
-      // 命中测试失败（无布局环境/异常）→ 几何回退
-    }
-  }
-
-  // 3. 末级回退：几何列宽推算
-  const relX = lineGeom
-    ? clientX - lineGeom.left
-    : clientX - contentLeftOf(container, cr);
-  const col = predictColumn(lineText, relX, fallbackCharWidths(container));
-  return lineStart + Math.min(col, lineText.length);
-}
-
 /**
  * 视口边缘滚动步长（CM6 dragScrollSpeed 简化版）：鼠标越出容器可见区或压入
  * 边缘 EDGE_SCROLL_MARGIN 内时返回滚动量（越近越大，封顶
@@ -466,46 +167,6 @@ export function formatAnnouncement(
 // 继续累积 value，窗口到期后以 textarea.value 为准一次性提交。
 const FLUSH_DELAY_MS = 50;
 
-/**
- * 翻页目标行计算（P2 项 4 键盘增强：PageUp/PageDown）：
- * 以「已挂载行几何」为视口行号来源（HeightMap.indexAt 像素→行的 DOM
- * 等价实现）：视口顶行 = 第一个 bottom > scrollTop 的行，视口底行 =
- * 最后一个 top < scrollTop + clientHeight 的行；页行数 = 顶底行号差
- * （≥1，行高不均匀时近似，与 CM6 页翻语义同量级）：
- * - PageUp 目标行 = 顶行 − 页行数（上翻一屏后位于新视口顶部的行）；
- * - PageDown 目标行 = 底行 + 页行数；
- * 收敛到 [0, lineCount-1]。滚动跟随由 HiddenInput 的光标越界滚动 effect
- * 接管（目标行视口外时自动滚入，与 ArrowUp/Down 同机制）。
- */
-// oxlint-disable-next-line react/only-export-components
-export function pageNavigationTarget(
-  direction: 'up' | 'down',
-  scrollTop: number,
-  clientHeight: number,
-  lineCount: number,
-  mounted: MountedLineGeom[]
-): number {
-  if (lineCount <= 0 || mounted.length === 0) return 0;
-  const top = scrollTop;
-  const bottom = top + clientHeight;
-  // 视口顶行：第一个 bottom > scrollTop 的行（其前所有行都在视口上方）
-  let firstIdx = mounted[mounted.length - 1].index;
-  for (const m of mounted) {
-    if (m.bottom > top) {
-      firstIdx = m.index;
-      break;
-    }
-  }
-  // 视口底行：最后一个 top < scrollTop + clientHeight 的行
-  let lastIdx = mounted[0].index;
-  for (const m of mounted) {
-    if (m.top < bottom) lastIdx = m.index;
-    else break;
-  }
-  const pageLines = Math.max(1, lastIdx - firstIdx);
-  if (direction === 'up') return Math.max(0, firstIdx - pageLines);
-  return Math.min(lineCount - 1, lastIdx + pageLines);
-}
 
 /**
  * 词级导航目标位置（B2 项 3：Ctrl+Arrow，R6-P1 行文本模式同款架构）：
@@ -676,17 +337,30 @@ export async function applyDroppedContent(
   return true;
 }
 
+/**
+ * T5b：`TableRange`（**绝对**行区间）+ 文档绝对行号 → 表内相对行号。
+ * 换算经 `tableSelection.lineToRow`（唯一入口）；分隔行 / 区间外返回 `null`。
+ * 用「本次新解析的区间」而非 `getTableIdentity`：此路径文本已改、渲染未发生，
+ * 身份注册表里的区间可能滞后，会算错行号。
+ */
+function tableRowOfAbsLine(range: TableRange, absLine: number): number | null {
+  const start = range.startLineIndex ?? 0;
+  const sep = range.separatorLineIndex >= 0 ? start + range.separatorLineIndex : null;
+  return lineToRow(absLine, start, start + range.lines.length - 1, sep);
+}
+
 export const HiddenInput: React.FC<HiddenInputProps> = ({
   containerRef,
   store,
   decorationVersion,
+  layoutDeps,
 }) => {
   // R5：绑定实例 store（缺省回退全局单例）；组件内所有 store 读写
   // （订阅 / getState / setState）统一经本变量，多实例输入互不串台
   const editorStore = store ?? useEditorStore;
+  const geometryVersion = useGeometryVersion(containerRef, layoutDeps);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const cursorPos = editorStore((state) => state.cursorPos);
-  const insertText = editorStore((state) => state.insertText);
   const deleteText = editorStore((state) => state.deleteText);
   const setCursorPos = editorStore((state) => state.setCursorPos);
   const setSelection = editorStore((state) => state.setSelection);
@@ -700,6 +374,19 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
   const lineCount = editorStore((state) => state.getLineCount());
   const selectionStart = editorStore((state) => state.selectionStart);
   const selectionEnd = editorStore((state) => state.selectionEnd);
+  const navigationRef = useRef<{ container: HTMLElement; store: EditorStore; value: ViewportNavigation } | null>(null);
+  const resumeDragRef = useRef<(() => void) | null>(null);
+  const suppressClickRef = useRef(false);
+  const getNavigation = useCallback(() => {
+    const container = containerRef.current;
+    if (!container) return null;
+    const previous = navigationRef.current;
+    if (!previous || previous.container !== container || previous.store !== editorStore) {
+      previous?.value.cancel();
+      navigationRef.current = { container, store: editorStore, value: new ViewportNavigation(container, editorStore) };
+    }
+    return navigationRef.current!.value;
+  }, [containerRef, editorStore]);
   const [coords, setCoords] = useState<{
     top: number;
     left: number;
@@ -744,22 +431,37 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
     startY: number;
     currentX: number;
     currentY: number;
-    anchor: number;
+    anchor: number | null;
     lastIndex: number;
     active: boolean;
     suppressed: boolean;
     rafId: number | null;
+    pending: boolean;
+    finished: boolean;
+    requestedLine: number | null;
+    pendingPoint: { line: number; withinLine: number; contentX: number } | null;
   } | null>(null);
 
   const prevCursorPosRef = useRef<number>(cursorPos);
   const prevSelectionStartRef = useRef<number | null>(selectionStart);
   const prevSelectionEndRef = useRef<number | null>(selectionEnd);
 
-  // Sync input value with current line text
   useLayoutEffect(() => {
-    // Sync physical coordinates whenever cursor or text changes
-    if (!containerRef.current) return;
+    getNavigation()?.resume();
+    resumeDragRef.current?.();
+  }, [getNavigation, layoutDeps, geometryVersion, decorationVersion, mainLines, streamTail, lineCount]);
 
+  useEffect(() => () => {
+    if (navigationRef.current?.store === editorStore) navigationRef.current.value.cancel();
+  }, [editorStore]);
+
+  // 坐标只是输入法锚点；输入宿主的生命周期不依赖目标行是否已经挂载。
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    if (!container) {
+      setCoords(null);
+      return;
+    }
     const cursorMoved =
       prevCursorPosRef.current !== cursorPos ||
       prevSelectionStartRef.current !== selectionStart ||
@@ -768,73 +470,22 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
     prevSelectionStartRef.current = selectionStart;
     prevSelectionEndRef.current = selectionEnd;
 
-    let rAF: number;
-    let retries = 0;
-    const updateCoords = () => {
-      // W1-2（M2c 根因修复，docs/streaming-render/00 总方案 S-EL-11）：
-      // 流式会话（store.streamActive 为 true = 流式追加进行中，W2-1 D-1
-      // 换源——旧判定 streamOp !== null；只读快路径 streamOp 恒 null 但
-      // 信号照常置位，门禁语义一致）期间短路光标滚动跟随——注入的每帧
-      // 提交都触发本 effect 重跑，而光标行（用户未动时停在文档首部/旧
-      // 位置）在虚拟视口外 → 越界滚动分支会把用户 scrollTop 抢拉到光标
-      // 行（perf M2c 实测 253027→3513 复位锁死，suite README 异常登记③；
-      // 随后 tanstack resizeItem 的纠滚又逐帧递减拉到 0）。流式期间光标
-      // 移动是 appendText 的记账平移（非用户意图），滚动跟随语义无意义；
-      // 编辑路径（streamActive 为 false）行为完全不变。
-      if (editorStore.getState().streamActive === true) return;
-      const rect = getCoordinatesFromIndex(cursorPos, containerRef.current);
-      if (rect) {
-        // 视口坐标 → 容器内容坐标（与 CursorLayer 共用换算；测量结果由
-        // measure 模块的同帧缓存共享，两组件同帧仅一次全量测量）
-        const { top, left, height } = toContainerCoords(
-          rect,
-          containerRef.current!
-        );
+    const rect = getCoordinatesFromIndex(cursorPos, container);
+    const next = rect ? toContainerCoords(rect, container) : null;
+    setCoords(next);
 
-        setCoords({ top, left, height });
-
-        const cTop = containerRef.current!.scrollTop;
-        const cHeight = containerRef.current!.clientHeight;
-
-        // Fix for "反反复复刷屏" (Repeated bouncing during native mouse drag)
-        // If the user is physically dragging the mouse outside the viewport,
-        // the browser natively triggers an OS-level drag-scroll loop.
-        // We MUST NOT fight the browser by setting scrollTop manually here,
-        // otherwise react-virtual and the browser scroll will fight each other causing a bounce loop.
-        if (!(window as any).__CRISH_IS_MOUSE_DOWN) {
-          if (cursorMoved) {
-            // 视口安全边缘阈值：仅当光标确凿超出可见范围时才贴边对齐，杜绝魔术 40px 抢拉颠簸
-            const threshold = 1.0;
-            if (top < cTop - threshold) {
-              containerRef.current!.scrollTop = Math.max(0, top);
-            } else if (top + height > cTop + cHeight + threshold) {
-              containerRef.current!.scrollTop = top + height - cHeight;
-            }
-          }
-        }
-      } else if (cursorMoved && retries < 10) {
-        retries++;
-        // 光标行未挂载（越视口跳转——Ctrl+End/PageDown/搜索跳转后行在
-        // 虚拟化视口外）：几何外推滚动到光标行，下一帧行挂载后精确
-        // 测量接管（scrollLineIntoViewByGeometry 注释见模块级定义；
-        // B2 词级跳选实测发现并修复：长文档 Ctrl+End 后测量持续失败 →
-        // textarea 卸载 → 输入/词级导航失效）
-        // 仅在光标或选区主动变化时才拉动滚动条，避免用户浏览文档时滚动条弹回光标
-        const st = editorStore.getState();
-        scrollLineIntoViewByGeometry(
-          containerRef.current!,
-          st.lineOffsets.findLineIndex(cursorPos)
-        );
-        rAF = requestAnimationFrame(updateCoords);
-      } else {
-        setCoords(null);
-      }
-    };
-    updateCoords();
-
-    return () => {
-      if (rAF) cancelAnimationFrame(rAF);
-    };
+    // 流式追加与鼠标拖选分别拥有自己的滚动意图，输入锚点不抢占它们。
+    const state = editorStore.getState();
+    if (!cursorMoved || state.streamActive || (window as any).__CRISH_IS_MOUSE_DOWN) return;
+    if (!next) {
+      revealEditorLine(container, state.lineOffsets.findLineIndex(cursorPos));
+      return;
+    }
+    if (next.top < container.scrollTop) {
+      container.scrollTop = next.top;
+    } else if (next.top + next.height > container.scrollTop + container.clientHeight) {
+      container.scrollTop = next.top + next.height - container.clientHeight;
+    }
   }, [
     cursorPos,
     selectionStart,
@@ -844,6 +495,9 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
     streamTail,
     lineCount,
     decorationVersion,
+    layoutDeps,
+    geometryVersion,
+    editorStore,
   ]);
 
   // —— a11y 光标行 value 同步 + aria-live 播报（R4-H，04 §6.3 短程）——
@@ -864,9 +518,6 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
   const lastAnnounceAtRef = useRef(-Infinity);
   /** 播报文案（aria-live polite 节点承载，SR 朗读） */
   const [announcement, setAnnouncement] = useState('');
-  /** textarea 挂载态（coords 是否已定位）：首帧 coords null → 无 textarea，
-   *  挂载后置 true 补一次同步（见下方依赖注释） */
-  const textareaMounted = coords !== null;
 
   useLayoutEffect(() => {
     const ta = textareaRef.current;
@@ -905,10 +556,7 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
     lastAnnouncePosRef.current = posKey;
     lastAnnounceAtRef.current = now;
     setAnnouncement(formatAnnouncement(lineIdx, col, selectedCount));
-    // 依赖取布尔 textareaMounted 而非 coords 对象：coords 每次 setCoords 都
-    // 是新对象（光标移动重测），若直接依赖会导致本 effect 在坐标重渲染时
-    // 重复执行、linesChanged 判据失效（编辑提交后被误同步）；布尔切换只在
-    // textarea 挂载/卸载时变化（首帧 coords null → 挂载后补一次同步）
+    // 输入框常驻，坐标变化不重写其当前输入缓冲。
   }, [
     cursorPos,
     selectionStart,
@@ -916,45 +564,41 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
     mainLines,
     streamTail,
     lineCount,
-    textareaMounted,
+    editorStore,
   ]);
+
+  const handleTableKeyboardEvent = useEffectEvent((event: KeyboardEvent) => handleTableInteraction(event));
 
   useEffect(() => {
     const handleSelectionChange = () => {
-      if (!containerRef.current) return;
+      const container = containerRef.current;
+      if (!container || isComposingRef.current || activeCompositionGroup.current) return;
       if (dragSelectRef.current && dragSelectRef.current.active) return;
-      if ((window as any).__CRISH_SYNCING_DOM_SELECTION) return;
 
       const selection = window.getSelection();
-      if (isComposing) {
-        setIsComposing(false);
-      }
-      if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
+      if (!selection || selection.isCollapsed || !selection.anchorNode || !selection.focusNode) {
         return;
       }
-
-      const range = selection.getRangeAt(0);
-
-      // Try to find the start and end DOM nodes
-      const startIdx = getGlobalIndexFromDOMNode(
-        range.startContainer,
-        range.startOffset,
-        containerRef.current
+      // 选区的两端都属于本实例才接收，不能把另一编辑器的端点映射进来。
+      if (!container.contains(selection.anchorNode) || !container.contains(selection.focusNode)) return;
+      const anchor = getGlobalIndexFromDOMNode(
+        selection.anchorNode,
+        selection.anchorOffset,
+        container
       );
-      const endIdx = getGlobalIndexFromDOMNode(
-        range.endContainer,
-        range.endOffset,
-        containerRef.current
+      const head = getGlobalIndexFromDOMNode(
+        selection.focusNode,
+        selection.focusOffset,
+        container
       );
-
-      if (startIdx !== null && endIdx !== null) {
-        // If it's a drag or double-click selection, update store using setSelection to preserve directionality.
-        // If it's a collapsed click (s === e), we IGNORE it here because MarkdownEngine.tsx's onClick
-        // will handle it using caretRangeFromPoint, which is more precise.
-        // This prevents the "two cursor changes" jitter on mousedown -> click.
-        if (startIdx !== endIdx) {
-          editorStore.getState().setSelection(startIdx, endIdx);
-        }
+      if (anchor === null || head === null || !Number.isFinite(anchor) || !Number.isFinite(head)) return;
+      const state = editorStore.getState();
+      // 隐藏源码可投到同一可见边界；原生投影未变时保留模型中的完整源码端点。
+      if (domSelectionMatchesModel(container, state.anchorPos, state.headPos, selection)) return;
+      const next = normalizeSelectionEndpoints(state, anchor, head);
+      // 原生 selectionchange 异步投递；以真实端点判等消除回声，不依赖同步锁。
+      if (next.anchor !== state.anchorPos || next.head !== state.headPos) {
+        state.setSelection(next.anchor, next.head);
       }
     };
 
@@ -989,6 +633,7 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
     };
 
     const handleGlobalMouseDown = () => {
+      suppressClickRef.current = false;
       (window as any).__CRISH_IS_MOUSE_DOWN = true;
       // B5 自动补全：点击定位/拖选开始 → 关闭候选菜单（光标将移动）
       window.dispatchEvent(new Event('close-autocomplete-menu'));
@@ -999,12 +644,11 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
       const tableStore = useTableStore.getState();
       if (tableStore.isDraggingCell) {
         tableStore.setDraggingCell(false);
-        (window as any).__CRISH_LAST_DRAG_END_TIME = Date.now();
       }
     };
 
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
-      if (e.defaultPrevented) return;
+      if (e.defaultPrevented || e.isComposing || isComposingRef.current) return;
 
       // 如果当前焦点位于编辑器之外的其他交互控件（例如外部输入框、下拉框、查找面板等），
       // 不在此处劫持 Backspace/Delete 或表格按键
@@ -1020,7 +664,7 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
         return;
       }
 
-      if (handleTableInteraction(e)) {
+      if (handleTableKeyboardEvent(e)) {
         return;
       }
       if (e.key === 'Backspace' || e.key === 'Delete') {
@@ -1036,231 +680,147 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
       }
     };
 
-    // —— R4-G 拖选状态机（坐标驱动，04 §3.3 方案 3 / CM6 MouseSelection 简化版）——
-    // mousedown：仅记录起点坐标与跳过条件（不移动光标、不清选区——纯点击
-    // 场景零副作用，click 定位由 MarkdownEngine handleContainerClick 独占）；
-    // mousemove 超阈值（DRAG_THRESHOLD_PX）后激活：锚点 = 按下位置定位的
-    // 光标位（此时 click 尚未触发，故在激活瞬间以 mousedown 坐标定位），
-    // 此后 head 由「坐标 → 索引」持续更新（store.moveHead，anchor 不动——
-    // 反向拖选天然正确），mouseup 结算。
-    // 拖选期间抑制原生 DOM 选区（userSelect none + removeAllRanges）：原生
-    // 选区依赖 DOM 存在，虚拟化视口外必断选（04 §3.2 S2），引擎自绘高亮
-    // （SelectionHighlight）替代；视口外拖选由边缘滚动 + 行几何估算兜底
-    // （目标行未挂载时用边界行几何推算行号，滚动后行挂载即被精确
-    // caretRangeFromPoint 命中接管——R2-F 列保持思路复用）。
-    const handleDragMouseDown = (e: MouseEvent) => {
+    // 鼠标与布局提交共享同一结算函数，未挂载目标只等待宿主的真实挂载信号。
+    const finishDrag = () => {
+      const d = dragSelectRef.current;
       const container = containerRef.current;
-      if (!container || e.button !== 0) return;
-      // 组合中不干预（R4-C IME 状态机：composition 期间鼠标交互一律跳过）
-      if (isComposingRef.current) return;
-      // 表格 Excel 交互区不接管（单元格拖拽/选区由 TableStore 状态机独占）
-      const target = e.target as HTMLElement | null;
-      if (
-        target &&
-        (target.closest('.line-table-row') ||
-          target.closest('.token-table-cell'))
-      ) {
-        return;
-      }
-      // 若存在外部原生 DOM 选区（非编辑器自身内部选区，如外部文本/测试注入）：
-      // 不干预——原生选区路径继续保留；但若为编辑器自身已有选区，允许 mousedown 启动新一轮拖选（支持倒着向上拖选）
-      const st = editorStore.getState();
-      const isInternalSelection = st.selectionStart !== st.selectionEnd;
-      const selection = window.getSelection();
-      if (!isInternalSelection && selection && selection.toString().length > 0) {
-        return;
-      }
-
-      // 预先在 mousedown 阶段（DOM 尚未激活/展开隐藏语法前）以当前未展开物理状态计算目标字符索引，
-      // 保证后续 click 触发时光标锚定在用户视线所点击的文字上，而不是在展开后新插入的前缀/标记位置
-      try {
-        const clickedLineIndex = parseInt(
-          target?.closest('[data-index]')?.getAttribute('data-index') || '-1',
-          10
-        );
-        const preIndex = indexFromClientPoint(
-          e.clientX,
-          e.clientY,
-          container,
-          editorStore.getState(),
-          clickedLineIndex >= 0 ? clickedLineIndex : undefined
-        );
-        (window as any).__CRISH_PRE_CLICK_INDEX = {
-          x: e.clientX,
-          y: e.clientY,
-          index: preIndex,
-          time: Date.now(),
-        };
-      } catch {}
-
-      dragSelectRef.current = {
-        startX: e.clientX,
-        startY: e.clientY,
-        currentX: e.clientX,
-        currentY: e.clientY,
-        anchor: -1,
-        lastIndex: -1,
-        active: false,
-        suppressed: false,
-        rafId: null,
-      };
+      if (!d?.finished || d.pending || !container) return;
+      container.style.userSelect = '';
+      const state = editorStore.getState();
+      syncDOMSelection(container, state.anchorPos, state.headPos);
+      dragSelectRef.current = null;
     };
 
-    const handleDragMouseMove = (e: MouseEvent) => {
-      // 单元格内划词拖选（当处于单元格就地文本编辑态时）
-      const cellDrag = (window as any).__CRISH_CELL_TEXT_DRAG;
-      if (cellDrag && cellDrag.cellEl) {
-        const headIdx = locateRowIndexByPhysicalBisection(
-          cellDrag.cellEl,
-          e.clientX,
-          cellDrag.start,
-          cellDrag.len,
-          e.clientY
-        ) ?? cellDrag.start;
-        const clampedHead = Math.max(
-          cellDrag.start,
-          Math.min(cellDrag.start + cellDrag.len, headIdx)
-        );
-        editorStore.getState().setSelection(cellDrag.anchorIdx, clampedHead);
-        return;
-      }
-
+    const updateDragSelection = (resume = false) => {
       const d = dragSelectRef.current;
       const container = containerRef.current;
       if (!d || !container) return;
-
-      d.currentX = e.clientX;
-      d.currentY = e.clientY;
-
       if (!d.active) {
-        // 移动阈值：未超阈值视为点击（mouseup 后由 click 定位，本状态机
-        // 不干预——「mousedown 后 mousemove 才进拖选态」与点击定位协调）
-        const dx = e.clientX - d.startX;
-        const dy = e.clientY - d.startY;
+        const dx = d.currentX - d.startX;
+        const dy = d.currentY - d.startY;
         if (dx * dx + dy * dy <= DRAG_THRESHOLD_PX * DRAG_THRESHOLD_PX) {
+          finishDrag();
           return;
         }
-        // 进入拖选态：锚点 = 按下位置定位的光标位（拖选起点 = 点击后光标位）
-        d.anchor = indexFromClientPoint(
-          d.startX,
-          d.startY,
-          container,
-          editorStore.getState()
-        );
+        d.anchor ??= indexFromClientPoint(d.startX, d.startY, container);
+        if (d.anchor === null) {
+          d.pending = true;
+          const viewport = getEditorViewport(container);
+          if (viewport) viewport.revealLine(viewport.lineAtClientY(d.startY));
+          return;
+        }
         d.active = true;
-        // 抑制原生选区：userSelect none 防止后续 mousemove 创建原生选区
-        // （引擎自绘高亮替代），并清空可能残留的 DOM 选区
         d.suppressed = true;
         container.style.userSelect = 'none';
         window.getSelection()?.removeAllRanges();
         editorStore.getState().setCursorPos(d.anchor);
       }
-
-      // 坐标驱动：head 同步更新（anchor 不动；同索引跳过——高频去抖）
-      const index = indexFromClientPoint(
-        e.clientX,
-        e.clientY,
-        container,
-        editorStore.getState()
-      );
+      const rect = container.getBoundingClientRect();
+      const top = rect.top + container.clientTop;
+      const left = rect.left + container.clientLeft;
+      let y = container.clientHeight > 0 ? Math.max(top, Math.min(top + container.clientHeight, d.currentY)) : d.currentY;
+      let x = container.clientWidth > 0 ? Math.max(left, Math.min(left + container.clientWidth, d.currentX)) : d.currentX;
+      const viewport = getEditorViewport(container);
+      if (resume && d.pendingPoint && viewport) {
+        const bounds = viewport.lineClientBounds(d.pendingPoint.line);
+        if (!bounds) return;
+        y = bounds.top + d.pendingPoint.withinLine;
+        x = d.pendingPoint.contentX + rect.left - container.scrollLeft;
+      }
+      const index = indexFromClientPoint(x, y, container);
+      d.pending = index === null;
+      if (index === null) {
+        const line = resume && d.pendingPoint ? d.pendingPoint.line : viewport?.lineAtClientY(y);
+        const bounds = line !== undefined ? viewport?.lineClientBounds(line) : null;
+        if (line !== undefined && bounds && (!resume || !d.pendingPoint)) {
+          d.pendingPoint = { line, withinLine: y - bounds.top, contentX: x - rect.left + container.scrollLeft };
+        }
+        if (viewport && line !== undefined && line !== d.requestedLine) {
+          d.requestedLine = line;
+          viewport.revealLine(line);
+        }
+        return;
+      }
+      d.requestedLine = null;
+      d.pendingPoint = null;
       if (index !== d.lastIndex) {
         d.lastIndex = index;
         editorStore.getState().moveHead(index);
       }
+      finishDrag();
+    };
+    const resumePendingDrag = () => updateDragSelection(true);
+    const updateScrolledDrag = () => updateDragSelection();
+    resumeDragRef.current = resumePendingDrag;
 
-      // 边缘自动滚动调度：边缘步进 + 持续 60fps 平滑滚屏（鼠标停在边缘时亦可持续滚动）
-      const edgeStep = edgeScrollStep(e.clientY, container);
-      if (edgeStep !== 0) {
-        const maxTop = Math.max(
-          0,
-          (container.scrollHeight || 0) - container.clientHeight
-        );
-        container.scrollTop = Math.min(
-          maxTop,
-          Math.max(0, container.scrollTop + edgeStep)
-        );
+    const handleDragMouseDown = (e: MouseEvent) => {
+      suppressClickRef.current = false;
+      const container = containerRef.current;
+      if (!container || e.button !== 0 || isComposingRef.current) return;
+      const target = e.target as HTMLElement | null;
+      if (target?.closest('.line-table-row, .token-table-cell')) return;
+      const state = editorStore.getState();
+      const selection = window.getSelection();
+      if (state.selectionStart === state.selectionEnd && selection && selection.toString().length > 0) return;
+      getNavigation()?.cancel();
+      const anchor = indexFromClientPoint(e.clientX, e.clientY, container);
+      dragSelectRef.current = {
+        startX: e.clientX, startY: e.clientY, currentX: e.clientX, currentY: e.clientY,
+        anchor, lastIndex: -1, active: false, suppressed: false, rafId: null,
+        pending: false, finished: false, requestedLine: null, pendingPoint: null,
+      };
+    };
 
-        if (d.rafId === null) {
-          const tick = () => {
-            const cur = dragSelectRef.current;
-            const c = containerRef.current;
-            if (!cur || !cur.active || !c) {
-              if (cur) cur.rafId = null;
-              return;
-            }
+    const scrollDrag = () => {
+      const d = dragSelectRef.current;
+      const container = containerRef.current;
+      if (!d?.active || d.finished || !container) return;
+      const step = edgeScrollStep(d.currentY, container);
+      const old = container.scrollTop;
+      const max = Math.max(0, container.scrollHeight - container.clientHeight);
+      container.scrollTop = Math.min(max, Math.max(0, old + step));
+      updateDragSelection();
+      if (step !== 0 && container.scrollTop !== old) d.rafId = requestAnimationFrame(scrollDrag);
+      else d.rafId = null;
+    };
 
-            const step = edgeScrollStep(cur.currentY, c);
-            if (step !== 0) {
-              const max = Math.max(
-                0,
-                (c.scrollHeight || 0) - c.clientHeight
-              );
-              c.scrollTop = Math.min(
-                max,
-                Math.max(0, c.scrollTop + step)
-              );
-
-              const idx = indexFromClientPoint(
-                cur.currentX,
-                cur.currentY,
-                c,
-                editorStore.getState()
-              );
-              if (idx !== cur.lastIndex) {
-                cur.lastIndex = idx;
-                editorStore.getState().moveHead(idx);
-              }
-              cur.rafId = requestAnimationFrame(tick);
-            } else {
-              cur.rafId = null;
-            }
-          };
-
-          d.rafId = requestAnimationFrame(tick);
-        }
-      } else if (d.rafId !== null) {
-        cancelAnimationFrame(d.rafId);
-        d.rafId = null;
+    const handleDragMouseMove = (e: MouseEvent) => {
+      // 单元格交互仍由表格状态机拥有，只替换其坐标命中入口。
+      const cellDrag = (window as any).__CRISH_CELL_TEXT_DRAG;
+      if (cellDrag?.cellEl) {
+        const index = getSourceIndexFromPoint(e.clientX, e.clientY, cellDrag.cellEl);
+        if (index !== null) editorStore.getState().setSelection(cellDrag.anchorIdx, index);
+        return;
       }
+      const d = dragSelectRef.current;
+      if (!d || d.finished) return;
+      d.currentX = e.clientX;
+      d.currentY = e.clientY;
+      updateDragSelection();
+      if (d.rafId === null) scrollDrag();
     };
 
     const handleDragMouseUp = (e: MouseEvent) => {
-      if ((window as any).__CRISH_CELL_TEXT_DRAG) {
-        (window as any).__CRISH_LAST_DRAG_END_TIME = Date.now();
-      }
       (window as any).__CRISH_CELL_TEXT_DRAG = null;
       const d = dragSelectRef.current;
       if (!d) return;
-      if (d.rafId !== null) {
-        cancelAnimationFrame(d.rafId);
-        d.rafId = null;
-      }
-      if (d.active && containerRef.current) {
-        // 结算：mouseup 位置可能是最后一次 mousemove 之后的新坐标，
-        // 补一次 head 更新（幂等）
-        const index = indexFromClientPoint(
-          e.clientX,
-          e.clientY,
-          containerRef.current,
-          editorStore.getState()
-        );
-        if (index !== d.lastIndex) {
-          editorStore.getState().moveHead(index);
-        }
-        // 拖选结束的合成 click 抑制（MarkdownEngine handleContainerClick
-        // 检查 __CRISH_LAST_DRAG_END_TIME 跳过，防光标回跳）
-        (window as any).__CRISH_LAST_DRAG_END_TIME = Date.now();
-      }
-      if (d.suppressed) {
-        const container = containerRef.current;
-        if (container) {
-          container.style.userSelect = '';
-          const s = editorStore.getState();
-          syncDOMSelection(container, s.selectionStart, s.selectionEnd);
-        }
-      }
-      dragSelectRef.current = null;
+      const samePoint = d.currentX === e.clientX && d.currentY === e.clientY;
+      if (d.rafId !== null) cancelAnimationFrame(d.rafId);
+      d.rafId = null;
+      d.currentX = e.clientX;
+      d.currentY = e.clientY;
+      d.finished = true;
+      if (d.active) suppressClickRef.current = true;
+      if (containerRef.current) containerRef.current.style.userSelect = '';
+      updateDragSelection(samePoint);
       textareaRef.current?.focus({ preventScroll: true });
+    };
+
+    const resetClickSuppression = () => { suppressClickRef.current = false; };
+    const handleClickCapture = (event: MouseEvent) => {
+      if (!suppressClickRef.current) return;
+      suppressClickRef.current = false;
+      event.preventDefault();
     };
 
     // —— B2 双击选词（词级，04 §3.3 状态机独立分支）——
@@ -1287,7 +847,8 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
       }
       e.preventDefault();
       const s = editorStore.getState();
-      const pos = indexFromClientPoint(e.clientX, e.clientY, container, s);
+      const pos = indexFromClientPoint(e.clientX, e.clientY, container);
+      if (pos === null) return;
       const lineIdx = s.lineOffsets.findLineIndex(pos);
       const lineStart = s.lineOffsets.getOffset(lineIdx);
       const lineText = s.getLine(lineIdx) ?? '';
@@ -1348,11 +909,14 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
     const containerEl = containerRef.current;
     if (containerEl) {
       containerEl.addEventListener('mousedown', handleDragMouseDown);
+      containerEl.addEventListener('pointerdown', resetClickSuppression, true);
+      containerEl.addEventListener('click', handleClickCapture, true);
       containerEl.addEventListener('dblclick', handleContainerDblClick);
       containerEl.addEventListener('dragenter', handleDragEnter);
       containerEl.addEventListener('dragover', handleDragOver);
       containerEl.addEventListener('dragleave', handleDragLeave);
       containerEl.addEventListener('drop', handleDrop);
+      containerEl.addEventListener('scroll', updateScrolledDrag);
     }
     window.addEventListener('mousemove', handleDragMouseMove);
     window.addEventListener('mouseup', handleDragMouseUp);
@@ -1369,12 +933,16 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
       window.removeEventListener('click', handleGlobalClick);
       window.removeEventListener('keydown', handleGlobalKeyDown);
       if (containerEl) {
+        if (resumeDragRef.current === resumePendingDrag) resumeDragRef.current = null;
         containerEl.removeEventListener('mousedown', handleDragMouseDown);
+        containerEl.removeEventListener('pointerdown', resetClickSuppression, true);
+        containerEl.removeEventListener('click', handleClickCapture, true);
         containerEl.removeEventListener('dblclick', handleContainerDblClick);
         containerEl.removeEventListener('dragenter', handleDragEnter);
         containerEl.removeEventListener('dragover', handleDragOver);
         containerEl.removeEventListener('dragleave', handleDragLeave);
         containerEl.removeEventListener('drop', handleDrop);
+        containerEl.removeEventListener('scroll', updateScrolledDrag);
         // 异常卸载兜底：恢复 userSelect（拖选中卸载时防样式残留）
         containerEl.style.userSelect = '';
       }
@@ -1385,7 +953,7 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
         dragSelectRef.current.rafId = null;
       }
     };
-  }, [containerRef]);
+  }, [containerRef, editorStore, getNavigation]);
 
   const handleTableInteraction = (e: KeyboardEvent | React.KeyboardEvent) => {
     const selectedCell = useTableStore.getState().selectedCell;
@@ -1396,18 +964,17 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
     if (!selectedCell.isEditing) {
       // 1. 单元格多选复制 (Ctrl+C / Cmd+C: 导出 TSV 格式制表符数据)
       if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'C')) {
-        const minLine = Math.min(selectedCell.startLine, selectedCell.endLine);
-        const maxLine = Math.max(selectedCell.startLine, selectedCell.endLine);
-        const minCol = Math.min(selectedCell.startCol, selectedCell.endCol);
-        const maxCol = Math.max(selectedCell.startCol, selectedCell.endCol);
-        const lines = editorStore.getState().lines;
+        // 读源码行需文档绝对行号 → selectionToLines 折算；null = 身份未观测过 → 不接管
+        const lines = selectionToLines(selectedCell);
+        if (!lines) return false;
+        const storeState = editorStore.getState();
         const copiedRows: string[] = [];
-        for (let r = minLine; r <= maxLine; r++) {
-          const lineText = lines[r] || '';
+        for (let r = lines.startLine; r <= lines.endLine; r++) {
+          const lineText = storeState.getLine(r) ?? '';
           if (/^\|?[\s:-]*[-]+[\s:-]*\|/.test(lineText.trim())) continue;
           const { cells } = parseRowCells(lineText);
           const selectedRowCells: string[] = [];
-          for (let c = minCol; c <= maxCol; c++) {
+          for (let c = lines.startCol; c <= lines.endCol; c++) {
             selectedRowCells.push((cells[c] || '').trim());
           }
           copiedRows.push(selectedRowCells.join('\t'));
@@ -1446,28 +1013,27 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
       }
       if (e.key === 'Backspace' || e.key === 'Delete') {
         e.preventDefault();
-        const minLine = Math.min(selectedCell.startLine, selectedCell.endLine);
-        const maxLine = Math.max(selectedCell.startLine, selectedCell.endLine);
-        const minCol = Math.min(selectedCell.startCol, selectedCell.endCol);
-        const maxCol = Math.max(selectedCell.startCol, selectedCell.endCol);
+        // 相对区间由 normalizeSelection 派生；多格清空另经 selectionToLines 折算绝对行
+        const b = normalizeSelection(selectedCell);
+        const lines = selectionToLines(selectedCell);
 
-        if (minLine === maxLine && minCol === maxCol) {
+        if (isSingleCell(selectedCell)) {
           const res = clearCell(text, cursorPos);
           if (res.newText !== text) {
-            editorStore.setState({ lines: res.newText.split('\n') });
+            editorStore.getState().replaceWholeDoc(res.newText);
           }
           editorStore.getState().setCursorPos(res.newCursorPos);
-        } else {
+        } else if (lines) {
           // 多单元格批量清空（保留管道符结构）
-          const currentLines = [...editorStore.getState().lines];
+          const currentLines = editorStore.getState().getText().split('\n');
           let hasChanges = false;
-          for (let r = minLine; r <= maxLine; r++) {
+          for (let r = lines.startLine; r <= lines.endLine; r++) {
             const lineText = currentLines[r] || '';
             if (/^\|?[\s:-]*[-]+[\s:-]*\|/.test(lineText.trim())) continue;
             const { pipePositions } = parseRowCells(lineText);
             if (pipePositions.length <= 1) continue;
             let modifiedLine = lineText;
-            for (let c = Math.min(maxCol, pipePositions.length - 2); c >= minCol; c--) {
+            for (let c = Math.min(b.c1, pipePositions.length - 2); c >= b.c0; c--) {
               const left = pipePositions[c];
               const right = pipePositions[c + 1];
               if (left !== undefined && right !== undefined) {
@@ -1483,13 +1049,13 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
             }
           }
           if (hasChanges) {
-            editorStore.setState({ lines: currentLines });
+            editorStore.getState().replaceWholeDoc(currentLines.join('\n'));
           }
         }
         return true;
       }
 
-      // Shift+方向键：扩展单元格多选范围（表格多选，支持跨越分隔行）
+      // Shift+方向键：扩展单元格多选范围（T5b：焦点在**表内相对行号**上 ±1）
       if (
         e.shiftKey &&
         (e.key === 'ArrowRight' ||
@@ -1499,29 +1065,20 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
       ) {
         e.preventDefault();
         const tableStore = useTableStore.getState();
-        const currentLines = editorStore.getState().lines;
+        // 焦点 = 拖选活动格（相对坐标；单选时 anchor === focus）
+        const focus = selectedCell.focus;
         if (e.key === 'ArrowRight') {
-          tableStore.updateCellSelectionEnd(selectedCell.endLine, selectedCell.endCol + 1);
+          tableStore.updateCellSelectionEnd({ row: focus.row, col: focus.col + 1 });
         } else if (e.key === 'ArrowLeft') {
-          tableStore.updateCellSelectionEnd(selectedCell.endLine, Math.max(0, selectedCell.endCol - 1));
+          tableStore.updateCellSelectionEnd({ row: focus.row, col: Math.max(0, focus.col - 1) });
         } else if (e.key === 'ArrowDown') {
-          let nextLine = selectedCell.endLine + 1;
-          const targetText = currentLines[nextLine] || '';
-          if (/^\|?[\s:-]*[-]+[\s:-]*\|/.test(targetText.trim())) {
-            nextLine++;
-          }
-          if (nextLine < currentLines.length && (currentLines[nextLine] || '').trim().startsWith('|')) {
-            tableStore.updateCellSelectionEnd(nextLine, selectedCell.endCol);
-          }
+          // 相对行 +1 = 下一表行：分隔行不占行号，天然跳过；上界由身份 endLine 折算
+          const entry = getTableIdentity(selectedCell.tableId);
+          const maxRow = entry ? lineToRow(entry.endLine, entry.startLine, entry.endLine, entry.separatorLine) : null;
+          if (maxRow !== null && focus.row + 1 <= maxRow) tableStore.updateCellSelectionEnd({ row: focus.row + 1, col: focus.col });
         } else if (e.key === 'ArrowUp') {
-          let prevLine = selectedCell.endLine - 1;
-          const targetText = currentLines[prevLine] || '';
-          if (/^\|?[\s:-]*[-]+[\s:-]*\|/.test(targetText.trim())) {
-            prevLine--;
-          }
-          if (prevLine >= 0 && (currentLines[prevLine] || '').trim().startsWith('|')) {
-            tableStore.updateCellSelectionEnd(prevLine, selectedCell.endCol);
-          }
+          // 相对行 -1；row ≥ 0 即仍在表内（表首行 = 0，其上一行必在表外）
+          if (focus.row - 1 >= 0) tableStore.updateCellSelectionEnd({ row: focus.row - 1, col: focus.col });
         }
         return true;
       }
@@ -1553,13 +1110,9 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
           }
           const newTable = findTableRange(res.newText, res.newCursorPos);
           if (newTable) {
-            useTableStore
-              .getState()
-              .enterCellSelection(
-                selectedCell.tableId,
-                newTable.absoluteLineIndex ?? newTable.activeLineIndex,
-                newTable.activeCellIndex
-              );
+            // 导航结果只有绝对行号 → 经 lineToRow 折算相对行（唯一入口）
+            const row = tableRowOfAbsLine(newTable, newTable.absoluteLineIndex ?? newTable.activeLineIndex);
+            if (row !== null) useTableStore.getState().enterCellSelection(selectedCell.tableId, { row, col: newTable.activeCellIndex });
           }
         }
         return true;
@@ -1599,13 +1152,9 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
           }
           const newTable = findTableRange(res.newText, res.newCursorPos);
           if (newTable) {
-            useTableStore
-              .getState()
-              .enterCellSelection(
-                selectedCell.tableId,
-                newTable.absoluteLineIndex ?? newTable.activeLineIndex,
-                newTable.activeCellIndex
-              );
+            // 导航结果只有绝对行号 → 经 lineToRow 折算相对行（唯一入口）
+            const row = tableRowOfAbsLine(newTable, newTable.absoluteLineIndex ?? newTable.activeLineIndex);
+            if (row !== null) useTableStore.getState().enterCellSelection(selectedCell.tableId, { row, col: newTable.activeCellIndex });
           }
         }
         return true;
@@ -1629,13 +1178,9 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
           }
           const newTable = findTableRange(res.newText, res.newCursorPos);
           if (newTable) {
-            useTableStore
-              .getState()
-              .enterCellSelection(
-                selectedCell.tableId,
-                newTable.absoluteLineIndex ?? newTable.activeLineIndex,
-                newTable.activeCellIndex
-              );
+            // 导航结果只有绝对行号 → 经 lineToRow 折算相对行（唯一入口）
+            const row = tableRowOfAbsLine(newTable, newTable.absoluteLineIndex ?? newTable.activeLineIndex);
+            if (row !== null) useTableStore.getState().enterCellSelection(selectedCell.tableId, { row, col: newTable.activeCellIndex });
           }
         }
         return true;
@@ -1692,13 +1237,8 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
               );
               fastCursorMove(prevEnd);
               editorStore.getState().setSelection(prevEnd, prevEnd);
-              useTableStore
-                .getState()
-                .enterCellEdit(
-                  selectedCell.tableId,
-                  selectedCell.startLine,
-                  prevCol
-                );
+              // 同格换列：行沿用选区锚点行（对应旧 startLine，相对行号）
+              useTableStore.getState().enterCellEdit({ tableId: selectedCell.tableId, row: selectedCell.anchor.row, col: prevCol });
               e.preventDefault();
               return true;
             }
@@ -1733,13 +1273,8 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
                 lineOffset + pipePositions[nextCol] + 1 + nextLeading;
               fastCursorMove(nextStart);
               editorStore.getState().setSelection(nextStart, nextStart);
-              useTableStore
-                .getState()
-                .enterCellEdit(
-                  selectedCell.tableId,
-                  selectedCell.startLine,
-                  nextCol
-                );
+              // 同格换列：行沿用选区锚点行（对应旧 startLine，相对行号）
+              useTableStore.getState().enterCellEdit({ tableId: selectedCell.tableId, row: selectedCell.anchor.row, col: nextCol });
               e.preventDefault();
               return true;
             }
@@ -1780,14 +1315,9 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
                 const newPos = Math.min(targetEnd, targetStart + relOffset);
                 fastCursorMove(newPos);
                 editorStore.getState().setSelection(newPos, newPos);
-                const targetAbsLine = (table.startLineIndex ?? 0) + prevLineIdx;
-                useTableStore
-                  .getState()
-                  .enterCellEdit(
-                    selectedCell.tableId,
-                    targetAbsLine,
-                    targetCol
-                  );
+                // 跨行换格：绝对行号 → 相对行（唯一入口 lineToRow）
+                const targetRow = tableRowOfAbsLine(table, (table.startLineIndex ?? 0) + prevLineIdx);
+                if (targetRow !== null) useTableStore.getState().enterCellEdit({ tableId: selectedCell.tableId, row: targetRow, col: targetCol });
                 e.preventDefault();
                 return true;
               }
@@ -1827,14 +1357,9 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
                 const newPos = Math.min(targetEnd, targetStart + relOffset);
                 fastCursorMove(newPos);
                 editorStore.getState().setSelection(newPos, newPos);
-                const targetAbsLine = (table.startLineIndex ?? 0) + nextLineIdx;
-                useTableStore
-                  .getState()
-                  .enterCellEdit(
-                    selectedCell.tableId,
-                    targetAbsLine,
-                    targetCol
-                  );
+                // 跨行换格：绝对行号 → 相对行（唯一入口 lineToRow）
+                const targetRow = tableRowOfAbsLine(table, (table.startLineIndex ?? 0) + nextLineIdx);
+                if (targetRow !== null) useTableStore.getState().enterCellEdit({ tableId: selectedCell.tableId, row: targetRow, col: targetCol });
                 e.preventDefault();
                 return true;
               }
@@ -1894,63 +1419,16 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
    */
   const handleSmartBackspace = (): boolean => {
     const s = editorStore.getState();
+    if (s.runListCommand('backspace')) return true;
     if (s.selectionStart !== s.selectionEnd) return false;
 
     const pos = s.cursorPos;
     const lineIdx = s.lineOffsets.findLineIndex(pos);
+    if (s.getLineContext(lineIdx).codeState !== 'none') return false;
     const lineStart = s.lineOffsets.getOffset(lineIdx);
     const lineText = s.getLine(lineIdx) ?? '';
     const inLine = pos - lineStart;
 
-    // 1. 任务列表项智能退格（例如 `- [ ] ` 或 `  - [ ] `）
-    const taskMatch = lineText.match(/^(\s*)([-*+]|\d+\.)\s+(\[[ xX]\])\s*/);
-    if (taskMatch) {
-      const prefixLen = taskMatch[0].length;
-      if (inLine <= prefixLen && inLine > 0) {
-        const indent = taskMatch[1];
-        const bullet = taskMatch[2];
-        const normalListPrefix = `${indent}${bullet} `;
-        const rest = lineText.slice(prefixLen);
-        s.applyChange(
-          lineStart,
-          lineStart + lineText.length,
-          normalListPrefix + rest,
-          { cursorAfter: lineStart + normalListPrefix.length }
-        );
-        return true;
-      }
-    }
-
-    // 2. 普通无序/有序列表项智能退格（例如 `- ` 或 `1. `）
-    const listMatch = lineText.match(/^(\s*)([-*+]|\d+\.)\s*/);
-    if (listMatch) {
-      const prefixLen = listMatch[0].length;
-      if (inLine <= prefixLen && inLine > 0) {
-        const indent = listMatch[1];
-        if (indent.length >= 2) {
-          // 有缩进：一键减少 2 个空格缩进（反缩进）
-          const newIndent = indent.slice(2);
-          const newPrefix = `${newIndent}${listMatch[2]} `;
-          const rest = lineText.slice(prefixLen);
-          s.applyChange(
-            lineStart,
-            lineStart + lineText.length,
-            newPrefix + rest,
-            { cursorAfter: lineStart + newPrefix.length }
-          );
-          return true;
-        }
-        // 无缩进：一键移除前缀，变为普通段落
-        const rest = lineText.slice(prefixLen);
-        s.applyChange(
-          lineStart,
-          lineStart + lineText.length,
-          rest,
-          { cursorAfter: lineStart }
-        );
-        return true;
-      }
-    }
 
     // 3. 块引用 / Callout 智能退格（> ）
     const bqMatch = lineText.match(/^(\s*)(>+)\s*/);
@@ -1986,6 +1464,21 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // 候选导航属于输入法；组合结束后的首个文档命令先提交待定文本，再读取端点。
+    if (isComposingRef.current || e.nativeEvent.isComposing) return;
+    if (activeCompositionGroup.current) flushComposition();
+    const navigation = getNavigation();
+    const vertical = e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'PageUp' || e.key === 'PageDown';
+    const directNavigation = vertical || ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !e.ctrlKey && !e.metaKey);
+    const ownedCommand = ['ArrowLeft', 'ArrowRight', 'Home', 'End', 'Enter', 'Tab', 'Backspace', 'Delete'].includes(e.key) ||
+      ((e.ctrlKey || e.metaKey) && ['a', 'c', 'z', 'y'].includes(e.key.toLowerCase()));
+    if (!directNavigation && navigation?.pending && !navigation.executingAction &&
+      ownedCommand) {
+      e.preventDefault();
+      navigation.afterNavigation(() => handleKeyDown(e));
+      return;
+    }
+    if (!vertical && (!navigation?.pending || navigation.executingAction)) navigation?.resetColumn();
     const { selectionStart, selectionEnd } = editorStore.getState();
     const cursorPos = editorStore.getState().cursorPos;
     // R6-P1 ArrowLeft 根治：不再无条件全文 getText()（O(全文) join——
@@ -2075,34 +1568,10 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
       return;
     }
 
-    if (e.key === 'ArrowLeft') {
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
       e.preventDefault();
-      // R6-P1 行文本模式 grapheme 移动：store.moveGrapheme 内部定位光标
-      // 所在行（getLine + LineOffsetTree）+ 行内 grapheme 边界 + 行边界
-      // 显式跨行——不再全文 getText() join（100 万行文档 14.5ms → <1ms）；
-      // 语义与全文模式等价（行首向左 = 上一行行尾、行尾向右 = 下一行行首）
-      const newPos = editorStore.getState().moveGrapheme(cursorPos, 'left');
-      if (e.shiftKey) {
-        // R4-B 接线：Shift+Left 扩展 = anchor 不动、head 左移（grapheme 粒度）。
-        // 删除旧启发式 selectionStart === cursorPos（光标离开选区端后即失效，
-        // 反向扩展第二次方向错误——04 §3.2 S1）；extendSelectionByDirection
-        // 以 headPos 为基点，方向由 anchor/head 相对位置判定，天然正确。
-        editorStore.getState().extendSelectionByDirection('left');
-      } else {
-        if (selectionStart !== selectionEnd) fastCursorMove(selectionStart);
-        else fastCursorMove(newPos);
-      }
-    } else if (e.key === 'ArrowRight') {
-      e.preventDefault();
-      // R6-P1：同 ArrowLeft——行文本模式 moveGrapheme（见上注释）
-      const newPos = editorStore.getState().moveGrapheme(cursorPos, 'right');
-      if (e.shiftKey) {
-        // R4-B 接线：Shift+Right 扩展（anchor 不动、head 右移），语义同上
-        editorStore.getState().extendSelectionByDirection('right');
-      } else {
-        if (selectionStart !== selectionEnd) fastCursorMove(selectionEnd);
-        else fastCursorMove(newPos);
-      }
+      closeAutocomplete();
+      navigation?.request(e.key, e.shiftKey);
     } else if (e.key === 'Backspace') {
       e.preventDefault();
       // 合成中退格删除的是候选文本（浏览器经 value 缓冲处理），
@@ -2123,12 +1592,17 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
       if (isComposingRef.current) return;
 
       const state = editorStore.getState();
-      const pos = state.cursorPos;
+      if (!e.shiftKey && state.runListCommand('enter')) return;
+      const pos = state.selectionStart;
       const lineIdx = state.lineOffsets.findLineIndex(pos);
       const lineStart = state.lineOffsets.getOffset(lineIdx);
       const lineText = state.getLine(lineIdx) ?? '';
       const inLine = pos - lineStart;
       const textBeforeCursor = lineText.slice(0, inLine);
+      if (state.getLineContext(lineIdx).codeState !== 'none') {
+        state.applyChange(state.selectionStart, state.selectionEnd, '\n', { merge: 'none' });
+        return;
+      }
 
       // 1. 表格环境（Table Row）判定：优先保障表格结构与单元格多行编辑
       const isTableRow = /^\s*\|/.test(lineText) || /\|\s*$/.test(lineText);
@@ -2170,19 +1644,17 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
 
         // 驱动 TableStore 自动聚焦新行首个单元格编辑
         const tableStore = useTableStore.getState();
-        if (tableStore.selectedCell) {
-          tableStore.enterCellEdit(
-            tableStore.selectedCell.tableId,
-            lineIdx + 1,
-            0
-          );
-        }
+        const sel = tableStore.selectedCell;
+        // 新行紧跟当前行 → 相对行号 = 当前行 + 1（相对行号连续且不含分隔行）
+        const entry = sel ? getTableIdentity(sel.tableId) : undefined;
+        const curRow = entry ? lineToRow(lineIdx, entry.startLine, entry.endLine, entry.separatorLine) : null;
+        if (sel && curRow !== null) tableStore.enterCellEdit({ tableId: sel.tableId, row: curRow + 1, col: 0 });
         return;
       }
 
       if (e.shiftKey) {
-        // 非表格下 Shift+Enter 直接换行
-        state.applyChange(pos, pos, '\n', { cursorAfter: pos + 1 });
+        // 普通换行以选区为替换范围，正反向选择得到同一文本事务。
+        state.applyChange(state.selectionStart, state.selectionEnd, '\n', { merge: 'none' });
         return;
       }
 
@@ -2190,6 +1662,10 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
       const bqMatch = textBeforeCursor.match(/^(\s*(?:>\s*)+)/);
       if (bqMatch) {
         const prefix = bqMatch[0];
+        if (state.selectionStart !== state.selectionEnd) {
+          state.applyChange(state.selectionStart, state.selectionEnd, '\n' + prefix, { merge: 'none' });
+          return;
+        }
         const contentAfterPrefix = lineText.slice(prefix.length).trim();
         if (contentAfterPrefix === '') {
           // 当前引用行为空行：跳出引用或降级一层引用
@@ -2216,57 +1692,9 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
         return;
       }
 
-      // 3. 任务列表 / 有序列表 / 无序列表环境判定（- [ ] , - , 1. ）
-      const listMatch = textBeforeCursor.match(
-        /^(\s*)([-*+]|\d+\.)\s+(\[[ xX]\]\s+)?/
-      );
-      if (listMatch) {
-        const fullPrefix = listMatch[0];
-        const indent = listMatch[1];
-        const marker = listMatch[2];
-        const isTask = Boolean(listMatch[3]);
-        const restContent = lineText.slice(fullPrefix.length).trim();
-
-        if (restContent === '') {
-          // 空列表行：回车优雅跳出或反缩进
-          if (indent.length >= 2) {
-            // 缩进列表：反缩进 2 格
-            const newIndent = indent.slice(2);
-            const newPrefix = isTask
-              ? `${newIndent}${marker} [ ] `
-              : `${newIndent}${marker} `;
-            state.applyChange(lineStart, lineStart + lineText.length, newPrefix, {
-              cursorAfter: lineStart + newPrefix.length,
-            });
-          } else {
-            // 顶层列表：一键退出列表，转为普通正文空行
-            state.applyChange(lineStart, lineStart + lineText.length, '', {
-              cursorAfter: lineStart,
-            });
-          }
-          return;
-        }
-
-        // 非空列表行：格式复用，续建下一列表项
-        let newPrefix = fullPrefix;
-        const numberMatch = marker.match(/^(\d+)\./);
-        if (numberMatch) {
-          const nextNum = parseInt(numberMatch[1], 10) + 1;
-          newPrefix = newPrefix.replace(/^\s*\d+\./, `${indent}${nextNum}.`);
-        }
-        // 任务列表续写时统一重置为未选中态 [ ]
-        if (isTask) {
-          newPrefix = newPrefix.replace(/\[[xX]\]/, '[ ]');
-        }
-
-        state.applyChange(pos, pos, '\n' + newPrefix, {
-          cursorAfter: pos + 1 + newPrefix.length,
-        });
-        return;
-      }
 
       // 4. 普通正文回车
-      state.applyChange(pos, pos, '\n', { cursorAfter: pos + 1 });
+      state.applyChange(state.selectionStart, state.selectionEnd, '\n', { merge: 'none' });
     } else if (e.key === 'a' && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
       // R6-P1：全选边界用 textLength（O(1)），不再全文 getText()
@@ -2274,6 +1702,7 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
     } else if (e.key === 'Tab') {
       e.preventDefault();
       const state = editorStore.getState();
+      if (state.runListCommand(e.shiftKey ? 'outdent' : 'indent')) return;
       const text = state.getText();
       const cursorPos = state.cursorPos;
 
@@ -2284,214 +1713,29 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
       );
       if (res) {
         if (res.newText !== text) {
-          editorStore.setState({ lines: res.newText.split('\n') });
+          editorStore.getState().replaceWholeDoc(res.newText);
         }
         editorStore.getState().setCursorPos(res.newCursorPos);
       } else {
-        const selStart = state.selectionStart;
-        const selEnd = state.selectionEnd;
-        const startLineIdx = state.lineOffsets.findLineIndex(
-          Math.min(selStart, selEnd)
-        );
-        const endLineIdx = state.lineOffsets.findLineIndex(
-          Math.max(selStart, selEnd)
-        );
-
-        const startLineOffset = state.lineOffsets.getOffset(startLineIdx);
-        const endLineOffset = state.lineOffsets.getOffset(endLineIdx);
-        // R6-P1：行内容经访问器读取（不再读物化视图 state.lines）
-        const endLineLength = state.getLine(endLineIdx)?.length ?? 0;
-
-        const blockStart = startLineOffset;
-        const blockEnd = endLineOffset + endLineLength;
-        const blockText = text.substring(blockStart, blockEnd);
-
-        let cursorDelta = 0;
-        let newBlockText = '';
-
-        if (e.shiftKey) {
-          newBlockText = blockText
-            .split('\n')
-            .map((line) => {
-              const match = line.match(/^ {1,2}/);
-              if (match && selStart === selEnd) cursorDelta = -match[0].length;
-              return line.replace(/^ {1,2}/, '');
-            })
-            .join('\n');
-        } else {
-          if (selStart !== selEnd) {
-            newBlockText = blockText
-              .split('\n')
-              .map((line) => '  ' + line)
-              .join('\n');
-          } else {
-            // R6-P1：行内容经访问器读取（不再读物化视图 state.lines）
-            const currentLine = state.getLine(startLineIdx) ?? '';
-            if (/^(\s*)([-*+]|\d+\.)\s+/.test(currentLine)) {
-              newBlockText = '  ' + currentLine;
-              cursorDelta = 2;
-            } else {
-              state.insertText('  ');
-              return;
-            }
-          }
-        }
-
-        if (newBlockText !== blockText) {
-          state.setSelection(blockStart, blockEnd);
-          state.insertText(newBlockText);
-          if (selStart !== selEnd) {
-            editorStore
-              .getState()
-              .setSelection(blockStart, blockStart + newBlockText.length);
-          } else {
-            const newPos = Math.max(blockStart, selStart + cursorDelta);
-            editorStore.getState().setSelection(newPos, newPos);
-          }
+        const edit = textIndentCommand(state, e.shiftKey);
+        if (edit && (edit.from !== edit.to || edit.insert !== '')) {
+          state.applyChange(edit.from, edit.to, edit.insert, { selectionAfter: edit.selectionAfter, merge: 'none' });
         }
       }
-    } else if (e.key === 'ArrowUp') {
+    } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'PageUp' || e.key === 'PageDown') {
       e.preventDefault();
-      if (containerRef.current) {
-        const targetIdx = getArrowNavigationIndex(
-          cursorPos,
-          'up',
-          containerRef.current
-        );
-        if (targetIdx !== null) {
-          // 垂直导航列保持的 grapheme 吸附：目标行来自 DOM 测量；
-          // 非左右方向键热路径，按需取全文（保持既有语义零变化）
-          const text = editorStore.getState().getText();
-          const newPos = snapToGraphemeBoundary(text, targetIdx);
-          if (e.shiftKey) {
-            // R4-B 垂直扩展登记：行级——head 移到目标行（列保持由
-            // getArrowNavigationIndex 完成），anchor 保持不动（moveHead）；
-            // 删除旧启发式 selectionStart === cursorPos（同 04 §3.2 S1）
-            editorStore.getState().moveHead(newPos);
-          } else {
-            fastCursorMove(newPos);
-          }
-        }
-      }
-    } else if (e.key === 'ArrowDown') {
+      closeAutocomplete();
+      navigation?.request(e.key, e.shiftKey);
+    } else if (e.key === 'Home' || e.key === 'End') {
       e.preventDefault();
-      if (containerRef.current) {
-        const targetIdx = getArrowNavigationIndex(
-          cursorPos,
-          'down',
-          containerRef.current
-        );
-        if (targetIdx !== null) {
-          const text = editorStore.getState().getText();
-          const newPos = snapToGraphemeBoundary(text, targetIdx);
-          if (e.shiftKey) {
-            // R4-B 垂直扩展登记：行级——head 移到目标行，anchor 保持不动
-            editorStore.getState().moveHead(newPos);
-          } else {
-            fastCursorMove(newPos);
-          }
-        }
-      }
-    } else if (e.key === 'PageUp' || e.key === 'PageDown') {
-      e.preventDefault();
-      // P2 项 4 键盘增强：翻页导航（浏览器默认在隐藏 textarea 上无效——
-      // value 恒空、无内容可翻，显式接管）。
-      // 目标行 = 视口顶/底行 ± 页行数（pageNavigationTarget，已挂载行
-      // 几何 = HeightMap.indexAt 的 DOM 等价实现）；列保持与 ArrowUp/Down
-      // 同款（字符宽度 Oracle 列预测 + grapheme 吸附）；滚动跟随由光标
-      // 越界滚动 effect 自动接管（目标行滚入视口）。
-      const container = containerRef.current;
-      if (!container) return;
       const s = editorStore.getState();
-      const lineCount = s.getLineCount();
-      const mounted = collectMountedLines(
-        container,
-        container.getBoundingClientRect()
-      );
-      if (mounted.length === 0) return;
-      const targetIdx = pageNavigationTarget(
-        e.key === 'PageUp' ? 'up' : 'down',
-        container.scrollTop,
-        container.clientHeight,
-        lineCount,
-        mounted
-      );
-      const targetStart = s.lineOffsets.getOffset(targetIdx);
-      const targetText = s.getLine(targetIdx) ?? '';
-      // 列保持：当前光标列 X（相对当前行左缘）→ 目标行内最接近列
-      const curRect = getCoordinatesFromIndex(cursorPos, container);
-      let newPos = targetStart;
-      if (curRect) {
-        const curLineIdx = s.lineOffsets.findLineIndex(cursorPos);
-        const curLineEl = container.querySelector(
-          `[data-index="${curLineIdx}"]`
-        );
-        const relX = curLineEl
-          ? Math.max(0, curRect.left - curLineEl.getBoundingClientRect().left)
-          : 0;
-        const col = predictColumn(
-          targetText,
-          relX,
-          fallbackCharWidths(container)
-        );
-        newPos = targetStart + Math.min(col, targetText.length);
-      }
-      // grapheme 吸附（列预测可能劈开组合序列，与 ArrowUp/Down 同款）
-      newPos =
-        targetStart + snapToGraphemeBoundary(targetText, newPos - targetStart);
+      const target = boundaryNavigationTarget(s, e.key, e.ctrlKey || e.metaKey);
+      closeAutocomplete();
       if (e.shiftKey) {
-        // Shift+PageUp/Down：选区扩展——head 移到目标行，anchor 保持不动
-        editorStore.getState().moveHead(newPos);
+        s.moveHead(target);
       } else {
-        fastCursorMove(newPos);
+        s.setCursorPos(target);
       }
-    } else if (e.key === 'Home' && (e.ctrlKey || e.metaKey)) {
-      e.preventDefault();
-      // P2 项 4 键盘增强：Ctrl+Home 文档首——位置 0 即文档开头（O(1)；
-      // 浏览器默认在隐藏 textarea 上无效，显式接管）
-      if (e.shiftKey) {
-        setSelection(selectionStart === cursorPos ? 0 : selectionStart, 0);
-      }
-      fastCursorMove(0);
-    } else if (e.key === 'End' && (e.ctrlKey || e.metaKey)) {
-      e.preventDefault();
-      // P2 项 4 键盘增强：Ctrl+End 文档尾——textLength O(1)（同 Ctrl+Home）
-      const textLength = editorStore.getState().textLength;
-      if (e.shiftKey) {
-        setSelection(
-          selectionStart === cursorPos ? textLength : selectionStart,
-          textLength
-        );
-      }
-      fastCursorMove(textLength);
-    } else if (e.key === 'Home') {
-      e.preventDefault();
-      // R6-P1：行首定位经 LineOffsetTree（O(log n)），不再全文扫描 \n
-      const s = editorStore.getState();
-      const lineIdx = s.lineOffsets.findLineIndex(cursorPos);
-      const lineStart = s.lineOffsets.getOffset(lineIdx);
-      if (e.shiftKey) {
-        setSelection(
-          selectionStart === cursorPos ? lineStart : selectionStart,
-          lineStart
-        );
-      }
-      fastCursorMove(lineStart);
-    } else if (e.key === 'End') {
-      e.preventDefault();
-      // R6-P1：行尾定位经 LineOffsetTree + getLine（O(log n) + O(行)），
-      // 不再全文扫描 \n（行尾 = 行首 + 行文本长度，不含换行符）
-      const s = editorStore.getState();
-      const lineIdx = s.lineOffsets.findLineIndex(cursorPos);
-      const lineStart = s.lineOffsets.getOffset(lineIdx);
-      const lineEnd = lineStart + (s.getLine(lineIdx) ?? '').length;
-      if (e.shiftKey) {
-        setSelection(
-          selectionStart === cursorPos ? lineEnd : selectionStart,
-          lineEnd
-        );
-      }
-      fastCursorMove(lineEnd);
     }
   };
 
@@ -2502,6 +1746,7 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
    * 让 value 继续累积（中途 flush 的同组延续）。
    */
   const flushComposition = () => {
+    if (pendingFlushTimer.current !== null) clearTimeout(pendingFlushTimer.current);
     pendingFlushTimer.current = null;
     const group = activeCompositionGroup.current;
     if (!group) return;
@@ -2512,9 +1757,10 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
       // merge:'typing' 与 insertText 同合并语义：单字符组合并入连续打字
       // 步（连续输入直觉）、多字符组合独立一步（合并条件含单字符约束，
       // 天然满足「整段组合 = 一个 undo 步」的撤销粒度）。
-      editorStore.getState().applyChange(group.from, group.to, value, {
-        merge: 'typing',
-      });
+      const commit = () => editorStore.getState().applyChange(group.from, group.to, value, { merge: 'typing' });
+      const navigation = getNavigation();
+      if (navigation?.pending) navigation.afterNavigation(commit);
+      else commit();
     }
     if (ta) ta.value = '';
   };
@@ -2543,6 +1789,13 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
       from: s.selectionStart,
       to: s.selectionEnd,
     };
+    const group = activeCompositionGroup.current;
+    const navigation = getNavigation();
+    if (navigation?.pending) navigation.afterNavigation(() => {
+      const state = editorStore.getState();
+      group.from = state.selectionStart;
+      group.to = state.selectionEnd;
+    });
     if (textareaRef.current) textareaRef.current.value = '';
   };
 
@@ -2603,6 +1856,14 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
     if (isComposingRef.current || activeCompositionGroup.current) return;
     const inputType = native.inputType;
     if (!inputType) return;
+    const navigation = getNavigation();
+    if (navigation?.pending && !navigation.executingAction &&
+      ['insertReplacementText', 'deleteContentBackward', 'deleteContentForward', 'insertParagraph'].includes(inputType)) {
+      native.preventDefault();
+      if (textareaRef.current) textareaRef.current.value = '';
+      navigation.afterNavigation(() => handleBeforeInput(native));
+      return;
+    }
     const s = editorStore.getState();
     const ta = native.target as HTMLTextAreaElement | null;
     if (inputType === 'insertReplacementText') {
@@ -2625,7 +1886,7 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
       if (ta) ta.value = '';
     } else if (inputType === 'insertParagraph') {
       native.preventDefault();
-      s.insertText('\n');
+      if (!s.runListCommand('enter')) s.insertText('\n');
       if (ta) ta.value = '';
     } else {
       // R4-H a11y 兜底清空：函数入口已放行（非合成、无活跃组），此时 value
@@ -2659,9 +1920,19 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
     // 无内容：放行浏览器默认（空粘贴无操作）
     if (transformed == null) return;
     native.preventDefault();
-    s.applyChange(s.selectionStart, s.selectionEnd, transformed, {
-      merge: 'none',
-    });
+    // 粘贴单一所有者契约：本监听（textarea 原生）是唯一处理者——处理完
+    // stopPropagation，防事件冒泡到容器级 paste 监听（MarkdownEngine）
+    // 造成二次插入（双写回归：表格内容被拼接两遍）。
+    native.stopPropagation();
+    const commit = () => {
+      const current = editorStore.getState();
+      const selected = current.getText().slice(current.selectionStart, current.selectionEnd);
+      const insert = buildPasteText(plain, html, selected);
+      if (insert !== null) current.applyChange(current.selectionStart, current.selectionEnd, insert, { merge: 'none' });
+    };
+    const navigation = getNavigation();
+    if (navigation?.pending) navigation.afterNavigation(commit);
+    else commit();
     const ta = textareaRef.current;
     if (ta) ta.value = '';
   };
@@ -2762,23 +2033,22 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
     const ta = e.target as HTMLTextAreaElement;
     const value = ta.value;
     if (value) {
-      editorStore.getState().insertText(value);
+      const commit = () => {
+        editorStore.getState().insertText(value);
+        maybeOpenAutocomplete();
+      };
+      const navigation = getNavigation();
+      if (navigation?.pending) navigation.afterNavigation(commit);
+      else commit();
       // reset textarea so we can catch next input cleanly
       ta.value = '';
       // B5 自动补全：提交后重新检测触发（新 query → 刷新候选菜单；
       // 未命中自动关闭）
-      maybeOpenAutocomplete();
     }
   };
 
-  // 原生 input/beforeinput 监听（挂载后一次性注册；textaera 卸载重挂时
-  // 随 coords 恢复重新注册——coords 为 null 期间组件返回 null，无监听）。
-  // input 走原生监听而非 React onChange：jsdom 中 React 19 的 onChange
-  // 值变化提取失效（isInputEventSupported 探测对 jsdom 不适用），且原生
-  // 监听与 React 合成行为等价（onChange 语义即原生 input 事件）。
-  const mounted = coords !== null;
+  // 原生输入监听随编辑器实例注册；几何暂不可测时仍保留同一个输入宿主。
   useEffect(() => {
-    if (!mounted) return;
     const ta = textareaRef.current;
     if (!ta) return;
     ta.addEventListener('input', handleInput);
@@ -2789,12 +2059,8 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
       ta.removeEventListener('beforeinput', handleBeforeInput);
       ta.removeEventListener('paste', handlePaste);
     };
-    // mounted 布尔：coords 在 null ↔ 非 null 间切换（textarea 卸载/重挂）
-    // 时重注册；coords 持续更新（光标移动）不重注册
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mounted]);
-
-  if (!coords) return null;
+  }, [editorStore]);
 
   return (
     <>
@@ -2802,22 +2068,7 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
           内联样式 + data-drag-drop-overlay 供测试定位；pointerEvents
           none 不拦截鼠标，drop 由容器原生事件接管） */}
       {dragOverlayVisible && (
-        <div
-          data-drag-drop-overlay
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 9000,
-            pointerEvents: 'none',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '14px',
-            color: 'var(--text-secondary)',
-            background: 'var(--selection-bg)',
-            border: '2px dashed var(--border-focus)',
-          }}
-        >
+        <div className="drag-drop-overlay" data-drag-drop-overlay>
           松开以插入文件内容
         </div>
       )}
@@ -2868,10 +2119,10 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
         }}
         style={{
           position: 'absolute',
-          top: `${coords.top}px`,
-          left: `${coords.left}px`,
+          top: coords?.top ?? containerRef.current?.scrollTop ?? 0,
+          left: coords?.left ?? containerRef.current?.scrollLeft ?? 0,
           width: isComposing ? '300px' : '1px',
-          height: `${coords.height + 15}px`,
+          height: coords ? `${coords.height}px` : '1lh',
           opacity: isComposing ? 1 : 0,
           color: 'var(--text-primary)',
           caretColor: 'var(--black)',
@@ -2886,7 +2137,7 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
           fontSize: 'inherit',
           lineHeight: 'inherit',
           whiteSpace: 'nowrap',
-          zIndex: 100,
+          zIndex: 'var(--z-input)',
         }}
         spellCheck="false"
         autoCapitalize="off"

@@ -15,7 +15,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { useEditorStore } from '../../src/core/EditorStore';
+import { createEditorStore, useEditorStore } from '../../src/core/EditorStore';
 import {
   HiddenInput,
   formatAnnouncement,
@@ -23,8 +23,8 @@ import {
 import { SelectionHighlight } from '../../src/components/SelectionHighlight';
 import React from 'react';
 // measure 模块依赖真实 DOM 布局（jsdom 无布局），统一 mock 固定坐标：
-// HiddenInput 只消费 getCoordinatesFromIndex / toContainerCoords 的返回值，
-// SelectionHighlight 只消费 getCoordinatesFromIndex 的 left 字段
+// HiddenInput 消费固定光标盒；SelectionHighlight 仍从真实来源文本创建 Range，
+// 下方夹具仅为 jsdom 补充 Range 的物理矩形，不替换源码投影或选区模型。
 vi.mock('../../src/core/measure', () => ({
   getCoordinatesFromIndex: (i: number) => ({
     top: 0,
@@ -265,6 +265,13 @@ describe('SelectionHighlight 选区层（R4-H）', () => {
     const line = document.createElement('div');
     line.setAttribute('data-line-start', '0');
     line.setAttribute('data-line-length', '3');
+    line.setAttribute('data-line-index', '0');
+    const text = document.createElement('span');
+    text.setAttribute('data-token-start', '0');
+    text.setAttribute('data-token-length', '3');
+    text.setAttribute('data-source-role', 'text');
+    text.textContent = '第一行';
+    line.appendChild(text);
     engine.appendChild(line);
     const reactHost = document.createElement('div');
     const mountHost = document.createElement('div');
@@ -272,20 +279,36 @@ describe('SelectionHighlight 选区层（R4-H）', () => {
     mountHost.appendChild(engine);
     document.body.appendChild(mountHost);
 
-    useEditorStore.getState().setText(DOC);
-    useEditorStore.getState().setSelection(0, 4);
+    const store = createEditorStore();
+    store.getState().setText(DOC);
+    store.getState().setSelection(0, 3);
+    const measuredText: string[] = [];
+    const originalRects = Object.getOwnPropertyDescriptor(Range.prototype, 'getClientRects');
+    Object.defineProperty(Range.prototype, 'getClientRects', {
+      configurable: true,
+      value(this: Range) {
+        measuredText.push(this.toString());
+        return [new DOMRect(0, 0, 30, 20)];
+      },
+    });
 
     const root: Root = createRoot(reactHost);
-    act(() => {
-      root.render(React.createElement(SelectionHighlight));
-    });
-    const layer = document.querySelector(
-      '.selection-layer'
-    ) as HTMLDivElement;
-    expect(layer).not.toBeNull();
-    expect(layer.getAttribute('aria-hidden')).toBe('true');
-    act(() => {
-      root.unmount();
-    });
+    try {
+      act(() => {
+        root.render(React.createElement(SelectionHighlight, {
+          containerRef: { current: engine },
+          store,
+        }));
+      });
+      const layer = document.querySelector('.selection-layer') as HTMLDivElement;
+      expect(layer).not.toBeNull();
+      expect(measuredText).toContain('第一行');
+      expect(layer.querySelectorAll('.selection-rect')).toHaveLength(1);
+      expect(layer.getAttribute('aria-hidden')).toBe('true');
+    } finally {
+      act(() => root.unmount());
+      if (originalRects) Object.defineProperty(Range.prototype, 'getClientRects', originalRects);
+      else delete (Range.prototype as unknown as Record<string, unknown>).getClientRects;
+    }
   });
 });

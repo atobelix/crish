@@ -22,6 +22,9 @@
  */
 import type { MarkdownDocument, LineNode, InlineNode } from './ast';
 import { renderMathToHtml } from './renderTheme';
+// 缩进语义单一真源（战役 wysiwyg-layout-remediation T2 / ADR-1 / I7）：
+// 本模块不再自带列宽副本——stripColumns / leadingColumns 一律引用 layout/。
+import { leadingColumns, stripColumns } from './layout/IndentModel';
 
 /** 文本转义：& < >（与 astToHtml / CommonMark 渲染器的文本转义规则一致） */
 export function escapeText(s: string): string {
@@ -59,88 +62,14 @@ function fenceInfo(raw: string): string {
 }
 
 /**
- * 剥离 up to limit 列前导空白（CommonMark 缩进代码块内容规则）：
- * tab 按停靠 4 展开。不足 limit 列或行尾残留的空白原样保留。
+ * 列表项内容缩进列（CommonMark §5.2 content indent）。
+ *
+ * 战役 wysiwyg-layout-remediation T3/ADR-2：该值由 parser 的列表容器栈
+ * 算好并落在 `contentIndentColumns`，本模块直接读取——不再自行按行原文
+ * 重算（旧实现是 parser 的第二份副本，双实现必然漂移）。
  */
-function stripIndentColumns(s: string, limit: number = 4): string {
-  let col = 0;
-  let i = 0;
-  while (i < s.length && col < limit) {
-    if (s[i] === ' ') {
-      col++;
-      i++;
-    } else if (s[i] === '\t') {
-      col += 4 - (col % 4);
-      i++;
-    } else {
-      break;
-    }
-  }
-  return s.substring(i);
-}
-
-/** 字符串的渲染列宽（tab 按停靠 4 展开） */
-function textColumns(s: string): number {
-  let col = 0;
-  for (const ch of s) {
-    if (ch === ' ') {
-      col++;
-    } else if (ch === '\t') {
-      col += 4 - (col % 4);
-    } else {
-      col++;
-    }
-  }
-  return col;
-}
-
-/** 行首缩进列宽（tab 按停靠 4 展开） */
-function leadingIndentColumns(s: string): number {
-  let col = 0;
-  for (let i = 0; i < s.length; i++) {
-    if (s[i] === ' ') {
-      col++;
-    } else if (s[i] === '\t') {
-      col += 4 - (col % 4);
-    } else {
-      break;
-    }
-  }
-  return col;
-}
-
-/** 剥离 up to 4 列前导空白（列表标记段判定用） */
-function stripFourColumns(s: string): string {
-  return stripIndentColumns(s, 4);
-}
-
-/**
- * 列表标记段信息：行首为列表标记（task / 项目符号 / 有序）时返回标记前缀
- * 与「内容缩进列偏移」——标记段列宽 = 标记字符 + 标记后空白（tab 停靠 4）；
- * 特例：标记后无内容或空白 ≥5 列时内容缩进列 = 标记宽 + 1。
- */
-function listMarkerInfo(
-  content: string
-): { prefix: string; markerWidth: number } | null {
-  const m = /^([-*+]\s*\[[xX\s]\])[ \t]+|^([-*+])[ \t]+|^(\d+\.)[ \t]+/.exec(
-    content
-  );
-  if (!m) return null;
-  const prefix = m[1] ?? m[2] ?? m[3];
-  const markerSeg = m[0];
-  const wPlusN = textColumns(markerSeg);
-  const n = wPlusN - prefix.length;
-  if (n >= 5 || content.slice(markerSeg.length) === '') {
-    return { prefix, markerWidth: prefix.length + 1 };
-  }
-  return { prefix, markerWidth: wPlusN };
-}
-
-/** 列表项内容缩进列（= 行首缩进列 + 标记段宽，spec §5.2） */
 function listContentIndent(line: LineNode): number {
-  const bqContent = stripBlockquotePrefix(line.raw);
-  const info = listMarkerInfo(stripFourColumns(bqContent));
-  return leadingIndentColumns(bqContent) + (info ? info.markerWidth : 0);
+  return line.contentIndentColumns ?? 0;
 }
 
 /**
@@ -317,13 +246,19 @@ interface ListItemAcc {
 }
 
 /**
- * 列表容器投影：支持嵌套、松散列表、项内多段落、li 内缩进代码块、
- * 紧邻 body 延续（迁移自 astToHtml renderListGroup，语义一致）。
+ * 列表容器投影：**按 `listDepth` 整数分层递归**（战役
+ * wysiwyg-layout-remediation T3/ADR-2）——同一层（depth 相同）的连续同种
+ * marker 行归入同一个 `<ul>`/`<ol>`，depth 更大者递归为当前 `<li>` 内的
+ * 子列表。嵌套层级只认 `listDepth`，不做任何缩进数值比较（旧实现
+ * `listIndent > indent` 会把 `- a\n - b` 的 1 空格同级项误判为子列表）。
+ *
+ * 另支持：松散列表、项内多段落、li 内缩进代码块、紧邻 body 延续
+ * （迁移自 astToHtml renderListGroup，语义一致）。
  */
 function renderListGroup(lines: LineNode[], start: number, out: string[]): number {
   const first = lines[start];
   const kind = listKind(first);
-  const indent = first.listIndent ?? 0;
+  const depth = first.listDepth ?? 0;
   const bq = first.blockquoteLevel ?? 0;
   const items: ListItemAcc[] = [];
   let j = start;
@@ -365,7 +300,7 @@ function renderListGroup(lines: LineNode[], start: number, out: string[]): numbe
   while (j < lines.length) {
     const ln = lines[j];
     const bqContent = stripBlockquotePrefix(ln.raw);
-    const colIndent = leadingIndentColumns(bqContent);
+    const colIndent = leadingColumns(bqContent);
 
     // 空白行：向后看是否仍属同一列表（松散分隔）
     if (ln.type === 'empty' || (ln.type === 'body' && bqContent.trim() === '')) {
@@ -380,16 +315,17 @@ function renderListGroup(lines: LineNode[], start: number, out: string[]): numbe
       }
       if (next < lines.length && (lines[next].blockquoteLevel ?? 0) === bq) {
         const nl = lines[next];
-        const nIndent = leadingIndentColumns(stripBlockquotePrefix(nl.raw));
+        const nIndent = leadingColumns(stripBlockquotePrefix(nl.raw));
         const nKind = listKind(nl);
-        const nListIndent = nl.listIndent ?? 0;
+        const nDepth = nl.listDepth;
         const last = items[items.length - 1];
-        // 成员判定：同级同种列表项 / 嵌套列表项 / 列表项延续 /
+        // 成员判定：本层同种列表项 / 更深层列表项 / 列表项延续 /
         // 紧邻归属 body（列缩进 ≥ 内容缩进）/ li 内缩进代码
         const isMember =
           (nKind !== null &&
-            nListIndent >= indent &&
-            (nListIndent > indent || nKind === kind)) ||
+            nDepth !== undefined &&
+            nDepth >= depth &&
+            (nDepth > depth || nKind === kind)) ||
           nl.listContinuation === true ||
           (nl.type === 'body' && last !== undefined && nIndent >= last.contentIndent) ||
           (nl.type === 'code' && last !== undefined && nIndent >= last.contentIndent + 4);
@@ -422,13 +358,13 @@ function renderListGroup(lines: LineNode[], start: number, out: string[]): numbe
       break;
     }
 
-    if (ln.listIndent === undefined) break;
+    if (ln.listDepth === undefined) break;
 
-    // 列表标记行（task / 项目符号 / 有序）：新项或嵌套递归
+    // 列表标记行（task / 项目符号 / 有序）：新项或更深层递归
     if (listKind(ln) !== null) {
-      if ((ln.listIndent ?? 0) < indent) break;
-      if ((ln.listIndent ?? 0) > indent) {
-        // 嵌套子列表（递归）——并入当前项作为块
+      if (ln.listDepth < depth) break; // 回到更外层：本组结束
+      if (ln.listDepth > depth) {
+        // 更深层子列表（递归）——并入当前项作为块
         const sub: string[] = [];
         const end = renderListGroup(lines, j, sub);
         const last = items[items.length - 1];
@@ -444,9 +380,9 @@ function renderListGroup(lines: LineNode[], start: number, out: string[]): numbe
         anyItem = true;
         continue;
       }
-      // 同级不同种列表：新列表（组结束）
+      // 同层不同种列表：新列表（组结束）
       if (listKind(ln) !== kind) break;
-      // 同级列表项（新项）
+      // 同层列表项（新项）
       items.push({
         firstText: renderLineInline(ln),
         blocks: [],
@@ -594,7 +530,7 @@ function collectIndentCode(
   const contentLines: string[] = [];
   let j = start;
   while (j < lines.length && lines[j].type === 'code') {
-    contentLines.push(stripIndentColumns(stripBlockquotePrefix(lines[j].raw), stripCols));
+    contentLines.push(stripColumns(stripBlockquotePrefix(lines[j].raw), stripCols));
     j++;
   }
   while (
@@ -672,7 +608,8 @@ export function renderToHtml(doc: MarkdownDocument): string {
         out.push(stripBlockquotePrefix(line.raw) + '\n');
         break;
       case 'body':
-        if (line.listIndent !== undefined && listKind(line) !== null) {
+        // 列表标记行（listDepth 由容器栈产出）→ 列表容器投影
+        if (line.listDepth !== undefined && listKind(line) !== null) {
           i = renderListGroup(lines, i, out);
           continue;
         }
@@ -682,7 +619,7 @@ export function renderToHtml(doc: MarkdownDocument): string {
           const parts: string[] = [];
           while (j < lines.length && lines[j].type === 'body') {
             const l = lines[j];
-            if (l.listIndent !== undefined && listKind(l) !== null) break;
+            if (l.listDepth !== undefined && listKind(l) !== null) break;
             if ((l.blockquoteLevel ?? 0) !== bq) break;
             if (l.raw.trim() === '') break; // 空行阻断段落
             parts.push(renderLineInline(l));
@@ -739,163 +676,7 @@ export function renderToHtml(doc: MarkdownDocument): string {
 // N9：DOM 选区 → 源码偏移映射（readOnly 复制为 Markdown）
 // ============================================================
 
-/** Node.TEXT_NODE 的数值常量（避免模块在无 DOM 全局环境下引用 Node） */
-const TEXT_NODE = 3;
-
-/**
- * 解析 DOM 选区边界 → 全局源码偏移（N9 无损映射链，与 MarkdownEngine
- * 光标定位 handleContainerClick 同源）：
- * - 文本节点：携带文本内偏移直接走祖先链映射（文本内偏移对 token 源码
- *   字符有效——普通文本 token 的文本节点即源码本身）；
- * - 元素节点：偏移 = 子节点序号，解析到子节点起始/末位子节点结束
- *   （递归下降；无子节点按元素自身映射）；
- * - 沿祖先链读取 data-sub-offset（token 内子偏移）与 data-token-start
- *   （token 全局起始）——子偏移存在时得到字符级精确位置；
- * - 无子偏移：文本节点「直达 token」时（父级即 token span，未途经
- *   未映射中间层）文本内偏移仍精确（普通文本 token）；途经未映射
- *   中间层（KaTeX 输出等合成内容，偏移与源码无对应）按整 token 边界
- *   映射（起始 → token 起点，结束 → token 终点）；
- * - 行级兜底：data-line-start 行容器 → 行首 + 文本偏移（钳制行长）；
- * - 全程无映射（容器外/未挂载内容）→ null（调用方放行浏览器默认复制）。
- */
-export function domRangeToSourceOffsets(
-  range: Range
-): { from: number; to: number } | null {
-  const from = resolveBoundary(range.startContainer, range.startOffset, false);
-  const to = resolveBoundary(range.endContainer, range.endOffset, true);
-  if (from === null || to === null) return null;
-  // Range 契约保证 start ≤ end；防御性归一化（异常输入不倒置）
-  return from <= to ? { from, to } : { from: to, to: from };
-}
-
-/** 选区边界解析入口：按容器类型分发 */
-function resolveBoundary(node: Node, offset: number, isEnd: boolean): number | null {
-  if (node.nodeType === TEXT_NODE) {
-    // 文本节点：offset = 文本内字符偏移，直接祖先链映射
-    return walkUp(node.parentElement, offset, isEnd, true);
-  }
-  return resolveFromElement(node as Element, offset, isEnd);
-}
-
-/** 元素容器解析：子节点序号 → 子节点边界（递归）；无子节点按自身映射 */
-function resolveFromElement(
-  el: Element | null,
-  offset: number,
-  isEnd: boolean
-): number | null {
-  if (!el) return null;
-  const children = el.childNodes;
-  if (children.length > 0 && offset <= children.length) {
-    if (offset < children.length) {
-      // 位置位于第 offset 个子节点之前 → 取该子节点起始位置
-      return resolveNodeStart(children[offset]);
-    }
-    // 位置位于全部子节点之后 → 取最后一个子节点结束位置
-    return resolveNodeEnd(children[children.length - 1]);
-  }
-  // 无子节点可解析：元素自身属性链向上映射（文本偏移 0）
-  return walkUp(el, 0, isEnd, false);
-}
-
-/** 节点起始位置（递归下降到第一个有内容的子节点） */
-function resolveNodeStart(node: Node): number | null {
-  if (node.nodeType === TEXT_NODE) return walkUp(node.parentElement, 0, false, true);
-  const el = node as Element;
-  if (el.childNodes.length > 0) return resolveNodeStart(el.childNodes[0]);
-  return walkUp(el, 0, false, false);
-}
-
-/** 节点结束位置（递归下降到最后一个子节点的结尾） */
-function resolveNodeEnd(node: Node): number | null {
-  if (node.nodeType === TEXT_NODE) {
-    return walkUp(node.parentElement, node.textContent?.length ?? 0, true, true);
-  }
-  const el = node as Element;
-  if (el.childNodes.length > 0) {
-    return resolveNodeEnd(el.childNodes[el.childNodes.length - 1]);
-  }
-  return walkUp(el, 0, true, false);
-}
-
-/**
- * 祖先链映射：data-sub-offset + data-token-start 双属性定位；
- * data-line-start 行容器为兜底；两者皆无 → null。
- * isTextOrigin：边界是否源自文本节点（文本内偏移对源码有效）；
- * crossedUnmapped：到达 token 前是否途经无映射属性的中间层（KaTeX
- * 等合成内容标志——合成内容的文本偏移与源码无对应，按整 token 映射）。
- */
-function walkUp(
-  el: Element | null,
-  textDelta: number,
-  isEnd: boolean,
-  isTextOrigin: boolean
-): number | null {
-  let subOffset: number | null = null;
-  let crossedUnmapped = false;
-  let current: Element | null = el;
-  while (current) {
-    // 行级兜底（虚拟化行容器 data-line-start/data-line-length）：
-    // - 文本偏移/子偏移可循 → 行首 + 偏移（钳制行长）；
-    // - 元素边界（br 等无映射元素，无文本偏移可循）→ 行首/行尾边界
-    //   （行尾兜底元素如尾随 <br/> 按行尾映射，避免倒置到行首）。
-    const lineStartAttr = current.getAttribute('data-line-start');
-    if (lineStartAttr !== null) {
-      const lineStart = parseInt(lineStartAttr, 10);
-      if (Number.isNaN(lineStart)) return null;
-      const lineLen = parseInt(current.getAttribute('data-line-length') ?? '0', 10);
-      const base = (subOffset ?? 0) + textDelta;
-      if (base === 0 && subOffset === null && !isTextOrigin) {
-        return isEnd ? lineStart + lineLen : lineStart;
-      }
-      return lineStart + Math.max(0, Math.min(base, lineLen));
-    }
-    if (current.hasAttribute('data-sub-offset')) {
-      subOffset = parseInt(current.getAttribute('data-sub-offset') || '0', 10);
-    }
-    const tokenStartAttr = current.getAttribute('data-token-start');
-    if (tokenStartAttr !== null) {
-      const tokenStart = parseInt(tokenStartAttr, 10);
-      if (Number.isNaN(tokenStart)) return null;
-      const tokenLen = parseInt(current.getAttribute('data-token-length') || '0', 10);
-      if (subOffset !== null) {
-        // 字符级精确位置（token 起始 + 子偏移 + 文本内偏移），钳制 token 内
-        const pos = tokenStart + subOffset + textDelta;
-        return Math.max(tokenStart, Math.min(pos, tokenStart + tokenLen));
-      }
-      if (isTextOrigin && !crossedUnmapped) {
-        // 文本节点直达 token（父级即 token span）：文本内偏移对源码有效
-        const pos = tokenStart + textDelta;
-        return Math.max(tokenStart, Math.min(pos, tokenStart + tokenLen));
-      }
-      // 合成内容（KaTeX 等）或元素边界：整 token 边界映射
-      return isEnd ? tokenStart + tokenLen : tokenStart;
-    }
-    // 本层无映射属性 → 合成内容中间层（继续向上找 token）
-    crossedUnmapped = true;
-    current = current.parentElement;
-  }
-  return null;
-}
-
-/**
- * 原生选区 → Markdown 源码切片（N9 只读复制核心）：
- * DOM 选区经 domRangeToSourceOffsets 映射为源码区间，getText 切片即
- * Markdown 源码。折叠选区/无法映射返回 null——调用方放行浏览器默认
- * 复制（渲染文本）。selection 参数取最小结构类型，便于测试注入。
- */
-export function selectionToMarkdown(
-  selection: {
-    isCollapsed: boolean;
-    rangeCount: number;
-    getRangeAt(index: number): Range;
-  },
-  getText: () => string
-): string | null {
-  if (selection.isCollapsed || selection.rangeCount === 0) return null;
-  const span = domRangeToSourceOffsets(selection.getRangeAt(0));
-  if (!span || span.from === span.to) return null;
-  return getText().substring(span.from, span.to);
-}
+export { domRangeToSourceOffsets, selectionToMarkdown } from './sourceSelection';
 
 // ============================================================
 // N5：剪贴板写入工具（代码块复制 / 公式复制按钮共用）

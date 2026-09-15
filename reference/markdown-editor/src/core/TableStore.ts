@@ -1,14 +1,17 @@
 import { create } from 'zustand';
 import { resolveTableId } from './tableIdentity';
+import {
+  remapSelection,
+  type CellCoord,
+  type CellSelection,
+  type RemapBounds,
+  type TableStructOp,
+} from './tableSelection';
 
-export interface CellSelection {
-  tableId: string;
-  startLine: number;
-  endLine: number;
-  startCol: number;
-  endCol: number;
-  isEditing: boolean; // false = cell selection mode (range), true = cell in-place text edit mode (single)
-}
+// T5b（ADR-6 / I7）：选区身份改**表内相对坐标**（`{tableId, anchor, focus}`），
+// 不再携带文档绝对行号——行号随「表上方任意编辑」漂移，会让选区指向无关单元格。
+// 绝对行号换算统一走 `src/core/tableSelection.ts`（`rowToLine` / `selectionToLines`）。
+export type { CellSelection };
 
 export type ColumnAlignment = 'left' | 'center' | 'right';
 
@@ -41,11 +44,23 @@ interface TableState {
   setSelectedCell: (cell: CellSelection | null) => void;
   setCellEditing: (isEditing: boolean) => void;
   setDraggingCell: (isDragging: boolean) => void;
-  enterCellSelection: (tableId: string, startLine: number, startCol: number, endLine?: number, endCol?: number) => void;
-  updateCellSelectionEnd: (endLine: number, endCol: number) => void;
-  enterCellEdit: (tableId?: string, lineIndex?: number, colIndex?: number) => void;
+  /**
+   * 进入单元格选区（T5b：坐标一律**表内相对**）。
+   * @param anchor 拖选锚点（固定端）
+   * @param focus 拖选焦点（缺省 = 单选）
+   */
+  enterCellSelection: (tableId: string, anchor: CellCoord, focus?: CellCoord) => void;
+  /** 更新拖选焦点（相对坐标） */
+  updateCellSelectionEnd: (focus: CellCoord) => void;
+  /** 进入单元格就地编辑；缺省沿用当前选区（必须是单格） */
+  enterCellEdit: (cell?: { tableId: string; row: number; col: number }) => void;
   exitCellEdit: () => void;
   clearCellSelection: () => void;
+  /**
+   * 结构操作后**重映射选区**（I7 的唯一入口）：由 `remapSelection` 纯函数给出
+   * 新坐标，语义载体消失（整表删除 / 全列删空）时清空选区。
+   */
+  applyStructOp: (op: TableStructOp, bounds?: RemapBounds) => void;
 }
 
 export const useTableStore = create<TableState>((set, get) => ({
@@ -143,43 +158,36 @@ export const useTableStore = create<TableState>((set, get) => ({
         ? { ...state.selectedCell, isEditing }
         : null,
     })),
-  enterCellSelection: (tableId, startLine, startCol, endLine, endCol) =>
+  enterCellSelection: (tableId, anchor, focus) =>
     set(() => ({
       selectedCell: {
         tableId,
-        startLine,
-        startCol,
-        endLine: endLine ?? startLine,
-        endCol: endCol ?? startCol,
+        anchor,
+        focus: focus ?? anchor,
         isEditing: false,
       },
     })),
-  updateCellSelectionEnd: (endLine, endCol) =>
+  updateCellSelectionEnd: (focus) =>
     set((state) => ({
       selectedCell: state.selectedCell
-        ? { ...state.selectedCell, endLine, endCol }
+        ? { ...state.selectedCell, focus }
         : null,
     })),
-  enterCellEdit: (tableId, lineIndex, colIndex) =>
+  enterCellEdit: (cell) =>
     set((state) => {
-      if (tableId !== undefined && lineIndex !== undefined && colIndex !== undefined) {
+      if (cell) {
         return {
           selectedCell: {
-            tableId,
-            startLine: lineIndex,
-            endLine: lineIndex,
-            startCol: colIndex,
-            endCol: colIndex,
+            tableId: cell.tableId,
+            anchor: { row: cell.row, col: cell.col },
+            focus: { row: cell.row, col: cell.col },
             isEditing: true,
           },
         };
       }
       if (state.selectedCell) {
         return {
-          selectedCell: {
-            ...state.selectedCell,
-            isEditing: true,
-          },
+          selectedCell: { ...state.selectedCell, isEditing: true },
         };
       }
       return state;
@@ -193,6 +201,10 @@ export const useTableStore = create<TableState>((set, get) => ({
   clearCellSelection: () =>
     set(() => ({
       selectedCell: null,
+    })),
+  applyStructOp: (op, bounds) =>
+    set((state) => ({
+      selectedCell: remapSelection(state.selectedCell, op, bounds),
     })),
 }));
 
