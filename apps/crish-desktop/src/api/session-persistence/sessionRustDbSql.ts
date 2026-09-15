@@ -95,6 +95,8 @@ export async function loadSessionBody(
     command: 'load_session_body',
     sessionId,
     status: res.status,
+    // 观测面（2026-09-15 补）：同 save 路径，后端错误消息必须落进日志。
+    message: res.status === 'error' ? res.message : undefined,
   });
   return [];
 }
@@ -136,6 +138,10 @@ export async function saveSessionBody(
     sessionId,
     batchVersion,
     status: res.status,
+    // 观测面（2026-09-15 补）：只记 status 时 `CasConflict` 与其它错误在日志里
+    // **不可区分**——真实事故（重启后 65 个会话正文全失败）的日志无法指认根因，
+    // 只能靠逐层读源码反推。后端错误消息必须落进日志。
+    message: res.status === 'error' ? res.message : undefined,
   });
 }
 
