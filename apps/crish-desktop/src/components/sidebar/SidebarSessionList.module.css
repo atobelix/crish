@@ -66,7 +66,8 @@
 .sectionLabel {
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium, 500);
-  color: var(--text-tertiary);
+  /* 分组标签（置顶 / 项目 / 对话）用次级灰度：此前为三级灰，暗色下对比度不足 */
+  color: var(--text-secondary);
   cursor: pointer;
   display: flex;
   align-items: center;

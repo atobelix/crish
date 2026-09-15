@@ -67,13 +67,15 @@ html[data-theme='light'] {
   --composer-attach-remove-border: color-mix(in srgb, var(--border-color) 70%, transparent);
   --shell-chrome-bg: var(--surface-chrome);
   --shell-inset-bg: var(--bg-workspace, var(--bg-primary));
+  /* ── 文字灰度阶（light：0% = 黑，100% = 白；四档均为显式灰值，禁止透明度/mix 向背景收敛）──
+     正文/常看到的字 = 10%（近黑，最高对比）→ 次级 32% → 小字/工具调用 = 45% → 极弱 62% */
   --text-primary: #1a1a1a;
-  --text-secondary: #555555;
-  /* 文本三级色：WCAG AA 达标 */
-  --text-tertiary: #696969;
+  --text-secondary: #525252;
+  /* 文本三级色（小字 / 工具调用 / 路径等）：45% 灰度，WCAG AA 达标 */
+  --text-tertiary: #737373;
   --text-muted: var(--text-tertiary);
-  /* 第四级弱化文字：由三级色向背景侧收敛（派生，无裸 hex；双主题同向弱化） */
-  --text-faint: color-mix(in srgb, var(--text-tertiary) 72%, var(--bg-primary));
+  /* 第四级弱化文字（时间戳 / 计数等）：62% 灰度（显式灰值，不再向背景 mix） */
+  --text-faint: #9e9e9e;
   /* 反色前景（与 --text-on-accent 同源，随主题翻转） */
   --text-inverse: var(--text-on-accent);
   /* 浮层/遮罩之上的前景 */
@@ -799,13 +801,15 @@ html[data-theme='dark'] {
   --bg-page: var(--surface-paper);
   --bg-canvas: var(--surface-paper);
   --shell-chrome-bg: var(--surface-chrome);
-  --text-primary: #cccccc;
-  --text-secondary: #aaaaaa;
-  /* 文本三级色：WCAG AA 达标 */
-  --text-tertiary: #8f8f8f;
+  /* ── 文字灰度阶（dark：与 light 镜像，0% = 黑，100% = 白；四档均为显式灰值）──
+     正文/常看到的字 = 90%（近白，与主对话区一致，修复侧边栏对比度不足）→ 次级 72% → 小字 58% → 极弱 45% */
+  --text-primary: #e6e6e6;
+  --text-secondary: #b8b8b8;
+  /* 文本三级色（小字 / 工具调用 / 路径等） */
+  --text-tertiary: #949494;
   --text-muted: var(--text-tertiary);
-  /* 第四级弱化文字：由三级色向背景侧收敛（派生，无裸 hex；双主题同向弱化） */
-  --text-faint: color-mix(in srgb, var(--text-tertiary) 68%, var(--bg-primary));
+  /* 第四级弱化文字（时间戳 / 计数等） */
+  --text-faint: #737373;
   /* 反色前景（与 --text-on-accent 同源，随主题翻转） */
   --text-inverse: var(--text-on-accent);
   /* 浮层/遮罩之上的前景 */
