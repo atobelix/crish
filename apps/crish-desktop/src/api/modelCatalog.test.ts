@@ -2,6 +2,9 @@
  * modelCatalog：上下文猜测、meta、Picker 列表 + 纯目录辅助
  * （normalize / dedupe / usable / default pick，无硬编码演示表）
  */
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.hoisted(() => {
@@ -30,7 +33,6 @@ vi.mock('./tauriInvoke', () => ({
 import { logger } from '../services/LoggerService';
 import {
   buildCatalogEntriesFromProfiles,
-  buildScannedModelWire,
   catalogEntryDisplayLabel,
   catalogEntryKey,
   dedupeCatalogEntries,
@@ -55,7 +57,6 @@ import {
   scanProviderModels,
   setModelEnabled,
   toCatalogCacheSnapshot,
-  uploadScannedModels,
   type CatalogModelEntry,
   type CatalogSnapshotWire,
 } from './modelCatalog';
@@ -70,6 +71,7 @@ import {
 import { saveProfiles, setProfileKey } from './providerProfiles';
 import { invokeResult, invokeTyped } from './tauriInvoke';
 import { clearCatalogCacheSnapshot, resolve4dPrices } from './pricingStore';
+import { modelsCatalogStore } from './modelsCatalogStore';
 
 function entry(
   partial: Partial<CatalogModelEntry> &
@@ -108,7 +110,7 @@ describe('modelCatalog', () => {
     expect(formatContextLabelZh(undefined)).toBe('上下文 —');
   });
 
-  it('listAvailablePickerModels only returns profile models that are meta-enabled', () => {
+  it('listAvailablePickerModels only returns profile models that are tree-enabled', () => {
     saveProfiles([
       {
         id: 'a',
@@ -128,7 +130,35 @@ describe('modelCatalog', () => {
         enabled: false,
       },
     ]);
-    setModelEnabled('a', 'hide-me', false);
+    // 启用态唯一权威 = 统一树（旧 LS meta 的 setModelEnabled 已物理删除）。
+    // 本文件整体 mock 了 ./tauriInvoke，故直接经 store 的 acceptSnapshot 注入。
+    modelsCatalogStore.resetForTesting();
+    modelsCatalogStore.acceptSnapshot({
+      path: 'C:\\Users\\tester\\.conex\\models.yaml',
+      content: '',
+      template: '',
+      revision: 'revision-0',
+      credentialStates: {},
+      parseError: null,
+      tree: {
+        version: 2,
+        activeModel: null,
+        providers: {
+          a: {
+            displayName: 'A',
+            baseUrl: 'https://a',
+            protocol: 'openai/chat',
+            enabled: true,
+            models: [
+              { id: 'keep-me', displayName: 'Keep Me', enabled: true },
+              { id: 'hide-me', displayName: 'Hide Me', enabled: false },
+            ],
+          },
+        },
+      },
+    });
+    expect(modelsCatalogStore.getState().loaded).toBe(true);
+    expect(getModelMeta('a', 'hide-me').enabled).toBe(false);
 
     const list = listAvailablePickerModels();
     expect(list.map((x) => x.model).sort()).toEqual(['keep-me']);
@@ -494,51 +524,47 @@ describe('modelCatalog', () => {
       }));
     });
 
-    it('buildScannedModelWire 映射窗口/能力位，缺省字段不发送', () => {
-      expect(
-        buildScannedModelWire('  gw-7b  ', 32_768, {
-          tools: true,
-          vision: false,
-          reasoning: false,
-        })
-      ).toEqual({
-        model: 'gw-7b',
-        contextWindow: 32_768,
-        capabilities: { tools: true, vision: false, reasoning: false },
-      });
-      // 无窗口 / 无能力位 → 对应键缺省（Rust 侧不合并该位）
-      expect(buildScannedModelWire('plain', undefined, undefined)).toEqual({
-        model: 'plain',
-      });
-      expect(buildScannedModelWire('zero', 0, undefined)).toEqual({
-        model: 'zero',
-      });
-      expect(buildScannedModelWire('  ', 128_000, undefined)).toEqual({
-        model: '',
-      });
-      // 扫描不提供 maxOutputTokens / vendor → 恒不出现在 wire 上
-      const wire = buildScannedModelWire('m', 128_000, { tools: true });
-      expect(wire).not.toHaveProperty('maxOutputTokens');
-      expect(wire).not.toHaveProperty('vendor');
-    });
+    /**
+     * 负向断言（阶段 3 收口）：退役命令与它们的死链必须保持物理删除。
+     *
+     * 历史：`catalog_get`（定价 / 思考档位快照）与 `catalog_refresh`（扫描结果
+     * 上送合并）已随单轨收敛退役——Rust 侧 `models_yaml.rs` 有断言要求二者
+     * **必须未注册**。前端若再出现调用字面量，就会恒 MISSING 并静默降级
+     * （用户可见：定价回退静态表 / 0 成本）。替代读面 =
+     * `workbench_read_capability_dictionary`（出厂能力字典只读投影）。
+     *
+     * 同时钉死死链载体 `buildScannedModelWire` / `uploadScannedModels` 不得回归
+     * （`catalog_refresh` 的语义是「上送运行时目录」，与「出厂数据只读」冲突）。
+     */
+    it('退役命令与死链载体不得回潮（负向断言）', () => {
+      const dir = dirname(fileURLToPath(import.meta.url));
+      const production = [
+        'modelCatalogIpc.ts',
+        'thinkingGear.ts',
+        'modelCatalog.ts',
+        'pricingStore.ts',
+        'pricingResolver.ts',
+      ].map((name) => ({
+        name,
+        src: readFileSync(join(dir, name), 'utf8'),
+      }));
 
-    it('uploadScannedModels：命令缺失 / invoke 失败仅 warn，不抛', async () => {
-      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {});
-      try {
-        // missing：命令未注册 / 非 Tauri 环境
-        await expect(
-          uploadScannedModels('ds', [buildScannedModelWire('a', 128_000)])
-        ).resolves.toBeUndefined();
-        // error：命令报错
-        invoke.mockImplementation(async () => ({
-          status: 'error' as const,
-          message: 'catalog 内部错误',
-        }));
-        await expect(uploadScannedModels('ds', [])).resolves.toBeUndefined();
-        expect(warn).toHaveBeenCalled();
-      } finally {
-        warn.mockRestore();
+      for (const { name, src } of production) {
+        for (const retired of ["'catalog_get'", "'catalog_refresh'"]) {
+          expect(
+            src.includes(retired),
+            `${name} 不得再出现退役命令字面量 ${retired}`
+          ).toBe(false);
+        }
       }
+
+      const ipc = production.find((f) => f.name === 'modelCatalogIpc.ts')!.src;
+      expect(ipc).not.toContain('buildScannedModelWire');
+      expect(ipc).not.toContain('uploadScannedModels');
+      // 替代读面必须真实存在于消费点（否则是「退役了但没换源」）。
+      expect(ipc).toContain('workbench_read_capability_dictionary');
+      const gear = production.find((f) => f.name === 'thinkingGear.ts')!.src;
+      expect(gear).toContain('workbench_read_capability_dictionary');
     });
 
     it('scanProviderModels 成功后经 catalog_refresh 上送 camelCase 窗口/能力位', async () => {
@@ -708,9 +734,11 @@ describe('modelCatalog', () => {
       ).toEqual({ version: 1, prices: {} });
     });
 
-    it('fetchCatalogSnapshot 成功：invoke(catalog_get) → pricingStore 快照生效', async () => {
+    it('fetchCatalogSnapshot 成功：invoke(workbench_read_capability_dictionary) → pricingStore 快照生效', async () => {
       invoke.mockImplementation(async (cmd: string) => {
-        if (cmd === 'catalog_get') return { status: 'ok' as const, data: wire };
+        if (cmd === 'workbench_read_capability_dictionary') {
+          return { status: 'ok' as const, data: wire };
+        }
         return { status: 'missing' as const };
       });
       const ok = await fetchCatalogSnapshot();
@@ -721,32 +749,40 @@ describe('modelCatalog', () => {
         cacheReadPerMTok: 0.0028,
         source: 'snapshot',
       });
-      const call = invoke.mock.calls.find(([cmd]) => cmd === 'catalog_get');
+      const call = invoke.mock.calls.find(
+        ([cmd]) => cmd === 'workbench_read_capability_dictionary'
+      );
       expect(call).toBeDefined();
     });
 
-    it('fetchCatalogSnapshot 失败降级：missing / error / 非法载荷 → false，静态表兜底不崩', async () => {
-      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    it('fetchCatalogSnapshot 失败 = fail-closed：missing / error / 非法载荷 → false + error 级告警，不注入任何快照', async () => {
+      const errorLog = vi.spyOn(logger, 'error').mockImplementation(() => {});
       try {
-        // missing（非 Tauri 环境 / 命令未注册）
+        // missing（非 Tauri 环境 / 命令未注册）——注册面缺陷必须显式可见
         expect(await fetchCatalogSnapshot()).toBe(false);
         // error：命令报错
         invoke.mockImplementation(async () => ({
           status: 'error' as const,
-          message: 'catalog 内部错误',
+          message: '字典内部错误',
         }));
         expect(await fetchCatalogSnapshot()).toBe(false);
-        // 非法载荷（entries 缺失）
+        // 非法载荷（entries 缺失 / 为空）
         invoke.mockImplementation(async () => ({
           status: 'ok' as const,
           data: { version: 1 } as CatalogSnapshotWire,
         }));
         expect(await fetchCatalogSnapshot()).toBe(false);
-        expect(warn).toHaveBeenCalled();
-        // 全程未注入 → 定价仍走静态表
-        expect(resolve4dPrices('deepseek-v4-flash')?.source).toBe('catalog');
+        invoke.mockImplementation(async () => ({
+          status: 'ok' as const,
+          data: { version: 1, entries: [] } as CatalogSnapshotWire,
+        }));
+        expect(await fetchCatalogSnapshot()).toBe(false);
+        // 三种失败都必须显式告警（禁止静默吞咽）
+        expect(errorLog).toHaveBeenCalled();
+        // 失败期间不得注入任何快照（快照保持空 → 消费面呈现「未收录」）
+        expect(resolve4dPrices('deepseek-v4-flash')?.source).not.toBe('snapshot');
       } finally {
-        warn.mockRestore();
+        errorLog.mockRestore();
       }
     });
   });

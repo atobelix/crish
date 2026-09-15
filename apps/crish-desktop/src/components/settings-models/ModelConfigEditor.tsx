@@ -27,7 +27,6 @@ export interface ProviderConfigGroup {
   refresh: () => void;
   notify: (ok: boolean, text: string) => void;
   runAsLocalMutation: <T>(fn: () => Promise<T> | T) => Promise<T>;
-  setProfiles: (profiles: ProviderProfile[]) => void;
   setSelectedId: (id: string | null) => void;
 }
 
@@ -108,7 +107,6 @@ export const ModelConfigEditor: React.FC<ModelConfigEditorProps> = ({
               setConfirmDeleteId={pc.setConfirmDeleteId}
               refresh={pc.refresh}
               notify={pc.notify}
-              setProfiles={pc.setProfiles}
               setSelectedId={pc.setSelectedId}
             />
 

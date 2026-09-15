@@ -45,7 +45,7 @@ function entry(
 }
 
 /**
- * 内置快照：镜像 Rust `COMMAND_MANIFEST`（126 = 注册面 126 全实装；与
+ * 内置快照：镜像 Rust `COMMAND_MANIFEST`（135 = 注册面 135 全实装；与
  * command_manifest.rs 行注释及 manifest_count_matches_registered_surface 测试对齐）。
  * 维护规则与 Rust 侧一致：registered 子集 = `make_handlers!` 注册面；新命令经
  * §7.2 登记表登记后追加在表尾（registered 随接线状态翻转）；双端漂移由
@@ -78,6 +78,8 @@ export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
     entry('workbench_validate_models_yaml', 'workbench', 'gui'),
     entry('workbench_save_models_yaml', 'workbench', 'gui'),
     entry('workbench_apply_models_config', 'workbench', 'gui'),
+    // 出厂能力字典只读投影（替代已退役 catalog_get 的读面；纯只读，无写盘）
+    entry('workbench_read_capability_dictionary', 'workbench', 'gui'),
     // F1（R-AB1 T-AB-08）：后台任务三条查询命令恢复（与 Rust 侧 manifest 同步）
     entry('workbench_list_background_tasks', 'workbench', 'gui'),
     entry('workbench_get_background_task_output', 'workbench', 'gui'),
@@ -85,12 +87,12 @@ export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
     // F3（T-AB-19 顺手接线）：stdin 注入命令面（sendBackgroundTaskInput
     // 等待的 Rust 命令；T-AB-20 操作面）——与 Rust command_manifest.rs 95/91 镜像
     entry('workbench_send_input', 'workbench', 'gui'),
-    entry('workbench_select_folder', 'workbench', 'gui'),
+    // workbench_select_folder 已退役（四方同步移除；目录选择统一走 plugin-dialog）
     entry('workbench_list_directory', 'workbench', 'gui'),
     entry('workbench_read_file_content', 'workbench', 'gui'),
     entry('workbench_write_file_content', 'workbench', 'gui'),
     entry('workbench_discover_skills', 'workbench', 'gui'),
-    entry('workbench_http_request', 'workbench', 'gui'),
+    // workbench_http_request 已退役（四方同步移除；唯一调用点在 Rust 测试内）
     entry('workbench_apply_update', 'workbench', 'gui'),
     // ── 多端互通配对面（R1-07：四件套，registered=true，与 Rust 同步）──
     entry('multi_device_pair_start', 'multi_device', 'engine'),
@@ -121,9 +123,8 @@ export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
     // ── 原生探活与模型扫描（Batch 1 · G3：provider_probe_ping / provider_probe_scan_models）──
     entry('provider_probe_ping', 'config', 'engine'),
     entry('provider_probe_scan_models', 'config', 'engine'),
-    // F10（T-EG-12）：产出根两级配置（全局 + 会话级）
-    entry('config_get_outputs_root', 'config', 'engine'),
-    entry('config_set_outputs_root', 'config', 'engine'),
+    // ── G03 产出根：config_get_outputs_root / config_set_outputs_root 已退役
+    //    （四方同步移除；前端 agentOutputsRoot 设置面不存在）──
     // ── 工具旧组（E1，§2.2-E）──
     entry('core_check_command', 'core', 'engine'),
     entry('core_search_files', 'core', 'engine'),
@@ -156,8 +157,7 @@ export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
     // F11b（T-D-12）：DAG 只读快照查询
     entry('get_flow_snapshot', 'session', 'engine'),
     entry('set_session_meta', 'session', 'engine'),
-    // F10（T-EG-12）：会话级产出根覆盖
-    entry('set_session_output_root', 'session', 'engine'),
+    // G03 会话级产出根：set_session_output_root 已退役（四方同步移除）
     entry('cleanup_orphan_sessions', 'session', 'engine'),
     entry('import_from_localstorage', 'session', 'engine'),
     // ── Markdown（D，T03.4 更名 core_md_*，并入 core 族）──
@@ -225,12 +225,6 @@ export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
     entry('note_document_create', 'note', 'engine'),
     entry('note_document_rename', 'note', 'engine'),
     entry('note_document_delete', 'note', 'engine'),
-    // ── 电脑操作会话命令（06 遗留⑨：computer_session_enable/disable、
-    //    computer_status；代理到 ComputerSlot，状态事件
-    //    computer://state-changed；与 Rust command_manifest.rs 同步）──
-    entry('computer_session_enable', 'computer', 'engine'),
-    entry('computer_session_disable', 'computer', 'engine'),
-    entry('computer_status', 'computer', 'engine'),
     // ── D4a：子代理显式恢复与关闭命令面（D4 §3.1 双端四步登记；与 Rust
     //    command_manifest.rs 同步）──
     entry('resume_subagent', 'core', 'engine'),

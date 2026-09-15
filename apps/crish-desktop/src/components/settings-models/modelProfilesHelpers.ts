@@ -8,16 +8,10 @@
  *   来源是 store 节点，不是 getModelMeta。openConfigFor 时捕获为编辑会话
  *   baseRev；saveConfig 保存前重算比对——外部已变更（rev 不符）→ 拒绝陈旧
  *   覆盖（不静默 LWW）。
- * - foldSettingsProfiles / pickSettingsSelectedId：设置列表与 picker 同一
- *   展示名折叠；已选 id 被同名胜者吃掉时改绑胜者。
+ * - pickSettingsSelectedId：设置页选中项必须落在统一树 provider 身份上；
+ *   树里没有的旧 id（含旧档案存储遗留）一律丢弃，绝不按展示名改绑。
  */
 import { modelRefKey } from '../../api/modelsCatalogTypes';
-import {
-  findProfileByDisplayName,
-  foldProfilesByDisplayName,
-  profileDisplayLabel,
-  type ProviderProfile,
-} from '../../api/providerProfiles';
 
 export { modelSpecRevision } from '../../api/modelsDraftMap';
 
@@ -25,37 +19,14 @@ export function settingsObjectId(profileId: string, model: string): string {
   return modelRefKey({ providerId: profileId, modelId: model });
 }
 
-/** 设置页服务商列表：同展示名只留一行（含停用）。与 picker 共用 fold。 */
-export function foldSettingsProfiles(
-  profiles: readonly ProviderProfile[] | null | undefined
-): ProviderProfile[] {
-  return foldProfilesByDisplayName(profiles);
-}
-
-/** preferred 在折叠结果中则原样；否则绑同展示名胜者；都没有则 ''。 */
-export function resolveSettingsSelectedId(
-  folded: readonly ProviderProfile[],
-  raw: readonly ProviderProfile[],
-  preferred: string | null | undefined
-): string {
-  if (!preferred) return '';
-  if (folded.some((p) => p.id === preferred)) return preferred;
-  const hidden = raw.find((p) => p.id === preferred);
-  if (!hidden) return '';
-  return findProfileByDisplayName(folded, profileDisplayLabel(hidden))?.id ?? '';
-}
-
-/** 已选 session → 活动 profile → 折叠表首行。 */
+/** 已选 → 会话记忆 → 树首行；三者都必须是树里真实存在的 provider 身份。 */
 export function pickSettingsSelectedId(
-  folded: readonly ProviderProfile[],
-  raw: readonly ProviderProfile[],
-  stored: string | null | undefined,
-  active: string | null | undefined
+  providers: readonly { id: string }[],
+  selected: string | null | undefined,
+  stored: string | null | undefined
 ): string {
-  return (
-    resolveSettingsSelectedId(folded, raw, stored) ||
-    resolveSettingsSelectedId(folded, raw, active) ||
-    folded[0]?.id ||
-    ''
-  );
+  const ids = new Set(providers.map((provider) => provider.id));
+  if (selected && ids.has(selected)) return selected;
+  if (stored && ids.has(stored)) return stored;
+  return providers[0]?.id ?? '';
 }

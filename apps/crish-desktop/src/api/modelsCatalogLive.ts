@@ -1,9 +1,11 @@
 /** 生产模型读取只消费已确认目录，绝不借助旧存储或预填数据补配。 */
 import {
+  modelsCatalogStore,
   selectModel,
   selectProvider,
   selectEffectiveCompat,
   listCatalogModels,
+  listCatalogProviders,
 } from './modelsCatalogStore';
 import {
   THINKING_VOCABULARY,
@@ -11,6 +13,7 @@ import {
 } from './modelsNormalize';
 import type {
   IndexedModelEntry,
+  IndexedProviderEntry,
   ModelSpec,
   ProviderSpec,
   ThinkingLevelTitle,
@@ -64,6 +67,18 @@ export function listLivePickerEntries(): IndexedModelEntry[] {
           ? (a.model.order ?? 0) - (b.model.order ?? 0)
           : 0)
     );
+}
+
+/** 服务商名单（含停用）只来自已确认镜像；顺序即配置文件顺序。 */
+export function listLiveProviders(): IndexedProviderEntry[] {
+  return listCatalogProviders();
+}
+
+/** 密钥状态权威源 = 快照 credentialStates；无记录视为无密钥，不回落旧存储。 */
+export function providerHasKey(providerId: string): boolean {
+  const id = providerId.trim();
+  if (!id) return false;
+  return modelsCatalogStore.getState().credentialStates[id]?.hasKey === true;
 }
 
 export function modelAcceptsInput(

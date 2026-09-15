@@ -72,80 +72,6 @@ export async function scanProviderModels(
 
 export type { ScannedModelCapabilities };
 
-/**
- * 扫描结果 → catalog_refresh 上送形状（纯）。
- * 仅映射窗口 / 能力位；vendor / maxOutputTokens 扫描不提供 → 缺省。
- */
-export function buildScannedModelWire(
-  model: string,
-  contextWindow?: number | undefined,
-  capabilities?: ScannedModelCapabilities | undefined
-): ScannedModel {
-  const m = normalizeModelIdText(model);
-  const out: ScannedModel = { model: m };
-  if (!m) return out;
-  if (contextWindow && contextWindow > 0) out.contextWindow = contextWindow;
-  if (capabilities && Object.keys(capabilities).length > 0) {
-    out.capabilities = { ...capabilities };
-  }
-  return out;
-}
-
-/**
- * 扫描结果上送合并（P3 步骤 5b / §3.1.3 数据来源策略 2）。
- *
- * 经 Tauri `catalog_refresh` 命令合并（仅窗口 / 能力位，不覆盖价格）；
- * 命令缺失 / invoke 失败 / 非 Tauri 环境一律降级：logger.warn 记录，
- * 绝不抛出——扫描流程不因上送失败而中断（invokeResult 本身不抛，外层
- * try/catch 兜底保证恒不抛）。
- */
-export async function uploadScannedModels(
-  provider: string,
-  scan: readonly ScannedModel[]
-): Promise<void> {
-  try {
-    const res = await invokeResult<unknown>('catalog_refresh', {
-      provider,
-      scan,
-    });
-    if (res.status !== 'ok') {
-      // 修复 4：降级推入 errorStore（info 级，可自动解决）
-      logger.warn(
-        `模型目录上送合并跳过（${res.status}）${res.status === 'error' ? `：${res.message}` : ''}，不阻塞扫描`
-      );
-      try {
-        errorStore.push({
-          code: 'MODEL_CATALOG_DEGRADED',
-          module: 'modelCatalog',
-          severity: 'info',
-          message: '模型目录上送合并跳过，不阻塞扫描',
-          autoResolve: true,
-        });
-      } catch {
-        /* ignore */
-      }
-    }
-  } catch (e) {
-    logger.warn('模型目录上送合并失败，不阻塞扫描：', {
-      module: 'modelCatalog',
-      err: e instanceof Error
-        ? { message: e.message, stack: e.stack, name: e.name }
-        : { message: String(e) },
-    });
-    try {
-      errorStore.push({
-        code: 'MODEL_CATALOG_DEGRADED',
-        module: 'modelCatalog',
-        severity: 'info',
-        message: '模型目录上送合并失败，不阻塞扫描',
-        autoResolve: true,
-      });
-    } catch {
-      /* ignore */
-    }
-  }
-}
-
 /** 条目 tiered 档映射（Rust TieredPriceTier camelCase → 前端 CatalogTier） */
 function toCatalogTierWire(
   tiers: CatalogSnapshotEntryWire['tieredPricing']
@@ -223,29 +149,36 @@ export function toCatalogCacheSnapshot(
 }
 
 /**
- * 拉取运行时模型目录快照（catalog_get → applyCatalogCacheSnapshot）。
+ * 拉取**出厂能力字典**的只读投影（`workbench_read_capability_dictionary`
+ * → `applyCatalogCacheSnapshot`）。
  *
- * - 成功：快照注入 pricingStore（版本号幂等，重复调用安全）；
- * - 命令缺失 / invoke 失败 / 载荷非法：logger.warn 降级（静态表兜底），
- *   恒不抛（invokeResult 不抛 + 外层 try/catch 兜底）。
+ * 数据源唯一性：出厂字典（Rust 侧 `catalog.json` 编译期打包）是定价 / 上下文 /
+ * 模态 / 思考档位等**出厂数据**的唯一来源；前端不再持有任何本地副本
+ * （`pricingCatalogData*.ts` 六份静态表与 `modelsAutofillBaselineData.json`
+ * 已物理删除，见 docs/provider-single-track-convergence/04-...方案.md 阶段 3）。
  *
- * @returns 是否成功注入（false = 降级静态表）
+ * 失败语义 = **fail-closed**：命令缺失 / invoke 失败 / 载荷非法一律显式告警并
+ * 返回 false，由消费面呈现「未收录」态。**禁止**回退到任何本地静态表——那会让
+ * 界面显示过期价格或 0 成本（比空白更危险）。
+ *
+ * @returns 是否成功注入（false = 未收录，消费面必须显式呈现）
  */
 export async function fetchCatalogSnapshot(): Promise<boolean> {
   try {
-    const res = await invokeResult<CatalogSnapshotWire>('catalog_get', {});
+    const res = await invokeResult<CatalogSnapshotWire>(
+      'workbench_read_capability_dictionary',
+      {}
+    );
     if (res.status !== 'ok') {
-      // 修复 4：降级推入 errorStore（info 级，可自动解决）
-      logger.warn(
-        `模型目录快照拉取跳过（${res.status}）${res.status === 'error' ? `：${res.message}` : ''}，定价回退静态表`
+      logger.error(
+        `出厂能力字典读取失败（${res.status}）${res.status === 'error' ? `：${res.message}` : ''}，定价与能力面按「未收录」呈现`
       );
       try {
         errorStore.push({
           code: 'MODEL_CATALOG_DEGRADED',
           module: 'modelCatalog',
-          severity: 'info',
-          message: '模型目录快照拉取跳过，定价回退静态表',
-          autoResolve: true,
+          severity: 'error',
+          message: '出厂能力字典读取失败，定价与能力面按「未收录」呈现',
         });
       } catch {
         /* ignore */
@@ -253,14 +186,13 @@ export async function fetchCatalogSnapshot(): Promise<boolean> {
       return false;
     }
     if (!Array.isArray(res.data?.entries) || res.data.entries.length === 0) {
-      logger.warn('模型目录快照载荷非法（entries 缺失），定价回退静态表');
+      logger.error('出厂能力字典载荷非法（entries 缺失或为空）');
       try {
         errorStore.push({
           code: 'MODEL_CATALOG_DEGRADED',
           module: 'modelCatalog',
-          severity: 'info',
-          message: '模型目录快照载荷非法，定价回退静态表',
-          autoResolve: true,
+          severity: 'error',
+          message: '出厂能力字典载荷非法，定价与能力面按「未收录」呈现',
         });
       } catch {
         /* ignore */
@@ -270,7 +202,7 @@ export async function fetchCatalogSnapshot(): Promise<boolean> {
     applyCatalogCacheSnapshot(toCatalogCacheSnapshot(res.data));
     return true;
   } catch (e) {
-    logger.warn('模型目录快照拉取失败，定价回退静态表：', {
+    logger.error('出厂能力字典读取抛异常，定价与能力面按「未收录」呈现：', {
       module: 'modelCatalog',
       err: e instanceof Error
         ? { message: e.message, stack: e.stack, name: e.name }
@@ -280,9 +212,8 @@ export async function fetchCatalogSnapshot(): Promise<boolean> {
       errorStore.push({
         code: 'MODEL_CATALOG_DEGRADED',
         module: 'modelCatalog',
-        severity: 'info',
-        message: '模型目录快照拉取失败，定价回退静态表',
-        autoResolve: true,
+        severity: 'error',
+        message: '出厂能力字典读取抛异常，定价与能力面按「未收录」呈现',
       });
     } catch {
       /* ignore */

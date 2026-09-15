@@ -29,6 +29,30 @@ export function modelRefKey(ref: ModelRef): string {
   return JSON.stringify([providerId, modelId]);
 }
 
+/**
+ * 身份键反解（[modelRefKey] 的严格逆）：JSON 二元组 → [ModelRef]。
+ *
+ * 非二元组 / 非字符串边 / 空白边 / 非法 JSON → `null`：调用方**不得**据此猜测
+ * 身份（裁决 ③：模型身份 = `(providerId, modelId)` 二元组，裸 modelId 一律不参与
+ * 解析）。本函数是身份键的**唯一**反解入口——禁止各模块自造 `::` 等第三种连接格式。
+ */
+export function parseModelRefKey(raw: unknown): ModelRef | null {
+  if (typeof raw !== 'string') return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(parsed) || parsed.length !== 2) return null;
+  const [providerId, modelId] = parsed as unknown[];
+  if (typeof providerId !== 'string' || typeof modelId !== 'string') return null;
+  const provider = providerId.trim();
+  const model = modelId.trim();
+  if (!provider || !model) return null;
+  return { providerId: provider, modelId: model };
+}
+
 export function sameModelRef(a: ModelRef, b: ModelRef): boolean {
   return modelRefKey(a) === modelRefKey(b);
 }
@@ -167,6 +191,12 @@ export interface IndexedModelEntry {
   providerId: string;
   provider: ProviderSpec;
   model: ModelSpec;
+}
+
+/** 供应商身份必须与配置键同时返回，消费方不得只拿 ProviderSpec 猜 id。 */
+export interface IndexedProviderEntry {
+  providerId: string;
+  provider: ProviderSpec;
 }
 
 /** 只保存已确认快照；草稿及排队动作不进入此镜像。 */

@@ -9,15 +9,11 @@ import { useToast } from '../../services/toast/ToastContext';
  * 4. 落实审计 1：同厂商自愈降级与置空引导，严禁跨服务商隐式静默切模；
  * 5. 挂载 ensureLsImported + ensureModelsCatalogLoaded；列表/协议读 store。
  */
-import React, { useCallback, useEffect, useState } from 'react';
-import {
-  activateProfileModel,
-  clearActiveModelId,
-  type ProviderProfile,
-} from '../../api/providerProfiles';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ensureModelsCatalogLoaded,
   getModelsCatalogPath,
+  modelsCatalogStore,
 } from '../../api/modelsCatalogStore';
 import { getLiveModel, getLiveProvider } from '../../api/modelsCatalogLive';
 import { ensureLsImported } from '../../api/modelsLsImport';
@@ -59,34 +55,34 @@ export function isLiveModelEnabled(profileId: string, model: string): boolean {
 }
 
 /**
- * 停用模型后的活动模型自愈解析器（落实审计 1，严禁跨厂商静默切换）
+ * 停用模型后的活动模型自愈解析器（落实审计 1，严禁跨厂商静默切换）。
+ * 名单与启用态只读统一树；`profiles` 参数已废除——树就是唯一名单源。
  */
 export function resolveActiveModelAfterMetaChange(
-  currentActive: { profileId: string; model: string } | null,
-  _profiles: readonly ProviderProfile[],
-  isModelEnabled: (profileId: string, model: string) => boolean
-): { nextActive: { profileId: string; model: string } | null; selfHealed: boolean } {
-  if (!currentActive || !currentActive.profileId || !currentActive.model) {
+  currentActive: { providerId: string; modelId: string } | null,
+  isModelEnabled: (providerId: string, modelId: string) => boolean
+): { nextActive: { providerId: string; modelId: string } | null; selfHealed: boolean } {
+  if (!currentActive || !currentActive.providerId || !currentActive.modelId) {
     return { nextActive: currentActive, selfHealed: false };
   }
 
   // 1. 若当前活动模型仍处于启用态，无需自愈
-  if (isModelEnabled(currentActive.profileId, currentActive.model)) {
+  if (isModelEnabled(currentActive.providerId, currentActive.modelId)) {
     return { nextActive: currentActive, selfHealed: false };
   }
 
   // 2. 当前活动模型已被停用！仅在【同服务商】内部寻找下一个已启用的模型
-  const storeIds = (getLiveProvider(currentActive.profileId)?.models ?? []).map(
+  const storeIds = (getLiveProvider(currentActive.providerId)?.models ?? []).map(
     (m) => m.id
   );
   const sameProviderNext = storeIds.find((m) => {
-    if (m === currentActive.model) return false;
-    return isModelEnabled(currentActive.profileId, m);
+    if (m === currentActive.modelId) return false;
+    return isModelEnabled(currentActive.providerId, m);
   });
 
   if (sameProviderNext) {
     return {
-      nextActive: { profileId: currentActive.profileId, model: sameProviderNext },
+      nextActive: { providerId: currentActive.providerId, modelId: sameProviderNext },
       selfHealed: true,
     };
   }
@@ -132,7 +128,7 @@ export const AddProviderMenu: React.FC<{
 export const ModelsSettingsTab: React.FC<Props> = ({ _onBlockingOverlayChange }) => {
   const { showToast: _showToast } = useToast();
   const {
-    profiles, setProfiles, selectedId, setSelectedId, selected,
+    profiles, selectedId, setSelectedId, selected,
     keyDraft, setKeyDraft,
     testBusy, scanBusy, checkBusy,
     modelFilter, setModelFilter, configOpenId,
@@ -146,6 +142,26 @@ export const ModelsSettingsTab: React.FC<Props> = ({ _onBlockingOverlayChange })
     modelsList, modelsCount,
     selectedLabel, hasKeySelected, activeProfileId, globalActiveModelId,
   } = useModelProfilesState();
+
+  /**
+   * 全局默认模型唯一写路径 = 统一树 setActiveModel（workbench_apply_models_config
+   * 的 CAS）。修订冲突先重读真源再重试一次，仍失败则明确报错，绝不静默吞掉。
+   */
+  const applyActiveModel = useCallback(
+    async (ref: { providerId: string; modelId: string } | null) => {
+      const first = await modelsCatalogStore.setActiveModel(ref);
+      if (first.ok) return true;
+      const reloaded = await modelsCatalogStore.ensureLoaded(true);
+      if (!reloaded) {
+        notify(false, first.error);
+        return false;
+      }
+      const retry = await modelsCatalogStore.setActiveModel(ref);
+      if (!retry.ok) notify(false, retry.error);
+      return retry.ok;
+    },
+    [notify]
+  );
 
   // 点击「添加服务商」直接创建空白服务商并进入右侧配置（无下拉预置）
   const handleDirectAdd = useCallback(async () => {
@@ -195,31 +211,51 @@ export const ModelsSettingsTab: React.FC<Props> = ({ _onBlockingOverlayChange })
     };
   }, []);
 
-  // 停用后同厂商自愈：enabled 读 live 树，不读 getModelMeta；tick = catalogVersion
+  // 停用后同厂商自愈：enabled 读 live 树，不读 getModelMeta；tick = catalogVersion。
+  // 树规范化会把失效 activeModel 置空，所以以「上一次仍有效的活动模型」为基准判定，
+  // 严禁跨服务商静默切换（落实审计 1）。
+  const lastActiveModelRef = useRef<{
+    providerId: string;
+    modelId: string;
+  } | null>(null);
+
   useEffect(() => {
-    if (!activeProfileId || !globalActiveModelId) return;
+    const current =
+      activeProfileId && globalActiveModelId
+        ? { providerId: activeProfileId, modelId: globalActiveModelId }
+        : null;
+    const previous = lastActiveModelRef.current;
+    lastActiveModelRef.current = current;
 
-    const currentActive = {
-      profileId: activeProfileId,
-      model: globalActiveModelId,
-    };
-
-    const { nextActive, selfHealed } = resolveActiveModelAfterMetaChange(
-      currentActive,
-      profiles,
-      isLiveModelEnabled
-    );
-
-    if (selfHealed) {
+    if (current) {
+      const { nextActive, selfHealed } = resolveActiveModelAfterMetaChange(
+        current,
+        isLiveModelEnabled
+      );
+      if (!selfHealed) return;
+      void applyActiveModel(nextActive);
       if (nextActive) {
-        void activateProfileModel(nextActive.profileId, nextActive.model);
-        notify(true, `当前模型已停用，已自动切换至同厂商模型: ${nextActive.model}`);
+        notify(true, `当前模型已停用，已自动切换至同厂商模型: ${nextActive.modelId}`);
       } else {
-        clearActiveModelId();
         notify(false, `当前服务商已无可用模型，请手动选择`);
       }
+      return;
     }
-  }, [catalogVersion, profiles, activeProfileId, globalActiveModelId, notify]);
+
+    if (!previous || isLiveModelEnabled(previous.providerId, previous.modelId)) {
+      return;
+    }
+    const { nextActive } = resolveActiveModelAfterMetaChange(
+      previous,
+      isLiveModelEnabled
+    );
+    if (nextActive) {
+      void applyActiveModel(nextActive);
+      notify(true, `当前模型已停用，已自动切换至同厂商模型: ${nextActive.modelId}`);
+    } else {
+      notify(false, `当前服务商已无可用模型，请手动选择`);
+    }
+  }, [catalogVersion, activeProfileId, globalActiveModelId, notify, applyActiveModel]);
 
   // 调起指定外部编辑器
   const handleOpenExternal = useCallback(
@@ -421,12 +457,10 @@ export const ModelsSettingsTab: React.FC<Props> = ({ _onBlockingOverlayChange })
             desc="新建对话时使用此模型"
             control={
               <ModelsCascadeSelect
-                profiles={profiles}
                 activeProfileId={activeProfileId || ''}
                 activeModelId={globalActiveModelId || ''}
                 onChange={async (pId, mId) => {
-                  await activateProfileModel(pId, mId);
-                  refresh();
+                  await applyActiveModel({ providerId: pId, modelId: mId });
                 }}
               />
             }
@@ -438,7 +472,6 @@ export const ModelsSettingsTab: React.FC<Props> = ({ _onBlockingOverlayChange })
       {/* Provider split layout */}
       <div className={`${styles.modelsSplit} models-split`}>
         <ModelProfileList
-          profiles={profiles}
           selectedId={selectedId}
           onSelectProfile={setSelectedId}
         />
@@ -448,7 +481,7 @@ export const ModelsSettingsTab: React.FC<Props> = ({ _onBlockingOverlayChange })
             selected, profiles, selectedLabel, hasKeySelected,
             editingName, nameDraft, setNameDraft, setEditingName,
             confirmDeleteId, setConfirmDeleteId, keyDraft, setKeyDraft,
-            saveKey, refresh, notify, runAsLocalMutation, setProfiles, setSelectedId,
+            saveKey, refresh, notify, runAsLocalMutation, setSelectedId,
           }}
           modelConfig={{
             runCheck, runScan, checkBusy, scanBusy,

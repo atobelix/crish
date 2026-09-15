@@ -16,7 +16,6 @@ import {
 import {
   flattenModelChoicesFrom,
   pickDefaultModelSelection,
-  profileHasKey,
 } from './profileValidation';
 import { recordPendingContextState } from './contextStatePending';
 import {
@@ -97,28 +96,6 @@ export function resolveDisplayModelId(engineModel?: string | null): string {
   return (getActiveModelId() || '').trim();
 }
 
-/** 将活动选择写入 Settings.defaultModel/defaultProvider */
-async function persistSelectionToAppSettings(
-  profileId: string,
-  model: string
-): Promise<void> {
-  try {
-    const { clientApi } = await import('../clientApi');
-    const merged = await clientApi.updateSettings({
-      defaultProvider: profileId,
-      defaultModel: model,
-    });
-    try {
-      const { useSettingsStore } = await import('../../store');
-      useSettingsStore.getState().setAppSettings(merged);
-    } catch {
-      /* swallow-ok: store 未就绪时跳过设置同步 */
-    }
-  } catch {
-    /* swallow-ok: settings 写失败不阻断引擎切换 */
-  }
-}
-
 function notifyModelChanged(profileId: string, model: string) {
   try {
     emitUiEvent('model-changed', { profileId, model });
@@ -158,10 +135,10 @@ export async function activateProfileModel(
   }
 
   const fresh = loadProfiles().find((x) => x.id === profileId) || p;
-  // 凭据不在前端明文持有：LS 壳标记或镜像凭据状态（hasKey）任一成立即视为本地有 key。
-  const hasLocalKey = p
-    ? profileHasKey(fresh)
-    : modelsCatalogStore.getState().credentialStates[profileId]?.hasKey === true;
+  // 凭据不在前端明文持有：权威来源 = 统一树 credentialStates[*].hasKey
+  // （密钥落 DPAPI 槽；config_secret_set / config_profile_apply 回执写回树镜像）。
+  const hasLocalKey =
+    modelsCatalogStore.getState().credentialStates[profileId]?.hasKey === true;
 
   const effectiveBaseUrl = live?.baseUrl || fresh?.baseUrl;
   const res = await configProfileApply({
@@ -182,9 +159,8 @@ export async function activateProfileModel(
 
   setActiveProfileId(profileId);
   setActiveModelId(m);
-  pushRecentModel(m);
+  pushRecentModel(m, profileId);
   notifyModelChanged(profileId, m);
-  void persistSelectionToAppSettings(profileId, m);
   try {
     const { fetchEngineStatus } = await import('../engineConfig');
     const status = await fetchEngineStatus();

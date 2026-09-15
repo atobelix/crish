@@ -9,10 +9,13 @@ import {
 import { modelsCatalogStore } from '../../api/modelsCatalogStore';
 import { Button, Input, Switch, Tooltip } from '../ui';
 import { AppIcon } from '../ui/icons/index';
+import { prepareCatalogWrite } from './catalogWriteGate';
 import styles from './ModelsSettingsTab.module.css';
 
 /**
  * 详情头部：重命名标题 / 启用状态按钮 / 自定义服务商删除确认组。
+ * 启用与删除以统一树为准（updateProvider / removeProvider），同时把旧档案
+ * 存储的同名字段一并更新——它仍是扫描与连通性 IPC 的凭据载体。
  */
 export const ProfileHeader: React.FC<{
   selected: ProviderProfile;
@@ -25,7 +28,6 @@ export const ProfileHeader: React.FC<{
   setConfirmDeleteId: (id: string | null) => void;
   refresh: () => void;
   notify?: (ok: boolean, text: string) => void;
-  setProfiles?: (profiles: ProviderProfile[]) => void;
   setSelectedId?: (id: string | null) => void;
 }> = ({
   selected,
@@ -37,10 +39,36 @@ export const ProfileHeader: React.FC<{
   confirmDeleteId,
   setConfirmDeleteId,
   refresh,
-  notify: _notify,
-  setProfiles,
+  notify = () => {},
   setSelectedId: _setSelectedId,
 }) => {
+  const applyEnabled = async (enabled: boolean) => {
+    const ready = await prepareCatalogWrite();
+    if (!ready.ok) {
+      notify(false, ready.error);
+      return;
+    }
+    setProfileEnabled(selected.id, enabled);
+    const res = await modelsCatalogStore.updateProvider(selected.id, {
+      enabled,
+    });
+    if (!res.ok) notify(false, res.error || '服务商启用状态保存失败');
+    refresh();
+  };
+
+  const applyRemove = async () => {
+    const ready = await prepareCatalogWrite();
+    if (!ready.ok) {
+      notify(false, ready.error);
+      return;
+    }
+    removeProfile(selected.id);
+    const res = await modelsCatalogStore.removeProvider(selected.id);
+    if (!res.ok) notify(false, res.error || '删除服务商失败');
+    setConfirmDeleteId(null);
+    refresh();
+  };
+
   return (
     <div className={styles.mrdHead}>
       <div className={styles.mrdHeadLeft}>
@@ -101,9 +129,7 @@ export const ProfileHeader: React.FC<{
                   size="sm"
                   className={styles.confirmDeleteBtn}
                   onClick={() => {
-                    const next = removeProfile(selected.id);
-                    setProfiles?.(next);
-                    setConfirmDeleteId(null);
+                    void applyRemove();
                   }}
                 >
                   确认
@@ -145,8 +171,7 @@ export const ProfileHeader: React.FC<{
             checked={selected.enabled !== false}
             aria-label={selected.enabled !== false ? '停用服务商' : '启用服务商'}
             onCheckedChange={(checked) => {
-              setProfileEnabled(selected.id, checked);
-              refresh();
+              void applyEnabled(checked);
             }}
           />
         </Tooltip>

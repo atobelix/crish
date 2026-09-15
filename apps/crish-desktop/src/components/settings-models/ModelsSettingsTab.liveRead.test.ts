@@ -68,28 +68,25 @@ describe('ModelsSettingsTab live 自愈读源', () => {
 
   it('当前停用 → 同厂商下一个启用模型', () => {
     const { nextActive, selfHealed } = resolveActiveModelAfterMetaChange(
-      { profileId: 'acme', model: 'acme-a' },
-      [],
+      { providerId: 'acme', modelId: 'acme-a' },
       isLiveModelEnabled
     );
     expect(selfHealed).toBe(true);
-    expect(nextActive).toEqual({ profileId: 'acme', model: 'acme-b' });
+    expect(nextActive).toEqual({ providerId: 'acme', modelId: 'acme-b' });
   });
 
   it('活动 id 已从 live 树删除 → 同厂商下一个，不切 beta', () => {
     const { nextActive, selfHealed } = resolveActiveModelAfterMetaChange(
-      { profileId: 'acme', model: 'deleted-id' },
-      [],
+      { providerId: 'acme', modelId: 'deleted-id' },
       isLiveModelEnabled
     );
     expect(selfHealed).toBe(true);
-    expect(nextActive).toEqual({ profileId: 'acme', model: 'acme-b' });
+    expect(nextActive).toEqual({ providerId: 'acme', modelId: 'acme-b' });
   });
 
   it('同厂商无可用 → 置空，严禁跨厂商', () => {
     const { nextActive, selfHealed } = resolveActiveModelAfterMetaChange(
-      { profileId: 'acme', model: 'acme-a' },
-      [],
+      { providerId: 'acme', modelId: 'acme-a' },
       (pId, m) => pId === 'beta' && m === 'beta-1'
     );
     expect(selfHealed).toBe(true);
@@ -97,10 +94,9 @@ describe('ModelsSettingsTab live 自愈读源', () => {
   });
 
   it('仍启用则不自愈', () => {
-    const current = { profileId: 'acme', model: 'acme-b' };
+    const current = { providerId: 'acme', modelId: 'acme-b' };
     const { nextActive, selfHealed } = resolveActiveModelAfterMetaChange(
       current,
-      [],
       isLiveModelEnabled
     );
     expect(selfHealed).toBe(false);

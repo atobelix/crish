@@ -42,6 +42,7 @@ export type {
   PricingConfig,
   ModelsCatalogError,
   IndexedModelEntry,
+  IndexedProviderEntry,
   ModelsCatalogState,
   ModelsCatalogSnapshot,
   ModelRef,
@@ -367,6 +368,7 @@ export const modelsCatalogStore = {
 const selectors = createSelectors(() => state);
 export const selectProvider = selectors.selectProvider;
 export const selectModel = selectors.selectModel;
+export const listCatalogProviders = selectors.listProviders;
 export const selectEffectiveProtocol = selectors.selectEffectiveProtocol;
 export const selectEffectiveContextWindow =
   selectors.selectEffectiveContextWindow;

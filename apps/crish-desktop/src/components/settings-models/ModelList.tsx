@@ -1,13 +1,11 @@
 import React from 'react';
 
-import {
-  getActiveModelId,
-  getActiveProfileId,
-  clearActiveModelId,
-} from '../../api/providerProfiles';
 import { formatContextLabel } from '../../api/modelCatalogPure';
 import { getModelMeta } from '../../api/modelCatalog';
-import { modelsCatalogStore } from '../../api/modelsCatalogStore';
+import {
+  getActiveModelRef,
+  modelsCatalogStore,
+} from '../../api/modelsCatalogStore';
 import { modelRefKey } from '../../api/modelsCatalogTypes';
 import { getLiveModel } from '../../api/modelsCatalogLive';
 import { Button, Switch, Tooltip } from '../ui';
@@ -60,6 +58,8 @@ export const ModelList: React.FC<{
   notify = () => {},
   runAsLocalMutation = defaultLocalMutation,
 }) => {
+  // 活动模型唯一真源 = 统一树 activeModel；删除/停用后由 store 规范化自动置空。
+  const activeRef = getActiveModelRef();
   return (
     <div className={`${styles.mrdModelList} mrd-model-list`}>
       {modelsList.map((m) => {
@@ -69,7 +69,7 @@ export const ModelList: React.FC<{
         const off = model?.enabled === false;
         const tKey = modelRefKey({ providerId, modelId: m });
         const isLive =
-          getActiveProfileId() === providerId && getActiveModelId() === m;
+          activeRef?.providerId === providerId && activeRef?.modelId === m;
         const expanded = configOpenId === m && !!cfgDraft;
         const display =
           expanded && cfgDraft?.displayName?.trim()
@@ -287,12 +287,6 @@ export const ModelList: React.FC<{
                             return;
                           }
                           if (configOpenId === m) closeConfig();
-                          if (
-                            getActiveProfileId() === providerId &&
-                            getActiveModelId() === m
-                          ) {
-                            clearActiveModelId();
-                          }
                         } catch (err) {
                           notify(
                             false,

@@ -16,10 +16,12 @@
  *   区分与 R4 T4.1「省略档位 → 无思考参数」）。
  */
 
-/** catalog_get wire 档位映射（Rust TierEffortMap camelCase：键=规范档位，值=Some(wire)/None=隐藏） */
+import { logger } from '../services/LoggerService';
+
+/** 出厂能力字典 wire 档位映射（Rust TierEffortMap camelCase：键=规范档位，值=Some(wire)/None=隐藏） */
 export type CatalogEffortMapWire = Record<string, string | null>;
 
-/** catalog_get wire 档位面条目（Rust ModelCatalogEntry camelCase 档位字段子集） */
+/** 出厂能力字典 wire 档位面条目（Rust ModelCatalogEntry camelCase 档位字段子集） */
 export interface CatalogEffortEntryWire {
   model?: string;
   apiModel?: string;
@@ -27,7 +29,7 @@ export interface CatalogEffortEntryWire {
   thinkingTiers?: CatalogEffortMapWire | null;
 }
 
-/** catalog_get wire 档位面快照（Rust CatalogSnapshot camelCase 档位字段子集） */
+/** 出厂能力字典 wire 档位面快照（Rust CatalogSnapshot camelCase 档位字段子集） */
 export interface CatalogEffortWire {
   entries?: CatalogEffortEntryWire[];
 }
@@ -196,20 +198,37 @@ function normalizeEffortModel(raw: unknown): string {
 }
 
 /**
- * 拉取描述接口档位快照（catalog_get → applyCatalogEfforts）。
- * 与定价快照 `modelCatalog.fetchCatalogSnapshot` 共用同一条 IPC（catalog_get；
- * 版本号语义由 pricing 快照统一承载），此面仅消费档位字段、幂等。
- * 命令缺失 / 失败 / 载荷非法 → false（档位面板回落「提供方默认」，恒不抛）。
+ * 拉取出厂能力字典的思考档位投影（`workbench_read_capability_dictionary`
+ * → `applyCatalogEfforts`）。与定价快照 `modelCatalog.fetchCatalogSnapshot`
+ * 共用同一条只读读面；此面仅消费档位字段，幂等。
+ *
+ * 失败 = **fail-closed**：命令缺失 / 失败 / 载荷非法一律显式告警并返回 false，
+ * 档位面板据此呈现「未收录」而不是静默回落成「提供方默认」（后者会让用户以为
+ * 该模型本就没有档位声明）。**禁止静默吞咽异常**。
  */
 export async function fetchDescribeEffortsSnapshot(): Promise<boolean> {
   // 动态引入以避免 tauriInvoke 在非 Tauri 环境（纯单测）形成顶层循环依赖
   const { invokeResult } = await import('./tauriInvoke');
   try {
-    const res = await invokeResult<CatalogEffortWire>('catalog_get', {});
-    if (res.status !== 'ok') return false;
+    const res = await invokeResult<CatalogEffortWire>(
+      'workbench_read_capability_dictionary',
+      {}
+    );
+    if (res.status !== 'ok') {
+      logger.error(
+        `思考档位快照读取失败（${res.status}）${res.status === 'error' ? `：${res.message}` : ''}，档位面板按「未收录」呈现`
+      );
+      return false;
+    }
     applyCatalogEfforts(res.data);
     return true;
-  } catch {
+  } catch (e) {
+    logger.error('思考档位快照读取抛异常，档位面板按「未收录」呈现：', {
+      module: 'thinkingGear',
+      err: e instanceof Error
+        ? { message: e.message, stack: e.stack, name: e.name }
+        : { message: String(e) },
+    });
     return false;
   }
 }

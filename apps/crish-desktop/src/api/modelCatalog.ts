@@ -47,23 +47,10 @@ export {
 
 export {
   getModelMeta,
-  setModelEnabled,
-  setModelContextLength,
-  setModelMaxOutputTokens,
-  setModelDisplayName,
-  setModelCapability,
-  setModelThinkingLevel,
-  setModelProtocol,
-  setModelModalities,
-  setModelThinking,
-  setModelPricing,
-  formatModelDisplayName,
 } from './modelCatalogMeta';
 
 export {
   scanProviderModels,
-  buildScannedModelWire,
-  uploadScannedModels,
   toCatalogCacheSnapshot,
   fetchCatalogSnapshot,
   testProviderModel,

@@ -2,17 +2,23 @@ import { toast } from '../../services/toast/ToastContext';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   createCustomProfile,
-  getActiveModelId,
-  getActiveProfileId,
-  loadProfiles,
   normalizeModelIds,
   profileDisplayLabel,
   profileHasKey,
   saveProfileKey,
   type ProviderProfile,
 } from '../../api/providerProfiles';
-import { modelsCatalogStore } from '../../api/modelsCatalogStore';
-import { getLiveModel, getLiveProvider } from '../../api/modelsCatalogLive';
+import {
+  getActiveModelRef,
+  modelsCatalogStore,
+} from '../../api/modelsCatalogStore';
+import {
+  getLiveModel,
+  getLiveProvider,
+  listLiveProviders,
+  providerHasKey,
+} from '../../api/modelsCatalogLive';
+import type { IndexedProviderEntry } from '../../api/modelsCatalogTypes';
 import { useModelsCatalogVersion } from '../../hooks/useModelsCatalogVersion';
 import {
   emptyAddDraft,
@@ -22,11 +28,7 @@ import {
 import { PROTOCOL_TEMPLATES } from './modelsPresets';
 import { onUiEvent } from '../../api/uiEvents';
 import { editSessionConsumer } from '../../api/chat-bridge/editSessionConsumer';
-import {
-  foldSettingsProfiles,
-  pickSettingsSelectedId,
-  settingsObjectId,
-} from './modelProfilesHelpers';
+import { pickSettingsSelectedId, settingsObjectId } from './modelProfilesHelpers';
 import { useModelConfigSession } from './useModelConfigSession';
 import { useModelProviderActions } from './useModelProviderActions';
 import {
@@ -44,26 +46,53 @@ export {
   type ConfigDraft,
 };
 
+const SELECTED_PROFILE_STORAGE_KEY = 'crish_models_selected_profile_v1';
+
+/** 会话记忆的「上次选中服务商」；读取失败视为无记忆。 */
+function readStoredSelectedProfileId(): string | null {
+  try {
+    return sessionStorage.getItem(SELECTED_PROFILE_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+/** 统一树 provider → 设置页与配置编辑器消费的 ProviderProfile 视图。 */
+function toSettingsProfile(entry: IndexedProviderEntry): ProviderProfile {
+  return {
+    id: entry.providerId,
+    name: entry.provider.displayName?.trim() || entry.providerId,
+    baseUrl: entry.provider.baseUrl ?? '',
+    protocol: entry.provider.protocol,
+    models: entry.provider.models.map((model) => model.id),
+    hasKey: providerHasKey(entry.providerId),
+    enabled: entry.provider.enabled !== false,
+  };
+}
+
 export function useModelProfilesState() {
   const catalogVersion = useModelsCatalogVersion();
-  const [profiles, setProfilesState] = useState<ProviderProfile[]>(() =>
-    foldSettingsProfiles(loadProfiles())
+
+  // 服务商名单唯一来源 = 统一树 providers 面（含停用项，保持配置文件顺序）。
+  const profiles = useMemo<ProviderProfile[]>(
+    () => listLiveProviders().map(toSettingsProfile),
+    [catalogVersion]
   );
-  const [selectedId, setSelectedIdState] = useState<string>(() => {
-    const raw = loadProfiles();
-    const folded = foldSettingsProfiles(raw);
-    let stored: string | null = null;
-    try {
-      stored = sessionStorage.getItem('crish_models_selected_profile_v1');
-    } catch {
-      /* ignore */
-    }
-    return pickSettingsSelectedId(folded, raw, stored, getActiveProfileId());
-  });
+
+  const [selectedId, setSelectedIdState] = useState<string>(
+    () => readStoredSelectedProfileId() ?? ''
+  );
 
   const setSelectedId = useCallback((id: string | null) => {
     setSelectedIdState(id || '');
   }, []);
+
+  // 树变更后收敛选中项：树里不存在的 id 一律丢弃，绝不按展示名改绑。
+  useEffect(() => {
+    setSelectedIdState((cur) =>
+      pickSettingsSelectedId(profiles, cur, readStoredSelectedProfileId())
+    );
+  }, [profiles]);
 
   const [keyDraft, setKeyDraft] = useState('');
   const [addOpen, setAddOpen] = useState(false);
@@ -76,12 +105,10 @@ export function useModelProfilesState() {
   const [nameDraft, setNameDraft] = useState('');
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
-  const [activeProfileId, setActiveProfileIdState] = useState<string>(
-    () => getActiveProfileId() || ''
-  );
-  const [globalActiveModelId, setGlobalActiveModelIdState] = useState<string>(
-    () => getActiveModelId() || ''
-  );
+  // 全局默认模型唯一真源 = 树 activeModel；未加载 / 未设置一律为空。
+  const activeModelRef = useMemo(() => getActiveModelRef(), [catalogVersion]);
+  const activeProfileId = activeModelRef?.providerId ?? '';
+  const globalActiveModelId = activeModelRef?.modelId ?? '';
 
   // ── R2-a ④ 设置页失效订阅（详案 §1.1-④ + analysis/15 §2.4）──────────────
   // 自身落盘（saveKey/addCustomProvider/handleManualAdd/runScan/saveConfig）经
@@ -131,19 +158,15 @@ export function useModelProfilesState() {
     [],
   );
 
-  const setProfiles = useCallback((raw: ProviderProfile[]) => {
-    const folded = foldSettingsProfiles(raw);
-    setProfilesState(folded);
+  /** 写盘回执后重读统一树，把失效的选中项收敛掉（树是唯一名单源）。 */
+  const refresh = useCallback(() => {
+    const liveIds = listLiveProviders().map((entry) => ({
+      id: entry.providerId,
+    }));
     setSelectedIdState((cur) =>
-      pickSettingsSelectedId(folded, raw, cur, getActiveProfileId())
+      pickSettingsSelectedId(liveIds, cur, readStoredSelectedProfileId())
     );
   }, []);
-
-  const refresh = useCallback(() => {
-    setProfiles(loadProfiles());
-    setActiveProfileIdState(getActiveProfileId() || '');
-    setGlobalActiveModelIdState(getActiveModelId() || '');
-  }, [setProfiles]);
 
   useEffect(() => {
     const onExternal = () => {
@@ -173,6 +196,17 @@ export function useModelProfilesState() {
     return profiles.find((p) => p.id === selectedId) || null;
   }, [profiles, selectedId]);
 
+  /**
+   * 选中项「身份」变化时才清空草稿 / 关闭编辑面板。
+   *
+   * 依赖必须是 `selected?.id`（身份）而非 `selected`（对象）：统一树的
+   * `profiles` 是 `catalogVersion` 的派生 `useMemo`，任何一次树版本变化
+   * （含**外部变更**）都会重建数组与 `selected` 对象——若以对象为依赖，
+   * 外部变更会连带把用户**未保存的草稿静默清空**（回归：invalidation
+   * 测试「有未保存草稿 → 提示 + invalidate，不静默覆盖」变红）。
+   * 以身份为依赖后：只有真正切换/失去选中项才重置，内容变化不重置。
+   */
+  const selectedIdentity = selected?.id ?? null;
   useEffect(() => {
     if (selectedId) {
       try {
@@ -181,7 +215,7 @@ export function useModelProfilesState() {
         /* ignore */
       }
     }
-    if (selected) {
+    if (selectedIdentity) {
       setKeyDraft('');
       setModelFilter('');
       setConfigOpenId(null);
@@ -192,7 +226,7 @@ export function useModelProfilesState() {
       setNameDraft('');
       setConfirmDeleteId(null);
     }
-  }, [selectedId, selected]);
+  }, [selectedId, selectedIdentity]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -389,7 +423,6 @@ export function useModelProfilesState() {
 
   return {
     profiles,
-    setProfiles,
     selectedId,
     setSelectedId,
     selected,

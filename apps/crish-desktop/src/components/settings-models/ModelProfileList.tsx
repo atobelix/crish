@@ -3,7 +3,8 @@
  *
  * 模型管理页面核心列表与级联选择组件（Task-C 级联菜单与 Portal 逃逸重构）：
  * 1. ModelsCascadeSelect: 全局默认模型级联选择器
- *    - 启用过滤只读 listLivePickerEntries / getLiveModel.enabled；
+ *    - 名单与展示名只读统一树镜像（listLivePickerEntries / getLiveProvider / getLiveModel）；
+ *    - 触发器标签唯一判据 = 树 activeModel 的 (providerId, modelId) 在树中存在且启用；
  *    - 刷新订 useModelsCatalogVersion，不订 model-meta-changed；
  *    - 二级子菜单采用 createPortal 挂载逃逸，避免 Paint 阶段物理裁切；
  *    - 挂载 data-floating-layer="true" 与 role="listbox"，免疫 FocusTrap 冻结与 Tab 焦点拉回；
@@ -11,7 +12,8 @@
  *    - 修复安全三角向量叉积方向向左反转 180° Bug，实现动态方位同构；
  *    - 接入 FALLBACK_EMPTY_SELECTION 安全空态假体，杜绝全停用白屏。
  * 2. ModelProfileList: 左侧 AI 服务商导航轨栏，平滑展示启用/停用与密钥状态。
- *    轨栏名单仍可来自凭据壳（S7 前）；不得用凭据壳 / getModelMeta 过滤模型能力。
+ *    名单只来自统一树 providers 面（listLiveProviders），启用状态读 provider.enabled，
+ *    密钥状态读快照 credentialStates[providerId].hasKey；不读旧档案存储。
  */
 
 import React, {
@@ -24,13 +26,11 @@ import React, {
 } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  profileDisplayLabel,
-  profileHasKey,
-  type ProviderProfile,
-} from '../../api/providerProfiles';
-import {
   getLiveModel,
+  getLiveProvider,
   listLivePickerEntries,
+  listLiveProviders,
+  providerHasKey,
 } from '../../api/modelsCatalogLive';
 import type { IndexedModelEntry } from '../../api/modelsCatalogTypes';
 import { useModelsCatalogVersion } from '../../hooks/useModelsCatalogVersion';
@@ -192,15 +192,12 @@ const CascadeSubmenuFlyout: React.FC<CascadeSubmenuFlyoutProps> = ({
 // ============================================================================
 
 interface ModelsCascadeSelectProps {
-  /** 凭据壳名单（S7 前父级仍传入）；启用过滤与展示名不读此列表。 */
-  profiles: ProviderProfile[];
   activeProfileId: string;
   activeModelId: string;
   onChange: (profileId: string, modelId: string) => void;
 }
 
 export const ModelsCascadeSelect: React.FC<ModelsCascadeSelectProps> = ({
-  profiles,
   activeProfileId,
   activeModelId,
   onChange,
@@ -215,46 +212,30 @@ export const ModelsCascadeSelect: React.FC<ModelsCascadeSelectProps> = ({
 
   const catalogVersion = useModelsCatalogVersion();
 
-  const enabledProfiles = useMemo(() => {
-    const activeProfiles = profiles.filter((p) => p.enabled !== false);
-    const configuredIds = new Set(activeProfiles.map((p) => p.id));
-    const configuredNames = new Set(
-      activeProfiles.map((p) => p.name.trim().toLowerCase())
-    );
+  const enabledProfiles = useMemo(
+    () => groupLivePickerByProvider(listLivePickerEntries()),
+    [catalogVersion]
+  );
 
-    const filteredEntries = listLivePickerEntries().filter((e) => {
-      // 若用户未配置任何服务商，降级展示所有可用模型（避免白屏）
-      if (configuredIds.size === 0) return true;
-      if (configuredIds.has(e.providerId)) return true;
-      const displayName = (e.provider.displayName || '').trim().toLowerCase();
-      if (displayName && configuredNames.has(displayName)) return true;
-      return false;
-    });
-
-    return groupLivePickerByProvider(filteredEntries);
-  }, [catalogVersion, profiles]);
-
-  const activeProfile = enabledProfiles.find((p) => p.id === activeProfileId);
-  const liveActive = activeModelId
+  const liveProvider = getLiveProvider(activeProfileId);
+  const liveActiveModel = activeModelId
     ? getLiveModel(activeProfileId, activeModelId)
     : undefined;
   const isCurrentModelValid = Boolean(
-    activeProfile &&
-      activeModelId &&
-      activeProfile.models.includes(activeModelId) &&
-      liveActive != null &&
-      liveActive.enabled !== false
+    liveProvider &&
+      liveProvider.enabled !== false &&
+      liveActiveModel &&
+      liveActiveModel.enabled !== false
   );
 
-  const activeLabel =
-    isCurrentModelValid && activeProfile
-      ? `${stripDefaultSuffix(activeProfile.name)} · ${liveModelLabel(
-          activeProfile.id,
-          activeModelId
-        )}`
-      : enabledProfiles.length === 0
-        ? FALLBACK_EMPTY_SELECTION.triggerLabel
-        : '请选择默认模型...';
+  const activeLabel = isCurrentModelValid
+    ? `${stripDefaultSuffix(liveProvider!.displayName || activeProfileId)} · ${liveModelLabel(
+        activeProfileId,
+        activeModelId
+      )}`
+    : enabledProfiles.length === 0
+      ? FALLBACK_EMPTY_SELECTION.triggerLabel
+      : '请选择默认模型...';
 
   const closeSubmenu = useCallback(() => {
     safeTrackerRef.current.reset();
@@ -421,16 +402,17 @@ export const ModelsCascadeSelect: React.FC<ModelsCascadeSelectProps> = ({
 // ============================================================================
 
 interface ModelProfileListProps {
-  profiles: ProviderProfile[];
   selectedId: string | null;
   onSelectProfile: (id: string) => void;
 }
 
 export const ModelProfileList: React.FC<ModelProfileListProps> = ({
-  profiles,
   selectedId,
   onSelectProfile,
 }) => {
+  const catalogVersion = useModelsCatalogVersion();
+  const providers = useMemo(() => listLiveProviders(), [catalogVersion]);
+
   return (
     <aside
       className={`${styles.modelsRail} models-rail`}
@@ -441,24 +423,24 @@ export const ModelProfileList: React.FC<ModelProfileListProps> = ({
       </div>
 
       <div className={`${styles.mrlList} mrl-list`} role="list">
-        {profiles.length === 0 ? (
+        {providers.length === 0 ? (
           <div className={`${styles.mrlEmpty} mrl-empty`}>还没有服务商</div>
         ) : (
-          profiles.map((p) => {
-            const isActive = p.id === selectedId;
-            const label = profileDisplayLabel(p);
-            const keyOk = profileHasKey(p);
-            const enabled = p.enabled !== false;
+          providers.map(({ providerId, provider }) => {
+            const isActive = providerId === selectedId;
+            const label = provider.displayName?.trim() || providerId;
+            const keyOk = providerHasKey(providerId);
+            const enabled = provider.enabled !== false;
 
             return (
               <Button
                 bare
-                key={p.id}
+                key={providerId}
                 type="button"
                 role="listitem"
                 className={`${styles.mrlItem} mrl-item ${isActive ? styles.isActive + ' is-active' : ''}`}
                 aria-current={isActive ? 'true' : undefined}
-                onClick={() => onSelectProfile(p.id)}
+                onClick={() => onSelectProfile(providerId)}
               >
                 <div className={`${styles.mrlItemRowTop} mrl-item-row-top`}>
                   <Tooltip content={label}>

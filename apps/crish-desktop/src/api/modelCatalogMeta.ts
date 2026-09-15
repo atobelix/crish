@@ -1,20 +1,33 @@
 /**
- * 模型元数据存储（拆自 modelCatalog.ts）：localStorage 读写 + get/set 元信息。
- * 引入 memoryMetaCache 单例内存镜像，杜绝 O(N*M) 同步反序列化雪崩（耗时从 200ms 骤降至 <0.2ms）。
- * 写入操作自动同步内存与 LocalStorage，并通过 uiEvents 广播 'model-meta-changed'。
+ * 模型**探测结果**存储（拆自 modelCatalog.ts）：localStorage 读写 + get/set 探测信息。
+ *
+ * 语义边界（轨 ⑤ 收敛，`docs/provider-single-track-convergence/04-…§9` R-4）：
+ * - 本键 `crish_model_meta_v1` **只存探测结果**（`lastTest`：连通测试的
+ *   ok / latencyMs / at / error）。它是「探测结果面」，**不是配置声明真源**；
+ *   禁止用 lastTest 决定 enabled / 能力 / 协议。
+ * - `enabled` / `contextLength` 的权威来源是统一配置树（`models.yaml` →
+ *   `modelsCatalogStore`）：读经 `selectModel` / `selectEffectiveContextWindow`，
+ *   写经 `modelsCatalogStore.updateModel`。本键不再持久化这两个字段，
+ *   以消除「LS 与树双写漂移」。
+ * - 键形状沿用本仓既有惯例 `providerId::modelId`（与 `modelCatalogMeta` 历史键、
+ *   `modelRefKey` 同形语义），裸 `modelId` 不参与身份解析（裁决 ③）。
+ *
+ * 引入 memoryMetaCache 单例内存镜像，杜绝 O(N*M) 同步反序列化雪崩
+ * （耗时从 200ms 骤降至 <0.2ms）。写入操作自动同步内存与 LocalStorage，
+ * 并通过 uiEvents 广播 'model-meta-changed'。
  */
 
 import { guessContextLength } from './modelCatalogPure';
-import type {
-  ModelCapabilityKey,
-  ModelMeta,
-  ModelProtocol,
-} from './modelCatalogTypes';
+import type { ModelMeta } from './modelCatalogTypes';
+import { modelRefKey } from './modelsCatalogTypes';
+import { modelsCatalogStore } from './modelsCatalogStore';
 import { emitUiEvent } from './uiEvents';
 
 const META_KEY = 'crish_model_meta_v1';
 
-type MetaMap = Record<string, ModelMeta>;
+/** 持久化记录：仅探测结果（配置声明字段一律不落本键） */
+type MetaRecord = Pick<ModelMeta, 'lastTest'>;
+type MetaMap = Record<string, MetaRecord>;
 
 /** 模块级单例内存镜像缓存 */
 let memoryMetaCache: MetaMap | null = null;
@@ -24,25 +37,7 @@ function metaKey(profileId: string, model: string): string {
 }
 
 /**
- * 存量数据一次性收敛迁移：历史能力键 `vision` 已被 `image` 取代。
- * 读时搬移（vision → image 取或）并删除旧键，随后写回存储；迁移幂等——
- * 迁移过的数据不再含 vision 键，二次加载零改动。
- */
-function migrateLegacyCapabilities(map: MetaMap): boolean {
-  let changed = false;
-  for (const meta of Object.values(map)) {
-    const caps = meta.capabilities as Record<string, unknown> | undefined;
-    if (caps && 'vision' in caps) {
-      caps.image = Boolean(caps.image) || caps.vision === true;
-      delete caps.vision;
-      changed = true;
-    }
-  }
-  return changed;
-}
-
-/**
- * 加载元数据字典（优先命中内存单例镜像；首次加载触发存量迁移）
+ * 加载探测结果字典（优先命中内存单例镜像）
  */
 function loadMap(): MetaMap {
   if (memoryMetaCache !== null) {
@@ -56,13 +51,8 @@ function loadMap(): MetaMap {
       return memoryMetaCache;
     }
     const o = JSON.parse(raw);
-    const map = o && typeof o === 'object' ? (o as MetaMap) : {};
-    const migrated = migrateLegacyCapabilities(map);
-    memoryMetaCache = map;
-    if (migrated) {
-      saveMap(map);
-    }
-    return map;
+    memoryMetaCache = o && typeof o === 'object' ? (o as MetaMap) : {};
+    return memoryMetaCache;
   } catch {
     memoryMetaCache = {};
     return memoryMetaCache;
@@ -70,7 +60,7 @@ function loadMap(): MetaMap {
 }
 
 /**
- * 保存元数据字典（同步写穿透：立即更新内存镜像 + 持久化 LocalStorage）
+ * 保存探测结果字典（同步写穿透：立即更新内存镜像 + 持久化 LocalStorage）
  */
 function saveMap(map: MetaMap): void {
   memoryMetaCache = map;
@@ -109,7 +99,7 @@ export function _getMemoryMetaCacheSnapshot(): MetaMap | null {
 }
 
 /**
- * 删除某服务商档案的全部元数据键（档案删除后的孤儿清扫）。
+ * 删除某服务商档案的全部探测结果键（档案删除后的孤儿清扫）。
  * 幂等：目标键不存在则零写回零广播。
  */
 export function purgeMetaForProfile(profileId: string): void {
@@ -128,8 +118,8 @@ export function purgeMetaForProfile(profileId: string): void {
 }
 
 /**
- * 孤儿 meta 键清扫：删除所有「档案已不存在」的 `profileId::model` 键
- * （档案删除 / 历史迁移残留的孤立数据，真机存量达 80+ 条）。
+ * 孤儿探测键清扫：删除所有「档案已不存在」的 `profileId::model` 键
+ * （档案删除 / 历史迁移残留的孤立数据）。
  * 幂等：无孤儿则零写回零广播。
  */
 export function purgeOrphanMetaKeys(validProfileIds: ReadonlySet<string>): void {
@@ -150,229 +140,80 @@ export function purgeOrphanMetaKeys(validProfileIds: ReadonlySet<string>): void 
 }
 
 /**
- * 读取模型元数据（O(1) 内存直读）
+ * 读取模型元数据。
+ *
+ * - `enabled` / `contextLength`：**统一树为唯一权威**（`model.enabled` /
+ *   `model.contextWindow`）；树未加载或无该模型 → enabled 视为 true（无声明即启用），
+ *   contextLength 回落纯启发式 `guessContextLength`（非配置声明）。
+ * - `lastTest`：来自本探测结果面。
  */
 export function getModelMeta(profileId: string, model: string): ModelMeta {
-  const map = loadMap();
-  const k = metaKey(profileId, model);
-  const stored = map[k];
-  if (stored) {
-    return {
-      ...stored,
-      enabled: stored.enabled !== false,
-      contextLength: stored.contextLength ?? guessContextLength(model),
-    };
-  }
+  const stored = loadMap()[metaKey(profileId, model)];
+  const spec = modelsCatalogStore.getState().loaded
+    ? modelsCatalogStore
+        .getState()
+        .modelIndex.get(modelRefKey({ providerId: profileId, modelId: model }))
+        ?.model
+    : undefined;
   return {
     profileId,
     model,
-    enabled: true,
-    contextLength: guessContextLength(model),
+    enabled: spec ? spec.enabled !== false : true,
+    contextLength: spec?.contextWindow ?? guessContextLength(model),
+    ...(stored?.lastTest !== undefined ? { lastTest: stored.lastTest } : {}),
   };
 }
 
 /**
- * 内部更新元信息：更新内存镜像、落盘 LocalStorage 并广播 uiEvents
+ * 内部更新探测结果：更新内存镜像、落盘 LocalStorage 并广播 uiEvents。
+ *
+ * 配置声明字段（enabled / contextLength）经 `modelsCatalogStore.updateModel`
+ * 路由到统一树（唯一权威），不落本键。
  */
 function upsertModelMeta(
   profileId: string,
   model: string,
-  patch: Partial<
-    Pick<
-      ModelMeta,
-      | 'enabled'
-      | 'contextLength'
-      | 'maxOutputTokens'
-      | 'lastTest'
-      | 'displayName'
-      | 'capabilities'
-      | 'defaultThinkingLevel'
-      | 'protocol'
-      | 'modalities'
-      | 'thinking'
-      | 'pricing'
-    >
-  >
+  patch: Partial<Pick<ModelMeta, 'enabled' | 'contextLength' | 'lastTest'>>
 ): ModelMeta {
+  if (patch.enabled !== undefined || patch.contextLength !== undefined) {
+    const treePatch = {
+      ...(patch.enabled !== undefined ? { enabled: patch.enabled } : {}),
+      ...(patch.contextLength !== undefined
+        ? { contextWindow: patch.contextLength }
+        : {}),
+    };
+    // 树写盘为异步 IPC；探测/扫描调用方为同步面，失败由 store 自身记录 lastError。
+    void modelsCatalogStore
+      .updateModel(profileId, model, treePatch)
+      .catch(() => undefined);
+  }
+
   const map = loadMap();
   const k = metaKey(profileId, model);
-  const prev = getModelMeta(profileId, model);
-  const next: ModelMeta = {
-    ...prev,
-    ...patch,
-    profileId,
-    model,
-    capabilities:
-      patch.capabilities !== undefined
-        ? { ...(prev.capabilities || {}), ...patch.capabilities }
-        : prev.capabilities,
-  };
-  // 空展示名不落盘
-  if (typeof next.displayName === 'string') {
-    const dn = next.displayName.trim();
-    next.displayName = dn || undefined;
+  if (patch.lastTest !== undefined) {
+    map[k] = { lastTest: patch.lastTest };
+    saveMap(map);
   }
-  map[k] = next;
-  saveMap(map);
+  const next = getModelMeta(profileId, model);
 
   // 广播 UI 事件
   emitUiEvent('model-meta-changed', {
     profileId,
     model,
     enabled: next.enabled !== false,
-    displayName: next.displayName,
   });
 
   return next;
 }
 
 /**
- * 设置模型启用/停用状态
+ * upsert 暴露给 IPC 面（扫描连通测试写回 lastTest / contextWindow）。
+ * `contextLength` 写入统一树 `contextWindow`；`lastTest` 写入探测结果面。
  */
-export function setModelEnabled(
-  profileId: string,
-  model: string,
-  enabled: boolean
-): ModelMeta {
-  return upsertModelMeta(profileId, model, { enabled });
-}
-
-/**
- * 设置模型上下文长度
- */
-export function setModelContextLength(
-  profileId: string,
-  model: string,
-  contextLength: number | undefined
-): ModelMeta {
-  return upsertModelMeta(profileId, model, { contextLength });
-}
-
-/**
- * 设置模型最大输出 token 上限
- */
-export function setModelMaxOutputTokens(
-  profileId: string,
-  model: string,
-  maxOutputTokens: number | undefined
-): ModelMeta {
-  return upsertModelMeta(profileId, model, { maxOutputTokens });
-}
-
-/**
- * 设置模型展示名
- */
-export function setModelDisplayName(
-  profileId: string,
-  model: string,
-  displayName: string | undefined
-): ModelMeta {
-  return upsertModelMeta(profileId, model, {
-    displayName: displayName?.trim() || undefined,
-  });
-}
-
-/**
- * 设置模型单项能力标签
- */
-export function setModelCapability(
-  profileId: string,
-  model: string,
-  key: ModelCapabilityKey,
-  on: boolean
-): ModelMeta {
-  const prev = getModelMeta(profileId, model);
-  return upsertModelMeta(profileId, model, {
-    capabilities: { ...(prev.capabilities || {}), [key]: on },
-  });
-}
-
-/**
- * 设置模型默认思考档位
- */
-export function setModelThinkingLevel(
-  profileId: string,
-  model: string,
-  defaultThinkingLevel: string | undefined
-): ModelMeta {
-  return upsertModelMeta(profileId, model, { defaultThinkingLevel });
-}
-
-/**
- * 设置模型调用协议。
- * 类型与新契约 ModelProtocol SSOT 对齐（含 google/generate-content 规范名）；
- * 写出前调用方应先经 normalizeProtocol 归一，禁止把 google/interactions 写回 LS。
- */
-export function setModelProtocol(
-  profileId: string,
-  model: string,
-  protocol: ModelProtocol | undefined
-): ModelMeta {
-  return upsertModelMeta(profileId, model, { protocol });
-}
-
-/**
- * 设置多模态能力矩阵
- */
-export function setModelModalities(
-  profileId: string,
-  model: string,
-  modalities: { input: string[]; output: string[] } | undefined
-): ModelMeta {
-  return upsertModelMeta(profileId, model, { modalities });
-}
-
-/**
- * 设置拍平思考档位映射表
- */
-export function setModelThinking(
-  profileId: string,
-  model: string,
-  thinking: Record<string, string> | undefined
-): ModelMeta {
-  return upsertModelMeta(profileId, model, { thinking });
-}
-
-/**
- * 设置四维单价计量规格
- */
-export function setModelPricing(
-  profileId: string,
-  model: string,
-  pricing:
-    | {
-        currency: 'USD' | 'CNY';
-        input?: number | undefined;
-        output?: number | undefined;
-        cacheRead?: number | undefined;
-        cacheWrite?: number | undefined;
-      }
-    | undefined
-): ModelMeta {
-  return upsertModelMeta(profileId, model, { pricing });
-}
-
-/** 展示名：优先 displayName，否则 model id */
-export function formatModelDisplayName(
-  profileId: string,
-  model: string,
-  meta?: ModelMeta | null
-): string {
-  const m = meta || getModelMeta(profileId, model);
-  const dn = typeof m.displayName === 'string' ? m.displayName.trim() : '';
-  return dn || model;
-}
-
-/** upsert 暴露给 IPC 面（扫描连通测试写回 lastTest / contextWindow） */
 export function upsertModelMetaExport(
   profileId: string,
   model: string,
-  patch: Partial<
-    Pick<
-      ModelMeta,
-      'enabled' | 'contextLength' | 'lastTest' | 'displayName' | 'capabilities'
-    >
-  >
+  patch: Partial<Pick<ModelMeta, 'enabled' | 'contextLength' | 'lastTest'>>
 ): ModelMeta {
   return upsertModelMeta(profileId, model, patch);
 }

@@ -85,11 +85,6 @@ const PROFILE: ProviderProfile = {
   hasKey: true,
 };
 
-const PROFILE_UPDATED: ProviderProfile = {
-  ...PROFILE,
-  models: ['gpt-4o', 'gpt-4o-mini'],
-};
-
 const CATALOG_PROVIDERS: Record<string, ProviderSpec> = {
   'preset-openai': {
     displayName: 'OpenAI 兼容',
@@ -143,13 +138,10 @@ async function awaitSave(fn: () => unknown): Promise<void> {
   });
 }
 
-let currentProfiles: ProviderProfile[];
 let saveImpl: ReturnType<typeof vi.fn>;
 
 describe('useModelProfilesState 失效订阅（R2-a ④ / T2-7）', () => {
   beforeEach(async () => {
-    currentProfiles = [PROFILE];
-    mocks.loadProfiles.mockImplementation(() => currentProfiles);
     mocks.getModelMeta.mockImplementation(() => ({
       profileId: 'preset-openai',
       model: 'gpt-4o',
@@ -198,13 +190,18 @@ describe('useModelProfilesState 失效订阅（R2-a ④ / T2-7）', () => {
     modelsCatalogStore.resetForTesting();
   });
 
-  it('外部 profiles 变更且无未保存草稿 → 直接 refresh 重载（不提示）', () => {
+  it('外部变更且无未保存草稿 → 名单随树刷新（不提示、不 invalidate）', async () => {
     const { result } = renderHook(() => useModelProfilesState());
 
     expect(result.current.profiles.map((p) => p.id)).toEqual(['preset-openai']);
 
-    currentProfiles = [PROFILE_UPDATED];
-    act(() => {
+    // 外部变更 = 直接改统一树（唯一名单源）；`loadProfiles` 已退出渲染链。
+    await act(async () => {
+      await modelsCatalogStore.addModel('preset-openai', {
+        id: 'gpt-4o-mini',
+        displayName: 'GPT-4o mini',
+        enabled: true,
+      });
       emitUiEvent('profiles-changed');
     });
 
@@ -216,7 +213,7 @@ describe('useModelProfilesState 失效订阅（R2-a ④ / T2-7）', () => {
     expect(mocks.invalidate).not.toHaveBeenCalled();
   });
 
-  it('外部 profiles-changed 且有未保存 cfgDraft → 提示 + invalidate，不静默覆盖', () => {
+  it('外部变更且有未保存 cfgDraft → 提示 + invalidate，不静默覆盖', async () => {
     const { result } = renderHook(() => useModelProfilesState());
 
     act(() => {
@@ -225,8 +222,12 @@ describe('useModelProfilesState 失效订阅（R2-a ④ / T2-7）', () => {
     expect(result.current.cfgDraft).not.toBeNull();
     expect(mocks.open).toHaveBeenCalledWith('["preset-openai","gpt-4o"]');
 
-    currentProfiles = [PROFILE_UPDATED];
-    act(() => {
+    await act(async () => {
+      await modelsCatalogStore.addModel('preset-openai', {
+        id: 'gpt-4o-mini',
+        displayName: 'GPT-4o mini',
+        enabled: true,
+      });
       emitUiEvent('profiles-changed');
     });
 
@@ -314,8 +315,12 @@ describe('useModelProfilesState 失效订阅（R2-a ④ / T2-7）', () => {
 
     await awaitSave(() => result.current.saveConfig());
 
+    // 失效订阅（`models-catalog-changed` / `profiles-changed`）在保存动作之前
+    // 就捕获了外部变更：提示用户「重载或丢弃草稿」，并 invalidate 编辑会话。
+    // 保存侧 CT-01 的「保存已取消」文案由 useModelConfigSession.test.tsx 单独钉住
+    // （此处订阅先命中，故不再产出该条）。
     expect(mocks.toastShow).toHaveBeenCalledWith(
-      '配置已被外部修改，保存已取消，请重新确认',
+      '配置已被外部修改，请确认后重载或丢弃草稿',
       undefined,
       { type: 'error' }
     );

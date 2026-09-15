@@ -17,6 +17,7 @@ import type {
   EngineStatus,
   NormalizedEngineConfig,
 } from './engineConfigTypes';
+import { modelRefKey, parseModelRefKey, type ModelRef } from './modelsCatalogTypes';
 
 // ─── Pure helpers (no LS / no network) ───────────────────────────────────────
 
@@ -304,6 +305,25 @@ export function buildUpdateConfigPayload(
     if (v !== undefined && v !== '') payload[k] = v;
   }
   return payload;
+}
+
+/**
+ * 最近使用模型的身份键 = 本仓**唯一**身份键 [modelRefKey]（JSON 二元组）。
+ *
+ * 裁决 ③：模型身份 = `(providerId, modelId)` 二元组；裸 modelId 不参与解析。
+ * 此处不引入任何第三种连接格式（`::` / `|` / `.` 一律禁止）——反解走
+ * [parseModelRefKey]，与统一树 / 设置页 / 编辑会话共用同一身份表示。
+ */
+export function recentModelKey(providerId: string, modelId: string): string {
+  return modelRefKey({ providerId, modelId });
+}
+
+/**
+ * 解析最近使用模型键（纯）：严格委托 [parseModelRefKey]。
+ * 非二元组（裸 modelId / 缺边 / 畸形）→ null，调用方不得据此猜测身份。
+ */
+export function parseRecentModelKey(raw: unknown): ModelRef | null {
+  return parseModelRefKey(raw);
 }
 
 /**

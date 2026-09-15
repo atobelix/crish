@@ -7,39 +7,118 @@
 import { getTransport } from './transport';
 import { logInternalError } from './userFacingErrors';
 import type { EngineConfigUpdate, EngineStatus } from './engineConfigTypes';
+import { modelsCatalogStore } from './modelsCatalogStore';
 import {
   buildUpdateConfigPayload,
   isEmptyEngineConfigUpdate,
   mergeModelsForPicker,
+  normalizeEngineConfigText,
   normalizeEngineConfigUpdate,
   normalizeEngineModelId,
   normalizeRecentModels,
   parseEngineStatusFromRaw,
+  parseRecentModelKey,
+  recentModelKey,
 } from './engineConfigHelpers';
 
 const RECENT_MODELS_KEY = 'crish_recent_models';
 const MAX_RECENT = 12;
 
-export function loadRecentModels(): string[] {
+/**
+ * 最近使用模型：**身份 = (providerId, modelId) 二元组**（裁决 ③）。
+ * 存储形状为 `providerId::modelId` 字符串数组（沿用本仓既有 `::` 键惯例）。
+ * 裸 modelId 一律不得参与身份解析——同名模型可同时存在于多个供应商。
+ */
+function readStoredRecent(): unknown[] {
   try {
     const raw = localStorage.getItem(RECENT_MODELS_KEY);
     if (!raw) return [];
     const arr = JSON.parse(raw);
-    return normalizeRecentModels(arr);
+    return Array.isArray(arr) ? arr : [];
   } catch {
     return [];
   }
 }
 
-export function pushRecentModel(model: string): string[] {
-  const m = normalizeEngineModelId(model);
-  if (!m) return loadRecentModels();
-  const next = [m, ...loadRecentModels().filter((x) => x !== m)].slice(0, MAX_RECENT);
+function writeStoredRecent(keys: string[]): void {
   try {
-    localStorage.setItem(RECENT_MODELS_KEY, JSON.stringify(next));
+    localStorage.setItem(RECENT_MODELS_KEY, JSON.stringify(keys));
   } catch {
     /* ignore */
   }
+}
+
+/**
+ * 统一树中唯一持有该 modelId 的供应商 id；0 个或 >1 个 → null。
+ * 歧义/未知一律不猜（裁决 ③），树未加载同样返回 null。
+ */
+function resolveUniqueProviderId(modelId: string): string | null {
+  const state = modelsCatalogStore.getState();
+  if (!state.loaded) return null;
+  let found: string | null = null;
+  for (const entry of state.modelIndex.values()) {
+    if (entry.model.id !== modelId) continue;
+    if (found !== null && found !== entry.providerId) return null;
+    found = entry.providerId;
+  }
+  return found;
+}
+
+/**
+ * 读取最近使用模型键（`providerId::modelId`）。
+ *
+ * 存量裸 id 的一次性幂等迁移：能由统一树解析出唯一供应商 → 迁移为二元组；
+ * 歧义/未知 → 丢弃（不得猜）。树未加载时不改写存储（保留原值待下次迁移），
+ * 但裸 id 不进入返回列表——裸 id 永不参与身份解析。
+ */
+export function loadRecentModels(): string[] {
+  const stored = readStoredRecent();
+  const treeReady = modelsCatalogStore.getState().loaded;
+  const out: string[] = [];
+  let changed = false;
+  for (const item of stored) {
+    const ref = parseRecentModelKey(item);
+    if (ref) {
+      out.push(recentModelKey(ref.providerId, ref.modelId));
+      continue;
+    }
+    const bare = normalizeEngineModelId(item);
+    if (!bare) {
+      changed = true;
+      continue;
+    }
+    if (!treeReady) continue;
+    const providerId = resolveUniqueProviderId(bare);
+    if (providerId) {
+      out.push(recentModelKey(providerId, bare));
+    }
+    changed = true;
+  }
+  const deduped = [...new Set(out)].slice(0, MAX_RECENT);
+  if (changed) writeStoredRecent(deduped);
+  return deduped;
+}
+
+/**
+ * 记录一次最近使用（`providerId::modelId`）。
+ * 显式 providerId 优先；缺省时由统一树解析唯一供应商；无法确定身份 → 不写入
+ * （裸 modelId 永不落库）。
+ */
+export function pushRecentModel(
+  model: string,
+  providerId?: string | null,
+): string[] {
+  const m = normalizeEngineModelId(model);
+  if (!m) return loadRecentModels();
+  const pid =
+    normalizeEngineConfigText(providerId ?? '') || resolveUniqueProviderId(m);
+  if (!pid) return loadRecentModels();
+  const key = recentModelKey(pid, m);
+  const next = [
+    key,
+    ...loadRecentModels().filter((x) => x !== key),
+  ].slice(0, MAX_RECENT);
+  writeStoredRecent(next);
   return next;
 }
 
@@ -137,5 +216,9 @@ export async function updateEngineConfig(
 
 /** Models shown in chat picker: recent + current engine model. */
 export function modelsForPicker(current?: string): string[] {
-  return mergeModelsForPicker(loadRecentModels(), current);
+  // 最近使用为二元组键；picker 展示面只取 modelId 分量
+  const recentIds = loadRecentModels().map(
+    (key) => parseRecentModelKey(key)?.modelId ?? key,
+  );
+  return mergeModelsForPicker(recentIds, current);
 }

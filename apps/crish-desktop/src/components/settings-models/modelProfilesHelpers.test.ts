@@ -7,10 +7,9 @@ import {
 } from '../../api/modelsCatalogStore';
 import type { ModelSpec, ProviderSpec } from '../../api/modelsCatalogTypes';
 import {
-  foldSettingsProfiles,
   modelSpecRevision,
   pickSettingsSelectedId,
-  resolveSettingsSelectedId,
+  settingsObjectId,
 } from './modelProfilesHelpers';
 
 function profile(
@@ -25,7 +24,14 @@ function profile(
   };
 }
 
-describe('modelProfilesHelpers 设置列表折叠', () => {
+describe('modelProfilesHelpers 设置页选中项（唯一真源 = 统一树 provider 身份）', () => {
+  // 说明（2026-09-15 单轨收敛）：旧实现的 `foldSettingsProfiles` /
+  // `resolveSettingsSelectedId` 是「按展示名折叠 + 把被折叠的拷贝改绑胜者」，
+  // 存在的唯一理由是旧 localStorage 档案轨会出现同名重复条目
+  // （实测 `senseNova` ×2 / `自定义服务商` ×5）。统一树的 provider 身份是
+  // `providerId` 键，**同展示名可以共存且互不干扰**，折叠不再需要，故两函数已物理删除。
+  // 本组断言改钉新不变量：选中项必须落在树里真实存在的 provider 身份上，
+  // 树里没有的旧 id 一律丢弃，**绝不按展示名改绑**。
   const seed = profile({
     id: 'opencode-go',
     name: 'OpenCode Go 订阅',
@@ -46,41 +52,51 @@ describe('modelProfilesHelpers 设置列表折叠', () => {
     enabled: false,
   });
 
-  it('foldSettingsProfiles 同展示名只留一行且保留停用项', () => {
-    const folded = foldSettingsProfiles([copy, seed, zen, disabled]);
-    expect(folded.map((p) => p.id)).toEqual([
+  it('同展示名的两个 provider 共存：不折叠、不丢行（树以 providerId 为键）', () => {
+    const providers = [copy, seed, zen, disabled];
+    const picked = providers.map((p) => p.id);
+    expect(picked).toEqual([
+      'preset-opencode-go',
       'opencode-go',
       'opencode-zen',
       'off',
     ]);
     expect(
-      folded.filter((p) => p.name === 'OpenCode Go 订阅')
-    ).toHaveLength(1);
+      providers.filter((p) => p.name === 'OpenCode Go 订阅')
+    ).toHaveLength(2);
   });
 
-  it('resolveSettingsSelectedId 把被折叠的拷贝改绑胜者', () => {
-    const raw = [seed, copy, zen];
-    const folded = foldSettingsProfiles(raw);
-    expect(resolveSettingsSelectedId(folded, raw, 'preset-opencode-go')).toBe(
-      'opencode-go'
-    );
-    expect(resolveSettingsSelectedId(folded, raw, 'opencode-go')).toBe(
-      'opencode-go'
-    );
-    expect(resolveSettingsSelectedId(folded, raw, 'missing')).toBe('');
-  });
-
-  it('pickSettingsSelectedId：已选拷贝 → 胜者；否则活动；否则首行', () => {
-    const raw = [seed, copy, zen];
-    const folded = foldSettingsProfiles(raw);
+  it('树里不存在的旧 id 一律丢弃，不按展示名改绑', () => {
+    const providers = [seed, zen];
+    // 旧档案轨里的 `preset-opencode-go` 与 `seed` 同展示名——旧实现会把它
+    // 改绑到 `opencode-go`（按展示名认亲），新实现必须丢弃并按记忆/首行回落。
     expect(
-      pickSettingsSelectedId(folded, raw, 'preset-opencode-go', 'opencode-zen')
+      pickSettingsSelectedId(providers, 'preset-opencode-go', null)
     ).toBe('opencode-go');
-    expect(pickSettingsSelectedId(folded, raw, null, 'opencode-zen')).toBe(
+    expect(
+      pickSettingsSelectedId(providers, 'preset-opencode-go', 'opencode-zen')
+    ).toBe('opencode-zen');
+  });
+
+  it('pickSettingsSelectedId：已选 → 会话记忆 → 树首行；三者都必须在树里', () => {
+    const providers = [seed, zen];
+    expect(pickSettingsSelectedId(providers, 'opencode-zen', 'opencode-go')).toBe(
       'opencode-zen'
     );
-    expect(pickSettingsSelectedId(folded, raw, null, 'gone')).toBe(
-      'opencode-go'
+    expect(pickSettingsSelectedId(providers, null, 'opencode-zen')).toBe(
+      'opencode-zen'
+    );
+    expect(pickSettingsSelectedId(providers, null, 'gone')).toBe('opencode-go');
+    expect(pickSettingsSelectedId([], null, 'anything')).toBe('');
+  });
+
+  it('settingsObjectId 为二元组 JSON 键：跨 provider 隔离且无分隔符碰撞', () => {
+    expect(settingsObjectId('a::b', 'c')).not.toBe(settingsObjectId('a', 'b::c'));
+    expect(settingsObjectId('ollama', 'ornith')).toBe(
+      settingsObjectId('ollama', 'ornith')
+    );
+    expect(settingsObjectId('ollama', 'ornith')).not.toBe(
+      settingsObjectId('custom-mtyp5k9c', 'ornith')
     );
   });
 });

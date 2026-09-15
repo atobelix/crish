@@ -1,6 +1,7 @@
 /** 精确身份选择器：只读取已确认镜像，不补协议、模型或能力。 */
 import { modelRefKey } from './modelsCatalogTypes';
 import type {
+  IndexedProviderEntry,
   ModelProtocol,
   ModelsCatalogState,
   ProviderCompatConfig,
@@ -35,6 +36,13 @@ export function createSelectors(getState: StateAccessor) {
   return {
     selectProvider,
     selectModel,
+    /** 供应商名单只来自已确认镜像，保持配置文件顺序（含停用项）。 */
+    listProviders(): IndexedProviderEntry[] {
+      if (!getState().loaded) return [];
+      return [...getState().providerMap.entries()].map(
+        ([providerId, provider]) => ({ providerId, provider })
+      );
+    },
     selectEffectiveProtocol(
       providerId: string,
       modelId: string

@@ -220,59 +220,34 @@ describe('useModelProfilesState', () => {
     );
   });
 
-  it('设置列表按展示名折叠：种子 opencode-go 与 preset 拷贝只一行', () => {
-    const seed = {
-      id: 'opencode-go',
-      name: 'OpenCode Go 订阅',
-      baseUrl: 'https://opencode.ai/zen/go/v1',
-      models: ['deepseek-v4-flash'],
-      hasKey: false,
-      enabled: true,
-    };
-    const copy = {
-      id: 'preset-opencode-go',
-      name: 'OpenCode Go 订阅',
-      baseUrl: 'https://opencode.ai/zen/go/v1',
-      models: [],
-      hasKey: false,
-      enabled: true,
-    };
-    profileMocks.loadProfiles.mockReturnValue([seed, copy]);
+  // 说明（2026-09-15 单轨收敛）：旧实现按展示名折叠并「把被折叠的拷贝改绑胜者」，
+  // 存在的唯一理由是旧 localStorage 档案轨会出现同名重复条目。统一树以
+  // `providerId` 为键，**同展示名可共存且互不干扰**，折叠已无必要（`foldSettingsProfiles`
+  // / `resolveSettingsSelectedId` 已物理删除）。下列两条断言改钉新不变量。
+  it('同展示名的两个 provider 共存：不折叠、不丢行（树以 providerId 为键）', () => {
     const { result } = renderHook(() => useModelProfilesState());
 
-    expect(result.current.profiles.map((p) => p.id)).toEqual(['opencode-go']);
+    expect(result.current.profiles.map((p) => p.id)).toEqual([
+      'preset-openai',
+      'opencode-go',
+      'preset-opencode-go',
+      'opencode-zen',
+    ]);
     expect(
       result.current.profiles.filter((p) => p.name === 'OpenCode Go 订阅')
-    ).toHaveLength(1);
-    expect(result.current.selectedId).toBe('opencode-go');
+    ).toHaveLength(2);
+    expect(result.current.selectedId).toBe('preset-openai');
   });
 
-  it('sessionStorage 指向被折叠的拷贝时改绑胜者', () => {
-    const seed = {
-      id: 'opencode-go',
-      name: 'OpenCode Go 订阅',
-      baseUrl: 'https://opencode.ai/zen/go/v1',
-      models: ['deepseek-v4-flash'],
-      hasKey: false,
-      enabled: true,
-    };
-    const copy = {
-      id: 'preset-opencode-go',
-      name: 'OpenCode Go 订阅',
-      baseUrl: 'https://opencode.ai/zen/go/v1',
-      models: [],
-      hasKey: false,
-      enabled: true,
-    };
-    profileMocks.loadProfiles.mockReturnValue([seed, copy]);
+  it('sessionStorage 指向树里不存在的 id → 丢弃并回落首行，不按展示名改绑', () => {
     sessionStorage.setItem(
       'crish_models_selected_profile_v1',
-      'preset-opencode-go'
+      'preset-opencode-go-ghost'
     );
     const { result } = renderHook(() => useModelProfilesState());
 
-    expect(result.current.selectedId).toBe('opencode-go');
-    expect(result.current.selected?.id).toBe('opencode-go');
+    expect(result.current.selectedId).toBe('preset-openai');
+    expect(result.current.selected?.id).toBe('preset-openai');
     sessionStorage.removeItem('crish_models_selected_profile_v1');
   });
 

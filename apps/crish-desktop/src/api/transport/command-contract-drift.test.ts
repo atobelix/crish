@@ -357,89 +357,6 @@ interface DriftDebt {
  */
 const DRIFT_DEBT: readonly DriftDebt[] = [
   {
-    command: 'computer_session_enable',
-    evidence:
-      'Rust 有注册：`main.rs:458` 注册宏 + `command_manifest.rs:235` registered=true' +
-      ' + `computer_commands.rs:32` 实现。前端零消费：' +
-      '`apps/crish-desktop/src` 生产代码 grep 命中 0（`ComputerPanel` /' +
-      '`useComputerSession` / `computerSessionApi` 均已物理删除，仅 `*.test.ts` 残留引用）。',
-    owner: '电脑操作会话域（computer-panel 退役收口，04 阶段 2 ④）',
-    expiry:
-      '前端恢复接线（`computerSessionApi` 重建并经 `invoke(\'computer_session_enable\')`' +
-      '消费）后删除本条；或 Rust 侧退役该命令（含四方同步 + D11 复核）后一并删除。',
-  },
-  {
-    command: 'computer_session_disable',
-    evidence:
-      'Rust 有注册：`main.rs:462` + `command_manifest.rs:236` + ' +
-      '`computer_commands.rs:43`。前端零消费（同上，生产代码 grep 命中 0）。',
-    owner: '电脑操作会话域（computer-panel 退役收口）',
-    expiry:
-      '前端恢复接线后删除本条；或 Rust 侧退役该命令（含四方同步）后一并删除。',
-  },
-  {
-    command: 'computer_status',
-    evidence:
-      'Rust 有注册：`main.rs:465` + `command_manifest.rs:237` + ' +
-      '`computer_commands.rs:54`。前端零消费（同上，生产代码 grep 命中 0）。',
-    owner: '电脑操作会话域（computer-panel 退役收口）',
-    expiry:
-      '前端恢复接线后删除本条；或 Rust 侧退役该命令（含四方同步）后一并删除。',
-  },
-  {
-    command: 'config_get_outputs_root',
-    evidence:
-      'Rust 有注册：`main.rs:258` + `command_manifest.rs:148` + ' +
-      '`outputs_config.rs:145`。前端零消费：设置面 `agentOutputsRoot` 不存在' +
-      '（`grep -rn agentOutputsRoot apps/crish-desktop/src` 仅命中 manifest 声明），' +
-      '即自述的「登记先行、未接线」。',
-    owner: 'G03 产出根配置（T-EG-12）',
-    expiry:
-      '前端产出根设置面接线（读 `config_get_outputs_root` + 写 ' +
-      '`config_set_outputs_root`）后删除本条；或 Rust 侧退役后一并删除。',
-  },
-  {
-    command: 'config_set_outputs_root',
-    evidence:
-      'Rust 有注册：`main.rs:262` + `command_manifest.rs:149` + ' +
-      '`outputs_config.rs:164`。前端零消费（同 `agentOutputsRoot` 设置面缺失）。',
-    owner: 'G03 产出根配置（T-EG-12）',
-    expiry: '前端产出根设置面接线后删除本条；或 Rust 侧退役后一并删除。',
-  },
-  {
-    command: 'set_session_output_root',
-    evidence:
-      'Rust 有注册：`main.rs:377` + `command_manifest.rs:187` + ' +
-      '`outputs_config.rs:197`。前端零消费（会话级产出根覆盖无消费方）。',
-    owner: 'G03 会话级产出根（T-EG-12）',
-    expiry: '前端会话级产出根接线后删除本条；或 Rust 侧退役后一并删除。',
-  },
-  {
-    command: 'workbench_http_request',
-    evidence:
-      'Rust 有注册：`main.rs:242` + `command_manifest.rs:115` + ' +
-      '`commands.rs:19-71`。前端零消费：唯一调用点在 `commands.rs:99` / `:112`，' +
-      '均位于 `#[cfg(test)] mod tests` 内（测试自调），前端生产代码 grep 命中 0；' +
-      '前端出站现走 `provider_probe_ping` / `directFetchBridge`。',
-    owner: '供应商探测域 / 扩展出站面',
-    expiry:
-      '确证有产品消费方并接线后删除本条；若确证无产品用途则 Rust 侧退役' +
-      '（含四方同步）后一并删除。',
-  },
-  {
-    command: 'workbench_select_folder',
-    evidence:
-      'Rust 有注册：`main.rs:228` + `command_manifest.rs:110` + ' +
-      '`fs_commands/mod.rs:19-23`。前端零消费——原豁免理由' +
-      '「经 `openDirectoryDialogSafe` 动态触发」**失实**（2026-09-15 实证）：' +
-      '`openDirectoryDialog.ts:9` / `:32` 走 `@tauri-apps/plugin-dialog` 的 `open()`，' +
-      '不经该命令；全仓生产代码 grep 仅命中 manifest 声明。',
-    owner: '工作区目录选择域（PE-07 T07.2）',
-    expiry:
-      '前端改回经该命令消费（或 `fs_commands` 命令面确认保留并接线）后删除本条；' +
-      '若 `plugin-dialog` 已完全取代则 Rust 侧退役该命令（含四方同步）后一并删除。',
-  },
-  {
     command: 'core_read_run_events',
     evidence:
       'Rust 有注册：`main.rs:288-294` + `command_manifest.rs:164`' +
@@ -456,7 +373,7 @@ const DRIFT_DEBT: readonly DriftDebt[] = [
 ];
 
 /** 债务上限棘轮（目标 0）：新增债务必须显式上调本常量，禁止静默扩张。 */
-const DRIFT_DEBT_CEILING = 9;
+const DRIFT_DEBT_CEILING = 1;
 
 /** 已知断链棘轮（04 阶段 3 修复前为红）：只允许减少，禁止新增。 */
 const KNOWN_BROKEN: ReadonlySet<string> = new Set([
