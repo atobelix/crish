@@ -21,6 +21,7 @@
 
 use std::sync::Arc;
 
+use agent_provider::models::CredentialRef;
 use conex_types::events::{AgentEventEnvelope, RunCacheStats, EVENT_ENVELOPE_SCHEMA_VERSION};
 use serde::Serialize;
 use tauri::State;
@@ -257,17 +258,39 @@ pub fn build_status(
     }
 }
 
-/// 从配置存储组装 providerStatus（PE-01 T01.1；无硬编码，三态如实）。
+/// 从统一配置解析组装 providerStatus（PE-01 T01.1；无硬编码，三态如实）。
 ///
-/// `has_api_key` 语义：`effective_api_key()` 返回 `None`（store 未初始化 / 锁失败 /
-/// 明确无 key）时投影为 `None`（无法判定），`Some(k)` 时按 `!k.is_empty()` 判定。
-fn provider_status_from_config() -> ProviderStatus {
-    let api_key = crate::config::effective_api_key();
+/// `has_api_key` 语义：活动模型未解析（`Ok(None)` = 用户未选择 / `Err` = 配置未就绪）
+/// 时整体投影为 `None`（无法判定），解析成功时按凭据是否缺省判定。
+pub(crate) fn provider_status_from_config() -> ProviderStatus {
+    let resolved = match crate::config::resolve_active_model() {
+        Ok(Some(resolved)) => resolved,
+        // Ok(None) = 用户未选择活动模型；Err = 配置未就绪；二者均如实投影为 None。
+        Ok(None) | Err(_) => {
+            return ProviderStatus {
+                has_api_key: None,
+                model: None,
+                base_url: None,
+                credential_mode: None,
+            };
+        }
+    };
+    let has_api_key = Some(!resolved.api_key.as_str().is_empty());
+    let model = Some(resolved.model.id.clone());
+    let base_url = resolved.provider.base_url.clone();
+    let credential_mode = match resolved.provider.api_key_ref.as_deref() {
+        Some(reference) => match CredentialRef::parse(reference) {
+            Ok(CredentialRef::Dpapi(_)) => "dpapi",
+            Ok(CredentialRef::Env(_)) => "env",
+            Err(_) => "invalid",
+        },
+        None => "unset",
+    };
     ProviderStatus {
-        has_api_key: Some(api_key.as_deref().is_some_and(|k| !k.is_empty())),
-        model: crate::config::effective_model(),
-        base_url: crate::config::effective_api_base_url(),
-        credential_mode: Some(crate::config::effective_credential_mode()),
+        has_api_key,
+        model,
+        base_url,
+        credential_mode: Some(credential_mode.to_string()),
     }
 }
 
@@ -854,6 +877,7 @@ pub async fn core_get_run_snapshot(
 mod tests {
     use super::*;
     use crate::core_error::CoreError;
+    use agent_provider::models::PricingUnit;
 
     #[test]
     fn build_status_serializes_to_camel_case() {
@@ -1549,8 +1573,9 @@ mod tests {
         let stats = usage_stats();
         let pricing = ModelPricingSpec {
             currency: CurrencyKind::Usd,
-            input: 3.0,
-            output: 9.0,
+            unit: PricingUnit::PerMillionTokens,
+            input: Some(3.0),
+            output: Some(9.0),
             cache_read: Some(0.1),
             cache_write: Some(0.0),
             per_image: None,
@@ -1576,7 +1601,7 @@ mod tests {
 
         // 改价（input 3.0 → 30.0）→ 字符串变，token 字段不变
         let mut priced2 = pricing.clone();
-        priced2.input = 30.0;
+        priced2.input = Some(30.0);
         let usage2 = RunUsage::from_run_cache_stats(stats.clone(), Some(&priced2))
             .expect("改价后必须出账");
         assert_ne!(
@@ -1590,13 +1615,16 @@ mod tests {
         let unpriced = RunUsage::from_run_cache_stats(stats.clone(), None).expect("有样本");
         assert!(unpriced.cost.is_none(), "无定价 → cost None");
 
-        // 四价 0 无阶梯 → 免费
+        // 四价 0 无阶梯 → 免费（新契约：缺单价与显式免费不同——样本含
+        // cache_read 用量，cache_read 必须显式 Some(0.0)，缺价+有用量 =
+        // 未定价返回 None 而非 0）
         let free = ModelPricingSpec {
             currency: CurrencyKind::Usd,
-            input: 0.0,
-            output: 0.0,
-            cache_read: None,
-            cache_write: None,
+            unit: PricingUnit::PerMillionTokens,
+            input: Some(0.0),
+            output: Some(0.0),
+            cache_read: Some(0.0),
+            cache_write: Some(0.0),
             per_image: None,
             tiers: vec![],
         };
@@ -1609,10 +1637,13 @@ mod tests {
         // CNY → ¥ 前缀（无硬编码 $）
         let cny = ModelPricingSpec {
             currency: CurrencyKind::Cny,
-            input: 3.0,
-            output: 9.0,
-            cache_read: None,
-            cache_write: None,
+            unit: PricingUnit::PerMillionTokens,
+            input: Some(3.0),
+            output: Some(9.0),
+            // 样本含 cache_read 用量：缺该维度单价 = 未定价（新契约），
+            // 显式 0 才是「免费维度」
+            cache_read: Some(0.0),
+            cache_write: Some(0.0),
             per_image: None,
             tiers: vec![],
         };

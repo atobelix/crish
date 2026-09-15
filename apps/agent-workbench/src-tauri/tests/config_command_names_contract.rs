@@ -30,13 +30,10 @@ fn manifest_names() -> Vec<&'static str> {
 #[test]
 fn f5_final_config_command_names_registered() {
     for name in [
-        "config_get",
-        "config_update",
         "config_secret_set",
         "config_secret_get",
         "config_secret_has",
         "config_secret_clear",
-        "config_profile_apply",
         "config_secret_reveal",
     ] {
         let entry = COMMAND_MANIFEST
@@ -55,6 +52,11 @@ fn f5_final_config_command_names_registered() {
 fn f5_legacy_config_command_names_excluded() {
     let names = manifest_names();
     for legacy in [
+        "config_get",
+        "config_update",
+        "config_profile_apply",
+        "catalog_get",
+        "catalog_refresh",
         // 更名（签名不变，sentToDaemon 删除）：update_daemon_config → config_update
         "update_daemon_config",
         // 更名 + 接线：get_api_config → config_get
@@ -91,5 +93,17 @@ fn f3_f4_session_commands_registered() {
             .unwrap_or_else(|| panic!("F3/F4 命令 {name} 必须登记 manifest"));
         assert!(entry.registered, "{name} 应已接线");
         assert_eq!(entry.family, "session");
+    }
+}
+#[test]
+fn models_read_save_apply_have_real_primary_registration() {
+    let main = include_str!("../src/main.rs");
+    for name in [
+        "workbench_read_models_yaml",
+        "workbench_save_models_yaml",
+        "workbench_apply_models_config",
+    ] {
+        assert!(manifest_names().contains(&name));
+        assert!(main.contains(&format!("models_yaml::{name}")));
     }
 }

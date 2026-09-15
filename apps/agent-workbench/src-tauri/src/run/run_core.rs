@@ -320,6 +320,11 @@ pub struct CoreRunState {
     /// 预装配——经 run_task_impl 复用装配拉起新 run；测试经
     /// set_resume_launcher 注入替身断言判定与注入载荷）
     pub(crate) resume_launcher: Mutex<Option<ResumeLauncher>>,
+    /// 全局运行策略（用户裁决：重试预算/上限可配置，进配置文件不绑供应
+    /// 商）。main.rs 启动时从 `<config_dir>/settings.json` 读入；测试经
+    /// [Self::set_run_policy] 内存注入；None = 装配点落缺省（与策略文件
+    /// 引入前行为一致）。
+    pub(crate) run_policy: Mutex<Option<crate::config::run_policy::RunPolicy>>,
     /// D2 §3.4（C4 锁死）：跨 run 续 run 退避延迟注入点——测试直接驱动
     /// （不依赖 tokio pause）；None = 生产镜像 recovery.rs 常量
     /// （750→1500→3000，8s 封顶）。注入存在时 [Self::sleep_resume_backoff]
@@ -519,6 +524,7 @@ impl CoreRunState {
             resume_empty_streak: Mutex::new(HashMap::new()),
             resume_launcher: Mutex::new(Some(resume_launcher)),
             resume_backoff: Mutex::new(None),
+            run_policy: Mutex::new(None),
             retraction_freeze: std::sync::Arc::new(session_loop::SessionFreezeRegistry::new()),
             subagent_spawner,
             recovery_coordinators: Mutex::new(HashMap::new()),
@@ -551,6 +557,24 @@ impl CoreRunState {
     /// 快照）并原子交换，下一次 run 用新凭据）。
     pub(crate) fn reload_provider(&self) {
         self.engine.reload_provider();
+    }
+
+    /// 全局运行策略注入（main.rs 启动读 settings.json；测试内存注入）。
+    pub(crate) fn set_run_policy(
+        &self,
+        policy: Option<crate::config::run_policy::RunPolicy>,
+    ) {
+        *self.run_policy.lock().unwrap_or_else(|e| e.into_inner()) = policy;
+    }
+
+    /// 全局运行策略读取（None = 未配置，装配点落缺省）。
+    pub(crate) fn run_policy(
+        &self,
+    ) -> Option<crate::config::run_policy::RunPolicy> {
+        self.run_policy
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 
     /// restore 域状态（core_get_status.restore 数据源；F2 冻结形状）

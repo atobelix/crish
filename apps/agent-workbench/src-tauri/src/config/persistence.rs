@@ -1,113 +1,28 @@
-//! 配置持久化：provider 非敏感配置的 JSON 读写与配置路径解析。
-//!
-//! - 原子写：先写 `*.json.tmp` 再 `rename` 原位替换（避免半写文件被读到）；
-//! - 路径布局：`config_dir()/provider-config.json` + `config_dir()/secrets/{id}.dpapi`；
-//! - `sanitize_profile_secret_id`：密钥槽 id 白名单校验（防路径穿越）。
+//! 宿主路径解析。配置内容、凭据和原子写入由核心 ModelsStore 管理。
 
-use serde::{Deserialize, Serialize};
-use std::{
-    env, fs,
-    path::{Path, PathBuf},
-};
+use agent_provider::model_store::ModelsStoreError;
+use std::path::PathBuf;
 
-use super::resolution::non_empty_config_value;
-
-const DEFAULT_CONFIG_FILE_NAME: &str = "provider-config.json";
-const DEFAULT_SECRET_FILE_NAME: &str = "provider-direct-key.dpapi";
-/// 多 profile 密钥目录（DPAPI 文件：`secrets/{profileId}.dpapi`）
-const PROFILE_SECRETS_DIR_NAME: &str = "secrets";
-
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct PersistedProviderConfig {
-    pub(crate) base_url: Option<String>,
-    pub(crate) model: Option<String>,
-    pub(crate) credential_mode: Option<String>,
-    pub(crate) endpoint: Option<String>,
-    pub(crate) stream: Option<bool>,
-    pub(crate) direct_key_cleared: bool,
+pub(crate) fn models_path() -> Result<PathBuf, ModelsStoreError> {
+    std::env::var_os("USERPROFILE")
+        .or_else(|| std::env::var_os("HOME"))
+        .filter(|path| !path.is_empty())
+        .map(PathBuf::from)
+        .map(|path| path.join(".conex").join("models.yaml"))
+        .ok_or_else(|| ModelsStoreError::new("CONFIG_PATH", "无法定位用户模型配置目录"))
 }
 
-pub(crate) fn default_config_path() -> PathBuf {
-    config_dir().join(DEFAULT_CONFIG_FILE_NAME)
-}
-
-pub(crate) fn default_secret_path() -> PathBuf {
-    config_dir().join(DEFAULT_SECRET_FILE_NAME)
-}
-
-pub(crate) fn config_dir() -> PathBuf {
-    if let Ok(path) = env::var("CRISH_WORKBENCH_CONFIG_DIR") {
-        if let Some(path) = non_empty_config_value(path) {
-            return PathBuf::from(path);
-        }
-    }
-    if let Ok(path) = env::var("APPDATA") {
-        if let Some(path) = non_empty_config_value(path) {
-            return PathBuf::from(path).join("Crish").join("AgentWorkbench");
-        }
-    }
-    env::temp_dir().join("crish-agent-workbench")
-}
-
-pub(crate) fn read_persisted_config(path: &Path) -> Result<PersistedProviderConfig, String> {
-    match fs::read_to_string(path) {
-        Ok(text) => serde_json::from_str(&text)
-            .map_err(|error| format!("Invalid provider config file: {error}")),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            Ok(PersistedProviderConfig::default())
-        }
-        Err(error) => Err(format!("Failed to read provider config: {error}")),
-    }
-}
-
-/// 原子写配置 JSON：tmp 文件 + rename 原位替换（对齐 `workspace.rs` 的 recent 列表写法）。
-pub(crate) fn write_persisted_config(
-    path: &Path,
-    config: &PersistedProviderConfig,
-) -> Result<(), String> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|error| format!("Failed to create provider config directory: {error}"))?;
-    }
-    let tmp = path.with_extension("json.tmp");
-    let text = serde_json::to_string_pretty(config)
-        .map_err(|error| format!("Failed to encode provider config: {error}"))?;
-    fs::write(&tmp, format!("{text}\n"))
-        .map_err(|error| format!("Failed to write provider config: {error}"))?;
-    fs::rename(&tmp, path)
-        .map_err(|error| format!("Failed to replace provider config: {error}"))?;
-    Ok(())
-}
-
-pub(crate) fn profile_secrets_dir() -> PathBuf {
-    config_dir().join(PROFILE_SECRETS_DIR_NAME)
-}
-
-pub(crate) fn profile_secret_path(profile_id: &str) -> Result<PathBuf, String> {
-    let id = sanitize_profile_secret_id(profile_id)?;
-    Ok(profile_secrets_dir().join(format!("{id}.dpapi")))
-}
-
-/// 密钥槽 id 白名单：trim 后 ASCII 字母数字 / `-` / `_`，长度上限 128（防路径穿越）。
-pub(crate) fn sanitize_profile_secret_id(profile_id: &str) -> Result<String, String> {
-    let id = profile_id.trim();
-    if id.is_empty() {
-        return Err("profileId is empty".to_string());
-    }
-    if id.len() > 128 {
-        return Err("profileId is too long".to_string());
-    }
-    if !id
-        .chars()
-        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+pub(crate) fn config_dir() -> Result<PathBuf, ModelsStoreError> {
+    if let Some(path) =
+        std::env::var_os("CRISH_WORKBENCH_CONFIG_DIR").filter(|path| !path.is_empty())
     {
-        return Err("profileId must be ASCII alphanumeric, '-' or '_' only".to_string());
+        return Ok(PathBuf::from(path));
     }
-    Ok(id.to_string())
-}
-
-/// 读取多 profile 持久化配置（`profile-config.json`）。
-pub(crate) fn load_profiles_config() -> super::profile::PersistedProfileState {
-    super::profile::PersistedProfileState::load()
+    std::env::var_os("APPDATA")
+        .filter(|path| !path.is_empty())
+        .map(|path| PathBuf::from(path).join("Crish").join("AgentWorkbench"))
+        .or_else(|| {
+            std::env::var_os("HOME").map(|path| PathBuf::from(path).join(".config").join("crish"))
+        })
+        .ok_or_else(|| ModelsStoreError::new("CONFIG_PATH", "无法定位系统凭据目录"))
 }

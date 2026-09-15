@@ -239,16 +239,53 @@ impl CoreRunState {
     }
 
     /// D5 §3.2：写 `goal_state` 键（唯一写方 = run 收口 RoundAssessment +
-    /// run_task_impl 装配覆盖；spawn_blocking 落键；失败仅告警不阻断）
+    /// run_task_impl 装配覆盖；spawn_blocking 落键）。
+    ///
+    /// 表锁竞速防护：收口写回与 events 终态落库同时段争用 SQLite（实测
+    /// `database table is locked`），旧实现 `let _` 静默吞失败导致 goal
+    /// 轮次推进无声丢失。现对锁类失败做有限重试（50ms ×3），仍失败
+    /// tracing::error 显式留痕（不阻断收口——goal 推进丢失属可观测降级，
+    /// 下轮续轮判定会重新读到未推进值并重新评估）。
     pub(crate) async fn save_goal_state(&self, _session_id: &str, state: &GoalState) {
         let Some(db) = self.local_db() else {
             return;
         };
         let json = state.to_json();
-        let _ = tokio::task::spawn_blocking(move || {
-            db.set_session_meta(orchestrator::goal_state::GOAL_STATE_KEY, &json)
+        let result = tokio::task::spawn_blocking(move || {
+            let mut last = None;
+            for attempt in 0..3 {
+                match db.set_session_meta(orchestrator::goal_state::GOAL_STATE_KEY, &json) {
+                    Ok(()) => return Ok(()),
+                    Err(error) => {
+                        let locked = error.to_string().contains("table is locked");
+                        last = Some(error);
+                        if !locked {
+                            break;
+                        }
+                        if attempt + 1 < 3 {
+                            std::thread::sleep(std::time::Duration::from_millis(50));
+                        }
+                    }
+                }
+            }
+            Err(last.unwrap_or_else(|| conex_db::DbFailure {
+                message: "goal_state 写回未执行".into(),
+                kind: conex_db::DbFailureKind::Lock,
+            }))
         })
         .await;
+        match result {
+            Ok(Ok(())) => {}
+            Ok(Err(error)) => {
+                tracing::error!(
+                    error = %error,
+                    "goal_state 写回失败（含表锁重试耗尽）：goal 轮次推进未持久化"
+                );
+            }
+            Err(error) => {
+                tracing::error!(error = %error, "goal_state 写回任务 join 失败");
+            }
+        }
     }
 
     /// D5 §3.7：最新 compression_block.summary_json 的 nextSteps 读取

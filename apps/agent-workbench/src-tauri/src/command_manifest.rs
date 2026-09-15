@@ -94,6 +94,7 @@ pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
         entry("workbench_read_models_yaml", "workbench", "gui", true),
         entry("workbench_validate_models_yaml", "workbench", "gui", true),
         entry("workbench_save_models_yaml", "workbench", "gui", true),
+        entry("workbench_apply_models_config", "workbench", "gui", true),
         // F1（R-AB1 T-AB-08）：后台任务三条查询命令恢复（B01/B02 查询面）
         entry("workbench_list_background_tasks", "workbench", "gui", true),
         entry(
@@ -133,15 +134,12 @@ pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
         entry("auth_list_devices", "auth", "engine", true),
         entry("auth_revoke_device", "auth", "engine", true),
         entry("auth_get_relay_ticket", "auth", "engine", true),
-        // ── 配置族（§2.2-C，F5 终态名：config_get/config_update/config_secret_*）──
-        // PE-07 T07.4（K-01/K-02）：config_profile_apply / config_secret_reveal 已接线
-        entry("config_get", "config", "engine", true),
-        entry("config_update", "config", "engine", true),
+        // ── 配置族（统一配置树事务：config_secret_* 凭据边界 + workbench_apply_models_config）──
+        // PE-07 T07.4（K-01/K-02）：密钥只经凭据命令落 DPAPI 槽，不进快照/事件/日志
         entry("config_secret_set", "config", "engine", true),
         entry("config_secret_get", "config", "engine", true),
         entry("config_secret_has", "config", "engine", true),
         entry("config_secret_clear", "config", "engine", true),
-        entry("config_profile_apply", "config", "engine", true),
         entry("config_secret_reveal", "config", "engine", true),
         // ── 原生探活与模型扫描（Batch 1 · G3：provider_probe_ping / provider_probe_scan_models）──
         entry("provider_probe_ping", "config", "engine", true),
@@ -202,8 +200,6 @@ pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
         // ── 注册表单一化自身（T03.1）──
         entry("core_list_commands", "core", "engine", true),
         // ── 模型目录（P3 步骤 5：catalog_get / catalog_refresh；C7 三处登记 ①）──
-        entry("catalog_get", "core", "engine", true),
-        entry("catalog_refresh", "core", "engine", true),
         // ── 误删恢复（I2-S5：trash_list / trash_restore / trash_purge）──
         entry("trash_list", "core", "engine", true),
         entry("trash_restore", "core", "engine", true),
@@ -326,12 +322,12 @@ mod tests {
             .count();
         let pending = total - registered;
         assert_eq!(
-            total, 146,
-            "总数 146（145 + workbench_window_ready 窗口首绘握手；与前端保持同步）"
+            total, 142,
+            "总数 142（单轨收敛退役 config_get/update/profile_apply 旧命令族后；与前端 commandMap 同步）"
         );
         assert_eq!(
-            registered, 146,
-            "注册面 146（全部为 registered=true 实装命令）"
+            registered, 142,
+            "注册面 142（全部为 registered=true 实装命令）"
         );
         assert_eq!(pending, 0, "登记先行 0");
     }
@@ -355,7 +351,7 @@ mod tests {
             .map(|c| (c.name, c))
             .collect();
         for name in [
-            "config_profile_apply",
+            "workbench_apply_models_config",
             "config_secret_reveal",
             "workbench_git_run",
         ] {
@@ -412,6 +408,8 @@ mod tests {
                 .unwrap_or_else(|| panic!("{name} 必须登记 manifest（T-CF-14）"));
             assert!(entry.registered, "{name} 已接线应 registered=true");
             assert_eq!(entry.family, "workflow", "{name} 属 workflow 族");
+            // create-workflow 由引擎（engine runtime）执行（209 行登记为
+            // engine 契约面——workflow 持久化/触发在内核侧）
             assert_eq!(entry.surface, "engine", "{name} 属引擎契约面");
         }
     }
@@ -439,12 +437,17 @@ mod tests {
             .iter()
             .map(|c| (c.name, c))
             .collect();
-        for name in ["catalog_get", "catalog_refresh"] {
+        for name in [
+            "workbench_read_models_yaml",
+            "workbench_save_models_yaml",
+            "workbench_apply_models_config",
+        ] {
             let entry = by_name
                 .get(name)
                 .unwrap_or_else(|| panic!("{name} 必须登记 manifest（C7 ①）"));
-            assert_eq!(entry.family, "core", "{name} 属 core 族");
-            assert_eq!(entry.surface, "engine", "{name} 属引擎契约面");
+            assert_eq!(entry.family, "workbench", "{name} 属 workbench 族");
+            // read 走 Tauri gui 面（WebView 直调），apply/save 走引擎事务
+            assert_eq!(entry.surface, "gui", "{name} 属 gui 契约面（WebView 直调读取）");
             assert!(entry.registered, "{name} 已接线应 registered=true");
         }
     }
@@ -453,7 +456,7 @@ mod tests {
     #[test]
     fn core_list_commands_returns_full_manifest() {
         let manifest = core_list_commands().unwrap();
-        assert_eq!(manifest.commands.len(), 146);
+        assert_eq!(manifest.commands.len(), COMMAND_MANIFEST.commands.len());
         assert_eq!(manifest.contract_version, "1.0.0");
     }
 

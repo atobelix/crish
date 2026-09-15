@@ -1,137 +1,137 @@
-//! Provider API 配置模块：加载/保存、密钥槽、环境变量合并与 Tauri 命令入口。
-//!
-//! 模块组织：
-//! - `provider.rs`：`ApiConfigStore` + `effective_*` 函数族 + `ProviderStatusSource` /
-//!   `provider_status()` + 命令 `config_get` / `config_update` / `config_profile_apply`；
-//! - `credentials.rs`：DPAPI 密钥槽（`secrets/{id}.dpapi`）+ 命令
-//!   `config_secret_set / get / has / clear / reveal`（K-02：默认只回 last4）；
-//! - `persistence.rs`：配置 JSON 原子写（tmp + rename）+ 路径布局 + id 白名单；
-//! - `profile.rs`：多 profile 引擎侧投影（T5.2a · G3 收敛，独立 `profile-config.json`）；
-//! - `resolution.rs`：字段规范化 / Endpoint 解析 / 来源标记；
-//! - `env_filter.rs`：环境变量名清单。
-
+//! 模型配置宿主适配：持有一个核心存储，注册变更事件，不维护第二份配置树。
 mod credentials;
-mod env_filter;
 pub(crate) mod persistence;
-pub(crate) mod profile;
-mod provider;
-mod resolution;
+pub(crate) mod run_policy;
 
-use std::sync::Mutex;
 #[cfg(not(test))]
 use std::sync::OnceLock;
+use std::sync::{Arc, Mutex};
 
-use conex_types::CoreError;
+use agent_provider::model_store::{
+    CommittedModels, ModelsChange, ModelsSnapshot, ModelsStore, ModelsStoreError,
+    ResolvedModelConfig,
+};
+use agent_provider::models::ModelRef;
+use tauri::{Emitter, Manager};
 
-use credentials::CredentialStore;
-use persistence::{default_config_path, default_secret_path, profile_secrets_dir};
-use provider::ApiConfigStore;
-
-// ── Static stores ──
-// 生产（cfg(not(test))）：OnceLock 单例——首次访问时按当前配置目录懒加载。
-// 测试（cfg(test)）：可重置形态——`OnceLock` 无 `&mut` 重置面，命令级测试
-// （config_profile_apply / config_update 等）需要把静态隔离到独立临时目录
-// （禁止写入真实用户配置），故测试面换 `Mutex<Option<T>>` +
-// [reset_config_stores_for_test]：重置为 None 后，下一次访问按当前
-// `CRISH_WORKBENCH_CONFIG_DIR` 重新懒加载。
-#[cfg(not(test))]
-pub(crate) static API_CONFIG_STORE: OnceLock<Mutex<ApiConfigStore>> = OnceLock::new();
-#[cfg(test)]
-pub(crate) static API_CONFIG_STORE: Mutex<Option<ApiConfigStore>> = Mutex::new(None);
-
-#[cfg(not(test))]
-pub(crate) static PROFILE_SECRET_STORE: OnceLock<Mutex<CredentialStore>> = OnceLock::new();
-#[cfg(test)]
-pub(crate) static PROFILE_SECRET_STORE: Mutex<Option<CredentialStore>> = Mutex::new(None);
-
-// ── Public re-exports ──
-// 使用 glob 确保 Tauri 的 #[tauri::command] 宏生成的辅助项（__cmd__*, __tauri_command_name_*）
-// 在 config 命名空间下可见；逐个 use 只引入命名项，不会引入宏生成项。
 pub(crate) use credentials::*;
-pub(crate) use provider::*;
 
-// 注：workbench_profile_secret_* 旧登记名别名（G11a 删除）——F5 单终态体系
-// （config_command_names_contract.rs 严禁旧名登记 manifest），终态名
-// config_secret_* 已在 credentials.rs 接线。
+#[cfg(not(test))]
+static MODELS_STORE: OnceLock<Arc<ModelsStore>> = OnceLock::new();
+#[cfg(test)]
+static MODELS_STORE: Mutex<Option<Arc<ModelsStore>>> = Mutex::new(None);
 
-pub(crate) fn init_api_config_store() {
-    let config_path = default_config_path();
-    let secret_path = default_secret_path();
+fn create_store() -> Result<Arc<ModelsStore>, ModelsStoreError> {
+    let config_dir = persistence::config_dir()?;
+    #[cfg(test)]
+    let path = if std::env::var_os("CRISH_WORKBENCH_CONFIG_DIR").is_some() {
+        config_dir.join("models.yaml")
+    } else {
+        persistence::models_path()?
+    };
+    #[cfg(not(test))]
+    let path = persistence::models_path()?;
+    let store = Arc::new(ModelsStore::new(
+        path,
+        config_dir.join("secrets"),
+        Some(config_dir),
+    ));
+    // 语法错误保存在核心状态；应用仍可打开编辑器修复，但新请求会被拒绝。
+    if let Err(error) = store.read() {
+        tracing::error!(error = %error, "模型配置初始化失败");
+    }
+    Ok(store)
+}
+
+pub(crate) fn models_store() -> Result<Arc<ModelsStore>, ModelsStoreError> {
     #[cfg(not(test))]
     {
-        let _ = API_CONFIG_STORE
-            .get_or_init(|| Mutex::new(ApiConfigStore::load(config_path, secret_path)));
-        let _ = profile_secret_store();
+        if let Some(store) = MODELS_STORE.get() {
+            return Ok(store.clone());
+        }
+        let created = create_store()?;
+        let _ = MODELS_STORE.set(created);
+        MODELS_STORE
+            .get()
+            .cloned()
+            .ok_or_else(|| ModelsStoreError::new("STORE_INIT", "模型配置存储未初始化"))
     }
     #[cfg(test)]
     {
-        let mut outer = API_CONFIG_STORE.lock().unwrap_or_else(|e| e.into_inner());
-        outer.get_or_insert_with(|| ApiConfigStore::load(config_path, secret_path));
-        let mut secrets = PROFILE_SECRET_STORE
+        let mut slot = MODELS_STORE
             .lock()
-            .unwrap_or_else(|e| e.into_inner());
-        secrets.get_or_insert_with(|| CredentialStore::new(profile_secrets_dir().join(".probe")));
+            .map_err(|_| ModelsStoreError::new("STORE_LOCK", "测试配置锁不可用"))?;
+        if slot.is_none() {
+            *slot = Some(create_store()?);
+        }
+        slot.clone()
+            .ok_or_else(|| ModelsStoreError::new("STORE_INIT", "模型配置存储未初始化"))
     }
 }
 
-/// 测试面：把静态配置存储重置为空（下一次访问按当前
-/// `CRISH_WORKBENCH_CONFIG_DIR` 重新懒加载）——命令级测试用，配合
-/// `std::env::set_var` 把静态隔离到独立临时目录，禁止触碰真实用户配置。
-/// 仅 cfg(test) 存在，生产无此面；调用方需自行串行化（并行测试竞态）。
+pub(crate) fn current_snapshot() -> Result<Arc<CommittedModels>, ModelsStoreError> {
+    models_store()?.committed()
+}
+
+pub(crate) fn resolve_model(reference: &ModelRef) -> Result<ResolvedModelConfig, ModelsStoreError> {
+    models_store()?.resolve_model(reference)
+}
+
+pub(crate) fn resolve_active_model() -> Result<Option<ResolvedModelConfig>, ModelsStoreError> {
+    models_store()?.resolve_active()
+}
+
+pub(crate) fn publish_snapshot(app: &tauri::AppHandle, snapshot: &mut ModelsSnapshot) {
+    let change = ModelsChange {
+        revision: snapshot.revision.clone(),
+        valid: snapshot.parse_error.is_none(),
+    };
+    if let Err(error) = publish_change(app, change) {
+        tracing::error!(error = %error, "已提交配置的窗口通知失败");
+        snapshot.notification_error = Some(error.message);
+    }
+}
+
+fn publish_change(app: &tauri::AppHandle, change: ModelsChange) -> Result<(), ModelsStoreError> {
+    if let Some(state) = app.try_state::<Arc<crate::core_run_commands::CoreRunState>>() {
+        state.reload_provider();
+    }
+    app.emit("models-config-changed", &change)
+        .map_err(|_| ModelsStoreError {
+            code: "CONFIG_EVENT".into(),
+            message: "配置已保存，但窗口同步事件发送失败，请重新加载配置".into(),
+            current_revision: Some(change.revision),
+        })
+}
+
+pub(crate) fn init_models_store(app: &tauri::AppHandle) -> Result<(), ModelsStoreError> {
+    let store = models_store()?;
+    let handle = app.clone();
+    let watcher = store.watch(move |change| {
+        if let Err(error) = publish_change(&handle, change) {
+            tracing::error!(error = %error, "模型配置变更通知失败");
+        }
+    })?;
+    app.manage(Mutex::new(watcher));
+    Ok(())
+}
+
 #[cfg(test)]
 pub(crate) fn reset_config_stores_for_test() {
-    *API_CONFIG_STORE.lock().unwrap_or_else(|e| e.into_inner()) = None;
-    *PROFILE_SECRET_STORE
-        .lock()
-        .unwrap_or_else(|e| e.into_inner()) = None;
-}
-
-#[cfg(not(test))]
-fn profile_secret_store() -> &'static Mutex<CredentialStore> {
-    PROFILE_SECRET_STORE
-        .get_or_init(|| Mutex::new(CredentialStore::new(profile_secrets_dir().join(".probe"))))
-}
-
-/// 多 profile 密钥槽锁内写操作（错误统一 CoreError，IPC 面唯一协议）。
-fn with_profile_secrets_mut<T>(
-    operation: impl FnOnce(&mut CredentialStore) -> Result<T, CoreError>,
-) -> Result<T, CoreError> {
-    #[cfg(not(test))]
-    {
-        let mut guard = profile_secret_store().lock().map_err(|error| {
-            CoreError::Internal(format!("profile secret store lock poisoned: {error}"))
-        })?;
-        operation(&mut guard)
-    }
-    #[cfg(test)]
-    {
-        let mut outer = PROFILE_SECRET_STORE.lock().map_err(|error| {
-            CoreError::Internal(format!("profile secret store lock poisoned: {error}"))
-        })?;
-        let store =
-            outer.get_or_insert_with(|| CredentialStore::new(profile_secrets_dir().join(".probe")));
-        operation(store)
+    if let Ok(mut slot) = MODELS_STORE.lock() {
+        *slot = None;
     }
 }
 
-/// 多 profile 密钥槽锁内读操作（错误统一 CoreError，IPC 面唯一协议）。
-fn with_profile_secrets<T>(
-    operation: impl FnOnce(&CredentialStore) -> Result<T, CoreError>,
-) -> Result<T, CoreError> {
-    #[cfg(not(test))]
-    {
-        let guard = profile_secret_store().lock().map_err(|error| {
-            CoreError::Internal(format!("profile secret store lock poisoned: {error}"))
-        })?;
-        operation(&guard)
-    }
-    #[cfg(test)]
-    {
-        let mut outer = PROFILE_SECRET_STORE.lock().map_err(|error| {
-            CoreError::Internal(format!("profile secret store lock poisoned: {error}"))
-        })?;
-        let store =
-            outer.get_or_insert_with(|| CredentialStore::new(profile_secrets_dir().join(".probe")));
-        operation(store)
-    }
+#[cfg(test)]
+pub(crate) fn install_models_store_for_test(store: Arc<ModelsStore>) {
+    *MODELS_STORE.lock().expect("测试配置锁") = Some(store);
+}
+/// IPC 的同步文件与系统凭据操作只在阻塞任务执行，不占 WebView 事件线程。
+pub(crate) async fn blocking<T: Send + 'static>(
+    operation: impl FnOnce(Arc<ModelsStore>) -> Result<T, ModelsStoreError> + Send + 'static,
+) -> Result<T, ModelsStoreError> {
+    tauri::async_runtime::spawn_blocking(move || operation(models_store()?))
+        .await
+        .map_err(|_| ModelsStoreError::new("CONFIG_TASK", "配置操作未能完成"))?
 }

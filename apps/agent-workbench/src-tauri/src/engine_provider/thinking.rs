@@ -12,6 +12,7 @@ use agent_provider::request::build::dialect::ReasoningEffort as DialectEffort;
 use agent_provider::request::{ReasoningEffort, ReasoningReject};
 use conex_types::error::ProviderErrorKind;
 use conex_types::response::ClassifiedStreamError;
+use indexmap::IndexMap;
 
 use super::protocol::CatalogRequestProfile;
 
@@ -45,7 +46,7 @@ pub(crate) fn to_provider_effort(
 /// - 显式档位在字典白名单内 → `Ok(())`（直发不降级）；
 /// - 显式档位不在字典 → `Err`：已分类流前错误 [ClassifiedStreamError]
 ///   （kind = [ProviderErrorKind::InvalidRequest]，文案含
-///   [ReasoningReject::UNSUPPORTED_TAG] 语义标签）。
+///   [ReasoningReject::UNSUPPORTED_TAG] 语义标签，并列出**该模型可用档位集合**）。
 ///
 /// 由 [crate::engine_provider::HttpProviderCall::stream] 在 HTTP I/O 之前调用——
 /// 错误在请求发送前返回，满足「请求面不支持的档位在网络 I/O 前拒绝」。
@@ -68,7 +69,7 @@ pub(crate) fn validate_reasoning_effort(
     // 白名单 = yaml thinking 字典的 TitleCase 键（归一比较：键拼写 High /
     // XHigh / X-High 均可命中对应档位）。
     let Some(map) = profile.thinking_map.as_ref() else {
-        return Err(reject_to_classified(provider_effort));
+        return Err(reject_to_classified(provider_effort, &[]));
     };
     let in_whitelist = map.keys().any(|title| {
         DialectEffort::from_title_case(title) == Some(provider_effort.into())
@@ -76,19 +77,58 @@ pub(crate) fn validate_reasoning_effort(
     if in_whitelist {
         Ok(())
     } else {
-        Err(reject_to_classified(provider_effort))
+        // 拒绝前把该模型可用档位集合（归一后的规范拼写，去重按词表序）带进文案。
+        Err(reject_to_classified(
+            provider_effort,
+            &available_effort_titles(Some(map)),
+        ))
     }
 }
 
+/// 思考词表序（与内核 [DialectEffort] 强度序一致）：Off→Minimal→Low→Medium→High→XHigh→Max。
+const EFFORT_VOCABULARY: [DialectEffort; 7] = [
+    DialectEffort::Off,
+    DialectEffort::Minimal,
+    DialectEffort::Low,
+    DialectEffort::Medium,
+    DialectEffort::High,
+    DialectEffort::XHigh,
+    DialectEffort::Max,
+];
+
+/// 该模型可用档位集合：`thinking_map` 的键经 [DialectEffort::from_title_case] 归一后的
+/// **规范拼写**，去重并按词表序排列（`None`/`Disabled` 等别名归一到其规范档位）。
+/// map 缺省 → 空集。
+fn available_effort_titles(map: Option<&IndexMap<String, String>>) -> Vec<&'static str> {
+    let Some(map) = map else {
+        return Vec::new();
+    };
+    EFFORT_VOCABULARY
+        .iter()
+        .filter(|canon| {
+            map.keys()
+                .any(|k| DialectEffort::from_title_case(k) == Some(**canon))
+        })
+        .map(|canon| canon.to_title_case())
+        .collect()
+}
+
 /// 拒绝载荷 → 已分类流前错误（C17 语义：复用 [ProviderErrorKind::InvalidRequest] 分类，
-/// 与既有 HTTP 400 同类；文案含 `UNSUPPORTED_REASONING_EFFORT` 语义标签，不降级不改写）。
-fn reject_to_classified(effort: ReasoningEffort) -> ClassifiedStreamError {
+/// 与既有 HTTP 400 同类；文案含 `UNSUPPORTED_REASONING_EFFORT` 语义标签与**该模型可用档位
+/// 集合**，不降级不改写）。
+fn reject_to_classified(effort: ReasoningEffort, available: &[&str]) -> ClassifiedStreamError {
+    let available_text = if available.is_empty() {
+        "（该模型未声明任何可用档位）".to_string()
+    } else {
+        available.join(" / ")
+    };
     ClassifiedStreamError {
         kind: ProviderErrorKind::InvalidRequest,
         message: format!(
-            "不支持的思考档位 '{}' 超出此模型能力 —— {}（请求前拒绝，不降级）",
+            "不支持的思考档位 '{}' 超出此模型能力 —— {}；可用档位集合：{}（请求前拒绝，不降级）",
             effort.as_str(),
             ReasoningReject::UNSUPPORTED_TAG,
+            available_text,
         ),
         retryable: false,
         retry_after_ms: None,

@@ -353,17 +353,11 @@ impl ApiBackend for CoreStateBackend {
     /// StatusDiagnostics 实例）
     async fn get_status(&self) -> Result<serde_json::Value, ServerError> {
         use crate::core_query_commands::{
-            build_status, DiagnosticEntry, LastErrorEntry, ProviderStatus,
+            build_status, DiagnosticEntry, LastErrorEntry,
         };
         let diagnostics = self.core.status_diagnostics();
-        // providerStatus 三态如实（config 全局 store 直读）
-        let api_key = crate::config::effective_api_key();
-        let provider_status = ProviderStatus {
-            has_api_key: Some(api_key.as_deref().is_some_and(|k| !k.is_empty())),
-            model: crate::config::effective_model(),
-            base_url: crate::config::effective_api_base_url(),
-            credential_mode: Some(crate::config::effective_credential_mode()),
-        };
+        // providerStatus 三态如实（统一配置解析单轨；与 core_query_commands 同源）
+        let provider_status = crate::core_query_commands::provider_status_from_config();
         // 日志目录与 core_get_status 同源（app_dir()/logs）
         let log_dir = crate::host_paths::app_dir()
             .map(|dir| dir.join("logs").to_string_lossy().to_string())

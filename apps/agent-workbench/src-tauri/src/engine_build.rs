@@ -1087,8 +1087,10 @@ pub(crate) fn waste_alert_event(
         if p.currency != agent_provider::pricing::Currency::Usd {
             return None;
         }
+        // 输入单价未配置（None）视为无法计价，失败闭合而非按 0 计价（价格未配置 ≠ 0）。
+        let input_rate = p.input?;
         let input_micros =
-            agent_provider::pricing::PricingEngine::tokens_to_micros(stats.missed_tokens, p.input);
+            agent_provider::pricing::PricingEngine::tokens_to_micros(stats.missed_tokens, input_rate);
         let read_micros = agent_provider::pricing::PricingEngine::tokens_to_micros(
             stats.missed_tokens,
             p.cache_read.unwrap_or(0.0),

@@ -728,6 +728,12 @@ fn describe_model_whitelist_for_deepseek_v4_flash_is_narrow() {
                 "文案携带语义标签：{}",
                 err.message
             );
+            // W9-F-3：拒绝文案必须列出该模型可用档位集合（归一规范拼写，词表序）。
+            assert!(
+                err.message.contains("Low / High / Max"),
+                "文案必须列出可用档位集合（词表序 Low / High / Max）：{}",
+                err.message
+            );
         }
         Ok(()) => panic!("medium 不在字典白名单，应拒绝"),
     }

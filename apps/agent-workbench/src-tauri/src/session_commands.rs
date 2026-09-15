@@ -662,7 +662,8 @@ mod tests {
         ];
 
         // 全新内存库：无索引行，自愈后正文可写入（不再 FK 失败）。
-        self_heal_then_save_body(&db, "s1", &messages).expect("self-heal save");
+        // 自愈语义与批次 CAS 无关：None = 显式非 CAS rebase 路径
+        self_heal_then_save_body(&db, "s1", &messages, None).expect("self-heal save");
 
         let body = db.load_session_body("s1").unwrap();
         assert_eq!(body.len(), 2);
@@ -678,7 +679,7 @@ mod tests {
         db.upsert_session_entry(&sample_entry("s1")).unwrap();
 
         let messages = [sample_message("m1", "user", 1)];
-        self_heal_then_save_body(&db, "s1", &messages).expect("save with existing row");
+        self_heal_then_save_body(&db, "s1", &messages, None).expect("save with existing row");
 
         // 既有索引行不被覆盖（INSERT OR IGNORE 幂等）。
         let list = db.list_sessions().unwrap();

@@ -1,25 +1,23 @@
 //! 原生服务商连通性探活与模型扫描模块（Batch 1 · G3 独立模块）。
 //!
 //! 职责与安全特性：
-//! - `provider_probe_ping`：底层直接读取 DPAPI 密钥（`read_profile_key`），
+//! - `provider_probe_ping`：从同一已提交配置快照读取模型与凭据，
 //!   发起轻量 HTTP 请求进行连通性检查与毫秒级 RTT 延迟测量，非崩溃型返回；
 //! - `provider_probe_scan_models`：底层携带 DPAPI 密钥直接请求 `GET /models`，
-//!   解析模型列表并自动合并至 `ModelCatalog`（`upsert_from_scan`），同时将
-//!   模型列表持久化到 `profile-config.json`；
+//!   解析候选列表；只有用户确认并提交统一配置事务后才持久化；
 //! - 凭据安全：前端冷启动与运行期无需在内存保留明文 API Key，零明文泄露。
 
 use std::{
     collections::HashSet,
-    sync::{Arc, RwLock},
     time::{Duration, Instant},
 };
 
-use agent_provider::models::{ModelCatalog, ScannedModel};
-use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, CONTENT_TYPE};
-use serde::{Deserialize, Serialize};
-use tauri::State;
+use agent_provider::model_store::ResolvedProviderConfig;
+use agent_provider::models::{ModelRef, ProtocolKind, ScannedModel};
+use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
 
-use crate::config::{persistence::load_profiles_config, profile::read_profile_key};
+const DEFAULT_PROBE_TIMEOUT_MS: u64 = 15_000;
+use serde::{Deserialize, Serialize};
 
 /// 探活请求参数（serde camelCase）。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -130,265 +128,143 @@ pub fn parse_scanned_models(body: &serde_json::Value, profile_id: &str) -> Vec<S
     scanned
 }
 
-#[derive(Debug, Clone)]
-struct ProbeTarget {
-    display_name: String,
-    base_url: String,
-    endpoint_type: String,
-    model_to_test: String,
-}
-
-fn resolve_probe_target(
-    profile_id: &str,
-    requested_model: Option<&str>,
-) -> Result<ProbeTarget, (u16, String)> {
-    let state = load_profiles_config();
-    let live = crate::engine_provider::protocol::live_catalog();
-
-    let state_profile = state.profiles.get(profile_id);
-    let live_provider = live.tree.providers.get(profile_id);
-
-    if state_profile.is_none() && live_provider.is_none() {
-        return Err((404, format!("未找到服务商配置 [{profile_id}]")));
+/// 代理和自定义头直接读取同一配置快照；非法配置返回错误，不静默跳过。
+fn probe_client(
+    config: &ResolvedProviderConfig,
+    timeout: Duration,
+) -> Result<reqwest::Client, String> {
+    let mut builder = reqwest::Client::builder().timeout(timeout).no_proxy();
+    if let Some(proxy) = &config.provider.proxy_url {
+        builder = builder.proxy(reqwest::Proxy::all(proxy).map_err(|_| "代理地址无效")?);
     }
-
-    let display_name = live_provider
-        .and_then(|p| p.display_name.clone())
-        .filter(|s| !s.trim().is_empty())
-        .unwrap_or_else(|| profile_id.to_string());
-
-    let base_url = live_provider
-        .and_then(|p| p.base_url.clone())
-        .or_else(|| state_profile.and_then(|p| p.base_url.clone()))
-        .filter(|s| !s.trim().is_empty());
-
-    let base_url = match base_url {
-        Some(u) => u.trim().trim_end_matches('/').to_string(),
-        None => {
-            return Err((400, format!("服务商 [{display_name}] 未配置 Base URL 地址")));
+    if let Some(headers) = &config.provider.headers {
+        let mut map = HeaderMap::new();
+        for (name, value) in headers {
+            let name = reqwest::header::HeaderName::from_bytes(name.as_bytes())
+                .map_err(|_| "自定义请求头名称无效")?;
+            let value = HeaderValue::from_str(value).map_err(|_| "自定义请求头值无效")?;
+            map.insert(name, value);
         }
-    };
-
-    let endpoint_type = live_provider
-        .map(|p| match p.protocol {
-            agent_provider::models::ProtocolKind::AnthropicMessages => "anthropic".to_string(),
-            agent_provider::models::ProtocolKind::GoogleGenerateContent => "gemini".to_string(),
-            agent_provider::models::ProtocolKind::OpenAiResponses => "responses".to_string(),
-            _ => "chat-completions".to_string(),
-        })
-        .or_else(|| state_profile.and_then(|p| p.endpoint.clone()))
-        .unwrap_or_else(|| "chat-completions".to_string());
-
-    let model_to_test = requested_model
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(ToString::to_string)
-        .or_else(|| live_provider.and_then(|p| p.models.first().map(|m| m.id.clone())))
-        .or_else(|| state_profile.and_then(|p| p.model.clone()))
-        .or_else(|| state_profile.and_then(|p| p.models.first().cloned()))
-        .unwrap_or_else(|| "deepseek-chat".to_string());
-
-    Ok(ProbeTarget {
-        display_name,
-        base_url,
-        endpoint_type,
-        model_to_test,
-    })
+        builder = builder.default_headers(map);
+    }
+    builder.build().map_err(|_| "无法创建供应商连接".into())
 }
 
 /// 原生探活核心逻辑
 pub async fn probe_ping_core(req: ProbePingRequest) -> ProbePingResult {
-    let profile_id = req.profile_id.trim();
-    if profile_id.is_empty() {
-        return ProbePingResult {
-            ok: false,
-            latency_ms: None,
-            status_code: Some(400),
-            error: Some("profile_id 不能为空".to_string()),
-        };
+    use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
+    use futures_util::StreamExt;
+    use session_loop::provider::{ProviderCall, ProviderRequest};
+    use session_loop::stream::{ProviderStreamEvent, StopReason};
+    use std::sync::Arc;
+
+    const PROBE_OUTPUT_BUDGET: u32 = 16;
+    let failure = |error: String| ProbePingResult {
+        ok: false,
+        latency_ms: None,
+        status_code: None,
+        error: Some(error),
+    };
+    let Some(model) = req
+        .model
+        .as_deref()
+        .filter(|model| !model.trim().is_empty())
+    else {
+        return failure("请选择要测试的模型".into());
+    };
+    let reference = ModelRef::new(req.profile_id, model);
+    if let Err(error) = reference.validate() {
+        return failure(error);
     }
-
-    let target = match resolve_probe_target(profile_id, req.model.as_deref()) {
-        Ok(t) => t,
-        Err((code, err)) => {
-            return ProbePingResult {
-                ok: false,
-                latency_ms: None,
-                status_code: Some(code),
-                error: Some(err),
-            };
-        }
+    let resolved = match crate::config::blocking(move |store| store.resolve_model(&reference)).await {
+        Ok(resolved) => resolved,
+        Err(error) => return failure(error.message),
     };
-
-    // 读取 DPAPI 密钥（若 DPAPI 缺失，支持回退到 live_catalog 中的配置密钥）
-    let api_key = match read_profile_key(profile_id) {
-        Ok(Some(k)) if !k.trim().is_empty() => Some(k.trim().to_string()),
-        _ => crate::engine_provider::protocol::live_catalog()
-            .tree
-            .providers
-            .get(profile_id)
-            .and_then(|p| p.api_key.clone())
-            .filter(|k| !k.trim().is_empty()),
+    let timeout = Duration::from_millis(req.timeout_ms.unwrap_or(DEFAULT_PROBE_TIMEOUT_MS));
+    if timeout.is_zero() {
+        return failure("探活超时必须大于零".into());
+    }
+    let client = match reqwest::Client::builder()
+        .timeout(timeout)
+        .no_proxy()
+        .build()
+    {
+        Ok(client) => client,
+        Err(_) => return failure("无法创建探活连接".into()),
     };
-
-    let api_key = match api_key {
-        Some(k) => k,
-        None => {
-            return ProbePingResult {
-                ok: false,
-                latency_ms: None,
-                status_code: Some(401),
-                error: Some(format!(
-                    "服务商 [{}] 未配置 API Key，请先输入密钥并保存",
-                    target.display_name
-                )),
-            };
-        }
+    let budget = resolved
+        .model
+        .max_output_tokens
+        .map_or(PROBE_OUTPUT_BUDGET, |limit| {
+            limit.min(u64::from(PROBE_OUTPUT_BUDGET)) as u32
+        });
+    let secret = resolved.api_key.clone();
+    let provider_config = crate::engine_provider::engine_provider_config_from_resolved(&resolved);
+    let provider = crate::engine_provider::HttpProviderCall::new(client, provider_config);
+    let messages = vec![Arc::new(AgentMessage {
+        id: "provider-probe".into(),
+        role: AgentMessageRole::User,
+        created_at: crate::engine_provider::now_iso_utc(),
+        blocks: vec![AgentMessageBlock::Text {
+            text: "Reply with OK.".into(),
+        }],
+        metadata: None,
+        client_message_id: None,
+        content: None,
+    })];
+    let request = ProviderRequest {
+        messages: &messages,
+        tools: vec![],
+        max_tokens: Some(budget),
+        system_prompt: None,
+        session_id: Some("provider-probe".into()),
+        reasoning_effort: None,
     };
-
-    let timeout_duration = Duration::from_millis(req.timeout_ms.unwrap_or(15000));
-    let client = match reqwest::Client::builder().timeout(timeout_duration).build() {
-        Ok(c) => c,
-        Err(e) => {
-            return ProbePingResult {
-                ok: false,
-                latency_ms: None,
-                status_code: Some(500),
-                error: Some(format!("构建 HTTP 客户端失败: {e}")),
-            };
-        }
-    };
-
-    let req_builder = match target.endpoint_type.as_str() {
-        "anthropic" => {
-            let url = agent_provider::request::build_endpoint_url(
-                agent_provider::models::ProtocolKind::AnthropicMessages,
-                &target.base_url,
-            );
-            let mut headers = HeaderMap::new();
-            if let Ok(val) = HeaderValue::from_str(&api_key) {
-                headers.insert("x-api-key", val);
-            }
-            headers.insert("anthropic-version", HeaderValue::from_static("2023-06-01"));
-            headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
-            let body = serde_json::json!({
-                "model": target.model_to_test,
-                "messages": [{"role": "user", "content": "hi"}],
-                "max_tokens": 1
-            });
-            client.post(url).headers(headers).json(&body)
-        }
-        "gemini" => {
-            let base_url = target.base_url.trim_end_matches('/');
-            // 优先 header x-goog-api-key（与生产轨 gemini_request_headers 同规），
-            // 避免 key 拼进 query 进访问日志；Gemini 官方与兼容网关均支持该头。
-            let url = format!(
-                "{base_url}/v1beta/models/{}:generateContent",
-                target.model_to_test
-            );
-            let body = serde_json::json!({
-                "contents": [{"parts": [{"text": "hi"}]}],
-                "generationConfig": {"maxOutputTokens": 1}
-            });
-            client
-                .post(url)
-                .header("x-goog-api-key", &api_key)
-                .header(CONTENT_TYPE, "application/json")
-                .json(&body)
-        }
-        _ => {
-            // 默认 OpenAI / DeepSeek / ChatCompletions
-            let url = agent_provider::request::build_endpoint_url(
-                agent_provider::models::ProtocolKind::OpenAiChat,
-                &target.base_url,
-            );
-            let mut headers = HeaderMap::new();
-            if let Ok(val) = HeaderValue::from_str(&format!("Bearer {api_key}")) {
-                headers.insert(AUTHORIZATION, val);
-            }
-            headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
-            let body = serde_json::json!({
-                "model": target.model_to_test,
-                "messages": [{"role": "user", "content": "hi"}],
-                "max_tokens": 1
-            });
-            client.post(url).headers(headers).json(&body)
-        }
-    };
-
     let started = Instant::now();
-    let retry_clone = req_builder.try_clone();
-    let resp_res = match req_builder.send().await {
-        Ok(resp) if resp.status().as_u16() == 429 => {
-            if let Some(retry) = retry_clone {
-                tokio::time::sleep(Duration::from_millis(1500)).await;
-                retry.send().await
-            } else {
-                Ok(resp)
+    let result = tokio::time::timeout(timeout, async {
+        let mut stream = provider
+            .stream(&request)
+            .await
+            .map_err(|error| error.message)?;
+        while let Some(event) = stream.next().await {
+            match event.map_err(|error| error.message)? {
+                ProviderStreamEvent::Stop {
+                    reason: StopReason::Error,
+                    error,
+                    ..
+                } => return Err(error.unwrap_or_else(|| "供应商返回错误终止".into())),
+                ProviderStreamEvent::Stop { .. } => return Ok(()),
+                _ => {}
             }
         }
-        other => other,
-    };
-
-    match resp_res {
-        Ok(resp) => {
-            let latency_ms = started.elapsed().as_millis() as u64;
-            let status_code = resp.status().as_u16();
-            if resp.status().is_success() {
-                ProbePingResult {
-                    ok: true,
-                    latency_ms: Some(latency_ms),
-                    status_code: Some(status_code),
-                    error: None,
-                }
-            } else if status_code == 429 {
-                // HTTP 429 表明网络已连通、Base URL 与 API Key 均鉴权通过，仅触发服务商 TPM/RPM 限流
-                ProbePingResult {
-                    ok: true,
-                    latency_ms: Some(latency_ms),
-                    status_code: Some(status_code),
-                    error: None,
-                }
-            } else {
-                let err_text = resp.text().await.unwrap_or_default();
-                let short_err = if err_text.chars().count() > 200 {
-                    let truncated: String = err_text.chars().take(200).collect();
-                    format!("{truncated}...")
-                } else {
-                    err_text
-                };
-                ProbePingResult {
-                    ok: false,
-                    latency_ms: Some(latency_ms),
-                    status_code: Some(status_code),
-                    error: Some(format!("服务端响应异常 (HTTP {status_code}): {short_err}")),
-                }
-            }
-        }
-        Err(err) => {
-            let latency_ms = started.elapsed().as_millis() as u64;
-            let error_msg = if err.is_timeout() {
-                format!("连接超时 (超过 {}ms)", timeout_duration.as_millis())
-            } else if err.is_connect() {
-                "无法连接到服务端，请检查 Base URL 与网络连接".to_string()
-            } else {
-                format!("网络请求失败: {err}")
-            };
-            ProbePingResult {
-                ok: false,
-                latency_ms: Some(latency_ms),
-                status_code: None,
-                error: Some(error_msg),
-            }
-        }
+        Err("响应缺少有效终止事件".into())
+    })
+    .await;
+    let latency_ms = Some(started.elapsed().as_millis().min(u128::from(u64::MAX)) as u64);
+    match result {
+        Ok(Ok(())) => ProbePingResult {
+            ok: true,
+            latency_ms,
+            status_code: None,
+            error: None,
+        },
+        Ok(Err(error)) => ProbePingResult {
+            ok: false,
+            latency_ms,
+            status_code: None,
+            error: Some(error.replace(secret.as_str(), "[已隐藏]")),
+        },
+        Err(_) => ProbePingResult {
+            ok: false,
+            latency_ms,
+            status_code: None,
+            error: Some("供应商探活超时".into()),
+        },
     }
 }
 
 /// 模型扫描核心逻辑
-pub async fn probe_scan_models_core(
-    req: ProbeScanRequest,
-    catalog: Option<Arc<RwLock<ModelCatalog>>>,
-) -> ProbeScanResult {
+pub async fn probe_scan_models_core(req: ProbeScanRequest) -> ProbeScanResult {
     let profile_id = req.profile_id.trim();
     if profile_id.is_empty() {
         return ProbeScanResult {
@@ -398,43 +274,34 @@ pub async fn probe_scan_models_core(
         };
     }
 
-    let target = match resolve_probe_target(profile_id, None) {
-        Ok(t) => t,
-        Err((_code, err)) => {
+    let id = profile_id.to_string();
+    let config = match crate::config::blocking(move |store| store.resolve_provider(&id)).await {
+        Ok(config) => config,
+        Err(error) => {
             return ProbeScanResult {
                 ok: false,
                 models: vec![],
-                error: Some(err),
-            };
+                error: Some(error.message),
+            }
         }
     };
-
-    let api_key = match read_profile_key(profile_id) {
-        Ok(Some(k)) if !k.trim().is_empty() => Some(k.trim().to_string()),
-        _ => crate::engine_provider::protocol::live_catalog()
-            .tree
-            .providers
-            .get(profile_id)
-            .and_then(|p| p.api_key.clone())
-            .filter(|k| !k.trim().is_empty()),
+    let Some(base_url) = config
+        .provider
+        .base_url
+        .as_deref()
+        .filter(|url| !url.trim().is_empty())
+    else {
+        return ProbeScanResult {
+            ok: false,
+            models: vec![],
+            error: Some("供应商尚未配置服务地址".into()),
+        };
     };
+    let api_key = config.api_key.as_str();
 
-    let api_key = match api_key {
-        Some(k) => k,
-        None => {
-            return ProbeScanResult {
-                ok: false,
-                models: vec![],
-                error: Some(format!(
-                    "服务商 [{}] 未配置 API Key，请先保存密钥后再扫描",
-                    target.display_name
-                )),
-            };
-        }
-    };
-
-    let timeout_duration = Duration::from_millis(req.timeout_ms.unwrap_or(15000));
-    let client = match reqwest::Client::builder().timeout(timeout_duration).build() {
+    let timeout_duration =
+        Duration::from_millis(req.timeout_ms.unwrap_or(DEFAULT_PROBE_TIMEOUT_MS));
+    let client = match probe_client(&config, timeout_duration) {
         Ok(c) => c,
         Err(e) => {
             return ProbeScanResult {
@@ -445,42 +312,33 @@ pub async fn probe_scan_models_core(
         }
     };
 
-    let req_builder = match target.endpoint_type.as_str() {
-        "anthropic" => {
-            let base_url = target.base_url.trim_end_matches('/');
-            let url = if base_url.ends_with("/v1/models") || base_url.ends_with("/models") {
-                base_url.to_string()
-            } else if base_url.ends_with("/v1") {
-                format!("{base_url}/models")
-            } else {
-                format!("{base_url}/v1/models")
-            };
-            client
-                .get(url)
-                .header("x-api-key", &api_key)
-                .header("anthropic-version", "2023-06-01")
-        }
-        "gemini" => {
-            let base_url = target.base_url.trim_end_matches('/');
-            // 与探活同轨：header x-goog-api-key，key 不进 query / 访问日志。
-            let url = format!("{base_url}/v1beta/models");
-            client.get(url).header("x-goog-api-key", &api_key)
-        }
-        _ => {
-            let base_url = target.base_url.trim_end_matches('/');
-            let url = if base_url.ends_with("/models") {
-                base_url.to_string()
-            } else if base_url.ends_with("/v1") {
-                format!("{base_url}/models")
-            } else if base_url.ends_with("openai.com") || base_url.contains("sensenova.cn") {
-                format!("{base_url}/v1/models")
-            } else {
-                format!("{base_url}/models")
-            };
-            client
-                .get(url)
-                .header(AUTHORIZATION, format!("Bearer {api_key}"))
-        }
+    let endpoint = agent_provider::request::build_endpoint_url(config.provider.protocol, base_url);
+    let url = match config.provider.protocol {
+        ProtocolKind::OpenAiChat => format!(
+            "{}/models",
+            endpoint
+                .strip_suffix("/chat/completions")
+                .unwrap_or(&endpoint)
+        ),
+        ProtocolKind::OpenAiResponses => format!(
+            "{}/models",
+            endpoint.strip_suffix("/responses").unwrap_or(&endpoint)
+        ),
+        ProtocolKind::AnthropicMessages => format!(
+            "{}/models",
+            endpoint.strip_suffix("/messages").unwrap_or(&endpoint)
+        ),
+        ProtocolKind::GoogleGenerateContent => format!("{endpoint}/models"),
+    };
+    let req_builder = match config.provider.protocol {
+        ProtocolKind::AnthropicMessages => client.get(url).header("x-api-key", api_key).header(
+            "anthropic-version",
+            agent_provider::request::ANTHROPIC_VERSION,
+        ),
+        ProtocolKind::GoogleGenerateContent => client.get(url).header("x-goog-api-key", api_key),
+        ProtocolKind::OpenAiChat | ProtocolKind::OpenAiResponses => client
+            .get(url)
+            .header(AUTHORIZATION, format!("Bearer {api_key}")),
     };
 
     let resp = match req_builder.send().await {
@@ -537,35 +395,6 @@ pub async fn probe_scan_models_core(
         };
     }
 
-    // 1. 同步合并至 ModelCatalog 内存真源
-    if let Some(cat_arc) = catalog {
-        if let Ok(mut cat) = cat_arc.write() {
-            cat.upsert_from_scan(profile_id, &scanned_entries);
-        }
-    }
-
-    // 2. 更新 profile-config.json 中的 models 映射
-    let mut state = load_profiles_config();
-    let p = state.profiles.entry(profile_id.to_string()).or_insert_with(|| {
-        crate::config::profile::ProfileConfig {
-            base_url: Some(target.base_url.clone()),
-            endpoint: Some(target.endpoint_type.clone()),
-            model: Some(target.model_to_test.clone()),
-            stream: Some(true),
-            models: vec![],
-        }
-    });
-    let mut changed = false;
-    for m in &scanned_entries {
-        if !p.models.contains(&m.model) {
-            p.models.push(m.model.clone());
-            changed = true;
-        }
-    }
-    if changed {
-        let _ = state.save();
-    }
-
     ProbeScanResult {
         ok: true,
         models: scanned_entries,
@@ -593,15 +422,11 @@ pub async fn provider_probe_ping(
 pub async fn provider_probe_scan_models(
     profile_id: String,
     timeout_ms: Option<u64>,
-    catalog: State<'_, Arc<RwLock<ModelCatalog>>>,
 ) -> Result<ProbeScanResult, String> {
-    Ok(probe_scan_models_core(
-        ProbeScanRequest {
-            profile_id,
-            timeout_ms,
-        },
-        Some(catalog.inner().clone()),
-    )
+    Ok(probe_scan_models_core(ProbeScanRequest {
+        profile_id,
+        timeout_ms,
+    })
     .await)
 }
 
@@ -712,48 +537,91 @@ mod tests {
         assert_eq!(ds_models[1].model, "deepseek-reasoner");
     }
 
+    struct Fixture {
+        _dir: tempfile::TempDir,
+        store: std::sync::Arc<agent_provider::model_store::ModelsStore>,
+        old_env: Option<std::ffi::OsString>,
+    }
+
+    impl Fixture {
+        fn new(base_url: &str) -> Self {
+            let dir = tempfile::tempdir().unwrap();
+            let store = std::sync::Arc::new(agent_provider::model_store::ModelsStore::new(
+                dir.path().join("models.yaml"),
+                dir.path().join("secrets"),
+                None,
+            ));
+            let base = store.read().unwrap();
+            let tree = serde_json::from_value(serde_json::json!({
+                "version":2,"activeModel":{"providerId":"test-provider","modelId":"mock-model-1"},
+                "providers":{"test-provider":{"baseUrl":base_url,"protocol":"openai/chat","stream":true,
+                    "apiKeyRef":"env:CRISH_PROBE_FIXTURE_KEY",
+                    "models":[{"id":"mock-model-1","maxOutputTokens":32,"contextWindow":1024}]}}
+            })).unwrap();
+            let old_env = std::env::var_os("CRISH_PROBE_FIXTURE_KEY");
+            std::env::set_var("CRISH_PROBE_FIXTURE_KEY", "fixture-key");
+            store.apply(tree, &base.revision).unwrap();
+            crate::config::install_models_store_for_test(store.clone());
+            Self {
+                _dir: dir,
+                store,
+                old_env,
+            }
+        }
+    }
+
+    impl Drop for Fixture {
+        fn drop(&mut self) {
+            if let Some(value) = &self.old_env {
+                std::env::set_var("CRISH_PROBE_FIXTURE_KEY", value);
+            } else {
+                std::env::remove_var("CRISH_PROBE_FIXTURE_KEY");
+            }
+            crate::config::reset_config_stores_for_test();
+        }
+    }
+
     #[tokio::test]
     async fn probe_ping_empty_profile_id_returns_error() {
         let res = probe_ping_core(ProbePingRequest {
-            profile_id: "".to_string(),
-            model: None,
+            profile_id: " ".into(),
+            model: Some("m".into()),
             timeout_ms: None,
         })
         .await;
-
         assert!(!res.ok);
-        assert_eq!(res.status_code, Some(400));
         assert!(res.error.is_some());
     }
 
     #[tokio::test]
-    async fn probe_ping_nonexistent_profile_returns_404() {
+    async fn probe_ping_nonexistent_profile_returns_configuration_error() {
+        let _guard = crate::core_run_commands::CONFIG_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let _fixture = Fixture::new("http://localhost:1");
         let res = probe_ping_core(ProbePingRequest {
-            profile_id: "nonexistent-profile-xyz-12345".to_string(),
-            model: None,
+            profile_id: "missing".into(),
+            model: Some("m".into()),
             timeout_ms: None,
         })
         .await;
-
         assert!(!res.ok);
-        assert_eq!(res.status_code, Some(404));
-        assert!(res.error.unwrap().contains("未找到服务商配置"));
+        assert!(res.error.unwrap().contains("供应商"));
     }
 
     #[tokio::test]
     async fn probe_scan_models_nonexistent_profile_returns_error() {
-        let res = probe_scan_models_core(
-            ProbeScanRequest {
-                profile_id: "nonexistent-profile-xyz-12345".to_string(),
-                timeout_ms: None,
-            },
-            None,
-        )
+        let _guard = crate::core_run_commands::CONFIG_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let _fixture = Fixture::new("http://localhost:1");
+        let res = probe_scan_models_core(ProbeScanRequest {
+            profile_id: "missing".into(),
+            timeout_ms: None,
+        })
         .await;
-
         assert!(!res.ok);
         assert!(res.models.is_empty());
-        assert!(res.error.unwrap().contains("未找到服务商配置"));
     }
 
     #[tokio::test]
@@ -762,123 +630,90 @@ mod tests {
             routing::{get, post},
             Json, Router,
         };
-        use std::net::SocketAddr;
-        use tokio::net::TcpListener;
-
+        let _guard = crate::core_run_commands::CONFIG_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
         let app = Router::new()
-            .route(
-                "/chat/completions",
-                post(|| async {
-                    Json(serde_json::json!({
-                        "id": "chatcmpl-test",
-                        "choices": [{"message": {"role": "assistant", "content": "hello"}}]
-                    }))
-                }),
-            )
-            .route(
-                "/models",
-                get(|| async {
-                    Json(serde_json::json!({
-                        "data": [
-                            {"id": "mock-model-1", "context_window": 32000},
-                            {"id": "mock-model-2", "context_window": 64000}
-                        ]
-                    }))
-                }),
-            );
-
-        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let addr: SocketAddr = listener.local_addr().unwrap();
-        tokio::spawn(async move {
-            axum::serve(listener, app).await.unwrap();
-        });
-
-        // 构造临时测试目录与隔离 Profile
-        let test_dir =
-            std::env::temp_dir().join(format!("crish-probe-test-{}", std::process::id()));
-        let _ = std::fs::create_dir_all(&test_dir);
-        let prev_config_dir = std::env::var("CRISH_WORKBENCH_CONFIG_DIR").ok();
-        std::env::set_var("CRISH_WORKBENCH_CONFIG_DIR", &test_dir);
-
-        let profile_id = "test-mock-provider";
-        let base_url = format!("http://{}", addr);
-
-        // 写入 profile 配置
-        let mut state = crate::config::profile::PersistedProfileState::load();
-        let _ = crate::config::profile::apply_profile_config(
-            &mut state,
-            profile_id,
-            Some(base_url.clone()),
-            Some("mock-model-1".to_string()),
-        );
-
-        // 写入 profile secret key
-        let _ =
-            crate::config::config_secret_set(profile_id.to_string(), "mock-api-key".to_string());
-
-        // 1. 测试 probe_ping_core
-        let ping_res = probe_ping_core(ProbePingRequest {
-            profile_id: profile_id.to_string(),
-            model: Some("mock-model-1".to_string()),
-            timeout_ms: Some(2000),
+            .route("/chat/completions", post(|| async {
+                ([(axum::http::header::CONTENT_TYPE, "text/event-stream")],
+                "data: {\"choices\":[{\"delta\":{\"content\":\"OK\"},\"finish_reason\":null}]}\n\ndata: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n")
+            }))
+            .route("/models", get(|| async { Json(serde_json::json!({"data":[{"id":"mock-model-1"},{"id":"new-candidate"}]})) }));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let task = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let fixture = Fixture::new(&format!("http://{addr}"));
+        let before = std::fs::read_to_string(fixture.store.path()).unwrap();
+        let ping = probe_ping_core(ProbePingRequest {
+            profile_id: "test-provider".into(),
+            model: Some("mock-model-1".into()),
+            timeout_ms: Some(5000),
         })
         .await;
-
-        assert!(ping_res.ok, "ping 应成功返回 ok=true: {:?}", ping_res.error);
-        assert_eq!(ping_res.status_code, Some(200));
-        assert!(ping_res.latency_ms.is_some());
-        assert!(ping_res.error.is_none());
-
-        // 2. 测试 probe_scan_models_core 并验证 ModelCatalog 合并
-        let catalog = Arc::new(RwLock::new(ModelCatalog::bundled()));
-        let initial_version = catalog.read().unwrap().version();
-
-        let scan_res = probe_scan_models_core(
-            ProbeScanRequest {
-                profile_id: profile_id.to_string(),
-                timeout_ms: Some(2000),
-            },
-            Some(catalog.clone()),
-        )
+        assert!(ping.ok, "{:?}", ping.error);
+        let scan = probe_scan_models_core(ProbeScanRequest {
+            profile_id: "test-provider".into(),
+            timeout_ms: Some(5000),
+        })
         .await;
-
-        assert!(scan_res.ok, "scan 应成功返回 ok=true: {:?}", scan_res.error);
-        assert_eq!(scan_res.models.len(), 2);
-        assert_eq!(scan_res.models[0].model, "mock-model-1");
-        assert_eq!(scan_res.models[1].model, "mock-model-2");
-
-        let updated_version = catalog.read().unwrap().version();
-        assert!(
-            updated_version > initial_version,
-            "扫描后 catalog version 应递增 (from {initial_version} to {updated_version})"
+        assert!(scan.ok, "{:?}", scan.error);
+        assert_eq!(scan.models.len(), 2);
+        assert_eq!(
+            std::fs::read_to_string(fixture.store.path()).unwrap(),
+            before
         );
+        assert_eq!(
+            fixture.store.committed().unwrap().tree.providers["test-provider"]
+                .models
+                .len(),
+            1
+        );
+        assert!(!fixture._dir.path().join("profile-config.json").exists());
+        task.abort();
+    }
 
-        // 清理环境
-        if let Some(prev) = prev_config_dir {
-            std::env::set_var("CRISH_WORKBENCH_CONFIG_DIR", prev);
-        } else {
-            std::env::remove_var("CRISH_WORKBENCH_CONFIG_DIR");
-        }
-        let _ = std::fs::remove_dir_all(&test_dir);
+    #[tokio::test]
+    async fn http_200_with_error_event_is_not_successful_probe() {
+        use axum::{routing::post, Router};
+        let _guard = crate::core_run_commands::CONFIG_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let app = Router::new().route(
+            "/chat/completions",
+            post(|| async {
+                (
+                    [(axum::http::header::CONTENT_TYPE, "text/event-stream")],
+                    "data: {\"error\":{\"message\":\"denied\"}}\n\n",
+                )
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let task = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let _fixture = Fixture::new(&format!("http://{addr}"));
+        let result = probe_ping_core(ProbePingRequest {
+            profile_id: "test-provider".into(),
+            model: Some("mock-model-1".into()),
+            timeout_ms: Some(5000),
+        })
+        .await;
+        assert!(!result.ok);
+        assert!(result.error.is_some());
+        task.abort();
     }
 
     #[test]
-    fn resolve_probe_target_prefers_live_provider_catalog() {
-        let yaml = r#"
-version: 2
-providers:
-  test-sensenova:
-    displayName: senseNova
-    baseUrl: https://token.sensenova.cn/v1
-    protocol: openai/chat
-    models:
-      - id: deepseek-v4-flash
-"#;
-        crate::engine_provider::protocol::reload_live_catalog_from_yaml_str(yaml).unwrap();
-        let target = resolve_probe_target("test-sensenova", None).expect("target should resolve");
-        assert_eq!(target.display_name, "senseNova");
-        assert_eq!(target.base_url, "https://token.sensenova.cn/v1");
-        assert_eq!(target.model_to_test, "deepseek-v4-flash");
-        assert_eq!(target.endpoint_type, "chat-completions");
+    fn resolve_probe_target_uses_committed_provider_only() {
+        let _guard = crate::core_run_commands::CONFIG_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let fixture = Fixture::new("https://example.test/v1");
+        let target = fixture.store.resolve_provider("test-provider").unwrap();
+        assert_eq!(
+            target.provider.base_url.as_deref(),
+            Some("https://example.test/v1")
+        );
+        assert_eq!(target.provider.protocol, ProtocolKind::OpenAiChat);
+        assert!(fixture.store.resolve_provider("other").is_err());
     }
 }

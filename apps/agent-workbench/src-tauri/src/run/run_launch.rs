@@ -703,15 +703,30 @@ pub(crate) async fn run_task_impl(
         }
     };
 
-    // ── D1 §3.1.4/§3.2.3：退避与熔断配置装配（读 session_meta 键；
-    //    None = 向后兼容：立即重试 / 不启用熔断闸）──
-    // - retry_backoff：`provider_retry_backoff_ms` 键 → 内核退避
-    //   （750ms×2^(n-1)/8s 封顶/60s 预算/Retry-After 放行）生产生效；
+    // ── D1 §3.1.4/§3.2.3：退避与熔断配置装配 ──
+    // 优先级（用户裁决：重试预算/上限用户可配置，进配置文件不绑供应商）：
+    // 1. 会话级键 `provider_retry_backoff_ms`（既有 per-session 覆盖）；
+    // 2. 全局运行策略文件 `settings.json` 的 runPolicy 段（config::run_policy）；
+    // 3. 缺省：750ms 指数退避 / 8s 封顶 / 180s 总预算、10 次上限（文件
+    //    引入前的行为，保持不变）。
     // - provider_fail_streak：`provider_fail_streak` 键 count → 熔断闸
     //   C1 输入（transient_retry 入口 >= 阈值直接 fatal）。熔断计数落
     //   键在收口 [Self::update_provider_fail_streak]（唯一写方），本装配
     //   点只读注入——天然跨 run（D1 §3.2.3 装配时序）。
-    let retry_backoff = state.retry_backoff_config(&session_id);
+    let run_policy = state.run_policy();
+    let retry_backoff = state
+        .retry_backoff_config(&session_id)
+        .or_else(|| {
+            run_policy.as_ref().and_then(|policy| {
+                policy.retry_backoff.as_ref().map(|backoff| {
+                    session_loop::r#loop::RetryBackoffConfig {
+                        base_ms: backoff.base_ms,
+                        max_ms: backoff.max_ms,
+                        total_budget_ms: backoff.total_budget_ms,
+                    }
+                })
+            })
+        });
     let provider_fail_streak = state.provider_fail_streak_count(&session_id).await;
 
     let options = {
@@ -728,7 +743,10 @@ pub(crate) async fn run_task_impl(
                 total_budget_ms: Some(180_000),
             })
         });
-        o.retry.transient_retry_limit = 10;
+        o.retry.transient_retry_limit = run_policy
+            .as_ref()
+            .and_then(|policy| policy.transient_retry_limit)
+            .unwrap_or(10);
         o.retry.provider_fail_streak = provider_fail_streak;
         o.tool_exec.tool_middleware = vec![Arc::new(BackupMiddleware::with_defaults(None))];
         o.assembly.parent_run_id = parent_run_id.clone();

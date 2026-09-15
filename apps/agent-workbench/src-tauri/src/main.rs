@@ -11,15 +11,14 @@
 //!   ① conex-telemetry 初始化（级别：`CRISH_LOG_LEVEL` 优先，dev debug /
 //!   release info；文件层 `app_dir()/logs` 双通道）+ 崩溃文件 panic hook；
 //!   ② LocalDb 打开（`app_dir()/sessions.db`，失败降级内存 + `db_ready=false`）；
-//!   ③ config 初始化（`init_api_config_store`，静态存储）；
+//!   ③ 模型配置单一存储初始化与文件变更监听；
 //!   ④ [WorkspaceRegistry::init] manage（工作区沙箱真源）；
 //!   ⑤ [SharedGatekeeper] / [SharedSearchState] / [SharedCompactionState] manage；
 //!   ⑥ [StatusDiagnostics] manage（与 CoreRunState 共享同一实例）；
 //!   ⑦ restore：`run_restore` 经 run_in_runtime 在 `manage(CoreRunState)` 之前
 //!   执行（成功 seed_sequences + 立即快照；失败降级不阻断启动）；
 //!   ⑧ [CoreRunState] manage + [EventBridge] manage + [SharedDb] manage；
-//!   ⑨ 模型目录 manage（`Arc<RwLock<ModelCatalog>>`，内置表；P3 步骤 5，
-//!   catalog_get / catalog_refresh 消费）；
+//!   ⑨ 模型目录由核心已提交配置快照派生；
 //!   ⑩ MCP 插件：debug 下 `dev_mcp::register_if_enabled(builder)`（默认开启，
 //!   `CRISH_MCP_SOCKET=0` 显式关闭；2026-08-21 用户裁决）；
 //!   ⑪ 多端本地服务生产装配（R1-11 G-1）：CoreStateBackend（真实
@@ -39,7 +38,6 @@ mod buffer;
 // 浏览器书签/历史落库适配（3 方案 U4：browser_import_sinks.rs 由浏览器
 // 阵营交付，main.rs mod 声明缺失导致 crate 编译中断——R1-11 装配面顺手补齐）
 mod browser_import_sinks;
-mod catalog_commands;
 mod command_manifest;
 // 电脑操作会话槽（06 遗留⑨：ComputerSlot 命令面托管 + 工具装配接线面，
 // 接线点登记见 computer/mod.rs 模块头）
@@ -129,7 +127,7 @@ mod workspace;
 #[cfg(test)]
 mod scripted_mock_server;
 
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 use core_event_bridge::{Emitter, EventBridge, TauriEmitter};
 use tauri::Manager;
@@ -221,6 +219,10 @@ command_registry![
         "workbench_save_models_yaml",
         models_yaml::workbench_save_models_yaml
     ),
+    (
+        "workbench_apply_models_config",
+        models_yaml::workbench_apply_models_config
+    ),
     // T-F 06：fs 四命令经 `#[tauri::command(rename = "workbench_*")]` 对齐
     // wire 键（元组名 = manifest 登记名 = wire 键逐字一致，分裂已消除）
     ("workbench_select_folder", fs_commands::select_folder),
@@ -239,14 +241,11 @@ command_registry![
     ),
     ("workbench_http_request", commands::workbench_http_request),
     ("workbench_apply_update", commands::workbench_apply_update),
-    // ── 配置族（§2.2-C，F5 终态名：config_get/config_update/config_secret_*）──
-    ("config_get", config::config_get),
-    ("config_update", config::config_update),
+    // ── 凭据事务：模型配置与活动选择只由 models 命令提交 ──
     ("config_secret_set", config::config_secret_set),
     ("config_secret_get", config::config_secret_get),
     ("config_secret_has", config::config_secret_has),
     ("config_secret_clear", config::config_secret_clear),
-    ("config_profile_apply", config::config_profile_apply),
     ("config_secret_reveal", config::config_secret_reveal),
     // ── 原生探活与模型扫描（Batch 1 · G3：provider_probe_ping / provider_probe_scan_models）──
     ("provider_probe_ping", probe::provider_probe_ping),
@@ -397,9 +396,6 @@ command_registry![
         "core_jsonl_to_messages",
         core_commands::core_jsonl_to_messages
     ),
-    // ── 模型目录（P3 步骤 5：catalog_get / catalog_refresh）──
-    ("catalog_get", catalog_commands::catalog_get),
-    ("catalog_refresh", catalog_commands::catalog_refresh),
     // ── 注册表单一化自身（T03.1；经 command_manifest 注册——Tauri 宏生成项
     //    （__cmd__*）不随 core_query_commands 的 pub use 重导出，必须直引真源）──
     ("core_list_commands", command_manifest::core_list_commands),
@@ -772,8 +768,11 @@ fn main() {
             // （含降级路径：完成即置位，窗口不因 db 失败而死锁）
             handshake.mark_db_ready();
 
-            // ③ 配置静态存储初始化（ApiConfigStore + 密钥槽）
-            config::init_api_config_store();
+            // ③ 初始化唯一配置存储及已提交变更事件
+            if let Err(error) = config::init_models_store(&app.handle().clone()) {
+                diagnostics.record("models-config", false, Some(error.to_string()));
+                tracing::error!(error = %error, "模型配置初始化或监听失败");
+            }
 
             // ④ 工作区注册表（沙箱根真源；加载 recent 列表 + 默认应用根）
             match workspace::WorkspaceRegistry::init() {
@@ -910,6 +909,9 @@ fn main() {
             // T-D-13：子代理 spawner 注入面装配（launcher / db / wait 广播 /
             // steering 队列——Arc 构造完成后注入，spawner 在 engine 内）
             core_state.finalize_subagent_spawner();
+            // 全局运行策略读入（用户裁决：重试预算/上限可配置，进
+            // settings.json 不绑供应商；文件缺失/解析失败 → 缺省）
+            core_state.set_run_policy(config::run_policy::read_run_policy());
             // 审计 01 W1（任务连续性推进轮）：kill_subagent / send_message
             // 三通道 + WaitChannel 控制总线解析器生产装配（与 spawner 同批
             // ——Arc 构造完成后经板卡绑定真实现，工具从 unsupported 升级为
@@ -988,11 +990,6 @@ fn main() {
                 .bind(workflow_state.backend_handle(), app_handle.clone());
             app.manage(workflow_state);
 
-            // ⑨ 模型目录（P3 步骤 5）：内置表挂 Tauri state（catalog_get /
-            //    catalog_refresh 消费；覆盖/扫描合并仅经命令入口进行）
-            app.manage(Arc::new(RwLock::new(
-                agent_provider::models::ModelCatalog::bundled(),
-            )));
 
             // 30 方案 P4 + Stage 6 ACT-602：timer/cron 事件 drain 改为
             // tokio::sync::Notify 事件驱动——sink.emit 即 notify_one，

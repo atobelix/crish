@@ -33,9 +33,8 @@ use std::time::Duration;
 
 use agent_provider::config::Endpoint;
 use agent_provider::error::{classify_provider_error, source_from_reqwest_error};
-use agent_provider::models::{
-    CacheControlFormat, ProtocolKind, ThinkingFormat,
-};
+use agent_provider::model_store::ResolvedModelConfig;
+use agent_provider::models::{CacheControlFormat, ProtocolKind, ThinkingFormat};
 use agent_provider::request::{
     build_anthropic_request_body, build_chat_completions_request_body, build_gemini_request_body,
     build_responses_request_body, ensure_outbound_modalities, validate_anthropic_pairing_from_context,
@@ -101,30 +100,39 @@ pub(crate) struct EngineProviderConfig {
     pub provider_id: Option<String>,
 }
 
-/// 从 config 模块的 effective_* 源加载生效配置（engine.rs:169-179 等价）
-/// 源 = `crate::config::effective_*`；三件套任一缺失 → None（引擎降级未就绪）。
+/// 从统一配置解析加载生效配置（替代旧 `config::effective_*` 多源）；
+/// 活动模型未选择或解析失败 → None（引擎降级未就绪，禁止挑列表首项）。
 ///
 /// 槽位从 [protocol::live_catalog] 灌入：模型 id 唯一命中才填
 /// provider_id/protocol/thinking_map/thinking_format/vendor；多命中或零命中
 /// 全为 None（fail-closed）。
 pub(crate) fn load_provider_endpoint() -> Option<EngineProviderConfig> {
-    let base_url = crate::config::effective_api_base_url()?;
-    let api_key = crate::config::effective_api_key()?;
-    let model = crate::config::effective_model()?;
-    if base_url.trim().is_empty() || api_key.trim().is_empty() || model.trim().is_empty() {
-        return None;
+    match crate::config::resolve_active_model() {
+        Ok(Some(resolved)) => Some(engine_provider_config_from_resolved(&resolved)),
+        // Ok(None) = 用户未选择活动模型；Err = 配置未就绪；二者均视为未就绪。
+        Ok(None) | Err(_) => None,
     }
-    let endpoint = Endpoint::parse(&crate::config::effective_provider_endpoint())
-        .unwrap_or(Endpoint::ChatCompletions);
-    let stream = crate::config::effective_provider_stream();
-    let provider_id = crate::config::effective_provider_id();
-    let slots = slots_for_model(
-        &live_catalog(),
-        provider_id.as_deref(),
-        Some(&base_url),
-        &model,
-    );
-    Some(EngineProviderConfig {
+}
+
+/// 从单轨权威 `ResolvedModelConfig` 投影出引擎 provider 配置：同一快照派生
+/// 全部字段（base_url/api_key/model/endpoint/stream/provider_id），I-LOOKUP
+/// vendor/protocol/thinking 槽位仍由 live_catalog 唯一命中灌入（禁止跨符号
+/// 分别取值造成修订混用）。
+pub(crate) fn engine_provider_config_from_resolved(
+    resolved: &ResolvedModelConfig,
+) -> EngineProviderConfig {
+    let provider_id = resolved.model_ref.provider_id.clone();
+    let base_url = resolved.provider.base_url.clone().unwrap_or_default();
+    let api_key = resolved.api_key.as_str().to_string();
+    let model = resolved.model.id.clone();
+    let endpoint = match resolved.provider.protocol {
+        ProtocolKind::OpenAiResponses => Endpoint::Responses,
+        _ => Endpoint::ChatCompletions,
+    };
+    let stream = resolved.provider.stream;
+    let live = live_catalog();
+    let slots = slots_for_model(&live, Some(&provider_id), resolved.provider.base_url.as_deref(), &model);
+    EngineProviderConfig {
         base_url,
         api_key,
         model,
@@ -135,8 +143,8 @@ pub(crate) fn load_provider_endpoint() -> Option<EngineProviderConfig> {
         protocol: slots.protocol,
         thinking_map: slots.thinking_map,
         thinking_format: slots.thinking_format,
-        provider_id: slots.provider_id.or(provider_id),
-    })
+        provider_id: slots.provider_id.or(Some(provider_id)),
+    }
 }
 
 // ── HttpProviderCall：真实 provider 适配层 ─────────────────────────
@@ -580,6 +588,8 @@ fn cache_policy_from_profile(profile: &protocol::CatalogRequestProfile) -> Optio
             prompt_cache_options: None,
             affinity_header: None,
         }),
+        // 显式关闭缓存，覆盖供应商级声明；无注入。
+        Some(CacheControlFormat::Disabled) => None,
         None => None,
     }
 }
