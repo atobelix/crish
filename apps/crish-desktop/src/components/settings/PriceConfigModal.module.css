@@ -1,6 +1,6 @@
 /**
  * PriceConfigModal.module.css
- * 现代高质感模型单价配置弹窗样式（纯净、通透、严格对齐网格与白底输入框）
+ * 模型单价配置弹窗样式（纯净、通透、严格对齐网格与卡片底输入框）
  */
 
 .dialogContent {
@@ -25,12 +25,14 @@
   flex-shrink: 0;
 }
 
-/* 表格公用网格模板（表头、数据行、新增行 100% 严格同轨对齐） */
+/* 表格公用网格模板（表头与数据行 100% 严格同轨对齐）
+ * 列：模型 | 服务商 | 提示输入 | 生成补全 | 缓存命中 | 计费方式 | 操作 */
 .tableHeader,
-.tableRow,
-.addRow {
+.tableRow {
   display: grid;
-  grid-template-columns: minmax(120px, 2fr) minmax(70px, 1fr) minmax(70px, 1fr) minmax(70px, 1fr) 105px 84px;
+  grid-template-columns:
+    minmax(96px, 1.5fr) minmax(80px, 1.2fr) minmax(66px, 1fr) minmax(66px, 1fr) minmax(66px, 1fr)
+    76px 92px;
   align-items: center;
   padding: var(--space-1_5) var(--space-3);
   gap: var(--space-2);
@@ -71,7 +73,17 @@
   align-items: center;
 }
 
-/* 对齐模型界面的输入框效果，背景色始终固定为纯白 #ffffff，字体字重标准统一 */
+/* 模型 / 服务商身份文本（单行省略；完整 ID 走 Tooltip） */
+.identityText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+  font-size: var(--font-size-xs);
+}
+
+/* 对齐模型界面的输入框效果，背景固定为卡片色，字体字重标准统一 */
 .cellInput {
   width: 100%;
   height: var(--control-height-sm);
@@ -89,11 +101,6 @@
   transition: border-color var(--transition-fast);
 }
 
-.cellInput::placeholder {
-  color: var(--text-tertiary);
-  font-size: var(--font-size-xs);
-}
-
 .cellInput:hover:not(:focus) {
   border-color: var(--border-color);
 }
@@ -107,12 +114,47 @@
   border-color: var(--focus-border-color);
 }
 
+/* 生图模型的 Token 单价列：不适用占位（非输入框，不承载任何提示语义） */
+.notApplicable {
+  color: var(--text-faint);
+  font-size: var(--font-size-xs);
+  user-select: none;
+}
+
+/* 计费方式：只读派生量，纯文本徽标（不可交互） */
+.billingMode {
+  display: inline-block;
+  padding: 0 var(--space-1_5);
+  border: var(--hairline-width) solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: var(--font-size-xxs);
+  line-height: 16px;
+  white-space: nowrap;
+}
+
 .rowActions {
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: var(--space-1);
   width: 100%;
+  min-width: 0;
+}
+
+/* 行内保存状态（编辑即保存；成功态短暂呈现，失败态常驻至下次编辑） */
+.rowStatus {
+  color: var(--text-tertiary);
+  font-size: var(--font-size-xxs);
+  white-space: nowrap;
+}
+
+.rowStatusError {
+  color: var(--accent-red-light-adaptive);
+  font-size: var(--font-size-xxs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .emptyTip {
@@ -122,11 +164,14 @@
   color: var(--text-tertiary);
 }
 
-/* 底部新增行：与 tableRow 完全相同栅格与内边距，顶部细分界线 */
-.addRow {
-  border-top: var(--hairline-width) solid var(--border-subtle);
-  background: transparent;
+/* 底部说明：计费方式为派生量，一次性交代来源，避免逐行重复解释 */
+.footHint {
   flex-shrink: 0;
+  padding-top: var(--space-2);
+  border-top: var(--hairline-width) solid var(--border-subtle);
+  color: var(--text-tertiary);
+  font-size: var(--font-size-xxs);
+  line-height: 1.5;
 }
 
 /* 弹窗底部操作区 */
@@ -137,105 +182,10 @@
   width: 100%;
 }
 
-/* 建议匹配下拉浮层 */
-.suggestionsDropdown {
-  position: absolute;
-  bottom: calc(100% + var(--space-1));
-  left: 0;
-  min-width: 100%;
-  width: max-content;
-  max-width: 260px;
-  background: var(--bg-card);
-  border: var(--hairline-width) solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-dropdown);
-  max-height: 180px;
-  overflow-y: auto;
-  z-index: var(--z-dropdown);
-  padding: var(--space-1);
-  box-sizing: border-box;
-}
-
 .headerColAction {
   text-align: right;
 }
 
-.addModelCell {
-  position: relative;
-}
-
-.suggestionItem {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--space-1) var(--space-2);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  font-size: var(--font-size-xs);
-  gap: var(--space-2);
-  color: var(--text-primary);
-  transition: background var(--transition-fast);
-}
-
-.suggestionItem:hover {
-  background: var(--tint-hover);
-}
-
-.suggestionItemMeta {
-  color: var(--text-tertiary);
-  font-size: var(--font-size-xxs);
-}
-
 .searchInputWrapper {
   width: 150px; /* 布局约束，不入刻度（同 audits/03 §七 150px 登记） */
-}
-
-/* ── 价格来源徽标与模型身份（名单真源 = 统一树；见 modelPricingSource.ts） ── */
-
-.modelIdentity {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  min-width: 0;
-}
-
-.modelName {
-  color: var(--text-primary);
-  font-size: var(--font-size-xs);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.modelMeta {
-  color: var(--text-tertiary);
-  font-size: var(--font-size-xxs);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.sourceBadge {
-  display: inline-block;
-  margin-top: 2px;
-  padding: 0 4px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-subtle);
-  color: var(--text-tertiary);
-  font-size: var(--font-size-xxs);
-  line-height: 16px;
-  white-space: nowrap;
-}
-
-.source_user {
-  color: var(--text-primary);
-  border-color: var(--border-color);
-}
-
-.source_estimate {
-  color: var(--text-tertiary);
-}
-
-.source_none {
-  color: var(--text-faint);
 }

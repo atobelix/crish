@@ -1,16 +1,19 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useCallback, useMemo, useState, useEffect } from 'react';
 
 import {
   listConfiguredPrices,
   setModelPrice,
   type ConfiguredPriceRow,
 } from '../../api/modelPricingSource';
+import type { PricingConfig } from '../../api/modelsCatalogTypes';
 import { ensureModelsCatalogLoaded } from '../../api/modelsCatalogStore';
 import { useModelsCatalogVersion } from '../../hooks/useModelsCatalogVersion';
 import { toast } from '../../services/toast/ToastContext';
 import { Button, Input, Dialog, SegmentedControl } from '../ui';
 import { EditablePriceRow } from './EditablePriceRow';
 import styles from './PriceConfigModal.module.css';
+
+type SaveResult = { ok: true } | { ok: false; error: string };
 
 /**
  * 模型单价配置弹窗。
@@ -19,13 +22,18 @@ import styles from './PriceConfigModal.module.css';
  * 与模型配置界面同源 ⇒ 配置页加了模型，这里立刻多一行；模型被删除，这一行随之消失
  * （价格挂在模型上，删模型即删价）。
  *
- * 每行价格来源三分（见 `modelPricingSource.resolveEffectivePrice`）：
- * - `user`：树 `ModelSpec.pricing` 里的**用户声明**（权威）；
- * - `estimate`：出厂字典快照的**预估价**（只读参考，保存后才成为用户声明）；
- * - `none`：未收录（空值呈现，**禁止**渲染为 0）。
+ * ## 交互口径（用户裁决 2026-09-15）
+ *
+ * - **编辑即保存**：行内无保存按钮，输入变化防抖后直接落树（`EditablePriceRow`）。
+ * - **不展示价格来源徽标**：不再渲染「用户 / 预估 / 未收录」角标；「有自定义价」
+ *   由该行是否出现清除入口隐式表达（无自定义价即无入口）。
+ * - **输入框不提示收录状态**：不再用 placeholder 表达「未收录」，空值即空。
+ * - **计费方式只读**：由模型能力派生（`modalities.output` 含 `image` ⇒ 按张生成），
+ *   生图模型自动套用按张价；用户不再手选。
+ * - **模型与服务商分列**：两个独立表头，不再挤在同一个单元格里。
  *
  * 旧 localStorage 扁平价表 `crish_model_prices_v1` 已退役（迁移见
- * `modelPricingSource.migrateLegacyLsPrices`，由用量页挂载时触发）。
+ * `modelPricingSource.migrateLegacyLsPrices`，启动期执行）。
  */
 export const PriceConfigModal: React.FC<{
   open: boolean;
@@ -33,7 +41,6 @@ export const PriceConfigModal: React.FC<{
 }> = ({ open, onClose }) => {
   const [currency, setCurrency] = useState<'USD' | 'CNY'>('CNY');
   const [priceFilter, setPriceFilter] = useState('');
-  const [savingKey, setSavingKey] = useState<string | null>(null);
 
   // 树版本变化（配置页增删模型 / 本次保存成功）驱动名单重算
   const catalogVersion = useModelsCatalogVersion();
@@ -60,41 +67,30 @@ export const PriceConfigModal: React.FC<{
     );
   }, [rows, priceFilter]);
 
-  const handleSave = async (
-    row: ConfiguredPriceRow,
-    input: number,
-    output: number,
-    cacheRead: number | undefined,
-    billingUnit: 'token' | 'per_image'
-  ) => {
-    const key = `${row.providerId}/${row.modelId}`;
-    setSavingKey(key);
-    const result = await setModelPrice(row.ref, {
-      currency,
-      unit: billingUnit === 'per_image' ? 'per_image' : 'per_1m_tokens',
-      input,
-      output,
-      ...(cacheRead !== undefined ? { cacheRead } : {}),
-    });
-    setSavingKey(null);
-    if (result.ok) {
-      toast.show(`已保存 ${key} 单价`);
-    } else {
-      toast.show(`保存失败：${result.error}`);
-    }
-  };
+  /** 编辑即保存的落盘点（行内防抖后调用；失败显式提示，不静默降级）。 */
+  const handleSave = useCallback(
+    async (row: ConfiguredPriceRow, pricing: PricingConfig): Promise<SaveResult> => {
+      const result = await setModelPrice(row.ref, pricing);
+      if (!result.ok) {
+        toast.show(`保存失败（${row.providerId}/${row.modelId}）：${result.error}`);
+        return { ok: false, error: result.error };
+      }
+      return { ok: true };
+    },
+    []
+  );
 
-  const handleClear = async (row: ConfiguredPriceRow) => {
-    const key = `${row.providerId}/${row.modelId}`;
-    setSavingKey(key);
-    const result = await setModelPrice(row.ref, undefined);
-    setSavingKey(null);
-    if (result.ok) {
-      toast.show(`已清除 ${key} 自定义价（恢复为字典预估）`);
-    } else {
-      toast.show(`清除失败：${result.error}`);
-    }
-  };
+  const handleClear = useCallback(
+    async (row: ConfiguredPriceRow): Promise<SaveResult> => {
+      const result = await setModelPrice(row.ref, undefined);
+      if (!result.ok) {
+        toast.show(`清除失败（${row.providerId}/${row.modelId}）：${result.error}`);
+        return { ok: false, error: result.error };
+      }
+      return { ok: true };
+    },
+    []
+  );
 
   const currencySymbol = currency === 'CNY' ? '¥' : '$';
   const treeEmpty = rows.length === 0;
@@ -140,13 +136,14 @@ export const PriceConfigModal: React.FC<{
           </div>
         </div>
 
-        {/* 表头 */}
+        {/* 表头：模型与服务商分列 */}
         <div className={styles.tableHeader}>
-          <div>模型（服务商 / 模型 ID）</div>
-          <div>提示输入 ({currencySymbol}/1M)</div>
-          <div>生成补全 ({currencySymbol}/1M)</div>
-          <div>缓存命中 ({currencySymbol}/1M)</div>
-          <div>计费方式</div>
+          <div data-testid="price-header-model">模型</div>
+          <div data-testid="price-header-provider">服务商</div>
+          <div data-testid="price-header-input">提示输入 ({currencySymbol}/1M)</div>
+          <div data-testid="price-header-output">生成补全 ({currencySymbol}/1M)</div>
+          <div data-testid="price-header-cache">缓存命中 ({currencySymbol}/1M)</div>
+          <div data-testid="price-header-billing">计费方式</div>
           <div className={styles.headerColAction}>操作</div>
         </div>
 
@@ -164,16 +161,18 @@ export const PriceConfigModal: React.FC<{
                 key={`${row.providerId}/${row.modelId}`}
                 row={row}
                 currency={currency}
-                onSave={(input, output, cacheRead, billingUnit) =>
-                  void handleSave(row, input, output, cacheRead, billingUnit)
-                }
-                onClear={() => void handleClear(row)}
+                onSave={(pricing) => handleSave(row, pricing)}
+                onClear={() => handleClear(row)}
               />
             ))
           )}
         </div>
 
-        {savingKey && <div className={styles.emptyTip}>正在保存…</div>}
+        {/* 计费方式为派生量，此处一次性说明来源，避免逐行重复解释 */}
+        <div className={styles.footHint}>
+          计费方式随模型能力自动判定：在「模型配置」把输出模态勾选「图片」即为生图模型，
+          此处自动按张计费；其余按 Token 计费。改动即自动保存，无需手动提交。
+        </div>
       </div>
     </Dialog>
   );

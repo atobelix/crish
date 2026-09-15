@@ -15,6 +15,7 @@ import { applyCatalogCacheSnapshot, clearCatalogCacheSnapshot } from './pricingR
 import { PRICES_KEY } from './pricingTypes';
 import {
   PRICES_BACKUP_KEY,
+  deriveBillingMode,
   listConfiguredPrices,
   migrateLegacyLsPrices,
   resolveEffectivePrice,
@@ -202,7 +203,6 @@ describe('回退链三态：树用户声明 → 出厂字典预估 → 未收录
       inputPerMTok: 0.2,
       outputPerMTok: 0.28,
       cacheReadPerMTok: 0.002,
-      billingUnit: 'token',
       source: 'user',
     });
     // 未声明字段保持「未配置」（不是 0）
@@ -231,7 +231,6 @@ describe('回退链三态：树用户声明 → 出厂字典预估 → 未收录
       outputPerMTok: 2.2,
       cacheReadPerMTok: 0.11,
       cacheWritePerMTok: 0,
-      billingUnit: 'token',
       source: 'estimate',
     });
     // 用户声明优先于字典（覆盖同一模型）
@@ -533,3 +532,89 @@ describe('旧 LS 价表一次性迁移', () => {
     expect(localStorage.getItem(PRICES_KEY)).toBe('not-json');
   });
 });
+
+describe('计费模式派生（能力为唯一真源；用户裁决 2026-09-15：不再手选）', () => {
+  it('deriveBillingMode：仅 modalities.output 含 image ⇒ per_image', () => {
+    expect(deriveBillingMode({ id: 'm', enabled: true })).toBe(
+      'per_1m_tokens'
+    );
+    expect(
+      deriveBillingMode({
+        id: 'm',
+        enabled: true,
+        modalities: { input: ['text'], output: ['text'] },
+      })
+    ).toBe('per_1m_tokens');
+    expect(
+      deriveBillingMode({
+        id: 'm',
+        enabled: true,
+        modalities: { input: ['text'], output: ['image'] },
+      })
+    ).toBe('per_image');
+    // 反向：只有**输入**含 image（视觉理解模型）不是生图模型
+    expect(
+      deriveBillingMode({
+        id: 'm',
+        enabled: true,
+        modalities: { input: ['image'], output: ['text'] },
+      })
+    ).toBe('per_1m_tokens');
+    // 文本 + 图片双输出 → 含 image 即按张（能力优先）
+    expect(
+      deriveBillingMode({
+        id: 'm',
+        enabled: true,
+        modalities: { input: ['text'], output: ['text', 'image'] },
+      })
+    ).toBe('per_image');
+  });
+
+  it('名单行携带派生计费模式；与树 pricing.unit 无关（防「两个真源」）', () => {
+    install(
+      provider_(
+        {
+          // 显式声明 unit 为 per_image，但能力是纯文本 ⇒ 派生结果仍为按 Token
+          id: 'text-but-claims-image-unit',
+          enabled: true,
+          pricing: {
+            currency: 'CNY',
+            unit: 'per_image',
+            input: 1,
+            output: 2,
+            perImage: 0.5,
+          },
+        },
+        {
+          // 未声明 unit，但能力是生图 ⇒ 派生结果为按张
+          id: 'image-but-no-unit',
+          enabled: true,
+          modalities: { input: ['text'], output: ['image'] },
+        }
+      )
+    );
+
+    const rows = listConfiguredPrices();
+    // 两者均无 order ⇒ 同档，按 modelId 码元序（'i' < 't'）决序
+    expect(rows.map((r) => `${r.modelId}=${r.billingMode}`)).toEqual([
+      'image-but-no-unit=per_image',
+      'text-but-claims-image-unit=per_1m_tokens',
+    ]);
+  });
+});
+
+/** 单供应商夹具（本 describe 专用；不扰动上方排序夹具）。 */
+function provider_(...models: ProviderSpec['models']): ModelsYamlTree {
+  return {
+    version: 2,
+    activeModel: null,
+    providers: {
+      p: {
+        protocol: 'openai/chat',
+        stream: true,
+        enabled: true,
+        models,
+      },
+    },
+  };
+}

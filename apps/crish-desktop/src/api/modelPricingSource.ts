@@ -20,7 +20,11 @@
  */
 
 import { modelRefKey } from './modelsCatalogTypes';
-import type { ModelRef, PricingConfig } from './modelsCatalogTypes';
+import type {
+  ModelRef,
+  ModelSpec,
+  PricingConfig,
+} from './modelsCatalogTypes';
 import { modelsCatalogStore } from './modelsCatalogStore';
 import { resolveSnapshotPrice } from './pricingResolver';
 import { PRICES_KEY, type ModelPrice } from './pricingTypes';
@@ -28,13 +32,39 @@ import { PRICES_KEY, type ModelPrice } from './pricingTypes';
 /** 价格来源：用户声明 / 字典预估 / 未收录 */
 export type PriceSource = 'user' | 'estimate' | 'none';
 
+/**
+ * 计费模式（**唯一判据 = 模型能力**，用户不再手选）。
+ *
+ * - `per_image`：`modalities.output` 含 `image`（生图模型）→ 按张生成计费；
+ * - `per_1m_tokens`：其余 → 按百万 token 计费。
+ *
+ * 用户裁决（2026-09-15）：价格页取消「计费方式」多选，生图模型自动套用按张价。
+ * 能力真源在模型配置页的 `modalities`（`ModelModalitiesEditor`），此处只做投影，
+ * **不读** `pricing.unit`——避免「同一件事两个真源」。
+ */
+export type BillingMode = 'per_1m_tokens' | 'per_image';
+
+/**
+ * 计费模式派生（纯函数；能力矩阵为唯一输入）。
+ *
+ * 实现约束：本文件受门禁 ②「定价身份路径零 includes」约束
+ * （`pricingCatalogSingleSource.test.ts` —— 裁决 ③ 禁止子串参与模型身份决议）。
+ * 该门禁**不剥注释**地一刀切扫描，故此处数组成员判定改用 `some(===)`：
+ * 语义等价（`string[]` 的成员判定 ≡ `some(v => v === x)`），且不引入任何子串
+ * 匹配语义。**请勿**改回数组原生成员判定方法，也请勿在本文件写出该调用字样
+ * （注释同样会被扫到）。
+ */
+export function deriveBillingMode(model: ModelSpec): BillingMode {
+  const outputs = model.modalities?.output;
+  return outputs?.some((m) => m === 'image') ? 'per_image' : 'per_1m_tokens';
+}
+
 export interface EffectiveModelPrice {
   currency: 'USD' | 'CNY';
   inputPerMTok?: number;
   outputPerMTok?: number;
   cacheReadPerMTok?: number;
   cacheWritePerMTok?: number;
-  billingUnit?: 'token' | 'per_image';
   source: PriceSource;
 }
 
@@ -44,6 +74,8 @@ export interface ConfiguredPriceRow {
   providerName: string;
   modelId: string;
   displayName: string;
+  /** 计费模式（能力派生；见 [deriveBillingMode]） */
+  billingMode: BillingMode;
   /** 生效价（用户声明 → 字典预估）；两者皆无 = null（未收录） */
   effective: EffectiveModelPrice | null;
   /** 树中用户声明价原文（编辑初值）；无 = undefined */
@@ -69,14 +101,6 @@ export function resolveUserPricing(ref: ModelRef): PricingConfig | undefined {
     .pricing;
 }
 
-/** `PricingBillingUnit` → 生效价计费单位（未声明单位 = undefined，不猜测） */
-function toBillingUnit(
-  unit: PricingConfig['unit']
-): 'token' | 'per_image' | undefined {
-  if (unit === undefined) return undefined;
-  return unit === 'per_image' ? 'per_image' : 'token';
-}
-
 /** 树用户声明 → 生效价（用户声明权威：已声明字段一律直取，**不**补零、不猜） */
 function fromUserPricing(pricing: PricingConfig): EffectiveModelPrice {
   return {
@@ -85,7 +109,6 @@ function fromUserPricing(pricing: PricingConfig): EffectiveModelPrice {
     outputPerMTok: pricing.output,
     cacheReadPerMTok: pricing.cacheRead,
     cacheWritePerMTok: pricing.cacheWrite,
-    billingUnit: toBillingUnit(pricing.unit),
     source: 'user',
   };
 }
@@ -111,7 +134,6 @@ function fromSnapshot(ref: ModelRef): EffectiveModelPrice | null {
     outputPerMTok: snap.outputPerMTok,
     cacheReadPerMTok: snap.readPerMTok,
     cacheWritePerMTok,
-    billingUnit: 'token',
     source: 'estimate',
   };
 }
@@ -167,6 +189,7 @@ export function listConfiguredPrices(): ConfiguredPriceRow[] {
         providerName: entry.provider.displayName?.trim() || entry.providerId,
         modelId: entry.model.id,
         displayName: entry.model.displayName?.trim() || entry.model.id,
+        billingMode: deriveBillingMode(entry.model),
         effective: resolveEffectivePrice(ref),
         userPricing: entry.model.pricing,
       },
