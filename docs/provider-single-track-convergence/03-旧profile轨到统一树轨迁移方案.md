@@ -95,19 +95,32 @@
 
 ---
 
-## 六、风险与未解（实施前必须确认）
+## 六、已确认的语义（原「未解」项，2026-09-15 查清）
 
-1. **映射规则**：旧 `profileId` 与统一树 `providerId` 是否同值？若不同，期 1 的「按 profileId 定位 provider」需要一张映射表，且影响迁移幂等性 —— **需在实施前确认**。
-2. **旧档案一次性迁移**：`profile-config.json` → `models.yaml` 的搬迁是否并入期 1，还是另立期？**待裁决**。
-3. **首次写入的 revision**：当前配置目录无 `models.yaml`，期 1 实施后首次 apply 的 `expectedRevision` 从何而来（空树 revision？空串？）——需以 `ModelsStore::apply` 的实现在实施前核对。
-4. **开关的默认值**：期 1 合并时默认开还是关？默认关更安全（行为不变），默认开能立即修用户故障 —— **待裁决**。
+1. **`profileId` ↔ 树 `providerId` 映射 = 同值**（期 1 **不需要映射表**）：
+   - `ModelsSnapshot.credential_states: BTreeMap<String, CredentialState>` 的 key 由树派生（`crates/agent-provider/src/model_store.rs:67`，`states_for(&tree)` `:312`）；
+   - 前端以 `profileId` 索引它（`profileStoreActivation.ts:163` 的 `credentialStates[profileId]?.hasKey`）⇒ 两者同值；
+   - 凭据槽同样以 `profileId` 为 key（`configSecretSet(profileId, key)` → `config/credentials.rs`）。
+
+2. **首次写入的 `expectedRevision` = `"missing"`**：
+   - `ModelsStore::apply` → `write_if_current` 比对 `content_revision(raw_observed(state))`（`model_store.rs:288-303`）；
+   - `content_revision(None)` 明确返回 **`"missing"`**（`model_store.rs:644-648`）；
+   - `workbench_read_models_yaml` 返回的 `revision` 与之同源 ⇒ **期 1 直接回传读到的 `revision` 即可**（文件不存在时为 `"missing"`），无需特判。
+
+3. **CAS 冲突自带最新 revision，重试无需额外读取**：
+   - `write_if_current` 失败时返回 `REVISION_CONFLICT` 且**携带 `current_revision`**（`model_store.rs:296-300`）⇒ 期 1 的重试可直接用该值重提交。
+
+## 七、仍待裁决
+
+1. **旧档案一次性迁移**：`profile-config.json` → `models.yaml` 的搬迁并入期 1，还是另立期？
+2. **开关默认值**：期 1 合并时默认开还是关？（默认关更安全、行为不变；默认开能立即修用户故障）
 
 ---
 
-## 七、续航锚点
+## 八、续航锚点
 
 - **当前状态**：方案已出，**未动任何生产代码**。
-- **已完成**：根因链实证（`00-执行记录.md` 对应章节）；D11 ⑤ 棘轮登记 4 处调用；D8 失真登记更正。
+- **已完成**：根因链实证（`00-执行记录.md` 对应章节）；D11 ⑤ 棘轮登记 4 处调用；D8 失真登记更正；**期 1 的三项关键语义已查清**（映射同值 / 首写 revision = `"missing"` / CAS 冲突自带 `current_revision`）。
 - **进行中**：无。
-- **阻塞**：待用户裁决范围（期 1 是否含旧档案一次性迁移）、开关默认值、映射规则确认。
+- **阻塞**：待用户裁决两项——旧档案迁移是否并入期 1、开关默认值。
 - **下一步**：裁决后按期 1 实施（文件域单一，可独立合入、可零代码回滚）。
