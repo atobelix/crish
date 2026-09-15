@@ -55,7 +55,7 @@ export type CrishErrorCode =
   | 'context.length_exceeded'
   | 'context.compaction_failed'
   | 'context.heal_failed'
-  // ── tool 域（7 正式码）──
+  // ── tool 域（10 正式码）──
   | 'tool.not_found'
   | 'tool.invalid_input'
   | 'tool.execution_failed'
@@ -65,6 +65,17 @@ export type CrishErrorCode =
   // F8-02：写路径互斥冲突（I4-M3：同路径被其他持有者声明，与
   // write_not_allowed 越权语义独立——白名单放行但被占用仍返回本码）
   | 'tool.write_path_conflict'
+  // session-integrity-repair 02 §4.1 F01：中断/取消/未知三码。
+  // Rust 侧早已在 codes 模块与 CRISH_ERROR_REGISTRY 注册
+  // （crates/conex-types/src/error.rs:115-119 与 :721-747），并在
+  // session-loop 真实抛出（executing_tools.rs:58 aborted_before_dispatch /
+  // exec_single.rs:98 + exec_verdict.rs:266 cancelled / hydrate.rs:378
+  // outcome_unknown），但 TS 侧长期漏注册 ⇒ getErrorInfo 回退
+  // common.unknown、动作建议丢失。F8-42 双向漂移门禁（codes-drift.test.ts）
+  // 捕获此漏码，本次补齐。
+  | 'tool.aborted_before_dispatch'
+  | 'tool.cancelled'
+  | 'tool.outcome_unknown'
   // ── tool.browser 子域（9 正式码，维度 17 §1.3 码表 + 22 裁决 U-12；
   //    浏览器工具面：恢复期 gating（R-9）/域名门禁/能力位红线/急停 等）──
   | 'tool.browser.not_ready'

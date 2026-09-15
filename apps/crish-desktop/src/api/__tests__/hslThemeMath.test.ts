@@ -42,16 +42,28 @@ describe('warm-gray 三级表面（侧栏约 5% 灰）', () => {
       const lPrimary = Number((95.2 + adjust * 0.6).toFixed(2));
       const lSecondary = Number((95 + adjust * 0.3).toFixed(2));
 
-      expect(root.style.getPropertyValue('--bg-primary')).toBe(
+      // T7 别名收敛（2026-09-12）：`--bg-*` 不再由 JS 注入，改由 tokens.css
+      // 从 `--surface-*` 派生（tokens.css:51-56）。故注入面断言必须落在
+      // 真源变量名上——TokenRuntimeController.ts:437-439 的
+      // bgPrimary→--surface-paper / bgSecondary→--surface-chrome /
+      // bgCard→--surface-card 是一一对应，语义未变，仅注入名变更。
+      // `--shell-chrome-bg` 仍是 JS 直注（同文件 :446），保持原名。
+      expect(root.style.getPropertyValue('--surface-paper')).toBe(
         `hsl(35 8% ${lPrimary}%)`,
       );
-      expect(root.style.getPropertyValue('--bg-secondary')).toBe(
+      expect(root.style.getPropertyValue('--surface-chrome')).toBe(
         `hsl(35 8% ${lSecondary}%)`,
       );
       expect(root.style.getPropertyValue('--shell-chrome-bg')).toBe(
         `hsl(35 8% ${lSecondary}%)`,
       );
-      expect(root.style.getPropertyValue('--bg-card')).toBe('hsl(0 0% 100%)');
+      expect(root.style.getPropertyValue('--surface-card')).toBe(
+        'hsl(0 0% 100%)',
+      );
+      // 反向锁定：`--bg-*` 不得再被 JS 注入（防别名双轨回潮）
+      expect(root.style.getPropertyValue('--bg-primary')).toBe('');
+      expect(root.style.getPropertyValue('--bg-secondary')).toBe('');
+      expect(root.style.getPropertyValue('--bg-card')).toBe('');
     }
   });
 
@@ -69,11 +81,13 @@ describe('warm-gray 三级表面（侧栏约 5% 灰）', () => {
       },
       'default',
     );
-    expect(root.style.getPropertyValue('--bg-secondary')).toBe(
+    // T7 别名收敛：注入面真源为 `--surface-chrome`（tokens.css:52 派生 --bg-secondary）
+    expect(root.style.getPropertyValue('--surface-chrome')).toBe(
       'hsl(35 8% 95%)',
     );
     expect(root.style.getPropertyValue('--shell-chrome-bg')).toBe(
       'hsl(35 8% 95%)',
     );
+    expect(root.style.getPropertyValue('--bg-secondary')).toBe('');
   });
 });

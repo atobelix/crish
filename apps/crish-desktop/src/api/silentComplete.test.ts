@@ -2,6 +2,12 @@
  * D2-5 silent-complete pure helper tests.
  * V1-α：判定单路化为 SessionMessage 直接判定（用户视图 DTO 分支随
  * 旧旁路投影删除）；silent-complete 行为测试保留并转绿。
+ *
+ * 告警可观测面口径：`silentComplete.ts:210` 已由裸 `console.warn` 收敛为
+ * `logger.warn(..., { module: 'silent-complete' })`（LoggerService 单一真源）。
+ * LoggerService 只在 `isDev()`（NODE_ENV==='development'）下转发 console.warn，
+ * 测试环境（NODE_ENV==='test'）走 console.log(JSON.stringify(entry))。
+ * 故断言落在真源可观测面 `logger.getRecentLogs()` 环形缓冲上。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SessionMessage } from '../store/layoutStore';
@@ -14,6 +20,7 @@ import {
   isSilentCompleteFromSessionMessage,
   resetSilentCompleteWarned,
 } from './silentComplete';
+import { logger } from '../services/LoggerService';
 
 function userMsg(id: string, text: string): SessionMessage {
   return { id, sender: 'user', text, timestamp: 1 };
@@ -186,6 +193,7 @@ describe('alertSilentComplete / checkAndAlertSilentComplete', () => {
   beforeEach(() => {
     resetControlMetrics();
     resetSilentCompleteWarned();
+    logger.clearLogs();
   });
 
   afterEach(() => {
@@ -205,24 +213,30 @@ describe('alertSilentComplete / checkAndAlertSilentComplete', () => {
   });
 
   it('checkAndAlertSilentComplete wires session message', () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const r = checkAndAlertSilentComplete(asstMsg('a-silent'), {
       sessionId: 's1',
       forceConsole: true,
     });
     expect(r.silent).toBe(true);
     expect(getControlMetrics().silent_complete).toBe(1);
-    expect(warn).toHaveBeenCalledTimes(1);
-    expect(String(warn.mock.calls[0]?.[0])).toContain('silent-complete');
-    expect(String(warn.mock.calls[0]?.[0])).toContain('a-silent');
+    const warnings = logger
+      .getRecentLogs()
+      .filter((l) => l.module === 'silent-complete');
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]?.level).toBe('warn');
+    expect(String(warnings[0]?.msg)).toContain('silent-complete');
+    expect(String(warnings[0]?.msg)).toContain('a-silent');
+    expect(String(warnings[0]?.msg)).toContain('session=s1');
   });
 
-  it('console.warn once per messageId', () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  it('warn once per messageId', () => {
     const r = isSilentComplete(asstMsg('same-id'));
     alertSilentComplete(r, { messageId: 'same-id', forceConsole: true });
     alertSilentComplete(r, { messageId: 'same-id', forceConsole: true });
     expect(getControlMetrics().silent_complete).toBe(2);
-    expect(warn).toHaveBeenCalledTimes(1);
+    // metric 记两次，但告警按 messageId 去重：仅 1 条日志
+    expect(
+      logger.getRecentLogs().filter((l) => l.module === 'silent-complete')
+    ).toHaveLength(1);
   });
 });

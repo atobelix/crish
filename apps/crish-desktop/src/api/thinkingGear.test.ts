@@ -29,7 +29,7 @@ afterEach(() => {
   clearCatalogEfforts();
 });
 
-describe('fetchDescribeEffortsSnapshot（catalog_get → 档位快照单源）', () => {
+describe('fetchDescribeEffortsSnapshot（workbench_read_capability_dictionary → 档位快照单源）', () => {
   const wire = {
     entries: [
       {
@@ -44,13 +44,20 @@ describe('fetchDescribeEffortsSnapshot（catalog_get → 档位快照单源）',
     ],
   };
 
-  it('成功：invoke(catalog_get) → applyCatalogEfforts → resolveCatalogEfforts 单源可用', async () => {
+  it('成功：invoke(workbench_read_capability_dictionary) → applyCatalogEfforts → resolveCatalogEfforts 单源可用', async () => {
+    // 命令名真源：出厂能力字典只读投影（2026-09-15 单轨收敛）替代已退役的
+    // catalog_get 读面；thinkingGear.ts:214 即此命令，mock 旧名会恒走 missing。
     vi.mocked(invokeResult).mockImplementation(async (cmd: string) =>
-      cmd === 'catalog_get'
+      cmd === 'workbench_read_capability_dictionary'
         ? { status: 'ok' as const, data: wire }
         : { status: 'missing' as const }
     );
     expect(await fetchDescribeEffortsSnapshot()).toBe(true);
+    // 正向锁定读面命令名（防再退回已退役 catalog_get）
+    expect(invokeResult).toHaveBeenCalledWith(
+      'workbench_read_capability_dictionary',
+      {}
+    );
     expect(resolveCatalogEfforts('deepseek-v4-flash')).toEqual({
       offered: ['high', 'low', 'medium'],
       defaultEffort: 'high',

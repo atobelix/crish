@@ -3,6 +3,13 @@
  * - renderMarkdownBatch（core_md_render_batch 三态：ok/missing/error）；
  * - rebuildSearchIndex（core_rebuild_search_index 三态 + logInternalError）；
  * - prewarmMarkdownBatch / collectPrewarmTexts（去重非空 → 缓存写入）。
+ *
+ * 可观测面口径：`logInternalError` 已收敛为唯一走 `logger.warn`
+ * （userFacingErrors.ts:341-349「删除 console.warn 裸调」），而 LoggerService
+ * 仅在 `isDev()`（NODE_ENV==='development'）下才转发 `console.warn`，测试环境
+ * （NODE_ENV==='test'）走 `console.log(JSON.stringify(entry))`。
+ * 故断言必须落在真源可观测面 `logger.getRecentLogs()` 环形缓冲上，
+ * 而非 `console.warn`（后者在测试环境恒 0 次，属断言与实现漂移）。
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { invokeResult } from './tauriInvoke';
@@ -15,6 +22,7 @@ import {
   getMarkdownHtmlCache,
   clearMarkdownHtmlCache,
 } from './markdownCache';
+import { logger } from '../services/LoggerService';
 
 vi.mock('./tauriInvoke', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./tauriInvoke')>();
@@ -29,6 +37,7 @@ const mockedInvokeResult = vi.mocked(invokeResult);
 beforeEach(() => {
   mockedInvokeResult.mockReset();
   clearMarkdownHtmlCache();
+  logger.clearLogs();
 });
 
 describe('T2.4 renderMarkdownBatch（core_md_render_batch）', () => {
@@ -108,21 +117,26 @@ describe('T2.5 rebuildSearchIndex（core_rebuild_search_index）', () => {
   });
 
   it('missing → false（可观测日志）', async () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     mockedInvokeResult.mockResolvedValueOnce({ status: 'missing' });
     await expect(rebuildSearchIndex()).resolves.toBe(false);
-    expect(warn).toHaveBeenCalled();
-    warn.mockRestore();
+    const logs = logger.getRecentLogs();
+    const hit = logs.find((l) => l.msg.includes('[rebuildSearchIndex]'));
+    expect(hit).toBeDefined();
+    expect(hit?.level).toBe('warn');
+    expect(hit?.module).toBe('userFacingErrors');
+    expect(hit?.err?.message).toContain('core_rebuild_search_index missing');
   });
 
   it('error → false（可观测日志）', async () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     mockedInvokeResult.mockResolvedValueOnce({
       status: 'error',
       message: 'index rebuild failed',
     });
     await expect(rebuildSearchIndex()).resolves.toBe(false);
-    expect(warn).toHaveBeenCalled();
-    warn.mockRestore();
+    const hit = logger
+      .getRecentLogs()
+      .find((l) => l.msg.includes('[rebuildSearchIndex]'));
+    expect(hit?.level).toBe('warn');
+    expect(hit?.err?.message).toContain('index rebuild failed');
   });
 });

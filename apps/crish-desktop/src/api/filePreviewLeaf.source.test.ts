@@ -47,6 +47,14 @@ const ATTACH_BAR = join(
   DIR,
   '../components/chat-composer/ComposerAttachmentBar.tsx'
 );
+const COMPOSER_TYPES = join(
+  DIR,
+  '../components/chat-composer/composerTypes.ts'
+);
+const ATTACHMENT_CARD = join(
+  DIR,
+  '../components/chat-attachment/AttachmentCard.tsx'
+);
 
 describe('S6 · 预览进叶源码钉（≠ 真壳到达绿）', () => {
   it('产品 src 无 fp-root 整屏 / FilePreview.open 调用 / 92vh', () => {
@@ -117,10 +125,23 @@ describe('S6 · 预览进叶源码钉（≠ 真壳到达绿）', () => {
   it('附件 / ChatCard 只接线 onOpenPath，不重做附件皮', () => {
     const composer = readUtf8(COMPOSER);
     const bar = readUtf8(ATTACH_BAR);
-    expect(composer).toMatch(/onOpenPath\?: \(filePath: string\) => void/);
-    expect(composer).toMatch(/data-file-open-path/);
-    expect(bar).toMatch(/data-file-open-path=\{a\.name\}/);
+    const types = readUtf8(COMPOSER_TYPES);
+    const card = readUtf8(ATTACHMENT_CARD);
+    // props 契约真源在 composerTypes.ts 的 ChatComposerProps（:241）；
+    // ChatComposer.tsx 只解构消费并做事件委托。
+    expect(types).toMatch(/onOpenPath\?: \(filePath: string\) => void/);
+    expect(composer).toMatch(/onOpenPath/);
+    // 宿主委托：closest('[data-file-open-path]') → getAttribute → onOpenPath(path)
+    expect(composer).toMatch(/closest\('\[data-file-open-path\]'\)/);
+    expect(composer).toMatch(/onOpenPath\(path\)/);
+    // 附件芯片写出点真源 = AttachmentCard（path 优先，name 兜底），
+    // 非 ComposerAttachmentBar 内联皮；bar 只做编排并委托 AttachmentCard。
+    expect(card).toMatch(
+      /data-file-open-path=\{item\.path \|\| item\.name\}/
+    );
+    expect(bar).toMatch(/AttachmentCard/);
     expect(bar).not.toMatch(/fp-root|createPortal|document\.body\.appendChild/);
+    expect(card).not.toMatch(/fp-root|createPortal|document\.body\.appendChild/);
   });
 
   it('无 docId 打开路径不创建 persist', () => {

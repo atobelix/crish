@@ -440,11 +440,14 @@ describe('EventRouter 消费侧 parser 异常兜底（T3.7 D7，F8-01 消费面�
     vi.restoreAllMocks();
   });
 
-  it('parseBridgeEvent 抛异常被兜底：registerUnknownEvent 登记 + 不中断事件处理循环', () => {
+  it('parseResolvedEvent 抛异常被兜底：registerUnknownEvent 登记 + 不中断事件处理循环', () => {
     const finish = vi.fn();
     const { router, callbacks } = makeRouter(finish);
     const logSpy = vi.spyOn(userFacingErrors, 'logInternalError');
-    const parserSpy = vi.spyOn(eventParserModule, 'parseBridgeEvent');
+    // 消费侧热路径已收敛为 `parseResolvedEvent(envelope)`（EventRouter.ts:236，
+    // D6.1 共享 envelope：不再 parseBridgeEvent(raw) 二次 resolve）。
+    // 故故障注入必须打在新的解析入口上，否则注入点不在链路上、断言恒空。
+    const parserSpy = vi.spyOn(eventParserModule, 'parseResolvedEvent');
 
     // 注入 parser 抛异常（模拟解析器未收敛的异常路径；验证的是消费侧兜底
     // 而非 parser 本身，故以故障注入方式驱动）

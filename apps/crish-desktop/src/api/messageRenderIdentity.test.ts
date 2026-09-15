@@ -47,13 +47,26 @@ describe('Chat list React key audit (static source)', () => {
     expect(src).toMatch(/setActual\(msgId/);
   });
 
-  it('MessageContent timeline keys use item.key / stable ids', () => {
+  it('MessageContent timeline keys use stable ids (seg.id + item.key)', () => {
     const src = readSrc('../components/chat-message/MessageContent.tsx');
     const code = stripComments(src);
-    expect(code).toMatch(/key=\{item\.key\}/);
+    // 正文交错过程折叠战役后，MessageContent 不再直接 `timeline.map(...)`：
+    // 顶层按 `segments`（partitionTimelineSegments 产出）渲染，键为 seg.id——
+    // 由 `${msgId}-proc|text|state-${序号}` 派生（timelineSegmenter.ts:117/125/247），
+    // 追加式流式演进下稳定，非数组下标。
+    expect(code).toMatch(/key=\{seg\.id\}/);
     expect(code).not.toMatch(
-      /timeline\.map\([^)]*index[^)]*\)\s*=>[\s\S]{0,120}key=\{index\}/
+      /segments\.map\([^)]*index[^)]*\)\s*=>[\s\S]{0,120}key=\{index\}/
     );
+    expect(code).not.toMatch(/key=\{index\}/);
+    expect(code).not.toMatch(/key=\{i\}/);
+    // 段内项键真源下移至 FoldableProcessSection（item.key，来自
+    // AssistantTimelineItem.key，toolPresentationTypes.ts:40）
+    const section = stripComments(
+      readSrc('../components/chat-message/FoldableProcessSection.tsx')
+    );
+    expect(section).toMatch(/key=\{item\.key\}/);
+    expect(section).not.toMatch(/key=\{index\}/);
   });
 
   it('S4.4/T4-A1 stream path: single streamText sub at shell assembly (row/content passive)', () => {
@@ -89,13 +102,27 @@ describe('Chat list React key audit (static source)', () => {
     const content = stripComments(
       readSrc('../components/chat-message/MessageContent.tsx')
     );
+    // 透传链真源（三跳，缺一即断）：
+    //   行 :179  hideThinkingBlock={hideThinkingBlock}
+    //   ↓
+    //   Content :89  const thoughtDefaultOpen = !hideThinkingBlock
+    //   ↓
+    //   Content :412/:564  thoughtDefaultOpen={thoughtDefaultOpen}
+    //   ↓
+    //   ProcessItemRenderer :70  defaultOpen: thoughtDefaultOpen
+    //                       :83  defaultExpanded={thoughtDefaultOpen}
+    const renderer = stripComments(
+      readSrc('../components/chat-message/ProcessItemRenderer.tsx')
+    );
     expect(row).toMatch(/hideThinkingBlock=\{hideThinkingBlock\}/);
     expect(row).not.toMatch(/void _hideThinkingBlock/);
     expect(row).not.toMatch(/_hideThinkingBlock/);
     expect(content).toMatch(/hideThinkingBlock/);
     expect(content).toMatch(/thoughtDefaultOpen/);
-    expect(content).toMatch(/defaultOpen:\s*thoughtDefaultOpen/);
-    expect(content).toMatch(/defaultExpanded=\{thoughtDefaultOpen\}/);
+    expect(content).toMatch(/const thoughtDefaultOpen = !hideThinkingBlock/);
+    expect(content).toMatch(/thoughtDefaultOpen=\{thoughtDefaultOpen\}/);
+    expect(renderer).toMatch(/defaultOpen:\s*thoughtDefaultOpen/);
+    expect(renderer).toMatch(/defaultExpanded=\{thoughtDefaultOpen\}/);
   });
 
   it('ChatToolCallBlock tool rows key by tool id', () => {

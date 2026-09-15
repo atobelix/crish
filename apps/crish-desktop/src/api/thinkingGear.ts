@@ -2,11 +2,14 @@
  * 思考档位单源（描述接口 efforts 白名单 → 档位面板）。
  *
  * 单源 = Rust `describe_model` 的 `offered_levels()`（R2 C9 / S-B7），经
- * `catalog_get` 下发的 `thinkingTiers`（TierEffortMap 单一载体）到达前端。
+ * `workbench_read_capability_dictionary`（出厂能力字典只读投影，2026-09-15
+ * 单轨收敛后替代已退役的 `catalog_get` 读面）下发的 `thinkingTiers`
+ * （TierEffortMap 单一载体）到达前端。
  * 档位 UI **不再自造静态档位表**（前端 `THINKING_LEVEL_IDS` 已移除）。
  *
  * 数据流：
- *   Rust describe_model(offered_levels) ──catalog_get──▶ 本模块 applyCatalogEfforts
+ *   Rust describe_model(offered_levels)
+ *     ──workbench_read_capability_dictionary──▶ 本模块 applyCatalogEfforts
  *   ──▶ resolveCatalogEfforts(model) ──▶ thinkingLevelOptionsFor（档位面板唯一数据源）
  *
  * 行为：

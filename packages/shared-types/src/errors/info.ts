@@ -1,12 +1,15 @@
 // packages/shared-types/src/errors/info.ts
 // 错误码元信息注册表，来源：./03-ERROR-MIGRATION.md §2.2
-// 实测条目数：92 正式码 + 10 reserved 码 = 102 条
+// 实测条目数：95 正式码 + 10 reserved 码 = 105 条
 // （R6 扩展：新增 goal 域 3 码；PE-03 T03.3 补 store.io / common.invalid_input / common.encoding；
 //  F8-02：tool.write_path_conflict 并入——写路径互斥，原 agent-tools 局部码；
 //  R13/B3：tool.browser.* 9 码并入 tool 域——浏览器工具面（维度 17 §1.3 + 22 裁决 U-12），
 //  语义与 conex-browser-tools/src/codes.rs 及 14 §5.1 分类映射对齐；
 //  S5：tool.computer.* 8 码 + tool.session.exclusive + subagent.not_found 并入
-//  （06 文档 §5 码表，码表同步轮；元信息与 Rust error.rs 注册表逐字一致））
+//  （06 文档 §5 码表，码表同步轮；元信息与 Rust error.rs 注册表逐字一致）；
+//  F8-42：tool.aborted_before_dispatch / tool.cancelled / tool.outcome_unknown 三码补入
+//  ——Rust 早已注册且 session-loop 真实抛出，TS 侧长期漏注册导致 getErrorInfo
+//  回退 common.unknown；由 codes-drift.test.ts 双向漂移门禁捕获）
 
 import type { CrishErrorCode, CrishErrorCategory } from './codes';
 
@@ -386,6 +389,35 @@ export const CRISH_ERROR_REGISTRY: Readonly<
     retryable: false,
     public: true,
     action: 'action.tool.wait_retry',
+  },
+  // session-integrity-repair 02 §4.1 F01：中断/取消/未知三码。
+  // 元信息与 Rust 注册表逐字一致（crates/conex-types/src/error.rs:721-747）。
+  // 注意：这三条的 action 在 Rust 侧是描述性文案而非 action.* i18n 键
+  // （Rust 原样保留），本表按「逐字一致」不变量照录——后续若归一为
+  // action.* 键需 Rust/TS 同步改，不可单侧漂移。
+  'tool.aborted_before_dispatch': {
+    code: 'tool.aborted_before_dispatch',
+    title: '工具分发前已中止',
+    category: 'permanent',
+    retryable: false,
+    public: true,
+    action: '请求已被用户或控制总线中止，无需重试',
+  },
+  'tool.cancelled': {
+    code: 'tool.cancelled',
+    title: '工具已被取消',
+    category: 'permanent',
+    retryable: false,
+    public: true,
+    action: '兄弟工具执行失败或批处理取消，跳过执行',
+  },
+  'tool.outcome_unknown': {
+    code: 'tool.outcome_unknown',
+    title: '工具结果未知（崩溃自愈）',
+    category: 'permanent',
+    retryable: false,
+    public: true,
+    action: '系统冷启动恢复自动合成未闭合调用，继续会话',
   },
   // ── tool.browser 子域（9 正式码，维度 17 §1.3 码表 + 22 裁决 U-12）──
   // 浏览器工具面：恢复期 gating（R-9）/域名门禁/能力位红线/急停/快照版本
