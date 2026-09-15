@@ -14,10 +14,18 @@
  */
 import { describe, expect, it } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-// vitest 下 import.meta.url 可能非 file: scheme；用 cwd 锚定 apps/crish-desktop
-const API_DIR = resolve(process.cwd(), 'src/api');
+// 路径以**本文件位置**（`src/api/__tests__`）锚定，禁止用 `process.cwd()`：
+// cwd 随调用口径漂移（根 `vitest.config.ts` 下 = 仓库根；app 目录配置下 =
+// `apps/crish-desktop`），锚错即 ENOENT 假红。与 `noteMirrorIpc.test.ts` 同款约定。
+const API_DIR =
+  typeof import.meta.dirname === 'string'
+    ? resolve(import.meta.dirname, '..')
+    : import.meta.url.startsWith('file:')
+      ? resolve(dirname(fileURLToPath(import.meta.url)), '..')
+      : resolve(process.cwd(), 'src/api');
 
 function readSource(rel: string): string {
   return readFileSync(join(API_DIR, rel), 'utf8');

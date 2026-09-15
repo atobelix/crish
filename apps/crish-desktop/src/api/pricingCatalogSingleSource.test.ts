@@ -13,12 +13,13 @@
  * → `applyCatalogCacheSnapshot` → 估算面，钉死「前端可解析的价格 = 出厂字典价格」
  * （取代已删除的前端静态全量表断言）。
  *
- * 静态断言用 fs（`process.cwd()` 锚定 apps/crish-desktop，与
- * `src/api/__tests__/legacy-storage-negative.test.ts` 同款约定）。
+ * 静态断言用 fs，路径以**本文件位置**锚定（见下方 `API_DIR`），
+ * 与 `src/api/noteMirrorIpc.test.ts` 同款约定——**不得**依赖 `process.cwd()`。
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { parseModelRefKey, type ModelRef } from './modelsCatalogTypes';
 import { normalizeModelIdText } from './modelCatalogPure';
 import type {
@@ -78,9 +79,22 @@ function installPriceTree(
   );
 }
 
-const APP_DIR = resolve(process.cwd());
-const SRC_DIR = join(APP_DIR, 'src');
-const API_DIR = join(SRC_DIR, 'api');
+/**
+ * 路径锚定：一律以**本文件自身位置**（`apps/crish-desktop/src/api`）为基准，
+ * **禁止**用 `process.cwd()`——cwd 随调用口径漂移（根 `vitest.config.ts` 下 =
+ * 仓库根；app 目录配置下 = `apps/crish-desktop`），锚错会让静态扫描走偏到仓库外
+ * （实证：`APPS_DIR` 曾被解析为仓库父目录，扫出
+ * `reference/markdown_compare/AFFiNE/**` 第三方命中 → 假红）。
+ * 与 `noteMirrorIpc.test.ts` 同款约定。
+ */
+const API_DIR =
+  typeof import.meta.dirname === 'string'
+    ? import.meta.dirname
+    : import.meta.url.startsWith('file:')
+      ? dirname(fileURLToPath(import.meta.url))
+      : resolve(process.cwd(), 'src/api');
+const SRC_DIR = resolve(API_DIR, '..');
+const APP_DIR = resolve(SRC_DIR, '..');
 
 /**
  * 独立判据：从 wire 计算「被**不同价**主张」的键集合（主 id 与 apiModel 别名同命名空间）。

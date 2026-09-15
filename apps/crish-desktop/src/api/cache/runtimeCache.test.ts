@@ -1,3 +1,10 @@
+// @vitest-environment jsdom
+/**
+ * 环境声明：本套件断言 localStorage 的配额（QuotaExceededError）行为，
+ * 依赖真实 `Storage` 构造器与 `localStorage` 实例（`vi.spyOn(Storage.prototype, ...)`）。
+ * 根 `vitest.config.ts` 的 unit 项目默认 `environment: 'node'`（无 `Storage` 全局）
+ * ⇒ 必须显式声明 jsdom，与同域 `modelCatalogMeta.test.ts` 同款口径。
+ */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   clearFontScanCache,

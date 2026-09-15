@@ -28,10 +28,24 @@ function makeStorageMock(store: Map<string, string>) {
 const localStorageMock = makeStorageMock(mem);
 const sessionStorageMock = makeStorageMock(sessionMem);
 
-// @ts-expect-error test env
-globalThis.localStorage = localStorageMock;
-// @ts-expect-error test env — shellWindowScope mints per-webview id here
-globalThis.sessionStorage = sessionStorageMock;
+// 只在环境**缺失**时补齐，禁止覆盖已存在的实现——与下方 RAF / CustomEvent
+// 等全局同款守卫口径。
+//
+// 覆盖已存在实现的后果（2026-09-15 实证）：带 `// @vitest-environment jsdom` 的
+// 用例文件里，jsdom 已提供符合规范的 `Storage` 实例；把它替换为普通对象后，
+// `localStorage instanceof Storage` 变为 false，于是
+// `vi.spyOn(Storage.prototype, 'getItem')` 这类**原型拦截**静默失效
+// （spy 装上了但永不命中，断言退化为「0 次调用」假红）。
+// 详见 modelCatalogMeta.test.ts / TokenRuntimeController.test.ts。
+if (typeof globalThis.localStorage === 'undefined') {
+  // @ts-expect-error test env
+  globalThis.localStorage = localStorageMock;
+}
+// shellWindowScope mints per-webview id here
+if (typeof globalThis.sessionStorage === 'undefined') {
+  // @ts-expect-error test env
+  globalThis.sessionStorage = sessionStorageMock;
+}
 // @ts-expect-error test env
 if (typeof globalThis.window === 'undefined') {
   // @ts-expect-error test env

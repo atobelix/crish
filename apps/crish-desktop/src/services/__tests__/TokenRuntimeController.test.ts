@@ -9,6 +9,34 @@ import {
 } from '../TokenRuntimeController';
 import { computeContrastGuardedTokens } from '../../api/oklchColorGuard';
 
+/**
+ * T7 别名收敛（2026-09-12）负向契约：JS 运行时**不得**注入这些派生别名。
+ *
+ * 它们是 `surface-*` 的下游，由 `tokens.css` 静态链单源派生
+ * （tokens.css:51-64、307-308）。一旦 JS 重新写入，就构成「同值多写」双写者，
+ * 静态链与运行时注入会互相覆盖、漂移无从定位——本断言即为该回归的守门人。
+ */
+const DERIVED_ALIASES = [
+  '--bg-primary',
+  '--bg-secondary',
+  '--bg-card',
+  '--bg-elevated',
+  '--bg-paper',
+  '--bg-workspace',
+  '--shell-inset-bg',
+  '--terminal-bg',
+  '--terminal-fg',
+] as const;
+
+function expectNoDerivedAliasesInjected(root: HTMLElement): void {
+  for (const alias of DERIVED_ALIASES) {
+    expect(
+      root.style.getPropertyValue(alias),
+      `${alias} 必须由 tokens.css 派生，JS 注入即双写者回归`
+    ).toBe('');
+  }
+}
+
 describe('TokenRuntimeController 全仓单一运行时 Token 注入控制器测试套件', () => {
   beforeEach(() => {
     localStorage.clear();
@@ -44,15 +72,20 @@ describe('TokenRuntimeController 全仓单一运行时 Token 注入控制器测�
       expect(root.classList.contains('theme-dark')).toBe(false);
 
       expect(root.style.getPropertyValue('--font-size-adjust')).toBe('2px');
-      expect(root.style.getPropertyValue('--bg-primary')).toBe('hsl(35 8% 95.2%)');
-      expect(root.style.getPropertyValue('--bg-secondary')).toBe('hsl(35 8% 95%)');
+      // T7 别名收敛（2026-09-12）：JS **只写独立侧** `surface-*` / `text-*` /
+      // `border-*` / `control-*`；`--bg-primary` / `--bg-secondary` / `--bg-card` /
+      // `--bg-elevated` / `--bg-paper` / `--bg-workspace` / `--shell-inset-bg` /
+      // `--terminal-*` 一律由 tokens.css 静态链从 `surface-*` 派生
+      // （tokens.css:51-64、307-308），JS 再写即「同值多写」双写者。
+      // 故此处断言**独立侧取值**，并由 expectNoDerivedAliasesInjected 钉死
+      // 「派生别名零注入」——比断言旧别名更强（旧写法对收敛回归无感知）。
+      expect(root.style.getPropertyValue('--surface-paper')).toBe('hsl(35 8% 95.2%)');
       expect(root.style.getPropertyValue('--surface-chrome')).toBe('hsl(35 8% 95%)');
       expect(root.style.getPropertyValue('--surface-card')).toBe('hsl(0 0% 100%)');
       expect(root.style.getPropertyValue('--text-primary')).toBe('#1a1a1a');
       expect(root.style.getPropertyValue('--border-color')).toBe('hsl(35 10% 86%)');
       expect(root.style.getPropertyValue('--control-soft-bg')).toContain('hsl(35 8% 95%)');
-      expect(root.style.getPropertyValue('--terminal-bg')).toBe('hsl(0 0% 100%)');
-      expect(root.style.getPropertyValue('--terminal-fg')).toBe('#1a1a1a');
+      expectNoDerivedAliasesInjected(root);
     });
 
     it('单例模式确保全局只有一个 TokenRuntimeController 实例', () => {
@@ -91,9 +124,10 @@ describe('TokenRuntimeController 全仓单一运行时 Token 注入控制器测�
       expect(root.classList.contains('theme-dark')).toBe(true);
       expect(root.classList.contains('theme-light')).toBe(false);
 
-      expect(root.style.getPropertyValue('--bg-primary')).toBe('#1f1f1f');
-      expect(root.style.getPropertyValue('--bg-secondary')).toBe('#191919');
+      expect(root.style.getPropertyValue('--surface-paper')).toBe('#1f1f1f');
+      expect(root.style.getPropertyValue('--surface-chrome')).toBe('#191919');
       expect(root.style.getPropertyValue('--text-primary')).toBe('#cccccc');
+      expectNoDerivedAliasesInjected(root);
     });
 
     it('浅色模式由纯布尔值 isDark 为 false 驱动，派生浅色调色板', () => {
@@ -115,8 +149,9 @@ describe('TokenRuntimeController 全仓单一运行时 Token 注入控制器测�
       expect(root.classList.contains('theme-light')).toBe(true);
       expect(root.classList.contains('theme-dark')).toBe(false);
 
-      expect(root.style.getPropertyValue('--bg-primary')).toBe('#f1f3f5');
+      expect(root.style.getPropertyValue('--surface-paper')).toBe('#f1f3f5');
       expect(root.style.getPropertyValue('--text-primary')).toBe('#212529');
+      expectNoDerivedAliasesInjected(root);
     });
 
     it('智能时光温感过渡基于当前时刻布尔判定深浅模式', () => {
@@ -193,7 +228,9 @@ describe('TokenRuntimeController 全仓单一运行时 Token 注入控制器测�
       const updateEvent = tokensUpdatedSpy.mock.calls[0][0] as CustomEvent;
       expect(updateEvent.detail.isDark).toBe(false);
       expect(updateEvent.detail.theme).toBe('default');
-      expect(updateEvent.detail.tokens['--bg-primary']).toBeDefined();
+      // 事件载荷同样遵循 T7 单写者契约：只携带独立侧，派生别名不出现在载荷中
+      expect(updateEvent.detail.tokens['--surface-paper']).toBeDefined();
+      expect(updateEvent.detail.tokens['--bg-primary']).toBeUndefined();
 
       const canvasEvent = canvasRecolorSpy.mock.calls[0][0] as CustomEvent;
       expect(canvasEvent.detail.isDark).toBe(false);
@@ -231,11 +268,12 @@ describe('TokenRuntimeController 全仓单一运行时 Token 注入控制器测�
       );
 
       expect(result.isDark).toBe(true);
-      expect(result.tokens['--bg-primary']).toBe('#223344');
+      expect(result.tokens['--surface-paper']).toBe('#223344');
       // 自定义极端暗色背景触发对比度防崩安全算法，派生高对比度亮白
       expect(result.tokens['--text-primary']).toBe('hsl(0, 0%, 94%)');
-      expect(result.tokens['--bg-secondary']).toContain('color-mix(');
-      expect(document.documentElement.style.getPropertyValue('--bg-primary')).toBe('#223344');
+      expect(result.tokens['--surface-chrome']).toContain('color-mix(');
+      expect(document.documentElement.style.getPropertyValue('--surface-paper')).toBe('#223344');
+      expectNoDerivedAliasesInjected(document.documentElement);
     });
   });
 

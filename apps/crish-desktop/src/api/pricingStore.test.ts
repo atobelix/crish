@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   applyCatalogCacheSnapshot,
   clearCatalogCacheSnapshot,
@@ -80,10 +81,21 @@ function installPriceTree(
 /**
  * 出厂字典真源（Rust 编译期打包，前端唯一价格来源）。
  * 前端静态定价表已物理删除 → 定价用例必须以**快照夹具**驱动。
+ *
+ * 路径锚定：一律以**本文件自身位置**为基准，禁止用 `process.cwd()`——cwd 随
+ * 调用口径漂移（根 `vitest.config.ts` 下 = 仓库根，app 目录配置下 =
+ * `apps/crish-desktop`），锚错即 ENOENT 假红。与 `noteMirrorIpc.test.ts` 同款约定。
  */
+const API_DIR =
+  typeof import.meta.dirname === 'string'
+    ? import.meta.dirname
+    : import.meta.url.startsWith('file:')
+      ? dirname(fileURLToPath(import.meta.url))
+      : resolve(process.cwd(), 'src/api');
+
 const CATALOG_JSON = resolve(
-  process.cwd(),
-  '../../crates/agent-provider/src/models/catalog.json'
+  API_DIR,
+  '../../../../crates/agent-provider/src/models/catalog.json'
 );
 
 function dictionarySnapshot(): CatalogCacheSnapshot {
