@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useMemo } from 'react';
 
 import styles from './ChatToolCallBlock.module.css';
 import { Button, Tooltip } from '../ui';
@@ -13,6 +13,7 @@ import {
 } from './toolOutputParser';
 import { isEditToolName } from '../../api/toolFeedbackDiff';
 import { AppIcon } from '../ui/icons/index';
+import { useTransientFlag } from '../../hooks/useTransientFlag';
 
 export interface ToolCallOutputPaneProps {
   toolId?: string;
@@ -47,7 +48,8 @@ export const ToolCallOutputPane: React.FC<ToolCallOutputPaneProps> = ({
   onOpenDiff,
   onOpenTerminal,
 }) => {
-  const [copied, setCopied] = useState(false);
+  // 复制反馈瞬态位：定时器由 useTransientFlag 统一持有并在卸载时清除
+  const { flag: copied, trigger: triggerCopied } = useTransientFlag(2000);
   const isError = status === 'error';
   const isRunning = status === 'running';
   const hasDiffs = Boolean(
@@ -115,8 +117,7 @@ export const ToolCallOutputPane: React.FC<ToolCallOutputPaneProps> = ({
     const textToCopy = readFile?.code || formattedOutput;
     if (textToCopy) {
       void navigator.clipboard.writeText(textToCopy);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      triggerCopied();
     }
   };
 

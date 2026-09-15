@@ -8,6 +8,7 @@ import {
   type ExtractedToolArgs,
 } from '../../api/toolPresentation';
 import { AppIcon } from '../ui/icons/index';
+import { useTransientFlag } from '../../hooks/useTransientFlag';
 
 const TOOL_INPUT_LINE_CAP = 1000;
 const TOOL_INPUT_BYTE_CAP = 128 * 1024;
@@ -47,7 +48,8 @@ export const ToolCallInputPane: React.FC<ToolCallInputPaneProps> = ({
   name = 'tool',
   argumentsStr = '',
 }) => {
-  const [copied, setCopied] = useState(false);
+  // 复制反馈瞬态位：定时器由 useTransientFlag 统一持有并在卸载时清除
+  const { flag: copied, trigger: triggerCopied } = useTransientFlag(2000);
   const [viewMode, setViewMode] = useState<'formatted' | 'raw'>('formatted');
 
   const shellTool = useMemo(() => isShellToolName(name), [name]);
@@ -64,8 +66,7 @@ export const ToolCallInputPane: React.FC<ToolCallInputPaneProps> = ({
         : argumentsStr;
     if (textToCopy) {
       void navigator.clipboard.writeText(textToCopy);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      triggerCopied();
     }
   };
 

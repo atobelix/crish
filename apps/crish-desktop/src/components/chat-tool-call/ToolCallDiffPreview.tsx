@@ -8,6 +8,7 @@ import {
 } from '../../api/codeHighlightBatch';
 import { Tooltip } from '../ui';
 import { AppIcon } from '../ui/icons/index';
+import { useTransientFlag } from '../../hooks/useTransientFlag';
 
 export interface ToolCallDiffPreviewProps {
   diff: FileDiff;
@@ -31,7 +32,8 @@ export const ToolCallDiffPreview: React.FC<ToolCallDiffPreviewProps> = ({
   className = '',
   cardVariant,
 }) => {
-  const [copied, setCopied] = useState(false);
+  // 复制反馈瞬态位：定时器由 useTransientFlag 统一持有并在卸载时清除
+  const { flag: copied, trigger: triggerCopied } = useTransientFlag(1500);
   const [showAll, setShowAll] = useState(false);
 
   const codeLang = useMemo(() => langFromFilename(diff.filePath), [diff.filePath]);
@@ -66,8 +68,7 @@ export const ToolCallDiffPreview: React.FC<ToolCallDiffPreviewProps> = ({
       })
       .join('\n');
     void navigator.clipboard.writeText(unifiedText);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+    triggerCopied();
   };
 
   const handleOpenDiff = (e?: React.MouseEvent) => {

@@ -3,6 +3,7 @@ import { Tooltip } from '../ui';
 import { parseAnsi } from '../../utils/parseAnsi';
 import styles from './ModernToolCall.module.css';
 import { AppIcon } from '../ui/icons/index';
+import { useTransientFlag } from '../../hooks/useTransientFlag';
 
 export interface ModernTerminalToolCallProps {
   id?: string;
@@ -28,8 +29,12 @@ export const ModernTerminalToolCall: React.FC<ModernTerminalToolCallProps> = ({
   status = 'success',
   className = '',
 }) => {
-  const [copied, setCopied] = useState(false);
-  const [copiedOutput, setCopiedOutput] = useState(false);
+  // 复制反馈瞬态位：定时器由 useTransientFlag 统一持有并在卸载时清除
+  // （历史手写 setTimeout 不清理 ⇒ 组件被虚拟列表回收后仍 setState，
+  //  在环境已拆除时访问 window 抛未捕获异常）。
+  const { flag: copied, trigger: triggerCopied } = useTransientFlag(1500);
+  const { flag: copiedOutput, trigger: triggerCopiedOutput } =
+    useTransientFlag(1500);
   const [isFullExpanded, setIsFullExpanded] = useState(false);
 
   // ANSI 解析与渐进截断折叠切片
@@ -42,16 +47,14 @@ export const ModernTerminalToolCall: React.FC<ModernTerminalToolCallProps> = ({
     e.stopPropagation();
     if (!command) return;
     void navigator.clipboard.writeText(command);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+    triggerCopied();
   };
 
   const handleCopyOutput = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!normalizedOutput) return;
     void navigator.clipboard.writeText(normalizedOutput);
-    setCopiedOutput(true);
-    setTimeout(() => setCopiedOutput(false), 1500);
+    triggerCopiedOutput();
   };
 
   const lines = useMemo(() => {

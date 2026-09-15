@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React from 'react';
 
 import styles from './ModernToolCall.module.css';
 import { AppIcon } from '../ui/icons/index';
+import { useTransientFlag } from '../../hooks/useTransientFlag';
 
 export interface ModernCodeBlockProps {
   filename?: string;
@@ -18,14 +19,14 @@ export const ModernCodeBlock: React.FC<ModernCodeBlockProps> = ({
   code,
   className = '',
 }) => {
-  const [copied, setCopied] = useState(false);
+  // 复制反馈瞬态位：定时器由 useTransientFlag 统一持有并在卸载时清除
+  const { flag: copied, trigger: triggerCopied } = useTransientFlag(1200);
 
   const lines = code.split('\n');
 
   const handleCopy = () => {
     void navigator.clipboard.writeText(code);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1200);
+    triggerCopied();
   };
 
   return (
