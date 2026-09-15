@@ -920,6 +920,64 @@ const D8_KNOWN_DEBT = new Map([
   } else {
     ok('D11: 四方命令名各自唯一（无重复登记）');
   }
+
+  // ⑤ 前端调用面 ⊆ manifest —— **退役命令漏改调用点的唯一自动捕获面**
+  //
+  // D1 用**标识符**匹配退役符号，抓不到以**字符串字面量**出现的命令名。
+  // 实证 2026-09-15：`catalog_get` / `catalog_refresh` / `config_profile_apply`
+  // 三条已退役命令仍被前端 invoke（4 处调用点），D1 全程零告警；用户侧表现为
+  // 「模型定价拉取跳过（missing）、回退静态表」。本断言把调用面与 manifest 对齐。
+  //
+  // 现状为**棘轮**：已知漏改点登记在 D11_RETIRED_CALL_DEBT（目标 = 0），
+  // 新增即红。收敛后逐项从该表删除。
+  const D11_RETIRED_CALL_DEBT = new Set([
+    'apps/crish-desktop/src/api/modelCatalogIpc.ts:catalog_get',
+    'apps/crish-desktop/src/api/modelCatalogIpc.ts:catalog_refresh',
+    'apps/crish-desktop/src/api/provider-profiles/rustProfileStore.ts:config_profile_apply',
+    'apps/crish-desktop/src/api/thinkingGear.ts:catalog_get',
+  ]);
+  const manifestNameSet = new Set(manifestNames);
+  const retiredCallKeys = new Set();
+  for (const file of walk(
+    path.join(REPO_ROOT, 'apps/crish-desktop/src'),
+    (name) => /\.(ts|tsx)$/.test(name) && !/\.test\.(ts|tsx)$/.test(name),
+  )) {
+    const src = fs.readFileSync(file, 'utf8');
+    for (const m of src.matchAll(
+      /\b(?:invokeResult|invokeTyped|invoke)\s*(?:<[^>]*>)?\s*\(\s*'([^']+)'/g,
+    )) {
+      const cmd = m[1];
+      if (cmd.startsWith('plugin:')) continue;
+      if (manifestNameSet.has(cmd)) continue;
+      const rel = path.relative(REPO_ROOT, file).replaceAll('\\', '/');
+      retiredCallKeys.add(`${rel}:${cmd}`);
+    }
+  }
+  const newRetiredCalls = [...retiredCallKeys].filter(
+    (key) => !D11_RETIRED_CALL_DEBT.has(key),
+  );
+  const clearedDebt = [...D11_RETIRED_CALL_DEBT].filter(
+    (key) => !retiredCallKeys.has(key),
+  );
+  if (newRetiredCalls.length > 0) {
+    fail(
+      `D11: 前端调用了 manifest 未登记的命令（疑似退役命令漏改调用点）：${newRetiredCalls.join(' / ')}——` +
+        ` 退役命令时必须同时清理前端调用面；命令名是**字符串字面量**，D1 的标识符扫描抓不到`
+    );
+  } else if (clearedDebt.length > 0) {
+    fail(
+      `D11: D11_RETIRED_CALL_DEBT 已收敛但未从登记表删除：${clearedDebt.join(' / ')}——` +
+        ` 棘轮只降不升，收敛后必须同步删表`
+    );
+  } else if (D11_RETIRED_CALL_DEBT.size > 0) {
+    console.warn(
+      `WARN  D11: 前端仍有 ${D11_RETIRED_CALL_DEBT.size} 处调用已退役命令（登记债务，目标 = 0）：` +
+        `${[...D11_RETIRED_CALL_DEBT].join(' / ')}。` +
+        ` 收敛方向 = 改调现行命令（配置激活链路需先出方案），收敛后从 D11_RETIRED_CALL_DEBT 删除对应条目。`
+    );
+  } else {
+    ok('D11: 前端调用面全部落在 manifest 登记集合内');
+  }
 }
 
 /* ── D12 资产防线（门禁脚本必须可入库；干净检出可执行） ─────────── */
