@@ -237,7 +237,13 @@ fn read_utf8_windowed(
             match chunk[start..].iter().position(|&b| b == b'\n') {
                 Some(rel) => {
                     let end = start + rel;
-                    let mut line_bytes = &chunk[start..end];
+                    let line_slice = &chunk[start..end];
+                    let mut line_bytes: &[u8] = if pending.is_empty() {
+                        line_slice
+                    } else {
+                        pending.extend_from_slice(line_slice);
+                        &pending
+                    };
                     // \r\n → 剥 \r
                     if line_bytes.last() == Some(&b'\r') {
                         line_bytes = &line_bytes[..line_bytes.len() - 1];
@@ -256,6 +262,7 @@ fn read_utf8_windowed(
                     total_lines += 1;
                     line_idx += 1;
                     file_ends_with_newline = true;
+                    pending.clear();
                     start = end + 1;
                 }
                 None => {
@@ -270,19 +277,24 @@ fn read_utf8_windowed(
     if !pending.is_empty() || (file_bytes > 0 && line_idx == 0) {
         // 空文件：pending 空且 line_idx=0 → 不计行
         if !pending.is_empty() {
+            let mut line_bytes: &[u8] = &pending;
+            if line_bytes.last() == Some(&b'\r') {
+                line_bytes = &line_bytes[..line_bytes.len() - 1];
+            }
             push_window_line(
                 &mut window_lines,
                 &mut ends_with_newline_in_window,
                 line_idx,
                 window_start0,
                 window_end0_exclusive,
-                &pending,
+                line_bytes,
                 &mut lossy_replaced,
             );
-            total_chars += line_bytes_char_count(&pending);
+            total_chars += line_bytes_char_count(line_bytes);
             total_lines += 1;
             ends_with_newline_in_window = false;
             file_ends_with_newline = false;
+            pending.clear();
         }
     }
 
@@ -707,5 +719,40 @@ mod tests {
         assert_eq!(shown, "aaaa");
         assert_eq!(n, 1);
         assert!(trunc);
+    }
+
+    #[test]
+    fn windowed_read_utf8_spanning_chunk_boundary_strict() {
+        let mut content = String::new();
+        while content.len() < 8190 {
+            content.push_str("这是一个用于测试 8KB chunk 边界的行，包含中文字符。\n");
+        }
+        content.push_str("【跨越边界】这是一行非常长的包含中文多字节字符的行，它正好跨越了 8192 字节边界，验证拼接无损。\n");
+        content.push_str("这是边界之后的后续行。\n");
+
+        let path = write_temp("spanning_utf8", content.as_bytes());
+        let mut opts = default_opts();
+        opts.strict_encoding = true;
+        let r = windowed_read(&path, &opts).expect("应成功读取跨越 8KB 边界的 UTF-8 文本");
+        assert!(!r.lossy_replaced);
+        assert!(r.text.contains("【跨越边界】这是一行非常长的包含中文多字节字符的行"));
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn windowed_read_agents_md_real_file() {
+        let repo_agents = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .join("AGENTS.md");
+        if repo_agents.exists() {
+            let mut opts = default_opts();
+            opts.strict_encoding = true;
+            let r = windowed_read(&repo_agents, &opts).expect("AGENTS.md 必须可由 windowed_read 严格模式成功读取");
+            assert!(!r.lossy_replaced);
+            assert!(r.text.contains("Conex / Crish — Agent 协作指令"));
+        }
     }
 }

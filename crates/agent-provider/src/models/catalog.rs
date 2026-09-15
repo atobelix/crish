@@ -25,7 +25,7 @@ use serde::de::Visitor;
 use serde::{Deserialize, Deserializer, Serialize};
 use thiserror::Error;
 
-use super::catalog_types::{ModelSpec, ProtocolKind, ProviderSpec, UnifiedModelsConfig};
+use super::catalog_types::{ModelRef, ModelSpec, ProtocolKind, ProviderSpec, UnifiedModelsConfig};
 
 #[path = "catalog_override.rs"]
 mod catalog_override;
@@ -271,7 +271,7 @@ pub struct ModelCatalogEntry {
 impl ModelCatalogEntry {
     /// 目录条目键（"{vendor}::{model}"，与 [ModelCatalog] 内部键格式一致）
     fn key(vendor: &str, model: &str) -> String {
-        format!("{vendor}::{model}")
+        ModelRef::new(vendor, model).key()
     }
 
     /// 模型级档位 → wire 拼写查询（v2 单一载体 [Self::thinking_tiers]；R4 T4.2 模型级改名消费）。
@@ -365,7 +365,12 @@ impl ModelCatalog {
                 let file: ModelCatalogFile = serde_json::from_str(include_str!("catalog.json"))
                     .expect("内置 catalog.json 必须可解析（serde 全量解析测试钉死转录错误）");
                 ModelCatalog {
-                    entries: file.entries,
+                    // 预填资产的旧文件键只在加载时转换；运行索引采用 JSON 二元组。
+                    entries: file.entries.into_iter().map(|(key, entry)| {
+                        let (provider, model) = key.split_once("::")
+                            .expect("内置预填资产必须含完整供应商与模型键");
+                        (ModelCatalogEntry::key(provider, model), entry)
+                    }).collect(),
                     version: 0,
                 }
             })
@@ -390,8 +395,9 @@ impl ModelCatalog {
 
     /// 从已解析的 v2 树投影目录（不重新解析 yaml）。
     pub fn from_unified(tree: &UnifiedModelsConfig) -> Result<Self, String> {
-        tree.validate()?;
-        Ok(project_unified_to_catalog(tree))
+        let mut normalized = tree.clone();
+        normalized.normalize_for_commit()?;
+        Ok(project_unified_to_catalog(&normalized))
     }
 
     /// 从文件路径动态读取并构建运行时模型目录快照。
@@ -445,45 +451,18 @@ impl ModelCatalog {
         self.version
     }
 
-    /// 多级兜底查找（对齐 litellm `_get_model_info_helper` 顺序）：
-    /// 精确 "vendor::model" → 逐级去版本后缀（-0731 / -20250826，如
-    /// `deepseek-v4-flash-0731` → `deepseek-v4-flash`）→ vendor 级默认条目
-    /// （model="*"）→ None。
-    pub fn lookup(&self, vendor: &str, model: &str) -> Option<&ModelCatalogEntry> {
-        let mut probe = ModelCatalogEntry::key(vendor, model);
-        if self.entries.contains_key(&probe) {
-            return self.entries.get(&probe);
-        }
-        // 逐级去版本后缀重试（v4-flash 官方版本号即 DeepSeek-V4-Flash-0731）
-        while let Some(stripped) = strip_version_suffix(&probe) {
-            probe = stripped;
-            if let Some(entry) = self.entries.get(&probe) {
-                return Some(entry);
-            }
-        }
-        // vendor 级默认条目（model="*"；未配置 → None）
-        if let Some(entry) = self.entries.get(&ModelCatalogEntry::key(vendor, "*")) {
-            return Some(entry);
-        }
-        // 动态真源回退：若未指定特定 vendor（如空字符串或通配符），在所有条目中根据 model ID 匹配
-        if vendor.is_empty() || vendor == "*" {
-            for entry in self.entries.values() {
-                if entry.model.eq_ignore_ascii_case(model) {
-                    return Some(entry);
-                }
-            }
-        }
-        None
+    /// 全量条目只读迭代（键 = `"{vendor}::{model}"`，与 `entries` 同序）。
+    ///
+    /// 供 apps 层做**只读投影**（如 `workbench_read_bundled_catalog` 把内置目录
+    /// 快照化返回给前端定价面）。`entries` 字段本身是 `pub(crate)`，外部 crate
+    /// 无法直接访问，故提供本迭代器；不暴露可变句柄（目录只增不改）。
+    pub fn iter_entries(&self) -> impl Iterator<Item = (&str, &ModelCatalogEntry)> {
+        self.entries.iter().map(|(k, v)| (k.as_str(), v))
     }
 
-    /// 仅按模型 ID 查找条目（跨供应商首个匹配项）
-    pub fn lookup_by_model_id(&self, model: &str) -> Option<&ModelCatalogEntry> {
-        for entry in self.entries.values() {
-            if entry.model.eq_ignore_ascii_case(model) {
-                return Some(entry);
-            }
-        }
-        None
+    /// 完整身份的精确查询；缺失返回 None，不改型号、不查默认、不跨供应商。
+    pub fn lookup(&self, vendor: &str, model: &str) -> Option<&ModelCatalogEntry> {
+        self.entries.get(&ModelCatalogEntry::key(vendor, model))
     }
 
     /// 便捷：上下文窗口钳制（P4/压缩层消费；窗口缺失 → None）
@@ -687,16 +666,6 @@ impl ModelCatalog {
     }
 }
 
-/// 剥离尾部数字版本后缀（-0731 / -20250826 形态）；后缀非纯数字时不剥离，
-/// 避免误伤如 `deepseek-v3` 这类本身含数字的模型名。
-fn strip_version_suffix(probe: &str) -> Option<String> {
-    let (base, suffix) = probe.rsplit_once('-')?;
-    if !suffix.bytes().all(|byte| byte.is_ascii_digit()) {
-        return None;
-    }
-    Some(base.to_owned())
-}
-
 /// yaml 树 + 扁平目录投影。α-3 `live_catalog()` 应持有本结构，而不是只持有目录。
 ///
 /// - `tree` 是第一公民（与 IPC `providers` 同构）
@@ -738,8 +707,8 @@ impl LiveModels {
         Self::from_unified(UnifiedModelsConfig::from_yaml_str(yaml_str)?)
     }
 
-    pub fn from_unified(tree: UnifiedModelsConfig) -> Result<Self, String> {
-        tree.validate()?;
+    pub fn from_unified(mut tree: UnifiedModelsConfig) -> Result<Self, String> {
+        tree.normalize_for_commit()?;
         let catalog = project_unified_to_catalog(&tree);
         Ok(Self {
             tree,
@@ -793,7 +762,7 @@ fn project_model_entry(
     let mut entry = ModelCatalogEntry::default();
     entry.model = model.id.clone();
     entry.api_model = Some(model.id.clone());
-    entry.id = Some(format!("{provider_id}::{}", model.id));
+    entry.id = Some(ModelRef::new(provider_id, &model.id).key());
     entry.provider = provider_id.to_string();
     // 折叠语义（轨G P2 · 文档化钉死）：yaml 树投影**故意**把 vendor 折叠为
     // provider_id——v2 models.yaml 以 provider 通道为第一公民，不做
@@ -812,8 +781,8 @@ fn project_model_entry(
 
     if let Some(pricing) = &model.pricing {
         entry.currency = Some(pricing.currency.code().to_string());
-        entry.input_price = Some(pricing.input);
-        entry.output_price = Some(pricing.output);
+        entry.input_price = pricing.input;
+        entry.output_price = pricing.output;
         entry.cache_read_price = pricing.cache_read;
         entry.cache_write_price = pricing.cache_write;
         entry.cache_write_free = entry.cache_write_price == Some(0.0);
@@ -843,8 +812,9 @@ fn project_model_entry(
         entry.supports_audio_output = mods.supports_output("audio");
     }
 
-    let compat = model.compat.as_ref().or(provider.compat.as_ref());
-    if let Some(compat) = compat {
+    entry.cache_ttl = model.cache_ttl.clone();
+    entry.supports_function_calling = model.supports_tools == Some(true);
+    if let Some(compat) = model.effective_compat(provider) {
         entry.thinking_format = compat
             .thinking_format
             .map(|format| format.as_str().to_string());

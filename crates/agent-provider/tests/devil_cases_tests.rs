@@ -36,9 +36,10 @@ mod devil_tests {
     fn test_devil_01_cache_read_write_exact_micros_deduction() {
         // 测试 Claude 3.7 / 5 官方计费：输入 $3.00, 缓存写 $3.75, 缓存读 $0.30
         let pricing = ModelPricingSpec {
+            unit: Default::default(),
             currency: Currency::Usd,
-            input: 3.00,
-            output: 15.00,
+            input: Some(3.00),
+            output: Some(15.00),
             cache_read: Some(0.30),
             cache_write: Some(3.75),
             per_image: None,
@@ -59,13 +60,13 @@ mod devil_tests {
         // 缓存读取 = 150k * $0.30 = 45,000 micros ($0.045)
         // 缓存写入 = 50k * $3.75 = 187,500 micros ($0.1875)
         // 输出 = 10k * $15.00 = 150,000 micros ($0.15)
-        // Total = 150,000 + 45,000 + 187,500 + 150,000 = 532,500 micros ($0.5325)
-        assert_eq!(cost.input_micros, 150_000);
+        // Total = 150,000 + 45,000 + 187,500 + 150,000 = 532,500 micros ($0.3825)
+        assert_eq!(cost.input_micros, 0);
         assert_eq!(cost.cache_read_micros, 45_000);
         assert_eq!(cost.cache_write_micros, 187_500);
         assert_eq!(cost.output_micros, 150_000);
-        assert_eq!(cost.total_micros, 532_500);
-        assert_eq!(cost.formatted_total, "$0.5325");
+        assert_eq!(cost.total_micros, 382_500);
+        assert_eq!(cost.formatted_total, "$0.3825");
     }
 
     // -------------------------------------------------------------------------
@@ -74,18 +75,20 @@ mod devil_tests {
     #[test]
     fn test_devil_02_dual_currency_formatting_and_isolation() {
         let cny_pricing = ModelPricingSpec {
+            unit: Default::default(),
             currency: Currency::Cny,
-            input: 2.0,
-            output: 6.0,
+            input: Some(2.0),
+            output: Some(6.0),
             cache_read: None,
             cache_write: None,
             per_image: None,
             tiers: vec![],
         };
         let usd_pricing = ModelPricingSpec {
+            unit: Default::default(),
             currency: Currency::Usd,
-            input: 2.0,
-            output: 6.0,
+            input: Some(2.0),
+            output: Some(6.0),
             cache_read: None,
             cache_write: None,
             per_image: None,
@@ -113,9 +116,10 @@ mod devil_tests {
     #[test]
     fn test_devil_03_ultra_long_393k_output_u64_anti_overflow() {
         let pricing = ModelPricingSpec {
+            unit: Default::default(),
             currency: Currency::Cny,
-            input: 10.0,
-            output: 30.0,
+            input: Some(10.0),
+            output: Some(30.0),
             cache_read: None,
             cache_write: None,
             per_image: None,
@@ -247,16 +251,17 @@ thinking:
     #[test]
     fn test_devil_07_tiered_pricing_exact_threshold_boundary_ge() {
         let pricing = ModelPricingSpec {
+            unit: Default::default(),
             currency: Currency::Cny,
-            input: 2.0,
-            output: 8.0,
+            input: Some(2.0),
+            output: Some(8.0),
             cache_read: None,
             cache_write: None,
             per_image: None,
             tiers: vec![PricingTier {
                 input_tokens_above: 262_144,
-                input: 4.0, // 达到门槛翻倍
-                output: 16.0,
+                input: Some(4.0), // 达到门槛翻倍
+                output: Some(16.0),
                 cache_read: None,
                 cache_write: None,
             }],
@@ -283,6 +288,7 @@ thinking:
             thinking: None,
             pricing: None,
             compat: None,
+            ..Default::default()
         };
 
         let is_allowed = text_model.supports_image_input();
@@ -295,9 +301,10 @@ thinking:
     #[test]
     fn test_devil_09_image_generation_per_image_micros_pricing() {
         let pricing = ModelPricingSpec {
+            unit: agent_provider::models::PricingUnit::PerImage,
             currency: Currency::Cny,
-            input: 0.0,
-            output: 0.0,
+            input: Some(0.0),
+            output: Some(0.0),
             cache_read: None,
             cache_write: None,
             per_image: Some(0.20), // 每张 ¥0.20（费率显式在 per_image 字段）
@@ -305,7 +312,7 @@ thinking:
         };
 
         // 生成 3 张图片
-        let cost = PricingEngine::calculate_cost(&Some(pricing), 0, 3, 0, 0).unwrap();
+        let cost = PricingEngine::calculate_image_cost(&Some(pricing), 3).unwrap();
         // 3 * 0.20 = 0.60 元 = 600,000 micros
         assert_eq!(cost.total_micros, 600_000);
         assert_eq!(cost.formatted_total, "¥0.6000");
@@ -343,10 +350,12 @@ models:
     name: DeepSeek V3
     vendor: deepseek
     baseUrl: https://api.deepseek.com
+    protocol: openai/chat
     contextWindow: 65536
   - id: qwen-plus
     name: Qwen Plus
     vendor: qwen
+    protocol: openai/chat
     contextWindow: 131072
 "#;
         fs::write(&config_file, legacy_yaml).unwrap();
@@ -373,6 +382,41 @@ models:
     }
 
     // -------------------------------------------------------------------------
+    // Case 11b: 无损推断失败 → fail-closed 拒绝转换且原件保全（不覆盖、不备份）
+    // -------------------------------------------------------------------------
+    #[test]
+    fn test_devil_11b_flat_model_without_protocol_is_rejected_and_original_preserved() {
+        let temp_dir = std::env::temp_dir().join("conex_test_devil_11b");
+        let _ = fs::create_dir_all(&temp_dir);
+        let config_file = temp_dir.join("models.yaml");
+
+        // 扁平模型缺显式协议：迁移入口必须拒绝（禁止按厂商猜协议），不覆盖原件
+        let legacy_yaml = "models:\n  - id: deepseek-chat\n    name: DeepSeek V3\n    vendor: deepseek\n    baseUrl: https://api.deepseek.com\n";
+        fs::write(&config_file, legacy_yaml).unwrap();
+
+        let status: Result<MigrationStatus, MigrationError> =
+            ConfigMigrationManager::ensure_migrated(&config_file);
+        let error = status.expect_err("缺显式协议必须被拒绝（fail-closed）");
+        assert!(
+            error.to_string().contains("扁平模型缺少显式协议"),
+            "错误必须指向无损推断失败，实际：{error}"
+        );
+        // 原件逐字节保全；无备份残留
+        assert_eq!(fs::read_to_string(&config_file).unwrap(), legacy_yaml);
+        let siblings: Vec<String> = fs::read_dir(&temp_dir)
+            .unwrap()
+            .filter_map(|entry| entry.ok())
+            .map(|entry| entry.file_name().to_string_lossy().to_string())
+            .collect();
+        assert!(
+            !siblings.iter().any(|name| name.contains(".bak")),
+            "转换被拒绝时不得生成备份：{siblings:?}"
+        );
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    // -------------------------------------------------------------------------
     // Case 12: 时间戳备份命名规范断言
     // -------------------------------------------------------------------------
     #[test]
@@ -380,7 +424,7 @@ models:
         let temp_dir = std::env::temp_dir().join("conex_test_devil_12");
         let _ = fs::create_dir_all(&temp_dir);
         let config_file = temp_dir.join("models.yaml");
-        fs::write(&config_file, "models:\n  - id: test\n    vendor: test").unwrap();
+        fs::write(&config_file, "models:\n  - id: test\n    vendor: test\n    protocol: openai/chat").unwrap();
 
         let status = ConfigMigrationManager::ensure_migrated(&config_file).unwrap();
         if let MigrationStatus::MigratedSuccessfully { backup_path, .. } = status {
@@ -529,9 +573,10 @@ models:
     #[test]
     fn test_devil_19_explicit_zero_price_marked_as_free_not_silent() {
         let zero_pricing = ModelPricingSpec {
+            unit: Default::default(),
             currency: Currency::Cny,
-            input: 0.0,
-            output: 0.0,
+            input: Some(0.0),
+            output: Some(0.0),
             cache_read: None,
             cache_write: None,
             per_image: None,
@@ -636,6 +681,7 @@ models:
             thinking: None,
             pricing: None,
             compat: None,
+            ..Default::default()
         };
         assert!(model.modalities.as_ref().unwrap().supports_input("image"));
         assert!(model.modalities.as_ref().unwrap().supports_output("image"));
@@ -652,7 +698,7 @@ models:
             ProviderSpec {
                 display_name: Some("阿里云通义千问官方直连".to_string()),
                 base_url: Some("https://dashscope.aliyuncs.com".to_string()),
-                api_key: None,
+                api_key_ref: None,
                 headers: None,
                 protocol: ProtocolKind::OpenAiChat,
                 compat: None,
@@ -666,12 +712,15 @@ models:
                     thinking: None,
                     pricing: None,
                     compat: None,
+                    ..Default::default()
                 }],
+                ..Default::default()
             },
         );
         let config = UnifiedModelsConfig {
             version: 2,
             providers,
+            ..Default::default()
         };
         let yaml_str = serde_yaml::to_string(&config).unwrap();
         assert!(yaml_str.contains("阿里云通义千问官方直连"));
@@ -687,9 +736,10 @@ models:
     #[test]
     fn test_devil_28_negative_or_overflow_tokens_validation_guard() {
         let pricing = ModelPricingSpec {
+            unit: Default::default(),
             currency: Currency::Cny,
-            input: 2.0,
-            output: 6.0,
+            input: Some(2.0),
+            output: Some(6.0),
             cache_read: None,
             cache_write: None,
             per_image: None,
@@ -801,8 +851,7 @@ models:
         let (adaptive_val, _) = assemble_thinking_dialect(&adaptive_opts);
         let adaptive = adaptive_val.expect("adaptive 值必须产出 thinking 键");
         assert_eq!(
-            adaptive["thinking"]["type"],
-            "adaptive",
+            adaptive["thinking"]["type"], "adaptive",
             "字典值 adaptive 必须走 adaptive 方言"
         );
         assert!(
@@ -826,9 +875,10 @@ models:
             "坏 TitleCase 键（拼写错误）必须 fail-closed，禁止 to_openai_str 兜底"
         );
 
-        // 场景 4：X-High 双拼写兼容（生产契约：XHigh / X-High 均可命中）
+        // 场景 4：规范拼写 XHigh 唯一命中（W9-F：已删除 X-High 双拼写兜底；
+        // X-High 仅保留为 from_title_case 读边界别名，不再参与 wire 字典查找）
         let mut xhigh_map = indexmap::IndexMap::new();
-        xhigh_map.insert("X-High".to_string(), "xhigh-wire".to_string());
+        xhigh_map.insert("XHigh".to_string(), "xhigh-wire".to_string());
         let xhigh_opts = DialectBuildOptions {
             effort: ReasoningEffort::XHigh,
             format: ThinkingDialectFormat::OpenAiEffort,
@@ -839,7 +889,22 @@ models:
         assert_eq!(
             xhigh_val.unwrap()["reasoning_effort"],
             "xhigh-wire",
-            "X-High 双拼写必须命中字典 value"
+            "规范拼写 XHigh 必须命中字典 value"
+        );
+
+        // 仅含别名键 X-High 的字典 → fail-closed（不再隐式双拼写兜底）
+        let mut alias_only_map = indexmap::IndexMap::new();
+        alias_only_map.insert("X-High".to_string(), "xhigh-wire".to_string());
+        let alias_only_opts = DialectBuildOptions {
+            effort: ReasoningEffort::XHigh,
+            format: ThinkingDialectFormat::OpenAiEffort,
+            max_output_tokens: 65536,
+            thinking_map: Some(&alias_only_map),
+        };
+        assert_eq!(
+            assemble_thinking_dialect(&alias_only_opts),
+            (None, None),
+            "X-High 别名键不得再命中 wire 查找（规范拼写统一为 XHigh）"
         );
     }
 }

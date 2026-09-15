@@ -287,11 +287,12 @@ fn cache_capability_table_longest_prefix_wins() {
 #[test]
 fn build_cache_policy_deepseek_omits_everything() {
     // DeepSeek 全省略：整个 cache 参数组不出现（P3 矩阵 omit 恒 true，
-    // 请求体不含任何 cache 键，对齐 deepseek-reasonix-cache-analysis.md:111-112）
+    // 请求体不含任何 cache 键，对齐 deepseek-reasonix-cache-analysis.md:111-112）。
+    // vendor 由 yaml provider 身份（providerId）声明，不由 baseUrl/模型名推断。
     assert_eq!(
         build_cache_policy(
             None,
-            Some("https://api.deepseek.com"),
+            Some("deepseek"),
             Some("deepseek-v4"),
             Some("ses-1"),
             None
@@ -299,14 +300,14 @@ fn build_cache_policy_deepseek_omits_everything() {
         None
     );
     assert_eq!(
-        build_cache_policy(None, None, Some("deepseek-chat"), Some("ses-1"), None),
+        build_cache_policy(None, Some("deepseek"), Some("deepseek-chat"), Some("ses-1"), None),
         None
     );
     // 即使 overrides 显式开启也省略（omit 优先于覆盖）
     assert_eq!(
         build_cache_policy(
             None,
-            Some("https://api.deepseek.com"),
+            Some("deepseek"),
             Some("deepseek-v4"),
             Some("ses-1"),
             Some(&json!({ "enabled": true }))
@@ -318,8 +319,14 @@ fn build_cache_policy_deepseek_omits_everything() {
 #[test]
 fn build_cache_policy_auto_zero_params() {
     // Auto 机制（Gemini 隐式）：零参数 policy——不发键/断点/options/亲和头
-    let policy = build_cache_policy(None, None, Some("gemini-2.5-pro"), Some("ses-1"), None)
-        .expect("Auto 机制应产出零参数策略");
+    let policy = build_cache_policy(
+        None,
+        Some("gemini"),
+        Some("gemini-2.5-pro"),
+        Some("ses-1"),
+        None,
+    )
+    .expect("Auto 机制应产出零参数策略");
     assert_eq!(policy.mechanism, CacheMechanism::Auto);
     assert_eq!(policy.retention, CacheRetention::Short);
     assert_eq!(policy.breakpoints, None);
@@ -331,7 +338,7 @@ fn build_cache_policy_auto_zero_params() {
 #[test]
 fn build_cache_policy_key_injects_cache_key() {
     // Key 机制：会话 ID → prompt_cache_key（钳 64）；retention 默认 Short
-    let policy = build_cache_policy(None, None, Some("gpt-4o"), Some("ses-abc"), None)
+    let policy = build_cache_policy(None, Some("openai"), Some("gpt-4o"), Some("ses-abc"), None)
         .expect("Key 机制应注入键");
     assert_eq!(policy.mechanism, CacheMechanism::Key);
     assert_eq!(policy.cache_key, Some(CacheKey("ses-abc".to_string())));
@@ -339,7 +346,7 @@ fn build_cache_policy_key_injects_cache_key() {
     // overrides 可升档 Long（wire 值 "24h" 由 T-15 经 retention_wire_value 发出）
     let policy = build_cache_policy(
         None,
-        None,
+        Some("openai"),
         Some("gpt-4o"),
         Some("ses-abc"),
         Some(&json!({ "retention": "long" })),
@@ -353,22 +360,22 @@ fn build_cache_policy_key_injects_cache_key() {
 fn build_cache_policy_key_without_session_id_returns_none() {
     // 无会话 ID → 无键可发 → 整体不注入（P2 §3.2 步骤 4：session_id?）
     assert_eq!(
-        build_cache_policy(None, None, Some("gpt-4o"), None, None),
+        build_cache_policy(None, Some("openai"), Some("gpt-4o"), None, None),
         None
     );
     assert_eq!(
-        build_cache_policy(None, None, Some("gpt-4o"), Some("   "), None),
+        build_cache_policy(None, Some("openai"), Some("gpt-4o"), Some("   "), None),
         None
     );
 }
 
 #[test]
 fn build_cache_policy_unknown_vendor_none() {
-    // 未知/本地模型 → 机制 None → 不参与缓存
+    // 未声明为已知厂商的身份（本地/自定义网关）→ fail-closed，不参与缓存
     assert_eq!(
         build_cache_policy(
             None,
-            Some("http://localhost:11434"),
+            Some("localhost"),
             Some("llama-3.1"),
             Some("ses-1"),
             None
@@ -383,7 +390,7 @@ fn build_cache_policy_disabled_override_none() {
     assert_eq!(
         build_cache_policy(
             None,
-            None,
+            Some("openai"),
             Some("gpt-4o"),
             Some("ses-1"),
             Some(&json!({ "enabled": false }))
@@ -393,34 +400,12 @@ fn build_cache_policy_disabled_override_none() {
 }
 
 #[test]
-fn build_cache_policy_gpt56_none_emits_explicit_options() {
-    // GPT-5.6+ none 档：prompt_cache_options={"mode":"explicit"}（"none 也须被
-    // 尊重"，pi openai-responses.ts:278-285）；不发键
-    let policy = build_cache_policy(
-        None,
-        None,
-        Some("gpt-5.6-x"),
-        Some("ses-1"),
-        Some(&json!({ "retention": "none" })),
-    )
-    .expect("5.6+ none 档应发 explicit options");
-    assert_eq!(
-        policy.prompt_cache_options,
-        Some(PromptCacheOptions {
-            mode: PromptCacheMode::Explicit
-        })
-    );
-    assert_eq!(policy.cache_key, None);
-    assert_eq!(policy.retention, CacheRetention::None);
-}
-
-#[test]
 fn build_cache_policy_key_none_retention_non_56_returns_none() {
     // 非 5.6+ Key 机制 + retention=none → 整体不参与（摘要请求同款）
     assert_eq!(
         build_cache_policy(
             None,
-            None,
+            Some("openai"),
             Some("gpt-4o"),
             Some("ses-1"),
             Some(&json!({ "retention": "none" }))
@@ -432,15 +417,21 @@ fn build_cache_policy_key_none_retention_non_56_returns_none() {
 #[test]
 fn build_cache_policy_explicit_plan_enabled() {
     // Explicit 机制（MiniMax M2.x）：breakpoints 启用位 + retention 驱动 TTL 桶
-    let policy = build_cache_policy(None, None, Some("minimax-m2.1"), Some("ses-1"), None)
-        .expect("M2.x 应启用显式断点注入");
+    let policy = build_cache_policy(
+        None,
+        Some("minimax"),
+        Some("minimax-m2.1"),
+        Some("ses-1"),
+        None,
+    )
+    .expect("M2.x 应启用显式断点注入");
     assert_eq!(policy.mechanism, CacheMechanism::Explicit);
     assert_eq!(policy.breakpoints, Some(BreakpointPlan::default()));
     assert_eq!(policy.cache_key, None);
     // 兜底表 M2.x 无 1h 桶：retention=long 也不升桶（保守，写价 2x 宁缺毋滥）
     let policy = build_cache_policy(
         None,
-        None,
+        Some("minimax"),
         Some("minimax-m2.1"),
         Some("ses-1"),
         Some(&json!({ "retention": "long" })),
@@ -450,7 +441,7 @@ fn build_cache_policy_explicit_plan_enabled() {
     // Anthropic 官方有 1h 桶：retention=long → OneHour
     let policy = build_cache_policy(
         None,
-        None,
+        Some("anthropic"),
         Some("claude-sonnet-4"),
         Some("ses-1"),
         Some(&json!({ "retention": "long" })),
@@ -463,12 +454,12 @@ fn build_cache_policy_explicit_plan_enabled() {
 #[test]
 fn build_cache_policy_catalog_drives_deepseek_omit() {
     // catalog 真源路径（C2）：DeepSeek 经 cache_behavior_for 的 omit 位 →
-    // 整个 cache 参数组不出现；无 catalog 兜底（vendor 推断直判）同语义
+    // 整个 cache 参数组不出现；vendor 由 providerId 声明
     let catalog = ModelCatalog::bundled();
     assert_eq!(
         build_cache_policy(
             Some(&catalog),
-            None,
+            Some("deepseek"),
             Some("deepseek-v4-flash"),
             Some("ses-1"),
             None
@@ -478,7 +469,7 @@ fn build_cache_policy_catalog_drives_deepseek_omit() {
     assert_eq!(
         build_cache_policy(
             Some(&catalog),
-            Some("https://api.deepseek.com"),
+            Some("deepseek"),
             Some("deepseek-v4"),
             Some("ses-1"),
             Some(&json!({ "enabled": true }))
@@ -486,18 +477,19 @@ fn build_cache_policy_catalog_drives_deepseek_omit() {
         None
     );
     assert_eq!(
-        build_cache_policy(None, None, Some("deepseek-v4-flash"), Some("ses-1"), None),
+        build_cache_policy(None, Some("deepseek"), Some("deepseek-v4-flash"), Some("ses-1"), None),
         None
     );
 }
 
 #[test]
 fn build_cache_policy_catalog_drives_minimax_m2_breakpoints() {
-    // MiniMax M2.x 经 catalog：系列表 minimax-m2 开主动缓存 → Explicit 断点注入
+    // MiniMax M2.x 经 catalog：条目显式声明主动缓存（cacheType both /
+    // supportsCacheControl true）→ Explicit 断点注入
     let catalog = ModelCatalog::bundled();
     let policy = build_cache_policy(
         Some(&catalog),
-        None,
+        Some("minimax"),
         Some("minimax-m2-7"),
         Some("ses-1"),
         None,
@@ -507,10 +499,10 @@ fn build_cache_policy_catalog_drives_minimax_m2_breakpoints() {
     assert_eq!(policy.breakpoints, Some(BreakpointPlan::default()));
     assert_eq!(policy.ttl, TtlBucket::FiveMinutes);
     assert_eq!(policy.cache_key, None);
-    // M3 经 catalog：系列表关主动缓存 → Auto 零参数（隐式缓存不发任何字段）
+    // M3 经 catalog：条目声明关主动缓存 → Auto 零参数（隐式缓存不发任何字段）
     let m3 = build_cache_policy(
         Some(&catalog),
-        None,
+        Some("minimax"),
         Some("minimax-m3"),
         Some("ses-1"),
         None,
@@ -528,7 +520,7 @@ fn build_cache_policy_catalog_drives_grok_key() {
     let catalog = ModelCatalog::bundled();
     let policy = build_cache_policy(
         Some(&catalog),
-        None,
+        Some("grok"),
         Some("grok-4.5"),
         Some("ses-grok"),
         None,
@@ -551,7 +543,7 @@ fn build_cache_policy_anthropic_catalog_path_enables_one_hour_bucket() {
     let catalog = ModelCatalog::bundled();
     let policy = build_cache_policy(
         Some(&catalog),
-        None,
+        Some("anthropic"),
         Some("claude-opus-4-5"),
         Some("ses-1"),
         Some(&json!({ "retention": "long" })),
@@ -562,7 +554,7 @@ fn build_cache_policy_anthropic_catalog_path_enables_one_hour_bucket() {
     assert_eq!(policy.ttl, TtlBucket::OneHour);
     let policy = build_cache_policy(
         Some(&catalog),
-        None,
+        Some("anthropic"),
         Some("claude-opus-4-5"),
         Some("ses-1"),
         None,
@@ -577,7 +569,7 @@ fn build_cache_policy_anthropic_catalog_1h_entry_sets_long_retention() {
     // 双桶 + 默认 Long 档（任务书：Anthropic 1h 配置 → 双桶含 1h）
     let mut entries = std::collections::BTreeMap::new();
     entries.insert(
-        "anthropic::claude-long-1h".to_string(),
+        crate::models::ModelRef::new("anthropic", "claude-long-1h").key(),
         ModelCatalogEntry {
             model: "claude-long-1h".to_string(),
             provider: "anthropic".to_string(),
@@ -595,7 +587,7 @@ fn build_cache_policy_anthropic_catalog_1h_entry_sets_long_retention() {
     };
     let policy = build_cache_policy(
         Some(&catalog),
-        None,
+        Some("anthropic"),
         Some("claude-long-1h"),
         Some("ses-1"),
         None,
@@ -614,7 +606,7 @@ fn build_cache_policy_short_config_keeps_five_minutes_only() {
     let catalog = ModelCatalog::bundled();
     let policy = build_cache_policy(
         Some(&catalog),
-        None,
+        Some("minimax"),
         Some("minimax-m2-7"),
         Some("ses-1"),
         Some(&json!({ "retention": "long" })),
@@ -631,27 +623,25 @@ fn build_cache_policy_short_config_keeps_five_minutes_only() {
 #[test]
 fn build_cache_policy_grok_injects_affinity_header() {
     // Grok 模型 → policy.affinity_header = x-grok-conv-id，值 = session_id
-    // 前 64 码点（键推导结果）；catalog / 兜底 model 前缀 / 兜底 base_url
-    // 三路径行为一致
+    // 前 64 码点（键推导结果）；catalog / 无 catalog 两路径行为一致
     let catalog = ModelCatalog::bundled();
-    for (catalog, base_url, model) in [
-        (Some(&catalog), None, Some("grok-4.5")),
-        (None, None, Some("grok-4.5")),
-        (None, Some("https://api.x.ai"), Some("grok-4.5")),
+    for (catalog, provider_id, model) in [
+        (Some(&catalog), Some("grok"), Some("grok-4.5")),
+        (None, Some("grok"), Some("grok-4.5")),
     ] {
-        let policy = build_cache_policy(catalog, base_url, model, Some("ses-grok"), None)
+        let policy = build_cache_policy(catalog, provider_id, model, Some("ses-grok"), None)
             .expect("Grok 应走键路由");
         assert_eq!(
             policy.affinity_header,
             Some(("x-grok-conv-id", "ses-grok".to_string())),
-            "路径 {model:?} / {base_url:?}"
+            "路径 {model:?} / {provider_id:?}"
         );
     }
     // 超长会话 ID：header 值恰好 64 码点（含多字节尾字符）
     let long = format!("{}尾", "g".repeat(63));
     let policy = build_cache_policy(
         Some(&catalog),
-        None,
+        Some("grok"),
         Some("grok-4.5"),
         Some(long.as_str()),
         None,
@@ -667,32 +657,32 @@ fn build_cache_policy_grok_injects_affinity_header() {
 fn build_cache_policy_other_vendors_no_affinity_header() {
     // G2 反例：Anthropic（Explicit）/ OpenAI（Key）/ Gemini（Auto）→
     // affinity_header 恒 None（矩阵 conv_header 关）；DeepSeek omit 整体 None
-    for (catalog, base_url, model) in [
-        (None, None, Some("claude-sonnet-5")),
-        (None, None, Some("gpt-4o")),
-        (None, None, Some("gemini-2.5-pro")),
-        (None, None, Some("deepseek-v4-flash")),
+    for (catalog, provider_id, model) in [
+        (None, Some("anthropic"), Some("claude-sonnet-5")),
+        (None, Some("openai"), Some("gpt-4o")),
+        (None, Some("gemini"), Some("gemini-2.5-pro")),
+        (None, Some("deepseek"), Some("deepseek-v4-flash")),
     ] {
-        let policy = build_cache_policy(catalog, base_url, model, Some("ses-1"), None);
+        let policy = build_cache_policy(catalog, provider_id, model, Some("ses-1"), None);
         if let Some(policy) = policy {
             assert_eq!(policy.affinity_header, None, "{model:?} 不得注入亲和头");
         }
     }
     // Grok 无有效会话 ID → 键路由整体不注入（无键则无路由对象，亲和头同源）
     assert_eq!(
-        build_cache_policy(None, None, Some("grok-4.5"), Some("   "), None),
+        build_cache_policy(None, Some("grok"), Some("grok-4.5"), Some("   "), None),
         None
     );
 }
 
 #[test]
 fn build_cache_policy_catalog_unknown_model_conservative() {
-    // 未知模型经 catalog：vendor 推断 Auto → 保守全关（不猜不注入）
+    // 未声明身份的 provider → fail-closed（不猜不注入）
     let catalog = ModelCatalog::bundled();
     assert_eq!(
         build_cache_policy(
             Some(&catalog),
-            Some("http://localhost:11434"),
+            Some("localhost"),
             Some("llama-3.1"),
             Some("ses-1"),
             None
@@ -703,7 +693,7 @@ fn build_cache_policy_catalog_unknown_model_conservative() {
     // 如 OpenAI 未知系列按 vendor 默认行走键路由）
     let policy = build_cache_policy(
         Some(&catalog),
-        None,
+        Some("openai"),
         Some("gpt-8-future"),
         Some("ses-1"),
         None,

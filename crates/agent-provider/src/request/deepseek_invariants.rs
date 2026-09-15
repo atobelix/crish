@@ -3,7 +3,7 @@
 //! 钉死的三组不变量（P3 §3.4.1 / ⑤ 验收 5，对齐 Reasonix anthropic_test.go:452-461
 //! 的"DeepSeek 请求体任意块不得出现 cache_control"模式）：
 //!
-//! 1. **cache_control 键全省略**：任意组合下（DeepSeek base_url + 任意模型名）经
+//! 1. **cache_control 键全省略**：任意组合下（providerId=deepseek + 任意模型名）经
 //!    [build_cache_policy] 判定为 None（机制 Auto 全省略 / 直判省略），端到端请求体
 //!    递归扫描不得出现 `cache_control` 键（消息级、part 级、工具级、顶层全部覆盖）。
 //! 2. **tool_calls 回合必带 reasoning_content 键**：engine 对 DeepSeek 恒
@@ -130,46 +130,39 @@ fn assert_no_cache_control_key(value: &Value) {
 
 #[test]
 fn deepseek_any_combination_yields_none_policy() {
-    // 判定组合矩阵：base_url 关键字命中 + 任意模型名 / model 前缀兜底 /
-    // 大小写变体 / 空模型名 / 显式 overrides 开启——全部归 None
-    // （机制 Auto 全省略 + 步骤 3 直判省略双重保证，cache.rs T-13b）
+    // 判定组合矩阵：providerId 声明为 deepseek + 任意模型名 / 大小写变体 /
+    // 空模型名 / 显式 overrides 开启——全部归 None（机制 Auto 全省略 + 步骤 3
+    // 直判省略双重保证，cache.rs T-13b）。vendor 由 yaml provider 身份声明，
+    // 不再由 baseUrl 关键字 / 模型名前缀推断（U4/N4）。
     let combos: &[(&str, &str)] = &[
-        // base_url 命中 + 任意模型（模型名不含 deepseek 前缀也必须省略）
-        ("https://api.deepseek.com", "any-model"),
-        ("https://api.deepseek.com", "custom-gateway-model"),
-        // 官方域名 + 官方模型
-        ("https://api.deepseek.com", "deepseek-v4-flash"),
-        ("https://api.deepseek.com", "deepseek-chat"),
-        // 大小写变体（判定走 to_ascii_lowercase）
-        ("https://API.DEEPSEEK.COM/v1", "any-model"),
-        // model 前缀兜底（base_url 无关键字）
-        ("https://gateway.example.com/v1", "deepseek-v4-flash"),
-        // 空模型名（仅 base_url 判定）
-        ("https://api.deepseek.com", ""),
+        // providerId=deepseek + 任意模型（模型名不含 deepseek 前缀也必须省略）
+        ("deepseek", "any-model"),
+        ("deepseek", "custom-gateway-model"),
+        // 官方模型
+        ("deepseek", "deepseek-v4-flash"),
+        ("deepseek", "deepseek-chat"),
+        // 大小写变体（身份归一化走 to_ascii_lowercase）
+        ("DEEPSEEK", "any-model"),
+        // 空模型名（仅身份判定）
+        ("deepseek", ""),
     ];
-    for (base_url, model) in combos {
+    for (provider_id, model) in combos {
         assert_eq!(
-            build_cache_policy(None, Some(base_url), Some(model), Some("ses-1"), None),
+            build_cache_policy(None, Some(provider_id), Some(model), Some("ses-1"), None),
             None,
-            "DeepSeek 组合（base_url={base_url}, model={model}）必须全省略缓存参数"
+            "DeepSeek 组合（providerId={provider_id}, model={model}）必须全省略缓存参数"
         );
     }
     // 无 model（None 形态）
     assert_eq!(
-        build_cache_policy(
-            None,
-            Some("https://api.deepseek.com"),
-            None,
-            Some("ses-1"),
-            None
-        ),
+        build_cache_policy(None, Some("deepseek"), None, Some("ses-1"), None),
         None
     );
     // 即使 extra.cache 显式开启也省略（omit 优先于覆盖，P3 §3.2.2 Deepseek 行）
     assert_eq!(
         build_cache_policy(
             None,
-            Some("https://api.deepseek.com"),
+            Some("deepseek"),
             Some("deepseek-v4"),
             Some("ses-1"),
             Some(&json!({ "enabled": true }))
@@ -180,7 +173,7 @@ fn deepseek_any_combination_yields_none_policy() {
 
 #[test]
 fn deepseek_request_body_never_contains_cache_control_key() {
-    // 端到端：DeepSeek 判定（base_url 命中 + 任意模型名）→ build_cache_policy 归 None
+    // 端到端：DeepSeek 判定（providerId=deepseek + 任意模型名）→ build_cache_policy 归 None
     // → 请求体构建（Require 模式 = engine 对 DeepSeek 的恒接线，C1）。
     // 消息序列覆盖完整工具循环形态（user / assistant+tool_calls / tool / assistant+思考），
     // 工具列表带两个工具——递归扫描整个请求体不得出现 cache_control 键。
@@ -213,7 +206,7 @@ fn deepseek_request_body_never_contains_cache_control_key() {
         reasoning_content: Some(ReasoningContentMode::Require),
         cache: build_cache_policy(
             None,
-            Some("https://api.deepseek.com"),
+            Some("deepseek"),
             Some("deepseek-v4-flash"),
             Some("ses-1"),
             None,
@@ -386,15 +379,15 @@ fn deepseek_matrix_drives_injection_decision_to_none() {
     let behavior = cache_behavior_for(None, VendorId::Deepseek, "deepseek-v4-flash");
     assert!(behavior.omit_cache_control);
     assert!(!behavior.supports_prompt_cache_key);
-    for (base_url, model) in [
-        ("https://api.deepseek.com", "deepseek-v4-flash"),
-        ("https://api.deepseek.com", "any-model"),
-        ("https://gateway.example.com", "deepseek-chat"),
+    for model in [
+        "deepseek-v4-flash",
+        "any-model",
+        "deepseek-chat",
     ] {
         assert_eq!(
-            build_cache_policy(None, Some(base_url), Some(model), Some("ses-1"), None),
+            build_cache_policy(None, Some("deepseek"), Some(model), Some("ses-1"), None),
             None,
-            "矩阵省略语义必须传导到 build_cache_policy（{base_url}, {model}）"
+            "矩阵省略语义必须传导到 build_cache_policy（providerId=deepseek, {model}）"
         );
     }
 }

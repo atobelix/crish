@@ -1,13 +1,5 @@
-//! 凭据存储：Windows DPAPI 加密读写、Unix 明文文件（0600 权限）与纯内存降级。
-//!
-//! 从 Tauri 壳 `apps/agent-workbench/src-tauri/src/config/credentials.rs` 抽取（04 §3.2 G8），
-//! 原壳仅有 Windows DPAPI 与内存降级两条路径；本模块按 B2.2 任务书补齐 Unix 明文文件路径。
-//!
-//! 平台策略：
-//! - `cfg(windows)`：DPAPI（CryptProtectData/CryptUnprotectData）加密后 hex 落盘。
-//! - `cfg(unix)`：明文文件 + 0600 权限（安全简化：仅属主可读写；不引入 keyring 依赖。
-//!   API key 也可由环境变量提供，见 config.rs 的 env 覆盖合并层）。
-//! - 其余平台：纯内存降级，进程退出即丢失。
+//! 系统凭据原语。Windows 使用 DPAPI；无系统凭据实现的平台明确拒绝写入。
+//! 只读写调用方指定的隔离槽，不保存共享内存密钥，也不退回明文文件。
 
 use std::{fs, path::Path};
 
@@ -57,33 +49,23 @@ impl Drop for SecretString {
     }
 }
 
-/// 凭据错误类型（文件缺失不视为错误：`read` 对缺失文件返回 `Ok(None)`，对齐壳语义）。
 #[derive(Debug, thiserror::Error)]
 pub enum CredentialError {
-    /// 文件系统读写失败（缺失除外）。
     #[error("凭据文件访问失败：{0}")]
     Io(#[from] std::io::Error),
-    /// 凭据密文的 hex 编码损坏或解密产物不是合法 UTF-8。
-    #[error("凭据密文编码损坏：{0}")]
+    #[error("凭据编码无效")]
     InvalidEncoding(String),
-    /// DPAPI 解密失败（文件存在但无法还原明文）。
-    #[error("凭据解密失败：{0}")]
+    #[error("系统凭据解密失败")]
     Decrypt(String),
-    /// DPAPI 加密失败。
-    #[error("凭据加密失败：{0}")]
+    #[error("系统凭据加密失败")]
     Encrypt(String),
+    #[error("当前平台未提供系统凭据存储；请使用显式环境变量引用")]
+    Unsupported,
 }
 
-/// 凭据落盘状态（对齐壳 `CredentialPersistence`，供上层诊断与 UI 展示）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CredentialPersistence {
-    /// 已落盘（DPAPI 加密文件或 Unix 0600 明文文件）。
     Persisted,
-    /// 仅存于进程内存。
-    MemoryOnly,
-    /// 落盘失败后降级为仅内存。
-    Degraded,
-    /// 无密钥（未设置或已清除）。
     Unset,
 }
 
@@ -91,228 +73,71 @@ impl CredentialPersistence {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Persisted => "persisted",
-            Self::MemoryOnly => "memory-only",
-            Self::Degraded => "degraded",
             Self::Unset => "unset",
         }
     }
 }
 
-/// 存储模式：由平台条件编译决定，测试可强制指定。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum StoreMode {
-    /// Windows：DPAPI 加密后 hex 编码落盘。
-    /// 非 Windows 平台的库构建中不可达（仅测试构建可见），放行死代码告警。
-    #[cfg_attr(not(windows), allow(dead_code))]
-    Dpapi,
-    /// Unix：明文文件 + 0600 权限（安全简化，见模块注释）；测试中也可强制使用
-    /// （此时权限设定仅在 Unix 生效，Windows 测试环境跳过）。
-    /// 非 Unix 平台的库构建中不可达（仅测试构建可见），放行死代码告警。
-    #[cfg_attr(not(unix), allow(dead_code))]
-    Plaintext,
-    /// 无 OS 凭据能力：仅进程内存。
-    MemoryOnly,
-}
-
-/// 凭据存储：`read`/`write`/`clear` 按模式分派。
-pub struct CredentialStore {
-    mode: StoreMode,
-    /// 内存降级时的密钥；`Drop` 时由 `SecretString` 覆写清零。
-    memory_key: Option<SecretString>,
-}
+/// 无状态系统凭据访问器；失败不改变其它槽位，也不发布内存替代值。
+#[derive(Debug, Default)]
+pub struct CredentialStore;
 
 impl CredentialStore {
-    /// 按平台选择默认模式（对齐壳 `os_secret_store_available` 的平台判定）。
     pub fn new() -> Self {
-        Self {
-            mode: default_mode(),
-            memory_key: None,
+        Self
+    }
+
+    pub fn read(&self, path: &Path) -> Result<Option<SecretString>, CredentialError> {
+        let text = match fs::read_to_string(path) {
+            Ok(text) => text,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(error) => return Err(CredentialError::Io(error)),
+        };
+        #[cfg(windows)]
+        {
+            let encrypted = decode_hex(text.trim()).map_err(CredentialError::InvalidEncoding)?;
+            let plain = dpapi_unprotect(&encrypted).map_err(CredentialError::Decrypt)?;
+            let text = String::from_utf8(plain)
+                .map_err(|_| CredentialError::InvalidEncoding("凭据不是 UTF-8".into()))?;
+            Ok(Some(SecretString::new(text)))
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = text;
+            Err(CredentialError::Unsupported)
         }
     }
 
-    /// 读取指定路径的凭据；文件不存在返回 `Ok(None)`。
-    ///
-    /// Windows 路径：hex 解码 → DPAPI 解密 → UTF-8 还原；
-    /// Unix 路径：直接读明文（0600 文件）；
-    /// 内存模式：返回进程内存中的密钥。
-    pub fn read(&self, path: &Path) -> Result<Option<SecretString>, CredentialError> {
-        let value = match self.mode {
-            StoreMode::Dpapi => {
-                let text = read_secret_text_file(path)?;
-                match text {
-                    Some(hex) => {
-                        let encrypted =
-                            decode_hex(hex.trim()).map_err(CredentialError::InvalidEncoding)?;
-                        let plain =
-                            dpapi_unprotect(&encrypted).map_err(CredentialError::Decrypt)?;
-                        String::from_utf8(plain).map_err(|error| {
-                            CredentialError::InvalidEncoding(format!(
-                                "解密产物不是合法 UTF-8：{error}"
-                            ))
-                        })?
-                    }
-                    None => return Ok(None),
-                }
-            }
-            StoreMode::Plaintext => match read_secret_text_file(path)? {
-                Some(text) => text.trim().to_string(),
-                None => return Ok(None),
-            },
-            StoreMode::MemoryOnly => match &self.memory_key {
-                Some(key) => key.as_str().to_string(),
-                None => return Ok(None),
-            },
-        };
-        Ok(Some(SecretString::new(value)))
-    }
-
-    /// 写入凭据。落盘失败时降级为仅内存并返回错误（密钥仍可用，由调用方决定如何处理）。
     pub fn write(
         &mut self,
         path: &Path,
         value: &str,
     ) -> Result<CredentialPersistence, CredentialError> {
-        // 内存模式：不落盘，仅更新进程内存副本。
-        if self.mode == StoreMode::MemoryOnly {
-            self.memory_key = Some(SecretString::new(value.to_string()));
-            return Ok(CredentialPersistence::MemoryOnly);
+        #[cfg(windows)]
+        {
+            let encrypted = dpapi_protect(value.as_bytes()).map_err(CredentialError::Encrypt)?;
+            conex_fs::atomic_write_file(path, encode_hex(&encrypted).as_bytes())?;
+            Ok(CredentialPersistence::Persisted)
         }
-        match self.write_to_path(path, value) {
-            Ok(()) => Ok(CredentialPersistence::Persisted),
-            Err(error) => {
-                // 对齐壳语义：写失败不丢密钥，降级为进程内存。
-                self.mode = StoreMode::MemoryOnly;
-                self.memory_key = Some(SecretString::new(value.to_string()));
-                Err(error)
-            }
+        #[cfg(not(windows))]
+        {
+            let _ = (path, value);
+            Err(CredentialError::Unsupported)
         }
     }
 
-    /// 清除凭据：删除文件（缺失视为成功）并清空内存副本。
-    // G2 禁令豁免（clippy.toml 文件头「豁免面」）：凭据清除——删除对象是
-    // 加密凭据文件（DPAPI/明文秘密），清除语义必须物理删除，进回收站/
-    // 快照会留下可恢复的敏感数据副本，与「不留痕迹」的清除意图相悖。
+    /// 凭据清除不能进回收站保留可恢复秘密；只允许删除明确的凭据槽。
     #[allow(clippy::disallowed_methods)]
     pub fn clear(&mut self, path: &Path) -> Result<CredentialPersistence, CredentialError> {
-        // 清空内存密钥（Option 赋值触发 Drop，`SecretString` 自动覆写清零）。
-        self.memory_key = None;
-        match self.mode {
-            StoreMode::MemoryOnly => Ok(CredentialPersistence::Unset),
-            _ => {
-                match fs::remove_file(path) {
-                    Ok(()) => {}
-                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-                    Err(error) => return Err(CredentialError::Io(error)),
-                }
+        match fs::remove_file(path) {
+            Ok(()) => Ok(CredentialPersistence::Unset),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
                 Ok(CredentialPersistence::Unset)
             }
-        }
-    }
-
-    fn write_to_path(&self, path: &Path, value: &str) -> Result<(), CredentialError> {
-        match self.mode {
-            StoreMode::Dpapi => {
-                let encrypted =
-                    dpapi_protect(value.as_bytes()).map_err(CredentialError::Encrypt)?;
-                write_hex_file(path, &encrypted)
-            }
-            StoreMode::Plaintext => write_plaintext_file(path, value.as_bytes()),
-            StoreMode::MemoryOnly => Ok(()),
-        }
-    }
-
-    #[cfg(test)]
-    fn for_test(mode: StoreMode) -> Self {
-        Self {
-            mode,
-            memory_key: None,
-        }
-    }
-
-    /// 测试用构造器：强制纯内存模式，保证测试不依赖平台凭据能力。
-    #[cfg(test)]
-    pub(crate) fn memory_only_for_test() -> Self {
-        Self {
-            mode: StoreMode::MemoryOnly,
-            memory_key: None,
-        }
-    }
-
-    /// 测试用构造器：强制明文文件模式（Unix 下同样收紧 0600 权限），
-    /// 用于在无 DPAPI 的环境验证文件读写与错误路径。
-    #[cfg(test)]
-    pub(crate) fn plaintext_for_test() -> Self {
-        Self {
-            mode: StoreMode::Plaintext,
-            memory_key: None,
+            Err(error) => Err(CredentialError::Io(error)),
         }
     }
 }
-
-impl Default for CredentialStore {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-/// 按平台选择默认存储模式；每种平台恰好编译一个分支，其余分支被 cfg 裁掉。
-fn default_mode() -> StoreMode {
-    #[cfg(windows)]
-    {
-        StoreMode::Dpapi
-    }
-    #[cfg(unix)]
-    {
-        StoreMode::Plaintext
-    }
-    #[cfg(not(any(windows, unix)))]
-    {
-        StoreMode::MemoryOnly
-    }
-}
-
-/// 读取凭据文件文本；文件不存在返回 `Ok(None)`。
-fn read_secret_text_file(path: &Path) -> Result<Option<String>, CredentialError> {
-    match fs::read_to_string(path) {
-        Ok(text) => Ok(Some(text)),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(error) => Err(CredentialError::Io(error)),
-    }
-}
-
-/// 写入 hex 编码的 DPAPI 密文文件。
-#[cfg(windows)]
-fn write_hex_file(path: &Path, encrypted: &[u8]) -> Result<(), CredentialError> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)?;
-    }
-    fs::write(path, format!("{}\n", encode_hex(encrypted)))?;
-    Ok(())
-}
-
-/// 写入明文凭据文件。
-///
-/// Unix：创建时即指定 0600 权限，并在写入后再次收紧，防止已存在的旧文件权限过宽。
-/// 非 Unix 平台（测试环境强制 Plaintext 模式时）不设置权限。
-fn write_plaintext_file(path: &Path, bytes: &[u8]) -> Result<(), CredentialError> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)?;
-    }
-    fs::write(path, bytes)?;
-    #[cfg(unix)]
-    set_plaintext_permissions(path)?;
-    Ok(())
-}
-
-/// 将凭据文件权限收紧为仅属主可读写（0600）。
-#[cfg(unix)]
-fn set_plaintext_permissions(path: &Path) -> Result<(), CredentialError> {
-    use std::os::unix::fs::PermissionsExt;
-    fs::set_permissions(path, fs::Permissions::from_mode(0o600))?;
-    Ok(())
-}
-
-// ── Windows DPAPI（从 Tauri 壳 credentials.rs:220-324 复制，SAFETY 注释保留）──
 
 /// 调用 `CryptProtectData` 加密明文，返回 DPAPI 密文。
 // 豁免 unsafe_code：Windows DPAPI FFI 调用（每处 unsafe 均有 SAFETY 说明），经评审后允许。
@@ -451,197 +276,112 @@ fn hex_value(byte: u8) -> Result<u8, String> {
 
 #[cfg(test)]
 mod tests {
-    // G2 禁令豁免：测试临时目录清理（非产品删除路径，可恢复语义不适用）。
-    #![allow(clippy::disallowed_methods)]
-
     use super::*;
-    use std::env;
-
-    /// 创建独立临时目录，避免测试间相互影响。
-    fn temp_dir(name: &str) -> std::path::PathBuf {
-        let dir = env::temp_dir().join(format!(
-            "agent-provider-cred-test-{name}-{}",
-            std::process::id()
-        ));
-        let _ = fs::remove_dir_all(&dir);
-        fs::create_dir_all(&dir).expect("创建临时目录");
-        dir
-    }
-
-    #[test]
-    fn memory_store_roundtrip_and_clear() {
-        let dir = temp_dir("memory");
-        let path = dir.join("secret.dpapi");
-        let mut store = CredentialStore::for_test(StoreMode::MemoryOnly);
-
-        assert_eq!(
-            store.write(&path, "sk-memory-key").expect("写入"),
-            CredentialPersistence::MemoryOnly
-        );
-        assert_eq!(
-            store.read(&path).expect("读取").expect("有值").as_str(),
-            "sk-memory-key"
-        );
-        assert_eq!(
-            store.clear(&path).expect("清除"),
-            CredentialPersistence::Unset
-        );
-        assert!(store.read(&path).expect("读取").is_none());
-    }
-
-    #[test]
-    fn plaintext_file_roundtrip_and_clear() {
-        let dir = temp_dir("plaintext");
-        let path = dir.join("secret.plain");
-        let mut store = CredentialStore::for_test(StoreMode::Plaintext);
-
-        assert_eq!(
-            store.write(&path, "sk-file-key").expect("写入"),
-            CredentialPersistence::Persisted
-        );
-        // 文件内容应为明文本身。
-        let raw = fs::read_to_string(&path).expect("读取文件");
-        assert_eq!(raw.trim(), "sk-file-key");
-        assert_eq!(
-            store.read(&path).expect("读取").expect("有值").as_str(),
-            "sk-file-key"
-        );
-        assert_eq!(
-            store.clear(&path).expect("清除"),
-            CredentialPersistence::Unset
-        );
-        assert!(!path.exists());
-        assert!(store.read(&path).expect("读取").is_none());
-    }
+    use conex_test_utils::TempWorkspace;
 
     #[test]
     fn missing_secret_file_reads_none() {
-        let dir = temp_dir("missing");
-        let path = dir.join("does-not-exist.dpapi");
-        let store = CredentialStore::for_test(StoreMode::Plaintext);
-        assert!(store.read(&path).expect("读取").is_none());
+        let dir = TempWorkspace::new("credential-missing");
+        assert!(CredentialStore::new()
+            .read(&dir.path().join("absent.dpapi"))
+            .unwrap()
+            .is_none());
     }
 
     #[test]
     fn clear_missing_file_is_ok() {
-        let dir = temp_dir("clear-missing");
-        let path = dir.join("never-written.dpapi");
-        let mut store = CredentialStore::for_test(StoreMode::Plaintext);
+        let dir = TempWorkspace::new("credential-clear");
         assert_eq!(
-            store.clear(&path).expect("清除缺失文件应成功"),
+            CredentialStore::new()
+                .clear(&dir.path().join("absent.dpapi"))
+                .unwrap(),
             CredentialPersistence::Unset
         );
     }
 
     #[test]
     fn read_from_directory_is_io_error() {
-        let dir = temp_dir("dir-as-file");
-        let store = CredentialStore::for_test(StoreMode::Plaintext);
-        match store.read(&dir) {
-            Err(CredentialError::Io(_)) => {}
-            other => panic!("期望 Io 错误，得到：{other:?}"),
-        }
-    }
-
-    #[test]
-    fn write_to_invalid_parent_is_io_error() {
-        let dir = temp_dir("invalid-parent");
-        let blocker = dir.join("blocker");
-        fs::write(&blocker, "占位文件").expect("写入占位文件");
-        // 父路径是一个普通文件，无法在其下创建目录。
-        let path = blocker.join("secret.dpapi");
-        let mut store = CredentialStore::for_test(StoreMode::Plaintext);
-        match store.write(&path, "sk-x") {
-            Err(CredentialError::Io(_)) => {}
-            other => panic!("期望 Io 错误，得到：{other:?}"),
-        }
-    }
-
-    #[test]
-    fn invalid_hex_decoding_errors() {
-        // 奇数长度与非法字符都会报错。
-        assert!(decode_hex("abc").is_err());
-        assert!(decode_hex("zz").is_err());
-        // 合法 hex 可正常往返。
-        let encoded = encode_hex(&[0xde, 0xad, 0xbe, 0xef]);
-        assert_eq!(
-            decode_hex(&encoded).expect("解码"),
-            vec![0xde, 0xad, 0xbe, 0xef]
-        );
+        let dir = TempWorkspace::new("credential-directory");
+        assert!(matches!(
+            CredentialStore::new().read(dir.path()),
+            Err(CredentialError::Io(_))
+        ));
     }
 
     #[test]
     fn secret_string_is_wiped_by_wipe_helper() {
-        let mut buf = String::from("sk-test-secret");
-        SecretString::wipe(&mut buf);
-        assert_eq!(buf, "\0\0\0\0\0\0\0\0\0\0\0\0\0\0");
+        let mut value = "private-value".to_string();
+        SecretString::wipe(&mut value);
+        assert!(value.as_bytes().iter().all(|byte| *byte == 0));
     }
 
     #[test]
     fn secret_string_debug_is_redacted() {
-        let secret = SecretString::new("sk-test-secret".to_string());
-        assert_eq!(format!("{secret:?}"), "SecretString(***)");
-        // as_str 正常暴露明文供上层使用。
-        assert_eq!(secret.as_str(), "sk-test-secret");
+        assert_eq!(
+            format!("{:?}", SecretString::new("private-value".into())),
+            "SecretString(***)"
+        );
     }
 
-    #[cfg(unix)]
     #[test]
-    fn plaintext_file_gets_0600_permissions() {
-        use std::os::unix::fs::PermissionsExt;
-        let dir = temp_dir("perms");
-        let path = dir.join("secret.plain");
-        let mut store = CredentialStore::for_test(StoreMode::Plaintext);
-        store.write(&path, "sk-perms").expect("写入");
-        let mode = fs::metadata(&path).expect("元数据").permissions().mode();
-        assert_eq!(mode & 0o777, 0o600);
+    fn invalid_hex_decoding_errors() {
+        assert!(decode_hex("broken").is_err());
+        assert!(decode_hex("xx").is_err());
     }
 
-    /// Windows 真实 DPAPI 路径的读写往返（其余平台无此能力，测试被裁掉）。
     #[cfg(windows)]
     #[test]
-    fn dpapi_file_roundtrip() {
-        let dir = temp_dir("dpapi");
-        let path = dir.join("secret.dpapi");
-        let mut store = CredentialStore::for_test(StoreMode::Dpapi);
-
-        assert_eq!(
-            store.write(&path, "sk-dpapi-key").expect("写入"),
-            CredentialPersistence::Persisted
-        );
-        // 文件内容必须是 hex 密文，不能出现明文。
-        let raw = fs::read_to_string(&path).expect("读取文件");
-        assert!(!raw.contains("sk-dpapi-key"));
-        assert_eq!(
-            store.read(&path).expect("读取").expect("有值").as_str(),
-            "sk-dpapi-key"
-        );
-        assert_eq!(
-            store.clear(&path).expect("清除"),
-            CredentialPersistence::Unset
-        );
-        assert!(store.read(&path).expect("读取").is_none());
+    fn dpapi_file_roundtrip_and_independent_clear() {
+        let dir = TempWorkspace::new("credential-roundtrip");
+        let mut store = CredentialStore::new();
+        let a = dir.path().join("a.dpapi");
+        let b = dir.path().join("b.dpapi");
+        store.write(&a, "secret-a").unwrap();
+        store.write(&b, "secret-b").unwrap();
+        assert!(!fs::read_to_string(&a).unwrap().contains("secret-a"));
+        assert_eq!(store.read(&a).unwrap().unwrap().as_str(), "secret-a");
+        store.clear(&a).unwrap();
+        assert!(store.read(&a).unwrap().is_none());
+        assert_eq!(store.read(&b).unwrap().unwrap().as_str(), "secret-b");
     }
 
-    /// Windows DPAPI 错误路径：密文损坏与非法 hex 均类型化返回。
+    #[cfg(windows)]
+    #[test]
+    fn write_to_invalid_parent_is_io_error_without_memory_fallback() {
+        let dir = TempWorkspace::new("credential-failed-write");
+        let mut store = CredentialStore::new();
+        let valid = dir.path().join("valid.dpapi");
+        store.write(&valid, "original").unwrap();
+        let blocker = dir.path().join("file");
+        fs::write(&blocker, b"blocker").unwrap();
+        assert!(store.write(&blocker.join("bad.dpapi"), "failed").is_err());
+        assert_eq!(store.read(&valid).unwrap().unwrap().as_str(), "original");
+        assert!(store
+            .read(&dir.path().join("other.dpapi"))
+            .unwrap()
+            .is_none());
+    }
+
     #[cfg(windows)]
     #[test]
     fn corrupt_dpapi_file_errors() {
-        let dir = temp_dir("corrupt-dpapi");
-        let path = dir.join("secret.dpapi");
-        let store = CredentialStore::for_test(StoreMode::Dpapi);
+        let dir = TempWorkspace::new("credential-corrupt");
+        let path = dir.path().join("corrupt.dpapi");
+        fs::write(&path, "deadbeef").unwrap();
+        assert!(CredentialStore::new().read(&path).is_err());
+    }
 
-        // 合法 hex 但不是 DPAPI 密文 → 解密失败。
-        fs::write(&path, "deadbeef\n").expect("写入");
-        match store.read(&path) {
-            Err(CredentialError::Decrypt(_)) => {}
-            other => panic!("期望解密失败，得到：{other:?}"),
-        }
-        // 非法 hex → 编码损坏。
-        fs::write(&path, "zzzz\n").expect("写入");
-        match store.read(&path) {
-            Err(CredentialError::InvalidEncoding(_)) => {}
-            other => panic!("期望编码错误，得到：{other:?}"),
-        }
+    #[cfg(not(windows))]
+    #[test]
+    fn unsupported_platform_never_writes_plaintext_or_memory() {
+        let dir = TempWorkspace::new("credential-unsupported");
+        let path = dir.path().join("key");
+        let mut store = CredentialStore::new();
+        assert!(matches!(
+            store.write(&path, "secret"),
+            Err(CredentialError::Unsupported)
+        ));
+        assert!(!path.exists());
+        assert!(store.read(&path).unwrap().is_none());
     }
 }

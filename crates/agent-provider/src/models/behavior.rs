@@ -2,19 +2,16 @@
 //!
 //! - [VendorId]：缓存行为矩阵的厂商键。独立于 `request/vendor.rs` 的
 //!   [ReasoningVendor]（A1-20：新增独立类型，不扩 ReasoningVendor），补充缓存
-//!   维度厂商 MiniMax / Grok / Dashscope / Qwen。
+//!   维度厂商 MiniMax / Grok / Dashscope / Qwen。[VendorId::from_identity] 是
+//!   yaml provider 身份（providerId / catalog 条目 `vendor` 字段）→ 矩阵键的
+//!   唯一映射；未识别 → None（调用方 fail-closed，**禁止** URL/模型前缀猜测）。
 //! - [CacheBehavior]：缓存行为开关集，是 models/ 层查询接口的返回类型。
 //!   本模块矩阵是缓存能力判定的**唯一数据真源**（C2）：P2 注入框架经
 //!   `build_cache_policy` 消费，本模块不直接进 engine。
-//! - [infer_vendor]：base_url 关键字 → model 前缀 → Auto 的推断链，对齐
-//!   `request/vendor.rs` 的 [infer_reasoning_vendor] 判定顺序，补充 minimax /
-//!   grok / dashscope / z.ai / moonshot 等缓存维度关键字；vendor.rs 不改动。
-//! - [cache_behavior_for]：vendor 级默认矩阵 + 模型系列覆盖（最长前缀）+
-//!   catalog 模型级覆盖（优先级：catalog 条目 > 系列表 > vendor 默认）。
-//!
-//! R0.5 模型时代审计表 3 #1：kimi-k3 / glm-4.7 等现行旗舰的判定缺口在本模块的
-//! 模型系列覆盖表中显式收录（缓存行为维度）；vendor.rs 思考能力表缺行属其
-//! 文件域，补全需求经轮末汇总物移交主 Agent 协调。
+//! - [cache_behavior_for]：vendor 级默认矩阵 + catalog 模型级覆盖
+//!   （优先级：catalog 条目显式声明 > vendor 默认）。模型系列差异（如
+//!   MiniMax M3 关主动缓存）**不再**由代码内模型 ID 表表达，改由 catalog 条目
+//!   的 `cacheType` / `supportsCacheControl` 声明驱动（U4：能力由配置声明）。
 //!
 //! 数据事实：P3 §3.2.2 矩阵 + vendor-cache-mechanisms.md §10 汇总；GLM
 //! Anthropic 端点 cache_control 行为未实测 → 保守关（矩阵标记 unverified）。
@@ -59,6 +56,27 @@ impl VendorId {
             Self::Qwen => "qwen",
             Self::Dashscope => "dashscope",
             Self::Auto => "auto",
+        }
+    }
+
+    /// yaml provider 身份 → 矩阵键（`providerId` / catalog 条目 `vendor` 字段）。
+    ///
+    /// 身份**必须由配置声明**（U4/N4）：本函数只做「已声明的身份 → 矩阵键」的
+    /// 枚举翻译，**不做**任何 URL 子串 / 模型名前缀推断。未识别 → `None`
+    /// （调用方 fail-closed，禁止回落猜测）。
+    pub fn from_identity(identity: &str) -> Option<Self> {
+        match identity.trim().to_ascii_lowercase().as_str() {
+            "deepseek" => Some(Self::Deepseek),
+            "anthropic" | "claude" => Some(Self::Anthropic),
+            "minimax" => Some(Self::MiniMax),
+            "openai" => Some(Self::Openai),
+            "kimi" | "moonshot" => Some(Self::Kimi),
+            "grok" | "xai" => Some(Self::Grok),
+            "gemini" | "google" => Some(Self::Gemini),
+            "glm" | "zhipu" | "bigmodel" | "zai" => Some(Self::Glm),
+            "qwen" => Some(Self::Qwen),
+            "dashscope" => Some(Self::Dashscope),
+            _ => None,
         }
     }
 }
@@ -301,155 +319,21 @@ fn vendor_default(vendor: VendorId) -> CacheBehavior {
     }
 }
 
-/// 从 base_url / model 推断 [VendorId]（P3 §3.2.3；对齐
-/// `request/vendor.rs` 的 [infer_reasoning_vendor] 优先级与顺序，补充
-/// minimax / grok / dashscope 等缓存维度关键字；vendor.rs 不改，本函数为
-/// 新增独立实现，A1-20）
+/// 应用 catalog 模型级覆盖（P3 §3.2.3；U4：模型差异由**配置声明**，不由代码内
+/// 模型 ID 表猜测）。
 ///
-/// 优先级：base_url 关键字 → model 前缀 → Auto（未识别网关保守默认）。
-pub fn infer_vendor(base_url: &str, model: &str) -> VendorId {
-    let url = base_url.to_ascii_lowercase();
-    let model = model.to_ascii_lowercase();
-    if url.contains("anthropic") || model.starts_with("claude") {
-        return VendorId::Anthropic;
-    }
-    if url.contains("deepseek") || model.starts_with("deepseek") {
-        return VendorId::Deepseek;
-    }
-    if url.contains("generativelanguage.googleapis.com")
-        || url.contains("gemini")
-        || model.starts_with("gemini")
-    {
-        return VendorId::Gemini;
-    }
-    if url.contains("openai")
-        || model.starts_with("gpt")
-        || model.starts_with("o1")
-        || model.starts_with("o3")
-        || model.starts_with("o4")
-    {
-        return VendorId::Openai;
-    }
-    if url.contains("minimax") || model.starts_with("minimax") || model.starts_with("abab") {
-        return VendorId::MiniMax;
-    }
-    if url.contains("x.ai") || url.contains("grok") || model.starts_with("grok") {
-        return VendorId::Grok;
-    }
-    if url.contains("kimi")
-        || url.contains("moonshot")
-        || model.starts_with("kimi")
-        || model.starts_with("moonshot")
-    {
-        return VendorId::Kimi;
-    }
-    if url.contains("z.ai")
-        || url.contains("bigmodel")
-        || url.contains("glm")
-        || model.starts_with("glm")
-    {
-        return VendorId::Glm;
-    }
-    if url.contains("dashscope") {
-        return VendorId::Dashscope;
-    }
-    if url.contains("qwen") || model.starts_with("qwen") {
-        return VendorId::Qwen;
-    }
-    VendorId::Auto
-}
-
-/// 模型系列行为覆盖（只携带部分字段；None 表示不覆盖，保持 vendor 级默认）
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct SeriesOverrides {
-    /// 主动缓存（Anthropic 式断点）开关覆盖：true 开（断点预算 = 家族常量 4）、
-    /// false 关（断点预算清空）；None 不覆盖
-    active_cache: Option<bool>,
-}
-
-impl SeriesOverrides {
-    /// 无覆盖（仅显式收录该系列，行为保持 vendor 级默认）
-    const fn none() -> Self {
-        Self { active_cache: None }
-    }
-}
-
-/// 模型系列 → 行为覆盖表（对齐 `MODEL_SERIES_CAPABILITIES` 的最长前缀命中
-/// 模式；P3 §3.2.3 示例：MiniMax 家族 minimax-m3 关主动缓存、minimax-m2 开；
-/// R0.5 表 3 #1：kimi-k3 / glm-4.7 现行旗舰显式收录防判定缺口）
-static MODEL_SERIES_CACHE_BEHAVIOR: &[(&str, SeriesOverrides)] = &[
-    // ── MiniMax：M3 仅被动自动缓存（vendor-cache-gaps.md:186）；
-    //    M2.x 有 Anthropic 式主动缓存（4 断点 / 20 块回溯）──
-    (
-        "minimax-m3",
-        SeriesOverrides {
-            active_cache: Some(false),
-        },
-    ),
-    (
-        "minimax-m2",
-        SeriesOverrides {
-            active_cache: Some(true),
-        },
-    ),
-    // ── Kimi 现行推理旗舰（§5.1；防"仅 kimi 前缀"式判定缺口）──
-    ("kimi-k3", SeriesOverrides::none()),
-    ("kimi-k2.7", SeriesOverrides::none()),
-    ("kimi-k2.6", SeriesOverrides::none()),
-    ("kimi-k2.5", SeriesOverrides::none()),
-    // ── GLM（R0.5 表 3 #1：glm-4.7 明确支持 Thinking Mode；缓存断点未实测
-    //    保守关，实测后改本表即可）。点号形态为 API 真实模型名（z.ai），
-    //    横线形态为 catalog.json 内部键（T-18 转录形态），两形态都收录 ──
-    ("glm-4.7", SeriesOverrides::none()),
-    ("glm-4.6", SeriesOverrides::none()),
-    ("glm-4.5-air", SeriesOverrides::none()),
-    ("glm-4.5", SeriesOverrides::none()),
-    ("glm-4-7", SeriesOverrides::none()),
-    ("glm-4-6", SeriesOverrides::none()),
-    ("glm-4-5-air", SeriesOverrides::none()),
-    ("glm-4-5", SeriesOverrides::none()),
-    // glm-5 前缀覆盖 glm-5.x（点号与横线形态皆命中）
-    ("glm-5", SeriesOverrides::none()),
-];
-
-/// 最长前缀命中系列覆盖（未命中 → None；对齐
-/// `infer_thinking_capability` 的匹配算法，vendor.rs:260-271）
-fn series_overrides(model: &str) -> Option<SeriesOverrides> {
-    let lower = model.to_ascii_lowercase();
-    let mut best: Option<&(&str, SeriesOverrides)> = None;
-    for entry in MODEL_SERIES_CACHE_BEHAVIOR {
-        if lower.starts_with(entry.0) && best.is_none_or(|current| entry.0.len() > current.0.len())
-        {
-            best = Some(entry);
-        }
-    }
-    best.map(|entry| entry.1)
-}
-
-/// 应用系列覆盖（断点预算随主动缓存开关联动）
-fn apply_series_overrides(behavior: &mut CacheBehavior, model: &str) {
-    let Some(overrides) = series_overrides(model) else {
-        return;
-    };
-    if let Some(active) = overrides.active_cache {
-        behavior.supports_cache_control = active;
-        behavior.breakpoint_max = if active {
-            Some(SERIES_BREAKPOINT_MAX)
-        } else {
-            None
-        };
-    }
-}
-
-/// 应用 catalog 模型级覆盖（P3 §3.2.3：supports_cache_control /
-/// supports_prompt_caching / breakpoint_max / cache_ttl 非默认时覆盖；
-/// `false` / `None` 视为缺省不覆盖——目录中"显式关闭"的模型（如 minimax-m3、
-/// glm 全系）已由系列表先行表达，不会与条目覆盖冲突）
+/// 覆盖语义：
+/// - 条目声明了缓存语义（`cacheType` 存在，如内置 catalog.json 条目）→
+///   `supports_cache_control` / `breakpoint_max` 以条目为**权威**（可开可关，
+///   如 minimax-m3 `cacheType: auto` + `supportsCacheControl: false` 关闭主动断点）；
+/// - 未声明缓存语义（如 yaml 树投影条目，`cacheType` 缺省）→ 仅**单向开启**
+///   （条目 true 时覆盖，false/None 视为缺省不覆盖，保持 vendor 级默认）。
 ///
 /// v2 Schema §6.1 新增消费点：`supportsPromptCacheKey` → `supports_prompt_cache_key`
-/// 模型级覆盖（真源为 vendor 矩阵时的目录覆盖来源）；`supportsImplicitCaching`
-/// → `auto_cache` 模型级覆盖（OpenRouter 端点实测值）。
+/// 模型级覆盖；`supportsImplicitCaching` → `auto_cache` 模型级覆盖。
 fn apply_catalog_overrides(behavior: &mut CacheBehavior, entry: &ModelCatalogEntry) {
+    // 条目是否显式声明缓存语义（catalog.json 条目带 cacheType；yaml 投影条目不带）
+    let declares_cache = entry.cache_type.is_some();
     if entry.supports_prompt_caching {
         behavior.supports_prompt_caching = true;
     }
@@ -467,11 +351,16 @@ fn apply_catalog_overrides(behavior: &mut CacheBehavior, entry: &ModelCatalogEnt
     if entry.supports_prompt_cache_key {
         behavior.supports_prompt_cache_key = true;
     }
+    // 主动断点能力：显式声明条目权威（可开可关），否则仅单向开启
     if entry.supports_cache_control {
         behavior.supports_cache_control = true;
+    } else if declares_cache {
+        behavior.supports_cache_control = false;
     }
     if let Some(breakpoint) = entry.breakpoint_max {
         behavior.breakpoint_max = Some(breakpoint);
+    } else if declares_cache {
+        behavior.breakpoint_max = None;
     }
     if let Some(ttl) = entry.cache_ttl.as_deref().and_then(CacheTtl::parse) {
         behavior.default_ttl = Some(ttl);
@@ -480,9 +369,9 @@ fn apply_catalog_overrides(behavior: &mut CacheBehavior, entry: &ModelCatalogEnt
 
 /// 缓存行为判定（P3 §3.2.3；models/ 层数据查询接口，唯一数据真源，C2）
 ///
-/// 覆盖优先级：catalog 模型级条目（非默认字段） > 模型系列表（最长前缀） >
-/// vendor 级默认矩阵。vendor = [VendorId::Auto] 时恒为保守默认（未知网关
-/// 不猜，系列表与 catalog 覆盖均不生效）。
+/// 覆盖优先级：catalog 模型级条目（显式声明） > vendor 级默认矩阵。
+/// vendor = [VendorId::Auto] 时恒为保守默认（未知网关不猜，catalog 覆盖不生效）。
+/// 模型系列差异由 catalog 条目声明驱动，不再有代码内模型 ID 表。
 pub fn cache_behavior_for(
     catalog: Option<&ModelCatalog>,
     vendor: VendorId,
@@ -492,7 +381,6 @@ pub fn cache_behavior_for(
     if vendor == VendorId::Auto {
         return behavior;
     }
-    apply_series_overrides(&mut behavior, model);
     if let Some(catalog) = catalog {
         if let Some(entry) = catalog.lookup(vendor.as_str(), model) {
             apply_catalog_overrides(&mut behavior, entry);
@@ -505,87 +393,45 @@ pub fn cache_behavior_for(
 mod tests {
     use super::*;
 
-    // ── infer_vendor：baseUrl 关键字命中（每家至少一条）──
+    // ── VendorId::from_identity：yaml provider 身份 → 矩阵键（唯一映射）──
 
     #[test]
-    fn infer_vendor_by_base_url_keyword() {
+    fn vendor_id_from_declared_identity() {
         assert_eq!(
-            infer_vendor("https://api.anthropic.com", ""),
-            VendorId::Anthropic
+            VendorId::from_identity("deepseek"),
+            Some(VendorId::Deepseek)
         );
         assert_eq!(
-            infer_vendor("https://api.deepseek.com", ""),
-            VendorId::Deepseek
+            VendorId::from_identity("Anthropic"),
+            Some(VendorId::Anthropic)
         );
+        assert_eq!(VendorId::from_identity("claude"), Some(VendorId::Anthropic));
+        assert_eq!(VendorId::from_identity("minimax"), Some(VendorId::MiniMax));
+        assert_eq!(VendorId::from_identity("openai"), Some(VendorId::Openai));
+        assert_eq!(VendorId::from_identity("kimi"), Some(VendorId::Kimi));
+        assert_eq!(VendorId::from_identity("moonshot"), Some(VendorId::Kimi));
+        assert_eq!(VendorId::from_identity("grok"), Some(VendorId::Grok));
+        assert_eq!(VendorId::from_identity("gemini"), Some(VendorId::Gemini));
+        assert_eq!(VendorId::from_identity("glm"), Some(VendorId::Glm));
+        assert_eq!(VendorId::from_identity("qwen"), Some(VendorId::Qwen));
         assert_eq!(
-            infer_vendor("https://api.minimaxi.com", ""),
-            VendorId::MiniMax
+            VendorId::from_identity("dashscope"),
+            Some(VendorId::Dashscope)
         );
-        assert_eq!(infer_vendor("https://api.openai.com", ""), VendorId::Openai);
-        assert_eq!(infer_vendor("https://api.kimi.com", ""), VendorId::Kimi);
-        // 月之暗面旧域名（platform.moonshot.cn）同样命中
+        // 前后空白容忍；大小写不敏感（身份是声明值，非 URL/模型名猜测）
         assert_eq!(
-            infer_vendor("https://platform.moonshot.cn", ""),
-            VendorId::Kimi
+            VendorId::from_identity("  DeepSeek  "),
+            Some(VendorId::Deepseek)
         );
-        assert_eq!(infer_vendor("https://api.x.ai", ""), VendorId::Grok);
-        assert_eq!(
-            infer_vendor("https://generativelanguage.googleapis.com", ""),
-            VendorId::Gemini
-        );
-        // z.ai（国际）与 open.bigmodel.cn（国内）双域名
-        assert_eq!(infer_vendor("https://api.z.ai", ""), VendorId::Glm);
-        assert_eq!(infer_vendor("https://open.bigmodel.cn", ""), VendorId::Glm);
-        assert_eq!(
-            infer_vendor("https://dashscope.aliyuncs.com/compatible-mode/v1", ""),
-            VendorId::Dashscope
-        );
-        assert_eq!(infer_vendor("https://qwen.example.com", ""), VendorId::Qwen);
-    }
-
-    // ── infer_vendor：model 前缀命中（每家至少一条）──
-
-    #[test]
-    fn infer_vendor_by_model_prefix() {
-        assert_eq!(infer_vendor("", "claude-sonnet-5"), VendorId::Anthropic);
-        assert_eq!(infer_vendor("", "deepseek-v4-flash"), VendorId::Deepseek);
-        assert_eq!(infer_vendor("", "minimax-m3"), VendorId::MiniMax);
-        assert_eq!(infer_vendor("", "minimax-m2.7"), VendorId::MiniMax);
-        assert_eq!(infer_vendor("", "gpt-5.6"), VendorId::Openai);
-        assert_eq!(infer_vendor("", "o3-mini"), VendorId::Openai);
-        assert_eq!(infer_vendor("", "kimi-k3"), VendorId::Kimi);
-        assert_eq!(infer_vendor("", "grok-4.5"), VendorId::Grok);
-        assert_eq!(infer_vendor("", "gemini-3.6-flash"), VendorId::Gemini);
-        assert_eq!(infer_vendor("", "glm-4.7"), VendorId::Glm);
-        assert_eq!(infer_vendor("", "qwen3.7-max"), VendorId::Qwen);
-    }
-
-    // ── infer_vendor：Auto 保守回退与优先级 ──
-
-    #[test]
-    fn infer_vendor_unrecognized_falls_back_to_auto() {
-        assert_eq!(infer_vendor("https://unknown.example", ""), VendorId::Auto);
-        assert_eq!(infer_vendor("", "unknown-model"), VendorId::Auto);
-        assert_eq!(infer_vendor("", ""), VendorId::Auto);
     }
 
     #[test]
-    fn infer_vendor_base_url_keyword_and_model_prefix_share_chain_order() {
-        // 对齐 infer_reasoning_vendor：逐厂商检查（url 或 model 命中即返回），
-        // 链序即优先级，base_url 命中与 model 前缀命中等价
-        assert_eq!(
-            infer_vendor("https://api.anthropic.com", "deepseek-v4-flash"),
-            VendorId::Anthropic
-        );
-        assert_eq!(
-            infer_vendor("https://dashscope.aliyuncs.com", "qwen3-max"),
-            VendorId::Dashscope
-        );
-        // 链序：claude 检查先于 openai——base_url 与 model 分属两家时取更早厂商
-        assert_eq!(
-            infer_vendor("https://api.openai.com", "claude-sonnet-5"),
-            VendorId::Anthropic
-        );
+    fn vendor_id_unknown_identity_is_none_fail_closed() {
+        // 未声明的自定义 provider 身份 → None（调用方 fail-closed，禁止回落猜测）
+        assert_eq!(VendorId::from_identity("my-gateway"), None);
+        assert_eq!(VendorId::from_identity(""), None);
+        assert_eq!(VendorId::from_identity("https://api.deepseek.com"), None);
+        assert_eq!(VendorId::from_identity("deepseek-v4-flash"), None);
     }
 
     // ── 矩阵行为：DeepSeek omit 恒 true（P3 验收 2）──
@@ -610,23 +456,23 @@ mod tests {
 
     #[test]
     fn minimax_m3_disables_active_caching_while_m2_keeps_breakpoints() {
-        // M3：仅被动自动缓存，无主动断点
-        let m3 = cache_behavior_for(None, VendorId::MiniMax, "minimax-m3");
+        // M3 关主动缓存 / M2.x 开：差异来自 catalog 条目的**显式声明**
+        // （cacheType + supportsCacheControl），不再有代码内模型 ID 表（U4）。
+        let catalog = ModelCatalog::bundled();
+        // M3：条目 cacheType="auto" + supportsCacheControl=false → 无主动断点
+        let m3 = cache_behavior_for(Some(&catalog), VendorId::MiniMax, "minimax-m3");
         assert!(m3.supports_prompt_caching && m3.auto_cache);
         assert!(!m3.supports_cache_control);
         assert_eq!(m3.breakpoint_max, None);
-        // M2.x（点号 API 形态与横线目录形态）：Anthropic 式断点 4 上限
-        let m2 = cache_behavior_for(None, VendorId::MiniMax, "minimax-m2.7");
+        // M2.x（横线目录形态）：条目 supportsCacheControl=true / breakpointMax=4
+        let m2 = cache_behavior_for(Some(&catalog), VendorId::MiniMax, "minimax-m2-7");
         assert!(m2.supports_cache_control);
         assert_eq!(m2.breakpoint_max, Some(4));
-        let m2 = cache_behavior_for(None, VendorId::MiniMax, "minimax-m2-5");
-        assert!(m2.supports_cache_control);
-        assert_eq!(m2.breakpoint_max, Some(4));
-        // catalog 路径：内置 minimax-m3 条目（supportsCacheControl=false）不复活断点
-        let catalog = ModelCatalog::bundled();
-        let m3 = cache_behavior_for(Some(&catalog), VendorId::MiniMax, "minimax-m3");
-        assert!(!m3.supports_cache_control);
-        assert_eq!(m3.breakpoint_max, None);
+        // 无 catalog（vendor 默认矩阵）：MiniMax 默认行开主动断点——
+        // 条目缺失时不回落代码内模型 ID 表（U4：不猜）
+        let m3_default = cache_behavior_for(None, VendorId::MiniMax, "minimax-m3");
+        assert!(m3_default.supports_cache_control);
+        assert_eq!(m3_default.breakpoint_max, Some(4));
     }
 
     // ── 矩阵行为：Grok 会话亲和 header 与键（P3 验收 2）──
@@ -657,7 +503,7 @@ mod tests {
         assert!(behavior.supports_prompt_caching && behavior.auto_cache);
     }
 
-    // ── R0.5 表 3 #1：kimi-k3 判定缺口在行为矩阵补全 ──
+    // ── Kimi 家族默认行（kimi-k3 等现行旗舰由 vendor 默认行 + catalog 条目声明）──
 
     #[test]
     fn kimi_k3_resolves_to_kimi_family_behavior() {
@@ -672,22 +518,16 @@ mod tests {
         assert!(behavior.auto_cache && behavior.supports_prompt_cache_key);
     }
 
-    // ── R0.5 表 3 #1：glm-4.7 判定缺口补全（断点未实测 → 保守关）──
+    // ── GLM 家族默认行（断点未实测 → 保守关；条目声明同向）──
 
     #[test]
     fn glm_4_7_resolves_to_conservative_glm_behavior() {
-        // 点号 API 形态
+        // GLM vendor 默认行即保守关（无主动断点）
         let behavior = cache_behavior_for(None, VendorId::Glm, "glm-4.7");
         assert!(behavior.auto_cache && behavior.supports_prompt_caching);
         assert!(!behavior.supports_cache_control);
         assert_eq!(behavior.breakpoint_max, None);
-        // 横线目录形态（catalog.json 存 glm-4-7）同样命中系列表
-        let behavior = cache_behavior_for(None, VendorId::Glm, "glm-4-7");
-        assert!(!behavior.supports_cache_control);
-        // 最长前缀：glm-4.5-air 不落到 glm-4.5 之外的未知判定
-        let behavior = cache_behavior_for(None, VendorId::Glm, "glm-4.5-air");
-        assert!(behavior.auto_cache && !behavior.supports_cache_control);
-        // catalog 路径（内置 glm-4-7 条目）保持保守
+        // 横线目录形态（catalog.json 存 glm-4-7）条目声明保守关
         let catalog = ModelCatalog::bundled();
         let behavior = cache_behavior_for(Some(&catalog), VendorId::Glm, "glm-4-7");
         assert!(!behavior.supports_cache_control);
@@ -712,7 +552,7 @@ mod tests {
         assert_eq!(behavior.default_ttl, None);
     }
 
-    // ── catalog 模型级覆盖：优先级 目录条目 > 系列表 > vendor 默认 ──
+    // ── catalog 模型级覆盖：优先级 目录条目显式声明 > vendor 默认 ──
 
     #[test]
     fn catalog_entry_overrides_vendor_defaults() {
@@ -738,19 +578,23 @@ mod tests {
         assert_eq!(gpt56.default_ttl, Some(CacheTtl::Short));
     }
 
-    // ── 系列表最长前缀命中 ──
+    // ── 系列差异由 catalog 条目显式声明驱动（无代码内模型 ID 表）──
 
     #[test]
-    fn series_table_uses_longest_prefix_match() {
-        // 版本后缀形态仍落在 M3 判定（前缀 minimax-m3 长于 minimax-m2）
-        let m3 = cache_behavior_for(None, VendorId::MiniMax, "minimax-m3-2026");
+    fn catalog_entry_declaration_drives_series_differences() {
+        // 模型差异只取精确条目，版本型号不再回落基础型号。
+        let catalog = ModelCatalog::bundled();
+        assert!(catalog.lookup("minimax", "minimax-m3-2026").is_none());
+        let m3 = cache_behavior_for(Some(&catalog), VendorId::MiniMax, "minimax-m3");
         assert!(!m3.supports_cache_control);
-        // minimax-m2 不误伤 minimax-m3
-        let m2 = cache_behavior_for(None, VendorId::MiniMax, "minimax-m2.7");
+        assert_eq!(m3.breakpoint_max, None);
+        // M2.x 条目声明开 → 断点 4
+        let m2 = cache_behavior_for(Some(&catalog), VendorId::MiniMax, "minimax-m2-7");
         assert!(m2.supports_cache_control);
-        // glm-5 系列与 glm-4 系列互不干扰
-        let glm5 = cache_behavior_for(None, VendorId::Glm, "glm-5.2");
-        assert!(glm5.auto_cache && !glm5.supports_cache_control);
+        assert_eq!(m2.breakpoint_max, Some(4));
+        // GLM 条目声明保守关（无主动断点）
+        let glm = cache_behavior_for(Some(&catalog), VendorId::Glm, "glm-4-7");
+        assert!(glm.auto_cache && !glm.supports_cache_control);
     }
 
     // ── 矩阵抽查：Anthropic / OpenAI / Gemini / Kimi 默认行 ──
@@ -886,5 +730,32 @@ mod tests {
         apply_catalog_overrides(&mut behavior, &entry);
         assert_eq!(behavior.default_ttl, Some(CacheTtl::HalfHour));
         assert_eq!(behavior.default_ttl.unwrap().seconds(), 1800);
+    }
+
+    // ── W4 验收：协议决议取自 yaml 声明，不受 baseUrl 影响（无 URL 嗅探）──
+
+    /// yaml 模型声明 `protocol: openai/chat`，同时 provider baseUrl 含
+    /// `anthropic` 字样 —— 协议决议必须取自 yaml 声明（openai/chat），
+    /// 绝不因 baseUrl 子串被嗅探成 anthropic/messages。
+    #[test]
+    fn yaml_declared_protocol_is_not_overridden_by_base_url() {
+        let yaml = r#"
+version: 2
+providers:
+  weird-gateway:
+    baseUrl: "https://api.anthropic.com/v1"
+    models:
+      - id: weird-model
+        protocol: "openai/chat"
+"#;
+        let catalog = ModelCatalog::from_yaml_str(yaml).expect("v2 yaml 必须解析成功");
+        let entry = catalog
+            .lookup("weird-gateway", "weird-model")
+            .expect("yaml 声明的模型必须命中");
+        assert_eq!(
+            entry.protocol.as_deref(),
+            Some("openai/chat"),
+            "协议决议必须取自 yaml 声明，不得被 baseUrl 的 anthropic 子串覆盖"
+        );
     }
 }

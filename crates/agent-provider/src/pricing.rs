@@ -1,24 +1,10 @@
-//! 四维双币微元定点计费引擎 (Micros Pricing Engine)
-//!
-//! 采用纯 u64/u128 整数定点运算，以 micros (10^-6 货币单位) 为基准，
-//! 彻底根除浮点运算累加误差，支持阶梯计费、Prompt Cache 扣减与按张计费。
-//!
-//! ## SSOT 契约（计费平行 DTO 收敛）
-//!
-//! 计费数据的唯一真源 = [ModelPricingSpec]（连同 [CurrencyKind] / [PricingTier]，
-//! 均定义于 [crate::models::catalog_types]）。本模块是纯计算引擎，直接消费该契约；
-//! 历史上与之平行的引擎侧 `Currency` / `PricingUnit` / `ModelPricing` DTO 已删除，
-//! **禁止再引入第二套计费结构**：
-//! - 结算币种：`CurrencyKind`（本模块 re-export 为 `Currency`，仅作旧路径兼容别名）；
-//! - 计费模式：由 `ModelPricingSpec.per_image` 显式判定——`Some(rate)` = 按张计费
-//!   （每张单价 = rate 本身，不再借用 `output` 字段做 `input=0/output=per_img`
-//!   隐式编码）；`None` = 按百万 Token 计费（四维费率 + 可选阶梯）；
-//! - `PerRequest`（按次）无 wire 表达且无生产构造方，已作为死枚举删除。
+//! 用户配置驱动的微元计价。缺单价与显式免费不同；图片必须有真实数量。
+//! 阶梯逐字段继承，使用归一后的输入总数与缓存分项；当前配置不用于历史重算。
 
 use serde::{Deserialize, Serialize};
 
 pub use crate::models::catalog_types::PricingTier;
-use crate::models::catalog_types::{CurrencyKind, ModelPricingSpec};
+use crate::models::catalog_types::{CurrencyKind, ModelPricingSpec, PricingUnit};
 
 /// 货币类型兼容别名：SSOT = [CurrencyKind]（catalog_types）。
 /// 保留 `pricing::Currency` 路径仅为既有调用方不漂移；禁止再扩展平行枚举。
@@ -111,152 +97,197 @@ impl Default for CostBreakdown {
 pub struct PricingEngine;
 
 impl PricingEngine {
-    /// 计算单次调用的四维双币微元账目（唯一算费入口，直接消费 catalog SSOT）
-    ///
-    /// 计费模式由 `pricing.per_image` 显式判定：
-    /// - `Some(rate)` → 按张计费：`completion_tokens` 解释为张数，每张单价 = rate；
-    /// - `None` → 按百万 Token 计费（含阶梯检索与缓存扣减）。
-    ///
-    /// 若 `pricing_opt` 为 `None`，返回 `None` 实现空配置静默 (Zero-Cost Silence)。
+    /// Token 使用量入口不推断图片张数；需要图片费用时必须显式提供 image_count。
     pub fn calculate_cost(
-        pricing_opt: &Option<ModelPricingSpec>,
+        pricing: &Option<ModelPricingSpec>,
         prompt_tokens: u64,
         completion_tokens: u64,
         cache_read_tokens: u64,
         cache_write_tokens: u64,
     ) -> Option<CostBreakdown> {
-        let pricing = pricing_opt.as_ref()?;
-
-        // 显式免费模型判断：必须且仅当不存在阶梯计费、无按张费率且
-        // 所有四项 Token 费率均为 0.0 时，才允许短路返回全免
-        // （per_image 必须参与判定：纯生图模型 input/output 常为 0，费率在 per_image）
-        if pricing.tiers.is_empty()
-            && pricing.per_image.unwrap_or(0.0) == 0.0
-            && pricing.input == 0.0
-            && pricing.output == 0.0
-            && pricing.cache_read.unwrap_or(0.0) == 0.0
-            && pricing.cache_write.unwrap_or(0.0) == 0.0
-        {
-            return Some(CostBreakdown::free(pricing.currency));
-        }
-
-        // 分支 1：按张计费模式 (PerImage)——费率显式来自 spec.per_image，
-        // 绝不借用 output 字段编码（无 input=0/output=per_img 信息损失）
-        if let Some(rate_per_image) = pricing.per_image {
-            let image_count = completion_tokens;
-            let rate_micros_per_image = Self::f64_to_micros(rate_per_image);
-            let product = (image_count as u128) * (rate_micros_per_image as u128);
-            let total_micros = product.min(u64::MAX as u128) as u64;
-
-            return Some(CostBreakdown {
-                currency: pricing.currency,
-                input_micros: 0,
-                output_micros: total_micros,
-                cache_read_micros: 0,
-                cache_write_micros: 0,
-                total_micros,
-                formatted_total: Self::format_micros(total_micros, pricing.currency),
-                is_free: false,
-            });
-        }
-
-        // 分支 2：按百万 Token 计费模式 (Per1mTokens)
-        let mut active_input_rate = pricing.input;
-        let mut active_output_rate = pricing.output;
-        let mut active_cache_read_rate = pricing.cache_read.unwrap_or(0.0);
-        let mut active_cache_write_rate = pricing.cache_write.unwrap_or(0.0);
-
-        // 检索阶梯计费（按照门槛倒序匹配）
-        if !pricing.tiers.is_empty() {
-            let mut sorted_tiers = pricing.tiers.clone();
-            sorted_tiers.sort_by(|a, b| b.input_tokens_above.cmp(&a.input_tokens_above));
-            for tier in sorted_tiers {
-                if prompt_tokens >= tier.input_tokens_above {
-                    active_input_rate = tier.input;
-                    active_output_rate = tier.output;
-                    if let Some(cr) = tier.cache_read {
-                        active_cache_read_rate = cr;
-                    }
-                    if let Some(cw) = tier.cache_write {
-                        active_cache_write_rate = cw;
-                    }
-                    break;
-                }
-            }
-        }
-
-        // 扣除已命中缓存读取的普通输入 Tokens
-        let non_cached_prompt_tokens = prompt_tokens.saturating_sub(cache_read_tokens);
-
-        let input_micros = Self::tokens_to_micros(non_cached_prompt_tokens, active_input_rate);
-        let output_micros = Self::tokens_to_micros(completion_tokens, active_output_rate);
-        let cache_read_micros = Self::tokens_to_micros(cache_read_tokens, active_cache_read_rate);
-        let cache_write_micros =
-            Self::tokens_to_micros(cache_write_tokens, active_cache_write_rate);
-
-        let total_micros = input_micros
-            .saturating_add(output_micros)
-            .saturating_add(cache_read_micros)
-            .saturating_add(cache_write_micros);
-
-        Some(CostBreakdown {
-            currency: pricing.currency,
-            input_micros,
-            output_micros,
-            cache_read_micros,
-            cache_write_micros,
-            total_micros,
-            formatted_total: Self::format_micros(total_micros, pricing.currency),
-            is_free: false,
-        })
-    }
-
-    /// 基于 ProviderUsage 与 ModelPricingSpec 计算费用（会话流结算权威入口）
-    pub fn calculate_cost_from_usage(
-        pricing_opt: &Option<ModelPricingSpec>,
-        usage: &crate::events::ProviderUsage,
-    ) -> Option<CostBreakdown> {
-        let prompt_tokens = usage.prompt_tokens.unwrap_or(0);
-        let completion_tokens = usage.completion_tokens.unwrap_or(0);
-        let cache_read_tokens = usage.cache_read_tokens.unwrap_or(0);
-        let cache_write_tokens = usage.cache_write_tokens.unwrap_or(0);
-        Self::calculate_cost(
-            pricing_opt,
+        Self::calculate_cost_with_images(
+            pricing,
             prompt_tokens,
             completion_tokens,
             cache_read_tokens,
             cache_write_tokens,
+            None,
         )
     }
 
-    /// 将费率 (元/1M Tokens) 转换为微元并与 Token 数量定点乘算
-    ///
-    /// 使用 u128 防止大 Token 数相乘溢出，加 500_000 实现严格四舍五入除以 1_000_000，
-    /// 并在转换为 u64 时使用饱和截断 .min(u64::MAX as u128)，彻底消灭强制 as u64 导致的回绕溢出。
-    #[inline]
-    pub fn tokens_to_micros(tokens: u64, rate_per_1m: f64) -> u64 {
-        if tokens == 0 || !rate_per_1m.is_finite() || rate_per_1m <= 0.0 {
-            return 0;
+    /// 按实际使用的维度收费。缺少该维度单价或图片数量时返回未定价，绝不填 0。
+    pub fn calculate_cost_with_images(
+        pricing: &Option<ModelPricingSpec>,
+        prompt_tokens: u64,
+        completion_tokens: u64,
+        cache_read_tokens: u64,
+        cache_write_tokens: u64,
+        image_count: Option<u64>,
+    ) -> Option<CostBreakdown> {
+        let pricing = pricing.as_ref()?;
+        if cache_read_tokens > prompt_tokens
+            || cache_write_tokens > prompt_tokens - cache_read_tokens
+        {
+            return None;
         }
-        let rate_micros = Self::f64_to_micros(rate_per_1m);
-        let product = (tokens as u128) * (rate_micros as u128);
-        let rounded = product.saturating_add(500_000);
-        let result = rounded / 1_000_000;
-        result.min(u64::MAX as u128) as u64
+        let image_only = pricing.unit == PricingUnit::PerImage;
+        let mut rates = [
+            pricing.input,
+            pricing.output,
+            pricing.cache_read,
+            pricing.cache_write,
+        ];
+        if let Some(tier) = pricing
+            .tiers
+            .iter()
+            .filter(|tier| prompt_tokens >= tier.input_tokens_above)
+            .max_by_key(|tier| tier.input_tokens_above)
+        {
+            for (base, tier_rate) in
+                rates
+                    .iter_mut()
+                    .zip([tier.input, tier.output, tier.cache_read, tier.cache_write])
+            {
+                *base = tier_rate.or(*base);
+            }
+        }
+        if rates
+            .iter()
+            .flatten()
+            .chain(pricing.per_image.iter())
+            .any(|rate| !rate.is_finite() || *rate < 0.0)
+        {
+            return None;
+        }
+        let has_image_price = pricing.per_image.is_some() || image_only;
+        let image_micros = if has_image_price {
+            Self::rate_cost(image_count?, pricing.per_image?, 6)
+        } else {
+            if image_count.is_some_and(|count| count > 0) {
+                return None;
+            }
+            0
+        };
+        let counts = if image_only {
+            [0; 4]
+        } else {
+            [
+                prompt_tokens - cache_read_tokens - cache_write_tokens,
+                completion_tokens,
+                cache_read_tokens,
+                cache_write_tokens,
+            ]
+        };
+        if !has_image_price && rates.iter().all(Option::is_none) {
+            return None;
+        }
+        let scale = if pricing.unit == PricingUnit::Token {
+            6
+        } else {
+            0
+        };
+        let mut components = [0_u64; 4];
+        for ((cost, count), rate) in components.iter_mut().zip(counts).zip(rates) {
+            if count > 0 {
+                *cost = Self::rate_cost(count, rate?, scale);
+            }
+        }
+        components[1] = components[1].saturating_add(image_micros);
+        let total_micros = components.into_iter().fold(0_u64, u64::saturating_add);
+        let is_free = if image_only {
+            pricing.per_image == Some(0.0)
+        } else {
+            // 缺价且有该维度用量已在上方返回 None；未使用的可选维度不构成收费。
+            pricing.tiers.is_empty()
+                && rates[0] == Some(0.0)
+                && rates[1] == Some(0.0)
+                && rates[2].is_none_or(|rate| rate == 0.0)
+                && rates[3].is_none_or(|rate| rate == 0.0)
+                && (!has_image_price || pricing.per_image == Some(0.0))
+        };
+        Some(CostBreakdown {
+            currency: pricing.currency,
+            input_micros: components[0],
+            output_micros: components[1],
+            cache_read_micros: components[2],
+            cache_write_micros: components[3],
+            total_micros,
+            formatted_total: if is_free {
+                "免费".into()
+            } else {
+                Self::format_micros(total_micros, pricing.currency)
+            },
+            is_free,
+        })
     }
 
-    /// 浮点数四舍五入转为微元整数 (1.00 -> 1_000_000)
-    #[inline]
-    pub fn f64_to_micros(val: f64) -> u64 {
-        if !val.is_finite() || val <= 0.0 {
+    /// 图片数量来自图片生成响应，不能借用任何 Token 计数字段。
+    pub fn calculate_image_cost(
+        pricing: &Option<ModelPricingSpec>,
+        image_count: u64,
+    ) -> Option<CostBreakdown> {
+        Self::calculate_cost_with_images(pricing, 0, 0, 0, 0, Some(image_count))
+    }
+
+    pub fn calculate_cost_from_usage(
+        pricing: &Option<ModelPricingSpec>,
+        usage: &crate::events::ProviderUsage,
+    ) -> Option<CostBreakdown> {
+        Self::calculate_cost(
+            pricing,
+            usage.prompt_tokens?,
+            usage.completion_tokens?,
+            usage.cache_read_tokens.unwrap_or(0),
+            usage.cache_write_tokens.unwrap_or(0),
+        )
+    }
+
+    /// 每百万 Token 费率折算为微元；两侧百万因子相消，最后一步才四舍五入。
+    pub fn tokens_to_micros(tokens: u64, rate_per_1m: f64) -> u64 {
+        Self::rate_cost(tokens, rate_per_1m, 0)
+    }
+
+    pub fn f64_to_micros(value: f64) -> u64 {
+        Self::rate_cost(1, value, 6)
+    }
+
+    /// 使用费率的十进制表示做整数乘除，避免先把单个 Token 价格舍入为 0。
+    fn rate_cost(count: u64, rate: f64, micro_scale: i32) -> u64 {
+        if count == 0 || !rate.is_finite() || rate <= 0.0 {
             return 0;
         }
-        let rounded = (val * 1_000_000.0).round();
-        if rounded >= (u64::MAX as f64) {
-            u64::MAX
+        let text = rate.to_string();
+        let (mantissa, exponent) = match text.split_once(['e', 'E']) {
+            Some((mantissa, exponent)) => (mantissa, exponent.parse::<i32>().unwrap_or(0)),
+            None => (text.as_str(), 0),
+        };
+        let decimals = mantissa
+            .split_once('.')
+            .map_or(0, |(_, fraction)| fraction.len()) as i32;
+        let digits: String = mantissa.chars().filter(|ch| *ch != '.').collect();
+        let digits = digits.trim_start_matches('0');
+        let coefficient = match digits.parse::<u128>() {
+            Ok(value) => value,
+            Err(_) => return u64::MAX,
+        };
+        let Some(mut value) = u128::from(count).checked_mul(coefficient) else {
+            return u64::MAX;
+        };
+        let scale = micro_scale + exponent - decimals;
+        if scale >= 0 {
+            let Some(factor) = 10_u128.checked_pow(scale as u32) else {
+                return u64::MAX;
+            };
+            value = value.saturating_mul(factor);
         } else {
-            rounded as u64
+            let Some(divisor) = 10_u128.checked_pow((-scale) as u32) else {
+                return 0;
+            };
+            let quotient = value / divisor;
+            let remainder = value % divisor;
+            value = quotient + u128::from(remainder >= divisor / 2);
         }
+        value.min(u128::from(u64::MAX)) as u64
     }
 
     /// 格式化微元为带符号的货币字符串

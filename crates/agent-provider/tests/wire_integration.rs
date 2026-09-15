@@ -115,11 +115,14 @@ fn anthropic_effort_tier_produces_enabled_thinking() {
             ReasoningEffort::Low => "Low",
             ReasoningEffort::Medium => "Medium",
             ReasoningEffort::High => "High",
-            ReasoningEffort::Xhigh => "X-High",
+            ReasoningEffort::Xhigh => "XHigh",
             ReasoningEffort::Max => "Max",
             _ => "Medium",
         };
-        thinking_map.insert(effort_key.to_string(), effort_to_budget_tokens(effort).to_string());
+        thinking_map.insert(
+            effort_key.to_string(),
+            effort_to_budget_tokens(effort).to_string(),
+        );
         let opts = AnthropicRequestOptions {
             model: Some("claude-sonnet-4-5".to_string()),
             reasoning_effort: Some(effort),
@@ -160,11 +163,14 @@ fn anthropic_intensity_tier_produces_thinking_or_omits_on_off() {
             ThinkingIntensity::Low => "Low",
             ThinkingIntensity::Medium => "Medium",
             ThinkingIntensity::High => "High",
-            ThinkingIntensity::Xhigh => "X-High",
+            ThinkingIntensity::Xhigh => "XHigh",
             ThinkingIntensity::Max => "Max",
             _ => "Medium",
         };
-        thinking_map.insert(key.to_string(), thinking_to_budget_tokens(intensity).to_string());
+        thinking_map.insert(
+            key.to_string(),
+            thinking_to_budget_tokens(intensity).to_string(),
+        );
         let opts = AnthropicRequestOptions {
             model: Some("claude-sonnet-4-5".to_string()),
             thinking_intensity: Some(intensity),
@@ -253,7 +259,7 @@ fn gemini_intensity_maps_to_generation_config_thinking_level() {
             ThinkingIntensity::Low => "Low",
             ThinkingIntensity::Medium => "Medium",
             ThinkingIntensity::High => "High",
-            ThinkingIntensity::Xhigh => "X-High",
+            ThinkingIntensity::Xhigh => "XHigh",
             ThinkingIntensity::Max => "Max",
             _ => "Medium",
         };
@@ -711,11 +717,12 @@ fn protocol_resolution_three_tier_truth() {
     let provider_chat = ProviderSpec {
         display_name: Some("OpenAI Gateway".to_string()),
         base_url: Some("https://api.openai.com/v1".to_string()),
-        api_key: None,
+        api_key_ref: None,
         headers: None,
         protocol: ProtocolKind::OpenAiChat,
         compat: None,
         models: vec![],
+        ..Default::default()
     };
 
     let model_responses = ModelSpec {
@@ -728,6 +735,7 @@ fn protocol_resolution_three_tier_truth() {
         thinking: None,
         pricing: None,
         compat: None,
+        ..Default::default()
     };
 
     let model_inherit = ModelSpec {
@@ -740,6 +748,7 @@ fn protocol_resolution_three_tier_truth() {
         thinking: None,
         pricing: None,
         compat: None,
+        ..Default::default()
     };
 
     assert_eq!(

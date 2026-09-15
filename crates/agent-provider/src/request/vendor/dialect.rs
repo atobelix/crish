@@ -59,7 +59,9 @@ impl std::fmt::Display for ReasoningEffort {
 }
 
 impl ReasoningEffort {
-    /// 解析 TitleCase 纯英文键（如 "Minimal", "Low", "Medium", "High", "X-High", "Max"）
+    /// 解析 TitleCase 纯英文键（如 "Minimal", "Low", "Medium", "High", "XHigh", "Max"）。
+    ///
+    /// 读边界别名接受集：`X-High` / `x-high` 仍归一为 [Self::XHigh]（规范拼写 = `XHigh`）。
     pub fn from_title_case(key: &str) -> Option<Self> {
         match key.trim() {
             "Off" | "off" | "None" | "none" | "Disabled" | "disabled" => Some(Self::Off),
@@ -81,7 +83,7 @@ impl ReasoningEffort {
             Self::Low => "Low",
             Self::Medium => "Medium",
             Self::High => "High",
-            Self::XHigh => "X-High",
+            Self::XHigh => "XHigh",
             Self::Max => "Max",
         }
     }
@@ -220,18 +222,12 @@ pub fn assemble_thinking_dialect(opts: &DialectBuildOptions<'_>) -> (Option<Valu
         }
     }
 
-    // wire 值只来自用户字典（TitleCase 键；XHigh 兼容双拼写）。
+    // wire 值只来自用户字典（规范拼写 TitleCase 键；XHigh 唯一规范拼写，读边界别名
+    // X-High 仅由 from_title_case 归一，不再参与 wire 查找）。
     // 禁止 `.or_else(|| opts.effort.to_openai_str())` 折叠兜底。
-    let custom_wire_val = opts.thinking_map.and_then(|map| {
-        map.get(opts.effort.to_title_case())
-            .or_else(|| {
-                if opts.effort == ReasoningEffort::XHigh {
-                    map.get("XHigh").or_else(|| map.get("X-High"))
-                } else {
-                    None
-                }
-            })
-    });
+    let custom_wire_val = opts
+        .thinking_map
+        .and_then(|map| map.get(opts.effort.to_title_case()));
 
     match opts.format {
         ThinkingDialectFormat::OpenAiEffort => {
@@ -384,7 +380,7 @@ mod tests {
 
         assert_eq!(ReasoningEffort::Off.to_title_case(), "Off");
         assert_eq!(ReasoningEffort::High.to_title_case(), "High");
-        assert_eq!(ReasoningEffort::XHigh.to_title_case(), "X-High");
+        assert_eq!(ReasoningEffort::XHigh.to_title_case(), "XHigh");
         assert_eq!(ReasoningEffort::Max.to_title_case(), "Max");
 
         assert_eq!(ReasoningEffort::Off.to_openai_str(), None);

@@ -22,6 +22,7 @@ pub mod credentials;
 pub mod error;
 pub mod events;
 pub mod migration;
+pub mod model_store;
 pub mod models;
 pub mod parse;
 pub mod pricing;

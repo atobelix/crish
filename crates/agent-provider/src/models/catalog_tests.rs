@@ -38,8 +38,8 @@ fn catalog_json_parses_fully_and_keys_match_entries() {
     let count = |vendor: &str| {
         catalog
             .entries
-            .keys()
-            .filter(|key| key.starts_with(&format!("{vendor}::")))
+            .values()
+            .filter(|entry| entry.vendor == vendor)
             .count()
     };
     assert_eq!(count("deepseek"), 2);
@@ -79,19 +79,14 @@ fn lookup_exact_match_hits_bundled_entry() {
     assert!(!pro.supports_responses);
 }
 
-/// 版本后缀兜底：deepseek-v4-flash-0731（官方版本号）命中内置 v4-flash 条目
+/// 版本后缀不同即身份不同，不能套用基础型号的配置
 #[test]
 fn lookup_strips_version_suffix() {
     let catalog = ModelCatalog::bundled();
-    let entry = catalog
-        .lookup("deepseek", "deepseek-v4-flash-0731")
-        .expect("版本后缀必须兜底命中");
-    assert_eq!(entry.model, "deepseek-v4-flash");
-    assert_eq!(entry.cache_read_price, Some(0.0028));
-    // 长日期形态（-YYYYMMDD）同样逐级剥离
-    assert!(catalog
-        .lookup("deepseek", "deepseek-v4-flash-20250826")
-        .is_some());
+    // 保留版本后缀反例资产；新合同禁止把不同型号替换成基础型号。
+    assert!(catalog.lookup("deepseek", "deepseek-v4-flash-0731").is_none());
+    assert!(catalog.lookup("deepseek", "deepseek-v4-flash-20250826").is_none());
+    assert!(catalog.lookup("deepseek", "deepseek-v4-flash").is_some());
 }
 
 /// 未知模型 / 未知 vendor → None
@@ -105,12 +100,76 @@ fn lookup_unknown_model_and_vendor_yield_none() {
     assert!(catalog.lookup("unknown-vendor", "whatever").is_none());
 }
 
-/// vendor 级默认条目（model="*"）兜底：精确与去版本后缀均未命中时生效
+/// W10：身份键精确匹配 + 首尾 trim（不做 lowercase）——与 TS 侧 lookup 对称。
+#[test]
+fn lookup_trims_whitespace_but_is_case_sensitive() {
+    let catalog = ModelCatalog::bundled();
+    // 首尾空白变体 → trim 后精确命中同一内置条目
+    let padded = catalog
+        .lookup("  deepseek  ", "  deepseek-v4-flash  ")
+        .expect("首尾空白必须 trim 后命中");
+    assert_eq!(padded.model, "deepseek-v4-flash");
+    assert_eq!(padded.vendor, "deepseek");
+    // 大小写变体 → 不命中（不做 lowercase）
+    assert!(
+        catalog.lookup("DeepSeek", "deepseek-v4-flash").is_none(),
+        "vendor 大小写变体不得命中"
+    );
+    assert!(
+        catalog.lookup("deepseek", "DeepSeek-V4-Flash").is_none(),
+        "model 大小写变体不得命中"
+    );
+}
+
+/// W10 / INV-12：`find_model` 身份键精确匹配 + 首尾 trim（不做 lowercase）——
+/// 与 TS 侧 `selectModel('Acme','XHigh-Model')` 对称。
+#[test]
+fn find_model_trims_whitespace_but_is_case_sensitive() {
+    // ① ProviderSpec::find_model：modelId 侧
+    let model: ModelSpec =
+        serde_json::from_str(r#"{"id":"XHigh-Model"}"#).expect("ModelSpec");
+    let provider = ProviderSpec {
+        models: vec![model],
+        ..Default::default()
+    };
+    assert!(provider.find_model("XHigh-Model").is_some(), "精确命中");
+    assert!(
+        provider.find_model("  XHigh-Model  ").is_some(),
+        "首尾空白 trim 后命中"
+    );
+    assert!(
+        provider.find_model("xhigh-model").is_none(),
+        "小写变体不命中（不做 lowercase）"
+    );
+    assert!(
+        provider.find_model("XHIGH-MODEL").is_none(),
+        "大写变体不命中（不做 lowercase）"
+    );
+
+    // ② UnifiedModelsConfig::find_model：providerId + modelId 双侧
+    let yaml = "version: 2\nproviders:\n  Acme:\n    protocol: openai/chat\n    models:\n      - id: XHigh-Model\n";
+    let config = UnifiedModelsConfig::from_yaml_str(yaml).expect("v2 yaml");
+    assert!(config.find_model("Acme", "XHigh-Model").is_some(), "精确命中");
+    assert!(
+        config.find_model("  Acme  ", "  XHigh-Model  ").is_some(),
+        "双侧首尾空白 trim 后命中"
+    );
+    assert!(
+        config.find_model("acme", "XHigh-Model").is_none(),
+        "providerId 小写变体不命中"
+    );
+    assert!(
+        config.find_model("ACME", "XHigh-Model").is_none(),
+        "providerId 大写变体不命中"
+    );
+}
+
+/// 星号条目不再充当供应商默认值，未知型号必须未命中
 #[test]
 fn lookup_falls_back_to_vendor_default_entry() {
     let mut entries = BTreeMap::new();
     entries.insert(
-        "acme::*".to_owned(),
+        ModelCatalogEntry::key("acme", "*"),
         ModelCatalogEntry {
             model: "*".to_owned(),
             provider: "acme".to_owned(),
@@ -122,7 +181,8 @@ fn lookup_falls_back_to_vendor_default_entry() {
         entries,
         version: 0,
     };
-    assert!(catalog.lookup("acme", "anything-at-all").is_some());
+    assert!(catalog.lookup("acme", "anything-at-all").is_none());
+    assert!(catalog.lookup("acme", "*").is_some(), "星号只能作为精确型号被读取");
     // 未配置 vendor 默认条目的厂商 → None
     assert!(catalog.lookup("other", "anything-at-all").is_none());
 }
@@ -132,7 +192,7 @@ fn lookup_falls_back_to_vendor_default_entry() {
 fn lookup_prefers_exact_over_vendor_default() {
     let mut entries = BTreeMap::new();
     entries.insert(
-        "acme::*".to_owned(),
+        ModelCatalogEntry::key("acme", "*"),
         ModelCatalogEntry {
             model: "*".to_owned(),
             provider: "acme".to_owned(),
@@ -141,7 +201,7 @@ fn lookup_prefers_exact_over_vendor_default() {
         },
     );
     entries.insert(
-        "acme::special".to_owned(),
+        ModelCatalogEntry::key("acme", "special"),
         ModelCatalogEntry {
             model: "special".to_owned(),
             provider: "acme".to_owned(),
@@ -313,15 +373,8 @@ fn with_overrides_rejects_forbidden_model_key() {
     // 的是内置基础条目，不代表覆盖生效）
     assert!(!catalog
         .entries
-        .contains_key("deepseek::deepseek-v4-flash-9999"));
-    assert_eq!(
-        catalog
-            .lookup("deepseek", "deepseek-v4-flash-9999")
-            .unwrap()
-            .model,
-        "deepseek-v4-flash",
-        "仅兜底命中内置基础条目，未新增/改名"
-    );
+        .contains_key(&ModelCatalogEntry::key("deepseek", "deepseek-v4-flash-9999")));
+    assert!(catalog.lookup("deepseek", "deepseek-v4-flash-9999").is_none());
 
     // provider 键禁覆盖：与既有条目通道不一致 → 拒绝
     let rejected = catalog.with_overrides(&[serde_json::json!({
@@ -523,7 +576,7 @@ fn replace_models_narrows_route_to_declared_list() {
         .collect();
     assert_eq!(
         deepseek_keys,
-        vec!["deepseek::deepseek-v4-flash".to_string()],
+        vec![ModelCatalogEntry::key("deepseek", "deepseek-v4-flash")],
         "路由只服务列表内模型"
     );
     // 未点名模型 lookup 返回 None（无 vendor 默认兜底）
@@ -532,7 +585,7 @@ fn replace_models_narrows_route_to_declared_list() {
         "未点名模型不再服务"
     );
     assert!(
-        !catalog.entries.contains_key("deepseek::deepseek-v4-pro"),
+        !catalog.entries.contains_key(&ModelCatalogEntry::key("deepseek", "deepseek-v4-pro")),
         "未点名旧条目必须被移除"
     );
     // 列表内模型可服务，且白名单字段生效
@@ -1016,7 +1069,7 @@ fn v2_file_wrapper_serde_roundtrip() {
         schema: "2.0".to_string(),
         updated_at: Some("2026-08-03".to_string()),
         entries: BTreeMap::from([(
-            "acme::x".to_string(),
+            ModelCatalogEntry::key("acme", "x"),
             ModelCatalogEntry {
                 model: "x".to_string(),
                 provider: "acme".to_string(),
@@ -1612,11 +1665,11 @@ providers:
         entry.vendor, "dashscope",
         "yaml 投影折叠语义：vendor 恒等于 provider_id"
     );
-    assert_eq!(entry.id.as_deref(), Some("dashscope::qwen-max"));
+    assert_eq!(entry.id, Some(ModelRef::new("dashscope", "qwen-max").key()));
     assert_eq!(
         ModelCatalogEntry::key(&entry.vendor, &entry.model),
-        "dashscope::qwen-max",
-        "catalog key 以折叠后的 vendor 组键"
+        ModelRef::new("dashscope", "qwen-max").key(),
+        "catalog key 与身份键同源（JSON 二元组，无分隔符碰撞）"
     );
 }
 
@@ -1630,7 +1683,7 @@ providers:
     displayName: Acme
     baseUrl: https://example.invalid/v1
     protocol: openai/chat
-    apiKey: $ACME_API_KEY
+    apiKeyRef: env:ACME_API_KEY
     compat:
       thinkingFormat: gemini
     models:
@@ -1776,11 +1829,5 @@ providers:
         modalities:
           image: true
 "#;
-    let cat = ModelCatalog::from_yaml_str(yaml).expect("仍可解析为 v2 树（未知键忽略）");
-    let entry = cat.lookup("x", "m").expect("条目");
-    assert!(!entry.supports_vision);
-    assert!(entry
-        .input_modalities
-        .as_ref()
-        .is_none_or(|m| !m.iter().any(|x| x.eq_ignore_ascii_case("image"))));
+    assert!(ModelCatalog::from_yaml_str(yaml).is_err(), "未知模态字段不能静默丢失");
 }

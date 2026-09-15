@@ -177,59 +177,26 @@ impl LocalDb {
 
     /// Open an in-memory database (for testing).
     ///
-    /// 主连接与 Writer 共享同一 shared-cache 内存库（`file:...?mode=memory&cache=shared`），
-    /// 保证组提交 Actor 写入对读路径 / 主连接可见（此前两个独立 `:memory:` 库
-    /// 互不可见——写 Actor 形同虚设，属既有半接线缺陷）。
+    /// 历史实现 = 主连接与 Writer 共享同一 shared-cache 内存库
+    /// （`file:...?mode=memory&cache=shared`，保证组提交 Actor 写入对读
+    /// 路径可见——此前两个独立 `:memory:` 库互不可见，写 Actor 形同虚设）。
+    ///
+    /// **2026-09-14 根治**：shared-cache 内存库在双连接并发下暴露 SQLite
+    /// 表级锁（`database table is locked`，busy_timeout 不覆盖 shared-cache
+    /// 表锁语义），run e2e 测试的收口落库与轮询读随机撞锁（单跑绿/并行
+    /// 挂的时序脆弱根源）。内存库模式无法启用 WAL（journal_mode=memory
+    /// 锁定），故测试库改为**临时 WAL 文件**落地（与生产 open(path) 同一
+    /// 锁语义：WAL 读写不互斥）；文件名带 pid+seq 保证隔离，残留由系统
+    /// temp 目录清理策略兜底。调用面（42 处测试）零改动。
     pub fn open_in_memory() -> Result<Self, DbFailure> {
-        use rusqlite::OpenFlags;
         use std::sync::atomic::{AtomicU64, Ordering};
         static MEM_SEQ: AtomicU64 = AtomicU64::new(0);
         let seq = MEM_SEQ.fetch_add(1, Ordering::Relaxed);
-        let uri = format!(
-            "file:conex_mem_{}_{seq}?mode=memory&cache=shared",
+        let path = std::env::temp_dir().join(format!(
+            "conex_mem_{}_{seq}.db",
             std::process::id()
-        );
-        let flags = OpenFlags::SQLITE_OPEN_URI
-            | OpenFlags::SQLITE_OPEN_READ_WRITE
-            | OpenFlags::SQLITE_OPEN_CREATE;
-        let conn = Connection::open_with_flags(&uri, flags).map_err(|e| DbFailure {
-            message: format!("failed to open in-memory database: {e}"),
-            kind: DbFailureKind::Open,
-        })?;
-        let _ = conn.busy_timeout(std::time::Duration::from_millis(5000));
-        let _ = conn.execute_batch(
-            "PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;
-             PRAGMA cache_size = -4000;",
-        );
-
-        let writer_conn = Connection::open_with_flags(&uri, flags).map_err(|e| DbFailure {
-            message: format!("failed to open in-memory writer: {e}"),
-            kind: DbFailureKind::Open,
-        })?;
-        let _ = writer_conn.busy_timeout(std::time::Duration::from_millis(5000));
-        let _ = writer_conn.execute_batch(
-            "PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;
-             PRAGMA cache_size = -8000;",
-        );
-        let writer = DbWriteHandle::spawn(writer_conn, GroupCommitConfig::default());
-
-        let reader_pool = Arc::new(ReaderPool::from_connections(
-            vec![],
-            ReaderPoolConfig::default(),
         ));
-
-        let db = Self {
-            conn: Arc::new(Mutex::new(conn)),
-            writer,
-            reader_pool,
-            lease_guard: Arc::new(BlobLeaseGuard::new()),
-            gc_config: CasGcConfig::default(),
-            failure: Arc::new(Mutex::new(None)),
-            compression_blocks_present: Arc::new(Mutex::new(None)),
-            imported_tables_present: Arc::new(Mutex::new(None)),
-        };
-        db.migrate()?;
-        Ok(db)
+        Self::open(&path)
     }
 
     /// 专用单写 Actor 句柄

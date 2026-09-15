@@ -15,8 +15,7 @@ use super::{
     ANTHROPIC_BREAKPOINT_CAP,
 };
 use crate::models::{
-    cache_behavior_for, infer_vendor, session_affinity_headers, CacheBehavior, CacheTtl,
-    ModelCatalog, VendorId,
+    cache_behavior_for, session_affinity_headers, CacheBehavior, CacheTtl, ModelCatalog, VendorId,
 };
 
 /// 按失效层级分配断点预算：tools → system → messages（对齐 opencode
@@ -114,52 +113,37 @@ pub struct CachePolicy {
 /// （P2 §3.2【调度者裁决】：engine.rs 只调用本函数，不直接暴露能力表）
 ///
 /// 输入：
-/// - `catalog`：P3 模型目录（models/ 层，cache_behavior_for 数据真源；None →
-///   内置保守兜底表）
-/// - `base_url` / `model`：能力判定依据（base_url 关键字优先，model 前缀兜底）
+/// - `catalog`：模型目录（models/ 层，cache_behavior_for 数据真源；None →
+///   vendor 默认矩阵）
+/// - `provider_id`：yaml provider 身份（`~/.conex/models.yaml` 的 providers 键，
+///   即缓存矩阵的 vendor 键来源）。**不再接受 baseUrl**——厂商由配置声明，
+///   禁止 URL 子串 / 模型名前缀推断（U4 / N4）。
+/// - `model`：模型标识（catalog 模型级覆盖键）
 /// - `session_id`：Key 机制 prompt_cache_key 的键来源（None/空白 → 不注入）
 /// - `overrides`：ProviderConfig.extra.cache 覆盖 JSON（键名与 P3 CacheBehavior
 ///   字段对齐，P2 §3.4 建议 2：enabled / retention("short"|"long"|"none")）
 ///
 /// 返回 None = 完全不参与缓存（请求体不含任何 cache 键）：
+/// - providerId 缺失 / 未识别为已声明厂商 → **fail-closed**（不猜，不回落）
 /// - DeepSeek（P3 矩阵 omit_cache_control 恒 true）→ 整个 cache 参数组不出现
-/// - 未识别厂商（机制 None）→ 保守不注入
+/// - 未声明缓存能力（机制 None）→ 保守不注入
 /// - enabled=false / 非 5.6+ 的 retention="none" / Key 机制无有效会话 ID → 不注入
 pub fn build_cache_policy(
     catalog: Option<&ModelCatalog>,
-    base_url: Option<&str>,
+    provider_id: Option<&str>,
     model: Option<&str>,
     session_id: Option<&str>,
     overrides: Option<&Value>,
 ) -> Option<CachePolicy> {
-    // 0. 能力判定（C2）：catalog 可用 → 数据真源（models/ 层 cache_behavior_for，
-    //    CacheBehavior 经 capability_from_behavior 归并到 wire 决策面，omit 位
-    //    单独带回供步骤 3 消费）；无 catalog → 内置保守兜底表
-    //    （infer_cache_capability，数据值以 P3 §3.2.2 矩阵为准转录）
-    let url = base_url.unwrap_or("").to_ascii_lowercase();
-    let model_lower = model.unwrap_or("").to_ascii_lowercase();
-    let (capability, behavior, omit_cache_control) = match catalog {
-        Some(catalog) => {
-            let vendor = infer_vendor(&url, &model_lower);
-            let behavior = cache_behavior_for(Some(catalog), vendor, &model_lower);
-            (
-                capability_from_behavior(&behavior),
-                behavior,
-                behavior.omit_cache_control,
-            )
-        }
-        None => {
-            let capability = infer_cache_capability(base_url, model);
-            // 兜底表无 omit 位（T-13a 冻结）：DeepSeek 强制省略按 vendor 推断
-            // 直判（与 infer_cache_capability 同链：url 关键字 → model 前缀）
-            let omit = infer_vendor(&url, &model_lower) == VendorId::Deepseek;
-            // G2：会话亲和头数据源 = 行为矩阵（models/cache_key.rs 数据表），
-            // 兜底路径取矩阵默认行（与兜底表转录自同一 P3 §3.2.2 矩阵；Grok
-            // 无 catalog 时同样注入 x-grok-conv-id，两路径行为一致）
-            let behavior = cache_behavior_for(None, infer_vendor(&url, &model_lower), &model_lower);
-            (capability, behavior, omit)
-        }
-    };
+    // 0. vendor 决议（U4/N4）：yaml provider 身份（providerId）→ 缓存矩阵键。
+    //    providerId 缺失 / 未声明为已知厂商 → fail-closed（返回 None）——
+    //    **禁止**回落 baseUrl 子串 / 模型名前缀猜测。
+    let vendor = VendorId::from_identity(provider_id?)?;
+    // 1. 能力判定（C2）：数据真源 = models/ 层 cache_behavior_for（catalog 条目
+    //    显式声明 > vendor 默认矩阵），归并到 wire 决策面；omit 位单独带回供步骤 3
+    let behavior = cache_behavior_for(catalog, vendor, model.unwrap_or(""));
+    let capability = capability_from_behavior(&behavior);
+    let omit_cache_control = behavior.omit_cache_control;
     // 1. 硬关：extra.cache.enabled == false → 完全不参与缓存（P2 §3.2 步骤 1）
     if overrides_disabled(overrides) {
         return None;
@@ -269,9 +253,10 @@ pub fn build_cache_policy(
 /// MiniMax M2.x / 百炼同为 supports_cache_control=true 但矩阵仅 5m 单桶
 /// （vendor-cache-mechanisms.md：M2.x 5m、百炼仅 ephemeral），不得随 Anthropic
 /// 并入 1h。
-/// GPT-5.6+ 显式模式位：CacheBehavior 无该字段（T-19 冻结），catalog 路径保守
-/// 按非 5.6+ 处理（retention="none" 整体不参与），5.6+ 显式模式仍由无 catalog
-/// 兜底表承担（OPENAI_CACHE_56 前缀行）。
+/// GPT-5.6+ 显式模式位：CacheBehavior 无该字段（T-19 冻结），本映射恒按非 5.6+
+/// 处理（retention="none" 整体不参与）。此前该位由「无 catalog 兜底表」
+/// （OPENAI_CACHE_56 前缀行）承担；W4 移除 baseUrl/前缀猜测后该回落路径已废除
+/// （U4：能力须由配置声明，不得由 URL/模型名推断）。
 fn capability_from_behavior(behavior: &CacheBehavior) -> CacheCapability {
     let mechanism = if !behavior.supports_prompt_caching {
         CacheMechanism::None
@@ -603,4 +588,91 @@ pub fn infer_cache_capability(base_url: Option<&str>, model: Option<&str>) -> Ca
         }
     }
     best.map_or(UNKNOWN_CACHE, |entry| entry.1)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── W4 验收：vendor 取自 yaml provider 身份（providerId），不猜 ──
+
+    /// providerId 缺失 → fail-closed（不追踪缓存）。
+    #[test]
+    fn build_cache_policy_fails_closed_without_provider_id() {
+        assert_eq!(
+            build_cache_policy(None, None, Some("gpt-4o"), Some("ses-1"), None),
+            None,
+            "无 providerId 必须 fail-closed"
+        );
+    }
+
+    /// providerId 未声明为已知厂商（自定义网关）→ fail-closed，**不**按 URL/前缀猜。
+    #[test]
+    fn build_cache_policy_fails_closed_for_undeclared_provider_identity() {
+        assert_eq!(
+            build_cache_policy(
+                None,
+                Some("my-gateway"),
+                Some("gpt-4o"),
+                Some("ses-1"),
+                None
+            ),
+            None,
+            "未声明身份不得回落 URL/模型名前缀猜测"
+        );
+    }
+
+    /// 构造「yaml 无相关声明」：provider baseUrl 含 `anthropic`、模型名像 OpenAI，
+    /// 但 provider 身份未声明为已知厂商 → fail-closed（不因 baseUrl 子串被嗅探）。
+    #[test]
+    fn build_cache_policy_fails_closed_when_yaml_declares_no_capability() {
+        let yaml = r#"
+version: 2
+providers:
+  my-gateway:
+    baseUrl: "https://api.anthropic.com/v1"
+    models:
+      - id: gpt-4o
+"#;
+        let catalog = ModelCatalog::from_yaml_str(yaml).expect("v2 yaml 必须解析成功");
+        assert_eq!(
+            build_cache_policy(
+                Some(&catalog),
+                Some("my-gateway"),
+                Some("gpt-4o"),
+                Some("ses-1"),
+                None
+            ),
+            None,
+            "yaml 未声明能力 + 未声明厂商身份 → 不追踪缓存（fail-closed）"
+        );
+    }
+
+    /// vendor 语义来自 yaml provider 身份：providerId=openai → Key 路由
+    /// （即便模型名像 claude）；providerId=deepseek → omit 整体 None。
+    #[test]
+    fn build_cache_policy_vendor_follows_provider_identity_not_model_name() {
+        let key = build_cache_policy(
+            None,
+            Some("openai"),
+            Some("claude-sonnet-5"),
+            Some("ses-abc"),
+            None,
+        )
+        .expect("providerId=openai 应走键路由");
+        assert_eq!(key.mechanism, CacheMechanism::Key);
+        assert_eq!(key.cache_key, Some(CacheKey("ses-abc".to_string())));
+
+        assert_eq!(
+            build_cache_policy(
+                None,
+                Some("deepseek"),
+                Some("gpt-4o"),
+                Some("ses-abc"),
+                None
+            ),
+            None,
+            "providerId=deepseek 的 omit 语义优先于模型名"
+        );
+    }
 }

@@ -51,7 +51,7 @@ fn mode_anthropic_wins_over_endpoint() {
         Some(Endpoint::Responses),
         Some(Endpoint::ChatCompletions),
     ] {
-        let catalog = fake_catalog(&[("acme::claude-x".into(), entry(Some("anthropic"), false))]);
+        let catalog = fake_catalog(&[(crate::models::ModelRef::new("acme", "claude-x").key(), entry(Some("anthropic"), false))]);
         assert_eq!(
             resolve_wire_protocol(&catalog, "acme", "claude-x", endpoint),
             WireProtocol::Anthropic,
@@ -63,7 +63,7 @@ fn mode_anthropic_wins_over_endpoint() {
 /// mode:"gemini" 条目 → Gemini
 #[test]
 fn mode_gemini_wins_over_endpoint() {
-    let catalog = fake_catalog(&[("acme::gemini-x".into(), entry(Some("gemini"), false))]);
+    let catalog = fake_catalog(&[(crate::models::ModelRef::new("acme", "gemini-x").key(), entry(Some("gemini"), false))]);
     assert_eq!(
         resolve_wire_protocol(&catalog, "acme", "gemini-x", Some(Endpoint::Responses)),
         WireProtocol::Gemini,
@@ -79,7 +79,7 @@ fn mode_responses_wins_over_endpoint() {
         Some(Endpoint::ChatCompletions),
         Some(Endpoint::Responses),
     ] {
-        let catalog = fake_catalog(&[("acme::resp-model".into(), entry(Some("responses"), false))]);
+        let catalog = fake_catalog(&[(crate::models::ModelRef::new("acme", "resp-model").key(), entry(Some("responses"), false))]);
         assert_eq!(
             resolve_wire_protocol(&catalog, "acme", "resp-model", endpoint),
             WireProtocol::Responses,
@@ -93,7 +93,7 @@ fn mode_responses_wins_over_endpoint() {
 /// mode:"both" + Endpoint::Responses → Responses
 #[test]
 fn mode_both_with_responses_endpoint_selects_responses() {
-    let catalog = fake_catalog(&[("acme::both-model".into(), entry(Some("both"), false))]);
+    let catalog = fake_catalog(&[(crate::models::ModelRef::new("acme", "both-model").key(), entry(Some("both"), false))]);
     assert_eq!(
         resolve_wire_protocol(&catalog, "acme", "both-model", Some(Endpoint::Responses)),
         WireProtocol::Responses,
@@ -103,7 +103,7 @@ fn mode_both_with_responses_endpoint_selects_responses() {
 /// mode:"both" + endpoint 缺省 / chat → chat（00 D3：未显式指定恒 chat-completions）
 #[test]
 fn mode_both_without_responses_endpoint_selects_chat() {
-    let catalog = fake_catalog(&[("acme::both-model".into(), entry(Some("both"), false))]);
+    let catalog = fake_catalog(&[(crate::models::ModelRef::new("acme", "both-model").key(), entry(Some("both"), false))]);
     for endpoint in [None, Some(Endpoint::ChatCompletions), Some(Endpoint::Auto)] {
         assert_eq!(
             resolve_wire_protocol(&catalog, "acme", "both-model", endpoint),
@@ -116,7 +116,7 @@ fn mode_both_without_responses_endpoint_selects_chat() {
 /// mode:"chat" 条目 → Chat
 #[test]
 fn mode_chat_selects_chat() {
-    let catalog = fake_catalog(&[("acme::chat-model".into(), entry(Some("chat"), true))]);
+    let catalog = fake_catalog(&[(crate::models::ModelRef::new("acme", "chat-model").key(), entry(Some("chat"), true))]);
     assert_eq!(
         resolve_wire_protocol(&catalog, "acme", "chat-model", Some(Endpoint::Responses)),
         WireProtocol::Chat,
@@ -130,8 +130,8 @@ fn mode_chat_selects_chat() {
 #[test]
 fn same_provider_two_models_resolve_independently() {
     let catalog = fake_catalog(&[
-        ("acme::chat-a".into(), entry(Some("chat"), false)),
-        ("acme::resp-b".into(), entry(Some("responses"), false)),
+        (crate::models::ModelRef::new("acme", "chat-a").key(), entry(Some("chat"), false)),
+        (crate::models::ModelRef::new("acme", "resp-b").key(), entry(Some("responses"), false)),
     ]);
     assert_eq!(
         resolve_wire_protocol(&catalog, "acme", "chat-a", Some(Endpoint::Responses)),
@@ -150,7 +150,7 @@ fn same_provider_two_models_resolve_independently() {
 /// 无 mode + supports_responses + endpoint responses → Responses（能力位叠加 endpoint 倾向）
 #[test]
 fn supports_responses_with_endpoint_responses_selects_responses() {
-    let catalog = fake_catalog(&[("acme::capable".into(), entry(None, true))]);
+    let catalog = fake_catalog(&[(crate::models::ModelRef::new("acme", "capable").key(), entry(None, true))]);
     assert_eq!(
         resolve_wire_protocol(&catalog, "acme", "capable", Some(Endpoint::Responses)),
         WireProtocol::Responses,
@@ -160,7 +160,7 @@ fn supports_responses_with_endpoint_responses_selects_responses() {
 /// 无 mode + supports_responses 但 endpoint 非 responses → 不据此强制，chat 兜底
 #[test]
 fn supports_responses_alone_does_not_force_responses() {
-    let catalog = fake_catalog(&[("acme::capable".into(), entry(None, true))]);
+    let catalog = fake_catalog(&[(crate::models::ModelRef::new("acme", "capable").key(), entry(None, true))]);
     for endpoint in [None, Some(Endpoint::ChatCompletions), Some(Endpoint::Auto)] {
         assert_eq!(
             resolve_wire_protocol(&catalog, "acme", "capable", endpoint),
@@ -175,7 +175,7 @@ fn supports_responses_alone_does_not_force_responses() {
 /// 已知模型但 mode/supports_responses 均缺省 → Chat 兜底
 #[test]
 fn known_model_without_mode_and_capability_falls_back_to_chat() {
-    let catalog = fake_catalog(&[("acme::plain".into(), entry(None, false))]);
+    let catalog = fake_catalog(&[(crate::models::ModelRef::new("acme", "plain").key(), entry(None, false))]);
     for endpoint in [None, Some(Endpoint::ChatCompletions), Some(Endpoint::Auto)] {
         assert_eq!(
             resolve_wire_protocol(&catalog, "acme", "plain", endpoint),
@@ -211,7 +211,7 @@ fn unknown_model_follows_global_endpoint_semantics() {
 /// responses 倾向 → chat 兜底）。
 #[test]
 fn unrecognized_mode_falls_back_to_chat() {
-    let catalog = fake_catalog(&[("acme::odd".into(), entry(Some("foo"), true))]);
+    let catalog = fake_catalog(&[(crate::models::ModelRef::new("acme", "odd").key(), entry(Some("foo"), true))]);
     for endpoint in [None, Some(Endpoint::ChatCompletions), Some(Endpoint::Auto)] {
         assert_eq!(
             resolve_wire_protocol(&catalog, "acme", "odd", endpoint),
@@ -243,7 +243,7 @@ fn wire_protocol_as_str_is_stable() {
 /// → 返回其 mode（Gemini），不落 chat 兜底。
 #[test]
 fn dotted_model_normalizes_to_hyphen_key_gemini() {
-    let catalog = fake_catalog(&[("acme::gemini-2-5-pro".into(), entry(Some("gemini"), false))]);
+    let catalog = fake_catalog(&[(crate::models::ModelRef::new("acme", "gemini-2-5-pro").key(), entry(Some("gemini"), false))]);
     assert_eq!(
         resolve_wire_protocol(&catalog, "acme", "gemini-2.5-pro", None),
         WireProtocol::Gemini,
@@ -254,7 +254,7 @@ fn dotted_model_normalizes_to_hyphen_key_gemini() {
 /// 点号模型名命中横线键且 mode=anthropic → Anthropic（归一后沿用 mode 语义）。
 #[test]
 fn dotted_model_normalizes_for_anthropic_mode() {
-    let catalog = fake_catalog(&[("acme::claude-2-5".into(), entry(Some("anthropic"), false))]);
+    let catalog = fake_catalog(&[(crate::models::ModelRef::new("acme", "claude-2-5").key(), entry(Some("anthropic"), false))]);
     assert_eq!(
         resolve_wire_protocol(&catalog, "acme", "claude-2.5", None),
         WireProtocol::Anthropic,
@@ -279,7 +279,7 @@ fn dotted_model_without_hyphen_key_falls_back_to_chat() {
 /// 横线形态模型名精确命中（无需归一）→ 原行为不受归一引入影响。
 #[test]
 fn hyphen_model_follows_original_exact_lookup() {
-    let catalog = fake_catalog(&[("acme::gemini-2-5-pro".into(), entry(Some("gemini"), false))]);
+    let catalog = fake_catalog(&[(crate::models::ModelRef::new("acme", "gemini-2-5-pro").key(), entry(Some("gemini"), false))]);
     assert_eq!(
         resolve_wire_protocol(
             &catalog,

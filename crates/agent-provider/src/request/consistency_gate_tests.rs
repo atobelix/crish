@@ -111,7 +111,7 @@ fn efforts_whitelist_equals_request_accept_set() {
         ("max", None),
     ]);
     let entry = entry_with_tiers("acme", "acme-model", tiers, true);
-    let cat = fake_catalog(&[("acme::acme-model".to_string(), entry)]);
+    let cat = fake_catalog(&[(crate::models::ModelRef::new("acme", "acme-model").key(), entry)]);
     let cap = describe(&cat, "acme", "acme-model");
 
     // 描述面白名单 = 提供档并集（hidden 不入集）。
@@ -183,8 +183,8 @@ fn bad_config_does_not_hide_provider_nor_misfire_sibling_request() {
         true,
     );
     let cat = fake_catalog(&[
-        ("acme::model-a".to_string(), bad_a),
-        ("acme::model-b".to_string(), good_b),
+        (crate::models::ModelRef::new("acme", "model-a").key(), bad_a),
+        (crate::models::ModelRef::new("acme", "model-b").key(), good_b),
     ]);
 
     // A 描述：保守兜底 → 不支持（不 panic，坏配置暴露在被执行处而非描述处）。
@@ -221,7 +221,7 @@ fn wire_spelling_consistency_describe_vs_request_dialect() {
         ("high", Some("higher")),
     ]);
     let entry = entry_with_tiers("glm", "glm-x", tiers, true);
-    let cat = fake_catalog(&[("glm::glm-x".to_string(), entry)]);
+    let cat = fake_catalog(&[(crate::models::ModelRef::new("glm", "glm-x").key(), entry)]);
 
     // C1 档位→wire：medium 的规范名经改名映射为 "high"。
     let entry = cat.lookup("glm", "glm-x").expect("lookup");
@@ -264,7 +264,7 @@ fn three_state_flow_explicit_omitted_off_consistent() {
     // - off → OpenAiEffort 不发送（关闭思考）。
 
     let cat = fake_catalog(&[(
-        "deepseek::deepseek-v4-flash".to_string(),
+        crate::models::ModelRef::new("deepseek", "deepseek-v4-flash").key(),
         entry_with_tiers(
             "deepseek",
             "deepseek-v4-flash",

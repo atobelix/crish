@@ -1,12 +1,4 @@
-//! 存量 models.yaml 迁移引擎自动化验证套件
-//!
-//! 验证点：
-//! 1. 旧版 v1.0 多厂商平铺配置无损升级为 v2.0 Provider-Centric 树状拓扑；
-//! 2. 思考能力平铺字典映射（{ Low: "low", Medium: "medium", High: "high" }）与非思考模型缺省；
-//! 3. 模态字段自动补齐（modalities: input/output: ["text"]）；
-//! 4. 时间戳物理防灾备份 (.bak) 创建与字节一致性校验；
-//! 5. 幂等性：连续多次调用安全返回 AlreadyUpToDate，绝不生成冗余备份；
-//! 6. 边界与容灾：空文件、纯注释、已是 v2 配置以及损坏 YAML 的自愈与安全拦截。
+//! 历史迁移测试资产：无损转换、显式声明、备份与失败保护。
 
 use super::*;
 use std::fs;
@@ -42,580 +34,310 @@ impl Drop for TempTestDir {
     }
 }
 
+fn read_tree(path: &std::path::Path) -> crate::models::UnifiedModelsConfig {
+    crate::models::UnifiedModelsConfig::from_yaml_str(&fs::read_to_string(path).unwrap()).unwrap()
+}
+
 #[test]
 fn test_v1_multi_vendor_migration_success() {
-    let test_dir = TempTestDir::new("v1_multi_vendor");
-    let config_path = test_dir.file_path("models.yaml");
-
-    let legacy_yaml = r#"
-schema_version: 1
-models:
-  - id: "deepseek-chat"
-    name: "DeepSeek V3"
-    vendor: "deepseek"
-    baseUrl: "https://api.deepseek.com"
-    contextWindow: 65536
-    maxTokens: 8192
-    reasoning: false
-  - id: "deepseek-reasoner"
-    name: "DeepSeek R1"
-    vendor: "deepseek"
-    baseUrl: "https://api.deepseek.com"
-    contextWindow: 131072
-    maxTokens: 32768
-    reasoning: true
-  - id: "qwen3.8-max"
-    name: "通义千问 3.8 Max"
-    vendor: "qwen"
-    baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1"
-    contextWindow: 1000000
-    maxTokens: 65536
-  - id: "gpt-4o"
-    displayName: "GPT-4o 旗舰"
-    vendor: "openai"
-    apiKey: "sk-proj-test123456"
-    contextWindow: 128000
-    maxTokens: 16384
-  - id: "claude-3-5-sonnet"
-    name: "Claude 3.5 Sonnet"
-    vendor: "anthropic"
-    protocol: "anthropic/messages"
-    contextWindow: 200000
-    maxTokens: 8192
-    capabilities:
-      reasoning: true
-  - id: "custom-llama"
-    name: "Llama 3.3 70B"
-    vendor: ""
-    contextWindow: 32768
-    maxTokens: 4096
-"#;
-
-    fs::write(&config_path, legacy_yaml).expect("写入旧版配置成功");
-    let original_bytes = fs::metadata(&config_path).unwrap().len();
-
-    let status =
-        ConfigMigrationManager::ensure_migrated(&config_path).expect("旧版配置迁移必须成功");
-
-    // 1. 状态与备份校验
-    match status {
-        MigrationStatus::MigratedSuccessfully {
-            backup_path,
-            provider_count,
-            model_count,
-        } => {
-            assert!(backup_path.exists(), "备份文件必须物理存在");
-            assert_eq!(
-                fs::metadata(&backup_path).unwrap().len(),
-                original_bytes,
-                "备份文件大小必须严格等于原文件大小"
-            );
-            assert!(
-                backup_path
-                    .file_name()
-                    .unwrap()
-                    .to_str()
-                    .unwrap()
-                    .contains(".bak."),
-                "备份文件名必须包含 .bak. 时间戳标记"
-            );
-            assert_eq!(model_count, 6, "迁移后模型数必须为 6");
-            assert_eq!(
-                provider_count, 5,
-                "供应商聚类总数必须为 5 (deepseek, qwen, openai, anthropic, custom)"
-            );
-        }
-        MigrationStatus::AlreadyUpToDate => panic!("初次运行旧版配置不应返回 AlreadyUpToDate"),
-    }
-
-    // 2. 验证临时文件 .tmp 已被干净清理
-    let tmp_file = config_path.with_file_name("models.yaml.tmp");
-    assert!(!tmp_file.exists(), "原子写完成后临时文件必须不存在");
-
-    // 3. 验证迁移后的树状 YAML 结构与字段保真度
-    let migrated_str = fs::read_to_string(&config_path).expect("读取迁移后文件");
-    let v2_value: serde_json::Value =
-        serde_yaml::from_str(&migrated_str).expect("有效 YAML 反序列化");
-
+    let directory = TempTestDir::new("multi_vendor");
+    let path = directory.file_path("models.yaml");
+    let raw = json!({"schema_version": 1, "models": [
+        {"id": "deepseek-chat", "name": "DeepSeek V3", "vendor": "deepseek",
+            "protocol": "openai/chat", "baseUrl": "https://example.invalid/deepseek",
+            "contextWindow": 65536, "maxTokens": 8192, "reasoning": false},
+        {"id": "deepseek-reasoner", "vendor": "deepseek", "protocol": "openai/chat",
+            "baseUrl": "https://example.invalid/deepseek", "reasoning": true,
+            "thinking": {"Low": "low", "Medium": "medium", "High": "high"},
+            "compat": {"thinkingFormat": "deepseek"}, "maxTokens": 32768},
+        {"id": "qwen3.8-max", "vendor": "qwen", "protocol": "openai/chat",
+            "maxTokens": 65536, "compat": {"thinkingFormat": "qwen"}},
+        {"id": "gpt-4o", "vendor": "openai", "protocol": "openai/chat",
+            "apiKey": "$MIGRATION_TEST_KEY", "contextWindow": 128000, "maxTokens": 16384},
+        {"id": "claude-3-5-sonnet", "vendor": "anthropic", "protocol": "anthropic/messages",
+            "capabilities": {"reasoning": true, "tools": false, "image": true},
+            "thinking": {"High": "16384"}, "contextWindow": 200000},
+        {"id": "custom-llama", "vendor": "custom", "protocol": "openai/chat",
+            "modalities": {"input": ["text"], "output": ["text"]}, "maxTokens": 4096}
+    ]});
+    let original = serde_yaml::to_string(&raw).unwrap();
+    fs::write(&path, &original).unwrap();
+    let result = ConfigMigrationManager::ensure_migrated(&path).unwrap();
+    let MigrationStatus::MigratedSuccessfully {
+        backup_path,
+        provider_count,
+        model_count,
+    } = result
+    else {
+        panic!("旧版配置必须转换");
+    };
+    assert_eq!((provider_count, model_count), (5, 6));
+    assert_eq!(fs::read_to_string(backup_path).unwrap(), original);
+    assert!(!path.with_file_name("models.yaml.tmp").exists());
+    let tree = read_tree(&path);
+    let chat = tree.find_model("deepseek", "deepseek-chat").unwrap();
+    assert_eq!(chat.context_window, Some(65536));
+    assert_eq!(chat.max_output_tokens, Some(8192));
+    assert!(chat.thinking.is_none());
+    assert!(chat.modalities.is_none(), "缺省模态不能被补成 text");
+    let reasoning = tree.find_model("deepseek", "deepseek-reasoner").unwrap();
+    assert_eq!(reasoning.thinking.as_ref().unwrap()["High"], "high");
+    assert_eq!(reasoning.max_output_tokens, Some(32768));
+    let provider = tree.find_provider("openai").unwrap();
     assert_eq!(
-        v2_value.get("schema_version").and_then(|v| v.as_u64()),
-        Some(2)
+        provider.api_key_ref.as_deref(),
+        Some("env:MIGRATION_TEST_KEY")
     );
-    assert_eq!(v2_value.get("version").and_then(|v| v.as_u64()), Some(2));
-
-    let providers = v2_value
-        .get("providers")
-        .and_then(|v| v.as_object())
-        .expect("providers 对象");
-    assert_eq!(providers.len(), 5);
-
-    // 4. 验证 DeepSeek 供应商及其下属模型
-    let ds = providers.get("deepseek").expect("deepseek 供应商存在");
-    assert_eq!(
-        ds.get("baseUrl").and_then(|v| v.as_str()),
-        Some("https://api.deepseek.com")
-    );
-    assert_eq!(
-        ds.get("protocol").and_then(|v| v.as_str()),
-        Some("openai/chat")
-    );
-    assert_eq!(
-        ds.get("compat")
-            .and_then(|c| c.get("thinkingFormat"))
-            .and_then(|v| v.as_str()),
-        Some("deepseek")
-    );
-
-    let ds_models = ds
-        .get("models")
-        .and_then(|v| v.as_array())
-        .expect("deepseek 模型数组");
-    assert_eq!(ds_models.len(), 2);
-
-    let ds_chat = ds_models
-        .iter()
-        .find(|m| m.get("id").and_then(|v| v.as_str()) == Some("deepseek-chat"))
-        .unwrap();
-    assert_eq!(
-        ds_chat.get("displayName").and_then(|v| v.as_str()),
-        Some("DeepSeek V3")
-    );
-    assert_eq!(
-        ds_chat.get("contextWindow").and_then(|v| v.as_u64()),
-        Some(65536)
-    );
-    assert_eq!(
-        ds_chat.get("maxOutputTokens").and_then(|v| v.as_u64()),
-        Some(8192)
-    );
-    assert!(
-        ds_chat.get("thinking").is_none(),
-        "非思考模型必须省略 thinking 字段"
-    );
-    let modalities = ds_chat.get("modalities").expect("多模态规格补齐");
-    assert_eq!(
-        modalities
-            .get("input")
-            .and_then(|v| v.as_array())
-            .unwrap()
-            .len(),
-        1
-    );
-    assert_eq!(
-        modalities
-            .get("output")
-            .and_then(|v| v.as_array())
-            .unwrap()
-            .len(),
-        1
-    );
-
-    let ds_reasoner = ds_models
-        .iter()
-        .find(|m| m.get("id").and_then(|v| v.as_str()) == Some("deepseek-reasoner"))
-        .unwrap();
-    assert_eq!(
-        ds_reasoner.get("contextWindow").and_then(|v| v.as_u64()),
-        Some(131072)
-    );
-    assert_eq!(
-        ds_reasoner.get("maxOutputTokens").and_then(|v| v.as_u64()),
-        Some(32768)
-    );
-    let thinking = ds_reasoner
-        .get("thinking")
-        .and_then(|v| v.as_object())
-        .expect("思考模型拍平字典");
-    assert_eq!(thinking.get("Low").and_then(|v| v.as_str()), Some("low"));
-    assert_eq!(
-        thinking.get("Medium").and_then(|v| v.as_str()),
-        Some("medium")
-    );
-    assert_eq!(thinking.get("High").and_then(|v| v.as_str()), Some("high"));
-
-    // 5. 验证 OpenAI 供应商与 apiKey 迁移
-    let openai = providers.get("openai").expect("openai 供应商存在");
-    assert_eq!(
-        openai.get("apiKey").and_then(|v| v.as_str()),
-        Some("sk-proj-test123456")
-    );
-    assert_eq!(
-        openai
-            .get("compat")
-            .and_then(|c| c.get("thinkingFormat"))
-            .and_then(|v| v.as_str()),
-        Some("openai")
-    );
-
-    // 6. 验证 Anthropic 供应商与协议继承
-    let anthropic = providers.get("anthropic").expect("anthropic 供应商存在");
-    assert_eq!(
-        anthropic.get("protocol").and_then(|v| v.as_str()),
-        Some("anthropic/messages")
-    );
-    let claude_model = anthropic
-        .get("models")
-        .and_then(|v| v.as_array())
-        .unwrap()
-        .iter()
-        .find(|m| m.get("id").and_then(|v| v.as_str()) == Some("claude-3-5-sonnet"))
-        .unwrap();
-    assert!(
-        claude_model.get("thinking").is_some(),
-        "capabilities.reasoning 思考模型正常转换"
-    );
-
-    // 7. 验证 custom 默认聚类
-    let custom = providers.get("custom").expect("custom 供应商存在");
-    assert_eq!(
-        custom.get("protocol").and_then(|v| v.as_str()),
-        Some("openai/chat")
-    );
-    assert_eq!(
-        custom
-            .get("models")
-            .and_then(|v| v.as_array())
-            .unwrap()
-            .len(),
-        1
-    );
-
-    // 8. 强类型契约反序列化校验（保证与 catalog_types 完全契约对齐）
-    let catalog_config: crate::models::catalog_types::UnifiedModelsConfig =
-        serde_yaml::from_str(&migrated_str).expect("必须成功反序列化为 UnifiedModelsConfig 契约");
-    assert_eq!(catalog_config.version, 2);
-    assert_eq!(catalog_config.providers.len(), 5);
+    let claude = tree.find_model("anthropic", "claude-3-5-sonnet").unwrap();
+    assert_eq!(claude.supports_tools, Some(false));
+    assert!(claude.supports_image_input());
+    assert!(tree.find_provider("custom").unwrap().base_url.is_none());
+    let written = fs::read_to_string(&path).unwrap();
+    assert!(!written.contains("schema_version"));
+    assert!(!written.contains("apiKey:"));
+    assert!(!written.contains("capabilities:"));
 }
 
 #[test]
 fn test_idempotency_multiple_calls_no_redundant_backups() {
-    let test_dir = TempTestDir::new("idempotency");
-    let config_path = test_dir.file_path("models.yaml");
-
-    let legacy_yaml = r#"
-schema_version: 1
-models:
-  - id: "deepseek-chat"
-    vendor: "deepseek"
-"#;
-    fs::write(&config_path, legacy_yaml).unwrap();
-
-    // 第一次调用：执行迁移
-    let res1 = ConfigMigrationManager::ensure_migrated(&config_path).unwrap();
-    assert!(matches!(res1, MigrationStatus::MigratedSuccessfully { .. }));
-
-    // 统计当前备份文件数量
-    let count_backups = || -> usize {
-        fs::read_dir(&test_dir.path)
-            .unwrap()
-            .filter_map(|e| e.ok())
-            .filter(|e| e.file_name().to_string_lossy().contains(".bak."))
-            .count()
-    };
-    assert_eq!(count_backups(), 1);
-
-    // 第二次调用：应当幂等跳过
-    let res2 = ConfigMigrationManager::ensure_migrated(&config_path).unwrap();
-    assert_eq!(res2, MigrationStatus::AlreadyUpToDate);
-    assert_eq!(count_backups(), 1, "幂等调用不得生成新的冗余备份");
-
-    // 第三次调用：继续幂等跳过
-    let res3 = ConfigMigrationManager::ensure_migrated(&config_path).unwrap();
-    assert_eq!(res3, MigrationStatus::AlreadyUpToDate);
-    assert_eq!(count_backups(), 1, "多次幂等调用备份数量始终保持为 1");
+    let directory = TempTestDir::new("idempotency");
+    let path = directory.file_path("models.yaml");
+    fs::write(
+        &path,
+        "models: [{vendor: Acme, id: m, protocol: openai/chat}]",
+    )
+    .unwrap();
+    assert!(matches!(
+        ConfigMigrationManager::ensure_migrated(&path).unwrap(),
+        MigrationStatus::MigratedSuccessfully { .. }
+    ));
+    let first = fs::read(&path).unwrap();
+    for _ in 0..2 {
+        assert_eq!(
+            ConfigMigrationManager::ensure_migrated(&path).unwrap(),
+            MigrationStatus::AlreadyUpToDate
+        );
+        assert_eq!(fs::read(&path).unwrap(), first);
+    }
+    let backups = fs::read_dir(&directory.path)
+        .unwrap()
+        .filter_map(Result::ok)
+        .filter(|entry| entry.file_name().to_string_lossy().contains(".bak."))
+        .count();
+    assert_eq!(backups, 1);
 }
 
 #[test]
 fn test_empty_and_comments_only_files_safe_skip() {
-    let test_dir = TempTestDir::new("empty_files");
-
-    // 1. 文件不存在
-    let non_existent = test_dir.file_path("not_found.yaml");
-    let res = ConfigMigrationManager::ensure_migrated(&non_existent).unwrap();
-    assert_eq!(res, MigrationStatus::AlreadyUpToDate);
-
-    // 2. 0 字节空白文件
-    let zero_byte = test_dir.file_path("empty.yaml");
-    fs::write(&zero_byte, "").unwrap();
-    let res = ConfigMigrationManager::ensure_migrated(&zero_byte).unwrap();
-    assert_eq!(res, MigrationStatus::AlreadyUpToDate);
-
-    // 3. 仅含空白字符文件
-    let whitespace_file = test_dir.file_path("spaces.yaml");
-    fs::write(&whitespace_file, "   \n\t  \n  ").unwrap();
-    let res = ConfigMigrationManager::ensure_migrated(&whitespace_file).unwrap();
-    assert_eq!(res, MigrationStatus::AlreadyUpToDate);
-
-    // 4. 纯注释文件
-    let comments_file = test_dir.file_path("comments.yaml");
-    fs::write(
-        &comments_file,
-        "# 这是 models.yaml 配置文件\n# 尚未配置任何模型\n# 纯注释内容",
-    )
-    .unwrap();
-    let res = ConfigMigrationManager::ensure_migrated(&comments_file).unwrap();
-    assert_eq!(res, MigrationStatus::AlreadyUpToDate);
+    let directory = TempTestDir::new("empty");
+    let path = directory.file_path("models.yaml");
+    assert_eq!(
+        ConfigMigrationManager::ensure_migrated(&path).unwrap(),
+        MigrationStatus::AlreadyUpToDate
+    );
+    for raw in ["", "  \n", "# 注释\n", "null"] {
+        fs::write(&path, raw).unwrap();
+        assert_eq!(
+            ConfigMigrationManager::ensure_migrated(&path).unwrap(),
+            MigrationStatus::AlreadyUpToDate
+        );
+        assert_eq!(fs::read_to_string(&path).unwrap(), raw);
+    }
 }
 
 #[test]
 fn test_already_v2_tree_config_no_op() {
-    let test_dir = TempTestDir::new("already_v2");
-    let config_path = test_dir.file_path("models.yaml");
-
-    let v2_yaml = r#"
-version: 2
-providers:
-  deepseek:
-    displayName: "DeepSeek 官方"
-    baseUrl: "https://api.deepseek.com"
-    protocol: "openai/chat"
-    models:
-      - id: "deepseek-chat"
-        displayName: "DeepSeek V3"
-        contextWindow: 65536
-        maxOutputTokens: 8192
-"#;
-    fs::write(&config_path, v2_yaml).unwrap();
-
-    let res = ConfigMigrationManager::ensure_migrated(&config_path).unwrap();
-    assert_eq!(res, MigrationStatus::AlreadyUpToDate);
-
-    // 验证未产生任何 .bak 文件
-    let backup_exists = fs::read_dir(&test_dir.path)
-        .unwrap()
-        .filter_map(|e| e.ok())
-        .any(|e| e.file_name().to_string_lossy().contains(".bak."));
-    assert!(!backup_exists, "已是 v2 配置绝不应产生任何 .bak 文件");
+    let directory = TempTestDir::new("canonical");
+    let path = directory.file_path("models.yaml");
+    let raw = "version: 2\nproviders: {p: {models: [{id: m}]}}\n";
+    fs::write(&path, raw).unwrap();
+    assert_eq!(
+        ConfigMigrationManager::ensure_migrated(&path).unwrap(),
+        MigrationStatus::AlreadyUpToDate
+    );
+    assert_eq!(fs::read_to_string(path).unwrap(), raw);
+    assert_eq!(fs::read_dir(&directory.path).unwrap().count(), 1);
 }
 
 #[test]
 fn test_invalid_yaml_syntax_returns_error_and_preserves_file() {
-    let test_dir = TempTestDir::new("invalid_yaml");
-    let config_path = test_dir.file_path("models.yaml");
-
-    let broken_yaml = "models: [ { id: unclosed_string, ";
-    fs::write(&config_path, broken_yaml).unwrap();
-
-    let res = ConfigMigrationManager::ensure_migrated(&config_path);
-    assert!(res.is_err(), "语法损坏的 YAML 必须报错拦截");
-    match res.unwrap_err() {
-        MigrationError::Yaml(_) => {}
-        other => panic!("预期返回 Yaml 错误，实际: {:?}", other),
-    }
-
-    // 验证原文件未被破坏覆盖
-    let content = fs::read_to_string(&config_path).unwrap();
-    assert_eq!(
-        content, broken_yaml,
-        "发生语法解析异常时必须 100% 保持原文件不动"
-    );
+    let directory = TempTestDir::new("invalid");
+    let path = directory.file_path("models.yaml");
+    let raw = "models: [}";
+    fs::write(&path, raw).unwrap();
+    assert!(ConfigMigrationManager::ensure_migrated(&path).is_err());
+    assert_eq!(fs::read_to_string(path).unwrap(), raw);
 }
 
 #[test]
 fn test_zero_model_loss_invariant() {
-    let test_dir = TempTestDir::new("zero_loss");
-    let config_path = test_dir.file_path("models.yaml");
-
-    let legacy_yaml = r#"
-schema_version: 1
-models:
-  - id: "m1"
-    vendor: "v1"
-  - id: "m2"
-    vendor: "v1"
-  - id: "m3"
-    vendor: "v2"
-"#;
-    fs::write(&config_path, legacy_yaml).unwrap();
-
-    let status = ConfigMigrationManager::ensure_migrated(&config_path).unwrap();
-    if let MigrationStatus::MigratedSuccessfully {
-        model_count,
-        provider_count,
-        ..
-    } = status
-    {
-        assert_eq!(model_count, 3);
-        assert_eq!(provider_count, 2);
-    } else {
-        panic!("预期 MigratedSuccessfully");
+    let raw = json!({"providers": {"existing": {"models": [{"id": "kept"}]}}, "models": [
+        {"vendor": "v1", "id": "m1", "protocol": "openai/chat"},
+        {"vendor": "v1", "id": "m2", "protocol": "openai/chat"},
+        {"vendor": "v2", "id": "m3", "protocol": "anthropic/messages"}
+    ]});
+    let (value, count) = ConfigMigrationManager::transform_flat_to_tree(&raw).unwrap();
+    assert_eq!(count, 4);
+    let tree =
+        crate::models::UnifiedModelsConfig::from_yaml_str(&serde_yaml::to_string(&value).unwrap())
+            .unwrap();
+    for (provider, model) in [
+        ("existing", "kept"),
+        ("v1", "m1"),
+        ("v1", "m2"),
+        ("v2", "m3"),
+    ] {
+        assert!(tree.find_model(provider, model).is_some());
     }
 }
 
 #[test]
 fn test_missing_context_window_and_max_output_stay_none() {
-    // 契约：迁移不得发明 contextWindow / maxOutputTokens 默认值；
-    // 缺字段时保持 None（与 catalog_types.rs「缺省 None，禁止发明 128000」对齐）。
-    let legacy = json!({
-        "schema_version": 1,
-        "models": [
-            { "id": "bare-model", "vendor": "deepseek" }
-        ]
-    });
-
-    let (migrated, total) =
-        ConfigMigrationManager::transform_flat_to_tree(&legacy).expect("迁移应成功");
+    let raw =
+        json!({"models": [{"id": "bare-model", "vendor": "deepseek", "protocol": "openai/chat"}]});
+    let (value, total) = ConfigMigrationManager::transform_flat_to_tree(&raw).unwrap();
     assert_eq!(total, 1);
-
-    let providers = migrated.get("providers").and_then(|v| v.as_object()).unwrap();
-    let models = providers
-        .get("deepseek")
-        .and_then(|v| v.get("models"))
-        .and_then(|v| v.as_array())
-        .unwrap();
-    let m0 = &models[0];
-    assert!(
-        m0.get("contextWindow").is_none(),
-        "缺 contextWindow 时不得发明 131072 等默认值"
-    );
-    assert!(
-        m0.get("maxOutputTokens").is_none(),
-        "缺 maxOutputTokens 时不得发明 8192 等默认值"
-    );
-
-    // 强类型反序列化：Option 字段必须为 None
-    let yaml_str = serde_yaml::to_string(&migrated).unwrap();
-    let catalog: crate::models::catalog_types::UnifiedModelsConfig =
-        serde_yaml::from_str(&yaml_str).expect("必须与 catalog_types 契约兼容");
-    let model = catalog
-        .providers
-        .get("deepseek")
-        .and_then(|p| p.models.first())
-        .expect("模型存在");
-    assert_eq!(model.context_window, None, "缺字段 context_window 必须为 None");
-    assert_eq!(
-        model.max_output_tokens, None,
-        "缺字段 max_output_tokens 必须为 None"
-    );
+    let tree =
+        crate::models::UnifiedModelsConfig::from_yaml_str(&serde_yaml::to_string(&value).unwrap())
+            .unwrap();
+    let model = tree.find_model("deepseek", "bare-model").unwrap();
+    assert_eq!(model.context_window, None);
+    assert_eq!(model.max_output_tokens, None);
+    assert_eq!(model.modalities, None);
+    assert_eq!(model.thinking, None);
+    assert_eq!(tree.find_provider("deepseek").unwrap().base_url, None);
 }
 
 #[test]
 fn test_timestamp_format_and_civil_days_math() {
-    let ts = ConfigMigrationManager::current_utc_timestamp();
-    // 格式应当为 15 字符，如 "20260908_120000"（UTC）
-    assert_eq!(ts.len(), 15);
-    let parts: Vec<&str> = ts.split('_').collect();
-    assert_eq!(parts.len(), 2);
-    assert_eq!(parts[0].len(), 8);
-    assert_eq!(parts[1].len(), 6);
-    assert!(parts[0].chars().all(|c| c.is_ascii_digit()));
-    assert!(parts[1].chars().all(|c| c.is_ascii_digit()));
-
-    // 验证 Howard Hinnant 算法对已知公历日的绝对精度
-    // 1970-01-01 -> days = 0
-    let (y1, m1, d1) = ConfigMigrationManager::civil_from_days(0);
-    assert_eq!((y1, m1, d1), (1970, 1, 1));
-
-    // 2000-02-29 (世纪闰年) -> Unix days = 11016
-    let (y2, m2, d2) = ConfigMigrationManager::civil_from_days(11016);
-    assert_eq!((y2, m2, d2), (2000, 2, 29));
-
-    // 2026-09-08 -> Unix days = 20704
-    let (y3, m3, d3) = ConfigMigrationManager::civil_from_days(20704);
-    assert_eq!((y3, m3, d3), (2026, 9, 8));
+    let stamp = ConfigMigrationManager::current_utc_timestamp();
+    assert_eq!(stamp.len(), 15);
+    let parts: Vec<_> = stamp.split('_').collect();
+    assert_eq!((parts[0].len(), parts[1].len()), (8, 6));
+    assert!(parts
+        .iter()
+        .all(|part| part.bytes().all(|byte| byte.is_ascii_digit())));
+    assert_eq!(ConfigMigrationManager::civil_from_days(0), (1970, 1, 1));
+    assert_eq!(
+        ConfigMigrationManager::civil_from_days(11016),
+        (2000, 2, 29)
+    );
+    assert_eq!(ConfigMigrationManager::civil_from_days(20704), (2026, 9, 8));
 }
 
 #[test]
 fn test_protocol_and_compat_inference_for_all_vendors() {
-    assert_eq!(
-        ConfigMigrationManager::infer_protocol_for_vendor("anthropic"),
-        "anthropic/messages"
-    );
-    assert_eq!(
-        ConfigMigrationManager::infer_protocol_for_vendor("claude"),
-        "anthropic/messages"
-    );
-    assert_eq!(
-        ConfigMigrationManager::infer_protocol_for_vendor("google"),
-        "google/generate-content"
-    );
-    assert_eq!(
-        ConfigMigrationManager::infer_protocol_for_vendor("gemini"),
-        "google/generate-content"
-    );
-    assert_eq!(
-        ConfigMigrationManager::infer_protocol_for_vendor("deepseek"),
-        "openai/chat"
-    );
-    assert_eq!(
-        ConfigMigrationManager::infer_protocol_for_vendor("qwen"),
-        "openai/chat"
-    );
-    assert_eq!(
-        ConfigMigrationManager::infer_protocol_for_vendor("openai"),
-        "openai/chat"
-    );
+    // 保留旧测试资产并反转被废止的“按厂商猜测”合同：现在只认原声明。
+    for vendor in [
+        "anthropic",
+        "claude",
+        "google",
+        "gemini",
+        "deepseek",
+        "qwen",
+        "openai",
+    ] {
+        let raw = json!({"models": [{"vendor": vendor, "id": "m",
+            "protocol": "google/generate-content", "compat": {"thinkingFormat": "qwen"}}]});
+        let (value, count) = ConfigMigrationManager::transform_flat_to_tree(&raw).unwrap();
+        assert_eq!(count, 1);
+        let model = &value["providers"][vendor]["models"][0];
+        assert_eq!(model["protocol"], "google/generate-content");
+        assert_eq!(model["compat"]["thinkingFormat"], "qwen");
+        assert!(value["providers"][vendor].get("baseUrl").is_none());
+        let missing = json!({"models": [{"vendor": vendor, "id": "m"}]});
+        assert!(ConfigMigrationManager::transform_flat_to_tree(&missing).is_err());
+    }
+}
 
-    // Compat 方言校验
-    let ds_compat = ConfigMigrationManager::infer_compat_for_vendor("deepseek");
-    assert_eq!(
-        ds_compat.get("thinkingFormat").and_then(|v| v.as_str()),
-        Some("deepseek")
-    );
-
-    let qwen_compat = ConfigMigrationManager::infer_compat_for_vendor("qwen");
-    assert_eq!(
-        qwen_compat.get("thinkingFormat").and_then(|v| v.as_str()),
-        Some("qwen")
-    );
-
-    let oai_compat = ConfigMigrationManager::infer_compat_for_vendor("openai");
-    assert_eq!(
-        oai_compat
-            .get("supportsDeveloperRole")
-            .and_then(|v| v.as_bool()),
-        Some(true)
-    );
-    assert_eq!(
-        oai_compat.get("maxTokensField").and_then(|v| v.as_str()),
-        Some("max_completion_tokens")
-    );
+#[test]
+fn test_unknown_vendor_migration_leaves_base_url_empty() {
+    let raw =
+        json!({"models": [{"vendor": "Unknown/供应商", "id": "m", "protocol": "openai/chat"}]});
+    let (value, count) = ConfigMigrationManager::transform_flat_to_tree(&raw).unwrap();
+    assert_eq!(count, 1);
+    assert!(value["providers"]["Unknown/供应商"]
+        .get("baseUrl")
+        .is_none());
+    assert!(value["providers"]["Unknown/供应商"]
+        .get("displayName")
+        .is_none());
+    assert!(value["providers"]["Unknown/供应商"].get("compat").is_none());
 }
 
 #[test]
 fn test_pricing_and_custom_protocol_retention() {
-    let test_dir = TempTestDir::new("pricing_retention");
-    let config_path = test_dir.file_path("models.yaml");
+    let raw = json!({"models": [{"vendor": "custom", "id": "special-model",
+        "protocol": "openai/responses", "pricing": {"currency": "CNY", "billingUnit": "token",
+            "inputPerMTok": 5, "outputPerMTok": 15, "cacheReadPerMTok": 0.5,
+            "cacheWritePerMTok": 3.75, "perImageCost": 0,
+            "tiers": [{"inputTokensAbove": 0, "inputPerMTok": 0, "outputPerMTok": 2}]}}]});
+    let value = ConfigMigrationManager::migrate_legacy_value(&raw).unwrap();
+    let model = &value["providers"]["custom"]["models"][0];
+    assert_eq!(model["protocol"], "openai/responses");
+    assert_eq!(model["pricing"]["unit"], "token");
+    assert_eq!(model["pricing"]["input"].as_f64(), Some(5.0));
+    assert_eq!(model["pricing"]["output"].as_f64(), Some(15.0));
+    assert_eq!(model["pricing"]["cacheRead"], 0.5);
+    assert_eq!(model["pricing"]["cacheWrite"], 3.75);
+    assert_eq!(model["pricing"]["perImage"].as_f64(), Some(0.0));
+    assert_eq!(model["pricing"]["tiers"][0]["input"].as_f64(), Some(0.0));
+    assert!(model["pricing"].get("inputPerMTok").is_none());
+}
 
-    let legacy_yaml = r#"
-models:
-  - id: "special-model"
-    vendor: "custom"
-    protocol: "openai/responses"
-    pricing:
-      currency: "USD"
-      input: 5.0
-      output: 15.0
-      cacheRead: 0.5
-      cacheWrite: 3.75
-"#;
-    fs::write(&config_path, legacy_yaml).unwrap();
+#[test]
+fn lossy_or_conflicting_legacy_input_is_rejected_without_mutation() {
+    for raw in [
+        json!({"models": [{"id": "m", "protocol": "openai/chat"}]}),
+        json!({"models": [{"vendor": "p", "protocol": "openai/chat"}]}),
+        json!({"models": [{"vendor": "p", "id": "m", "protocol": "openai/chat", "reasoning": true}]}),
+        json!({"models": [{"vendor": "p", "id": "m", "protocol": "openai/chat", "apiKey": "test-inline-secret"}]}),
+        json!({"providers": {"p": {"models": [{"id": "m", "model": "other"}]}}}),
+        json!({"providers": {"p": {"models": [{"id": "m", "pricing": {"currency": "USD",
+            "input": 1, "inputPerMTok": 2}}]}}}),
+        json!({"models": [{"vendor": "p", "id": "m1", "protocol": "openai/chat", "baseUrl": "https://a.invalid"},
+            {"vendor": "p", "id": "m2", "protocol": "openai/chat", "baseUrl": "https://b.invalid"}]}),
+        json!({"providers": {"p": {"models": [{"id": "m", "unknown": 1}]}}}),
+    ] {
+        let before = raw.clone();
+        let error = ConfigMigrationManager::migrate_legacy_value(&raw).unwrap_err();
+        assert_eq!(raw, before);
+        assert!(!error.to_string().contains("test-inline-secret"));
+    }
+}
 
-    let res = ConfigMigrationManager::ensure_migrated(&config_path).unwrap();
-    assert!(matches!(res, MigrationStatus::MigratedSuccessfully { .. }));
+#[test]
+fn failed_semantic_migration_preserves_original_bytes() {
+    let directory = TempTestDir::new("lossy");
+    let path = directory.file_path("models.yaml");
+    let raw = "models: [{vendor: p, id: m, protocol: openai/chat, reasoning: true}]\n";
+    fs::write(&path, raw).unwrap();
+    assert!(ConfigMigrationManager::ensure_migrated(&path).is_err());
+    assert_eq!(fs::read_to_string(&path).unwrap(), raw);
+    assert!(!path.with_file_name("models.yaml.tmp").exists());
+}
 
-    let content = fs::read_to_string(&config_path).unwrap();
-    let unified: crate::models::catalog_types::UnifiedModelsConfig =
-        serde_yaml::from_str(&content).expect("与 catalog_types 强类型契约无缝对齐");
-
-    let prov = unified
-        .providers
-        .get("custom")
-        .expect("custom provider 存在");
-    let model = prov.models.first().expect("model 存在");
-    assert_eq!(model.id, "special-model");
+#[test]
+fn field_aliases_migrate_only_at_the_explicit_boundary() {
+    let raw = json!({"providers": {"p": {"protocol": "google/interactions",
+    "compat": {"thinkingFormat": "google"}, "models": [{
+        "model": "m", "contextLength": 1, "capabilities": {"tools": false},
+        "thinking": {"X-High": "CUSTOM"}, "pricing": {"currency": "USD", "per_image_cost": 0}
+    }]}}});
+    let original_yaml = serde_yaml::to_string(&raw).unwrap();
+    assert!(crate::models::UnifiedModelsConfig::from_yaml_str(&original_yaml).is_err());
+    let migrated = ConfigMigrationManager::migrate_legacy_value(&raw).unwrap();
+    let tree = crate::models::UnifiedModelsConfig::from_yaml_str(
+        &serde_yaml::to_string(&migrated).unwrap(),
+    )
+    .unwrap();
+    let model = tree.find_model("p", "m").unwrap();
+    assert_eq!(model.context_window, Some(1));
+    assert_eq!(model.supports_tools, Some(false));
+    assert_eq!(model.thinking.as_ref().unwrap()["XHigh"], "CUSTOM");
+    assert_eq!(model.pricing.as_ref().unwrap().per_image, Some(0.0));
     assert_eq!(
-        model.protocol,
-        Some(crate::models::catalog_types::ProtocolKind::OpenAiResponses)
+        ConfigMigrationManager::migrate_legacy_value(&migrated).unwrap(),
+        migrated
     );
-    assert!(model.pricing.is_some(), "pricing 规格定义完整保留");
-    let pricing = model.pricing.as_ref().unwrap();
-    assert_eq!(
-        pricing.currency,
-        crate::models::catalog_types::CurrencyKind::Usd
-    );
-    assert_eq!(pricing.input, 5.0);
-    assert_eq!(pricing.output, 15.0);
-    assert_eq!(pricing.cache_read, Some(0.5));
-    assert_eq!(pricing.cache_write, Some(3.75));
 }

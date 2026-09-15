@@ -14,18 +14,23 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "conex-compaction",
+ "conex-fs",
  "conex-test-utils",
  "conex-types",
  "criterion",
+ "fs2",
  "futures-util",
  "indexmap 2.14.2",
+ "notify",
  "reqwest",
  "serde",
  "serde_json",
  "serde_yaml",
+ "sha2",
  "thiserror 2.0.20",
  "tokio",
  "tracing",
+ "uuid",
  "windows-sys 0.61.2",
 ]
 
