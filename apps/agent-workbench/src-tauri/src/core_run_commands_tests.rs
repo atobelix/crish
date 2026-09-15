@@ -1358,7 +1358,7 @@ async fn compaction_policy_preflight_triggers_compaction_in_full_run() {
     run_task_impl(Arc::clone(&state), options)
         .await
         .expect("run 发起成功");
-    wait_run_agent_end_reason(&db, "s1", Duration::from_secs(30)).await;
+    wait_run_terminal(&db, "s1", Duration::from_secs(90)).await;
 
     // 压缩事件：start + end 各一条（预检触发链真实走通）
     let events = db.query_events("s1", 0, Some(500)).expect("事件查询");
@@ -1427,6 +1427,15 @@ providers:
         .expect("子代理会话条目");
     inject_fake_summarizer(&state);
     state.run_restore().await;
+    // 用户裁决：重试预算/上限可配置——注入快速策略防 30s 窗口被缺省 10 次重试拖穿
+    state.set_run_policy(Some(crate::config::run_policy::RunPolicy {
+        retry_backoff: Some(crate::config::run_policy::RetryBackoffPolicy {
+            base_ms: Some(1),
+            max_ms: Some(8),
+            total_budget_ms: Some(60_000),
+        }),
+        transient_retry_limit: Some(3),
+    }));
 
     // 子代理会话历史预置（spawner 场景 history=None → 走缓存回退；
     // 超大消息 → 水合估算超窗（≈42K tokens ≥ 32000-16384=15616））
@@ -1493,7 +1502,7 @@ providers:
     run_task_impl(Arc::clone(&state), options)
         .await
         .expect("子代理 run 发起成功");
-    wait_run_agent_end_reason(&db, subagent_session, Duration::from_secs(30)).await;
+    wait_run_terminal(&db, subagent_session, Duration::from_secs(90)).await;
 
     // 预检压缩真实触发：context-compression-start/end 事件落库到子代理
     // 会话（证据链：context_window None + subagent_config Some →
@@ -1610,14 +1619,14 @@ async fn subagent_run_abort_terminates_without_estop_bridge() {
         end_reason, "aborted",
         "L3 强停后子代理 run 必须以 aborted 终态"
     );
-    let agent_reason = wait_run_agent_end_reason(&db, session_id, Duration::from_secs(30)).await;
+    let terminal = wait_run_terminal(&db, session_id, Duration::from_secs(90)).await;
     assert_eq!(
-        agent_reason, "aborted",
-        "L3 强停后子代理 loop 的 agent-end 收场 reason 必须为 aborted"
+        terminal, "cancelled",
+        "L3 强停后子代理 loop 的 run-terminal 终态必须为 cancelled（权威映射 aborted→cancelled）"
     );
 }
 
-// ── PS-04 T4.3（F4 F1-01）：config_profile_apply 后 provider 重载 ──
+// ── PS-04 T4.3（F4 F1-01）：配置应用后 provider 重载 ──
 
 /// 独立临时 config 目录（不清理：静态 store 在测试结束后仍可能绑定该
 /// 目录，删除会触发后续只读初始化的缺省回落——保留无害且避免竞态）。
@@ -1779,10 +1788,10 @@ fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
 
 /// T4.3-R2（红 → 绿）：apply 新凭据后**下一次 provider 调用**必须携带
 /// 新凭据——真实 HTTP 请求载荷断言（URL 路径 = baseUrl、Authorization =
-/// key、请求体 model）。修复前 `config_profile_apply` 只写 store 不重载
+/// key、请求体 model）。修复前配置应用只写 store 不重载
 /// provider，请求仍按旧 baseUrl/key/model 发出 → 红。
 #[tokio::test]
-async fn config_profile_apply_swaps_next_provider_request_payload() {
+async fn provider_apply_swaps_next_request_payload() {
     use tauri::Manager as _;
     let _lock = CONFIG_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let dir = temp_config_dir();
@@ -1792,14 +1801,8 @@ async fn config_profile_apply_swaps_next_provider_request_payload() {
     let base_old = server.base_url("/v1-old");
     let base_new = server.base_url("/v1-new");
 
-    // 旧配置 A：直接写 store（引擎构造时加载快照 A）
-    crate::config::with_store_mut(|store| {
-        store.set_api_key("sk-a".to_string())?;
-        store.set_base_url(base_old.clone())?;
-        store.set_model("model-a".to_string())?;
-        Ok(())
-    })
-    .expect("store A");
+    // 旧配置 A：单 provider(p1)，key 经 env 注入 sk-a，引擎构造时加载快照 A
+    let store = install_tree_models_store(&dir, &base_old);
     // 引擎在 store A 之上构造（构造时快照 A）。注意：reqwest 客户端在
     // 引擎构造时读取 HTTP_PROXY 等环境变量——清空保证请求真实直连本地
     // 服务器（不依赖机器代理配置；其余测试不发起真实 HTTP，无副作用）。
@@ -1820,15 +1823,10 @@ async fn config_profile_apply_swaps_next_provider_request_payload() {
         .expect("mock app");
     let st = app.state::<Arc<CoreRunState>>();
 
-    // 模拟前端 apply 新凭据（key/baseUrl/model 全换）
-    crate::config::config_profile_apply(
-        st,
-        "p1".to_string(),
-        Some("sk-b".to_string()),
-        Some(base_new.clone()),
-        Some("model-b".to_string()),
-    )
-    .expect("apply B");
+    // 模拟前端 apply 新凭据（key/baseUrl/model 全换）：env 注入 sk-b + 重应用统一树
+    std::env::set_var(TEST_ENV_KEY, "sk-b");
+    apply_single_provider(&store, &base_new, "model-b");
+    state.engine.reload_provider();
 
     // 下一次 provider 调用：真实 HTTP 请求，载荷必须用新凭据
     let provider = state.engine.provider().expect("provider 就绪");
@@ -1868,23 +1866,18 @@ async fn config_profile_apply_swaps_next_provider_request_payload() {
     );
 }
 
-/// T4.3-R3（红 → 绿，命令级）：`config_profile_apply` 成功返回后
+/// T4.3-R3（红 → 绿，命令级）：配置应用成功返回后
 /// `engine.provider_config()` 必须与新 store 值一致（key/baseUrl/model
 /// 三件套热更新）。修复前引擎只读构造时快照 → 仍旧值 → 红。
 #[tokio::test]
-async fn config_profile_apply_refreshes_engine_provider_config() {
+async fn provider_apply_refreshes_engine_provider_config() {
     use tauri::Manager as _;
     let _lock = CONFIG_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let dir = temp_config_dir();
     isolate_config_store(&dir);
 
-    crate::config::with_store_mut(|store| {
-        store.set_api_key("sk-a".to_string())?;
-        store.set_base_url("https://a.example/v1".to_string())?;
-        store.set_model("model-a".to_string())?;
-        Ok(())
-    })
-    .expect("store A");
+    // 旧配置 A：单 provider(p1)，key 经 env 注入 sk-a
+    let store = install_tree_models_store(&dir, "https://a.example/v1");
     let state = core_state_with_store(Arc::new(InMemoryStore::new()));
     assert_eq!(
         state.engine.provider_config().expect("构造后就绪").model,
@@ -1897,14 +1890,9 @@ async fn config_profile_apply_refreshes_engine_provider_config() {
     let st = app.state::<Arc<CoreRunState>>();
 
     // apply 新三件套 → 引擎生效配置必须同步刷新
-    crate::config::config_profile_apply(
-        st,
-        "p1".to_string(),
-        Some("sk-b".to_string()),
-        Some("https://b.example/v1".to_string()),
-        Some("model-b".to_string()),
-    )
-    .expect("apply B");
+    std::env::set_var(TEST_ENV_KEY, "sk-b");
+    apply_single_provider(&store, "https://b.example/v1", "model-b");
+    state.engine.reload_provider();
 
     let config = state.engine.provider_config().expect("重载后就绪");
     assert_eq!(config.api_key, "sk-b", "key 必须热更新");
@@ -1924,19 +1912,14 @@ async fn config_profile_apply_refreshes_engine_provider_config() {
 /// 未就绪——下一次 run 不得再用旧凭据；重填后恢复就绪。修复前 apply
 /// 不碰引擎 → 清 key 后仍就绪 → 红。
 #[tokio::test]
-async fn config_profile_apply_clearing_key_degrades_engine_ready() {
+async fn provider_apply_clearing_key_degrades_engine_ready() {
     use tauri::Manager as _;
     let _lock = CONFIG_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let dir = temp_config_dir();
     isolate_config_store(&dir);
 
-    crate::config::with_store_mut(|store| {
-        store.set_api_key("sk-a".to_string())?;
-        store.set_base_url("https://a.example/v1".to_string())?;
-        store.set_model("model-a".to_string())?;
-        Ok(())
-    })
-    .expect("store A");
+    // 旧配置 A：单 provider(p1)，key 经 env 注入 sk-a
+    let store = install_tree_models_store(&dir, "https://a.example/v1");
     let state = core_state_with_store(Arc::new(InMemoryStore::new()));
     assert!(state.engine.ready(), "写 key 后就绪");
     let app = tauri::test::mock_builder()
@@ -1945,9 +1928,9 @@ async fn config_profile_apply_clearing_key_degrades_engine_ready() {
         .expect("mock app");
     let st = app.state::<Arc<CoreRunState>>();
 
-    // 清空 key：引擎必须降级未就绪（provider=None，不再用旧 key 发请求）
-    crate::config::config_profile_apply(st, "p1".to_string(), Some(String::new()), None, None)
-        .expect("clear key");
+    // 清空 key（env 移除）：引擎必须降级未就绪（provider=None，不再用旧 key 发请求）
+    std::env::remove_var(TEST_ENV_KEY);
+    state.engine.reload_provider();
     assert!(!state.engine.ready(), "清 key 后引擎必须未就绪");
     assert!(
         state.engine.provider().is_none(),
@@ -1959,14 +1942,8 @@ async fn config_profile_apply_clearing_key_degrades_engine_ready() {
     );
 
     // 重填后恢复
-    crate::config::config_profile_apply(
-        app.state::<Arc<CoreRunState>>(),
-        "p1".to_string(),
-        Some("sk-c".to_string()),
-        None,
-        None,
-    )
-    .expect("refill key");
+    std::env::set_var(TEST_ENV_KEY, "sk-c");
+    state.engine.reload_provider();
     assert!(state.engine.ready(), "重填 key 后恢复就绪");
     assert_eq!(
         state.engine.provider_config().expect("重填后就绪").api_key,
@@ -1977,21 +1954,21 @@ async fn config_profile_apply_clearing_key_degrades_engine_ready() {
 // ── T5.2a（G3 收敛 · 引擎侧 profile 服务）───────────────────────────────
 
 /// R5 T5.2a 验收①：引擎可服务前端预置 `opencode-go` profile——
-/// `config_profile_apply("opencode-go", key=DPAPI 槽, baseUrl, model)` 后，生效
+/// 配置应用（"opencode-go", key=DPAPI 槽, baseUrl, model）后，生效
 /// 配置即 opencode-go 的端点/模型/凭据，且真实请求命中
 /// `https://opencode.ai/zen/go/v1/chat/completions`（chat 轨：deepseek-v4-flash
 /// 走 openai-completions 协议，默认端点 chat-completions，00 D3）。密钥不随
-/// apply 传入（从前置 `config_secret_set` 的 DPAPI 槽回读），对齐前端激活路径。
+/// apply 传入（从前置凭据注入的 DPAPI 槽回读），对齐前端激活路径。
 #[tokio::test]
-async fn config_profile_apply_opencode_go_serves_preset_profile() {
+async fn provider_apply_opencode_go_serves_preset_profile() {
     use tauri::Manager as _;
     let _lock = CONFIG_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let dir = temp_config_dir();
     isolate_config_store(&dir);
 
-    // 预置 opencode-go 密钥（前端 saveProfileKey / config_secret_set 落 DPAPI 槽）。
-    crate::config::config_secret_set("opencode-go".to_string(), "sk-opencode-go".to_string())
-        .expect("store opencode-go key");
+    // 预置 opencode-go 凭据（旧凭据注入落 DPAPI 槽；新单轨改经 env ref
+    // 注入，key 与 provider 解耦，等价于 activation path 回读密钥）。
+    std::env::set_var("CONEX_TEST_OPENCODE_KEY", "sk-opencode-go");
 
     let server = RequestCaptureServer::start().await;
     for var in [
@@ -2004,22 +1981,25 @@ async fn config_profile_apply_opencode_go_serves_preset_profile() {
     ] {
         std::env::remove_var(var);
     }
+    // 安装 opencode-go 统一树（provider=opencode-go，active=deepseek-v4-flash，
+    // base=server 端点，key 经 env ref 注入），引擎构造时即加载该快照。
+    let opencode_yaml = format!(
+        "version: 2\n\
+         activeModel:\n  providerId: opencode-go\n  modelId: deepseek-v4-flash\n\
+         providers:\n  opencode-go:\n    displayName: opencode-go\n    baseUrl: {}\n    protocol: openai/chat\n    apiKeyRef: env:CONEX_TEST_OPENCODE_KEY\n    models:\n      - id: deepseek-v4-flash\n        enabled: true\n",
+        server.base_url("/zen/go/v1")
+    );
+    let _store = install_yaml_store(&dir, &opencode_yaml);
     let state = core_state_with_store(Arc::new(InMemoryStore::new()));
     let app = tauri::test::mock_builder()
         .manage(Arc::clone(&state))
         .build(tauri::test::mock_context(tauri::test::noop_assets()))
         .expect("mock app");
-    let st = app.state::<Arc<CoreRunState>>();
+    let _st = app.state::<Arc<CoreRunState>>();
 
-    // 前端激活 opencode-go：key 从 DPAPI 槽回读（apiKey 不传），带 baseUrl+model。
-    crate::config::config_profile_apply(
-        st,
-        "opencode-go".to_string(),
-        None,
-        Some(server.base_url("/zen/go/v1")),
-        Some("deepseek-v4-flash".to_string()),
-    )
-    .expect("apply opencode-go");
+    // 前端激活 opencode-go：key 从 env ref 回读（apiKey 不传），带 baseUrl+model；
+    // 重加载引擎使生效配置与统一树一致（等价于旧配置应用的 reload）。
+    state.engine.reload_provider();
 
     // 引擎生效配置 = opencode-go 端点/模型/凭据（profile 投影优先）。
     let config = state.engine.provider_config().expect("opencode-go 就绪");
@@ -2069,59 +2049,42 @@ async fn config_profile_apply_opencode_go_serves_preset_profile() {
 /// R5 T5.2a 验收②：多 profile 并存——profile A/B 独立端点/模型互不串扰；
 /// 切换后生效配置随之切换（对齐 C2 per-provider 语义）。
 #[tokio::test]
-async fn config_profile_apply_switches_profiles_independently() {
+async fn provider_apply_switches_profiles_independently() {
     use tauri::Manager as _;
     let _lock = CONFIG_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let dir = temp_config_dir();
     isolate_config_store(&dir);
 
-    crate::config::config_secret_set("profile-a".to_string(), "sk-a".to_string())
-        .expect("store a key");
-    crate::config::config_secret_set("profile-b".to_string(), "sk-b".to_string())
-        .expect("store b key");
+    // profile A/B 凭据经独立 env ref 注入（旧凭据注入落各自 DPAPI 槽）。
+    std::env::set_var(TEST_PROFILE_A_KEY, "sk-a");
+    std::env::set_var(TEST_PROFILE_B_KEY, "sk-b");
 
+    // 安装双 provider 统一树（active=profile-a）；引擎构造即加载该快照。
+    let store = install_yaml_store(&dir, &profile_tree_yaml("profile-a", "model-a"));
     let state = core_state_with_store(Arc::new(InMemoryStore::new()));
-    let app = tauri::test::mock_builder()
+    let _app = tauri::test::mock_builder()
         .manage(Arc::clone(&state))
         .build(tauri::test::mock_context(tauri::test::noop_assets()))
         .expect("mock app");
     // 应用 A
-    crate::config::config_profile_apply(
-        app.state::<Arc<CoreRunState>>(),
-        "profile-a".to_string(),
-        None,
-        Some("https://a.example/v1".to_string()),
-        Some("model-a".to_string()),
-    )
-    .expect("apply a");
+    apply_unified_yaml(&store, &profile_tree_yaml("profile-a", "model-a"));
+    state.engine.reload_provider();
     let a = state.engine.provider_config().expect("a 就绪");
     assert_eq!(a.base_url, "https://a.example/v1");
     assert_eq!(a.model, "model-a");
     assert_eq!(a.api_key, "sk-a");
 
     // 应用 B（切到 B）
-    crate::config::config_profile_apply(
-        app.state::<Arc<CoreRunState>>(),
-        "profile-b".to_string(),
-        None,
-        Some("https://b.example/v1".to_string()),
-        Some("model-b".to_string()),
-    )
-    .expect("apply b");
+    apply_unified_yaml(&store, &profile_tree_yaml("profile-b", "model-b"));
+    state.engine.reload_provider();
     let b = state.engine.provider_config().expect("b 就绪");
     assert_eq!(b.base_url, "https://b.example/v1", "B 的 baseUrl 独立");
     assert_eq!(b.model, "model-b", "B 的 model 独立");
     assert_eq!(b.api_key, "sk-b", "B 的 key 独立");
 
     // 切回 A：A 的端点/模型独立恢复，不被 B 覆盖
-    crate::config::config_profile_apply(
-        app.state::<Arc<CoreRunState>>(),
-        "profile-a".to_string(),
-        None,
-        Some("https://a.example/v1".to_string()),
-        Some("model-a".to_string()),
-    )
-    .expect("reapply a");
+    apply_unified_yaml(&store, &profile_tree_yaml("profile-a", "model-a"));
+    state.engine.reload_provider();
     let a2 = state.engine.provider_config().expect("a 恢复");
     assert_eq!(a2.base_url, "https://a.example/v1", "A 端点不被 B 串扰");
     assert_eq!(a2.model, "model-a", "A 模型不被 B 串扰");
@@ -2131,55 +2094,40 @@ async fn config_profile_apply_switches_profiles_independently() {
 /// R5 T5.2a 验收③：config_get 快照含 ≥2 提供方（I2：Tauri 壳 config 快照
 /// ≥2 提供方）——活跃 profile 与已配置 profile 并列，activeProfileId 暴露。
 #[tokio::test]
-async fn config_get_snapshot_exposes_multiple_providers() {
+async fn config_snapshot_exposes_multiple_providers() {
     use tauri::Manager as _;
     let _lock = CONFIG_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let dir = temp_config_dir();
     isolate_config_store(&dir);
 
-    crate::config::config_secret_set("profile-a".to_string(), "sk-a".to_string())
-        .expect("store a key");
-    crate::config::config_secret_set("profile-b".to_string(), "sk-b".to_string())
-        .expect("store b key");
+    // profile A/B 凭据经独立 env ref 注入（旧凭据注入落各自 DPAPI 槽）。
+    std::env::set_var(TEST_PROFILE_A_KEY, "sk-a");
+    std::env::set_var(TEST_PROFILE_B_KEY, "sk-b");
 
+    // 安装双 provider 统一树（active=profile-b：最近应用者）；快照直接读统一树。
+    let _store = install_yaml_store(&dir, &profile_tree_yaml("profile-b", "model-b"));
     let state = core_state_with_store(Arc::new(InMemoryStore::new()));
-    let app = tauri::test::mock_builder()
+    let _app = tauri::test::mock_builder()
         .manage(Arc::clone(&state))
         .build(tauri::test::mock_context(tauri::test::noop_assets()))
         .expect("mock app");
 
-    crate::config::config_profile_apply(
-        app.state::<Arc<CoreRunState>>(),
-        "profile-a".to_string(),
-        None,
-        Some("https://a.example/v1".to_string()),
-        Some("model-a".to_string()),
-    )
-    .expect("apply a");
-    crate::config::config_profile_apply(
-        app.state::<Arc<CoreRunState>>(),
-        "profile-b".to_string(),
-        None,
-        Some("https://b.example/v1".to_string()),
-        Some("model-b".to_string()),
-    )
-    .expect("apply b");
-
-    let snapshot = crate::config::config_get().expect("config_get");
-    let providers = snapshot["providers"].as_array().expect("providers 数组");
+    // config 快照投影（settings_get_impl 替代旧 config_get；providers 为对象键控）
+    let snapshot = super::settings_get_impl().expect("settings snapshot");
+    let providers = snapshot
+        .get("providers")
+        .and_then(|v| v.as_object())
+        .expect("providers 对象");
     assert!(
         providers.len() >= 2,
         "config 快照应含 ≥2 提供方：{providers:?}"
     );
     assert_eq!(
-        snapshot["activeProfileId"].as_str(),
+        snapshot.get("activeProfileId").and_then(|v| v.as_str()),
         Some("profile-b"),
         "activeProfileId 应指向最近应用者"
     );
-    let ids: Vec<&str> = providers
-        .iter()
-        .filter_map(|p| p["profileId"].as_str())
-        .collect();
+    let ids: Vec<&str> = providers.keys().map(|s| s.as_str()).collect();
     assert!(
         ids.contains(&"profile-a") && ids.contains(&"profile-b"),
         "providers 应含 A 与 B：{ids:?}"
@@ -4644,6 +4592,15 @@ async fn goal_mode_run_writes_state_and_continues_round() {
     ]));
     let (state, db, emitter) = run_control_test_state(provider);
     state.run_restore().await;
+    // 用户裁决：重试预算/上限可配置——注入快速策略防 30s 窗口被缺省 10 次重试拖穿
+    state.set_run_policy(Some(crate::config::run_policy::RunPolicy {
+        retry_backoff: Some(crate::config::run_policy::RetryBackoffPolicy {
+            base_ms: Some(1),
+            max_ms: Some(8),
+            total_budget_ms: Some(60_000),
+        }),
+        transient_retry_limit: Some(3),
+    }));
     // 记录型拉起器替身（断言 goal-continue 续轮；拦截生产拉起器防
     // 真拉起新 run 形成续 run 链）
     let launched: Arc<std::sync::Mutex<Vec<(String, usize)>>> =
@@ -4665,7 +4622,7 @@ async fn goal_mode_run_writes_state_and_continues_round() {
     run_task_impl(Arc::clone(&state), options)
         .await
         .expect("run 发起成功");
-    wait_run_agent_end_reason(&db, "s1", Duration::from_secs(30)).await;
+    wait_run_terminal(&db, "s1", Duration::from_secs(90)).await;
     // 轮询至续轮拉起（launcher push 在收口尾部，agent-end 落库后稍晚）
     let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
     loop {
@@ -4680,7 +4637,8 @@ async fn goal_mode_run_writes_state_and_continues_round() {
         );
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
-    // goal_state 键创建 + 收口评估
+    // goal_state 键创建 + 收口评估（advance 写回 spawn_blocking 异步——竞速容忍轮询）
+    wait_goal_round_advanced(&db, "s1", Duration::from_secs(10)).await;
     let raw = db
         .get_session_meta(orchestrator::goal_state::GOAL_STATE_KEY)
         .expect("键读取")
@@ -5066,7 +5024,7 @@ async fn goal_continue_inject_text_contains_goal_prefix_and_round() {
     run_task_impl(Arc::clone(&state), options)
         .await
         .expect("run 发起成功");
-    wait_run_agent_end_reason(&db, "s1", Duration::from_secs(30)).await;
+    wait_run_terminal(&db, "s1", Duration::from_secs(90)).await;
     // 轮询至注入捕获（goal_pending 拉起在收口尾部）
     let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
     loop {
@@ -5188,7 +5146,8 @@ async fn goal_mode_new_goal_overwrites_old_state() {
     run_task_impl(Arc::clone(&state), options)
         .await
         .expect("run 发起成功");
-    wait_run_agent_end_reason(&db, "s1", Duration::from_secs(30)).await;
+    wait_run_terminal(&db, "s1", Duration::from_secs(90)).await;
+    wait_goal_round_advanced(&db, "s1", Duration::from_secs(10)).await;
     let raw = db
         .get_session_meta(orchestrator::goal_state::GOAL_STATE_KEY)
         .expect("键读取")
@@ -5221,6 +5180,14 @@ async fn goal_mode_new_goal_overwrites_old_state() {
         goal.get("currentRound").is_none(),
         "不得序列化为 camelCase 字段"
     );
+    // 续轮拉起（launcher 调用）发生在轮次写键之后的异步收口段，二者不是
+    // 同一时刻：`wait_goal_round_advanced` 只保证轮次已落键，不保证 launcher
+    // 已调用，直接断言会与收口竞速（实证 2026-09-15 读到 0）。改为轮询等待，
+    // 断言强度不变（仍要求恰好 1 次）。
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
+    while counter.load(Ordering::SeqCst) < 1 && tokio::time::Instant::now() < deadline {
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
     assert_eq!(
         counter.load(Ordering::SeqCst),
         1,
@@ -5247,12 +5214,21 @@ async fn drive_run_loop_close_records_transient_failure() {
     );
     let (state, db, _emitter) = run_control_test_state(provider);
     state.run_restore().await;
+    // 用户裁决：重试预算/上限可配置——注入快速策略防 30s 窗口被缺省 10 次重试拖穿
+    state.set_run_policy(Some(crate::config::run_policy::RunPolicy {
+        retry_backoff: Some(crate::config::run_policy::RetryBackoffPolicy {
+            base_ms: Some(1),
+            max_ms: Some(8),
+            total_budget_ms: Some(60_000),
+        }),
+        transient_retry_limit: Some(3),
+    }));
     let counter = Arc::new(AtomicU64::new(0));
     state.set_resume_launcher(Some(counting_launcher(Arc::clone(&counter))));
     run_task_impl(Arc::clone(&state), test_options("run-cb-1", "s1", "任务"))
         .await
         .expect("run 发起成功");
-    wait_run_agent_end_reason(&db, "s1", Duration::from_secs(30)).await;
+    wait_run_terminal(&db, "s1", Duration::from_secs(90)).await;
     let streak = wait_for_fail_streak(&db, 1, Duration::from_secs(10)).await;
     assert_eq!(streak.count, 1, "瞬态 fatal 收口 → streak=1");
     assert!(streak.first_fail_at_ms > 0, "首次失败时刻填充");
@@ -5489,9 +5465,9 @@ async fn content_resume_e2e_partial_stream_resumes_with_template_and_history() {
     .await
     .expect("run 发起成功");
     // run 1 收场 reason=Stop（部分保留断流的正常收场形态，E1 §2.1 前提）
-    let agent_reason = wait_run_agent_end_reason(&db, "s1", Duration::from_secs(30)).await;
+    let terminal = wait_run_terminal(&db, "s1", Duration::from_secs(90)).await;
     assert_eq!(
-        agent_reason, "stop",
+        terminal, "completed",
         "断流 run 以 Stop 正常收场（E1 续写分支前提）"
     );
     // 续写拉起断言：mode="content-resume" + 注入文本精确等于锁定模板
@@ -5826,6 +5802,15 @@ async fn content_resume_degrades_to_error_retry_when_resume_run_fails() {
     ));
     let (state, db, _emitter) = fault_inject_test_state(provider).await;
     state.run_restore().await;
+    // 用户裁决：重试预算/上限可配置——注入快速策略防 30s 窗口被缺省 10 次重试拖穿
+    state.set_run_policy(Some(crate::config::run_policy::RunPolicy {
+        retry_backoff: Some(crate::config::run_policy::RetryBackoffPolicy {
+            base_ms: Some(1),
+            max_ms: Some(8),
+            total_budget_ms: Some(60_000),
+        }),
+        transient_retry_limit: Some(3),
+    }));
     state.set_resume_backoff(Some(Arc::new(|_attempt| Duration::ZERO)));
     let recorded: Arc<Mutex<Vec<(String, String, Vec<String>)>>> = Arc::new(Mutex::new(Vec::new()));
     state.set_resume_launcher(Some(recording_resume_launcher(Arc::clone(&recorded))));
@@ -5942,6 +5927,15 @@ async fn fail_streak_cross_threshold_emits_circuit_trip() {
     );
     let (state, db, emitter) = run_control_test_state(provider);
     state.run_restore().await;
+    // 用户裁决：重试预算/上限可配置——注入快速策略防 30s 窗口被缺省 10 次重试拖穿
+    state.set_run_policy(Some(crate::config::run_policy::RunPolicy {
+        retry_backoff: Some(crate::config::run_policy::RetryBackoffPolicy {
+            base_ms: Some(1),
+            max_ms: Some(8),
+            total_budget_ms: Some(60_000),
+        }),
+        transient_retry_limit: Some(3),
+    }));
     db.set_session_meta(
         PROVIDER_FAIL_STREAK_KEY,
         &ProviderFailStreak {
@@ -5957,7 +5951,7 @@ async fn fail_streak_cross_threshold_emits_circuit_trip() {
     run_task_impl(Arc::clone(&state), test_options("run-cb-4", "s1", "任务"))
         .await
         .expect("run 发起成功");
-    wait_run_agent_end_reason(&db, "s1", Duration::from_secs(30)).await;
+    wait_run_terminal(&db, "s1", Duration::from_secs(90)).await;
     let streak = wait_for_fail_streak(&db, 6, Duration::from_secs(10)).await;
     assert_eq!(streak.count, 6, "跨过阈值 6");
     let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
@@ -6027,7 +6021,7 @@ async fn circuit_breaker_gate_fatals_without_retry() {
     run_task_impl(Arc::clone(&state), test_options("run-cb-5", "s1", "任务"))
         .await
         .expect("run 发起成功");
-    wait_run_agent_end_reason(&db, "s1", Duration::from_secs(30)).await;
+    wait_run_terminal(&db, "s1", Duration::from_secs(90)).await;
     assert_eq!(
         provider.call_count(),
         1,
@@ -6055,12 +6049,21 @@ async fn transient_retry_without_gate_retries_three() {
     );
     let (state, db, _emitter) = run_control_test_state(provider.clone());
     state.run_restore().await;
+    // 用户裁决：重试预算/上限可配置——注入快速策略防 30s 窗口被缺省 10 次重试拖穿
+    state.set_run_policy(Some(crate::config::run_policy::RunPolicy {
+        retry_backoff: Some(crate::config::run_policy::RetryBackoffPolicy {
+            base_ms: Some(1),
+            max_ms: Some(8),
+            total_budget_ms: Some(60_000),
+        }),
+        transient_retry_limit: Some(3),
+    }));
     let counter = Arc::new(AtomicU64::new(0));
     state.set_resume_launcher(Some(counting_launcher(Arc::clone(&counter))));
     run_task_impl(Arc::clone(&state), test_options("run-cb-6", "s1", "任务"))
         .await
         .expect("run 发起成功");
-    wait_run_agent_end_reason(&db, "s1", Duration::from_secs(30)).await;
+    wait_run_terminal(&db, "s1", Duration::from_secs(90)).await;
     assert_eq!(
         provider.call_count(),
         4,
@@ -6097,9 +6100,23 @@ async fn circuit_breaker_streak_survives_restart_and_gates_new_run() {
     let db = {
         let (state, db, _emitter) = run_control_test_state(failing());
         state.run_restore().await;
+    // 用户裁决：重试预算/上限可配置——注入快速策略防 30s 窗口被缺省 10 次重试拖穿
+    state.set_run_policy(Some(crate::config::run_policy::RunPolicy {
+        retry_backoff: Some(crate::config::run_policy::RetryBackoffPolicy {
+            base_ms: Some(1),
+            max_ms: Some(8),
+            total_budget_ms: Some(60_000),
+        }),
+        transient_retry_limit: Some(3),
+    }));
         run_task_impl(Arc::clone(&state), test_options("run-cb-r1", "s1", "任务"))
             .await
             .expect("run 发起成功");
+        // 同步点 = **本阶段自己的 run-terminal**（按 runId 定位）。
+        // 只等键值会被上一阶段的延迟收口骗过（实证 2026-09-15）。
+        let terminal =
+            wait_run_terminal_for_run(&db, "s1", "run-cb-r1", Duration::from_secs(30)).await;
+        assert_eq!(terminal, "failed", "实例 A 以 provider 瞬态错误收场");
         let streak = wait_for_fail_streak(&db, 1, Duration::from_secs(30)).await;
         assert_eq!(streak.count, 1, "实例 A 收口自然写 count=1");
         db
@@ -6112,9 +6129,12 @@ async fn circuit_breaker_streak_survives_restart_and_gates_new_run() {
         run_task_impl(Arc::clone(&state), test_options("run-cb-r2", "s1", "任务"))
             .await
             .expect("run 发起成功");
-        // 同步点 = 熔断键轮询（会话事件库含上一阶段 agent-end 历史，
-        // wait_run_agent_end_reason 会误命中旧事件；键值计数只在本
-        // 阶段收口后推进，是跨重启链路的唯一正确同步点）
+        // 同步点 = 本阶段自己的 run-terminal（按 runId 定位）。
+        // 旧注释「键值计数是本阶段唯一正确同步点」已被实证推翻：键值轮询
+        // 无法区分「本阶段收口」与「上一阶段延迟收口」，必须用 runId 事件。
+        let terminal =
+            wait_run_terminal_for_run(&db, "s1", "run-cb-r2", Duration::from_secs(30)).await;
+        assert_eq!(terminal, "failed", "重启后失败 run 收场");
         let streak = wait_for_fail_streak(&db, 2, Duration::from_secs(30)).await;
         assert_eq!(
             streak.count, 2,
@@ -6141,8 +6161,13 @@ async fn circuit_breaker_streak_survives_restart_and_gates_new_run() {
     run_task_impl(Arc::clone(&state), test_options("run-cb-r3", "s1", "任务"))
         .await
         .expect("run 发起成功");
-    // 同步点 = 键值轮询：count=7 仅在本阶段闸 fatal 收口写键后出现，
-    // 返回即 provider 调用链已结束（同上理由，不用 agent-end 事件）
+    // 同步点 = 本阶段自己的 run-terminal（按 runId 定位）：熔断闸在内核
+    // transient_retry 入口触发（首次请求失败之后），故 provider 必已调用
+    // 1 次；等本阶段终态落库后 provider 调用链必然结束。旧「键值轮询」同步
+    // 点已被实证推翻（上一阶段延迟收口会把 count 推到 7，让断言提前通过）。
+    let terminal =
+        wait_run_terminal_for_run(&db, "s1", "run-cb-r3", Duration::from_secs(30)).await;
+    assert_eq!(terminal, "failed", "熔断闸 fatal 收场");
     let streak = wait_for_fail_streak(&db, 7, Duration::from_secs(30)).await;
     assert_eq!(streak.count, 7, "熔断 fatal 收口计数继续 +1");
     assert_eq!(
@@ -6210,6 +6235,12 @@ async fn retry_backoff_injection_delays_retry() {
     );
     let (state, db, _emitter) = run_control_test_state(provider.clone());
     state.run_restore().await;
+    // 用户裁决：重试上限用户可配置——本用例经运行策略限 3 次（会话键只
+    // 定退避曲线，上限由策略文件控制），避免缺省 10 次把窗口拖穿。
+    state.set_run_policy(Some(crate::config::run_policy::RunPolicy {
+        retry_backoff: None,
+        transient_retry_limit: Some(3),
+    }));
     db.set_session_meta(PROVIDER_RETRY_BACKOFF_MS_KEY, "[750,8000,60000]")
         .expect("退避键落库");
     let counter = Arc::new(AtomicU64::new(0));
@@ -6218,7 +6249,7 @@ async fn retry_backoff_injection_delays_retry() {
     run_task_impl(Arc::clone(&state), test_options("run-bk-1", "s1", "任务"))
         .await
         .expect("run 发起成功");
-    wait_run_agent_end_reason(&db, "s1", Duration::from_secs(30)).await;
+    wait_run_terminal(&db, "s1", Duration::from_secs(90)).await;
     let elapsed_ms = started.elapsed().as_millis() as u64;
     assert_eq!(provider.call_count(), 4, "退避注入下仍 3 次重试（预算内）");
     assert!(
@@ -6227,10 +6258,12 @@ async fn retry_backoff_injection_delays_retry() {
     );
 }
 
-/// D1 规则 R6 对照：缺退避键 → None = 现状立即重试（无 run 内等待，
-/// 总耗时 < 退避基数 750ms）。
+/// 用户裁决（重试预算/上限用户可配置，进配置文件不绑供应商）验收：
+/// 运行策略 baseMs=1 + limit=3 → 重试几乎零等待、3 次后 fatal（生产
+/// 缺省为 750ms 指数退避 ×10 次/180s 预算；「缺键即立即重试」的旧 R6
+/// 语义随缺省预算装配退役，内核侧由 loop_tests 覆盖）。
 #[tokio::test]
-async fn retry_backoff_missing_config_retries_immediately() {
+async fn retry_backoff_run_policy_retries_fast_and_fatales() {
     let provider = Arc::new(
         TestProvider::new(vec![
             ProviderStreamEvent::text("x"),
@@ -6245,18 +6278,26 @@ async fn retry_backoff_missing_config_retries_immediately() {
     );
     let (state, db, _emitter) = run_control_test_state(provider.clone());
     state.run_restore().await;
+    state.set_run_policy(Some(crate::config::run_policy::RunPolicy {
+        retry_backoff: Some(crate::config::run_policy::RetryBackoffPolicy {
+            base_ms: Some(1),
+            max_ms: Some(8),
+            total_budget_ms: Some(60_000),
+        }),
+        transient_retry_limit: Some(3),
+    }));
     let counter = Arc::new(AtomicU64::new(0));
     state.set_resume_launcher(Some(counting_launcher(Arc::clone(&counter))));
     let started = tokio::time::Instant::now();
     run_task_impl(Arc::clone(&state), test_options("run-bk-2", "s1", "任务"))
         .await
         .expect("run 发起成功");
-    wait_run_agent_end_reason(&db, "s1", Duration::from_secs(30)).await;
+    wait_run_terminal(&db, "s1", Duration::from_secs(90)).await;
     let elapsed_ms = started.elapsed().as_millis() as u64;
-    assert_eq!(provider.call_count(), 4, "无退避：3 次立即重试后 fatal");
+    assert_eq!(provider.call_count(), 4, "策略 limit=3：3 次重试后 fatal");
     assert!(
         elapsed_ms < 700,
-        "无退避键 → 立即重试（实际 {elapsed_ms}ms，应 < 退避基数 750ms）"
+        "baseMs=1 → 重试近零等待（实际 {elapsed_ms}ms，应 < 退避基数 750ms）"
     );
 }
 
@@ -6835,7 +6876,12 @@ async fn wait_all_runs_terminal(state: &CoreRunState, window: Duration) {
 async fn wait_agent_rows_terminal(db: &LocalDb, session_id: &str, expect: usize, window: Duration) {
     let deadline = tokio::time::Instant::now() + window;
     loop {
-        let rows = db.load_session_agents(session_id).expect("读行");
+        // 写侧落库（spawn_blocking）与查询竞速：表锁按未就绪重试
+        let Ok(rows) = db.load_session_agents(session_id) else {
+            assert!(tokio::time::Instant::now() < deadline, "子代理行未在窗口内落库");
+            tokio::time::sleep(Duration::from_millis(20)).await;
+            continue;
+        };
         let terminal = rows
             .iter()
             .filter(|r| r.status == "completed" || r.status == "failed")
@@ -7779,6 +7825,18 @@ fn run_control_test_state_on_db_with_model(
         Arc::new(StatusDiagnostics::new()),
         None,
     ));
+    // 用户裁决（重试预算/上限可配置）下的测试基线：baseMs=1 让错误重试
+    // 近零等待（缺省 750ms 指数退避 ×10 次 ≈ 59s，超出 30s 断言窗口）；
+    // limit 保持 10 与生产一致，断言重试次数的用例经 set_run_policy 或
+    // 会话键单独覆盖（后写覆盖，见 retry_backoff_injection_delays_retry）。
+    state.set_run_policy(Some(crate::config::run_policy::RunPolicy {
+        retry_backoff: Some(crate::config::run_policy::RetryBackoffPolicy {
+            base_ms: Some(1),
+            max_ms: Some(8),
+            total_budget_ms: Some(60_000),
+        }),
+        transient_retry_limit: Some(10),
+    }));
     let routed: Arc<dyn ProviderCall> = provider;
     let config = EngineProviderConfig {
         base_url: "http://test.local/v1".to_string(),
@@ -7825,27 +7883,160 @@ async fn wait_run_end_reason(active: &Arc<ActiveRun>, window: Duration) -> Strin
 
 /// 轮询会话事件库中的 agent-end 事件（真实 loop 收口落库；返回
 /// reason——RunOutcome.reason 的持久化镜像，kebab-case）
-async fn wait_run_agent_end_reason(db: &LocalDb, session_id: &str, window: Duration) -> String {
+async fn wait_run_terminal(db: &LocalDb, session_id: &str, window: Duration) -> String {
     let deadline = tokio::time::Instant::now() + window;
     loop {
-        let events = db.query_events(session_id, 0, Some(500)).expect("事件查询");
+        // 收口落库经 spawn_blocking 异步写 events 表——测试轮询可能撞上
+        // 写侧表锁（query_events_collect: database table is locked）；
+        // 锁竞速按「未就绪」重试，写侧完成后本查询自然成功。
+        let events = match db.query_events(session_id, 0, Some(500)) {
+            Ok(events) => events,
+            Err(_) => {
+                assert!(
+                    tokio::time::Instant::now() < deadline,
+                    "run-terminal 事件未在窗口内落库"
+                );
+                tokio::time::sleep(Duration::from_millis(30)).await;
+                continue;
+            }
+        };
         for event in &events {
-            if event.event_type != "agent-end" {
+            // G-29 事件权威：run-terminal 是唯一终态事件（03 §5.2-2，
+            // 旧 agent-end/run-completed/run-failed 已删），断言只认权威形态。
+            if event.event_type != "run-terminal" {
                 continue;
             }
             let payload: serde_json::Value =
-                serde_json::from_str(&event.payload).expect("agent-end 载荷为合法 JSON");
-            if let Some(reason) = payload["reason"].as_str() {
-                return reason.to_string();
+                serde_json::from_str(&event.payload).expect("run-terminal 载荷为合法 JSON");
+            if let Some(terminal) = payload["terminal"].as_str() {
+                return terminal.to_string();
             }
         }
         assert!(
             tokio::time::Instant::now() < deadline,
-            "agent-end 事件未在窗口内落库"
+            "run-terminal 事件未在窗口内落库"
         );
         tokio::time::sleep(Duration::from_millis(30)).await;
     }
 }
+
+/// 按 **runId** 定位终态事件（跨阶段复用同一 db 的唯一正确同步点）。
+///
+/// `wait_run_terminal` 只按 sessionId 取**第一个** run-terminal——当同一
+/// 会话上先后跑多个 run（如熔断计数跨重启用例的阶段 1/2/3）时，它会命中
+/// 上一阶段遗留的旧事件，导致「本阶段 run 尚未收口」被误判为已收口
+/// （实证 2026-09-15：阶段 3 的 provider 调用数读到 0，而 streak 已被
+/// 上一阶段的延迟收口推到 7）。定位到具体 runId 才能把同步点钉在本阶段。
+async fn wait_run_terminal_for_run(
+    db: &LocalDb,
+    session_id: &str,
+    run_id: &str,
+    window: Duration,
+) -> String {
+    let deadline = tokio::time::Instant::now() + window;
+    loop {
+        let events = match db.query_events(session_id, 0, Some(500)) {
+            Ok(events) => events,
+            Err(_) => {
+                assert!(
+                    tokio::time::Instant::now() < deadline,
+                    "{run_id} 的 run-terminal 未在窗口内落库（事件表读锁竞速）"
+                );
+                tokio::time::sleep(Duration::from_millis(30)).await;
+                continue;
+            }
+        };
+        for event in &events {
+            if event.event_type != "run-terminal" {
+                continue;
+            }
+            let payload: serde_json::Value =
+                serde_json::from_str(&event.payload).expect("run-terminal 载荷为合法 JSON");
+            if payload["runId"].as_str() != Some(run_id) {
+                continue;
+            }
+            if let Some(terminal) = payload["terminal"].as_str() {
+                return terminal.to_string();
+            }
+        }
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "{run_id} 的 run-terminal 未在窗口内落库"
+        );
+        tokio::time::sleep(Duration::from_millis(30)).await;
+    }
+}
+
+
+// ── 诊断（临时）3：goal 覆盖流程键演化 dump ──
+#[tokio::test]
+async fn diag_goal_overwrite_dump() {
+    let provider = Arc::new(TestProvider::new(vec![
+        ProviderStreamEvent::text("x"),
+        ProviderStreamEvent::stop(StopReason::Stop),
+    ]));
+    let (state, db, _emitter) = run_control_test_state(provider);
+    state.run_restore().await;
+    let mut old = GoalState::new("旧目标", 6, 4);
+    old.current_round = 5;
+    old.stalled_rounds = 2;
+    old.progress_signature = Some("tools:fnv1a:bbbbbbbbbbbbbbbb".into());
+    db.set_session_meta(orchestrator::goal_state::GOAL_STATE_KEY, &old.to_json())
+        .expect("旧 goal_state 预置");
+    let counter = Arc::new(AtomicU64::new(0));
+    state.set_resume_launcher(Some(counting_launcher(Arc::clone(&counter))));
+    let mut options = test_options("run-goal-diag", "s1", "请完成目标");
+    options.mode = Some("goal".to_string());
+    options.visible_goal = Some("新目标".to_string());
+    options.max_rounds = Some(10);
+    options.max_stalled_rounds = Some(3);
+    run_task_impl(Arc::clone(&state), options)
+        .await
+        .expect("run 发起成功");
+    for i in 0..50 {
+        let raw = db
+            .get_session_meta(orchestrator::goal_state::GOAL_STATE_KEY)
+            .ok()
+            .flatten();
+        match raw {
+            Some(raw) => {
+                let goal: serde_json::Value = serde_json::from_str(&raw).unwrap_or_default();
+                println!(
+                    "[{i}] goal={} round={} stalled={} max={}",
+                    goal["goal"], goal["current_round"], goal["stalled_rounds"], goal["max_rounds"]
+                );
+                if goal["current_round"].as_u64().unwrap_or(0) >= 1 {
+                    return;
+                }
+            }
+            None => println!("[{i}] 键不存在"),
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    }
+    panic!("goal advance 未写回（dump 结束）");
+}
+
+/// 轮询 goal_state 键直至收口评估写回完成。收口 advance 经 spawn_blocking
+/// 异步写回（晚于 run-terminal 可见，竞速容忍）；窗口内 current_round 未
+/// 推进到 >=1 则 panic（写回丢失 = 真失败）。
+async fn wait_goal_round_advanced(db: &LocalDb, session_id: &str, window: Duration) {
+    let deadline = tokio::time::Instant::now() + window;
+    loop {
+        if let Ok(Some(raw)) = db.get_session_meta(orchestrator::goal_state::GOAL_STATE_KEY) {
+            if let Ok(goal) = serde_json::from_str::<serde_json::Value>(&raw) {
+                if goal["current_round"].as_u64().unwrap_or(0) >= 1 {
+                    return;
+                }
+            }
+        }
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "goal_state 收口评估写回未在窗口内完成"
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+}
+
 
 /// 事件桥载荷 → security-audit 操作列表（判定器审计断言用）
 fn audit_operations(emitter: &RecordingEmitter) -> Vec<String> {
@@ -7928,10 +8119,10 @@ async fn l3_force_cancel_aborts_running_run() {
     // 真实 loop 在下一安全点收场：agent-end reason == aborted
     let end_reason = wait_run_end_reason(&active, Duration::from_secs(30)).await;
     assert_eq!(end_reason, "aborted", "L3 强停后 run 必须以 aborted 终态");
-    let agent_reason = wait_run_agent_end_reason(&db, "s1", Duration::from_secs(30)).await;
+    let terminal = wait_run_terminal(&db, "s1", Duration::from_secs(90)).await;
     assert_eq!(
-        agent_reason, "aborted",
-        "L3 强停后 loop 的 agent-end 收场 reason 必须为 aborted"
+        terminal, "cancelled",
+        "L3 强停后 loop 的 run-terminal 终态必须为 cancelled（权威映射 aborted→cancelled）"
     );
 }
 
@@ -7974,10 +8165,10 @@ async fn l2_cooperative_stop_reaches_stopped() {
     )
     .await
     .expect("cooperative_stop 应成功");
-    let agent_reason = wait_run_agent_end_reason(&db, "s1", Duration::from_secs(30)).await;
+    let terminal = wait_run_terminal(&db, "s1", Duration::from_secs(90)).await;
     assert_eq!(
-        agent_reason, "stopped",
-        "L2 协作停止后 loop 必须以 stopped 收场（D1 独立 reason）"
+        terminal, "completed",
+        "L2 协作停止后 loop 必须以 completed 终态收场（G-29 权威：Stopped 不置 cancel_requested，独立 reason 文案并入 stop，取消语义仅由 cancel_requested→cancelled 表达）"
     );
     // 协作停止不是取消：run-terminal 终态为 completed 而非 cancelled
     // （L2 不置 cancel_requested，终态本体由 drive_outcome 权威映射）
@@ -8097,10 +8288,10 @@ async fn kill_all_aborts_target_run() {
         state.request_force_cancel("run-kill-e2e", "test-kill-all"),
         "kill_all 投递必须命中活动 run"
     );
-    let agent_reason = wait_run_agent_end_reason(&db, "s1", Duration::from_secs(30)).await;
+    let terminal = wait_run_terminal(&db, "s1", Duration::from_secs(90)).await;
     assert_eq!(
-        agent_reason, "aborted",
-        "kill_all 后目标 run 必须以 aborted 收场"
+        terminal, "cancelled",
+        "kill_all 后目标 run 必须以 cancelled 终态收场（权威映射 aborted→cancelled）"
     );
     let _ = active;
 }
@@ -10232,14 +10423,99 @@ use super::idle_resume::{
 /// 可能已把静态绑定到 `CRISH_WORKBENCH_CONFIG_DIR` 之外的真实路径）。
 pub(crate) static CONFIG_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
+// ── 统一配置单轨测试夹具（替代已删除的 with_store_mut / config_profile_apply /
+// config_secret_set / config_get；凭据经 env ref 注入，配置变更经
+// ModelsStore::apply 落盘 + install_models_store_for_test 安装）────────────
+
+/// 单轨测试凭据环境变量名（key 经 set_var/remove_var 注入，与旧 apply 的
+/// key 切换语义一致；CONFIG_TEST_LOCK 已序列化这些测试，env 互不串扰）。
+pub(crate) const TEST_ENV_KEY: &str = "CONEX_TEST_WIZARD_KEY";
+const TEST_PROFILE_A_KEY: &str = "CONEX_TEST_PROFILE_A_KEY";
+const TEST_PROFILE_B_KEY: &str = "CONEX_TEST_PROFILE_B_KEY";
+
+/// 写统一树 YAML 到 dir/models.yaml，读入提交，安装为生效 store。
+fn install_yaml_store(
+    dir: &std::path::Path,
+    yaml: &str,
+) -> std::sync::Arc<agent_provider::model_store::ModelsStore> {
+    let config_path = dir.join("models.yaml");
+    std::fs::write(&config_path, yaml).expect("write models.yaml");
+    let store = std::sync::Arc::new(agent_provider::model_store::ModelsStore::new(
+        config_path,
+        dir.join("secrets"),
+        None,
+    ));
+    store.read().expect("load unified models tree");
+    crate::config::install_models_store_for_test(std::sync::Arc::clone(&store));
+    store
+}
+
+/// 在已提交统一树上以新修订重应用 YAML（CAS：expected = 当前提交修订）。
+fn apply_unified_yaml(store: &agent_provider::model_store::ModelsStore, yaml: &str) {
+    let revision = store
+        .committed()
+        .expect("unified tree 必须已提交")
+        .revision
+        .clone();
+    store
+        .save_yaml(yaml, &revision)
+        .expect("apply unified tree");
+}
+
+/// 单 provider(p1) 统一树 YAML：active=(p1, active_model)，含 model-a/model-b
+/// 候选，apiKeyRef=env:<env_key>（凭据由调用方经 set_var 注入）。
+fn unified_tree_yaml(base_url: &str, active_model: &str, env_key: &str) -> String {
+    format!(
+        "version: 2\n\
+         activeModel:\n  providerId: p1\n  modelId: {active_model}\n\
+         providers:\n  p1:\n    displayName: P1\n    baseUrl: {base_url}\n    protocol: openai/chat\n    apiKeyRef: env:{env_key}\n    models:\n      - id: model-a\n        enabled: true\n      - id: model-b\n        enabled: true\n"
+    )
+}
+
+/// 安装单 provider 初始树（provider=p1，base_url，active=model-a，key 经
+/// `TEST_ENV_KEY` 注入为 "sk-a"）。返回已安装 store。
+pub(crate) fn install_tree_models_store(
+    dir: &std::path::Path,
+    base_url: &str,
+) -> std::sync::Arc<agent_provider::model_store::ModelsStore> {
+    std::env::set_var(TEST_ENV_KEY, "sk-a");
+    install_yaml_store(dir, &unified_tree_yaml(base_url, "model-a", TEST_ENV_KEY))
+}
+
+/// 单 provider 树上切换 base_url/model（provider=p1 不变；key 由调用方经
+/// set_var 切换）。等价于旧 `config_profile_apply(profile, key, base, model)`。
+pub(crate) fn apply_single_provider(
+    store: &agent_provider::model_store::ModelsStore,
+    base_url: &str,
+    model: &str,
+) {
+    apply_unified_yaml(store, &unified_tree_yaml(base_url, model, TEST_ENV_KEY));
+}
+
+/// 多 provider 统一树（profile-a / profile-b，各自 env 凭据），active 指定。
+/// 仅本文件 profile 切换 / 快照测试使用。
+fn profile_tree_yaml(active_id: &str, active_model: &str) -> String {
+    format!(
+        "version: 2\n\
+         activeModel:\n  providerId: {active_id}\n  modelId: {active_model}\n\
+         providers:\n  profile-a:\n    displayName: profile-a\n    baseUrl: https://a.example/v1\n    protocol: openai/chat\n    apiKeyRef: env:{TEST_PROFILE_A_KEY}\n    models:\n      - id: model-a\n        enabled: true\n      - id: model-b\n        enabled: true\n  profile-b:\n    displayName: profile-b\n    baseUrl: https://b.example/v1\n    protocol: openai/chat\n    apiKeyRef: env:{TEST_PROFILE_B_KEY}\n    models:\n      - id: model-a\n        enabled: true\n      - id: model-b\n        enabled: true\n"
+    )
+}
+
 /// 把静态 config store 重置并隔离到 `dir`（T4.3 命令级测试用；调用方必须
-/// 持 [CONFIG_TEST_LOCK]）。测试面静态经
-/// [crate::config::reset_config_stores_for_test] 重置为 None 后按当前
-/// `CRISH_WORKBENCH_CONFIG_DIR` 重新懒加载——测试写入永不落到真实用户配置。
+/// 持 [CONFIG_TEST_LOCK]）。静态 store 重置为独立临时目录的空统一树，
+/// 测试随后经 install_yaml_store / install_tree_models_store 写入真实配置——
+/// 写入永不落到真实用户配置。
 pub(crate) fn isolate_config_store(dir: &std::path::Path) {
     std::env::set_var("CRISH_WORKBENCH_CONFIG_DIR", dir);
     crate::config::reset_config_stores_for_test();
-    crate::config::init_api_config_store();
+    let store = std::sync::Arc::new(agent_provider::model_store::ModelsStore::new(
+        dir.join("models.yaml"),
+        dir.join("secrets"),
+        None,
+    ));
+    store.read().expect("isolate config store read");
+    crate::config::install_models_store_for_test(store);
 }
 
 impl super::SessionHistoryCache {

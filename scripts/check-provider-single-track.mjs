@@ -15,6 +15,23 @@
  *
  * 本脚本只断言「缺陷不复发」，不断言期望实现——注入自检见脚本尾部注释。
  *
+ *   D1 连通防线：生产代码零引用已退役符号（清单由兼容清册生成）。
+ *     实证缺陷：删旧符号留消费调用（E0425 同族）。
+ *   D2 构建防线：全量构建单任务档位；构建失败禁止被静默跳过。
+ *     实证缺陷：OOM 中断遗留产物损坏假象（E0463），失败被误读为环境问题。
+ *   D3 契约防线：read 回执形状守卫（完整树 + revision + credentialStates）
+ *     及其负向断言必须齐备。
+ *     实证缺陷：mock 旧回执形状，20 个文件陈旧却仍绿跑的假象。
+ *   D7 协议防线：规范协议集合外写出即红；旧名 google/interactions 只允许
+ *     存在于显式升级边界（modelsLsImport）。
+ *     实证缺陷：协议旧名写出风险。
+ *   D8 孤岛防线：旧 LS 档案写口不得在岛外复活；localStorage.setItem 写口
+ *     必须登记（棘轮）。
+ *     实证缺陷：LS 业务写口复活。
+ *   D9 思考防线：未声明档位 → 引导态（不 throw 到渲染层、不降级、不出站）；
+ *     词表外键 → 显式诊断。
+ *     实证缺陷：未声明档位静默降级 / 渲染崩溃。
+ *
  * 用法：node scripts/check-provider-single-track.mjs [--guide <metric>]
  * 退出码：0 通过；1 任一断言失败。
  *
@@ -23,6 +40,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -52,6 +70,19 @@ function read(rel) {
   return fs.readFileSync(path.join(REPO_ROOT, rel), 'utf8');
 }
 
+/// git 查询（stdout trim；任何非零退出 / 非 git 环境 → 空串，调用方按「未命中」处理）
+function gitOut(args) {
+  try {
+    return execFileSync('git', args, {
+      cwd: REPO_ROOT,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+  } catch {
+    return '';
+  }
+}
+
 /* ── 正确做法指引（--guide） ──────────────────────────────────── */
 // 增量契约：仅在显式 `--guide <metric>` 时生效并立即退出；
 // 不触碰任何断言、判定分支与「普通运行」的退出码。
@@ -60,6 +91,83 @@ function read(rel) {
 const GUIDE_INDEX = process.argv.indexOf('--guide');
 
 const GUIDE_TEXT = {
+  D1: [
+    '违反项：生产代码仍引用**已退役符号**（FAIL 前缀 D1）——删了旧符号却留下消费调用（E0425 同族）。',
+    '文件:行号：FAIL 逐条给出 `<file>:<line>`。扫描范围 = 生产 Rust（crates/**、apps/agent-workbench/src-tauri/src/**，排除 `*_tests.rs` 与 `tests/`，并跳过 `#[cfg(test)]` 区块）+ 生产前端（apps/crish-desktop/src/**，排除 `*.test.ts(x)`）；注释不计。',
+    '当前值/阈值：每个退役符号命中数必须 = 0。清单（7 个，由兼容清册生成）：with_store_mut / config_profile_apply / config_get( / lookup_by_model_id / MODEL_SERIES_CACHE_BEHAVIOR / selectEstimatedCost / selectModelGlobally。',
+    '正确做法：',
+    '  ① 消费点迁到统一配置单轨：配置读写走 `ModelsStore::apply`（CAS 事务）+ `reload_provider`，不要保留旧 store 写口；',
+    '  ② 前端模型选择器改用现行权威入口（`modelRefKey` / 目录查询），不要复活跨厂商「首个」选择器；',
+    '  ③ 确需保留该符号 → 先在 docs/model-config-ssot-convergence/00-兼容清册.md 登记其性质与边界，再在本脚本 D1_RETIRED 同步（两处必须一致）；',
+    '  ④ 复现：node scripts/check-provider-single-track.mjs。',
+    '参考：docs/model-config-ssot-convergence/00-兼容清册.md「已删除」表；docs/provider-single-track-convergence/00-执行记录.md R-域实测记录。',
+  ],
+  D2: [
+    '违反项：全量构建未钉单任务档位，或构建失败可被静默跳过（FAIL 前缀 D2）。',
+    '文件:行号：FAIL 给出 FULL_CHECK_COMMANDS.md 的具体命令行或 .github/workflows/<wf>:<line>。',
+    '当前值/阈值：① FULL_CHECK_COMMANDS.md 中每条全量 cargo 命令（含 `--workspace` / `--manifest-path`）必须带 `-j 1`；② 必须登记 workbench 主二进制 `cargo check --manifest-path`；③ CI 的 cargo 步骤不得 `continue-on-error: true` 或 `|| true`。三项均须为 0 违例。',
+    '正确做法：',
+    '  ① 全量构建统一写成 `cargo test --workspace -j 1` / `cargo check --manifest-path apps/agent-workbench/src-tauri/Cargo.toml -j 1`——Windows 可提交虚拟内存余量有限，默认并行编译曾 OOM 中断并留下「产物损坏」假象（E0463），失败会被误读为环境问题；',
+    '  ② 不要用 `continue-on-error` / `|| true` 让构建步骤「软失败」——报错必须拦住；',
+    '  ③ 主二进制构建不可从清单里删掉（那是唯一能发现「删旧符号留消费调用」的编译面）；',
+    '  ④ 复现：node scripts/check-provider-single-track.mjs。',
+    '参考：docs/provider-single-track-convergence/02-执行拓扑与防御网方案.md D2 行。',
+  ],
+  D3: [
+    '违反项：read 回执形状守卫缺失/被弱化，或缺负向断言（FAIL 前缀 D3）。',
+    '文件:行号：apps/crish-desktop/src/api/modelsCatalogIpc.ts（守卫 `isSnapshot`）与 apps/crish-desktop/src/api/modelsCatalogIpc.test.ts（负向断言）。',
+    '当前值/阈值：① `isSnapshot` 必须强制 `revision` 非空、`credentialStates` 为对象、`credentialStates[*].hasKey` 为 boolean；② 负向断言必须覆盖 4 类：空 revision / credentialStates 缺失 / 旧 `tree` 投影 / hasKey 非布尔。',
+    '正确做法：',
+    '  ① 回执 = 规范树（path + revision + content + template + credentialStates），**不再有 `tree` 旧投影**；有损投影必须被拒（`CONTRACT_MISMATCH`），不得「补字段装成成功」；',
+    '  ② 新增拒绝路径时同步补负向断言——守卫的拒绝分支必须有测试钉死，否则可被静默弱化；',
+    '  ③ mock 请走统一回执工厂（唯一 mock 工厂 = 完整树 + revision + credentialStates）；当前 `modelsCatalogIpc.test.ts` 与 `modelsCatalogStore.test.ts` 各有一份且默认值已发散（脚本 WARN 提示），收敛为共享 helper 后告警消失；',
+    '  ④ 复现：node scripts/check-provider-single-track.mjs。',
+    '参考：docs/provider-single-track-convergence/02-执行拓扑与防御网方案.md D3 行。',
+  ],
+  D7: [
+    '违反项：规范协议集合被绕过 / 旧协议名泄漏到升级边界之外（FAIL 前缀 D7）。',
+    '文件:行号：apps/crish-desktop/src/api/modelsNormalize.ts（集合与归一）、apps/crish-desktop/src/api/modelsLsImport.ts（唯一允许的升级边界）；越界命中由 FAIL 列出。',
+    '当前值/阈值：① CANONICAL_PROTOCOLS 必须存在且不含 `google/interactions`；② normalizeProtocol 必须以 CANONICAL_PROTOCOLS 收口；③ 生产代码中 `google/interactions` 只允许出现在 modelsLsImport.ts。',
+    '正确做法：',
+    '  ① 运行时与写出统一用规范名 `google/generate-content`；旧名 `google/interactions` 只在**读侧升级边界**（modelsLsImport 的别名映射）出现一次；',
+    '  ② 任何新增协议先加进 PROTOCOLS / CANONICAL_PROTOCOLS，再经 normalizeProtocol 归一——不要就地写字面量；',
+    '  ③ 别名映射不得散落到运行时：`google/interactions` 出现在 modelsLsImport.ts 之外即红；',
+    '  ④ 复现：node scripts/check-provider-single-track.mjs。',
+    '参考：docs/provider-single-track-convergence/02-执行拓扑与防御网方案.md D7 行。',
+  ],
+  D8: [
+    '违反项：旧 LS 档案写口复活（岛外**新增**写调用），或新增未登记的 localStorage.setItem 写口（FAIL 前缀 D8）。',
+    '文件:行号：FAIL 逐条给出 `<file>:<line> <symbol>`。扫描 = apps/crish-desktop/src 生产 ts/tsx（排除 *.test.*，注释不计），符号 = saveProfiles / saveProfileKey / setActiveModelId。',
+    '当前值/阈值：① 岛外新增写调用必须 = 0（岛内 = 登记债务，脚本 WARN）；② 带 localStorage.setItem 的文件必须全部登记在 D8_SETITEM_FILES（当前 32 个）。',
+    '正确做法：',
+    '  ① 业务写口走统一配置单轨：Rust `ModelsStore`（CAS 事务）+ 前端 `modelsCatalog*`；旧 LS 档案只允许**读侧导入**（迁移/兼容读取）；',
+    '  ② 需要新增 localStorage 键空间 → 在 D8_SETITEM_FILES 登记文件并说明键的用途与生命周期；',
+    '  ③ 岛内债务收敛：逐项把写调用迁出，收敛后从 D8_ISLAND / D8_KNOWN_DEBT 删除对应条目（棘轮只降不升）；',
+    '  ④ 复现：node scripts/check-provider-single-track.mjs（WARN 行会列出全部现存债务点位）。',
+    '参考：docs/provider-single-track-convergence/02-执行拓扑与防御网方案.md D8 行。',
+  ],
+  D9: [
+    '违反项：思考档位未声明时降级/出站，或词表外档位被静默忽略（FAIL 前缀 D9）。',
+    '文件:行号：apps/crish-desktop/src/api/modelsCatalogLive.ts（resolveThinkingHandoff）、apps/crish-desktop/src/api/modelsCatalogLive.test.ts（三条路径断言）。',
+    '当前值/阈值：① 模型未声明档位且未选择 → 必须返回引导态 `supported: false`（不 throw 到渲染层、不降级、不出站）；② 请求词表外的档位 → 必须**显式诊断**（throw 且消息含档位名），不得静默忽略；③ 上述两条 + 命中路径都必须有断言钉死。',
+    '正确做法：',
+    '  ① 未声明档位 = 引导态：让 UI 引导用户去声明，不要偷偷发一个默认 thinking 出去；',
+    '  ② 词表外档位 = 显式诊断：静默忽略会让用户以为档位已生效（实际按默认发），属于「不出站但骗人」；',
+    '  ③ 新增分支必须同时补断言——拒绝路径与引导路径都要钉死，否则守卫可被静默弱化；',
+    '  ④ 复现：node scripts/check-provider-single-track.mjs。',
+    '参考：docs/provider-single-track-convergence/02-执行拓扑与防御网方案.md D9 行。',
+  ],
+  D12: [
+    '违反项：① 门禁清单引用了**不存在**的脚本（package.json / FULL_CHECK_COMMANDS.md 与磁盘不一致，干净检出后门禁直接断裂）；② 门禁脚本被 `.gitignore` **永久排除**（存在但永远进不了库的幽灵脚本）。',
+    '文件:行号：FAIL 逐条给出相对仓库根的脚本路径；判据来源 = package.json `scripts` 的引用 + FULL_CHECK_COMMANDS.md 反引号内命令 + 本脚本自身。',
+    '当前值/阈值：两条判据均须为 0 违例。「未跟踪但未被忽略」= 待提交的正常开发态，不算违规（新脚本先写后提交）。',
+    '正确做法：',
+    '  ① 门禁脚本是**资产**：`.gitignore` 的 `/scripts/**/*.mjs` 是全局忽略规则，每个守卫脚本必须**逐条** `!scripts/<name>.mjs` 显式放行——不得依赖「已被 git 跟踪」的间接兜底（`git commit --only` 用临时索引，跟踪状态丢失时会被判忽略）；',
+    '  ② 被 package.json / FULL_CHECK_COMMANDS.md 引用的脚本若不打算入库（本机专用脚手架），应从引用处摘除，而不是留在清单里指向一个干净检出后不存在的文件；',
+    '  ③ 新增门禁脚本时三处同步：写脚本 → 补 `.gitignore` 放行 → 在 FULL_CHECK_COMMANDS.md 注册；',
+    '  ④ 复现：node scripts/check-provider-single-track.mjs。',
+    '参考：.gitignore 的「守卫脚本显式放行补齐（2026-09-14）」段；docs/provider-single-track-convergence/02-执行拓扑与防御网方案.md D12 行。',
+  ],
   D5: [
     '违反项：身份键 `::` 拼接回潮 —— ① settingsObjectId 未委派 modelRefKey；② settingsObjectId 仍含 `${..}::${..}` 模板拼接；③ 生产代码出现未白名单登记的 `::` 拼接键空间（FAIL 前缀 D5）。',
     '文件:行号：FAIL 逐条给出 —— 生产代码扫描打印 `<file>:<line>`；settingsObjectId 检查打印 apps/crish-desktop/src/components/settings-models/modelProfilesHelpers.ts。',
@@ -219,6 +327,481 @@ const testDirs = ['apps/crish-desktop/src'];
     }
   }
   ok('D6: 退役别名清单核验完成');
+}
+
+/* ── D1 连通防线（生产代码零引用已退役符号） ───────────────────── */
+
+// 权威清单来源（清单由兼容清册生成，不得在此凭空增删）：
+//   ① docs/model-config-ssot-convergence/00-兼容清册.md「已删除」表（α3 / α4 / α6）
+//   ② docs/provider-single-track-convergence/00-执行记录.md R-域实测记录
+//      （统一配置单轨后 config_get / config_profile_apply / with_store_mut 消费面零残留）
+const D1_RETIRED = [
+  { symbol: 'with_store_mut', kind: 'rust', note: '旧统一配置 store 写口（已由 ModelsStore::apply CAS 事务取代）' },
+  { symbol: 'config_profile_apply', kind: 'rust', note: '旧供应商配置写入命令（已退役）' },
+  { symbol: 'config_get(', kind: 'rust', note: '旧配置读取命令（已退役）' },
+  { symbol: 'lookup_by_model_id', kind: 'rust', note: '跨厂商首个模型查询（α4 已删除）' },
+  { symbol: 'MODEL_SERIES_CACHE_BEHAVIOR', kind: 'rust', note: '系列缓存行为表（α6 已删除）' },
+  { symbol: 'selectEstimatedCost', kind: 'ts', note: 'gravestone 选择器（α3 已删除）' },
+  { symbol: 'selectModelGlobally', kind: 'ts', note: '跨厂商首模型选择器（α3 已删除）' },
+];
+
+/** 去掉行/块注释（保留换行以维持行号）。 */
+function stripComments(src) {
+  return src
+    .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '))
+    .replace(/\/\/[^\n]*/g, (m) => ' '.repeat(m.length));
+}
+
+/**
+ * 标记 `#[cfg(test)]` 覆盖的行号（1-based）。判定 = 从该属性后的第一个 `{`
+ * 起做括号配平；`#[cfg(test)] mod x;`（无花括号）只覆盖其自身行。
+ */
+function cfgTestLines(src) {
+  const masked = stripComments(src);
+  const lines = masked.split('\n');
+  const covered = new Set();
+  const re = /#\[cfg\(test\)\]/g;
+  let m;
+  while ((m = re.exec(masked)) !== null) {
+    const startLine = masked.slice(0, m.index).split('\n').length;
+    const braceAt = masked.indexOf('{', m.index);
+    const semiAt = masked.indexOf(';', m.index);
+    if (braceAt === -1 || (semiAt !== -1 && semiAt < braceAt)) {
+      covered.add(startLine);
+      continue;
+    }
+    let depth = 0;
+    let end = braceAt;
+    for (let i = braceAt; i < masked.length; i++) {
+      if (masked[i] === '{') depth++;
+      else if (masked[i] === '}') {
+        depth--;
+        if (depth === 0) { end = i; break; }
+      }
+    }
+    const endLine = masked.slice(0, end).split('\n').length;
+    for (let l = startLine; l <= endLine; l++) covered.add(l);
+  }
+  return covered;
+}
+
+{
+  const targets = [
+    ...walk(path.join(REPO_ROOT, 'crates'), (name) => name.endsWith('.rs')),
+    ...walk(path.join(REPO_ROOT, 'apps/agent-workbench/src-tauri/src'), (name) => name.endsWith('.rs')),
+  ];
+  let scanned = 0;
+  for (const file of targets) {
+    const rel = path.relative(REPO_ROOT, file).replaceAll('\\', '/');
+    // 测试文件整体排除：`*_tests.rs` 与 `tests/` 目录
+    if (/_tests\.rs$/.test(rel) || /\/tests\//.test(rel)) continue;
+    const raw = fs.readFileSync(file, 'utf8');
+    const masked = stripComments(raw);
+    const testLines = cfgTestLines(raw);
+    scanned++;
+    const lines = masked.split('\n');
+    lines.forEach((line, index) => {
+      const lineNo = index + 1;
+      if (testLines.has(lineNo)) return; // #[cfg(test)] 内允许（测试专用符号）
+      for (const { symbol, note } of D1_RETIRED) {
+        if (symbol.endsWith('(')) {
+          if (!line.includes(symbol)) continue;
+        } else if (!new RegExp(`\\b${symbol.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(line)) {
+          continue;
+        }
+        fail(
+          `D1: ${rel}:${lineNo} 生产代码仍引用已退役符号 \`${symbol}\`（${note}）。` +
+            ` 消费面必须已迁到统一配置单轨；若确需保留请先在兼容清册登记并说明边界。`
+        );
+      }
+    });
+  }
+  ok(`D1: 生产 Rust 代码退役符号连通扫描完成（${scanned} 个文件 / ${D1_RETIRED.length} 个退役符号）`);
+}
+
+{
+  const files = walk(path.join(REPO_ROOT, 'apps/crish-desktop/src'), (name) =>
+    /\.(ts|tsx)$/.test(name) && !/\.test\.(ts|tsx)$/.test(name)
+  );
+  for (const file of files) {
+    const rel = path.relative(REPO_ROOT, file).replaceAll('\\', '/');
+    const masked = stripComments(fs.readFileSync(file, 'utf8'));
+    masked.split('\n').forEach((line, index) => {
+      for (const { symbol, kind, note } of D1_RETIRED) {
+        if (kind !== 'ts') continue;
+        if (!new RegExp(`\\b${symbol}\\b`).test(line)) continue;
+        fail(
+          `D1: ${rel}:${index + 1} 生产代码仍引用已退役符号 \`${symbol}\`（${note}）。`
+        );
+      }
+    });
+  }
+  ok('D1: 生产前端代码退役选择器扫描完成');
+}
+
+/* ── D2 构建防线（全量构建单任务档位 + 禁止静默跳过） ───────────── */
+
+{
+  // ① 全量 cargo 命令必须显式单任务档位：Windows 可提交虚拟内存余量有限，
+  //    默认并行编译曾 OOM 中断并留下「产物损坏」假象（E0463）。
+  const full = read('FULL_CHECK_COMMANDS.md');
+  // 只取反引号内的命令本体——行内说明文字可能提到「-j 1 必带」，
+  // 若扫整行会把「命令本身没钉」的缺陷盖成通过（假阴性）。
+  const cargoCmds = [];
+  for (const l of full.split('\n')) {
+    const m = l.match(/`([^`]*cargo\s+(?:test|check|build)\s[^`]*)`/);
+    if (m && /--workspace|--manifest-path/.test(m[1])) cargoCmds.push({ line: l.trim(), cmd: m[1] });
+  }
+  const unpinned = cargoCmds.filter(({ cmd }) => !/-j\s*1\b/.test(cmd) && !/--jobs\s*1\b/.test(cmd));
+  if (cargoCmds.length === 0) {
+    fail('D2: FULL_CHECK_COMMANDS.md 未登记任何全量 cargo 命令——主二进制检查被静默移除');
+  } else if (unpinned.length > 0) {
+    fail(
+      `D2: FULL_CHECK_COMMANDS.md 有 ${unpinned.length} 条全量 cargo 命令未钉单任务档位（-j 1）——` +
+        ` 默认并行编译在页面文件余量不足时 OOM 中断，失败会被误读为「产物损坏」。首条：${unpinned[0].line}`
+    );
+  } else {
+    ok(`D2: 全量 cargo 命令全部钉单任务档位（${cargoCmds.length} 条）`);
+  }
+
+  // ② 主二进制构建/检查必须仍被登记（防止「静默跳过主二进制检查」）
+  if (/cargo\s+check\s+--manifest-path\s+apps\/agent-workbench\/src-tauri\/Cargo\.toml/.test(full)) {
+    ok('D2: workbench 主二进制静态检查已登记');
+  } else {
+    fail('D2: FULL_CHECK_COMMANDS.md 缺少 workbench 主二进制 `cargo check --manifest-path`——构建失败可被静默跳过');
+  }
+
+  // ③ CI 工作流的 cargo 步骤不得 continue-on-error / `|| true`（失败必须 fail）
+  const wfDir = path.join(REPO_ROOT, '.github/workflows');
+  if (fs.existsSync(wfDir)) {
+    const wfs = fs.readdirSync(wfDir).filter((n) => n.endsWith('.yml'));
+    let steps = 0;
+    for (const wf of wfs) {
+      const lines = fs.readFileSync(path.join(wfDir, wf), 'utf8').split('\n');
+      lines.forEach((line, index) => {
+        if (!/run:\s*cargo\s/.test(line)) return;
+        steps++;
+        const window = lines.slice(Math.max(0, index - 6), index + 7).join('\n');
+        if (/continue-on-error:\s*true/.test(window)) {
+          fail(`D2: .github/workflows/${wf}:${index + 1} 的 cargo 步骤被 continue-on-error 静默跳过`);
+        }
+        if (/\|\|\s*true/.test(line)) {
+          fail(`D2: .github/workflows/${wf}:${index + 1} 的 cargo 步骤带 \`|| true\`——构建失败被吞`);
+        }
+      });
+    }
+    ok(`D2: CI cargo 步骤静默跳过扫描完成（${wfs.length} 个工作流 / ${steps} 个 cargo 步骤）`);
+  }
+}
+
+/* ── D3 契约防线（read 回执形状：完整树 + revision + credentialStates） ── */
+
+{
+  const rel = 'apps/crish-desktop/src/api/modelsCatalogIpc.ts';
+  const src = read(rel);
+
+  // ① 回执守卫必须存在，且强制 revision 与 credentialStates
+  if (!/function isSnapshot\(/.test(src)) {
+    fail(`D3: ${rel} 缺少 isSnapshot 回执守卫——有损旧投影可被当成成功回执`);
+  } else {
+    if (!/typeof value\.revision !== 'string' \|\| !value\.revision/.test(src)) {
+      fail(`D3: ${rel} 的 isSnapshot 未强制 revision 非空——revision 缺失会被放行`);
+    }
+    if (!/!object\(value\.credentialStates\)/.test(src)) {
+      fail(`D3: ${rel} 的 isSnapshot 未强制 credentialStates——凭据态缺失会被放行`);
+    }
+    if (!/hasKey !== 'boolean'/.test(src)) {
+      fail(`D3: ${rel} 的 isSnapshot 未校验 credentialStates[*].hasKey 为 boolean`);
+    }
+    ok('D3: isSnapshot 强制 revision / credentialStates / hasKey');
+  }
+
+  // ② 负向断言必须覆盖：空 revision、credentialStates 缺失、旧 tree 投影
+  const testRel = 'apps/crish-desktop/src/api/modelsCatalogIpc.test.ts';
+  const testSrc = read(testRel);
+  const negatives = [
+    { name: '空 revision', re: /revision:\s*''/ },
+    { name: 'credentialStates 缺失', re: /credentialStates:\s*undefined/ },
+    { name: '旧 tree 投影', re: /tree:\s*(\{\s*version|\bnull\b)/ },
+    { name: 'hasKey 非布尔', re: /hasKey:\s*'yes'/ },
+  ];
+  const missing = negatives.filter((n) => !n.re.test(testSrc));
+  if (missing.length > 0) {
+    fail(
+      `D3: ${testRel} 缺少负向断言：${missing.map((n) => n.name).join(' / ')}——` +
+        ` 回执守卫的拒绝路径必须被钉死，否则守卫可被静默弱化`
+    );
+  } else {
+    ok('D3: 回执守卫负向断言齐备（4 类）');
+  }
+
+  // ③ 回执 mock 工厂唯一性（审计项：当前两份已发散，登记为待收敛）
+  const factories = [
+    'apps/crish-desktop/src/api/modelsCatalogIpc.test.ts',
+    'apps/crish-desktop/src/api/modelsCatalogStore.test.ts',
+  ].filter((p) => /function snapshot\(/.test(read(p)));
+  if (factories.length > 1) {
+    console.warn(
+      `WARN  D3: read 回执 mock 工厂存在 ${factories.length} 份独立定义（${factories.join(' / ')}）——` +
+        ` 二者默认值已发散（template / parseError / apiKeyLast4 不一致）。` +
+        ` 权威要求「唯一 mock 工厂」，收敛为共享 helper 后本告警应消失。`
+    );
+  } else {
+    ok('D3: read 回执 mock 工厂唯一');
+  }
+}
+
+/* ── D7 协议防线（规范协议集合外写出即红） ─────────────────────── */
+
+{
+  const rel = 'apps/crish-desktop/src/api/modelsNormalize.ts';
+  const src = read(rel);
+
+  // ① 规范集合必须存在，且**不含**只读边界旧名
+  if (!/export const CANONICAL_PROTOCOLS/.test(src)) {
+    fail(`D7: ${rel} 缺少 CANONICAL_PROTOCOLS——运行时/写出的规范协议集合无单一真源`);
+  } else if (/CANONICAL_PROTOCOLS[\s\S]{0,400}google\/interactions/.test(src)) {
+    fail(`D7: ${rel} 的规范协议集合混入旧名 google/interactions——旧名只允许存在于显式升级边界`);
+  } else {
+    ok('D7: 规范协议集合存在且不含旧名 google/interactions');
+  }
+
+  // ② 归一入口必须拒绝集合外取值（返回 undefined 而非原样透传）
+  if (/export function normalizeProtocol[\s\S]{0,240}CANONICAL_PROTOCOLS\.has\(raw\)/.test(src)) {
+    ok('D7: normalizeProtocol 只放行规范集合内的协议');
+  } else {
+    fail(`D7: ${rel} 的 normalizeProtocol 未以 CANONICAL_PROTOCOLS 收口——集合外取值可被原样透传写出`);
+  }
+
+  // ③ 旧名只允许出现在显式升级边界 modelsLsImport.ts（+ 测试）
+  const BOUNDARY = 'apps/crish-desktop/src/api/modelsLsImport.ts';
+  const offenders = [];
+  for (const file of walk(path.join(REPO_ROOT, 'apps/crish-desktop/src'), (name) =>
+    /\.(ts|tsx)$/.test(name) && !/\.test\.(ts|tsx)$/.test(name)
+  )) {
+    const r = path.relative(REPO_ROOT, file).replaceAll('\\', '/');
+    if (r === BOUNDARY) continue;
+    if (/google\/interactions/.test(stripComments(fs.readFileSync(file, 'utf8')))) offenders.push(r);
+  }
+  if (offenders.length > 0) {
+    fail(
+      `D7: 旧协议名 google/interactions 出现在升级边界之外：${offenders.join(' / ')}——` +
+        ` 别名映射只允许存在于 modelsLsImport.ts（显式升级边界），运行时与写出必须用 google/generate-content`
+    );
+  } else {
+    ok('D7: 旧协议名仅存在于显式升级边界 modelsLsImport.ts');
+  }
+}
+
+/* ── D8 孤岛防线（LS 业务写口不得复活） ────────────────────────── */
+
+// 登记为「旧 LS 档案岛」的文件域（迁移未收口 ⇒ 现状债务，非豁免新增）。
+// 权威目标 = 岛内写调用归零（本表随迁移收口逐项删除）。
+const D8_ISLAND = [
+  'apps/crish-desktop/src/api/provider-profiles/',
+  'apps/crish-desktop/src/api/providerProfiles.ts',
+  'apps/crish-desktop/src/api/oauthTokenManager.ts', // 无生产引用方（死岛），待清退
+];
+const D8_SYMBOLS = ['saveProfiles', 'saveProfileKey', 'setActiveModelId'];
+
+// 岛外**已知债务**（2026-09-15 实测）：新设置 UI 与首启向导仍直接调用旧岛写入方
+// `saveProfileKey`（其实现内部 `saveProfiles(list)` 写 LS + 走旧同步路径）。
+// 这是迁移未收口的事实，不是豁免新增——新增站点（不在本表）一律硬失败。
+const D8_KNOWN_DEBT = new Map([
+  ['apps/crish-desktop/src/components/settings-models/useModelProfilesState.ts', '设置 UI 保存密钥仍走旧岛 saveProfileKey'],
+  ['apps/crish-desktop/src/components/useFirstRunWizard.ts', '首启向导保存密钥仍走旧岛 saveProfileKey'],
+]);
+
+{
+  const inIsland = (rel) => D8_ISLAND.some((p) => (p.endsWith('/') ? rel.startsWith(p) : rel === p));
+  const outside = [];
+  const islandHits = [];
+  const debtHits = [];
+  for (const file of walk(path.join(REPO_ROOT, 'apps/crish-desktop/src'), (name) =>
+    /\.(ts|tsx)$/.test(name) && !/\.test\.(ts|tsx)$/.test(name)
+  )) {
+    const rel = path.relative(REPO_ROOT, file).replaceAll('\\', '/');
+    const masked = stripComments(fs.readFileSync(file, 'utf8'));
+    masked.split('\n').forEach((line, index) => {
+      for (const symbol of D8_SYMBOLS) {
+        if (!new RegExp(`\\b${symbol}\\s*\\(`).test(line)) continue;
+        const at = `${rel}:${index + 1}`;
+        if (inIsland(rel)) islandHits.push(`${at} ${symbol}`);
+        else if (D8_KNOWN_DEBT.has(rel)) debtHits.push(`${at} ${symbol}`);
+        else outside.push(`${at} ${symbol}`);
+      }
+    });
+  }
+  if (outside.length > 0) {
+    fail(
+      `D8: 旧 LS 档案写口在岛外**新增**（${outside.length} 处，未登记）：${outside.slice(0, 5).join(' / ')}` +
+        `${outside.length > 5 ? ' …' : ''}—— 业务写口必须走统一配置单轨（ModelsStore / modelsCatalog*），` +
+        ` 旧 LS 档案只允许读侧导入。`
+    );
+  } else {
+    ok('D8: 旧 LS 档案写口在岛外零新增');
+  }
+  if (islandHits.length > 0) {
+    console.warn(
+      `WARN  D8: 旧 LS 档案岛内仍有 ${islandHits.length} 处写调用（登记债务，目标 = 0）：` +
+        `${islandHits.slice(0, 4).join(' / ')}${islandHits.length > 4 ? ' …' : ''}。` +
+        ` 迁移收口时逐项删除本脚本 D8_ISLAND 条目。`
+    );
+  }
+  if (debtHits.length > 0) {
+    console.warn(
+      `WARN  D8: 岛外已知债务 ${debtHits.length} 处（登记于 D8_KNOWN_DEBT，目标 = 0）：` +
+        `${debtHits.join(' / ')}。 收敛方向 = 设置 UI / 首启向导改调统一单轨的密钥写入，` +
+        ` 收敛后从 D8_KNOWN_DEBT 删除对应条目。`
+    );
+  }
+
+  // localStorage.setItem 键空间白名单（棘轮：新增写文件必须显式登记）
+  const D8_SETITEM_FILES = new Set([
+    'apps/crish-desktop/src/api/SessionRuntimeRegistry.ts',
+    'apps/crish-desktop/src/api/agentProfiles.ts',
+    'apps/crish-desktop/src/api/beforeunloadFlush.ts',
+    'apps/crish-desktop/src/api/cache/runtimeCache.ts',
+    'apps/crish-desktop/src/api/clientApiSettings.ts',
+    'apps/crish-desktop/src/api/engineConfigIO.ts',
+    'apps/crish-desktop/src/api/extensionCatalog.ts',
+    'apps/crish-desktop/src/api/import/importRootSettings.ts',
+    'apps/crish-desktop/src/api/localStorageApi.ts',
+    'apps/crish-desktop/src/api/modelCatalogMeta.ts',
+    'apps/crish-desktop/src/api/modelsLsImport.ts',
+    'apps/crish-desktop/src/api/previewBrowserStore.ts',
+    'apps/crish-desktop/src/api/pricingStore.ts',
+    'apps/crish-desktop/src/api/projectStore.ts',
+    'apps/crish-desktop/src/api/provider-profiles/contextStatePending.ts',
+    'apps/crish-desktop/src/api/provider-profiles/migrateLegacyProfiles.ts',
+    'apps/crish-desktop/src/api/provider-profiles/profileActiveSelection.ts',
+    'apps/crish-desktop/src/api/provider-profiles/profileStorePersistence.ts',
+    'apps/crish-desktop/src/api/session-persistence/sessionLocalStorage.ts',
+    'apps/crish-desktop/src/api/session-persistence/sessionQuota.ts',
+    'apps/crish-desktop/src/api/session-persistence/sessionRustDbFallback.ts',
+    'apps/crish-desktop/src/api/session-persistence/sessionShellKeyMigration.ts',
+    'apps/crish-desktop/src/api/shellWindowScope.ts',
+    'apps/crish-desktop/src/api/skillsApiFs.ts',
+    'apps/crish-desktop/src/api/skillsApiHelpers.ts',
+    'apps/crish-desktop/src/api/themeStore.ts',
+    'apps/crish-desktop/src/api/updateStore.ts',
+    'apps/crish-desktop/src/api/usageStore.ts',
+    'apps/crish-desktop/src/app/hydrateWorkspaceShell.ts',
+    'apps/crish-desktop/src/services/TelemetryService.ts',
+    'apps/crish-desktop/src/services/startup/startupMetrics.ts',
+    'apps/crish-desktop/src/utils/layoutSerializer.ts',
+  ]);
+  const newWriters = [];
+  for (const file of walk(path.join(REPO_ROOT, 'apps/crish-desktop/src'), (name) =>
+    /\.(ts|tsx)$/.test(name) && !/\.test\.(ts|tsx)$/.test(name)
+  )) {
+    const rel = path.relative(REPO_ROOT, file).replaceAll('\\', '/');
+    if (D8_SETITEM_FILES.has(rel)) continue;
+    if (/localStorage\.setItem\s*\(/.test(stripComments(fs.readFileSync(file, 'utf8')))) {
+      newWriters.push(rel);
+    }
+  }
+  if (newWriters.length > 0) {
+    fail(
+      `D8: 新增 localStorage.setItem 写口未登记：${newWriters.join(' / ')}——` +
+        ` localStorage 键空间必须显式登记（白名单在 check-provider-single-track.mjs 的 D8_SETITEM_FILES）`
+    );
+  } else {
+    ok(`D8: localStorage.setItem 键空间白名单核验完成（${D8_SETITEM_FILES.size} 个登记文件）`);
+  }
+}
+
+/* ── D9 思考防线（未声明档位不降级不出站；词表外键显式诊断） ─────── */
+
+{
+  const rel = 'apps/crish-desktop/src/api/modelsCatalogLive.ts';
+  const src = read(rel);
+  const body = src.split('export function resolveThinkingHandoff')[1] ?? '';
+
+  // ① 未声明档位 + 无选择 → 引导态（supported: false），不得 throw
+  if (!/if \(!model \|\| options\.length === 0\)/.test(body)) {
+    fail(`D9: ${rel} 的 resolveThinkingHandoff 未识别「模型未声明思考档位」分支`);
+  } else if (!/supported:\s*false/.test(body)) {
+    fail(`D9: ${rel} 未声明档位时未返回引导态（supported: false）——可能降级或出站`);
+  } else {
+    ok('D9: 未声明档位返回引导态（supported: false，不降级不出站）');
+  }
+
+  // ② 词表外键 → 显式诊断（throw 且消息指明档位），不得静默忽略
+  if (/if \(selectedTitle && !option\)\s*throw new Error\(/.test(body)) {
+    ok('D9: 词表外档位 → 显式诊断（throw，消息含档位名）');
+  } else {
+    fail(`D9: ${rel} 对词表外的思考档位未显式诊断——静默忽略会让用户以为档位已生效`);
+  }
+
+  // ③ 负向断言必须钉死三条路径（引导态 / 词表外 / 已声明档位命中）
+  const testRel = 'apps/crish-desktop/src/api/modelsCatalogLive.test.ts';
+  const testSrc = read(testRel);
+  const needed = [
+    { name: '未声明档位 → supported:false', re: /resolveThinkingHandoff\([^)]*null\)[\s\S]{0,200}supported:\s*false/ },
+    { name: '词表外键 → throw', re: /expect\(\(\) => resolveThinkingHandoff\([^)]*\)\)\.toThrow\(/ },
+  ];
+  const missing = needed.filter((n) => !n.re.test(testSrc));
+  if (missing.length > 0) {
+    fail(`D9: ${testRel} 缺少负向断言：${missing.map((n) => n.name).join(' / ')}`);
+  } else {
+    ok('D9: 思考交接三条路径均有断言钉死');
+  }
+}
+
+/* ── D12 资产防线（门禁脚本必须可入库；干净检出可执行） ─────────── */
+
+{
+  // 门禁资产 = package.json `scripts` 引用的脚本 + FULL_CHECK_COMMANDS.md
+  // 注册的命令 + 本防御网脚本自身。两条判据：
+  //   ① 路径存在——干净检出后门禁不得因缺文件而断（硬红）；
+  //   ② 未被 .gitignore 永久排除——「存在但永远进不了库」的幽灵脚本（硬红）。
+  // 未跟踪但未被忽略 = 待提交的正常开发态，不算违规（新脚本先写后提交）。
+  const SCRIPT_REF = /(?:^|[\s`'"])(scripts\/[\w./-]+\.(?:mjs|js|cjs|ps1))/g;
+  const referenced = new Set();
+
+  const pkg = JSON.parse(read('package.json'));
+  for (const cmd of Object.values(pkg.scripts ?? {})) {
+    for (const m of String(cmd).matchAll(SCRIPT_REF)) referenced.add(m[1]);
+  }
+  for (const m of read('FULL_CHECK_COMMANDS.md').matchAll(/`([^`\n]+)`/g)) {
+    for (const r of m[1].matchAll(SCRIPT_REF)) referenced.add(r[1]);
+  }
+  referenced.add('scripts/check-provider-single-track.mjs');
+
+  const inGitRepo = gitOut(['rev-parse', '--is-inside-work-tree']) === 'true';
+  const missing = [];
+  const ghosts = [];
+  for (const rel of [...referenced].sort()) {
+    if (!fs.existsSync(path.join(REPO_ROOT, rel))) {
+      missing.push(rel);
+      continue;
+    }
+    // 幽灵判据 = 「git 未跟踪」且「被忽略规则命中」：两者同时成立才永远入不了库。
+    const tracked = gitOut(['ls-files', '--error-unmatch', '--', rel]) !== '';
+    const ignored = gitOut(['check-ignore', '--', rel]) !== '';
+    if (inGitRepo && !tracked && ignored) ghosts.push(rel);
+  }
+
+  if (missing.length > 0) {
+    fail(
+      `D12: 门禁清单引用了不存在的脚本：${missing.join(' / ')}——` +
+        ` 干净检出后门禁直接断裂（package.json / FULL_CHECK_COMMANDS.md 与磁盘不一致）`
+    );
+  } else {
+    ok(`D12: 门禁脚本引用全部存在（${referenced.size} 个）`);
+  }
+
+  if (!inGitRepo) {
+    ok('D12: 非 git 工作区，跳过可入库性核验');
+  } else if (ghosts.length > 0) {
+    fail(
+      `D12: 门禁脚本被 .gitignore 永久排除（存在但入不了库）：${ghosts.join(' / ')}——` +
+        ` 需在 .gitignore 补 \`!<path>\` 显式放行，或从 package.json / FULL_CHECK_COMMANDS.md 摘除引用`
+    );
+  } else {
+    ok('D12: 门禁脚本均可入库（无被忽略的幽灵脚本）');
+  }
 }
 
 /* ── 出口 ────────────────────────────────────────────────────── */

@@ -678,6 +678,17 @@ mod integration_tests {
             Arc::new(StatusDiagnostics::new()),
             None,
         ));
+        // 用户裁决：重试预算/上限可配置——本文件用例数请求次数不断言墙钟
+        // 时长，统一注入 baseMs=1 快速策略，防缺省 750ms 指数退避把多次
+        // 重试用例拖穿断言窗口。
+        state.set_run_policy(Some(crate::config::run_policy::RunPolicy {
+            retry_backoff: Some(crate::config::run_policy::RetryBackoffPolicy {
+                base_ms: Some(1),
+                max_ms: Some(8),
+                total_budget_ms: Some(60_000),
+            }),
+            transient_retry_limit: Some(10),
+        }));
         let config = EngineProviderConfig {
             base_url: base_url.to_string(),
             api_key: "test-key".to_string(),
@@ -719,23 +730,38 @@ mod integration_tests {
     }
 
     /// 轮询会话事件库中的 agent-end 事件(真实 loop 收口落库;返回 reason)
-    async fn wait_run_agent_end_reason(db: &LocalDb, session_id: &str, window: Duration) -> String {
+async fn wait_run_terminal(db: &LocalDb, session_id: &str, window: Duration) -> String {
         let deadline = tokio::time::Instant::now() + window;
         loop {
-            let events = db.query_events(session_id, 0, Some(500)).expect("事件查询");
+            // 收口落库经 spawn_blocking 异步写 events 表——测试轮询可能撞上
+        // 写侧表锁（query_events_collect: database table is locked）；
+        // 锁竞速按「未就绪」重试，写侧完成后本查询自然成功。
+        let events = match db.query_events(session_id, 0, Some(500)) {
+            Ok(events) => events,
+            Err(_) => {
+                assert!(
+                    tokio::time::Instant::now() < deadline,
+                    "run-terminal 事件未在窗口内落库"
+                );
+                tokio::time::sleep(Duration::from_millis(30)).await;
+                continue;
+            }
+        };
             for event in &events {
-                if event.event_type != "agent-end" {
+                // G-29 事件权威：run-terminal 是唯一终态事件（03 §5.2-2，
+                // 旧 agent-end/run-completed/run-failed 已删），断言只认权威形态。
+                if event.event_type != "run-terminal" {
                     continue;
                 }
                 let payload: serde_json::Value =
-                    serde_json::from_str(&event.payload).expect("agent-end 载荷为合法 JSON");
-                if let Some(reason) = payload["reason"].as_str() {
-                    return reason.to_string();
+                    serde_json::from_str(&event.payload).expect("run-terminal 载荷为合法 JSON");
+                if let Some(terminal) = payload["terminal"].as_str() {
+                    return terminal.to_string();
                 }
             }
             assert!(
                 tokio::time::Instant::now() < deadline,
-                "agent-end 事件未在窗口内落库"
+                "run-terminal 事件未在窗口内落库"
             );
             tokio::time::sleep(Duration::from_millis(30)).await;
         }
@@ -800,6 +826,29 @@ mod integration_tests {
         }
     }
 
+    /// 进程级 LIVE_CATALOG 是共享静态（protocol.rs:46），必须与
+    /// protocol / engine_provider 测试**共用同一把锁**串行安装夹具——
+    /// 否则并行时本模块会读到别的测试装的 catalog，chat 轨被误判为
+    /// responses 轨（实证 2026-09-15：本模块 4 个用例并行全红、单跑全绿，
+    /// 报错 `[invalid-stream] Responses stream ended without a terminal
+    /// response event`）。protocol.rs:486-489 的注释已声明该锁的共享契约，
+    /// 此前只覆盖了 protocol / engine_provider 两处，本模块漏接。
+    fn lock_live_catalog() -> std::sync::MutexGuard<'static, ()> {
+        crate::engine_provider::protocol::LIVE_CATALOG_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner())
+    }
+
+    /// 安装空树夹具 → `slots_for_model` 不命中 → `CatalogRequestProfile::fail_closed()`
+    /// （protocol = Chat、max_tokens_field = MaxTokens）。本模块全部用例都走
+    /// chat 轨，空树给出**确定性**剖面，不再依赖机器上真实 models.yaml 的内容。
+    fn install_chat_catalog() {
+        crate::engine_provider::protocol::reload_live_catalog_from_yaml_str(
+            "version: 2\nproviders: {}\n",
+        )
+        .expect("空树夹具");
+    }
+
     // ── 用例①:429+Retry-After → 客户端等待 ≥Retry-After 后重试 ──
 
     /// C3 用例①(429+Retry-After=2s):真实 wire 下内核退避等待
@@ -827,6 +876,8 @@ mod integration_tests {
                 ..Default::default()
             },
         );
+        let _live = lock_live_catalog();
+        install_chat_catalog();
         let (state, db) = run_state_with_http_provider(Arc::new(provider), &server.base_url("/v1"));
         state.run_restore().await;
         // 退避键装配:内核 750ms×2^(n-1)/8s 封顶/60s 预算(生产装配同键)
@@ -835,8 +886,8 @@ mod integration_tests {
         run_task_impl(Arc::clone(&state), test_options("c3-429", "s1", "任务"))
             .await
             .expect("run 发起成功");
-        let reason = wait_run_agent_end_reason(&db, "s1", Duration::from_secs(30)).await;
-        assert_eq!(reason, "stop", "429 重试后正常完成收场");
+        let terminal = wait_run_terminal(&db, "s1", Duration::from_secs(90)).await;
+        assert_eq!(terminal, "completed", "429 重试后正常完成收场");
         let captured = server.wait_for(2).await;
         assert_eq!(captured.len(), 2, "429 后恰好重试 1 次");
         assert_eq!(captured[0].response_status, 429, "首请求 → 429");
@@ -883,6 +934,8 @@ mod integration_tests {
                 ..Default::default()
             },
         );
+        let _live = lock_live_catalog();
+        install_chat_catalog();
         let (state, db) = run_state_with_http_provider(Arc::new(provider), &server.base_url("/v1"));
         state.run_restore().await;
         db.set_session_meta(RETRY_BACKOFF_KEY, "[750,8000,60000]")
@@ -891,8 +944,8 @@ mod integration_tests {
         run_task_impl(Arc::clone(&state), test_options("c3-5xx", "s1", "任务"))
             .await
             .expect("run 发起成功");
-        let reason = wait_run_agent_end_reason(&db, "s1", Duration::from_secs(30)).await;
-        assert_eq!(reason, "stop", "5xx 重试耗尽前成功收场");
+        let terminal = wait_run_terminal(&db, "s1", Duration::from_secs(90)).await;
+        assert_eq!(terminal, "completed", "5xx 重试耗尽前成功收场");
         let captured = server.wait_for(4).await;
         assert_eq!(captured.len(), 4, "3 次 5xx + 1 次成功 = 4 个请求");
         let statuses: Vec<u16> = captured.iter().map(|c| c.response_status).collect();
@@ -928,6 +981,8 @@ mod integration_tests {
                 ..Default::default()
             },
         );
+        let _live = lock_live_catalog();
+        install_chat_catalog();
         let (state, db) = run_state_with_http_provider(Arc::new(provider), &server.base_url("/v1"));
         state.run_restore().await;
         // E1 续写退避置零(测试直接驱动,跳过跨 run 退避睡眠)
@@ -939,8 +994,8 @@ mod integration_tests {
             .await
             .expect("run 发起成功");
         // 部分保留断流:正常 Stop 收场(非 Error fatal)
-        let reason = wait_run_agent_end_reason(&db, "s1", Duration::from_secs(30)).await;
-        assert_eq!(reason, "stop", "部分保留断流以 Stop 正常收场");
+        let terminal = wait_run_terminal(&db, "s1", Duration::from_secs(90)).await;
+        assert_eq!(terminal, "completed", "部分保留断流以正常完成收场");
         // 已产出不重试(内核三层纪律):仅 1 个请求
         let captured = server.wait_for(1).await;
         assert_eq!(captured.len(), 1, "已产出断流不重试(仅 1 次请求)");
@@ -987,6 +1042,8 @@ mod integration_tests {
                 ..Default::default()
             },
         );
+        let _live = lock_live_catalog();
+        install_chat_catalog();
         let (state, db) = run_state_with_http_provider(Arc::new(provider), &server.base_url("/v1"));
         state.run_restore().await;
         db.set_session_meta(RETRY_BACKOFF_KEY, "[750,8000,60000]")
@@ -994,8 +1051,10 @@ mod integration_tests {
         run_task_impl(Arc::clone(&state), test_options("c3-cut0", "s1", "任务"))
             .await
             .expect("run 发起成功");
-        let reason = wait_run_agent_end_reason(&db, "s1", Duration::from_secs(30)).await;
-        assert_eq!(reason, "stop", "未产出断流重试后正常完成收场");
+        let terminal = wait_run_terminal(&db, "s1", Duration::from_secs(90)).await;
+        // G-29 事件权威：终态取值经权威映射收敛（旧 stop → completed），
+        // 与同组其余 scripted 用例同源；语义仍为「重试后正常完成收场」。
+        assert_eq!(terminal, "completed", "未产出断流重试后正常完成收场");
         let captured = server.wait_for(2).await;
         assert_eq!(captured.len(), 2, "未产出断流 → 重试 1 次(共 2 请求)");
         assert_eq!(captured[0].response_status, 200, "断流请求仍先回 200 头");

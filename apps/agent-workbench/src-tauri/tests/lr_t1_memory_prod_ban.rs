@@ -47,6 +47,9 @@ const PROD_INJECT_FILES: &[&str] = &[
     "src/core_run_commands.rs",
     "src/main.rs",
     "src/note_commands.rs",
+    "src/note_commands_apply.rs",
+    // ACT-102 双库并发装配：NoteRuntime 初始化入口（原 main.rs 内联）。
+    "src/db_setup.rs",
 ];
 
 fn workspace_root() -> PathBuf {
@@ -190,10 +193,24 @@ fn lr_t1_prod_inject_is_store_or_unwired() {
         "run_launch 零 {MEMORY_IDENT}"
     );
 
+    // NoteRuntime 初始化唯一入口随 ACT-102 双库并发装配迁入 db_setup：
+    // 断言随之迁移到新落点，语义不变（Store 打开；失败保持 unwired = None）。
+    // 同时新增 main.rs 消费面断言——只断言「调用存在」不足以证明接线，
+    // 必须断言 main 真正消费并发装配的返回值。
+    let db_setup = production_code(&read_utf8(&manifest.join("src/db_setup.rs")));
+    assert!(
+        db_setup.contains("note_runtime::init_default()"),
+        "NoteRuntime 初始化唯一入口 = db_setup 的 init_default（Store 打开）"
+    );
+    assert!(
+        !contains_ident(&db_setup, MEMORY_IDENT),
+        "db_setup 生产码零 {MEMORY_IDENT}"
+    );
+
     let main = production_code(&read_utf8(&manifest.join("src/main.rs")));
     assert!(
-        main.contains("note_runtime::init_default()"),
-        "setup 必须 init_default（Store 打开；失败不阻断 = unwired）"
+        main.contains("db_init.note_runtime"),
+        "main setup 必须消费并发装配的 note_runtime（Some = Store；None = unwired）"
     );
     assert!(
         !contains_ident(&main, MEMORY_IDENT),

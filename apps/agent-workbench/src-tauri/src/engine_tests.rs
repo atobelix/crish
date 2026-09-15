@@ -539,6 +539,53 @@ fn responses_config(model: &str, endpoint: Endpoint) -> EngineProviderConfig {
     }
 }
 
+/// 进程级 LIVE_CATALOG 是共享静态（protocol.rs:46）：本文件依赖出站剖面的
+/// 用例必须与 protocol / engine_provider / scripted_mock_server 测试
+/// **共用同一把锁**串行安装夹具，否则并行时读到别的测试装的 catalog，
+/// 协议剖面被跨轨污染（实证 2026-09-15：`request_body_dispatches_by_rail`
+/// 在并行全套下 chat 轨读到 Null 的 max_tokens——剖面被误判为 responses）。
+fn lock_live_catalog() -> std::sync::MutexGuard<'static, ()> {
+    crate::engine_provider::protocol::LIVE_CATALOG_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|poison| poison.into_inner())
+}
+
+/// 出站剖面双轨夹具：`api.example.com` → openai/chat（chat 轨断言），
+/// `api.deepseek.com` → openai/responses（responses 轨断言）。两条 base_url
+/// 各自命中一个 provider，剖面由 base_url 区分——**不依赖机器上的
+/// models.yaml**（此前依赖真实用户目录，是并行/换机即红的根因）。
+fn install_dual_rail_catalog() {
+    crate::engine_provider::protocol::reload_live_catalog_from_yaml_str(
+        r#"
+version: 2
+providers:
+  example:
+    displayName: Example
+    baseUrl: "https://api.example.com/v1/"
+    protocol: "openai/chat"
+    models:
+      - id: deepseek-v4-flash
+        displayName: Flash
+        maxOutputTokens: 4096
+  deepseek:
+    displayName: DeepSeek
+    baseUrl: "https://api.deepseek.com/v1/"
+    protocol: "openai/responses"
+    models:
+      - id: deepseek-v4-flash
+        displayName: Flash
+        maxOutputTokens: 4096
+      - id: deepseek-v4-flash-0731
+        displayName: Flash 0731
+        maxOutputTokens: 4096
+      - id: deepseek-v4-pro
+        displayName: Pro
+        maxOutputTokens: 4096
+"#,
+    )
+    .expect("双轨夹具 yaml 必须解析成功");
+}
+
 /// provider_url 按 live yaml 模型级 protocol 判定端点（plans/04 §2.3）：
 /// openai/responses → /v1/responses；openai/chat（继承）→ /chat/completions；
 /// lookup 未命中 → fail-closed chat（禁止 URL / 目录 supports_responses 猜）。
@@ -569,7 +616,10 @@ fn provider_url_gates_responses_by_catalog_support() {
 }
 
 /// responses_supported 辅助函数语义（目录查询面）：
-/// v4-flash → true；v4-pro → false；版本后缀兜底 → true；
+/// v4-flash → true；v4-pro → false；
+/// 版本后缀**不兜底** → false（`lookup` 是精确匹配，且仓库明令
+/// 「禁止前缀表猜厂商」——protocol.rs:108；与同文件 provider_url 的
+/// 「未命中模型 → 保守降级 chat」同一纪律，2026-09-15 修正陈旧期望）；
 /// 未收录模型 → false（保守）；未知厂商（Auto）→ true（保留现状）。
 #[test]
 fn responses_supported_follows_catalog_entry() {
@@ -577,10 +627,13 @@ fn responses_supported_follows_catalog_entry() {
         "deepseek-v4-flash",
         Endpoint::Responses
     )));
-    assert!(responses_supported(&responses_config(
-        "deepseek-v4-flash-0731",
-        Endpoint::Responses
-    )));
+    assert!(
+        !responses_supported(&responses_config(
+            "deepseek-v4-flash-0731",
+            Endpoint::Responses
+        )),
+        "版本后缀不兜底：0731 未收录于 bundled catalog → 保守 false（禁止前缀猜厂商）"
+    );
     assert!(!responses_supported(&responses_config(
         "deepseek-v4-pro",
         Endpoint::Responses
@@ -641,6 +694,8 @@ fn responses_endpoint_active_follows_catalog_and_endpoint() {
 /// chat 轨 → chat 形状（既有字节路径回归护栏）
 #[test]
 fn request_body_dispatches_by_rail() {
+    let _live = lock_live_catalog();
+    install_dual_rail_catalog();
     let user = AgentMessage {
         id: "user-1".to_string(),
         role: AgentMessageRole::User,
@@ -1531,8 +1586,9 @@ fn waste_alert_emitted_above_threshold_with_honest_attribution() {
     // 显式 USD 单价（引擎微元口径）：input 0.14 / cacheRead 0.0028
     let pricing = agent_provider::models::catalog_types::ModelPricingSpec {
         currency: agent_provider::pricing::Currency::Usd,
-        input: 0.14,
-        output: 0.28,
+        unit: agent_provider::models::catalog_types::PricingUnit::PerMillionTokens,
+        input: Some(0.14),
+        output: Some(0.28),
         cache_read: Some(0.0028),
         cache_write: Some(0.0),
         per_image: None,
@@ -1592,8 +1648,9 @@ fn waste_alert_emitted_above_threshold_with_honest_attribution() {
 fn waste_alert_fires_on_cost_threshold_alone() {
     let pricing = agent_provider::models::catalog_types::ModelPricingSpec {
         currency: agent_provider::pricing::Currency::Usd,
-        input: 12.5,
-        output: 12.5,
+        unit: agent_provider::models::catalog_types::PricingUnit::PerMillionTokens,
+        input: Some(12.5),
+        output: Some(12.5),
         cache_read: Some(1.25),
         cache_write: Some(1.25),
         per_image: None,
@@ -3200,12 +3257,15 @@ mod event_drain_tests {
 
     // ── PS-04 T4.3（F4 F1-01）：reload_provider 热更新 ──
 
-    /// T4.3-R1：注入旧配置 A → `reload_provider()` → provider_config 的
+    /// T4.3-R1：注入统一树配置 A → `reload_provider()` → provider_config 的
     /// model/key/baseUrl 必须变为新值（换 key/模型后下一次 run 用新凭据；
     /// 修复前 provider 只在构造时加载一次，改配置后不生效）。
     #[test]
     fn reload_provider_rebuilds_provider_config_from_store() {
-        use crate::core_run_commands::{isolate_config_store, CONFIG_TEST_LOCK};
+        use crate::core_run_commands::{
+            apply_single_provider, install_tree_models_store, isolate_config_store,
+            CONFIG_TEST_LOCK, TEST_ENV_KEY,
+        };
         let _lock = CONFIG_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let nanos = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -3216,28 +3276,18 @@ mod event_drain_tests {
         std::fs::create_dir_all(&dir).expect("create config dir");
         isolate_config_store(&dir);
 
-        // 旧配置 A（引擎构造时快照）
-        crate::config::with_store_mut(|store| {
-            store.set_api_key("sk-a".to_string())?;
-            store.set_base_url("https://a.example/v1".to_string())?;
-            store.set_model("model-a".to_string())?;
-            Ok(())
-        })
-        .expect("store A");
+        // 统一树配置 A（active=(p1, model-a)，key 经 env ref 注入为 sk-a）
+        let store = install_tree_models_store(&dir, "https://a.example/v1");
         let engine = EngineHandle::new(None);
         let before = engine.provider_config().expect("构造后就绪");
         assert_eq!(before.api_key, "sk-a");
         assert_eq!(before.model, "model-a");
         assert!(engine.ready());
 
-        // 改 store 为新配置 B → 重载 → 生效配置必须刷新
-        crate::config::with_store_mut(|store| {
-            store.set_api_key("sk-b".to_string())?;
-            store.set_base_url("https://b.example/v1".to_string())?;
-            store.set_model("model-b".to_string())?;
-            Ok(())
-        })
-        .expect("store B");
+        // 统一树事务切新配置 B（baseUrl/model 切换 + key 切换）→ 重载 →
+        // 生效配置必须刷新（CAS 落盘，等价旧版「配置 B」步骤）
+        apply_single_provider(&store, "https://b.example/v1", "model-b");
+        std::env::set_var(TEST_ENV_KEY, "sk-b");
         engine.reload_provider();
         let after = engine.provider_config().expect("重载后就绪");
         assert_eq!(after.api_key, "sk-b", "key 必须热更新");
@@ -3247,12 +3297,15 @@ mod event_drain_tests {
         assert!(engine.provider().is_some(), "重载后 provider 可调用");
     }
 
-    /// T4.3-R1 契约延伸：三件套清空（api_key=空串）后 reload_provider →
-    /// 引擎降级未就绪（ready=false / provider=None / provider_config=None）；
-    /// 重填后恢复。与构造时降级语义一致（F4 F1-01 修复建议 4）。
+    /// T4.3-R1 契约延伸：凭据移除后 reload_provider → 引擎降级未就绪
+    /// （ready=false / provider=None / provider_config=None——resolve 报
+    /// CREDENTIAL_MISSING，load_provider_endpoint 返回 None）；重填后恢复。
+    /// 与构造时降级语义一致（F4 F1-01 修复建议 4）。
     #[test]
     fn reload_provider_degrades_when_key_cleared_then_recovers() {
-        use crate::core_run_commands::{isolate_config_store, CONFIG_TEST_LOCK};
+        use crate::core_run_commands::{
+            install_tree_models_store, isolate_config_store, CONFIG_TEST_LOCK, TEST_ENV_KEY,
+        };
         let _lock = CONFIG_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let nanos = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -3263,22 +3316,13 @@ mod event_drain_tests {
         std::fs::create_dir_all(&dir).expect("create config dir");
         isolate_config_store(&dir);
 
-        crate::config::with_store_mut(|store| {
-            store.set_api_key("sk-a".to_string())?;
-            store.set_base_url("https://a.example/v1".to_string())?;
-            store.set_model("model-a".to_string())?;
-            Ok(())
-        })
-        .expect("store A");
+        let _store = install_tree_models_store(&dir, "https://a.example/v1");
         let engine = EngineHandle::new(None);
         assert!(engine.ready());
 
-        // 清空 key（空串）→ 重载 → 降级未就绪（不得再用旧 key 发请求）
-        crate::config::with_store_mut(|store| {
-            store.set_api_key(String::new())?;
-            Ok(())
-        })
-        .expect("clear key");
+        // 移除凭据（env ref 失效 → CREDENTIAL_MISSING）→ 重载 → 降级未就绪
+        // （不得再用旧 key 发请求）
+        std::env::remove_var(TEST_ENV_KEY);
         engine.reload_provider();
         assert!(!engine.ready(), "清 key 后未就绪");
         assert!(engine.provider().is_none(), "清 key 后 provider=None");
@@ -3289,11 +3333,7 @@ mod event_drain_tests {
         assert!(engine.ready_reason().is_some(), "未就绪原因可诊断");
 
         // 重填 → 恢复
-        crate::config::with_store_mut(|store| {
-            store.set_api_key("sk-c".to_string())?;
-            Ok(())
-        })
-        .expect("refill key");
+        std::env::set_var(TEST_ENV_KEY, "sk-c");
         engine.reload_provider();
         assert!(engine.ready(), "重填后恢复就绪");
         assert_eq!(

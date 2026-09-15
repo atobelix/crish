@@ -53,6 +53,8 @@ const PROD_INJECT_FILES = [
   'src/main.rs',
   'src/note_commands.rs',
   'src/note_commands_apply.rs',
+  // ACT-102 双库并发装配：NoteRuntime 初始化入口（原 main.rs 内联）。
+  'src/db_setup.rs',
 ];
 
 const errors = [];
@@ -168,14 +170,22 @@ function checkInjectStoreOrUnwired() {
   if (containsIdent(engine, MEMORY_IDENT)) fail(`engine_build 零 ${MEMORY_IDENT}`);
 
   const run = productionCode(readUtf8(join(workbenchRoot, 'src/run/run_launch.rs')));
-  if (!run.includes('note_backend: crate::note_runtime::try_backend()')) {
+  if (!run.includes('note_backend = crate::note_runtime::try_backend()')) {
     fail('core_run 必须同源 try_backend');
   }
   if (containsIdent(run, MEMORY_IDENT)) fail(`run_launch 零 ${MEMORY_IDENT}`);
 
+  // NoteRuntime 初始化唯一入口随 ACT-102 双库并发装配迁入 db_setup；
+  // 断言随之迁移到新落点（语义不变：Store 打开；失败保持 unwired = None）。
+  const dbSetup = productionCode(readUtf8(join(workbenchRoot, 'src/db_setup.rs')));
+  if (!dbSetup.includes('note_runtime::init_default()')) {
+    fail('NoteRuntime 初始化唯一入口 = db_setup 的 init_default（Store 打开）');
+  }
+  if (containsIdent(dbSetup, MEMORY_IDENT)) fail(`db_setup 生产码零 ${MEMORY_IDENT}`);
+
   const main = productionCode(readUtf8(join(workbenchRoot, 'src/main.rs')));
-  if (!main.includes('note_runtime::init_default()')) {
-    fail('setup 必须 init_default（Store 打开；失败不阻断 = unwired）');
+  if (!main.includes('db_init.note_runtime')) {
+    fail('main setup 必须消费并发装配的 note_runtime（Some = Store；None = unwired）');
   }
   if (containsIdent(main, MEMORY_IDENT)) fail(`main 零 ${MEMORY_IDENT}`);
 

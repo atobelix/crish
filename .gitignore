@@ -77,12 +77,10 @@ reference/ui-replica/node_modules/
 reference/ui-replica/dist/
 reference/ui-replica/package-lock.json
 
-# markdown-editor（自研渲染引擎 + 测试资产，必须入库——测试比项目重要，防丢失防 AI 清理）
-!reference/markdown-editor/
-!reference/markdown-editor/**
-reference/markdown-editor/node_modules/
-reference/markdown-editor/dist/
-reference/markdown-editor/package-lock.json
+# markdown-editor 已独立为 C:/Software/markdown-editor（2026-09-14 移出本仓库，
+# 见提交 chore(repo): 移除 reference/markdown-editor 子树）。
+# 不再白名单入库：残留目录一律忽略，防止被 git add 回潮。
+reference/markdown-editor/
 
 # ui-replica-refactored (keep for architecture redesign)
 !reference/ui-replica-refactored/
@@ -307,9 +305,7 @@ reference/ui-replica/node_modules/
 reference/ui-replica/dist/
 reference/ui-replica/package-lock.json
 
-# markdown-editor（自研渲染引擎 + 测试资产，必须入库——测试比项目重要，防丢失防 AI 清理）
-!reference/markdown-editor/
-!reference/markdown-editor/**
+# markdown-editor 已独立（同上条目）：仅保留忽略语义，不再白名单入库。
 
 # chat-composer-component（全真参考设计与原型资产，必须入库）
 !reference/chat-composer-component/
@@ -621,6 +617,9 @@ orchestrator-snapshot.json.prev
 # provider 单轨门禁入库放行（同上：不放行则 CI checkout 后缺失，
 # 且会被 check-guard-system 的 unreleased_guard 零容忍指标判定为未入库）
 !scripts/check-provider-single-track.mjs
+# 性能测量脚手架入库放行（被 package.json `perf:block-workspace` 引用——
+# 不放行则干净检出后该 npm script 直接断裂；由 D12 资产防线命中）
+!scripts/block-workspace-perf.mjs
 # 守卫脚本显式放行补齐（2026-09-14）：
 # 下列守卫此前**仅靠「已被 git 跟踪」间接避免被 `*.mjs` 全局规则忽略**——
 # 该兜底不可靠：git 在 `commit --only <paths>` 等场景使用**临时索引**，
