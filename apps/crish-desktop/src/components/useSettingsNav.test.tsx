@@ -119,8 +119,24 @@ describe('useSettingsNav Esc / LayerStack', () => {
     );
     const cover = css.match(/\.settingsCover\s*\{[\s\S]*?\n\}/)?.[0] ?? '';
     expect(cover).not.toMatch(/z-index\s*:/);
-    expect(css).toMatch(/\.settingsCoverOverlay[\s\S]*--dialog-z:\s*var\(--z-modal/);
-    expect(css).toMatch(/\.settingsCoverOverlay[\s\S]*--z-dropdown:/);
+    // 层叠契约真源已上移至全局层级 SSOT：--dialog-z 默认 = --z-modal
+    // （z-index.css Level 5），Dialog 遮罩以 var(--dialog-z, var(--z-modal))
+    // 消费；故 settingsCoverOverlay 只负责把 portal 进来的 popper 归到
+    // 全局 --z-dropdown，不再本地重声明 --z-dropdown（同值多写属层级双轨）。
+    const zIndexCss = readFileSync(resolve(__dirname, '../styles/z-index.css'), 'utf8');
+    expect(zIndexCss).toMatch(/--dialog-z:\s*var\(--z-modal\)/);
+    expect(zIndexCss).toMatch(/--z-dropdown:/);
+    const dialogCss = readFileSync(
+      resolve(__dirname, 'ui/Dialog/Dialog.module.css'),
+      'utf8'
+    );
+    expect(dialogCss).toMatch(/z-index:\s*var\(--dialog-z,\s*var\(--z-modal\)\)/);
+    // 消费面：overlay 内的 popper wrapper 必须吃到全局 --z-dropdown
+    expect(css).toMatch(
+      /\.settingsCoverOverlay[\s\S]*z-index:\s*var\(--z-dropdown\)/
+    );
+    // 反向锁定：不得再本地声明 --z-dropdown（唯一真源在 z-index.css）
+    expect(css).not.toMatch(/--z-dropdown\s*:/);
   });
 
   it('useSettingsNav 不再 window 捕获阶段直接关设置', () => {

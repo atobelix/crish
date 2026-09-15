@@ -4,7 +4,8 @@
  * 契约：
  * - 废除内嵌完整输入框与上帝控件，改为时间线行内徽章：`<title> subagent 工作中 1.8秒`（带 5px 呼吸灯与双行链路追踪摘要）；
  * - 打开详情分流走 openAgentInSidePanel（侧栏 only，永不 setActiveAgentId / 新窗口）；
- * - 展开消息区具备独立 LEFT vertical rail，支持 AsyncMarkdownBlock 渲染已完成消息。
+ * - 展开消息区具备独立 LEFT vertical rail，已完成消息走 MarkdownBlockItem
+ *   封口分支（Rust 异步 HTML），未封口消息走活跃尾块分支（流式直写）。
  */
 import React, {
   useCallback,
@@ -216,24 +217,37 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
         </div>
       ) : null}
 
-      {/* 展开消息区（若外部传入 defaultOpen=true 或展开），带左轨线与 AsyncMarkdownBlock */}
+      {/* 展开消息区（若外部传入 defaultOpen=true 或展开），带左轨线与 MarkdownBlockItem */}
       {open ? (
         <div className={`${styles.flowSubagentPanel} flow-subagent__panel`}>
           <div
             ref={bodyRef}
             className={`${styles.flowSubagentPanelInner} flow-subagent__panel-inner`}
           >
-            {messages.map((m) => (
-              <div key={m.id} className={styles.inlineAgentMsg}>
-                <MarkdownBlockItem
-                  text={m.text || ''}
-                  isSealed={m.status !== 'processing'}
-                  isLast={false}
-                  isStreaming={m.status === 'processing'}
-                  priority={Priority.Low}
-                />
-              </div>
-            ))}
+            {messages.map((m) => {
+              // 活跃尾块契约（回归修复）：MarkdownBlockItem 仅在
+              //   isActiveTail = isStreaming && isLast && !isSealed
+              // 时进入流式直写分支（data-sealed="false" / data-streaming="true"
+              // + useLayoutEffect 直写 textContent）；否则落入封口分支渲染
+              // 空容器（等待 Rust 异步 HTML 注入）。
+              // 本面板每条消息各挂一个独立根块，未封口者即该根的唯一尾块，
+              // 故 isLast 必须跟随 isSealed 取反。历史实现恒传 isLast={false}
+              // ⇒ processing 消息的 isActiveTail 恒 false ⇒ 子代理实时正文
+              // 渲染为空容器（旧 AsyncMarkdownBlock 在 isStreaming 下直接渲染
+              // 纯文本，换用 MarkdownBlockItem 后该可见性丢失）。
+              const isSealed = m.status !== 'processing';
+              return (
+                <div key={m.id} className={styles.inlineAgentMsg}>
+                  <MarkdownBlockItem
+                    text={m.text || ''}
+                    isSealed={isSealed}
+                    isLast={!isSealed}
+                    isStreaming={!isSealed}
+                    priority={Priority.Low}
+                  />
+                </div>
+              );
+            })}
             {isFailed && (
               <div className={styles.inlineAgentRecovery}>
                 <span className={styles.inlineAgentFailKind}>

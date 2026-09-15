@@ -71,8 +71,14 @@ html[data-theme='light'] {
      正文/常看到的字 = 10%（近黑，最高对比）→ 次级 32% → 小字/工具调用 = 45% → 极弱 62% */
   --text-primary: #1a1a1a;
   --text-secondary: #525252;
-  /* 文本三级色（小字 / 工具调用 / 路径等）：45% 灰度，WCAG AA 达标 */
-  --text-tertiary: #737373;
+  /* 文本三级色（小字 / 工具调用 / 路径等）：WCAG AA 达标。
+     取值说明：原 #737373（45% 灰度）在**侧栏背景**（--bg-secondary =
+     --surface-chrome = hsl(30 2.5% 95%)）上仅 4.24:1，未达 AA 4.5:1
+     （a11y-contrast.test.ts 行 2 捕获）。取 #6b6b6b（42% 灰度）：
+     对 tokens.css 侧栏 4.77:1、对 warm-gray 预设侧栏（hsl(35 8% 95%)）
+     4.77:1、对自定义浅色底（≈#f4f4f4）4.85:1 —— 跨皮肤均留 ≥0.27 余量，
+     且比主背景（98.5% L）上的对比度更高，行 1 不受影响。 */
+  --text-tertiary: #6b6b6b;
   --text-muted: var(--text-tertiary);
   /* 第四级弱化文字（时间戳 / 计数等）：62% 灰度（显式灰值，不再向背景 mix） */
   --text-faint: #9e9e9e;

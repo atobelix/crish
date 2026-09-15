@@ -9,6 +9,20 @@ import {
   resetControlMetrics,
 } from '../api/controlMetrics';
 import { EMPTY_SESSION_TITLE } from '../api/sessionTitle';
+import { logger } from '../services/LoggerService';
+
+/**
+ * 告警可观测面：emptyShellAssert.ts:141 已由裸 `console.warn` 收敛为
+ * `logger.warn(..., { module: 'empty-shell-assert' })`（LoggerService 单一真源）。
+ * LoggerService 仅在 isDev()（NODE_ENV === 'development'）下转发 console.warn，
+ * 测试环境走 console.log(JSON.stringify(entry)) ⇒ console.warn spy 恒 0 次。
+ * 故按真源可观测面（环形缓冲 + module 标记）计数。
+ */
+function warnCount(): number {
+  return logger
+    .getRecentLogs()
+    .filter((l) => l.module === 'empty-shell-assert').length;
+}
 
 function shell(id: string, extra?: Record<string, unknown>) {
   return {
@@ -23,6 +37,7 @@ describe('emptyShellAssert (D2-4)', () => {
   beforeEach(() => {
     resetControlMetrics();
     resetEmptyShellAssertWarned();
+    logger.clearLogs();
   });
 
   afterEach(() => {
@@ -103,7 +118,6 @@ describe('emptyShellAssert (D2-4)', () => {
   });
 
   it('runEmptyShellAssert force: metrics + warn once per id', () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const sessions = [shell('ghost-1'), shell('ghost-2')];
 
     const v1 = runEmptyShellAssert(sessions, {
@@ -112,27 +126,32 @@ describe('emptyShellAssert (D2-4)', () => {
     });
     expect(v1).toHaveLength(2);
     expect(getControlMetrics().shell_empty_assert).toBe(2);
-    expect(warn).toHaveBeenCalledTimes(2);
+    expect(warnCount()).toBe(2);
+    // 告警载荷逐条可核（id + reason + 诚实文案）
+    const logs = logger
+      .getRecentLogs()
+      .filter((l) => l.module === 'empty-shell-assert');
+    expect(logs.every((l) => l.level === 'warn')).toBe(true);
+    expect(logs[0]?.msg).toContain('[empty-shell-assert]');
+    expect(logs.map((l) => l.msg).join('\n')).toContain('ghost-1');
 
     // second pass: metrics again, warn still once per id
     runEmptyShellAssert(sessions, { force: true, activeSessionId: null });
     expect(getControlMetrics().shell_empty_assert).toBe(4);
-    expect(warn).toHaveBeenCalledTimes(2);
+    expect(warnCount()).toBe(2);
   });
 
   it('runEmptyShellAssert silent still records metric when force', () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     runEmptyShellAssert([shell('x')], {
       force: true,
       silent: true,
       activeSessionId: null,
     });
     expect(getControlMetrics().shell_empty_assert).toBe(1);
-    expect(warn).not.toHaveBeenCalled();
+    expect(warnCount()).toBe(0);
   });
 
   it('runEmptyShellAssert without force/dev skips side-effects in production-like env', () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     // force=false：若当前 vitest 为 development 仍可能 side-effect；用 silent 验证 find 路径
     const v = findEmptyShellViolations([shell('g')], {
       activeSessionId: null,
@@ -145,6 +164,6 @@ describe('emptyShellAssert (D2-4)', () => {
         silent: true,
       }),
     ).not.toThrow();
-    expect(warn).not.toHaveBeenCalled();
+    expect(warnCount()).toBe(0);
   });
 });
