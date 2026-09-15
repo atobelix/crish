@@ -157,6 +157,18 @@ const GUIDE_TEXT = {
     '  ④ 复现：node scripts/check-provider-single-track.mjs。',
     '参考：docs/provider-single-track-convergence/02-执行拓扑与防御网方案.md D9 行。',
   ],
+  D10: [
+    '违反项：Token 域聚合入口 `check-tokens-all.mjs` 清单里列出的子门禁脚本不存在（FAIL 前缀 D10）——子门禁被删/改名而清单未同步，聚合入口**静默少跑一项**，样式防线无声缩水。',
+    '文件:行号：scripts/check-tokens-all.mjs 的清单数组（形如 `[\'标签\', \'scripts/x.mjs\', [...]]`）。',
+    '当前值/阈值：清单列出的全部子门禁脚本必须存在（当前 14 项）。',
+    '正确做法：',
+    '  ① D10 的**扫描面由既有 Token 域门禁承担**——裸 Hex / 假 token fallback → `check-color-ssot.mjs`；未定义 `var()` → `check-token-consistency.mjs`；token 定义唯一化与 module.css 交叉校验 → `check-token-ssot.mjs`；布局 / 几何 / 文字色 / 线宽 / 图标 / 输入四态 / tooltip / md 样式 / CSS 编码各有专职门禁。本战役**不重复造扫描逻辑**（重复门禁属反过度设计红线）；',
+    '  ② 本防线只守**间接引用链的存在性**：D12 覆盖 `package.json` 与 `FULL_CHECK_COMMANDS.md` 的**直接**引用，覆盖不到聚合入口内部清单；',
+    '  ③ 删除或改名任何子门禁，必须同步聚合入口清单——否则聚合入口不报错、只是少跑一项；',
+    '  ④ 新增样式类断言前先查既有门禁是否已覆盖，确认缺口后再新建；',
+    '  ⑤ 复现：node scripts/check-provider-single-track.mjs。',
+    '参考：scripts/check-tokens-all.mjs 头部「为什么需要它」；docs/provider-single-track-convergence/02-执行拓扑与防御网方案.md D10 行。',
+  ],
   D11: [
     '违反项：命令注册面漂移（FAIL 前缀 D11）——① manifest 声明面与 main.rs `command_registry!` 实装面不一致；② 前端注册表（tauri-command-registry.ts）与 manifest 不齐；③ 前端内置快照（commandManifest.ts）与 manifest 不齐；④ 任一侧重复登记。',
     '文件:行号：四方权威 —— apps/agent-workbench/src-tauri/src/command_manifest.rs（`entry("name","family","surface",registered)`）/ apps/agent-workbench/src-tauri/src/main.rs（`command_registry![("name", path), ...]`）/ apps/agent-workbench/src/core/tauri-command-registry.ts（`command: ...`）/ apps/crish-desktop/src/api/transport/commandManifest.ts（`entry("name", ...)`）。',
@@ -758,6 +770,46 @@ const D8_KNOWN_DEBT = new Map([
     fail(`D9: ${testRel} 缺少负向断言：${missing.map((n) => n.name).join(' / ')}`);
   } else {
     ok('D9: 思考交接三条路径均有断言钉死');
+  }
+}
+
+/* ── D10 样式防线（既有 Token 域门禁的间接引用存在性） ───────────── */
+
+{
+  // D10 的**扫描面**由既有 Token 域门禁承担，本战役**不重复造扫描逻辑**
+  // （否则就是重复门禁，属反过度设计红线）：
+  //   裸 Hex / 假 token fallback        → scripts/check-color-ssot.mjs
+  //   未定义 var() / 三项一致性指标     → scripts/check-token-consistency.mjs
+  //   定义唯一化 + module.css 交叉校验  → scripts/check-token-ssot.mjs
+  //   布局 / 几何 / 文字色 / 线宽 / 图标 / 输入四态 / tooltip / md 样式 / CSS 编码
+  //                                     → 见聚合入口清单
+  // 本防线只守**间接引用链的存在性**：D12 覆盖 package.json 与
+  // FULL_CHECK_COMMANDS.md 的**直接**引用，覆盖不到聚合入口内部的清单——
+  // 子门禁被删/改名而清单未同步时，聚合入口会**静默少跑一项**（门禁面悄悄缩水）。
+  const aggregatorRel = 'scripts/check-tokens-all.mjs';
+  const listed = [
+    ...read(aggregatorRel).matchAll(
+      /\[\s*'[^']+'\s*,\s*'(scripts\/[\w./-]+\.(?:mjs|js|cjs|ps1))'/g,
+    ),
+  ].map((m) => m[1]);
+
+  if (listed.length === 0) {
+    fail(
+      `D10: 未能从 ${aggregatorRel} 解析出子门禁清单——` +
+        ` 清单形态变更时本防线会假绿，请同步正则（当前正则假设 ['标签', 'scripts/x.mjs', [...]]）`
+    );
+  } else {
+    const absent = listed.filter((rel) => !fs.existsSync(path.join(REPO_ROOT, rel)));
+    if (absent.length > 0) {
+      fail(
+        `D10: Token 域聚合入口 ${aggregatorRel} 列出的子门禁不存在：${absent.join(' / ')}——` +
+          ` 删除或改名子门禁时必须同步清单，否则聚合入口静默少跑一项（样式防线无声缩水）`
+      );
+    } else {
+      ok(
+        `D10: Token 域聚合入口 ${listed.length} 项子门禁全部存在（样式扫描面由既有门禁承担，不重复造）`
+      );
+    }
   }
 }
 
