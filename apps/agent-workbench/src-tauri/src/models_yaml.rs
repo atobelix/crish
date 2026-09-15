@@ -49,7 +49,11 @@ pub(crate) struct BundledCatalogSnapshot {
     entries: Vec<ModelCatalogEntry>,
 }
 
-/// 内置模型目录只读投影（前端定价快照数据源，替代已退役 `catalog_get` 的读面）。
+/// 出厂能力字典只读投影（前端定价 / 能力快照数据源，替代已退役 `catalog_get` 的读面）。
+///
+/// 命名口径：本命令是「出厂能力字典」的只读投影（wire 名 =
+/// `workbench_read_capability_dictionary`），**不是**「bundled catalog」这个
+/// 实现细节名——后者只是它的数据来源（`engine_provider::protocol::bundled_catalog`）。
 ///
 /// `catalog_get` / `catalog_refresh` 退役时未提供等价读面，而前端定价快照
 /// （fetchCatalogSnapshot → applyCatalogCacheSnapshot）依赖内置目录的定价面
@@ -57,7 +61,7 @@ pub(crate) struct BundledCatalogSnapshot {
 /// docs/provider-single-track-convergence/00-执行记录.md）。本命令**纯只读**，
 /// 不做任何写盘或状态变更。
 #[tauri::command]
-pub(crate) fn workbench_read_bundled_catalog() -> BundledCatalogSnapshot {
+pub(crate) fn workbench_read_capability_dictionary() -> BundledCatalogSnapshot {
     let bundled = crate::engine_provider::protocol::bundled_catalog();
     BundledCatalogSnapshot {
         version: bundled.version(),

@@ -92,7 +92,24 @@ pub(crate) fn publish_snapshot(app: &tauri::AppHandle, snapshot: &mut ModelsSnap
     }
 }
 
+/// 提交成功后的运行期同步（T1 修订撕裂修复）：**先**刷新能力快照，**再**重建
+/// provider 适配层。顺序不可交换——`reload_provider` 内部经
+/// `load_provider_endpoint` → `live_catalog()` 消费能力快照，反序即
+/// 「baseUrl/apiKey/model 已新、vendor/protocol/thinking/cacheTtl 仍旧」。
+///
+/// 能力快照派生自 `ModelsStore::committed()`（本次提交已发布），因此刷新发生在
+/// **提交成功之后、下一次请求之前**，且「快照 revision == 盘上 revision」恒成立；
+/// 派生失败时 [crate::engine_provider::protocol::reload_live_catalog] 保持上一份
+/// 成功快照并显式告警（fail-closed）。
+///
+/// 无窗口依赖，供测试直接调用以验证修订恒等（见 `engine_provider/protocol.rs`
+/// 测试模块 `committed_refresh_keeps_snapshot_revision_in_lockstep`）。
+pub(crate) fn sync_runtime_after_commit() {
+    crate::engine_provider::protocol::reload_live_catalog();
+}
+
 fn publish_change(app: &tauri::AppHandle, change: ModelsChange) -> Result<(), ModelsStoreError> {
+    sync_runtime_after_commit();
     if let Some(state) = app.try_state::<Arc<crate::core_run_commands::CoreRunState>>() {
         state.reload_provider();
     }

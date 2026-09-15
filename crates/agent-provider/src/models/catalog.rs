@@ -377,18 +377,13 @@ impl ModelCatalog {
             .clone()
     }
 
-    /// 解析跨平台用户主目录下的 `~/.conex/models.yaml` 物理真源路径。
-    pub fn resolve_models_yaml_path() -> Option<std::path::PathBuf> {
-        let home = std::env::var_os("USERPROFILE")
-            .or_else(|| std::env::var_os("HOME"))
-            .map(std::path::PathBuf::from)?;
-        Some(home.join(".conex").join("models.yaml"))
-    }
-
     /// 从 YAML 字符串构建运行时模型目录快照。
     ///
     /// 与 [LiveModels::from_yaml_str] / [UnifiedModelsConfig::from_yaml_str] 同一套 v2 解析：
     /// 先得到树，再投影本目录。禁止第二套 `DynamicYamlModalities` 解析器。
+    ///
+    /// **本函数不读盘**：`models.yaml` 的唯一读面是 `ModelsStore`（单写单读口），
+    /// 目录快照只能由 [LiveModels::from_committed] 从已提交树投影。
     pub fn from_yaml_str(yaml_str: &str) -> Result<Self, String> {
         Ok(LiveModels::from_yaml_str(yaml_str)?.catalog)
     }
@@ -400,48 +395,15 @@ impl ModelCatalog {
         Ok(project_unified_to_catalog(&normalized))
     }
 
-    /// 从文件路径动态读取并构建运行时模型目录快照。
-    pub fn from_yaml_file(path: impl AsRef<std::path::Path>) -> Result<Self, String> {
-        let content = std::fs::read_to_string(path.as_ref())
-            .map_err(|e| format!("读取 models.yaml 失败: {e}"))?;
-        Self::from_yaml_str(&content)
-    }
-
-    /// 从用户主目录 `~/.conex/models.yaml` 动态构建运行时模型目录快照：
-    /// - 文件缺失 / 无法解析主目录 → `Ok` 诚实空目录（不是 `catalog.json`）；
-    /// - 文件存在但语法/结构失败 → `Err`（禁止吞成空目录冒充「用户配置了空 providers」）。
-    pub fn load_user_catalog() -> Result<Self, String> {
-        Ok(LiveModels::load_user()?.catalog)
-    }
-
-    /// 加载用户真源目录（函数名历史遗留：曾 fail-open 把坏文件吞成空目录）。
-    ///
-    /// 现行行为与 [Self::load_user_catalog] 相同：
-    /// - 文件缺失 → `Ok(empty)`
-    /// - 解析失败 → `Err`
-    ///
-    /// α-3 `live_catalog` / `reload_live_catalog` 在 `Err` 时必须保持上一份成功快照，
-    /// 不得把本函数的错误当成空配置写入 `LIVE_CATALOG`。
-    pub fn load_user_catalog_or_default() -> Result<Self, String> {
-        Self::load_user_catalog()
-    }
-
     /// 动态原子更新运行时目录快照（单调递增版本号）。
     pub fn reload(&mut self, new_catalog: Self) {
         self.entries = new_catalog.entries;
         self.version += 1;
     }
 
-    /// 从 YAML 内容重载运行时快照。
+    /// 从 YAML 内容重载运行时快照（内存态，不读盘）。
     pub fn reload_from_yaml_str(&mut self, yaml_str: &str) -> Result<(), String> {
         let new_catalog = Self::from_yaml_str(yaml_str)?;
-        self.reload(new_catalog);
-        Ok(())
-    }
-
-    /// 从用户真实配置文件重新加载运行时快照。
-    pub fn reload_user_catalog(&mut self) -> Result<(), String> {
-        let new_catalog = Self::load_user_catalog()?;
         self.reload(new_catalog);
         Ok(())
     }
@@ -666,17 +628,21 @@ impl ModelCatalog {
     }
 }
 
-/// yaml 树 + 扁平目录投影。α-3 `live_catalog()` 应持有本结构，而不是只持有目录。
+/// yaml 树 + 扁平目录投影。`live_catalog()` 持有本结构，而不是只持有目录。
 ///
+/// - `revision`：本快照派生自的**已提交修订**。生产路径恒等于
+///   `ModelsStore::committed().revision`（同一次提交事务内刷新，杜绝修订撕裂）；
+///   空字符串 = 内存夹具（yaml 字符串 / 纯树注入），未绑定任何提交。
 /// - `tree` 是第一公民（与 IPC `providers` 同构）
 /// - `catalog` 是丢失信息的 lookup 投影，供既有价格/窗口 API
 /// - `find` 按 `(provider_id, model_id)` 精确命中 `ModelSpec`，不做后缀/`*`/跨厂商 `[0]`
 /// - `parse_error`：显式错误态。`None` = 诚实空树或成功快照；`Some` = 解析失败，
 ///   **不得**把空 `providers` 当成「用户清空了配置」。
 ///
-/// 加载失败时调用方必须保持上一份成功快照，禁止把 `Err` 写成空 `providers`。
+/// 装载失败时调用方必须保持上一份成功快照，禁止把 `Err` 写成空 `providers`。
 #[derive(Debug, Clone)]
 pub struct LiveModels {
+    pub revision: String,
     pub tree: UnifiedModelsConfig,
     pub catalog: ModelCatalog,
     pub parse_error: Option<String>,
@@ -686,6 +652,7 @@ impl LiveModels {
     /// 诚实空树 + 空目录（文件缺失）。不是 `catalog.json`。`parse_error` 为 None。
     pub fn empty() -> Self {
         Self {
+            revision: String::new(),
             tree: UnifiedModelsConfig::default(),
             catalog: ModelCatalog::empty(),
             parse_error: None,
@@ -696,44 +663,47 @@ impl LiveModels {
     /// 调用方必须据此区分「没有配置」与「坏文件」，禁止安装成成功快照。
     pub fn parse_failed(message: impl Into<String>) -> Self {
         Self {
+            revision: String::new(),
             tree: UnifiedModelsConfig::default(),
             catalog: ModelCatalog::empty(),
             parse_error: Some(message.into()),
         }
     }
 
-    /// yaml → 树 + 投影。与 IPC 同一套 [UnifiedModelsConfig::from_yaml_str]。
+    /// yaml → 树 + 投影（内存夹具；`revision` 未绑定提交）。与 IPC 同一套
+    /// [UnifiedModelsConfig::from_yaml_str]。**不读盘**。
     pub fn from_yaml_str(yaml_str: &str) -> Result<Self, String> {
         Self::from_unified(UnifiedModelsConfig::from_yaml_str(yaml_str)?)
     }
 
-    pub fn from_unified(mut tree: UnifiedModelsConfig) -> Result<Self, String> {
+    /// 纯投影（内存夹具；`revision` 未绑定提交）。
+    pub fn from_unified(tree: UnifiedModelsConfig) -> Result<Self, String> {
+        Self::project(String::new(), tree)
+    }
+
+    /// 生产唯一装载路径：**已提交树 → 纯投影**，并绑定该提交的修订。
+    ///
+    /// 输入只能来自 `ModelsStore::committed()`（`models.yaml` 的唯一读面），
+    /// 因此本函数是纯函数：不读盘、不解析 yaml、不引入第二份真相源。
+    pub fn from_committed(
+        revision: impl Into<String>,
+        tree: UnifiedModelsConfig,
+    ) -> Result<Self, String> {
+        Self::project(revision.into(), tree)
+    }
+
+    fn project(revision: String, mut tree: UnifiedModelsConfig) -> Result<Self, String> {
         tree.normalize_for_commit()?;
         let catalog = project_unified_to_catalog(&tree);
         Ok(Self {
+            revision,
             tree,
             catalog,
             parse_error: None,
         })
     }
 
-    pub fn from_yaml_file(path: impl AsRef<std::path::Path>) -> Result<Self, String> {
-        let content = std::fs::read_to_string(path.as_ref())
-            .map_err(|e| format!("读取 models.yaml 失败: {e}"))?;
-        Self::from_yaml_str(&content)
-    }
-
-    /// 读 `~/.conex/models.yaml`：缺失 → 空树；解析失败 → Err。
-    pub fn load_user() -> Result<Self, String> {
-        let Some(path) = ModelCatalog::resolve_models_yaml_path() else {
-            return Ok(Self::empty());
-        };
-        if !path.exists() {
-            return Ok(Self::empty());
-        }
-        Self::from_yaml_file(&path)
-    }
-
+    /// 精确命中 `(provider_id, model_id)` 的模型规格（不做后缀 / `*` / 跨厂商回落）。
     pub fn find(&self, provider_id: &str, model_id: &str) -> Option<&ModelSpec> {
         self.tree.find_model(provider_id, model_id)
     }

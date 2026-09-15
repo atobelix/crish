@@ -15,7 +15,7 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
-use agent_provider::models::{cache_ttl_for_provider_model, CacheTtl, VendorId};
+use agent_provider::models::{cache_ttl_for_declared_model, CacheTtl};
 use agent_tools::audit::AuditSink;
 use agent_tools::background::BackgroundTaskManager;
 use agent_tools::definition::{ToolDefinition, ToolError};
@@ -47,8 +47,8 @@ use session_loop::{
 use super::engine_audit::{RoutingAuditSink, WaitDispatchStore};
 use super::engine_channels::ContinuityChannelBoard;
 use super::engine_provider::{
-    build_http_client, bundled_catalog, live_catalog, load_provider_endpoint, now_iso_utc,
-    EngineProviderConfig, HttpProviderCall,
+    build_http_client, live_catalog, load_provider_endpoint, now_iso_utc, EngineProviderConfig,
+    HttpProviderCall,
 };
 use crate::fs_commands::skills::RustSkill;
 use crate::timers::{
@@ -809,10 +809,10 @@ impl EngineHandle {
     }
 
     /// 解析缓存跟踪配置（P5 S5 / T-40）：provider / model 取生效配置、
-    /// TTL 走 P3 `cache_ttl_for_provider_model` 路由表（T-21）——未知厂商 /
-    /// 无 TTL 数据 → ttl_seconds = 0（P5 §3.4.4「TTL 查询失败不提示」，
-    /// 不阻塞其他功能）。
-    #[allow(dead_code)] // T-40 轮末合并：core_run_task 装配 producer 时消费
+    /// TTL 走 [build_cache_tracking_config] 的唯一来源（用户 yaml `cacheTtl`）
+    /// ——未声明 / 无 TTL 数据 → ttl_seconds = 0（不追踪缓存，fail-closed，
+    /// P5 §3.4.4「TTL 查询失败不提示」，不阻塞其他功能）。
+    /// 生产消费点：`run/run_core.rs` 与 `run/run_launch.rs` 装配 producer。
     pub(crate) fn cache_tracking_config(&self) -> Option<CacheTrackingConfig> {
         let config = self.provider_config()?;
         Some(build_cache_tracking_config(&config))
@@ -935,63 +935,28 @@ pub(crate) struct SessionCacheState {
     pub last_model: Option<String>,
 }
 
-/// live 灌槽 vendor 字符串 → [VendorId]（直接映射，非 `infer_vendor` URL 猜测）。
-/// 未识别的自定义 provider_id → `VendorId::Auto`（TTL 路由保守 None）。
-fn vendor_id_from_live_slot(vendor: &str) -> VendorId {
-    match vendor {
-        "deepseek" => VendorId::Deepseek,
-        "anthropic" => VendorId::Anthropic,
-        "openai" => VendorId::Openai,
-        "kimi" => VendorId::Kimi,
-        "grok" => VendorId::Grok,
-        "gemini" => VendorId::Gemini,
-        "glm" => VendorId::Glm,
-        "qwen" => VendorId::Qwen,
-        "dashscope" => VendorId::Dashscope,
-        "minimax" => VendorId::MiniMax,
-        _ => VendorId::Auto,
-    }
-}
-
-/// 装配缓存跟踪配置（T-40：provider / model 取生效配置、TTL 走 live 优先
-/// 路由，T-21）；未知厂商 / 无 TTL 数据 → ttl_seconds = 0（P5 §3.4.4
-/// 「TTL 查询失败不提示」，不阻塞其他功能）。
+/// 装配缓存跟踪配置（T-40 / plans/03 §2.2）：provider / model 取生效配置，
+/// TTL 走**唯一来源**——用户 yaml `cacheTtl` 声明（live 树投影）。
 ///
-/// TTL 决议顺序（SSOT：禁止 `infer_vendor` URL 前缀猜厂商）：
-/// 1. vendor 从 live 灌槽取（`config.vendor` ≻ `config.provider_id`，
-///    由 `load_provider_endpoint` 经 `slots_for_model` 从 live 树灌入）；
-/// 2. TTL 优先读 live 树投影 `LiveModels.catalog` 的 `cache_ttl` 字段
-///    （用户 yaml `cacheTtl` 声明）；
-/// 3. live 条目无 `cache_ttl` → 回退 `bundled_catalog()` 查内置目录条目；
-/// 4. 两级目录均无 `cache_ttl` 声明 → vendor 默认档
-///    （`cache_ttl_for_provider_model(None, ...)` 的 `vendor_default_ttl` 路径）；
-/// 5. 无 live 槽位（vendor 为 None）→ ttl 0（fail-closed，不猜厂商）。
+/// TTL 决议（裁决 N7：字典不得替用户决定 TTL）：
+/// 1. provider 位 = `config.vendor` ≻ `config.provider_id`（二者均由
+///    `load_provider_endpoint` 经 `slots_for_model` 从 live 树灌入）；
+/// 2. TTL = [cache_ttl_for_declared_model]（live 树投影 `cache_ttl`，单一纯函数）；
+/// 3. 未收录 / 未声明 `cacheTtl` / 无 live 槽位 → `ttl_seconds = 0`
+///    = **不追踪缓存**（fail-closed，P5 §3.4.4「TTL 查询失败不提示」）。
+///
+/// 已物理删除的两级回落（`00-总方案.md:307` 负向门禁「热路径
+/// `bundled_catalog()` = 0」）：内置 `catalog.json` 条目与 `ttl.rs` 的
+/// vendor 默认表。
 pub(crate) fn build_cache_tracking_config(config: &EngineProviderConfig) -> CacheTrackingConfig {
     let vendor = config
         .vendor
         .as_deref()
         .or(config.provider_id.as_deref());
+    let live = live_catalog();
     let ttl_seconds = vendor
         .and_then(|vendor_str| {
-            let live = live_catalog();
-            // 1. live 树投影优先：用户 yaml 的 cacheTtl 声明
-            if let Some(entry) = live.catalog.lookup(vendor_str, &config.model) {
-                if let Some(parsed) = entry.cache_ttl.as_deref().and_then(CacheTtl::parse) {
-                    return Some(parsed);
-                }
-            }
-            // 2. live 条目无 cache_ttl → 回退内置 catalog.json
-            if let Some(entry) = bundled_catalog().lookup(vendor_str, &config.model) {
-                if let Some(parsed) = entry.cache_ttl.as_deref().and_then(CacheTtl::parse) {
-                    return Some(parsed);
-                }
-            }
-            // 3. 两级目录均无 cache_ttl → vendor 默认档（P3 §3.5 路由表）
-            cache_ttl_for_provider_model(
-                None,
-                vendor_id_from_live_slot(vendor_str),
-                &config.model,
-            )
+            cache_ttl_for_declared_model(&live.catalog, vendor_str, &config.model)
         })
         .map(CacheTtl::seconds)
         .unwrap_or(0);

@@ -1,5 +1,11 @@
 //! 历史配置的显式迁移。转换不能证明无损时拒绝，不补厂商、能力或价格。
 //! 凭据字面量必须先由存储事务导入凭据库；本模块不会把它复制进规范树。
+//!
+//! **单写口**：本模块只做**纯转换**（`migrate_legacy_value` /
+//! `transform_flat_to_tree`）与**只读备份**（`create_disaster_backup` 读原字节
+//! 写独立 `.bak`，不触碰真源）；`models.yaml` 的写入一律经
+//! `ModelsStore`（`model_store.rs` 的 `write_if_current`），迁移边界因此不存在
+//! 第二套写盘代码。
 
 use serde::{Deserialize, Serialize};
 #[cfg(test)]
@@ -65,22 +71,11 @@ impl ConfigMigrationManager {
         let serialized = serde_yaml::to_string(&migrated)?;
         let tree = crate::models::UnifiedModelsConfig::from_yaml_str(&serialized)
             .map_err(MigrationError::InvalidConfig)?;
+        // 备份是**只读真源 + 写独立 .bak**，不构成 models.yaml 的第二写口。
         let backup_path = Self::create_disaster_backup(config_path)?;
-        let name = config_path
-            .file_name()
-            .and_then(|name| name.to_str())
-            .ok_or_else(|| MigrationError::InvalidPath("缺少配置文件名".into()))?;
-        let temporary = config_path.with_file_name(format!("{name}.tmp"));
-        fs::write(&temporary, serialized.as_bytes())?;
-        let written = fs::read_to_string(&temporary)?;
-        let verified = crate::models::UnifiedModelsConfig::from_yaml_str(&written)
-            .map_err(MigrationError::InvalidConfig)?;
-        if verified != tree {
-            return Err(MigrationError::InvalidConfig(
-                "临时配置回读不一致，原件未替换".into(),
-            ));
-        }
-        Self::atomic_replace(&temporary, config_path)?;
+        // 真源写入唯一出口 = ModelsStore（与 IPC save / apply 同一条提交事务：
+        // 规范树校验 → 凭据引用校验 → 原子落盘 → 发布修订）。
+        Self::commit_through_store(config_path)?;
         Ok(MigrationStatus::MigratedSuccessfully {
             backup_path,
             provider_count: tree.providers.len(),
@@ -90,6 +85,30 @@ impl ConfigMigrationManager {
                 .map(|provider| provider.models.len())
                 .sum(),
         })
+    }
+
+    /// 经唯一写口 `ModelsStore` 提交迁移结果（本模块禁止直接写 `models.yaml`）。
+    ///
+    /// `ModelsStore::read()` 在文件尚不是规范 v2 树时执行**同一条**一次性导入：
+    /// 旧扁平 → 规范树（复用本模块的 `migrate_legacy_value`）、旧介质凭据入系统
+    /// 凭据库、原子落盘、发布修订。因此迁移边界与 IPC 保存共享同一份写盘与校验
+    /// 代码，不再存在 `fs::write` + `atomic_replace` 的绕过写路径。
+    fn commit_through_store(config_path: &Path) -> Result<(), MigrationError> {
+        let parent = config_path
+            .parent()
+            .ok_or_else(|| MigrationError::InvalidPath("缺少配置目录".into()))?;
+        let store = crate::model_store::ModelsStore::new(
+            config_path.to_path_buf(),
+            parent.join("secrets"),
+            Some(parent.to_path_buf()),
+        );
+        let snapshot = store
+            .read()
+            .map_err(|error| MigrationError::InvalidConfig(error.message))?;
+        match snapshot.parse_error {
+            Some(error) => Err(MigrationError::InvalidConfig(error.message)),
+            None => Ok(()),
+        }
     }
 
     /// 历史别名只在这个显式入口消费；不允许在请求期读取旧字段或补查字典。
@@ -156,7 +175,11 @@ impl ConfigMigrationManager {
         Ok(backup_path)
     }
 
-    /// 安全替换目标文件，消除 Windows 平台先删后移的物理丢失崩溃窗口
+    /// 安全替换目标文件，消除 Windows 平台先删后移的物理丢失崩溃窗口。
+    ///
+    /// 通用原子替换原语（**无 `models.yaml` 生产调用方**：真源写入已收敛到
+    /// `ModelsStore::write_if_current`）。保留为公共 API，仅由本模块的
+    /// 硬化测试覆盖其回滚语义。
     pub fn atomic_replace(tmp_path: &Path, target: &Path) -> Result<(), MigrationError> {
         // 先尝试直接原子重命名（Unix 或目标不存在时直接成功）
         if fs::rename(tmp_path, target).is_ok() {

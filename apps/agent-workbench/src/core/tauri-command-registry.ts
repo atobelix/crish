@@ -20,7 +20,7 @@ export interface RegisteredTauriCommand {
   owner?: string;
 }
 
-// 注册面（142 条 = 与 command_manifest.rs `COMMAND_MANIFEST`、
+// 注册面（135 条 = 与 command_manifest.rs `COMMAND_MANIFEST`、
 // main.rs `command_registry!` 及前端 `BUILTIN_COMMAND_MANIFEST` 四方对齐；
 // 条数与集合一致性由 scripts/check-provider-single-track.mjs 的 D11 防线守护）：
 // - 注册面：`command_registry!` 宏已注册的命令，status=implemented；
@@ -28,6 +28,11 @@ export interface RegisteredTauriCommand {
 // 2026-09-15 更正：此前注释记为「73 = 注册面 69 + 登记先行 4」，实为陈旧数字，
 // 且本表实际缺 15 条（auth_* ×7 / note_document_* ×4 / prefs_* ×3 /
 // workbench_window_ready），已补齐——D11 首扫命中。
+// 2026-09-15 单轨收敛：出厂能力字典读面 `workbench_read_capability_dictionary`
+// 登记（142 → 143）；随后 8 条「Rust 已注册、前端零消费」真漂移退役
+// （workbench_select_folder / workbench_http_request / config_get_outputs_root /
+//  config_set_outputs_root / set_session_output_root / computer_session_enable /
+//  computer_session_disable / computer_status）→ **135**。
 export const REGISTERED_TAURI_COMMANDS: readonly RegisteredTauriCommand[] = [
   // ── GUI 专属面（workbench_*，§2.3）──
   {
@@ -96,9 +101,9 @@ export const REGISTERED_TAURI_COMMANDS: readonly RegisteredTauriCommand[] = [
     feature: 'models.yaml atomic save',
   },
   {
-    command: 'workbench_select_folder',
+    command: 'workbench_read_capability_dictionary',
     status: 'implemented',
-    feature: 'workspace folder picker',
+    feature: '出厂能力字典只读投影（定价 / 上下文 / 模态 / 思考档位）',
   },
   {
     command: 'workbench_list_directory',
@@ -119,11 +124,6 @@ export const REGISTERED_TAURI_COMMANDS: readonly RegisteredTauriCommand[] = [
     command: 'workbench_discover_skills',
     status: 'implemented',
     feature: 'skill discovery',
-  },
-  {
-    command: 'workbench_http_request',
-    status: 'implemented',
-    feature: 'HTTP request tool',
   },
   {
     command: 'workbench_apply_update',
@@ -398,21 +398,6 @@ export const REGISTERED_TAURI_COMMANDS: readonly RegisteredTauriCommand[] = [
     feature: 'background task stdin input',
   },
   {
-    command: 'config_get_outputs_root',
-    status: 'implemented',
-    feature: 'outputs root read',
-  },
-  {
-    command: 'config_set_outputs_root',
-    status: 'implemented',
-    feature: 'outputs root write',
-  },
-  {
-    command: 'set_session_output_root',
-    status: 'implemented',
-    feature: 'session outputs root override',
-  },
-  {
     command: 'get_flow_snapshot',
     status: 'implemented',
     feature: 'DAG flow snapshot read',
@@ -559,21 +544,6 @@ export const REGISTERED_TAURI_COMMANDS: readonly RegisteredTauriCommand[] = [
     feature: 'browser history list',
   },
   {
-    command: 'computer_session_disable',
-    status: 'implemented',
-    feature: 'computer session disable',
-  },
-  {
-    command: 'computer_session_enable',
-    status: 'implemented',
-    feature: 'computer session enable',
-  },
-  {
-    command: 'computer_status',
-    status: 'implemented',
-    feature: 'computer status query',
-  },
-  {
     command: 'core_compact_now',
     status: 'implemented',
     feature: 'manual conversation compaction',
@@ -666,8 +636,9 @@ export const REGISTERED_TAURI_COMMANDS: readonly RegisteredTauriCommand[] = [
   },
   // ── D11 注册防线对齐补齐（2026-09-15）──
   // 此前本表缺下列 15 条：三方（command_manifest.rs / main.rs `command_registry!`
-  // / 前端 BUILTIN_COMMAND_MANIFEST）各 142 条，本表只有 127，违反本文件头部
+  // / 前端 BUILTIN_COMMAND_MANIFEST）当时各 142 条，本表只有 127，违反本文件头部
   // 「三方对齐」契约。描述按命令名与 manifest 的 family/surface 归纳。
+  // （142 → 135 的第二轮收敛见本文件头部注释：能力字典读面 +1、真漂移退役 8 条。）
   {
     command: 'workbench_window_ready',
     status: 'implemented',

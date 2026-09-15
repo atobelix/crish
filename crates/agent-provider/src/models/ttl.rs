@@ -1,24 +1,30 @@
-//! 模型级 TTL 路由表（P3 §3.5 E / T-21）
+//! 模型级缓存 TTL 决议（单一纯函数；plans/03 §2.2 · 裁决 N7）
 //!
 //! - [CacheTtl]：缓存 TTL 四档（5m / 30m / 1h / 24h；v2 Schema 扩 "30m" 档承载
-//!   gpt-5.6 系）。**定义在 behavior.rs（T-19 交付）**，本模块按
-//!   T-19 的模块内约定 re-export（"TTL 路由表（T-21 models/ttl.rs）如需本类型
-//!   应 re-export 而非重定义，避免同 crate 两套同名枚举漂移"）；C3 裁决的
-//!   实质目标（单一类型、serde 值域 "5m"/"1h"/"24h"、与 P2 wire 桶
-//!   `TtlBucket` 无同名冲突）由此满足。任务书要求的 `as_str()` 由本模块的
-//!   固有 impl 补全（同 crate 允许在其他模块内扩展固有方法）。
-//! - [cache_ttl_for_provider_model]：vendor 默认档 + catalog 模型级覆盖的
-//!   纯函数查询（参考 jcode `cache_ttl_for_provider_model`，
-//!   jcode-cache-analysis.md:2774-2799；表只依赖供应商/模型能力，不依赖 UI 层）。
+//!   gpt-5.6 系）。**定义在 behavior.rs（T-19 交付）**，本模块按 T-19 的模块内
+//!   约定 re-export（"TTL 路由表（T-21 models/ttl.rs）如需本类型应 re-export
+//!   而非重定义，避免同 crate 两套同名枚举漂移"）；任务书要求的 `as_str()` 由本
+//!   模块的固有 impl 补全（同 crate 允许在其他模块内扩展固有方法）。
+//! - [cache_ttl_for_declared_model]：**唯一** TTL 决议纯函数。
 //!
-//! 覆盖优先级：catalog 条目 `cache_ttl` > vendor 默认 > None（P3 §3.5）。
-//! 消费方：冷缓存预警（P5 测量层）、摘要请求缓存隔离（P4 压缩层）。
+//! ## 唯一来源（N7 / 00-总方案 §8 剧本 4）
+//!
+//! 缓存 TTL 只认**用户 yaml 的 `cacheTtl` 声明**（经 `ModelsStore` 已提交树
+//! 投影进 `ModelCatalogEntry.cache_ttl`）：
+//!
+//! - 命中且值域合法 → `Some(档位)`；
+//! - 未收录 / 无 `cacheTtl` / 值域非法 → `None` = **不追踪缓存**（fail-closed）。
+//!
+//! **禁止**回落内置 `catalog.json`（`bundled_catalog()`）或任何厂商 / 模型名前缀
+//! 推断表——字典不得替用户决定 TTL。原 `vendor_default_ttl` /
+//! `openai_default_ttl` / `is_openai_extended_retention` 硬编码表已物理删除。
+//!
+//! 消费方：冷缓存预警（P5 测量层，`engine_build::build_cache_tracking_config`）、
+//! 摘要请求缓存隔离（P4 压缩层）。
 //! 与行为矩阵的分工：behavior.rs 的 `CacheBehavior::default_ttl` 是注入框架的
-//! 决策输入（C2 数据真源）；本表是独立的 TTL 路由查询（含 OpenAI 模型档位，
-//! A1-11），两者值保持一致，供不同消费者使用。
+//! 决策输入（C2 数据真源）；本函数是 yaml 声明面的唯一决议。
 
 pub use super::behavior::CacheTtl;
-use super::behavior::VendorId;
 use super::catalog::ModelCatalog;
 
 impl CacheTtl {
@@ -35,90 +41,31 @@ impl CacheTtl {
     }
 }
 
-/// 模型级 TTL 路由表（对齐 jcode `cache_ttl_for_provider_model`；纯函数，不依赖 UI）
+/// 缓存 TTL 唯一决议（**单一纯函数**：无 IO、无全局态、无兜底表）。
 ///
-/// 覆盖优先级：catalog 条目 `cache_ttl` > vendor 默认 > None。
-/// - catalog 为 None、条目未命中、或条目 `cache_ttl` 为 None 时回退 vendor 默认档；
-/// - catalog 条目 `cache_ttl` 值域为 "5m"/"30m"/"1h"/"24h"（v2 四档），
-///   无法识别的值防御性忽略并回退 vendor 默认档（[CacheTtl::parse] → None）；
-/// - Auto 与无缓存厂商 → None（永不预警，对齐 jcode copilot/cursor 返回 None
-///   的"否则视为不支持"语义）。
-pub fn cache_ttl_for_provider_model(
-    catalog: Option<&ModelCatalog>,
-    vendor: VendorId,
+/// - `catalog` 必须是 **live 树投影**（`LiveModels.catalog`，由 `ModelsStore`
+///   已提交树派生）——传 `ModelCatalog::bundled()` 即等于把字典当 TTL 真源，
+///   属 N7 禁止项；
+/// - 条目 `cache_ttl` 值域为 "5m"/"30m"/"1h"/"24h"（v2 四档），无法识别的值
+///   防御性忽略（[CacheTtl::parse] → `None`）；
+/// - 未收录 / 未声明 / 值域非法 → `None`：**不追踪缓存**（fail-closed），
+///   调用方必须据此关闭缓存测量，禁止凭空推断 TTL。
+pub fn cache_ttl_for_declared_model(
+    catalog: &ModelCatalog,
+    provider_id: &str,
     model: &str,
 ) -> Option<CacheTtl> {
-    if let Some(catalog) = catalog {
-        if let Some(entry) = catalog.lookup(vendor.as_str(), model) {
-            if let Some(parsed) = entry.cache_ttl.as_deref().and_then(CacheTtl::parse) {
-                return Some(parsed);
-            }
-        }
-    }
-    vendor_default_ttl(vendor, model)
-}
-
-/// vendor 级默认档（P3 §3.5 表格；对齐 jcode 2774-2799 与 00-catalog 各节）
-fn vendor_default_ttl(vendor: VendorId, model: &str) -> Option<CacheTtl> {
-    match vendor {
-        // Deepseek：自动磁盘前缀缓存，命中刷新免费；客户端按 300s 预警
-        VendorId::Deepseek => Some(CacheTtl::Short),
-        // Anthropic：默认 300s。1h 档（jcode `is_cache_ttl_1h` 开关，2776-2780）
-        // 属 wire 层 TtlBucket::OneHour / retention=Long 语义（T-13 交付，
-        // request/cache.rs），本路由表保守按 300s 预警
-        VendorId::Anthropic => Some(CacheTtl::Short),
-        // Openai：Short 为默认；gpt-5.5 及更早扩展保留模型 → Day（见下）
-        VendorId::Openai => openai_default_ttl(model),
-        // Kimi：全自动 Context Caching，无 TTL 管理，按 300s 预警
-        VendorId::Kimi => Some(CacheTtl::Short),
-        // Grok：服务端管理未公布值，按 300s
-        VendorId::Grok => Some(CacheTtl::Short),
-        // MiniMax：主动缓存 TTL 5 分钟（vendor-cache-mechanisms.md:150）
-        VendorId::MiniMax => Some(CacheTtl::Short),
-        // Gemini：隐式缓存无公开 TTL；显式 cachedContents 默认 1h 有存储费另行核算
-        VendorId::Gemini => Some(CacheTtl::Short),
-        // Glm：自动缓存"有合理时限"（vendor-cache-mechanisms.md:58），按 300s
-        VendorId::Glm => Some(CacheTtl::Short),
-        // Qwen：官方直连缓存行为未实测（T-19 矩阵 QWEN 行保守全关、default_ttl
-        // None；P3 §3.5 表未单列）→ 保守 None；百炼通道经 catalog 条目
-        // cache_ttl="5m" 覆盖生效（内置 qwen3 系条目）
-        VendorId::Qwen => None,
-        // Dashscope（百炼）：显式缓存 5 分钟、命中重置（vendor-cache-gaps.md:23）
-        VendorId::Dashscope => Some(CacheTtl::Short),
-        // Auto / 未识别网关：不支持前缀缓存 → 永不预警（jcode 2794-2796）
-        VendorId::Auto => None,
-    }
-}
-
-/// OpenAI 默认档：Short；gpt-5.5 及更早扩展保留模型 → Day(24h)；
-/// **gpt-5.6 除外**（TTL 仅 30m，不入 24h 档，A1-11 / 00-catalog §2.1）——
-/// v2 Schema 扩档后 30m 有明确档位（CacheTtl::HalfHour），不再按 5m 保守预警
-/// （03-catalog-v2-schema.md §5.2 要点，销账 ttl.rs:93-97 旧注释）。
-fn openai_default_ttl(model: &str) -> Option<CacheTtl> {
-    if model.starts_with("gpt-5.6") {
-        return Some(CacheTtl::HalfHour);
-    }
-    if is_openai_extended_retention(model) {
-        Some(CacheTtl::Day)
-    } else {
-        Some(CacheTtl::Short)
-    }
-}
-
-/// OpenAI 24h extended 保留模型前缀（P3 §3.5 / A1-11 修正清单）：
-/// gpt-5.5 / 5.4 / 5.2 / 5.1 系列与 gpt-5（00-catalog §2.1 另列 gpt-4.1，
-/// 不在 P3 修正清单内，保守不入 24h 档，可由 catalog 条目显式开启）
-fn is_openai_extended_retention(model: &str) -> bool {
-    model == "gpt-5"
-        || model.starts_with("gpt-5.5")
-        || model.starts_with("gpt-5.4")
-        || model.starts_with("gpt-5.2")
-        || model.starts_with("gpt-5.1")
+    catalog
+        .lookup(provider_id, model)?
+        .cache_ttl
+        .as_deref()
+        .and_then(CacheTtl::parse)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::LiveModels;
 
     /// CacheTtl 契约：秒数（300/1800/3600/86400）+ 值域字符串 + serde 往返
     /// （枚举本体与 parse 由 T-19 behavior.rs 的 cache_ttl_serde_values_and_seconds
@@ -146,113 +93,137 @@ mod tests {
         }
     }
 
-    /// 每 vendor 默认档断言（无 catalog 时；Qwen/Auto → None）
+    /// 旧 vendor 默认表的**同一供应商矩阵**反转断言：无 `cacheTtl` 声明时，
+    /// 任何厂商（含旧表内 8 家 + 未识别网关）都**不得**推出 TTL（N7 fail-closed）。
+    /// 该用例接替被废止的 `vendor_defaults_without_catalog`，覆盖面不减。
     #[test]
-    fn vendor_defaults_without_catalog() {
-        let ttl = |vendor: VendorId, model: &str| cache_ttl_for_provider_model(None, vendor, model);
+    fn every_vendor_fails_closed_without_declaration() {
+        let yaml = r#"
+version: 2
+providers:
+  deepseek:
+    models: [{ id: deepseek-v4-flash }]
+  anthropic:
+    models: [{ id: claude-sonnet-5 }]
+  openai:
+    models: [{ id: gpt-5.6 }, { id: gpt-5.5 }, { id: gpt-5 }, { id: gpt-4o }, { id: o3 }]
+  kimi:
+    models: [{ id: kimi-k3 }]
+  grok:
+    models: [{ id: grok-4.5 }]
+  minimax:
+    models: [{ id: minimax-m2-7 }]
+  gemini:
+    models: [{ id: gemini-3-6-flash }]
+  glm:
+    models: [{ id: glm-5 }]
+  qwen:
+    models: [{ id: qwen3-max }]
+  dashscope:
+    models: [{ id: qwen3-max }]
+  auto:
+    models: [{ id: anything }]
+"#;
+        let live = LiveModels::from_yaml_str(yaml).expect("v2 yaml 必须解析成功");
+        for (provider, model) in [
+            ("deepseek", "deepseek-v4-flash"),
+            ("anthropic", "claude-sonnet-5"),
+            ("openai", "gpt-5.6"),
+            ("openai", "gpt-5.5"),
+            ("openai", "gpt-5"),
+            ("openai", "gpt-4o"),
+            ("openai", "o3"),
+            ("kimi", "kimi-k3"),
+            ("grok", "grok-4.5"),
+            ("minimax", "minimax-m2-7"),
+            ("gemini", "gemini-3-6-flash"),
+            ("glm", "glm-5"),
+            ("qwen", "qwen3-max"),
+            ("dashscope", "qwen3-max"),
+            ("auto", "anything"),
+        ] {
+            assert_eq!(
+                cache_ttl_for_declared_model(&live.catalog, provider, model),
+                None,
+                "yaml 未声明 cacheTtl 时 {provider}::{model} 必须 fail-closed（不追踪缓存）"
+            );
+        }
+        // 零命中同样 fail-closed
         assert_eq!(
-            ttl(VendorId::Deepseek, "deepseek-v4-flash"),
-            Some(CacheTtl::Short)
-        );
-        assert_eq!(
-            ttl(VendorId::Anthropic, "claude-sonnet-5"),
-            Some(CacheTtl::Short)
-        );
-        assert_eq!(ttl(VendorId::Kimi, "kimi-k3"), Some(CacheTtl::Short));
-        assert_eq!(ttl(VendorId::Grok, "grok-4.5"), Some(CacheTtl::Short));
-        assert_eq!(
-            ttl(VendorId::MiniMax, "minimax-m2-7"),
-            Some(CacheTtl::Short)
-        );
-        assert_eq!(
-            ttl(VendorId::Gemini, "gemini-3-6-flash"),
-            Some(CacheTtl::Short)
-        );
-        assert_eq!(ttl(VendorId::Glm, "glm-5"), Some(CacheTtl::Short));
-        assert_eq!(ttl(VendorId::Dashscope, "qwen3-max"), Some(CacheTtl::Short));
-        // Qwen 官方直连未实测 → 保守 None（与 T-19 矩阵 QWEN 行一致）
-        assert_eq!(ttl(VendorId::Qwen, "qwen3-max"), None);
-        // Auto → None
-        assert_eq!(ttl(VendorId::Auto, "anything"), None);
-    }
-
-    /// OpenAI 分档（A1-11 / v2 Schema §5.2）：gpt-5.5 及更早扩展保留 → Day；
-    /// **gpt-5.6 仅 30m TTL** → HalfHour（v2 扩档后不再按 5m 保守预警）；其余
-    /// OpenAI 模型 → Short
-    #[test]
-    fn openai_ttl_tiers_gpt55_day_gpt56_half_hour() {
-        let ttl = |model: &str| cache_ttl_for_provider_model(None, VendorId::Openai, model);
-        // gpt-5.6 及同族 → HalfHour（30m 档）
-        assert_eq!(ttl("gpt-5.6"), Some(CacheTtl::HalfHour));
-        assert_eq!(ttl("gpt-5.6-mini"), Some(CacheTtl::HalfHour));
-        // gpt-5.5 及更早扩展保留模型 → Day(24h)
-        assert_eq!(ttl("gpt-5.5"), Some(CacheTtl::Day));
-        assert_eq!(ttl("gpt-5.5-preview"), Some(CacheTtl::Day));
-        assert_eq!(ttl("gpt-5.4"), Some(CacheTtl::Day));
-        assert_eq!(ttl("gpt-5.2"), Some(CacheTtl::Day));
-        assert_eq!(ttl("gpt-5.1"), Some(CacheTtl::Day));
-        assert_eq!(ttl("gpt-5"), Some(CacheTtl::Day));
-        // 其余 OpenAI 模型 → Short
-        assert_eq!(ttl("gpt-4o"), Some(CacheTtl::Short));
-        assert_eq!(ttl("o3"), Some(CacheTtl::Short));
-    }
-
-    /// None 语义：Auto 与未识别网关 → None（永不预警）
-    #[test]
-    fn auto_and_unknown_vendor_yield_none() {
-        let ttl = |model: &str| cache_ttl_for_provider_model(None, VendorId::Auto, model);
-        assert_eq!(ttl("anything"), None);
-        assert_eq!(ttl("gpt-5.5"), None);
-        assert_eq!(ttl(""), None);
-    }
-
-    /// catalog 覆盖生效：内置目录条目 cache_ttl 优先于 vendor 默认
-    ///
-    /// 内置数据（T-18 转录，00-catalog 口径）：openai::gpt-5.5 → "24h"、
-    /// openai::gpt-5.6 无 cache_ttl、deepseek 全系 → "5m"、kimi-k3 / qwen3-max
-    /// → "5m"。
-    #[test]
-    fn catalog_entry_overrides_vendor_default() {
-        let catalog = ModelCatalog::bundled();
-        // 目录条目值路径：gpt-5.5 cacheTtl="24h" → Day
-        assert_eq!(
-            cache_ttl_for_provider_model(Some(&catalog), VendorId::Openai, "gpt-5.5"),
-            Some(CacheTtl::Day)
-        );
-        // 目录条目无 cache_ttl（gpt-5.6）→ 回退 vendor 默认 HalfHour（30m 档，
-        // v2 扩档后不再按 5m 保守预警）
-        assert_eq!(
-            cache_ttl_for_provider_model(Some(&catalog), VendorId::Openai, "gpt-5.6"),
-            Some(CacheTtl::HalfHour)
-        );
-        // deepseek 条目 cacheTtl="5m" → Short（路径仍经目录解析）
-        assert_eq!(
-            cache_ttl_for_provider_model(Some(&catalog), VendorId::Deepseek, "deepseek-v4-flash"),
-            Some(CacheTtl::Short)
-        );
-        // kimi-k3 条目 cacheTtl="5m" → Short
-        assert_eq!(
-            cache_ttl_for_provider_model(Some(&catalog), VendorId::Kimi, "kimi-k3"),
-            Some(CacheTtl::Short)
-        );
-        // qwen3-max：vendor 默认 None，目录条目 "5m" 覆盖 → Short（覆盖优先级钉死）
-        assert_eq!(
-            cache_ttl_for_provider_model(Some(&catalog), VendorId::Qwen, "qwen3-max"),
-            Some(CacheTtl::Short)
-        );
-        // 目录未收录模型 → 回退 vendor 默认（OpenAI 扩展保留前缀仍命中 24h；
-        // Qwen 未知模型保守 None，与 T-19 矩阵一致）
-        assert_eq!(
-            cache_ttl_for_provider_model(Some(&catalog), VendorId::Openai, "gpt-5.2-x"),
-            Some(CacheTtl::Day)
-        );
-        assert_eq!(
-            cache_ttl_for_provider_model(Some(&catalog), VendorId::Qwen, "qwen-future-model"),
+            cache_ttl_for_declared_model(&live.catalog, "deepseek", "no-such-model"),
             None
         );
+    }
+
+    /// 用户声明是唯一来源：声明 "5m"/"30m"/"1h"/"24h" 四档逐一透传。
+    #[test]
+    fn declaration_is_the_only_ttl_source() {
+        let yaml = r#"
+version: 2
+providers:
+  acme:
+    models:
+      - id: m-short
+        cacheTtl: "5m"
+      - id: m-half-hour
+        cacheTtl: "30m"
+      - id: m-hour
+        cacheTtl: "1h"
+      - id: m-day
+        cacheTtl: "24h"
+      - id: m-undeclared
+"#;
+        let live = LiveModels::from_yaml_str(yaml).expect("v2 yaml 必须解析成功");
+        let ttl = |model: &str| cache_ttl_for_declared_model(&live.catalog, "acme", model);
+        assert_eq!(ttl("m-short"), Some(CacheTtl::Short));
+        assert_eq!(ttl("m-half-hour"), Some(CacheTtl::HalfHour));
+        assert_eq!(ttl("m-hour"), Some(CacheTtl::Hour));
+        assert_eq!(ttl("m-day"), Some(CacheTtl::Day));
+        assert_eq!(ttl("m-undeclared"), None, "未声明档位 → 不追踪缓存");
+    }
+
+    /// 值域非法 → **解析边界**显式拒绝（fail-closed 第一道闸），
+    /// 非法值不得以「静默忽略」的形式进入已提交树。
+    ///
+    /// 说明：`cache_ttl_for_declared_model` 内部的「无法识别 → None」分支属
+    /// 纵深防御（`from_unified` 的 `normalize_for_commit` 已先校验），因此
+    /// 该分支在公开构造路径上不可达——本测试钉住**可达**的那道闸。
+    #[test]
+    fn invalid_declaration_fails_closed() {
+        for illegal in ["banana", "", "7h", "1H", "60m"] {
+            let yaml = format!(
+                "version: 2\nproviders:\n  acme:\n    models:\n      - id: m-bad\n        cacheTtl: \"{illegal}\"\n"
+            );
+            let err = LiveModels::from_yaml_str(&yaml)
+                .expect_err(&format!("cacheTtl=`{illegal}` 必须在解析期被拒绝"));
+            assert!(
+                err.contains("cacheTtl"),
+                "拒绝信息必须指名 cacheTtl（实际：{err}）"
+            );
+        }
+    }
+
+    /// §8 剧本 4 的内核级断言：内置字典**确有**该模型 TTL，但 yaml 未声明时
+    /// 决议必须是 `None`——即内置字典不构成 TTL 第二来源。
+    #[test]
+    fn undeclared_yaml_yields_none_even_though_bundled_catalog_has_a_value() {
+        let bundled = ModelCatalog::bundled();
+        // 从内置字典里取**第一条确有 cache_ttl 的条目**（不写死具体模型，
+        // 避免字典更新后前置失效；若无任何条目带 TTL 则本断言失去鉴别力）。
+        let (provider, model) = bundled
+            .iter_entries()
+            .find(|(_, entry)| entry.cache_ttl.is_some())
+            .map(|(_, entry)| (entry.provider.clone(), entry.model.clone()))
+            .expect("前置：内置字典应至少有一条带 cache_ttl 的条目");
+
+        let live = LiveModels::from_yaml_str(&format!(
+            "version: 2\nproviders:\n  {provider}:\n    models:\n      - id: {model}\n"
+        ))
+        .expect("v2 yaml 必须解析成功");
         assert_eq!(
-            cache_ttl_for_provider_model(Some(&catalog), VendorId::Grok, "grok-9"),
-            Some(CacheTtl::Short)
+            cache_ttl_for_declared_model(&live.catalog, &provider, &model),
+            None,
+            "yaml 未声明 cacheTtl → 不追踪缓存，禁止回落内置字典"
         );
     }
 }

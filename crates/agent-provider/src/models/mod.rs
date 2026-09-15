@@ -4,7 +4,7 @@
 //! - [catalog]（catalog.rs）：模型目录结构 + 内置表 + 多级兜底查询（T-18，本任务已实现）
 //! - behavior.rs：厂商缓存行为矩阵（T-19 追加）
 //! - cache_key.rs：缓存键推导与会话亲和 header（T-20 追加）
-//! - ttl.rs：TTL 路由表（T-21 追加）
+//! - ttl.rs：缓存 TTL 唯一决议纯函数（T-21 追加；vendor 默认表已按 N7 物理删除）
 //!
 //! 依赖方向：catalog.rs 不依赖 request/parse 层；上层（P2 注入框架、P5 成本计算）
 //! 只依赖本模块的公共 re-export，禁止各 provider 分支直接读 catalog.json 之外的散落判定。
@@ -32,4 +32,8 @@ pub use catalog_types::{
     PricingTier, PricingUnit, ProtocolKind, ProviderSpec, ThinkingFormat, ThinkingMapExt, UnifiedModelsConfig,
     YamlParseError,
 };
-pub use ttl::cache_ttl_for_provider_model;
+pub use ttl::cache_ttl_for_declared_model;
+
+#[cfg(test)]
+#[path = "ssot_convergence_tests.rs"]
+mod ssot_convergence_tests;

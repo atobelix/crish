@@ -4,14 +4,14 @@
 //! `BUILTIN_COMMAND_MANIFEST` 是本文件的**内置快照镜像**（启动拉取失败 / 非 Tauri
 //! 环境回退面），双端手工同步，条数由双端测试锁定：
 //! - Rust 侧：本文件 `manifest_*` 测试（条数公式化 / 幽灵命令排除 / 新增命令登记）；
-//! - 前端侧：`commandManifest.test.ts`（94 = 注册面 90 + 登记先行 4，
-//!   T-F 06 退役 5 条后 95 → 90，浏览器域追加 4 条 browser_* 后 90 → 94）。
+//! - 前端侧：`commandManifest.test.ts`（**135 = 注册面 135 + 登记先行 0**；
+//!   条数与集合由该文件的动态对照断言直读本文件真源双向锁定）。
 //!
 //! 维护规则：
-//! - `registered = true` 子集 = main.rs `make_handlers!` 当前注册面（integration agent
+//! - `registered = true` 子集 = main.rs `command_registry!` 当前注册面（integration agent
 //!   接线时以本清单为准对齐，任何不一致都是 bug）；
 //! - 登记先行命令（`registered = false`，如 workbench_* 待接线）
-//!   由实现方各自负责，接线后翻 `true`；
+//!   由实现方各自负责，接线后翻 `true`（**当前为 0 条**，全部实装）；
 //! - 幽灵命令（AA-02 W-5，9 条）**严禁**登记（`manifest_excludes_ghost_commands` 测试拦截）。
 //!
 //! `core_list_commands` 启动即可用、无状态依赖，返回完整 manifest JSON
@@ -60,16 +60,27 @@ const fn entry(
     }
 }
 
-/// 命令清单（127 条 = 全部 registered=true 实装命令；与前端 `BUILTIN_COMMAND_MANIFEST` 双向镜像）。
+/// 命令清单（**135 条 = 全部 registered=true 实装命令**；与前端
+/// `BUILTIN_COMMAND_MANIFEST` 双向镜像）。
 ///
-/// 注册面（registered=true）必须与 main.rs `make_handlers!` 注册一致；
+/// 注册面（registered=true）必须与 main.rs `command_registry!` 注册一致；
 /// 登记先行（registered=false）为「已登记未接线」：workbench_open_workspace /
 /// workbench_list_workspaces / workbench_dev_mcp_enabled / core_resume_run（P2）。
 /// F-03（DM-07）：core_read_run_events 恢复激活；R1 撤回 core_session_retract 登记
 ///（统一输入流收敛战役）后总数 125（注册面 120 → 121）；R7 收口 GUI fs 删除命令
 /// 幽灵退役（R6-D5 后零消费）后总数 124（注册面 121 → 120）；
 /// computer_estop 退役后 123；`note_document_recent` 追加后 124；
-/// 模型字典真源三命令追加后 127；core_jsonl_append 退役（零消费）后 126。
+/// 模型字典真源三命令追加后 127；core_jsonl_append 退役（零消费）后 126；
+/// 用量 / 笔记 / 账号 / 偏好 / 握手命令追加后 142（见 `manifest_count_matches_
+/// registered_surface` 的逐次记账）。
+///
+/// **单轨收敛命令面清零（2026-09-15，本次）**：出厂能力字典读面
+/// `workbench_read_capability_dictionary` 登记（142 → 143）；真漂移债务清零
+/// 退役 8 条（workbench_select_folder / workbench_http_request /
+/// config_get_outputs_root / config_set_outputs_root / set_session_output_root /
+/// computer_session_enable / computer_session_disable / computer_status）
+/// 后 143 → **135**。`core_read_run_events` 经复核**保留**（跨端契约面，
+/// 见 command-contract-drift.test.ts DRIFT_DEBT 的待裁决登记）。
 pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
     contract_version: COMMAND_MANIFEST_CONTRACT_VERSION,
     commands: &[
@@ -95,6 +106,8 @@ pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
         entry("workbench_validate_models_yaml", "workbench", "gui", true),
         entry("workbench_save_models_yaml", "workbench", "gui", true),
         entry("workbench_apply_models_config", "workbench", "gui", true),
+        // 出厂能力字典只读投影（替代已退役 catalog_get 的读面；纯只读）
+        entry("workbench_read_capability_dictionary", "workbench", "gui", true),
         // F1（R-AB1 T-AB-08）：后台任务三条查询命令恢复（B01/B02 查询面）
         entry("workbench_list_background_tasks", "workbench", "gui", true),
         entry(
@@ -107,12 +120,12 @@ pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
         // F3（T-AB-19 顺手接线）：send_input 命令面补齐（前端
         // sendBackgroundTaskInput 已接线等待，T-AB-20 操作面）
         entry("workbench_send_input", "workbench", "gui", true),
-        entry("workbench_select_folder", "workbench", "gui", true),
+        // workbench_select_folder 已退役（前端目录选择统一走 plugin-dialog）
         entry("workbench_list_directory", "workbench", "gui", true),
         entry("workbench_read_file_content", "workbench", "gui", true),
         entry("workbench_write_file_content", "workbench", "gui", true),
         entry("workbench_discover_skills", "workbench", "gui", true),
-        entry("workbench_http_request", "workbench", "gui", true),
+        // workbench_http_request 已退役（唯一调用点在 Rust `#[cfg(test)]` 内）
         entry("workbench_apply_update", "workbench", "gui", true),
         // ── 多端互通配对面（R1-07 四件套 + R1-08 撤销/改名，registered=true，与前端同步）──
         entry("multi_device_pair_start", "multi_device", "engine", true),
@@ -144,9 +157,8 @@ pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
         // ── 原生探活与模型扫描（Batch 1 · G3：provider_probe_ping / provider_probe_scan_models）──
         entry("provider_probe_ping", "config", "engine", true),
         entry("provider_probe_scan_models", "config", "engine", true),
-        // ── G03 产出根配置（T-EG-12：agentOutputsRoot 全局设置 + 校验）──
-        entry("config_get_outputs_root", "config", "engine", true),
-        entry("config_set_outputs_root", "config", "engine", true),
+        // ── G03 产出根：config_get_outputs_root / config_set_outputs_root
+        //    已退役（四方同步移除，前端 agentOutputsRoot 设置面不存在）──
         // ── 工具旧组（E1，§2.2-E）──
         entry("core_check_command", "core", "engine", true),
         entry("core_search_files", "core", "engine", true),
@@ -183,8 +195,8 @@ pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
         // F11b（T-D-12）：DAG 只读快照查询（flow_dag_visible 开关关闭时
         // 前端不调用本命令，只读通用面保留无害）
         entry("get_flow_snapshot", "session", "engine", true),
-        // G03 会话级产出根覆盖（T-EG-12：session_meta `{session_id}:output_root`）
-        entry("set_session_output_root", "session", "engine", true),
+        // G03 会话级产出根：set_session_output_root 已退役（四方同步移除，
+        // 前端无会话级产出根消费方；工具侧读取面保留）
         // ── Markdown（D，T03.4 更名 core_md_*，并入 core 族）──
         entry("core_md_render", "core", "engine", true),
         entry("core_md_render_batch", "core", "engine", true),
@@ -229,12 +241,10 @@ pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
         entry("browser_import_history", "browser", "engine", true),
         entry("browser_list_bookmarks", "browser", "engine", true),
         entry("browser_list_history", "browser", "engine", true),
-        // ── 电脑操作会话命令（06 遗留⑨：computer_session_enable/disable、
-        //    computer_status；代理到 ComputerSlot，
-        //    状态事件 computer://state-changed）──
-        entry("computer_session_enable", "computer", "engine", true),
-        entry("computer_session_disable", "computer", "engine", true),
-        entry("computer_status", "computer", "engine", true),
+        // ── 电脑操作会话命令：computer_session_enable / computer_session_disable /
+        //    computer_status 已退役（四方同步移除；computer-panel 前端面已
+        //    物理删除，生产代码零消费）。ComputerSlot 托管状态与实现体保留，
+        //    恢复接线时重新走四方登记 ──
         // ── Round7+：笔记双引擎 IPC（noteApi / noteHydrateIpc / noteMirrorIpc）──
         entry("note_document_apply_md", "note", "engine", true),
         entry("note_query_blocks", "note", "engine", true),
@@ -312,6 +322,16 @@ mod tests {
     /// computer_estop 退役后 123；note_document_recent 追加后 124；
     /// 模型字典真源三命令追加后 127；core_jsonl_append 退役（零消费）后 126；
     /// workbench_window_ready（ACT-101 / CON-01）追加后 145 → 146。
+    ///
+    /// 单轨收敛命令面清零（2026-09-15）：
+    /// - 出厂能力字典读面 `workbench_read_capability_dictionary` 登记（142 → 143）；
+    /// - 真漂移债务清零退役 8 条（workbench_select_folder / workbench_http_request /
+    ///   config_get_outputs_root / config_set_outputs_root / set_session_output_root /
+    ///   computer_session_enable / computer_session_disable / computer_status）
+    ///   后 143 → **135**；
+    /// - `core_read_run_events` 复核后**保留**（跨端契约面 tauri_command 映射 +
+    ///   移动端 monitorCommands 映射真源 + 实现处「不得静默再退役」登记）——
+    ///   在 command-contract-drift.test.ts 记为待裁决，不计入本次退役。
     #[test]
     fn manifest_count_matches_registered_surface() {
         let total = COMMAND_MANIFEST.commands.len();
@@ -322,12 +342,12 @@ mod tests {
             .count();
         let pending = total - registered;
         assert_eq!(
-            total, 142,
-            "总数 142（单轨收敛退役 config_get/update/profile_apply 旧命令族后；与前端 commandMap 同步）"
+            total, 135,
+            "总数 135（单轨收敛：能力字典读面 +1 → 143，真漂移退役 8 条 → 135；与前端 commandMap 同步）"
         );
         assert_eq!(
-            registered, 142,
-            "注册面 142（全部为 registered=true 实装命令）"
+            registered, 135,
+            "注册面 135（全部为 registered=true 实装命令）"
         );
         assert_eq!(pending, 0, "登记先行 0");
     }
@@ -441,6 +461,8 @@ mod tests {
             "workbench_read_models_yaml",
             "workbench_save_models_yaml",
             "workbench_apply_models_config",
+            // 出厂能力字典只读投影（替代已退役 catalog_get 的读面；纯只读）
+            "workbench_read_capability_dictionary",
         ] {
             let entry = by_name
                 .get(name)

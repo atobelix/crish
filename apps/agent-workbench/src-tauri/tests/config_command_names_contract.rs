@@ -107,3 +107,58 @@ fn models_read_save_apply_have_real_primary_registration() {
         assert!(main.contains(&format!("models_yaml::{name}")));
     }
 }
+
+/// 出厂能力字典读面注册契约（单轨收敛阶段 3，2026-09-15）：
+/// 命令名 = **语义名**（「能力字典」的只读投影），不是实现细节名
+/// （`workbench_read_bundled_catalog`）；且必须**真实注册**进 main.rs
+/// `command_registry!`——防「`#[tauri::command]` 已定义但未注册」的假接线回归
+/// （注册面盲区：D11 只对齐四方清单，不检宏外命令函数）。
+#[test]
+fn capability_dictionary_read_face_is_registered() {
+    const NAME: &str = "workbench_read_capability_dictionary";
+    let main = include_str!("../src/main.rs");
+    assert!(
+        manifest_names().contains(&NAME),
+        "{NAME} 必须登记 manifest（四方权威 ①）"
+    );
+    assert!(
+        main.contains(&format!("\"{NAME}\"")),
+        "{NAME} 必须注册进 main.rs command_registry!（四方权威 ②）"
+    );
+    assert!(
+        main.contains(&format!("models_yaml::{NAME}")),
+        "{NAME} 的实现路径必须指向 models_yaml 真源"
+    );
+    // 改名即弃名：旧实现细节名不得在任何注册面残留
+    assert!(
+        !main.contains("workbench_read_bundled_catalog"),
+        "旧名 workbench_read_bundled_catalog 严禁残留（改名即弃名）"
+    );
+}
+
+/// 真漂移退役面（2026-09-15 债务清零）：已退役的 8 条命令**严禁**在
+/// manifest 重新登记（防「退役后又悄悄复活」），也不得出现在 main.rs 注册面。
+#[test]
+fn retired_drift_debt_commands_are_not_registered() {
+    let main = include_str!("../src/main.rs");
+    let names = manifest_names();
+    for retired in [
+        "workbench_select_folder",
+        "workbench_http_request",
+        "config_get_outputs_root",
+        "config_set_outputs_root",
+        "set_session_output_root",
+        "computer_session_enable",
+        "computer_session_disable",
+        "computer_status",
+    ] {
+        assert!(
+            !names.contains(&retired),
+            "已退役命令 {retired} 严禁登记 manifest（真漂移债务清零后不得复活）"
+        );
+        assert!(
+            !main.contains(&format!("\"{retired}\",")),
+            "已退役命令 {retired} 严禁出现在 main.rs command_registry! 注册面"
+        );
+    }
+}

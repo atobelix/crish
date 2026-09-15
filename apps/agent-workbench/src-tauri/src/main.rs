@@ -223,9 +223,16 @@ command_registry![
         "workbench_apply_models_config",
         models_yaml::workbench_apply_models_config
     ),
-    // T-F 06：fs 四命令经 `#[tauri::command(rename = "workbench_*")]` 对齐
-    // wire 键（元组名 = manifest 登记名 = wire 键逐字一致，分裂已消除）
-    ("workbench_select_folder", fs_commands::select_folder),
+    // 出厂能力字典只读投影（替代已退役 catalog_get 的读面；纯只读，无写盘 /
+    // 无状态变更）——wire 名语义：它是「能力字典」的投影，不是实现细节名
+    (
+        "workbench_read_capability_dictionary",
+        models_yaml::workbench_read_capability_dictionary
+    ),
+    // T-F 06：fs 命令经 `#[tauri::command(rename = "workbench_*")]` 对齐
+    // wire 键（元组名 = manifest 登记名 = wire 键逐字一致，分裂已消除）；
+    // workbench_select_folder 已退役（四方同步移除，见 command-contract-drift
+    // 债务清零记录）——前端目录选择统一走 `@tauri-apps/plugin-dialog`
     ("workbench_list_directory", fs_commands::list_directory),
     (
         "workbench_read_file_content",
@@ -239,7 +246,9 @@ command_registry![
         "workbench_discover_skills",
         fs_commands::workbench_discover_skills
     ),
-    ("workbench_http_request", commands::workbench_http_request),
+    // workbench_http_request 已退役（四方同步移除）——唯一调用点在
+    // `commands.rs` 的 `#[cfg(test)]` 内，前端出站走 provider_probe_ping /
+    // directFetchBridge
     ("workbench_apply_update", commands::workbench_apply_update),
     // ── 凭据事务：模型配置与活动选择只由 models 命令提交 ──
     ("config_secret_set", config::config_secret_set),
@@ -253,15 +262,10 @@ command_registry![
         "provider_probe_scan_models",
         probe::provider_probe_scan_models
     ),
-    // ── G03 产出根配置（T-EG-12：agentOutputsRoot 全局设置 + 校验）──
-    (
-        "config_get_outputs_root",
-        outputs_config::config_get_outputs_root
-    ),
-    (
-        "config_set_outputs_root",
-        outputs_config::config_set_outputs_root
-    ),
+    // ── G03 产出根配置（T-EG-12）：config_get_outputs_root /
+    //    config_set_outputs_root 已退役（四方同步移除，前端 agentOutputsRoot
+    //    设置面不存在）；产出根解析能力（outputs_config::resolve_outputs_root
+    //    + OutputsRootConfig 托管状态）保留，供工具侧默认根与清理链消费 ──
     // ── 工具旧组（E1，§2.2-E）──
     ("core_check_command", core_commands::core_check_command),
     ("core_search_files", core_commands::core_search_files),
@@ -372,11 +376,9 @@ command_registry![
     // F11b（T-D-12）：DAG 只读快照查询（flow_dag_visible 开关关闭时不调用，
     // 只读通用面保留无害）
     ("get_flow_snapshot", session_commands::get_flow_snapshot),
-    // G03 会话级产出根覆盖（T-EG-12：session_meta `{session_id}:output_root`）
-    (
-        "set_session_output_root",
-        outputs_config::set_session_output_root
-    ),
+    // G03 会话级产出根覆盖：set_session_output_root 已退役（四方同步移除，
+    // 前端会话级产出根无消费方）；session_meta `{session_id}:output_root`
+    // 读取面仍由工具侧 resolve_output_dir 消费
     // ── Markdown（D，T03.4 更名 core_md_*，并入 core 族；实现函数在
     //    markdown_commands.rs，经 `#[tauri::command(rename = ...)]` 对齐 wire 名）──
     ("core_md_render", markdown_commands::md_render),
@@ -452,17 +454,11 @@ command_registry![
         "browser_list_history",
         browser_commands::browser_list_history
     ),
-    // ── 电脑操作会话命令（06 遗留⑨：会话开关 + 状态；代理到
-    //    ComputerSlot，状态事件 computer://state-changed）──
-    (
-        "computer_session_enable",
-        computer_commands::computer_session_enable
-    ),
-    (
-        "computer_session_disable",
-        computer_commands::computer_session_disable
-    ),
-    ("computer_status", computer_commands::computer_status),
+    // ── 电脑操作会话命令：computer_session_enable / computer_session_disable /
+    //    computer_status 已退役（四方同步移除，computer-panel 前端面
+    //    computerSessionApi / ComputerPanel / useComputerSession 均已物理删除，
+    //    生产代码零消费）；ComputerSlot 托管状态与 computer_commands 实现体
+    //    保留（内联测试直调），恢复接线时按四方登记流程重新注册 ──
     // ── Round7+：笔记双引擎 IPC（noteApi / noteHydrateIpc / noteMirrorIpc）──
     (
         "note_document_apply_md",

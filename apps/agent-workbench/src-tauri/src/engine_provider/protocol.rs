@@ -37,12 +37,15 @@ use super::EngineProviderConfig;
 
 /// 运行时 yaml 树 + 扁平投影快照（支持热重载）。
 ///
-/// **热路径唯一入口是 [live_catalog]。** `bundled_catalog()` 只服务内置
-/// `catalog.json`（测试、预填、历史 lookup）。S4 必须把 `request_options`
-/// 的 catalog 参数从 `bundled_catalog()` 换成 `live_catalog()`，并复制
-/// `EngineProviderConfig.thinking_map`；本维不改该调用点，不得宣称出站已通。
+/// **装载源唯一 = `ModelsStore::committed()`**（`~/.conex/models.yaml` 的唯一
+/// 读写口）：快照由已提交树纯投影派生，并绑定该提交的 `revision`，因此
+/// 「快照 revision == 盘上 revision」恒成立，不存在第二份真相源。
 ///
-/// 持有 α-1 导出的 [LiveModels]（tree + 由 tree 投影的 catalog），禁止第三套解析器。
+/// **热路径唯一入口是 [live_catalog]。** `bundled_catalog()` 只服务内置
+/// `catalog.json`（测试、前端定价快照 `workbench_read_bundled_catalog`）；
+/// 生产能力/定价/缓存决议禁止消费它。
+///
+/// 持有 [LiveModels]（tree + 由 tree 投影的 catalog），禁止第三套解析器。
 static LIVE_CATALOG: RwLock<Option<Arc<LiveModels>>> = RwLock::new(None);
 
 /// `load_provider_endpoint` 从 live 快照灌入的槽位（零/多命中全为 None）。
@@ -240,16 +243,26 @@ pub(crate) fn catalog_request_profile(
     }
 }
 
+/// 生产唯一装载路径：**`ModelsStore` 已提交树 → 纯投影**。
+///
+/// 这是 `~/.conex/models.yaml` 的唯一读面（T2 已物理删除
+/// `LiveModels::load_user()` 的独立读盘路径与 `ModelCatalog::load_user_catalog*`），
+/// 因此不再有「两套解析器 + 两份内存快照」。
+///
+/// 返回 `Err` 的情形（存储未加载 / 解析失败）由调用方 fail-closed 处理：
+/// 保持上一份成功快照，绝不把坏数据当空树安装。
+fn committed_live_models() -> Result<LiveModels, String> {
+    let snapshot = crate::config::current_snapshot().map_err(|error| error.message)?;
+    LiveModels::from_committed(snapshot.revision.clone(), snapshot.tree.clone())
+}
+
 /// 获取当前运行时模型目录快照（热路径唯一 getter）。
 ///
-/// - 文件缺失：诚实空树 + 空目录（`parse_error = None`），**不是** `catalog.json`；
-/// - 解析失败：保持上一份成功快照；从未成功过则返回 [LiveModels::parse_failed]
-///   显式错误态（`parse_error = Some`），**并安装进槽位**——禁止把坏文件装成
-///   empty tree 当真源，但失败快照同样要缓存，避免每请求重复读盘直到文件修好；
+/// - 首次调用：从 `ModelsStore::committed()` 派生（不直接读盘、不第二次解析）；
+/// - 派生失败：保持上一份成功快照；从未成功过则返回 [LiveModels::parse_failed]
+///   显式错误态（`parse_error = Some`），**并安装进槽位**——禁止把坏配置装成
+///   empty tree 当真源，但失败快照同样要缓存，避免每请求重复派生；
 ///   下一次 [reload_live_catalog] 成功时覆盖失败快照。
-///
-/// S4 必须把 `request_options` 的 catalog 从 [bundled_catalog] 换成本函数；
-/// 本维不改该调用点，不得宣称出站已通。
 pub(crate) fn live_catalog() -> Arc<LiveModels> {
     if let Ok(guard) = LIVE_CATALOG.read() {
         if let Some(live) = guard.as_ref() {
@@ -262,13 +275,13 @@ pub(crate) fn live_catalog() -> Arc<LiveModels> {
     if let Some(live) = guard.as_ref() {
         return Arc::clone(live);
     }
-    adopt_load_result(&mut guard, LiveModels::load_user())
+    adopt_load_result(&mut guard, committed_live_models())
 }
 
 /// 成功或失败都写入 LIVE_CATALOG。
 ///
 /// 失败写入 [LiveModels::parse_failed] 快照（`parse_error = Some`），调用方仍能
-/// 与 empty tree 区分；安装失败快照是为了避免首次坏文件后每请求重复 load_user。
+/// 与 empty tree 区分；安装失败快照是为了避免首次坏配置后每请求重复派生。
 /// [reload_live_catalog] 成功路径会覆盖失败快照。
 fn adopt_load_result(
     slot: &mut Option<Arc<LiveModels>>,
@@ -283,7 +296,7 @@ fn adopt_load_result(
         Err(err) => {
             tracing::warn!(
                 target: "engine_provider",
-                "读取 ~/.conex/models.yaml 失败，安装 parse_failed 快照（不把空 providers 当作已加载，也不重复读盘）: {err}"
+                "从 ModelsStore 已提交树派生能力快照失败，安装 parse_failed 快照（不把空 providers 当作已加载，也不重复派生）: {err}"
             );
             let failed_arc = Arc::new(LiveModels::parse_failed(err));
             *slot = Some(Arc::clone(&failed_arc));
@@ -292,20 +305,30 @@ fn adopt_load_result(
     }
 }
 
-/// 重新加载运行时模型目录（models.yaml 保存成功后由 `models_yaml.rs` 调用）。
-/// 内容重解析 tree + 投影。解析失败保持上一份成功快照。
+/// 提交成功后刷新运行期能力快照（**唯一刷新口**，T1 修订撕裂修复）。
+///
+/// 调用点 = `config::publish_change`（save / apply / read / 外部文件变更四条提交
+/// 收口都经此），且**必须早于 `state.reload_provider()`**——顺序不可交换：
+/// `reload_provider` → `load_provider_endpoint` → `live_catalog()` 会消费本快照，
+/// 反序即「baseUrl/apiKey/model 已新、vendor/protocol/thinking/cacheTtl 仍旧」的
+/// 修订撕裂。
+///
+/// 快照直接派生自 `ModelsStore::committed()`（同一提交事务已落盘并发布），
+/// 故「快照 revision == 盘上 revision」恒成立，刷新在**下一次请求之前**生效。
+///
+/// 派生失败 → fail-closed：保持上一份成功快照并显式告警，不覆盖成空树。
 pub(crate) fn reload_live_catalog() {
-    match LiveModels::load_user() {
+    match committed_live_models() {
         Ok(live) => install_live_models(live),
         Err(err) => tracing::warn!(
             target: "engine_provider",
-            "reload_live_catalog 解析失败，保持上一份成功快照: {err}"
+            "reload_live_catalog 派生失败，保持上一份成功快照（fail-closed）: {err}"
         ),
     }
 }
 
-/// 从 yaml 字符串重解析并安装快照（仅测试与内存灌入；生产热更走
-/// [reload_live_catalog]）。失败不覆盖上一份成功快照。
+/// 从 yaml 字符串重解析并安装快照（**仅测试夹具**：内存灌入，不经 ModelsStore）。
+/// 安装的快照 `revision` 为空串（未绑定任何提交）。失败不覆盖上一份成功快照。
 #[cfg(test)]
 pub(crate) fn reload_live_catalog_from_yaml_str(yaml: &str) -> Result<(), String> {
     let live = LiveModels::from_yaml_str(yaml)?;
@@ -323,8 +346,9 @@ fn install_live_models(live: LiveModels) {
 /// 内置模型目录单例（T-23：Responses 支持判定用）
 ///
 /// catalog.json 编译期打包（include_str!，无运行时 IO）；OnceLock 保证进程内只
-/// 解析一次。仅内置表（测试、预填、历史 lookup）。**热路径新代码禁止再调用**；
-/// S4/S5 必须替换为 [live_catalog]。
+/// 解析一次。**非热路径**：只服务前端定价快照读面
+/// （`workbench_read_bundled_catalog`）与测试夹具。生产能力 / 定价 / 缓存 TTL
+/// 决议一律走 [live_catalog]（负向门禁：热路径 `bundled_catalog()` = 0）。
 static BUNDLED_CATALOG: OnceLock<ModelCatalog> = OnceLock::new();
 
 /// 内置模型目录只读引用（进程内单例）。热路径唯一入口是 [live_catalog]。
