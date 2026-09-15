@@ -87,12 +87,20 @@
 }
 
 /*
- * 叶的直接子节点：绝对钉在叶右上。
+ * 叶的直接子节点：绝对钉在叶右上第二行（抽屉头/快捷动作条行内，与 28px 按钮同轴垂直居中）。
+ *
+ * 纵向位置必须越过第一行 PaneHeader（--header-height = 36px），并在第二行居中推导：
+ * calc(var(--header-height) + (var(--header-height) - var(--leaf-corner-btn-size)) / 2)
+ * 第二行的横向让位由消费方各自预留：
+ * LeafToolTabStrip.fixedCluster（padding-right: size + inset）与
+ * UnitChromeActions（坞收起态让位区）都留出
+ * (--leaf-corner-btn-size + --leaf-corner-btn-inset) 的空间。
+ * 严禁把 top 算在第一行内（如 (header - size) / 2），否则会漂到窗口右上角遮挡窗口叉号窗控。
  * 开合都不卸载、不改透明度。
  */
 .topSidePanelBtn {
   position: absolute;
-  top: calc(var(--header-height) + var(--leaf-corner-btn-gap));
+  top: calc(var(--header-height) + (var(--header-height) - var(--leaf-corner-btn-size)) / 2);
   right: var(--leaf-corner-btn-inset);
   width: var(--leaf-corner-btn-size);
   height: var(--leaf-corner-btn-size);

@@ -123,7 +123,7 @@ describe('叶 chrome IA 与真树对齐', () => {
     const css = readBeside('./BinaryTreeWorkspace.module.css');
     expect(css).not.toMatch(/data-canvas-quiet/);
     /*
-     * 参考 .chat-top-header 是流内 sticky + margin-bottom:-38px。
+     * 参考 .chat-top-header 是流内 sticky + margin-bottom: 0。
      * 本表曾另有一份 .leafToolHeader 绝对定位覆盖层，两套定位互相覆盖，
      * 表现为渐隐层与右上角坞开关错位。这里钉死：布局表不再碰叶顶行定位。
      */
@@ -137,8 +137,8 @@ describe('叶 chrome IA 与真树对齐', () => {
     const header = ruleBlock(chromeCss, '.chatTopHeader');
     expect(header).toMatch(/position:\s*sticky/);
     expect(header).toMatch(/height:\s*38px/);
-    expect(header).toMatch(/margin-bottom:\s*-38px/);
-    expect(header).toMatch(/pointer-events:\s*none/);
+    expect(header).toMatch(/margin-bottom:\s*0/);
+    expect(header).toMatch(/pointer-events:\s*auto/);
     expect(header).not.toMatch(/justify-content:\s*flex-end/);
   });
 });

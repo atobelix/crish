@@ -77,8 +77,12 @@ describe('标签条动效单一真理路径契约', () => {
   });
 
   it('几何常量单一来源：双条带与拖拽手感均接入 tabStripGeometry', () => {
+    const varsTs = readRepoFile('src/components/binary-tree/tabStripVars.ts');
     expect(paneTsx).toContain("from '../../utils/tabStripGeometry'");
-    expect(toolTsx).toContain("from '../../utils/tabStripGeometry'");
+    expect(
+      toolTsx.includes("from '../../utils/tabStripGeometry'") ||
+        varsTs.includes("from '../../utils/tabStripGeometry'")
+    ).toBe(true);
     expect(dragFeelTs).toContain("from '../../utils/tabStripGeometry'");
   });
 

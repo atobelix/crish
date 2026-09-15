@@ -347,12 +347,6 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
       ]
     );
 
-    const stackedPanelIds = tabModeEnabled
-      ? [toolPanelId]
-      : dock.openPanelIds.length > 0
-        ? dock.openPanelIds
-        : [toolPanelId];
-
     const edges = useMemo(() => computePaneEdges(rect), [rect]);
     const tabCount = readLeafTabs(leaf).length;
 
@@ -487,40 +481,37 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
                       <div className={styles.emptyState}>加载中…</div>
                     }
                   >
-                    {tabModeEnabled ? (
-                      dock.openPanelIds.length > 0 ? (
-                        dock.openPanelIds.map((pid) => {
-                          const isActive = pid === toolPanelId;
-                          return (
-                            <div
-                              key={pid}
-                              className={styles.dockPanelPane}
-                              style={{
-                                display: isActive ? 'flex' : 'none',
-                                flex: '1 1 auto',
-                                width: '100%',
-                                height: '100%',
-                                minHeight: 0,
-                                minWidth: 0,
-                                flexDirection: 'column',
-                              }}
-                              data-panel-id={pid}
-                              data-active-panel={isActive ? 'true' : 'false'}
-                              aria-hidden={!isActive}
-                            >
-                              {renderToolOutlet(pid)}
-                            </div>
-                          );
-                        })
-                      ) : (
-                        renderToolOutlet(toolPanelId)
-                      )
+                    {/* 面板内容**互斥**：标签条已把 openPanelIds 呈现为标签，
+                        因此同一时刻只允许激活面板可见。此前非标签模式走
+                        `stackedPanelIds` 全量堆叠 ⇒ 三个标签的内容会同时出现在
+                        一个右侧边栏里（实证缺陷 2026-09-15）。所有面板仍保持挂载
+                        （仅切 display），切标签不丢状态。 */}
+                    {dock.openPanelIds.length > 0 ? (
+                      dock.openPanelIds.map((pid) => {
+                        const isActive = pid === toolPanelId;
+                        return (
+                          <div
+                            key={pid}
+                            className={styles.dockPanelPane}
+                            style={{
+                              display: isActive ? 'flex' : 'none',
+                              flex: '1 1 auto',
+                              width: '100%',
+                              height: '100%',
+                              minHeight: 0,
+                              minWidth: 0,
+                              flexDirection: 'column',
+                            }}
+                            data-panel-id={pid}
+                            data-active-panel={isActive ? 'true' : 'false'}
+                            aria-hidden={!isActive}
+                          >
+                            {renderToolOutlet(pid)}
+                          </div>
+                        );
+                      })
                     ) : (
-                      stackedPanelIds.map((pid) => (
-                        <React.Fragment key={pid}>
-                          {renderToolOutlet(pid)}
-                        </React.Fragment>
-                      ))
+                      renderToolOutlet(toolPanelId)
                     )}
                   </Suspense>
                 </AppErrorBoundary>

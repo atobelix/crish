@@ -427,7 +427,10 @@ html[data-theme='light'] {
   --header-height: 36px;
   /*
    * 壳几何让位 token：顶行叶头为悬浮壳层控件让出的空间，单一出处。
-   * --leaf-corner-btn-* 三元组共同描述叶右上浮动坞开关（28px 按钮 + 10px 边距 + 5px 头高间隙），
+   * --leaf-corner-btn-* 二元组描述叶右上浮动坞开关（28px 按钮 + 10px 右边距）；
+   * 纵向位置由 --header-height（越过第一行标签栏 PaneHeader）与第二行内居中偏移推导：
+   * calc(var(--header-height) + (var(--header-height) - var(--leaf-corner-btn-size)) / 2)
+   * 这样让位区（第二行工具标签/动作条的 size + inset）与按钮实际所在行永远同一行。
    * 消费方一律用 calc 组合，禁止重写数字。
    */
   --edge-reserve-left: 52px;
@@ -436,7 +439,6 @@ html[data-theme='light'] {
   --edge-reserve-right-macos: 38px;
   --leaf-corner-btn-size: 28px;
   --leaf-corner-btn-inset: 10px;
-  --leaf-corner-btn-gap: 5px;
   --sidebar-width: 260px; /* overridden by JS constants at runtime */
   --settings-sidebar-width: 240px;
 
