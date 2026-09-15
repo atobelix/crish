@@ -6,6 +6,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { TerminalCard } from './TerminalCard';
 import { mockTauriCommand, mockTauriMissing } from '../../test-setup';
 import { resetPtyRegistryForTests } from '../../api/ptyRegistry';
@@ -208,7 +210,7 @@ describe('TerminalCard', () => {
     root.style.removeProperty('--terminal-fg');
   });
 
-  it('applyPersonalization 与终端 CSS 变量双向联动与重置', async () => {
+  it('applyPersonalization 注入 surface/text 独立侧；--terminal-* 由 tokens.css 派生（不再 JS 注入）', async () => {
     const { applyPersonalization } = await import('../../api/themePersonalization');
     const root = document.documentElement;
 
@@ -225,9 +227,16 @@ describe('TerminalCard', () => {
       },
       'default'
     );
-    expect(root.style.getPropertyValue('--terminal-bg')).toBeTruthy();
-    expect(root.style.getPropertyValue('--terminal-fg')).toBeTruthy();
-    expect(root.style.getPropertyValue('--terminal-cmd')).toBeTruthy();
+    // T7 别名收敛（2026-09-12）：JS 只写「独立侧」surface-* / text-* / border-*，
+    // --bg-* / --shell-inset-bg / --terminal-* 一律由 tokens.css 静态链从
+    // surface-* 派生（TokenRuntimeController.ts:437-455 与 :484-487 注释明写）。
+    expect(root.style.getPropertyValue('--surface-paper')).toBeTruthy();
+    expect(root.style.getPropertyValue('--surface-card')).toBeTruthy();
+    expect(root.style.getPropertyValue('--text-primary')).toBeTruthy();
+    // 反向锁定：JS 不得再写 --terminal-*（单点真源在 tokens.css）
+    expect(root.style.getPropertyValue('--terminal-bg')).toBe('');
+    expect(root.style.getPropertyValue('--terminal-fg')).toBe('');
+    expect(root.style.getPropertyValue('--terminal-cmd')).toBe('');
 
     // 2. 应用 dark-cozy 深色皮肤
     applyPersonalization(
@@ -242,10 +251,12 @@ describe('TerminalCard', () => {
       },
       'dark'
     );
-    expect(root.style.getPropertyValue('--terminal-bg')).toBeTruthy();
-    expect(root.style.getPropertyValue('--terminal-fg')).toBeTruthy();
+    expect(root.style.getPropertyValue('--surface-paper')).toBeTruthy();
+    expect(root.style.getPropertyValue('--text-primary')).toBeTruthy();
+    expect(root.style.getPropertyValue('--terminal-bg')).toBe('');
 
-    // 3. 恢复默认（无 skinConfig）时清除 --terminal-* 属性
+    // 3. 未知皮肤 → 回落 warm-gray 预设（TokenRuntimeController.ts:222
+    //    `SKIN_PRESETS[skinKey] || SKIN_PRESETS['warm-gray']`），仍写独立侧
     applyPersonalization(
       {
         fontSizeAdjust: 0,
@@ -258,9 +269,19 @@ describe('TerminalCard', () => {
       },
       'default'
     );
+    expect(root.style.getPropertyValue('--surface-card')).toBeTruthy();
     expect(root.style.getPropertyValue('--terminal-bg')).toBe('');
-    expect(root.style.getPropertyValue('--terminal-fg')).toBe('');
-    expect(root.style.getPropertyValue('--terminal-cmd')).toBe('');
+
+    // 4. --terminal-* 单点真源 = tokens.css（浅/深各一套派生链）
+    const tokensCss = fs.readFileSync(
+      path.resolve(__dirname, '../../styles/tokens.css'),
+      'utf-8'
+    );
+    expect(tokensCss).toContain('--terminal-bg: var(--bg-card');
+    expect(tokensCss).toContain('--terminal-fg: var(--text-primary');
+    expect(tokensCss).toContain('--terminal-cmd: var(--text-primary');
+    expect(tokensCss.match(/--terminal-bg:\s*var\(--bg-card/g)).toHaveLength(2);
+    expect(tokensCss.match(/--terminal-fg:\s*var\(--text-primary/g)).toHaveLength(2);
   });
 
   it('document data-theme 切换时动态触发 xterm 实例主题色刷新', async () => {
@@ -334,15 +355,26 @@ describe('TerminalCard', () => {
     recordPtyOutputHistory('reused-pty-test-1', 'PowerShell 7.4.5\r\n');
     recordPtyOutputHistory('reused-pty-test-1', 'PS C:\\repo> npm test\r\n');
 
-    const { container } = render(<TerminalCard sessionId="session-reuse-replay" />);
+    // D8.1「隐藏终端 write=0」门闩（ptyWriteGate.ts）：隐藏期 chunk 只进
+    // pending 缓冲、不直写 term。jsdom 下 `isTerminalHostHidden` 因
+    // offsetParent 恒为 null 会判定为「隐藏」，故必须以产品同源标记
+    // `data-active-panel="true"`（TreeLeafPanel 真源）声明宿主可见，
+    // 否则重放被缓冲、断言恒 0 次（假红）。
+    const { container } = render(
+      <div data-active-panel="true">
+        <TerminalCard sessionId="session-reuse-replay" />
+      </div>
+    );
 
     await waitFor(() => {
       const panel = container.querySelector(`.${styles.panel}`);
       expect(panel).toHaveAttribute('data-pty-status', 'ready');
     });
 
-    // 验证历史 chunks 被依次写入 terminal
-    expect(writeSpy).toHaveBeenCalledWith('PowerShell 7.4.5\r\n');
+    // 验证历史 chunks 被依次写入 terminal（复用 PTY → 从环形缓冲重放）
+    await waitFor(() => {
+      expect(writeSpy).toHaveBeenCalledWith('PowerShell 7.4.5\r\n');
+    });
     expect(writeSpy).toHaveBeenCalledWith('PS C:\\repo> npm test\r\n');
 
     writeSpy.mockRestore();

@@ -276,13 +276,18 @@ describe('PreviewCard 原生预览浏览器与透明代理', () => {
       // 点击激活拾取器
       fireEvent.click(inspectorBtn);
       expect(inspectorBtn.getAttribute('aria-pressed')).toBe('true');
+      // §4.1 安全加固：targetOrigin 不再用通配 '*'，改为解析出的 iframe origin
+      // （previewHostBridge.ts resolveInspectorTargetOrigin：优先
+      // iframe.contentWindow.location.origin，跨域不可读则回落宿主 origin；
+      // 本用例以 { postMessage } 替身覆写 contentWindow ⇒ 无 location ⇒ 回落宿主 origin）
+      const expectedOrigin = window.location.origin;
       expect(postMessageSpy).toHaveBeenCalledWith(
         expect.objectContaining({
           source: CRISH_PREVIEW_HOST_SOURCE,
           type: 'INSPECT_TOGGLE',
           payload: { enabled: true },
         }),
-        '*'
+        expectedOrigin
       );
 
       // 再次点击退出拾取器
@@ -294,8 +299,12 @@ describe('PreviewCard 原生预览浏览器与透明代理', () => {
           type: 'INSPECT_TOGGLE',
           payload: { enabled: false },
         }),
-        '*'
+        expectedOrigin
       );
+      // 反向锁定：任何一次投递都不得用通配 targetOrigin
+      for (const call of postMessageSpy.mock.calls) {
+        expect(call[1]).not.toBe('*');
+      }
     });
   });
 
@@ -311,9 +320,13 @@ describe('PreviewCard 原生预览浏览器与透明代理', () => {
       });
 
       // 派发新协议 INSPECT_SELECT 消息
+      // §4.1：subscribeToInspector 先校验 origin 白名单
+      // （previewProtocol.ts:110 isAllowedPreviewMessageOrigin === window.location.origin）
+      // 再解析 source/type 防伪造；不带 origin 的 MessageEvent 会被直接丢弃。
       act(() => {
         window.dispatchEvent(
           new MessageEvent('message', {
+            origin: window.location.origin,
             data: {
               source: CRISH_PREVIEW_INSPECTOR_SOURCE,
               type: 'INSPECT_SELECT',
@@ -369,6 +382,8 @@ describe('PreviewCard 原生预览浏览器与透明代理', () => {
       act(() => {
         window.dispatchEvent(
           new MessageEvent('message', {
+            // §4.1：origin 白名单校验（同 INSPECT_SELECT 用例）
+            origin: window.location.origin,
             data: {
               source: CRISH_PREVIEW_INSPECTOR_SOURCE,
               type: 'INSPECT_HOVER',

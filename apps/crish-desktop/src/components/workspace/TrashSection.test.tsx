@@ -20,7 +20,9 @@ import {
 } from '@testing-library/react';
 import { TrashSection } from './TrashSection';
 import * as trashApi from '../../api/trashApi';
-import { useLayoutStore } from '../../store/storeAccess';
+// 会话域（activeSessionId）真源为 SessionStore；layoutStore 已纯化为壳层
+// chrome 域（无 sessions/activeSessionId 字段）。
+import { useSessionStore } from '../../store/sessionStore';
 import type { TrashEntryDto } from '../../api/trashApi';
 
 vi.mock('../../api/trashApi', () => ({
@@ -28,6 +30,17 @@ vi.mock('../../api/trashApi', () => ({
   restoreTrashEntry: vi.fn(),
   purgeTrashEntry: vi.fn(),
   formatTrashedAt: vi.fn(),
+}));
+
+// toast 通道：TrashSectionProps 已无 onShowToast，组件内 `const { showToast } =
+// useToast()`（TrashSection.tsx:34）。打桩 hook 保持真实链路（含 onUndo/options
+// 形参），而非注入已废弃的 prop。
+const { toastSpies } = vi.hoisted(() => ({
+  toastSpies: { showToast: vi.fn(), show: vi.fn() },
+}));
+vi.mock('../../services/toast/ToastContext', () => ({
+  useToast: () => ({ showToast: toastSpies.showToast }),
+  toast: { show: toastSpies.show },
 }));
 
 const mockList = vi.mocked(trashApi.listTrashEntries);
@@ -51,15 +64,16 @@ const dirEntry: TrashEntryDto = {
   size: 5 * 1024 * 1024,
 };
 
-function renderSection(toast = vi.fn()) {
-  const utils = render(<TrashSection onShowToast={toast} />);
-  return { toast, ...utils };
+function renderSection() {
+  const utils = render(<TrashSection />);
+  return { toast: toastSpies.showToast, ...utils };
 }
 
 beforeEach(() => {
-  useLayoutStore.setState((st) => {
+  useSessionStore.setState((st) => {
     st.activeSessionId = 'sess-1';
   });
+  toastSpies.showToast.mockReset();
   mockList.mockResolvedValue({
     entries: [fileEntry, dirEntry],
     trashRoot: 'C:/trash',
@@ -128,18 +142,20 @@ describe('TrashSection 恢复 / 清除动作', () => {
   });
 
   it('恢复失败：结构化错误 toast（成功静默）', async () => {
-    const toast = vi.fn();
     mockRestore.mockResolvedValue({
       ok: false,
       message: '恢复失败：目标已存在',
     });
-    renderSection(toast);
+    const { toast } = renderSection();
 
     const rows = await screen.findAllByTestId('trash-entry');
     fireEvent.click(withinRow(rows[0]!, '恢复 C:/repo/src/a.txt'));
 
     await waitFor(() => {
-      expect(toast).toHaveBeenCalledWith('恢复失败：目标已存在');
+      // 组件以 (message, onUndo, options) 三参调用（TrashSection.tsx:67）
+      expect(toast).toHaveBeenCalledWith('恢复失败：目标已存在', undefined, {
+        type: 'error',
+      });
     });
   });
 

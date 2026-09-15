@@ -37,6 +37,17 @@ vi.mock('../../api/backgroundTasksApi', async () => {
   };
 });
 
+// toast 通道：BgTasksSectionProps 已无 onShowToast，组件内 `const { showToast } =
+// useToast()`（BgTasksSection.tsx:36,57）。打桩 hook 保持真实链路，而非注入
+// 已废弃的 prop（后者会被忽略，toast 落到 fallback 单例上、断言恒 0 次）。
+const { toastSpies } = vi.hoisted(() => ({
+  toastSpies: { showToast: vi.fn(), show: vi.fn() },
+}));
+vi.mock('../../services/toast/ToastContext', () => ({
+  useToast: () => ({ showToast: toastSpies.showToast }),
+  toast: { show: toastSpies.show },
+}));
+
 import {
   getBackgroundTaskOutput,
   openBackgroundTaskInTerminal,
@@ -60,13 +71,11 @@ function task(
 function renderSection(opts: {
   bgTasks: BackgroundTaskInfo[];
   countLabel?: string | null;
-  onShowToast?: (msg: string) => void;
 }) {
   return render(
     <BgTasksSection
       bgTasks={opts.bgTasks}
       countLabel={opts.countLabel ?? null}
-      onShowToast={opts.onShowToast ?? vi.fn()}
     />,
   );
 }
@@ -79,6 +88,7 @@ function setEngineConnection(status: 'connected' | 'disconnected'): void {
 beforeEach(() => {
   mockedGetOutput.mockReset();
   mockedOpenTerminal.mockReset();
+  toastSpies.showToast.mockReset();
   // 默认在线；离线用例显式设置
   setEngineConnection('connected');
 });
@@ -167,12 +177,10 @@ describe('BgTasksSection 操作交互', () => {
 describe('BgTasksSection 读取失败回退', () => {
   it('读取失败 → 仍打开终端（回退 command 摘要）+ 错误 toast', async () => {
     mockedGetOutput.mockRejectedValueOnce(new Error('boom'));
-    const onShowToast = vi.fn();
     renderSection({
       bgTasks: [
         task({ id: 'a', label: 'Vite', state: 'running', command: 'npm run dev' }),
       ],
-      onShowToast,
     });
 
     const row = screen.getByRole('button', { name: 'Vite，运行中，在终端中查看输出' });
@@ -181,7 +189,7 @@ describe('BgTasksSection 读取失败回退', () => {
       expect(row).not.toHaveAttribute('aria-busy');
     });
     expect(mockedOpenTerminal).toHaveBeenCalledWith('Vite', 'npm run dev');
-    expect(onShowToast).toHaveBeenCalledWith('读取后台任务输出失败');
+    expect(toastSpies.showToast).toHaveBeenCalledWith('读取后台任务输出失败');
   });
 });
 

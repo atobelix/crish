@@ -13,7 +13,9 @@
  * chrome 槽与 content 槽 **分槽共存**，不计入互斥。
  *
  * ## 32px 紧凑顶栏与全高视口重构（DETAIL-PLAN-05）
- * - 彻底物理切除底部 MirrorDriftStatusBar 与 <footer> 调试废弃块；
+ * - 物理切除底部 `<footer>` 调试废弃块（`note-paper-strict-footer`）；
+ *   **注意**：同批次 986043bfc 曾连带误删底部 `MirrorDriftStatusBar` 挂载点，
+ *   已在本文件按原契约回补（见渲染尾部注释）；
  * - 顶栏全面升级为 32px 紧凑生产力架构，集成行内标题重命名、等宽字数统计、20x20px Chevron 下拉触点与全量 Tooltip；
  * - 编辑区 100% 全高弹性视口直达底边缘，纸面背景纯净连贯；
  * - 顶栏测试桩点严格保全：note-paper-strict-open-slash、refresh、close。
@@ -35,6 +37,7 @@ import '@crish/block-paper/paper-list.css';
 import { NotePaperStrictBody } from './NotePaperStrictBody';
 import { NotePaperStrictChromeSlot } from './NotePaperStrictChromeSlot';
 import { NotePaperStrictHeader } from './NotePaperStrictHeader';
+import { MirrorDriftStatusBar } from './MirrorDriftStatusBar';
 import {
   buildStrictPanelSectionDataAttrs,
   resolveStrictContentPresentation,
@@ -91,6 +94,12 @@ export const NotePaperStrictPanel: React.FC<NotePaperStrictPanelProps> = ({
   onSelectDoc,
   onCreateDoc,
   registerPendingFlush,
+  // A-INV-02 镜像漂移状态条（CONN-E2 opt-in；默认关，避免噪声）
+  mirrorDriftReport = null,
+  mirrorWatchSource = 'unknown',
+  mirrorUnpushedOpCount = 0,
+  showMirrorDriftBar,
+  onMirrorThreeWay,
 }) => {
   const {
     paperListConfig,
@@ -311,6 +320,22 @@ export const NotePaperStrictPanel: React.FC<NotePaperStrictPanelProps> = ({
           }}
         />
       </NotePaperStrictBody>
+
+      {/* A-INV-02 方向子集；≠ EL-03；≠ inotify 满关。
+          恢复说明：本装配于 986043bfc（BATCH-06 顶栏重构）被误删——该提交
+          信息自称「严格保护 MirrorDriftStatusBar 资产」，diff 却连其唯一
+          DOM 挂载点一并移除，致组件成为全仓零渲染点孤儿；随后 b1901c472
+          以 @deprecated 标记平事。此处按原契约回补（写入侧
+          diagnosticHandlers/mirrorDetectSchedule → report 从未中断，只是
+          显示面被切断）。 */}
+      {showMirrorDriftBar === true || mirrorDriftReport != null ? (
+        <MirrorDriftStatusBar
+          report={mirrorDriftReport}
+          watchSource={mirrorWatchSource}
+          unpushedOpCount={mirrorUnpushedOpCount}
+          onAction={onMirrorThreeWay}
+        />
+      ) : null}
     </section>
   );
 };

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
+import { readEntryChainSource } from '../../../test-utils/entryChainSources';
 
 describe('Runtime Background & Workspace Zero-Flash SSOT Test Suite', () => {
   const readCss = (relPath: string) => {
@@ -48,16 +49,27 @@ describe('Runtime Background & Workspace Zero-Flash SSOT Test Suite', () => {
     expect(previewCss).toMatch(/\.histPanel\s*\{[^}]*background:\s*var\(--bg-card/);
   });
 
-  it('FLASH-05: main.tsx 包含常用工具视图 Chunk 的闲时预热逻辑', () => {
+  it('FLASH-05: 入口链包含常用工具视图 Chunk 的闲时预热逻辑', () => {
+    // ACT-301 单拍装配后，main.tsx 收敛为纯转发器（`import './entry-core'`），
+    // 真实装配（含闲时预热表）全在 entry-core.tsx。故必须扫整条入口链
+    // （唯一读取口径见 test-utils/entryChainSources.ts），只读 main.tsx 会得空源码。
     const mainTsx = fs.readFileSync(
       path.resolve(__dirname, '../../../main.tsx'),
       'utf-8'
     );
+    // main.tsx 仍是物理唯一入口，且不得自留装配逻辑
+    expect(mainTsx).toContain("import './entry-core'");
+    expect(mainTsx).not.toContain('createRoot');
 
-    expect(mainTsx).toContain("import('./components/diff/DiffCard')");
-    expect(mainTsx).toContain("import('./components/files/FilesCard')");
-    expect(mainTsx).toContain("import('./components/overview/OverviewCard')");
-    expect(mainTsx).toContain("import('./components/workspace/PreviewCard')");
-    expect(mainTsx).toContain("import('./components/workspace/RuntimePanel')");
+    const entryChain = readEntryChainSource();
+    expect(entryChain).toContain("import('./components/diff/DiffCard')");
+    expect(entryChain).toContain("import('./components/files/FilesCard')");
+    expect(entryChain).toContain("import('./components/overview/OverviewCard')");
+    expect(entryChain).toContain("import('./components/workspace/PreviewCard')");
+    expect(entryChain).toContain("import('./components/workspace/RuntimePanel')");
+    // 闲时预热通道存在：项目统一调度器 staggeredIdleQueue（entry-core.tsx:269/301），
+    // 禁止 rIC timeout 整批强刷（CUT-03），由 maxWaitMs 兜底防饿死
+    expect(entryChain).toContain('staggeredIdleQueue');
+    expect(entryChain).toContain('maxWaitMs');
   });
 });

@@ -1,6 +1,11 @@
 /**
- * @deprecated 仅保留用于 mirrorThreeWayBridge.test.tsx 单元测试；生产主编辑视图 NotePaperStrictPanel 已彻底切断 DOM 挂载与引用
  * MirrorDriftStatusBar — A-INV-02 镜像漂移状态 + 三路操作入口骨架
+ *
+ * 装配点：`NotePaperStrictPanel` 底部（CONN-E2 opt-in：`showMirrorDriftBar` /
+ * `mirrorDriftReport`，默认关以避免空态噪声），由 `WorkspaceEmptyState` →
+ * mirrorSlot → paper entry → `NoteLeafHost` 逐级透传。
+ * 历史：986043bfc 误删该挂载点致本组件成为孤儿，随后被标 @deprecated；
+ * 现按原契约恢复挂载，标记一并撤销。
  *
  * ## 完成定义（本包方向子集）
  * - 可点名：**镜像漂移状态展示** + **三路入口**（接受镜像 / 保留文档 / 标记冲突）

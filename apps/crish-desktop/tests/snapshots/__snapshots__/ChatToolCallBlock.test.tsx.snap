@@ -5,8 +5,9 @@ exports[`ChatToolCallBlock snapshots > renders error tool 1`] = `
   class="_toolStack_d18ff4 tool-stack"
 >
   <div
-    class="_toolRow_d18ff4 _isError_d18ff4 is-error _isCollapsed_d18ff4 is-collapsed tool-row"
+    class="_toolRow_d18ff4 _isError_d18ff4 is-error _isCollapsed_d18ff4 is-collapsed  tool-row"
     data-default-collapsed="true"
+    data-expanded="false"
     data-tool-id="tool_error"
     data-tool-label="构建项目"
     data-tool-status="失败"
@@ -26,63 +27,48 @@ exports[`ChatToolCallBlock snapshots > renders error tool 1`] = `
           aria-hidden="true"
           class="_toolRowIcoSlot_d18ff4"
         >
-          <svg
+          <span
             aria-hidden="true"
-            class="lucide lucide-circle-x"
-            fill="none"
-            height="14"
-            stroke="var(--accent-red, #c45c5c)"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="1.6"
-            viewBox="0 0 24 24"
-            width="14"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <circle
-              cx="12"
-              cy="12"
-              r="10"
-            />
-            <path
-              d="m15 9-6 6"
-            />
-            <path
-              d="m9 9 6 6"
-            />
-          </svg>
+            class="_toolErrorDot_d18ff4"
+          />
         </span>
         <span
           class="_toolRowText_d18ff4"
         >
           <span
-            aria-describedby="_r_7_"
             class="_toolRowSummary_d18ff4"
           >
-            构建项目
+            <span
+              aria-describedby="_r_2_"
+              class="_toolActionText_d18ff4"
+            >
+              构建项目
+            </span>
+            <span
+              aria-hidden="true"
+              class="_dotSeparator_d18ff4"
+            >
+              ·
+            </span>
+            <span
+              aria-describedby="_r_3_"
+              class="_toolErrorParamText_d18ff4"
+            >
+              Error: build failed - syntax error in src/index.ts
+            </span>
           </span>
         </span>
       </span>
       <span
-        class="_toolRowChevronSlot_d18ff4 _isToggle_d18ff4"
+        class="_toolRowHeadRight_d18ff4"
       >
-        <svg
+        <span
           aria-hidden="true"
-          class="lucide lucide-chevron-right _toolRowChevron_d18ff4"
-          fill="none"
-          height="12"
-          stroke="currentColor"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          stroke-width="2"
-          viewBox="0 0 24 24"
-          width="12"
-          xmlns="http://www.w3.org/2000/svg"
+          class="_toolRowChevron_d18ff4 "
+          data-testid="tool-chevron-tool_error"
         >
-          <path
-            d="m9 18 6-6-6-6"
-          />
-        </svg>
+          ›
+        </span>
       </span>
     </div>
     <div
@@ -98,32 +84,33 @@ exports[`ChatToolCallBlock snapshots > renders error tool 1`] = `
           role="region"
         >
           <section
-            aria-label="工具输入参数"
-            class="_toolSection_d18ff4 _toolSectionInput_d18ff4"
+            aria-label="终端命令输入"
+            class="_toolSection_d18ff4 _toolSectionInput_d18ff4 _toolSectionShellSingleLine_d18ff4"
             data-tool-id="tool_error"
           >
-            <header
-              class="_toolSectionHeader_d18ff4"
+            <div
+              class="_terminalSingleLineRow_d18ff4"
             >
               <div
-                class="_toolSectionTitleGroup_d18ff4"
+                class="_terminalLine_d18ff4"
               >
                 <span
-                  class="_toolSectionBadge_d18ff4"
+                  aria-hidden="true"
+                  class="_terminalPrompt_d18ff4"
                 >
-                  📥 输入
+                  $
                 </span>
-                <span
-                  class="_toolSectionKind_d18ff4"
+                <pre
+                  class="_toolResultPreCmd_d18ff4"
                 >
-                  命令行指令
-                </span>
+                  npm run build
+                </pre>
               </div>
               <div
-                class="_toolSectionActions_d18ff4"
+                class="_terminalLineEndSlot_d18ff4"
               >
                 <button
-                  aria-describedby="_r_8_"
+                  aria-describedby="_r_4_"
                   class="_button_ae1db5 _buttonGhost_ae1db5 _buttonSm_ae1db5 _toolSectionActionBtn_d18ff4"
                   data-size="sm"
                   data-variant="ghost"
@@ -135,27 +122,30 @@ exports[`ChatToolCallBlock snapshots > renders error tool 1`] = `
                   >
                     <svg
                       aria-hidden="true"
-                      class="lucide lucide-copy"
+                      class=""
+                      color="currentColor"
+                      data-icon="copy"
                       fill="none"
-                      height="12"
+                      height="14"
                       stroke="currentColor"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
                       stroke-width="2"
                       viewBox="0 0 24 24"
-                      width="12"
+                      width="14"
                       xmlns="http://www.w3.org/2000/svg"
                     >
-                      <rect
-                        height="14"
-                        rx="2"
-                        ry="2"
-                        width="14"
-                        x="8"
-                        y="8"
+                      <path
+                        d="M7.5 14.5C7.5 11.2002 7.5 9.55025 8.52513 8.52513C9.55025 7.5 11.2002 7.5 14.5 7.5C17.7998 7.5 19.4497 7.5 20.4749 8.52513C21.5 9.55025 21.5 11.2002 21.5 14.5C21.5 17.7998 21.5 19.4497 20.4749 20.4749C19.4497 21.5 17.7998 21.5 14.5 21.5C11.2002 21.5 9.55025 21.5 8.52513 20.4749C7.5 19.4497 7.5 17.7998 7.5 14.5Z"
+                        stroke="currentColor"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
                       />
                       <path
-                        d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"
+                        d="M7.5 16.5C6.10355 16.5 5.40533 16.5 4.84402 16.3036C3.83866 15.9518 3.0482 15.1613 2.69641 14.156C2.5 13.5947 2.5 12.8964 2.5 11.5V9.5C2.5 6.20017 2.5 4.55025 3.52513 3.52513C4.55025 2.5 6.20017 2.5 9.5 2.5H11.5C12.8964 2.5 13.5947 2.5 14.156 2.69641C15.1613 3.0482 15.9518 3.83866 16.3036 4.84402C16.5 5.40533 16.5 6.10355 16.5 7.5"
+                        stroke="currentColor"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
                       />
                     </svg>
                   </span>
@@ -165,29 +155,6 @@ exports[`ChatToolCallBlock snapshots > renders error tool 1`] = `
                     复制
                   </span>
                 </button>
-              </div>
-            </header>
-            <div
-              class="_toolSectionContent_d18ff4"
-            >
-              <div
-                class="_toolCommandBlock_d18ff4"
-              >
-                <div
-                  class="_terminalLine_d18ff4"
-                >
-                  <span
-                    aria-hidden="true"
-                    class="_terminalPrompt_d18ff4"
-                  >
-                    $
-                  </span>
-                  <pre
-                    class="_toolResultPreCmd_d18ff4"
-                  >
-                    npm run build
-                  </pre>
-                </div>
               </div>
             </div>
           </section>
@@ -205,7 +172,7 @@ exports[`ChatToolCallBlock snapshots > renders error tool 1`] = `
                 <span
                   class="_toolSectionBadge_d18ff4 _toolSectionBadgeOutput_d18ff4"
                 >
-                  📤 输出
+                  输出
                 </span>
                 <span
                   class="_toolSectionMeta_d18ff4"
@@ -213,17 +180,15 @@ exports[`ChatToolCallBlock snapshots > renders error tool 1`] = `
                   <span
                     class="_errorTag_d18ff4"
                   >
-                    ✕ 执行失败
+                    执行失败
                   </span>
-                   · 1 行
-                   · 0.0 KB
                 </span>
               </div>
               <div
                 class="_toolSectionActions_d18ff4"
               >
                 <button
-                  aria-describedby="_r_9_"
+                  aria-describedby="_r_5_"
                   class="_button_ae1db5 _buttonGhost_ae1db5 _buttonSm_ae1db5 _toolSectionActionBtn_d18ff4"
                   data-size="sm"
                   data-variant="ghost"
@@ -235,27 +200,30 @@ exports[`ChatToolCallBlock snapshots > renders error tool 1`] = `
                   >
                     <svg
                       aria-hidden="true"
-                      class="lucide lucide-copy"
+                      class=""
+                      color="currentColor"
+                      data-icon="copy"
                       fill="none"
-                      height="12"
+                      height="14"
                       stroke="currentColor"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
                       stroke-width="2"
                       viewBox="0 0 24 24"
-                      width="12"
+                      width="14"
                       xmlns="http://www.w3.org/2000/svg"
                     >
-                      <rect
-                        height="14"
-                        rx="2"
-                        ry="2"
-                        width="14"
-                        x="8"
-                        y="8"
+                      <path
+                        d="M7.5 14.5C7.5 11.2002 7.5 9.55025 8.52513 8.52513C9.55025 7.5 11.2002 7.5 14.5 7.5C17.7998 7.5 19.4497 7.5 20.4749 8.52513C21.5 9.55025 21.5 11.2002 21.5 14.5C21.5 17.7998 21.5 19.4497 20.4749 20.4749C19.4497 21.5 17.7998 21.5 14.5 21.5C11.2002 21.5 9.55025 21.5 8.52513 20.4749C7.5 19.4497 7.5 17.7998 7.5 14.5Z"
+                        stroke="currentColor"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
                       />
                       <path
-                        d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"
+                        d="M7.5 16.5C6.10355 16.5 5.40533 16.5 4.84402 16.3036C3.83866 15.9518 3.0482 15.1613 2.69641 14.156C2.5 13.5947 2.5 12.8964 2.5 11.5V9.5C2.5 6.20017 2.5 4.55025 3.52513 3.52513C4.55025 2.5 6.20017 2.5 9.5 2.5H11.5C12.8964 2.5 13.5947 2.5 14.156 2.69641C15.1613 3.0482 15.9518 3.83866 16.3036 4.84402C16.5 5.40533 16.5 6.10355 16.5 7.5"
+                        stroke="currentColor"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
                       />
                     </svg>
                   </span>
@@ -267,38 +235,6 @@ exports[`ChatToolCallBlock snapshots > renders error tool 1`] = `
                 </button>
               </div>
             </header>
-            <div
-              class="_diagnosticBanner_d18ff4"
-            >
-              <svg
-                aria-hidden="true"
-                class="lucide lucide-triangle-alert _diagIcon_d18ff4"
-                fill="none"
-                height="14"
-                stroke="currentColor"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                viewBox="0 0 24 24"
-                width="14"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path
-                  d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"
-                />
-                <path
-                  d="M12 9v4"
-                />
-                <path
-                  d="M12 17h.01"
-                />
-              </svg>
-              <span
-                class="_diagText_d18ff4"
-              >
-                执行遇到异常中断，详情见下方 Stderr / 输出日志
-              </span>
-            </div>
             <div
               class="_toolSectionContent_d18ff4"
             >
@@ -322,8 +258,9 @@ exports[`ChatToolCallBlock snapshots > renders running tool 1`] = `
 >
   <div
     aria-busy="true"
-    class="_toolRow_d18ff4 _isRunning_d18ff4 is-running _isCollapsed_d18ff4 is-collapsed tool-row"
+    class="_toolRow_d18ff4 _isRunning_d18ff4 is-running _isCollapsed_d18ff4 is-collapsed  tool-row"
     data-default-collapsed="true"
+    data-expanded="false"
     data-tool-id="tool_running"
     data-tool-label="运行测试"
     data-tool-status="运行中"
@@ -345,44 +282,46 @@ exports[`ChatToolCallBlock snapshots > renders running tool 1`] = `
         >
           <span
             aria-hidden="true"
-            class="_toolRowLive_d18ff4"
-          >
-            <span
-              class="_toolLivePulseDot_d18ff4"
-            />
-          </span>
+            class="_toolPulseDot_d18ff4"
+          />
         </span>
         <span
           class="_toolRowText_d18ff4"
         >
           <span
-            aria-describedby="_r_a_"
             class="_toolRowSummary_d18ff4"
           >
-            运行测试
+            <span
+              aria-describedby="_r_6_"
+              class="_toolActionText_d18ff4"
+            >
+              终端
+            </span>
+            <span
+              aria-hidden="true"
+              class="_dotSeparator_d18ff4"
+            >
+              ·
+            </span>
+            <span
+              aria-describedby="_r_7_"
+              class="_toolParamText_d18ff4"
+            >
+              npm test
+            </span>
           </span>
         </span>
       </span>
       <span
-        class="_toolRowChevronSlot_d18ff4 _isToggle_d18ff4"
+        class="_toolRowHeadRight_d18ff4"
       >
-        <svg
+        <span
           aria-hidden="true"
-          class="lucide lucide-chevron-right _toolRowChevron_d18ff4"
-          fill="none"
-          height="12"
-          stroke="currentColor"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          stroke-width="2"
-          viewBox="0 0 24 24"
-          width="12"
-          xmlns="http://www.w3.org/2000/svg"
+          class="_toolRowChevron_d18ff4 "
+          data-testid="tool-chevron-tool_running"
         >
-          <path
-            d="m9 18 6-6-6-6"
-          />
-        </svg>
+          ›
+        </span>
       </span>
     </div>
     <div
@@ -398,32 +337,33 @@ exports[`ChatToolCallBlock snapshots > renders running tool 1`] = `
           role="region"
         >
           <section
-            aria-label="工具输入参数"
-            class="_toolSection_d18ff4 _toolSectionInput_d18ff4"
+            aria-label="终端命令输入"
+            class="_toolSection_d18ff4 _toolSectionInput_d18ff4 _toolSectionShellSingleLine_d18ff4"
             data-tool-id="tool_running"
           >
-            <header
-              class="_toolSectionHeader_d18ff4"
+            <div
+              class="_terminalSingleLineRow_d18ff4"
             >
               <div
-                class="_toolSectionTitleGroup_d18ff4"
+                class="_terminalLine_d18ff4"
               >
                 <span
-                  class="_toolSectionBadge_d18ff4"
+                  aria-hidden="true"
+                  class="_terminalPrompt_d18ff4"
                 >
-                  📥 输入
+                  $
                 </span>
-                <span
-                  class="_toolSectionKind_d18ff4"
+                <pre
+                  class="_toolResultPreCmd_d18ff4"
                 >
-                  命令行指令
-                </span>
+                  npm test
+                </pre>
               </div>
               <div
-                class="_toolSectionActions_d18ff4"
+                class="_terminalLineEndSlot_d18ff4"
               >
                 <button
-                  aria-describedby="_r_b_"
+                  aria-describedby="_r_8_"
                   class="_button_ae1db5 _buttonGhost_ae1db5 _buttonSm_ae1db5 _toolSectionActionBtn_d18ff4"
                   data-size="sm"
                   data-variant="ghost"
@@ -435,27 +375,30 @@ exports[`ChatToolCallBlock snapshots > renders running tool 1`] = `
                   >
                     <svg
                       aria-hidden="true"
-                      class="lucide lucide-copy"
+                      class=""
+                      color="currentColor"
+                      data-icon="copy"
                       fill="none"
-                      height="12"
+                      height="14"
                       stroke="currentColor"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
                       stroke-width="2"
                       viewBox="0 0 24 24"
-                      width="12"
+                      width="14"
                       xmlns="http://www.w3.org/2000/svg"
                     >
-                      <rect
-                        height="14"
-                        rx="2"
-                        ry="2"
-                        width="14"
-                        x="8"
-                        y="8"
+                      <path
+                        d="M7.5 14.5C7.5 11.2002 7.5 9.55025 8.52513 8.52513C9.55025 7.5 11.2002 7.5 14.5 7.5C17.7998 7.5 19.4497 7.5 20.4749 8.52513C21.5 9.55025 21.5 11.2002 21.5 14.5C21.5 17.7998 21.5 19.4497 20.4749 20.4749C19.4497 21.5 17.7998 21.5 14.5 21.5C11.2002 21.5 9.55025 21.5 8.52513 20.4749C7.5 19.4497 7.5 17.7998 7.5 14.5Z"
+                        stroke="currentColor"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
                       />
                       <path
-                        d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"
+                        d="M7.5 16.5C6.10355 16.5 5.40533 16.5 4.84402 16.3036C3.83866 15.9518 3.0482 15.1613 2.69641 14.156C2.5 13.5947 2.5 12.8964 2.5 11.5V9.5C2.5 6.20017 2.5 4.55025 3.52513 3.52513C4.55025 2.5 6.20017 2.5 9.5 2.5H11.5C12.8964 2.5 13.5947 2.5 14.156 2.69641C15.1613 3.0482 15.9518 3.83866 16.3036 4.84402C16.5 5.40533 16.5 6.10355 16.5 7.5"
+                        stroke="currentColor"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
                       />
                     </svg>
                   </span>
@@ -465,29 +408,6 @@ exports[`ChatToolCallBlock snapshots > renders running tool 1`] = `
                     复制
                   </span>
                 </button>
-              </div>
-            </header>
-            <div
-              class="_toolSectionContent_d18ff4"
-            >
-              <div
-                class="_toolCommandBlock_d18ff4"
-              >
-                <div
-                  class="_terminalLine_d18ff4"
-                >
-                  <span
-                    aria-hidden="true"
-                    class="_terminalPrompt_d18ff4"
-                  >
-                    $
-                  </span>
-                  <pre
-                    class="_toolResultPreCmd_d18ff4"
-                  >
-                    npm test
-                  </pre>
-                </div>
               </div>
             </div>
           </section>
@@ -505,7 +425,7 @@ exports[`ChatToolCallBlock snapshots > renders running tool 1`] = `
                 <span
                   class="_toolSectionBadge_d18ff4 _toolSectionBadgeOutput_d18ff4"
                 >
-                  📤 输出
+                  输出
                 </span>
                 <span
                   class="_toolSectionMeta_d18ff4"
@@ -513,7 +433,7 @@ exports[`ChatToolCallBlock snapshots > renders running tool 1`] = `
                   <span
                     class="_runningTag_d18ff4"
                   >
-                    ⏳ 执行中…
+                    执行中
                   </span>
                 </span>
               </div>
@@ -527,30 +447,8 @@ exports[`ChatToolCallBlock snapshots > renders running tool 1`] = `
               <div
                 class="_emptyOutputBlock_d18ff4"
               >
-                <svg
-                  aria-hidden="true"
-                  class="lucide lucide-circle-check _emptySuccessIcon_d18ff4"
-                  fill="none"
-                  height="13"
-                  stroke="currentColor"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  viewBox="0 0 24 24"
-                  width="13"
-                  xmlns="http://www.w3.org/2000/svg"
-                >
-                  <circle
-                    cx="12"
-                    cy="12"
-                    r="10"
-                  />
-                  <path
-                    d="m9 12 2 2 4-4"
-                  />
-                </svg>
                 <span>
-                  执行成功，无返回内容
+                  （无输出）
                 </span>
               </div>
             </div>
@@ -567,19 +465,17 @@ exports[`ChatToolCallBlock snapshots > renders successful tool 1`] = `
   class="_toolStack_d18ff4 tool-stack"
 >
   <div
-    class="_toolRow_d18ff4  _isCollapsed_d18ff4 is-collapsed tool-row"
+    class="_toolRow_d18ff4  _isCollapsed_d18ff4 is-collapsed  tool-row"
     data-default-collapsed="true"
+    data-expanded="false"
     data-tool-id="tool_success"
     data-tool-label="查看 main.ts"
     data-tool-status="完成"
   >
     <div
-      aria-controls="tool-result-tool_success"
-      aria-expanded="false"
-      aria-label="查看 main.ts，完成，已折叠，按 Enter 或空格展开"
-      class="_toolRowHead_d18ff4 tool-row-head"
-      role="button"
-      tabindex="0"
+      aria-label="查看 main.ts，完成"
+      class="_toolRowHead_d18ff4 _toolRowHeadStatic_d18ff4 tool-row-head tool-row-head-static"
+      style="cursor: default;"
     >
       <span
         class="_toolRowHeadMain_d18ff4"
@@ -590,30 +486,30 @@ exports[`ChatToolCallBlock snapshots > renders successful tool 1`] = `
         >
           <svg
             aria-hidden="true"
-            class="lucide lucide-file-search"
+            class="_toolKindIcon_d18ff4"
+            color="currentColor"
+            data-icon="file-search"
             fill="none"
             height="14"
-            stroke="var(--text-tertiary, #8c877d)"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="1.6"
+            stroke="currentColor"
+            stroke-width="2"
             viewBox="0 0 24 24"
             width="14"
             xmlns="http://www.w3.org/2000/svg"
           >
             <path
-              d="M14 2v4a2 2 0 0 0 2 2h4"
+              d="M13.5 16.5L15 18M14 14.5C14 15.8807 12.8807 17 11.5 17C10.1193 17 9 15.8807 9 14.5C9 13.1193 10.1193 12 11.5 12C12.8807 12 14 13.1193 14 14.5Z"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
             />
             <path
-              d="M4.268 21a2 2 0 0 0 1.727 1H18a2 2 0 0 0 2-2V7l-5-5H6a2 2 0 0 0-2 2v3"
-            />
-            <path
-              d="m9 18-1.5-1.5"
-            />
-            <circle
-              cx="5"
-              cy="14"
-              r="3"
+              d="M13 2.5V3C13 5.82843 13 7.24264 13.8787 8.12132C14.7574 9 16.1716 9 19 9H19.5M20 10.6569V14C20 17.7712 20 19.6569 18.8284 20.8284C17.6569 22 15.7712 22 12 22C8.22876 22 6.34315 22 5.17157 20.8284C4 19.6569 4 17.7712 4 14V9.45584C4 6.21082 4 4.58831 4.88607 3.48933C5.06508 3.26731 5.26731 3.06508 5.48933 2.88607C6.58831 2 8.21082 2 11.4558 2C12.1614 2 12.5141 2 12.8372 2.11401C12.9044 2.13772 12.9702 2.165 13.0345 2.19575C13.3436 2.34355 13.593 2.593 14.0919 3.09188L18.8284 7.82843C19.4065 8.40649 19.6955 8.69552 19.8478 9.06306C20 9.4306 20 9.83935 20 10.6569Z"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
             />
           </svg>
         </span>
@@ -621,363 +517,33 @@ exports[`ChatToolCallBlock snapshots > renders successful tool 1`] = `
           class="_toolRowText_d18ff4"
         >
           <span
-            aria-describedby="_r_0_"
             class="_toolRowSummary_d18ff4"
           >
-            查看 
             <span
-              class="_toolPathWrap_d18ff4"
+              aria-describedby="_r_0_"
+              class="_toolActionText_d18ff4"
             >
-              <button
-                aria-describedby="_r_1_"
-                class="_toolPathLink_d18ff4"
-                type="button"
-              >
-                main.ts
-              </button>
-              <span
-                class="_toolPathActions_d18ff4"
-              >
-                <button
-                  aria-describedby="_r_2_"
-                  aria-label="在文件面板打开"
-                  class="_button_ae1db5 _buttonGhost_ae1db5 _buttonSm_ae1db5 _toolPathAction_d18ff4"
-                  data-size="sm"
-                  data-variant="ghost"
-                  type="button"
-                >
-                  <span
-                    aria-hidden="true"
-                    class="_buttonIcon_ae1db5"
-                  >
-                    <svg
-                      aria-hidden="true"
-                      class="lucide lucide-panel-right-open"
-                      fill="none"
-                      height="14"
-                      stroke="currentColor"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="2"
-                      viewBox="0 0 24 24"
-                      width="14"
-                      xmlns="http://www.w3.org/2000/svg"
-                    >
-                      <rect
-                        height="18"
-                        rx="2"
-                        width="18"
-                        x="3"
-                        y="3"
-                      />
-                      <path
-                        d="M15 3v18"
-                      />
-                      <path
-                        d="m10 15-3-3 3-3"
-                      />
-                    </svg>
-                  </span>
-                </button>
-                <button
-                  aria-describedby="_r_3_"
-                  aria-label="复制路径"
-                  class="_button_ae1db5 _buttonGhost_ae1db5 _buttonSm_ae1db5 _toolPathAction_d18ff4"
-                  data-size="sm"
-                  data-variant="ghost"
-                  type="button"
-                >
-                  <span
-                    aria-hidden="true"
-                    class="_buttonIcon_ae1db5"
-                  >
-                    <svg
-                      aria-hidden="true"
-                      class="lucide lucide-copy"
-                      fill="none"
-                      height="14"
-                      stroke="currentColor"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="2"
-                      viewBox="0 0 24 24"
-                      width="14"
-                      xmlns="http://www.w3.org/2000/svg"
-                    >
-                      <rect
-                        height="14"
-                        rx="2"
-                        ry="2"
-                        width="14"
-                        x="8"
-                        y="8"
-                      />
-                      <path
-                        d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"
-                      />
-                    </svg>
-                  </span>
-                </button>
-              </span>
+              读取
             </span>
+            <span
+              aria-hidden="true"
+              class="_dotSeparator_d18ff4"
+            >
+              ·
+            </span>
+            <button
+              aria-describedby="_r_1_"
+              class="_toolPathLink_d18ff4"
+              type="button"
+            >
+              main.ts
+            </button>
           </span>
         </span>
       </span>
       <span
-        class="_toolRowChevronSlot_d18ff4 _isToggle_d18ff4"
-      >
-        <svg
-          aria-hidden="true"
-          class="lucide lucide-chevron-right _toolRowChevron_d18ff4"
-          fill="none"
-          height="12"
-          stroke="currentColor"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          stroke-width="2"
-          viewBox="0 0 24 24"
-          width="12"
-          xmlns="http://www.w3.org/2000/svg"
-        >
-          <path
-            d="m9 18 6-6-6-6"
-          />
-        </svg>
-      </span>
-    </div>
-    <div
-      class="_toolBody_d18ff4"
-    >
-      <div
-        class="_toolBodyInner_d18ff4"
-      >
-        <div
-          aria-label="完成的工具详情"
-          class="_toolResultBody_d18ff4"
-          id="tool-result-tool_success"
-          role="region"
-        >
-          <section
-            aria-label="工具输入参数"
-            class="_toolSection_d18ff4 _toolSectionInput_d18ff4"
-            data-tool-id="tool_success"
-          >
-            <header
-              class="_toolSectionHeader_d18ff4"
-            >
-              <div
-                class="_toolSectionTitleGroup_d18ff4"
-              >
-                <span
-                  class="_toolSectionBadge_d18ff4"
-                >
-                  📥 输入
-                </span>
-                <span
-                  class="_toolSectionKind_d18ff4"
-                >
-                  入参配置
-                </span>
-              </div>
-              <div
-                class="_toolSectionActions_d18ff4"
-              >
-                <button
-                  aria-describedby="_r_4_"
-                  class="_button_ae1db5 _buttonGhost_ae1db5 _buttonSm_ae1db5 _toolSectionActionBtn_d18ff4"
-                  data-size="sm"
-                  data-variant="ghost"
-                  type="button"
-                >
-                  <span
-                    aria-hidden="true"
-                    class="_buttonIcon_ae1db5"
-                  >
-                    <svg
-                      aria-hidden="true"
-                      class="lucide lucide-code-xml"
-                      fill="none"
-                      height="12"
-                      stroke="currentColor"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="2"
-                      viewBox="0 0 24 24"
-                      width="12"
-                      xmlns="http://www.w3.org/2000/svg"
-                    >
-                      <path
-                        d="m18 16 4-4-4-4"
-                      />
-                      <path
-                        d="m6 8-4 4 4 4"
-                      />
-                      <path
-                        d="m14.5 4-5 16"
-                      />
-                    </svg>
-                  </span>
-                </button>
-                <button
-                  aria-describedby="_r_5_"
-                  class="_button_ae1db5 _buttonGhost_ae1db5 _buttonSm_ae1db5 _toolSectionActionBtn_d18ff4"
-                  data-size="sm"
-                  data-variant="ghost"
-                  type="button"
-                >
-                  <span
-                    aria-hidden="true"
-                    class="_buttonIcon_ae1db5"
-                  >
-                    <svg
-                      aria-hidden="true"
-                      class="lucide lucide-copy"
-                      fill="none"
-                      height="12"
-                      stroke="currentColor"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="2"
-                      viewBox="0 0 24 24"
-                      width="12"
-                      xmlns="http://www.w3.org/2000/svg"
-                    >
-                      <rect
-                        height="14"
-                        rx="2"
-                        ry="2"
-                        width="14"
-                        x="8"
-                        y="8"
-                      />
-                      <path
-                        d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"
-                      />
-                    </svg>
-                  </span>
-                  <span
-                    class="_buttonLabel_ae1db5"
-                  >
-                    复制
-                  </span>
-                </button>
-              </div>
-            </header>
-            <div
-              class="_toolSectionContent_d18ff4"
-            >
-              <div
-                class="_toolKeyValueTable_d18ff4"
-              >
-                <div
-                  class="_toolKeyValueRow_d18ff4"
-                >
-                  <span
-                    class="_toolKeyCell_d18ff4"
-                  >
-                    filePath
-                  </span>
-                  <div
-                    class="_toolValCell_d18ff4"
-                  >
-                    <span
-                      class="_toolValText_d18ff4"
-                    >
-                      /src/main.ts
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </section>
-          <section
-            aria-label="工具执行输出"
-            class="_toolSection_d18ff4 _toolSectionOutput_d18ff4 "
-            data-tool-id="tool_success"
-          >
-            <header
-              class="_toolSectionHeader_d18ff4"
-            >
-              <div
-                class="_toolSectionTitleGroup_d18ff4"
-              >
-                <span
-                  class="_toolSectionBadge_d18ff4 _toolSectionBadgeOutput_d18ff4"
-                >
-                  📤 输出
-                </span>
-                <span
-                  class="_toolSectionMeta_d18ff4"
-                >
-                  <span
-                    class="_successTag_d18ff4"
-                  >
-                    ✓ 执行成功
-                  </span>
-                   · 1 行
-                   · 0.0 KB
-                </span>
-              </div>
-              <div
-                class="_toolSectionActions_d18ff4"
-              >
-                <button
-                  aria-describedby="_r_6_"
-                  class="_button_ae1db5 _buttonGhost_ae1db5 _buttonSm_ae1db5 _toolSectionActionBtn_d18ff4"
-                  data-size="sm"
-                  data-variant="ghost"
-                  type="button"
-                >
-                  <span
-                    aria-hidden="true"
-                    class="_buttonIcon_ae1db5"
-                  >
-                    <svg
-                      aria-hidden="true"
-                      class="lucide lucide-copy"
-                      fill="none"
-                      height="12"
-                      stroke="currentColor"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="2"
-                      viewBox="0 0 24 24"
-                      width="12"
-                      xmlns="http://www.w3.org/2000/svg"
-                    >
-                      <rect
-                        height="14"
-                        rx="2"
-                        ry="2"
-                        width="14"
-                        x="8"
-                        y="8"
-                      />
-                      <path
-                        d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"
-                      />
-                    </svg>
-                  </span>
-                  <span
-                    class="_buttonLabel_ae1db5"
-                  >
-                    复制
-                  </span>
-                </button>
-              </div>
-            </header>
-            <div
-              class="_toolSectionContent_d18ff4"
-            >
-              <pre
-                class="_toolOutputCode_d18ff4"
-              >
-                file content loaded
-              </pre>
-            </div>
-          </section>
-        </div>
-      </div>
+        class="_toolRowHeadRight_d18ff4"
+      />
     </div>
   </div>
 </div>
@@ -988,8 +554,9 @@ exports[`ChatToolCallBlock snapshots > renders tool with duration 1`] = `
   class="_toolStack_d18ff4 tool-stack"
 >
   <div
-    class="_toolRow_d18ff4  _isCollapsed_d18ff4 is-collapsed tool-row"
+    class="_toolRow_d18ff4  _isCollapsed_d18ff4 is-collapsed  tool-row"
     data-default-collapsed="true"
+    data-expanded="false"
     data-tool-id="tool_duration"
     data-tool-label="修改 utils.ts"
     data-tool-status="完成"
@@ -1011,25 +578,29 @@ exports[`ChatToolCallBlock snapshots > renders tool with duration 1`] = `
         >
           <svg
             aria-hidden="true"
-            class="lucide lucide-file-pen"
+            class="_toolKindIcon_d18ff4"
+            color="currentColor"
+            data-icon="file-edit"
             fill="none"
             height="14"
-            stroke="var(--text-tertiary, #8c877d)"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="1.6"
+            stroke="currentColor"
+            stroke-width="2"
             viewBox="0 0 24 24"
             width="14"
             xmlns="http://www.w3.org/2000/svg"
           >
             <path
-              d="M12.5 22H18a2 2 0 0 0 2-2V7l-5-5H6a2 2 0 0 0-2 2v9.5"
+              d="M13 20.8268V22H14.1734C14.5827 22 14.7874 22 14.9715 21.9238C15.1555 21.8475 15.3003 21.7028 15.5897 21.4134L20.4133 16.5894C20.6864 16.3164 20.8229 16.1799 20.8959 16.0327C21.0347 15.7525 21.0347 15.4236 20.8959 15.1434C20.8229 14.9961 20.6864 14.8596 20.4133 14.5866C20.1403 14.3136 20.0038 14.1771 19.8565 14.1041C19.5763 13.9653 19.2473 13.9653 18.9671 14.1041C18.8198 14.1771 18.6833 14.3136 18.4103 14.5866L18.4103 14.5866L13.5867 19.4106C13.2972 19.7 13.1525 19.8447 13.0762 20.0287C13 20.2128 13 20.4174 13 20.8268Z"
+              stroke="currentColor"
+              stroke-linejoin="round"
+              stroke-width="2"
             />
             <path
-              d="M14 2v4a2 2 0 0 0 2 2h4"
-            />
-            <path
-              d="M13.378 15.626a1 1 0 1 0-3.004-3.004l-5.01 5.012a2 2 0 0 0-.506.854l-.837 2.87a.5.5 0 0 0 .62.62l2.87-.837a2 2 0 0 0 .854-.506z"
+              d="M19 11C19 11 19 9.4306 18.8478 9.06306C18.6955 8.69552 18.4065 8.40649 17.8284 7.82843L13.0919 3.09188C12.593 2.593 12.3436 2.34355 12.0345 2.19575C11.9702 2.165 11.9044 2.13772 11.8372 2.11401C11.5141 2 11.1614 2 10.4558 2C7.21082 2 5.58831 2 4.48933 2.88607C4.26731 3.06508 4.06508 3.26731 3.88607 3.48933C3 4.58831 3 6.21082 3 9.45584V14C3 17.7712 3 19.6569 4.17157 20.8284C5.23467 21.8915 6.8857 21.99 10 21.9991M12 2.5V3C12 5.82843 12 7.24264 12.8787 8.12132C13.7574 9 15.1716 9 18 9H18.5"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
             />
           </svg>
         </span>
@@ -1037,128 +608,40 @@ exports[`ChatToolCallBlock snapshots > renders tool with duration 1`] = `
           class="_toolRowText_d18ff4"
         >
           <span
-            aria-describedby="_r_c_"
             class="_toolRowSummary_d18ff4"
           >
-            修改 
             <span
-              class="_toolPathWrap_d18ff4"
+              aria-describedby="_r_9_"
+              class="_toolActionText_d18ff4"
             >
-              <button
-                aria-describedby="_r_d_"
-                class="_toolPathLink_d18ff4"
-                type="button"
-              >
-                utils.ts
-              </button>
-              <span
-                class="_toolPathActions_d18ff4"
-              >
-                <button
-                  aria-describedby="_r_e_"
-                  aria-label="在文件面板打开"
-                  class="_button_ae1db5 _buttonGhost_ae1db5 _buttonSm_ae1db5 _toolPathAction_d18ff4"
-                  data-size="sm"
-                  data-variant="ghost"
-                  type="button"
-                >
-                  <span
-                    aria-hidden="true"
-                    class="_buttonIcon_ae1db5"
-                  >
-                    <svg
-                      aria-hidden="true"
-                      class="lucide lucide-panel-right-open"
-                      fill="none"
-                      height="14"
-                      stroke="currentColor"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="2"
-                      viewBox="0 0 24 24"
-                      width="14"
-                      xmlns="http://www.w3.org/2000/svg"
-                    >
-                      <rect
-                        height="18"
-                        rx="2"
-                        width="18"
-                        x="3"
-                        y="3"
-                      />
-                      <path
-                        d="M15 3v18"
-                      />
-                      <path
-                        d="m10 15-3-3 3-3"
-                      />
-                    </svg>
-                  </span>
-                </button>
-                <button
-                  aria-describedby="_r_f_"
-                  aria-label="复制路径"
-                  class="_button_ae1db5 _buttonGhost_ae1db5 _buttonSm_ae1db5 _toolPathAction_d18ff4"
-                  data-size="sm"
-                  data-variant="ghost"
-                  type="button"
-                >
-                  <span
-                    aria-hidden="true"
-                    class="_buttonIcon_ae1db5"
-                  >
-                    <svg
-                      aria-hidden="true"
-                      class="lucide lucide-copy"
-                      fill="none"
-                      height="14"
-                      stroke="currentColor"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="2"
-                      viewBox="0 0 24 24"
-                      width="14"
-                      xmlns="http://www.w3.org/2000/svg"
-                    >
-                      <rect
-                        height="14"
-                        rx="2"
-                        ry="2"
-                        width="14"
-                        x="8"
-                        y="8"
-                      />
-                      <path
-                        d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"
-                      />
-                    </svg>
-                  </span>
-                </button>
-              </span>
+              修改
             </span>
+            <span
+              aria-hidden="true"
+              class="_dotSeparator_d18ff4"
+            >
+              ·
+            </span>
+            <button
+              aria-describedby="_r_a_"
+              class="_toolPathLink_d18ff4"
+              type="button"
+            >
+              utils.ts
+            </button>
           </span>
         </span>
       </span>
       <span
-        class="_toolRowChevronSlot_d18ff4 _isToggle_d18ff4"
+        class="_toolRowHeadRight_d18ff4"
       >
-        <svg
+        <span
           aria-hidden="true"
-          class="lucide lucide-chevron-right _toolRowChevron_d18ff4"
-          fill="none"
-          height="12"
-          stroke="currentColor"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          stroke-width="2"
-          viewBox="0 0 24 24"
-          width="12"
-          xmlns="http://www.w3.org/2000/svg"
+          class="_toolRowChevron_d18ff4 "
+          data-testid="tool-chevron-tool_duration"
         >
-          <path
-            d="m9 18 6-6-6-6"
-          />
-        </svg>
+          ›
+        </span>
       </span>
     </div>
     <div
@@ -1187,19 +670,14 @@ exports[`ChatToolCallBlock snapshots > renders tool with duration 1`] = `
                 <span
                   class="_toolSectionBadge_d18ff4"
                 >
-                  📥 输入
-                </span>
-                <span
-                  class="_toolSectionKind_d18ff4"
-                >
-                  入参配置
+                  输入
                 </span>
               </div>
               <div
                 class="_toolSectionActions_d18ff4"
               >
                 <button
-                  aria-describedby="_r_g_"
+                  aria-describedby="_r_b_"
                   class="_button_ae1db5 _buttonGhost_ae1db5 _buttonSm_ae1db5 _toolSectionActionBtn_d18ff4"
                   data-size="sm"
                   data-variant="ghost"
@@ -1211,31 +689,36 @@ exports[`ChatToolCallBlock snapshots > renders tool with duration 1`] = `
                   >
                     <svg
                       aria-hidden="true"
-                      class="lucide lucide-code-xml"
+                      class=""
+                      color="currentColor"
+                      data-icon="code"
                       fill="none"
-                      height="12"
+                      height="14"
                       stroke="currentColor"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
                       stroke-width="2"
                       viewBox="0 0 24 24"
-                      width="12"
+                      width="14"
                       xmlns="http://www.w3.org/2000/svg"
                     >
                       <path
-                        d="m18 16 4-4-4-4"
+                        d="M16 6.99998L19.0664 9.64296C20.3554 10.7541 21 11.3096 21 12C21 12.6903 20.3555 13.2459 19.0664 14.357L16 17"
+                        stroke="currentColor"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
                       />
                       <path
-                        d="m6 8-4 4 4 4"
-                      />
-                      <path
-                        d="m14.5 4-5 16"
+                        d="M8 6.99998L4.93365 9.64296C3.64455 10.7541 3 11.3096 3 12C3 12.6903 3.64455 13.2459 4.93365 14.357L8 17"
+                        stroke="currentColor"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
                       />
                     </svg>
                   </span>
                 </button>
                 <button
-                  aria-describedby="_r_h_"
+                  aria-describedby="_r_c_"
                   class="_button_ae1db5 _buttonGhost_ae1db5 _buttonSm_ae1db5 _toolSectionActionBtn_d18ff4"
                   data-size="sm"
                   data-variant="ghost"
@@ -1247,27 +730,30 @@ exports[`ChatToolCallBlock snapshots > renders tool with duration 1`] = `
                   >
                     <svg
                       aria-hidden="true"
-                      class="lucide lucide-copy"
+                      class=""
+                      color="currentColor"
+                      data-icon="copy"
                       fill="none"
-                      height="12"
+                      height="14"
                       stroke="currentColor"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
                       stroke-width="2"
                       viewBox="0 0 24 24"
-                      width="12"
+                      width="14"
                       xmlns="http://www.w3.org/2000/svg"
                     >
-                      <rect
-                        height="14"
-                        rx="2"
-                        ry="2"
-                        width="14"
-                        x="8"
-                        y="8"
+                      <path
+                        d="M7.5 14.5C7.5 11.2002 7.5 9.55025 8.52513 8.52513C9.55025 7.5 11.2002 7.5 14.5 7.5C17.7998 7.5 19.4497 7.5 20.4749 8.52513C21.5 9.55025 21.5 11.2002 21.5 14.5C21.5 17.7998 21.5 19.4497 20.4749 20.4749C19.4497 21.5 17.7998 21.5 14.5 21.5C11.2002 21.5 9.55025 21.5 8.52513 20.4749C7.5 19.4497 7.5 17.7998 7.5 14.5Z"
+                        stroke="currentColor"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
                       />
                       <path
-                        d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"
+                        d="M7.5 16.5C6.10355 16.5 5.40533 16.5 4.84402 16.3036C3.83866 15.9518 3.0482 15.1613 2.69641 14.156C2.5 13.5947 2.5 12.8964 2.5 11.5V9.5C2.5 6.20017 2.5 4.55025 3.52513 3.52513C4.55025 2.5 6.20017 2.5 9.5 2.5H11.5C12.8964 2.5 13.5947 2.5 14.156 2.69641C15.1613 3.0482 15.9518 3.83866 16.3036 4.84402C16.5 5.40533 16.5 6.10355 16.5 7.5"
+                        stroke="currentColor"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
                       />
                     </svg>
                   </span>
@@ -1320,25 +806,17 @@ exports[`ChatToolCallBlock snapshots > renders tool with duration 1`] = `
                 <span
                   class="_toolSectionBadge_d18ff4 _toolSectionBadgeOutput_d18ff4"
                 >
-                  📤 输出
+                  输出
                 </span>
                 <span
                   class="_toolSectionMeta_d18ff4"
-                >
-                  <span
-                    class="_successTag_d18ff4"
-                  >
-                    ✓ 执行成功
-                  </span>
-                   · 4 行
-                   · 0.1 KB
-                </span>
+                />
               </div>
               <div
                 class="_toolSectionActions_d18ff4"
               >
                 <button
-                  aria-describedby="_r_i_"
+                  aria-describedby="_r_d_"
                   class="_button_ae1db5 _buttonGhost_ae1db5 _buttonSm_ae1db5 _toolSectionActionBtn_d18ff4"
                   data-size="sm"
                   data-variant="ghost"
@@ -1350,27 +828,30 @@ exports[`ChatToolCallBlock snapshots > renders tool with duration 1`] = `
                   >
                     <svg
                       aria-hidden="true"
-                      class="lucide lucide-copy"
+                      class=""
+                      color="currentColor"
+                      data-icon="copy"
                       fill="none"
-                      height="12"
+                      height="14"
                       stroke="currentColor"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
                       stroke-width="2"
                       viewBox="0 0 24 24"
-                      width="12"
+                      width="14"
                       xmlns="http://www.w3.org/2000/svg"
                     >
-                      <rect
-                        height="14"
-                        rx="2"
-                        ry="2"
-                        width="14"
-                        x="8"
-                        y="8"
+                      <path
+                        d="M7.5 14.5C7.5 11.2002 7.5 9.55025 8.52513 8.52513C9.55025 7.5 11.2002 7.5 14.5 7.5C17.7998 7.5 19.4497 7.5 20.4749 8.52513C21.5 9.55025 21.5 11.2002 21.5 14.5C21.5 17.7998 21.5 19.4497 20.4749 20.4749C19.4497 21.5 17.7998 21.5 14.5 21.5C11.2002 21.5 9.55025 21.5 8.52513 20.4749C7.5 19.4497 7.5 17.7998 7.5 14.5Z"
+                        stroke="currentColor"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
                       />
                       <path
-                        d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"
+                        d="M7.5 16.5C6.10355 16.5 5.40533 16.5 4.84402 16.3036C3.83866 15.9518 3.0482 15.1613 2.69641 14.156C2.5 13.5947 2.5 12.8964 2.5 11.5V9.5C2.5 6.20017 2.5 4.55025 3.52513 3.52513C4.55025 2.5 6.20017 2.5 9.5 2.5H11.5C12.8964 2.5 13.5947 2.5 14.156 2.69641C15.1613 3.0482 15.9518 3.83866 16.3036 4.84402C16.5 5.40533 16.5 6.10355 16.5 7.5"
+                        stroke="currentColor"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
                       />
                     </svg>
                   </span>

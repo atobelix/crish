@@ -179,14 +179,18 @@ export type NotePaperStrictPanelProps = {
    * 先冲刷当前面板的 pending 差量，避免编辑丢失。注销传 null。
    */
   registerPendingFlush?: (flush: (() => Promise<void>) | null) => void;
-  /** @deprecated 仅保留类型兼容，生产主面板已切除 DOM 挂载 */
+  /**
+   * A-INV-02 镜像漂移报告（CONN-E2 opt-in 装配面）。
+   * 有值 → Strict 面板挂 StatusBar 并展示漂移分类。
+   * 历史：986043bfc 曾误删挂载点并在此加 @deprecated，已随挂载点一并恢复。
+   */
   mirrorDriftReport?: MirrorDriftReportView | null;
-  /** @deprecated 仅保留类型兼容，生产主面板已切除 DOM 挂载 */
+  /** A-INV-02 数据来源标注（poll / os / injected / unknown），透传 StatusBar */
   mirrorWatchSource?: MirrorWatchSource;
-  /** @deprecated 仅保留类型兼容，生产主面板已切除 DOM 挂载 */
+  /** 未推送操作数（X-05：>0 且未显式确认时禁止静默 drop_unacked） */
   mirrorUnpushedOpCount?: number;
-  /** @deprecated 仅保留类型兼容，生产主面板已切除 DOM 挂载 */
+  /** 显式 opt-in 挂条（无 report 时也挂，用于「未检测」诚实态） */
   showMirrorDriftBar?: boolean;
-  /** @deprecated 仅保留类型兼容，生产主面板已切除 DOM 挂载 */
+  /** 三路决策回调；省略则经 mirrorIpc 桥提交 */
   onMirrorThreeWay?: (decision: ThreeWayDecision) => void;
 };
