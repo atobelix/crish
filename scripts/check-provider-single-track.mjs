@@ -83,6 +83,38 @@ function gitOut(args) {
   }
 }
 
+/**
+ * 极简 glob 匹配（`**` 跨目录 / `*` 单段 / `{a,b}` 枚举）——只服务 D11⑤ 的
+ * 「注册面是否覆盖某文件」判定，不追求通用 glob 语义。
+ */
+function globMatch(glob, rel) {
+  let out = '';
+  for (let i = 0; i < glob.length; i++) {
+    const c = glob[i];
+    if (c === '*') {
+      if (glob[i + 1] === '*') { out += '[\\s\\S]*'; i++; }
+      else out += '[^/]*';
+    } else if (c === '{') {
+      const end = glob.indexOf('}', i);
+      if (end === -1) { out += '\\{'; continue; }
+      out +=
+        '(?:' +
+        glob
+          .slice(i + 1, end)
+          .split(',')
+          .map((a) => a.replace(/[.+?^$()|\[\]\\]/g, '\\$&'))
+          .join('|') +
+        ')';
+      i = end;
+    } else if (/[.+?^$()|\[\]\\]/.test(c)) {
+      out += `\\${c}`;
+    } else {
+      out += c;
+    }
+  }
+  return new RegExp(`^${out}$`).test(rel);
+}
+
 /* ── 正确做法指引（--guide） ──────────────────────────────────── */
 // 增量契约：仅在显式 `--guide <metric>` 时生效并立即退出；
 // 不触碰任何断言、判定分支与「普通运行」的退出码。
@@ -170,15 +202,17 @@ const GUIDE_TEXT = {
     '参考：scripts/check-tokens-all.mjs 头部「为什么需要它」；docs/provider-single-track-convergence/02-执行拓扑与防御网方案.md D10 行。',
   ],
   D11: [
-    '违反项：命令注册面漂移（FAIL 前缀 D11）——① manifest 声明面与 main.rs `command_registry!` 实装面不一致；② 前端注册表（tauri-command-registry.ts）与 manifest 不齐；③ 前端内置快照（commandManifest.ts）与 manifest 不齐；④ 任一侧重复登记。',
-    '文件:行号：四方权威 —— apps/agent-workbench/src-tauri/src/command_manifest.rs（`entry("name","family","surface",registered)`）/ apps/agent-workbench/src-tauri/src/main.rs（`command_registry![("name", path), ...]`）/ apps/agent-workbench/src/core/tauri-command-registry.ts（`command: ...`）/ apps/crish-desktop/src/api/transport/commandManifest.ts（`entry("name", ...)`）。',
-    '当前值/阈值：四方命令名集合必须两两相等（当前 142 条），且各侧内部无重名。',
+    '违反项：命令注册面漂移（FAIL 前缀 D11）——① manifest 声明面与 main.rs `command_registry!` 实装面不一致；② 前端注册表（tauri-command-registry.ts）与 manifest 不齐；③ 前端内置快照（commandManifest.ts）与 manifest 不齐；④ 任一侧重复登记；⑤ **既有断链门禁失守**——`apps/crish-desktop/src/api/transport/command-contract-drift.test.ts` 不存在 / 缺「断言一（零断链）」「断言二（零幽灵）」/ 未由 vitest 入口注册覆盖。',
+    '文件:行号：四方权威 —— apps/agent-workbench/src-tauri/src/command_manifest.rs（`entry("name","family","surface",registered)`）/ apps/agent-workbench/src-tauri/src/main.rs（`command_registry![("name", path), ...]`）/ apps/agent-workbench/src/core/tauri-command-registry.ts（`command: ...`）/ apps/crish-desktop/src/api/transport/commandManifest.ts（`entry("name", ...)`）；⑤ 判据来源 = apps/crish-desktop/src/api/transport/command-contract-drift.test.ts + vitest.config.ts 的 include + package.json 的 vitest 入口。',
+    '当前值/阈值：四方命令名集合必须两两相等（当前 142 条），且各侧内部无重名；⑤ 既有门禁必须存在、两条断言齐备、且其路径被 vitest include glob 覆盖（解析不到即显式 FAIL，防正则失配假绿）。',
     '正确做法：',
     '  ① 改注册面（新增 / 退役 / 改名）必须**四处同步**：main.rs 宏 + command_manifest.rs 条目 + 前端注册表 + 前端内置快照；',
     '  ② wire 键 = manifest 登记名；函数名与 wire 键不一致必须显式 `#[tauri::command(rename = "...")]`，禁止函数名隐式成为 wire 键；',
     '  ③ 退役命令四处同时删——实证漂移形态之一就是「旧命令族只删一侧、另一侧仍留」（2026-09-15：前端注册表缺 15 条，含 auth_* / note_document_* / prefs_* / workbench_window_ready）；',
     '  ④ 条数注释与测试锁定值必须随批次更新——陈旧条数（如「73 = 69 + 4」）会让读者误判对齐状态；',
-    '  ⑤ 复现：node scripts/check-provider-single-track.mjs。',
+    '  ⑤ **前端调用面 ⊆ manifest 的扫描面由既有门禁承担，本脚本不重复造**（重复门禁属反过度设计红线）：该方向已由 command-contract-drift.test.ts 的「断言一（零断链）」+「断言二（零幽灵）」+ 动态拼接面覆盖。本防线只守其**存在性与注册**（同 D10 模式）。实证 2026-09-15：本脚本此前自建一份同向扫描 + 债务棘轮，两处豁免口径不同 → 结论互相打架——本脚本只红在「注释里的 `invoke(\'X\'` 示例」假阳性上，而真断链 `catalog_get` / `catalog_refresh` 被棘轮登记为「已知债务」，修掉假阳性后会**转绿并掩盖真缺陷**。自建扫描与棘轮表已整体删除；',
+    '  ⑥ 真断链的修法：改前端调用名 / 或补 Rust 注册（rename），**不得**把它登记成「已知债务」绕过；',
+    '  ⑦ 复现：node scripts/check-provider-single-track.mjs（⑤ 为静态判据）；真断链详情跑 `cd apps/crish-desktop && npx vitest run src/api/transport/command-contract-drift.test.ts`。',
     '参考：command_manifest.rs 模块头「维护规则」；docs/provider-single-track-convergence/02-执行拓扑与防御网方案.md D11 行。',
   ],
   D12: [
@@ -256,7 +290,30 @@ if (GUIDE_INDEX >= 0) printGuide(process.argv[GUIDE_INDEX + 1]);
   } else {
     fail(`D5: ${rel} 的 settingsObjectId 未委派 modelRefKey——身份键双轨回潮`);
   }
-  if (/\$\{[^}]+\}::\$\{/.test(src.split('settingsObjectId')[1]?.split('}')[0] ?? '')) {
+  // ② settingsObjectId 函数体内不得出现 `::` 模板拼接。
+  //    作用域必须**按声明处的函数体**取（自 `export function settingsObjectId`
+  //    后首个 `{` 起做括号配平）。此前写作
+  //    `src.split('settingsObjectId')[1]?.split('}')[0]`，有两处假绿：
+  //      ① 锚点落在**文件头注释**上（首个 `settingsObjectId` 出现在模块注释里），
+  //         而首个 `}` 落在 import 块 → 扫描面根本不含函数体；
+  //      ② 即便锚点正确，`${a}::${b}` 的首个 `}` 落在模板内插里，会正好截掉
+  //         `::`，把「回退到 :: 拼接」判成通过。
+  let settingsObjectIdBody = '';
+  const settingsObjectIdAt = src.search(/export function settingsObjectId/);
+  if (settingsObjectIdAt !== -1) {
+    const braceAt = src.indexOf('{', settingsObjectIdAt);
+    if (braceAt !== -1) {
+      let depth = 0;
+      for (let i = braceAt; i < src.length; i++) {
+        if (src[i] === '{') depth++;
+        else if (src[i] === '}' && --depth === 0) {
+          settingsObjectIdBody = src.slice(braceAt, i + 1);
+          break;
+        }
+      }
+    }
+  }
+  if (/\$\{[^}]+\}::\$\{/.test(settingsObjectIdBody)) {
     fail(`D5: ${rel} settingsObjectId 仍存在 :: 模板拼接`);
   }
 }
@@ -428,11 +485,15 @@ function cfgTestLines(src) {
       const lineNo = index + 1;
       if (testLines.has(lineNo)) return; // #[cfg(test)] 内允许（测试专用符号）
       for (const { symbol, note } of D1_RETIRED) {
-        if (symbol.endsWith('(')) {
-          if (!line.includes(symbol)) continue;
-        } else if (!new RegExp(`\\b${symbol.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(line)) {
-          continue;
-        }
+        // 符号一律**转义后按词边界**匹配：
+        //   ① 含 `(` 的符号（config_get(）此前用 `line.includes(symbol)` 子串匹配，
+        //      `foo_config_get(` 会被误报（误报会让防线失去可信度）；
+        //   ② 不含 `(` 的符号此前未转义正则（Rust 分支）——退役符号若含元字符即失配假绿。
+        const escaped = symbol.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const re = symbol.endsWith('(')
+          ? new RegExp(`\\b${escaped}`)
+          : new RegExp(`\\b${escaped}\\b`);
+        if (!re.test(line)) continue;
         fail(
           `D1: ${rel}:${lineNo} 生产代码仍引用已退役符号 \`${symbol}\`（${note}）。` +
             ` 消费面必须已迁到统一配置单轨；若确需保留请先在兼容清册登记并说明边界。`
@@ -453,7 +514,9 @@ function cfgTestLines(src) {
     masked.split('\n').forEach((line, index) => {
       for (const { symbol, kind, note } of D1_RETIRED) {
         if (kind !== 'ts') continue;
-        if (!new RegExp(`\\b${symbol}\\b`).test(line)) continue;
+        // 与 Rust 分支统一：转义后按词边界匹配（未转义时退役符号含元字符即失配假绿）
+        const escaped = symbol.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        if (!new RegExp(`\\b${escaped}\\b`).test(line)) continue;
         fail(
           `D1: ${rel}:${index + 1} 生产代码仍引用已退役符号 \`${symbol}\`（${note}）。`
         );
@@ -471,10 +534,13 @@ function cfgTestLines(src) {
   const full = read('FULL_CHECK_COMMANDS.md');
   // 只取反引号内的命令本体——行内说明文字可能提到「-j 1 必带」，
   // 若扫整行会把「命令本身没钉」的缺陷盖成通过（假阴性）。
+  // 逐行 matchAll（非 match）：一行内可能出现**多条**反引号命令，
+  // 只取首条会让后面的未钉命令静默漏检。
   const cargoCmds = [];
   for (const l of full.split('\n')) {
-    const m = l.match(/`([^`]*cargo\s+(?:test|check|build)\s[^`]*)`/);
-    if (m && /--workspace|--manifest-path/.test(m[1])) cargoCmds.push({ line: l.trim(), cmd: m[1] });
+    for (const m of l.matchAll(/`([^`]*cargo\s+(?:test|check|build)\s[^`]*)`/g)) {
+      if (/--workspace|--manifest-path/.test(m[1])) cargoCmds.push({ line: l.trim(), cmd: m[1] });
+    }
   }
   const unpinned = cargoCmds.filter(({ cmd }) => !/-j\s*1\b/.test(cmd) && !/--jobs\s*1\b/.test(cmd));
   if (cargoCmds.length === 0) {
@@ -921,61 +987,74 @@ const D8_KNOWN_DEBT = new Map([
     ok('D11: 四方命令名各自唯一（无重复登记）');
   }
 
-  // ⑤ 前端调用面 ⊆ manifest —— **退役命令漏改调用点的唯一自动捕获面**
+  // ⑤ 前端调用面 ⊆ manifest（**退役命令漏改调用点的唯一自动捕获面**）
+  //    —— 由既有门禁承担，本脚本**不重复造扫描逻辑**（同 D10 模式）。
   //
   // D1 用**标识符**匹配退役符号，抓不到以**字符串字面量**出现的命令名。
-  // 实证 2026-09-15：`catalog_get` / `catalog_refresh` / `config_profile_apply`
-  // 三条已退役命令仍被前端 invoke（4 处调用点），D1 全程零告警；用户侧表现为
-  // 「模型定价拉取跳过（missing）、回退静态表」。本断言把调用面与 manifest 对齐。
+  // 同一方向（前端 invoke 字面量 ⊆ Rust 权威集）的扫描已由既有门禁
+  // apps/crish-desktop/src/api/transport/command-contract-drift.test.ts 的
+  // 「断言一（零断链）」承担，且覆盖面更全（另有「断言二（零幽灵）」与动态拼接面）。
   //
-  // 现状为**棘轮**：已知漏改点登记在 D11_RETIRED_CALL_DEBT（目标 = 0），
-  // 新增即红。收敛后逐项从该表删除。
-  const D11_RETIRED_CALL_DEBT = new Set([
-    'apps/crish-desktop/src/api/modelCatalogIpc.ts:catalog_get',
-    'apps/crish-desktop/src/api/modelCatalogIpc.ts:catalog_refresh',
-    'apps/crish-desktop/src/api/thinkingGear.ts:catalog_get',
-  ]);
-  const manifestNameSet = new Set(manifestNames);
-  const retiredCallKeys = new Set();
-  for (const file of walk(
-    path.join(REPO_ROOT, 'apps/crish-desktop/src'),
-    (name) => /\.(ts|tsx)$/.test(name) && !/\.test\.(ts|tsx)$/.test(name),
-  )) {
-    const src = fs.readFileSync(file, 'utf8');
-    for (const m of src.matchAll(
-      /\b(?:invokeResult|invokeTyped|invoke)\s*(?:<[^>]*>)?\s*\(\s*'([^']+)'/g,
-    )) {
-      const cmd = m[1];
-      if (cmd.startsWith('plugin:')) continue;
-      if (manifestNameSet.has(cmd)) continue;
-      const rel = path.relative(REPO_ROOT, file).replaceAll('\\', '/');
-      retiredCallKeys.add(`${rel}:${cmd}`);
-    }
-  }
-  const newRetiredCalls = [...retiredCallKeys].filter(
-    (key) => !D11_RETIRED_CALL_DEBT.has(key),
-  );
-  const clearedDebt = [...D11_RETIRED_CALL_DEBT].filter(
-    (key) => !retiredCallKeys.has(key),
-  );
-  if (newRetiredCalls.length > 0) {
+  // 实证 2026-09-15：本脚本此前自建一份同向扫描 + D11_RETIRED_CALL_DEBT 棘轮，
+  // 与既有门禁**豁免口径不同** → 两处结论互相打架：本脚本只红在「注释里的
+  // `invoke('X'` 示例」这一假阳性上，而真断链 `catalog_get` / `catalog_refresh`
+  // 被棘轮登记成「已知债务」，修掉假阳性后本脚本会**转绿并掩盖真缺陷**。
+  // 重复门禁属反过度设计红线：删除自建扫描与棘轮，只守既有门禁的**存在性与注册**。
+  //
+  // 解析不到即**显式 FAIL**（防正则失配假绿）。
+  const driftRel = 'apps/crish-desktop/src/api/transport/command-contract-drift.test.ts';
+  if (!fs.existsSync(path.join(REPO_ROOT, driftRel))) {
     fail(
-      `D11: 前端调用了 manifest 未登记的命令（疑似退役命令漏改调用点）：${newRetiredCalls.join(' / ')}——` +
-        ` 退役命令时必须同时清理前端调用面；命令名是**字符串字面量**，D1 的标识符扫描抓不到`
-    );
-  } else if (clearedDebt.length > 0) {
-    fail(
-      `D11: D11_RETIRED_CALL_DEBT 已收敛但未从登记表删除：${clearedDebt.join(' / ')}——` +
-        ` 棘轮只降不升，收敛后必须同步删表`
-    );
-  } else if (D11_RETIRED_CALL_DEBT.size > 0) {
-    console.warn(
-      `WARN  D11: 前端仍有 ${D11_RETIRED_CALL_DEBT.size} 处调用已退役命令（登记债务，目标 = 0）：` +
-        `${[...D11_RETIRED_CALL_DEBT].join(' / ')}。` +
-        ` 收敛方向 = 改调现行命令（配置激活链路需先出方案），收敛后从 D11_RETIRED_CALL_DEBT 删除对应条目。`
+      `D11: 既有命令断链门禁 ${driftRel} 不存在——` +
+        ` 前端调用面 ⊆ manifest 的唯一自动捕获面被删/改名，退役命令漏改调用点将无门禁可拦`
     );
   } else {
-    ok('D11: 前端调用面全部落在 manifest 登记集合内');
+    const driftSrc = read(driftRel);
+    const missingAssertions = [
+      { name: '断言一（零断链：前端 invoke 字面量 ⊆ Rust 注册键集）', re: /断言一（零断链）/ },
+      { name: '断言二（零幽灵：注册键集 ⊆ 前端字面量 ∪ 显式豁免集）', re: /断言二（零幽灵）/ },
+    ].filter((a) => !a.re.test(driftSrc));
+    if (missingAssertions.length > 0) {
+      fail(
+        `D11: ${driftRel} 缺少${missingAssertions.map((a) => a.name).join(' / ')}——` +
+          ` 命令契约门禁被弱化/改名后，本防线的「已委托既有门禁」会变成空头承诺`
+      );
+    } else {
+      // 注册入口：必须由 package.json 的 vitest 全量入口承载，且在
+      // FULL_CHECK_COMMANDS.md 登记；同时 vitest 的 include 必须**覆盖该文件**
+      // （存在但从不执行 = 幽灵门禁，等于没有门禁）。
+      const pkgScripts = JSON.parse(read('package.json')).scripts ?? {};
+      const fullDoc = read('FULL_CHECK_COMMANDS.md');
+      const vitestEntries = Object.entries(pkgScripts).filter(([, cmd]) =>
+        /^vitest\s+run\b/.test(String(cmd).trim())
+      );
+      const registeredEntry = vitestEntries.find(([name]) =>
+        fullDoc.includes(`npm run ${name}`)
+      );
+      const includeGlobs = [
+        ...read('vitest.config.ts').matchAll(/include:\s*\[([\s\S]*?)\]/g),
+      ].flatMap((m) => [...m[1].matchAll(/'([^']+)'/g)].map((g) => g[1]));
+
+      if (!registeredEntry || includeGlobs.length === 0) {
+        fail(
+          `D11: 未能解析既有门禁的注册入口（package.json vitest 入口：` +
+            `${vitestEntries.map(([n]) => n).join(' / ') || '（无）'}；` +
+            `其中登记在 FULL_CHECK_COMMANDS.md 的：${registeredEntry?.[0] ?? '（无）'}；` +
+            `vitest include glob：${includeGlobs.length} 条）——` +
+            ` 注册面形态变更时本防线会假绿，请同步正则`
+        );
+      } else if (!includeGlobs.some((g) => g.includes('.test.') && globMatch(g, driftRel))) {
+        fail(
+          `D11: ${driftRel} 未被 vitest 入口 \`npm run ${registeredEntry[0]}\` 的 include 覆盖——` +
+            ` 存在但从不执行的幽灵门禁等于没有门禁`
+        );
+      } else {
+        ok(
+          `D11: 前端调用面断链守卫委托既有门禁 ${driftRel}（断言一/断言二齐备，` +
+            `经 \`npm run ${registeredEntry[0]}\` 注册并覆盖；本脚本不重复造扫描）`
+        );
+      }
+    }
   }
 }
 
