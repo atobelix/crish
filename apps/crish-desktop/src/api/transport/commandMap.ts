@@ -58,8 +58,8 @@ export const COMMAND_NAME_ALLOWLIST: ReadonlySet<string> = new Set([
   // ── 运行生命周期类（core_*）──
   'core_run_task',
   'core_cancel_run',
-  // ── 壳命令（config / session，F5 终态名：config_update / list_sessions）──
-  'config_update',
+  // ── 规范配置事务与会话 ──
+  'workbench_apply_models_config',
   'list_sessions',
 ]);
 
@@ -94,20 +94,12 @@ export function checkCommandMapConsistency(): void {
 }
 
 /**
- * Tauri 路径 payload 整形（用于壳命令参数形状与协议不一致的场合，
- * 如 config_update 不接受 type 字段）。键为命令名（T18：与调用侧对齐，
- * 无 WS 消息 type 键）。
- * PE-07 T07.4（K-05）：update-config 载荷剥离 apiKey（明文 key 一律走
- * config_secret_set / config_profile_apply，禁止经 config_update 通道）。
- * 幽灵命令（rewind 等）的整形条目已随映射删除（T03.1）。
+ * 运行入口将业务选项装进 Tauri 所需参数；配置事务原样传递完整树与修订号。
+ * 退役的供应商配置命令不保留字段过滤或兼容整形。
  */
 const PAYLOAD_SHAPERS: Readonly<
   Record<string, (p: Record<string, unknown>) => Record<string, unknown>>
 > = {
-  config_update: (p) => {
-    const { type: _type, apiKey: _apiKey, ...rest } = p;
-    return rest;
-  },
   core_run_task: (p) => {
     if ('options' in p && typeof p.options === 'object' && p.options !== null) {
       return p;

@@ -130,7 +130,7 @@ export function streamViaDirectFetch(
   let finished = false;
 
   const activeProfile = getActiveProfile();
-  const activeModel = getActiveModelId() || 'deepseek-v4-flash';
+  const activeModel = getActiveModelId();
 
   if (
     !activeProfile ||
@@ -138,6 +138,15 @@ export function streamViaDirectFetch(
   ) {
     const errorMsg =
       '未检测到 Daemon 服务，且尚未配置活动服务商与 API Key/OAuth Token。请在设置 → 模型中配置。';
+    if (callbacks.onRunError) callbacks.onRunError(errorMsg, 'config');
+    else callbacks.onChunk(errorMsg);
+    callbacks.onComplete();
+    return () => {};
+  }
+
+  // 无活动模型 → fail-closed：不发明厂商特定兜底模型，不发出请求（承 U1）。
+  if (!activeModel) {
+    const errorMsg = '未检测到活动模型。请在设置 → 模型中配置并选择模型。';
     if (callbacks.onRunError) callbacks.onRunError(errorMsg, 'config');
     else callbacks.onChunk(errorMsg);
     callbacks.onComplete();

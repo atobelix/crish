@@ -95,7 +95,7 @@ describe('modelSpecRevision（CT-01 签 ModelSpec 全字段）', () => {
     maxOutputTokens: 8192,
     enabled: true,
     protocol: 'openai/chat',
-    capabilities: { tools: true },
+    supportsTools: true,
     thinking: { Low: 'low', High: 'high' },
     modalities: { input: ['text', 'image'], output: ['text'] },
     pricing: {
@@ -127,13 +127,23 @@ describe('modelSpecRevision（CT-01 签 ModelSpec 全字段）', () => {
       path: 'C:\\Users\\tester\\.conex\\models.yaml',
       content: '',
       template: '',
-      seeded: false,
+      revision: 'revision-0',
+      credentialStates: {},
       parseError: null,
-      providers: structuredClone(PROVIDERS),
+      tree: { version: 2, activeModel: null, providers: structuredClone(PROVIDERS) },
     }));
-    mockTauriCommand('workbench_save_models_yaml', () => ({
-      path: 'C:\\Users\\tester\\.conex\\models.yaml',
-    }));
+    mockTauriCommand('workbench_apply_models_config', (args) => {
+      const { tree } = args as { tree: unknown };
+      return {
+        path: 'C:\\Users\\tester\\.conex\\models.yaml',
+        revision: 'revision-1',
+        content: '',
+        template: '',
+        credentialStates: {},
+        parseError: null,
+        tree,
+      };
+    });
     await modelsCatalogStore.ensureLoaded(true);
     expect(selectModel(PROVIDER_ID, MODEL_ID)?.thinking?.Low).toBe('low');
   });
@@ -151,7 +161,7 @@ describe('modelSpecRevision（CT-01 签 ModelSpec 全字段）', () => {
     const before = revisionOf(PROVIDER_ID, MODEL_ID);
 
     await modelsCatalogStore.updateModel(PROVIDER_ID, MODEL_ID, {
-      thinking: { Low: 'low', CustomUltra: 'ultra_wire' },
+      thinking: { Low: 'low', XHigh: 'ultra_wire' },
     });
     expect(revisionOf(PROVIDER_ID, MODEL_ID)).not.toBe(before);
 

@@ -33,6 +33,7 @@ import {
   setActiveModelId,
 } from './profileActiveSelection';
 import { getLiveProvider } from '../modelsCatalogLive';
+import { modelsCatalogStore } from '../modelsCatalogStore';
 
 /**
  * 保存 Base URL；若该 profile 为当前活动项，同步到引擎（保存即生效）。
@@ -157,7 +158,10 @@ export async function activateProfileModel(
   }
 
   const fresh = loadProfiles().find((x) => x.id === profileId) || p;
-  const hasLocalKey = p ? profileHasKey(fresh) : Boolean(live?.apiKey?.trim());
+  // 凭据不在前端明文持有：LS 壳标记或镜像凭据状态（hasKey）任一成立即视为本地有 key。
+  const hasLocalKey = p
+    ? profileHasKey(fresh)
+    : modelsCatalogStore.getState().credentialStates[profileId]?.hasKey === true;
 
   const effectiveBaseUrl = live?.baseUrl || fresh?.baseUrl;
   const res = await configProfileApply({

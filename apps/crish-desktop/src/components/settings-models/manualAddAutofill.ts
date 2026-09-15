@@ -7,6 +7,8 @@ import type { AddDraft } from './useModelProfilesState';
 /**
  * 智能模型草稿预填计算（纯函数逻辑）：
  * 综合探针 LiveModel 与官方 Baseline 字典，计算规范化的 AddDraft。
+ * 只产出规范草稿字段（contextWindow / supportsTools / modalities / thinking），
+ * 不发明能力默认，不携带旧 capabilities / contextLength 词表。
  */
 export function calculateAutofillDraft(
   id: string,
@@ -21,7 +23,7 @@ export function calculateAutofillDraft(
     live?.modalities?.input ??
     autofill?.modalities?.input ??
     prev.modalities?.input ??
-    ['text', 'image'];
+    ['text'];
   const outputMods =
     live?.modalities?.output ??
     autofill?.modalities?.output ??
@@ -42,12 +44,12 @@ export function calculateAutofillDraft(
     displayName: isCustomName
       ? prev.displayName
       : live?.displayName ?? autofill?.displayName ?? id,
-    contextLength:
+    contextWindow:
       live?.contextWindow != null
         ? String(live.contextWindow)
         : autofill?.contextWindow != null
         ? String(autofill.contextWindow)
-        : prev.contextLength,
+        : prev.contextWindow,
     maxOutputTokens:
       live?.maxOutputTokens != null
         ? String(live.maxOutputTokens)
@@ -58,12 +60,8 @@ export function calculateAutofillDraft(
       input: [...inputMods],
       output: [...outputMods],
     },
-    caps: {
-      tools: Boolean(live?.capabilities?.tools ?? prev.caps.tools ?? true),
-      image: Boolean(live?.capabilities?.image ?? inputMods.includes('image')),
-      video: Boolean(live?.capabilities?.video ?? inputMods.includes('video')),
-      reasoning: Boolean(live?.capabilities?.reasoning ?? hasThinking),
-    },
+    supportsTools:
+      live?.supportsTools ?? autofill?.supportsTools ?? prev.supportsTools,
     thinkingEnabled: hasThinking,
     thinkingMap:
       live?.thinking ||

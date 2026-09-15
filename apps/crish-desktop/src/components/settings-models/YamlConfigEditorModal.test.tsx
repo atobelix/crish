@@ -1,7 +1,14 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import React from 'react';
-import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react';
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  within,
+  act,
+} from '@testing-library/react';
 import { YamlConfigEditorModal } from './YamlConfigEditorModal';
 
 vi.mock('../../api/tauriInvoke', () => ({
@@ -9,7 +16,9 @@ vi.mock('../../api/tauriInvoke', () => ({
 }));
 
 vi.mock('../../api/modelsCatalogStore', () => ({
-  ensureModelsCatalogLoaded: vi.fn().mockResolvedValue(undefined),
+  ensureModelsCatalogLoaded: vi
+    .fn()
+    .mockResolvedValue({ ok: true, path: '/mock/path/models.yaml' }),
   getModelsCatalogPath: vi.fn().mockReturnValue('/mock/path/models.yaml'),
 }));
 
@@ -30,9 +39,12 @@ describe('YamlConfigEditorModal (模型 YAML 编辑器弹窗)', () => {
           status: 'ok',
           data: {
             path: '/mock/path/models.yaml',
-            content: 'version: 1\nproviders: []\n',
-            template: 'version: 1\n# default template\nproviders: []\n',
-            seeded: false,
+            content: 'version: 2\nproviders: {}\nactiveModel: null\n',
+            template:
+              'version: 2\n# empty template\nproviders: {}\nactiveModel: null\n',
+            revision: 'read-revision',
+            tree: { version: 2, activeModel: null, providers: {} },
+            credentialStates: {},
             parseError: null,
           },
         };
@@ -54,14 +66,18 @@ describe('YamlConfigEditorModal (模型 YAML 编辑器弹窗)', () => {
 
     await waitFor(() => {
       expect(screen.getByText('模型能力与参数配置')).toBeTruthy();
+      expect(screen.getByRole('status', { name: '已与磁盘同步' })).toBeTruthy();
     });
 
     // 状态指示位于标题旁边且为纯实点动态状态（无文本陈列，通过 aria-label 与 Tooltip 呈现）
     expect(screen.getByRole('status', { name: '已与磁盘同步' })).toBeTruthy();
 
     // 标题下方功能行：搜索框与工具按钮
-    expect(screen.getByPlaceholderText('在配置中查找 (Ctrl+F)...')).toBeTruthy();
+    expect(
+      screen.getByPlaceholderText('在配置中查找 (Ctrl+F)...')
+    ).toBeTruthy();
     expect(screen.getByRole('button', { name: /显示代码行数/ })).toBeTruthy();
+    expect(screen.getByRole('status', { name: '已与磁盘同步' })).toBeTruthy();
     expect(screen.getByRole('button', { name: /开启自动换行/ })).toBeTruthy();
     expect(screen.getByRole('button', { name: /复制全部内容/ })).toBeTruthy();
   });
@@ -71,6 +87,7 @@ describe('YamlConfigEditorModal (模型 YAML 编辑器弹窗)', () => {
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /撤回/ })).toBeTruthy();
+      expect(screen.getByRole('status', { name: '已与磁盘同步' })).toBeTruthy();
     });
 
     const undoBtn = screen.getByRole('button', { name: /撤回/ });
@@ -92,11 +109,15 @@ describe('YamlConfigEditorModal (模型 YAML 编辑器弹窗)', () => {
 
     const textarea = await waitFor(() => {
       const el = screen.getByPlaceholderText('请输入 models.yaml 配置内容...');
-      expect((el as HTMLTextAreaElement).value).toBe('version: 1\nproviders: []\n');
+      expect((el as HTMLTextAreaElement).value).toBe(
+        'version: 2\nproviders: {}\nactiveModel: null\n'
+      );
       return el as HTMLTextAreaElement;
     });
 
-    fireEvent.change(textarea, { target: { value: 'version: 2\ncustom: true\n' } });
+    fireEvent.change(textarea, {
+      target: { value: 'version: 2\ncustom: true\n' },
+    });
 
     // 修改后撤回按钮亮起
     const undoBtn = screen.getByRole('button', { name: /撤回/ });
@@ -105,7 +126,9 @@ describe('YamlConfigEditorModal (模型 YAML 编辑器弹窗)', () => {
 
     // 点击撤回
     fireEvent.click(undoBtn);
-    expect(textarea.value).toBe('version: 1\nproviders: []\n');
+    expect(textarea.value).toBe(
+      'version: 2\nproviders: {}\nactiveModel: null\n'
+    );
     expect(screen.getByRole('status', { name: '已与磁盘同步' })).toBeTruthy();
     expect(undoBtn.hasAttribute('disabled')).toBe(true);
   });
@@ -115,7 +138,9 @@ describe('YamlConfigEditorModal (模型 YAML 编辑器弹窗)', () => {
 
     const textarea = await waitFor(() => {
       const el = screen.getByPlaceholderText('请输入 models.yaml 配置内容...');
-      expect((el as HTMLTextAreaElement).value).toBe('version: 1\nproviders: []\n');
+      expect((el as HTMLTextAreaElement).value).toBe(
+        'version: 2\nproviders: {}\nactiveModel: null\n'
+      );
       return el as HTMLTextAreaElement;
     });
 
@@ -128,23 +153,35 @@ describe('YamlConfigEditorModal (模型 YAML 编辑器弹窗)', () => {
     expect(screen.getByText('恢复内置默认模板？')).toBeTruthy();
     expect(screen.getByText(/覆盖当前编辑器内容/)).toBeTruthy();
 
-    const confirmDialog = screen.getByRole('alertdialog', { name: '恢复内置默认模板？' });
+    const confirmDialog = screen.getByRole('alertdialog', {
+      name: '恢复内置默认模板？',
+    });
 
     // 取消重置
-    const cancelBtn = within(confirmDialog).getByRole('button', { name: '取消' });
+    const cancelBtn = within(confirmDialog).getByRole('button', {
+      name: '取消',
+    });
     fireEvent.click(cancelBtn);
     await waitFor(() => {
-      expect(screen.queryByRole('alertdialog', { name: '恢复内置默认模板？' })).toBeNull();
+      expect(
+        screen.queryByRole('alertdialog', { name: '恢复内置默认模板？' })
+      ).toBeNull();
     });
 
     // 再次点击并确认重置
     fireEvent.click(resetBtn);
-    const nextConfirmDialog = screen.getByRole('alertdialog', { name: '恢复内置默认模板？' });
-    const confirmBtn = within(nextConfirmDialog).getByRole('button', { name: '确认恢复模板' });
+    const nextConfirmDialog = screen.getByRole('alertdialog', {
+      name: '恢复内置默认模板？',
+    });
+    const confirmBtn = within(nextConfirmDialog).getByRole('button', {
+      name: '确认恢复模板',
+    });
     fireEvent.click(confirmBtn);
 
     // 内容更新为 template 内容
-    expect(textarea.value).toBe('version: 1\n# default template\nproviders: []\n');
+    expect(textarea.value).toBe(
+      'version: 2\n# empty template\nproviders: {}\nactiveModel: null\n'
+    );
   });
 
   it('点击刷新重新读取磁盘 models.yaml 内容', async () => {
@@ -152,6 +189,7 @@ describe('YamlConfigEditorModal (模型 YAML 编辑器弹窗)', () => {
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /刷新/ })).toBeTruthy();
+      expect(screen.getByRole('status', { name: '已与磁盘同步' })).toBeTruthy();
     });
 
     const refreshBtn = screen.getByRole('button', { name: /刷新/ });
@@ -160,6 +198,11 @@ describe('YamlConfigEditorModal (模型 YAML 编辑器弹窗)', () => {
     });
 
     expect(mockInvoke).toHaveBeenCalledWith('workbench_read_models_yaml', {});
+    expect(
+      mockInvoke.mock.calls.filter(
+        ([command]) => command === 'workbench_read_models_yaml'
+      )
+    ).toHaveLength(2);
   });
 
   it('未保存修改时退出弹出防丢确认', async () => {
@@ -168,7 +211,9 @@ describe('YamlConfigEditorModal (模型 YAML 编辑器弹窗)', () => {
 
     const textarea = await waitFor(() => {
       const el = screen.getByPlaceholderText('请输入 models.yaml 配置内容...');
-      expect((el as HTMLTextAreaElement).value).toBe('version: 1\nproviders: []\n');
+      expect((el as HTMLTextAreaElement).value).toBe(
+        'version: 2\nproviders: {}\nactiveModel: null\n'
+      );
       return el as HTMLTextAreaElement;
     });
 
@@ -190,11 +235,14 @@ describe('YamlConfigEditorModal (模型 YAML 编辑器弹窗)', () => {
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /显示代码行数/ })).toBeTruthy();
+      expect(screen.getByRole('status', { name: '已与磁盘同步' })).toBeTruthy();
     });
 
     const toggleLineBtn = screen.getByRole('button', { name: /显示代码行数/ });
     // 默认不开启行号
-    expect(screen.queryByText('1', { selector: '._gutterLine_f230ef' })).toBeNull();
+    expect(
+      screen.queryByText('1', { selector: '._gutterLine_f230ef' })
+    ).toBeNull();
 
     // 点击开启行号
     fireEvent.click(toggleLineBtn);

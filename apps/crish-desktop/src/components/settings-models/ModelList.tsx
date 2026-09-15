@@ -8,6 +8,7 @@ import {
 import { formatContextLabel } from '../../api/modelCatalogPure';
 import { getModelMeta } from '../../api/modelCatalog';
 import { modelsCatalogStore } from '../../api/modelsCatalogStore';
+import { modelRefKey } from '../../api/modelsCatalogTypes';
 import { getLiveModel } from '../../api/modelsCatalogLive';
 import { Button, Switch, Tooltip } from '../ui';
 import { ModelConfigPanel } from './ModelConfigPanel';
@@ -66,7 +67,7 @@ export const ModelList: React.FC<{
         // lastTest 是连通性探测结果，不是 modalities/thinking/pricing 真源
         const lastTest = getModelMeta(providerId, m).lastTest;
         const off = model?.enabled === false;
-        const tKey = `${providerId}::${m}`;
+        const tKey = modelRefKey({ providerId, modelId: m });
         const isLive =
           getActiveProfileId() === providerId && getActiveModelId() === m;
         const expanded = configOpenId === m && !!cfgDraft;
@@ -78,7 +79,7 @@ export const ModelList: React.FC<{
           expanded && cfgDraft
             ? (() => {
                 const n = parseInt(
-                  cfgDraft.contextLength.replace(/[^\d]/g, ''),
+                  cfgDraft.contextWindow.replace(/[^\d]/g, ''),
                   10
                 );
                 return Number.isFinite(n) && n > 0 ? n : model?.contextWindow;
@@ -86,18 +87,16 @@ export const ModelList: React.FC<{
             : model?.contextWindow;
         const liveCtxLabel = formatContextLabel(liveCtxVal);
         const showCtx = liveCtxLabel && liveCtxLabel !== '—';
-        const hasTools = Boolean(model?.capabilities?.tools);
+        // 能力徽标只读规范字段：supportsTools / modalities / thinking。
+        const hasTools = Boolean(model?.supportsTools);
         const hasImage = Boolean(
-          model?.modalities?.input?.includes('image') ||
-            model?.capabilities?.image
+          model?.modalities?.input?.includes('image')
         );
         const hasVideo = Boolean(
-          model?.modalities?.input?.includes('video') ||
-            model?.capabilities?.video
+          model?.modalities?.input?.includes('video')
         );
         const hasReasoning = Boolean(
-          (model?.thinking && Object.keys(model.thinking).length > 0) ||
-            model?.capabilities?.reasoning
+          model?.thinking && Object.keys(model.thinking).length > 0
         );
 
         return (
@@ -197,14 +196,14 @@ export const ModelList: React.FC<{
                     variant="ghost"
                     size="sm"
                     aria-label="检查连通性"
-                    disabled={testBusy === `${providerId}::${m}`}
+                    disabled={testBusy === modelRefKey({ providerId, modelId: m })}
                     className={styles.mrdRowMiniBtn}
                     onClick={(e) => {
                       e.stopPropagation();
                       void runTest(m);
                     }}
                     icon={
-                      testBusy === `${providerId}::${m}` ? (
+                      testBusy === modelRefKey({ providerId, modelId: m }) ? (
                         <AppIcon name="loader" size={13} className={styles.loadingSpinner} />
                       ) : (
                         <AppIcon name="wifi" size={13} />

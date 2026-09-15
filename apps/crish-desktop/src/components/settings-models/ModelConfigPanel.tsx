@@ -28,11 +28,11 @@ export const ModelConfigPanel: React.FC<{
   closeConfig,
   saveConfig,
 }) => {
-  // 多模态列表安全保底
+  // 多模态列表安全保底（不发明能力：未配置只按文本）
   const modalities = useMemo(() => {
     return (
       cfgDraft.modalities || {
-        input: ['text', 'image'],
+        input: ['text'],
         output: ['text'],
       }
     );
@@ -64,11 +64,11 @@ export const ModelConfigPanel: React.FC<{
           <span>上下文长度</span>
           <Input
             size="sm"
-            value={cfgDraft.contextLength}
+            value={cfgDraft.contextWindow}
             placeholder="如 128000"
             onChange={(e) =>
               setCfgDraft((d) =>
-                d ? { ...d, contextLength: e.target.value } : null
+                d ? { ...d, contextWindow: e.target.value } : null
               )
             }
           />
@@ -88,16 +88,11 @@ export const ModelConfigPanel: React.FC<{
         </label>
       </div>
 
-      {/* ── 2. 多模态矩阵 (Modalities - 一等公民) ── */}
+      {/* ── 2. 多模态矩阵 (Modalities - 一等公民，能力唯一真源) ── */}
       <ModelModalitiesEditor
         modalities={modalities}
         onChange={(next) =>
           setCfgDraft((d) => (d ? { ...d, modalities: next } : null))
-        }
-        onSyncCaps={(capsPatch) =>
-          setCfgDraft((d) =>
-            d ? { ...d, caps: { ...d.caps, ...capsPatch } } : null
-          )
         }
       />
 
@@ -107,13 +102,7 @@ export const ModelConfigPanel: React.FC<{
           enabled={cfgDraft.thinkingEnabled}
           onEnabledChange={(en) =>
             setCfgDraft((d) =>
-              d
-                ? {
-                    ...d,
-                    thinkingEnabled: en,
-                    caps: { ...d.caps, reasoning: en },
-                  }
-                : null
+              d ? { ...d, thinkingEnabled: en } : null
             )
           }
           thinkingMap={cfgDraft.thinkingMap || STANDARD_THINKING_PRESET}

@@ -293,12 +293,18 @@ export function flattenModelChoicesFrom(
 /**
  * 纯函数：从给定 profiles + 选择提示安全挑选默认模型。
  *
- * 优先级（与 resolvePreferred 一致，勿倒退）：
- * 1. stored_active
- * 2. stored_model_match
- * 3. active_profile_first
- * 4. engine_match（仅当 model 已在本地列表）
- * 5–6. first_available（先有密钥，再任一有模型）
+ * 模型身份 = (providerId, modelId) 复合键（总方案 §2.2 / INV-1）：
+ * 解析必须由 storedProfileId 限定供应商，**禁止只按 modelId 跨供应商匹配**。
+ *
+ * 优先级（全部带 providerId，勿倒退）：
+ * 1. storedProfileId + storedModel 且该 provider 的 models 含该 model → 采纳（stored_active）
+ * 2. storedProfileId（无 storedModel 或不在列表）→ 该 provider 首个模型 → 采纳（active_profile_first）
+ * 3. 无 storedProfileId → 返回 null —— **不跨厂商回落**（U1 裁决）：
+ *    活动选择失效（供应商关闭/删除、模型停用/删除）时置空，交由 UI 引导用户重选；
+ *    绝不自动匹配同名字段、绝不自动选「第一个可用」。
+ *
+ * `opts.engineModel` 已不用于定位：引擎回报的 model 不带 provider 信息，无法构成
+ * 复合身份（plans/01 §5.1）；入参保留仅为兼容既有调用方，调用方清理由主控裁决。
  *
  * **空 catalog 守卫**：无可用模型时返回 null，绝不发明 mimo 等演示 id。
  * 无 LS / 无 profiles-changed 副作用。
@@ -336,13 +342,12 @@ export function pickDefaultModelSelection(
 
   const storedProfileId = (opts?.storedProfileId || '').trim();
   const storedModel = (opts?.storedModel || '').trim();
-  const engineModel = (opts?.engineModel || '').trim();
   const requireInList = opts?.requireInList === true;
 
   const byId = (id: string | null | undefined) =>
     (id ? normalized.find((p) => p.id === id) : undefined) || null;
 
-  // 1) 本机已选 profile + model
+  // 1) 本机已选 profile + model（已由 providerId 限定，非跨厂商）
   if (storedProfileId && storedModel) {
     const p = byId(storedProfileId);
     if (p) {
@@ -355,19 +360,7 @@ export function pickDefaultModelSelection(
     }
   }
 
-  // 2) 仅有 model id：在任一列表中定位
-  if (storedModel) {
-    const p = normalized.find((x) => x.models.includes(storedModel));
-    if (p) {
-      return {
-        profileId: p.id,
-        model: storedModel,
-        source: 'stored_model_match',
-      };
-    }
-  }
-
-  // 3) 活动 profile 首个模型
+  // 2) 仅有 profile id：取该 provider 首个模型（同 provider 内，不跨厂商）
   if (storedProfileId) {
     const p = byId(storedProfileId);
     const m = p?.models[0];
@@ -376,34 +369,7 @@ export function pickDefaultModelSelection(
     }
   }
 
-  // 4) 引擎回报的 model **仅当** 已在某用户列表中（拒绝未知演示 id）
-  if (engineModel) {
-    const p = normalized.find((x) => x.models.includes(engineModel));
-    if (p) {
-      return { profileId: p.id, model: engineModel, source: 'engine_match' };
-    }
-  }
-
-  // 5) 已配密钥且有模型
-  const keyed = normalized.find((p) => profileHasKey(p) && p.models.length > 0);
-  if (keyed) {
-    return {
-      profileId: keyed.id,
-      model: keyed.models[0]!,
-      source: 'first_available',
-    };
-  }
-
-  // 6) 任一有模型的 profile
-  const withModels = normalized.find((p) => p.models.length > 0);
-  if (withModels) {
-    return {
-      profileId: withModels.id,
-      model: withModels.models[0]!,
-      source: 'first_available',
-    };
-  }
-
+  // 3) 无 providerId → 置空（U1）：不跨厂商回落、不自动选「第一个可用」
   return null;
 }
 

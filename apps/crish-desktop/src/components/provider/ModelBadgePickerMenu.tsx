@@ -15,6 +15,7 @@ import {
   resolveThinkingHandoff,
 } from '../../api/modelsCatalogLive';
 import { useModelsCatalogVersion } from '../../hooks/useModelsCatalogVersion';
+import { modelsCatalogStore } from '../../api/modelsCatalogStore';
 import { openSettings } from '../../api/storeAccess';
 import { Menu, Tooltip } from '../ui';
 import { getActiveProfileId } from '../../api/provider-profiles/profileActiveSelection';
@@ -60,13 +61,13 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
   const providerId = getActiveProfileId() ?? '';
   const modelId = activeModel || '';
 
-  // 只列「可用」供应商：yaml 带 apiKey 或凭据壳带 key（未配置的预置壳不占列表，
+  // 只列「可用」供应商：镜像凭据状态带 key 或凭据壳带 key（未配置的预置壳不占列表，
   // 避免选择器出现从未配置过的供应商导致切换 profile_not_found）
   const entries = useMemo(
     () =>
       listLivePickerEntries().filter((e) => {
-        const yamlKey = e.provider.apiKey;
-        if (yamlKey && yamlKey.trim()) return true;
+        if (modelsCatalogStore.getState().credentialStates[e.providerId]?.hasKey)
+          return true;
         return profileHasConfiguredKey(e.providerId);
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -94,10 +95,22 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
     providerId,
     modelId,
   );
-  const handoff = useMemo(
-    () => resolveThinkingHandoff(providerId, modelId, selectedTitle),
-    [providerId, modelId, selectedTitle, catalogVersion],
-  );
+  const handoff = useMemo(() => {
+    try {
+      return resolveThinkingHandoff(providerId, modelId, selectedTitle);
+    } catch {
+      // 用户存档档位不被当前模型声明 → 视为未选（引导重选，不降级、不出站），
+      // 存档本身不被解析结果反向覆写。
+      return {
+        supported: false,
+        providerId,
+        modelId,
+        thinking: undefined,
+        selectedTitle: null,
+        selectedWire: null,
+      };
+    }
+  }, [providerId, modelId, selectedTitle, catalogVersion]);
 
   const showThinking = thinkingOptions.length > 0 && Boolean(selectedSpec);
 
@@ -111,7 +124,8 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
 
   const handleSelectModel = useCallback(
     async (profileId: string, nextModelId: string) => {
-      // 跨模型切换时：优先加载目标模型专属偏好；若无则平移继承用户当前选中的档位
+      // 跨模型切换时：优先加载目标模型专属偏好；若无则平移继承用户当前选中的档位。
+      // 目标模型未声明该档位 → 视为未选（不持久化、不降级），由 UI 引导重选。
       const targetTitle = resolveEffectiveThinkingTitle(
         sessionId,
         profileId,
@@ -122,14 +136,14 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
         nextModelId,
         targetTitle,
       );
-      if (nextHandoff.supported) {
+      if (nextHandoff.supported && nextHandoff.selectedTitle != null) {
         persistThinkingSelection(
           sessionId,
           profileId,
           nextModelId,
           nextHandoff.selectedTitle,
         );
-      } else {
+      } else if (!nextHandoff.supported) {
         setSessionThinkingTitle(sessionId, null);
       }
 
@@ -163,9 +177,10 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
     onClose();
   }, [onOpenChange, onClose]);
 
-  const currentThinkingDisplay = handoff.supported
-    ? handoff.selectedTitle
-    : '';
+  // 生效档位：命中当前模型 thinking 声明才显示；未选 / 未命中 → 引导重选（不降级）。
+  const currentThinkingDisplay = handoff.selectedTitle ?? '';
+  const thinkingDisplayText =
+    currentThinkingDisplay || '请选择思考档位';
 
   if (!open) return null;
 
@@ -267,8 +282,11 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
                   <div className={styles.thinkingSection}>
                     <div className={styles.thinkingHeader}>
                       <span className={styles.thinkingTitle}>思考强度</span>
-                      <span className={styles.thinkingValue}>
-                        {currentThinkingDisplay}
+                      <span
+                        className={styles.thinkingValue}
+                        data-testid="thinking-value"
+                      >
+                        {thinkingDisplayText}
                       </span>
                     </div>
                     <div className={styles.thinkingTrack}>
@@ -281,10 +299,11 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
                             key={o.title}
                             type="button"
                             data-testid={`thinking-option-${o.title}`}
+                            data-active={isActive ? 'true' : 'false'}
                             className={`${styles.thinkingPill} ${isActive ? styles.activePill : ''}`}
                             onClick={() => handleSelectThinking(o.title)}
                           >
-                            {o.title}
+                            {o.label}
                           </button>
                         );
                       })}

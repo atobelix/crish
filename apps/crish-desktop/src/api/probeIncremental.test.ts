@@ -22,7 +22,7 @@ describe('probeIncremental 纯增量探测套件', () => {
         contextWindow: 2_000_000, // 手动扩容
         maxOutputTokens: 500_000,
         thinking: {
-          CustomLevel: 'custom_wire',
+          XHigh: 'custom_wire',
         },
         pricing: {
           currency: 'CNY',
@@ -68,7 +68,7 @@ describe('probeIncremental 纯增量探测套件', () => {
     expect(existing.contextWindow).toBe(2_000_000);
     expect(existing.pricing?.input).toBe(0.88);
     expect(existing.pricing?.cacheRead).toBe(0.05);
-    expect(existing.thinking?.['CustomLevel']).toBe('custom_wire');
+    expect(existing.thinking?.['XHigh']).toBe('custom_wire');
 
     // 官方模型自动调用 findAutofillModel 智能补齐真实大模型元数据
     const proModel = updatedProvider.models[1];
@@ -89,17 +89,28 @@ describe('probeIncremental 纯增量探测套件', () => {
     const providers = {
       deepseek: { ...sampleProvider, models: [...sampleProvider.models] },
     };
+    const CATALOG_PATH = 'C:\\Users\\tester\\.conex\\models.yaml';
     mockTauriCommand('workbench_read_models_yaml', () => ({
-      path: 'C:\\Users\\tester\\.conex\\models.yaml',
+      path: CATALOG_PATH,
+      revision: 'revision-0',
       content: '',
       template: '',
-      seeded: false,
+      credentialStates: {},
       parseError: null,
-      providers,
+      tree: { version: 2, activeModel: null, providers },
     }));
-    mockTauriCommand('workbench_save_models_yaml', () => ({
-      path: 'C:\\Users\\tester\\.conex\\models.yaml',
-    }));
+    mockTauriCommand('workbench_apply_models_config', (args) => {
+      const { tree } = args as { tree: unknown };
+      return {
+        path: CATALOG_PATH,
+        revision: 'revision-1',
+        content: '',
+        template: '',
+        credentialStates: {},
+        parseError: null,
+        tree,
+      };
+    });
     const loaded = await modelsCatalogStore.ensureLoaded(true);
     expect(loaded).toBe(true);
 

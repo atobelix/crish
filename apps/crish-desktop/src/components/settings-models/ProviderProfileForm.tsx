@@ -19,6 +19,7 @@ import {
 } from './catalogWriteGate';
 import styles from './ModelsSettingsTab.module.css';
 import { AppIcon } from '../ui/icons/index';
+import { DEFAULT_PROTOCOL } from '../../api/modelsNormalize';
 
 /** 凭据区：厂商名称/Base URL/API Key/协议。配置完成后支持优雅人机工程折叠。 */
 export const ProviderProfileForm: React.FC<{
@@ -46,7 +47,7 @@ export const ProviderProfileForm: React.FC<{
   const storeProvider = selectProvider(selected.id);
   const storeBaseUrl = storeProvider?.baseUrl ?? '';
   const protocolValue =
-    toYamlProtocol(storeProvider?.protocol) ?? 'openai/chat';
+    toYamlProtocol(storeProvider?.protocol) ?? DEFAULT_PROTOCOL;
   const [baseUrlDraft, setBaseUrlDraft] = useState(storeBaseUrl);
   const [vendorNameDraft, setVendorNameDraft] = useState(selected.name || '');
 

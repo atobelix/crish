@@ -97,7 +97,7 @@ const CATALOG_PROVIDERS: Record<string, ProviderSpec> = {
         id: 'gpt-4o',
         displayName: 'GPT-4o',
         contextWindow: 128000,
-        capabilities: { tools: true },
+        supportsTools: true,
         thinking: { Low: 'low' },
         modalities: { input: ['text'], output: ['text'] },
       },
@@ -125,9 +125,9 @@ const CATALOG_PROVIDERS: Record<string, ProviderSpec> = {
 
 function lastSavedYaml(saveImpl: ReturnType<typeof vi.fn>): string {
   const last = saveImpl.mock.calls[saveImpl.mock.calls.length - 1]?.[0] as
-    | { content?: string }
+    | { tree?: unknown }
     | undefined;
-  return last?.content ?? '';
+  return JSON.stringify(last?.tree ?? null);
 }
 
 describe('useModelProfilesState', () => {
@@ -146,12 +146,24 @@ describe('useModelProfilesState', () => {
       path: CATALOG_PATH,
       content: '',
       template: '',
-      seeded: false,
+      revision: 'revision-0',
+      credentialStates: {},
       parseError: null,
-      providers: structuredClone(CATALOG_PROVIDERS),
+      tree: { version: 2, activeModel: null, providers: structuredClone(CATALOG_PROVIDERS) },
     }));
-    saveImpl = vi.fn((_args: unknown) => ({ path: CATALOG_PATH }));
-    mockTauriCommand('workbench_save_models_yaml', saveImpl);
+    saveImpl = vi.fn((args: unknown) => {
+      const { tree } = args as { tree: unknown };
+      return {
+        path: CATALOG_PATH,
+        revision: 'revision-1',
+        content: '',
+        template: '',
+        credentialStates: {},
+        parseError: null,
+        tree,
+      };
+    });
+    mockTauriCommand('workbench_apply_models_config', saveImpl);
     await modelsCatalogStore.ensureLoaded(true);
   });
 
@@ -341,7 +353,7 @@ describe('useModelProfilesState', () => {
     });
 
     await waitFor(() => {
-      expect(lastSavedYaml(saveImpl)).toContain('cacheRead:');
+      expect(lastSavedYaml(saveImpl)).toContain('"cacheRead":');
     });
 
     const doc = parseYaml(lastSavedYaml(saveImpl)) as {

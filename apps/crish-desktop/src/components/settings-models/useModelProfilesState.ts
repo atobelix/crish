@@ -33,6 +33,7 @@ import {
   addDraftToModelInput,
   ensureProviderShell,
 } from './catalogWriteGate';
+import { DEFAULT_PROTOCOL, thinkingVocabularyDiagnostic } from '../../api/modelsNormalize';
 
 export type AddDraft = AddModelDraft;
 export type CfgDraft = ConfigDraft;
@@ -235,7 +236,6 @@ export function useModelProfilesState() {
     setConfigOpenId,
     setCfgDraft,
     setManualOpen,
-    refresh,
     notify,
     runAsLocalMutation,
   });
@@ -291,7 +291,7 @@ export function useModelProfilesState() {
           ...(params.baseUrl?.trim() ? { baseUrl: params.baseUrl.trim() } : {}),
           models: [],
           protocol:
-            (params.protocol as ProviderProfile['protocol']) || 'openai/chat',
+            (params.protocol as ProviderProfile['protocol']) || DEFAULT_PROTOCOL,
         });
         refresh();
         setSelectedIdState(p.id);
@@ -301,7 +301,7 @@ export function useModelProfilesState() {
           providerId: p.id,
           displayName: p.name,
           baseUrl: p.baseUrl,
-          protocol: p.protocol ?? 'openai/chat',
+          protocol: p.protocol ?? DEFAULT_PROTOCOL,
         });
         if (!shell.ok) notify(false, shell.error || '写入服务商失败');
 
@@ -329,6 +329,14 @@ export function useModelProfilesState() {
       return;
     }
     const snap = { ...addDraft };
+    // 词表外键显式诊断（第一防线，plans/09 §4.1）：落盘前校验 thinking 键，阻止透传。
+    if (snap.thinkingEnabled === true) {
+      const diag = thinkingVocabularyDiagnostic(snap.thinkingMap);
+      if (diag) {
+        notify(false, diag);
+        return;
+      }
+    }
     void runAsLocalMutation(async () => {
       const shell = await ensureProviderShell({
         providerId: selected.id,

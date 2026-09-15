@@ -38,7 +38,10 @@ describe('commandManifest', () => {
       // 与 Rust COMMAND_MANIFEST（126 = 注册面 126 全实装）保持同步；
       // 变更 Rust 侧时同步本快照，双向条数由两端测试锁定
       // PE-07：T07.3（git_run/fs_delete_file）+ T07.4（profile_apply/secret_reveal）已接线
-      // P3 步骤 5（C7 ③）：catalog_get / catalog_refresh 已接线
+      // P3 步骤 5（C7 ③）：catalog_get / catalog_refresh 曾接线；**单轨收敛
+      //   已退役**（`command_manifest.rs:326`；`catalog_commands.rs` 物理删除）
+      //   ——与本文件下方「幽灵命令排除」断言一致；前端残留调用面（恒 MISSING）
+      //   由 command-contract-drift.test.ts 断言一守（当前红，待 04 阶段 3 修）
       // F3（T-AB-19）：workbench_send_input 已接线
       // F9（T-CF-14）：workflow 六条 kebab 接线；I2-S5：trash 三条接线
       // R13（27 方案 S6）：browser_start / browser_stop / browser_status 已接线；
@@ -79,8 +82,11 @@ describe('commandManifest', () => {
       // 用户账号与云端设备管理面七命令追加（135 → 142）
       // 偏好持久化面三命令追加（142 → 145，prefs_get / prefs_set / prefs_delete）
       // 首绘就绪握手命令追加（145 → 146，workbench_window_ready）
-      expect(registered).toBe(146);
-      expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(146);
+      const rust = rustManifestOnce();
+      expect(registered).toBe(rust.registered.length);
+      expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(
+        rust.registered.length + rust.pending.length
+      );
     });
 
     it('命令名唯一', () => {
@@ -93,7 +99,7 @@ describe('commandManifest', () => {
         BUILTIN_COMMAND_MANIFEST.commands.map((c) => [c.name, c])
       );
       for (const name of [
-        'config_profile_apply',
+        'workbench_apply_models_config',
         'config_secret_reveal',
         'workbench_git_run',
       ]) {
@@ -116,7 +122,15 @@ describe('commandManifest', () => {
           .map((c) => c.name)
       );
       // 幽灵 WS type 对应的命令名不得出现在 registered 面
-      for (const ws of ['git-status', 'git-diff']) {
+      for (const ws of [
+        'git-status',
+        'git-diff',
+        'config_get',
+        'config_update',
+        'config_profile_apply',
+        'catalog_get',
+        'catalog_refresh',
+      ]) {
         expect(registered.has(ws)).toBe(false);
       }
     });
@@ -128,7 +142,7 @@ describe('commandManifest', () => {
       expect(isRegisteredCommand('core_list_commands')).toBe(true);
       // PE-07 T07.3：git_run 已接线；T07.4：profile_apply / secret_reveal 已接线
       expect(isRegisteredCommand('workbench_git_run')).toBe(true);
-      expect(isRegisteredCommand('config_profile_apply')).toBe(true);
+      expect(isRegisteredCommand('workbench_apply_models_config')).toBe(true);
       expect(isRegisteredCommand('config_secret_reveal')).toBe(true);
       // R1-09（G-4）：网络环境检测已接线
       expect(isRegisteredCommand('multi_device_network_info')).toBe(true);
@@ -299,8 +313,10 @@ describe('commandManifest', () => {
     it('断言二式：双端总数一致（总数一致 + 一式子集 ⇒ registered 全等）', () => {
       const rust = rustManifestOnce();
       const total = rust.registered.length + rust.pending.length;
-      expect(total).toBe(146);
-      expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(146);
+      expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(total);
+      expect(
+        BUILTIN_COMMAND_MANIFEST.commands.map((item) => item.name).sort()
+      ).toEqual([...rust.registered, ...rust.pending].sort());
     });
 
     it('断言三式：登记先行（registered=false）名集合双向一致', () => {

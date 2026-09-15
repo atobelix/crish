@@ -22,9 +22,9 @@ const CATALOG_PATH = 'C:\\Users\\tester\\.conex\\models.yaml';
 
 function lastSavedYaml(saveImpl: ReturnType<typeof vi.fn>): string {
   const last = saveImpl.mock.calls[saveImpl.mock.calls.length - 1]?.[0] as
-    | { content?: string }
+    | { tree?: unknown }
     | undefined;
-  return last?.content ?? '';
+  return JSON.stringify(last?.tree ?? null);
 }
 
 describe('ModelList 启用开关写 yaml', () => {
@@ -41,9 +41,13 @@ describe('ModelList 启用开关写 yaml', () => {
       path: CATALOG_PATH,
       content: '',
       template: '',
-      seeded: false,
+      revision: 'revision-0',
+      credentialStates: {},
       parseError: null,
-      providers: {
+      tree: {
+        version: 2,
+        activeModel: null,
+        providers: {
         acme: {
           displayName: 'Acme',
           baseUrl: 'https://example.invalid/v1',
@@ -57,10 +61,22 @@ describe('ModelList 启用开关写 yaml', () => {
             },
           ],
         },
+        },
       },
     }));
-    saveImpl = vi.fn((_args: unknown) => ({ path: CATALOG_PATH }));
-    mockTauriCommand('workbench_save_models_yaml', saveImpl);
+    saveImpl = vi.fn((args: unknown) => {
+      const { tree } = args as { tree: unknown };
+      return {
+        path: CATALOG_PATH,
+        revision: 'revision-1',
+        content: '',
+        template: '',
+        credentialStates: {},
+        parseError: null,
+        tree,
+      };
+    });
+    mockTauriCommand('workbench_apply_models_config', saveImpl);
     await modelsCatalogStore.ensureLoaded(true);
   });
 
@@ -90,7 +106,7 @@ describe('ModelList 启用开关写 yaml', () => {
     fireEvent.click(screen.getByRole('switch', { name: '停用模型' }));
 
     await waitFor(() => {
-      expect(lastSavedYaml(saveImpl)).toMatch(/enabled:\s*false/);
+      expect(lastSavedYaml(saveImpl)).toMatch(/enabled\":\s*false/);
     });
 
     const doc = parseYaml(lastSavedYaml(saveImpl)) as {

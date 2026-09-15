@@ -1,257 +1,153 @@
-/**
- * useModelConfigSession：模型配置编辑会话子 hook（从 useModelProfilesState 拆出）。
- *
- * 职责：openConfigFor / closeConfig / saveConfig——围绕 cfgDraft 的打开、关闭、
- * 保存。打开草稿读 selectModel；保存按 yaml 写核正序 await updateModel（无 LS、无 debounce）。
- */
-import { useRef, useCallback } from 'react';
+/** 模型编辑只从确认镜像打开，以完整修订提交；目标消失时拒绝保存。 */
+import { useCallback, useEffect, useRef } from 'react';
 import { editSessionConsumer } from '../../api/chat-bridge/editSessionConsumer';
-import { type ConfigDraft } from './modelsIpcHelpers';
-import { type ProviderProfile } from '../../api/providerProfiles';
-import { settingsObjectId } from './modelProfilesHelpers';
-import {
-  modelsCatalogStore,
-  selectModel,
-  selectProvider,
-} from '../../api/modelsCatalogStore';
-import type { ModelSpec } from '../../api/modelsCatalogTypes';
+import { modelRefKey, normalizeModelRef } from '../../api/modelsCatalogTypes';
+import { modelsCatalogStore, selectModel } from '../../api/modelsCatalogStore';
 import {
   draftToModelPatch,
-  modelToConfigDraft,
   modelSpecRevision,
-  type ModelConfigDraft,
+  modelToConfigDraft,
 } from '../../api/modelsDraftMap';
-import { normalizeProtocol } from '../../api/modelsNormalize';
-import {
-  ensureLsImported,
-  LS_IMPORT_FLAG_KEY,
-  LS_IMPORT_FLAG_VERSION,
-} from '../../api/modelsLsImport';
+import type { ConfigDraft } from './modelsIpcHelpers';
 
 export interface ModelConfigSessionArgs {
-  selected: ProviderProfile | null;
+  selected: { id: string } | null;
   configOpenId: string | null;
   cfgDraft: ConfigDraft | null;
   setConfigOpenId: (id: string | null) => void;
   setCfgDraft: (draft: ConfigDraft | null) => void;
   setManualOpen: (open: boolean) => void;
-  refresh: () => void;
-  notify: (ok: boolean, msg: string) => void;
+  notify: (ok: boolean, message: string) => void;
   runAsLocalMutation: <T>(fn: () => Promise<T> | T) => Promise<T>;
 }
 
-function loadErrorMessage(fallback: string): string {
-  const msg = modelsCatalogStore.getState().lastError?.message;
-  return msg && msg.trim() ? msg : fallback;
-}
+export function useModelConfigSession({
+  selected,
+  configOpenId,
+  cfgDraft,
+  setConfigOpenId,
+  setCfgDraft,
+  setManualOpen,
+  notify,
+  runAsLocalMutation,
+}: ModelConfigSessionArgs) {
+  const editBase = useRef(
+    new Map<string, { modelRevision: string; fileRevision: string }>()
+  );
+  const currentObject = useRef<string | null>(null);
+  const openRequest = useRef(0);
+  const currentDraft = useRef(cfgDraft);
+  currentDraft.current = cfgDraft;
 
-function writeErrorMessage(
-  res: { ok: boolean; error?: string },
-  fallback: string
-): string {
-  return res.error && res.error.trim() ? res.error : fallback;
-}
-
-/** 缺节点只带 id，不猜测 contextWindow / modalities。 */
-function specOrId(providerId: string, modelId: string): ModelSpec {
-  return selectModel(providerId, modelId) ?? { id: modelId };
-}
-
-/** 完成标记已在则可同步打开，避免 await 回填覆盖已编辑草稿。 */
-function isLsImportDone(): boolean {
-  if (typeof localStorage === 'undefined') return false;
-  try {
-    const raw = localStorage.getItem(LS_IMPORT_FLAG_KEY);
-    if (!raw) return false;
-    const parsed: unknown = JSON.parse(raw);
-    if (parsed == null || typeof parsed !== 'object') return false;
-    const rec = parsed as { done?: unknown; version?: unknown };
-    return rec.done === true && rec.version === LS_IMPORT_FLAG_VERSION;
-  } catch {
-    return false;
-  }
-}
-
-function toCfgDraft(d: ModelConfigDraft): ConfigDraft {
-  const out: ConfigDraft = {
-    displayName: d.displayName ?? '',
-    contextLength: d.contextLength ?? '',
-    caps: {
-      tools: Boolean(d.caps?.tools),
-      image: Boolean(d.caps?.image),
-      video: Boolean(d.caps?.video),
-      reasoning: Boolean(d.caps?.reasoning),
+  useEffect(
+    () => () => {
+      openRequest.current += 1;
+      if (currentObject.current)
+        editSessionConsumer.invalidate(currentObject.current, 'external');
+      currentObject.current = null;
     },
-  };
-  if (d.maxOutputTokens !== undefined) out.maxOutputTokens = d.maxOutputTokens;
-  if (d.thinkingLevel !== undefined) out.thinkingLevel = d.thinkingLevel;
-  const protocol = normalizeProtocol(d.protocol);
-  if (protocol) out.protocol = protocol;
-  if (d.modalities) out.modalities = d.modalities;
-  if (d.thinkingEnabled !== undefined) out.thinkingEnabled = d.thinkingEnabled;
-  if (d.thinkingMap) out.thinkingMap = d.thinkingMap;
-  if (d.pricing) out.pricing = d.pricing;
-  return out;
-}
-
-export function useModelConfigSession(args: ModelConfigSessionArgs) {
-  const {
-    selected,
-    configOpenId,
-    cfgDraft,
-    setConfigOpenId,
-    setCfgDraft,
-    setManualOpen,
-    notify,
-    runAsLocalMutation,
-  } = args;
-
-  // CT-01 本地 rev 记账：objectId → 打开时 modelSpecRevision(selectModel)
-  const cfgRevRef = useRef<Map<string, string>>(new Map());
+    [selected?.id]
+  );
 
   const openConfigFor = useCallback(
-    async (model: string) => {
+    async (modelId: string) => {
       if (!selected) return;
-      const providerId = selected.id.trim().toLowerCase();
-      const modelId = model;
-
-      const fillFromStore = () => {
-        const spec = specOrId(providerId, modelId);
-        const provider = selectProvider(providerId);
-        const objectId = settingsObjectId(selected.id, modelId);
-        cfgRevRef.current.set(objectId, modelSpecRevision(spec));
-        editSessionConsumer.open(objectId);
-        setManualOpen(false);
-        setConfigOpenId(modelId);
-        setCfgDraft(toCfgDraft(modelToConfigDraft(spec, provider)));
-      };
-
-      // 导入已完成且 store 已加载：同步填草稿（禁止回落 getModelMeta）
-      if (isLsImportDone() && modelsCatalogStore.getState().loaded) {
-        fillFromStore();
-        return;
-      }
-
+      const request = ++openRequest.current;
       try {
-        const imported = await ensureLsImported();
-        const loaded = await modelsCatalogStore.ensureLoaded();
-        if (!loaded) {
-          notify(
-            false,
-            !imported.ok
-              ? writeErrorMessage(imported, '模型目录尚未加载，无法打开配置')
-              : loadErrorMessage('模型目录尚未加载，无法打开配置')
-          );
-          return;
+        const ref = normalizeModelRef({ providerId: selected.id, modelId });
+        if (!modelsCatalogStore.getState().loaded) {
+          const loaded = await modelsCatalogStore.ensureLoaded();
+          if (!loaded)
+            throw new Error(
+              modelsCatalogStore.getState().lastError?.message ||
+                '模型目录尚未加载'
+            );
         }
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        notify(false, msg.trim() || '模型目录尚未加载，无法打开配置');
-        return;
+        if (request !== openRequest.current) return;
+        const model = selectModel(ref.providerId, ref.modelId);
+        if (!model) throw new Error('模型已不存在，请重新选择');
+        const key = modelRefKey(ref);
+        if (currentObject.current && currentObject.current !== key) {
+          editSessionConsumer.invalidate(currentObject.current, 'external');
+          editBase.current.delete(currentObject.current);
+        }
+        currentObject.current = key;
+        editBase.current.set(key, {
+          modelRevision: modelSpecRevision(model),
+          fileRevision: modelsCatalogStore.getState().revision,
+        });
+        editSessionConsumer.open(key);
+        setManualOpen(false);
+        setConfigOpenId(ref.modelId);
+        setCfgDraft(modelToConfigDraft(model));
+      } catch (error) {
+        if (request === openRequest.current)
+          notify(false, error instanceof Error ? error.message : String(error));
       }
-
-      fillFromStore();
     },
-    [selected, setManualOpen, setConfigOpenId, setCfgDraft, notify]
+    [selected, notify, setManualOpen, setConfigOpenId, setCfgDraft]
   );
 
   const closeConfig = useCallback(() => {
-    if (selected && configOpenId) {
-      const objectId = settingsObjectId(selected.id, configOpenId);
-      editSessionConsumer.invalidate(objectId, 'external');
-      cfgRevRef.current.delete(objectId);
+    openRequest.current += 1;
+    if (currentObject.current) {
+      editSessionConsumer.invalidate(currentObject.current, 'external');
+      editBase.current.delete(currentObject.current);
     }
+    currentObject.current = null;
     setConfigOpenId(null);
     setCfgDraft(null);
-  }, [selected, configOpenId, setConfigOpenId, setCfgDraft]);
+  }, [setConfigOpenId, setCfgDraft]);
 
   const saveConfig = useCallback(async () => {
     if (!selected || !configOpenId || !cfgDraft) return;
-    const objectId = settingsObjectId(selected.id, configOpenId);
-    const draft = cfgDraft;
-
-    await runAsLocalMutation(async () => {
-      try {
-        const imported = await ensureLsImported();
-        if (!imported.ok) {
-          notify(false, writeErrorMessage(imported, '本地配置导入未完成，拒绝保存'));
-          return;
-        }
-
-        const loaded = await modelsCatalogStore.ensureLoaded();
-        if (!loaded) {
-          notify(false, loadErrorMessage('模型目录尚未加载，拒绝保存'));
-          return;
-        }
-
-        const providerId = selected.id.trim().toLowerCase();
-        const modelId = configOpenId;
-
-        if (!selectProvider(providerId)) {
-          const addProv = await modelsCatalogStore.addProvider(providerId, {
-            displayName: selected.name,
-            baseUrl: selected.baseUrl,
-            protocol: normalizeProtocol(selected.protocol) ?? 'openai/chat',
-            models: [],
-          });
-          if (!addProv.ok) {
-            notify(false, writeErrorMessage(addProv, '创建供应商失败'));
-            return;
-          }
-        }
-
-        // 手填未落盘残态：无节点则 addModel，不得静默 no-op
-        const modelExisted = Boolean(selectModel(providerId, modelId));
-        if (!modelExisted) {
-          const addMod = await modelsCatalogStore.addModel(providerId, {
-            id: modelId,
-          });
-          if (!addMod.ok) {
-            notify(false, writeErrorMessage(addMod, '创建模型失败'));
-            return;
-          }
-        }
-
-        const currentSpec = specOrId(providerId, modelId);
-        const expectRev = cfgRevRef.current.get(objectId);
-        const currentRev = modelSpecRevision(currentSpec);
-        // 刚 addModel 的残态无打开时节点，跳过与自身写入的签名比对
-        if (
-          modelExisted &&
-          expectRev !== undefined &&
-          expectRev !== currentRev
-        ) {
-          notify(false, '配置已被外部修改，保存已取消，请重新确认');
-          editSessionConsumer.invalidate(objectId, 'external');
-          return;
-        }
-
-        const patch = draftToModelPatch(draft);
-        const res = await modelsCatalogStore.updateModel(
-          providerId,
-          modelId,
-          patch
-        );
-        if (!res.ok) {
-          notify(false, writeErrorMessage(res, '保存失败'));
-          return;
-        }
-
-        editSessionConsumer.commit(objectId);
-        cfgRevRef.current.delete(objectId);
-        await openConfigFor(configOpenId);
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        notify(false, msg.trim() || '保存失败');
-      }
+    const ref = normalizeModelRef({
+      providerId: selected.id,
+      modelId: configOpenId,
     });
+    const key = modelRefKey(ref);
+    const draft = cfgDraft;
+    const base = editBase.current.get(key);
+    try {
+      if (!base || currentObject.current !== key)
+        throw new Error('编辑会话已失效，请重新打开模型');
+      const model = selectModel(ref.providerId, ref.modelId);
+      if (!model) throw new Error('模型已不存在，保存已取消');
+      if (base.modelRevision !== modelSpecRevision(model)) {
+        editSessionConsumer.invalidate(key, 'external');
+        throw new Error('配置已被外部修改，保存已取消，请重新确认');
+      }
+      const patch = draftToModelPatch(draft);
+      await runAsLocalMutation(async () => {
+        const result = await modelsCatalogStore.updateModel(
+          ref.providerId,
+          ref.modelId,
+          patch,
+          base.fileRevision
+        );
+        if (!result.ok) throw new Error(result.error);
+        editSessionConsumer.commit(key);
+        if (currentObject.current !== key) return;
+        const accepted = selectModel(ref.providerId, ref.modelId);
+        if (!accepted) throw new Error('保存回执缺少目标模型，请重新加载配置');
+        editBase.current.set(key, {
+          modelRevision: modelSpecRevision(accepted),
+          fileRevision: modelsCatalogStore.getState().revision,
+        });
+        // 保存期间用户新输入的内容保留，不能被这次回执覆盖。
+        if (currentDraft.current === draft)
+          setCfgDraft(modelToConfigDraft(accepted));
+      });
+    } catch (error) {
+      notify(false, error instanceof Error ? error.message : String(error));
+    }
   }, [
     selected,
     configOpenId,
     cfgDraft,
     notify,
     runAsLocalMutation,
-    openConfigFor,
+    setCfgDraft,
   ]);
 
   return { openConfigFor, closeConfig, saveConfig };

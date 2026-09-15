@@ -225,7 +225,7 @@ describe('providerProfiles', () => {
     expect(resolveDisplayModelId('mimo-v2.5')).toBe('');
   });
 
-  it('adopts engine model only when listed on a profile', () => {
+  it('does not adopt engine model without a stored provider selection', () => {
     saveProfiles([
       {
         id: 'flowbit',
@@ -243,11 +243,11 @@ describe('providerProfiles', () => {
       /* ignore */
     }
 
+    // U1：引擎回报的 model 不带 provider 信息，不用于定位 → 置空
     const resolved = resolvePreferredModelSelection({
       engineModel: 'mimo-v2.5',
     });
-    expect(resolved?.model).toBe('mimo-v2.5');
-    expect(resolved?.source).toBe('engine_match');
+    expect(resolved).toBeNull();
   });
 
   it('flattenModelChoices only returns real profile models', () => {
@@ -326,7 +326,7 @@ describe('providerProfiles', () => {
     expect(loadProfiles()![0]!.models).toEqual(['a', 'b']);
   });
 
-  it('falls back to first keyed profile model when active is empty', async () => {
+  it('returns null when active selection is empty (no auto-pick of keyed model)', async () => {
     saveProfiles([
       {
         id: 'empty',
@@ -352,10 +352,8 @@ describe('providerProfiles', () => {
       /* ignore */
     }
 
-    const r = resolvePreferredModelSelection();
-    expect(r?.profileId).toBe('keyed');
-    expect(r?.model).toBe('real-1');
-    expect(r?.source).toBe('first_available');
+    // U1：无活动选择 → 置空，不自动选「第一个可用」
+    expect(resolvePreferredModelSelection()).toBeNull();
   });
 
   it('getProviderSetupStatus: fresh install needs key, hides picker', () => {
@@ -743,7 +741,7 @@ describe('providerProfiles', () => {
     expect(resolvePreferredModelSelection()).toBeNull();
   });
 
-  it('resolve priority: stored_active beats engine_match and first_available', () => {
+  it('resolve priority: stored_active wins over engine hint (no cross-provider fallback)', () => {
     saveProfiles([
       {
         id: 'a',
@@ -980,15 +978,12 @@ describe('providerProfiles', () => {
         })?.source
       ).toBe('stored_active');
 
+      // 无 providerId 的裸 modelId → 不跨厂商回落（U1 裁决）
       expect(
         pickDefaultModelSelection(profiles, {
           storedModel: 'other-first',
         })
-      ).toEqual({
-        profileId: 'b',
-        model: 'other-first',
-        source: 'stored_model_match',
-      });
+      ).toBeNull();
 
       expect(
         pickDefaultModelSelection(profiles, {
@@ -996,11 +991,12 @@ describe('providerProfiles', () => {
         })?.source
       ).toBe('active_profile_first');
 
+      // engineModel 不带 provider 信息，不用于定位 → null
       expect(
         pickDefaultModelSelection(profiles, {
           engineModel: 'engine-also',
-        })?.source
-      ).toBe('engine_match');
+        })
+      ).toBeNull();
 
       // requireInList rejects hand-fill not in list
       expect(
@@ -1062,7 +1058,7 @@ describe('providerProfiles', () => {
         )
       ).toBeNull();
 
-      // non-empty catalog but mimo not listed → fall through to first_available
+      // non-empty catalog but mimo not listed → 取该 provider 首个模型（同 provider，不跨厂商）
       const r = pickDefaultModelSelection(
         [
           {

@@ -63,14 +63,14 @@ export interface Settings {
   defaultProvider?: string;
   defaultModel?: string;
   /**
-   * 思考档位偏好（本机设置；单源 = 描述接口，见 THINKING_LEVEL_IDS 移除说明）。
+   * 思考档位偏好（本机设置；词表唯一权威 = 内核 `dialect::ReasoningEffort`，
+   * 前端镜像见 `modelsNormalize.ts` 的 `THINKING_VOCABULARY`，由
+   * `scripts/check-thinking-vocabulary-ssot.mjs` 守护）。
    *
    * 语义（G8-c / R4 T4.1「显式档位/默认档位区分」）：
-   * - 缺省 / 'default' → 跟随引擎侧默认档位（描述接口 derived default_effort，省略不注入）；
-   * - 其它字符串 → 尽量透传为显式档位，最终有效性由请求面校验
-   *   （T4.1：白名单外显式档位在请求面拒绝，前端不代答）。
-   *
-   * 不再固化为固定档位集常量（消除前端自造档位表与 Rust 静态表双实现漂移）。
+   * - 缺省 / 'default' → 跟随引擎侧默认档位（哨兵，非档位名；省略不注入）；
+   * - 词表档位（经别名归一）→ 规范拼写（`Off`/`Minimal`/…/`XHigh`/`Max`）；
+   * - 词表外键 → 回落哨兵 'default'（不静默透传，见 plans/09 §4）。
    */
   defaultThinkingLevel?: string;
   theme?: string;

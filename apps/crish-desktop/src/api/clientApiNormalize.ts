@@ -1,4 +1,5 @@
 import type { ResponseStyle, Settings, ThinkingLevel } from './clientApi.types';
+import { normalizeThinkingKey } from './modelsNormalize';
 
 export const RESPONSE_STYLE_IDS: readonly ResponseStyle[] = [
   'minimal',
@@ -68,30 +69,30 @@ export function normalizeResponseStyle(raw: unknown): ResponseStyle {
 }
 
 /**
- * 规范档位透传（纯）。单源 = 描述接口（THINKING_LEVEL_IDS 已移除，front 不维护
- * 档位面板数据源）；本函数仅做设置持久化的合法值夹取与「提供方默认」归一：
+ * 「跟随引擎默认」哨兵值 —— **不是档位名**。
+ * 语义：不向请求注入显式思考档位参数，由内核按该模型默认执行。
+ * 它独立于档位词汇表；档位名是配置数据，代码不得枚举（见下）。
+ */
+const DEFAULT_THINKING_SENTINEL = 'default';
+
+/**
+ * 思考档位归一（纯）。词表唯一权威 = 内核 `dialect::ReasoningEffort`（7 档，
+ * 无 `Auto`），前端镜像见 `modelsNormalize.ts` 的 `THINKING_VOCABULARY`，
+ * 由 `scripts/check-thinking-vocabulary-ssot.mjs` 守护。
  *
- * - 'default' / 空 / 非法 → 'default'（跟随引擎默认档位，不注入显式思考参数）；
- * - 其余字符串（含 'off' / 'minimal' / 'low' / 'medium' / 'high' / 'xhigh' 等
- *   引擎已知档位）→ 小写透传；最终请求面有效性由 T4.1 校验，此处不代答。
+ * - 空 / undefined / null / 非字符串 / 哨兵 'default'
+ *   → 'default'（跟随引擎默认，不注入显式思考参数）；
+ * - 命中词表（经 `normalizeThinkingKey` 别名归一，如 `off`/`None`/`X-High`）
+ *   → 返回**规范拼写**（`Off`/`Minimal`/`Low`/`Medium`/`High`/`XHigh`/`Max`）；
+ * - 词表外键（如 `ultra`/`Auto`）→ 哨兵 'default'（不静默透传，见 plans/09 §4）。
+ *
+ * 唯一常量是哨兵 'default'（非档位名）；档位名清单只在词表镜像一处。
  */
 export function normalizeThinkingLevel(raw: unknown): ThinkingLevel {
-  if (typeof raw === 'string' || typeof raw === 'number') {
-    const t = normalizeSettingsText(raw).toLowerCase();
-    if (
-      t === 'default' ||
-      t === 'off' ||
-      t === 'minimal' ||
-      t === 'low' ||
-      t === 'medium' ||
-      t === 'high' ||
-      t === 'xhigh'
-    ) {
-      return t;
-    }
-    return 'default';
-  }
-  return 'default';
+  if (typeof raw !== 'string') return DEFAULT_THINKING_SENTINEL;
+  const t = normalizeSettingsText(raw);
+  if (!t || t === DEFAULT_THINKING_SENTINEL) return DEFAULT_THINKING_SENTINEL;
+  return normalizeThinkingKey(t) ?? DEFAULT_THINKING_SENTINEL;
 }
 
 /** Coerce loose LS / JSON values to boolean; unknown → fallback. */

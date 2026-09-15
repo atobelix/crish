@@ -1,8 +1,8 @@
 /**
  * useModelProfilesState 的纯辅助函数（从主 hook 拆出，无 React 依赖）。
  *
- * - settingsObjectId：设置表单「编辑会话」对象 id（profileId::model，与
- *   modelCatalog metaKey 同形，跨 profile 隔离，避免 model id 裸串撞车）。
+ * - settingsObjectId：设置表单「编辑会话」对象 id（modelRefKey 的 JSON
+ *   二元组形态，与编辑会话 open/commit 键同源，跨 profile 隔离，无分隔符碰撞）。
  * - modelSpecRevision：CT-01 对齐的模型配置 rev——对 ModelSpec 可编辑字段
  *   的稳定 JSON 签名（实现见 api/modelsDraftMap.modelSpecRevision）。
  *   来源是 store 节点，不是 getModelMeta。openConfigFor 时捕获为编辑会话
@@ -11,6 +11,7 @@
  * - foldSettingsProfiles / pickSettingsSelectedId：设置列表与 picker 同一
  *   展示名折叠；已选 id 被同名胜者吃掉时改绑胜者。
  */
+import { modelRefKey } from '../../api/modelsCatalogTypes';
 import {
   findProfileByDisplayName,
   foldProfilesByDisplayName,
@@ -21,7 +22,7 @@ import {
 export { modelSpecRevision } from '../../api/modelsDraftMap';
 
 export function settingsObjectId(profileId: string, model: string): string {
-  return `${profileId}::${model}`;
+  return modelRefKey({ providerId: profileId, modelId: model });
 }
 
 /** 设置页服务商列表：同展示名只留一行（含停用）。与 picker 共用 fold。 */

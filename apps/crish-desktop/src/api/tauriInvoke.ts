@@ -34,6 +34,8 @@ export interface InvokeError {
   kind: string;
   message: string;
   raw?: unknown;
+  /** 配置事务冲突时，内核返回实际磁盘修订号供界面提示刷新。 */
+  currentRevision?: string;
 }
 
 export type InvokeTypedResult<T> = InvokeOk<T> | InvokeMissing | InvokeError;
@@ -70,7 +72,11 @@ function isMissingCommandMessage(msg: string): boolean {
  *   - 字符串错误：kind 设为 "Unknown"，message 即字符串本身
  *   - 普通 Error 对象：kind 设为 "Unknown"，message 即 error.message
  */
-function extractErrorKind(err: unknown): { kind: string; message: string } {
+function extractErrorKind(err: unknown): {
+  kind: string;
+  message: string;
+  currentRevision?: string;
+} {
   if (err == null) {
     return { kind: 'Unknown', message: '未知错误' };
   }
@@ -80,6 +86,16 @@ function extractErrorKind(err: unknown): { kind: string; message: string } {
   if (typeof err === 'object') {
     const o = err as Record<string, unknown>;
     // Rust CoreError serde tagged enum: { kind: "InvalidInput", detail: "msg" }
+    // 配置事务使用明确的错误码；不能丢掉冲突语义而归为未知错误。
+    if (typeof o.code === 'string' && typeof o.message === 'string') {
+      return {
+        kind: o.code,
+        message: o.message,
+        ...(typeof o.currentRevision === 'string'
+          ? { currentRevision: o.currentRevision }
+          : {}),
+      };
+    }
     if (typeof o.kind === 'string') {
       const detail = o.detail;
       const message =
@@ -179,7 +195,7 @@ export async function invokeTyped<T = unknown>(
   } catch (err) {
     const msg = formatInvokeError(err);
     if (isMissingCommandMessage(msg)) return { status: 'missing' };
-    const { kind, message } = extractErrorKind(err);
-    return { status: 'error', kind, message, raw: err };
+    const details = extractErrorKind(err);
+    return { status: 'error', ...details, raw: err };
   }
 }

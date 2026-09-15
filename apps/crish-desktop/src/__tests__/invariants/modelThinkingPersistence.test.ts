@@ -41,9 +41,10 @@ function mockReadOk(providers: Record<string, ProviderSpec>): void {
     path: CATALOG_PATH,
     content: '',
     template: '',
-    seeded: false,
+    revision: 'revision-0',
+    credentialStates: {},
     parseError: null,
-    providers,
+    tree: { version: 2, activeModel: null, providers },
   }));
 }
 
@@ -98,7 +99,6 @@ describe('模型思考强度全局记忆与平移继承契约', () => {
       anthropic: {
         displayName: 'Anthropic',
         baseUrl: 'https://api.anthropic.com',
-        apiKey: 'key-test',
         protocol: 'openai/chat',
         models: [
           {
@@ -124,7 +124,6 @@ describe('模型思考强度全局记忆与平移继承契约', () => {
       deepseek: {
         displayName: 'DeepSeek',
         baseUrl: 'https://api.deepseek.com',
-        apiKey: 'key-test',
         protocol: 'openai/chat',
         models: [
           {

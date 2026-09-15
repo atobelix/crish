@@ -269,15 +269,20 @@ describe('ConnectionLifecycle Tauri IPC 路径（C1.2）', () => {
         path: 'C:\\tmp\\models.yaml',
         content: '',
         template: '',
-        seeded: false,
+        revision: 'revision-0',
+        credentialStates: {},
         parseError: null,
-        providers: {
+        tree: {
+          version: 2,
+          activeModel: null,
+          providers: {
           p1: {
             displayName: 'P1',
             baseUrl: 'https://example.invalid/v1',
             protocol: 'openai/chat',
             models: [{ id: 'deepseek-chat', contextWindow: 131_072 }],
           } satisfies ProviderSpec,
+          },
         },
       }));
       mockTauriCommand('workbench_save_models_yaml', () => ({
@@ -413,9 +418,13 @@ describe('ConnectionLifecycle Tauri IPC 路径（C1.2）', () => {
         path: 'C:\\tmp\\models.yaml',
         content: '',
         template: '',
-        seeded: false,
+        revision: 'revision-0',
+        credentialStates: {},
         parseError: null,
-        providers: {
+        tree: {
+          version: 2,
+          activeModel: null,
+          providers: {
           gemini: {
             displayName: 'Gemini',
             baseUrl: 'https://generativelanguage.googleapis.com',
@@ -424,6 +433,7 @@ describe('ConnectionLifecycle Tauri IPC 路径（C1.2）', () => {
               { id: 'flash', thinking: { Off: 'disabled', High: 'HIGH' } },
             ],
           } satisfies ProviderSpec,
+          },
         },
       }));
       mockTauriCommand('workbench_save_models_yaml', () => ({

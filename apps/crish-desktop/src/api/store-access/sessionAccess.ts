@@ -184,11 +184,12 @@ export function updateMessageText(
 export function updateMessageThinking(
   sessionId: string,
   messageId: string,
-  thinking: string
+  thinking: string,
+  turnIndex = 0
 ): void {
   const sid = requireExistingSessionId(sessionId);
   if (!sid) return;
-  getSessionStoreState().updateMessageThinking(sid, messageId, thinking);
+  getSessionStoreState().updateMessageThinking(sid, messageId, thinking, turnIndex);
 }
 
 export function addMessageToolCall(

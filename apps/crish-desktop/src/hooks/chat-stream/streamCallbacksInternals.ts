@@ -29,6 +29,7 @@ import type { SessionStreamManager } from '../../api/sessionStreamManager';
 import type { MutableRefObject } from 'react';
 import {
   snapshotStreamTextToSession,
+  snapshotStreamThinkingToSession,
   isLiveStreamRun,
 } from './helpers';
 import { markStreamingActive } from '../../api/streamStop';
@@ -211,25 +212,8 @@ export function createToolPatchQueue(opts: {
     approvalMeta?: MessageToolApprovalMeta
   ) => {
     // 物理因果时序保全：在工具启动前，若存在流式思考，立即提交至 sessionStore，
-    // 确保思考块必然处于该工具块之前，绝不发生事后重排颠倒
-    const currentLiveThinking = getStreamThinking(sid, assistantMsgId);
-    if (currentLiveThinking && currentLiveThinking.trim()) {
-      const msg = getSessionById(sid)?.messages?.find(
-        (m) => m.id === assistantMsgId
-      );
-      const lastThought =
-        msg?.thinkingTurns?.[msg.thinkingTurns.length - 1] ||
-        msg?.blocks?.filter((b) => b.type === 'thought').pop();
-      const activeTurn = lastThought?.turnIndex ?? 0;
-      getCompositionRoot()
-        .session.getState()
-        .updateMessageThinking(
-          sid,
-          assistantMsgId,
-          currentLiveThinking,
-          activeTurn
-        );
-    }
+    // 确保思考块必然处于该工具块之前，绝不发生事后重排颠倒，并锁定思考耗时
+    snapshotStreamThinkingToSession(sid, assistantMsgId);
     // Durable text snapshot before tool so blocks/streamTextOffset interleave correctly.
     snapshotStreamTextToSession(sid, assistantMsgId, readStreamedFullText());
     toolNames[toolId] = name;

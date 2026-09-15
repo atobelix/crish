@@ -317,6 +317,61 @@ describe('partitionTimelineSegments · 工作时间区唯一位置（2026-09-11 
     expect(seg?.startTime).toBe(1_000);
     expect(seg?.endTime).toBeUndefined();
   });
+
+  it('工作时间与思考时间解耦：工作时间承载整轮吐字完成耗时，思考时间保留内部思考耗时（2026-09-12 用户裁决）', () => {
+    // 场景：思考耗时 15 秒（内部思考耗时），整轮从用户发消息到吐字完成总计 54 秒
+    const thItem: TimelineThoughtItem = {
+      ...thought('t1', 15_000),
+      startTime: 10_000,
+    };
+    const textItem = text('ans', '这是吐字完成的最终回复正文');
+
+    const segs = partitionTimelineSegments(
+      'msg-decouple',
+      [thItem, textItem],
+      false,
+      false,
+      {
+        msgTimestamp: 10_000,
+        totalTurnDurationSec: 54,
+      }
+    );
+
+    const procSeg = segs.find((s) => s.kind === 'process_section') as any;
+    expect(procSeg).toBeDefined();
+    expect(procSeg.showWorkTime).toBe(true);
+
+    // 1. 外部工作时间段：从消息起点到终点跨度为整轮 54 秒（54000ms）
+    expect(procSeg.startTime).toBe(10_000);
+    expect(procSeg.endTime).toBe(64_000);
+    expect(procSeg.endTime - procSeg.startTime).toBe(54_000);
+    expect(procSeg.metrics.totalDurationMs).toBe(54_000);
+
+    // 2. 内部思考子项：纯粹保留自身思考耗时 15 秒（15000ms），绝不被整轮 54 秒污染
+    const innerThought = procSeg.items.find((it: any) => it.kind === 'thought') as any;
+    expect(innerThought).toBeDefined();
+    expect(innerThought.durationMs).toBe(15_000);
+  });
+
+  it('活跃态流式执行：startTime 以 msgTimestamp 为物理起点推进全轮工作时间', () => {
+    const thItem: TimelineThoughtItem = {
+      ...thought('t1'),
+      startTime: 12_000,
+    };
+    const segs = partitionTimelineSegments(
+      'msg-live',
+      [thItem],
+      true,
+      false,
+      {
+        msgTimestamp: 10_000,
+      }
+    );
+    const procSeg = segs.find((s) => s.kind === 'process_section') as any;
+    expect(procSeg.startTime).toBe(10_000);
+    expect(procSeg.endTime).toBeUndefined();
+    expect(procSeg.isLive).toBe(true);
+  });
 });
 
 describe('partitionTimelineSegments · 段边界与空输入', () => {

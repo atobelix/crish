@@ -1,265 +1,261 @@
-/**
- * modelsDraftMap.ts —— 设置草稿 ↔ ModelSpec 纯映射（T2-1）
- *
- * 无 IO：不读浏览器存储、不写价表、不猜测窗口。
- * 写出只许 contextWindow、拍平 thinking、规范 protocol、规范价键。
- * 会话选档与旧默认档字段不进 patch。
- */
-
-import { normalizeProtocol } from './modelsNormalize';
+/** 完整模型与编辑草稿的无损往返。不存在的字段不补值，明确清空产生删除补丁。 */
+import { normalizeProtocol, normalizeThinkingMap } from './modelsNormalize';
 import type {
-  ModelProtocol,
   ModelSpec,
-  ModalityMatrix,
   PricingConfig,
-  PricingCurrency,
-  ProviderSpec,
-  ThinkingMap,
+  PricingTier,
 } from './modelsCatalogTypes';
 
-/** 设置抽屉草稿。表单窗口字段名仍是 contextLength；写出必须是 contextWindow。 */
-export interface ModelConfigDraft {
-  displayName?: string;
-  contextLength?: string;
+type PriceField = 'input' | 'output' | 'cacheRead' | 'cacheWrite' | 'perImage';
+type TierPriceField = Exclude<PriceField, 'perImage'>;
+
+export type ModelPricingTierDraft = Omit<
+  PricingTier,
+  'inputTokensAbove' | TierPriceField
+> & {
+  inputTokensAbove: string;
+} & Partial<Record<TierPriceField, string>>;
+
+export type ModelPricingDraft = Omit<PricingConfig, PriceField | 'tiers'> &
+  Partial<Record<PriceField, string>> & { tiers?: ModelPricingTierDraft[] };
+
+export type ModelConfigDraft = Omit<
+  ModelSpec,
+  | 'id'
+  | 'displayName'
+  | 'contextWindow'
+  | 'maxOutputTokens'
+  | 'order'
+  | 'thinking'
+  | 'pricing'
+> & {
+  displayName: string;
+  contextWindow: string;
   maxOutputTokens?: string;
-  caps?: {
-    tools?: boolean;
-    image?: boolean;
-    video?: boolean;
-    reasoning?: boolean;
-  };
-  /** 会话选档；禁止写入 ModelSpec / yaml */
-  thinkingLevel?: string;
-  /** 旧 LS 字段；禁止写入 ModelSpec / yaml */
-  defaultThinkingLevel?: string;
-  protocol?: ModelProtocol | string;
-  modalities?: {
-    input: string[];
-    output: string[];
-  };
+  order?: string;
   thinkingEnabled?: boolean;
   thinkingMap?: Record<string, string>;
-  pricing?: {
-    currency: PricingCurrency;
-    input?: string;
-    output?: string;
-    cacheRead?: string;
-    cacheWrite?: string;
-  };
-}
+  pricing?: ModelPricingDraft;
+};
 
-function parsePositiveInt(raw: unknown): number | undefined {
-  if (typeof raw === 'number' && Number.isInteger(raw) && raw > 0) return raw;
-  if (typeof raw !== 'string') return undefined;
-  const digits = raw.replace(/[^\d]/g, '');
-  if (!digits) return undefined;
-  const n = parseInt(digits, 10);
-  if (!Number.isFinite(n) || n <= 0) return undefined;
-  return n;
-}
-
-function parseOptionalPrice(raw: string | number | undefined): number | undefined {
-  if (typeof raw === 'number') {
-    return Number.isFinite(raw) ? raw : undefined;
+export class ModelDraftValidationError extends Error {
+  readonly field: string;
+  constructor(field: string, message: string) {
+    super(message);
+    this.field = field;
+    this.name = 'ModelDraftValidationError';
   }
-  if (typeof raw !== 'string') return undefined;
-  const t = raw.trim();
-  if (!t) return undefined;
-  const n = Number(t);
-  return Number.isFinite(n) ? n : undefined;
 }
 
-/** 空键、空值丢掉；清洗后空表视为缺省。 */
-function cleanThinkingMap(
-  map: Record<string, string> | undefined
-): ThinkingMap | undefined {
-  if (!map) return undefined;
-  const clean: ThinkingMap = {};
-  for (const [k, v] of Object.entries(map)) {
-    if (k.trim() && v !== undefined && String(v).trim()) {
-      clean[k.trim()] = String(v).trim();
-    }
-  }
-  return Object.keys(clean).length > 0 ? clean : undefined;
-}
-
-function pricingFromDraft(
-  pricing: ModelConfigDraft['pricing']
-): PricingConfig | undefined {
-  if (!pricing) return undefined;
-  const input = parseOptionalPrice(pricing.input);
-  const output = parseOptionalPrice(pricing.output);
-  const cacheRead = parseOptionalPrice(pricing.cacheRead);
-  const cacheWrite = parseOptionalPrice(pricing.cacheWrite);
+function parseInteger(
+  raw: string | undefined,
+  field: string,
+  signed = false
+): number | undefined {
+  if (raw === undefined || raw.trim() === '') return undefined;
+  const text = raw.trim();
+  const value = Number(text);
   if (
-    input === undefined &&
-    output === undefined &&
-    cacheRead === undefined &&
-    cacheWrite === undefined
+    !(signed ? /^-?\d+$/ : /^\d+$/).test(text) ||
+    !Number.isSafeInteger(value)
   ) {
-    return undefined;
+    throw new ModelDraftValidationError(
+      field,
+      `${field} 必须为${signed ? '' : '非负'}安全整数`
+    );
   }
-  const out: PricingConfig = {
-    currency: pricing.currency === 'CNY' ? 'CNY' : 'USD',
-  };
-  if (input !== undefined) out.input = input;
-  if (output !== undefined) out.output = output;
-  if (cacheRead !== undefined) out.cacheRead = cacheRead;
-  if (cacheWrite !== undefined) out.cacheWrite = cacheWrite;
-  return out;
+  return value;
 }
 
-function copyModalities(raw: ModelConfigDraft['modalities']): ModalityMatrix | undefined {
-  if (!raw) return undefined;
-  return {
-    input: Array.isArray(raw.input) ? [...raw.input] : [],
-    output: Array.isArray(raw.output) ? [...raw.output] : [],
-  };
+function parsePrice(
+  raw: string | undefined,
+  field: string
+): number | undefined {
+  if (raw === undefined || raw.trim() === '') return undefined;
+  const text = raw.trim();
+  const value = Number(text);
+  if (
+    !/^(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(text) ||
+    !Number.isFinite(value) ||
+    value < 0
+  ) {
+    throw new ModelDraftValidationError(field, `${field} 必须为非负有限价格`);
+  }
+  return value;
 }
 
-function priceToDraftStr(n: number | undefined): string {
-  if (n === undefined || !Number.isFinite(n)) return '';
-  return String(n);
+const PRICE_FIELDS: Record<
+  Exclude<keyof PricingConfig, 'currency' | 'unit' | 'tiers'>,
+  true
+> = {
+  input: true,
+  output: true,
+  cacheRead: true,
+  cacheWrite: true,
+  perImage: true,
+};
+const TIER_FIELDS: Record<
+  Exclude<keyof PricingTier, 'inputTokensAbove'>,
+  true
+> = {
+  input: true,
+  output: true,
+  cacheRead: true,
+  cacheWrite: true,
+};
+
+function pricingFromDraft(pricing: ModelPricingDraft): PricingConfig {
+  const result: PricingConfig = { currency: pricing.currency };
+  if (pricing.unit !== undefined) result.unit = pricing.unit;
+  for (const key of Object.keys(PRICE_FIELDS) as PriceField[]) {
+    const value = parsePrice(pricing[key], key);
+    if (value !== undefined) result[key] = value;
+  }
+  if (pricing.tiers !== undefined) {
+    result.tiers = pricing.tiers.map((draft, index) => {
+      const inputTokensAbove = parseInteger(
+        draft.inputTokensAbove,
+        `阶梯 ${index + 1} 阈值`
+      );
+      if (inputTokensAbove === undefined)
+        throw new ModelDraftValidationError('tiers', '阶梯阈值不能为空');
+      const tier: PricingTier = { inputTokensAbove };
+      for (const key of Object.keys(TIER_FIELDS) as TierPriceField[]) {
+        const value = parsePrice(draft[key], `阶梯 ${index + 1} ${key}`);
+        if (value !== undefined) tier[key] = value;
+      }
+      return tier;
+    });
+  }
+  return result;
 }
 
-function stableThinking(thinking: ThinkingMap | undefined): Record<string, string> | null {
-  if (!thinking || Object.keys(thinking).length === 0) return null;
-  const keys = Object.keys(thinking).sort((a, b) => a.localeCompare(b));
-  const out: Record<string, string> = {};
-  for (const k of keys) out[k] = thinking[k]!;
-  return out;
+function pricingToDraft(pricing: PricingConfig): ModelPricingDraft {
+  const result: ModelPricingDraft = { currency: pricing.currency };
+  if (pricing.unit !== undefined) result.unit = pricing.unit;
+  for (const key of Object.keys(PRICE_FIELDS) as PriceField[]) {
+    if (pricing[key] !== undefined) result[key] = String(pricing[key]);
+  }
+  if (pricing.tiers !== undefined) {
+    result.tiers = pricing.tiers.map((tier) => {
+      const draft: ModelPricingTierDraft = {
+        inputTokensAbove: String(tier.inputTokensAbove),
+      };
+      for (const key of Object.keys(TIER_FIELDS) as TierPriceField[]) {
+        if (tier[key] !== undefined) draft[key] = String(tier[key]);
+      }
+      return draft;
+    });
+  }
+  return result;
 }
 
-function stablePricing(pricing: PricingConfig | undefined): Record<string, unknown> | null {
-  if (!pricing) return null;
-  return {
-    currency: pricing.currency ?? 'USD',
-    input: pricing.input ?? null,
-    output: pricing.output ?? null,
-    cacheRead: pricing.cacheRead ?? null,
-    cacheWrite: pricing.cacheWrite ?? null,
-    unit: pricing.unit ?? null,
-  };
-}
+type DirectField = Exclude<
+  keyof ModelSpec,
+  | 'id'
+  | 'displayName'
+  | 'contextWindow'
+  | 'maxOutputTokens'
+  | 'order'
+  | 'thinking'
+  | 'pricing'
+>;
+/** 新增模型字段时，编译器要求明确其草稿保存归属，防止再次有损。 */
+const DIRECT_FIELDS: Record<DirectField, true> = {
+  enabled: true,
+  protocol: true,
+  compat: true,
+  modalities: true,
+  headers: true,
+  supportsTools: true,
+  cacheTtl: true,
+};
 
-/**
- * 草稿 → yaml / ModelSpec 规范字段。
- * 空价、思考关闭以显式 undefined 出现在返回值上，便于 updateModel spread 清掉旧值。
- */
-export function draftToModelPatch(draft: ModelConfigDraft): Partial<ModelSpec> {
+export function draftToModelPatch(
+  draft: Partial<ModelConfigDraft>
+): Partial<ModelSpec> {
   const patch: Partial<ModelSpec> = {};
-
-  if (typeof draft.displayName === 'string') {
-    const t = draft.displayName.trim();
-    patch.displayName = t ? t : undefined;
+  for (const key of Object.keys(DIRECT_FIELDS) as DirectField[]) {
+    if (Object.hasOwn(draft, key))
+      Object.assign(patch, { [key]: structuredClone(draft[key]) });
   }
-
-  const contextWindow = parsePositiveInt(draft.contextLength);
-  if (contextWindow !== undefined) {
-    patch.contextWindow = contextWindow;
+  if (draft.protocol !== undefined && !normalizeProtocol(draft.protocol)) {
+    throw new ModelDraftValidationError('protocol', '模型协议不受支持');
   }
-
-  const maxOutputTokens = parsePositiveInt(draft.maxOutputTokens);
-  if (maxOutputTokens !== undefined) {
-    patch.maxOutputTokens = maxOutputTokens;
+  if (Object.hasOwn(draft, 'displayName'))
+    patch.displayName = draft.displayName?.trim() || undefined;
+  if (Object.hasOwn(draft, 'contextWindow'))
+    patch.contextWindow = parseInteger(draft.contextWindow, '上下文长度');
+  if (Object.hasOwn(draft, 'maxOutputTokens'))
+    patch.maxOutputTokens = parseInteger(draft.maxOutputTokens, '最大输出');
+  if (patch.contextWindow === 0 || patch.maxOutputTokens === 0) {
+    throw new ModelDraftValidationError(
+      'contextWindow',
+      '上下文长度和最大输出必须大于零'
+    );
   }
-
-  if (draft.caps) {
-    patch.capabilities = { tools: Boolean(draft.caps.tools) };
+  if (Object.hasOwn(draft, 'order'))
+    patch.order = parseInteger(draft.order, '模型顺序', true);
+  if (Object.hasOwn(draft, 'pricing')) {
+    patch.pricing =
+      draft.pricing === undefined ? undefined : pricingFromDraft(draft.pricing);
   }
-
-  if (draft.thinkingEnabled === true) {
-    patch.thinking = cleanThinkingMap(draft.thinkingMap);
-  } else if (draft.thinkingEnabled === false) {
+  if (draft.thinkingEnabled === false) {
     patch.thinking = undefined;
+  } else if (draft.thinkingEnabled === true) {
+    if (draft.thinkingMap === undefined)
+      throw new ModelDraftValidationError('thinking', '请填写思考档位与参数');
+    patch.thinking = normalizeThinkingMap(draft.thinkingMap);
   }
-
-  const protocol = normalizeProtocol(draft.protocol);
-  if (protocol) {
-    patch.protocol = protocol;
-  }
-
-  const modalities = copyModalities(draft.modalities);
-  if (modalities) {
-    patch.modalities = modalities;
-  }
-
-  if (draft.pricing) {
-    patch.pricing = pricingFromDraft(draft.pricing);
-  }
-
   return patch;
 }
 
-/**
- * store 节点 → 设置草稿（打开 / 保存后重开）。
- * provider 可成对传入，但不得把 provider.protocol 抄进草稿（否则保存会变成模型级覆盖）。
- */
-export function modelToConfigDraft(
-  model: ModelSpec,
-  _provider?: ProviderSpec
-): ModelConfigDraft {
-  const thinkingMap =
-    model.thinking && Object.keys(model.thinking).length > 0
-      ? { ...model.thinking }
-      : {};
-  const thinkingEnabled = Object.keys(thinkingMap).length > 0;
-  const input = model.modalities?.input;
-  const pricing = model.pricing;
-
+/** 草稿仅携带模型级配置；供应商继承值不得变成模型覆盖。 */
+export function modelToConfigDraft(model: ModelSpec): ModelConfigDraft {
+  const {
+    id: _id,
+    displayName,
+    contextWindow,
+    maxOutputTokens,
+    order,
+    thinking,
+    pricing,
+    ...rest
+  } = model;
   const draft: ModelConfigDraft = {
-    displayName: model.displayName ?? '',
-    contextLength: model.contextWindow != null ? String(model.contextWindow) : '',
-    maxOutputTokens:
-      model.maxOutputTokens != null ? String(model.maxOutputTokens) : '',
-    caps: {
-      tools: Boolean(model.capabilities?.tools),
-      image: Array.isArray(input) ? input.includes('image') : false,
-      video: Array.isArray(input) ? input.includes('video') : false,
-      reasoning: thinkingEnabled,
-    },
-    thinkingEnabled,
-    thinkingMap,
-    pricing: {
-      currency: pricing?.currency === 'CNY' ? 'CNY' : 'USD',
-      input: priceToDraftStr(pricing?.input),
-      output: priceToDraftStr(pricing?.output),
-      cacheRead: priceToDraftStr(pricing?.cacheRead),
-      cacheWrite: priceToDraftStr(pricing?.cacheWrite),
-    },
+    ...structuredClone(rest),
+    displayName: displayName ?? '',
+    contextWindow: contextWindow === undefined ? '' : String(contextWindow),
+    thinkingEnabled: thinking !== undefined,
   };
-
-  if (model.modalities) {
-    draft.modalities = {
-      input: [...(model.modalities.input ?? [])],
-      output: [...(model.modalities.output ?? [])],
-    };
-  }
-
-  const protocol = normalizeProtocol(model.protocol);
-  if (protocol) draft.protocol = protocol;
-
+  if (maxOutputTokens !== undefined)
+    draft.maxOutputTokens = String(maxOutputTokens);
+  if (order !== undefined) draft.order = String(order);
+  if (thinking !== undefined)
+    draft.thinkingMap = normalizeThinkingMap(thinking) as Record<
+      string,
+      string
+    >;
+  if (pricing !== undefined) draft.pricing = pricingToDraft(pricing);
   return draft;
 }
 
-/**
- * CT-01 稳定 JSON 签名。来源是 ModelSpec（store 节点），不是 LS meta。
- */
+function stableValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(stableValue);
+  if (value !== null && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value)
+        .filter(([, entry]) => entry !== undefined)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([key, entry]) => [key, stableValue(entry)])
+    );
+  }
+  return value;
+}
+
+/** 完整模型语义参与签名；对象键序不影响结果，数组内容与顺序不丢失。 */
 export function modelSpecRevision(model: ModelSpec): string {
-  return JSON.stringify({
-    displayName: model.displayName ?? '',
-    contextWindow: model.contextWindow ?? null,
-    maxOutputTokens: model.maxOutputTokens ?? null,
-    enabled: model.enabled ?? true,
-    protocol: normalizeProtocol(model.protocol) ?? null,
-    thinking: stableThinking(model.thinking),
-    modalities: model.modalities
-      ? {
-          input: model.modalities.input ?? [],
-          output: model.modalities.output ?? [],
-        }
-      : null,
-    pricing: stablePricing(model.pricing),
-    tools: model.capabilities?.tools ?? false,
-  });
+  return JSON.stringify(
+    stableValue({ ...model, thinking: normalizeThinkingMap(model.thinking) })
+  );
 }

@@ -8,8 +8,11 @@ import {
 import {
   searchCatalogModels,
   ensureModelsCatalogLoaded,
-  type CatalogModelSpec,
 } from '../../api/modelsCatalogStore';
+import {
+  modelRefKey,
+  type IndexedModelEntry,
+} from '../../api/modelsCatalogTypes';
 import { useModelsCatalogVersion } from '../../hooks/useModelsCatalogVersion';
 import { toast } from '../../services/toast/ToastContext';
 import { Button, Input, Dialog, SegmentedControl, Select } from '../ui';
@@ -72,18 +75,18 @@ export const PriceConfigModal: React.FC<{
     return () => document.removeEventListener('mousedown', handleOutside);
   }, []);
 
-  const handleSelectAddSuggestion = (spec: CatalogModelSpec) => {
+  const handleSelectAddSuggestion = (entry: IndexedModelEntry) => {
+    // 目录条目 pricing 投影只产出规范字段（input/output/cacheRead）；
+    // ModelPrice（价表存储）仍用 *PerMTok 旧名——在边界处映射
     setPriceDraft({
-      model: spec.model,
-      // CatalogModelSpec.pricing 投影只产出规范字段（input/output/cacheRead）；
-      // ModelPrice（价表存储）仍用 *PerMTok 旧名——在边界处映射
-      input: String(spec.pricing?.input ?? 0),
-      output: String(spec.pricing?.output ?? 0),
+      model: entry.model.id,
+      input: String(entry.model.pricing?.input ?? 0),
+      output: String(entry.model.pricing?.output ?? 0),
       cacheRead:
-        spec.pricing?.cacheRead !== undefined
-          ? String(spec.pricing.cacheRead)
+        entry.model.pricing?.cacheRead !== undefined
+          ? String(entry.model.pricing.cacheRead)
           : '',
-      billingUnit: spec.pricing?.billingUnit || 'token',
+      billingUnit: entry.model.pricing?.unit === 'per_image' ? 'per_image' : 'token',
     });
     setShowAddSuggestions(false);
   };
@@ -272,17 +275,17 @@ export const PriceConfigModal: React.FC<{
                 className={styles.suggestionsDropdown}
                 onMouseDown={(e) => e.stopPropagation()}
               >
-                {addSuggestions.map((item) => (
+                {addSuggestions.map((entry) => (
                   <div
-                    key={item.model}
+                    key={modelRefKey({ providerId: entry.providerId, modelId: entry.model.id })}
                     className={styles.suggestionItem}
-                    onClick={() => handleSelectAddSuggestion(item)}
+                    onClick={() => handleSelectAddSuggestion(entry)}
                   >
-                    <span>{item.model}</span>
+                    <span>{entry.model.id}</span>
                     <span className={styles.suggestionItemMeta}>
-                      {item.pricing?.billingUnit === 'per_image'
+                      {entry.model.pricing?.unit === 'per_image'
                         ? '按张'
-                        : `${currencySymbol}${item.pricing?.input ?? 0}/${item.pricing?.output ?? 0}`}
+                        : `${currencySymbol}${entry.model.pricing?.input ?? 0}/${entry.model.pricing?.output ?? 0}`}
                     </span>
                   </div>
                 ))}

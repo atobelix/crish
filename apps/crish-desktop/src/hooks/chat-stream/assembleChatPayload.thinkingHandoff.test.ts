@@ -71,9 +71,13 @@ async function loadGeminiFlash(): Promise<void> {
     path: CATALOG_PATH,
     content: '',
     template: '',
-    seeded: false,
+    revision: 'revision-0',
+    credentialStates: {},
     parseError: null,
-    providers: {
+    tree: {
+      version: 2,
+      activeModel: null,
+      providers: {
       gemini: {
         displayName: 'Gemini',
         baseUrl: 'https://generativelanguage.googleapis.com',
@@ -82,6 +86,7 @@ async function loadGeminiFlash(): Promise<void> {
           { id: 'flash', thinking: { Off: 'disabled', High: 'HIGH' } },
         ],
       } satisfies ProviderSpec,
+      },
     },
   }));
   mockTauriCommand('workbench_save_models_yaml', () => ({ path: CATALOG_PATH }));
@@ -115,7 +120,7 @@ describe('assembleChatPayload thinking handoff', () => {
     expect(out.finalStreamOptions?.thinkingWire).toBe('HIGH');
   });
 
-  it('非思考或缺会话 Title 回落到字典第一 key', async () => {
+  it('缺会话 Title → 不注入思考档位（视为未选，不回落字典第一 key）', async () => {
     await loadGeminiFlash();
     const out = assembleChatPayload({
       sessionId: 'sess-1',
@@ -125,7 +130,22 @@ describe('assembleChatPayload thinking handoff', () => {
       displayText: 'hello',
       attachments: [],
     });
-    expect(out.finalStreamOptions?.thinkingTitle).toBe('Off');
-    expect(out.finalStreamOptions?.thinkingWire).toBe('disabled');
+    expect(out.finalStreamOptions?.thinkingTitle).toBeUndefined();
+    expect(out.finalStreamOptions?.thinkingWire).toBeUndefined();
+  });
+
+  it('原选档位不在当前模型声明中 → 不注入（视为未选，不降级到 Off/High）', async () => {
+    await loadGeminiFlash();
+    setSessionThinkingTitle('sess-1', 'Medium');
+    const out = assembleChatPayload({
+      sessionId: 'sess-1',
+      rawInput: 'hello',
+      slash: { kind: 'none', raw: 'hello' },
+      modelText: 'hello',
+      displayText: 'hello',
+      attachments: [],
+    });
+    expect(out.finalStreamOptions?.thinkingTitle).toBeUndefined();
+    expect(out.finalStreamOptions?.thinkingWire).toBeUndefined();
   });
 });

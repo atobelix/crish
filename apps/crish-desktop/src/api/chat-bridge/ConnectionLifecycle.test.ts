@@ -25,6 +25,7 @@ import type { Settings } from '../clientApi';
 import type { HistoryMessage } from './ConnectionLifecycle';
 import { getControlMetrics, resetControlMetrics } from '../controlMetrics';
 import { mockTauriCommand } from '../../test-setup';
+import { DOMAIN_MESSAGES } from '../userFacingErrors';
 import {
   ensureModelsCatalogLoaded,
   resetModelsCatalogMirror,
@@ -384,9 +385,10 @@ async function loadLiveCatalog(
     path: CATALOG_PATH,
     content: '',
     template: '',
-    seeded: false,
+    revision: 'revision-0',
+    credentialStates: {},
     parseError: null,
-    providers,
+    tree: { version: 2, activeModel: null, providers },
   }));
   mockTauriCommand('workbench_save_models_yaml', () => ({
     path: CATALOG_PATH,
@@ -466,6 +468,8 @@ describe('resolveSendThinkingFields（会话 Title → live wire）', () => {
   afterEach(() => {
     localStorage.removeItem('crish_active_profile_id');
     localStorage.removeItem('crish_active_model_id');
+    localStorage.removeItem('conex:model-thinking-pref:gemini:gpt-4o');
+    localStorage.removeItem('conex:global-thinking-pref');
     resetModelsCatalogMirror();
     sessionRuntimeRegistry.clearAll();
   });
@@ -528,6 +532,70 @@ describe('resolveSendThinkingFields（会话 Title → live wire）', () => {
       },
     });
     setSessionThinkingTitle('sess-a', 'High');
+    expect(resolveSendThinkingFields('sess-a')).toEqual({});
+  });
+
+  it('原选档位不在当前模型声明中 → 省略（视为未选，不降级到 Off/High）', async () => {
+    localStorage.setItem('crish_active_profile_id', 'gemini');
+    localStorage.setItem('crish_active_model_id', 'gpt-4o');
+    await loadLiveCatalog({
+      gemini: {
+        displayName: 'Gemini',
+        baseUrl: 'https://generativelanguage.googleapis.com',
+        protocol: 'google/generate-content',
+        models: [
+          {
+            id: 'gpt-4o',
+            thinking: { Off: 'disabled', High: 'HIGH' },
+          },
+        ],
+      },
+    });
+    // 'Medium' 不在 {Off, High} 中：旧行为是回落首项 'Off'，现行为省略
+    setSessionThinkingTitle('sess-a', 'Medium');
+    expect(resolveSendThinkingFields('sess-a')).toEqual({});
+  });
+
+  it('无会话 Title 但该模型有持久偏好 → 沿用（与档位面板同一解析源）', async () => {
+    localStorage.setItem('crish_active_profile_id', 'gemini');
+    localStorage.setItem('crish_active_model_id', 'gpt-4o');
+    await loadLiveCatalog({
+      gemini: {
+        displayName: 'Gemini',
+        baseUrl: 'https://generativelanguage.googleapis.com',
+        protocol: 'google/generate-content',
+        models: [
+          {
+            id: 'gpt-4o',
+            thinking: { Off: 'disabled', High: 'HIGH' },
+          },
+        ],
+      },
+    });
+    localStorage.setItem('conex:model-thinking-pref:gemini:gpt-4o', 'High');
+    expect(resolveSendThinkingFields('sess-a')).toEqual({
+      thinkingTitle: 'High',
+      thinkingWire: 'HIGH',
+    });
+  });
+
+  it('全局偏好档位不在当前模型声明中 → 省略（视为未选，不降级）', async () => {
+    localStorage.setItem('crish_active_profile_id', 'gemini');
+    localStorage.setItem('crish_active_model_id', 'gpt-4o');
+    await loadLiveCatalog({
+      gemini: {
+        displayName: 'Gemini',
+        baseUrl: 'https://generativelanguage.googleapis.com',
+        protocol: 'google/generate-content',
+        models: [
+          {
+            id: 'gpt-4o',
+            thinking: { Off: 'disabled', High: 'HIGH' },
+          },
+        ],
+      },
+    });
+    localStorage.setItem('conex:global-thinking-pref', 'Medium');
     expect(resolveSendThinkingFields('sess-a')).toEqual({});
   });
 });
@@ -937,7 +1005,7 @@ describe('取消与启动竞态（P1-F2：waitUntilConnected 挂起期间 stop�
 
     expect(onRunError).not.toHaveBeenCalled();
     expect(onThought).toHaveBeenCalledWith(
-      '当前会话上一轮任务仍在收尾中，已自动为您排队…'
+      DOMAIN_MESSAGES.S7
     );
     expect(finish).toHaveBeenCalledTimes(1);
   });

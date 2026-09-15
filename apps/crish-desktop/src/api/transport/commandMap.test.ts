@@ -8,7 +8,7 @@
  * - 白名单对照：COMMAND_NAME_ALLOWLIST 每条都在内置清单 registered 内；
  * - mock 清单对照：注入自定义清单验证「命令名不在清单 → null」；
  * - checkCommandMapConsistency：白名单内命令名不在清单 → console.warn（不崩）；
- * - Tauri 路径 payload 整形（键为命令名 config_update；rewind 幽灵整形已删除）。
+ * - Tauri 路径 payload 整形（键为命令名 workbench_apply_models_config；rewind 幽灵整形已删除）。
  */
 
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -60,7 +60,9 @@ describe('commandMap', () => {
       );
       expect(resolveTauriCommand('core_deny_tool')).toBe('core_deny_tool');
       // 壳命令（F5 终态名）
-      expect(resolveTauriCommand('config_update')).toBe('config_update');
+      expect(resolveTauriCommand('workbench_apply_models_config')).toBe(
+        'workbench_apply_models_config'
+      );
       expect(resolveTauriCommand('list_sessions')).toBe('list_sessions');
       // run 生命周期：清单校验放行
       expect(resolveTauriCommand('core_run_task')).toBe('core_run_task');
@@ -145,7 +147,7 @@ describe('commandMap', () => {
       resetCommandManifestForTests(
         makeManifest([
           ['core_get_run_snapshot', true],
-          ['config_update', true],
+          ['workbench_apply_models_config', true],
           ['list_sessions', true],
         ])
       );
@@ -170,10 +172,10 @@ describe('commandMap', () => {
       resetCommandManifestForTests(
         makeManifest([
           ['core_get_status', true],
-          ['config_update', false],
+          ['workbench_apply_models_config', false],
         ])
       );
-      expect(resolveTauriCommand('config_update')).toBeNull();
+      expect(resolveTauriCommand('workbench_apply_models_config')).toBeNull();
       expect(resolveTauriCommand('core_get_status')).toBe('core_get_status');
     });
   });
@@ -206,20 +208,14 @@ describe('commandMap', () => {
   });
 
   describe('shapeTauriPayload（payload 整形）', () => {
-    it('config_update 剥离 type 字段 + apiKey（K-05：明文 key 不走 config_update 通道）', () => {
-      expect(
-        shapeTauriPayload('config_update', {
-          type: 'config_update',
-          model: 'm1',
-          apiKey: 'k',
-        })
-      ).toEqual({ model: 'm1' });
-      expect(
-        shapeTauriPayload('config_update', {
-          type: 'config_update',
-          baseUrl: 'https://x',
-        })
-      ).toEqual({ baseUrl: 'https://x' });
+    it('配置事务保留完整树与修订，不再进行破坏性字段过滤', () => {
+      const payload = {
+        tree: { version: 2, activeModel: null, providers: {} },
+        expectedRevision: 'read-revision',
+      };
+      expect(shapeTauriPayload('workbench_apply_models_config', payload)).toBe(
+        payload
+      );
     });
 
     it('rewind 幽灵命令的整形条目已删除（T03.1）→ 原样返回', () => {

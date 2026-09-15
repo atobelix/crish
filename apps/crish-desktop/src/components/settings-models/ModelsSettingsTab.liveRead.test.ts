@@ -46,9 +46,10 @@ describe('ModelsSettingsTab live 自愈读源', () => {
       path: CATALOG_PATH,
       content: '',
       template: '',
-      seeded: false,
+      revision: 'revision-0',
+      credentialStates: {},
       parseError: null,
-      providers: structuredClone(LIVE_PROVIDERS),
+      tree: { version: 2, activeModel: null, providers: structuredClone(LIVE_PROVIDERS) },
     }));
     mockTauriCommand('workbench_save_models_yaml', () => ({ path: CATALOG_PATH }));
     await modelsCatalogStore.ensureLoaded(true);

@@ -62,10 +62,11 @@ function specProvider(
   return {
     displayName,
     baseUrl: 'https://example.com',
-    // 可用供应商夹具：带 apiKey，避免被「未配置供应商」过滤隐藏
-    apiKey: 'k-test',
+    // 可用供应商夹具：凭据状态由 seedCatalog 的 credentialStates 提供
     protocol: 'openai/chat',
     models,
+    stream: true,
+    enabled: true,
     ...patch,
   };
 }
@@ -77,12 +78,13 @@ async function seedCatalog(
     path: CATALOG_PATH,
     content: '',
     template: '',
-    seeded: false,
+    revision: 'revision-0',
+    // 夹具供应商全部视为已配置凭据（hasKey），避免被可用性过滤隐藏
+    credentialStates: Object.fromEntries(
+      Object.keys(providers).map((id) => [id, { hasKey: true }])
+    ),
     parseError: null,
-    providers,
-  }));
-  mockTauriCommand('workbench_save_models_yaml', () => ({
-    path: CATALOG_PATH,
+    tree: { version: 2, activeModel: null, providers },
   }));
   const res = await ensureModelsCatalogLoaded(true);
   expect(res.ok).toBe(true);
@@ -329,7 +331,7 @@ describe('catalog 刷新（models-catalog-changed）', () => {
 });
 
 describe('高级选项（思考档位 = listThinkingOptions）', () => {
-  it('展开高级选项渲染 yaml 字典 key，无合成「默认」', async () => {
+  it('展开高级选项渲染档位中文标签，无合成「默认」', async () => {
     await seedDefaultCatalog({
       thinking: { Low: 'low', High: 'high' },
     });
@@ -337,8 +339,8 @@ describe('高级选项（思考档位 = listThinkingOptions）', () => {
     fireEvent.click(screen.getByText('高级选项'));
 
     expect(screen.getByText('思考强度')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Low' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'High' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '低' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '高' })).toBeInTheDocument();
     expect(
       screen.queryByRole('button', { name: '默认' }),
     ).not.toBeInTheDocument();
@@ -350,7 +352,7 @@ describe('高级选项（思考档位 = listThinkingOptions）', () => {
     });
     render(<Wrapper />);
     fireEvent.click(screen.getByText('高级选项'));
-    fireEvent.click(screen.getByRole('button', { name: 'High' }));
+    fireEvent.click(screen.getByRole('button', { name: '高' }));
 
     await waitFor(() =>
       expect(getSessionThinkingTitle(SESSION_ID)).toBe('High'),
@@ -365,6 +367,49 @@ describe('高级选项（思考档位 = listThinkingOptions）', () => {
     render(<Wrapper />);
     expect(screen.queryByText('高级选项')).not.toBeInTheDocument();
     expect(screen.queryByText('思考强度')).not.toBeInTheDocument();
+  });
+
+  it('原选档位不在当前模型声明中：显示引导、无错误选中态、不降级到其他档', async () => {
+    await seedDefaultCatalog({
+      thinking: { Low: 'low', Medium: 'medium', High: 'high' },
+    });
+    // 用户此前为 model-a 存档了 'XHigh'（该模型并未声明此档）
+    localStorage.setItem('conex:model-thinking-pref:p1:model-a', 'XHigh');
+
+    render(<Wrapper />);
+    fireEvent.click(screen.getByText('高级选项'));
+
+    // 引导重选，而不是把 'XHigh' 静默降级成 'Low'/'High'
+    expect(screen.getByTestId('thinking-value').textContent).toBe(
+      '请选择思考档位',
+    );
+    for (const title of ['Low', 'Medium', 'High']) {
+      expect(
+        screen.getByTestId(`thinking-option-${title}`).getAttribute('data-active'),
+      ).toBe('false');
+    }
+    // 档位存档不被解析结果反向覆写
+    expect(
+      localStorage.getItem('conex:model-thinking-pref:p1:model-a'),
+    ).toBe('XHigh');
+  });
+
+  it('共同档位跨模型保留（精确命中才保留）', async () => {
+    await seedDefaultCatalog({
+      thinking: { Low: 'low', Medium: 'medium', High: 'high' },
+    });
+    localStorage.setItem('conex:model-thinking-pref:p1:model-a', 'High');
+
+    render(<Wrapper />);
+    fireEvent.click(screen.getByText('高级选项'));
+
+    expect(screen.getByTestId('thinking-value').textContent).toBe('High');
+    expect(
+      screen.getByTestId('thinking-option-High').getAttribute('data-active'),
+    ).toBe('true');
+    expect(
+      screen.getByTestId('thinking-option-Low').getAttribute('data-active'),
+    ).toBe('false');
   });
 });
 

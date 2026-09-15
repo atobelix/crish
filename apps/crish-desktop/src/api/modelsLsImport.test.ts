@@ -1,8 +1,8 @@
 /**
  * modelsLsImport.test.ts —— 一次性 LS→yaml 导入
  *
- * 内存 localStorage 夹具 + mock workbench_read/save。
- * 禁止断言 setter spy；验收看 serialize / 写盘文本。
+ * 内存 localStorage 夹具 + mock workbench_read/apply（统一事务契约：完整规范树 + 修订号 + 凭据状态）。
+ * 禁止断言 setter spy；写盘内容以提交给内核事务的规范树为准（序列化在内核）。
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -13,41 +13,59 @@ import {
   resetLsImportForTesting,
 } from './modelsLsImport';
 import { modelsCatalogStore, resetModelsCatalogMirror, selectModel } from './modelsCatalogStore';
-import { serializeModelsYamlTree } from './modelsCatalogIpc';
+import { DEFAULT_PROTOCOL } from './modelsNormalize';
 import { DEFAULT_PRICES } from './pricingTypes';
 import * as profilePersistence from './provider-profiles/profileStorePersistence';
-import type { ProviderSpec } from './modelsCatalogTypes';
+import type {
+  ModelsYamlTree,
+  ProviderSpec,
+} from './modelsCatalogTypes';
 
+const READ = 'workbench_read_models_yaml';
+const APPLY = 'workbench_apply_models_config';
 const CATALOG_PATH = 'C:\\Users\\tester\\.conex\\models.yaml';
 const PROFILES_KEY = 'crish_provider_profiles_v1';
 const META_KEY = 'crish_model_meta_v1';
 const PRICES_KEY = 'crish_model_prices_v1';
 const SECRET = 'sk-plain-secret-must-not-appear';
 
-function workbenchReadOk(providers: Record<string, ProviderSpec>) {
+function readSnapshot(providers: Record<string, ProviderSpec>) {
   return {
     path: CATALOG_PATH,
+    revision: 'revision-0',
     content: '',
     template: '',
-    seeded: false,
+    credentialStates: {},
     parseError: null,
-    providers,
+    tree: { version: 2, activeModel: null, providers },
   };
 }
 
 function mockReadOk(providers: Record<string, ProviderSpec>): void {
-  mockTauriCommand('workbench_read_models_yaml', () => workbenchReadOk(providers));
+  mockTauriCommand(READ, () => readSnapshot(providers));
 }
 
 function mockSaveOk(): ReturnType<typeof vi.fn> {
-  const impl = vi.fn((_args: unknown) => ({ path: CATALOG_PATH }));
-  mockTauriCommand('workbench_save_models_yaml', impl);
+  const impl = vi.fn((args: unknown) => {
+    const { tree } = args as { tree: ModelsYamlTree };
+    return {
+      path: CATALOG_PATH,
+      revision: 'revision-1',
+      content: '',
+      template: '',
+      credentialStates: {},
+      parseError: null,
+      tree,
+    };
+  });
+  mockTauriCommand(APPLY, impl);
   return impl;
 }
 
-function savedYaml(saveImpl: ReturnType<typeof vi.fn>): string {
-  const args = saveImpl.mock.calls[0]?.[0] as { content?: string } | undefined;
-  return args?.content ?? '';
+/** 提交给统一事务的候选树（内核据此落盘与序列化）。 */
+function savedTree(saveImpl: ReturnType<typeof vi.fn>): ModelsYamlTree | null {
+  const args = saveImpl.mock.calls[0]?.[0] as { tree?: ModelsYamlTree } | undefined;
+  return args?.tree ?? null;
 }
 
 function flagRaw(): string | null {
@@ -106,7 +124,7 @@ describe('ensureLsImported（一次性 LS→yaml）', () => {
     resetLsImportForTesting();
   });
 
-  it('空 yaml + 实有 LS → serialize/写盘文本含 thinking、modalities、pricing.input、protocol、contextWindow', async () => {
+  it('空 yaml + 实有 LS → 提交树含 thinking、modalities、pricing.input、protocol、contextWindow', async () => {
     seedFullLs();
     mockReadOk({});
     const saveImpl = mockSaveOk();
@@ -114,25 +132,28 @@ describe('ensureLsImported（一次性 LS→yaml）', () => {
     const res = await ensureLsImported();
     expect(res).toEqual({ ok: true });
 
+    // 镜像（已提交回执）
     const model = selectModel('gemini', 'gemini-2.5-pro');
     expect(model?.thinking).toEqual({ Low: 'low', High: 'high' });
     expect(model?.modalities).toEqual({ input: ['text', 'image'], output: ['text'] });
     expect(model?.pricing?.input).toBe(1.5);
     expect(model?.contextWindow).toBe(64000);
 
-    const text = savedYaml(saveImpl);
-    const serialized = serializeModelsYamlTree(modelsCatalogStore.getState().tree);
-    for (const sample of [text, serialized]) {
-      expect(sample).toContain('thinking:');
-      expect(sample).toContain('modalities:');
-      expect(sample).toContain('pricing:');
-      expect(sample).toMatch(/pricing:[\s\S]*input:\s*1\.5/);
-      expect(sample).toContain('protocol: google/generate-content');
-      expect(sample).toContain('contextWindow: 64000');
-      expect(sample).not.toContain(SECRET);
-      expect(sample).not.toContain('defaultThinkingLevel');
-      expect(sample).not.toContain('apiKey:');
-    }
+    // 提交给内核事务的规范树（落盘依据）
+    const tree = savedTree(saveImpl);
+    expect(tree).not.toBeNull();
+    const provider = tree!.providers.gemini!;
+    expect(provider.protocol).toBe('google/generate-content');
+    const imported = provider.models[0]!;
+    expect(imported.thinking).toEqual({ Low: 'low', High: 'high' });
+    expect(imported.modalities).toEqual({ input: ['text', 'image'], output: ['text'] });
+    expect(imported.pricing?.input).toBe(1.5);
+    expect(imported.contextWindow).toBe(64000);
+
+    const payload = JSON.stringify(tree);
+    expect(payload).not.toContain(SECRET);
+    expect(payload).not.toContain('defaultThinkingLevel');
+    expect(payload).not.toContain('apiKey');
 
     expect(JSON.parse(flagRaw() || '{}')).toEqual({ done: true, version: 1 });
     expect(localStorage.getItem(PROFILES_KEY)).toContain(SECRET);
@@ -179,16 +200,20 @@ describe('ensureLsImported（一次性 LS→yaml）', () => {
     const res = await ensureLsImported();
     expect(res.ok).toBe(true);
 
+    // 镜像断言
     const model = selectModel('acme', 'acme-think');
     expect(model?.thinking).toEqual({ Low: 'yaml-low' });
     expect(model?.thinking).not.toHaveProperty('High');
     expect(model?.contextWindow).toBe(32000);
 
-    const text = savedYaml(saveImpl);
-    expect(text).toContain('yaml-low');
-    expect(text).not.toContain('ls-high');
-    expect(text).toContain('protocol: openai/chat');
-    expect(text).toContain('Acme Yaml');
+    // 提交树断言
+    const tree = savedTree(saveImpl)!;
+    const provider = tree.providers.acme!;
+    expect(provider.displayName).toBe('Acme Yaml');
+    expect(provider.protocol).toBe('openai/chat');
+    const payload = JSON.stringify(tree);
+    expect(payload).toContain('yaml-low');
+    expect(payload).not.toContain('ls-high');
   });
 
   it('缺 LS 键 → 不把 DEFAULT_PRICES / 128000 写入', async () => {
@@ -210,20 +235,34 @@ describe('ensureLsImported（一次性 LS→yaml）', () => {
     const res = await ensureLsImported();
     expect(res.ok).toBe(true);
 
-    const text = savedYaml(saveImpl);
-    const serialized = serializeModelsYamlTree(modelsCatalogStore.getState().tree);
-    for (const sample of [text, serialized]) {
-      expect(sample).toContain('deepseek-v4-flash');
-      expect(sample).not.toMatch(/\b128000\b/);
-      expect(sample).not.toContain('contextWindow:');
-      expect(sample).not.toContain('pricing:');
-      for (const price of DEFAULT_PRICES) {
-        if (price.model === 'deepseek-v4-flash') {
-          expect(sample).not.toContain(`input: ${price.inputPerMTok}`);
-          expect(sample).not.toContain(`output: ${price.outputPerMTok}`);
-        } else {
-          expect(sample).not.toContain(price.model);
-        }
+    // 提交树：不发明窗口 / 价格，协议落 SSOT 默认值
+    const tree = savedTree(saveImpl)!;
+    expect(Object.keys(tree.providers)).toEqual(['deepseek']);
+    const imported = tree.providers.deepseek!.models[0]!;
+    expect(imported.id).toBe('deepseek-v4-flash');
+    expect(tree.providers.deepseek!.protocol).toBe(DEFAULT_PROTOCOL);
+    expect(imported.contextWindow).toBeUndefined();
+    expect(imported.pricing).toBeUndefined();
+    const payload = JSON.stringify(tree);
+    expect(payload).not.toMatch(/\b128000\b/);
+    // 字典价目模型不得经导入混入（结构断言：供应商集合精确）
+    for (const price of DEFAULT_PRICES) {
+      if (price.model !== 'deepseek-v4-flash') {
+        expect(payload).not.toContain(`"${price.model}"`);
+      }
+    }
+
+    // 已提交镜像与提交树一致（回执安装）
+    const mirrorTree = modelsCatalogStore.getState().tree;
+    expect(Object.keys(mirrorTree.providers)).toEqual(['deepseek']);
+    const mirrorModel = mirrorTree.providers.deepseek!.models[0]!;
+    expect(mirrorModel.pricing).toBeUndefined();
+    expect(mirrorModel.contextWindow).toBeUndefined();
+    const mirror = JSON.stringify(mirrorTree);
+    expect(mirror).not.toMatch(/\b128000\b/);
+    for (const price of DEFAULT_PRICES) {
+      if (price.model !== 'deepseek-v4-flash') {
+        expect(mirror).not.toContain(`"${price.model}"`);
       }
     }
 
@@ -235,10 +274,10 @@ describe('ensureLsImported（一次性 LS→yaml）', () => {
     const emptyRes = await ensureLsImported();
     expect(emptyRes.ok).toBe(true);
     expect(saveEmpty).not.toHaveBeenCalled();
-    const emptyText = serializeModelsYamlTree(modelsCatalogStore.getState().tree);
+    const emptyText = JSON.stringify(modelsCatalogStore.getState().tree);
     expect(emptyText).not.toMatch(/\b128000\b/);
     for (const price of DEFAULT_PRICES) {
-      expect(emptyText).not.toContain(price.model);
+      expect(emptyText).not.toContain(`"${price.model}"`);
     }
   });
 
@@ -294,12 +333,14 @@ describe('ensureLsImported（一次性 LS→yaml）', () => {
 
   it('yaml parseError → 整次放弃，不写完成标记', async () => {
     seedFullLs();
-    mockTauriCommand('workbench_read_models_yaml', () => ({
+    mockTauriCommand(READ, () => ({
       path: CATALOG_PATH,
+      revision: 'revision-0',
       content: 'broken: [',
       template: '',
-      seeded: false,
+      credentialStates: {},
       parseError: { line: 4, column: 1, message: 'bad indentation' },
+      tree: null,
     }));
     const saveImpl = mockSaveOk();
 

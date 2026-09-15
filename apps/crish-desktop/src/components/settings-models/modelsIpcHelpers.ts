@@ -1,67 +1,14 @@
-import type { ModelCapabilityKey } from '../../api/modelCatalogTypes';
-import type { ModelProtocol } from '../../api/modelsCatalogTypes';
+/** 设置表单共用规范草稿契约，避免另建一份窄化类型。 */
+import type { ModelConfigDraft } from '../../api/modelsDraftMap';
 
-export interface AddModelDraft {
+export type ConfigDraft = ModelConfigDraft;
+export interface AddModelDraft extends Partial<ModelConfigDraft> {
   modelId: string;
   displayName: string;
-  contextLength: string;
-  maxOutputTokens?: string;
-  caps: Record<ModelCapabilityKey, boolean>;
-  thinkingLevel?: string;
-  protocol?: ModelProtocol;
-  modalities?: {
-    input: string[];
-    output: string[];
-  };
-  thinkingEnabled?: boolean;
-  thinkingMap?: Record<string, string>;
-  pricing?: {
-    currency: 'USD' | 'CNY';
-    input?: string;
-    output?: string;
-    cacheRead?: string;
-    cacheWrite?: string;
-  };
+  contextWindow: string;
 }
 
+/** 新建表单只有用户输入，能力和价格不能凭空预置。 */
 export function emptyAddDraft(): AddModelDraft {
-  return {
-    modelId: '',
-    displayName: '',
-    contextLength: '',
-    maxOutputTokens: '',
-    caps: {
-      tools: true,
-      image: false,
-      video: false,
-      reasoning: false,
-    },
-    modalities: {
-      input: ['text', 'image'],
-      output: ['text'],
-    },
-    thinkingEnabled: false,
-  };
-}
-
-export interface ConfigDraft {
-  displayName: string;
-  contextLength: string;
-  maxOutputTokens?: string;
-  caps: Record<ModelCapabilityKey, boolean>;
-  thinkingLevel?: string;
-  protocol?: ModelProtocol;
-  modalities?: {
-    input: string[];
-    output: string[];
-  };
-  thinkingEnabled?: boolean;
-  thinkingMap?: Record<string, string>;
-  pricing?: {
-    currency: 'USD' | 'CNY';
-    input?: string;
-    output?: string;
-    cacheRead?: string;
-    cacheWrite?: string;
-  };
+  return { modelId: '', displayName: '', contextWindow: '' };
 }

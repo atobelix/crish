@@ -28,6 +28,7 @@ const clone = <T>(val: T): T => JSON.parse(JSON.stringify(val));
 /** 2026 官方权威主流模型全景预填基线树（version 钉死为 2，与 SSOT ModelsYamlTree 对齐） */
 export const AUTOFILL_BASELINE_2026: ModelsYamlTree = {
   version: 2,
+  activeModel: null,
   providers: baselineData.providers as unknown as Record<string, ProviderSpec>,
 };
 
@@ -67,7 +68,9 @@ export function findAutofillProvider(idOrName: string): ProviderSpec | null {
   const direct = AUTOFILL_BASELINE_2026.providers[key];
   if (direct) return clone(direct);
   const found = Object.values(AUTOFILL_BASELINE_2026.providers).find(
-    (p) => p.displayName.toLowerCase() === key || p.displayName.toLowerCase().includes(key)
+    (p) =>
+      (p.displayName ?? '').toLowerCase() === key ||
+      (p.displayName ?? '').toLowerCase().includes(key)
   );
   return found ? clone(found) : null;
 }
@@ -112,18 +115,6 @@ function scoreModelCandidate(
     candidateBare.startsWith(queryBare) ||
     candidateBare.startsWith(`${queryBare}-`);
 
-  // 如果没有任何文字词元重合且互不为前缀，判定为无关模型，直接排除（防止跨厂商纯数字重合误判）
-  if (wordMatches === 0 && !isPrefix) {
-    return 0;
-  }
-
-  let score = 0;
-  if (queryBare.startsWith(candidateBare) || queryBare.startsWith(`${candidateBare}-`)) {
-    score += 500;
-  } else if (candidateBare.startsWith(queryBare) || candidateBare.startsWith(`${queryBare}-`)) {
-    score += 300;
-  }
-
   // 提取数字/版本 tokens
   const queryNums = queryTokens.filter((t) => /^\d+(\.\d+)?$/.test(t));
   const candNums = candidateTokens.filter((t) => /^\d+(\.\d+)?$/.test(t));
@@ -135,6 +126,24 @@ function scoreModelCandidate(
   }
   for (const cn of candNums) {
     if (!queryNums.includes(cn)) numMismatchCount++;
+  }
+
+  // 如果没有任何文字词元重合且互不为前缀，判定为无关模型，直接排除（防止跨厂商纯数字重合误判）
+  if (wordMatches === 0 && !isPrefix) {
+    return 0;
+  }
+
+  // 单一文字词元重合（如仅厂商名）且无前缀关系、无数字支撑 → 无关模型。
+  // 防止退役别名经厂商 token 蹭匹配（如 deepseek-chat → deepseek-reasoner）。
+  if (!isPrefix && wordMatches <= 1 && numMatchCount === 0) {
+    return 0;
+  }
+
+  let score = 0;
+  if (queryBare.startsWith(candidateBare) || queryBare.startsWith(`${candidateBare}-`)) {
+    score += 500;
+  } else if (candidateBare.startsWith(queryBare) || candidateBare.startsWith(`${queryBare}-`)) {
+    score += 300;
   }
   score += numMatchCount * 120;
   score -= numMismatchCount * 150;
@@ -160,7 +169,7 @@ export function findAutofillModelSpec(providerId: string, modelId: string): Mode
   const normPId = providerId.trim().toLowerCase();
   const p =
     AUTOFILL_BASELINE_2026.providers[normPId] ||
-    Object.values(AUTOFILL_BASELINE_2026.providers).find((x) => x.displayName.toLowerCase() === normPId);
+    Object.values(AUTOFILL_BASELINE_2026.providers).find((x) => (x.displayName ?? '').toLowerCase() === normPId);
   if (!p) return (findAutofillModel(modelId) as ModelSpec) ?? undefined;
 
   const low = modelId.trim().toLowerCase(), bare = extractBareModelId(low);

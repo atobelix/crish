@@ -2,6 +2,8 @@
  * 默认服务商配置模板与预置目录类型与常量。
  */
 
+import type { ModelProtocol } from '../modelsNormalize';
+
 export type AuthType = 'api_key' | 'oauth2' | 'subscription';
 
 export type OAuthTokenData = {
@@ -30,8 +32,8 @@ export type ProviderProfile = {
   id: string;
   name: string;
   baseUrl: string;
-  /** 供应商首要通信协议（Default Protocol，下属模型默认继承） */
-  protocol?: 'openai/chat' | 'openai/responses' | 'anthropic/messages' | undefined;
+  /** 供应商首要通信协议（Default Protocol，下属模型默认继承）；枚举 SSOT 见 modelsNormalize */
+  protocol?: ModelProtocol | undefined;
   authType?: AuthType | undefined;
   models: string[];
   /** 是否已保存密钥或已完成 OAuth 授权 */

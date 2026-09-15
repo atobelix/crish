@@ -52,23 +52,37 @@ describe('settings pure helpers', () => {
     ]);
   });
 
-  it('normalizeThinkingLevel passthroughs explicit levels and falls back to provider default', () => {
-    // 单源收敛：档位面板数据源已移交描述接口；normalize 仅做「提供方默认」归一，
-    // 不再固化为自造档位集常量（THINKING_LEVEL_IDS 已移除）。
-    expect(normalizeThinkingLevel('off')).toBe('off');
-    expect(normalizeThinkingLevel('minimal')).toBe('minimal');
-    expect(normalizeThinkingLevel('low')).toBe('low');
-    expect(normalizeThinkingLevel('medium')).toBe('medium');
-    expect(normalizeThinkingLevel('high')).toBe('high');
-    expect(normalizeThinkingLevel('xhigh')).toBe('xhigh');
-    expect(normalizeThinkingLevel(' XHIGH ')).toBe('xhigh');
+  it('normalizeThinkingLevel canonicalizes vocabulary keys and falls back to sentinel', () => {
+    // 词表唯一权威 = 内核 dialect::ReasoningEffort（7 档）；命中 → 规范拼写。
+    expect(normalizeThinkingLevel('off')).toBe('Off');
+    expect(normalizeThinkingLevel('minimal')).toBe('Minimal');
+    expect(normalizeThinkingLevel('low')).toBe('Low');
+    expect(normalizeThinkingLevel('medium')).toBe('Medium');
+    expect(normalizeThinkingLevel('high')).toBe('High');
+    expect(normalizeThinkingLevel('xhigh')).toBe('XHigh');
+    expect(normalizeThinkingLevel('XHigh')).toBe('XHigh');
+    expect(normalizeThinkingLevel(' XHigh ')).toBe('XHigh');
+    expect(normalizeThinkingLevel('max')).toBe('Max');
+    // 别名（等价内核 from_title_case）→ 归一为同一规范档位
+    expect(normalizeThinkingLevel('None')).toBe('Off');
+    expect(normalizeThinkingLevel('Disabled')).toBe('Off');
+    expect(normalizeThinkingLevel('X-High')).toBe('XHigh');
     expect(normalizeThinkingLevel('default')).toBe('default');
-    // 空 / 非法 / 非字符串 → 'default'（跟随引擎侧默认档位，不代答固定档）
+    // 词表外键 / 非接受集大小写（内核 from_title_case 只认 High|high）→ 哨兵回退
+    expect(normalizeThinkingLevel('HIGH')).toBe('default');
+    expect(normalizeThinkingLevel(' XHIGH ')).toBe('default');
+    expect(normalizeThinkingLevel('ultra')).toBe('default');
+    expect(normalizeThinkingLevel('ULTRA')).toBe('default');
+    expect(normalizeThinkingLevel('Auto')).toBe('default');
     expect(normalizeThinkingLevel('bogus')).toBe('default');
+    // 空 / 非字符串 / 哨兵 → 'default'（跟随引擎默认，不注入显式思考参数）
     expect(normalizeThinkingLevel(undefined)).toBe('default');
     expect(normalizeThinkingLevel(null)).toBe('default');
+    expect(normalizeThinkingLevel('')).toBe('default');
+    expect(normalizeThinkingLevel('   ')).toBe('default');
     expect(normalizeThinkingLevel(42)).toBe('default');
     expect(normalizeThinkingLevel({ level: 'high' })).toBe('default');
+    expect(normalizeThinkingLevel(['high'])).toBe('default');
   });
 
   it('normalizeSettingsBool coerces loose LS / Chinese yes-no', () => {
@@ -251,6 +265,7 @@ describe('clientApi settings hydrate / save', () => {
     );
     const s = await clientApi.getSettingsEx('__global__');
     expect(s.responseStyle).toBe('high');
+    // 词表外键 → 回落哨兵 'default'（不再原样透传）
     expect(s.defaultThinkingLevel).toBe('default');
     expect(s.hideThinkingBlock).toBe(true);
     expect(s.tabModeEnabled).toBe(false);

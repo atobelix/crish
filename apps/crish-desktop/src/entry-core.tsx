@@ -106,6 +106,42 @@ export class StartupCoordinator {
           });
       }
 
+      // 5b. DEV：MCP guest 监听器注册（真实宿主自动化唯一入口）。
+      //     插件不会自动注入 guest 监听器（Cargo.toml exclude /guest-js、
+      //     build.rs 无 guest 打包步骤、listener_patch.js 不含 execute-js），
+      //     必须由前端显式注册；否则 execute-js 等 emit_and_wait 事件无人接收
+      //     → 所有依赖 webview JS 桥的工具永久超时。
+      //     注册成功后串接 app_bridge 助手（shell/session 直驱）。
+      if (import.meta.env.DEV) {
+        void Promise.all([
+          import('tauri-plugin-mcp'),
+          import('./dev/mcpBridge'),
+        ])
+          .then(async ([mcp, bridge]) => {
+            await mcp.setupPluginListeners();
+            // 监听器就绪即应已装好 __MCP_BRIDGE__ 注册表；缺失则显式告警。
+            if (!(window as { __MCP_BRIDGE__?: unknown }).__MCP_BRIDGE__) {
+              logger.error(
+                '[StartupCoordinator] MCP app_bridge 未就绪：window.__MCP_BRIDGE__ 缺失',
+                { module: 'StartupCoordinator' }
+              );
+            }
+            bridge.registerCrishMcpBridge();
+          })
+          .catch((e) => {
+            logger.error(
+              '[StartupCoordinator] MCP guest 监听器注册失败（宿主桥工具将不可用）:',
+              {
+                module: 'StartupCoordinator',
+                err:
+                  e instanceof Error
+                    ? { message: e.message, stack: e.stack, name: e.name }
+                    : { message: String(e) },
+              }
+            );
+          });
+      }
+
       // 6. DOM 根节点
       const rootElement = document.getElementById('root');
       if (!rootElement) {

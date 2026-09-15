@@ -62,11 +62,23 @@ async function seedCatalog(
     path: CATALOG_PATH,
     content: '',
     template: '',
-    seeded: false,
+    revision: 'revision-0',
+    credentialStates: {},
     parseError: null,
-    providers: structuredClone(providers),
+    tree: { version: 2, activeModel: null, providers: structuredClone(providers) },
   }));
-  mockTauriCommand('workbench_save_models_yaml', () => ({ path: CATALOG_PATH }));
+  mockTauriCommand('workbench_apply_models_config', (args) => {
+    const { tree } = args as { tree: unknown };
+    return {
+      path: CATALOG_PATH,
+      revision: 'revision-1',
+      content: '',
+      template: '',
+      credentialStates: {},
+      parseError: null,
+      tree,
+    };
+  });
   await modelsCatalogStore.ensureLoaded(true);
 }
 

@@ -49,7 +49,7 @@ function pushFallbackTurns(msg: SessionMessage, items: AssistantTimelineItem[]):
     items.push({
       kind: 'thought',
       content: msg.thinking || '',
-      durationMs: msg.thinkingTime ? msg.thinkingTime * 1000 : undefined,
+      durationMs: undefined,
       key: 'thought-legacy',
       startTime: msg.timestamp,
     });
@@ -288,30 +288,13 @@ export function buildAssistantTimeline(
 }
 
 /**
- * 历史/无打点耗时兜底：若全段子项耗时均为 0/undefined，但消息级记录了 thinkingTime（秒），
- * 自动回填给首个过程项，杜绝终态「已完成 0.0 秒」虚假定格。
+ * 时序与耗时校准：思考项耗时（durationMs）严格代表思考自身的内部耗时，
+ * 严禁以整轮工作耗时（msg.thinkingTime）覆盖；整轮工作时间统一由 timelineSegmenter 在分段层呈现。
  */
 function applyDurationFallback(
-  msg: SessionMessage,
+  _msg: SessionMessage,
   items: AssistantTimelineItem[]
 ): AssistantTimelineItem[] {
-  const totalRecordedDuration = items.reduce(
-    (acc, it) => acc + (it.durationMs || 0),
-    0
-  );
-  if (
-    totalRecordedDuration === 0 &&
-    typeof msg.thinkingTime === 'number' &&
-    msg.thinkingTime > 0
-  ) {
-    const fallbackMs = Math.round(msg.thinkingTime * 1000);
-    const firstProc = items.find(
-      (it) => it.kind === 'tools' || it.kind === 'thought'
-    );
-    if (firstProc) {
-      firstProc.durationMs = fallbackMs;
-    }
-  }
   return enforceThoughtBeforeText(items);
 }
 

@@ -269,9 +269,9 @@ export const ManualAddForm: React.FC<{
           <Input
             size="sm"
             placeholder="如 128000"
-            value={addDraft.contextLength}
+            value={addDraft.contextWindow}
             onChange={(e) =>
-              setAddDraft((d) => ({ ...d, contextLength: e.target.value }))
+              setAddDraft((d) => ({ ...d, contextWindow: e.target.value }))
             }
           />
         </label>
@@ -289,22 +289,16 @@ export const ManualAddForm: React.FC<{
         </label>
       </div>
 
-      {/* 多模态矩阵编辑器（一等公民） */}
+      {/* 多模态矩阵编辑器（一等公民）；modalities 是能力唯一真源 */}
       <ModelModalitiesEditor
         modalities={
           addDraft.modalities || {
-            input: ['text', 'image'],
+            input: ['text'],
             output: ['text'],
           }
         }
         onChange={(next) =>
           setAddDraft((d) => ({ ...d, modalities: next }))
-        }
-        onSyncCaps={(capsPatch) =>
-          setAddDraft((d) => ({
-            ...d,
-            caps: { ...d.caps, ...capsPatch },
-          }))
         }
       />
 
@@ -320,7 +314,6 @@ export const ManualAddForm: React.FC<{
                 setAddDraft((d) => ({
                   ...d,
                   thinkingEnabled: false,
-                  caps: { ...d.caps, reasoning: false },
                 }))
               }
               className={styles.mrdAddThinkingCloseBtn}
@@ -348,7 +341,6 @@ export const ManualAddForm: React.FC<{
                 ...d,
                 thinkingEnabled: true,
                 thinkingMap: { ...STANDARD_THINKING_PRESET },
-                caps: { ...d.caps, reasoning: true },
               }))
             }
             icon={<AppIcon name="plus" size={11} />}

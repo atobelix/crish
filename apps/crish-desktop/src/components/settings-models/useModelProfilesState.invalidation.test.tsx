@@ -102,7 +102,7 @@ const CATALOG_PROVIDERS: Record<string, ProviderSpec> = {
         contextWindow: 128000,
         maxOutputTokens: 16384,
         enabled: true,
-        capabilities: { tools: true },
+        supportsTools: true,
         thinking: { Low: 'low', High: 'high' },
         modalities: { input: ['text'], output: ['text'] },
         pricing: {
@@ -119,9 +119,9 @@ const CATALOG_PROVIDERS: Record<string, ProviderSpec> = {
 
 function lastSavedYaml(saveImpl: ReturnType<typeof vi.fn>): string {
   const last = saveImpl.mock.calls[saveImpl.mock.calls.length - 1]?.[0] as
-    | { content?: string }
+    | { tree?: unknown }
     | undefined;
-  return last?.content ?? '';
+  return JSON.stringify(last?.tree ?? null);
 }
 
 function parseGpt4o(content: string): Record<string, unknown> | undefined {
@@ -173,12 +173,24 @@ describe('useModelProfilesState 失效订阅（R2-a ④ / T2-7）', () => {
       path: CATALOG_PATH,
       content: '',
       template: '',
-      seeded: false,
+      revision: 'revision-0',
+      credentialStates: {},
       parseError: null,
-      providers: structuredClone(CATALOG_PROVIDERS),
+      tree: { version: 2, activeModel: null, providers: structuredClone(CATALOG_PROVIDERS) },
     }));
-    saveImpl = vi.fn((_args: unknown) => ({ path: CATALOG_PATH }));
-    mockTauriCommand('workbench_save_models_yaml', saveImpl);
+    saveImpl = vi.fn((args: unknown) => {
+      const { tree } = args as { tree: unknown };
+      return {
+        path: CATALOG_PATH,
+        revision: 'revision-1',
+        content: '',
+        template: '',
+        credentialStates: {},
+        parseError: null,
+        tree,
+      };
+    });
+    mockTauriCommand('workbench_apply_models_config', saveImpl);
     await modelsCatalogStore.ensureLoaded(true);
   });
 
@@ -211,7 +223,7 @@ describe('useModelProfilesState 失效订阅（R2-a ④ / T2-7）', () => {
       result.current.openConfigFor('gpt-4o');
     });
     expect(result.current.cfgDraft).not.toBeNull();
-    expect(mocks.open).toHaveBeenCalledWith('preset-openai::gpt-4o');
+    expect(mocks.open).toHaveBeenCalledWith('["preset-openai","gpt-4o"]');
 
     currentProfiles = [PROFILE_UPDATED];
     act(() => {
@@ -224,7 +236,7 @@ describe('useModelProfilesState 失效订阅（R2-a ④ / T2-7）', () => {
       { type: 'error' }
     );
     expect(mocks.invalidate).toHaveBeenCalledWith(
-      'preset-openai::gpt-4o',
+      '["preset-openai","gpt-4o"]',
       'external'
     );
     expect(result.current.cfgDraft).not.toBeNull();
@@ -248,7 +260,7 @@ describe('useModelProfilesState 失效订阅（R2-a ④ / T2-7）', () => {
       { type: 'error' }
     );
     expect(mocks.invalidate).toHaveBeenCalledWith(
-      'preset-openai::gpt-4o',
+      '["preset-openai","gpt-4o"]',
       'external'
     );
     expect(result.current.cfgDraft).not.toBeNull();
@@ -276,7 +288,7 @@ describe('useModelProfilesState 失效订阅（R2-a ④ / T2-7）', () => {
         contextLength: '130000',
         caps: { tools: true, image: false, video: false, reasoning: true },
         thinkingEnabled: true,
-        thinkingMap: { Low: 'low', CustomUltra: 'stale_wire' },
+        thinkingMap: { Low: 'low', XHigh: 'stale_wire' },
         modalities: { input: ['text', 'image'], output: ['text'] },
         pricing: {
           currency: 'CNY',
@@ -308,7 +320,7 @@ describe('useModelProfilesState 失效订阅（R2-a ④ / T2-7）', () => {
       { type: 'error' }
     );
     expect(mocks.invalidate).toHaveBeenCalledWith(
-      'preset-openai::gpt-4o',
+      '["preset-openai","gpt-4o"]',
       'external'
     );
     expect(mocks.commit).not.toHaveBeenCalled();
@@ -325,11 +337,11 @@ describe('useModelProfilesState 失效订阅（R2-a ④ / T2-7）', () => {
       result.current.openConfigFor('gpt-4o');
       result.current.setCfgDraft({
         displayName: 'GPT-4o 正常改',
-        contextLength: '200000',
+        contextWindow: '200000',
         maxOutputTokens: '16384',
-        caps: { tools: true, image: true, video: false, reasoning: true },
+        supportsTools: true,
         thinkingEnabled: true,
-        thinkingMap: { Low: 'low', CustomUltra: 'ultra_wire' },
+        thinkingMap: { Low: 'low', XHigh: 'ultra_wire' },
         modalities: { input: ['text', 'image'], output: ['text'] },
         pricing: {
           currency: 'CNY',
@@ -349,16 +361,16 @@ describe('useModelProfilesState 失效订阅（R2-a ④ / T2-7）', () => {
     });
 
     const content = lastSavedYaml(saveImpl);
-    expect(content).toContain('thinking:');
-    expect(content).toContain('modalities:');
-    expect(content).toContain('cacheRead:');
+    expect(content).toContain('"thinking":');
+    expect(content).toContain('"modalities":');
+    expect(content).toContain('"cacheRead":');
     expect(content).not.toContain('inputPerMTok');
-    expect(content).not.toContain('contextLength:');
+    expect(content).not.toContain('contextLength');
     expect(content).not.toContain('defaultThinkingLevel');
 
     const node = parseGpt4o(content);
     expect(node?.displayName).toBe('GPT-4o 正常改');
-    expect(node?.thinking).toEqual({ Low: 'low', CustomUltra: 'ultra_wire' });
+    expect(node?.thinking).toEqual({ Low: 'low', XHigh: 'ultra_wire' });
     expect(node?.modalities).toEqual({
       input: ['text', 'image'],
       output: ['text'],
@@ -366,7 +378,7 @@ describe('useModelProfilesState 失效订阅（R2-a ④ / T2-7）', () => {
     expect((node?.pricing as { cacheRead?: number })?.cacheRead).toBe(0.08);
     expect(node?.contextWindow).toBe(200000);
 
-    expect(mocks.commit).toHaveBeenCalledWith('preset-openai::gpt-4o');
+    expect(mocks.commit).toHaveBeenCalledWith('["preset-openai","gpt-4o"]');
     expect(mocks.toastShow).not.toHaveBeenCalled();
   });
 
@@ -381,7 +393,7 @@ describe('useModelProfilesState 失效订阅（R2-a ④ / T2-7）', () => {
     });
 
     expect(mocks.invalidate).toHaveBeenCalledWith(
-      'preset-openai::gpt-4o',
+      '["preset-openai","gpt-4o"]',
       'external'
     );
     expect(result.current.cfgDraft).toBeNull();

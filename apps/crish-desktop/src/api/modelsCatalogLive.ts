@@ -1,21 +1,28 @@
-/**
- * modelsCatalogLive.ts —— 生产唯一读 API（plans/03 §3.2）
- *
- * 真源 = modelsCatalogStore（yaml 镜像）。禁止 LS / thinkingGear / 预填库。
- * 未加载或找不到 → undefined / [] / false。禁止猜测对象、禁止发明窗口、禁止合成「默认」档。
- * 定位键 (providerId, modelId) 大小写不敏感，与 modelIndex `${normPId}::${normMId}` 一致。
- */
-
-import { modelsCatalogStore, selectModel, selectProvider } from './modelsCatalogStore';
+/** 生产模型读取只消费已确认目录，绝不借助旧存储或预填数据补配。 */
+import {
+  selectModel,
+  selectProvider,
+  selectEffectiveCompat,
+  listCatalogModels,
+} from './modelsCatalogStore';
+import {
+  THINKING_VOCABULARY,
+  THINKING_VOCABULARY_LABELS,
+} from './modelsNormalize';
 import type {
   IndexedModelEntry,
   ModelSpec,
   ProviderSpec,
+  ThinkingLevelTitle,
+  ThinkingMap,
   ThinkingWireFormat,
 } from './modelsCatalogTypes';
 
-export type LiveThinkingOption = { title: string; wire: string };
-
+export type LiveThinkingOption = {
+  title: ThinkingLevelTitle;
+  wire: string;
+  label: string;
+};
 export type LiveThinkingHandoff =
   | {
       supported: false;
@@ -29,141 +36,113 @@ export type LiveThinkingHandoff =
       supported: true;
       providerId: string;
       modelId: string;
-      thinking: Record<string, string>;
-      selectedTitle: string;
-      selectedWire: string;
+      thinking: ThinkingMap;
+      selectedTitle: ThinkingLevelTitle | null;
+      selectedWire: string | null;
       thinkingFormat?: ThinkingWireFormat;
     };
 
-function isCatalogLoaded(): boolean {
-  return modelsCatalogStore.getState().loaded === true;
-}
-
-function isEnabledFlag(flag: boolean | undefined): boolean {
-  return flag !== false;
-}
-
-/** 未加载或找不到 → undefined。禁止返回猜测对象。 */
 export function getLiveProvider(providerId: string): ProviderSpec | undefined {
-  if (!isCatalogLoaded()) return undefined;
   return selectProvider(providerId);
 }
 
-/** 未加载或找不到 → undefined。原样交出 thinking / modalities / pricing / protocol。 */
-export function getLiveModel(providerId: string, modelId: string): ModelSpec | undefined {
-  if (!isCatalogLoaded()) return undefined;
+export function getLiveModel(
+  providerId: string,
+  modelId: string
+): ModelSpec | undefined {
   return selectModel(providerId, modelId);
 }
 
-/** 启用中的供应商 × 启用中的模型。顺序 = yaml 对象插入序。未加载 → []。 */
+/** 只列已启用条目；相同顺序值维持配置中的稳定顺序。 */
 export function listLivePickerEntries(): IndexedModelEntry[] {
-  const state = modelsCatalogStore.getState();
-  if (state.loaded !== true) return [];
-
-  const out: IndexedModelEntry[] = [];
-  for (const [providerId, provider] of Object.entries(state.tree.providers || {})) {
-    if (!isEnabledFlag(provider.enabled)) continue;
-    for (const model of provider.models || []) {
-      if (!isEnabledFlag(model.enabled)) continue;
-      if (!(model.id || '').trim()) continue;
-      out.push({ providerId, provider, model });
-    }
-  }
-  return out;
+  return listCatalogModels()
+    .filter(({ provider, model }) => provider.enabled && model.enabled)
+    .sort(
+      (a, b) =>
+        (a.provider.order ?? 0) - (b.provider.order ?? 0) ||
+        (a.providerId === b.providerId
+          ? (a.model.order ?? 0) - (b.model.order ?? 0)
+          : 0)
+    );
 }
 
-/**
- * modalities.input 含该模态。
- * modalities 缺省或 input 非数组 → false（闭）。未加载 / 找不到 / 仅 capabilities 布尔 → false。
- */
 export function modelAcceptsInput(
   providerId: string,
   modelId: string,
   modality: string
 ): boolean {
-  const spec = getLiveModel(providerId, modelId);
-  const input = spec?.modalities?.input;
-  if (!Array.isArray(input)) return false;
-  return input.includes(modality);
+  const provider = getLiveProvider(providerId);
+  const model = getLiveModel(providerId, modelId);
+  return Boolean(
+    provider?.enabled &&
+    model?.enabled &&
+    model.modalities?.input.includes(modality)
+  );
 }
 
-/**
- * thinking 为非空字典 → 支持思考。选项 = Object.entries，label=key，wire=value。
- * 无合成「默认」项。空字典 / 缺省 / 未加载 = []。
- */
+/** 保存的档位以规范词表顺序呈现，wire 保持原文。 */
 export function listThinkingOptions(
   providerId: string,
   modelId: string
 ): LiveThinkingOption[] {
   const thinking = getLiveModel(providerId, modelId)?.thinking;
-  if (!thinking || typeof thinking !== 'object' || Array.isArray(thinking)) return [];
-  return Object.entries(thinking).map(([title, wire]) => ({ title, wire }));
+  if (!thinking) return [];
+  return THINKING_VOCABULARY.flatMap((title) => {
+    const wire = thinking[title];
+    return wire === undefined
+      ? []
+      : [{ title, wire, label: THINKING_VOCABULARY_LABELS[title] }];
+  });
 }
 
-function unsupportedHandoff(providerId: string, modelId: string): LiveThinkingHandoff {
-  return {
-    supported: false,
-    providerId,
-    modelId,
-    thinking: undefined,
-    selectedTitle: null,
-    selectedWire: null,
-  };
+export function isThinkingLevelAvailable(
+  selectedLevel: string | null | undefined,
+  availableLevels: readonly string[]
+): boolean {
+  return (
+    selectedLevel != null &&
+    selectedLevel !== '' &&
+    THINKING_VOCABULARY.some((level) => level === selectedLevel) &&
+    availableLevels.includes(selectedLevel)
+  );
 }
 
-/**
- * 选中 Title 对当前字典的解析。
- * selectedTitle 不在字典内 → 回落到字典第一项；字典空 → supported=false。
- */
+/** 未选择与明确请求一个不可用档位不同；后者不能静默省略出站参数。 */
 export function resolveThinkingHandoff(
   providerId: string,
   modelId: string,
   selectedTitle: string | null
 ): LiveThinkingHandoff {
-  const spec = getLiveModel(providerId, modelId);
-  const thinking = spec?.thinking;
-  if (!thinking || typeof thinking !== 'object' || Array.isArray(thinking)) {
-    return unsupportedHandoff(providerId, modelId);
+  const model = getLiveModel(providerId, modelId);
+  const options = listThinkingOptions(providerId, modelId);
+  if (!model || options.length === 0) {
+    if (selectedTitle) throw new Error('当前模型未声明所选思考档位');
+    return {
+      supported: false,
+      providerId,
+      modelId,
+      thinking: undefined,
+      selectedTitle: null,
+      selectedWire: null,
+    };
   }
-
-  const entries = Object.entries(thinking);
-  if (entries.length === 0) {
-    return unsupportedHandoff(providerId, modelId);
-  }
-
-  // 1. 精确匹配用户选择
-  let hit: string | undefined =
-    selectedTitle != null && Object.hasOwn(thinking, selectedTitle)
-      ? selectedTitle
-      : undefined;
-
-  // 2. 大小写不敏感容错平移
-  if (!hit && selectedTitle != null && selectedTitle.trim()) {
-    const norm = selectedTitle.trim().toLowerCase();
-    const caseMatch = entries.find(([k]) => k.toLowerCase() === norm);
-    if (caseMatch) {
-      hit = caseMatch[0];
-    }
-  }
-
-  // 3. 未存档或未命中时：稳态平滑回退到字典第一项（契约规范）
-  if (!hit) {
-    hit = entries[0]![0];
-  }
-
-  const provider = getLiveProvider(providerId);
-  const thinkingFormat = (provider?.compat ?? spec.compat)?.thinkingFormat;
-
-  const handoff: Extract<LiveThinkingHandoff, { supported: true }> = {
+  const option = selectedTitle
+    ? options.find((entry) => entry.title === selectedTitle)
+    : undefined;
+  if (selectedTitle && !option)
+    throw new Error(`当前模型不支持思考档位：${selectedTitle}`);
+  const thinking = model.thinking!;
+  const thinkingFormat = selectEffectiveCompat(
+    providerId,
+    modelId
+  )?.thinkingFormat;
+  return {
     supported: true,
     providerId,
     modelId,
     thinking,
-    selectedTitle: hit,
-    selectedWire: thinking[hit] ?? '',
+    selectedTitle: option?.title ?? null,
+    selectedWire: option?.wire ?? null,
+    ...(thinkingFormat !== undefined ? { thinkingFormat } : {}),
   };
-  if (thinkingFormat !== undefined) {
-    handoff.thinkingFormat = thinkingFormat;
-  }
-  return handoff;
 }

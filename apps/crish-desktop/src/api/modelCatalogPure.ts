@@ -127,8 +127,10 @@ export function filterUsableCatalogEntries(
 /**
  * 从目录选默认项（纯）。
  * - 空列表 / 无可用项 → null（**绝不**发明 mimo 或其它远程 vendor 演示 id）
- * - 优先 preferred profile+model → preferred model → preferred profile
- * - 再优先 hasKey，最后取首个可用
+ * - 模型身份 = (providerId, modelId) 双键：优先精确 profile+model，
+ *   仅有 model 而无 profile 时**不可**跨供应商匹配，返回 null
+ *   （U1：失效即置空，不强行找可用；INV-1：禁止裸 modelId 跨供应商匹配）
+ * - 再优先 preferred profile，其后 hasKey，最后取首个可用
  */
 export function pickDefaultCatalogEntry(
   list: readonly CatalogModelEntry[] | null | undefined,
@@ -142,14 +144,13 @@ export function pickDefaultCatalogEntry(
   const prefProfile = normalizeModelIdText(opts?.preferredProfileId ?? '');
   const prefModel = normalizeModelIdText(opts?.preferredModel ?? '');
 
+  // 只有 modelId 没有 providerId → 身份不完整，拒绝跨供应商「同名首个」匹配。
+  if (prefModel && !prefProfile) return null;
+
   if (prefProfile && prefModel) {
     const hit = usable.find(
       (e) => e.profileId === prefProfile && e.model === prefModel
     );
-    if (hit) return hit;
-  }
-  if (prefModel) {
-    const hit = usable.find((e) => e.model === prefModel);
     if (hit) return hit;
   }
   if (prefProfile) {

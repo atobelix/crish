@@ -7,7 +7,7 @@
  */
 
 import { modelsCatalogStore } from './modelsCatalogStore';
-import { normalizeProtocol } from './modelsNormalize';
+import { DEFAULT_PROTOCOL, normalizeProtocol, type ModelProtocol } from './modelsNormalize';
 import type {
   ModelSpec,
   ModelsYamlTree,
@@ -24,6 +24,17 @@ const META_KEY = 'crish_model_meta_v1';
 const PRICES_KEY = 'crish_model_prices_v1';
 
 export type LsImportResult = { ok: boolean; error?: string };
+
+/** 只读边界旧名 → 规范协议。LS→yaml 是一次性显式升级边界，旧名到此终结。 */
+const LEGACY_PROTOCOL_ALIASES: Readonly<Record<string, ModelProtocol>> = {
+  'google/interactions': 'google/generate-content',
+};
+
+function protocolFromLegacy(raw: unknown): ModelProtocol | undefined {
+  if (typeof raw !== 'string') return undefined;
+  const text = raw.trim();
+  return normalizeProtocol(text) ?? LEGACY_PROTOCOL_ALIASES[text];
+}
 
 let inflight: Promise<LsImportResult> | null = null;
 
@@ -177,7 +188,8 @@ function mergeLsIntoTree(tree: ModelsYamlTree, ls: LsBundle): ModelsYamlTree {
     providers[pid] = existing ? fillProviderHoles(existing, fromLs) : fromLs;
   }
 
-  return { version: 2, providers };
+  // LS 导入不改活动选择；树契约要求 activeModel 键恒在。
+  return { version: 2, activeModel: tree.activeModel, providers };
 }
 
 function providerFromLs(
@@ -185,7 +197,7 @@ function providerFromLs(
   pid: string,
   ls: LsBundle
 ): ProviderSpec {
-  const protocol = normalizeProtocol(profile.protocol) ?? 'openai/chat';
+  const protocol = protocolFromLegacy(profile.protocol) ?? DEFAULT_PROTOCOL;
   const name = typeof profile.name === 'string' ? profile.name.trim() : '';
   const displayName = name || pid;
   const baseUrl = typeof profile.baseUrl === 'string' ? profile.baseUrl : '';
@@ -201,8 +213,14 @@ function providerFromLs(
     models.push(modelFromLs(pid, modelId, ls));
   }
 
-  const spec: ProviderSpec = { displayName, baseUrl, protocol, models };
-  if (profile.enabled === false) spec.enabled = false;
+  const spec: ProviderSpec = {
+    displayName,
+    baseUrl,
+    protocol,
+    stream: true,
+    enabled: profile.enabled !== false,
+    models,
+  };
   return spec;
 }
 
@@ -236,11 +254,11 @@ function fillProviderHoles(yaml: ProviderSpec, ls: ProviderSpec): ProviderSpec {
 function modelFromLs(pid: string, modelId: string, ls: LsBundle): ModelSpec {
   const meta = ls.meta.get(`${pid}::${modelId.toLowerCase()}`);
   const price = ls.prices.get(modelId.toLowerCase());
-  const spec: ModelSpec = { id: modelId };
+  const spec: ModelSpec = { id: modelId, enabled: meta?.enabled !== false };
 
   const displayName = typeof meta?.displayName === 'string' ? meta.displayName.trim() : '';
   if (displayName) spec.displayName = displayName;
-  const protocol = normalizeProtocol(meta?.protocol);
+  const protocol = protocolFromLegacy(meta?.protocol);
   if (protocol) spec.protocol = protocol;
   const contextWindow = pickNum(meta?.contextWindow, meta?.contextLength);
   if (contextWindow != null) spec.contextWindow = contextWindow;
@@ -252,7 +270,6 @@ function modelFromLs(pid: string, modelId: string, ls: LsBundle): ModelSpec {
   if (modalities) spec.modalities = modalities;
   const pricing = pricingFrom(meta, price);
   if (pricing) spec.pricing = pricing;
-  if (meta?.enabled === false) spec.enabled = false;
   return spec;
 }
 

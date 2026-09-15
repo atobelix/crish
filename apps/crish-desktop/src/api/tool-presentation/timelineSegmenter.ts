@@ -51,6 +51,13 @@ function hasTextContent(item: TimelineTextItem): boolean {
   return (item.content || '').trim().length > 0;
 }
 
+export interface TimelineSegmentationContext {
+  /** 消息起始时间戳（epoch ms，从用户发送/消息创建起算） */
+  msgTimestamp?: number;
+  /** 整轮总工作耗时（秒，来自 SessionMessage.thinkingTime / 运行完成统计） */
+  totalTurnDurationSec?: number;
+}
+
 /**
  * 将线性时间线切割为交错的分段序列。
  *
@@ -58,12 +65,14 @@ function hasTextContent(item: TimelineTextItem): boolean {
  * @param items       已去重的线性时间线项
  * @param isTurnLive  本轮是否处于流式活跃态
  * @param hasStreamText 是否存在流式正文（用于铁律二的补强判定）
+ * @param timeContext 消息级轮次时间上下文（用于首段精准承载整轮工作耗时）
  */
 export function partitionTimelineSegments(
   msgId: string,
   items: readonly AssistantTimelineItem[],
   isTurnLive: boolean,
-  hasStreamText: boolean
+  hasStreamText: boolean,
+  timeContext?: TimelineSegmentationContext
 ): TimelineSegment[] {
   const segments: TimelineSegment[] = [];
   let procIndex = 0;
@@ -178,9 +187,27 @@ export function partitionTimelineSegments(
     let segEnd: number | undefined;
 
     if (procIndex === 0) {
-      segStart = turnStart;
+      if (
+        typeof timeContext?.msgTimestamp === 'number' &&
+        timeContext.msgTimestamp > 0
+      ) {
+        segStart =
+          turnStart !== undefined
+            ? Math.min(turnStart, timeContext.msgTimestamp)
+            : timeContext.msgTimestamp;
+      } else {
+        segStart = turnStart;
+      }
+
       if (!isLive) {
         if (
+          typeof timeContext?.totalTurnDurationSec === 'number' &&
+          timeContext.totalTurnDurationSec > 0
+        ) {
+          const wallMs = Math.round(timeContext.totalTurnDurationSec * 1000);
+          segEnd = (segStart ?? 0) + wallMs;
+          metrics.totalDurationMs = Math.max(metrics.totalDurationMs, wallMs);
+        } else if (
           segStart !== undefined &&
           (turnEnd === undefined || turnEnd <= segStart) &&
           turnTotalDurationMs > 0

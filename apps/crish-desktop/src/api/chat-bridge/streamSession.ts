@@ -30,6 +30,7 @@ import {
   ENGINE_SEND_GATE_TIMEOUT_MS,
 } from './readiness';
 import { type HistoryMessage, buildHistoryMessages } from './historyMessages';
+import { DOMAIN_MESSAGES } from '../userFacingErrors';
 import {
   getResponseStyleDescription,
   resolveResponseStyle,
@@ -239,6 +240,8 @@ export async function createStreamSession(
     if (isSessionBusy) {
       logInternalError('stream-start-busy-queued', e);
       try {
+        // S7 用户可见排队提示（文案 SSOT = DOMAIN_MESSAGES.S7，禁止双写）
+        callbacks.onThought?.(DOMAIN_MESSAGES.S7);
         const root = getCompositionRoot();
         if (userClientMessageId) {
           root.session

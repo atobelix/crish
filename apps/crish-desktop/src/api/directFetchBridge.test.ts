@@ -1,12 +1,17 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { streamViaDirectFetch } from './directFetchBridge';
 
-vi.mock('../api/providerProfiles', () => ({
-  getActiveProfile: () => ({
+const activeMocks = vi.hoisted(() => ({
+  profile: {
     apiKey: 'test-key',
     baseUrl: 'https://api.test.example/v1',
-  }),
-  getActiveModelId: () => 'deepseek-chat',
+  } as { apiKey: string; baseUrl: string } | null,
+  modelId: 'deepseek-chat' as string | null,
+}));
+
+vi.mock('../api/providerProfiles', () => ({
+  getActiveProfile: () => activeMocks.profile,
+  getActiveModelId: () => activeMocks.modelId,
 }));
 
 const makeCallbacks = () => ({
@@ -28,6 +33,11 @@ const okResponse = () =>
 
 describe('directFetchBridge', () => {
   beforeEach(() => {
+    activeMocks.profile = {
+      apiKey: 'test-key',
+      baseUrl: 'https://api.test.example/v1',
+    };
+    activeMocks.modelId = 'deepseek-chat';
     vi.stubGlobal(
       'fetch',
       vi.fn().mockImplementation(() => okResponse())
@@ -36,6 +46,35 @@ describe('directFetchBridge', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+  });
+
+  it('无活动模型 → fail-closed：不发请求、不发明厂商兜底模型', async () => {
+    activeMocks.modelId = null;
+    const fetchMock = vi.mocked(globalThis.fetch);
+    const callbacks = makeCallbacks();
+
+    streamViaDirectFetch('hello', callbacks, 's-1', 'msg-1');
+    await Promise.resolve();
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(callbacks.onRunError).toHaveBeenCalledWith(
+      expect.stringContaining('活动模型'),
+      'config'
+    );
+    expect(callbacks.onComplete).toHaveBeenCalled();
+  });
+
+  it('有活动模型 → 请求体 model = 活动模型（无厂商特定兜底）', async () => {
+    const fetchMock = vi.mocked(globalThis.fetch);
+    const callbacks = makeCallbacks();
+
+    streamViaDirectFetch('hello', callbacks, 'sess-001', 'msg-1');
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
+
+    const body = JSON.parse(
+      (fetchMock.mock.calls[0]?.[1] as { body: string }).body
+    ) as Record<string, unknown>;
+    expect(body.model).toBe('deepseek-chat');
   });
 
   it('should preserve reasoning_content on abort', () => {

@@ -77,6 +77,7 @@ export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
     entry('workbench_read_models_yaml', 'workbench', 'gui'),
     entry('workbench_validate_models_yaml', 'workbench', 'gui'),
     entry('workbench_save_models_yaml', 'workbench', 'gui'),
+    entry('workbench_apply_models_config', 'workbench', 'gui'),
     // F1（R-AB1 T-AB-08）：后台任务三条查询命令恢复（与 Rust 侧 manifest 同步）
     entry('workbench_list_background_tasks', 'workbench', 'gui'),
     entry('workbench_get_background_task_output', 'workbench', 'gui'),
@@ -111,15 +112,11 @@ export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
     entry('auth_list_devices', 'auth', 'engine'),
     entry('auth_revoke_device', 'auth', 'engine'),
     entry('auth_get_relay_ticket', 'auth', 'engine'),
-    // ── 配置族（§2.2-C，F5 终态名：config_get/config_update/config_secret_*）──
-    // PE-07 T07.4（K-01/K-02）：config_profile_apply / config_secret_reveal 已接线
-    entry('config_get', 'config', 'engine'),
-    entry('config_update', 'config', 'engine'),
+    // ── 供应商隔离凭据；配置读写统一由 models 命令负责。──
     entry('config_secret_set', 'config', 'engine'),
     entry('config_secret_get', 'config', 'engine'),
     entry('config_secret_has', 'config', 'engine'),
     entry('config_secret_clear', 'config', 'engine'),
-    entry('config_profile_apply', 'config', 'engine'),
     entry('config_secret_reveal', 'config', 'engine'),
     // ── 原生探活与模型扫描（Batch 1 · G3：provider_probe_ping / provider_probe_scan_models）──
     entry('provider_probe_ping', 'config', 'engine'),
@@ -177,9 +174,6 @@ export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
     entry('core_jsonl_to_messages', 'core', 'engine'),
     // ── 注册表单一化自身（T03.1）──
     entry('core_list_commands', 'core', 'engine'),
-    // ── 模型目录（P3 步骤 5：catalog_get / catalog_refresh；C7 三处登记 ③）──
-    entry('catalog_get', 'core', 'engine'),
-    entry('catalog_refresh', 'core', 'engine'),
     // ── 误删恢复（I2-S5：trash_list / trash_restore / trash_purge；Rust
     //    command_manifest.rs :169-171 已登记、main.rs 已注册，trashApi.ts 实调用）──
     entry('trash_list', 'core', 'engine'),

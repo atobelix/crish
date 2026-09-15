@@ -218,7 +218,7 @@ export function normalizeAssistantTimeline(
       type: 'thought',
       content: msg.thinking || '',
       turnIndex: 0,
-      durationMs: msg.thinkingTime ? msg.thinkingTime * 1000 : undefined,
+      durationMs: undefined,
       id: 'thought-legacy',
     };
     // 关键：若此前完全没有 thought 块，思考必然是在整条助手消息最开始发生的，

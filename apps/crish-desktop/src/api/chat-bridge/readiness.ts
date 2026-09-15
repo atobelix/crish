@@ -11,7 +11,7 @@ import type { ErrorDomain } from '../userFacingErrors';
 import type { Settings } from '../clientApi';
 import { getActiveModelId, getActiveProfileId } from '../providerProfiles';
 import { getLiveModel, resolveThinkingHandoff } from '../modelsCatalogLive';
-import { getSessionThinkingTitle } from '../SessionRuntimeRegistry';
+import { resolveEffectiveThinkingTitle } from '../SessionRuntimeRegistry';
 
 export type ReadinessState = 'ok' | 'blocked_with_action' | 'retryable_wait';
 
@@ -99,8 +99,15 @@ export function resolveContextWindow(
 }
 
 /**
- * 发送瞬间思考档位：会话 Title（yaml key）对 live 字典解析为 wire。
- * 不支持思考 → 空对象（省略，不伪造 Off）。settings.defaultThinkingLevel 不是规格。
+ * 发送瞬间思考档位：生效档位 Title（yaml key）对 live 字典解析为 wire。
+ *
+ * 生效档位 = `resolveEffectiveThinkingTitle`（与档位面板/胶囊**同一解析源**，
+ * 会话临时覆盖 → 该模型持久偏好 → 全局偏好）；否则 UI 显示的档位与实际发出的
+ * 档位可能不一致。显式 override 优先。
+ *
+ * 不支持思考 → 空对象（省略，不伪造 Off）。
+ * 原选档位不在当前模型声明中 → 空对象（**视为未选**，省略；禁止降级到其他档）。
+ * settings.defaultThinkingLevel 不是规格。
  */
 export function resolveSendThinkingFields(
   sessionId?: string | null,
@@ -116,11 +123,10 @@ export function resolveSendThinkingFields(
     const selectedTitle =
       typeof selectedTitleOverride === 'string' && selectedTitleOverride.trim()
         ? selectedTitleOverride.trim()
-        : sessionId
-          ? getSessionThinkingTitle(sessionId)
-          : null;
+        : resolveEffectiveThinkingTitle(sessionId, providerId, modelId);
     const handoff = resolveThinkingHandoff(providerId, modelId, selectedTitle);
     if (!handoff.supported) return {};
+    if (handoff.selectedTitle == null || handoff.selectedWire == null) return {};
     return {
       thinkingTitle: handoff.selectedTitle,
       thinkingWire: handoff.selectedWire,

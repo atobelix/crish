@@ -19,6 +19,7 @@ import {
   resolveStreamSessionId,
   canStreamLocalSession,
   isLiveStreamRun,
+  snapshotStreamThinkingToSession,
 } from './helpers';
 import { getSessionById } from '../../store/sessionStore';
 import { getCompositionRoot } from '../../app/compositionRoot';
@@ -293,6 +294,11 @@ export function useRunStreamingAssistant(
           onChunk: (chunk) => {
             if (!assertLive()) return;
             recordChunkSample(chunk.length);
+            if (!gotRealText) {
+              // 首个正文 token 抵达：前置思考阶段正式结束（"吐字开始"），
+              // 立即固化思考内容与真实思考耗时（durationMs），杜绝后续吐字阶段的耗时混入思考耗时。
+              snapshotStreamThinkingToSession(sid, assistantMsgId);
+            }
             gotRealText = true;
             dismissTransientRunNotice();
             streamedFullText += chunk;

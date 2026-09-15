@@ -1,503 +1,426 @@
 // @vitest-environment jsdom
-/**
- * T2-7：抽屉 saveConfig 的完成句是 yaml 文本含字段，不是 setter spy / 有保存按钮。
- * mock 仅 workbench_read_models_yaml / workbench_save_models_yaml。
- */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, renderHook, waitFor } from '@testing-library/react';
-import { useCallback, useState } from 'react';
-import { parse as parseYaml } from 'yaml';
-import { invoke } from '@tauri-apps/api/core';
-import {
-  mockTauriCommand,
-  mockTauriError,
-} from '../../test-setup';
-import {
-  modelsCatalogStore,
-  selectModel,
-} from '../../api/modelsCatalogStore';
-import * as pricingStore from '../../api/pricingStore';
-import type { ProviderProfile } from '../../api/providerProfiles';
-import type { ModelSpec, ProviderSpec } from '../../api/modelsCatalogTypes';
+/** 使用真实编辑 Hook、目录 Store 和 IPC 桥；只替换宿主命令及通用编辑会话通知。 */
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, renderHook } from '@testing-library/react';
+import { useState } from 'react';
+import { mockTauriCommand, mockTauriError } from '../../test-setup';
 import { useModelConfigSession } from './useModelConfigSession';
+import { modelsCatalogStore, selectModel } from '../../api/modelsCatalogStore';
+import { modelRefKey } from '../../api/modelsCatalogTypes';
+import type {
+  ModelSpec,
+  ModelsYamlTree,
+  ModelsCatalogSnapshot,
+} from '../../api/modelsCatalogTypes';
 import type { ConfigDraft } from './modelsIpcHelpers';
 
-const CATALOG_PATH = 'C:\\Users\\tester\\.conex\\models.yaml';
-const PROVIDER_ID = 'acme';
-const MODEL_ID = 'acme-think';
-
-const mocks = vi.hoisted(() => ({
+const hooks = vi.hoisted(() => ({
   open: vi.fn(),
   commit: vi.fn(),
   invalidate: vi.fn(),
-  isOpen: vi.fn(),
-  notify: vi.fn(),
-  refresh: vi.fn(),
-  setManualOpen: vi.fn(),
 }));
-
 vi.mock('../../api/chat-bridge/editSessionConsumer', () => ({
-  editSessionConsumer: {
-    open: mocks.open,
-    commit: mocks.commit,
-    invalidate: mocks.invalidate,
-    isOpen: mocks.isOpen,
-  },
+  editSessionConsumer: hooks,
   invalidateEditObjects: vi.fn(),
   bindEditSession: vi.fn(),
   getBoundEditSession: vi.fn(() => null),
   isEditSessionConsumerBound: vi.fn(() => false),
 }));
-
-const BASE_MODEL: ModelSpec = {
+const PROVIDER = 'Acme';
+const MODEL_ID = 'Model::Shared';
+const MODEL: ModelSpec = {
   id: MODEL_ID,
-  displayName: 'Acme Think',
-  contextWindow: 128000,
-  maxOutputTokens: 8192,
+  displayName: 'Original',
   enabled: true,
-  capabilities: { tools: true },
-  thinking: { Low: 'low', High: 'high' },
-  modalities: { input: ['text'], output: ['text'] },
+  order: 0,
+  supportsTools: false,
+  contextWindow: 200000,
+  maxOutputTokens: 8192,
+  cacheTtl: '30m',
+  protocol: 'openai/responses',
+  headers: { 'X-Model-Only': 'original' },
+  compat: {
+    thinkingFormat: 'openai',
+    cacheControlFormat: 'disabled',
+    strictJsonSchema: false,
+  },
+  modalities: { input: ['text', 'pdf'], output: ['text'] },
+  thinking: { Low: 'low', XHigh: ' wire ' },
   pricing: {
     currency: 'USD',
-    input: 1,
+    unit: 'per_image',
+    perImage: 0.08,
+    input: 0,
     output: 2,
-    cacheRead: 0.1,
-    cacheWrite: 0.2,
+    cacheRead: 0,
+    cacheWrite: 0.1,
+    tiers: [{ inputTokensAbove: 100, input: 3, output: 5, cacheRead: 0 }],
   },
 };
-
-const BASE_PROVIDERS: Record<string, ProviderSpec> = {
-  [PROVIDER_ID]: {
-    displayName: 'Acme',
-    baseUrl: 'https://example.invalid/v1',
-    protocol: 'openai/chat',
-    models: [BASE_MODEL],
-  },
-};
-
-const SELECTED: ProviderProfile = {
-  id: PROVIDER_ID,
-  name: 'Acme',
-  baseUrl: 'https://example.invalid/v1',
-  models: [MODEL_ID],
-  hasKey: true,
-  protocol: 'openai/chat',
-};
-
-function workbenchReadOk(providers: Record<string, ProviderSpec>) {
+let documentTree: ModelsYamlTree;
+let revision: string;
+let writeMock: ReturnType<typeof vi.fn>;
+let revisionCounter: number;
+function snapshot(): ModelsCatalogSnapshot {
   return {
-    path: CATALOG_PATH,
-    content: '',
+    path: 'C:/test/models.yaml',
+    content: JSON.stringify(documentTree),
+    revision,
+    tree: structuredClone(documentTree),
+    credentialStates: {},
     template: '',
-    seeded: false,
-    parseError: null,
-    providers,
   };
 }
-
-function mockSaveOk(): ReturnType<typeof vi.fn> {
-  const impl = vi.fn((_args: unknown) => ({ path: CATALOG_PATH }));
-  mockTauriCommand('workbench_save_models_yaml', impl);
-  return impl;
+function save(payload: unknown): ModelsCatalogSnapshot {
+  const input = payload as { tree: ModelsYamlTree; expectedRevision: string };
+  if (input.expectedRevision !== revision)
+    throw { code: 'REVISION_CONFLICT', message: 'configuration changed' };
+  documentTree = structuredClone(input.tree);
+  revision = 'r' + ++revisionCounter;
+  return snapshot();
 }
-
-function lastSavedYaml(saveImpl: ReturnType<typeof vi.fn>): string {
-  const calls = saveImpl.mock.calls;
-  const last = calls[calls.length - 1]?.[0] as { content?: string } | undefined;
-  return last?.content ?? '';
-}
-
-function parseProviders(content: string): {
-  protocol?: string;
-  models?: Array<Record<string, unknown>>;
-} {
-  const doc = parseYaml(content) as {
-    providers?: Record<string, { protocol?: string; models?: Array<Record<string, unknown>> }>;
-  };
-  return doc.providers?.[PROVIDER_ID] ?? {};
-}
-
-function parseModel(content: string): Record<string, unknown> | undefined {
-  const models = parseProviders(content).models ?? [];
-  return models.find((m) => m.id === MODEL_ID);
-}
-
-function assertCanonicalWrite(content: string): void {
-  expect(content).not.toMatch(/inputPerMTok/);
-  expect(content).not.toMatch(/outputPerMTok/);
-  expect(content).not.toMatch(/cacheReadPerMTok/);
-  expect(content).not.toMatch(/contextLength:/);
-  expect(content).not.toMatch(/defaultThinkingLevel/);
-  expect(content).not.toMatch(/google\/interactions/);
-  expect(content).not.toMatch(/\blevels:/);
-}
-
-function invokedCommands(): string[] {
-  return (invoke as unknown as { mock: { calls: unknown[][] } }).mock.calls.map(
-    (c) => String(c[0])
-  );
-}
-
-const FULL_DRAFT: ConfigDraft = {
-  displayName: 'Acme Think',
-  contextLength: '200000',
-  maxOutputTokens: '8192',
-  caps: { tools: true, image: true, video: false, reasoning: true },
-  thinkingEnabled: true,
-  thinkingMap: { Low: 'low', CustomUltra: 'ultra_wire' },
-  modalities: { input: ['text', 'image'], output: ['text'] },
-  pricing: {
-    currency: 'CNY',
-    input: '0.99',
-    output: '2.8',
-    cacheRead: '0.08',
-    cacheWrite: '0.2',
-  },
-};
-
-function useSessionHarness(selected: ProviderProfile) {
+const notify = vi.fn();
+function useSessionHarness(selected: { id: string } | null = { id: PROVIDER }) {
   const [configOpenId, setConfigOpenId] = useState<string | null>(null);
   const [cfgDraft, setCfgDraft] = useState<ConfigDraft | null>(null);
-  const runAsLocalMutation = useCallback(async <T,>(fn: () => Promise<T> | T) => {
-    return await fn();
-  }, []);
   const session = useModelConfigSession({
     selected,
     configOpenId,
-    cfgDraft,
     setConfigOpenId,
+    cfgDraft,
     setCfgDraft,
-    setManualOpen: mocks.setManualOpen,
-    refresh: mocks.refresh,
-    notify: mocks.notify,
-    runAsLocalMutation,
+    setManualOpen: vi.fn(),
+    notify,
+    runAsLocalMutation: async <T,>(fn: () => Promise<T> | T) => await fn(),
   });
-  return { ...session, configOpenId, cfgDraft, setCfgDraft, notify: mocks.notify };
+  return { ...session, cfgDraft, setCfgDraft, configOpenId };
 }
+beforeEach(async () => {
+  vi.clearAllMocks();
+  modelsCatalogStore.resetForTesting();
+  documentTree = {
+    version: 2,
+    activeModel: null,
+    providers: {
+      [PROVIDER]: {
+        protocol: 'openai/chat',
+        enabled: true,
+        stream: false,
+        models: [structuredClone(MODEL)],
+      },
+    },
+  };
+  revision = 'r0';
+  revisionCounter = 0;
+  mockTauriCommand('workbench_read_models_yaml', snapshot);
+  writeMock = vi.fn(save);
+  mockTauriCommand('workbench_apply_models_config', writeMock);
+  expect(await modelsCatalogStore.ensureLoaded()).toBe(true);
+});
 
-async function awaitSave(fn: () => unknown): Promise<void> {
-  await act(async () => {
-    const ret = fn();
-    await Promise.resolve(ret);
-    await Promise.resolve();
-    await Promise.resolve();
-  });
-}
-
-describe('useModelConfigSession 保存即落盘 yaml', () => {
-  let saveImpl: ReturnType<typeof vi.fn>;
-  let upsertSpy: ReturnType<typeof vi.spyOn>;
-  let setItemSpy: ReturnType<typeof vi.spyOn>;
-
-  beforeEach(async () => {
-    vi.clearAllMocks();
-    modelsCatalogStore.resetForTesting();
-    localStorage.clear();
-    localStorage.setItem(
-      'crish_models_ls_import_v1',
-      JSON.stringify({ done: true, version: 1 })
-    );
-    mockTauriCommand('workbench_read_models_yaml', () =>
-      workbenchReadOk(structuredClone(BASE_PROVIDERS))
-    );
-    saveImpl = mockSaveOk();
-    const loaded = await modelsCatalogStore.ensureLoaded(true);
-    expect(loaded).toBe(true);
-    upsertSpy = vi.spyOn(pricingStore, 'upsertPrice');
-    setItemSpy = vi.spyOn(localStorage, 'setItem');
-  });
-
-  afterEach(() => {
-    upsertSpy.mockRestore();
-    setItemSpy.mockRestore();
-    modelsCatalogStore.resetForTesting();
-  });
-
-  it('改 thinking / modalities / pricing.cacheRead 后保存：write content 含这些键且 cacheRead 不是 input×0.1', async () => {
-    const { result } = renderHook(() => useSessionHarness(SELECTED));
-
-    act(() => {
-      result.current.openConfigFor(MODEL_ID);
+describe('真实保存调用保持完整模型', () => {
+  it('只改显示名，不改价格、headers、cache、模态、false和0', async () => {
+    const { result } = renderHook(() => useSessionHarness());
+    await act(async () => {
+      await result.current.openConfigFor(MODEL_ID);
     });
-    act(() => {
-      result.current.setCfgDraft({ ...FULL_DRAFT });
-    });
-
-    await awaitSave(() => result.current.saveConfig());
-
-    await waitFor(() => {
-      expect(lastSavedYaml(saveImpl).length).toBeGreaterThan(0);
-    });
-
-    const content = lastSavedYaml(saveImpl);
-    assertCanonicalWrite(content);
-    expect(content).toContain('thinking:');
-    expect(content).toContain('CustomUltra');
-    expect(content).toContain('ultra_wire');
-    expect(content).toContain('modalities:');
-    expect(content).toContain('cacheRead:');
-    expect(content).toContain('contextWindow:');
-    expect(content).not.toContain('contextLength:');
-
-    const node = parseModel(content);
-    expect(node).toBeTruthy();
-    expect(node?.thinking).toEqual({ Low: 'low', CustomUltra: 'ultra_wire' });
-    expect(node?.modalities).toEqual({
-      input: ['text', 'image'],
-      output: ['text'],
-    });
-    const pricing = node?.pricing as Record<string, unknown> | undefined;
-    expect(pricing?.currency).toBe('CNY');
-    expect(pricing?.input).toBe(0.99);
-    expect(pricing?.output).toBe(2.8);
-    expect(pricing?.cacheRead).toBe(0.08);
-    expect(pricing?.cacheWrite).toBe(0.2);
-    expect(pricing?.cacheRead).not.toBeCloseTo(0.99 * 0.1);
-    expect(node?.contextWindow).toBe(200000);
-
-    expect(invokedCommands()).toContain('workbench_save_models_yaml');
-    expect(invokedCommands()).not.toContain('models_yaml_write');
-    expect(mocks.commit).toHaveBeenCalledWith(`${PROVIDER_ID}::${MODEL_ID}`);
-  });
-
-  it('关掉推理后保存：该节点无 thinking 键', async () => {
-    const { result } = renderHook(() => useSessionHarness(SELECTED));
-    act(() => {
-      result.current.openConfigFor(MODEL_ID);
-    });
-    act(() => {
+    act(() =>
       result.current.setCfgDraft({
-        ...FULL_DRAFT,
-        thinkingEnabled: false,
-        caps: { ...FULL_DRAFT.caps, reasoning: false },
-      });
-    });
-
-    await awaitSave(() => result.current.saveConfig());
-    await waitFor(() => {
-      expect(lastSavedYaml(saveImpl).length).toBeGreaterThan(0);
-    });
-
-    const node = parseModel(lastSavedYaml(saveImpl));
-    expect(node).toBeTruthy();
-    expect(node).not.toHaveProperty('thinking');
-    expect(lastSavedYaml(saveImpl)).not.toMatch(
-      new RegExp(`id: ${MODEL_ID}[\\s\\S]*thinking:`)
+        ...result.current.cfgDraft!,
+        displayName: 'Renamed',
+      })
     );
+    await act(async () => {
+      await result.current.saveConfig();
+    });
+    expect(documentTree.providers[PROVIDER]!.models[0]).toEqual({
+      ...MODEL,
+      displayName: 'Renamed',
+    });
+    expect(writeMock.mock.calls[0]?.[0]).toMatchObject({
+      expectedRevision: 'r0',
+    });
+    expect(hooks.commit).toHaveBeenCalledWith(
+      modelRefKey({ providerId: PROVIDER, modelId: MODEL_ID })
+    );
+    expect(result.current.cfgDraft?.pricing?.tiers?.[0]?.input).toBe('3');
   });
-
-  it('改 modalities 增删 image：yaml modalities.input 同步', async () => {
-    const { result } = renderHook(() => useSessionHarness(SELECTED));
-    act(() => {
-      result.current.openConfigFor(MODEL_ID);
+  it('用户显式调整思考、模态、价格和窗口进入同次结构化提交', async () => {
+    const { result } = renderHook(() => useSessionHarness());
+    await act(async () => {
+      await result.current.openConfigFor(MODEL_ID);
     });
-    act(() => {
+    act(() =>
       result.current.setCfgDraft({
-        ...FULL_DRAFT,
-        modalities: { input: ['text', 'image'], output: ['text'] },
-        caps: { ...FULL_DRAFT.caps, image: true },
-      });
-    });
-
-    await awaitSave(() => result.current.saveConfig());
-    await waitFor(() => {
-      expect(parseModel(lastSavedYaml(saveImpl))?.modalities).toBeTruthy();
-    });
-
-    const node = parseModel(lastSavedYaml(saveImpl));
-    expect(node?.modalities).toEqual({
-      input: ['text', 'image'],
-      output: ['text'],
-    });
-  });
-
-  it('填四维价 CNY：yaml pricing 四键与 currency，cacheRead 等于输入值', async () => {
-    const { result } = renderHook(() => useSessionHarness(SELECTED));
-    act(() => {
-      result.current.openConfigFor(MODEL_ID);
-    });
-    act(() => {
-      result.current.setCfgDraft({
-        ...FULL_DRAFT,
+        ...result.current.cfgDraft!,
+        contextWindow: '1048576',
+        maxOutputTokens: '16384',
+        supportsTools: true,
+        modalities: { input: ['text', 'image'], output: [] },
+        thinkingMap: { Low: 'low', 'X-High': ' special wire ' },
         pricing: {
           currency: 'CNY',
           input: '0.99',
           output: '2.8',
           cacheRead: '0.08',
-          cacheWrite: '0.2',
+          cacheWrite: '0',
+          perImage: '0',
+          unit: 'token',
+          tiers: [],
         },
-      });
-    });
-
-    await awaitSave(() => result.current.saveConfig());
-    await waitFor(() => {
-      expect(lastSavedYaml(saveImpl)).toContain('cacheRead:');
-    });
-
-    const pricing = parseModel(lastSavedYaml(saveImpl))?.pricing as
-      | Record<string, unknown>
-      | undefined;
-    expect(pricing).toMatchObject({
-      currency: 'CNY',
-      input: 0.99,
-      output: 2.8,
-      cacheRead: 0.08,
-      cacheWrite: 0.2,
-    });
-  });
-
-  it('四维全空保存：节点无 pricing；upsertPrice 零调用', async () => {
-    const { result } = renderHook(() => useSessionHarness(SELECTED));
-    act(() => {
-      result.current.openConfigFor(MODEL_ID);
-    });
-    act(() => {
-      result.current.setCfgDraft({
-        ...FULL_DRAFT,
-        pricing: {
-          currency: 'USD',
-          input: '',
-          output: '',
-          cacheRead: '',
-          cacheWrite: '',
-        },
-      });
-    });
-
-    upsertSpy.mockClear();
-    await awaitSave(() => result.current.saveConfig());
-    await waitFor(() => {
-      expect(lastSavedYaml(saveImpl).length).toBeGreaterThan(0);
-    });
-
-    const node = parseModel(lastSavedYaml(saveImpl));
-    expect(node).toBeTruthy();
-    expect(node).not.toHaveProperty('pricing');
-    expect(upsertSpy).not.toHaveBeenCalled();
-  });
-
-  it('改上下文 1048576：yaml contextWindow 为该数，不含 contextLength 键', async () => {
-    const { result } = renderHook(() => useSessionHarness(SELECTED));
-    act(() => {
-      result.current.openConfigFor(MODEL_ID);
-    });
-    act(() => {
-      result.current.setCfgDraft({
-        ...FULL_DRAFT,
-        contextLength: '1048576',
-      });
-    });
-
-    await awaitSave(() => result.current.saveConfig());
-    await waitFor(() => {
-      expect(parseModel(lastSavedYaml(saveImpl))?.contextWindow).toBe(1048576);
-    });
-
-    const content = lastSavedYaml(saveImpl);
-    expect(content).toContain('contextWindow: 1048576');
-    expect(content).not.toContain('contextLength:');
-  });
-
-  it('写盘拒绝：捕获命令失败；LS 三键不被 setItem；草稿仍在', async () => {
-    const { result } = renderHook(() => useSessionHarness(SELECTED));
-    act(() => {
-      result.current.openConfigFor(MODEL_ID);
-    });
-    act(() => {
-      result.current.setCfgDraft({ ...FULL_DRAFT });
-    });
-
-    mockTauriError('workbench_save_models_yaml', 'Permission denied');
-    setItemSpy.mockClear();
-
-    await awaitSave(() => result.current.saveConfig());
-
-    await waitFor(() => {
-      expect(result.current.notify).toHaveBeenCalled();
-    });
-
-    const failMsg = result.current.notify.mock.calls.find(
-      (c) => c[0] === false
-    )?.[1];
-    expect(String(failMsg ?? '')).toMatch(/Permission denied|写入|保存失败|拒绝/);
-    expect(result.current.cfgDraft).not.toBeNull();
-    expect(result.current.cfgDraft?.thinkingMap?.CustomUltra).toBe('ultra_wire');
-    expect(mocks.commit).not.toHaveBeenCalled();
-
-    const banned = setItemSpy.mock.calls.filter(
-      (c) =>
-        c[0] === 'crish_model_meta_v1' ||
-        c[0] === 'crish_model_prices_v1' ||
-        c[0] === 'crish_provider_profiles_v1'
+      })
     );
-    expect(banned).toHaveLength(0);
-
-    // 内存回滚：磁盘未写上，store 仍是打开时的节点
-    expect(selectModel(PROVIDER_ID, MODEL_ID)?.thinking).toEqual({
-      Low: 'low',
-      High: 'high',
+    await act(async () => {
+      await result.current.saveConfig();
     });
+    const saved = documentTree.providers[PROVIDER]!.models[0]!;
+    expect(saved).toMatchObject({
+      contextWindow: 1048576,
+      maxOutputTokens: 16384,
+      supportsTools: true,
+      modalities: { input: ['text', 'image'], output: [] },
+      thinking: { Low: 'low', XHigh: ' special wire ' },
+      pricing: {
+        currency: 'CNY',
+        input: 0.99,
+        cacheRead: 0.08,
+        cacheWrite: 0,
+        perImage: 0,
+        unit: 'token',
+        tiers: [],
+      },
+    });
+    const payload = JSON.stringify(writeMock.mock.calls[0]?.[0]);
+    for (const key of [
+      'contextLength',
+      'capabilities',
+      'inputPerMTok',
+      'defaultThinkingLevel',
+    ])
+      expect(payload).not.toContain(key);
   });
-
-  it('CT-01：打开后 store 被外部改过 → 保存拒绝，不把陈旧草稿写盘', async () => {
-    const { result } = renderHook(() => useSessionHarness(SELECTED));
-    act(() => {
-      result.current.openConfigFor(MODEL_ID);
+  it('关闭思考、清空上限和价格有明确删除语义', async () => {
+    const { result } = renderHook(() => useSessionHarness());
+    await act(async () => {
+      await result.current.openConfigFor(MODEL_ID);
     });
-    act(() => {
+    act(() =>
       result.current.setCfgDraft({
-        ...FULL_DRAFT,
-        displayName: '陈旧草稿名',
+        ...result.current.cfgDraft!,
+        thinkingEnabled: false,
+        maxOutputTokens: '',
+        pricing: undefined,
+      })
+    );
+    await act(async () => {
+      await result.current.saveConfig();
+    });
+    const saved = documentTree.providers[PROVIDER]!.models[0]!;
+    for (const key of ['thinking', 'maxOutputTokens', 'pricing'])
+      expect(saved).not.toHaveProperty(key);
+    expect(saved.headers).toEqual(MODEL.headers);
+  });
+  it('成功保存不写任何旧配置浏览器介质', async () => {
+    const spy = vi.spyOn(Storage.prototype, 'setItem');
+    const { result } = renderHook(() => useSessionHarness());
+    await act(async () => {
+      await result.current.openConfigFor(MODEL_ID);
+    });
+    act(() =>
+      result.current.setCfgDraft({
+        ...result.current.cfgDraft!,
+        displayName: 'Saved',
+      })
+    );
+    await act(async () => {
+      await result.current.saveConfig();
+    });
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
+  });
+});
+
+describe('保存期间的编辑输入', () => {
+  it('保存回执不覆盖等待期间继续输入的草稿', async () => {
+    const { result } = renderHook(() => useSessionHarness());
+    await act(async () => {
+      await result.current.openConfigFor(MODEL_ID);
+    });
+    act(() =>
+      result.current.setCfgDraft({
+        ...result.current.cfgDraft!,
+        displayName: 'First edit',
+      })
+    );
+    let complete!: () => void;
+    writeMock.mockImplementationOnce(
+      (payload: unknown) =>
+        new Promise<ModelsCatalogSnapshot>((resolve) => {
+          complete = () => resolve(save(payload));
+        })
+    );
+    let pending!: Promise<void>;
+    act(() => {
+      pending = result.current.saveConfig();
+    });
+    await vi.waitFor(() => expect(writeMock).toHaveBeenCalledTimes(1));
+    act(() =>
+      result.current.setCfgDraft({
+        ...result.current.cfgDraft!,
+        displayName: 'Continued typing',
+      })
+    );
+    await act(async () => {
+      complete();
+      await pending;
+    });
+    expect(selectModel(PROVIDER, MODEL_ID)?.displayName).toBe('First edit');
+    expect(result.current.cfgDraft?.displayName).toBe('Continued typing');
+    await act(async () => {
+      await result.current.saveConfig();
+    });
+    expect(selectModel(PROVIDER, MODEL_ID)?.displayName).toBe(
+      'Continued typing'
+    );
+  });
+});
+
+describe('拒绝有损和过期提交', () => {
+  it.each(['-1.5', '1e3', '128k', '0'])(
+    '非法窗口在真实保存入口被拒绝：%s',
+    async (value) => {
+      const { result } = renderHook(() => useSessionHarness());
+      await act(async () => {
+        await result.current.openConfigFor(MODEL_ID);
       });
+      act(() =>
+        result.current.setCfgDraft({
+          ...result.current.cfgDraft!,
+          contextWindow: value,
+        })
+      );
+      await act(async () => {
+        await result.current.saveConfig();
+      });
+      expect(writeMock).not.toHaveBeenCalled();
+      expect(result.current.cfgDraft?.contextWindow).toBe(value);
+      expect(notify).toHaveBeenCalledWith(false, expect.any(String));
+      expect(hooks.commit).not.toHaveBeenCalled();
+    }
+  );
+  it('未知思考键失败，不删除wire伪装成保存成功', async () => {
+    const { result } = renderHook(() => useSessionHarness());
+    await act(async () => {
+      await result.current.openConfigFor(MODEL_ID);
     });
-
-    saveImpl.mockClear();
-    await modelsCatalogStore.updateModel(PROVIDER_ID, MODEL_ID, {
-      contextWindow: 777777,
-      displayName: '外部已改',
+    act(() =>
+      result.current.setCfgDraft({
+        ...result.current.cfgDraft!,
+        thinkingMap: { Custom: 'user wire' },
+      })
+    );
+    await act(async () => {
+      await result.current.saveConfig();
     });
-    const callsAfterExternal = saveImpl.mock.calls.length;
-    const yamlAfterExternal = lastSavedYaml(saveImpl);
-    expect(parseModel(yamlAfterExternal)?.contextWindow).toBe(777777);
-
-    await awaitSave(() => result.current.saveConfig());
-
-    expect(result.current.notify).toHaveBeenCalledWith(
+    expect(writeMock).not.toHaveBeenCalled();
+    expect(result.current.cfgDraft?.thinkingMap).toEqual({
+      Custom: 'user wire',
+    });
+    expect(notify).toHaveBeenCalledWith(
+      false,
+      expect.stringContaining('不受支持')
+    );
+  });
+  it.each([
+    {
+      pricing: {
+        ...MODEL.pricing!,
+        tiers: [{ inputTokensAbove: 100, input: 99 }],
+      },
+    },
+    { pricing: { ...MODEL.pricing!, perImage: 9 } },
+    { headers: { 'X-Model-Only': 'external' } },
+    { compat: { ...MODEL.compat!, strictJsonSchema: true } },
+  ])('外部只改完整语义字段，旧草稿也必须拒绝：%j', async (patch) => {
+    const { result } = renderHook(() => useSessionHarness());
+    await act(async () => {
+      await result.current.openConfigFor(MODEL_ID);
+    });
+    act(() =>
+      result.current.setCfgDraft({
+        ...result.current.cfgDraft!,
+        displayName: 'Stale name',
+      })
+    );
+    await act(async () => {
+      await modelsCatalogStore.updateModel(PROVIDER, MODEL_ID, patch);
+    });
+    writeMock.mockClear();
+    await act(async () => {
+      await result.current.saveConfig();
+    });
+    expect(writeMock).not.toHaveBeenCalled();
+    expect(notify).toHaveBeenCalledWith(
       false,
       '配置已被外部修改，保存已取消，请重新确认'
     );
-    expect(mocks.invalidate).toHaveBeenCalledWith(
-      `${PROVIDER_ID}::${MODEL_ID}`,
-      'external'
-    );
-    expect(mocks.commit).not.toHaveBeenCalled();
-    expect(result.current.cfgDraft).not.toBeNull();
-    expect(saveImpl.mock.calls.length).toBe(callsAfterExternal);
-    expect(lastSavedYaml(saveImpl)).not.toContain('陈旧草稿名');
-    expect(parseModel(lastSavedYaml(saveImpl))?.displayName).toBe('外部已改');
+    expect(result.current.cfgDraft?.displayName).toBe('Stale name');
+    expect(selectModel(PROVIDER, MODEL_ID)?.displayName).toBe('Original');
+    expect(hooks.commit).not.toHaveBeenCalled();
   });
-
-  it('保存成功后不以 crish_model_meta_v1 / crish_model_prices_v1 为 key 写入本次 thinking/pricing', async () => {
-    const { result } = renderHook(() => useSessionHarness(SELECTED));
-    act(() => {
-      result.current.openConfigFor(MODEL_ID);
+  it('写盘失败保留草稿和上次已提交镜像', async () => {
+    const { result } = renderHook(() => useSessionHarness());
+    await act(async () => {
+      await result.current.openConfigFor(MODEL_ID);
     });
-    act(() => {
-      result.current.setCfgDraft({ ...FULL_DRAFT });
+    act(() =>
+      result.current.setCfgDraft({
+        ...result.current.cfgDraft!,
+        displayName: 'Retain draft',
+      })
+    );
+    mockTauriError('workbench_apply_models_config', 'Permission denied');
+    await act(async () => {
+      await result.current.saveConfig();
     });
-    setItemSpy.mockClear();
-
-    await awaitSave(() => result.current.saveConfig());
-    await waitFor(() => {
-      expect(lastSavedYaml(saveImpl)).toContain('ultra_wire');
+    expect(result.current.cfgDraft?.displayName).toBe('Retain draft');
+    expect(selectModel(PROVIDER, MODEL_ID)?.displayName).toBe('Original');
+    expect(notify).toHaveBeenCalledWith(
+      false,
+      expect.stringContaining('Permission denied')
+    );
+    expect(hooks.commit).not.toHaveBeenCalled();
+  });
+  it('编辑目标被删除时不重新创建供应商或空模型', async () => {
+    const { result } = renderHook(() => useSessionHarness());
+    await act(async () => {
+      await result.current.openConfigFor(MODEL_ID);
     });
-
-    for (const [key, value] of setItemSpy.mock.calls) {
-      if (key === 'crish_model_meta_v1' || key === 'crish_model_prices_v1') {
-        expect(String(value)).not.toContain('ultra_wire');
-        expect(String(value)).not.toContain('"cacheRead":0.08');
-      }
-    }
+    await act(async () => {
+      await modelsCatalogStore.removeModel(PROVIDER, MODEL_ID);
+    });
+    writeMock.mockClear();
+    await act(async () => {
+      await result.current.saveConfig();
+    });
+    expect(writeMock).not.toHaveBeenCalled();
+    expect(documentTree.providers[PROVIDER]!.models).toEqual([]);
+    expect(result.current.cfgDraft).not.toBeNull();
+    expect(notify).toHaveBeenCalledWith(
+      false,
+      expect.stringContaining('不存在')
+    );
+  });
+  it('不存在的模型不能用只有id的伪草稿打开', async () => {
+    const { result } = renderHook(() => useSessionHarness());
+    await act(async () => {
+      await result.current.openConfigFor('Missing');
+    });
+    expect(result.current.cfgDraft).toBeNull();
+    expect(notify).toHaveBeenCalledWith(
+      false,
+      expect.stringContaining('不存在')
+    );
+    expect(writeMock).not.toHaveBeenCalled();
   });
 });

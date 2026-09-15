@@ -38,7 +38,6 @@ const PROVIDERS: Record<string, ProviderSpec> = {
     models: [
       {
         id: 'gpt-4o',
-        capabilities: { image: true },
         modalities: { input: ['text'], output: ['text'] },
       },
       {
@@ -71,9 +70,10 @@ async function loadProviders(
     path: CATALOG_PATH,
     content: '',
     template: '',
-    seeded: false,
+    revision: 'revision-0',
+    credentialStates: {},
     parseError: null,
-    providers,
+    tree: { version: 2, activeModel: null, providers },
   }));
   mockTauriCommand('workbench_save_models_yaml', () => ({
     path: CATALOG_PATH,

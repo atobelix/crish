@@ -360,15 +360,16 @@ describe('modelCatalog', () => {
         entry({ profileId: 'x', model: 'user-ft', hasKey: true })
       );
 
-      // preferred model only
-      const byModel = pickDefaultCatalogEntry(
+      // 只有 modelId 没有 providerId → 身份不完整，拒绝跨供应商「同名首个」，返回 null
+      // （INV-1 / U1：失效即置空，不强行找可用）
+      const byModelOnly = pickDefaultCatalogEntry(
         [
           entry({ profileId: 'a', model: 'alpha', hasKey: true }),
           entry({ profileId: 'b', model: 'beta', hasKey: true }),
         ],
         { preferredModel: 'beta' }
       );
-      expect(byModel?.model).toBe('beta');
+      expect(byModelOnly).toBeNull();
     });
 
     it('buildCatalogEntriesFromProfiles skips disabled providers and empty models', () => {

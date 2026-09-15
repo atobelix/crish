@@ -185,7 +185,7 @@ export function highlightCodeSafe(rawCode: string, langOrFilePath?: string): str
   return highlightCode(rawCode, lang);
 }
 
-function escapeHtml(s: string): string {
+export function escapeHtml(s: string): string {
   return s
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')

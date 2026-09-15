@@ -1,28 +1,18 @@
-/**
- * modelsCatalogStore.ts —— Provider-Centric 树状单源状态中枢
- *
- * 架构裁决（SSOT）：
- * 1. 磁盘 ~/.conex/models.yaml 为全系统绝对唯一真源；
- * 2. 彻底消灭 LocalStorage 双轨分裂与 KNOWN_CONTEXT 128K 假上限；
- * 3. 维护 version: 2, providers: Record<string, ProviderSpec>；
- * 4. 建立双层双向 O(1) 索引（providerMap, modelIndex, globalModelIndex）；
- * 5. 提供极简纯函数 action 与选择器；
- * 6. 保持对既有消费方的向后兼容门面（listCatalogModels, findCatalogModel 等）。
- */
-
+/** 已提交模型配置镜像。所有写操作串行，回执成功后才发布新快照。 */
 import { emitUiEvent } from './uiEvents';
+import { logger, toErrMeta } from '../services/LoggerService';
+import { modelRefKey, formatParseError } from './modelsCatalogTypes';
 import type {
+  IndexedModelEntry,
+  ModelRef,
+  ModelSpec,
+  ModelsCatalogError,
+  ModelsCatalogSnapshot,
+  ModelsCatalogState,
   ModelsYamlTree,
   ProviderSpec,
-  ModelSpec,
-  ModelProtocol,
-  PricingConfig,
-  ModelsCatalogError,
-  IndexedModelEntry,
-  ModelsCatalogState,
 } from './modelsCatalogTypes';
 import { readModelsYamlIpc, writeModelsYamlIpc } from './modelsCatalogIpc';
-import { applyIncrementalProbe, type IncrementalProbeResult } from './probeIncremental';
 import {
   addProvider,
   updateProvider,
@@ -30,19 +20,12 @@ import {
   addModel,
   updateModel,
   removeModel,
+  normalizeModelsTree,
+  setActiveModel,
 } from './modelsCatalogActions';
 import { createSelectors } from './modelsCatalogSelectors';
-import {
-  setCatalogStateAccessor,
-  listCatalogModels,
-  findCatalogModel,
-  searchCatalogModels,
-  getPresetPricingList,
-  type CatalogModelProtocol,
-  type CatalogModelSpec,
-} from './modelsCatalogQuery';
+import { createCatalogQueries } from './modelsCatalogQuery';
 
-// 重导出纯函数 action 与类型
 export {
   addProvider,
   updateProvider,
@@ -60,229 +43,187 @@ export type {
   ModelsCatalogError,
   IndexedModelEntry,
   ModelsCatalogState,
-  CatalogModelProtocol,
-  CatalogModelSpec,
-};
-export {
-  listCatalogModels,
-  findCatalogModel,
-  searchCatalogModels,
-  getPresetPricingList,
-};
+  ModelsCatalogSnapshot,
+  ModelRef,
+} from './modelsCatalogTypes';
 
-export type ModelsCatalogLoadResult = { ok: true; path: string } | { ok: false; error: string };
+export type ModelsCatalogLoadResult =
+  { ok: true; path: string } | { ok: false; error: string };
+export type ModelsCatalogWriteResult =
+  { ok: true } | { ok: false; error: string };
+type StoreListener = (snapshot: ModelsCatalogState) => void;
 
-type StoreListener = (state: ModelsCatalogState) => void;
-
-// ── 内部响应式状态定义 ──────────────────────────────────────────────────────────
-
-let state: ModelsCatalogState = {
-  tree: { version: 2, providers: {} },
-  providerMap: new Map(),
-  modelIndex: new Map(),
-  globalModelIndex: new Map(),
-  version: 0,
-  loaded: false,
-  filePath: '~/.conex/models.yaml',
-  lastError: null,
-};
-
-setCatalogStateAccessor(() => state);
-
-const listeners = new Set<StoreListener>();
-let inflightLoadPromise: Promise<boolean> | null = null;
-
-const WRITE_BEFORE_LOAD_ERROR = '模型目录尚未成功加载，拒绝写盘以免覆盖用户文件';
-
-// ── 写串行队列（单飞 save + 最新 tree coalesce）────────────────────────────────
-//
-// 语义（文档化裁决）：
-// 1. 同一时刻最多一个 in-flight save IPC；
-// 2. save 在途时，后到的 updateTree 乐观更新内存后 coalesce 为「最新 tree」，
-//    等当前 save 结束后由 drain 循环补一次 save（并发双写 → 磁盘只落最新）；
-// 3. 失败回滚：save 被拒绝且无更新 tree 顶替时，内存原子回滚到本批次首个
-//    乐观更新之前的快照（batchBaseSnapshot），并打 WRITE_REJECTED lastError；
-// 4. drain 经 queueMicrotask 延迟启动，保证同一 tick 内连续两次 updateTree
-//    能 coalesce 成一次 save（而不是各自抢跑 IPC）。
-
-type WriteResult = { ok: boolean; error?: string };
-type WriteWaiter = { resolve: (r: WriteResult) => void };
-
-let saveInFlight = false;
-let drainScheduled = false;
-let queuedTree: ModelsYamlTree | null = null;
-let queuedWaiters: WriteWaiter[] = [];
-/** 本批次（未成功落盘的乐观更新链）起点快照，失败时整体回滚用 */
-let batchBaseSnapshot: ModelsCatalogState | null = null;
-
-function resetWriteQueueForTesting(): void {
-  saveInFlight = false;
-  drainScheduled = false;
-  queuedTree = null;
-  queuedWaiters = [];
-  batchBaseSnapshot = null;
-}
-
-function applyOptimisticTree(newTree: ModelsYamlTree): void {
-  const { providerMap, modelIndex, globalModelIndex } = buildIndexes(newTree);
-  state = {
-    ...state,
-    tree: newTree,
-    providerMap,
-    modelIndex,
-    globalModelIndex,
-    version: state.version + 1,
-    lastError: null,
-  };
-  notify();
-}
-
-function scheduleDrain(): void {
-  if (drainScheduled || saveInFlight) return;
-  drainScheduled = true;
-  queueMicrotask(() => {
-    drainScheduled = false;
-    void drainWriteQueue();
-  });
-}
-
-async function drainWriteQueue(): Promise<void> {
-  if (saveInFlight) return;
-  saveInFlight = true;
-  try {
-    while (queuedTree) {
-      const treeToSave = queuedTree;
-      const waiters = queuedWaiters;
-      const baseForRollback = batchBaseSnapshot;
-      queuedTree = null;
-      queuedWaiters = [];
-
-      let writeRes: { ok: boolean; error?: string };
-      try {
-        writeRes = await writeModelsYamlIpc(treeToSave);
-      } catch (e) {
-        writeRes = {
-          ok: false,
-          error: e instanceof Error ? e.message : String(e),
-        };
-      }
-      if (!writeRes.ok) {
-        // 无更新 tree 顶替时回滚到批次基线；有则保留 base 给下一轮（整条未确认链共享锚点）
-        if (state.tree === treeToSave && baseForRollback) {
-          state = {
-            ...baseForRollback,
-            lastError: {
-              kind: 'WRITE_REJECTED',
-              message: writeRes.error || '写入磁盘被拒绝',
-            },
-          };
-          notify();
-          batchBaseSnapshot = null;
-        }
-        for (const w of waiters) w.resolve({ ok: false, error: writeRes.error });
-      } else {
-        // 成功：磁盘已与 treeToSave 一致。
-        // 若还有排队 tree，下一轮回滚锚点设为「已落盘 treeToSave 的干净镜像」
-        // （不含排队者的乐观更新——失败时可精确回退到磁盘现状）。
-        if (queuedTree) {
-          const cleanIndexes = buildIndexes(treeToSave);
-          batchBaseSnapshot = {
-            ...state,
-            tree: treeToSave,
-            providerMap: cleanIndexes.providerMap,
-            modelIndex: cleanIndexes.modelIndex,
-            globalModelIndex: cleanIndexes.globalModelIndex,
-            lastError: null,
-          };
-        } else {
-          batchBaseSnapshot = null;
-        }
-        for (const w of waiters) w.resolve({ ok: true });
-        emitUiEvent('models-catalog-changed', undefined);
-      }
-    }
-  } finally {
-    saveInFlight = false;
-  }
-}
-
-/** 读 IPC 成功载荷：只认 providers 对象。data.tree 无论有没有都不得当成功源。 */
-interface ModelsYamlReadPayload {
-  path?: string;
-  providers?: unknown;
-}
-
-function isProvidersObject(value: unknown): value is Record<string, ProviderSpec> {
-  return value != null && typeof value === 'object' && !Array.isArray(value);
-}
-
-function treeFromReadPayload(data: ModelsYamlReadPayload): ModelsYamlTree | null {
-  if (isProvidersObject(data.providers)) {
-    return { version: 2, providers: data.providers };
-  }
-  return null;
-}
-
-function refuseWriteIfNotLoaded(): { ok: false; error: string } | null {
-  if (state.loaded !== true) {
-    return { ok: false, error: WRITE_BEFORE_LOAD_ERROR };
-  }
-  return null;
-}
-
-function applyLoadFailure(kind: ModelsCatalogError['kind'], message: string): false {
-  // 失败不得用空 providers 覆盖上一份成功快照；显式把 loaded 打回 false
-  state = {
-    ...state,
+function emptyState(): ModelsCatalogState {
+  return {
+    tree: { version: 2, activeModel: null, providers: {} },
+    providerMap: new Map(),
+    modelIndex: new Map(),
+    revision: '',
+    credentialStates: {},
+    version: 0,
     loaded: false,
-    version: state.version + 1,
-    lastError: { kind, message },
+    filePath: '',
+    lastError: null,
+    warning: null,
   };
-  notify();
-  emitUiEvent('models-catalog-changed', undefined);
-  return false;
 }
 
-function buildIndexes(tree: ModelsYamlTree): {
-  providerMap: Map<string, ProviderSpec>;
-  modelIndex: Map<string, IndexedModelEntry>;
-  globalModelIndex: Map<string, IndexedModelEntry[]>;
-} {
-  const providerMap = new Map<string, ProviderSpec>();
-  const modelIndex = new Map<string, IndexedModelEntry>();
-  const globalModelIndex = new Map<string, IndexedModelEntry[]>();
+let state = emptyState();
+const listeners = new Set<StoreListener>();
+let operationTail: Promise<unknown> = Promise.resolve();
+let inflightLoadPromise: Promise<boolean> | null = null;
+let generation = 0;
 
-  for (const [pId, provider] of Object.entries(tree.providers || {})) {
-    const normPId = pId.trim().toLowerCase();
-    providerMap.set(normPId, provider);
-
-    for (const model of provider.models || []) {
-      const normMId = (model.id || '').trim().toLowerCase();
-      if (!normMId) continue;
-
-      const entry: IndexedModelEntry = { providerId: normPId, provider, model };
-      modelIndex.set(`${normPId}::${normMId}`, entry);
-
-      const list = globalModelIndex.get(normMId) || [];
-      list.push(entry);
-      globalModelIndex.set(normMId, list);
-    }
-  }
-
-  return { providerMap, modelIndex, globalModelIndex };
+function enqueue<T>(operation: () => Promise<T>): Promise<T> {
+  const next = operationTail.then(operation, operation);
+  operationTail = next;
+  return next;
 }
 
 function notify(): void {
   for (const listener of listeners) {
     try {
       listener(state);
-    } catch (err) {
-      console.error('[ModelsCatalogStore] 监听器执行异常:', err);
+    } catch (error) {
+      logger.error('模型目录监听器执行失败', {
+        module: 'models-catalog',
+        err: toErrMeta(error),
+      });
     }
   }
 }
 
-// ── 核心 Store 单例 ────────────────────────────────────────────────────────────
+function indexes(tree: ModelsYamlTree) {
+  const providerMap = new Map<string, ProviderSpec>();
+  const modelIndex = new Map<string, IndexedModelEntry>();
+  for (const [providerId, provider] of Object.entries(tree.providers)) {
+    providerMap.set(providerId, provider);
+    for (const model of provider.models) {
+      modelIndex.set(modelRefKey({ providerId, modelId: model.id }), {
+        providerId,
+        provider,
+        model,
+      });
+    }
+  }
+  return { providerMap, modelIndex };
+}
+
+function freezeTree<T>(value: T): T {
+  if (value && typeof value === 'object') {
+    for (const child of Object.values(value)) freezeTree(child);
+    Object.freeze(value);
+  }
+  return value;
+}
+
+/** 凭据写入等同轨命令也通过此入口安装已接受快照。 */
+function acceptSnapshot(snapshot: ModelsCatalogSnapshot): void {
+  if (!snapshot.tree || snapshot.parseError)
+    throw new Error(
+      snapshot.parseError
+        ? formatParseError(snapshot.parseError)
+        : '模型配置无法解析'
+    );
+  if (!snapshot.revision || !snapshot.path)
+    throw new Error('配置回执缺少修订号或真实路径');
+  const tree = freezeTree(normalizeModelsTree(snapshot.tree));
+  state = {
+    tree,
+    ...indexes(tree),
+    revision: snapshot.revision,
+    credentialStates: structuredClone(snapshot.credentialStates),
+    filePath: snapshot.path,
+    version: state.version + 1,
+    loaded: true,
+    lastError: null,
+    warning: snapshot.notificationError ?? null,
+  };
+  notify();
+  emitUiEvent('models-catalog-changed', undefined);
+}
+
+function fail(
+  kind: ModelsCatalogError['kind'],
+  message: string,
+  unreadable = false
+): ModelsCatalogWriteResult {
+  state = {
+    ...state,
+    loaded: unreadable ? false : state.loaded,
+    version: state.version + 1,
+    lastError: { kind, message },
+  };
+  notify();
+  return { ok: false, error: message };
+}
+
+const NOT_LOADED = '模型目录尚未成功加载，拒绝写盘以免覆盖用户文件';
+const CONFLICT = '配置已被外部修改，保存已取消，请重新确认';
+
+/** 函数操作在队首读取最新已接受树，不能在排队前拼一份陈旧全树。 */
+function mutate(
+  action: (tree: ModelsYamlTree) => ModelsYamlTree,
+  expectedRevision?: string
+): Promise<ModelsCatalogWriteResult> {
+  const token = generation;
+  return enqueue(async () => {
+    if (token !== generation) return { ok: false, error: '配置操作已失效' };
+    if (!state.loaded) return { ok: false, error: NOT_LOADED };
+    if (expectedRevision !== undefined && expectedRevision !== state.revision) {
+      return fail('REVISION_CONFLICT', CONFLICT);
+    }
+    let candidate: ModelsYamlTree;
+    try {
+      candidate = normalizeModelsTree(action(state.tree));
+    } catch (error) {
+      return fail(
+        'VALIDATION_FAILED',
+        error instanceof Error ? error.message : String(error)
+      );
+    }
+    try {
+      const requestRevision = state.revision;
+      const result = await writeModelsYamlIpc(candidate, requestRevision);
+      if (token !== generation) return { ok: false, error: '配置操作已失效' };
+      if (!result.ok) {
+        return fail(
+          result.kind === 'REVISION_CONFLICT'
+            ? 'REVISION_CONFLICT'
+            : 'WRITE_REJECTED',
+          result.error,
+          result.kind === 'REVISION_CONFLICT' ||
+            result.code === 'CONTRACT_MISMATCH'
+        );
+      }
+      if (
+        state.revision !== requestRevision &&
+        state.revision !== result.data.revision
+      ) {
+        return fail(
+          'REVISION_CONFLICT',
+          '配置已收到更新回执，拒绝安装过期保存结果'
+        );
+      }
+      try {
+        acceptSnapshot(result.data);
+      } catch (error) {
+        return fail(
+          'PARSE_FAILURE',
+          error instanceof Error ? error.message : String(error),
+          true
+        );
+      }
+      return { ok: true };
+    } catch (error) {
+      if (token !== generation) return { ok: false, error: '配置操作已失效' };
+      return fail(
+        'WRITE_REJECTED',
+        error instanceof Error ? error.message : String(error)
+      );
+    }
+  });
+}
 
 export const modelsCatalogStore = {
   getState(): ModelsCatalogState {
@@ -296,167 +237,164 @@ export const modelsCatalogStore = {
     };
   },
 
+  acceptSnapshot,
+
   resetForTesting(): void {
-    state = {
-      tree: { version: 2, providers: {} },
-      providerMap: new Map(),
-      modelIndex: new Map(),
-      globalModelIndex: new Map(),
-      version: 0,
-      loaded: false,
-      filePath: '~/.conex/models.yaml',
-      lastError: null,
-    };
+    generation += 1;
+    state = emptyState();
     listeners.clear();
+    operationTail = Promise.resolve();
     inflightLoadPromise = null;
-    resetWriteQueueForTesting();
   },
 
   async ensureLoaded(force = false): Promise<boolean> {
     if (inflightLoadPromise) return inflightLoadPromise;
     if (state.loaded && !force) return true;
-
-    inflightLoadPromise = (async () => {
-      const result = await readModelsYamlIpc();
-      if (!result.ok) {
-        const kind =
-          result.kind === 'PARSE_ERROR' ? 'PARSE_FAILURE' : 'IPC_DISCONNECTED';
-        return applyLoadFailure(kind, result.error);
-      }
-
-      const loadedTree = treeFromReadPayload(result.data as ModelsYamlReadPayload);
-      if (!loadedTree) {
-        return applyLoadFailure(
+    const token = generation;
+    inflightLoadPromise = enqueue(async () => {
+      try {
+        const result = await readModelsYamlIpc();
+        if (token !== generation) return false;
+        if (!result.ok) {
+          fail(
+            result.kind === 'PARSE_ERROR'
+              ? 'PARSE_FAILURE'
+              : 'IPC_DISCONNECTED',
+            result.error,
+            true
+          );
+          return false;
+        }
+        try {
+          acceptSnapshot(result.data);
+          return true;
+        } catch (error) {
+          fail(
+            'PARSE_FAILURE',
+            error instanceof Error ? error.message : String(error),
+            true
+          );
+          return false;
+        }
+      } catch (error) {
+        if (token !== generation) return false;
+        fail(
           'IPC_DISCONNECTED',
-          '读 IPC 未返回 providers 对象（协议漂移，拒绝空树冒充已加载）'
+          error instanceof Error ? error.message : String(error),
+          true
         );
+        return false;
       }
-
-      const { providerMap, modelIndex, globalModelIndex } = buildIndexes(loadedTree);
-
-      state = {
-        tree: loadedTree,
-        providerMap,
-        modelIndex,
-        globalModelIndex,
-        version: state.version + 1,
-        loaded: true,
-        filePath: result.data.path || state.filePath,
-        lastError: null,
-      };
-
-      notify();
-      emitUiEvent('models-catalog-changed', undefined);
-      return true;
-    })();
-
+    });
     try {
       return await inflightLoadPromise;
     } finally {
-      inflightLoadPromise = null;
+      if (token === generation) inflightLoadPromise = null;
     }
   },
 
-  /**
-   * 写入口：乐观更新内存 + 经单飞写队列 coalesce 落盘。
-   * 并发双写时后到请求 coalesce 为最新 tree，最终磁盘与内存一致。
-   */
-  async updateTree(newTree: ModelsYamlTree): Promise<WriteResult> {
-    const refused = refuseWriteIfNotLoaded();
-    if (refused) return refused;
+  /** 整树编辑必须携带读取该树时的修订，拒绝覆盖排队期间的新配置。 */
+  updateTree(tree: ModelsYamlTree, expectedRevision = state.revision) {
+    const candidate = structuredClone(tree);
+    return mutate(() => candidate, expectedRevision);
+  },
 
-    // 批次回滚锚点：仅在完全空闲（无排队 tree、无 in-flight save）时取当前快照。
-    // in-flight / 排队链保持既有锚点（整条未确认链共享同一回滚目标）；
-    // 成功落盘且仍有排队时，由 drain 将锚点更新为「已落盘 tree 的干净镜像」。
-    if (!queuedTree && !saveInFlight) {
-      batchBaseSnapshot = state;
-    }
-
-    applyOptimisticTree(newTree);
-
-    return new Promise<WriteResult>((resolve) => {
-      // coalesce：最新 tree 覆盖先前排队者；所有 waiter 共享下一次 save 的结果
-      queuedTree = newTree;
-      queuedWaiters.push({ resolve });
-      scheduleDrain();
+  addProvider(providerId: string, provider: ProviderSpec) {
+    const input = structuredClone(provider);
+    return mutate((tree) => addProvider(tree, providerId, input));
+  },
+  updateProvider(providerId: string, patch: Partial<ProviderSpec>) {
+    const input = structuredClone(patch);
+    return mutate((tree) => updateProvider(tree, providerId, input));
+  },
+  removeProvider(providerId: string) {
+    return mutate((tree) => removeProvider(tree, providerId));
+  },
+  addModel(providerId: string, model: Partial<ModelSpec> & { id: string }) {
+    const input = structuredClone(model);
+    return mutate((tree) => addModel(tree, providerId, input));
+  },
+  updateModel(
+    providerId: string,
+    modelId: string,
+    patch: Partial<ModelSpec>,
+    expectedRevision?: string
+  ) {
+    const input = structuredClone(patch);
+    return mutate(
+      (tree) => updateModel(tree, providerId, modelId, input),
+      expectedRevision
+    );
+  },
+  removeModel(providerId: string, modelId: string) {
+    return mutate((tree) => removeModel(tree, providerId, modelId));
+  },
+  setActiveModel(ref: ModelRef | null) {
+    const input = ref === null ? null : { ...ref };
+    return mutate((tree) => setActiveModel(tree, input));
+  },
+  async probeAndAppendModels(providerId: string, modelIds: string[]) {
+    const id = providerId.trim();
+    const uniqueIds = [
+      ...new Set(modelIds.map((model) => model.trim()).filter(Boolean)),
+    ];
+    let existingRetained = 0;
+    let appendedModelIds: string[] = [];
+    const result = await mutate((tree) => {
+      const provider = tree.providers[id];
+      if (!provider) throw new Error(`供应商不存在：${id}`);
+      const existing = new Set(provider.models.map((model) => model.id));
+      existingRetained = existing.size;
+      appendedModelIds = uniqueIds.filter((model) => !existing.has(model));
+      return updateProvider(tree, id, {
+        models: [
+          ...provider.models,
+          ...appendedModelIds.map((model) => ({ id: model, enabled: true })),
+        ],
+      });
     });
-  },
-
-  async addProvider(providerId: string, provider: ProviderSpec): Promise<{ ok: boolean; error?: string }> {
-    const refused = refuseWriteIfNotLoaded();
-    if (refused) return refused;
-    return this.updateTree(addProvider(state.tree, providerId, provider));
-  },
-
-  async updateProvider(providerId: string, patch: Partial<ProviderSpec>): Promise<{ ok: boolean; error?: string }> {
-    const refused = refuseWriteIfNotLoaded();
-    if (refused) return refused;
-    return this.updateTree(updateProvider(state.tree, providerId, patch));
-  },
-
-  async removeProvider(providerId: string): Promise<{ ok: boolean; error?: string }> {
-    const refused = refuseWriteIfNotLoaded();
-    if (refused) return refused;
-    return this.updateTree(removeProvider(state.tree, providerId));
-  },
-
-  async addModel(providerId: string, modelInput: Partial<ModelSpec> & { id: string }): Promise<{ ok: boolean; error?: string }> {
-    const refused = refuseWriteIfNotLoaded();
-    if (refused) return refused;
-    return this.updateTree(addModel(state.tree, providerId, modelInput));
-  },
-
-  async updateModel(providerId: string, modelId: string, patch: Partial<ModelSpec>): Promise<{ ok: boolean; error?: string }> {
-    const refused = refuseWriteIfNotLoaded();
-    if (refused) return refused;
-    return this.updateTree(updateModel(state.tree, providerId, modelId, patch));
-  },
-
-  async removeModel(providerId: string, modelId: string): Promise<{ ok: boolean; error?: string }> {
-    const refused = refuseWriteIfNotLoaded();
-    if (refused) return refused;
-    return this.updateTree(removeModel(state.tree, providerId, modelId));
-  },
-
-  async probeAndAppendModels(providerId: string, probedRawIds: string[]): Promise<IncrementalProbeResult> {
-    return applyIncrementalProbe(providerId, probedRawIds);
+    if (!result.ok) throw new Error(result.error);
+    return {
+      providerId: id,
+      totalProbed: uniqueIds.length,
+      existingRetained,
+      newAppended: appendedModelIds.length,
+      appendedModelIds,
+    };
   },
 };
 
-// ── 选择器导出 ─────────────────────────────────────────────────────────────────
+const selectors = createSelectors(() => state);
+export const selectProvider = selectors.selectProvider;
+export const selectModel = selectors.selectModel;
+export const selectEffectiveProtocol = selectors.selectEffectiveProtocol;
+export const selectEffectiveContextWindow =
+  selectors.selectEffectiveContextWindow;
+export const selectEffectiveCompat = selectors.selectEffectiveCompat;
+export const selectSupportsThinking = selectors.selectSupportsThinking;
+export const selectThinkingLevelsMap = selectors.selectThinkingLevelsMap;
+export const getActiveModelRef = selectors.getActiveModelRef;
 
-const selectors = createSelectors(() => modelsCatalogStore.getState());
-
-export const selectProvider = selectors.selectProvider.bind(selectors);
-export const selectModel = selectors.selectModel.bind(selectors);
-export const selectModelGlobally = selectors.selectModelGlobally.bind(selectors);
-export const selectEffectiveProtocol = selectors.selectEffectiveProtocol.bind(selectors);
-export const selectEffectiveContextWindow = selectors.selectEffectiveContextWindow.bind(selectors);
-export const selectSupportsThinking = selectors.selectSupportsThinking.bind(selectors);
-export const selectThinkingLevelsMap = selectors.selectThinkingLevelsMap.bind(selectors);
-export const selectEstimatedCost = selectors.selectEstimatedCost.bind(selectors);
-
-// ── 向后兼容门面函数 ───────────────────────────────────────────────────────────
+const queries = createCatalogQueries(() => state);
+export const listCatalogModels = queries.listCatalogModels;
+export const findCatalogModel = queries.findCatalogModel;
+export const searchCatalogModels = queries.searchCatalogModels;
 
 export function getModelsCatalogPath(): string {
   return state.filePath;
 }
-
 export function getModelsCatalogVersion(): number {
   return state.version;
 }
-
 export function resetModelsCatalogMirror(): void {
   modelsCatalogStore.resetForTesting();
 }
 
-export async function ensureModelsCatalogLoaded(force = false): Promise<ModelsCatalogLoadResult> {
+export async function ensureModelsCatalogLoaded(
+  force = false
+): Promise<ModelsCatalogLoadResult> {
   const ok = await modelsCatalogStore.ensureLoaded(force);
-  if (ok) {
-    return { ok: true, path: state.filePath };
-  }
-  return {
-    ok: false,
-    error: state.lastError?.message || '加载 models.yaml 失败',
-  };
+  return ok
+    ? { ok: true, path: state.filePath }
+    : { ok: false, error: state.lastError?.message || '加载模型配置失败' };
 }

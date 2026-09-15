@@ -19,6 +19,7 @@ import {
   modelsCatalogStore,
   selectProvider,
 } from '../../api/modelsCatalogStore';
+import { modelRefKey } from '../../api/modelsCatalogTypes';
 import { ensureProviderShell } from './catalogWriteGate';
 
 export interface ModelProviderActionsArgs {
@@ -39,7 +40,7 @@ export function useModelProviderActions(args: ModelProviderActionsArgs) {
   const runTest = useCallback(
     async (model: string) => {
       if (!selected) return;
-      setTestBusy(`${selected.id}::${model}`);
+      setTestBusy(modelRefKey({ providerId: selected.id, modelId: model }));
 
       try {
         const fresh =
