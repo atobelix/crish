@@ -12,6 +12,7 @@ import styles from './ChatMessageRow.module.css';
 import { ChatToolStack, type ChatToolStackSharedProps } from '../chat-tool-call/ChatToolCallBlock';
 import { FoldableToolGroup } from '../chat-tool-call/FoldableToolGroup';
 import type { ToolRenderItem } from '../../api/toolPresentation';
+import type { MessageToolCall, SessionAgent } from '../../store/types';
 import { buildToolStackHostProps, shouldHostToolStack } from './chatMessageRowUtils';
 import { ReasoningRow } from './ReasoningRow';
 import type { VirtualScrollManager } from '../../api/VirtualScrollManager';
@@ -145,7 +146,11 @@ export const MessageToolCallsSection: React.FC<MessageToolCallsSectionProps> =
         ...host,
         actions: {
           ...host.actions,
-          renderLinkedAgentPanel: (agent, parentSessionId, tc) => (
+          renderLinkedAgentPanel: (
+            agent: SessionAgent,
+            parentSessionId: string,
+            tc: MessageToolCall,
+          ) => (
             <InlineAgentPanel
               agent={agent}
               parentSessionId={parentSessionId}

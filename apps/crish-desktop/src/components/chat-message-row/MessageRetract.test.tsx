@@ -148,8 +148,7 @@ describe('消息级撤回入口', () => {
     expect(screen.queryByRole('button', { name: '撤回上一条用户消息' })).toBeNull();
   });
 
-  it('已完成的最后一条助手行动作栏带撤回', () => {
-    const onRetract = vi.fn();
+  it('AssistantMessageActionsBar 严守契约：AI 助手消息不提供撤回功能', () => {
     render(
       <AssistantMessageActionsBar
         timestamp={1}
@@ -159,13 +158,10 @@ describe('消息级撤回入口', () => {
         onCopy={vi.fn()}
         onRegenerate={vi.fn()}
         onTogglePin={vi.fn()}
-        onRetract={onRetract}
+        onRetract={vi.fn()}
       />
     );
-    const btn = screen.getByRole('button', { name: '撤回上一条用户消息' });
-    assertRetractChrome(btn);
-    fireEvent.click(btn);
-    expect(onRetract).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('button', { name: '撤回上一条用户消息' })).toBeNull();
   });
 
   it('UserMessageActionsBar 未固定时渲染固定按钮，点击触发 onTogglePin', () => {
@@ -247,7 +243,7 @@ describe('消息级撤回入口', () => {
   it('RetractActionButton 源码与 DOM 契约：精准 Tooltip、无原生 title 且图标隐藏于无障碍树', () => {
     const retractSrc = readFileSync(join(here, 'RetractActionButton.tsx'), 'utf8');
     expect(retractSrc).toMatch(/content="撤回上一条消息（还原文件、截断并回填输入框）"/);
-    expect(retractSrc).toMatch(/<AppIcon name="undo" size=\{14\} aria-hidden \/>/);
+    expect(retractSrc).toMatch(/<AppIcon name="undo" size=\{16\} aria-hidden \/>/);
     expect(retractSrc).not.toMatch(/\btitle=/);
 
     const onRetract = vi.fn();

@@ -14,14 +14,14 @@ describe('AssistantMessageActionsBar §5 / F5-1 source contracts', () => {
     expect(src).toMatch(/onRegenerate\?:\s*\(\)\s*=>\s*void/);
   });
 
-  it('gates regenerate button on real callback like onRetract', () => {
+  it('gates regenerate button on real callback and excludes retract', () => {
     expect(src).toMatch(/isLastAssistant && onRegenerate/);
-    expect(src).toMatch(/onRetract \? <RetractActionButton/);
+    expect(src).not.toMatch(/<RetractActionButton/);
   });
 
   it('renders regenerate button with exact tooltip and accessible icon', () => {
     expect(src).toMatch(/content="重新生成回复 \(快捷键: R\)"/);
-    expect(src).toMatch(/<AppIcon name="refresh" size=\{14\} aria-hidden \/>/);
+    expect(src).toMatch(/<AppIcon name="refresh" size=\{16\} aria-hidden \/>/);
     expect(src).toMatch(/styles\.regenerateBtn/);
     expect(src).not.toMatch(/\btitle=/);
   });

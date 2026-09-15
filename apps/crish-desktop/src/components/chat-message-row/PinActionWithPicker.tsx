@@ -302,7 +302,7 @@ export const PinActionWithPicker: React.FC<PinActionWithPickerProps> = React.mem
             aria-label={pinLabels.ariaLabel}
             aria-pressed={isPinned}
             onClick={handleMainClick}
-            icon={isPinned ? <AppIcon name="pin-off" size={14} /> : <AppIcon name="pin" size={14} />}
+            icon={isPinned ? <AppIcon name="pin-off" size={16} /> : <AppIcon name="pin" size={16} />}
           />
         </Tooltip>
 

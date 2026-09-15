@@ -40,17 +40,17 @@
   border-right: none;
 }
 
-/* 上下端点大圆角贝塞尔三角按钮：三个角均采用 Q 贝塞尔平滑圆角，与默认滚动条严格保持 10% 相同灰度 */
+/* 上下端点大圆角贝塞尔三角按钮：顶角与底角均采用圆润贝塞尔曲率，宽度严格对齐 8px 滑块 */
 ::-webkit-scrollbar-button:vertical:start:decrement {
   display: block;
   height: 12px;
   background-color: transparent;
   background-repeat: no-repeat;
   background-position: center center;
-  background-size: 8px 6px;
+  background-size: 8px 7px;
   background-clip: padding-box;
   border-right: 2px solid transparent;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 9 6'%3E%3Cpath d='M 4.0 1.4 Q 4.5 0.5 5.0 1.4 L 8.1 4.9 Q 8.6 5.6 7.8 5.6 L 1.2 5.6 Q 0.4 5.6 0.9 4.9 Z' fill='%23e6e6e5'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 7'%3E%3Cpath d='M 5.5 6.2 L 2.5 6.2 C 1.2 6.2 0.3 5.9 0.8 4.8 L 2.4 2.3 C 3.1 1.0 4.9 1.0 5.6 2.3 L 7.2 4.8 C 7.7 5.9 6.8 6.2 5.5 6.2 Z' fill='%23e6e6e5'/%3E%3C/svg%3E");
 }
 
 ::-webkit-scrollbar-button:vertical:end:increment {
@@ -59,20 +59,20 @@
   background-color: transparent;
   background-repeat: no-repeat;
   background-position: center center;
-  background-size: 8px 6px;
+  background-size: 8px 7px;
   background-clip: padding-box;
   border-right: 2px solid transparent;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 9 6'%3E%3Cpath d='M 4.0 4.6 Q 4.5 5.5 5.0 4.6 L 8.1 1.1 Q 8.6 0.4 7.8 0.4 L 1.2 0.4 Q 0.4 0.4 0.9 1.1 Z' fill='%23e6e6e5'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 7'%3E%3Cpath d='M 2.5 0.8 L 5.5 0.8 C 6.8 0.8 7.7 1.1 7.2 2.2 L 5.6 4.7 C 4.9 6.0 3.1 6.0 2.4 4.7 L 0.8 2.2 C 0.3 1.1 1.2 0.8 2.5 0.8 Z' fill='%23e6e6e5'/%3E%3C/svg%3E");
 }
 
 ::-webkit-scrollbar-button:vertical:start:decrement:hover,
 ::-webkit-scrollbar-button:vertical:start:decrement:active {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 9 6'%3E%3Cpath d='M 4.0 1.4 Q 4.5 0.5 5.0 1.4 L 8.1 4.9 Q 8.6 5.6 7.8 5.6 L 1.2 5.6 Q 0.4 5.6 0.9 4.9 Z' fill='%23c8c7c6'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 7'%3E%3Cpath d='M 5.5 6.2 L 2.5 6.2 C 1.2 6.2 0.3 5.9 0.8 4.8 L 2.4 2.3 C 3.1 1.0 4.9 1.0 5.6 2.3 L 7.2 4.8 C 7.7 5.9 6.8 6.2 5.5 6.2 Z' fill='%23c8c7c6'/%3E%3C/svg%3E");
 }
 
 ::-webkit-scrollbar-button:vertical:end:increment:hover,
 ::-webkit-scrollbar-button:vertical:end:increment:active {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 9 6'%3E%3Cpath d='M 4.0 4.6 Q 4.5 5.5 5.0 4.6 L 8.1 1.1 Q 8.6 0.4 7.8 0.4 L 1.2 0.4 Q 0.4 0.4 0.9 1.1 Z' fill='%23c8c7c6'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 7'%3E%3Cpath d='M 2.5 0.8 L 5.5 0.8 C 6.8 0.8 7.7 1.1 7.2 2.2 L 5.6 4.7 C 4.9 6.0 3.1 6.0 2.4 4.7 L 0.8 2.2 C 0.3 1.1 1.2 0.8 2.5 0.8 Z' fill='%23c8c7c6'/%3E%3C/svg%3E");
 }
 
 /* 左右端点大圆角贝塞尔三角按钮：与上下端点圆角贝塞尔严格保持同构与 10% 灰度 */
@@ -82,10 +82,10 @@
   background-color: transparent;
   background-repeat: no-repeat;
   background-position: center center;
-  background-size: 6px 8px;
+  background-size: 7px 8px;
   background-clip: padding-box;
   border-bottom: 2px solid transparent;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 6 9'%3E%3Cpath d='M 1.4 4.5 Q 0.5 4.0 1.4 3.5 L 4.9 0.4 Q 5.6 -0.1 5.6 0.7 L 5.6 7.3 Q 5.6 8.1 4.9 7.6 Z' fill='%23e6e6e5'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 8'%3E%3Cpath d='M 6.2 2.5 L 6.2 5.5 C 6.2 6.8 5.9 7.7 4.8 7.2 L 2.3 5.6 C 1.0 4.9 1.0 3.1 2.3 2.4 L 4.8 0.8 C 5.9 0.3 6.2 1.2 6.2 2.5 Z' fill='%23e6e6e5'/%3E%3C/svg%3E");
 }
 
 ::-webkit-scrollbar-button:horizontal:end:increment {
@@ -94,20 +94,61 @@
   background-color: transparent;
   background-repeat: no-repeat;
   background-position: center center;
-  background-size: 6px 8px;
+  background-size: 7px 8px;
   background-clip: padding-box;
   border-bottom: 2px solid transparent;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 6 9'%3E%3Cpath d='M 4.6 4.5 Q 5.5 4.0 4.6 3.5 L 1.1 0.4 Q 0.4 -0.1 0.4 0.7 L 0.4 7.3 Q 0.4 8.1 1.1 7.6 Z' fill='%23e6e6e5'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 8'%3E%3Cpath d='M 0.8 2.5 L 0.8 5.5 C 0.8 6.8 1.1 7.7 2.2 7.2 L 4.7 5.6 C 6.0 4.9 6.0 3.1 4.7 2.4 L 2.2 0.8 C 1.1 0.3 0.8 1.2 0.8 2.5 Z' fill='%23e6e6e5'/%3E%3C/svg%3E");
 }
 
 ::-webkit-scrollbar-button:horizontal:start:decrement:hover,
 ::-webkit-scrollbar-button:horizontal:start:decrement:active {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 6 9'%3E%3Cpath d='M 1.4 4.5 Q 0.5 4.0 1.4 3.5 L 4.9 0.4 Q 5.6 -0.1 5.6 0.7 L 5.6 7.3 Q 5.6 8.1 4.9 7.6 Z' fill='%23c8c7c6'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 8'%3E%3Cpath d='M 6.2 2.5 L 6.2 5.5 C 6.2 6.8 5.9 7.7 4.8 7.2 L 2.3 5.6 C 1.0 4.9 1.0 3.1 2.3 2.4 L 4.8 0.8 C 5.9 0.3 6.2 1.2 6.2 2.5 Z' fill='%23c8c7c6'/%3E%3C/svg%3E");
 }
 
 ::-webkit-scrollbar-button:horizontal:end:increment:hover,
 ::-webkit-scrollbar-button:horizontal:end:increment:active {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 6 9'%3E%3Cpath d='M 4.6 4.5 Q 5.5 4.0 4.6 3.5 L 1.1 0.4 Q 0.4 -0.1 0.4 0.7 L 0.4 7.3 Q 0.4 8.1 1.1 7.6 Z' fill='%23c8c7c6'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 8'%3E%3Cpath d='M 0.8 2.5 L 0.8 5.5 C 0.8 6.8 1.1 7.7 2.2 7.2 L 4.7 5.6 C 6.0 4.9 6.0 3.1 4.7 2.4 L 2.2 0.8 C 1.1 0.3 0.8 1.2 0.8 2.5 Z' fill='%23c8c7c6'/%3E%3C/svg%3E");
+}
+
+/* ==========================================================================
+   暗色环境滚动条大圆角三角按钮色彩适配 (Dark Theme Scrollbar Buttons)
+   与暗色滑块 (--scrollbar-thumb-bg / --scrollbar-thumb-active) 严格保持二元色彩一致
+   静止态: #cccccc 20% 透光率; 激活/悬停态: #cccccc 36% 透光率
+   ========================================================================== */
+html[data-theme='dark'] ::-webkit-scrollbar-button:vertical:start:decrement {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 7'%3E%3Cpath d='M 5.5 6.2 L 2.5 6.2 C 1.2 6.2 0.3 5.9 0.8 4.8 L 2.4 2.3 C 3.1 1.0 4.9 1.0 5.6 2.3 L 7.2 4.8 C 7.7 5.9 6.8 6.2 5.5 6.2 Z' fill='%23cccccc' fill-opacity='0.20'/%3E%3C/svg%3E");
+}
+
+html[data-theme='dark'] ::-webkit-scrollbar-button:vertical:end:increment {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 7'%3E%3Cpath d='M 2.5 0.8 L 5.5 0.8 C 6.8 0.8 7.7 1.1 7.2 2.2 L 5.6 4.7 C 4.9 6.0 3.1 6.0 2.4 4.7 L 0.8 2.2 C 0.3 1.1 1.2 0.8 2.5 0.8 Z' fill='%23cccccc' fill-opacity='0.20'/%3E%3C/svg%3E");
+}
+
+html[data-theme='dark'] ::-webkit-scrollbar-button:vertical:start:decrement:hover,
+html[data-theme='dark'] ::-webkit-scrollbar-button:vertical:start:decrement:active {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 7'%3E%3Cpath d='M 5.5 6.2 L 2.5 6.2 C 1.2 6.2 0.3 5.9 0.8 4.8 L 2.4 2.3 C 3.1 1.0 4.9 1.0 5.6 2.3 L 7.2 4.8 C 7.7 5.9 6.8 6.2 5.5 6.2 Z' fill='%23cccccc' fill-opacity='0.36'/%3E%3C/svg%3E");
+}
+
+html[data-theme='dark'] ::-webkit-scrollbar-button:vertical:end:increment:hover,
+html[data-theme='dark'] ::-webkit-scrollbar-button:vertical:end:increment:active {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 7'%3E%3Cpath d='M 2.5 0.8 L 5.5 0.8 C 6.8 0.8 7.7 1.1 7.2 2.2 L 5.6 4.7 C 4.9 6.0 3.1 6.0 2.4 4.7 L 0.8 2.2 C 0.3 1.1 1.2 0.8 2.5 0.8 Z' fill='%23cccccc' fill-opacity='0.36'/%3E%3C/svg%3E");
+}
+
+html[data-theme='dark'] ::-webkit-scrollbar-button:horizontal:start:decrement {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 8'%3E%3Cpath d='M 6.2 2.5 L 6.2 5.5 C 6.2 6.8 5.9 7.7 4.8 7.2 L 2.3 5.6 C 1.0 4.9 1.0 3.1 2.3 2.4 L 4.8 0.8 C 5.9 0.3 6.2 1.2 6.2 2.5 Z' fill='%23cccccc' fill-opacity='0.20'/%3E%3C/svg%3E");
+}
+
+html[data-theme='dark'] ::-webkit-scrollbar-button:horizontal:end:increment {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 8'%3E%3Cpath d='M 0.8 2.5 L 0.8 5.5 C 0.8 6.8 1.1 7.7 2.2 7.2 L 4.7 5.6 C 6.0 4.9 6.0 3.1 4.7 2.4 L 2.2 0.8 C 1.1 0.3 0.8 1.2 0.8 2.5 Z' fill='%23cccccc' fill-opacity='0.20'/%3E%3C/svg%3E");
+}
+
+html[data-theme='dark'] ::-webkit-scrollbar-button:horizontal:start:decrement:hover,
+html[data-theme='dark'] ::-webkit-scrollbar-button:horizontal:start:decrement:active {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 8'%3E%3Cpath d='M 6.2 2.5 L 6.2 5.5 C 6.2 6.8 5.9 7.7 4.8 7.2 L 2.3 5.6 C 1.0 4.9 1.0 3.1 2.3 2.4 L 4.8 0.8 C 5.9 0.3 6.2 1.2 6.2 2.5 Z' fill='%23cccccc' fill-opacity='0.36'/%3E%3C/svg%3E");
+}
+
+html[data-theme='dark'] ::-webkit-scrollbar-button:horizontal:end:increment:hover,
+html[data-theme='dark'] ::-webkit-scrollbar-button:horizontal:end:increment:active {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 8'%3E%3Cpath d='M 0.8 2.5 L 0.8 5.5 C 0.8 6.8 1.1 7.7 2.2 7.2 L 4.7 5.6 C 6.0 4.9 6.0 3.1 4.7 2.4 L 2.2 0.8 C 1.1 0.3 0.8 1.2 0.8 2.5 Z' fill='%23cccccc' fill-opacity='0.36'/%3E%3C/svg%3E");
 }
 
 ::-webkit-scrollbar-corner {

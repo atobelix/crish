@@ -106,7 +106,7 @@ describe('flowScrubberModel', () => {
     manager.setActual('u2', 200);
     scrollToScrubberTarget(empty, 'u2', manager);
     expect(scrollTo).toHaveBeenCalledWith({
-      top: 100,
+      top: 148,
       behavior: 'smooth',
     });
 

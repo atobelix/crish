@@ -69,13 +69,19 @@ input.urlInput::placeholder {
   color: var(--text-tertiary);
 }
 
-/* 悬停态与获得焦点态：无边框无绿色，仅背景微加深（对齐侧边栏搜索框） */
-.urlForm:hover input.urlInput:not(:disabled),
-.urlForm input.urlInput:hover:not(:disabled),
+/* 悬停态与获得焦点态：无边框无绿色，仅背景微加深（对齐侧边栏搜索框）。
+ *
+ * 特异性必须与共享 Input 的基础悬停规则**同形且更高**：
+ *   Input.module.css 的 `.input:hover:not(:focus):not(:focus-visible):not(:disabled)`
+ *   是 (0,5,0)；此处若只用 `:hover:not(:disabled)`（0,3,1）会被它压过 ——
+ *   地址栏悬停就会冒出边框（实证缺陷 2026-09-15）。
+ * 本组带 `input` 类型选择器 ⇒ (0,5,1)，不依赖样式表加载顺序，也无需 !important。 */
+.urlForm:hover input.urlInput:not(:focus):not(:focus-visible):not(:disabled),
+.urlForm input.urlInput:hover:not(:focus):not(:focus-visible):not(:disabled),
 .urlForm input.urlInput:focus,
 .urlForm input.urlInput:focus-visible,
 .urlForm:focus-within input.urlInput,
-input.urlInput:hover:not(:disabled),
+input.urlInput:hover:not(:focus):not(:focus-visible):not(:disabled),
 input.urlInput:focus,
 input.urlInput:focus-visible {
   outline: none;

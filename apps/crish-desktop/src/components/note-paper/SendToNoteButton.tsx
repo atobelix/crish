@@ -172,9 +172,9 @@ export const SendToNoteButton: React.FC<SendToNoteButtonProps> = ({
             className={className}
           >
             {lastOk ? (
-              <AppIcon name="check" size={13} aria-hidden />
+              <AppIcon name="check" size={16} aria-hidden />
             ) : (
-              <AppIcon name="square-pen" size={13} aria-hidden />
+              <AppIcon name="note" size={16} aria-hidden />
             )}
           </button>
         </Tooltip>
@@ -200,7 +200,7 @@ export const SendToNoteButton: React.FC<SendToNoteButtonProps> = ({
         }}
         aria-label={label}
         data-testid="send-to-note-button"
-        icon={<AppIcon name="square-pen" size={14} aria-hidden />}
+        icon={<AppIcon name="square-pen" size={16} aria-hidden />}
       >
         {label}
       </Button>

@@ -77,8 +77,8 @@ describe('Streaming Animation, Caret & Performance Tier Tokens Contract', () => 
     expect(animCss).toContain('@media (prefers-reduced-motion: reduce)');
   });
 
-  it('GPU 硬件加速：单词 Span 必须声明 will-change: opacity, transform', () => {
-    expect(animCss).toContain('will-change: opacity, transform;');
+  it('合成层收敛（12-W1 / U-TERM-DIFF 反转）：streaming-animation.css 禁止常驻 will-change', () => {
+    expect(animCss).not.toMatch(/will-change\s*:/);
   });
 
   it('智能上下文光标抑制：表格与 suppressCaret 修饰符严格隐藏光标', () => {

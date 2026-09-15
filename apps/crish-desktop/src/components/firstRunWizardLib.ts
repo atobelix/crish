@@ -11,6 +11,7 @@ import {
   type ProviderProfile,
 } from '../api/providerProfiles';
 import { networkUserMessage } from '../api/userFacingErrors';
+import { DEFAULT_PROTOCOL } from '../api/modelsNormalize';
 
 import {
   readFirstRunWizardDone,
@@ -111,8 +112,8 @@ export function wizardEmptyModelCatalogHint(hasProfile: boolean): string {
   return '本机目录为空：请手填供应商文档中的 model id，或稍后在设置中「获取列表」。不会预置任何远程演示模型。';
 }
 
-/** 中立向导默认协议（仅协议兼容，不绑官方域名） */
-export const DEFAULT_WIZARD_PROTOCOL = 'openai/chat';
+/** 中立向导默认协议（仅协议兼容，不绑官方域名）；值取协议 SSOT 默认值。 */
+export const DEFAULT_WIZARD_PROTOCOL: string = DEFAULT_PROTOCOL;
 
 /** 密钥步页内字段校验（名称必填；URL/密钥按业务规则） */
 export type WizardConnectFormResult =

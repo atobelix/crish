@@ -13,63 +13,63 @@ export function calculateSafeAreaInset(radius: number = 0, margin: number = 2): 
   return Math.ceil(radius - arcY) + 1;
 }
 
-/** 顶部向上大圆角贝塞尔矢量等腰三角 (宽 8px 高 6px，顶角与两底角均带平滑 Q 圆角曲率) */
+/** 顶部向上大圆角贝塞尔矢量等腰三角 (宽 8px 高 7px，顶角与两底角均带平滑圆润曲率，宽度严格对齐滑块) */
 export const StepperArrowUpIcon: React.FC<{ className?: string }> = ({ className }) => (
   <svg
-    viewBox="0 0 9 6"
+    viewBox="0 0 8 7"
     width="8"
-    height="6"
+    height="7"
     className={className}
     fill="currentColor"
     aria-hidden="true"
-    style={{ width: '8px', height: '6px', display: 'block' }}
+    style={{ width: '8px', height: '7px', display: 'block' }}
   >
-    <path d="M 4.0 1.4 Q 4.5 0.5 5.0 1.4 L 8.1 4.9 Q 8.6 5.6 7.8 5.6 L 1.2 5.6 Q 0.4 5.6 0.9 4.9 Z" />
+    <path d="M 5.5 6.2 L 2.5 6.2 C 1.2 6.2 0.3 5.9 0.8 4.8 L 2.4 2.3 C 3.1 1.0 4.9 1.0 5.6 2.3 L 7.2 4.8 C 7.7 5.9 6.8 6.2 5.5 6.2 Z" />
   </svg>
 );
 
-/** 底部向下大圆角贝塞尔矢量等腰三角 (宽 8px 高 6px，顶角与两底角均带平滑 Q 圆角曲率) */
+/** 底部向下大圆角贝塞尔矢量等腰三角 (宽 8px 高 7px，顶角与两底角均带平滑圆润曲率，宽度严格对齐滑块) */
 export const StepperArrowDownIcon: React.FC<{ className?: string }> = ({ className }) => (
   <svg
-    viewBox="0 0 9 6"
+    viewBox="0 0 8 7"
     width="8"
-    height="6"
+    height="7"
     className={className}
     fill="currentColor"
     aria-hidden="true"
-    style={{ width: '8px', height: '6px', display: 'block' }}
+    style={{ width: '8px', height: '7px', display: 'block' }}
   >
-    <path d="M 4.0 4.6 Q 4.5 5.5 5.0 4.6 L 8.1 1.1 Q 8.6 0.4 7.8 0.4 L 1.2 0.4 Q 0.4 0.4 0.9 1.1 Z" />
+    <path d="M 2.5 0.8 L 5.5 0.8 C 6.8 0.8 7.7 1.1 7.2 2.2 L 5.6 4.7 C 4.9 6.0 3.1 6.0 2.4 4.7 L 0.8 2.2 C 0.3 1.1 1.2 0.8 2.5 0.8 Z" />
   </svg>
 );
 
-/** 左侧向左大圆角贝塞尔矢量等腰三角 (宽 6px 高 8px，顶角与两底角均带平滑 Q 圆角曲率) */
+/** 左侧向左大圆角贝塞尔矢量等腰三角 (宽 7px 高 8px，顶角与两底角均带平滑圆润曲率，高度严格对齐滑块) */
 export const StepperArrowLeftIcon: React.FC<{ className?: string }> = ({ className }) => (
   <svg
-    viewBox="0 0 6 9"
-    width="6"
+    viewBox="0 0 7 8"
+    width="7"
     height="8"
     className={className}
     fill="currentColor"
     aria-hidden="true"
-    style={{ width: '6px', height: '8px', display: 'block' }}
+    style={{ width: '7px', height: '8px', display: 'block' }}
   >
-    <path d="M 1.4 4.5 Q 0.5 4.0 1.4 3.5 L 4.9 0.4 Q 5.6 -0.1 5.6 0.7 L 5.6 7.3 Q 5.6 8.1 4.9 7.6 Z" />
+    <path d="M 6.2 2.5 L 6.2 5.5 C 6.2 6.8 5.9 7.7 4.8 7.2 L 2.3 5.6 C 1.0 4.9 1.0 3.1 2.3 2.4 L 4.8 0.8 C 5.9 0.3 6.2 1.2 6.2 2.5 Z" />
   </svg>
 );
 
-/** 右侧向右大圆角贝塞尔矢量等腰三角 (宽 6px 高 8px，顶角与两底角均带平滑 Q 圆角曲率) */
+/** 右侧向右大圆角贝塞尔矢量等腰三角 (宽 7px 高 8px，顶角与两底角均带平滑圆润曲率，高度严格对齐滑块) */
 export const StepperArrowRightIcon: React.FC<{ className?: string }> = ({ className }) => (
   <svg
-    viewBox="0 0 6 9"
-    width="6"
+    viewBox="0 0 7 8"
+    width="7"
     height="8"
     className={className}
     fill="currentColor"
     aria-hidden="true"
-    style={{ width: '6px', height: '8px', display: 'block' }}
+    style={{ width: '7px', height: '8px', display: 'block' }}
   >
-    <path d="M 4.6 4.5 Q 5.5 4.0 4.6 3.5 L 1.1 0.4 Q 0.4 -0.1 0.4 0.7 L 0.4 7.3 Q 0.4 8.1 1.1 7.6 Z" />
+    <path d="M 0.8 2.5 L 0.8 5.5 C 0.8 6.8 1.1 7.7 2.2 7.2 L 4.7 5.6 C 6.0 4.9 6.0 3.1 4.7 2.4 L 2.2 0.8 C 1.1 0.3 0.8 1.2 0.8 2.5 Z" />
   </svg>
 );
 

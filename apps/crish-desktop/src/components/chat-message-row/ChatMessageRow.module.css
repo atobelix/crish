@@ -781,8 +781,16 @@
 }
 
 .iconBtn {
-  width: 28px;
-  height: 28px;
+  width: 28px !important;
+  height: 28px !important;
+  min-width: 28px !important;
+  max-width: 28px !important;
+  padding: 0 !important;
+  --btn-px: 0px !important;
+  --btn-h: 28px !important;
+  --btn-icon-size: 16px !important;
+  box-sizing: border-box;
+  flex-shrink: 0;
   border: none;
   background: transparent;
   border-radius: var(--button-radius, 7px);
@@ -791,7 +799,6 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  padding: 0;
   -webkit-appearance: none;
   appearance: none;
   transform: none;
@@ -801,8 +808,9 @@
 }
 
 .iconBtn svg {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
 }
 
 .iconBtn:hover {
@@ -817,7 +825,7 @@
   appearance: none;
   border-radius: var(--button-radius, 7px);
   transform: none;
-  color: var(--text-secondary);
+  color: var(--text-tertiary);
 }
 
 .retractBtn:hover,
@@ -833,7 +841,7 @@
   appearance: none;
   border-radius: var(--button-radius, 7px);
   transform: none;
-  color: var(--text-secondary);
+  color: var(--text-tertiary);
 }
 
 .regenerateBtn:hover,
@@ -849,7 +857,7 @@
   appearance: none;
   border-radius: var(--button-radius, 7px);
   transform: none;
-  color: var(--text-secondary);
+  color: var(--text-tertiary);
 }
 
 .editBtn:hover,

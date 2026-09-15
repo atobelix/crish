@@ -2,7 +2,8 @@
  * Conex 统一流式动画 GPU 硬件加速样式表
  *
  * 核心契约：
- * 1. 满足 Zero-CLS 与 Chromium Compositor 独立硬件加速（will-change: opacity, transform）；
+ * 1. Zero-CLS + 合成友好：动画仅用 opacity/transform；**禁止常驻 will-change**
+ *    （12-W1 / D7.6：逐词常驻层膨胀已废除，契约测试负向锁定）；
  * 2. 单源打字机光标 .conex-streaming-caret 全局唯一真相源，消费 --stream-caret-*；
  * 3. 彻底接入 tokens.css 中的 --stream-* 命名空间与 data-perf-tier 性能分档；
  * 4. 彻底消除历史蓝灰裸色与 ChatMessageRow.module.css 双轨冲突；
@@ -24,11 +25,10 @@
   }
 }
 
-/* 单词级动画 Span 规范 (GPU 合成，不占用主线程 JS) */
+/* 单词级动画 Span 规范 (opacity/transform 动画；非常驻 will-change — 12-W1) */
 [data-conex-animate="true"],
 [data-sd-animate="true"] {
   display: inline;
-  will-change: opacity, transform;
   animation-name: conex-fade-in;
   animation-duration: var(--stream-anim-word-fade);
   animation-timing-function: var(--stream-anim-easing, cubic-bezier(0.16, 1, 0.3, 1));
@@ -62,7 +62,6 @@
 [data-tier="TURBO"],
 .md-block-active[data-turbo="true"] {
   contain: layout style paint;
-  will-change: transform;
 }
 
 /* ==========================================================================

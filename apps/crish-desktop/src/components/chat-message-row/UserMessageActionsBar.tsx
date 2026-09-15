@@ -50,9 +50,9 @@ export const UserMessageActionsBar: React.FC<UserMessageActionsBarProps> = ({
           onClick={onCopy}
           icon={
             copied ? (
-              <AppIcon name="check" size={14} aria-hidden />
+              <AppIcon name="check" size={16} aria-hidden />
             ) : (
-              <AppIcon name="copy" size={14} aria-hidden />
+              <AppIcon name="copy" size={16} aria-hidden />
             )
           }
         />
@@ -67,7 +67,7 @@ export const UserMessageActionsBar: React.FC<UserMessageActionsBarProps> = ({
             data-testid="message-edit"
             aria-label="编辑消息"
             onClick={onEdit}
-            icon={<AppIcon name="pencil" size={14} aria-hidden />}
+            icon={<AppIcon name="pencil" size={16} aria-hidden />}
           />
         </Tooltip>
       ) : onRetract ? (

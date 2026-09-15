@@ -42,9 +42,10 @@ function workbenchReadOk(providers: Record<string, ProviderSpec>) {
     path: CATALOG_PATH,
     content: '',
     template: '',
-    seeded: false,
+    revision: 'revision-0',
+    credentialStates: {},
     parseError: null,
-    providers,
+    tree: { version: 2, activeModel: null, providers },
   };
 }
 

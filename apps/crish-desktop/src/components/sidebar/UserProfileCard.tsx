@@ -51,9 +51,12 @@ export const UserProfileCard: React.FC<UserProfileCardProps> = React.memo(
               <span className={styles.userName}>{activeUser}</span>
               <span className={styles.userWorkspace}>{activeWorkspace}</span>
             </div>
-            <AppIcon name="chevrons-up-down" size={13}
+            <AppIcon
+              name="chevrons-up-down"
+              size={14}
               className={styles.userChevron}
-              aria-hidden />
+              aria-hidden
+            />
           </Button>
         )}
       />

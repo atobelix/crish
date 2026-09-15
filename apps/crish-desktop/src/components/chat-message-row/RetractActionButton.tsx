@@ -16,7 +16,7 @@ export function RetractActionButton({ onRetract }: { onRetract: () => void }) {
         data-testid="message-retract"
         aria-label="撤回上一条用户消息"
         onClick={onRetract}
-        icon={<AppIcon name="undo" size={14} aria-hidden />}
+        icon={<AppIcon name="undo" size={16} aria-hidden />}
       />
     </Tooltip>
   );

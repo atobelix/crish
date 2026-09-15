@@ -127,6 +127,8 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
 
   const isAtBottomRef = useRef<boolean>(true);
   const [isAtBottom, setIsAtBottom] = useState<boolean>(true);
+  const isAtTopRef = useRef<boolean>(true);
+  const [isAtTop, setIsAtTop] = useState<boolean>(true);
   const observedTopRef = useRef<number>(0);
   const [showFloorButton, setShowFloorButton] = useState<boolean>(false);
 
@@ -137,6 +139,8 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
     clearHeights();
     isAtBottomRef.current = true;
     setIsAtBottom(true);
+    isAtTopRef.current = true;
+    setIsAtTop(true);
     setShowFloorButton(false);
     // 会话切换：立刻回灌 order + 估高，杜绝 clear 后空 order 空屏
     if (msgIds.length > 0) {
@@ -169,7 +173,7 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
       );
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [uiSize, clearHeights, manager]);
+  }, [uiSize, clearHeights]);
 
   useEffect(() => {
     registerActiveVsm(activeSessionId, manager);
@@ -355,6 +359,13 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
         setShowFloorButton(distanceToBottom > SCROLL_BOTTOM_THRESHOLD);
       }
 
+      // 2. 评估与物理顶部的亚像素距离
+      const isPhysicallyAtTop = currentScrollTop <= 2;
+      if (isPhysicallyAtTop !== isAtTopRef.current) {
+        isAtTopRef.current = isPhysicallyAtTop;
+        setIsAtTop(isPhysicallyAtTop);
+      }
+
       // 3. 更新真理账本
       observedTopRef.current = currentScrollTop;
     },
@@ -372,6 +383,10 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
     }
     isAtBottomRef.current = true;
     setIsAtBottom(true);
+    if (maxScroll > 2) {
+      isAtTopRef.current = false;
+      setIsAtTop(false);
+    }
     setShowFloorButton(false);
   }, [containerRef]);
 
@@ -392,7 +407,12 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
   }, [messages, totalHeight, containerRef]);
 
   return (
-    <div className={styles.streamHost} data-chat-stream-host="">
+    <div
+      className={styles.streamHost}
+      data-chat-stream-host=""
+      data-at-top={isAtTop ? 'true' : 'false'}
+      data-at-bottom={isAtBottom ? 'true' : 'false'}
+    >
       <div
         ref={vs.containerRef}
         className={styles.list}

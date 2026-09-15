@@ -460,11 +460,11 @@
   height: 24px;
   line-height: 24px;
   font-family: inherit;
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium, 500);
+  font-size: var(--font-size-xs, 12px);
+  font-weight: var(--font-weight-normal, 400);
   font-variant-numeric: tabular-nums;
   font-feature-settings: 'tnum' 1;
-  color: var(--text-tertiary);
+  color: var(--text-faint);
   flex-shrink: 0;
   white-space: nowrap;
   max-width: 68px;

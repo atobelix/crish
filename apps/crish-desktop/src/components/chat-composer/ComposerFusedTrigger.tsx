@@ -1,8 +1,9 @@
 /**
  * 融合触发：一条弱分割胶囊，左真模型槽、右思考档。
  * 模型由宿主 rightActions（ModelBadgePicker）注入。
- * 档位能力 = yaml thinking 字典（listThinkingOptions）；标签 = 字典 key。
+ * 档位能力 = yaml thinking 字典（listThinkingOptions）；标签 = 词表中文标签（别名键归一到规范档位）。
  * 选中 Title 写入会话 runtime.thinkingTitle，不写 yaml、不写全局 settings。
+ * 原选档位不在当前模型声明中 → 视为未选，显示「请选择思考档位」引导（不降级）。
  * 无思考选项则物理卸载右侧槽。
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -109,30 +110,12 @@ export const ComposerFusedTrigger: React.FC<ComposerFusedTriggerProps> = ({
 
   const showThinking = options.length > 0;
 
-  useEffect(() => {
-    // 仅当 showThinking=false 时不重置已有存档（避免异步目录重刷时误清状态）
-    if (!showThinking) return;
-    if (!handoff.supported) return;
-    if (storedTitle !== handoff.selectedTitle) {
-      persistThinkingSelection(
-        sessionId,
-        providerId,
-        modelId,
-        handoff.selectedTitle
-      );
-      setTitleEpoch((n) => n + 1);
-    }
-  }, [
-    sessionId,
-    showThinking,
-    storedTitle,
-    handoff.supported,
-    handoff.selectedTitle,
-    providerId,
-    modelId,
-  ]);
-
-  const currentTitle = handoff.supported ? handoff.selectedTitle : '';
+  // 生效档位 = 原选档位命中当前模型 thinking 声明才保留；未选 / 未命中 → 空（视为未选）。
+  // 不做「解析 → 写回 → 再解析」：档位只由用户显式选择（selectLevel）写入，
+  // 解析结果不反向落盘，失效档也不会被静默改成其他档（U1：不替用户找）。
+  const currentTitle = handoff.selectedTitle ?? '';
+  const needsThinkingPick = showThinking && currentTitle === '';
+  const thinkingLabel = needsThinkingPick ? '请选择思考档位' : currentTitle;
 
   const selectLevel = useCallback(
     (title: string) => {
@@ -146,7 +129,7 @@ export const ComposerFusedTrigger: React.FC<ComposerFusedTriggerProps> = ({
 
   const menuOptions = options.map((o) => ({
     id: o.title,
-    label: o.title,
+    label: o.label,
     onClick: () => {
       selectLevel(o.title);
     },
@@ -172,7 +155,7 @@ export const ComposerFusedTrigger: React.FC<ComposerFusedTriggerProps> = ({
       {showThinking ? (
         <div className={styles.right} data-testid="composer-thinking-slot">
           <Tooltip
-            content={`思考档位：${currentTitle}`}
+            content={`思考档位：${thinkingLabel}`}
             disabled={open}
             side="top"
           >
@@ -182,11 +165,12 @@ export const ComposerFusedTrigger: React.FC<ComposerFusedTriggerProps> = ({
               className={`${styles.thinkBtn} ${open ? styles.isOpen : ''}`}
               aria-haspopup="menu"
               aria-expanded={open}
-              aria-label={`思考档位：${currentTitle}`}
+              aria-label={`思考档位：${thinkingLabel}`}
               data-testid="composer-thinking-trigger"
+              data-thinking-unset={needsThinkingPick ? 'true' : 'false'}
               onClick={() => toggleExclusiveMenu(open, setOpen, btnRef.current)}
             >
-              <span>{currentTitle}</span>
+              <span>{thinkingLabel}</span>
             </button>
           </Tooltip>
           {open ? (

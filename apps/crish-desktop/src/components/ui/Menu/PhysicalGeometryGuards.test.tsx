@@ -49,7 +49,6 @@ async function seedYamlCatalog(): Promise<void> {
   const provider: ProviderSpec = {
     displayName: '测试服务商',
     baseUrl: 'https://example.com',
-    apiKey: 'k-test',
     protocol: 'openai/chat',
     models: [{ id: 'model-a', displayName: 'model-a' }],
   };
@@ -57,11 +56,11 @@ async function seedYamlCatalog(): Promise<void> {
     path: CATALOG_PATH,
     content: '',
     template: '',
-    seeded: false,
+    revision: 'revision-0',
+    credentialStates: { p1: { hasKey: true } },
     parseError: null,
-    providers: { p1: provider },
+    tree: { version: 2, activeModel: null, providers: { p1: provider } },
   }));
-  mockTauriCommand('workbench_save_models_yaml', () => ({ path: CATALOG_PATH }));
   const res = await ensureModelsCatalogLoaded(true);
   expect(res.ok).toBe(true);
 }

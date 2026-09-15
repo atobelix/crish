@@ -55,6 +55,11 @@ describe('diff/VirtualPlainCodeViewer 换行与行高契约', () => {
     const outer = container.firstElementChild as HTMLElement;
     expect(outer.style.overflowX).toBe('auto');
 
+    // 画布宽度自愈扩容：500 字符在关闭换行模式下画布宽度必须大于 3000px，提供真实水平滚动轨道
+    const canvasDiv = outer.firstElementChild as HTMLElement;
+    const canvasWidthNum = parseFloat(canvasDiv.style.width);
+    expect(canvasWidthNum).toBeGreaterThan(3000);
+
     const lineTexts = Array.from(
       container.querySelectorAll(`.${styles.lineText}`)
     );
@@ -64,7 +69,13 @@ describe('diff/VirtualPlainCodeViewer 换行与行高契约', () => {
       expect(styleEl.style.whiteSpace).toBe('pre');
       expect(styleEl.style.overflowX).toBe('hidden');
       expect(styleEl.style.overflowX).not.toBe('auto');
+      expect(styleEl.style.width).toBe('max-content');
     }
+
+    // 行号常驻左侧 sticky 契约：横向滚动时不被卷出屏幕
+    const gutter = container.querySelector(`.${styles.gutterNum}`) as HTMLElement;
+    expect(gutter.style.position).toBe('sticky');
+    expect(gutter.style.left).toBe('0px');
   });
 
   it('行高按实测高度而非硬编码 20px（ui-size 缩放安全）', () => {
@@ -112,5 +123,39 @@ describe('diff/VirtualPlainCodeViewer 换行与行高契约', () => {
     const text = container.querySelector(`.${styles.lineText}`) as HTMLElement;
     expect(text.style.padding).toBe('0px 2px 0px 6px');
   });
-});
 
+  it('滚动触底与尾行保障契约：画布容器杜绝 overflow: hidden 物理剪裁，行号顶端对齐', () => {
+    const lines = Array.from({ length: 69 }, (_, i) => `line ${i + 1}: ${'code '.repeat(i % 5 === 0 ? 30 : 5)}`);
+    const { container } = render(
+      <VirtualPlainCodeViewer content={lines.join('\n')} filePath="hourly_loc.py" wordWrap={true} />
+    );
+    const outer = container.firstElementChild as HTMLElement;
+    const canvasDiv = outer.firstElementChild as HTMLElement;
+
+    // 1. 核心防护：画布占位容器严禁 overflow: hidden，避免物理剪切尾行内容
+    expect(canvasDiv.style.overflow).not.toBe('hidden');
+    expect(canvasDiv.style.overflowY).not.toBe('hidden');
+
+    // 2. 行号对齐保护：折行情况下行号保持与首行 baseline 对齐 (flex-start)，杜绝居中沉底
+    const gutter = container.querySelector(`.${styles.gutterNum}`) as HTMLElement;
+    expect(gutter.style.alignItems).toBe('flex-start');
+
+    // 3. 文本行高统一
+    const text = container.querySelector(`.${styles.lineText}`) as HTMLElement;
+    expect(text.style.lineHeight).toBeTruthy();
+  });
+
+  it('超长单行场景：截断提示按钮完整可交互，展开后无物理截断阻碍', () => {
+    const hugeLine = '{"key":"' + 'v'.repeat(4000) + '"}';
+    const { container } = render(
+      <VirtualPlainCodeViewer content={hugeLine} filePath="eslint_report.json" wordWrap={true} />
+    );
+    const outer = container.firstElementChild as HTMLElement;
+    const canvasDiv = outer.firstElementChild as HTMLElement;
+    expect(canvasDiv.style.overflow).not.toBe('hidden');
+
+    const button = container.querySelector('button');
+    expect(button).not.toBeNull();
+    expect(button?.textContent).toContain('点击展开');
+  });
+});

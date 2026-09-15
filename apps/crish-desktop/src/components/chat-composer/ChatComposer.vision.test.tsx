@@ -61,9 +61,10 @@ async function loadCatalog(input: string[]): Promise<void> {
     path: CATALOG_PATH,
     content: '',
     template: '',
-    seeded: false,
+    revision: 'revision-0',
+    credentialStates: {},
     parseError: null,
-    providers: providers(input),
+    tree: { version: 2, activeModel: null, providers: providers(input) },
   }));
   mockTauriCommand('workbench_save_models_yaml', () => ({ path: CATALOG_PATH }));
   const res = await ensureModelsCatalogLoaded(true);

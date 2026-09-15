@@ -22,15 +22,15 @@ const h = vi.hoisted(() => {
     Medium: 'medium',
     High: 'high',
   };
-  let options: Array<{ title: string; wire: string }> = [
-    { title: 'Low', wire: 'low' },
-    { title: 'Medium', wire: 'medium' },
-    { title: 'High', wire: 'high' },
+  let options: Array<{ title: string; wire: string; label: string }> = [
+    { title: 'Low', wire: 'low', label: '低' },
+    { title: 'Medium', wire: 'medium', label: '中' },
+    { title: 'High', wire: 'high', label: '高' },
   ];
   return {
     thinking,
     sessionId,
-    setOptions(next: Array<{ title: string; wire: string }>) {
+    setOptions(next: Array<{ title: string; wire: string; label: string }>) {
       options = next;
     },
     getLiveModel: vi.fn(() =>
@@ -51,17 +51,18 @@ const h = vi.hoisted(() => {
             selectedWire: null,
           };
         }
+        // 与生产同构：精确命中才保留，否则视为未选（不回落首项、不降级）
         const hit =
-          selectedTitle != null && options.some((o) => o.title === selectedTitle)
-            ? options.find((o) => o.title === selectedTitle)!
-            : options[0];
+          selectedTitle != null
+            ? options.find((o) => o.title === selectedTitle)
+            : undefined;
         return {
           supported: true as const,
           providerId,
           modelId,
           thinking,
-          selectedTitle: hit.title,
-          selectedWire: hit.wire,
+          selectedTitle: hit?.title ?? null,
+          selectedWire: hit?.wire ?? null,
         };
       }
     ),
@@ -86,9 +87,9 @@ vi.mock('../../hooks/useModelsCatalogVersion', () => ({
 describe('ComposerFusedTrigger（S3 融合触发 · live 档位）', () => {
   beforeEach(() => {
     h.setOptions([
-      { title: 'Low', wire: 'low' },
-      { title: 'Medium', wire: 'medium' },
-      { title: 'High', wire: 'high' },
+      { title: 'Low', wire: 'low', label: '低' },
+      { title: 'Medium', wire: 'medium', label: '中' },
+      { title: 'High', wire: 'high', label: '高' },
     ]);
     h.getLiveModel.mockClear();
     h.listThinkingOptions.mockClear();
@@ -111,7 +112,7 @@ describe('ComposerFusedTrigger（S3 融合触发 · live 档位）', () => {
     localStorage.removeItem('conex:global-thinking-pref');
   });
 
-  it('左槽渲染真模型、右为 yaml key 档位，无 Claude 3.7、无 title、无中文标签', async () => {
+  it('左槽渲染真模型；未选档位显示引导，不自动回落首项、无 title、无中文标签', async () => {
     const { container } = render(
       <ComposerFusedTrigger>
         <span>qwen3-coder</span>
@@ -119,15 +120,20 @@ describe('ComposerFusedTrigger（S3 融合触发 · live 档位）', () => {
     );
     expect(screen.getByTestId('composer-fused-trigger')).toBeTruthy();
     expect(screen.getByText('qwen3-coder')).toBeTruthy();
+    // 未选档位 → 引导重选（旧行为是自动回落首项 'Low'）
     expect(
-      screen.getByRole('button', { name: /思考档位：Low/ })
+      screen.getByRole('button', { name: /思考档位：请选择思考档位/ })
     ).toBeTruthy();
+    expect(
+      screen
+        .getByTestId('composer-thinking-trigger')
+        .getAttribute('data-thinking-unset')
+    ).toBe('true');
     expect(container.textContent).not.toMatch(/Claude 3\.7/);
     expect(container.textContent).not.toMatch(/默认|深入|关闭/);
     expect(container.querySelectorAll('[title]').length).toBe(0);
-    await waitFor(() => {
-      expect(getSessionThinkingTitle(h.sessionId)).toBe('Low');
-    });
+    // 解析结果不写回：会话存档保持未选
+    expect(getSessionThinkingTitle(h.sessionId)).toBeNull();
   });
 
   it('点思考档打开菜单并写入 sessionRuntimeRegistry.thinkingTitle，不写 settings', async () => {
@@ -137,7 +143,7 @@ describe('ComposerFusedTrigger（S3 融合触发 · live 档位）', () => {
       </ComposerFusedTrigger>
     );
     fireEvent.click(screen.getByTestId('composer-thinking-trigger'));
-    const item = await screen.findByRole('menuitem', { name: /^High$/ });
+    const item = await screen.findByRole('menuitem', { name: /^高$/ });
     fireEvent.click(item);
     await waitFor(() => {
       expect(getSessionThinkingTitle(h.sessionId)).toBe('High');
@@ -156,9 +162,10 @@ describe('ComposerFusedTrigger（S3 融合触发 · live 档位）', () => {
         <span>model-a</span>
       </ComposerFusedTrigger>
     );
+    // 初始未选档位 → 引导态
     await waitFor(() => {
       expect(
-        screen.getByRole('button', { name: /思考档位：Low/ })
+        screen.getByRole('button', { name: /思考档位：请选择思考档位/ })
       ).toBeTruthy();
     });
     // 模拟 Picker 的写路径：不经 Composer 自身交互，直接写 runtime registry
@@ -176,12 +183,12 @@ describe('ComposerFusedTrigger（S3 融合触发 · live 档位）', () => {
     );
     const trigger = screen.getByTestId('composer-thinking-trigger');
     fireEvent.click(trigger);
-    expect(await screen.findByRole('menuitem', { name: /^High$/ })).toBeTruthy();
+    expect(await screen.findByRole('menuitem', { name: /^高$/ })).toBeTruthy();
     fireEvent.pointerDown(trigger);
     fireEvent.pointerUp(trigger);
     fireEvent.click(trigger);
     await waitFor(() =>
-      expect(screen.queryByRole('menuitem', { name: /^High$/ })).toBeNull()
+      expect(screen.queryByRole('menuitem', { name: /^高$/ })).toBeNull()
     );
   });
 
@@ -218,19 +225,25 @@ describe('ComposerFusedTrigger（S3 融合触发 · live 档位）', () => {
     expect(getSessionThinkingTitle(h.sessionId)).toBe('High');
   });
 
-  it('字典里没有的 runtime title 回落到第一 key 并回写', async () => {
+  it('字典里没有的 runtime title：视为未选并显示引导，不回落首项、不降级', async () => {
     setSessionThinkingTitle(h.sessionId, 'XHigh');
     render(
       <ComposerFusedTrigger>
         <span>acme-think</span>
       </ComposerFusedTrigger>
     );
-    await waitFor(() => {
-      expect(getSessionThinkingTitle(h.sessionId)).toBe('Low');
-    });
     expect(
-      screen.getByRole('button', { name: /思考档位：Low/ })
+      screen.getByRole('button', { name: /思考档位：请选择思考档位/ })
     ).toBeTruthy();
+    // 不显示错误选中态：绝不降级到首项 'Low'
+    expect(screen.queryByRole('button', { name: /思考档位：Low/ })).toBeNull();
+    expect(
+      screen
+        .getByTestId('composer-thinking-trigger')
+        .getAttribute('data-thinking-unset')
+    ).toBe('true');
+    // 不写回：存档不被静默改写（跨模型意图保留）
+    expect(getSessionThinkingTitle(h.sessionId)).toBe('XHigh');
   });
 
   it('生产源不引用 thinkingGear / getModelMeta / defaultThinkingLevel', () => {

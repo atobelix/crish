@@ -380,8 +380,8 @@ describe('UnitChromeActions 对话顶快捷行（三级面包屑 + 极简动作�
     expect(css).not.toMatch(/opacity:\s*0\.28/);
     expect(css).not.toMatch(/transform:\s*scale/);
     expect(css).toMatch(/height:\s*38px/);
-    expect(css).toMatch(/margin-bottom:\s*-38px/);
-    expect(css).toMatch(/pointer-events:\s*none/);
+    expect(css).toMatch(/margin-bottom:\s*0/);
+    expect(css).toMatch(/pointer-events:\s*auto/);
     expect(css).toMatch(/border-radius:\s*(?:var\(--radius-md,\s*6px\)|6px)/);
     expect(css).not.toMatch(/\.chatTopHeader\s*\{[^}]*display:\s*none/);
   });

@@ -3,7 +3,6 @@ import React from 'react';
 import styles from './ChatMessageRow.module.css';
 import { Button, Tooltip } from '../ui';
 import { formatMsgTime } from './chatMessageRowUtils';
-import { RetractActionButton } from './RetractActionButton';
 import { AppIcon } from '../ui/icons/index';
 
 // ─── Assistant Message Meta Actions Bar ─────────────────────────────────────
@@ -32,7 +31,6 @@ export const AssistantMessageActionsBar: React.FC<
   onRegenerate,
   sendToNoteNode,
   metricsNode,
-  onRetract,
 }) => {
   return (
     <div className={styles.assistantMeta}>
@@ -47,9 +45,9 @@ export const AssistantMessageActionsBar: React.FC<
           onClick={onCopy}
           icon={
             copied ? (
-              <AppIcon name="check" size={14} aria-hidden />
+              <AppIcon name="check" size={16} aria-hidden />
             ) : (
-              <AppIcon name="copy" size={14} aria-hidden />
+              <AppIcon name="copy" size={16} aria-hidden />
             )
           }
         />
@@ -63,11 +61,10 @@ export const AssistantMessageActionsBar: React.FC<
             className={`${styles.iconBtn} ${styles.regenerateBtn}`}
             aria-label="重新生成"
             onClick={onRegenerate}
-            icon={<AppIcon name="refresh" size={14} aria-hidden />}
+            icon={<AppIcon name="refresh" size={16} aria-hidden />}
           />
         </Tooltip>
       ) : null}
-      {onRetract ? <RetractActionButton onRetract={onRetract} /> : null}
       {sendToNoteNode}
       {metricsNode ? (
         <span className={styles.cacheMetricsInline}>{metricsNode}</span>

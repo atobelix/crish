@@ -293,3 +293,41 @@ export function IconNewChatPen({
     </svg>
   );
 }
+
+/** 编辑笔：圆润微弧钢笔尖与笔身（24 网格原生，93% 黄金尺寸对齐 Copy/Pin，1.5 细线笔帽缝） */
+export function IconEditPen({
+  size = 16,
+  className,
+  strokeWidth = 2,
+  style,
+}: CustomIconProps) {
+  return (
+    <svg {...baseProps(size, className, style, '0 0 24 24')}>
+      <path
+        d="M20.705 3.295a3.655 3.655 0 0 0-5.175 0L4.551 14.288a4.129 4.129 0 0 0-1.074 1.883l-.837 3.292a1.395 1.395 0 0 0 1.744 1.744l3.292-.837a4.115 4.115 0 0 0 1.883-1.074l10.979-10.979a3.655 3.655 0 0 0 0-5.175Z"
+        strokeWidth={strokeWidth}
+      />
+      <path
+        d="M14.441 6.364l3.195 3.195"
+        strokeWidth={Math.max(1.2, strokeWidth * 0.75)}
+      />
+    </svg>
+  );
+}
+
+/** 刷新 / 重新生成：顺时针双弧线 + 箭头，与用户提供的 SVG 契约对齐 */
+export function IconRefreshCw({
+  size = 16,
+  className,
+  strokeWidth = 2,
+  style,
+}: CustomIconProps) {
+  return (
+    <svg {...baseProps(size, className, style, '0 0 24 24')}>
+      <path
+        d="M4 11a8.1 8.1 0 0 1 15.5-2M20 5v4h-4m4 4a8.1 8.1 0 0 1-15.5 2M4 19v-4h4"
+        strokeWidth={strokeWidth}
+      />
+    </svg>
+  );
+}
