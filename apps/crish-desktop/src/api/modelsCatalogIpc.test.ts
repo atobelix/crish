@@ -270,9 +270,11 @@ describe('结构化配置提交', () => {
 });
 
 describe('高级文档保存和校验', () => {
-  it('原文和预期修订传给同轨文本入口', async () => {
+  it('原文和预期修订传给同轨文本入口（写盘前先过校验）', async () => {
     const invoke = vi.fn(() => snapshot());
     mockTauriCommand('workbench_save_models_yaml', invoke);
+    // 2026-09-15 接线：保存前先 validate（fail-closed），故本用例须一并 mock 校验面
+    mockTauriCommand('workbench_validate_models_yaml', () => ({ valid: true }));
     const content =
       '# 保留用户编辑意图\nversion: 2\nproviders: {}\nactiveModel: null\n';
     expect((await saveModelsYamlTextIpc(content, 'read-revision')).ok).toBe(
@@ -282,6 +284,23 @@ describe('高级文档保存和校验', () => {
       content,
       expectedRevision: 'read-revision',
     });
+  });
+
+  it('校验不通过 → 就地拦下，不打给内核写盘（fail-closed）', async () => {
+    const invoke = vi.fn(() => snapshot());
+    mockTauriCommand('workbench_save_models_yaml', invoke);
+    mockTauriCommand('workbench_validate_models_yaml', () => ({
+      valid: false,
+      message: '非法 yaml：未知字段',
+    }));
+    const res = await saveModelsYamlTextIpc('bad: true', 'read-revision');
+    expect(res.ok).toBe(false);
+    if (!res.ok) {
+      expect(res.kind).toBe('PARSE_ERROR');
+      expect(res.error).toContain('非法 yaml');
+    }
+    // 关键：非法内容绝不进写盘面
+    expect(invoke).not.toHaveBeenCalled();
   });
 
   it('文档无修订也拒绝提交', async () => {
