@@ -55,7 +55,20 @@ export function enqueuePersist(task: () => Promise<void>): Promise<void> {
   return run;
 }
 
-/** 领取下一批次版本号（发起序 = 版本序，R9）。 */
-export function nextBatchVersion(): number {
+/** 领取下一批次版本号（发起序 = 版本序，R9）。
+ *
+ * **进程首批返回 `null`**（显式非 CAS rebase）：内存计数器与 SQLite 的
+ * `sessions.body_version` 是**两条独立序列**——计数器每次进程启动从 0 开始，
+ * 而库里的版本是上次运行留下的（实证 2026-09-15：重启后首批恒为 1，库里
+ * 已是数十，65 个会话的 `save_session_body` 全部 `CasConflict` ⇒ 正文写不进
+ * SQLite、整批降级 LS）。首批在本进程内无旧批次可防，rebase 语义正确；
+ * 后端在 `None` 分支把 `body_version` 归零（新纪元），此后 `Some(1..n)` 与
+ * 库中 `0..n-1` 连续，CAS 的「后发起 = 高版本」防线在进程内完整保留。
+ */
+export function nextBatchVersion(): number | null {
+  if (batchVersionCounter === 0) {
+    batchVersionCounter = 1;
+    return null;
+  }
   return ++batchVersionCounter;
 }

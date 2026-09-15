@@ -106,12 +106,14 @@ export async function loadSessionBody(
  * I-DRAFT：PENDING_DRAFT 哨兵永不写 body。
  *
  * @param batchVersion 批次版本戳（R9 单调递增，随 IPC 传递；Wave C 后内存侧
- * 不再做 CAS 丢弃——后端 Upsert 为唯一写安全源）。
+ * 不再做 CAS 丢弃——后端 Upsert 为唯一写安全源）。**`null` = 进程首批的显式
+ * 非 CAS rebase**（见 sessionRustDbWriteGuard.nextBatchVersion）；后端在该
+ * 分支把 `body_version` 归零，使后续递增版本与库中序列连续。
  */
 export async function saveSessionBody(
   sessionId: string,
   messages: SessionMessage[],
-  batchVersion: number
+  batchVersion: number | null
 ): Promise<void> {
   if (!sessionId?.trim() || isPendingDraft(sessionId)) return;
   const msgs = messages || [];

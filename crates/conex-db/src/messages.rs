@@ -70,7 +70,10 @@ impl LocalDb {
     ///
     /// - `batch_version = Some(v)`：要求 `sessions.body_version < v` 才写入；
     ///   过期写返回 [`DbFailureKind::CasConflict`]（可识别错误，禁止静默 Ok）。
-    /// - `batch_version = None`：显式非 CAS 全量 rebase（导入 / 损坏恢复 / 测试）。
+    /// - `batch_version = None`：显式非 CAS 全量 rebase（导入 / 损坏恢复 /
+    ///   **进程首批**）；该分支会把 `sessions.body_version` **归零**作为
+    ///   「新纪元」标记，使前端随后递传的 `Some(1..n)` 与库中序列连续
+    ///   （详见 [save_session_body_conn] 第 5 步的归零说明）。
     ///
     /// 写路径经组提交 Writer；闭包内不再开 `transaction()`（外层已 BEGIN IMMEDIATE）。
     /// 闭包仅捕获纯数据参数，禁止捕获 `self`（防 Actor 重入死锁）。
@@ -212,8 +215,17 @@ pub fn save_session_body_conn(
             rusqlite::params![session_id, new_len, batch_version],
         )
     } else {
+        // 显式非 CAS rebase（导入 / 恢复 / 自愈 / **进程首批**）：更新
+        // message_count，并把 `body_version` **归零**——标记「新纪元开始」。
+        //
+        // 为什么必须归零（实证 2026-09-15）：前端的批次计数器是**模块级内存
+        // 变量**，每次进程启动从 0 开始；若沿用旧纪元版本（数十），首批 rebase
+        // 之后前端传 `Some(1)` 仍会命中 `1 <= 数十` 而 CasConflict ⇒ 65 个会话
+        // 的正文全部写不进 SQLite、整批降级 LS。归零后 `Some(1..n)` 与库中
+        // `0..n-1` 连续，CAS 的「后发起 = 高版本」防线在**进程内**完整保留
+        // （跨进程时旧批次随进程结束，无并发可防，归零不削弱防线）。
         conn.execute(
-            "UPDATE sessions SET message_count = ?2 WHERE id = ?1",
+            "UPDATE sessions SET message_count = ?2, body_version = 0 WHERE id = ?1",
             rusqlite::params![session_id, new_len],
         )
     }

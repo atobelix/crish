@@ -286,6 +286,60 @@ fn save_session_body_cas_conflict_rejects_stale_batch() {
     assert_eq!(list2[0].message_count, 2);
 }
 
+/// 回归（实证 2026-09-15，真实宿主）：重启后首批 `None`（rebase）必须把
+/// `body_version` **归零**，使前端随后递传的 `Some(1..n)` 与库中序列连续。
+///
+/// 旧实现只更新 `message_count`、保留旧纪元版本 ⇒ 首批 rebase 之后每一批都
+/// 命中 `n <= 旧纪元版本` 而 `CasConflict`，真实宿主表现为 **65 个会话的正文
+/// 全部写不进 SQLite、整批降级 LS**（前端批次计数器是模块级内存变量，每次
+/// 启动从 0 开始，首批恒为 1）。
+#[test]
+fn rebase_resets_body_version_so_post_restart_batches_are_accepted() {
+    let (db, _guard) = open_temp_wal_db();
+    db.upsert_session_entry(&sample_entry("s1")).unwrap();
+
+    // 旧纪元：上次运行写到 batch_version=40（留下高 body_version）
+    db.save_session_body_versioned("s1", &[sample_message("m1", "user", 1)], Some(40))
+        .unwrap();
+
+    // 模拟重启：前端首批传 None（显式 rebase）——必须成功并归零纪元
+    db.save_session_body_versioned("s1", &[sample_message("m1", "user", 1)], None)
+        .unwrap();
+
+    // 重启后的递增批次必须被接受（旧实现此处恒 CasConflict）
+    db.save_session_body_versioned(
+        "s1",
+        &[
+            sample_message("m1", "user", 1),
+            sample_message("m2", "assistant", 2),
+        ],
+        Some(1),
+    )
+    .unwrap();
+    db.save_session_body_versioned(
+        "s1",
+        &[
+            sample_message("m1", "user", 1),
+            sample_message("m2", "assistant", 2),
+            sample_message("m3", "user", 3),
+        ],
+        Some(2),
+    )
+    .unwrap();
+    assert_eq!(db.load_session_body("s1").unwrap().len(), 3);
+
+    // 归零不得削弱 CAS 防线：同版本重放仍被拒
+    let err = db
+        .save_session_body_versioned("s1", &[sample_message("m4", "user", 4)], Some(2))
+        .unwrap_err();
+    assert_eq!(err.kind, crate::error::DbFailureKind::CasConflict);
+    assert_eq!(
+        db.load_session_body("s1").unwrap().len(),
+        3,
+        "冲突批次不得污染正文"
+    );
+}
+
 #[test]
 fn reserve_sequence_single_stmt_returns_monotonic() {
     let db = LocalDb::open_in_memory().unwrap();
