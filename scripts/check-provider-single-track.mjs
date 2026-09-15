@@ -120,7 +120,7 @@ const GUIDE_TEXT = {
     '正确做法：',
     '  ① 回执 = 规范树（path + revision + content + template + credentialStates），**不再有 `tree` 旧投影**；有损投影必须被拒（`CONTRACT_MISMATCH`），不得「补字段装成成功」；',
     '  ② 新增拒绝路径时同步补负向断言——守卫的拒绝分支必须有测试钉死，否则可被静默弱化；',
-    '  ③ mock 请走统一回执工厂（唯一 mock 工厂 = 完整树 + revision + credentialStates）；当前 `modelsCatalogIpc.test.ts` 与 `modelsCatalogStore.test.ts` 各有一份且默认值已发散（脚本 WARN 提示），收敛为共享 helper 后告警消失；',
+    '  ③ mock 请走统一回执工厂——唯一真源 = apps/crish-desktop/src/test-utils/modelsCatalogSnapshot.ts 的 `catalogSnapshot`（默认值只在该处定义，差异经 overrides 显式传入）；调用侧至多保留一层薄包装补「本文件特有的默认参数」，不得再自行拼装回执字段。此前 `modelsCatalogIpc.test.ts` 与 `modelsCatalogStore.test.ts` 各有一份本地 `snapshot()` 且默认值发散（template / parseError / apiKeyLast4），已于 2026-09-15 收敛；',
     '  ④ 复现：node scripts/check-provider-single-track.mjs。',
     '参考：docs/provider-single-track-convergence/02-执行拓扑与防御网方案.md D3 行。',
   ],
@@ -559,7 +559,8 @@ function cfgTestLines(src) {
     ok('D3: 回执守卫负向断言齐备（4 类）');
   }
 
-  // ③ 回执 mock 工厂唯一性（审计项：当前两份已发散，登记为待收敛）
+  // ③ 回执 mock 工厂唯一性（2026-09-15 已收敛：唯一真源 =
+  // apps/crish-desktop/src/test-utils/modelsCatalogSnapshot.ts 的 catalogSnapshot）
   const factories = [
     'apps/crish-desktop/src/api/modelsCatalogIpc.test.ts',
     'apps/crish-desktop/src/api/modelsCatalogStore.test.ts',

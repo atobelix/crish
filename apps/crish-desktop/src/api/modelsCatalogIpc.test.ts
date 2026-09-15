@@ -1,403 +1,324 @@
-/**
- * modelsCatalogIpc.test.ts —— 诚实 IPC 与序列化边界
- *
- * 钉：只打 workbench_*；读消费 providers；写出 SSOT 键；命令缺失 fail-closed。
- */
-
+/** 完整配置 IPC 契约：字段无损、修订冲突、坏文档与退役投影拒绝。 */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { mockTauriCommand, mockTauriError } from '../test-setup';
+import { catalogSnapshot } from '../test-utils/modelsCatalogSnapshot';
 import {
   readModelsYamlIpc,
+  saveModelsYamlTextIpc,
+  validateModelsYamlIpc,
   writeModelsYamlIpc,
-  serializeModelsYamlTree,
 } from './modelsCatalogIpc';
-import type { ModelsYamlTree, ProviderSpec } from './modelsCatalogTypes';
+import type {
+  ModelsCatalogSnapshot,
+  ModelsYamlTree,
+} from './modelsCatalogTypes';
 
-const ACME_TREE: ModelsYamlTree = {
-  version: 2,
-  providers: {
-    acme: {
-      displayName: 'Acme',
-      baseUrl: 'https://example.invalid/v1',
-      protocol: 'openai/chat',
-      apiKey: '$ACME_API_KEY',
-      headers: { 'X-Title': 'conex' },
-      models: [
-        {
-          id: 'acme-think',
-          displayName: 'Acme Think',
-          contextWindow: 128000,
-          thinking: { Low: 'low', High: 'high' },
-          modalities: { input: ['text', 'image'], output: ['text'] },
-          pricing: {
-            currency: 'USD',
-            input: 1,
-            output: 2,
-            cacheRead: 0.1,
-            cacheWrite: 0.2,
-          },
-        },
-      ],
-    },
-  },
-};
-
-describe('serializeModelsYamlTree', () => {
-  it('写出 §4.1 键：thinking / modalities / cacheRead / baseUrl / apiKey / protocol', () => {
-    const text = serializeModelsYamlTree(ACME_TREE);
-    expect(text).toContain('thinking:');
-    expect(text).toContain('Low: low');
-    expect(text).toContain('modalities:');
-    expect(text).toContain('cacheRead: 0.1');
-    expect(text).toContain('cacheWrite: 0.2');
-    expect(text).toContain('baseUrl: https://example.invalid/v1');
-    expect(text).toContain('apiKey: $ACME_API_KEY');
-    expect(text).toContain('protocol: openai/chat');
-    expect(text).toContain('X-Title: conex');
-    expect(text).not.toContain('https://api.openai.com/v1');
-  });
-
-  it('写出 capabilities.tools；不写 capabilities.image/video', () => {
-    const tree: ModelsYamlTree = {
-      version: 2,
-      providers: {
-        acme: {
-          displayName: 'Acme',
-          baseUrl: 'https://example.invalid/v1',
-          protocol: 'openai/chat',
-          models: [
-            {
-              id: 'with-tools',
-              capabilities: { tools: true, image: true, video: true },
-              modalities: { input: ['text', 'image'], output: ['text'] },
-            },
-            {
-              id: 'no-tools',
-              capabilities: { tools: false },
-            },
-          ],
-        },
-      },
-    };
-    const text = serializeModelsYamlTree(tree);
-    expect(text).toContain('tools: true');
-    expect(text).toContain('tools: false');
-    expect(text).not.toMatch(/capabilities:[\s\S]*image:/);
-    expect(text).not.toMatch(/capabilities:[\s\S]*video:/);
-  });
-
-  it('非空 tiers 写出 SSOT 键（inputTokensAbove/input/output），禁写 inputCost/outputCost', () => {
-    const tree: ModelsYamlTree = {
-      version: 2,
-      providers: {
-        bailian: {
-          displayName: 'Bailian',
-          baseUrl: 'https://dashscope.aliyuncs.com',
-          protocol: 'openai/chat',
-          models: [
-            {
-              id: 'qwen-tiered',
-              pricing: {
-                currency: 'CNY',
-                input: 4.0,
-                output: 12.0,
-                cacheRead: 0.8,
-                tiers: [
-                  {
-                    inputTokensAbove: 256_000,
-                    input: 6.0,
-                    output: 18.0,
-                    cacheRead: 1.2,
-                  },
-                ],
-              },
-            },
-          ],
-        },
-      },
-    };
-    const text = serializeModelsYamlTree(tree);
-    expect(text).toContain('tiers:');
-    expect(text).toContain('inputTokensAbove: 256000');
-    expect(text).toContain('input: 6');
-    expect(text).toContain('output: 18');
-    expect(text).toContain('cacheRead: 1.2');
-    expect(text).not.toContain('inputCost');
-    expect(text).not.toContain('outputCost');
-  });
-
-  it('空 tiers 数组写出跳过（不当有值字段）', () => {
-    const tree: ModelsYamlTree = {
-      version: 2,
-      providers: {
-        acme: {
-          displayName: 'Acme',
-          baseUrl: 'https://example.invalid/v1',
-          protocol: 'openai/chat',
-          models: [
-            {
-              id: 'no-tiers',
-              pricing: {
-                currency: 'USD',
-                input: 1,
-                output: 2,
-                tiers: [],
-              },
-            },
-          ],
-        },
-      },
-    };
-    const text = serializeModelsYamlTree(tree);
-    expect(text).not.toContain('tiers:');
-  });
-
-  it('协议旧名写出 google/generate-content；pricing 只写 SSOT 键；窗口只写 contextWindow', () => {
-    const tree: ModelsYamlTree = {
-      version: 2,
-      providers: {
-        g: {
-          displayName: 'G',
-          baseUrl: 'https://generativelanguage.googleapis.com',
-          protocol: 'google/interactions' as unknown as ProviderSpec['protocol'],
-          compat: { thinkingFormat: 'google' },
-          models: [
-            {
-              id: 'gemini-x',
-              protocol: 'google/interactions' as unknown as ProviderSpec['protocol'],
-              contextLength: 1_000_000,
-              pricing: {
-                currency: 'USD',
-                inputPerMTok: 3,
-                outputPerMTok: 9,
-                cacheReadPerMTok: 0.3,
-                cacheWritePerMTok: 0.6,
-                perImageCost: 4,
-              },
-              compat: { thinkingFormat: 'qwen_enable_thinking' },
-            },
-          ],
-        },
-      },
-    };
-    const text = serializeModelsYamlTree(tree);
-    expect(text).toContain('google/generate-content');
-    expect(text).not.toContain('google/interactions');
-    expect(text).toContain('thinkingFormat: gemini');
-    expect(text).toContain('thinkingFormat: qwen');
-    expect(text).not.toContain('qwen_enable_thinking');
-    expect(text).toContain('input: 3');
-    expect(text).toContain('output: 9');
-    expect(text).toContain('cacheRead: 0.3');
-    expect(text).toContain('cacheWrite: 0.6');
-    expect(text).toContain('perImage: 4');
-    expect(text).not.toContain('inputPerMTok');
-    expect(text).not.toContain('outputPerMTok');
-    expect(text).not.toContain('cacheReadPerMTok');
-    expect(text).not.toContain('contextLength');
-    expect(text).toContain('contextWindow: 1000000');
-  });
-});
-
-describe('readModelsYamlIpc', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it('只 invoke workbench_read_models_yaml，成功消费 providers 组装 tree', async () => {
-    mockTauriCommand('workbench_read_models_yaml', () => ({
-      path: 'C:\\tmp\\models.yaml',
-      content: 'version: 2\nproviders: {}\n',
-      template: 'version: 2\nproviders: {}\n',
-      seeded: false,
-      version: 2,
-      providers: ACME_TREE.providers,
-    }));
-
-    const res = await readModelsYamlIpc();
-    expect(res.ok).toBe(true);
-    if (!res.ok) return;
-    expect(res.data.providers.acme.apiKey).toBe('$ACME_API_KEY');
-    expect(res.data.providers.acme.models[0].thinking?.Low).toBe('low');
-    expect(res.data.providers.acme.models[0].modalities?.input).toContain('image');
-    expect(res.data.tree).toEqual({ version: 2, providers: res.data.providers });
-    expect(res.data.tree.providers.acme.baseUrl).toBe('https://example.invalid/v1');
-  });
-
-  it('诚实空 providers: {} 视为成功', async () => {
-    mockTauriCommand('workbench_read_models_yaml', () => ({
-      path: '/tmp/models.yaml',
-      content: 'version: 2\nproviders: {}\n',
-      template: '',
-      seeded: true,
-      providers: {},
-    }));
-    const res = await readModelsYamlIpc();
-    expect(res.ok).toBe(true);
-    if (!res.ok) return;
-    expect(res.data.providers).toEqual({});
-    expect(res.data.tree).toEqual({ version: 2, providers: {} });
-  });
-
-  it('命令 missing → MISSING，不把空树当成功', async () => {
-    const res = await readModelsYamlIpc();
-    expect(res).toEqual({
-      ok: false,
-      kind: 'MISSING',
-      error: 'workbench_read_models_yaml 命令未注册',
-    });
-  });
-
-  it('parseError → PARSE_ERROR，不构造生产树', async () => {
-    mockTauriCommand('workbench_read_models_yaml', () => ({
-      path: '/tmp/models.yaml',
-      content: ':::bad',
-      template: '',
-      seeded: false,
-      parseError: { line: 3, column: 1, message: 'bad indentation' },
-      providers: null,
-    }));
-    const res = await readModelsYamlIpc();
-    expect(res.ok).toBe(false);
-    if (res.ok) return;
-    expect(res.kind).toBe('PARSE_ERROR');
-    expect(res.error).toContain('第 3 行');
-  });
-
-  it('无 parseError 且缺少 providers → 协议漂移 fail-closed', async () => {
-    mockTauriCommand('workbench_read_models_yaml', () => ({
-      path: '/tmp/models.yaml',
-      content: 'version: 2\n',
-      template: '',
-      seeded: false,
-      models: [{ model: 'x', vendor: 'openai' }],
-    }));
-    const res = await readModelsYamlIpc();
-    expect(res.ok).toBe(false);
-    if (res.ok) return;
-    expect(res.kind).toBe('IPC_ERROR');
-    expect(res.error).toContain('providers');
-  });
-
-  it('读边界归一 google/interactions 与 thinkingFormat google', async () => {
-    mockTauriCommand('workbench_read_models_yaml', () => ({
-      path: '/tmp/models.yaml',
-      content: '',
-      template: '',
-      seeded: false,
-      providers: {
-        g: {
-          displayName: 'G',
-          baseUrl: 'https://example.invalid/gemini',
-          protocol: 'google/interactions',
-          compat: { thinkingFormat: 'google' },
-          models: [{ id: 'g1', protocol: 'google/interactions' }],
-        },
-      },
-    }));
-    const res = await readModelsYamlIpc();
-    expect(res.ok).toBe(true);
-    if (!res.ok) return;
-    expect(res.data.providers.g.protocol).toBe('google/generate-content');
-    expect(res.data.providers.g.compat?.thinkingFormat).toBe('gemini');
-    expect(res.data.providers.g.models[0].protocol).toBe('google/generate-content');
-    expect(res.data.providers.g.baseUrl).toBe('https://example.invalid/gemini');
-  });
-
-  it('读回含 tiers 的 providers：树与 pricing.tiers 不丢', async () => {
-    const providersWithTiers = {
-      bailian: {
-        displayName: 'Bailian',
-        baseUrl: 'https://dashscope.aliyuncs.com',
-        protocol: 'openai/chat' as const,
+function configuredTree(): ModelsYamlTree {
+  return {
+    version: 2,
+    activeModel: { providerId: 'Acme', modelId: 'model::one' },
+    providers: {
+      Acme: {
+        displayName: '示例供应商',
+        baseUrl: 'https://example.invalid/v1',
+        protocol: 'openai/chat',
+        enabled: true,
+        stream: true,
+        order: 0,
+        apiKeyRef: 'env:ACME_KEY',
+        headers: { 'X-Title': 'conex' },
+        proxyUrl: 'socks5://127.0.0.1:1080',
+        compat: { supportsDeveloperRole: false },
         models: [
           {
-            id: 'qwen-tiered',
+            id: 'model::one',
+            displayName: '示例模型',
+            enabled: true,
+            contextWindow: 128000,
+            maxOutputTokens: 12000,
+            supportsTools: false,
+            thinking: { Low: 'low', High: 'HIGH' },
+            cacheTtl: '30m',
+            headers: { 'X-Model': 'one' },
+            modalities: { input: ['text', 'image'], output: ['text'] },
             pricing: {
-              currency: 'CNY' as const,
-              input: 4.0,
-              output: 12.0,
-              cacheRead: 0.8,
-              tiers: [
-                {
-                  inputTokensAbove: 256_000,
-                  input: 6.0,
-                  output: 18.0,
-                  cacheRead: 1.2,
-                },
-              ],
+              currency: 'USD',
+              unit: 'per_1m_tokens',
+              input: 0,
+              output: 2,
+              cacheRead: 0.1,
+              cacheWrite: 0.2,
+              perImage: 0.04,
+              tiers: [{ inputTokensAbove: 64000, output: 3, cacheRead: 0.15 }],
             },
           },
         ],
       },
+    },
+  };
+}
+
+// 回执夹具统一走 test-utils 的唯一工厂（默认值单一真源，D3 契约防线要求）；
+// 本包装只补本文件特有的 tree 默认值（configuredTree()），不再自行拼装回执字段。
+const snapshot = (tree: ModelsYamlTree | null = configuredTree()) =>
+  catalogSnapshot({ tree });
+
+beforeEach(() => vi.clearAllMocks());
+
+describe('规范配置读取', () => {
+  it('直接接受完整树与凭据状态，不把供应商大小写或wire改写', async () => {
+    const accepted = snapshot();
+    const invoke = vi.fn(() => accepted);
+    mockTauriCommand('workbench_read_models_yaml', invoke);
+    expect(await readModelsYamlIpc()).toEqual({ ok: true, data: accepted });
+    expect(invoke).toHaveBeenCalledWith({});
+    expect(accepted.tree?.providers.Acme.models[0].thinking?.High).toBe('HIGH');
+  });
+
+  it('诚实空配置与未配置活动模型可以成功读取', async () => {
+    const accepted = {
+      ...snapshot({ version: 2, activeModel: null, providers: {} }),
+      credentialStates: {},
     };
-    mockTauriCommand('workbench_read_models_yaml', () => ({
-      path: '/tmp/models.yaml',
-      content: '',
-      template: '',
-      seeded: false,
-      providers: providersWithTiers,
-    }));
+    mockTauriCommand('workbench_read_models_yaml', () => accepted);
+    expect(await readModelsYamlIpc()).toEqual({ ok: true, data: accepted });
+  });
 
-    const res = await readModelsYamlIpc();
-    expect(res.ok).toBe(true);
-    if (!res.ok) return;
-    const tiers = res.data.tree.providers.bailian.models[0]?.pricing?.tiers;
-    expect(tiers).toHaveLength(1);
-    expect(tiers?.[0]).toMatchObject({
-      inputTokensAbove: 256_000,
-      input: 6.0,
-      output: 18.0,
-      cacheRead: 1.2,
+  it('保留错误原文及定位供编辑器修复，不创建可运行的空树', async () => {
+    const document = {
+      ...snapshot(null),
+      content: ':::bad',
+      parseError: { line: 3, column: 1, message: '缩进错误' },
+    };
+    mockTauriCommand('workbench_read_models_yaml', () => document);
+    const result = await readModelsYamlIpc();
+    expect(result).toEqual({ ok: true, data: document });
+    if (result.ok) expect(result.data.tree).toBeNull();
+  });
+
+  it('缺失命令明确拒绝，不尝试第二目录命令', async () => {
+    const retired = vi.fn();
+    mockTauriCommand('catalog_get', retired);
+    expect(await readModelsYamlIpc()).toEqual({
+      ok: false,
+      kind: 'MISSING',
+      error: 'workbench_read_models_yaml 命令未注册',
     });
+    expect(retired).not.toHaveBeenCalled();
+  });
 
-    // 序列化往返：树再写 yaml 仍含 tiers
-    const text = serializeModelsYamlTree(res.data.tree);
-    expect(text).toContain('tiers:');
-    expect(text).toContain('inputTokensAbove: 256000');
+  it.each([
+    { path: 'C:/test/models.yaml', providers: {} },
+    { ...snapshot(), revision: '' },
+    { ...snapshot(), credentialStates: undefined },
+    { ...snapshot(), tree: { version: 2, providers: {} } },
+    { ...snapshot(), tree: null },
+    { ...snapshot(), credentialStates: { Acme: { hasKey: 'yes' } } },
+  ])('拒绝不完整或旧投影回执 %#', async (bad) => {
+    mockTauriCommand('workbench_read_models_yaml', () => bad);
+    expect(await readModelsYamlIpc()).toMatchObject({
+      ok: false,
+      code: 'CONTRACT_MISMATCH',
+    });
   });
 });
 
-describe('writeModelsYamlIpc', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it('唯一路径 workbench_save_models_yaml({ content })，返回 providers 不作失败覆盖', async () => {
-    let savedArgs: unknown = null;
-    mockTauriCommand('workbench_save_models_yaml', (args) => {
-      savedArgs = args;
-      return {
-        path: '/tmp/models.yaml',
-        version: 2,
-        providers: ACME_TREE.providers,
-      };
+describe('结构化配置提交', () => {
+  it('完整字段直接传入已注册事务，回执包含实际新修订', async () => {
+    const tree = configuredTree();
+    const committed = { ...snapshot(tree), revision: 'committed-revision' };
+    const invoke = vi.fn(() => committed);
+    const textSave = vi.fn();
+    mockTauriCommand('workbench_apply_models_config', invoke);
+    mockTauriCommand('workbench_save_models_yaml', textSave);
+    expect(await writeModelsYamlIpc(tree, 'read-revision')).toEqual({
+      ok: true,
+      data: committed,
     });
-
-    const res = await writeModelsYamlIpc(ACME_TREE);
-    expect(res.ok).toBe(true);
-    expect(res.providers?.acme.models[0].thinking?.Low).toBe('low');
-    expect(savedArgs).toEqual({
-      content: expect.stringContaining('acme-think'),
+    expect(invoke).toHaveBeenCalledWith({
+      tree,
+      expectedRevision: 'read-revision',
     });
-    const content = (savedArgs as { content: string }).content;
-    expect(content).toContain('thinking:');
-    expect(content).toContain('cacheRead:');
+    expect(textSave).not.toHaveBeenCalled();
   });
 
-  it('写失败返回 ok:false，不附带空 providers', async () => {
-    mockTauriError('workbench_save_models_yaml', 'Permission denied');
-    const res = await writeModelsYamlIpc(ACME_TREE);
-    expect(res.ok).toBe(false);
-    expect(res.error).toContain('Permission denied');
-    expect(res.providers).toBeUndefined();
+  it('价格单位、四价、图片价及阶梯均完整传递', async () => {
+    const tree = configuredTree();
+    const invoke = vi.fn<(payload: unknown) => ModelsCatalogSnapshot>(() =>
+      snapshot(tree)
+    );
+    mockTauriCommand('workbench_apply_models_config', invoke);
+    await writeModelsYamlIpc(tree, 'read-revision');
+    expect(invoke.mock.calls[0][0]).toMatchObject({
+      tree: {
+        providers: {
+          Acme: {
+            models: [{ pricing: tree.providers.Acme.models[0].pricing }],
+          },
+        },
+      },
+    });
   });
 
-  it('命令 missing → ok:false', async () => {
-    const res = await writeModelsYamlIpc(ACME_TREE);
-    expect(res).toEqual({
+  it('明确false、零费率与空阶梯不会被删掉', async () => {
+    const tree = configuredTree();
+    tree.providers.Acme.models[0].pricing!.tiers = [];
+    const invoke = vi.fn<(payload: unknown) => ModelsCatalogSnapshot>(() =>
+      snapshot(tree)
+    );
+    mockTauriCommand('workbench_apply_models_config', invoke);
+    await writeModelsYamlIpc(tree, 'read-revision');
+    expect(invoke.mock.calls[0][0]).toMatchObject({
+      tree: {
+        providers: {
+          Acme: {
+            order: 0,
+            compat: { supportsDeveloperRole: false },
+            models: [
+              { supportsTools: false, pricing: { input: 0, tiers: [] } },
+            ],
+          },
+        },
+      },
+    });
+  });
+
+  it('纯图片价格不补造token费率', async () => {
+    const tree = configuredTree();
+    tree.providers.Acme.models[0].pricing = {
+      currency: 'CNY',
+      unit: 'per_image',
+      perImage: 0.4,
+    };
+    const invoke = vi.fn<(payload: unknown) => ModelsCatalogSnapshot>(() =>
+      snapshot(tree)
+    );
+    mockTauriCommand('workbench_apply_models_config', invoke);
+    await writeModelsYamlIpc(tree, 'read-revision');
+    expect(invoke.mock.calls[0][0]).toMatchObject({ tree });
+    expect(tree.providers.Acme.models[0].pricing).not.toHaveProperty('input');
+  });
+
+  it('清空活动选择明确传null，不自动找下一个模型', async () => {
+    const tree = configuredTree();
+    tree.activeModel = null;
+    const invoke = vi.fn<(payload: unknown) => ModelsCatalogSnapshot>(() =>
+      snapshot(tree)
+    );
+    mockTauriCommand('workbench_apply_models_config', invoke);
+    await writeModelsYamlIpc(tree, 'read-revision');
+    expect(invoke).toHaveBeenCalledWith({
+      tree,
+      expectedRevision: 'read-revision',
+    });
+  });
+
+  it('过期修订保留冲突类别和实际修订，不转为默认成功', async () => {
+    mockTauriError('workbench_apply_models_config', {
+      code: 'REVISION_CONFLICT',
+      message: '配置已被修改',
+      currentRevision: 'newer-revision',
+    });
+    expect(await writeModelsYamlIpc(configuredTree(), 'old-revision')).toEqual({
       ok: false,
-      error: 'workbench_save_models_yaml 命令不可用',
+      kind: 'REVISION_CONFLICT',
+      code: 'REVISION_CONFLICT',
+      error: '配置已被修改',
+      currentRevision: 'newer-revision',
+    });
+  });
+
+  it('写失败只返回明确错误，不返回空providers覆盖数据', async () => {
+    mockTauriError('workbench_apply_models_config', {
+      code: 'CONFIG_IO',
+      message: '磁盘不可写',
+    });
+    const result = await writeModelsYamlIpc(configuredTree(), 'read-revision');
+    expect(result).toMatchObject({
+      ok: false,
+      code: 'CONFIG_IO',
+      error: '磁盘不可写',
+    });
+    expect(result).not.toHaveProperty('data');
+  });
+
+  it('命令缺失不回写旧文本或profile入口', async () => {
+    expect(
+      await writeModelsYamlIpc(configuredTree(), 'read-revision')
+    ).toMatchObject({ ok: false, kind: 'MISSING' });
+  });
+
+  it('没有修订号时不发出覆盖请求', async () => {
+    const invoke = vi.fn();
+    mockTauriCommand('workbench_apply_models_config', invoke);
+    expect(await writeModelsYamlIpc(configuredTree(), '')).toMatchObject({
+      ok: false,
+      code: 'REVISION_REQUIRED',
+    });
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it('保存不能接受解析失败或不完整的回执', async () => {
+    mockTauriCommand('workbench_apply_models_config', () => ({
+      ...snapshot(null),
+      parseError: { message: '无效配置' },
+    }));
+    expect(
+      await writeModelsYamlIpc(configuredTree(), 'read-revision')
+    ).toMatchObject({ ok: false, kind: 'PARSE_ERROR' });
+  });
+});
+
+describe('高级文档保存和校验', () => {
+  it('原文和预期修订传给同轨文本入口', async () => {
+    const invoke = vi.fn(() => snapshot());
+    mockTauriCommand('workbench_save_models_yaml', invoke);
+    const content =
+      '# 保留用户编辑意图\nversion: 2\nproviders: {}\nactiveModel: null\n';
+    expect((await saveModelsYamlTextIpc(content, 'read-revision')).ok).toBe(
+      true
+    );
+    expect(invoke).toHaveBeenCalledWith({
+      content,
+      expectedRevision: 'read-revision',
+    });
+  });
+
+  it('文档无修订也拒绝提交', async () => {
+    expect(await saveModelsYamlTextIpc('version: 2', '')).toMatchObject({
+      ok: false,
+      code: 'REVISION_REQUIRED',
+    });
+  });
+
+  it('校验保留内核错误文案及定位', async () => {
+    const diagnostic = {
+      valid: false,
+      line: 2,
+      column: 4,
+      message: '未知字段',
+    };
+    mockTauriCommand('workbench_validate_models_yaml', () => diagnostic);
+    expect(await validateModelsYamlIpc('version: 2')).toEqual({
+      ok: true,
+      data: diagnostic,
+    });
+  });
+
+  it('校验服务缺失明确失败', async () => {
+    expect(await validateModelsYamlIpc('version: 2')).toMatchObject({
+      ok: false,
+      kind: 'MISSING',
+    });
+  });
+
+  it('校验不把错误回执当valid', async () => {
+    mockTauriCommand('workbench_validate_models_yaml', () => ({
+      valid: 'yes',
+    }));
+    expect(await validateModelsYamlIpc('version: 2')).toMatchObject({
+      ok: false,
+      code: 'CONTRACT_MISMATCH',
     });
   });
 });
