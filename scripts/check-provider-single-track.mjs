@@ -933,7 +933,6 @@ const D8_KNOWN_DEBT = new Map([
   const D11_RETIRED_CALL_DEBT = new Set([
     'apps/crish-desktop/src/api/modelCatalogIpc.ts:catalog_get',
     'apps/crish-desktop/src/api/modelCatalogIpc.ts:catalog_refresh',
-    'apps/crish-desktop/src/api/provider-profiles/rustProfileStore.ts:config_profile_apply',
     'apps/crish-desktop/src/api/thinkingGear.ts:catalog_get',
   ]);
   const manifestNameSet = new Set(manifestNames);
