@@ -625,7 +625,12 @@ function cfgTestLines(src) {
 const D8_ISLAND = [
   'apps/crish-desktop/src/api/provider-profiles/',
   'apps/crish-desktop/src/api/providerProfiles.ts',
-  'apps/crish-desktop/src/api/oauthTokenManager.ts', // 无生产引用方（死岛），待清退
+  // OAuth token 调度器：**生产活跃**（bootstrap-full.ts:37-43 拉起
+  // initOAuthTokenScheduler），岛内合法写口——token 刷新成功后必须回写
+  // profile.oauthToken / hasKey（oauthTokenManager.ts:106-109）。
+  // 2026-09-15 更正：此前注释误标「无生产引用方（死岛），待清退」，
+  // 若据此清退会**删掉活的 OAuth 刷新链路**（脚本自述与事实不符的失真登记）。
+  'apps/crish-desktop/src/api/oauthTokenManager.ts',
 ];
 const D8_SYMBOLS = ['saveProfiles', 'saveProfileKey', 'setActiveModelId'];
 
