@@ -267,7 +267,7 @@
   max-height: min(52vh, 400px);
   display: flex;
   flex-direction: column;
-  padding: var(--space-2, 8px);
+  padding: 4px;
   border-radius: var(--radius-xl, 12px);
   border: 1px solid var(--border-subtle);
   background: var(--bg-elevated);
@@ -281,11 +281,11 @@
   display: flex;
   align-items: center;
   gap: var(--space-1_5, 6px);
-  padding: 4px 6px 4px 8px;
-  margin-bottom: var(--space-1_5, 6px);
-  border-radius: var(--radius-lg, 8px);
-  border: 1px solid var(--border-subtle);
-  background: var(--bg-card);
+  padding: 4px 6px 6px;
+  margin-bottom: var(--space-1, 4px);
+  border: none;
+  border-bottom: 1px solid var(--border-subtle);
+  background: transparent;
   color: var(--text-tertiary);
   flex-shrink: 0;
 }
@@ -299,7 +299,8 @@
   font: inherit;
   font-size: var(--font-size-sm, 13px);
   color: var(--text-primary);
-  padding: 2px 0;
+  padding: 2px 4px;
+  box-shadow: none;
 }
 
 .filesBcDirectOpenBtn {

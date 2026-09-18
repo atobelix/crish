@@ -234,12 +234,14 @@
 .cardTitle {
   flex: 1 1 auto;
   overflow: hidden;
-  text-overflow: ellipsis;
+  text-overflow: clip;
   white-space: nowrap;
   min-width: 0;
   font-size: var(--font-size-base, 13px);
   line-height: 28px;
   color: inherit;
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 14px), transparent 100%);
+  mask-image: linear-gradient(to right, #000 calc(100% - 14px), transparent 100%);
 }
 
 .sessionRenameInput,
@@ -274,13 +276,13 @@
 .itemTrailing {
   position: relative;
   flex-shrink: 0;
-  min-width: 44px;
+  min-width: 24px;
   max-width: 72px;
   height: 24px;
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  margin-left: var(--space-1, 4px);
+  margin-left: 2px;
 }
 
 .sessionTime,

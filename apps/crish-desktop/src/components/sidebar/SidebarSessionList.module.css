@@ -420,11 +420,13 @@
 .sessionText {
   flex: 1;
   overflow: hidden;
-  text-overflow: ellipsis;
+  text-overflow: clip;
   white-space: nowrap;
   min-width: 0;
   font-size: var(--font-size-base);
   line-height: 28px;
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 14px), transparent 100%);
+  mask-image: linear-gradient(to right, #000 calc(100% - 14px), transparent 100%);
 }
 
 /*           multiLine /      */
@@ -447,13 +449,13 @@
 .sessionTrailing {
   position: relative;
   flex-shrink: 0;
-  min-width: 44px;
-  max-width: 68px;
+  min-width: 24px;
+  max-width: 60px;
   height: 24px;
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  margin-left: var(--space-1, 4px);
+  margin-left: 2px;
 }
 
 .sessionTime {
@@ -468,7 +470,7 @@
   color: var(--text-faint);
   flex-shrink: 0;
   white-space: nowrap;
-  max-width: 68px;
+  max-width: 60px;
   overflow: hidden;
   text-overflow: ellipsis;
   text-align: right;

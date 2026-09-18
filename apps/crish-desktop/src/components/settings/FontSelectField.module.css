@@ -96,9 +96,9 @@
   gap: var(--space-1);
   height: var(--control-height-sm);
   min-height: var(--control-height-sm);
-  padding: 0 var(--space-1);
-  border-radius: var(--radius-lg);
-  background: var(--bg-primary, var(--bg-workspace));
+  padding: 2px var(--space-1) 4px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: transparent;
   flex-shrink: 0;
   box-sizing: border-box;
 }
@@ -110,6 +110,7 @@
   flex: 1;
   min-width: 0;
   height: 100%;
+  background: transparent;
 }
 
 .searchIcon {
