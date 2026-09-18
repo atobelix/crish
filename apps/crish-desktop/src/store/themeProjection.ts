@@ -23,12 +23,19 @@ import { setTheme } from '../api/themeStore';
  */
 export function initThemeProjection(): () => void {
   let prevTheme: string | undefined;
+  let isApplying = false;
 
   const apply = () => {
+    if (isApplying) return;
     const theme = useSettingsStore.getState().appSettings?.theme;
     if (theme === undefined || theme === null || theme === prevTheme) return;
     prevTheme = theme;
-    setTheme(theme);
+    isApplying = true;
+    try {
+      setTheme(theme);
+    } finally {
+      isApplying = false;
+    }
   };
 
   apply();

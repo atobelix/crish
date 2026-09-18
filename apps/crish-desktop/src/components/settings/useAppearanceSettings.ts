@@ -134,14 +134,15 @@ export function useAppearanceSettings(): AppearanceSettingsResult {
 
   const updatePersonalization = useCallback(
     (updates: Partial<PersonalizationSettings>) => {
-      const next = { ...personalization, ...updates };
-      setPersonalization(next);
-      writeStoredPersonalization(next);
-      applyPersonalization(next, activeTheme);
+      setPersonalization((prev) => {
+        const next = { ...prev, ...updates };
+        writeStoredPersonalization(next);
+        return next;
+      });
       const domTheme = readDomTheme();
       if (domTheme) setActiveTheme(domTheme);
     },
-    [personalization, activeTheme]
+    []
   );
 
   const { skinOptions } = useSkinSettings({
@@ -168,31 +169,31 @@ export function useAppearanceSettings(): AppearanceSettingsResult {
       try {
         const sets = await clientApi.getSettingsEx(cwd);
         if (cancelled || !sets) return;
+        // 读盘后尊重当前已生效的真实主题（若磁盘配置陈旧，先以当前主题修复，杜绝陈旧默认值反向触发投影循环）
+        const currentActiveTheme = readDomTheme() || readStoredTheme();
+        if (currentActiveTheme && sets.theme !== currentActiveTheme) {
+          sets.theme = currentActiveTheme;
+          void clientApi.saveSettingsEx(cwd, 'global', {
+            theme: currentActiveTheme,
+          });
+        }
         setSettings(sets);
         setLoadError(null);
         setAppSettings(sets);
-        // 读盘后尊重当前已生效的真实主题（若磁盘配置陈旧，则自动以当前主题反向修复磁盘）
-        try {
-          const currentActiveTheme = readDomTheme() || readStoredTheme();
-          if (sets.theme && sets.theme !== currentActiveTheme) {
-            sets.theme = currentActiveTheme;
-            void clientApi.saveSettingsEx(cwd, 'global', {
-              theme: currentActiveTheme,
-            });
-          }
-          if (currentActiveTheme && !cancelled) {
-            setActiveTheme(currentActiveTheme);
-          }
-          if (sets.fonts) {
+        if (currentActiveTheme && !cancelled) {
+          setActiveTheme(currentActiveTheme);
+        }
+        if (sets.fonts) {
+          try {
             const { applyFontStacks, ensureFontsLoaded, normalizeFontPrefs } =
               await import('../../api/fontStore');
             const prefs = normalizeFontPrefs(sets.fonts);
             await ensureFontsLoaded(prefs);
             applyFontStacks(prefs);
-          }
-        } catch (applyErr) {
-          if (!cancelled) {
-            toast.show('外观应用失败：' + String(applyErr));
+          } catch (fontErr) {
+            if (!cancelled) {
+              toast.show('字体应用失败：' + String(fontErr));
+            }
           }
         }
       } catch (err) {

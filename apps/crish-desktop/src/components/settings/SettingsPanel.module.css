@@ -12,7 +12,7 @@
   height: 100vh;
   display: flex;
   flex-direction: column;
-  background: var(--bg-workspace, var(--bg-primary));
+  background: var(--shell-chrome-bg, var(--bg-secondary));
   color: var(--text-primary);
   font-family: var(--font-sans);
   pointer-events: auto;
@@ -28,7 +28,7 @@
   width: 100%;
   min-height: 0;
   overflow: hidden;
-  background: var(--bg-workspace, var(--bg-primary));
+  background: var(--shell-chrome-bg, var(--bg-secondary));
   color: var(--text-secondary);
   font-family: var(--font-sans);
 }
@@ -43,7 +43,8 @@
   min-height: var(--header-height);
   padding: 0 var(--space-3);
   /* border-bottom: 0.5px solid var(--border-color); */
-  background: var(--bg-workspace, var(--bg-primary));
+  background: var(--shell-chrome-bg, var(--bg-secondary));
+  border-bottom: 1px solid var(--border-subtle);
   flex-shrink: 0;
   box-sizing: border-box;
   -webkit-app-region: drag;
@@ -229,7 +230,7 @@
   margin: 0;
   padding: 0;
   gap: 0;
-  background: var(--bg-workspace, var(--bg-primary));
+  background: var(--shell-chrome-bg, var(--bg-secondary));
   overflow: hidden;
 }
 
@@ -238,14 +239,15 @@
   width: var(--settings-sidebar-width);
   flex-shrink: 0;
   height: 100%;
-  background: var(--bg-workspace, var(--bg-primary));
-  /* border-right: 1px solid var(--border-color); */
+  background: var(--shell-chrome-bg, var(--bg-secondary));
+  border-right: 1px solid var(--border-subtle);
   padding: var(--space-2) var(--space-2_5);
   overflow: hidden;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   gap: 0;
+  box-sizing: border-box;
 }
 
 .navGroup {
@@ -257,7 +259,7 @@
   text-transform: none;
 }
 
-/* 5. 主内容功能区：与主对话卡片 100% 共享纯正卡底纸面 */
+/* 5. 主内容功能区：与主对话卡片 100% 共享纯正工作台纸面 */
 .coverContent {
   flex: 1;
   min-width: 0;
@@ -272,7 +274,7 @@
   flex-direction: column;
   gap: var(--space-3_5);
   position: relative;
-  background: var(--bg-elevated, var(--bg-card));
+  background: var(--bg-workspace, var(--bg-primary));
   overflow-y: auto;
   overflow-x: hidden;
   overscroll-behavior: auto;
@@ -319,7 +321,7 @@
 }
 
 .sidebarTab.active {
-  background: var(--bg-card);
+  background: var(--tab-active-bg, var(--bg-card));
   border: var(--hairline-width) solid var(--border-subtle);
   box-shadow: var(--shadow-sm);
   color: var(--text-primary);
