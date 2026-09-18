@@ -124,9 +124,9 @@ describe('TokenRuntimeController 全仓单一运行时 Token 注入控制器测�
       expect(root.classList.contains('theme-dark')).toBe(true);
       expect(root.classList.contains('theme-light')).toBe(false);
 
-      expect(root.style.getPropertyValue('--surface-paper')).toBe('#1f1f1f');
-      expect(root.style.getPropertyValue('--surface-chrome')).toBe('#191919');
-      expect(root.style.getPropertyValue('--text-primary')).toBe('#cccccc');
+      expect(root.style.getPropertyValue('--surface-paper')).toBe('#121212');
+      expect(root.style.getPropertyValue('--surface-chrome')).toBe('#262626');
+      expect(root.style.getPropertyValue('--text-primary')).toBe('#e6e6e6');
       expectNoDerivedAliasesInjected(root);
     });
 

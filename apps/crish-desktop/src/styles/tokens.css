@@ -57,6 +57,7 @@ html[data-theme='light'] {
   --bg-card-hover: color-mix(in srgb, var(--text-primary) 3.5%, var(--bg-card));
   --bg-card-active: color-mix(in srgb, var(--text-primary) 6%, var(--bg-card));
   --bg-card-subtle: color-mix(in srgb, var(--text-primary) 2%, var(--bg-card));
+  --tab-active-bg: var(--surface-card);
   --bg-elevated: var(--surface-elevated);
   --bg-subtle: var(--surface-chrome);
   --bg-workspace: var(--surface-paper);
@@ -781,12 +782,12 @@ html[data-theme='light'] {
  *   --hairline-strong =
  *          color-mix     ?*/
 html[data-theme='dark'] {
-  /* 三级：chrome 最沉 → paper 对话画布 → card 工具/输入更深或略抬（暗色反转：卡片更深） */
-  --surface-chrome: hsl(30 7% 10.5%);
-  --surface-paper: hsl(30 6% 12%);
-  --surface-card: hsl(30 5% 8%);
-  --surface-elevated: hsl(30 6% 10%);
-  --surface-sunken: hsl(30 6% 9%);
+  /* 结构框架：chrome 浅灰外壳（侧栏 + 顶部Header统一，提亮至 #262626） → paper 对话主工作区纯黑沉浸 → card 卡片略抬 → elevated 浮层 */
+  --surface-chrome: #262626;
+  --surface-paper: #121212;
+  --surface-card: #1a1a1a;
+  --surface-elevated: #252525;
+  --surface-sunken: #0e0e0e;
   --surface-scrim: var(--shadow-color, #000);
   --surface-overlay: hsl(0 0% 0% / 0.65);
   --surface-overlay-fg: hsl(0 0% 100%);
@@ -800,6 +801,8 @@ html[data-theme='dark'] {
   --bg-card-hover: color-mix(in srgb, var(--text-primary) 4.5%, var(--bg-card));
   --bg-card-active: color-mix(in srgb, var(--text-primary) 8%, var(--bg-card));
   --bg-card-subtle: color-mix(in srgb, var(--text-primary) 2.5%, var(--bg-card));
+  /* 标签激活背景：75% 灰度（25% 明度），清晰凸显 */
+  --tab-active-bg: hsl(0 0% 25%);
   --bg-elevated: var(--surface-elevated);
   --bg-subtle: var(--surface-chrome);
   --bg-workspace: var(--surface-paper);
@@ -808,11 +811,11 @@ html[data-theme='dark'] {
   --bg-canvas: var(--surface-paper);
   --shell-chrome-bg: var(--surface-chrome);
   /* ── 文字灰度阶（dark：与 light 镜像，0% = 黑，100% = 白；四档均为显式灰值）──
-     正文/常看到的字 = 90%（近白，与主对话区一致，修复侧边栏对比度不足）→ 次级 72% → 小字 58% → 极弱 45% */
+     正文/常看到的字 = 90%（近白，10% 灰度）→ 次级 72% → 小字 55%（45% 灰度）→ 极弱 45% */
   --text-primary: #e6e6e6;
   --text-secondary: #b8b8b8;
-  /* 文本三级色（小字 / 工具调用 / 路径等） */
-  --text-tertiary: #949494;
+  /* 文本三级色（小字 / 工具调用 / 路径等）：45% 灰度（55% 亮度），显式灰值零透明度，达标 WCAG AA */
+  --text-tertiary: #8c8c8c;
   --text-muted: var(--text-tertiary);
   /* 第四级弱化文字（时间戳 / 计数等） */
   --text-faint: #737373;
@@ -871,13 +874,9 @@ html[data-theme='dark'] {
     var(--surface-card)
   );
 
-  /* 暗色描边：旧值 #EBEBEB 对卡底 15.4:1（light 同角色 1.32:1），属 11 倍失衡量级，
-     会在暗色下形成刺眼"发光描边"。改为 hsl 显式中性灰：
-     · 避开 AGENTS.md §13「border 用 --text-primary 混入须 ≤10%」的约束（10% 上限仅达 1.22:1，
-       不足以修复失衡量级），故不用 color-mix(text-primary) 表达；
-     · hsl(30 4% 20%) 对 paper 1.31:1，与 light 侧 hsl(30 2.5% 88%) 的 1.32:1 对称。 */
-  --border-color: hsl(30 4% 20%);
-  --border-subtle: hsl(30 6% 14%);
+  /* 暗色描边：温和克制微调（提升质感同时避免刺眼） */
+  --border-color: hsl(30 4% 22%);
+  --border-subtle: hsl(30 5% 17%);
   /* 线宽契约（dark 分支显式声明，语义与 light 一致；style-contract 要求色系前缀 token 双主题全定义） */
   --border-width-emphasis: 2px;
   --composer-bg: var(--surface-card);

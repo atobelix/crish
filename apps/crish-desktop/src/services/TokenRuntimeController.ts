@@ -403,8 +403,12 @@ export class TokenRuntimeController {
           bgElevated = 'hsl(0 0% 100%)';
         }
       } else {
-        bgCard = `color-mix(in srgb, ${bgPrimary} 70%, hsl(0 0% 0%))`;
-        bgElevated = `color-mix(in srgb, ${bgPrimary} 82%, hsl(0 0% 0%))`;
+        if (skinConfig.bgCard) {
+          bgCard = skinConfig.bgCard;
+        }
+        if (skinConfig.bgElevated) {
+          bgElevated = skinConfig.bgElevated;
+        }
       }
 
       const isDarkPreset = isDark;
@@ -413,15 +417,15 @@ export class TokenRuntimeController {
       const softHoverPct = isDarkPreset ? '6.5%' : '4%';
       const softActivePct = isDarkPreset ? '9.5%' : '8%';
 
-      const tertiaryMix = isDark
-        ? `color-mix(in srgb, ${textSecondary} 62%, transparent)`
-        : `color-mix(in srgb, ${textSecondary} 70%, transparent)`;
+      // 遵循显式灰阶契约：黑夜模式使用 45% 灰度（55% 亮度），浅色模式使用 55% 灰度（45% 亮度），严禁透明度混色
+      const defaultTertiary = isDark ? '#8c8c8c' : '#6b6b6b';
+      const tertiaryColor = skinConfig.textTertiary || defaultTertiary;
 
       const composerBg = skinConfig.composerBg || bgCard;
 
       let finalFg = textPrimary;
       let finalSec = textSecondary;
-      let finalTert = tertiaryMix;
+      let finalTert = tertiaryColor;
 
       const contrastGuard = computeContrastGuardedTokens(bgPrimary, isDark, {
         isCustomSkin: skinKey === 'custom',

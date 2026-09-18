@@ -16,6 +16,7 @@ export interface SkinPreset {
   shellChromeBg: string;
   textPrimary: string;
   textSecondary: string;
+  textTertiary?: string;
   borderColor: string;
   borderSubtle: string;
   mixColor?: string;
@@ -32,7 +33,8 @@ export const SKIN_PRESETS: Record<string, SkinPreset> = {
     bgElevated: 'hsl(0 0% 100%)',
     shellChromeBg: 'hsl(35 8% 95%)',
     textPrimary: '#1a1a1a',
-    textSecondary: '#555555',
+    textSecondary: '#525252',
+    textTertiary: '#6b6b6b',
     borderColor: 'hsl(35 10% 86%)',
     borderSubtle: 'hsl(30 6% 93.8%)',
     mixColor: 'hsl(35 40% 30%)',
@@ -142,16 +144,17 @@ export const SKIN_PRESETS: Record<string, SkinPreset> = {
   },
   'dark-cozy': {
     name: '护眼暗灰',
-    bgPrimary: '#1f1f1f',
-    bgSecondary: '#191919',
+    bgPrimary: '#121212',
+    bgSecondary: '#262626',
     bgTertiary: '#161616',
-    bgCard: '#141414',
-    bgElevated: '#161616',
-    shellChromeBg: '#181818',
-    textPrimary: '#cccccc',
-    textSecondary: '#aaaaaa',
-    borderColor: '#2e2e2e',
-    borderSubtle: '#242424',
+    bgCard: '#1a1a1a',
+    bgElevated: '#2a2a2a',
+    shellChromeBg: '#262626',
+    textPrimary: '#e6e6e6',
+    textSecondary: '#b8b8b8',
+    textTertiary: '#8c8c8c',
+    borderColor: '#333333',
+    borderSubtle: '#282828',
     mixColor: 'hsl(0, 0%, 75%)',
   },
   'deep-night': {
