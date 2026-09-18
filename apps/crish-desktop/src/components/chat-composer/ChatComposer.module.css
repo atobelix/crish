@@ -1176,8 +1176,7 @@
   box-shadow:
     0 1px 3px color-mix(in srgb, var(--shadow-color) 1.5%, transparent),
     0 3px 8px -1px color-mix(in srgb, var(--shadow-color) 2%, transparent);
-  transition:
-    border-color var(--transition-fast, 120ms ease);
+  transition: none;
   container-type: inline-size;
 }
 
@@ -1191,22 +1190,29 @@
   gap: 8px;
 }
 
-.composerCard:focus-within {
-  border-color: color-mix(
-    in srgb,
-    var(--border-subtle) 94%,
-    var(--text-primary) 6%
-  );
+.composerCard:hover {
+  border-color: var(--border-subtle);
+  box-shadow:
+    0 1px 3px color-mix(in srgb, var(--shadow-color) 1.5%, transparent),
+    0 3px 8px -1px color-mix(in srgb, var(--shadow-color) 2%, transparent);
+}
+
+.composerCard:focus-within,
+.composerCard:active {
+  border-color: var(--border-subtle);
+  box-shadow:
+    0 1px 3px color-mix(in srgb, var(--shadow-color) 1.5%, transparent),
+    0 3px 8px -1px color-mix(in srgb, var(--shadow-color) 2%, transparent);
   outline: none;
 }
 
-/* RL-01 特例：全页空态落地输入焦点边框仅混入 5% */
+/* RL-01 特例：全页空态落地输入焦点边框 */
 .composerCard[data-empty-kind='session-empty']:focus-within {
-  border-color: color-mix(
-    in srgb,
-    var(--border-subtle) 95%,
-    var(--text-primary) 5%
-  );
+  border-color: var(--border-subtle);
+  box-shadow:
+    0 1px 3px color-mix(in srgb, var(--shadow-color) 1.5%, transparent),
+    0 3px 8px -1px color-mix(in srgb, var(--shadow-color) 2%, transparent);
+  outline: none;
 }
 
 .inputMainLayout {
@@ -1486,29 +1492,27 @@
   min-height: calc(
     1em * var(--composer-line-height) * var(--composer-min-lines) + 16px
   );
-  transition: border-color var(--transition-fast);
+  transition: none;
   color: var(--text-primary);
   box-sizing: border-box;
 }
 
-.container:focus-within {
-  background: var(--composer-shell-bg-focus);
-  background-color: var(--composer-shell-bg-focus);
-  border-color: color-mix(
-    in srgb,
-    var(--border-color) 94%,
-    var(--text-primary) 6%
-  );
+.container:hover {
+  border-color: var(--border-color);
+}
+
+.container:focus-within,
+.container:active {
+  background: var(--composer-shell-bg);
+  background-color: var(--composer-shell-bg);
+  border-color: var(--border-color);
   box-shadow: none;
   outline: none;
 }
 
 .container[data-empty-kind='session-empty']:focus-within {
-  border-color: color-mix(
-    in srgb,
-    var(--border-color) 95%,
-    var(--text-primary) 5%
-  );
+  border-color: var(--border-color);
+  outline: none;
 }
 
 .containerDense {
@@ -1521,14 +1525,12 @@
   border: 1px solid var(--border-color);
 }
 
-.containerDense:focus-within {
-  background: var(--composer-shell-bg-focus);
-  background-color: var(--composer-shell-bg-focus);
-  border-color: color-mix(
-    in srgb,
-    var(--border-color) 94%,
-    var(--text-primary) 6%
-  );
+.containerDense:focus-within,
+.containerDense:active {
+  background: var(--composer-shell-bg);
+  background-color: var(--composer-shell-bg);
+  border-color: var(--border-color);
+  outline: none;
 }
 
 .textarea {

@@ -18,7 +18,7 @@
   max-height: var(--header-height);
   flex: 0 0 var(--header-height);
   flex-shrink: 0;
-  background: var(--shell-chrome-bg, var(--bg-secondary));
+  background: var(--bg-card);
   position: relative;
   z-index: var(--z-sticky, 2);
   user-select: none;
@@ -50,7 +50,7 @@
   padding: 0 10px;
   box-sizing: border-box;
   border-bottom: 1px solid var(--border-subtle);
-  background: var(--shell-chrome-bg, var(--bg-secondary));
+  background: var(--bg-card);
   flex-shrink: 0;
   width: 100%;
   min-width: 0;
