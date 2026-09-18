@@ -40,7 +40,7 @@ export const UserProfileCard: React.FC<UserProfileCardProps> = React.memo(
           >
             <div className={styles.userAvatarContainer}>
               <div className={styles.userAvatar}>
-                <AppIcon name="user" size={15} aria-hidden />
+                <AppIcon name="user" size={16} aria-hidden />
               </div>
               <span
                 className={`${styles.userOnlineStatus}${!isLoggedIn ? ` ${styles.userOfflineStatus}` : ''}`}
@@ -53,7 +53,7 @@ export const UserProfileCard: React.FC<UserProfileCardProps> = React.memo(
             </div>
             <AppIcon
               name="chevrons-up-down"
-              size={14}
+              size={16}
               className={styles.userChevron}
               aria-hidden
             />

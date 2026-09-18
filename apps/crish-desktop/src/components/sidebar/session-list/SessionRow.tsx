@@ -395,7 +395,7 @@ export const SessionRow = memo(function SessionRow(props: SessionRowProps) {
                         e.stopPropagation();
                       }}
                       icon={
-                        <AppIcon name="more-horizontal" size={14}
+                        <AppIcon name="more-horizontal" size={16}
                           aria-hidden />
                       }
                     />

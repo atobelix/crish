@@ -19,9 +19,9 @@
   width: 100%;
   height: var(--control-height);
   min-height: var(--control-height);
-  border: 1px solid transparent;
+  border: none;
   background: transparent;
-  color: var(--text-secondary);
+  color: var(--text-primary);
   font-family: inherit;
   font-size: var(--font-size-base, 14px);
   font-weight: var(--font-weight-medium);
@@ -47,17 +47,16 @@
   width: var(--icon-size);
   height: var(--icon-size);
   flex-shrink: 0;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
 }
 
 .navItem:hover {
   background: var(--sidebar-hover);
   color: var(--text-primary);
-  border-color: transparent;
 }
 
 .navItem:hover svg {
-  color: var(--text-secondary);
+  color: var(--text-primary);
 }
 
 .navItem.isActive,
@@ -108,7 +107,7 @@
 }
 
 .navItem input[type='search']::placeholder {
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
 }
 
 .navItem input[type='search']::-webkit-search-cancel-button,

@@ -107,6 +107,7 @@
 .sectionNew,
 .sectionSortBtn,
 .sectionSort {
+  --btn-icon-size: 16px !important;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -208,8 +209,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   line-height: 1;
   flex-shrink: 0;
 }
@@ -246,6 +247,7 @@
 .folderNewBtn,
 .folderNewSession,
 :global(.button).folderNewBtn {
+  --btn-icon-size: 16px !important;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -479,6 +481,7 @@
 }
 
 .sessionItem .sessionActionsBtn {
+  --btn-icon-size: 16px;
   position: absolute;
   right: 0;
   top: 50%;

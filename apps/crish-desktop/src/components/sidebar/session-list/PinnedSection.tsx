@@ -51,7 +51,7 @@ export function PinnedSection({
             aria-controls="sb-pinned-zone"
           >
             <span>置顶</span>
-            <AppIcon name="chevron-down" size={13}
+            <AppIcon name="chevron-down" size={16}
               className={pinnedCollapsed ? styles.chevCollapsed : ''}
               aria-hidden />
           </button>

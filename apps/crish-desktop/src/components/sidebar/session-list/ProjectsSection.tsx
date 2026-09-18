@@ -82,7 +82,7 @@ export function ProjectsSection({
           aria-expanded={!projectsSectionCollapsed}
         >
           <span>项目</span>
-          <AppIcon name="chevron-down" size={13}
+          <AppIcon name="chevron-down" size={16}
             className={projectsSectionCollapsed ? styles.chevCollapsed : ''}
             aria-hidden />
         </button>
@@ -97,7 +97,7 @@ export function ProjectsSection({
               e.stopPropagation();
               emitUiEvent('open-project-picker');
             }}
-            icon={<AppIcon name="folder-plus" size={14} aria-hidden />}
+            icon={<AppIcon name="folder-plus" size={16} aria-hidden />}
           />
         </Tooltip>
       </div>
@@ -133,9 +133,9 @@ export function ProjectsSection({
                   >
                     <span className={styles.folderIcon} aria-hidden>
                       {open ? (
-                        <AppIcon name="folder-open" size={14} />
+                        <AppIcon name="folder-open" size={16} />
                       ) : (
-                        <AppIcon name="folder" size={14} />
+                        <AppIcon name="folder" size={16} />
                       )}
                     </span>
                     <Tooltip content={p.path}>
@@ -158,7 +158,7 @@ export function ProjectsSection({
                           navigateToNewDraft(p.id);
                         }}
                         icon={
-                          <AppIcon name="file-plus" size={14} aria-hidden />
+                          <AppIcon name="file-plus" size={16} aria-hidden />
                         }
                       />
                     </Tooltip>

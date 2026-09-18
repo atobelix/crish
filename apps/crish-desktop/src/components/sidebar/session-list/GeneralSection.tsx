@@ -67,7 +67,7 @@ export function GeneralSection({
             aria-expanded={!generalCollapsed}
           >
             <span>对话</span>
-            <AppIcon name="chevron-down" size={13}
+            <AppIcon name="chevron-down" size={16}
               className={generalCollapsed ? styles.chevCollapsed : ''}
               aria-hidden />
           </button>
@@ -83,7 +83,7 @@ export function GeneralSection({
                 e.stopPropagation();
                 onSortBtnClick(e);
               }}
-              icon={<AppIcon name="chevrons-up-down" size={14} aria-hidden />}
+              icon={<AppIcon name="chevrons-up-down" size={16} aria-hidden />}
             />
           </Tooltip>
         </div>
@@ -98,7 +98,7 @@ export function GeneralSection({
               e.stopPropagation();
               navigateToNewDraft(GENERAL_FOLDER);
             }}
-            icon={<AppIcon name="message-circle-plus" size={14} aria-hidden />}
+            icon={<AppIcon name="message-circle-plus" size={16} aria-hidden />}
           />
         </Tooltip>
       </div>

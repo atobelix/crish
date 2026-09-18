@@ -35,7 +35,7 @@ export const SettingsIconButton: React.FC<SettingsIconButtonProps> = React.memo(
         onClick={() => toggleSettingsOverlay()}
         icon={
           <>
-            <AppIcon name="settings" size={16} aria-hidden />
+            <AppIcon name="settings" size={16} stroke="fine" aria-hidden />
             {updateAvailable && (
               <span
                 className={styles.gearUpdatePulseDot}
@@ -94,7 +94,7 @@ export const SidebarFooter: React.FC<SidebarFooterProps> = React.memo(
                   })();
                 }}
                 icon={
-                  <AppIcon name="refresh" size={14} aria-hidden />
+                  <AppIcon name="refresh" size={16} aria-hidden />
                 }
               >
                 更新

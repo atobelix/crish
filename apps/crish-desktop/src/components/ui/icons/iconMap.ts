@@ -168,6 +168,7 @@ import {
   IconMinimize2,
   IconNewChatPen,
   IconRefreshCw,
+  IconSettings,
   IconSidebarLeft,
   IconSidebarRight,
 } from './customIcons';
@@ -487,7 +488,7 @@ export const iconMap = {
   'search-check': h(SearchCheckIcon),
   'search-x': h(SearchXIcon),
   send: h(SendIcon),
-  settings: h(Settings01Icon),
+  settings: c(IconSettings),
   shield: h(Shield01Icon),
   'shield-alert': h(ShieldAlertIcon),
   'shield-check': h(ShieldCheckIcon),
