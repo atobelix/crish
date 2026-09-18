@@ -38,6 +38,9 @@ window.InteractiveTable.ColumnManager = class ColumnManager {
       e.preventDefault();
       e.stopPropagation();
 
+      // 1. 立即清除已有单元格选区，杜绝拖拽列宽时产生多余选区干扰
+      window.__interactiveTableApp?.selectionManager?.clearSelection();
+
       const colIndex = parseInt(resizer.dataset.col, 10);
       const col = this.state.get().columns[colIndex];
       if (!col) return;
@@ -47,11 +50,13 @@ window.InteractiveTable.ColumnManager = class ColumnManager {
       this.startWidth = col.width || 190;
 
       resizer.classList.add('resizing');
-      document.body.style.cursor = 'col-resize';
-      document.body.style.userSelect = 'none';
+      document.body.classList.add('is-resizing-column');
 
       const colBtn = this.root.querySelector('.col-handle-btn');
-      if (colBtn) colBtn.classList.add('no-transition');
+      if (colBtn) {
+        colBtn.classList.add('no-transition');
+        colBtn.classList.remove('visible');
+      }
 
       document.addEventListener('mousemove', this.onMouseMove);
       document.addEventListener('mouseup', this.onMouseUp);
@@ -84,8 +89,7 @@ window.InteractiveTable.ColumnManager = class ColumnManager {
     const colBtn = this.root.querySelector('.col-handle-btn');
     if (colBtn) colBtn.classList.remove('no-transition');
 
-    document.body.style.cursor = '';
-    document.body.style.userSelect = '';
+    document.body.classList.remove('is-resizing-column');
     document.removeEventListener('mousemove', this.onMouseMove);
     document.removeEventListener('mouseup', this.onMouseUp);
 
@@ -94,7 +98,8 @@ window.InteractiveTable.ColumnManager = class ColumnManager {
 
   syncControlsPosition() {
     const table = this.root.querySelector('.notion-table');
-    if (!table) return;
+    const contentArea = this.root.querySelector('.table-content-area');
+    if (!table || !contentArea) return;
 
     const colBtn = this.root.querySelector('.col-handle-btn');
     if (colBtn) {
@@ -102,7 +107,9 @@ window.InteractiveTable.ColumnManager = class ColumnManager {
       const headerCells = Array.from(table.querySelectorAll('th, tr.header-row td'));
       const targetTh = headerCells[activeCol];
       if (targetTh) {
-        const left = targetTh.offsetLeft + targetTh.offsetWidth / 2;
+        const thRect = targetTh.getBoundingClientRect();
+        const cRect = contentArea.getBoundingClientRect();
+        const left = (thRect.left + thRect.right) / 2 - cRect.left;
         colBtn.style.left = `${left}px`;
       }
     }

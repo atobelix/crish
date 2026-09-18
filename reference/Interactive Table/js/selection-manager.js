@@ -95,8 +95,8 @@ window.InteractiveTable.SelectionManager = class SelectionManager {
   onMouseDown(e) {
     if (e.button === 2) return; // 忽略鼠标右键
 
-    // 忽略手柄、添加条与弹窗点击
-    if (e.target.closest('.col-handle-btn, .row-handle-btn, .add-column-strip, .add-row-strip, .notion-popover')) {
+    // 忽略手柄、添加条、列宽调整器与弹窗点击
+    if (e.target.closest('.col-handle-btn, .row-handle-btn, .add-column-strip, .add-row-strip, .col-resizer, .notion-popover')) {
       return;
     }
 
@@ -168,6 +168,7 @@ window.InteractiveTable.SelectionManager = class SelectionManager {
   }
 
   onDoubleClick(e) {
+    if (e.target.closest('.col-resizer')) return;
     const cellInfo = this.getCellInfo(e.target);
     if (cellInfo) {
       this.enterEditing(cellInfo);

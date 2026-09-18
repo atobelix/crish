@@ -213,6 +213,12 @@ window.InteractiveTable.TableRenderer = class TableRenderer {
 
       const targetEl = (e.target && e.target instanceof Element) ? e.target : document.body;
 
+      // 如果正在调节列宽，手柄保持隐藏，不干扰视线
+      if (document.body.classList.contains('is-resizing-column')) {
+        colBtn.classList.remove('visible');
+        return;
+      }
+
       // 如果上下文菜单打开且锚定在手柄上，或者手柄正在拖拽中，锁定当前手柄位置与状态
       const isColLocked = colBtn.classList.contains('active') || colBtn.classList.contains('dragging');
       const isRowLocked = rowBtn.classList.contains('active') || rowBtn.classList.contains('dragging');
