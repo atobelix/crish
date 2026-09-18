@@ -78,7 +78,12 @@ function readActiveTabId(leaf: LayoutLeaf): string {
 
 export const PaneHeader: React.FC<PaneHeaderProps> = React.memo(
   ({ leaf, isActive, isChat, isTopRow = true }) => {
-    const containerRef = useRef<HTMLDivElement>(null);
+    const containerRef = useRef<HTMLDivElement | null>(null);
+    const [containerEl, setContainerEl] = useState<HTMLDivElement | null>(null);
+    const setContainerRef = useCallback((node: HTMLDivElement | null) => {
+      containerRef.current = node;
+      setContainerEl(node);
+    }, []);
     const [containerWidth, setContainerWidth] = useState(0);
     const [booted, setBooted] = useState(false);
     const closingIdsRef = useRef<Set<string>>(new Set());
@@ -231,32 +236,36 @@ export const PaneHeader: React.FC<PaneHeaderProps> = React.memo(
       []
     );
 
-    // 容器宽度监听（统一接入 ResizeObserverManager 批处理）
+    // 容器宽度监听（统一接入 ResizeObserverManager 批处理，动态跟随 DOM 节点挂载生命周期）
     useEffect(() => {
-      const el = containerRef.current;
-      if (!el) return;
+      if (!containerEl) return;
 
       const checkMetrics = (entry?: ResizeObserverEntry) => {
         const w =
           typeof entry?.contentRect?.width === 'number'
             ? Math.round(entry.contentRect.width)
-            : el.clientWidth;
+            : containerEl.clientWidth;
         setContainerWidth(w);
       };
 
       checkMetrics();
 
       const ro = ResizeObserverManager.getInstance();
-      ro.observe(el, checkMetrics);
+      ro.observe(containerEl, checkMetrics);
 
       return () => {
-        ro.unobserve(el, checkMetrics);
+        ro.unobserve(containerEl, checkMetrics);
       };
-    }, []);
+    }, [containerEl]);
+
+    const currentMeasuredWidth =
+      containerWidth > 0
+        ? containerWidth
+        : (containerEl?.clientWidth || containerRef.current?.clientWidth || 0);
 
     const effectiveTabWidth =
       lockedTabWidth ??
-      computeNaturalTabWidth(visibleTabs.length, containerWidth);
+      computeNaturalTabWidth(visibleTabs.length, currentMeasuredWidth);
 
     // 强制阻止任何横向滚动漂移，保障全量标签永远在视口内全景显示
     const handleScroll = useCallback(() => {
@@ -454,7 +463,7 @@ export const PaneHeader: React.FC<PaneHeaderProps> = React.memo(
         onMouseLeave={handleHeaderMouseLeave}
       >
         <div
-          ref={containerRef}
+          ref={setContainerRef}
           className={styles.tabsContainer}
           style={paneTabStripVars(effectiveTabWidth)}
           data-locked={lockedTabWidth != null ? 'true' : 'false'}

@@ -268,7 +268,7 @@
 .tabCloseBtn:hover {
   background: var(--tint-hover);
   color: var(--text-primary);
-  opacity: 1 !important;
+  opacity: 1;
 }
 
 .tabCloseBtn:active {
