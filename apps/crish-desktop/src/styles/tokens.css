@@ -785,8 +785,8 @@ html[data-theme='dark'] {
   /* 结构框架：chrome 浅灰外壳（侧栏 + 顶部Header统一，提亮至 #262626） → paper 对话主工作区纯黑沉浸 → card 卡片略抬 → elevated 浮层 */
   --surface-chrome: #262626;
   --surface-paper: #121212;
-  --surface-card: #1a1a1a;
-  --surface-elevated: #252525;
+  --surface-card: #161616;
+  --surface-elevated: #262626;
   --surface-sunken: #0e0e0e;
   --surface-scrim: var(--shadow-color, #000);
   --surface-overlay: hsl(0 0% 0% / 0.65);

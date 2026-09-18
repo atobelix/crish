@@ -186,17 +186,17 @@ export class TokenRuntimeController {
         name: '自定义颜色',
         bgPrimary: bg,
         bgSecondary: isDark
-          ? `color-mix(in srgb, ${bg} 85%, hsl(0 0% 0%) 15%)`
+          ? `color-mix(in srgb, ${bg} 82%, hsl(0 0% 100%) 18%)`
           : `color-mix(in srgb, ${bg} 95%, hsl(0 0% 100%) 5%)`,
         bgTertiary: `color-mix(in srgb, ${bg} 90%, ${fg} 10%)`,
         bgCard: isDark
-          ? `color-mix(in srgb, ${bg} 90%, hsl(0 0% 100%) 10%)`
+          ? `color-mix(in srgb, ${bg} 95%, hsl(0 0% 100%) 5%)`
           : `color-mix(in srgb, ${bg} 96%, hsl(0 0% 100%) 4%)`,
         bgElevated: isDark
-          ? `color-mix(in srgb, ${bg} 88%, hsl(0 0% 100%) 12%)`
+          ? `color-mix(in srgb, ${bg} 82%, hsl(0 0% 100%) 18%)`
           : `color-mix(in srgb, ${bg} 96%, hsl(0 0% 100%) 4%)`,
         shellChromeBg: isDark
-          ? `color-mix(in srgb, ${bg} 85%, hsl(0 0% 0%) 15%)`
+          ? `color-mix(in srgb, ${bg} 82%, hsl(0 0% 100%) 18%)`
           : `color-mix(in srgb, ${bg} 78%, hsl(38 8% 70%) 22%)`,
         textPrimary: fg,
         textSecondary: `color-mix(in srgb, ${bg} 35%, ${fg} 65%)`,
