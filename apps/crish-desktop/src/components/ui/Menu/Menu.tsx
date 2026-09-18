@@ -319,6 +319,9 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
             style={{ maxHeight: resolvedMaxHeight, ...contentStyle }}
             onKeyDown={handleKeyDown}
             onCloseAutoFocus={onCloseAutoFocus}
+            onWheel={(e) => {
+              e.stopPropagation();
+            }}
             onPointerDownOutside={(e) => {
               onPointerDownOutside?.(e);
               if (e.defaultPrevented) return;

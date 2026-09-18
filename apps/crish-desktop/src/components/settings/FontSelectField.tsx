@@ -224,6 +224,7 @@ export const FontSelectField: React.FC<Props> = ({
             role="search"
             onClick={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
+            onWheel={(e) => e.stopPropagation()}
           >
             <div className={styles.searchInputWrapper}>
               <SearchIcon size={13} className={styles.searchIcon} />
@@ -293,7 +294,11 @@ export const FontSelectField: React.FC<Props> = ({
             )}
           </div>
 
-          {header ? <div className={styles.headerArea}>{header}</div> : null}
+          {header ? (
+            <div className={styles.headerArea} onWheel={(e) => e.stopPropagation()}>
+              {header}
+            </div>
+          ) : null}
 
           {/* 选项滚动列表 */}
           <div
@@ -302,6 +307,7 @@ export const FontSelectField: React.FC<Props> = ({
             role="listbox"
             aria-label="字体选项列表"
             className={styles.settingsSelectScroll}
+            onWheel={(e) => e.stopPropagation()}
           >
             {groupedList.presets.length > 0 && (
               <>
@@ -385,7 +391,11 @@ export const FontSelectField: React.FC<Props> = ({
             )}
           </div>
 
-          {footer ? <div className={styles.footerArea}>{footer}</div> : null}
+          {footer ? (
+            <div className={styles.footerArea} onWheel={(e) => e.stopPropagation()}>
+              {footer}
+            </div>
+          ) : null}
         </Menu>
       </div>
     </div>
