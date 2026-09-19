@@ -25,6 +25,7 @@ export {
   type ParsedInlineItem,
 } from './inlineTagParser';
 import { isThoughtPlaceholder } from '../markdownRenderLite';
+import { logInternalError } from '../userFacingErrors';
 export {
   timelineSignature,
   buildAssistantTimelineCached,
@@ -199,10 +200,24 @@ export function buildAssistantTimeline(
             );
           }
         } else if (b.type === 'tool_call' && b.id) {
-          const tc = toolsById.get(b.id);
-          if (tc) {
-            if (tc.startedAt == null && b.startTime != null) tc.startedAt = b.startTime;
-            if (tc.durationMs == null && b.durationMs != null) tc.durationMs = b.durationMs;
+          const found = toolsById.get(b.id);
+          if (found) {
+            // 【只读铁律】store 里的消息对象经 immer auto-freeze 后为只读；
+            // 渲染期严禁原地 mutate —— 否则 ES module 严格模式抛
+            // `TypeError: Cannot add property ... object is not extensible`，
+            // 被本函数 catch 吞掉后静默降级为「只渲染正文」，导致思考行与
+            // 工具块整体消失（2026-09-19 真实宿主实证）。
+            // 需要补齐时间戳时构造新对象，绝不改写入参。
+            const needStartedAt = found.startedAt == null && b.startTime != null;
+            const needDuration = found.durationMs == null && b.durationMs != null;
+            const tc =
+              needStartedAt || needDuration
+                ? {
+                    ...found,
+                    ...(needStartedAt ? { startedAt: b.startTime } : {}),
+                    ...(needDuration ? { durationMs: b.durationMs } : {}),
+                  }
+                : found;
             toolBuf.push(tc);
             usedTools.add(b.id);
           }
@@ -279,7 +294,10 @@ export function buildAssistantTimeline(
       pushParsedText(msg.text || '', undefined, msg.status === 'processing', items, thi, xi);
     }
     return applyDurationFallback(msg, items);
-  } catch {
+  } catch (err) {
+    // 静默降级 = 用户可见的内容丢失（最忌讳级）。必须留可观测痕迹，
+    // 否则「思考行 / 工具块整体消失」会被长期误判为渲染层问题。
+    logInternalError('timeline-build-degraded', err, { severity: 'warning' });
     if ((msg.text || '').trim()) {
       return [{ kind: 'text', content: msg.text || '', key: 'text-fallback' }];
     }
@@ -290,37 +308,12 @@ export function buildAssistantTimeline(
 /**
  * 时序与耗时校准：思考项耗时（durationMs）严格代表思考自身的内部耗时，
  * 严禁以整轮工作耗时（msg.thinkingTime）覆盖；整轮工作时间统一由 timelineSegmenter 在分段层呈现。
+ *
+ * 原生因果铁律：原生 blocks/items 到达顺序即为唯一真相源，严禁任何跨项跨轮重排。
  */
 function applyDurationFallback(
   _msg: SessionMessage,
   items: AssistantTimelineItem[]
 ): AssistantTimelineItem[] {
-  return enforceThoughtBeforeText(items);
-}
-
-/**
- * 物理因果时序守卫：同一轮次内（或未指定轮次时），思考（thought）必定先于正文（text）产生，
- * 严禁因底层 blocks 乱序将同轮次 thought 排在 text 之后。
- */
-function enforceThoughtBeforeText(
-  items: AssistantTimelineItem[]
-): AssistantTimelineItem[] {
-  const result = [...items];
-  for (let i = 0; i < result.length; i++) {
-    const cur = result[i]!;
-    if (cur.kind !== 'thought') continue;
-    const curTurn = cur.turnIndex;
-    // 只有在两块明确指定且处于同一显式轮次时才校准时序；绝不跨步越界重排
-    if (curTurn == null) continue;
-    const misplacedTextIdx = result.findIndex(
-      (it, idx) =>
-        idx < i && it.kind === 'text' && it.turnIndex === curTurn
-    );
-    if (misplacedTextIdx !== -1) {
-      // 将此 thought 移到该 text 块之前
-      result.splice(i, 1);
-      result.splice(misplacedTextIdx, 0, cur);
-    }
-  }
-  return result;
+  return items;
 }

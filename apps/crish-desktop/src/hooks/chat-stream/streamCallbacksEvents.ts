@@ -23,7 +23,7 @@ import {
   resolveToolDiffs,
   sanitizeToolDisplayOutput,
 } from '../../api/toolFeedback';
-import { publishToolDiffsLazy } from './helpers';
+import { publishToolDiffsLazy, commitToolPatchToSession } from './helpers';
 import {
   buildMessageIndex,
   resolveToolIdentity,
@@ -200,19 +200,17 @@ export function handleToolSuccess(opts: {
         ? Math.max(0, Date.now() - startedAt)
         : undefined;
 
-  queueToolCallPatch(
-    toolId,
-    {
-      id: toolId,
-      ...(name ? { name } : {}),
-      status: 'success',
-      output: displayOut || output || '完成',
-      diffs: resolvedDiffs.length ? resolvedDiffs : undefined,
-      ...(durationMs !== undefined ? { durationMs } : {}),
-      ...(startedAt !== undefined ? { startedAt } : {}),
-    },
-    true
-  );
+  const toolPatch: StreamToolCallPatch = {
+    id: toolId,
+    ...(name ? { name } : {}),
+    status: 'success',
+    output: displayOut || output || '完成',
+    diffs: resolvedDiffs.length ? resolvedDiffs : undefined,
+    ...(durationMs !== undefined ? { durationMs } : {}),
+    ...(startedAt !== undefined ? { startedAt } : {}),
+  };
+  commitToolPatchToSession(sid, assistantMsgId, toolId, toolPatch);
+  queueToolCallPatch(toolId, toolPatch, true);
   if (resolvedDiffs.length > 0) {
     publishToolDiffsLazy(resolvedDiffs);
   }
@@ -255,17 +253,17 @@ export function handleToolError(opts: {
     }
   }
   const clean = sanitizeToolDisplayOutput(error || '');
-  queueToolCallPatch(
-    toolId,
-    {
-      id: toolId,
-      status: 'error',
-      output: clean || error || '失败',
-      ...(durationMs !== undefined ? { durationMs } : {}),
-      ...(startedAt !== undefined ? { startedAt } : {}),
-    },
-    true
-  );
+  const toolPatch: StreamToolCallPatch = {
+    id: toolId,
+    status: 'error',
+    output: clean || error || '失败',
+    ...(durationMs !== undefined ? { durationMs } : {}),
+    ...(startedAt !== undefined ? { startedAt } : {}),
+  };
+  if (assistantMsgId) {
+    commitToolPatchToSession(sid, assistantMsgId, toolId, toolPatch);
+  }
+  queueToolCallPatch(toolId, toolPatch, true);
 }
 
 /**

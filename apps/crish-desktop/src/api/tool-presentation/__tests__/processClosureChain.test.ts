@@ -153,9 +153,9 @@ describe('节点 6 · 软收口全链路物证（收口 → 落盘 → 归一 �
 
     const { seg, spanMs, label } = runChain(msg);
 
-    // 铁律一：后继存在正文 → 折叠收拢
+    // 2026-09-19 用户裁决：去除工作完成后的整体折叠，默认展开
     expect(seg.foldable).toBe(true);
-    expect(seg.defaultExpanded).toBe(false);
+    expect(seg.defaultExpanded).toBe(true);
     expect(seg.isLive).toBe(false);
     expect(spanMs).toBe(12_000);
     expect(label).toBe('已完成 12.0 秒');
@@ -206,9 +206,12 @@ describe('节点 6 · 软收口全链路物证（收口 → 落盘 → 归一 �
       metrics: any;
       items: any[];
     }>;
-    expect(procSegs).toHaveLength(1);
+    // 严格按时间线交错输出：思考段 -> 正文 -> 工具段，绝不允许强行聚合重排
+    expect(procSegs).toHaveLength(2);
     expect(procSegs[0]?.showWorkTime).toBe(true);
-    expect(procSegs[0]?.items).toHaveLength(3);
+    expect(procSegs[0]?.items).toHaveLength(1);
+    expect(procSegs[1]?.showWorkTime).toBe(false);
+    expect(procSegs[1]?.items).toHaveLength(1);
     const label = formatProcessControlLabel(procSegs[0]!.metrics, true, 6_000, false);
     expect(label).toBe('已完成 6.0 秒');
   });

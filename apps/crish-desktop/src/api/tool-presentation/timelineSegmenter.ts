@@ -98,45 +98,6 @@ export function partitionTimelineSegments(
     }
   }
 
-  // 定位整轮时间线中最后一个过程项（thought / tools）的索引
-  let lastProcessIdx = -1;
-  for (let i = items.length - 1; i >= 0; i--) {
-    if (isProcessItem(items[i]!)) {
-      lastProcessIdx = i;
-      break;
-    }
-  }
-
-  // 分支 1：整轮无任何过程产出（纯文本 / 状态通知，如问答直出）
-  if (lastProcessIdx === -1) {
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i]!;
-      if (item.kind === 'injection') {
-        segments.push({
-          kind: 'state_notice',
-          id: `${msgId}-state-${stateIndex++}`,
-          item,
-        });
-      } else if (item.kind === 'text') {
-        if (!hasTextContent(item)) continue;
-        const isFinalAnswer = !hasLaterText(items, i);
-        segments.push({
-          kind: 'text_narrative',
-          id: `${msgId}-text-${textIndex++}`,
-          item,
-          isFinalAnswer,
-          isStreaming: hasStreamText && isFinalAnswer && isTurnLive,
-        });
-      }
-    }
-    return segments;
-  }
-
-  // 分支 2：存在过程产出（思考 / 工具调用）
-  // 0 <= i <= lastProcessIdx 之间的所有项（思考、工具组、以及过程中的过渡说明正文）
-  // 统筹归入过程段；仅 lastProcessIdx 之后的正文项作为最终总结（isFinalAnswer）。
-  // 若遭遇 injection（系统状态通知），作为物理界标独立冲出 state_notice，绝不被折叠吞掉。
-
   let buffer: AssistantTimelineItem[] = [];
 
   const flushProcessBuffer = (hasNextText: boolean): void => {
@@ -158,23 +119,18 @@ export function partitionTimelineSegments(
       defaultExpanded = true;
       forceExpanded = true;
     } else if (hasNextText) {
-      // ── 铁律一：后继存在正文 → 过程履职完毕，收拢 ──
+      // 过程段已履职完成（后继存在正文），不再是 live 尾部段；默认保持展开直出（2026-09-19 用户裁决）
       foldable = true;
-      defaultExpanded = false;
+      defaultExpanded = true;
+      isLive = false;
     } else if (isTurnLive) {
-      // ── 铁律二：尾部流式无正文 → 直出展开 ──
       foldable = true;
       defaultExpanded = true;
       isLive = true;
     } else {
-      // ── 铁律三：纯工具终态自收敛 ──
-      if (metrics.toolCount >= 2) {
-        foldable = true;
-        defaultExpanded = false;
-      } else {
-        foldable = false;
-        defaultExpanded = true;
-      }
+      // 终态过程段（2026-09-19 用户裁决）：彻底去除工作完成后的整体内容折叠，默认平铺展开展现原生时间线
+      foldable = true;
+      defaultExpanded = true;
     }
 
     // 无任何过程产出时不产生过程段（避免空折叠栏）
@@ -242,6 +198,7 @@ export function partitionTimelineSegments(
       }
     }
 
+    const isFirstProc = procIndex === 0;
     const seg: ProcessTimelineSegment = {
       kind: 'process_section',
       id: `${msgId}-proc-${procIndex++}`,
@@ -249,7 +206,7 @@ export function partitionTimelineSegments(
       metrics,
       startTime: segStart,
       endTime: segEnd,
-      showWorkTime: true,
+      showWorkTime: isFirstProc,
       foldable,
       defaultExpanded,
       forceExpanded,
@@ -258,7 +215,8 @@ export function partitionTimelineSegments(
     segments.push(seg);
   };
 
-  for (let i = 0; i <= lastProcessIdx; i++) {
+  // 单遍因果线性切分（2026-09-18 严格按发生序交错展现，严禁聚合重排）
+  for (let i = 0; i < items.length; i++) {
     const item = items[i]!;
 
     if (item.kind === 'injection') {
@@ -273,7 +231,15 @@ export function partitionTimelineSegments(
 
     if (item.kind === 'text') {
       if (!hasTextContent(item)) continue;
-      buffer.push(item);
+      flushProcessBuffer(true);
+      const isFinalAnswer = !hasLaterText(items, i);
+      segments.push({
+        kind: 'text_narrative',
+        id: `${msgId}-text-${textIndex++}`,
+        item,
+        isFinalAnswer,
+        isStreaming: hasStreamText && isFinalAnswer && isTurnLive,
+      });
       continue;
     }
 
@@ -283,35 +249,8 @@ export function partitionTimelineSegments(
     }
   }
 
-  // 冲出过程缓冲：判断 lastProcessIdx 之后是否存在非空正文（最终总结）
-  const hasFinalText = hasLaterText(items, lastProcessIdx);
-  flushProcessBuffer(hasFinalText);
-
-  // 处理 lastProcessIdx 之后的项（最终总结正文与状态通知）
-  for (let i = lastProcessIdx + 1; i < items.length; i++) {
-    const item = items[i]!;
-
-    if (item.kind === 'injection') {
-      segments.push({
-        kind: 'state_notice',
-        id: `${msgId}-state-${stateIndex++}`,
-        item,
-      });
-      continue;
-    }
-
-    if (item.kind === 'text') {
-      if (!hasTextContent(item)) continue;
-      const isFinalAnswer = !hasLaterText(items, i);
-      segments.push({
-        kind: 'text_narrative',
-        id: `${msgId}-text-${textIndex++}`,
-        item,
-        isFinalAnswer,
-        isStreaming: hasStreamText && isFinalAnswer && isTurnLive,
-      });
-    }
-  }
+  // 冲出末尾剩余的过程缓冲（若存在）
+  flushProcessBuffer(false);
 
   return segments;
 }

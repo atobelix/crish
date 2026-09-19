@@ -915,4 +915,80 @@ describe('timelineNormalizer', () => {
       expect(sigA).not.toBe(sigTextChanged);
     });
   });
+
+  /**
+   * 防回归：2026-09-19 真实宿主实证的内容丢失事故。
+   *
+   * 事故链：store 消息对象经 immer auto-freeze 后为只读 → buildAssistantTimeline
+   * 对 toolCall 原地补 durationMs（`tc.durationMs = b.durationMs`）→ ES module
+   * 严格模式抛 `TypeError: Cannot add property durationMs, object is not extensible`
+   * → 被函数内 catch 吞掉 → 降级为「只渲染正文」→ 思考行与工具块整体消失。
+   *
+   * 契约：渲染投影必须对入参只读；frozen 输入不得抛错、不得降级。
+   */
+  describe('只读契约（frozen 输入防回归）', () => {
+    function deepFreeze<T>(o: T): T {
+      if (o && typeof o === 'object') {
+        Object.values(o as Record<string, unknown>).forEach(deepFreeze);
+        Object.freeze(o);
+      }
+      return o;
+    }
+
+    function makeFrozenTimelineMessage(): SessionMessage {
+      const toolCall = makeToolCall({
+        id: 'tc-frozen-1',
+        name: 'project_tree',
+        status: 'success',
+        startedAt: 1700000000000,
+        // 关键：durationMs 缺失，而 block.durationMs 存在（0）→ 旧实现触发原地赋值
+      });
+      return deepFreeze(
+        makeMessage({
+          id: 'asst-frozen-1',
+          sender: 'assistant',
+          status: 'completed',
+          text: '正文 1\n\n正文 2',
+          thinking: '思考内容',
+          toolCalls: [toolCall],
+          blocks: [
+            { type: 'thought', id: 'thought-turn-0', content: '思考内容', turnIndex: 0 },
+            { type: 'text', content: '正文 1', turnIndex: 0 },
+            { type: 'tool_call', id: 'tc-frozen-1', durationMs: 0, turnIndex: 0 },
+            { type: 'text', content: '正文 2', turnIndex: 0 },
+          ] as SessionMessage['blocks'],
+        })
+      );
+    }
+
+    it('frozen 输入下不得抛错（旧实现因原地赋值抛 TypeError 被 catch 吞掉）', () => {
+      expect(() => buildAssistantTimeline(makeFrozenTimelineMessage())).not.toThrow();
+    });
+
+    it('frozen 输入下仍产出 thought / tools / text 三段（不得降级为 text-fallback）', () => {
+      const items = buildAssistantTimeline(makeFrozenTimelineMessage());
+      const kinds = items.map((i) => i.kind);
+      expect(kinds).toContain('thought');
+      expect(kinds).toContain('tools');
+      expect(kinds).toContain('text');
+      // 降级路径的特征 key
+      expect(items.some((i) => i.key === 'text-fallback')).toBe(false);
+    });
+
+    it('不得原地修改入参（数据层 toolCall 的 durationMs 保持缺失）', () => {
+      const msg = makeFrozenTimelineMessage();
+      buildAssistantTimeline(msg);
+      expect(msg.toolCalls?.[0]?.durationMs).toBeUndefined();
+    });
+
+    it('补齐的时间戳只落在投影产物上，绝不写回数据层', () => {
+      const msg = makeFrozenTimelineMessage();
+      const items = buildAssistantTimeline(msg);
+      const toolsItem = items.find((i) => i.kind === 'tools');
+      expect(toolsItem).toBeDefined();
+      const rendered = (toolsItem as { items: unknown[] }).items;
+      expect(rendered.length).toBeGreaterThan(0);
+      expect(msg.toolCalls?.[0]?.durationMs).toBeUndefined();
+    });
+  });
 });

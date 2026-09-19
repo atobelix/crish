@@ -218,7 +218,9 @@ export function createSessionMessageActionsCore<T extends SessionStoreSlice>(
           msg.streamTextOffset = 0;
           msg.blocks = msg.blocks.filter((b) => b.type !== 'text');
         }
-        const segment = text.length >= offset ? text.slice(offset) : text;
+        const rawSegment = text.length >= offset ? text.slice(offset) : text;
+        const segment =
+          offset > 0 ? rawSegment.replace(/^\n+/, '') : rawSegment;
         /**
          * 【双重物理界标隔离】定位可承接当前段落的最新 text 块时，
          * 必须确保该正文块位于「最后一个工具块」**与**「最后一个思考块」之后。

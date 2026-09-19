@@ -30,6 +30,7 @@ import type { MutableRefObject } from 'react';
 import {
   snapshotStreamTextToSession,
   snapshotStreamThinkingToSession,
+  commitToolPatchToSession,
   isLiveStreamRun,
 } from './helpers';
 import { markStreamingActive } from '../../api/streamStop';
@@ -211,25 +212,24 @@ export function createToolPatchQueue(opts: {
     status: 'running' | 'pending_approval',
     approvalMeta?: MessageToolApprovalMeta
   ) => {
-    // 物理因果时序保全：在工具启动前，若存在流式思考，立即提交至 sessionStore，
-    // 确保思考块必然处于该工具块之前，绝不发生事后重排颠倒，并锁定思考耗时
+    // 物理因果时序保全：在工具启动前，若存在流式思考与正文，立即提交至 sessionStore，
+    // 确保思考块与前置正文块必然处于该工具块之前，锁定因果时序
     snapshotStreamThinkingToSession(sid, assistantMsgId);
-    // Durable text snapshot before tool so blocks/streamTextOffset interleave correctly.
     snapshotStreamTextToSession(sid, assistantMsgId, readStreamedFullText());
     toolNames[toolId] = name;
-    queueToolCallPatch(
-      toolId,
-      {
-        id: toolId,
-        name,
-        arguments: args,
-        explanation,
-        status,
-        startedAt: Date.now(),
-        ...(approvalMeta ? { approvalMeta } : {}),
-      },
-      status === 'pending_approval'
-    );
+    const patch: StreamToolCallPatch = {
+      id: toolId,
+      name,
+      arguments: args,
+      explanation,
+      status,
+      startedAt: Date.now(),
+      ...(approvalMeta ? { approvalMeta } : {}),
+    };
+    // 关键：在工具调用产生的一瞬间，立即持久化落入 sessionStore 消息 blocks，
+    // 使得正文切片与工具块按产生先后自然交错，绝不在收口时批量倾倒
+    commitToolPatchToSession(sid, assistantMsgId, toolId, patch);
+    queueToolCallPatch(toolId, patch, status === 'pending_approval');
   };
   return { queueToolCallPatch, upsertToolCall };
 }

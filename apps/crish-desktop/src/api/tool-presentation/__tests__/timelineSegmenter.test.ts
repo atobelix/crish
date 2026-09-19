@@ -70,7 +70,7 @@ describe('partitionTimelineSegments · 基础切割', () => {
     expect(segs[0]!.kind).toBe('text_narrative');
   });
 
-  it('多阶段过程与中间说明正文统筹并列归入单一过程段，仅尾部正文作为最终答案', () => {
+  it('多阶段过程与中间说明正文严格按原生因果时序交错分段，绝不强行聚合（2026-09-18 用户裁决）', () => {
     const items: AssistantTimelineItem[] = [
       thought('t1'),
       tools('k1', ['read_file']),
@@ -86,22 +86,26 @@ describe('partitionTimelineSegments · 基础切割', () => {
     expect(segs.map((s) => s.kind)).toEqual([
       'process_section',
       'text_narrative',
+      'process_section',
+      'text_narrative',
+      'process_section',
+      'text_narrative',
     ]);
     expect(segs.map((s) => s.id)).toEqual([
       'm1-proc-0',
       'm1-text-0',
+      'm1-proc-1',
+      'm1-text-1',
+      'm1-proc-2',
+      'm1-text-2',
     ]);
-    // 过程段内包含 7 项：思考、工具、中间正文并列同级（对齐用户标注图二）
-    const procSeg = segs[0] as { items: AssistantTimelineItem[] };
-    expect(procSeg.items.map((it) => it.key)).toEqual([
-      't1',
-      'k1',
-      'x1',
-      't2',
-      'k2',
-      'x2',
-      'k3',
-    ]);
+    // 每个过程段仅包含各自阶段的思考与工具，中间正文独立作为叙事段
+    const p0 = segs[0] as { items: AssistantTimelineItem[] };
+    expect(p0.items.map((it) => it.key)).toEqual(['t1', 'k1']);
+    const p1 = segs[2] as { items: AssistantTimelineItem[] };
+    expect(p1.items.map((it) => it.key)).toEqual(['t2', 'k2']);
+    const p2 = segs[4] as { items: AssistantTimelineItem[] };
+    expect(p2.items.map((it) => it.key)).toEqual(['k3']);
   });
 
   it('空正文不构成物理界标', () => {
@@ -135,8 +139,8 @@ describe('partitionTimelineSegments · 基础切割', () => {
   });
 });
 
-describe('partitionTimelineSegments · 铁律一（后继正文必折叠）', () => {
-  it('中间过程段（有后继正文）→ foldable=true, defaultExpanded=false', () => {
+describe('partitionTimelineSegments · 终态过程段默认直出（2026-09-19 用户裁决）', () => {
+  it('中间过程段（有后继正文）→ foldable=true, defaultExpanded=true（去除整体折叠）', () => {
     const items: AssistantTimelineItem[] = [
       thought('t1'),
       tools('k1', ['read_file']),
@@ -145,11 +149,11 @@ describe('partitionTimelineSegments · 铁律一（后继正文必折叠）', ()
     const segs = partitionTimelineSegments('m1', items, false, false);
     const mid = segs[0] as { foldable: boolean; defaultExpanded: boolean; forceExpanded: boolean };
     expect(mid.foldable).toBe(true);
-    expect(mid.defaultExpanded).toBe(false);
+    expect(mid.defaultExpanded).toBe(true);
     expect(mid.forceExpanded).toBe(false);
   });
 
-  it('流式中但存在后继正文时，铁律一优先于铁律二', () => {
+  it('存在后继正文时，过程段保持默认展开', () => {
     const items: AssistantTimelineItem[] = [
       thought('t1'),
       tools('k1', ['read_file']),
@@ -159,7 +163,7 @@ describe('partitionTimelineSegments · 铁律一（后继正文必折叠）', ()
     const segs = partitionTimelineSegments('m1', items, true, true);
     const mid = segs[0] as { foldable: boolean; defaultExpanded: boolean; isLive: boolean };
     expect(mid.foldable).toBe(true);
-    expect(mid.defaultExpanded).toBe(false);
+    expect(mid.defaultExpanded).toBe(true);
     expect(mid.isLive).toBe(false);
   });
 });
@@ -179,28 +183,28 @@ describe('partitionTimelineSegments · 铁律二（尾部流式直出）', () =>
   });
 });
 
-describe('partitionTimelineSegments · 铁律三（纯工具终态自收敛）', () => {
-  it('终态纯工具且 toolCount >= 2 → foldable=true, defaultExpanded=false', () => {
+describe('partitionTimelineSegments · 终态自收敛（默认全部展开直出）', () => {
+  it('终态纯工具且 toolCount >= 2 → foldable=true, defaultExpanded=true', () => {
     const items: AssistantTimelineItem[] = [tools('k1', ['read_file', 'grep_search'])];
     const segs = partitionTimelineSegments('m1', items, false, false);
     const seg = segs[0] as { foldable: boolean; defaultExpanded: boolean };
     expect(seg.foldable).toBe(true);
-    expect(seg.defaultExpanded).toBe(false);
-  });
-
-  it('终态纯工具且 toolCount < 2 → foldable=false, defaultExpanded=true', () => {
-    const items: AssistantTimelineItem[] = [tools('k1', ['read_file'])];
-    const segs = partitionTimelineSegments('m1', items, false, false);
-    const seg = segs[0] as { foldable: boolean; defaultExpanded: boolean };
-    expect(seg.foldable).toBe(false);
     expect(seg.defaultExpanded).toBe(true);
   });
 
-  it('终态纯思考（无工具）→ 落入 toolCount<2 分支，foldable=false', () => {
+  it('终态纯工具且 toolCount < 2 → foldable=true, defaultExpanded=true', () => {
+    const items: AssistantTimelineItem[] = [tools('k1', ['read_file'])];
+    const segs = partitionTimelineSegments('m1', items, false, false);
+    const seg = segs[0] as { foldable: boolean; defaultExpanded: boolean };
+    expect(seg.foldable).toBe(true);
+    expect(seg.defaultExpanded).toBe(true);
+  });
+
+  it('终态纯思考（无工具）→ defaultExpanded=true', () => {
     const items: AssistantTimelineItem[] = [thought('t1', 3000)];
     const segs = partitionTimelineSegments('m1', items, false, false);
     const seg = segs[0] as { foldable: boolean; defaultExpanded: boolean };
-    expect(seg.foldable).toBe(false);
+    expect(seg.foldable).toBe(true);
     expect(seg.defaultExpanded).toBe(true);
   });
 });
@@ -284,7 +288,7 @@ describe('partitionTimelineSegments · 工作时间区唯一位置（2026-09-11 
     expect(capsuleOf([tools('k1', ['read_file', 'grep_search'])])?.showWorkTime).toBe(true);
   });
 
-  it('过程中间正文与后续工具统筹并入同个过程段，showWorkTime 恒为 true', () => {
+  it('过程中间正文与后续工具严格按原生时序交错分段，首个过程段承载 showWorkTime', () => {
     const items: AssistantTimelineItem[] = [
       thought('t1'),
       text('x1', '回答中间过渡正文'),
@@ -296,9 +300,11 @@ describe('partitionTimelineSegments · 工作时间区唯一位置（2026-09-11 
       showWorkTime: boolean;
       items: AssistantTimelineItem[];
     }>;
-    expect(procSections).toHaveLength(1);
+    expect(procSections).toHaveLength(2);
     expect(procSections[0]?.showWorkTime).toBe(true);
-    expect(procSections[0]?.items).toHaveLength(3);
+    expect(procSections[0]?.items).toHaveLength(1);
+    expect(procSections[1]?.showWorkTime).toBe(false);
+    expect(procSections[1]?.items).toHaveLength(1);
   });
 
   it('段起止时间戳：终态取段内最早 / 最晚 startTime', () => {
@@ -403,14 +409,14 @@ describe('partitionTimelineSegments · 段边界与空输入', () => {
       'process_section',
       'text_narrative',
     ]);
-    // 注入前的段仍受铁律一约束（后继存在正文 → 折叠）
+    // 注入前的段保持默认展开（去除整体折叠）
     const first = segs[0] as { foldable: boolean; defaultExpanded: boolean };
     expect(first.foldable).toBe(true);
-    expect(first.defaultExpanded).toBe(false);
-    // 注入后的段同样受铁律一约束
+    expect(first.defaultExpanded).toBe(true);
+    // 注入后的段同样保持默认展开
     const third = segs[2] as { foldable: boolean; defaultExpanded: boolean };
     expect(third.foldable).toBe(true);
-    expect(third.defaultExpanded).toBe(false);
+    expect(third.defaultExpanded).toBe(true);
   });
 
   it('负向断言：注入项绝不可出现在任何 process_section 的 items 中', () => {

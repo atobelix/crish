@@ -243,6 +243,9 @@ export function formatDurationLabel(ms: number): string {
  */
 export function formatProcessActionsSummary(metrics: ProcessSegmentMetrics): string {
   if (metrics.toolCount === 0 && metrics.thoughtCount > 0) {
+    if (metrics.thoughtDurationMs > 0) {
+      return `已思考 ${formatDurationLabel(metrics.thoughtDurationMs)}`;
+    }
     return '思考';
   }
 
