@@ -6,19 +6,64 @@
  */
 import type { EngineEnvelope } from './eventParser';
 import type { HandlerEnv } from './handlerEnv';
+import { useSessionStore } from '../../../store/sessionStore';
 
 export function onContextCompressionStart(
-  _env: HandlerEnv,
+  env: HandlerEnv,
   _envelope: EngineEnvelope<'context-compression-start'>
 ): void {
-  // context-compression-start 暂无 UI 落地：显式空实现
+  const sessionId = env.sessionId;
+  if (!sessionId) return;
+  useSessionStore.getState().addContextInjection(sessionId, {
+    id: `context-compression-${sessionId}`,
+    kind: 'memory',
+    status: 'active',
+    source: 'context_compression',
+    title: '状态切换',
+    content: '系统 · 上下文正在压缩...',
+    timestamp: Date.now(),
+    metadata: {
+      mode: 'context-state',
+      type: 'context_compression',
+    },
+  });
 }
 
 export function onContextCompressionEnd(
-  _env: HandlerEnv,
-  _envelope: EngineEnvelope<'context-compression-end'>
+  env: HandlerEnv,
+  envelope: EngineEnvelope<'context-compression-end'>
 ): void {
-  // context-compression-end 暂无 UI 落地：显式空实现
+  const sessionId = env.sessionId;
+  if (!sessionId) return;
+  const rawResult = (
+    envelope.event as {
+      result?: { tokensBefore?: number; tokensAfter?: number };
+    }
+  )?.result;
+  let summary = '系统 · 上下文压缩完成';
+  if (
+    rawResult &&
+    typeof rawResult.tokensBefore === 'number' &&
+    typeof rawResult.tokensAfter === 'number'
+  ) {
+    const saved = rawResult.tokensBefore - rawResult.tokensAfter;
+    if (saved > 0) {
+      summary = `系统 · 上下文压缩完成（节省 ${saved} tokens）`;
+    }
+  }
+  useSessionStore.getState().addContextInjection(sessionId, {
+    id: `context-compression-${sessionId}`,
+    kind: 'memory',
+    status: 'active',
+    source: 'context_compression',
+    title: '状态切换',
+    content: summary,
+    timestamp: Date.now(),
+    metadata: {
+      mode: 'context-state',
+      type: 'context_compression',
+    },
+  });
 }
 
 export function onCheckpointCreated(

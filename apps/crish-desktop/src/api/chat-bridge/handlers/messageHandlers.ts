@@ -217,6 +217,32 @@ export function onMessageEnd(
     }
 
     state.assistantText = combinedPieces.filter(Boolean).join('\n\n');
+
+    // 权威落盘账本：将本轮权威文本同步落盘至 sessionStore（对齐 03 详案与因果时序）
+    if (env.sessionId) {
+      const sess = useSessionStore
+        .getState()
+        .sessions.find((s) => s.id === env.sessionId);
+      if (sess?.messages) {
+        let target = msg.id
+          ? sess.messages.find((m) => m.id === msg.id)
+          : undefined;
+        if (!target) {
+          for (let i = sess.messages.length - 1; i >= 0; i--) {
+            const m = sess.messages[i];
+            if (m && m.sender === 'assistant' && m.status === 'processing') {
+              target = m;
+              break;
+            }
+          }
+        }
+        if (target) {
+          useSessionStore
+            .getState()
+            .updateMessageText(env.sessionId, target.id, state.assistantText);
+        }
+      }
+    }
   }
 
   // 3. 消息级缓存指标收集（T-47 / T-48）
