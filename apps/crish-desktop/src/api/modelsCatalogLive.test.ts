@@ -11,6 +11,7 @@ import {
   modelAcceptsInput,
   listThinkingOptions,
   resolveThinkingHandoff,
+  resolveThinkingHandoffSafe,
   isThinkingLevelAvailable,
 } from './modelsCatalogLive';
 import type { ModelsYamlTree, ProviderSpec } from './modelsCatalogTypes';
@@ -131,6 +132,34 @@ describe('规范思考交接', () => {
     expect(resolveThinkingHandoff('acme', 'Shared', null)).toMatchObject({
       supported: false,
       thinking: undefined,
+    });
+  });
+  it('resolveThinkingHandoffSafe 安全解析：不抛错且保持未选或不支持', () => {
+    // 模型支持思考且命中档位
+    expect(resolveThinkingHandoffSafe('Acme', 'Shared', 'XHigh')).toMatchObject({
+      supported: true,
+      selectedTitle: 'XHigh',
+      selectedWire: ' wire ',
+      thinkingFormat: 'openai',
+    });
+    // 模型支持思考，但传入不可用档位：不抛错，退化为未选引导
+    expect(resolveThinkingHandoffSafe('Acme', 'Shared', 'High')).toMatchObject({
+      supported: true,
+      selectedTitle: null,
+      selectedWire: null,
+      thinkingFormat: 'openai',
+    });
+    // 模型未声明思考：不抛错，返回不支持
+    expect(resolveThinkingHandoffSafe('acme', 'Shared', 'Low')).toMatchObject({
+      supported: false,
+      selectedTitle: null,
+      selectedWire: null,
+    });
+    // 模型未声明思考且未选：返回不支持
+    expect(resolveThinkingHandoffSafe('acme', 'Shared', null)).toMatchObject({
+      supported: false,
+      selectedTitle: null,
+      selectedWire: null,
     });
   });
 });

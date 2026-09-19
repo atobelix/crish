@@ -10,7 +10,7 @@ import { classifyErrorDomain, domainUserMessage, logInternalError, networkUserMe
 import type { ErrorDomain } from '../userFacingErrors';
 import type { Settings } from '../clientApi';
 import { getActiveModelId, getActiveProfileId } from '../providerProfiles';
-import { getLiveModel, resolveThinkingHandoff } from '../modelsCatalogLive';
+import { getLiveModel, resolveThinkingHandoffSafe } from '../modelsCatalogLive';
 import { resolveEffectiveThinkingTitle } from '../SessionRuntimeRegistry';
 
 export type ReadinessState = 'ok' | 'blocked_with_action' | 'retryable_wait';
@@ -124,7 +124,7 @@ export function resolveSendThinkingFields(
       typeof selectedTitleOverride === 'string' && selectedTitleOverride.trim()
         ? selectedTitleOverride.trim()
         : resolveEffectiveThinkingTitle(sessionId, providerId, modelId);
-    const handoff = resolveThinkingHandoff(providerId, modelId, selectedTitle);
+    const handoff = resolveThinkingHandoffSafe(providerId, modelId, selectedTitle);
     if (!handoff.supported) return {};
     if (handoff.selectedTitle == null || handoff.selectedWire == null) return {};
     return {

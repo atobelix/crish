@@ -161,3 +161,44 @@ export function resolveThinkingHandoff(
     ...(thinkingFormat !== undefined ? { thinkingFormat } : {}),
   };
 }
+
+/**
+ * UI / 呈现层安全解析（不向外抛出异常，未命中或模型不支持时平滑回落）：
+ * - 当模型未加载或不支持思考时，返回 supported: false，selectedTitle: null
+ * - 当模型支持思考但未命中传入的 selectedTitle 时，返回 supported: true，selectedTitle: null（引导用户重选）
+ */
+export function resolveThinkingHandoffSafe(
+  providerId: string,
+  modelId: string,
+  selectedTitle: string | null
+): LiveThinkingHandoff {
+  try {
+    return resolveThinkingHandoff(providerId, modelId, selectedTitle);
+  } catch {
+    const model = getLiveModel(providerId, modelId);
+    const options = listThinkingOptions(providerId, modelId);
+    if (!model || options.length === 0 || !model.thinking) {
+      return {
+        supported: false,
+        providerId,
+        modelId,
+        thinking: undefined,
+        selectedTitle: null,
+        selectedWire: null,
+      };
+    }
+    const thinkingFormat = selectEffectiveCompat(
+      providerId,
+      modelId
+    )?.thinkingFormat;
+    return {
+      supported: true,
+      providerId,
+      modelId,
+      thinking: model.thinking,
+      selectedTitle: null,
+      selectedWire: null,
+      ...(thinkingFormat !== undefined ? { thinkingFormat } : {}),
+    };
+  }
+}
