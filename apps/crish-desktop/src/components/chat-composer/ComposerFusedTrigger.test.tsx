@@ -73,6 +73,7 @@ vi.mock('../../api/modelsCatalogLive', () => ({
   getLiveModel: h.getLiveModel,
   listThinkingOptions: h.listThinkingOptions,
   resolveThinkingHandoff: h.resolveThinkingHandoff,
+  resolveThinkingHandoffSafe: h.resolveThinkingHandoff,
 }));
 
 vi.mock('../../store/sessionStore', () => ({

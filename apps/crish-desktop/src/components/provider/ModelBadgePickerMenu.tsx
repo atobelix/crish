@@ -12,7 +12,7 @@ import {
   getLiveModel,
   listLivePickerEntries,
   listThinkingOptions,
-  resolveThinkingHandoff,
+  resolveThinkingHandoffSafe,
 } from '../../api/modelsCatalogLive';
 import { useModelsCatalogVersion } from '../../hooks/useModelsCatalogVersion';
 import { modelsCatalogStore } from '../../api/modelsCatalogStore';
@@ -96,20 +96,7 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
     modelId,
   );
   const handoff = useMemo(() => {
-    try {
-      return resolveThinkingHandoff(providerId, modelId, selectedTitle);
-    } catch {
-      // 用户存档档位不被当前模型声明 → 视为未选（引导重选，不降级、不出站），
-      // 存档本身不被解析结果反向覆写。
-      return {
-        supported: false,
-        providerId,
-        modelId,
-        thinking: undefined,
-        selectedTitle: null,
-        selectedWire: null,
-      };
-    }
+    return resolveThinkingHandoffSafe(providerId, modelId, selectedTitle);
   }, [providerId, modelId, selectedTitle, catalogVersion]);
 
   const showThinking = thinkingOptions.length > 0 && Boolean(selectedSpec);
@@ -131,7 +118,7 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
         profileId,
         nextModelId,
       );
-      const nextHandoff = resolveThinkingHandoff(
+      const nextHandoff = resolveThinkingHandoffSafe(
         profileId,
         nextModelId,
         targetTitle,

@@ -233,6 +233,33 @@ export const FoldableProcessSection: React.FC<FoldableProcessSectionProps> = Rea
       [forceExpanded, onToggle, sectionId, expanded]
     );
 
+    const isSingleThought =
+      metrics.thoughtCount === 1 &&
+      metrics.toolCount === 0 &&
+      metrics.subagentCount === 0;
+
+    if (isSingleThought) {
+      return (
+        <div
+          className={`${styles.section} ${className}`}
+          data-process-segment={sectionId}
+          data-single-thought="true"
+          data-foldable={isFoldable ? 'true' : 'false'}
+          data-expanded={expanded ? 'true' : 'false'}
+        >
+          <div
+            id={bodyId}
+            className={styles.sectionBody}
+            data-testid={`process-slot-${sectionId}`}
+          >
+            {items.map((item, index) => (
+              <React.Fragment key={item.key}>{renderItem(item, index)}</React.Fragment>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
     const controlInteractive = isFoldable && !forceExpanded;
 
     return (

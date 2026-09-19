@@ -106,10 +106,10 @@ describe('终态收敛：总结抵达后只外露工作时长与总结正文', (
 
     rerender(<Harness msg={closedMsg} isThinkingMsg={false} sessionId={sessionId} />);
 
-    // 断言 ②：自动收拢为「工作时长」单行，过程明细不再占据布局
+    // 2026-09-19 用户裁决：彻底去除工作完成后的整体内容折叠，过程明细默认保持展开直出
     const slotAfter = container.querySelector('[data-testid^="process-slot-"]');
-    expect(slotAfter, '收拢后节点仍必须常驻（严禁 return null）').not.toBeNull();
-    expect(slotAfter?.getAttribute('hidden')).toBe('until-found');
+    expect(slotAfter, '过程段节点必须常驻').not.toBeNull();
+    expect(slotAfter?.getAttribute('hidden')).toBeNull();
 
     // 断言 ③：总结正文照常外露
     expect(container.textContent).toContain('已完成分析');
@@ -174,7 +174,7 @@ describe('终态收敛：总结抵达后只外露工作时长与总结正文', (
    * 若改为「惰性键（用户交互才写）」，消息级检索展开命令将无处落键，
    * 段落永远打不开——这是本测试真正守住的回归面。
    */
-  it('检索穿透：终态收拢后消息级展开命令必须能重新打开该段', () => {
+  it('检索穿透：手动收拢后消息级展开命令必须能重新打开该段', () => {
     cleanup();
     const sessionId = 'sess-conv-4';
     const msgId = 'msg-conv-4';
@@ -196,9 +196,19 @@ describe('终态收敛：总结抵达后只外露工作时长与总结正文', (
       <Harness msg={msg} isThinkingMsg={false} sessionId={sessionId} />
     );
 
+    const bar = container.querySelector('[data-testid^="process-toggle-"]');
+    const sectionId = (bar?.getAttribute('data-testid') ?? '').replace('process-toggle-', '');
     const slot = container.querySelector('[data-testid^="process-slot-"]');
+    // 2026-09-19 用户裁决：终态默认展开直出
+    expect(slot?.getAttribute('hidden')).toBeNull();
+
+    // 用户手动收拢该段
+    act(() => {
+      fireEvent.click(container.querySelector(`[data-testid="process-toggle-${sectionId}"]`)!);
+    });
     expect(slot?.getAttribute('hidden')).toBe('until-found');
 
+    // 消息级展开命令重新打开
     act(() => {
       expandMessageProcess(msgId);
     });
@@ -206,7 +216,7 @@ describe('终态收敛：总结抵达后只外露工作时长与总结正文', (
     expect(slot?.getAttribute('hidden')).toBeNull();
   });
 
-  it('负向断言：无正文的纯工具终态段同样自收敛（铁律三）', () => {
+  it('断言：无正文的纯工具终态段同样默认展开直出（2026-09-19 用户裁决）', () => {
     cleanup();
     const sessionId = 'sess-conv-3';
     const msgId = 'msg-conv-3';
@@ -228,6 +238,7 @@ describe('终态收敛：总结抵达后只外露工作时长与总结正文', (
 
     const slot = container.querySelector('[data-testid^="process-slot-"]');
     expect(slot).not.toBeNull();
-    expect(slot?.getAttribute('hidden')).toBe('until-found');
+    // 彻底去除工作完成后的整体内容折叠，无正文纯工具段同样平铺直出
+    expect(slot?.getAttribute('hidden')).toBeNull();
   });
 });

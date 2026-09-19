@@ -217,15 +217,35 @@ describe('FoldableProcessSection 控制栏工作时间', () => {
     expect(bar.textContent).toContain('已完成 12.5 秒');
   });
 
-  it('单思考段（不显示工作时间区域）→ 退化为「思考」', () => {
-    const bar = renderBar({
-      showWorkTime: false,
-      startTime: 1_700_000_000_000,
-      endTime: 1_700_000_003_200,
-      metrics: { toolCount: 0, thoughtCount: 1, thoughtDurationMs: 3_200 },
-    });
-    expect(bar.textContent).toContain('思考');
-    expect(bar.textContent ?? '').not.toContain('工作');
+  it('单思考段 → 物理切除控制栏（直接直出思考槽位，绝不渲染已完成/思考外层栏）', () => {
+    cleanup();
+    render(
+      <FoldableProcessSection
+        msgId="msg-cap"
+        sectionId="msg-cap-proc-0"
+        items={[]}
+        metrics={{
+          ...mockMetrics(),
+          toolCount: 0,
+          thoughtCount: 1,
+          thoughtDurationMs: 3_200,
+          totalDurationMs: 3_200,
+        }}
+        startTime={1_700_000_000_000}
+        endTime={1_700_000_003_200}
+        showWorkTime={false}
+        isLive={false}
+        isExpanded={true}
+        isFoldable={true}
+        onToggle={vi.fn()}
+        onExpand={vi.fn()}
+        renderItem={() => <div data-testid="thought-content">thinking</div>}
+      />
+    );
+    // 负向断言：控制栏节点必须彻底切除（杜绝重复外层思考栏）
+    expect(screen.queryByTestId('process-toggle-msg-cap-proc-0')).toBeNull();
+    // 正向断言：内容槽位常驻渲染
+    expect(screen.getByTestId('process-slot-msg-cap-proc-0')).toBeInTheDocument();
   });
 
   it('单工具调用段（命令行）→ 展示「已运行 N 条命令」', () => {

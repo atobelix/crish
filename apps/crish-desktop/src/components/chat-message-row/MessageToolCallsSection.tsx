@@ -10,7 +10,6 @@
 import React, { lazy, useCallback, useLayoutEffect, useMemo, useRef } from 'react';
 import styles from './ChatMessageRow.module.css';
 import { ChatToolStack, type ChatToolStackSharedProps } from '../chat-tool-call/ChatToolCallBlock';
-import { FoldableToolGroup } from '../chat-tool-call/FoldableToolGroup';
 import type { ToolRenderItem } from '../../api/toolPresentation';
 import type { MessageToolCall, SessionAgent } from '../../store/types';
 import { buildToolStackHostProps, shouldHostToolStack } from './chatMessageRowUtils';
@@ -186,12 +185,7 @@ export const MessageToolCallsSection: React.FC<MessageToolCallsSectionProps> =
         ) : null}
 
         {hasTools && hostWithAgentPanel ? (
-          <FoldableToolGroup
-            items={toolRenderItems}
-            msgId={msgId}
-            onInvalidate={() => virtualScrollManager?.invalidateActual(msgId)}
-            hostProps={hostWithAgentPanel}
-          />
+          <ChatToolStack {...hostWithAgentPanel} />
         ) : null}
       </div>
     );

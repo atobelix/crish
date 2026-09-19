@@ -19,7 +19,7 @@ import { onUiEvent } from '../../api/uiEvents';
 import {
   getLiveModel,
   listThinkingOptions,
-  resolveThinkingHandoff,
+  resolveThinkingHandoffSafe,
 } from '../../api/modelsCatalogLive';
 import {
   getSessionThinkingTitle,
@@ -104,7 +104,7 @@ export const ComposerFusedTrigger: React.FC<ComposerFusedTriggerProps> = ({
   );
 
   const handoff = useMemo(
-    () => resolveThinkingHandoff(providerId, modelId, storedTitle),
+    () => resolveThinkingHandoffSafe(providerId, modelId, storedTitle),
     [providerId, modelId, storedTitle, catalogVersion]
   );
 

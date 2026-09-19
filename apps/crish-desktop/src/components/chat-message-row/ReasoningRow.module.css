@@ -67,7 +67,7 @@
   border-radius: var(--radius-sm, 4px);
 }
 
-/* 极简状态指示灯（流式运行态 4px 中性炭灰微脉冲） */
+/* 极简状态指示灯（静态 4px 中性炭灰圆点，零动态闪烁与缩放） */
 .statusDot {
   width: 4px;
   height: 4px;
@@ -75,24 +75,9 @@
   min-height: 4px;
   border-radius: 50%;
   background: var(--text-tertiary);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--text-tertiary) 20%, transparent);
-  animation: thought-dot-pulse 1.6s ease-in-out infinite;
   display: inline-block;
   flex-shrink: 0;
   margin-right: 5px;
-}
-
-@keyframes thought-dot-pulse {
-  0%, 100% {
-    transform: scale(0.85);
-    opacity: 0.6;
-    box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--text-tertiary) 15%, transparent);
-  }
-  50% {
-    transform: scale(1.1);
-    opacity: 0.95;
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--text-tertiary) 25%, transparent);
-  }
 }
 
 /*
@@ -178,9 +163,9 @@
 
 /* 流式尾窗柔和纯净字色（中性微交互） */
 .sweepShine {
-  animation: sweep-shine 2.6s ease-in-out infinite;
   color: var(--text-secondary);
   font-weight: var(--font-weight-normal);
+  animation: sweep-shine 2.6s infinite ease-in-out;
 }
 
 /* 无障碍降级：系统偏好减弱动态效果时关停扫光 */

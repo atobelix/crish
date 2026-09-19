@@ -22,6 +22,8 @@ export interface ReasoningRowProps {
   content: string;
   /** 是否处于实时流式思考输出中 */
   isLive?: boolean;
+  /** 整轮是否处于模型工作态（吐完所有内容前保持展开，全部完成后自动折叠） */
+  isTurnWorking?: boolean;
   /** 思考完成总耗时（毫秒） */
   durationMs?: number;
   /** 多阶段思考轮次索引（如第 1 阶段思考） */
@@ -109,6 +111,7 @@ export function extractFirstLine(text: string): string {
 export const ReasoningRow: React.FC<ReasoningRowProps> = ({
   content,
   isLive = false,
+  isTurnWorking = false,
   durationMs,
   turnIndex,
   isOpen,
@@ -117,18 +120,27 @@ export const ReasoningRow: React.FC<ReasoningRowProps> = ({
   messageId,
   className = '',
 }) => {
-  const [uncontrolledOpen, setUncontrolledOpen] = useState(
-    defaultExpanded ?? false
-  );
+  const [userInteracted, setUserInteracted] = useState(false);
+  const [userExpanded, setUserExpanded] = useState(false);
 
-  const isExpanded = isOpen !== undefined ? isOpen : uncontrolledOpen;
+  // 默认开合策略（2026-09-18 用户裁决）：
+  // 1. 若外部显式受控传入 isOpen，遵循 isOpen；
+  // 2. 若用户曾手动交互，持久保持用户的意图；
+  // 3. 模型工作态 (isTurnWorking) 期间：直接平铺展开显示思考思维链；
+  // 4. 终态 (!isTurnWorking，所有内容吐完)：自动折叠收起，仅显示已思考单行；
+  // 5. 兜底回退 defaultExpanded。
+  const isExpanded = useMemo(() => {
+    if (isOpen !== undefined) return isOpen;
+    if (userInteracted) return userExpanded;
+    if (isTurnWorking) return true;
+    return defaultExpanded ?? false;
+  }, [isOpen, userInteracted, userExpanded, isTurnWorking, defaultExpanded]);
 
   const handleToggle = useCallback(() => {
+    setUserInteracted(true);
+    setUserExpanded(!isExpanded);
     onToggle?.();
-    if (isOpen === undefined) {
-      setUncontrolledOpen((prev) => !prev);
-    }
-  }, [onToggle, isOpen]);
+  }, [isExpanded, onToggle]);
 
   // 终态耗时格式化（支持已思考 3.2s）
   const durationText = useMemo(() => {

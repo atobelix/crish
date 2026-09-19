@@ -6,7 +6,6 @@ import type { ChatToolStackSharedProps } from '../chat-tool-call/ChatToolCallBlo
 import {
   buildAssistantTimelineCached,
   partitionTimelineSegments,
-  buildSlotId,
   type AssistantTimelineItem,
   type TimelineSegment,
 } from '../../api/toolPresentation';
@@ -23,13 +22,13 @@ import { TurnErrorNode } from '../chat-message-row/TurnErrorNode';
 import { FoldableProcessSection } from './FoldableProcessSection';
 import {
   subscribeMessageProcessExpansion,
-  isMessageProcessExpanded,
   setMessageProcessExpanded,
 } from './searchExpandBridge';
 import { useEphemeralChatStore } from '../../store/ephemeralChatStore';
 import { useSessionStore } from '../../store/sessionStore';
 
 import { ProcessItemRenderer } from './ProcessItemRenderer';
+import { logInternalError } from '../../api/userFacingErrors';
 
 export interface MessageContentProps {
   /**
@@ -116,18 +115,6 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
       !hasToolContent
     );
 
-    const isThinkingLive = Boolean(
-      isThinkingMsg &&
-      !hasTextContent &&
-      hasThoughtContent
-    );
-
-    const isWorkingAfterThought = Boolean(
-      isLiveTurn &&
-      !isInitialWaiting &&
-      !isThinkingLive
-    );
-
     const inFlowRetry =
       (isThinkingMsg || msg.status === 'processing')
         ? ephemeralStatus?.retryState
@@ -198,7 +185,8 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
       };
       timeline = r.timeline;
     } catch (err) {
-      console.error('[MessageContent] timeline build error', err);
+      // 静默清空 timeline = 整条助手消息内容消失（最忌讳级）。必须可观测。
+      logInternalError('message-content-timeline-build', err, { severity: 'warning' });
       timeline = [];
     }
 
@@ -263,16 +251,9 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
     const userInteractedKeysRef = useRef<Set<string>>(new Set());
 
     /**
-     * 终态收敛：宿主展开态持续对齐分段权威态（2026-09-11 用户裁决）。
-     *
-     * 【裁决原文】「ai 回复正文的总结之后，只显示工作时长和总结内容」。
-     * 即：过程段在流式执行期（铁律二）直出展开，一旦后继总结正文抵达
-     * （铁律一 hasNextText），必须自动收拢为「工作时间 + 折叠指示」单行，
-     * 页面最终只外露工作时长与总结正文。
-     *
-     * 【为何不是「首次播种」】历史实现只在段首次出现时写入一次
-     * `defaultExpanded`，导致「活跃期已展开」的段在总结抵达后仍保持展开，
-     * 折叠态永远无法自愈。此处改为持续对齐，权威态即唯一真相源。
+     * 分段展开态对齐：
+     * 2026-09-19 用户裁决：「不要弄这个折叠了，就去掉这个工作完成后的整体内容折叠了。顺序做不对，弄这种折叠没有意义。」
+     * 过程段默认全部展开平铺直出，绝不在生成结束后强制折叠为单行遮掩真实过程。
      */
     useEffect(() => {
       const patch: SectionExpandedMap = {};
@@ -282,8 +263,8 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
         if (seg.kind !== 'process_section') continue;
         // ① 用户手动裁决优先：钉住的段不参与自动收敛
         if (userInteractedKeysRef.current.has(seg.id)) continue;
-        // ② 铁律四：子代理段恒展开（与组件内 forceExpanded 双保险）
-        const target = seg.forceExpanded ? true : seg.defaultExpanded;
+        // ② 默认全展开平铺（2026-09-19 用户裁决）
+        const target = seg.forceExpanded ? true : (seg.defaultExpanded ?? true);
         // ③ 首次出现（无键）或有键但与权威态不符 → 对齐
         if (
           Object.prototype.hasOwnProperty.call(expandedMap, seg.id) &&
@@ -379,7 +360,15 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
      * 此时顶部指示器让位给分段胶囊（分段胶囊的语义更精准：它是该阶段自身的耗时）。
      */
     const hasLiveProcessTimer = segments.some(
-      (seg) => seg.kind === 'process_section' && seg.isLive && seg.showWorkTime
+      (seg) =>
+        seg.kind === 'process_section' &&
+        seg.isLive &&
+        seg.showWorkTime &&
+        !(
+          seg.metrics.thoughtCount > 0 &&
+          seg.metrics.toolCount === 0 &&
+          seg.metrics.subagentCount === 0
+        )
     );
 
     /**
@@ -443,7 +432,7 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
 
     // 分支 α：无任何可渲染内容
     if (!hasSegments && !fallbackText.trim() && !streaming) {
-      if (isInitialWaiting || isWorkingAfterThought || isLiveTurn) {
+      if (isInitialWaiting || isLiveTurn) {
         return (
           <div className={`${styles.contentText} ${className || ''}`}>
             <div className={styles.topProcessHeader} data-testid="top-live-header">
@@ -475,11 +464,6 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
     if (!hasSegments) {
       return (
         <div className={`${styles.contentText} ${className || ''}`}>
-          {isWorkingAfterThought && (
-            <div className={styles.workingSlot}>
-              <WorkingStatusIndicator mode="working" />
-            </div>
-          )}
           <StreamingMarkdownView
             text={fallbackText}
             isStreaming={streaming}
@@ -596,12 +580,6 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
             />
           );
         })}
-
-        {isWorkingAfterThought && (
-          <div className={styles.workingSlot}>
-            <WorkingStatusIndicator mode="working" />
-          </div>
-        )}
 
         {streaming && !streamingTextItem && streamText && (
           <div className={styles.contentText}>
