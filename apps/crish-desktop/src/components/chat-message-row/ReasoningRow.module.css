@@ -22,6 +22,7 @@
 }
 
 /* 24px 极简交互单行按钮：防 Chromium 内核宽度坍塌与单行高度失锁 */
+:global(.button).reasoningRow,
 .reasoningRow {
   display: flex;
   width: 100%;
@@ -29,6 +30,8 @@
   height: 24px;
   min-height: 24px;
   max-height: 24px;
+  --btn-h: 24px;
+  --btn-px: var(--space-1, 4px);
   box-sizing: border-box;
   contain: size layout;
   align-items: center;
@@ -44,9 +47,12 @@
   line-height: 24px;
   color: var(--text-tertiary);
   text-align: left;
+  justify-content: flex-start;
   transition: color var(--transition-fast, 150ms ease);
 }
 
+:global(.button).reasoningRow:hover,
+:global(.button).reasoningRow:focus-visible,
 .reasoningRow:hover,
 .reasoningRow:focus-visible {
   color: var(--text-primary);

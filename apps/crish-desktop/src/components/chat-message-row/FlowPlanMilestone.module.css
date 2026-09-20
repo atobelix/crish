@@ -43,11 +43,15 @@
   display: none;
 }
 
+:global(.button).flowPlanStepHead,
 .flowPlanStepHead {
   display: flex;
   align-items: center;
   gap: 8px;
   min-height: 28px;
+  height: auto;
+  --btn-h: auto;
+  --btn-px: 0px;
   padding: 4px 0;
   user-select: none;
   cursor: pointer;
@@ -58,6 +62,7 @@
   border: none;
   font-family: inherit;
   text-align: left;
+  justify-content: flex-start;
 }
 
 .flowPlanStepNum {

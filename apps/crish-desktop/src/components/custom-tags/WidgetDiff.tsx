@@ -2,7 +2,7 @@ import React, { useState, useMemo, type ReactNode } from 'react';
 import styles from './custom-tags.module.css';
 import { CustomTagErrorBoundary } from './CustomTagErrorBoundary';
 import type { ExtraComponentProps } from './CustomTagRegistry';
-import { Tooltip } from '../ui';
+import { Button, Tooltip } from '../ui';
 import { AppIcon } from '../ui/icons/index';
 import { escapeHtml, langFromFilename } from '../../api/codeHighlight';
 import {
@@ -105,51 +105,61 @@ export const WidgetDiffInner: React.FC<WidgetDiffProps> = ({
 
         <div className={styles.cardActions}>
           <div className={styles.diffModeGroup}>
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="xs"
               className={`${styles.diffModeBtn} ${viewMode === 'unified' ? styles.active : ''}`}
               onClick={() => setViewMode('unified')}
             >
               单栏比对
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              variant="ghost"
+              size="xs"
               className={`${styles.diffModeBtn} ${viewMode === 'split' ? styles.active : ''}`}
               onClick={() => setViewMode('split')}
             >
               分栏比对
-            </button>
+            </Button>
           </div>
 
           <Tooltip content="复制 Diff 文本">
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="xs"
               className={styles.actionBtn}
               onClick={handleCopy}
             >
               {copied ? '已复制' : '复制'}
-            </button>
+            </Button>
           </Tooltip>
 
           {onAgentAction && (
             <>
               <Tooltip content="采纳本次代码变更">
-                <button
+                <Button
                   type="button"
+                  variant="primary"
+                  size="xs"
                   className={`${styles.actionBtn} ${styles.primary}`}
                   onClick={handleAccept}
                 >
                   采纳
-                </button>
+                </Button>
               </Tooltip>
               <Tooltip content="拒绝本次代码变更">
-                <button
+                <Button
                   type="button"
+                  variant="danger"
+                  size="xs"
                   className={`${styles.actionBtn} ${styles.danger}`}
                   onClick={handleReject}
                 >
                   拒绝
-                </button>
+                </Button>
               </Tooltip>
             </>
           )}

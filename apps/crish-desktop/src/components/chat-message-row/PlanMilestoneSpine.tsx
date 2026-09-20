@@ -10,6 +10,7 @@
  * - 纯净有机流排布，绝无沉重外框与卡片包袱。
  */
 import React, { useState } from 'react';
+import { Button } from '../ui';
 import styles from './FlowPlanMilestone.module.css';
 
 export interface PlanSubstepItem {
@@ -90,8 +91,9 @@ export const PlanMilestoneSpine: React.FC<PlanMilestoneSpineProps> = ({
             data-step-id={step.id}
             data-step-status={step.status}
           >
-            <button
+            <Button
               type="button"
+              variant="ghost"
               className={`${styles.flowPlanStepHead} flow-plan-step__head`}
               onClick={() => {
                 toggleStep(step.id);
@@ -120,7 +122,7 @@ export const PlanMilestoneSpine: React.FC<PlanMilestoneSpineProps> = ({
                   ›
                 </span>
               )}
-            </button>
+            </Button>
 
             {hasBody && !isCollapsed && (
               <div

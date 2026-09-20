@@ -329,8 +329,9 @@ export const PinActionWithPicker: React.FC<PinActionWithPickerProps> = React.mem
                           isPinned && activeColor.toLowerCase() === c.value.toLowerCase();
                         return (
                           <Tooltip key={c.value} content={c.label}>
-                            <button
+                            <Button
                               type="button"
+                              variant="ghost"
                               className={`${styles.pinColorDot}${isSelected ? ` ${styles.isSelected}` : ''}`}
                               style={{ backgroundColor: c.value }}
                               aria-label={c.label}
@@ -339,14 +340,15 @@ export const PinActionWithPicker: React.FC<PinActionWithPickerProps> = React.mem
                               {isSelected ? (
                                 <AppIcon name="check" size={10} color="#fff" />
                               ) : null}
-                            </button>
+                            </Button>
                           </Tooltip>
                         );
                       })}
 
                       <Tooltip content={isExpanded ? '收起自定义' : '自定义颜色'}>
-                        <button
+                        <Button
                           type="button"
+                          variant="ghost"
                           className={`${styles.pinCustomToggleBtn}${isExpanded || isCustomSelected ? ` ${styles.isSelected}` : ''}`}
                           onClick={() => setShowCustom(!isExpanded)}
                           aria-label={isExpanded ? '收起自定义颜色' : '自定义固定颜色'}
@@ -355,7 +357,7 @@ export const PinActionWithPicker: React.FC<PinActionWithPickerProps> = React.mem
                           {isExpanded || isCustomSelected ? (
                             <AppIcon name="check" size={10} color="#fff" />
                           ) : null}
-                        </button>
+                        </Button>
                       </Tooltip>
                     </div>
                   );
@@ -391,7 +393,8 @@ export const PinActionWithPicker: React.FC<PinActionWithPickerProps> = React.mem
                         />
                       </div>
 
-                      <input
+                      <Input
+                        bare
                         type="range"
                         min="0"
                         max="360"
@@ -403,15 +406,17 @@ export const PinActionWithPicker: React.FC<PinActionWithPickerProps> = React.mem
 
                       <div className={styles.pinCustomBottomRow}>
                         <Tooltip content="重置为默认绿色">
-                          <button
+                          <Button
                             type="button"
+                            variant="ghost"
+                            size="xs"
                             className={styles.pinResetBtn}
                             onClick={handleResetDefault}
                             aria-label="重置为默认绿色"
                           >
                             <AppIcon name="rotate-ccw" size={11} />
                             <span>重置</span>
-                          </button>
+                          </Button>
                         </Tooltip>
 
                         <div className={styles.pinCustomValueRow}>

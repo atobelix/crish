@@ -11,7 +11,7 @@ import { useLayoutStore } from '../../store/layoutStore';
 import { highlightCodeSafe } from '../../api/codeHighlight';
 import { LineBuffer } from './LineBuffer';
 import { VirtualCodeEngine, MAX_DOM_LINE_CHARS, MAX_EXPANDED_LINE_CHARS } from './VirtualCodeEngine';
-import { Tooltip } from '../ui';
+import { Button, Tooltip } from '../ui';
 import { ResizeObserverManager } from '../../services/ResizeObserverManager';
 import styles from './DiffCard.module.css';
 
@@ -386,8 +386,10 @@ export const VirtualPlainCodeViewer: React.FC<VirtualPlainCodeViewerProps> = Rea
                           : '展开该行剩余内容（按需加载，复制仍走全量数据）'
                       }
                     >
-                      <button
+                      <Button
                         type="button"
+                        variant="ghost"
+                        size="sm"
                         onClick={() => toggleLineExpanded(l.num - 1)}
                         aria-expanded={l.expanded}
                         style={{
@@ -395,7 +397,8 @@ export const VirtualPlainCodeViewer: React.FC<VirtualPlainCodeViewerProps> = Rea
                           fontSize: 11,
                           padding: '1px 6px',
                           borderRadius: 3,
-                          border: 'none',
+                          height: 'auto',
+                          minHeight: 'unset',
                           background: 'var(--bg-secondary)',
                           color: 'var(--text-secondary)',
                           cursor: 'pointer',
@@ -407,7 +410,7 @@ export const VirtualPlainCodeViewer: React.FC<VirtualPlainCodeViewerProps> = Rea
                             ? `[已展开前 ${l.text.length} 字符，完整共 ${l.originalLen} 字符] 收起`
                             : `[已展开，完整共 ${l.originalLen} 字符] 收起`
                           : `[超长单行已截断呈现，完整共 ${l.originalLen} 字符] 点击展开`}
-                      </button>
+                      </Button>
                     </Tooltip>
                   )}
                 </div>

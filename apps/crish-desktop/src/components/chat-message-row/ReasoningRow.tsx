@@ -10,6 +10,7 @@
  * - 独立一键复制纯净思考思维链。
  */
 import React, { useState, useMemo, useCallback } from 'react';
+import { Button } from '../ui';
 import styles from './ReasoningRow.module.css';
 import { StreamingMarkdownView } from './StreamingMarkdownView';
 import { Priority } from '../../workers';
@@ -169,8 +170,9 @@ export const ReasoningRow: React.FC<ReasoningRowProps> = ({
       data-message-id={messageId}
       data-testid="reasoning-container"
     >
-      <button
+      <Button
         type="button"
+        variant="ghost"
         className={styles.reasoningRow}
         onClick={handleToggle}
         aria-expanded={isExpanded}
@@ -211,7 +213,7 @@ export const ReasoningRow: React.FC<ReasoningRowProps> = ({
         >
           ›
         </span>
-      </button>
+      </Button>
 
       {isExpanded && (
         <div className={styles.reasoningBody} data-testid="reasoning-body">

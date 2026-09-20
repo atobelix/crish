@@ -11,7 +11,7 @@
  *   - 已完成态：`已落盘 (1.2KB)`。
  */
 import React from 'react';
-import { Tooltip } from '../ui';
+import { Button, Tooltip } from '../ui';
 import { AppIcon } from '../ui/icons/index';
 import styles from './FlowArtifactChip.module.css';
 
@@ -43,8 +43,9 @@ export const ArtifactCapsule: React.FC<ArtifactCapsuleProps> = ({
       </span>
       <span className="flow-artifact__prefix">{prefix}</span>
       <Tooltip content={`打开产物 ${name}`}>
-        <button
+        <Button
           type="button"
+          variant="ghost"
           className={`${styles.flowArtifactChip} flow-artifact__chip`}
           onClick={(e) => {
             e.stopPropagation();
@@ -53,7 +54,7 @@ export const ArtifactCapsule: React.FC<ArtifactCapsuleProps> = ({
           aria-label={`打开产物 ${name}`}
         >
           {name}
-        </button>
+        </Button>
       </Tooltip>
     </div>
   );

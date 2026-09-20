@@ -1,5 +1,5 @@
 import React from 'react';
-import { Tooltip } from '../ui';
+import { Button, Tooltip } from '../ui';
 import styles from './ChatScrollFloorSlot.module.css';
 import { AppIcon } from '../ui/icons/index';
 
@@ -84,8 +84,9 @@ export const ChatScrollFloorSlot: React.FC<ChatScrollFloorSlotProps> = ({
       {showButton ? (
         <div className={styles.buttonAnchor}>
           <Tooltip content={tooltipLabel}>
-            <button
+            <Button
               type="button"
+              variant="ghost"
               className={`${styles.chatScrollFab}${buttonClassName ? ` ${buttonClassName}` : ''}`}
               onClick={handleClick}
               aria-label="回到底部最新消息"
@@ -100,7 +101,7 @@ export const ChatScrollFloorSlot: React.FC<ChatScrollFloorSlotProps> = ({
                   {unreadCount > 99 ? '99+' : unreadCount}
                 </span>
               ) : null}
-            </button>
+            </Button>
           </Tooltip>
         </div>
       ) : null}

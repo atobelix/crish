@@ -17,7 +17,7 @@ import {
   type ScrubberTick,
 } from './flowScrubberModel';
 import { DEFAULT_PIN_COLOR } from '../chat-message-row/colorPickerUtils';
-import { Tooltip } from '../ui';
+import { Button, Tooltip } from '../ui';
 import { AppIcon } from '../ui/icons';
 
 export interface FlowScrubberProps {
@@ -349,12 +349,13 @@ const FlowScrubberInner: React.FC<FlowScrubberProps> = ({
 
               return (
                 <div className={styles.tickSlot} key={seg.tick.id}>
-                  <button
+                  <Button
                     ref={(el) => {
                       if (el) tickRefs.current.set(seg.tick.id, el);
                       else tickRefs.current.delete(seg.tick.id);
                     }}
                     type="button"
+                    variant="ghost"
                     className={`${styles.tick}${isPinned ? ` ${styles.isPinnedTick}` : ''}${isCurrentHovered ? ` ${styles.isHoveredTick}` : ''}`}
                     style={tickStyle}
                     data-flow-scrubber-tick=""
@@ -407,8 +408,10 @@ const FlowScrubberInner: React.FC<FlowScrubberProps> = ({
                       timeLabelFromTimestamp(hoveredTick.timestamp)}
                   </span>
                   {onTogglePin && (
-                    <button
+                    <Button
                       type="button"
+                      variant="ghost"
+                      size="xs"
                       className={`${styles.scrubberPinBtn}${isCurrentPinned ? ` ${styles.isPinned}` : ''}`}
                       style={
                         isCurrentPinned
@@ -426,12 +429,13 @@ const FlowScrubberInner: React.FC<FlowScrubberProps> = ({
                       ) : (
                         <AppIcon name="pin" size={12} />
                       )}
-                    </button>
+                    </Button>
                   )}
                 </div>
 
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
                   className={styles.scrubberTooltipUserBtn}
                   onClick={(e) => {
                     e.stopPropagation();
@@ -442,11 +446,12 @@ const FlowScrubberInner: React.FC<FlowScrubberProps> = ({
                   <span className={styles.scrubberTooltipUserText}>
                     {hoveredTick.snippet}
                   </span>
-                </button>
+                </Button>
 
                 {hoveredTick.assistantSnippet ? (
-                  <button
+                  <Button
                     type="button"
+                    variant="ghost"
                     className={styles.scrubberTooltipAssistantBtn}
                     onClick={(e) => {
                       e.stopPropagation();
@@ -459,7 +464,7 @@ const FlowScrubberInner: React.FC<FlowScrubberProps> = ({
                     <span className={styles.scrubberTooltipAssistantText}>
                       {hoveredTick.assistantSnippet}
                     </span>
-                  </button>
+                  </Button>
                 ) : null}
               </div>
             </div>

@@ -14,7 +14,7 @@ import React, { useState, type ReactNode } from 'react';
 import styles from './custom-tags.module.css';
 import { CustomTagErrorBoundary } from './CustomTagErrorBoundary';
 import type { ExtraComponentProps } from './CustomTagRegistry';
-import { Tooltip } from '../ui';
+import { Button, Tooltip } from '../ui';
 import { AppIcon } from '../ui/icons/index';
 
 export interface AiCardProps extends ExtraComponentProps {
@@ -103,14 +103,16 @@ export const AiCardInner: React.FC<AiCardProps> = ({
 
         <div className={styles.cardActions}>
           {effectiveStatus === 'error' && (onRetry || onAgentAction) && (
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="xs"
               className={styles.actionBtn}
               onClick={handleRetry}
               aria-label="重试"
             >
               重试
-            </button>
+            </Button>
           )}
 
           {collapsible && (

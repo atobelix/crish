@@ -4,7 +4,7 @@
  */
 import React, { useCallback, useDeferredValue, useState } from 'react';
 import styles from './DiffCard.module.css';
-import { Button, Tooltip } from '../ui';
+import { Button, Input, Tooltip } from '../ui';
 import { selectActiveSession, useSessionField } from '../../store/storeAccess';
 import type { FileDiff } from '../../store/types';
 import {
@@ -271,8 +271,9 @@ const DiffCardInner: React.FC<DiffCardProps> = () => {
 
       {searchOpen || searchActive ? (
         <div className={styles.searchRow}>
-          <input
-            type="search"
+          <Input
+            variant="search"
+            size="sm"
             className={styles.searchInput}
             placeholder="搜索/筛选行…"
             value={rawDiffSearchQuery}

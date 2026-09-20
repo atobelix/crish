@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import styles from './DiffCard.module.css';
-import { Button, Tooltip } from '../ui';
+import { Button, Textarea, Tooltip } from '../ui';
 import { AppIcon } from '../ui/icons/index';
 
 interface DiffCardGitActionsProps {
@@ -85,7 +85,8 @@ export const DiffCardGitActions: React.FC<DiffCardGitActionsProps> = ({
           icon={<AppIcon name="x" size={13} />}
         />
       </div>
-      <textarea
+      <Textarea
+        bare
         className={styles.commitInput}
         placeholder={
           stagedCount > 0

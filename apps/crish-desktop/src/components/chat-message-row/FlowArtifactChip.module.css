@@ -19,6 +19,7 @@
   flex-shrink: 0;
 }
 
+:global(.button).flowArtifactChip,
 .flowArtifactChip {
   display: inline-flex;
   align-items: center;
@@ -39,6 +40,9 @@
   text-decoration-color: color-mix(in srgb, var(--accent-color) 35%, transparent);
   line-height: inherit;
   height: auto;
+  min-height: unset;
+  --btn-h: auto;
+  --btn-px: 2px;
   cursor: pointer;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -47,6 +51,7 @@
   transition: color var(--transition-fast, 150ms ease), text-decoration-color var(--transition-fast, 150ms ease);
 }
 
+:global(.button).flowArtifactChip:hover,
 .flowArtifactChip:hover {
   background: transparent;
   color: var(--accent-hover, var(--accent-color));

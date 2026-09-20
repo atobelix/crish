@@ -11,6 +11,7 @@
 
 import React, { Component, type ReactNode, type ErrorInfo, type ComponentType } from 'react';
 import { AppIcon } from '../ui/icons/index';
+import { Button } from '../ui';
 import styles from './custom-tags.module.css';
 
 export interface CustomTagErrorBoundaryProps {
@@ -74,14 +75,16 @@ export class CustomTagErrorBoundary extends Component<
               <AppIcon name="alert-triangle" size={13} aria-hidden style={{ marginRight: 4, verticalAlign: -2 }} />
               自定义组件渲染异常 [{this.props.tagName || 'custom-tag'}]
             </span>
-            <button
+            <Button
               type="button"
+              variant="secondary"
+              size="xs"
               className={styles.customTagErrorResetBtn}
               onClick={this.handleReset}
               aria-label="重试"
             >
               重试
-            </button>
+            </Button>
           </div>
           <div className={styles.customTagErrorMessage}>
             {this.state.error.message || '未知运行时错误'}

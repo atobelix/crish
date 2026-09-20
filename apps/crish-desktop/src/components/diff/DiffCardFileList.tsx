@@ -210,8 +210,9 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
            * 未 hover 显示字母，hover 显示折叠/展开 Chevron，字母无背景纯文字有色
            * ================================================================= */}
           <Tooltip content={`${badge.tooltip} · ${active ? `折叠 ${name} 差异` : `展开 ${name} 差异`}`}>
-            <button
+            <Button
               type="button"
+              variant="ghost"
               className={styles.fileNodeToggle}
               onClick={() => onSetActiveDiffSource(active ? null : f)}
               aria-label={active ? `折叠 ${name} 差异代码` : `展开 ${name} 差异代码`}
@@ -226,7 +227,7 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
               <AppIcon name="chevron-right" size={14}
                 className={`${styles.chevronIcon} ${active ? styles.expanded : ''}`}
                 aria-hidden />
-            </button>
+            </Button>
           </Tooltip>
 
           {/* =================================================================
@@ -234,8 +235,9 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
            * ================================================================= */}
           <div className={styles.pathWrap}>
             <Tooltip content={`在独立标签页打开差异：${f.filePath}`}>
-              <button
+              <Button
                 type="button"
+                variant="ghost"
                 className={styles.fileNameLinkBtn}
                 onClick={(e) => {
                   e.stopPropagation();
@@ -248,7 +250,7 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
                 aria-label={`在独立标签页预览文件 ${name}`}
               >
                 <span className={styles.fileName}>{name}</span>
-              </button>
+              </Button>
             </Tooltip>
 
             {dir ? (

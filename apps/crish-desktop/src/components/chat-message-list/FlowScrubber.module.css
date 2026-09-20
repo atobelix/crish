@@ -53,11 +53,14 @@
   font-feature-settings: 'tnum' 1;
 }
 
+:global(.button).tick,
 .tick {
   position: relative;
   flex: 0 0 auto;
   height: 2px;
+  min-height: unset;
   width: 8px;
+  min-width: unset;
   margin: 0;
   padding: 0;
   border: none;
@@ -216,12 +219,17 @@
   white-space: nowrap;
 }
 
+:global(.button).scrubberPinBtn,
 .scrubberPinBtn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 20px;
   height: 20px;
+  min-width: unset;
+  min-height: unset;
+  --btn-h: 20px;
+  --btn-px: 0px;
   background: transparent;
   border: none;
   padding: 0;
@@ -233,24 +241,30 @@
   flex-shrink: 0;
 }
 
+:global(.button).scrubberPinBtn:hover,
 .scrubberPinBtn:hover {
   background-color: var(--tint-hover);
   color: var(--text-primary);
 }
 
+:global(.button).scrubberPinBtn.isPinned,
 .scrubberPinBtn.isPinned {
   color: var(--tick-pin-color, var(--brand));
 }
 
+:global(.button).scrubberPinBtn.isPinned:hover,
 .scrubberPinBtn.isPinned:hover {
   background-color: var(--tint-hover);
   color: var(--tick-pin-color, var(--brand));
 }
 
 /* 用户提问行：主文本色，中等字重，多行包裹 */
+:global(.button).scrubberTooltipUserBtn,
 .scrubberTooltipUserBtn {
   display: block;
   width: 100%;
+  height: auto;
+  min-height: unset;
   text-align: left;
   background: transparent;
   border: none;
@@ -261,6 +275,7 @@
   box-sizing: border-box;
 }
 
+:global(.button).scrubberTooltipUserBtn:hover,
 .scrubberTooltipUserBtn:hover {
   background-color: var(--tint-hover);
 }
@@ -279,9 +294,12 @@
 }
 
 /* 助手回复行：次级灰度，略小字号，多行包裹完整呈现 */
+:global(.button).scrubberTooltipAssistantBtn,
 .scrubberTooltipAssistantBtn {
   display: block;
   width: 100%;
+  height: auto;
+  min-height: unset;
   text-align: left;
   background: transparent;
   border: none;
@@ -293,6 +311,7 @@
   box-sizing: border-box;
 }
 
+:global(.button).scrubberTooltipAssistantBtn:hover,
 .scrubberTooltipAssistantBtn:hover {
   background-color: var(--tint-hover);
 }

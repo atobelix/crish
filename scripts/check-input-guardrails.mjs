@@ -826,8 +826,8 @@ export function runCheckFileSuite(targetErrors = errors) {
         message: '必须绑定 styles.commitInput 规范样式类',
       },
       {
-        regex: /<textarea[^>]*className=\{styles\.commitInput\}/,
-        message: '必须使用绑定了 styles.commitInput 的 textarea 提交文本域',
+        regex: /<(?:textarea|Textarea)[^>]*className=\{styles\.commitInput\}/,
+        message: '必须使用绑定了 styles.commitInput 的 textarea/Textarea 提交文本域',
       },
     ],
     targetErrors
@@ -843,8 +843,8 @@ export function runCheckFileSuite(targetErrors = errors) {
         message: '必须绑定 styles.titleInput 规范样式类',
       },
       {
-        regex: /<input[^>]*className=\{styles\.titleInput\}/,
-        message: '必须使用绑定了 styles.titleInput 的 input 文本控件',
+        regex: /<(?:input|Input)[^>]*className=\{styles\.titleInput\}/,
+        message: '必须使用绑定了 styles.titleInput 的 input/Input 文本控件',
       },
     ],
     targetErrors

@@ -1064,9 +1064,14 @@ button.iconBtn,
   gap: 5px;
 }
 
+:global(.button).pinColorDot,
 .pinColorDot {
   width: 18px;
   height: 18px;
+  min-width: unset;
+  min-height: unset;
+  --btn-h: 18px;
+  --btn-px: 0px;
   border-radius: 50%;
   border: var(--border-width-emphasis, 2px) solid color-mix(in srgb, var(--surface-overlay-fg) 95%, transparent);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--border-color) 70%, transparent);
@@ -1079,19 +1084,26 @@ button.iconBtn,
   box-sizing: border-box;
 }
 
+:global(.button).pinColorDot:hover,
 .pinColorDot:hover {
   transform: scale(1.18);
   box-shadow: 0 0 0 1px var(--text-primary), 0 2px 5px color-mix(in srgb, var(--shadow-color) 15%, transparent);
 }
 
+:global(.button).pinColorDot.isSelected,
 .pinColorDot.isSelected {
   box-shadow: 0 0 0 2px var(--text-primary);
   transform: scale(1.12);
 }
 
+:global(.button).pinCustomToggleBtn,
 .pinCustomToggleBtn {
   width: 18px;
   height: 18px;
+  min-width: unset;
+  min-height: unset;
+  --btn-h: 18px;
+  --btn-px: 0px;
   border-radius: 50%;
   border: var(--border-width-emphasis, 2px) solid color-mix(in srgb, var(--surface-overlay-fg) 95%, transparent);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--border-color) 70%, transparent);
@@ -1116,11 +1128,13 @@ button.iconBtn,
   flex-shrink: 0;
 }
 
+:global(.button).pinCustomToggleBtn:hover,
 .pinCustomToggleBtn:hover {
   transform: scale(1.18);
   box-shadow: 0 0 0 1px var(--text-primary), 0 2px 5px color-mix(in srgb, var(--shadow-color) 15%, transparent);
 }
 
+:global(.button).pinCustomToggleBtn.isSelected,
 .pinCustomToggleBtn.isSelected {
   box-shadow: 0 0 0 2px var(--text-primary);
   transform: scale(1.12);
@@ -1214,11 +1228,15 @@ button.iconBtn,
   gap: 8px;
 }
 
+:global(.button).pinResetBtn,
 .pinResetBtn {
   display: inline-flex;
   align-items: center;
   gap: 4px;
   height: 22px;
+  min-height: unset;
+  --btn-h: 22px;
+  --btn-px: 8px;
   padding: 0 8px;
   background: var(--tint-hover);
   border: none;
@@ -1231,6 +1249,7 @@ button.iconBtn,
               color var(--transition-fast, 120ms ease);
 }
 
+:global(.button).pinResetBtn:hover,
 .pinResetBtn:hover {
   background: var(--tint-active);
   color: var(--text-primary);
