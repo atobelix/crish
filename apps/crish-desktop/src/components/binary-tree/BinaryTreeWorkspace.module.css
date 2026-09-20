@@ -52,15 +52,15 @@
 
 .leaf {
   position: absolute;
-  /* rect   useTreeResize.paintFlatLayout / TreeLeafPanel layoutEffect   inline
-   *     React style prop    live resize re-render
-   *    px min-width      % rect   min-size   useTreeResize
-   *      clamp MIN_CHILD_PX          min-width:0   flex
-   *       overflow:hidden        sibling     */
+  /* rect 由 useTreeResize.paintFlatLayout / TreeLeafPanel layoutEffect 写 inline
+   * （勿用 React style prop，否则 live resize re-render 会覆盖两侧几何）。
+   * 不设 px min-width：绝对定位 % rect 的 min-size 由 useTreeResize
+   * 像素感知 clamp（MIN_CHILD_PX）保证非重叠；此处 min-width:0 让 flex
+   * 子项可收缩，overflow:hidden 防止内容画出 sibling 边界。 */
   box-sizing: border-box;
   min-width: 0;
   min-height: 0;
-  /*     padding leaf   canvas   unit     AppTopBar */
+  /* 内层不设 padding，leaf 紧贴 canvas，留白由 unit 或 AppTopBar 承担 */
   padding: 0;
   margin: 0;
   overflow: hidden;
@@ -95,7 +95,7 @@
  * LeafToolTabStrip.fixedCluster（padding-right: size + inset）与
  * UnitChromeActions（坞收起态让位区）都留出
  * (--leaf-corner-btn-size + --leaf-corner-btn-inset) 的空间。
- * 严禁把 top 算在第一行内（如 (header - size) / 2），否则会漂到窗口右上角遮挡窗口叉号窗控。
+ * 严禁把 top 算在第一行内（如 (header - size) / 2），否则会漂到宿主右上角遮挡顶栏叉号窗控。
  * 开合都不卸载、不改透明度。
  */
 .topSidePanelBtn {
@@ -135,14 +135,14 @@
 }
 
 
-/* live resize     +          leaf      */
+/* live resize 拖拽指示条 + 拖拽中激活 leaf 样式 */
 :global(.tree-resizing) .leaf,
 :global(.tree-dragging) .leaf {
   transition: none;
   will-change: left, width, top, height;
 }
 
-/*   leaf        */
+/* 拖拽悬停 leaf 目标高亮状态 */
 .leaf[data-active='true'] {
   z-index: 1;
 }

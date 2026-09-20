@@ -38,6 +38,8 @@ export interface InputProps extends Omit<
   suffix?: React.ReactNode;
   /** 回车提交回调（受 IME 组合输入锁保护，拼音选词回车不触发） */
   onEnter?: (value: string) => void;
+  /** 裸核心模式（不应用外部 wrapper/container，专供隐藏文件输入框或就地编辑场景） */
+  bare?: boolean;
 }
 
 export const Input = React.forwardRef<HTMLInputElement, InputProps>(
@@ -49,6 +51,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
       hint,
       error,
       clearable = false,
+      bare = false,
       onClear,
       prefixIcon,
       suffix,
@@ -118,6 +121,26 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
         onEnter?.((e.currentTarget as HTMLInputElement).value);
       }
     };
+
+    if (bare) {
+      return (
+        <input
+          ref={setCombinedRef}
+          id={id}
+          className={className}
+          value={value}
+          defaultValue={defaultValue}
+          disabled={disabled}
+          readOnly={readOnly}
+          onChange={onChange}
+          onKeyDown={handleKeyDown}
+          onCompositionStart={handleCompositionStart}
+          onCompositionEnd={handleCompositionEnd}
+          role={role}
+          {...restProps}
+        />
+      );
+    }
 
     const isControlled = value !== undefined;
     const [uncontrolledHasValue, setUncontrolledHasValue] = useState<boolean>(
