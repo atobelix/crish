@@ -171,7 +171,7 @@
 .userAvatar {
   width: 26px;
   height: 26px;
-  border-radius: var(--radius-full);
+  border-radius: 50%;
   background: var(--bg-card);
   border: 1px solid var(--border-subtle);
   display: flex;
@@ -186,7 +186,7 @@
   right: -1px;
   width: 7px;
   height: 7px;
-  border-radius: var(--radius-full);
+  border-radius: 50%;
   background: var(--status-online);
   box-shadow: 0 0 0 1.5px var(--bg-workspace, var(--bg-primary));
 }
@@ -232,7 +232,7 @@
   right: 4px;
   width: 8px;
   height: 8px;
-  border-radius: var(--radius-full);
+  border-radius: 50%;
   background: var(--accent-green);
   box-shadow: 0 0 0 2px var(--bg-secondary);
 }

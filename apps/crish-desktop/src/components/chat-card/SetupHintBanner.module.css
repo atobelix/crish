@@ -30,7 +30,7 @@
   white-space: nowrap;
 }
 
-:global(.button).chatSoftHintAction,
+.chatSoftHintAction,
 .chatSoftHintAction {
   min-width: unset;
   min-height: unset;

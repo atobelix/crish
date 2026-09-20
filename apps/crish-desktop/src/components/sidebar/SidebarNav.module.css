@@ -7,7 +7,7 @@
   padding-right: 0;
 }
 
-:global(.button).navItem,
+.navItem,
 .navItem {
   --btn-hover-overlay: transparent;
   --btn-active-overlay: transparent;

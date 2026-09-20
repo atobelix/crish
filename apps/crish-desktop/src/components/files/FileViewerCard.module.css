@@ -53,7 +53,7 @@
   box-sizing: border-box;
 }
 
-:global(.button).toggleTab,
+.toggleTab,
 .toggleTab {
   padding: 0 8px;
   font-size: var(--font-size-xs, 12px);
@@ -71,13 +71,13 @@
   transition: all var(--transition-fast);
 }
 
-:global(.button).toggleTab:hover:not(:disabled),
+.toggleTab:hover:not(:disabled),
 .toggleTab:hover:not(:disabled) {
   color: var(--text-primary);
   background: var(--tint-hover);
 }
 
-:global(.button).toggleTabActive,
+.toggleTabActive,
 .toggleTabActive {
   background: var(--bg-card);
   color: var(--text-primary);
@@ -86,7 +86,7 @@
   box-shadow: none;
 }
 
-:global(.button).toggleTabActive:hover,
+.toggleTabActive:hover,
 .toggleTabActive:hover {
   background: var(--bg-card);
   color: var(--text-primary);
@@ -483,7 +483,7 @@
   gap: 6px;
 }
 
-:global(.button).hashBadge,
+.hashBadge,
 .hashBadge {
   display: inline-flex;
   align-items: center;
@@ -502,7 +502,7 @@
   transition: all var(--transition-fast);
 }
 
-:global(.button).hashBadge:hover,
+.hashBadge:hover,
 .hashBadge:hover {
   background: var(--tint-hover);
   color: var(--accent-color);

@@ -19,7 +19,7 @@
   flex-shrink: 0;
 }
 
-:global(.button).flowArtifactChip,
+.flowArtifactChip,
 .flowArtifactChip {
   display: inline-flex;
   align-items: center;
@@ -51,7 +51,7 @@
   transition: color var(--transition-fast, 150ms ease), text-decoration-color var(--transition-fast, 150ms ease);
 }
 
-:global(.button).flowArtifactChip:hover,
+.flowArtifactChip:hover,
 .flowArtifactChip:hover {
   background: transparent;
   color: var(--accent-hover, var(--accent-color));

@@ -141,7 +141,7 @@
 }
 
 /* Compact        */
-:global(.button).appErrorReloadLink,
+.appErrorReloadLink,
 .appErrorReloadLink {
   background: none;
   border: none;
@@ -156,7 +156,7 @@
   line-height: inherit;
 }
 
-:global(.button).appErrorReloadLink:hover,
+.appErrorReloadLink:hover,
 .appErrorReloadLink:hover {
   color: var(--accent-hover);
   background: none;

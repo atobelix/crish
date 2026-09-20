@@ -91,7 +91,7 @@
   vertical-align: middle;
 }
 
-:global(.button).chatEmptyProjectBtnInline,
+.chatEmptyProjectBtnInline,
 .chatEmptyProjectBtnInline {
   appearance: none;
   -webkit-appearance: none;
@@ -207,9 +207,8 @@
   box-sizing: border-box;
 }
 
-:global(.button).quickPromptCard,
 .quickPromptCard,
-.sessionEmpty :global(.button).quickPromptCard,
+.sessionEmpty .quickPromptCard,
 .sessionEmpty .quickPromptCard {
   display: flex;
   align-items: center;

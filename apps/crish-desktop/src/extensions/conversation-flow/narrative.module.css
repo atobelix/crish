@@ -39,7 +39,7 @@
   box-sizing: border-box;
 }
 
-:global(.button).head,
+.head,
 .head {
   display: flex;
   align-items: center;
@@ -146,8 +146,7 @@
   flex: 1 1 auto;
 }
 
-:global(.button).pathBtn,
-:global(.button).chip,
+.chip,
 .pathBtn,
 .chip {
   flex: 0 0 auto;
@@ -249,7 +248,7 @@
   word-break: break-word;
 }
 
-:global(.button).inspectorBtn,
+.inspectorBtn,
 .inspectorBtn {
   flex: 0 0 auto;
   min-width: unset;
@@ -340,7 +339,7 @@
   color: var(--text-tertiary);
 }
 
-:global(.button).nbBtn,
+.nbBtn,
 .nbBtn {
   flex: 0 0 auto;
   min-width: unset;

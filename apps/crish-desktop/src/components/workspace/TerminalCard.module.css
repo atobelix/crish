@@ -96,7 +96,7 @@
   gap: 6px;
 }
 
-:global(.button).termBranchItem,
+.termBranchItem,
 .termBranchItem {
   display: inline-flex;
   align-items: center;

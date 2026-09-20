@@ -144,7 +144,7 @@
 .revokedBadge {
   font-size: var(--font-size-xxs);
   padding: 1px var(--space-1_5);
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-sm);
   background: var(--color-error-bg);
   color: var(--color-error);
 }
@@ -179,7 +179,7 @@
   display: inline-flex;
   align-items: center;
   padding: var(--space-0_5) var(--space-2_5);
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-sm);
   background: var(--bg-primary);
   border: var(--hairline-width) solid var(--border-subtle);
   color: var(--text-secondary);
@@ -191,7 +191,7 @@
   display: inline-flex;
   align-items: center;
   padding: var(--space-0_5) var(--space-2_5);
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-sm);
   background: var(--color-success-bg);
   border: var(--hairline-width) solid var(--color-success-border);
   color: var(--color-success);
@@ -203,7 +203,7 @@
   display: inline-flex;
   align-items: center;
   padding: var(--space-0_5) var(--space-2_5);
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-sm);
   background: var(--color-warning-bg);
   border: var(--hairline-width) solid var(--color-warning-border);
   color: var(--text-warning);
@@ -231,7 +231,7 @@
   gap: var(--space-1_5);
 }
 
-:global(.button).ipBadge,
+.ipBadge,
 .ipBadge {
   display: inline-flex;
   align-items: center;

@@ -25,7 +25,7 @@
   min-width: 0;
 }
 
-:global(.button).upBtn,
+.upBtn,
 .upBtn {
   display: inline-flex;
   align-items: center;
@@ -55,7 +55,7 @@
     color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
 }
 
-:global(.button).row,
+.row,
 .row {
   display: flex;
   align-items: center;

@@ -151,7 +151,7 @@
   padding: 2px;
 }
 
-:global(.button).themeTab,
+.themeTab,
 .themeTab {
   padding: 3px 12px;
   font-size: 12px;
@@ -167,7 +167,7 @@
   transition: all 100ms ease;
 }
 
-:global(.button).themeTab.tabActive,
+.themeTab.tabActive,
 .themeTab.tabActive {
   background: #27272a;
   color: #ffffff;

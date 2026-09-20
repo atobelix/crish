@@ -19,7 +19,7 @@
   font-family: var(--font-sans, var(--sep-font-sans));
 }
 
-:global(.button).item,
+.item,
 .item {
   display: flex;
   align-items: center;

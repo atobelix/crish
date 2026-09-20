@@ -4,7 +4,7 @@
   min-width: 0;
 }
 
-:global(.button).sidebarFooterSettings,
+.sidebarFooterSettings,
 .sidebarFooterSettings {
   width: 100%;
   display: inline-flex;
@@ -99,7 +99,7 @@
   padding: 0;
 }
 
-:global(.button).sbQuickItem,
+.sbQuickItem,
 .sbQuickItem {
   display: flex;
   align-items: center;

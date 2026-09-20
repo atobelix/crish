@@ -165,7 +165,7 @@
   right: calc(100% + 6px);
 }
 
-:global(.button).sortFilterOption,
+.sortFilterOption,
 .sortFilterOption {
   display: flex;
   align-items: center;

@@ -46,29 +46,26 @@
   color: var(--text-tertiary);
 }
 
-.input:hover:not(:focus):not(:focus-visible):not(:disabled) {
+.input:where(:hover:not(:focus):not(:focus-visible):not(:disabled)) {
   border-color: color-mix(in srgb, var(--border-color) 92%, var(--text-primary) 8%);
   background: color-mix(in srgb, var(--bg-primary) 20%, var(--bg-card));
 }
 
 /* 焦点激活态：锁定浅灰（~8%微调，源自 #EBEAE9 推算 hsl(30 4.8% 91.8%)），无论 hover 与否完全零色差，严禁 box-shadow 粗描边环与加黑 */
-.input:focus,
-.input:focus-visible,
-.input:focus:hover,
-.input:focus-visible:hover {
+.input:where(:focus, :focus-visible, :focus:hover, :focus-visible:hover) {
   outline: none;
   background: var(--bg-card);
   box-shadow: none;
   border-color: color-mix(in srgb, var(--border-color) 92%, var(--text-primary) 8%);
 }
 
-.input:disabled {
+.input:where(:disabled) {
   cursor: not-allowed;
   opacity: var(--opacity-disabled);
 }
 
 /* 4 档尺寸定义 */
-.inputXs {
+.input:where(.inputXs) {
   height: 24px;
   min-height: 24px;
   padding: 0 var(--space-2);
@@ -76,7 +73,7 @@
   border-radius: var(--radius-sm);
 }
 
-.inputSm {
+.input:where(.inputSm) {
   height: 28px;
   min-height: 28px;
   padding: 0 var(--space-2_5);
@@ -84,7 +81,7 @@
   border-radius: var(--radius-md);
 }
 
-.inputMd {
+.input:where(.inputMd) {
   height: 32px;
   min-height: 32px;
   padding: 0 var(--space-3);
@@ -92,7 +89,7 @@
   border-radius: var(--radius-md);
 }
 
-.inputLg {
+.input:where(.inputLg) {
   height: 40px;
   min-height: 40px;
   padding: 0 var(--space-4);
@@ -101,7 +98,7 @@
 }
 
 /* search 变体：无前缀时不预留放大镜空位；圆角走 7px 锁 */
-.inputSearch {
+.input:where(.inputSearch) {
   appearance: none;
   -webkit-appearance: none;
   border-radius: var(--button-radius);

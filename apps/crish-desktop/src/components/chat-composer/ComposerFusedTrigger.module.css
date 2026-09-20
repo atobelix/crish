@@ -154,7 +154,7 @@
 }
 
 /* 右侧思考强度槽（图示 ②：左平切贴合，右圆弧 14px） */
-:global(.button).thinkBtn,
+.thinkBtn,
 .thinkBtn {
   display: inline-flex;
   align-items: center;
@@ -215,7 +215,7 @@
   font-family: var(--font-sans);
 }
 
-:global(.button).item,
+.item,
 .item {
   display: flex;
   align-items: center;

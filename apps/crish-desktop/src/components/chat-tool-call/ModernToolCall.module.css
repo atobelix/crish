@@ -15,7 +15,7 @@
   box-sizing: border-box;
 }
 
-:global(.button).jsonToolHead,
+.jsonToolHead,
 .jsonToolHead {
   display: inline-flex;
   align-items: center;
@@ -255,7 +255,7 @@
   flex-shrink: 0;
 }
 
-:global(.button).terminalCopyBtn,
+.terminalCopyBtn,
 .terminalCopyBtn {
   display: inline-flex;
   align-items: center;
@@ -341,7 +341,7 @@
   margin: 4px 0;
 }
 
-:global(.button).terminalMidFoldBar,
+.terminalMidFoldBar,
 .terminalMidFoldBar {
   display: flex;
   align-items: center;
@@ -383,7 +383,7 @@
   color: var(--text-tertiary);
 }
 
-:global(.button).terminalCollapseBtn,
+.terminalCollapseBtn,
 .terminalCollapseBtn {
   display: flex;
   align-items: center;
@@ -466,7 +466,7 @@
 .approvalScopePill {
   font-size: var(--font-size-micro, 11px);
   padding: 2px 8px;
-  border-radius: var(--radius-full, 999px);
+  border-radius: var(--radius-sm);
   font-weight: 500;
   background: var(--tint-hover);
   color: var(--text-tertiary);
@@ -607,7 +607,7 @@
   font-weight: 500;
 }
 
-:global(.button).codeBlockCopyBtn,
+.codeBlockCopyBtn,
 .codeBlockCopyBtn {
   display: flex;
   align-items: center;
@@ -783,9 +783,8 @@
   gap: 4px;
 }
 
-:global(.button).diffActionBtn,
 .diffActionBtn,
-:global(.button).diffCopyBtn,
+.diffCopyBtn,
 .diffCopyBtn {
   display: inline-flex;
   align-items: center;
@@ -816,9 +815,8 @@
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
 }
 
-:global(.button).diffPreviewTag,
 .diffPreviewTag,
-:global(.button).gitDiffPreviewTag,
+.gitDiffPreviewTag,
 .gitDiffPreviewTag {
   display: inline-flex;
   align-items: center;
@@ -959,7 +957,7 @@
   box-sizing: border-box;
 }
 
-:global(.button).diffMoreBtn,
+.diffMoreBtn,
 .diffMoreBtn {
   display: inline-flex;
   align-items: center;

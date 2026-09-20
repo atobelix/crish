@@ -48,35 +48,32 @@
   color: var(--text-tertiary);
 }
 
-.nativeTextarea:hover:not(:focus):not(:focus-visible):not(:disabled) {
+.nativeTextarea:where(:hover:not(:focus):not(:focus-visible):not(:disabled)) {
   border-color: color-mix(in srgb, var(--border-color) 92%, var(--text-primary) 8%);
   background: color-mix(in srgb, var(--bg-primary) 20%, var(--bg-card));
 }
 
-.nativeTextarea:focus,
-.nativeTextarea:focus-visible,
-.nativeTextarea:focus:hover,
-.nativeTextarea:focus-visible:hover {
+.nativeTextarea:where(:focus, :focus-visible, :focus:hover, :focus-visible:hover) {
   outline: none;
   background: var(--bg-card);
   box-shadow: none;
   border-color: color-mix(in srgb, var(--border-color) 92%, var(--text-primary) 8%);
 }
 
-.nativeTextarea:disabled {
+.nativeTextarea:where(:disabled) {
   cursor: not-allowed;
   opacity: var(--opacity-disabled);
 }
 
-/*       */
-.textareaSm {
+/* 尺寸规格 */
+.nativeTextarea:where(.textareaSm) {
   min-height: 44px;
   padding: var(--space-1_5) var(--space-2_5);
   font-size: var(--font-size-sm);
   border-radius: var(--radius-md);
 }
 
-.textareaLg {
+.nativeTextarea:where(.textareaLg) {
   min-height: 72px;
   padding: var(--space-3) var(--space-4);
   font-size: var(--font-size-md);

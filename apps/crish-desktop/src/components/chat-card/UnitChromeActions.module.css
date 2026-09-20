@@ -63,7 +63,7 @@
   flex-shrink: 0;
 }
 
-:global(.button).bcProjectBtn,
+.bcProjectBtn,
 .bcProjectBtn {
   display: inline-flex;
   align-items: center;
@@ -157,7 +157,7 @@
   );
 }
 
-:global(.button).topActionBtn,
+.topActionBtn,
 .topActionBtn {
   width: 28px;
   height: 28px;

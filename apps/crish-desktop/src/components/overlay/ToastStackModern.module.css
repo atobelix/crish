@@ -347,7 +347,7 @@
   margin-left: auto;
 }
 
-:global(.button).undoButton,
+.undoButton,
 .undoButton {
   background: none;
   border: none;
@@ -364,13 +364,13 @@
   transition: opacity 0.15s ease, background-color 0.15s ease;
 }
 
-:global(.button).undoButton:hover,
+.undoButton:hover,
 .undoButton:hover {
   opacity: 0.85;
   background-color: var(--tint-hover);
 }
 
-:global(.button).actionButton,
+.actionButton,
 .actionButton {
   border: none;
   padding: 3px 8px;
@@ -385,31 +385,31 @@
   transition: opacity 0.15s ease;
 }
 
-:global(.button).actionButton:hover,
+.actionButton:hover,
 .actionButton:hover {
   opacity: 0.88;
 }
 
-:global(.button).actionButton[data-variant='secondary'],
+.actionButton[data-variant='secondary'],
 .actionButton[data-variant='secondary'] {
   background-color: var(--tint-hover);
   color: var(--text-primary);
   border: 1px solid var(--border-subtle);
 }
 
-:global(.button).actionButton[data-variant='danger'],
+.actionButton[data-variant='danger'],
 .actionButton[data-variant='danger'] {
   background-color: var(--text-danger);
   color: var(--text-on-danger);
 }
 
-:global(.button).actionButton[data-variant='ghost'],
+.actionButton[data-variant='ghost'],
 .actionButton[data-variant='ghost'] {
   background-color: transparent;
   color: var(--text-primary);
 }
 
-:global(.button).closeButton,
+.closeButton,
 .closeButton {
   background: transparent;
   border: none;
@@ -429,15 +429,13 @@
   transition: color 0.15s ease, background-color 0.15s ease;
 }
 
-:global(.button).closeButton:hover,
+.closeButton:hover,
 .closeButton:hover {
   color: var(--text-primary);
   background-color: var(--tint-hover);
 }
 
-:global(.button).closeButton:focus-visible,
-:global(.button).actionButton:focus-visible,
-:global(.button).undoButton:focus-visible,
+.undoButton:focus-visible,
 .closeButton:focus-visible,
 .actionButton:focus-visible,
 .undoButton:focus-visible {
@@ -451,6 +449,8 @@
 
 @media (prefers-reduced-motion: reduce) {
   .viewport .toastCard,
+  .viewport[data-expanded] .toastCard,
+  .toastCard[data-state],
   .toastCard {
     transition: none;
     animation: none;

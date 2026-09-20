@@ -28,7 +28,7 @@
 .mcpStatusPill {
   font-size: var(--font-size-xxs);
   padding: 0 var(--space-1_5);
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-sm);
   border: var(--hairline-width) solid var(--border-subtle);
   color: var(--text-tertiary);
   background: transparent;
@@ -161,7 +161,7 @@
 .mcpStateBadge {
   font-size: var(--font-size-xxs);
   padding: 0 var(--space-1_5);
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-sm);
   border: var(--hairline-width) solid var(--border-subtle);
   color: var(--text-tertiary);
   line-height: 1.5;

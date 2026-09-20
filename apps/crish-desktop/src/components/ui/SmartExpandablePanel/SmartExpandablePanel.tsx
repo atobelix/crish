@@ -197,7 +197,7 @@ export const SmartExpandablePanel: React.FC<SmartPanelProps> = ({
       const stylePos: React.CSSProperties = {
         position: 'fixed',
         top: `${Math.max(12, Math.min(itemRect.top - 4, vpHeight - 200))}px`,
-        zIndex: 9999,
+        zIndex: 'var(--z-popover)' as unknown as number,
       };
 
       if (fitsRight) {

@@ -1,5 +1,5 @@
 /* 默认：宽屏药丸态（高度 28px，半圆端头，与加号等高平权，显示文字即可） */
-:global(.button).permPill,
+.permPill,
 .permPill {
   display: inline-flex;
   align-items: center;
@@ -10,7 +10,7 @@
   min-width: unset;
   padding: 0 10px;
   border: none;
-  border-radius: var(--radius-full, 9999px);
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--text-primary);
   font-family: inherit;
@@ -164,7 +164,7 @@
   animation: cds-popover-exit var(--transition-popover-exit) forwards;
 }
 
-:global(.button).permMenuItem,
+.permMenuItem,
 .permMenuItem {
   display: flex;
   align-items: center;

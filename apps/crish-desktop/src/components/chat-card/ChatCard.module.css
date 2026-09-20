@@ -97,7 +97,7 @@
   box-sizing: border-box;
 }
 
-:global(.button).modelBadge,
+.modelBadge,
 .modelBadge {
   display: inline-flex;
   align-items: center;

@@ -29,7 +29,7 @@
   list-style: none;
 }
 
-:global(.button).changesItemBtn,
+.changesItemBtn,
 .changesItemBtn {
   width: 100%;
   display: flex;
@@ -54,18 +54,18 @@
   transition: background-color var(--transition-fast, 120ms ease);
 }
 
-:global(.button).changesItemBtn:hover,
+.changesItemBtn:hover,
 .changesItemBtn:hover {
   background: var(--bg-hover);
 }
 
-:global(.button).changesItemBtn:focus-visible,
+.changesItemBtn:focus-visible,
 .changesItemBtn:focus-visible {
   outline: none;
   box-shadow: var(--focus-ring);
 }
 
-:global(.button).changesItemBtn.isOpening,
+.changesItemBtn.isOpening,
 .changesItemBtn.isOpening {
   opacity: 0.6;
   pointer-events: none;

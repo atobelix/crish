@@ -271,7 +271,7 @@
 /* --------------------------------------------------------------------------
  * 4. 子域 A：折叠 Chevron 与状态字母单槽位融合（交互态平滑切换）
  * -------------------------------------------------------------------------- */
-:global(.button).fileNodeToggle,
+.fileNodeToggle,
 .fileNodeToggle {
   position: relative;
   display: inline-flex;
@@ -413,7 +413,7 @@
   margin-right: 8px;
 }
 
-:global(.button).fileNameLinkBtn,
+.fileNameLinkBtn,
 .fileNameLinkBtn {
   display: inline-flex;
   align-items: center;

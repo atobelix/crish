@@ -182,7 +182,7 @@
   -webkit-appearance: none;
 }
 
-:global(.button).searchClear,
+.searchClear,
 .searchClear {
   display: inline-flex;
   align-items: center;
@@ -296,7 +296,7 @@
   padding: var(--space-5) var(--space-8) var(--space-6);
 }
 
-:global(.button).sidebarTab,
+.sidebarTab,
 .sidebarTab {
   display: flex;
   align-items: center;

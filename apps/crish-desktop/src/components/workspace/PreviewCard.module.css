@@ -135,7 +135,7 @@ input.urlInput::-webkit-search-results-decoration {
   padding: 3px 6px 3px 8px;
   background: var(--bg-card);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-full, 9999px);
+  border-radius: var(--radius-sm);
   box-shadow: var(--shadow-sm);
   font-size: var(--font-size-xs, 12px);
   color: var(--text-primary);
@@ -407,7 +407,7 @@ input.urlInput::-webkit-search-results-decoration {
 }
 
 /* 纯文字按钮：完全无边框、无绿色、无重阴影、仅极低灰度 Hover */
-:global(.button).pureTextLink,
+.pureTextLink,
 .pureTextLink {
   border: none;
   background: transparent;
@@ -426,13 +426,13 @@ input.urlInput::-webkit-search-results-decoration {
   text-decoration: none;
 }
 
-:global(.button).pureTextLink:hover,
+.pureTextLink:hover,
 .pureTextLink:hover {
   background: var(--sidebar-hover, var(--tint-hover));
   color: var(--text-primary);
 }
 
-:global(.button).pureTextLink:focus-visible,
+.pureTextLink:focus-visible,
 .pureTextLink:focus-visible {
   background: var(--sidebar-hover, var(--tint-active));
   color: var(--text-primary);
@@ -447,7 +447,7 @@ input.urlInput::-webkit-search-results-decoration {
   color: var(--text-primary);
 }
 
-:global(.button).pureTextLinkWithIcon,
+.pureTextLinkWithIcon,
 .pureTextLinkWithIcon {
   border: none;
   background: transparent;
@@ -469,13 +469,13 @@ input.urlInput::-webkit-search-results-decoration {
   text-decoration: none;
 }
 
-:global(.button).pureTextLinkWithIcon:hover,
+.pureTextLinkWithIcon:hover,
 .pureTextLinkWithIcon:hover {
   background: var(--sidebar-hover, var(--tint-hover));
   color: var(--text-primary);
 }
 
-:global(.button).pureTextLinkWithIcon:focus-visible,
+.pureTextLinkWithIcon:focus-visible,
 .pureTextLinkWithIcon:focus-visible {
   background: var(--sidebar-hover, var(--tint-active));
   color: var(--text-primary);

@@ -141,7 +141,7 @@
   gap: var(--space-0_5);
 }
 
-:global(.button).skillsMoreItem,
+.skillsMoreItem,
 .skillsMoreItem {
   display: block;
   width: 100%;
@@ -296,7 +296,7 @@
   font-family: var(--font-mono);
   font-size: var(--font-size-xxs);
   padding: var(--space-0_5) var(--space-2);
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-secondary);
   border: var(--hairline-width) solid var(--border-subtle);
@@ -363,7 +363,7 @@
   letter-spacing: var(--letter-spacing-wide);
 }
 
-:global(.button).skillsRailItem,
+.skillsRailItem,
 .skillsRailItem {
   display: flex;
   align-items: flex-start;
@@ -471,7 +471,7 @@
   font-size: var(--font-size-xxs);
   color: var(--text-tertiary);
   border: var(--hairline-width) solid var(--border-subtle);
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-sm);
   padding: 0 var(--space-1_5);
   background: transparent;
 }
@@ -696,7 +696,7 @@
   font-size: var(--font-size-xxs);
   color: var(--text-tertiary);
   border: var(--hairline-width) solid var(--border-subtle);
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-sm);
   padding: 1px var(--space-2);
   background: transparent;
 }

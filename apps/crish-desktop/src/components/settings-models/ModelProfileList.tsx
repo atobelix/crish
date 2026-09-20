@@ -153,7 +153,7 @@ const CascadeSubmenuFlyout: React.FC<CascadeSubmenuFlyoutProps> = ({
         left: `${placement.x}px`,
         top: `${placement.y}px`,
         transformOrigin: placement.transformOrigin,
-        zIndex: 2010, // 确保压制常规下拉面板
+        zIndex: 'var(--z-dropdown)' as unknown as number,
       }}
       onMouseEnter={onReach}
       onMouseLeave={onClose}

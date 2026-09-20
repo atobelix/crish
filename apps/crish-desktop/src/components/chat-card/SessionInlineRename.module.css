@@ -29,7 +29,7 @@
   box-shadow: none;
 }
 
-:global(.button).titleBtn,
+.titleBtn,
 .titleBtn {
   display: inline-flex;
   align-items: center;

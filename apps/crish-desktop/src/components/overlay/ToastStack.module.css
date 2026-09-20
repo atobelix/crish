@@ -83,7 +83,7 @@
   color: var(--text-primary);
 }
 
-:global(.button).toastUndoBtn,
+.toastUndoBtn,
 .toastUndoBtn {
   appearance: none;
   background: transparent;
@@ -103,12 +103,12 @@
   flex-shrink: 0;
 }
 
-:global(.button).toastUndoBtn:hover,
+.toastUndoBtn:hover,
 .toastUndoBtn:hover {
   color: var(--text-primary);
 }
 
-:global(.button).toastDismissBtn,
+.toastDismissBtn,
 .toastDismissBtn {
   appearance: none;
   flex-shrink: 0;
@@ -130,14 +130,13 @@
   line-height: 1;
 }
 
-:global(.button).toastDismissBtn:hover,
+.toastDismissBtn:hover,
 .toastDismissBtn:hover {
   opacity: 1;
   background: color-mix(in srgb, currentColor 8%, transparent);
 }
 
-:global(.button).toastDismissBtn:focus-visible,
-:global(.button).toastUndoBtn:focus-visible,
+.toastUndoBtn:focus-visible,
 .toastDismissBtn:focus-visible,
 .toastUndoBtn:focus-visible {
   outline: none;

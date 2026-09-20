@@ -391,7 +391,7 @@ describe('输入框四态体系与焦点/激活态刚性防御契约', () => {
       'utf-8'
     );
     expect(editableTitleTsx).toContain('className={styles.titleInput}');
-    expect(editableTitleTsx).toMatch(/<input[^>]*className=\{styles\.titleInput\}/);
+    expect(editableTitleTsx).toMatch(/<(?:Input|input)[^>]*className=\{styles\.titleInput\}/);
     expect(editableTitleTsx).toContain('data-testid="note-paper-strict-title-input"');
     // 严禁 TSX 内联非透明边框、阴影或底色
     expect(editableTitleTsx).not.toMatch(/style=\{\{[^}]*border:\s*['"](?:1px|\d|#|rgb|var)/i);

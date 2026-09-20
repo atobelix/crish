@@ -22,7 +22,7 @@
 }
 
 /* 24px 极简交互单行按钮：防 Chromium 内核宽度坍塌与单行高度失锁 */
-:global(.button).reasoningRow,
+.reasoningRow,
 .reasoningRow {
   display: flex;
   width: 100%;
@@ -51,8 +51,7 @@
   transition: color var(--transition-fast, 150ms ease);
 }
 
-:global(.button).reasoningRow:hover,
-:global(.button).reasoningRow:focus-visible,
+.reasoningRow:focus-visible,
 .reasoningRow:hover,
 .reasoningRow:focus-visible {
   color: var(--text-primary);

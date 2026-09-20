@@ -28,7 +28,7 @@
 
 /* 回底轻量浮钮：GPU transform 向上物理位移（对文档流 scrollHeight 贡献严格为 0），
    彻底拔除破坏性负 margin。基态 -46px；hover 再抬 1px（-47px）；active 回落至基态。 */
-:global(.button).chatScrollFab,
+.chatScrollFab,
 .chatScrollFab {
   width: 34px;
   height: 34px;
@@ -82,7 +82,7 @@
   height: 14px;
   min-width: 14px;
   padding: 0 3px;
-  border-radius: var(--radius-full, 9999px);
+  border-radius: var(--radius-sm);
   text-align: center;
   box-sizing: border-box;
 }

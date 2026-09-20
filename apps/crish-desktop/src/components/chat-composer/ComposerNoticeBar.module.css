@@ -81,7 +81,7 @@
 }
 
 /* 叹号详情徽标 */
-:global(.button).detailBadge,
+.detailBadge,
 .detailBadge {
   flex-shrink: 0;
   display: inline-flex;
@@ -92,7 +92,7 @@
   min-width: unset;
   min-height: unset;
   padding: 0;
-  border-radius: var(--radius-full, 9999px);
+  border-radius: var(--radius-sm);
   border: 1px solid color-mix(in srgb, var(--border-color) 80%, transparent);
   background-color: transparent;
   color: var(--text-secondary);
@@ -120,9 +120,8 @@
 }
 
 /* 极简 ghost 扁平操作按钮（复制与反馈） */
-:global(.button).copyBtn,
 .copyBtn,
-:global(.button).feedbackBtn,
+.feedbackBtn,
 .feedbackBtn {
   flex-shrink: 0;
   display: inline-flex;
@@ -167,7 +166,7 @@
 }
 
 /* 关闭/删除按钮 */
-:global(.button).dismissBtn,
+.dismissBtn,
 .dismissBtn {
   flex-shrink: 0;
   display: inline-flex;

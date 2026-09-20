@@ -40,7 +40,7 @@
   gap: 2px;
 }
 
-:global(.button).menuItem,
+.menuItem,
 .menuItem {
   display: flex;
   align-items: center;

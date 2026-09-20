@@ -77,7 +77,7 @@
   color: var(--sep-text-muted, var(--text-tertiary));
 }
 
-:global(.button).settingsBtn,
+.settingsBtn,
 .settingsBtn {
   display: inline-flex;
   align-items: center;
@@ -95,7 +95,7 @@
   transition: background var(--transition-micro, 100ms ease), color var(--transition-micro, 100ms ease);
 }
 
-:global(.button).settingsBtn:hover,
+.settingsBtn:hover,
 .settingsBtn:hover {
   background: var(--sep-bg-item-hover);
   color: var(--sep-text-primary, var(--text-primary));
@@ -122,7 +122,7 @@
   user-select: none;
 }
 
-:global(.button).modelItem,
+.modelItem,
 .modelItem {
   display: flex;
   align-items: center;
@@ -142,20 +142,20 @@
   box-sizing: border-box;
 }
 
-:global(.button).modelItem:hover,
+.modelItem:hover,
 .modelItem:hover {
   background: var(--tint-hover);
   color: var(--text-primary);
 }
 
-:global(.button).modelItem.isSelected,
+.modelItem.isSelected,
 .modelItem.isSelected {
   background: var(--tint-hover);
   color: var(--text-primary);
   font-weight: 500;
 }
 
-:global(.button).modelItem:focus-visible,
+.modelItem:focus-visible,
 .modelItem:focus-visible {
   outline: none;
   background: var(--tint-hover);
@@ -227,7 +227,7 @@
   gap: 2px;
 }
 
-:global(.button).thinkingPill,
+.thinkingPill,
 .thinkingPill {
   flex: 1;
   border: none;
@@ -245,12 +245,12 @@
   user-select: none;
 }
 
-:global(.button).thinkingPill:hover,
+.thinkingPill:hover,
 .thinkingPill:hover {
   color: var(--text-primary);
 }
 
-:global(.button).thinkingPill.activePill,
+.thinkingPill.activePill,
 .thinkingPill.activePill {
   background: var(--bg-elevated);
   color: var(--text-primary);
@@ -266,7 +266,7 @@
   padding: 2px 2px 0;
 }
 
-:global(.button).advancedTrigger,
+.advancedTrigger,
 .advancedTrigger {
   display: flex;
   align-items: center;
@@ -285,7 +285,7 @@
   transition: background var(--transition-micro, 100ms ease), color var(--transition-micro, 100ms ease);
 }
 
-:global(.button).advancedTrigger:hover,
+.advancedTrigger:hover,
 .advancedTrigger:hover {
   background: var(--bg-hover);
   color: var(--text-primary);
@@ -308,7 +308,7 @@
   animation: crish-popover-enter var(--transition-micro, 150ms ease) forwards;
 }
 
-:global(.button).advancedItem,
+.advancedItem,
 .advancedItem {
   display: flex;
   align-items: center;
@@ -327,7 +327,7 @@
   transition: background var(--transition-micro, 100ms ease), color var(--transition-micro, 100ms ease);
 }
 
-:global(.button).advancedItem:hover,
+.advancedItem:hover,
 .advancedItem:hover {
   background: var(--bg-hover);
   color: var(--text-primary);

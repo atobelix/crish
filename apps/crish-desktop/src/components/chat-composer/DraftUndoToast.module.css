@@ -45,7 +45,7 @@
   text-overflow: ellipsis;
 }
 
-:global(.button).undoBtn,
+.undoBtn,
 .undoBtn {
   display: inline-flex;
   align-items: center;
@@ -74,7 +74,7 @@
     color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
 }
 
-:global(.button).closeBtn,
+.closeBtn,
 .closeBtn {
   display: inline-flex;
   align-items: center;

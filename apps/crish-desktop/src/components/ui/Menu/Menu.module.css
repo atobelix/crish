@@ -87,42 +87,40 @@
 }
 
 /* Hover 状态：采用微背景 tint-hover，边框绝不加深变黑 */
-.menuItem:hover:not(.menuItemDisabled) {
+.menuItem:where(:hover:not(.menuItemDisabled)) {
   background: var(--tint-hover);
   color: var(--text-primary);
 }
 
 /* 键盘焦点高亮 (WAI-ARIA Focus Visible) */
-.menuItem:focus-visible,
-.menuItem.isFocused {
+.menuItem:where(:focus-visible, .isFocused) {
   outline: none;
   background: var(--tint-hover);
   color: var(--text-primary);
   box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
 }
 
-.menuItem.isSelected,
-.menuItem[data-selected='true'] {
+.menuItem:where(.isSelected, [data-selected='true']) {
   background: var(--tint-active);
   color: var(--text-primary);
   font-weight: 500;
 }
 
-.menuItemDisabled {
+.menuItem:where(.menuItemDisabled) {
   color: var(--text-tertiary);
   cursor: not-allowed;
   opacity: var(--opacity-disabled);
 }
 
-.menuItemDisabled:hover {
+.menuItem:where(.menuItemDisabled:hover) {
   background: transparent;
 }
 
-.menuItemDanger {
+.menuItem:where(.menuItemDanger) {
   color: var(--color-error);
 }
 
-.menuItemDanger:hover {
+.menuItem:where(.menuItemDanger:hover) {
   background: var(--color-error-bg);
   color: var(--color-error);
 }

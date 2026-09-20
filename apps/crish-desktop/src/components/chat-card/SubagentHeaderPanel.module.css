@@ -1,5 +1,4 @@
-:global(.button).agentTrigger,
-:global(.button).breadcrumbAgentBtn,
+.breadcrumbAgentBtn,
 .agentTrigger,
 .breadcrumbAgentBtn {
   display: inline-flex;

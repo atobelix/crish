@@ -113,7 +113,7 @@
 :global(body.is-tab-dragging) [data-tree-canvas] [data-leaf-id] > :not([data-pane-header]),
 :global(body.is-tab-dragging) [data-tree-canvas] [data-leaf-id] [class],
 :global(body.is-tab-dragging) iframe,
-:global(body.is-tab-dragging) .xterm,
+:global(body.is-tab-dragging) :global(.xterm),
 :global(body.is-tab-dragging) [data-markdown-editor] {
   pointer-events: none;
 }

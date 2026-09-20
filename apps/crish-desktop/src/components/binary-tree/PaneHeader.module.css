@@ -226,7 +226,7 @@
   white-space: nowrap;
 }
 
-:global(.button).tabCloseBtn,
+.tabCloseBtn,
 .tabCloseBtn {
   width: 18px;
   height: 18px;
@@ -260,16 +260,14 @@
   right: calc(-1 * var(--tab-close-hit-pad));
 }
 
-.tabItem:hover :global(.button).tabCloseBtn,
-.tabItemActive :global(.button).tabCloseBtn,
+.tabItemActive .tabCloseBtn,
 .tabItem:hover .tabCloseBtn,
 .tabItemActive .tabCloseBtn {
   opacity: 0.7;
   pointer-events: auto;
 }
 
-.tabItem :global(.button).tabCloseBtn:hover,
-:global(.button).tabCloseBtn:hover,
+.tabCloseBtn:hover,
 .tabItem .tabCloseBtn:hover,
 .tabCloseBtn:hover {
   background: var(--tint-hover);
@@ -277,13 +275,13 @@
   opacity: 1;
 }
 
-:global(.button).tabCloseBtn:active,
+.tabCloseBtn:active,
 .tabCloseBtn:active {
   background: var(--tint-active);
 }
 
 /* 新建标签按钮（加号）：28px 与标签同高、8px 圆角，纯流式紧贴末尾标签 */
-:global(.button).newTabBtn,
+.newTabBtn,
 .newTabBtn {
   width: var(--tab-height);
   height: var(--tab-height);
@@ -309,8 +307,7 @@
     box-shadow var(--duration-micro) var(--ease-standard);
 }
 
-:global(.button).newTabBtn:hover,
-:global(.button).newTabBtn:active,
+.newTabBtn:active,
 .newTabBtn:hover,
 .newTabBtn:active {
   background: color-mix(in srgb, var(--bg-card) 65%, transparent);

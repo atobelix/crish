@@ -100,7 +100,7 @@
 .dynamicStatusDot {
   width: var(--space-1_5); /* 6px 实点 */
   height: var(--space-1_5);
-  border-radius: var(--radius-full);
+  border-radius: 50%;
   display: inline-block;
   flex-shrink: 0;
   cursor: help;
@@ -190,7 +190,7 @@
   padding-right: var(--space-0_5);
 }
 
-:global(.button).searchNavBtn,
+.searchNavBtn,
 .searchNavBtn {
   display: inline-flex;
   align-items: center;

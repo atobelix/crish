@@ -262,7 +262,7 @@ function runRule4_ZeroPillRadius() {
   const files = collectFiles(
     DESKTOP_SRC,
     /\.(css|module\.css)$/,
-    /(reduced-motion\.css|src\/styles\/|components\/(settings|settings-mcp|settings-models|settings-skills|sidebar|chat)\/|\.test\.|\.spec\.)/
+    /(reduced-motion\.css|src\/styles\/|\.test\.|\.spec\.)/
   );
 
   for (const file of files) {
@@ -284,13 +284,18 @@ function runRule4_ZeroPillRadius() {
       const trimmed = lineText.trim();
       if (trimmed.startsWith('/*') || trimmed.startsWith('*')) return;
 
-      if (/var\(--radius-full\)/.test(lineText) || /var\(--radius-pill\)/.test(lineText) || /--radius-9999/.test(lineText)) {
+      if (
+        /var\(--radius-full\b/.test(lineText) ||
+        /var\(--radius-pill\b/.test(lineText) ||
+        /--radius-9999/.test(lineText) ||
+        /var\([^)]*,\s*(?:9999px|999px|1000px)\)/.test(lineText)
+      ) {
         report(
           4,
           'G-04',
           file,
           idx + 1,
-          `禁止在非白名单元素上使用 var(--radius-full)，桌面端必须遵循同心几何标尺！`
+          `禁止在非白名单元素上使用 var(--radius-full/pill/9999)，桌面端必须遵循同心几何标尺！`
         );
       }
       if (/border-radius:\s*(9999px|999px|1000px)/.test(lineText)) {
@@ -389,11 +394,11 @@ function runRule5_ZIndexStandard() {
     });
   }
 
-  // 强化检测：识别 TSX 中的内联 zIndex 违规
+  // 强化检测：识别 TSX 中的内联 zIndex 违规（封顶 9000）
   const tsxFiles = collectFiles(DESKTOP_SRC, /\.(tsx|jsx)$/, /(\.test\.|\.spec\.)/);
   for (const file of tsxFiles) {
     const content = readFileSync(file, 'utf8');
-    if (/zIndex\s*:\s*(?:[1-9]\d{4,}|99999|100000)/.test(content)) {
+    if (/zIndex\s*:\s*(?:9[0-9]{3,}|[1-9][0-9]{4,})/.test(content)) {
       report(5, 'G-05', file, 1, `TSX 内联样式禁止使用超过 9000 的恶性通胀 zIndex！`);
     }
   }

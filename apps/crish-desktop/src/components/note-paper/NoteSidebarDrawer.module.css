@@ -57,7 +57,7 @@
   gap: 4px;
 }
 
-:global(.button).iconBtn,
+.iconBtn,
 .iconBtn {
   display: inline-flex;
   align-items: center;
@@ -77,7 +77,7 @@
   transition: background-color 150ms ease, color 150ms ease;
 }
 
-:global(.button).iconBtn:hover,
+.iconBtn:hover,
 .iconBtn:hover {
   background: var(--bg-hover);
   color: var(--text-primary);
@@ -336,9 +336,7 @@
   z-index: 5;
 }
 
-:global(.button).sessionActionBtn,
-:global(.button).actionBtn,
-:global(.button).miniBtn,
+.miniBtn,
 .sessionActionBtn,
 .actionBtn,
 .miniBtn {
@@ -361,9 +359,7 @@
   transition: opacity var(--transition-micro, 120ms ease), color var(--transition-micro, 120ms ease), background var(--transition-micro, 120ms ease);
 }
 
-:global(.button).sessionActionBtn:hover,
-:global(.button).actionBtn:hover,
-:global(.button).miniBtn:hover,
+.miniBtn:hover,
 .sessionActionBtn:hover,
 .actionBtn:hover,
 .miniBtn:hover {
@@ -458,8 +454,7 @@
   gap: 8px;
 }
 
-:global(.button).cancelBtn,
-:global(.button).dangerBtn,
+.dangerBtn,
 .cancelBtn,
 .dangerBtn {
   padding: 4px 12px;
@@ -470,26 +465,25 @@
   cursor: pointer;
 }
 
-:global(.button).cancelBtn,
 .cancelBtn {
   background: transparent;
   border: 1px solid var(--border-color);
   color: var(--text-primary);
 }
 
-:global(.button).cancelBtn:hover,
+.cancelBtn:hover,
 .cancelBtn:hover {
   background: var(--bg-hover);
 }
 
-:global(.button).dangerBtn,
+.dangerBtn,
 .dangerBtn {
   background: var(--color-error);
   border: 1px solid var(--color-error);
   color: var(--text-inverse);
 }
 
-:global(.button).dangerBtn:hover,
+.dangerBtn:hover,
 .dangerBtn:hover {
   opacity: 0.9;
 }

@@ -184,7 +184,7 @@
   font-size: 12px;
 }
 
-:global(.button).tabCloseBtn,
+.tabCloseBtn,
 .tabCloseBtn {
   display: inline-flex;
   align-items: center;
@@ -215,6 +215,8 @@
   pointer-events: auto;
 }
 
+.tab:hover .tabCloseBtn:hover,
+.tabActive .tabCloseBtn:hover,
 .tab .tabCloseBtn:hover,
 .tabCloseBtn:hover {
   opacity: 1;
@@ -227,7 +229,7 @@
 }
 
 /* Add Buttons: in-flow and pinned（双态加号：随流位 + 溢出固定位，尺寸同标签高） */
-:global(.button).addBtn,
+.addBtn,
 .addBtn {
   width: var(--tab-height);
   height: var(--tab-height);
@@ -252,8 +254,7 @@
     margin var(--duration-normal) var(--ease-standard);
 }
 
-:global(.button).addBtn:hover,
-:global(.button).addBtn:active,
+.addBtn:active,
 .addBtn:hover,
 .addBtn:active {
   background: var(--bg-hover);
@@ -264,7 +265,7 @@
   margin-left: 2px;
 }
 
-:global(.button).addBtn.pinned,
+.addBtn.pinned,
 .addBtn.pinned {
   opacity: 0;
   width: 0;
@@ -275,7 +276,7 @@
   margin: 0;
 }
 
-.hasOverflow :global(.button).addBtn.pinned,
+.hasOverflow .addBtn.pinned,
 .hasOverflow .addBtn.pinned {
   opacity: 1;
   width: var(--tab-height);
@@ -285,7 +286,7 @@
   margin-right: 2px;
 }
 
-.hasOverflow :global(.button).addBtn.inFlow,
+.hasOverflow .addBtn.inFlow,
 .hasOverflow .addBtn.inFlow {
   opacity: 0;
   pointer-events: none;
@@ -311,7 +312,7 @@
   z-index: var(--z-sticky, 2);
 }
 
-:global(.button).sideBtn,
+.sideBtn,
 .sideBtn {
   width: var(--tab-height);
   height: var(--tab-height);
@@ -332,8 +333,7 @@
     color var(--duration-micro) var(--ease-standard);
 }
 
-:global(.button).sideBtn:hover,
-:global(.button).sideBtn:active,
+.sideBtn:active,
 .sideBtn:hover,
 .sideBtn:active {
   background: var(--bg-hover);
@@ -371,7 +371,7 @@
   gap: 4px;
 }
 
-:global(.button).toolbarBtn,
+.toolbarBtn,
 .toolbarBtn {
   width: 26px;
   height: 26px;
@@ -449,7 +449,7 @@
   width: 100%;
 }
 
-:global(.button).launcherCard,
+.launcherCard,
 .launcherCard {
   display: flex;
   align-items: center;
@@ -473,7 +473,7 @@
     box-shadow var(--duration-micro) var(--ease-standard);
 }
 
-:global(.button).launcherCard:hover,
+.launcherCard:hover,
 .launcherCard:hover {
   background: var(--bg-card-hover);
   border-color: var(--border-color);

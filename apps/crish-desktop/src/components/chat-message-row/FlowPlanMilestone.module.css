@@ -43,7 +43,7 @@
   display: none;
 }
 
-:global(.button).flowPlanStepHead,
+.flowPlanStepHead,
 .flowPlanStepHead {
   display: flex;
   align-items: center;

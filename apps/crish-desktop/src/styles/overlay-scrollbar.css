@@ -18,7 +18,7 @@
   background: var(--scrollbar-thumb-bg, var(--tint-scrollbar-thumb));
   background-clip: padding-box;
   border-right: var(--scrollbar-track-safe-gap, 2px) solid transparent; /* 右侧留出 2px 物理安全空隙，防误触，滑块净宽 8px 饱满舒适 */
-  border-radius: var(--radius-full);
+  border-radius: var(--scrollbar-thumb-radius);
 }
 
 ::-webkit-scrollbar-thumb:horizontal {

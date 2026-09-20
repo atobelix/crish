@@ -37,7 +37,7 @@
   flex-shrink: 0;
 }
 
-:global(.button).rowDeleteBtn,
+.rowDeleteBtn,
 .rowDeleteBtn {
   border: none;
   background: transparent;

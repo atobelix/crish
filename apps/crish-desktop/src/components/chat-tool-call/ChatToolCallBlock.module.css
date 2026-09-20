@@ -1035,7 +1035,7 @@
   background: var(--bg-hover);
 }
 
-:global(.button).toolPathLink,
+.toolPathLink,
 .toolPathLink {
   display: inline;
   border: none;

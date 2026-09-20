@@ -263,7 +263,7 @@
   padding: 0 2px;
 }
 
-:global(.button).agentLaunchItem,
+.agentLaunchItem,
 .agentLaunchItem {
   display: flex;
   align-items: center;
@@ -370,7 +370,7 @@
 }
 
 /* ?team card     ?+  */
-:global(.button).agentTeamCard,
+.agentTeamCard,
 .agentTeamCard {
   display: flex;
   flex-direction: column;

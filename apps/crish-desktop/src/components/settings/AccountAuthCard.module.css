@@ -65,7 +65,7 @@
 .userAvatar {
   width: 36px; /* 刻度外裸值：无既有档，授权保留 */
   height: 36px; /* 刻度外裸值：无既有档，授权保留 */
-  border-radius: var(--radius-full);
+  border-radius: 50%;
   background: var(--bg-secondary);
   border: var(--hairline-width) solid var(--border-subtle);
   display: flex;
@@ -96,7 +96,7 @@
   align-items: center;
   gap: var(--space-1_5);
   padding: var(--space-0_5) var(--space-2);
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-sm);
   background: var(--color-success-bg);
   color: var(--text-success);
   font-size: var(--font-size-xxs);
@@ -106,7 +106,7 @@
 .statusDot {
   width: var(--space-1_5);
   height: var(--space-1_5);
-  border-radius: var(--radius-full);
+  border-radius: 50%;
   background: var(--text-success);
 }
 
