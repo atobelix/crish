@@ -109,17 +109,14 @@ export const ComposePlusMenu: React.FC<ComposePlusMenuProps> = ({
       renderItem={(item) => (
         <Tooltip key={item.id} content={item.hint || item.label}>
           <Button
+            bare
             type="button"
-            variant="ghost"
             className={styles.item}
             role="menuitem"
             aria-label={item.hint ? `${item.label}，${item.hint}` : item.label}
-            onClick={(e) => {
-              e.stopPropagation();
+            onClick={() => {
               item.onClick?.();
             }}
-            onMouseDown={(e) => e.stopPropagation()}
-            onPointerDown={(e) => e.stopPropagation()}
           >
             <span className={styles.icon} aria-hidden="true">
               {item.icon}

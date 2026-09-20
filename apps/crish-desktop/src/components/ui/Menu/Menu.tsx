@@ -3,7 +3,7 @@
  *
  * 从 `components/common/UnifiedSelectPopover.tsx` 整体提炼上移：
  * - 键盘漫游：↑↓ 跳过 disabled、Enter/Space 选中、Esc 关闭
- * - cloneElement 注入 trigger 事件（保留 stopPropagation 防拖拽抢夺）
+ * - Radix asChild Slot 直通契约与 LayerStack 统一事件栈调度
  * - 样式从全局类/内联 style 收敛为 CSS Modules（tokens 变量）
  * - 支持 description 多行自适应与 checkmark 呈现
  */

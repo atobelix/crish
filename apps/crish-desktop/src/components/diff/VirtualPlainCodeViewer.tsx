@@ -387,23 +387,11 @@ export const VirtualPlainCodeViewer: React.FC<VirtualPlainCodeViewerProps> = Rea
                       }
                     >
                       <Button
+                        bare
                         type="button"
-                        variant="ghost"
-                        size="sm"
+                        className={styles.expandLineBtn}
                         onClick={() => toggleLineExpanded(l.num - 1)}
                         aria-expanded={l.expanded}
-                        style={{
-                          marginLeft: 8,
-                          fontSize: 11,
-                          padding: '1px 6px',
-                          borderRadius: 3,
-                          height: 'auto',
-                          minHeight: 'unset',
-                          background: 'var(--bg-secondary)',
-                          color: 'var(--text-secondary)',
-                          cursor: 'pointer',
-                          font: 'inherit',
-                        }}
                       >
                         {l.expanded
                           ? l.text.length < l.originalLen

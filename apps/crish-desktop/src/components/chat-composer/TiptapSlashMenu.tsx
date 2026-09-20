@@ -260,15 +260,14 @@ export const TiptapSlashMenu = forwardRef<SlashMenuRefHandle, SlashMenuProps>(
                       ref={(el) => {
                         itemRefs.current[index] = el;
                       }}
+                      bare
                       type="button"
-                      variant="ghost"
                       role="option"
                       id={`${listboxId ?? 'tiptap-suggestion'}-opt-${index}`}
                       aria-selected={isActive}
                       className={`${styles.menuItem} ${isActive ? styles.menuItemActive : ''}`}
                       onClick={(e) => {
                         e.preventDefault();
-                        e.stopPropagation();
                         selectItem(index);
                       }}
                       onMouseEnter={() => setSelectedIndex(index)}

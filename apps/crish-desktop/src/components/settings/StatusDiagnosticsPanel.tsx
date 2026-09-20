@@ -25,25 +25,13 @@ import { SettingsCard, SettingsPage, SettingsRow, SettingsSection } from './Sett
 import { Button, Tooltip } from '../ui';
 import styles from './StatusDiagnosticsPanel.module.css';
 import { AppIcon } from '../ui/icons/index';
+import { copyTextToClipboard } from '@crish/shared-utils';
 
 type Props = {
   /** 轮询间隔（ms）；测试可注入大值只取首拉 */
   pollIntervalMs?: number;
   onBlockingOverlayChange?: (open: boolean) => void;
 };
-
-/** 复制到剪贴板（best-effort：clipboard API） */
-async function copyTextBestEffort(text: string): Promise<boolean> {
-  try {
-    if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(text);
-      return true;
-    }
-  } catch {
-    /* 剪贴板失败 */
-  }
-  return false;
-}
 
 /** 时间戳 → 本地时间短串（epoch ms；非法值回退 '—'） */
 function formatTs(ts: number | undefined): string {
@@ -137,7 +125,7 @@ export const StatusDiagnosticsPanel: React.FC<Props> = ({
   const handleCopy = useCallback(
     async (err: EngineLastErrorEntry) => {
       const text = `[${err.kind}] ${err.detail}`;
-      const ok = await copyTextBestEffort(text);
+      const ok = await copyTextToClipboard(text);
       if (ok) showToast('已复制错误信息');
       else showToast('复制失败');
     },
@@ -146,7 +134,7 @@ export const StatusDiagnosticsPanel: React.FC<Props> = ({
 
   const handleCopyPath = useCallback(
     async (pathStr: string) => {
-      const ok = await copyTextBestEffort(pathStr);
+      const ok = await copyTextToClipboard(pathStr);
       if (ok) showToast('已复制路径');
       else showToast('复制失败');
     },

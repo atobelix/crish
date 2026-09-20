@@ -144,12 +144,11 @@ export const PermissionModeMenu: React.FC<Props> = ({
             return (
               <Tooltip key={opt.id} content={itemMeta.matrixHint}>
                 <Button
+                  bare
                   type="button"
-                  variant="ghost"
                   className={`${styles.permMenuItem} ${isSelected ? styles.isSelected : ''}`}
                   role="menuitem"
-                  onClick={(e) => {
-                    e.stopPropagation();
+                  onClick={() => {
                     opt.onClick?.();
                   }}
                 >

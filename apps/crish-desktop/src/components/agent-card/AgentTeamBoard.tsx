@@ -272,7 +272,7 @@ export const AgentTeamBoard: React.FC<AgentTeamBoardProps> = React.memo(
                   .join('\n')}
               >
                 <Button
-                  variant="ghost"
+                  bare
                   id={optionId}
                   type="button"
                   role="option"

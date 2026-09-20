@@ -437,4 +437,30 @@ describe('ui/Button 样式与物理动效契约 (Button.module.css)', () => {
     expect(cssContent).toMatch(/\.buttonActive,\s*\.button\[data-active='true'\]\s*\{[^}]*border-color:\s*transparent;/);
     expect(cssContent).toMatch(/\.buttonActive,\s*\.button\[data-active='true'\]\s*\{[^}]*box-shadow:\s*none;/);
   });
+
+  it('S1.1 内容模型自适应：字符串/数字包裹 buttonLabel span；元素/数组直接渲染', () => {
+    // 1. 纯文本子节点 → 包裹 buttonLabel span
+    const { rerender } = render(<Button data-testid="btn-text">点击保存</Button>);
+    const textBtn = screen.getByTestId('btn-text');
+    const labelSpan = textBtn.querySelector(`.${styles.buttonLabel}`);
+    expect(labelSpan).not.toBeNull();
+    expect(labelSpan?.textContent).toBe('点击保存');
+
+    // 2. 纯数字子节点 → 包裹 buttonLabel span
+    rerender(<Button data-testid="btn-text">{42}</Button>);
+    expect(textBtn.querySelector(`.${styles.buttonLabel}`)?.textContent).toBe('42');
+
+    // 3. 元素子节点 → 直接渲染，不被 buttonLabel span 截断/包裹
+    render(
+      <Button data-testid="btn-element">
+        <span data-testid="custom-child" style={{ marginLeft: 'auto' }}>
+          右对齐
+        </span>
+      </Button>
+    );
+    const elemBtn = screen.getByTestId('btn-element');
+    expect(elemBtn.querySelector(`.${styles.buttonLabel}`)).toBeNull();
+    const customChild = screen.getByTestId('custom-child');
+    expect(customChild.parentElement).toBe(elemBtn);
+  });
 });

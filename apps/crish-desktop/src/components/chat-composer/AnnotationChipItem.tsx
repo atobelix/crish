@@ -267,11 +267,9 @@ export const AnnotationChipItem: React.FC<AnnotationChipItemProps> = React.memo(
                   onChange={(e) => {
                     setDraftComment(e.target.value);
                   }}
+                  onEnter={handleSaveAndClose}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      handleSaveAndClose();
-                    } else if (e.key === 'Escape') {
+                    if (e.key === 'Escape') {
                       e.preventDefault();
                       handleCancel();
                     }

@@ -29,7 +29,13 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
   block?: boolean;
   /** 激活态 */
   active?: boolean;
-  /** 裸核心模式（不应用默认规格与文字包裹，专供复杂列表项/下拉选项等自定义布局按钮） */
+  /**
+   * 裸核心模式（剥离 padding/border/background/shadow 等视觉包装，保留语义与无障碍）。
+   * 选型决策树：
+   * 1. 常规操作触点（带背景、边框、标准规格）→ 使用标准 Button（variant: primary/secondary/ghost/danger）；
+   * 2. 纯图标按钮 → 使用 IconButton（强制 aria-label + 编译期约束）；
+   * 3. 复杂列表项、下拉菜单条目、树行展开/折叠 twisty、代码行内行号按钮等完全由外层 CSS 自定义布局的场景 → 使用 Button bare。
+   */
   bare?: boolean;
   /** 对齐方式：center（默认居中）| start（靠左对齐，专供通栏导航条目等） */
   align?: 'center' | 'start';
@@ -133,7 +139,11 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
           iconNode
         ) : null}
         {children != null ? (
-          <span className={styles.buttonLabel}>{children}</span>
+          typeof children === 'string' || typeof children === 'number' ? (
+            <span className={styles.buttonLabel}>{children}</span>
+          ) : (
+            children
+          )
         ) : null}
         {!loading && iconPosition === 'right' ? iconNode : null}
       </button>

@@ -1232,3 +1232,24 @@
   margin-right: var(--space-1);
   flex-shrink: 0;
 }
+
+.expandLineBtn {
+  margin-left: 8px;
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm, 4px);
+  height: auto;
+  min-height: unset;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font: inherit;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+}
+
+.expandLineBtn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}

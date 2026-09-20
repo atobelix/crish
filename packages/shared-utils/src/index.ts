@@ -24,6 +24,7 @@ export { deepEqual, shallowEqual } from './deep-equal';
 export { BoundedArray } from './bounded-array';
 export { retryWithBackoff, calculateBackoff } from './retry';
 export type { RetryOptions } from './retry';
+export { copyTextToClipboard } from './clipboard';
 
 // ── 文件编辑 ──
 export { replaceViaSeekSequence } from './file/seek-sequence';

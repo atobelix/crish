@@ -40,10 +40,7 @@ export const SessionInlineRename: React.FC<SessionInlineRenameProps> = ({
   }, [editValue, title, onRename]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      handleCommit();
-    } else if (e.key === 'Escape') {
+    if (e.key === 'Escape') {
       setEditValue(title);
       setIsEditing(false);
     }
@@ -60,6 +57,7 @@ export const SessionInlineRename: React.FC<SessionInlineRenameProps> = ({
           value={editValue}
           onChange={(e) => setEditValue(e.target.value)}
           onBlur={handleCommit}
+          onEnter={handleCommit}
           onKeyDown={handleKeyDown}
           maxLength={64}
           aria-label="修改会话名称"

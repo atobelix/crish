@@ -315,9 +315,8 @@ export const FileTreeView: React.FC<FileTreeViewProps> = React.memo(
                     onKeyDown={(ev) => handleRowKeyDown(ev, globalIdx, e)}
                   >
                     <Button
+                      bare
                       type="button"
-                      variant="ghost"
-                      size="sm"
                       className={`${styles.filesRowTwist} ${e.isDir ? '' : styles.isLeaf}`}
                       onClick={(ev) => {
                         ev.stopPropagation();

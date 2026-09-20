@@ -272,6 +272,7 @@ const DiffCardInner: React.FC<DiffCardProps> = () => {
       {searchOpen || searchActive ? (
         <div className={styles.searchRow}>
           <Input
+            bare
             variant="search"
             size="sm"
             className={styles.searchInput}

@@ -191,12 +191,11 @@ export const ComposerFusedTrigger: React.FC<ComposerFusedTriggerProps> = ({
                 return (
                   <Button
                     key={opt.id}
+                    bare
                     type="button"
-                    variant="ghost"
                     className={`${styles.item} ${selected ? styles.isSelected : ''}`}
                     role="menuitem"
-                    onClick={(e) => {
-                      e.stopPropagation();
+                    onClick={() => {
                       opt.onClick?.();
                     }}
                   >

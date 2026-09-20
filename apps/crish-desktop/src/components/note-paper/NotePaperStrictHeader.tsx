@@ -18,6 +18,7 @@ import { computeNoteMetrics, exportBlocksToMarkdown } from './noteMetrics';
 import type { SerializableBlock } from './noteMetrics';
 import styles from './NotePaperPanel.module.css';
 import { AppIcon } from '../ui/icons/index';
+import { copyTextToClipboard } from '@crish/shared-utils';
 
 export interface NoteDocumentDropdownItem {
   id?: string;
@@ -111,12 +112,9 @@ export const NotePaperStrictHeader: React.FC<NotePaperStrictHeaderProps> = React
     // 复制全文 Markdown
     const handleCopyMarkdown = useCallback(async () => {
       const mdContent = exportBlocksToMarkdown(blocks, title);
-      try {
-        if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-          await navigator.clipboard.writeText(mdContent);
-        }
-      } catch (err) {
-        console.error('[NotePaperStrictHeader] 复制 Markdown 失败:', err);
+      const ok = await copyTextToClipboard(mdContent);
+      if (!ok) {
+        console.error('[NotePaperStrictHeader] 复制 Markdown 失败');
       }
     }, [blocks, title]);
 

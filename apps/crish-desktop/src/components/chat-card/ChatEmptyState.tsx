@@ -410,8 +410,8 @@ export const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
             {CHAT_EMPTY_QUICK_PROMPTS.map((item) => (
               <Tooltip key={item.label} content={item.prompt}>
                 <Button
+                  bare
                   type="button"
-                  variant="ghost"
                   className={styles.quickPromptCard}
                   role="listitem"
                   data-quick-prompt={item.label}
