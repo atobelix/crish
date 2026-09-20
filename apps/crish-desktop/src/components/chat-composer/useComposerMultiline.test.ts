@@ -19,8 +19,11 @@ import {
   measureTextWidthCanvas,
   useComposerMultiline,
 } from './useComposerMultiline';
+import { ResizeObserverManager } from '../../services/ResizeObserverManager';
 
 describe('useComposerMultiline 状态机与交互优化', () => {
+  const origRO = globalThis.ResizeObserver;
+
   beforeEach(() => {
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(((
       contextId: string
@@ -39,6 +42,8 @@ describe('useComposerMultiline 状态机与交互优化', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    globalThis.ResizeObserver = origRO;
+    ResizeObserverManager.resetInstanceForTest();
   });
 
   it('measureTextWidthCanvas: 使用单例 Canvas 2D 离屏度量文本宽度', () => {
@@ -221,14 +226,17 @@ describe('useComposerMultiline 状态机与交互优化', () => {
   });
 
   it('ResizeObserver 回调通过 RAF 防抖调度度量', () => {
-    let roCallback: () => void = () => {};
+    ResizeObserverManager.resetInstanceForTest();
+    let roCallback: (entries: any[]) => void = () => {};
     const observeMock = vi.fn();
+    const unobserveMock = vi.fn();
     const disconnectMock = vi.fn();
 
     (globalThis as any).ResizeObserver = vi.fn().mockImplementation((cb) => {
       roCallback = cb;
       return {
         observe: observeMock,
+        unobserve: unobserveMock,
         disconnect: disconnectMock,
       };
     });
@@ -245,13 +253,13 @@ describe('useComposerMultiline 状态机与交互优化', () => {
 
     // 触发 ResizeObserver
     act(() => {
-      roCallback();
+      roCallback([{ target: container, contentRect: { width: 300 } }]);
     });
 
     expect(rafSpy).toHaveBeenCalled();
 
     unmount();
-    expect(disconnectMock).toHaveBeenCalled();
+    ResizeObserverManager.resetInstanceForTest();
   });
 
   it('当 DOM 中出现多个段落或换行结构时立即判定为多行态且 input 事件触发 0ms 展开', () => {

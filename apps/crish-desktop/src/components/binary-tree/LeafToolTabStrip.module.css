@@ -213,8 +213,9 @@
   pointer-events: auto;
 }
 
+.tab .tabCloseBtn:hover,
 .tabCloseBtn:hover {
-  opacity: 1 !important;
+  opacity: 1;
   background: var(--tint-hover);
   color: var(--text-primary);
 }

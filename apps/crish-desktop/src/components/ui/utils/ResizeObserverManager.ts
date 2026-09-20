@@ -87,5 +87,15 @@ export class ResizeObserverManager {
     this.entries.clear();
     this.pendingQueue.clear();
     if (this.flushRafId !== null) cancelAnimationFrame(this.flushRafId);
+    if (ResizeObserverManager.instance === this) {
+      ResizeObserverManager.instance = null;
+    }
+  }
+
+  static resetInstanceForTest(): void {
+    if (ResizeObserverManager.instance) {
+      ResizeObserverManager.instance.destroy();
+    }
+    ResizeObserverManager.instance = null;
   }
 }

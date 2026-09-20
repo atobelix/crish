@@ -136,11 +136,12 @@
 }
 
 /* 搜索框尺寸约束与工具栏极简形态（未激活/未选中态融入纸面，不显眼突兀） */
+.editorToolbar .searchBar,
 .searchBar {
   width: 220px;
-  background: transparent !important;
-  border-color: transparent !important;
-  box-shadow: none !important;
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
   transition:
     background-color var(--transition-fast) ease,
     border-color var(--transition-fast) ease,
@@ -148,24 +149,29 @@
 }
 
 /* 鼠标悬停但未聚焦时，给出极柔和底色，不突兀 */
+.editorToolbar .searchBar:hover:not(:focus),
 .searchBar:hover:not(:focus) {
-  background: var(--tint-hover) !important;
-  border-color: color-mix(in srgb, var(--border-subtle) 40%, transparent) !important;
+  background: var(--tint-hover);
+  border-color: color-mix(in srgb, var(--border-subtle) 40%, transparent);
 }
 
 /* 激活、聚焦或有搜索内容时展开宽度并呈现柔和底色与边框 */
+.editorToolbar .searchBar:focus,
+.editorToolbar .searchBar:focus-visible,
+.editorToolbar .searchBar[data-has-value='true'],
 .searchBar:focus,
 .searchBar:focus-visible,
 .searchBar[data-has-value='true'] {
   width: 275px;
-  background: var(--bg-card) !important;
-  border-color: color-mix(in srgb, var(--border-color) 92%, var(--text-primary) 8%) !important;
-  box-shadow: none !important;
+  background: var(--bg-card);
+  border-color: color-mix(in srgb, var(--border-color) 92%, var(--text-primary) 8%);
+  box-shadow: none;
 }
 
 /* 包含内容时右侧预留安全避让间距，防止文字与后缀按钮组重叠 */
+.editorToolbar .searchBar[data-has-value='true'],
 .searchBar[data-has-value='true'] {
-  padding-right: 106px !important;
+  padding-right: 106px;
 }
 
 .searchSuffix {
@@ -222,10 +228,11 @@
   font-size: var(--font-size-xs);
 }
 
+.toolbarBtn.toolbarBtnActive,
 .toolbarBtnActive {
   font-size: var(--font-size-xs);
-  color: var(--brand) !important;
-  background: color-mix(in srgb, var(--brand) 12%, transparent) !important;
+  color: var(--brand);
+  background: color-mix(in srgb, var(--brand) 12%, transparent);
 }
 
 /* ── 双层同步代码编辑器视口 (纯净无外环) ─────────────────────────── */
@@ -378,8 +385,9 @@
   gap: var(--space-1_5);
 }
 
+.footerActionGroup .footerBtn,
 .footerBtn {
-  border-radius: var(--button-radius) !important;
+  border-radius: var(--button-radius);
   font-size: var(--font-size-xs);
   height: var(--control-height-sm);
   font-weight: var(--font-weight-normal);

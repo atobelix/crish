@@ -104,10 +104,13 @@
   flex-shrink: 0;
 }
 
+:global(.button).sectionNew,
+:global(.button).sectionSortBtn,
+:global(.button).sectionSort,
 .sectionNew,
 .sectionSortBtn,
 .sectionSort {
-  --btn-icon-size: 16px !important;
+  --btn-icon-size: 16px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -244,10 +247,11 @@
   flex-shrink: 0;
 }
 
+:global(.button).folderNewBtn,
+:global(.button).folderNewSession,
 .folderNewBtn,
-.folderNewSession,
-:global(.button).folderNewBtn {
-  --btn-icon-size: 16px !important;
+.folderNewSession {
+  --btn-icon-size: 16px;
   display: inline-flex;
   align-items: center;
   justify-content: center;

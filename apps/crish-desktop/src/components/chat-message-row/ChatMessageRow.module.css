@@ -789,15 +789,18 @@
   user-select: none;
 }
 
+:global(.button).iconBtn,
+button.iconBtn,
+.iconBtn.iconBtn,
 .iconBtn {
-  width: 28px !important;
-  height: 28px !important;
-  min-width: 28px !important;
-  max-width: 28px !important;
-  padding: 0 !important;
-  --btn-px: 0px !important;
-  --btn-h: 28px !important;
-  --btn-icon-size: 16px !important;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  max-width: 28px;
+  padding: 0;
+  --btn-px: 0px;
+  --btn-h: 28px;
+  --btn-icon-size: 16px;
   box-sizing: border-box;
   flex-shrink: 0;
   border: none;
@@ -886,9 +889,10 @@
   padding: 0;
 }
 
+.userBubble.userBubblePinned,
 .userBubblePinned {
-  background: color-mix(in srgb, var(--user-bubble-pin-color) 6%, var(--bg-card)) !important;
-  border-color: color-mix(in srgb, var(--user-bubble-pin-color) 26%, var(--border-color)) !important;
+  background: color-mix(in srgb, var(--user-bubble-pin-color) 6%, var(--bg-card));
+  border: 1px solid color-mix(in srgb, var(--user-bubble-pin-color) 26%, var(--border-color));
 }
 
 .iconBtn.isPinnedActive {

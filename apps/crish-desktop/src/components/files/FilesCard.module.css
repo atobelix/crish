@@ -448,7 +448,7 @@
 
 .filesContextActions button,
 .filesContextActions :global(.button) {
-  box-shadow: none !important;
+  box-shadow: none;
 }
 
 .filesSoftBtn {
@@ -466,19 +466,19 @@
   font-family: inherit;
   cursor: pointer;
   box-sizing: border-box;
-  box-shadow: none !important;
+  box-shadow: none;
 }
 
 .filesSoftBtn:hover:not(:disabled) {
   background: var(--bg-hover);
   color: var(--text-primary);
-  box-shadow: none !important;
+  box-shadow: none;
 }
 
 .filesSoftBtn:disabled {
   opacity: 0.4;
   cursor: default;
-  box-shadow: none !important;
+  box-shadow: none;
 }
 
 .filesSoftBtnEmphasis {
@@ -486,12 +486,12 @@
   border-color: var(--border-color);
   color: var(--text-primary);
   font-weight: var(--font-weight-normal);
-  box-shadow: none !important;
+  box-shadow: none;
 }
 
 .filesSoftBtnEmphasis:hover:not(:disabled) {
   background: var(--bg-hover);
-  box-shadow: none !important;
+  box-shadow: none;
 }
 
 .filesBody {

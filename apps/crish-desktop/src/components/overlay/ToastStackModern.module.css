@@ -187,20 +187,26 @@
   animation: toastEnterBottom 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
+.viewport[data-expanded] .toastCard[data-state='exiting'],
+.viewport .toastCard[data-state='exiting'],
 .toastCard[data-state='exiting'] {
-  opacity: 0 !important;
-  transform: translateY(100%) scale(0.92) !important;
+  opacity: 0;
+  transform: translateY(100%) scale(0.92);
   pointer-events: none;
   transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.25s ease;
 }
 
+.viewport[data-expanded] .toastCard[data-state='swiping'],
+.viewport .toastCard[data-state='swiping'],
 .toastCard[data-state='swiping'] {
-  transition: none !important;
+  transition: none;
 }
 
+.viewport[data-expanded] .toastCard[data-state='swiping-dismiss'],
+.viewport .toastCard[data-state='swiping-dismiss'],
 .toastCard[data-state='swiping-dismiss'] {
-  opacity: 0 !important;
-  transform: translateX(calc(var(--swipe-x) * 1.8 + 120px)) translateY(var(--swipe-y)) !important;
+  opacity: 0;
+  transform: translateX(calc(var(--swipe-x) * 1.8 + 120px)) translateY(var(--swipe-y));
   pointer-events: none;
   transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.25s ease;
 }
@@ -232,7 +238,7 @@
 
 /* 展开悬停时冻结进度条 */
 .viewport[data-expanded='true'] .progressBar {
-  animation-play-state: paused !important;
+  animation-play-state: paused;
 }
 
 @keyframes toastProgress {
@@ -424,12 +430,13 @@
    ========================================================================== */
 
 @media (prefers-reduced-motion: reduce) {
+  .viewport .toastCard,
   .toastCard {
-    transition: none !important;
-    animation: none !important;
+    transition: none;
+    animation: none;
   }
   .progressBar {
-    animation: none !important;
-    display: none !important;
+    animation: none;
+    display: none;
   }
 }

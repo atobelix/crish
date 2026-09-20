@@ -158,14 +158,20 @@ export function useComposerMultiline(opts: {
     };
     el.addEventListener('input', onInput);
 
+    let rafId: number | null = null;
     const roManager = ResizeObserverManager.getInstance();
     const handleResize = () => {
-      measure();
+      if (rafId !== null) cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        measure();
+      });
     };
     roManager.observe(el, handleResize);
 
     return () => {
       el.removeEventListener('input', onInput);
+      if (rafId !== null) cancelAnimationFrame(rafId);
       roManager.unobserve(el, handleResize);
     };
   }, [enabled, layoutRef, measure]);

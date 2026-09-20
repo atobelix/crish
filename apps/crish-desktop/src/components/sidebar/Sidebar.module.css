@@ -44,8 +44,8 @@
   flex-shrink: 0;
   z-index: calc(var(--z-sidebar, 100) + 1);
   pointer-events: auto;
-  -webkit-app-region: no-drag !important;
-  app-region: no-drag !important;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
   cursor: pointer;
 }
 

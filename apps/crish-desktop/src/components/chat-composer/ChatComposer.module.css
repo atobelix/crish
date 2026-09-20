@@ -928,17 +928,21 @@
 .attachChip:focus-within .attachRemove,
 .fileRemove:hover,
 .attachRemove:hover {
-  opacity: 1 !important;
-  transform: scale(1) !important;
-  pointer-events: auto !important;
+  opacity: 1;
+  transform: scale(1);
+  pointer-events: auto;
 }
 
 /* 单一真理源统一 Hover：正红色稍弱一点（不混合黑色），纯白叉号，清透干净，全卡片类型绝对统一样式 */
+.fileCard .fileRemove:hover,
+.fileCard .attachRemove:hover,
+.attachChip .fileRemove:hover,
+.attachChip .attachRemove:hover,
 .fileRemove:hover,
 .attachRemove:hover {
-  background: var(--color-error) !important;
-  border-color: transparent !important;
-  color: var(--text-on-danger) !important;
+  background: var(--color-error);
+  border-color: transparent;
+  color: var(--text-on-danger);
 }
 
 /* ==========================================================================
@@ -1076,12 +1080,12 @@
 .annCommentInput {
   width: 100%;
   box-sizing: border-box;
-  background: transparent !important;
-  border: none !important;
-  outline: none !important;
-  box-shadow: none !important;
-  padding: 0 !important;
-  margin: 0 !important;
+  background: transparent;
+  border: none;
+  outline: none;
+  box-shadow: none;
+  padding: 0;
+  margin: 0;
   font-family: inherit;
   font-size: 12px;
   line-height: 1.5;
@@ -1415,15 +1419,15 @@
 .sendBtnCircle.active,
 .sendCircle[data-send-active='1'],
 .sendCircle:not(:disabled) {
-  width: 28px !important;
-  min-width: 28px !important;
-  max-width: 28px !important;
-  height: 28px !important;
+  width: 28px;
+  min-width: 28px;
+  max-width: 28px;
+  height: 28px;
   margin-left: 6px;
   opacity: 1;
   transform: scale(1);
   pointer-events: auto;
-  box-shadow: none !important;
+  box-shadow: none;
 }
 
 .sendBtnCircle.active:hover,
@@ -1451,10 +1455,10 @@
 }
 
 .stopCircleBtn {
-  width: 28px !important;
-  height: 28px !important;
-  min-width: 28px !important;
-  max-width: 28px !important;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  max-width: 28px;
   border-radius: 50%;
   background: transparent;
   color: var(--text-secondary);

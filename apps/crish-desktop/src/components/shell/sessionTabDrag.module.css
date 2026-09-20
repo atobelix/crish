@@ -103,14 +103,17 @@
 }
 
 /* 拖拽期隔离：不要给 * 设 pointer-events:none，条带与叶框仍需命中 */
-:global(body.is-tab-dragging) * {
-  user-select: none !important;
+:global(body.is-tab-dragging),
+:global(body.is-tab-dragging) *,
+:global(body.is-tab-dragging) [class] {
+  user-select: none;
 }
 
 :global(body.is-tab-dragging) [data-tree-canvas] [data-leaf-body],
 :global(body.is-tab-dragging) [data-tree-canvas] [data-leaf-id] > :not([data-pane-header]),
+:global(body.is-tab-dragging) [data-tree-canvas] [data-leaf-id] [class],
 :global(body.is-tab-dragging) iframe,
 :global(body.is-tab-dragging) .xterm,
 :global(body.is-tab-dragging) [data-markdown-editor] {
-  pointer-events: none !important;
+  pointer-events: none;
 }
