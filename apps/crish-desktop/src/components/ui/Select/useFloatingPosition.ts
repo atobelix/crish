@@ -6,6 +6,7 @@ import {
   type ComputeFloatingPositionOptions,
   type ComputedFloatingPlacement,
 } from './internal/positionGeometry';
+import { ResizeObserverManager } from '../utils/ResizeObserverManager';
 
 export { computeFloatingPosition };
 export type { ComputeFloatingPositionOptions, ComputedFloatingPlacement };
@@ -172,20 +173,23 @@ export function useFloatingPosition(
       });
     };
 
-    window.addEventListener('resize', throttledUpdate, { passive: true });
+    window.addEventListener('app:window-resize-settled', throttledUpdate);
     window.addEventListener('scroll', throttledUpdate, { passive: true, capture: true });
 
-    let resizeObserver: ResizeObserver | null = null;
-    if (typeof ResizeObserver !== 'undefined' && triggerRef.current) {
-      resizeObserver = new ResizeObserver(() => throttledUpdate());
-      resizeObserver.observe(triggerRef.current);
+    const roManager = ResizeObserverManager.getInstance();
+    const triggerEl = triggerRef.current;
+    const handleRo = () => throttledUpdate();
+    if (triggerEl) {
+      roManager.observe(triggerEl, handleRo);
     }
 
     return () => {
       if (rafId !== null) cancelAnimationFrame(rafId);
-      window.removeEventListener('resize', throttledUpdate);
+      window.removeEventListener('app:window-resize-settled', throttledUpdate);
       window.removeEventListener('scroll', throttledUpdate, true);
-      resizeObserver?.disconnect();
+      if (triggerEl) {
+        roManager.unobserve(triggerEl, handleRo);
+      }
     };
   }, [open, updatePosition, triggerRef, contentRef]);
 

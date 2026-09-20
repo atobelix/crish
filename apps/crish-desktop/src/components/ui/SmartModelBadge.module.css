@@ -17,7 +17,7 @@
   align-items: center;
   gap: 5px;
   padding: 2px 8px;
-  border-radius: 9999px;
+  border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--surface-scrim) 85%, transparent);
   border: 1px solid var(--border-subtle);
   color: var(--text-primary);

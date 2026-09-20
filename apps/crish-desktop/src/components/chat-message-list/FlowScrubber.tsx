@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSta
 
 import type { SessionMessage } from '../../store/types';
 import type { VirtualScrollManager } from '../../api/VirtualScrollManager';
+import { ResizeObserverManager } from '../../services/ResizeObserverManager';
 import styles from './FlowScrubber.module.css';
 import {
   USER_BUBBLE_SELECTOR,
@@ -75,10 +76,11 @@ const FlowScrubberInner: React.FC<FlowScrubberProps> = ({
     if (!wrap) return;
     const measure = () => setRailHeight(wrap.clientHeight);
     measure();
-    if (typeof ResizeObserver === 'undefined') return;
-    const ro = new ResizeObserver(measure);
-    ro.observe(wrap);
-    return () => ro.disconnect();
+    const ro = ResizeObserverManager.getInstance();
+    ro.observe(wrap, measure);
+    return () => {
+      ro.unobserve(wrap, measure);
+    };
   }, []);
 
   const maxTicks = Math.max(

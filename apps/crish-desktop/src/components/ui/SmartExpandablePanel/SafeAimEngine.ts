@@ -44,7 +44,7 @@ export class SafeAimEngine {
 
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.setAttribute('aria-hidden', 'true');
-    svg.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;pointer-events:none;z-index:2005;';
+    svg.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;pointer-events:none;z-index:var(--z-popover);';
     if (this.debug) {
       svg.style.background = 'rgba(16, 185, 129, 0.05)';
     }

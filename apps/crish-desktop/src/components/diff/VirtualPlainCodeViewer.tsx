@@ -12,6 +12,7 @@ import { highlightCodeSafe } from '../../api/codeHighlight';
 import { LineBuffer } from './LineBuffer';
 import { VirtualCodeEngine, MAX_DOM_LINE_CHARS, MAX_EXPANDED_LINE_CHARS } from './VirtualCodeEngine';
 import { Tooltip } from '../ui';
+import { ResizeObserverManager } from '../../services/ResizeObserverManager';
 import styles from './DiffCard.module.css';
 
 function basename(p: string): string {
@@ -92,22 +93,21 @@ export const VirtualPlainCodeViewer: React.FC<VirtualPlainCodeViewerProps> = Rea
       }
 
       let rafId: number | null = null;
-      const ro = new ResizeObserver((entries) => {
-        for (const entry of entries) {
-          const w = entry.contentRect.width;
-          if (w > 0 && Math.abs(w - prevWidthRef.current) >= 4) {
-            if (rafId != null) cancelAnimationFrame(rafId);
-            rafId = requestAnimationFrame(() => {
-              prevWidthRef.current = w;
-              setContainerWidth(w);
-            });
-          }
+      const handleResize = (entry: ResizeObserverEntry) => {
+        const w = entry.contentRect.width;
+        if (w > 0 && Math.abs(w - prevWidthRef.current) >= 4) {
+          if (rafId != null) cancelAnimationFrame(rafId);
+          rafId = requestAnimationFrame(() => {
+            prevWidthRef.current = w;
+            setContainerWidth(w);
+          });
         }
-      });
-      ro.observe(el);
+      };
+      const roManager = ResizeObserverManager.getInstance();
+      roManager.observe(el, handleResize);
       return () => {
         if (rafId != null) cancelAnimationFrame(rafId);
-        ro.disconnect();
+        roManager.unobserve(el, handleResize);
       };
     }, [containerRef]);
 
@@ -155,13 +155,15 @@ export const VirtualPlainCodeViewer: React.FC<VirtualPlainCodeViewerProps> = Rea
       };
 
       applyMeasure();
-      const ro = new ResizeObserver(() => {
+      const roManager = ResizeObserverManager.getInstance();
+      const handleMeasure = () => {
         applyMeasure();
-      });
-      ro.observe(lineEl);
-      ro.observe(spanEl);
+      };
+      roManager.observe(lineEl, handleMeasure);
+      roManager.observe(spanEl, handleMeasure);
       return () => {
-        ro.disconnect();
+        roManager.unobserve(lineEl, handleMeasure);
+        roManager.unobserve(spanEl, handleMeasure);
       };
     }, [uiSize, wordWrap]);
 
@@ -242,22 +244,21 @@ export const VirtualPlainCodeViewer: React.FC<VirtualPlainCodeViewerProps> = Rea
           setActualPreWidth((prev) => (Math.abs(w - prev) >= 4 ? w : prev));
         }
       }
-      const ro = new ResizeObserver((entries) => {
-        for (const entry of entries) {
-          const height = Math.round(entry.contentRect.height);
-          if (height > 0) {
-            setActualPreHeight((prev) => (Math.abs(height - prev) >= 2 ? height : prev));
-          }
-          if (!wordWrap) {
-            const width = Math.round(entry.contentRect.width);
-            if (width > 0) {
-              setActualPreWidth((prev) => (Math.abs(width - prev) >= 4 ? width : prev));
-            }
+      const roManager = ResizeObserverManager.getInstance();
+      const handlePreResize = (entry: ResizeObserverEntry) => {
+        const height = Math.round(entry.contentRect.height);
+        if (height > 0) {
+          setActualPreHeight((prev) => (Math.abs(height - prev) >= 2 ? height : prev));
+        }
+        if (!wordWrap) {
+          const width = Math.round(entry.contentRect.width);
+          if (width > 0) {
+            setActualPreWidth((prev) => (Math.abs(width - prev) >= 4 ? width : prev));
           }
         }
-      });
-      ro.observe(el);
-      return () => ro.disconnect();
+      };
+      roManager.observe(el, handlePreResize);
+      return () => roManager.unobserve(el, handlePreResize);
     }, [visibleLines, wordWrap]);
 
     // 动态画布总高：以静态估算为基准，并根据当前物化 DOM 的实际探底几何自愈扩容

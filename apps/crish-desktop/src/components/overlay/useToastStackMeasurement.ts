@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import type { AppToast } from '../../services/toast/types';
+import { ResizeObserverManager } from '../../services/ResizeObserverManager';
 
 export function useToastStackMeasurement(
   toasts: readonly AppToast[],
@@ -27,41 +28,34 @@ export function useToastStackMeasurement(
     }
   }, []);
 
-  // 监听尺寸动态变化 (通过 ResizeObserver 精准收集真实卡片高度)
+  // 监听尺寸动态变化 (通过 ResizeObserverManager 精准收集真实卡片高度)
   useEffect(() => {
-    if (typeof ResizeObserver === 'undefined') return;
+    const roManager = ResizeObserverManager.getInstance();
 
-    const observer = new ResizeObserver((entries) => {
-      let changed = false;
-      const next = { ...heightsRef.current };
+    const handleResize = (entry: ResizeObserverEntry) => {
+      const id = entry.target.getAttribute('data-toast-id');
+      if (id) {
+        const newH =
+          entry.borderBoxSize?.[0]?.blockSize ??
+          entry.contentRect.height ??
+          (entry.target as HTMLElement).offsetHeight ??
+          56;
 
-      for (const entry of entries) {
-        const id = entry.target.getAttribute('data-toast-id');
-        if (id) {
-          const newH =
-            entry.borderBoxSize?.[0]?.blockSize ??
-            entry.contentRect.height ??
-            (entry.target as HTMLElement).offsetHeight ??
-            56;
-
-          if (next[id] !== newH && newH > 0) {
-            next[id] = newH;
-            changed = true;
-          }
+        if (heightsRef.current[id] !== newH && newH > 0) {
+          setHeights((prev) => ({ ...prev, [id]: newH }));
         }
       }
+    };
 
-      if (changed) {
-        setHeights(next);
-      }
-    });
-
-    nodeRefs.current.forEach((el) => {
-      observer.observe(el);
+    const elements = Array.from(nodeRefs.current.values());
+    elements.forEach((el) => {
+      roManager.observe(el, handleResize);
     });
 
     return () => {
-      observer.disconnect();
+      elements.forEach((el) => {
+        roManager.unobserve(el, handleResize);
+      });
     };
   }, [toasts]);
 

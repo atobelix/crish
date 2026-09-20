@@ -5,6 +5,11 @@
   z-index: var(--z-dropdown);
 }
 
+.menuTriggerHost {
+  display: inline-flex;
+  align-items: center;
+}
+
 .menuContent {
   z-index: var(--z-dropdown);
   outline: none;

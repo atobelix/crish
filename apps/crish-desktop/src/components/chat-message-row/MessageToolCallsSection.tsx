@@ -15,6 +15,7 @@ import type { MessageToolCall, SessionAgent } from '../../store/types';
 import { buildToolStackHostProps, shouldHostToolStack } from './chatMessageRowUtils';
 import { ReasoningRow } from './ReasoningRow';
 import type { VirtualScrollManager } from '../../api/VirtualScrollManager';
+import { ResizeObserverManager } from '../../services/ResizeObserverManager';
 
 /**
  * 关联子 agent 行渲染器：内嵌 InlineAgentPanel（懒加载保持分包）。
@@ -119,15 +120,14 @@ export const MessageToolCallsSection: React.FC<MessageToolCallsSectionProps> =
     useLayoutEffect(() => {
       const el = sectionRef.current;
       if (!el) return;
-      const ro = new ResizeObserver((entries) => {
-        for (const entry of entries) {
-          if (entry.contentRect.height > 0) {
-            virtualScrollManager?.invalidateActual(msgId);
-          }
+      const roManager = ResizeObserverManager.getInstance();
+      const onResize = (entry: ResizeObserverEntry) => {
+        if (entry.contentRect.height > 0) {
+          virtualScrollManager?.invalidateActual(msgId);
         }
-      });
-      ro.observe(el);
-      return () => ro.disconnect();
+      };
+      roManager.observe(el, onResize);
+      return () => roManager.unobserve(el, onResize);
     }, [msgId, virtualScrollManager]);
 
     // D7.4：hostProps / actions 引用稳定（useMemo），供 FoldableToolGroup / ChatToolStack memo 短路

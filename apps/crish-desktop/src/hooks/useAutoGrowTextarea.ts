@@ -84,7 +84,7 @@ export function useAutoGrowTextarea(value: string, maxLines = COMPOSER_MAX_LINES
 
   useEffect(() => {
     const onWin = () => applyHeight();
-    window.addEventListener('resize', onWin);
+    window.addEventListener('app:window-resize-settled', onWin);
 
     // 复用 ResizeObserverManager 单例（消灭独立 new ResizeObserver，
     // 与布局动画冻结状态机共用同一 RO 实例，避免多 RO 竞争与内存浪费）
@@ -97,7 +97,7 @@ export function useAutoGrowTextarea(value: string, maxLines = COMPOSER_MAX_LINES
     }
 
     return () => {
-      window.removeEventListener('resize', onWin);
+      window.removeEventListener('app:window-resize-settled', onWin);
       if (el) {
         roManager.unobserve(el, onResize);
         if (el.parentElement) roManager.unobserve(el.parentElement, onResize);

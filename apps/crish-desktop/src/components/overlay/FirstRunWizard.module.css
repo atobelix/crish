@@ -62,7 +62,7 @@
   font-size: var(--font-size-xs);
   color: var(--text-tertiary);
   padding: 4px 8px;
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   background: transparent;
 }
 

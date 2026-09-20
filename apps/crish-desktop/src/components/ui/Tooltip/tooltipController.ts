@@ -150,6 +150,7 @@ function ensureDismissListeners(): void {
 
   window.addEventListener('scroll', dismiss, true);
   window.addEventListener('resize', dismiss);
+  window.addEventListener('app:window-resize-settled', dismiss);
   window.addEventListener('blur', dismiss);
   window.addEventListener('keydown', onKeyDown, true);
   document.addEventListener('pointerdown', dismiss, true);
@@ -165,6 +166,7 @@ function ensureDismissListeners(): void {
   listenerCleanups.push(() => {
     window.removeEventListener('scroll', dismiss, true);
     window.removeEventListener('resize', dismiss);
+    window.removeEventListener('app:window-resize-settled', dismiss);
     window.removeEventListener('blur', dismiss);
     window.removeEventListener('keydown', onKeyDown, true);
     document.removeEventListener('pointerdown', dismiss, true);

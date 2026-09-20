@@ -164,7 +164,7 @@
   top: 0;
   left: 0;
   width: 100%;
-  border-radius: var(--scrollbar-thumb-radius, var(--radius-full));
+  border-radius: var(--scrollbar-thumb-radius);
   background: var(--scrollbar-thumb-bg);
   transition: background 120ms ease;
   cursor: grab;
@@ -215,7 +215,7 @@
   top: 0;
   left: 0;
   height: 100%;
-  border-radius: var(--scrollbar-thumb-radius, var(--radius-full));
+  border-radius: var(--scrollbar-thumb-radius);
   background: var(--scrollbar-thumb-bg);
   transition: background 120ms ease;
   cursor: grab;

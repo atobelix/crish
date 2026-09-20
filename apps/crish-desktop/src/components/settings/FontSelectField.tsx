@@ -157,8 +157,8 @@ export const FontSelectField: React.FC<Props> = ({
 
   useEffect(() => {
     if (!open) return;
-    window.addEventListener('resize', measureWidth);
-    return () => window.removeEventListener('resize', measureWidth);
+    window.addEventListener('app:window-resize-settled', measureWidth);
+    return () => window.removeEventListener('app:window-resize-settled', measureWidth);
   }, [open, measureWidth]);
 
   const menuOptions: SelectOptionItem[] = useMemo(

@@ -7,6 +7,7 @@
  * 5. ResizeObserver 回调结合 RAF 防抖批处理调度
  */
 import { useCallback, useLayoutEffect, useRef, useState } from 'react';
+import { ResizeObserverManager } from '../../services/ResizeObserverManager';
 
 export const GRID_GUTTER_PX = 18;
 export const MIN_CAPACITY_PX = 200;
@@ -157,43 +158,15 @@ export function useComposerMultiline(opts: {
     };
     el.addEventListener('input', onInput);
 
-    let rafId: number | null = null;
-    let ro: ResizeObserver | null = null;
-    if (typeof ResizeObserver !== 'undefined') {
-      try {
-        ro = new ResizeObserver(() => {
-          if (typeof window !== 'undefined' && window.requestAnimationFrame) {
-            if (rafId !== null) {
-              window.cancelAnimationFrame(rafId);
-            }
-            rafId = window.requestAnimationFrame(() => {
-              rafId = null;
-              measure();
-            });
-          } else {
-            measure();
-          }
-        });
-        if (ro && typeof ro.observe === 'function') {
-          ro.observe(el);
-        }
-      } catch {
-        ro = null;
-      }
-    }
+    const roManager = ResizeObserverManager.getInstance();
+    const handleResize = () => {
+      measure();
+    };
+    roManager.observe(el, handleResize);
 
     return () => {
       el.removeEventListener('input', onInput);
-      if (
-        rafId !== null &&
-        typeof window !== 'undefined' &&
-        window.cancelAnimationFrame
-      ) {
-        window.cancelAnimationFrame(rafId);
-      }
-      if (ro && typeof ro.disconnect === 'function') {
-        ro.disconnect();
-      }
+      roManager.unobserve(el, handleResize);
     };
   }, [enabled, layoutRef, measure]);
 

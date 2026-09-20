@@ -139,7 +139,7 @@
 /* line 滑块：圆角高光线条 */
 .indicatorLine {
   background-color: var(--accent-color, var(--brand-primary));
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-xs);
 }
 
 .indicatorLine[data-orientation='horizontal'] {
@@ -261,7 +261,7 @@
   font-size: 11px;
   line-height: 1;
   padding: 1px 4px;
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-sm);
   background-color: var(--tint-strong);
   color: var(--text-tertiary);
 }

@@ -6,6 +6,7 @@ import {
   type HeightGetter,
   type SessionListWindowRange,
 } from '../../../api/sessionListWindow';
+import { ResizeObserverManager } from '../../../services/ResizeObserverManager';
 
 export const FULL_RANGE = (count: number): SessionListWindowRange => ({
   start: 0,
@@ -76,16 +77,21 @@ export function useSessionListWindow(
       update();
     });
     scrollEl.addEventListener('scroll', update, { passive: true });
-    const ro =
-      typeof ResizeObserver !== 'undefined' ? new ResizeObserver(update) : null;
-    ro?.observe(scrollEl);
+    const roManager = ResizeObserverManager.getInstance();
+    const handleRo = () => {
+      update();
+    };
+    const observedElements: HTMLElement[] = [scrollEl];
     const listEl = listRef.current;
     if (listEl) {
-      ro?.observe(listEl);
+      observedElements.push(listEl);
       if (listEl.parentElement) {
-        ro?.observe(listEl.parentElement);
+        observedElements.push(listEl.parentElement);
       }
     }
+    observedElements.forEach((el) => {
+      roManager.observe(el, handleRo);
+    });
 
     // 监听侧栏内部（如 ProjectsSection 折叠/展开、PinnedSection 变化）导致的几何重排
     const mo =
@@ -104,7 +110,9 @@ export function useSessionListWindow(
     return () => {
       cancelAnimationFrame(raf);
       scrollEl.removeEventListener('scroll', update);
-      ro?.disconnect();
+      observedElements.forEach((el) => {
+        roManager.unobserve(el, handleRo);
+      });
       mo?.disconnect();
     };
   }, [count, enabled, ensureIndex, scrollParentRef, listRef, getHeight]);

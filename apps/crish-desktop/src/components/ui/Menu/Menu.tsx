@@ -237,54 +237,52 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
         .children;
     }
 
-    const clonedTrigger = React.isValidElement(actualTrigger)
-      ? React.cloneElement(
-          actualTrigger as React.ReactElement<Record<string, unknown>>,
-          {
-            ref: (node: HTMLElement | null) => {
-              triggerRef.current = node;
-              const propsRef = (
-                (actualTrigger as React.ReactElement).props as {
-                  ref?: React.Ref<HTMLElement>;
-                }
-              )?.ref;
-              if (typeof propsRef === 'function') {
-                propsRef(node);
-              } else if (
-                propsRef &&
-                typeof propsRef === 'object' &&
-                'current' in propsRef
-              ) {
-                (
-                  propsRef as React.MutableRefObject<HTMLElement | null>
-                ).current = node;
-              }
-            },
-            onClick: (e: React.MouseEvent) => {
-              if (!isOpen && shouldSuppressMenuReopen(triggerRef.current)) {
-                e.preventDefault();
-                return;
-              }
-              (
-                (actualTrigger as React.ReactElement).props as {
-                  onClick?: (e: React.MouseEvent) => void;
-                }
-              )?.onClick?.(e);
-            },
+    const handleTriggerClickCapture = (e: React.MouseEvent) => {
+      if (!isOpen && shouldSuppressMenuReopen(triggerRef.current)) {
+        e.preventDefault();
+      }
+    };
+
+    const hostTrigger = React.isValidElement(actualTrigger) ? (
+      <span
+        ref={(node: HTMLElement | null) => {
+          triggerRef.current = node;
+          const propsRef = (
+            actualTrigger.props as {
+              ref?: React.Ref<HTMLElement>;
+            }
+          )?.ref;
+          if (typeof propsRef === 'function') {
+            propsRef(node);
+          } else if (
+            propsRef &&
+            typeof propsRef === 'object' &&
+            'current' in propsRef
+          ) {
+            (
+              propsRef as React.MutableRefObject<HTMLElement | null>
+            ).current = node;
           }
-        )
-      : actualTrigger;
+        }}
+        className={styles.menuTriggerHost}
+        onClickCapture={handleTriggerClickCapture}
+      >
+        {actualTrigger}
+      </span>
+    ) : (
+      actualTrigger
+    );
 
     renderedTrigger =
-      tipContent && React.isValidElement(clonedTrigger) ? (
+      tipContent && React.isValidElement(hostTrigger) ? (
         <Tooltip content={tipContent} side={tipSide} disabled={isOpen}>
           <Popover.Trigger asChild>
-            {clonedTrigger as React.ReactElement}
+            {hostTrigger as React.ReactElement}
           </Popover.Trigger>
         </Tooltip>
       ) : (
         <Popover.Trigger asChild>
-          {clonedTrigger as React.ReactElement}
+          {hostTrigger as React.ReactElement}
         </Popover.Trigger>
       );
   }
@@ -319,9 +317,6 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
             style={{ maxHeight: resolvedMaxHeight, ...contentStyle }}
             onKeyDown={handleKeyDown}
             onCloseAutoFocus={onCloseAutoFocus}
-            onWheel={(e) => {
-              e.stopPropagation();
-            }}
             onPointerDownOutside={(e) => {
               onPointerDownOutside?.(e);
               if (e.defaultPrevented) return;

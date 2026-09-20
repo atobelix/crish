@@ -201,7 +201,7 @@ function runRule3_RawResizeAndThrashing() {
   const files = collectFiles(
     DESKTOP_SRC,
     /\.(ts|tsx)$/,
-    /(\.test\.|\.spec\.|__tests__|tests\/|ResizeObserverManager\.ts|WindowResizeBridge\.ts)/
+    /(\.test\.|\.spec\.|__tests__|tests\/|ResizeObserverManager\.ts|WindowResizeBridge\.ts|tooltipController\.ts)/
   );
 
   for (const file of files) {
@@ -267,15 +267,16 @@ function runRule4_ZeroPillRadius() {
 
   for (const file of files) {
     const posix = toPosix(file);
-    // 合法白名单：Switch 轨道、Avatar 头像、PulseDot / StatusDot 加载指示器
+    // 合法白名单：Switch 轨道、Avatar 头像、PulseDot / StatusDot 加载指示器、Tooltip 胶囊提示（AGENTS.md §12 / RULE-07）
     const isSwitchTrack = posix.includes('Switch.module.css');
     const isAvatar = posix.includes('Avatar');
     const isPulseDot =
       posix.includes('PulseDot') ||
       posix.includes('StatusDot') ||
       posix.includes('StatusPulseDot');
+    const isTooltip = posix.includes('Tooltip.module.css');
 
-    if (isSwitchTrack || isAvatar || isPulseDot) continue;
+    if (isSwitchTrack || isAvatar || isPulseDot || isTooltip) continue;
 
     const content = readFileSync(file, 'utf8');
     const lines = content.split('\n');

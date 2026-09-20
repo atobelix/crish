@@ -569,11 +569,11 @@ export const PreviewCardContent = forwardRef<
       if (!isOpen) return;
       const handleDismiss = () => setIsOpen(false);
       window.addEventListener('scroll', handleDismiss, true);
-      window.addEventListener('resize', handleDismiss);
+      window.addEventListener('app:window-resize-settled', handleDismiss);
       window.addEventListener('blur', handleDismiss);
       return () => {
         window.removeEventListener('scroll', handleDismiss, true);
-        window.removeEventListener('resize', handleDismiss);
+        window.removeEventListener('app:window-resize-settled', handleDismiss);
         window.removeEventListener('blur', handleDismiss);
       };
     }, [isOpen, setIsOpen]);

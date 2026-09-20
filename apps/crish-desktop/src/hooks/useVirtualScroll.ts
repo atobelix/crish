@@ -3,6 +3,7 @@ import {
   VirtualScrollManager,
   type VisibleRange,
 } from '../api/VirtualScrollManager';
+import { ResizeObserverManager } from '../services/ResizeObserverManager';
 
 export interface UseVirtualScrollOptions {
   /** 消息 ID 序列 */
@@ -83,13 +84,12 @@ export function useVirtualScroll(
     if (!el) return;
     const updateHeight = () => setViewportHeight(el.clientHeight || 600);
     updateHeight();
-    const ro = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        setViewportHeight(entry.contentRect.height || 600);
-      }
-    });
-    ro.observe(el);
-    return () => ro.disconnect();
+    const roManager = ResizeObserverManager.getInstance();
+    const handleRo = (entry: ResizeObserverEntry) => {
+      setViewportHeight(entry.contentRect.height || 600);
+    };
+    roManager.observe(el, handleRo);
+    return () => roManager.unobserve(el, handleRo);
   }, []);
 
   const ids = options.ids;

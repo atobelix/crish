@@ -25,6 +25,7 @@ import {
 } from './ScrollAreaHelpers';
 import { ScrollAreaScrollBar } from './ScrollAreaScrollBar';
 import { useThumbDrag } from './useThumbDrag';
+import { ResizeObserverManager } from '../utils/ResizeObserverManager';
 
 export {
   calculateSafeAreaInset,
@@ -216,10 +217,15 @@ export const ScrollArea = forwardRef<ScrollAreaHandle, ScrollAreaProps>(
       const el = internalViewportRef.current;
       if (!el) return;
       updateMetrics();
-      const observer = new ResizeObserver(() => updateMetrics());
-      observer.observe(el);
-      if (el.firstElementChild) observer.observe(el.firstElementChild);
-      return () => observer.disconnect();
+      const roManager = ResizeObserverManager.getInstance();
+      const handleResize = () => updateMetrics();
+      roManager.observe(el, handleResize);
+      const child = el.firstElementChild;
+      if (child) roManager.observe(child, handleResize);
+      return () => {
+        roManager.unobserve(el, handleResize);
+        if (child) roManager.unobserve(child, handleResize);
+      };
     }, [updateMetrics]);
 
     const rigidBrake = useCallback(() => {

@@ -255,7 +255,7 @@
   font-size: 11px;
   line-height: 1;
   padding: 1px 5px;
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-sm);
   background-color: var(--tint-strong);
   color: var(--text-secondary);
   font-family: var(--font-mono);

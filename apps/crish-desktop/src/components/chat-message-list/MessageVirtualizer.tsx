@@ -23,6 +23,7 @@ import {
 } from '../../store/storeAccess';
 import { useUndoWithScrollAnchor } from './useUndoWithScrollAnchor';
 import { FlowScrubber } from './FlowScrubber';
+import { ResizeObserverManager } from '../../services/ResizeObserverManager';
 import { ChatScrollFloorSlot } from './ChatScrollFloorSlot';
 
 import {
@@ -187,54 +188,52 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
   // Heights: MESSAGE_ESTIMATED_ROW_HEIGHT fallback until ResizeObserver setActual.
   // No @chenglou/pretext on this path — RO owns measured heights after paint.
 
-  const roRef = useRef<ResizeObserver | null>(null);
   const observedRowsRef = useRef<Set<Element>>(new Set());
+  const handleEntry = useCallback(
+    (entry: ResizeObserverEntry) => {
+      const el = entry.target;
+      if (!(el instanceof HTMLElement)) return;
+      const msgId = el.dataset.vindex;
+      const measuredHeight = el.offsetHeight || Math.ceil(entry.contentRect.height);
+      if (msgId != null && measuredHeight > 0) {
+        setActual(msgId, measuredHeight);
+      }
+    },
+    [setActual]
+  );
+
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
-    if (!roRef.current) {
-      roRef.current = new ResizeObserver((entries) => {
-        for (const entry of entries) {
-          const el = entry.target;
-          if (!(el instanceof HTMLElement)) continue;
-          // data-vindex 存 messageId（稳定键），不再用数字下标
-          // 统一度量入口（Plan 05 §2.2 / DEF-13）：使用 el.offsetHeight 度量完整盒模型外框高度（content + padding + border，严格排除外部 margin）
-          const msgId = el.dataset.vindex;
-          const measuredHeight = el.offsetHeight || Math.ceil(entry.contentRect.height);
-          if (msgId != null && measuredHeight > 0) {
-            setActual(msgId, measuredHeight);
-          }
-        }
-      });
-    }
-    const ro = roRef.current;
+    const roManager = ResizeObserverManager.getInstance();
     const observed = observedRowsRef.current;
     const current = new Set<Element>(
       Array.from(container.querySelectorAll('[data-vindex]'))
     );
     for (const row of current) {
       if (!observed.has(row)) {
-        ro.observe(row);
+        roManager.observe(row, handleEntry);
         observed.add(row);
       }
     }
     for (const row of observed) {
       if (!current.has(row)) {
-        ro.unobserve(row);
+        roManager.unobserve(row, handleEntry);
         observed.delete(row);
       }
     }
-  }, [msgIds, containerRef, setActual]);
+  }, [msgIds, containerRef, handleEntry]);
 
   useEffect(() => {
-    const ro = roRef.current;
     const observed = observedRowsRef.current;
+    const roManager = ResizeObserverManager.getInstance();
     return () => {
-      ro?.disconnect();
-      roRef.current = null;
+      for (const row of observed) {
+        roManager.unobserve(row, handleEntry);
+      }
       observed.clear();
     };
-  }, []);
+  }, [handleEntry]);
 
   // 展开/收起后同帧兜底重测：RO 异步；宿主在 commit 后扫一遍可见 [data-vindex]，经 vs.setActual 触发 actualTick
   useLayoutEffect(() => {

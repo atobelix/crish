@@ -115,8 +115,8 @@
   color: var(--text-secondary);
   padding: 0;
   outline: none;
-  /* 高于最大化抽屉 .leafDockDrawer.maximized (z-index: 150)，全屏下常驻可见并可点击 */
-  z-index: 160;
+  /* 高于最大化抽屉 .leafDockDrawer.maximized (var(--z-chrome))，全屏下常驻可见并可点击 */
+  z-index: var(--z-dropdown);
   pointer-events: auto;
   transition:
     background-color var(--transition-micro) ease,
@@ -427,7 +427,7 @@
   min-width: 0;
   height: 100%;
   border-left: none;
-  z-index: 150;
+  z-index: var(--z-chrome);
   background: var(--bg-card);
 }
 

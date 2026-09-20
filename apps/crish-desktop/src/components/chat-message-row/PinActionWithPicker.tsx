@@ -114,10 +114,10 @@ export const PinActionWithPicker: React.FC<PinActionWithPickerProps> = React.mem
         updatePosition();
       };
       window.addEventListener('scroll', onScrollOrResize, true);
-      window.addEventListener('resize', onScrollOrResize);
+      window.addEventListener('app:window-resize-settled', onScrollOrResize);
       return () => {
         window.removeEventListener('scroll', onScrollOrResize, true);
-        window.removeEventListener('resize', onScrollOrResize);
+        window.removeEventListener('app:window-resize-settled', onScrollOrResize);
       };
     }, [popoverOpen, updatePosition]);
 
