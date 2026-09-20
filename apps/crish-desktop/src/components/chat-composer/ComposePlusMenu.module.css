@@ -19,17 +19,22 @@
   font-family: var(--font-sans, var(--sep-font-sans));
 }
 
+:global(.button).item,
 .item {
   display: flex;
   align-items: center;
+  justify-content: flex-start;
   gap: var(--space-2, 8px);
   width: 100%;
+  height: auto;
+  min-height: 32px;
+  --btn-h: auto;
+  --btn-px: 8px;
   border: none;
   background: transparent;
   text-align: left;
   padding: 6px 8px;
   border-radius: var(--sep-item-radius, 8px);
-  min-height: 32px;
   cursor: pointer;
   font-family: inherit;
   color: var(--text-primary);

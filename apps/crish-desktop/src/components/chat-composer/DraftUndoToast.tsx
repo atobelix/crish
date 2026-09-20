@@ -10,6 +10,7 @@
 import React, { useEffect, useState } from 'react';
 
 import styles from './DraftUndoToast.module.css';
+import { Button } from '../ui';
 import { AppIcon } from '../ui/icons/index';
 
 export interface DraftUndoToastProps {
@@ -51,8 +52,9 @@ export const DraftUndoToast: React.FC<DraftUndoToastProps> = ({
       data-draft-undo-toast=""
     >
       <span className={styles.toastText}>{message}</span>
-      <button
+      <Button
         type="button"
+        variant="ghost"
         className={styles.undoBtn}
         onClick={() => {
           onUndo();
@@ -61,15 +63,16 @@ export const DraftUndoToast: React.FC<DraftUndoToastProps> = ({
       >
         <AppIcon name="undo" size={12} aria-hidden />
         <span>撤销恢复</span>
-      </button>
-      <button
+      </Button>
+      <Button
         type="button"
+        variant="ghost"
         className={styles.closeBtn}
         onClick={dismiss}
         aria-label="关闭提示"
       >
         <AppIcon name="x" size={12} aria-hidden />
-      </button>
+      </Button>
     </div>
   );
 };

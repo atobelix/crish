@@ -26,6 +26,7 @@ import {
   calculateSafeCursorAnchor,
   type SafeAnchorRect,
 } from './safeCursorAnchor';
+import { Button } from '../ui';
 import { AppIcon, type IconName } from '../ui/icons';
 
 export { isValidClientRect } from './safeCursorAnchor';
@@ -254,12 +255,13 @@ export const TiptapSlashMenu = forwardRef<SlashMenuRefHandle, SlashMenuProps>(
                   const isActive = index === selectedIndex;
 
                   return (
-                    <button
+                    <Button
                       key={item.id || item.title}
                       ref={(el) => {
                         itemRefs.current[index] = el;
                       }}
                       type="button"
+                      variant="ghost"
                       role="option"
                       id={`${listboxId ?? 'tiptap-suggestion'}-opt-${index}`}
                       aria-selected={isActive}
@@ -282,7 +284,7 @@ export const TiptapSlashMenu = forwardRef<SlashMenuRefHandle, SlashMenuProps>(
                           </span>
                         )}
                       </div>
-                    </button>
+                    </Button>
                   );
                 })
               )}

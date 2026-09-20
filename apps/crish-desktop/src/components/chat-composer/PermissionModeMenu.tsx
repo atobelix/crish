@@ -1,7 +1,7 @@
 import React, { useCallback, useRef, useState } from 'react';
 
 import styles from './PermissionModeMenu.module.css';
-import { Menu, Tooltip } from '../ui';
+import { Button, Menu, Tooltip } from '../ui';
 import { toggleExclusiveMenu } from '../ui/Menu';
 import {
   DESKTOP_PERMISSION_MODE_IDS,
@@ -89,9 +89,10 @@ export const PermissionModeMenu: React.FC<Props> = ({
         disabled={open}
         side="top"
       >
-        <button
+        <Button
           ref={pillBtnRef}
           type="button"
+          variant="ghost"
           className={[
             styles.permPill,
             open ? styles.isOpen : null,
@@ -115,7 +116,7 @@ export const PermissionModeMenu: React.FC<Props> = ({
               className={styles.permPillChev}
               aria-hidden="true" />
           )}
-        </button>
+        </Button>
       </Tooltip>
 
       {open ? (
@@ -142,8 +143,9 @@ export const PermissionModeMenu: React.FC<Props> = ({
               itemMeta.description;
             return (
               <Tooltip key={opt.id} content={itemMeta.matrixHint}>
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
                   className={`${styles.permMenuItem} ${isSelected ? styles.isSelected : ''}`}
                   role="menuitem"
                   onClick={(e) => {
@@ -163,7 +165,7 @@ export const PermissionModeMenu: React.FC<Props> = ({
                       className={styles.checkIcon}
                       aria-hidden="true" />
                   ) : null}
-                </button>
+                </Button>
               </Tooltip>
             );
           }}

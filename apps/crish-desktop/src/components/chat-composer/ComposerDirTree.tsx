@@ -25,7 +25,7 @@ import {
 } from './safeCursorAnchor';
 import slashStyles from './TiptapSlashMenu.module.css';
 import styles from './ComposerDirTree.module.css';
-import { Tooltip } from '../ui';
+import { Button, Tooltip } from '../ui';
 import { AppIcon } from '../ui/icons/index';
 
 export type ComposerDirTreeHandle = {
@@ -220,14 +220,16 @@ export const ComposerDirTree = forwardRef<
             <div className={styles.head}>
               {canGoUp ? (
                 <Tooltip content="上级目录">
-                  <button
+                  <Button
                     type="button"
+                    variant="ghost"
+                    size="xs"
                     className={styles.upBtn}
                     aria-label="上级目录"
                     onClick={() => void load(parentOf(cwd, root))}
                   >
                     <AppIcon name="corner-left-up" size={14} aria-hidden />
-                  </button>
+                  </Button>
                 </Tooltip>
               ) : null}
               <span className={styles.cwd}>{cwdLabel || '工作区'}</span>
@@ -243,9 +245,10 @@ export const ComposerDirTree = forwardRef<
                 const iconName = entry.isDir ? 'folder' : 'file-text';
                 const active = index === selected;
                 return (
-                  <button
+                  <Button
                     key={entry.path}
                     type="button"
+                    variant="ghost"
                     role="treeitem"
                     aria-selected={active}
                     className={`${styles.row} ${active ? styles.rowActive : ''}`}
@@ -256,7 +259,7 @@ export const ComposerDirTree = forwardRef<
                       <AppIcon name={iconName} size={14} />
                     </span>
                     <span className={styles.name}>{entry.name}</span>
-                  </button>
+                  </Button>
                 );
               })
             )}

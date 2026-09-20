@@ -8,7 +8,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import styles from './ComposerNoticeBar.module.css';
-import { Tooltip } from '../ui';
+import { Button, Tooltip } from '../ui';
 import { AppIcon } from '../ui/icons/index';
 
 export interface ComposerNotice {
@@ -114,19 +114,21 @@ export const ComposerNoticeBar: React.FC<ComposerNoticeBarProps> = ({
 
       {/* c. 错误详情叹号徽标 */}
       <Tooltip content={detailContent}>
-        <button
+        <Button
           type="button"
+          variant="ghost"
           className={styles.detailBadge}
           aria-label="查看详细信息"
           data-testid="composer-notice-detail-badge"
         >
           !
-        </button>
+        </Button>
       </Tooltip>
 
       {/* d. 复制错误按钮 */}
-      <button
+      <Button
         type="button"
+        variant="ghost"
         className={styles.copyBtn}
         onClick={handleCopy}
         aria-label={copied ? '已复制' : '复制'}
@@ -143,11 +145,12 @@ export const ComposerNoticeBar: React.FC<ComposerNoticeBarProps> = ({
             <span>复制</span>
           </>
         )}
-      </button>
+      </Button>
 
       {/* e. 反馈按钮 */}
-      <button
+      <Button
         type="button"
+        variant="ghost"
         className={styles.feedbackBtn}
         onClick={() => onFeedback?.()}
         aria-label="反馈"
@@ -155,18 +158,19 @@ export const ComposerNoticeBar: React.FC<ComposerNoticeBarProps> = ({
       >
         <AppIcon name="message-square-plus" size={13} className={styles.btnIcon} aria-hidden="true" />
         <span>反馈</span>
-      </button>
+      </Button>
 
       {/* f. 删除/关闭按钮 */}
-      <button
+      <Button
         type="button"
+        variant="ghost"
         className={styles.dismissBtn}
         onClick={onDismiss}
         aria-label="关闭提示"
         data-testid="composer-notice-dismiss-btn"
       >
         <AppIcon name="x" size={14} aria-hidden="true" />
-      </button>
+      </Button>
     </div>
   );
 };

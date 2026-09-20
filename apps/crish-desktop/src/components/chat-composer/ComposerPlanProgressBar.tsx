@@ -6,7 +6,7 @@
  */
 import React, { useState, useEffect } from 'react';
 import styles from './ChatComposer.module.css';
-import { Tooltip } from '../ui';
+import { Button, Tooltip } from '../ui';
 import { AppIcon } from '../ui/icons/index';
 
 export interface PlanStepItem {
@@ -146,8 +146,9 @@ export const ComposerPlanProgressBar: React.FC<ComposerPlanProgressBarProps> = (
 
       {/* Single-Line Anchored Hub */}
       <div className={`${styles.planCollapsed} plan-collapsed`}>
-        <button
+        <Button
           type="button"
+          variant="ghost"
           className={`${styles.planModeBadge} plan-mode-badge`}
           onClick={handleToggle}
           aria-expanded={isExpanded}
@@ -155,7 +156,7 @@ export const ComposerPlanProgressBar: React.FC<ComposerPlanProgressBarProps> = (
         >
           <AppIcon name="target" size={13} className={`${styles.modeIcon} mode-icon`} aria-hidden />
           <span className="mode-text">{modeLabel}</span>
-        </button>
+        </Button>
 
         <div className={`${styles.planDividerV} plan-divider-v`} aria-hidden />
 
@@ -187,21 +188,23 @@ export const ComposerPlanProgressBar: React.FC<ComposerPlanProgressBarProps> = (
           <div className={`${styles.planQuickActions} plan-quick-actions`}>
             {onEditGoal ? (
               <Tooltip content="编辑目标">
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
                   className={`${styles.planActionBtn} plan-action-btn`}
                   onClick={onEditGoal}
                   aria-label="编辑目标"
                 >
                   <AppIcon name="edit-alt" size={13} aria-hidden />
-                </button>
+                </Button>
               </Tooltip>
             ) : null}
 
             {onTogglePause ? (
               <Tooltip content={isPaused ? '继续' : '暂停'}>
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
                   className={`${styles.planActionBtn} plan-action-btn`}
                   onClick={onTogglePause}
                   aria-label={isPaused ? '继续' : '暂停'}
@@ -211,20 +214,21 @@ export const ComposerPlanProgressBar: React.FC<ComposerPlanProgressBarProps> = (
                   ) : (
                     <AppIcon name="pause" size={13} aria-hidden />
                   )}
-                </button>
+                </Button>
               </Tooltip>
             ) : null}
 
             {onStop ? (
               <Tooltip content="终止">
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
                   className={`${styles.planActionBtn} ${styles.stop} plan-action-btn stop`}
                   onClick={onStop}
                   aria-label="终止"
                 >
                   <AppIcon name="square" size={13} aria-hidden />
-                </button>
+                </Button>
               </Tooltip>
             ) : null}
           </div>

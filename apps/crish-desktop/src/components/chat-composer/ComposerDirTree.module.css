@@ -25,12 +25,15 @@
   min-width: 0;
 }
 
+:global(.button).upBtn,
 .upBtn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 22px;
   height: 22px;
+  min-width: unset;
+  min-height: unset;
   padding: 0;
   border: none;
   border-radius: var(--radius-sm);
@@ -52,11 +55,15 @@
     color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
 }
 
+:global(.button).row,
 .row {
   display: flex;
   align-items: center;
+  justify-content: flex-start;
   gap: var(--space-2);
   width: 100%;
+  min-width: unset;
+  min-height: unset;
   padding: var(--space-1) var(--space-2);
   border: none;
   border-radius: var(--radius-sm);
@@ -64,6 +71,7 @@
   color: var(--text-primary);
   font-family: var(--font-sans);
   font-size: var(--font-size-sm, 13px);
+  font-weight: normal;
   text-align: left;
   cursor: pointer;
   box-shadow: none;

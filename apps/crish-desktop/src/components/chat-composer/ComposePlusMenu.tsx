@@ -3,7 +3,7 @@ import React from 'react';
 import styles from './ComposePlusMenu.module.css';
 import { openSettings } from '../../api/storeAccess';
 import { emitUiEvent } from '../../api/uiEvents';
-import { Menu, Tooltip } from '../ui';
+import { Button, Menu, Tooltip } from '../ui';
 import type { SelectOptionItem } from '../ui';
 import { AppIcon } from '../ui/icons/index';
 
@@ -108,8 +108,9 @@ export const ComposePlusMenu: React.FC<ComposePlusMenuProps> = ({
       panel={{ contentClassName: `${styles.plusMenu} no-drag` }}
       renderItem={(item) => (
         <Tooltip key={item.id} content={item.hint || item.label}>
-          <button
+          <Button
             type="button"
+            variant="ghost"
             className={styles.item}
             role="menuitem"
             aria-label={item.hint ? `${item.label}，${item.hint}` : item.label}
@@ -129,7 +130,7 @@ export const ComposePlusMenu: React.FC<ComposePlusMenuProps> = ({
                 <span className={styles.desc}>{item.hint}</span>
               ) : null}
             </div>
-          </button>
+          </Button>
         </Tooltip>
       )}
     />

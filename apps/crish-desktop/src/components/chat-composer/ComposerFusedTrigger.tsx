@@ -9,7 +9,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import styles from './ComposerFusedTrigger.module.css';
-import { Menu, Tooltip } from '../ui';
+import { Button, Menu, Tooltip } from '../ui';
 import { toggleExclusiveMenu } from '../ui/Menu';
 import {
   getActiveModelId,
@@ -159,9 +159,10 @@ export const ComposerFusedTrigger: React.FC<ComposerFusedTriggerProps> = ({
             disabled={open}
             side="top"
           >
-            <button
+            <Button
               ref={btnRef}
               type="button"
+              variant="ghost"
               className={`${styles.thinkBtn} ${open ? styles.isOpen : ''}`}
               aria-haspopup="menu"
               aria-expanded={open}
@@ -171,7 +172,7 @@ export const ComposerFusedTrigger: React.FC<ComposerFusedTriggerProps> = ({
               onClick={() => toggleExclusiveMenu(open, setOpen, btnRef.current)}
             >
               <span>{thinkingLabel}</span>
-            </button>
+            </Button>
           </Tooltip>
           {open ? (
             <Menu
@@ -188,9 +189,10 @@ export const ComposerFusedTrigger: React.FC<ComposerFusedTriggerProps> = ({
               renderItem={(opt) => {
                 const selected = opt.id === currentTitle;
                 return (
-                  <button
+                  <Button
                     key={opt.id}
                     type="button"
+                    variant="ghost"
                     className={`${styles.item} ${selected ? styles.isSelected : ''}`}
                     role="menuitem"
                     onClick={(e) => {
@@ -204,7 +206,7 @@ export const ComposerFusedTrigger: React.FC<ComposerFusedTriggerProps> = ({
                         className={styles.check}
                         aria-hidden="true" />
                     ) : null}
-                  </button>
+                  </Button>
                 );
               }}
             />

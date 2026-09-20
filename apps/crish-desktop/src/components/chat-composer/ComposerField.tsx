@@ -10,6 +10,7 @@ import type { ComposerFieldProps } from './composerTypes';
 import { readSendShortcut } from '../../api/store-access/settingsAccess';
 import { readCodeBlockIndent } from '../../api/codeBlockIndent';
 import { ComposerSendControls } from './ComposerSendControls';
+import { Textarea } from '../ui';
 
 export {
   STOP_TOOLTIP,
@@ -114,7 +115,8 @@ export const ComposerField: React.FC<ComposerFieldProps> = React.memo(
         }
       >
         {leading}
-        <textarea
+        <Textarea
+          bare
           id={textAreaId}
           ref={taRef}
           className={styles.textarea}

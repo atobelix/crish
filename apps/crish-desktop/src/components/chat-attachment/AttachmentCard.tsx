@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
 import styles from './AttachmentCard.module.css';
-import { Tooltip } from '../ui';
+import { Button, Tooltip } from '../ui';
 import { FileFormatIcon } from '../../assets/icons';
 import {
   useActiveModelAcceptsImage,
@@ -222,8 +222,10 @@ export const AttachmentCard: React.FC<AttachmentCardProps> = React.memo(
               <AppIcon name="image-off" size={20} className={styles.missingIcon} />
               <span className={styles.missingBadge}>失效</span>
               {onRemove ? (
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="xs"
                   className={`${styles.fileRemove} ${styles.attachRemove} file-remove chat-attach-remove`}
                   aria-label={`移除附件 ${item.name || '图片'}`}
                   onClick={(e) => {
@@ -232,7 +234,7 @@ export const AttachmentCard: React.FC<AttachmentCardProps> = React.memo(
                   }}
                 >
                   <AppIcon name="x" size={10} aria-hidden />
-                </button>
+                </Button>
               ) : null}
             </div>
           </Tooltip>
@@ -310,8 +312,10 @@ export const AttachmentCard: React.FC<AttachmentCardProps> = React.memo(
               </>
             )}
             {onRemove ? (
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="xs"
                 className={`${styles.fileRemove} ${styles.attachRemove} file-remove chat-attach-remove`}
                 aria-label={`移除附件 ${item.name || '图片'}`}
                 onClick={(e) => {
@@ -320,7 +324,7 @@ export const AttachmentCard: React.FC<AttachmentCardProps> = React.memo(
                 }}
               >
                 <AppIcon name="x" size={10} aria-hidden />
-              </button>
+              </Button>
             ) : null}
           </div>
         </Tooltip>
@@ -414,8 +418,10 @@ export const AttachmentCard: React.FC<AttachmentCardProps> = React.memo(
             </>
           )}
           {onRemove ? (
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="xs"
               className={`${styles.fileRemove} ${styles.attachRemove} file-remove chat-attach-remove`}
               aria-label={`移除附件 ${item.name || displayName}`}
               onClick={(e) => {
@@ -424,7 +430,7 @@ export const AttachmentCard: React.FC<AttachmentCardProps> = React.memo(
               }}
             >
               <AppIcon name="x" size={10} aria-hidden />
-            </button>
+            </Button>
           ) : null}
         </div>
       </Tooltip>

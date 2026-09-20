@@ -45,17 +45,22 @@
   text-overflow: ellipsis;
 }
 
+:global(.button).undoBtn,
 .undoBtn {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  min-width: unset;
+  min-height: unset;
   padding: 3px 8px;
   border: none;
   border-radius: var(--radius-btn);
   background: color-mix(in srgb, var(--accent-color) 10%, transparent);
   color: var(--text-primary);
   font: inherit;
+  font-weight: normal;
   cursor: pointer;
+  box-shadow: none;
   transition: background-color 120ms ease;
 }
 
@@ -69,18 +74,22 @@
     color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
 }
 
+:global(.button).closeBtn,
 .closeBtn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 20px;
   height: 20px;
+  min-width: unset;
+  min-height: unset;
   padding: 0;
   border: none;
   border-radius: 6px;
   background: transparent;
   color: var(--text-tertiary);
   cursor: pointer;
+  box-shadow: none;
   transition: background-color 120ms ease, color 120ms ease;
 }
 

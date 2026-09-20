@@ -21,7 +21,7 @@ import styles from './ChatComposer.module.css';
 import { AppErrorBoundary } from '../AppErrorBoundary';
 import { ComposePlusMenu } from './ComposePlusMenu';
 import { PermissionModeMenu } from './PermissionModeMenu';
-import { Button, Tooltip } from '../ui';
+import { Button, Input, Tooltip } from '../ui';
 import { shouldSuppressMenuReopen } from '../ui/Menu';
 import type { PermissionMode } from '../../api/permissionModes';
 import type { ChatAttachment } from '../../hooks/useChatStream';
@@ -360,9 +360,10 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
             {/* 左侧控制区：[ ＋ 加号按钮 ] + [ 权限盾牌按钮 ]（icon-only 模式） */}
             <div className={styles.actionLeft} data-composer-grid="left">
               <Tooltip content="添加文件、技能、扩展…" disabled={showPlusMenu}>
-                <button
+                <Button
                   ref={plusBtnRef}
                   type="button"
+                  variant="ghost"
                   className={`${styles.plusBtn} ${showPlusMenu ? styles.isOpen : ''}`}
                   aria-label="打开添加菜单"
                   aria-haspopup="menu"
@@ -380,7 +381,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
                   }}
                 >
                   <AppIcon name="plus" size={14} aria-hidden />
-                </button>
+                </Button>
               </Tooltip>
               <ComposePlusMenu
                 id={plusMenuId}
@@ -451,26 +452,28 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
               {voiceStatsButton ||
                 (showVoiceStatsButton ? (
                   <Tooltip content="语音输入 / 上下文统计">
-                    <button
+                    <Button
                       type="button"
+                      variant="ghost"
                       className={styles.actionCircleBtn}
                       aria-label="语音输入或上下文统计"
                     >
                       <AppIcon name="bar-chart" size={16} aria-hidden />
-                    </button>
+                    </Button>
                   </Tooltip>
                 ) : null)}
               {isEditingMessage && onCancelEdit ? (
                 <Tooltip content="取消编辑 (Esc)">
-                  <button
+                  <Button
                     type="button"
+                    variant="ghost"
                     className={styles.cancelEditBtn}
                     onClick={onCancelEdit}
                     data-testid="composer-cancel-edit-btn"
                     aria-label="取消编辑"
                   >
                     <AppIcon name="x" size={16} aria-hidden />
-                  </button>
+                  </Button>
                 </Tooltip>
               ) : null}
               <ComposerSendControls
@@ -490,7 +493,8 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
             </div>
           </div>
 
-          <input
+          <Input
+            bare
             ref={fileInputRef as React.RefObject<HTMLInputElement>}
             {...hiddenFileInputProps}
           />

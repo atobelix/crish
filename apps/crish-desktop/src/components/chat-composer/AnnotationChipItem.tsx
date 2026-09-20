@@ -9,6 +9,7 @@ import { createPortal } from 'react-dom';
 import styles from './ChatComposer.module.css';
 import type { ChatAttachment } from '../../hooks/useChatStream';
 import { openFileInPanel } from '../../api/filePanelOpener';
+import { Button, Textarea } from '../ui';
 import {
   pathBasename,
   updatePendingFileAnnotationComment,
@@ -213,8 +214,10 @@ export const AnnotationChipItem: React.FC<AnnotationChipItemProps> = React.memo(
             <span>{fileName}</span>
           </span>
 
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="xs"
             className={`${styles.fileRemove} ${styles.attachRemove} file-remove chat-attach-remove`}
             aria-label={`移除附件 ${attachment.name}`}
             onClick={(e) => {
@@ -223,7 +226,7 @@ export const AnnotationChipItem: React.FC<AnnotationChipItemProps> = React.memo(
             }}
           >
             <AppIcon name="x" size={10} aria-hidden />
-          </button>
+          </Button>
         </span>
 
         {isOpen &&
@@ -254,7 +257,8 @@ export const AnnotationChipItem: React.FC<AnnotationChipItemProps> = React.memo(
               )}
 
               <div className={styles.annInputContainer}>
-                <textarea
+                <Textarea
+                  bare
                   className={styles.annCommentInput}
                   value={draftComment}
                   placeholder="写下批注说明… (Enter 保存，Esc 取消)"
@@ -276,20 +280,24 @@ export const AnnotationChipItem: React.FC<AnnotationChipItemProps> = React.memo(
               </div>
 
               <div className={styles.annFooter}>
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="xs"
                   className={styles.annCancelBtn}
                   onClick={handleCancel}
                 >
                   取消
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
+                  variant="primary"
+                  size="xs"
                   className={styles.annSaveBtn}
                   onClick={handleSaveAndClose}
                 >
                   保存
-                </button>
+                </Button>
               </div>
             </div>,
             document.body

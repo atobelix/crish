@@ -251,6 +251,8 @@
 /* --------------------------------------------------------------------------
    右上角删除/移除按钮 (Remove Button)
    -------------------------------------------------------------------------- */
+:global(.button).fileRemove,
+:global(.button).attachRemove,
 .fileRemove,
 .attachRemove {
   position: absolute;
@@ -258,6 +260,10 @@
   right: 3px;
   width: 16px;
   height: 16px;
+  min-width: unset;
+  min-height: unset;
+  --btn-h: 16px;
+  --btn-px: 0px;
   border-radius: var(--radius-full, 9999px);
   border: none;
   background: color-mix(in srgb, var(--bg-elevated) 85%, transparent);
@@ -275,6 +281,8 @@
     transform var(--transition-fast);
 }
 
+:global(.button).fileRemove:hover,
+:global(.button).attachRemove:hover,
 .fileRemove:hover,
 .attachRemove:hover {
   background: var(--color-error);

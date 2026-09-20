@@ -257,6 +257,7 @@
   margin-left: auto;
 }
 
+:global(.button).flowPermissionBtn,
 .flowPermissionBtn {
   display: inline-flex;
   align-items: center;
@@ -265,6 +266,8 @@
   height: 22px;
   min-height: 22px;
   max-height: 22px;
+  --btn-h: 22px;
+  --btn-px: 8px;
   line-height: 22px;
   padding: 0 8px;
   border-radius: var(--radius-sm, 4px);
@@ -280,15 +283,18 @@
   box-shadow: none;
 }
 
+:global(.button).flowPermissionBtnDeny,
 .flowPermissionBtnDeny {
   background: transparent;
   color: var(--color-error);
 }
 
+:global(.button).flowPermissionBtnDeny:hover,
 .flowPermissionBtnDeny:hover {
   background: color-mix(in srgb, var(--color-error) 8%, transparent);
 }
 
+:global(.button).flowPermissionBtnAllow,
 .flowPermissionBtnAllow {
   background: var(--bg-elevated);
   color: var(--text-primary);
@@ -296,15 +302,18 @@
   font-weight: 500;
 }
 
+:global(.button).flowPermissionBtnAllow:hover,
 .flowPermissionBtnAllow:hover {
   background: var(--bg-elevated);
 }
 
+:global(.button).flowPermissionBtnAlways,
 .flowPermissionBtnAlways {
   background: transparent;
   color: var(--text-secondary);
 }
 
+:global(.button).flowPermissionBtnAlways:hover,
 .flowPermissionBtnAlways:hover {
   background: var(--tint-hover);
 }
@@ -447,6 +456,7 @@
   box-sizing: border-box;
 }
 
+:global(.button).planModeBadge,
 .planModeBadge {
   display: inline-flex;
   align-items: center;
@@ -462,6 +472,9 @@
   cursor: pointer;
   user-select: none;
   height: 24px;
+  min-height: 24px;
+  --btn-h: 24px;
+  --btn-px: 6px;
   box-sizing: border-box;
   line-height: 1;
   flex-shrink: 0;
@@ -570,12 +583,17 @@
   gap: 2px;
 }
 
+:global(.button).planActionBtn,
 .planActionBtn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 24px;
   height: 24px;
+  min-width: unset;
+  min-height: unset;
+  --btn-h: 24px;
+  --btn-px: 0px;
   border-radius: var(--radius-sm, 4px);
   border: none;
   background: transparent;
@@ -587,11 +605,13 @@
     color var(--transition-fast, 120ms ease);
 }
 
+:global(.button).planActionBtn:hover,
 .planActionBtn:hover {
   background: var(--tint-hover);
   color: var(--text-primary);
 }
 
+:global(.button).planActionBtn.stop:hover,
 .planActionBtn.stop:hover {
   background: color-mix(in srgb, var(--color-error) 10%, transparent);
   color: var(--color-error);
@@ -871,6 +891,8 @@
   background: var(--color-warning-bg, color-mix(in srgb, var(--color-warning, var(--warning-color)) 25%, var(--bg-card)));
 }
 
+:global(.button).fileRemove,
+:global(.button).attachRemove,
 .fileRemove,
 .attachRemove {
   position: absolute;
@@ -878,6 +900,10 @@
   right: 3px;
   width: var(--composer-attach-remove-size, 18px);
   height: var(--composer-attach-remove-size, 18px);
+  min-width: unset;
+  min-height: unset;
+  --btn-h: var(--composer-attach-remove-size, 18px);
+  --btn-px: 0px;
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -1113,8 +1139,12 @@
   padding-top: 2px;
 }
 
+:global(.button).annCancelBtn,
 .annCancelBtn {
   height: 24px;
+  min-height: unset;
+  --btn-h: 24px;
+  --btn-px: 10px;
   padding: 0 10px;
   border-radius: var(--ann-radius-inner);
   border: 1px solid transparent;
@@ -1129,13 +1159,18 @@
   transition: background var(--transition-fast, 120ms ease), color var(--transition-fast, 120ms ease);
 }
 
+:global(.button).annCancelBtn:hover,
 .annCancelBtn:hover {
   background: var(--tint-hover);
   color: var(--text-primary);
 }
 
+:global(.button).annSaveBtn,
 .annSaveBtn {
   height: 24px;
+  min-height: unset;
+  --btn-h: 24px;
+  --btn-px: 12px;
   padding: 0 12px;
   border-radius: var(--ann-radius-inner);
   border: none;
@@ -1150,10 +1185,12 @@
   transition: opacity var(--transition-fast, 120ms ease), transform var(--transition-fast, 120ms ease);
 }
 
+:global(.button).annSaveBtn:hover,
 .annSaveBtn:hover {
   opacity: 0.88;
 }
 
+:global(.button).annSaveBtn:active,
 .annSaveBtn:active {
   opacity: 0.8;
 }
@@ -1279,11 +1316,15 @@
   gap: 4px;
 }
 
+:global(.button).cancelEditBtn,
 .cancelEditBtn {
   width: 28px;
   height: 28px;
   min-width: 28px;
   max-width: 28px;
+  min-height: unset;
+  --btn-h: 28px;
+  --btn-px: 0px;
   padding: 0;
   border-radius: 50%;
   color: var(--text-secondary);
@@ -1301,6 +1342,8 @@
   box-sizing: border-box;
 }
 
+:global(.button).cancelEditBtn:hover,
+:global(.button).cancelEditBtn:active,
 .cancelEditBtn:hover,
 .cancelEditBtn:active {
   background: var(--composer-control-hover-bg);
@@ -1308,6 +1351,7 @@
 }
 
 /* ---- Plus Button (28x28 正圆按钮，同心几何标尺) ---- */
+:global(.button).plusBtn,
 .plusBtn {
   background: transparent;
   border: none;
@@ -1316,6 +1360,9 @@
   height: 28px;
   min-width: 28px;
   max-width: 28px;
+  min-height: unset;
+  --btn-h: 28px;
+  --btn-px: 0px;
   padding: 0;
   border-radius: 50%;
   color: var(--text-primary);
@@ -1330,6 +1377,11 @@
     color var(--transition-micro, 100ms ease);
 }
 
+:global(.button).plusBtn:hover,
+:global(.button).plusBtn:active,
+:global(.button).plusBtn:focus-visible,
+:global(.button).plusBtn.isOpen,
+:global(.button).plusBtn.isOn,
 .plusBtn:hover,
 .plusBtn:active,
 .plusBtn:focus-visible,
@@ -1346,9 +1398,15 @@
 }
 
 /* ---- Action Circle Button (Voice / Stats) (28x28 正圆按钮) ---- */
+:global(.button).actionCircleBtn,
 .actionCircleBtn {
   width: 28px;
   height: 28px;
+  min-width: 28px;
+  max-width: 28px;
+  min-height: unset;
+  --btn-h: 28px;
+  --btn-px: 0px;
   border-radius: 50%;
   border: none;
   background: transparent;
@@ -1367,6 +1425,8 @@
     background var(--transition-fast, 120ms ease);
 }
 
+:global(.button).actionCircleBtn:hover,
+:global(.button).actionCircleBtn:active,
 .actionCircleBtn:hover,
 .actionCircleBtn:active {
   color: var(--text-primary);

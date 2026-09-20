@@ -8,7 +8,7 @@
 import React, { useEffect, useState } from 'react';
 
 import styles from './ChatComposer.module.css';
-import { Tooltip } from '../ui';
+import { Button, Tooltip } from '../ui';
 import { AppIcon } from '../ui/icons/index';
 
 export type PermissionRiskLevel = 'low' | 'medium' | 'high';
@@ -114,33 +114,36 @@ export const ComposerPermissionBar: React.FC<ComposerPermissionBarProps> = ({
           {command || summary}
         </code>
         <div className={`${styles.flowPermissionBarActions} flow-permission-bar__actions`}>
-          <button
+          <Button
             type="button"
+            variant="ghost"
             className={`${styles.flowPermissionBtn} ${styles.flowPermissionBtnDeny} flow-permission-bar__btn flow-permission-bar__btn--deny`}
             disabled={busy || resolved}
             onClick={onDeny}
             aria-label="拒绝命令执行"
           >
             拒绝
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
+            variant="ghost"
             className={`${styles.flowPermissionBtn} ${styles.flowPermissionBtnAllow} flow-permission-bar__btn flow-permission-bar__btn--allow`}
             disabled={busy || resolved}
             onClick={() => onAllow?.(false)}
             aria-label="批准执行命令"
           >
             批准
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
+            variant="ghost"
             className={`${styles.flowPermissionBtn} ${styles.flowPermissionBtnAlways} flow-permission-bar__btn flow-permission-bar__btn--always`}
             disabled={busy || resolved}
             onClick={() => (onAlwaysAllow ? onAlwaysAllow() : onAllow?.(true))}
             aria-label="始终允许此类命令"
           >
             始终允许
-          </button>
+          </Button>
         </div>
       </div>
     </div>
