@@ -449,6 +449,8 @@ apps/agent-workbench/src-tauri/gen/*
 /.claude/**/*.json
 !apps/**/src/**/*.json
 !packages/**/src/**/*.json
+!scripts/show-*.mjs
+!scripts/check-*.mjs
 # T-E 批次 5 门禁脚本入库放行（check:store-writes / check:store-facade 及其基线——
 # 门禁脚本是资产，必须可被 git 跟踪，否则 CI checkout 后门禁缺失）
 !scripts/check-no-raw-setstate.mjs

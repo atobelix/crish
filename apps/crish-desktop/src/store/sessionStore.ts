@@ -252,14 +252,14 @@ export function getSessionAgent(
 /** 等待 store 会话回灌完成 */
 export function waitForHydration(): Promise<void> {
   return waitForStoreHydration(
-    useSessionStore as unknown as StoreApiLike<any>
+    useSessionStore as StoreApiLike<any>
   );
 }
 
 /** 挂载会话持久化与回灌 */
 export function initSessionStorePersistence(): () => void {
   return initStorePersistence(
-    useSessionStore as unknown as SessionActivatableStore<any>
+    useSessionStore as SessionActivatableStore<any>
   );
 }
 
@@ -305,6 +305,5 @@ sessionRuntimeRegistry.registerActiveIdResolver(
 );
 
 if (typeof window !== 'undefined') {
-  (window as unknown as Record<string, unknown>).useSessionStore =
-    useSessionStore;
+  window.useSessionStore = useSessionStore;
 }

@@ -12,3 +12,5 @@ node scripts/check-inline-style-hardcode.mjs
 node scripts/check-session-message-upsert.mjs
 node scripts/check-tool-pairing-invariants.mjs
 node scripts/check-db-write-bypass.mjs
+# 前端重构终极收敛门禁（G-01 ~ G-15）
+node scripts/check-frontend-convergence.mjs

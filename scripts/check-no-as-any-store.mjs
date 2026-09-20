@@ -125,14 +125,6 @@ const SESSION_INDEX_REQUIRED = [
 /** layoutStore 须用泛型切片接线，禁止 any 遥测入参（遥测签名检查随 T11 迁至 settingsStore） */
 const LAYOUT_REQUIRED = [
   {
-    re: /createSessionActions\s*\(\s*set\s*,\s*get\s*\)/,
-    label: 'createSessionActions(set, get) without cast',
-  },
-  {
-    re: /createWorkspaceActions\s*\(\s*set\s*,\s*get\s*\)/,
-    label: 'createWorkspaceActions(set, get) without cast',
-  },
-  {
     // 兼容直接定义与 re-export 两种形态（layoutStore 经 store-types 再导出）
     re: /export\s+type\s+(?:TelemetrySyncPayload\b|\{[^}]*\bTelemetrySyncPayload\b)/,
     label: 'export type TelemetrySyncPayload',
@@ -168,7 +160,10 @@ const ACTION_MODULE_REQUIRED = [
   {
     file: 'workspaceActions.ts',
     patterns: [
-      { re: /export\s+interface\s+WorkspaceStoreSlice\b/, label: 'WorkspaceStoreSlice interface' },
+      {
+        re: /export\s+(?:interface|type)\s+(?:\{[^}]*\b)?WorkspaceStoreSlice\b/,
+        label: 'WorkspaceStoreSlice interface or type re-export',
+      },
       {
         re: /export\s+function\s+createWorkspaceActions\s*<\s*T\s+extends\s+WorkspaceStoreSlice\s*>/,
         label: 'createWorkspaceActions<T extends WorkspaceStoreSlice>',
@@ -182,14 +177,14 @@ const ACTION_MODULE_REQUIRED = [
 ];
 
 /**
- * 三门面对齐：同引用 alias + 命令式 get*State + 域 helper。
- * 防止 Phase 1 facade 退回「只 re-export 无 getState」。
+ * 三独立 Store 对齐（G-09 物理独立实例规范）：独立 create + 命令式 get*State + 域 helper。
  */
 const FACADE_REQUIRED = [
   {
     file: 'sessionStore.ts',
     patterns: [
-      { re: /export\s+const\s+useSessionStore\s*=\s*useLayoutStore\b/, label: 'useSessionStore = useLayoutStore' },
+      { re: /export\s+const\s+useSessionStore\b/, label: 'useSessionStore' },
+      { re: /createSessionActions\s*\(\s*set\s*,\s*get\s*\)/, label: 'createSessionActions(set, get)' },
       { re: /export\s+function\s+getSessionStoreState\b/, label: 'getSessionStoreState' },
       { re: /export\s+function\s+getSessionById\b/, label: 'getSessionById' },
       { re: /export\s+function\s+getActiveSession\b/, label: 'getActiveSession' },
@@ -197,28 +192,22 @@ const FACADE_REQUIRED = [
       { re: /export\s+function\s+getSessionAgent\b/, label: 'getSessionAgent' },
       { re: /export\s+function\s+useSessionField\b/, label: 'useSessionField' },
     ],
-    // 门面互不 import，避免 multi-store 前形成假依赖
+    // 独立 Store 互不 import，避免形成假依赖
     forbidImport: [
       { re: /from\s+['"]\.\/workspaceStore['"]/, label: 'sessionStore must not import workspaceStore' },
       { re: /from\s+['"]\.\/settingsUiStore['"]/, label: 'sessionStore must not import settingsUiStore' },
     ],
-    getStateCast: {
-      re: /as\s+unknown\s+as\s+SessionFacade\b/,
-      label: 'getSessionStoreState as unknown as SessionFacade',
-      max: 1,
-    },
   },
   {
     file: 'workspaceStore.ts',
     patterns: [
-      { re: /export\s+const\s+useWorkspaceStore\s*=\s*useLayoutStore\b/, label: 'useWorkspaceStore = useLayoutStore' },
+      { re: /export\s+const\s+useWorkspaceStore\b/, label: 'useWorkspaceStore' },
+      { re: /createWorkspaceActions\s*\(\s*set\s*,\s*get\s*\)/, label: 'createWorkspaceActions(set, get)' },
       { re: /export\s+function\s+getWorkspaceStoreState\b/, label: 'getWorkspaceStoreState' },
       { re: /export\s+function\s+getActiveWorkspace\b/, label: 'getActiveWorkspace' },
       { re: /export\s+function\s+getDropPreview\b/, label: 'getDropPreview' },
       { re: /export\s+function\s+setGroupActiveCard\b/, label: 'setGroupActiveCard' },
       { re: /export\s+function\s+focusExistingPanelCard\b/, label: 'focusExistingPanelCard' },
-      // P3-4（T-E 批次 5）：facade 仅转发真 action（workspaceActions 定义），
-      // facade 层自身不得再出现 setState recipe
       {
         re: /getWorkspaceStoreState\(\)\.setGroupActiveCard\b/,
         label: 'setGroupActiveCard forwards to workspaceActions action',
@@ -234,16 +223,11 @@ const FACADE_REQUIRED = [
       { re: /from\s+['"]\.\/sessionStore['"]/, label: 'workspaceStore must not import sessionStore' },
       { re: /from\s+['"]\.\/settingsUiStore['"]/, label: 'workspaceStore must not import settingsUiStore' },
     ],
-    getStateCast: {
-      re: /as\s+unknown\s+as\s+WorkspaceFacade\b/,
-      label: 'getWorkspaceStoreState as unknown as WorkspaceFacade',
-      max: 1,
-    },
   },
   {
     file: 'settingsUiStore.ts',
     patterns: [
-      { re: /export\s+const\s+useSettingsUiStore\s*=\s*useLayoutStore\b/, label: 'useSettingsUiStore = useLayoutStore' },
+      { re: /export\s+const\s+useSettingsUiStore\b/, label: 'useSettingsUiStore' },
       { re: /export\s+function\s+getSettingsUiState\b/, label: 'getSettingsUiState' },
       { re: /export\s+function\s+getPermissionMode\b/, label: 'getPermissionMode' },
       { re: /export\s+function\s+openSettings\b/, label: 'openSettings' },
@@ -257,11 +241,6 @@ const FACADE_REQUIRED = [
       { re: /from\s+['"]\.\/sessionStore['"]/, label: 'settingsUiStore must not import sessionStore' },
       { re: /from\s+['"]\.\/workspaceStore['"]/, label: 'settingsUiStore must not import workspaceStore' },
     ],
-    getStateCast: {
-      re: /as\s+unknown\s+as\s+SettingsUiFacade\b/,
-      label: 'getSettingsUiState as unknown as SettingsUiFacade',
-      max: 1,
-    },
   },
 ];
 
@@ -339,20 +318,17 @@ if (!existsSync(storeReadmePath)) {
 }
 
 for (const abs of files) {
+  const base = basename(abs);
+  if (/\.(test|spec)\.(ts|tsx)$/.test(base)) continue;
   const rel = relative(root, abs).replace(/\\/g, '/');
   const src = scanForbidden(abs, rel);
 
-  // 非 facade 生产文件禁止散落 as unknown as（测试文件除外）
-  const base = basename(abs);
-  const isFacade = /^(session|workspace|settingsUi)Store\.ts$/.test(base);
-  const isTest = /\.test\.ts$/.test(base);
-  if (!isFacade && !isTest) {
-    const unknownCasts = countInCode(src, /as\s+unknown\s+as\b/);
-    if (unknownCasts > 0) {
-      fail(
-        `${rel}: forbidden \`as unknown as\` outside facade get*StoreState (found ${unknownCasts})`,
-      );
-    }
+  // 生产文件禁止散落 as unknown as
+  const unknownCasts = countInCode(src, /as\s+unknown\s+as\b/);
+  if (unknownCasts > 0) {
+    fail(
+      `${rel}: forbidden \`as unknown as\` in production store (found ${unknownCasts})`,
+    );
   }
 }
 

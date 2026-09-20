@@ -29,12 +29,17 @@ if (process.argv.includes('--guide')) {
   process.exit(0);
 }
 if (process.argv.includes('--list')) {
-  console.log('ephemeral-chat-store\ncontinuity-retry-notice\nrun-notice-channel\ndirect-store-write\nreport-without-ssot-import');
+  console.log('ephemeral-chat-store\ncontinuity-retry-notice\nrun-notice-channel\ndirect-store-write\nbanned-legacy-nodes\nerror-detail-write\nreport-without-ssot-import');
   process.exit(0);
 }
 
 const ALLOWED_WRITERS = new Set([
   'apps/crish-desktop/src/store/sessionRuntimeStatusStore.ts',
+]);
+
+const ALLOWED_ERROR_DETAIL_WRITERS = new Set([
+  'apps/crish-desktop/src/hooks/chat-stream/staleSessionHealer.ts',
+  'apps/crish-desktop/src/store/sessionMessageActionsTools.ts',
 ]);
 
 /** 旧通道回流黑名单（标识符级） */
@@ -43,6 +48,8 @@ const BANNED_PATTERNS = [
   { id: 'continuity-retry-notice', re: /applyRetryNotice|retryNotices|useContinuityUiStore/ },
   { id: 'run-notice-channel', re: /\bpushRunNotice\b|\bcreateRunNoticeController\b|\bRunNoticeBar\b|\btype RunNotice\b/ },
   { id: 'direct-store-write', re: /useSessionRuntimeStatusStore\s*\.\s*setState\b|\.getState\(\)\s*\.\s*report\(/ },
+  { id: 'banned-legacy-nodes', re: /\bRetrySlotNotice\b|\bTurnErrorNode\b|\bModelRetryNode\b/ },
+  { id: 'error-detail-write', re: /\bsetSessionMessageStatus\([^)]*\berrorDetail\s*:|\.errorDetail\s*=/ },
 ];
 
 function* walk(dir) {
@@ -72,6 +79,7 @@ for (const file of walk(SRC)) {
   for (const { id, re } of BANNED_PATTERNS) {
     // SSOT store 自身是写入定义点，豁免 direct-store-write
     if (id === 'direct-store-write' && isSsot) continue;
+    if (id === 'error-detail-write' && (ALLOWED_ERROR_DETAIL_WRITERS.has(r) || /\.(test|spec)\.(ts|tsx)$/.test(r))) continue;
     if (re.test(src)) {
       violations.push(`[${id}] ${r}`);
     }

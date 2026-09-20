@@ -122,8 +122,8 @@ export function useDropPreview(): DropPreviewState | null {
   return useWorkspaceStore((s) => s.dropPreview);
 }
 
-export function getWorkspaceStoreState(): WorkspaceFacade {
-  return useWorkspaceStore.getState() as unknown as WorkspaceFacade;
+export function getWorkspaceStoreState(): WorkspaceStore {
+  return useWorkspaceStore.getState();
 }
 
 export function getActiveWorkspace(): WorkspaceState | undefined {

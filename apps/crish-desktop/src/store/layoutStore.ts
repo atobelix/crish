@@ -148,8 +148,7 @@ export const useLayoutStore = create<LayoutStore>()(
 );
 
 if (typeof window !== 'undefined') {
-  (window as unknown as Record<string, unknown>).useLayoutStore =
-    useLayoutStore;
+  window.useLayoutStore = useLayoutStore;
 }
 
 /** 挂载会话持久化与回灌 */

@@ -136,7 +136,7 @@ export function useOpenSettings(): (tab?: SettingsTabType) => void {
 }
 
 export function getSettingsUiState(): SettingsUiFacade {
-  return useSettingsUiStore.getState() as unknown as SettingsUiFacade;
+  return useSettingsUiStore.getState();
 }
 
 export function getPermissionMode(): PermissionMode {

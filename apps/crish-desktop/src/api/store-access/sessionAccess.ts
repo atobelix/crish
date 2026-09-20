@@ -9,6 +9,7 @@ import type {
   SessionAgent,
   SessionGoalMode,
   SessionMessage,
+  SessionMessageStatus,
 } from '../../store/types';
 import { PENDING_DRAFT_SESSION_ID } from '../../store/draftSession';
 import { getSessionStoreState } from '../../store/sessionStore';
@@ -242,7 +243,7 @@ export function withdrawMessage(
 export function setSessionMessageStatus(
   sessionId: string,
   messageId: string,
-  status: any,
+  status: SessionMessageStatus,
   thinkingTime?: number,
   opts?: {
     force?: boolean;
@@ -274,7 +275,7 @@ export function applyToolCallPatches(
   messageId: string,
   patches: Array<{
     id: string;
-    status: any;
+    status: MessageToolCall['status'];
     output?: string;
     durationMs?: number;
   }>
@@ -302,7 +303,7 @@ export function upsertSessionAgent(
 export function patchSessionAgent(
   sessionId: string,
   agentId: string,
-  patch: any
+  patch: Partial<SessionAgent>
 ): void {
   const sid = requireExistingSessionId(sessionId);
   if (!sid) return;
