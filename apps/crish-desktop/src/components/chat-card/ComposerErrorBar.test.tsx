@@ -112,7 +112,7 @@ describe('ComposerErrorBar (单轨收敛 §2.3)', () => {
     expect(status).toBeUndefined();
   });
 
-  it('点击重试按钮派发 retry-failed-turn 并清空错误态', () => {
+  it('点击重试按钮派发 retry-failed-turn 事件（错误态由重试执行流收敛清空）', () => {
     const onRetry = vi.fn();
     const unsub = onUiEvent('retry-failed-turn', onRetry);
 
@@ -136,9 +136,10 @@ describe('ComposerErrorBar (单轨收敛 §2.3)', () => {
       assistantMsgId: 'a-101',
     });
 
+    // S4.2：重试按钮本身不立即抹除状态，交由 regenerateTurn 节流通过后清空
     const status =
       useSessionRuntimeStatusStore.getState().statusBySession['sess-1'];
-    expect(status).toBeUndefined();
+    expect(status?.phase).toBe('failed');
 
     unsub();
   });

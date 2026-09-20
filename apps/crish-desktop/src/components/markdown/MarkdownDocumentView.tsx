@@ -3,8 +3,9 @@ import { Priority } from '../../workers';
 import { useAsyncMarkdownHtml } from '../../api/markdownRenderAsync';
 import { isSafeHref, sanitizeUrlCandidate } from '../../api/markdown-render/markdownSanitizer';
 import { VirtualPlainCodeViewer } from '../diff/VirtualPlainCodeViewer';
-import { ScrollArea } from './ScrollArea';
-import { AppIcon } from './icons/index';
+import { ScrollArea } from '../ui/ScrollArea';
+import { AppIcon } from '../ui/icons/index';
+import { copyTextToClipboard } from '@crish/shared-utils';
 
 /** 超过此阈值（默认 256KB）将强制熔断切入虚拟化极速代码呈现 */
 export const DEFAULT_LARGE_FILE_THRESHOLD_BYTES = 256 * 1024;
@@ -161,43 +162,13 @@ export const MarkdownDocumentView: React.FC<MarkdownDocumentViewProps> = React.m
           onCopyFeedbackRef.current?.('success', textToCopy);
         };
 
-        if (navigator?.clipboard?.writeText) {
-          navigator.clipboard.writeText(textToCopy).then(
-            () => {
-              applyCopiedState();
-            },
-            () => {
-              // 剪贴板 API 被阻断时的退回方案
-              try {
-                const textarea = document.createElement('textarea');
-                textarea.value = textToCopy;
-                textarea.style.position = 'fixed';
-                textarea.style.opacity = '0';
-                document.body.appendChild(textarea);
-                textarea.select();
-                document.execCommand('copy');
-                document.body.removeChild(textarea);
-                applyCopiedState();
-              } catch {
-                onCopyFeedbackRef.current?.('error', '写入剪贴板失败');
-              }
-            }
-          );
-        } else {
-          try {
-            const textarea = document.createElement('textarea');
-            textarea.value = textToCopy;
-            textarea.style.position = 'fixed';
-            textarea.style.opacity = '0';
-            document.body.appendChild(textarea);
-            textarea.select();
-            document.execCommand('copy');
-            document.body.removeChild(textarea);
+        copyTextToClipboard(textToCopy).then((ok) => {
+          if (ok) {
             applyCopiedState();
-          } catch {
+          } else {
             onCopyFeedbackRef.current?.('error', '写入剪贴板失败');
           }
-        }
+        });
         return;
       }
 

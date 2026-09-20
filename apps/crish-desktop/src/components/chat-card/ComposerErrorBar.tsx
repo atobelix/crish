@@ -41,7 +41,8 @@ export const ComposerErrorBar: React.FC<ComposerErrorBarProps> = React.memo(
     };
 
     const handleRetry = () => {
-      clearRuntimeStatus(sid);
+      // S4.2 单轨收敛：重试由 regenerateTurn 节流检查通过后清空运行时状态，
+      // 此处不提前清态，防止节流阻断导致错误条丢失但请求未发
       emitUiEvent('retry-failed-turn', {
         sessionId: sid,
         userMsgId: status.turn.userMsgId,

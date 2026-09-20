@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Button } from '../ui';
+import { SegmentedControl } from '../ui';
 import styles from './ComponentGallery.module.css';
 import {
   ModernJsonToolCall,
@@ -177,24 +177,16 @@ export const ComponentGallery: React.FC = () => {
         {/* 预览控制条 */}
         <div className={styles.previewBar}>
           <span className={styles.previewLabel}>Preview</span>
-          <div className={styles.themeSegmented}>
-            <Button
-              type="button"
-              variant="ghost"
-              className={`${styles.themeTab} ${themeMode === 'light' ? styles.tabActive : ''}`}
-              onClick={() => setThemeMode('light')}
-            >
-              Light
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              className={`${styles.themeTab} ${themeMode === 'dark' ? styles.tabActive : ''}`}
-              onClick={() => setThemeMode('dark')}
-            >
-              Dark
-            </Button>
-          </div>
+          <SegmentedControl
+            size="sm"
+            value={themeMode}
+            onChange={(val) => setThemeMode(val as 'light' | 'dark')}
+            options={[
+              { value: 'light', label: 'Light' },
+              { value: 'dark', label: 'Dark' },
+            ]}
+            aria-label="主题切换"
+          />
         </div>
 
         {/* 画布 */}

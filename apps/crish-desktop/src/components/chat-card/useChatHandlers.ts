@@ -8,6 +8,11 @@ import { getTransport } from '../../api/transport';
 import { backfillFromBoundaryText } from '../../hooks/chat-stream/slashSendDraftManager';
 import { clearRuntimeStatus } from '../../store/sessionRuntimeStatusStore';
 import type { ChatAttachment } from '../../hooks/useChatStream';
+import type {
+  ChatContentPart,
+  StreamAttachmentMeta,
+  StreamRequestOptions,
+} from '../../api/chatApi';
 
 export interface UseChatHandlersOptions {
   wsId: string;
@@ -19,7 +24,7 @@ export interface UseChatHandlersOptions {
     text: string,
     msgId: string,
     sessionIdOverride?: string,
-    streamOptions?: { clientMessageId?: string }
+    streamOptions?: StreamRequestOptions
   ) => void;
   handleSendChat?: (
     isInsert?: boolean,
@@ -213,10 +218,14 @@ export function useChatHandlers({
         (opts.userMsgId && msgs.find((m) => m.id === opts.userMsgId && m.sender === 'user')) ||
         msgs.findLast((m) => m.sender === 'user');
       const userText = (targetUser?.text || opts.fallbackText || '').trim();
-      if (!userText) return;
+      const hasAttachments = Boolean(
+        (targetUser?.images && targetUser.images.length > 0) ||
+        (targetUser?.attachments && targetUser.attachments.length > 0)
+      );
+      if (!userText && !hasAttachments) return;
 
       session.withdrawMessage(wsId, sessionId, assistantMsgId);
-      // 重试时原子清空运行时状态（单轨收敛 §2.0）
+      // 重试时原子清空运行时状态（单轨收敛 §2.0，节流通过后清态）
       clearRuntimeStatus(sessionId);
 
       let userMsgId = targetUser?.id;
@@ -229,14 +238,96 @@ export function useChatHandlers({
           text: userText,
           timestamp: Date.now(),
           status: 'processing',
+          ...(targetUser?.images?.length ? { images: targetUser.images } : {}),
+          ...(targetUser?.attachments?.length ? { attachments: targetUser.attachments } : {}),
         });
       } else {
         session.setSessionMessageStatus(sessionId, userMsgId, 'processing');
       }
-      // 透传用户 clientMessageId；助手 id 在 runStreamingAssistant 内 mint 并经 run-task 下发
-      runStreamingAssistant(userText, userMsgId, sessionId, {
+
+      const streamOptions: StreamRequestOptions = {
         clientMessageId: userMsgId,
-      });
+      };
+
+      const contentParts: ChatContentPart[] = [];
+      if (userText) {
+        contentParts.push({ type: 'text', text: userText });
+      }
+      if (targetUser?.images?.length) {
+        for (const img of targetUser.images) {
+          const url = img.resolvedUrl || img.source;
+          if (url) {
+            contentParts.push({
+              type: 'image_url',
+              image_url: { url, detail: 'auto' },
+              name: img.alt || img.id,
+              mime: img.mime || 'image/png',
+            });
+          }
+        }
+      }
+      if (targetUser?.attachments?.length) {
+        for (const att of targetUser.attachments) {
+          if (att.dataUrl) {
+            contentParts.push({
+              type: 'image_url',
+              image_url: { url: att.dataUrl, detail: 'auto' },
+              name: att.name,
+              mime: att.mime || 'image/png',
+            });
+          } else if (att.text) {
+            contentParts.push({
+              type: 'text',
+              text: `--- ${att.name} ---\n${att.text}`,
+            });
+          }
+        }
+      }
+      if (contentParts.length > 0) {
+        streamOptions.content = contentParts;
+      }
+
+      const hasImages = Boolean(
+        (targetUser?.images && targetUser.images.length > 0) ||
+        (targetUser?.attachments &&
+          targetUser.attachments.some((a) =>
+            Boolean(a.dataUrl || a.mime?.startsWith('image/'))
+          ))
+      );
+      if (hasImages) {
+        streamOptions.hasImages = true;
+      }
+
+      const streamAttachmentMetas: StreamAttachmentMeta[] = [];
+      if (targetUser?.attachments?.length) {
+        for (const att of targetUser.attachments) {
+          streamAttachmentMetas.push({
+            name: att.name,
+            mime: att.mime,
+            kind:
+              att.dataUrl || (att.mime && att.mime.startsWith('image/'))
+                ? 'image'
+                : att.text
+                  ? 'text'
+                  : 'file',
+          });
+        }
+      }
+      if (targetUser?.images?.length) {
+        for (const img of targetUser.images) {
+          streamAttachmentMetas.push({
+            name: img.alt || img.id,
+            mime: img.mime,
+            kind: 'image',
+          });
+        }
+      }
+      if (streamAttachmentMetas.length > 0) {
+        streamOptions.attachments = streamAttachmentMetas;
+      }
+
+      // 透传用户 clientMessageId 与多模态完整载荷；助手 id 在 runStreamingAssistant 内 mint 并经 run-task 下发
+      runStreamingAssistant(userText, userMsgId, sessionId, streamOptions);
     },
     [handleStopGeneration, wsId, runStreamingAssistant]
   );

@@ -3,11 +3,11 @@
  * （任务书补充场景：core_run_task 拒绝时前端必须显式提示，非静默失败）
  *
  * 链路：core_run_task 抛 CoreError（{ kind, message }）→
- *   createStreamSession catch → onRunError → RunNoticeBar（运行提示）+ toast
- *   （useStreamCallbacks.ts:436-479：错误只走横幅/toast，禁止写入 assistant 气泡）
+ *   createStreamSession catch → onRunError → SessionRuntimeStatusStore → ComposerErrorBar
+ *   （单轨收敛：错误展示唯一出口 = SessionRuntimeStatusStore，禁止写入 assistant 气泡）
  *
  * 断言（行为级）：
- *   1. run-notice 可见且文案为引擎错误信息（非静默失败）
+ *   1. composer-error-bar 可见且文案为引擎错误信息（非静默失败）
  *   2. 无 assistant 空气泡残留（错误不伪装成 AI 输出）
  *   3. 错误后输入框可继续输入（可重试）
  */
@@ -31,13 +31,13 @@ test.describe('E2E-L2 错误路径（error-path）', () => {
     await typeIntoComposer(page, '请帮我执行一个任务');
     await input.press('Enter');
 
-    // ── ① 运行提示条可见（RunNoticeBar：data-testid="run-notice"）──
-    const notice = page.locator('[data-testid="run-notice"]');
+    // ── ① 运行错误条可见（ComposerErrorBar：data-testid="composer-error-bar"）──
+    const notice = page.locator('[data-testid="composer-error-bar"]');
     await expect(notice).toBeVisible({ timeout: 8000 });
     // C3.4 产品语义：stream-start 拒绝统一走 networkUserMessage 通用文案
     // （createStreamSession catch → onRunError(networkUserMessage(), 'network')），
     // 不透出引擎错误原文，但必须显式提示而非静默失败。
-    await expect(page.locator('[data-testid="run-notice-text"]')).toContainText(
+    await expect(page.locator('[data-testid="composer-error-text"]')).toContainText(
       '服务暂时不可用',
       { timeout: 8000 }
     );
@@ -77,7 +77,7 @@ test.describe('E2E-L2 错误路径（error-path）', () => {
     await typeIntoComposer(page, '触发错误');
     await input.press('Enter');
 
-    await expect(page.locator('[data-testid="run-notice"]')).toBeVisible({
+    await expect(page.locator('[data-testid="composer-error-bar"]')).toBeVisible({
       timeout: 8000,
     });
     const state = await page.evaluate(() => {

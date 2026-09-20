@@ -62,7 +62,9 @@ export const NoteSidebarDrawer: React.FC<NoteSidebarDrawerProps> = ({
 
   const formatRelativeTime = (timestamp?: number) => {
     if (!timestamp) return '';
-    return formatRelativeActivity(timestamp);
+    // S4.5：恢复 10 位秒级 Unix 时间戳兼容分支（<1e11 则乘 1000 换算为毫秒）
+    const ms = timestamp < 1e11 ? timestamp * 1000 : timestamp;
+    return formatRelativeActivity(ms);
   };
 
   return (

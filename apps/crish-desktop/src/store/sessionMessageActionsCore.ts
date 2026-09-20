@@ -93,20 +93,38 @@ export function createSessionMessageActionsCore<T extends SessionStoreSlice>(
         if (sess?.messages) {
           const idx = sess.messages.findIndex((m) => m.id === messageId);
           if (idx !== -1) {
+            const targetMsg = sess.messages[idx];
             const prevMessages = sess.messages.slice();
             const prevPinned = sess.pinnedMessageIds
               ? sess.pinnedMessageIds.slice()
               : undefined;
-            // 收集被撤回消息影响的文件路径（轻量：仅取 toolCalls[].diffs[].filePath）
-            const pathSet = new Set<string>();
-            for (const m of prevMessages.slice(idx)) {
-              for (const tc of m.toolCalls || []) {
-                for (const d of tc.diffs || []) {
-                  if (d.filePath) pathSet.add(d.filePath);
+
+            // S4.4：精确识别被撤回节点（目标 assistant / user 及其派生工具回执节点）
+            const toRemove = new Set<string>([messageId]);
+            const toolCallIds = new Set((targetMsg?.toolCalls || []).map((tc) => tc.id));
+            if (toolCallIds.size > 0) {
+              for (const m of prevMessages) {
+                if (m.toolCallResults?.some((r) => toolCallIds.has(r.id))) {
+                  toRemove.add(m.id);
                 }
               }
             }
-            sess.messages = sess.messages.slice(0, idx);
+
+            // 收集被撤回消息影响的文件路径（轻量：仅取 toolCalls[].diffs[].filePath）
+            const pathSet = new Set<string>();
+            for (const m of prevMessages) {
+              if (toRemove.has(m.id)) {
+                for (const tc of m.toolCalls || []) {
+                  for (const d of tc.diffs || []) {
+                    if (d.filePath) pathSet.add(d.filePath);
+                  }
+                }
+              }
+            }
+
+            // 严禁截断时间线：仅精确摘除目标节点及其派生节点，后续排队追问与后续对话完整保留
+            sess.messages = sess.messages.filter((m) => !toRemove.has(m.id));
+
             if (sess.pinnedMessageIds?.length) {
               const keep = new Set(sess.messages.map((m) => m.id));
               sess.pinnedMessageIds = sess.pinnedMessageIds.filter((id) =>
@@ -131,11 +149,8 @@ export function createSessionMessageActionsCore<T extends SessionStoreSlice>(
               { afterMessages: sess.messages }
             );
             rebindSessionById(state, sessionId, sess);
-            // R2-b ⑥ gap2 补点：被撤回消息（含其后）对象失效广播（语义不变）
-            invalidateEditObjects(
-              prevMessages.slice(idx).map((m) => m.id),
-              'withdraw'
-            );
+            // 被撤回消息对象失效广播（仅失效被摘除的节点集合）
+            invalidateEditObjects([...toRemove], 'withdraw');
           }
         }
       }),

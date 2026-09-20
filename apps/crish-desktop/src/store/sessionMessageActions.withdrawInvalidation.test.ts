@@ -63,15 +63,53 @@ describe('withdrawMessage 收口适配（R2-b ⑥ 失效广播）', () => {
     }
   });
 
-  it('撤回中间消息 → 被撤回消息（含其后节点）id 收到 invalidate(withdraw) + 时间线截断', () => {
+  it('撤回中间消息 → 精确摘除目标节点，保留后续时间线与排队追问，仅失效被撤回节点', () => {
+    // 增加一条 queued 的追问
+    useSessionStore.getState().addMessage('ws-1', sid, {
+      id: 'msg-u2-queued',
+      sender: 'user',
+      text: '排队追问',
+      timestamp: 4,
+      status: 'queued',
+    });
+
     useSessionStore.getState().withdrawMessage('ws-1', sid, 'msg-a1');
 
     const sess = useSessionStore.getState().sessionsById[sid];
-    expect(sess?.messages.map((m) => m.id)).toEqual(['msg-u1']);
+    expect(sess?.messages.map((m) => m.id)).toEqual(['msg-u1', 'msg-a2', 'msg-u2-queued']);
     expect(invalidationSpy.invalidateEditObjects).toHaveBeenCalledWith(
-      ['msg-a1', 'msg-a2'],
+      ['msg-a1'],
       'withdraw'
     );
+  });
+
+  it('撤回带有 toolCalls 的助手消息 → 派生工具回执节点一同被摘除', () => {
+    useSessionStore.getState().addMessage('ws-1', sid, {
+      id: 'msg-a-tools',
+      sender: 'assistant',
+      text: '调用工具',
+      timestamp: 10,
+      toolCalls: [{ id: 'tc-exec-1', name: 'run_cmd', args: '{}', status: 'completed' }],
+    });
+    useSessionStore.getState().addMessage('ws-1', sid, {
+      id: 'msg-tool-result',
+      sender: 'tool',
+      timestamp: 11,
+      toolCallResults: [{ id: 'tc-exec-1', output: 'ok' }],
+    });
+    useSessionStore.getState().addMessage('ws-1', sid, {
+      id: 'msg-u3',
+      sender: 'user',
+      text: '后续问题',
+      timestamp: 12,
+    });
+
+    useSessionStore.getState().withdrawMessage('ws-1', sid, 'msg-a-tools');
+
+    const sess = useSessionStore.getState().sessionsById[sid];
+    expect(sess?.messages.map((m) => m.id)).not.toContain('msg-a-tools');
+    expect(sess?.messages.map((m) => m.id)).not.toContain('msg-tool-result');
+    expect(sess?.messages.map((m) => m.id)).toContain('msg-u3');
   });
 
   it('目标不存在 → 不截断、不广播', () => {

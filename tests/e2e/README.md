@@ -64,7 +64,7 @@ npm run test:e2e:native
 | `session-restore.spec.ts`  | 会话恢复（hydrate）                   | 侧栏 3 会话、点击回灌消息/工具卡、in-flight 中断标注（PE-08 T08.6）、懒水合标记                                                                             |
 | `settings-persist.spec.ts` | 设置保存→重启→一致                    | 主题改 dark → reload 回显、无「待同步」、LS 无明文 apiKey（PE-07 T07.4）                                                                                    |
 | `streaming-render.spec.ts` | 流式渲染专项                          | 流式期 delta 累积（收敛性）、未闭合 fence 软渲染、完成态收敛 `pre/code`、表格结构                                                                           |
-| `error-path.spec.ts`       | 错误路径                              | `core_run_task` 拒绝 → run-notice 提示、无 assistant 空气泡、可重试                                                                                         |
+| `error-path.spec.ts`       | 错误路径                              | `core_run_task` 拒绝 → composer-error-bar 提示、无 assistant 空气泡、可重试                                                                                 |
 | `cache-metrics.spec.ts`    | 缓存指标（P6 §3.5.1）                 | ①cache fixture → 徽标 75%（9000/12000）与 read/write 数值；②legacy 无徽标无 0%；③缓存域参数缺省；④read=0 未命中态                                           |
 | `cache-telemetry.spec.ts`  | 缓存遥测展示链路（P5 §5.3，T-48）     | ①两次请求 badge 75% + 面板 hitRatio 递增/累计；②cache-waste-alert 归因文案；③冷缓存提示每 run 一次；④legacy 面板空态无 0%；⑤model-switch 归因 + miss 仍计数 |
 
@@ -81,7 +81,7 @@ npm run test:e2e:native
 | `settings-button` / `quick-settings-all` / `settings-panel` / `settings-tab-*` / `settings-close-button` | settings                                             | 设置     |
 | `model-selector-button` / `model-picker-menu`                                                            | provider                                             | 模型     |
 | `chat-input` / `composer-stop`                                                                           | chat-composer/ComposerField                          | 聊天     |
-| `run-notice` / `run-notice-text`                                                                         | chat-card/RunNoticeBar（T11.1 补充）                 | 错误提示 |
+| `composer-error-bar` / `composer-error-text`                                                             | chat-card/ComposerErrorBar（单轨收敛）               | 错误提示 |
 | `tab-chat` / `add-panel-button` / `add-panel-item-terminal`                                              | 工作区                                               | 通用     |
 | `cache-metrics-badge`                                                                                    | chat-message-row/CacheMetricsBadge（P6 T-46）        | 缓存指标 |
 | `session-cache-stats`                                                                                    | workspace/SessionCacheStatsPanel（P6 T-46）          | 缓存指标 |

@@ -208,6 +208,8 @@ export function useRunStreamingAssistant(
             // D2 单轨收敛：thinking 仅经 batcher → streamingStore（与 onChunk 同构），
             // 不再同步直写 sessionStore.updateMessageThinking。
             if (!assertLive()) return;
+            // S4.3：首帧思考清理运行时状态（消除幽灵重试瞬态行）
+            clearRuntimeStatus(sid);
             thinkingBatcherRef.current?.push(
               streamBatchKey(sid, assistantMsgId),
               thought
@@ -215,6 +217,8 @@ export function useRunStreamingAssistant(
           },
           onToolStart: (toolId, name, args, explanation) => {
             if (!assertLive()) return;
+            // S4.3：首帧工具调用清理运行时状态（消除幽灵重试瞬态行）
+            clearRuntimeStatus(sid);
             upsertToolCall(toolId, name, args, explanation, 'running');
           },
           onToolPendingApproval: (

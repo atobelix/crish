@@ -179,9 +179,3 @@ export type {
 
 export { SmartModelBadge } from './SmartModelBadge';
 export type { SmartModelBadgeProps } from './SmartModelBadge';
-
-export { MarkdownDocumentView, parsePathAndLocation } from './MarkdownDocumentView';
-export type {
-  MarkdownDocumentViewProps,
-  ParsedPathTarget,
-} from './MarkdownDocumentView';

@@ -27,7 +27,7 @@ export const SidePanelNavToolbar: React.FC<SidePanelNavToolbarProps> = ({
             variant="ghost"
             className={`${styles.toolbarBtn} side-panel-btn`}
             aria-label="后退"
-            disabled
+            aria-disabled="true"
           >
             <AppIcon name="arrow-left" size={14} />
           </Button>
@@ -38,7 +38,7 @@ export const SidePanelNavToolbar: React.FC<SidePanelNavToolbarProps> = ({
             variant="ghost"
             className={`${styles.toolbarBtn} side-panel-btn`}
             aria-label="前进"
-            disabled
+            aria-disabled="true"
           >
             <AppIcon name="arrow-right" size={14} />
           </Button>

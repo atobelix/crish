@@ -2,7 +2,8 @@ import { useToast } from '../../services/toast/ToastContext';
 import React from 'react';
 
 import { revealSkillPath, type DesktopSkill, type SkillActivation } from '../../api/skillsApi';
-import { Button, MarkdownDocumentView, SegmentedControl, Tooltip } from '../ui';
+import { Button, SegmentedControl, Tooltip } from '../ui';
+import { MarkdownDocumentView } from '../markdown/MarkdownDocumentView';
 import styles from './SkillsSettingsTab.module.css';
 import { ACTIVATION_OPTIONS, scopeGroupLabel } from './useSkillsSettingsState';
 import { AppIcon } from '../ui/icons/index';

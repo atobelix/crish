@@ -143,36 +143,6 @@
   color: #ffffff;
 }
 
-.themeSegmented {
-  display: flex;
-  background: #141417;
-  border: 1px solid #27272a;
-  border-radius: 6px;
-  padding: 2px;
-}
-
-.themeTab,
-.themeTab {
-  padding: 3px 12px;
-  font-size: 12px;
-  height: auto;
-  min-height: unset;
-  border-radius: 4px;
-  border: none;
-  background: transparent;
-  color: #71717a;
-  cursor: pointer;
-  font-family: inherit;
-  font-weight: 500;
-  transition: all 100ms ease;
-}
-
-.themeTab.tabActive,
-.themeTab.tabActive {
-  background: #27272a;
-  color: #ffffff;
-}
-
 /* 预览画布容器 */
 .canvas {
   width: 100%;

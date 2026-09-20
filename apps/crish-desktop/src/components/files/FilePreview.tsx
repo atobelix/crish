@@ -1,6 +1,7 @@
 import React, { useCallback, useRef } from 'react';
 import styles from './FilesCard.module.css';
-import { Button, MarkdownDocumentView, Tooltip } from '../ui';
+import { Button, Tooltip } from '../ui';
+import { MarkdownDocumentView } from '../markdown/MarkdownDocumentView';
 
 import { parseCsvPreview, pathBasename } from '../../api/workspaceFsApi';
 import { FileEditor } from './FileEditor';
