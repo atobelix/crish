@@ -185,12 +185,7 @@ export const ProviderProfileForm: React.FC<{
                 spellCheck={false}
                 onChange={(e) => setVendorNameDraft(e.target.value)}
                 onBlur={handleSaveVendorName}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    handleSaveVendorName();
-                  }
-                }}
+                onEnter={handleSaveVendorName}
               />
           </div>
 
@@ -224,9 +219,8 @@ export const ProviderProfileForm: React.FC<{
                   }
                   value={keyDraft}
                   onChange={(e) => setKeyDraft(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && keyDraft.trim()) {
-                      e.preventDefault();
+                  onEnter={() => {
+                    if (keyDraft.trim()) {
                       void saveKey();
                     }
                   }}

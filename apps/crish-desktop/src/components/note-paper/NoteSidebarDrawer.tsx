@@ -50,14 +50,12 @@ export const NoteSidebarDrawer: React.FC<NoteSidebarDrawerProps> = ({
   );
 
   const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLInputElement>, docId: string) => {
-      if (e.key === 'Enter') {
-        commitRename(docId);
-      } else if (e.key === 'Escape') {
+    (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === 'Escape') {
         setEditingDocId(null);
       }
     },
-    [commitRename]
+    []
   );
 
   const formatRelativeTime = (timestamp?: number) => {
@@ -156,7 +154,8 @@ export const NoteSidebarDrawer: React.FC<NoteSidebarDrawerProps> = ({
                     value={editTitle}
                     onChange={(e) => setEditTitle(e.target.value)}
                     onBlur={() => commitRename(doc.id)}
-                    onKeyDown={(e) => handleKeyDown(e, doc.id)}
+                    onEnter={() => commitRename(doc.id)}
+                    onKeyDown={handleKeyDown}
                     autoFocus
                     onClick={(e) => e.stopPropagation()}
                     maxLength={48}

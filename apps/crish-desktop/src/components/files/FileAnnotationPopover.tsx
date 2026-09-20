@@ -261,11 +261,9 @@ export const FileAnnotationPopover: React.FC<FileAnnotationPopoverProps> = React
           }}
           placeholder="添加批注…"
           autoFocus
+          onEnter={handleSubmit}
           onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault();
-              handleSubmit();
-            } else if (e.key === 'Escape') {
+            if (e.key === 'Escape') {
               e.preventDefault();
               handleClose();
             }

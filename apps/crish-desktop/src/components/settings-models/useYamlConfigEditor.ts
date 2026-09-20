@@ -206,6 +206,7 @@ export function useYamlConfigEditor({
 
   const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
+      if (e.nativeEvent?.isComposing || e.keyCode === 229) return;
       e.preventDefault();
       if (e.shiftKey) {
         jumpToMatch(searchIndex - 1);

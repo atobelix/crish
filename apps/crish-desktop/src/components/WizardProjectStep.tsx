@@ -83,9 +83,8 @@ export const WizardProjectStep: React.FC<WizardProjectStepProps> = ({
             aria-invalid={error ? true : undefined}
             aria-describedby={describedBy}
             onChange={(e) => onPathChange(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !busy) {
-                e.preventDefault();
+            onEnter={() => {
+              if (!busy) {
                 onEnter();
               }
             }}

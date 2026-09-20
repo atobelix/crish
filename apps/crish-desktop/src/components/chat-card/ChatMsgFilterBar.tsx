@@ -103,6 +103,7 @@ export const ChatMsgFilterBar: React.FC<ChatMsgFilterBarProps> = ({
               closeBar();
             }
           } else if (e.key === 'Enter') {
+            if (e.nativeEvent?.isComposing || e.keyCode === 229) return;
             // 客户端即时过滤，无提交；阻止表单/默认行为
             e.preventDefault();
           }

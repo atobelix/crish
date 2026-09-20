@@ -70,9 +70,8 @@ export const WizardKeyStep: React.FC<WizardKeyStepProps> = ({
         value={name}
         {...inputProps}
         onChange={(e) => onNameChange(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' && !busy) {
-            e.preventDefault();
+        onEnter={() => {
+          if (!busy) {
             onEnter();
           }
         }}
@@ -89,9 +88,8 @@ export const WizardKeyStep: React.FC<WizardKeyStepProps> = ({
         value={baseUrl}
         {...inputProps}
         onChange={(e) => onBaseUrlChange(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' && !busy) {
-            e.preventDefault();
+        onEnter={() => {
+          if (!busy) {
             onEnter();
           }
         }}
@@ -127,9 +125,8 @@ export const WizardKeyStep: React.FC<WizardKeyStepProps> = ({
         value={apiKey}
         {...inputProps}
         onChange={(e) => onKeyChange(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' && !busy) {
-            e.preventDefault();
+        onEnter={() => {
+          if (!busy) {
             onEnter();
           }
         }}

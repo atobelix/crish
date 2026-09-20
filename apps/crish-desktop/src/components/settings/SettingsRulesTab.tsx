@@ -255,12 +255,7 @@ export const SettingsRulesTab: React.FC<Props> = ({ onBlockingOverlayChange }) =
                 aria-label="自定义规则"
                 autoComplete="off"
                 spellCheck={false}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    handleAddCustomRule();
-                  }
-                }}
+                onEnter={handleAddCustomRule}
               />
               <Tooltip content={`加入${scopeLabel}短规则`}>
                 <Button

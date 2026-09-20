@@ -226,9 +226,8 @@ export const SkillCardList: React.FC<SkillCardListProps> = ({
                     value={extraDir}
                     onChange={(e) => setExtraDir(e.target.value)}
                     aria-label="额外技能目录绝对路径"
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && extraDir.trim()) {
-                        e.preventDefault();
+                    onEnter={() => {
+                      if (extraDir.trim()) {
                         commitExtraDir(extraDir);
                       }
                     }}

@@ -154,6 +154,7 @@ export function useSettingsNav(opts: UseSettingsNavOptions): UseSettingsNavResul
         return;
       }
       if (e.key === 'Enter' && visibleTabs.length > 0) {
+        if (e.nativeEvent?.isComposing || e.keyCode === 229) return;
         e.preventDefault();
         const hit =
           visibleTabs.find((t) => t.id === safeActiveTab)?.id ?? visibleTabs[0]!.id;

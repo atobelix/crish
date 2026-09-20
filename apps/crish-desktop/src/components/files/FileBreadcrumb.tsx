@@ -399,13 +399,11 @@ export const FileBreadcrumb = React.memo(function FileBreadcrumb({
                               prev ? { ...prev, filter: e.target.value } : prev
                             )
                           }
+                          onEnter={handleDirectOpenCurrentDir}
                           onKeyDown={(e) => {
                             if (e.key === 'Escape') {
                               setBcFlyout(null);
                               requestAnimationFrame(() => bcTriggerRef.current?.focus());
-                            } else if (e.key === 'Enter') {
-                              e.preventDefault();
-                              handleDirectOpenCurrentDir();
                             }
                           }}
                         />

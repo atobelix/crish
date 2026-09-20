@@ -97,11 +97,19 @@ export const ProfileHeader: React.FC<{
               }
               setEditingName(false);
             }}
+            onEnter={async (val) => {
+              const trimmed = (val !== undefined ? val : nameDraft).trim();
+              if (trimmed && trimmed !== selected.name) {
+                upsertProfile({ ...selected, name: trimmed });
+                await modelsCatalogStore.updateProvider(selected.id, {
+                  displayName: trimmed,
+                });
+                refresh();
+              }
+              setEditingName(false);
+            }}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                e.currentTarget.blur();
-              } else if (e.key === 'Escape') {
+              if (e.key === 'Escape') {
                 setEditingName(false);
               }
             }}

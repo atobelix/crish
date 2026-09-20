@@ -274,6 +274,7 @@ export const PinActionWithPicker: React.FC<PinActionWithPickerProps> = React.mem
 
     const handleHexKeyDown = useCallback(
       (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.nativeEvent?.isComposing || e.keyCode === 229) return;
         if (e.key === 'Enter') {
           (e.target as HTMLInputElement).blur();
         }

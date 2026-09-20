@@ -82,9 +82,8 @@ export const WizardModelStep: React.FC<WizardModelStepProps> = ({
             value={modelInList ? '' : modelId}
             {...inputProps}
             onChange={(e) => onChange(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !busy) {
-                e.preventDefault();
+            onEnter={() => {
+              if (!busy) {
                 onEnter();
               }
             }}
@@ -99,9 +98,8 @@ export const WizardModelStep: React.FC<WizardModelStepProps> = ({
           value={modelId}
           {...inputProps}
           onChange={(e) => onChange(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !busy) {
-              e.preventDefault();
+          onEnter={() => {
+            if (!busy) {
               onEnter();
             }
           }}

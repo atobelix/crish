@@ -97,6 +97,7 @@ export const DiffCardGitActions: React.FC<DiffCardGitActionsProps> = ({
         disabled={commitLoading || pushLoading}
         onChange={(e) => onCommitMsgChange(e.target.value)}
         onKeyDown={(e) => {
+          if (e.nativeEvent?.isComposing || e.keyCode === 229) return;
           if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
             if (canCommit) {
               e.preventDefault();

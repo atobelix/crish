@@ -110,9 +110,45 @@
   0 HARD BLOCK / 63 BASELINE = 62 + 1 新登记）**。
 
 <!-- BASELINE_START -->
+apps/crish-desktop/src/api/VirtualScrollManager.ts 371
+apps/crish-desktop/src/api/conversation/ConversationAssembler.ts 394
+apps/crish-desktop/src/api/modelsCatalogActions.ts 378
+apps/crish-desktop/src/api/modelsCatalogStore.ts 375
+apps/crish-desktop/src/api/ptySessionApi.ts 396
+apps/crish-desktop/src/api/sessionEventProjection.ts 350
+apps/crish-desktop/src/api/sessionTitle.ts 348
+apps/crish-desktop/src/api/toolFeedbackDiff.ts 341
+apps/crish-desktop/src/api/transport/tauriTransport.ts 381
+apps/crish-desktop/src/api/workspaceFsApi.ts 372
+apps/crish-desktop/src/app/UnifiedAppHydrationCoordinator.ts 376
+apps/crish-desktop/src/assets/icons/modelVendorCatalog.ts 366
+apps/crish-desktop/src/components/binary-tree/PaneHeader.tsx 442
+apps/crish-desktop/src/components/binary-tree/TreeLeafPanel.tsx 485
+apps/crish-desktop/src/components/chat-card/useChatAttachments.ts 427
+apps/crish-desktop/src/components/chat-composer/ChatComposer.tsx 460
+apps/crish-desktop/src/components/chat-message-list/MessageVirtualizer.tsx 476
+apps/crish-desktop/src/components/chat-tool-call/toolExpansionState.ts 437
 apps/crish-desktop/src/components/diff/ChangeOverviewCard.tsx 481
+apps/crish-desktop/src/components/diff/useDiffData.ts 426
+apps/crish-desktop/src/components/files/FileBreadcrumb.tsx 450
+apps/crish-desktop/src/components/files/FileViewerCard.tsx 456
+apps/crish-desktop/src/components/files/FilesCard.tsx 465
+apps/crish-desktop/src/components/note-paper/useNoteTextPersistence.ts 454
+apps/crish-desktop/src/components/settings-models/ModelsSettingsTab.tsx 427
 apps/crish-desktop/src/components/sidebar/session-list/useSessionListDrag.ts 582
 apps/crish-desktop/src/components/ui/PreviewCard/PreviewCard.tsx 683
+apps/crish-desktop/src/components/ui/ScrollArea/ScrollArea.tsx 429
+apps/crish-desktop/src/components/ui/Tooltip/Tooltip.tsx 473
+apps/crish-desktop/src/components/ui/icons/iconMap.ts 509
+apps/crish-desktop/src/components/ui/internal/layer-stack/LayerStackManager.ts 487
+apps/crish-desktop/src/components/workspace/useXtermTerminal.ts 528
+apps/crish-desktop/src/hooks/chat-stream/helpers.ts 415
+apps/crish-desktop/src/hooks/chat-stream/slashSendPreflight.ts 380
+apps/crish-desktop/src/services/TokenRuntimeController.ts 523
 apps/crish-desktop/src/store/layout-tree/layoutTreeStore.ts 435
 apps/crish-desktop/src/store/layout-tree/sessionTabMigration.ts 501
+apps/crish-desktop/src/store/sessionCrudActions.ts 392
+apps/crish-desktop/src/store/sessionSharedHelpers.messageMerge.ts 353
+apps/crish-desktop/src/store/types.ts 370
+apps/crish-desktop/src/workers/worker-pool.ts 356
 <!-- BASELINE_END -->

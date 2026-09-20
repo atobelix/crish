@@ -70,16 +70,13 @@ export const EditableTitle: React.FC<EditableTitleProps> = React.memo(
     // 键盘响应
     const handleKeyDown = useCallback(
       (e: React.KeyboardEvent<HTMLInputElement>) => {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          void handleCommit();
-        } else if (e.key === 'Escape') {
+        if (e.key === 'Escape') {
           e.preventDefault();
           setDraftText(title || placeholder);
           setIsEditing(false);
         }
       },
-      [handleCommit, title, placeholder]
+      [title, placeholder]
     );
 
     const containerClasses = [styles.titleContainer, className]
@@ -114,6 +111,9 @@ export const EditableTitle: React.FC<EditableTitleProps> = React.memo(
             placeholder={placeholder}
             onChange={(e) => setDraftText(e.target.value)}
             onBlur={() => {
+              void handleCommit();
+            }}
+            onEnter={() => {
               void handleCommit();
             }}
             onKeyDown={handleKeyDown}

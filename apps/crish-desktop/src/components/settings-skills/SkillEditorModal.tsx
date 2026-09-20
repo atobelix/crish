@@ -197,9 +197,8 @@ export const SkillEditorModal: React.FC<SkillEditorModalProps> = ({
                   onChange={(e) => setCreateName(e.target.value)}
                   aria-label="技能名称"
                   disabled={createBusy}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && createName.trim()) {
-                      e.preventDefault();
+                  onEnter={() => {
+                    if (createName.trim()) {
                       void handleCreate();
                     }
                   }}
@@ -215,9 +214,8 @@ export const SkillEditorModal: React.FC<SkillEditorModalProps> = ({
                 onChange={(e) => setCreateDesc(e.target.value)}
                 aria-label="技能描述（可选）"
                 disabled={createBusy}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && createName.trim()) {
-                    e.preventDefault();
+                onEnter={() => {
+                  if (createName.trim()) {
                     void handleCreate();
                   }
                 }}

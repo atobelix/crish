@@ -334,11 +334,9 @@ export const SessionRow = memo(function SessionRow(props: SessionRowProps) {
             aria-label="重命名会话"
             onClick={(e) => e.stopPropagation()}
             onChange={(e) => onRenameDraftChange(e.target.value)}
+            onEnter={() => onCommitRename(s.id)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                onCommitRename(s.id);
-              } else if (e.key === 'Escape') {
+              if (e.key === 'Escape') {
                 e.preventDefault();
                 onCancelRename?.();
               }

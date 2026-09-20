@@ -283,11 +283,9 @@ export const SettingsSecurityTab: React.FC = () => {
                 autoCapitalize="off"
                 aria-label="要信任的命令"
                 className={styles.inputGrow}
+                onEnter={addWhitelist}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    addWhitelist();
-                  } else if (e.key === 'Escape' && newWhitelistCmd) {
+                  if (e.key === 'Escape' && newWhitelistCmd) {
                     e.preventDefault();
                     setNewWhitelistCmd('');
                   }

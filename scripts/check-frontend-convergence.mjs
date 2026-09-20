@@ -13,7 +13,7 @@
  *   - docs/red-team-plans/audits/02-蓝队工程约束与防回潮门禁交叉审计报告.md
  *   - docs/red-team-plans/remediation/03-状态分域与死代码清剿最佳修复方案.md
  *
- * 覆盖 12 大不可违背的刚性检测规则（G-01 ~ G-12）：
+ * 覆盖 15 大不可违背的刚性检测规则（G-01 ~ G-15）：
  *   Rule 1 (G-01): 业务层零裸原生交互标签阻断 (No Naked Interactive Elements)
  *   Rule 2 (G-02): 浮层零 cloneElement 与零 stopPropagation (No Trigger Cloning & Event Hijack)
  *   Rule 3 (G-03): 零裸 ResizeObserver / 零 window.resize / 零 0px 回流 / 零 flushSync (No Raw RO & Thrashing)
@@ -26,6 +26,9 @@
  *   Rule 10 (G-10): 空态表面零状态渗透 (!onEmptySurface 刚性门闩) (Clean Slate Invariant)
  *   Rule 11 (G-11): 全仓零 onShowToast 属性透传 (No Toast Prop Drilling)
  *   Rule 12 (G-12): 严禁使用原生 HTML title 属性作为悬浮提示 (No Native Title Attribute)
+ *   Rule 13 (G-13): 全仓零 GBK 乱码固化与编码损坏阻断 (Zero GBK Mojibake)
+ *   Rule 14 (G-14): 业务层 CSS Modules 禁书 :global 幽灵提权选择器 (No Ghost Global Selectors)
+ *   Rule 15 (G-15): 业务层 onKeyDown 裸判 Enter 提交阻断 (Enter Key IME Guard Invariant)
  *
  * 用法：node scripts/check-frontend-convergence.mjs [--verbose]
  * 退出码：0 全部通过；1 存在违规项（CI / Git 阻断）
@@ -149,12 +152,19 @@ function runRule1_NakedTags() {
 
 /**
  * Rule 2 (G-02): 浮层零 cloneElement 与零 stopPropagation
- * 检查 Menu.tsx 及浮层组件禁止使用 cloneElement 劫持 Trigger，禁止使用 stopPropagation 破坏 LayerStack。
+ * 检查 Menu 及其全浮层基元组件（Menu, ConfirmDialog, SmartPanel, Dialog 等）禁止使用 cloneElement 劫持 Trigger，
+ * 禁止使用 stopPropagation 破坏 LayerStack。
  */
 function runRule2_MenuCloneElement() {
-  const menuFile = join(UI_DIR, 'Menu', 'Menu.tsx');
-  if (existsSync(menuFile)) {
-    const content = readFileSync(menuFile, 'utf8');
+  const targetFiles = [
+    ...collectFiles(join(UI_DIR, 'Menu'), /\.(tsx|ts)$/, /(\.test\.|\.spec\.)/),
+    join(UI_DIR, 'ConfirmDialog', 'ConfirmDialog.tsx'),
+    join(UI_DIR, 'SmartPanel', 'SmartPanel.tsx'),
+    join(UI_DIR, 'Dialog', 'Dialog.tsx'),
+  ].filter((f) => existsSync(f));
+
+  for (const file of targetFiles) {
+    const content = readFileSync(file, 'utf8');
     const lines = content.split('\n');
     lines.forEach((lineText, idx) => {
       const trimmed = lineText.trim();
@@ -166,27 +176,27 @@ function runRule2_MenuCloneElement() {
         report(
           2,
           'G-02',
-          menuFile,
+          file,
           idx + 1,
-          `Menu 组件禁止使用 cloneElement 劫持触发器，必须使用 Anchor 或标准 Slot 模式！`
+          `浮层基元组件禁止使用 cloneElement 劫持触发器，必须使用 Anchor 或标准 Slot 模式！`
         );
       }
       if (lineText.includes('stopPropagation()')) {
         report(
           2,
           'G-02',
-          menuFile,
+          file,
           idx + 1,
-          `Menu 组件禁止使用 stopPropagation 截断全局事件流，必须接入 LayerStack 统一调度！`
+          `浮层基元组件禁止使用 stopPropagation 截断全局事件流，必须接入 LayerStack 统一调度！`
         );
       }
       if (/window\.addEventListener\s*\(\s*['"]pointerup['"]/.test(lineText)) {
         report(
           2,
           'G-02',
-          menuFile,
+          file,
           idx + 1,
-          `Menu 组件禁止注册全局捕获 pointerup 监听器（WO-26 死锁残留）！`
+          `浮层基元组件禁止注册全局捕获 pointerup 监听器（WO-26 死锁残留）！`
         );
       }
     });
@@ -774,12 +784,149 @@ function runRule13_ZeroGbkMojibake() {
   }
 }
 
+/**
+ * Rule 14 (G-14): 业务层 CSS Modules 禁书 :global(.button|.input|.textarea|.menu*) 幽灵提权选择器
+ * 检查全仓业务 CSS Modules，禁止书写 :global(.button|.input|.textarea|.menu*) 等死选择器。
+ */
+function runRule14_NoGhostGlobalSelectors() {
+  const files = collectFiles(
+    DESKTOP_SRC,
+    /\.(module\.css)$/,
+    /(\.test\.|\.spec\.|components\/ui\/)/
+  );
+
+  const GHOST_RE = /:global\(\s*\.(?:button|input|textarea|menu[a-zA-Z0-9_-]*)(?![a-zA-Z0-9_-])/;
+
+  for (const file of files) {
+    const content = readFileSync(file, 'utf8');
+    const lines = content.split('\n');
+    lines.forEach((lineText, idx) => {
+      const trimmed = lineText.trim();
+      if (trimmed.startsWith('/*') || trimmed.startsWith('*')) return;
+      if (GHOST_RE.test(lineText)) {
+        report(
+          14,
+          'G-14',
+          file,
+          idx + 1,
+          `业务层 CSS Modules 禁止书写 :global(.button|.input|.textarea|.menu*) 幽灵提权选择器！`
+        );
+      }
+    });
+  }
+}
+
+/**
+ * Rule 15 (G-15): 业务层 onKeyDown 裸判 Enter 提交阻断 (Enter Key IME Guard Invariant)
+ * 业务层 <Input> 与 <Textarea> 必须通过 onEnter 契约或包含 isComposing 守卫处理回车，
+ * 禁止在 onKeyDown 中裸判 key === 'Enter' 绕过 IME 输入法保护。
+ */
+function runRule15_EnterKeyImeGuard() {
+  const files = collectFiles(
+    DESKTOP_SRC,
+    /\.(tsx|jsx)$/,
+    /(\.test\.|\.spec\.|__tests__|tests\/|components\/ui\/)/
+  );
+
+  for (const file of files) {
+    const content = readFileSync(file, 'utf8');
+    const sf = ts.createSourceFile(
+      file,
+      content,
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TSX
+    );
+
+    const functionMap = new Map();
+    function collectFunctions(node) {
+      if (ts.isFunctionDeclaration(node) && node.name) {
+        functionMap.set(node.name.getText(sf), node);
+      } else if (ts.isVariableStatement(node)) {
+        for (const decl of node.declarationList.declarations) {
+          if (
+            decl.name &&
+            decl.initializer &&
+            (ts.isArrowFunction(decl.initializer) || ts.isFunctionExpression(decl.initializer))
+          ) {
+            functionMap.set(decl.name.getText(sf), decl.initializer);
+          } else if (
+            decl.name &&
+            decl.initializer &&
+            ts.isCallExpression(decl.initializer) &&
+            (decl.initializer.expression.getText(sf) === 'useCallback' ||
+              decl.initializer.expression.getText(sf).endsWith('.useCallback')) &&
+            decl.initializer.arguments[0] &&
+            (ts.isArrowFunction(decl.initializer.arguments[0]) ||
+              ts.isFunctionExpression(decl.initializer.arguments[0]))
+          ) {
+            functionMap.set(decl.name.getText(sf), decl.initializer.arguments[0]);
+          }
+        }
+      }
+      ts.forEachChild(node, collectFunctions);
+    }
+    collectFunctions(sf);
+
+    function checkHandlerText(handlerText, nodeForLoc, tagName) {
+      const ENTER_RE = /\b(?:e|event|ev)\.key\s*===?\s*['"]Enter['"]/;
+      if (ENTER_RE.test(handlerText)) {
+        const hasImeGuard =
+          handlerText.includes('isComposing') ||
+          handlerText.includes('229') ||
+          handlerText.includes('Process');
+        if (!hasImeGuard) {
+          const { line } = sf.getLineAndCharacterOfPosition(nodeForLoc.getStart(sf));
+          report(
+            15,
+            'G-15',
+            file,
+            line + 1,
+            `<${tagName}> onKeyDown 中直接判定 key === 'Enter'，缺乏 isComposing / keyCode === 229 守卫！必须改用 onEnter 契约！`
+          );
+        }
+      }
+    }
+
+    function visit(node) {
+      if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) {
+        const tagName = node.tagName.getText(sf);
+        if (tagName === 'Input' || tagName === 'Textarea') {
+          for (const prop of node.attributes.properties) {
+            if (
+              ts.isJsxAttribute(prop) &&
+              prop.name.getText(sf) === 'onKeyDown' &&
+              prop.initializer
+            ) {
+              if (ts.isJsxExpression(prop.initializer) && prop.initializer.expression) {
+                const expr = prop.initializer.expression;
+                if (ts.isArrowFunction(expr) || ts.isFunctionExpression(expr)) {
+                  checkHandlerText(expr.getText(sf), prop, tagName);
+                } else if (ts.isIdentifier(expr)) {
+                  const idName = expr.getText(sf);
+                  const fnNode = functionMap.get(idName);
+                  if (fnNode) {
+                    checkHandlerText(fnNode.getText(sf), prop, tagName);
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+      ts.forEachChild(node, visit);
+    }
+
+    visit(sf);
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 主执行入口
 // ─────────────────────────────────────────────────────────────────────────────
 
 function main() {
-  console.log('🛡️  [check:convergence] 启动前端重构终极收敛防回潮门禁扫描 (G-01 ~ G-13)...\n');
+  console.log('🛡️  [check:convergence] 启动前端重构终极收敛防回潮门禁扫描 (G-01 ~ G-15)...\n');
 
   runRule1_NakedTags();
   runRule2_MenuCloneElement();
@@ -794,6 +941,8 @@ function main() {
   runRule11_NoToastPropDrilling();
   runRule12_NoNativeTitle();
   runRule13_ZeroGbkMojibake();
+  runRule14_NoGhostGlobalSelectors();
+  runRule15_EnterKeyImeGuard();
 
   const rulesPassed = [
     { id: 'G-01', name: '业务层零裸交互标签', hit: violations.some((v) => v.includes('[Rule 1 / G-01]')) },
@@ -809,6 +958,8 @@ function main() {
     { id: 'G-11', name: '全仓零 onShowToast 属性透传 (No Toast Prop Drilling)', hit: violations.some((v) => v.includes('[Rule 11 / G-11]')) },
     { id: 'G-12', name: '严禁使用原生 HTML title 属性 (强制 <Tooltip>)', hit: violations.some((v) => v.includes('[Rule 12 / G-12]')) },
     { id: 'G-13', name: '全仓零 GBK 乱码固化与编码损坏阻断', hit: violations.some((v) => v.includes('[Rule 13 / G-13]')) },
+    { id: 'G-14', name: '业务层 CSS Modules 禁书 :global 幽灵提权选择器', hit: violations.some((v) => v.includes('[Rule 14 / G-14]')) },
+    { id: 'G-15', name: '业务层 onKeyDown 裸判 Enter 提交阻断 (强制 onEnter / IME 守卫)', hit: violations.some((v) => v.includes('[Rule 15 / G-15]')) },
   ];
 
   console.log('┌──────┬──────────────────────────────────────────────────────────────┬────────────┐');
@@ -837,7 +988,7 @@ function main() {
   }
 
   console.log(
-    '🎉 [check:convergence] 完美通过！全仓 13 大收敛规则 0 违规，架构纯净无回潮 (All 13 Rules Passed, 0 Violations)。\n'
+    '🎉 [check:convergence] 完美通过！全仓 15 大收敛规则 0 违规，架构纯净无回潮 (All 15 Rules Passed, 0 Violations)。\n'
   );
   process.exit(0);
 }
