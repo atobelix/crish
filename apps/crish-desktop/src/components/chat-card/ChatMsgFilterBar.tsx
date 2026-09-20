@@ -9,7 +9,7 @@
 import React, { useId } from 'react';
 
 import styles from './ChatMsgFilterBar.module.css';
-import { Button, Tooltip } from '../ui';
+import { Button, Input, Tooltip } from '../ui';
 import { AppIcon } from '../ui/icons/index';
 
 export type ChatMsgFilterBarProps = {
@@ -75,7 +75,8 @@ export const ChatMsgFilterBar: React.FC<ChatMsgFilterBarProps> = ({
       <AppIcon name="search" size={13}
         className={styles.icon}
         aria-hidden />
-      <input
+      <Input
+        bare
         ref={inputRef}
         type="search"
         className={styles.input}

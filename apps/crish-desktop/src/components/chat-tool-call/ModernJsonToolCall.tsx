@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 
-import { Tooltip } from '../ui';
+import { Button, Tooltip } from '../ui';
 import styles from './ModernToolCall.module.css';
 import { AppIcon } from '../ui/icons/index';
 
@@ -97,8 +97,9 @@ export const ModernJsonToolCall: React.FC<ModernJsonToolCallProps> = ({
       data-tool-status={status}
     >
       {/* 头部：可点击折叠/展开行 */}
-      <button
+      <Button
         type="button"
+        variant="ghost"
         className={styles.jsonToolHead}
         onClick={handleToggle}
         aria-expanded={isExpanded}
@@ -127,7 +128,7 @@ export const ModernJsonToolCall: React.FC<ModernJsonToolCallProps> = ({
             <span className={styles.pulseDot} />
           ) : null}
         </span>
-      </button>
+      </Button>
 
       {/* 展开卡片主体 */}
       {isExpanded ? (

@@ -91,11 +91,16 @@
   vertical-align: middle;
 }
 
+:global(.button).chatEmptyProjectBtnInline,
 .chatEmptyProjectBtnInline {
   appearance: none;
   -webkit-appearance: none;
   font-size: calc(var(--font-size-2xl) + var(--space-1));
   font-weight: var(--font-weight-content);
+  min-width: unset;
+  min-height: unset;
+  height: auto;
+  box-shadow: none;
   padding: var(--space-0_5, 2px) var(--space-2, 8px);
   border-radius: var(--radius-lg, 8px);
   background: transparent;
@@ -202,12 +207,19 @@
   box-sizing: border-box;
 }
 
+:global(.button).quickPromptCard,
 .quickPromptCard,
+.sessionEmpty :global(.button).quickPromptCard,
 .sessionEmpty .quickPromptCard {
   display: flex;
   align-items: center;
   justify-content: flex-start;
   text-align: left;
+  min-width: unset;
+  min-height: unset;
+  height: auto;
+  font-family: inherit;
+  font-weight: normal;
   padding: var(--space-3, 12px) var(--space-4, 16px);
   background: var(--bg-card, var(--bg-secondary));
   border: 1px solid var(--border-subtle);

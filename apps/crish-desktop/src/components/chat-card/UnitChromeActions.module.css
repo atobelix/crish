@@ -63,10 +63,14 @@
   flex-shrink: 0;
 }
 
+:global(.button).bcProjectBtn,
 .bcProjectBtn {
   display: inline-flex;
   align-items: center;
+  min-width: unset;
+  min-height: unset;
   border: none;
+  box-shadow: none;
   background: transparent;
   color: var(--text-secondary);
   font-weight: 500;
@@ -153,16 +157,19 @@
   );
 }
 
+:global(.button).topActionBtn,
 .topActionBtn {
   width: 28px;
   height: 28px;
   min-width: 28px;
+  min-height: unset;
   border-radius: var(--radius-md, 6px);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   background: transparent;
   border: none;
+  box-shadow: none;
   cursor: pointer;
   color: var(--text-secondary);
   padding: 0;

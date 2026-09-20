@@ -3,6 +3,7 @@
  * live 计时 ≤ 1Hz；查阅器仍走 thoughtInspector。
  */
 import { useEffect, useState, type ReactElement } from 'react';
+import { Button } from '../../components/ui';
 import { FLOW_OUTPUT_STYLE } from './flowOutputStyle';
 import { clipThinkingPreview } from './narrativeModel';
 import styles from './narrative.module.css';
@@ -57,7 +58,8 @@ export function ThinkingBlock({
       data-flow-expanded={open ? 'true' : 'false'}
     >
       <div className={styles.actionHeadRow}>
-        <button
+        <Button
+          variant="ghost"
           type="button"
           className={styles.head}
           aria-expanded={open}
@@ -70,7 +72,7 @@ export function ThinkingBlock({
           {durationLabel ? (
             <span className={styles.meta}>{durationLabel}</span>
           ) : null}
-        </button>
+        </Button>
       </div>
       {open ? (
         <div

@@ -5,7 +5,6 @@
  */
 import React from 'react';
 
-
 import styles from './InlineAgentPanel.module.css';
 import { Button, Tooltip } from '../ui';
 import type { SessionAgent } from '../../store/types';
@@ -78,7 +77,8 @@ export const InlineAgentPanelHeader: React.FC<InlineAgentPanelHeaderProps> = ({
   const { labelDomId = '', bodyDomId = '' } = dom ?? {};
   return (
     <div className={styles.inlineAgentHeadRow}>
-      <button
+      <Button
+        variant="ghost"
         type="button"
         className={styles.inlineAgentHead}
         aria-expanded={open}
@@ -132,7 +132,7 @@ export const InlineAgentPanelHeader: React.FC<InlineAgentPanelHeaderProps> = ({
         <AppIcon name="chevron-right" size={13}
           className={`tool-row-chevron ${open ? 'rot' : ''}`}
           aria-hidden />
-      </button>
+      </Button>
       {/* 折叠态也可：停止 / 侧栏 only（不依赖展开 Composer） */}
       <div className={styles.inlineAgentHeadActions}>
         {running ? (

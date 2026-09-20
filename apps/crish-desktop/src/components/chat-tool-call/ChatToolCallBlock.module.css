@@ -1035,15 +1035,21 @@
   background: var(--bg-hover);
 }
 
+:global(.button).toolPathLink,
 .toolPathLink {
   display: inline;
   border: none;
   background: transparent;
   padding: 0;
   margin: 0;
+  min-width: unset;
+  min-height: unset;
+  height: auto;
+  line-height: inherit;
   font: inherit;
   color: var(--text-secondary);
   cursor: pointer;
+  box-shadow: none;
   text-decoration: none;
   border-radius: var(--radius-xs);
   font-weight: var(--font-weight-normal);

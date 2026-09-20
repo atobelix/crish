@@ -9,7 +9,7 @@ import React, {
 import { ChatHeaderMore } from './ChatHeaderMore';
 import { SessionInlineRename } from './SessionInlineRename';
 import { SubagentHeaderPanel } from './SubagentHeaderPanel';
-import { Tooltip } from '../ui';
+import { Button, Tooltip } from '../ui';
 import {
   resolveUnitChromeLabel,
   UNIT_CHROME_TOOL_TIP_SIDE,
@@ -259,14 +259,15 @@ export const UnitChromeActions: React.FC<UnitChromeActionsProps> = React.memo(
             {/* Level 1: Project */}
             <div className={`${styles.breadcrumbItem} breadcrumb-item`}>
               <Tooltip content="点击新建此项目对话" side={UNIT_CHROME_TOOL_TIP_SIDE}>
-                <button
+                <Button
+                  variant="ghost"
                   type="button"
                   id="bcProject"
                   className={`${styles.bcProjectBtn} breadcrumb-project`}
                   onClick={handleJumpToNewDraft}
                 >
                   <span className={`${styles.bcText} bc-text`}>{projectLabel}</span>
-                </button>
+                </Button>
               </Tooltip>
             </div>
 
@@ -315,7 +316,8 @@ export const UnitChromeActions: React.FC<UnitChromeActionsProps> = React.memo(
         >
           {/* 按钮 1: 浏览器 (Globe) */}
           <Tooltip content="浏览器" side={UNIT_CHROME_TOOL_TIP_SIDE}>
-            <button
+            <Button
+              variant="ghost"
               type="button"
               id="topQuickPreviewBtn"
               className={`${styles.topActionBtn} top-action-btn`}
@@ -325,12 +327,13 @@ export const UnitChromeActions: React.FC<UnitChromeActionsProps> = React.memo(
               onClick={handleOpenPreview}
             >
               <AppIcon name="globe" size={14} aria-hidden="true" />
-            </button>
+            </Button>
           </Tooltip>
 
           {/* 按钮 2: 文件管理器 (FolderTree) */}
           <Tooltip content="打开文件" side={UNIT_CHROME_TOOL_TIP_SIDE}>
-            <button
+            <Button
+              variant="ghost"
               type="button"
               id="topQuickFilesBtn"
               className={`${styles.topActionBtn} top-action-btn`}
@@ -340,7 +343,7 @@ export const UnitChromeActions: React.FC<UnitChromeActionsProps> = React.memo(
               onClick={handleOpenFiles}
             >
               <AppIcon name="folder-tree" size={14} aria-hidden="true" />
-            </button>
+            </Button>
           </Tooltip>
 
           {/* 按钮 3: 更多操作 (⋯ More) */}

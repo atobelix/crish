@@ -4,6 +4,7 @@
  */
 import { useState, type ReactElement } from 'react';
 import type { PurposeNode } from '@crish/conversation-flow';
+import { Button } from '../../components/ui';
 import { findAgentForTool } from '../../components/chat-tool-call/chatToolCallUtils';
 import type { MessageToolCall, SessionAgent } from '../../store/types';
 import { ActionRow } from './ActionRow';
@@ -54,7 +55,8 @@ export function PurposeBlock({
       role="group"
       aria-label={purpose.primary}
     >
-      <button
+      <Button
+        variant="ghost"
         type="button"
         className={styles.head}
         aria-expanded={open}
@@ -65,7 +67,7 @@ export function PurposeBlock({
         ) : null}
         <span className={styles.primary}>{purpose.primary}</span>
         {meta ? <span className={styles.meta}>{meta}</span> : null}
-      </button>
+      </Button>
       {open
         ? purpose.actions.map((action) => {
             const tool = toolsById.get(action.id);

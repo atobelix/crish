@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 
-import { IconButton, Tooltip } from '../ui';
+import { Button, Tooltip } from '../ui';
 import {
   SmartExpandablePanel,
   type MenuItem,
@@ -135,14 +135,15 @@ export const ChatHeaderMore: React.FC<ChatHeaderMoreProps> = ({
 
   const trigger = (
     <Tooltip content="更多操作" side={UNIT_CHROME_TOOL_TIP_SIDE}>
-      <button
+      <Button
         type="button"
+        variant="ghost"
         className={`${className || ''} top-action-btn`}
         data-testid="chat-header-more"
         aria-label="更多选项"
       >
         <AppIcon name="more-horizontal" size={14} aria-hidden="true" />
-      </button>
+      </Button>
     </Tooltip>
   );
 

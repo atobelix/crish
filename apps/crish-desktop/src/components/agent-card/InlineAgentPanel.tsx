@@ -39,6 +39,7 @@ import {
   resumeSubagent,
 } from '../../api/subagentRecoveryApi';
 import { resolveErrorKindLabel } from '../../api/continuity/continuityNotices';
+import { Button } from '../ui';
 import { AppIcon } from '../ui/icons/index';
 
 export interface InlineAgentPanelProps {
@@ -183,7 +184,8 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
       aria-label={`${displayTitle}，${statusText}`}
     >
       {/* Line 1: 闪电图标 + 标题 + 运行状态与 5px 呼吸绿点 */}
-      <button
+      <Button
+        variant="ghost"
         type="button"
         className={`${styles.flowSubagentLine1} flow-subagent__line1`}
         onClick={openInSideOnly}
@@ -201,7 +203,7 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
           ) : null}
           <span>{statusText}</span>
         </span>
-      </button>
+      </Button>
 
       {/* Line 2: 双行链路追踪摘要（缩进对齐 padding-left: 22px） */}
       {traceText ? (
@@ -254,22 +256,24 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
                   {errorKindLabel || '执行异常'}
                 </span>
                 {resumeReady && (
-                  <button
+                  <Button
+                    variant="ghost"
                     type="button"
                     className={styles.inlineAgentLinkResume}
                     onClick={() => runRecoveryAction('resume')}
                   >
                     重试恢复
-                  </button>
+                  </Button>
                 )}
                 {killReady && (
-                  <button
+                  <Button
+                    variant="ghost"
                     type="button"
                     className={styles.inlineAgentLinkKill}
                     onClick={() => runRecoveryAction('kill')}
                   >
                     关闭
-                  </button>
+                  </Button>
                 )}
               </div>
             )}

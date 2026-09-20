@@ -3,6 +3,7 @@
  * 代码路径不走本组件（仍 files / file-viewer 叶）。
  */
 import { useEffect, useRef, useState, type ReactElement } from 'react';
+import { Button } from '../../components/ui';
 import { ArtifactNotebookSurface } from './ArtifactNotebookSurface';
 import styles from './narrative.module.css';
 
@@ -73,7 +74,8 @@ export function ArtifactChip({
         scheduleHide();
       }}
     >
-      <button
+      <Button
+        variant="ghost"
         type="button"
         className={styles.chip}
         data-flow-artifact="document"
@@ -90,7 +92,7 @@ export function ArtifactChip({
         }}
       >
         已生成 · {text}
-      </button>
+      </Button>
       {open ? (
         <ArtifactNotebookSurface
           title={text}

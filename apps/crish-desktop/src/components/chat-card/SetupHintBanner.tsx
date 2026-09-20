@@ -7,6 +7,7 @@ import React from 'react';
 
 import styles from './SetupHintBanner.module.css';
 import type { SetupHintKind } from './chatStatusRibbonsLib';
+import { Button } from '../ui';
 import { AppIcon } from '../ui/icons/index';
 
 /** 单条 soft-hint 的完整渲染状态（文案层已在壳组件算好）。 */
@@ -47,14 +48,15 @@ export const SetupHintBanner: React.FC<SetupHintBannerProps> = ({
     >
       <span className={styles.chatSoftHintIcon}>{SETUP_HINT_ICON[state.kind]}</span>
       <span className={styles.chatSoftHintText}>{state.text}</span>
-      <button
+      <Button
+        variant="ghost"
         type="button"
         className={styles.chatSoftHintAction}
         aria-label={state.actionAriaLabel}
         onClick={() => onAction(state.kind)}
       >
         {state.actionLabel}
-      </button>
+      </Button>
     </div>
   );
 };

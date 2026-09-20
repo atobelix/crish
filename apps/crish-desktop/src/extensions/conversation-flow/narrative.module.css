@@ -39,11 +39,16 @@
   box-sizing: border-box;
 }
 
+:global(.button).head,
 .head {
   display: flex;
   align-items: center;
+  justify-content: flex-start;
   gap: var(--space-2);
   width: 100%;
+  min-width: unset;
+  min-height: unset;
+  height: auto;
   margin: 0;
   padding: 6px 8px;
   border: 1px solid transparent;
@@ -141,9 +146,14 @@
   flex: 1 1 auto;
 }
 
+:global(.button).pathBtn,
+:global(.button).chip,
 .pathBtn,
 .chip {
   flex: 0 0 auto;
+  min-width: unset;
+  min-height: unset;
+  height: auto;
   margin: 0;
   padding: 4px 4px;
   border: 1px solid transparent;
@@ -239,8 +249,12 @@
   word-break: break-word;
 }
 
+:global(.button).inspectorBtn,
 .inspectorBtn {
   flex: 0 0 auto;
+  min-width: unset;
+  min-height: unset;
+  height: auto;
   margin: 0;
   padding: 4px;
   border: 1px solid transparent;
@@ -326,8 +340,12 @@
   color: var(--text-tertiary);
 }
 
+:global(.button).nbBtn,
 .nbBtn {
   flex: 0 0 auto;
+  min-width: unset;
+  min-height: unset;
+  height: auto;
   margin: 0;
   padding: 2px 8px;
   border: 1px solid transparent;

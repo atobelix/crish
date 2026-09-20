@@ -7,7 +7,7 @@ import React, {
 } from 'react';
 
 import styles from './ChatCard.module.css';
-import { Tooltip } from '../ui';
+import { Button, Tooltip } from '../ui';
 import { toggleExclusiveMenu } from '../ui/Menu';
 import {
   getActiveModelId,
@@ -206,9 +206,10 @@ export const ModelBadgePicker: React.FC<ModelBadgePickerProps> = ({
         }
         disabled={showModelDropdown}
       >
-        <button
+        <Button
           ref={badgeRef}
           type="button"
+          variant="ghost"
           className={`${styles.modelBadge} ${showModelDropdown ? styles.active : ''}`}
           data-testid="model-selector-button"
           aria-haspopup="menu"
@@ -231,7 +232,7 @@ export const ModelBadgePicker: React.FC<ModelBadgePickerProps> = ({
               engineModel || (needsModelSetup ? '填写模型' : '无可用模型')
             )}
           </span>
-        </button>
+        </Button>
       </Tooltip>
       {showModelDropdown ? (
         <ModelBadgePickerMenu

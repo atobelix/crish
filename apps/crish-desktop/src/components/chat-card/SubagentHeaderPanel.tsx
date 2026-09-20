@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 
 import type { SessionAgent } from '../../store/types';
 import { countRunningSubagents } from './unitChromeLabel';
-import { IconButton, Tooltip } from '../ui';
+import { Button, IconButton, Tooltip } from '../ui';
 import { openAgentInSidePanel } from '../../api/openAgentPanel';
 import { killSubagent } from '../../api/subagentRecoveryApi';
 import {
@@ -25,7 +25,8 @@ export const SubagentHeaderPanel: React.FC<SubagentHeaderPanelProps> = ({
 
   const trigger = (
     <Tooltip content="查看子 Agent 状态" side="bottom">
-      <button
+      <Button
+        variant="ghost"
         type="button"
         id="bcAgentCapsule"
         className={`${styles.agentTrigger} ${styles.breadcrumbAgentBtn} breadcrumb-agent-btn ${
@@ -58,7 +59,7 @@ export const SubagentHeaderPanel: React.FC<SubagentHeaderPanelProps> = ({
         <AppIcon name="chevron-down" size={11}
           className={`${styles.bcChevron} bc-chevron`}
           aria-hidden="true" />
-      </button>
+      </Button>
     </Tooltip>
   );
 

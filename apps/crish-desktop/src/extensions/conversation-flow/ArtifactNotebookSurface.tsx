@@ -3,6 +3,7 @@
  * 浮层只挂本组件树（对话叶内），不挂 document.body。
  */
 import type { ReactElement } from 'react';
+import { Button } from '../../components/ui';
 import { StreamingMarkdownView } from '../../components/chat-message-row/StreamingMarkdownView';
 import styles from './narrative.module.css';
 
@@ -41,7 +42,8 @@ export function ArtifactNotebookSurface({
     >
       <div className={styles.notebookHead}>
         <span className={styles.notebookTitle}>{title || '文档'}</span>
-        <button
+        <Button
+          variant="ghost"
           type="button"
           className={styles.nbBtn}
           aria-pressed={pinned}
@@ -51,9 +53,10 @@ export function ArtifactNotebookSurface({
           }}
         >
           {pinned ? '取消钉住' : '钉住'}
-        </button>
+        </Button>
         {canEdit ? (
-          <button
+          <Button
+            variant="ghost"
             type="button"
             className={styles.nbBtn}
             data-artifact-edit="note"
@@ -63,9 +66,10 @@ export function ArtifactNotebookSurface({
             }}
           >
             编辑
-          </button>
+          </Button>
         ) : null}
-        <button
+        <Button
+          variant="ghost"
           type="button"
           className={styles.nbBtn}
           onClick={(e) => {
@@ -74,7 +78,7 @@ export function ArtifactNotebookSurface({
           }}
         >
           关闭
-        </button>
+        </Button>
       </div>
       <div
         className={styles.notebookBody}

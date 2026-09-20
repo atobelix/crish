@@ -6,7 +6,7 @@
  */
 import React from 'react';
 import styles from './InlineAgentPanel.module.css';
-import { Tooltip } from '../ui';
+import { Button, Tooltip } from '../ui';
 import type { SessionAgent } from '../../store/types';
 import { buildAssistantTimeline } from '../../api/toolPresentation';
 import { stripThoughtPlaceholders } from '../../api/markdownRenderLite';
@@ -85,7 +85,8 @@ export const InlineAgentTimeline: React.FC<InlineAgentTimelineProps> = ({
       <div className={styles.inlineAgentToolbar}>
         {running ? (
           <Tooltip content="停止生成">
-            <button
+            <Button
+              variant="ghost"
               type="button"
               className={`${styles.inlineAgentLink} ${styles.inlineAgentLinkStop}`}
               aria-label="停止生成"
@@ -94,7 +95,7 @@ export const InlineAgentTimeline: React.FC<InlineAgentTimelineProps> = ({
               onClick={onStop}
             >
               {stopping ? '停止中…' : '停止'}
-            </button>
+            </Button>
           </Tooltip>
         ) : null}
         <InlineAgentApprovalHint pendingTools={approval.pendingTools} />
@@ -145,7 +146,8 @@ export const InlineAgentTimeline: React.FC<InlineAgentTimelineProps> = ({
               >
                 {resumeReady ? (
                   <Tooltip content="关闭并重新派发（fork 新 run）">
-                    <button
+                    <Button
+                      variant="ghost"
                       type="button"
                       className={`${styles.inlineAgentLink} ${styles.inlineAgentLinkResume}`}
                       aria-label="恢复运行该子智能体"
@@ -155,12 +157,13 @@ export const InlineAgentTimeline: React.FC<InlineAgentTimelineProps> = ({
                       }
                     >
                       {recoveryBusy ? '处理中…' : '恢复运行'}
-                    </button>
+                    </Button>
                   </Tooltip>
                 ) : null}
                 {killReady ? (
                   <Tooltip content="终止该子智能体">
-                    <button
+                    <Button
+                      variant="ghost"
                       type="button"
                       className={`${styles.inlineAgentLink} ${styles.inlineAgentLinkKill}`}
                       aria-label="终止该子智能体"
@@ -168,12 +171,13 @@ export const InlineAgentTimeline: React.FC<InlineAgentTimelineProps> = ({
                       onClick={() => void onRecoveryAction('kill', 'kill 失败')}
                     >
                       关闭
-                    </button>
+                    </Button>
                   </Tooltip>
                 ) : null}
                 {killAllReady ? (
                   <Tooltip content="批量终止全部运行中子智能体">
-                    <button
+                    <Button
+                      variant="ghost"
                       type="button"
                       className={`${styles.inlineAgentLink} ${styles.inlineAgentLinkKillAll}`}
                       aria-label="批量终止全部运行中子智能体"
@@ -183,7 +187,7 @@ export const InlineAgentTimeline: React.FC<InlineAgentTimelineProps> = ({
                       }
                     >
                       全部关闭
-                    </button>
+                    </Button>
                   </Tooltip>
                 ) : null}
                 {recoveryError ? (

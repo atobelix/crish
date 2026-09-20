@@ -13,7 +13,7 @@ import {
 import { openDirectoryDialogSafe } from '../../api/openDirectoryDialog';
 import { getSessionStoreState, setDraftFolder } from '../../api/storeAccess';
 import { isPendingDraft } from '../../store/storeAccess';
-import { ConfirmDialog, Tooltip } from '../ui';
+import { Button, ConfirmDialog, Tooltip } from '../ui';
 import { useConfirmGate } from '../../hooks/useConfirmGate';
 import {
   SmartExpandablePanel,
@@ -132,8 +132,9 @@ export const ProjectPickerMenu: React.FC<ProjectPickerMenuProps> = ({
         trailingAction:
           p.id !== GENERAL_FOLDER ? (
             <Tooltip content="从列表移除项目">
-              <button
+              <Button
                 type="button"
+                variant="ghost"
                 className={styles.rowDeleteBtn}
                 aria-label={`从列表移除项目 ${p.name}`}
                 onClick={(e) => {
@@ -142,7 +143,7 @@ export const ProjectPickerMenu: React.FC<ProjectPickerMenuProps> = ({
                 }}
               >
                 <AppIcon name="trash" size={12} />
-              </button>
+              </Button>
             </Tooltip>
           ) : undefined,
       };

@@ -263,11 +263,14 @@
   padding: 0 2px;
 }
 
+:global(.button).agentLaunchItem,
 .agentLaunchItem {
   display: flex;
   align-items: center;
+  justify-content: flex-start;
   gap: var(--space-1_5);
   width: 100%;
+  min-width: unset;
   border: 1px solid transparent;
   border-radius: var(--radius-md);
   background: transparent;
@@ -278,6 +281,7 @@
   color: var(--text-primary);
   font-family: inherit;
   font-size: var(--font-size-sm);
+  box-shadow: none;
 }
 
 .agentLaunchItem:hover {
@@ -366,9 +370,11 @@
 }
 
 /* ?team card     ?+  */
+:global(.button).agentTeamCard,
 .agentTeamCard {
   display: flex;
   flex-direction: column;
+  align-items: stretch;
   gap: var(--space-0_5);
   text-align: left;
   padding: 5px 8px;
@@ -379,6 +385,9 @@
   cursor: pointer;
   font-family: inherit;
   min-width: 0;
+  min-height: unset;
+  height: auto;
+  box-shadow: none;
   transition: background-color var(--transition-fast), color var(--transition-fast);
 }
 

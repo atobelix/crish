@@ -5,7 +5,7 @@ import {
   toolCommandType,
   toolCommandIcon,
 } from '../../api/toolPresentation';
-import { Tooltip } from '../ui';
+import { Button, Tooltip } from '../ui';
 import { AppIcon } from '../ui/icons';
 import {
   type ResolvedToolAction,
@@ -117,8 +117,9 @@ export const ToolCallHeader: React.FC<ToolCallHeaderProps> = ({
                   </Tooltip>
                 ) : isPath && pathClickable && filePath ? (
                   <Tooltip content={filePath}>
-                    <button
+                    <Button
                       type="button"
+                      variant="ghost"
                       className={styles.toolPathLink}
                       onClick={(e) => {
                         e.stopPropagation();
@@ -126,7 +127,7 @@ export const ToolCallHeader: React.FC<ToolCallHeaderProps> = ({
                       }}
                     >
                       {paramText}
-                    </button>
+                    </Button>
                   </Tooltip>
                 ) : (
                   <Tooltip content={fullTooltip}>

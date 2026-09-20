@@ -167,7 +167,8 @@ export function AgentBrowsePad({
               ].filter(Boolean);
               return (
                 <Tooltip key={a.id} content={titleBits.join(' · ')}>
-                  <button
+                  <Button
+                    variant="ghost"
                     type="button"
                     role="listitem"
                     className={styles.agentLaunchItem}
@@ -193,7 +194,7 @@ export function AgentBrowsePad({
                       </Tooltip>
                     ) : null}
                     <AgentStatusChip status={a.status} mode={a.mode} compact />
-                  </button>
+                  </Button>
                 </Tooltip>
               );
             })}

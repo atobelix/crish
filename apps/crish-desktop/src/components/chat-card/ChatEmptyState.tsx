@@ -329,8 +329,9 @@ export const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
                     onContentMouseEnter={cancelProjectPickerClose}
                     onContentMouseLeave={scheduleProjectPickerClose}
                   >
-                    <button
+                    <Button
                       type="button"
+                      variant="ghost"
                       className={`${styles.chatEmptyProjectBtnInline}`}
                       aria-expanded={showProjectPicker}
                       aria-haspopup="menu"
@@ -345,7 +346,7 @@ export const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
                       onMouseLeave={scheduleProjectPickerClose}
                     >
                       <span>{projectName}</span>
-                    </button>
+                    </Button>
                   </ProjectPickerMenu>
                 </div>
               ) : (
@@ -408,8 +409,9 @@ export const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
           >
             {CHAT_EMPTY_QUICK_PROMPTS.map((item) => (
               <Tooltip key={item.label} content={item.prompt}>
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
                   className={styles.quickPromptCard}
                   role="listitem"
                   data-quick-prompt={item.label}
@@ -424,7 +426,7 @@ export const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
                   <AppIcon name="chevron-right" size={14}
                     className={styles.promptArrow}
                     aria-hidden="true" />
-                </button>
+                </Button>
               </Tooltip>
             ))}
           </div>

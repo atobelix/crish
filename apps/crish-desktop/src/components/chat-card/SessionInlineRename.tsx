@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 
-import { Tooltip } from '../ui';
+import { Button, Input, Tooltip } from '../ui';
 import styles from './SessionInlineRename.module.css';
 
 export interface SessionInlineRenameProps {
@@ -52,8 +52,9 @@ export const SessionInlineRename: React.FC<SessionInlineRenameProps> = ({
   if (isEditing) {
     return (
       <div className={styles.renameContainer}>
-        <input
+        <Input
           ref={inputRef}
+          bare
           type="text"
           className={styles.renameInput}
           value={editValue}
@@ -69,7 +70,8 @@ export const SessionInlineRename: React.FC<SessionInlineRenameProps> = ({
 
   return (
     <Tooltip content={disabled ? undefined : '点击修改会话名称'}>
-      <button
+      <Button
+        variant="ghost"
         type="button"
         className={`${styles.titleBtn} ${disabled ? styles.disabled : ''}`}
         onClick={() => !disabled && setIsEditing(true)}
@@ -77,7 +79,7 @@ export const SessionInlineRename: React.FC<SessionInlineRenameProps> = ({
         aria-label={`会话名称：${title}`}
       >
         <span className={styles.titleText}>{title}</span>
-      </button>
+      </Button>
     </Tooltip>
   );
 };

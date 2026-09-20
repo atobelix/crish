@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Tooltip } from '../ui';
+import { Button, Tooltip } from '../ui';
 import { parseAnsi } from '../../utils/parseAnsi';
 import styles from './ModernToolCall.module.css';
 import { AppIcon } from '../ui/icons/index';
@@ -83,8 +83,9 @@ export const ModernTerminalToolCall: React.FC<ModernTerminalToolCallProps> = ({
 
         <div className={styles.terminalActions}>
           <Tooltip content={copied ? '已复制命令' : '复制命令'}>
-            <button
+            <Button
               type="button"
+              variant="ghost"
               className={styles.terminalCopyBtn}
               onClick={handleCopy}
               aria-label="复制命令行"
@@ -94,12 +95,13 @@ export const ModernTerminalToolCall: React.FC<ModernTerminalToolCallProps> = ({
               ) : (
                 <AppIcon name="copy" size={12} />
               )}
-            </button>
+            </Button>
           </Tooltip>
           {Boolean(normalizedOutput) && (
             <Tooltip content={copiedOutput ? '已复制输出' : '复制终端输出'}>
-              <button
+              <Button
                 type="button"
+                variant="ghost"
                 className={styles.terminalCopyBtn}
                 onClick={handleCopyOutput}
                 aria-label="复制终端输出"
@@ -109,7 +111,7 @@ export const ModernTerminalToolCall: React.FC<ModernTerminalToolCallProps> = ({
                 ) : (
                   <AppIcon name="file-text" size={12} />
                 )}
-              </button>
+              </Button>
             </Tooltip>
           )}
         </div>
@@ -130,8 +132,9 @@ export const ModernTerminalToolCall: React.FC<ModernTerminalToolCallProps> = ({
                 </div>
               ))}
               <div className={styles.terminalMidFoldBarWrapper}>
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
                   className={styles.terminalMidFoldBar}
                   onClick={(e) => {
                     e.stopPropagation();
@@ -143,7 +146,7 @@ export const ModernTerminalToolCall: React.FC<ModernTerminalToolCallProps> = ({
                   <span>
                     展开中间剩余 {lines.length - (TERMINAL_HEAD_LINES + TERMINAL_TAIL_LINES)} 行日志输出
                   </span>
-                </button>
+                </Button>
               </div>
               {lines.slice(-TERMINAL_TAIL_LINES).map((line, i) => (
                 <div key={`tail-${i}`} className={styles.terminalLine}>
@@ -160,8 +163,9 @@ export const ModernTerminalToolCall: React.FC<ModernTerminalToolCallProps> = ({
               ))}
               {lines.length > TERMINAL_FOLD_THRESHOLD && isFullExpanded && (
                 <div className={styles.terminalMidFoldBarWrapper}>
-                  <button
+                  <Button
                     type="button"
+                    variant="ghost"
                     className={styles.terminalCollapseBtn}
                     onClick={(e) => {
                       e.stopPropagation();
@@ -170,7 +174,7 @@ export const ModernTerminalToolCall: React.FC<ModernTerminalToolCallProps> = ({
                     aria-label="收起中间日志输出"
                   >
                     <span>收起部分日志输出</span>
-                  </button>
+                  </Button>
                 </div>
               )}
             </>

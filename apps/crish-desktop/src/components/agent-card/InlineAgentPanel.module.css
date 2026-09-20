@@ -6,17 +6,22 @@
   box-sizing: border-box;
 }
 
+:global(.button).flowSubagentLine1,
 .flowSubagentLine1 {
   display: flex;
   align-items: center;
+  justify-content: flex-start;
   gap: 6px;
   width: 100%;
   max-width: 100%;
+  min-width: unset;
   min-height: 24px;
+  height: auto;
   padding: 0;
   margin: 0;
   border: none;
   background: none;
+  box-shadow: none;
   cursor: pointer;
   font-family: inherit;
   font-size: var(--font-size-sm, 13px);
@@ -173,14 +178,17 @@
   min-height: 26px;
 }
 
+:global(.button).inlineAgentHead,
 .inlineAgentHead {
   display: flex;
   align-items: center;
+  justify-content: flex-start;
   gap: 5px;
   flex: 1;
   min-width: 0;
   width: auto;
   border: none;
+  box-shadow: none;
   background: transparent;
   padding: 4px 6px 4px 8px;
   cursor: pointer;
@@ -188,6 +196,7 @@
   text-align: left;
   color: var(--text-secondary);
   min-height: 26px;
+  height: auto;
   transition: background var(--transition-micro);
 }
 
@@ -397,9 +406,14 @@
   border-bottom-color: var(--hairline, var(--border-subtle));
 }
 
+:global(.button).inlineAgentLink,
 .inlineAgentLink {
+  min-width: unset;
+  min-height: unset;
+  height: auto;
   border: none;
   background: transparent;
+  box-shadow: none;
   font-size: var(--font-size-xs);
   color: var(--text-secondary);
   cursor: pointer;
@@ -471,12 +485,37 @@
   margin-top: var(--space-1_5, 6px);
 }
 
+:global(.button).inlineAgentLinkResume,
 .inlineAgentLinkResume {
+  min-width: unset;
+  min-height: unset;
+  height: auto;
+  padding: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  font-family: inherit;
+  font-size: var(--font-size-xs, 12px);
+  cursor: pointer;
+  text-decoration: underline;
   color: var(--accent-green, var(--text-secondary));
 }
 
+:global(.button).inlineAgentLinkKill,
+:global(.button).inlineAgentLinkKillAll,
 .inlineAgentLinkKill,
 .inlineAgentLinkKillAll {
+  min-width: unset;
+  min-height: unset;
+  height: auto;
+  padding: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  font-family: inherit;
+  font-size: var(--font-size-xs, 12px);
+  cursor: pointer;
+  text-decoration: underline;
   color: var(--accent-red, var(--text-tertiary));
 }
 

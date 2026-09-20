@@ -15,10 +15,13 @@
   box-sizing: border-box;
 }
 
+:global(.button).jsonToolHead,
 .jsonToolHead {
   display: inline-flex;
   align-items: center;
   gap: var(--space-2, 8px);
+  min-width: unset;
+  min-height: unset;
   background: transparent;
   border: none;
   padding: 4px 0;
@@ -26,7 +29,9 @@
   cursor: pointer;
   user-select: none;
   font-family: inherit;
+  font-weight: normal;
   text-align: left;
+  box-shadow: none;
   outline: none;
   color: inherit;
   width: fit-content;
@@ -250,17 +255,22 @@
   flex-shrink: 0;
 }
 
+:global(.button).terminalCopyBtn,
 .terminalCopyBtn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 22px;
   height: 22px;
+  min-width: unset;
+  min-height: unset;
+  padding: 0;
   border-radius: var(--radius-sm, 4px);
   border: none;
   background: transparent;
   color: var(--text-tertiary);
   cursor: pointer;
+  box-shadow: none;
   opacity: 0;
   transition: opacity var(--transition-micro, 120ms ease), background var(--transition-micro, 120ms ease), color var(--transition-micro, 120ms ease);
 }
@@ -331,12 +341,15 @@
   margin: 4px 0;
 }
 
+:global(.button).terminalMidFoldBar,
 .terminalMidFoldBar {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
   width: 100%;
+  min-width: unset;
+  min-height: unset;
   padding: 6px 12px;
   background: color-mix(in srgb, var(--bg-card) 92%, var(--text-primary) 8%);
   border: none;
@@ -345,7 +358,9 @@
   color: var(--text-secondary);
   font-size: var(--font-size-micro, 11px);
   font-family: var(--font-sans, inherit);
+  font-weight: normal;
   cursor: pointer;
+  box-shadow: none;
   user-select: none;
   border-radius: var(--radius-sm, 4px);
   box-sizing: border-box;
@@ -368,11 +383,14 @@
   color: var(--text-tertiary);
 }
 
+:global(.button).terminalCollapseBtn,
 .terminalCollapseBtn {
   display: flex;
   align-items: center;
   justify-content: center;
   width: 100%;
+  min-width: unset;
+  min-height: unset;
   padding: 5px 12px;
   background: color-mix(in srgb, var(--bg-card) 95%, var(--text-primary) 5%);
   border: none;
@@ -380,7 +398,9 @@
   color: var(--text-tertiary);
   font-size: var(--font-size-micro, 11px);
   font-family: var(--font-sans, inherit);
+  font-weight: normal;
   cursor: pointer;
+  box-shadow: none;
   user-select: none;
   transition: background var(--transition-micro, 120ms ease), color var(--transition-micro, 120ms ease);
 }
@@ -587,16 +607,22 @@
   font-weight: 500;
 }
 
+:global(.button).codeBlockCopyBtn,
 .codeBlockCopyBtn {
   display: flex;
   align-items: center;
   gap: 4px;
+  min-width: unset;
+  min-height: unset;
+  padding: 0;
   background: transparent;
   border: none;
+  box-shadow: none;
   color: var(--text-tertiary);
   font-size: var(--font-size-micro, 11px);
   cursor: pointer;
   font-family: var(--font-sans, inherit);
+  font-weight: normal;
   transition: color var(--transition-micro, 100ms ease);
 }
 
@@ -757,18 +783,24 @@
   gap: 4px;
 }
 
+:global(.button).diffActionBtn,
 .diffActionBtn,
+:global(.button).diffCopyBtn,
 .diffCopyBtn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 24px;
   height: 24px;
+  min-width: unset;
+  min-height: unset;
+  padding: 0;
   border-radius: var(--radius-xs, 4px);
   border: 1px solid transparent;
   background: transparent;
   color: var(--text-tertiary);
   cursor: pointer;
+  box-shadow: none;
   transition: background var(--transition-micro, 120ms ease), color var(--transition-micro, 120ms ease);
 }
 
@@ -784,18 +816,25 @@
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
 }
 
+:global(.button).diffPreviewTag,
 .diffPreviewTag,
+:global(.button).gitDiffPreviewTag,
 .gitDiffPreviewTag {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  min-width: unset;
+  min-height: unset;
   padding: 2px 8px;
   border-radius: var(--radius-xs, 4px);
   font-size: var(--font-size-micro, 11px);
+  font-family: inherit;
+  font-weight: normal;
   color: var(--text-secondary);
   background: var(--tint-hover);
   border: 1px solid var(--border-subtle);
   cursor: pointer;
+  box-shadow: none;
   transition: background var(--transition-micro, 120ms ease), color var(--transition-micro, 120ms ease);
 }
 
@@ -920,17 +959,23 @@
   box-sizing: border-box;
 }
 
+:global(.button).diffMoreBtn,
 .diffMoreBtn {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  min-width: unset;
+  min-height: unset;
   padding: 3px 10px;
   border-radius: var(--radius-md, 6px);
   border: 1px solid var(--border-subtle);
   background: var(--bg-card);
   color: var(--text-secondary);
+  font-family: inherit;
+  font-weight: normal;
   font-size: var(--font-size-micro, 11px);
   cursor: pointer;
+  box-shadow: none;
   transition: background var(--transition-micro, 120ms ease), color var(--transition-micro, 120ms ease);
 }
 

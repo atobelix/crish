@@ -15,6 +15,7 @@ import { TOOL_OUTPUT_DOM_CHAR_CAP } from '../../workers';
 import { FLOW_OUTPUT_STYLE } from './flowOutputStyle';
 import { ArtifactChip } from './ArtifactChip';
 import { actionPathOf } from './narrativeModel';
+import { Button } from '../../components/ui';
 import styles from './narrative.module.css';
 
 export interface ActionRowProps {
@@ -85,7 +86,8 @@ export function ActionRow({
       data-flow-expanded={open ? 'true' : 'false'}
     >
       <div className={styles.actionHeadRow}>
-        <button
+        <Button
+          variant="ghost"
           type="button"
           className={`${styles.head}${expandable ? '' : ` ${styles.headStatic}`}`}
           aria-expanded={expandable ? open : undefined}
@@ -103,9 +105,10 @@ export function ActionRow({
           </span>
           <span className={styles.primary}>{human || action.verb}</span>
           {meta ? <span className={styles.meta}>{meta}</span> : null}
-        </button>
+        </Button>
         {path && !artifact && onOpenPath ? (
-          <button
+          <Button
+            variant="ghost"
             type="button"
             className={styles.pathBtn}
             data-flow-path="code"
@@ -115,7 +118,7 @@ export function ActionRow({
             }}
           >
             {path.split(/[/\\]/).pop() || path}
-          </button>
+          </Button>
         ) : null}
         {artifact ? (
           <ArtifactChip

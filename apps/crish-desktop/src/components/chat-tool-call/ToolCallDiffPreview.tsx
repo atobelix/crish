@@ -6,7 +6,7 @@ import {
   useDiffHighlightMap,
   type DiffHighlightItem,
 } from '../../api/codeHighlightBatch';
-import { Tooltip } from '../ui';
+import { Button, Tooltip } from '../ui';
 import { AppIcon } from '../ui/icons/index';
 import { useTransientFlag } from '../../hooks/useTransientFlag';
 
@@ -114,8 +114,9 @@ export const ToolCallDiffPreview: React.FC<ToolCallDiffPreviewProps> = ({
           <div className={styles.diffActions}>
             {/* 复制纯净 Diff 按钮 */}
             <Tooltip content={copied ? '已复制差异' : '复制差异'}>
-              <button
+              <Button
                 type="button"
+                variant="ghost"
                 className={styles.diffCopyBtn}
                 onClick={handleCopyDiff}
                 aria-label="复制差异内容"
@@ -125,21 +126,22 @@ export const ToolCallDiffPreview: React.FC<ToolCallDiffPreviewProps> = ({
                 ) : (
                   <AppIcon name="copy" size={13} />
                 )}
-              </button>
+              </Button>
             </Tooltip>
 
             {/* 在右侧打开 */}
             {onOpenDiff && (
               <Tooltip content="在右侧面板查看完整差异">
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
                   className={styles.diffPreviewTag}
                   onClick={handleOpenDiff}
                   aria-label="在右侧面板查看完整差异"
                 >
                   <span>在右侧查看</span>
                   <AppIcon name="external-link" size={11} aria-hidden="true" />
-                </button>
+                </Button>
               </Tooltip>
             )}
           </div>
@@ -187,8 +189,9 @@ export const ToolCallDiffPreview: React.FC<ToolCallDiffPreviewProps> = ({
         {hasMore && (
           <div className={styles.diffMoreIndicator}>
             {!showAll ? (
-              <button
+              <Button
                 type="button"
+                variant="ghost"
                 className={styles.diffMoreBtn}
                 onClick={(e) => {
                   e.stopPropagation();
@@ -197,10 +200,11 @@ export const ToolCallDiffPreview: React.FC<ToolCallDiffPreviewProps> = ({
                 aria-label={`平铺展开剩余 ${changes.length - DIFF_FLAT_PREVIEW_LIMIT} 行`}
               >
                 平铺展开剩余 {changes.length - DIFF_FLAT_PREVIEW_LIMIT} 行
-              </button>
+              </Button>
             ) : (
-              <button
+              <Button
                 type="button"
+                variant="ghost"
                 className={styles.diffMoreBtn}
                 onClick={(e) => {
                   e.stopPropagation();
@@ -209,7 +213,7 @@ export const ToolCallDiffPreview: React.FC<ToolCallDiffPreviewProps> = ({
                 aria-label="收起部分平铺行"
               >
                 收起平铺行
-              </button>
+              </Button>
             )}
 
             {isCapped && (
@@ -219,14 +223,15 @@ export const ToolCallDiffPreview: React.FC<ToolCallDiffPreviewProps> = ({
             )}
 
             {onOpenDiff && (
-              <button
+              <Button
                 type="button"
+                variant="ghost"
                 className={styles.diffMoreBtn}
                 onClick={handleOpenDiff}
                 aria-label="点击在右侧查看完整 diff"
               >
                 还有 {changes.length - (showAll ? 0 : DIFF_FLAT_PREVIEW_LIMIT)} 行 · 点击在右侧查看完整 diff
-              </button>
+              </Button>
             )}
           </div>
         )}

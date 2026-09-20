@@ -5,7 +5,7 @@
 import React, { useCallback, useId, useMemo, useRef } from 'react';
 import styles from './AgentCard.module.css';
 import { ICON_STROKE } from '../ui/icons/iconTokens';
-import { Tooltip } from '../ui';
+import { Button, Tooltip } from '../ui';
 
 import type { SessionAgent } from '../../store/types';
 import { openAgentInSidePanel } from '../../api/openAgentPanel';
@@ -271,7 +271,8 @@ export const AgentTeamBoard: React.FC<AgentTeamBoardProps> = React.memo(
                   .filter(Boolean)
                   .join('\n')}
               >
-                <button
+                <Button
+                  variant="ghost"
                   id={optionId}
                   type="button"
                   role="option"
@@ -331,7 +332,7 @@ export const AgentTeamBoard: React.FC<AgentTeamBoardProps> = React.memo(
                       <span className={styles.agentTeamCardTools}>{toolsHint}</span>
                     ) : null}
                   </div>
-                </button>
+                </Button>
               </Tooltip>
             );
           })}

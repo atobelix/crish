@@ -1,6 +1,7 @@
 import React from 'react';
 
 import styles from './ModernToolCall.module.css';
+import { Button } from '../ui';
 import { AppIcon } from '../ui/icons/index';
 import { useTransientFlag } from '../../hooks/useTransientFlag';
 
@@ -36,8 +37,9 @@ export const ModernCodeBlock: React.FC<ModernCodeBlockProps> = ({
           <AppIcon name="code" size={13} />
           <span>{filename}</span>
         </div>
-        <button
+        <Button
           type="button"
+          variant="ghost"
           className={styles.codeBlockCopyBtn}
           onClick={handleCopy}
         >
@@ -52,7 +54,7 @@ export const ModernCodeBlock: React.FC<ModernCodeBlockProps> = ({
               <span>Copy</span>
             </>
           )}
-        </button>
+        </Button>
       </div>
 
       <div className={styles.codeBlockBody}>
