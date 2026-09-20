@@ -72,7 +72,8 @@ export function ProjectsSection({
         onClick={onToggleProjectsSection}
         style={{ cursor: 'pointer' }}
       >
-        <button
+        <Button
+          variant="ghost"
           type="button"
           className={styles.sectionLabel}
           onClick={(e) => {
@@ -85,7 +86,7 @@ export function ProjectsSection({
           <AppIcon name="chevron-down" size={16}
             className={projectsSectionCollapsed ? styles.chevCollapsed : ''}
             aria-hidden />
-        </button>
+        </Button>
         <Tooltip content="管理与选择项目">
           <Button
             type="button"
@@ -186,7 +187,8 @@ export function ProjectsSection({
                         </ul>
                         {sess.length > PROJECT_FOLD_LIMIT && (
                           <div className={styles.foldToggleRow}>
-                            <button
+                            <Button
+                              variant="ghost"
                               type="button"
                               className={styles.foldToggleBtn}
                               onClick={(e) => {
@@ -201,7 +203,7 @@ export function ProjectsSection({
                               {expandedProjectFolders[p.id]
                                 ? '收起'
                                 : `查看全部 (${sess.length})`}
-                            </button>
+                            </Button>
                           </div>
                         )}
                       </>

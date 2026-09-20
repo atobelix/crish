@@ -57,7 +57,8 @@ export function GeneralSection({
         style={{ cursor: 'pointer' }}
       >
         <div className={styles.sectionLabelLeft}>
-          <button
+          <Button
+            variant="ghost"
             type="button"
             className={styles.sectionLabel}
             onClick={(e) => {
@@ -70,7 +71,7 @@ export function GeneralSection({
             <AppIcon name="chevron-down" size={16}
               className={generalCollapsed ? styles.chevCollapsed : ''}
               aria-hidden />
-          </button>
+          </Button>
           <Tooltip content="排序与过滤">
             <Button
               ref={sortTriggerRef}
@@ -139,7 +140,8 @@ export function GeneralSection({
               )}
               {generalSessions.length > GENERAL_FOLD_LIMIT && (
                 <div className={styles.foldToggleRow}>
-                  <button
+                  <Button
+                    variant="ghost"
                     type="button"
                     className={styles.foldToggleBtn}
                     onClick={() => setIsExpanded((prev) => !prev)}
@@ -148,7 +150,7 @@ export function GeneralSection({
                     {isExpanded
                       ? '收起'
                       : `查看全部 (${generalSessions.length})`}
-                  </button>
+                  </Button>
                 </div>
               )}
             </>

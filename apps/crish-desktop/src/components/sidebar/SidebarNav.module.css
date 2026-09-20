@@ -7,6 +7,7 @@
   padding-right: 0;
 }
 
+:global(.button).navItem,
 .navItem {
   --btn-hover-overlay: transparent;
   --btn-active-overlay: transparent;
@@ -17,9 +18,11 @@
   justify-content: flex-start;
   gap: var(--space-2);
   width: 100%;
+  min-width: unset;
   height: var(--control-height);
   min-height: var(--control-height);
   border: none;
+  box-shadow: none;
   background: transparent;
   color: var(--text-primary);
   font-family: inherit;
@@ -92,7 +95,10 @@
 
 .navItem input[type='search'],
 .navItem input[type='search']:focus,
-.navItem input[type='search']:focus-visible {
+.navItem input[type='search']:focus-visible,
+.navItem :global(.bareInput),
+.navItem :global(.bareInput):focus,
+.navItem :global(.bareInput):focus-visible {
   flex: 1 1 auto;
   min-width: 0;
   border: none;

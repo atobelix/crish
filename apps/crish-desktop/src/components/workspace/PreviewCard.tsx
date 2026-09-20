@@ -346,16 +346,17 @@ export const PreviewCard: React.FC<PreviewCardProps> = ({
                       <div className={styles.emptySection} role="group" aria-label="运行中的本地服务">
                         <div className={styles.textLinksColumn}>
                           {activePorts.map((port) => (
-                            <button
+                            <Button
                               key={port}
                               type="button"
+                              variant="ghost"
                               className={styles.pureTextLink}
                               onClick={() => navigate(`http://localhost:${port}`)}
                               aria-label={`运行中的本地服务: localhost:${port}`}
                             >
                               <span className={styles.portLabel}>运行中的本地服务: </span>
                               <span className={styles.portValue}>localhost:{port}</span>
-                            </button>
+                            </Button>
                           ))}
                         </div>
                       </div>
@@ -374,15 +375,16 @@ export const PreviewCard: React.FC<PreviewCardProps> = ({
                             }
                             return (
                               <Tooltip key={url} content={url}>
-                                <button
+                                <Button
                                   type="button"
+                                  variant="ghost"
                                   className={styles.pureTextLinkWithIcon}
                                   onClick={() => navigate(url)}
                                   aria-label={`打开最近网页 ${displayHost}`}
                                 >
                                   <AppIcon name="globe" size={12} className={styles.recentIcon} aria-hidden />
                                   <span className={styles.recentText}>{displayHost}</span>
-                                </button>
+                                </Button>
                               </Tooltip>
                             );
                           })}

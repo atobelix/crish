@@ -407,10 +407,13 @@ input.urlInput::-webkit-search-results-decoration {
 }
 
 /* 纯文字按钮：完全无边框、无绿色、无重阴影、仅极低灰度 Hover */
+:global(.button).pureTextLink,
 .pureTextLink {
   border: none;
   background: transparent;
   padding: 4px 10px;
+  min-height: unset;
+  height: auto;
   border-radius: var(--radius-sm, 4px);
   color: var(--text-secondary);
   font-family: var(--font-mono, ui-monospace, monospace);
@@ -423,11 +426,13 @@ input.urlInput::-webkit-search-results-decoration {
   text-decoration: none;
 }
 
+:global(.button).pureTextLink:hover,
 .pureTextLink:hover {
   background: var(--sidebar-hover, var(--tint-hover));
   color: var(--text-primary);
 }
 
+:global(.button).pureTextLink:focus-visible,
 .pureTextLink:focus-visible {
   background: var(--sidebar-hover, var(--tint-active));
   color: var(--text-primary);
@@ -442,10 +447,13 @@ input.urlInput::-webkit-search-results-decoration {
   color: var(--text-primary);
 }
 
+:global(.button).pureTextLinkWithIcon,
 .pureTextLinkWithIcon {
   border: none;
   background: transparent;
   padding: 4px 10px;
+  min-height: unset;
+  height: auto;
   border-radius: var(--radius-sm, 4px);
   color: var(--text-secondary);
   font-size: var(--font-size-xs, 12px);
@@ -461,11 +469,13 @@ input.urlInput::-webkit-search-results-decoration {
   text-decoration: none;
 }
 
+:global(.button).pureTextLinkWithIcon:hover,
 .pureTextLinkWithIcon:hover {
   background: var(--sidebar-hover, var(--tint-hover));
   color: var(--text-primary);
 }
 
+:global(.button).pureTextLinkWithIcon:focus-visible,
 .pureTextLinkWithIcon:focus-visible {
   background: var(--sidebar-hover, var(--tint-active));
   color: var(--text-primary);

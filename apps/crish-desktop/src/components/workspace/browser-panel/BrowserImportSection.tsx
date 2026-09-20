@@ -4,7 +4,7 @@
  */
 import React, { useState } from 'react';
 import styles from './BrowserImportSection.module.css';
-import { Button, Tooltip } from '../../ui';
+import { Button, Input, Tooltip } from '../../ui';
 import { useBookmarksImport } from './import-hooks/useBookmarksImport';
 import { useHistoryImport } from './import-hooks/useHistoryImport';
 import { useStorageImport } from './import-hooks/useStorageImport';
@@ -66,7 +66,8 @@ export const BrowserImportSection: React.FC<BrowserImportSectionProps> = ({
             desc="导入 Chrome 书签文件"
             control={
               <>
-                <input
+                <Input
+                  bare
                   ref={bookmarks.bookmarksFileRef}
                   type="file"
                   accept=".json,application/json"
@@ -116,7 +117,8 @@ export const BrowserImportSection: React.FC<BrowserImportSectionProps> = ({
             desc="导入浏览器会话凭据"
             control={
               <>
-                <input
+                <Input
+                  bare
                   ref={storage.storageFileRef}
                   type="file"
                   accept=".json,application/json"

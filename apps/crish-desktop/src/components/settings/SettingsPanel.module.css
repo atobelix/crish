@@ -295,9 +295,11 @@
   padding: var(--space-5) var(--space-8) var(--space-6);
 }
 
+:global(.button).sidebarTab,
 .sidebarTab {
   display: flex;
   align-items: center;
+  justify-content: flex-start;
   gap: var(--space-2);
   padding: var(--space-1_5) var(--space-2_5);
   border-radius: var(--radius-lg);
@@ -307,8 +309,11 @@
   font-weight: var(--font-weight-normal);
   text-align: left;
   width: 100%;
+  min-width: unset;
+  height: auto;
   background: transparent;
   color: var(--text-secondary);
+  box-shadow: none;
   transition:
     background var(--transition-micro),
     color var(--transition-micro);

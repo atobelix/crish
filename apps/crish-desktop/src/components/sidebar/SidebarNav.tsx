@@ -1,7 +1,7 @@
 import React from 'react';
+import { Button, Input } from '../ui';
 import styles from './SidebarNav.module.css';
 import { AppIcon } from '../ui/icons/index';
-
 
 export interface SidebarNavProps {
   activeNav: string;
@@ -22,7 +22,8 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
   const scheduledActive = activeNav === 'scheduled';
   return (
     <div className={styles.topActions}>
-      <button
+      <Button
+        variant="ghost"
         type="button"
         className={styles.navItem}
         data-testid="new-session-button"
@@ -30,8 +31,9 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
       >
         <AppIcon name="new-chat" size={16} aria-hidden="true" />
         <span>新对话</span>
-      </button>
-      <button
+      </Button>
+      <Button
+        variant="ghost"
         type="button"
         className={`${styles.navItem}${scheduledActive ? ` ${styles.isActive}` : ''}`}
         data-testid="sidebar-nav-scheduled"
@@ -40,7 +42,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
       >
         <AppIcon name="clock" size={16} aria-hidden />
         <span>定时任务</span>
-      </button>
+      </Button>
       {onSearchChange && (
         <div
           className={`${styles.navItem} no-drag`}
@@ -48,7 +50,8 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
           aria-label="会话搜索"
         >
           <AppIcon name="search" size={16} aria-hidden="true" />
-          <input
+          <Input
+            bare
             type="search"
             placeholder="搜索会话与消息…"
             aria-label="搜索会话与消息"

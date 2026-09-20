@@ -17,6 +17,7 @@ import {
   formatControlMetricsLines,
   type ControlMetricsSnapshot,
 } from './devHealthFormat';
+import { Button } from '../components/ui';
 import styles from './DevHealthOverlay.module.css';
 
 const REFRESH_MS = 1500;
@@ -102,14 +103,15 @@ export const DevHealthOverlay: React.FC = () => {
           </span>
         ))}
       </div>
-      <button
+      <Button
         type="button"
+        variant="ghost"
         className={styles.refresh}
         onClick={refresh}
         aria-label="Refresh control metrics"
       >
         ↻
-      </button>
+      </Button>
     </div>
   );
 };

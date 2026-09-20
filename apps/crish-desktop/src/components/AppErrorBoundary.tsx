@@ -333,13 +333,14 @@ export class AppErrorBoundary extends React.Component<Props, State> {
                   关闭面板
                 </Button>
               )}
-              <button
+              <Button
                 type="button"
+                variant="ghost"
                 className={styles.appErrorReloadLink}
                 onClick={this.reload}
               >
                 重新加载
-              </button>
+              </Button>
             </div>
           </div>
         </div>

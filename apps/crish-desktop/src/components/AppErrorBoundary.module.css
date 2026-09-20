@@ -141,10 +141,13 @@
 }
 
 /* Compact        */
+:global(.button).appErrorReloadLink,
 .appErrorReloadLink {
   background: none;
   border: none;
   padding: 0;
+  min-height: unset;
+  height: auto;
   font: inherit;
   color: var(--accent-color);
   text-decoration: underline;
@@ -153,6 +156,8 @@
   line-height: inherit;
 }
 
+:global(.button).appErrorReloadLink:hover,
 .appErrorReloadLink:hover {
   color: var(--accent-hover);
+  background: none;
 }

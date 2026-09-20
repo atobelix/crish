@@ -10,7 +10,7 @@
  */
 import React from 'react';
 import styles from './TerminalCard.module.css';
-import { IconButton } from '../ui';
+import { Button, IconButton } from '../ui';
 import { AppIcon } from '../ui/icons/index';
 
 export type TerminalSplitMode = 'none' | 'horizontal' | 'vertical';
@@ -51,8 +51,9 @@ export const TerminalToolbar: React.FC<TerminalToolbarProps> = ({
           </div>
         ) : (
           <div className={styles.termBranchGroup}>
-            <button
+            <Button
               type="button"
+              variant="ghost"
               className={`${styles.termBranchItem} ${
                 activePaneIndex === 0 ? styles.termBranchActive : ''
               }`}
@@ -62,9 +63,10 @@ export const TerminalToolbar: React.FC<TerminalToolbarProps> = ({
               <span className={styles.branchSymbol}>┌</span>
               <AppIcon name="terminal" size={11} className={styles.termTagIcon} />
               <span>{title ? `${title} (主)` : 'pwsh 1'}</span>
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              variant="ghost"
               className={`${styles.termBranchItem} ${
                 activePaneIndex === 1 ? styles.termBranchActive : ''
               }`}
@@ -74,7 +76,7 @@ export const TerminalToolbar: React.FC<TerminalToolbarProps> = ({
               <span className={styles.branchSymbol}>└</span>
               <AppIcon name="terminal" size={11} className={styles.termTagIcon} />
               <span>{title ? `${title} (分屏)` : 'pwsh 2'}</span>
-            </button>
+            </Button>
           </div>
         )}
       </div>

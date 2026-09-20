@@ -5,7 +5,7 @@
  */
 import React from 'react';
 import styles from './overlay/FirstRunWizard.module.css';
-import { Select } from './ui';
+import { Select, Input } from './ui';
 import { YAML_PROTOCOL_SELECT_OPTIONS } from './settings-models/catalogWriteGate';
 import { DEFAULT_WIZARD_PROTOCOL } from './firstRunWizardLib';
 
@@ -62,7 +62,8 @@ export const WizardKeyStep: React.FC<WizardKeyStepProps> = ({
       <label className={styles.firstRunLabel} htmlFor={ids.nameId}>
         服务商名称
       </label>
-      <input
+      <Input
+        bare
         id={ids.nameId}
         className={styles.firstRunInput}
         placeholder="例如: 自建网关、公司代理"
@@ -80,7 +81,8 @@ export const WizardKeyStep: React.FC<WizardKeyStepProps> = ({
       <label className={styles.firstRunLabel} htmlFor={ids.baseUrlId}>
         Base URL
       </label>
-      <input
+      <Input
+        bare
         id={ids.baseUrlId}
         className={styles.firstRunInput}
         placeholder="https://api.example.com/v1"
@@ -116,7 +118,8 @@ export const WizardKeyStep: React.FC<WizardKeyStepProps> = ({
       <label className={styles.firstRunLabel} htmlFor={ids.keyId}>
         API 密钥
       </label>
-      <input
+      <Input
+        bare
         id={ids.keyId}
         type="password"
         className={styles.firstRunInput}

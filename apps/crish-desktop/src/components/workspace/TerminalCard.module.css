@@ -96,10 +96,13 @@
   gap: 6px;
 }
 
+:global(.button).termBranchItem,
 .termBranchItem {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  min-height: unset;
+  height: auto;
   font-size: 11.5px;
   font-family: var(--font-mono);
   color: var(--text-secondary);

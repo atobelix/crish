@@ -6,7 +6,7 @@
 import React from 'react';
 
 import styles from './settings/SettingsPanel.module.css';
-import { Button, Tooltip } from './ui';
+import { Button, Input, Tooltip } from './ui';
 import type { TabMeta, TabType } from './settingsTabsMeta';
 import { AppIcon } from './ui/icons/index';
 
@@ -96,7 +96,8 @@ export const SettingsTablist: React.FC<SettingsTablistProps> = ({
         <AppIcon name="search" size={14}
           className={styles.searchIco}
           aria-hidden />
-        <input
+        <Input
+          bare
           ref={searchInputRef}
           id={searchId}
           type="search"
@@ -142,7 +143,8 @@ export const SettingsTablist: React.FC<SettingsTablistProps> = ({
                 </div>
               ) : null}
               <Tooltip content={tab.keywords.slice(0, 4).join(' · ')}>
-                <button
+                <Button
+                  variant="ghost"
                   type="button"
                   id={tabBtnId}
                   role="tab"
@@ -160,7 +162,7 @@ export const SettingsTablist: React.FC<SettingsTablistProps> = ({
                     <AppIcon name={iconName} size={16} aria-hidden />
                   </span>
                   <span>{tab.label}</span>
-                </button>
+                </Button>
               </Tooltip>
             </React.Fragment>
           );

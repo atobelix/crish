@@ -5,7 +5,7 @@
  */
 import React from 'react';
 import styles from './overlay/FirstRunWizard.module.css';
-import { Select } from './ui';
+import { Select, Input } from './ui';
 import { wizardEmptyModelCatalogHint } from './firstRunWizardLib';
 
 /** 本步用到的可访问 id（useId 生成，壳层透传） */
@@ -74,7 +74,8 @@ export const WizardModelStep: React.FC<WizardModelStepProps> = ({
           <label className={styles.firstRunLabel} htmlFor={ids.modelCustomId}>
             或手填模型 id
           </label>
-          <input
+          <Input
+            bare
             id={ids.modelCustomId}
             className={styles.firstRunInput}
             placeholder="例如 deepseek-v4-flash、gpt-5.6"
@@ -90,7 +91,8 @@ export const WizardModelStep: React.FC<WizardModelStepProps> = ({
           />
         </>
       ) : (
-        <input
+        <Input
+          bare
           id={ids.modelIdField}
           className={styles.firstRunInput}
           placeholder="输入模型 id（如 deepseek-v4-flash）"

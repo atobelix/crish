@@ -17,7 +17,7 @@ import {
   storeSessionSearchQuery,
   type SessionSearchMatch,
 } from '../../../api/sessionSearch';
-import { Button, Tooltip } from '../../ui';
+import { Button, Input, Tooltip } from '../../ui';
 import styles from '../SidebarSessionList.module.css';
 import { AppIcon } from '../../ui/icons/index';
 
@@ -325,7 +325,8 @@ export const SessionRow = memo(function SessionRow(props: SessionRowProps) {
         }}
       >
         {isRenaming ? (
-          <input
+          <Input
+            bare
             ref={renameInputRef}
             className={styles.sessionRenameInput}
             value={renameDraft}

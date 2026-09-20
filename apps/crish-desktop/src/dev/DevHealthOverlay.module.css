@@ -47,10 +47,13 @@
   color: var(--warning-color);
 }
 
+:global(.button).refresh,
 .refresh {
   flex-shrink: 0;
   margin: 0;
   padding: 0 4px;
+  min-height: unset;
+  height: auto;
   border: none;
   border-radius: var(--radius-xs, 2px);
   background: transparent;
@@ -60,11 +63,13 @@
   cursor: pointer;
 }
 
+:global(.button).refresh:hover,
 .refresh:hover {
   color: var(--text-primary);
   background: var(--bg-subtle, transparent);
 }
 
+:global(.button).refresh:focus-visible,
 .refresh:focus-visible {
   outline: 1px solid var(--focus-ring, var(--border-subtle));
   outline-offset: 1px;

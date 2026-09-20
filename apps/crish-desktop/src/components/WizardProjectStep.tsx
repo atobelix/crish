@@ -6,7 +6,7 @@
 import React from 'react';
 
 import styles from './overlay/FirstRunWizard.module.css';
-import { Button } from './ui';
+import { Button, Input } from './ui';
 import { AppIcon } from './ui/icons/index';
 
 /** 本步用到的可访问 id（useId 生成，壳层透传） */
@@ -71,7 +71,8 @@ export const WizardProjectStep: React.FC<WizardProjectStepProps> = ({
           <label className={styles.firstRunLabel} htmlFor={ids.pathId}>
             或输入路径
           </label>
-          <input
+          <Input
+            bare
             id={ids.pathId}
             className={styles.firstRunInput}
             placeholder="例如 C:/workspace/crish"

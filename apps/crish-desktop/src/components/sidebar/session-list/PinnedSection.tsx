@@ -1,8 +1,8 @@
 import React from 'react';
 import type { SessionState } from '../../../store/types';
+import { Button } from '../../ui';
 import styles from '../SidebarSessionList.module.css';
 import { AppIcon } from '../../ui/icons/index';
-
 
 export interface PinnedSectionProps {
   pinnedSessions: SessionState[];
@@ -40,7 +40,8 @@ export function PinnedSection({
         style={{ cursor: 'pointer' }}
       >
         <div className={styles.sectionLabelLeft}>
-          <button
+          <Button
+            variant="ghost"
             type="button"
             className={styles.sectionLabel}
             onClick={(e) => {
@@ -54,7 +55,7 @@ export function PinnedSection({
             <AppIcon name="chevron-down" size={16}
               className={pinnedCollapsed ? styles.chevCollapsed : ''}
               aria-hidden />
-          </button>
+          </Button>
         </div>
       </div>
       <div

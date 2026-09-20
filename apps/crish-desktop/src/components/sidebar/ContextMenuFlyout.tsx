@@ -6,7 +6,7 @@ import React, {
   useState,
 } from 'react';
 
-import { Menu } from '../ui';
+import { Button, Menu } from '../ui';
 import styles from './SidebarContextMenus.module.css';
 import { AppIcon } from '../ui/icons/index';
 
@@ -108,7 +108,8 @@ const FlyoutOption: React.FC<{
   children: React.ReactNode;
 }> = ({ checked, onSelect, children }) => {
   return (
-    <button
+    <Button
+      variant="ghost"
       type="button"
       role="menuitemradio"
       aria-checked={checked}
@@ -121,7 +122,7 @@ const FlyoutOption: React.FC<{
           className={styles.sortFilterCheck}
           aria-hidden />
       ) : null}
-    </button>
+    </Button>
   );
 };
 
