@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSta
 
 import type { SessionMessage } from '../../store/types';
 import type { VirtualScrollManager } from '../../api/VirtualScrollManager';
-import { ResizeObserverManager } from '../../services/ResizeObserverManager';
+import { ResizeObserverManager } from '../ui/utils/ResizeObserverManager';
 import styles from './FlowScrubber.module.css';
 import {
   USER_BUBBLE_SELECTOR,

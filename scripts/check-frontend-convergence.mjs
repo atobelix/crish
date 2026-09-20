@@ -201,7 +201,7 @@ function runRule3_RawResizeAndThrashing() {
   const files = collectFiles(
     DESKTOP_SRC,
     /\.(ts|tsx)$/,
-    /(\.test\.|\.spec\.|__tests__|tests\/|ResizeObserverManager\.ts|WindowResizeBridge\.ts|tooltipController\.ts)/
+    /(\.test\.|\.spec\.|__tests__|tests\/|ResizeObserverManager\.ts|WindowResizeBridge\.ts)/
   );
 
   for (const file of files) {

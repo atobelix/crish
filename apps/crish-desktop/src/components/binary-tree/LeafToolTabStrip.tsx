@@ -18,7 +18,7 @@ import {
   type LayoutLeaf,
 } from '../../store/storeAccess';
 import { Tooltip, Button } from '../ui';
-import { ResizeObserverManager } from '../../services/ResizeObserverManager';
+import { ResizeObserverManager } from '../ui/utils/ResizeObserverManager';
 import { viewRegistry } from '../../services/view-registry';
 import { SidePanelNavToolbar } from './SidePanelNavToolbar';
 import { toolTabStripVars } from './tabStripVars';

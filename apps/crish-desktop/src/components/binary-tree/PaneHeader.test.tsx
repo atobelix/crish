@@ -30,7 +30,7 @@ const roManagerMock = vi.hoisted(() => {
   };
 });
 
-vi.mock('../../services/ResizeObserverManager', () => ({
+vi.mock('../ui/utils/ResizeObserverManager', () => ({
   ResizeObserverManager: { getInstance: () => roManagerMock.instance },
 }));
 

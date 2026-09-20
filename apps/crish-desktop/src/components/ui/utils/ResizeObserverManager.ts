@@ -53,7 +53,14 @@ export class ResizeObserverManager {
   setSuspended(suspended: boolean): void {
     if (this.isSuspended === suspended) return;
     this.isSuspended = suspended;
-    if (!suspended) this.flushPending();
+    if (suspended) {
+      if (this.flushRafId !== null) {
+        cancelAnimationFrame(this.flushRafId);
+        this.flushRafId = null;
+      }
+    } else {
+      this.flushPending();
+    }
   }
 
   private dispatch(entry: ResizeObserverEntry): void {
@@ -65,16 +72,17 @@ export class ResizeObserverManager {
   }
 
   private flushPending(): void {
-    if (this.flushRafId !== null) return;
+    if (this.isSuspended || this.flushRafId !== null) return;
     const flushBatch = () => {
       this.flushRafId = null;
+      if (this.isSuspended) return;
       const elements = Array.from(this.pendingQueue).slice(0, this.FLUSH_BATCH_SIZE);
       for (const el of elements) {
         this.pendingQueue.delete(el);
         const entry = this.entries.get(el);
         if (entry) this.dispatch(entry);
       }
-      if (this.pendingQueue.size > 0) {
+      if (!this.isSuspended && this.pendingQueue.size > 0) {
         this.flushRafId = requestAnimationFrame(flushBatch);
       }
     };
@@ -86,7 +94,11 @@ export class ResizeObserverManager {
     this.callbacks.clear();
     this.entries.clear();
     this.pendingQueue.clear();
-    if (this.flushRafId !== null) cancelAnimationFrame(this.flushRafId);
+    if (this.flushRafId !== null) {
+      cancelAnimationFrame(this.flushRafId);
+      this.flushRafId = null;
+    }
+    this.isSuspended = false;
     if (ResizeObserverManager.instance === this) {
       ResizeObserverManager.instance = null;
     }

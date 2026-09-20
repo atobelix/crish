@@ -30,7 +30,7 @@ import { DRAG_THRESHOLD_PX, NON_TAB_SPACE_PX, TAB_GAP_PX } from '../../utils/tab
 import { paneTabStripVars } from './tabStripVars';
 import { DURATION_FAST_MS, readTransitionMs } from '../../utils/motionTokens';
 import { useTablistKeyboard } from '../../hooks/useTablistKeyboard';
-import { ResizeObserverManager } from '../../services/ResizeObserverManager';
+import { ResizeObserverManager } from '../ui/utils/ResizeObserverManager';
 import {
   computeCloseLockWidth,
   computeNaturalTabWidth,

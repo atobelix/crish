@@ -7,7 +7,9 @@
  * 2. 追踪鼠标轨迹历史（4 帧队列），计算光标运动趋势向量；
  * 3. 采用重心坐标（Barycentric Coordinates）与 2D 叉积算法 O(1) 判定光标是否在 Safe Triangle 保护区；
  * 4. 支持四向方位 (left / right / top / bottom) 级联展开与动态多边形渲染；
- * 5. 彻底消除鼠标斜向划入二级级联子菜单时的闪烁与误关闭。
+ * 5. 支持级联子菜单堆栈（SubmenuStack）与速度矢量反向判定（v · d <= 0 立即释放）；
+ * 6. 支持 300ms 停顿安全超时熔断，彻底消除鼠标斜向划入二级级联子菜单时的闪烁与误关闭；
+ * 7. destroy() 彻底清理 DOM、监听器并置空 instance 单例。
  */
 
 export interface Point2D {
@@ -18,28 +20,40 @@ export interface Point2D {
 export interface SafeAimOptions {
   enabled?: boolean;
   debug?: boolean;
+  timeoutMs?: number;
 }
 
 export type SubmenuPlacement = 'left' | 'right' | 'top' | 'bottom';
+
+export interface SubmenuStackEntry {
+  triggerEl: HTMLElement;
+  submenuEl: HTMLElement;
+}
 
 export class SafeAimEngine {
   private static instance: SafeAimEngine | null = null;
 
   public enabled: boolean;
   public debug: boolean;
+  public readonly timeoutMs: number;
   public activeSubmenu: HTMLElement | null = null;
   public activeTriggerItem: HTMLElement | null = null;
   public activePlacement: SubmenuPlacement | null = null;
+  private submenuStack: SubmenuStackEntry[] = [];
   private mouseHistory: Point2D[] = [];
   private readonly MAX_MOUSE_HISTORY = 4;
+  private safeZoneEntryTimestamp: number | null = null;
 
   private svgOverlay: SVGSVGElement | null = null;
   private polygonEl: SVGPolygonElement | null = null;
   private isListening = false;
+  private container: HTMLElement | null = null;
 
-  constructor(options: SafeAimOptions = {}) {
+  constructor(options: SafeAimOptions = {}, container?: HTMLElement | null) {
     this.enabled = options.enabled ?? true;
     this.debug = options.debug ?? false;
+    this.timeoutMs = options.timeoutMs ?? 300;
+    this.container = container || null;
     this.onMouseMove = this.onMouseMove.bind(this);
     if (typeof window !== 'undefined' && typeof document !== 'undefined') {
       this.initSvgOverlay();
@@ -68,8 +82,9 @@ export class SafeAimEngine {
 
       const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
       svg.appendChild(poly);
-      if (document.body) {
-        document.body.appendChild(svg);
+      const parent = this.container || document.body;
+      if (parent) {
+        parent.appendChild(svg);
       }
     }
     this.svgOverlay = svg;
@@ -121,9 +136,15 @@ export class SafeAimEngine {
     submenuEl: HTMLElement | null,
     placement?: SubmenuPlacement
   ): void {
+    if (!triggerItemEl || !submenuEl) {
+      this.clearSubmenu();
+      return;
+    }
     this.activeTriggerItem = triggerItemEl;
     this.activeSubmenu = submenuEl;
     this.activePlacement = placement ?? null;
+    this.submenuStack = [{ triggerEl: triggerItemEl, submenuEl }];
+    this.safeZoneEntryTimestamp = null;
     this.updatePolygon();
   }
 
@@ -131,12 +152,36 @@ export class SafeAimEngine {
     this.activeTriggerItem = null;
     this.activeSubmenu = null;
     this.activePlacement = null;
+    this.submenuStack = [];
+    this.safeZoneEntryTimestamp = null;
     this.mouseHistory = [];
     this.clearPolygon();
   }
 
   public reset(): void {
     this.clearSubmenu();
+  }
+
+  public pushSubmenu(triggerEl: HTMLElement, submenuEl: HTMLElement): void {
+    this.submenuStack.push({ triggerEl, submenuEl });
+    this.activeTriggerItem = triggerEl;
+    this.activeSubmenu = submenuEl;
+    this.safeZoneEntryTimestamp = null;
+    this.updatePolygon();
+  }
+
+  public popSubmenu(): void {
+    this.submenuStack.pop();
+    const active = this.getActiveSubmenu();
+    this.activeTriggerItem = active?.triggerEl ?? null;
+    this.activeSubmenu = active?.submenuEl ?? null;
+    this.safeZoneEntryTimestamp = null;
+    this.updatePolygon();
+  }
+
+  public getActiveSubmenu(): SubmenuStackEntry | null {
+    if (this.submenuStack.length === 0) return null;
+    return this.submenuStack[this.submenuStack.length - 1] ?? null;
   }
 
   public setPolygonPoints(p1: Point2D, p2: Point2D, p3: Point2D): void {
@@ -158,12 +203,18 @@ export class SafeAimEngine {
   }
 
   public updatePolygon(): void {
-    if (!this.enabled || !this.activeSubmenu) {
+    if (!this.enabled) {
       this.clearPolygon();
       return;
     }
 
-    const subRect = this.activeSubmenu.getBoundingClientRect();
+    const targetSubmenu = this.activeSubmenu || this.getActiveSubmenu()?.submenuEl;
+    if (!targetSubmenu) {
+      this.clearPolygon();
+      return;
+    }
+
+    const subRect = targetSubmenu.getBoundingClientRect();
     if (subRect.width === 0 || subRect.height === 0) {
       this.clearPolygon();
       return;
@@ -206,12 +257,32 @@ export class SafeAimEngine {
     point: Point2D,
     placement?: SubmenuPlacement
   ): boolean {
-    if (!this.enabled || !this.activeSubmenu) return false;
+    if (!this.enabled) return false;
+    const targetSubmenu = this.activeSubmenu || this.getActiveSubmenu()?.submenuEl;
+    if (!targetSubmenu) return false;
 
-    const subRect = this.activeSubmenu.getBoundingClientRect();
-    const mouse = this.getPreviousMousePos();
+    const subRect = targetSubmenu.getBoundingClientRect();
+    if (subRect.width === 0 || subRect.height === 0) return false;
+
+    const mouse = this.getRecentMousePos();
+    const prevMouse = this.getPreviousMousePos();
+
+    // 速度矢量导数判定 (v · d > 0)
+    const vx = mouse.x - prevMouse.x;
+    const vy = mouse.y - prevMouse.y;
+    const targetCenterX = subRect.left + subRect.width / 2;
+    const targetCenterY = subRect.top + subRect.height / 2;
+    const dx = targetCenterX - mouse.x;
+    const dy = targetCenterY - mouse.y;
+    const dotProduct = vx * dx + vy * dy;
+
+    // 若光标反向远离目标子菜单，立即释放安全区
+    if (this.mouseHistory.length > 1 && (vx !== 0 || vy !== 0) && dotProduct <= 0) {
+      this.safeZoneEntryTimestamp = null;
+      return false;
+    }
+
     const resolvedPlacement = placement ?? this.activePlacement;
-
     let pTop: Point2D;
     let pBottom: Point2D;
 
@@ -228,7 +299,7 @@ export class SafeAimEngine {
       pTop = { x: subRect.left, y: subRect.top };
       pBottom = { x: subRect.left, y: subRect.bottom };
     } else {
-      const isSubmenuOnRight = subRect.left >= mouse.x;
+      const isSubmenuOnRight = subRect.left >= prevMouse.x;
       if (isSubmenuOnRight) {
         pTop = { x: subRect.left, y: subRect.top };
         pBottom = { x: subRect.left, y: subRect.bottom };
@@ -238,7 +309,24 @@ export class SafeAimEngine {
       }
     }
 
-    return this.pointInTriangle(point, mouse, pTop, pBottom);
+    const inTriangle = this.pointInTriangle(point, prevMouse, pTop, pBottom);
+    if (!inTriangle) {
+      this.safeZoneEntryTimestamp = null;
+      return false;
+    }
+
+    // 停顿安全超时熔断
+    const now = Date.now();
+    if (this.safeZoneEntryTimestamp === null) {
+      this.safeZoneEntryTimestamp = now;
+      return true;
+    }
+    if (now - this.safeZoneEntryTimestamp > this.timeoutMs) {
+      this.safeZoneEntryTimestamp = null;
+      return false;
+    }
+
+    return true;
   }
 
   /**
@@ -273,10 +361,15 @@ export class SafeAimEngine {
   public destroy(): void {
     this.detach();
     this.mouseHistory = [];
+    this.submenuStack = [];
+    this.safeZoneEntryTimestamp = null;
     if (this.svgOverlay && this.svgOverlay.parentNode) {
       this.svgOverlay.parentNode.removeChild(this.svgOverlay);
       this.svgOverlay = null;
       this.polygonEl = null;
+    }
+    if (SafeAimEngine.instance === this) {
+      SafeAimEngine.instance = null;
     }
   }
 }

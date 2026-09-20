@@ -3,7 +3,7 @@ import {
   VirtualScrollManager,
   type VisibleRange,
 } from '../api/VirtualScrollManager';
-import { ResizeObserverManager } from '../services/ResizeObserverManager';
+import { ResizeObserverManager } from '../components/ui/utils/ResizeObserverManager';
 
 export interface UseVirtualScrollOptions {
   /** 消息 ID 序列 */

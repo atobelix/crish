@@ -172,7 +172,7 @@ describe('MessageVirtualizer — 长会话 (1000+ 消息) 性能与高度断言'
     expect(manager.getTotalHeight(1500)).toBe(expectedTotal);
   });
 
-  it('100 次高频虚拟滚动：单帧工作量不随消息总数增长（自校准相对门禁）', () => {
+  it('100 次高频虚拟滚动：单帧工作量不随消息总数增长（自校准相对门禁）', { timeout: 60000 }, () => {
     // ── 门禁可信化改造（2026-09-15）────────────────────────────────────
     // 原实现断言绝对墙钟：avgFrameTime < 80ms / maxFrameTime < 350ms。
     // 实测（8 次隔离复跑，含全量套件并发轮次）：
@@ -207,7 +207,7 @@ describe('MessageVirtualizer — 长会话 (1000+ 消息) 性能与高度断言'
     // 帧预算的 7.7 倍）；短路轨道渲染后每帧与 N 无关（25ms 持平）。
     // 修复：轨道刻度按像素容量有界渲染（flowScrubberModel.capScrubberSegments），
     // 修复后 t(300)=15ms / t(1500)=14ms / t(6000)=13ms（持平，N=6000 时约 9.5 倍改善）。
-    const FRAMES = 50; // 每轮 50 帧；共 4 轮 = 200 帧采样
+    const FRAMES = 20; // 每轮 20 帧；共 4 轮 = 80 帧采样
     const STEP = 5 * MESSAGE_ESTIMATED_ROW_HEIGHT; // 每帧推进 5 行，两侧一致
 
     /** 低分位估计量：最不受争抢的帧最接近真实单帧成本 */

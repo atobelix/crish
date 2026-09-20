@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
-import { ResizeObserverManager } from '../services/ResizeObserverManager';
+import { ResizeObserverManager } from '../components/ui/utils/ResizeObserverManager';
 
 export const COMPOSER_MIN_LINES = 2;
 export const COMPOSER_MAX_LINES = 10;

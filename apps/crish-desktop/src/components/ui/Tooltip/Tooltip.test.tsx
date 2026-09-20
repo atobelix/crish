@@ -308,7 +308,7 @@ describe('ui/Tooltip', () => {
     fireEvent.mouseEnter(screen.getByText('失焦目标'));
     expect(screen.getByRole('tooltip')).toBeInTheDocument();
     act(() => {
-      window.dispatchEvent(new Event('resize'));
+      window.dispatchEvent(new CustomEvent('app:window-resize-settled'));
     });
     expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
 

@@ -7,7 +7,7 @@
  * 5. ResizeObserver 回调结合 RAF 防抖批处理调度
  */
 import { useCallback, useLayoutEffect, useRef, useState } from 'react';
-import { ResizeObserverManager } from '../../services/ResizeObserverManager';
+import { ResizeObserverManager } from '../ui/utils/ResizeObserverManager';
 
 export const GRID_GUTTER_PX = 18;
 export const MIN_CAPACITY_PX = 200;

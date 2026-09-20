@@ -19,7 +19,7 @@ import {
   measureTextWidthCanvas,
   useComposerMultiline,
 } from './useComposerMultiline';
-import { ResizeObserverManager } from '../../services/ResizeObserverManager';
+import { ResizeObserverManager } from '../ui/utils/ResizeObserverManager';
 
 describe('useComposerMultiline 状态机与交互优化', () => {
   const origRO = globalThis.ResizeObserver;

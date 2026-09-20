@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { ResizeObserverManager } from '../services/ResizeObserverManager';
+import { ResizeObserverManager } from '../components/ui/utils/ResizeObserverManager';
 
 /** 动画/拖拽类型枚举 */
 export type LayoutAnimationType =

@@ -12,7 +12,7 @@ import { highlightCodeSafe } from '../../api/codeHighlight';
 import { LineBuffer } from './LineBuffer';
 import { VirtualCodeEngine, MAX_DOM_LINE_CHARS, MAX_EXPANDED_LINE_CHARS } from './VirtualCodeEngine';
 import { Button, Tooltip } from '../ui';
-import { ResizeObserverManager } from '../../services/ResizeObserverManager';
+import { ResizeObserverManager } from '../ui/utils/ResizeObserverManager';
 import styles from './DiffCard.module.css';
 
 function basename(p: string): string {

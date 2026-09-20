@@ -6,7 +6,7 @@ import {
   type HeightGetter,
   type SessionListWindowRange,
 } from '../../../api/sessionListWindow';
-import { ResizeObserverManager } from '../../../services/ResizeObserverManager';
+import { ResizeObserverManager } from '../../ui/utils/ResizeObserverManager';
 
 export const FULL_RANGE = (count: number): SessionListWindowRange => ({
   start: 0,

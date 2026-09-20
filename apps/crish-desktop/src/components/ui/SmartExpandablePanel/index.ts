@@ -6,7 +6,7 @@ export { useSmartPanel } from './useSmartPanel';
 export { useSmartKeyboardNav } from './useSmartKeyboardNav';
 export { useWheelIsolation } from './useWheelIsolation';
 export { PositionEngine } from './PositionEngine';
-export { SafeAimEngine } from './SafeAimEngine';
+export { SafeAimEngine } from '../internal/SafeAimEngine';
 export {
   MenuAdapter,
   SelectAdapter,

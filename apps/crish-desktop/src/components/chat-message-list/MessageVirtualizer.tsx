@@ -23,7 +23,7 @@ import {
 } from '../../store/storeAccess';
 import { useUndoWithScrollAnchor } from './useUndoWithScrollAnchor';
 import { FlowScrubber } from './FlowScrubber';
-import { ResizeObserverManager } from '../../services/ResizeObserverManager';
+import { ResizeObserverManager } from '../ui/utils/ResizeObserverManager';
 import { ChatScrollFloorSlot } from './ChatScrollFloorSlot';
 
 import {
@@ -234,21 +234,6 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
       observed.clear();
     };
   }, [handleEntry]);
-
-  // 展开/收起后同帧兜底重测：RO 异步；宿主在 commit 后扫一遍可见 [data-vindex]，经 vs.setActual 触发 actualTick
-  useLayoutEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-    const nodes = container.querySelectorAll('[data-vindex]');
-    nodes.forEach((node) => {
-      if (!(node instanceof HTMLElement)) return;
-      const msgId = node.dataset.vindex;
-      const h = node.offsetHeight;
-      if (msgId != null && h > 0) {
-        setActual(msgId, h);
-      }
-    });
-  });
 
   // 仅在 messages 引用变化时灌入预估高度（依赖 manager 而非整个 vs，避免每次滚动重扫 1500 项）
   useMemo(() => {

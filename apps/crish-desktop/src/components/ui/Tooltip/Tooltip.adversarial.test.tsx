@@ -337,7 +337,7 @@ describe('ui/Tooltip 极限对抗压力与立体验证测试套件', () => {
       expect(document.querySelector('[data-tooltip-portal="true"]')).toBeInTheDocument();
 
       act(() => {
-        window.dispatchEvent(new Event('resize'));
+        window.dispatchEvent(new CustomEvent('app:window-resize-settled'));
       });
       expect(document.querySelector('[data-tooltip-portal="true"]')).toBeNull();
     });

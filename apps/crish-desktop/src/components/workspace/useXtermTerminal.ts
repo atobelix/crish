@@ -16,7 +16,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import { WebglAddon } from '@xterm/addon-webgl';
 import { ptyResize, ptyWrite } from '../../api/ptySessionApi';
 import { parseColorToOklch } from '../../api/oklchColorGuard';
-import { ResizeObserverManager } from '../../services/ResizeObserverManager';
+import { ResizeObserverManager } from '../ui/utils/ResizeObserverManager';
 import { useLayoutAnimationStore } from '../../store/layoutAnimationStore';
 import { logger } from '../../services/LoggerService';
 import type { InteractiveXtermStatus } from './TerminalCard.xterm';

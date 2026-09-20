@@ -15,7 +15,7 @@ import type { MessageToolCall, SessionAgent } from '../../store/types';
 import { buildToolStackHostProps, shouldHostToolStack } from './chatMessageRowUtils';
 import { ReasoningRow } from './ReasoningRow';
 import type { VirtualScrollManager } from '../../api/VirtualScrollManager';
-import { ResizeObserverManager } from '../../services/ResizeObserverManager';
+import { ResizeObserverManager } from '../ui/utils/ResizeObserverManager';
 
 /**
  * 关联子 agent 行渲染器：内嵌 InlineAgentPanel（懒加载保持分包）。
