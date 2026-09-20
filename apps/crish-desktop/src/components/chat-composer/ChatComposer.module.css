@@ -1208,7 +1208,11 @@
 
 /* RL-01 特例：全页空态落地输入焦点边框 */
 .composerCard[data-empty-kind='session-empty']:focus-within {
-  border-color: var(--border-subtle);
+  border-color: color-mix(
+    in srgb,
+    var(--border-subtle) 95%,
+    var(--text-primary) 5%
+  );
   box-shadow:
     0 1px 3px color-mix(in srgb, var(--shadow-color) 1.5%, transparent),
     0 3px 8px -1px color-mix(in srgb, var(--shadow-color) 2%, transparent);

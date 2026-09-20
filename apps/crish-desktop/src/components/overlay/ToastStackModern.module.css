@@ -280,6 +280,12 @@
   background: var(--brand);
 }
 
+/* 顶部锚定：阴影向下发散（单轨收敛：全局浮层默认 top-center） */
+.viewport[data-position^='top'] .toastCard {
+  box-shadow: 0 4px 16px -2px color-mix(in srgb, var(--shadow-color) 6%, transparent),
+              0 2px 6px -1px color-mix(in srgb, var(--shadow-color) 4%, transparent);
+}
+
 /* ==========================================================================
    卡片内部布局与组件元素
    ========================================================================== */

@@ -12,7 +12,6 @@
  */
 
 import type { FileDiff } from '../store/types';
-import type { QueuedMessage } from '../hooks/chat-stream/types';
 import { emitUiEvent } from './uiEvents';
 
 export interface Attachment {
@@ -31,7 +30,6 @@ export interface SessionRuntimeState {
   diffFiles: FileDiff[];
   chatMainSurface: 'chat' | 'scheduled' | null;
   attachments: Attachment[];
-  queuedMessages: QueuedMessage[];
   fileCompareModes: Record<string, 'split' | 'unified'>;
   scrollPosition: number;
   lastActivePanelTab: string | null;
@@ -99,7 +97,6 @@ class SessionRuntimeRegistry {
     if (state) {
       state.diffFiles = [];
       state.attachments = [];
-      state.queuedMessages = [];
       state.fileCompareModes = {};
       state.thinkingTitle = null;
       state.lastSentContextSignature = null;
@@ -187,7 +184,6 @@ class SessionRuntimeRegistry {
       diffFiles: [],
       chatMainSurface: null,
       attachments: [],
-      queuedMessages: [],
       fileCompareModes: {},
       scrollPosition: 0,
       lastActivePanelTab: null,

@@ -106,10 +106,6 @@ function renderChatComposer(opts: {
   onSend?: () => void;
   onPasteImage?: (e: React.ClipboardEvent) => void;
   isProcessing?: boolean;
-  queuedMessages?: ChatComposerProps['queuedMessages'];
-  onEditQueued?: (id: string) => void;
-  onDeleteQueued?: (id: string) => void;
-  onSendQueuedNow?: (id: string) => void;
   initialInput?: string;
 }) {
   const loadSkillSlash = vi.fn();
@@ -166,10 +162,6 @@ function renderChatComposer(opts: {
         setShowPlusMenu={() => {}}
         permissionMode={permission}
         onPermissionChange={setPermission}
-        queuedMessages={opts.queuedMessages}
-        onSendQueuedNow={opts.onSendQueuedNow}
-        onEditQueued={opts.onEditQueued}
-        onDeleteQueued={opts.onDeleteQueued}
       />
     );
   }
@@ -376,30 +368,6 @@ describe('ChatComposer 全链（T6 接线）', () => {
         '--composer-line-height'
       )
     ).toBe('1.45');
-  });
-
-  it('队列面板共存：排队消息展示，编辑/发送/删除回调透传', async () => {
-    const onEditQueued = vi.fn();
-    const onSendQueuedNow = vi.fn();
-    const onDeleteQueued = vi.fn();
-    renderChatComposer({
-      queuedMessages: [
-        { id: 'q1', text: '排队消息甲', attachments: [], createdAt: 0 },
-      ],
-      onEditQueued,
-      onSendQueuedNow,
-      onDeleteQueued,
-    });
-    const panel = await screen.findByRole('region', {
-      name: '排队消息，共 1 条',
-    });
-    expect(panel.textContent).toContain('排队消息甲');
-    fireEvent.click(screen.getByRole('button', { name: '编辑排队消息' }));
-    expect(onEditQueued).toHaveBeenCalledWith('q1');
-    fireEvent.click(screen.getByRole('button', { name: '立即发送' }));
-    expect(onSendQueuedNow).toHaveBeenCalledWith('q1');
-    fireEvent.click(screen.getByRole('button', { name: '删除排队消息' }));
-    expect(onDeleteQueued).toHaveBeenCalledWith('q1');
   });
 
   it('焦点回迁：斜杠点选后编辑器获得焦点（菜单关闭 → 编辑器）', async () => {

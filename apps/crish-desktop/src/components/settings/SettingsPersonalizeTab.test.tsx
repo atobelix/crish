@@ -63,13 +63,13 @@ describe('SettingsPersonalizeTab 写读钥匙', () => {
     getSettingsEx.mockResolvedValue({
       ...DEFAULT_SETTINGS,
       sendShortcut: 'enter',
-      queueMode: false,
+      hideThinkingBlock: false,
     });
     saveSettingsEx.mockImplementation(
       async (_cwd: string, _scope: string, updates: Record<string, unknown>) => ({
         ...DEFAULT_SETTINGS,
         sendShortcut: 'enter',
-        queueMode: false,
+        hideThinkingBlock: false,
         ...updates,
       })
     );
@@ -102,14 +102,14 @@ describe('SettingsPersonalizeTab 写读钥匙', () => {
 
   it('通用开关能拨，失败才 toast', async () => {
     render(<SettingsPersonalizeTab />);
-    const queue = await screen.findByRole('switch', { name: '排队发送模式' });
+    const queue = await screen.findByRole('switch', { name: '默认折叠思考过程' });
     expect(queue).not.toBeDisabled();
     fireEvent.click(queue);
     await waitFor(() => {
       expect(saveSettingsEx).toHaveBeenCalledWith(
         '__global__',
         'global',
-        expect.objectContaining({ queueMode: true })
+        expect.objectContaining({ hideThinkingBlock: true })
       );
     });
     expect(showToast).not.toHaveBeenCalled();

@@ -2,21 +2,15 @@
  * chat-stream 流回调表面层：纯函数 + 命名常量 + 共享钩子参数类型（可单测）。
  *
  * - T-47 run usage 成本估算器选择（4D/2D 回退规则）；
- * - onRunError 分级分发裁决（展示唯一性，通道 E-B）；
  * - DELAY_AFTER_STOP_MS：complete 收口后等待 run usage 快照落定的延迟；
- * - StreamRunNoticeHelpers / StreamRunQueryHelpers：useStreamCallbacks 与
- *   useRunStreamingAssistant 共享的参数面类型（G-03c 拆分后双钩子同形）。
+ * - StreamRunQueryHelpers：useStreamCallbacks 与 useRunStreamingAssistant 共享参数面。
+ *
+ * 单轨收敛（docs/chat-notice-convergence §2.0）：旧 onRunError 四态裁决器
+ * （persistent/bubble/banner/banner-toast）与 StreamRunNoticeHelpers 已整体删除——
+ * 错误展示唯一出口 = SessionRuntimeStatusStore（reportRuntimeStatus 唯一上报）。
  */
-import type { RunNotice, UseChatStreamResult } from './types';
+import type { UseChatStreamResult } from './types';
 import type { FileDiff, SessionAgent } from '../../store/types';
-
-/** useStreamCallbacks 家族共享：notice 助手参数面。 */
-export type StreamRunNoticeHelpers = {
-  pushRunNotice: (notice: RunNotice, ttlMs?: number) => void;
-  dismissRunNotice: () => void;
-  /** 仅清 TTL 横幅，持久条保持显示（发送 / onChunk / onComplete 路径） */
-  dismissTransientRunNotice: () => void;
-};
 
 /** useStreamCallbacks 家族共享：会话查询参数面。 */
 export type StreamRunQueryHelpers = {
@@ -92,48 +86,3 @@ export function pickUsageCostEstimators(
  * 定稿名：禁止与并发面旧建议 `USAGE_SNAPSHOT_SETTLE_MS` 双名并存。
  */
 export const DELAY_AFTER_STOP_MS = 400;
-
-/**
- * 可行动错误 kind（需用户处理：补密钥/改地址/选工作区等）→ 横幅 + 一次性 toast。
- * 对齐 userFacingErrors.SoftFailureKind 分类；network/ended 不在此列。
- */
-const ACTIONABLE_ERROR_KINDS: ReadonlySet<string> = new Set([
-  'blocked',
-  'auth',
-  'no_key',
-  'no_project',
-]);
-
-export type RunErrorSurface =
-  /** network/恢复类：仅输入框上方持久条（无 TTL、恢复即消失），不进 toast、不写气泡 */
-  | 'persistent'
-  /** 有正文的失败：仅气泡错误卡（不弹横幅、不弹 toast） */
-  | 'bubble'
-  /** 无正文的失败：仅横幅（14s TTL），无 toast */
-  | 'banner'
-  /** 可行动错误：横幅 + 一次性 toast */
-  | 'banner-toast';
-
-/** 是否可行动错误 kind（blocked / auth / no_key / no_project）。 */
-export function isActionableErrorKind(
-  kind: string | undefined | null
-): boolean {
-  return kind != null && ACTIONABLE_ERROR_KINDS.has(kind);
-}
-
-/**
- * onRunError 分级分发裁决（展示唯一性，通道 E-B）：
- * - network/恢复类 → 持久条（无论是否有正文，错误不写气泡）；
- * - 可行动错误 → 横幅 + toast（有正文时气泡 errorDetail 一并保留，由调用方处理）；
- * - 其余有正文 → 仅气泡错误卡；
- * - 其余无正文 → 仅横幅。
- */
-export function resolveRunErrorSurface(
-  kind: string | undefined | null,
-  hadText: boolean
-): RunErrorSurface {
-  if (kind === 'network') return 'persistent';
-  if (isActionableErrorKind(kind)) return 'banner-toast';
-  if (hadText) return 'bubble';
-  return 'banner';
-}

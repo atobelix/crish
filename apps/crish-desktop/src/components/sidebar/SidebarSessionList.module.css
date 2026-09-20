@@ -317,7 +317,7 @@
   border-radius: var(--radius-lg);
   padding: 0 var(--space-1) 0 var(--space-8);
   font-size: var(--font-size-base);
-  color: color-mix(in srgb, var(--text-secondary) 65%, var(--text-tertiary) 35%);
+  color: var(--text-secondary);
   background: transparent;
   border: none;
   font-weight: var(--font-weight-medium, 500);
@@ -354,6 +354,10 @@
   color: var(--text-primary);
   font-weight: var(--font-weight-medium, 500);
   box-shadow: none;
+}
+
+.sessionItem.active .sessionTime {
+  color: var(--text-secondary);
 }
 
 .sessionItem:focus-visible {
@@ -469,7 +473,7 @@
   font-weight: var(--font-weight-normal, 400);
   font-variant-numeric: tabular-nums;
   font-feature-settings: 'tnum' 1;
-  color: var(--text-faint);
+  color: var(--text-tertiary);
   flex-shrink: 0;
   white-space: nowrap;
   max-width: 60px;

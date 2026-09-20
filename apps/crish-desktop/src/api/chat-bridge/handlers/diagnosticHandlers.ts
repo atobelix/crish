@@ -8,8 +8,7 @@ import { surfaceStreamFailure } from '../BridgeErrorPolicy';
 import { logInternalError } from '../../userFacingErrors';
 import type { EngineEnvelope } from './eventParser';
 import type { HandlerEnv } from './handlerEnv';
-import { useContinuityUiStore } from '../../continuity/continuityUiStore';
-import { useEphemeralChatStore } from '../../../store/ephemeralChatStore';
+import { reportRuntimeStatus } from '../../../store/sessionRuntimeStatusStore';
 
 export function onProviderDiagnostic(
   _env: HandlerEnv,
@@ -25,28 +24,28 @@ export function onProviderDiagnostic(
   ).trim();
   if (!sessionId || !diag) return;
 
-  if (diag.phase === 'retry') {
-    const attempt =
-      typeof diag.attempt === 'number' ? diag.attempt : Number(diag.attempt);
-    if (Number.isFinite(attempt) && attempt > 0) {
-      const maxAttempts =
-        typeof diag.maxAttempts === 'number' ? diag.maxAttempts : undefined;
-      useContinuityUiStore
-        .getState()
-        .applyRetryNotice(sessionId, attempt, maxAttempts);
+  if (diag.phase !== 'retry') return;
 
-      const rawDelay = (diag as unknown as Record<string, unknown> | undefined)?.delayMs;
-      const delayMs = typeof rawDelay === 'number' ? rawDelay : 3000;
-      useEphemeralChatStore.getState().updateRetryProgress(sessionId, {
-        attempt,
-        maxAttempts: maxAttempts ?? 3,
-        nextRetryTimestamp: Date.now() + delayMs,
-        backoffMs: delayMs,
-        reasonText: (diag as { message?: string })?.message || '网络连接抖动，正在自动重试',
-        rawDiagnostic: diag,
-      });
-    }
-  }
+  const attempt =
+    typeof diag.attempt === 'number' ? diag.attempt : Number(diag.attempt);
+  if (!Number.isFinite(attempt) || attempt <= 0) return;
+
+  const maxAttempts =
+    typeof diag.maxAttempts === 'number' && diag.maxAttempts > 0
+      ? diag.maxAttempts
+      : undefined;
+  const errorKind =
+    typeof diag.errorKind === 'string' && diag.errorKind
+      ? diag.errorKind
+      : undefined;
+
+  // 单轨收敛（docs/chat-notice-convergence §2.0）：唯一上报入口，只投影 retrying 相位。
+  // 引擎 ProviderDiagnostic 的 reason 是分类 Debug 字串、且不下发倒计时——两者都不进 UI 文案。
+  reportRuntimeStatus({
+    type: 'retrying',
+    sessionId,
+    retry: { attempt, maxAttempts, errorKind },
+  });
 }
 
 export function onRuntimeError(

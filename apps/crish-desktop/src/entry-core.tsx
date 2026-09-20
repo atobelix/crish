@@ -385,30 +385,30 @@ export class StartupCoordinator {
     if (rootElement) {
       rootElement.innerHTML = `
         <div style="display:flex;height:100vh;width:100vw;align-items:center;justify-content:center;
-                    background-color:var(--bg-primary, hsl(240 6% 10%));
-                    color:var(--text-primary, hsl(0 0% 100%));
+                    background-color:var(--bg-primary);
+                    color:var(--text-primary);
                     font-family:var(--font-sans, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
                     padding:var(--space-6, 24px);box-sizing:border-box;text-align:center;user-select:none;">
           <div style="max-width:420px;padding:var(--space-8, 32px);
-                      background:var(--bg-secondary, hsl(240 5% 16%));
-                      border:1px solid var(--border-color, hsl(240 4% 24%));
+                      background:var(--bg-secondary);
+                      border:1px solid var(--border-color);
                       border-radius:var(--radius-lg, 8px);
-                      box-shadow:var(--shadow-lg, 0 10px 15px -3px hsl(0 0% 0% / 0.3));">
+                      box-shadow:var(--shadow-lg);">
             <div style="width:36px;height:36px;margin:0 auto var(--space-4, 16px);
-                        border:2px solid var(--text-secondary, hsl(240 5% 65%));
+                        border:2px solid var(--text-secondary);
                         border-radius:50%;display:flex;align-items:center;justify-content:center;
-                        font-size:18px;font-weight:700;color:var(--text-secondary, hsl(240 5% 65%));">!</div>
-            <h2 style="margin:0 0 var(--space-3, 12px);font-weight:600;font-size:18px;color:var(--text-primary, hsl(0 0% 100%));">
+                        font-size:18px;font-weight:700;color:var(--text-secondary);">!</div>
+            <h2 style="margin:0 0 var(--space-3, 12px);font-weight:600;font-size:18px;color:var(--text-primary);">
               应用核心启动失败
             </h2>
-            <p style="margin:0 0 var(--space-5, 20px);font-size:14px;color:var(--text-secondary, hsl(240 5% 65%));line-height:1.5;">
+            <p style="margin:0 0 var(--space-5, 20px);font-size:14px;color:var(--text-secondary);line-height:1.5;">
               界面装配层在初始化时遭遇未捕获异常。本地数据完整，请尝试重新加载。
             </p>
             <button onclick="window.location.reload()"
                     style="padding:var(--space-2, 8px) var(--space-5, 20px);font-size:13px;font-weight:500;
                            border:none;border-radius:var(--radius-md, 4px);
-                           background-color:var(--brand-primary, hsl(217 91% 60%));
-                           color:var(--text-on-primary, hsl(0 0% 100%));
+                           background-color:var(--brand-primary);
+                           color:var(--text-on-accent);
                            cursor:pointer;">
               重新加载
             </button>

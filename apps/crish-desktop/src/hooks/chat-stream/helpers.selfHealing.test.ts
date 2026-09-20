@@ -64,7 +64,9 @@ describe('helpers.ts - 对话流自愈与死锁根除断言 (Self-Healing & Anti
     const queuedMsg = session?.messages.find((m) => m.id === 'asst-queued');
 
     expect(staleMsg?.status).toBe('error');
-    expect(staleMsg?.errorDetail?.message).toBe('上一轮生成异常中断');
+    // 单轨收敛：自愈不再写 errorDetail 气泡错误卡（partial 文本保留即可）
+    expect(staleMsg?.text).toBe('部分生成的内容...');
+    expect(staleMsg?.errorDetail).toBeUndefined();
     expect(queuedMsg?.status).toBe('completed');
   });
 

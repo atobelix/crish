@@ -125,15 +125,13 @@ describe('ToastStore & toast 命令式门面单元测试', () => {
     toast.error('错误 1');
     toast.error('错误 2');
     toast.error('错误 3');
-    toast.error('错误 4');
-    toast.error('错误 5');
-    expect(ToastStore.getToasts()).toHaveLength(5);
+    expect(ToastStore.getToasts()).toHaveLength(3);
 
-    // 第 6 条入队，最旧的「错误 1」应被淘汰
-    toast.error('错误 6');
+    // 第 4 条入队，最旧的「错误 1」应被淘汰
+    toast.error('错误 4');
     const list = ToastStore.getToasts();
-    expect(list).toHaveLength(5);
-    expect(list[0]?.message).toBe('错误 6');
+    expect(list).toHaveLength(3);
+    expect(list[0]?.message).toBe('错误 4');
     expect(list.some((t) => t.message === '错误 1')).toBe(false);
   });
 

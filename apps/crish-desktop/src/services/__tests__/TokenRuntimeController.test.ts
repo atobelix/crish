@@ -285,5 +285,47 @@ describe('TokenRuntimeController 全仓单一运行时 Token 注入控制器测�
       expect(result.preferences).toEqual(DEFAULT_PERSONALIZATION);
     });
   });
+
+  describe('8. 文字层级与滚动条 Token 主题色融合', () => {
+    it('在落樱微风 (sakura) 皮肤下动态派生融入主题色的字色与滚动条', () => {
+      const result = applyTokens(
+        {
+          skin: 'sakura',
+          fontSizeAdjust: 0,
+          themeBrightnessAdjust: 0,
+        },
+        'default'
+      );
+
+      expect(result.tokens['--text-primary']).toBe('#3c1642');
+      expect(result.tokens['--text-secondary']).toBe('#7a528a');
+      expect(result.tokens['--text-tertiary']).toContain('color-mix(');
+      expect(result.tokens['--text-faint']).toContain('color-mix(');
+      expect(result.tokens['--scrollbar-thumb-bg']).toContain('color-mix(');
+      expect(result.tokens['--scrollbar-thumb-active']).toContain('color-mix(');
+
+      const root = document.documentElement;
+      expect(root.style.getPropertyValue('--text-faint')).toContain('color-mix(');
+      expect(root.style.getPropertyValue('--scrollbar-thumb-bg')).toContain('color-mix(');
+      expect(root.style.getPropertyValue('--scrollbar-button-up')).toContain('data:image/svg+xml');
+      expect(root.style.getPropertyValue('--scrollbar-button-down')).toContain('data:image/svg+xml');
+    });
+
+    it('在冰川薄荷 (glacier) 皮肤下应用 #e9fcf9 柔和主题底色并动态生成滚动条微调按钮', () => {
+      const result = applyTokens(
+        {
+          skin: 'glacier',
+          fontSizeAdjust: 0,
+          themeBrightnessAdjust: 0,
+        },
+        'default'
+      );
+
+      expect(result.tokens['--surface-chrome']).toBe('#e9fcf9');
+      expect(result.tokens['--shell-chrome-bg']).toContain('#e9fcf9');
+      expect(result.tokens['--scrollbar-button-up']).toContain('data:image/svg+xml');
+      expect(result.tokens['--scrollbar-button-down-active']).toContain('data:image/svg+xml');
+    });
+  });
 });
 

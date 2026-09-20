@@ -17,14 +17,13 @@ import {
   formatContextStateDisplayText,
 } from './contextStateUtils';
 import { WorkingStatusIndicator } from '../chat-message-row/WorkingStatusIndicator';
-import { ModelRetryNode } from '../chat-message-row/ModelRetryNode';
-import { TurnErrorNode } from '../chat-message-row/TurnErrorNode';
+import { InFlowStatusLine } from '../chat-message-row/InFlowStatusLine';
 import { FoldableProcessSection } from './FoldableProcessSection';
 import {
   subscribeMessageProcessExpansion,
   setMessageProcessExpanded,
 } from './searchExpandBridge';
-import { useEphemeralChatStore } from '../../store/ephemeralChatStore';
+import { useSessionRuntimeStatusStore } from '../../store/sessionRuntimeStatusStore';
 import { useSessionStore } from '../../store/sessionStore';
 
 import { ProcessItemRenderer } from './ProcessItemRenderer';
@@ -88,7 +87,8 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
     const thoughtDefaultOpen = !hideThinkingBlock;
 
     const sessionId = useSessionStore((s) => s.activeSessionId) || '';
-    const ephemeralStatus = useEphemeralChatStore(
+    // 单轨收敛 §2.2：运行时状态机 retrying 相位（唯一数据源）
+    const runtimeStatus = useSessionRuntimeStatusStore(
       useCallback((s) => s.statusBySession[sessionId], [sessionId])
     );
 
@@ -115,49 +115,20 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
       !hasToolContent
     );
 
+    // 单轨收敛 §2.2：瞬态状态行仅在「本轮活跃 + retrying 相位」出现
     const inFlowRetry =
-      (isThinkingMsg || msg.status === 'processing')
-        ? ephemeralStatus?.retryState
+      (isThinkingMsg || msg.status === 'processing') &&
+      runtimeStatus?.phase === 'retrying'
+        ? runtimeStatus.retry
         : undefined;
-    const isErrorMsg = msg.status === 'error';
-    const errorDetail = msg.errorDetail;
-
-    const handleRetryNow = useCallback(() => {
-      if (sessionId) {
-        useEphemeralChatStore.getState().clearEphemeralStatus(sessionId);
-      }
-    }, [sessionId]);
-
-    const handleCancelRetry = useCallback(() => {
-      if (sessionId) {
-        useEphemeralChatStore.getState().clearEphemeralStatus(sessionId);
-      }
-    }, [sessionId]);
-
-    const handleRetryTurn = useCallback(() => {
-      if (!sessionId) return;
-      useEphemeralChatStore.getState().clearEphemeralStatus(sessionId);
-      const currentSession = useSessionStore.getState().sessionsById[sessionId];
-      const msgs = currentSession?.messages || [];
-      const thisIdx = msgs.findIndex((m) => m.id === msg.id);
-      let promptText = '';
-      if (thisIdx > 0) {
-        for (let i = thisIdx - 1; i >= 0; i--) {
-          if (msgs[i]?.sender === 'user') {
-            promptText = msgs[i]?.text || '';
-            break;
-          }
-        }
-      }
-      if (!promptText && ephemeralStatus?.retryContext?.promptText) {
-        promptText = ephemeralStatus.retryContext.promptText;
-      }
-      if (promptText) {
-        void import('../../app/compositionRoot').then(({ getCompositionRoot }) => {
-          void getCompositionRoot().session.getState().setComposerDraft(sessionId, promptText);
-        });
-      }
-    }, [sessionId, msg.id, ephemeralStatus]);
+    // 单轨收敛 §2.3：有正文的失败轮次状态为 error——流内只留一行事实标记
+    //（无按钮、无详情；行动入口唯一在 ComposerErrorBar）。零正文失败已被 withdraw，不会到这里。
+    const interruptedMark =
+      msg.status === 'error' ? (
+        <div className={styles.interruptedMark} data-testid="turn-interrupted-mark">
+          回复中断
+        </div>
+      ) : null;
 
     // timeline 签名缓存
     const timelineCacheRef = useRef<{
@@ -353,23 +324,19 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
     }, [linearItems]);
 
     /**
-     * 顶部常驻指示器的去重闸门。
+     * 顶层常驻指示器的去重闸门（单一真理源 SSOT）。
      *
-     * 当尾部活跃过程段已自带「工作工作时间区」（`isLive && showWorkTime`）时，
-     * 顶部再挂一个跳秒指示器即构成**双计时器噪音**——同一耗时被两处重复表达。
-     * 此时顶部指示器让位给分段胶囊（分段胶囊的语义更精准：它是该阶段自身的耗时）。
+     * 当时间线内已有实体分段处于活跃执行态（如单思考行、工具控制栏、或正文流式中）时，
+     * 运行态已由时间线原生节点权威呈现，顶层指示器必须绝对让位静默，杜绝双状态栏与双计时器噪音。
      */
-    const hasLiveProcessTimer = segments.some(
-      (seg) =>
-        seg.kind === 'process_section' &&
-        seg.isLive &&
-        seg.showWorkTime &&
-        !(
-          seg.metrics.thoughtCount > 0 &&
-          seg.metrics.toolCount === 0 &&
-          seg.metrics.subagentCount === 0
-        )
-    );
+    const hasLiveProcessIndicator =
+      segments.some(
+        (seg) =>
+          (seg.kind === 'process_section' && seg.isLive) ||
+          (seg.kind === 'text_narrative' && seg.isStreaming)
+      ) ||
+      streaming ||
+      Boolean(displayMsg.thinkingTurns?.some((tt) => tt.isStreaming));
 
     /**
      * 流式注入面收窄（D7.2 / FE-INV-6）：
@@ -438,22 +405,7 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
             <div className={styles.topProcessHeader} data-testid="top-live-header">
               <WorkingStatusIndicator startTime={msg.timestamp} mode="initial" />
             </div>
-          </div>
-        );
-      }
-      if (isErrorMsg) {
-        return (
-          <div className={`${styles.contentText} ${className || ''}`}>
-            <TurnErrorNode
-              kind={(errorDetail?.kind as any) || ephemeralStatus?.kind}
-              message={errorDetail?.message || ephemeralStatus?.message}
-              technicalDetail={
-                errorDetail?.technical ||
-                ((errorDetail as Record<string, unknown> | undefined)?.detail as string | undefined) ||
-                ephemeralStatus?.technicalDetail
-              }
-              onRetryTurn={handleRetryTurn}
-            />
+            {inFlowRetry && <InFlowStatusLine retry={inFlowRetry} />}
           </div>
         );
       }
@@ -470,25 +422,8 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
             priority={msg.status === 'processing' ? Priority.Normal : Priority.High}
             messageId={msg.id}
           />
-          {inFlowRetry && (
-            <ModelRetryNode
-              retryState={inFlowRetry}
-              onRetryNow={handleRetryNow}
-              onCancel={handleCancelRetry}
-            />
-          )}
-          {isErrorMsg && (
-            <TurnErrorNode
-              kind={(errorDetail?.kind as any) || ephemeralStatus?.kind}
-              message={errorDetail?.message || ephemeralStatus?.message}
-              technicalDetail={
-                errorDetail?.technical ||
-                ((errorDetail as Record<string, unknown> | undefined)?.detail as string | undefined) ||
-                ephemeralStatus?.technicalDetail
-              }
-              onRetryTurn={handleRetryTurn}
-            />
-          )}
+          {inFlowRetry && <InFlowStatusLine retry={inFlowRetry} />}
+          {interruptedMark}
         </div>
       );
     }
@@ -497,8 +432,8 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
     let textCursor = 0;
     return (
       <div className={`${styles.assistantTimelineStream} ${className || ''}`}>
-        {/* 顶层常驻态（生成中）：活动过程段已有工作时间区时让位，杜绝双计时器 */}
-        {isLiveTurn && !hasLiveProcessTimer && (
+        {/* 顶层常驻态（生成中）：时间线内已有任何活跃过程节点时让位，杜绝双状态栏 */}
+        {isLiveTurn && !hasLiveProcessIndicator && (
           <div className={styles.topProcessHeader} data-testid="top-live-header">
             <WorkingStatusIndicator startTime={msg.timestamp} mode="initial" />
           </div>
@@ -598,25 +533,8 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
           </div>
         )}
 
-        {inFlowRetry && (
-          <ModelRetryNode
-            retryState={inFlowRetry}
-            onRetryNow={handleRetryNow}
-            onCancel={handleCancelRetry}
-          />
-        )}
-        {isErrorMsg && (
-          <TurnErrorNode
-            kind={(errorDetail?.kind as any) || ephemeralStatus?.kind}
-            message={errorDetail?.message || ephemeralStatus?.message}
-            technicalDetail={
-              errorDetail?.technical ||
-              ((errorDetail as Record<string, unknown> | undefined)?.detail as string | undefined) ||
-              ephemeralStatus?.technicalDetail
-            }
-            onRetryTurn={handleRetryTurn}
-          />
-        )}
+        {inFlowRetry && <InFlowStatusLine retry={inFlowRetry} />}
+        {interruptedMark}
       </div>
     );
   }

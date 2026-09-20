@@ -151,13 +151,15 @@ export const ReasoningRow: React.FC<ReasoningRowProps> = ({
     return null;
   }, [durationMs]);
 
-  // 动态摘要计算：流式态 512B 尾窗提取，终态 512B 首行提取
+  // 动态摘要计算：仅在单行收拢模式（!isExpanded）下作为预览计算与展示；
+  // 展开阅读模式下，正文在下方完整直出，头部作为纯净标题栏，不计算也不展示摘要，彻底阻断内容双份复读
   const displaySummary = useMemo(() => {
+    if (isExpanded) return '';
     if (isLive) {
       return extractLatestLine(content);
     }
     return extractFirstLine(content);
-  }, [content, isLive]);
+  }, [content, isLive, isExpanded]);
 
   return (
     <div
@@ -184,28 +186,23 @@ export const ReasoningRow: React.FC<ReasoningRowProps> = ({
           <>
             <span className={styles.statusDot} aria-hidden data-testid="status-dot" />
             <span className={styles.reasoningLabel}>思考中</span>
+          </>
+        ) : (
+          <span className={styles.durationBadge}>
+            {durationText || '已思考'}
+          </span>
+        )}
+
+        {displaySummary ? (
+          <>
             <span className={styles.dotSeparator} aria-hidden>·</span>
             <span className={styles.reasoningSummary} data-follow-end="true">
-              <span className={`${styles.summaryText} ${styles.sweepShine}`}>
-                {displaySummary || '思考中…'}
+              <span className={`${styles.summaryText} ${isLive ? styles.sweepShine : ''}`}>
+                {displaySummary}
               </span>
             </span>
           </>
-        ) : (
-          <>
-            <span className={styles.durationBadge}>
-              {durationText || '已思考'}
-            </span>
-            {!isExpanded && displaySummary ? (
-              <>
-                <span className={styles.dotSeparator} aria-hidden>·</span>
-                <span className={styles.reasoningSummary}>
-                  <span className={styles.summaryText}>{displaySummary}</span>
-                </span>
-              </>
-            ) : null}
-          </>
-        )}
+        ) : null}
 
         <span
           className={`${styles.chevron} ${isExpanded ? styles.isOpen : ''}`}

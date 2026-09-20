@@ -13,7 +13,7 @@ import { useStreamingStore } from './streamingStore';
 import { clearMessageSnapshots } from './messageSnapshotsBridge';
 import { useTerminalStore } from './terminalStore';
 import { getShellReadApi } from './workspace-shell/shellReadBridge';
-import { useEphemeralChatStore } from './ephemeralChatStore';
+import { clearRuntimeStatus } from './sessionRuntimeStatusStore';
 import { clearWorkflowConfirmSignaturesForSession } from '../api/workflow-api/workflowConfirmSignatures';
 
 export const SessionCoordinator = {
@@ -42,8 +42,8 @@ export const SessionCoordinator = {
     // 4. 清理 terminalStore 中的终端绑定与会话关联
     useTerminalStore.getState().removePtySession(id);
 
-    // 5. 清理 ephemeralChatStore 中的内存瞬态状态，杜绝内存泄漏
-    useEphemeralChatStore.getState().clearEphemeralStatus(id);
+    // 5. 清理运行时状态机中的内存瞬态状态，杜绝内存泄漏（单轨收敛 §2.0）
+    clearRuntimeStatus(id);
 
     // 6. §5.3：清理 WorkflowConfirm 按会话分桶的确认签名
     clearWorkflowConfirmSignaturesForSession(id);

@@ -23,8 +23,6 @@ export interface UseChatSendResult {
   canSend: boolean;
   showPlusMenu: boolean;
   setShowPlusMenu: React.Dispatch<React.SetStateAction<boolean>>;
-  runNotice: ReturnType<typeof useChatStream>['runNotice'];
-  setRunNotice: ReturnType<typeof useChatStream>['setRunNotice'];
   runStreamingAssistant: ReturnType<typeof useChatStream>['runStreamingAssistant'];
   handleSendChat: ReturnType<typeof useChatStream>['handleSendChat'];
   handleStopGeneration: ReturnType<typeof useChatStream>['handleStopGeneration'];
@@ -37,8 +35,6 @@ export function useChatSend(
   const [showPlusMenu, setShowPlusMenu] = useState(false);
 
   const {
-    runNotice,
-    setRunNotice,
     runStreamingAssistant,
     handleSendChat,
     handleStopGeneration,
@@ -66,8 +62,6 @@ export function useChatSend(
     canSend,
     showPlusMenu,
     setShowPlusMenu,
-    runNotice,
-    setRunNotice,
     runStreamingAssistant,
     handleSendChat,
     handleStopGeneration,

@@ -17,7 +17,8 @@ export const ToastContainer: React.FC<ToastContainerProps> = ({
   toasts,
   onDismiss,
   containerId = 'toast-root',
-  position = 'bottom-right',
+  // 单轨收敛（docs/chat-notice-convergence Step 1）：全局通知默认顶部居中
+  position = 'top-center',
 }) => {
   if (typeof document === 'undefined') return null;
   const root = document.getElementById(containerId) ?? document.body;

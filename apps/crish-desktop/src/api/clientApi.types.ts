@@ -117,8 +117,6 @@ export interface Settings {
   shortcuts?: Record<string, string>;
   /** 优先合并工具标签页（与 layoutStore.tabModeEnabled 双写） */
   tabModeEnabled?: boolean;
-  /** 排队发送模式：AI 回复中时，新消息进入队列而不是直接插入对话 */
-  queueMode?: boolean;
   /**
    * MCP 工具禁用表：serverId → toolName[]。
    * 写入本机设置；run-task 时下发给引擎，过滤不注入的 MCP 工具。

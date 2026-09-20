@@ -16,12 +16,9 @@ import {
   resolveGoalRibbonAriaLabel,
   resolvePlanModeAriaLabel,
   resolvePlanModeTitle,
-  resolveRunNoticeAriaLabel,
-  resolveRunNoticeAriaLive,
   resolveSetupHintAction,
   resolveSyncEngineSoftHintText,
   shouldRenderApprovalDock,
-  shouldRenderRunNotice,
   shouldShowPlanApproveAction,
   type SetupHintKind,
 } from './chatStatusRibbonsLib';
@@ -219,31 +216,6 @@ describe('engine-down vs key-setup copy', () => {
       expect(a.label.trim().length).toBeGreaterThan(0);
       expect(a.ariaLabel.trim().length).toBeGreaterThan(0);
     }
-  });
-});
-
-describe('shouldRenderRunNotice / run-notice a11y', () => {
-  it('suppresses null and blank text (no ghost notice)', () => {
-    expect(shouldRenderRunNotice(null)).toBe(false);
-    expect(shouldRenderRunNotice(undefined)).toBe(false);
-    expect(shouldRenderRunNotice({ text: '' })).toBe(false);
-    expect(shouldRenderRunNotice({ text: '   ' })).toBe(false);
-  });
-
-  it('renders non-empty text', () => {
-    expect(shouldRenderRunNotice({ text: '空回复' })).toBe(true);
-    expect(shouldRenderRunNotice({ text: ' 有内容 ', kind: 'empty' })).toBe(
-      true,
-    );
-  });
-
-  it('builds spoken aria and urgency by kind', () => {
-    expect(resolveRunNoticeAriaLabel('网络中断')).toBe('系统提示：网络中断');
-    expect(resolveRunNoticeAriaLabel('  ')).toBe('系统提示');
-    expect(resolveRunNoticeAriaLive('error')).toBe('assertive');
-    expect(resolveRunNoticeAriaLive('fail')).toBe('assertive');
-    expect(resolveRunNoticeAriaLive('empty')).toBe('polite');
-    expect(resolveRunNoticeAriaLive(undefined)).toBe('polite');
   });
 });
 

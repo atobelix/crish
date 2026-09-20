@@ -96,8 +96,6 @@ describe('streamExecutionHelper', () => {
 
   describe('executeStreamCompletion', () => {
     it('executes full completion lifecycle safely', () => {
-      const pushRunNotice = vi.fn();
-      const dismissTransientRunNotice = vi.fn();
       const scheduleRunFinalHtml = vi.fn();
       const flushStreamBatchers = vi.fn();
       const generationMapRef = { current: new Map([['sess-1', 1]]) };
@@ -115,8 +113,6 @@ describe('streamExecutionHelper', () => {
         localRunId: 'run-1',
         gotRealText: true,
         runEndedWithNetworkError: false,
-        pushRunNotice,
-        dismissTransientRunNotice,
         scheduleRunFinalHtml,
         thinkingBatcher: null,
         flushStreamBatchers,
@@ -127,7 +123,6 @@ describe('streamExecutionHelper', () => {
       });
 
       expect(flushStreamBatchers).toHaveBeenCalled();
-      expect(dismissTransientRunNotice).toHaveBeenCalled();
       expect(generationMapRef.current.has('sess-1')).toBe(false);
       expect(state.runClosed).toBe(true);
       expect(state.draining).toBe(false);

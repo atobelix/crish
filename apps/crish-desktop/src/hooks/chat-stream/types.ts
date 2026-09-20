@@ -34,14 +34,6 @@ export interface QueuedMessage {
   createdAt: number;
 }
 
-export type RunNotice = {
-  text: string;
-  kind?: string | undefined;
-  detail?: string | undefined;
-  /** 持久条变体：无 TTL 计时，由外部 dismiss 驱动（恢复即消失）；network/恢复类错误专用 */
-  persistent?: boolean | undefined;
-};
-
 export interface UseChatStreamOptions {
   wsId: string;
   handleGlobalTabClick: (cardId: string) => void;
@@ -58,8 +50,6 @@ export interface UseChatStreamOptions {
 }
 
 export interface UseChatStreamResult {
-  runNotice: RunNotice | null;
-  setRunNotice: Dispatch<SetStateAction<RunNotice | null>>;
   runStreamingAssistant: (
     input: string,
     userMsgId: string,

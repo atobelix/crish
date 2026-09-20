@@ -6,7 +6,7 @@ import { onUiEvent } from '../../api/uiEvents';
 import { generateMessageId } from '../../utils/generateMessageId';
 import { getTransport } from '../../api/transport';
 import { backfillFromBoundaryText } from '../../hooks/chat-stream/slashSendDraftManager';
-import { useEphemeralChatStore } from '../../store/ephemeralChatStore';
+import { clearRuntimeStatus } from '../../store/sessionRuntimeStatusStore';
 import type { ChatAttachment } from '../../hooks/useChatStream';
 
 export interface UseChatHandlersOptions {
@@ -184,33 +184,46 @@ export function useChatHandlers({
     [activeSessionId, handleStopGeneration, wsId, handleSendChat]
   );
 
-  const handleRegenerate = useCallback(
-    (userText: string, assistantMsgId: string) => {
-      if (!activeSessionId) return;
-
+  /**
+   * 原位重跑一轮（regenerate 核心，行动作栏与 ComposerErrorBar「重试」共用）：
+   * - 撤回目标 assistant 节点（及其后续）；
+   * - 复用 user 消息位：优先按显式 userMsgId 定位，否则取最后一条 user；
+   * - 提问文本按 id 现查（用户编辑过消息也不会重发旧内容），仅当消息缺失时回落 fallbackText。
+   */
+  const regenerateTurn = useCallback(
+    (opts: {
+      sessionId: string;
+      assistantMsgId: string;
+      userMsgId?: string;
+      fallbackText?: string;
+    }) => {
+      const { sessionId, assistantMsgId } = opts;
       const now = Date.now();
-      const lastTime = lastRetryTimeRef.current[activeSessionId] || 0;
+      const lastTime = lastRetryTimeRef.current[sessionId] || 0;
       if (now - lastTime < 1500) {
-        console.warn(
-          '[handleRegenerate] clicks too fast, throttling duplicate submit'
-        );
+        console.warn('[regenerateTurn] clicks too fast, throttling duplicate submit');
         return;
       }
-      lastRetryTimeRef.current[activeSessionId] = now;
+      lastRetryTimeRef.current[sessionId] = now;
 
       handleStopGeneration();
       const session = getCompositionRoot().session.getState();
-      session.withdrawMessage(wsId, activeSessionId, assistantMsgId);
+      const msgs = session.sessionsById[sessionId]?.messages || [];
+      const targetUser =
+        (opts.userMsgId && msgs.find((m) => m.id === opts.userMsgId && m.sender === 'user')) ||
+        msgs.findLast((m) => m.sender === 'user');
+      const userText = (targetUser?.text || opts.fallbackText || '').trim();
+      if (!userText) return;
 
-      // 重试时原子清空瞬态错误提示
-      useEphemeralChatStore.getState().clearEphemeralStatus(activeSessionId);
+      session.withdrawMessage(wsId, sessionId, assistantMsgId);
+      // 重试时原子清空运行时状态（单轨收敛 §2.0）
+      clearRuntimeStatus(sessionId);
 
-      const msgs = session.sessionsById[activeSessionId]?.messages || [];
-      let userMsgId = msgs.findLast((m) => m.sender === 'user')?.id;
+      let userMsgId = targetUser?.id;
       if (!userMsgId) {
         // 发送前固定 clientMessageId
         userMsgId = generateMessageId('user');
-        session.addMessage(wsId, activeSessionId, {
+        session.addMessage(wsId, sessionId, {
           id: userMsgId,
           sender: 'user',
           text: userText,
@@ -218,19 +231,35 @@ export function useChatHandlers({
           status: 'processing',
         });
       } else {
-        session.setSessionMessageStatus(
-          activeSessionId,
-          userMsgId,
-          'processing'
-        );
+        session.setSessionMessageStatus(sessionId, userMsgId, 'processing');
       }
       // 透传用户 clientMessageId；助手 id 在 runStreamingAssistant 内 mint 并经 run-task 下发
-      runStreamingAssistant(userText, userMsgId, activeSessionId, {
+      runStreamingAssistant(userText, userMsgId, sessionId, {
         clientMessageId: userMsgId,
       });
     },
-    [handleStopGeneration, wsId, activeSessionId, runStreamingAssistant]
+    [handleStopGeneration, wsId, runStreamingAssistant]
   );
+
+  const handleRegenerate = useCallback(
+    (userText: string, assistantMsgId: string) => {
+      if (!activeSessionId) return;
+      regenerateTurn({
+        sessionId: activeSessionId,
+        assistantMsgId,
+        fallbackText: userText,
+      });
+    },
+    [activeSessionId, regenerateTurn]
+  );
+
+  // ComposerErrorBar「重试」（单轨收敛 §2.3）：复用原消息位重发当轮，严禁新建用户消息
+  useEffect(() => {
+    return onUiEvent('retry-failed-turn', ({ sessionId, userMsgId, assistantMsgId }) => {
+      if (!sessionId || !assistantMsgId) return;
+      regenerateTurn({ sessionId, assistantMsgId, userMsgId });
+    });
+  }, [regenerateTurn]);
 
   const handleBranch = useCallback(() => {
     if (!activeSessionId) return;

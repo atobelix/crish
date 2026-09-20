@@ -193,7 +193,9 @@ describe('MessageContent 零闪烁与平滑降级断言', () => {
     expect(container.textContent).not.toBe('准备读取文件...读取结果：');
   });
 
-  it('当 msg.status === "error" 且 timeline 为空时渲染错误提示卡片', () => {
+  // 单轨收敛（docs/chat-notice-convergence §2.3）：对话流内不再挂载错误卡（文案 / 详情 / 按钮），
+  // 终态错误唯一行动入口为 ComposerErrorBar；有正文的失败轮次只在流内留一行「回复中断」事实标记。
+  it('当 msg.status === "error" 且零正文时，对话流内既无错误卡也无标记（零正文失败已被 withdraw）', () => {
     const errorMsg: SessionMessage = {
       id: 'err-msg-1',
       sender: 'assistant',
@@ -202,17 +204,14 @@ describe('MessageContent 零闪烁与平滑降级断言', () => {
       errorDetail: { message: '后端请求超时，请重试' },
     };
 
-    const { container } = render(
-      <MessageContent msg={errorMsg} />
-    );
+    const { container } = render(<MessageContent msg={errorMsg} />);
 
-    // 对话流内生韧性：错误通过 TurnErrorNode 挂载在流内
-    expect(container.querySelector('[data-testid="turn-error-node"]')).not.toBeNull();
-    expect(container.textContent).toContain('后端请求超时');
+    expect(container.querySelector('[data-testid="turn-error-node"]')).toBeNull();
     expect(container.querySelector('.errorBanner')).toBeNull();
+    expect(container.textContent).not.toContain('后端请求超时');
   });
 
-  it('当 msg.status === "error" 且 timeline.length > 0（包含思考链）时，保留真实思考链，同时挂载流内错误节点', () => {
+  it('当 msg.status === "error" 且有思考链时，保留思考链 + 「回复中断」标记，无错误文案', () => {
     const errorWithThoughtMsg: SessionMessage = {
       id: 'err-msg-thought-1',
       sender: 'assistant',
@@ -222,18 +221,15 @@ describe('MessageContent 零闪烁与平滑降级断言', () => {
       errorDetail: { message: '模型生成阶段发生异常' },
     };
 
-    const { container } = render(
-      <MessageContent msg={errorWithThoughtMsg} />
-    );
+    const { container } = render(<MessageContent msg={errorWithThoughtMsg} />);
 
-    // 思考链真实呈现，流内原生挂载 TurnErrorNode
     expect(container.textContent).toContain('思考');
-    expect(container.querySelector('[data-testid="turn-error-node"]')).not.toBeNull();
-    expect(container.textContent).toContain('模型生成阶段发生异常');
-    expect(container.querySelector('.errorBanner')).toBeNull();
+    expect(container.querySelector('[data-testid="turn-error-node"]')).toBeNull();
+    expect(container.querySelector('[data-testid="turn-interrupted-mark"]')).not.toBeNull();
+    expect(container.textContent).not.toContain('模型生成阶段发生异常');
   });
 
-  it('当 msg.status === "error" 且存在前置 partial 正文时，展示真实生成正文与流内错误节点', () => {
+  it('当 msg.status === "error" 且存在 partial 正文时，正文完整保留 + 「回复中断」标记，错误文案不进流内', () => {
     const errorWithPartialTextMsg: SessionMessage = {
       id: 'err-msg-partial-1',
       sender: 'assistant',
@@ -242,31 +238,27 @@ describe('MessageContent 零闪烁与平滑降级断言', () => {
       errorDetail: { message: '下游服务连接中断' },
     };
 
-    const { container } = render(
-      <MessageContent msg={errorWithPartialTextMsg} />
-    );
+    const { container } = render(<MessageContent msg={errorWithPartialTextMsg} />);
 
     expect(container.textContent).toContain('已完成前半部分数据收集。');
-    expect(container.querySelector('[data-testid="turn-error-node"]')).not.toBeNull();
-    expect(container.textContent).toContain('下游服务连接中断');
-    expect(container.querySelector('.errorBanner')).toBeNull();
+    expect(container.querySelector('[data-testid="turn-error-node"]')).toBeNull();
+    const mark = container.querySelector('[data-testid="turn-interrupted-mark"]');
+    expect(mark).not.toBeNull();
+    expect(mark!.querySelectorAll('button')).toHaveLength(0);
+    expect(container.textContent).not.toContain('下游服务连接中断');
   });
 
-  it('当 msg.status === "error" 且无文本时，渲染默认流内异常节点', () => {
-    const errorDefaultMsg: SessionMessage = {
-      id: 'err-msg-default-1',
+  it('当 msg.status === "completed" 且有正文时，不渲染「回复中断」标记', () => {
+    const okMsg: SessionMessage = {
+      id: 'ok-msg-1',
       sender: 'assistant',
-      status: 'error',
-      text: '',
+      status: 'completed',
+      text: '完整回复。',
     };
 
-    const { container } = render(
-      <MessageContent msg={errorDefaultMsg} />
-    );
+    const { container } = render(<MessageContent msg={okMsg} />);
 
-    expect(container.querySelector('[data-testid="turn-error-node"]')).not.toBeNull();
-    expect(container.textContent).toContain('生成过程中发生异常');
-    expect(container.querySelector('.errorBanner')).toBeNull();
+    expect(container.querySelector('[data-testid="turn-interrupted-mark"]')).toBeNull();
   });
 });
 

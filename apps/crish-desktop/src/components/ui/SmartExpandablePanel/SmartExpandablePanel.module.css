@@ -324,7 +324,7 @@
   min-width: 160px;
   border-radius: var(--sep-radius-outer, 14px);
   border: 1px solid var(--border-color);
-  background: var(--bg-card);
+  background: var(--sep-bg-panel-solid, var(--bg-elevated));
   box-shadow: var(--sep-shadow);
   padding: 6px;
   display: flex;

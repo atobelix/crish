@@ -50,7 +50,7 @@
   background-size: 8px 7px;
   background-clip: padding-box;
   border-right: 2px solid transparent;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 7'%3E%3Cpath d='M 5.5 6.2 L 2.5 6.2 C 1.2 6.2 0.3 5.9 0.8 4.8 L 2.4 2.3 C 3.1 1.0 4.9 1.0 5.6 2.3 L 7.2 4.8 C 7.7 5.9 6.8 6.2 5.5 6.2 Z' fill='%23e6e6e5'/%3E%3C/svg%3E");
+  background-image: var(--scrollbar-button-up);
 }
 
 ::-webkit-scrollbar-button:vertical:end:increment {
@@ -62,20 +62,20 @@
   background-size: 8px 7px;
   background-clip: padding-box;
   border-right: 2px solid transparent;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 7'%3E%3Cpath d='M 2.5 0.8 L 5.5 0.8 C 6.8 0.8 7.7 1.1 7.2 2.2 L 5.6 4.7 C 4.9 6.0 3.1 6.0 2.4 4.7 L 0.8 2.2 C 0.3 1.1 1.2 0.8 2.5 0.8 Z' fill='%23e6e6e5'/%3E%3C/svg%3E");
+  background-image: var(--scrollbar-button-down);
 }
 
 ::-webkit-scrollbar-button:vertical:start:decrement:hover,
 ::-webkit-scrollbar-button:vertical:start:decrement:active {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 7'%3E%3Cpath d='M 5.5 6.2 L 2.5 6.2 C 1.2 6.2 0.3 5.9 0.8 4.8 L 2.4 2.3 C 3.1 1.0 4.9 1.0 5.6 2.3 L 7.2 4.8 C 7.7 5.9 6.8 6.2 5.5 6.2 Z' fill='%23c8c7c6'/%3E%3C/svg%3E");
+  background-image: var(--scrollbar-button-up-active);
 }
 
 ::-webkit-scrollbar-button:vertical:end:increment:hover,
 ::-webkit-scrollbar-button:vertical:end:increment:active {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 7'%3E%3Cpath d='M 2.5 0.8 L 5.5 0.8 C 6.8 0.8 7.7 1.1 7.2 2.2 L 5.6 4.7 C 4.9 6.0 3.1 6.0 2.4 4.7 L 0.8 2.2 C 0.3 1.1 1.2 0.8 2.5 0.8 Z' fill='%23c8c7c6'/%3E%3C/svg%3E");
+  background-image: var(--scrollbar-button-down-active);
 }
 
-/* 左右端点大圆角贝塞尔三角按钮：与上下端点圆角贝塞尔严格保持同构与 10% 灰度 */
+/* 左右端点大圆角贝塞尔三角按钮：与上下端点圆角贝塞尔严格保持同构 */
 ::-webkit-scrollbar-button:horizontal:start:decrement {
   display: block;
   width: 12px;
@@ -85,7 +85,7 @@
   background-size: 7px 8px;
   background-clip: padding-box;
   border-bottom: 2px solid transparent;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 8'%3E%3Cpath d='M 6.2 2.5 L 6.2 5.5 C 6.2 6.8 5.9 7.7 4.8 7.2 L 2.3 5.6 C 1.0 4.9 1.0 3.1 2.3 2.4 L 4.8 0.8 C 5.9 0.3 6.2 1.2 6.2 2.5 Z' fill='%23e6e6e5'/%3E%3C/svg%3E");
+  background-image: var(--scrollbar-button-left);
 }
 
 ::-webkit-scrollbar-button:horizontal:end:increment {
@@ -97,58 +97,17 @@
   background-size: 7px 8px;
   background-clip: padding-box;
   border-bottom: 2px solid transparent;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 8'%3E%3Cpath d='M 0.8 2.5 L 0.8 5.5 C 0.8 6.8 1.1 7.7 2.2 7.2 L 4.7 5.6 C 6.0 4.9 6.0 3.1 4.7 2.4 L 2.2 0.8 C 1.1 0.3 0.8 1.2 0.8 2.5 Z' fill='%23e6e6e5'/%3E%3C/svg%3E");
+  background-image: var(--scrollbar-button-right);
 }
 
 ::-webkit-scrollbar-button:horizontal:start:decrement:hover,
 ::-webkit-scrollbar-button:horizontal:start:decrement:active {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 8'%3E%3Cpath d='M 6.2 2.5 L 6.2 5.5 C 6.2 6.8 5.9 7.7 4.8 7.2 L 2.3 5.6 C 1.0 4.9 1.0 3.1 2.3 2.4 L 4.8 0.8 C 5.9 0.3 6.2 1.2 6.2 2.5 Z' fill='%23c8c7c6'/%3E%3C/svg%3E");
+  background-image: var(--scrollbar-button-left-active);
 }
 
 ::-webkit-scrollbar-button:horizontal:end:increment:hover,
 ::-webkit-scrollbar-button:horizontal:end:increment:active {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 8'%3E%3Cpath d='M 0.8 2.5 L 0.8 5.5 C 0.8 6.8 1.1 7.7 2.2 7.2 L 4.7 5.6 C 6.0 4.9 6.0 3.1 4.7 2.4 L 2.2 0.8 C 1.1 0.3 0.8 1.2 0.8 2.5 Z' fill='%23c8c7c6'/%3E%3C/svg%3E");
-}
-
-/* ==========================================================================
-   暗色环境滚动条大圆角三角按钮色彩适配 (Dark Theme Scrollbar Buttons)
-   与暗色滑块 (--scrollbar-thumb-bg / --scrollbar-thumb-active) 严格保持二元色彩一致
-   静止态: #cccccc 20% 透光率; 激活/悬停态: #cccccc 36% 透光率
-   ========================================================================== */
-html[data-theme='dark'] ::-webkit-scrollbar-button:vertical:start:decrement {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 7'%3E%3Cpath d='M 5.5 6.2 L 2.5 6.2 C 1.2 6.2 0.3 5.9 0.8 4.8 L 2.4 2.3 C 3.1 1.0 4.9 1.0 5.6 2.3 L 7.2 4.8 C 7.7 5.9 6.8 6.2 5.5 6.2 Z' fill='%23cccccc' fill-opacity='0.20'/%3E%3C/svg%3E");
-}
-
-html[data-theme='dark'] ::-webkit-scrollbar-button:vertical:end:increment {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 7'%3E%3Cpath d='M 2.5 0.8 L 5.5 0.8 C 6.8 0.8 7.7 1.1 7.2 2.2 L 5.6 4.7 C 4.9 6.0 3.1 6.0 2.4 4.7 L 0.8 2.2 C 0.3 1.1 1.2 0.8 2.5 0.8 Z' fill='%23cccccc' fill-opacity='0.20'/%3E%3C/svg%3E");
-}
-
-html[data-theme='dark'] ::-webkit-scrollbar-button:vertical:start:decrement:hover,
-html[data-theme='dark'] ::-webkit-scrollbar-button:vertical:start:decrement:active {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 7'%3E%3Cpath d='M 5.5 6.2 L 2.5 6.2 C 1.2 6.2 0.3 5.9 0.8 4.8 L 2.4 2.3 C 3.1 1.0 4.9 1.0 5.6 2.3 L 7.2 4.8 C 7.7 5.9 6.8 6.2 5.5 6.2 Z' fill='%23cccccc' fill-opacity='0.36'/%3E%3C/svg%3E");
-}
-
-html[data-theme='dark'] ::-webkit-scrollbar-button:vertical:end:increment:hover,
-html[data-theme='dark'] ::-webkit-scrollbar-button:vertical:end:increment:active {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 7'%3E%3Cpath d='M 2.5 0.8 L 5.5 0.8 C 6.8 0.8 7.7 1.1 7.2 2.2 L 5.6 4.7 C 4.9 6.0 3.1 6.0 2.4 4.7 L 0.8 2.2 C 0.3 1.1 1.2 0.8 2.5 0.8 Z' fill='%23cccccc' fill-opacity='0.36'/%3E%3C/svg%3E");
-}
-
-html[data-theme='dark'] ::-webkit-scrollbar-button:horizontal:start:decrement {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 8'%3E%3Cpath d='M 6.2 2.5 L 6.2 5.5 C 6.2 6.8 5.9 7.7 4.8 7.2 L 2.3 5.6 C 1.0 4.9 1.0 3.1 2.3 2.4 L 4.8 0.8 C 5.9 0.3 6.2 1.2 6.2 2.5 Z' fill='%23cccccc' fill-opacity='0.20'/%3E%3C/svg%3E");
-}
-
-html[data-theme='dark'] ::-webkit-scrollbar-button:horizontal:end:increment {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 8'%3E%3Cpath d='M 0.8 2.5 L 0.8 5.5 C 0.8 6.8 1.1 7.7 2.2 7.2 L 4.7 5.6 C 6.0 4.9 6.0 3.1 4.7 2.4 L 2.2 0.8 C 1.1 0.3 0.8 1.2 0.8 2.5 Z' fill='%23cccccc' fill-opacity='0.20'/%3E%3C/svg%3E");
-}
-
-html[data-theme='dark'] ::-webkit-scrollbar-button:horizontal:start:decrement:hover,
-html[data-theme='dark'] ::-webkit-scrollbar-button:horizontal:start:decrement:active {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 8'%3E%3Cpath d='M 6.2 2.5 L 6.2 5.5 C 6.2 6.8 5.9 7.7 4.8 7.2 L 2.3 5.6 C 1.0 4.9 1.0 3.1 2.3 2.4 L 4.8 0.8 C 5.9 0.3 6.2 1.2 6.2 2.5 Z' fill='%23cccccc' fill-opacity='0.36'/%3E%3C/svg%3E");
-}
-
-html[data-theme='dark'] ::-webkit-scrollbar-button:horizontal:end:increment:hover,
-html[data-theme='dark'] ::-webkit-scrollbar-button:horizontal:end:increment:active {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 8'%3E%3Cpath d='M 0.8 2.5 L 0.8 5.5 C 0.8 6.8 1.1 7.7 2.2 7.2 L 4.7 5.6 C 6.0 4.9 6.0 3.1 4.7 2.4 L 2.2 0.8 C 1.1 0.3 0.8 1.2 0.8 2.5 Z' fill='%23cccccc' fill-opacity='0.36'/%3E%3C/svg%3E");
+  background-image: var(--scrollbar-button-right-active);
 }
 
 ::-webkit-scrollbar-corner {

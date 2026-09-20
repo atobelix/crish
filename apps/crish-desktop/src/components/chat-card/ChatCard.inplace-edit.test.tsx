@@ -27,8 +27,6 @@ const { mockState } = vi.hoisted(() => {
         handleForceCancelGeneration: vi.fn(),
         handleFilesSelected: vi.fn(),
         handleDroppedFiles: vi.fn(),
-        runNotice: null,
-        setRunNotice: vi.fn(),
         onSend: vi.fn(),
       },
       handleEditMessageAndResend,

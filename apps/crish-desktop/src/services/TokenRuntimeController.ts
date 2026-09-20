@@ -33,6 +33,17 @@ export interface TokenApplyResult {
   tokens: Record<string, string>;
 }
 
+const SCROLLBAR_UP_PATH = "M 5.5 6.2 L 2.5 6.2 C 1.2 6.2 0.3 5.9 0.8 4.8 L 2.4 2.3 C 3.1 1.0 4.9 1.0 5.6 2.3 L 7.2 4.8 C 7.7 5.9 6.8 6.2 5.5 6.2 Z";
+const SCROLLBAR_DOWN_PATH = "M 2.5 0.8 L 5.5 0.8 C 6.8 0.8 7.7 1.1 7.2 2.2 L 5.6 4.7 C 4.9 6.0 3.1 6.0 2.4 4.7 L 0.8 2.2 C 0.3 1.1 1.2 0.8 2.5 0.8 Z";
+const SCROLLBAR_LEFT_PATH = "M 6.2 2.5 L 6.2 5.5 C 6.2 6.8 5.9 7.7 4.8 7.2 L 2.3 5.6 C 1.0 4.9 1.0 3.1 2.3 2.4 L 4.8 0.8 C 5.9 0.3 6.2 1.2 6.2 2.5 Z";
+const SCROLLBAR_RIGHT_PATH = "M 0.8 2.5 L 0.8 5.5 C 0.8 6.8 1.1 7.7 2.2 7.2 L 4.7 5.6 C 6.0 4.9 6.0 3.1 4.7 2.4 L 2.2 0.8 C 1.1 0.3 0.8 1.2 0.8 2.5 Z";
+
+function makeScrollbarArrowSvg(pathD: string, viewBox: string, color: string, opacity: string): string {
+  const safeColor = color.startsWith('#') ? `%23${color.slice(1)}` : color;
+  const svg = `%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='${viewBox}'%3E%3Cpath d='${pathD}' fill='${safeColor}' fill-opacity='${opacity}'/%3E%3C/svg%3E`;
+  return `url("data:image/svg+xml,${svg}")`;
+}
+
 export interface SolarAdjustmentResult {
   brightnessAdjust: number;
   solarWarmthMix: number;
@@ -197,7 +208,7 @@ export class TokenRuntimeController {
           : `color-mix(in srgb, ${bg} 96%, hsl(0 0% 100%) 4%)`,
         shellChromeBg: isDark
           ? `color-mix(in srgb, ${bg} 82%, hsl(0 0% 100%) 18%)`
-          : `color-mix(in srgb, ${bg} 78%, hsl(38 8% 70%) 22%)`,
+          : `color-mix(in srgb, ${bg} 88%, hsl(38 8% 70%) 12%)`,
         textPrimary: fg,
         textSecondary: `color-mix(in srgb, ${bg} 35%, ${fg} 65%)`,
         borderColor: `color-mix(in srgb, ${bg} 82%, ${fg} 18%)`,
@@ -417,15 +428,33 @@ export class TokenRuntimeController {
       const softHoverPct = isDarkPreset ? '6.5%' : '4%';
       const softActivePct = isDarkPreset ? '9.5%' : '8%';
 
-      // 遵循显式灰阶契约：黑夜模式使用 45% 灰度（55% 亮度），浅色模式使用 55% 灰度（45% 亮度），严禁透明度混色
+      // 遵循显式灰阶契约：黑夜模式使用 45% 灰度（55% 亮度），浅色模式使用 55% 灰度（45% 亮度）
       const defaultTertiary = isDark ? '#8c8c8c' : '#6b6b6b';
-      const tertiaryColor = skinConfig.textTertiary || defaultTertiary;
+      const defaultFaint = isDark ? '#737373' : '#9e9e9e';
+
+      // 皮肤未显式指定时，根据皮肤色相与明暗基底动态调配层级字色，杜绝死灰断层
+      const baseTertiary =
+        skinConfig.textTertiary ||
+        (skinKey === 'warm-gray' || skinKey === 'paper' || skinKey === 'classic-gray'
+          ? defaultTertiary
+          : isDark
+            ? `color-mix(in srgb, ${textPrimary} 65%, ${bgPrimary})`
+            : `color-mix(in srgb, ${textPrimary} 60%, hsl(0 0% 100%))`);
+
+      const baseFaint =
+        skinConfig.textFaint ||
+        (skinKey === 'warm-gray' || skinKey === 'paper' || skinKey === 'classic-gray'
+          ? defaultFaint
+          : isDark
+            ? `color-mix(in srgb, ${textPrimary} 45%, ${bgPrimary})`
+            : `color-mix(in srgb, ${textPrimary} 38%, hsl(0 0% 100%))`);
 
       const composerBg = skinConfig.composerBg || bgCard;
 
       let finalFg = textPrimary;
       let finalSec = textSecondary;
-      let finalTert = tertiaryColor;
+      let finalTert = baseTertiary;
+      let finalFaint = baseFaint;
 
       const contrastGuard = computeContrastGuardedTokens(bgPrimary, isDark, {
         isCustomSkin: skinKey === 'custom',
@@ -436,6 +465,9 @@ export class TokenRuntimeController {
         finalFg = contrastGuard.textPrimary;
         finalSec = contrastGuard.textSecondary;
         finalTert = contrastGuard.textTertiary;
+        finalFaint = isDark
+          ? `color-mix(in srgb, ${finalFg} 45%, ${bgPrimary})`
+          : `color-mix(in srgb, ${finalFg} 40%, hsl(0 0% 100%))`;
       }
 
       tokens['--surface-chrome'] = bgSecondary;
@@ -451,6 +483,8 @@ export class TokenRuntimeController {
       tokens['--text-primary'] = finalFg;
       tokens['--text-secondary'] = finalSec;
       tokens['--text-tertiary'] = finalTert;
+      tokens['--text-muted'] = finalTert;
+      tokens['--text-faint'] = finalFaint;
       tokens['--border-color'] = borderColor;
       tokens['--border-subtle'] = borderSubtle;
       tokens['--control-mix-color'] = mixColor;
@@ -460,6 +494,31 @@ export class TokenRuntimeController {
       tokens['--composer-bg'] = composerBg;
       tokens['--accent-green-light-adaptive'] = greenLight;
       tokens['--accent-red-light-adaptive'] = redLight;
+
+      // 滚动条主题色融合：在各类皮肤下自然融入当前主题色相，杜绝孤立突兀的灰白硬块
+      if (skinKey === 'warm-gray') {
+        tokens['--scrollbar-thumb-bg'] = '#e6e6e5';
+        tokens['--scrollbar-thumb-active'] = '#c8c7c6';
+      } else if (isDark) {
+        tokens['--scrollbar-thumb-bg'] = `color-mix(in srgb, ${finalFg} 20%, transparent)`;
+        tokens['--scrollbar-thumb-active'] = `color-mix(in srgb, ${finalFg} 36%, transparent)`;
+      } else {
+        tokens['--scrollbar-thumb-bg'] = `color-mix(in srgb, ${finalFg} 15%, transparent)`;
+        tokens['--scrollbar-thumb-active'] = `color-mix(in srgb, ${finalFg} 28%, transparent)`;
+      }
+
+      // 滚动条微调三角按钮动态 SVG Token 化：在各类皮肤下与当前滑块颜色深度契合
+      const btnNormalOp = isDark ? '0.20' : '0.22';
+      const btnActiveOp = isDark ? '0.36' : '0.40';
+
+      tokens['--scrollbar-button-up'] = makeScrollbarArrowSvg(SCROLLBAR_UP_PATH, '0 0 8 7', finalFg, btnNormalOp);
+      tokens['--scrollbar-button-down'] = makeScrollbarArrowSvg(SCROLLBAR_DOWN_PATH, '0 0 8 7', finalFg, btnNormalOp);
+      tokens['--scrollbar-button-left'] = makeScrollbarArrowSvg(SCROLLBAR_LEFT_PATH, '0 0 7 8', finalFg, btnNormalOp);
+      tokens['--scrollbar-button-right'] = makeScrollbarArrowSvg(SCROLLBAR_RIGHT_PATH, '0 0 7 8', finalFg, btnNormalOp);
+      tokens['--scrollbar-button-up-active'] = makeScrollbarArrowSvg(SCROLLBAR_UP_PATH, '0 0 8 7', finalFg, btnActiveOp);
+      tokens['--scrollbar-button-down-active'] = makeScrollbarArrowSvg(SCROLLBAR_DOWN_PATH, '0 0 8 7', finalFg, btnActiveOp);
+      tokens['--scrollbar-button-left-active'] = makeScrollbarArrowSvg(SCROLLBAR_LEFT_PATH, '0 0 7 8', finalFg, btnActiveOp);
+      tokens['--scrollbar-button-right-active'] = makeScrollbarArrowSvg(SCROLLBAR_RIGHT_PATH, '0 0 7 8', finalFg, btnActiveOp);
     }
 
     if (typeof document !== 'undefined') {
@@ -499,6 +558,8 @@ export class TokenRuntimeController {
       if (tokens['--text-primary']) root.style.setProperty('--text-primary', tokens['--text-primary']);
       if (tokens['--text-secondary']) root.style.setProperty('--text-secondary', tokens['--text-secondary']);
       if (tokens['--text-tertiary']) root.style.setProperty('--text-tertiary', tokens['--text-tertiary']);
+      if (tokens['--text-muted']) root.style.setProperty('--text-muted', tokens['--text-muted']);
+      if (tokens['--text-faint']) root.style.setProperty('--text-faint', tokens['--text-faint']);
       if (tokens['--border-color']) root.style.setProperty('--border-color', tokens['--border-color']);
       if (tokens['--border-subtle']) root.style.setProperty('--border-subtle', tokens['--border-subtle']);
       if (tokens['--control-mix-color']) root.style.setProperty('--control-mix-color', tokens['--control-mix-color']);
@@ -508,6 +569,16 @@ export class TokenRuntimeController {
       if (tokens['--composer-bg']) root.style.setProperty('--composer-bg', tokens['--composer-bg']);
       if (tokens['--accent-green-light-adaptive']) root.style.setProperty('--accent-green-light-adaptive', tokens['--accent-green-light-adaptive']);
       if (tokens['--accent-red-light-adaptive']) root.style.setProperty('--accent-red-light-adaptive', tokens['--accent-red-light-adaptive']);
+      if (tokens['--scrollbar-thumb-bg']) root.style.setProperty('--scrollbar-thumb-bg', tokens['--scrollbar-thumb-bg']);
+      if (tokens['--scrollbar-thumb-active']) root.style.setProperty('--scrollbar-thumb-active', tokens['--scrollbar-thumb-active']);
+      if (tokens['--scrollbar-button-up']) root.style.setProperty('--scrollbar-button-up', tokens['--scrollbar-button-up']);
+      if (tokens['--scrollbar-button-down']) root.style.setProperty('--scrollbar-button-down', tokens['--scrollbar-button-down']);
+      if (tokens['--scrollbar-button-left']) root.style.setProperty('--scrollbar-button-left', tokens['--scrollbar-button-left']);
+      if (tokens['--scrollbar-button-right']) root.style.setProperty('--scrollbar-button-right', tokens['--scrollbar-button-right']);
+      if (tokens['--scrollbar-button-up-active']) root.style.setProperty('--scrollbar-button-up-active', tokens['--scrollbar-button-up-active']);
+      if (tokens['--scrollbar-button-down-active']) root.style.setProperty('--scrollbar-button-down-active', tokens['--scrollbar-button-down-active']);
+      if (tokens['--scrollbar-button-left-active']) root.style.setProperty('--scrollbar-button-left-active', tokens['--scrollbar-button-left-active']);
+      if (tokens['--scrollbar-button-right-active']) root.style.setProperty('--scrollbar-button-right-active', tokens['--scrollbar-button-right-active']);
 
       for (const key of Object.keys(tokens)) {
         this.currentInjectedKeys.add(key);

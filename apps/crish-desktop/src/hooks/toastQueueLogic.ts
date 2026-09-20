@@ -62,8 +62,10 @@ export type ToastEnqueueResult =
 /** 单条 toast 自动消失（TTL / auto-dismiss）。 */
 export const TOAST_TTL_MS = 5000;
 
-/** 同时展示上限；超出时挤掉最旧（FIFO）。 */
-export const TOAST_MAX_QUEUE = 5;
+/** 同时展示上限；超出时挤掉最旧（FIFO）。
+ *  单轨收敛（docs/chat-notice-convergence Step 1）：全局浮层顶部居中、上限 3——
+ *  不取 1 是为了避免「设置已保存」与「模型目录已刷新」同帧互相覆盖。 */
+export const TOAST_MAX_QUEUE = 3;
 
 /**
  * 归一 / 钳制 TTL：缺省、非有限、≤0 → TOAST_TTL_MS。

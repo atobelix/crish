@@ -15,7 +15,6 @@ import styles from './ChatStatusRibbons.module.css';
 
 import { AppErrorBoundary } from '../AppErrorBoundary';
 import type { EngineStatus } from '../../api/engineConfig';
-import type { RunNotice } from '../../hooks/useChatStream';
 import { useSessionStore } from '../../store/sessionStore';
 import {
   resolveSessionProgressItems,
@@ -34,9 +33,7 @@ import {
   type PlanRibbonState,
 } from './PlanGoalRibbons';
 import { ApprovalDock } from './ApprovalDock';
-import { RetrySlotNotice } from './RetrySlotNotice';
-import { RunNoticeBar } from './RunNoticeBar';
-import { useContinuityUiStore } from '../../api/continuity/continuityUiStore';
+import { ComposerErrorBar } from './ComposerErrorBar';
 import { useConnectionStatus } from '../../hooks/useConnectionStatus';
 import { connectionManager } from '../../services/ConnectionManager';
 import {
@@ -80,9 +77,6 @@ export interface StreamingRibbonProps {
   onOpenModelDropdown: () => void;
   showScrollToBottom?: boolean;
   onScrollToBottom?: () => void;
-  /** 系统 run 提示（错误/空回复等） */
-  runNotice: RunNotice | null;
-  onDismissRunNotice: () => void;
 }
 
 export interface GoalRibbonProps {
@@ -158,8 +152,6 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
     localHasKey,
     onOpenModelSettings,
     onOpenModelDropdown,
-    runNotice,
-    onDismissRunNotice,
   } = sp;
   const {
     inPlanMode,
@@ -200,17 +192,8 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
   const engineCrashed = connectionStatus === 'engine_crashed';
   const engineCrashedText = resolveEngineCrashedText({ onEmptySurface });
 
-  // D8 §3.7.4：临时通知（老虎机滚动重连；会话级订阅；不进对话历史，
-  // 仅 UI 层——事件 handler 经 diagnosticHandlers.onProviderDiagnostic
-  // 写入 continuityUiStore.applyRetryNotice）。
-  // 注：本订阅曾于 e8624e99d（消息气泡渲染重构）被误删，导致
-  // diagnosticHandlers → store 的写入侧悬空、RetrySlotNotice 成为孤儿组件
-  // （全仓零渲染点），「重连中 N/M」永久不显示；由
-  // diagnosticHandlers.retryNotices.integration.test.tsx 全链路用例捕获，此处恢复。
-  const activeSession = activeSessionId ?? null;
-  const retryNotice = useContinuityUiStore((s) =>
-    activeSession ? s.retryNotices[activeSession] : null
-  );
+  // 单轨收敛 §2.0：retryNotices 双轨已删除（diagnosticHandlers 只写
+  // SessionRuntimeStatusStore）；ComposerErrorBar 自行订阅 failed 相位。
 
   // §5.2：订阅 session store（与 ComposerPlanProgressBar 同源），删除快照轨
   const currentSession = useSessionStore((s) =>
@@ -364,17 +347,9 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
 
       {between}
 
-      {/* 临时通知老虎机滚动（D8 §3.7.4）：重连进度单起一行，不进对话历史；
-          空态不挂载（retryNotice null）防幽灵条 */}
-      {retryNotice ? (
-        <RetrySlotNotice
-          attempt={retryNotice.attempt}
-          maxAttempts={retryNotice.maxAttempts}
-        />
-      ) : null}
-
-      {/* 系统提示：错误/空回复 — 明确非 AI 输出；空文案不挂载（防幽灵条） */}
-      <RunNoticeBar runNotice={runNotice} onDismiss={onDismissRunNotice} />
+      {/* 单轨收敛 §2.3：会话运行终态错误唯一承载体（ComposerErrorBar → failed 相位）。
+          retrying 相位在对话流内 InFlowStatusLine 呈现。 */}
+      <ComposerErrorBar activeSessionId={activeSessionId ?? null} />
 
       {/* 审批 sticky：队列/子 agent 待确认时显示；单条主时间线靠 ApprovalAskCard */}
       {omitApprovalDock ? null : (

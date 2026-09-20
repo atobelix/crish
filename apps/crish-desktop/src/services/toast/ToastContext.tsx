@@ -34,7 +34,8 @@ export interface ToastProviderProps {
 export const ToastProvider: React.FC<ToastProviderProps> = ({
   children,
   containerId = 'toast-root',
-  position = 'bottom-right',
+  // 单轨收敛（docs/chat-notice-convergence Step 1）：全局通知默认顶部居中
+  position = 'top-center',
 }) => {
   const toasts = useSyncExternalStore(
     ToastStore.subscribe,

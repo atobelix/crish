@@ -213,5 +213,25 @@ describe('DIM-05 双阶段生命周期调度与思考折叠规范契约', () => 
     // 负向断言：历史遗留的 `data-kind="thought"` 契约已随旧思考行组件物理切除
     expect(container.querySelector('[data-kind="thought"]')).toBeNull();
   });
+
+  it('单轨状态条设计：当思考正在流式推演时，顶层独立状态条让位，防止双状态栏重复', () => {
+    const liveThoughtMsg: SessionMessage = {
+      id: 'msg-live-dedup-1',
+      sender: 'assistant',
+      text: '',
+      thinking: '正在实时进行逻辑推演...',
+      status: 'processing',
+    };
+
+    const { queryByTestId } = render(
+      <MessageContent
+        msg={liveThoughtMsg}
+        isThinkingMsg={true}
+      />
+    );
+
+    // 顶层 top-live-header 必须让位（null），避免思考行与其共存产生双重状态
+    expect(queryByTestId('top-live-header')).toBeNull();
+  });
 });
 

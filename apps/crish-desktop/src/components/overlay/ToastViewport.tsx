@@ -12,7 +12,8 @@ export interface ToastViewportProps {
 }
 
 export const ToastViewport: React.FC<ToastViewportProps> = ({
-  position = 'bottom-right',
+  // 单轨收敛（docs/chat-notice-convergence Step 1）：全局通知默认顶部居中
+  position = 'top-center',
   toasts: propToasts,
   onDismiss: propOnDismiss,
 }) => {

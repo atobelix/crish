@@ -128,3 +128,12 @@
   width: 100%;
   box-sizing: border-box;
 }
+
+/* 单轨收敛 §2.3：有正文失败轮次的流内事实标记（无操作，行动入口在 ComposerErrorBar） */
+.interruptedMark {
+  margin-top: var(--space-1, 4px);
+  font-size: var(--font-size-xs, 12px);
+  line-height: 20px;
+  color: var(--text-tertiary);
+  user-select: none;
+}

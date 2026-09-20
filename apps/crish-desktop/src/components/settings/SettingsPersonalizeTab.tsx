@@ -120,12 +120,6 @@ export const SettingsPersonalizeTab: React.FC<Props> = ({ _onBlockingOverlayChan
             title: '默认折叠思考过程',
             desc: '在对话流中默认隐藏或折叠深度思考模型的大段推理内容',
           },
-          {
-            key: 'queueMode',
-            type: 'boolean',
-            title: '排队发送模式',
-            desc: 'AI 回复中时，新消息进入队列而不是直接插入对话；可在输入框上方手动发送、编辑或删除排队消息',
-          },
         ],
       },
       {

@@ -47,8 +47,6 @@ function renderWrap(
       emptyKind={null}
       composerElement={<div data-testid="composer" />}
       ribbons={ribbons}
-      runNotice={null}
-      onDismissRunNotice={vi.fn()}
       pendingApprovalCount={2}
       showApprovalDock={true}
       pendingApprovalSummary="运行 shell"

@@ -12,9 +12,8 @@ import type { SessionAgent } from '../../store/types';
 import type { FileDiff } from '../../store/types';
 import { clearStream, getStreamText } from '../../store/streamingStore';
 import { getCompositionRoot } from '../../app/compositionRoot';
-import { useEphemeralChatStore } from '../../store/ephemeralChatStore';
+import { reportRuntimeStatus } from '../../store/sessionRuntimeStatusStore';
 import { recordStreamDiag } from '../../api/streamDiag';
-import { toast } from '../../services/toast/ToastContext';
 import type { StreamCallbacks } from '../../api/chatApi';
 import type { SessionStreamManager } from '../../api/sessionStreamManager';
 import type { StreamRenderBuffer } from '../../api/StreamRenderBuffer';
@@ -28,8 +27,6 @@ import {
   buildMessageIndex,
   resolveToolIdentity,
 } from './streamCallbacksInternals';
-import { resolveRunErrorSurface } from './streamCallbacksSurfaces';
-import type { RunNotice } from './types';
 
 type SubagentStartedInfo =
   NonNullable<StreamCallbacks['onSubagentStarted']> extends (
@@ -267,19 +264,24 @@ export function handleToolError(opts: {
 }
 
 /**
- * onRunError 分级分发（通道 E-B）：按分类选展示面，一次错误只占一个瞬时面；
- * 持久条与横幅/toast 互斥（persistent 无 TTL，恢复驱动消失）。
+ * onRunError 单轨分发（docs/chat-notice-convergence §2.0/§2.3）：
+ * 所有终态错误（含 network）唯一承载体 = SessionRuntimeStatusStore failed 相位
+ * （ComposerErrorBar）。不写 toast / 横幅 / 气泡 errorDetail。
+ *
+ * 消息状态收口（错误即本轮终态，不依赖随后是否还有 onComplete）：
+ * - user 消息 processing → completed（否则 isProcessing 恒真，发送按钮被 Stop 常驻）；
+ * - assistant 零正文 → withdraw 占位；有正文 → 状态置 error（正文保留，历史可见「回复中断」）。
  * 返回 hadNetworkError 供调用方置 runEndedWithNetworkError 守卫。
  */
 export function handleRunError(opts: {
   wsId: string;
   sid: string;
+  userMsgId: string;
   assistantMsgId: string;
   runId: string | null;
   message: string;
   kind: string | undefined;
   detail: string | undefined;
-  pushRunNotice: (notice: RunNotice, ttlMs?: number) => void;
   flushStreamBatchers: () => void;
   refs: {
     renderBuffer: StreamRenderBuffer | null;
@@ -290,12 +292,12 @@ export function handleRunError(opts: {
   const {
     wsId,
     sid,
+    userMsgId,
     assistantMsgId,
     runId,
     message,
     kind,
     detail,
-    pushRunNotice,
     flushStreamBatchers,
     refs,
   } = opts;
@@ -317,58 +319,24 @@ export function handleRunError(opts: {
   const hadText = !!(
     (asstErr?.text || '').trim() || getStreamText(sid, assistantMsgId)?.trim()
   );
-  const surface = resolveRunErrorSurface(kind, hadText);
-  const notice: RunNotice = {
-    text: message,
-    kind: kind || 'error',
-    detail: detail || undefined,
-  };
-  let hadNetworkError = false;
   const st = getCompositionRoot().session.getState();
-  if (surface === 'persistent') {
-    // network/恢复类：仅输入框上方持久条；不进 toast、不写气泡
-    hadNetworkError = true;
-    pushRunNotice({ ...notice, persistent: true });
-  } else if (surface === 'banner-toast') {
-    // 可行动错误（blocked/auth/no_key/no_project）：横幅 + 一次性 toast
-    pushRunNotice(notice, 14000);
-    toast.show(message);
-  } else if (surface === 'banner') {
-    // 无正文的失败：仅横幅（14s TTL），无 toast
-    pushRunNotice(notice, 14000);
-  }
+  const isNetwork = kind === 'network';
 
   if (asstErr) {
-    if (surface === 'persistent') {
-      // network/恢复类：不写气泡错误卡；无正文时 withdraw 占位（保持现状）
-      if (!hadText) {
-        st.withdrawMessage(wsId, sid, assistantMsgId);
-        clearStream(sid, assistantMsgId);
-      }
-    } else if (!hadText) {
+    if (!hadText) {
       // 零 Token 失败：彻底撤回预置的空白 assistant 消息，不留幽灵占位
       st.withdrawMessage(wsId, sid, assistantMsgId);
       clearStream(sid, assistantMsgId);
     } else {
-      st.setSessionMessageStatus(sid, assistantMsgId, 'error', undefined, {
-        errorDetail: {
-          message: message || '服务暂时不可用，请检查网络或后端配置',
-          kind: kind || 'stream-error',
-          technical:
-            typeof detail === 'string'
-              ? detail
-              : detail
-                ? JSON.stringify(detail)
-                : undefined,
-        },
-      });
+      // 有正文：正文保留，状态置 error（事实记录；行动入口在 ComposerErrorBar）
+      st.setSessionMessageStatus(sid, assistantMsgId, 'error');
     }
   }
-
-  // 提取当轮真实提问文本与用户消息 ID，保障失败重试闭环
-  const lastUserMsg = st?.sessionsById?.[sid]?.messages?.findLast(
-    (m) => m.sender === 'user'
-  );
+  // 本轮 user 消息收口：错误是终态，不再等待 onComplete
+  const userMsg = buildMessageIndex(getSessionById(sid)).get(userMsgId);
+  if (userMsg?.status === 'processing') {
+    st.setSessionMessageStatus(sid, userMsgId, 'completed');
+  }
 
   const validKinds = [
     'network',
@@ -384,20 +352,17 @@ export function handleRunError(opts: {
       ? (kind as (typeof validKinds)[number])
       : 'generic';
 
-  useEphemeralChatStore.getState().setEphemeralStatus(sid, {
-    id: `err-${sid}-${assistantMsgId}`,
-    messageId: assistantMsgId,
+  // 全局唯一上报入口（docs/chat-notice-convergence §2.0）：
+  // network 与其余终态错误统一进 failed 相位（ComposerErrorBar 唯一承载体）。
+  // 只记录消息定位，不缓存提问文本——重试按 userMsgId 现查。
+  reportRuntimeStatus({
+    type: 'failed',
+    sessionId: sid,
     kind: resolvedKind,
     message: message || '服务暂时不可用，请检查网络或后端配置',
     technicalDetail: typeof detail === 'string' ? detail : undefined,
-    retryable: true,
-    timestamp: Date.now(),
-    retryContext: {
-      userMsgId: lastUserMsg?.id,
-      promptText: lastUserMsg?.text,
-    },
+    turn: { userMsgId, assistantMsgId },
   });
-
 
   flushStreamBatchers();
   // R-11（08-detail T5.4）：error 收口补清理——先预算刷残余帧
@@ -408,5 +373,5 @@ export function handleRunError(opts: {
   if (errCur?.assistantMsgId === assistantMsgId) {
     refs.generationMap.delete(sid);
   }
-  return { hadNetworkError };
+  return { hadNetworkError: isNetwork };
 }

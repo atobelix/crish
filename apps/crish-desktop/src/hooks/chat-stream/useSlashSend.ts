@@ -34,7 +34,7 @@ import {
   sanitizeImageRefForPersist,
 } from '../../api/attachmentPersistSanitize';
 import { runPreflightChecks, assembleChatPayload } from './slashSendPreflight';
-import { useEphemeralChatStore } from '../../store/ephemeralChatStore';
+import { clearRuntimeStatus } from '../../store/sessionRuntimeStatusStore';
 
 export function useSlashSend(
   options: UseChatStreamOptions,
@@ -112,8 +112,8 @@ export function useSlashSend(
       return;
     }
 
-    // 原子清空该会话的瞬态错误进行时提示（发送新对话自动自愈）
-    useEphemeralChatStore.getState().clearEphemeralStatus(sessionId);
+    // 原子清空该会话的运行时状态（发送新对话自动自愈，单轨收敛 §2.0）
+    clearRuntimeStatus(sessionId);
 
     // 3. 多模态 Payload 与提示词组装
     const { input, displayText, finalStreamOptions } = assembleChatPayload({

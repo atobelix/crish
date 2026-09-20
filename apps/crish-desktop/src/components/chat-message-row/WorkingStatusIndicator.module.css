@@ -9,7 +9,7 @@
   border-radius: var(--radius-sm, 4px);
   user-select: none;
   font-family: inherit;
-  font-size: var(--font-size-sm, 12px);
+  font-size: 14px;
   color: var(--text-secondary);
   background: transparent;
   transition: opacity 0.2s ease-out;
@@ -33,18 +33,19 @@
 }
 
 .text {
-  font-size: var(--font-size-xs, 12px);
+  font-size: 14px;
   color: var(--text-tertiary);
   letter-spacing: 0.01em;
 }
 
 .separator {
   color: var(--text-faint);
+  font-size: 14px;
 }
 
 .timer {
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: var(--font-size-micro, 11px);
+  font-size: 14px;
   color: var(--text-faint);
   font-variant-numeric: tabular-nums;
 }

@@ -78,6 +78,16 @@ export type UiEventMap = {
    * ChatCard 宿主订阅后调 setChatInput + setComposerDraft。
    */
   'retract-backfill': { sessionId: string; text: string };
+  /**
+   * 单轨收敛（docs/chat-notice-convergence §2.3）：ComposerErrorBar「重试」按钮派发。
+   * ChatCard 宿主（useChatHandlers）订阅后复用 handleRegenerate 原位重发当轮：
+   * 提问文本按 userMsgId 现查（不缓存旧文本），assistant 占位按 id 撤回后重跑。
+   */
+  'retry-failed-turn': {
+    sessionId: string;
+    userMsgId?: string;
+    assistantMsgId?: string;
+  };
 };
 
 export type UiEventName = keyof UiEventMap;
@@ -122,6 +132,7 @@ export const UI_EVENT_NAMES = [
   'close-all-popovers',
   'security-migration-failed',
   'retract-backfill',
+  'retry-failed-turn',
 ] as const satisfies readonly UiEventName[];
 
 const UI_EVENT_NAME_SET: ReadonlySet<string> = new Set<string>(UI_EVENT_NAMES);

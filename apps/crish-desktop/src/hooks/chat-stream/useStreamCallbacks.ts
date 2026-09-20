@@ -19,6 +19,7 @@ import {
   dispatchStreamStopCancel,
 } from '../../api/streamStop';
 import { recordStreamDiag } from '../../api/streamDiag';
+import { toast } from '../../services/toast/ToastContext';
 import type { UseChatStreamOptions } from './types';
 import type { StreamBatcherRefs } from './useStreamBatchers';
 import {
@@ -32,7 +33,6 @@ import { useRunStreamingAssistant } from './useRunStreamingAssistant';
 import { buildMessageIndex } from './streamCallbacksInternals';
 import { applyStopUsageApprox } from './streamCallbacksUsage';
 import type {
-  StreamRunNoticeHelpers,
   StreamRunQueryHelpers,
   StreamRunStarter,
 } from './streamCallbacksSurfaces';
@@ -40,7 +40,6 @@ import type {
 export function useStreamCallbacks(
   options: UseChatStreamOptions,
   refs: StreamBatcherRefs,
-  noticeHelpers: StreamRunNoticeHelpers,
   queryHelpers: StreamRunQueryHelpers
 ): {
   runStreamingAssistant: StreamRunStarter;
@@ -49,14 +48,12 @@ export function useStreamCallbacks(
   /** 强制取消 = L3 force（UI 二次确认后调用） */
   handleForceCancelGeneration: () => void;
 } {
-  const { pushRunNotice } = noticeHelpers;
   const { streamManagerRef, renderBufferRef, flushStreamBatchers } = refs;
 
   const generationMapRef = useRef<Map<string, number>>(new Map());
   const { runStreamingAssistant } = useRunStreamingAssistant(
     options,
     refs,
-    noticeHelpers,
     queryHelpers,
     generationMapRef
   );
@@ -119,16 +116,12 @@ export function useStreamCallbacks(
         });
       }
     } else {
-      // 无正文：清空占位，用横幅提示停止（不写 assistant 正文）
+      // 无正文：清空占位（不写 assistant 正文）；停止提示走全局 toast（单轨收敛 §2.4）
       st.updateMessageText(sid, cur.assistantMsgId, '');
       clearStream(sid, cur.assistantMsgId);
-      pushRunNotice(
-        {
-          text: force ? '已强制停止本轮生成。' : '已停止本轮生成。',
-          kind: 'ended',
-        },
-        5000
-      );
+      toast.show(force ? '已强制停止本轮生成。' : '已停止本轮生成。', {
+        type: 'info',
+      });
     }
     const asst = buildMessageIndex(getSessionById(sid)).get(cur.assistantMsgId);
     st.setSessionMessageStatus(sid, cur.userMsgId, 'completed');
@@ -170,8 +163,5 @@ export function useStreamCallbacks(
   };
 }
 
-export {
-  isActionableErrorKind,
-  resolveRunErrorSurface,
-} from './streamCallbacksSurfaces';
-export type { RunErrorSurface } from './streamCallbacksSurfaces';
+// 单轨收敛：旧四态裁决器已删除（resolveRunErrorSurface / isActionableErrorKind）。
+// 错误展示唯一出口 = SessionRuntimeStatusStore（ComposerErrorBar / InFlowStatusLine）。

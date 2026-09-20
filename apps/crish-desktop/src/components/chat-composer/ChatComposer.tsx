@@ -24,7 +24,7 @@ import { PermissionModeMenu } from './PermissionModeMenu';
 import { Button, Tooltip } from '../ui';
 import { shouldSuppressMenuReopen } from '../ui/Menu';
 import type { PermissionMode } from '../../api/permissionModes';
-import type { ChatAttachment, QueuedMessage } from '../../hooks/useChatStream';
+import type { ChatAttachment } from '../../hooks/useChatStream';
 import { ComposerField } from './ComposerField';
 import type {
   ComposerFieldProps,
@@ -37,7 +37,6 @@ import type {
 import { ComposerAttachmentBar } from './ComposerAttachmentBar';
 import { ComposerPermissionBar } from './ComposerPermissionBar';
 import { ComposerPlanProgressBar } from './ComposerPlanProgressBar';
-import { ChatQueuePanel } from './ChatQueuePanel';
 import { ComposerDropHost } from './ComposerDropHost';
 import { ComposerFusedTrigger } from './ComposerFusedTrigger';
 import { removePendingFileAnnotation } from '../../api/workspaceFsApi';
@@ -101,10 +100,6 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
   onCloseSiblingMenus,
   rightActions,
   className,
-  queuedMessages = [],
-  onSendQueuedNow,
-  onEditQueued,
-  onDeleteQueued,
   emptyKind: emptyKindProp,
   permissionBarNode,
   permissionBarProps,
@@ -314,13 +309,6 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
           void onFilesSelected(files);
         }}
       >
-        <ChatQueuePanel
-          queue={queuedMessages}
-          onSendNow={onSendQueuedNow ?? (() => {})}
-          onEdit={onEditQueued ?? (() => {})}
-          onDelete={onDeleteQueued ?? (() => {})}
-        />
-
         {/* 浮动层区域（Layer 1: 权限审批条 + Layer 2: 目标/计划进度条） */}
         {hasFloatLayer ? (
           <div className={styles.composerFloatZone} data-composer-float-zone="">

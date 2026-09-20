@@ -416,8 +416,6 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
             emptyKind={state.emptyKind}
             composerElement={mainComposerElement}
             ribbons={ribbons}
-            runNotice={state.composerProps.runNotice}
-            onDismissRunNotice={() => state.composerProps.setRunNotice(null)}
             pendingApprovalCount={state.approvalState.pendingApprovalCount}
             showApprovalDock={state.approvalState.approvalDockVisible}
             pendingApprovalSummary={

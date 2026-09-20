@@ -502,6 +502,8 @@ apps/agent-workbench/src-tauri/gen/*
 !scripts/token-registry.json
 # D0/U-BUDGET 性能预算 SSOT 门禁必须入库（check:desktop 依赖；同 382 行 `*.mjs` 忽略）
 !scripts/check-perf-budgets.mjs
+# 会话运行时状态 SSOT 门禁（单轨收敛）
+!scripts/check-runtime-status-ssot.mjs
 # 2026-09-11 补放行（由 check-guard-system 的 unreleased_guard 指标发现）：
 # 以下守卫脚本此前被 381 行 `*.mjs` 吞掉、从未入库 —— 本地存在、clone 后消失，
 # 属「防御体系无法生长」的结构性缺陷。门禁脚本是资产，一律放行。

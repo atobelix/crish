@@ -254,6 +254,22 @@ describe('DIM-03 §1.1: 24px ReasoningRow 极简思考行流式追踪与扫光�
       );
       expect(container.querySelector('[data-testid="reasoning-body"]')).not.toBeNull();
     });
+
+    it('架构防复读断言：展开态下头部不渲染摘要文本，彻底阻断与正文的内容双重重复', () => {
+      const { container } = render(
+        <ReasoningRow
+          content={'第一阶段推理\n第二阶段推理'}
+          isLive={true}
+          isTurnWorking={true}
+        />
+      );
+
+      // 工作态默认展开正文
+      expect(container.querySelector('[data-testid="reasoning-body"]')).not.toBeNull();
+      // 头部单行按钮内绝不包含任何尾窗跟随摘要元素
+      const summaryInHeader = container.querySelector('button [data-follow-end="true"]');
+      expect(summaryInHeader).toBeNull();
+    });
   });
 
   describe('六、负向断言：历史兼容别名已物理切除', () => {

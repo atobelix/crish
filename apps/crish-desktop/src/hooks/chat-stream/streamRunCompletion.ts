@@ -15,34 +15,26 @@ import type { SessionMessage } from '../../store/types';
 import type { MessageToolCall } from '../../store/types';
 import { getStreamText } from '../../store/streamingStore';
 import { getCompositionRoot } from '../../app/compositionRoot';
+import { clearRuntimeStatus } from '../../store/sessionRuntimeStatusStore';
+import { toast } from '../../services/toast/ToastContext';
 import { recordStreamDiag } from '../../api/streamDiag';
 import { stripThoughtPlaceholders } from '../../api/markdownRenderLite';
 import { checkAndAlertSilentComplete } from '../../api/silentComplete';
 import { streamBatchKey } from '../../api/streamTextBatcher';
 import { commitStreamToSession } from './helpers';
 import { buildMessageIndex, type MessageIndex } from './streamCallbacksInternals';
-import type { RunNotice } from './types';
 
 /**
- * 空回复横幅裁决 + 展示动作（push 弹提示 / dismiss 清 TTL 横幅）。
- * network 错误收口时守卫：持久条已承载错误，不重复弹横幅。
+ * 空回复提示（单轨收敛 §2.4）：全局 toast 一次性承载（5s TTL），不占 composer 区。
+ * network 错误收口时守卫：ComposerErrorBar 已承载错误，不重复提示。
  */
 export function decideEmptyRunNotice(opts: {
   asst: SessionMessage | undefined;
   committedText: string;
   gotRealText: boolean;
   runEndedWithNetworkError: boolean;
-  pushRunNotice: (notice: RunNotice, ttlMs?: number) => void;
-  dismissTransientRunNotice: () => void;
 }): void {
-  const {
-    asst,
-    committedText,
-    gotRealText,
-    runEndedWithNetworkError,
-    pushRunNotice,
-    dismissTransientRunNotice,
-  } = opts;
+  const { asst, committedText, gotRealText, runEndedWithNetworkError } = opts;
   if (runEndedWithNetworkError) return;
   if (asst && !gotRealText && !(asst.text || committedText || '').trim()) {
     const hasTools = (asst.toolCalls || []).some(
@@ -50,20 +42,11 @@ export function decideEmptyRunNotice(opts: {
         t.status === 'success' || t.status === 'error' || t.status === 'running'
     );
     if (!hasTools) {
-      pushRunNotice(
-        {
-          text: '这一轮没有文字回复。若刚改过配置，请检查模型与网络。',
-          kind: 'empty',
-        },
-        6000
+      toast.show(
+        '这一轮没有文字回复。若刚改过配置，请检查模型与网络。',
+        { type: 'info', ttlMs: 5000 }
       );
-    } else {
-      dismissTransientRunNotice();
     }
-    return;
-  }
-  if (gotRealText || (asst?.text || committedText || '').trim()) {
-    dismissTransientRunNotice();
   }
 }
 
@@ -93,6 +76,8 @@ export function commitRunCompletion(opts: {
     runId,
     gotRealText,
   } = opts;
+  // 单轨收敛 §2.0：run 收口 = 本轮结束，瞬态重试/错误行原子清空（成功不留痕）
+  clearRuntimeStatus(sid);
   const committedText = commitStreamToSession(sid, assistantMsgId, {
     text:
       buffer?.currentText() ||

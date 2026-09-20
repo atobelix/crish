@@ -8,7 +8,6 @@ import { useCallback, type MutableRefObject } from 'react';
 import type { UseChatStreamOptions } from './types';
 import type { StreamBatcherRefs } from './useStreamBatchers';
 import type {
-  StreamRunNoticeHelpers,
   StreamRunQueryHelpers,
   StreamRunStarter,
 } from './streamCallbacksSurfaces';
@@ -24,6 +23,7 @@ import {
 import { getSessionById } from '../../store/sessionStore';
 import { getCompositionRoot } from '../../app/compositionRoot';
 import { setStreamText } from '../../store/streamingStore';
+import { clearRuntimeStatus } from '../../store/sessionRuntimeStatusStore';
 import { StreamRenderBuffer } from '../../api/StreamRenderBuffer';
 import { streamBatchKey } from '../../api/streamTextBatcher';
 import { recordChunkSample } from '../../api/streamDiag';
@@ -53,14 +53,12 @@ import {
 export function useRunStreamingAssistant(
   options: UseChatStreamOptions,
   refs: StreamBatcherRefs,
-  noticeHelpers: StreamRunNoticeHelpers,
   queryHelpers: StreamRunQueryHelpers,
   generationMapRef: MutableRefObject<Map<string, number>>
 ): {
   runStreamingAssistant: StreamRunStarter;
 } {
   const { wsId, upsertSessionAgent } = queryHelpers;
-  const { pushRunNotice, dismissTransientRunNotice } = noticeHelpers;
   const {
     streamManagerRef,
     textBatcherRef,
@@ -90,7 +88,8 @@ export function useRunStreamingAssistant(
       const store = getCompositionRoot().session.getState();
       const toolNames: Record<string, string> = {};
       const startTime = Date.now();
-      dismissTransientRunNotice();
+      // 单轨收敛 §2.0：run 启动原子清空运行时状态（新一轮开始，旧瞬态/错误行消失）
+      clearRuntimeStatus(sid);
       let gotRealText = false;
       let runEndedWithNetworkError = false;
       let localRunId: string | null = null;
@@ -137,8 +136,6 @@ export function useRunStreamingAssistant(
           localRunId,
           gotRealText,
           runEndedWithNetworkError,
-          pushRunNotice,
-          dismissTransientRunNotice,
           scheduleRunFinalHtml,
           thinkingBatcher: thinkingBatcherRef.current,
           flushStreamBatchers,
@@ -298,9 +295,10 @@ export function useRunStreamingAssistant(
               // 首个正文 token 抵达：前置思考阶段正式结束（"吐字开始"），
               // 立即固化思考内容与真实思考耗时（durationMs），杜绝后续吐字阶段的耗时混入思考耗时。
               snapshotStreamThinkingToSession(sid, assistantMsgId);
+              // 单轨收敛 §2.0：新 Token 到达 = 重试成功信号，瞬态重试行立即消失（不留痕）
+              clearRuntimeStatus(sid);
             }
             gotRealText = true;
-            dismissTransientRunNotice();
             streamedFullText += chunk;
             if (renderBufferRef.current) {
               renderBufferRef.current.push(chunk);
@@ -321,12 +319,12 @@ export function useRunStreamingAssistant(
             const res = handleRunError({
               wsId,
               sid,
+              userMsgId,
               assistantMsgId,
               runId: localRunId,
               message,
               kind,
               detail,
-              pushRunNotice,
               flushStreamBatchers,
               refs: {
                 renderBuffer: renderBufferRef.current,
@@ -352,8 +350,6 @@ export function useRunStreamingAssistant(
     [
       wsId,
       upsertSessionAgent,
-      pushRunNotice,
-      dismissTransientRunNotice,
       streamManagerRef,
       textBatcherRef,
       thinkingBatcherRef,

@@ -242,7 +242,7 @@
   height: 100%;
   background: var(--shell-chrome-bg, var(--bg-secondary));
   border-right: 1px solid var(--border-subtle);
-  padding: var(--space-2) var(--space-2_5);
+  padding: var(--space-2) 0 var(--space-2) var(--space-2_5);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -275,7 +275,7 @@
   flex-direction: column;
   gap: var(--space-3_5);
   position: relative;
-  background: var(--bg-workspace, var(--bg-primary));
+  background: var(--bg-card);
   overflow-y: auto;
   overflow-x: hidden;
   overscroll-behavior: contain;
@@ -367,7 +367,7 @@
   height: 100%;
   min-height: 0;
   overflow: hidden;
-  background: var(--bg-workspace, var(--bg-primary));
+  background: var(--shell-chrome-bg, var(--bg-secondary));
   color: var(--text-primary);
   font-family: var(--font-sans);
 }

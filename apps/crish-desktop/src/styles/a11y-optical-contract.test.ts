@@ -110,7 +110,6 @@ describe('契约测试：色彩语义、排版防抖与焦点无障碍护栏 (DI
     { relPath: 'components/settings-models/ScanResultsModal.module.css' },
     { relPath: 'components/settings-models/YamlConfigEditorModal.module.css' },
     { relPath: 'components/settings-models/ModelsSettingsTab.module.css' },
-    { relPath: 'components/chat-composer/ChatQueuePanel.module.css' },
     { relPath: 'components/workspace/TerminalCard.module.css' },
     { relPath: 'components/settings-skills/SkillsSettingsTab.module.css' },
     { relPath: 'components/settings/ScheduledTasksPanel.module.css' },

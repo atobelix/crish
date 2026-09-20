@@ -4,7 +4,6 @@
  * 封装并发流冲突检测、Markdown HTML 单次调度、思考占位清理与完成终态收口逻辑。
  */
 import type { MutableRefObject } from 'react';
-import type { RunNotice } from './types';
 import type { StreamTextBatcher } from '../../api/streamTextBatcher';
 import type { SessionStreamManager } from '../../api/sessionStreamManager';
 import type { SessionMessage } from '../../store/types';
@@ -116,8 +115,6 @@ export interface StreamCompletionContext {
   localRunId: string | null;
   gotRealText: boolean;
   runEndedWithNetworkError: boolean;
-  pushRunNotice: (notice: RunNotice, ttlMs?: number) => void;
-  dismissTransientRunNotice: () => void;
   scheduleRunFinalHtml: (fullText: string) => void;
   thinkingBatcher: StreamTextBatcher | null | undefined;
   flushStreamBatchers: () => void;
@@ -141,8 +138,6 @@ export function executeStreamCompletion(ctx: StreamCompletionContext): void {
     localRunId,
     gotRealText,
     runEndedWithNetworkError,
-    pushRunNotice,
-    dismissTransientRunNotice,
     scheduleRunFinalHtml,
     thinkingBatcher,
     flushStreamBatchers,
@@ -168,8 +163,6 @@ export function executeStreamCompletion(ctx: StreamCompletionContext): void {
     committedText,
     gotRealText,
     runEndedWithNetworkError,
-    pushRunNotice,
-    dismissTransientRunNotice,
   });
   const toolPatches = buildTerminalToolPatches(asst?.toolCalls, 'complete');
   if (toolPatches.length) {

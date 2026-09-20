@@ -128,24 +128,21 @@
   color: inherit;
 }
 
-/* 右对齐打字机动态跟随：靠右硬截断，让左侧较早文字溢出可视边界外 */
+/* 单行收拢模式下的动态文本预览：自然居左截断，与分割点紧密衔接 */
 .reasoningSummary[data-follow-end='true'] {
-  display: flex;
-  justify-content: flex-end;
-  text-align: right;
-  direction: ltr;
+  display: block;
   overflow: hidden;
   white-space: nowrap;
-  text-overflow: clip;
+  text-overflow: ellipsis;
+  text-align: left;
 }
 
 .reasoningSummary[data-follow-end='true'] .summaryText {
-  flex: 0 0 auto;
-  width: max-content;
-  min-width: 100%;
-  overflow: visible;
-  text-align: right;
-  text-overflow: clip;
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: left;
 }
 
 /* 极简微交互动画契约声明 */
@@ -224,7 +221,9 @@
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
-  padding: 4px 0 8px calc(var(--space-1, 4px) + 2px);
+  padding: 4px 0 8px 12px;
+  margin-left: 6px;
+  border-left: 2px solid var(--border-subtle);
   overflow: visible;
   height: auto;
   max-height: none;

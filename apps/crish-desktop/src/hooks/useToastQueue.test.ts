@@ -32,7 +32,7 @@ import {
 describe('constants (ttl / max queue)', () => {
   it('exports positive TTL and max queue defaults', () => {
     expect(TOAST_TTL_MS).toBe(5000);
-    expect(TOAST_MAX_QUEUE).toBe(5);
+    expect(TOAST_MAX_QUEUE).toBe(3);
     expect(TOAST_TTL_MS).toBeGreaterThan(0);
     expect(TOAST_MAX_QUEUE).toBeGreaterThanOrEqual(1);
   });

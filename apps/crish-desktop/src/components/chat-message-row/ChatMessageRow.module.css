@@ -770,6 +770,15 @@
   opacity: 1;
 }
 
+.time {
+  font-size: var(--font-size-xs);
+  color: var(--text-faint);
+  margin-right: var(--space-2);
+  user-select: none;
+  font-variant-numeric: tabular-nums;
+  line-height: var(--control-height-sm, 28px);
+}
+
 .cacheMetricsInline {
   font-size: var(--font-size-xs);
   color: var(--text-tertiary);

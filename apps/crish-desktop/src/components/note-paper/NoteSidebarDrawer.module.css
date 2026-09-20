@@ -204,6 +204,13 @@
   border: none;
 }
 
+.sessionItem.active .sessionTime,
+.sessionItem.active .itemTime,
+.item.active .sessionTime,
+.item.active .itemTime {
+  color: var(--text-secondary);
+}
+
 .sessionItem:focus-visible,
 .item:focus-visible,
 .card:focus-visible {
@@ -296,7 +303,7 @@
   font-weight: var(--font-weight-normal, 400);
   font-variant-numeric: tabular-nums;
   font-feature-settings: 'tnum' 1;
-  color: var(--text-faint);
+  color: var(--text-tertiary);
   flex-shrink: 0;
   white-space: nowrap;
   max-width: 68px;

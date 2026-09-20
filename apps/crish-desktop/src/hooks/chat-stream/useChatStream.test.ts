@@ -1,18 +1,15 @@
 /**
- * useChatStream 横幅控制器与分级分发端到端测试：
- * - createRunNoticeController：同文案去重窗口 / persistent 变体 / dismissTransient；
- * - useChatStream × transport onStatus：network 持久条「恢复即消失」；
- * - onRunError 分级分发（network 仅持久条 / 有正文仅气泡 / 无正文仅横幅 / 可行动横幅+toast）。
+ * useChatStream onRunError 单轨分发端到端测试（docs/chat-notice-convergence §2.0/§2.3）：
+ * - 全部终态错误（含 network）唯一承载体 = SessionRuntimeStatusStore failed 相位；
+ * - 不写 toast、不写横幅、不写气泡 errorDetail；
+ * - 有正文保留并置 error（流内「回复中断」事实标记）；无正文 withdraw 占位；user 消息收 completed；
+ * - transport 恢复：network 类失败「恢复即消失」。
  */
 // @vitest-environment jsdom
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  createRunNoticeController,
-  normalizeRunNoticeKey,
-  RUN_NOTICE_DEDUPE_WINDOW_MS,
-  useChatStream,
-} from './index';
+import { useChatStream } from './index';
+import { useSessionRuntimeStatusStore } from '../../store/sessionRuntimeStatusStore';
 import type { UseChatStreamOptions } from './types';
 
 const h = vi.hoisted(() => {
@@ -93,126 +90,8 @@ function makeSession(messages: Array<Record<string, unknown>> = []) {
   return { id: 'sess-1', goalMode: null, agents: [], messages };
 }
 
-describe('createRunNoticeController', () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-  });
-  afterEach(() => {
-    vi.useRealTimers();
-  });
 
-  it('普通 push：显示 + TTL 到期自动消失', () => {
-    const set = vi.fn();
-    const c = createRunNoticeController(set);
-    c.push({ text: '横幅A' }, 8000);
-    expect(set).toHaveBeenCalledWith(expect.objectContaining({ text: '横幅A' }));
-    vi.advanceTimersByTime(8000);
-    expect(set).toHaveBeenLastCalledWith(null);
-  });
-
-  it('同文案窗口内（可见）重复 push：不重复 set，仅刷新 TTL', () => {
-    const set = vi.fn();
-    let now = 1000;
-    const c = createRunNoticeController(set, () => now);
-    c.push({ text: '横幅A' }, 8000);
-    expect(set).toHaveBeenCalledTimes(1);
-    vi.advanceTimersByTime(4000);
-    now = 5000;
-    c.push({ text: '横幅A' }, 8000);
-    expect(set).toHaveBeenCalledTimes(1); // 同文案不叠层、不重显
-    vi.advanceTimersByTime(8000); // 刷新后的 TTL 到期
-    expect(set).toHaveBeenLastCalledWith(null);
-  });
-
-  it('同文案窗口内（已消失）重复 push：抑制不重显', () => {
-    const set = vi.fn();
-    let now = 1000;
-    const c = createRunNoticeController(set, () => now);
-    c.push({ text: '横幅A' }, 8000);
-    vi.advanceTimersByTime(8000); // TTL 到期消失
-    set.mockClear();
-    now = 1000 + RUN_NOTICE_DEDUPE_WINDOW_MS - 1; // 仍在 30s 窗口内
-    c.push({ text: '横幅A' }, 8000);
-    expect(set).not.toHaveBeenCalled(); // 抑制，不重显
-  });
-
-  it('窗口外同文案：重新显示', () => {
-    const set = vi.fn();
-    let now = 1000;
-    const c = createRunNoticeController(set, () => now);
-    c.push({ text: '横幅A' }, 8000);
-    vi.advanceTimersByTime(8000);
-    set.mockClear();
-    now = 1000 + RUN_NOTICE_DEDUPE_WINDOW_MS + 1; // 窗口过期
-    c.push({ text: '横幅A' }, 8000);
-    expect(set).toHaveBeenCalledWith(expect.objectContaining({ text: '横幅A' }));
-  });
-
-  it('persistent push：无 TTL，推进时间不消失', () => {
-    const set = vi.fn();
-    const c = createRunNoticeController(set);
-    c.push({ text: '服务暂时不可用', kind: 'network', persistent: true });
-    expect(set).toHaveBeenCalledWith(
-      expect.objectContaining({ persistent: true })
-    );
-    vi.advanceTimersByTime(120_000);
-    expect(set).not.toHaveBeenLastCalledWith(null);
-  });
-
-  it('persistent 同文案重复 push：幂等保持，不重复 set', () => {
-    const set = vi.fn();
-    const c = createRunNoticeController(set);
-    c.push({ text: '服务暂时不可用', persistent: true });
-    expect(set).toHaveBeenCalledTimes(1);
-    c.push({ text: '服务暂时不可用', persistent: true });
-    expect(set).toHaveBeenCalledTimes(1);
-  });
-
-  it('dismissTransient：持久条显示中保持，TTL 横幅显示中清除', () => {
-    const set = vi.fn();
-    const c = createRunNoticeController(set);
-    c.push({ text: '服务暂时不可用', persistent: true });
-    set.mockClear();
-    c.dismissTransient();
-    expect(set).toHaveBeenCalledWith(
-      expect.objectContaining({ text: '服务暂时不可用', persistent: true })
-    );
-    c.push({ text: '临时横幅B' }, 8000); // TTL 横幅覆盖持久条
-    set.mockClear();
-    c.dismissTransient();
-    expect(set).toHaveBeenCalledWith(null);
-  });
-
-  it('dismiss：全清（含持久条）并重置去重窗口', () => {
-    const set = vi.fn();
-    const c = createRunNoticeController(set);
-    c.push({ text: '服务暂时不可用', persistent: true });
-    set.mockClear();
-    c.dismiss();
-    expect(set).toHaveBeenCalledWith(null);
-    // 重置后同文案可立即重新 push（手动关闭后不抑制）
-    c.push({ text: '服务暂时不可用', persistent: true });
-    expect(set).toHaveBeenLastCalledWith(
-      expect.objectContaining({ text: '服务暂时不可用', persistent: true })
-    );
-  });
-
-  it('dispose：清理 TTL timer，不再自动消失回调', () => {
-    const set = vi.fn();
-    const c = createRunNoticeController(set);
-    c.push({ text: '横幅A' }, 8000);
-    c.dispose();
-    vi.advanceTimersByTime(10_000);
-    expect(set).toHaveBeenCalledTimes(1); // 仅初次显示，无消失回调
-  });
-
-  it('normalizeRunNoticeKey：trim 归一（对齐 toast dedupe）', () => {
-    expect(normalizeRunNoticeKey('  x ')).toBe('x');
-    expect(normalizeRunNoticeKey('')).toBe('');
-  });
-});
-
-describe('useChatStream onRunError 分级分发（端到端）', () => {
+describe('useChatStream onRunError 单轨分发（端到端，docs/chat-notice-convergence §2.0）', () => {
   beforeEach(() => {
     showToastMock.mockClear();
     h.layoutState.addMessage.mockClear();
@@ -222,7 +101,15 @@ describe('useChatStream onRunError 分级分发（端到端）', () => {
     h.transport.onStatus.mockClear();
     h.transport.onMessage.mockClear();
     h.getSessionById.mockReturnValue(makeSession());
+    useSessionRuntimeStatusStore.getState().clearAll();
   });
+
+  /** 读取状态机相位（无则 null） */
+  function runtimePhase(sid = 'sess-1') {
+    return (
+      useSessionRuntimeStatusStore.getState().statusBySession[sid]?.phase ?? null
+    );
+  }
 
   /** 启动一个 run 并返回捕获的 onRunError 回调（含生成的 assistant 占位消息） */
   function startRunAndGetErrorHandler() {
@@ -243,8 +130,8 @@ describe('useChatStream onRunError 分级分发（端到端）', () => {
     return { result, callbacks, addedMsg };
   }
 
-  it('network：仅持久条，无 toast；无正文 withdraw 占位；transport connected 恢复即消失', () => {
-    const { result, callbacks, addedMsg } = startRunAndGetErrorHandler();
+  it('network 无正文：状态机 failed（唯一承载体），无 toast/无气泡，withdraw 占位；恢复即消失', () => {
+    const { callbacks, addedMsg } = startRunAndGetErrorHandler();
     h.getSessionById.mockReturnValue(
       makeSession([
         {
@@ -264,10 +151,6 @@ describe('useChatStream onRunError 分级分发（端到端）', () => {
       );
     });
 
-    expect(result.current.runNotice).toMatchObject({
-      text: '服务暂时不可用，正在自动恢复，请稍后再试。',
-      persistent: true,
-    });
     expect(showToastMock).not.toHaveBeenCalled(); // network 不进 toast
     expect(h.layoutState.withdrawMessage).toHaveBeenCalledWith(
       'ws-test',
@@ -275,19 +158,22 @@ describe('useChatStream onRunError 分级分发（端到端）', () => {
       addedMsg.id
     );
     expect(h.layoutState.setSessionMessageStatus).not.toHaveBeenCalled(); // 不写气泡
+    expect(runtimePhase()).toBe('failed'); // 唯一承载体：状态机
+    const st = useSessionRuntimeStatusStore.getState().statusBySession['sess-1'];
+    if (st?.phase === 'failed') expect(st.kind).toBe('network');
 
-    // 恢复即消失：transport failed/connecting → connected 切换点
+    // 恢复即消失：transport connected → network 类失败自动清空
     const statusListener = h.transport.onStatus.mock.calls[0]?.[0] as (
       s: string
     ) => void;
     act(() => {
       statusListener('connected');
     });
-    expect(result.current.runNotice).toBeNull();
+    expect(runtimePhase()).toBeNull();
   });
 
-  it('network 有正文：不写气泡错误卡、不 withdraw（保留正文）', () => {
-    const { result, callbacks, addedMsg } = startRunAndGetErrorHandler();
+  it('network 有正文：保留正文并置 error，user 收 completed，状态机 failed（不 withdraw）', () => {
+    const { callbacks, addedMsg } = startRunAndGetErrorHandler();
     h.getSessionById.mockReturnValue(
       makeSession([
         {
@@ -304,12 +190,16 @@ describe('useChatStream onRunError 分级分发（端到端）', () => {
       callbacks.onRunError('服务暂时不可用，正在自动恢复，请稍后再试。', 'network');
     });
 
-    expect(result.current.runNotice).toMatchObject({ persistent: true });
     expect(h.layoutState.withdrawMessage).not.toHaveBeenCalled();
-    expect(h.layoutState.setSessionMessageStatus).not.toHaveBeenCalled();
+    expect(h.layoutState.setSessionMessageStatus).toHaveBeenCalledWith(
+      'sess-1',
+      addedMsg.id,
+      'error'
+    );
+    expect(runtimePhase()).toBe('failed');
   });
 
-  it('有正文失败（非 network 非可行动）：仅气泡错误卡，不弹横幅、不弹 toast', () => {
+  it('有正文失败（非 network）：仅状态机 failed 相位，不弹横幅/toast；正文保留置 error，turn 定位 user/assistant', () => {
     const { result, callbacks, addedMsg } = startRunAndGetErrorHandler();
     h.getSessionById.mockReturnValue(
       makeSession([
@@ -327,23 +217,46 @@ describe('useChatStream onRunError 分级分发（端到端）', () => {
       callbacks.onRunError('这一轮任务中断了，请稍后重试。', 'ended');
     });
 
-    expect(result.current.runNotice).toBeNull(); // 不弹横幅
     expect(showToastMock).not.toHaveBeenCalled(); // 不弹 toast
+    expect(h.layoutState.withdrawMessage).not.toHaveBeenCalled(); // 正文保留
+    // 有正文：置 error（事实记录；不再写 errorDetail 气泡错误卡）
     expect(h.layoutState.setSessionMessageStatus).toHaveBeenCalledWith(
       'sess-1',
       addedMsg.id,
-      'error',
-      undefined,
-      expect.objectContaining({
-        errorDetail: expect.objectContaining({
-          message: '这一轮任务中断了，请稍后重试。',
-          kind: 'ended',
-        }),
-      })
+      'error'
+    );
+    // 错误唯一承载体：状态机 failed 相位，只带消息定位、不缓存提问文本
+    const status = useSessionRuntimeStatusStore.getState().statusBySession['sess-1'];
+    expect(status?.phase).toBe('failed');
+    if (status?.phase === 'failed') {
+      expect(status.message).toBe('这一轮任务中断了，请稍后重试。');
+      expect(status.kind).toBe('generic');
+      expect(status.turn).toEqual({ userMsgId: 'user-1', assistantMsgId: addedMsg.id });
+      expect('promptText' in status).toBe(false);
+    }
+  });
+
+  it('错误即本轮终态：processing 的 user 消息收 completed（发送按钮不被 Stop 常驻）', () => {
+    const { callbacks, addedMsg } = startRunAndGetErrorHandler();
+    h.getSessionById.mockReturnValue(
+      makeSession([
+        { id: 'user-1', sender: 'user', text: '你好', status: 'processing' },
+        { id: addedMsg.id, sender: 'assistant', text: '', status: 'processing', toolCalls: [] },
+      ])
+    );
+
+    act(() => {
+      callbacks.onRunError('服务端错误', 'server_error');
+    });
+
+    expect(h.layoutState.setSessionMessageStatus).toHaveBeenCalledWith(
+      'sess-1',
+      'user-1',
+      'completed'
     );
   });
 
-  it('无正文失败（非 network 非可行动）：仅横幅，无 toast，withdraw 占位', () => {
+  it('无正文失败（非 network）：withdraw 占位 + 状态机 failed，无横幅/无 toast', () => {
     const { result, callbacks, addedMsg } = startRunAndGetErrorHandler();
     h.getSessionById.mockReturnValue(
       makeSession([
@@ -361,28 +274,27 @@ describe('useChatStream onRunError 分级分发（端到端）', () => {
       callbacks.onRunError('这一轮任务中断了，请稍后重试。', 'ended');
     });
 
-    expect(result.current.runNotice).toMatchObject({
-      text: '这一轮任务中断了，请稍后重试。',
-    });
-    expect(result.current.runNotice?.persistent).toBeUndefined();
     expect(showToastMock).not.toHaveBeenCalled(); // 无 toast
     expect(h.layoutState.withdrawMessage).toHaveBeenCalled();
     expect(h.layoutState.setSessionMessageStatus).not.toHaveBeenCalled();
+    expect(runtimePhase()).toBe('failed');
   });
 
-  it('可行动错误（blocked）：横幅 + 一次性 toast', () => {
+  it('可行动错误（blocked）：仅状态机 failed，无横幅、无 toast（双显已废除）', () => {
     const { result, callbacks } = startRunAndGetErrorHandler();
 
     act(() => {
       callbacks.onRunError('该操作未获允许（可能被安全策略或计划模式拦截）。', 'blocked');
     });
 
-    expect(result.current.runNotice).toMatchObject({
-      text: '该操作未获允许（可能被安全策略或计划模式拦截）。',
-    });
-    expect(result.current.runNotice?.persistent).toBeUndefined();
-    expect(showToastMock).toHaveBeenCalledWith(
-      '该操作未获允许（可能被安全策略或计划模式拦截）。'
-    );
+    expect(showToastMock).not.toHaveBeenCalled();
+    const status = useSessionRuntimeStatusStore.getState().statusBySession['sess-1'];
+    expect(status?.phase).toBe('failed');
+    if (status?.phase === 'failed') {
+      expect(status.kind).toBe('generic'); // blocked 不在状态机 kind 枚举内 → generic
+      expect(status.message).toBe(
+        '该操作未获允许（可能被安全策略或计划模式拦截）。'
+      );
+    }
   });
 });

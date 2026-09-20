@@ -29,7 +29,6 @@ export type { SendWhileRunningAction } from './chat-stream/helpers';
 export type {
   ChatAttachment,
   QueuedMessage,
-  RunNotice,
   UseChatStreamOptions,
   UseChatStreamResult,
   TerminalToolReason,

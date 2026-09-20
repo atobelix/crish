@@ -1,0 +1,54 @@
+/* ComposerErrorBar — 输入框上方全宽错误条（单轨收敛 §2.3，非胶囊形态） */
+
+.errorBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 12px;
+  border: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--text-danger);
+  border-radius: var(--radius-md, 6px);
+  background-color: var(--bg-elevated);
+  color: var(--text-primary);
+  font-size: var(--font-size-sm, 13px);
+  line-height: var(--line-height-base, 1.4);
+}
+
+.errorIcon {
+  flex-shrink: 0;
+  color: var(--text-danger);
+}
+
+.errorText {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.detailToggle {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+}
+
+.retryButton {
+  flex-shrink: 0;
+}
+
+.closeButton {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+}
+
+.detailBody {
+  flex-basis: 100%;
+  font-size: var(--font-size-xs, 12px);
+  color: var(--text-secondary);
+  word-break: break-all;
+  white-space: pre-wrap;
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 6px;
+}

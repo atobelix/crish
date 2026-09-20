@@ -175,9 +175,6 @@ export function normalizeSettingsPartial(raw: unknown): Partial<Settings> {
   if ('tabModeEnabled' in o) {
     out.tabModeEnabled = normalizeSettingsBool(o.tabModeEnabled, true);
   }
-  if ('queueMode' in o) {
-    out.queueMode = normalizeSettingsBool(o.queueMode, false);
-  }
   if ('quietStartup' in o) {
     out.quietStartup = normalizeSettingsBool(o.quietStartup, true);
   }
@@ -335,7 +332,6 @@ export function normalizeSettingsPayload(raw: unknown): Settings {
     defaultThinkingLevel: normalizeThinkingLevel(merged.defaultThinkingLevel),
     hideThinkingBlock: normalizeSettingsBool(merged.hideThinkingBlock, false),
     tabModeEnabled: normalizeSettingsBool(merged.tabModeEnabled, true),
-    queueMode: normalizeSettingsBool(merged.queueMode, false),
     quietStartup: normalizeSettingsBool(merged.quietStartup, true),
     enableSkillCommands: normalizeSettingsBool(
       merged.enableSkillCommands,

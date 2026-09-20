@@ -120,8 +120,6 @@ function makeState(overrides: Record<string, unknown> = {}) {
       handleForceCancelGeneration: vi.fn(),
       handleFilesSelected: vi.fn(),
       setChatInput: vi.fn(),
-      runNotice: null,
-      setRunNotice: vi.fn(),
     },
     isProcessing: false,
     permissionMode: 'ask',

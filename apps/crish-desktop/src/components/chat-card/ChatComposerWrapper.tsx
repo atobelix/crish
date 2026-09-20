@@ -6,7 +6,6 @@ import {
   type GoalRibbonProps,
   type ApprovalRibbonProps,
 } from './ChatStatusRibbons';
-import type { RunNotice } from '../../hooks/useChatStream';
 import { SlotOutlet } from '../../services/view-registry';
 import { slotCore } from '../../services/view-registry/SlotCore';
 import type { ChatComposerAboveProps } from './chatComposerAboveProps';
@@ -22,11 +21,10 @@ import {
 /**
  * R2-5 B3（P1-12 聚合）：ChatStatusRibbons 专属字段分组（ribbons 对象由调用方
  * 构造稳定引用，案甲：ChatCard 层 useMemo）——消除 20+ 字段平铺 drilling。
- * streaming/goal 子对象由 ribbons 传入；approval/runNotice/activeSessionId
- * 仍平铺（它们同时被 ChatComposerWrapper 其他消费面引用）。
+ * streaming/goal 子对象由 ribbons 传入；approval/activeSessionId 仍平铺。
  */
 export interface RibbonsGroup {
-  streaming: Omit<StreamingRibbonProps, 'runNotice' | 'onDismissRunNotice'>;
+  streaming: StreamingRibbonProps;
   goal: GoalRibbonProps;
 }
 
@@ -36,8 +34,6 @@ export interface ChatComposerWrapperProps {
   composerElement: React.ReactNode;
   /** R2-5 B3：ribbons 专属字段分组（调用方构造稳定引用） */
   ribbons: RibbonsGroup;
-  runNotice: RunNotice | null;
-  onDismissRunNotice: () => void;
   pendingApprovalCount: number;
   showApprovalDock: boolean;
   pendingApprovalSummary: string;
@@ -57,8 +53,6 @@ export const ChatComposerWrapper: React.FC<ChatComposerWrapperProps> = React.mem
   mainSurface,
   composerElement,
   ribbons,
-  runNotice,
-  onDismissRunNotice,
   pendingApprovalCount,
   showApprovalDock,
   pendingApprovalSummary,
@@ -163,7 +157,7 @@ export const ChatComposerWrapper: React.FC<ChatComposerWrapperProps> = React.mem
       {/* chatCol 与消息 listInner 同 max-width / 水平 padding，对齐 stream + composer */}
       <div className={styles.chatCol}>
         <ChatStatusRibbons
-          streaming={{ ...ribbons.streaming, runNotice, onDismissRunNotice }}
+          streaming={ribbons.streaming}
           goal={ribbons.goal}
           approval={approval}
           omitPlanRibbons

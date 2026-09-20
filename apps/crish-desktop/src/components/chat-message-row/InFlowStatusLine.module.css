@@ -1,0 +1,54 @@
+/* InFlowStatusLine — 对话流内瞬态状态行（单轨收敛 §2.2，极简单行） */
+
+.statusLine {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  margin: var(--space-1, 4px) 0;
+  color: var(--text-tertiary);
+  font-size: var(--font-size-sm, 12px);
+  line-height: 24px;
+  user-select: none;
+}
+
+.statusIcon {
+  flex-shrink: 0;
+  opacity: 0.8;
+}
+
+/* 闪光流动文字（与「正在思考」ReasoningRow 同一视觉语言：
+   background-clip:text + 渐变位移动画） */
+.statusText {
+  background: linear-gradient(
+    90deg,
+    var(--text-tertiary) 0%,
+    var(--text-tertiary) 40%,
+    var(--text-primary) 50%,
+    var(--text-tertiary) 60%,
+    var(--text-tertiary) 100%
+  );
+  background-position: 100% 50%;
+  background-size: 200% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  animation: inflow-status-shimmer 1.8s ease-in-out infinite;
+}
+
+@keyframes inflow-status-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .statusLine .statusText {
+    animation: none;
+    background: none;
+    color: var(--text-tertiary);
+  }
+}

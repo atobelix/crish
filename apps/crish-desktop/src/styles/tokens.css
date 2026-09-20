@@ -107,6 +107,14 @@ html[data-theme='light'] {
 
   /* 激活态滑块：黄色/色相饱和度绝对不动 (H=30 S=2%)，灰度下调至 21.8% (L=78%)，物理像素 #c8c7c6，差值严格死锁约 12% */
   --scrollbar-thumb-active: #c8c7c6;
+  --scrollbar-button-up: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 7'%3E%3Cpath d='M 5.5 6.2 L 2.5 6.2 C 1.2 6.2 0.3 5.9 0.8 4.8 L 2.4 2.3 C 3.1 1.0 4.9 1.0 5.6 2.3 L 7.2 4.8 C 7.7 5.9 6.8 6.2 5.5 6.2 Z' fill='%23e6e6e5'/%3E%3C/svg%3E");
+  --scrollbar-button-down: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 7'%3E%3Cpath d='M 2.5 0.8 L 5.5 0.8 C 6.8 0.8 7.7 1.1 7.2 2.2 L 5.6 4.7 C 4.9 6.0 3.1 6.0 2.4 4.7 L 0.8 2.2 C 0.3 1.1 1.2 0.8 2.5 0.8 Z' fill='%23e6e6e5'/%3E%3C/svg%3E");
+  --scrollbar-button-left: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 8'%3E%3Cpath d='M 6.2 2.5 L 6.2 5.5 C 6.2 6.8 5.9 7.7 4.8 7.2 L 2.3 5.6 C 1.0 4.9 1.0 3.1 2.3 2.4 L 4.8 0.8 C 5.9 0.3 6.2 1.2 6.2 2.5 Z' fill='%23e6e6e5'/%3E%3C/svg%3E");
+  --scrollbar-button-right: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 8'%3E%3Cpath d='M 0.8 2.5 L 0.8 5.5 C 0.8 6.8 1.1 7.7 2.2 7.2 L 4.7 5.6 C 6.0 4.9 6.0 3.1 4.7 2.4 L 2.2 0.8 C 1.1 0.3 0.8 1.2 0.8 2.5 Z' fill='%23e6e6e5'/%3E%3C/svg%3E");
+  --scrollbar-button-up-active: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 7'%3E%3Cpath d='M 5.5 6.2 L 2.5 6.2 C 1.2 6.2 0.3 5.9 0.8 4.8 L 2.4 2.3 C 3.1 1.0 4.9 1.0 5.6 2.3 L 7.2 4.8 C 7.7 5.9 6.8 6.2 5.5 6.2 Z' fill='%23c8c7c6'/%3E%3C/svg%3E");
+  --scrollbar-button-down-active: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 7'%3E%3Cpath d='M 2.5 0.8 L 5.5 0.8 C 6.8 0.8 7.7 1.1 7.2 2.2 L 5.6 4.7 C 4.9 6.0 3.1 6.0 2.4 4.7 L 0.8 2.2 C 0.3 1.1 1.2 0.8 2.5 0.8 Z' fill='%23c8c7c6'/%3E%3C/svg%3E");
+  --scrollbar-button-left-active: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 8'%3E%3Cpath d='M 6.2 2.5 L 6.2 5.5 C 6.2 6.8 5.9 7.7 4.8 7.2 L 2.3 5.6 C 1.0 4.9 1.0 3.1 2.3 2.4 L 4.8 0.8 C 5.9 0.3 6.2 1.2 6.2 2.5 Z' fill='%23c8c7c6'/%3E%3C/svg%3E");
+  --scrollbar-button-right-active: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 8'%3E%3Cpath d='M 0.8 2.5 L 0.8 5.5 C 0.8 6.8 1.1 7.7 2.2 7.2 L 4.7 5.6 C 6.0 4.9 6.0 3.1 4.7 2.4 L 2.2 0.8 C 1.1 0.3 0.8 1.2 0.8 2.5 Z' fill='%23c8c7c6'/%3E%3C/svg%3E");
 
   /* 轨道背景：完全透明，消除轨道占位边缘对内容的侵入感 */
   --scrollbar-track-bg: transparent;
@@ -214,16 +222,16 @@ html[data-theme='light'] {
   --sep-font-sans: var(--font-sans, 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
   --sep-font-mono: var(--font-mono, SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace);
 
-  --sep-bg-panel-solid: #ffffff;
+  --sep-bg-panel-solid: var(--bg-elevated);
   --sep-bg-item-hover: var(--tint-hover);
   --sep-bg-input: color-mix(in srgb, var(--text-primary) 3%, transparent);
 
   --sep-border-color: var(--border-color);
   --sep-divider-color: color-mix(in srgb, var(--text-primary) 6%, transparent);
 
-  --sep-text-primary: #1a1a1a;
-  --sep-text-secondary: #555555;
-  --sep-text-muted: #767676;
+  --sep-text-primary: var(--text-primary);
+  --sep-text-secondary: var(--text-secondary);
+  --sep-text-muted: var(--text-tertiary);
 
   --sep-accent-check: hsl(160 84% 39%);
   --sep-danger-color: hsl(0 84% 60%);
@@ -848,6 +856,14 @@ html[data-theme='dark'] {
     var(--text-primary, #cccccc) 36%,
     transparent
   );
+  --scrollbar-button-up: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 7'%3E%3Cpath d='M 5.5 6.2 L 2.5 6.2 C 1.2 6.2 0.3 5.9 0.8 4.8 L 2.4 2.3 C 3.1 1.0 4.9 1.0 5.6 2.3 L 7.2 4.8 C 7.7 5.9 6.8 6.2 5.5 6.2 Z' fill='%23cccccc' fill-opacity='0.20'/%3E%3C/svg%3E");
+  --scrollbar-button-down: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 7'%3E%3Cpath d='M 2.5 0.8 L 5.5 0.8 C 6.8 0.8 7.7 1.1 7.2 2.2 L 5.6 4.7 C 4.9 6.0 3.1 6.0 2.4 4.7 L 0.8 2.2 C 0.3 1.1 1.2 0.8 2.5 0.8 Z' fill='%23cccccc' fill-opacity='0.20'/%3E%3C/svg%3E");
+  --scrollbar-button-left: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 8'%3E%3Cpath d='M 6.2 2.5 L 6.2 5.5 C 6.2 6.8 5.9 7.7 4.8 7.2 L 2.3 5.6 C 1.0 4.9 1.0 3.1 2.3 2.4 L 4.8 0.8 C 5.9 0.3 6.2 1.2 6.2 2.5 Z' fill='%23cccccc' fill-opacity='0.20'/%3E%3C/svg%3E");
+  --scrollbar-button-right: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 8'%3E%3Cpath d='M 0.8 2.5 L 0.8 5.5 C 0.8 6.8 1.1 7.7 2.2 7.2 L 4.7 5.6 C 6.0 4.9 6.0 3.1 4.7 2.4 L 2.2 0.8 C 1.1 0.3 0.8 1.2 0.8 2.5 Z' fill='%23cccccc' fill-opacity='0.20'/%3E%3C/svg%3E");
+  --scrollbar-button-up-active: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 7'%3E%3Cpath d='M 5.5 6.2 L 2.5 6.2 C 1.2 6.2 0.3 5.9 0.8 4.8 L 2.4 2.3 C 3.1 1.0 4.9 1.0 5.6 2.3 L 7.2 4.8 C 7.7 5.9 6.8 6.2 5.5 6.2 Z' fill='%23cccccc' fill-opacity='0.36'/%3E%3C/svg%3E");
+  --scrollbar-button-down-active: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 7'%3E%3Cpath d='M 2.5 0.8 L 5.5 0.8 C 6.8 0.8 7.7 1.1 7.2 2.2 L 5.6 4.7 C 4.9 6.0 3.1 6.0 2.4 4.7 L 0.8 2.2 C 0.3 1.1 1.2 0.8 2.5 0.8 Z' fill='%23cccccc' fill-opacity='0.36'/%3E%3C/svg%3E");
+  --scrollbar-button-left-active: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 8'%3E%3Cpath d='M 6.2 2.5 L 6.2 5.5 C 6.2 6.8 5.9 7.7 4.8 7.2 L 2.3 5.6 C 1.0 4.9 1.0 3.1 2.3 2.4 L 4.8 0.8 C 5.9 0.3 6.2 1.2 6.2 2.5 Z' fill='%23cccccc' fill-opacity='0.36'/%3E%3C/svg%3E");
+  --scrollbar-button-right-active: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 8'%3E%3Cpath d='M 0.8 2.5 L 0.8 5.5 C 0.8 6.8 1.1 7.7 2.2 7.2 L 4.7 5.6 C 6.0 4.9 6.0 3.1 4.7 2.4 L 2.2 0.8 C 1.1 0.3 0.8 1.2 0.8 2.5 Z' fill='%23cccccc' fill-opacity='0.36'/%3E%3C/svg%3E");
 
   /* 暗色轨道背景：保持完全透明 */
   --scrollbar-track-bg: transparent;
@@ -941,16 +957,16 @@ html[data-theme='dark'] {
   --sep-item-padding-h: 10px;
   --sep-item-gap: 2px;
 
-  --sep-bg-panel-solid: #181715;
+  --sep-bg-panel-solid: var(--bg-elevated);
   --sep-bg-item-hover: var(--tint-hover);
   --sep-bg-input: hsl(48 20% 95% / 0.04);
 
-  --sep-border-color: #2b2926;
-  --sep-divider-color: hsl(0 0% 100% / 0.07);
+  --sep-border-color: var(--border-color);
+  --sep-divider-color: color-mix(in srgb, var(--text-primary) 6%, transparent);
 
-  --sep-text-primary: #f5f4f0;
-  --sep-text-secondary: #b5b2aa;
-  --sep-text-muted: #78756d;
+  --sep-text-primary: var(--text-primary);
+  --sep-text-secondary: var(--text-secondary);
+  --sep-text-muted: var(--text-tertiary);
 
   --sep-accent-check: hsl(160 84% 45%);
   --sep-danger-color: hsl(0 84% 60%);

@@ -6,7 +6,6 @@
  * - setup 四态：'engine-down' | 'needs-key' | 'needs-model' | 'sync-engine'（SetupHintKind）
  * - plan / goal 两态：由 PlanRibbonState / GoalRibbonState 布尔字段表达
  */
-import type { RunNotice } from '../../hooks/useChatStream';
 import {
   shouldShowNeedsKeySoftHint,
   shouldShowNeedsModelSoftHint,
@@ -246,37 +245,6 @@ export function resolveSetupHintAction(kind: SetupHintKind): {
   }
 }
 
-/**
- * run-notice 是否挂载：null / 空文案不渲染，防幽灵条。
- */
-export function shouldRenderRunNotice(
-  notice: RunNotice | null | undefined
-): boolean {
-  if (notice == null) return false;
-  return Boolean(String(notice.text ?? '').trim());
-}
-
-/** run-notice 可访问名：系统提示 + 正文。 */
-export function resolveRunNoticeAriaLabel(text: string): string {
-  const t = String(text ?? '').trim();
-  if (!t) return '系统提示';
-  return `系统提示：${t}`;
-}
-
-/**
- * run-notice 播报急迫度：错误类 assertive，其余 polite。
- */
-export function resolveRunNoticeAriaLive(
-  kind?: string | null
-): 'polite' | 'assertive' {
-  const k = String(kind ?? '')
-    .trim()
-    .toLowerCase();
-  if (k === 'error' || k === 'fail' || k === 'failed' || k === 'fatal') {
-    return 'assertive';
-  }
-  return 'polite';
-}
 
 /**
  * 是否真正挂载 approval dock DOM。

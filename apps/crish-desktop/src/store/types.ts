@@ -569,9 +569,11 @@ export interface SessionMessage extends Pick<
   /** 本条消息携带的附件信息（用户上传或拖拽的图片/文件/代码段） */
   attachments?: SessionMessageAttachment[] | undefined;
   /**
-   * 运行错误诊断详情。
-   * @deprecated 历史持久化/向后兼容字段；新流式会话错误已收敛至 ephemeralChatStore 瞬态进行时状态。
-   * @see useEphemeralChatStore
+   * 运行错误诊断详情（历史字段）。
+   * @deprecated 只读兼容：新错误展示已单轨收敛至
+   * SessionRuntimeStatusStore（ComposerErrorBar / InFlowStatusLine），
+   * 本字段不再被任何 UI 渲染，也不再被写入。
+   * @see useSessionRuntimeStatusStore
    */
   errorDetail?:
     | {
