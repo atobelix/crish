@@ -53,6 +53,7 @@
   box-sizing: border-box;
 }
 
+:global(.button).toggleTab,
 .toggleTab {
   padding: 0 8px;
   font-size: var(--font-size-xs, 12px);
@@ -62,6 +63,7 @@
   color: var(--text-secondary);
   cursor: pointer;
   height: 22px;
+  min-height: unset;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -69,11 +71,13 @@
   transition: all var(--transition-fast);
 }
 
+:global(.button).toggleTab:hover:not(:disabled),
 .toggleTab:hover:not(:disabled) {
   color: var(--text-primary);
   background: var(--tint-hover);
 }
 
+:global(.button).toggleTabActive,
 .toggleTabActive {
   background: var(--bg-card);
   color: var(--text-primary);
@@ -82,6 +86,7 @@
   box-shadow: none;
 }
 
+:global(.button).toggleTabActive:hover,
 .toggleTabActive:hover {
   background: var(--bg-card);
   color: var(--text-primary);
@@ -478,21 +483,26 @@
   gap: 6px;
 }
 
+:global(.button).hashBadge,
 .hashBadge {
   display: inline-flex;
   align-items: center;
   gap: 4px;
   padding: 1px 6px;
+  height: auto;
+  min-height: unset;
   background: color-mix(in srgb, var(--tint-hover) 80%, transparent);
   border: 1px solid color-mix(in srgb, var(--border-subtle) 30%, transparent);
   border-radius: var(--radius-xs, 2px);
   font-family: var(--font-mono, monospace);
   font-size: 11px;
+  line-height: 1.4;
   color: var(--text-primary);
   cursor: pointer;
   transition: all var(--transition-fast);
 }
 
+:global(.button).hashBadge:hover,
 .hashBadge:hover {
   background: var(--tint-hover);
   color: var(--accent-color);

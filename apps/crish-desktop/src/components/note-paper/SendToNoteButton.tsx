@@ -161,8 +161,9 @@ export const SendToNoteButton: React.FC<SendToNoteButtonProps> = ({
         style={{ display: 'inline-flex', alignItems: 'center' }}
       >
         <Tooltip content={lastOk ? '已发送到笔记' : errorText || label}>
-          <button
+          <Button
             type="button"
+            variant="ghost"
             disabled={!canSend || busy}
             onClick={() => {
               void handleClick();
@@ -176,7 +177,7 @@ export const SendToNoteButton: React.FC<SendToNoteButtonProps> = ({
             ) : (
               <AppIcon name="note" size={16} aria-hidden />
             )}
-          </button>
+          </Button>
         </Tooltip>
       </div>
     );

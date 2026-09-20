@@ -8,6 +8,7 @@
  */
 
 import React from 'react';
+import { Button } from '../ui';
 import {
   BP_SLASH_EMPTY,
   BP_SLASH_GROUP,
@@ -89,9 +90,10 @@ export const SlashMenuOverlayCatalog: React.FC<
               const optionId = `np-slash-opt-${it.id}`;
               const itemDisabled = pending || isReadOnly;
               return (
-                <button
+                <Button
                   key={it.id}
                   type="button"
+                  variant="ghost"
                   id={optionId}
                   className="bp-slash-item"
                   {...{ [BP_SLASH_ITEM]: '1' }}
@@ -128,7 +130,7 @@ export const SlashMenuOverlayCatalog: React.FC<
                       </span>
                     ) : null}
                   </span>
-                </button>
+                </Button>
               );
             })}
           </React.Fragment>

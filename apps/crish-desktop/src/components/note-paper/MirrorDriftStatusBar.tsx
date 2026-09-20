@@ -27,8 +27,7 @@
  */
 
 import React, { useCallback, useMemo, useState } from 'react';
-import { Button } from '../ui';
-import { Tooltip } from '../ui/Tooltip/Tooltip';
+import { Button, Input, Tooltip } from '../ui';
 import {
   A_INV_02_UI_DIRECTION_ID,
   isDriftAttention,
@@ -241,7 +240,8 @@ export const MirrorDriftStatusBar: React.FC<MirrorDriftStatusBarProps> = ({
               className={styles.mirrorDriftConfirm}
               data-testid="mirror-drift-confirm-discard"
             >
-              <input
+              <Input
+                bare
                 type="checkbox"
                 checked={confirmDiscard}
                 onChange={(e) => {

@@ -1,7 +1,7 @@
 import React, { useState, useId, useCallback } from 'react';
 import type { NoteDocumentMeta } from '../../api/noteDocumentContracts';
 import { formatRelativeActivity } from '../../api/sessionTime';
-import { Tooltip } from '../ui/Tooltip/Tooltip';
+import { Button, Input, Tooltip } from '../ui';
 import styles from './NoteSidebarDrawer.module.css';
 import { AppIcon } from '../ui/icons/index';
 
@@ -60,10 +60,9 @@ export const NoteSidebarDrawer: React.FC<NoteSidebarDrawerProps> = ({
     [commitRename]
   );
 
-  const formatRelativeTime = (ts: number): string => {
-    // 兼容 13 位标准毫秒级与历史 10 位秒级
-    const tsMs = ts < 10_000_000_000 ? ts * 1000 : ts;
-    return formatRelativeActivity(tsMs) || '刚刚';
+  const formatRelativeTime = (timestamp?: number) => {
+    if (!timestamp) return '';
+    return formatRelativeActivity(timestamp);
   };
 
   return (
@@ -77,33 +76,36 @@ export const NoteSidebarDrawer: React.FC<NoteSidebarDrawerProps> = ({
           <span className={styles.headerTitle}>全部笔记 ({documents.length})</span>
           <div className={styles.actions}>
             <Tooltip content="新建笔记">
-              <button
+              <Button
                 type="button"
+                variant="ghost"
                 className={styles.iconBtn}
                 onClick={onCreateDoc}
                 aria-label="新建笔记"
                 data-testid="note-sidebar-create-btn"
               >
                 <AppIcon name="plus" size={14} />
-              </button>
+              </Button>
             </Tooltip>
             <Tooltip content="收起侧栏 (Ctrl+\)">
-              <button
+              <Button
                 type="button"
+                variant="ghost"
                 className={styles.iconBtn}
                 onClick={onClose}
                 aria-label="收起侧栏"
                 data-testid="note-sidebar-close-btn"
               >
                 <AppIcon name="sidebar-left" size={15} aria-hidden />
-              </button>
+              </Button>
             </Tooltip>
           </div>
         </div>
 
         <div className={styles.searchRow} role="search" aria-label="搜索笔记">
           <AppIcon name="search" size={14} className={styles.searchIcon} aria-hidden="true" />
-          <input
+          <Input
+            bare
             id={searchInputId}
             type="search"
             className={styles.searchInput}
@@ -145,7 +147,8 @@ export const NoteSidebarDrawer: React.FC<NoteSidebarDrawerProps> = ({
                 data-testid={`note-card-${doc.id}`}
               >
                 {isEditing ? (
-                  <input
+                  <Input
+                    bare
                     type="text"
                     className={`${styles.sessionRenameInput} ${styles.renameInput}`}
                     value={editTitle}
@@ -173,19 +176,21 @@ export const NoteSidebarDrawer: React.FC<NoteSidebarDrawerProps> = ({
                       </time>
                       <div className={`${styles.sessionActions} ${styles.itemActions} ${styles.hoverActions}`}>
                         <Tooltip content="重命名">
-                          <button
+                          <Button
                             type="button"
+                            variant="ghost"
                             className={`${styles.sessionActionBtn} ${styles.actionBtn} ${styles.miniBtn}`}
                             onClick={(e) => startRename(doc, e)}
                             aria-label="重命名"
                             tabIndex={-1}
                           >
                             <AppIcon name="edit" size={12} />
-                          </button>
+                          </Button>
                         </Tooltip>
                         <Tooltip content="删除笔记">
-                          <button
+                          <Button
                             type="button"
+                            variant="ghost"
                             className={`${styles.sessionActionBtn} ${styles.actionBtn} ${styles.miniBtn}`}
                             onClick={(e) => {
                               e.stopPropagation();
@@ -195,7 +200,7 @@ export const NoteSidebarDrawer: React.FC<NoteSidebarDrawerProps> = ({
                             tabIndex={-1}
                           >
                             <AppIcon name="trash" size={12} />
-                          </button>
+                          </Button>
                         </Tooltip>
                       </div>
                     </span>
@@ -216,15 +221,17 @@ export const NoteSidebarDrawer: React.FC<NoteSidebarDrawerProps> = ({
               删除后该篇文档及全部数据将彻底从数据库中移除，此操作不可撤销。
             </div>
             <div className={styles.dialogFooter}>
-              <button
+              <Button
                 type="button"
+                variant="ghost"
                 className={styles.cancelBtn}
                 onClick={() => setPendingDeleteId(null)}
               >
                 取消
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
+                variant="primary"
                 className={styles.dangerBtn}
                 onClick={() => {
                   onDeleteDoc(pendingDeleteId);
@@ -233,7 +240,7 @@ export const NoteSidebarDrawer: React.FC<NoteSidebarDrawerProps> = ({
                 data-testid="confirm-delete-btn"
               >
                 确认删除
-              </button>
+              </Button>
             </div>
           </div>
         </div>

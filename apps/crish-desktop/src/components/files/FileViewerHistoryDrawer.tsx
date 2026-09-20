@@ -172,15 +172,16 @@ export const FileViewerHistoryDrawer: React.FC<FileViewerHistoryDrawerProps> = (
               >
                 <div className={styles.commitMeta}>
                   <Tooltip content={`复制提交哈希 ${commit.hash}`}>
-                    <button
+                    <Button
                       type="button"
+                      variant="ghost"
                       className={styles.hashBadge}
                       onClick={() => handleCopyHash(commit.hash)}
                       aria-label={`复制提交哈希 ${commit.hash}`}
                     >
                       <AppIcon name="git-commit" size={12} className={styles.commitIcon} aria-hidden />
                       <span>{commit.hash}</span>
-                    </button>
+                    </Button>
                   </Tooltip>
                 </div>
                 <Tooltip content={commit.message}>

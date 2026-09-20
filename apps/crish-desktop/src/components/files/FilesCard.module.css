@@ -141,6 +141,7 @@
   box-sizing: border-box;
 }
 
+:global(.button).filesSegBtn,
 .filesSegBtn {
   appearance: none;
   border: none;
@@ -152,6 +153,7 @@
   padding: 0 10px;
   cursor: pointer;
   line-height: 24px;
+  min-height: unset;
   height: 100%;
   box-sizing: border-box;
 }
@@ -209,6 +211,7 @@
   flex: 1;
 }
 
+:global(.button).filesBcChip,
 .filesBcChip {
   border: none;
   background: transparent;
@@ -217,6 +220,8 @@
   font-family: inherit;
   font-weight: var(--font-weight-medium, 500);
   padding: 2px 4px;
+  min-height: unset;
+  height: auto;
   cursor: pointer;
   max-width: 120px;
   overflow: hidden;
@@ -225,6 +230,8 @@
   border-radius: var(--radius-md);
 }
 
+:global(.button).filesBcChip:hover,
+:global(.button).filesBcChip.isOpen,
 .filesBcChip:hover,
 .filesBcChip.isOpen {
   color: var(--text-primary);
@@ -303,6 +310,7 @@
   box-shadow: none;
 }
 
+:global(.button).filesBcDirectOpenBtn,
 .filesBcDirectOpenBtn {
   appearance: none;
   border: none;
@@ -313,6 +321,9 @@
   width: 26px;
   height: 26px;
   min-width: 26px;
+  min-height: 26px;
+  max-width: 26px;
+  max-height: 26px;
   border-radius: var(--radius-sm, 4px);
   color: var(--text-secondary);
   cursor: pointer;
@@ -321,6 +332,7 @@
   transition: background var(--transition-micro, 120ms) ease, color var(--transition-micro, 120ms) ease;
 }
 
+:global(.button).filesBcDirectOpenBtn:hover,
 .filesBcDirectOpenBtn:hover {
   background: var(--bg-hover);
   color: var(--text-primary);
@@ -336,6 +348,7 @@
   gap: 1px;
 }
 
+:global(.button).filesBcFlyoutItem,
 .filesBcFlyoutItem {
   appearance: none;
   border: none;
@@ -343,6 +356,8 @@
   display: flex;
   align-items: center;
   gap: var(--space-1_5, 6px);
+  min-height: unset;
+  height: auto;
   width: 100%;
   text-align: left;
   padding: 5px 8px;
@@ -355,6 +370,8 @@
   user-select: none;
 }
 
+:global(.button).filesBcFlyoutItem:hover,
+:global(.button).filesBcFlyoutItem.isActive,
 .filesBcFlyoutItem:hover,
 .filesBcFlyoutItem.isActive {
   background: var(--bg-hover);

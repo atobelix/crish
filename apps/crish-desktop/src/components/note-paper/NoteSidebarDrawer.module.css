@@ -57,12 +57,17 @@
   gap: 4px;
 }
 
+:global(.button).iconBtn,
 .iconBtn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 22px;
   height: 22px;
+  min-width: 22px;
+  min-height: 22px;
+  max-width: 22px;
+  max-height: 22px;
   padding: 0;
   background: transparent;
   border: 1px solid transparent;
@@ -72,6 +77,7 @@
   transition: background-color 150ms ease, color 150ms ease;
 }
 
+:global(.button).iconBtn:hover,
 .iconBtn:hover {
   background: var(--bg-hover);
   color: var(--text-primary);
@@ -330,6 +336,9 @@
   z-index: 5;
 }
 
+:global(.button).sessionActionBtn,
+:global(.button).actionBtn,
+:global(.button).miniBtn,
 .sessionActionBtn,
 .actionBtn,
 .miniBtn {
@@ -352,6 +361,9 @@
   transition: opacity var(--transition-micro, 120ms ease), color var(--transition-micro, 120ms ease), background var(--transition-micro, 120ms ease);
 }
 
+:global(.button).sessionActionBtn:hover,
+:global(.button).actionBtn:hover,
+:global(.button).miniBtn:hover,
 .sessionActionBtn:hover,
 .actionBtn:hover,
 .miniBtn:hover {
@@ -446,30 +458,38 @@
   gap: 8px;
 }
 
+:global(.button).cancelBtn,
+:global(.button).dangerBtn,
 .cancelBtn,
 .dangerBtn {
   padding: 4px 12px;
   font-size: 12px;
+  min-height: unset;
+  height: auto;
   border-radius: var(--radius-xs, 3px);
   cursor: pointer;
 }
 
+:global(.button).cancelBtn,
 .cancelBtn {
   background: transparent;
   border: 1px solid var(--border-color);
   color: var(--text-primary);
 }
 
+:global(.button).cancelBtn:hover,
 .cancelBtn:hover {
   background: var(--bg-hover);
 }
 
+:global(.button).dangerBtn,
 .dangerBtn {
   background: var(--color-error);
   border: 1px solid var(--color-error);
   color: var(--text-inverse);
 }
 
+:global(.button).dangerBtn:hover,
 .dangerBtn:hover {
   opacity: 0.9;
 }

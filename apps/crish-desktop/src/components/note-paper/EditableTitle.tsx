@@ -9,7 +9,7 @@
  * - 物理剔除原生 title 属性，全量换装项目自定义 <Tooltip>
  */
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Tooltip } from '../ui/Tooltip/Tooltip';
+import { Input, Tooltip } from '../ui';
 import styles from './NotePaperPanel.module.css';
 
 export interface EditableTitleProps {
@@ -98,7 +98,8 @@ export const EditableTitle: React.FC<EditableTitleProps> = React.memo(
             background: 'transparent',
           }}
         >
-          <input
+          <Input
+            bare
             ref={inputRef}
             type="text"
             className={styles.titleInput}

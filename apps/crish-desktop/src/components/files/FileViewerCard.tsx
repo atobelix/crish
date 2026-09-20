@@ -337,8 +337,9 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
             role="tablist"
             aria-label="视图模式切换"
           >
-            <button
+            <Button
               type="button"
+              variant="ghost"
               role="tab"
               aria-selected={viewMode === 'diff'}
               className={`${styles.toggleTab} ${
@@ -347,9 +348,10 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
               onClick={() => setViewMode('diff')}
             >
               仅看变更
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              variant="ghost"
               role="tab"
               aria-selected={viewMode === 'plain'}
               className={`${styles.toggleTab} ${
@@ -358,7 +360,7 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
               onClick={() => setViewMode('plain')}
             >
               完整代码
-            </button>
+            </Button>
           </div>
 
           <div className={styles.rightActions}>

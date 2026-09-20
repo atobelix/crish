@@ -2,6 +2,7 @@
  * apps/crish-desktop/src/components/files/FileEditor.tsx
  */
 import React from 'react';
+import { Textarea } from '../ui';
 import styles from './FileEditor.module.css';
 
 interface FileEditorProps {
@@ -18,7 +19,8 @@ export const FileEditor = React.memo(function FileEditor({
 }: FileEditorProps) {
   return (
     <div className={styles.editorWrapper}>
-      <textarea
+      <Textarea
+        bare
         className={styles.editor}
         value={editBuf}
         onChange={(e) => onChange(e.target.value, e.target.value !== content)}

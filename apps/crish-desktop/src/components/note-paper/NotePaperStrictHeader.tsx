@@ -12,8 +12,7 @@
 
 import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import type { SlashOverlayWriteMode } from './SlashMenuOverlay';
-import { IconButton } from '../ui/Button/IconButton';
-import { Tooltip } from '../ui/Tooltip/Tooltip';
+import { Button, IconButton, Tooltip } from '../ui';
 import { EditableTitle } from './EditableTitle';
 import { computeNoteMetrics, exportBlocksToMarkdown } from './noteMetrics';
 import type { SerializableBlock } from './noteMetrics';
@@ -113,17 +112,8 @@ export const NotePaperStrictHeader: React.FC<NotePaperStrictHeaderProps> = React
     const handleCopyMarkdown = useCallback(async () => {
       const mdContent = exportBlocksToMarkdown(blocks, title);
       try {
-        if (navigator.clipboard && window.isSecureContext) {
+        if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
           await navigator.clipboard.writeText(mdContent);
-        } else {
-          const textarea = document.createElement('textarea');
-          textarea.value = mdContent;
-          textarea.style.position = 'fixed';
-          textarea.style.opacity = '0';
-          document.body.appendChild(textarea);
-          textarea.select();
-          document.execCommand('copy');
-          document.body.removeChild(textarea);
         }
       } catch (err) {
         console.error('[NotePaperStrictHeader] 复制 Markdown 失败:', err);
@@ -181,8 +171,9 @@ export const NotePaperStrictHeader: React.FC<NotePaperStrictHeaderProps> = React
           {documents && documents.length > 0 && (
             <div className={styles.dropdownWrap} ref={dropdownRef}>
               <Tooltip content="切换笔记文档">
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
                   className={styles.dropdownTriggerBtn}
                   onClick={() => setIsDropdownOpen((prev) => !prev)}
                   aria-haspopup="listbox"
@@ -191,7 +182,7 @@ export const NotePaperStrictHeader: React.FC<NotePaperStrictHeaderProps> = React
                   data-testid="note-document-dropdown-trigger"
                 >
                   <AppIcon name="chevron-down" size={13} className={styles.dropdownChevron} aria-hidden />
-                </button>
+                </Button>
               </Tooltip>
 
               {isDropdownOpen && (
@@ -204,8 +195,9 @@ export const NotePaperStrictHeader: React.FC<NotePaperStrictHeaderProps> = React
                   <div className={styles.dropdownHeader}>
                     <span className={styles.dropdownHeaderTitle}>最近笔记</span>
                     {onCreateDoc && (
-                      <button
+                      <Button
                         type="button"
+                        variant="ghost"
                         className={styles.dropdownNewBtn}
                         onClick={() => {
                           setIsDropdownOpen(false);
@@ -215,7 +207,7 @@ export const NotePaperStrictHeader: React.FC<NotePaperStrictHeaderProps> = React
                       >
                         <AppIcon name="plus" size={12} aria-hidden />
                         <span>新建</span>
-                      </button>
+                      </Button>
                     )}
                   </div>
                   <div className={styles.dropdownList}>
@@ -223,9 +215,10 @@ export const NotePaperStrictHeader: React.FC<NotePaperStrictHeaderProps> = React
                       const id = doc.docId || doc.id || '';
                       const isSelected = id === docId;
                       return (
-                        <button
+                        <Button
                           key={id}
                           type="button"
+                          variant="ghost"
                           className={`${styles.dropdownItem} ${
                             isSelected ? styles.dropdownItemSelected : ''
                           }`}
@@ -242,7 +235,7 @@ export const NotePaperStrictHeader: React.FC<NotePaperStrictHeaderProps> = React
                           {isSelected && (
                             <AppIcon name="check" size={12} className={styles.dropdownItemCheck} aria-hidden />
                           )}
-                        </button>
+                        </Button>
                       );
                     })}
                   </div>
@@ -303,7 +296,7 @@ export const NotePaperStrictHeader: React.FC<NotePaperStrictHeaderProps> = React
 
           {/* 斜杠菜单产品入口按钮（保全三大测试桩之一：note-paper-strict-open-slash，零尺寸不可见元素保全单测） */}
           {showOpenSlashButton && (
-            <button
+            <Button
               type="button"
               style={{ display: 'none' }}
               aria-hidden="true"
@@ -314,7 +307,7 @@ export const NotePaperStrictHeader: React.FC<NotePaperStrictHeaderProps> = React
               data-slash-write-mode={slashWriteMode}
             >
               /
-            </button>
+            </Button>
           )}
 
           <IconButton

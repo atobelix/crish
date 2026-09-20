@@ -1,7 +1,7 @@
 import { useToast } from '../../services/toast/ToastContext';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import styles from './FilesCard.module.css';
-import { Button, Tooltip } from '../ui';
+import { Button, Tooltip, Input } from '../ui';
 
 import {
   countPendingFileAnnotations,
@@ -297,7 +297,8 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(
             ) : null}
 
             {preview.view === 'browse' && (nav.filterMode || nav.filter) ? (
-              <input
+              <Input
+                bare
                 ref={filterInputRef}
                 className={styles.filesPathFilter}
                 placeholder="筛选…"

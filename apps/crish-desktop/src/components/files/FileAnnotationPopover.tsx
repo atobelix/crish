@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import styles from './FileAnnotationPopover.module.css';
-import { Tooltip } from '../ui';
+import { Button, Textarea, Tooltip } from '../ui';
 import { addPendingFileAnnotation } from '../../api/workspaceFsApi';
 import { useSessionStore } from '../../store/storeAccess';
 import { AppIcon } from '../ui/icons/index';
@@ -247,7 +247,8 @@ export const FileAnnotationPopover: React.FC<FileAnnotationPopoverProps> = React
           e.stopPropagation();
         }}
       >
-        <textarea
+        <Textarea
+          bare
           ref={textareaRef}
           className={styles.nativeTextarea}
           value={commentDraft}
@@ -273,25 +274,27 @@ export const FileAnnotationPopover: React.FC<FileAnnotationPopoverProps> = React
 
         <div className={styles.actionGroup}>
           <Tooltip content="添加 (Enter)">
-            <button
+            <Button
               type="button"
+              variant="ghost"
               className={`${styles.actionBtn} ${hasInput ? styles.actionBtnActive : ''}`}
               aria-label="确认添加批注"
               disabled={!hasInput}
               onClick={handleSubmit}
             >
               <AppIcon name="corner-down-left" size={12} />
-            </button>
+            </Button>
           </Tooltip>
           <Tooltip content="取消 (Esc)">
-            <button
+            <Button
               type="button"
+              variant="ghost"
               className={`${styles.actionBtn} ${styles.closeBtn}`}
               aria-label="取消"
               onClick={handleClose}
             >
               <AppIcon name="x" size={12} />
-            </button>
+            </Button>
           </Tooltip>
         </div>
       </div>

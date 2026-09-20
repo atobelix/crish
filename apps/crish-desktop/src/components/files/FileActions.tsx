@@ -140,24 +140,26 @@ export const FileActions = React.memo(function FileActions({
               data-md-source-toggle="files-leaf-only"
             >
               <Tooltip content="渲染预览">
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
                   className={`${styles.filesSegBtn} ${mdMode === 'render' ? styles.isOn : ''}`}
                   aria-pressed={mdMode === 'render'}
                   onClick={() => onMdModeChange('render')}
                 >
                   渲染
-                </button>
+                </Button>
               </Tooltip>
               <Tooltip content="源码">
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
                   className={`${styles.filesSegBtn} ${mdMode === 'source' ? styles.isOn : ''}`}
                   aria-pressed={mdMode === 'source'}
                   onClick={() => onMdModeChange('source')}
                 >
                   源码
-                </button>
+                </Button>
               </Tooltip>
             </div>
           ) : null}

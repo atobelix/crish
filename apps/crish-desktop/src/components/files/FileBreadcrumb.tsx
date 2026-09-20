@@ -6,7 +6,7 @@ import React, {
   useState,
 } from 'react';
 import styles from './FilesCard.module.css';
-import { Tooltip } from '../ui';
+import { Button, Input, Tooltip } from '../ui';
 
 import {
   detectFileKind,
@@ -290,8 +290,9 @@ export const FileBreadcrumb = React.memo(function FileBreadcrumb({
 
       return (
         <React.Fragment key={ent.path}>
-          <button
+          <Button
             type="button"
+            variant="ghost"
             role="option"
             className={`${styles.filesBcFlyoutItem} ${selected === ent.path ? styles.isActive : ''}`}
             style={{ paddingLeft: `${8 + depth * 14}px` }}
@@ -312,7 +313,7 @@ export const FileBreadcrumb = React.memo(function FileBreadcrumb({
               </>
             )}
             <span className={styles.filesBcFlyoutName}>{ent.name}</span>
-          </button>
+          </Button>
           {ent.isDir && isExpanded ? (
             isLoading ? (
               <div
@@ -360,8 +361,9 @@ export const FileBreadcrumb = React.memo(function FileBreadcrumb({
                         : `${b.path} · 点击列出该层`
                     }
                   >
-                    <button
+                    <Button
                       type="button"
+                      variant="ghost"
                       className={`${styles.filesBcChip} ${flyOpen ? styles.isOpen : ''}`}
                       aria-haspopup="listbox"
                       aria-expanded={flyOpen}
@@ -376,7 +378,7 @@ export const FileBreadcrumb = React.memo(function FileBreadcrumb({
                       }}
                     >
                       {b.label}
-                    </button>
+                    </Button>
                   </Tooltip>
                   {flyOpen && bcFlyout ? (
                     <div
@@ -386,7 +388,8 @@ export const FileBreadcrumb = React.memo(function FileBreadcrumb({
                     >
                       <div className={styles.filesBcFlyoutSearch}>
                         <AppIcon name="search" size={13} aria-hidden />
-                        <input
+                        <Input
+                          bare
                           ref={bcFilterRef}
                           type="search"
                           placeholder="筛选文件…"
@@ -409,14 +412,15 @@ export const FileBreadcrumb = React.memo(function FileBreadcrumb({
                         <Tooltip
                           content={`在文件树中打开此目录 (${bcFlyout.anchorLabel}) (Enter)`}
                         >
-                          <button
+                          <Button
                             type="button"
+                            variant="ghost"
                             className={styles.filesBcDirectOpenBtn}
                             aria-label="在文件树中打开此目录"
                             onClick={handleDirectOpenCurrentDir}
                           >
                             <AppIcon name="folder-open" size={14} aria-hidden />
-                          </button>
+                          </Button>
                         </Tooltip>
                       </div>
                       <div className={styles.filesBcFlyoutList}>
@@ -427,9 +431,10 @@ export const FileBreadcrumb = React.memo(function FileBreadcrumb({
                             <div className={styles.filesBcFlyoutEmpty}>无匹配</div>
                           ) : (
                             filteredEntries.map((ent) => (
-                              <button
+                              <Button
                                 key={ent.path}
                                 type="button"
+                                variant="ghost"
                                 role="option"
                                 className={`${styles.filesBcFlyoutItem} ${selected === ent.path ? styles.isActive : ''}`}
                                 onClick={() =>
@@ -443,7 +448,7 @@ export const FileBreadcrumb = React.memo(function FileBreadcrumb({
                                   <BcFileIcon name={ent.name} />
                                 )}
                                 <span className={styles.filesBcFlyoutName}>{ent.name}</span>
-                              </button>
+                              </Button>
                             ))
                           )
                         ) : !bcFlyout.dirCache[bcFlyout.anchorPath] ||
