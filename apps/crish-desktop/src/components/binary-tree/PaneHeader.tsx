@@ -38,6 +38,7 @@ import {
   type LeafSessionTab,
 } from './paneHeaderGeometry';
 import { PaneTabItem } from './PaneTabItem';
+import { Button } from '../ui';
 import styles from './PaneHeader.module.css';
 import { AppIcon } from '../ui/icons/index';
 
@@ -508,15 +509,16 @@ export const PaneHeader: React.FC<PaneHeaderProps> = React.memo(
             })}
           </div>
 
-          <button
+          <Button
             type="button"
+            variant="ghost"
             className={styles.newTabBtn}
             onClick={handleNewTab}
             aria-label="新对话"
             data-tauri-drag-region="false"
           >
             <AppIcon name="plus" size={14} />
-          </button>
+          </Button>
         </div>
       </div>
     );

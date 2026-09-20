@@ -29,11 +29,12 @@
   list-style: none;
 }
 
-/* 单行文件按钮：严格锁定 28px 高度，对齐 --control-height-sm 与基线 */
+:global(.button).changesItemBtn,
 .changesItemBtn {
   width: 100%;
   display: flex;
   align-items: center;
+  justify-content: flex-start;
   gap: var(--space-1_5, 6px);
   min-height: var(--control-height-sm, 28px);
   max-height: var(--control-height-sm, 28px);
@@ -53,15 +54,18 @@
   transition: background-color var(--transition-fast, 120ms ease);
 }
 
+:global(.button).changesItemBtn:hover,
 .changesItemBtn:hover {
   background: var(--bg-hover);
 }
 
+:global(.button).changesItemBtn:focus-visible,
 .changesItemBtn:focus-visible {
   outline: none;
   box-shadow: var(--focus-ring);
 }
 
+:global(.button).changesItemBtn.isOpening,
 .changesItemBtn.isOpening {
   opacity: 0.6;
   pointer-events: none;

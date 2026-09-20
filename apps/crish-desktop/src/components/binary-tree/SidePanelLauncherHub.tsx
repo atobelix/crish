@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { getPreviewUrl, setPreviewUrl } from '../../api/previewBrowserStore';
 import styles from './LeafToolTabStrip.module.css';
+import { Button } from '../ui';
 import { AppIcon } from '../ui/icons/index';
 
 export interface SidePanelLauncherHubProps {
@@ -110,8 +111,9 @@ export const SidePanelLauncherHub: React.FC<SidePanelLauncherHubProps> = ({
       >
         <div className={`${styles.launcherCardsGroup} launcher-cards-group`}>
           {activePort && (
-            <button
+            <Button
               type="button"
+              variant="ghost"
               className={`${styles.launcherCard} ${styles.activePortCard} side-panel-launcher-card side-panel-active-port-card`}
               onClick={() => handleOpenActiveService(activePort)}
               data-testid="launcher-card-active-service"
@@ -129,10 +131,11 @@ export const SidePanelLauncherHub: React.FC<SidePanelLauncherHubProps> = ({
                 </span>
               </div>
               <AppIcon name="arrow-right" size={14} className={styles.activePortArrow} />
-            </button>
+            </Button>
           )}
-          <button
+          <Button
             type="button"
+            variant="ghost"
             className={`${styles.launcherCard} side-panel-launcher-card`}
             onClick={() => onOpenPanel('preview')}
             data-testid="launcher-card-preview"
@@ -149,9 +152,10 @@ export const SidePanelLauncherHub: React.FC<SidePanelLauncherHubProps> = ({
                 浏览器
               </span>
             </div>
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
+            variant="ghost"
             className={`${styles.launcherCard} side-panel-launcher-card`}
             onClick={() => onOpenPanel('files')}
             data-testid="launcher-card-files"
@@ -168,7 +172,7 @@ export const SidePanelLauncherHub: React.FC<SidePanelLauncherHubProps> = ({
                 代码产物与文件
               </span>
             </div>
-          </button>
+          </Button>
         </div>
       </div>
     </div>

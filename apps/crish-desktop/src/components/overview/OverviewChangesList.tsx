@@ -84,8 +84,9 @@ export const OverviewChangesList: React.FC<OverviewChangesListProps> = React.mem
 
             return (
               <li key={file.path} className={styles.changesItem}>
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
                   className={`${styles.changesItemBtn} ${isOpening ? styles.isOpening : ''}`}
                   onClick={() => onOpenFile(file)}
                   aria-label={fullAriaLabel}
@@ -105,7 +106,7 @@ export const OverviewChangesList: React.FC<OverviewChangesListProps> = React.mem
                       deletions={file.deletions || 0}
                     />
                   </div>
-                </button>
+                </Button>
               </li>
             );
           })}

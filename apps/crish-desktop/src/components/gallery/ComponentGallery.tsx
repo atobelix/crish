@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../ui';
 import styles from './ComponentGallery.module.css';
 import {
   ModernJsonToolCall,
@@ -177,20 +178,22 @@ export const ComponentGallery: React.FC = () => {
         <div className={styles.previewBar}>
           <span className={styles.previewLabel}>Preview</span>
           <div className={styles.themeSegmented}>
-            <button
+            <Button
               type="button"
+              variant="ghost"
               className={`${styles.themeTab} ${themeMode === 'light' ? styles.tabActive : ''}`}
               onClick={() => setThemeMode('light')}
             >
               Light
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              variant="ghost"
               className={`${styles.themeTab} ${themeMode === 'dark' ? styles.tabActive : ''}`}
               onClick={() => setThemeMode('dark')}
             >
               Dark
-            </button>
+            </Button>
           </div>
         </div>
 

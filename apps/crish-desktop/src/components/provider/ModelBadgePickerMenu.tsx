@@ -17,7 +17,7 @@ import {
 import { useModelsCatalogVersion } from '../../hooks/useModelsCatalogVersion';
 import { modelsCatalogStore } from '../../api/modelsCatalogStore';
 import { openSettings } from '../../api/storeAccess';
-import { Menu, Tooltip } from '../ui';
+import { Menu, Tooltip, Button, Input } from '../ui';
 import { getActiveProfileId } from '../../api/provider-profiles/profileActiveSelection';
 import { profileHasConfiguredKey } from '../../api/providerProfiles';
 import { useSessionStore } from '../../store/sessionStore';
@@ -189,7 +189,8 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
       <div ref={panelRef} className={styles.mbInner} role="menu">
         <div className={styles.searchHeader}>
           <AppIcon name="search" size={14} className={styles.searchIcon} />
-          <input
+          <Input
+            bare
             ref={searchInputRef}
             type="text"
             className={styles.searchInput}
@@ -204,15 +205,16 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
             }}
           />
           <Tooltip content="模型管理...">
-            <button
+            <Button
               type="button"
+              variant="ghost"
               className={styles.settingsBtn}
               aria-label="模型管理"
               onClick={handleOpenSettings}
             >
               <AppIcon name="sliders" size={14} />
               <span style={{ position: 'absolute', width: 1, height: 1, padding: 0, margin: -1, overflow: 'hidden', clip: 'rect(0,0,0,0)', border: 0 }}>模型管理...</span>
-            </button>
+            </Button>
           </Tooltip>
         </div>
 
@@ -230,9 +232,10 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
                 {group.models.map((m) => {
                   const isSelected = m.id === activeModel;
                   return (
-                    <button
+                    <Button
                       key={m.id}
                       type="button"
+                      variant="ghost"
                       role="menuitem"
                       data-testid={`model-option-${m.id}`}
                       className={`${styles.modelItem} ${isSelected ? styles.isSelected : ''}`}
@@ -242,7 +245,7 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
                       {isSelected ? (
                         <AppIcon name="check" size={14} className={styles.checkIcon} />
                       ) : null}
-                    </button>
+                    </Button>
                   );
                 })}
               </div>
@@ -254,8 +257,9 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
           <>
             <div className={styles.divider} />
             <div className={styles.advancedSection}>
-              <button
+              <Button
                 type="button"
+                variant="ghost"
                 className={styles.advancedTrigger}
                 aria-expanded={showAdvanced}
                 onClick={() => setShowAdvanced((v) => !v)}
@@ -263,7 +267,7 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
                 <span>高级选项</span>
                 <AppIcon name="chevron-down" size={13}
                   className={`${styles.advancedChevron} ${showAdvanced ? styles.rotated : ''}`} />
-              </button>
+              </Button>
               {showAdvanced ? (
                 <div className={styles.advancedContent}>
                   <div className={styles.thinkingSection}>
@@ -282,16 +286,17 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
                           handoff.supported &&
                           handoff.selectedTitle === o.title;
                         return (
-                          <button
+                          <Button
                             key={o.title}
                             type="button"
+                            variant="ghost"
                             data-testid={`thinking-option-${o.title}`}
                             data-active={isActive ? 'true' : 'false'}
                             className={`${styles.thinkingPill} ${isActive ? styles.activePill : ''}`}
                             onClick={() => handleSelectThinking(o.title)}
                           >
                             {o.label}
-                          </button>
+                          </Button>
                         );
                       })}
                     </div>

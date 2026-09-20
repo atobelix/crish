@@ -184,6 +184,7 @@
   font-size: 12px;
 }
 
+:global(.button).tabCloseBtn,
 .tabCloseBtn {
   display: inline-flex;
   align-items: center;
@@ -191,6 +192,7 @@
   width: 16px;
   height: 16px;
   min-width: 16px;
+  min-height: unset;
   border: none;
   border-radius: var(--radius-xs);
   background: transparent;
@@ -225,10 +227,12 @@
 }
 
 /* Add Buttons: in-flow and pinned（双态加号：随流位 + 溢出固定位，尺寸同标签高） */
+:global(.button).addBtn,
 .addBtn {
   width: var(--tab-height);
   height: var(--tab-height);
   min-width: var(--tab-height);
+  min-height: unset;
   flex: 0 0 var(--tab-height);
   padding: 0;
   border-radius: var(--radius-lg);
@@ -248,6 +252,8 @@
     margin var(--duration-normal) var(--ease-standard);
 }
 
+:global(.button).addBtn:hover,
+:global(.button).addBtn:active,
 .addBtn:hover,
 .addBtn:active {
   background: var(--bg-hover);
@@ -258,6 +264,7 @@
   margin-left: 2px;
 }
 
+:global(.button).addBtn.pinned,
 .addBtn.pinned {
   opacity: 0;
   width: 0;
@@ -268,6 +275,7 @@
   margin: 0;
 }
 
+.hasOverflow :global(.button).addBtn.pinned,
 .hasOverflow .addBtn.pinned {
   opacity: 1;
   width: var(--tab-height);
@@ -277,6 +285,7 @@
   margin-right: 2px;
 }
 
+.hasOverflow :global(.button).addBtn.inFlow,
 .hasOverflow .addBtn.inFlow {
   opacity: 0;
   pointer-events: none;
@@ -302,10 +311,12 @@
   z-index: var(--z-sticky, 2);
 }
 
+:global(.button).sideBtn,
 .sideBtn {
   width: var(--tab-height);
   height: var(--tab-height);
   min-width: var(--tab-height);
+  min-height: unset;
   padding: 0;
   border-radius: var(--radius-lg);
   border: none;
@@ -321,6 +332,8 @@
     color var(--duration-micro) var(--ease-standard);
 }
 
+:global(.button).sideBtn:hover,
+:global(.button).sideBtn:active,
 .sideBtn:hover,
 .sideBtn:active {
   background: var(--bg-hover);
@@ -358,10 +371,12 @@
   gap: 4px;
 }
 
+:global(.button).toolbarBtn,
 .toolbarBtn {
   width: 26px;
   height: 26px;
   min-width: 26px;
+  min-height: unset;
   border-radius: var(--radius-sm);
   display: inline-flex;
   align-items: center;
@@ -434,11 +449,15 @@
   width: 100%;
 }
 
+:global(.button).launcherCard,
 .launcherCard {
   display: flex;
   align-items: center;
+  justify-content: flex-start;
   gap: 12px;
   padding: 10px 14px;
+  height: auto;
+  min-height: unset;
   border-radius: var(--radius-md, 8px);
   border: 1px solid var(--border-subtle);
   background: var(--bg-card);
@@ -454,6 +473,7 @@
     box-shadow var(--duration-micro) var(--ease-standard);
 }
 
+:global(.button).launcherCard:hover,
 .launcherCard:hover {
   background: var(--bg-card-hover);
   border-color: var(--border-color);

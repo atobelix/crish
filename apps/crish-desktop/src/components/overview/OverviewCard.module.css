@@ -76,14 +76,17 @@
   min-width: 0;
 }
 
+:global(.button).secH,
 .secH {
   width: 100%;
   display: flex;
   align-items: center;
+  justify-content: flex-start;
   gap: var(--space-1_5);
   border: none;
   background: transparent;
   padding: 6px 2px;
+  height: auto;
   min-height: var(--control-height-sm, 28px);
   font-family: inherit;
   font-size: var(--font-size-sm);
@@ -101,6 +104,7 @@
   transition: color var(--transition-fast, 120ms ease);
 }
 
+:global(.button).secH:hover,
 .secH:hover {
   background: transparent;
   color: var(--text-primary);

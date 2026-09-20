@@ -1,4 +1,5 @@
 import { AppIcon } from '../ui/icons';
+import { Button } from '../ui';
 /**
  * 二叉树叶子面板 — 声明式微内核叶子容器。
  *
@@ -520,8 +521,9 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
           ) : null}
         </div>
         {isChatSurface && !isLeafDraft && (
-          <button
+          <Button
             type="button"
+            variant="ghost"
             className={`${styles.topSidePanelBtn} top-action-btn top-side-panel-btn`}
             data-testid="top-quick-dock-btn"
             data-active={dockOpen ? 'true' : 'false'}
@@ -529,7 +531,7 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
             onClick={handleToggleDock}
           >
             <AppIcon name="sidebar-right" size={14} aria-hidden />
-          </button>
+          </Button>
         )}
       </div>
     );

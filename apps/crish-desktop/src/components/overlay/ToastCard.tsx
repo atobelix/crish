@@ -3,6 +3,7 @@ import React, { useRef, useEffect, useState, useCallback } from 'react';
 import type { AppToast } from '../../services/toast/types';
 import { useSwipeDismiss } from './useSwipeDismiss';
 import styles from './ToastStackModern.module.css';
+import { Button } from '../ui';
 import { AppIcon } from '../ui/icons';
 
 export interface ToastCardProps {
@@ -176,8 +177,9 @@ export const ToastCard: React.FC<ToastCardProps> = ({
 
         <div className={styles.actionsRow}>
           {toast.onUndo && (
-            <button
+            <Button
               type="button"
+              variant="ghost"
               className={styles.undoButton}
               onClick={(e) => {
                 e.stopPropagation();
@@ -186,12 +188,13 @@ export const ToastCard: React.FC<ToastCardProps> = ({
               }}
             >
               撤销
-            </button>
+            </Button>
           )}
 
           {toast.action && (
-            <button
+            <Button
               type="button"
+              variant="ghost"
               data-variant={toast.action.variant ?? 'primary'}
               className={styles.actionButton}
               onClick={(e) => {
@@ -200,11 +203,12 @@ export const ToastCard: React.FC<ToastCardProps> = ({
               }}
             >
               {toast.action.label}
-            </button>
+            </Button>
           )}
 
-          <button
+          <Button
             type="button"
+            variant="ghost"
             aria-label="关闭通知"
             className={styles.closeButton}
             onClick={(e) => {
@@ -213,7 +217,7 @@ export const ToastCard: React.FC<ToastCardProps> = ({
             }}
           >
             <AppIcon name="x" size={13} aria-hidden="true" />
-          </button>
+          </Button>
         </div>
       </div>
 

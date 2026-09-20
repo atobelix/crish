@@ -24,8 +24,9 @@ export const BackgroundSection = React.memo(function BackgroundSection({
 }: BackgroundSectionProps) {
   return (
     <section className={styles.sec} aria-labelledby="overview-sec-bg">
-      <button
+      <Button
         type="button"
+        variant="ghost"
         id="overview-sec-bg"
         className={styles.secH}
         aria-expanded={open}
@@ -41,7 +42,7 @@ export const BackgroundSection = React.memo(function BackgroundSection({
           className={`${styles.chev} ${open ? styles.open : ''}`}
           aria-hidden
         />
-      </button>
+      </Button>
       {open ? (
         <div className={styles.secB}>
           {bgTasks.length === 0 ? (

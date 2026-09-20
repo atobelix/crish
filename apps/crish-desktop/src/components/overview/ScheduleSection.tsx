@@ -1,5 +1,6 @@
 import React from 'react';
 import styles from './OverviewCard.module.css';
+import { Button } from '../ui';
 
 import { ChevronDownIcon } from '../../assets/icons';
 import { scheduleLabel } from '../../api/workflowApi';
@@ -21,15 +22,21 @@ export const ScheduleSection = React.memo(function ScheduleSection({
 
   return (
     <section className={styles.sec} aria-labelledby="overview-sec-cron">
-      <button type="button" id="overview-sec-cron" className={styles.secH}
-        aria-expanded={open} onClick={onToggle}>
+      <Button
+        type="button"
+        variant="ghost"
+        id="overview-sec-cron"
+        className={styles.secH}
+        aria-expanded={open}
+        onClick={onToggle}
+      >
         <AppIcon name="calendar-clock" size={15} aria-hidden />
         <span>计划任务</span>
         {count > 0 ? (
           <span className={styles.pill}>{count}</span>
         ) : null}
         <ChevronDownIcon size={13} className={`${styles.chev} ${open ? styles.open : ''}`} aria-hidden />
-      </button>
+      </Button>
       {open ? (
         <div className={styles.secB}>
           {count === 0 ? (

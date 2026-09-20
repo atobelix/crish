@@ -1,5 +1,6 @@
 import React from 'react';
 import styles from './OverviewCard.module.css';
+import { Button } from '../ui';
 import { ChevronDownIcon } from '../../assets/icons';
 import { AppIcon } from '../ui/icons/index';
 
@@ -17,12 +18,12 @@ export const UsageSection = React.memo(function UsageSection({
 }: UsageSectionProps) {
   return (
     <section className={styles.sec} aria-labelledby="overview-sec-usage">
-      <button type="button" id="overview-sec-usage" className={styles.secH} aria-expanded={open} onClick={onToggle}>
+      <Button type="button" variant="ghost" id="overview-sec-usage" className={styles.secH} aria-expanded={open} onClick={onToggle}>
         <AppIcon name="cpu" size={15} aria-hidden />
         <span>用量</span>
         <span className={styles.pill}>{estimated}</span>
         <ChevronDownIcon size={13} className={`${styles.chev} ${open ? styles.open : ''}`} aria-hidden />
-      </button>
+      </Button>
       {open ? (
         <div className={styles.secB}>
           <div className={styles.usageGrid}>

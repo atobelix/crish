@@ -17,7 +17,7 @@ import {
   getCompositionRoot,
   type LayoutLeaf,
 } from '../../store/storeAccess';
-import { Tooltip } from '../ui';
+import { Tooltip, Button } from '../ui';
 import { ResizeObserverManager } from '../../services/ResizeObserverManager';
 import { viewRegistry } from '../../services/view-registry';
 import { SidePanelNavToolbar } from './SidePanelNavToolbar';
@@ -389,14 +389,15 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
                       {label}
                     </span>
                     <Tooltip content={`关闭 ${label}`}>
-                      <button
+                      <Button
                         type="button"
+                        variant="ghost"
                         className={`${styles.tabCloseBtn} tab-item-close-btn`}
                         onClick={(e) => triggerCloseTab(tabId, e)}
                         aria-label={`关闭 ${label}`}
                       >
                         <AppIcon name="x" size={10} />
-                      </button>
+                      </Button>
                     </Tooltip>
                   </div>
                 );
@@ -420,8 +421,9 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
               content={isMaximized ? '恢复面板' : '最大化面板'}
               side="bottom"
             >
-              <button
+              <Button
                 type="button"
+                variant="ghost"
                 className={`${styles.sideBtn} side-panel-btn side-panel-btn-maximize`}
                 onClick={handleToggleMaximize}
                 aria-label={isMaximized ? '恢复面板' : '最大化面板'}
@@ -431,7 +433,7 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
                 ) : (
                   <AppIcon name="maximize" size={14} />
                 )}
-              </button>
+              </Button>
             </Tooltip>
           </div>
         </div>

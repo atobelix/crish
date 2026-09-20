@@ -8,6 +8,7 @@
 import React from 'react';
 import type { LeafSessionTab } from './paneHeaderGeometry';
 import styles from './PaneHeader.module.css';
+import { Button } from '../ui';
 import { AppIcon } from '../ui/icons/index';
 
 export interface PaneTabItemProps {
@@ -85,14 +86,15 @@ export const PaneTabItem: React.FC<PaneTabItemProps> = React.memo(
       >
         <div className={styles.tabItemInner}>
           <span className={styles.tabTitle}>{title}</span>
-          <button
+          <Button
             type="button"
+            variant="ghost"
             className={styles.tabCloseBtn}
             onClick={(e) => onClose(e, tab)}
             aria-label={`关闭 ${title}`}
           >
             <AppIcon name="x" size={10} />
-          </button>
+          </Button>
         </div>
       </div>
     );

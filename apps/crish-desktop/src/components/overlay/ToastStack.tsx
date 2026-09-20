@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import type { AppToast } from '../../hooks/useToastQueue';
 import styles from './ToastStack.module.css';
+import { Button } from '../ui';
 import { AppIcon } from '../ui/icons/index';
 
 type Props = {
@@ -54,7 +55,8 @@ export const ToastStack = ({ toasts, onDismiss }: Props) => {
         >
           <span className={styles.toastMessage}>{toast.message}</span>
           {toast.onUndo ? (
-            <button
+            <Button
+              bare
               type="button"
               className={styles.toastUndoBtn}
               onClick={() => {
@@ -63,16 +65,17 @@ export const ToastStack = ({ toasts, onDismiss }: Props) => {
               }}
             >
               撤销
-            </button>
+            </Button>
           ) : null}
-          <button
+          <Button
+            bare
             type="button"
             className={styles.toastDismissBtn}
             aria-label="关闭通知"
             onClick={() => handleDismiss(toast)}
           >
             <AppIcon name="x" size={12} aria-hidden="true" />
-          </button>
+          </Button>
         </div>
       ))}
     </div>

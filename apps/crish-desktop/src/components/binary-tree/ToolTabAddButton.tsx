@@ -6,7 +6,7 @@
  */
 
 import React from 'react';
-import { Tooltip } from '../ui';
+import { Tooltip, Button } from '../ui';
 import {
   SmartExpandablePanel,
   type MenuItem,
@@ -50,9 +50,14 @@ export const ToolTabAddButton: React.FC<ToolTabAddButtonProps> = ({
   } ${isInFlow ? 'in-flow' : 'pinned'} side-panel-add-btn`;
 
   const btnElement = (
-    <button type="button" className={btnClass} aria-label="添加功能面板">
+    <Button
+      type="button"
+      variant="ghost"
+      className={btnClass}
+      aria-label="添加功能面板"
+    >
       <AppIcon name="plus" size={13} />
-    </button>
+    </Button>
   );
 
   if (availablePanels.length === 0) {

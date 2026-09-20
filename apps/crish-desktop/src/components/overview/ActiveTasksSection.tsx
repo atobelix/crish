@@ -35,8 +35,9 @@ export const ActiveTasksSection = React.memo(function ActiveTasksSection({
   const total = liveTasks.length + pendingApprovals.length;
   return (
     <section className={styles.sec} aria-labelledby="overview-sec-active">
-      <button
+      <Button
         type="button"
+        variant="ghost"
         id="overview-sec-active"
         className={styles.secH}
         aria-expanded={open}
@@ -50,7 +51,7 @@ export const ActiveTasksSection = React.memo(function ActiveTasksSection({
           className={`${styles.chev} ${open ? styles.open : ''}`}
           aria-hidden
         />
-      </button>
+      </Button>
       {open ? (
         <div className={styles.secB}>
           {total === 0 ? (

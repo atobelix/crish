@@ -34,8 +34,9 @@ export const AgentSection = React.memo(function AgentSection({
 
   return (
     <section className={styles.sec} aria-labelledby="overview-sec-agents">
-      <button
+      <Button
         type="button"
+        variant="ghost"
         id="overview-sec-agents"
         className={styles.secH}
         aria-expanded={open}
@@ -56,7 +57,7 @@ export const AgentSection = React.memo(function AgentSection({
           className={`${styles.chev} ${open ? styles.open : ''}`}
           aria-hidden
         />
-      </button>
+      </Button>
       {open ? (
         <div className={styles.secB} id="overview-sec-agents-b">
           {sortedAgents.length > 0 ? (
