@@ -4,7 +4,7 @@
 
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import styles from './FontSelectField.module.css';
-import { Menu, Tooltip } from '../ui';
+import { Button, Input, Menu, Tooltip } from '../ui';
 import type { SelectOptionItem } from '../ui';
 import {
   filterAndSortIndexedOptions,
@@ -193,7 +193,8 @@ export const FontSelectField: React.FC<Props> = ({
             contentStyle: { width: menuWidth, maxHeight },
           }}
           trigger={
-            <button
+            <Button
+              bare
               ref={triggerRef}
               type="button"
               className={styles.settingsSelectTrigger}
@@ -215,7 +216,7 @@ export const FontSelectField: React.FC<Props> = ({
                 {label}
               </span>
               <ChevronDownIcon size={14} className={styles.settingsSelectChev} />
-            </button>
+            </Button>
           }
         >
           {/* 内嵌搜索头部 + 极简操作栏 */}
@@ -228,7 +229,8 @@ export const FontSelectField: React.FC<Props> = ({
           >
             <div className={styles.searchInputWrapper}>
               <SearchIcon size={13} className={styles.searchIcon} />
-              <input
+              <Input
+                bare
                 ref={searchInputRef}
                 role="combobox"
                 aria-autocomplete="list"
@@ -249,21 +251,23 @@ export const FontSelectField: React.FC<Props> = ({
               />
               {hasDraftToApply && (
                 <Tooltip content="应用当前自定义字体 (Enter)">
-                  <button
+                  <Button
+                    bare
                     type="button"
                     className={styles.customApplyBtn}
                     onClick={handleApplyCustomQuery}
                     aria-label="应用当前自定义字体"
                   >
                     <CheckIcon size={12} />
-                  </button>
+                  </Button>
                 </Tooltip>
               )}
             </div>
 
             {onScanLocal && (
               <Tooltip content="全量扫描本机系统字体">
-                <button
+                <Button
+                  bare
                   type="button"
                   className={styles.actionBtn}
                   disabled={disabled || isScanning}
@@ -275,13 +279,14 @@ export const FontSelectField: React.FC<Props> = ({
                   ) : (
                     <HardDriveIcon size={13} />
                   )}
-                </button>
+                </Button>
               </Tooltip>
             )}
 
             {onResetDefault && (
               <Tooltip content="恢复系统优化默认字体">
-                <button
+                <Button
+                  bare
                   type="button"
                   className={styles.actionBtn}
                   disabled={disabled || isDefault}
@@ -289,7 +294,7 @@ export const FontSelectField: React.FC<Props> = ({
                   aria-label="恢复系统优化默认字体"
                 >
                   <RotateCcwIcon size={13} />
-                </button>
+                </Button>
               </Tooltip>
             )}
           </div>
@@ -319,7 +324,8 @@ export const FontSelectField: React.FC<Props> = ({
                   const isSelected = opt.value === value;
                   const isFocused = flatIdx === focusedIndex;
                   return (
-                    <button
+                    <Button
+                      bare
                       key={opt.value}
                       id={`${listboxId}-opt-${flatIdx}`}
                       data-opt-index={flatIdx}
@@ -340,7 +346,7 @@ export const FontSelectField: React.FC<Props> = ({
                         {opt.label}
                       </span>
                       {isSelected && <CheckIcon size={13} className={styles.checkIcon} />}
-                    </button>
+                    </Button>
                   );
                 })}
               </>
@@ -356,7 +362,8 @@ export const FontSelectField: React.FC<Props> = ({
                   const isSelected = opt.value === value;
                   const isFocused = flatIdx === focusedIndex;
                   return (
-                    <button
+                    <Button
+                      bare
                       key={opt.value}
                       id={`${listboxId}-opt-${flatIdx}`}
                       data-opt-index={flatIdx}
@@ -377,7 +384,7 @@ export const FontSelectField: React.FC<Props> = ({
                         {opt.label}
                       </span>
                       {isSelected && <CheckIcon size={13} className={styles.checkIcon} />}
-                    </button>
+                    </Button>
                   );
                 })}
               </>

@@ -15,7 +15,7 @@ import { openSettings } from '../../store/settingsUiStore';
 import type { SettingsTabType } from '../../store/types';
 import { readStoredTheme, setTheme, type UiTheme } from '../../api/themeStore';
 import styles from './SettingsQuickMenu.module.css';
-import { Menu, SegmentedControl, Tooltip } from '../ui';
+import { Button, Menu, SegmentedControl, Tooltip } from '../ui';
 import { AppIcon } from '../ui/icons/index';
 
 export interface SettingsQuickMenuProps {
@@ -234,7 +234,8 @@ export const SettingsQuickMenu: React.FC<SettingsQuickMenuProps> = ({
 
   const defaultTrigger = (
     <Tooltip content="快捷设置" disabled={open}>
-      <button
+      <Button
+        bare
         type="button"
         className={`${styles.sidebarFooterSettings}${open ? ` ${styles.isOpen}` : ''}`}
         data-testid="settings-button"
@@ -246,7 +247,7 @@ export const SettingsQuickMenu: React.FC<SettingsQuickMenuProps> = ({
         <AppIcon name="chevron-up" size={14}
           className={styles.sbQuickChev}
           aria-hidden />
-      </button>
+      </Button>
     </Tooltip>
   );
 
@@ -303,7 +304,8 @@ export const SettingsQuickMenu: React.FC<SettingsQuickMenuProps> = ({
 
           {QUICK_ENTRIES.map((entry) => (
             <Tooltip key={entry.id} content={entry.title}>
-              <button
+              <Button
+                bare
                 type="button"
                 className={`${styles.sbQuickItem} sb-quick-item`}
                 data-testid={`quick-settings-${entry.id}`}
@@ -314,7 +316,7 @@ export const SettingsQuickMenu: React.FC<SettingsQuickMenuProps> = ({
               >
                 {entry.icon}
                 <span>{entry.label}</span>
-              </button>
+              </Button>
             </Tooltip>
           ))}
         </div>

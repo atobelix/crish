@@ -176,7 +176,8 @@ export const YamlConfigEditorModal: React.FC<YamlConfigEditorModalProps> = ({
                     {ed.matchCount > 0 ? `${ed.searchIndex + 1} / ${ed.matchCount}` : '无结果'}
                   </span>
                   <Tooltip content="上一个匹配项 (Shift+Enter)">
-                    <button
+                    <Button
+                      bare
                       type="button"
                       className={styles.searchNavBtn}
                       onClick={() => ed.jumpToMatch(ed.searchIndex - 1)}
@@ -184,10 +185,11 @@ export const YamlConfigEditorModal: React.FC<YamlConfigEditorModalProps> = ({
                       aria-label="上一个匹配项"
                     >
                       <AppIcon name="chevron-up" size={12} />
-                    </button>
+                    </Button>
                   </Tooltip>
                   <Tooltip content="下一个匹配项 (Enter)">
-                    <button
+                    <Button
+                      bare
                       type="button"
                       className={styles.searchNavBtn}
                       onClick={() => ed.jumpToMatch(ed.searchIndex + 1)}
@@ -195,10 +197,11 @@ export const YamlConfigEditorModal: React.FC<YamlConfigEditorModalProps> = ({
                       aria-label="下一个匹配项"
                     >
                       <AppIcon name="chevron-down" size={12} />
-                    </button>
+                    </Button>
                   </Tooltip>
                   <Tooltip content="清空搜索 (Esc)">
-                    <button
+                    <Button
+                      bare
                       type="button"
                       className={styles.searchNavBtn}
                       onClick={() => {
@@ -208,7 +211,7 @@ export const YamlConfigEditorModal: React.FC<YamlConfigEditorModalProps> = ({
                       aria-label="清空搜索"
                     >
                       <AppIcon name="x" size={12} />
-                    </button>
+                    </Button>
                   </Tooltip>
                 </div>
               ) : null

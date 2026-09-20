@@ -23,6 +23,7 @@ import { scanSystemFonts } from './internal/fontStoreScan';
 import { sanitizeFontFamilyNameStrict } from './internal/fontPinyinMatcher';
 import { FontSelectField, type FontSelectOption } from './FontSelectField';
 import { SettingsRow } from './SettingsUI';
+import { Input } from '../ui';
 import styles from './FontSettingsSection.module.css';
 
 interface Props {
@@ -219,7 +220,8 @@ export const FontSettingsSection: React.FC<Props> = ({ onPersistSettings }) => {
         control={
           <div className={styles.monoControlRow}>
             <label className={styles.settingsRowCheck} aria-label="启用代码连字（liga / calt）">
-              <input
+              <Input
+                bare
                 type="checkbox"
                 checked={!!prefs.monoLigatures}
                 disabled={busy}

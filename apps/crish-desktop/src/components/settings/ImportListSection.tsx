@@ -4,7 +4,7 @@ import {
   externalSourceLabel,
   type DetectedExternalSession,
 } from '../../api/import';
-import { Button, Tooltip } from '../ui';
+import { Button, Input, Tooltip } from '../ui';
 import styles from './ExternalSessionImport.module.css';
 import { AppIcon } from '../ui/icons/index';
 
@@ -99,7 +99,8 @@ export const ImportListSection: React.FC<{
                 role="option"
                 aria-selected={checked}
               >
-                <input
+                <Input
+                  bare
                   id={checkId}
                   type="checkbox"
                   className={styles.importCheck}

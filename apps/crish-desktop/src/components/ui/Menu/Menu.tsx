@@ -243,46 +243,31 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
       }
     };
 
-    const hostTrigger = React.isValidElement(actualTrigger) ? (
-      <span
-        ref={(node: HTMLElement | null) => {
-          triggerRef.current = node;
-          const propsRef = (
-            actualTrigger.props as {
-              ref?: React.Ref<HTMLElement>;
-            }
-          )?.ref;
-          if (typeof propsRef === 'function') {
-            propsRef(node);
-          } else if (
-            propsRef &&
-            typeof propsRef === 'object' &&
-            'current' in propsRef
-          ) {
-            (
-              propsRef as React.MutableRefObject<HTMLElement | null>
-            ).current = node;
-          }
-        }}
-        className={styles.menuTriggerHost}
-        onClickCapture={handleTriggerClickCapture}
-      >
-        {actualTrigger}
-      </span>
-    ) : (
-      actualTrigger
-    );
-
     renderedTrigger =
-      tipContent && React.isValidElement(hostTrigger) ? (
+      tipContent && React.isValidElement(actualTrigger) ? (
         <Tooltip content={tipContent} side={tipSide} disabled={isOpen}>
-          <Popover.Trigger asChild>
-            {hostTrigger as React.ReactElement}
+          <Popover.Trigger
+            asChild
+            ref={triggerRef as React.Ref<HTMLButtonElement>}
+            onClickCapture={handleTriggerClickCapture}
+          >
+            {actualTrigger}
           </Popover.Trigger>
         </Tooltip>
+      ) : React.isValidElement(actualTrigger) ? (
+        <Popover.Trigger
+          asChild
+          ref={triggerRef as React.Ref<HTMLButtonElement>}
+          onClickCapture={handleTriggerClickCapture}
+        >
+          {actualTrigger}
+        </Popover.Trigger>
       ) : (
-        <Popover.Trigger asChild>
-          {hostTrigger as React.ReactElement}
+        <Popover.Trigger
+          ref={triggerRef as React.Ref<HTMLButtonElement>}
+          onClickCapture={handleTriggerClickCapture}
+        >
+          {actualTrigger}
         </Popover.Trigger>
       );
   }

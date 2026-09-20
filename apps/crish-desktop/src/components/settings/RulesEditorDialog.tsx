@@ -4,7 +4,7 @@
  */
 import React from 'react';
 import styles from './SettingsRulesTab.module.css';
-import { Button, Dialog } from '../ui';
+import { Button, Dialog, Textarea } from '../ui';
 
 export type RulesEditorDialogProps = {
   open: boolean;
@@ -68,7 +68,8 @@ export const RulesEditorDialog: React.FC<RulesEditorDialogProps> = ({
         </div>
       }
     >
-      <textarea
+      <Textarea
+        bare
         ref={initialFocusRef}
         className={styles.rulesEditorTextarea}
         value={editorText}

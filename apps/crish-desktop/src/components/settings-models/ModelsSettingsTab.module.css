@@ -943,6 +943,7 @@
   gap: var(--space-1_5);
 }
 
+:global(.button).mrdModalityChip,
 .mrdModalityChip {
   display: inline-flex;
   align-items: center;
@@ -1025,6 +1026,7 @@
   background: var(--bg-card);
 }
 
+:global(.button).mrdCurrencyBtn,
 .mrdCurrencyBtn {
   padding: 1px var(--space-1_5); /* 布局约束，不入刻度 */
   font-size: var(--font-size-xxs);

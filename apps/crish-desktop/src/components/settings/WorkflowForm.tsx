@@ -12,7 +12,7 @@ import {
   type WorkflowScheduleDraft,
 } from '../../api/workflowApi';
 import { listProjects } from '../../api/projectStore';
-import { Button, Input, Select, Tooltip } from '../ui';
+import { Button, Input, Select, Textarea, Tooltip } from '../ui';
 import styles from './ScheduledTasksPanel.module.css';
 import scheduleStyles from './SettingsScheduleTab.module.css';
 
@@ -65,7 +65,8 @@ export const WorkflowForm: React.FC<WorkflowFormProps> = ({
     ) : (
       <label className={styles.schedField}>
         <span className={styles.schedFieldLabel}>名称</span>
-        <input
+        <Input
+          bare
           className={styles.schedFieldInput}
           placeholder="例如：每日代码体检"
           value={draft.name}
@@ -92,7 +93,8 @@ export const WorkflowForm: React.FC<WorkflowFormProps> = ({
   ) : (
     <label className={styles.schedField}>
       <span className={styles.schedFieldLabel}>要做什么</span>
-      <textarea
+      <Textarea
+        bare
         className={`${styles.schedFieldInput} ${styles.schedFieldTextarea}`}
         placeholder="描述任务内容…"
         value={draft.prompt}
@@ -139,7 +141,8 @@ export const WorkflowForm: React.FC<WorkflowFormProps> = ({
     ) : (
       <label className={styles.schedField}>
         <span className={styles.schedFieldLabel}>时间</span>
-        <input
+        <Input
+          bare
           className={styles.schedFieldInput}
           type="time"
           value={draft.dailyTime}
@@ -170,7 +173,8 @@ export const WorkflowForm: React.FC<WorkflowFormProps> = ({
     ) : (
       <label className={styles.schedField}>
         <span className={styles.schedFieldLabel}>间隔（分钟）</span>
-        <input
+        <Input
+          bare
           className={styles.schedFieldInput}
           type="number"
           min={WORKFLOW_INTERVAL_MINUTES_MIN}

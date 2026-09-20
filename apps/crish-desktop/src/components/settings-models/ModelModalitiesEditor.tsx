@@ -1,4 +1,5 @@
 import React, { useCallback } from 'react';
+import { Button } from '../ui';
 import styles from './ModelsSettingsTab.module.css';
 
 export const ALL_INPUT_MODALITIES = [
@@ -95,7 +96,8 @@ export const ModelModalitiesEditor: React.FC<ModelModalitiesEditorProps> = ({
             {ALL_INPUT_MODALITIES.map((mod) => {
               const active = modalities.input.includes(mod);
               return (
-                <button
+                <Button
+                  bare
                   key={mod}
                   type="button"
                   aria-pressed={active}
@@ -105,7 +107,7 @@ export const ModelModalitiesEditor: React.FC<ModelModalitiesEditorProps> = ({
                   onClick={() => toggleInput(mod)}
                 >
                   {MODALITY_LABELS[mod] || mod}
-                </button>
+                </Button>
               );
             })}
           </div>
@@ -116,7 +118,8 @@ export const ModelModalitiesEditor: React.FC<ModelModalitiesEditorProps> = ({
             {ALL_OUTPUT_MODALITIES.map((mod) => {
               const active = modalities.output.includes(mod);
               return (
-                <button
+                <Button
+                  bare
                   key={mod}
                   type="button"
                   aria-pressed={active}
@@ -126,7 +129,7 @@ export const ModelModalitiesEditor: React.FC<ModelModalitiesEditorProps> = ({
                   onClick={() => toggleOutput(mod)}
                 >
                   {MODALITY_LABELS[mod] || mod}
-                </button>
+                </Button>
               );
             })}
           </div>

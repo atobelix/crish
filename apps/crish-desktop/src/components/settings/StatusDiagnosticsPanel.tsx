@@ -32,7 +32,7 @@ type Props = {
   onBlockingOverlayChange?: (open: boolean) => void;
 };
 
-/** 复制到剪贴板（best-effort：clipboard API → execCommand 兜底） */
+/** 复制到剪贴板（best-effort：clipboard API） */
 async function copyTextBestEffort(text: string): Promise<boolean> {
   try {
     if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
@@ -40,23 +40,9 @@ async function copyTextBestEffort(text: string): Promise<boolean> {
       return true;
     }
   } catch {
-    /* 走 execCommand 兜底 */
+    /* 剪贴板失败 */
   }
-  try {
-    if (typeof document === 'undefined') return false;
-    const ta = document.createElement('textarea');
-    ta.value = text;
-    ta.setAttribute('readonly', '');
-    ta.style.position = 'fixed';
-    ta.style.left = '-9999px';
-    document.body.appendChild(ta);
-    ta.select();
-    const ok = document.execCommand('copy');
-    document.body.removeChild(ta);
-    return ok;
-  } catch {
-    return false;
-  }
+  return false;
 }
 
 /** 时间戳 → 本地时间短串（epoch ms；非法值回退 '—'） */

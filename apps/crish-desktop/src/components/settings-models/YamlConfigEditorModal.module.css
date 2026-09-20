@@ -190,6 +190,7 @@
   padding-right: var(--space-0_5);
 }
 
+:global(.button).searchNavBtn,
 .searchNavBtn {
   display: inline-flex;
   align-items: center;

@@ -182,6 +182,7 @@
   -webkit-appearance: none;
 }
 
+:global(.button).searchClear,
 .searchClear {
   display: inline-flex;
   align-items: center;

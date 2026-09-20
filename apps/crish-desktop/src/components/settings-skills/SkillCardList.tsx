@@ -153,7 +153,8 @@ export const SkillCardList: React.FC<SkillCardListProps> = ({
                 const isSel = selectedId === s.id;
                 return (
                   <Tooltip key={s.id} content={s.description || s.name}>
-                    <button
+                    <Button
+                      bare
                       id={`skill-opt-${s.id}`}
                       type="button"
                       role="option"
@@ -179,7 +180,7 @@ export const SkillCardList: React.FC<SkillCardListProps> = ({
                         className={`${styles.skillsActDot} skills-act-dot act-${s.activation}`}
                         aria-hidden
                       />
-                    </button>
+                    </Button>
                   </Tooltip>
                 );
               })}

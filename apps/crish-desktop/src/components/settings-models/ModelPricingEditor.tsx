@@ -1,6 +1,6 @@
 import React from 'react';
 
-import { Input } from '../ui';
+import { Button, Input } from '../ui';
 import { AppIcon } from '../ui/icons';
 import styles from './ModelsSettingsTab.module.css';
 
@@ -57,7 +57,8 @@ export const ModelPricingEditor: React.FC<ModelPricingEditorProps> = ({
           四维计费 (选填 · 留空优雅静默)
         </span>
         <div className={styles.mrdCurrencyToggle}>
-          <button
+          <Button
+            bare
             type="button"
             className={`${styles.mrdCurrencyBtn} ${
               current.currency === 'CNY' ? styles.mrdCurrencyBtnActive : ''
@@ -65,8 +66,9 @@ export const ModelPricingEditor: React.FC<ModelPricingEditorProps> = ({
             onClick={() => setCurrency('CNY')}
           >
             ¥ CNY
-          </button>
-          <button
+          </Button>
+          <Button
+            bare
             type="button"
             className={`${styles.mrdCurrencyBtn} ${
               current.currency === 'USD' ? styles.mrdCurrencyBtnActive : ''
@@ -74,7 +76,7 @@ export const ModelPricingEditor: React.FC<ModelPricingEditorProps> = ({
             onClick={() => setCurrency('USD')}
           >
             $ USD
-          </button>
+          </Button>
         </div>
       </div>
       <div className={styles.mrdPricingGrid}>

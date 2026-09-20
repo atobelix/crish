@@ -17,6 +17,7 @@
   width: 100%;
 }
 
+:global(.button).settingsSelectTrigger,
 .settingsSelectTrigger {
   display: inline-flex;
   align-items: center;
@@ -141,6 +142,7 @@
   color: var(--text-tertiary);
 }
 
+:global(.button).customApplyBtn,
 .customApplyBtn {
   position: absolute;
   right: var(--space-0_5);
@@ -162,6 +164,7 @@
   background: var(--tint-hover);
 }
 
+:global(.button).actionBtn,
 .actionBtn {
   display: inline-flex;
   align-items: center;
@@ -221,6 +224,7 @@
   user-select: none;
 }
 
+:global(.button).settingsSelectItem,
 .settingsSelectItem {
   display: flex;
   align-items: center;

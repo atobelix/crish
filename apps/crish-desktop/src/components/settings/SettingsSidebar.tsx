@@ -1,7 +1,7 @@
 import React from 'react';
 
 import styles from './SettingsPanel.module.css';
-import { Button, Tooltip } from '../ui';
+import { Button, Input, Tooltip } from '../ui';
 import type { TabMeta, TabType } from '../settingsTabsMeta';
 import { SidebarFooter } from '../sidebar/SidebarFooter';
 import { AppIcon } from '../ui/icons/index';
@@ -101,7 +101,8 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = React.memo(
             <span className={styles.searchIco} aria-hidden="true">
               <AppIcon name="search" size={16} />
             </span>
-            <input
+            <Input
+              bare
               ref={searchInputRef}
               id={searchId}
               type="search"
@@ -118,7 +119,8 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = React.memo(
               enterKeyHint="search"
             />
             {searchQuery ? (
-              <button
+              <Button
+                bare
                 type="button"
                 className={styles.searchClear}
                 onClick={(e) => {
@@ -129,7 +131,7 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = React.memo(
                 aria-label="清空搜索"
               >
                 <AppIcon name="x" size={12} />
-              </button>
+              </Button>
             ) : null}
           </div>
         </div>
@@ -162,7 +164,8 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = React.memo(
                   </div>
                 ) : null}
                 <Tooltip content={tab.keywords.slice(0, 4).join(' · ')}>
-                  <button
+                  <Button
+                    bare
                     type="button"
                     id={tabBtnId}
                     role="tab"
@@ -180,7 +183,7 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = React.memo(
                       <AppIcon name={iconName} size={16} aria-hidden />
                     </span>
                     <span>{tab.label}</span>
-                  </button>
+                  </Button>
                 </Tooltip>
               </React.Fragment>
             );

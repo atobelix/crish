@@ -219,7 +219,8 @@ export const SettingsRulesTab: React.FC<Props> = ({ onBlockingOverlayChange }) =
                 );
                 return (
                   <Tooltip key={preset} content={exists ? '已添加' : `添加：${preset}`}>
-                    <button
+                    <Button
+                      bare
                       type="button"
                       className={styles.presetChip}
                       onClick={() => handleAddPreset(preset)}
@@ -229,7 +230,7 @@ export const SettingsRulesTab: React.FC<Props> = ({ onBlockingOverlayChange }) =
                       }
                     >
                       {preset}
-                    </button>
+                    </Button>
                   </Tooltip>
                 );
               })}

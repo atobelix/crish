@@ -231,6 +231,7 @@
   gap: var(--space-1_5);
 }
 
+:global(.button).ipBadge,
 .ipBadge {
   display: inline-flex;
   align-items: center;

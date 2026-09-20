@@ -162,7 +162,8 @@ export const SkillsMoreMenu: React.FC<SkillsMoreMenuProps> = ({
             const isConfirmEnabled = opt.id === 'enable-all' && batchConfirm === 'enabled';
             const isConfirmDisabled = opt.id === 'disable-all' && batchConfirm === 'disabled';
             return (
-              <button
+              <Button
+                bare
                 key={opt.id}
                 type="button"
                 role="menuitem"
@@ -176,7 +177,7 @@ export const SkillsMoreMenu: React.FC<SkillsMoreMenuProps> = ({
                 }}
               >
                 {opt.label}
-              </button>
+              </Button>
             );
           })}
         </div>

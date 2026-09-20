@@ -141,6 +141,7 @@
   gap: var(--space-0_5);
 }
 
+:global(.button).skillsMoreItem,
 .skillsMoreItem {
   display: block;
   width: 100%;
@@ -362,6 +363,7 @@
   letter-spacing: var(--letter-spacing-wide);
 }
 
+:global(.button).skillsRailItem,
 .skillsRailItem {
   display: flex;
   align-items: flex-start;

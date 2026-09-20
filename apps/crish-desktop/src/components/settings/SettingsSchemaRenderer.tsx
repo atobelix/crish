@@ -149,7 +149,8 @@ export const SettingsSchemaRenderer: React.FC<SettingsSchemaRendererProps> = Rea
                 );
               } else if (prop.type === 'color') {
                 control = (
-                  <input
+                  <Input
+                    bare
                     id={domId}
                     type="color"
                     className={uiStyles.controlColor}

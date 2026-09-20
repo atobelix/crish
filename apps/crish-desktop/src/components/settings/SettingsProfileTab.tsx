@@ -5,7 +5,7 @@ import { useToast } from '../../services/toast/ToastContext';
  * Stream D 改造后：磁盘镜像已删除，存储位置统一显示「本机 SQLite 数据库」。
  * 外部对话：点击扫描 Claude Code / Codex → 勾选 → 导入所选（禁止自动导入）。
  */
-import React, { useId, useState } from 'react';
+import React, { useId, useRef, useState } from 'react';
 
 import { clientApi } from '../../api/clientApi';
 import { ensureEngineConnected } from '../../api/chatBridge';
@@ -19,7 +19,7 @@ import {
   SettingsCard,
   SettingsRow,
 } from './SettingsUI';
-import { Button, Tooltip } from '../ui';
+import { Button, Input, Tooltip } from '../ui';
 import { ExternalSessionImport } from './ExternalSessionImport';
 import { AccountAuthCard } from './AccountAuthCard';
 import styles from './SettingsProfileTab.module.css';
@@ -45,6 +45,7 @@ export const SettingsProfileTab: React.FC<Props> = ({ _onBlockingOverlayChange }
   const [busy, setBusy] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
+  const importFileInputRef = useRef<HTMLInputElement>(null);
 
   const hasWorkspace = cwd !== '__global__' && Boolean(cwd);
   // Stream D 改造后：存储统一为 SQLite（本机数据库），不再有磁盘镜像 / localStorage 分支
@@ -78,41 +79,40 @@ export const SettingsProfileTab: React.FC<Props> = ({ _onBlockingOverlayChange }
   /** 选择 JSON 后合并写入本机设置；成功静默，失败 toast */
   const handleImportSettings = () => {
     if (importing) return;
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'application/json,.json';
-    input.onchange = () => {
-      const file = input.files?.[0];
-      if (!file) return;
-      void (async () => {
-        setImporting(true);
+    importFileInputRef.current?.click();
+  };
+
+  const handleImportFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    void (async () => {
+      setImporting(true);
+      try {
+        const text = await file.text();
+        let parsed: unknown;
         try {
-          const text = await file.text();
-          let parsed: unknown;
-          try {
-            parsed = JSON.parse(text);
-          } catch {
-            showToast('导入失败：不是合法 JSON');
-            return;
-          }
-          if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-            showToast('导入失败：根节点须为对象');
-            return;
-          }
-          await clientApi.saveSettingsEx(
-            cwd === '__global__' ? '__global__' : cwd,
-            'global',
-            parsed as Parameters<typeof clientApi.saveSettingsEx>[2]
-          );
-          // 成功静默（用户裁决：导出/导入成功提示不必每次说）
-        } catch (err) {
-          showToast('导入失败：' + String(err));
-        } finally {
-          setImporting(false);
+          parsed = JSON.parse(text);
+        } catch {
+          showToast('导入失败：不是合法 JSON');
+          return;
         }
-      })();
-    };
-    input.click();
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+          showToast('导入失败：根节点须为对象');
+          return;
+        }
+        await clientApi.saveSettingsEx(
+          cwd === '__global__' ? '__global__' : cwd,
+          'global',
+          parsed as Parameters<typeof clientApi.saveSettingsEx>[2]
+        );
+        // 成功静默（用户裁决：导出/导入成功提示不必每次说）
+      } catch (err) {
+        showToast('导入失败：' + String(err));
+      } finally {
+        setImporting(false);
+      }
+    })();
   };
 
   const handleTestDaemon = () => {
@@ -249,11 +249,19 @@ export const SettingsProfileTab: React.FC<Props> = ({ _onBlockingOverlayChange }
                     variant="secondary"
                     size="sm"
                     disabled={importing}
-                    onClick={() => handleImportSettings()}
+                    onClick={handleImportSettings}
                   >
                     {importing ? '导入中…' : '导入'}
                   </Button>
                 </Tooltip>
+                <Input
+                  bare
+                  ref={importFileInputRef}
+                  type="file"
+                  accept="application/json,.json"
+                  style={{ display: 'none' }}
+                  onChange={handleImportFileChange}
+                />
               </>
             }
           />

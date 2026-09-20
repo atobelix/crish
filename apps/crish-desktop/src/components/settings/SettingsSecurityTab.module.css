@@ -53,6 +53,7 @@
   gap: var(--space-2);
 }
 
+:global(.button).presetChip,
 .presetChip {
   display: inline-flex;
   align-items: center;

@@ -227,24 +227,26 @@ export const SettingsSecurityTab: React.FC = () => {
               })}
               {extraCount > 0 && !showAllPaths ? (
                 <div className={styles.morePathsWrapper}>
-                  <button
+                  <Button
+                    bare
                     type="button"
                     className="settings-chip-btn"
                     onClick={() => setShowAllPaths(true)}
                   >
                     +{extraCount} 更多
-                  </button>
+                  </Button>
                 </div>
               ) : null}
               {showAllPaths && extraCount > 0 ? (
                 <div className={styles.morePathsWrapper}>
-                  <button
+                  <Button
+                    bare
                     type="button"
                     className="settings-chip-btn"
                     onClick={() => setShowAllPaths(false)}
                   >
                     收起
-                  </button>
+                  </Button>
                 </div>
               ) : null}
             </>
@@ -365,7 +367,8 @@ export const SettingsSecurityTab: React.FC = () => {
                     key={cmd}
                     content={already ? '已添加' : `添加 ${cmd}`}
                   >
-                    <button
+                    <Button
+                      bare
                       type="button"
                       className={styles.presetChip}
                       disabled={already}
@@ -374,7 +377,7 @@ export const SettingsSecurityTab: React.FC = () => {
                       onClick={() => addWhitelist(cmd)}
                     >
                       {cmd}
-                    </button>
+                    </Button>
                   </Tooltip>
                 );
               })}
