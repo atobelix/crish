@@ -34,6 +34,7 @@ import {
   createSidebarSessionGhost,
   swallowNextClick,
 } from './useSessionListDragHelpers';
+import { shiftRowsForDrag } from './sessionListDragShift';
 
 export {
   type DropPlace,
@@ -463,88 +464,15 @@ export function useSessionListDrag(
         );
 
         if (activeContainer) {
-          const allTargetRows = Array.from(
-            activeContainer.querySelectorAll<HTMLElement>('li[data-session-id]')
-          ).filter((r) => r.offsetParent !== null && r.getBoundingClientRect().height > 0);
-
-          const isSameContainer = Boolean(
-            sourceContainer && activeContainer.contains(sourceContainer)
-          );
-
-          const otherRows = allTargetRows.filter(
-            (r) => r.getAttribute('data-session-id') !== sessionId
-          );
-          const srcIdx = isSameContainer
-            ? allTargetRows.findIndex((r) => r.getAttribute('data-session-id') === sessionId)
-            : -1;
-
-          let targetIdx = otherRows.length;
-          if (overId) {
-            const matchIdx = otherRows.findIndex(
-              (r) => r.getAttribute('data-session-id') === overId
-            );
-            if (matchIdx >= 0) {
-              targetIdx = hit.place === 'before' ? matchIdx : matchIdx + 1;
-            }
-          }
-
-          const stepPx = DEFAULT_ROW_STEP_PX;
-          const nextShifted: HTMLElement[] = [];
-
-          for (let i = 0; i < otherRows.length; i++) {
-            const row = otherRows[i]!;
-            let offset = 0;
-
-            if (isSameContainer && srcIdx >= 0) {
-              if (targetIdx > srcIdx) {
-                if (i >= srcIdx && i < targetIdx) offset = -stepPx;
-              } else if (targetIdx < srcIdx) {
-                if (i >= targetIdx && i < srcIdx) offset = stepPx;
-              }
-            } else {
-              if (i >= targetIdx) {
-                offset = stepPx;
-              }
-            }
-
-            row.style.transition = 'transform 120ms cubic-bezier(0.2, 0, 0, 1)';
-            row.style.transform = offset !== 0 ? `translateY(${offset}px)` : '';
-            nextShifted.push(row);
-          }
-
-          // 跨分组拖拽时：原分组容器下的列表项向上补位收缩空洞，避免源与目标出现双空行
-          if (!isSameContainer && sourceContainer) {
-            const allSourceRows = Array.from(
-              sourceContainer.querySelectorAll<HTMLElement>('li[data-session-id]')
-            ).filter(
-              (r) => r.offsetParent !== null && r.getBoundingClientRect().height > 0
-            );
-
-            const origIdx = allSourceRows.findIndex(
-              (r) => r.getAttribute('data-session-id') === sessionId
-            );
-            if (origIdx >= 0) {
-              for (let i = 0; i < allSourceRows.length; i++) {
-                const sRow = allSourceRows[i]!;
-                if (sRow.getAttribute('data-session-id') === sessionId) continue;
-                if (i > origIdx) {
-                  sRow.style.transition = 'transform 120ms cubic-bezier(0.2, 0, 0, 1)';
-                  sRow.style.transform = `translateY(-${stepPx}px)`;
-                  nextShifted.push(sRow);
-                }
-              }
-
-              // 若源容器内有折叠切换按钮（如“查看全部”），亦同步向上收缩
-              const foldBtn = sourceContainer.parentElement?.querySelector(
-                `.${styles.foldToggleRow}`
-              ) as HTMLElement | null;
-              if (foldBtn) {
-                foldBtn.style.transition = 'transform 120ms cubic-bezier(0.2, 0, 0, 1)';
-                foldBtn.style.transform = `translateY(-${stepPx}px)`;
-                nextShifted.push(foldBtn);
-              }
-            }
-          }
+          const nextShifted = shiftRowsForDrag({
+            activeContainer,
+            sourceContainer,
+            sessionId,
+            overId,
+            place: hit.place,
+            stepPx: DEFAULT_ROW_STEP_PX,
+            foldToggleClass: styles.foldToggleRow,
+          });
 
           for (const el of shiftedElements) {
             if (!nextShifted.includes(el)) {
