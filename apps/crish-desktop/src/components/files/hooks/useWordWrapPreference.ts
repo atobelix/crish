@@ -20,7 +20,9 @@ export function useWordWrapPreference(): [
           setWordWrap(saved);
         }
       })
-      .catch(() => {});
+      .catch(() => {
+        /* swallow-ok: 读偏好失败保持默认开启 */
+      });
     return () => {
       unmounted = true;
     };
@@ -41,7 +43,9 @@ export function useWordWrapPreference(): [
         try {
           void preferencesClient
             .setPreference('file_viewer_word_wrap', next)
-            .catch(() => {});
+            .catch(() => {
+              /* swallow-ok: 本地状态已更新；偏好落盘失败下次会话仍默认 true */
+            });
         } catch {
           /* swallow */
         }

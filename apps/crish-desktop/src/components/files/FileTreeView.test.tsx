@@ -77,6 +77,19 @@ describe('files/FileTreeView 树形语义（F7-F35）与单轨重构', () => {
     expect(getRows(container)).toHaveLength(TREE.length);
   });
 
+  it('文件浏览器行内不渲染展开箭头（不占位），单击目录行仍触发展开（onSelect 带 isDir）', () => {
+    const props = defaultProps(TREE);
+    const { container } = render(<FileTreeView {...props} />);
+    const rows = getRows(container);
+    for (const row of rows) {
+      expect(row.querySelector('button')).toBeNull();
+      expect(row.className).not.toMatch(/Twist/);
+      expect(row.querySelector('[class*="Twist"]')).toBeNull();
+    }
+    fireEvent.click(rows[0]!);
+    expect(props.onSelect).toHaveBeenCalledWith('src', true);
+  });
+
   it('存量用例 2: 行节点带 aria-level 与 aria-expanded（目录行）', () => {
     const { container } = render(<FileTreeView {...defaultProps(TREE)} />);
     const rows = getRows(container);

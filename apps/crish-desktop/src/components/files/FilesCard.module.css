@@ -365,7 +365,7 @@
   font-size: var(--font-size-sm, 13px);
   color: var(--text-primary);
   cursor: pointer;
-  transition: background 0.12s ease;
+  transition: background var(--transition-micro);
   user-select: none;
 }
 
@@ -383,7 +383,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: transform 0.18s cubic-bezier(0.2, 0, 0, 1);
+  transition: transform var(--transition-fast);
 }
 
 .filesBcFlyoutChev.isExpanded {
@@ -796,26 +796,6 @@
 
 .filesRow.isSelected {
   background: var(--bg-active);
-}
-
-.filesRowTwist {
-  border: none;
-  background: transparent;
-  width: 16px;
-  height: 16px;
-  padding: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-tertiary);
-  cursor: pointer;
-  border-radius: var(--radius-xs);
-  flex-shrink: 0;
-}
-
-.filesRowTwist.isLeaf {
-  visibility: hidden;
-  pointer-events: none;
 }
 
 .filesRowIco {

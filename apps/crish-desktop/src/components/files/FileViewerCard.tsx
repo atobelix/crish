@@ -1,4 +1,5 @@
 import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
+import type { ViewRenderContext } from '../../services/view-registry/ViewTypes';
 import type { FileDiff } from '../../store/types';
 import {
   openToolInSession,
@@ -9,7 +10,6 @@ import {
 import { getCompositionRoot } from '../../app/compositionRoot';
 import {
   openPathDefault,
-  openWithHostOpener,
   listOpenOptionsForFile,
   type HostOpener,
 } from '../../api/hostOpenersApi';
@@ -29,12 +29,12 @@ import { DiffCardUnifiedView } from '../diff/DiffCardUnifiedView';
 import { getComputedChanges } from '../diff/useDiffData';
 import { useToast } from '../../services/toast/ToastContext';
 import { Button, Tooltip, Menu } from '../ui';
-import type { SelectOptionItem } from '../ui/Menu/types';
 import { FileViewerHistoryDrawer } from './FileViewerHistoryDrawer';
 import { useWordWrapPreference } from './hooks/useWordWrapPreference';
 import { isJsonFileOrContent, formatJsonSafe } from './jsonFormatUtils';
 import { FileAnnotationPopover } from './FileAnnotationPopover';
 import styles from './FileViewerCard.module.css';
+import { createFileViewerMenuOptions } from './fileViewerMenuOptions';
 
 export interface FileViewerCardProps {
   filePath: string;
@@ -238,80 +238,29 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
     }, [f]);
 
     // “更多操作”下拉菜单选项（收纳路径与打开方式相关动作）
-    const moreMenuOptions = useMemo<SelectOptionItem[]>(() => {
-      const items: SelectOptionItem[] = [
-        {
-          id: 'open-file-path',
-          label: '打开文件路径',
-          icon: <AppIcon name="folder-open" size={14} aria-hidden />,
-          onClick: handleOpenSystemExplorer,
-        },
-        {
-          id: 'copy-rel-path',
-          label: '复制相对路径',
-          icon: <AppIcon name="copy" size={14} aria-hidden />,
-          onClick: handleCopyRelativePath,
-        },
-        {
-          id: 'copy-abs-path',
-          label: '复制绝对路径',
-          icon: <AppIcon name="file-code" size={14} aria-hidden />,
-          onClick: handleCopyAbsolutePath,
-        },
-        {
-          id: 'open-with-default',
-          label: '选择打开方式',
-          hint: openDefaultLabel,
-          icon: <AppIcon name="external-link" size={14} aria-hidden />,
-          onClick: handleOpenDefault,
-        },
-      ];
-
-      for (const op of fileOpeners) {
-        items.push({
-          id: `open-with-${op.id}`,
-          label: `用 ${op.displayName} 打开`,
-          icon: op.iconDataUrl ? (
-            <img
-              src={op.iconDataUrl}
-              width={14}
-              height={14}
-              alt=""
-              style={{ flexShrink: 0, objectFit: 'contain' }}
-            />
-          ) : (
-            <AppIcon name="app-window" size={14}
-              style={{
-                flexShrink: 0,
-                color: 'var(--text-secondary)',
-              }} />
-          ),
-          onClick: () => {
-            void openWithHostOpener(op.id, absolutePath).catch((e) =>
-              logInternalError('components/files/FileViewerCard/openWith', e)
-            );
-          },
-        });
-      }
-
-      items.push({
-        id: 'locate-tree',
-        label: '在应用文件树中定位',
-        icon: <AppIcon name="locate" size={14} aria-hidden />,
-        onClick: handleLocateInFiles,
-      });
-
-      return items;
-    }, [
-      absolutePath,
-      fileOpeners,
-      handleCopyAbsolutePath,
-      handleCopyRelativePath,
-      handleLocateInFiles,
-      handleOpenDefault,
-      handleOpenSystemExplorer,
-      openDefaultLabel,
-    ]);
+    const moreMenuOptions = useMemo(
+      () =>
+        createFileViewerMenuOptions({
+          absolutePath,
+          fileOpeners,
+          openDefaultLabel,
+          onCopyAbsolutePath: handleCopyAbsolutePath,
+          onCopyRelativePath: handleCopyRelativePath,
+          onLocateInFiles: handleLocateInFiles,
+          onOpenDefault: handleOpenDefault,
+          onOpenSystemExplorer: handleOpenSystemExplorer,
+        }),
+      [
+        absolutePath,
+        fileOpeners,
+        handleCopyAbsolutePath,
+        handleCopyRelativePath,
+        handleLocateInFiles,
+        handleOpenDefault,
+        handleOpenSystemExplorer,
+        openDefaultLabel,
+      ]
+    );
 
     return (
       <div
@@ -507,5 +456,17 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
 
 FileViewerCard.displayName = 'FileViewerCard';
 
-export { FileViewerCardView } from './FileViewerCardView';
+export const FileViewerCardView: React.FC<ViewRenderContext> = (ctx) => {
+  const filePath = (ctx.params?.filePath as string) || '';
+  const initialMode = (ctx.params?.initialMode as 'plain' | 'diff') || 'plain';
+  return (
+    <FileViewerCard
+      key={filePath}
+      filePath={filePath}
+      initialMode={initialMode}
+    />
+  );
+};
+
+FileViewerCardView.displayName = 'FileViewerCardView';
 import { AppIcon } from '../ui/icons/index';

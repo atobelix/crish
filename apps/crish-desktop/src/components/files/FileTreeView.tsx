@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import styles from './FilesCard.module.css';
 import { Button, Tooltip } from '../ui';
-import { ChevronDownIcon, ChevronRightIcon, FileFormatIcon } from '../../assets/icons';
+import { FileFormatIcon } from '../../assets/icons';
 import { useVirtualScroll } from '../../hooks/useVirtualScroll';
 import { isSameFsPath } from '../../api/workspaceFsApi';
 import type { TreeNode } from './hooks/useFileNavigation';
@@ -314,32 +314,9 @@ export const FileTreeView: React.FC<FileTreeViewProps> = React.memo(
                     tabIndex={isSelected ? 0 : -1}
                     onKeyDown={(ev) => handleRowKeyDown(ev, globalIdx, e)}
                   >
-                    <Button
-                      bare
-                      type="button"
-                      className={`${styles.filesRowTwist} ${e.isDir ? '' : styles.isLeaf}`}
-                      onClick={(ev) => {
-                        ev.stopPropagation();
-                        if (e.isDir) onToggleExpand(e.path, ev);
-                      }}
-                      tabIndex={-1}
-                      aria-label={
-                        e.isDir
-                          ? expanded[e.path]
-                            ? '收起'
-                            : '展开'
-                          : undefined
-                      }
-                      icon={
-                        e.isDir ? (
-                          expanded[e.path] ? (
-                            <ChevronDownIcon size={12} />
-                          ) : (
-                            <ChevronRightIcon size={12} />
-                          )
-                        ) : undefined
-                      }
-                    />
+                    {/* 文件浏览器不显示展开箭头（filesRowTwist 已移除，不占位）：
+                        单击行 → onSelect（目录即 toggleExpand），键盘 ←/→/Enter 同样可展开折叠；
+                        展开态由 aria-expanded 暴露。差异面板用自己的 fileNodeToggle，不受影响。 */}
                     {e.isDir ? (
                       <AppIcon name="folder" size={14}
                         className={`${styles.filesRowIco} ${styles.dir}`} />

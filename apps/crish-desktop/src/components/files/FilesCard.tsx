@@ -19,6 +19,7 @@ import { FilePreview } from './FilePreview';
 import { FileActions } from './FileActions';
 import { AppIcon } from '../ui/icons/index';
 import { preferencesClient } from '../../api/preferences';
+import { useFileListRatio } from './hooks/useFileListRatio';
 
 interface FilesCardProps {
   initialPath?: string | null;
@@ -34,26 +35,7 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(
     const filterInputRef = useRef<HTMLInputElement>(null);
     const bodySplitRef = useRef<HTMLDivElement>(null);
     const [isResizing, setIsResizing] = useState(false);
-    const [listWidthRatio, setListWidthRatio] = useState<number>(35);
-
-    useEffect(() => {
-      let unmounted = false;
-      void preferencesClient
-        .getPreference('files_list_ratio')
-        .then((prefRatio) => {
-          if (unmounted) return;
-          if (typeof prefRatio === 'number' && Number.isFinite(prefRatio)) {
-            const pct = prefRatio <= 1 ? prefRatio * 100 : prefRatio;
-            if (pct >= 15 && pct <= 75) {
-              setListWidthRatio(pct);
-            }
-          }
-        })
-        .catch(() => {});
-      return () => {
-        unmounted = true;
-      };
-    }, []);
+    const [listWidthRatio, setListWidthRatio] = useFileListRatio();
 
     const handleSplitResizeStart = useCallback(
       (
@@ -123,7 +105,9 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(
             try {
               void preferencesClient
                 .setPreference('files_list_ratio', finalRatio)
-                .catch(() => {});
+                .catch(() => {
+                  /* swallow-ok: UI 已就地更新；偏好落盘失败不打断拖拽 */
+                });
             } catch {
               // ignore
             }
