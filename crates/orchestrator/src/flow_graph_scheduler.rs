@@ -418,7 +418,8 @@ impl FlowScheduler {
     }
 
     /// 挂载子代理事件发射器（M14：spawn 成功发 subagent-started、
-    /// 收口发 subagent-ended；不挂载则不发射——编排纯逻辑域保持零事件）
+    /// 收口发 subagent-ended；若生产 spawner 接管 flow 生命周期则由它成对发射；
+    /// 不挂载则不发射——编排纯逻辑域保持零事件）
     pub fn with_subagent_event_emitter(mut self, emitter: SubagentEventEmitter) -> Self {
         self.subagent_events = Some(emitter);
         self

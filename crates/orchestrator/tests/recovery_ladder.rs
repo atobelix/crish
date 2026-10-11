@@ -13,7 +13,7 @@
 //!
 //! 测试替身：InMemoryStore（RecoveryStore 契约，内存记账）+ DbStore
 //! （真实 SQLite 库，验证 set_subagent_path / update_run_status /
-//! append_event 经既有接口落库）+ RecordingSpawner（DB 模式同时落库
+//! append_event 与 escalation 复合写经域接口落库）+ RecordingSpawner（DB 模式同时落库
 //! session_agents 行——阶梯 3 路径落库用真实库）。
 
 // G2 禁令豁免：测试临时目录清理（非产品删除路径，可恢复语义不适用）。
@@ -27,7 +27,7 @@ use agent_tools::tools::subagent::{
     SubagentSpawnError, SubagentSpawnRequest, SubagentSpawnResult, SubagentSpawner, SubagentState,
 };
 use async_trait::async_trait;
-use conex_db::{LocalDb, RunStatus};
+use conex_db::{DbFailure, DbFailureKind, LocalDb, RunStatus};
 use conex_test_utils::TempWorkspace;
 use conex_types::error::ProviderErrorKind;
 use conex_types::SessionAgent;
@@ -175,10 +175,29 @@ impl RecoveryStore for DbStore {
                 .map_err(|e| RecoveryError::PersistFailed {
                     message: e.to_string(),
                 })?;
-        // DM-02：conex-db append_event 已加 run_id 列参数；RecoveryStore
-        // trait 签名本波不变（DM-05 裁决）——此处恒传 None，recovery-* 行的
-        // 列级 run 归属待 DM-05 合并时补透传（对齐 recovery_store.rs 实现）
+        // DM-05：RecoveryStore::append_event 的既有签名保持不变；recovery-*
+        // 事件按会话级留痕，run_id 列继续恒为 None。
         conex_db::LocalDb::append_event(&self.db, session_id, sequence, event_type, payload, None)
+            .map_err(|e| RecoveryError::PersistFailed {
+                message: e.to_string(),
+            })
+    }
+
+    fn persist_escalation(
+        &self,
+        session_id: &str,
+        notification_json: &str,
+        escalation_payload: &str,
+        steering_payload: &str,
+    ) -> Result<(), RecoveryError> {
+        self.db
+            .append_two_events_and_set_session_meta(
+                session_id,
+                (RECOVER_ESCALATED_EVENT, escalation_payload),
+                (RECOVER_NOTIFICATIONS_KEY, notification_json),
+                (RECOVER_STEERING_EVENT, steering_payload),
+            )
+            .map(|_| ())
             .map_err(|e| RecoveryError::PersistFailed {
                 message: e.to_string(),
             })
@@ -481,6 +500,142 @@ async fn ladder2_budget_exhausted_creates_steering_readable() {
     let events = store.events();
     let types: Vec<&str> = events.iter().map(|(_, t, _)| t.as_str()).collect();
     assert_eq!(types, vec![RECOVER_ESCALATED_EVENT, RECOVER_STEERING_EVENT]);
+}
+
+#[tokio::test]
+async fn ladder2_localdb_escalation_publishes_state_after_atomic_commit() {
+    let ws = TempWorkspace::new("recovery_ladder2_atomic_success");
+    let db = LocalDb::open(ws.path().join("sessions.db")).expect("打开测试库失败");
+    db.insert_session("s1", "会话").expect("插入会话失败");
+    let queue = Arc::new(Mutex::new(PendingMessageQueue::new()));
+    let tree = Arc::new(Mutex::new(SessionTree::new("s1")));
+    let mut coordinator = RecoveryCoordinator::new(
+        "s1",
+        Arc::new(db.clone()),
+        queue.clone(),
+        tree,
+        RecordingSpawner::new(),
+        retry_policy(),
+    )
+    .expect("协调器构造失败");
+
+    let outcome = coordinator
+        .on_subagent_run_failure(&failure_ctx(
+            "run-atomic-success",
+            ProviderErrorKind::Network,
+            5,
+            61_000,
+        ))
+        .await
+        .expect("LocalDb escalation 应原子成功");
+    assert_eq!(outcome.ladder, RecoveryLadder::Ladder2MainAgent);
+    assert_eq!(coordinator.pending_notifications(), 1);
+    assert_eq!(queue.lock().unwrap().len(), 1);
+
+    let events = db
+        .query_events("s1", 0, None)
+        .expect("读取 recovery events");
+    assert_eq!(
+        events
+            .iter()
+            .map(|event| event.sequence)
+            .collect::<Vec<_>>(),
+        vec![1, 2]
+    );
+    assert_eq!(
+        events
+            .iter()
+            .map(|event| event.event_type.as_str())
+            .collect::<Vec<_>>(),
+        vec![RECOVER_ESCALATED_EVENT, RECOVER_STEERING_EVENT]
+    );
+    assert!(events.iter().all(|event| event.run_id.is_none()));
+    let escalation_payload: serde_json::Value =
+        serde_json::from_str(&events[0].payload).expect("升级 payload JSON 有效");
+    let steering_payload: serde_json::Value =
+        serde_json::from_str(&events[1].payload).expect("steering payload JSON 有效");
+    assert_eq!(escalation_payload["type"], RECOVER_ESCALATED_EVENT);
+    assert_eq!(steering_payload["type"], RECOVER_STEERING_EVENT);
+    let notification_json = db
+        .get_session_meta(RECOVER_NOTIFICATIONS_KEY)
+        .expect("读取通知元数据")
+        .expect("通知元数据必须与事件同事务落库");
+    let notifications: Vec<RecoveryNotification> =
+        serde_json::from_str(&notification_json).expect("通知 JSON 有效");
+    assert_eq!(notifications.len(), 1);
+    assert_eq!(notifications[0].subagent_run_id, "run-atomic-success");
+    assert!(notifications[0].pending);
+}
+
+#[tokio::test]
+async fn ladder2_localdb_failure_does_not_publish_uncommitted_state() {
+    let ws = TempWorkspace::new("recovery_ladder2_atomic_failure");
+    let db = LocalDb::open(ws.path().join("sessions.db")).expect("打开测试库失败");
+    db.insert_session("s1", "会话").expect("插入会话失败");
+    db.write_blocking(|conn| {
+        conn.execute_batch(
+            "CREATE TRIGGER reject_recovery_steering
+             BEFORE INSERT ON events
+             WHEN NEW.event_type = 'recovery-steering'
+             BEGIN SELECT RAISE(ABORT, 'injected recovery batch failure'); END;",
+        )
+        .map_err(|e| DbFailure {
+            message: e.to_string(),
+            kind: DbFailureKind::Other("test_trigger".to_string()),
+        })?;
+        Ok(())
+    })
+    .expect("创建失败注入触发器");
+    let queue = Arc::new(Mutex::new(PendingMessageQueue::new()));
+    let tree = Arc::new(Mutex::new(SessionTree::new("s1")));
+    let mut coordinator = RecoveryCoordinator::new(
+        "s1",
+        Arc::new(db.clone()),
+        queue.clone(),
+        tree,
+        RecordingSpawner::new(),
+        retry_policy(),
+    )
+    .expect("协调器构造失败");
+    let ctx = failure_ctx("run-atomic-failure", ProviderErrorKind::Network, 5, 61_000);
+
+    let error = coordinator
+        .on_subagent_run_failure(&ctx)
+        .await
+        .expect_err("第二个事件注入失败后 escalation 必须失败");
+    assert!(matches!(error, RecoveryError::PersistFailed { .. }));
+    assert_eq!(coordinator.pending_notifications(), 0);
+    assert_eq!(queue.lock().unwrap().len(), 0);
+    assert!(db.query_events("s1", 0, None).unwrap().is_empty());
+    assert_eq!(
+        db.get_session_meta(RECOVER_NOTIFICATIONS_KEY).unwrap(),
+        None
+    );
+
+    db.write_blocking(|conn| {
+        conn.execute_batch("DROP TRIGGER reject_recovery_steering;")
+            .map_err(|e| DbFailure {
+                message: e.to_string(),
+                kind: DbFailureKind::Other("test_trigger".to_string()),
+            })?;
+        Ok(())
+    })
+    .expect("移除失败注入触发器");
+    coordinator
+        .on_subagent_run_failure(&ctx)
+        .await
+        .expect("失败回滚后同一 escalation 应可重试");
+    assert_eq!(coordinator.pending_notifications(), 1);
+    assert_eq!(queue.lock().unwrap().len(), 1);
+    let events = db.query_events("s1", 0, None).unwrap();
+    assert_eq!(
+        events
+            .iter()
+            .map(|event| event.sequence)
+            .collect::<Vec<_>>(),
+        vec![1, 2],
+        "失败事务不能消费事件序号"
+    );
 }
 
 // ── C7 验收 3：注入激活指令载体面 + acknowledge ─────────────────

@@ -1298,7 +1298,11 @@ async fn restore_g29_terminal_conflict_mandatory_overwrite() {
     // 04 §10.2 test_g29_terminal_conflict_mandatory_overwrite 三要素：
     // 1. runs[0].status == Completed（事件权威单向覆盖）
     let runs = mem.runs();
-    assert_eq!(runs[0].status, RunStatus::Completed, "runs 表被物理覆写为 completed");
+    assert_eq!(
+        runs[0].status,
+        RunStatus::Completed,
+        "runs 表被物理覆写为 completed"
+    );
     // 2. outcome.interrupted.is_empty() == true（绝不打断）
     assert!(
         outcome.interrupted.is_empty(),
@@ -1638,7 +1642,10 @@ async fn restore_heals_tool_end_only_when_tool_start_exists() {
     assert_eq!(outcome.healed_orphan_tools.len(), 1);
     let rec = &outcome.healed_orphan_tools[0];
     assert_eq!(rec.call_id, "c2");
-    assert!(!rec.synthesized_tool_start, "ToolStart 已存在，仅补 ToolEnd");
+    assert!(
+        !rec.synthesized_tool_start,
+        "ToolStart 已存在，仅补 ToolEnd"
+    );
 
     // 不额外合成 tool-start
     let starts = mem
@@ -1675,7 +1682,11 @@ async fn restore_heals_mixed_orphan_and_complete_envelopes() {
             "message-end",
             &message_end_with_tool_calls(
                 "s1",
-                &[("c_missing", "search"), ("c_endonly", "shell"), ("c_ok", "read")],
+                &[
+                    ("c_missing", "search"),
+                    ("c_endonly", "shell"),
+                    ("c_ok", "read"),
+                ],
             ),
             Some("r1"),
         )
@@ -1825,10 +1836,7 @@ async fn restore_heals_full_envelope_from_session_messages_localdb() {
         .iter()
         .filter(|e| e.event_type == "tool-start")
         .count();
-    let ends = events
-        .iter()
-        .filter(|e| e.event_type == "tool-end")
-        .count();
+    let ends = events.iter().filter(|e| e.event_type == "tool-end").count();
     assert_eq!(starts, 1, "补齐 tool-start");
     assert_eq!(ends, 1, "补齐 tool-end");
 
@@ -1893,9 +1901,13 @@ async fn restore_skips_declared_call_with_message_level_result() {
                 status: None,
                 stream_text_offset: None,
                 thinking_time: None,
-                tool_calls_json: Some(r#"[{"id":"c_done","name":"read_file","arguments":"{}"}]"#.to_string()),
+                tool_calls_json: Some(
+                    r#"[{"id":"c_done","name":"read_file","arguments":"{}"}]"#.to_string(),
+                ),
                 blocks_json: None,
-                tool_call_results_json: Some(r#"[{"id":"c_done","output":"ok","isError":false}]"#.to_string()),
+                tool_call_results_json: Some(
+                    r#"[{"id":"c_done","output":"ok","isError":false}]"#.to_string(),
+                ),
                 usage: None,
             }],
         )

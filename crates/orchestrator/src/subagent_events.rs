@@ -19,10 +19,12 @@
 //!   loop）、message/tool=**Soft**（尽力落库）。
 //!
 //! 发射点（引擎侧接线位）：
-//! - spawn 成功 → [SubagentEventEmitter::emit_started]（FlowScheduler 已接）；
+//! - spawn 成功 → [SubagentEventEmitter::emit_started]（生产 SubagentSpawner
+//!   的独立启动任务负责；其它 spawner 由配置了 emitter 的 FlowScheduler 负责）；
 //! - 运行中增量 → [SubagentEventEmitter::emit_event]（子代理 run 实时事件
 //!   流派生，引擎侧接线）；
-//! - 收口（终态）→ [SubagentEventEmitter::emit_ended]（FlowScheduler 已接）。
+//! - 收口（终态）→ [SubagentEventEmitter::emit_ended]（生产 SubagentSpawner
+//!   接管 flow 生命周期时成对负责；其它 spawner 由 FlowScheduler 负责）。
 //!
 //! 序列语义：经 [EventQueue] 推送（store 端会话级原子计数器取号，T08.12），
 //! 会话内全局单调；runId（父 run）由信封 emit 层注入（03 §5.3-2），本模块
@@ -297,9 +299,9 @@ impl SubagentEventEmitter {
     }
 }
 
-/// 从 spawn 请求/结果装配 `subagent-started` 信息（FlowScheduler 接线用；
-/// role/capability 缺省与前端缺省语义对齐）
-pub(crate) fn started_info_from_spawn(
+/// 从 spawn 请求/结果装配 `subagent-started` 信息（role/capability 缺省
+/// 与前端缺省语义对齐）。由引擎 spawner 在独立启动任务中调用。
+pub fn started_info_from_spawn(
     request: &agent_tools::tools::subagent::SubagentSpawnRequest,
     result: &agent_tools::tools::subagent::SubagentSpawnResult,
 ) -> SubagentStartedInfo {

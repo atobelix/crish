@@ -540,7 +540,10 @@ fn extract_resolved_call_ids(tool_call_results_json: Option<&str>) -> HashSet<St
 ///
 /// payload 为 AgentEventEnvelope 扁平 JSON（含 type=message-end 与 message
 /// 全文）；解析失败返回空。
-fn extract_declared_from_message_end(payload: &str, run_id: Option<String>) -> Vec<(String, String, Option<String>)> {
+fn extract_declared_from_message_end(
+    payload: &str,
+    run_id: Option<String>,
+) -> Vec<(String, String, Option<String>)> {
     let Ok(v) = serde_json::from_str::<serde_json::Value>(payload) else {
         return Vec::new();
     };
@@ -610,7 +613,9 @@ async fn heal_orphaned_tool_calls(
                     ended.insert(call_id);
                 }
             } else if e.event_type == "message-end" {
-                for (id, name, run_id) in extract_declared_from_message_end(&e.payload, e.run_id.clone()) {
+                for (id, name, run_id) in
+                    extract_declared_from_message_end(&e.payload, e.run_id.clone())
+                {
                     declared.insert(id, (name, run_id));
                 }
             }
@@ -861,12 +866,10 @@ fn write_healed_result_to_messages(
     };
     let mut changed = false;
     for m in messages.iter_mut().filter(|m| m.sender == "assistant") {
-        let declares = extract_declared_tool_calls(
-            m.tool_calls_json.as_deref(),
-            m.blocks_json.as_deref(),
-        )
-        .iter()
-        .any(|(id, _)| id == call_id);
+        let declares =
+            extract_declared_tool_calls(m.tool_calls_json.as_deref(), m.blocks_json.as_deref())
+                .iter()
+                .any(|(id, _)| id == call_id);
         if !declares {
             continue;
         }

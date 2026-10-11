@@ -47,8 +47,8 @@
 //! 决定重分配时调用 [RecoveryCoordinator::fork_and_reassign]；主 agent
 //! 处理完阶梯 2 通知后调用 [RecoveryCoordinator::acknowledge]；重启后
 //! 经 [RecoveryCoordinator::restore_steering_notifications] 把未处理
-//! 通知重新排入队列。conex-db 只读：session_meta 与事件/run/session_agents
-//! 均经既有接口（[RecoveryStore] 抽象，无一行 conex-db 改动）。
+//! 通知重新排入队列。持久化经 [RecoveryStore] 抽象；阶梯 2 使用窄原子
+//! 复合写接口，其他 session_meta / event / run / session_agents 操作走既有域接口。
 //!
 //! **接线现状（EV-08 头注更新，08 审计建议 6）**：D3 实现后生产接线已
 //! 存在——协调器装配（[RecoveryCoordinator]）与阶梯 1 决策/执行
@@ -56,9 +56,8 @@
 //! 通知恢复（restore_steering_notifications）均在壳层
 //! （apps/agent-workbench run/run_resume.rs、run/run_idle.rs）接线；
 //! acknowledge 由主 agent 处理阶梯 2 通知后调用。子代理 run 失败时
-//! 生产链路触发四级阶梯恢复。conex-db 只读：session_meta 与事件/run/
-//! session_agents 均经既有接口（[RecoveryStore] 抽象，无一行 conex-db
-//! 改动）。
+//! 生产链路触发四级阶梯恢复。恢复域持久化经 [RecoveryStore] 抽象；阶梯 2
+//! 通知元数据与两个留痕事件经 conex-db 单 writer 原子提交，不新增 schema。
 
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -349,7 +348,7 @@ impl RecoveryCoordinator {
         ctx: &RunFailureContext,
     ) -> Result<RecoveryOutcome, RecoveryError> {
         // 阶梯 1：预算内自动重试
-        match ladder1_decision(
+        let escalation_payload = match ladder1_decision(
             ctx.error_kind,
             ctx.retries,
             ctx.retry_elapsed_ms,
@@ -366,24 +365,25 @@ impl RecoveryCoordinator {
                 // 升级留痕（阶梯 1 → 阶梯 2 的边界证据；DM-05 typed
                 // 序列化：字段形状与 engine-events.json id 42 对齐，
                 // serde 自动产出顶层 type 键）
-                self.store.append_event(
-                    &self.session_id,
-                    RECOVER_ESCALATED_EVENT,
-                    &serialize_recovery_typed(&AgentEvent::RecoveryEscalated {
-                        session_id: self.session_id.clone(),
-                        subagent_run_id: Some(ctx.subagent_run_id.clone()),
-                        kind: format!("{reason:?}"),
-                        retries: ctx.retries,
-                        elapsed_ms: ctx.retry_elapsed_ms,
-                        detail: None,
-                    })?,
-                )?;
+                serialize_recovery_typed(&AgentEvent::RecoveryEscalated {
+                    session_id: self.session_id.clone(),
+                    subagent_run_id: Some(ctx.subagent_run_id.clone()),
+                    kind: format!("{reason:?}"),
+                    retries: ctx.retries,
+                    elapsed_ms: ctx.retry_elapsed_ms,
+                    detail: None,
+                })?
             }
-        }
+        };
         // 预算制：上行前检查该指纹 Episode 预算——超预算禁止自动恢复
         // （含阶梯 2 通知），直接阶梯 4（01 Top 5）
         let fp = fingerprint(&ctx.subagent_id, &ctx.task);
         if !self.budget.can_recover(&fp) {
+            self.store.append_event(
+                &self.session_id,
+                RECOVER_ESCALATED_EVENT,
+                &escalation_payload,
+            )?;
             self.store.append_event(
                 &self.session_id,
                 RECOVER_BUDGET_DENIED_EVENT,
@@ -403,7 +403,7 @@ impl RecoveryCoordinator {
             return self.report_to_user(ctx);
         }
         // 阶梯 2：steering 条目 + 通知落库
-        self.escalate(ctx, fp)
+        self.escalate(ctx, fp, escalation_payload)
     }
 
     /// 阶梯 2：写 steering 条目（C7 写入侧，同 run 分组原位替换）并落库
@@ -412,6 +412,7 @@ impl RecoveryCoordinator {
         &mut self,
         ctx: &RunFailureContext,
         fp: String,
+        escalation_payload: String,
     ) -> Result<RecoveryOutcome, RecoveryError> {
         let notification = RecoveryNotification {
             subagent_id: ctx.subagent_id.clone(),
@@ -423,29 +424,39 @@ impl RecoveryCoordinator {
             pending: true,
             created_at_ms: now_ms() as u64,
         };
-        // 队列写入（同分组 replaceOrEnqueue：同 run 重复升级原位替换）
-        {
-            let mut queue = self.queue.lock().map_err(|e| RecoveryError::InvalidState {
-                message: format!("steering 队列锁中毒：{e}"),
-            })?;
-            queue.replace_or_enqueue(build_steering_entry(&notification));
-        }
-        // 通知落库（幂等：同 run 替换旧记录）
-        self.notifications
-            .retain(|n| n.subagent_run_id != notification.subagent_run_id);
-        self.notifications.push(notification.clone());
-        self.persist_notifications()?;
+        // 先构造待提交快照，但不发布到 coordinator 或队列；持久化失败时
+        // 调用方仍看不到未落库的通知。
+        let mut next_notifications = self
+            .notifications
+            .iter()
+            .filter(|existing| existing.subagent_run_id != notification.subagent_run_id)
+            .cloned()
+            .collect::<Vec<_>>();
+        next_notifications.push(notification.clone());
+        let notification_json = serde_json::to_string(&next_notifications).map_err(|e| {
+            RecoveryError::InvalidState {
+                message: format!("通知列表序列化失败：{e}"),
+            }
+        })?;
         // 事件留痕（DM-05 降级路径：RecoveryNotification 镜像 + 顶层
         // type 键——errorKind 字段超出 typed 变体形状，镜像保真不丢失）
         let payload_value =
             serde_json::to_value(&notification).map_err(|e| RecoveryError::InvalidState {
                 message: format!("steering 事件序列化失败：{e}"),
             })?;
-        self.store.append_event(
+        let steering_payload = serialize_recovery_mirror(RECOVER_STEERING_EVENT, &payload_value)?;
+        self.store.persist_escalation(
             &self.session_id,
-            RECOVER_STEERING_EVENT,
-            &serialize_recovery_mirror(RECOVER_STEERING_EVENT, &payload_value)?,
+            &notification_json,
+            &escalation_payload,
+            &steering_payload,
         )?;
+
+        let mut queue = self.queue.lock().map_err(|e| RecoveryError::InvalidState {
+            message: format!("steering 队列锁中毒：{e}"),
+        })?;
+        queue.replace_or_enqueue(build_steering_entry(&notification));
+        self.notifications = next_notifications;
         Ok(RecoveryOutcome {
             ladder: RecoveryLadder::Ladder2MainAgent,
             action: RecoveryAction::SteeringQueued { notification },

@@ -797,7 +797,11 @@ mod tests {
         // T-D1-A（NoPersist-first）：delta 不取号——sequence = last_reserved
         // （夹在两条持久化事件之间时共享同一镜像值）；持久化事件仍连续取号。
         let seqs: Vec<u64> = sequences.iter().map(|s| s.sequence).collect();
-        assert_eq!(seqs, vec![1, 1, 1, 1, 2], "delta 复用 last_reserved，不推进计数器");
+        assert_eq!(
+            seqs,
+            vec![1, 1, 1, 1, 2],
+            "delta 复用 last_reserved，不推进计数器"
+        );
         // delta 不落库；持久化事件已落库
         assert_eq!(
             sequences.iter().map(|s| s.persisted).collect::<Vec<_>>(),
@@ -969,11 +973,7 @@ mod tests {
             "NoPersist 事件 persisted = false"
         );
         // sequence = last_reserved 镜像（未推进）
-        assert_eq!(
-            queue.next_sequence(),
-            1,
-            "NoPersist 不推进本地镜像"
-        );
+        assert_eq!(queue.next_sequence(), 1, "NoPersist 不推进本地镜像");
 
         // 持久化事件仍恰好 reserve 1 次
         queue.push("s1", agent_start()).await.unwrap();
@@ -1148,13 +1148,9 @@ mod tests {
             message_delta(2),
             agent_end(AgentEndReason::Stop),
         ];
-        let result = drive_outcome(
-            &mut run,
-            &mut queue,
-            outcome(AgentEndReason::Stop, events),
-        )
-        .await
-        .unwrap();
+        let result = drive_outcome(&mut run, &mut queue, outcome(AgentEndReason::Stop, events))
+            .await
+            .unwrap();
 
         // 落库序列连续无空洞：agent-start=1, message-end=2, agent-end=3, run-terminal=4
         let stored = mem.events();

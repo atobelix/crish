@@ -366,7 +366,19 @@ async fn stress_real_localdb_and_kernel_state_machine_zero_deadlock() {
             reader_pool.check_health().expect("ReaderPool 数据库健康检查通过");
         }
         _ = tokio::time::sleep(Duration::from_secs(10)) => {
-            panic!("🔴 压力测试在 10 秒内未完成：发生死锁或严重饥饿！");
+            let l2_completed = l2_latencies.lock().unwrap().len();
+            let l3_completed = l3_latencies.lock().unwrap().len();
+            let completed = completed_tasks.load(Ordering::SeqCst);
+            let reader_stats = local_db.reader_pool().stats();
+            let writer_stats = local_db.writer().stats();
+            panic!(
+                "🔴 压力测试在 10 秒内未完成：发生死锁或严重饥饿！L2 decisions={l2_completed}/{}, L3 writes={l3_completed}/{}, completed={completed}/{}, L4 acquisitions={}, writer operations={}",
+                write_workers * iterations_per_worker,
+                write_workers * iterations_per_worker,
+                write_workers * iterations_per_worker,
+                reader_stats.total_acquisitions,
+                writer_stats.total_operations,
+            );
         }
     }
 }

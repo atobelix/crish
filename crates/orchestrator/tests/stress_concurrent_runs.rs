@@ -13,17 +13,14 @@ mod common;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use agent_tools::tools::subagent::{
     SubagentSpawnError, SubagentSpawnRequest, SubagentSpawnResult, SubagentSpawner, SubagentState,
 };
 use async_trait::async_trait;
-use conex_db::{
-    DbFailure, DbFailureKind, DbWriteHandle, GroupCommitConfig, LocalDb, ReaderPool,
-    ReaderPoolConfig, RunStatus,
-};
+use conex_db::{DbFailure, DbFailureKind, LocalDb, ReaderPool, ReaderPoolConfig, RunStatus};
 use conex_types::events::RunTerminalStatus;
 use conex_types::session::AgentEndReason;
 use conex_types::{SessionAgent, SessionMessage};
@@ -42,6 +39,14 @@ fn now_ms() -> i64 {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis() as i64)
         .unwrap_or(0)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LockOrderStage {
+    L0Acquired,
+    L1Acquired,
+    L2Acquired,
+    L3WriteCompleted,
 }
 
 /// RAII 临时数据库清理守卫
@@ -312,7 +317,7 @@ async fn stress_16_subagents_high_concurrency_real_db() {
             .await
             .expect("查询事件失败");
         // agent_start (1) + events_per_agent * (message_end (1)) + agent_end (1) + run_terminal (1) = 23 条持久化事件
-        // (注意 message_delta 消费 sequence 但不持久化入库)
+        // message_delta 为 NoPersist 事件，不取号也不占用持久化序号。
         let expected_persisted = 1 + events_per_agent + 1 + 1;
         assert_eq!(
             events.len(),
@@ -321,12 +326,7 @@ async fn stress_16_subagents_high_concurrency_real_db() {
         );
         let seqs: Vec<u64> = events.iter().map(|e| e.sequence).collect();
 
-        let mut expected_seqs = vec![1u64];
-        for i in 0..events_per_agent {
-            expected_seqs.push((1 + i * 2 + 2) as u64);
-        }
-        expected_seqs.push((1 + events_per_agent * 2 + 1) as u64);
-        expected_seqs.push((1 + events_per_agent * 2 + 2) as u64);
+        let expected_seqs: Vec<u64> = (1..=expected_persisted as u64).collect();
 
         assert_eq!(
             seqs, expected_seqs,
@@ -391,9 +391,9 @@ impl SubagentSpawner for MockSpawner {
 async fn stress_five_tier_lock_ordering_zero_deadlock() {
     let (_guard, db_path) = create_temp_db_path();
 
-    // 1. 初始化 L3: SQLite Single Writer Actor (Group Commit 5ms 管道)
-    let write_conn = rusqlite::Connection::open(&db_path).expect("打开 SQLite 写连接失败");
-    write_conn
+    // 1. 先用 bootstrap connection 建表并关闭，再由唯一 LocalDb 建立单写 Actor。
+    let bootstrap_conn = rusqlite::Connection::open(&db_path).expect("打开 SQLite 初始化连接失败");
+    bootstrap_conn
         .execute_batch(
             "PRAGMA journal_mode = WAL;
              PRAGMA synchronous = NORMAL;
@@ -407,27 +407,12 @@ async fn stress_five_tier_lock_ordering_zero_deadlock() {
              );",
         )
         .expect("初始化五级锁测试表失败");
+    drop(bootstrap_conn);
 
-    let group_commit_config = GroupCommitConfig {
-        batch_timeout: Duration::from_millis(5),
-        max_batch_size: 50,
-        channel_capacity: 1024,
-    };
-    let l3_writer = DbWriteHandle::spawn(write_conn, group_commit_config);
-
-    // 2. 初始化 L4: ReaderPool (WAL 8 连接自适应探测池)
-    let l4_reader_pool = ReaderPool::open(
-        &db_path,
-        ReaderPoolConfig {
-            pool_size: 8,
-            max_wait_timeout: Duration::from_secs(5),
-            ..Default::default()
-        },
-    )
-    .expect("打开 L4 ReaderPool 失败");
-
-    // 3. 初始化 L2: RecoveryCoordinator 异步业务互斥锁
-    let l2_db = LocalDb::open(&db_path).expect("打开 Recovery LocalDb 失败");
+    // 2. L2/L3/L4 共用一个 LocalDb，确保 WAL 文件只有一个 SQLite 写 Actor。
+    let l2_db = Arc::new(LocalDb::open(&db_path).expect("打开五级压力测试 LocalDb 失败"));
+    let l3_writer = l2_db.writer().clone();
+    let l4_reader_pool = l2_db.reader_pool().clone();
     let master_sess = "session_recovery_master";
     l2_db
         .insert_session(master_sess, "恢复主会话")
@@ -437,7 +422,7 @@ async fn stress_five_tier_lock_ordering_zero_deadlock() {
     let spawner = Arc::new(MockSpawner);
     let coordinator = RecoveryCoordinator::new(
         master_sess,
-        Arc::new(l2_db),
+        l2_db.clone(),
         queue,
         tree,
         spawner,
@@ -463,7 +448,14 @@ async fn stress_five_tier_lock_ordering_zero_deadlock() {
     let l1_wait_times = Arc::new(Mutex::new(Vec::new()));
     let l2_wait_times = Arc::new(Mutex::new(Vec::new()));
     let completed_tasks = Arc::new(AtomicUsize::new(0));
+    let completed_l3_writes = Arc::new(AtomicUsize::new(0));
+    let completed_reads = Arc::new(AtomicUsize::new(0));
+    let lock_order_traces: Vec<Arc<OnceLock<Vec<LockOrderStage>>>> = (0..total_workers)
+        .map(|_| Arc::new(OnceLock::new()))
+        .collect();
 
+    // 基线只覆盖本测试 worker；LocalDb 初始化和主会话写入不计入压力负载。
+    let writer_stats_before_workers = l3_writer.stats();
     let mut join_set = tokio::task::JoinSet::new();
     let test_start = Instant::now();
 
@@ -478,14 +470,18 @@ async fn stress_five_tier_lock_ordering_zero_deadlock() {
         let l1_wait_times = l1_wait_times.clone();
         let l2_wait_times = l2_wait_times.clone();
         let completed = completed_tasks.clone();
+        let completed_l3 = completed_l3_writes.clone();
+        let lock_order_trace = lock_order_traces[worker_id].clone();
 
         join_set.spawn(async move {
+            let mut lock_order = Vec::with_capacity(iterations_per_worker * 4);
             for iter in 0..iterations_per_worker {
                 // Tier L0: 纳秒级内存守卫（持锁极短，不可跨 await）
                 let t0 = Instant::now();
                 {
                     let mut guard = l0.lock().expect("L0 锁中毒");
                     guard.insert(format!("w{worker_id}"), iter as u64);
+                    lock_order.push(LockOrderStage::L0Acquired);
                 }
                 let l0_dur = t0.elapsed();
                 l0_wait_times.lock().unwrap().push(l0_dur);
@@ -498,6 +494,7 @@ async fn stress_five_tier_lock_ordering_zero_deadlock() {
                         &format!("node-{worker_id}-{iter}"),
                         serde_json::json!({ "worker": worker_id, "iter": iter }),
                     );
+                    lock_order.push(LockOrderStage::L1Acquired);
                 }
                 let l1_dur = t1.elapsed();
                 l1_wait_times.lock().unwrap().push(l1_dur);
@@ -506,6 +503,7 @@ async fn stress_five_tier_lock_ordering_zero_deadlock() {
                 let t2 = Instant::now();
                 {
                     let mut recovery = l2.lock().await;
+                    lock_order.push(LockOrderStage::L2Acquired);
                     let ctx = orchestrator::recovery::RunFailureContext {
                         subagent_id: format!("sub-{worker_id}"),
                         subagent_run_id: format!("run-{worker_id}-{iter}"),
@@ -547,17 +545,23 @@ async fn stress_five_tier_lock_ordering_zero_deadlock() {
                 })
                 .await
                 .expect("L3 写入失败");
+                completed_l3.fetch_add(1, Ordering::Relaxed);
+                lock_order.push(LockOrderStage::L3WriteCompleted);
                 let l3_dur = t3.elapsed();
                 write_latencies.lock().unwrap().push(l3_dur);
 
                 completed.fetch_add(1, Ordering::Relaxed);
             }
+            lock_order_trace
+                .set(lock_order)
+                .expect("每个写 worker 只写入一次锁序记录");
         });
     }
 
     // 启动 8 个读 Worker：独立并发查询 Tier L4 (ReaderPool)
     for _r in 0..read_workers {
         let pool = l4_reader_pool.clone();
+        let completed = completed_reads.clone();
         join_set.spawn(async move {
             for _ in 0..reads_per_worker {
                 let _count: i64 = pool
@@ -572,6 +576,7 @@ async fn stress_five_tier_lock_ordering_zero_deadlock() {
                     })
                     .await
                     .expect("L4 读连接查询失败");
+                completed.fetch_add(1, Ordering::Relaxed);
                 tokio::time::sleep(Duration::from_millis(1)).await;
             }
         });
@@ -585,18 +590,89 @@ async fn stress_five_tier_lock_ordering_zero_deadlock() {
     })
     .await;
 
+    let l2_recovery_decisions = l2_wait_times.lock().unwrap().len();
+    let writer_stats = l3_writer.stats();
+    let writer_operations_delta = writer_stats
+        .total_operations
+        .checked_sub(writer_stats_before_workers.total_operations)
+        .expect("writer operation counter must not decrease");
+    let writer_errors_delta = writer_stats
+        .total_errors
+        .checked_sub(writer_stats_before_workers.total_errors)
+        .expect("writer error counter must not decrease");
+    let pool_stats = l4_reader_pool.stats();
     assert!(
         timeout_res.is_ok(),
-        "五级锁偏序并发压力测试超时（发生死锁或 Tokio 线程饥饿）！"
+        "五级锁偏序并发压力测试超时（发生死锁或 Tokio 线程饥饿）！L2 恢复决策={l2_recovery_decisions}/{}, L3 写入完成={}/{}, L4 读取完成={}/{}, Worker 完成={}/{}, Writer 操作={} 批次={} 错误={}, ReaderPool 获取={} 超时={} 活跃连接={}/{}",
+        total_workers * iterations_per_worker,
+        completed_l3_writes.load(Ordering::Relaxed),
+        total_workers * iterations_per_worker,
+        completed_reads.load(Ordering::Relaxed),
+        read_workers * reads_per_worker,
+        completed_tasks.load(Ordering::Relaxed),
+        total_workers * iterations_per_worker,
+        writer_stats.total_operations,
+        writer_stats.total_batches,
+        writer_stats.total_errors,
+        pool_stats.total_acquisitions,
+        pool_stats.timeouts,
+        pool_stats.active_readers,
+        pool_stats.pool_size,
     );
 
     let total_test_duration = test_start.elapsed();
     let expected_writes = total_workers * iterations_per_worker;
+    let completed_l3_write_count = completed_l3_writes.load(Ordering::Relaxed);
+    assert_eq!(
+        completed_l3_write_count, expected_writes,
+        "所有 L3 写操作必须 100% 完成"
+    );
+    assert_eq!(
+        l2_recovery_decisions, expected_writes,
+        "所有 L2 恢复升级必须 100% 完成"
+    );
+    let expected_writer_operations =
+        u64::try_from(completed_l3_write_count + l2_recovery_decisions)
+            .expect("completed writer operation count must fit u64");
+    assert_eq!(
+        writer_operations_delta, expected_writer_operations,
+        "每次 L2 恢复升级与已完成的 L3 写入都必须各对应一次 writer 请求"
+    );
+    assert_eq!(
+        writer_errors_delta, 0,
+        "压力测试期间 writer error 计数不得增加"
+    );
     assert_eq!(
         completed_tasks.load(Ordering::Relaxed),
         expected_writes,
         "所有写操作必须 100% 完成"
     );
+    let expected_reads = read_workers * reads_per_worker;
+    assert_eq!(
+        completed_reads.load(Ordering::Relaxed),
+        expected_reads,
+        "所有 L4 读操作必须 100% 完成"
+    );
+
+    // 直接验证每个写 worker 的层级执行顺序；耗时分位数仅作观测，不能
+    // 推出不同锁层级之间的延迟大小关系。
+    let expected_lock_order: Vec<LockOrderStage> = (0..iterations_per_worker)
+        .flat_map(|_| {
+            [
+                LockOrderStage::L0Acquired,
+                LockOrderStage::L1Acquired,
+                LockOrderStage::L2Acquired,
+                LockOrderStage::L3WriteCompleted,
+            ]
+        })
+        .collect();
+    for (worker_id, trace) in lock_order_traces.iter().enumerate() {
+        assert_eq!(
+            trace.get().expect("写 worker 必须完成锁序记录"),
+            &expected_lock_order,
+            "worker {worker_id} 的每轮执行必须遵循 L0 → L1 → L2 → L3"
+        );
+    }
 
     // 统计指标计算
     let mut w_lats = write_latencies.lock().unwrap().clone();
@@ -611,7 +687,7 @@ async fn stress_five_tier_lock_ordering_zero_deadlock() {
         .cloned()
         .unwrap_or_default();
 
-    // 激活死数据：计算各锁层级的 P99 等待时延并断言偏序单调性
+    // 计算各锁层级 P99 等待时延用于观测；锁序正确性由执行轨迹断言。
     let mut l0_sorted = l0_wait_times.lock().unwrap().clone();
     let mut l1_sorted = l1_wait_times.lock().unwrap().clone();
     let mut l2_sorted = l2_wait_times.lock().unwrap().clone();
@@ -629,7 +705,7 @@ async fn stress_five_tier_lock_ordering_zero_deadlock() {
     let p99_l1 = l1_sorted.get(p99_idx_1).cloned().unwrap_or_default();
     let p99_l2 = l2_sorted.get(p99_idx_2).cloned().unwrap_or_default();
 
-    // 偏序时延单调性物理断言：L0 (纳秒级内存守卫) <= L1 (微秒级领域状态锁) <= L2 (异步业务互斥锁)
+    // 保留原有偏序时延断言；执行轨迹断言用于补充语义证据，不能替代既有 SLA 约束。
     assert!(
         p99_l0 <= p99_l1,
         "L0 纳秒内存守卫 P99 ({p99_l0:?}) 必须 <= L1 微秒领域状态锁 P99 ({p99_l1:?})"
@@ -644,9 +720,6 @@ async fn stress_five_tier_lock_ordering_zero_deadlock() {
         p99_write < Duration::from_millis(50),
         "Group Commit P99 写入延迟必须小于 50ms SLA 门槛: {p99_write:?}"
     );
-
-    let pool_stats = l4_reader_pool.stats();
-    let writer_stats = l3_writer.stats();
 
     // 验证 ReaderPool 零超时
     assert_eq!(pool_stats.timeouts, 0, "ReaderPool 发生超时争用");

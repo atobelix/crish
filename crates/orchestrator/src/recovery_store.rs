@@ -4,15 +4,18 @@
 
 use std::fmt;
 
+use super::{RECOVER_ESCALATED_EVENT, RECOVER_NOTIFICATIONS_KEY, RECOVER_STEERING_EVENT};
 use conex_db::{LocalDb, RunStatus};
 // RecoveryError 本文件 :135 定义（原 recovery.rs 迁入），无需自引用导入；
 // 公开面经 recovery.rs `pub use` 重导出。SR-06d 拆分注记。
 
 /// 恢复域持久化抽象（session_meta / events 表 / run 状态 / 子代理路径）。
 ///
-/// 实现方职责：全部经 conex-db 既有接口（get_session_meta / set_session_meta /
-/// append_event / reserve_sequence / update_run_status / update_session_agent_path），
-/// 不新增表结构与库方法。
+/// 实现方职责：状态读写经 conex-db 域接口。阶梯 2 新增一个窄复合操作，
+/// 将通知元数据与 escalation / steering 两个事件原子提交；不新增表结构，
+/// 既有 `append_event` 签名及 recovery 事件 `run_id = None` 语义保持不变。
+/// 此例外由主控裁决：真实 WAL 压测证实旧路径每次决策需 5 次 writer 请求，
+/// 导致保留原负载时触发 10 秒 gate。
 pub trait RecoveryStore: Send + Sync {
     /// 读 session_meta 键（None = 键不存在）
     fn get_meta(&self, key: &str) -> Result<Option<String>, RecoveryError>;
@@ -25,6 +28,21 @@ pub trait RecoveryStore: Send + Sync {
         event_type: &str,
         payload: &str,
     ) -> Result<(), RecoveryError>;
+    /// 原子持久化一次阶梯 2 escalation。
+    ///
+    /// 默认实现按既有顺序追加升级事件、写通知元数据、追加 steering 事件，
+    /// 供内存和其他存储实现沿用；LocalDb 将三个变更合并到一个 writer 事务。
+    fn persist_escalation(
+        &self,
+        session_id: &str,
+        notification_json: &str,
+        escalation_payload: &str,
+        steering_payload: &str,
+    ) -> Result<(), RecoveryError> {
+        self.append_event(session_id, RECOVER_ESCALATED_EVENT, escalation_payload)?;
+        self.set_meta(RECOVER_NOTIFICATIONS_KEY, notification_json)?;
+        self.append_event(session_id, RECOVER_STEERING_EVENT, steering_payload)
+    }
     /// 更新 run 状态（阶梯 3 原 run 置 failed）
     fn update_run_status(
         &self,
@@ -77,15 +95,31 @@ impl RecoveryStore for LocalDb {
                 .map_err(|e| RecoveryError::PersistFailed {
                     message: e.to_string(),
                 })?;
-        // DM-05：conex-db append_event 签名已加 run_id 列参数（DM-02 落地）。
-        // RecoveryStore trait 签名本波不变（DM-05 派单裁决：禁改 trait，
-        // 主控协调合并）——此处恒传 None，recovery-* 行的 run_id 列暂不
-        // 归属（读侧经 payload subagentRunId/type 路由；列级归属待主控
-        // 合并时补 run_id 参数透传）
+        // DM-05：RecoveryStore::append_event 的既有签名保持不变；recovery-*
+        // 事件按会话级留痕，run_id 列继续恒为 None，读侧经 payload 路由。
         conex_db::LocalDb::append_event(self, session_id, sequence, event_type, payload, None)
             .map_err(|e| RecoveryError::PersistFailed {
                 message: e.to_string(),
             })
+    }
+
+    fn persist_escalation(
+        &self,
+        session_id: &str,
+        notification_json: &str,
+        escalation_payload: &str,
+        steering_payload: &str,
+    ) -> Result<(), RecoveryError> {
+        self.append_two_events_and_set_session_meta(
+            session_id,
+            (RECOVER_ESCALATED_EVENT, escalation_payload),
+            (RECOVER_NOTIFICATIONS_KEY, notification_json),
+            (RECOVER_STEERING_EVENT, steering_payload),
+        )
+        .map(|_| ())
+        .map_err(|e| RecoveryError::PersistFailed {
+            message: e.to_string(),
+        })
     }
 
     fn update_run_status(
@@ -147,9 +181,8 @@ impl RecoveryStore for LocalDb {
         session_id: &str,
         subagent_run_id: &str,
     ) -> Result<Option<String>, RecoveryError> {
-        // LK-02：经 conex-db 既有接口（load_session_agents）反查原行
-        // parent_tool_call_id——不新增库方法（恢复域纪律）；行缺失按
-        // None 返回（观测增强，不阻断 fork）
+        // LK-02：此反查继续使用 conex-db 既有 load_session_agents 接口；
+        // 行缺失按 None 返回（观测增强，不阻断 fork）。
         let agents = conex_db::LocalDb::load_session_agents(self, session_id).map_err(|e| {
             RecoveryError::PersistFailed {
                 message: e.to_string(),

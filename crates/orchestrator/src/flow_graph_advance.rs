@@ -206,7 +206,12 @@ impl FlowScheduler {
                     display_label: None,
                     model_override: None,
                 };
-                match self.spawner.spawn(&request).await {
+                let spawner_owns_flow_events = self.spawner.owns_flow_lifecycle_events();
+                match self
+                    .spawner
+                    .spawn_flow_node(&request, self.subagent_events.is_some())
+                    .await
+                {
                     Ok(result) => {
                         self.states.insert(node_id.clone(), FlowNodeState::Running);
                         self.mark_successors_dirty(&node_id);
@@ -217,31 +222,31 @@ impl FlowScheduler {
                                 .or_insert_with(|| FlowNodeRuntime::new(node_id.clone()));
                             runtime.subagent_run_id = Some(result.subagent_run_id.clone());
                             runtime.subagent_session_id = Some(result.session_id.clone());
+                            runtime.subagent_id = Some(result.subagent_id.clone());
                         }
                         self.persist_runtime()?;
                         self.persist_budget()?;
-                        if let Some(emitter) = &self.subagent_events {
-                            let ctx = SubagentEmitContext {
-                                session_id: self.session_id.clone(),
-                                parent_run_id: self.planner_run_id.clone().unwrap_or_default(),
-                            };
-                            match emitter
-                                .emit_started(&ctx, &started_info_from_spawn(&request, &result))
-                                .await
-                            {
-                                Ok(_) => {}
-                                Err(error) => {
-                                    tracing::warn!(
-                                        target: "subagent_events",
-                                        event = "emit_started_failed",
-                                        subagent_run_id = %result.subagent_run_id,
-                                        error = %error,
-                                        "subagent-started 发射失败（不阻塞编排）"
-                                    );
+                        if !spawner_owns_flow_events {
+                            if let Some(emitter) = &self.subagent_events {
+                                let ctx = SubagentEmitContext {
+                                    session_id: self.session_id.clone(),
+                                    parent_run_id: self.planner_run_id.clone().unwrap_or_default(),
+                                };
+                                match emitter
+                                    .emit_started(&ctx, &started_info_from_spawn(&request, &result))
+                                    .await
+                                {
+                                    Ok(_) => {}
+                                    Err(error) => {
+                                        tracing::warn!(
+                                            target: "subagent_events",
+                                            event = "emit_started_failed",
+                                            subagent_run_id = %result.subagent_run_id,
+                                            error = %error,
+                                            "subagent-started 发射失败（不阻塞编排）"
+                                        );
+                                    }
                                 }
-                            }
-                            if let Some(runtime) = self.runtime.get_mut(&node_id) {
-                                runtime.subagent_id = Some(result.subagent_id.clone());
                             }
                         }
                         out.started.push(FlowStarted {
@@ -331,7 +336,11 @@ impl FlowScheduler {
         let next = FlowNodeState::from_subagent(state);
         self.states.insert(node_id.clone(), next);
         self.mark_successors_dirty(&node_id);
-        if let Some(emitter) = &self.subagent_events {
+        if let Some(emitter) = self
+            .subagent_events
+            .as_ref()
+            .filter(|_| !self.spawner.owns_flow_lifecycle_events())
+        {
             let ctx = SubagentEmitContext {
                 session_id: self.session_id.clone(),
                 parent_run_id: self.planner_run_id.clone().unwrap_or_default(),
