@@ -4,7 +4,7 @@
 //! `BUILTIN_COMMAND_MANIFEST` 是本文件的**内置快照镜像**（启动拉取失败 / 非 Tauri
 //! 环境回退面），双端手工同步，条数由双端测试锁定：
 //! - Rust 侧：本文件 `manifest_*` 测试（条数公式化 / 幽灵命令排除 / 新增命令登记）；
-//! - 前端侧：`commandManifest.test.ts`（**136 = 注册面 136 + 登记先行 0**；
+//! - 前端侧：`commandManifest.test.ts`（**137 = 注册面 137 + 登记先行 0**；
 //!   条数与集合由该文件的动态对照断言直读本文件真源双向锁定）。
 //!
 //! 维护规则：
@@ -60,7 +60,7 @@ const fn entry(
     }
 }
 
-/// 命令清单（**136 条 = 全部 registered=true 实装命令**；与前端
+/// 命令清单（**137 条 = 全部 registered=true 实装命令**；与前端
 /// `BUILTIN_COMMAND_MANIFEST` 双向镜像）。
 ///
 /// 注册面（registered=true）必须与 main.rs `command_registry!` 注册一致；
@@ -82,6 +82,7 @@ const fn entry(
 /// 后 143 → **135**。`core_read_run_events` 经复核**保留**（跨端契约面，
 /// 见 command-contract-drift.test.ts DRIFT_DEBT 的待裁决登记）。
 /// b6：`core_generate_session_title` 追加后 135 → **136**。
+/// Win11 贴靠布局热区 `workbench_set_snap_overlay_rect` 追加后 136 → **137**。
 pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
     contract_version: COMMAND_MANIFEST_CONTRACT_VERSION,
     commands: &[
@@ -89,6 +90,8 @@ pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
         entry("workbench_run_shell", "workbench", "gui", true),
         // ACT-101 / CON-01：窗口首绘握手命令（workbench_window_ready）
         entry("workbench_window_ready", "workbench", "gui", true),
+        // Win11 贴靠布局（Snap Layouts）：最大化按钮原生 HTMAXBUTTON 热区矩形上报
+        entry("workbench_set_snap_overlay_rect", "workbench", "gui", true),
         // PE-07 T07.3（C-02/C-03/C-04）：git 参数数组执行 + 参数 schema 白名单
         entry("workbench_git_run", "workbench", "gui", true),
         entry("workbench_pty_create", "workbench", "gui", true),
@@ -337,6 +340,7 @@ mod tests {
     ///   config_get_outputs_root / config_set_outputs_root / set_session_output_root /
     ///   computer_session_enable / computer_session_disable / computer_status）
     ///   后 143 → **135**；b6 `core_generate_session_title` 追加后 135 → **136**；
+    ///   Win11 贴靠布局热区 `workbench_set_snap_overlay_rect` 追加后 136 → **137**；
     /// - `core_read_run_events` 复核后**保留**（跨端契约面 tauri_command 映射 +
     ///   移动端 monitorCommands 映射真源 + 实现处「不得静默再退役」登记）——
     ///   在 command-contract-drift.test.ts 记为待裁决，不计入本次退役。
@@ -350,12 +354,12 @@ mod tests {
             .count();
         let pending = total - registered;
         assert_eq!(
-            total, 136,
-            "总数 136（单轨收敛后 135；b6 core_generate_session_title +1 → 136；与前端 commandMap 同步）"
+            total, 137,
+            "总数 137（单轨收敛后 135；b6 core_generate_session_title +1 → 136；workbench_set_snap_overlay_rect +1 → 137；与前端 commandMap 同步）"
         );
         assert_eq!(
-            registered, 136,
-            "注册面 136（全部为 registered=true 实装命令）"
+            registered, 137,
+            "注册面 137（全部为 registered=true 实装命令）"
         );
         assert_eq!(pending, 0, "登记先行 0");
     }

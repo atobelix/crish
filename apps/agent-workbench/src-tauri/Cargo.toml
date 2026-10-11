@@ -34,6 +34,7 @@ tauri-plugin-persisted-scope = { version = "2", features = ["protocol-asset"] }
 tauri-plugin-single-instance = "2"
 # Dev MCP bridge (Grok/Cursor 调试 live workbench)。仅 debug 注册；插件自身 release 默认不启 socket。
 tauri-plugin-mcp = { git = "https://github.com/P3GLEG/tauri-plugin-mcp" }
+window-vibrancy = "0.6.0"
 tokio = { version = "1", features = ["full"] }
 futures-util = "0.3"
 url = "2"
@@ -128,7 +129,9 @@ ring = "0.17"
 # Win32_System_Registry：R1-09 G-4 网络配置文件检测（multi_device_network.rs
 # 读 NetworkList\Profiles 的 Category 值判定公用/专用/域）
 # Win32_Graphics_Gdi：host_openers 提取应用与资源管理器原生图标位图
-windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security_Cryptography", "Win32_System_JobObjects", "Win32_System_Power", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging", "Win32_Graphics_Gdi", "Win32_System_Threading", "Win32_System_Registry", "Win32_NetworkManagement_IpHelper", "Win32_NetworkManagement_Ndis", "Win32_Networking_WinSock"] }
+# Win32_UI_Input_KeyboardAndMouse + Win32_System_LibraryLoader：window_snap_overlay.rs
+# 贴靠布局热区（TrackMouseEvent 非客户区离开通知 / GetModuleHandleW 注册窗口类）
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security_Cryptography", "Win32_System_JobObjects", "Win32_System_Power", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging", "Win32_Graphics_Gdi", "Win32_System_Threading", "Win32_System_Registry", "Win32_NetworkManagement_IpHelper", "Win32_NetworkManagement_Ndis", "Win32_Networking_WinSock", "Win32_UI_Input_KeyboardAndMouse", "Win32_System_LibraryLoader"] }
 windows = { version = "0.62", features = ["Win32_System_Com", "Win32_Storage_FileSystem", "Win32_UI_Shell"] }
 
 [target.'cfg(unix)'.dependencies]

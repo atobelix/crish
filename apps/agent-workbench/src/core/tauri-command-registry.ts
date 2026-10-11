@@ -20,7 +20,7 @@ export interface RegisteredTauriCommand {
   owner?: string;
 }
 
-// 注册面（136 条 = 与 command_manifest.rs `COMMAND_MANIFEST`、
+// 注册面（137 条 = 与 command_manifest.rs `COMMAND_MANIFEST`、
 // main.rs `command_registry!` 及前端 `BUILTIN_COMMAND_MANIFEST` 四方对齐；
 // 条数与集合一致性由 scripts/check-provider-single-track.mjs 的 D11 防线守护）：
 // - 注册面：`command_registry!` 宏已注册的命令，status=implemented；
@@ -34,6 +34,7 @@ export interface RegisteredTauriCommand {
 //  config_set_outputs_root / set_session_output_root / computer_session_enable /
 //  computer_session_disable / computer_status）→ **135**。
 // b6：`core_generate_session_title` 追加后 135 → **136**。
+// Win11 贴靠布局热区 `workbench_set_snap_overlay_rect` 追加后 136 → **137**。
 export const REGISTERED_TAURI_COMMANDS: readonly RegisteredTauriCommand[] = [
   // ── GUI 专属面（workbench_*，§2.3）──
   {
@@ -649,6 +650,11 @@ export const REGISTERED_TAURI_COMMANDS: readonly RegisteredTauriCommand[] = [
     command: 'workbench_window_ready',
     status: 'implemented',
     feature: 'window ready handshake',
+  },
+  {
+    command: 'workbench_set_snap_overlay_rect',
+    status: 'implemented',
+    feature: 'Windows 11 snap layouts maximize-button hit-test overlay',
   },
   {
     command: 'auth_login',

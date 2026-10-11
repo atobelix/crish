@@ -21,7 +21,8 @@
         "decorations": false,
         "dragDropEnabled": true,
         "visible": false,
-        "backgroundColor": "#18181b"
+        "transparent": true,
+        "backgroundColor": "#00000000"
       }
     ],
     "security": {

@@ -97,6 +97,9 @@ mod single_instance;
 mod status_diagnostics;
 // ACT-101 / CON-01：原生窗口隐式创建 + 首绘握手唤醒（Stage 1）
 mod window_handshake;
+mod window_backdrop;
+// Win11 贴靠布局（Snap Layouts）：最大化按钮上的原生 HTMAXBUTTON 热区
+mod window_snap_overlay;
 // ACT-102：双 SQLite 并发装配（spawn_blocking + async 汇聚）
 mod db_setup;
 // T-D-13：子代理生产 spawner（SubagentSpawner 引擎侧接线；bin 模块，
@@ -165,6 +168,11 @@ command_registry![
     (
         "workbench_window_ready",
         window_handshake::workbench_window_ready
+    ),
+    // Win11 贴靠布局：前端上报最大化按钮矩形，原生子 HWND 在其上回报 HTMAXBUTTON
+    (
+        "workbench_set_snap_overlay_rect",
+        window_snap_overlay::workbench_set_snap_overlay_rect
     ),
     // T-AB-08：后台任务查询面恢复（B01/B02；list/get_output/cancel 三命令，
     // 形状对齐前端 backgroundTasksApi.ts 解析层）
@@ -737,6 +745,12 @@ fn main() {
                 app_handle.clone(),
                 window_handshake::DEFAULT_WATCHDOG_TIMEOUT,
             );
+
+            // ①c 原生窗口系统材质（Win11 Mica 云母 / Win10 Acrylic / Solid 阶梯回退）
+            if let Some(main_window) = app.get_webview_window(window_handshake::MAIN_WINDOW_LABEL) {
+                let backdrop = window_backdrop::apply_adaptive_backdrop(&main_window);
+                diagnostics.record("window_backdrop", true, Some(backdrop.as_str().into()));
+            }
 
             // ② 双 SQLite 并发装配（ACT-102 / INV-02 Phase-1）：
             // spawn_blocking 并发 open sessions.db + workspace.db；

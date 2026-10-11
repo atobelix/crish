@@ -26,7 +26,6 @@ const DESKTOP_SRC = path.resolve(REPO_ROOT, 'apps/crish-desktop/src');
 const ALLOW_PATH_PREFIXES = [
   'styles/tokens.css',
   'components/gallery/',
-  'components/shell/WindowControls.module.css',
   'styles/__tests__/',
   'components/ui/Input/',
   'main.tsx',

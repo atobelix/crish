@@ -45,7 +45,7 @@ function entry(
 }
 
 /**
- * 内置快照：镜像 Rust `COMMAND_MANIFEST`（136 = 注册面 136 全实装；与
+ * 内置快照：镜像 Rust `COMMAND_MANIFEST`（137 = 注册面 137 全实装；与
  * command_manifest.rs 行注释及 manifest_count_matches_registered_surface 测试对齐）。
  * 维护规则与 Rust 侧一致：registered 子集 = `make_handlers!` 注册面；新命令经
  * §7.2 登记表登记后追加在表尾（registered 随接线状态翻转）；双端漂移由
@@ -59,6 +59,8 @@ export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
   commands: [
     // ── GUI 专属面（workbench_*，§2.3）──
     entry('workbench_window_ready', 'workbench', 'gui'),
+    // Win11 贴靠布局（Snap Layouts）：最大化按钮原生 HTMAXBUTTON 热区矩形上报
+    entry('workbench_set_snap_overlay_rect', 'workbench', 'gui'),
     entry('workbench_run_shell', 'workbench', 'gui'),
     // PE-07 T07.3（C-02/C-03）：git 参数数组执行 + 参数 schema 白名单
     entry('workbench_git_run', 'workbench', 'gui'),

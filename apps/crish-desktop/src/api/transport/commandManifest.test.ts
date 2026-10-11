@@ -82,6 +82,7 @@ describe('commandManifest', () => {
       // 用户账号与云端设备管理面七命令追加（135 → 142）
       // 偏好持久化面三命令追加（142 → 145，prefs_get / prefs_set / prefs_delete）
       // 首绘就绪握手命令追加（145 → 146，workbench_window_ready）
+      // Win11 贴靠布局热区追加（136 → 137，workbench_set_snap_overlay_rect）
       const rust = rustManifestOnce();
       expect(registered).toBe(rust.registered.length);
       expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(

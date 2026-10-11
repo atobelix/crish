@@ -458,6 +458,7 @@ export const PaneHeader: React.FC<PaneHeaderProps> = React.memo(
           style={paneTabStripVars(effectiveTabWidth)}
           data-locked={lockedTabWidth != null ? 'true' : 'false'}
           data-booted={booted ? 'true' : 'false'}
+          data-tauri-drag-region="false"
           onScroll={handleScroll}
           onMouseLeave={handleHeaderMouseLeave}
           onKeyDown={handleTablistKeyDown}
@@ -474,7 +475,7 @@ export const PaneHeader: React.FC<PaneHeaderProps> = React.memo(
           role="tablist"
           aria-label="窗格会话标签"
         >
-          <div className={styles.tabsList}>
+          <div className={styles.tabsList} data-tauri-drag-region="false">
             {visibleTabs.map((tab) => {
               const isSelected = tab.tabId === effectiveActiveTabId;
               const session = tab.sessionId

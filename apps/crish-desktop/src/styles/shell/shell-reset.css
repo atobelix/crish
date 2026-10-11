@@ -51,6 +51,39 @@ body {
   background-color: transparent;
 }
 
+/* 系统窗口材质分层适配 (Win11 Mica 云母 / Win10 Acrylic / 纯实色 Solid 阶梯回退) */
+html[data-backdrop='mica'] body {
+  background-color: transparent;
+}
+
+html[data-backdrop='mica'] .sidebar-wrapper:not(.collapsed) {
+  background-color: color-mix(
+    in srgb,
+    var(--shell-chrome-bg, var(--bg-secondary)) 68%,
+    transparent
+  );
+}
+
+html[data-backdrop='mica'] .workspaces-column {
+  background-color: transparent;
+}
+
+html[data-backdrop='acrylic'] body {
+  background-color: transparent;
+}
+
+html[data-backdrop='acrylic'] .sidebar-wrapper:not(.collapsed) {
+  background-color: color-mix(
+    in srgb,
+    var(--shell-chrome-bg, var(--bg-secondary)) 75%,
+    transparent
+  );
+}
+
+html[data-backdrop='acrylic'] .workspaces-column {
+  background-color: transparent;
+}
+
 /*           400      UI 500    */
 code,
 pre,

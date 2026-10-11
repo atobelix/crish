@@ -1,40 +1,64 @@
+/**
+ * Windows 标题栏按钮（Win11 规范）：每钮宽 --window-caption-btn-width、上下铺满顶栏高度，
+ * 整块矩形 hover / active，无圆角、无外边距、钮间无缝，组右缘贴窗口边（父容器不留右内边距）。
+ * 窗口圆角由 DWM 裁切，关闭钮红底在右上角随之变圆，不露方角。
+ *
+ * 最大化钮在 Windows 上被贴靠布局原生热区（window_snap_overlay.rs）接管鼠标，
+ * :hover / :active 收不到 → 由 data-pointer（热区事件）驱动，与伪类同一套样式。
+ */
 .controlsGroup {
   display: flex;
-  align-items: center;
+  align-items: stretch;
+  align-self: stretch;
   height: 100%;
-  margin-left: var(--space-1, 4px);
   -webkit-app-region: no-drag;
+  app-region: no-drag;
 }
 
 .winBtn {
-  width: 32px;
-  height: 28px;
-  border-radius: 0;
+  flex: 0 0 auto;
+  width: var(--window-caption-btn-width);
+  height: 100%;
+  margin: 0;
+  padding: 0;
   border: none;
+  border-radius: 0;
   background: transparent;
   color: var(--text-secondary);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  cursor: pointer;
-  padding: 0;
-  transition: background-color var(--transition-micro, 100ms ease-out),
-              color var(--transition-micro, 100ms ease-out);
+  cursor: default;
+  transition: background-color var(--transition-micro),
+              color var(--transition-micro);
   -webkit-app-region: no-drag;
+  app-region: no-drag;
   pointer-events: auto;
 }
 
-.winBtn:hover {
+.winBtn:focus-visible {
+  outline: none;
+  box-shadow: inset var(--focus-ring);
+}
+
+.winBtn:hover,
+.winBtn[data-pointer='hover'] {
   background: var(--tint-hover);
   color: var(--text-primary);
 }
 
-.winBtn:active {
+.winBtn:active,
+.winBtn[data-pointer='pressed'] {
   background: var(--tint-active);
+  color: var(--text-primary);
 }
 
 .closeBtn:hover {
-  /* Windows 11 Fluent Design 关闭按钮红色（#e81123），平台规范要求精确色值 */
-  background: #e81123;
-  color: var(--text-on-accent);
+  background: var(--window-close-hover-bg);
+  color: var(--window-close-hover-fg);
+}
+
+.closeBtn:active {
+  background: var(--window-close-active-bg);
+  color: var(--window-close-hover-fg);
 }

@@ -42,7 +42,8 @@
   display: flex;
   align-items: center;
   gap: var(--space-1, 4px);
-  padding-right: var(--space-1, 4px);
+  /* 右侧 0：Windows 标题栏按钮右缘贴窗口边（Win11 规范） */
+  padding-right: 0;
   padding-left: var(--space-1, 4px);
   background: transparent;
   -webkit-app-region: no-drag;
