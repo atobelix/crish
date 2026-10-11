@@ -118,6 +118,40 @@ pub(crate) fn list_file_openers_for_path(path: String) -> Result<Vec<HostOpener>
     Ok(openers)
 }
 
+fn start_menu_roots() -> Vec<PathBuf> {
+    let mut roots = Vec::new();
+    if let Some(appdata) = env::var_os("APPDATA") {
+        roots.push(PathBuf::from(appdata).join("Microsoft\\Windows\\Start Menu\\Programs"));
+    }
+    if let Some(progdata) = env::var_os("ProgramData") {
+        roots.push(PathBuf::from(progdata).join("Microsoft\\Windows\\Start Menu\\Programs"));
+    }
+    roots
+}
+
+pub(crate) fn trusted_start_menu_shortcut_path(path: &Path) -> Option<PathBuf> {
+    trusted_shortcut_path_with_roots(path, &start_menu_roots())
+}
+
+fn trusted_shortcut_path_with_roots(path: &Path, roots: &[PathBuf]) -> Option<PathBuf> {
+    let canonical_path = path.canonicalize().ok()?;
+    if !canonical_path.is_file()
+        || canonical_path
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .is_none_or(|extension| !extension.eq_ignore_ascii_case("lnk"))
+    {
+        return None;
+    }
+    roots
+        .iter()
+        .any(|root| {
+            root.canonicalize()
+                .is_ok_and(|canonical_root| canonical_path.starts_with(canonical_root))
+        })
+        .then_some(canonical_path)
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum FileCategory {
     TextOrCode,
@@ -278,18 +312,22 @@ fn is_relevant_app_for_category(name: &str, category: FileCategory) -> bool {
 
 fn scan_start_menu_shortcuts(category: FileCategory, limit: usize) -> Vec<HostOpener> {
     let mut out = Vec::new();
-    let mut roots: Vec<PathBuf> = Vec::new();
-    if let Some(appdata) = env::var_os("APPDATA") {
-        roots.push(PathBuf::from(appdata).join("Microsoft\\Windows\\Start Menu\\Programs"));
-    }
-    if let Some(progdata) = env::var_os("ProgramData") {
-        roots.push(PathBuf::from(progdata).join("Microsoft\\Windows\\Start Menu\\Programs"));
-    }
-    for root in roots {
+    for root in start_menu_roots() {
         if !root.is_dir() {
             continue;
         }
-        collect_lnk_openers(&root, &mut out, category, limit);
+        let Ok(canonical_root) = root.canonicalize() else {
+            continue;
+        };
+        let mut visited = HashSet::new();
+        collect_lnk_openers(
+            &root,
+            &canonical_root,
+            &mut visited,
+            &mut out,
+            category,
+            limit,
+        );
         if out.len() >= limit {
             break;
         }
@@ -299,10 +337,18 @@ fn scan_start_menu_shortcuts(category: FileCategory, limit: usize) -> Vec<HostOp
 
 fn collect_lnk_openers(
     dir: &Path,
+    canonical_root: &Path,
+    visited: &mut HashSet<PathBuf>,
     out: &mut Vec<HostOpener>,
     category: FileCategory,
     limit: usize,
 ) {
+    let Ok(canonical_dir) = dir.canonicalize() else {
+        return;
+    };
+    if !canonical_dir.starts_with(canonical_root) || !visited.insert(canonical_dir.clone()) {
+        return;
+    }
     let Ok(rd) = std::fs::read_dir(dir) else {
         return;
     };
@@ -311,11 +357,24 @@ fn collect_lnk_openers(
             return;
         }
         let path = entry.path();
-        if path.is_dir() {
-            collect_lnk_openers(&path, out, category, limit);
+        let Ok(canonical_path) = path.canonicalize() else {
+            continue;
+        };
+        if !canonical_path.starts_with(canonical_root) {
             continue;
         }
-        let ext = path
+        if canonical_path.is_dir() {
+            collect_lnk_openers(
+                &canonical_path,
+                canonical_root,
+                visited,
+                out,
+                category,
+                limit,
+            );
+            continue;
+        }
+        let ext = canonical_path
             .extension()
             .and_then(|e| e.to_str())
             .unwrap_or("")
@@ -339,8 +398,8 @@ fn collect_lnk_openers(
             continue;
         }
 
-        let id = format!("lnk:{}", path.display());
-        let icon_data_url = extract_icon_data_url(&path);
+        let id = format!("lnk:{}", canonical_path.display());
+        let icon_data_url = extract_icon_data_url(&canonical_path);
         out.push(HostOpener {
             id,
             display_name: name.clone(),
@@ -353,8 +412,8 @@ fn collect_lnk_openers(
             diagnostic: host_opener_diagnostic(
                 "host-opener-available",
                 "Discovered from Start Menu shortcut.",
-                Some(path.display().to_string()),
-                Some(path.display().to_string()),
+                Some(canonical_path.display().to_string()),
+                Some(canonical_path.display().to_string()),
             ),
         });
     }
@@ -516,4 +575,34 @@ fn join_segments(mut root: PathBuf, segments: &[&str]) -> PathBuf {
         root.push(segment);
     }
     root
+}
+
+#[cfg(test)]
+mod shortcut_security_tests {
+    use super::trusted_shortcut_path_with_roots;
+    use std::path::PathBuf;
+
+    #[test]
+    fn shortcut_path_must_be_a_link_inside_a_canonical_start_menu_root() {
+        let temp = tempfile::tempdir().expect("temporary directory");
+        let root = temp.path().join("Programs");
+        let outside = temp.path().join("Programs-Evil");
+        std::fs::create_dir_all(&root).expect("create Start Menu root");
+        std::fs::create_dir_all(&outside).expect("create sibling directory");
+        let trusted = root.join("Editor.lnk");
+        let sibling = outside.join("Editor.lnk");
+        let wrong_extension = root.join("Editor.exe");
+        std::fs::write(&trusted, b"link").expect("create trusted link");
+        std::fs::write(&sibling, b"link").expect("create sibling link");
+        std::fs::write(&wrong_extension, b"not a link").expect("create executable");
+        let roots = vec![root.clone()];
+
+        assert_eq!(
+            trusted_shortcut_path_with_roots(&trusted, &roots),
+            Some(trusted.canonicalize().unwrap())
+        );
+        assert!(trusted_shortcut_path_with_roots(&sibling, &roots).is_none());
+        assert!(trusted_shortcut_path_with_roots(&wrong_extension, &roots).is_none());
+        assert!(trusted_shortcut_path_with_roots(&PathBuf::from("missing.lnk"), &roots).is_none());
+    }
 }

@@ -152,15 +152,6 @@ fn open_with_shortcut(
     target: HostOpenTarget,
     opener_id: String,
 ) -> Result<HostOpenResult, CoreError> {
-    let lnk = PathBuf::from(lnk_path);
-    if !lnk.exists() {
-        return Err(to_core_error(host_opener_error(
-            "host-opener-not-found",
-            format!("Shortcut not found: {lnk_path}"),
-            Some(lnk_path.to_string()),
-            None,
-        )));
-    }
     let app_dir = crate::host_paths::app_dir().map_err(|message| {
         to_core_error(host_opener_error(
             "host-path-root-unavailable",
@@ -177,66 +168,217 @@ fn open_with_shortcut(
         ResolvedOpenTarget::Url(u) => u.clone(),
     };
 
+    let openers = crate::host_openers::discovery::list_file_openers_for_path(file_arg.clone())
+        .map_err(to_core_error)?;
+    if !openers
+        .iter()
+        .any(|opener| opener.available && opener.id == opener_id)
+    {
+        return Err(to_core_error(host_opener_error(
+            "host-opener-not-found",
+            "Shortcut opener is not in the current file opener list.",
+            Some(opener_id.clone()),
+            Some(file_arg.clone()),
+        )));
+    }
+
+    let lnk = crate::host_openers::discovery::trusted_start_menu_shortcut_path(Path::new(lnk_path))
+        .ok_or_else(|| {
+            to_core_error(host_opener_error(
+                "PermissionDenied",
+                "Shortcut must resolve to a .lnk inside a Start Menu Programs folder.",
+                Some(lnk_path.to_string()),
+                None,
+            ))
+        })?;
+
+    #[cfg(windows)]
+    let executable = resolve_windows_shortcut_target(&lnk).map_err(|message| {
+        to_core_error(host_opener_error(
+            "host-opener-shortcut-invalid",
+            message,
+            Some(lnk.display().to_string()),
+            Some(file_arg.clone()),
+        ))
+    })?;
+
+    #[cfg(not(windows))]
+    let executable = {
+        let _ = (&lnk, &file_arg);
+        return Err(to_core_error(host_opener_error(
+            "host-opener-unavailable",
+            "Shortcut open is only implemented on Windows.",
+            Some(lnk_path.to_string()),
+            None,
+        )));
+    };
+
+    let executable = executable.canonicalize().map_err(|error| {
+        to_core_error(host_opener_error(
+            "host-opener-shortcut-invalid",
+            format!("Shortcut target could not be resolved: {error}"),
+            Some(executable.display().to_string()),
+            Some(file_arg.clone()),
+        ))
+    })?;
+    if !executable.is_file() || !is_safe_shortcut_executable(&executable) {
+        return Err(to_core_error(host_opener_error(
+            "PermissionDenied",
+            "Shortcut target must be an existing application executable.",
+            Some(executable.display().to_string()),
+            Some(file_arg),
+        )));
+    }
+
     let gatekeeper = &*conex_sandbox::gatekeeper::SHARED_GATEKEEPER;
-    if gatekeeper.check_command(lnk_path, &[&file_arg])
-        == conex_sandbox::gatekeeper::GatekeeperResult::Blocked
-        || gatekeeper.patterns().is_match(lnk_path)
+    let command_display = executable.display().to_string();
+    let shortcut_display = lnk.display().to_string();
+    let arguments = [file_arg.as_str()];
+    if gatekeeper.check_command(&command_display, &arguments)
+        != conex_sandbox::gatekeeper::GatekeeperResult::Allowed
+        || gatekeeper.patterns().is_match(&shortcut_display)
+        || gatekeeper.patterns().is_match(&command_display)
         || gatekeeper.patterns().is_match(&file_arg)
     {
         return Err(to_core_error(host_opener_error(
             "PermissionDenied",
             "Command blocked by safety red-line gatekeeper (InvalidCommand)",
-            Some(lnk_path.to_string()),
+            Some(command_display),
             Some(file_arg),
         )));
     }
 
     #[cfg(windows)]
     {
-        let script = format!(
-            "$s=(New-Object -ComObject WScript.Shell).CreateShortcut('{}'); Start-Process -FilePath $s.TargetPath -ArgumentList @('{}') -WorkingDirectory (Split-Path $s.TargetPath -Parent) -ErrorAction Stop",
-            lnk_path.replace('\'', "''"),
-            file_arg.replace('\'', "''"),
-        );
-        let status = Command::new("powershell")
-            .args(["-NoProfile", "-Command", &script])
+        // Shortcut-embedded arguments are deliberately not forwarded. The opener
+        // passes only the selected workspace item, matching its existing contract.
+        let command = Command::new(&executable)
+            .arg(&file_arg)
+            .current_dir(executable.parent().unwrap_or_else(|| Path::new(".")))
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .spawn();
-        match status {
+        match command {
             Ok(_) => Ok(HostOpenResult {
                 ok: true,
                 opener_id,
-                target_kind: HostOpenTargetKindForResult::Path,
+                target_kind: match resolved_target {
+                    ResolvedOpenTarget::Path(_) => HostOpenTargetKindForResult::Path,
+                    ResolvedOpenTarget::Url(_) => HostOpenTargetKindForResult::Url,
+                },
                 target: file_arg.clone(),
-                command: lnk_path.to_string(),
+                command: command_display.clone(),
                 diagnostic: host_opener_diagnostic(
                     "host-opener-launched",
                     "Opened via Start Menu shortcut.",
-                    Some(lnk_path.to_string()),
+                    Some(command_display),
                     Some(file_arg),
                 ),
             }),
             Err(error) => Err(to_core_error(host_opener_error(
                 "host-opener-spawn-failed",
                 format!("Failed to launch shortcut: {error}"),
-                Some(lnk_path.to_string()),
+                Some(executable.display().to_string()),
                 Some(file_arg),
             ))),
         }
     }
+}
 
-    #[cfg(not(windows))]
-    {
-        let _ = file_arg;
-        Err(to_core_error(host_opener_error(
-            "host-opener-unavailable",
-            "Shortcut open is only implemented on Windows.",
-            Some(lnk_path.to_string()),
-            None,
+fn is_safe_shortcut_executable(path: &Path) -> bool {
+    const NON_APPLICATION_EXECUTABLES: &[&str] = &[
+        "bash.exe",
+        "cmd.exe",
+        "cscript.exe",
+        "java.exe",
+        "javaw.exe",
+        "mshta.exe",
+        "msiexec.exe",
+        "node.exe",
+        "nodejs.exe",
+        "powershell.exe",
+        "pwsh.exe",
+        "python.exe",
+        "pythonw.exe",
+        "regsvr32.exe",
+        "rundll32.exe",
+        "sh.exe",
+        "wscript.exe",
+        "wsl.exe",
+    ];
+    let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+        return false;
+    };
+    path.extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("exe"))
+        && !NON_APPLICATION_EXECUTABLES
+            .iter()
+            .any(|blocked| name.eq_ignore_ascii_case(blocked))
+}
+
+#[cfg(windows)]
+#[allow(unsafe_code)]
+fn resolve_windows_shortcut_target(lnk_path: &Path) -> Result<PathBuf, String> {
+    use std::os::windows::ffi::{OsStrExt, OsStringExt};
+    use windows::{
+        core::{Interface, PCWSTR},
+        Win32::{
+            System::Com::{
+                CoCreateInstance, CoInitializeEx, CoUninitialize, IPersistFile,
+                CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED, STGM_READ,
+            },
+            UI::Shell::{IShellLinkW, ShellLink},
+        },
+    };
+
+    let wide_path = lnk_path
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect::<Vec<_>>();
+    std::thread::spawn(move || -> Result<PathBuf, String> {
+        let init = unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) };
+        if init.is_err() {
+            return Err(format!("COM initialization failed: {init:?}"));
+        }
+        struct ComApartment;
+        impl Drop for ComApartment {
+            fn drop(&mut self) {
+                unsafe { CoUninitialize() };
+            }
+        }
+        let _apartment = ComApartment;
+
+        let link: IShellLinkW = unsafe {
+            CoCreateInstance(&ShellLink, None, CLSCTX_INPROC_SERVER)
+                .map_err(|error| format!("Cannot create Shell Link reader: {error}"))?
+        };
+        let persist: IPersistFile = link
+            .cast()
+            .map_err(|error| format!("Shortcut does not expose IPersistFile: {error}"))?;
+        unsafe { persist.Load(PCWSTR(wide_path.as_ptr()), STGM_READ) }
+            .map_err(|error| format!("Cannot load shortcut: {error}"))?;
+
+        // IShellLinkW::GetPath documents a MAX_PATH result. Reject paths at the
+        // truncation boundary instead of treating a partial target as executable.
+        let mut target = vec![0u16; 260];
+        unsafe { link.GetPath(&mut target, std::ptr::null_mut(), 0) }
+            .map_err(|error| format!("Cannot resolve shortcut target: {error}"))?;
+        let length = target
+            .iter()
+            .position(|unit| *unit == 0)
+            .ok_or_else(|| "Shortcut target path is truncated.".to_string())?;
+        if length == 0 || length >= 259 {
+            return Err("Shortcut target path is empty or exceeds MAX_PATH.".to_string());
+        }
+        Ok(PathBuf::from(std::ffi::OsString::from_wide(
+            &target[..length],
         )))
-    }
+    })
+    .join()
+    .map_err(|_| "Shortcut resolution thread panicked.".to_string())?
 }
 
 // G2 禁令豁免：host opener 执行面——本函数所有拉起点（.spawn()，
@@ -646,5 +788,86 @@ mod tests {
         assert_eq!(extension_of_path("README"), None);
         assert!(is_blocked_executable_path(r"C:\tmp\x.exe"));
         assert!(!is_blocked_executable_path("notes.md"));
+    }
+
+    #[test]
+    fn shortcut_target_must_be_an_application_not_a_script_host() {
+        assert!(is_safe_shortcut_executable(Path::new("Editor.EXE")));
+        for blocked in [
+            "powershell.exe",
+            "pwsh.exe",
+            "cmd.exe",
+            "wscript.exe",
+            "cscript.exe",
+            "python.exe",
+            "node.exe",
+            "rundll32.exe",
+        ] {
+            assert!(
+                !is_safe_shortcut_executable(Path::new(blocked)),
+                "shortcut must not launch command or script host {blocked}"
+            );
+        }
+        assert!(!is_safe_shortcut_executable(Path::new("editor.cmd")));
+    }
+
+    #[cfg(windows)]
+    #[allow(unsafe_code)]
+    fn create_test_shortcut(link_path: &Path, target: &Path) {
+        use std::os::windows::ffi::OsStrExt;
+        use windows::{
+            core::{Interface, PCWSTR},
+            Win32::System::Com::{
+                CoCreateInstance, CoInitializeEx, CoUninitialize, IPersistFile,
+                CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED,
+            },
+            Win32::UI::Shell::{IShellLinkW, ShellLink},
+        };
+
+        let link_path_wide = link_path
+            .as_os_str()
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect::<Vec<_>>();
+        let target = target
+            .as_os_str()
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect::<Vec<_>>();
+        std::thread::spawn(move || {
+            let init = unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) };
+            assert!(init.is_ok(), "COM initialization: {init:?}");
+            struct ComApartment;
+            impl Drop for ComApartment {
+                fn drop(&mut self) {
+                    unsafe { CoUninitialize() };
+                }
+            }
+            let _apartment = ComApartment;
+            let link: IShellLinkW = unsafe {
+                CoCreateInstance(&ShellLink, None, CLSCTX_INPROC_SERVER).expect("create Shell Link")
+            };
+            unsafe { link.SetPath(PCWSTR(target.as_ptr())) }.expect("set shortcut target");
+            let persist: IPersistFile = link.cast().expect("query IPersistFile");
+            unsafe { persist.Save(PCWSTR(link_path_wide.as_ptr()), true) }.expect("save shortcut");
+        })
+        .join()
+        .expect("shortcut creation thread");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn resolves_shortcut_target_with_windows_shell_link_api() {
+        let temp = tempfile::tempdir().expect("temporary directory");
+        let shortcut = temp.path().join("editor.lnk");
+        let target = std::env::current_exe().expect("current executable");
+        let expected = target.canonicalize().expect("canonical executable");
+        create_test_shortcut(&shortcut, &target);
+
+        let resolved = resolve_windows_shortcut_target(&shortcut)
+            .expect("shortcut target resolution")
+            .canonicalize()
+            .expect("canonical shortcut target");
+        assert_eq!(resolved, expected);
     }
 }
