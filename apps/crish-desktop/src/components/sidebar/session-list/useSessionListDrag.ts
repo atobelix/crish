@@ -512,6 +512,40 @@ export function useSessionListDrag(
             nextShifted.push(row);
           }
 
+          // 跨分组拖拽时：原分组容器下的列表项向上补位收缩空洞，避免源与目标出现双空行
+          if (!isSameContainer && sourceContainer) {
+            const allSourceRows = Array.from(
+              sourceContainer.querySelectorAll<HTMLElement>('li[data-session-id]')
+            ).filter(
+              (r) => r.offsetParent !== null && r.getBoundingClientRect().height > 0
+            );
+
+            const origIdx = allSourceRows.findIndex(
+              (r) => r.getAttribute('data-session-id') === sessionId
+            );
+            if (origIdx >= 0) {
+              for (let i = 0; i < allSourceRows.length; i++) {
+                const sRow = allSourceRows[i]!;
+                if (sRow.getAttribute('data-session-id') === sessionId) continue;
+                if (i > origIdx) {
+                  sRow.style.transition = 'transform 120ms cubic-bezier(0.2, 0, 0, 1)';
+                  sRow.style.transform = `translateY(-${stepPx}px)`;
+                  nextShifted.push(sRow);
+                }
+              }
+
+              // 若源容器内有折叠切换按钮（如“查看全部”），亦同步向上收缩
+              const foldBtn = sourceContainer.parentElement?.querySelector(
+                `.${styles.foldToggleRow}`
+              ) as HTMLElement | null;
+              if (foldBtn) {
+                foldBtn.style.transition = 'transform 120ms cubic-bezier(0.2, 0, 0, 1)';
+                foldBtn.style.transform = `translateY(-${stepPx}px)`;
+                nextShifted.push(foldBtn);
+              }
+            }
+          }
+
           for (const el of shiftedElements) {
             if (!nextShifted.includes(el)) {
               el.style.transform = '';

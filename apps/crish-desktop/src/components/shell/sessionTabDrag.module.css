@@ -110,10 +110,17 @@
 }
 
 :global(body.is-tab-dragging) [data-tree-canvas] [data-leaf-body],
+:global(body.is-tab-dragging) [data-tree-canvas] [data-leaf-body] [class],
 :global(body.is-tab-dragging) [data-tree-canvas] [data-leaf-id] > :not([data-pane-header]),
-:global(body.is-tab-dragging) [data-tree-canvas] [data-leaf-id] [class],
+:global(body.is-tab-dragging) [data-tree-canvas] [data-leaf-id] > :not([data-pane-header]) [class],
 :global(body.is-tab-dragging) iframe,
 :global(body.is-tab-dragging) :global(.xterm),
 :global(body.is-tab-dragging) [data-markdown-editor] {
   pointer-events: none;
+}
+
+:global(body.is-tab-dragging) [data-pane-header="true"],
+:global(body.is-tab-dragging) [data-pane-header="true"] [role="tablist"],
+:global(body.is-tab-dragging) [data-pane-header="true"] [role="tab"]:not(.is-dragging) {
+  pointer-events: auto;
 }

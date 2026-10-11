@@ -265,9 +265,13 @@ export function SessionTabDragProvider({ children }: { children: ReactNode }) {
         ? (stripWrap.querySelector('[role="tablist"]') as HTMLElement | null)
         : null;
 
-      // 垂直防抖滞后区间：若当前已在 strip 模式，y 只要未深入内容区（>48px）优先维持 strip
-      const stripBottom = stripWrap ? stripWrap.getBoundingClientRect().bottom : 36;
-      const preferStrip = currentMode === 'strip' ? p.y <= stripBottom + 12 : p.y <= stripBottom + 2;
+      // 垂直防抖滞后区间：双向保护，若已在 strip 模式提供更大滞后缓冲区避免轻微手抖跳出
+      const wrapRect = stripWrap?.getBoundingClientRect();
+      const preferStrip = wrapRect
+        ? (currentMode === 'strip'
+            ? p.y >= wrapRect.top - 12 && p.y <= wrapRect.bottom + 16
+            : p.y >= wrapRect.top - 6 && p.y <= wrapRect.bottom + 8)
+        : false;
 
       if (strip && preferStrip) {
         if (autoScrollStrip(strip, p.x)) {
