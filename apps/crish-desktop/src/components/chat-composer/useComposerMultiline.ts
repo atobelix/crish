@@ -109,7 +109,14 @@ export function useComposerMultiline(opts: {
       fontRef.current = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
     }
 
-    const clean = text.replace(/\u200B/g, '').trim();
+    // 从 DOM 取出用户当前正在输入的实时文本（包括长按按键持续输入未触发 150ms 序列化防抖时的实时字符）
+    const liveDomText = editable
+      ? editable instanceof HTMLTextAreaElement
+        ? editable.value
+        : editable.textContent || ''
+      : '';
+    const rawText = liveDomText || text;
+    const clean = rawText.replace(/\u200B/g, '').trim();
     if (!clean) {
       setMultiline(false);
       return;
@@ -121,10 +128,19 @@ export function useComposerMultiline(opts: {
     );
     const isCurrentlyMulti = multilineRef.current;
 
+    // 物理溢出双重保障：结合 Canvas 测宽与 editable 物理 scrollWidth，确保长按输入零延迟感知
+    const isPhysicallyOverflowed = Boolean(
+      editable && editable.scrollWidth > capacity
+    );
+
     let nextState = isCurrentlyMulti;
-    if (!isCurrentlyMulti && textWidth >= capacity) {
+    if (!isCurrentlyMulti && (textWidth >= capacity || isPhysicallyOverflowed)) {
       nextState = true; // 突破上门限，展开
-    } else if (isCurrentlyMulti && textWidth < capacity - HYSTERESIS_BUFFER_PX) {
+    } else if (
+      isCurrentlyMulti &&
+      textWidth < capacity - HYSTERESIS_BUFFER_PX &&
+      !isPhysicallyOverflowed
+    ) {
       nextState = false; // 跌破下门限，收起
     }
 

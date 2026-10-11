@@ -6,10 +6,8 @@ import {
   type SessionStoreStateShape,
 } from './useScopedSessionField';
 import type { SessionMessage, SessionAgent } from '../../store/types';
-import { triggerSessionMessageHydrateIfNeeded } from '../../store/sessionCrudActions';
-import { messageMatchesSearch } from '../../api/sessionSearch';
-import { dedupeStateCarrierMessages } from '../chat-message/contextStateUtils';
-import { sortMessagesByOrder } from '../../store/sessionSharedHelpers';
+import { triggerSessionMessageHydrateIfNeeded } from '../../store/storeAccess';
+import { projectDisplayMessages } from './projectDisplayMessages';
 
 export interface UseChatMessagesOptions {
   resolveSessionId: (s: SessionStoreStateShape) => string;
@@ -61,13 +59,12 @@ export function useChatMessages({
     triggerSessionMessageHydrateIfNeeded(activeSessionId);
   }, [activeSessionId]);
 
-  const displayMessages = useMemo(() => {
-    const q = localMsgFilter.trim();
-    const base = q ? messages.filter((m) => messageMatchesSearch(m, q)) : messages;
-    // 显示层唯一防御排序入口：复用写入序比较器（sortMessagesByOrder → compareMessageOrder）
-    // 防历史脏数据乱序；processing 流式消息若 timestamp 最新自然在末尾，不 special-case
-    return sortMessagesByOrder(dedupeStateCarrierMessages(base));
-  }, [messages, localMsgFilter]);
+  // S-6 展示投影唯一入口（排序 → 搜索 → 可渲染过滤 → 载体折叠）
+  const projection = useMemo(
+    () => projectDisplayMessages(messages, localMsgFilter),
+    [messages, localMsgFilter]
+  );
+  const displayMessages = projection.display;
 
   const {
     messagesLoading,
@@ -76,7 +73,8 @@ export function useChatMessages({
     chatRegionAria,
   } = useChatEmptyKind({
     activeSessionId,
-    messageCount: messages.length,
+    // G5：投影后、搜索前的条数——全部不可渲染时落到 session-empty（欢迎面），不白屏
+    messageCount: projection.visibleCount,
     displayCount: displayMessages.length,
     localMsgFilter,
     mainSurface,

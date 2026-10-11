@@ -291,6 +291,13 @@ export const TiptapEditorField = React.forwardRef<
           '\n\n>[!WARNING]\n>内容过长已被防爆截断，请清理后继续。';
       }
 
+      // 编辑器默认就是空文档。不要把首次空值排进 rAF 再 setContent：
+      // 用户可能已在首帧水合前输入，延迟写回空内容会覆盖这段新输入。
+      if (lastContentRef.current === undefined && safeContent === '') {
+        lastContentRef.current = '';
+        return;
+      }
+
       if (safeContent === lastContentRef.current) return;
 
       // 采用 requestAnimationFrame 调度渲染，确保 120Hz/60Hz 不掉帧

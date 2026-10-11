@@ -22,6 +22,8 @@
 }
 
 .proseMirrorField {
+  min-width: 0;
+  max-width: 100%;
   min-height: calc(
     1em * var(--composer-line-height, 1.45) * var(--composer-min-lines, 2)
   );
@@ -165,13 +167,24 @@
   color: var(--text-secondary);
 }
 
-/*     Placeholder     text-tertiary      textarea::placeholder */
 .proseMirrorField :global(p.is-editor-empty:first-child::before) {
   color: var(--text-tertiary);
   content: attr(data-placeholder);
-  float: left;
-  height: 0;
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
   pointer-events: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.proseMirrorField :global(p.is-editor-empty:first-child) {
+  position: relative;
 }
 
 /* Mention chip：文件图标盒 + Skill 变体（中性，无绿底墙） */

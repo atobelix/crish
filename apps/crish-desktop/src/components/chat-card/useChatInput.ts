@@ -13,7 +13,7 @@
  * CI Guardrail: Max 400 lines of effective code, UTF-8 无 BOM.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { sessionDraftManager } from '../../api/draft/sessionDraftManager';
 
 export interface UseChatInputOptions {
@@ -45,7 +45,8 @@ export function useChatInput({
   const latestTextRef = useRef('');
 
   // 1. 会话切换原子 Barrier（Flush 旧会话草稿 → 复位 DOM → Hydrate 新会话）
-  useEffect(() => {
+  // 用布局 effect 在新会话首次可交互前完成切换，避免输入事件命中旧会话 ref。
+  useLayoutEffect(() => {
     const prevSid = activeSessionIdRef.current;
     if (prevSid && prevSid !== activeSessionId) {
       // Barrier 阶段 1：强刷旧会话草稿至 Level 2/3（同步，作废其挂起防抖）

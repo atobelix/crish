@@ -6,7 +6,7 @@ import { onUiEvent } from '../../api/uiEvents';
 import { generateMessageId } from '../../utils/generateMessageId';
 import { getTransport } from '../../api/transport';
 import { backfillFromBoundaryText } from '../../hooks/chat-stream/slashSendDraftManager';
-import { clearRuntimeStatus } from '../../store/sessionRuntimeStatusStore';
+import { clearRuntimeStatus } from '../../store/storeAccess';
 import type { ChatAttachment } from '../../hooks/useChatStream';
 import type {
   ChatContentPart,
@@ -198,7 +198,8 @@ export function useChatHandlers({
   const regenerateTurn = useCallback(
     (opts: {
       sessionId: string;
-      assistantMsgId: string;
+      /** 缺省 = 该轮无助手节点可撤回（如串行守卫排队重试用尽），仅按 userMsgId 重发 */
+      assistantMsgId?: string;
       userMsgId?: string;
       fallbackText?: string;
     }) => {
@@ -224,7 +225,7 @@ export function useChatHandlers({
       );
       if (!userText && !hasAttachments) return;
 
-      session.withdrawMessage(wsId, sessionId, assistantMsgId);
+      if (assistantMsgId) session.withdrawMessage(wsId, sessionId, assistantMsgId);
       // 重试时原子清空运行时状态（单轨收敛 §2.0，节流通过后清态）
       clearRuntimeStatus(sessionId);
 
@@ -347,7 +348,7 @@ export function useChatHandlers({
   // ComposerErrorBar「重试」（单轨收敛 §2.3）：复用原消息位重发当轮，严禁新建用户消息
   useEffect(() => {
     return onUiEvent('retry-failed-turn', ({ sessionId, userMsgId, assistantMsgId }) => {
-      if (!sessionId || !assistantMsgId) return;
+      if (!sessionId || (!assistantMsgId && !userMsgId)) return;
       regenerateTurn({ sessionId, assistantMsgId, userMsgId });
     });
   }, [regenerateTurn]);

@@ -5,11 +5,13 @@
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { useLayoutEffect, type ReactNode } from 'react';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mockTauriCommand } from '../../test-setup';
 import {
   ensureModelsCatalogLoaded,
+  modelsCatalogStore,
   resetModelsCatalogMirror,
 } from '../../api/modelsCatalogStore';
 import type { ProviderSpec } from '../../api/modelsCatalogTypes';
@@ -117,6 +119,27 @@ describe('useChatModelPicker catalogVersion → needsModelSetup', () => {
     });
     expect(result.current.needsModelSetup).toBe(true);
     expect(result.current.engineModel).not.toBe('ls-seed-model');
+  });
+
+  it('首次渲染和订阅安装之间目录更新时仍能刷新模型可用状态', async () => {
+    const wrapper = ({ children }: { children: ReactNode }) => {
+      useLayoutEffect(() => {
+        modelsCatalogStore.acceptSnapshot(
+          workbenchReadOk({ acme: spec([{ id: 'old-id' }]) })
+        );
+      }, []);
+      return children;
+    };
+
+    const { result } = renderHook(
+      () => useChatModelPicker({ projectTick: 0 }),
+      { wrapper }
+    );
+
+    await waitFor(() => {
+      expect(result.current.needsModelSetup).toBe(false);
+      expect(result.current.engineModel).toBe('old-id');
+    });
   });
 
   it('yaml 列出模型后 needsModelSetup 变为 false', async () => {

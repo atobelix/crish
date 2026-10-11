@@ -297,9 +297,9 @@ describe('ComposerFusedTrigger（S3 融合触发 · live 档位）', () => {
     expect(css).not.toMatch(/\.capsule:hover/);
     expect(css).not.toMatch(/\.capsule:active/);
     // 左半胶囊几何（左圆右平贴合）
-    expect(css).toMatch(/14px\s+0\s+0\s+14px/);
+    expect(css).toMatch(/(?:14px|var\(--sep-radius-outer\))\s+0\s+0\s+(?:14px|var\(--sep-radius-outer\))/);
     // 右半胶囊几何（左平贴合右圆）
-    expect(css).toMatch(/0\s+14px\s+14px\s+0/);
+    expect(css).toMatch(/0\s+(?:14px|var\(--sep-radius-outer\))\s+(?:14px|var\(--sep-radius-outer\))\s+0/);
     // 中间弱发丝竖线不占据水平排版空间（margin-left: -1px）
     expect(css).toMatch(/margin-left:\s*-1px/);
     // 左右各自独立 hover

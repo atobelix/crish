@@ -11,7 +11,7 @@ import {
 import {
   openToolInActiveTab,
   openFileViewerInSession,
-} from '../../store/workspace-shell';
+} from '../../store/storeAccess';
 import { toast } from '../../services/toast/ToastContext';
 import { getCompositionRoot } from '../../app/compositionRoot';
 import { getActiveProjectId } from '../../api/projectStore';
@@ -114,7 +114,9 @@ export function useChatSessionActions({
             new CustomEvent('crish-open-file', { detail: { path: resolved } })
           );
           if (isOfficeOrBinary) {
-            void openPathDefault(resolved).catch(() => {});
+            void openPathDefault(resolved).catch(() => {
+              /* swallow-ok: 文件面板已打开；系统关联拉起失败不打断主路径 */
+            });
           }
         })
         .catch((err: unknown) => {
@@ -133,7 +135,9 @@ export function useChatSessionActions({
             new CustomEvent('crish-open-file', { detail: { path: resolved } })
           );
           if (isOfficeOrBinary) {
-            void openPathDefault(resolved).catch(() => {});
+            void openPathDefault(resolved).catch(() => {
+              /* swallow-ok: 文件面板已打开；系统关联拉起失败不打断主路径 */
+            });
           }
         });
       return;

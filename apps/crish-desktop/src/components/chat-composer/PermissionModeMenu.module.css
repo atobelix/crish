@@ -28,7 +28,7 @@
 
 /* 融合模式（单行胶囊左段）：左圆弧 14px，右平切贴合中间模型槽 */
 .permPill.fused {
-  border-radius: 14px 0 0 14px;
+  border-radius: var(--sep-radius-outer) 0 0 var(--sep-radius-outer);
   padding: 0 8px 0 10px;
 }
 
@@ -211,7 +211,7 @@
   justify-content: center;
   width: 22px;
   height: 22px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-secondary);
   flex-shrink: 0;

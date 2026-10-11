@@ -9,14 +9,14 @@
  * - 「重试」：派发 retry-failed-turn，由 ChatCard 宿主复用 handleRegenerate **原位重发当轮**
  *   （按 userMsgId 现查提问、撤回失败的 assistant 节点后重跑，不新建用户消息）。
  */
-import React, { useCallback, useState } from 'react';
+import React, { useState } from 'react';
 import { Button, Tooltip } from '../ui';
 import { AppIcon } from '../ui/icons/index';
 import { emitUiEvent } from '../../api/uiEvents';
 import {
   clearRuntimeStatus,
-  useSessionRuntimeStatusStore,
-} from '../../store/sessionRuntimeStatusStore';
+  useSessionRuntimeStatus,
+} from '../../store/storeAccess';
 import styles from './ComposerErrorBar.module.css';
 
 export interface ComposerErrorBarProps {
@@ -25,12 +25,7 @@ export interface ComposerErrorBarProps {
 
 export const ComposerErrorBar: React.FC<ComposerErrorBarProps> = React.memo(
   function ComposerErrorBar({ activeSessionId }) {
-    const status = useSessionRuntimeStatusStore(
-      useCallback(
-        (s) => (activeSessionId ? s.statusBySession[activeSessionId] : undefined),
-        [activeSessionId]
-      )
-    );
+    const status = useSessionRuntimeStatus(activeSessionId);
     const [detailOpen, setDetailOpen] = useState(false);
 
     if (!activeSessionId || status?.phase !== 'failed') return null;

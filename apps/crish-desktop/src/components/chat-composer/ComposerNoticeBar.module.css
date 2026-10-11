@@ -1,72 +1,110 @@
 /**
- * ComposerNoticeBar: 输入框上方精致提示条组件样式
+ * ComposerNoticeBar: 输入框上方 48px 灵动配重胶囊组件样式
  * 严格对齐 AGENTS.md §13（无纯黑边框、微变焦点、对比度克制）与 §14（色彩 Token 规范）
+ * 严格收编至 Design Token 体系，严禁裸色与硬编码
  */
 
 .noticeBar {
   display: flex;
   align-items: center;
-  gap: 8px;
-  min-height: 34px;
-  max-height: 36px;
+  justify-content: space-between;
+  gap: 10px;
+  height: 48px;
+  min-height: 48px;
+  max-height: 48px;
   box-sizing: border-box;
-  padding: 6px 12px;
-  border-radius: var(--radius-md, 8px);
+  width: fit-content;
+  max-width: min(760px, calc(100% - 24px));
+  margin: 0 auto;
+  padding: 0 10px 0 14px;
+  border-radius: var(--composer-radius-single, 20px);
   border: 1px solid var(--border-subtle);
-  background-color: var(--surface-paper);
+  background-color: var(--bg-elevated);
   color: var(--text-primary);
-  font-size: 12px;
+  font-size: var(--font-size-xs);
   user-select: none;
-  transition: background-color 0.18s ease, border-color 0.18s ease;
+  box-shadow: var(--notice-shadow-deck-1);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  transition:
+    background-color var(--transition-fast),
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast);
+  animation: noticeIn 260ms var(--ease-emphasized) forwards;
 }
 
-/* 深色模式底色 */
+@keyframes noticeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* 深色模式底色与阴影 */
 :global(html[data-theme='dark']) .noticeBar {
-  background-color: var(--bg-card);
+  background-color: var(--bg-elevated);
+  box-shadow: var(--notice-shadow-deck-1);
 }
 
-/* --- 类型特定样式 --- */
+/* --- 核心语义类型绑定（严格引用 Design Tokens，无荧光） --- */
 
-/* 1. info 类型 */
-.noticeBar.info {
-  border-color: color-mix(in srgb, var(--color-info) 20%, var(--border-subtle));
+/* 1. 中断停止态 (Stop - 珊瑚粉红原图真值) */
+.noticeBar.stop {
+  background-color: var(--notice-bg-stop);
+  border-color: var(--notice-border-stop);
+  color: var(--notice-text-stop);
 }
 
-.noticeBar.info .icon {
-  color: var(--color-info);
-}
-
-/* 2. warning 类型 */
+/* 2. 警告态 (Warning - 柔杏暖金) */
 .noticeBar.warning {
-  border-color: color-mix(in srgb, var(--color-warning) 25%, var(--border-subtle));
+  background-color: var(--notice-bg-warn);
+  border-color: var(--notice-border-warn);
+  color: var(--notice-text-warn);
 }
 
-.noticeBar.warning .icon {
-  color: var(--color-warning);
-}
-
-/* 3. error 类型 */
+/* 3. 错误态 (Error - 浅绯玫瑰) */
 .noticeBar.error {
-  border: 1px solid color-mix(in srgb, var(--color-error) 25%, var(--border-subtle));
-  background-color: color-mix(in srgb, var(--color-error) 4%, var(--bg-card));
+  background-color: var(--notice-bg-error);
+  border-color: var(--notice-border-error);
+  color: var(--notice-text-error);
 }
 
-:global(html[data-theme='dark']) .noticeBar.error {
-  border-color: color-mix(in srgb, var(--color-error) 30%, var(--border-subtle));
-  background-color: color-mix(in srgb, var(--color-error) 6%, var(--bg-card));
+/* 4. 信息态 (Info - 纯通知，不带刺激性大色块) */
+.noticeBar.info {
+  background-color: var(--notice-bg-info);
+  border-color: var(--notice-border-info);
+  color: var(--notice-text-info);
 }
 
-.noticeBar.error .icon {
-  color: var(--color-error);
+/* 5. 成功态 (Success - 淡竹翡翠) */
+.noticeBar.success {
+  background-color: var(--notice-bg-success);
+  border-color: var(--notice-border-success);
+  color: var(--notice-text-success);
 }
 
-/* --- 子元素样式 --- */
+/* --- 三槽光学配重布局 --- */
 
-.icon {
+.capsuleSlotLeft {
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  width: 20px;
+  height: 20px;
+}
+
+.capsuleSlotCenter {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
 }
 
 .message {
@@ -75,9 +113,50 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12px;
-  line-height: 1.4;
-  color: var(--text-primary);
+  font-size: var(--font-size-sm, 13px);
+  font-weight: 500;
+  line-height: 20px;
+  color: inherit;
+}
+
+.capsuleSlotRight {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ActionPill 快捷行动微胶囊药丸 */
+.actionPill,
+.actionPill {
+  height: 26px;
+  padding: 0 10px;
+  border-radius: var(--radius-md, 6px);
+  border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+  background-color: color-mix(in srgb, currentColor 8%, transparent);
+  color: inherit;
+  font-size: var(--font-size-xxs, 11px);
+  font-weight: 500;
+  font-family: inherit;
+  line-height: 1;
+  cursor: pointer;
+  white-space: nowrap;
+  outline: none;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast), opacity var(--transition-fast);
+}
+
+.actionPill:hover,
+.actionPill:hover {
+  background-color: color-mix(in srgb, currentColor 16%, transparent);
+  border-color: currentColor;
+}
+
+.actionPill:active {
+  opacity: 0.7;
+}
+
+.actionPill:focus-visible {
+  box-shadow: 0 0 0 1.5px color-mix(in srgb, currentColor 40%, transparent);
 }
 
 /* 叹号详情徽标 */
@@ -87,85 +166,78 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   min-width: unset;
   min-height: unset;
   padding: 0;
-  border-radius: var(--radius-sm);
-  border: 1px solid color-mix(in srgb, var(--border-color) 80%, transparent);
+  border-radius: var(--radius-sm, 4px);
+  border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
   background-color: transparent;
-  color: var(--text-secondary);
-  font-size: 11px;
+  color: inherit;
+  font-size: var(--font-size-xxs, 11px);
   font-weight: 600;
   font-family: inherit;
   line-height: 1;
   cursor: pointer;
-  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  transition: background-color var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
 }
 
 .detailBadge:hover {
-  background-color: var(--tint-hover);
-  color: var(--text-primary);
-  border-color: var(--border-color);
+  background-color: color-mix(in srgb, currentColor 10%, transparent);
+  border-color: currentColor;
 }
 
 .detailBadge:active {
-  background-color: var(--tint-active);
+  opacity: 0.7;
 }
 
 .detailBadge:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
+  box-shadow: 0 0 0 1.5px color-mix(in srgb, currentColor 40%, transparent);
 }
 
-/* 极简 ghost 扁平操作按钮（复制与反馈） */
+/* 复制与反馈按钮 */
 .copyBtn,
-.feedbackBtn,
 .feedbackBtn {
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  height: 22px;
+  height: 24px;
   min-width: unset;
   min-height: unset;
-  padding: 0 6px;
+  padding: 0 8px;
   border: none;
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-md, 6px);
   background-color: transparent;
-  color: var(--text-secondary);
-  font-size: 11.5px;
+  color: inherit;
+  opacity: 0.75;
+  font-size: var(--font-size-xxs, 11px);
   font-family: inherit;
   font-weight: 500;
   line-height: 1;
   cursor: pointer;
   white-space: nowrap;
-  transition: background-color 0.15s ease, color 0.15s ease;
+  transition: background-color var(--transition-fast), opacity var(--transition-fast);
 }
 
 .copyBtn:hover,
 .feedbackBtn:hover {
-  background-color: var(--tint-hover);
-  color: var(--text-primary);
+  opacity: 1;
+  background-color: color-mix(in srgb, currentColor 10%, transparent);
 }
 
 .copyBtn:active,
 .feedbackBtn:active {
-  background-color: var(--tint-active);
-}
-
-.copyBtn:focus-visible,
-.feedbackBtn:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
+  opacity: 0.65;
 }
 
 .btnIcon {
   flex-shrink: 0;
 }
 
-/* 关闭/删除按钮 */
+/* 0.8px 发丝微圈关闭按钮 */
 .dismissBtn,
 .dismissBtn {
   flex-shrink: 0;
@@ -174,28 +246,29 @@
   justify-content: center;
   width: 20px;
   height: 20px;
-  min-width: unset;
+  min-width: 20px;
   min-height: unset;
   padding: 0;
   margin-left: 2px;
-  border: none;
-  border-radius: var(--radius-sm, 4px);
+  border: var(--hairline-width) solid color-mix(in srgb, currentColor 45%, transparent);
+  border-radius: 50%;
   background-color: transparent;
-  color: var(--text-tertiary);
+  color: inherit;
+  opacity: 0.6;
   cursor: pointer;
-  transition: background-color 0.15s ease, color 0.15s ease;
+  transition: opacity var(--transition-fast), border-color var(--transition-fast);
 }
 
 .dismissBtn:hover {
-  background-color: var(--tint-hover);
-  color: var(--text-primary);
+  opacity: 1;
+  border-color: currentColor;
 }
 
 .dismissBtn:active {
-  background-color: var(--tint-active);
+  opacity: 0.5;
 }
 
 .dismissBtn:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
+  box-shadow: 0 0 0 1.5px color-mix(in srgb, currentColor 40%, transparent);
 }

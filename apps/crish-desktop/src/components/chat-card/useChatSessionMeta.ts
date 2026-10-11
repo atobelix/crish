@@ -1,14 +1,19 @@
 import { useCallback, useRef, useEffect } from 'react';
-import { useLayoutStore, useSessionField, selectActiveSessionId } from '../../store/storeAccess';
+import {
+  useLayoutStore,
+  useSessionField,
+  selectActiveSessionId,
+  useLayoutTreeStore,
+  collectLeaves,
+  useDraftFolder,
+  useSessionStore,
+} from '../../store/storeAccess';
 import { isDemoMode } from '../../api/appMode';
 import { isFirstRunOverlayOpen } from '../firstRunOverlayFlag';
 import { useScopedSessionField, type SessionStoreStateShape } from './useScopedSessionField';
 import type { SessionState } from '../../store/types';
 
-import { useLayoutTreeStore, collectLeaves } from '../../store/layout-tree';
 import { GENERAL_FOLDER } from '../../api/projectStore';
-import { useDraftFolder } from '../../store/draft-routing';
-import { useSessionStore } from '../../store/sessionStore';
 
 export interface UseChatSessionMetaOptions {
   sessionIdProp?: string | null;

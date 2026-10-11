@@ -10,10 +10,10 @@
   padding: 0 6px;
   border: none;
   box-shadow: none;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-xs);
   font-weight: 400;
   font-family: inherit;
   cursor: pointer;
@@ -128,7 +128,7 @@
 }
 
 .agentName {
-  font-size: 12px;
+  font-size: var(--font-size-xs);
   font-weight: 500;
   color: var(--text-primary);
   overflow: hidden;
@@ -137,7 +137,7 @@
 }
 
 .statusBadge {
-  font-size: 10px;
+  font-size: var(--font-size-xxs);
   padding: 1px 4px;
   border-radius: var(--radius-xs, 2px);
   background: var(--tint-hover);
@@ -165,7 +165,7 @@
 }
 
 .agentTask {
-  font-size: 11px;
+  font-size: var(--font-size-xxs);
   color: var(--text-tertiary);
   overflow: hidden;
   text-overflow: ellipsis;

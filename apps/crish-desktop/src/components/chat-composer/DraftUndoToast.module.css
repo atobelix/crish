@@ -18,7 +18,7 @@
   padding: 6px 8px 6px 12px;
   border: var(--hairline-width, 1px) solid
     color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
-  border-radius: 10px;
+  border-radius: var(--radius-xl);
   background: var(--bg-elevated);
   color: var(--text-primary);
   font-size: 12px;
@@ -85,7 +85,7 @@
   min-height: unset;
   padding: 0;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--text-tertiary);
   cursor: pointer;

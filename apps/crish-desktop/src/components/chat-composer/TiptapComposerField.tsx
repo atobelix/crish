@@ -13,6 +13,7 @@
 import React, {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -156,7 +157,7 @@ export const TiptapComposerField: React.FC<TiptapComposerFieldProps> = ({
   const sendRequestRef = useRef<string | null>(null);
   const [sendTick, setSendTick] = useState(0);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     onSendRef.current = onSend;
   }, [onSend]);
 
@@ -206,7 +207,7 @@ export const TiptapComposerField: React.FC<TiptapComposerFieldProps> = ({
     onSendRef.current?.();
   }, [disabled, canSend, value, handleSendMarkdown]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!sendApiRef) return;
     sendApiRef.current = { flushAndSend: trySend };
     return () => {

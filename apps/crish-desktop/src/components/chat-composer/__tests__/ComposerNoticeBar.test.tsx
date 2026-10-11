@@ -277,4 +277,52 @@ describe('ComposerNoticeBar (输入框上方高级提示条组件)', () => {
 
     expect(onDismiss).toHaveBeenCalledTimes(1);
   });
+
+  it('9. 提供 action 时正确渲染 ActionPill 胶囊按钮并响应点击回调', () => {
+    const onActionClick = vi.fn();
+    const notice: ComposerNotice = {
+      id: 'action-1',
+      type: 'error',
+      message: '模型服务连接超时',
+      action: {
+        label: '立即重试',
+        onClick: onActionClick,
+      },
+    };
+
+    render(<ComposerNoticeBar notice={notice} onDismiss={vi.fn()} />);
+
+    const pill = screen.getByTestId('composer-notice-action-pill');
+    expect(pill).toBeInTheDocument();
+    expect(pill).toHaveTextContent('立即重试');
+
+    fireEvent.click(pill);
+    expect(onActionClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('10. 支持 stop（原图珊瑚粉红）与 success（淡竹青）类型扩展', () => {
+    const stopNotice: ComposerNotice = {
+      id: 'stop-1',
+      type: 'stop',
+      message: '已停止本轮生成',
+    };
+
+    const { rerender } = render(
+      <ComposerNoticeBar notice={stopNotice} onDismiss={vi.fn()} />
+    );
+
+    const bar = screen.getByTestId('composer-notice-bar');
+    expect(bar).toHaveAttribute('data-notice-type', 'stop');
+    expect(screen.getByText('已停止本轮生成')).toBeInTheDocument();
+
+    const successNotice: ComposerNotice = {
+      id: 'success-1',
+      type: 'success',
+      message: '环境检查全绿',
+    };
+    rerender(<ComposerNoticeBar notice={successNotice} onDismiss={vi.fn()} />);
+    expect(bar).toHaveAttribute('data-notice-type', 'success');
+    expect(screen.getByText('环境检查全绿')).toBeInTheDocument();
+  });
 });
+

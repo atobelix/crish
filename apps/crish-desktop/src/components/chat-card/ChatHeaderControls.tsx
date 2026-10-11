@@ -2,6 +2,7 @@ import React, {
   Suspense,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from 'react';
@@ -174,6 +175,11 @@ export const ModelBadgePicker: React.FC<ModelBadgePickerProps> = ({
   const showModelDropdown = showModelDropdownProp ?? internalShow;
   const setShowModelDropdown = setShowModelDropdownProp ?? setInternalShow;
   const badgeRef = useRef<HTMLButtonElement>(null);
+  const catalogVersion = useModelsCatalogVersion();
+  const choiceCount = useMemo(
+    () => listLivePickerEntries().length,
+    [catalogVersion]
+  );
 
   const handleBadgeClick = useCallback(() => {
     toggleExclusiveMenu(
@@ -202,7 +208,9 @@ export const ModelBadgePicker: React.FC<ModelBadgePickerProps> = ({
         content={
           getActiveProfile()
             ? `${getActiveProfile()!.name} · ${engineModel || '未选模型'}`
-            : '服务商与模型（可在设置中更改）'
+            : choiceCount > 0
+              ? '在此选择模型。设置里的默认模型可以不填'
+              : '服务商与模型'
         }
         disabled={showModelDropdown}
       >
@@ -212,6 +220,7 @@ export const ModelBadgePicker: React.FC<ModelBadgePickerProps> = ({
           variant="ghost"
           className={`${styles.modelBadge} ${showModelDropdown ? styles.active : ''}`}
           data-testid="model-selector-button"
+          data-needs-model-setup={needsModelSetup ? 'true' : 'false'}
           aria-haspopup="menu"
           aria-expanded={showModelDropdown}
           aria-label="选择模型"
@@ -229,7 +238,12 @@ export const ModelBadgePicker: React.FC<ModelBadgePickerProps> = ({
             }}
           >
             {renderModelName(
-              engineModel || (needsModelSetup ? '填写模型' : '无可用模型')
+              engineModel ||
+                (needsModelSetup
+                  ? '填写模型'
+                  : choiceCount > 0
+                    ? '选择模型'
+                    : '无可用模型')
             )}
           </span>
         </Button>
