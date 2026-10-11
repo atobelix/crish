@@ -136,8 +136,7 @@ pub(crate) fn kill_all_sessions() {
 // ── Stage 6 ACT-605：PTY GC 惰性拉起与动态自销毁 ─────────────────────────────
 
 /// GC 协程单例门闩：compare_exchange 保证并发 create 下实例恒严格为 1。
-static PTY_GC_RUNNING: std::sync::atomic::AtomicBool =
-    std::sync::atomic::AtomicBool::new(false);
+static PTY_GC_RUNNING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 /// 终端创建成功后调用：惰性拉起 GC 协程（已运行则仅记日志跳过）。
 /// 不维护任何独立计数——活跃数一律经 [session::active_session_count] 读取

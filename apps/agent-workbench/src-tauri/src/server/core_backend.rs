@@ -352,9 +352,7 @@ impl ApiBackend for CoreStateBackend {
     /// logDir 不下发；diagnostics / lastError 与 GUI 共享同一
     /// StatusDiagnostics 实例）
     async fn get_status(&self) -> Result<serde_json::Value, ServerError> {
-        use crate::core_query_commands::{
-            build_status, DiagnosticEntry, LastErrorEntry,
-        };
+        use crate::core_query_commands::{build_status, DiagnosticEntry, LastErrorEntry};
         let diagnostics = self.core.status_diagnostics();
         // providerStatus 三态如实（统一配置解析单轨；与 core_query_commands 同源）
         let provider_status = crate::core_query_commands::provider_status_from_config();

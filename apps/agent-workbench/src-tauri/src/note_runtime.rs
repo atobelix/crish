@@ -28,6 +28,8 @@ use agent_tools::note_backend::NoteBackendHandle;
 use conex_note_runtime::StoreNoteBackend;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock, RwLock};
+#[cfg(test)]
+use std::sync::{Mutex, MutexGuard};
 
 /// 进程级共享笔记运行时（可 clone 注入多 session / 命令面）。
 #[derive(Clone)]
@@ -96,6 +98,20 @@ pub fn open_at(path: impl AsRef<Path>) -> Result<SharedNoteRuntime, String> {
 
 /// 全局安装槽：setup 一次；测试可经 [`install`] 覆盖。
 static GLOBAL: OnceLock<RwLock<Option<SharedNoteRuntime>>> = OnceLock::new();
+
+/// 测试中替换全局运行时的统一锁；需覆盖完整用例，避免跨调用切换数据库。
+#[cfg(test)]
+static TEST_GLOBAL_LOCK: Mutex<()> = Mutex::new(());
+
+/// 保护测试中依赖进程级 note runtime 的完整用例。
+///
+/// `install_for_test` 会替换进程槽位，而 IPC 命令在每次调用时重新读取槽位。
+/// 因此测试必须在整个创建、写入、撤销/重做和读取链路期间持有此锁；只锁安装
+/// 动作无法阻止另一用例在后续 IPC 调用前替换后端。
+#[cfg(test)]
+pub(crate) fn lock_for_test() -> MutexGuard<'static, ()> {
+    TEST_GLOBAL_LOCK.lock().unwrap_or_else(|e| e.into_inner())
+}
 
 fn global_slot() -> &'static RwLock<Option<SharedNoteRuntime>> {
     GLOBAL.get_or_init(|| RwLock::new(None))
@@ -222,6 +238,7 @@ mod tests {
 
     #[tokio::test]
     async fn install_exposes_try_backend() {
+        let _guard = lock_for_test();
         let (dir, db) = temp_db();
         let runtime = open_at(&db).unwrap();
         install(runtime);

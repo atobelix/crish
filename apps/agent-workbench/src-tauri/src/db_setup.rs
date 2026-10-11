@@ -108,10 +108,7 @@ pub async fn setup_databases_concurrently(
 }
 
 /// 打开会话库；失败降级内存库 + 诊断（原 main.rs::open_session_db 语义）。
-fn open_session_db_at(
-    db_path: &PathBuf,
-    diagnostics: &StatusDiagnostics,
-) -> SharedDb {
+fn open_session_db_at(db_path: &PathBuf, diagnostics: &StatusDiagnostics) -> SharedDb {
     match conex_db::LocalDb::open(db_path) {
         Ok(db) => {
             let shared = SharedDb::new(db);
@@ -130,8 +127,7 @@ fn open_session_db_at(
                 false,
                 Some(format!("sessions.db 打开失败：{err_msg}")),
             );
-            let mem = conex_db::LocalDb::open_in_memory()
-                .expect("in-memory DB must always open");
+            let mem = conex_db::LocalDb::open_in_memory().expect("in-memory DB must always open");
             let shared = SharedDb::new(mem);
             shared.set_ready(false);
             shared
@@ -150,10 +146,8 @@ mod tests {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let dir = std::env::temp_dir().join(format!(
-            "crish-db-setup-{}-{nanos}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("crish-db-setup-{}-{nanos}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
 
         let diagnostics = Arc::new(StatusDiagnostics::new());

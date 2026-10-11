@@ -80,7 +80,10 @@ pub const SEMANTIC_TO_LEGACY: &[(&str, &str)] = &[
     ("font_size_adjust", "crish_font_size_adjust"),
     ("theme_brightness_adjust", "crish_theme_brightness_adjust"),
     ("theme_brightness_vibrant", "crish_theme_brightness_vibrant"),
-    ("theme_brightness_auto_time", "crish_theme_brightness_auto_time"),
+    (
+        "theme_brightness_auto_time",
+        "crish_theme_brightness_auto_time",
+    ),
     ("fonts", "crish_fonts"),
     ("files_list_ratio", "crish:files-list-ratio"),
     ("file_viewer_word_wrap", "crish:file-viewer-word-wrap"),
@@ -252,15 +255,13 @@ pub fn validate_preference_value(key: &str, value: &Value) -> Result<(), CoreErr
             }
         }
         "ui_size" => match value {
-            Value::String(s)
-                if s == "compact" || s == "normal" || s == "spacious" => Ok(()),
+            Value::String(s) if s == "compact" || s == "normal" || s == "spacious" => Ok(()),
             _ => Err(CoreError::invalid_input(
                 "ui_size must be one of compact|normal|spacious",
             )),
         },
         "shell_chrome_mode" => match value {
-            Value::String(s)
-                if s == "frameless" || s == "native" || s == "bordered" => Ok(()),
+            Value::String(s) if s == "frameless" || s == "native" || s == "bordered" => Ok(()),
             _ => Err(CoreError::invalid_input(
                 "shell_chrome_mode must be one of frameless|native|bordered",
             )),
@@ -338,9 +339,7 @@ pub async fn prefs_get(
             })
             .await
             .map_err(|e| CoreError::Internal(format!("prefs_get join: {e}")))?
-            .map_err(|e| {
-                CoreError::Internal(format!("prefs_get db: {}: {}", e.kind, e.message))
-            })?;
+            .map_err(|e| CoreError::Internal(format!("prefs_get db: {}: {}", e.kind, e.message)))?;
 
             match row {
                 Some(r) => {
@@ -399,19 +398,14 @@ pub async fn prefs_set(
     tokio::task::spawn_blocking(move || db.set_preference(&key, &serialized, now_ms))
         .await
         .map_err(|e| CoreError::Internal(format!("prefs_set join: {e}")))?
-        .map_err(|e| {
-            CoreError::Internal(format!("prefs_set db: {}: {}", e.kind, e.message))
-        })?;
+        .map_err(|e| CoreError::Internal(format!("prefs_set db: {}: {}", e.kind, e.message)))?;
 
     Ok(())
 }
 
 /// 删除指定偏好 key。
 #[tauri::command]
-pub async fn prefs_delete(
-    key: String,
-    db_state: State<'_, SharedDb>,
-) -> Result<bool, CoreError> {
+pub async fn prefs_delete(key: String, db_state: State<'_, SharedDb>) -> Result<bool, CoreError> {
     if key.trim().is_empty() {
         return Err(CoreError::invalid_input("preference key must not be empty"));
     }
@@ -434,9 +428,7 @@ pub async fn prefs_delete(
     })
     .await
     .map_err(|e| CoreError::Internal(format!("prefs_delete join: {e}")))?
-    .map_err(|e| {
-        CoreError::Internal(format!("prefs_delete db: {}: {}", e.kind, e.message))
-    })?;
+    .map_err(|e| CoreError::Internal(format!("prefs_delete db: {}: {}", e.kind, e.message)))?;
 
     Ok(deleted)
 }
@@ -565,13 +557,9 @@ mod tests {
         assert_eq!(theme_val, json!("dark"));
 
         // 写入数值
-        prefs_set(
-            "crish_sidebar_width".to_string(),
-            json!(260),
-            state.clone(),
-        )
-        .await
-        .expect("set sidebar width");
+        prefs_set("crish_sidebar_width".to_string(), json!(260), state.clone())
+            .await
+            .expect("set sidebar width");
         let width_val = prefs_get(Some("crish_sidebar_width".to_string()), state.clone())
             .await
             .expect("get sidebar width");
@@ -607,9 +595,7 @@ mod tests {
         assert_eq!(fonts_val, font_pref);
 
         // 全量读取
-        let all_prefs = prefs_get(None, state.clone())
-            .await
-            .expect("get all prefs");
+        let all_prefs = prefs_get(None, state.clone()).await.expect("get all prefs");
         let obj = all_prefs.as_object().expect("is object");
         assert_eq!(obj.get("crish_theme"), Some(&json!("dark")));
         assert_eq!(obj.get("crish_sidebar_width"), Some(&json!(260)));

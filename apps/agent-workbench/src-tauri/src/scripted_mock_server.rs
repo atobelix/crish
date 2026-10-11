@@ -730,23 +730,23 @@ mod integration_tests {
     }
 
     /// 轮询会话事件库中的 agent-end 事件(真实 loop 收口落库;返回 reason)
-async fn wait_run_terminal(db: &LocalDb, session_id: &str, window: Duration) -> String {
+    async fn wait_run_terminal(db: &LocalDb, session_id: &str, window: Duration) -> String {
         let deadline = tokio::time::Instant::now() + window;
         loop {
             // 收口落库经 spawn_blocking 异步写 events 表——测试轮询可能撞上
-        // 写侧表锁（query_events_collect: database table is locked）；
-        // 锁竞速按「未就绪」重试，写侧完成后本查询自然成功。
-        let events = match db.query_events(session_id, 0, Some(500)) {
-            Ok(events) => events,
-            Err(_) => {
-                assert!(
-                    tokio::time::Instant::now() < deadline,
-                    "run-terminal 事件未在窗口内落库"
-                );
-                tokio::time::sleep(Duration::from_millis(30)).await;
-                continue;
-            }
-        };
+            // 写侧表锁（query_events_collect: database table is locked）；
+            // 锁竞速按「未就绪」重试，写侧完成后本查询自然成功。
+            let events = match db.query_events(session_id, 0, Some(500)) {
+                Ok(events) => events,
+                Err(_) => {
+                    assert!(
+                        tokio::time::Instant::now() < deadline,
+                        "run-terminal 事件未在窗口内落库"
+                    );
+                    tokio::time::sleep(Duration::from_millis(30)).await;
+                    continue;
+                }
+            };
             for event in &events {
                 // G-29 事件权威：run-terminal 是唯一终态事件（03 §5.2-2，
                 // 旧 agent-end/run-completed/run-failed 已删），断言只认权威形态。

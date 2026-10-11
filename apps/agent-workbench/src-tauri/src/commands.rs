@@ -11,6 +11,8 @@ pub(crate) async fn workbench_apply_update() -> Result<serde_json::Value, CoreEr
 
 #[cfg(test)]
 mod tests {
+    use super::workbench_apply_update;
+
     /// 真漂移退役面（2026-09-15 债务清零 · 物理切除）：桌面壳原生 HTTP 请求
     /// 命令已从实现面物理删除（前端生产代码零消费，唯一调用点原在本
     /// `#[cfg(test)]` 内）。原两条断言（非法 method / 非 http(s) url →

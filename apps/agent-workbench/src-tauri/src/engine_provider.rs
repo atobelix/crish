@@ -35,16 +35,16 @@ use agent_provider::config::Endpoint;
 use agent_provider::error::{classify_provider_error, source_from_reqwest_error};
 use agent_provider::model_store::ResolvedModelConfig;
 use agent_provider::models::{CacheControlFormat, ProtocolKind, ThinkingFormat};
-use agent_provider::request::{
-    build_anthropic_request_body, build_chat_completions_request_body, build_gemini_request_body,
-    build_responses_request_body, ensure_outbound_modalities, validate_anthropic_pairing_from_context,
-    validate_chat_pairing_from_messages, validate_gemini_tool_pairing, AnthropicRequestOptions,
-    BreakpointPlan, CacheMechanism, CachePolicy, CacheRetention, ChatCompletionsRequestOptions,
-    GeminiRequestOptions, RequestBuildContext, ToolDefinition as WireToolDefinition, TtlBucket,
-    WireProtocol,
-};
 #[cfg(test)]
 use agent_provider::request::ReasoningContentMode;
+use agent_provider::request::{
+    build_anthropic_request_body, build_chat_completions_request_body, build_gemini_request_body,
+    build_responses_request_body, ensure_outbound_modalities,
+    validate_anthropic_pairing_from_context, validate_chat_pairing_from_messages,
+    validate_gemini_tool_pairing, AnthropicRequestOptions, BreakpointPlan, CacheMechanism,
+    CachePolicy, CacheRetention, ChatCompletionsRequestOptions, GeminiRequestOptions,
+    RequestBuildContext, ToolDefinition as WireToolDefinition, TtlBucket, WireProtocol,
+};
 use agent_provider::sse::{AbortFlag, StreamDiagnosticContext, StreamReadOptions};
 use agent_provider::transport::stream_frames;
 use async_trait::async_trait;
@@ -131,7 +131,12 @@ pub(crate) fn engine_provider_config_from_resolved(
     };
     let stream = resolved.provider.stream;
     let live = live_catalog();
-    let slots = slots_for_model(&live, Some(&provider_id), resolved.provider.base_url.as_deref(), &model);
+    let slots = slots_for_model(
+        &live,
+        Some(&provider_id),
+        resolved.provider.base_url.as_deref(),
+        &model,
+    );
     EngineProviderConfig {
         base_url,
         api_key,
@@ -392,7 +397,14 @@ impl HttpProviderCall {
         policy: Option<&agent_provider::request::cache::CachePolicy>,
     ) -> Vec<(String, String)> {
         let profile = protocol::catalog_request_profile(&self.config);
-        headers::request_headers_for(&self.config, WireProtocol::Chat, policy, None, None, &profile)
+        headers::request_headers_for(
+            &self.config,
+            WireProtocol::Chat,
+            policy,
+            None,
+            None,
+            &profile,
+        )
     }
 
     /// 组装完整请求头（四轨同轨；会话亲和头族 seam T3.5 注入 session_id）。
@@ -451,9 +463,7 @@ impl ProviderCall for HttpProviderCall {
         // 3. 多模态出站硬拒（plans/04 §4.1 唯一挂载点）：纯文本模型带图 →
         //    HTTP 前 InvalidRequest，上游零字节。S3 入口禁图是第一道；本闸
         //    不可绕过（工具 / 脚本 / 恶意 IPC）。
-        if let Err(err) =
-            ensure_outbound_modalities(request.messages, profile.supports_image)
-        {
+        if let Err(err) = ensure_outbound_modalities(request.messages, profile.supports_image) {
             return Err(to_modality_reject(err));
         }
 
@@ -574,11 +584,7 @@ impl ProviderCall for HttpProviderCall {
 /// anthropic` → 显式断点机制；无声明 → None（请求体不出现 cache 键）。
 /// 禁止 `bundled_catalog` + base_url 猜 cache 能力（§2.4）。
 fn cache_policy_from_profile(profile: &protocol::CatalogRequestProfile) -> Option<CachePolicy> {
-    match profile
-        .compat
-        .as_ref()
-        .and_then(|c| c.cache_control_format)
-    {
+    match profile.compat.as_ref().and_then(|c| c.cache_control_format) {
         Some(CacheControlFormat::Anthropic) => Some(CachePolicy {
             mechanism: CacheMechanism::Explicit,
             retention: CacheRetention::Short,

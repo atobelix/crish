@@ -949,10 +949,7 @@ pub(crate) struct SessionCacheState {
 /// `bundled_catalog()` = 0」）：内置 `catalog.json` 条目与 `ttl.rs` 的
 /// vendor 默认表。
 pub(crate) fn build_cache_tracking_config(config: &EngineProviderConfig) -> CacheTrackingConfig {
-    let vendor = config
-        .vendor
-        .as_deref()
-        .or(config.provider_id.as_deref());
+    let vendor = config.vendor.as_deref().or(config.provider_id.as_deref());
     let live = live_catalog();
     let ttl_seconds = vendor
         .and_then(|vendor_str| {
@@ -1054,8 +1051,10 @@ pub(crate) fn waste_alert_event(
         }
         // 输入单价未配置（None）视为无法计价，失败闭合而非按 0 计价（价格未配置 ≠ 0）。
         let input_rate = p.input?;
-        let input_micros =
-            agent_provider::pricing::PricingEngine::tokens_to_micros(stats.missed_tokens, input_rate);
+        let input_micros = agent_provider::pricing::PricingEngine::tokens_to_micros(
+            stats.missed_tokens,
+            input_rate,
+        );
         let read_micros = agent_provider::pricing::PricingEngine::tokens_to_micros(
             stats.missed_tokens,
             p.cache_read.unwrap_or(0.0),
@@ -1650,12 +1649,9 @@ impl SessionLoopProducer {
             // plans/05 §3.6：浪费金额用同一份 live 单价（取价键 = 缓存跟踪
             // provider 串，与 yaml providers 键同值才命中；miss → None）
             let pricing = crate::live_pricing::live_model_pricing(vendor, model);
-            if let Some(alert) = waste_alert_event(
-                &self.session_id,
-                stats,
-                model_switched,
-                pricing.as_ref(),
-            ) {
+            if let Some(alert) =
+                waste_alert_event(&self.session_id, stats, model_switched, pricing.as_ref())
+            {
                 if let Some(sink) = &self.delta_sink {
                     sink.push(alert);
                 }

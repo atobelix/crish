@@ -109,7 +109,10 @@ mod tests {
         let raw = r#"{ "runPolicy": { "transientRetryLimit": 5 } }"#;
         let parsed: SettingsFile = serde_json::from_str(raw).expect("合法策略文件");
         let policy = parsed.run_policy.expect("runPolicy 段");
-        assert!(policy.retry_backoff.is_none(), "未配置退避 → 装配点落内核缺省");
+        assert!(
+            policy.retry_backoff.is_none(),
+            "未配置退避 → 装配点落内核缺省"
+        );
         assert_eq!(policy.transient_retry_limit, Some(5));
     }
 

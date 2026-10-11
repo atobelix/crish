@@ -493,7 +493,8 @@ mod tests {
     fn on_run_stopped_releases_and_persists() {
         let (slot, db) = slot_with_meta(true);
         let mut registry = ToolRegistry::new();
-        slot.register_tools(&mut registry).expect("恢复注册不应失败");
+        slot.register_tools(&mut registry)
+            .expect("恢复注册不应失败");
         assert!(
             slot.activation().current().is_desktop(),
             "恢复后应处于桌面活跃态"
@@ -522,7 +523,8 @@ mod tests {
         let events = Arc::new(Mutex::new(Vec::new()));
         slot.attach_emitter(Arc::new(TestEmitter(Arc::clone(&events))));
         let mut registry = ToolRegistry::new();
-        slot.register_tools(&mut registry).expect("恢复注册不应失败");
+        slot.register_tools(&mut registry)
+            .expect("恢复注册不应失败");
         slot.on_run_stopped();
         let events = events.lock().unwrap_or_else(|e| e.into_inner());
         assert_eq!(events.len(), 2, "恢复与停止各广播一次");
@@ -542,7 +544,8 @@ mod tests {
         let events = Arc::new(Mutex::new(Vec::new()));
         slot.attach_emitter(Arc::new(TestEmitter(Arc::clone(&events))));
         let mut registry = ToolRegistry::new();
-        slot.register_tools(&mut registry).expect("恢复注册不应失败");
+        slot.register_tools(&mut registry)
+            .expect("恢复注册不应失败");
         let events = events.lock().unwrap_or_else(|e| e.into_inner());
         assert_eq!(events.len(), 1);
         let payload: serde_json::Value = serde_json::from_str(&events[0]).expect("事件 JSON");

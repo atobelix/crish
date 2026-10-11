@@ -26,7 +26,9 @@ use agent_provider::parse::anthropic::AnthropicParser;
 use agent_provider::parse::chat::ChatCompletionsParser;
 use agent_provider::parse::gemini::GeminiParser;
 use agent_provider::parse::responses::ResponsesParser;
-use agent_provider::request::{build_endpoint_url, MaxTokensField, ReasoningContentMode, WireProtocol};
+use agent_provider::request::{
+    build_endpoint_url, MaxTokensField, ReasoningContentMode, WireProtocol,
+};
 use agent_provider::sse::SseFrame;
 use indexmap::IndexMap;
 
@@ -58,7 +60,11 @@ pub(crate) struct LiveLookupSlots {
     pub provider_id: Option<String>,
 }
 
-fn slots_from_spec(provider_id: &str, provider: &ProviderSpec, spec: &ModelSpec) -> LiveLookupSlots {
+fn slots_from_spec(
+    provider_id: &str,
+    provider: &ProviderSpec,
+    spec: &ModelSpec,
+) -> LiveLookupSlots {
     LiveLookupSlots {
         vendor: Some(provider_id.to_string()),
         protocol: Some(spec.effective_protocol(provider)),
@@ -97,7 +103,12 @@ pub(crate) fn slots_for_model(
     if let Some(url) = base_url {
         let clean_url = url.trim_end_matches('/');
         for (pid, provider) in &live.tree.providers {
-            if provider.base_url.as_deref().map(|u| u.trim_end_matches('/')) == Some(clean_url) {
+            if provider
+                .base_url
+                .as_deref()
+                .map(|u| u.trim_end_matches('/'))
+                == Some(clean_url)
+            {
                 if let Some(spec) = provider.find_model(model_id) {
                     return slots_from_spec(pid.as_str(), provider, spec);
                 }
@@ -173,9 +184,7 @@ impl CatalogRequestProfile {
 /// - supports_image：`modalities.input` 含 `image`（禁止 `capabilities.image` 双读）；
 /// - max_tokens_field：仅 `CompatSpec.max_tokens_field`，否则协议缺省；
 /// - reasoning_content：`thinking_format == DeepSeek` → Require，否则 Omit。
-pub(crate) fn catalog_request_profile(
-    config: &EngineProviderConfig,
-) -> CatalogRequestProfile {
+pub(crate) fn catalog_request_profile(config: &EngineProviderConfig) -> CatalogRequestProfile {
     let live = live_catalog();
     let (provider, spec) = if let Some(provider_id) = config.provider_id.as_deref() {
         if let Some(p) = live.tree.find_provider(provider_id) {
@@ -415,18 +424,18 @@ pub(crate) fn provider_url(config: &EngineProviderConfig) -> String {
     provider_url_for(config, effective_protocol(config))
 }
 
-    /// 按显式协议生成 URL（测试/解析器三件套一致性的纯决策入口）。
-    ///
-    /// 规范化拼装单一真源 = [build_endpoint_url]
-    /// （Anthropic `/v1/messages`、Responses `/v1/responses`、Chat `/chat/completions`
-    /// 的去重拼装）；Gemini 在其上补 `models/{model}:generateContent` 模型路径。
-    pub(crate) fn provider_url_for(config: &EngineProviderConfig, protocol: WireProtocol) -> String {
-        let base = build_endpoint_url(protocol.protocol_kind(), &config.base_url);
-        match protocol {
-            WireProtocol::Gemini => format!("{base}/models/{}:generateContent", config.model),
-            _ => base,
-        }
+/// 按显式协议生成 URL（测试/解析器三件套一致性的纯决策入口）。
+///
+/// 规范化拼装单一真源 = [build_endpoint_url]
+/// （Anthropic `/v1/messages`、Responses `/v1/responses`、Chat `/chat/completions`
+/// 的去重拼装）；Gemini 在其上补 `models/{model}:generateContent` 模型路径。
+pub(crate) fn provider_url_for(config: &EngineProviderConfig, protocol: WireProtocol) -> String {
+    let base = build_endpoint_url(protocol.protocol_kind(), &config.base_url);
+    match protocol {
+        WireProtocol::Gemini => format!("{base}/models/{}:generateContent", config.model),
+        _ => base,
     }
+}
 
 /// Responses 轨是否生效（chat 与 responses 双态既有判定；仅测试面使用——
 /// 生产协议决议已改走 [catalog_request_profile]，本函数保留为历史夹具语义）。

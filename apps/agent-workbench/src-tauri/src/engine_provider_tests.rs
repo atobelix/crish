@@ -308,7 +308,10 @@ fn effective_protocol_keeps_url_body_parser_in_rail() {
         reqwest::Client::new(),
         live_config("anthropic", "claude-sonnet-4"),
     );
-    assert_eq!(effective_protocol(&anthropic.config), WireProtocol::Anthropic);
+    assert_eq!(
+        effective_protocol(&anthropic.config),
+        WireProtocol::Anthropic
+    );
 
     // 显式协议 dispatch 与协议一致：anthropic / gemini 的 URL/body/parser 同轨
     for protocol in [WireProtocol::Anthropic, WireProtocol::Gemini] {
@@ -364,10 +367,7 @@ fn thinking_high_on_anthropic_rail_emits_budget_tokens() {
 #[test]
 fn thinking_high_on_chat_rail_emits_reasoning_effort() {
     let _fixture = install_live_fixture();
-    let call = HttpProviderCall::new(
-        reqwest::Client::new(),
-        live_config("acme", "acme-think"),
-    );
+    let call = HttpProviderCall::new(reqwest::Client::new(), live_config("acme", "acme-think"));
     let protocol = WireProtocol::Chat;
     let messages = vec![user_msg("你好")];
     let request = single_user_request(&messages, Some(LoopEffort::High));
@@ -490,10 +490,7 @@ fn session_head_injected_when_session_id_present() {
     let messages = vec![user_msg("你好")];
 
     // acme 声明 x-acme-affinity → 随请求发出（session_id 非空）
-    let call = HttpProviderCall::new(
-        reqwest::Client::new(),
-        live_config("acme", "acme-think"),
-    );
+    let call = HttpProviderCall::new(reqwest::Client::new(), live_config("acme", "acme-think"));
     let request = request_with_session(&messages, Some("ses-123"));
     let headers = call.request_headers_for_auto(WireProtocol::Chat, &request);
     assert!(
@@ -519,9 +516,7 @@ fn session_head_injected_when_session_id_present() {
         &request_with_session(&messages, Some("ses-123")),
     );
     assert!(
-        !headers
-            .iter()
-            .any(|(name, _)| name.starts_with("x-")),
+        !headers.iter().any(|(name, _)| name.starts_with("x-")),
         "未声明供应商不得注入任何 x-* 头：{headers:?}"
     );
 }
@@ -530,10 +525,7 @@ fn session_head_injected_when_session_id_present() {
 #[test]
 fn session_head_coexists_with_grok_affinity_header() {
     let _fixture = install_live_fixture();
-    let call = HttpProviderCall::new(
-        reqwest::Client::new(),
-        live_config("acme", "acme-think"),
-    );
+    let call = HttpProviderCall::new(reqwest::Client::new(), live_config("acme", "acme-think"));
     let messages = vec![user_msg("你好")];
     let request = request_with_session(&messages, Some("ses-abc"));
     let headers = call.request_headers_for_auto(WireProtocol::Chat, &request);
@@ -608,11 +600,9 @@ fn max_tokens_field_openai_o_series_uses_max_completion_tokens() {
     let messages = vec![user_msg("你好")];
 
     // acme 声明 maxTokensField: max_completion_tokens → 写 max_completion_tokens
-    let call = HttpProviderCall::new(
-        reqwest::Client::new(),
-        live_config("acme", "acme-think"),
-    );
-    let body = call.request_body_for_auto(WireProtocol::Chat, &single_user_request(&messages, None));
+    let call = HttpProviderCall::new(reqwest::Client::new(), live_config("acme", "acme-think"));
+    let body =
+        call.request_body_for_auto(WireProtocol::Chat, &single_user_request(&messages, None));
     assert_eq!(
         body["max_completion_tokens"], 1024,
         "yaml 声明写 max_completion_tokens：{body}"
@@ -628,7 +618,8 @@ fn max_tokens_field_openai_o_series_uses_max_completion_tokens() {
         "o4-mini",
         Endpoint::ChatCompletions,
     );
-    let body2 = unknown.request_body_for_auto(WireProtocol::Chat, &single_user_request(&messages, None));
+    let body2 =
+        unknown.request_body_for_auto(WireProtocol::Chat, &single_user_request(&messages, None));
     assert_eq!(
         body2["max_tokens"], 1024,
         "无 yaml 声明写 max_tokens（禁止 o 系列猜）：{body2}"
@@ -702,8 +693,15 @@ fn describe_model_whitelist_for_deepseek_v4_flash_is_narrow() {
     let profile = protocol::catalog_request_profile(&call.config);
     assert!(profile.supports_reasoning, "夹具字典非空 → 支持 reasoning");
     assert_eq!(
-        profile.thinking_map.as_ref().map(|m| m.keys().cloned().collect::<Vec<_>>()),
-        Some(vec!["High".to_string(), "Low".to_string(), "Max".to_string()])
+        profile
+            .thinking_map
+            .as_ref()
+            .map(|m| m.keys().cloned().collect::<Vec<_>>()),
+        Some(vec![
+            "High".to_string(),
+            "Low".to_string(),
+            "Max".to_string()
+        ])
     );
 
     // 合法档位放行；越白名单档位（medium）拒绝。
@@ -744,19 +742,19 @@ fn describe_model_whitelist_for_deepseek_v4_flash_is_narrow() {
 /// 此处会得到 reqwest 连接错误而非我们的 InvalidRequest）。
 #[tokio::test]
 async fn out_of_whitelist_effort_rejected_before_http() {
-        let _fixture = install_live_fixture();
-        // 夹具字典 High/Low/Max + 越档 medium + 死端口 URL：
-        // 错误必须在请求发送前由拒绝校验返回，证明网络 I/O 未发生。
-        let config = EngineProviderConfig {
-            base_url: "http://127.0.0.1:1".to_string(),
-            api_key: "k-test".to_string(),
-            model: "deepseek-v4-flash".to_string(),
-            endpoint: Endpoint::ChatCompletions,
-            stream: true,
-            extra: BTreeMap::new(),
-            provider_id: Some("deepseek".to_string()),
-            ..Default::default()
-        };
+    let _fixture = install_live_fixture();
+    // 夹具字典 High/Low/Max + 越档 medium + 死端口 URL：
+    // 错误必须在请求发送前由拒绝校验返回，证明网络 I/O 未发生。
+    let config = EngineProviderConfig {
+        base_url: "http://127.0.0.1:1".to_string(),
+        api_key: "k-test".to_string(),
+        model: "deepseek-v4-flash".to_string(),
+        endpoint: Endpoint::ChatCompletions,
+        stream: true,
+        extra: BTreeMap::new(),
+        provider_id: Some("deepseek".to_string()),
+        ..Default::default()
+    };
     let call = HttpProviderCall::new(reqwest::Client::new(), config);
     let messages = vec![user_msg("你好")];
     let request = single_user_request(&messages, Some(LoopEffort::Medium));
@@ -794,7 +792,8 @@ fn omitted_effort_passes_validation_and_omits_thinking_param() {
     );
     // 请求体：None → 不写入 reasoning_effort（省略即不发送思考参数）。
     let messages = vec![user_msg("你好")];
-    let body = call.request_body_for_auto(WireProtocol::Chat, &single_user_request(&messages, None));
+    let body =
+        call.request_body_for_auto(WireProtocol::Chat, &single_user_request(&messages, None));
     assert!(
         body.get("reasoning_effort").is_none(),
         "省略档位不应发送思考参数：{body}"

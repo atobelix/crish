@@ -176,7 +176,8 @@ pub async fn probe_ping_core(req: ProbePingRequest) -> ProbePingResult {
     if let Err(error) = reference.validate() {
         return failure(error);
     }
-    let resolved = match crate::config::blocking(move |store| store.resolve_model(&reference)).await {
+    let resolved = match crate::config::blocking(move |store| store.resolve_model(&reference)).await
+    {
         Ok(resolved) => resolved,
         Err(error) => return failure(error.message),
     };

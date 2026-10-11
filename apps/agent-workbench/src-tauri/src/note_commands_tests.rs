@@ -14,17 +14,15 @@ use agent_tools::note_backend::{NoteApplyMdRequest, NoteApplyMode, NoteQueryBloc
 use conex_note_runtime::{HYDRATE_PATH_DOC_SESSION, HYDRATE_PATH_QUERY_BLOCKS};
 use serde_json::json;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Mutex, MutexGuard};
+use std::sync::MutexGuard;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::note_runtime;
 
 static COUNTER: AtomicU64 = AtomicU64::new(0);
-/// 全局 note_runtime 安装槽进程级共享；本模块测串行避免互踩。
-static TEST_LOCK: Mutex<()> = Mutex::new(());
 
 fn temp_install() -> (MutexGuard<'static, ()>, std::path::PathBuf) {
-    let guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let guard = note_runtime::lock_for_test();
     let n = COUNTER.fetch_add(1, Ordering::SeqCst);
     let dir = std::env::temp_dir().join(format!(
         "workbench-note-cmd-{}-{}-{}",
@@ -591,6 +589,7 @@ async fn note_undo_and_redo_text_ipc_roundtrip() {
     .await
     .unwrap();
     assert_eq!(apply_res["ok"], true, "apply_res failed: {apply_res}");
+    assert_eq!(apply_res["doc_id"], "undo-ipc-doc");
 
     // 2. 触发 note_undo_text
     let undo_res = note_undo_text(NoteUndoTextArgs {
@@ -599,7 +598,10 @@ async fn note_undo_and_redo_text_ipc_roundtrip() {
     })
     .await
     .unwrap();
-    assert_eq!(undo_res["ok"], true);
+    assert_eq!(undo_res["ok"], true, "undo_res failed: {undo_res}");
+    assert_eq!(undo_res["doc_id"], "undo-ipc-doc");
+    assert_eq!(undo_res["block_id"], block_id);
+    assert_eq!(undo_res["text"], "first content");
     assert_eq!(undo_res["is_noop"], false);
 
     // 3. 触发 note_redo_text
@@ -609,8 +611,27 @@ async fn note_undo_and_redo_text_ipc_roundtrip() {
     })
     .await
     .unwrap();
-    assert_eq!(redo_res["ok"], true);
+    assert_eq!(redo_res["ok"], true, "redo_res failed: {redo_res}");
+    assert_eq!(redo_res["doc_id"], "undo-ipc-doc");
+    assert_eq!(redo_res["block_id"], block_id);
+    assert_eq!(redo_res["text"], "Extra Text first content");
     assert_eq!(redo_res["is_noop"], false);
+
+    let read_res = note_document_hydrate(NoteHydrateDocumentArgs {
+        doc_id: "undo-ipc-doc".into(),
+        limit: None,
+        prefer_query: None,
+    })
+    .await
+    .unwrap();
+    assert_eq!(read_res["ok"], true, "read_res failed: {read_res}");
+    assert_eq!(read_res["doc_id"], "undo-ipc-doc");
+    let read_blocks = read_res["blocks"].as_array().expect("blocks array");
+    let read_block = read_blocks
+        .iter()
+        .find(|block| block["id"] == block_id)
+        .expect("the exact edited block must remain readable");
+    assert_eq!(read_block["text"], "Extra Text first content");
 
     let _ = std::fs::remove_dir_all(dir);
 }

@@ -164,7 +164,10 @@ mod tests {
     fn reasoning_effort_parse_covers_all_levels_and_fails_open() {
         assert_eq!(parse_reasoning_effort("off"), Some(ReasoningEffort::Off));
         assert_eq!(parse_reasoning_effort("none"), Some(ReasoningEffort::Off));
-        assert_eq!(parse_reasoning_effort("disabled"), Some(ReasoningEffort::Off));
+        assert_eq!(
+            parse_reasoning_effort("disabled"),
+            Some(ReasoningEffort::Off)
+        );
         assert_eq!(parse_reasoning_effort("auto"), Some(ReasoningEffort::Auto));
         assert_eq!(
             parse_reasoning_effort("minimal"),
@@ -329,9 +332,7 @@ pub(crate) async fn run_task_impl(
     let context_window = options.context_window;
     // plans/04 §4.2：多模态 content 桥（hasImages 时把 OpenAI 形 parts 写入
     // 用户消息 metadata.contentParts；先于下方 SessionLoopOptions 遮蔽取出）
-    let content_parts = options
-        .content
-        .filter(|_| options.has_images == Some(true));
+    let content_parts = options.content.filter(|_| options.has_images == Some(true));
     // T-D-13：子代理 run 装配配置（None = 普通 run，装配行为与现状一致）
     let subagent_config = options.subagent_config;
     // T-D-14：父 run 归属（审批裁决者路由 + spawner 侧 run 注册表——先于
@@ -714,19 +715,18 @@ pub(crate) async fn run_task_impl(
     //   键在收口 [Self::update_provider_fail_streak]（唯一写方），本装配
     //   点只读注入——天然跨 run（D1 §3.2.3 装配时序）。
     let run_policy = state.run_policy();
-    let retry_backoff = state
-        .retry_backoff_config(&session_id)
-        .or_else(|| {
-            run_policy.as_ref().and_then(|policy| {
-                policy.retry_backoff.as_ref().map(|backoff| {
-                    session_loop::r#loop::RetryBackoffConfig {
-                        base_ms: backoff.base_ms,
-                        max_ms: backoff.max_ms,
-                        total_budget_ms: backoff.total_budget_ms,
-                    }
+    let retry_backoff = state.retry_backoff_config(&session_id).or_else(|| {
+        run_policy.as_ref().and_then(|policy| {
+            policy
+                .retry_backoff
+                .as_ref()
+                .map(|backoff| session_loop::r#loop::RetryBackoffConfig {
+                    base_ms: backoff.base_ms,
+                    max_ms: backoff.max_ms,
+                    total_budget_ms: backoff.total_budget_ms,
                 })
-            })
-        });
+        })
+    });
     let provider_fail_streak = state.provider_fail_streak_count(&session_id).await;
 
     let options = {
@@ -778,9 +778,7 @@ pub(crate) async fn run_task_impl(
         // `..Default::default()` 隐式继承（旧路径 None）；常量来自 D0
         // conex-shared::perf_budget::TOOL_OUTPUT_BUDGET_BYTES_DEFAULT（64KiB
         // 事件载荷预算）。测试注入 None 仍合法（工具级 200KB 覆盖保留）。
-        output_budget_bytes: Some(
-            conex_shared::perf_budget::TOOL_OUTPUT_BUDGET_BYTES_DEFAULT,
-        ),
+        output_budget_bytes: Some(conex_shared::perf_budget::TOOL_OUTPUT_BUDGET_BYTES_DEFAULT),
         ..ToolBatchOptions::default()
     };
     // 用户消息（clientMessageId 透传，03 §5.3-4；多模态 content 桥——

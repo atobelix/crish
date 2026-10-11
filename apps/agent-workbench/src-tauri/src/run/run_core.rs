@@ -560,17 +560,12 @@ impl CoreRunState {
     }
 
     /// 全局运行策略注入（main.rs 启动读 settings.json；测试内存注入）。
-    pub(crate) fn set_run_policy(
-        &self,
-        policy: Option<crate::config::run_policy::RunPolicy>,
-    ) {
+    pub(crate) fn set_run_policy(&self, policy: Option<crate::config::run_policy::RunPolicy>) {
         *self.run_policy.lock().unwrap_or_else(|e| e.into_inner()) = policy;
     }
 
     /// 全局运行策略读取（None = 未配置，装配点落缺省）。
-    pub(crate) fn run_policy(
-        &self,
-    ) -> Option<crate::config::run_policy::RunPolicy> {
+    pub(crate) fn run_policy(&self) -> Option<crate::config::run_policy::RunPolicy> {
         self.run_policy
             .lock()
             .unwrap_or_else(|e| e.into_inner())
@@ -660,14 +655,11 @@ impl CoreRunState {
         };
         // plans/05 T5.2：取价 = live yaml（当前引擎生效配置的身份键精确命中）；
         // pricing None → RunUsage.cost None = 未定价
-        let pricing = self
-            .engine
-            .provider_config()
-            .and_then(|config| {
-                config.provider_id.as_deref().and_then(|provider_id| {
-                    crate::live_pricing::live_model_pricing(provider_id, &config.model)
-                })
-            });
+        let pricing = self.engine.provider_config().and_then(|config| {
+            config.provider_id.as_deref().and_then(|provider_id| {
+                crate::live_pricing::live_model_pricing(provider_id, &config.model)
+            })
+        });
         RunUsage::from_run_cache_stats(stats, pricing.as_ref())
     }
 

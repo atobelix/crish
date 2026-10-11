@@ -187,7 +187,8 @@ pub fn reveal_for_second_launch<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
             if state.is_shown() {
                 let _ = window.unminimize();
                 let _ = window.set_focus();
-                let _ = window.request_user_attention(Some(tauri::UserAttentionType::Informational));
+                let _ =
+                    window.request_user_attention(Some(tauri::UserAttentionType::Informational));
             } else {
                 tracing::info!(
                     target: "window",
@@ -285,9 +286,7 @@ mod tests {
     #[tokio::test]
     async fn wait_db_ready_times_out() {
         let state = WindowHandshakeState::new();
-        let ok = state
-            .wait_db_ready(Duration::from_millis(30))
-            .await;
+        let ok = state.wait_db_ready(Duration::from_millis(30)).await;
         assert!(!ok, "未置位时应超时返回 false");
     }
 

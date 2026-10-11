@@ -915,11 +915,18 @@ fn context_window_assembles_into_budget_with_defaults() {
     assert_eq!(budget.safety_tokens, 4_096);
 }
 
+fn lock_live_catalog_for_test() -> std::sync::MutexGuard<'static, ()> {
+    crate::engine_provider::protocol::LIVE_CATALOG_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|poison| poison.into_inner())
+}
+
 /// DEEPCHECK-06 P0：预算入站解析（resolve_context_budget 装配分支）——
 /// 显式窗口优先；子代理 run（context_window 恒 None）按生效模型 catalog
 /// 窗口兜底；普通 run 无窗口 → None（向后兼容不钳制）
 #[test]
 fn resolve_context_budget_subagent_arm_uses_engine_catalog_window() {
+    let _live = lock_live_catalog_for_test();
     // live yaml 夹具：qwen2-5-omni-7b contextWindow 32000（plans/04 §2.4
     // 窗口只读 live，不读 bundled catalog）
     crate::engine_provider::protocol::reload_live_catalog_from_yaml_str(
@@ -1401,6 +1408,7 @@ async fn compaction_policy_preflight_triggers_compaction_in_full_run() {
 /// 真实触发（context-compression-start/end 事件落库到子代理会话）。
 #[tokio::test]
 async fn subagent_run_assembles_catalog_window_budget_and_preflight_compaction() {
+    let _live = lock_live_catalog_for_test();
     // live yaml 夹具：qwen2-5-omni-7b contextWindow 32000（窗口只读 live）
     crate::engine_provider::protocol::reload_live_catalog_from_yaml_str(
         r#"
@@ -1821,7 +1829,7 @@ async fn provider_apply_swaps_next_request_payload() {
         .manage(Arc::clone(&state))
         .build(tauri::test::mock_context(tauri::test::noop_assets()))
         .expect("mock app");
-    let st = app.state::<Arc<CoreRunState>>();
+    let _st = app.state::<Arc<CoreRunState>>();
 
     // 模拟前端 apply 新凭据（key/baseUrl/model 全换）：env 注入 sk-b + 重应用统一树
     std::env::set_var(TEST_ENV_KEY, "sk-b");
@@ -1887,7 +1895,7 @@ async fn provider_apply_refreshes_engine_provider_config() {
         .manage(Arc::clone(&state))
         .build(tauri::test::mock_context(tauri::test::noop_assets()))
         .expect("mock app");
-    let st = app.state::<Arc<CoreRunState>>();
+    let _st = app.state::<Arc<CoreRunState>>();
 
     // apply 新三件套 → 引擎生效配置必须同步刷新
     std::env::set_var(TEST_ENV_KEY, "sk-b");
@@ -1919,14 +1927,14 @@ async fn provider_apply_clearing_key_degrades_engine_ready() {
     isolate_config_store(&dir);
 
     // 旧配置 A：单 provider(p1)，key 经 env 注入 sk-a
-    let store = install_tree_models_store(&dir, "https://a.example/v1");
+    let _store = install_tree_models_store(&dir, "https://a.example/v1");
     let state = core_state_with_store(Arc::new(InMemoryStore::new()));
     assert!(state.engine.ready(), "写 key 后就绪");
     let app = tauri::test::mock_builder()
         .manage(Arc::clone(&state))
         .build(tauri::test::mock_context(tauri::test::noop_assets()))
         .expect("mock app");
-    let st = app.state::<Arc<CoreRunState>>();
+    let _st = app.state::<Arc<CoreRunState>>();
 
     // 清空 key（env 移除）：引擎必须降级未就绪（provider=None，不再用旧 key 发请求）
     std::env::remove_var(TEST_ENV_KEY);
@@ -2050,7 +2058,6 @@ async fn provider_apply_opencode_go_serves_preset_profile() {
 /// 切换后生效配置随之切换（对齐 C2 per-provider 语义）。
 #[tokio::test]
 async fn provider_apply_switches_profiles_independently() {
-    use tauri::Manager as _;
     let _lock = CONFIG_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let dir = temp_config_dir();
     isolate_config_store(&dir);
@@ -2095,7 +2102,6 @@ async fn provider_apply_switches_profiles_independently() {
 /// ≥2 提供方）——活跃 profile 与已配置 profile 并列，activeProfileId 暴露。
 #[tokio::test]
 async fn config_snapshot_exposes_multiple_providers() {
-    use tauri::Manager as _;
     let _lock = CONFIG_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let dir = temp_config_dir();
     isolate_config_store(&dir);
@@ -4561,6 +4567,7 @@ async fn goal_round_no_output_counts_streak() {
 /// spawn_blocking 异步落键——轮询窗口内未达则 panic）
 async fn wait_for_fail_streak(db: &LocalDb, expected: u32, window: Duration) -> ProviderFailStreak {
     let deadline = tokio::time::Instant::now() + window;
+    let mut last_persisted = None;
     loop {
         if let Some(raw) = db
             .get_session_meta(PROVIDER_FAIL_STREAK_KEY)
@@ -4570,10 +4577,11 @@ async fn wait_for_fail_streak(db: &LocalDb, expected: u32, window: Duration) -> 
             if streak.count == expected {
                 return streak;
             }
+            last_persisted = Some(raw);
         }
         assert!(
             tokio::time::Instant::now() < deadline,
-            "熔断键未在窗口内达 count={expected}"
+            "熔断键未在窗口内达 count={expected}；最后持久化值={last_persisted:?}"
         );
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
@@ -6099,16 +6107,19 @@ async fn circuit_breaker_streak_survives_restart_and_gates_new_run() {
     // 阶段 1：实例 A 失败 run → 收口自然写 count=1
     let db = {
         let (state, db, _emitter) = run_control_test_state(failing());
+        // 本用例验证跨实例 streak 与阶段 3 熔断闸；隔离 error-retry 自动续 run，
+        // 防止前一阶段的生产 launcher 在后续阶段改写同一持久化键。
+        state.set_resume_launcher(None);
         state.run_restore().await;
-    // 用户裁决：重试预算/上限可配置——注入快速策略防 30s 窗口被缺省 10 次重试拖穿
-    state.set_run_policy(Some(crate::config::run_policy::RunPolicy {
-        retry_backoff: Some(crate::config::run_policy::RetryBackoffPolicy {
-            base_ms: Some(1),
-            max_ms: Some(8),
-            total_budget_ms: Some(60_000),
-        }),
-        transient_retry_limit: Some(3),
-    }));
+        // 用户裁决：重试预算/上限可配置——注入快速策略防 30s 窗口被缺省 10 次重试拖穿
+        state.set_run_policy(Some(crate::config::run_policy::RunPolicy {
+            retry_backoff: Some(crate::config::run_policy::RetryBackoffPolicy {
+                base_ms: Some(1),
+                max_ms: Some(8),
+                total_budget_ms: Some(60_000),
+            }),
+            transient_retry_limit: Some(3),
+        }));
         run_task_impl(Arc::clone(&state), test_options("run-cb-r1", "s1", "任务"))
             .await
             .expect("run 发起成功");
@@ -6125,6 +6136,7 @@ async fn circuit_breaker_streak_survives_restart_and_gates_new_run() {
     // 失败 run → 收口读-改-写 count=2（跨实例计数链）
     let db = {
         let (state, db, _emitter) = run_control_test_state_on_db(failing(), db);
+        state.set_resume_launcher(None);
         state.run_restore().await;
         run_task_impl(Arc::clone(&state), test_options("run-cb-r2", "s1", "任务"))
             .await
@@ -6157,6 +6169,11 @@ async fn circuit_breaker_streak_survives_restart_and_gates_new_run() {
         .to_json(),
     )
     .expect("熔断键预置 count=6");
+    assert_eq!(
+        state.provider_fail_streak_count("s1").await,
+        Some(6),
+        "阶段 3 的旧时间戳配 window_ms=0 必须仍读作有效 count=6"
+    );
     state.run_restore().await;
     run_task_impl(Arc::clone(&state), test_options("run-cb-r3", "s1", "任务"))
         .await
@@ -6165,16 +6182,15 @@ async fn circuit_breaker_streak_survives_restart_and_gates_new_run() {
     // transient_retry 入口触发（首次请求失败之后），故 provider 必已调用
     // 1 次；等本阶段终态落库后 provider 调用链必然结束。旧「键值轮询」同步
     // 点已被实证推翻（上一阶段延迟收口会把 count 推到 7，让断言提前通过）。
-    let terminal =
-        wait_run_terminal_for_run(&db, "s1", "run-cb-r3", Duration::from_secs(30)).await;
+    let terminal = wait_run_terminal_for_run(&db, "s1", "run-cb-r3", Duration::from_secs(30)).await;
     assert_eq!(terminal, "failed", "熔断闸 fatal 收场");
-    let streak = wait_for_fail_streak(&db, 7, Duration::from_secs(30)).await;
-    assert_eq!(streak.count, 7, "熔断 fatal 收口计数继续 +1");
     assert_eq!(
         provider.call_count(),
         1,
         "熔断闸生效：跳过 run 内重试直接 fatal（provider 仅 1 次调用）"
     );
+    let streak = wait_for_fail_streak(&db, 7, Duration::from_secs(30)).await;
+    assert_eq!(streak.count, 7, "熔断 fatal 收口计数继续 +1");
 }
 
 /// D1 §3.1.4 纯解析：`provider_retry_backoff_ms` 键三形状（数组三值 /
@@ -6295,6 +6311,32 @@ async fn retry_backoff_run_policy_retries_fast_and_fatales() {
     wait_run_terminal(&db, "s1", Duration::from_secs(90)).await;
     let elapsed_ms = started.elapsed().as_millis() as u64;
     assert_eq!(provider.call_count(), 4, "策略 limit=3：3 次重试后 fatal");
+    let retry_attempts_and_delays = db
+        .query_events("s1", 0, None)
+        .expect("读取重试诊断事件")
+        .into_iter()
+        .filter(|event| event.event_type == "provider-diagnostic")
+        .filter_map(|event| {
+            let payload: serde_json::Value =
+                serde_json::from_str(&event.payload).expect("重试诊断载荷为合法 JSON");
+            let diagnostic = &payload["diagnostic"];
+            if diagnostic["phase"] != "retry" {
+                return None;
+            }
+            Some((
+                diagnostic["attempt"]
+                    .as_u64()
+                    .expect("重试诊断包含 attempt"),
+                diagnostic["elapsedMs"]
+                    .as_u64()
+                    .expect("重试诊断 elapsedMs 精确记录本次等待"),
+            ))
+        })
+        .collect::<Vec<_>>();
+    assert!(
+        retry_attempts_and_delays == [(1, 1), (2, 2), (3, 4)],
+        "baseMs=1 应依序记录 attempt/delay [(1,1),(2,2),(3,4)]，实际 {retry_attempts_and_delays:?}"
+    );
     assert!(
         elapsed_ms < 700,
         "baseMs=1 → 重试近零等待（实际 {elapsed_ms}ms，应 < 退避基数 750ms）"
@@ -6878,7 +6920,10 @@ async fn wait_agent_rows_terminal(db: &LocalDb, session_id: &str, expect: usize,
     loop {
         // 写侧落库（spawn_blocking）与查询竞速：表锁按未就绪重试
         let Ok(rows) = db.load_session_agents(session_id) else {
-            assert!(tokio::time::Instant::now() < deadline, "子代理行未在窗口内落库");
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "子代理行未在窗口内落库"
+            );
             tokio::time::sleep(Duration::from_millis(20)).await;
             continue;
         };
@@ -7967,7 +8012,6 @@ async fn wait_run_terminal_for_run(
     }
 }
 
-
 // ── 诊断（临时）3：goal 覆盖流程键演化 dump ──
 #[tokio::test]
 async fn diag_goal_overwrite_dump() {
@@ -8019,7 +8063,7 @@ async fn diag_goal_overwrite_dump() {
 /// 轮询 goal_state 键直至收口评估写回完成。收口 advance 经 spawn_blocking
 /// 异步写回（晚于 run-terminal 可见，竞速容忍）；窗口内 current_round 未
 /// 推进到 >=1 则 panic（写回丢失 = 真失败）。
-async fn wait_goal_round_advanced(db: &LocalDb, session_id: &str, window: Duration) {
+async fn wait_goal_round_advanced(db: &LocalDb, _session_id: &str, window: Duration) {
     let deadline = tokio::time::Instant::now() + window;
     loop {
         if let Ok(Some(raw)) = db.get_session_meta(orchestrator::goal_state::GOAL_STATE_KEY) {
@@ -8036,7 +8080,6 @@ async fn wait_goal_round_advanced(db: &LocalDb, session_id: &str, window: Durati
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
 }
-
 
 /// 事件桥载荷 → security-audit 操作列表（判定器审计断言用）
 fn audit_operations(emitter: &RecordingEmitter) -> Vec<String> {

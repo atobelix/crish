@@ -102,7 +102,7 @@ fn user_message_carries_client_message_id() {
 /// live yaml，端点字段不再参与决议）
 #[test]
 fn provider_url_respects_endpoint() {
-    install_live_fixture();
+    let _live = install_live_fixture();
     let chat = live_config("deepseek", "deepseek-chat");
     assert_eq!(
         provider_url(&chat),
@@ -191,7 +191,8 @@ fn test_provider_call(model: &str) -> HttpProviderCall {
 
 /// 安装 live yaml 综合夹具（plans/04：协议 / thinking / contextWindow / headers /
 /// cacheControlFormat 全部从 yaml 长出，禁止 URL / 前缀启发式）。
-fn install_live_fixture() {
+fn install_live_fixture() -> std::sync::MutexGuard<'static, ()> {
+    let live = lock_live_catalog();
     protocol::reload_live_catalog_from_yaml_str(
         r#"
 version: 2
@@ -224,6 +225,7 @@ providers:
 "#,
     )
     .expect("engine_tests live 夹具必须解析成功");
+    live
 }
 
 /// 指向 live 夹具的配置（provider_id = yaml providers 键）
@@ -307,7 +309,7 @@ fn build_context_passes_system_prompt_and_is_stable() {
 /// §1.2 #9）：DeepSeek → Require（键存在性，空串兜底）；其余 / 未命中 → Omit
 #[test]
 fn reasoning_content_mode_follows_vendor() {
-    install_live_fixture();
+    let _live = install_live_fixture();
     let deepseek = HttpProviderCall::new(
         reqwest::Client::new(),
         live_config("deepseek", "deepseek-chat"),
@@ -349,7 +351,7 @@ fn reasoning_content_mode_follows_vendor() {
 /// 未命中 / 无 provider_id → None（不臆造窗口）
 #[test]
 fn effective_context_window_resolves_from_bundled_catalog() {
-    install_live_fixture();
+    let _live = install_live_fixture();
     let deepseek = live_config("deepseek", "deepseek-v4-flash");
     assert_eq!(
         effective_context_window(&deepseek),
@@ -383,7 +385,7 @@ fn session_request<'a>(
 /// （请求体不含任何 cache 键，禁止 bundled_catalog + base_url 猜能力）
 #[test]
 fn request_options_wires_build_cache_policy() {
-    install_live_fixture();
+    let _live = install_live_fixture();
     let user = AgentMessage {
         id: "user-1".to_string(),
         role: AgentMessageRole::User,
@@ -399,10 +401,7 @@ fn request_options_wires_build_cache_policy() {
     let request = session_request(&messages, Some("ses-abc"));
 
     // acme-cache 声明 cacheControlFormat: anthropic → 显式断点机制
-    let acme = HttpProviderCall::new(
-        reqwest::Client::new(),
-        live_config("acme", "acme-cache"),
-    );
+    let acme = HttpProviderCall::new(reqwest::Client::new(), live_config("acme", "acme-cache"));
     let options = acme.request_options_auto(&request);
     let policy = options.cache.expect("yaml 声明应注入缓存策略");
     assert_eq!(policy.mechanism, CacheMechanism::Explicit);
@@ -430,7 +429,7 @@ fn request_options_wires_build_cache_policy() {
 /// 无条件 x-deepseek-harness-session-id 已删除；Authorization 恒在。
 #[test]
 fn request_headers_merges_affinity_header() {
-    install_live_fixture();
+    let _live = install_live_fixture();
     let user = AgentMessage {
         id: "user-1".to_string(),
         role: AgentMessageRole::User,
@@ -446,10 +445,7 @@ fn request_headers_merges_affinity_header() {
     let request = session_request(&messages, Some("ses-abc"));
 
     // acme 声明 x-acme-affinity → 随请求发出
-    let acme = HttpProviderCall::new(
-        reqwest::Client::new(),
-        live_config("acme", "acme-cache"),
-    );
+    let acme = HttpProviderCall::new(reqwest::Client::new(), live_config("acme", "acme-cache"));
     let options = acme.request_options_auto(&request);
     let headers = acme.request_headers(options.cache.as_ref());
     assert!(headers.iter().any(|(name, _)| name == "Authorization"));
@@ -591,7 +587,7 @@ providers:
 /// lookup 未命中 → fail-closed chat（禁止 URL / 目录 supports_responses 猜）。
 #[test]
 fn provider_url_gates_responses_by_catalog_support() {
-    install_live_fixture();
+    let _live = install_live_fixture();
     // v4-flash：yaml 模型级 protocol openai/responses → /v1/responses
     let flash = live_config("deepseek", "deepseek-v4-flash");
     assert_eq!(
@@ -623,6 +619,7 @@ fn provider_url_gates_responses_by_catalog_support() {
 /// 未收录模型 → false（保守）；未知厂商（Auto）→ true（保留现状）。
 #[test]
 fn responses_supported_follows_catalog_entry() {
+    let _live = install_live_fixture();
     assert!(responses_supported(&responses_config(
         "deepseek-v4-flash",
         Endpoint::Responses
@@ -661,6 +658,7 @@ fn responses_supported_follows_catalog_entry() {
 /// responses_endpoint_active = endpoint=Responses && 目录支持（三件套统一判定点）
 #[test]
 fn responses_endpoint_active_follows_catalog_and_endpoint() {
+    let _live = install_live_fixture();
     // v4-flash + responses 端点 → 生效
     assert!(responses_endpoint_active(&responses_config(
         "deepseek-v4-flash",
@@ -825,7 +823,7 @@ async fn responses_stream_end_to_end_over_mock_sse() {
         r#"data: {"type":"response.completed","response":{"status":"completed","usage":{"input_tokens":100,"output_tokens":20,"total_tokens":120,"input_tokens_details":{"cached_tokens":50}}}}"#,
     ];
     let server = ResponsesMockServer::start(frames).await;
-    install_live_fixture();
+    let _live = install_live_fixture();
     let config = EngineProviderConfig {
         base_url: server.base_url(),
         api_key: "k".to_string(),
@@ -1500,18 +1498,36 @@ fn sample_stats(warm_until_ms: Option<u64>, missed_tokens: u64) -> RunCacheStats
     }
 }
 
-/// T-40：装配缓存跟踪配置——vendor 从 live 灌槽取、TTL 走 live 优先
-/// 路由（live miss → bundled 回退）；无 live 槽位 → ttl 0（不猜厂商）
+/// T-40：装配缓存跟踪配置——provider 和 TTL 都来自 live 树；
+/// 已声明 TTL 精确透传，未声明或无 live 槽位均 fail-closed。
 #[test]
 fn cache_tracking_config_resolves_provider_model_ttl() {
-    install_live_fixture();
-    // vendor/provider_id 由 live 灌槽（load_provider_endpoint 同源）
+    let _live = lock_live_catalog();
+    protocol::reload_live_catalog_from_yaml_str(
+        r#"
+version: 2
+providers:
+  deepseek:
+    displayName: DeepSeek
+    baseUrl: "https://api.deepseek.com/v1"
+    models:
+      - id: deepseek-v4-flash
+        cacheTtl: 5m
+      - id: deepseek-chat
+"#,
+    )
+    .expect("cache tracking live 夹具必须解析成功");
+    // provider_id 和 cacheTtl 均由共享锁保护的 live 树明确提供。
     let deepseek = live_config("deepseek", "deepseek-v4-flash");
     let config = build_cache_tracking_config(&deepseek);
     assert_eq!(config.provider, "deepseek");
     assert_eq!(config.model, "deepseek-v4-flash");
-    // live 树投影无 cacheTtl 声明 → 回退 bundled（deepseek-v4-flash: "5m" → 300s）
+    // 已声明 cacheTtl: 5m → 300s。
     assert_eq!(config.ttl_seconds, 300, "DeepSeek 自动前缀缓存 TTL 300s");
+
+    let undeclared_ttl = live_config("deepseek", "deepseek-chat");
+    let config = build_cache_tracking_config(&undeclared_ttl);
+    assert_eq!(config.ttl_seconds, 0, "live 未声明 cacheTtl 时 fail-closed");
 
     // 无 live 槽位（vendor/provider_id 均 None）→ fail-closed 保守全关
     let gateway = EngineProviderConfig {
@@ -1600,8 +1616,7 @@ fn waste_alert_emitted_above_threshold_with_honest_attribution() {
         "低于阈值不打扰"
     );
     let over = sample_stats(Some(61_000), WARN_MISSED_TOKENS);
-    let event = waste_alert_event("s1", &over, true, Some(&pricing))
-        .expect("达到阈值必须预警");
+    let event = waste_alert_event("s1", &over, true, Some(&pricing)).expect("达到阈值必须预警");
     match event {
         AgentEvent::CacheWasteAlert {
             ref session_id,
@@ -1629,8 +1644,7 @@ fn waste_alert_emitted_above_threshold_with_honest_attribution() {
     assert!(value.get("missed_tokens").is_none(), "不得出现 snake_case");
     // 无定价（未知厂商）→ 金额 None，仅 token 阈值判定（诚实兜底不估算）
     let unknown = sample_stats(Some(61_000), WARN_MISSED_TOKENS);
-    let event = waste_alert_event("s1", &unknown, false, None)
-        .expect("token 阈值已超，也应预警");
+    let event = waste_alert_event("s1", &unknown, false, None).expect("token 阈值已超，也应预警");
     match event {
         AgentEvent::CacheWasteAlert {
             missed_cost_usd, ..
@@ -1658,8 +1672,7 @@ fn waste_alert_fires_on_cost_threshold_alone() {
     };
     // token 阈值以下（10_000 < 20_000）但金额超 $0.1 → 必须预警
     let stats = sample_stats(Some(61_000), 10_000);
-    let event = waste_alert_event("s1", &stats, false, Some(&pricing))
-        .expect("金额阈值单独触发");
+    let event = waste_alert_event("s1", &stats, false, Some(&pricing)).expect("金额阈值单独触发");
     match event {
         AgentEvent::CacheWasteAlert {
             missed_tokens,

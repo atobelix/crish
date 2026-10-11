@@ -532,7 +532,11 @@ pub(crate) fn settings_snapshot_value() -> Result<serde_json::Value, CoreError> 
                 resolved.provider.base_url.clone().unwrap_or_default(),
                 resolved.model_ref.model_id.clone(),
                 !secret.is_empty(),
-                if secret.is_empty() { String::new() } else { last4 },
+                if secret.is_empty() {
+                    String::new()
+                } else {
+                    last4
+                },
                 credential_mode.to_string(),
             )
         }
@@ -644,10 +648,7 @@ pub(crate) fn settings_update_impl(
     }
     if let Some(m) = model {
         if m != active.model_id {
-            let exists = provider
-                .models
-                .iter()
-                .any(|candidate| candidate.id == m);
+            let exists = provider.models.iter().any(|candidate| candidate.id == m);
             if !exists {
                 return Err(CoreError::invalid_input(format!(
                     "目标模型不存在：{m}（供应商：{}）",

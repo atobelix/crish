@@ -71,9 +71,9 @@ pub(crate) fn validate_reasoning_effort(
     let Some(map) = profile.thinking_map.as_ref() else {
         return Err(reject_to_classified(provider_effort, &[]));
     };
-    let in_whitelist = map.keys().any(|title| {
-        DialectEffort::from_title_case(title) == Some(provider_effort.into())
-    });
+    let in_whitelist = map
+        .keys()
+        .any(|title| DialectEffort::from_title_case(title) == Some(provider_effort.into()));
     if in_whitelist {
         Ok(())
     } else {

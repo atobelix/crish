@@ -343,9 +343,15 @@ mod tests {
         }
 
         let result = list_directory_at_root(&root, "").expect("list dir");
-        assert_eq!(result.items.len(), conex_shared::perf_budget::FS_LIST_DIRECTORY_DEFAULT_LIMIT);
+        assert_eq!(
+            result.items.len(),
+            conex_shared::perf_budget::FS_LIST_DIRECTORY_DEFAULT_LIMIT
+        );
         assert!(result.truncated);
-        assert_eq!(result.cursor, Some(conex_shared::perf_budget::FS_LIST_DIRECTORY_DEFAULT_LIMIT));
+        assert_eq!(
+            result.cursor,
+            Some(conex_shared::perf_budget::FS_LIST_DIRECTORY_DEFAULT_LIMIT)
+        );
         assert_eq!(
             result.total,
             conex_shared::perf_budget::FS_LIST_DIRECTORY_DEFAULT_LIMIT + 1
