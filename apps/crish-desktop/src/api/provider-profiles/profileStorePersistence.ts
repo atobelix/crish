@@ -30,14 +30,13 @@ import {
   setActiveModelId,
   sanitizeGhostActiveModel,
 } from './profileActiveSelection';
-import { normalizeProfile } from './profileKeySecret';
 
 const PROFILES_KEY = 'crish_provider_profiles_v1';
 
 export function saveProfiles(list: ProviderProfile[]) {
   localStorage.setItem(
     PROFILES_KEY,
-    JSON.stringify(list.map((p) => normalizeProfile(p)))
+    JSON.stringify(list.map((p) => normalizeProviderProfile(p)))
   );
   try {
     emitUiEvent('profiles-changed');
@@ -161,7 +160,7 @@ export function anyProfileHasModel(): boolean {
 
 export function upsertProfile(profile: ProviderProfile) {
   const list = loadProfiles();
-  const next = normalizeProfile(profile);
+  const next = normalizeProviderProfile(profile);
   const i = list.findIndex((p) => p.id === next.id);
   if (i >= 0) list[i] = next;
   else list.push(next);
@@ -177,7 +176,7 @@ export function createCustomProfile(input: {
 }): ProviderProfile {
   const name = input.name.trim() || '自定义服务商';
   const id = `custom-${Date.now().toString(36)}`;
-  const entry = normalizeProfile({
+  const entry = normalizeProviderProfile({
     id,
     name,
     // 中立：不预填任何官方/第三方 URL；由用户填写

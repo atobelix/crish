@@ -1,100 +1,154 @@
+import { permissionModeLabel } from '../../api/permissionModes';
+import { isContextStateCarrierMessage } from '../../store/storeAccess';
 import type {
   ContextStateMetadata,
   MessageContextInjection,
   SessionMessage,
 } from '../../store/types';
 
+const CONTEXT_STATE_FIELD_ORDER = [
+  'model',
+  'profile',
+  'permission',
+  'thinking',
+] as const;
+
+// S-4（FINAL-PLAN §2）：载体 / 注入判定唯一定义在 store/sessionInjectionMount，
+// 此处仅 re-export（经 storeAccess 门面），禁止再写平行实现（门禁 G-17）。
+export {
+  isContextStateCarrierMessage,
+  isContextStateInjection,
+} from '../../store/storeAccess';
+
 /**
- * 判定注入项是否为 context-state 纯状态微提示
+ * S-5：context-state 折叠（展示层唯一实现，列表间与消息内两处共用）。
+ *
+ * 输入为已按显示顺序排好、且已滤掉不可渲染项的序列；`isState(item)` 判定是否
+ * 为状态提示，`stateKey(item)` 给出用于「相邻相同则折叠」的键（null = 不比较
+ * 键，相邻状态项一律只保留最后一条）。非状态项会打断折叠：
+ * - 列表层：相邻的纯载体消息只保留最后一条（中间隔着用户气泡的不合并）；
+ * - 消息内：相邻的同文案状态注入只保留第一条（与原 MessageContent 语义一致）。
  */
-export function isContextStateInjection(
-  injection: Partial<MessageContextInjection> | undefined
-): boolean {
-  if (!injection) return false;
-  const meta = injection.metadata as Record<string, unknown> | undefined;
-  if (meta?.mode === 'context-state') {
-    return true;
+export function collapseContextState<T>(
+  items: readonly T[],
+  isState: (item: T) => boolean,
+  opts: { keep: 'last' | 'first-same-key'; stateKey?: (item: T) => string } = {
+    keep: 'last',
   }
-  const title = injection.title || '';
-  return title === '上下文状态切换' || title === '状态切换';
-}
-
-/**
- * 判定消息是否为纯上下文状态切换载体消息（PureCarrier）。
- */
-export function isContextStateCarrierMessage(
-  msg: SessionMessage | undefined | null
-): boolean {
-  if (!msg || msg.sender !== 'assistant') return false;
-
-  if ((msg.text || '').trim().length > 0) return false;
-  if (msg.toolCalls && msg.toolCalls.length > 0) return false;
-  if ((msg.thinking || '').trim().length > 0) return false;
-  if (msg.thinkingTurns && msg.thinkingTurns.length > 0) return false;
-  if (msg.images && msg.images.length > 0) return false;
-  if (msg.attachments && msg.attachments.length > 0) return false;
-  if (msg.errorDetail) return false;
-
-  const blocks = msg.blocks || [];
-  const injections = msg.injections || [];
-  const hasBlocks = blocks.length > 0;
-  const hasInjections = injections.length > 0;
-
-  if (!hasBlocks && !hasInjections) return false;
-  if (hasBlocks && !blocks.every((b) => b.type === 'context_injection')) {
-    return false;
-  }
-
-  const allInjectionsState =
-    !hasInjections || injections.every((inj) => isContextStateInjection(inj));
-
-  const allBlocksState =
-    !hasBlocks ||
-    blocks.every((b) => {
-      const inj = b.injection || injections.find((i) => i.id === b.id);
-      return isContextStateInjection(inj);
-    });
-
-  return allBlocksState && allInjectionsState;
-}
-
-/**
- * 过滤消息列表中连续堆叠的状态切换微提示消息
- */
-export function dedupeStateCarrierMessages<
-  T extends {
-    sender?: string;
-    text?: string;
-    toolCalls?: unknown[];
-    thinking?: string;
-    blocks?: Array<{ type: string; injection?: Partial<MessageContextInjection> }>;
-    injections?: Array<Partial<MessageContextInjection>>;
-  },
->(messages: T[]): T[] {
-  if (messages.length <= 1) return messages;
-  const result: T[] = [];
-  for (let i = 0; i < messages.length; i++) {
-    const current = messages[i];
-    if (!current) continue;
-    if (isContextStateCarrierMessage(current as unknown as SessionMessage)) {
-      const next = messages[i + 1];
-      if (next && isContextStateCarrierMessage(next as unknown as SessionMessage)) {
-        continue;
-      }
+): T[] {
+  if (items.length <= 1) return items.slice();
+  const out: T[] = [];
+  let prevWasState = false;
+  let prevKey: string | null = null;
+  for (const item of items) {
+    if (!isState(item)) {
+      out.push(item);
+      prevWasState = false;
+      prevKey = null;
+      continue;
     }
-    result.push(current);
+    if (opts.keep === 'last') {
+      if (prevWasState) out[out.length - 1] = item;
+      else out.push(item);
+    } else {
+      const key = opts.stateKey ? opts.stateKey(item) : '';
+      if (!(prevWasState && prevKey === key)) out.push(item);
+      prevKey = key;
+    }
+    prevWasState = true;
   }
-  return result;
+  return out;
 }
 
 /**
- * 格式化上下文状态切换在对话流中的展示文案（极简纯文字打样，零 emoji）。
+ * 过滤消息列表中连续堆叠的状态切换微提示消息（相邻载体只保留最后一条）。
+ * 委托 S-5 collapseContextState。
+ */
+export function dedupeStateCarrierMessages<T>(messages: T[]): T[] {
+  if (messages.length <= 1) return messages;
+  return collapseContextState(messages, (m) =>
+    isContextStateCarrierMessage(m as unknown as SessionMessage)
+  );
+}
+
+function readChangedKeys(metadata: Record<string, unknown>): string[] | null {
+  if (!Object.prototype.hasOwnProperty.call(metadata, 'changed')) return null;
+  const raw = metadata.changed;
+  if (!Array.isArray(raw)) return null;
+  return raw.filter((item): item is string => typeof item === 'string');
+}
+
+function fieldText(
+  key: string,
+  value: string,
+  withModel: boolean
+): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (key === 'model') return `已切换到 ${trimmed}`;
+  if (key === 'profile') {
+    return withModel ? `服务商 ${trimmed}` : `已切换到服务商 ${trimmed}`;
+  }
+  if (key === 'permission') return `权限 ${permissionModeLabel(trimmed)}`;
+  if (key === 'thinking') return `思考 ${trimmed}`;
+  return null;
+}
+
+/**
+ * 结构化字段 → `已切换到 ornith-1.5-9b · 思考 High`。
+ * 有 `changed` 时只渲染这些字段；没有 `changed`（历史消息）渲染全部已有字段。
+ * 无「系统 ·」前缀，无句号。权限值走 permissionModeLabel（full → 完全访问）。
+ */
+function formatStructuredContextState(metadata: Record<string, unknown>): string {
+  const changed = readChangedKeys(metadata);
+  const explicit = changed != null;
+  let keys: readonly string[] = explicit
+    ? CONTEXT_STATE_FIELD_ORDER.filter((key) => changed.includes(key))
+    : CONTEXT_STATE_FIELD_ORDER;
+  const modelValue = typeof metadata.model === 'string' ? metadata.model.trim() : '';
+  // 历史消息没有 changed：沿用「有模型就不单列服务商」
+  if (!explicit && modelValue) {
+    keys = keys.filter((key) => key !== 'profile');
+  }
+  const parts: string[] = [];
+  for (const key of keys) {
+    const raw = metadata[key];
+    if (typeof raw !== 'string') continue;
+    const part = fieldText(key, raw, Boolean(modelValue));
+    if (part) parts.push(part);
+  }
+  return parts.join(' · ');
+}
+
+/** 旧版纯文本回退，收成同一套短句（无「系统 ·」、无句号）。 */
+function formatLegacyContextStateText(raw: string): string {
+  let text = raw.trim();
+  if (!text) return '状态切换';
+  text = text.replace(/^\[系统上下文注入\s*[·\-_]\s*状态切换\]\s*/i, '').trim();
+  text = text.replace(/[(（](?:服务商|服务端)\s*[^)）]+[)）]\s*/g, '');
+  text = text.replace(/^系统\s*[·\-_]\s*/, '').trim();
+
+  const model = text.match(/(?:当前)?已切换到模型\s*([^\s。！？]+)/)?.[1];
+  const permission = text.match(/权限模式\s*[:：]\s*([^\s。]+)/)?.[1];
+  const thinking = text.match(/思考档位\s*[:：]\s*([^\s。]+)/)?.[1];
+  const parts: string[] = [];
+  if (model) parts.push(`已切换到 ${model}`);
+  if (permission) parts.push(`权限 ${permissionModeLabel(permission)}`);
+  if (thinking) parts.push(`思考 ${thinking}`);
+  if (parts.length > 0) return parts.join(' · ');
+
+  text = text.replace(/[。．.\s]+$/g, '').trim();
+  return text || '状态切换';
+}
+
+/**
+ * 格式化上下文状态切换在对话流中的展示文案（极简纯文字，零 emoji）。
  */
 export function formatContextStateDisplayText(
   input?: Partial<MessageContextInjection> | ContextStateMetadata | string,
   fallbackText?: string
 ): string {
-  let metadata: ContextStateMetadata | undefined;
+  let metadata: Record<string, unknown> | undefined;
   let fallback = fallbackText || '';
 
   if (typeof input === 'string') {
@@ -103,9 +157,9 @@ export function formatContextStateDisplayText(
     const inputObj = input as Record<string, unknown>;
     const nestedMeta = inputObj.metadata as Record<string, unknown> | undefined;
     if (inputObj.mode === 'context-state') {
-      metadata = inputObj as unknown as ContextStateMetadata;
+      metadata = inputObj;
     } else if (nestedMeta && nestedMeta.mode === 'context-state') {
-      metadata = nestedMeta as unknown as ContextStateMetadata;
+      metadata = nestedMeta;
       fallback =
         fallback ||
         (typeof inputObj.summary === 'string' ? inputObj.summary : '') ||
@@ -124,35 +178,10 @@ export function formatContextStateDisplayText(
   }
 
   if (metadata) {
-    const parts: string[] = [];
-    if (metadata.model) {
-      parts.push(`切换到${metadata.model}`);
-    } else if (metadata.profile) {
-      parts.push(`切换到服务商 ${metadata.profile}`);
-    }
-    if (metadata.permission) {
-      parts.push(`权限模式：${metadata.permission}`);
-    }
-    if (metadata.thinking) {
-      parts.push(`思考档位：${metadata.thinking}`);
-    }
-    if (parts.length > 0) {
-      return `系统 · ${parts.join('。 ')}。`;
-    }
+    const structured = formatStructuredContextState(metadata);
+    if (structured) return structured;
   }
 
-  if (!fallback) return '系统 · 状态切换';
-
-  let text = fallback.trim();
-  text = text.replace(/^\[系统上下文注入\s*[·\-_]\s*状态切换\]\s*/i, '').trim();
-  text = text.replace(/[(（](?:服务商|服务端)\s*[^)）]+[)）]\s*/g, '');
-  text = text.replace(/(?:当前)?已切换到模型\s*/g, '切换到');
-  text = text.replace(/\s+([。！？:：])/g, '$1');
-  text = text.replace(/权限模式\s*[:：]\s*/g, '权限模式：');
-  text = text.replace(/思考档位\s*[:：]\s*/g, '思考档位：');
-  text = text.replace(/([。！？])\s*([^\s。！？])/g, '$1 $2');
-  text = text.replace(/^系统\s*[·\-_]\s*/, '');
-  text = `系统 · ${text.trim()}`;
-
-  return text;
+  if (!fallback) return '状态切换';
+  return formatLegacyContextStateText(fallback);
 }

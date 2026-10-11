@@ -7,7 +7,7 @@
 
 import { maskSecretLast4 } from '../../utils/redact';
 import { configSecretClear, configSecretSet } from './rustProfileStore';
-import { normalizeProviderProfile, profileHasKey } from './profileValidation';
+import { profileHasKey } from './profileValidation';
 import type { ProviderProfile } from './profileCatalog';
 import { saveProfiles, loadProfiles } from './profileStorePersistence';
 
@@ -131,11 +131,5 @@ export async function saveProfileKey(
 }
 
 /** @internal 兼容旧内部名（profileStorePersistence / activation 共用） */
-export function normalizeProfile(
-  p: Partial<ProviderProfile> & { id: string }
-): ProviderProfile {
-  return normalizeProviderProfile(p);
-}
-
 /** profileHasKey 透传（activation / setup-status 共用） */
 export { profileHasKey };

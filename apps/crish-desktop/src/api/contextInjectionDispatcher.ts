@@ -13,7 +13,11 @@
  *    写入目标会话时间线；
  * 4. 目标会话不存在 / 无可派发会话时告警并返回空串。
  */
-import { useSessionStore, getSessionById } from '../store/sessionStore';
+import {
+  addContextInjection,
+  getActiveSessionId,
+  getSessionById,
+} from './storeAccess';
 import type {
   ContextInjectionStatus,
   MessageContextInjection,
@@ -56,12 +60,12 @@ export class ContextInjectionDispatcher {
     targetSessionId: string,
     payload: ContextInjectionDispatchPayload
   ): string {
-    const store = useSessionStore.getState();
+    const activeSessionId = getActiveSessionId();
     const rawSid =
       typeof targetSessionId === 'string'
         ? targetSessionId.trim()
-        : store.activeSessionId;
-    const sid = rawSid || store.activeSessionId;
+        : activeSessionId;
+    const sid = rawSid || activeSessionId;
     if (!sid) {
       console.warn(
         '[ContextInjectionDispatcher] Drop injection: No active session'
@@ -83,7 +87,7 @@ export class ContextInjectionDispatcher {
       status: payload.status || 'injected',
     };
 
-    store.addContextInjection(sid, fullInjection);
+    addContextInjection(sid, fullInjection);
     return finalId;
   }
 }

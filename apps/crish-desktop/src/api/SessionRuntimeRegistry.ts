@@ -12,6 +12,7 @@
  */
 
 import type { FileDiff } from '../store/types';
+import type { ContextStateFieldSnapshot } from './contextStateDiff';
 import { emitUiEvent } from './uiEvents';
 
 export interface Attachment {
@@ -44,6 +45,11 @@ export interface SessionRuntimeState {
    * 仅用于发送比对：若用户切出去又切回相同状态，或连续多轮未换模型，则不弹出居中切换提示。
    */
   lastSentContextSignature?: string | null;
+  /**
+   * 与文本签名并列的结构化快照（仅运行时）。注入时用它做字段差分，
+   * 只把变化字段写入 context-state metadata。不进 yaml / SessionState。
+   */
+  lastSentContextSnapshot?: ContextStateFieldSnapshot | null;
 }
 
 class SessionRuntimeRegistry {
@@ -100,6 +106,7 @@ class SessionRuntimeRegistry {
       state.fileCompareModes = {};
       state.thinkingTitle = null;
       state.lastSentContextSignature = null;
+      state.lastSentContextSnapshot = null;
     }
     this.states.delete(sessionId);
     this.refCounts.delete(sessionId);
@@ -237,6 +244,29 @@ export function getLastSentContextSignature(sessionId: string): string | null {
   if (!sessionId) return null;
   if (!sessionRuntimeRegistry.exists(sessionId)) return null;
   return sessionRuntimeRegistry.get(sessionId).lastSentContextSignature ?? null;
+}
+
+/**
+ * 记录本会话上一轮真实发送时的结构化上下文快照。只碰 runtime。
+ */
+export function setLastSentContextSnapshot(
+  sessionId: string,
+  snapshot: ContextStateFieldSnapshot | null,
+): void {
+  if (!sessionId) return;
+  sessionRuntimeRegistry.save(sessionId, { lastSentContextSnapshot: snapshot });
+}
+
+/**
+ * 读取结构化上下文快照。未记录返回 null（视为该会话尚未注入过）。
+ * 只读已有槽，不因查询新建会话。
+ */
+export function getLastSentContextSnapshot(
+  sessionId: string,
+): ContextStateFieldSnapshot | null {
+  if (!sessionId) return null;
+  if (!sessionRuntimeRegistry.exists(sessionId)) return null;
+  return sessionRuntimeRegistry.get(sessionId).lastSentContextSnapshot ?? null;
 }
 
 // ── 跨会话、按模型持久化的思考档位（localStorage） ───────────────────────────

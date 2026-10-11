@@ -41,9 +41,7 @@ describe('contextStateUtils', () => {
       },
     } as Partial<MessageContextInjection>);
 
-    expect(text).toBe(
-      '系统 · 切换到deepseek-chat。 权限模式：ask。 思考档位：high。'
-    );
+    expect(text).toBe('已切换到 deepseek-chat · 权限 需确认 · 思考 high');
     // Strict assertion: zero emoji in output
     expect(/[\u{1F300}-\u{1F9FF}]/u.test(text)).toBe(false);
   });
@@ -53,7 +51,7 @@ describe('contextStateUtils', () => {
       undefined,
       '[系统上下文注入 · 状态切换] 当前已切换到模型 deepseek-chat。 权限模式: full'
     );
-    expect(text).toBe('系统 · 切换到deepseek-chat。 权限模式：full');
+    expect(text).toBe('已切换到 deepseek-chat · 权限 完全访问');
     expect(/[\u{1F300}-\u{1F9FF}]/u.test(text)).toBe(false);
   });
 
@@ -103,5 +101,33 @@ describe('contextStateUtils', () => {
     expect(res).toHaveLength(2);
     expect(res[0].id).toBe('m2');
     expect(res[1].id).toBe('m3');
+  });
+
+  it('formatContextStateDisplayText shows only changed fields, joined without a trailing period', () => {
+    const text = formatContextStateDisplayText({
+      id: 'inj-changed',
+      metadata: {
+        mode: 'context-state',
+        model: 'ornith-1.5-9b',
+        permission: 'full',
+        thinking: 'High',
+        changed: ['model', 'thinking'],
+      },
+    } as Partial<MessageContextInjection>);
+
+    expect(text).toBe('已切换到 ornith-1.5-9b · 思考 High');
+    expect(text.startsWith('系统')).toBe(false);
+    expect(text.endsWith('。')).toBe(false);
+  });
+
+  it('formatContextStateDisplayText maps permission full to 完全访问 via the shared label', () => {
+    const text = formatContextStateDisplayText({
+      metadata: {
+        mode: 'context-state',
+        permission: 'full',
+        changed: ['permission'],
+      },
+    } as Partial<MessageContextInjection>);
+    expect(text).toBe('权限 完全访问');
   });
 });

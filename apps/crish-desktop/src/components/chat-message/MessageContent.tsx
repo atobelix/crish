@@ -13,6 +13,7 @@ import { stripThoughtPlaceholders } from '../../api/markdownRenderLite';
 import { Priority } from '../../workers';
 import { StreamingMarkdownView } from '../chat-message-row/StreamingMarkdownView';
 import {
+  collapseContextState,
   isContextStateInjection,
   formatContextStateDisplayText,
 } from './contextStateUtils';
@@ -23,8 +24,7 @@ import {
   subscribeMessageProcessExpansion,
   setMessageProcessExpanded,
 } from './searchExpandBridge';
-import { useSessionRuntimeStatusStore } from '../../store/sessionRuntimeStatusStore';
-import { useSessionStore } from '../../store/sessionStore';
+import { useSessionRuntimeStatus, useSessionStore } from '../../store/storeAccess';
 
 import { ProcessItemRenderer } from './ProcessItemRenderer';
 import { logInternalError } from '../../api/userFacingErrors';
@@ -88,9 +88,7 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
 
     const sessionId = useSessionStore((s) => s.activeSessionId) || '';
     // 单轨收敛 §2.2：运行时状态机 retrying 相位（唯一数据源）
-    const runtimeStatus = useSessionRuntimeStatusStore(
-      useCallback((s) => s.statusBySession[sessionId], [sessionId])
-    );
+    const runtimeStatus = useSessionRuntimeStatus(sessionId);
 
     const isLiveTurn = Boolean(msg.status === 'processing' || isThinkingMsg);
 
@@ -174,27 +172,20 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
       prevStreamingRef.current = streaming;
     }
 
-    // 单轨交错线性时间线：去重连续的上下文状态提示，严格保持原生时序
-    const linearItems = useMemo(() => {
-      const deduped: AssistantTimelineItem[] = [];
-      let lastStateText = '';
-      for (const item of timeline) {
-        if (
-          item.kind === 'injection' &&
-          isContextStateInjection(item.injection)
-        ) {
-          const currentText = formatContextStateDisplayText(item.injection);
-          if (currentText === lastStateText) {
-            continue;
+    // 单轨交错线性时间线：相邻同文案的上下文状态提示只留一条（S-5 唯一折叠实现）
+    const linearItems = useMemo(
+      () =>
+        collapseContextState(
+          timeline,
+          (item) => item.kind === 'injection' && isContextStateInjection(item.injection),
+          {
+            keep: 'first-same-key',
+            stateKey: (item) =>
+              item.kind === 'injection' ? formatContextStateDisplayText(item.injection) : '',
           }
-          lastStateText = currentText;
-        } else {
-          lastStateText = '';
-        }
-        deduped.push(item);
-      }
-      return deduped;
-    }, [timeline]);
+        ),
+      [timeline]
+    );
 
     // ── 分段唯一权威：`partitionTimelineSegments`（四铁律裁决） ──
     const hasStreamText = Boolean(streamText != null && streamText.length > 0);

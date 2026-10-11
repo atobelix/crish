@@ -9,7 +9,8 @@
   min-height: 20px;
   max-height: 20px;
   padding: 0;
-  margin: var(--space-1, 4px) 0;
+  /* 行距统一由 .rowCarrier 的 --chat-row-gap-compact 承担（P2-a），此处不再叠加 margin */
+  margin: 0;
   background: transparent;
   border: none;
   box-shadow: none;

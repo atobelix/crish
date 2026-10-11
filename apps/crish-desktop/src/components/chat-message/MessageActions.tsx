@@ -30,7 +30,7 @@ export interface MessageActionsActions {
   onFillFollowUp?: ((prompt: string) => void) | undefined;
   onSendFollowUp?: ((prompt: string) => void) | undefined;
   onDismissFollowUp?: ((msgId: string) => void) | undefined;
-  onOpenDiff: (diff: FileDiff) => void;
+  onOpenDiff?: ((diff: FileDiff) => void) | undefined;
   onOpenDiffPanel?: (() => void) | undefined;
   onRetract?: (() => void) | undefined;
 }

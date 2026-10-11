@@ -12,6 +12,8 @@ vi.mock('../../api/markdownRenderAsync', () => ({
     html: markdown ? `<p>${markdown}</p>` : '',
     loading: false,
   }),
+  useStreamingMarkdownHtml: (markdown: string) =>
+    markdown ? `<p>${markdown}</p>` : '',
   parseMarkdownToHtmlAsync: vi.fn(async (m: string) => `<p>${m}</p>`),
 }));
 
