@@ -18,22 +18,13 @@ import { nowIsoTimestamp } from '../api/sessionTime';
  */
 export function triggerSessionMessageHydrateIfNeeded(
   sessionId: string,
-  get?: SessionStoreGet,
-  set?: SessionImmerSet
+  get: SessionStoreGet,
+  set: SessionImmerSet
 ): void {
   if (!sessionId || isPendingDraft(sessionId)) return;
 
-  const resolveGet = async () => {
-    if (get) return get();
-    const { useSessionStore } = await import('./sessionStore');
-    return useSessionStore.getState();
-  };
-
-  const resolveSet = async () => {
-    if (set) return set;
-    const { useSessionStore } = await import('./sessionStore');
-    return useSessionStore.setState;
-  };
+  const resolveGet = async () => get();
+  const resolveSet = async () => set;
 
   void resolveGet().then((state) => {
     const sess = getSessionById(state, sessionId);

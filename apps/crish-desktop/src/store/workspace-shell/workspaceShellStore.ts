@@ -22,10 +22,8 @@ import {
   activateWorkspaceForSessionFolder,
 } from '../../api/projectStore';
 import { isPendingDraft, mintDraftSessionId } from '../draftSession';
-import {
-  draftFolderRegistry,
-  resolveMostActiveProjectFolder,
-} from '../draft-routing';
+import { draftFolderRegistry } from '../draft-routing/draftFolderRegistry';
+import { resolveMostActiveProjectFolder } from '../draft-routing/draftProjectResolver';
 import { useSessionStore } from '../sessionStore';
 import { useLayoutStore } from '../layoutStore';
 import { currentWorkspaceFolderKey } from '../../api/workspaceChromeTabs';

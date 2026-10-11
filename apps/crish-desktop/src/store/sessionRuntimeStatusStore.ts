@@ -40,7 +40,11 @@ export interface RuntimeRetryInfo {
 /** 失败轮次定位（重试按钮原位重发所需的最小信息） */
 export interface FailedTurnRef {
   userMsgId: string;
-  assistantMsgId: string;
+  /**
+   * 失败轮次的助手节点；缺省 = 该轮没有助手节点（例如串行守卫排队重试用尽：
+   * 占位已撤回），重试时只按 userMsgId 原位重发。
+   */
+  assistantMsgId?: string;
 }
 
 export type SessionRuntimeStatus =

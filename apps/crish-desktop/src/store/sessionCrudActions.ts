@@ -7,12 +7,10 @@ import {
 } from '../api/sessionTitle';
 import { nowIsoTimestamp } from '../api/sessionTime';
 import type { SessionImportMeta, SessionState } from './types';
-import type { MessageContextInjection } from './types';
 import {
   deleteSessionFromIndexed,
   getSessionById,
   getSessionForWrite,
-  rebindSessionById,
   reindexSessionsById,
 } from './sessionIndex';
 import { clearMessageSnapshots } from './messageSnapshotsBridge';
@@ -44,14 +42,11 @@ import {
 // 批量状态 actions（setSessions / patchSession / clearSessionMessages）从子模块导入
 import { createSessionStateActions } from './sessionStateActions';
 import { triggerSessionMessageHydrateIfNeeded } from './sessionActivateHydrate';
+import { findInactiveHydratedSessionIdsToEvict } from './sessionMessageEviction';
+import { evictSessionMessagesInState } from './sessionStateActions';
+import { SESSION_HYDRATE_KEEP_K } from '../api/perfBudgets';
 // 可见注入卡片挂载辅助纯函数（addContextInjection 复用，见 sessionInjectionMount.ts）
-import {
-  appendInjectionToMessage,
-  findInjectionMountTarget,
-  isContextStateCarrierMessage,
-  isContextStateInjection,
-  makeInjectionCarrierMessage,
-} from './sessionInjectionMount';
+import { createSessionInjectionActions } from './sessionInjectionActions';
 
 export function createSessionCrudActions<T extends SessionStoreSlice>(
   set: SessionImmerSet<T>,
@@ -67,6 +62,7 @@ export function createSessionCrudActions<T extends SessionStoreSlice>(
   | 'clearDraft'
   | 'commitDraftIfNeeded'
   | 'renameSession'
+  | 'applyGeneratedSessionTitle'
   | 'createSession'
   | 'deleteSession'
   | 'addContextInjection'
@@ -169,15 +165,20 @@ export function createSessionCrudActions<T extends SessionStoreSlice>(
         });
         return;
       }
-      // D5：切换成功后异步软驱逐非活跃已水合消息（动态 import 防 store 环依赖）
+      // D5：切换成功后在 microtask 中重新读取状态并软驱逐非活跃已水合消息。
       queueMicrotask(() => {
-        void import('../api/session-persistence/sessionMessageEvict')
-          .then((m) => {
-            m.evictInactiveHydratedSessionsWithGuards(nextId, new Set());
-          })
-          .catch(() => {
-            /* 驱逐失败不影响切换 */
-          });
+        const state = get();
+        const evictedSessionIds = findInactiveHydratedSessionIdsToEvict(
+          nextId,
+          new Set(),
+          state.sessions || [],
+          state.sessionsById || {},
+          SESSION_HYDRATE_KEEP_K
+        );
+        if (evictedSessionIds.length === 0) return;
+        set((current) => {
+          evictSessionMessagesInState(current, evictedSessionIds);
+        });
       });
       if (!isDemoMode()) {
         const sess = getSessionById(get(), nextId);
@@ -218,8 +219,20 @@ export function createSessionCrudActions<T extends SessionStoreSlice>(
         if (!sess) return;
         const next = normalizeWritableSessionTitle(title);
         if (!next) return;
-        if (sess.title === next) return;
+        if (sess.title === next && sess.titleSource === 'user') return;
         sess.title = next;
+        sess.titleSource = 'user';
+        state.sessionsById[sessionId] = sess;
+      }),
+
+    applyGeneratedSessionTitle: (sessionId: string, title: string) =>
+      set((state) => {
+        const sess = getSessionForWrite(state, sessionId);
+        if (!sess || sess.titleSource === 'user') return;
+        const next = normalizeWritableSessionTitle(title);
+        if (!next) return;
+        sess.title = next;
+        sess.titleSource = 'auto';
         state.sessionsById[sessionId] = sess;
       }),
 
@@ -394,85 +407,6 @@ export function createSessionCrudActions<T extends SessionStoreSlice>(
       return removed;
     },
 
-    /**
-     * 向目标会话时间线写入一条可见上下文注入卡片。
-     *
-     * 挂载策略（findInjectionMountTarget）：优先写入「最新可挂载消息」——
-     * 进行中的助手消息或空正文注入载体消息；无任何可挂载消息时创建
-     * sender='assistant' 的载体消息（makeInjectionCarrierMessage）。
-     *
-     * 防御：空 targetSessionId 拒绝并 console.warn；injection 缺 id 拒绝；
-     * 目标会话不存在时静默 no-op（与 addMessage 对缺失会话的语义一致）。
-     * 写卡动作单一路径：外部一律经 contextInjectionDispatcher 调用本 action。
-     */
-    addContextInjection: (
-      targetSessionId: string,
-      injection: MessageContextInjection
-    ) => {
-      const sessionId =
-        typeof targetSessionId === 'string' ? targetSessionId.trim() : '';
-      if (!sessionId) {
-        console.warn(
-          '[addContextInjection] 拒绝写入：targetSessionId 为空'
-        );
-        return;
-      }
-      if (!injection || !injection.id) {
-        console.warn(
-          '[addContextInjection] 拒绝写入：injection 缺少 id'
-        );
-        return;
-      }
-      set((state) => {
-        const sess = getSessionForWrite(state, sessionId);
-        if (!sess) return;
-        if (!sess.messages) sess.messages = [];
-
-        const isState = isContextStateInjection(injection);
-        const lastMsg = sess.messages[sess.messages.length - 1];
-        const target = isState
-          ? isContextStateCarrierMessage(lastMsg)
-            ? lastMsg
-            : undefined
-          : findInjectionMountTarget(sess.messages);
-        if (target) {
-          appendInjectionToMessage(target, injection);
-          if (injection.metadata?.mode === 'context-state') {
-            // 清理紧邻目标之前的冗余纯 context-state 载体消息（彻底治愈历史连续堆叠病灶）
-            const targetIdx = sess.messages.indexOf(target);
-            if (targetIdx > 0) {
-              let pruneStart = targetIdx;
-              while (
-                pruneStart > 0 &&
-                isContextStateCarrierMessage(sess.messages[pruneStart - 1])
-              ) {
-                pruneStart--;
-              }
-              if (pruneStart < targetIdx) {
-                sess.messages.splice(pruneStart, targetIdx - pruneStart);
-              }
-            }
-          }
-        } else {
-          sess.messages.push(makeInjectionCarrierMessage(injection));
-        }
-        if (injection.metadata?.mode !== 'context-state') {
-          if (
-            typeof injection.timestamp === 'number' &&
-            Number.isFinite(injection.timestamp)
-          ) {
-            sess.timestamp = new Date(injection.timestamp).toISOString();
-          } else {
-            sess.timestamp = nowIsoTimestamp();
-          }
-          if (sess.timestampSource !== 'local') {
-            sess.timestampSource = 'local';
-          }
-        }
-        rebindSessionById(state, sessionId, sess);
-      });
-    },
-
     // setSessions / patchSession / clearSessionMessages 由 createSessionStateActions 提供（见 return 处合并）。
   };
 
@@ -480,8 +414,6 @@ export function createSessionCrudActions<T extends SessionStoreSlice>(
   const draftActions = createSessionDraftActions(set, get, actions.createSession);
   // 批量状态 actions（setSessions / patchSession / clearSessionMessages）
   const stateActions = createSessionStateActions(set);
-  return { ...actions, ...draftActions, ...stateActions };
+  const injectionActions = createSessionInjectionActions(set);
+  return { ...actions, ...draftActions, ...stateActions, ...injectionActions };
 }
-
-export { triggerSessionMessageHydrateIfNeeded } from './sessionActivateHydrate';
-

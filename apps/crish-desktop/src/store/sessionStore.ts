@@ -13,6 +13,9 @@ import { withPersist } from './middleware/withPersist';
 import { sidebarSessionsEqual } from './sessionListEqual';
 import type { SessionState, SessionAgent, SessionMessage } from './types';
 import { createSessionActions, type SessionActions } from './sessionActions';
+import {
+  triggerSessionMessageHydrateIfNeeded as triggerSessionMessageHydrate,
+} from './sessionActivateHydrate';
 import { getSessionById as getSessionByIdFromIndex } from './sessionIndex';
 import { sessionRuntimeRegistry } from '../api/SessionRuntimeRegistry';
 import {
@@ -296,7 +299,15 @@ export {
 
 export type { SessionActions } from './sessionActions';
 export type { SessionState, SessionAgent, SessionMessage } from './types';
-export { SessionCoordinator, deleteSessionCascade } from './SessionCoordinator';
+
+/** Store-backed public wrapper; the hydration helper itself remains store-agnostic. */
+export function triggerSessionMessageHydrateIfNeeded(sessionId: string): void {
+  triggerSessionMessageHydrate(
+    sessionId,
+    () => useSessionStore.getState(),
+    (recipe) => useSessionStore.setState(recipe)
+  );
+}
 
 // ── 运行时动态注册 ──────────────────────────────────────────────────────────
 

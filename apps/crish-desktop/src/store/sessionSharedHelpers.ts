@@ -1,7 +1,7 @@
 import {
   isDefaultSessionTitle,
   isEmptyShellSession,
-  maybeAutoTitleFromMessages,
+  autoTitleAssignment,
   pruneEmptyShellSessions,
   sanitizeSessionTitleText,
   truncateSessionTitle,
@@ -67,6 +67,7 @@ export function applyTitleIfDefault(
   rawTitle: string | null | undefined
 ): void {
   if (rawTitle == null) return;
+  if (sess.titleSource === 'user') return;
   if (!isDefaultSessionTitle(sess.title)) return;
   const next = normalizeWritableSessionTitle(rawTitle);
   if (next) sess.title = next;
@@ -142,15 +143,15 @@ export function pruneEmptyShellsInPlace(
 }
 
 export function maybeAutoTitleSession(
-  state: SessionsIndexed,
+  _state: SessionsIndexed,
   sess: SessionState
 ): void {
-  const existingTitles = state.sessions
-    .filter((s) => s.id !== sess.id)
-    .map((s) => s.title);
-  const auto = maybeAutoTitleFromMessages(sess.title, sess.messages, {
-    existingTitles,
-    excludeTitle: sess.title,
-  });
-  if (auto) sess.title = auto;
+  const assigned = autoTitleAssignment(
+    sess.title,
+    sess.messages,
+    sess.titleSource
+  );
+  if (!assigned) return;
+  sess.title = assigned.title;
+  sess.titleSource = assigned.titleSource;
 }

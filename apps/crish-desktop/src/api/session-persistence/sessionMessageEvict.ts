@@ -7,8 +7,11 @@
  * - 不写库：驱逐仅改内存；空数组不得触发 saveSessionBody(id,[])。
  * - 流式/激活会话永不驱逐。
  */
-import { needsEngineMessageHydrate } from '../../store/sessionSharedHelpers';
-import { useSessionStore } from '../../store/sessionStore';
+import {
+  findInactiveHydratedSessionIdsToEvict,
+  needsEngineMessageHydrate,
+  useSessionStore,
+} from '../../store/storeAccess';
 import type { SessionState } from '../../store/types';
 import { SESSION_HYDRATE_KEEP_K } from '../perfBudgets';
 
@@ -23,42 +26,13 @@ export function evictInactiveHydratedSessionsWithGuards(
   streamingSessionIds: ReadonlySet<string>,
 ): string[] {
   const store = useSessionStore.getState();
-  const sessions = store.sessions || [];
-  const byId = store.sessionsById || {};
-  const keepBudget = Math.max(1, SESSION_HYDRATE_KEEP_K);
-  const keepIds = new Set<string>([activeSessionId]);
-  for (const id of streamingSessionIds) keepIds.add(id);
-  for (const s of sessions) {
-    if (keepIds.size >= keepBudget) break;
-    const full = byId[s.id] ?? s;
-    if (
-      full.id &&
-      (full.messages?.length || 0) > 0 &&
-      full.hydratedFromEngine === true
-    ) {
-      keepIds.add(full.id);
-    }
-  }
-
-  const evicted: string[] = [];
-  for (const s of sessions) {
-    const full = byId[s.id] ?? s;
-    if (
-      !full.id ||
-      keepIds.has(full.id) ||
-      streamingSessionIds.has(full.id) ||
-      full.id === activeSessionId
-    ) {
-      continue;
-    }
-    if (
-      Array.isArray(full.messages) &&
-      full.messages.length > 0 &&
-      full.hydratedFromEngine === true
-    ) {
-      evicted.push(full.id);
-    }
-  }
+  const evicted = findInactiveHydratedSessionIdsToEvict(
+    activeSessionId,
+    streamingSessionIds,
+    store.sessions || [],
+    store.sessionsById || {},
+    SESSION_HYDRATE_KEEP_K
+  );
   if (evicted.length === 0) return [];
   store.evictSessionMessages(evicted);
   return evicted;

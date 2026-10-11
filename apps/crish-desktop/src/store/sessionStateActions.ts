@@ -50,7 +50,7 @@ export function createSessionStateActions<T extends SessionStoreSlice>(
             s.folder &&
             !state.folderOrder.includes(s.folder) &&
             state.folderOrder.length < MAX_FOLDERS
-          ) {
+) {
             state.folderOrder.push(s.folder);
           }
         }
@@ -105,18 +105,24 @@ export function createSessionStateActions<T extends SessionStoreSlice>(
      * 恢复为 ACT-502 懒壳：messages=[]、messagesHydrated=false、
      * **删除 hydratedFromEngine**——否则 needsEngineMessageHydrate 恒 false。
      * 仅改内存；不调用 saveSessionBody（空数组不得写库）。
-     */
+    */
     evictSessionMessages: (sessionIds: readonly string[]) =>
-      set((state) => {
-        for (const id of sessionIds) {
-          if (!id) continue;
-          const sess = getSessionForWrite(state, id);
-          if (!sess) continue;
-          sess.messages = [];
-          sess.messagesHydrated = false;
-          delete sess.hydratedFromEngine;
-          state.sessionsById[id] = sess;
-        }
-      }),
+      set((state) => evictSessionMessagesInState(state, sessionIds)),
   };
+}
+
+/** 在 Immer 更新中按 evictSessionMessages 的同一契约清除正文。 */
+export function evictSessionMessagesInState<T extends SessionStoreSlice>(
+  state: T,
+  sessionIds: readonly string[]
+): void {
+  for (const id of sessionIds) {
+    if (!id) continue;
+    const sess = getSessionForWrite(state, id);
+    if (!sess) continue;
+    sess.messages = [];
+    sess.messagesHydrated = false;
+    delete sess.hydratedFromEngine;
+    state.sessionsById[id] = sess;
+  }
 }
