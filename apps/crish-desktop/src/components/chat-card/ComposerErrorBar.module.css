@@ -10,7 +10,7 @@
   padding: 8px 12px;
   border: 1px solid var(--border-subtle);
   border-left: 3px solid var(--text-danger);
-  border-radius: var(--radius-md, 6px);
+  border-radius: var(--radius-md);
   background-color: var(--bg-elevated);
   color: var(--text-primary);
   font-size: var(--font-size-sm, 13px);

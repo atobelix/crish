@@ -58,7 +58,7 @@
 .icon {
   width: 24px;
   height: 24px;
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-sm);
   background: transparent;
   display: inline-flex;
   align-items: center;

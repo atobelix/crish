@@ -750,6 +750,16 @@ fn main() {
             if let Some(main_window) = app.get_webview_window(window_handshake::MAIN_WINDOW_LABEL) {
                 let backdrop = window_backdrop::apply_adaptive_backdrop(&main_window);
                 diagnostics.record("window_backdrop", true, Some(backdrop.as_str().into()));
+                // 材质跟随应用主题（而非系统明暗）：前端启动和切主题时发 THEME_EVENT
+                let theme_window = main_window.clone();
+                tauri::Listener::listen_any(app, window_backdrop::THEME_EVENT, move |event| {
+                    if let Some(is_dark) = window_backdrop::parse_theme_payload(event.payload()) {
+                        let w = theme_window.clone();
+                        let _ = theme_window.run_on_main_thread(move || {
+                            window_backdrop::reapply_for_app_theme(&w, backdrop, is_dark);
+                        });
+                    }
+                });
             }
 
             // ② 双 SQLite 并发装配（ACT-102 / INV-02 Phase-1）：

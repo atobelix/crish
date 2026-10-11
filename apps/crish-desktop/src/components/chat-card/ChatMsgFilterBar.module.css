@@ -24,7 +24,7 @@
   height: 24px;
   min-height: 24px;
   border: var(--hairline-width, 1px) solid transparent;
-  border-radius: var(--radius-sm, 6px);
+  border-radius: var(--radius-sm);
   background: var(--tint-hover);
   color: var(--text-primary);
   padding: 0 8px;

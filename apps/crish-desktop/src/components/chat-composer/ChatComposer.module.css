@@ -271,7 +271,7 @@
   --btn-px: 8px;
   line-height: 22px;
   padding: 0 8px;
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-sm);
   border: none;
   outline: none;
   font-family: inherit;
@@ -343,7 +343,7 @@
   background: var(--bg-card);
   border: 1px solid var(--border-subtle);
   border-bottom: 1px solid var(--border-subtle);
-  border-radius: var(--radius-lg, 8px);
+  border-radius: var(--radius-lg);
   box-shadow: 0 -2px 10px color-mix(in srgb, var(--shadow-color) 2%, transparent);
   box-sizing: border-box;
   transition:
@@ -359,7 +359,7 @@
   transition: grid-template-rows var(--transition-accordion);
   background: var(--bg-card);
   border-bottom: 0px solid var(--border-subtle);
-  border-radius: var(--radius-lg, 8px);
+  border-radius: var(--radius-lg);
   overflow: hidden;
 }
 
@@ -595,7 +595,7 @@
   min-height: unset;
   --btn-h: 24px;
   --btn-px: 0px;
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-sm);
   border: none;
   background: transparent;
   color: var(--text-muted);
@@ -661,7 +661,7 @@
   padding: 6px;
   background: var(--composer-attach-card-bg, var(--bg-card));
   border: var(--composer-attach-card-border, 1px solid var(--border-subtle));
-  border-radius: var(--composer-attach-card-radius, var(--radius-xl, 14px));
+  border-radius: var(--composer-attach-card-radius, var(--radius-xl));
   cursor: pointer;
   user-select: none;
   box-sizing: border-box;
@@ -754,7 +754,7 @@
   line-height: 1;
   padding: 2px 4px;
   margin-right: 4px;
-  border-radius: var(--radius-xs, 3px);
+  border-radius: var(--radius-xs);
   background: color-mix(in srgb, var(--accent-color) 14%, transparent);
   color: var(--accent-color);
   letter-spacing: -0.01em;
@@ -791,7 +791,7 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  border-radius: var(--radius-md, 6px);
+  border-radius: var(--radius-md);
   background: var(--bg-subtle);
 }
 
@@ -1681,7 +1681,7 @@
   color: var(--text-tertiary);
   width: var(--control-height, 32px);
   height: var(--control-height, 32px);
-  border-radius: var(--radius-lg, 8px);
+  border-radius: var(--radius-lg);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1726,7 +1726,7 @@
   color: var(--text-tertiary);
   font-size: var(--font-size-sm, 13px);
   font-weight: var(--font-weight-medium, 500);
-  border-radius: var(--radius-md, 6px);
+  border-radius: var(--radius-md);
   font-family: var(--font-sans);
 }
 

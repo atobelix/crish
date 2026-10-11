@@ -71,7 +71,7 @@
   padding: 0;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: var(--radius-xs, 3px);
+  border-radius: var(--radius-xs);
   color: var(--text-secondary);
   cursor: pointer;
   transition: background-color 150ms ease, color 150ms ease;
@@ -92,7 +92,7 @@
   height: 28px;
   min-height: 28px;
   padding: 0 8px;
-  border-radius: var(--radius-lg, 8px);
+  border-radius: var(--radius-lg);
   background: transparent;
   border: none;
   box-shadow: none;
@@ -170,7 +170,7 @@
   height: 28px;
   min-height: 28px;
   max-height: 28px;
-  border-radius: var(--radius-lg, 8px);
+  border-radius: var(--radius-lg);
   padding: 0 8px 0 10px;
   font-size: var(--font-size-base, 13px);
   color: var(--text-secondary);
@@ -351,7 +351,7 @@
   max-width: 20px;
   max-height: 20px;
   padding: 0;
-  border-radius: var(--radius-md, 6px);
+  border-radius: var(--radius-md);
   color: var(--text-tertiary);
   background: transparent;
   border: none;
@@ -434,7 +434,7 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-sm);
 }
 
 .dialogTitle {
@@ -462,7 +462,7 @@
   font-size: 12px;
   min-height: unset;
   height: auto;
-  border-radius: var(--radius-xs, 3px);
+  border-radius: var(--radius-xs);
   cursor: pointer;
 }
 

@@ -218,7 +218,7 @@
   justify-content: center;
   width: 16px;
   height: 16px;
-  border-radius: var(--radius-xs, 2px);
+  border-radius: var(--radius-xs);
   background: var(--bg-elevated);
   color: var(--text-secondary);
   flex-shrink: 0;

@@ -203,10 +203,17 @@
   flex-shrink: 0;
   opacity: 0;
   pointer-events: none;
+  /* 屏蔽通用 Button 的 ::before 遮罩，消除 hover 时多层背景色嵌套 */
+  --btn-hover-overlay: transparent;
+  --btn-active-overlay: transparent;
   transition:
     opacity var(--duration-micro) var(--ease-standard),
     background-color var(--duration-micro) var(--ease-standard),
     color var(--duration-micro) var(--ease-standard);
+}
+
+.tabCloseBtn::before {
+  display: none;
 }
 
 .tabActive .tabCloseBtn,
@@ -458,7 +465,7 @@
   padding: 10px 14px;
   height: auto;
   min-height: unset;
-  border-radius: var(--radius-md, 8px);
+  border-radius: var(--radius-md);
   border: 1px solid var(--border-subtle);
   background: var(--bg-card);
   cursor: pointer;

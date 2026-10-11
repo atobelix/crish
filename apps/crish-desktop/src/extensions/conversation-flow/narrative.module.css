@@ -163,7 +163,7 @@
   margin: 0;
   padding: 4px 4px;
   border: 1px solid transparent;
-  border-radius: var(--radius-sm, 6px);
+  border-radius: var(--radius-sm);
   background: transparent;
   box-shadow: none;
   color: var(--text-secondary);
@@ -214,7 +214,7 @@
   margin: 0;
   padding: 8px 10px;
   border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--bg-secondary) 88%, transparent);
+  background: var(--surface-outer); /* 三档：外层档（原 88% 半透明叠在主层上得到中间灰） */
   color: var(--text-secondary);
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: var(--font-size-xs, 12px);

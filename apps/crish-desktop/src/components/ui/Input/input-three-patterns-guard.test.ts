@@ -405,7 +405,7 @@ describe('输入框四态体系与焦点/激活态刚性防御契约', () => {
     );
     expect(diffCardCss).toMatch(/\.commitInput[^{]*\{[^}]*box-shadow:\s*none/);
     expect(diffCardCss).toMatch(/\.commitInput[^{]*\{[^}]*outline:\s*none/);
-    expect(diffCardCss).toMatch(/\.commitInput[^{]*\{[^}]*border-radius:\s*var\(--radius-(?:sm|md),\s*(?:4|6)px\)/);
+    expect(diffCardCss).toMatch(/\.commitInput[^{]*\{[^}]*border-radius:\s*var\(--radius-(?:sm|md)(?:\s*,\s*(?:4|6)px)?\)/); // 兜底可选（P2-5 清退）
     expect(diffCardCss).toMatch(/\.commitInput[^{]*\{[^}]*border:\s*1px solid color-mix/);
     expect(diffCardCss).toContain('.commitInput:focus');
     expect(diffCardCss).toContain('.commitInput:focus-visible');

@@ -105,7 +105,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   padding: 2px 6px;
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-sm);
   cursor: text;
   transition: background var(--transition-micro, 100ms ease-out);
 }
@@ -164,7 +164,7 @@
   border: none;
   background: transparent;
   color: var(--text-tertiary);
-  border-radius: var(--radius-xs, 3px);
+  border-radius: var(--radius-xs);
   cursor: pointer;
   transition: background var(--transition-micro, 100ms ease-out), color var(--transition-micro, 100ms ease-out);
   flex-shrink: 0;
@@ -194,7 +194,7 @@
   max-width: 280px;
   background: var(--bg-card);
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md, 6px);
+  border-radius: var(--radius-md);
   box-shadow: var(--shadow-md);
   padding: 4px;
   z-index: var(--z-index-popover, 50);
@@ -230,7 +230,7 @@
   font-size: var(--font-size-xxs, 11px);
   cursor: pointer;
   padding: 1px 4px;
-  border-radius: var(--radius-xs, 3px);
+  border-radius: var(--radius-xs);
 }
 
 .dropdownNewBtn:hover,
@@ -257,7 +257,7 @@
   width: 100%;
   border: none;
   background: transparent;
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-sm);
   cursor: pointer;
   text-align: left;
   font-size: var(--font-size-xs, 12px);
@@ -352,7 +352,7 @@
   font-variant-numeric: tabular-nums;
   font-family: var(--font-mono, monospace);
   padding: 2px 6px;
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-sm);
   background: var(--bg-secondary);
   user-select: none;
   flex-shrink: 0;
@@ -381,7 +381,7 @@
   color: var(--text-secondary);
   font-size: var(--font-size-xs, 12px);
   font-weight: var(--font-weight-semibold, 600);
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-sm);
   cursor: pointer;
   transition: background var(--transition-micro, 100ms ease-out), color var(--transition-micro, 100ms ease-out);
 }
@@ -481,7 +481,7 @@
   color: var(--text-secondary);
   background: var(--bg-secondary);
   padding: 1px 6px;
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-sm);
 }
 
 .badgeSilent {
@@ -590,7 +590,7 @@ button.badge:focus-visible {
   align-items: flex-start;
   gap: var(--space-1_5, 6px);
   padding: var(--space-0_5, 2px) var(--space-1_5, 6px);
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-sm);
   box-sizing: border-box;
   transition: background var(--transition-micro, 100ms ease-out);
 }
@@ -646,7 +646,7 @@ button.badge:focus-visible {
   min-height: var(--control-height-xs, 24px);
   margin-top: var(--space-0_5, 2px);
   padding: 0 var(--space-1, 4px);
-  border-radius: var(--radius-xs, 4px);
+  border-radius: var(--radius-xs);
   opacity: 0;
   background-image:
     radial-gradient(
@@ -799,7 +799,7 @@ button.badge:focus-visible {
   background: var(--md-code-bg, var(--bg-secondary));
   border: var(--hairline-width, 1px) solid
     var(--md-code-border, var(--border-color));
-  border-radius: var(--radius-sm, 5px);
+  border-radius: var(--radius-sm);
   padding: var(--md-code-block-padding, var(--space-2, 8px) var(--space-3, 12px));
   margin-top: var(--space-2, 8px);
   margin-bottom: var(--space-2, 8px);
@@ -839,7 +839,7 @@ button.badge:focus-visible {
   color: var(--text-secondary);
   font-size: var(--font-size-base, 14px);
   line-height: var(--line-height-body, 1.55);
-  border-radius: var(--radius-md, 6px);
+  border-radius: var(--radius-md);
 }
 
 .stateLoading {

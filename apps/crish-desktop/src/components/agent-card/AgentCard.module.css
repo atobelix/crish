@@ -57,7 +57,7 @@
 .agentCardBadge {
   font-size: var(--font-size-xxs);
   padding: 0 5px;
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-sm);
   background: transparent;
   border: 1px solid var(--hairline, var(--border-subtle));
   color: var(--text-secondary);
@@ -352,7 +352,7 @@
   background: transparent;
   border: 1px solid var(--hairline, var(--border-subtle));
   padding: 0 5px;
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-sm);
   line-height: var(--line-height-base);
 }
 
@@ -507,14 +507,14 @@
 
 .agentTeamCardBar {
   height: 1.5px;
-  border-radius: var(--radius-xs, 2px);
+  border-radius: var(--radius-xs);
   background: var(--hairline, var(--border-subtle));
   overflow: hidden;
 }
 
 .agentTeamCardBarFill {
   height: 100%;
-  border-radius: var(--radius-xs, 2px);
+  border-radius: var(--radius-xs);
   background: var(--text-tertiary);
   transition: width var(--transition-fast);
 }

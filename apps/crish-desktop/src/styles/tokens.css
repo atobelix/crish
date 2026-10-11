@@ -19,7 +19,7 @@
   /* 响应式断点权威单一真源 (SSOT) */
 
   /* 几何尺寸与圆角契约 (锁定 7px 按钮圆角与 9999px 胶囊圆角；U1 用户锁) */
-  --radius-full: 9999px;
+  --radius-full: var(--radius-pill);
   --seg-outer-radius: var(--button-radius, 7px);
   --seg-inner-radius: var(--button-radius, 7px);
 
@@ -33,37 +33,57 @@
 html[data-theme='default'],
 html[data-theme='light'] {
   /*
-   * Premium Light Theme · 三级表面层级（SSOT）
-   * 1) chrome：整体灰底（侧栏/壳）≈7% 暖灰
-   * 2) paper：对话流画布 ≈1.5% 暖灰（H30 S2.5%）
-   * 3) card/elevated：工具调用、输入框、浮层 = 纯白
+   * Premium Light Theme · 三档底色（SSOT，2026-10-10 定稿）——灰度 = 100 − 亮度
+   * 1) outer 外层：左侧边栏 + 顶部标签栏/标题栏（含窗口按钮）灰度 3.5（L 96.5%）；唯一透出云母的一层
+   * 2) main  主层：聊天区 + 右侧栏（差异/文件）+ 卡片/弹层/Tooltip/代码块/空状态/面包屑 灰度 2.0（L 98%），实色
+   * 3) input 输入框：灰度 0（纯白）
+   * 其它 surface-* / bg-* 只能引用这三档；hover/active/选中 = 所在层上的统一叠加（--tint-hover / --tint-active）。
+   * 运行时皮肤（TokenRuntimeController）只写 --surface-outer / --surface-main / --surface-input 三个独立源。
    */
-  --surface-chrome: hsl(30 2.5% 95%);
-  --surface-paper: hsl(30 2.5% 98.5%);
-  --surface-card: hsl(0 0% 100%);
-  --surface-elevated: hsl(0 0% 100%);
-  --surface-sunken: hsl(30 2.5% 90%);
+  /* heson 实测定稿（2026-10-11）：所有层同一暖色调 CMYK C0 M0.4 Y0.8，只改 K：
+     外层 K5 → RGB 242.25/241.28/240.32 #f2f1f0（2026-10-11 由 K4 #f4f3f2 加深：侧栏/顶栏不够深）；
+     主层 K2.8 → 248/247/246 #f8f7f6（HSB 30°/1%/97%）；输入框纯白。 */
+  --surface-outer: #f2f1f0;
+  --surface-main: #f8f7f6;
+  --surface-input: #ffffff;
+  /* 内容矩形 .leafBody 的框线（只画左边 + 顶边 1px）：外层 K5 再加 3 → K8 → RGB 234.6/233.7/232.7 #ebeae9
+     （10-11 heson 由 K11 #e3e2e1 改浅）。线色，不是第四档底色。 */
+  --content-frame-border: #ebeae9;
+  --surface-chrome: var(--surface-outer);
+  --surface-paper: var(--surface-main);
+  --surface-card: var(--surface-main);
+  --surface-elevated: var(--surface-main);
+  --workspace-surface-bg: var(--bg-workspace, var(--bg-primary));
+  --leaf-card-bg: var(--bg-card);
+  --surface-sunken: var(--surface-outer);
   --surface-scrim: var(--shadow-color, #000);
   --surface-overlay: hsl(0 0% 0% / 0.65);
   --surface-overlay-fg: hsl(0 0% 100%);
 
-  /* L2：primary=对话画布；card=白卡；chrome=侧栏 */
+  /* L2 别名：全部落在三档上（primary/card/elevated = main；secondary/sunken/subtle = outer） */
   --bg-primary: var(--surface-paper);
   --bg-secondary: var(--surface-chrome);
   --bg-tertiary: var(--surface-sunken);
   --bg-hover: var(--tint-hover);
   --bg-active: var(--tint-active);
   --bg-card: var(--surface-card);
-  --bg-card-hover: color-mix(in srgb, var(--text-primary) 3.5%, var(--bg-card));
-  --bg-card-active: color-mix(in srgb, var(--text-primary) 6%, var(--bg-card));
-  --bg-card-subtle: color-mix(in srgb, var(--text-primary) 2%, var(--bg-card));
-  --tab-active-bg: var(--surface-card);
+  /* 卡片 hover/active 保持补丁前的增量（3.5% / 6%），改为透明叠加，落在任何一层上都同幅变化 */
+  --bg-card-hover: color-mix(in srgb, var(--text-primary) 3.5%, transparent);
+  --bg-card-active: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  --bg-card-subtle: var(--surface-outer);
+  /* 用户消息气泡（heson 定稿 2026-10-11）：所在层（主层 K2.8）再加 K4 → CMYK C0 M0.4 Y0.8 K6.8
+     → RGB 237.7/236.7/235.8 ≈ #eeedec。三档之外唯一的有意例外（气泡是内容，不是面板）。 */
+  --user-bubble-bg: #eeedec;
+  /* 激活标签页 = 输入框档（纯白，比外层/主层都亮一档）；未激活标签透明，透出外层 */
+  --tab-active-bg: var(--surface-input);
+  /* 次级按钮底色（元素底色 token；浅色 = 所在层卡片色，不变） */
+  --button-secondary-bg: var(--bg-card);
   --bg-elevated: var(--surface-elevated);
   --bg-subtle: var(--surface-chrome);
-  --bg-workspace: var(--surface-paper);
+  --bg-workspace: var(--surface-outer); /* 布局模型：body/.section = 通底（外层），内容矩形 .leafBody = 主层 */
   --bg-page: var(--surface-paper);
   --bg-canvas: var(--surface-paper);
-  --composer-attach-card-bg: var(--surface-card);
+  --composer-attach-card-bg: var(--surface-input);
   --composer-attach-remove-bg: color-mix(in srgb, var(--surface-card) 72%, transparent);
   --composer-attach-remove-border: color-mix(in srgb, var(--border-color) 70%, transparent);
   --shell-chrome-bg: var(--surface-chrome);
@@ -88,49 +108,49 @@ html[data-theme='light'] {
   /* 浮层/遮罩之上的前景 */
   --text-on-overlay: var(--text-on-accent);
 
-  --tint-hover: color-mix(in srgb, var(--text-primary) 3%, transparent);
-  --tint-active: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  /* 叠加增量恢复为补丁前原值（refs/backup/ui-polish-pre-20261010-214735）：hover 2.5% / active 5% */
+  --tint-hover: color-mix(in srgb, var(--text-primary) 2.5%, transparent);
+  --tint-active: color-mix(in srgb, var(--text-primary) 5%, transparent);
   --tint-strong: color-mix(in srgb, var(--text-primary) 8%, transparent);
   /* 族内最轻一档：极弱底/分隔 */
   --tint-subtle: color-mix(in srgb, var(--text-primary) 1.5%, transparent);
   --tint-focus-ring: color-mix(in srgb, var(--text-primary) 8%, transparent);
-  --tint-divider: color-mix(in srgb, var(--text-primary) 10%, transparent);
+  --tint-divider: var(--border-color); /* 线色统一：border-color（强）/ border-subtle（弱）两档 */
   /* ==========================================================================
      统一滚动条二元色彩与几何尺寸 Token 体系（Unified Scrollbar Design Tokens）
      遵循用户最高定案铁律：二元灰度 (8.2% vs 20.2%，差值死锁 12.0%)，四级宽度零裸写
      ========================================================================== */
 
   /* --- 1. 二元色彩与灰度系统 (Binary Optical Color System) --- */
-  /* 未激活态滑块：微调至 10.0% 灰度 (H=30 S=2% L=90%)，物理像素 #e6e6e5，确保浅色底板清晰可见 (SSOT) */
-  --scrollbar-track-safe-gap: 2px; /* 滑块行程与端点按钮的隔离裕量；被 ScrollArea 消费 */
-  --scrollbar-thumb-bg: #e6e6e5;
+  --scrollbar-track-safe-gap: var(--space-0_5, 2px); /* 滑块左右对称 2px 隔离裕量；净宽 6px 精致舒适，圆角对称不截断 (SSOT) */
+  --scrollbar-thumb-bg: #dedddc;
 
-  /* 激活态滑块：黄色/色相饱和度绝对不动 (H=30 S=2%)，灰度下调至 21.8% (L=78%)，物理像素 #c8c7c6，差值严格死锁约 12% */
-  --scrollbar-thumb-active: #c8c7c6;
-  --scrollbar-button-up: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 7'%3E%3Cpath d='M 5.5 6.2 L 2.5 6.2 C 1.2 6.2 0.3 5.9 0.8 4.8 L 2.4 2.3 C 3.1 1.0 4.9 1.0 5.6 2.3 L 7.2 4.8 C 7.7 5.9 6.8 6.2 5.5 6.2 Z' fill='%23e6e6e5'/%3E%3C/svg%3E");
-  --scrollbar-button-down: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 7'%3E%3Cpath d='M 2.5 0.8 L 5.5 0.8 C 6.8 0.8 7.7 1.1 7.2 2.2 L 5.6 4.7 C 4.9 6.0 3.1 6.0 2.4 4.7 L 0.8 2.2 C 0.3 1.1 1.2 0.8 2.5 0.8 Z' fill='%23e6e6e5'/%3E%3C/svg%3E");
-  --scrollbar-button-left: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 8'%3E%3Cpath d='M 6.2 2.5 L 6.2 5.5 C 6.2 6.8 5.9 7.7 4.8 7.2 L 2.3 5.6 C 1.0 4.9 1.0 3.1 2.3 2.4 L 4.8 0.8 C 5.9 0.3 6.2 1.2 6.2 2.5 Z' fill='%23e6e6e5'/%3E%3C/svg%3E");
-  --scrollbar-button-right: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 8'%3E%3Cpath d='M 0.8 2.5 L 0.8 5.5 C 0.8 6.8 1.1 7.7 2.2 7.2 L 4.7 5.6 C 6.0 4.9 6.0 3.1 4.7 2.4 L 2.2 0.8 C 1.1 0.3 0.8 1.2 0.8 2.5 Z' fill='%23e6e6e5'/%3E%3C/svg%3E");
-  --scrollbar-button-up-active: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 7'%3E%3Cpath d='M 5.5 6.2 L 2.5 6.2 C 1.2 6.2 0.3 5.9 0.8 4.8 L 2.4 2.3 C 3.1 1.0 4.9 1.0 5.6 2.3 L 7.2 4.8 C 7.7 5.9 6.8 6.2 5.5 6.2 Z' fill='%23c8c7c6'/%3E%3C/svg%3E");
-  --scrollbar-button-down-active: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 7'%3E%3Cpath d='M 2.5 0.8 L 5.5 0.8 C 6.8 0.8 7.7 1.1 7.2 2.2 L 5.6 4.7 C 4.9 6.0 3.1 6.0 2.4 4.7 L 0.8 2.2 C 0.3 1.1 1.2 0.8 2.5 0.8 Z' fill='%23c8c7c6'/%3E%3C/svg%3E");
-  --scrollbar-button-left-active: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 8'%3E%3Cpath d='M 6.2 2.5 L 6.2 5.5 C 6.2 6.8 5.9 7.7 4.8 7.2 L 2.3 5.6 C 1.0 4.9 1.0 3.1 2.3 2.4 L 4.8 0.8 C 5.9 0.3 6.2 1.2 6.2 2.5 Z' fill='%23c8c7c6'/%3E%3C/svg%3E");
-  --scrollbar-button-right-active: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 8'%3E%3Cpath d='M 0.8 2.5 L 0.8 5.5 C 0.8 6.8 1.1 7.7 2.2 7.2 L 4.7 5.6 C 6.0 4.9 6.0 3.1 4.7 2.4 L 2.2 0.8 C 1.1 0.3 0.8 1.2 0.8 2.5 Z' fill='%23c8c7c6'/%3E%3C/svg%3E");
+  /* 激活态滑块：加深至沉着明确的 #6b6a69，触感坚实笃定，交互反馈清晰区分 */
+  --scrollbar-thumb-active: #6b6a69;
+  --scrollbar-button-up: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 7' preserveAspectRatio='none'%3E%3Cpath d='M 2.0 6.2 C 0.6 6.2 0.0 5.3 0.6 4.3 L 3.8 1.4 C 4.4 0.5 5.6 0.5 6.2 1.4 L 9.4 4.3 C 10.0 5.3 9.4 6.2 8.0 6.2 Z' fill='%23dedddc'/%3E%3C/svg%3E");
+  --scrollbar-button-down: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 7' preserveAspectRatio='none'%3E%3Cpath d='M 2.0 0.8 C 0.6 0.8 0.0 1.7 0.6 2.7 L 3.8 5.6 C 4.4 6.5 5.6 6.5 6.2 5.6 L 9.4 2.7 C 10.0 1.7 9.4 0.8 8.0 0.8 Z' fill='%23dedddc'/%3E%3C/svg%3E");
+  --scrollbar-button-left: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 10' preserveAspectRatio='none'%3E%3Cpath d='M 6.2 2.0 C 6.2 0.6 5.3 0.0 4.3 0.6 L 1.4 3.8 C 0.5 4.4 0.5 5.6 1.4 6.2 L 4.3 9.4 C 5.3 10.0 6.2 9.4 6.2 8.0 Z' fill='%23dedddc'/%3E%3C/svg%3E");
+  --scrollbar-button-right: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 10' preserveAspectRatio='none'%3E%3Cpath d='M 0.8 2.0 C 0.8 0.6 1.7 0.0 2.7 0.6 L 5.6 3.8 C 6.5 4.4 6.5 5.6 5.6 6.2 L 2.7 9.4 C 1.7 10.0 0.8 9.4 0.8 8.0 Z' fill='%23dedddc'/%3E%3C/svg%3E");
+  --scrollbar-button-up-active: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 7' preserveAspectRatio='none'%3E%3Cpath d='M 2.0 6.2 C 0.6 6.2 0.0 5.3 0.6 4.3 L 3.8 1.4 C 4.4 0.5 5.6 0.5 6.2 1.4 L 9.4 4.3 C 10.0 5.3 9.4 6.2 8.0 6.2 Z' fill='%236b6a69'/%3E%3C/svg%3E");
+  --scrollbar-button-down-active: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 7' preserveAspectRatio='none'%3E%3Cpath d='M 2.0 0.8 C 0.6 0.8 0.0 1.7 0.6 2.7 L 3.8 5.6 C 4.4 6.5 5.6 6.5 6.2 5.6 L 9.4 2.7 C 10.0 1.7 9.4 0.8 8.0 0.8 Z' fill='%236b6a69'/%3E%3C/svg%3E");
+  --scrollbar-button-left-active: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 10' preserveAspectRatio='none'%3E%3Cpath d='M 6.2 2.0 C 6.2 0.6 5.3 0.0 4.3 0.6 L 1.4 3.8 C 0.5 4.4 0.5 5.6 1.4 6.2 L 4.3 9.4 C 5.3 10.0 6.2 9.4 6.2 8.0 Z' fill='%236b6a69'/%3E%3C/svg%3E");
+  --scrollbar-button-right-active: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 10' preserveAspectRatio='none'%3E%3Cpath d='M 0.8 2.0 C 0.8 0.6 1.7 0.0 2.7 0.6 L 5.6 3.8 C 6.5 4.4 6.5 5.6 5.6 6.2 L 2.7 9.4 C 1.7 10.0 0.8 9.4 0.8 8.0 Z' fill='%236b6a69'/%3E%3C/svg%3E");
 
   /* 轨道背景：完全透明，消除轨道占位边缘对内容的侵入感 */
   --scrollbar-track-bg: transparent;
 
   /* --- 2. 四级宽度 Token 体系 (Four-Tier Width System，包含 2px 右侧防误触间距) --- */
-  --scrollbar-width-xs: 6px; /* 超细纤薄型：滑块净宽 4px + 2px 边距 */
+  --scrollbar-width-xs: 5px; /* 超细纤薄型：滑块净宽 3px + 2px 边距 */
   --scrollbar-width-sm: 7px; /* 紧凑型：滑块净宽 5px + 2px 边距 */
-  --scrollbar-width-md: 9px; /* 标准默认型 (SSOT)：滑块净宽 7px + 2px 边距，告别 4px 过细 */
-  --scrollbar-width-lg: 11px; /* 宽屏大视口型：滑块净宽 9px + 2px 边距 */
+  --scrollbar-width-md: 10px; /* 标准默认型 (SSOT)：列宽 10px；滑块净宽 6px，左右对称 2px 边距，整列可抓取 */
+  --scrollbar-width-lg: 12px; /* 宽屏大视口型：滑块净宽 8px + 2px 边距 */
 
   /* 全局默认滑块宽度映射：未指定时默认走标准 md (9px 总宽，7px 净宽) */
   --scrollbar-width: var(--scrollbar-width-md);
   --scrollbar-thumb-width: var(--scrollbar-width);
 
   /* --- 3. 几何与圆角 Token (Geometry) --- */
-  --scrollbar-thumb-radius: var(--radius-full, 9999px); /* 胶囊圆角，保证两端半圆完全对称 */
+  --scrollbar-thumb-radius: var(--radius-full); /* 胶囊圆角，保证两端半圆完全对称 */
 
   /* --- 向后兼容别名安全网 (Deprecated Aliases Bridge) ---
      警告：以下别名仅供存量代码渐进过渡，全新业务严禁直接引用，将在维度 6 门禁收口后全面废弃 */
@@ -140,27 +160,23 @@ html[data-theme='light'] {
   --tint-highlight: color-mix(in srgb, var(--text-primary) 28%, transparent);
 
   /* T-C    5.2   T11 ui/Switch             settings-switch     */
-  --switch-track-bg: color-mix(
-    in srgb,
-    var(--text-primary) 3.5%,
-    var(--bg-card, hsl(0 0% 100%))
-  );
+  /* 开关轨道 = 层上透明叠加（与 --bg-card-hover 同幅 3.5%），不再混出不透明第四种灰（review P2-2） */
+  --switch-track-bg: var(--bg-card-hover);
   --switch-thumb-bg: var(--surface-overlay-fg);
   --switch-thumb-shadow: 0 1px 2px
     color-mix(in srgb, var(--shadow-color) 8%, transparent);
-  --seg-track-bg: color-mix(
-    in srgb,
-    var(--text-primary) 3.5%,
-    var(--surface-card)
-  );
-  --seg-slider-bg: var(--surface-card);
+  --seg-track-bg: var(--surface-outer);
+  /* 分段控件激活滑块（heson 2026-10-11）：主层 #f8f7f6 → 纯白输入档，和外层轨道 #f2f1f0 拉开 */
+  --seg-slider-bg: var(--surface-input);
 
   /* 描边降调（2026-09-11 用户裁决：弱化描边存在感，按钮尤其）
    * 旧值 hsl(30 2.5% 86%) 对白卡对比 1.38:1，偏重；降至 88% → 1.32:1，
    * 与暗色侧同档（≈1.5:1）保持量级一致，同时保留"可辨识但不抢戏"的边界感。 */
-  --border-color: hsl(30 2.5% 88%);
-  --border-subtle: hsl(30 6% 94.5%);
-  --composer-bg: var(--surface-card);
+  /* 线色两档（review P2-1：与运行时 warm-gray 注入同值，同一暖色调 M0.4/Y0.8）：
+     强 K≈11.4 → #e2e1e0；弱 K≈5.9 → #f0efee */
+  --border-color: #e2e1e0;
+  --border-subtle: #f0efee;
+  --composer-bg: var(--surface-input);
   /* 输入框底部操作区按钮统一底色（默认透明，hover/click/active 均为同一 3% 灰度 #F7F7F7，单一灰度无级差） */
   --composer-control-hover-bg: color-mix(in srgb, var(--text-primary) 3.3%, transparent);
   --hairline-width: 1px;
@@ -207,13 +223,13 @@ html[data-theme='light'] {
   --brand-deep: hsl(160 84% 30%); /* #047857, 4.77:1 >= 4.5:1 */
 
   /* --- SmartExpandablePanel & Zero-Blue Design System Tokens (Light) --- */
-  --sep-radius-outer: 14px;
+  --sep-radius-outer: var(--radius-l);
   --sep-padding: 6px;
-  --sep-radius-inner: calc(var(--sep-radius-outer) - var(--sep-padding)); /* 8px */
-  --sep-item-radius: calc(var(--sep-radius-outer) - var(--sep-padding));   /* 8px */
-  --sep-btn-radius: 6px;
-  --sep-badge-radius: 4px;
-  --sep-pill-radius: 9999px;
+  --sep-radius-inner: var(--radius-m);
+  --sep-item-radius: var(--radius-m);
+  --sep-btn-radius: var(--radius-m);
+  --sep-badge-radius: var(--radius-s);
+  --sep-pill-radius: var(--radius-pill);
 
   --sep-item-height: 28px;
   --sep-item-padding-h: 10px;
@@ -224,10 +240,10 @@ html[data-theme='light'] {
 
   --sep-bg-panel-solid: var(--bg-elevated);
   --sep-bg-item-hover: var(--tint-hover);
-  --sep-bg-input: color-mix(in srgb, var(--text-primary) 3%, transparent);
+  --sep-bg-input: var(--surface-input);
 
   --sep-border-color: var(--border-color);
-  --sep-divider-color: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  --sep-divider-color: var(--border-subtle);
 
   --sep-text-primary: var(--text-primary);
   --sep-text-secondary: var(--text-secondary);
@@ -248,7 +264,6 @@ html[data-theme='light'] {
   --accent-green: oklch(0.60 0.16 150); /* 纯净翡翠翠绿，满足 WCAG AA 状态点 ≥ 3:1 */
   --accent-green-light: oklch(0.60 0.16 150 / 0.08);
   --accent-green-muted: oklch(0.60 0.16 150 / 0.22);
-  --status-online: oklch(0.60 0.16 150);
   --accent-red: oklch(0.61 0.19 31.8); /* 纯净温暖朱红，基准 #de4931，鲜艳不刺眼 */
   --accent-red-light: oklch(0.61 0.19 31.8 / 0.08);
   --accent-blue: oklch(0.50 0.18 250); /* 纯净天蓝，满足 WCAG AA 文字 ≥ 4.5:1 */
@@ -383,43 +398,51 @@ html[data-theme='light'] {
 
   /* 5           (Ro = Ri + P: 12/8/6/4/2px) */
   /* 刻度新增：设置/按钮恒 7px（用户锁；来源 docs/desktop-ui-repair/survey/04-*） */
+  /* ── 圆角 SSOT（2026-10-10 统一）：只允许下列 5 档 + 正圆 50% + 0 ──
+     s     小   4px    标签/徽标/行内代码/复选框/Kbd/骨架线/细条
+     m     中   8px    图标按钮/小输入框/下拉触发器/菜单项/列表行/会话行/Tooltip/标签页/代码块/表格
+           （文字按钮 + 分段控件 = --radius-btn 7px，用户锁 U1，唯一例外）
+     l     大   12px   卡片/面板/弹层/下拉面板/对话框/工具调用块/附件卡片/artifact
+     input 输入 20px   底部输入框（单行/多行）与用户消息气泡
+     pill  胶囊 9999px 胶囊按钮/开关/滚动条滑块/计数胶囊
+     旧 token（xs…3xl、btn、seg-*、sep-*、md-*、composer-*、chat-bubble）全部是这 5 档的别名。 */
+  --radius-s: 4px;
+  --radius-m: 8px;
+  --radius-l: 12px;
+  --radius-input: 20px;
+  --radius-pill: 9999px;
   --radius-circle: 50%; /* Avatar 等正圆；被 ModelsSettingsTab 等消费 */
-  --radius-btn: 7px;
+  --radius-btn: 7px; /* 用户锁 U1（survey 04）：按钮圆角钉死 7px，是 5 档之外唯一的例外；禁止改成 8px */
   --button-radius: var(--radius-btn); /* :root 唯一权威定义（U1）；密度档/主题块禁止覆写 */
-  --radius-xs: 2px; /*            (2px) */
-  --radius-sm: 4px; /*      (IconButton)      (Badge)    (Kbd) (4px) */
-  --radius-md: 6px; /*            Tab     Select     (6px) */
-  --radius-lg: 8px; /*           Content        (8px) */
-  --radius-xl: 12px; /*               (12px) */
-  --radius-2xl: 12px; /*      */
-  --radius-3xl: 24px; /* U2 新增：Composer 多行等 */
+  --radius-xs: var(--radius-s);
+  --radius-sm: var(--radius-s);
+  --radius-md: var(--radius-m);
+  --radius-lg: var(--radius-m);
+  --radius-xl: var(--radius-l);
+  --radius-2xl: var(--radius-l);
+  --radius-3xl: var(--radius-input);
   /* 语义场景契约 Token（Tier 2，BATCH-01 新增）：组件优先消费语义层 */
-  --composer-radius-single: 20px;
-  --composer-radius-multi: var(--radius-3xl);
+  --composer-radius-single: var(--radius-input);
+  --composer-radius-multi: var(--radius-input);
   /* 水平内衬基座 = 结束侧（右）内衬，与 --composer-pad-x-start 成对消费。
-   * 2026-09-21 用户视觉裁决：12px → 10px（配合起始侧光学内衬达成左右视觉平衡）。 */
+   * 等宽内衬：左右两端均锁 10px。 */
   --composer-pad-x: 10px;
-  /* 起始侧（左）光学内衬（2026-09-21 用户视觉裁决「左 6 / 右 10」）：
-   * 根因——单行态左缘是轻量 ghost ＋（28px 圆钮内 14px 线框图标，光学边界软），
-   * 右缘是融合胶囊（pill 自带 8~10px 内衬的硬边界）+ 实心发送圆；
-   * 对称内衬会使整行光学重心右移，起始侧收窄 4px 后两侧留白观感均衡。
-   * 多行态消费同一对 token：＋ 同列（left-ctrl），单/多行切换 X 轴零位移
-   * （设计目标 Zero Horizontal Shift，见 docs/layout-token-system/05 §3.2）。
+  /* 起始侧（左）内衬：
+   * 等宽试验：左右两端统一为 10px 等宽（Zero Horizontal Shift 仍由单/多行同值守护）。
    * 纪律：光学量必须命名化为 token，禁止 calc(token - Npx) 魔术数（AGENTS.md §7）。 */
-  --composer-pad-x-start: 6px;
+  --composer-pad-x-start: 10px;
   /* 用户裁决（2026-09-11）：固定 20px，不随密度缩放。
    * 理由：① 该值喂给 chatScrollGeometry 的滚动数学（TS 常量 CHAT_SCROLL_PAD_X=20），
    *   密度可变的值会使几何测量变成时序依赖；② 它是消息流与地板槽的对齐值，
    *   对齐方必须同步缩放才允许变，而 --chat-col-max 固定；③ 密度缩放的是控件，
    *   不是布局骨架。双源同值由 dual-source-values.test.ts 守护。 */
   --chat-stream-pad-x: 20px;
-  --chat-bubble-radius: 16px;
-  --composer-attach-card-radius: var(--radius-xl, 12px);
+  --chat-bubble-radius: var(--radius-input);
+  --composer-attach-card-radius: var(--radius-l);
   --composer-attach-card-border: 1px solid var(--border-subtle);
-  --composer-attach-card-bg: var(--bg-card, #ffffff);
+  --composer-attach-card-bg: var(--surface-input);
   --composer-attach-card-hover-border: var(--border-color);
   --composer-attach-remove-size: 18px;
-  --composer-attach-remove-bg: rgba(255, 255, 255, 0.4);
   --composer-attach-name-size: 11px;
   --composer-attach-name-color: var(--text-secondary);
   --composer-attach-progress-color: var(--accent-primary, #10b981);
@@ -576,15 +599,15 @@ html[data-theme='light'] {
   --md-heading-margin-bottom: 0.28em;
 
   /* --- 3. 行内元素与交互胶囊 (Light) --- */
-  --md-code-inline-bg: color-mix(in srgb, var(--text-primary) 3.5%, var(--bg-card));
+  --md-code-inline-bg: var(--surface-outer);
   --md-code-inline-fg: var(--text-primary);
-  --md-code-inline-radius: 4px;
+  --md-code-inline-radius: var(--radius-s);
   --md-code-inline-padding: 0.15em 0.4em;
   --md-code-inline-size: 0.9em;
 
   --md-code-block-bg: var(--bg-card);
   --md-code-block-border: var(--border-subtle);
-  --md-code-block-radius: var(--radius-lg, 8px);
+  --md-code-block-radius: var(--radius-m);
   --md-code-block-padding: var(--space-2, 8px) var(--space-3, 12px);
   --md-code-font: var(--font-mono);
   --md-code-font-size: var(--font-size-xs, 12px);
@@ -599,7 +622,7 @@ html[data-theme='light'] {
   --md-path-link-border: transparent;
 
   --md-task-box-size: 14px;
-  --md-task-box-radius: 3px;
+  --md-task-box-radius: var(--radius-s);
   /* 任务勾选 ✓ 的笔画宽度（border 拼形画法，SSOT）。
      语义同 --border-width-emphasis 的强调档，但独立命名以表达「勾线」而非「边框」。 */
   --md-task-check-stroke: 2px;
@@ -613,7 +636,7 @@ html[data-theme='light'] {
   --md-quote-border: 3px solid var(--border-color);
   --md-quote-border-color: color-mix(in srgb, var(--text-primary) 8%, var(--border-color));
   --md-quote-border-width: 3px;
-  --md-quote-bg: color-mix(in srgb, var(--text-primary) 2%, transparent);
+  --md-quote-bg: transparent;
   --md-quote-text: var(--text-secondary, hsl(0 0% 33%));
   --md-quote-padding: 0.45em 0 0.45em 1.1em;
   --md-quote-margin: 0.68em 0;
@@ -626,12 +649,12 @@ html[data-theme='light'] {
 
   /* --- 5. 表格系统变量收敛 (Light) --- */
   --md-table-border: var(--hairline-strong, var(--border-color));
-  --md-table-header-bg: color-mix(in srgb, var(--text-primary) 3.5%, var(--bg-card));
-  --md-table-row-alt-bg: color-mix(in srgb, var(--text-primary) 1.8%, transparent);
-  --md-table-row-hover-bg: color-mix(in srgb, var(--text-primary) 4%, transparent);
+  --md-table-header-bg: var(--surface-outer);
+  --md-table-row-alt-bg: transparent;
+  --md-table-row-hover-bg: var(--tint-hover);
   --md-table-cell-padding: 10px 14px;
   --md-table-cell-padding-compact: 7px 10px;
-  --md-table-radius: var(--radius-lg, 8px);
+  --md-table-radius: var(--radius-m);
 
   --md-table-bg: var(--bg-secondary);
   --md-table-border-width: var(--hairline-width, 1px);
@@ -650,8 +673,8 @@ html[data-theme='light'] {
   --artifact-card-bg: var(--bg-card, #ffffff);
   --artifact-card-border: var(--border-color);
   --artifact-card-border-hover: color-mix(in srgb, var(--border-subtle) 95%, var(--text-primary) 5%);
-  --artifact-card-radius: 8px;
-  --artifact-header-bg: color-mix(in srgb, var(--text-primary) 3%, var(--bg-card));
+  --artifact-card-radius: var(--radius-l);
+  --artifact-header-bg: var(--surface-outer);
   --artifact-header-border: var(--border-subtle);
   --artifact-btn-bg: var(--bg-primary);
   --artifact-btn-border: var(--border-subtle);
@@ -683,8 +706,8 @@ html[data-theme='light'] {
   --diff-gutter-width-split: 36px;
   --diff-split-header-bg: var(--bg-secondary);
   --diff-split-header-fg: var(--text-secondary);
-  --diff-mode-segmented-bg: var(--bg-secondary, hsl(35 8% 92.1%));
-  --diff-mode-item-active-bg: var(--bg-card, #ffffff);
+  --diff-mode-segmented-bg: var(--seg-track-bg);
+  --diff-mode-item-active-bg: var(--seg-slider-bg);
   --diff-mode-item-active-fg: var(--text-primary, #111111);
 
 
@@ -816,12 +839,13 @@ html[data-theme='light'] {
    */
   --settings-content-max: 820px;
   /* footer        .chat-footer / .agent-card-composer    */
+  /* 只渐隐到主层同色（不引入第四种颜色；旧版渐变到 bg-card 白色，主层 98% 上出现一条白带） */
   --chat-footer-fade: linear-gradient(
     to bottom,
     transparent 0%,
-    color-mix(in srgb, var(--bg-card, #ffffff) 55%, transparent) 42%,
-    color-mix(in srgb, var(--bg-card, #ffffff) 92%, transparent) 78%,
-    var(--bg-card, #ffffff) 100%
+    color-mix(in srgb, var(--surface-main) 55%, transparent) 42%,
+    color-mix(in srgb, var(--surface-main) 92%, transparent) 78%,
+    var(--surface-main) 100%
   );
 
   color-scheme: light;
@@ -834,12 +858,22 @@ html[data-theme='light'] {
  *   --hairline-strong =
  *          color-mix     ?*/
 html[data-theme='dark'] {
-  /* 结构框架：chrome 浅灰外壳（侧栏 + 顶部Header统一，提亮至 #262626） → paper 对话主工作区纯黑沉浸 → card 卡片略抬 → elevated 浮层 */
-  --surface-chrome: #262626;
-  --surface-paper: #121212;
-  --surface-card: #161616;
-  --surface-elevated: #262626;
-  --surface-sunken: #0e0e0e;
+  /* 三档底色（SSOT，2026-10-10 定稿；灰度 = 100 − 亮度）：
+     outer 外层（侧栏 + 标签栏/标题栏）#1a1a1a 灰度 89.8（原 #262626 = 85.1），唯一透出云母
+     → main 主层（聊天区 + 右侧栏 + 卡片/弹层/代码块等）#1e1e1e 88.2，实色
+     → input 输入框 #232323 86.3（深色下输入框最亮，沿用既有方向）。与运行时 dark-cozy 皮肤一致 */
+  /* 深色同一暖色调 CMYK C0 M0.4 Y0.8：K 90 / 88.2 / 86.3 → 换算后 R−B 差 < 0.3，取整基本落回中性灰 */
+  --surface-outer: #1a1919;
+  --surface-main: #1e1e1e;
+  --surface-input: #232323;
+  /* 内容矩形框线：与浅色同幅减弱为 +3 个点 —— 外层 L≈10.2% 提亮到 L≈13.2% → #222121（保留外层 R+1 暖偏）。
+     深色下往亮走：内容矩形 #1e1e1e 本身比外层亮，往暗走的线会和外层糊在一起，看不出边。 */
+  --content-frame-border: #222121;
+  --surface-chrome: var(--surface-outer);
+  --surface-paper: var(--surface-main);
+  --surface-card: var(--surface-main);
+  --surface-elevated: var(--surface-main);
+  --surface-sunken: var(--surface-outer);
   --surface-scrim: var(--shadow-color, #000);
   --surface-overlay: hsl(0 0% 0% / 0.65);
   --surface-overlay-fg: hsl(0 0% 100%);
@@ -850,14 +884,41 @@ html[data-theme='dark'] {
   --bg-hover: var(--tint-hover);
   --bg-active: var(--tint-active);
   --bg-card: var(--surface-card);
-  --bg-card-hover: color-mix(in srgb, var(--text-primary) 4.5%, var(--bg-card));
-  --bg-card-active: color-mix(in srgb, var(--text-primary) 8%, var(--bg-card));
-  --bg-card-subtle: color-mix(in srgb, var(--text-primary) 2.5%, var(--bg-card));
-  /* 标签激活背景：75% 灰度（25% 明度），清晰凸显 */
-  --tab-active-bg: hsl(0 0% 25%);
+  /* 卡片 hover/active 保持补丁前的增量（4.5% / 8%），透明叠加 */
+  /* 并入阶梯（旧 text-primary 4.5% / 8%） */
+  --bg-card-hover: var(--elevate-1);
+  --bg-card-active: var(--elevate-1-active);
+  --bg-card-subtle: var(--surface-outer);
+  /* 用户气泡：主层 K88.2 再加 K4 → K92.2 → RGB 19.9/19.8/19.7 ≈ #141414（与浅色同向：比所在层更「重墨」） */
+  /* 深色「元素底色」派生体系（heson 2026-10-11 00:54 / 01:01）：
+     不写死灰值，一律 = 所在层 token + 一份「提亮墨」，色相随当前皮肤的层色走，并带一点 accent。
+     --element-ink = 主文字色 88% + accent 12%（皮肤切换 / accent 变化自动跟随）。 */
+  --element-ink: color-mix(in oklab, var(--text-primary) 88%, var(--accent-color) 12%);
+  /* ── 深色「元素提亮阶梯」（heson 2026-10-11 01:05）──
+     全部是 element-ink 的透明叠加：叠在哪一层就在哪一层上提亮，外层/主层/输入框上的相对增量一致（ΔL ≈ α ×（墨 L − 层 L））。
+     ★ 调亮度只改下面 4 个 --elevate-step-*（墨的叠加百分比；每 1.33% ≈ +1 亮度点）★
+     elevate-1        hover                       ≈ +6 亮度点
+     elevate-1-active 按下（hover 再 +2）         ≈ +8
+     elevate-2        按钮底色、用户气泡          ≈ +10
+     elevate-3        激活标签 / 分段滑块 / 侧栏选中行 ≈ +12（= 侧栏选中行 01:11 的亮度，封顶） */
+  --elevate-step-1: 8%;
+  --elevate-step-1-active: 10.6%;
+  --elevate-step-2: 13.3%;
+  --elevate-step-3: 16%;
+  --elevate-1: color-mix(in srgb, var(--element-ink) var(--elevate-step-1), transparent);
+  --elevate-1-active: color-mix(in srgb, var(--element-ink) var(--elevate-step-1-active), transparent);
+  --elevate-2: color-mix(in srgb, var(--element-ink) var(--elevate-step-2), transparent);
+  --elevate-3: color-mix(in srgb, var(--element-ink) var(--elevate-step-3), transparent);
+  /* 用户气泡 = elevate-2（旧 #141414，比主层还暗） */
+  --user-bubble-bg: var(--elevate-2);
+  /* 激活标签页 = 输入框档（深色最亮一层 #232323；旧值 hsl(0 0% 25%) 是第四种灰）；未激活透明 */
+  /* 激活标签 = elevate-3（旧 = 输入档 #232323） */
+  --tab-active-bg: var(--elevate-3);
+  /* 次级按钮 = elevate-2（旧 = bg-card #1e1e1e） */
+  --button-secondary-bg: var(--elevate-2);
   --bg-elevated: var(--surface-elevated);
   --bg-subtle: var(--surface-chrome);
-  --bg-workspace: var(--surface-paper);
+  --bg-workspace: var(--surface-outer); /* 布局模型：body/.section = 通底（外层），内容矩形 .leafBody = 主层 */
   --shell-inset-bg: var(--bg-workspace, var(--bg-primary));
   --bg-page: var(--surface-paper);
   --bg-canvas: var(--surface-paper);
@@ -876,38 +937,40 @@ html[data-theme='dark'] {
   /* 浮层/遮罩之上的前景 */
   --text-on-overlay: var(--text-on-accent);
 
-  --tint-hover: color-mix(in srgb, var(--text-primary) 3%, transparent);
-  --tint-active: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  /* 叠加增量恢复为补丁前原值：hover 3.5% / active 6.5% */
+  /* hover / 按下并入阶梯（旧 text-primary 3.5% / 6.5%） */
+  --tint-hover: var(--elevate-1);
+  --tint-active: var(--elevate-1-active);
   --tint-strong: color-mix(in srgb, var(--text-primary) 10%, transparent);
   /* 族内最轻一档：极弱底/分隔 */
   --tint-subtle: color-mix(in srgb, var(--text-primary) 2%, transparent);
   --tint-focus-ring: color-mix(in srgb, var(--text-primary) 10%, transparent);
-  --tint-divider: color-mix(in srgb, var(--text-primary) 12%, transparent);
+  --tint-divider: var(--border-color); /* 线色统一：border-color（强）/ border-subtle（弱）两档 */
   /* ==========================================================================
      暗色环境二元滚动条色彩适配 (Dark Theme Binary Scrollbar Tokens)
      遵循用户最高定案铁律：二元灰度，暗色防刺眼低眩光，四级宽度与几何继承全局
      ========================================================================== */
-  /* 暗色未激活态：微弱透光冷灰，融入暗色底板 (--bg-primary: #1b1b1b) */
+  /* 暗色未激活态：微弱透光冷灰，融入暗色底板 (--bg-primary: #1e1e1e) */
   --scrollbar-thumb-bg: color-mix(
     in srgb,
-    var(--text-primary, #cccccc) 20%,
+    var(--text-primary, #cccccc) 16%,
     transparent
   );
 
-  /* 暗色激活态：Hover 与 Active 严格同色，坚挺沉着，透光率提升至 36%，杜绝高对比刺眼 */
+  /* 暗色激活态：Hover 与 Active 严格同色，坚挺沉着，透光率提升至 48%，杜绝高对比刺眼 */
   --scrollbar-thumb-active: color-mix(
     in srgb,
-    var(--text-primary, #cccccc) 36%,
+    var(--text-primary, #cccccc) 48%,
     transparent
   );
-  --scrollbar-button-up: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 7'%3E%3Cpath d='M 5.5 6.2 L 2.5 6.2 C 1.2 6.2 0.3 5.9 0.8 4.8 L 2.4 2.3 C 3.1 1.0 4.9 1.0 5.6 2.3 L 7.2 4.8 C 7.7 5.9 6.8 6.2 5.5 6.2 Z' fill='%23cccccc' fill-opacity='0.20'/%3E%3C/svg%3E");
-  --scrollbar-button-down: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 7'%3E%3Cpath d='M 2.5 0.8 L 5.5 0.8 C 6.8 0.8 7.7 1.1 7.2 2.2 L 5.6 4.7 C 4.9 6.0 3.1 6.0 2.4 4.7 L 0.8 2.2 C 0.3 1.1 1.2 0.8 2.5 0.8 Z' fill='%23cccccc' fill-opacity='0.20'/%3E%3C/svg%3E");
-  --scrollbar-button-left: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 8'%3E%3Cpath d='M 6.2 2.5 L 6.2 5.5 C 6.2 6.8 5.9 7.7 4.8 7.2 L 2.3 5.6 C 1.0 4.9 1.0 3.1 2.3 2.4 L 4.8 0.8 C 5.9 0.3 6.2 1.2 6.2 2.5 Z' fill='%23cccccc' fill-opacity='0.20'/%3E%3C/svg%3E");
-  --scrollbar-button-right: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 8'%3E%3Cpath d='M 0.8 2.5 L 0.8 5.5 C 0.8 6.8 1.1 7.7 2.2 7.2 L 4.7 5.6 C 6.0 4.9 6.0 3.1 4.7 2.4 L 2.2 0.8 C 1.1 0.3 0.8 1.2 0.8 2.5 Z' fill='%23cccccc' fill-opacity='0.20'/%3E%3C/svg%3E");
-  --scrollbar-button-up-active: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 7'%3E%3Cpath d='M 5.5 6.2 L 2.5 6.2 C 1.2 6.2 0.3 5.9 0.8 4.8 L 2.4 2.3 C 3.1 1.0 4.9 1.0 5.6 2.3 L 7.2 4.8 C 7.7 5.9 6.8 6.2 5.5 6.2 Z' fill='%23cccccc' fill-opacity='0.36'/%3E%3C/svg%3E");
-  --scrollbar-button-down-active: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 7'%3E%3Cpath d='M 2.5 0.8 L 5.5 0.8 C 6.8 0.8 7.7 1.1 7.2 2.2 L 5.6 4.7 C 4.9 6.0 3.1 6.0 2.4 4.7 L 0.8 2.2 C 0.3 1.1 1.2 0.8 2.5 0.8 Z' fill='%23cccccc' fill-opacity='0.36'/%3E%3C/svg%3E");
-  --scrollbar-button-left-active: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 8'%3E%3Cpath d='M 6.2 2.5 L 6.2 5.5 C 6.2 6.8 5.9 7.7 4.8 7.2 L 2.3 5.6 C 1.0 4.9 1.0 3.1 2.3 2.4 L 4.8 0.8 C 5.9 0.3 6.2 1.2 6.2 2.5 Z' fill='%23cccccc' fill-opacity='0.36'/%3E%3C/svg%3E");
-  --scrollbar-button-right-active: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 8'%3E%3Cpath d='M 0.8 2.5 L 0.8 5.5 C 0.8 6.8 1.1 7.7 2.2 7.2 L 4.7 5.6 C 6.0 4.9 6.0 3.1 4.7 2.4 L 2.2 0.8 C 1.1 0.3 0.8 1.2 0.8 2.5 Z' fill='%23cccccc' fill-opacity='0.36'/%3E%3C/svg%3E");
+  --scrollbar-button-up: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 7' preserveAspectRatio='none'%3E%3Cpath d='M 2.0 6.2 C 0.6 6.2 0.0 5.3 0.6 4.3 L 3.8 1.4 C 4.4 0.5 5.6 0.5 6.2 1.4 L 9.4 4.3 C 10.0 5.3 9.4 6.2 8.0 6.2 Z' fill='%23cccccc' fill-opacity='0.16'/%3E%3C/svg%3E");
+  --scrollbar-button-down: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 7' preserveAspectRatio='none'%3E%3Cpath d='M 2.0 0.8 C 0.6 0.8 0.0 1.7 0.6 2.7 L 3.8 5.6 C 4.4 6.5 5.6 6.5 6.2 5.6 L 9.4 2.7 C 10.0 1.7 9.4 0.8 8.0 0.8 Z' fill='%23cccccc' fill-opacity='0.16'/%3E%3C/svg%3E");
+  --scrollbar-button-left: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 10' preserveAspectRatio='none'%3E%3Cpath d='M 6.2 2.0 C 6.2 0.6 5.3 0.0 4.3 0.6 L 1.4 3.8 C 0.5 4.4 0.5 5.6 1.4 6.2 L 4.3 9.4 C 5.3 10.0 6.2 9.4 6.2 8.0 Z' fill='%23cccccc' fill-opacity='0.16'/%3E%3C/svg%3E");
+  --scrollbar-button-right: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 10' preserveAspectRatio='none'%3E%3Cpath d='M 0.8 2.0 C 0.8 0.6 1.7 0.0 2.7 0.6 L 5.6 3.8 C 6.5 4.4 6.5 5.6 5.6 6.2 L 2.7 9.4 C 1.7 10.0 0.8 9.4 0.8 8.0 Z' fill='%23cccccc' fill-opacity='0.16'/%3E%3C/svg%3E");
+  --scrollbar-button-up-active: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 7' preserveAspectRatio='none'%3E%3Cpath d='M 2.0 6.2 C 0.6 6.2 0.0 5.3 0.6 4.3 L 3.8 1.4 C 4.4 0.5 5.6 0.5 6.2 1.4 L 9.4 4.3 C 10.0 5.3 9.4 6.2 8.0 6.2 Z' fill='%23cccccc' fill-opacity='0.48'/%3E%3C/svg%3E");
+  --scrollbar-button-down-active: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 7' preserveAspectRatio='none'%3E%3Cpath d='M 2.0 0.8 C 0.6 0.8 0.0 1.7 0.6 2.7 L 3.8 5.6 C 4.4 6.5 5.6 6.5 6.2 5.6 L 9.4 2.7 C 10.0 1.7 9.4 0.8 8.0 0.8 Z' fill='%23cccccc' fill-opacity='0.48'/%3E%3C/svg%3E");
+  --scrollbar-button-left-active: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 10' preserveAspectRatio='none'%3E%3Cpath d='M 6.2 2.0 C 6.2 0.6 5.3 0.0 4.3 0.6 L 1.4 3.8 C 0.5 4.4 0.5 5.6 1.4 6.2 L 4.3 9.4 C 5.3 10.0 6.2 9.4 6.2 8.0 Z' fill='%23cccccc' fill-opacity='0.48'/%3E%3C/svg%3E");
+  --scrollbar-button-right-active: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 10' preserveAspectRatio='none'%3E%3Cpath d='M 0.8 2.0 C 0.8 0.6 1.7 0.0 2.7 0.6 L 5.6 3.8 C 6.5 4.4 6.5 5.6 5.6 6.2 L 2.7 9.4 C 1.7 10.0 0.8 9.4 0.8 8.0 Z' fill='%23cccccc' fill-opacity='0.48'/%3E%3C/svg%3E");
 
   /* 暗色轨道背景：保持完全透明 */
   --scrollbar-track-bg: transparent;
@@ -919,33 +982,25 @@ html[data-theme='dark'] {
   --tint-highlight: color-mix(in srgb, var(--text-primary) 28%, transparent);
 
   /* T-C    5.2   T11 ui/Switch         dark       theme-dark.css     */
-  --switch-track-bg: color-mix(
-    in srgb,
-    var(--text-primary) 14%,
-    var(--surface-card)
-  );
+  /* 开关轨道 = 层上透明叠加（深色保持原 14% 增量） */
+  --switch-track-bg: color-mix(in srgb, var(--text-primary) 14%, transparent);
   --switch-thumb-bg: var(--surface-overlay-fg);
   --switch-thumb-shadow: 0 1px 3px
     color-mix(in srgb, var(--shadow-color) 40%, transparent);
-  --seg-track-bg: color-mix(in srgb, var(--text-primary) 10%, var(--surface-card));
-  --seg-slider-bg: color-mix(
-    in srgb,
-    var(--text-primary) 16%,
-    var(--surface-card)
-  );
+  --seg-track-bg: var(--surface-outer);
+  /* 分段控件激活滑块 = elevate-3（轨道 = 外层；旧 = 主层 #1e1e1e） */
+  --seg-slider-bg: var(--elevate-3);
 
   /* 暗色描边：温和克制微调（提升质感同时避免刺眼） */
-  --border-color: hsl(30 4% 22%);
-  --border-subtle: hsl(30 5% 17%);
+  /* 随 card/paper 抬亮约 +5% 同步上移 3%，保持描边对卡片/主界面的可辨识度 */
+  /* 线色两档（review P2-1：与运行时 dark-cozy 预设同值，消除双源） */
+  --border-color: #3a3a3a;
+  --border-subtle: #2e2e2e;
   /* 线宽契约（dark 分支显式声明，语义与 light 一致；style-contract 要求色系前缀 token 双主题全定义） */
   --border-width-emphasis: 2px;
-  --composer-bg: var(--surface-card);
+  --composer-bg: var(--surface-input);
   /* 暗色环境输入框底部操作区按钮底色适配（默认透明，hover/active 统一） */
-  --composer-control-hover-bg: color-mix(
-    in srgb,
-    var(--text-primary) 8%,
-    transparent
-  );
+  --composer-control-hover-bg: var(--elevate-1); /* 并入阶梯（旧 text-primary 8%） */
   /* S6      theme-dark.css                           */
   --md-code-bg: var(--md-code-block-bg);
   --md-code-border: var(--md-code-block-border);
@@ -954,25 +1009,13 @@ html[data-theme='dark'] {
   --hairline: var(--border-subtle);
   --hairline-strong: var(--border-color);
 
-  --control-soft-bg: color-mix(
-    in srgb,
-    var(--text-primary) 5%,
-    var(--bg-primary)
-  );
-  --control-soft-bg-hover: color-mix(
-    in srgb,
-    var(--text-primary) 6.5%,
-    var(--bg-primary)
-  );
-  --control-soft-bg-active: color-mix(
-    in srgb,
-    var(--text-primary) 9.5%,
-    var(--bg-primary)
-  );
+  --control-soft-bg: var(--tint-hover);
+  --control-soft-bg-hover: var(--tint-hover);
+  --control-soft-bg-active: var(--tint-active);
   /* dark        01    P2-01  light    hover/active   control-mix-color   dark
    *     light           tint          */
   --sidebar-hover: var(--tint-hover);
-  --sidebar-active: var(--tint-active);
+  --sidebar-active: var(--elevate-3); /* 选中 = elevate-3（旧 = tint-active） */
   --control-mix-color: var(--text-primary);
   --focus-ring-color: color-mix(
     in srgb,
@@ -989,13 +1032,13 @@ html[data-theme='dark'] {
   --brand-deep: hsl(160 84% 30%);
 
   /* --- SmartExpandablePanel & Zero-Blue Design System Tokens (Dark) --- */
-  --sep-radius-outer: 14px;
+  --sep-radius-outer: var(--radius-l);
   --sep-padding: 6px;
-  --sep-radius-inner: calc(var(--sep-radius-outer) - var(--sep-padding)); /* 8px */
-  --sep-item-radius: calc(var(--sep-radius-outer) - var(--sep-padding));   /* 8px */
-  --sep-btn-radius: 6px;
-  --sep-badge-radius: 4px;
-  --sep-pill-radius: 9999px;
+  --sep-radius-inner: var(--radius-m);
+  --sep-item-radius: var(--radius-m);
+  --sep-btn-radius: var(--radius-m);
+  --sep-badge-radius: var(--radius-s);
+  --sep-pill-radius: var(--radius-pill);
 
   --sep-item-height: 28px;
   --sep-item-padding-h: 10px;
@@ -1003,10 +1046,10 @@ html[data-theme='dark'] {
 
   --sep-bg-panel-solid: var(--bg-elevated);
   --sep-bg-item-hover: var(--tint-hover);
-  --sep-bg-input: hsl(48 20% 95% / 0.04);
+  --sep-bg-input: var(--surface-input);
 
   --sep-border-color: var(--border-color);
-  --sep-divider-color: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  --sep-divider-color: var(--border-subtle);
 
   --sep-text-primary: var(--text-primary);
   --sep-text-secondary: var(--text-secondary);
@@ -1028,7 +1071,6 @@ html[data-theme='dark'] {
   --accent-green: oklch(0.76 0.16 152);
   --accent-green-light: oklch(0.76 0.16 152 / 0.14);
   --accent-green-muted: oklch(0.76 0.16 152 / 0.26);
-  --status-online: oklch(0.76 0.16 152);
   --accent-red: oklch(0.72 0.19 27.5);
   --accent-red-light: oklch(0.72 0.19 27.5 / 0.14);
   /* themeStore applyTheme dark */
@@ -1167,9 +1209,8 @@ html[data-theme='dark'] {
   /* --- Composer Attachment Card Tokens (Dark) --- */
   --composer-attach-card-size: 52px;
   --composer-attach-card-border: 1px solid var(--border-subtle);
-  --composer-attach-card-bg: var(--bg-card, hsl(0 0% 12%));
+  --composer-attach-card-bg: var(--surface-input);
   --composer-attach-card-hover-border: var(--border-color);
-  --composer-attach-remove-bg: rgba(255, 255, 255, 0.3);
   --composer-attach-name-color: var(--text-secondary);
   --composer-attach-progress-color: var(--accent-primary, #10b981);
 
@@ -1213,15 +1254,15 @@ html[data-theme='dark'] {
   --md-heading-margin-bottom: 0.28em;
 
   /* --- 3. 行内元素与交互胶囊 (Dark) --- */
-  --md-code-inline-bg: color-mix(in srgb, var(--text-primary) 5%, var(--bg-card));
+  --md-code-inline-bg: var(--surface-outer);
   --md-code-inline-fg: var(--text-primary);
-  --md-code-inline-radius: 4px;
+  --md-code-inline-radius: var(--radius-s);
   --md-code-inline-padding: 0.15em 0.4em;
   --md-code-inline-size: 0.9em;
 
   --md-code-block-bg: var(--bg-card);
   --md-code-block-border: var(--border-subtle);
-  --md-code-block-radius: var(--radius-lg, 8px);
+  --md-code-block-radius: var(--radius-m);
   --md-code-block-padding: var(--space-2, 8px) var(--space-3, 12px);
   --md-code-font: var(--font-mono);
   --md-code-font-size: var(--font-size-xs, 12px);
@@ -1236,7 +1277,7 @@ html[data-theme='dark'] {
   --md-path-link-border: transparent;
 
   --md-task-box-size: 14px;
-  --md-task-box-radius: 3px;
+  --md-task-box-radius: var(--radius-s);
   /* 任务勾选 ✓ 的笔画宽度（border 拼形画法，SSOT）。
      语义同 --border-width-emphasis 的强调档，但独立命名以表达「勾线」而非「边框」。 */
   --md-task-check-stroke: 2px;
@@ -1250,7 +1291,7 @@ html[data-theme='dark'] {
   --md-quote-border: 3px solid var(--border-color);
   --md-quote-border-color: color-mix(in srgb, var(--text-primary) 8%, var(--border-color));
   --md-quote-border-width: 3px;
-  --md-quote-bg: color-mix(in srgb, var(--text-primary) 3%, transparent);
+  --md-quote-bg: transparent;
   --md-quote-text: var(--text-secondary, hsl(0 0% 64%));
   --md-quote-padding: 0.45em 0 0.45em 1.1em;
   --md-quote-margin: 0.68em 0;
@@ -1263,12 +1304,12 @@ html[data-theme='dark'] {
 
   /* --- 5. 表格系统变量收敛 (Dark) --- */
   --md-table-border: var(--hairline-strong, var(--border-color));
-  --md-table-header-bg: hsl(0 0% 12%);
-  --md-table-row-alt-bg: color-mix(in srgb, var(--text-primary) 1.8%, transparent);
-  --md-table-row-hover-bg: color-mix(in srgb, var(--text-primary) 4%, transparent);
+  --md-table-header-bg: var(--surface-outer);
+  --md-table-row-alt-bg: transparent;
+  --md-table-row-hover-bg: var(--tint-hover);
   --md-table-cell-padding: 10px 14px;
   --md-table-cell-padding-compact: 7px 10px;
-  --md-table-radius: var(--radius-lg, 8px);
+  --md-table-radius: var(--radius-m);
 
   --md-table-bg: var(--bg-secondary);
   --md-table-border-width: var(--hairline-width, 1px);
@@ -1284,14 +1325,14 @@ html[data-theme='dark'] {
   --stream-table-intrinsic-h: 320px;
 
   /* --- 3. 自定义富交互与 Artifacts 体系 (Dark) --- */
-  --artifact-card-bg: hsl(0 0% 11%);
-  --artifact-card-border: hsl(0 0% 18%);
+  --artifact-card-bg: var(--surface-main);
+  --artifact-card-border: var(--border-color);
   --artifact-card-border-hover: color-mix(in srgb, var(--border-subtle) 94%, var(--text-primary) 6%);
-  --artifact-card-radius: 8px;
-  --artifact-header-bg: hsl(0 0% 13%);
-  --artifact-header-border: hsl(0 0% 14%);
-  --artifact-btn-bg: hsl(0 0% 8%);
-  --artifact-btn-border: hsl(0 0% 18%);
+  --artifact-card-radius: var(--radius-l);
+  --artifact-header-bg: var(--surface-outer);
+  --artifact-header-border: var(--border-subtle);
+  --artifact-btn-bg: var(--surface-main);
+  --artifact-btn-border: var(--border-subtle);
   --artifact-btn-hover-bg: var(--tint-hover);
   --artifact-btn-hover-border: color-mix(in srgb, var(--border-subtle) 90%, var(--text-primary) 10%);
   --artifact-btn-active-bg: var(--tint-active);
@@ -1313,16 +1354,16 @@ html[data-theme='dark'] {
   --diff-linenum-fg: hsl(0 0% 56%);
   --diff-gutter-bg: var(--bg-card);
   --diff-split-divider: color-mix(in srgb, var(--border-subtle) 25%, transparent);
-  --diff-split-header-bg: hsl(0 0% 8%);
+  --diff-split-header-bg: var(--bg-secondary);
   --diff-split-header-fg: var(--text-secondary);
-  --diff-mode-segmented-bg: hsl(0 0% 8%);
-  --diff-mode-item-active-bg: hsl(0 0% 18%);
+  --diff-mode-segmented-bg: var(--seg-track-bg);
+  --diff-mode-item-active-bg: var(--seg-slider-bg);
   --diff-mode-item-active-fg: var(--text-primary, #f0f0f0);
 
 
   /* FileTree 工程文件树 */
   --filetree-indent-unit: 14px;
-  --filetree-node-hover-bg: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  --filetree-node-hover-bg: var(--elevate-1); /* 并入阶梯（旧 text-primary 6%） */
   --filetree-node-active-bg: color-mix(in srgb, var(--brand) 14%, transparent);
   --filetree-node-active-fg: var(--text-primary);
   --filetree-node-fg: var(--text-secondary);
@@ -1369,7 +1410,7 @@ html[data-theme='dark'] {
 
 
   /* --- 6. 用量监控与时序分析（Usage Dashboard）暗色体系 (Dark) --- */
-  --usage-capsule-outer-radius: 9px;
+  --usage-capsule-outer-radius: var(--radius-pill);
   --usage-capsule-pad: 3px;
   --usage-capsule-inner-radius: calc(var(--usage-capsule-outer-radius) - var(--usage-capsule-pad)); /* 6px */
 
@@ -1449,14 +1490,15 @@ html[data-ui-size='small'] {
   --line-height-body: 1.5;
 
   /* 圆角偶数化（BATCH-01 §4.4）；禁止改写 --radius-btn / --button-radius */
-  --radius-xs: 2px;
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 8px;
-  --radius-xl: 10px;
-  --radius-2xl: 10px;
-  --radius-3xl: 20px;
-  --radius-full: 9999px;
+  /* small 密度档：圆角不再按密度档缩放，统一引用 :root 的 5 档 */
+  --radius-xs: var(--radius-s);
+  --radius-sm: var(--radius-s);
+  --radius-md: var(--radius-m);
+  --radius-lg: var(--radius-m);
+  --radius-xl: var(--radius-l);
+  --radius-2xl: var(--radius-l);
+  --radius-3xl: var(--radius-input);
+  --radius-full: var(--radius-pill);
 
   --card-header-min-height: 32px;
   --card-header-pad-y: 3px;
@@ -1516,14 +1558,15 @@ html[data-ui-size='large'] {
   --line-height-body: 1.6;
 
   /* 圆角偶数化（BATCH-01 §4.4）；禁止改写 --radius-btn / --button-radius */
-  --radius-xs: 4px;
-  --radius-sm: 6px;
-  --radius-md: 8px;
-  --radius-lg: 10px;
-  --radius-xl: 14px;
-  --radius-2xl: 14px;
-  --radius-3xl: 26px;
-  --radius-full: 9999px;
+  /* large 密度档：圆角不再按密度档缩放，统一引用 :root 的 5 档 */
+  --radius-xs: var(--radius-s);
+  --radius-sm: var(--radius-s);
+  --radius-md: var(--radius-m);
+  --radius-lg: var(--radius-m);
+  --radius-xl: var(--radius-l);
+  --radius-2xl: var(--radius-l);
+  --radius-3xl: var(--radius-input);
+  --radius-full: var(--radius-pill);
 
   --card-header-min-height: 40px;
   --card-header-pad-y: 5px;
@@ -1542,7 +1585,7 @@ html[data-ui-size='large'] {
 /* ── 用量监控与时序分析（Usage Dashboard）专用系统设计规范 ── */
 :root {
   /* 胶囊进度行：outer(9px) = inner(6px) + pad(3px) */
-  --usage-capsule-outer-radius: 9px;
+  --usage-capsule-outer-radius: var(--radius-pill);
   --usage-capsule-pad: 3px;
   --usage-capsule-inner-radius: calc(var(--usage-capsule-outer-radius) - var(--usage-capsule-pad)); /* 6px */
 
@@ -1735,4 +1778,32 @@ html[data-perf-tier='eco'] {
     --syntax-addition: oklch(0.82 0.16 142);
     --syntax-deletion: oklch(0.75 0.18 25);
   }
+}
+
+/* --- 系统窗口材质分层 (Win11 Mica / Win10 Acrylic) --- */
+html[data-backdrop='mica'] {
+  --workspace-surface-bg: transparent;
+}
+
+html[data-backdrop='acrylic'] {
+  --workspace-surface-bg: transparent;
+}
+
+/* --- 三档底色 × 窗口材质（2026-10-11 heson 定稿；review P1-2：外层只在一处着色）---
+ * 布局模型：窗口最底 = 原生 Mica（Tauri transparent 窗口 + window-vibrancy，跟随应用主题），其上：
+ *   外层 = body 一处着色：--outer-layer-bg = 外层色以 α 叠在云母上（Mica α 0.68、Acrylic α 0.75）；
+ *     侧栏、顶部标签栏、.section、分栏缝都透明（--outer-layer-child-bg），全部透出同一层 body 着色，
+ *     内容矩形圆角外侧不会露出未着色的云母；无材质时 body 与子层都是不透明外层色（兜底）。
+ *   内容矩形（主界面 + 右侧栏，.leafBody）与输入框 = 不透明实色（--leaf-card-bg 恒为 --bg-card）。 */
+:root {
+  --outer-layer-bg: var(--surface-outer);
+  --outer-layer-child-bg: var(--surface-outer);
+}
+html[data-backdrop='mica'] {
+  --outer-layer-bg: color-mix(in srgb, var(--surface-outer) 68%, transparent);
+  --outer-layer-child-bg: transparent;
+}
+html[data-backdrop='acrylic'] {
+  --outer-layer-bg: color-mix(in srgb, var(--surface-outer) 75%, transparent);
+  --outer-layer-child-bg: transparent;
 }

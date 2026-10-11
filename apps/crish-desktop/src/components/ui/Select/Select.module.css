@@ -168,18 +168,19 @@
   animation: cds-popover-enter var(--transition-popover-enter) forwards;
 }
 
+/* 同心圆角：外圆角 = 内圆角（选项 --sep-item-radius = --radius-m 8px）+ 内边距（review P2-4） */
 .contentSm {
-  border-radius: var(--radius-l);
+  border-radius: calc(var(--radius-m) + 4px);
   padding: 4px;
 }
 
 .contentMd {
-  border-radius: var(--radius-l);
+  border-radius: calc(var(--radius-m) + 6px);
   padding: 6px;
 }
 
 .contentLg {
-  border-radius: var(--radius-l);
+  border-radius: calc(var(--radius-m) + 8px);
   padding: 8px;
 }
 

@@ -11,7 +11,7 @@
   max-width: min(100vw - 16px, 520px);
   padding: 3px 6px 3px 8px;
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md, 6px);
+  border-radius: var(--radius-md);
   background: var(--bg-elevated);
   color: var(--text-secondary, var(--text-tertiary));
   font-family: var(--font-mono);
@@ -55,7 +55,7 @@
   min-height: unset;
   height: auto;
   border: none;
-  border-radius: var(--radius-xs, 2px);
+  border-radius: var(--radius-xs);
   background: transparent;
   color: var(--text-tertiary);
   font: inherit;

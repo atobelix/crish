@@ -35,7 +35,8 @@
   font-size: var(--font-size-base);
   line-height: var(--line-height-body);
   color: var(--text-primary);
-  background: color-mix(in srgb, var(--bg-primary) 40%, var(--bg-card));
+  /* 三档底色：输入控件属于「输入框」档（浅色纯白 / 深色最亮层），review P1-4 */
+  background: var(--surface-input);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   outline: none;
@@ -50,12 +51,13 @@
 
 .nativeTextarea:where(:hover:not(:focus):not(:focus-visible):not(:disabled)) {
   border-color: color-mix(in srgb, var(--border-color) 92%, var(--text-primary) 8%);
-  background: color-mix(in srgb, var(--bg-primary) 20%, var(--bg-card));
+  /* hover = 输入档上的统一透明叠加 */
+  background: linear-gradient(var(--tint-hover), var(--tint-hover)), var(--surface-input);
 }
 
 .nativeTextarea:where(:focus, :focus-visible, :focus:hover, :focus-visible:hover) {
   outline: none;
-  background: var(--bg-card);
+  background: var(--surface-input);
   box-shadow: none;
   border-color: color-mix(in srgb, var(--border-color) 92%, var(--text-primary) 8%);
 }

@@ -55,7 +55,7 @@ input.urlInput {
   font-size: var(--font-size-xs, 12px);
   background: transparent;
   border: 1px solid transparent;
-  border-radius: var(--radius-md, 6px);
+  border-radius: var(--radius-md);
   box-shadow: none;
   color: var(--text-primary);
   cursor: text;
@@ -172,13 +172,13 @@ input.urlInput::-webkit-search-results-decoration {
   --btn-h: 22px;
   --btn-px: 6px;
   --btn-fs: 11px;
-  --btn-radius: var(--radius-sm, 4px);
+  --btn-radius: var(--radius-sm);
   --btn-gap: 4px;
   height: 22px;
   min-height: 22px;
   padding: 0 6px;
   font-size: 11px;
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-sm);
   gap: 4px;
   line-height: 1;
 }
@@ -201,7 +201,7 @@ input.urlInput::-webkit-search-results-decoration {
   padding: 4px 8px;
   background: var(--bg-elevated, var(--bg-card));
   border: var(--hairline-width, 1px) solid var(--border-color);
-  border-radius: var(--radius-md, 6px);
+  border-radius: var(--radius-md);
   box-shadow: 0 2px 8px var(--tint-strong);
   font-size: var(--font-size-xs, 12px);
   color: var(--text-primary);
@@ -226,7 +226,7 @@ input.urlInput::-webkit-search-results-decoration {
   color: var(--accent-primary);
   background: color-mix(in srgb, var(--accent-primary) 8%, transparent);
   padding: 1px 4px;
-  border-radius: var(--radius-sm, 3px);
+  border-radius: var(--radius-sm);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -281,7 +281,7 @@ input.urlInput::-webkit-search-results-decoration {
   color: var(--text-secondary);
   background: var(--bg-secondary);
   padding: 1px 4px;
-  border-radius: var(--radius-sm, 3px);
+  border-radius: var(--radius-sm);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -337,7 +337,7 @@ input.urlInput::-webkit-search-results-decoration {
   background: var(--bg-elevated);
   border: var(--hairline-width, 1px) solid
     color-mix(in srgb, var(--accent-primary) 36%, transparent);
-  border-radius: var(--radius-sm, 3px);
+  border-radius: var(--radius-sm);
   box-shadow: var(--shadow-sm);
   padding: 1px 5px;
   white-space: nowrap;
@@ -414,7 +414,7 @@ input.urlInput::-webkit-search-results-decoration {
   padding: 4px 10px;
   min-height: unset;
   height: auto;
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-sm);
   color: var(--text-secondary);
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: var(--font-size-xs, 12px);
@@ -454,7 +454,7 @@ input.urlInput::-webkit-search-results-decoration {
   padding: 4px 10px;
   min-height: unset;
   height: auto;
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-sm);
   color: var(--text-secondary);
   font-size: var(--font-size-xs, 12px);
   cursor: pointer;
@@ -569,7 +569,7 @@ input.urlInput::-webkit-search-results-decoration {
 .quickChip {
   border: var(--hairline-width, 1px) solid var(--border-subtle);
   background: var(--bg-card);
-  border-radius: var(--radius-md, 8px);
+  border-radius: var(--radius-md);
   padding: 3px 8px;
   font-size: var(--font-size-xxs);
   cursor: pointer;
@@ -603,7 +603,7 @@ input.urlInput::-webkit-search-results-decoration {
   z-index: var(--z-popover);
   max-height: min(240px, 42vh);
   border: var(--hairline-width, 1px) solid var(--border-color);
-  border-radius: var(--radius-md, 8px);
+  border-radius: var(--radius-md);
   box-shadow: var(--shadow-md);
   background: var(--bg-elevated, var(--bg-primary));
 }
@@ -664,7 +664,7 @@ input.urlInput::-webkit-search-results-decoration {
   border: none;
   background: transparent;
   padding: 3px 4px;
-  border-radius: var(--radius-sm, 6px);
+  border-radius: var(--radius-sm);
   font-size: var(--font-size-xs);
   color: var(--text-secondary);
   cursor: pointer;

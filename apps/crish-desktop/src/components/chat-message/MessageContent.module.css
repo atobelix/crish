@@ -33,7 +33,7 @@
 
 .turnProcessControlBar:focus-visible {
   outline: none;
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-sm);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
 }
 
@@ -108,7 +108,7 @@
 .mdImg {
   max-width: min(100%, 420px);
   max-height: 280px;
-  border-radius: var(--radius-xl, 12px);
+  border-radius: var(--radius-xl);
   border: var(--hairline-width, 1px) solid var(--hairline, var(--border-subtle));
   object-fit: contain;
   background: var(--bg-secondary);

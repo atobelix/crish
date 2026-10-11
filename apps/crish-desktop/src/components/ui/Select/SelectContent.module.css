@@ -37,19 +37,19 @@
 /* 尺寸档位（同心曲率：外圆角 = 内圆角 + 内边距） */
 .contentSm,
 .size-sm {
-  border-radius: var(--radius-l);
+  border-radius: calc(var(--radius-m) + 4px);
   padding: 4px;
 }
 
 .contentMd,
 .size-md {
-  border-radius: var(--radius-xl);
-  padding: 5px;
+  border-radius: calc(var(--radius-m) + 6px); /* 内边距 5→6px，避免奇数圆角（DIM-02 ratchet） */
+  padding: 6px;
 }
 
 .contentLg,
 .size-lg {
-  border-radius: var(--radius-l);
+  border-radius: calc(var(--radius-m) + 6px);
   padding: 6px;
 }
 

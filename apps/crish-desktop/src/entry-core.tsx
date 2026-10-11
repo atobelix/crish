@@ -400,7 +400,7 @@ export class StartupCoordinator {
           <div style="max-width:420px;padding:var(--space-8, 32px);
                       background:var(--bg-secondary);
                       border:1px solid var(--border-color);
-                      border-radius:var(--radius-lg, 8px);
+                      border-radius:var(--radius-lg);
                       box-shadow:var(--shadow-lg);">
             <div style="width:36px;height:36px;margin:0 auto var(--space-4, 16px);
                         border:2px solid var(--text-secondary);
@@ -414,7 +414,7 @@ export class StartupCoordinator {
             </p>
             <button onclick="window.location.reload()"
                     style="padding:var(--space-2, 8px) var(--space-5, 20px);font-size:13px;font-weight:500;
-                           border:none;border-radius:var(--radius-md, 4px);
+                           border:none;border-radius:var(--radius-md);
                            background-color:var(--brand-primary);
                            color:var(--text-on-accent);
                            cursor:pointer;">

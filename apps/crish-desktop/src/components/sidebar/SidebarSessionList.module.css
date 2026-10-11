@@ -132,7 +132,7 @@
   min-width: 24px;
   min-height: 24px;
   border: none;
-  border-radius: var(--radius-md, 6px);
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--text-tertiary);
   cursor: pointer;
@@ -273,7 +273,7 @@
   min-width: 24px;
   min-height: 24px;
   border: none;
-  border-radius: var(--radius-md, 6px);
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--text-tertiary);
   cursor: pointer;
@@ -527,7 +527,7 @@
   max-width: 24px;
   max-height: 24px;
   padding: 0;
-  border-radius: var(--radius-md, 6px);
+  border-radius: var(--radius-md);
   color: var(--text-tertiary);
   background: transparent;
   border: none;
@@ -717,7 +717,7 @@ li.isDraggingSource > *,
   padding: 0;
   width: 32px;
   height: 32px;
-  border-radius: var(--radius-md, 8px);
+  border-radius: var(--radius-md);
   margin: 0 auto;
 }
 
@@ -766,7 +766,7 @@ li.isDraggingSource > *,
   box-shadow: none;
   cursor: pointer;
   padding: 0 8px;
-  border-radius: var(--radius-md, 6px);
+  border-radius: var(--radius-md);
   line-height: 1;
   transition: color var(--transition-fast), background-color var(--transition-fast);
   user-select: none;

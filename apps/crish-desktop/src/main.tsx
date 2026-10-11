@@ -6,4 +6,6 @@
  */
 // 必须先于 entry-core：整页刷新后恢复 data-backdrop（云母分层规则的开关），见 bootstrap/backdropPersistence.ts
 import './bootstrap/backdropPersistence';
+// 材质跟随应用主题（通知 Rust 重设 Mica/Acrylic），见 bootstrap/backdropThemeSync.ts
+import './bootstrap/backdropThemeSync';
 import './entry-core';

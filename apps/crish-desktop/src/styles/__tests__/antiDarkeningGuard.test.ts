@@ -159,7 +159,7 @@ describe('Design System: Anti-Darkening, SSOT & A11y Guardrails (Master Suite)',
     ).toEqual([]);
   });
 
-  // 7. Tooltip 组件圆角为 var(--radius-full, 9999px) 胶囊且阴影为 --shadow-sm
+  // 7. Tooltip 组件圆角为 var(--radius-full) 胶囊且阴影为 --shadow-sm
   it('RULE-07: enforces Tooltip module uses radius-full and soft shadow-sm', () => {
     const tooltipCss = readFile('src/components/ui/Tooltip/Tooltip.module.css');
     expect(tooltipCss).toContain('var(--radius-full');

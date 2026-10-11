@@ -213,7 +213,7 @@
   font-size: var(--font-size-base, 14px);
   font-weight: var(--font-weight-medium);
   pointer-events: none;
-  border-radius: var(--radius-xl, 16px);
+  border-radius: var(--radius-xl);
   box-shadow: inset 0 0 0 1px var(--border-color);
   animation: dropOverlayFadeIn 140ms var(--ease-emphasized);
 }

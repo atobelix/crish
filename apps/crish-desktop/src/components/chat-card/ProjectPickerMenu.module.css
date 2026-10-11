@@ -8,7 +8,7 @@
   appearance: none;
   -webkit-appearance: none;
   position: relative;
-  border-radius: var(--radius-md, 6px);
+  border-radius: var(--radius-md);
   min-height: 28px;
 }
 

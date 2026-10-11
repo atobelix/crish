@@ -107,7 +107,7 @@
   height: var(--leaf-corner-btn-size);
   min-width: var(--leaf-corner-btn-size);
   min-height: unset;
-  border-radius: var(--radius-md, 6px);
+  border-radius: var(--radius-md);
   display: inline-flex;
   align-items: center;
   justify-content: center;

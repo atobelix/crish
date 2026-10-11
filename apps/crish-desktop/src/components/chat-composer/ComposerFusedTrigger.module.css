@@ -226,7 +226,7 @@
   min-width: unset;
   padding: 5px 8px;
   border: none;
-  border-radius: var(--radius-md, 6px);
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--text-primary);
   font-family: inherit;

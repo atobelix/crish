@@ -153,8 +153,8 @@
 /* 深色模式：精准抬升灰度明度，塑造清晰高对比度的暗色实体纸片感知 */
 :global(html[data-theme='dark']) .button:where(.buttonSecondary, [data-variant='secondary']),
 :global(.theme-dark) .button:where(.buttonSecondary, [data-variant='secondary']) {
-  /* 三档底色：次级按钮静止态与浅色一致 = 所在层底色 + 描边，不再自造第四种灰（旧 #323232） */
-  --btn-bg: var(--bg-card);
+  /* 次级按钮底色走主题 token（深色稍亮于所在层，heson 2026-10-11；浅色 = bg-card 不变） */
+  --btn-bg: var(--button-secondary-bg, var(--bg-card));
   --btn-fg: var(--text-primary);
   --btn-border: var(--border-color);
   --btn-shadow: 0 1px 3px hsl(0 0% 0% / 0.35);

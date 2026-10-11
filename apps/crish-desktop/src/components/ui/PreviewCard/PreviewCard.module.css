@@ -16,7 +16,7 @@
   background: var(--bg-elevated);
   color: var(--text-primary);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-xl, 12px);
+  border-radius: var(--radius-xl);
   padding: var(--space-3, 12px) var(--space-4, 16px);
   box-shadow: var(--shadow-2xl);
   display: flex;

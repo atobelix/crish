@@ -10,7 +10,7 @@
   width: 100%;
   max-width: 100%;
   margin: var(--space-2, 8px) 0;
-  border-radius: var(--md-table-radius, var(--radius-lg, 8px));
+  border-radius: var(--md-table-radius, var(--radius-lg));
   border: var(--md-table-border-width, var(--hairline-width, 1px)) solid var(--md-table-border, var(--border-color));
   background: var(--md-table-bg, var(--bg-secondary));
   box-sizing: border-box;
@@ -24,7 +24,7 @@
   overflow-x: auto;
   overflow-y: auto;
   contain: layout paint;
-  border-radius: calc(var(--md-table-radius, var(--radius-lg, 8px)) - 2px);
+  border-radius: calc(var(--md-table-radius, var(--radius-lg)) - 2px);
   background: var(--md-table-bg, var(--bg-secondary));
   box-sizing: border-box;
 }

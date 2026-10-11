@@ -5,7 +5,7 @@
    ========================================================================== */
 
 .attachmentCard {
-  border-radius: var(--radius-xl, 14px);
+  border-radius: var(--radius-xl);
   border: 1px solid var(--border-subtle);
   background: var(--bg-card);
   box-sizing: border-box;
@@ -51,7 +51,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: var(--composer-attach-card-radius, var(--radius-xl, 14px));
+  border-radius: var(--composer-attach-card-radius, var(--radius-xl));
   background: var(--bg-primary);
   border: var(--composer-attach-card-border, 1px solid var(--border-subtle));
   position: relative;
@@ -176,7 +176,7 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  border-radius: var(--radius-md, 6px);
+  border-radius: var(--radius-md);
   background: var(--bg-subtle);
 }
 
@@ -235,7 +235,7 @@
   height: 16px;
   border-radius: var(--radius-sm);
   /* background: color-mix(in srgb, hsl(38, 95%, 50%) 20%, var(--bg-elevated)); */
-  background: color-mix(in srgb, var(--surface-paper) 60%, transparent);
+  background: var(--surface-main); /* 三档：主层（原 paper 60% 叠在白色输入框上得到新灰） */
   /* border: 1px solid color-mix(in srgb, hsl(38, 95%, 50%) 60%, transparent); */
   color: var(--text-warning-strong);
   backdrop-filter: blur(4px);
@@ -264,7 +264,7 @@
   --btn-px: 0px;
   border-radius: 50%;
   border: none;
-  background: color-mix(in srgb, var(--bg-elevated) 85%, transparent);
+  background: var(--surface-main); /* 三档：主层（原 elevated 85% 半透明） */
   color: var(--text-tertiary);
   cursor: pointer;
   display: flex;

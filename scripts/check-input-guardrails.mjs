@@ -785,7 +785,8 @@ export function runCheckFileSuite(targetErrors = errors) {
         message: '提交输入框常态必须声明 outline: none',
       },
       {
-        regex: /\.commitInput[^{]*\{[^}]*border-radius:\s*var\(--radius-(?:sm|md),\s*(?:4|6)px\)/,
+        // 2026-10-11：圆角兜底值批量清退（theme review P2-5），兜底改为可选
+        regex: /\.commitInput[^{]*\{[^}]*border-radius:\s*var\(--radius-(?:sm|md)(?:\s*,\s*(?:4|6)px)?\)/,
         message: '提交输入框必须采用标准微圆角 (4px/6px)',
       },
       {
@@ -1195,7 +1196,7 @@ export function scanAllCssRules(dir, targetErrors = errors) {
             const bizarrePixelMatch = radiusVal.match(/\b(17|19|23|27|29|31|37|41|43|47)\s*px\b/i);
             if (bizarrePixelMatch) {
               targetErrors.push(
-                `[奇葩野值圆角拦截] 在 ${relPath} (${rawSelector}) 中发现非标奇葩圆角: "${bizarrePixelMatch[0]}"。圆角须接入 Design Tokens 阶梯 (--radius-xs: 2px, --radius-sm: 4px, --radius-md: 6px, --radius-lg: 8px, --radius-xl: 12px)！`
+                `[奇葩野值圆角拦截] 在 ${relPath} (${rawSelector}) 中发现非标奇葩圆角: "${bizarrePixelMatch[0]}"。圆角须接入 Design Tokens 5 档 (--radius-s: 4px, --radius-m: 8px, --radius-l: 12px, --radius-input: 20px, --radius-pill: 9999px；按钮例外 --radius-btn: 7px)！`
               );
             }
           }

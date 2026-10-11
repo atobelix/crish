@@ -102,7 +102,7 @@
   height: auto;
   box-shadow: none;
   padding: var(--space-0_5, 2px) var(--space-2, 8px);
-  border-radius: var(--radius-lg, 8px);
+  border-radius: var(--radius-lg);
   background: transparent;
   border: 1px solid transparent;
   color: var(--text-primary);
@@ -222,7 +222,7 @@
   padding: var(--space-3, 12px) var(--space-4, 16px);
   background: var(--bg-card, var(--bg-secondary));
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-xl, 12px);
+  border-radius: var(--radius-xl);
   cursor: pointer;
   color: var(--text-primary);
   width: 100%;

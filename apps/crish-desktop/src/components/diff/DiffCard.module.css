@@ -100,7 +100,7 @@
   width: 28px;
   height: 28px;
   min-width: 28px;
-  border-radius: var(--radius-md, 6px);
+  border-radius: var(--radius-md);
   padding: 0;
   display: inline-flex;
   align-items: center;
@@ -283,7 +283,7 @@
   padding: 0;
   margin: 0 8px 0 0;
   border: none;
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-sm);
   background: transparent;
   cursor: pointer;
   outline: none;
@@ -341,7 +341,7 @@
   padding: 0;
   margin: 0 6px 0 0;
   border: none;
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-sm);
   background: transparent;
   cursor: pointer;
   outline: none;
@@ -423,7 +423,7 @@
   padding: 0;
   margin: 0;
   border: none;
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-sm);
   background: transparent;
   cursor: pointer;
   text-align: left;
@@ -609,7 +609,7 @@
   margin: 0;
   padding: 0;
   border: 1px solid color-mix(in srgb, var(--border-subtle) 18%, transparent);
-  border-radius: 0 0 var(--radius-md, 8px) var(--radius-md, 8px);
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
   background: var(--bg-card);
   box-sizing: border-box;
   overflow: hidden;
@@ -627,7 +627,7 @@
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
-  border-radius: 0 0 var(--radius-md, 8px) var(--radius-md, 8px);
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
   border: none;
 }
 
@@ -657,8 +657,8 @@
   justify-content: center;
   width: 22px;
   height: 22px;
-  border-radius: var(--radius-md, 6px);
-  --btn-radius: var(--radius-md, 6px);
+  border-radius: var(--radius-md);
+  --btn-radius: var(--radius-md);
   border: none;
   background: transparent;
   color: var(--text-secondary);
@@ -825,13 +825,13 @@
 /* 词法级行内修改高亮 (Intraline) */
 .diffWordAdd {
   background: transparent;
-  border-radius: var(--radius-xs, 2px);
+  border-radius: var(--radius-xs);
   padding: 0 1px;
 }
 
 .diffWordDel {
   background: transparent;
-  border-radius: var(--radius-xs, 2px);
+  border-radius: var(--radius-xs);
   padding: 0 1px;
 }
 
@@ -882,7 +882,7 @@
   padding: 0 12px;
   cursor: pointer;
   border: none;
-  border-radius: var(--radius-md, 6px);
+  border-radius: var(--radius-md);
   user-select: none;
   font-family: var(--font-sans);
   box-sizing: border-box;
@@ -988,7 +988,7 @@
   justify-content: center;
   width: 18px;
   height: 18px;
-  border-radius: var(--radius-md, 6px);
+  border-radius: var(--radius-md);
   padding: 0;
 }
 
@@ -999,7 +999,7 @@
 .commitInput {
   height: 52px;
   border: 1px solid color-mix(in srgb, var(--border-subtle) 20%, transparent);
-  border-radius: var(--radius-md, 6px);
+  border-radius: var(--radius-md);
   background: var(--bg-card);
   padding: 8px 10px;
   font-size: var(--font-size-xs, 12px);
@@ -1039,7 +1039,7 @@
 }
 
 .commitActions button {
-  border-radius: var(--radius-md, 6px);
+  border-radius: var(--radius-md);
 }
 
 .commitCharCount,
@@ -1094,8 +1094,8 @@
   --btn-fs: var(--font-size-xxs, 11px);
   padding: 0 8px;
   --btn-px: 8px;
-  border-radius: var(--radius-md, 6px);
-  --btn-radius: var(--radius-md, 6px);
+  border-radius: var(--radius-md);
+  --btn-radius: var(--radius-md);
   border: none;
   --btn-border: transparent;
   background: transparent;
@@ -1237,7 +1237,7 @@
   margin-left: 8px;
   font-size: 11px;
   padding: 1px 6px;
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-sm);
   height: auto;
   min-height: unset;
   background: var(--bg-secondary);

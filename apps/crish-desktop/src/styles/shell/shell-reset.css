@@ -52,16 +52,14 @@ body {
 }
 
 /* 系统窗口材质分层适配 (Win11 Mica 云母 / Win10 Acrylic / 纯实色 Solid 阶梯回退) */
+/* 外层唯一着色点：body = 外层色 α 叠在云母上；侧栏/顶栏/分栏缝透明（review P1-2） */
 html[data-backdrop='mica'] body {
-  background-color: transparent;
+  background-color: var(--outer-layer-bg);
 }
 
 html[data-backdrop='mica'] .sidebar-wrapper:not(.collapsed) {
-  background-color: color-mix(
-    in srgb,
-    var(--shell-chrome-bg, var(--bg-secondary)) 68%,
-    transparent
-  );
+  /* 子层透明，透出 body 的唯一外层着色（原为第二条 68% 着色链） */
+  background-color: var(--outer-layer-child-bg);
 }
 
 html[data-backdrop='mica'] .workspaces-column {
@@ -69,15 +67,11 @@ html[data-backdrop='mica'] .workspaces-column {
 }
 
 html[data-backdrop='acrylic'] body {
-  background-color: transparent;
+  background-color: var(--outer-layer-bg);
 }
 
 html[data-backdrop='acrylic'] .sidebar-wrapper:not(.collapsed) {
-  background-color: color-mix(
-    in srgb,
-    var(--shell-chrome-bg, var(--bg-secondary)) 75%,
-    transparent
-  );
+  background-color: var(--outer-layer-child-bg);
 }
 
 html[data-backdrop='acrylic'] .workspaces-column {

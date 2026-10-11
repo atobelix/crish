@@ -9,7 +9,7 @@
   border: 1px solid
     color-mix(in srgb, var(--accent-orange, var(--border-color)) 16%, var(--border-color));
   border-radius: var(--radius-xl);
-  background: color-mix(in srgb, var(--bg-secondary) 82%, transparent);
+  background: var(--surface-outer); /* 三档：外层档（原 82% 半透明得到中间灰） */
   box-shadow: none;
   color: var(--text-secondary);
   font-size: var(--font-size-sm);

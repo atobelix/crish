@@ -93,7 +93,7 @@
   align-items: center;
   max-width: 100%;
   padding: 1px 6px;
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-sm);
   border: 1px solid var(--hairline, var(--border-subtle));
   font-size: var(--font-size-xxs, 11px);
   font-family: var(--font-mono);
@@ -210,7 +210,7 @@
 .approvalCardBtn {
   height: 28px;
   padding: 0 12px;
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-sm);
   border: 1px solid var(--hairline-strong, var(--border-color, var(--border-subtle)));
   font-family: inherit;
   font-size: var(--font-size-xs);

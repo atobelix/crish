@@ -7,6 +7,7 @@
 
 import type { PersonalizationSettings, UiTheme } from '../api/themeTypes';
 import { SKIN_PRESETS, type SkinPreset } from '../api/themePresets';
+import { shiftWarmLayers } from './warmLayerShift';
 import {
   parseColorToOklch,
   computeContrastGuardedTokens,
@@ -300,25 +301,37 @@ export class TokenRuntimeController {
         vibrantTint = `color-mix(in srgb, hsl(30, 50%, 65%) ${solarWarmthMix * 100}%, ${vibrantTint})`;
       }
 
+      let darkLayersShifted = false;
       if (!isDark && skinKey === 'warm-gray') {
         // 从外到内逐层变白（2026-10-10 heson 定稿，刻度 = 100 − HSL 亮度）：
         //   外层/侧栏 3.5（L 96.5%）→ 主界面 2.0（L 98%）→ 输入框/卡片 0（纯白）。
         //   旧值 95% / 95.2%（实测灰度 ≈5.1 / 4.7，两层几乎同色）。
         //   亮度微调 ±5 档沿用原斜率；主界面封顶 99.5%，保证永远略暗于纯白输入框。
-        // 2026-10-11 heson 实测定稿（同一暖色调 CMYK C0 M0.4 Y0.8）：外层 K5 #f2f1f0（hsl(30 7.14% 94.51%)；10-11 由 K4 #f4f3f2 加深）、主层 K2.8 #f8f7f6（hsl(30 12.5% 96.86%)）、
-        // 输入框 #ffffff。adjust=0 时输出精确 hex；±档沿用原斜率（主层 0.6/档、外层 0.3/档），主层封顶 99.5%。
-        const lPrimary = Number(Math.min(99.5, 96.86 + adjust * 0.6).toFixed(2));
-        const lSecondary = Number(Math.min(99, 94.51 + adjust * 0.3).toFixed(2));
-        const lTertiary = Number((lSecondary - 3).toFixed(2));
-
-        bgPrimary = adjust === 0 ? '#f8f7f6' : `hsl(30 12.5% ${lPrimary}%)`;
-        bgSecondary = adjust === 0 ? '#f2f1f0' : `hsl(30 7.14% ${lSecondary}%)`;
-        bgTertiary = `hsl(30 8.33% ${lTertiary}%)`;
+        // 2026-10-11 heson 实测定稿（同一暖色调 CMYK C0 M0.4 Y0.8）：外层 K5 #f2f1f0、主层 K2.8 #f8f7f6、输入框 #ffffff。
+        // 亮度微调只平移 K（保持 M0.4/Y0.8），三层同步并夹紧，层级不反转、不贴合（review P1-3，见 warmLayerShift.ts）。
+        const layers = shiftWarmLayers({ outer: '#f2f1f0', main: '#f8f7f6', input: '#ffffff' }, adjust, false);
+        bgPrimary = layers.main;
+        bgSecondary = layers.outer;
+        bgTertiary = layers.outer;
         bgCard = '#ffffff';
         bgElevated = '#ffffff';
         shellChromeBg = bgSecondary;
-        borderColor = 'hsl(35 10% 86%)';
-        borderSubtle = 'hsl(30 6% 93.8%)';
+        // 与 tokens.css 浅色 --border-color / --border-subtle 同值（review P2-1：单一取值，M0.4/Y0.8）
+        borderColor = '#e2e1e0';
+        borderSubtle = '#f0efee';
+      } else if (isDark && skinKey === 'dark-cozy') {
+        // 默认深色皮肤：三层（外层 / 主层 / 输入框）只平移 K、同步移动并夹紧，输入框参与平移，永远最亮（review P1-3）
+        const layers = shiftWarmLayers(
+          { outer: skinConfig.bgSecondary, main: skinConfig.bgPrimary, input: skinConfig.bgCard },
+          adjust,
+          true,
+        );
+        bgPrimary = layers.main;
+        bgSecondary = layers.outer;
+        bgTertiary = layers.outer;
+        shellChromeBg = layers.outer;
+        bgCard = layers.input;
+        darkLayersShifted = true;
       } else if (adjust !== 0) {
         if (isDark) {
           if (adjust > 0) {
@@ -419,7 +432,7 @@ export class TokenRuntimeController {
           bgCard = 'hsl(0 0% 100%)';
           bgElevated = 'hsl(0 0% 100%)';
         }
-      } else {
+      } else if (!darkLayersShifted) {
         if (skinConfig.bgCard) {
           bgCard = skinConfig.bgCard;
         }

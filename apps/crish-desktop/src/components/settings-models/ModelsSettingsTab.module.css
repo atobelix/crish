@@ -27,7 +27,8 @@
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  background: color-mix(in srgb, var(--bg-primary) 35%, var(--bg-card));
+  /* 导轨同构主侧栏 → 外层档（原 primary/card 混色在三档后塌成主层色，review P1-4） */
+  background: var(--surface-outer);
   border-right: var(--hairline-width) solid var(--border-subtle);
   overflow: hidden;
 }

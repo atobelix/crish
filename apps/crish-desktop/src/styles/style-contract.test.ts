@@ -435,10 +435,10 @@ describe('批次 2 · ⑦ 固定值双源同值（双层同源约束 2）', () =
       '--tint-active: color-mix(in srgb, var(--text-primary) 5%, transparent)'
     );
     expect(darkBlock).toContain(
-      '--tint-hover: color-mix(in srgb, var(--text-primary) 5%, transparent)'
+      '--tint-hover: var(--elevate-1)' // 深色并入元素提亮阶梯（heson 2026-10-11 01:05）
     );
     expect(darkBlock).toContain(
-      '--tint-active: color-mix(in srgb, var(--text-primary) 8%, transparent)'
+      '--tint-active: var(--elevate-1-active)'
     );
   });
 });

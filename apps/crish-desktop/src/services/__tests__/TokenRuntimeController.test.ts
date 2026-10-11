@@ -87,7 +87,7 @@ describe('TokenRuntimeController 全仓单一运行时 Token 注入控制器测�
         expect(root.style.getPropertyValue(alias), alias).toBe('');
       }
       expect(root.style.getPropertyValue('--text-primary')).toBe('#1a1a1a');
-      expect(root.style.getPropertyValue('--border-color')).toBe('hsl(35 10% 86%)');
+      expect(root.style.getPropertyValue('--border-color')).toBe('#e2e1e0'); // P2-1：与 tokens.css 同值（M0.4/Y0.8）
       // control-soft-* 改为 tokens.css 统一叠加（--tint-hover/--tint-active），不再注入
       expect(root.style.getPropertyValue('--control-soft-bg')).toBe('');
       expectNoDerivedAliasesInjected(root);
@@ -155,7 +155,8 @@ describe('TokenRuntimeController 全仓单一运行时 Token 注入控制器测�
       expect(root.classList.contains('theme-light')).toBe(true);
       expect(root.classList.contains('theme-dark')).toBe(false);
 
-      expect(root.style.getPropertyValue('--surface-main')).toBe('#f1f3f5');
+      // P2-7：classic-gray 方向修正后主层 #f8f9fa 比外层 #f1f3f5 亮
+      expect(root.style.getPropertyValue('--surface-main')).toBe('#f8f9fa');
       expect(root.style.getPropertyValue('--text-primary')).toBe('#212529');
       expectNoDerivedAliasesInjected(root);
     });

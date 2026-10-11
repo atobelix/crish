@@ -18,8 +18,8 @@
   height: var(--header-height);
   min-height: var(--header-height);
   max-height: var(--header-height);
-  /* 顶部标签栏属于外层：与侧栏同一着色（有云母时为半透明叠色，透出 Mica） */
-  background: var(--outer-layer-bg, var(--shell-chrome-bg, var(--bg-secondary)));
+  /* 顶部标签栏属于外层：无材质 = 不透明外层色；有云母时透明，透出 body 的唯一外层着色 */
+  background: var(--outer-layer-child-bg, var(--shell-chrome-bg, var(--bg-secondary)));
   display: flex;
   align-items: center;
   justify-content: flex-start;
@@ -245,13 +245,17 @@
   opacity: 0;
   pointer-events: none;
   position: relative;
+  /* 屏蔽通用 Button 的 ::before 物理微光遮罩，消除 hover 时多层背景色嵌套 */
+  --btn-hover-overlay: transparent;
+  --btn-active-overlay: transparent;
   transition:
-    background var(--duration-micro) var(--ease-standard),
+    background-color var(--duration-micro) var(--ease-standard),
     opacity var(--duration-micro) var(--ease-standard),
     color var(--duration-micro) var(--ease-standard),
     transform 100ms var(--ease-standard);
 }
 
+/* 隐形扩大点击热区：纯透明图层，严禁任何着色 */
 .tabCloseBtn::before {
   content: '';
   position: absolute;
@@ -259,6 +263,13 @@
   bottom: calc(-1 * var(--tab-close-hit-pad));
   left: calc(-1 * var(--tab-close-hit-pad));
   right: calc(-1 * var(--tab-close-hit-pad));
+  background: transparent;
+}
+
+.tabCloseBtn:hover::before,
+.tabCloseBtn:active::before {
+  background: transparent;
+  opacity: 0;
 }
 
 .tabItemActive .tabCloseBtn,
@@ -268,6 +279,7 @@
   pointer-events: auto;
 }
 
+/* 单一简单 hover 变量，清爽利落零嵌套 */
 .tabCloseBtn:hover,
 .tabItem .tabCloseBtn:hover,
 .tabCloseBtn:hover {

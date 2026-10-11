@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { SKIN_PRESETS } from '../themePresets';
 import { applyPersonalization } from '../themePersonalization';
 import type { PersonalizationSettings } from '../themeTypes';
+import { shiftWarmLayers } from '../../services/warmLayerShift';
 
 describe('warm-gray 三级表面（侧栏约 5% 灰）', () => {
   beforeEach(() => {
@@ -41,10 +42,10 @@ describe('warm-gray 三级表面（侧栏约 5% 灰）', () => {
         'default',
       );
 
-      const lPrimary = Number(Math.min(99.5, 96.86 + adjust * 0.6).toFixed(2));
-      const lSecondary = Number(Math.min(99, 94.51 + adjust * 0.3).toFixed(2));
-      const expMain = adjust === 0 ? '#f8f7f6' : `hsl(30 12.5% ${lPrimary}%)`;
-      const expOuter = adjust === 0 ? '#f2f1f0' : `hsl(30 7.14% ${lSecondary}%)`;
+      // review P1-3：亮度微调只平移 K（保持 M0.4/Y0.8），三层夹紧不反转
+      const exp = shiftWarmLayers({ outer: '#f2f1f0', main: '#f8f7f6', input: '#ffffff' }, adjust, false);
+      const expMain = exp.main;
+      const expOuter = exp.outer;
 
       // T7 别名收敛（2026-09-12）：`--bg-*` 不再由 JS 注入，改由 tokens.css
       // 从 `--surface-*` 派生（tokens.css:51-56）。故注入面断言必须落在

@@ -200,7 +200,7 @@
   padding: 8px 10px;
   background: var(--tooltip-card-bg, var(--bg-card));
   border: 1px solid var(--tooltip-card-border, color-mix(in srgb, var(--border-color) 70%, transparent));
-  border-radius: var(--radius-lg, 10px);
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
   text-align: left;
   box-sizing: border-box;

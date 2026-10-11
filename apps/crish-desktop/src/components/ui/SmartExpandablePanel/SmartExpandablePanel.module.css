@@ -97,7 +97,7 @@
   border: none;
   background: transparent;
   color: var(--text-tertiary);
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-sm);
   cursor: pointer;
   padding: 0;
   transition: color var(--transition-micro, 100ms) ease;

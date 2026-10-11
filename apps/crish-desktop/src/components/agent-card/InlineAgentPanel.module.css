@@ -304,7 +304,7 @@
 .inlineAgentBadge {
   font-size: var(--font-size-xxs);
   padding: 0 5px;
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-sm);
   background: transparent;
   border: 1px solid var(--hairline, var(--border-subtle));
   color: var(--text-secondary);
@@ -465,14 +465,14 @@
 .inlineAgentFailKind,
 .inlineAgentFailRetries {
   padding: 1px 8px;
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-sm);
   border: 1px solid var(--hairline, var(--border-subtle));
   background: var(--bg-hover, transparent);
 }
 
 .inlineAgentFailNeedsUser {
   padding: 1px 8px;
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-sm);
   border: 1px solid var(--accent-orange, var(--border-subtle));
   color: var(--accent-orange, var(--text-secondary));
 }

@@ -64,6 +64,48 @@ pub fn apply_adaptive_backdrop(window: &WebviewWindow) -> WindowBackdropKind {
     WindowBackdropKind::None
 }
 
+/// 前端主题事件（payload = JSON bool，true 表示应用当前为深色）。
+/// 前端在启动和每次切换主题时发送（bootstrap/backdropThemeSync.ts）。
+pub const THEME_EVENT: &str = "crish://backdrop-theme";
+
+/// Acrylic 底色分浅、深两套（RGBA）：浅色取外层色 #f2f1f0，深色沿用原值。
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+const ACRYLIC_TINT_LIGHT: (u8, u8, u8, u8) = (242, 241, 240, 180);
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+const ACRYLIC_TINT_DARK: (u8, u8, u8, u8) = (24, 24, 27, 180);
+
+/// 解析主题事件 payload（只认 JSON 的 true / false）。
+pub fn parse_theme_payload(payload: &str) -> Option<bool> {
+    match payload.trim() {
+        "true" => Some(true),
+        "false" => Some(false),
+        _ => None,
+    }
+}
+
+/// 按**应用**主题（不跟随系统明暗）重设材质，并重新同步 data-backdrop。
+/// 修复：apply_mica/apply_tabbed(None) 跟随系统明暗，浅色应用 + 深色系统时，
+/// 外层 68% 着色叠在深色云母上会变成脏灰。
+pub fn reapply_for_app_theme(window: &WebviewWindow, kind: WindowBackdropKind, is_dark: bool) {
+    #[cfg(target_os = "windows")]
+    match kind {
+        WindowBackdropKind::Mica => {
+            if window_vibrancy::apply_tabbed(window, Some(is_dark)).is_err() {
+                let _ = window_vibrancy::apply_mica(window, Some(is_dark));
+            }
+        }
+        WindowBackdropKind::Acrylic => {
+            let tint = if is_dark { ACRYLIC_TINT_DARK } else { ACRYLIC_TINT_LIGHT };
+            let _ = window_vibrancy::apply_acrylic(window, Some(tint));
+        }
+        WindowBackdropKind::None => {}
+    }
+    #[cfg(not(target_os = "windows"))]
+    let _ = is_dark;
+    // 每次收到前端事件都重新写属性：整页刷新 / 首个文档晚于 setup eval 时也能恢复分层
+    sync_backdrop_to_webview(window, kind);
+}
+
 /// 将生效的材质类型同步至前端 DOM 属性与全局变量。
 pub fn sync_backdrop_to_webview(window: &WebviewWindow, kind: WindowBackdropKind) {
     let script = format!(
@@ -79,6 +121,14 @@ pub fn sync_backdrop_to_webview(window: &WebviewWindow, kind: WindowBackdropKind
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_parse_theme_payload() {
+        assert_eq!(parse_theme_payload("true"), Some(true));
+        assert_eq!(parse_theme_payload(" false "), Some(false));
+        assert_eq!(parse_theme_payload("\"dark\""), None);
+        assert_eq!(parse_theme_payload(""), None);
+    }
 
     #[test]
     fn test_backdrop_kind_str() {

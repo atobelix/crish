@@ -102,7 +102,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 6px 8px;
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-sm);
   gap: 8px;
   transition: background-color var(--transition-micro, 120ms) ease;
 }
@@ -139,7 +139,7 @@
 .statusBadge {
   font-size: var(--font-size-xxs);
   padding: 1px 4px;
-  border-radius: var(--radius-xs, 2px);
+  border-radius: var(--radius-xs);
   background: var(--tint-hover);
   color: var(--text-tertiary);
 }

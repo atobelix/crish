@@ -34,7 +34,7 @@ export function SkeletonFallback({
       style={{
         height: height || '100%',
         width: width || '100%',
-        borderRadius: 6,
+        borderRadius: 'var(--radius-m)',
       }}
       aria-hidden="true"
     />

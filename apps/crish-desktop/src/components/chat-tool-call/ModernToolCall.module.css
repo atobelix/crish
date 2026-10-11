@@ -36,7 +36,7 @@
   color: inherit;
   width: fit-content;
   max-width: 100%;
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-sm);
   transition: opacity var(--transition-micro, 120ms ease);
 }
 
@@ -79,7 +79,7 @@
   display: inline-flex;
   align-items: center;
   padding: 2px 8px;
-  border-radius: var(--radius-md, 6px);
+  border-radius: var(--radius-md);
   background: var(--tint-hover);
   font-family: var(--font-mono, monospace);
   font-size: var(--font-size-xs, 12px);
@@ -136,7 +136,7 @@
 /* 展开卡片主体：纯净黑白灰圆角卡片 */
 .jsonToolCard {
   margin-top: var(--space-2, 8px);
-  border-radius: var(--radius-xl, 10px);
+  border-radius: var(--radius-xl);
   border: 1px solid var(--border-subtle);
   background: var(--bg-card);
   box-shadow: none;
@@ -203,7 +203,7 @@
    -------------------------------------------------------------------------- */
 .terminalCard {
   margin: var(--space-2, 8px) 0;
-  border-radius: var(--radius-xl, 10px);
+  border-radius: var(--radius-xl);
   border: 1px solid var(--border-subtle);
   background: var(--bg-card);
   box-shadow: none;
@@ -265,7 +265,7 @@
   min-width: unset;
   min-height: unset;
   padding: 0;
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-sm);
   border: none;
   background: transparent;
   color: var(--text-tertiary);
@@ -323,7 +323,7 @@
   overflow-y: visible;
   cursor: text;
   box-sizing: border-box;
-  background: color-mix(in srgb, var(--bg-card) 96%, var(--text-primary) 4%);
+  background: var(--tint-hover); /* 三档：层上统一叠加（原 bg-card 96% + text 4% 不透明新灰） */
 }
 
 .terminalLine {
@@ -351,7 +351,7 @@
   min-width: unset;
   min-height: unset;
   padding: 6px 12px;
-  background: color-mix(in srgb, var(--bg-card) 92%, var(--text-primary) 8%);
+  background: var(--tint-active); /* 三档：层上统一叠加（原 92/8 不透明新灰） */
   border: none;
   border-top: 1px dashed var(--border-subtle);
   border-bottom: 1px dashed var(--border-subtle);
@@ -362,13 +362,13 @@
   cursor: pointer;
   box-shadow: none;
   user-select: none;
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-sm);
   box-sizing: border-box;
   transition: background var(--transition-micro, 120ms ease), color var(--transition-micro, 120ms ease);
 }
 
 .terminalMidFoldBar:hover {
-  background: color-mix(in srgb, var(--bg-card) 88%, var(--text-primary) 12%);
+  background: linear-gradient(var(--tint-hover), var(--tint-hover)), var(--tint-active); /* hover = 静止态再叠一层 tint-hover */
   color: var(--text-primary);
 }
 
@@ -392,7 +392,7 @@
   min-width: unset;
   min-height: unset;
   padding: 5px 12px;
-  background: color-mix(in srgb, var(--bg-card) 95%, var(--text-primary) 5%);
+  background: var(--tint-hover); /* 三档：层上统一叠加（原 95/5 不透明新灰） */
   border: none;
   border-top: 1px dashed var(--border-subtle);
   color: var(--text-tertiary);
@@ -406,7 +406,7 @@
 }
 
 .terminalCollapseBtn:hover {
-  background: color-mix(in srgb, var(--bg-card) 90%, var(--text-primary) 10%);
+  background: var(--tint-active); /* hover：tint-hover → tint-active */
   color: var(--text-primary);
 }
 
@@ -420,7 +420,7 @@
    -------------------------------------------------------------------------- */
 .approvalCard {
   width: 100%;
-  border-radius: var(--radius-xl, 12px);
+  border-radius: var(--radius-xl);
   border: 1px solid var(--border-subtle);
   background: var(--bg-card);
   box-shadow: none;
@@ -451,7 +451,7 @@
   justify-content: center;
   width: 22px;
   height: 22px;
-  border-radius: var(--radius-md, 6px);
+  border-radius: var(--radius-md);
   background: var(--tint-hover);
   color: var(--text-tertiary);
 }
@@ -493,7 +493,7 @@
 }
 
 .approvalTargetBox {
-  border-radius: var(--radius-lg, 8px);
+  border-radius: var(--radius-lg);
   border: 1px solid var(--border-subtle);
   background: var(--tint-hover);
   overflow: hidden;
@@ -564,7 +564,7 @@
 .approvalCheckbox {
   width: 14px;
   height: 14px;
-  border-radius: var(--radius-xs, 4px);
+  border-radius: var(--radius-xs);
   cursor: pointer;
 }
 
@@ -579,7 +579,7 @@
    -------------------------------------------------------------------------- */
 .codeBlockCard {
   width: 100%;
-  border-radius: var(--radius-lg, 8px);
+  border-radius: var(--radius-lg);
   border: 1px solid var(--border-subtle);
   background: var(--bg-card);
   box-shadow: none;
@@ -670,7 +670,7 @@
 .diffCard,
 .gitDiffCard {
   margin: var(--space-2, 8px) 0;
-  border-radius: var(--radius-xl, 10px);
+  border-radius: var(--radius-xl);
   border: 1px solid var(--border-subtle);
   background: var(--bg-card);
   box-shadow: none;
@@ -698,7 +698,7 @@
   justify-content: space-between;
   gap: var(--space-2, 8px);
   padding: var(--space-2, 8px) var(--space-3, 12px);
-  background: color-mix(in srgb, var(--bg-card) 97%, var(--text-primary) 3%);
+  background: var(--tint-hover); /* 三档：层上统一叠加（原 97/3 不透明新灰） */
   border-bottom: 1px solid var(--border-subtle);
   cursor: pointer;
   user-select: none;
@@ -709,7 +709,7 @@
 
 .diffCardHeader:hover,
 .gitDiffCardHeader:hover {
-  background: color-mix(in srgb, var(--bg-card) 94%, var(--text-primary) 6%);
+  background: var(--tint-active); /* 三档：层上统一叠加（原 94/6 不透明新灰） */
 }
 
 .diffCardHeader:focus-visible,
@@ -764,7 +764,7 @@
 .diffStatAdd,
 .gitDiffAdd {
   padding: 1px 6px;
-  border-radius: var(--radius-xs, 4px);
+  border-radius: var(--radius-xs);
   background: var(--diff-add-bg);
   color: var(--diff-add-fg);
 }
@@ -772,7 +772,7 @@
 .diffStatDel,
 .gitDiffDel {
   padding: 1px 6px;
-  border-radius: var(--radius-xs, 4px);
+  border-radius: var(--radius-xs);
   background: var(--diff-del-bg);
   color: var(--diff-del-fg);
 }
@@ -794,7 +794,7 @@
   min-width: unset;
   min-height: unset;
   padding: 0;
-  border-radius: var(--radius-xs, 4px);
+  border-radius: var(--radius-xs);
   border: 1px solid transparent;
   background: transparent;
   color: var(--text-tertiary);
@@ -824,7 +824,7 @@
   min-width: unset;
   min-height: unset;
   padding: 2px 8px;
-  border-radius: var(--radius-xs, 4px);
+  border-radius: var(--radius-xs);
   font-size: var(--font-size-micro, 11px);
   font-family: inherit;
   font-weight: normal;
@@ -949,7 +949,7 @@
   justify-content: center;
   gap: var(--space-3, 12px);
   padding: 8px 12px;
-  background: color-mix(in srgb, var(--bg-card) 96%, var(--text-primary) 4%);
+  background: var(--tint-hover); /* 三档：层上统一叠加（原 bg-card 96% + text 4% 不透明新灰） */
   color: var(--text-secondary);
   font-size: var(--font-size-micro, 11px);
   border-top: 1px solid var(--border-subtle);
@@ -965,7 +965,7 @@
   min-width: unset;
   min-height: unset;
   padding: 3px 10px;
-  border-radius: var(--radius-md, 6px);
+  border-radius: var(--radius-md);
   border: 1px solid var(--border-subtle);
   background: var(--bg-card);
   color: var(--text-secondary);

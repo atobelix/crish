@@ -131,7 +131,7 @@
 .actionPill {
   height: 26px;
   padding: 0 10px;
-  border-radius: var(--radius-md, 6px);
+  border-radius: var(--radius-md);
   border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
   background-color: color-mix(in srgb, currentColor 8%, transparent);
   color: inherit;
@@ -171,7 +171,7 @@
   min-width: unset;
   min-height: unset;
   padding: 0;
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-sm);
   border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
   background-color: transparent;
   color: inherit;
@@ -209,7 +209,7 @@
   min-height: unset;
   padding: 0 8px;
   border: none;
-  border-radius: var(--radius-md, 6px);
+  border-radius: var(--radius-md);
   background-color: transparent;
   color: inherit;
   opacity: 0.75;

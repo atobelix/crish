@@ -330,14 +330,15 @@ _2026-08-13 主调度订正 · 附录 B 取代附录 A §3 的旧口径（16 上
 
 ## 20. UI：邻近圆角一致性与去极端化铁律（2026-09-05 用户裁决）
 
+0. **圆角 5 档（2026-10-11 主题统一，见 tokens.css）**：`--radius-s` 4px（小内嵌控件、徽标）· `--radius-m` 8px（按钮组/条目/卡片/弹层选项）· `--radius-l` 12px（弹层、内容矩形等大面板）· `--radius-input` 20px（主输入框）· `--radius-pill` 9999px（胶囊/Badge/开关）；唯一例外 `--radius-btn` 7px（用户锁 U1）。旧名 `--radius-xs/sm`→s、`md/lg`→m、`xl/2xl`→l、`3xl`→input、`full`→pill 仅为别名；新代码直接写 5 档名，**不再写 `var(--radius-*, Npx)` 兜底**（token 在 :root 恒定义，兜底只会与真实值漂移）。嵌套容器遵守同心圆角：外圆角 = 内圆角 + 内边距（例：Select 内容 `calc(var(--radius-m) + 6px)`）。
 1. **邻近一致原则（Contextual Proximity）**：控件圆角没有一刀切绝对死值，**核心在于必须与相邻/同层容器元素的圆角保持视觉一致**：
-   - 侧边栏搜索框与相邻侧栏条目统一保持 `var(--radius-lg, 8px)`；
-   - 工具栏与卡片内嵌套操作按钮统一保持 8px 或 6px（`--button-radius`）；
-   - 小尺寸内嵌控件与相邻小元素统一保持 4px（`--radius-sm`）；
+   - 侧边栏搜索框与相邻侧栏条目统一保持 `var(--radius-m)`（8px）；
+   - 工具栏与卡片内嵌套操作按钮统一保持 `--radius-btn`（7px）或 `--radius-m`（8px）；
+   - 小尺寸内嵌控件与相邻小元素统一保持 4px（`--radius-s`）；
 2. **严禁离谱极端圆角（No Bizarre Corners）**：
    - 禁止在普通输入框、卡片、工具栏按钮随意声明 9999px 药丸胶囊（除系统级浮动 Badge、全局主底栏或特定开关外）；
    - 严禁出现生硬刺眼的 0px/1px 方角；
-   - 严禁出现 17px、23px 等脱离 Design Tokens 阶梯的奇葩自由数字。遵循系统标尺（4px / 6px / 8px / 12px / 16px）。
+   - 严禁出现 17px、23px 等脱离 Design Tokens 阶梯的奇葩自由数字。遵循 5 档标尺（4px / 8px / 12px / 20px / 胶囊，按钮 7px 例外；同心圆角用 calc 推导的值除外）。
 3. **全仓自动化刚性门禁闭环（check-input-guardrails）**：
    - 运行 `node scripts/check-input-guardrails.mjs`（`npm run check:input-guard`，已接入 `check:desktop` 与单测）；
    - 静态 AST 深度遍历全仓所有 CSS 规则与 TSX 标签，刚性阻断纯黑边框、厚重阴影、奇葩/生硬圆角、按钮果冻弹跳（`:active scale(0.96)` 等）；

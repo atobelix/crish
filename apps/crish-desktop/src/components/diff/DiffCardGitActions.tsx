@@ -111,7 +111,7 @@ export const DiffCardGitActions: React.FC<DiffCardGitActionsProps> = ({
           type="button"
           variant="primary"
           size="sm"
-          style={{ height: 28, borderRadius: 'var(--radius-sm, 4px)' }}
+          style={{ height: 28, borderRadius: 'var(--radius-sm)' }}
           disabled={!canCommit}
           onClick={onCommit}
           icon={<AppIcon name="git-commit" size={14} style={{ marginRight: 4 }} />}
@@ -127,7 +127,7 @@ export const DiffCardGitActions: React.FC<DiffCardGitActionsProps> = ({
             type="button"
             variant="ghost"
             size="sm"
-            style={{ height: 28, borderRadius: 'var(--radius-sm, 4px)' }}
+            style={{ height: 28, borderRadius: 'var(--radius-sm)' }}
             disabled={commitLoading || pushLoading}
             onClick={onPush}
             icon={<AppIcon name="cloud-upload" size={14} style={{ marginRight: 4 }} />}
