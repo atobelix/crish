@@ -18,7 +18,11 @@
  */
 import { test, expect, type Page } from '@playwright/test';
 import { type MockEvent } from './mock-engine';
-import { openApp as waitAppReady, typeIntoComposer } from './helpers/boot';
+import {
+  openApp as waitAppReady,
+  startNewSession,
+  typeIntoComposer,
+} from './helpers/boot';
 
 const RUN_DELAY_MS = 30;
 
@@ -197,21 +201,18 @@ async function openApp(
   });
   await expect(page.locator('[data-testid="chat-input"]')).toBeVisible();
   // 新建会话进入草稿态（与 full-journey 同路径）
-  await page.locator('[data-testid="new-session-button"]').click();
+  await startNewSession(page);
 }
 
 /**
- * 打开运行状态面板（当前壳 UI 路径）：
- * 工具入口 openToolInSession('terminal') 在会话 leaf 打开工具标签 →
- * LeafToolTabStrip 出现「添加功能面板」加号 → 菜单选「运行时」→
- * RuntimePanel 挂载（T-46 挂载点）。
+ * 通过工具标签栏添加入口打开运行状态面板。
  */
 async function openRuntimePanel(page: Page) {
-  const terminalBtn = page
-    .locator('[data-testid="chat-open-terminal"]')
-    .first();
-  await expect(terminalBtn).toBeVisible();
-  await terminalBtn.click();
+  // 面板抽屉关闭时工具标签栏尚未挂载，先用对话快捷操作打开文件面板。
+  const filesButton = page.locator('[data-testid="top-quick-files-btn"]');
+  await expect(filesButton).toBeVisible({ timeout: 8000 });
+  await filesButton.click();
+
   const addBtn = page.locator('[aria-label="添加功能面板"]').first();
   await expect(addBtn).toBeVisible();
   await addBtn.click();
@@ -225,6 +226,11 @@ async function sendPrompt(page: Page, text: string) {
   const input = page.locator('[data-testid="chat-input"]');
   await typeIntoComposer(page, text);
   await input.press('Enter');
+  await expect
+    .poll(() =>
+      page.evaluate(() => (window as any).__CRISH_E2E__?.getState?.().lastRun)
+    )
+    .not.toBeNull();
 }
 
 /** 等待第 n 条 assistant 消息终态（run-terminal 已处理） */

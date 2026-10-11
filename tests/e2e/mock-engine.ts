@@ -28,6 +28,7 @@
 
 import type { Page } from '@playwright/test';
 import { BUILTIN_COMMAND_MANIFEST } from '../../apps/crish-desktop/src/api/transport/commandManifest';
+import type { ModelsCatalogSnapshot } from '../../apps/crish-desktop/src/api/modelsCatalogTypes';
 
 /** 事件通道名（与 TauriTransport.RUN_EVENT_CHANNEL 一致） */
 const MOCK_EVENT_CHANNEL = 'workbench-run-event';
@@ -62,6 +63,8 @@ export interface MockRunStreamConfig {
   events?: MockEvent[];
   /** 逐条间隔（ms），默认 80；流式中间态断言建议 ≥120 */
   delayMs?: number;
+  /** 覆盖单个事件的相邻间隔（ms），用于精确构造可观测的流式边界。 */
+  eventDelaysMs?: number[];
   /** core_run_task 直接抛错（CoreError 形状 { kind, message }） */
   error?: { kind: string; message: string };
 }
@@ -80,6 +83,8 @@ export interface MockEngineConfig {
   commandPermissions?: unknown[];
   /** get_providers 返回 */
   providers?: unknown[];
+  /** 模型配置读取回执；默认提供已配置的 mock 模型 */
+  modelsCatalog?: ModelsCatalogSnapshot;
   /** 初始 config_get 值 */
   config?: Record<string, unknown>;
   /** core_get_status 覆盖（默认 engineReady/dbReady=true） */
@@ -90,15 +95,54 @@ export interface MockEngineConfig {
   disableAnimations?: boolean;
 }
 
+const DEFAULT_MODELS_CATALOG: ModelsCatalogSnapshot = {
+  path: 'C:/e2e/models.yaml',
+  content: '',
+  revision: 'e2e-model-catalog-v1',
+  template: '',
+  credentialStates: {
+    'mock-openai': { hasKey: true, apiKeyLast4: 'mock' },
+  },
+  tree: {
+    version: 2,
+    activeModel: { providerId: 'mock-openai', modelId: 'gpt-4o' },
+    providers: {
+      'mock-openai': {
+        displayName: 'Mock OpenAI',
+        protocol: 'openai/chat',
+        enabled: true,
+        stream: true,
+        models: [
+          {
+            id: 'gpt-4o',
+            displayName: 'GPT-4o',
+            enabled: true,
+            supportsTools: true,
+            modalities: { input: ['text'], output: ['text'] },
+          },
+        ],
+      },
+    },
+  },
+};
+
+const DEFAULT_CAPABILITY_DICTIONARY = {
+  version: 1,
+  entries: [{ provider: 'mock-openai', model: 'gpt-4o' }],
+};
+
 /**
  * 构建引擎注入脚本（自包含 IIFE 字符串）。
  * 运行时读取 `window.__CRISH_MOCK_CONFIG__`（须先注册 config 脚本）。
  */
 function buildMockEngineInitScript(): string {
   const manifestJson = JSON.stringify(BUILTIN_COMMAND_MANIFEST);
+  const defaultModelsCatalogJson = JSON.stringify(DEFAULT_MODELS_CATALOG);
   return `(function () {
     'use strict';
     var MANIFEST = ${manifestJson};
+    var DEFAULT_MODELS_CATALOG = ${defaultModelsCatalogJson};
+    var DEFAULT_CAPABILITY_DICTIONARY = ${JSON.stringify(DEFAULT_CAPABILITY_DICTIONARY)};
     var REGISTERED = {};
     MANIFEST.commands.forEach(function (c) { if (c.registered) REGISTERED[c.name] = true; });
 
@@ -122,7 +166,10 @@ function buildMockEngineInitScript(): string {
 
     function emitEvent(name, payload) {
       emitSeq += 1;
-      window['${MOCK_HANDLE}'].state.emitted += 1;
+      var state = window['${MOCK_HANDLE}'].state;
+      state.emitted += 1;
+      state.lastEvent = payload;
+      state.eventHistory.push(payload);
       var ids = (listeners[name] || []).slice();
       for (var i = 0; i < ids.length; i++) {
         var entry = callbacks[ids[i]];
@@ -175,6 +222,16 @@ function buildMockEngineInitScript(): string {
         }
         if (/^\\s*\\|/.test(line) && i + 1 < lines.length && /^\\s*\\|?[\\s:|-]+\\|/.test(lines[i + 1])) {
           var headerRow = line.trim().replace(/^\\|/, '').replace(/\\|$/, '').split('|').map(function (c) { return c.trim(); });
+          var separatorCells = lines[i + 1].trim().replace(/^\\|/, '').replace(/\\|$/, '').split('|').map(function (c) { return c.trim(); });
+          var alignments = separatorCells.map(function (c) {
+            if (c.charAt(0) === ':' && c.charAt(c.length - 1) === ':') return 'center';
+            if (c.charAt(c.length - 1) === ':') return 'right';
+            return 'left';
+          });
+          var alignAttr = function (index) {
+            var align = alignments[index] || 'left';
+            return align === 'left' ? '' : ' style="text-align:' + align + '"';
+          };
           var body = [];
           i += 2;
           while (i < lines.length && /^\\s*\\|/.test(lines[i])) {
@@ -182,8 +239,8 @@ function buildMockEngineInitScript(): string {
             i += 1;
           }
           var rows = [headerRow].concat(body);
-          out.push('<table><thead><tr>' + headerRow.map(function (c) { return '<th>' + inlineMd(c) + '</th>'; }).join('') + '</tr></thead><tbody>' +
-            body.map(function (r) { return '<tr>' + r.map(function (c) { return '<td>' + inlineMd(c) + '</td>'; }).join('') + '</tr>'; }).join('') + '</tbody></table>');
+          out.push('<table><thead><tr>' + headerRow.map(function (c, index) { return '<th' + alignAttr(index) + '>' + inlineMd(c) + '</th>'; }).join('') + '</tr></thead><tbody>' +
+            body.map(function (r) { return '<tr>' + r.map(function (c, index) { return '<td' + alignAttr(index) + '>' + inlineMd(c) + '</td>'; }).join('') + '</tr>'; }).join('') + '</tbody></table>');
           continue;
         }
         if (/^\\s*-\\s+/.test(line)) {
@@ -238,7 +295,10 @@ function buildMockEngineInitScript(): string {
       persist();
       return cur;
     }
-    function runTask(args) {
+    function runTask(request) {
+      var args = request && request.options && typeof request.options === 'object'
+        ? request.options
+        : {};
       var state = window['${MOCK_HANDLE}'].state;
       state.lastRun = {
         runId: args && args.runId, sessionId: args && args.sessionId,
@@ -251,7 +311,12 @@ function buildMockEngineInitScript(): string {
       var events = run.events || [];
       var delay = (typeof run.delayMs === 'number' && run.delayMs >= 0) ? run.delayMs : 80;
       var seq = 0;
+      var elapsed = 0;
       events.forEach(function (ev, i) {
+        var eventDelay = Array.isArray(run.eventDelaysMs) && typeof run.eventDelaysMs[i] === 'number'
+          ? Math.max(0, run.eventDelaysMs[i])
+          : delay;
+        elapsed += eventDelay;
         setTimeout(function () {
           var e = {};
           for (var k in ev) e[k] = ev[k];
@@ -259,7 +324,7 @@ function buildMockEngineInitScript(): string {
           if (e.sessionId === undefined) e.sessionId = args && args.sessionId;
           if (e.sequence === undefined) e.sequence = ++seq;
           emitEvent('${MOCK_EVENT_CHANNEL}', e);
-        }, delay * (i + 1));
+        }, elapsed);
       });
       return { runId: args && args.runId, sessionId: args && args.sessionId };
     }
@@ -365,6 +430,12 @@ function buildMockEngineInitScript(): string {
       },
       'get_command_permissions': function () { return cfg.commandPermissions || []; },
       'get_providers': function () { return cfg.providers || []; },
+      'workbench_read_models_yaml': function () {
+        return cfg.modelsCatalog || DEFAULT_MODELS_CATALOG;
+      },
+      'workbench_read_capability_dictionary': function () {
+        return cfg.capabilityDictionary || DEFAULT_CAPABILITY_DICTIONARY;
+      },
     };
 
     function handleCommand(cmd, args) {
@@ -388,6 +459,10 @@ function buildMockEngineInitScript(): string {
 
     // ── 环境安装 ──
     window.__TAURI_INTERNALS__ = {
+      metadata: {
+        currentWindow: { label: 'main' },
+        currentWebview: { label: 'main' },
+      },
       invoke: function (cmd, args, options) {
         return Promise.resolve().then(function () { return handleCommand(cmd, args); });
       },
@@ -400,7 +475,7 @@ function buildMockEngineInitScript(): string {
     };
     window['${MOCK_HANDLE}'] = {
       config: cfg,
-      state: { lastRun: null, runCount: 0, emitted: 0 },
+      state: { lastRun: null, runCount: 0, emitted: 0, lastEvent: null, eventHistory: [] },
       emit: function (payload) { emitEvent('${MOCK_EVENT_CHANNEL}', payload); },
       setConfig: function (next) { cfg = next || {}; },
       getState: function () { return window['${MOCK_HANDLE}'].state; },
@@ -521,7 +596,13 @@ export function fullJourneyRunEvents(): MockEvent[] {
 export function fenceRunEvents(): MockEvent[] {
   return [
     { type: 'message-start' },
-    { type: 'message-delta', block: { type: 'text', text: '示例代码：\n' } },
+    {
+      type: 'message-delta',
+      block: {
+        type: 'text',
+        text: '# 流式 Markdown\n\n- **列表项**\n\n示例代码：\n',
+      },
+    },
     {
       type: 'message-delta',
       block: { type: 'text', text: '```ts\nconst x = 1;\n' },
@@ -534,11 +615,13 @@ export function fenceRunEvents(): MockEvent[] {
       type: 'message-end',
       message: {
         role: 'assistant',
-        content: '示例代码：\n```ts\nconst x = 1;\nconst y = x + 1;\n```',
+        content:
+          '# 流式 Markdown\n\n- **列表项**\n\n示例代码：\n```ts\nconst x = 1;\nconst y = x + 1;\n```',
         blocks: [
           {
             type: 'text',
-            text: '示例代码：\n```ts\nconst x = 1;\nconst y = x + 1;\n```',
+            text:
+              '# 流式 Markdown\n\n- **列表项**\n\n示例代码：\n```ts\nconst x = 1;\nconst y = x + 1;\n```',
           },
         ],
       },
@@ -575,10 +658,109 @@ export function tableRunEvents(): MockEvent[] {
   ];
 }
 
+/** 表格逐行流式 fixture：表头和数据行分 delta 到达。 */
+export function streamingTableRunEvents(): MockEvent[] {
+  const content =
+    '| 任务编号 | 任务名称 |\n| --- | :---: |\n| TASK-001 | **需求调研** |\n| TASK-002 | 原型设计 |\n表格后说明：**实时生成文字**';
+  return [
+    { type: 'message-start' },
+    {
+      type: 'message-delta',
+      block: { type: 'text', text: '| 任务编号 | 任务名称 |\n' },
+    },
+    {
+      type: 'message-delta',
+      block: { type: 'text', text: '| --- | :---: |\n' },
+    },
+    {
+      type: 'message-delta',
+      block: { type: 'text', text: '| TASK-001 | **需求调研** |\n' },
+    },
+    {
+      type: 'message-delta',
+      block: { type: 'text', text: '| TASK-002 | 原型设计 |' },
+    },
+    {
+      type: 'message-delta',
+      block: { type: 'text', text: '\n表格后说明：**实时生成文字**' },
+    },
+    {
+      type: 'message-end',
+      message: {
+        role: 'assistant',
+        content,
+        blocks: [{ type: 'text', text: content }],
+      },
+    },
+    { type: 'run-terminal', terminal: 'completed' },
+  ];
+}
+
+function appendPerfToolEvents(events: MockEvent[], index: number): void {
+  const toolId = `perf-tool-${index}`;
+  const call = {
+    id: toolId,
+    toolName: index % 2 === 0 ? 'shell_command' : 'read_file',
+    summary: `性能压测工具 ${index}`,
+    input: { command: `echo step-${index}` },
+    category: 'terminal' as const,
+    concurrency: 'sequential' as const,
+  };
+  events.push(
+    {
+      type: 'tool-batch-start',
+      sessionId: 's',
+      batchId: `batch-${index}`,
+      timestamp: `t${index}`,
+      summary: `执行第 ${index} 步`,
+      calls: [call],
+    },
+    {
+      type: 'tool-start',
+      sessionId: 's',
+      batchId: `batch-${index}`,
+      timestamp: `t${index}`,
+      call,
+    },
+    toolUpdateEvent(
+      { text: `第 ${index} 步执行中…`, metadata: { kind: 'tool-progress' } },
+      { timestamp: `t${index}.1` }
+    ),
+    {
+      type: 'tool-end',
+      sessionId: 's',
+      batchId: `batch-${index}`,
+      timestamp: `t${index}.2`,
+      result: {
+        id: toolId,
+        toolName: call.toolName,
+        output: { text: `第 ${index} 步完成` },
+        isError: false,
+        durationMs: 100,
+      },
+    },
+    {
+      type: 'tool-batch-end',
+      sessionId: 's',
+      batchId: `batch-${index}`,
+      timestamp: `t${index}.3`,
+      calls: [
+        {
+          id: toolId,
+          toolName: call.toolName,
+          output: { text: `第 ${index} 步完成` },
+          isError: false,
+          durationMs: 100,
+        },
+      ],
+    }
+  );
+}
+
 /**
- * 性能压测 fixture（08-detail 6.3，T5.2）：100KB 文本 + 20 工具事件。
- * - 文本按 ~4KB 分块（message-delta），对齐真实 SSE 流式形态；
- * - 20 个工具 start/update/end 穿插，压工具区 timeline 重建；
+ * 性能压测 fixture（08-detail 6.3，T5.2）：100KB 文本 + 40 条文本增量 + 20 工具事件。
+ * - 全文等分为 40 条 message-delta，不重叠、不拼入额外文本；
+ * - 20 个工具 start/update/end 分散穿插，压工具区 timeline 重建；
  * - delayMs=0~1 压榨渲染管线（mock 引擎逐条 setTimeout 投递）。
  */
 export function bigRunEvents(): MockEvent[] {
@@ -602,54 +784,23 @@ export function bigRunEvents(): MockEvent[] {
   }
 
   const events: MockEvent[] = [{ type: 'message-start' }];
-  // 20 个工具（交错在文本块之间）
-  for (let i = 0; i < 20; i++) {
-    const toolId = `perf-tool-${i}`;
-    const call = {
-      id: toolId,
-      toolName: i % 2 === 0 ? 'shell_command' : 'read_file',
-      summary: `性能压测工具 ${i}`,
-      input: { command: `echo step-${i}` },
-      category: 'terminal' as const,
-      concurrency: 'sequential' as const,
-    };
-    events.push(
-      { type: 'tool-batch-start', sessionId: 's', batchId: `batch-${i}`, timestamp: `t${i}`, summary: `执行第 ${i} 步`, calls: [call] },
-      { type: 'tool-start', sessionId: 's', batchId: `batch-${i}`, timestamp: `t${i}`, call },
-      toolUpdateEvent(
-        { text: `第 ${i} 步执行中…`, metadata: { kind: 'tool-progress' } },
-        { timestamp: `t${i}.1` }
-      ),
-      {
-        type: 'tool-end',
-        sessionId: 's',
-        batchId: `batch-${i}`,
-        timestamp: `t${i}.2`,
-        result: { id: toolId, toolName: call.toolName, output: { text: `第 ${i} 步完成` }, isError: false, durationMs: 100 },
-      },
-      {
-        type: 'tool-batch-end',
-        sessionId: 's',
-        batchId: `batch-${i}`,
-        timestamp: `t${i}.3`,
-        calls: [
-          { id: toolId, toolName: call.toolName, output: { text: `第 ${i} 步完成` }, isError: false, durationMs: 100 },
-        ],
-      }
+  const chunkCount = 40;
+  let nextToolIndex = 0;
+  for (let chunkIndex = 0; chunkIndex < chunkCount; chunkIndex += 1) {
+    const start = Math.floor((chunkIndex * body.length) / chunkCount);
+    const end = Math.floor(((chunkIndex + 1) * body.length) / chunkCount);
+    events.push({
+      type: 'message-delta',
+      block: { type: 'text', text: body.slice(start, end) },
+    });
+
+    const toolsAfterThisChunk = Math.floor(
+      ((chunkIndex + 1) * 20) / chunkCount
     );
-    // 工具间穿插文本块（约 3KB）
-    events.push({
-      type: 'message-delta',
-      block: { type: 'text', text: `\n工具 ${i} 完成后的文本段落：${body.slice(i * 1024, i * 1024 + 3000)}\n` },
-    });
-  }
-  // 剩余文本按 ~4KB 分块
-  const start = 20 * 1024;
-  for (let pos = start; pos < body.length; pos += 4096) {
-    events.push({
-      type: 'message-delta',
-      block: { type: 'text', text: body.slice(pos, pos + 4096) },
-    });
+    while (nextToolIndex < toolsAfterThisChunk) {
+      appendPerfToolEvents(events, nextToolIndex);
+      nextToolIndex += 1;
+    }
   }
   events.push(
     {
@@ -801,8 +952,8 @@ export function restoreSessionIndexSeed(): Record<string, string> {
  *
  * 事件编排：message-start → message-delta → message-end（携带
  * `message.metadata.usage`，ProviderUsage camelCase 挂载点，Included 形态：
- * promptTokens 已含缓存读）→ run-terminal → cache-stats-updated
- * （run 收口时的会话级缓存统计快照，RunCacheStats camelCase）。
+ * promptTokens 已含缓存读）→ cache-stats-updated（会话级统计快照）→
+ * run-terminal（结束事件后不再发送数据事件）。
  *
  * 命中率断言口径（P6 §3.5.1 / C9）：hitRate = cacheReadTokens / inputTotal，
  * inputTotal = miss + read + write；本 fixture 为 Included 形态，
@@ -846,7 +997,6 @@ export function cacheUsageRunEvents(): MockEvent[] {
         },
       },
     },
-    { type: 'run-terminal', terminal: 'completed' },
     {
       type: 'cache-stats-updated',
       timestamp: '2026-08-03T00:00:00.000Z',
@@ -862,6 +1012,7 @@ export function cacheUsageRunEvents(): MockEvent[] {
         writeRatio: 500 / 12000,
       },
     },
+    { type: 'run-terminal', terminal: 'completed' },
   ];
 }
 

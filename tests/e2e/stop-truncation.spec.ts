@@ -26,7 +26,7 @@
  *    完成态 marker 全量 + 总结标题剥离 + 无流式残留。
  */
 import { test, expect, type Page } from '@playwright/test';
-import { openApp, typeIntoComposer } from './helpers/boot';
+import { openApp, startNewSession, typeIntoComposer } from './helpers/boot';
 import {
   bigRunEvents,
   engineState,
@@ -48,14 +48,17 @@ function deltaTextOf(events: MockEvent[]): string {
 /** 发送提示词并等待引擎收到 run（订阅就绪标志） */
 async function sendPrompt(page: Page, prompt: string): Promise<void> {
   const input = page.locator('[data-testid="chat-input"]');
+  // 新会话创建后，composer 会等会话 store 切换才挂载；等可见再输入，
+  // 避免在切换窗口中把键盘事件发给尚未就绪的旧视图。
+  await expect(input).toBeVisible({ timeout: 8000 });
   await typeIntoComposer(page, prompt);
   await input.press('Enter');
-  await expect(page.locator('[data-testid="composer-stop"]')).toBeVisible({
-    timeout: 8000,
-  });
   await expect
     .poll(async () => (await engineState(page)).runCount, { timeout: 8000 })
     .toBe(1);
+  await expect(page.locator('[data-testid="composer-stop"]')).toBeVisible({
+    timeout: 8000,
+  });
 }
 
 /** 读取当前会话 store 中 assistant 消息（text/status） */
@@ -79,7 +82,7 @@ test.describe('E2E-L2 stop 截断回归（stop-truncation，R2-4 P2-1）', () =>
     page,
   }) => {
     await openApp(page, { runStream: { events: [], delayMs: 5 } });
-    await page.locator('[data-testid="new-session-button"]').click();
+    await startNewSession(page);
 
     await sendPrompt(page, '模拟 100KB 积压流，流式中途停止');
 
@@ -157,7 +160,7 @@ test.describe('E2E-L2 stop 截断回归（stop-truncation，R2-4 P2-1）', () =>
     await openApp(page, {
       runStream: { events: bigRunEvents(), delayMs: 30 },
     });
-    await page.locator('[data-testid="new-session-button"]').click();
+    await startNewSession(page);
     await sendPrompt(page, '跑 100KB 压测流，中途停止');
 
     // Stop 控件 data-testid 可定位（R2-4 V6 判据；L2 级联）
@@ -166,13 +169,15 @@ test.describe('E2E-L2 stop 截断回归（stop-truncation，R2-4 P2-1）', () =>
     await expect(stopButton).toHaveAttribute('data-stop-level', 'l2');
 
     // 流式期：marker-119 已渲染（已收到全部 marker 段落）
-    const streamingText = page.locator(
-      '.msg-row-assistant .md-rendered[data-streaming="true"]'
+    const assistantRow = page.locator('.msg-row-assistant').first();
+    const streamingText = assistantRow.locator(
+      '.md-rendered[data-streaming="true"]'
     );
     await expect(streamingText.first()).toBeVisible({ timeout: 10000 });
-    await expect(streamingText.first()).toContainText('marker-119', {
-      timeout: 15000,
-    });
+    const visibleMarkerBlocks = streamingText
+      .filter({ hasText: 'marker-119' });
+    await expect(visibleMarkerBlocks).toHaveCount(1, { timeout: 15000 });
+    await expect(visibleMarkerBlocks).toBeVisible();
 
     // 流式中途真实点击 Stop（此时 message-end 尚未到达）
     await stopButton.click();
@@ -188,7 +193,6 @@ test.describe('E2E-L2 stop 截断回归（stop-truncation，R2-4 P2-1）', () =>
     ).toHaveCount(0, { timeout: 15000 });
 
     // 消息按 block 分片渲染（每个工具间隔一个文本块）；内容断言取整行文本
-    const assistantRow = page.locator('.msg-row-assistant').first();
     const finalText = await assistantRow.innerText();
     expect(finalText).toContain('marker-0');
     expect(finalText).toContain('marker-119');

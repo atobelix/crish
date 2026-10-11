@@ -2,9 +2,11 @@
  * E2E-L2 场景 ③：设置保存 → 重启 → 状态一致
  * （PE-11 T11.1 必覆盖场景 2；localStorage 持久化路径 + mock config 引擎）
  *
- * 真实链路：设置面板（外观 tab）→ clientApi.saveSettingsEx → localStorage
- *   `crish_settings` → page.reload() → 设置面板回显；mock 引擎的 config_*
- *   状态亦持久化（__crish_mock_store_v1），reload 后引擎状态保留。
+ * 设置入口：SettingsAppearanceTab → SettingsSchemaRenderer 的主题分段控件
+ *   → saveSettingsEx 写入 `crish_settings` → settingsStore/themeProjection
+ *   → prefs_set（成功后写入 `crish_theme` 引导镜像）。
+ * L2 的共享 mock 引擎不实现 prefs_* 状态；本 spec 局部模拟该持久化边界，
+ * 使 reload 能验证产品现有偏好 API 的读写与设置面板回显。
  *
  * 断言（行为级）：
  *   1. 修改设置（主题模式 → 深色）后 localStorage 生效
@@ -14,24 +16,92 @@
  */
 
 import { test, expect, type Page } from '@playwright/test';
-import { installMockEngine } from './mock-engine';
+import { openApp as bootOpenApp } from './helpers/boot';
 
 async function openApp(page: Page) {
-  await installMockEngine(page, {});
-  await page.goto('/');
-  await expect(page.locator('#root')).toBeVisible();
-  await expect(page.locator('[data-testid="sidebar"]')).toBeVisible();
+  await bootOpenApp(page);
+  await page.evaluate(installPersistentPreferences);
+  // init script 在下一次 reload 时重新包装 mock IPC，保留 prefs_* 状态。
+  await page.addInitScript(installPersistentPreferences);
+}
+
+/** L2 局部 prefs_* 持久化层；产品调用仍经过 preferencesClient / Tauri IPC。 */
+function installPersistentPreferences() {
+  const storageKey = '__crish_e2e_preferences_v1';
+  const patch = (internals: any) => {
+    if (!internals || internals.__crishE2ePreferencesPatched) return;
+    const originalInvoke = internals.invoke.bind(internals);
+
+    internals.invoke = (
+      command: string,
+      args?: Record<string, unknown>,
+      options?: unknown
+    ) => {
+      if (command === 'prefs_get') {
+        let preferences: Record<string, unknown> = {};
+        try {
+          preferences = JSON.parse(
+            localStorage.getItem(storageKey) || '{}'
+          );
+        } catch {
+          preferences = {};
+        }
+        if (typeof args?.key === 'string') {
+          return Promise.resolve(
+            Object.prototype.hasOwnProperty.call(preferences, args.key)
+              ? { value: preferences[args.key] }
+              : null
+          );
+        }
+        return Promise.resolve(preferences);
+      }
+
+      if (command === 'prefs_set' || command === 'prefs_delete') {
+        let preferences: Record<string, unknown> = {};
+        try {
+          preferences = JSON.parse(
+            localStorage.getItem(storageKey) || '{}'
+          );
+        } catch {
+          preferences = {};
+        }
+        const key = args?.key;
+        if (typeof key === 'string') {
+          if (command === 'prefs_set') {
+            preferences[key] = args?.value;
+          } else {
+            delete preferences[key];
+          }
+          localStorage.setItem(
+            storageKey,
+            JSON.stringify(preferences)
+          );
+        }
+        return Promise.resolve(null);
+      }
+
+      return originalInvoke(command, args, options);
+    };
+    internals.__crishE2ePreferencesPatched = true;
+  };
+
+  const current = (window as any).__TAURI_INTERNALS__;
+  patch(current);
+  let internals = current;
+  Object.defineProperty(window, '__TAURI_INTERNALS__', {
+    configurable: true,
+    enumerable: true,
+    get: () => internals,
+    set: (next) => {
+      internals = next;
+      patch(next);
+    },
+  });
 }
 
 /** 打开设置弹窗并切到「外观」tab */
 async function openAppearanceTab(page: Page) {
-  await page.locator('[data-testid="settings-button"]').click();
-  // ui/Menu 基座弹层在 low-height 视口下溢出（position:fixed 与 Radix transform
-  // 定位冲突，既有产品缺陷）→ Playwright 命中测试失败，改用 dispatchEvent 派发
-  // 点击语义（验证「全部设置 → SettingsPanel 打开」链路本体）。
-  const qsAll = page.locator('[data-testid="quick-settings-all"]');
-  await expect(qsAll).toBeVisible();
-  await qsAll.dispatchEvent('click');
+  await page.locator('[data-testid="sidebar-settings-gear-btn"]').click();
   const panel = page.locator('[data-testid="settings-panel"]');
   await expect(panel).toBeVisible();
   await page.locator('[data-testid="settings-tab-appearance"]').click();
@@ -43,12 +113,13 @@ test.describe('E2E-L2 设置保存与重启（settings-persist）', () => {
     await openApp(page);
     const panel = await openAppearanceTab(page);
 
-    // 主题模式 toggle：默认浅色 → 点击「深色」
-    const darkBtn = panel.getByRole('button', { name: '深色' });
-    await expect(darkBtn).toBeVisible();
-    await darkBtn.click();
+    // 当前主题控件是 SegmentedControl：radiogroup 中以 aria-checked 表示选中。
+    const themeGroup = panel.getByRole('radiogroup', { name: '主题模式' });
+    const darkOption = themeGroup.getByRole('radio', { name: '深色' });
+    await expect(darkOption).toBeVisible();
+    await darkOption.click();
 
-    // 等待写入 localStorage（saveSettingsEx 异步）
+    // 设置 API 写入全局 settings，并等待主题 Commit Ack 镜像落盘。
     await expect
       .poll(() =>
         page.evaluate(() => {
@@ -62,17 +133,22 @@ test.describe('E2E-L2 设置保存与重启（settings-persist）', () => {
         })
       )
       .toBe('dark');
+    await expect
+      .poll(() => page.evaluate(() => localStorage.getItem('crish_theme')))
+      .toBe('dark');
 
     // ── 重启（reload）──
     await page.reload();
     await expect(page.locator('[data-testid="sidebar"]')).toBeVisible();
+    await expect(page.locator('[data-engine-ready="true"]')).toBeVisible();
 
     // ── 回显：设置面板主题仍为「深色」──
     const panel2 = await openAppearanceTab(page);
-    // 深色为选中态（aria-pressed / data-state 由 toggle-group 提供）
-    const darkBtn2 = panel2.getByRole('button', { name: '深色' });
-    await expect(darkBtn2).toBeVisible();
-    await expect(darkBtn2).toHaveAttribute('aria-pressed', 'true');
+    const darkOption2 = panel2
+      .getByRole('radiogroup', { name: '主题模式' })
+      .getByRole('radio', { name: '深色' });
+    await expect(darkOption2).toBeVisible();
+    await expect(darkOption2).toHaveAttribute('aria-checked', 'true');
 
     // 无「待同步」提示（PE-01 T02.2：引擎就绪无同步横幅）
     await expect(page.getByText('待同步')).toBeHidden();
@@ -116,6 +192,7 @@ test.describe('E2E-L2 设置保存与重启（settings-persist）', () => {
 
     await page.reload();
     await expect(page.locator('[data-testid="sidebar"]')).toBeVisible();
+    await expect(page.locator('[data-engine-ready="true"]')).toBeVisible();
 
     // reload 后引擎状态仍在（localStorage __crish_mock_store_v1 持久化）
     const cfgVal = await page.evaluate(() =>

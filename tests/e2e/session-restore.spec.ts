@@ -16,19 +16,45 @@
 
 import { test, expect, type Page } from '@playwright/test';
 import {
-  installMockEngine,
   restoreSessions,
   restoreSessionIndexSeed,
+  type MockSessionSource,
 } from './mock-engine';
+import { openApp as bootOpenApp } from './helpers/boot';
+
+function restoreSessionsForHydration(): MockSessionSource[] {
+  return restoreSessions().map((session) => ({
+    ...session,
+    events: session.events?.map((event) => {
+      if (event.type !== 'tool-start') return event;
+
+      return {
+        type: 'tool-start',
+        sessionId: session.id,
+        batchId: `restore-${String(event.id ?? 'tool')}`,
+        timestamp: new Date(
+          typeof session.updatedAt === 'number'
+            ? session.updatedAt
+            : Date.now()
+        ).toISOString(),
+        call: {
+          id: String(event.id ?? ''),
+          toolName: String(event.name ?? ''),
+          summary: String(event.explanation ?? ''),
+          input: event.args ?? {},
+          category: 'terminal',
+          concurrency: 'sequential',
+        },
+      };
+    }),
+  }));
+}
 
 async function openApp(page: Page) {
-  await installMockEngine(page, {
-    sessions: restoreSessions(),
+  await bootOpenApp(page, {
+    sessions: restoreSessionsForHydration(),
     localStorage: restoreSessionIndexSeed(),
   });
-  await page.goto('/');
-  await expect(page.locator('#root')).toBeVisible();
-  await expect(page.locator('[data-testid="sidebar"]')).toBeVisible();
 }
 
 test.describe('E2E-L2 会话恢复（session-restore）', () => {
@@ -63,6 +89,9 @@ test.describe('E2E-L2 会话恢复（session-restore）', () => {
     await expect(toolRow).toBeVisible({ timeout: 8000 });
     // human label 优先 explanation（toolHumanLabel 产品语义：意图说明）
     await expect(toolRow).toHaveAttribute('data-tool-label', '复现 CI 失败');
+    // 工具详情默认折叠，按 UI 的键盘/点击展开操作检查回灌输出
+    await toolRow.locator('.tool-row-head').click();
+    await expect(toolRow).toHaveAttribute('data-expanded', 'true');
     // 完成会话的工具为成功态
     await expect(toolRow).toContainText('2 failed; 1 passed');
 

@@ -16,7 +16,7 @@
  */
 
 import { test, expect, type Page } from '@playwright/test';
-import { typeIntoComposer, expectComposerText } from './helpers/boot';
+import { typeIntoComposer, expectComposerText, startNewSession } from './helpers/boot';
 import {
   installMockEngine,
   fullJourneyRunEvents,
@@ -50,7 +50,7 @@ test.describe('E2E-L2 完整旅程（full-journey）', () => {
     await expect(input).toBeVisible();
 
     // ── ② 新建会话 ──
-    await page.locator('[data-testid="new-session-button"]').click();
+    await startNewSession(page);
 
     // ── ③ 发送：输入框文字清空、用户消息入列 ──
     const prompt = '帮我看看当前目录结构';
@@ -104,9 +104,16 @@ test.describe('E2E-L2 完整旅程（full-journey）', () => {
       '.tool-stack .tool-row[data-tool-id="tool-1"]'
     );
     await expect(toolRow).toBeVisible({ timeout: 8000 });
-    // human label 优先 explanation（toolHumanLabel 产品语义：意图说明）
+    // 产品契约：意图说明必须可见，同时保留 data/无障碍关系与真实命令。
     await expect(toolRow).toHaveAttribute('data-tool-label', '查看当前目录');
     await expect(toolRow).toContainText('查看当前目录');
+    const toolHeader = toolRow.locator('.tool-row-head');
+    await expect(toolHeader).toHaveAttribute(
+      'aria-label',
+      expect.stringContaining('查看当前目录')
+    );
+    await expect(toolHeader.getByText('Bash', { exact: true })).toBeVisible();
+    await expect(toolHeader.getByText('pwd', { exact: true })).toBeVisible();
     // tool-end 成功态：输出可见
     await expect(toolRow).toContainText('/workspace/crish');
 
@@ -148,6 +155,7 @@ test.describe('E2E-L2 完整旅程（full-journey）', () => {
     await openApp(page, {
       runStream: { events: fullJourneyRunEvents(), delayMs: 30 },
     });
+    await startNewSession(page);
     const input = page.locator('[data-testid="chat-input"]');
     await typeIntoComposer(page, 'hello');
     await input.press('Enter');
@@ -165,6 +173,7 @@ test.describe('E2E-L2 完整旅程（full-journey）', () => {
       string,
       unknown
     >;
+    expect(lastRun.prompt).toBe('hello');
     const args = lastRun.args as Record<string, unknown>;
     expect(args).toBeDefined();
     // runId 为前端自管并随请求下发（ConnectionLifecycle 语义）

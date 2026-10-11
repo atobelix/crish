@@ -3,6 +3,11 @@
 本目录为前端 e2e 全旅程的唯一归属（Playwright 根 config `playwright.config.ts`）。
 视觉回归见 `apps/crish-desktop/tests/visual/`（T11.2）。
 
+默认 E2E 与 smoke 测试运行 Conex Agent 前端（`apps/crish-desktop`，端口 5174），
+并通过 L2 mock 引擎模拟 IPC。`reference/markdown-editor` 已退役；相关旧 spec
+仍作为历史测试资产保留，但根 Playwright 配置会排除它们，也不会启动编辑器服务。
+这套 L2 测试不替代真实 Tauri 桌面环境验收；桌面 UI 调试通道按仓库 `AGENTS.md` 使用 Tauri MCP 4000。
+
 ---
 
 ## 1. 框架与分层（T11.1 方案评估结论）

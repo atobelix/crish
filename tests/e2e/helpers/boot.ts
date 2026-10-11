@@ -28,20 +28,66 @@ export async function openApp(page: Page, config: MockEngineConfig = {}) {
   await expect(page.locator('[data-engine-ready="true"]')).toBeVisible({
     timeout: 8000,
   });
+  const modelSelector = page.locator('[data-testid="model-selector-button"]');
+  await expect(modelSelector).toBeVisible({ timeout: 20000 });
+  await expect(modelSelector).toHaveAttribute('data-needs-model-setup', 'false', {
+    timeout: 20000,
+  });
+}
+
+/** Click 「新对话」并等草稿状态与 composer 水合完成后再开始输入。 */
+export async function startNewSession(page: Page): Promise<void> {
+  await page.locator('[data-testid="new-session-button"]').click();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => (window as any).__CRISH_STORE__?.getState?.().activeSessionId
+      )
+    )
+    .toMatch(/^__pending_draft__(?::|$)/);
+  const activeSessionId = await page.evaluate(
+    () => (window as any).__CRISH_STORE__?.getState?.().activeSessionId
+  );
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          document
+            .querySelector('[data-panel-id="chat"][data-active="true"]')
+            ?.getAttribute('data-session-id') ?? null
+      )
+    )
+    .toBe(activeSessionId);
+  const tiptapInput = page.locator(
+    '[data-testid="chat-input"][contenteditable="true"]'
+  );
+  await expect(tiptapInput).toBeVisible();
+  await expect(tiptapInput).toHaveText('');
 }
 
 /**
- * 向 composer（contenteditable ProseMirror）键入文本。
- *
- * 背景：chat-input 已从 textarea 迁移为 tiptap contenteditable div
- * （tiptap 接线收尾），Playwright fill() 仅适用于 input/textarea，
- * 对 contenteditable 会抛 Not an input element —— 统一走
- * click + keyboard.type（触发真实键入事件链，含 tiptap onUpdate 防抖回流）。
+ * 向 composer（contenteditable ProseMirror）逐字符键入测试文本，并核对
+ * 编辑器文本、发送按钮状态和宿主草稿都已收到完整输入。
  */
 export async function typeIntoComposer(page: Page, text: string) {
   const input = page.locator('[data-testid="chat-input"]');
   await input.click();
   await page.keyboard.type(text, { delay: 8 });
+  await expect(input).toHaveText(text, { timeout: 5000 });
+  await expect(
+    page.locator('[data-composer-send] [data-send-active="1"]')
+  ).toBeVisible({ timeout: 5000 });
+  await expect
+    .poll(() =>
+      page.evaluate((expected) => {
+        const store = (window as any).__CRISH_STORE__?.getState?.();
+        const activeSessionId = store?.activeSessionId;
+        return activeSessionId
+          ? store?.composerDrafts?.[activeSessionId] ?? ''
+          : '';
+      }, text)
+    )
+    .toBe(text);
 }
 
 /**

@@ -14,8 +14,12 @@
 import { test, expect, type Page } from '@playwright/test';
 import { writeFileSync, mkdirSync, existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
-import { typeIntoComposer } from './helpers/boot';
-import { installMockEngine, bigRunEvents } from './mock-engine';
+import {
+  openApp as bootOpenApp,
+  startNewSession,
+  typeIntoComposer,
+} from './helpers/boot';
+import { bigRunEvents } from './mock-engine';
 
 const BASELINE_PATH = resolve('tests/perf/baselines/desktop-l3.json');
 
@@ -26,9 +30,9 @@ interface L3Sample {
 }
 
 /** 在页面内安装 rAF 采样 + longtask observer（自包含 IIFE） */
-async function installPerfSampler(page: Page, windowMs: number): Promise<void> {
+async function installPerfSampler(page: Page): Promise<void> {
   await page.evaluate(
-    ({ ms }) => {
+    () => {
       const w = window as unknown as {
         __perfSample?: { raf: number[]; longtasks: number[]; stop: () => void };
       };
@@ -50,22 +54,23 @@ async function installPerfSampler(page: Page, windowMs: number): Promise<void> {
         }
       });
       obs.observe({ entryTypes: ['longtask'] });
-      const timer = setTimeout(() => {
-        alive = false;
-        obs.disconnect();
-      }, ms);
       w.__perfSample = {
         raf,
         longtasks,
         stop: () => {
-          clearTimeout(timer);
           alive = false;
           obs.disconnect();
         },
       };
-    },
-    { ms: windowMs }
+    }
   );
+}
+
+async function stopPerfSampler(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    (window as unknown as { __perfSample?: { stop: () => void } })
+      .__perfSample?.stop();
+  });
 }
 
 async function readSample(page: Page): Promise<{
@@ -82,16 +87,11 @@ async function readSample(page: Page): Promise<{
 async function openApp(
   page: Page,
   delayMs: number
-): Promise<ReturnType<typeof installMockEngine>> {
-  const engine = await installMockEngine(page, {
+): Promise<void> {
+  await bootOpenApp(page, {
     runStream: { events: bigRunEvents(), delayMs },
   });
-  await page.goto('/');
-  await expect(page.locator('#root')).toBeVisible({ timeout: 20000 });
-  await expect(page.locator('[data-testid="chat-input"]')).toBeVisible({
-    timeout: 20000,
-  });
-  return engine;
+  await startNewSession(page);
 }
 
 function saveBaseline(sample: L3Sample): void {
@@ -117,39 +117,67 @@ test.describe('E2E-L2 性能断言（perf-streaming）', () => {
     page,
   }) => {
     await openApp(page, 0);
-    await installPerfSampler(page, 1500);
+    // 在发送首个事件前安装采样器，覆盖首帧启动与流式首事件。
+    await installPerfSampler(page);
 
     const input = page.locator('[data-testid="chat-input"]');
     await typeIntoComposer(page, '跑一遍性能压测');
     await input.press('Enter');
+    await expect
+      .poll(() =>
+        page.evaluate(() => (window as any).__CRISH_E2E__?.getState?.().lastRun)
+      )
+      .not.toBeNull();
 
-    // 流式期：增量文本出现（锚点词在首批块内）
+    // 流式期：活跃 Markdown 块已经挂载。
+    const assistantRow = page.locator('.msg-row-assistant').first();
     const streamingText = page.locator(
       '.msg-row-assistant .md-rendered[data-streaming="true"]'
     );
-    await expect(streamingText.first()).toBeVisible({ timeout: 10000 });
-    await expect(streamingText.first()).toContainText('性能压测流式输出', {
-      timeout: 5000,
-    });
+    await expect.poll(() => streamingText.count(), { timeout: 10000 }).toBe(1);
+    await expect(streamingText).toBeVisible();
+    await expect(streamingText).toContainText('性能压测文本填充');
+    await expect.poll(
+      () => page.locator('.md-rendered[data-streaming="true"][data-has-html="true"]').count(),
+      { timeout: 10000 }
+    ).toBe(1);
+    const renderedHeading = assistantRow
+      .locator('.md-rendered')
+      .filter({ hasText: '性能压测流式输出' });
+    await expect(renderedHeading).toHaveCount(1, { timeout: 10000 });
+    await expect(renderedHeading).toBeVisible();
+    const renderedMarkup = await assistantRow
+      .locator('.md-rendered')
+      .evaluateAll((elements) => elements.map((element) => element.innerHTML).join('\n'));
+    expect(renderedMarkup).not.toContain('## 性能压测流式输出');
+    expect(renderedMarkup).not.toContain('- 目标：100KB');
+    expect(renderedMarkup).not.toContain('```');
 
     // 完成态：流式节点卸载、最终块出现
-    await expect(
-      page.locator('.msg-row-assistant .md-rendered[data-streaming="false"]').first()
-    ).toBeVisible({ timeout: 15000 });
-    await expect(
-      page.locator('.msg-row-assistant .md-rendered[data-streaming="true"]')
-    ).toHaveCount(0, { timeout: 15000 });
-    // 增量累积完整（完成态 HTML 文本包含末段锚点）
-    const finalText = await page
-      .locator('.msg-row-assistant .md-rendered[data-streaming="false"]')
-      .first()
-      .innerText();
-    expect(finalText).toContain('性能压测流式输出');
-    expect(finalText).toContain('marker-119');
-    expect(finalText).not.toContain('## 本轮总结');
+    const completedBlocks = page.locator(
+      '.msg-row-assistant .md-rendered[data-streaming="false"]'
+    );
+    await expect.poll(() => completedBlocks.count(), { timeout: 15000 }).toBeGreaterThan(0);
+    await expect.poll(() => streamingText.count(), { timeout: 15000 }).toBe(0);
+    await stopPerfSampler(page);
+    const completedHeading = completedBlocks.filter({
+      hasText: '性能压测流式输出',
+    });
+    await expect(completedHeading).toHaveCount(1);
+    await expect(completedHeading).toBeVisible();
+    const renderedMarker = completedBlocks.filter({ hasText: 'marker-119' });
+    await expect(renderedMarker).toHaveCount(1);
+    await expect(renderedMarker).toBeVisible();
+    // 分块后标题与正文锚点可能位于不同块；分别锁定对应完成块。
+    await expect(completedHeading).toContainText('性能压测流式输出');
+    await expect(renderedMarker).toContainText('marker-0');
+    await expect(renderedMarker).toContainText('marker-119');
+    const completedText = (await completedBlocks.allInnerTexts()).join('\n');
+    expect(completedText).not.toContain('本轮总结');
 
     // 采样：流式期 + complete 过渡
     const sample = await readSample(page);
+    expect(sample.raf.length).toBeGreaterThan(0);
     const baseline = loadBaseline();
     const p95Raf =
       [...sample.raf].sort((a, b) => a - b)[
@@ -184,19 +212,31 @@ test.describe('E2E-L2 性能断言（perf-streaming）', () => {
     await searchInput.fill('吞吐基线');
     await expect(searchInput).toHaveValue('吞吐基线');
 
-    await installPerfSampler(page, 1500);
     const input = page.locator('[data-testid="chat-input"]');
+    // 在发送首个事件前安装采样器，覆盖搜索态后的首帧与流式首事件。
+    await installPerfSampler(page);
     await typeIntoComposer(page, '搜索态下跑流式');
     await input.press('Enter');
+    await expect
+      .poll(() =>
+        page.evaluate(() => (window as any).__CRISH_E2E__?.getState?.().lastRun)
+      )
+      .not.toBeNull();
 
-    await expect(
-      page.locator('.msg-row-assistant .md-rendered[data-streaming="true"]').first()
-    ).toBeVisible({ timeout: 10000 });
-    await expect(
-      page.locator('.msg-row-assistant .md-rendered[data-streaming="false"]').first()
-    ).toBeVisible({ timeout: 15000 });
+    const streamingBlocks = page.locator(
+      '.msg-row-assistant .md-rendered[data-streaming="true"]'
+    );
+    await expect.poll(() => streamingBlocks.count(), { timeout: 10000 }).toBe(1);
+    await expect(streamingBlocks).toBeVisible();
+    const completedBlocks = page.locator(
+      '.msg-row-assistant .md-rendered[data-streaming="false"]'
+    );
+    await expect.poll(() => completedBlocks.count(), { timeout: 15000 }).toBeGreaterThan(0);
+    await stopPerfSampler(page);
+    await expect(completedBlocks.first()).toBeVisible();
 
     const sample = await readSample(page);
+    expect(sample.raf.length).toBeGreaterThan(0);
     const maxLongtask = sample.longtasks.length
       ? Math.max(...sample.longtasks)
       : 0;

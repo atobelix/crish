@@ -1,7 +1,7 @@
 /**
  * 根 Playwright 配置 —— 前端 e2e 唯一入口（PE-11 T11.1 双配置归一裁决）。
  *
- * - testDir `./tests/e2e`：全旅程 L2 mock 引擎 spec + 行为断言；
+ * - testDir `./tests/e2e`：Agent 前端的 L2 mock 引擎 spec + 行为断言；
  * - projects `e2e-l2`（默认）：mock 引擎层（dev server + __TAURI_INTERNALS__
  *   注入），CI 中层默认全量；`e2e-l3`（真壳 tauri-driver）暂不接线，
  *   保留 project 占位（发布前/nightly 层，见 PE-11 T11.1-3）；
@@ -9,10 +9,9 @@
  *   test:e2e:native`，PS-02 T2.1 起归属 vitest.config.ts 独立 native-smoke
  *   项目），不属 Playwright 面 —— testIgnore 排除，
  *   避免 `npx playwright test` 误扫 vitest spec；
- * - `webview/` 子目录为真 WebView 载体（CONN-01，需 dev:workbench 的
- *   WebView2 带 9222）—— 独立 config `tests/e2e/webview/playwright.config.ts`
- *   运行（project e2e-webview，`npm run test:e2e:webview`），根 config
- *   testIgnore 排除，避免 L2 中层误扫需真 Tauri 的 spec；
+ * - `webview/` 子目录是既有的旧版 WebView 测试资产，由根 config 排除；
+ *   桌面界面调试与验收按 AGENTS.md 使用 Tauri MCP 4000；
+ * - 退役 Markdown 编辑器的旧 spec 保留在仓库中，但不属于 Agent 默认测试集；
  * - visual 回归收敛到 `apps/crish-desktop/playwright.config.ts`（testDir
  *   限 `tests/visual`），本 config 不再扫描 app 目录，职责单一。
  *
@@ -30,9 +29,12 @@ import { defineConfig } from '@playwright/test';
 export default defineConfig({
   testDir: './tests/e2e',
   timeout: 30_000,
-  // vitest spec（进程级冒烟）与真 WebView 载体（webview/，独立 config）
-  // 不归本 config 管
-  testIgnore: [/tauri-native-smoke\.spec\.ts$/, /webview\//],
+  // 排除进程级冒烟、旧 WebView 资产与退役 Markdown 编辑器 spec。
+  testIgnore: [
+    /tauri-native-smoke\.spec\.ts$/,
+    /[\\/]webview[\\/]/,
+    /[\\/](?:active-token|ast-block-tables|bug-repro|console-errors|cursor-position|editor-fuzz-thrash|format-checker|ime-composition|keyboard-navigation|matrix-ime-selection|matrix-navigation|matrix-tables|syntax-render|wysiwyg-interaction)\.spec\.ts$/,
+  ],
   fullyParallel: true,
   // 并发收敛（tiptap 接线后冷编译回归记录 2026-08-07）：fullyParallel 下 26 用例
   // 同时触发 vite 首屏编译，早期页面 bundle 未就绪 → 白屏（sidebar/chat-input 缺失）。
@@ -57,26 +59,11 @@ export default defineConfig({
     // E2E-L3 真壳（tauri-driver）发布前层：当前以 tauri-native-smoke（vitest）
     // 进程级冒烟占位；tauri-driver 接线后在此增加 project（见 PE-11 T11.1-3）。
   ],
-  webServer: [
-    {
-      command: 'npm --workspace @crish/crish-desktop run dev',
-      // G15c 修正（T-48 轮内协调）：Playwright 校验 port 与 url 互斥
-      // （`Either 'port' or 'url' should be specified`），url 已含端口且
-      // 提供 HTTP 级就绪健康检查（2xx/3xx 轮询），保留 url 即覆盖原意图
-      url: 'http://localhost:5174',
-      reuseExistingServer: true,
-      // 冷启动余量：120s → 180s（CI 慢层 60min 预算内可容忍，本地体验差）
-      timeout: 180_000,
-    },
-    {
-      // 5 个 markdown-editor 专项 spec（AGENTS.md 保护名单）以 5173 硬编码
-      // URL 驱动 reference/markdown-editor 的引擎 dev server（其 main.tsx
-      // 暴露 window.MarkdownParser / __CRISH_SESSION_STORE__ 测试全局）——
-      // PS-02 T2.7 补挂第二 webServer，CI 上无 5173 时自动拉起（本地可复用）
-      command: 'npm --prefix reference/markdown-editor run dev',
-      url: 'http://localhost:5173',
-      reuseExistingServer: true,
-      timeout: 180_000,
-    },
-  ],
+  webServer: {
+    command: 'npm --workspace @crish/crish-desktop run dev',
+    // url 提供 HTTP 级就绪健康检查；该服务运行 Agent Workbench 前端。
+    url: 'http://localhost:5174',
+    reuseExistingServer: true,
+    timeout: 180_000,
+  },
 });

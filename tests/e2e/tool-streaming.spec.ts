@@ -19,9 +19,12 @@
  * 全用例收口断言为空。
  */
 import { test, expect, type Page } from '@playwright/test';
-import { typeIntoComposer } from './helpers/boot';
 import {
-  installMockEngine,
+  openApp as bootOpenApp,
+  startNewSession,
+  typeIntoComposer,
+} from './helpers/boot';
+import {
   toolStreamingRunEvents,
   toolStreamingLenientRunEvents,
 } from './mock-engine';
@@ -44,20 +47,22 @@ function collectConsoleIssues(page: Page): string[] {
 
 async function openApp(
   page: Page,
-  config: Parameters<typeof installMockEngine>[1]
+  config: Parameters<typeof bootOpenApp>[1]
 ) {
-  await installMockEngine(page, config);
-  await page.goto('/');
-  await expect(page.locator('#root')).toBeVisible({ timeout: 20000 });
-  await expect(page.locator('[data-testid="chat-input"]')).toBeVisible({
-    timeout: 20000,
-  });
+  await bootOpenApp(page, config);
 }
 
 async function sendPrompt(page: Page, prompt: string) {
+  await startNewSession(page);
   const input = page.locator('[data-testid="chat-input"]');
+  await expect(input).toBeVisible({ timeout: 20000 });
   await typeIntoComposer(page, prompt);
   await input.press('Enter');
+  await expect
+    .poll(() =>
+      page.evaluate(() => (window as any).__CRISH_E2E__?.getState?.().lastRun)
+    )
+    .not.toBeNull();
   const assistantRow = page.locator('.msg-row-assistant').first();
   await expect(assistantRow).toBeVisible({ timeout: 10000 });
   return assistantRow;
@@ -114,6 +119,7 @@ test.describe('E2E-L2 工具流式协议（tool-streaming）', () => {
       '.tool-stack .tool-row[data-tool-id="tool-l1"]'
     );
     await expect(toolRow).toBeVisible({ timeout: 8000 });
+    await expect(toolRow).toHaveAttribute('data-tool-label', '检查工作区');
     await expect(toolRow).toContainText('检查工作区');
     // 宽容 tool-end（toolCallId 别名 + output 字符串归一）→ 终值渲染
     await expect(toolRow).toContainText('clean', { timeout: 8000 });
