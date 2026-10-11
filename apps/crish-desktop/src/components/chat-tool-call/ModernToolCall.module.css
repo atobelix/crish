@@ -58,7 +58,7 @@
   height: 14px;
   color: var(--text-tertiary);
   flex-shrink: 0;
-  transition: transform 150ms cubic-bezier(0.2, 0, 0, 1);
+  transition: transform var(--transition-fast);
 }
 
 .chevron.isOpen {

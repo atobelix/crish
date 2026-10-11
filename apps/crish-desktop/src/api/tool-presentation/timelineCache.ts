@@ -9,8 +9,6 @@
  */
 
 import type { SessionMessage } from '../../store/layoutStore';
-import type { AssistantTimelineItem } from './toolPresentationTypes';
-import { buildAssistantTimeline } from './timelineNormalizer';
 
 /**
  * 历史块投影摘要缓存（cacheKey → 投影 JSON 片段）。
@@ -161,19 +159,4 @@ export function timelineSignature(msg: SessionMessage): string {
     i: injProj,
     st: msg.status || 'unknown',
   });
-}
-
-/**
- * 带签名缓存的 timeline 构建。
- */
-export function buildAssistantTimelineCached(
-  msg: SessionMessage,
-  prevSig: string | null,
-  prevTimeline: AssistantTimelineItem[] | null
-): { sig: string; timeline: AssistantTimelineItem[] } {
-  const sig = timelineSignature(msg);
-  if (sig === prevSig && prevTimeline) {
-    return { sig, timeline: prevTimeline };
-  }
-  return { sig, timeline: buildAssistantTimeline(msg) };
 }

@@ -15,3 +15,4 @@ export * from './tool-presentation/toolCommandIcon';
 export * from './tool-presentation/toolActionClassifier';
 export * from './tool-presentation/processMetricsEngine';
 export * from './tool-presentation/timelineSegmenter';
+export * from './tool-presentation/assistantRenderability';

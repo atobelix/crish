@@ -68,6 +68,7 @@ export const ToolCallHeader: React.FC<ToolCallHeaderProps> = ({
   const kindIconName = useMemo(() => toolCommandIcon(kind), [kind]);
 
   const fullTooltip = filePath || tc.arguments || human || '';
+  const showHumanLabel = Boolean(human && human !== actionText && human !== paramText);
 
   return (
     <div
@@ -105,6 +106,14 @@ export const ToolCallHeader: React.FC<ToolCallHeaderProps> = ({
         </span>
         <span className={styles.toolRowText}>
           <span className={styles.toolRowSummary}>
+            {showHumanLabel ? (
+              <>
+                <Tooltip content={human}>
+                  <span className={styles.toolActionText}>{human}</span>
+                </Tooltip>
+                <span className={styles.dotSeparator} aria-hidden="true">·</span>
+              </>
+            ) : null}
             <Tooltip content={fullTooltip}>
               <span className={styles.toolActionText}>{actionText}</span>
             </Tooltip>

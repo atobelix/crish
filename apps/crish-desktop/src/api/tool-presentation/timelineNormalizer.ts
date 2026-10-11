@@ -25,16 +25,25 @@ export {
   type ParsedInlineItem,
 } from './inlineTagParser';
 import { isThoughtPlaceholder } from '../markdownRenderLite';
-import { logInternalError } from '../userFacingErrors';
-export {
-  timelineSignature,
-  buildAssistantTimelineCached,
-} from './timelineCache';
+import {
+  isLegacyDomainNoticeThought,
+  logInternalError,
+} from '../userFacingErrors';
+import { timelineSignature } from './timelineCache';
+export { timelineSignature } from './timelineCache';
+
+/**
+ * S-2：非内容思考（流式占位 / 误写入 thinking 的域文案），不产出 thought 项。
+ * 本文件全部 thought 入口统一经此判定。
+ */
+export function isNonContentThought(text: string | undefined | null): boolean {
+  return isThoughtPlaceholder(text ?? '') || isLegacyDomainNoticeThought(text);
+}
 
 function pushFallbackTurns(msg: SessionMessage, items: AssistantTimelineItem[]): void {
   if (msg.thinkingTurns && msg.thinkingTurns.length > 0) {
     for (const tt of msg.thinkingTurns) {
-      if (tt.content?.trim() && !isThoughtPlaceholder(tt.content)) {
+      if (tt.content?.trim() && !isNonContentThought(tt.content)) {
         items.push({
           kind: 'thought',
           content: tt.content,
@@ -46,7 +55,7 @@ function pushFallbackTurns(msg: SessionMessage, items: AssistantTimelineItem[]):
         });
       }
     }
-  } else if ((msg.thinking || '').trim() && !isThoughtPlaceholder(msg.thinking)) {
+  } else if ((msg.thinking || '').trim() && !isNonContentThought(msg.thinking)) {
     items.push({
       kind: 'thought',
       content: msg.thinking || '',
@@ -70,6 +79,7 @@ function pushParsedText(
   const parsed = parseInlineThoughtAndTextSafely(text, turnIndex, isStreaming);
   for (const p of parsed) {
     if (p.kind === 'thought') {
+      if (!p.isStreaming && isNonContentThought(p.content)) continue;
       items.push({
         kind: 'thought',
         content: p.content,
@@ -170,7 +180,7 @@ export function buildAssistantTimeline(
         } else if (b.type === 'thought') {
           flushTools();
           const thoughtContent = (b.content || '').trim();
-          const isPlaceholder = isThoughtPlaceholder(thoughtContent);
+          const isPlaceholder = isNonContentThought(thoughtContent);
           if (!isPlaceholder && (thoughtContent || b.isStreaming)) {
             items.push({
               kind: 'thought',
@@ -303,6 +313,19 @@ export function buildAssistantTimeline(
     }
     return [];
   }
+}
+
+/** 带签名缓存的 timeline 构建。 */
+export function buildAssistantTimelineCached(
+  msg: SessionMessage,
+  prevSig: string | null,
+  prevTimeline: AssistantTimelineItem[] | null
+): { sig: string; timeline: AssistantTimelineItem[] } {
+  const sig = timelineSignature(msg);
+  if (sig === prevSig && prevTimeline) {
+    return { sig, timeline: prevTimeline };
+  }
+  return { sig, timeline: buildAssistantTimeline(msg) };
 }
 
 /**

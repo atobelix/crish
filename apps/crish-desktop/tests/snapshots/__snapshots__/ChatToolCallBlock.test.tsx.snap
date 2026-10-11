@@ -39,7 +39,7 @@ exports[`ChatToolCallBlock snapshots > renders error tool 1`] = `
             class="_toolRowSummary_d18ff4"
           >
             <span
-              aria-describedby="_r_2_"
+              aria-describedby="_r_0_"
               class="_toolActionText_d18ff4"
             >
               构建项目
@@ -51,7 +51,7 @@ exports[`ChatToolCallBlock snapshots > renders error tool 1`] = `
               ·
             </span>
             <span
-              aria-describedby="_r_3_"
+              aria-describedby="_r_1_"
               class="_toolErrorParamText_d18ff4"
             >
               Error: build failed - syntax error in src/index.ts
@@ -110,7 +110,7 @@ exports[`ChatToolCallBlock snapshots > renders error tool 1`] = `
                 class="_terminalLineEndSlot_d18ff4"
               >
                 <button
-                  aria-describedby="_r_4_"
+                  aria-describedby="_r_2_"
                   class="_button_ae1db5 _buttonGhost_ae1db5 _buttonSm_ae1db5 _toolSectionActionBtn_d18ff4"
                   data-size="sm"
                   data-variant="ghost"
@@ -188,7 +188,7 @@ exports[`ChatToolCallBlock snapshots > renders error tool 1`] = `
                 class="_toolSectionActions_d18ff4"
               >
                 <button
-                  aria-describedby="_r_5_"
+                  aria-describedby="_r_3_"
                   class="_button_ae1db5 _buttonGhost_ae1db5 _buttonSm_ae1db5 _toolSectionActionBtn_d18ff4"
                   data-size="sm"
                   data-variant="ghost"
@@ -292,7 +292,19 @@ exports[`ChatToolCallBlock snapshots > renders running tool 1`] = `
             class="_toolRowSummary_d18ff4"
           >
             <span
-              aria-describedby="_r_6_"
+              aria-describedby="_r_0_"
+              class="_toolActionText_d18ff4"
+            >
+              运行测试
+            </span>
+            <span
+              aria-hidden="true"
+              class="_dotSeparator_d18ff4"
+            >
+              ·
+            </span>
+            <span
+              aria-describedby="_r_1_"
               class="_toolActionText_d18ff4"
             >
               终端
@@ -304,7 +316,7 @@ exports[`ChatToolCallBlock snapshots > renders running tool 1`] = `
               ·
             </span>
             <span
-              aria-describedby="_r_7_"
+              aria-describedby="_r_2_"
               class="_toolParamText_d18ff4"
             >
               npm test
@@ -363,7 +375,7 @@ exports[`ChatToolCallBlock snapshots > renders running tool 1`] = `
                 class="_terminalLineEndSlot_d18ff4"
               >
                 <button
-                  aria-describedby="_r_8_"
+                  aria-describedby="_r_3_"
                   class="_button_ae1db5 _buttonGhost_ae1db5 _buttonSm_ae1db5 _toolSectionActionBtn_d18ff4"
                   data-size="sm"
                   data-variant="ghost"
@@ -523,6 +535,18 @@ exports[`ChatToolCallBlock snapshots > renders successful tool 1`] = `
               aria-describedby="_r_0_"
               class="_toolActionText_d18ff4"
             >
+              查看 main.ts
+            </span>
+            <span
+              aria-hidden="true"
+              class="_dotSeparator_d18ff4"
+            >
+              ·
+            </span>
+            <span
+              aria-describedby="_r_1_"
+              class="_toolActionText_d18ff4"
+            >
               读取
             </span>
             <span
@@ -532,11 +556,17 @@ exports[`ChatToolCallBlock snapshots > renders successful tool 1`] = `
               ·
             </span>
             <button
-              aria-describedby="_r_1_"
-              class="_toolPathLink_d18ff4"
+              aria-describedby="_r_2_"
+              class="_button_ae1db5 _buttonGhost_ae1db5 _buttonMd_ae1db5 _toolPathLink_d18ff4"
+              data-size="md"
+              data-variant="ghost"
               type="button"
             >
-              main.ts
+              <span
+                class="_buttonLabel_ae1db5"
+              >
+                main.ts
+              </span>
             </button>
           </span>
         </span>
@@ -611,7 +641,19 @@ exports[`ChatToolCallBlock snapshots > renders tool with duration 1`] = `
             class="_toolRowSummary_d18ff4"
           >
             <span
-              aria-describedby="_r_9_"
+              aria-describedby="_r_0_"
+              class="_toolActionText_d18ff4"
+            >
+              修改 utils.ts
+            </span>
+            <span
+              aria-hidden="true"
+              class="_dotSeparator_d18ff4"
+            >
+              ·
+            </span>
+            <span
+              aria-describedby="_r_1_"
               class="_toolActionText_d18ff4"
             >
               修改
@@ -623,11 +665,17 @@ exports[`ChatToolCallBlock snapshots > renders tool with duration 1`] = `
               ·
             </span>
             <button
-              aria-describedby="_r_a_"
-              class="_toolPathLink_d18ff4"
+              aria-describedby="_r_2_"
+              class="_button_ae1db5 _buttonGhost_ae1db5 _buttonMd_ae1db5 _toolPathLink_d18ff4"
+              data-size="md"
+              data-variant="ghost"
               type="button"
             >
-              utils.ts
+              <span
+                class="_buttonLabel_ae1db5"
+              >
+                utils.ts
+              </span>
             </button>
           </span>
         </span>
@@ -677,7 +725,7 @@ exports[`ChatToolCallBlock snapshots > renders tool with duration 1`] = `
                 class="_toolSectionActions_d18ff4"
               >
                 <button
-                  aria-describedby="_r_b_"
+                  aria-describedby="_r_3_"
                   class="_button_ae1db5 _buttonGhost_ae1db5 _buttonSm_ae1db5 _toolSectionActionBtn_d18ff4"
                   data-size="sm"
                   data-variant="ghost"
@@ -718,7 +766,7 @@ exports[`ChatToolCallBlock snapshots > renders tool with duration 1`] = `
                   </span>
                 </button>
                 <button
-                  aria-describedby="_r_c_"
+                  aria-describedby="_r_4_"
                   class="_button_ae1db5 _buttonGhost_ae1db5 _buttonSm_ae1db5 _toolSectionActionBtn_d18ff4"
                   data-size="sm"
                   data-variant="ghost"
@@ -816,7 +864,7 @@ exports[`ChatToolCallBlock snapshots > renders tool with duration 1`] = `
                 class="_toolSectionActions_d18ff4"
               >
                 <button
-                  aria-describedby="_r_d_"
+                  aria-describedby="_r_5_"
                   class="_button_ae1db5 _buttonGhost_ae1db5 _buttonSm_ae1db5 _toolSectionActionBtn_d18ff4"
                   data-size="sm"
                   data-variant="ghost"

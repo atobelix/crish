@@ -44,7 +44,7 @@
 .toolGroup > div > .toolRow {
   margin-left: 10px;
   padding-left: 14px;
-  border-left: 1.5px solid var(--border-subtle);
+  border-left: var(--hairline-width) solid var(--border-subtle);
 }
 
 /* Tool Row */
