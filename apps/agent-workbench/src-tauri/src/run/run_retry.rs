@@ -343,11 +343,28 @@ impl CoreRunState {
                 idle_resume::spawn_idle_resume_run(state, sid, "idle-resume", Vec::new()).await;
             })
         });
-        Arc::new(crate::wake_watcher::WakeWatcher::new(
+        let weak_cb = Arc::downgrade(self);
+        let is_circuit_tripped: Arc<dyn Fn(&str) -> bool + Send + Sync> =
+            Arc::new(move |_sid: &str| {
+                weak_cb
+                    .upgrade()
+                    .map(|state| {
+                        let Some(db) = state.local_db() else {
+                            return false;
+                        };
+                        let threshold = state.provider_fail_threshold_config(&db);
+                        let raw = db.get_session_meta(PROVIDER_FAIL_STREAK_KEY).ok().flatten();
+                        let streak = ProviderFailStreak::from_json(raw.as_deref());
+                        streak.effective_count(now_ms_internal()) >= threshold
+                    })
+                    .unwrap_or(false)
+            });
+        Arc::new(crate::wake_watcher::WakeWatcher::with_circuit_breaker(
             session_id.to_string(),
             queue,
             has_active_run,
             empty_streak,
+            is_circuit_tripped,
             launcher,
             crate::wake_watcher::WakeWatcherOptions::default(),
         ))

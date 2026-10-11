@@ -804,7 +804,8 @@ pub(crate) async fn run_task_impl(
             format!("context-state-{run_id}-{now}"),
             text,
             now,
-        );
+        )
+        .with_session(&session_id);
         state
             .pending_queue
             .lock()

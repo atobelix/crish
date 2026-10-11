@@ -1,7 +1,13 @@
 // @vitest-environment jsdom
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import { DEFAULT_SETTINGS } from '../../api/clientApiDefaultSettings';
 import { readSendShortcut } from '../../api/store-access/settingsAccess';
 
@@ -39,14 +45,18 @@ vi.mock('../../services/toast/ToastContext', () => ({
 }));
 
 vi.mock('../../store/storeAccess', () => ({
-  useLayoutStore: (sel: (s: { setTabModeEnabled: typeof setTabModeEnabled }) => unknown) =>
-    sel({ setTabModeEnabled }),
-  useSettingsField: (sel: (s: { setAppSettings: typeof setAppSettings }) => unknown) =>
-    sel({ setAppSettings }),
+  useLayoutStore: (
+    sel: (s: { setTabModeEnabled: typeof setTabModeEnabled }) => unknown
+  ) => sel({ setTabModeEnabled }),
+  useSettingsField: (
+    sel: (s: { setAppSettings: typeof setAppSettings }) => unknown
+  ) => sel({ setAppSettings }),
 }));
 
 vi.mock('../../services/TelemetryService', () => ({
-  telemetry: { setEnabled: (...args: unknown[]) => telemetrySetEnabled(...args) },
+  telemetry: {
+    setEnabled: (...args: unknown[]) => telemetrySetEnabled(...args),
+  },
 }));
 
 import { SettingsPersonalizeTab } from './SettingsPersonalizeTab';
@@ -66,7 +76,11 @@ describe('SettingsPersonalizeTab 写读钥匙', () => {
       hideThinkingBlock: false,
     });
     saveSettingsEx.mockImplementation(
-      async (_cwd: string, _scope: string, updates: Record<string, unknown>) => ({
+      async (
+        _cwd: string,
+        _scope: string,
+        updates: Record<string, unknown>
+      ) => ({
         ...DEFAULT_SETTINGS,
         sendShortcut: 'enter',
         hideThinkingBlock: false,
@@ -102,7 +116,9 @@ describe('SettingsPersonalizeTab 写读钥匙', () => {
 
   it('通用开关能拨，失败才 toast', async () => {
     render(<SettingsPersonalizeTab />);
-    const queue = await screen.findByRole('switch', { name: '默认折叠思考过程' });
+    const queue = await screen.findByRole('switch', {
+      name: '默认折叠思考过程',
+    });
     expect(queue).not.toBeDisabled();
     fireEvent.click(queue);
     await waitFor(() => {
@@ -123,5 +139,20 @@ describe('SettingsPersonalizeTab 写读钥匙', () => {
     await waitFor(() => {
       expect(telemetrySetEnabled).toHaveBeenCalledWith(false);
     });
+  });
+
+  it('单次重试上限调整数字即实时保存，无需点击额外确认', async () => {
+    render(<SettingsPersonalizeTab />);
+    const retryInput = await screen.findByRole('spinbutton');
+    expect(retryInput).toHaveValue(10);
+    fireEvent.change(retryInput, { target: { value: '5' } });
+    await waitFor(() => {
+      expect(saveSettingsEx).toHaveBeenCalledWith(
+        '__global__',
+        'global',
+        expect.objectContaining({ maxRetryAttempts: 5 })
+      );
+    });
+    expect(showToast).not.toHaveBeenCalled();
   });
 });

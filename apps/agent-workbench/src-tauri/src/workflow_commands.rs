@@ -559,6 +559,7 @@ impl QueueSteeringSink {
 impl SteeringSink for QueueSteeringSink {
     fn enqueue_steering(&self, cron_id: &str, text: String, enqueued_at_ms: u64) {
         let entry = SteeringInputEntry {
+            session_id: String::new(),
             id: format!("{cron_id}-{enqueued_at_ms}"),
             text,
             attachments: Vec::new(),

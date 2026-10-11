@@ -354,6 +354,7 @@ impl Watchdog {
             format_duration_ms(elapsed_ms)
         );
         SteeringInputEntry {
+            session_id: self.session_id.clone(),
             // 条目 id 带时间戳保证同组替换后仍唯一（对齐 recovery 模式）
             id: format!("watchdog-{}-{now_ms}", self.session_id),
             text,

@@ -6,7 +6,8 @@ import { onUiEvent } from '../../api/uiEvents';
 import { generateMessageId } from '../../utils/generateMessageId';
 import { getTransport } from '../../api/transport';
 import { backfillFromBoundaryText } from '../../hooks/chat-stream/slashSendDraftManager';
-import { clearRuntimeStatus } from '../../store/storeAccess';
+import { reportRuntimeStatus } from '../../store/sessionRuntimeStatusStore';
+import { useSettingsField } from '../../store/storeAccess';
 import type { ChatAttachment } from '../../hooks/useChatStream';
 import type {
   ChatContentPart,
@@ -43,6 +44,10 @@ export function useChatHandlers({
   handleSendChat,
 }: UseChatHandlersOptions) {
   const lastRetryTimeRef = useRef<Record<string, number>>({});
+  const retryCountRef = useRef<Record<string, number>>({});
+  const configuredMaxRetries = useSettingsField(
+    (s) => s.appSettings?.maxRetryAttempts ?? 10
+  );
 
   const handleExportMarkdown = useCallback(() => {
     const byId = getCompositionRoot().session.getState().sessionsById;
@@ -159,6 +164,7 @@ export function useChatHandlers({
         toast.show('当前无可用会话，无法编辑重发');
         return;
       }
+      retryCountRef.current[sid] = 0;
       handleStopGeneration();
       suppressRetractBackfillRef.current = true;
 
@@ -170,7 +176,9 @@ export function useChatHandlers({
         });
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
-        console.warn(`[handleEditMessageAndResend] core_session_retract failed: ${msg}`);
+        console.warn(
+          `[handleEditMessageAndResend] core_session_retract failed: ${msg}`
+        );
       } finally {
         setTimeout(() => {
           suppressRetractBackfillRef.current = false;
@@ -206,17 +214,47 @@ export function useChatHandlers({
       const { sessionId, assistantMsgId } = opts;
       const now = Date.now();
       const lastTime = lastRetryTimeRef.current[sessionId] || 0;
-      if (now - lastTime < 1500) {
-        console.warn('[regenerateTurn] clicks too fast, throttling duplicate submit');
+      const prevAttempts = retryCountRef.current[sessionId] || 0;
+      // 指数退避：重试间隔随尝试次数递增（初始 1.2s，按 1.4 倍递增，上限 10s）
+      const backoffThrottleMs = Math.min(
+        10000,
+        Math.floor(1200 * Math.pow(1.4, prevAttempts))
+      );
+      if (now - lastTime < backoffThrottleMs) {
+        console.warn(
+          `[regenerateTurn] clicks too fast (backoff: ${backoffThrottleMs}ms), throttling duplicate submit`
+        );
         return;
       }
       lastRetryTimeRef.current[sessionId] = now;
+
+      const MAX_MANUAL_RETRIES = Math.max(1, configuredMaxRetries ?? 10);
+      const currentAttempt = prevAttempts + 1;
+      if (currentAttempt > MAX_MANUAL_RETRIES) {
+        console.warn(
+          `[regenerateTurn] retry limit exceeded (${MAX_MANUAL_RETRIES}) for session ${sessionId}`
+        );
+        reportRuntimeStatus({
+          type: 'failed',
+          sessionId,
+          kind: 'generic',
+          message: `已达到最大重试次数上限（${MAX_MANUAL_RETRIES}/${MAX_MANUAL_RETRIES} 次），请检查模型服务或网络连接`,
+          technicalDetail: `单次手动重试上限已达 ${MAX_MANUAL_RETRIES} 次。为避免后台无限循环空转与资源耗尽，系统已停止自动拉起。可在「通用设置」中自由调整上限，或检查模型服务后重新发送消息。`,
+          turn: {
+            userMsgId: opts.userMsgId || '',
+            assistantMsgId,
+          },
+        });
+        return;
+      }
+      retryCountRef.current[sessionId] = currentAttempt;
 
       handleStopGeneration();
       const session = getCompositionRoot().session.getState();
       const msgs = session.sessionsById[sessionId]?.messages || [];
       const targetUser =
-        (opts.userMsgId && msgs.find((m) => m.id === opts.userMsgId && m.sender === 'user')) ||
+        (opts.userMsgId &&
+          msgs.find((m) => m.id === opts.userMsgId && m.sender === 'user')) ||
         msgs.findLast((m) => m.sender === 'user');
       const userText = (targetUser?.text || opts.fallbackText || '').trim();
       const hasAttachments = Boolean(
@@ -225,9 +263,18 @@ export function useChatHandlers({
       );
       if (!userText && !hasAttachments) return;
 
-      if (assistantMsgId) session.withdrawMessage(wsId, sessionId, assistantMsgId);
-      // 重试时原子清空运行时状态（单轨收敛 §2.0，节流通过后清态）
-      clearRuntimeStatus(sessionId);
+      if (assistantMsgId)
+        session.withdrawMessage(wsId, sessionId, assistantMsgId);
+
+      // 上报 retrying 状态驱动 InFlowStatusLine 展示重试进度（如「正在重试 1/3」）
+      reportRuntimeStatus({
+        type: 'retrying',
+        sessionId,
+        retry: {
+          attempt: currentAttempt,
+          maxAttempts: MAX_MANUAL_RETRIES,
+        },
+      });
 
       let userMsgId = targetUser?.id;
       if (!userMsgId) {
@@ -240,7 +287,9 @@ export function useChatHandlers({
           timestamp: Date.now(),
           status: 'processing',
           ...(targetUser?.images?.length ? { images: targetUser.images } : {}),
-          ...(targetUser?.attachments?.length ? { attachments: targetUser.attachments } : {}),
+          ...(targetUser?.attachments?.length
+            ? { attachments: targetUser.attachments }
+            : {}),
         });
       } else {
         session.setSessionMessageStatus(sessionId, userMsgId, 'processing');
@@ -330,7 +379,7 @@ export function useChatHandlers({
       // 透传用户 clientMessageId 与多模态完整载荷；助手 id 在 runStreamingAssistant 内 mint 并经 run-task 下发
       runStreamingAssistant(userText, userMsgId, sessionId, streamOptions);
     },
-    [handleStopGeneration, wsId, runStreamingAssistant]
+    [handleStopGeneration, wsId, runStreamingAssistant, configuredMaxRetries]
   );
 
   const handleRegenerate = useCallback(
@@ -347,10 +396,13 @@ export function useChatHandlers({
 
   // ComposerErrorBar「重试」（单轨收敛 §2.3）：复用原消息位重发当轮，严禁新建用户消息
   useEffect(() => {
-    return onUiEvent('retry-failed-turn', ({ sessionId, userMsgId, assistantMsgId }) => {
-      if (!sessionId || (!assistantMsgId && !userMsgId)) return;
-      regenerateTurn({ sessionId, assistantMsgId, userMsgId });
-    });
+    return onUiEvent(
+      'retry-failed-turn',
+      ({ sessionId, userMsgId, assistantMsgId }) => {
+        if (!sessionId || (!assistantMsgId && !userMsgId)) return;
+        regenerateTurn({ sessionId, assistantMsgId, userMsgId });
+      }
+    );
   }, [regenerateTurn]);
 
   const handleBranch = useCallback(() => {

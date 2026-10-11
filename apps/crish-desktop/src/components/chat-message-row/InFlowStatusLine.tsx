@@ -10,7 +10,7 @@
 import React from 'react';
 import styles from './InFlowStatusLine.module.css';
 import { AppIcon } from '../ui/icons/index';
-import type { RuntimeRetryInfo } from '../../store/sessionRuntimeStatusStore';
+import type { RuntimeRetryInfo } from '../../store';
 import { formatRetryStatusText } from './inFlowStatusLineLib';
 
 export interface InFlowStatusLineProps {
@@ -32,7 +32,9 @@ export const InFlowStatusLine: React.FC<InFlowStatusLineProps> = React.memo(
           aria-hidden
           className={styles.statusIcon}
         />
-        <span className={styles.statusText}>{formatRetryStatusText(retry)}</span>
+        <span className={styles.statusText}>
+          {formatRetryStatusText(retry)}
+        </span>
       </div>
     );
   }

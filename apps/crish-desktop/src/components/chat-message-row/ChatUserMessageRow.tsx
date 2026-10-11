@@ -1,5 +1,11 @@
 import { useToast } from '../../services/toast/ToastContext';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import styles from './ChatMessageRow.module.css';
 import { Tooltip } from '../ui';
 import type { SessionMessage } from '../../store/types';
@@ -14,7 +20,10 @@ import {
 import { DEFAULT_PIN_COLOR } from '../../utils/pinColor';
 import { UserMessageActionsBar } from './MessageActionsBar';
 import { openFileInPanel } from '../../api/filePanelOpener';
-import { isAbsoluteFsPath, resolveWorkspacePath } from '../../api/workspaceFsApi';
+import {
+  isAbsoluteFsPath,
+  resolveWorkspacePath,
+} from '../../api/workspaceFsApi';
 import {
   AttachmentCard,
   normalizeMessageAttachments,
@@ -79,7 +88,8 @@ function userRowPropsEqual(
     prev.virtualScrollManager === next.virtualScrollManager &&
     prev.onOpenPath === next.onOpenPath &&
     prev.msg.images === next.msg.images &&
-    prev.msg.attachments === next.msg.attachments
+    prev.msg.attachments === next.msg.attachments &&
+    prev.msg.metadata === next.msg.metadata
   );
 }
 
@@ -172,7 +182,15 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
     virtualScrollManager,
     msg.id,
     msg.status !== 'processing',
-    [msg.text, msg.id, msg.status, msg.images, msg.attachments, isExpanded, virtualScrollManager],
+    [
+      msg.text,
+      msg.id,
+      msg.status,
+      msg.images,
+      msg.attachments,
+      isExpanded,
+      virtualScrollManager,
+    ]
   );
 
   const rowRef = useRef<HTMLDivElement>(null);
@@ -217,18 +235,29 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
   const hasAttachmentCards = allCardItems.length > 0;
   // 核心判定：无文本且非排队态时，空气泡彻底销毁为 null（NEG-06）
   const isQueued = msg.status === 'queued';
-  const hasTextContent = Boolean(displayText && displayText.trim()) || isQueued;
+  const triggerSource = (msg.metadata as Record<string, unknown> | undefined)
+    ?.triggerSource as string | undefined;
+  const triggerBadgeText = useMemo(() => {
+    if (triggerSource === 'system_timer') return '系统定时任务唤醒';
+    if (triggerSource === 'cron') return '定时计划唤醒';
+    if (triggerSource === 'subagent_complete') return '子代理完成通知';
+    return null;
+  }, [triggerSource]);
+
+  const hasTextContent =
+    Boolean(displayText && displayText.trim()) ||
+    isQueued ||
+    Boolean(triggerBadgeText);
   // S7 只在串行守卫自动重试时作为 Tooltip；用户主动追问的排队不附这段文案。
   const queuedBusyTip = isQueued && isBusyRetryPending(msg.id);
 
   const isEditingRow = Boolean(isEditing && composerElement);
 
-  useInvalidateActualOnChange(
+  useInvalidateActualOnChange(virtualScrollManager, msg.id, true, [
+    isEditingRow,
     virtualScrollManager,
     msg.id,
-    true,
-    [isEditingRow, virtualScrollManager, msg.id],
-  );
+  ]);
 
   return (
     <div
@@ -274,7 +303,9 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
                 role={isLong ? 'button' : undefined}
                 tabIndex={isLong ? 0 : undefined}
                 aria-expanded={isLong ? isExpanded : undefined}
-                aria-label={isLong ? userBubbleExpandAria(isExpanded) : undefined}
+                aria-label={
+                  isLong ? userBubbleExpandAria(isExpanded) : undefined
+                }
               >
                 {/* 1. 顶部：内嵌 58×58 附件卡片横排流 */}
                 {hasAttachmentCards ? (
@@ -309,6 +340,18 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
                         }}
                       />
                     ))}
+                  </div>
+                ) : null}
+
+                {/* 1.5 触发源/系统定时任务标识 */}
+                {triggerBadgeText ? (
+                  <div
+                    className={styles.triggerBadge}
+                    data-testid="trigger-source-badge"
+                    data-source={triggerSource}
+                  >
+                    <span aria-hidden="true">⏰</span>
+                    <span>{triggerBadgeText}</span>
                   </div>
                 ) : null}
 

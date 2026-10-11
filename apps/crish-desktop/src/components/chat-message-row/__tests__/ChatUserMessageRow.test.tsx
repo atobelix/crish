@@ -30,7 +30,8 @@ vi.mock('../../../api/filePanelOpener', () => ({
 vi.mock('../../../api/workspaceFsApi', () => ({
   assertWorkspacePath: (p: string) => p,
   resolveWorkspacePath: (p: string) => p,
-  isAbsoluteFsPath: (p: string) => p.startsWith('/') || /^[a-zA-Z]:[/\\]/.test(p),
+  isAbsoluteFsPath: (p: string) =>
+    p.startsWith('/') || /^[a-zA-Z]:[/\\]/.test(p),
   registerFileViewerOpener: vi.fn(),
 }));
 
@@ -39,7 +40,9 @@ vi.mock('@tauri-apps/api/core', () => ({
   convertFileSrc: (p: string) => `asset://${p}`,
 }));
 
-function createMockUserMessage(overrides: Partial<SessionMessage> = {}): SessionMessage {
+function createMockUserMessage(
+  overrides: Partial<SessionMessage> = {}
+): SessionMessage {
   return {
     id: 'user-msg-1',
     clientMessageId: 'client-1',
@@ -89,11 +92,15 @@ describe('ChatUserMessageRow 全新解耦与物理删除立体验证套件', () 
     expect(bubble).not.toBeNull();
 
     // 2) 验证卡片横排流内嵌在卡片内挂载
-    const strip = bubble?.querySelector('[data-testid="user-attachment-strip"]');
+    const strip = bubble?.querySelector(
+      '[data-testid="user-attachment-strip"]'
+    );
     expect(strip).not.toBeNull();
 
     // 3) 验证渲染了 2 张 58x58 原子卡片
-    const cards = container.querySelectorAll('[data-testid="attachment-card-58"]');
+    const cards = container.querySelectorAll(
+      '[data-testid="attachment-card-58"]'
+    );
     expect(cards.length).toBe(2);
 
     // 4) 核心负向断言：纯附件时正文文本节点为 null
@@ -117,13 +124,17 @@ describe('ChatUserMessageRow 全新解耦与物理删除立体验证套件', () 
     expect(bubble?.textContent).toContain('这是一个纯文本消息');
 
     // 2) 验证卡片流完全不挂载
-    expect(container.querySelector('[data-testid="user-attachment-strip"]')).toBeNull();
+    expect(
+      container.querySelector('[data-testid="user-attachment-strip"]')
+    ).toBeNull();
   });
 
   it('图文混排模式：类输入框卡片内部上方必须渲染内嵌卡片流，下方渲染正文文本', () => {
     const msg = createMockUserMessage({
       text: '请看附件中的配置',
-      attachments: [{ name: 'config.json', path: 'c:/Software/conex/config.json' }],
+      attachments: [
+        { name: 'config.json', path: 'c:/Software/conex/config.json' },
+      ],
     });
 
     const { container } = render(
@@ -133,7 +144,9 @@ describe('ChatUserMessageRow 全新解耦与物理删除立体验证套件', () 
     const bubble = container.querySelector(`.${styles.userBubble}`);
     expect(bubble).not.toBeNull();
 
-    const strip = bubble?.querySelector('[data-testid="user-attachment-strip"]');
+    const strip = bubble?.querySelector(
+      '[data-testid="user-attachment-strip"]'
+    );
     const text = bubble?.querySelector(`.${styles.userBubbleText}`);
 
     expect(strip).not.toBeNull();
@@ -266,7 +279,9 @@ describe('ChatUserMessageRow 全新解耦与物理删除立体验证套件', () 
 
     // 默认展示类输入框卡片
     expect(container.querySelector(`.${styles.userBubble}`)).not.toBeNull();
-    expect(container.querySelector('[data-testid="in-place-user-editor"]')).toBeNull();
+    expect(
+      container.querySelector('[data-testid="in-place-user-editor"]')
+    ).toBeNull();
 
     // 点击编辑按钮
     const editBtn = container.querySelector('[data-testid="message-edit"]');
@@ -286,26 +301,30 @@ describe('ChatUserMessageRow 全新解耦与物理删除立体验证套件', () 
         {...defaultProps}
         msg={msg}
         isEditing={true}
-        composerElement={<div data-testid="transferred-composer">100% 复用的 ChatComposer</div>}
+        composerElement={
+          <div data-testid="transferred-composer">100% 复用的 ChatComposer</div>
+        }
       />
     );
 
     // 挂载单实例 composerElement
-    const editorHost = container.querySelector('[data-testid="in-place-user-editor"]');
+    const editorHost = container.querySelector(
+      '[data-testid="in-place-user-editor"]'
+    );
     expect(editorHost).not.toBeNull();
-    expect(container.querySelector('[data-testid="transferred-composer"]')).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="transferred-composer"]')
+    ).not.toBeNull();
     expect(container.querySelector(`.${styles.userBubble}`)).toBeNull();
 
     // 取消编辑后恢复展示气泡
     rerender(
-      <ChatUserMessageRow
-        {...defaultProps}
-        msg={msg}
-        isEditing={false}
-      />
+      <ChatUserMessageRow {...defaultProps} msg={msg} isEditing={false} />
     );
 
-    expect(container.querySelector('[data-testid="in-place-user-editor"]')).toBeNull();
+    expect(
+      container.querySelector('[data-testid="in-place-user-editor"]')
+    ).toBeNull();
     expect(container.querySelector(`.${styles.userBubble}`)).not.toBeNull();
   });
 
@@ -371,5 +390,33 @@ describe('ChatUserMessageRow 全新解耦与物理删除立体验证套件', () 
       vi.advanceTimersByTime(DEFAULT_DELAY_SHOW_MS);
     });
     expect(document.body.textContent).toContain(DOMAIN_MESSAGES.S7);
+  });
+
+  it('定时任务单次唤醒标识：msg.metadata 包含 triggerSource 时，渲染明确的系统定时任务唤醒标识', () => {
+    const timerMsg = createMockUserMessage({
+      id: 'timer-msg-1',
+      text: '请总结今日工作',
+      metadata: { triggerSource: 'system_timer' },
+    });
+    const { container, rerender } = render(
+      <ChatUserMessageRow {...defaultProps} msg={timerMsg} />
+    );
+    const badge = container.querySelector(
+      '[data-testid="trigger-source-badge"]'
+    );
+    expect(badge).not.toBeNull();
+    expect(badge?.textContent).toContain('系统定时任务唤醒');
+
+    const cronMsg = createMockUserMessage({
+      id: 'cron-msg-1',
+      text: '执行定时报告',
+      metadata: { triggerSource: 'cron' },
+    });
+    rerender(<ChatUserMessageRow {...defaultProps} msg={cronMsg} />);
+    const cronBadge = container.querySelector(
+      '[data-testid="trigger-source-badge"]'
+    );
+    expect(cronBadge).not.toBeNull();
+    expect(cronBadge?.textContent).toContain('定时计划唤醒');
   });
 });

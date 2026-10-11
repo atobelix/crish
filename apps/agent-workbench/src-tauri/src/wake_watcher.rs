@@ -118,6 +118,8 @@ pub(crate) struct WakeWatcher {
     /// 空转计数只读接口（壳层注入：读 resume_empty_streak；计数由收口
     /// 维护——W2 按唤醒源区分计数在壳层域，本模块只读判停）
     empty_streak: Arc<dyn Fn(&str) -> u32 + Send + Sync>,
+    /// 熔断状态查询（壳层注入：读 provider_fail_streak 是否超限；已熔断则不拉）
+    is_circuit_tripped: Arc<dyn Fn(&str) -> bool + Send + Sync>,
     /// 拉起器（拉 run；生产 = spawn_idle_resume_run 包装）
     launcher: WakeLauncher,
     /// 会话级用户停止标记（停止时刻；用户显式停止后 watcher 不再拉起，
@@ -134,6 +136,7 @@ pub(crate) struct WakeWatcher {
 impl WakeWatcher {
     /// 新建 watcher（适配器与配置由壳层装配方注入；每会话一个实例，
     /// 会话出现时 spawn、会话销毁时 stop）
+    #[allow(dead_code)]
     pub(crate) fn new(
         session_id: String,
         queue: Arc<Mutex<PendingMessageQueue>>,
@@ -142,11 +145,33 @@ impl WakeWatcher {
         launcher: WakeLauncher,
         options: WakeWatcherOptions,
     ) -> Self {
+        Self::with_circuit_breaker(
+            session_id,
+            queue,
+            has_active_run,
+            empty_streak,
+            Arc::new(|_| false),
+            launcher,
+            options,
+        )
+    }
+
+    /// 新建带熔断感知的 watcher（生产路径推荐使用）
+    pub(crate) fn with_circuit_breaker(
+        session_id: String,
+        queue: Arc<Mutex<PendingMessageQueue>>,
+        has_active_run: Arc<dyn Fn(&str) -> bool + Send + Sync>,
+        empty_streak: Arc<dyn Fn(&str) -> u32 + Send + Sync>,
+        is_circuit_tripped: Arc<dyn Fn(&str) -> bool + Send + Sync>,
+        launcher: WakeLauncher,
+        options: WakeWatcherOptions,
+    ) -> Self {
         Self {
             session_id,
             queue,
             has_active_run,
             empty_streak,
+            is_circuit_tripped,
             launcher,
             user_stopped: Mutex::new(None),
             last_launch_ms: Mutex::new(None),
@@ -227,17 +252,20 @@ impl WakeWatcher {
 
     /// 单次判定（纯同步逻辑，时钟可注入便于测试；对齐 D6 §3.2 tick
     /// 判定步骤 1-5）：
-    /// 1. 队列空 → 不拉；2. 该会话有活动 run → 不拉（拉起前检查）；
+    /// 0. 熔断已触发 → 不拉；1. 本会话队列空 → 不拉；2. 该会话有活动 run → 不拉；
     /// 3. user_stopped 标记存在 → 不拉；4. 空转计数超限（> max）→ 不拉；
     /// 5. 距上次拉起 < 最小间隔 → 不拉。全部通过 → 拉。
     fn should_launch(&self, now_ms: u64) -> bool {
-        // 1. 队列空 → 不拉（锁内读，不跨 await——AA-02 并发模型，
-        //    对齐 decide_idle_resume 的 queue_pending 判定）
+        // 0. 熔断判定：会话已熔断 → 绝对不拉（彻底阻断无限拉起风暴）
+        if (self.is_circuit_tripped)(&self.session_id) {
+            return false;
+        }
+        // 1. 本会话队列空 → 不拉（按 session_id 强隔离读）
         let queue_pending = self
             .queue
             .lock()
             .unwrap_or_else(|e| e.into_inner())
-            .has_pending();
+            .has_pending_for(&self.session_id);
         if !queue_pending {
             return false;
         }
@@ -368,11 +396,10 @@ mod tests {
         queue
             .lock()
             .unwrap_or_else(|e| e.into_inner())
-            .enqueue(SteeringInputEntry::steering(
-                "wake-1",
-                "定时器 <t-1> 已到期",
-                1_000_000,
-            ));
+            .enqueue(
+                SteeringInputEntry::steering("wake-1", "定时器 <t-1> 已到期", 1_000_000)
+                    .with_session("sess-1"),
+            );
     }
 
     // ── tick 判定 ────────────────────────────────────────────────
@@ -533,5 +560,49 @@ mod tests {
         watcher.clear_user_stopped();
         assert!(!watcher.is_user_stopped());
         watcher.stop();
+    }
+
+    /// 跨会话隔离：其他会话有待处理条目时，本会话 watcher 绝对不拉起
+    #[tokio::test]
+    async fn watcher_does_not_launch_for_other_session_queue_entry() {
+        let (watcher, queue, _, launches, _, _) = test_watcher();
+        // 入队 sess-OTHER 的条目
+        queue
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .enqueue(
+                SteeringInputEntry::steering("wake-other", "其他会话通知", 1_000_000)
+                    .with_session("sess-OTHER"),
+            );
+        watcher.tick().await;
+        assert_eq!(
+            launches.load(Ordering::SeqCst),
+            0,
+            "其他会话的待处理条目绝不拉起本会话"
+        );
+    }
+
+    /// 熔断守卫：会话已熔断时，即使本会话有条目也绝对不拉起（阻断循环风暴）
+    #[tokio::test]
+    async fn watcher_does_not_launch_when_circuit_tripped() {
+        let (_, options) = test_clock();
+        let queue = Arc::new(Mutex::new(PendingMessageQueue::new()));
+        let launches = Arc::new(AtomicUsize::new(0));
+        let watcher = Arc::new(WakeWatcher::with_circuit_breaker(
+            "sess-1".to_string(),
+            Arc::clone(&queue),
+            Arc::new(|_| false),
+            Arc::new(|_| 0),
+            Arc::new(|_| true), // 熔断恒 true
+            test_launcher(&launches),
+            options,
+        ));
+        enqueue_entry(&queue);
+        watcher.tick().await;
+        assert_eq!(
+            launches.load(Ordering::SeqCst),
+            0,
+            "熔断时绝不拉起任何 run"
+        );
     }
 }

@@ -32,6 +32,7 @@
   );
   overflow-y: auto;
   outline: none;
+  border: none;
   box-shadow: none;
   caret-color: var(--text-primary);
   font-family: var(--font-sans);
@@ -45,8 +46,10 @@
   box-sizing: border-box;
 }
 
-.proseMirrorField:focus {
+.proseMirrorField:focus,
+.proseMirrorField:focus-visible {
   outline: none;
+  border: none;
   box-shadow: none;
 }
 

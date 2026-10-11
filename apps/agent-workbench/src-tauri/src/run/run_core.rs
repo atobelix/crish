@@ -1310,6 +1310,7 @@ impl CoreRunState {
         }
         // 3. run 已收口 → PendingMessageQueue 兜底（下一 run 队列源消费）
         let entry = orchestrator::steering_queue::SteeringInputEntry {
+            session_id: session_id.to_string(),
             id: message_id.clone(),
             text: message.to_string(),
             attachments: Vec::new(),

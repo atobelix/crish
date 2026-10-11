@@ -84,6 +84,8 @@ export interface Settings {
   compaction?: CompactionSettings;
   branchSummary?: BranchSummarySettings;
   retry?: RetrySettings;
+  /** 单次手动重试上限次数（默认 10 次，配合指数退避；调整即实时保存） */
+  maxRetryAttempts?: number;
   hideThinkingBlock?: boolean;
   shellPath?: string;
   quietStartup?: boolean;

@@ -226,6 +226,7 @@ impl QueuePendingSink {
 impl PendingSink for QueuePendingSink {
     fn enqueue_steering(&self, cron_id: &str, text: String, enqueued_at_ms: u64) {
         let entry = SteeringInputEntry {
+            session_id: String::new(),
             // 条目 id 带时间戳保证同组替换后仍唯一（对齐 recovery 模式）
             id: format!("{cron_id}-{enqueued_at_ms}"),
             text,

@@ -212,6 +212,22 @@
   border-color: var(--border-color);
 }
 
+.controlNumberWrapper {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.controlNumberInput {
+  width: 84px; /* 容器约束·不入 token */
+  text-align: center;
+}
+
+.controlNumberUnit {
+  font-size: var(--font-size-sm);
+  color: var(--text-tertiary);
+}
+
 .presetGrid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
@@ -285,7 +301,6 @@
   align-items: center;
   gap: var(--space-3);
 }
-
 
 /* Modern select tooltip */
 .modernSelectTooltip {

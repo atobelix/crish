@@ -42,9 +42,9 @@ impl CoreRunState {
         let mut queue = self.pending_queue.lock().unwrap_or_else(|e| e.into_inner());
         for record in &outcome.interrupted {
             let now = now_ms_internal();
-            // 目标会话为语义注记（队列为全局共享面，无会话字段——消费
-            // 方按 group_id/条目文本承载归属语义，T06.3 Q15）
-            let (_target_session, text) = if record.session_id.starts_with(SUBAGENT_SESSION_PREFIX)
+            // 目标会话强隔离：子代理 interrupted 通知父会话；
+            // 用户显式铁律：主 run 在重启时不隐蔽自动续跑（防止启动时无差别并发拉起数十个历史会话）
+            let (target_session, text) = if record.session_id.starts_with(SUBAGENT_SESSION_PREFIX)
             {
                 match parents.get(&record.run_id) {
                     Some(parent) => (
@@ -66,14 +66,13 @@ impl CoreRunState {
                     }
                 }
             } else {
-                (
-                    record.session_id.clone(),
-                    RESTORE_MAIN_INJECT_TEXT.to_string(),
-                )
+                // 主 run 中断状态已在数据库留痕，不生成自动唤醒条目，交由用户在界面显式操作
+                continue;
             };
             // 分组去重（replace_or_enqueue：同 run 不重复堆积——重启
             // 双恢复场景仅 1 条）；带时间戳 id 保证同组替换后仍唯一
             queue.replace_or_enqueue(orchestrator::steering_queue::SteeringInputEntry {
+                session_id: target_session,
                 id: format!("{RESTORE_GROUP_PREFIX}{}-{now}", record.run_id),
                 text,
                 attachments: Vec::new(),
@@ -243,12 +242,20 @@ impl CoreRunState {
                 // D6-③：重启恢复条目生成（interrupted → restore-<run_id>
                 // steering 条目；主 run 自动续跑，子代理只通知不自动 fork）
                 self.enqueue_restore_entries(&outcome).await;
-                // D6 §3.2 spawn 点 1：恢复后对恢复会话 spawn watcher——
-                // 恢复条目 / 定时器补发 / 通知重排需要消费方（每会话
-                // 幂等持有；子代理会话不 spawn——无 watcher 拉起语义）
+                // D6 §3.2 spawn 点 1：恢复后仅对有待办条目的会话 spawn watcher
+                // （避免为全量历史会话无差别启动周期轮询造成空转泛滥；子代理会话不 spawn）
                 for record in &outcome.sessions {
                     if !record.session_id.starts_with(SUBAGENT_SESSION_PREFIX) {
-                        self.ensure_wake_watcher(&record.session_id);
+                        let has_pending = {
+                            let q = self
+                                .pending_queue
+                                .lock()
+                                .unwrap_or_else(|e| e.into_inner());
+                            q.has_pending_for(&record.session_id)
+                        };
+                        if has_pending {
+                            self.ensure_wake_watcher(&record.session_id);
+                        }
                     }
                 }
                 tracing::info!(

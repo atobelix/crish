@@ -3696,11 +3696,14 @@ async fn idle_resume_run_when_queue_non_empty() {
         .pending_queue
         .lock()
         .unwrap_or_else(|e| e.into_inner())
-        .enqueue(SteeringInputEntry::steering(
-            "e1",
-            "子代理 sa-1（分析）已完成：completed",
-            1_785_456_000_000,
-        ));
+        .enqueue(
+            SteeringInputEntry::steering(
+                "e1",
+                "子代理 sa-1（分析）已完成：completed",
+                1_785_456_000_000,
+            )
+            .with_session("s1"),
+        );
     let calls = Arc::new(AtomicU64::new(0));
     let injected: Arc<Mutex<Vec<Vec<AgentMessage>>>> = Arc::new(Mutex::new(Vec::new()));
     state.set_resume_launcher(Some(resume_launcher_probe(
@@ -3798,11 +3801,14 @@ async fn idle_resume_stops_after_consecutive_empty() {
             .pending_queue
             .lock()
             .unwrap_or_else(|e| e.into_inner())
-            .enqueue(SteeringInputEntry::steering(
-                format!("e{round}"),
-                "子代理完成",
-                1000 + u64::from(round),
-            ));
+            .enqueue(
+                SteeringInputEntry::steering(
+                    format!("e{round}"),
+                    "子代理完成",
+                    1000 + u64::from(round),
+                )
+                .with_session("s1"),
+            );
         let verdict = decide_idle_resume(
             &state,
             &active,
@@ -3821,7 +3827,7 @@ async fn idle_resume_stops_after_consecutive_empty() {
         .pending_queue
         .lock()
         .unwrap_or_else(|e| e.into_inner())
-        .enqueue(SteeringInputEntry::steering("e4", "子代理完成", 1004));
+        .enqueue(SteeringInputEntry::steering("e4", "子代理完成", 1004).with_session("s1"));
     let stopped = decide_idle_resume(
         &state,
         &active,
@@ -3837,7 +3843,7 @@ async fn idle_resume_stops_after_consecutive_empty() {
         .pending_queue
         .lock()
         .unwrap_or_else(|e| e.into_inner())
-        .enqueue(SteeringInputEntry::steering("e5", "子代理完成", 1005));
+        .enqueue(SteeringInputEntry::steering("e5", "子代理完成", 1005).with_session("s1"));
     let verdict = decide_idle_resume(
         &state,
         &active,
@@ -3851,7 +3857,7 @@ async fn idle_resume_stops_after_consecutive_empty() {
         .pending_queue
         .lock()
         .unwrap_or_else(|e| e.into_inner())
-        .enqueue(SteeringInputEntry::steering("e6", "子代理完成", 1006));
+        .enqueue(SteeringInputEntry::steering("e6", "子代理完成", 1006).with_session("s1"));
     let verdict = decide_idle_resume(
         &state,
         &active,
@@ -3872,7 +3878,7 @@ async fn idle_resume_not_on_user_cancel() {
         .pending_queue
         .lock()
         .unwrap_or_else(|e| e.into_inner())
-        .enqueue(SteeringInputEntry::steering("e1", "子代理完成", 1000));
+        .enqueue(SteeringInputEntry::steering("e1", "子代理完成", 1000).with_session("s1"));
     let launcher_calls = Arc::new(AtomicU64::new(0));
     state.set_resume_launcher(Some(counting_launcher(Arc::clone(&launcher_calls))));
 
@@ -3912,7 +3918,7 @@ async fn idle_resume_not_after_user_interaction() {
         .pending_queue
         .lock()
         .unwrap_or_else(|e| e.into_inner())
-        .enqueue(SteeringInputEntry::steering("e1", "子代理完成", 1000));
+        .enqueue(SteeringInputEntry::steering("e1", "子代理完成", 1000).with_session("s1"));
     let launcher_calls = Arc::new(AtomicU64::new(0));
     state.set_resume_launcher(Some(counting_launcher(Arc::clone(&launcher_calls))));
 
@@ -4216,11 +4222,10 @@ async fn restore_entries_dedup_by_group() {
 fn drain_merge_caps_at_16() {
     let mut queue = PendingMessageQueue::new();
     for i in 0..18 {
-        queue.enqueue(SteeringInputEntry::steering(
-            format!("e{i}"),
-            format!("条目 {i}"),
-            i,
-        ));
+        queue.enqueue(
+            SteeringInputEntry::steering(format!("e{i}"), format!("条目 {i}"), i)
+                .with_session("s1"),
+        );
     }
     let messages = drain_pending_to_inject_messages(&mut queue, "s1");
     assert_eq!(messages.len(), 1, "合并为单条注入消息");
@@ -4250,11 +4255,10 @@ fn drain_merge_caps_at_16() {
 fn drain_merge_under_cap_unchanged() {
     let mut queue = PendingMessageQueue::new();
     for i in 0..5 {
-        queue.enqueue(SteeringInputEntry::steering(
-            format!("e{i}"),
-            format!("条目 {i}"),
-            i,
-        ));
+        queue.enqueue(
+            SteeringInputEntry::steering(format!("e{i}"), format!("条目 {i}"), i)
+                .with_session("s1"),
+        );
     }
     let messages = drain_pending_to_inject_messages(&mut queue, "s1");
     let text = messages[0].text();
@@ -4262,6 +4266,30 @@ fn drain_merge_under_cap_unchanged() {
     assert!(text.contains("条目 4"));
     assert!(!text.contains("省略"), "无省略注记");
     assert_eq!(text.matches("条目").count(), 5, "5 条全量拼接");
+}
+
+/// 定时器 steering 条目 drain 时注入 triggerSource = "system_timer"
+#[test]
+fn drain_timer_steering_carries_trigger_source() {
+    let mut queue = PendingMessageQueue::new();
+    let entry = SteeringInputEntry {
+        session_id: "s1".to_string(),
+        id: "timer-1-1000".to_string(),
+        text: "请总结当前任务（定时器 timer-1 已到期）".to_string(),
+        attachments: Vec::new(),
+        enqueued_at: 1000,
+        group_id: Some("timer-timer-1".to_string()),
+        is_steering: true,
+    };
+    queue.enqueue(entry);
+
+    let messages = drain_pending_to_inject_messages(&mut queue, "s1");
+    assert_eq!(messages.len(), 1);
+    let meta = messages[0].metadata.as_ref().expect("元数据存在");
+    assert_eq!(
+        meta.get("triggerSource").and_then(|v| v.as_str()),
+        Some("system_timer")
+    );
 }
 
 /// D6 §3.2 接线：ensure_wake_watcher 幂等持有 + start 生效（不重复 spawn）
@@ -4348,7 +4376,7 @@ async fn decide_idle_resume_blocked_by_user_stopped() {
         .pending_queue
         .lock()
         .unwrap_or_else(|e| e.into_inner())
-        .enqueue(SteeringInputEntry::steering("e1", "子代理完成", 1000));
+        .enqueue(SteeringInputEntry::steering("e1", "子代理完成", 1000).with_session("s1"));
     state.set_user_stopped("s1");
     let active = build_active_run(&state, "s1", "run-1").await;
     let verdict = decide_idle_resume(
@@ -4463,7 +4491,7 @@ async fn queue_round_no_output_counts_streak() {
         .pending_queue
         .lock()
         .unwrap_or_else(|e| e.into_inner())
-        .enqueue(SteeringInputEntry::steering("e1", "子代理完成", 1000));
+        .enqueue(SteeringInputEntry::steering("e1", "子代理完成", 1000).with_session("s1"));
     let active = build_active_run(&state, "s1", "run-1").await;
     let verdict = decide_idle_resume(
         &state,
@@ -4497,7 +4525,7 @@ async fn productive_round_resets_streak() {
         .pending_queue
         .lock()
         .unwrap_or_else(|e| e.into_inner())
-        .enqueue(SteeringInputEntry::steering("e1", "子代理完成", 1000));
+        .enqueue(SteeringInputEntry::steering("e1", "子代理完成", 1000).with_session("s1"));
     let active = build_active_run(&state, "s1", "run-1").await;
     let verdict = decide_idle_resume(
         &state,
@@ -8982,11 +9010,14 @@ async fn watcher_concurrent_double_launch_only_one_run_e2e() {
         .pending_queue
         .lock()
         .unwrap_or_else(|e| e.into_inner())
-        .enqueue(SteeringInputEntry::steering(
-            "timer-e2e",
-            "提醒喝水（定时器 t-e2e 已到期）",
-            1_000_000,
-        ));
+        .enqueue(
+            SteeringInputEntry::steering(
+                "timer-e2e",
+                "提醒喝水（定时器 t-e2e 已到期）",
+                1_000_000,
+            )
+            .with_session("s1"),
+        );
     // 并发双拉：watcher tick（真实实例，has_active_run 短路）+ 收口
     // 判定同款 spawn_idle_resume_run（run_task_impl 串行守卫拒绝后发者）
     let watcher = state
@@ -9105,11 +9136,14 @@ async fn watcher_min_launch_interval_blocks_retick_e2e() {
         .pending_queue
         .lock()
         .unwrap_or_else(|e| e.into_inner())
-        .enqueue(SteeringInputEntry::steering(
-            "timer-min",
-            "提醒喝水（定时器 t-min 已到期）",
-            1_000_000,
-        ));
+        .enqueue(
+            SteeringInputEntry::steering(
+                "timer-min",
+                "提醒喝水（定时器 t-min 已到期）",
+                1_000_000,
+            )
+            .with_session("s1"),
+        );
     watcher.tick().await;
     // 拉起轮收口 → 收口判定 drain → 注入轮（条目消费）→ AI 休眠
     let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
@@ -9140,11 +9174,10 @@ async fn watcher_min_launch_interval_blocks_retick_e2e() {
         .pending_queue
         .lock()
         .unwrap_or_else(|e| e.into_inner())
-        .enqueue(SteeringInputEntry::steering(
-            "timer-min-2",
-            "第二个到期提醒",
-            1_000_001,
-        ));
+        .enqueue(
+            SteeringInputEntry::steering("timer-min-2", "第二个到期提醒", 1_000_001)
+                .with_session("s1"),
+        );
     watcher.tick().await;
     assert_eq!(
         provider.call_count(),
@@ -9244,11 +9277,14 @@ async fn watcher_user_stopped_blocks_then_user_run_resumes_e2e() {
         .pending_queue
         .lock()
         .unwrap_or_else(|e| e.into_inner())
-        .enqueue(SteeringInputEntry::steering(
-            "timer-stop",
-            "提醒喝水（定时器 t-stop 已到期）",
-            1_000_000,
-        ));
+        .enqueue(
+            SteeringInputEntry::steering(
+                "timer-stop",
+                "提醒喝水（定时器 t-stop 已到期）",
+                1_000_000,
+            )
+            .with_session("s1"),
+        );
     watcher.tick().await;
     assert_eq!(provider.call_count(), 1, "用户停止后 watcher 不得拉起 run");
     assert!(
@@ -9292,11 +9328,14 @@ async fn watcher_user_stopped_blocks_then_user_run_resumes_e2e() {
         .pending_queue
         .lock()
         .unwrap_or_else(|e| e.into_inner())
-        .enqueue(SteeringInputEntry::steering(
-            "timer-resume",
-            "恢复后的到期提醒",
-            1_000_002,
-        ));
+        .enqueue(
+            SteeringInputEntry::steering(
+                "timer-resume",
+                "恢复后的到期提醒",
+                1_000_002,
+            )
+            .with_session("s1"),
+        );
     let before = provider.call_count();
     watcher.tick().await;
     let deadline = tokio::time::Instant::now() + Duration::from_secs(8);

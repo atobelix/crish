@@ -116,7 +116,7 @@ pub(crate) mod idle_resume {
                         .pending_queue
                         .lock()
                         .unwrap_or_else(|e| e.into_inner());
-                    queue.has_pending()
+                    queue.has_pending_for(&active.session_id)
                 };
                 let timer_check = state
                     .timer_has_active
@@ -293,6 +293,7 @@ pub(crate) mod idle_resume {
                 //     事件 + 临时通知，不进对话、不给 AI）
                 let now = now_ms_internal();
                 let entry = SteeringInputEntry {
+                    session_id: active.session_id.clone(),
                     id: format!("recovery-main-{}-{now}", active.run_id),
                     text: MAIN_RESUME_INJECT_TEXT.to_string(),
                     attachments: Vec::new(),
@@ -378,6 +379,7 @@ pub(crate) mod idle_resume {
             resume_kind_label(kind)
         );
         let entry = SteeringInputEntry {
+            session_id: active.session_id.clone(),
             id: format!("recovery-main-{}-{now}", active.run_id),
             text,
             attachments: Vec::new(),
@@ -537,9 +539,9 @@ pub(crate) mod idle_resume {
     /// 消息 id 沿用首条条目 id 保证幂等（对齐 transfer_follow_up 的 id 沿用）。
     pub(crate) fn drain_pending_to_inject_messages(
         queue: &mut PendingMessageQueue,
-        _session_id: &str,
+        session_id: &str,
     ) -> Vec<AgentMessage> {
-        let entries = queue.dequeue_all();
+        let entries = queue.dequeue_all_for(session_id);
         if entries.is_empty() {
             return Vec::new();
         }
@@ -574,14 +576,41 @@ pub(crate) mod idle_resume {
             // 消息 id 沿用保留集首条条目 id 保证幂等（对齐 transfer_follow_up
             // 的 id 沿用）
             let first = &kept[0];
+            let trigger_source = if first
+                .group_id
+                .as_deref()
+                .is_some_and(|g| g.starts_with("timer-"))
+                || first.id.starts_with("timer-")
+            {
+                Some("system_timer")
+            } else if first
+                .group_id
+                .as_deref()
+                .is_some_and(|g| g.starts_with("cron-"))
+                || first.id.starts_with("cron-")
+            {
+                Some("cron")
+            } else if first.group_id.as_deref() == Some("subagent-complete")
+                || first.id.starts_with("subagent-")
+            {
+                Some("subagent_complete")
+            } else {
+                None
+            };
+
+            let mut meta = serde_json::json!({
+                "kind": AgentMessageMetadataKind::Steering
+            });
+            if let Some(src) = trigger_source {
+                meta["triggerSource"] = serde_json::json!(src);
+            }
+
             return vec![AgentMessage {
                 id: first.id.clone(),
                 role: AgentMessageRole::User,
                 created_at: crate::engine::now_iso_utc(),
                 blocks: vec![AgentMessageBlock::Text { text }],
-                metadata: Some(serde_json::json!({
-                    "kind": AgentMessageMetadataKind::Steering
-                })),
+                metadata: Some(meta),
                 client_message_id: None,
                 content: None,
             }];
@@ -1628,6 +1657,14 @@ pub(crate) mod idle_resume {
                         );
                     }
                 }
+            } else {
+                // 当不再续跑（如错误收场、熔断、空转超限、四源全空时）：
+                // 清理本会话可能残留的旧条目，杜绝 poison pill 遗留
+                let mut queue = state
+                    .pending_queue
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner());
+                queue.clear_for(&session_id);
             }
         }
     } // drive_run_loop 收口闭

@@ -160,6 +160,7 @@ pub const TASK_WAKE_GROUP_ID: &str = "task-wake";
 /// 容量挤占时不淘汰；group_id = [TASK_WAKE_GROUP_ID] 去重）。
 pub fn build_wake_steering_entry(text: String) -> SteeringInputEntry {
     SteeringInputEntry {
+        session_id: String::new(),
         id: TASK_WAKE_GROUP_ID.to_string(),
         text,
         attachments: Vec::new(),
@@ -183,11 +184,17 @@ pub fn task_steering_group_id(task_id: &str) -> String {
 /// 位 + group_id 分组去重 + id 含任务 id 保证幂等。文案复用唤醒摘要
 /// （「任务 <id> 异常退出（exit code N），附最后 20 行日志」）。
 pub fn build_task_failed_steering_entry(event: &AgentEvent) -> Option<SteeringInputEntry> {
-    let AgentEvent::TaskFailed { task_id, .. } = event else {
+    let AgentEvent::TaskFailed {
+        task_id,
+        session_id,
+        ..
+    } = event
+    else {
         return None;
     };
     let text = task_wake_summary(event)?;
     Some(SteeringInputEntry {
+        session_id: session_id.clone(),
         id: format!("task-failed-{task_id}"),
         text,
         attachments: Vec::new(),

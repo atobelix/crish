@@ -26,7 +26,9 @@ type Props = {
   _onBlockingOverlayChange?: (open: boolean) => void;
 };
 
-export const SettingsPersonalizeTab: React.FC<Props> = ({ _onBlockingOverlayChange }) => {
+export const SettingsPersonalizeTab: React.FC<Props> = ({
+  _onBlockingOverlayChange,
+}) => {
   void _onBlockingOverlayChange;
   const { showToast } = useToast();
   const cwd = getWorkspacePath() || '__global__';
@@ -115,6 +117,16 @@ export const SettingsPersonalizeTab: React.FC<Props> = ({ _onBlockingOverlayChan
             ],
           },
           {
+            key: 'maxRetryAttempts',
+            type: 'number',
+            title: '单次重试上限次数',
+            desc: '手动重试的最大尝试次数（默认 10 次，配合指数退避保护；调整数字即实时保存）',
+            min: 1,
+            max: 50,
+            step: 1,
+            unit: '次',
+          },
+          {
             key: 'hideThinkingBlock',
             type: 'boolean',
             title: '默认折叠思考过程',
@@ -177,6 +189,7 @@ export const SettingsPersonalizeTab: React.FC<Props> = ({ _onBlockingOverlayChan
     if (!settings) return null;
     return {
       ...settings,
+      maxRetryAttempts: settings.maxRetryAttempts ?? 10,
       sendShortcut: normalizeSendShortcut(settings.sendShortcut),
     };
   }, [settings]);
@@ -188,6 +201,14 @@ export const SettingsPersonalizeTab: React.FC<Props> = ({ _onBlockingOverlayChan
         const next = persistSendShortcut(updates.sendShortcut);
         const ok = await save({ sendShortcut: next });
         if (!ok) persistSendShortcut(prev);
+        return;
+      }
+      if ('maxRetryAttempts' in updates) {
+        const count = Math.max(
+          1,
+          Math.min(50, Number(updates.maxRetryAttempts) || 10)
+        );
+        await save({ maxRetryAttempts: count });
         return;
       }
       if ('tabModeEnabled' in updates) {

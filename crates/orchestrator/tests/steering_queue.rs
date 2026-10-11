@@ -18,6 +18,7 @@ use session_loop::steering::metadata_kind_wire;
 /// T06.3 Q15：session_id 恒空字段已删除）
 fn run_entry(run: &str, id: &str, text: &str, seq: u64) -> SteeringInputEntry {
     SteeringInputEntry {
+        session_id: String::new(),
         id: id.to_string(),
         text: text.to_string(),
         attachments: Vec::new(),

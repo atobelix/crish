@@ -1113,11 +1113,14 @@ impl SubagentSpawnerImpl {
             queue
                 .lock()
                 .unwrap_or_else(|e| e.into_inner())
-                .enqueue(SteeringInputEntry::steering(
-                    format!("subagent-terminal-{run_id}"),
-                    summary_text,
-                    now_ms() as u64,
-                ));
+                .enqueue(
+                    SteeringInputEntry::steering(
+                        format!("subagent-terminal-{run_id}"),
+                        summary_text,
+                        now_ms() as u64,
+                    )
+                    .with_session(&cfg.parent_session_id),
+                );
         }
 
         tracing::info!(

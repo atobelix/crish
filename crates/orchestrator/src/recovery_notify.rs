@@ -84,6 +84,7 @@ pub fn steering_text(notification: &RecoveryNotification) -> String {
 /// 构造阶梯 2 steering 条目（is_steering 受保护位 + 分组去重）
 pub fn build_steering_entry(notification: &RecoveryNotification) -> SteeringInputEntry {
     SteeringInputEntry {
+        session_id: String::new(),
         id: format!(
             "recovery-{}-{}",
             notification.subagent_run_id, notification.created_at_ms

@@ -45,11 +45,12 @@ pub struct MessageAttachment {
 
 /// 跨 run steering 输入条目（对齐 TS SteeringInputEntry）
 ///
-/// 注（T06.3 Q15）：`session_id` 字段已删除——所有生产构造路径均写空串
-/// （user / steering），恒空字段无消费方；run 关联语义由消费方按
-/// group_id / id 承载。
+/// 恢复 session_id 归属字段，实现跨会话强隔离，彻底解决无隔离引发的全局唤醒风暴。
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct SteeringInputEntry {
+    /// 目标会话 id（跨会话隔离核心字段，对齐 REQ-D08）
+    #[serde(default)]
+    pub session_id: String,
     /// 条目 id（转用户消息时沿用，保证幂等）
     pub id: String,
     /// 用户可见文本
@@ -68,6 +69,7 @@ impl SteeringInputEntry {
     /// 普通用户输入条目（非 steering）
     pub fn user(id: impl Into<String>, text: impl Into<String>, enqueued_at: u64) -> Self {
         Self {
+            session_id: String::new(),
             id: id.into(),
             text: text.into(),
             attachments: Vec::new(),
@@ -85,6 +87,12 @@ impl SteeringInputEntry {
         }
     }
 
+    /// 指定会话 id（链式调用）
+    pub fn with_session(mut self, session_id: impl Into<String>) -> Self {
+        self.session_id = session_id.into();
+        self
+    }
+
     /// context-state 感知注入条目（详案 I1-α② 扩展点 A）
     ///
     /// 状态切换（模型名/权限/思考模式）产生的「切换发生」告知——作为
@@ -98,6 +106,7 @@ impl SteeringInputEntry {
     /// 偏好存储留在独立配置带，不塞消息流。
     pub fn context_state(id: impl Into<String>, text: impl Into<String>, enqueued_at: u64) -> Self {
         Self {
+            session_id: String::new(),
             id: id.into(),
             text: text.into(),
             attachments: Vec::new(),
@@ -171,7 +180,7 @@ impl PendingMessageQueue {
         }
     }
 
-    /// 分组入队：同 `groupId` 存在则原位替换，否则入队。
+    /// 分组入队：同会话且同 `groupId` 存在则原位替换，否则入队。
     ///
     /// 返回 `true` 表示发生了替换（对齐 TS replaceOrEnqueue 返回值）。
     /// 未设置分组名的条目恒走入队路径（05 §2.2:106）。
@@ -180,7 +189,7 @@ impl PendingMessageQueue {
             if let Some(idx) = self
                 .entries
                 .iter()
-                .position(|e| e.group_id.as_deref() == Some(group_id))
+                .position(|e| e.session_id == entry.session_id && e.group_id.as_deref() == Some(group_id))
             {
                 self.entries[idx] = entry;
                 return true;
@@ -220,6 +229,16 @@ impl PendingMessageQueue {
         self.entries.drain(..).collect()
     }
 
+    /// FIFO 取出指定会话的全部条目，保持其余会话条目顺序（跨会话强隔离核心消费路径）
+    pub fn dequeue_all_for(&mut self, session_id: &str) -> Vec<SteeringInputEntry> {
+        self.withdraw(|e| e.session_id == session_id)
+    }
+
+    /// 清空指定会话的全部条目
+    pub fn clear_for(&mut self, session_id: &str) {
+        self.withdraw(|e| e.session_id == session_id);
+    }
+
     /// 跨 run 转移：全部条目迁入目标队列并清空本队列。
     ///
     /// 目标队列按自身容量限制与 steering 优先级逐条收容——满容量时普通
@@ -257,14 +276,31 @@ impl PendingMessageQueue {
         !self.entries.is_empty()
     }
 
+    /// 指定会话是否有待处理条目（防跨会话无差别拉起核心守护）
+    pub fn has_pending_for(&self, session_id: &str) -> bool {
+        self.entries.iter().any(|e| e.session_id == session_id)
+    }
+
     /// 是否含 steering 条目（对齐 TS hasPendingSteering）
     pub fn has_pending_steering(&self) -> bool {
         self.entries.iter().any(|e| e.is_steering)
     }
 
+    /// 指定会话是否含 steering 条目
+    pub fn has_pending_steering_for(&self, session_id: &str) -> bool {
+        self.entries
+            .iter()
+            .any(|e| e.session_id == session_id && e.is_steering)
+    }
+
     /// 预览队首（不移除）
     pub fn peek(&self) -> Option<&SteeringInputEntry> {
         self.entries.front()
+    }
+
+    /// 预览指定会话的队首条目（不移除）
+    pub fn peek_for(&self, session_id: &str) -> Option<&SteeringInputEntry> {
+        self.entries.iter().find(|e| e.session_id == session_id)
     }
 
     /// 清空队列
@@ -706,5 +742,73 @@ mod tests {
     fn iso_from_millis_known_date() {
         let iso = iso_from_millis(1_785_456_000_000);
         assert_eq!(iso, "2026-07-31T00:00:00.000Z");
+    }
+
+    /// 跨会话强隔离测试：不同会话条目隔离取出、分组去重互不干扰
+    #[test]
+    fn session_isolation_and_drain() {
+        let mut queue = PendingMessageQueue::new();
+        // 会话 A 入队两条
+        queue.enqueue(
+            SteeringInputEntry::user("a1", "sess A msg 1", 1001).with_session("sess-A"),
+        );
+        queue.enqueue(
+            SteeringInputEntry::steering("a2", "sess A steer 2", 1002).with_session("sess-A"),
+        );
+        // 会话 B 入队一条
+        queue.enqueue(
+            SteeringInputEntry::user("b1", "sess B msg 1", 1003).with_session("sess-B"),
+        );
+
+        assert_eq!(queue.len(), 3);
+        assert!(queue.has_pending_for("sess-A"));
+        assert!(queue.has_pending_for("sess-B"));
+        assert!(!queue.has_pending_for("sess-C"));
+        assert!(queue.has_pending_steering_for("sess-A"));
+        assert!(!queue.has_pending_steering_for("sess-B"));
+
+        // peek_for
+        assert_eq!(queue.peek_for("sess-A").expect("sess-A 存在").id, "a1");
+        assert_eq!(queue.peek_for("sess-B").expect("sess-B 存在").id, "b1");
+        assert!(queue.peek_for("sess-C").is_none());
+
+        // 仅取出 会话 A：会话 B 仍驻留队列
+        let drained_a = queue.dequeue_all_for("sess-A");
+        assert_eq!(drained_a.len(), 2);
+        assert_eq!(drained_a[0].id, "a1");
+        assert_eq!(drained_a[1].id, "a2");
+
+        assert_eq!(queue.len(), 1);
+        assert!(!queue.has_pending_for("sess-A"));
+        assert!(queue.has_pending_for("sess-B"));
+
+        // 会话级 group_id 去重：两会话有相同 group_id，互不覆盖
+        let mut entry_a =
+            SteeringInputEntry::user("a3", "group test A", 1004).with_session("sess-A");
+        entry_a.group_id = Some("grp-shared".to_string());
+        let mut entry_b_update =
+            SteeringInputEntry::user("b2", "group test B", 1005).with_session("sess-B");
+        entry_b_update.group_id = Some("grp-shared".to_string());
+
+        queue.enqueue(entry_a);
+        queue.enqueue(entry_b_update);
+        assert_eq!(queue.len(), 3); // b1, entry_a, entry_b_update
+
+        // 更新 sess-B 的 grp-shared
+        let mut entry_b_replace =
+            SteeringInputEntry::user("b3", "group test B updated", 1006).with_session("sess-B");
+        entry_b_replace.group_id = Some("grp-shared".to_string());
+        let replaced = queue.replace_or_enqueue(entry_b_replace);
+        assert!(replaced, "同会话同 group 应替换");
+        assert_eq!(queue.len(), 3, "替换不增加总数");
+
+        // 检查 sess-A 的 grp-shared 未被篡改
+        let peek_a = queue.peek_for("sess-A").expect("sess-A grp-shared 存在");
+        assert_eq!(peek_a.text, "group test A");
+
+        // clear_for
+        queue.clear_for("sess-A");
+        assert!(!queue.has_pending_for("sess-A"));
+        assert_eq!(queue.len(), 2); // 剩余 sess-B 的两条
     }
 }

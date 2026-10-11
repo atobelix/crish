@@ -207,6 +207,7 @@ pub(crate) const RESTORE_MERGE_INJECT_LIMIT: usize = 16;
 /// recovery-/timer-/subagent-terminal- 前缀族，00-总纲-维度设计.md:136）
 pub(crate) const RESTORE_GROUP_PREFIX: &str = "restore-";
 /// D6 §3.3：主 run 恢复条目注入文本（任务书原文：重启恢复的续跑指令）
+#[allow(dead_code)]
 pub(crate) const RESTORE_MAIN_INJECT_TEXT: &str = "上次被重启打断，请继续";
 /// D7 §8 决策 4：checkpoint 注入摘要截断护栏（summary ≤500 字符，
 /// 超长截断 + 省略号；completed/next 各 ≤5 项在拼接处限制）

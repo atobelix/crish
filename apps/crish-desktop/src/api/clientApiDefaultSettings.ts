@@ -19,6 +19,7 @@ export const DEFAULT_SETTINGS: Settings = {
   compaction: { enabled: true, reserveTokens: 16384, keepRecentTokens: 20000 },
   branchSummary: { reserveTokens: 16384, skipPrompt: false },
   retry: { enabled: true, maxRetries: 3, baseDelayMs: 2000 },
+  maxRetryAttempts: 10,
   terminal: {
     showImages: true,
     imageWidthCells: 60,
