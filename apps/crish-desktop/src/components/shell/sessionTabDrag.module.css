@@ -7,7 +7,7 @@
   position: fixed;
   background: var(--tint-hover);
   border: 1px dashed var(--border-subtle);
-  border-radius: 6px;
+  border-radius: var(--radius-m);
   box-sizing: border-box;
   z-index: var(--z-tooltip, 9000);
   pointer-events: none;
@@ -20,14 +20,14 @@
 
 .strip {
   justify-content: flex-start;
-  border-radius: 6px;
+  border-radius: var(--radius-m);
   background: var(--tint-hover);
   border: 1px dashed var(--border-subtle);
 }
 
 .pane {
   justify-content: center;
-  border-radius: 8px;
+  border-radius: var(--radius-m);
   background: color-mix(
     in srgb,
     var(--tint-hover) 80%,
@@ -53,7 +53,7 @@
   font-weight: 600;
   color: var(--text-primary);
   padding: 4px 12px;
-  border-radius: 6px;
+  border-radius: var(--radius-m);
   background: var(--bg-card);
   border: 1px solid var(--border-subtle);
   box-shadow: var(--shadow-md);
@@ -76,7 +76,7 @@
   background: var(--bg-card);
   color: var(--text-primary);
   border: 1px solid var(--border-subtle);
-  border-radius: 6px;
+  border-radius: var(--radius-m);
   box-shadow: var(--shadow-2xl);
   font-size: 12px;
   font-weight: 500;

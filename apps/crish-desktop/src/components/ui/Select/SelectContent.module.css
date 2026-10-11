@@ -37,7 +37,7 @@
 /* 尺寸档位（同心曲率：外圆角 = 内圆角 + 内边距） */
 .contentSm,
 .size-sm {
-  border-radius: 12px;
+  border-radius: var(--radius-l);
   padding: 4px;
 }
 
@@ -49,7 +49,7 @@
 
 .contentLg,
 .size-lg {
-  border-radius: 14px;
+  border-radius: var(--radius-l);
   padding: 6px;
 }
 
@@ -69,7 +69,7 @@
   background: transparent;
   text-align: left;
   padding: 0 10px;
-  border-radius: 8px;
+  border-radius: var(--radius-m);
   min-height: 32px;
   height: 32px;
   font-family: inherit;
@@ -95,7 +95,7 @@
   font-size: var(--font-size-xs);
   min-height: 28px;
   height: 28px;
-  border-radius: 8px;
+  border-radius: var(--radius-m);
 }
 
 .itemMd {
@@ -103,7 +103,7 @@
   font-size: var(--font-size-sm);
   min-height: 32px;
   height: 32px;
-  border-radius: 8px;
+  border-radius: var(--radius-m);
 }
 
 .itemLg {

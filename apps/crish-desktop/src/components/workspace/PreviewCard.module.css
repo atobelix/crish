@@ -323,7 +323,7 @@ input.urlInput::-webkit-search-results-decoration {
   background: color-mix(in srgb, var(--accent-primary) 12%, transparent);
   pointer-events: none;
   z-index: 8;
-  border-radius: 2px;
+  border-radius: var(--radius-s);
 }
 .inspectorHoverTag {
   position: absolute;

@@ -23,7 +23,7 @@
   left: 8px;
   background: var(--bg-elevated);
   color: var(--text-primary);
-  border-radius: 6px;
+  border-radius: var(--radius-m);
   text-decoration: none;
   font-size: 13px;
 }

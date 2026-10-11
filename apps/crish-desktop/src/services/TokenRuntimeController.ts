@@ -33,14 +33,14 @@ export interface TokenApplyResult {
   tokens: Record<string, string>;
 }
 
-const SCROLLBAR_UP_PATH = "M 5.5 6.2 L 2.5 6.2 C 1.2 6.2 0.3 5.9 0.8 4.8 L 2.4 2.3 C 3.1 1.0 4.9 1.0 5.6 2.3 L 7.2 4.8 C 7.7 5.9 6.8 6.2 5.5 6.2 Z";
-const SCROLLBAR_DOWN_PATH = "M 2.5 0.8 L 5.5 0.8 C 6.8 0.8 7.7 1.1 7.2 2.2 L 5.6 4.7 C 4.9 6.0 3.1 6.0 2.4 4.7 L 0.8 2.2 C 0.3 1.1 1.2 0.8 2.5 0.8 Z";
-const SCROLLBAR_LEFT_PATH = "M 6.2 2.5 L 6.2 5.5 C 6.2 6.8 5.9 7.7 4.8 7.2 L 2.3 5.6 C 1.0 4.9 1.0 3.1 2.3 2.4 L 4.8 0.8 C 5.9 0.3 6.2 1.2 6.2 2.5 Z";
-const SCROLLBAR_RIGHT_PATH = "M 0.8 2.5 L 0.8 5.5 C 0.8 6.8 1.1 7.7 2.2 7.2 L 4.7 5.6 C 6.0 4.9 6.0 3.1 4.7 2.4 L 2.2 0.8 C 1.1 0.3 0.8 1.2 0.8 2.5 Z";
+const SCROLLBAR_UP_PATH = "M 2.0 6.2 C 0.6 6.2 0.0 5.3 0.6 4.3 L 3.8 1.4 C 4.4 0.5 5.6 0.5 6.2 1.4 L 9.4 4.3 C 10.0 5.3 9.4 6.2 8.0 6.2 Z";
+const SCROLLBAR_DOWN_PATH = "M 2.0 0.8 C 0.6 0.8 0.0 1.7 0.6 2.7 L 3.8 5.6 C 4.4 6.5 5.6 6.5 6.2 5.6 L 9.4 2.7 C 10.0 1.7 9.4 0.8 8.0 0.8 Z";
+const SCROLLBAR_LEFT_PATH = "M 6.2 2.0 C 6.2 0.6 5.3 0.0 4.3 0.6 L 1.4 3.8 C 0.5 4.4 0.5 5.6 1.4 6.2 L 4.3 9.4 C 5.3 10.0 6.2 9.4 6.2 8.0 Z";
+const SCROLLBAR_RIGHT_PATH = "M 0.8 2.0 C 0.8 0.6 1.7 0.0 2.7 0.6 L 5.6 3.8 C 6.5 4.4 6.5 5.6 5.6 6.2 L 2.7 9.4 C 1.7 10.0 0.8 9.4 0.8 8.0 Z";
 
 function makeScrollbarArrowSvg(pathD: string, viewBox: string, color: string, opacity: string): string {
   const safeColor = color.startsWith('#') ? `%23${color.slice(1)}` : color;
-  const svg = `%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='${viewBox}'%3E%3Cpath d='${pathD}' fill='${safeColor}' fill-opacity='${opacity}'/%3E%3C/svg%3E`;
+  const svg = `%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='${viewBox}' preserveAspectRatio='none'%3E%3Cpath d='${pathD}' fill='${safeColor}' fill-opacity='${opacity}'/%3E%3C/svg%3E`;
   return `url("data:image/svg+xml,${svg}")`;
 }
 
@@ -301,16 +301,22 @@ export class TokenRuntimeController {
       }
 
       if (!isDark && skinKey === 'warm-gray') {
-        const lPrimary = Number((95.2 + adjust * 0.6).toFixed(2));
-        const lSecondary = Number((95 + adjust * 0.3).toFixed(2));
+        // 从外到内逐层变白（2026-10-10 heson 定稿，刻度 = 100 − HSL 亮度）：
+        //   外层/侧栏 3.5（L 96.5%）→ 主界面 2.0（L 98%）→ 输入框/卡片 0（纯白）。
+        //   旧值 95% / 95.2%（实测灰度 ≈5.1 / 4.7，两层几乎同色）。
+        //   亮度微调 ±5 档沿用原斜率；主界面封顶 99.5%，保证永远略暗于纯白输入框。
+        // 2026-10-11 heson 实测定稿（同一暖色调 CMYK C0 M0.4 Y0.8）：外层 K4 #f4f3f2（hsl(30 8.33% 95.29%)）、主层 K2.8 #f8f7f6（hsl(30 12.5% 96.86%)）、
+        // 输入框 #ffffff。adjust=0 时输出精确 hex；±档沿用原斜率（主层 0.6/档、外层 0.3/档），主层封顶 99.5%。
+        const lPrimary = Number(Math.min(99.5, 96.86 + adjust * 0.6).toFixed(2));
+        const lSecondary = Number(Math.min(99, 95.29 + adjust * 0.3).toFixed(2));
         const lTertiary = Number((lSecondary - 3).toFixed(2));
 
-        bgPrimary = `hsl(35 8% ${lPrimary}%)`;
-        bgSecondary = `hsl(35 8% ${lSecondary}%)`;
-        bgTertiary = `hsl(35 8% ${lTertiary}%)`;
-        bgCard = 'hsl(0 0% 100%)';
-        bgElevated = 'hsl(0 0% 100%)';
-        shellChromeBg = `hsl(35 8% ${lSecondary}%)`;
+        bgPrimary = adjust === 0 ? '#f8f7f6' : `hsl(30 12.5% ${lPrimary}%)`;
+        bgSecondary = adjust === 0 ? '#f4f3f2' : `hsl(30 8.33% ${lSecondary}%)`;
+        bgTertiary = `hsl(30 8.33% ${lTertiary}%)`;
+        bgCard = '#ffffff';
+        bgElevated = '#ffffff';
+        shellChromeBg = bgSecondary;
         borderColor = 'hsl(35 10% 86%)';
         borderSubtle = 'hsl(30 6% 93.8%)';
       } else if (adjust !== 0) {
@@ -422,11 +428,7 @@ export class TokenRuntimeController {
         }
       }
 
-      const isDarkPreset = isDark;
-      const controlSoftBase = isDarkPreset ? mixColor : vibrantTint;
-      const softBgPct = isDarkPreset ? '5%' : '4%';
-      const softHoverPct = isDarkPreset ? '6.5%' : '4%';
-      const softActivePct = isDarkPreset ? '9.5%' : '8%';
+      // 三档底色（2026-10-10）：control-soft-* 不再按皮肤单独注入，统一为 tokens.css 的 --tint-hover/--tint-active 叠加。
 
       // 遵循显式灰阶契约：黑夜模式使用 45% 灰度（55% 亮度），浅色模式使用 55% 灰度（45% 亮度）
       const defaultTertiary = isDark ? '#8c8c8c' : '#6b6b6b';
@@ -449,7 +451,8 @@ export class TokenRuntimeController {
             ? `color-mix(in srgb, ${textPrimary} 45%, ${bgPrimary})`
             : `color-mix(in srgb, ${textPrimary} 38%, hsl(0 0% 100%))`);
 
-      const composerBg = skinConfig.composerBg || bgCard;
+      // 浅色暖灰：输入框必须是纯白（heson 定稿），不受皮肤 composerBg / 亮度微调影响
+      const composerBg = !isDark && skinKey === 'warm-gray' ? '#ffffff' : skinConfig.composerBg || bgCard;
 
       let finalFg = textPrimary;
       let finalSec = textSecondary;
@@ -470,16 +473,20 @@ export class TokenRuntimeController {
           : `color-mix(in srgb, ${finalFg} 40%, hsl(0 0% 100%))`;
       }
 
-      tokens['--surface-chrome'] = bgSecondary;
-      tokens['--surface-paper'] = bgPrimary;
-      tokens['--surface-card'] = bgCard;
-      tokens['--surface-elevated'] = bgElevated;
-      tokens['--bg-tertiary'] = bgTertiary;
+      // 三档底色 SSOT（2026-10-10）：运行时只写三个独立源 —— 外层（侧栏 + 标签栏）/ 主层（聊天区 + 右侧栏 +
+      // 卡片/弹层…）/ 输入框。--surface-chrome/paper/card/elevated/sunken、--bg-tertiary、--shell-chrome-bg、
+      // --composer-bg 在 tokens.css 中都是这三档的别名，皮肤的 bgTertiary/bgElevated/shellChromeBg/bgCard
+      // 不再单独生效（否则会出现第四、五种底色）。输入框取 composerBg（未配置时回落 bgCard）。
+      void bgTertiary;
+      void bgElevated;
+      void shellChromeBg;
+      tokens['--surface-outer'] = bgSecondary;
+      tokens['--surface-main'] = bgPrimary;
+      tokens['--surface-input'] = composerBg;
       // T7 别名收敛（2026-09-12）：--bg-primary/--bg-secondary/--bg-card/--bg-elevated/
       // --bg-paper/--bg-workspace/--shell-inset-bg/--terminal-* 已不再由 JS 写入——
       // tokens.css 静态链以 surface-* 为独立源派生它们（--bg-primary: var(--surface-paper) 等），
       // JS 只需写独立侧。同值多写是 a_class_multi_writer 同类问题。
-      tokens['--shell-chrome-bg'] = shellChromeBg;
       tokens['--text-primary'] = finalFg;
       tokens['--text-secondary'] = finalSec;
       tokens['--text-tertiary'] = finalTert;
@@ -488,37 +495,35 @@ export class TokenRuntimeController {
       tokens['--border-color'] = borderColor;
       tokens['--border-subtle'] = borderSubtle;
       tokens['--control-mix-color'] = mixColor;
-      tokens['--control-soft-bg'] = `color-mix(in srgb, ${controlSoftBase} ${softBgPct}, ${bgSecondary})`;
-      tokens['--control-soft-bg-hover'] = `color-mix(in srgb, ${controlSoftBase} ${softHoverPct}, ${bgSecondary})`;
-      tokens['--control-soft-bg-active'] = `color-mix(in srgb, ${controlSoftBase} ${softActivePct}, ${bgSecondary})`;
-      tokens['--composer-bg'] = composerBg;
       tokens['--accent-green-light-adaptive'] = greenLight;
       tokens['--accent-red-light-adaptive'] = redLight;
 
       // 滚动条主题色融合：在各类皮肤下自然融入当前主题色相，杜绝孤立突兀的灰白硬块
       if (skinKey === 'warm-gray') {
-        tokens['--scrollbar-thumb-bg'] = '#e6e6e5';
-        tokens['--scrollbar-thumb-active'] = '#c8c7c6';
+        // 暖灰皮肤（默认浅色纸温）走 tokens.css 静态权威 SSOT（降低灰度的 #dedddc 与深沉激活态 #6b6a69）
+        // 按钮 SVG 同步继承 tokens.css 权威满宽平滑大圆角矢量，不向 root.style 写入内联覆盖
       } else if (isDark) {
-        tokens['--scrollbar-thumb-bg'] = `color-mix(in srgb, ${finalFg} 20%, transparent)`;
-        tokens['--scrollbar-thumb-active'] = `color-mix(in srgb, ${finalFg} 36%, transparent)`;
+        tokens['--scrollbar-thumb-bg'] = `color-mix(in srgb, ${finalFg} 16%, transparent)`;
+        tokens['--scrollbar-thumb-active'] = `color-mix(in srgb, ${finalFg} 48%, transparent)`;
       } else {
-        tokens['--scrollbar-thumb-bg'] = `color-mix(in srgb, ${finalFg} 15%, transparent)`;
-        tokens['--scrollbar-thumb-active'] = `color-mix(in srgb, ${finalFg} 28%, transparent)`;
+        tokens['--scrollbar-thumb-bg'] = `color-mix(in srgb, ${finalFg} 13%, transparent)`;
+        tokens['--scrollbar-thumb-active'] = `color-mix(in srgb, ${finalFg} 58%, transparent)`;
       }
 
-      // 滚动条微调三角按钮动态 SVG Token 化：在各类皮肤下与当前滑块颜色深度契合
-      const btnNormalOp = isDark ? '0.20' : '0.22';
-      const btnActiveOp = isDark ? '0.36' : '0.40';
+      // 滚动条微调三角按钮动态 SVG Token 化：在非 warm-gray 自定义皮肤下与当前滑块颜色深度契合
+      if (skinKey !== 'warm-gray') {
+        const btnNormalOp = isDark ? '0.16' : '0.13';
+        const btnActiveOp = isDark ? '0.48' : '0.58';
 
-      tokens['--scrollbar-button-up'] = makeScrollbarArrowSvg(SCROLLBAR_UP_PATH, '0 0 8 7', finalFg, btnNormalOp);
-      tokens['--scrollbar-button-down'] = makeScrollbarArrowSvg(SCROLLBAR_DOWN_PATH, '0 0 8 7', finalFg, btnNormalOp);
-      tokens['--scrollbar-button-left'] = makeScrollbarArrowSvg(SCROLLBAR_LEFT_PATH, '0 0 7 8', finalFg, btnNormalOp);
-      tokens['--scrollbar-button-right'] = makeScrollbarArrowSvg(SCROLLBAR_RIGHT_PATH, '0 0 7 8', finalFg, btnNormalOp);
-      tokens['--scrollbar-button-up-active'] = makeScrollbarArrowSvg(SCROLLBAR_UP_PATH, '0 0 8 7', finalFg, btnActiveOp);
-      tokens['--scrollbar-button-down-active'] = makeScrollbarArrowSvg(SCROLLBAR_DOWN_PATH, '0 0 8 7', finalFg, btnActiveOp);
-      tokens['--scrollbar-button-left-active'] = makeScrollbarArrowSvg(SCROLLBAR_LEFT_PATH, '0 0 7 8', finalFg, btnActiveOp);
-      tokens['--scrollbar-button-right-active'] = makeScrollbarArrowSvg(SCROLLBAR_RIGHT_PATH, '0 0 7 8', finalFg, btnActiveOp);
+        tokens['--scrollbar-button-up'] = makeScrollbarArrowSvg(SCROLLBAR_UP_PATH, '0 0 10 7', finalFg, btnNormalOp);
+        tokens['--scrollbar-button-down'] = makeScrollbarArrowSvg(SCROLLBAR_DOWN_PATH, '0 0 10 7', finalFg, btnNormalOp);
+        tokens['--scrollbar-button-left'] = makeScrollbarArrowSvg(SCROLLBAR_LEFT_PATH, '0 0 7 10', finalFg, btnNormalOp);
+        tokens['--scrollbar-button-right'] = makeScrollbarArrowSvg(SCROLLBAR_RIGHT_PATH, '0 0 7 10', finalFg, btnNormalOp);
+        tokens['--scrollbar-button-up-active'] = makeScrollbarArrowSvg(SCROLLBAR_UP_PATH, '0 0 10 7', finalFg, btnActiveOp);
+        tokens['--scrollbar-button-down-active'] = makeScrollbarArrowSvg(SCROLLBAR_DOWN_PATH, '0 0 10 7', finalFg, btnActiveOp);
+        tokens['--scrollbar-button-left-active'] = makeScrollbarArrowSvg(SCROLLBAR_LEFT_PATH, '0 0 7 10', finalFg, btnActiveOp);
+        tokens['--scrollbar-button-right-active'] = makeScrollbarArrowSvg(SCROLLBAR_RIGHT_PATH, '0 0 7 10', finalFg, btnActiveOp);
+      }
     }
 
     if (typeof document !== 'undefined') {
@@ -549,12 +554,9 @@ export class TokenRuntimeController {
       //   bg-primary/secondary/card/elevated/paper/workspace、shell-inset-bg、terminal-*
       //   由 tokens.css 静态链从 surface-* 派生，不再注入）
       if (tokens['--font-size-adjust']) root.style.setProperty('--font-size-adjust', tokens['--font-size-adjust']);
-      if (tokens['--surface-chrome']) root.style.setProperty('--surface-chrome', tokens['--surface-chrome']);
-      if (tokens['--surface-paper']) root.style.setProperty('--surface-paper', tokens['--surface-paper']);
-      if (tokens['--surface-card']) root.style.setProperty('--surface-card', tokens['--surface-card']);
-      if (tokens['--surface-elevated']) root.style.setProperty('--surface-elevated', tokens['--surface-elevated']);
-      if (tokens['--bg-tertiary']) root.style.setProperty('--bg-tertiary', tokens['--bg-tertiary']);
-      if (tokens['--shell-chrome-bg']) root.style.setProperty('--shell-chrome-bg', tokens['--shell-chrome-bg']);
+      if (tokens['--surface-outer']) root.style.setProperty('--surface-outer', tokens['--surface-outer']);
+      if (tokens['--surface-main']) root.style.setProperty('--surface-main', tokens['--surface-main']);
+      if (tokens['--surface-input']) root.style.setProperty('--surface-input', tokens['--surface-input']);
       if (tokens['--text-primary']) root.style.setProperty('--text-primary', tokens['--text-primary']);
       if (tokens['--text-secondary']) root.style.setProperty('--text-secondary', tokens['--text-secondary']);
       if (tokens['--text-tertiary']) root.style.setProperty('--text-tertiary', tokens['--text-tertiary']);
@@ -563,10 +565,6 @@ export class TokenRuntimeController {
       if (tokens['--border-color']) root.style.setProperty('--border-color', tokens['--border-color']);
       if (tokens['--border-subtle']) root.style.setProperty('--border-subtle', tokens['--border-subtle']);
       if (tokens['--control-mix-color']) root.style.setProperty('--control-mix-color', tokens['--control-mix-color']);
-      if (tokens['--control-soft-bg']) root.style.setProperty('--control-soft-bg', tokens['--control-soft-bg']);
-      if (tokens['--control-soft-bg-hover']) root.style.setProperty('--control-soft-bg-hover', tokens['--control-soft-bg-hover']);
-      if (tokens['--control-soft-bg-active']) root.style.setProperty('--control-soft-bg-active', tokens['--control-soft-bg-active']);
-      if (tokens['--composer-bg']) root.style.setProperty('--composer-bg', tokens['--composer-bg']);
       if (tokens['--accent-green-light-adaptive']) root.style.setProperty('--accent-green-light-adaptive', tokens['--accent-green-light-adaptive']);
       if (tokens['--accent-red-light-adaptive']) root.style.setProperty('--accent-red-light-adaptive', tokens['--accent-red-light-adaptive']);
       if (tokens['--scrollbar-thumb-bg']) root.style.setProperty('--scrollbar-thumb-bg', tokens['--scrollbar-thumb-bg']);

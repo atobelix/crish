@@ -1,8 +1,9 @@
 /* 细滚动条出口。禁名 shell-scrollbar.css，本文件为唯一 webkit 出口。
  * WebView2 / Chromium：必须走 ::-webkit-scrollbar。
  * 全局或容器上写 scrollbar-width 会关闭 webkit 伪元素，Windows 上仍露出
- * 带上下三角的系统粗条（survey/09）。默认 7px（6–8px）；域可覆盖
- * --scrollbar-thumb-width（0px 隐藏 / 3px 紧凑）。
+ * 带上下三角的系统粗条（survey/09）。列宽默认 10px（--scrollbar-thumb-width）；
+ * 滑块静止净宽 = 列宽 − safe-gap（md：6px），hover/拖拽 = 列宽 − hover-gap（md：9px），
+ * 透明边框属于滑块盒子，整列 10px 都可抓取。域可覆盖 --scrollbar-thumb-width（0px 隐藏）。
  * thumb 走 --tint-scrollbar-thumb；轨道透明；无上下三角。 */
 
 ::-webkit-scrollbar {
@@ -17,51 +18,63 @@
 ::-webkit-scrollbar-thumb {
   background: var(--scrollbar-thumb-bg, var(--tint-scrollbar-thumb));
   background-clip: padding-box;
-  border-right: var(--scrollbar-track-safe-gap, 2px) solid transparent; /* 右侧留出 2px 物理安全空隙，防误触，滑块净宽 8px 饱满舒适 */
+  /* 左右边框严格对称 2px，滑块净宽 6px 精致舒适，圆角中心与 padding-box 严格重合，彻底杜绝单侧截断切平 */
+  border-left: var(--scrollbar-track-safe-gap, 2px) solid transparent;
+  border-right: var(--scrollbar-track-safe-gap, 2px) solid transparent;
   border-radius: var(--scrollbar-thumb-radius);
 }
 
 ::-webkit-scrollbar-thumb:horizontal {
   background: var(--scrollbar-thumb-bg, var(--tint-scrollbar-thumb));
-  border-bottom: var(--scrollbar-track-safe-gap, 2px) solid transparent; /* 底部留出 2px 物理安全空隙，防误触，滑块净高 8px 饱满舒适 */
+  /* background 简写会把 clip 重置为 border-box，安全空隙被涂满（静止满高、hover 才变细）；显式恢复 */
+  background-clip: padding-box;
+  border-top: var(--scrollbar-track-safe-gap, 2px) solid transparent;
+  border-bottom: var(--scrollbar-track-safe-gap, 2px) solid transparent;
   border-right: none;
+  border-left: none;
 }
 
 ::-webkit-scrollbar-thumb:hover,
 ::-webkit-scrollbar-thumb:active {
   background: var(--scrollbar-thumb-active);
   background-clip: padding-box;
+  /* 粗细严格恒定：hover 与拖拽保持对称 2px 呼吸感边距，净宽锁死 6px 精致胶囊不跳变 */
+  border-left: var(--scrollbar-track-safe-gap, 2px) solid transparent;
   border-right: var(--scrollbar-track-safe-gap, 2px) solid transparent;
 }
 
 ::-webkit-scrollbar-thumb:horizontal:hover,
 ::-webkit-scrollbar-thumb:horizontal:active {
+  border-top: var(--scrollbar-track-safe-gap, 2px) solid transparent;
   border-bottom: var(--scrollbar-track-safe-gap, 2px) solid transparent;
   border-right: none;
+  border-left: none;
 }
 
-/* 上下端点大圆角贝塞尔三角按钮：顶角与底角均采用圆润贝塞尔曲率，宽度严格对齐 8px 滑块 */
+/* 上下端点大圆角贝塞尔三角按钮：宽度 100% 自动吃满 padding-box，与滑块净宽 100% 严格绝对等宽同轴！ */
 ::-webkit-scrollbar-button:vertical:start:decrement {
   display: block;
-  height: 12px;
+  height: 9px;
   background-color: transparent;
   background-repeat: no-repeat;
   background-position: center center;
-  background-size: 8px 7px;
+  background-size: 100% 5.5px;
   background-clip: padding-box;
-  border-right: 2px solid transparent;
+  border-left: var(--scrollbar-track-safe-gap, 2px) solid transparent;
+  border-right: var(--scrollbar-track-safe-gap, 2px) solid transparent;
   background-image: var(--scrollbar-button-up);
 }
 
 ::-webkit-scrollbar-button:vertical:end:increment {
   display: block;
-  height: 12px;
+  height: 9px;
   background-color: transparent;
   background-repeat: no-repeat;
   background-position: center center;
-  background-size: 8px 7px;
+  background-size: 100% 5.5px;
   background-clip: padding-box;
-  border-right: 2px solid transparent;
+  border-left: var(--scrollbar-track-safe-gap, 2px) solid transparent;
+  border-right: var(--scrollbar-track-safe-gap, 2px) solid transparent;
   background-image: var(--scrollbar-button-down);
 }
 
@@ -75,28 +88,34 @@
   background-image: var(--scrollbar-button-down-active);
 }
 
-/* 左右端点大圆角贝塞尔三角按钮：与上下端点圆角贝塞尔严格保持同构 */
+/* 左右端点大圆角贝塞尔三角按钮：高度 100% 自动吃满 padding-box，与水平滑块净高 100% 严格绝对等宽同轴 */
 ::-webkit-scrollbar-button:horizontal:start:decrement {
   display: block;
-  width: 12px;
+  width: 9px;
   background-color: transparent;
   background-repeat: no-repeat;
   background-position: center center;
-  background-size: 7px 8px;
+  background-size: 5.5px 100%;
   background-clip: padding-box;
-  border-bottom: 2px solid transparent;
+  border-top: var(--scrollbar-track-safe-gap, 2px) solid transparent;
+  border-bottom: var(--scrollbar-track-safe-gap, 2px) solid transparent;
+  border-right: none;
+  border-left: none;
   background-image: var(--scrollbar-button-left);
 }
 
 ::-webkit-scrollbar-button:horizontal:end:increment {
   display: block;
-  width: 12px;
+  width: 9px;
   background-color: transparent;
   background-repeat: no-repeat;
   background-position: center center;
-  background-size: 7px 8px;
+  background-size: 5.5px 100%;
   background-clip: padding-box;
-  border-bottom: 2px solid transparent;
+  border-top: var(--scrollbar-track-safe-gap, 2px) solid transparent;
+  border-bottom: var(--scrollbar-track-safe-gap, 2px) solid transparent;
+  border-right: none;
+  border-left: none;
   background-image: var(--scrollbar-button-right);
 }
 

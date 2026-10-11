@@ -79,12 +79,17 @@ describe('TokenRuntimeController 全仓单一运行时 Token 注入控制器测�
       // （tokens.css:51-64、307-308），JS 再写即「同值多写」双写者。
       // 故此处断言**独立侧取值**，并由 expectNoDerivedAliasesInjected 钉死
       // 「派生别名零注入」——比断言旧别名更强（旧写法对收敛回归无感知）。
-      expect(root.style.getPropertyValue('--surface-paper')).toBe('hsl(35 8% 95.2%)');
-      expect(root.style.getPropertyValue('--surface-chrome')).toBe('hsl(35 8% 95%)');
-      expect(root.style.getPropertyValue('--surface-card')).toBe('hsl(0 0% 100%)');
+      // 2026-10-10 三档底色：运行时只写 --surface-outer / --surface-main / --surface-input
+      expect(root.style.getPropertyValue('--surface-main')).toBe('#f8f7f6');
+      expect(root.style.getPropertyValue('--surface-outer')).toBe('#f4f3f2');
+      expect(root.style.getPropertyValue('--surface-input')).toBe('#ffffff');
+      for (const alias of ['--surface-paper', '--surface-chrome', '--surface-card', '--surface-elevated', '--shell-chrome-bg', '--bg-tertiary', '--composer-bg']) {
+        expect(root.style.getPropertyValue(alias), alias).toBe('');
+      }
       expect(root.style.getPropertyValue('--text-primary')).toBe('#1a1a1a');
       expect(root.style.getPropertyValue('--border-color')).toBe('hsl(35 10% 86%)');
-      expect(root.style.getPropertyValue('--control-soft-bg')).toContain('hsl(35 8% 95%)');
+      // control-soft-* 改为 tokens.css 统一叠加（--tint-hover/--tint-active），不再注入
+      expect(root.style.getPropertyValue('--control-soft-bg')).toBe('');
       expectNoDerivedAliasesInjected(root);
     });
 
@@ -124,8 +129,9 @@ describe('TokenRuntimeController 全仓单一运行时 Token 注入控制器测�
       expect(root.classList.contains('theme-dark')).toBe(true);
       expect(root.classList.contains('theme-light')).toBe(false);
 
-      expect(root.style.getPropertyValue('--surface-paper')).toBe('#121212');
-      expect(root.style.getPropertyValue('--surface-chrome')).toBe('#262626');
+      expect(root.style.getPropertyValue('--surface-main')).toBe('#1e1e1e');
+      expect(root.style.getPropertyValue('--surface-outer')).toBe('#1a1919');
+      expect(root.style.getPropertyValue('--surface-input')).toBe('#232323');
       expect(root.style.getPropertyValue('--text-primary')).toBe('#e6e6e6');
       expectNoDerivedAliasesInjected(root);
     });
@@ -149,7 +155,7 @@ describe('TokenRuntimeController 全仓单一运行时 Token 注入控制器测�
       expect(root.classList.contains('theme-light')).toBe(true);
       expect(root.classList.contains('theme-dark')).toBe(false);
 
-      expect(root.style.getPropertyValue('--surface-paper')).toBe('#f1f3f5');
+      expect(root.style.getPropertyValue('--surface-main')).toBe('#f1f3f5');
       expect(root.style.getPropertyValue('--text-primary')).toBe('#212529');
       expectNoDerivedAliasesInjected(root);
     });
@@ -229,7 +235,7 @@ describe('TokenRuntimeController 全仓单一运行时 Token 注入控制器测�
       expect(updateEvent.detail.isDark).toBe(false);
       expect(updateEvent.detail.theme).toBe('default');
       // 事件载荷同样遵循 T7 单写者契约：只携带独立侧，派生别名不出现在载荷中
-      expect(updateEvent.detail.tokens['--surface-paper']).toBeDefined();
+      expect(updateEvent.detail.tokens['--surface-main']).toBeDefined();
       expect(updateEvent.detail.tokens['--bg-primary']).toBeUndefined();
 
       const canvasEvent = canvasRecolorSpy.mock.calls[0][0] as CustomEvent;
@@ -268,11 +274,11 @@ describe('TokenRuntimeController 全仓单一运行时 Token 注入控制器测�
       );
 
       expect(result.isDark).toBe(true);
-      expect(result.tokens['--surface-paper']).toBe('#223344');
+      expect(result.tokens['--surface-main']).toBe('#223344');
       // 自定义极端暗色背景触发对比度防崩安全算法，派生高对比度亮白
       expect(result.tokens['--text-primary']).toBe('hsl(0, 0%, 94%)');
-      expect(result.tokens['--surface-chrome']).toContain('color-mix(');
-      expect(document.documentElement.style.getPropertyValue('--surface-paper')).toBe('#223344');
+      expect(result.tokens['--surface-outer']).toContain('color-mix(');
+      expect(document.documentElement.style.getPropertyValue('--surface-main')).toBe('#223344');
       expectNoDerivedAliasesInjected(document.documentElement);
     });
   });
@@ -321,8 +327,8 @@ describe('TokenRuntimeController 全仓单一运行时 Token 注入控制器测�
         'default'
       );
 
-      expect(result.tokens['--surface-chrome']).toBe('#e9fcf9');
-      expect(result.tokens['--shell-chrome-bg']).toContain('#e9fcf9');
+      expect(result.tokens['--surface-outer']).toBe('#e9fcf9');
+      expect(result.tokens['--shell-chrome-bg']).toBeUndefined();
       expect(result.tokens['--scrollbar-button-up']).toContain('data:image/svg+xml');
       expect(result.tokens['--scrollbar-button-down-active']).toContain('data:image/svg+xml');
     });

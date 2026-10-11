@@ -333,7 +333,7 @@ describe('G-CASCADE · 密度档层叠生效契约（防「定义正确却被压
   });
 
   it('主题色级联：light 取基础块值、dark 取暗色块值（medium 档，二者必须不同）', () => {
-    for (const token of ['--text-primary', '--surface-paper', '--border-color']) {
+    for (const token of ['--text-primary', '--surface-main', '--border-color']) {
       const light = resolveWinner(allBlocks, token, { theme: 'light', uiSize: 'medium' });
       const dark = resolveWinner(allBlocks, token, { theme: 'dark', uiSize: 'medium' });
       expect(light, `${token} light 应有胜出方`).not.toBeNull();

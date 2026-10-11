@@ -230,8 +230,8 @@ describe('TerminalCard', () => {
     // T7 别名收敛（2026-09-12）：JS 只写「独立侧」surface-* / text-* / border-*，
     // --bg-* / --shell-inset-bg / --terminal-* 一律由 tokens.css 静态链从
     // surface-* 派生（TokenRuntimeController.ts:437-455 与 :484-487 注释明写）。
-    expect(root.style.getPropertyValue('--surface-paper')).toBeTruthy();
-    expect(root.style.getPropertyValue('--surface-card')).toBeTruthy();
+    expect(root.style.getPropertyValue('--surface-main')).toBeTruthy();
+    expect(root.style.getPropertyValue('--surface-input')).toBeTruthy();
     expect(root.style.getPropertyValue('--text-primary')).toBeTruthy();
     // 反向锁定：JS 不得再写 --terminal-*（单点真源在 tokens.css）
     expect(root.style.getPropertyValue('--terminal-bg')).toBe('');
@@ -251,7 +251,7 @@ describe('TerminalCard', () => {
       },
       'dark'
     );
-    expect(root.style.getPropertyValue('--surface-paper')).toBeTruthy();
+    expect(root.style.getPropertyValue('--surface-main')).toBeTruthy();
     expect(root.style.getPropertyValue('--text-primary')).toBeTruthy();
     expect(root.style.getPropertyValue('--terminal-bg')).toBe('');
 
@@ -269,7 +269,7 @@ describe('TerminalCard', () => {
       },
       'default'
     );
-    expect(root.style.getPropertyValue('--surface-card')).toBeTruthy();
+    expect(root.style.getPropertyValue('--surface-input')).toBeTruthy();
     expect(root.style.getPropertyValue('--terminal-bg')).toBe('');
 
     // 4. --terminal-* 单点真源 = tokens.css（浅/深各一套派生链）

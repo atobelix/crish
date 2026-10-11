@@ -70,7 +70,7 @@
   align-items: center;
   justify-content: center;
   padding: 2px;
-  border-radius: 4px;
+  border-radius: var(--radius-s);
   border: none;
   background: transparent;
   color: var(--text-tertiary);
@@ -166,7 +166,7 @@
   background: transparent;
   color: var(--text-tertiary);
   cursor: pointer;
-  border-radius: 2px;
+  border-radius: var(--radius-s);
 }
 
 .chipRemove:hover {

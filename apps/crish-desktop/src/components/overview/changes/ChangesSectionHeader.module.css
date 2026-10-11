@@ -86,7 +86,7 @@
   padding: 0 6px 0 8px;
   font-size: 11px;
   line-height: 22px;
-  border-radius: 6px;
+  border-radius: var(--radius-m);
 }
 
 /* ── 最右侧折叠指示符：与其它 Section 绝对对齐 ── */

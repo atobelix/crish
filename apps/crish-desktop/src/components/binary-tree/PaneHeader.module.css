@@ -18,7 +18,8 @@
   height: var(--header-height);
   min-height: var(--header-height);
   max-height: var(--header-height);
-  background: var(--shell-chrome-bg, var(--bg-secondary));
+  /* 顶部标签栏属于外层：与侧栏同一着色（有云母时为半透明叠色，透出 Mica） */
+  background: var(--outer-layer-bg, var(--shell-chrome-bg, var(--bg-secondary)));
   display: flex;
   align-items: center;
   justify-content: flex-start;

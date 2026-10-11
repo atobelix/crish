@@ -340,7 +340,8 @@
   padding-top: 0;
   margin-top: 0;
   background: var(--leaf-card-bg, var(--bg-card));
-  border-radius: var(--radius-lg);
+  /* 内容矩形（主界面 + 右侧栏共用）：大圆角，坐在外层通底上 */
+  border-radius: var(--radius-l);
   /* box-shadow:
     0 1px 3px hsl(0 0% 0% / 0.03),
     0 4px 12px hsl(0 0% 0% / 0.02); */

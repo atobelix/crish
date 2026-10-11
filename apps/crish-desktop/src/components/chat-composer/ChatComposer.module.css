@@ -1214,7 +1214,8 @@
   padding: 6px var(--composer-pad-x, 10px) 6px var(--composer-pad-x-start, 10px);
   border: 1px solid var(--border-subtle);
   border-radius: var(--composer-radius-single, 20px);
-  background: var(--bg-elevated);
+  /* 三档底色：输入框独立一档（浅色纯白 / 深色最亮层） */
+  background: var(--composer-bg, var(--surface-input));
   box-shadow:
     0 1px 3px color-mix(in srgb, var(--shadow-color) 1.5%, transparent),
     0 3px 8px -1px color-mix(in srgb, var(--shadow-color) 2%, transparent);

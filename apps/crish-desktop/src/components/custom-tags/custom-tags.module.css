@@ -476,7 +476,7 @@
 .customTagError {
   margin: 0.75rem 0;
   padding: 0.625rem 0.875rem;
-  border-radius: 6px;
+  border-radius: var(--radius-m);
   border: 1px solid var(--color-error-border, color-mix(in srgb, var(--color-error) 30%, transparent));
   background: var(--color-error-bg, color-mix(in srgb, var(--color-error) 8%, transparent));
   color: var(--color-error);

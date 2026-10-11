@@ -153,9 +153,10 @@
 /* 深色模式：精准抬升灰度明度，塑造清晰高对比度的暗色实体纸片感知 */
 :global(html[data-theme='dark']) .button:where(.buttonSecondary, [data-variant='secondary']),
 :global(.theme-dark) .button:where(.buttonSecondary, [data-variant='secondary']) {
-  --btn-bg: color-mix(in srgb, var(--text-primary) 10%, var(--bg-card));
+  /* 三档底色：次级按钮静止态与浅色一致 = 所在层底色 + 描边，不再自造第四种灰（旧 #323232） */
+  --btn-bg: var(--bg-card);
   --btn-fg: var(--text-primary);
-  --btn-border: color-mix(in srgb, var(--text-primary) 10%, transparent);
+  --btn-border: var(--border-color);
   --btn-shadow: 0 1px 3px hsl(0 0% 0% / 0.35);
   --btn-hover-overlay: var(--tint-hover);
   --btn-active-overlay: var(--tint-active);

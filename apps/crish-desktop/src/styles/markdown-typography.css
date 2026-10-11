@@ -702,10 +702,11 @@
   line-height: inherit;
   white-space: inherit;
 }
-/* 代码块滚动条走 overlay-scrollbar.css 唯一出口的域覆盖通道（细条 4px），
- * thumb/track/安全空隙全部由全局出口提供；禁止在域外新增私有 webkit 伪元素块。 */
+/* 代码块滚动条走 overlay-scrollbar.css 唯一出口的域覆盖通道（细条：静止净宽 4px，hover 7px），
+ * thumb/track/安全空隙全部由全局出口提供；禁止在域外新增私有 webkit 伪元素块。
+ * 列宽须 > safe-gap(4px)：净宽 = 列宽 − 安全空隙，原 4px 列宽在空隙改为 4px 后净宽为 0。 */
 :is(.conex-markdown, .md-rendered) .md-code-pre {
-  --scrollbar-thumb-width: 4px;
+  --scrollbar-thumb-width: 8px;
 }
 /* --- GFM 任务清单列表 --- */
 .md-rendered .md-task-item,

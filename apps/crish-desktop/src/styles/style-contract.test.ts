@@ -283,7 +283,7 @@ describe('批次 2 · ④ scrollbar 块 ratchet', () => {
     const darkBlock = css.match(DARK_BLOCK_RE)?.[0] ?? '';
 
     // light 模式必须显式定义实体像素且非透明（彻底杜绝浅色底板透明滚动条缺陷）
-    expect(lightBlock).toMatch(/--scrollbar-thumb-bg:\s*#e6e6e5/);
+    expect(lightBlock).toMatch(/--scrollbar-thumb-bg:\s*#dedddc/);
     expect(lightBlock).toMatch(/--tint-scrollbar-thumb:\s*var\(--scrollbar-thumb-bg\)/);
     expect(lightBlock).toMatch(/--tint-scrollbar-track:\s*transparent/);
 
@@ -323,6 +323,7 @@ describe('批次 2 · ④ scrollbar 块 ratchet', () => {
 
   const SCROLLBAR_WHITELIST = new Set([
     SCROLLBAR_EXPORT,
+    'Sidebar.module.css',
     'LeafToolTabStrip.module.css',
     'ChatComposer.module.css',
     'ModelBadgePickerMenu.module.css',
@@ -403,43 +404,19 @@ describe('批次 2 · ⑦ 固定值双源同值（双层同源约束 2）', () =
     expect(themeStore).not.toContain("setProperty('--bg-active'");
   });
 
-  it('themeStore control-soft 注入百分比与静态定义对齐（light 4/4/8、dark 5/6.5/9.5）', () => {
-    const ts =
-      readFile('src/api/themeStore.ts') +
-      '\n' +
-      readFile('src/api/themePersonalization.ts') +
-      '\n' +
-      readFile('src/services/TokenRuntimeController.ts');
-    const softBg = ts.match(
-      /softBgPct = isDarkPreset \? '([^']+)' : '([^']+)'/
-    );
-    const softHover = ts.match(
-      /softHoverPct = isDarkPreset \? '([^']+)' : '([^']+)'/
-    );
-    const softActive = ts.match(
-      /softActivePct = isDarkPreset \? '([^']+)' : '([^']+)'/
-    );
-    expect(softBg?.[1]).toBe('5%');
-    expect(softBg?.[2]).toBe('4%');
-    expect(softHover?.[1]).toBe('6.5%');
-    expect(softHover?.[2]).toBe('4%');
-    expect(softActive?.[1]).toBe('9.5%');
-    expect(softActive?.[2]).toBe('8%');
-
+  it('control-soft-* 由 tokens.css 统一叠加，运行时不再按皮肤注入（2026-10-10 三档底色）', () => {
+    const ts = readFile('src/services/TokenRuntimeController.ts');
+    expect(ts).not.toMatch(/tokens\['--control-soft-bg/);
+    expect(ts).not.toMatch(/setProperty\('--control-soft-bg/);
     const css = readFile('src/styles/tokens.css');
     const lightBlock = css.match(LIGHT_BLOCK_RE)?.[0] ?? '';
     const darkBlock = css.match(DARK_BLOCK_RE)?.[0] ?? '';
-    const pctOf = (block: string, token: string): string | null => {
-      const m = block.match(
-        new RegExp(
-          `${token}:\\s*color-mix\\(\\s*in srgb,\\s*var\\(--[\\w-]+\\)\\s*(\\d+(?:\\.\\d+)?)%`
-        )
-      );
-      return m?.[1] ?? null;
-    };
-    expect(lightBlock).toContain('--control-soft-bg: var(--tint-hover)');
-    expect(lightBlock).toContain('--control-soft-bg-hover: var(--tint-hover)');
+    for (const block of [lightBlock, darkBlock]) {
+      expect(block).toContain('--control-soft-bg: var(--tint-hover)');
+      expect(block).toContain('--control-soft-bg-hover: var(--tint-hover)');
+    }
     expect(lightBlock).toContain('--control-soft-bg-active: color-mix(');
+    expect(darkBlock).toContain('--control-soft-bg-active: var(--tint-active)');
   });
 
   it('--bg-hover/--bg-active 语义别名接线到 tint 档位且两主题对齐', () => {
@@ -450,17 +427,18 @@ describe('批次 2 · ⑦ 固定值双源同值（双层同源约束 2）', () =
       expect(block).toContain('--bg-hover: var(--tint-hover)');
       expect(block).toContain('--bg-active: var(--tint-active)');
     }
+    // 2026-10-11：叠加增量恢复为补丁前原值（light 2.5/5，dark 3.5/6.5）
     expect(lightBlock).toContain(
-      '--tint-hover: color-mix(in srgb, var(--text-primary) 3%, transparent)'
+      '--tint-hover: color-mix(in srgb, var(--text-primary) 2.5%, transparent)'
     );
     expect(lightBlock).toContain(
-      '--tint-active: color-mix(in srgb, var(--text-primary) 6%, transparent)'
+      '--tint-active: color-mix(in srgb, var(--text-primary) 5%, transparent)'
     );
     expect(darkBlock).toContain(
-      '--tint-hover: color-mix(in srgb, var(--text-primary) 3%, transparent)'
+      '--tint-hover: color-mix(in srgb, var(--text-primary) 5%, transparent)'
     );
     expect(darkBlock).toContain(
-      '--tint-active: color-mix(in srgb, var(--text-primary) 6%, transparent)'
+      '--tint-active: color-mix(in srgb, var(--text-primary) 8%, transparent)'
     );
   });
 });
@@ -588,10 +566,10 @@ describe('composer 水平内衬光学 token 对（2026-09-21 用户视觉裁决�
     return v ?? '';
   }
 
-  it('tokens.css 定义光学 token 对：--composer-pad-x=10px（结束侧） + --composer-pad-x-start=6px（起始侧），均为固定 px', () => {
+  it('tokens.css 定义水平内衬 token 对：--composer-pad-x=10px（结束侧） + --composer-pad-x-start=10px（起始侧，等宽试验），均为固定 px', () => {
     const tokens = readFile('src/styles/tokens.css');
     expect(tokenDef(tokens, '--composer-pad-x')).toBe('10px');
-    expect(tokenDef(tokens, '--composer-pad-x-start')).toBe('6px');
+    expect(tokenDef(tokens, '--composer-pad-x-start')).toBe('10px');
     // 负向：不得引用 --space-* 刻度（密度可变值会使几何测量变成时序依赖，同 --chat-stream-pad-x 纪律）
     for (const name of ['--composer-pad-x', '--composer-pad-x-start']) {
       expect(
@@ -607,10 +585,10 @@ describe('composer 水平内衬光学 token 对（2026-09-21 用户视觉裁决�
     const multi = ruleBlock(readFile(COMPOSER_CSS), '.composerCard.isMultiline').replace(/\s+/g, ' ');
     expect(single, '.composerCard 规则应存在').not.toBe('');
     expect(multi, '.composerCard.isMultiline 规则应存在').not.toBe('');
-    // 单行：上 6 / 右=结束侧 / 下 6 / 左=起始侧（左轻右重的光学平衡）
-    expect(single).toContain('padding: 6px var(--composer-pad-x, 10px) 6px var(--composer-pad-x-start, 6px)');
+    // 单行：上 6 / 右=结束侧 / 下 6 / 左=起始侧（等宽 10px）
+    expect(single).toContain('padding: 6px var(--composer-pad-x, 10px) 6px var(--composer-pad-x-start, 10px)');
     // 多行：垂直 8，水平同一对 token——＋ 同列（left-ctrl）切换 X 轴零位移
-    expect(multi).toContain('padding: 8px var(--composer-pad-x, 10px) 8px var(--composer-pad-x-start, 6px)');
+    expect(multi).toContain('padding: 8px var(--composer-pad-x, 10px) 8px var(--composer-pad-x-start, 10px)');
   });
 
   it('负向：composer 卡片 padding 禁 calc() 魔术补偿（光学量必须命名化为 token）', () => {

@@ -12,7 +12,8 @@
   padding: var(--space-2) var(--space-3);
   border: var(--hairline-width) solid var(--border-subtle);
   border-radius: var(--radius-lg);
-  background: var(--tint-hover);
+  /* 静止态不用 hover 叠加：凹槽区归外层档 */
+  background: var(--surface-outer);
 }
 
 .importRootRow {

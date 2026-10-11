@@ -67,24 +67,27 @@ describe('Zero-FOUC & Startup Theme SSOT Test Suite', () => {
     expect(document.documentElement.classList.contains('theme-dark')).toBe(true);
     // T7 别名收敛后：--bg-primary 由 tokens.css 静态派生自 --surface-paper；
     // applyTokens 只写独立 surface 侧（TokenRuntimeController 合流）
-    expect(document.documentElement.style.getPropertyValue('--surface-paper')).toBe('#121212');
-    expect(document.documentElement.style.getPropertyValue('--surface-chrome')).toBe('#262626');
-    expect(document.documentElement.style.getPropertyValue('--bg-tertiary')).toBe('#161616');
+    // 2026-10-10 三档底色：运行时只写 outer / main / input 三个独立源
+    expect(document.documentElement.style.getPropertyValue('--surface-main')).toBe('#1e1e1e');
+    expect(document.documentElement.style.getPropertyValue('--surface-outer')).toBe('#1a1919');
+    expect(document.documentElement.style.getPropertyValue('--surface-input')).toBe('#232323');
+    expect(document.documentElement.style.getPropertyValue('--bg-tertiary')).toBe('');
   });
 
   it('SSOT-04: dark-cozy 与 warm-gray 官方预设满足 WCAG 单真源契约', () => {
     const darkCozy = SKIN_PRESETS['dark-cozy'];
     expect(darkCozy).toBeDefined();
-    expect(darkCozy.bgPrimary).toBe('#121212');
-    expect(darkCozy.bgSecondary).toBe('#262626');
-    expect(darkCozy.bgTertiary).toBe('#161616');
+    expect(darkCozy.bgPrimary).toBe('#1e1e1e');
+    expect(darkCozy.bgSecondary).toBe('#1a1919');
+    expect(darkCozy.bgCard).toBe('#232323');
     expect(darkCozy.textPrimary).toBe('#e6e6e6');
 
     const warmGray = SKIN_PRESETS['warm-gray'];
     expect(warmGray).toBeDefined();
-    expect(warmGray.bgPrimary).toBe('hsl(35 8% 94.5%)');
-    expect(warmGray.bgSecondary).toBe('hsl(35 8% 95%)');
-    expect(warmGray.bgTertiary).toBe('hsl(35 8% 92%)');
+    // 2026-10-11 定稿：同一暖色调 CMYK C0 M0.4 Y0.8 —— 主层 K2.8 #f8f7f6、外层 K4 #f4f3f2
+    expect(warmGray.bgPrimary).toBe('#f8f7f6');
+    expect(warmGray.bgSecondary).toBe('#f4f3f2');
+    expect(warmGray.bgTertiary).toBe('hsl(30 8.33% 92.29%)');
     expect(warmGray.textPrimary).toBe('#1a1a1a');
   });
 
