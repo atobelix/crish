@@ -17,8 +17,6 @@ import { getCompositionRoot } from './compositionRoot';
 import { navigateToNewDraft } from '../store/surfaceRouter';
 
 export interface UseAppShortcutsOptions {
-  showCheatsheet: boolean;
-  setShowCheatsheet: React.Dispatch<React.SetStateAction<boolean>>;
   showSettingsOverlay: boolean;
   setShowSettingsOverlay: (show: boolean) => void;
   showFirstRun: boolean;
@@ -27,8 +25,6 @@ export interface UseAppShortcutsOptions {
 }
 
 export function useAppShortcuts({
-  showCheatsheet,
-  setShowCheatsheet,
   showSettingsOverlay,
   setShowSettingsOverlay,
   showFirstRun,
@@ -45,12 +41,6 @@ export function useAppShortcuts({
 
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
-      if (showCheatsheet) {
-        e.preventDefault();
-        e.stopPropagation();
-        setShowCheatsheet(false);
-        return;
-      }
       if (showSettingsOverlay) {
         e.preventDefault();
         e.stopPropagation();
@@ -74,9 +64,7 @@ export function useAppShortcuts({
 
       if (
         inEditable &&
-        !['toggle_settings', 'toggle_sidebar', 'cheatsheet'].includes(
-          actionId
-        )
+        !['toggle_settings', 'toggle_sidebar'].includes(actionId)
       ) {
         return;
       }
@@ -155,10 +143,6 @@ export function useAppShortcuts({
           }
           return;
         }
-        case 'cheatsheet':
-          e.preventDefault();
-          setShowCheatsheet((v) => !v);
-          return;
         case 'export_logs':
           e.preventDefault();
           setShowTelemetry(true);
@@ -174,10 +158,8 @@ export function useAppShortcuts({
       svc.destroy();
     };
   }, [
-    showCheatsheet,
     showSettingsOverlay,
     showFirstRun,
-    setShowCheatsheet,
     setShowSettingsOverlay,
     setShowTelemetry,
     setSidebarCollapsed,

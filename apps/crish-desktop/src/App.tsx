@@ -89,7 +89,6 @@ function App() {
   const settingsActiveTab = useSettingsUiStore((s) => s.settingsActiveTab);
   const setAppSettings = useSettingsStore((s) => s.setAppSettings);
 
-  const [showCheatsheet, setShowCheatsheet] = useState(false);
   const [showTelemetry, setShowTelemetry] = useState(false);
   const [sessionSearchInput, setSessionSearchInput] = useState('');
   const [sessionSearch, setSessionSearch] = useState('');
@@ -121,8 +120,6 @@ function App() {
 
   // Global keybindings
   useAppShortcuts({
-    showCheatsheet,
-    setShowCheatsheet,
     showSettingsOverlay,
     setShowSettingsOverlay,
     showFirstRun,
@@ -217,9 +214,7 @@ function App() {
             aria-label="工作台内容"
           >
             {/* 流内顶栏：只盖工作区列，不再绝对定位横跨全宽 */}
-            <AppTopBar
-              onShowCheatsheet={() => setShowCheatsheet(true)}
-            />
+            <AppTopBar />
             <div
               className="workspaces-stack"
               role="region"
@@ -249,8 +244,6 @@ function App() {
           setShowFirstRun={setShowFirstRun}
           showTelemetry={showTelemetry}
           setShowTelemetry={setShowTelemetry}
-          showCheatsheet={showCheatsheet}
-          setShowCheatsheet={setShowCheatsheet}
           showSettingsOverlay={showSettingsOverlay}
           setShowSettingsOverlay={setShowSettingsOverlay}
           activeWorkspaceId={activeWorkspaceId}

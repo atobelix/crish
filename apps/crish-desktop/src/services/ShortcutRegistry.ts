@@ -31,7 +31,6 @@ export const BUILTIN_SHORTCUTS: ShortcutMeta[] = [
   { id: 'stop_generation',   defaultBinding: 'Ctrl + Shift + Backspace', category: 'editor', label: '停止生成',   keywords: ['停止', '中断'] },
   { id: 'branch_session',    defaultBinding: 'Ctrl + Shift + F',  category: 'session',    label: '分支对话',        keywords: ['分叉', '分支'] },
   { id: 'toggle_sidebar',    defaultBinding: 'Ctrl + B',          category: 'navigation', label: '切换侧栏',        keywords: ['侧栏', '侧边栏'] },
-  { id: 'cheatsheet',        defaultBinding: 'Ctrl + Shift + /',  category: 'navigation', label: '快捷键帮助',      keywords: ['帮助', '快捷键'] },
   { id: 'open_models',       defaultBinding: 'Ctrl + Shift + M',  category: 'panel',      label: '模型设置',        keywords: ['模型', 'AI'] },
   { id: 'open_usage',        defaultBinding: 'Ctrl + Shift + U',  category: 'panel',      label: '用量统计',        keywords: ['用量', '统计'] },
   { id: 'open_security',     defaultBinding: 'Ctrl + Shift + S',  category: 'panel',      label: '安全设置',        keywords: ['安全', '权限'] },

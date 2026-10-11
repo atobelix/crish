@@ -7,11 +7,6 @@ import { getActiveModelId, getActiveProfileId } from '../api/providerProfiles';
 import type { SettingsTabType } from '../store/types';
 
 // Lazy loaded components
-const CheatsheetModal = lazy(() =>
-  import('../components/overlay/CheatsheetModal').then((m) => ({
-    default: m.CheatsheetModal,
-  }))
-);
 const FirstRunWizard = lazy(() =>
   import('../components/overlay/FirstRunWizard').then((m) => ({
     default: m.FirstRunWizard,
@@ -51,8 +46,6 @@ export interface AppGlobalDialogsProps {
   setShowFirstRun: (show: boolean) => void;
   showTelemetry: boolean;
   setShowTelemetry: (show: boolean) => void;
-  showCheatsheet: boolean;
-  setShowCheatsheet: (show: boolean) => void;
   showSettingsOverlay: boolean;
   setShowSettingsOverlay: (show: boolean) => void;
   activeWorkspaceId: string;
@@ -64,8 +57,6 @@ export function AppGlobalDialogs({
   setShowFirstRun,
   showTelemetry,
   setShowTelemetry,
-  showCheatsheet,
-  setShowCheatsheet,
   showSettingsOverlay,
   setShowSettingsOverlay,
   activeWorkspaceId,
@@ -96,14 +87,6 @@ export function AppGlobalDialogs({
 
       {showTelemetry && (
         <TelemetryDialog onClose={() => setShowTelemetry(false)} />
-      )}
-
-      {showCheatsheet && (
-        <AppErrorBoundary compact title="快捷键帮助出错">
-          <Suspense fallback={<SkeletonFallback height={300} />}>
-            <CheatsheetModal onClose={() => setShowCheatsheet(false)} />
-          </Suspense>
-        </AppErrorBoundary>
       )}
 
       {/* 设置全屏盖层（PE-05 T05.2 #5）：role/aria-modal/层级已由

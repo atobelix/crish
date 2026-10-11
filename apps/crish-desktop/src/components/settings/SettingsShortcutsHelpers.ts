@@ -18,7 +18,6 @@ export const SHORTCUT_DISPLAY: Record<string, { group: string; desc: string }> =
   open_extensions: { group: '系统', desc: '插件、MCP、技能' },
   open_schedule: { group: '系统', desc: '打开定时任务' },
   export_logs: { group: '系统', desc: '导出诊断日志' },
-  cheatsheet: { group: '系统', desc: '快捷键一览' },
   new_session: { group: '会话', desc: '开始新会话' },
   focus_composer: { group: '会话', desc: '定位到输入框' },
   branch_session: { group: '会话', desc: '从当前对话分出一支' },
