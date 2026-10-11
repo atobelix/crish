@@ -12,6 +12,7 @@
 
 import { isPendingDraftSessionId as isPendingDraft } from '@crish/shared-types';
 import { EMPTY_SESSION_TITLE } from '../sessionTitle';
+import { parseSessionTitleSource } from '../sessionTitleSource';
 import {
   DEFAULT_SESSION_FOLDER,
   type SessionIndexEntry,
@@ -158,6 +159,8 @@ export function parseSessionIndexEntry(raw: unknown): SessionIndexEntry | null {
   }
   const importMeta = parseSessionIndexImportMeta(o.importMeta);
   if (importMeta) entry.importMeta = importMeta;
+  const titleSource = parseSessionTitleSource(o.titleSource);
+  if (titleSource) entry.titleSource = titleSource;
 
   return entry;
 }

@@ -876,6 +876,7 @@ describe('sessionActions delete / active safety / Chinese titles', () => {
     );
     h.actions.renameSession('s1', '  /cmd  \u200B帮我重构模块。  ');
     expect(getSessionOrThrow(h.getState(), 's1').title).toBe('帮我重构模块');
+    expect(getSessionOrThrow(h.getState(), 's1').titleSource).toBe('user');
 
     // 空清洗结果不覆盖
     h.actions.renameSession('s1', '  /help  ');
@@ -887,6 +888,27 @@ describe('sessionActions delete / active safety / Chinese titles', () => {
     const titled = getSessionOrThrow(h.getState(), 's1').title;
     expect(Array.from(titled).length).toBe(49); // 48 + …
     expect(titled.endsWith('…')).toBe(true);
+  });
+
+  it('applyGeneratedSessionTitle writes an auto title and refuses user titles', () => {
+    const h = makeHarnessFromState(
+      makeStateFromSessions(
+        [emptyShell({ id: 's1', title: '你好', titleSource: 'auto-trivial' })],
+        's1'
+      )
+    );
+    h.actions.applyGeneratedSessionTitle('s1', '「登录失败排查」');
+    expect(getSessionOrThrow(h.getState(), 's1').title).toBe('登录失败排查');
+    expect(getSessionOrThrow(h.getState(), 's1').titleSource).toBe('auto');
+
+    h.actions.renameSession('s1', '我的标题');
+    h.actions.applyGeneratedSessionTitle('s1', '另一套标题');
+    expect(getSessionOrThrow(h.getState(), 's1').title).toBe('我的标题');
+    expect(getSessionOrThrow(h.getState(), 's1').titleSource).toBe('user');
+
+    h.actions.applyGeneratedSessionTitle('missing', '不会出现');
+    h.actions.applyGeneratedSessionTitle('s1', '   ');
+    expect(getSessionOrThrow(h.getState(), 's1').title).toBe('我的标题');
   });
 
   it('createSession uses EMPTY_SESSION_TITLE and sanitizes opts.title', () => {

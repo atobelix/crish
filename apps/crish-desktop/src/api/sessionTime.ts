@@ -314,19 +314,34 @@ export function msUntilRelativeLabelChange(activityMs: number, now = Date.now())
   return null;
 }
 
-/** 紧凑时间文案（m、h、d、mo，如 5m、2h、3d、1mo） */
+/** 侧栏紧凑日期（本地日历）：同年 M/D，跨年 YY/M/D（两位年份，比 Y/M/D 更省宽）。 */
+export function formatCompactCalendarDate(ms: number, now = Date.now()): string {
+  if (!ms || ms <= 0 || !Number.isFinite(ms)) return '';
+  const date = new Date(ms);
+  const m = date.getMonth() + 1;
+  const day = date.getDate();
+  const safeNow = Number.isFinite(now) ? now : Date.now();
+  if (date.getFullYear() === new Date(safeNow).getFullYear()) return `${m}/${day}`;
+  const yy = String(date.getFullYear() % 100).padStart(2, '0');
+  return `${yy}/${m}/${day}`;
+}
+
+/**
+ * 侧栏紧凑时间（每行唯一的时间标签，越短越好）：
+ * 1 分钟内「刚刚」/ 1 小时内「N分」/ 24 小时内「N时」/ 7 天内「N天」/ 今年更早「M/D」/ 跨年「YY/M/D」。
+ * 完整日期时间由 formatSessionListAbsoluteTime 放在 Tooltip。
+ */
 export function formatCompactActivity(ms: number, now = Date.now()): string {
   if (!ms || ms <= 0 || !Number.isFinite(ms)) return '';
   if (ms > now + SESSION_LIST_CLOCK_SKEW_MS) {
-    return formatAbsoluteCalendarDate(ms, now);
+    return formatCompactCalendarDate(ms, now);
   }
   const d = Math.max(0, now - ms);
-  if (d < 60_000) return 'now';
-  if (d < 3_600_000) return `${Math.max(1, Math.floor(d / 60_000))}m`;
-  if (d < 86_400_000) return `${Math.max(1, Math.floor(d / 3_600_000))}h`;
-  if (d < 30 * 86_400_000) return `${Math.max(1, Math.floor(d / 86_400_000))}d`;
-  if (d < 365 * 86_400_000) return `${Math.max(1, Math.floor(d / (30 * 86_400_000)))}mo`;
-  return `${Math.max(1, Math.floor(d / (365 * 86_400_000)))}y`;
+  if (d < 60_000) return '刚刚';
+  if (d < 3_600_000) return `${Math.max(1, Math.floor(d / 60_000))}分`;
+  if (d < 86_400_000) return `${Math.max(1, Math.floor(d / 3_600_000))}时`;
+  if (d < 7 * 86_400_000) return `${Math.max(1, Math.floor(d / 86_400_000))}天`;
+  return formatCompactCalendarDate(ms, now);
 }
 
 /**
@@ -343,7 +358,7 @@ export function formatSessionListTime(s: SessionState, now = Date.now()): string
 }
 
 /**
- * 侧栏展示用紧凑时间（m、h、d、mo），极简轻量省空间。
+ * 侧栏展示用紧凑时间：刚刚 / N分 / N时 / N天 / M/D / YY/M/D（规则见 formatCompactActivity）。
  */
 export function formatSessionListCompactTime(s: SessionState, now = Date.now()): string {
   if (isRemoteSessionTimestamp(s.timestamp, s.timestampSource) && sessionLastActivityMs(s) <= 0) {

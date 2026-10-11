@@ -45,7 +45,7 @@ function entry(
 }
 
 /**
- * 内置快照：镜像 Rust `COMMAND_MANIFEST`（135 = 注册面 135 全实装；与
+ * 内置快照：镜像 Rust `COMMAND_MANIFEST`（136 = 注册面 136 全实装；与
  * command_manifest.rs 行注释及 manifest_count_matches_registered_surface 测试对齐）。
  * 维护规则与 Rust 侧一致：registered 子集 = `make_handlers!` 注册面；新命令经
  * §7.2 登记表登记后追加在表尾（registered 随接线状态翻转）；双端漂移由
@@ -233,6 +233,8 @@ export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
     // E2 扩展：core_compact_now 实现体已落（E2 实现轮，registered=true；
     // 与 Rust command_manifest.rs 同步）
     entry('core_compact_now', 'core', 'engine', true),
+    // b6：首条助手回复后的短标题（与 Rust command_manifest.rs 同步）
+    entry('core_generate_session_title', 'core', 'engine', true),
     // ── 用量监控与时序分析面（usage_*，与 Rust command_manifest.rs 同步）──
     entry('usage_get_dashboard_data', 'usage', 'gui'),
     entry('usage_get_activity_matrix', 'usage', 'gui'),

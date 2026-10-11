@@ -138,6 +138,8 @@ export interface SessionRowSessionProps {
   isDraggable: boolean;
   /** Live drop line: insert before/after this row */
   dropPlace?: SessionRowDropPlace | null | undefined;
+  /** 同分区重名时的展示后缀（日期或助手首句），不写存储 */
+  titleHint?: string | undefined;
 }
 
 /** 重命名操作域（草稿/输入 ref/起止提交回调收敛为单一子对象） */
@@ -189,6 +191,7 @@ export const SessionRow = memo(function SessionRow(props: SessionRowProps) {
     isRenaming,
     isDraggable,
     dropPlace: dropPlaceProp,
+    titleHint: titleHintProp,
   } = props.session;
   const {
     renameDraft,
@@ -212,6 +215,7 @@ export const SessionRow = memo(function SessionRow(props: SessionRowProps) {
   const isBranched = !!s.branchParentId;
   const baseTitle = sessionListDisplayTitle(s);
   const displayText = baseTitle.replace(/ - 分支$/, '');
+  const titleHint = (titleHintProp ?? '').trim();
   const isRunning = s.messages?.some((m) => m.status === 'processing') ?? false;
   const sessionActive = s.id === activeSessionId;
   void searchHit;
@@ -241,9 +245,12 @@ export const SessionRow = memo(function SessionRow(props: SessionRowProps) {
   const sessionTitleWithBranch = isBranched
     ? `分支会话：${displayText}`
     : displayText;
-  const ariaLabel = isRunning
-    ? `${sessionTitleWithBranch}，处理中`
+  const sessionTitleForA11y = titleHint
+    ? `${sessionTitleWithBranch}（${titleHint}）`
     : sessionTitleWithBranch;
+  const ariaLabel = isRunning
+    ? `${sessionTitleForA11y}，处理中`
+    : sessionTitleForA11y;
   const tipContent = sessionTitleWithBranch;
 
   const fixedH = SIDEBAR_SESSION_ROW_HEIGHT;
@@ -347,6 +354,14 @@ export const SessionRow = memo(function SessionRow(props: SessionRowProps) {
           <>
             <span className={styles.sessionTextCol}>
               <span className={styles.sessionText}>{displayText}</span>
+              {titleHint ? (
+                <span
+                  className={styles.sessionTitleHint}
+                  data-testid="session-title-hint"
+                >
+                  {titleHint}
+                </span>
+              ) : null}
             </span>
             <span className={styles.sessionTrailing}>
               {isRunning ? (

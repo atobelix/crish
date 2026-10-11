@@ -8,6 +8,7 @@ import {
   isDefaultSessionTitle,
   isEmptyShellSession,
   isScheduledSessionTitle,
+  autoTitleAssignment,
   maybeAutoTitleFromMessages,
   prepareSessionsForUi,
   pruneEmptyShellSessions,
@@ -597,31 +598,58 @@ describe('sessionTitle pure helpers: sanitize / CJK / collision', () => {
     );
   });
 
-  it('maybeAutoTitleFromMessages optional collision via existingTitles', () => {
+  it('maybeAutoTitleFromMessages ignores existingTitles (no persisted suffix)', () => {
     const msgs = [{ sender: 'user', text: '同一问题' }];
     expect(maybeAutoTitleFromMessages('新会话', msgs)).toBe('同一问题');
     expect(
       maybeAutoTitleFromMessages('新会话', msgs, {
         existingTitles: ['同一问题'],
       })
-    ).toBe('同一问题 2');
-    // excludeTitle 避免与自身碰撞
+    ).toBe('同一问题');
+    // 非默认标题不改
     expect(
       maybeAutoTitleFromMessages('同一问题', msgs, {
         existingTitles: ['同一问题', '其他'],
         excludeTitle: '同一问题',
       })
-    ).toBe(null); // 非默认标题，不改
-    // 默认标题 + 排除旧默认
+    ).toBe(null);
     expect(
       maybeAutoTitleFromMessages('新会话', msgs, {
         existingTitles: ['新会话', '同一问题'],
         excludeTitle: '新会话',
       })
-    ).toBe('同一问题 2');
+    ).toBe('同一问题');
+    // 平凡问候让路给下一条有信息量的用户消息；都没有则保留平凡原文
+    expect(
+      maybeAutoTitleFromMessages('新会话', [{ sender: 'user', text: 'hi' }])
+    ).toBe('hi');
+    expect(
+      maybeAutoTitleFromMessages('新会话', [
+        { sender: 'user', text: '你好' },
+        { sender: 'user', text: '帮我看登录' },
+      ])
+    ).toBe('帮我看登录');
+    expect(
+      maybeAutoTitleFromMessages('新会话', [
+        { sender: 'user', text: '在吗' },
+        { sender: 'assistant', text: '登录接口返回 500。请重试' },
+      ])
+    ).toBe('登录接口返回 500');
+    expect(
+      maybeAutoTitleFromMessages('新会话', msgs, { titleSource: 'user' })
+    ).toBe(null);
+    expect(
+      autoTitleAssignment('新会话', [{ sender: 'user', text: 'hi' }])
+    ).toEqual({ title: 'hi', titleSource: 'auto-trivial' });
+    expect(
+      autoTitleAssignment('新会话', [{ sender: 'user', text: '帮我看登录' }])
+    ).toEqual({ title: '帮我看登录', titleSource: 'auto' });
+    expect(
+      autoTitleAssignment('新会话', [{ sender: 'user', text: '帮我看登录' }], 'user')
+    ).toBe(null);
   });
 
-  it('fillDefaultSessionTitles resolveCollisions uniquifies batch', () => {
+  it('fillDefaultSessionTitles does not number duplicate titles', () => {
     const sessions = [
       {
         id: 'a',
@@ -639,7 +667,6 @@ describe('sessionTitle pure helpers: sanitize / CJK / collision', () => {
         messages: [{ sender: 'user', text: '重复主题' }],
       },
     ];
-    // 默认不碰撞解析：两会话可同名
     const plain = fillDefaultSessionTitles(sessions);
     expect(plain.find((s) => s.id === 'a')?.title).toBe('重复主题');
     expect(plain.find((s) => s.id === 'b')?.title).toBe('重复主题');
@@ -649,9 +676,20 @@ describe('sessionTitle pure helpers: sanitize / CJK / collision', () => {
       resolveCollisions: true,
     });
     expect(unique.find((s) => s.id === 'a')?.title).toBe('重复主题');
-    expect(unique.find((s) => s.id === 'b')?.title).toBe('重复主题 2');
-    // 用户手改不覆盖
+    expect(unique.find((s) => s.id === 'b')?.title).toBe('重复主题');
     expect(unique.find((s) => s.id === 'c')?.title).toBe('用户手改');
+    expect(unique.find((s) => s.id === 'a')?.titleSource).toBe('auto');
+
+    const locked = fillDefaultSessionTitles([
+      {
+        id: 'u',
+        title: '新会话',
+        titleSource: 'user' as const,
+        messages: [{ sender: 'user', text: '不要覆盖' }],
+      },
+    ]);
+    expect(locked[0]?.title).toBe('新会话');
+    expect(locked[0]?.titleSource).toBe('user');
   });
 
   it('empty session title is clear 新会话 — no ghost labels', () => {

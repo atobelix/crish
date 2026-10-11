@@ -97,6 +97,11 @@ export interface SessionActions {
   ) => void;
   renameSession: (sessionId: string, title: string) => void;
   /**
+   * 写入模型生成的标题，来源标为 auto。
+   * titleSource 已是 user 时不改标题、也不改来源。
+   */
+  applyGeneratedSessionTitle: (sessionId: string, title: string) => void;
+  /**
    * 创建/附加真会话。系统·测试·commit 用；**禁止**用户「新建」直调 mint 空壳
    * （用户入口 → enterDraftMode / openNewDraftTab）。
    */

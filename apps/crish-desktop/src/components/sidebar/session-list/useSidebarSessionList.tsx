@@ -13,6 +13,7 @@ import {
   sessionListTimeTickMs,
 } from '../../../api/sessionTime';
 import { sessionListDisplayTitle } from '../../../api/sessionTitle';
+import { buildSectionTitleHints } from '../../../api/sessionListTitleHint';
 import { storeSessionSearchQuery } from '../../../api/sessionSearch';
 import styles from '../SidebarSessionList.module.css';
 import { SessionRow } from './SessionRow';
@@ -177,6 +178,16 @@ export function useSidebarSessionList(props: SidebarSessionListProps) {
     onTogglePinned,
   });
 
+  const titleHints = useMemo(
+    () =>
+      buildSectionTitleHints([
+        pinnedSessions,
+        ...Object.values(byProjectId),
+        generalSessions,
+      ]),
+    [pinnedSessions, byProjectId, generalSessions]
+  );
+
   const activeGeneralIndex = useMemo(() => {
     if (!activeSessionId) return null;
     const idx = generalSessions.findIndex((s) => s.id === activeSessionId);
@@ -305,6 +316,7 @@ export function useSidebarSessionList(props: SidebarSessionListProps) {
             isRenaming: renamingSessionId === s.id,
             isDraggable,
             dropPlace,
+            titleHint: titleHints.get(s.id) ?? '',
           }}
           rename={{
             renameDraft,
@@ -341,6 +353,7 @@ export function useSidebarSessionList(props: SidebarSessionListProps) {
       onCancelRename,
       navigateSession,
       dropIndicator,
+      titleHints,
     ]
   );
 

@@ -216,6 +216,7 @@ export function sessionsToIndex(sessions: SessionState[]): SessionIndexEntry[] {
         old.messageCount !== messageCount ||
         old.branchParentId !== s.branchParentId ||
         importMetaKey !== oldImportMetaKey ||
+        (old.titleSource ?? '') !== (s.titleSource ?? '') ||
         pinsChanged;
 
       let updatedAt = old?.updatedAt ?? Date.now();
@@ -251,6 +252,7 @@ export function sessionsToIndex(sessions: SessionState[]): SessionIndexEntry[] {
               },
             }
           : {}),
+        ...(s.titleSource ? { titleSource: s.titleSource } : {}),
       });
     })
     .filter(Boolean) as SessionIndexEntry[];
@@ -304,6 +306,7 @@ export function hydrateSessionsFromDisk(): {
           ? { hydratedFromEngine: e.hydratedFromEngine }
           : {}),
         ...(e.importMeta ? { importMeta: e.importMeta } : {}),
+        ...(e.titleSource ? { titleSource: e.titleSource } : {}),
       };
     });
 

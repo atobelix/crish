@@ -36,6 +36,8 @@ describe('preferencesSchema', () => {
     expect(isKnownPreferenceKey('ui_size')).toBe(true);
     expect(isKnownPreferenceKey('crish_theme')).toBe(true);
     expect(isKnownPreferenceKey('crish_sidebar_width')).toBe(true);
+    expect(isKnownPreferenceKey('aiSessionTitle')).toBe(true);
+    expect(PREFERENCES_SCHEMA.aiSessionTitle.defaultValue).toBe(true);
     expect(isKnownPreferenceKey('unknown_key')).toBe(false);
     expect(isKnownPreferenceKey('')).toBe(false);
   });

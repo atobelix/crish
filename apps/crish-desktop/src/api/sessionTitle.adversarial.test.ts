@@ -542,7 +542,7 @@ describe('ST36-ST45: 推导与批量补全', () => {
     expect(() => prepareSessionsForUi(sessions, null)).not.toThrow();
   });
 
-  it('ST41: fillDefaultSessionTitles resolveCollisions 批量去重', () => {
+  it('ST41: fillDefaultSessionTitles resolveCollisions 不再落盘编号', () => {
     const sessions = [
       {
         id: 'a',
@@ -568,7 +568,7 @@ describe('ST36-ST45: 推导与批量补全', () => {
       resolveCollisions: true,
     });
     expect(unique.find((s) => s.id === 'a')?.title).toBe('重复主题');
-    expect(unique.find((s) => s.id === 'b')?.title).toBe('重复主题 2');
+    expect(unique.find((s) => s.id === 'b')?.title).toBe('重复主题');
     expect(unique.find((s) => s.id === 'c')?.title).toBe('用户手改');
   });
 

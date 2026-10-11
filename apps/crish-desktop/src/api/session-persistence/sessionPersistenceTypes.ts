@@ -1,6 +1,7 @@
 /**
  * 会话持久化类型与常量契约
  */
+import type { SessionTitleSource } from '../sessionTitleSource';
 
 export const SESSION_INDEX_KEY = 'crish_session_index_v1';
 export const SESSION_BODY_PREFIX = 'crish_session_body_v1:';
@@ -67,4 +68,6 @@ export type SessionIndexEntry = {
   hydratedFromEngine?: boolean;
   /** 外部导入溯源（软去重）；可选，避免 schema 膨胀 */
   importMeta?: SessionIndexImportMeta;
+  /** 缺省不写；读取时按 auto。user 禁止自动覆盖。 */
+  titleSource?: SessionTitleSource;
 };

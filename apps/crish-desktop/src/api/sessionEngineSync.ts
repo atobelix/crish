@@ -19,8 +19,8 @@ import { logInternalError } from './userFacingErrors';
 import type { SessionState } from '../store/layoutStore';
 import { GENERAL_FOLDER, listProjects } from './projectStore';
 import {
+  autoTitleAssignment,
   isDefaultSessionTitle,
-  maybeAutoTitleFromMessages,
   pruneEmptyShellSessions,
 } from './sessionTitle';
 
@@ -82,7 +82,7 @@ export function shouldInsertRemoteSession(remoteTitle: string): boolean {
 
 /**
  * 标题合并优先级（本地真相优先）：
- * 1. 本地已是真实 / 定时 / 用户改名 → 原样保留
+ * 1. titleSource === 'user'，或本地已是真实 / 定时标题 → 原样保留
  * 2. 本地默认 + 消息可推导 → 用消息标题
  * 3. 本地默认 + 远程真实标题 → 用远程
  * 4. 否则保持本地（含默认「新会话」，绝不发明）
@@ -91,19 +91,21 @@ export function resolveMergedSessionTitle(
   existingTitle: string,
   messages: SessionState['messages'] | undefined | null,
   remoteTitleClean: string,
+  titleSource?: SessionState['titleSource'],
 ): string {
-  if (!isDefaultSessionTitle(existingTitle)) {
-    return existingTitle;
-  }
-  const fromMsgs = maybeAutoTitleFromMessages(existingTitle, messages ?? []);
-  if (fromMsgs && fromMsgs !== existingTitle) {
-    return fromMsgs;
-  }
+  if (titleSource === 'user') return existingTitle;
+  if (!isDefaultSessionTitle(existingTitle)) return existingTitle;
+  const assigned = autoTitleAssignment(existingTitle, messages ?? [], titleSource);
+  if (assigned) return assigned.title;
   const remote = (remoteTitleClean ?? '').trim();
-  if (remote && !isDefaultSessionTitle(remote)) {
-    return remote;
-  }
+  if (remote && !isDefaultSessionTitle(remote)) return remote;
   return existingTitle;
+}
+
+function withAutoTitle(s: SessionState): SessionState {
+  const assigned = autoTitleAssignment(s.title, s.messages, s.titleSource);
+  if (!assigned) return s;
+  return { ...s, title: assigned.title, titleSource: assigned.titleSource };
 }
 
 /**
@@ -318,11 +320,20 @@ export function mergeEngineSessions(
     const remoteTitle = remoteSessionTitle(r);
 
     if (existing) {
-      const title = resolveMergedSessionTitle(
+      const assigned = autoTitleAssignment(
         existing.title,
         existing.messages,
-        remoteTitle,
+        existing.titleSource,
       );
+      const title = assigned
+        ? assigned.title
+        : resolveMergedSessionTitle(
+            existing.title,
+            existing.messages,
+            remoteTitle,
+            existing.titleSource,
+          );
+      const titleSource = assigned ? assigned.titleSource : existing.titleSource;
       let folder = existing.folder;
       // folder 仅在远程元数据足够新时补绑定，避免 stale list 改项目归属
       if (isRemoteMetadataFresh(existing, r)) {
@@ -335,10 +346,15 @@ export function mergeEngineSessions(
           folder = mappedFolder;
         }
       }
-      if (title !== existing.title || folder !== existing.folder) {
+      if (
+        title !== existing.title ||
+        titleSource !== existing.titleSource ||
+        folder !== existing.folder
+      ) {
         const next: SessionState = {
           ...existing,
           title,
+          titleSource,
           folder,
           messages: existing.messages || [],
         };
@@ -370,11 +386,10 @@ export function mergeEngineSessions(
   if (!changed) {
     let titledAny = false;
     const next = local.map((s) => {
-      if (!isDefaultSessionTitle(s.title)) return s;
-      const t = maybeAutoTitleFromMessages(s.title, s.messages);
-      if (!t || t === s.title) return s;
+      const titled = withAutoTitle(s);
+      if (titled === s) return s;
       titledAny = true;
-      return { ...s, title: t };
+      return titled;
     });
     const result = titledAny ? next : local;
     return maybePrune(result, opts);
@@ -385,9 +400,8 @@ export function mergeEngineSessions(
   for (const s of local) {
     const key = localSessionKey(s.id);
     const cur = byId.get(key) ?? s;
-    const t = maybeAutoTitleFromMessages(cur.title, cur.messages);
-    if (t && t !== cur.title) {
-      const titled = { ...cur, title: t };
+    const titled = withAutoTitle(cur);
+    if (titled !== cur) {
       byId.set(key, titled);
       merged.push(titled);
     } else {

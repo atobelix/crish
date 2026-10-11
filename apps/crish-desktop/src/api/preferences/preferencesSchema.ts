@@ -34,6 +34,8 @@ export interface PreferencesMap {
   app_mode: 'developer' | 'minimal' | 'architect' | 'normal' | 'demo';
   product_shell: boolean;
   show_engine_settings: boolean;
+  /** 首条助手回复后是否请求模型生成不超过 12 字的会话标题。 */
+  aiSessionTitle: boolean;
 }
 
 export type PreferenceKey = keyof PreferencesMap;
@@ -212,6 +214,12 @@ export const PREFERENCES_SCHEMA: {
     type: 'boolean',
     defaultValue: false,
     description: '是否在产品模式下显示开发者引擎设置',
+  },
+  aiSessionTitle: {
+    key: 'aiSessionTitle',
+    type: 'boolean',
+    defaultValue: true,
+    description: '是否允许用模型为会话自动生成不超过 12 字的标题',
   },
 };
 

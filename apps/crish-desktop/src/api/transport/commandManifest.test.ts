@@ -159,6 +159,7 @@ describe('commandManifest', () => {
       expect(isRegisteredCommand('kill_subagent')).toBe(true);
       // E2 F4：core_compact_now 已接线（registered=true，可调用）
       expect(isRegisteredCommand('core_compact_now')).toBe(true);
+      expect(isRegisteredCommand('core_generate_session_title')).toBe(true);
       // 用量监控面五命令已接线
       expect(isRegisteredCommand('usage_get_dashboard_data')).toBe(true);
       expect(isRegisteredCommand('usage_get_activity_matrix')).toBe(true);

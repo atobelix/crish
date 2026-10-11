@@ -18,13 +18,17 @@
  * 残留来源：旧版「新建即 mint」脏盘、daemon list 插入、commit 后未发消息的短暂壳、落盘半成品。
  *
  * 空会话标题规则：只用清晰的「新会话」占位（`EMPTY_SESSION_TITLE`），不发明幽灵标签；
- * 实质标题由首条用户消息 sanitize + 长度截断推导，中文 UTF-8/CJK 安全。
+ * 实质标题跳过整句平凡问候，再用下一条有信息量的用户消息或助手首句推导，中文 UTF-8/CJK 安全。
  *
  * @see docs/architecture/session-pending-draft-adr.md
  * @see docs/plans/progress/architecture-dedup-inventory.md #9
  */
 
 import { recordHydratePrune } from './controlMetrics';
+import {
+  pickAutoTitle,
+  type SessionTitleSource,
+} from './sessionTitleSource';
 
 /**
  * 仅依赖消息形状，避免与 layoutStore 循环引用。
@@ -49,6 +53,7 @@ type TitleSession = {
   title?: string | null | undefined;
   /** readonly 兼容 store 投影 / chrome selector，只读推导标题 */
   messages?: readonly TitleMessage[] | null | undefined;
+  titleSource?: SessionTitleSource | null | undefined;
 };
 
 /** 空壳判定所需的最小会话形状 */
@@ -409,86 +414,66 @@ export function firstUserMessageText(
 }
 
 export type MaybeAutoTitleOpts = {
-  /** 若提供，推导结果会避开这些已有标题（碰撞后缀） */
+  /** @deprecated 同名编号只在侧栏展示，落盘路径忽略 */
   existingTitles?: Iterable<string | null | undefined> | null;
-  /** 排除自身当前标题（避免「与自己碰撞」） */
+  /** @deprecated 落盘路径忽略 */
   excludeTitle?: string | null;
+  /** user 时任何自动路径都不改标题 */
+  titleSource?: SessionTitleSource | null;
 };
 
 /**
- * 若标题仍是默认且已有用户消息，推导新标题；否则返回 null（不改）。
+ * 默认标题且非用户改名时，给出新标题和来源。
+ * 平凡整句 → auto-trivial；有信息量 → auto。编号不落盘。
+ */
+export function autoTitleAssignment(
+  title: string | undefined | null,
+  messages: readonly TitleMessage[] | undefined,
+  titleSource?: SessionTitleSource | null
+): { title: string; titleSource: 'auto' | 'auto-trivial' } | null {
+  if (titleSource === 'user') return null;
+  if (!isDefaultSessionTitle(title)) return null;
+  const picked = pickAutoTitle(messages);
+  if (!picked) return null;
+  const next = deriveSessionTitle(picked.text);
+  if (isDefaultSessionTitle(next)) return null;
+  if (next === (title ?? '').trim()) return null;
+  return { title: next, titleSource: picked.origin };
+}
+
+/**
+ * 标题仍是默认时推导新标题；否则返回 null。
+ * existingTitles / excludeTitle 保留签名，不再写「标题 2」。
  */
 export function maybeAutoTitleFromMessages(
   title: string | undefined | null,
   messages: readonly TitleMessage[] | undefined,
   opts?: MaybeAutoTitleOpts
 ): string | null {
-  if (!isDefaultSessionTitle(title)) return null;
-  const first = firstUserMessageText(messages);
-  if (!first) return null;
-  let next = deriveSessionTitle(first);
-  // 无实质正文（纯 slash）且推导回默认 → 不写
-  if (isDefaultSessionTitle(next)) return null;
-
-  if (opts?.existingTitles) {
-    const exclude = (opts.excludeTitle ?? title ?? '').trim();
-    const pool: string[] = [];
-    for (const t of opts.existingTitles) {
-      const k = (t ?? '').trim();
-      if (!k || k === exclude) continue;
-      pool.push(k);
-    }
-    next = withTitleCollisionSuffix(next, pool);
-  }
-
-  if (next === (title ?? '').trim()) return null;
-  return next;
+  return autoTitleAssignment(title, messages, opts?.titleSource)?.title ?? null;
 }
 
 export type FillDefaultTitlesOpts = {
-  /** 批量补全时对推导标题去重（同文首条消息 → 「… 2」） */
+  /** @deprecated 同名不再落盘编号，侧栏用展示后缀 */
   resolveCollisions?: boolean;
 };
 
-/** 批量补全默认标题（hydrate / seed 用） */
+/** 批量补全默认标题（hydrate / seed）。不写编号后缀。 */
 export function fillDefaultSessionTitles<T extends TitleSession>(
   sessions: T[],
-  opts?: FillDefaultTitlesOpts
+  _opts?: FillDefaultTitlesOpts
 ): T[] {
   let changed = false;
-  const resolve = Boolean(opts?.resolveCollisions);
-  const taken: string[] = [];
-  if (resolve) {
-    for (const s of sessions) {
-      if (!s) continue; // null / undefined 条目跳过（落盘脏数据防御）
-      const t = (s.title || '').trim();
-      // 仅真实标题占位；默认占位不阻塞碰撞池
-      if (t && !isDefaultSessionTitle(t)) taken.push(t);
-    }
-  }
-
   const next = sessions.map((s) => {
-    if (!s) return s; // null / undefined 条目保留原值（由 prepareSessionsForUi 过滤）
-    const opts: MaybeAutoTitleOpts | undefined = resolve
-      ? {
-          existingTitles: taken,
-          ...(s.title !== undefined ? { excludeTitle: s.title } : {}),
-        }
-      : undefined;
-    const title = maybeAutoTitleFromMessages(s.title, s.messages || undefined, opts);
-    if (!title || title === s.title) {
-      // 未改时若已是真实标题，确保在池中（多会话同名用户标题）
-      if (resolve) {
-        const cur = (s.title || '').trim();
-        if (cur && !isDefaultSessionTitle(cur) && !taken.includes(cur)) {
-          taken.push(cur);
-        }
-      }
-      return s;
-    }
+    if (!s) return s;
+    const assigned = autoTitleAssignment(
+      s.title,
+      s.messages || undefined,
+      s.titleSource
+    );
+    if (!assigned) return s;
     changed = true;
-    if (resolve) taken.push(title);
-    return { ...s, title };
+    return { ...s, title: assigned.title, titleSource: assigned.titleSource };
   });
   return changed ? next : sessions;
 }
@@ -549,7 +534,7 @@ export function prepareSessionsForUi<
 
 /**
  * 侧栏展示：优先 session.title；
- * 仍为空/默认时用首条用户消息短标题；再否则 EMPTY_SESSION_TITLE。
+ * 仍为空/默认时跳过平凡问候再推导短标题；再否则 EMPTY_SESSION_TITLE。
  * 展示层兜底，不 dump 长文；默认/幽灵标签一律回落清晰「新会话」。
  */
 export function sessionListDisplayTitle(s: TitleSession): string {

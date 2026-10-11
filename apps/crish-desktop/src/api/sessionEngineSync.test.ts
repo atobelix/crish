@@ -87,6 +87,17 @@ describe('remoteSessionTitle / resolveMergedSessionTitle', () => {
     ).toContain('从消息');
   });
 
+  it('keeps a user-owned title even when it still looks like the default', () => {
+    expect(
+      resolveMergedSessionTitle(
+        '新会话',
+        [{ id: 'm', sender: 'user', text: '从消息来的标题内容', timestamp: 1 }],
+        '引擎名',
+        'user',
+      ),
+    ).toBe('新会话');
+  });
+
   it('uses remote real title only for empty default shells', () => {
     expect(resolveMergedSessionTitle('新会话', [], '引擎真实名')).toBe('引擎真实名');
     expect(resolveMergedSessionTitle('新会话', [], '')).toBe('新会话');
@@ -192,6 +203,35 @@ describe('dedupeRemoteSessions', () => {
 });
 
 describe('mergeEngineSessions', () => {
+  it('does not overwrite titleSource user and stamps auto on derived titles', () => {
+    const userOwned = localShell({
+      id: 'user-1',
+      title: '新会话',
+      titleSource: 'user',
+      messages: [{ id: 'm1', sender: 'user', text: '帮我看登录', timestamp: 1 }],
+    });
+    const kept = mergeEngineSessions(
+      [userOwned],
+      [{ id: 'user-1', title: '引擎名', updatedAt: Date.now() }],
+    );
+    expect(kept[0]!.title).toBe('新会话');
+    expect(kept[0]!.titleSource).toBe('user');
+
+    const derived = mergeEngineSessions(
+      [
+        localShell({
+          id: 'auto-1',
+          title: '新会话',
+          messages: [{ id: 'm1', sender: 'user', text: 'hi', timestamp: 1 }],
+        }),
+      ],
+      [{ id: 'auto-1', title: '引擎名', updatedAt: Date.now() }],
+    );
+    expect(derived[0]!.title).toBe('hi');
+    expect(derived[0]!.titleSource).toBe('auto-trivial');
+  });
+
+
   it('does not insert remote-only default-title shells', () => {
     const local: SessionState[] = [
       localShell({

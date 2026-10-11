@@ -177,6 +177,41 @@ describe('parseSessionIndexEntry / parseSessionIndexList', () => {
     });
     expect(e?.pinnedMessageIds).toBeUndefined();
     expect(e?.engineCursor).toBeUndefined();
+    expect(e?.titleSource).toBeUndefined();
+  });
+
+  it('titleSource round-trips and missing field stays absent', () => {
+    const user = parseSessionIndexEntry({ id: 'u', title: '手改', titleSource: 'user' });
+    expect(user?.titleSource).toBe('user');
+    const trivial = parseSessionIndexEntry({
+      id: 't',
+      title: 'hi',
+      titleSource: 'auto-trivial',
+    });
+    expect(trivial?.titleSource).toBe('auto-trivial');
+    const junk = parseSessionIndexEntry({ id: 'j', title: 'x', titleSource: 'manual' });
+    expect(junk?.titleSource).toBeUndefined();
+
+    const s = baseSession({
+      id: 's-user',
+      title: '手改',
+      titleSource: 'user',
+      messages: [baseMsg({ id: 'm1', sender: 'user', text: 'hi', timestamp: 50 })],
+    });
+    const idx = sessionsToIndex([s]);
+    expect(idx[0]?.titleSource).toBe('user');
+    saveSessionIndex(idx);
+    const hydrated = hydrateSessionsFromDisk();
+    expect(hydrated.sessions[0]?.titleSource).toBe('user');
+    expect(hydrated.sessions[0]?.title).toBe('手改');
+
+    const legacy = baseSession({ id: 'legacy', title: '旧标题' });
+    const legacyIdx = sessionsToIndex([legacy]);
+    expect(legacyIdx[0]?.titleSource).toBeUndefined();
+    saveSessionIndex(legacyIdx);
+    const legacyHydrated = hydrateSessionsFromDisk();
+    expect(legacyHydrated.sessions).toHaveLength(1);
+    expect(legacyHydrated.sessions[0]?.titleSource).toBeUndefined();
   });
 
   it('normalizes numbers / pins / engine fields', () => {

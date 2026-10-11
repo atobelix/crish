@@ -730,7 +730,7 @@ export type SessionImportMeta = {
  */
 export interface SessionState {
   id: string;
-  title: string;
+  title: string; titleSource?: 'auto-trivial' | 'auto' | 'user';
   /** 侧栏文件夹/项目归组键；缺省「常规会话」由创建路径写入 */
   folder: string;
   isPinned: boolean;

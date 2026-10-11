@@ -231,8 +231,9 @@ export async function hydrateSessionsFromRust(): Promise<{
       ...(e.hydratedFromEngine !== undefined
         ? { hydratedFromEngine: e.hydratedFromEngine }
         : {}),
-      // importMeta 仅存 localStorage 索引；SQLite 行无此列，从 LS 索引水合时带回
+      // importMeta / titleSource 仅存 localStorage 索引；SQLite 行无此列，从 LS 索引水合时带回
       ...(e.importMeta ? { importMeta: e.importMeta } : {}),
+      ...(e.titleSource ? { titleSource: e.titleSource } : {}),
     };
     return base;
   });

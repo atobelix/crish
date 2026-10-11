@@ -10,6 +10,7 @@ import {
   compareSessionsByActivity,
   formatAbsoluteCalendarDate,
   formatCompactActivity,
+  formatCompactCalendarDate,
   formatRelativeActivity,
   formatSessionListAbsoluteTime,
   formatSessionListCompactTime,
@@ -216,16 +217,34 @@ describe('formatSessionListTime', () => {
     expect(formatRelativeActivity(-1, now)).toBe('');
   });
 
-  it('formatCompactActivity thresholds (m, h, d, mo, y)', () => {
-    const now = 1_000_000_000_000;
-    expect(formatCompactActivity(now - 10_000, now)).toBe('now');
-    expect(formatCompactActivity(now - 120_000, now)).toBe('2m');
-    expect(formatCompactActivity(now - 3 * 3_600_000, now)).toBe('3h');
-    expect(formatCompactActivity(now - 2 * 86_400_000, now)).toBe('2d');
-    expect(formatCompactActivity(now - 60 * 86_400_000, now)).toBe('2mo');
-    expect(formatCompactActivity(now - 400 * 86_400_000, now)).toBe('1y');
+  it('formatCompactActivity thresholds (刚刚 / N分 / N时 / N天 / M/D / YY/M/D)', () => {
+    // 本地时间构造，避免时区让「同年 / 跨年」判断漂移
+    const now = new Date(2026, 9, 10, 21, 0, 0).getTime(); // 2026-10-10 21:00
+    expect(formatCompactActivity(now - 10_000, now)).toBe('刚刚');
+    expect(formatCompactActivity(now - 59_000, now)).toBe('刚刚');
+    expect(formatCompactActivity(now - 60_000, now)).toBe('1分');
+    expect(formatCompactActivity(now - 59 * 60_000, now)).toBe('59分');
+    expect(formatCompactActivity(now - 3_600_000, now)).toBe('1时');
+    expect(formatCompactActivity(now - 19 * 3_600_000, now)).toBe('19时');
+    expect(formatCompactActivity(now - 86_400_000, now)).toBe('1天');
+    expect(formatCompactActivity(now - 6 * 86_400_000, now)).toBe('6天');
+    // ≥7 天：今年内 M/D
+    expect(formatCompactActivity(new Date(2026, 9, 3, 21, 0, 0).getTime(), now)).toBe('10/3');
+    expect(formatCompactActivity(new Date(2026, 6, 29, 9, 0, 0).getTime(), now)).toBe('7/29');
+    // 跨年 YY/M/D
+    expect(formatCompactActivity(new Date(2025, 11, 31, 9, 0, 0).getTime(), now)).toBe('25/12/31');
+    expect(formatCompactActivity(new Date(2009, 0, 5, 9, 0, 0).getTime(), now)).toBe('09/1/5');
+    // 远未来损坏时间戳 → 日期，不粘「刚刚」
+    const farFuture = now + SESSION_LIST_CLOCK_SKEW_MS + 60_000;
+    expect(formatCompactActivity(farFuture, now)).toBe(formatCompactCalendarDate(farFuture, now));
+    expect(formatCompactActivity(farFuture, now)).not.toBe('刚刚');
+    // 不再出现旧格式（N分钟 / N小时 / M月D日 / 「前」）
+    for (const d of [120_000, 3 * 3_600_000, 2 * 86_400_000, 60 * 86_400_000, 400 * 86_400_000]) {
+      expect(formatCompactActivity(now - d, now)).not.toMatch(/分钟|小时|月|日|前/);
+    }
     expect(formatCompactActivity(0, now)).toBe('');
     expect(formatCompactActivity(Number.NaN, now)).toBe('');
+    expect(formatCompactCalendarDate(0, now)).toBe('');
   });
 
   it('formatRelativeActivity absolute calendar for old / far-future', () => {

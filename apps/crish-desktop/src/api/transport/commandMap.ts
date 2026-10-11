@@ -55,6 +55,8 @@ export const COMMAND_NAME_ALLOWLIST: ReadonlySet<string> = new Set([
   'kill_subagent',
   // ── E2 F4：手动压缩命令（slash /compact 消费面；registered=true 已接线）──
   'core_compact_now',
+  // b6：首条助手回复后的短标题（invokeTyped 直调；白名单与 compact 对齐）
+  'core_generate_session_title',
   // ── 运行生命周期类（core_*）──
   'core_run_task',
   'core_cancel_run',
