@@ -1,5 +1,13 @@
 import { type MutableRefObject } from 'react';
-import type { SessionStreamManager } from '../../api/sessionStreamManager';
+import {
+  BUSY_RETRY_MAX_ATTEMPTS,
+  busyRetryDelayMs,
+  clearBusy,
+  getBusyAttempt,
+  type SessionStreamManager,
+} from '../../api/sessionStreamManager';
+import { DOMAIN_MESSAGES } from '../../api/userFacingErrors';
+import { reportRuntimeStatus } from '../../store/sessionRuntimeStatusStore';
 import { getSessionById } from '../../store/sessionStore';
 import { addMessage, patchSession } from '../../api/storeAccess';
 import {
@@ -172,6 +180,23 @@ export function useGoalMode(
         (m: SessionMessage) => m.sender === 'user' && m.status === 'queued'
       );
       if (next?.text) {
+        // P1-d 方案 B：串行守卫自动排队 → 退避重发（300ms 起指数，最多 4 次）；
+        // 用尽 → queued → error，失败经 ComposerErrorBar 可见（不写 errorDetail）
+        const busyAttempt = getBusyAttempt(next.id);
+        if (busyAttempt > BUSY_RETRY_MAX_ATTEMPTS) {
+          clearBusy(next.id);
+          st.setSessionMessageStatus(sid, next.id, 'error', undefined, {
+            force: true,
+          });
+          reportRuntimeStatus({
+            type: 'failed',
+            sessionId: sid,
+            kind: 'generic',
+            message: DOMAIN_MESSAGES.S7_EXHAUSTED,
+            turn: { userMsgId: next.id },
+          });
+          return;
+        }
         st.setSessionMessageStatus(sid, next.id, 'processing');
         let prompt = next.text;
         const gm = sess?.goalMode;
@@ -179,7 +204,14 @@ export function useGoalMode(
           const maxIter = gm.maxIterations ?? GOAL_DEFAULT_MAX_ITERATIONS;
           prompt = `${buildGoalModePrefix(gm.goal, gm.iteration ?? 0, maxIter, gm.tasks)}${next.text}`;
         }
-        mgr.scheduleStart(sid, prompt, next.id);
+        if (busyAttempt > 0) {
+          const delay = busyRetryDelayMs(busyAttempt);
+          mgr.scheduleStart(sid, prompt, next.id, (fn) => {
+            setTimeout(fn, delay);
+          });
+        } else {
+          mgr.scheduleStart(sid, prompt, next.id);
+        }
       }
     } finally {
       mgr.endDrainNextTick(sid);

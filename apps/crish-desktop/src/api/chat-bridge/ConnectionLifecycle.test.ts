@@ -26,6 +26,12 @@ import type { HistoryMessage } from './ConnectionLifecycle';
 import { getControlMetrics, resetControlMetrics } from '../controlMetrics';
 import { mockTauriCommand } from '../../test-setup';
 import { DOMAIN_MESSAGES } from '../userFacingErrors';
+import { getCompositionRoot } from '../../app/compositionRoot';
+import {
+  getBusyAttempt,
+  noteBusy,
+  resetBusyRetryForTests,
+} from '../sessionStreamManager';
 import {
   ensureModelsCatalogLoaded,
   resetModelsCatalogMirror,
@@ -972,12 +978,30 @@ describe('取消与启动竞态（P1-F2：waitUntilConnected 挂起期间 stop�
     expect(finish).toHaveBeenCalledTimes(1);
   });
 
-  it('catch 分支：串行守卫（SESSION_BUSY）→ S7 会话排队中（自动入队，0 次红条报错）', async () => {
+  it('catch 分支：串行守卫（SESSION_BUSY）→ 撤回助手占位、用户消息 queued、不 followUp、0 次红条', async () => {
     vi.mocked(fakeTransport.waitUntilConnected).mockResolvedValue(true);
     vi.mocked(fakeTransport.isReady).mockReturnValue(true);
     startRunTask.mockRejectedValueOnce(
       new Error('InvalidInput: 会话 sess-gate-2 已有活动 run（串行守卫）')
     );
+    const root = getCompositionRoot();
+    const sid = `sess-gate-2-${Math.random().toString(36).slice(2, 8)}`;
+    root.session.getState().createSession({ title: 'busy', id: sid, activate: false });
+    root.session.getState().addMessage('ws', sid, {
+      id: 'u-busy-1',
+      sender: 'user',
+      text: 'gate reject',
+      timestamp: 1,
+      status: 'processing',
+    });
+    root.session.getState().addMessage('ws', sid, {
+      id: 'a-busy-1',
+      sender: 'assistant',
+      text: '',
+      timestamp: 2,
+      status: 'processing',
+    });
+    const followUpSpy = vi.spyOn(root.runControl, 'followUp');
     const onThought = vi.fn();
     const onRunError = vi.fn();
     const callbacks: StreamCallbacks = {
@@ -994,20 +1018,54 @@ describe('取消与启动竞态（P1-F2：waitUntilConnected 挂起期间 stop�
 
     await createStreamSession(
       'gate reject',
-      'sess-gate-2',
+      sid,
       'run-gate-2',
       callbacks,
-      undefined,
+      { clientMessageId: 'u-busy-1' },
       state,
       () => undefined,
-      finish
+      finish,
+      'a-busy-1'
     );
 
+    const msgs = root.session.getState().sessionsById[sid]?.messages ?? [];
+    expect(msgs.find((m) => m.id === 'a-busy-1')).toBeUndefined();
+    expect(msgs.find((m) => m.id === 'u-busy-1')?.status).toBe('queued');
+    expect(getBusyAttempt('u-busy-1')).toBe(1);
+    expect(followUpSpy).not.toHaveBeenCalled();
     expect(onRunError).not.toHaveBeenCalled();
-    expect(onThought).toHaveBeenCalledWith(
-      DOMAIN_MESSAGES.S7
-    );
+    expect(onThought).not.toHaveBeenCalled();
     expect(finish).toHaveBeenCalledTimes(1);
+    followUpSpy.mockRestore();
+    resetBusyRetryForTests();
+  });
+
+  it('run 被受理（startRunTask resolve）→ 串行守卫退避计数清零', async () => {
+    vi.mocked(fakeTransport.waitUntilConnected).mockResolvedValue(true);
+    vi.mocked(fakeTransport.isReady).mockReturnValue(true);
+    noteBusy('sess-gate-ok', 'u-busy-ok');
+    noteBusy('sess-gate-ok', 'u-busy-ok');
+    expect(getBusyAttempt('u-busy-ok')).toBe(2);
+    const callbacks: StreamCallbacks = {
+      onChunk: vi.fn(),
+      onThought: vi.fn(),
+      onToolStart: vi.fn(),
+      onToolError: vi.fn(),
+      onToolSuccess: vi.fn(),
+      onComplete: vi.fn(),
+      onRunError: vi.fn(),
+    };
+    await createStreamSession(
+      'ok',
+      'sess-gate-ok',
+      'run-gate-ok',
+      callbacks,
+      { clientMessageId: 'u-busy-ok' },
+      makeState(),
+      () => undefined,
+      vi.fn()
+    );
+    expect(getBusyAttempt('u-busy-ok')).toBe(0);
   });
 
   it('catch 分支：内部崩溃（panic / 未捕获异常）→ S6 内部错误文案', async () => {

@@ -6,7 +6,7 @@
  */
 import type { EngineEnvelope } from './eventParser';
 import type { HandlerEnv } from './handlerEnv';
-import { useSessionStore } from '../../../store/sessionStore';
+import { addContextInjection } from '../../storeAccess';
 
 export function onContextCompressionStart(
   env: HandlerEnv,
@@ -14,7 +14,7 @@ export function onContextCompressionStart(
 ): void {
   const sessionId = env.sessionId;
   if (!sessionId) return;
-  useSessionStore.getState().addContextInjection(sessionId, {
+  addContextInjection(sessionId, {
     id: `context-compression-${sessionId}`,
     kind: 'memory',
     status: 'active',
@@ -51,7 +51,7 @@ export function onContextCompressionEnd(
       summary = `系统 · 上下文压缩完成（节省 ${saved} tokens）`;
     }
   }
-  useSessionStore.getState().addContextInjection(sessionId, {
+  addContextInjection(sessionId, {
     id: `context-compression-${sessionId}`,
     kind: 'memory',
     status: 'active',

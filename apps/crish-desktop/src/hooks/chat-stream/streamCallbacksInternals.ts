@@ -71,6 +71,7 @@ export function resolveToolIdentity(opts: {
 export type StreamRunState = {
   runClosed: boolean;
   draining: boolean;
+  runEndedWithError: boolean;
 };
 
 /**

@@ -29,6 +29,7 @@ import {
 import { getTransport, type Transport } from './transport';
 import { eventBus } from '../services/EventBus';
 import { recordRunControlLevel } from './controlMetrics';
+import { logInternalError } from './userFacingErrors';
 
 /**
  * Stream cancel mode 字面量（**唯一真源**）。
@@ -105,6 +106,18 @@ export async function dispatchRunControl(req: RunControlRequest): Promise<boolea
     eventBus.emit('run:control', intent, 'runControlClient');
   } catch {
     /* EventBus 类型表未登记时忽略 */
+  }
+
+  // G1（FINAL-PLAN P1-d）：L1–L3 后端 core_run_control 的 run_id 为必填参数，
+  // 缺 runId 必然被拒——先可观测记录再返回 false，杜绝「伪连通 + 静默 no-op」
+  if (intent.level !== RUN_CONTROL_LEVEL.L0 && !intent.runId) {
+    logInternalError(
+      'run-control-missing-run-id',
+      new Error(
+        `run-control ${intent.level} 缺少 runId（sessionId=${intent.sessionId ?? '-'}，reason=${intent.reason ?? '-'}）`
+      )
+    );
+    return false;
   }
 
   let transport: Transport;

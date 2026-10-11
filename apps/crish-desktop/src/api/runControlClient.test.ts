@@ -8,6 +8,14 @@ vi.mock('./transport', () => ({
   getTransport: () => ({ send: sendMock }),
 }));
 
+const { logInternalErrorMock } = vi.hoisted(() => ({
+  logInternalErrorMock: vi.fn(),
+}));
+vi.mock('./userFacingErrors', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./userFacingErrors')>();
+  return { ...actual, logInternalError: logInternalErrorMock };
+});
+
 import {
   buildRunControlWireMessage,
   cancelModeForLevel,
@@ -22,6 +30,22 @@ describe('runControlClient', () => {
   beforeEach(() => {
     resetControlMetrics();
     sendMock.mockClear();
+    logInternalErrorMock.mockClear();
+  });
+
+  it('G1：L1–L3 缺 runId → 不发 wire、可观测记录 run-control-missing-run-id、返回 false', async () => {
+    const ok = await dispatchRunControl({
+      level: RUN_CONTROL_LEVEL.L1,
+      runId: null,
+      sessionId: 'sess-x',
+      reason: 'ui-send-while-running',
+    });
+    expect(ok).toBe(false);
+    expect(sendMock).not.toHaveBeenCalled();
+    expect(logInternalErrorMock).toHaveBeenCalledTimes(1);
+    expect(logInternalErrorMock.mock.calls[0]![0]).toBe('run-control-missing-run-id');
+    // 指标照常记录（意图可观测）
+    expect(getControlMetrics().run_control_L1).toBe(1);
   });
 
   it('cancelModeForLevel maps L2/L3 only', () => {

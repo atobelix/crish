@@ -13,7 +13,7 @@
  *   - docs/red-team-plans/audits/02-蓝队工程约束与防回潮门禁交叉审计报告.md
  *   - docs/red-team-plans/remediation/03-状态分域与死代码清剿最佳修复方案.md
  *
- * 覆盖 15 大不可违背的刚性检测规则（G-01 ~ G-15）：
+ * 覆盖 17 大不可违背的刚性检测规则（G-01 ~ G-17）：
  *   Rule 1 (G-01): 业务层零裸原生交互标签阻断 (No Naked Interactive Elements)
  *   Rule 2 (G-02): 浮层零 cloneElement 与零 stopPropagation (No Trigger Cloning & Event Hijack)
  *   Rule 3 (G-03): 零裸 ResizeObserver / 零 window.resize / 零 0px 回流 / 零 flushSync (No Raw RO & Thrashing)
@@ -29,6 +29,8 @@
  *   Rule 13 (G-13): 全仓零 GBK 乱码固化与编码损坏阻断 (Zero GBK Mojibake)
  *   Rule 14 (G-14): 业务层 CSS Modules 禁书 :global 幽灵提权选择器 (No Ghost Global Selectors)
  *   Rule 15 (G-15): 业务层 onKeyDown 裸判 Enter 提交阻断 (Enter Key IME Guard Invariant)
+ *   Rule 16 (G-16): S7 文案单点（FINAL-PLAN §2.1）
+ *   Rule 17 (G-17): 载体判定单定义（FINAL-PLAN §2 S-4）
  *
  * 用法：node scripts/check-frontend-convergence.mjs [--verbose]
  * 退出码：0 全部通过；1 存在违规项（CI / Git 阻断）
@@ -921,12 +923,58 @@ function runRule15_EnterKeyImeGuard() {
   }
 }
 
+/**
+ * Rule 16 (G-16): S7 文案单点（FINAL-PLAN §2.1）
+ * 生产代码中 S7 域文案字面量只允许出现在 api/userFacingErrors.ts（DOMAIN_MESSAGES SSOT）；
+ * 其它位置必须经 DOMAIN_MESSAGES.S7 / isLegacyDomainNoticeThought 引用。测试文件豁免。
+ */
+function runRule16_S7CopySingleSource() {
+  const S7_LITERAL = '上一轮任务仍在收尾中';
+  const files = collectFiles(
+    DESKTOP_SRC,
+    /\.(ts|tsx)$/,
+    /(\.test\.|\.spec\.|__tests__|tests\/)/
+  );
+  for (const file of files) {
+    if (toPosix(file).endsWith('/api/userFacingErrors.ts')) continue;
+    const lines = readFileSync(file, 'utf8').split('\n');
+    lines.forEach((lineText, idx) => {
+      if (lineText.includes(S7_LITERAL)) {
+        report(16, 'G-16', file, idx + 1, 'S7 文案字面量只能定义在 api/userFacingErrors.ts（引用 DOMAIN_MESSAGES.S7）！');
+      }
+    });
+  }
+}
+
+/**
+ * Rule 17 (G-17): 载体判定单定义（FINAL-PLAN §2 S-4）
+ * `export function isContextStateCarrierMessage` / `isContextStateInjection` 全仓（apps + packages 源码）只能各有 1 处定义。
+ */
+function runRule17_CarrierPredicateSingleDefinition() {
+  const roots = [join(REPO_ROOT, 'apps'), join(REPO_ROOT, 'packages')];
+  const files = [];
+  for (const r of roots) collectFiles(r, /\.(ts|tsx)$/, /(node_modules|dist|\.test\.|\.spec\.|__tests__)/, files);
+  for (const name of ['isContextStateCarrierMessage', 'isContextStateInjection']) {
+    const re = new RegExp(`export\\s+function\\s+${name}\\b`);
+    const hits = [];
+    for (const file of files) {
+      const src = readFileSync(file, 'utf8');
+      if (re.test(src)) hits.push(file);
+    }
+    if (hits.length !== 1) {
+      for (const f of hits.length ? hits : [DESKTOP_SRC]) {
+        report(17, 'G-17', f, 0, `${name} 必须全仓唯一定义（当前 ${hits.length} 处），其余位置 re-export！`);
+      }
+    }
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 主执行入口
 // ─────────────────────────────────────────────────────────────────────────────
 
 function main() {
-  console.log('🛡️  [check:convergence] 启动前端重构终极收敛防回潮门禁扫描 (G-01 ~ G-15)...\n');
+  console.log('🛡️  [check:convergence] 启动前端重构终极收敛防回潮门禁扫描 (G-01 ~ G-17)...\n');
 
   runRule1_NakedTags();
   runRule2_MenuCloneElement();
@@ -943,6 +991,8 @@ function main() {
   runRule13_ZeroGbkMojibake();
   runRule14_NoGhostGlobalSelectors();
   runRule15_EnterKeyImeGuard();
+  runRule16_S7CopySingleSource();
+  runRule17_CarrierPredicateSingleDefinition();
 
   const rulesPassed = [
     { id: 'G-01', name: '业务层零裸交互标签', hit: violations.some((v) => v.includes('[Rule 1 / G-01]')) },
@@ -960,6 +1010,8 @@ function main() {
     { id: 'G-13', name: '全仓零 GBK 乱码固化与编码损坏阻断', hit: violations.some((v) => v.includes('[Rule 13 / G-13]')) },
     { id: 'G-14', name: '业务层 CSS Modules 禁书 :global 幽灵提权选择器', hit: violations.some((v) => v.includes('[Rule 14 / G-14]')) },
     { id: 'G-15', name: '业务层 onKeyDown 裸判 Enter 提交阻断 (强制 onEnter / IME 守卫)', hit: violations.some((v) => v.includes('[Rule 15 / G-15]')) },
+    { id: 'G-16', name: 'S7 文案单点（仅 userFacingErrors.ts）', hit: violations.some((v) => v.includes('[Rule 16 / G-16]')) },
+    { id: 'G-17', name: '载体判定单定义（isContextStateCarrierMessage）', hit: violations.some((v) => v.includes('[Rule 17 / G-17]')) },
   ];
 
   console.log('┌──────┬──────────────────────────────────────────────────────────────┬────────────┐');
@@ -988,7 +1040,7 @@ function main() {
   }
 
   console.log(
-    '🎉 [check:convergence] 完美通过！全仓 15 大收敛规则 0 违规，架构纯净无回潮 (All 15 Rules Passed, 0 Violations)。\n'
+    '🎉 [check:convergence] 完美通过！全仓 17 大收敛规则 0 违规，架构纯净无回潮 (All 17 Rules Passed, 0 Violations)。\n'
   );
   process.exit(0);
 }

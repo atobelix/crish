@@ -9,7 +9,7 @@
 import { blockText } from './eventUtils';
 import type { EngineEnvelope } from './eventParser';
 import type { HandlerEnv } from './handlerEnv';
-import { useSessionStore } from '../../../store/sessionStore';
+import { getSessionStoreState } from '../../storeAccess';
 import { projectAgentMessageContent } from '../../messageProjection';
 
 /**
@@ -31,8 +31,7 @@ function attachCacheMetricsToStoreMessage(
   messageId: string,
   metrics: MessageCacheMetrics
 ): void {
-  useSessionStore
-    .getState()
+  getSessionStoreState()
     .setMessageCacheMetrics(sessionId, messageId, metrics);
 }
 
@@ -220,8 +219,7 @@ export function onMessageEnd(
 
     // 权威落盘账本：将本轮权威文本同步落盘至 sessionStore（对齐 03 详案与因果时序）
     if (env.sessionId) {
-      const sess = useSessionStore
-        .getState()
+      const sess = getSessionStoreState()
         .sessions.find((s) => s.id === env.sessionId);
       if (sess?.messages) {
         let target = msg.id
@@ -237,8 +235,7 @@ export function onMessageEnd(
           }
         }
         if (target) {
-          useSessionStore
-            .getState()
+          getSessionStoreState()
             .updateMessageText(env.sessionId, target.id, state.assistantText);
         }
       }

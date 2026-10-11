@@ -7,6 +7,7 @@
  *                         → cancelled
  *   completed → processing  (仅 force=true)
  *   error     → processing  (仅 force=true)
+ *   processing → queued     (仅 force=true；串行守卫自动排队)
  */
 
 /** 无条件合法转换表: from → Set<to> */
@@ -25,7 +26,8 @@ const VALID_TRANSITIONS: Record<string, ReadonlySet<string>> = {
 const FORCE_TRANSITIONS: Record<string, ReadonlySet<string>> = {
   completed: new Set(['processing']),
   queued: new Set(['completed', 'error', 'cancelled']),
-  processing: new Set(['completed', 'error', 'cancelled']),
+  // processing → queued：串行守卫（S7）拒绝后自动排队（FINAL-PLAN P1-d）
+  processing: new Set(['completed', 'error', 'cancelled', 'queued']),
   error: new Set(['processing', 'completed']),
   cancelled: new Set(['processing']),
 };

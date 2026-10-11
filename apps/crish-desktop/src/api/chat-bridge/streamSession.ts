@@ -30,7 +30,7 @@ import {
   ENGINE_SEND_GATE_TIMEOUT_MS,
 } from './readiness';
 import { type HistoryMessage, buildHistoryMessages } from './historyMessages';
-import { DOMAIN_MESSAGES } from '../userFacingErrors';
+import { clearBusy, noteBusy } from '../sessionStreamManager';
 import {
   getResponseStyleDescription,
   resolveResponseStyle,
@@ -228,6 +228,8 @@ export async function createStreamSession(
         ? { assistantClientMessageId: asstClientMessageId }
         : {}),
     });
+    // run 已被后端受理：串行守卫退避计数归零
+    if (userClientMessageId) clearBusy(userClientMessageId);
   } catch (e) {
     const text =
       typeof e === 'object' && e !== null
@@ -239,28 +241,31 @@ export async function createStreamSession(
 
     if (isSessionBusy) {
       logInternalError('stream-start-busy-queued', e);
+      // P1-d 方案 B：只走前端 drain（useGoalMode 按 busyRetry 计数退避重发，
+      // 用尽后 queued → error + ComposerErrorBar）。不再 followUp：runId 为空
+      // 的 core_run_control 到不了后端 follow_up 环（静默空调用）。
       try {
-        // S7 用户可见排队提示（文案 SSOT = DOMAIN_MESSAGES.S7，禁止双写）
-        callbacks.onThought?.(DOMAIN_MESSAGES.S7);
         const root = getCompositionRoot();
         if (userClientMessageId) {
+          noteBusy(safeSessionId, userClientMessageId);
+          // processing → queued 需 force（StatusTransitionGuard）
           root.session
             .getState()
             .setSessionMessageStatus(
               safeSessionId,
               userClientMessageId,
-              'queued'
+              'queued',
+              undefined,
+              { force: true }
             );
         }
-        void root.runControl.followUp({
-          runId: null,
-          sessionId: safeSessionId,
-          text: prompt,
-          clientMessageId: userClientMessageId,
-          reason: 'serial-guard-auto-queue',
-        });
+        if (assistantClientMessageId) {
+          root.session
+            .getState()
+            .withdrawMessage('', safeSessionId, assistantClientMessageId);
+        }
       } catch (err) {
-        logInternalError('stream-start-busy-followup', err);
+        logInternalError('stream-start-busy-queue-state', err);
       }
       finish();
       return;

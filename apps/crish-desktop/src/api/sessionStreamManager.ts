@@ -28,6 +28,62 @@ export type PendingContinue = {
   userMsgId: string;
 };
 
+/**
+ * 串行守卫（S7 / SESSION_BUSY）自动排队的退避重试计数（FINAL-PLAN P1-d 方案 B）。
+ *
+ * - 运行时、不持久化：userMsgId → { sessionId, attempt }；
+ * - streamSession 的 S7 分支 noteBusy（第 n 次被拒）；run 被后端受理 / 用尽 /
+ *   会话清理时 clearBusy；
+ * - drain（useGoalMode.drainQueuedAfterComplete）按 attempt 计算退避：
+ *   300 → 600 → 1200 → 2400ms，最多 BUSY_RETRY_MAX_ATTEMPTS 次；用尽后
+ *   消息 queued → error 并经 reportRuntimeStatus 交给 ComposerErrorBar。
+ * - 无计数的普通 drain（用户主动排队的追问）保持 microtask，不受影响。
+ */
+export const BUSY_RETRY_MAX_ATTEMPTS = 4;
+export const BUSY_RETRY_BASE_DELAY_MS = 300;
+
+type BusyRetryEntry = { sessionId: string; attempt: number };
+const busyRetry = new Map<string, BusyRetryEntry>();
+
+/** 记一次串行守卫拒绝；返回累计次数（从 1 起） */
+export function noteBusy(sessionId: string, userMsgId: string): number {
+  const prev = busyRetry.get(userMsgId);
+  const attempt = (prev?.attempt ?? 0) + 1;
+  busyRetry.set(userMsgId, { sessionId, attempt });
+  return attempt;
+}
+
+export function clearBusy(userMsgId: string): void {
+  busyRetry.delete(userMsgId);
+}
+
+/** 当前累计拒绝次数（无记录 = 0） */
+export function getBusyAttempt(userMsgId: string): number {
+  return busyRetry.get(userMsgId)?.attempt ?? 0;
+}
+
+/** 该消息是否处于串行守卫自动排队重试中（气泡 Tooltip 附 S7 详情用） */
+export function isBusyRetryPending(userMsgId: string): boolean {
+  return busyRetry.has(userMsgId);
+}
+
+/** 第 attempt 次拒绝后的退避时长：300 * 2^(attempt-1) */
+export function busyRetryDelayMs(attempt: number): number {
+  const n = Math.max(1, Math.floor(attempt));
+  return BUSY_RETRY_BASE_DELAY_MS * 2 ** (n - 1);
+}
+
+function clearBusyForSession(sessionId: string): void {
+  for (const [id, entry] of busyRetry) {
+    if (entry.sessionId === sessionId) busyRetry.delete(id);
+  }
+}
+
+/** 测试复位 */
+export function resetBusyRetryForTests(): void {
+  busyRetry.clear();
+}
+
 export class SessionStreamManager {
   private streams = new Map<string, SessionStreamHandle>();
   private draining = new Set<string>();
@@ -147,7 +203,7 @@ export class SessionStreamManager {
   }
 
   /**
-   * 清理指定会话的全部追踪状态（streams / draining / goalCancelled）。
+   * 清理指定会话的全部追踪状态（streams / draining / goalCancelled / busyRetry）。
    *
    * 异常路径兜底：当流异常中断（onRunError）或会话被销毁时，
    * streams Map 与 draining/goalCancelled Set 会累积孤儿条目。
@@ -162,6 +218,7 @@ export class SessionStreamManager {
     this.streams.delete(sessionId);
     this.draining.delete(sessionId);
     this.goalCancelled.delete(sessionId);
+    clearBusyForSession(sessionId);
     return hadStream;
   }
 
@@ -175,6 +232,7 @@ export class SessionStreamManager {
     this.streams.clear();
     this.draining.clear();
     this.goalCancelled.clear();
+    busyRetry.clear();
     this.starter = null;
   }
 }

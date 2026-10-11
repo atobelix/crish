@@ -21,6 +21,7 @@ import {
 } from './streamRunCompletion';
 import { type StreamRunState } from './streamCallbacksInternals';
 import { applyRunUsageSnapshot } from './streamCallbacksUsage';
+import { maybeRequestAiSessionTitle } from '../../api/sessionAiTitle';
 
 /**
  * 检查当前会话是否已有正在运行的流。
@@ -157,6 +158,7 @@ export function executeStreamCompletion(ctx: StreamCompletionContext): void {
     startTime,
     runId: localRunId,
     gotRealText,
+    preserveRuntimeStatus: state.runEndedWithError,
   });
   decideEmptyRunNotice({
     asst,
@@ -178,6 +180,14 @@ export function executeStreamCompletion(ctx: StreamCompletionContext): void {
     scheduleRunFinalHtml,
     thinkingBatcher,
   });
+  // 首条成功的助手回复后异步要标题。失败保留现有标题，策略在 sessionAiTitle。
+  if (
+    committedText.trim() &&
+    !state.runEndedWithError &&
+    !runEndedWithNetworkError
+  ) {
+    void maybeRequestAiSessionTitle(sid, assistantMsgId);
+  }
   finalizeRunCompletionStatuses({
     sid,
     userMsgId,

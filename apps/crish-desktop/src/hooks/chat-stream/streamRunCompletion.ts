@@ -62,6 +62,7 @@ export function commitRunCompletion(opts: {
   startTime: number;
   runId: string | null;
   gotRealText: boolean;
+  preserveRuntimeStatus?: boolean;
 }): {
   committedText: string;
   elapsed: number;
@@ -75,9 +76,10 @@ export function commitRunCompletion(opts: {
     startTime,
     runId,
     gotRealText,
+    preserveRuntimeStatus = false,
   } = opts;
   // 单轨收敛 §2.0：run 收口 = 本轮结束，瞬态重试/错误行原子清空（成功不留痕）
-  clearRuntimeStatus(sid);
+  if (!preserveRuntimeStatus) clearRuntimeStatus(sid);
   const committedText = commitStreamToSession(sid, assistantMsgId, {
     text:
       buffer?.currentText() ||

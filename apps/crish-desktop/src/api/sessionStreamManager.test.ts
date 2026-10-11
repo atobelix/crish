@@ -61,3 +61,24 @@ describe('SessionStreamManager', () => {
     expect(calls).toEqual(['s1:u1:continue']);
   });
 });
+
+describe('busyRetry（串行守卫退避计数，FINAL-PLAN P1-d）', () => {
+  it('退避 300 → 600 → 1200 → 2400ms', async () => {
+    const { busyRetryDelayMs } = await import('./sessionStreamManager');
+    expect([1, 2, 3, 4].map(busyRetryDelayMs)).toEqual([300, 600, 1200, 2400]);
+  });
+
+  it('noteBusy 累加；clearSession 只清本会话的计数', async () => {
+    const m = await import('./sessionStreamManager');
+    m.resetBusyRetryForTests();
+    expect(m.noteBusy('s1', 'u1')).toBe(1);
+    expect(m.noteBusy('s1', 'u1')).toBe(2);
+    m.noteBusy('s2', 'u2');
+    expect(m.isBusyRetryPending('u1')).toBe(true);
+    new m.SessionStreamManager().clearSession('s1');
+    expect(m.getBusyAttempt('u1')).toBe(0);
+    expect(m.isBusyRetryPending('u1')).toBe(false);
+    expect(m.getBusyAttempt('u2')).toBe(1);
+    m.resetBusyRetryForTests();
+  });
+});

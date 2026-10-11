@@ -28,7 +28,9 @@ import {
   commitStreamToSession,
   scheduleFinalMarkdownHtml,
   buildTerminalToolPatches,
+  settleStaleSessionProcessingMessages,
 } from './helpers';
+import { clearRuntimeStatus } from '../../store/sessionRuntimeStatusStore';
 import { useRunStreamingAssistant } from './useRunStreamingAssistant';
 import { buildMessageIndex } from './streamCallbacksInternals';
 import { applyStopUsageApprox } from './streamCallbacksUsage';
@@ -71,9 +73,44 @@ export function useStreamCallbacks(
       getCompositionRoot().session.getActiveSessionId()
     );
     if (!sid) return;
-    const cur = streamManagerRef.current!.get(sid);
-    if (!cur) return;
-    streamManagerRef.current!.delete(sid);
+    const cur = streamManagerRef.current?.get(sid);
+
+    if (!cur) {
+      // 无物理内存句柄时的安全兜底（如已被后端阻断、排队挂起或竞态已回收）：
+      // 1. 发起 runControl 停止
+      const sess = getSessionById(sid);
+      const lastRunId = sess?.engineLastRunId ?? null;
+      const rc = getCompositionRoot().runControl;
+      if (force) {
+        void rc.forceCancel({
+          runId: lastRunId,
+          sessionId: sid,
+          reason: 'ui-force-cancel-fallback',
+        });
+      } else {
+        void rc.cooperativeStop({
+          runId: lastRunId,
+          sessionId: sid,
+          reason: 'ui-stop-fallback',
+        });
+      }
+      // 2. 清理流式标记与运行时状态
+      markStreamingActive(false);
+      generationMapRef.current.delete(sid);
+      try {
+        clearRuntimeStatus(sid);
+      } catch {
+        /* ignore */
+      }
+      // 3. 彻底清扫会话中残留的 processing 和 queued 状态消息，解除输入框锁定
+      settleStaleSessionProcessingMessages(sid, false);
+      toast.show(force ? '已强制停止本轮任务。' : '已停止任务并清空排队。', {
+        type: 'info',
+      });
+      return;
+    }
+
+    streamManagerRef.current?.delete(sid);
     generationMapRef.current.delete(sid);
     markStreamingActive(false);
     const stopBuf = renderBufferRef.current;
@@ -86,7 +123,7 @@ export function useStreamCallbacks(
     flushStreamBatchers();
     const st = getCompositionRoot().session.getState();
     if (getSessionById(sid)?.goalMode?.active) {
-      streamManagerRef.current!.markGoalCancelled(sid);
+      streamManagerRef.current?.markGoalCancelled(sid);
       patchSession(sid, { goalMode: null });
     }
     // Persist partial stream text only（禁止把「已停止」等系统句写入气泡）
@@ -142,8 +179,20 @@ export function useStreamCallbacks(
       assistantMsgId: cur.assistantMsgId,
       stopText,
     });
+    // 关键收口：无论当前消息是否已停止，同时清扫该会话内所有可能处于 processing 或 queued 态的消息
+    settleStaleSessionProcessingMessages(sid, false);
+    try {
+      clearRuntimeStatus(sid);
+    } catch {
+      /* ignore */
+    }
     // L2/L3 wire：shared helper（chat has live cancel; no runId double-dispatch）
-    dispatchStreamStopCancel({ force, cancel: cur.cancel });
+    dispatchStreamStopCancel({
+      force,
+      cancel: cur.cancel,
+      sessionId: sid,
+      runId: cur.runId,
+    });
   };
 
   /** 默认 Stop = L2 cooperative_stop */

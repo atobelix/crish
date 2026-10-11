@@ -4,7 +4,6 @@
  */
 import { checkEngineReadyRealtime } from '../../api/chat-bridge/ConnectionLifecycle';
 import { resolveSendThinkingFields } from '../../api/chat-bridge/readiness';
-import { domainUserMessage } from '../../api/userFacingErrors';
 import { useSessionStore } from '../../store/sessionStore';
 import { navigateToNewDraft } from '../../store/storeAccess';
 import {
@@ -38,6 +37,7 @@ import { buildMultimodalFromAttachments } from './multimodal';
 import { isModelVisionSupported } from '../../api/modelVisionSupport';
 import { getActiveModelId, getActiveProfileId } from '../../api/providerProfiles';
 import { canStreamLocalSession } from './helpers';
+import { routeReadinessFailure } from './readinessPreflight';
 import { getSessionById } from '../../store/sessionStore';
 import { generateMessageId } from '../../utils/generateMessageId';
 import { invokeTyped } from '../../api/tauriInvoke';
@@ -120,8 +120,7 @@ export async function runPreflightChecks(
   }
 
   const readiness = await checkEngineReadyRealtime();
-  if (!readiness.ok && readiness.domain) {
-    setPickerInlineError(domainUserMessage(readiness.domain));
+  if (!readiness.ok && routeReadinessFailure(readiness.domain, opts)) {
     return { status: 'abort' };
   }
 

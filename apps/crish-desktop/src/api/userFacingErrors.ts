@@ -129,8 +129,14 @@ export type UserFacingMessage = string | null;
 export type ErrorDomain =
   'S1' | 'S2' | 'S3' | 'S4' | 'S5' | 'S6' | 'S7' | 'S8' | 'engine_crash';
 
-/** 差异化文案表（用户裁决选项 A：分层 + 动作指引，不虚假承诺「自动恢复」） */
-export const DOMAIN_MESSAGES: Record<ErrorDomain, string> = {
+/**
+ * 差异化文案表（用户裁决选项 A：分层 + 动作指引，不虚假承诺「自动恢复」）。
+ * 除 ErrorDomain 各域外另含非域派生文案 S7_EXHAUSTED（串行守卫自动排队
+ * 退避重试用尽 → ComposerErrorBar 失败提示，FINAL-PLAN P1-d 方案 B）。
+ */
+export const DOMAIN_MESSAGES: Readonly<
+  Record<ErrorDomain, string> & { S7_EXHAUSTED: string }
+> = {
   S1: '软件服务正在启动，请稍候片刻。',
   S2: '模型服务尚未配置，请打开 设置 → 模型 完成配置后再发送。',
   S3: '正在恢复上次的会话数据，稍后即可发送。',
@@ -139,11 +145,43 @@ export const DOMAIN_MESSAGES: Record<ErrorDomain, string> = {
   S6: '软件内部错误，请稍后重试；若反复出现请重启应用。',
   S7: '当前会话上一轮任务仍在收尾中，已自动为您排队。',
   S8: '本地会话存储正在同步数据，请稍候片刻。',
+  S7_EXHAUSTED: '上一轮任务长时间未结束，本条消息未能发出，请稍后点击重试。',
   // T5-1：崩溃域——只给「自动重连 / 查看崩溃日志」，不给「重启引擎」
   // 按钮（进程内架构重启 = 整个 Tauri 重启，产品待决明示不做）
   engine_crash:
     '引擎无响应，可能已崩溃；任务可能已中断，请检查崩溃日志或重启应用。',
 };
+
+/**
+ * 历史上曾写入 thinking 流的域文案旧变体（S-1，FINAL-PLAN §2）。
+ * DOMAIN_MESSAGES.S7 改文案时，必须把旧值登记到这里（否则已持久化的旧消息
+ * 会重新出现「已思考」行；userFacingErrors.test 有防漂移断言）。
+ */
+export const LEGACY_DOMAIN_NOTICE_VARIANTS: readonly string[] = [
+  '当前会话上一轮任务仍在收尾中…',
+  '当前会话上一轮任务仍在收尾中...',
+];
+
+const TRAILING_PUNCT_RE = /[\s。．.，,；;！!…]+$/u;
+
+function stripTrailingPunct(text: string): string {
+  return text.trim().replace(TRAILING_PUNCT_RE, '');
+}
+
+/**
+ * S-1：思考文本是否只是误写入 thinking 的 S7 域文案（HEAD 版 SESSION_BUSY 分支
+ * `onThought(DOMAIN_MESSAGES.S7)` 遗留）。前缀由 DOMAIN_MESSAGES.S7 推导，
+ * 不另写字面量。每一非空行都必须是该文案（或登记的旧变体）才判真。
+ */
+export function isLegacyDomainNoticeThought(text: string | undefined | null): boolean {
+  if (!text || !text.trim()) return false;
+  const known = [DOMAIN_MESSAGES.S7, ...LEGACY_DOMAIN_NOTICE_VARIANTS]
+    .map(stripTrailingPunct)
+    .filter(Boolean);
+  const lines = text.split(/\r?\n/).map((l) => stripTrailingPunct(l)).filter(Boolean);
+  if (lines.length === 0) return false;
+  return lines.every((line) => known.some((k) => line === k));
+}
 
 /** kebab 错误码 → 域（Rust provider 包装 `provider 错误（{kind}）：{message}`） */
 const KEBAB_TO_DOMAIN: Record<string, ErrorDomain> = {

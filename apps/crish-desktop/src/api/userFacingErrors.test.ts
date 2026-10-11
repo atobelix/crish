@@ -300,3 +300,27 @@ describe('softFailureMessage：分类文案覆盖与 detail 透传', () => {
     expect(softFailureMessage('network')).not.toContain('正在自动恢复');
   });
 });
+
+describe('S-1 isLegacyDomainNoticeThought（FINAL-PLAN §2）', () => {
+  it('当前 S7 文案、去末尾标点、多行重复均判真；夹带其它内容判假', async () => {
+    const { DOMAIN_MESSAGES: M, isLegacyDomainNoticeThought: f } = await import(
+      './userFacingErrors'
+    );
+    expect(f(M.S7)).toBe(true);
+    expect(f(M.S7.replace(/。$/, ''))).toBe(true);
+    expect(f(`${M.S7}\n${M.S7}`)).toBe(true);
+    expect(f(`${M.S7}\n继续分析`)).toBe(false);
+    expect(f('')).toBe(false);
+    expect(f(undefined)).toBe(false);
+  });
+
+  it('防漂移：历史上持久化过的 S7 文案必须一直被识别（改 S7 文案时请把旧值登记进 LEGACY_DOMAIN_NOTICE_VARIANTS）', async () => {
+    const { isLegacyDomainNoticeThought: f } = await import('./userFacingErrors');
+    for (const historic of [
+      '当前会话上一轮任务仍在收尾中，已自动为您排队。',
+      '当前会话上一轮任务仍在收尾中…',
+    ]) {
+      expect(f(historic)).toBe(true);
+    }
+  });
+});

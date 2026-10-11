@@ -13,6 +13,8 @@
  *    - RunNotice / pushRunNotice / RunNoticeBar（已删除）
  *    - msg.errorDetail 的新写入（setSessionMessageStatus 第 5 参 errorDetail 字段）
  *      仅允许 staleSessionHealer.ts 历史兼容点之外的零处。
+ * 3. domain-message-as-thought：禁止 onThought?.(DOMAIN_MESSAGES.*)（FINAL-PLAN §2.1）。
+ * 4. busy-branch-followup：SESSION_BUSY / S7 分支内禁止 runControl.followUp（P1-d 方案 B）。
  *
  * 违规 → exit 1。
  */
@@ -29,7 +31,7 @@ if (process.argv.includes('--guide')) {
   process.exit(0);
 }
 if (process.argv.includes('--list')) {
-  console.log('ephemeral-chat-store\ncontinuity-retry-notice\nrun-notice-channel\ndirect-store-write\nbanned-legacy-nodes\nerror-detail-write\nreport-without-ssot-import');
+  console.log('ephemeral-chat-store\ncontinuity-retry-notice\nrun-notice-channel\ndirect-store-write\nbanned-legacy-nodes\nerror-detail-write\nreport-without-ssot-import\ndomain-message-as-thought\nbusy-branch-followup');
   process.exit(0);
 }
 
@@ -50,7 +52,33 @@ const BANNED_PATTERNS = [
   { id: 'direct-store-write', re: /useSessionRuntimeStatusStore\s*\.\s*setState\b|\.getState\(\)\s*\.\s*report\(/ },
   { id: 'banned-legacy-nodes', re: /\bRetrySlotNotice\b|\bTurnErrorNode\b|\bModelRetryNode\b/ },
   { id: 'error-detail-write', re: /\bsetSessionMessageStatus\([^)]*\berrorDetail\s*:|\.errorDetail\s*=/ },
+  // FINAL-PLAN §2.1：用户可见域文案（DOMAIN_MESSAGES.*）禁止当作思考流写入（会被渲染成「已思考」行）
+  { id: 'domain-message-as-thought', re: /\bonThought\s*\??\.?\s*\(\s*DOMAIN_MESSAGES\./ },
 ];
+
+/**
+ * busy-branch-followup（FINAL-PLAN §2.1 / P1-d 方案 B）：
+ * 串行守卫（SESSION_BUSY / S7）分支内禁止调用 runControl.followUp——
+ * runId 为空的 followUp 到不了后端 follow_up 环，属静默空调用；重发只走前端 drain。
+ * 识别：`if (isSessionBusy…) {…}` / `if (…SESSION_BUSY…) {…}` / `if (…=== 'S7'…) {…}` 的块体。
+ */
+const BUSY_BRANCH_RE = /if\s*\(([^)]*(?:isSessionBusy|SESSION_BUSY|===\s*'S7')[^)]*)\)\s*\{/g;
+function busyBranchBodies(src) {
+  const bodies = [];
+  BUSY_BRANCH_RE.lastIndex = 0;
+  let m;
+  while ((m = BUSY_BRANCH_RE.exec(src))) {
+    let depth = 1;
+    let i = m.index + m[0].length;
+    const start = i;
+    for (; i < src.length && depth > 0; i++) {
+      if (src[i] === '{') depth++;
+      else if (src[i] === '}') depth--;
+    }
+    bodies.push(src.slice(start, i));
+  }
+  return bodies;
+}
 
 function* walk(dir) {
   for (const name of readdirSync(dir)) {
@@ -82,6 +110,14 @@ for (const file of walk(SRC)) {
     if (id === 'error-detail-write' && (ALLOWED_ERROR_DETAIL_WRITERS.has(r) || /\.(test|spec)\.(ts|tsx)$/.test(r))) continue;
     if (re.test(src)) {
       violations.push(`[${id}] ${r}`);
+    }
+  }
+  if (!/\.(test|spec)\.(ts|tsx)$/.test(r)) {
+    for (const body of busyBranchBodies(src)) {
+      if (/\bfollowUp\s*\(/.test(body)) {
+        violations.push(`[busy-branch-followup] ${r}`);
+        break;
+      }
     }
   }
   // reportRuntimeStatus 只能经 SSOT 模块定义（import 方式消费）

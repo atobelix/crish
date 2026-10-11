@@ -94,7 +94,11 @@ export function useRunStreamingAssistant(
       let runEndedWithNetworkError = false;
       let localRunId: string | null = null;
       let streamedFullText = '';
-      const state: StreamRunState = { runClosed: false, draining: false };
+      const state: StreamRunState = {
+        runClosed: false,
+        draining: false,
+        runEndedWithError: false,
+      };
       let completed = false;
 
       let cancelStreamFn: (opts?: {
@@ -320,6 +324,7 @@ export function useRunStreamingAssistant(
           },
           onRunError: (message, kind, detail) => {
             if (!assertLive()) return;
+            state.runEndedWithError = true;
             const res = handleRunError({
               wsId,
               sid,
