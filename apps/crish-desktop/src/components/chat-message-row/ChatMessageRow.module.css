@@ -224,6 +224,14 @@
   pointer-events: auto;
 }
 
+/* 工具栏里的弹层（钉住颜色选择等）打开期间，工具栏保持可见、可点——
+   弹层经 portal 渲染在行外，鼠标进入弹层时行已失去 :hover。 */
+.userMeta:has([data-popover-open='true']),
+.assistantMeta:has([data-popover-open='true']) {
+  opacity: 1;
+  pointer-events: auto;
+}
+
 .time {
   font-size: 11px;
   font-weight: var(--font-weight-normal);

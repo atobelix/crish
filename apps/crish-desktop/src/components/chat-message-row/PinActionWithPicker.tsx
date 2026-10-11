@@ -42,6 +42,14 @@ export const PinActionWithPicker: React.FC<PinActionWithPickerProps> = React.mem
     const paletteRef = useRef<HTMLDivElement | null>(null);
     const enterTimerRef = useRef<number | null>(null);
     const leaveTimerRef = useRef<number | null>(null);
+    /**
+     * 「钉住」态：用户在弹层里点过（展开自定义 / 选色 / 拖色板 / 输入色值）后，
+     * 弹层不再跟随鼠标移出而关闭，只由外部点击、Esc、主按钮关闭。
+     * 修复：展开自定义后面板变高、位置变化，鼠标瞬间落到弹层外 → 260ms 后被 hover 逻辑关掉。
+     */
+    const stickyRef = useRef(false);
+    /** 本次打开时选定的方向（上 / 下）；展开自定义时沿用，不翻转到鼠标另一侧。 */
+    const placementRef = useRef<'top' | 'bottom' | null>(null);
 
     const [popoverPos, setPopoverPos] = useState<{ top: number; left: number }>({
       top: 0,
@@ -80,10 +88,16 @@ export const PinActionWithPicker: React.FC<PinActionWithPickerProps> = React.mem
         return;
       }
 
-      // 上下方空间评估：默认上方，空间不足则向下翻折
+      // 上下方空间评估：默认上方，空间不足则向下翻折。
+      // 方向只在本次打开时决定一次；展开自定义（变高）时沿用原方向、靠视口夹紧，
+      // 避免面板翻到触发器另一侧、把鼠标「甩」到弹层外。
       const spaceAbove = rect.top;
       const spaceBelow = window.innerHeight - rect.bottom;
-      const placeTop = spaceAbove >= height + 8 || spaceAbove >= spaceBelow;
+      if (placementRef.current == null) {
+        placementRef.current =
+          spaceAbove >= height + 8 || spaceAbove >= spaceBelow ? 'top' : 'bottom';
+      }
+      const placeTop = placementRef.current === 'top';
 
       let top = placeTop ? rect.top - height - 6 : rect.bottom + 6;
       if (top < 8) top = 8;
@@ -105,6 +119,9 @@ export const PinActionWithPicker: React.FC<PinActionWithPickerProps> = React.mem
     useLayoutEffect(() => {
       if (popoverOpen) {
         updatePosition();
+      } else {
+        stickyRef.current = false;
+        placementRef.current = null;
       }
     }, [popoverOpen, updatePosition]);
 
@@ -139,12 +156,24 @@ export const PinActionWithPicker: React.FC<PinActionWithPickerProps> = React.mem
         window.clearTimeout(enterTimerRef.current);
         enterTimerRef.current = null;
       }
+      // 钉住态不随鼠标移出关闭（只靠外部点击 / Esc / 主按钮）
+      if (stickyRef.current) return;
       if (leaveTimerRef.current == null) {
         leaveTimerRef.current = window.setTimeout(() => {
           leaveTimerRef.current = null;
+          if (stickyRef.current) return;
           setPopoverOpen(false);
           setShowCustom(false);
         }, 260);
+      }
+    }, []);
+
+    /** 弹层内任何按下都进入钉住态，并取消已排队的 hover 关闭。 */
+    const handlePopoverPointerDownCapture = useCallback(() => {
+      stickyRef.current = true;
+      if (leaveTimerRef.current != null) {
+        window.clearTimeout(leaveTimerRef.current);
+        leaveTimerRef.current = null;
       }
     }, []);
 
@@ -290,6 +319,7 @@ export const PinActionWithPicker: React.FC<PinActionWithPickerProps> = React.mem
       <div
         ref={wrapperRef}
         className={styles.pinPickerWrapper}
+        data-popover-open={popoverOpen ? 'true' : undefined}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
       >
@@ -319,6 +349,8 @@ export const PinActionWithPicker: React.FC<PinActionWithPickerProps> = React.mem
                 }}
                 onMouseEnter={handleMouseEnter}
                 onMouseLeave={handleMouseLeave}
+                onPointerDownCapture={handlePopoverPointerDownCapture}
+                data-testid="pin-picker-popover"
                 role="toolbar"
                 aria-label="固定管理与颜色选择"
               >
@@ -351,7 +383,10 @@ export const PinActionWithPicker: React.FC<PinActionWithPickerProps> = React.mem
                           type="button"
                           variant="ghost"
                           className={`${styles.pinCustomToggleBtn}${isExpanded || isCustomSelected ? ` ${styles.isSelected}` : ''}`}
-                          onClick={() => setShowCustom(!isExpanded)}
+                          onClick={() => {
+                            stickyRef.current = true;
+                            setShowCustom(!isExpanded);
+                          }}
                           aria-label={isExpanded ? '收起自定义颜色' : '自定义固定颜色'}
                           aria-expanded={isExpanded}
                         >
