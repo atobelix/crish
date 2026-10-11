@@ -13,8 +13,8 @@ import {
   detectFileKind,
   isMarkdownFilename,
   pathBasename,
-  resolveWorkspacePath,
-} from './workspaceFsApi';
+} from './workspaceFileKinds';
+import { resolveWorkspacePath } from './workspacePathResolver';
 
 /** 面板尚未挂载时暂存待打开路径 */
 let pendingOpenPath: string | null = null;

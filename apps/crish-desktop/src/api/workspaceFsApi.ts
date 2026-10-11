@@ -8,6 +8,21 @@ export { getWorkspacePath };
 export { openPathDefault } from './hostOpenersApi';
 import { invokeResult } from './tauriInvoke';
 import { countTextLines } from './countTextLines';
+import {
+  assertWorkspacePath,
+  getWorkspaceRoot,
+  isAbsoluteFsPath,
+  isInsideWorkspace,
+  joinWorkspaceRootPath,
+  resolveWorkspacePath,
+} from './workspacePathResolver';
+export {
+  assertWorkspacePath,
+  isAbsoluteFsPath,
+  isInsideWorkspace,
+  resolveWorkspacePath,
+  type ResolvedPath,
+} from './workspacePathResolver';
 
 export type FsDirEntry = {
   name: string;
@@ -24,12 +39,6 @@ export type FsReadResult = {
   path: string;
 };
 
-function joinPath(base: string, name: string): string {
-  if (!base) return name;
-  const sep = base.includes('\\') ? '\\' : '/';
-  return `${base.replace(/[\\/]+$/, '')}${sep}${name}`;
-}
-
 function parentPath(p: string): string {
   const norm = p.replace(/[\\/]+$/, '');
   const i = Math.max(norm.lastIndexOf('/'), norm.lastIndexOf('\\'));
@@ -37,89 +46,8 @@ function parentPath(p: string): string {
   return norm.slice(0, i) || norm;
 }
 
-function getFsRoot(): string {
-  return getWorkspacePath() || '';
-}
-
-const WINDOWS_RESERVED_NAME_RE = /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\..*)?$/i;
-const BIDI_OVERRIDE_RE = /[\u202A-\u202E\u2066-\u2069]/;
-const MAX_PATH_LENGTH = 4096;
-
-/** Windows 盘符 / UNC / POSIX 绝对路径 */
-export function isAbsoluteFsPath(path: string): boolean {
-  const p = (path || '').trim();
-  if (!p) return false;
-  if (/^[A-Za-z]:[\\/]/.test(p)) return true;
-  if (p.startsWith('\\\\') || p.startsWith('//')) return true;
-  if (p.startsWith('/')) return true;
-  return false;
-}
-
-/**
- * 相对路径且已设置工作区时，拼到工作区下；绝对路径原样返回。
- * 用于 FilesCard 打开/列举及 readTextFile / listDirectory 等入口。
- */
-export function resolveWorkspacePath(path: string): string {
-  const p = (path || '').trim();
-  if (!p) return p;
-  // 拒绝 NUL 字节
-  if (p.includes('\0')) return '';
-  // 拒绝路径过长
-  if (p.length > MAX_PATH_LENGTH) return '';
-  // 拒绝 Unicode bidi 覆盖字符
-  if (BIDI_OVERRIDE_RE.test(p)) return '';
-  // 拒绝 Windows 保留设备名
-  const lastSegment = p.replace(/[\\/]$/, '').split(/[\\/]/).pop() || '';
-  if (WINDOWS_RESERVED_NAME_RE.test(lastSegment)) return '';
-  // 拒绝路径遍历 (.. 作为路径组件)
-  const norm = p.replace(/\\/g, '/');
-  if (/(^|\/)\.\.($|\/)/.test(norm)) return '';
-  if (isAbsoluteFsPath(p)) {
-    // 绝对路径必须在工作区根目录下（路径边界判定：根自身或「根 + /」前缀，
-    // 防止根 c:/work 误放行 c:/workspace/x.txt 这类兄弟前缀目录，A6-H03）
-    const root = getFsRoot().trim().replace(/\\/g, '/').replace(/\/+$/, '');
-    if (!root) return '';
-    const r = root.toLowerCase();
-    const n = norm.toLowerCase();
-    if (!(n === r || n.startsWith(r + '/'))) return '';
-    return p;
-  }
-  const root = getFsRoot().trim();
-  // §0.1 / F1：无工作区根时相对路径不得放行（与绝对路径无根对称硬失败）
-  if (!root) return '';
-  // 去掉前导 ./ 或 .\
-  const rel = p.replace(/^\.[\\/]/, '');
-  return joinPath(root, rel);
-}
-
-/** 经 resolveWorkspacePath 校验后的工作区路径（空/越界不可构造） */
-export type ResolvedPath = string & { readonly __brand: 'ResolvedPath' };
-
-/**
- * 硬失败版路径沙箱：空串、越界、非法组件一律 throw。
- * 读/写/asset URL / 本地读盘入口应只接受本函数返回值。
- */
-export function assertWorkspacePath(path: string, label = '路径'): ResolvedPath {
-  const raw = (path || '').trim();
-  if (!raw) {
-    throw new Error(`${label}为空`);
-  }
-  const resolved = resolveWorkspacePath(raw);
-  if (!resolved) {
-    throw new Error(`文件不在当前工作区内: ${path}`);
-  }
-  return resolved as ResolvedPath;
-}
-
-/** 是否已解析为工作区内路径（不抛错；供 UI 分支） */
-export function isInsideWorkspace(path: string): boolean {
-  const raw = (path || '').trim();
-  if (!raw) return false;
-  return Boolean(resolveWorkspacePath(raw));
-}
-
 export async function listDirectory(dirPath?: string): Promise<FsDirEntry[]> {
-  const root = getFsRoot();
+  const root = getWorkspaceRoot();
   const path = resolveWorkspacePath(dirPath || root);
   if (!path) throw new Error('未打开项目工作区，请先选择项目');
 
@@ -134,7 +62,7 @@ export async function listDirectory(dirPath?: string): Promise<FsDirEntry[]> {
       isDir: Boolean(it.isDir ?? it.is_dir),
       ...(typeof it.size === 'number' && { size: it.size }),
       ...(it.modified != null && { modified: String(it.modified) }),
-      path: joinPath(path, String(it.name ?? '')),
+      path: joinWorkspaceRootPath(path, String(it.name ?? '')),
     }));
   }
   if (res.status === 'error') throw new Error(res.message);
@@ -248,10 +176,7 @@ export async function revealInOs(filePath: string): Promise<void> {
   throw new Error('无法在系统资源管理器中打开（需桌面壳）');
 }
 
-export function pathBasename(p: string): string {
-  const parts = p.replace(/\\/g, '/').split('/');
-  return parts[parts.length - 1] || p;
-}
+export { pathBasename, detectFileKind, isMarkdownFilename } from './workspaceFileKinds';
 
 export function pathDirname(p: string): string {
   return parentPath(p);
@@ -411,30 +336,6 @@ export function getAncestorDirPaths(targetPath: string, rootPath: string): strin
   }
 
   return ancestors;
-}
-
-export function detectFileKind(name: string): 'text' | 'image' | 'pdf' | 'table' | 'binary' {
-  const n = name.toLowerCase();
-  if (/\.(png|jpe?g|gif|webp|svg|bmp|ico|avif)$/i.test(n)) return 'image';
-  if (/\.pdf$/i.test(n)) return 'pdf';
-  if (/\.(csv|tsv)$/i.test(n)) return 'table';
-  if (
-    /\.(txt|md|markdown|mdx|json|jsonc|ts|tsx|js|jsx|mjs|cjs|css|scss|less|html|htm|xml|yml|yaml|toml|ini|env|py|rs|go|java|kt|c|cpp|h|hpp|cs|php|rb|sh|bash|zsh|ps1|bat|cmd|log|sql|graphql|vue|svelte|lock|gitignore|dockerignore|editorconfig|prettierrc|eslintrc|conf|cfg|properties|gradle|swift|m|mm|r|lua|vim|dart|scala|clj|ex|exs|erl|hs|ml|fs|fsx|nim|zig|v|sv|vhdl|asm|s|tex|rst|adoc|org)$/i.test(
-      n,
-    ) ||
-    n === 'dockerfile' ||
-    n === 'makefile' ||
-    n === 'cmakelists.txt' ||
-    n.startsWith('.')
-  ) {
-    return 'text';
-  }
-  return 'binary';
-}
-
-/** Markdown / MDX：可渲染预览 */
-export function isMarkdownFilename(name: string): boolean {
-  return /\.(md|markdown|mdx)$/i.test(name || '');
 }
 
 /** 简易 CSV / TSV → 行列（预览用，游标惰性扫描前 maxRows 行，杜绝全量 split） */

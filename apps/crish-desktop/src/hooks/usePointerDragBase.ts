@@ -22,89 +22,30 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type {
+  PointerDragBaseApi,
+  PointerDragBaseOptions,
+  PointerDragPhase,
+  PendingDrag,
+  ActiveDrag,
+} from './pointerDragContract';
 import {
   useDragGeometry,
   useDragStart,
   useDragMove,
   useDragEnd,
-  type PendingDrag,
-  type ActiveDrag,
 } from './useDragPhases';
-
-// ── 常量单源 ────────────────────────────────────────────────────────
-
-/** 拖拽触发阈值（px）：移动超过此距离才认定为拖拽，避免误触 */
-export const DRAG_THRESHOLD_PX = 5;
-/** 拖拽 ghost 偏移：让 ghost 略低于指针，避免遮挡指针 */
-export const GHOST_OFFSET_X = 16;
-export const GHOST_OFFSET_Y = 16;
-/** drop zone 检测节流间隔（ms） */
-export const DROP_DETECT_INTERVAL_MS = 16; // ~1 frame
-
-// ── 类型 ────────────────────────────────────────────────────────────
-
-export type PointerDragPhase =
-  'idle' | 'pending' | 'active' | 'committed' | 'cancelled';
-
-export interface PointerDragBaseOptions<T> {
-  /** 阈值跨越（pending → active）时调用；返回 false 可中止手势（回到 idle） */
-  onDragStart?: (
-    payload: T,
-    clientX: number,
-    clientY: number
-  ) => boolean | void;
-  /** active 阶段每次 pointermove 调用（含进入 active 当帧；drop 检测节流由调用方自持） */
-  onDragMove?: (
-    payload: T,
-    clientX: number,
-    clientY: number,
-    e: PointerEvent
-  ) => void;
-  /** pointerup / endGesture 提交（active 阶段）；cancelled 标记用于 lostpointercapture 等外部收尾 */
-  onDrop?: (
-    payload: T,
-    clientX: number,
-    clientY: number,
-    cancelled: boolean
-  ) => void;
-  /** pointercancel / Escape / cancel()：payload 为 null 表示未越过阈值 */
-  onCancel?: (payload: T | null) => void;
-  /**
-   * 每次手势结束（drop / cancel / 未拖拽 up）后调用：统一收尾
-   * （释放 pointer capture、清理挂载期监听等）。
-   */
-  onGestureEnd?: (
-    payload: T | null,
-    outcome: 'drop' | 'cancel' | 'no-drag'
-  ) => void;
-  /** active 期间挂到 body 的 class */
-  bodyClass?: string;
-  /** ghost 跟随偏移（默认 GHOST_OFFSET_X/Y） */
-  ghostOffset?: { x: number; y: number };
-  /** ghost transform 模板（默认 translate + rotate(1.5deg)） */
-  ghostTransform?: (x: number, y: number) => string;
-  /** 是否由基座跟手写 ghost DOM（默认 true；自定义 overlay 的控制器置 false） */
-  followGhost?: boolean;
-  /** 是否注册 Escape 取消（默认 true；保留旧行为的控制器置 false） */
-  handleEscape?: boolean;
-}
-
-export interface PointerDragBaseApi<T> {
-  /** 是否处于 active 拖拽中 */
-  isDragging: boolean;
-  /** pointerdown 启动手势（内部守卫 button 0 + idle） */
-  start: (payload: T, e: React.PointerEvent) => void;
-  /** 主动取消（Escape / pointercancel 同路径） */
-  cancel: () => void;
-  /** 外部强制收尾（lostpointercapture 等）：active 带 cancelled 标记走 onDrop */
-  endGesture: (cancelled?: boolean, clientX?: number, clientY?: number) => void;
-  /** ghost 元素回调 ref（挂载时立即应用当前位置） */
-  setGhostRef: (el: HTMLDivElement | null) => void;
-  /** 本轮手势是否超过阈值（抑制 click）；消费后复位 */
-  consumeDidDrag: () => boolean;
-  /** 是否仍有手势进行中（卸载兜底守卫） */
-  isActive: () => boolean;
-}
+export {
+  DRAG_THRESHOLD_PX,
+  GHOST_OFFSET_X,
+  GHOST_OFFSET_Y,
+  DROP_DETECT_INTERVAL_MS,
+} from './pointerDragContract';
+export type {
+  PointerDragBaseApi,
+  PointerDragBaseOptions,
+  PointerDragPhase,
+} from './pointerDragContract';
 
 // ── 内部状态 ────────────────────────────────────────────────────────
 //

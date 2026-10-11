@@ -7,7 +7,7 @@
 import { getWorkspacePath } from './projectStore';
 import { parseUnifiedDiffs } from './toolFeedback';
 import type { FileDiff } from '../store/layoutStore';
-import { runLocalGit } from './gitApi';
+import { runLocalGit } from './gitRunner';
 
 /** 本机 shell git 超时（与 hub/commands 共享口径） */
 const GIT_LOCAL_TIMEOUT_MS = 8_000;

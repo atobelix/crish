@@ -2,7 +2,7 @@
  * 预览浏览器展示工具函数（拆自 previewBrowserStore，纯函数，无副作用）。
  * 依赖 hub 的 sanitizeBrowseInput / isAboutBlank（安全过滤基础原语）。
  */
-import { sanitizeBrowseInput, isAboutBlank } from './previewBrowserStore';
+import { sanitizeBrowseInput, isAboutBlank } from './previewBrowserUrl';
 
 /**
  * 窄栏状态条 / 书签标题：host 或短路径，失败则截断原文。

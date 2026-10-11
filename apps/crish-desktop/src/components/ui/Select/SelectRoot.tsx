@@ -1,6 +1,4 @@
 import React, {
-  createContext,
-  useContext,
   useState,
   useRef,
   useCallback,
@@ -8,6 +6,8 @@ import React, {
   useMemo,
   useEffect,
 } from 'react';
+import { SelectContext } from './selectContext';
+export { SelectContext, useSelectContext } from './selectContext';
 import { SelectTrigger } from './SelectTrigger';
 import { SelectValue } from './SelectValue';
 import { SelectContent } from './SelectContent';
@@ -18,16 +18,6 @@ import type {
   RegisteredItemData,
 } from './types';
 import { extractItemsFromChildren } from './internal/extractChildrenItems';
-
-export const SelectContext = createContext<SelectContextValue | null>(null);
-
-export function useSelectContext(componentName = 'Select compound component'): SelectContextValue {
-  const ctx = useContext(SelectContext);
-  if (!ctx) {
-    throw new Error(`${componentName} must be used within a <Select> root component.`);
-  }
-  return ctx;
-}
 
 export function SelectRoot({
   value: controlledValue,

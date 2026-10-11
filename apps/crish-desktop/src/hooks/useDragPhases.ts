@@ -22,25 +22,15 @@ import {
   DRAG_THRESHOLD_PX,
   GHOST_OFFSET_X,
   GHOST_OFFSET_Y,
-  type PointerDragBaseOptions,
-  type PointerDragPhase,
-} from './usePointerDragBase';
+} from './pointerDragContract';
+import type {
+  PointerDragBaseOptions,
+  PointerDragPhase,
+  PendingDrag,
+  ActiveDrag,
+} from './pointerDragContract';
 
 // ── 内部状态类型（从 usePointerDragBase 导出供共享） ────────────────
-
-export interface PendingDrag<T> {
-  payload: T;
-  startX: number;
-  startY: number;
-  pointerId: number;
-}
-
-export interface ActiveDrag<T> {
-  payload: T;
-  currentX: number;
-  currentY: number;
-  pointerId: number;
-}
 
 // ── 共享上下文 ────────────────────────────────────────────────────
 

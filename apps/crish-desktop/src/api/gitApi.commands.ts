@@ -10,7 +10,7 @@ const GIT_LOCAL_TIMEOUT_MS = 8_000;
 const GIT_STATUS_TIMEOUT_MS = 12_000;
 
 // runLocalGit 留在 gitApi hub（status/diff 仍需），此处复用
-import { runLocalGit } from './gitApi';
+import { runLocalGit } from './gitRunner';
 
 /** 获取当前本地分支及分支列表 */
 export async function fetchGitBranches(cwd: string): Promise<{ current: string; list: string[] }> {

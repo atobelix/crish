@@ -1,5 +1,5 @@
 import React from 'react';
-import { useSelectContext } from './SelectRoot';
+import { useSelectContext } from './selectContext';
 import type { SelectValueProps } from './types';
 import styles from './SelectTrigger.module.css';
 

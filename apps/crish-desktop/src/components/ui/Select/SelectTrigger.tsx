@@ -1,5 +1,5 @@
 import React, { forwardRef, useCallback } from 'react';
-import { useSelectContext } from './SelectRoot';
+import { useSelectContext } from './selectContext';
 import { ChevronUpDownIcon } from './internal/SelectIcons';
 import { SelectClearButton } from './SelectClearButton';
 import type { SelectTriggerProps } from './types';

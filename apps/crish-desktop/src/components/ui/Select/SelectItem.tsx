@@ -1,5 +1,5 @@
 import React, { useId, useEffect, useCallback, useMemo } from 'react';
-import { useSelectContext } from './SelectRoot';
+import { useSelectContext } from './selectContext';
 import { CheckIcon } from './internal/SelectIcons';
 import type { SelectItemProps } from './types';
 import styles from './SelectContent.module.css';

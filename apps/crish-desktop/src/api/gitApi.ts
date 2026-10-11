@@ -9,6 +9,9 @@
  */
 
 import { getWorkspacePath } from './projectStore';
+import { runLocalGit } from './gitRunner';
+
+export { runLocalGit } from './gitRunner';
 
 export type GitFileStatusCode = 'A' | 'M' | 'D' | 'U' | 'R' | 'C' | '?' | '!' | 'mixed' | string;
 
@@ -165,44 +168,6 @@ export function withTimeout<T>(
       () => finish(onTimeout()),
     );
   });
-}
-
-/** 本机 git 命令（经 workbench_git_run 参数数组执行，不经 shell——PE-07 T07.3 C-02 修复） */
-export async function runLocalGit(
-  cwd: string,
-  gitArgs: string[],
-  timeoutMs = GIT_LOCAL_TIMEOUT_MS,
-): Promise<{ ok: boolean; stdout: string; stderr: string; timedOut?: boolean } | null> {
-  try {
-    const { getTransport } = await import('./transport');
-    // 参数数组直传：文件名/提交信息中的 `; | & $ ( ) 反引号 " ' %` 等元字符
-    // 由 Rust 侧 std::process::Command::args 原样传递，无任何外壳解释面；
-    // `--` 之后的路径由 Rust 侧统一加 `:(literal)` pathspec 前缀防魔法注入。
-    const res = await getTransport().call<{
-      ok?: boolean;
-      stdout?: string;
-      stderr?: string;
-      timedOut?: boolean;
-      truncated?: boolean;
-    }>('workbench_git_run', { cwd, gitArgs, timeoutMs });
-    if (res.status === 'ok') {
-      const d = res.data || {};
-      return {
-        ok: Boolean(d.ok),
-        stdout: String(d.stdout ?? ''),
-        stderr: String(d.stderr ?? ''),
-        timedOut: Boolean(d.timedOut),
-      };
-    }
-    if (res.status === 'error') {
-      // 服务端拒绝（arg_not_allowed / workspace_not_granted）→ 错误信息回传供诊断
-      return { ok: false, stdout: '', stderr: res.message, timedOut: false };
-    }
-    // missing：非桌面壳 → 回落引擎路径
-    return null;
-  } catch {
-    return null;
-  }
 }
 
 // 命令操作拆出至子模块，hub re-export

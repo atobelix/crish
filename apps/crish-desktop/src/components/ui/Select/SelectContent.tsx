@@ -1,7 +1,7 @@
 import React, { useCallback, useContext } from 'react';
 import { createPortal } from 'react-dom';
 import { DialogOverlayContext } from '../Dialog/dialogOverlayContext';
-import { useSelectContext } from './SelectRoot';
+import { useSelectContext } from './selectContext';
 import { useFloatingPosition } from './useFloatingPosition';
 import type { SelectContentProps } from './types';
 import styles from './SelectContent.module.css';

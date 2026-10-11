@@ -6,6 +6,9 @@
  * - 危险 scheme、无法外部打开等错误由调用方 toast
  */
 
+import { isAboutBlank, sanitizeBrowseInput } from './previewBrowserUrl';
+export { isAboutBlank, sanitizeBrowseInput } from './previewBrowserUrl';
+
 const URL_KEY = 'crish_preview_url_v1';
 const HIST_KEY = 'crish_preview_history_v1';
 const BOOK_KEY = 'crish_preview_bookmarks_v1';
@@ -45,27 +48,6 @@ export type NormalizeBrowseResult = BrowseUrlOk | BrowseUrlErr;
 /** 类型守卫：成功路径可读 result.url，失败路径可读 result.reason */
 export function isBrowseUrlOk(result: NormalizeBrowseResult): result is BrowseUrlOk {
   return result.ok === true;
-}
-
-/**
- * 去掉 C0/C1 控制符、BOM、软连字符、零宽 / bidi 覆盖与行/段分隔符，再 trim。
- * 防止 `https://x\r\njavascript:...`、`java\u200Bscript:`、bidi 夹带等绕过 scheme 判定。
- * 字符类与 markdownRender.sanitizeUrlCandidate 对齐，并保留 C1（CT）过滤。
- */
-export function sanitizeBrowseInput(raw: string): string {
-  if (typeof raw !== 'string') return '';
-  return raw
-    .replace(
-      // eslint-disable-next-line no-control-regex -- 有意剥离控制符与不可见字符
-      /[\u0000-\u001F\u007F-\u009F\u00AD\u200B-\u200F\u2028\u2029\u202A-\u202E\u2060-\u2064\uFEFF]/g,
-      '',
-    )
-    .trim();
-}
-
-/** 是否为空白预览页（大小写不敏感，已 sanitize） */
-export function isAboutBlank(url: string): boolean {
-  return sanitizeBrowseInput(url).toLowerCase() === 'about:blank';
 }
 
 function safeParseJson(raw: string | null): unknown {
