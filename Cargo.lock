@@ -1496,6 +1496,7 @@ dependencies = [
  "getrandom 0.2.17",
  "hex",
  "indexmap 2.14.2",
+ "junction",
  "libc",
  "memmap2",
  "miniz_oxide 0.8.9",
@@ -1515,7 +1516,9 @@ dependencies = [
  "tauri",
  "tauri-build",
  "tauri-plugin-dialog",
+ "tauri-plugin-fs",
  "tauri-plugin-mcp",
+ "tauri-plugin-persisted-scope",
  "tauri-plugin-single-instance",
  "tempfile",
  "thiserror 2.0.20",
@@ -1526,6 +1529,7 @@ dependencies = [
  "tower",
  "tracing",
  "url",
+ "windows 0.62.2",
  "windows-sys 0.61.2",
  "x509-parser",
  "zeroize",
@@ -3823,6 +3827,16 @@ checksum = "5dea2b27dd239b2556ed7a25ba842fe47fd602e7fc7433c2a8d6106d4d9edd70"
 dependencies = [
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "junction"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "160f2eade097f30263b548aae5deb12ad349c909baa710fa24b92c9090b2e006"
+dependencies = [
+ "scopeguard",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -7236,6 +7250,22 @@ dependencies = [
  "uuid",
  "win-screenshot",
  "xcap",
+]
+
+[[package]]
+name = "tauri-plugin-persisted-scope"
+version = "2.3.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3455c9b9d86158aa9acf596b2385fd99f3963e16fce0f5a613020b4388a36770"
+dependencies = [
+ "aho-corasick",
+ "bincode",
+ "log",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-plugin-fs",
+ "thiserror 2.0.20",
 ]
 
 [[package]]

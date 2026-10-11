@@ -28,7 +28,7 @@
       "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: asset: http://asset.localhost https://asset.localhost; media-src 'self' data: blob: asset: http://asset.localhost https://asset.localhost; connect-src 'self' ipc: http://ipc.localhost http://localhost:8765 http://127.0.0.1:8765 ws://localhost:8765 ws://127.0.0.1:8765 asset: http://asset.localhost https://asset.localhost; worker-src 'self' blob:; frame-src 'self' http://localhost:* http://127.0.0.1:* http://*.localhost https://*.localhost asset: http://asset.localhost https://asset.localhost; frame-ancestors 'self'; form-action 'self'; object-src 'none'; base-uri 'self'",
       "assetProtocol": {
         "enable": true,
-        "scope": ["$APPDATA/**", "$RESOURCE/**", "**", "*/**", "*:\\**", "*:/**"]
+        "scope": ["$RESOURCE/**"]
       }
     }
   },
