@@ -1209,10 +1209,9 @@
   gap: 0;
   width: 100%;
   box-sizing: border-box;
-  /* 水平内衬 SSOT：X 轴锁 --composer-pad-x（结束侧）+ --composer-pad-x-start（起始侧光学内衬）。
-   * 单/多行消费同一对 token——模式切换时 ＋（left-ctrl 同列）与右缘动作组 X 轴零位移。
-   * 取值理由（左轻右重的光学平衡）见 tokens.css 2026-09-21 裁决注释。 */
-  padding: 6px var(--composer-pad-x, 10px) 6px var(--composer-pad-x-start, 6px);
+  /* 水平内衬 SSOT：X 轴锁 --composer-pad-x（结束侧）+ --composer-pad-x-start（起始侧内衬）。
+   * 单/多行消费同一对 token——模式切换时 ＋（left-ctrl 同列）与右缘动作组 X 轴零位移。 */
+  padding: 6px var(--composer-pad-x, 10px) 6px var(--composer-pad-x-start, 10px);
   border: 1px solid var(--border-subtle);
   border-radius: var(--composer-radius-single, 20px);
   background: var(--bg-elevated);
@@ -1224,7 +1223,7 @@
 }
 
 .composerCard.isMultiline {
-  padding: 8px var(--composer-pad-x, 10px) 8px var(--composer-pad-x-start, 6px);
+  padding: 8px var(--composer-pad-x, 10px) 8px var(--composer-pad-x-start, 10px);
   border-radius: var(--composer-radius-multi, 24px);
 }
 
