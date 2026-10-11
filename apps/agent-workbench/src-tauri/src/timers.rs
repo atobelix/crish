@@ -156,7 +156,7 @@ impl QueuePendingSink {
 impl PendingSink for QueuePendingSink {
     fn enqueue_steering(&self, timer_id: &str, text: String, enqueued_at_ms: u64) {
         let entry = SteeringInputEntry {
-            session_id: String::new(),
+            session_id: format!("timer-{timer_id}"),
             // 条目 id 带时间戳保证同组替换后仍唯一（对齐 recovery 模式）
             id: format!("{timer_id}-{enqueued_at_ms}"),
             text,

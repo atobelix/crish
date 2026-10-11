@@ -175,6 +175,8 @@ pub(crate) trait SchedStore: Send + Sync {
     fn load_all(&self) -> Vec<CronTask>;
     /// 保存声明（幂等 upsert）
     fn save(&self, task: &CronTask);
+    /// 追加运行记录（到期触发时记录）
+    fn append_run(&self, _record: &crate::workflow_commands::WorkflowRunRecord) {}
 }
 
 /// 独立 run 拉起点（is_daemon 路径；A3 装配时以 RunProducer 适配注入）
@@ -226,7 +228,7 @@ impl QueuePendingSink {
 impl PendingSink for QueuePendingSink {
     fn enqueue_steering(&self, cron_id: &str, text: String, enqueued_at_ms: u64) {
         let entry = SteeringInputEntry {
-            session_id: String::new(),
+            session_id: format!("sched-{cron_id}"),
             // 条目 id 带时间戳保证同组替换后仍唯一（对齐 recovery 模式）
             id: format!("{cron_id}-{enqueued_at_ms}"),
             text,
@@ -414,6 +416,12 @@ impl SchedStore for LocalDbSchedStore {
                     .set_session_meta(SESSION_META_SCHED_INDEX_KEY, &json);
             }
         }
+    }
+
+    fn append_run(&self, record: &crate::workflow_commands::WorkflowRunRecord) {
+        use crate::workflow_commands::WorkflowStore;
+        let store = crate::workflow_commands::SessionMetaWorkflowStore::new(self.db.clone());
+        store.append_or_update_run(record.clone());
     }
 }
 
@@ -972,6 +980,24 @@ fn fire_once(components: &SchedulerComponents, task: &CronTask) -> Option<FireOu
     // 4. 落库（fired_count 已更新；max/无下次 → enabled=false，
     //    重启不再恢复）
     components.store.save(&updated);
+    // 5. 运行历史（持久化记录，保证最近运行有据可查）
+    let run_id = format!("{}-fire-{}", task.cron_id, iteration);
+    let session_id = format!("sched-{}-{}", task.cron_id, iteration);
+    let run_record = crate::workflow_commands::WorkflowRunRecord {
+        workflow_id: task.cron_id.clone(),
+        run_id,
+        session_id: Some(session_id),
+        trigger_kind: "cron".to_string(),
+        scheduled_for_ms: task.next_fire_at_ms,
+        started_at_ms: now,
+        finished_at_ms: Some(now),
+        duration_ms: Some(0),
+        status: "completed".to_string(),
+        prompt: task.prompt.clone(),
+        error: None,
+        output_summary: Some(format!("定时调度自动触发（第 {} 次）", iteration)),
+    };
+    components.store.append_run(&run_record);
     Some(FireOutcome {
         task: updated,
         iteration,

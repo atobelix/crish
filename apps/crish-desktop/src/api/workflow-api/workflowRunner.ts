@@ -221,18 +221,25 @@ export type WorkflowRunEntry = {
   workflowId: string;
   runId: string;
   sessionId?: string | undefined;
+  triggerKind?: string | undefined;
   scheduledFor?: string | undefined;
   startedAt?: string | undefined;
+  finishedAt?: string | undefined;
+  durationMs?: number | undefined;
   status?: string | undefined;
+  prompt?: string | undefined;
   error?: string | undefined;
+  outputSummary?: string | undefined;
 };
 
 /** 运行历史：真实读 list-workflow-runs（可按 workflowId 过滤；缺失降级空表） */
 export async function listWorkflowRuns(
-  workflowId?: string
+  workflowId?: string,
+  limit?: number
 ): Promise<WorkflowRunEntry[]> {
   const res = await invokeTyped<WorkflowRunEntry[]>('list-workflow-runs', {
     ...(workflowId !== undefined && { workflowId }),
+    ...(limit !== undefined && { limit }),
   });
   if (res.status === 'error') logInternalError('listWorkflowRuns', res.message);
   if (res.status !== 'ok') return [];

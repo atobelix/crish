@@ -29,7 +29,6 @@ import {
   type WorkflowScheduleDraft,
 } from '../../api/workflowApi';
 import {
-  WORKFLOWS_LOAD_TIMEOUT_MS,
   ensureScheduledSession,
   loadWorkflowRunsCache,
   loadWorkflowsCache,
@@ -64,7 +63,10 @@ export type UseWorkflowsStateResult = {
   /** 创建成功返回 true（壳层据此关表单）；失败 false（行内 + toast 已处理） */
   handleCreate: (draft: WorkflowScheduleDraft) => Promise<boolean>;
   /** 保存成功返回 true（编辑用 editingWorkflow.id 更新；新建走 createWorkflow） */
-  handleSave: (draft: WorkflowScheduleDraft, editingWorkflow: WorkflowDefinition | null) => Promise<boolean>;
+  handleSave: (
+    draft: WorkflowScheduleDraft,
+    editingWorkflow: WorkflowDefinition | null
+  ) => Promise<boolean>;
   handleToggle: (w: WorkflowDefinition) => Promise<void>;
   handleTrigger: (w: WorkflowDefinition) => Promise<void>;
   handleDelete: (w: WorkflowDefinition) => Promise<void>;
@@ -77,17 +79,17 @@ export type UseWorkflowsStateResult = {
 };
 
 export function useWorkflowsState(
-  opts: UseWorkflowsStateOptions,
+  opts: UseWorkflowsStateOptions
 ): UseWorkflowsStateResult {
   const surface = opts.surface;
   const [workflows, setWorkflows] = useState<WorkflowDefinition[]>(() =>
-    surface === 'chat' ? loadWorkflowsCache() : [],
+    loadWorkflowsCache()
   );
   const [runs, setRuns] = useState<WorkflowRunEntry[]>(() =>
-    surface === 'chat' ? loadWorkflowRunsCache() : [],
+    loadWorkflowRunsCache()
   );
-  const [loading, setLoading] = useState(() =>
-    surface === 'chat' ? loadWorkflowsCache().length === 0 : false,
+  const [loading, setLoading] = useState(
+    () => loadWorkflowsCache().length === 0
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -104,7 +106,7 @@ export function useWorkflowsState(
 
   const filtered = useMemo(
     () => scopedWorkflows.filter((w) => matchesFilter(w, filter)),
-    [scopedWorkflows, filter],
+    [scopedWorkflows, filter]
   );
 
   const emptyCopy = useMemo(
@@ -115,80 +117,36 @@ export function useWorkflowsState(
         ...(surface === 'settings' ? { filteredCount: filtered.length } : {}),
         surface: surface === 'settings' ? 'settings' : 'list',
       }),
-    [loading, scopedWorkflows.length, filtered.length, surface],
+    [loading, scopedWorkflows.length, filtered.length, surface]
   );
 
   const refresh = async () => {
-    if (surface === 'chat') {
-      if (workflows.length === 0) {
-        setLoading(true);
-      }
-      try {
-        const [wfs, rs] = await Promise.all([listWorkflows(), listWorkflowRuns()]);
-        setWorkflows(wfs);
-        saveWorkflowsCache(wfs);
-        const sortedRuns = [...rs].sort((a, b) => {
-          const ta = Date.parse(a.startedAt || a.scheduledFor || '') || 0;
-          const tb = Date.parse(b.startedAt || b.scheduledFor || '') || 0;
-          return tb - ta;
-        });
-        setRuns(sortedRuns);
-        saveWorkflowRunsCache(sortedRuns);
-      } catch (e) {
-        setError(networkUserMessage(e) || '无法加载定时任务');
-      } finally {
-        setLoading(false);
-      }
-      return;
+    if (workflows.length === 0) {
+      setLoading(true);
     }
-    setLoading(true);
     try {
-      const list = await Promise.race([
+      const [wfs, rs] = await Promise.all([
         listWorkflows(),
-        new Promise<never>((_, rej) => {
-          window.setTimeout(() => rej(new Error('读取计划超时，请确认引擎已启动')), WORKFLOWS_LOAD_TIMEOUT_MS);
-        }),
+        listWorkflowRuns(),
       ]);
-      setWorkflows(list);
+      setWorkflows(wfs);
+      saveWorkflowsCache(wfs);
+      const sortedRuns = [...rs].sort((a, b) => {
+        const ta = Date.parse(a.startedAt || a.scheduledFor || '') || 0;
+        const tb = Date.parse(b.startedAt || b.scheduledFor || '') || 0;
+        return tb - ta;
+      });
+      setRuns(sortedRuns);
+      saveWorkflowRunsCache(sortedRuns);
     } catch (e) {
-      setError(networkUserMessage(e) || '读取计划失败');
-      setWorkflows([]);
+      setError(networkUserMessage(e) || '无法加载定时任务');
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (surface === 'chat') {
-      void refresh();
-      return;
-    }
-    setLoading(true);
-    setError('');
-    let cancelled = false;
-    const timer = window.setTimeout(() => {
-      if (!cancelled) {
-        setLoading(false);
-        setError((prev) => prev || '读取计划超时，可点新建或稍后重试');
-      }
-    }, WORKFLOWS_LOAD_TIMEOUT_MS);
-    void listWorkflows()
-      .then((list) => {
-        if (!cancelled) setWorkflows(list);
-      })
-      .catch((e) => {
-        if (cancelled) return;
-        setError(networkUserMessage(e) || '读取计划失败');
-        setWorkflows([]);
-      })
-      .finally(() => {
-        window.clearTimeout(timer);
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timer);
-    };
+    void refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -236,7 +194,7 @@ export function useWorkflowsState(
 
   const handleSave = async (
     draft: WorkflowScheduleDraft,
-    editingWorkflow: WorkflowDefinition | null,
+    editingWorkflow: WorkflowDefinition | null
   ): Promise<boolean> => {
     const draftErr = validateWorkflowDraft(draft);
     if (draftErr) {
@@ -257,19 +215,25 @@ export function useWorkflowsState(
           name: draft.name.trim(),
           prompt: draft.prompt.trim(),
           schedule: schedGuard.schedule,
-          cwd: draft.cwd !== undefined ? draft.cwd : (opts.workspacePath || undefined),
+          cwd:
+            draft.cwd !== undefined
+              ? draft.cwd
+              : opts.workspacePath || undefined,
         });
         if (!res.ok) {
           fail(
-            workflowActionErrorMessage(res.error, '保存失败，请检查引擎是否就绪', () =>
-              networkUserMessage(),
-            ),
+            workflowActionErrorMessage(
+              res.error,
+              '保存失败，请检查引擎是否就绪',
+              () => networkUserMessage()
+            )
           );
           return false;
         }
         setOk('已保存');
       } else {
-        const targetCwd = (draft.cwd || '').trim() || opts.workspacePath || undefined;
+        const targetCwd =
+          (draft.cwd || '').trim() || opts.workspacePath || undefined;
         const res = await createWorkflow({
           name: draft.name.trim(),
           prompt: draft.prompt.trim(),
@@ -279,9 +243,11 @@ export function useWorkflowsState(
         });
         if (!res.ok) {
           fail(
-            workflowActionErrorMessage(res.error, '创建失败，请检查引擎是否就绪', () =>
-              networkUserMessage(),
-            ),
+            workflowActionErrorMessage(
+              res.error,
+              '创建失败，请检查引擎是否就绪',
+              () => networkUserMessage()
+            )
           );
           return false;
         }
@@ -299,7 +265,9 @@ export function useWorkflowsState(
   };
 
   /** chat 面新建：无编辑支路，成功仅行内不 toast */
-  const handleCreate = async (draft: WorkflowScheduleDraft): Promise<boolean> => {
+  const handleCreate = async (
+    draft: WorkflowScheduleDraft
+  ): Promise<boolean> => {
     const draftErr = validateWorkflowDraft(draft);
     if (draftErr) {
       failInline(draftErr);
@@ -314,7 +282,8 @@ export function useWorkflowsState(
     setBusy(true);
     setError('');
     try {
-      const targetCwd = (draft.cwd || '').trim() || opts.workspacePath || undefined;
+      const targetCwd =
+        (draft.cwd || '').trim() || opts.workspacePath || undefined;
       const res = await createWorkflow({
         name: draft.name.trim(),
         prompt: draft.prompt.trim(),
@@ -325,8 +294,8 @@ export function useWorkflowsState(
       if (!res.ok) {
         fail(
           workflowActionErrorMessage(res.error, '创建失败', () =>
-            networkUserMessage(),
-          ),
+            networkUserMessage()
+          )
         );
         return false;
       }
@@ -350,7 +319,11 @@ export function useWorkflowsState(
     try {
       const res = await updateWorkflow(w.id, { enabled: enabling });
       if (!res.ok) {
-        fail(workflowActionErrorMessage(res.error, '更新失败', () => networkUserMessage()));
+        fail(
+          workflowActionErrorMessage(res.error, '更新失败', () =>
+            networkUserMessage()
+          )
+        );
         return;
       }
       if (enabling) maybeWatchHint(`${w.name} ${w.prompt || ''}`);
@@ -370,7 +343,11 @@ export function useWorkflowsState(
     try {
       const res = await triggerWorkflow(w.id);
       if (!res.ok) {
-        fail(workflowActionErrorMessage(res.error, '触发失败', () => networkUserMessage()));
+        fail(
+          workflowActionErrorMessage(res.error, '触发失败', () =>
+            networkUserMessage()
+          )
+        );
         return;
       }
       // 成功：行内状态 + 侧栏占位；不 toast、不抢焦点
@@ -392,7 +369,11 @@ export function useWorkflowsState(
     try {
       const res = await deleteWorkflow(w.id);
       if (!res.ok) {
-        fail(workflowActionErrorMessage(res.error, '删除失败', () => networkUserMessage()));
+        fail(
+          workflowActionErrorMessage(res.error, '删除失败', () =>
+            networkUserMessage()
+          )
+        );
         return;
       }
       setOk('已删除');

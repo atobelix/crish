@@ -15,19 +15,21 @@ import {
   type WorkflowRunEntry,
   type WorkflowScheduleDraft,
 } from '../../api/workflowApi';
-import { clearAgentPanelFocus } from '../../api/openAgentPanel';
 import {
   navigateToChatSession,
   navigateToNewDraft,
+  useSessionStore,
 } from '../../store/storeAccess';
-import { useLayoutStore, useSessionStore } from '../../store/storeAccess';
 import { getWorkspacePath } from '../../api/projectStore';
 import { sessionDraftManager } from '../../api/draft/sessionDraftManager';
 import { WORKFLOW_CREATE_TEMPLATE } from '../../api/workflow-api/workflowAssistantCard';
 import styles from './ScheduledTasksPanel.module.css';
 import { Button, Tooltip, Menu } from '../ui';
 import type { SelectOptionItem } from '../ui';
-import { ensureScheduledSession, draftFromWorkflow } from './workflowsSharedLib';
+import {
+  ensureScheduledSession,
+  draftFromWorkflow,
+} from './workflowsSharedLib';
 import { useWorkflowsState } from './useWorkflowsState';
 import { WorkflowForm } from './WorkflowForm';
 import { WorkflowList } from './WorkflowList';
@@ -41,7 +43,10 @@ type Props = {
 export const ScheduledTasksPanel: React.FC<Props> = ({ onBackToChat }) => {
   const { showToast } = useToast();
   const currentWorkspacePath = getWorkspacePath();
-  const state = useWorkflowsState({ surface: 'chat', workspacePath: currentWorkspacePath });
+  const state = useWorkflowsState({
+    surface: 'chat',
+    workspacePath: currentWorkspacePath,
+  });
   const {
     workflows,
     runs,
@@ -52,7 +57,6 @@ export const ScheduledTasksPanel: React.FC<Props> = ({ onBackToChat }) => {
     setError,
     setOk,
     emptyCopy,
-    handleCreate,
     handleSave,
     handleToggle,
     handleTrigger,
@@ -61,7 +65,8 @@ export const ScheduledTasksPanel: React.FC<Props> = ({ onBackToChat }) => {
   } = state;
 
   const [showForm, setShowForm] = useState(false);
-  const [editingWorkflow, setEditingWorkflow] = useState<WorkflowDefinition | null>(null);
+  const [editingWorkflow, setEditingWorkflow] =
+    useState<WorkflowDefinition | null>(null);
   const [draft, setDraft] = useState<WorkflowScheduleDraft>(() =>
     emptyWorkflowDraft(currentWorkspacePath)
   );
@@ -75,7 +80,10 @@ export const ScheduledTasksPanel: React.FC<Props> = ({ onBackToChat }) => {
     setEditingWorkflow(null);
     setError('');
     setOk('');
-    setDraft({ ...preset.draft, cwd: currentWorkspacePath || preset.draft.cwd });
+    setDraft({
+      ...preset.draft,
+      cwd: currentWorkspacePath || preset.draft.cwd,
+    });
   };
 
   const closeForm = () => {
@@ -219,7 +227,11 @@ export const ScheduledTasksPanel: React.FC<Props> = ({ onBackToChat }) => {
       </div>
 
       <div className={styles.schedPresetRow}>
-        <div className={styles.schedPresetChips} role="group" aria-label="计划模板">
+        <div
+          className={styles.schedPresetChips}
+          role="group"
+          aria-label="计划模板"
+        >
           {WORKFLOW_SCHEDULE_PRESETS.map((p) => (
             <Button
               key={p.id}
@@ -237,16 +249,26 @@ export const ScheduledTasksPanel: React.FC<Props> = ({ onBackToChat }) => {
       </div>
 
       {/* 状态：aria-live 行内；成功永不 toast */}
-      <div className="sched-status-live" aria-live="polite" aria-relevant="additions text">
+      <div
+        className="sched-status-live"
+        aria-live="polite"
+        aria-relevant="additions text"
+      >
         {error ? (
           <Tooltip content={error}>
-            <div className={`${styles.schedStatusLine} ${styles.isErr}`} role="alert">
+            <div
+              className={`${styles.schedStatusLine} ${styles.isErr}`}
+              role="alert"
+            >
               {error}
             </div>
           </Tooltip>
         ) : null}
         {ok && !error ? (
-          <div className={`${styles.schedStatusLine} ${styles.isOk}`} role="status">
+          <div
+            className={`${styles.schedStatusLine} ${styles.isOk}`}
+            role="status"
+          >
             {ok}
           </div>
         ) : null}
@@ -290,9 +312,13 @@ export const ScheduledTasksPanel: React.FC<Props> = ({ onBackToChat }) => {
       />
 
       <RunHistoryList
+        variant="chat"
         runs={runs}
         workflows={workflows}
         onOpenRun={openRunSession}
+        onRerun={(w) => {
+          void handleTrigger(w);
+        }}
       />
     </div>
   );

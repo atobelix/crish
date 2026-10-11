@@ -11,22 +11,25 @@ import {
   WORKFLOW_SCHEDULE_PRESETS,
   emptyWorkflowDraft,
   type WorkflowDefinition,
+  type WorkflowRunEntry,
   type WorkflowScheduleDraft,
 } from '../../api/workflowApi';
 import { useSessionStore } from '../../store/storeAccess';
 import { sessionDraftManager } from '../../api/draft/sessionDraftManager';
-import { closeSettings } from '../../store/storeAccess';
+import { closeSettings, navigateToChatSession } from '../../store/storeAccess';
 import styles from './SettingsScheduleTab.module.css';
 import { Button, SegmentedControl } from '../ui';
 import { SettingsPage, SettingsSection, SettingsCard } from './SettingsUI';
 import {
   FILTER_OPTIONS,
   draftFromWorkflow,
+  ensureScheduledSession,
   type ScheduleFilter,
 } from './workflowsSharedLib';
 import { useWorkflowsState } from './useWorkflowsState';
 import { WorkflowForm } from './WorkflowForm';
 import { WorkflowList } from './WorkflowList';
+import { RunHistoryList } from './RunHistoryList';
 import { AppIcon } from '../ui/icons/index';
 
 type Props = {
@@ -38,13 +41,17 @@ const CREATE_PATH_OPTIONS = [
   { value: 'manual', label: '手动创建' },
 ];
 
-export const SettingsScheduleTab: React.FC<Props> = ({ _onBlockingOverlayChange }) => {
+export const SettingsScheduleTab: React.FC<Props> = ({
+  _onBlockingOverlayChange,
+}) => {
   const { showToast } = useToast();
   const state = useWorkflowsState({
     surface: 'settings',
     workspacePath: getWorkspacePath() || '',
   });
   const {
+    workflows,
+    runs,
     loading,
     busy,
     error,
@@ -100,6 +107,21 @@ export const SettingsScheduleTab: React.FC<Props> = ({ _onBlockingOverlayChange 
     setError('');
     setOk('');
     setWfDraft(draftFromWorkflow(w));
+  };
+
+  const handleOpenRunSession = (run: WorkflowRunEntry) => {
+    const matchedWf = workflows.find((w) => w.id === run.workflowId);
+    const wfName = matchedWf?.name || '定时任务';
+    const targetSessionId =
+      run.sessionId || `sched-${run.workflowId}-${run.runId || Date.now()}`;
+    ensureScheduledSession(targetSessionId, wfName, {
+      activate: true,
+      prompt: matchedWf?.prompt || '按计划执行定时任务',
+      status: run.status,
+      startedAt: run.startedAt ? new Date(run.startedAt).getTime() : Date.now(),
+    });
+    closeSettings();
+    navigateToChatSession(targetSessionId, { title: `[定时] ${wfName}` });
   };
 
   /** 关闭设置，在对话里用 AI 写定时任务名称与提示词（定向注入 + 可见助手卡片） */
@@ -270,6 +292,20 @@ export const SettingsScheduleTab: React.FC<Props> = ({ _onBlockingOverlayChange 
                 void handleDelete(w);
               }}
               onEdit={handleEditClick}
+            />
+          </SettingsCard>
+        </SettingsSection>
+
+        <SettingsSection title="运行历史记录">
+          <SettingsCard>
+            <RunHistoryList
+              variant="settings"
+              runs={runs}
+              workflows={workflows}
+              onOpenRun={handleOpenRunSession}
+              onRerun={(w) => {
+                void handleTrigger(w);
+              }}
             />
           </SettingsCard>
         </SettingsSection>

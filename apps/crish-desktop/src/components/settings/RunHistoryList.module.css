@@ -1,0 +1,172 @@
+.runsContainer {
+  margin-top: var(--space-4);
+  padding-top: var(--space-3);
+  border-top: var(--hairline-width) solid var(--border-subtle);
+}
+
+.runsContainerSettings {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+
+.runsHeading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-tertiary);
+  margin-bottom: var(--space-2);
+}
+
+.runsHeadingCount {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.runsList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.runItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-2_5);
+  border-radius: var(--radius-lg);
+  background: transparent;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition:
+    background-color var(--duration-fast) ease,
+    border-color var(--duration-fast) ease;
+  user-select: none;
+  text-align: left;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.runItem:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-subtle);
+}
+
+.runItem:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: -1px;
+}
+
+.runItemMain {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0_5);
+}
+
+.runItemTitleRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1_5);
+  min-width: 0;
+}
+
+.runItemName {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 240px;
+}
+
+.runBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  font-weight: var(--font-weight-medium);
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  line-height: 1.25;
+  flex-shrink: 0;
+}
+
+.badgeSuccess {
+  background: var(--color-success-bg);
+  color: var(--color-success);
+}
+
+.badgeRunning {
+  background: var(--color-brand-muted);
+  color: var(--color-brand);
+}
+
+.badgeFailed {
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+}
+
+.badgeCancelled {
+  background: var(--bg-secondary);
+  color: var(--text-tertiary);
+}
+
+.runItemMeta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1_5);
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.metaChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.errorSnippet {
+  color: var(--color-danger);
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.runItemActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex-shrink: 0;
+}
+
+.actionBtn {
+  opacity: 0.8;
+  transition: opacity var(--duration-fast) ease;
+}
+
+.runItem:hover .actionBtn {
+  opacity: 1;
+}
+
+.emptyRuns {
+  padding: var(--space-3);
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  text-align: center;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-lg);
+  border: 1px dashed var(--border-subtle);
+}

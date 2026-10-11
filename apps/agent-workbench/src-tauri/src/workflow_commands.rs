@@ -341,42 +341,97 @@ pub(crate) struct WorkflowView {
 }
 
 /// 运行记录（`sched_runs` 键条目；触发时登记，事件面接线后替换真源）
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct WorkflowRunRecord {
     pub workflow_id: String,
     pub run_id: String,
+    #[serde(default)]
     pub session_id: Option<String>,
+    #[serde(default = "default_trigger_kind")]
+    pub trigger_kind: String,
     pub scheduled_for_ms: u64,
     pub started_at_ms: u64,
+    #[serde(default)]
+    pub finished_at_ms: Option<u64>,
+    #[serde(default)]
+    pub duration_ms: Option<u64>,
     pub status: String,
+    #[serde(default)]
+    pub prompt: String,
+    #[serde(default)]
+    pub error: Option<String>,
+    #[serde(default)]
+    pub output_summary: Option<String>,
+}
+
+fn default_trigger_kind() -> String {
+    "cron".to_string()
+}
+
+/// 运行历史滚动淘汰策略（单工作流上限 20 条，全局上限 100 条；保护 running 在途任务）
+pub(crate) fn prune_runs(runs: Vec<WorkflowRunRecord>) -> Vec<WorkflowRunRecord> {
+    const PER_WORKFLOW_LIMIT: usize = 20;
+    const GLOBAL_LIMIT: usize = 100;
+
+    let (running, mut finished): (Vec<_>, Vec<_>) = runs
+        .into_iter()
+        .partition(|r| r.status == "running");
+
+    finished.sort_by_key(|r| std::cmp::Reverse(r.started_at_ms));
+
+    let mut counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    let mut kept_finished = Vec::new();
+
+    for run in finished {
+        let count = counts.entry(run.workflow_id.clone()).or_insert(0);
+        if *count < PER_WORKFLOW_LIMIT && kept_finished.len() < GLOBAL_LIMIT {
+            *count += 1;
+            kept_finished.push(run);
+        }
+    }
+
+    let mut result = running;
+    result.extend(kept_finished);
+    result.sort_by_key(|r| std::cmp::Reverse(r.started_at_ms));
+    result
 }
 
 impl WorkflowRunRecord {
-    fn view(&self) -> WorkflowRunView {
+    pub(crate) fn view(&self) -> WorkflowRunView {
         WorkflowRunView {
             workflow_id: self.workflow_id.clone(),
             run_id: self.run_id.clone(),
             session_id: self.session_id.clone(),
+            trigger_kind: self.trigger_kind.clone(),
             scheduled_for: epoch_ms_to_iso(self.scheduled_for_ms),
             started_at: epoch_ms_to_iso(self.started_at_ms),
+            finished_at: self.finished_at_ms.map(epoch_ms_to_iso),
+            duration_ms: self.duration_ms,
             status: self.status.clone(),
-            error: None,
+            prompt: self.prompt.clone(),
+            error: self.error.clone(),
+            output_summary: self.output_summary.clone(),
         }
     }
 }
 
 /// 命令输出：运行条目（对齐前端 WorkflowRunEntry 类型面）
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct WorkflowRunView {
     pub workflow_id: String,
     pub run_id: String,
     pub session_id: Option<String>,
+    pub trigger_kind: String,
     pub scheduled_for: String,
     pub started_at: String,
+    pub finished_at: Option<String>,
+    pub duration_ms: Option<u64>,
     pub status: String,
+    pub prompt: String,
     pub error: Option<String>,
+    pub output_summary: Option<String>,
 }
 
 // ── 存储适配（sched_* 键读写；重启恢复数据源）───────────────────────
@@ -393,6 +448,48 @@ pub(crate) trait WorkflowStore: Send + Sync {
     fn load_runs(&self) -> Vec<WorkflowRunRecord>;
     /// 保存运行历史（全量覆盖；当前条目量小，全量读写足够）
     fn save_runs(&self, runs: &[WorkflowRunRecord]);
+
+    /// 追加或更新单条运行记录（自动滚动淘汰）
+    fn append_or_update_run(&self, record: WorkflowRunRecord) {
+        let mut runs = self.load_runs();
+        if let Some(pos) = runs
+            .iter()
+            .position(|r| r.workflow_id == record.workflow_id && r.run_id == record.run_id)
+        {
+            runs[pos] = record;
+        } else {
+            runs.push(record);
+        }
+        let pruned = prune_runs(runs);
+        self.save_runs(&pruned);
+    }
+
+    /// 标记单条运行记录完成/终态
+    #[allow(dead_code)]
+    fn update_run_finish(
+        &self,
+        workflow_id: &str,
+        run_id: &str,
+        status: &str,
+        finished_at_ms: u64,
+        duration_ms: u64,
+        error: Option<String>,
+        output_summary: Option<String>,
+    ) {
+        let mut runs = self.load_runs();
+        if let Some(run) = runs
+            .iter_mut()
+            .find(|r| r.workflow_id == workflow_id && r.run_id == run_id)
+        {
+            run.status = status.to_string();
+            run.finished_at_ms = Some(finished_at_ms);
+            run.duration_ms = Some(duration_ms);
+            run.error = error;
+            run.output_summary = output_summary;
+            let pruned = prune_runs(runs);
+            self.save_runs(&pruned);
+        }
+    }
 }
 
 /// session_meta 真适配（LocalDb `sched_<cronId>` 键 + `sched_index` 索引 +
@@ -559,7 +656,7 @@ impl QueueSteeringSink {
 impl SteeringSink for QueueSteeringSink {
     fn enqueue_steering(&self, cron_id: &str, text: String, enqueued_at_ms: u64) {
         let entry = SteeringInputEntry {
-            session_id: String::new(),
+            session_id: format!("sched-{cron_id}"),
             id: format!("{cron_id}-{enqueued_at_ms}"),
             text,
             attachments: Vec::new(),
@@ -1058,16 +1155,21 @@ impl WorkflowBackend {
         // 运行记录（命令层近似真源；生成可追踪 session_id 与完成状态）
         let run_id = format!("{}-fire-{}", workflow.cron_id, workflow.fired_count);
         let session_id = format!("sched-{}-{}", workflow.cron_id, workflow.fired_count);
-        let mut runs = self.store.load_runs();
-        runs.push(WorkflowRunRecord {
+        let record = WorkflowRunRecord {
             workflow_id: workflow.cron_id.clone(),
             run_id: run_id.clone(),
             session_id: Some(session_id.clone()),
+            trigger_kind: "manual".to_string(),
             scheduled_for_ms: now,
             started_at_ms: now,
+            finished_at_ms: Some(now),
+            duration_ms: Some(0),
             status: "completed".to_string(),
-        });
-        self.store.save_runs(&runs);
+            prompt: workflow.prompt.clone(),
+            error: None,
+            output_summary: Some(format!("手动立即触发成功（第 {} 次）", workflow.fired_count)),
+        };
+        self.store.append_or_update_run(record);
         tracing::info!(
             target: "workflow",
             cron_id,
@@ -1080,14 +1182,19 @@ impl WorkflowBackend {
         })
     }
 
-    /// 运行历史（可按 workflowId 过滤；按开始时间倒序）
-    pub(crate) fn list_runs(&self, workflow_id: Option<&str>) -> Vec<WorkflowRunView> {
+    /// 运行历史（可按 workflowId 过滤；按开始时间倒序；支持上限数量限制）
+    pub(crate) fn list_runs(
+        &self,
+        workflow_id: Option<&str>,
+        limit: Option<usize>,
+    ) -> Vec<WorkflowRunView> {
         let mut runs = self.store.load_runs();
         if let Some(id) = workflow_id {
             runs.retain(|r| r.workflow_id == id);
         }
         runs.sort_by_key(|r| std::cmp::Reverse(r.started_at_ms));
-        runs.iter().map(|r| r.view()).collect()
+        let cap = limit.unwrap_or(50).clamp(1, 200);
+        runs.into_iter().take(cap).map(|r| r.view()).collect()
     }
 }
 
@@ -1263,15 +1370,16 @@ pub(crate) async fn trigger_workflow(
         .map_err(|e| CoreError::Internal(format!("trigger-workflow join: {e}")))?
 }
 
-/// `list-workflow-runs`：运行历史（可按 workflowId 过滤）
+/// `list-workflow-runs`：运行历史（可按 workflowId 过滤，支持 limit 数量限制）
 #[tauri::command(rename = "list-workflow-runs")]
 pub(crate) async fn list_workflow_runs(
     workflow_id: Option<String>,
+    limit: Option<usize>,
     state: tauri::State<'_, WorkflowCommandState>,
 ) -> Result<Vec<WorkflowRunView>, CoreError> {
     let backend = Arc::clone(&state.inner().backend);
     tokio::task::spawn_blocking(move || {
-        Ok::<Vec<WorkflowRunView>, CoreError>(backend.list_runs(workflow_id.as_deref()))
+        Ok::<Vec<WorkflowRunView>, CoreError>(backend.list_runs(workflow_id.as_deref(), limit))
     })
     .await
     .map_err(|e| CoreError::Internal(format!("list-workflow-runs join: {e}")))?
@@ -1450,10 +1558,12 @@ mod tests {
             "steering 文本应按冻结模板：{text}"
         );
         // 运行记录
-        let runs = backend.list_runs(Some(&view.id));
+        let runs = backend.list_runs(Some(&view.id), None);
         assert_eq!(runs.len(), 1);
         assert_eq!(runs[0].workflow_id, view.id);
         assert_eq!(runs[0].status, "completed");
+        assert_eq!(runs[0].trigger_kind, "manual");
+        assert_eq!(runs[0].prompt, "巡检工作区");
     }
 
     /// 非法调度拒绝（Rust 侧真实错误文案——parse_cron 中文错误，不落库）

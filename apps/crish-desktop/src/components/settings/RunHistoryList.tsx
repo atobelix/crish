@@ -1,89 +1,258 @@
 /**
- * ScheduledTasksPanel 专属：最近运行历史列表（对话内紧凑）。
- * run 状态中文走 workflowRunStatusLabel；可打开关联会话。
+ * 最近运行历史列表（RunHistoryList）。
+ *
+ * 彻底解决「点击无反应」与「小按钮置灰锁死」问题：
+ * 1. 行级全域可点（点击整行卡片即呼出完整的 RunDetailDialog 诊断弹窗）；
+ * 2. 状态色阶显式区分（已完成绿 / 失败红 / 运行中蓝 / 取消灰）；
+ * 3. 性能耗时与触发源清晰标示；
+ * 4. 辅助动作独立隔离（stopPropagation 防冒泡）；按钮恒不置灰锁死，缺失 session 时平滑兜底。
  */
-import React from 'react';
 
-import styles from './ScheduledTasksPanel.module.css';
-import { workflowRunStatusLabel, type WorkflowDefinition, type WorkflowRunEntry } from '../../api/workflowApi';
+import React, { useState } from 'react';
+import styles from './RunHistoryList.module.css';
+import {
+  workflowRunStatusLabel,
+  type WorkflowDefinition,
+  type WorkflowRunEntry,
+} from '../../api/workflowApi';
 import { Button, Tooltip } from '../ui';
 import { AppIcon } from '../ui/icons/index';
-
-/** 最近运行条数上限（对话内紧凑） */
-const RECENT_RUNS_LIMIT = 10;
+import { RunDetailDialog } from './RunDetailDialog';
 
 export type RunHistoryListProps = {
   runs: WorkflowRunEntry[];
   workflows: WorkflowDefinition[];
-  /** 打开运行会话（无关联会话时由壳层 toast） */
-  onOpenRun: (run: WorkflowRunEntry) => void;
+  /** 打开运行会话（无关联会话时由壳层自动创建或导航） */
+  onOpenRun?: (run: WorkflowRunEntry) => void;
+  /** 重新运行任务 */
+  onRerun?: (workflow: WorkflowDefinition) => void;
+  /** 样式形态：'chat'（对话紧凑面板）| 'settings'（设置页列表） */
+  variant?: 'chat' | 'settings';
+  /** 显示数量限制 */
+  limit?: number;
 };
 
-function formatRunWhen(when: string): string {
-  if (!when) return '—';
+function formatRunWhen(when?: string): { formatted: string; full: string } {
+  if (!when) return { formatted: '—', full: '无时间戳' };
   const ms = Date.parse(when);
-  if (!Number.isFinite(ms)) return '—';
-  return new Date(ms).toLocaleString('zh-CN', {
+  if (!Number.isFinite(ms)) return { formatted: when, full: when };
+  const d = new Date(ms);
+  const formatted = d.toLocaleString('zh-CN', {
     month: 'numeric',
     day: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
   });
+  return { formatted, full: d.toISOString() };
+}
+
+function formatDurationMini(ms?: number): string | null {
+  if (ms === undefined || ms === null) return null;
+  if (ms < 100) return '<0.1s';
+  if (ms < 1000) return `${(ms / 1000).toFixed(1)}s`;
+  if (ms < 60_000) return `${Math.round(ms / 1000)}s`;
+  const m = Math.floor(ms / 60_000);
+  const s = Math.round((ms % 60_000) / 1000);
+  return `${m}m${s}s`;
 }
 
 export const RunHistoryList: React.FC<RunHistoryListProps> = ({
   runs,
   workflows,
   onOpenRun,
+  onRerun,
+  variant = 'chat',
+  limit,
 }) => {
-  const recentRuns = runs.slice(0, RECENT_RUNS_LIMIT);
-  if (recentRuns.length === 0) return null;
+  const [selectedRun, setSelectedRun] = useState<WorkflowRunEntry | null>(null);
+
+  const displayLimit = limit ?? (variant === 'settings' ? 30 : 10);
+  const displayRuns = runs.slice(0, displayLimit);
+
+  if (displayRuns.length === 0) {
+    if (variant === 'settings') {
+      return (
+        <div className={styles.emptyRuns}>
+          暂无历史运行记录。创建并触发定时任务后，将在此展示详细执行记录。
+        </div>
+      );
+    }
+    return null;
+  }
+
+  const selectedWorkflow = selectedRun
+    ? workflows.find((w) => w.id === selectedRun.workflowId)
+    : undefined;
 
   return (
-    <div className={styles.schedRuns}>
-      <div className={styles.schedRunsH} id="sched-runs-heading">
-        最近运行
+    <div
+      className={`${styles.runsContainer} ${
+        variant === 'settings' ? styles.runsContainerSettings : ''
+      }`}
+    >
+      <div className={styles.runsHeading} id="sched-runs-heading">
+        <span>最近运行记录</span>
+        <span className={styles.runsHeadingCount}>共 {runs.length} 次运行</span>
       </div>
-      <ul className={`${styles.schedList} ${styles.schedRunsList}`} aria-labelledby="sched-runs-heading">
-        {recentRuns.map((r) => {
-          const wfName =
-            workflows.find((w) => w.id === r.workflowId)?.name || r.workflowId;
-          const when = r.startedAt || r.scheduledFor || '';
-          const whenLabel = formatRunWhen(when);
-          const canOpen = Boolean(r.sessionId);
+
+      <ul
+        className={styles.runsList}
+        aria-labelledby="sched-runs-heading"
+        role="list"
+      >
+        {displayRuns.map((r) => {
+          const wf = workflows.find((w) => w.id === r.workflowId);
+          const wfName = wf?.name || r.workflowId;
+          const whenInfo = formatRunWhen(r.startedAt || r.scheduledFor);
+          const durationStr = formatDurationMini(r.durationMs);
+
+          const isSuccess =
+            r.status === 'completed' ||
+            r.status === 'success' ||
+            r.status === 'ok';
+          const isFailed =
+            r.status === 'failed' ||
+            r.status === 'error' ||
+            r.status === 'errored';
+          const isRunning =
+            r.status === 'running' ||
+            r.status === 'in_progress' ||
+            r.status === 'pending';
+
+          const badgeClass = isSuccess
+            ? styles.badgeSuccess
+            : isFailed
+              ? styles.badgeFailed
+              : isRunning
+                ? styles.badgeRunning
+                : styles.badgeCancelled;
+
+          const handleRowClick = () => {
+            setSelectedRun(r);
+          };
+
+          const handleKeyDown = (e: React.KeyboardEvent) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              setSelectedRun(r);
+            }
+          };
+
           return (
             <li
-              key={`${r.workflowId}-${r.runId}`}
-              className={`${styles.schedItem} ${styles.schedItemDense} ${styles.schedRunItem}`}
+              key={`${r.workflowId}-${r.runId}-${r.startedAt || ''}`}
+              className={styles.runItem}
+              onClick={handleRowClick}
+              onKeyDown={handleKeyDown}
+              role="button"
+              tabIndex={0}
+              data-testid={`run-item-${r.runId}`}
+              aria-label={`查看 ${wfName} 运行详情`}
             >
-              <div className={styles.schedItemMain}>
-                <div className={styles.schedItemName}>{wfName}</div>
-                <Tooltip content={r.error || ''} disabled={!r.error}>
-                  <div className={styles.schedItemMeta}>
-                    {workflowRunStatusLabel(r.status)} · {whenLabel}
-                    {r.error ? ` · ${r.error.slice(0, 24)}` : ''}
-                  </div>
-                </Tooltip>
+              <div className={styles.runItemMain}>
+                <div className={styles.runItemTitleRow}>
+                  <Tooltip content={wfName}>
+                    <span className={styles.runItemName}>{wfName}</span>
+                  </Tooltip>
+                  <span className={`${styles.runBadge} ${badgeClass}`}>
+                    {workflowRunStatusLabel(r.status)}
+                  </span>
+                </div>
+
+                <div className={styles.runItemMeta}>
+                  <Tooltip content={whenInfo.full}>
+                    <span className={styles.metaChip}>
+                      {whenInfo.formatted}
+                    </span>
+                  </Tooltip>
+
+                  {durationStr ? (
+                    <>
+                      <span>·</span>
+                      <Tooltip content="执行耗时">
+                        <span className={styles.metaChip}>{durationStr}</span>
+                      </Tooltip>
+                    </>
+                  ) : null}
+
+                  {r.triggerKind ? (
+                    <>
+                      <span>·</span>
+                      <span className={styles.metaChip}>
+                        {r.triggerKind === 'manual'
+                          ? '手动'
+                          : r.triggerKind === 'cron'
+                            ? '计划'
+                            : '定时'}
+                      </span>
+                    </>
+                  ) : null}
+
+                  {r.error ? (
+                    <>
+                      <span>·</span>
+                      <Tooltip content={r.error}>
+                        <span className={styles.errorSnippet}>{r.error}</span>
+                      </Tooltip>
+                    </>
+                  ) : null}
+                </div>
               </div>
-              <div className={styles.schedItemActions}>
-                <Tooltip content={canOpen ? '打开会话' : '无关联会话'}>
+
+              <div
+                className={styles.runItemActions}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <Tooltip content="查看运行详情与诊断">
                   <Button
                     type="button"
                     variant="ghost"
                     size="sm"
-                    aria-label={
-                      canOpen ? `打开 ${wfName} 的运行会话` : `${wfName} 无关联会话`
-                    }
-                    disabled={!canOpen}
-                    onClick={() => onOpenRun(r)}
-                    icon={<AppIcon name="message-square" size={16} aria-hidden />}
+                    className={styles.actionBtn}
+                    aria-label={`查看 ${wfName} 运行详情`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedRun(r);
+                    }}
+                    icon={<AppIcon name="info" size={15} aria-hidden />}
                   />
                 </Tooltip>
+
+                {onOpenRun ? (
+                  <Tooltip
+                    content={r.sessionId ? '打开关联会话' : '前往专属定时会话'}
+                  >
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className={styles.actionBtn}
+                      aria-label={`打开 ${wfName} 会话`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onOpenRun(r);
+                      }}
+                      icon={
+                        <AppIcon name="message-square" size={15} aria-hidden />
+                      }
+                    />
+                  </Tooltip>
+                ) : null}
               </div>
             </li>
           );
         })}
       </ul>
+
+      {/* 完整执行详情与诊断弹窗 */}
+      <RunDetailDialog
+        open={Boolean(selectedRun)}
+        onClose={() => setSelectedRun(null)}
+        run={selectedRun}
+        workflow={selectedWorkflow}
+        onNavigateToSession={onOpenRun}
+        onRerun={onRerun}
+      />
     </div>
   );
 };
