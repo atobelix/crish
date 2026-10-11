@@ -160,7 +160,7 @@ export const SendToNoteButton: React.FC<SendToNoteButtonProps> = ({
         data-can-send={canSend ? 'true' : 'false'}
         style={{ display: 'inline-flex', alignItems: 'center' }}
       >
-        <Tooltip content={lastOk ? '已发送到笔记' : errorText || label}>
+        <Tooltip content={errorText || label}>
           <Button
             type="button"
             variant="ghost"
@@ -172,11 +172,7 @@ export const SendToNoteButton: React.FC<SendToNoteButtonProps> = ({
             data-testid="send-to-note-button"
             className={className}
           >
-            {lastOk ? (
-              <AppIcon name="check" size={16} aria-hidden />
-            ) : (
-              <AppIcon name="note" size={16} aria-hidden />
-            )}
+            <AppIcon name="note" size={16} aria-hidden />
           </Button>
         </Tooltip>
       </div>

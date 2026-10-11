@@ -104,7 +104,7 @@ export const ToastCard: React.FC<ToastCardProps> = ({
     ['--toast-index' as string]: index,
     ['--toast-frontmost-height' as string]: `${frontmostHeight}px`,
     ['--toast-height' as string]: cardRef.current
-      ? `${cardRef.current.scrollHeight || cardRef.current.offsetHeight}px`
+      ? `${Math.min(cardRef.current.offsetHeight || 48, 68)}px`
       : 'auto',
     ['--toast-offset-y' as string]: `${offsetY}px`,
     ['--toast-swipe-movement-x' as string]: `${movement.x}px`,
@@ -116,25 +116,49 @@ export const ToastCard: React.FC<ToastCardProps> = ({
     switch (toast.type) {
       case 'success':
         return (
-          <AppIcon name="check-circle" size={16} style={{ color: 'var(--text-success-strong)' }} aria-hidden="true" />
+          <AppIcon
+            name="check-circle"
+            size={16}
+            style={{ color: 'var(--color-success, var(--brand-deep))' }}
+            aria-hidden="true"
+          />
         );
       case 'error':
         return (
-          <AppIcon name="alert-circle" size={16}
-            style={{ color: 'var(--text-danger)' }}
-            aria-hidden="true" />
+          <AppIcon
+            name="alert-circle"
+            size={16}
+            style={{ color: 'var(--color-error)' }}
+            aria-hidden="true"
+          />
         );
       case 'warning':
         return (
-          <AppIcon name="alert-triangle" size={16} style={{ color: 'var(--text-warning-strong)' }} aria-hidden="true" />
+          <AppIcon
+            name="alert-triangle"
+            size={16}
+            style={{ color: 'var(--color-warning)' }}
+            aria-hidden="true"
+          />
         );
       case 'loading':
         return (
-          <AppIcon name="loader" size={16} className="animate-spin" style={{ color: 'var(--brand)' }} aria-hidden="true" />
+          <AppIcon
+            name="loader"
+            size={16}
+            className="animate-spin"
+            style={{ color: 'var(--brand)' }}
+            aria-hidden="true"
+          />
         );
       default:
         return (
-          <AppIcon name="info" size={16} style={{ color: 'var(--text-secondary)' }} aria-hidden="true" />
+          <AppIcon
+            name="info"
+            size={16}
+            style={{ color: 'var(--accent-color, var(--text-primary))' }}
+            aria-hidden="true"
+          />
         );
     }
   };
@@ -209,6 +233,7 @@ export const ToastCard: React.FC<ToastCardProps> = ({
           <Button
             type="button"
             variant="ghost"
+            size="sm"
             aria-label="关闭通知"
             className={styles.closeButton}
             onClick={(e) => {
@@ -216,20 +241,10 @@ export const ToastCard: React.FC<ToastCardProps> = ({
               handleDismissAnimation();
             }}
           >
-            <AppIcon name="x" size={13} aria-hidden="true" />
+            <AppIcon name="x" size={12} aria-hidden="true" />
           </Button>
         </div>
       </div>
-
-      {toast.duration && toast.duration !== Infinity && (
-        <div className={styles.progressTrack}>
-          <div
-            key={toast.updateKey ?? toast.timestamp}
-            className={styles.progressBar}
-            style={{ animationDuration: `${toast.duration}ms` }}
-          />
-        </div>
-      )}
     </div>
   );
 };

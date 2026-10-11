@@ -58,6 +58,14 @@ describe('LineBuffer 紧凑二进制行索引契约测试', () => {
     expect(buf.maxLineLength).toBe(4);
   });
 
+  it('无换行结尾的回车不计入行长度或显示宽度', () => {
+    const buf = new LineBuffer('abc\r');
+    expect(buf.getLineText(0)).toBe('abc');
+    expect(buf.getLineLength(0)).toBe(3);
+    expect(buf.maxLineLength).toBe(3);
+    expect(buf.maxLineDisplayWidth).toBe(3);
+  });
+
   it('显示宽度统计：宽字符按 2 单位计入 maxLineDisplayWidth，宽行标记 O(1) 可查', () => {
     const buf = new LineBuffer('a=1;\n中文注释占两倍宽度\nb=2;');
     // 最长行为 10 个汉字（字符数 10，显示宽度 20）
@@ -69,6 +77,12 @@ describe('LineBuffer 紧凑二进制行索引契约测试', () => {
     expect(buf.getLineDisplayWidth(1)).toBe('中文注释占两倍宽度'.length * 2);
     // 非宽行显示宽度 == 字符数
     expect(buf.getLineDisplayWidth(0)).toBe(4);
+  });
+
+  it('未换行结尾的最后一行也记录宽字符标记', () => {
+    const buf = new LineBuffer('first\n中文');
+    expect(buf.isWideLine(1)).toBe(true);
+    expect(buf.getLineDisplayWidth(1)).toBe(4);
   });
 
   it('越界保护：超出行范围安全返回空', () => {

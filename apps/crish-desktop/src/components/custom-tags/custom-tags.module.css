@@ -40,7 +40,7 @@
   background: var(--artifact-card-bg);
   overflow: hidden;
   font-family: inherit;
-  transition: border-color 0.15s ease;
+  transition: border-color var(--transition-fast);
 }
 
 .customTagCard:hover {
@@ -86,7 +86,7 @@
   align-items: center;
   gap: 0.25rem;
   padding: 0.2rem 0.5rem;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--artifact-btn-border);
   background: var(--artifact-btn-bg);
   color: var(--text-secondary);
@@ -94,7 +94,7 @@
   cursor: pointer;
   height: auto;
   min-height: unset;
-  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+  transition: background-color var(--transition-micro), border-color var(--transition-micro), color var(--transition-micro);
 }
 
 .actionBtn:hover,
@@ -146,7 +146,7 @@
 .diffModeGroup {
   display: inline-flex;
   background: var(--diff-mode-segmented-bg);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   padding: 2px;
   border: 1px solid var(--diff-split-divider);
 }
@@ -162,7 +162,7 @@
   cursor: pointer;
   height: auto;
   min-height: unset;
-  transition: all 0.12s ease;
+  transition: background-color var(--transition-micro), color var(--transition-micro), border-color var(--transition-micro);
 }
 
 .diffModeBtn.active,
@@ -338,7 +338,7 @@
   padding-left: calc(var(--tree-level, 0) * var(--filetree-indent-unit, 14px) + 0.75rem);
   cursor: pointer;
   user-select: none;
-  transition: background-color 0.1s ease;
+  transition: background-color var(--transition-micro);
   color: var(--filetree-node-fg, var(--text-secondary));
 }
 
@@ -442,7 +442,7 @@
 .aiCardBadge {
   font-size: 0.6875rem;
   padding: 0.1rem 0.4rem;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: var(--aicard-badge-bg);
   border: 1px solid var(--border-subtle);
   color: var(--aicard-badge-fg);
@@ -452,7 +452,7 @@
   font-size: 0.75rem;
   color: var(--text-tertiary);
   display: inline-block;
-  transition: transform 0.15s ease;
+  transition: transform var(--transition-fast);
 }
 
 .aiCard[data-expanded='true'] .chevronIcon {

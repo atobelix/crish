@@ -28,76 +28,113 @@ export class LineBuffer {
       return;
     }
 
-    // 按平均每行 35 字符预估容量，避免频繁扩容
-    let capacity = Math.max(16, Math.ceil(len / 35));
-    let offsets = new Uint32Array(capacity + 1);
-    let wideFlags = new Uint8Array(capacity + 1);
+    if (!/[^\x00-\xff]/.test(this.text)) {
+      let totalLines = 1;
+      for (
+        let newline = this.text.indexOf('\n');
+        newline !== -1;
+        newline = this.text.indexOf('\n', newline + 1)
+      ) {
+        totalLines += 1;
+      }
+      const offsets = new Uint32Array(totalLines + 1);
+      let maxLineLength = 0;
+      let lineIndex = 0;
+      let lineStart = 0;
 
-    let lineCount = 0;
-    offsets[0] = 0;
-    lineCount++;
+      for (
+        let newline = this.text.indexOf('\n');
+        newline !== -1;
+        newline = this.text.indexOf('\n', lineStart)
+      ) {
+        offsets[lineIndex] = lineStart;
+        let lineEnd = newline;
+        if (lineEnd > lineStart && this.text.charCodeAt(lineEnd - 1) === 13) {
+          lineEnd -= 1;
+        }
+        const lineLength = lineEnd - lineStart;
+        if (lineLength > maxLineLength) maxLineLength = lineLength;
+        lineIndex += 1;
+        lineStart = newline + 1;
+      }
 
+      offsets[lineIndex] = lineStart;
+      let lastLineEnd = len;
+      if (lastLineEnd > lineStart && this.text.charCodeAt(lastLineEnd - 1) === 13) {
+        lastLineEnd -= 1;
+      }
+      const lastLineLength = lastLineEnd - lineStart;
+      if (lastLineLength > maxLineLength) maxLineLength = lastLineLength;
+
+      offsets[totalLines] = len;
+      this.lineOffsets = offsets;
+      this.wideFlags = new Uint8Array(totalLines);
+      this.totalLines = totalLines;
+      this.maxLineLength = maxLineLength;
+      this.maxLineDisplayWidth = maxLineLength;
+      return;
+    }
+
+    // 先用原生字符串查找确定真实行数，避免容量不足时扩容并复制数组。
+    let totalLines = 1;
+    for (
+      let newline = this.text.indexOf('\n');
+      newline !== -1;
+      newline = this.text.indexOf('\n', newline + 1)
+    ) {
+      totalLines += 1;
+    }
+
+    const offsets = new Uint32Array(totalLines + 1);
+    const wideFlags = new Uint8Array(totalLines);
     let maxLen = 0;
     let maxDisp = 0;
-    let prevOffset = 0;
-    // 当前行累计：是否含宽字符 + 显示宽度（等宽模型：>255 记 2 单位）
-    let curWide = false;
-    let curDisp = 0;
+    let lineIndex = 0;
+    let lineStart = 0;
+    let lineDisplayWidth = 0;
+    let hasWideChar = false;
+    offsets[0] = 0;
 
-    for (let i = 0; i < len; i++) {
+    for (let i = 0; i < len; i += 1) {
       const code = this.text.charCodeAt(i);
       if (code === 10 /* '\n' */) {
-        // 计算当前行字符数（排除末尾可能有的 '\r'）
         let lineEnd = i;
-        if (lineEnd > prevOffset && this.text.charCodeAt(lineEnd - 1) === 13 /* '\r' */) {
-          lineEnd--;
-          curDisp--; // '\r' 不渲染，回退其宽度贡献
+        if (lineEnd > lineStart && this.text.charCodeAt(lineEnd - 1) === 13 /* '\r' */) {
+          lineEnd -= 1;
+          lineDisplayWidth -= 1;
         }
-        const lineLen = lineEnd - prevOffset;
+        const lineLen = lineEnd - lineStart;
         if (lineLen > maxLen) maxLen = lineLen;
-        if (curDisp > maxDisp) maxDisp = curDisp;
+        if (lineDisplayWidth > maxDisp) maxDisp = lineDisplayWidth;
+        wideFlags[lineIndex] = hasWideChar ? 1 : 0;
 
-        if (lineCount >= offsets.length) {
-          const next = new Uint32Array(Math.ceil(offsets.length * 1.5));
-          next.set(offsets);
-          offsets = next;
-          const nextWide = new Uint8Array(offsets.length);
-          nextWide.set(wideFlags);
-          wideFlags = nextWide;
-        }
-
-        wideFlags[lineCount - 1] = curWide ? 1 : 0;
-        offsets[lineCount++] = i + 1;
-        prevOffset = i + 1;
-        curWide = false;
-        curDisp = 0;
+        lineIndex += 1;
+        lineStart = i + 1;
+        offsets[lineIndex] = lineStart;
+        lineDisplayWidth = 0;
+        hasWideChar = false;
       } else {
-        curDisp += code > 255 ? 2 : 1;
-        if (code > 255) curWide = true;
+        lineDisplayWidth += code > 255 ? 2 : 1;
+        if (code > 255) hasWideChar = true;
       }
     }
 
-    // 处理最后一行（在最后一个换行符之后的内容）
-    let lastEnd = len;
-    if (lastEnd > prevOffset && this.text.charCodeAt(lastEnd - 1) === 13 /* '\r' */) {
-      lastEnd--;
-      curDisp--;
+    let lineEnd = len;
+    if (lineEnd > lineStart && this.text.charCodeAt(lineEnd - 1) === 13 /* '\r' */) {
+      lineEnd -= 1;
+      lineDisplayWidth -= 1;
     }
-    const lastLen = lastEnd - prevOffset;
-    if (lastLen > maxLen) maxLen = lastLen;
-    if (curDisp > maxDisp) maxDisp = curDisp;
+    const lastLineLen = lineEnd - lineStart;
+    if (lastLineLen > maxLen) maxLen = lastLineLen;
+    if (lineDisplayWidth > maxDisp) maxDisp = lineDisplayWidth;
+    wideFlags[lineIndex] = hasWideChar ? 1 : 0;
 
-    // 最终截取精确尺寸的 typed array，并在末尾追加哨兵
-    const finalOffsets = new Uint32Array(lineCount + 1);
-    finalOffsets.set(offsets.subarray(0, lineCount));
-    finalOffsets[lineCount] = len;
+    // 哨兵指向文本末尾，末尾换行因此保留为空行。
+    offsets[totalLines] = len;
 
-    const finalWide = new Uint8Array(lineCount);
-    finalWide.set(wideFlags.subarray(0, lineCount));
-
-    this.lineOffsets = finalOffsets;
-    this.wideFlags = finalWide;
-    this.totalLines = lineCount;
+    this.lineOffsets = offsets;
+    this.wideFlags = wideFlags;
+    this.totalLines = totalLines;
     this.maxLineLength = maxLen;
     this.maxLineDisplayWidth = maxDisp;
   }

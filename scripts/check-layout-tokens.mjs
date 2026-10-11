@@ -4,17 +4,19 @@
  * 布局 Token 门禁（BATCH-06 · docs/layout-token-system/00-总方案 §8）
  *
  * 语义（基线 ratchet，对齐 check-token-consistency 范式）：
- * 扫描 apps/crish-desktop/src 全部 CSS，核算三项指标：
+ * 扫描 apps/crish-desktop/src 全部 CSS，核算四项指标：
  *   1. negative_margin_gt2 —— margin/padding 声明中负值绝对值 > 2px 的条目数
  *      （白名单 -1px / -2px：分割线贴合与极小修正，见总方案 §2.4）。
  *   2. bad_space_fallback  —— `var(--space-X, fallback)` 中 fallback 与
  *      tokens.css :root 默认值不等价的条目数（错误 fallback 清洗，§5.2）。
+ *   4. chat_row_gap_hardcode —— ChatMessageRow .row/.rowCarrier 行距未引用 --chat-row-gap*
+ *      （FINAL-PLAN P2-a，基线 0）；density_matrix_viol 同时覆盖 --chat-row-gap* 三档。
  *   3. density_matrix_viol —— small/large 密度档 --space-* 存在奇数或
  *      非严格单调的条目数（密度齿轮矩阵，§4）。
  *
  * 基线 ratchet：
  * - 实测 > 登记 → FAIL（新增即拦）；实测 ≤ 登记 → 通过（存量按分维文档收敛）；
- * - `--update`：把当前三项实测值写回标记区（提升基线必须显式、有意）；
+ * - `--update`：把当前四项实测值写回标记区（提升基线必须显式、有意）；
  * - 基线缺失 → **FAIL**（2026-09-11 硬化：旧行为"自动建线并 exit 0"等价于
  *   「删除基线文件即可静默禁用门禁」，是真实绕过漏洞；建线须显式 `--update`）；
  * - 基线格式：`docs/layout-token-system/基线记录/layout-token-baseline.md`
@@ -233,6 +235,69 @@ function checkDensityMatrix(tokensCssText) {
   return violations;
 }
 
+/**
+ * R3 扩展（FINAL-PLAN §2.1-3）：--chat-row-gap / --chat-row-gap-compact 在默认、
+ * small、large 三档都必须声明，且为偶数 px、gap > compact。返回违规条目。
+ */
+const CHAT_ROW_GAP_TOKENS = ['--chat-row-gap', '--chat-row-gap-compact'];
+function parseChatRowGapTokens(cssText, selectorPattern) {
+  const map = new Map();
+  for (const { selector, body } of extractCssRules(cssText)) {
+    if (!selectorPattern.test(selector)) continue;
+    const re = /(--chat-row-gap(?:-compact)?)\s*:\s*(-?[\d.]+)px\s*;/g;
+    let m;
+    while ((m = re.exec(body))) map.set(m[1], parseFloat(m[2]));
+  }
+  return map;
+}
+function checkChatRowGapDensity(tokensCssText) {
+  const violations = [];
+  for (const [label, re] of [
+    ['default', /^:root\b/],
+    ['small', /\[data-ui-size=['"]small['"]\]/],
+    ['large', /\[data-ui-size=['"]large['"]\]/],
+  ]) {
+    const map = parseChatRowGapTokens(tokensCssText, re);
+    for (const name of CHAT_ROW_GAP_TOKENS) {
+      const px = map.get(name);
+      if (px === undefined) violations.push({ density: label, token: name, kind: 'missing' });
+      else if (!Number.isInteger(px) || px % 2 !== 0)
+        violations.push({ density: label, token: name, kind: 'odd', value: px });
+    }
+    const g = map.get('--chat-row-gap');
+    const c = map.get('--chat-row-gap-compact');
+    if (g !== undefined && c !== undefined && !(g > c)) {
+      violations.push({ density: label, token: '--chat-row-gap', kind: 'non-monotonic', value: g, prev: `compact=${c}px` });
+    }
+  }
+  return violations;
+}
+
+/**
+ * chat_row_gap_hardcode（FINAL-PLAN §2.1-3）：ChatMessageRow.module.css 的 `.row` 与
+ * `.rowCarrier` 的 padding / padding-bottom 必须引用 `--chat-row-gap*`（基线 0）。
+ */
+function checkChatRowGapHardcode() {
+  const file = join(DESKTOP_SRC, 'components', 'chat-message-row', 'ChatMessageRow.module.css');
+  if (!existsSync(file)) return [{ file: 'ChatMessageRow.module.css', selector: '*', reason: 'missing file' }];
+  const rules = extractCssRules(readFileSync(file, 'utf-8'));
+  const out = [];
+  for (const sel of ['.row', '.rowCarrier']) {
+    const hits = rules.filter((r) => r.selector.trim() === sel);
+    const decls = hits.flatMap((r) =>
+      [...r.body.matchAll(/(?:^|[;{\s])(padding(?:-bottom)?)\s*:\s*([^;]+);/g)].map((m) => m[2])
+    );
+    if (decls.length === 0) {
+      out.push({ selector: sel, reason: 'padding 未声明' });
+      continue;
+    }
+    for (const d of decls) {
+      if (!/var\(\s*--chat-row-gap/.test(d)) out.push({ selector: sel, reason: `硬编码 padding: ${d.trim()}` });
+    }
+  }
+  return out;
+}
+
 // ── 基线读写 ───────────────────────────────────────────────────────────────
 
 function readBaseline() {
@@ -261,6 +326,7 @@ function writeBaseline(m) {
     `negative_margin_gt2 ${m.negative_margin_gt2}`,
     `bad_space_fallback ${m.bad_space_fallback}`,
     `density_matrix_viol ${m.density_matrix_viol}`,
+    `chat_row_gap_hardcode ${m.chat_row_gap_hardcode}`,
     END_MARKER,
   ].join('\n');
   let text = existsSync(BASELINE_PATH) ? readFileSync(BASELINE_PATH, 'utf-8') : '';
@@ -292,15 +358,20 @@ function run() {
 
   const negMargins = checkNegativeMargins(cssFiles);
   const badFallbacks = checkSpaceFallbacks(cssFiles, defaultSpace);
-  const densityViols = checkDensityMatrix(tokensCssText);
+  const densityViols = [
+    ...checkDensityMatrix(tokensCssText),
+    ...checkChatRowGapDensity(tokensCssText),
+  ];
+  const rowGapHardcode = checkChatRowGapHardcode();
 
   const metrics = {
     negative_margin_gt2: negMargins.length,
     bad_space_fallback: badFallbacks.length,
     density_matrix_viol: densityViols.length,
+    chat_row_gap_hardcode: rowGapHardcode.length,
   };
 
-  return { metrics, negMargins, badFallbacks, densityViols, cssFileCount: cssFiles.length };
+  return { metrics, negMargins, badFallbacks, densityViols, rowGapHardcode, cssFileCount: cssFiles.length };
 }
 
 // ── CLI 入口 ───────────────────────────────────────────────────────────────
@@ -313,7 +384,7 @@ const isDirectRun =
 if (!isDirectRun) {
   // 作为模块 import 时不执行 CLI
 } else {
-  const { metrics, negMargins, badFallbacks, densityViols, cssFileCount } = run();
+  const { metrics, negMargins, badFallbacks, densityViols, rowGapHardcode, cssFileCount } = run();
 
   console.log(`[check-layout-tokens] 扫描 ${cssFileCount} 个 CSS 文件（${relative(REPO_ROOT, DESKTOP_SRC).split(sep).join('/')}）`);
   console.log('[check-layout-tokens] 指标：');
@@ -343,6 +414,10 @@ if (!isDirectRun) {
           `  [${v.density}] ${v.token} ${v.kind}: ${v.value}${v.prev ? ` (prev ${v.prev})` : ''}`
         );
       }
+    }
+    if (rowGapHardcode.length) {
+      console.log(`\n=== R4 chat_row_gap_hardcode（${rowGapHardcode.length}）===`);
+      for (const v of rowGapHardcode) console.log(`  ${v.selector}: ${v.reason}`);
     }
     process.exit(0);
   }
@@ -425,7 +500,7 @@ if (!isDirectRun) {
     process.exit(1);
   }
 
-  console.log('\n[check-layout-tokens] OK: 三项指标均未超基线');
+  console.log('\n[check-layout-tokens] OK: 四项指标均未超基线');
   process.exit(0);
 }
 

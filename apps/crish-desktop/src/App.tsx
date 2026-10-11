@@ -196,7 +196,6 @@ function App() {
               width: sidebarCollapsed ? 0 : 'var(--sidebar-width)',
               height: '100%',
               flexShrink: 0,
-              transition: 'width 0.25s cubic-bezier(0.2, 0.8, 0.2, 1)',
               overflow: 'hidden',
               position: 'relative',
             }}

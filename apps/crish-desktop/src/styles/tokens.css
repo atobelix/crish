@@ -88,8 +88,8 @@ html[data-theme='light'] {
   /* 浮层/遮罩之上的前景 */
   --text-on-overlay: var(--text-on-accent);
 
-  --tint-hover: color-mix(in srgb, var(--text-primary) 2.5%, transparent);
-  --tint-active: color-mix(in srgb, var(--text-primary) 5%, transparent);
+  --tint-hover: color-mix(in srgb, var(--text-primary) 3%, transparent);
+  --tint-active: color-mix(in srgb, var(--text-primary) 6%, transparent);
   --tint-strong: color-mix(in srgb, var(--text-primary) 8%, transparent);
   /* 族内最轻一档：极弱底/分隔 */
   --tint-subtle: color-mix(in srgb, var(--text-primary) 1.5%, transparent);
@@ -273,6 +273,38 @@ html[data-theme='light'] {
   --color-info-bg: var(--accent-blue-light);
   --color-info-border: oklch(0.65 0.18 245 / 0.25);
 
+  /* ==========================================================================
+   * 通知与灵动胶囊专用 Design Token 体系 (Notification & Capsule Tokens)
+   * 严格遵循 AGENTS.md §13 (克制对比度) 与 §14 (纯净色彩规范)，杜绝荧光
+   * ========================================================================== */
+  /* 1. 停止/中断态 (Stop - 用户原图珊瑚粉红基准真值) */
+  --notice-bg-stop: #ffeeee;
+  --notice-border-stop: #ffcfcf;
+  --notice-text-stop: #ff686c;
+
+  /* 2. 预警态 (Warning - 柔杏暖金) */
+  --notice-bg-warn: #fff7e6;
+  --notice-border-warn: #ffe7ba;
+  --notice-text-warn: #c25e00;
+
+  /* 3. 阻断错误态 (Error - 浅绯玫瑰) */
+  --notice-bg-error: #ffeff0;
+  --notice-border-error: #ffcfcf;
+  --notice-text-error: #b91c1c;
+
+  /* 4. 系统信息态 (Info - 纯通知中性磨砂底色) */
+  --notice-bg-info: var(--bg-elevated);
+  --notice-border-info: var(--border-subtle);
+  --notice-text-info: var(--text-primary);
+
+  /* 5. 完成就绪态 (Success - 淡竹翡翠) */
+  --notice-bg-success: #edfcf2;
+  --notice-border-success: #c2f0d2;
+  --notice-text-success: #15803d;
+
+  /* 堆叠层级微阴影（改浅一半，对齐 4% / 2% 取值） */
+  --notice-shadow-deck-1: 0 4px 14px -2px color-mix(in srgb, var(--shadow-color) 4%, transparent), 0 1px 3px 0 color-mix(in srgb, var(--shadow-color) 2%, transparent);
+
   /* legacy/semantic aliases used across modules (prefer --color-* going forward) */
   --danger-color: var(--color-error);
   --accent-danger: var(--color-error);
@@ -364,7 +396,17 @@ html[data-theme='light'] {
   /* 语义场景契约 Token（Tier 2，BATCH-01 新增）：组件优先消费语义层 */
   --composer-radius-single: 20px;
   --composer-radius-multi: var(--radius-3xl);
-  --composer-pad-x: 12px;
+  /* 水平内衬基座 = 结束侧（右）内衬，与 --composer-pad-x-start 成对消费。
+   * 2026-09-21 用户视觉裁决：12px → 10px（配合起始侧光学内衬达成左右视觉平衡）。 */
+  --composer-pad-x: 10px;
+  /* 起始侧（左）光学内衬（2026-09-21 用户视觉裁决「左 6 / 右 10」）：
+   * 根因——单行态左缘是轻量 ghost ＋（28px 圆钮内 14px 线框图标，光学边界软），
+   * 右缘是融合胶囊（pill 自带 8~10px 内衬的硬边界）+ 实心发送圆；
+   * 对称内衬会使整行光学重心右移，起始侧收窄 4px 后两侧留白观感均衡。
+   * 多行态消费同一对 token：＋ 同列（left-ctrl），单/多行切换 X 轴零位移
+   * （设计目标 Zero Horizontal Shift，见 docs/layout-token-system/05 §3.2）。
+   * 纪律：光学量必须命名化为 token，禁止 calc(token - Npx) 魔术数（AGENTS.md §7）。 */
+  --composer-pad-x-start: 6px;
   /* 用户裁决（2026-09-11）：固定 20px，不随密度缩放。
    * 理由：① 该值喂给 chatScrollGeometry 的滚动数学（TS 常量 CHAT_SCROLL_PAD_X=20），
    *   密度可变的值会使几何测量变成时序依赖；② 它是消息流与地板槽的对齐值，
@@ -402,7 +444,6 @@ html[data-theme='light'] {
   --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
   --ease-emphasized: cubic-bezier(0.16, 1, 0.3, 1);
   /* 历史缓动名 → 正典别名（零消费者，仅保留名字不丢失） */
-  --transition-spring-layout: var(--ease-emphasized) 220ms;
   --transition-micro: 100ms ease-out;
   --transition-fast: 150ms var(--ease-standard);
   --transition-smooth: 300ms var(--ease-standard);
@@ -729,6 +770,9 @@ html[data-theme='light'] {
   --space-7: 28px;
   --space-8: 32px;
   --space-10: 40px;
+  /* 消息流行距（FINAL-PLAN P2-a，默认档）：行间 / 状态载体紧凑行距 */
+  --chat-row-gap: 16px;
+  --chat-row-gap-compact: 4px;
 
   /*
    *     ?UI    body          /  ?tight|ui
@@ -832,8 +876,8 @@ html[data-theme='dark'] {
   /* 浮层/遮罩之上的前景 */
   --text-on-overlay: var(--text-on-accent);
 
-  --tint-hover: color-mix(in srgb, var(--text-primary) 3.5%, transparent);
-  --tint-active: color-mix(in srgb, var(--text-primary) 6.5%, transparent);
+  --tint-hover: color-mix(in srgb, var(--text-primary) 3%, transparent);
+  --tint-active: color-mix(in srgb, var(--text-primary) 6%, transparent);
   --tint-strong: color-mix(in srgb, var(--text-primary) 10%, transparent);
   /* 族内最轻一档：极弱底/分隔 */
   --tint-subtle: color-mix(in srgb, var(--text-primary) 2%, transparent);
@@ -1023,6 +1067,29 @@ html[data-theme='dark'] {
   --color-info: var(--accent-blue);
   --color-info-bg: var(--accent-blue-light);
   --color-info-border: color-mix(in srgb, var(--accent-blue) 25%, transparent);
+
+  /* 通知与灵动胶囊专用 Design Token 体系 (Dark 模式) */
+  --notice-bg-stop: #241517;
+  --notice-border-stop: rgba(255, 104, 108, 0.22);
+  --notice-text-stop: #ff8487;
+
+  --notice-bg-warn: #221c13;
+  --notice-border-warn: rgba(217, 119, 6, 0.22);
+  --notice-text-warn: #fbbf24;
+
+  --notice-bg-error: #261517;
+  --notice-border-error: rgba(220, 38, 38, 0.22);
+  --notice-text-error: #f87171;
+
+  --notice-bg-info: var(--bg-elevated);
+  --notice-border-info: var(--border-subtle);
+  --notice-text-info: var(--text-primary);
+
+  --notice-bg-success: #121e16;
+  --notice-border-success: rgba(22, 163, 74, 0.22);
+  --notice-text-success: #4ade80;
+
+  --notice-shadow-deck-1: 0 6px 18px -2px rgba(0, 0, 0, 0.4), 0 2px 6px 0 rgba(0, 0, 0, 0.2);
 
   /* Premium Soft Dark Shadows */
   --shadow-sm:
@@ -1373,6 +1440,9 @@ html[data-ui-size='small'] {
   --space-7: 28px;
   --space-8: 32px;
   --space-10: 40px;
+  /* 消息流行距（FINAL-PLAN P2-a，紧凑档）：行间 / 状态载体紧凑行距 */
+  --chat-row-gap: 12px;
+  --chat-row-gap-compact: 2px;
 
   --line-height-tight: 1.22;
   --line-height-ui: 1.32;
@@ -1437,6 +1507,9 @@ html[data-ui-size='large'] {
   --space-7: 32px;
   --space-8: 36px;
   --space-10: 48px;
+  /* 消息流行距（FINAL-PLAN P2-a，宽松档）：行间 / 状态载体紧凑行距 */
+  --chat-row-gap: 20px;
+  --chat-row-gap-compact: 6px;
 
   --line-height-tight: 1.28;
   --line-height-ui: 1.4;
@@ -1566,7 +1639,6 @@ html[data-ui-size='large'] {
 
 /* HIGH SPEC TIER: Snappy, brisk, and premium transitions */
 html[data-perf-tier='high'] {
-  --transition-spring-layout: cubic-bezier(0.16, 1, 0.3, 1) 220ms;
 }
 html[data-perf-tier='high'][data-theme='dark'] {
 }
@@ -1580,7 +1652,6 @@ html[data-perf-tier='balanced'] {
 
 /* ECO PERFORMANCE TIER: Strictly flat layout, zero transitions */
 html[data-perf-tier='eco'] {
-  --transition-spring-layout: 0ms;
   --transition-micro: 0ms;
   --transition-fast: 0ms;
   --transition-smooth: 0ms;

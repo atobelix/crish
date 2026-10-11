@@ -66,8 +66,9 @@
 .sectionLabel {
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium, 500);
-  /* 分组标签（置顶 / 项目 / 对话）用次级灰度：此前为三级灰，暗色下对比度不足 */
-  color: var(--text-secondary);
+  /* 分组标签比会话行再弱一档。暗色 --text-tertiary 对侧栏 chrome 为 4.50:1，
+     对主背景 5.57:1，a11y-contrast 暗色断言仍过。 */
+  color: var(--text-tertiary);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -82,6 +83,18 @@
 
 .sectionLabel:hover {
   color: var(--text-primary);
+}
+
+/* 分组标题 / 分组右侧图标钮 / 查看全部：hover 只改文字与图标颜色，不出底色。
+   ghost Button 的底色来自 ::before 的 --btn-hover-overlay / --btn-active-overlay，这里置透明。
+   会话行（.sessionItem）的 hover / 选中底色不受影响。 */
+.sectionLabel,
+.sectionNew,
+.sectionSortBtn,
+.sectionSort,
+.foldToggleBtn {
+  --btn-hover-overlay: transparent;
+  --btn-active-overlay: transparent;
 }
 
 .sectionLabel svg {
@@ -141,7 +154,7 @@
 .sectionSortBtn:hover,
 .sectionSort:hover {
   color: var(--text-primary);
-  background-color: var(--tint-hover);
+  background-color: transparent;
 }
 
 .pinnedDropZone {
@@ -322,7 +335,7 @@
   color: var(--text-secondary);
   background: transparent;
   border: none;
-  font-weight: var(--font-weight-medium, 500);
+  font-weight: var(--font-weight-normal, 400);
   box-shadow: none;
   transition: color var(--transition-press), background-color var(--transition-press);
   box-sizing: border-box;
@@ -335,12 +348,6 @@
   -webkit-app-region: no-drag;
 }
 
-/* 按下色变，无缩放 */
-.sessionItem:active {
-  background: var(--sidebar-active);
-  color: var(--text-primary);
-}
-
 .sessionItem {
   /* ... */
 }
@@ -348,7 +355,6 @@
 .sessionItem:hover {
   background: var(--sidebar-hover);
   color: var(--text-primary);
-  font-weight: var(--font-weight-medium, 500);
 }
 
 .sessionItem.active {
@@ -356,6 +362,12 @@
   color: var(--text-primary);
   font-weight: var(--font-weight-medium, 500);
   box-shadow: none;
+}
+
+/* 按下介于 hover（tint-hover）与选中（tint-active）之间，且不改字重 */
+.sessionItem:active {
+  background: color-mix(in srgb, var(--sidebar-hover) 50%, var(--sidebar-active));
+  color: var(--text-primary);
 }
 
 .sessionItem.active .sessionTime {
@@ -425,6 +437,19 @@
   overflow: hidden;
 }
 
+.sessionTitleHint {
+  flex-shrink: 0;
+  margin-left: var(--space-1);
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-size-xs, 12px);
+  font-weight: var(--font-weight-normal, 400);
+  line-height: 28px;
+  color: var(--text-faint);
+}
+
 .sessionText {
   flex: 1;
   overflow: hidden;
@@ -433,6 +458,7 @@
   min-width: 0;
   font-size: var(--font-size-base);
   line-height: 28px;
+  /* mask-image 只消费 alpha 通道，#000 此处无色彩语义，仅用于文字末端渐变淡出 */
   -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 14px), transparent 100%);
   mask-image: linear-gradient(to right, #000 calc(100% - 14px), transparent 100%);
 }
@@ -749,9 +775,9 @@ li.isDraggingSource > *,
 
 .foldToggleBtn:hover {
   color: var(--text-primary);
-  background: var(--tint-hover);
+  background: transparent;
 }
 
 .foldToggleBtn:active {
-  background: var(--tint-active);
+  background: transparent;
 }

@@ -13,6 +13,7 @@ import {
   THEME_KEY,
 } from '../themeStore';
 import { preferencesClient } from '../preferences/preferencesClient';
+import { clientApi } from '../clientApi';
 
 describe('Zero-FOUC & Startup Theme SSOT Test Suite', () => {
   beforeEach(() => {
@@ -166,5 +167,25 @@ describe('Zero-FOUC & Startup Theme SSOT Test Suite', () => {
     await Promise.resolve();
     await Promise.resolve();
     expect(localStorage.getItem(THEME_KEY)).toBe('dark');
+  });
+
+  it('SSOT-10: 设置缓存持久化失败有明确错误记录，不产生未处理 rejection', async () => {
+    const cacheError = new Error('settings cache unavailable');
+    const saveSpy = vi
+      .spyOn(clientApi, 'saveSettingsEx')
+      .mockRejectedValue(cacheError);
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    setTheme('dark');
+
+    await vi.waitFor(() => {
+      expect(saveSpy).toHaveBeenCalledWith('__global__', 'global', {
+        theme: 'dark',
+      });
+      expect(errorSpy).toHaveBeenCalledWith(
+        '[themeStore] Failed to persist settings cache',
+        cacheError
+      );
+    });
   });
 });

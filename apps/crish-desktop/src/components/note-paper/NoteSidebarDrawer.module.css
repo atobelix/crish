@@ -253,6 +253,7 @@
   font-size: var(--font-size-base, 13px);
   line-height: 28px;
   color: inherit;
+  /* mask-image 只消费 alpha 通道，#000 此处无色彩语义，仅用于文字末端渐变淡出 */
   -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 14px), transparent 100%);
   mask-image: linear-gradient(to right, #000 calc(100% - 14px), transparent 100%);
 }

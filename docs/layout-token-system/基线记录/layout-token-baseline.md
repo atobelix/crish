@@ -7,4 +7,5 @@
 negative_margin_gt2 7
 bad_space_fallback 0
 density_matrix_viol 0
+chat_row_gap_hardcode 0
 <!-- BASELINE_END -->

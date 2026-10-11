@@ -30,8 +30,10 @@ export const ToastViewport: React.FC<ToastViewportProps> = ({
     useToastStackMeasurement(toasts, expanded);
 
   const handleMouseEnter = useCallback(() => {
-    setExpanded(true);
-  }, []);
+    if (toasts.length > 1) {
+      setExpanded(true);
+    }
+  }, [toasts.length]);
 
   const handleMouseLeave = useCallback(() => {
     setExpanded(false);

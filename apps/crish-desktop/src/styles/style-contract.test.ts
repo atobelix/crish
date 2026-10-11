@@ -451,16 +451,16 @@ describe('批次 2 · ⑦ 固定值双源同值（双层同源约束 2）', () =
       expect(block).toContain('--bg-active: var(--tint-active)');
     }
     expect(lightBlock).toContain(
-      '--tint-hover: color-mix(in srgb, var(--text-primary) 2.5%, transparent)'
+      '--tint-hover: color-mix(in srgb, var(--text-primary) 3%, transparent)'
     );
     expect(lightBlock).toContain(
-      '--tint-active: color-mix(in srgb, var(--text-primary) 5%, transparent)'
+      '--tint-active: color-mix(in srgb, var(--text-primary) 6%, transparent)'
     );
     expect(darkBlock).toContain(
-      '--tint-hover: color-mix(in srgb, var(--text-primary) 3.5%, transparent)'
+      '--tint-hover: color-mix(in srgb, var(--text-primary) 3%, transparent)'
     );
     expect(darkBlock).toContain(
-      '--tint-active: color-mix(in srgb, var(--text-primary) 6.5%, transparent)'
+      '--tint-active: color-mix(in srgb, var(--text-primary) 6%, transparent)'
     );
   });
 });
@@ -567,5 +567,58 @@ describe('批次 6 · T4 hover-only 键盘闭环契约（08-步5 · 平直列表
     expect(src).not.toContain('role="listbox"');
     expect(src).not.toContain('role="option"');
     expect(src).not.toContain('aria-selected={active}');
+  });
+});
+
+describe('composer 水平内衬光学 token 对（2026-09-21 用户视觉裁决）', () => {
+  const COMPOSER_CSS = 'src/components/chat-composer/ChatComposer.module.css';
+
+  /** 取某选择器规则块（CSS Modules 规则体无嵌套花括号，[^}]* 安全；精确匹配行首选择器） */
+  function ruleBlock(css: string, selector: string): string {
+    const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return css.match(new RegExp(`^${escaped}\\s*\\{[^}]*\\}`, 'm'))?.[0] ?? '';
+  }
+
+  /** tokens.css 中某 token 的最后一次定义值（多主题块后者覆盖前者；取最后一次） */
+  function tokenDef(tokensCss: string, name: string): string {
+    const re = new RegExp(`(?<![\\w-])${name}\\s*:\\s*([^;]+);`, 'g');
+    let v: string | null = null;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(tokensCss))) v = m[1].trim();
+    return v ?? '';
+  }
+
+  it('tokens.css 定义光学 token 对：--composer-pad-x=10px（结束侧） + --composer-pad-x-start=6px（起始侧），均为固定 px', () => {
+    const tokens = readFile('src/styles/tokens.css');
+    expect(tokenDef(tokens, '--composer-pad-x')).toBe('10px');
+    expect(tokenDef(tokens, '--composer-pad-x-start')).toBe('6px');
+    // 负向：不得引用 --space-* 刻度（密度可变值会使几何测量变成时序依赖，同 --chat-stream-pad-x 纪律）
+    for (const name of ['--composer-pad-x', '--composer-pad-x-start']) {
+      expect(
+        tokenDef(tokens, name).startsWith('var('),
+        `${name} 不得引用空间刻度（光学内衬须固定值）`
+      ).toBe(false);
+    }
+  });
+
+  it('.composerCard 单/多行两条规则消费同一 token 对，兜底值与静态默认同值', () => {
+    // 规则块提取用原始文本（^ 行首锚定依赖换行）；断言前再对块内空白归一化
+    const single = ruleBlock(readFile(COMPOSER_CSS), '.composerCard').replace(/\s+/g, ' ');
+    const multi = ruleBlock(readFile(COMPOSER_CSS), '.composerCard.isMultiline').replace(/\s+/g, ' ');
+    expect(single, '.composerCard 规则应存在').not.toBe('');
+    expect(multi, '.composerCard.isMultiline 规则应存在').not.toBe('');
+    // 单行：上 6 / 右=结束侧 / 下 6 / 左=起始侧（左轻右重的光学平衡）
+    expect(single).toContain('padding: 6px var(--composer-pad-x, 10px) 6px var(--composer-pad-x-start, 6px)');
+    // 多行：垂直 8，水平同一对 token——＋ 同列（left-ctrl）切换 X 轴零位移
+    expect(multi).toContain('padding: 8px var(--composer-pad-x, 10px) 8px var(--composer-pad-x-start, 6px)');
+  });
+
+  it('负向：composer 卡片 padding 禁 calc() 魔术补偿（光学量必须命名化为 token）', () => {
+    const css = readFile(COMPOSER_CSS);
+    for (const sel of ['.composerCard', '.composerCard.isMultiline']) {
+      const block = ruleBlock(css, sel);
+      const padLine = block.split('\n').find((l) => l.includes('padding:')) ?? '';
+      expect(padLine, `${sel} 的 padding 不得使用 calc() 魔术补偿（AGENTS.md §7）`).not.toContain('calc(');
+    }
   });
 });

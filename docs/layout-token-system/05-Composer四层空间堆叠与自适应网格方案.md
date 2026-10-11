@@ -244,6 +244,17 @@ graph TD
 
 $$P_{x\text{-single}} = P_{x\text{-multi}} = 12\text{px}$$
 
+> **2026-09-21 修订（用户视觉裁决，取代上文「12px 对称统一」口径；X 轴零位移原则不变）**：
+> 实测单行态左缘为轻量 ghost ＋（28px 圆钮内 14px 线框图标，光学边界软），右缘为融合胶囊
+> （pill 自带 8~10px 内衬的硬边界）+ 实心发送圆——对称 12px 内衬使整行光学重心右移。
+> 用户裁决「**左 6px / 右 10px**」达成视觉平衡，落为命名 token 对：
+> `--composer-pad-x: 10px`（结束侧/基座）+ `--composer-pad-x-start: 6px`（起始侧光学内衬），
+> 定义于 `apps/crish-desktop/src/styles/tokens.css`。
+> **多行态消费同一对 token**：＋ 同列（grid `left-ctrl`），单/多行切换时左右两翼 X 轴零位移
+> （若多行沿用旧对称值，＋ 与文本左缘将产生 4px 跳变，重演本方案要消除的边缘跳变）。
+> **纪律**：光学量必须命名化、可密度演进；禁止 `calc(token - Npx)` 魔术数补偿（AGENTS.md §7），
+> 守护单测见 `style-contract.test.ts`「composer 水平内衬光学 token 对」。
+
 - **X 轴零位移（Zero Horizontal Shift）**：
   无论文本如何输入、换行或折行，输入卡片的左内边缘、右内边缘，以及第一列控件（加号）和最后一列控件（发送按钮）在水平轴上的绝对坐标完全固定，视觉上卡片两翼坚如磐石，彻底消除横向拉扯感。
 - **垂直内衬微阶梯收敛**：

@@ -101,7 +101,9 @@ export function useSidebarResize() {
 
   const persistSidebarWidth = useCallback((px: number) => {
     try {
-      void preferencesClient.setPreference('sidebar_width', px).catch(() => {});
+      void preferencesClient.setPreference('sidebar_width', px).catch(() => {
+        /* swallow-ok: configService 已同步写入；偏好落盘失败不打断拖拽 */
+      });
       const layout = configService.get('workspace.layout') as {
         sidebarWidth?: number;
       };
