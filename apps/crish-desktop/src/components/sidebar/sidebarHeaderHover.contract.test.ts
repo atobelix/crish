@@ -2,14 +2,17 @@
  * 侧栏分组标题（置顶 / 项目 / 对话）、分组右侧图标钮、「查看全部」：
  * hover 只改文字 / 图标颜色，不出底色；会话行 hover / 选中底色保持。
  */
+import path from 'node:path';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
-const css = readFileSync(
-  fileURLToPath(new URL('./SidebarSessionList.module.css', import.meta.url)),
-  'utf8'
-).replace(/\r\n/g, '\n');
+const cssPath =
+  typeof __dirname !== 'undefined'
+    ? path.resolve(__dirname, 'SidebarSessionList.module.css')
+    : fileURLToPath(new URL('./SidebarSessionList.module.css', import.meta.url));
+
+const css = readFileSync(cssPath, 'utf8').replace(/\r\n/g, '\n');
 
 function blocksFor(selector: RegExp): string[] {
   const out: string[] = [];

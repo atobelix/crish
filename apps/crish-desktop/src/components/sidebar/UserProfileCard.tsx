@@ -44,14 +44,9 @@ export const UserProfileCard: React.FC<UserProfileCardProps> = React.memo(
               <div className={styles.userAvatar}>
                 <AppIcon name="user" size={16} aria-hidden />
               </div>
-              <span
-                className={`${styles.userOnlineStatus}${!isLoggedIn ? ` ${styles.userOfflineStatus}` : ''}`}
-                aria-label="在线"
-              />
             </div>
             <div className={styles.userTextStack}>
               <span className={styles.userName}>{activeUser}</span>
-              <span className={styles.userWorkspace}>{activeWorkspace}</span>
             </div>
             <AppIcon
               name="chevrons-up-down"

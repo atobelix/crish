@@ -28,14 +28,12 @@ describe('SidebarFooter 双列底栏与 UserProfileCard 交互测试', () => {
       />
     );
 
-    // 左列用户卡片
+    // 左列用户卡片：纯净单行昵称，无工作空间副文本与头像状态标点
     const userCard = screen.getByTestId('user-profile-card');
     expect(userCard).toBeInTheDocument();
     expect(screen.getByText('orange')).toBeInTheDocument();
-    expect(screen.getByText('Conex Workspace')).toBeInTheDocument();
-
-    // 在线绿点
-    expect(screen.getByLabelText('在线')).toBeInTheDocument();
+    expect(screen.queryByText('Conex Workspace')).toBeNull();
+    expect(screen.queryByLabelText('在线')).toBeNull();
 
     // 右列独立齿轮按钮
     const gearBtn = screen.getByTestId('sidebar-settings-gear-btn');
@@ -72,7 +70,7 @@ describe('SidebarFooter 双列底栏与 UserProfileCard 交互测试', () => {
     );
 
     expect(screen.getByText('test-user')).toBeInTheDocument();
-    expect(screen.getByText('My Workspace')).toBeInTheDocument();
+    expect(screen.queryByText('My Workspace')).toBeNull();
 
     const cardBtn = screen.getByTestId('user-profile-card');
     fireEvent.click(cardBtn);
