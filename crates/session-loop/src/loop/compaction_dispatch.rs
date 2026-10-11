@@ -44,7 +44,7 @@ use super::handlers::{compaction_shape_ok, new_message_id, streaming, LoopState}
 use super::SessionLoopOptions;
 use crate::cache_tracker::CacheStatsTracker;
 use crate::r#loop::summary_coordinator::SessionSummaryCoordinator;
-use crate::r#loop::summary_dispatch::{SummaryDispatch, summarize_via_blocking};
+use crate::r#loop::summary_dispatch::{summarize_via_blocking, SummaryDispatch};
 
 // ── P4 预算层（阶段 2-2/2-3）：估算 + 钳制 ─────────────────────────────
 

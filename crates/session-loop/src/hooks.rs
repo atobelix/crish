@@ -1372,10 +1372,7 @@ mod tests {
         // ErrorSpy sleep 期间，第二个 dispatch 的失败路径会进入 emit_error_event。
         let ev_a = turn_end();
         let ev_b = tool_pre();
-        let (o1, o2) = tokio::join!(
-            registry.dispatch(&ev_a),
-            registry.dispatch(&ev_b),
-        );
+        let (o1, o2) = tokio::join!(registry.dispatch(&ev_a), registry.dispatch(&ev_b),);
         let o1 = o1.expect("dispatch turn_end");
         let o2 = o2.expect("dispatch tool_pre");
         assert_eq!(o1.error_events, 1, "先到失败必须广播 error.occurred");

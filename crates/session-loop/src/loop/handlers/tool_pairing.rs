@@ -13,9 +13,7 @@ use std::sync::Arc;
 
 use conex_types::error::codes;
 use conex_types::events::AgentEvent;
-use conex_types::message::{
-    AgentMessage, AgentMessageBlock, AgentMessageRole, ToolCallBlock,
-};
+use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole, ToolCallBlock};
 use conex_types::tool::{ToolCategory, ToolConcurrency};
 
 use super::super::end::EndDecision;
@@ -23,18 +21,22 @@ use super::{record_message, LoopState};
 
 /// 事件轨是否已存在该 call_id 的 ToolStart
 fn events_have_tool_start(state: &LoopState, call_id: &str) -> bool {
-    state.events.iter().any(|e| matches!(
-        e,
-        AgentEvent::ToolStart { call, .. } if call.id == call_id
-    ))
+    state.events.iter().any(|e| {
+        matches!(
+            e,
+            AgentEvent::ToolStart { call, .. } if call.id == call_id
+        )
+    })
 }
 
 /// 事件轨是否已存在该 call_id 的 ToolEnd（幂等闸：终态判定）
 pub(crate) fn events_have_tool_end(state: &LoopState, call_id: &str) -> bool {
-    state.events.iter().any(|e| matches!(
-        e,
-        AgentEvent::ToolEnd { result, .. } if result.id == call_id
-    ))
+    state.events.iter().any(|e| {
+        matches!(
+            e,
+            AgentEvent::ToolEnd { result, .. } if result.id == call_id
+        )
+    })
 }
 
 /// conversation 是否已含该 call_id 的 ToolResult 块（任意消息、任意块位）
@@ -48,10 +50,12 @@ pub(crate) fn conversation_has_tool_result_in(
     call_id: &str,
 ) -> bool {
     conversation.iter().any(|msg| {
-        msg.blocks.iter().any(|b| matches!(
-            b,
-            AgentMessageBlock::ToolResult { tool_call_id, .. } if tool_call_id == call_id
-        ))
+        msg.blocks.iter().any(|b| {
+            matches!(
+                b,
+                AgentMessageBlock::ToolResult { tool_call_id, .. } if tool_call_id == call_id
+            )
+        })
     })
 }
 
@@ -110,7 +114,10 @@ fn close_orphan_call(
         });
     }
     if !has_result {
-        record_message(state, synthesized_tool_result_message(call, error_code, reason, metadata_extra));
+        record_message(
+            state,
+            synthesized_tool_result_message(call, error_code, reason, metadata_extra),
+        );
     }
 }
 
@@ -125,10 +132,7 @@ fn synthesized_tool_result_message(
         "synthesized": true,
         "errorCode": error_code,
     });
-    if let (Some(obj), Some(extra)) = (
-        metadata.as_object_mut(),
-        metadata_extra.as_object(),
-    ) {
+    if let (Some(obj), Some(extra)) = (metadata.as_object_mut(), metadata_extra.as_object()) {
         for (k, v) in extra {
             obj.insert(k.clone(), v.clone());
         }
@@ -157,10 +161,7 @@ pub(crate) fn synthesize_and_record_interrupted_calls(
     reason: &str,
 ) {
     // 先收集 call 块（借用拆分：后续 &mut state 需要释放对 assistant 的引用）
-    let calls: Vec<ToolCallBlock> = assistant
-        .tool_calls()
-        .cloned()
-        .collect();
+    let calls: Vec<ToolCallBlock> = assistant.tool_calls().cloned().collect();
     if calls.is_empty() {
         return;
     }
@@ -235,7 +236,9 @@ pub(crate) fn reconcile_orphan_tool_calls(state: &mut LoopState, decision: &EndD
 mod tests {
     use super::*;
     use crate::r#loop::SessionLoopOptions;
-    use crate::steering::{RecoverySteeringStrategy, SteeringCoordinator, SteeringCoordinatorOptions};
+    use crate::steering::{
+        RecoverySteeringStrategy, SteeringCoordinator, SteeringCoordinatorOptions,
+    };
     use agent_tools::registry::ToolRegistry;
 
     fn test_state() -> LoopState {
@@ -409,14 +412,12 @@ mod tests {
     fn reconcile_skips_paired_calls() {
         let mut state = test_state();
         let mut assistant = assistant_with_call("paired-1");
-        assistant
-            .blocks
-            .push(AgentMessageBlock::ToolResult {
-                tool_call_id: "paired-1".into(),
-                tool_name: "shell_command".into(),
-                output: conex_types::tool::ToolOutput::text("ok"),
-                is_error: false,
-            });
+        assistant.blocks.push(AgentMessageBlock::ToolResult {
+            tool_call_id: "paired-1".into(),
+            tool_name: "shell_command".into(),
+            output: conex_types::tool::ToolOutput::text("ok"),
+            is_error: false,
+        });
         state.conversation.push(Arc::new(assistant));
         let decision = EndDecision::aborted(&state);
         reconcile_orphan_tool_calls(&mut state, &decision);

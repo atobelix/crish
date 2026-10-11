@@ -14,10 +14,12 @@
 //!    收口 / 终态事件），run-terminal 后自然停写
 //! 4. [冻结读 max seq] 稳定点上读会话 events 表 MAX(sequence) = frozen_seq
 //!    （本撤回事务内不会再被任何事件超过的边界）
-//! 5. [发 truncate] push AgentEvent::TimelineTruncate { boundary_seq: frozen_seq }
+//! 5. [准备回滚计划] 冻结后以目标消息起始 seq 到 frozen_seq 收集回滚所需
+//!    事件数据；失败则释放冻结并中止。
+//! 6. [发 truncate] push AgentEvent::TimelineTruncate { boundary_seq: frozen_seq }
 //!    ——自身占 sequence = frozen_seq + 1（TimelineTruncate.sequence > boundary_seq，
 //!    T1 §1.2a 不变量）
-//! 6. [冻结完成] truncate 落库确认后释放冻结；此后新写入（若因并发残余
+//! 7. [冻结完成] truncate 落库确认后释放冻结；此后新写入（若因并发残余
 //!    产生）由冻结护栏拒绝或归新 run（新 run 天然从 boundary 后开始）
 //! ```
 //!
@@ -68,6 +70,19 @@ pub trait RetractionBackend: Send + Sync {
         run_id: Option<&str>,
     ) -> Result<(), RetractionError>;
 
+    /// 冻结后、TimelineTruncate 前收集撤回回滚计划。
+    /// `target_boundary_seq` 是目标 user message 的起始 seq，`frozen_seq`
+    /// 是收敛后的 MAX；实现须在此窗口内完成读取，失败则不得截断。
+    async fn prepare_rollback_plan(
+        &self,
+        _session_id: &str,
+        _target_message_id: &str,
+        _target_boundary_seq: u64,
+        _frozen_seq: u64,
+    ) -> Result<(), RetractionError> {
+        Ok(())
+    }
+
     /// 发射 TimelineTruncate（Critical + Persist 必达落库）；返回落库 sequence
     async fn push_timeline_truncate(
         &self,
@@ -112,7 +127,7 @@ impl std::error::Error for RetractionError {}
 /// 撤回事务结果
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RetractionOutcome {
-    /// 冻结边界 = 事件流停止写入点（== boundary user 节点起始 seq）
+    /// 冻结边界 = 收敛后的事件流停止写入点（events MAX sequence）
     pub boundary_seq: u64,
     /// TimelineTruncate 自身落库 sequence（== frozen_seq + 1）
     pub truncate_sequence: u64,
@@ -202,6 +217,17 @@ impl RetractionProtocol {
             .freeze(session_id, &token, frozen_seq)
             .map_err(|_| RetractionError::Busy)?;
 
+        // 在冻结状态下、truncate 前收集撤回计划。查询失败时先释放冻结，
+        // 不生成没有可靠回滚清单的 timeline-truncate。
+        if let Err(err) = self
+            .backend
+            .prepare_rollback_plan(session_id, target_message_id, boundary, frozen_seq)
+            .await
+        {
+            let _ = self.freeze.release(session_id, &token);
+            return Err(err);
+        }
+
         // 7. 发 truncate（撤离事件放行；自身占 sequence = frozen_seq + 1）
         let truncate_sequence = self
             .backend
@@ -259,6 +285,7 @@ mod tests {
         calls: Mutex<Vec<String>>,
         truncate_seq: AtomicU64,
         converge_ok: bool,
+        prepare_rollback_ok: bool,
     }
 
     impl FakeBackend {
@@ -269,6 +296,7 @@ mod tests {
                 calls: Mutex::new(Vec::new()),
                 truncate_seq: AtomicU64::new(0),
                 converge_ok: true,
+                prepare_rollback_ok: true,
             }
         }
         fn calls(&self) -> Vec<String> {
@@ -316,6 +344,24 @@ mod tests {
                 Err(RetractionError::ConvergeTimeout)
             }
         }
+        async fn prepare_rollback_plan(
+            &self,
+            _session_id: &str,
+            _target_message_id: &str,
+            target_boundary_seq: u64,
+            frozen_seq: u64,
+        ) -> Result<(), RetractionError> {
+            self.calls.lock().unwrap().push(format!(
+                "prepare_rollback:{target_boundary_seq}:{frozen_seq}"
+            ));
+            if self.prepare_rollback_ok {
+                Ok(())
+            } else {
+                Err(RetractionError::Backend(
+                    "rollback plan query failed".into(),
+                ))
+            }
+        }
         async fn push_timeline_truncate(
             &self,
             _session_id: &str,
@@ -336,7 +382,7 @@ mod tests {
 
     /// FREEZE2：冻结原子性——boundary_seq == 事件流停止写入点（稳定点
     /// MAX），TimelineTruncate.sequence == boundary_seq + 1；协议调用
-    /// 顺序 = resolve → stop → converge → max → truncate
+    /// 顺序 = resolve → stop → converge → max → prepare rollback → truncate
     #[tokio::test]
     async fn protocol_freezes_at_max_and_truncates_at_boundary_plus_one() {
         let backend = Arc::new(FakeBackend::new(Some(40), 99));
@@ -354,6 +400,7 @@ mod tests {
                 "stop:40",
                 "converge:run-1",
                 "max",
+                "prepare_rollback:40:99",
                 "truncate:99:Some(\"run-1\")"
             ],
             "协议调用顺序 = 定位 → 停 run → 收敛 → 冻结读 → truncate"
@@ -392,6 +439,34 @@ mod tests {
             .await
             .unwrap_err();
         assert_eq!(err, RetractionError::ConvergeTimeout);
+        assert!(!protocol.freeze_registry().is_frozen("s1"));
+    }
+
+    /// 回滚计划读取失败时释放冻结且不写 timeline-truncate。
+    #[tokio::test]
+    async fn rollback_plan_failure_releases_freeze_before_truncate() {
+        let mut backend = FakeBackend::new(Some(40), 99);
+        backend.prepare_rollback_ok = false;
+        let backend = Arc::new(backend);
+        let protocol = RetractionProtocol::new(Box::new(backend.clone()));
+        let err = protocol
+            .prepare_retraction("s1", "msg-1")
+            .await
+            .unwrap_err();
+        assert_eq!(
+            err,
+            RetractionError::Backend("rollback plan query failed".into())
+        );
+        assert_eq!(
+            backend.calls(),
+            vec![
+                "resolve",
+                "stop:40",
+                "converge:run-1",
+                "max",
+                "prepare_rollback:40:99"
+            ]
+        );
         assert!(!protocol.freeze_registry().is_frozen("s1"));
     }
 

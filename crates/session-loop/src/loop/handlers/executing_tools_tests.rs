@@ -147,9 +147,8 @@ fn tool_result_message_id_derivation_documented() {
 #[test]
 fn g8_normal_path_truncates_oversize_tool_text() {
     // 超默认字节阈值（50KiB）：单行长文本必截断
-    let oversized = "x".repeat(
-        conex_compaction::tool_output::TOOL_OUTPUT_MAX_BYTES_DEFAULT + 1_024,
-    );
+    let oversized =
+        "x".repeat(conex_compaction::tool_output::TOOL_OUTPUT_MAX_BYTES_DEFAULT + 1_024);
     let ok = ClassifiedToolResult {
         id: "call_g8".into(),
         tool_name: "shell_command".into(),

@@ -194,7 +194,9 @@ fn tool_result_message(result: &ClassifiedToolResult) -> AgentMessage {
 /// 文本字段统一经 [`apply_g8_tool_output_truncation`]（正常工具记录路径）；
 /// emergency 压缩路径的二次截断仍在 `conex-compaction` 引擎侧（CON-6
 /// 同一算法两处调用，非双实现）。
-fn tool_output_from_result(result: &ClassifiedToolResult) -> (
+fn tool_output_from_result(
+    result: &ClassifiedToolResult,
+) -> (
     ToolOutput,
     Option<conex_compaction::tool_output::ToolOutputTruncationRecord>,
 ) {

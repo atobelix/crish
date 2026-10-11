@@ -19,10 +19,10 @@
 //!
 //! # rollback_before 执行器
 //!
-//! 对撤回边界之后执行过的写类工具输出路径逐一还原（trash 层
-//! [conex_fs::trash::TrashService::rollback_before]）。只读/无副作用类
-//! 空实现（[RollbackStrategy::None]）。执行器为**会话外挂载点**（不进
-//! 核心循环），由撤回命令编排（retraction_commands.rs）。
+//! 历史 path-only 写类入口经 trash 层 fail-closed 拒绝，不能再按路径消费
+//! 快照。生产撤回由壳层按 ToolEnd owner 调用
+//! [conex_fs::trash::TrashService::rollback_operations]；本执行器仅保留类别
+//! 策略投影兼容面。只读/无副作用类仍由 [RollbackStrategy::None] 空实现。
 
 use conex_types::tool::ToolCategory;
 
@@ -98,10 +98,9 @@ pub enum PathRollbackResult {
 
 /// 撤回回滚执行器（扩展点 D 承载面）
 ///
-/// `rollback_before(boundary, category_paths)`：对撤回边界之后执行过的
-/// 写类工具输出路径逐一还原。`boundary` 为撤回边界 sequence（审计/幂等
-/// 标记，调用方保证 `category_paths` 均在该边界之后被写）；trash 层按
-/// 路径精确回滚写前快照（不越界扫描）。
+/// `rollback_before(boundary, category_paths)` 是旧 path-only API。Filesystem
+/// 非空路径无法与 ToolEnd owner 精确关联，trash 会返回错误，本执行器把它
+/// 透传为 `Failed`；生产回滚须使用 owner-aware `rollback_operations`。
 pub struct RollbackExecutor<'a> {
     registry: &'a CategoryRollbackRegistry,
     trash: Option<&'a conex_fs::trash::TrashService>,
@@ -116,7 +115,7 @@ impl<'a> RollbackExecutor<'a> {
         Self { registry, trash }
     }
 
-    /// 执行回滚：按类别分派，写类走 trash rollback_before，只读类空实现
+    /// 按类别分派旧 path-only 回滚；Filesystem 非空路径会显式失败。
     ///
     /// `category_paths`：类别 → 输出路径清单（由调用方按撤回边界后
     /// tool-end 输出收集；路径去重后传入）。
@@ -266,6 +265,25 @@ mod tests {
             &results[0],
             PathRollbackResult::Skipped { reason, .. }
                 if reason.contains("trash 底座未接线")
+        ));
+    }
+
+    /// 旧 path-only 回滚不得假报成功或消费边界外快照。
+    #[test]
+    fn trash_path_only_selection_is_reported_as_failed() {
+        let reg = CategoryRollbackRegistry::default_();
+        let trash = conex_fs::trash::TrashService::new(
+            std::env::temp_dir().join("unused-retraction-trash-root"),
+        );
+        let exec = RollbackExecutor::new(&reg, Some(&trash));
+        let results = exec.rollback_before(
+            42,
+            &[(ToolCategory::Filesystem, vec!["/ws/a.txt".to_string()])],
+        );
+        assert!(matches!(
+            &results[0],
+            PathRollbackResult::Failed { error, .. }
+                if error.contains("缺少事件 owner")
         ));
     }
 

@@ -726,13 +726,16 @@ async fn max_turns_ends_with_independent_budget_reason() {
     );
     // 观测到 runtime-error 事件：retryable 与注册表 AGENT_MAX_TURNS_REACHED
     // （Permanent/retryable=false）对齐（01 §2.10；SSOT 对齐回归断言）
-    assert!(outcome.events.iter().any(|e| matches!(
-        e,
-        conex_types::events::AgentEvent::RuntimeError {
-            retryable: Some(false),
-            ..
-        }
-    )), "max-turns 的 runtime-error 必须携带 retryable=false（与错误码注册表对齐）");
+    assert!(
+        outcome.events.iter().any(|e| matches!(
+            e,
+            conex_types::events::AgentEvent::RuntimeError {
+                retryable: Some(false),
+                ..
+            }
+        )),
+        "max-turns 的 runtime-error 必须携带 retryable=false（与错误码注册表对齐）"
+    );
 }
 
 /// provider error（无内容）→ 瞬态重试 → 成功（01 §2.5 步骤 2）

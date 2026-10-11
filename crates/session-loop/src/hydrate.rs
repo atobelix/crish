@@ -555,7 +555,10 @@ mod tests {
             } if tool_call_id == "c1"
         ));
         let meta = tool_msg.metadata.as_ref().expect("合成消息带标记");
-        assert_eq!(meta.get("errorCode"), Some(&serde_json::json!(codes::TOOL_OUTCOME_UNKNOWN)));
+        assert_eq!(
+            meta.get("errorCode"),
+            Some(&serde_json::json!(codes::TOOL_OUTCOME_UNKNOWN))
+        );
         assert_eq!(meta.get("synthesized"), Some(&serde_json::json!(true)));
     }
 
@@ -572,7 +575,11 @@ mod tests {
             msg("u2", "user", Some("继续"), None),
         ];
         let hydrated = hydrate_history(history);
-        assert_eq!(ids(&hydrated), ["u1", "a1", "u2"], "已配对不得插入 Tool 消息");
+        assert_eq!(
+            ids(&hydrated),
+            ["u1", "a1", "u2"],
+            "已配对不得插入 Tool 消息"
+        );
     }
 
     /// 规则 7：blocks_json 保真路径的孤儿同样自愈
@@ -589,10 +596,7 @@ mod tests {
             msg("u2", "user", Some("继续"), None),
         ];
         let hydrated = hydrate_history(history);
-        assert_eq!(
-            ids(&hydrated),
-            ["u1", "a1", "hydrate-tool-result-c9", "u2"]
-        );
+        assert_eq!(ids(&hydrated), ["u1", "a1", "hydrate-tool-result-c9", "u2"]);
         assert_eq!(hydrated[2].role, AgentMessageRole::Tool);
     }
 

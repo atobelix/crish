@@ -808,7 +808,10 @@ mod tests {
             tool_calls[1].id, "call_0",
             "空 id 合成结果不得与显式 call_0 碰撞"
         );
-        assert_ne!(tool_calls[0].id, tool_calls[1].id, "两条 tool-call id 必须唯一");
+        assert_ne!(
+            tool_calls[0].id, tool_calls[1].id,
+            "两条 tool-call id 必须唯一"
+        );
     }
 
     /// 合成 id 跳过已存在 id（含显式插入后的空洞场景，修复前真实碰撞路径）：
@@ -819,16 +822,8 @@ mod tests {
         let result = consume(
             vec![
                 // 显式 call_0 / call_2 先占位，制造合成候选 call_2 碰撞
-                ProviderStreamEvent::tool_call(
-                    Some("call_0".into()),
-                    "a",
-                    serde_json::json!({}),
-                ),
-                ProviderStreamEvent::tool_call(
-                    Some("call_2".into()),
-                    "b",
-                    serde_json::json!({}),
-                ),
+                ProviderStreamEvent::tool_call(Some("call_0".into()), "a", serde_json::json!({})),
+                ProviderStreamEvent::tool_call(Some("call_2".into()), "b", serde_json::json!({})),
                 // 空 id：len=2 → 候选 call_2 已存在 → 跳到 call_3
                 ProviderStreamEvent::tool_call(None, "c", serde_json::json!({})),
                 ProviderStreamEvent::tool_call(Some("".into()), "d", serde_json::json!({})),

@@ -2907,7 +2907,10 @@ async fn middleware_on_result_error_degrades_to_passthrough() {
         .await;
     // 后置钩子错误：记录日志并降级透传原输出（不改变已完成的执行结果）
     assert!(out.results[0].is_ok(), "on_result 失败应降级透传原输出");
-    assert_eq!(out.results[0].output, serde_json::json!({ "v": "c1" }).into());
+    assert_eq!(
+        out.results[0].output,
+        serde_json::json!({ "v": "c1" }).into()
+    );
 }
 
 #[tokio::test]
@@ -2925,7 +2928,10 @@ async fn middleware_empty_chain_is_noop() {
         )
         .await;
     assert!(out.results[0].is_ok());
-    assert_eq!(out.results[0].output, serde_json::json!({ "v": "c1" }).into());
+    assert_eq!(
+        out.results[0].output,
+        serde_json::json!({ "v": "c1" }).into()
+    );
 }
 
 /// 审批优先于中间件：拒绝时不进入中间件链，通过后中间件参与执行
@@ -3218,7 +3224,10 @@ async fn middleware_on_result_timeout_degrades_to_passthrough() {
         )
         .await;
     assert!(out.results[0].is_ok(), "on_result 超时应降级透传原输出");
-    assert_eq!(out.results[0].output, serde_json::json!({ "v": "c1" }).into());
+    assert_eq!(
+        out.results[0].output,
+        serde_json::json!({ "v": "c1" }).into()
+    );
 }
 
 /// on_error 超时 → 仅日志（06:59）：原错误结果保持（不吞错）
