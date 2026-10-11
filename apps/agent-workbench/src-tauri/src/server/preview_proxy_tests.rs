@@ -5,7 +5,7 @@
 //!   Set-Cookie SameSite 修正、CORS 注入（preview_headers）；
 //! - HTML 注入引擎：`<base href>` 注入到 `<head>` 后首行、Inspector 桥接
 //!   脚本注入位置、`<header>` 误匹配防护（preview_injector）；
-//! - SSRF 防护：云元数据 IP / 非 http(s) 协议拦截（preview_proxy）；
+//! - URL 协议验证仅允许 http(s)，保留 localhost / 私网目标（preview_proxy）；
 //! - 端到端集成：HTML 注入链路、二进制资产流式透传零转码。
 //!
 //! 测试组织：经 `preview_proxy.rs` 的
@@ -167,9 +167,8 @@ fn test_inject_inspector_before_body_end() {
 
 // ── SSRF 防护测试（preview_proxy；对齐现有行为）──
 
-/// 云元数据 IP（169.254.169.254）协议合法（http）但属 SSRF 高危目标——
-/// 现有实现按协议白名单放行 http，此处验证**按现状**（与安全语义变更无关）；
-/// 若后续新增 IP 级 SSRF 守卫，此处断言将随实现收紧为拦截。
+/// 云元数据 IP（169.254.169.254）仍按 http(s) 协议规则放行；本守卫只负责
+/// 代理入口的访问授权，不筛查目标地址，以保留用户明确需要的本地 / 私网预览。
 #[test]
 fn test_ssrf_cloud_metadata_current_behavior_http_passthrough() {
     let url = extract_target_url(Some(
@@ -441,12 +440,14 @@ async fn test_binary_asset_passthrough() {
 /// （router.rs 已有同主题测试，此处补充 file:// 协议用例并经路由全链路驱动）
 #[tokio::test]
 async fn test_preview_proxy_route_rejects_file_scheme_400() {
-    let app = build_router(test_state());
+    let (state, token) = test_state_with_token();
+    let app = build_router(state);
 
     let response = app
         .oneshot(
             axum::http::Request::builder()
                 .uri(format!("{PREVIEW_PROXY_PATH}?url=file:///etc/passwd"))
+                .header(axum::http::header::AUTHORIZATION, format!("Bearer {token}"))
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -458,6 +459,82 @@ async fn test_preview_proxy_route_rejects_file_scheme_400() {
         .unwrap();
     let body: serde_json::Value = serde_json::from_slice(&bytes).expect("错误响应必须为 JSON");
     assert_eq!(body["code"], "cmd.invalid");
+}
+
+/// 路由级：未配对请求不能读取代理响应（Bearer 中间件须在 handler / 出站请求前拒绝）。
+#[tokio::test]
+async fn test_preview_proxy_route_rejects_missing_bearer() {
+    let app = build_router(test_state());
+    for authorization in [None, Some("Bearer invalid-preview-token")] {
+        let mut request = axum::http::Request::builder().uri(format!(
+            "{PREVIEW_PROXY_PATH}?url=http%3A%2F%2F127.0.0.1%3A1%2Fprivate"
+        ));
+        if let Some(authorization) = authorization {
+            request = request.header(axum::http::header::AUTHORIZATION, authorization);
+        }
+        let response = app
+            .clone()
+            .oneshot(request.body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        assert!(!String::from_utf8_lossy(&bytes).contains("private"));
+    }
+}
+
+/// 路由级：配对 Bearer 认证后仍可经 Axum 代理访问 localhost 预览目标。
+#[tokio::test]
+async fn test_preview_proxy_route_allows_bearer_localhost_preview() {
+    let (state, token) = test_state_with_token();
+    let app = build_router(state);
+
+    let upstream = axum::Router::new().route(
+        "/page",
+        axum::routing::get(|| async {
+            (
+                [(axum::http::header::CONTENT_TYPE, "text/html; charset=utf-8")],
+                "<html><head><title>Local preview</title></head><body>localhost preview ok</body></html>",
+            )
+        }),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind local preview upstream");
+    let target = format!(
+        "http://{}/page",
+        listener.local_addr().expect("local address")
+    );
+    let upstream_task = tokio::spawn(async move {
+        axum::serve(listener, upstream)
+            .await
+            .expect("serve local preview upstream");
+    });
+    let encoded_target =
+        url::form_urlencoded::byte_serialize(target.as_bytes()).collect::<String>();
+
+    let response = app
+        .oneshot(
+            axum::http::Request::builder()
+                .uri(format!("{PREVIEW_PROXY_PATH}?url={encoded_target}"))
+                .header(axum::http::header::AUTHORIZATION, format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let body = String::from_utf8_lossy(&bytes);
+    assert!(body.contains("localhost preview ok"));
+    assert!(body.contains("<base href="));
+    upstream_task.abort();
 }
 
 /// 路由级：OPTIONS 预检 → 204 + CORS（router.rs 已覆盖；此处补 max-age 断言）
@@ -491,7 +568,7 @@ async fn test_preview_proxy_route_options_204_with_cors() {
 /// 独立测试令牌文件序号（并发测试共享同一 pairing.json 会竞态 tmp rename）
 static TOKEN_FILE_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
-/// 测试路由状态（临时目录独立令牌库，无后端——预览代理免鉴权，无需后端）
+/// 测试路由状态（临时目录独立令牌库，无后端）
 fn test_state() -> ServerState {
     let config = crate::server::ServerConfig::new(std::env::temp_dir());
     let handle =
@@ -501,4 +578,23 @@ fn test_state() -> ServerState {
         std::env::temp_dir().join(format!("pairing-preview-proxy-test-{seq}.json")),
     );
     ServerState::new(&handle, tokens, None)
+}
+
+/// 测试路由状态 + 有效配对令牌（预览鉴权集成测试）。
+fn test_state_with_token() -> (ServerState, String) {
+    let config = crate::server::ServerConfig::new(std::env::temp_dir());
+    let handle =
+        crate::server::ServerHandle::new(config, "127.0.0.1:0".parse().expect("固定测试地址"));
+    let seq = TOKEN_FILE_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let tokens = crate::server::auth::TokenStore::new(
+        std::env::temp_dir().join(format!("pairing-preview-proxy-auth-test-{seq}.json")),
+    );
+    let state = ServerState::new(&handle, tokens, None);
+    let token = state
+        .tokens()
+        .lock()
+        .unwrap()
+        .issue("preview-test-device", crate::server::now_ms())
+        .expect("签发测试配对令牌");
+    (state, token)
 }
