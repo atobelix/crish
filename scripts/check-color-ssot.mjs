@@ -28,6 +28,9 @@ const ALLOW_PATHS = [
 ];
 
 const L0_KEYS = new Set([
+  '--surface-outer',
+  '--surface-main',
+  '--surface-input',
   '--surface-paper',
   '--surface-card',
   '--surface-elevated',
