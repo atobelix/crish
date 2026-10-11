@@ -158,7 +158,14 @@ pub mod gatekeeper {
                 format!("{cmd} {}", args.join(" "))
             };
             let analysis = crate::semantics::analyze(&full_line);
-            self.check_command_with_context_and_analysis(&analysis, cmd, args, &full_line, cwd, workspace_root)
+            self.check_command_with_context_and_analysis(
+                &analysis,
+                cmd,
+                args,
+                &full_line,
+                cwd,
+                workspace_root,
+            )
         }
 
         /// 上下文感知门禁 + 复用已算 analysis（U-GATE：prepare 单次 analyze）。
@@ -221,9 +228,17 @@ mod tests {
         use super::gatekeeper::SHARED_GATEKEEPER;
         let a: &CommandGatekeeper = &SHARED_GATEKEEPER;
         let b: &CommandGatekeeper = &SHARED_GATEKEEPER;
-        assert_eq!(a as *const _, b as *const _, "SHARED_GATEKEEPER 必须为同一地址");
+        assert_eq!(
+            a as *const _, b as *const _,
+            "SHARED_GATEKEEPER 必须为同一地址"
+        );
 
-        for cmd in ["git status", "rm -rf /", "git push --force", "sudo rm -rf /"] {
+        for cmd in [
+            "git status",
+            "rm -rf /",
+            "git push --force",
+            "sudo rm -rf /",
+        ] {
             let direct = SHARED_GATEKEEPER.check_command(cmd, &[]);
             let analysis = super::semantics::analyze(cmd);
             let full = cmd.to_string();

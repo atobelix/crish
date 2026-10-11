@@ -207,7 +207,8 @@ mod tests {
         );
         // 事件载荷预算 ≠ G8 字节阈值（第二层语义分列）
         assert_ne!(
-            TOOL_OUTPUT_BUDGET_BYTES_DEFAULT, G8_TOOL_OUTPUT_MAX_BYTES_DEFAULT
+            TOOL_OUTPUT_BUDGET_BYTES_DEFAULT,
+            G8_TOOL_OUTPUT_MAX_BYTES_DEFAULT
         );
         // shell 预览头/尾分列常量但当前同值（历史）
         assert_eq!(SHELL_PREVIEW_HEAD_BYTES, SHELL_PREVIEW_TAIL_BYTES);

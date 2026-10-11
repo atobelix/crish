@@ -56,7 +56,6 @@ use std::time::Duration;
 struct Rig {
     registry: ToolRegistry,
     activation: Arc<ActivationGate>,
-    enablement: Arc<SessionEnablement>,
 }
 
 fn build_rig(session: Arc<dyn ComputerOps>) -> Rig {
@@ -76,7 +75,6 @@ fn build_rig(session: Arc<dyn ComputerOps>) -> Rig {
     Rig {
         registry,
         activation,
-        enablement,
     }
 }
 

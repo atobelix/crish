@@ -15,7 +15,7 @@
 use agent_tools::context::ToolContext;
 use agent_tools::definition::ToolError;
 use agent_tools::registry::ToolRegistry;
-use conex_computer::activation::{ActivationGate, SessionMode};
+use conex_computer::activation::ActivationGate;
 use conex_computer::perception::{PerceptionError, PerceptionNode, PerceptionSnapshot, Rect};
 use conex_computer::screen::CapturedFrame;
 use conex_computer::security::SessionEnablement;

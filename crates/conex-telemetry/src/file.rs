@@ -44,13 +44,33 @@ pub struct FileConfig {
     pub file_name_prefix: String,
 }
 
-/// 累计 open 系统调用次数（供单测 / N5-2 断言；生产仅观测）
+/// 累计 open 尝试次数（生产进程级观测；测试断言使用当前线程计数，避免并行用例互相污染）。
 static SYSCALL_OPEN_COUNT: AtomicU64 = AtomicU64::new(0);
 
-/// 累计 open 系统调用次数（测试与性能断言用；生产仅观测不消费）。
-#[cfg_attr(not(test), allow(dead_code))]
+#[cfg(test)]
+std::thread_local! {
+    /// 仅供当前测试线程读取的 open 尝试计数。
+    static TEST_SYSCALL_OPEN_COUNT: std::cell::Cell<u64> = std::cell::Cell::new(0);
+}
+
+/// 单测读取当前线程的 open 尝试计数；进程级生产观测仍由 [SYSCALL_OPEN_COUNT] 提供。
+#[cfg(test)]
+pub(crate) fn open_syscall_count() -> u64 {
+    TEST_SYSCALL_OPEN_COUNT.with(std::cell::Cell::get)
+}
+
+/// 生产环境读取累计 open 尝试次数；当前无消费方，保留给后续性能观测。
+#[cfg(not(test))]
+#[allow(dead_code)]
 pub(crate) fn open_syscall_count() -> u64 {
     SYSCALL_OPEN_COUNT.load(Ordering::Relaxed)
+}
+
+#[inline]
+fn record_open_syscall() {
+    SYSCALL_OPEN_COUNT.fetch_add(1, Ordering::Relaxed);
+    #[cfg(test)]
+    TEST_SYSCALL_OPEN_COUNT.with(|count| count.set(count.get().wrapping_add(1)));
 }
 
 /// B1-6 毒丸恢复计数原语：文件层降级恢复事件累计次数（锁毒化恢复 +
@@ -144,8 +164,8 @@ impl DailyFileWriter {
         // 判定是否需要轮转：无句柄 / 跨天 / 写满分片
         let needs_rotate = match (state.file.as_ref(), state.meta.as_ref()) {
             (Some(_), Some(meta)) => {
-                meta.day_key != today || meta.written_bytes.load(Ordering::Relaxed)
-                    >= MAX_SINGLE_FILE_BYTES
+                meta.day_key != today
+                    || meta.written_bytes.load(Ordering::Relaxed) >= MAX_SINGLE_FILE_BYTES
             }
             _ => true,
         };
@@ -177,7 +197,7 @@ impl DailyFileWriter {
         let mut part = next_part;
         loop {
             let path = self.file_path(today, part);
-            SYSCALL_OPEN_COUNT.fetch_add(1, Ordering::Relaxed);
+            record_open_syscall();
             match open_log_file(&path) {
                 Ok(f) => {
                     let size = f.metadata().map(|m| m.len()).unwrap_or(0);
@@ -679,7 +699,6 @@ mod tests {
     /// （N5-2 目标：50 次写 open 增量 = 1）
     #[test]
     fn resident_handle_reuse_limits_opens() {
-        let _serial = RECOVERY_TEST_LOCK.lock().unwrap();
         let dir = temp_dir("resident");
         let writer = DailyFileWriter::new(dir.clone(), "workbench".to_string());
 
@@ -701,6 +720,28 @@ mod tests {
             "常驻句柄复用：后续 49 次写不得触发 open（first={} total={}）",
             opens_after_first,
             opens_after_50
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// open 计数的测试快照按线程隔离，不受其他线程写文件污染。
+    #[test]
+    fn open_syscall_count_is_thread_local_for_tests() {
+        let before = open_syscall_count();
+        let dir = temp_dir("open-counter-thread");
+        let child_dir = dir.clone();
+        std::thread::spawn(move || {
+            let writer = DailyFileWriter::new(child_dir, "workbench".to_string());
+            let sink = writer.make_writer();
+            assert!(matches!(sink, FileSink::File { .. }));
+        })
+        .join()
+        .expect("子线程写日志应正常完成");
+
+        assert_eq!(
+            open_syscall_count(),
+            before,
+            "其他线程的文件 open 不得污染当前测试快照"
         );
         let _ = fs::remove_dir_all(&dir);
     }

@@ -385,43 +385,44 @@ impl CompactionEngine {
                 policy.max_summary_tokens,
             )
         };
-        let (summary, summary_is_llm, llm_unavailable) =
-            if let Some(summary_result) = summarize_precomputed {
-                match summary_result {
-                    Ok(text) => {
-                        // 字节预算 = max_summary_tokens × 4（ASCII 4 字符/token、
-                        // CJK 3 字节/字符 ≤ 4 字节/token 的保守上界）
-                        match crate::summary_document::validate_summary_document(
-                            &text,
-                            policy.max_summary_tokens.saturating_mul(4),
-                        ) {
-                            Ok(doc) => (
-                                truncate_summary(
-                                    &crate::summary_document::summary_to_markdown(&doc),
-                                    policy.max_summary_tokens,
-                                ),
-                                true,
-                                false,
+        let (summary, summary_is_llm, llm_unavailable) = if let Some(summary_result) =
+            summarize_precomputed
+        {
+            match summary_result {
+                Ok(text) => {
+                    // 字节预算 = max_summary_tokens × 4（ASCII 4 字符/token、
+                    // CJK 3 字节/字符 ≤ 4 字节/token 的保守上界）
+                    match crate::summary_document::validate_summary_document(
+                        &text,
+                        policy.max_summary_tokens.saturating_mul(4),
+                    ) {
+                        Ok(doc) => (
+                            truncate_summary(
+                                &crate::summary_document::summary_to_markdown(&doc),
+                                policy.max_summary_tokens,
                             ),
-                            Err(_) if stub_policy == StubPolicy::LlmRequired => {
-                                return llm_blocked_plan(messages, cut, &dropped_ids, tokens_before);
-                            }
-                            Err(_) => (stub(), false, false),
+                            true,
+                            false,
+                        ),
+                        Err(_) if stub_policy == StubPolicy::LlmRequired => {
+                            return llm_blocked_plan(messages, cut, &dropped_ids, tokens_before);
                         }
+                        Err(_) => (stub(), false, false),
                     }
-                    Err(_) if stub_policy == StubPolicy::LlmRequired => {
-                        return llm_blocked_plan(messages, cut, &dropped_ids, tokens_before);
-                    }
-                    Err(_) => (stub(), false, false),
                 }
-            } else {
-                // 无预计算摘要（E2 F1 L1）：LlmRequired 下不产生
-                // stub——放弃压缩等待 LLM 可用；StubAllowed 下保持现状
-                if stub_policy == StubPolicy::LlmRequired {
+                Err(_) if stub_policy == StubPolicy::LlmRequired => {
                     return llm_blocked_plan(messages, cut, &dropped_ids, tokens_before);
                 }
-                (stub(), false, false)
-            };
+                Err(_) => (stub(), false, false),
+            }
+        } else {
+            // 无预计算摘要（E2 F1 L1）：LlmRequired 下不产生
+            // stub——放弃压缩等待 LLM 可用；StubAllowed 下保持现状
+            if stub_policy == StubPolicy::LlmRequired {
+                return llm_blocked_plan(messages, cut, &dropped_ids, tokens_before);
+            }
+            (stub(), false, false)
+        };
 
         // 组装：system + 链全查（按原始顺序）+ 新摘要 + 保留段（T-08）
         let mut result: Vec<Arc<AgentMessage>> = messages[..cut]

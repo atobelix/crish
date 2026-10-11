@@ -1146,8 +1146,7 @@ fn build_code_fence_html_shell(lang: &str, file_path: Option<&str>, inner: Strin
 
     let header = format!(
         "<div class=\"md-code-header\"><div class=\"md-code-header-left\">{}</div>{}</div>",
-        left_content,
-        actions
+        left_content, actions
     );
 
     format!(
