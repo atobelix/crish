@@ -102,18 +102,7 @@ export {
 } from './dropDetection';
 
 export type { Rect, Pointer } from './geometry';
-
-let _isPrimaryPanel: (panelId: string) => boolean = () => false;
-
-export function setPrimaryPanelChecker(
-  fn: (panelId: string) => boolean
-): void {
-  _isPrimaryPanel = fn;
-}
-
-export function isPrimaryPanel(panelId: string): boolean {
-  return _isPrimaryPanel(panelId);
-}
+export { setPrimaryPanelChecker, isPrimaryPanel } from './panelIdentity';
 
 export {
   useLayoutTreeStore,

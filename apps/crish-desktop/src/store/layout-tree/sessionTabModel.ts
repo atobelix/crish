@@ -5,7 +5,7 @@
  * 草稿哨兵按 tab 唯一（`__pending_draft__:${tabId}`），禁止全局单例写入 tab。
  */
 import type { LayoutLeaf, LayoutNode } from './types';
-import { collectLeaves } from './layoutTreeQuery';
+import { collectLeaves } from './layoutTreeTraversal';
 
 /** 全局草稿哨兵（session store / enterDraftMode 仍用）。禁止写入 SessionTab.sessionId */
 export const PENDING_DRAFT_SESSION_ID = '__pending_draft__' as const;

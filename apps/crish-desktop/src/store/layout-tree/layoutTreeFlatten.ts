@@ -15,7 +15,7 @@ import type {
 } from './types';
 import { isLeaf } from './types';
 import { createDefaultDock } from './sessionTabModel';
-import { isPrimaryPanel } from './index';
+import { isPrimaryPanel } from './panelIdentity';
 
 type Rect = { x: number; y: number; width: number; height: number };
 

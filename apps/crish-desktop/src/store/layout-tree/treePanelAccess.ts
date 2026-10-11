@@ -18,7 +18,7 @@
  * no cross-store gain.
  */
 
-import { isPrimaryPanel } from './index';
+import { isPrimaryPanel } from './panelIdentity';
 import {
   openToolInActiveTab,
   openToolInSession,

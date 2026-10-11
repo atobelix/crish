@@ -13,7 +13,7 @@ import type {
 import { createBranch, createFallbackDraftTree, isLeaf } from './types';
 import { sessionIdTaken } from './sessionTabModel';
 import { findNodeById, findParent, collectLeaves } from './layoutTreeQuery';
-import { removeBranch, replaceNode } from './layoutTreeInsert';
+import { removeBranch, replaceNode } from './layoutTreeNodeOps';
 
 /**
  * 移动叶子：将 source leaf 从原位置移除，

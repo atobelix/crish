@@ -5,10 +5,10 @@
  */
 import type {
   LayoutBranch,
-  LayoutLeaf,
   LayoutNode,
 } from './types';
 import { isBranch, isLeaf } from './types';
+export { collectLeaves } from './layoutTreeTraversal';
 
 // ── 查询操作 ──────────────────────────────────────────────────────────
 
@@ -32,13 +32,4 @@ export function findParent(
   if (root.children[0].id === id) return { parent: root, index: 0 };
   if (root.children[1].id === id) return { parent: root, index: 1 };
   return findParent(root.children[0], id) ?? findParent(root.children[1], id);
-}
-
-/** 收集所有叶子节点 */
-export function collectLeaves(root: LayoutNode): LayoutLeaf[] {
-  if (isLeaf(root)) return [root];
-  return [
-    ...collectLeaves(root.children[0]),
-    ...collectLeaves(root.children[1]),
-  ];
 }

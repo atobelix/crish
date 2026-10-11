@@ -17,7 +17,7 @@
  * - 域隔离（chat vs tool）由 types.isSameDomain 另行处理
  */
 
-import { isPrimaryPanel } from './index';
+import { isPrimaryPanel } from './panelIdentity';
 import type { Rect, Pointer } from './geometry';
 
 // 透传 re-export 几何原语：消费方仍可从 dropDetection 取 Rect/Pointer，
