@@ -19,7 +19,14 @@ import {
 import { notificationStore } from '@/domain/store/notificationStore';
 import type { NotificationInput } from '@/domain/store/notificationReducers';
 import type { PushMessage } from './types';
-import { buildDeepLinkRoute } from './deepLink';
+import { buildDeepLinkRoute } from './deepLinkRoute';
+import { normalizeSystemNotification } from './notificationNormalizer';
+
+export {
+  normalizeSystemNotification,
+  TARGET_ID_PARAM_KEYS,
+} from './notificationNormalizer';
+export type { SystemNotificationLike } from './notificationNormalizer';
 
 /** 前台呈现决策（SDK 57 NotificationBehavior；全 false = 不弹系统通知） */
 export interface ForegroundPresentation {
@@ -44,78 +51,6 @@ export async function installForegroundHandler(): Promise<void> {
   await setNotificationHandlerSafe({
     handleNotification: async () => decideForegroundPresentation(),
   });
-}
-
-/** 系统通知结构子集（expo Notification 的结构兼容面：request.content 嵌套；纯函数可测） */
-export interface SystemNotificationLike {
-  request: {
-    identifier: string;
-    content: {
-      title: string | null;
-      body: string | null;
-      data?: Record<string, unknown>;
-    };
-  };
-}
-
-/** data 中取字符串字段（类型不符 → null，不猜测） */
-function asString(v: unknown): string | null {
-  return typeof v === 'string' && v.length > 0 ? v : null;
-}
-
-/** data 中取数值字段（类型不符 → null） */
-function asNumber(v: unknown): number | null {
-  return typeof v === 'number' && Number.isFinite(v) ? v : null;
-}
-
-/** 目标定位参数白名单（target.params → 系统通知 data 扁平字段；pushConsumer 复用） */
-export const TARGET_ID_PARAM_KEYS = [
-  'toolCallId',
-  'runId',
-  'taskId',
-  'subagentId',
-  'timerId',
-  'cronId',
-] as const;
-
-/** 系统通知 → PushMessage 归一（厂商通道 data 白名单扁平字段形态） */
-export function normalizeSystemNotification(
-  notification: SystemNotificationLike
-): PushMessage | null {
-  const content = notification.request.content;
-  const data = content.data ?? {};
-  const eventType = asString(data.eventType);
-  const dedupeKey = asString(data.dedupeKey);
-  // 缺事件类型/去重键 = 非 crish 推送（无展示层去重前提，D7 §6.4-2）→ 丢弃 + 留痕
-  if (!eventType || !dedupeKey) return null;
-  const params: Record<string, string> = {};
-  for (const key of TARGET_ID_PARAM_KEYS) {
-    const v = asString(data[key]);
-    if (v) params[key] = v;
-  }
-  const severity =
-    data.severity === 'critical' || data.severity === 'important'
-      ? data.severity
-      : 'normal';
-  return {
-    schemaVersion: 1,
-    id: asString(data.id) ?? `sys:${notification.request.identifier}`,
-    eventType,
-    seq: asNumber(data.seq) ?? 0,
-    tsMs: asNumber(data.tsMs) ?? Date.now(),
-    severity,
-    category: asString(data.category) ?? 'system',
-    title: asString(data.title) ?? content.title ?? 'Crish 通知',
-    body: asString(data.body) ?? content.body,
-    dedupeKey,
-    collapseKey: asString(data.collapseKey),
-    channelId: asString(data.channelId) ?? 'general',
-    target: {
-      screen: asString(data.screen) ?? '',
-      sessionId: asString(data.sessionId),
-      params,
-    },
-  };
 }
 
 /** PushMessage → app 内通知输入（id = dedupeKey 双通道去重主键；route = 深链） */
