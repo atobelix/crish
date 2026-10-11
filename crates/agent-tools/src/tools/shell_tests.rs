@@ -27,8 +27,8 @@ use super::shell_exec::terminate_process_tree;
 use super::shell_invoke::{
     base64_encode, build_shell_invocation, build_windows_powershell_script, parse_mode, ShellMode,
 };
-use super::shell_output::{clamp_output_bytes, format_command_result, high_output_suggestion};
 use super::shell_output::OutputAccumulator;
+use super::shell_output::{clamp_output_bytes, format_command_result, high_output_suggestion};
 use conex_shared::perf_budget::{SHELL_ACCUM_HARD_CAP_FACTOR, SHELL_MAX_OUTPUT_BYTES_DEFAULT};
 
 fn tool() -> ShellCommandTool {

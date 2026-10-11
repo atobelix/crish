@@ -175,6 +175,21 @@ pub trait SubagentSpawner: Send + Sync + std::fmt::Debug {
         req: &SubagentSpawnRequest,
     ) -> Result<SubagentSpawnResult, SubagentSpawnError>;
 
+    /// 为流程节点派发子代理，并声明此 flow 是否启用了生命周期事件。
+    /// 默认实现保留既有 spawner 行为；未接管事件的调度器会自行发射。
+    async fn spawn_flow_node(
+        &self,
+        req: &SubagentSpawnRequest,
+        _emit_lifecycle_events: bool,
+    ) -> Result<SubagentSpawnResult, SubagentSpawnError> {
+        self.spawn(req).await
+    }
+
+    /// 返回 true 表示实现负责已启用 flow 的 started/ended 事件，调度器不重复发射。
+    fn owns_flow_lifecycle_events(&self) -> bool {
+        false
+    }
+
     /// 批量派发（T-D-06：REQ-D02 无依赖平铺并行）：tasks 数组 → 逐条 spawn，
     /// 返回结果数组（顺序与入参一致，每条 subagentId/subagentRunId/
     /// sessionId/status）。

@@ -124,7 +124,8 @@ impl Tool for GrepSearchTool {
             .unwrap_or_default();
         let max_matches = optional_u64(&args, "maxMatches").unwrap_or(DEFAULT_MAX_MATCHES);
         let max_files = optional_u64(&args, "maxFiles").unwrap_or(DEFAULT_MAX_FILES);
-        let max_file_bytes = optional_u64(&args, "maxFileBytes").unwrap_or(SEARCH_MAX_FILE_BYTES_DEFAULT);
+        let max_file_bytes =
+            optional_u64(&args, "maxFileBytes").unwrap_or(SEARCH_MAX_FILE_BYTES_DEFAULT);
 
         // 正则编译失败按入参非法处理（对齐 TS new RegExp 抛错语义）
         let matcher = if use_regex {

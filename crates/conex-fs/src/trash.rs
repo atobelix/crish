@@ -96,6 +96,41 @@ struct EntryMeta {
     /// 旧登记无此字段按 true 兼容）
     #[serde(default = "default_true")]
     original_existed: bool,
+    /// 写操作精确归属键；旧快照无该字段，不能参与撤回。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    operation: Option<SnapshotOperation>,
+    /// 快照持久化顺序键（条目 id 使用固定宽度序号，可在重启后排序）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    snapshot_order: Option<String>,
+}
+
+/// 写前快照与 ToolEnd 事件的精确关联键。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SnapshotOperation {
+    pub session_id: String,
+    pub run_id: String,
+    pub tool_call_id: String,
+    /// 快照对应的标准显示路径，仅用于诊断；owner 匹配不依赖路径文本格式。
+    pub path: String,
+}
+
+impl PartialEq for SnapshotOperation {
+    fn eq(&self, other: &Self) -> bool {
+        self.session_id == other.session_id
+            && self.run_id == other.run_id
+            && self.tool_call_id == other.tool_call_id
+    }
+}
+
+impl Eq for SnapshotOperation {}
+
+impl std::hash::Hash for SnapshotOperation {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.session_id.hash(state);
+        self.run_id.hash(state);
+        self.tool_call_id.hash(state);
+    }
 }
 
 /// serde 缺省值：原路径已存在（旧条目兼容）
@@ -223,6 +258,30 @@ impl TrashService {
 
     /// 写前自动备份快照（S10b 中间件钩子存储面）
     pub fn snapshot(&self, path: &Path) -> Result<TrashEntry> {
+        self.snapshot_inner(path, None)
+    }
+
+    /// 写前快照并持久化其精确 operation owner。
+    pub fn snapshot_for_operation(
+        &self,
+        path: &Path,
+        operation: SnapshotOperation,
+    ) -> Result<TrashEntry> {
+        if operation.session_id.is_empty()
+            || operation.run_id.is_empty()
+            || operation.tool_call_id.is_empty()
+            || operation.path.is_empty()
+        {
+            bail!("写前快照 operation owner 字段不能为空");
+        }
+        self.snapshot_inner(path, Some(operation))
+    }
+
+    fn snapshot_inner(
+        &self,
+        path: &Path,
+        operation: Option<SnapshotOperation>,
+    ) -> Result<TrashEntry> {
         if path_is_within(&self.root, path) {
             bail!("目标位于回收站根目录内，拒绝快照：{}", path.display());
         }
@@ -247,7 +306,7 @@ impl TrashService {
                     checksum: None,
                     mode: EntryMode::Snapshot,
                 };
-                write_meta(&entry_dir, &entry, true, None, false)?;
+                write_meta_with_operation(&entry_dir, &entry, true, None, false, operation)?;
                 return Ok(entry);
             }
             Err(e) => {
@@ -279,7 +338,9 @@ impl TrashService {
             checksum,
             mode: EntryMode::Snapshot,
         };
-        if let Err(e) = write_meta(&entry_dir, &entry, true, Some(snapshot), true) {
+        if let Err(e) =
+            write_meta_with_operation(&entry_dir, &entry, true, Some(snapshot), true, operation)
+        {
             let _ = force_remove_dir_all(&entry_dir);
             return Err(e).with_context(|| format!("登记快照条目失败：{}", path.display()));
         }
@@ -372,47 +433,170 @@ impl TrashService {
     }
 
     /// 撤回批量回滚入口（统一输入流收敛战役 R1 · 详案 §1.2-④ 接线）
-    ///
-    /// 对撤回边界之后执行过的写类工具输出路径逐一还原写前快照
-    /// （S10b 语义：[Self::snapshot] 登记的快照条目 + [Self::restore_force]
-    /// 覆盖式恢复，含 nil-content 删除语义）。
-    ///
-    /// - `boundary`：撤回边界 sequence——**审计/幂等标记**（调用方保证
-    ///   `target_paths` 均在该边界之后被写；trash 层不持有 sequence 轴，
-    ///   按调用方给定的路径清单精确回滚，不越界扫描）。多写路径按
-    ///   快照时间倒序逐条恢复（最新写先还原，终态 = 边界前状态）；
-    /// - 单条恢复失败（checksum 校验失败 / 原路径非法 / 恢复写回失败）
-    ///   → 整体返回 Err（fail-closed：损坏快照不静默跳过）；
-    /// - 无快照条目 → [RollbackOutcome::Skipped]（幂等降级，不报错）。
+    /// 旧 path-only 回滚面已停用：非空路径缺少事件 owner，必须使用
+    /// [Self::rollback_operations]；空清单保留为幂等 no-op。
     pub fn rollback_before(
         &self,
         boundary: u64,
         target_paths: &[std::path::PathBuf],
     ) -> Result<Vec<RollbackOutcome>> {
-        let _boundary = boundary; // 审计/幂等标记（见上方注释；调用方保证路径在边界后被写）
-        let entries = self.list();
-        let mut results = Vec::new();
-        for path in target_paths {
-            let original = abs_clean(path);
-            // 该路径全部写前快照条目（时间倒序：最新写先还原）
-            let mut snapshots: Vec<&TrashEntry> = entries
-                .iter()
-                .filter(|e| e.mode == EntryMode::Snapshot && e.original_path == original)
-                .collect();
-            snapshots.sort_by_key(|e| std::cmp::Reverse(e.trashed_at));
-            if snapshots.is_empty() {
-                results.push(RollbackOutcome::Skipped {
-                    path: original,
-                    reason: "无写前快照（幂等跳过）".into(),
-                });
+        let _boundary = boundary;
+        if !target_paths.is_empty() {
+            bail!("路径级回滚缺少事件 owner，拒绝越过撤回边界；请使用 rollback_operations");
+        }
+        Ok(Vec::new())
+    }
+
+    /// 按 ToolEnd sequence 逆序恢复精确选中的写操作。
+    /// `operations` 按事件 sequence 升序提供；同一 owner 的重试快照按
+    /// 持久化顺序逆序恢复，使最终内容回到该 operation 首次写入前。
+    pub fn rollback_operations(
+        &self,
+        operations: &[SnapshotOperation],
+    ) -> Result<Vec<RollbackOutcome>> {
+        if operations.is_empty() {
+            return Ok(Vec::new());
+        }
+        let metas = self.scan_metas_strict()?;
+        let mut selected_operations = Vec::new();
+        let mut seen_operations = std::collections::HashSet::new();
+        for operation in operations.iter().rev() {
+            if !seen_operations.insert(operation) {
                 continue;
             }
-            for entry in snapshots {
-                self.restore_force(&entry.id)?;
+            let mut snapshots: Vec<(String, EntryMeta)> = metas
+                .iter()
+                .filter_map(|meta| {
+                    if meta.entry.mode != EntryMode::Snapshot
+                        || meta.operation.as_ref() != Some(operation)
+                    {
+                        return None;
+                    }
+                    Some((meta, meta.snapshot_order.as_deref()))
+                })
+                .map(|(meta, order)| -> Result<(String, EntryMeta)> {
+                    let order = order.filter(|order| !order.is_empty()).ok_or_else(|| {
+                        anyhow::anyhow!("快照 owner 缺少持久化顺序键：{}", meta.entry.id)
+                    })?;
+                    if order != snapshot_order_key(&meta.entry) {
+                        bail!("快照 owner 顺序键与条目 id 不匹配：{}", meta.entry.id);
+                    }
+                    self.validate_rollback_snapshot(meta)?;
+                    Ok((order.to_string(), meta.clone()))
+                })
+                .collect::<Result<Vec<_>>>()?;
+            snapshots.sort_by(|left, right| right.0.cmp(&left.0));
+            if snapshots.is_empty() {
+                bail!(
+                    "ToolEnd operation 缺少匹配写前快照：session={}, run={}, call={}, path={}",
+                    operation.session_id,
+                    operation.run_id,
+                    operation.tool_call_id,
+                    operation.path
+                );
             }
-            results.push(RollbackOutcome::Restored(original));
+            selected_operations.push(snapshots);
+        }
+
+        let mut results = Vec::new();
+        let mut restored_paths = std::collections::HashSet::new();
+        for snapshots in selected_operations {
+            for (_, meta) in snapshots {
+                let original = abs_clean(&meta.entry.original_path);
+                self.restore_force(&meta.entry.id)?;
+                let restored_entry_dir = self.entry_dir(&meta.entry.id)?;
+                match fs::symlink_metadata(&restored_entry_dir) {
+                    Ok(_) => bail!(
+                        "已恢复快照但回收站条目清理失败：{}",
+                        restored_entry_dir.display()
+                    ),
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(error) => {
+                        return Err(error).with_context(|| {
+                            format!(
+                                "检查回滚后快照清理状态失败：{}",
+                                restored_entry_dir.display()
+                            )
+                        })
+                    }
+                }
+                if restored_paths.insert(original.clone()) {
+                    results.push(RollbackOutcome::Restored(original));
+                }
+            }
         }
         Ok(results)
+    }
+
+    /// 回滚专用严格扫描：任何目录枚举、目录类型读取或登记解析错误都
+    /// 返回 Err。普通用户列表仍走宽容 list()，但不能用于决定撤回成功。
+    fn scan_metas_strict(&self) -> Result<Vec<EntryMeta>> {
+        let rd = match fs::read_dir(&self.root) {
+            Ok(rd) => rd,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+            Err(error) => {
+                return Err(error)
+                    .with_context(|| format!("扫描回收站根目录失败：{}", self.root.display()))
+            }
+        };
+        let mut metas = Vec::new();
+        for entry in rd {
+            let entry =
+                entry.with_context(|| format!("读取回收站目录项失败：{}", self.root.display()))?;
+            let file_type = entry
+                .file_type()
+                .with_context(|| format!("读取回收站目录项类型失败：{}", entry.path().display()))?;
+            if !file_type.is_dir() {
+                continue;
+            }
+            metas.push(read_meta(&entry.path())?);
+        }
+        Ok(metas)
+    }
+
+    /// 在开始消费任何条目前验证所选快照，避免后续损坏项导致较新写入已
+    /// 恢复、较早快照才报错的半回滚状态。
+    fn validate_rollback_snapshot(&self, meta: &EntryMeta) -> Result<()> {
+        if !meta.backup || meta.entry.mode != EntryMode::Snapshot {
+            bail!("ToolEnd owner 指向非写前快照条目：{}", meta.entry.id);
+        }
+        validate_original_path(&meta.entry.original_path, &self.root)?;
+        let entry_dir = self.entry_dir(&meta.entry.id)?;
+        let payload_dir = entry_dir.join(PAYLOAD_DIR);
+        if !meta.original_existed {
+            match fs::symlink_metadata(&payload_dir) {
+                Ok(_) => bail!("nil-content 快照意外包含 payload：{}", meta.entry.id),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => {
+                    return Err(error).with_context(|| {
+                        format!(
+                            "读取 nil-content payload 元数据失败：{}",
+                            payload_dir.display()
+                        )
+                    })
+                }
+            }
+            return Ok(());
+        }
+        if meta.snapshot.is_none() {
+            bail!("写前快照缺少原始元数据：{}", meta.entry.id);
+        }
+        let payload = payload_dir.join(relative_path_of(&meta.entry.original_path));
+        let payload_metadata = fs::symlink_metadata(&payload)
+            .with_context(|| format!("读取写前快照 payload 元数据失败：{}", payload.display()))?;
+        if !payload_metadata.file_type().is_file() {
+            bail!("写前快照 payload 缺失：{}", payload.display());
+        }
+        let expected = meta
+            .entry
+            .checksum
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("写前快照缺少 checksum：{}", meta.entry.id))?;
+        let actual = crate::path_utils::compute_file_hash(&payload)?;
+        if &actual != expected {
+            bail!("写前快照 checksum 不匹配：{}", meta.entry.id);
+        }
+        Ok(())
     }
 
     /// 扫描 trash 根目录，返回全部登记条目（按入回收站时间倒序）
@@ -470,11 +654,24 @@ fn write_meta(
     snapshot: Option<SnapshotMeta>,
     original_existed: bool,
 ) -> Result<()> {
+    write_meta_with_operation(entry_dir, entry, backup, snapshot, original_existed, None)
+}
+
+fn write_meta_with_operation(
+    entry_dir: &Path,
+    entry: &TrashEntry,
+    backup: bool,
+    snapshot: Option<SnapshotMeta>,
+    original_existed: bool,
+    operation: Option<SnapshotOperation>,
+) -> Result<()> {
     let meta = EntryMeta {
         entry: entry.clone(),
         backup,
         snapshot,
         original_existed,
+        operation,
+        snapshot_order: Some(snapshot_order_key(entry)),
     };
     let json = serde_json::to_string_pretty(&meta)?;
     let target = entry_dir.join(META_FILE);
@@ -743,7 +940,17 @@ fn gen_entry_id() -> String {
     static SEQ: AtomicU64 = AtomicU64::new(0);
     let millis = now_millis();
     let seq = SEQ.fetch_add(1, Ordering::Relaxed);
-    format!("t{millis:x}-{seq:x}{:x}", std::process::id())
+    format!("t{millis:x}-{seq:016x}-{:x}", std::process::id())
+}
+
+/// 可词典序比较的持久化顺序键：数值时间戳 + 固定位宽进程内序号 + pid。
+fn snapshot_order_key(entry: &TrashEntry) -> String {
+    let id_suffix = entry
+        .id
+        .split_once('-')
+        .map(|(_, suffix)| suffix)
+        .unwrap_or("");
+    format!("{:020}-{id_suffix}", entry.trashed_at.max(0))
 }
 
 /// 当前纪元毫秒（时钟不可用时 0）
@@ -1426,103 +1633,133 @@ mod tests {
         assert_eq!(fs::read_to_string(&dst).unwrap(), "payload data");
     }
 
-    // ── R1 撤回批量回滚（rollback_before）──
+    // ── R1 撤回精确 owner 回滚 ──
 
-    /// 单写回滚：写前快照 + 修改 → rollback_before → 内容还原为写前状态
-    #[test]
-    fn rollback_before_restores_single_write() {
-        let ws = TempDir::new("rb_ws");
-        let trash_root = TempDir::new("rb_trash");
-        let svc = TrashService::new(trash_root.path());
-        let file = ws.write("a.txt", "原始内容");
-
-        // 写前快照（S10b 语义）
-        svc.snapshot(&file).unwrap();
-        fs::write(&file, "修改后内容").unwrap();
-
-        let results = svc.rollback_before(42, &[file.clone()]).unwrap();
-        assert_eq!(results.len(), 1);
-        assert_eq!(results[0], RollbackOutcome::Restored(file.clone()));
-        assert_eq!(
-            fs::read_to_string(&file).unwrap(),
-            "原始内容",
-            "写类工具输出路径还原为写前状态"
-        );
-        assert!(svc.list().is_empty(), "快照条目被消费");
+    fn operation(call: &str, path: &str) -> SnapshotOperation {
+        SnapshotOperation {
+            session_id: "s1".into(),
+            run_id: "r1".into(),
+            tool_call_id: call.into(),
+            path: path.into(),
+        }
     }
 
-    /// 多写回滚：同一路径多次写 → 快照倒序恢复，终态 = 边界前状态
+    /// 同一路径边界前后均有快照时，只消费事件边界后的 operation。
     #[test]
-    fn rollback_before_undoes_multiple_writes_in_reverse() {
-        let ws = TempDir::new("rb_ws2");
-        let trash_root = TempDir::new("rb_trash2");
+    fn rollback_operations_preserves_pre_boundary_snapshot_for_same_path() {
+        let ws = TempDir::new("rb_boundary_ws");
+        let trash_root = TempDir::new("rb_boundary_trash");
         let svc = TrashService::new(trash_root.path());
-        let file = ws.write("b.txt", "v0");
+        let file = ws.write("a.txt", "v0");
+        let before = operation("before", "a.txt");
+        let after_one = operation("after-one", "a.txt");
+        let after_two = operation("after-two", "a.txt");
 
-        svc.snapshot(&file).unwrap(); // 快照1：v0
+        svc.snapshot_for_operation(&file, before.clone()).unwrap();
         fs::write(&file, "v1").unwrap();
-        svc.snapshot(&file).unwrap(); // 快照2：v1
+        svc.snapshot_for_operation(&file, after_one.clone())
+            .unwrap();
+        fs::write(&file, "v2").unwrap();
+        svc.snapshot_for_operation(&file, after_two.clone())
+            .unwrap();
+        fs::write(&file, "v3").unwrap();
+
+        let results = svc.rollback_operations(&[after_one, after_two]).unwrap();
+        assert_eq!(results, vec![RollbackOutcome::Restored(file.clone())]);
+        assert_eq!(fs::read_to_string(&file).unwrap(), "v1");
+        assert_eq!(svc.list().len(), 1, "边界前快照应保留");
+
+        svc.rollback_operations(&[before]).unwrap();
+        assert_eq!(fs::read_to_string(&file).unwrap(), "v0");
+        assert!(svc.list().is_empty());
+    }
+
+    /// 同一 tool_call_id 的重试可产生多张快照，按持久化顺序逆序恢复。
+    #[test]
+    fn rollback_operations_restores_retries_in_reverse_persisted_order() {
+        let ws = TempDir::new("rb_retry_ws");
+        let trash_root = TempDir::new("rb_retry_trash");
+        let svc = TrashService::new(trash_root.path());
+        let file = ws.write("retry.txt", "v0");
+        let retry = operation("call-retry", "retry.txt");
+
+        svc.snapshot_for_operation(&file, retry.clone()).unwrap();
+        fs::write(&file, "v1").unwrap();
+        svc.snapshot_for_operation(&file, retry.clone()).unwrap();
         fs::write(&file, "v2").unwrap();
 
-        let results = svc.rollback_before(42, &[file.clone()]).unwrap();
-        assert_eq!(results, vec![RollbackOutcome::Restored(file.clone())]);
-        assert_eq!(
-            fs::read_to_string(&file).unwrap(),
-            "v0",
-            "多写路径终态 = 边界前状态（倒序恢复全部写前快照）"
-        );
+        svc.rollback_operations(&[retry]).unwrap();
+        assert_eq!(fs::read_to_string(&file).unwrap(), "v0");
+        assert!(svc.list().is_empty());
     }
 
-    /// nil-content 删除语义：写前不存在的文件被写后撤回 → 删除还原
+    /// nil-content 快照只允许匹配的写操作 owner 删除新建文件。
     #[test]
-    fn rollback_before_removes_newly_created_file() {
-        let ws = TempDir::new("rb_ws3");
-        let trash_root = TempDir::new("rb_trash3");
+    fn rollback_operations_nil_content_deletes_only_for_matching_owner() {
+        let ws = TempDir::new("rb_nil_owner_ws");
+        let trash_root = TempDir::new("rb_nil_owner_trash");
         let svc = TrashService::new(trash_root.path());
         let file = ws.0.join("new.txt");
-        assert!(!file.exists());
+        let owner = operation("write-call", "new.txt");
 
-        svc.snapshot(&file).unwrap(); // nil-content 快照（原路径不存在）
-        fs::write(&file, "新文件").unwrap();
+        assert!(!file.exists(), "写入前路径必须不存在");
+        let entry = svc
+            .snapshot_for_operation(&file, owner.clone())
+            .expect("nil-content 写前快照应登记");
+        assert_eq!(entry.mode, EntryMode::Snapshot);
+        assert_eq!(entry.size, 0);
+        assert!(entry.checksum.is_none());
+        assert!(!file.exists(), "创建 nil-content 快照不得创建目标文件");
 
-        let results = svc.rollback_before(42, &[file.clone()]).unwrap();
+        fs::write(&file, "created by write tool").unwrap();
+        let wrong_owner = operation("different-call", "new.txt");
+        let err = svc
+            .rollback_operations(&[wrong_owner])
+            .expect_err("错误 owner 不得使用 nil-content 快照删除文件");
+        assert!(err.to_string().contains("缺少匹配写前快照"));
+        assert_eq!(fs::read_to_string(&file).unwrap(), "created by write tool");
+        assert_eq!(svc.list().len(), 1, "错误 owner 不得消费快照");
+
+        let results = svc
+            .rollback_operations(&[owner])
+            .expect("匹配 owner 应恢复 nil-content 状态");
         assert_eq!(results, vec![RollbackOutcome::Restored(file.clone())]);
-        assert!(!file.exists(), "nil-content 条目恢复 = 删除原路径");
+        assert!(!file.exists(), "匹配 owner 回滚应删除原本不存在的新文件");
+        assert!(svc.list().is_empty(), "匹配 owner 回滚应消费快照");
     }
 
-    /// 无快照路径 → Skipped 幂等降级（不报错）
+    /// 选中 operation 无快照必须显式失败；空计划仍是幂等 no-op。
     #[test]
-    fn rollback_before_skips_path_without_snapshot() {
-        let ws = TempDir::new("rb_ws4");
-        let trash_root = TempDir::new("rb_trash4");
+    fn rollback_operations_fails_when_selected_snapshot_is_missing() {
+        let trash_root = TempDir::new("rb_missing_trash");
         let svc = TrashService::new(trash_root.path());
-        let untouched = ws.write("untouched.txt", "从未被写");
-
-        let results = svc.rollback_before(42, &[untouched.clone()]).unwrap();
-        assert!(matches!(
-            &results[0],
-            RollbackOutcome::Skipped { path, reason }
-                if *path == untouched && reason.contains("无写前快照")
-        ));
-        assert_eq!(fs::read_to_string(&untouched).unwrap(), "从未被写");
+        assert!(svc
+            .rollback_operations(&[operation("missing", "x.txt")])
+            .is_err());
+        assert!(svc.rollback_operations(&[]).unwrap().is_empty());
     }
 
-    /// 边界参数为审计/幂等标记：同边界重复回滚（快照已消费）→ 幂等跳过
     #[test]
-    fn rollback_before_is_idempotent_on_repeat() {
-        let ws = TempDir::new("rb_ws5");
-        let trash_root = TempDir::new("rb_trash5");
+    fn rollback_operations_fails_closed_on_corrupt_unrelated_entry_metadata() {
+        let trash_root = TempDir::new("rb_corrupt_trash");
+        let broken_entry = trash_root.path().join("broken-entry");
+        fs::create_dir_all(&broken_entry).unwrap();
+        fs::write(broken_entry.join(META_FILE), "{").unwrap();
         let svc = TrashService::new(trash_root.path());
-        let file = ws.write("c.txt", "原始");
 
-        svc.snapshot(&file).unwrap();
-        fs::write(&file, "修改").unwrap();
-        svc.rollback_before(42, &[file.clone()]).unwrap();
-        assert_eq!(fs::read_to_string(&file).unwrap(), "原始");
+        let err = svc
+            .rollback_operations(&[operation("selected", "a.txt")])
+            .unwrap_err();
+        assert!(err.to_string().contains("解析登记文件失败"));
+    }
 
-        // 第二次回滚：快照已消费 → Skipped（幂等）
-        let results = svc.rollback_before(42, &[file.clone()]).unwrap();
-        assert!(matches!(&results[0], RollbackOutcome::Skipped { .. }));
-        assert_eq!(fs::read_to_string(&file).unwrap(), "原始", "内容不再变化");
+    /// path-only API 不知道事件 owner，拒绝执行可能越过撤回边界的恢复。
+    #[test]
+    fn rollback_before_rejects_path_only_selection() {
+        let ws = TempDir::new("rb_legacy_ws");
+        let trash_root = TempDir::new("rb_legacy_trash");
+        let svc = TrashService::new(trash_root.path());
+        let file = ws.write("a.txt", "v0");
+        assert!(svc.rollback_before(42, &[file]).is_err());
     }
 }

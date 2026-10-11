@@ -155,7 +155,8 @@ impl Default for BuiltinToolConfig {
         Self {
             default_shell_timeout_ms: 30_000,
             // D0/U-BUDGET：预算定义收敛至 conex-shared::perf_budget（数值不变）
-            default_shell_max_output_bytes: conex_shared::perf_budget::SHELL_MAX_OUTPUT_BYTES_DEFAULT,
+            default_shell_max_output_bytes:
+                conex_shared::perf_budget::SHELL_MAX_OUTPUT_BYTES_DEFAULT,
             trash_root: None,
             audit_sink: None,
             subagent_spawner: None,

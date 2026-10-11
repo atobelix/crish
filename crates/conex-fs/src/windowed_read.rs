@@ -118,7 +118,10 @@ pub enum WindowReadError {
     Io(std::io::Error),
     /// `metadata.is_dir()` 等非文件形态
     NotAFile,
-    FileTooLarge { size: u64, limit: u64 },
+    FileTooLarge {
+        size: u64,
+        limit: u64,
+    },
     Binary,
     UnsupportedEncoding,
 }
@@ -129,11 +132,20 @@ impl std::fmt::Display for WindowReadError {
             Self::Io(e) => write!(f, "{e}"),
             Self::NotAFile => write!(f, "Path is not a file"),
             Self::FileTooLarge { size, limit } => {
-                write!(f, "File is too large to preview safely ({size} bytes, limit {limit} bytes).")
+                write!(
+                    f,
+                    "File is too large to preview safely ({size} bytes, limit {limit} bytes)."
+                )
             }
-            Self::Binary => write!(f, "File appears to be binary and cannot be previewed as text."),
+            Self::Binary => write!(
+                f,
+                "File appears to be binary and cannot be previewed as text."
+            ),
             Self::UnsupportedEncoding => {
-                write!(f, "File is not valid UTF-8 text and cannot be previewed safely.")
+                write!(
+                    f,
+                    "File is not valid UTF-8 text and cannot be previewed safely."
+                )
             }
         }
     }
@@ -373,7 +385,11 @@ fn read_utf16_window(
     opts: &WindowReadOptions,
 ) -> Result<WindowReadResult, WindowReadError> {
     let bytes = std::fs::read(path).map_err(WindowReadError::Io)?;
-    let body = if little_endian { &bytes[2..] } else { &bytes[2..] };
+    let body = if little_endian {
+        &bytes[2..]
+    } else {
+        &bytes[2..]
+    };
     let units: Vec<u16> = body
         .chunks_exact(2)
         .map(|c| {
@@ -402,7 +418,9 @@ fn read_utf16_window(
         .unwrap_or(window_start0.saturating_add(opts.max_lines))
         .max(window_start0);
 
-    let end = window_end0_exclusive.min(all_lines.len()).max(window_start0);
+    let end = window_end0_exclusive
+        .min(all_lines.len())
+        .max(window_start0);
     let window_slice = if window_start0 >= all_lines.len() {
         &[][..]
     } else {
@@ -527,7 +545,11 @@ pub fn clamp_window_text_by_chars(
         take += 1;
     }
     let char_truncated = take < kept.len();
-    (kept[..take].join("\n"), take, line_truncated || char_truncated)
+    (
+        kept[..take].join("\n"),
+        take,
+        line_truncated || char_truncated,
+    )
 }
 
 #[cfg(test)]
@@ -707,7 +729,11 @@ mod tests {
         let r = windowed_read(&path, &opts).unwrap();
         assert_eq!(r.shown_lines, 10);
         assert!(r.content_truncated);
-        assert!(r.text.len() < 1024, "窗口文本应远小于全文: {}", r.text.len());
+        assert!(
+            r.text.len() < 1024,
+            "窗口文本应远小于全文: {}",
+            r.text.len()
+        );
         assert!(r.total_lines > 40_000);
         let _ = std::fs::remove_dir_all(path.parent().unwrap());
     }
@@ -735,7 +761,9 @@ mod tests {
         opts.strict_encoding = true;
         let r = windowed_read(&path, &opts).expect("应成功读取跨越 8KB 边界的 UTF-8 文本");
         assert!(!r.lossy_replaced);
-        assert!(r.text.contains("【跨越边界】这是一行非常长的包含中文多字节字符的行"));
+        assert!(r
+            .text
+            .contains("【跨越边界】这是一行非常长的包含中文多字节字符的行"));
         let _ = std::fs::remove_dir_all(path.parent().unwrap());
     }
 
@@ -750,7 +778,8 @@ mod tests {
         if repo_agents.exists() {
             let mut opts = default_opts();
             opts.strict_encoding = true;
-            let r = windowed_read(&repo_agents, &opts).expect("AGENTS.md 必须可由 windowed_read 严格模式成功读取");
+            let r = windowed_read(&repo_agents, &opts)
+                .expect("AGENTS.md 必须可由 windowed_read 严格模式成功读取");
             assert!(!r.lossy_replaced);
             assert!(r.text.contains("Conex / Crish — Agent 协作指令"));
         }

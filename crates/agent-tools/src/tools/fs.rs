@@ -94,8 +94,9 @@ impl Tool for ReadFileTool {
             let file_path = file_path.clone();
             let display = display.clone();
             tokio::task::spawn_blocking(move || -> Result<ReadFileOutcome, ToolError> {
-                let metadata = std::fs::metadata(&file_path)
-                    .map_err(|e| ToolError::execution_failed("read_file", format!("{display}: {e}")))?;
+                let metadata = std::fs::metadata(&file_path).map_err(|e| {
+                    ToolError::execution_failed("read_file", format!("{display}: {e}"))
+                })?;
                 if metadata.is_dir() {
                     return Err(ToolError::execution_failed(
                         "read_file",
@@ -131,14 +132,12 @@ impl Tool for ReadFileTool {
                     });
                 }
 
-                let (shown, shown_lines, _) =
-                    clamp_text_by_lines(&r.text, max_bytes, max_lines);
+                let (shown, shown_lines, _) = clamp_text_by_lines(&r.text, max_bytes, max_lines);
                 let window_start0 = r.window_start_line.saturating_sub(1);
                 let next_content_offset = (window_start0 + shown_lines).min(r.total_lines);
                 let char_truncated = r.text.chars().count() > max_bytes;
                 let content_truncated = next_content_offset < r.total_lines;
-                let end_line_echo =
-                    end_line_arg.unwrap_or(window_start0.saturating_add(max_lines));
+                let end_line_echo = end_line_arg.unwrap_or(window_start0.saturating_add(max_lines));
                 let out_of_range = window_start0 >= r.total_lines;
 
                 Ok(ReadFileOutcome::Text {
@@ -156,7 +155,9 @@ impl Tool for ReadFileTool {
                 })
             })
             .await
-            .map_err(|e| ToolError::execution_failed("read_file", format!("spawn_blocking: {e}")))??
+            .map_err(|e| {
+                ToolError::execution_failed("read_file", format!("spawn_blocking: {e}"))
+            })??
         };
 
         match outcome {
@@ -412,9 +413,7 @@ impl Tool for WriteFileTool {
             })
         })
         .await
-        .map_err(|e| {
-            ToolError::execution_failed("write_file", format!("spawn_blocking: {e}"))
-        })??;
+        .map_err(|e| ToolError::execution_failed("write_file", format!("spawn_blocking: {e}")))??;
         // 写盘成功：提交占用（Drop 不再回滚）
         if let Some(mut r) = reservation {
             r.commit();
@@ -589,10 +588,9 @@ impl Tool for ListDirTool {
             let dir = dir.clone();
             let display = display.clone();
             tokio::task::spawn_blocking(move || -> Result<Vec<DirEntry>, ToolError> {
-                let metadata = std::fs::metadata(&dir)
-                    .map_err(|e| {
-                        ToolError::execution_failed("list_dir", format!("{display}: {e}"))
-                    })?;
+                let metadata = std::fs::metadata(&dir).map_err(|e| {
+                    ToolError::execution_failed("list_dir", format!("{display}: {e}"))
+                })?;
                 if !metadata.is_dir() {
                     return Err(ToolError::execution_failed(
                         "list_dir",

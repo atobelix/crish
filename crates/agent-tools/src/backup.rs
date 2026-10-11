@@ -30,7 +30,7 @@
 use crate::definition::{Tool, ToolError};
 use crate::middleware::{BeforeExecuteResult, ToolExecutionContext, ToolMiddleware};
 use async_trait::async_trait;
-use conex_fs::trash::TrashService;
+use conex_fs::trash::{SnapshotOperation, TrashService};
 use serde_json::Value;
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -145,8 +145,23 @@ impl ToolMiddleware for BackupMiddleware {
             .trash_root
             .clone()
             .unwrap_or_else(|| ws_root.join(crate::tools::delete::DEFAULT_TRASH_DIR_NAME));
+        let (Some(session_id), Some(run_id), Some(tool_call_id)) = (
+            ctx.session_id.as_ref(),
+            ctx.run_id.as_ref(),
+            ctx.tool_call_id.as_ref(),
+        ) else {
+            return Ok(BeforeExecuteResult::Block {
+                reason: "写前自动备份缺少 session/run/tool_call owner，安全优先阻止执行".into(),
+            });
+        };
+        let operation = SnapshotOperation {
+            session_id: session_id.clone(),
+            run_id: run_id.clone(),
+            tool_call_id: tool_call_id.clone(),
+            path: crate::tools::display_path(&ws_root, &target),
+        };
         let service = TrashService::new(root);
-        match service.snapshot(&target) {
+        match service.snapshot_for_operation(&target, operation) {
             Ok(entry) => {
                 tracing::info!(
                     target: "security.backup",
@@ -172,7 +187,7 @@ mod tests {
     use super::*;
     use crate::context::ToolContext;
     use crate::definition::{Tool, ToolDefinition};
-    use conex_fs::trash::EntryMode;
+    use conex_fs::trash::{EntryMode, SnapshotOperation};
     use conex_test_utils::TempWorkspace;
     use serde_json::json;
     use std::sync::atomic::{AtomicUsize, Ordering};
@@ -267,6 +282,16 @@ mod tests {
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].mode, EntryMode::Snapshot);
         assert_eq!(entries[0].original_path, ws.path().join("a.txt"));
+        assert_eq!(ws.read_file("a.txt"), "original content");
+        let restored = svc
+            .rollback_operations(&[SnapshotOperation {
+                session_id: "s1".into(),
+                run_id: "r1".into(),
+                tool_call_id: "c1".into(),
+                path: "a.txt".into(),
+            }])
+            .unwrap();
+        assert_eq!(restored.len(), 1, "middleware 快照必须带可精确匹配 owner");
         assert_eq!(ws.read_file("a.txt"), "original content");
     }
 
