@@ -5,7 +5,10 @@
   /* 纯净垂直节奏（DEF-13）：消除外部 margin 黑洞，垂直间距收敛为行内部盒模型 padding-bottom */
   margin-top: 0;
   margin-bottom: 0;
-  padding-bottom: 16px;
+  /* 行距 token（FINAL-PLAN P2-a）；估高常量由 VirtualScrollManager.rowGap 契约测试锁定 */
+  padding-bottom: var(--chat-row-gap, var(--space-4, 16px));
+  /* 行内绝对定位子元素的锚点（操作栏已回到文档流占位，见 .userMeta / .assistantMeta） */
+  position: relative;
   /* 仅保留布局与绘制隔离（DEF-14），坚决剔除 content-visibility 与 contain-intrinsic-size 属性，交由 JS 虚拟化单轨调度 */
   contain: layout paint;
   /* 对齐栅格列宽最大值 */
@@ -45,9 +48,6 @@
   max-width: min(var(--chat-col-max, 760px), 100%);
 }
 
-.rowAssistant .assistantMeta {
-  margin-top: var(--space-1);
-}
 
 .rowAssistant.isFollowup {
   /* 旧外边距链与负 margin 补丁已拔除，统一由内部盒模型接管 */
@@ -59,7 +59,7 @@
   width: 100%;
   /* 纯状态微提示载体消息（PureCarrier）：彻底清除外部 margin，赋予紧凑 4px 内部间距 (DEF-13) */
   margin: 0;
-  padding: 0 0 4px;
+  padding: 0 0 var(--chat-row-gap-compact, var(--space-1, 4px));
   background: transparent;
   border: none;
   box-shadow: none;
@@ -78,12 +78,15 @@
   margin: 0;
 }
 
+/* 气泡宽度：唯一的上限在 .userStack（相对行宽 85% / 720px）。
+   .userStack 本身是按内容收缩的列项，气泡若再写百分比 max-width 会相对「已收缩的父宽」
+   二次打折（85% × 自身宽度），短消息「你好啊」也会被折成两行——禁止在气泡上再用百分比上限。 */
 .userStack {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
   max-width: min(85%, 720px);
-  min-width: min-content;
+  min-width: 0;
 }
 
 .userStackEditing {
@@ -120,12 +123,13 @@
   font-size: var(--font-size-base, 14px);
   font-weight: var(--font-weight-normal);
   line-height: 1.5;
-  word-break: break-word;
-  overflow-wrap: break-word;
+  /* 中文正常折行；超长英文 / URL 在任意处断开，不用 break-all（避免逐字断行） */
+  word-break: normal;
+  overflow-wrap: anywhere;
   box-shadow: none;
   width: fit-content;
-  max-width: min(85%, 720px);
-  min-width: min-content;
+  max-width: 100%;
+  min-width: 0;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
@@ -186,19 +190,38 @@
   align-items: center;
   gap: 2px;
   min-height: 28px;
-  margin-top: var(--space-1, 4px);
-  opacity: 0;
-  transition: opacity var(--transition-fast, 150ms ease);
   padding-right: var(--space-0_5, 2px);
 }
 
-.userStack:hover .userMeta {
+/*
+ * 操作栏显隐（2026-10-10 修正，取代 P2-b-1 变体 ① 的行内浮层）：
+ * - 所有用户 / 助手行都在气泡（正文）下方的文档流里预留固定高度的槽位
+ *   （margin-top 4 + min-height 28 = 32px，估高 META_SLOT_PX 同步），永不覆盖正文；
+ * - 只切 opacity 与 pointer-events（不切 display / visibility 布局），hover 时行高不变；
+ * - 每行槽位相同，行距均匀；常显行（metaAlways）仅是常亮，几何与其他行一致。
+ * 行盒有 contain: paint，操作栏不能画到行盒之外，所以不用「绝对定位到气泡底边以下」。
+ */
+.userMeta,
+.assistantMeta {
+  position: static;
+  margin-top: var(--space-1, 4px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--transition-fast, 150ms ease);
+}
+
+.rowUser:hover .userMeta,
+.rowUser:focus-within .userMeta,
+.rowAssistant:hover .assistantMeta,
+.rowAssistant:focus-within .assistantMeta {
   opacity: 1;
+  pointer-events: auto;
 }
 
 .userMeta.metaAlways,
 .assistantMeta.metaAlways {
   opacity: 1;
+  pointer-events: auto;
 }
 
 .time {
@@ -760,14 +783,7 @@
   display: flex;
   align-items: center;
   gap: var(--space-0_5, 2px);
-  margin-top: var(--space-1, 4px);
   min-height: 28px;
-  opacity: 0;
-  transition: opacity var(--transition-fast, 150ms ease);
-}
-
-.rowAssistant:hover .assistantMeta {
-  opacity: 1;
 }
 
 .time {
@@ -880,13 +896,26 @@ button.iconBtn,
 }
 
 .queued {
-  display: block;
+  display: flex;
+  align-items: center;
   margin-top: var(--space-1_5);
-  font-size: var(--font-size-xxs);
+  font-size: var(--font-size-xs);
   color: var(--text-tertiary);
   background: transparent;
   border: none;
   padding: 0;
+  line-height: var(--line-height-base, 1.4);
+}
+
+.queuedBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm, 4px);
+  background: color-mix(in srgb, var(--text-tertiary) 12%, transparent);
+  color: var(--text-tertiary);
+  font-size: var(--font-size-xs);
+  font-weight: 500;
 }
 
 .userBubble.userBubblePinned,
@@ -972,8 +1001,7 @@ button.iconBtn,
   .row {
     max-width: 100%;
   }
-  .userStack,
-  .userBubble {
+  .userStack {
     max-width: min(82%, 100%);
   }
 }
@@ -1041,7 +1069,7 @@ button.iconBtn,
 }
 
 .pinPickerPopover.pinPickerExpanded {
-  border-radius: 16px;
+  border-radius: var(--chat-bubble-radius);
   padding: 8px;
   width: 196px;
   gap: 8px;
@@ -1157,7 +1185,7 @@ button.iconBtn,
   position: relative;
   width: 100%;
   height: 84px;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   cursor: crosshair;
   touch-action: none;
   /* ssot-color-ignore: pin-sat-val-palette */

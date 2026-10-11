@@ -229,14 +229,13 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
             {messages.map((m) => {
               // 活跃尾块契约（回归修复）：MarkdownBlockItem 仅在
               //   isActiveTail = isStreaming && isLast && !isSealed
-              // 时进入流式直写分支（data-sealed="false" / data-streaming="true"
-              // + useLayoutEffect 直写 textContent）；否则落入封口分支渲染
-              // 空容器（等待 Rust 异步 HTML 注入）。
+              // 时进入流式 Markdown 分支（data-sealed="false" / data-streaming="true"
+              // + 只注入解析器生成的 HTML）；否则落入封口分支等待异步 HTML。
               // 本面板每条消息各挂一个独立根块，未封口者即该根的唯一尾块，
               // 故 isLast 必须跟随 isSealed 取反。历史实现恒传 isLast={false}
               // ⇒ processing 消息的 isActiveTail 恒 false ⇒ 子代理实时正文
               // 渲染为空容器（旧 AsyncMarkdownBlock 在 isStreaming 下直接渲染
-              // 纯文本，换用 MarkdownBlockItem 后该可见性丢失）。
+              // 纯文本，换用 MarkdownBlockItem 后异步渲染可见性丢失）。
               const isSealed = m.status !== 'processing';
               return (
                 <div key={m.id} className={styles.inlineAgentMsg}>

@@ -9,11 +9,40 @@
  * - 点击展开态：自然向下融入主文档流，零内部滚动条，无 168px 限制，滚动交由外层唯一滚动宿主；
  * - 独立一键复制纯净思考思维链。
  */
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useRef } from 'react';
 import { Button } from '../ui';
 import styles from './ReasoningRow.module.css';
 import { StreamingMarkdownView } from './StreamingMarkdownView';
 import { Priority } from '../../workers';
+import { useStreamingMarkdownHtml } from '../../api/markdownRenderAsync';
+import { ReconciledMarkdownHtml } from '../markdown/ReconciledMarkdownHtml';
+import type { IncrementalMarkdownUnitSnapshot } from '../../api/markdown/IncrementalMarkdownSession';
+
+function ReasoningSummaryMarkup({
+  markdown,
+  isLive,
+}: {
+  markdown: string;
+  isLive: boolean;
+}) {
+  const incrementalUnitsRef = useRef<readonly IncrementalMarkdownUnitSnapshot[] | null>(null);
+  const html = useStreamingMarkdownHtml(
+    markdown,
+    Boolean(markdown),
+    Priority.Low,
+    incrementalUnitsRef
+  );
+
+  return (
+    <ReconciledMarkdownHtml
+      as="span"
+      className={`${styles.summaryText} ${isLive ? styles.sweepShine : ''}`}
+      data-testid="reasoning-summary-markup"
+      html={html}
+      incrementalUnits={incrementalUnitsRef.current}
+    />
+  );
+}
 
 /**
  * ReasoningRowProps 核心渲染契约（对齐 DIM-03 §1.1）
@@ -114,7 +143,6 @@ export const ReasoningRow: React.FC<ReasoningRowProps> = ({
   isLive = false,
   isTurnWorking = false,
   durationMs,
-  turnIndex,
   isOpen,
   onToggle,
   defaultExpanded,
@@ -199,9 +227,7 @@ export const ReasoningRow: React.FC<ReasoningRowProps> = ({
           <>
             <span className={styles.dotSeparator} aria-hidden>·</span>
             <span className={styles.reasoningSummary} data-follow-end="true">
-              <span className={`${styles.summaryText} ${isLive ? styles.sweepShine : ''}`}>
-                {displaySummary}
-              </span>
+              <ReasoningSummaryMarkup markdown={displaySummary} isLive={isLive} />
             </span>
           </>
         ) : null}
@@ -218,15 +244,12 @@ export const ReasoningRow: React.FC<ReasoningRowProps> = ({
       {isExpanded && (
         <div className={styles.reasoningBody} data-testid="reasoning-body">
           <div className={styles.reasoningContent}>
-            {isLive ? (
-              <div className={styles.liveContent}>{content}</div>
-            ) : (
-              <StreamingMarkdownView
-                text={content}
-                isStreaming={false}
-                priority={Priority.Low}
-              />
-            )}
+            <StreamingMarkdownView
+              text={content}
+              isStreaming={isLive}
+              priority={Priority.Low}
+              messageId={messageId ? `${messageId}-reasoning` : undefined}
+            />
           </div>
         </div>
       )}

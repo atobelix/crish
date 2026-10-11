@@ -2,10 +2,17 @@
  * 思考预览行：默认 48–64 字 + fade；展开才挂全文。
  * live 计时 ≤ 1Hz；查阅器仍走 thoughtInspector。
  */
-import { useEffect, useState, type ReactElement } from 'react';
+import { useEffect, useRef, useState, type ReactElement } from 'react';
 import { Button } from '../../components/ui';
+import {
+  useAsyncMarkdownHtml,
+  useStreamingMarkdownHtml,
+} from '../../api/markdownRenderAsync';
+import { Priority } from '../../workers';
 import { FLOW_OUTPUT_STYLE } from './flowOutputStyle';
 import { clipThinkingPreview } from './narrativeModel';
+import { ReconciledMarkdownHtml } from '../../components/markdown/ReconciledMarkdownHtml';
+import type { IncrementalMarkdownUnitSnapshot } from '../../api/markdown/IncrementalMarkdownSession';
 import styles from './narrative.module.css';
 
 export interface ThinkingBlockProps {
@@ -28,6 +35,30 @@ export function ThinkingBlock({
   const [open, setOpen] = useState(defaultOpen);
   const [liveSec, setLiveSec] = useState(0);
   const shownPreview = preview?.trim() || clipThinkingPreview(content);
+  const previewRender = useAsyncMarkdownHtml(
+    !isLive && !open ? shownPreview : '',
+    Priority.Low
+  );
+  const previewUnitsRef = useRef<readonly IncrementalMarkdownUnitSnapshot[] | null>(null);
+  const fullUnitsRef = useRef<readonly IncrementalMarkdownUnitSnapshot[] | null>(null);
+  const livePreviewHtml = useStreamingMarkdownHtml(
+    shownPreview,
+    isLive && !open,
+    Priority.Low,
+    previewUnitsRef
+  );
+  const fullRender = useAsyncMarkdownHtml(
+    !isLive && open ? content : '',
+    Priority.Low
+  );
+  const liveFullHtml = useStreamingMarkdownHtml(
+    content,
+    isLive && open,
+    Priority.Low,
+    fullUnitsRef
+  );
+  const previewHtml = isLive ? livePreviewHtml : previewRender.html;
+  const fullHtml = isLive ? liveFullHtml : fullRender.html;
 
   useEffect(() => {
     if (!isLive) {
@@ -75,16 +106,21 @@ export function ThinkingBlock({
         </Button>
       </div>
       {open ? (
-        <div
-          className={styles.thinkingFull}
-          style={outputMax}
-          data-flow-thinking-full=""
-        >
-          {content}
-        </div>
+          <ReconciledMarkdownHtml
+            className={styles.thinkingFull}
+            style={outputMax}
+            data-flow-thinking-full=""
+            html={fullHtml}
+            incrementalUnits={isLive && open ? fullUnitsRef.current : undefined}
+          />
       ) : (
         <div className={styles.previewWrap} data-flow-thinking-preview="">
-          <span className={styles.previewText}>{shownPreview}</span>
+          <ReconciledMarkdownHtml
+            className={styles.previewText}
+            data-flow-thinking-preview-content=""
+            html={previewHtml}
+            incrementalUnits={isLive && !open ? previewUnitsRef.current : undefined}
+          />
           <span className={styles.previewFade} aria-hidden />
         </div>
       )}

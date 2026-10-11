@@ -46,7 +46,7 @@
   align-items: center;
   justify-content: center;
   color: inherit;
-  font-size: 13px;
+  font-size: var(--font-size-sm);
 }
 
 .flowSubagentTitle {

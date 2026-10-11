@@ -66,7 +66,7 @@ export const CacheMetricsBadge: React.FC<CacheMetricsBadgeProps> = ({
         }
       >
         <span
-          className={`${styles.badge} ${styles.hit}`}
+          className={`${styles.badge} ${styles.hit} cache-metrics`}
           data-testid="cache-metrics-badge"
           data-state="hit"
         >
@@ -98,7 +98,7 @@ export const CacheMetricsBadge: React.FC<CacheMetricsBadgeProps> = ({
         }
       >
         <span
-          className={`${styles.badge} ${styles.write}`}
+          className={`${styles.badge} ${styles.write} cache-metrics`}
           data-testid="cache-metrics-badge"
           data-state="write"
         >
@@ -127,7 +127,7 @@ export const CacheMetricsBadge: React.FC<CacheMetricsBadgeProps> = ({
       }
     >
       <span
-        className={`${styles.badge} ${styles.miss}`}
+        className={`${styles.badge} ${styles.miss} cache-metrics`}
         data-testid="cache-metrics-badge"
         data-state="miss"
       >

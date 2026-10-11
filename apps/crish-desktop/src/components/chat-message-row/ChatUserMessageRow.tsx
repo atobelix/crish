@@ -21,6 +21,9 @@ import {
   type AttachmentItem,
 } from '../chat-attachment/AttachmentCard';
 import type { ChatAttachment } from '../../hooks/useChatStream';
+import { isBusyRetryPending } from '../../api/sessionStreamManager';
+import { DOMAIN_MESSAGES } from '../../api/userFacingErrors';
+import { useInvalidateActualOnChange } from './useInvalidateActualOnChange';
 
 export type ChatUserMessageRowProps = {
   msg: SessionMessage;
@@ -163,20 +166,14 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
     };
   }, []);
 
-  // 虚拟滚动高度同步与失效通知
-  // 展开/收起/正文变化 → invalidate；实测回写只允许经宿主 RO → useVirtualScroll.setActual（触发 actualTick）
-  useEffect(() => {
-    if (msg.status === 'processing') return;
-    virtualScrollManager?.invalidateActual(msg.id);
-  }, [
-    msg.text,
-    msg.id,
-    msg.status,
-    msg.images,
-    msg.attachments,
-    isExpanded,
+  // 展开/收起/正文变化才作废实测。首帧跳过，避免挂载把已测高度抹掉。
+  // 实测回写只允许经宿主 RO → useVirtualScroll.setActual（触发 actualTick）。
+  useInvalidateActualOnChange(
     virtualScrollManager,
-  ]);
+    msg.id,
+    msg.status !== 'processing',
+    [msg.text, msg.id, msg.status, msg.images, msg.attachments, isExpanded, virtualScrollManager],
+  );
 
   const rowRef = useRef<HTMLDivElement>(null);
 
@@ -219,13 +216,19 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
 
   const hasAttachmentCards = allCardItems.length > 0;
   // 核心判定：无文本且非排队态时，空气泡彻底销毁为 null（NEG-06）
-  const hasTextContent = Boolean(displayText && displayText.trim()) || msg.status === 'queued';
+  const isQueued = msg.status === 'queued';
+  const hasTextContent = Boolean(displayText && displayText.trim()) || isQueued;
+  // S7 只在串行守卫自动重试时作为 Tooltip；用户主动追问的排队不附这段文案。
+  const queuedBusyTip = isQueued && isBusyRetryPending(msg.id);
 
   const isEditingRow = Boolean(isEditing && composerElement);
 
-  useEffect(() => {
-    virtualScrollManager?.invalidateActual(msg.id);
-  }, [isEditingRow, virtualScrollManager, msg.id]);
+  useInvalidateActualOnChange(
+    virtualScrollManager,
+    msg.id,
+    true,
+    [isEditingRow, virtualScrollManager, msg.id],
+  );
 
   return (
     <div
@@ -313,8 +316,18 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
                 {hasTextContent ? (
                   <div className={styles.userBubbleText}>
                     {displayText}
-                    {msg.status === 'queued' ? (
-                      <span className={styles.queued}>排队中</span>
+                    {isQueued ? (
+                      queuedBusyTip ? (
+                        <Tooltip content={DOMAIN_MESSAGES.S7} side="top">
+                          <span className={styles.queued} role="status">
+                            <span className={styles.queuedBadge}>排队中</span>
+                          </span>
+                        </Tooltip>
+                      ) : (
+                        <span className={styles.queued} role="status">
+                          <span className={styles.queuedBadge}>排队中</span>
+                        </span>
+                      )
                     ) : null}
                   </div>
                 ) : null}

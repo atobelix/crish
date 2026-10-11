@@ -7,6 +7,12 @@ import { render, cleanup, fireEvent, act } from '@testing-library/react';
 import { ChatUserMessageRow } from '../ChatUserMessageRow';
 import type { SessionMessage } from '../../../store/types';
 import styles from '../ChatMessageRow.module.css';
+import {
+  noteBusy,
+  resetBusyRetryForTests,
+} from '../../../api/sessionStreamManager';
+import { DOMAIN_MESSAGES } from '../../../api/userFacingErrors';
+import { DEFAULT_DELAY_SHOW_MS } from '../../ui/Tooltip/Tooltip';
 
 // Mock 全局 Toast 上下文
 vi.mock('../../../services/toast/ToastContext', () => ({
@@ -48,7 +54,9 @@ function createMockUserMessage(overrides: Partial<SessionMessage> = {}): Session
 describe('ChatUserMessageRow 全新解耦与物理删除立体验证套件', () => {
   afterEach(() => {
     cleanup();
+    vi.useRealTimers();
     vi.restoreAllMocks();
+    resetBusyRetryForTests();
   });
 
   const defaultProps = {
@@ -299,5 +307,69 @@ describe('ChatUserMessageRow 全新解耦与物理删除立体验证套件', () 
 
     expect(container.querySelector('[data-testid="in-place-user-editor"]')).toBeNull();
     expect(container.querySelector(`.${styles.userBubble}`)).not.toBeNull();
+  });
+
+  it('排队徽标：queued 时只显示「排队中」，status 离开 queued 后消失', () => {
+    const msg = createMockUserMessage({
+      text: '稍后发出',
+      status: 'queued',
+    });
+    const { container, rerender } = render(
+      <ChatUserMessageRow {...defaultProps} msg={msg} />
+    );
+
+    const badge = container.querySelector(`.${styles.queuedBadge}`);
+    expect(badge?.textContent).toBe('排队中');
+    expect(container.textContent).not.toContain(DOMAIN_MESSAGES.S7);
+    expect(container.querySelector('[title]')).toBeNull();
+
+    rerender(
+      <ChatUserMessageRow
+        {...defaultProps}
+        msg={{ ...msg, status: 'completed' }}
+      />
+    );
+    expect(container.querySelector(`.${styles.queuedBadge}`)).toBeNull();
+    expect(container.textContent).toContain('稍后发出');
+    expect(container.textContent).not.toContain('排队中');
+  });
+
+  it('排队徽标的 S7 Tooltip 只在串行守卫重试中出现', () => {
+    vi.useFakeTimers();
+    const idle = createMockUserMessage({
+      id: 'user-follow-up',
+      text: '主动追问',
+      status: 'queued',
+    });
+    const { container, rerender } = render(
+      <ChatUserMessageRow {...defaultProps} msg={idle} />
+    );
+    const idleBadge = container.querySelector(`.${styles.queued}`);
+    expect(idleBadge).not.toBeNull();
+    fireEvent.mouseEnter(idleBadge!);
+    act(() => {
+      vi.advanceTimersByTime(DEFAULT_DELAY_SHOW_MS);
+    });
+    expect(document.body.textContent).not.toContain(DOMAIN_MESSAGES.S7);
+
+    noteBusy('sess-1', 'user-busy');
+    rerender(
+      <ChatUserMessageRow
+        {...defaultProps}
+        msg={createMockUserMessage({
+          id: 'user-busy',
+          text: '被串行守卫拦住',
+          status: 'queued',
+        })}
+      />
+    );
+    const busyBadge = container.querySelector(`.${styles.queued}`);
+    expect(busyBadge).not.toBeNull();
+    expect(busyBadge?.getAttribute('title')).toBeNull();
+    fireEvent.mouseEnter(busyBadge!);
+    act(() => {
+      vi.advanceTimersByTime(DEFAULT_DELAY_SHOW_MS);
+    });
+    expect(document.body.textContent).toContain(DOMAIN_MESSAGES.S7);
   });
 });

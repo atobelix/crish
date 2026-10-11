@@ -9,7 +9,7 @@
  *     + class 含 md-block-sealed（等待 Rust 异步 HTML 注入，不画源码）；
  *   - 活跃尾块分支（isActiveTail = isStreaming && isLast && !isSealed）：
  *     data-sealed="false" / data-streaming="true" + class 含 md-block-active，
- *     且 useLayoutEffect 已把正文直写进容器（正文可见）。
+ *     且只注入 Markdown 渲染器生成的 HTML，不把源码写进容器。
  *
  * 回归背景：历史实现恒传 isLast={false}，使 processing 消息的 isActiveTail
  * 恒为 false，落入封口分支渲染成空容器 ⇒ 子代理实时正文不可见。
@@ -72,6 +72,21 @@ vi.mock('../ui', async (importOriginal) => {
 vi.mock('../../api/markdownRenderLite', () => ({
   stripThoughtPlaceholders: (t: string) => t,
 }));
+
+vi.mock('../../api/markdownRenderAsync', () => {
+  const render = (markdown: string) =>
+    `<p>${markdown.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')}</p>`;
+  return {
+    useAsyncMarkdownHtml: vi.fn((markdown: string) => ({
+      html: markdown ? render(markdown) : '',
+      loading: false,
+      failed: false,
+    })),
+    useStreamingMarkdownHtml: vi.fn((markdown: string, enabled: boolean) =>
+      enabled && markdown ? render(markdown) : ''
+    ),
+  };
+});
 
 import { InlineAgentPanel } from './InlineAgentPanel';
 
@@ -138,7 +153,7 @@ describe('InlineAgentPanel markdown path (dedup #5)', () => {
     ).toBe(0);
   });
 
-  it('processing assistant text stays on the active-tail branch and keeps body visible', () => {
+  it('processing assistant text stays on the active-tail branch and shows rendered HTML only', () => {
     const agent = makeAgent({
       status: 'running',
       messages: [
@@ -164,8 +179,10 @@ describe('InlineAgentPanel markdown path (dedup #5)', () => {
     expect(blocks[0]!.getAttribute('data-streaming')).toBe('true');
     expect(blocks[0]!.className).toContain('md-block-active');
     expect(blocks[0]!.className).not.toContain('md-block-sealed');
-    // 活跃尾块由 useLayoutEffect 直写 textContent ⇒ 正文必须可见
+    // 活跃尾块只显示解析后的 HTML；等待编译时不允许源码落进 DOM。
     expect(blocks[0]!.textContent).toContain('partial stream…');
+    expect(blocks[0]!.innerHTML).toBe('<p>partial stream…</p>');
+    expect(blocks[0]!.textContent).not.toContain('**');
   });
 
   it('未封口块恰好是活跃尾块（isLast 契约，禁止恒 false）', () => {
@@ -198,10 +215,11 @@ describe('InlineAgentPanel markdown path (dedup #5)', () => {
     // 已封口块 → 封口分支
     expect(blocks[0]!.getAttribute('data-sealed')).toBe('true');
     expect(blocks[0]!.getAttribute('data-streaming')).toBe('false');
-    // 未封口块 → 活跃尾块分支（正文可见）
+    // 未封口块 → 活跃尾块分支（安全编译后正文可见）
     expect(blocks[1]!.getAttribute('data-sealed')).toBe('false');
     expect(blocks[1]!.getAttribute('data-streaming')).toBe('true');
     expect(blocks[1]!.textContent).toContain('正在追加的段落');
+    expect(blocks[1]!.innerHTML).toBe('<p>正在追加的段落</p>');
   });
 
   it('空文本消息不产生 Markdown 根块', () => {

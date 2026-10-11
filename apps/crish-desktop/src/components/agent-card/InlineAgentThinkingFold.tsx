@@ -1,12 +1,12 @@
 /**
  * 子智能体「思考」折叠（InlineAgentPanel 时间线内联折叠，F1-β 拆分）。
- * 纯展示：open 受控于本地状态；isLive（运行中）时强制展开。
- * 零 hook / 零 store，仅消费 props。
+ * 展示组件：折叠状态由本地控制；isLive（运行中）时强制展开，正文交由共享 Markdown 渲染器呈现。
  */
 import React, { useState } from 'react';
 
 import styles from './InlineAgentPanel.module.css';
 import { AppIcon } from '../ui/icons/index';
+import { StreamingMarkdownView } from '../chat-message-row/StreamingMarkdownView';
 
 export const InlineAgentThinkingFold: React.FC<{
   thinkingText: string;
@@ -25,7 +25,16 @@ export const InlineAgentThinkingFold: React.FC<{
           className={`${styles.thinkingChevron} ${isExpanded ? styles.isOpen : ''}`} />
         <span className={styles.thinkingFoldLabel}>思考</span>
       </summary>
-      <div className={styles.thinkingFoldBody}>{thinkingText.trim()}</div>
+      <div
+        className={styles.thinkingFoldBody}
+        data-testid="inline-agent-thinking-body"
+      >
+        <StreamingMarkdownView
+          text={thinkingText.trim()}
+          isStreaming={isLive}
+          messageId="inline-agent-thinking"
+        />
+      </div>
     </details>
   );
 };

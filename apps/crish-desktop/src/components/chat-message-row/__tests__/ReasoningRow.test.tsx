@@ -4,6 +4,26 @@ import fs from 'fs';
 import path from 'path';
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
+
+vi.mock('../../../api/markdownRenderAsync', () => {
+  const renderMarkdown = (markdown: string) => {
+    const text = markdown
+      .replace(/^#{1,6}\s+/, '')
+      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    return `<p class="md-p">${text}</p>`;
+  };
+  return {
+    useAsyncMarkdownHtml: vi.fn((markdown: string) => ({
+      html: markdown ? renderMarkdown(markdown) : '',
+      loading: false,
+      failed: false,
+    })),
+    useStreamingMarkdownHtml: vi.fn((markdown: string, enabled: boolean) =>
+      enabled && markdown ? renderMarkdown(markdown) : ''
+    ),
+  };
+});
+
 import {
   ReasoningRow,
   extractLatestLine,
@@ -99,10 +119,10 @@ describe('DIM-03 §1.1: 24px ReasoningRow 极简思考行流式追踪与扫光�
   });
 
   describe('三、流式运行态与扫光微交互：指示灯、@keyframes sweep-shine 与尾窗跟随', () => {
-    it('流式运行态呈现状态指示灯与 [data-follow-end="true"] 尾窗追踪窗', () => {
+    it('流式运行态呈现状态指示灯与已解析的尾窗摘要，不暴露 Markdown 源码', () => {
       const { container } = render(
         <ReasoningRow
-          content={'历史过程第一步\n正在流式推理最后一行'}
+          content={'历史过程第一步\n## 正在流式推理 **最后一行**'}
           isLive={true}
         />
       );
@@ -117,7 +137,11 @@ describe('DIM-03 §1.1: 24px ReasoningRow 极简思考行流式追踪与扫光�
       // 尾窗打字机跟随视窗
       const summaryContainer = container.querySelector('[data-follow-end="true"]');
       expect(summaryContainer).not.toBeNull();
-      expect(screen.getByText('正在流式推理最后一行')).toBeDefined();
+      const summaryMarkup = screen.getByTestId('reasoning-summary-markup');
+      expect(summaryMarkup?.textContent).toBe('正在流式推理 最后一行');
+      expect(summaryMarkup?.innerHTML).toContain('<strong>最后一行</strong>');
+      expect(summaryMarkup?.innerHTML).not.toContain('##');
+      expect(summaryMarkup?.innerHTML).not.toContain('**');
     });
 
     it('CSS 样式验证：包含 @keyframes sweep-shine 与 a11y 降级规范', () => {
@@ -258,14 +282,23 @@ describe('DIM-03 §1.1: 24px ReasoningRow 极简思考行流式追踪与扫光�
     it('架构防复读断言：展开态下头部不渲染摘要文本，彻底阻断与正文的内容双重重复', () => {
       const { container } = render(
         <ReasoningRow
-          content={'第一阶段推理\n第二阶段推理'}
+          content={'## 第一阶段 **推理**\n第二阶段推理'}
           isLive={true}
           isTurnWorking={true}
         />
       );
 
       // 工作态默认展开正文
-      expect(container.querySelector('[data-testid="reasoning-body"]')).not.toBeNull();
+      const reasoningBody = container.querySelector('[data-testid="reasoning-body"]');
+      expect(reasoningBody).not.toBeNull();
+      const renderedHtml = Array.from(
+        reasoningBody?.querySelectorAll('.md-rendered') ?? []
+      )
+        .map((block) => block.innerHTML)
+        .join('\n');
+      expect(renderedHtml).toContain('<strong>推理</strong>');
+      expect(renderedHtml).not.toContain('##');
+      expect(renderedHtml).not.toContain('**');
       // 头部单行按钮内绝不包含任何尾窗跟随摘要元素
       const summaryInHeader = container.querySelector('button [data-follow-end="true"]');
       expect(summaryInHeader).toBeNull();

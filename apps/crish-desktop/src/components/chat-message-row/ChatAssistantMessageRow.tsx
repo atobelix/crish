@@ -12,7 +12,10 @@ import { useToast } from '../../services/toast/ToastContext';
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import styles from './ChatMessageRow.module.css';
-import { assistantCopyText } from '../../api/toolPresentation';
+import {
+  assistantCopyText,
+  isRenderableAssistantMessage,
+} from '../../api/toolPresentation';
 
 import { copyTextBestEffort, messageRowAriaLabel } from './chatMessageRowUtils';
 
@@ -23,7 +26,9 @@ import {
 
 import { MessageContent } from '../chat-message/MessageContent';
 import { MessageActions } from '../chat-message/MessageActions';
-import { isContextStateCarrierMessage } from '../../store/sessionInjectionMount';
+import { CacheMetricsBadge } from './CacheMetricsBadge';
+import { isContextStateCarrierMessage } from '../../store/storeAccess';
+import { useInvalidateActualOnChange } from './useInvalidateActualOnChange';
 
 export type { ChatAssistantMessageRowProps } from './chatMessageRowUtils';
 
@@ -79,25 +84,25 @@ const ChatAssistantMessageRowInner: React.FC<
   );
 
   // 测高单轨：禁止行级私有 RO 直写 manager.setActual（会绕过 actualTick → 总高/滚动条不更新）。
-  // 尺寸变化由 MessageVirtualizer 宿主 ResizeObserver → useVirtualScroll.setActual 统一回写。
-
-  // 内容/折叠态变化 → 作废旧实测；宿主 RO 在尺寸变化时重测并触发 tick
-  useEffect(() => {
-    if (isThinkingMsg || msg.status === 'processing') return;
-    virtualScrollManager?.invalidateActual(msg.id);
-  }, [
-    msg.text,
-    msg.id,
-    msg.status,
-    msg.thinking,
-    msg.toolCalls,
-    msg.blocks,
-    isThinkingMsg,
-    hideThinkingBlock,
-    toolStackProps?.expandedToolsByMessage?.[msg.id] ??
-      toolStackProps?.expandedTools,
+  // 尺寸变化由 MessageVirtualizer 宿主 callback ref → useVirtualScroll.setActual 统一回写。
+  // 内容/折叠态真正变化才作废；首帧跳过，避免挂载抹掉已测高度。
+  useInvalidateActualOnChange(
     virtualScrollManager,
-  ]);
+    msg.id,
+    !(isThinkingMsg || msg.status === 'processing'),
+    [
+      msg.text,
+      msg.id,
+      msg.status,
+      msg.thinking,
+      msg.toolCalls,
+      msg.blocks,
+      isThinkingMsg,
+      hideThinkingBlock,
+      toolStackProps?.expandedToolsByMessage?.[msg.id] ?? toolStackProps?.expandedTools,
+      virtualScrollManager,
+    ],
+  );
 
   // 增强 toolStackProps：
   // D7.3（FE-INV-5）：expandedTools 按 msgId 从 expandedToolsByMessage 切片注入，
@@ -134,6 +139,8 @@ const ChatAssistantMessageRowInner: React.FC<
   );
 
   const isLive = isThinkingMsg || msg.status === 'processing';
+  // S-3 双保险：不可渲染（空）行不挂操作栏（投影层已过滤，此处防直渲路径）
+  const isRenderable = useMemo(() => isRenderableAssistantMessage(msg), [msg]);
   const isPureCarrier = useMemo(() => {
     // 完善 isPureCarrier 判定：处于深度思考、流式输出、或消息本身包含实质数据时不为纯载体
     if (isThinkingMsg || (streamText || '').trim().length > 0) return false;
@@ -182,7 +189,7 @@ const ChatAssistantMessageRowInner: React.FC<
         />
       </div>
 
-      {!isLive && !isPureCarrier && (
+      {!isLive && !isPureCarrier && isRenderable && (
         <MessageActions
           msg={msg}
           state={{
@@ -208,7 +215,11 @@ const ChatAssistantMessageRowInner: React.FC<
             ...(onOpenDiffPanel !== undefined && { onOpenDiffPanel }),
             ...(isLastAssistant && onRetract !== undefined && { onRetract }),
           }}
-          cacheMetricsNode={null}
+          cacheMetricsNode={
+            msg.cacheMetrics?.metrics ? (
+              <CacheMetricsBadge metrics={msg.cacheMetrics.metrics} />
+            ) : null
+          }
         />
       )}
     </div>

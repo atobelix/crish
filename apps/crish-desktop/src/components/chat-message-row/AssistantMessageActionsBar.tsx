@@ -33,7 +33,10 @@ export const AssistantMessageActionsBar: React.FC<
   metricsNode,
 }) => {
   return (
-    <div className={styles.assistantMeta}>
+    <div
+      className={`${styles.assistantMeta}${isLastAssistant ? ` ${styles.metaAlways}` : ''}`}
+      data-meta-always={isLastAssistant ? 'true' : undefined}
+    >
       <span className={styles.time}>{formatMsgTime(timestamp)}</span>
       <Tooltip content={copied ? '已复制' : '复制正文'}>
         <Button

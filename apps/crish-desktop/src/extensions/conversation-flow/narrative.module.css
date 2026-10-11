@@ -54,6 +54,8 @@
   border: 1px solid transparent;
   border-radius: var(--radius-xl);
   background: transparent;
+  --btn-hover-overlay: transparent;
+  --btn-active-overlay: transparent;
   box-shadow: none;
   color: inherit;
   font: inherit;
@@ -61,9 +63,14 @@
   cursor: pointer;
 }
 
+.head::before {
+  display: none;
+}
+
 .head:hover {
   color: var(--text-primary);
-  background: var(--tint-hover);
+  background: transparent;
+  background-color: transparent;
 }
 
 .head:focus-visible {

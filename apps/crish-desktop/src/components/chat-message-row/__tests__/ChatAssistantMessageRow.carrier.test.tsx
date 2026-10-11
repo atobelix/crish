@@ -13,9 +13,13 @@ vi.mock('../../../services/toast/ToastContext', () => ({
   useToast: () => ({ showToast: vi.fn() }),
 }));
 
-vi.mock('../../../store/storeAccess', () => ({
-  useSettingsField: vi.fn(() => 2),
-}));
+vi.mock('../../../store/storeAccess', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../store/storeAccess')>();
+  return {
+    ...actual,
+    useSettingsField: vi.fn(() => 2),
+  };
+});
 
 vi.mock('../../../api/markdownRenderAsync', () => ({
   useAsyncMarkdownHtml: (markdown: string) => ({
@@ -23,6 +27,8 @@ vi.mock('../../../api/markdownRenderAsync', () => ({
     loading: false,
     failed: false,
   }),
+  useStreamingMarkdownHtml: (markdown: string) =>
+    markdown ? '<p>live rendered content</p>' : '',
   parseMarkdownToHtmlAsync: vi.fn(async (m: string) => `<p>${m}</p>`),
 }));
 
@@ -87,7 +93,7 @@ describe('ChatAssistantMessageRow 去助手化与纯状态载体', () => {
     expect(notice).toHaveAttribute('aria-live', 'polite');
     expect(notice).toHaveAttribute('tabindex', '0');
     expect(
-      screen.getByText(/系统 · 切换到.*deepseek-chat/)
+      screen.getByText(/已切换到 deepseek-chat/)
     ).toBeInTheDocument();
 
     // 4. 彻底消灭 MessageActions：无时间戳、无复制按钮、无重新生成按钮、无固定按钮

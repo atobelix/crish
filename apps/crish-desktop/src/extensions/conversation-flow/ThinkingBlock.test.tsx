@@ -1,11 +1,44 @@
 // @vitest-environment jsdom
 import React from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import * as markdownRenderAsync from '../../api/markdownRenderAsync';
 import { THINKING_PREVIEW_CHARS } from './narrativeModel';
 import { ThinkingBlock } from './ThinkingBlock';
 
+vi.mock('../../api/markdownRenderAsync', () => ({
+  useAsyncMarkdownHtml: vi.fn(),
+  useStreamingMarkdownHtml: vi.fn(),
+}));
+
+const richMarkdown =
+  '# Markdown title\n\n**bold phrase**\n\n```ts\nconst value = 1;\n```';
+const richHtml =
+  '<h1 class="md-h1">Markdown title</h1><p><strong>bold phrase</strong></p><pre><code>const value = 1;</code></pre>';
+
+function renderTestMarkdown(markdown: string): string {
+  if (markdown === richMarkdown) return richHtml;
+  return markdown
+    ? `<p>${markdown.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')}</p>`
+    : '';
+}
+
 describe('ThinkingBlock', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(markdownRenderAsync.useAsyncMarkdownHtml).mockImplementation(
+      (markdown) => ({
+        html: renderTestMarkdown(markdown),
+        loading: false,
+        failed: false,
+      })
+    );
+    vi.mocked(markdownRenderAsync.useStreamingMarkdownHtml).mockImplementation(
+      (markdown, enabled) =>
+        enabled ? renderTestMarkdown(markdown) : ''
+    );
+  });
+
   afterEach(() => {
     cleanup();
   });
@@ -62,6 +95,133 @@ describe('ThinkingBlock', () => {
     expect(closed.container.querySelector('[data-flow-thinking-full]')).toBeNull();
     expect(closed.container.querySelector('[data-flow-expanded="false"]')).not.toBeNull();
     expect(closed.container.querySelector('[data-flow-thinking-preview]')).not.toBeNull();
+  });
+
+  it.each([
+    { label: 'non-live preview', isLive: false, open: false },
+    { label: 'non-live expanded body', isLive: false, open: true },
+    { label: 'live preview', isLive: true, open: false },
+    { label: 'live expanded body', isLive: true, open: true },
+  ])('$label only inserts renderer-produced Markdown HTML', ({ isLive, open }) => {
+    const { container } = render(
+      <ThinkingBlock
+        content={richMarkdown}
+        preview={richMarkdown}
+        isLive={isLive}
+        defaultOpen={open}
+      />
+    );
+    const view = container.querySelector(
+      open
+        ? '[data-flow-thinking-full]'
+        : '[data-flow-thinking-preview-content]'
+    );
+
+    expect(view?.querySelector('h1')?.textContent).toBe('Markdown title');
+    expect(view?.querySelector('strong')?.textContent).toBe('bold phrase');
+    expect(view?.querySelector('pre code')?.textContent).toBe('const value = 1;');
+    expect(view?.innerHTML).toBe(richHtml);
+    expect(view?.textContent).not.toContain('# Markdown title');
+    expect(view?.textContent).not.toContain('**bold phrase**');
+    expect(view?.textContent).not.toContain('```');
+  });
+
+  it('live preview keeps existing Markdown DOM nodes while the active paragraph grows', () => {
+    const { container, rerender } = render(
+      <ThinkingBlock content="" preview="**first**" isLive />
+    );
+    const view = container.querySelector('[data-flow-thinking-preview-content]');
+    const paragraph = view?.querySelector('p');
+    const strong = view?.querySelector('strong');
+
+    rerender(<ThinkingBlock content="" preview="**first grows**" isLive />);
+
+    expect(view?.querySelector('p')).toBe(paragraph);
+    expect(view?.querySelector('strong')).toBe(strong);
+    expect(strong?.textContent).toBe('first grows');
+    expect(view?.textContent).not.toContain('**');
+  });
+
+  it('live preview and expanded body each receive an incremental unit session', () => {
+    const preview = render(
+      <ThinkingBlock content="**live preview**" isLive />
+    );
+    const previewCall = vi.mocked(markdownRenderAsync.useStreamingMarkdownHtml)
+      .mock.calls.find(([, enabled]) => enabled);
+    expect(previewCall?.[3]).toBeDefined();
+    expect(preview.container.textContent).not.toContain('**live preview**');
+    preview.unmount();
+
+    vi.clearAllMocks();
+    const expanded = render(
+      <ThinkingBlock content="## **live body**" isLive defaultOpen />
+    );
+    const fullCall = vi.mocked(markdownRenderAsync.useStreamingMarkdownHtml)
+      .mock.calls.find(([, enabled]) => enabled);
+    expect(fullCall?.[3]).toBeDefined();
+    expect(expanded.container.textContent).not.toContain('## **live body**');
+  });
+
+  it.each([
+    { label: 'non-live preview', isLive: false, open: false },
+    { label: 'non-live expanded body', isLive: false, open: true },
+    { label: 'live preview', isLive: true, open: false },
+    { label: 'live expanded body', isLive: true, open: true },
+  ])('$label stays blank while rendering is pending', ({ isLive, open }) => {
+    vi.mocked(markdownRenderAsync.useAsyncMarkdownHtml).mockReturnValue({
+      html: '',
+      loading: true,
+      failed: false,
+    });
+    vi.mocked(markdownRenderAsync.useStreamingMarkdownHtml).mockReturnValue('');
+
+    const { container } = render(
+      <ThinkingBlock
+        content={richMarkdown}
+        preview={richMarkdown}
+        isLive={isLive}
+        defaultOpen={open}
+      />
+    );
+    const view = container.querySelector(
+      open
+        ? '[data-flow-thinking-full]'
+        : '[data-flow-thinking-preview-content]'
+    );
+
+    expect(view?.innerHTML).toBe('');
+    expect(view?.textContent).toBe('');
+  });
+
+  it.each([
+    { label: 'non-live preview', isLive: false, open: false },
+    { label: 'non-live expanded body', isLive: false, open: true },
+    { label: 'live preview', isLive: true, open: false },
+    { label: 'live expanded body', isLive: true, open: true },
+  ])('$label stays blank when rendering fails', ({ isLive, open }) => {
+    vi.mocked(markdownRenderAsync.useAsyncMarkdownHtml).mockReturnValue({
+      html: '',
+      loading: false,
+      failed: true,
+    });
+    vi.mocked(markdownRenderAsync.useStreamingMarkdownHtml).mockReturnValue('');
+
+    const { container } = render(
+      <ThinkingBlock
+        content={richMarkdown}
+        preview={richMarkdown}
+        isLive={isLive}
+        defaultOpen={open}
+      />
+    );
+    const view = container.querySelector(
+      open
+        ? '[data-flow-thinking-full]'
+        : '[data-flow-thinking-preview-content]'
+    );
+
+    expect(view?.innerHTML).toBe('');
+    expect(view?.textContent).toBe('');
   });
 
   it('已挂载块不随 defaultOpen 变化改开合（仅新渲染生效）', () => {

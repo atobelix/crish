@@ -196,8 +196,8 @@ export type ChatAssistantMessageRowProps = {
   toolStackProps: ChatToolStackSharedProps;
   onTogglePin: (msgId: string, color?: string) => void;
   onRegenerate?: (assistantMsgId: string) => void;
-  onBranch: () => void;
-  onOpenDiff: (diff: FileDiff) => void;
+  onBranch?: (() => void) | undefined;
+  onOpenDiff?: ((diff: FileDiff) => void) | undefined;
   onOpenDiffPanel?: (() => void) | undefined;
   setPermissionMode: (mode: PermissionMode) => void;
   setPlanApproved: (v: boolean) => void;

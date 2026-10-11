@@ -32,6 +32,9 @@
   max-height: 24px;
   --btn-h: 24px;
   --btn-px: var(--space-1, 4px);
+  --btn-bg: transparent;
+  --btn-hover-overlay: transparent;
+  --btn-active-overlay: transparent;
   box-sizing: border-box;
   contain: size layout;
   align-items: center;
@@ -51,11 +54,16 @@
   transition: color var(--transition-fast, 150ms ease);
 }
 
+.reasoningRow::before {
+  display: none;
+}
+
 .reasoningRow:focus-visible,
 .reasoningRow:hover,
-.reasoningRow:focus-visible {
+.reasoningRow:active {
   color: var(--text-primary);
   background: transparent;
+  background-color: transparent;
 }
 
 .reasoningContainer.isLive .reasoningRow,
@@ -131,6 +139,23 @@
   white-space: nowrap;
   font-size: 14px;
   color: inherit;
+}
+
+.summaryText :global(.md-p),
+.summaryText :global(.md-h1),
+.summaryText :global(.md-h2),
+.summaryText :global(.md-h3),
+.summaryText :global(.md-h4),
+.summaryText :global(.md-h5),
+.summaryText :global(.md-h6),
+.summaryText :global(ul),
+.summaryText :global(ol),
+.summaryText :global(li) {
+  display: inline;
+  margin: 0;
+  padding: 0;
+  font: inherit;
+  line-height: inherit;
 }
 
 /* 单行收拢模式下的动态文本预览：自然居左截断，与分割点紧密衔接 */
@@ -259,11 +284,6 @@
 .reasoningContent :global(div),
 .reasoningContent :global(blockquote) {
   color: inherit;
-}
-
-.liveContent {
-  white-space: pre-wrap;
-  word-break: break-word;
 }
 
 /* 保留兼容 ThinkingTimer 轻量样式类名 */

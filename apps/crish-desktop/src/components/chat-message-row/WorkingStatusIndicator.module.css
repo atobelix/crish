@@ -12,7 +12,7 @@
   font-size: 14px;
   color: var(--text-secondary);
   background: transparent;
-  transition: opacity 0.2s ease-out;
+  transition: opacity var(--transition-micro);
 }
 
 .workingMode {
