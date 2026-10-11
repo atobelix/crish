@@ -274,7 +274,7 @@
   color: var(--accent-red);
 }
 .inlineAgentStopBtn:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--accent-red) 12%, transparent);
+  background: var(--danger-soft-bg);
   color: var(--accent-red);
 }
 

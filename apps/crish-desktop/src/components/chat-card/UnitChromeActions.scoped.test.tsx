@@ -382,7 +382,8 @@ describe('UnitChromeActions 对话顶快捷行（三级面包屑 + 极简动作�
     expect(css).toMatch(/height:\s*38px/);
     expect(css).toMatch(/margin-bottom:\s*0/);
     expect(css).toMatch(/pointer-events:\s*auto/);
-    expect(css).toMatch(/border-radius:\s*(?:var\(--radius-md,\s*6px\)|6px)/);
+    // 2026-10-11 圆角兜底清退（theme review P2-5）：兜底可选
+    expect(css).toMatch(/border-radius:\s*(?:var\(--radius-md(?:,\s*6px)?\)|6px)/);
     expect(css).not.toMatch(/\.chatTopHeader\s*\{[^}]*display:\s*none/);
   });
 });

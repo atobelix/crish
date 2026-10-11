@@ -233,6 +233,7 @@
   display: flex;
   flex-direction: row;
   align-items: center;
+  cursor: pointer; /* 整行可点击切换展开（heson 2026-10-11） */
   height: 32px;
   min-height: 32px;
   max-height: 32px;
@@ -385,19 +386,19 @@
 }
 
 .statusBadge.mod {
-  color: var(--filetree-badge-mod-fg);
+  color: var(--status-modified);
 }
 
 .statusBadge.add {
-  color: var(--filetree-badge-add-fg);
+  color: var(--status-added);
 }
 
 .statusBadge.del {
-  color: var(--filetree-badge-del-fg);
+  color: var(--status-deleted);
 }
 
 .statusBadge.ren {
-  color: var(--filetree-badge-renamed-fg);
+  color: var(--status-renamed);
 }
 
 /* --------------------------------------------------------------------------
@@ -506,13 +507,14 @@
   transition: opacity var(--transition-micro, 80ms) ease-out;
 }
 
+/* 增减行数：固定语义纯色（旧 text-secondary 灰，2026-09-10 7693fe5dd 引入；heson 2026-10-11 改回语义色） */
 .statAdd {
-  color: var(--text-secondary);
+  color: var(--diff-add);
   font-weight: 400;
 }
 
 .statDel {
-  color: var(--text-secondary);
+  color: var(--diff-del);
   font-weight: 400;
 }
 
@@ -579,9 +581,10 @@
 .danger[data-variant]:hover,
 .rowActBtn.danger:hover,
 .rowActBtn.danger[data-variant]:hover {
-  color: var(--diff-del-fg);
-  --btn-fg: var(--diff-del-fg);
-  --btn-hover-overlay: color-mix(in srgb, var(--color-error) 12%, transparent);
+  /* 放弃修改等危险操作：固定 danger 红 + 浅红纯色底，不加黑、不变暗（heson 2026-10-11） */
+  color: var(--danger-fg);
+  --btn-fg: var(--danger-fg);
+  --btn-hover-overlay: var(--danger-soft-bg);
 }
 
 .dangerBtn:active,
@@ -590,7 +593,7 @@
 .danger[data-variant]:active,
 .rowActBtn.danger:active,
 .rowActBtn.danger[data-variant]:active {
-  --btn-active-overlay: color-mix(in srgb, var(--color-error) 20%, transparent);
+  --btn-active-overlay: var(--danger-soft-bg-hover);
 }
 
 .rowActBtn,

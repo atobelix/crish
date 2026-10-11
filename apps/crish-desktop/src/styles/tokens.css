@@ -250,8 +250,8 @@ html[data-theme='light'] {
   --sep-text-muted: var(--text-tertiary);
 
   --sep-accent-check: hsl(160 84% 39%);
-  --sep-danger-color: hsl(0 84% 60%);
-  --sep-danger-light: hsl(0 84% 60% / 0.08);
+  --sep-danger-color: var(--danger-fg); /* 菜单危险项文字：固定 danger 红 */
+  --sep-danger-light: var(--danger-soft-bg); /* 固定纯色 soft 底（旧为半透明） */
 
   --sep-shadow:
     0 4px 16px -2px color-mix(in srgb, var(--shadow-color, hsl(0 0% 0%)) 4%, transparent),
@@ -260,32 +260,30 @@ html[data-theme='light'] {
 
   --accent-color: hsl(160 84% 36%); /* 品牌翡翠绿活态签名 */
   --accent-orange: oklch(0.70 0.16 65);
-  --accent-orange-light: oklch(0.70 0.16 65 / 0.10);
   --accent-green: oklch(0.60 0.16 150); /* 纯净翡翠翠绿，满足 WCAG AA 状态点 ≥ 3:1 */
-  --accent-green-light: oklch(0.60 0.16 150 / 0.08);
+  --accent-green-light: var(--success-soft-bg); /* 固定纯色 soft 底（旧为半透明） */
   --accent-green-muted: oklch(0.60 0.16 150 / 0.22);
   --accent-red: oklch(0.61 0.19 31.8); /* 纯净温暖朱红，基准 #de4931，鲜艳不刺眼 */
-  --accent-red-light: oklch(0.61 0.19 31.8 / 0.08);
+  --accent-red-light: var(--danger-soft-bg); /* 固定纯色 soft 底（旧为半透明） */
   --accent-blue: oklch(0.50 0.18 250); /* 纯净天蓝，满足 WCAG AA 文字 ≥ 4.5:1 */
-  --accent-blue-light: oklch(0.50 0.18 250 / 0.08);
   --accent-primary: #10b981;
-  --accent-green-light-adaptive: color-mix(in srgb, var(--accent-green, #16a34a) 15%, #ffffff);
-  --accent-red-light-adaptive: color-mix(in srgb, var(--accent-red, #dc2626) 12%, #ffffff);
+  --accent-green-light-adaptive: var(--success-soft-bg); /* 固定纯色（旧为与白/底色混色） */
+  --accent-red-light-adaptive: var(--danger-soft-bg); /* 固定纯色 */
   /* primary     FirstRunWizard        light = text-primary   dark = text-secondary    */
   --text-on-accent: #ffffff;
 
   /* semantic color roles (纯净 OKLCH 直通，零混浊 dirty mix) */
   --color-success: var(--accent-green);
-  --color-success-bg: var(--accent-green-light);
+  --color-success-bg: var(--success-soft-bg); /* 固定纯色 soft 底（旧为半透明） */
   --color-success-border: var(--accent-green-muted);
   --color-warning: var(--accent-orange);
-  --color-warning-bg: var(--accent-orange-light);
+  --color-warning-bg: var(--warning-soft-bg); /* 固定纯色 soft 底（旧为半透明） */
   --color-warning-border: oklch(0.78 0.16 80 / 0.25);
   --color-error: var(--accent-red);
-  --color-error-bg: var(--accent-red-light);
+  --color-error-bg: var(--danger-soft-bg); /* 固定纯色 soft 底（旧为半透明） */
   --color-error-border: oklch(0.61 0.19 31.8 / 0.25);
   --color-info: var(--accent-blue);
-  --color-info-bg: var(--accent-blue-light);
+  --color-info-bg: var(--info-soft-bg); /* 固定纯色 soft 底（旧为半透明） */
   --color-info-border: oklch(0.65 0.18 245 / 0.25);
 
   /* ==========================================================================
@@ -338,6 +336,10 @@ html[data-theme='light'] {
   --ui-text-warning: var(--text-warning-strong);
 
   /* Windows caption close (shared by app top bar + inset chrome) */
+  /* Win11 标题栏关闭钮：hover 整块红底白叉（Fluent 规范色），pressed 为 90% 不透明 */
+  --window-close-hover-bg: #c42b1c;
+  --window-close-hover-fg: #ffffff;
+  --window-close-active-bg: color-mix(in srgb, var(--window-close-hover-bg) 90%, transparent);
 
   /* shadow base color unified source for 28 color-mix(in srgb, #000 ...) */
   --shadow-color: #000;
@@ -518,6 +520,8 @@ html[data-theme='light'] {
   --edge-reserve-left-macos: 106px;
   --edge-reserve-right-win: 144px;
   --edge-reserve-right-macos: 38px;
+  /* Windows 标题栏按钮宽（Win11 规范 46px；3 × 46 = 138 ≤ --edge-reserve-right-win） */
+  --window-caption-btn-width: 46px;
   --leaf-corner-btn-size: 28px;
   --leaf-corner-btn-inset: 10px;
   --sidebar-width: 260px; /* overridden by JS constants at runtime */
@@ -719,17 +723,33 @@ html[data-theme='light'] {
   --filetree-node-fg: var(--text-secondary);
   --filetree-icon-color: var(--text-tertiary);
   --filetree-badge-add-bg: hsl(142 71% 45% / 0.12);
-  --filetree-badge-add-fg: hsl(142 71% 28%);
+  /* 固定语义色（heson 2026-10-11 收尾）：所有皮肤共用的纯色，不与主题色 / accent / 底色混色，不加透明；运行时皮肤不覆盖。浅色 */
+  --diff-add: #1a7f37;
+  --diff-del: #cf222e;
+  --status-modified: #9a6700;
+  --status-added: #1a7f37;
+  --status-deleted: #cf222e;
+  --status-renamed: #8250df;
+  --status-untracked: #57606a;
+  --status-conflicted: #bc4c00;
+  /* 语义色 fg / soft 底 / hover·按下底：固定纯色，不混主题色、底色、黑色，不透明（heson 2026-10-11） */
+  --danger-fg: #e5484d;
+  --danger-soft-bg: #fdecec;
+  --danger-soft-bg-hover: #fbdcdc;
+  --success-fg: #1a7f37;
+  --success-soft-bg: #e7f6ec;
+  --success-soft-bg-hover: #d3eedc;
+  --warning-fg: #b25e00;
+  --warning-soft-bg: #fdf3e1;
+  --warning-soft-bg-hover: #fae6c2;
+  --info-fg: #0b66d6;
+  --info-soft-bg: #e8f1fd;
+  --info-soft-bg-hover: #d4e4fb;
+  --filetree-badge-add-fg: var(--status-added); /* 旧 hsl(142 71% 28%) */
   --filetree-badge-mod-bg: hsl(38 92% 50% / 0.12);
-  --filetree-badge-mod-fg: hsl(32 95% 30%);
+  --filetree-badge-mod-fg: var(--status-modified); /* 旧 hsl(32 95% 30%) */
   --filetree-badge-del-bg: hsl(0 84% 60% / 0.12);
-  --filetree-badge-del-fg: hsl(0 75% 38%);
-  --filetree-badge-untracked-bg: hsl(0 0% 50% / 0.12);
-  --filetree-badge-untracked-fg: hsl(0 0% 36%);
-  --filetree-badge-conflicted-bg: hsl(0 84% 60% / 0.18);
-  --filetree-badge-conflicted-fg: hsl(0 84% 35%);
-  --filetree-badge-renamed-bg: hsl(270 60% 50% / 0.12);
-  --filetree-badge-renamed-fg: hsl(270 60% 36%);
+  --filetree-badge-del-fg: var(--status-deleted); /* 旧 hsl(0 75% 38%) */
 
   /* AI 步骤卡片 */
   --aicard-status-running: var(--brand);
@@ -897,14 +917,14 @@ html[data-theme='dark'] {
   /* ── 深色「元素提亮阶梯」（heson 2026-10-11 01:05）──
      全部是 element-ink 的透明叠加：叠在哪一层就在哪一层上提亮，外层/主层/输入框上的相对增量一致（ΔL ≈ α ×（墨 L − 层 L））。
      ★ 调亮度只改下面 4 个 --elevate-step-*（墨的叠加百分比；每 1.33% ≈ +1 亮度点）★
-     elevate-1        hover                       ≈ +6 亮度点
-     elevate-1-active 按下（hover 再 +2）         ≈ +8
-     elevate-2        按钮底色、用户气泡          ≈ +10
-     elevate-3        激活标签 / 分段滑块 / 侧栏选中行 ≈ +12（= 侧栏选中行 01:11 的亮度，封顶） */
-  --elevate-step-1: 8%;
-  --elevate-step-1-active: 10.6%;
-  --elevate-step-2: 13.3%;
-  --elevate-step-3: 16%;
+     elevate-1        hover                       ≈ +8 亮度点
+     elevate-1-active 按下（hover 再 +2）         ≈ +10
+     elevate-2        按钮底色、用户气泡          ≈ +12
+     elevate-3        激活标签 / 分段滑块 / 侧栏选中行 ≈ +14（heson 2026-10-11 02:14 整体再 +2） */
+  --elevate-step-1: 10.6%;
+  --elevate-step-1-active: 13.3%;
+  --elevate-step-2: 16%;
+  --elevate-step-3: 18.7%;
   --elevate-1: color-mix(in srgb, var(--element-ink) var(--elevate-step-1), transparent);
   --elevate-1-active: color-mix(in srgb, var(--element-ink) var(--elevate-step-1-active), transparent);
   --elevate-2: color-mix(in srgb, var(--element-ink) var(--elevate-step-2), transparent);
@@ -1056,8 +1076,8 @@ html[data-theme='dark'] {
   --sep-text-muted: var(--text-tertiary);
 
   --sep-accent-check: hsl(160 84% 45%);
-  --sep-danger-color: hsl(0 84% 60%);
-  --sep-danger-light: hsl(0 84% 60% / 0.08);
+  --sep-danger-color: var(--danger-fg); /* 菜单危险项文字：固定 danger 红 */
+  --sep-danger-light: var(--danger-soft-bg); /* 固定纯色 soft 底（旧为半透明） */
 
   --sep-shadow:
     0 4px 18px hsl(0 0% 0% / 0.28),
@@ -1067,17 +1087,15 @@ html[data-theme='dark'] {
   --accent-hover: #ffffff;
 
   --accent-orange: oklch(0.80 0.17 75);
-  --accent-orange-light: oklch(0.80 0.17 75 / 0.14);
   --accent-green: oklch(0.76 0.16 152);
-  --accent-green-light: oklch(0.76 0.16 152 / 0.14);
+  --accent-green-light: var(--success-soft-bg); /* 固定纯色 soft 底（旧为半透明） */
   --accent-green-muted: oklch(0.76 0.16 152 / 0.26);
   --accent-red: oklch(0.72 0.19 27.5);
-  --accent-red-light: oklch(0.72 0.19 27.5 / 0.14);
+  --accent-red-light: var(--danger-soft-bg); /* 固定纯色 soft 底（旧为半透明） */
   /* themeStore applyTheme dark */
-  --accent-green-light-adaptive: oklch(0.76 0.16 152 / 0.14);
-  --accent-red-light-adaptive: oklch(0.72 0.19 27.5 / 0.14);
+  --accent-green-light-adaptive: var(--success-soft-bg); /* 固定纯色（旧为与白/底色混色） */
+  --accent-red-light-adaptive: var(--danger-soft-bg); /* 固定纯色 */
   --accent-blue: oklch(0.74 0.16 250);
-  --accent-blue-light: oklch(0.74 0.16 250 / 0.14);
   --accent-primary: #10b981;
   /* primary     dark    text-secondary    */
   --text-on-accent: var(--bg-primary, #0a0a0a);
@@ -1091,23 +1109,27 @@ html[data-theme='dark'] {
   --text-success-strong: var(--ui-text-success);
   --text-on-danger: #ffffff;
   --color-active: #16a34a;
+  /* Win11 标题栏关闭钮（深色同 Fluent 规范色；不可复用 --text-on-accent，深色下它是暗色） */
+  --window-close-hover-bg: #c42b1c;
+  --window-close-hover-fg: #ffffff;
+  --window-close-active-bg: color-mix(in srgb, var(--window-close-hover-bg) 90%, transparent);
 
   /* semantic color roles */
   --color-success: var(--accent-green);
-  --color-success-bg: var(--accent-green-light);
+  --color-success-bg: var(--success-soft-bg); /* 固定纯色 soft 底（旧为半透明） */
   --color-success-border: var(--accent-green-muted);
   --color-warning: var(--accent-orange);
-  --color-warning-bg: var(--accent-orange-light);
+  --color-warning-bg: var(--warning-soft-bg); /* 固定纯色 soft 底（旧为半透明） */
   --color-warning-border: color-mix(
     in srgb,
     var(--accent-orange) 25%,
     transparent
   );
   --color-error: var(--accent-red);
-  --color-error-bg: var(--accent-red-light);
+  --color-error-bg: var(--danger-soft-bg); /* 固定纯色 soft 底（旧为半透明） */
   --color-error-border: color-mix(in srgb, var(--accent-red) 25%, transparent);
   --color-info: var(--accent-blue);
-  --color-info-bg: var(--accent-blue-light);
+  --color-info-bg: var(--info-soft-bg); /* 固定纯色 soft 底（旧为半透明） */
   --color-info-border: color-mix(in srgb, var(--accent-blue) 25%, transparent);
 
   /* 通知与灵动胶囊专用 Design Token 体系 (Dark 模式) */
@@ -1369,17 +1391,33 @@ html[data-theme='dark'] {
   --filetree-node-fg: var(--text-secondary);
   --filetree-icon-color: var(--text-tertiary);
   --filetree-badge-add-bg: hsl(142 60% 45% / 0.20);
-  --filetree-badge-add-fg: hsl(142 75% 70%);
+  /* 固定语义色（heson 2026-10-11 收尾）：所有皮肤共用的纯色，不与主题色 / accent / 底色混色，不加透明；运行时皮肤不覆盖。深色 */
+  --diff-add: #3fb950;
+  --diff-del: #f85149;
+  --status-modified: #d29922;
+  --status-added: #3fb950;
+  --status-deleted: #f85149;
+  --status-renamed: #a371f7;
+  --status-untracked: #8b949e;
+  --status-conflicted: #f0883e;
+  /* 语义色 fg / soft 底 / hover·按下底：固定纯色（深色） */
+  --danger-fg: #ff6369;
+  --danger-soft-bg: #4a1f22;
+  --danger-soft-bg-hover: #5a2629;
+  --success-fg: #3fb950;
+  --success-soft-bg: #17301f;
+  --success-soft-bg-hover: #1e3d28;
+  --warning-fg: #e3a33b;
+  --warning-soft-bg: #3a2a12;
+  --warning-soft-bg-hover: #4a3617;
+  --info-fg: #58a6ff;
+  --info-soft-bg: #14263d;
+  --info-soft-bg-hover: #1b304d;
+  --filetree-badge-add-fg: var(--status-added); /* 旧 hsl(142 75% 70%) */
   --filetree-badge-mod-bg: hsl(38 92% 50% / 0.20);
-  --filetree-badge-mod-fg: hsl(45 93% 65%);
+  --filetree-badge-mod-fg: var(--status-modified); /* 旧 hsl(45 93% 65%) */
   --filetree-badge-del-bg: hsl(0 75% 55% / 0.20);
-  --filetree-badge-del-fg: hsl(0 75% 72%);
-  --filetree-badge-untracked-bg: hsl(0 0% 70% / 0.18);
-  --filetree-badge-untracked-fg: hsl(0 0% 78%);
-  --filetree-badge-conflicted-bg: hsl(0 75% 55% / 0.25);
-  --filetree-badge-conflicted-fg: hsl(0 85% 75%);
-  --filetree-badge-renamed-bg: hsl(270 60% 50% / 0.20);
-  --filetree-badge-renamed-fg: hsl(270 70% 75%);
+  --filetree-badge-del-fg: var(--status-deleted); /* 旧 hsl(0 75% 72%) */
 
   /* AI 步骤卡片 */
   --aicard-status-running: var(--brand);

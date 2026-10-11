@@ -225,12 +225,16 @@
 }
 
 .item.danger {
-  color: var(--color-error);
+  color: var(--danger-fg); /* 固定 danger 红（heson 2026-10-11） */
 }
 
 .item.danger:hover,
 .item.danger.focused {
-  background-color: color-mix(in srgb, var(--color-error) 10%, transparent);
+  background-color: var(--danger-soft-bg);
+}
+
+.item.danger:active {
+  background-color: var(--danger-soft-bg-hover);
 }
 
 .itemLeft {

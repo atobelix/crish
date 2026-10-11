@@ -541,11 +541,11 @@
 /* Active Port Capsule / Card */
 .activePortCard {
   border: 1px solid color-mix(in srgb, var(--color-success) 35%, transparent);
-  background: color-mix(in srgb, var(--color-success) 6%, var(--bg-card));
+  background: var(--success-soft-bg);
 }
 
 .activePortCard:hover {
-  background: color-mix(in srgb, var(--color-success) 12%, var(--bg-card));
+  background: var(--success-soft-bg);
   border-color: color-mix(in srgb, var(--color-success) 60%, transparent);
 }
 

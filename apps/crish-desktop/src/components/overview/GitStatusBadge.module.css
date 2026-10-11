@@ -15,40 +15,41 @@
   flex-shrink: 0;
 }
 
+/* 状态徽标：固定语义纯色，去掉半透明底和混色描边（heson 2026-10-11：混色发雾 / 发脏） */
 .modified {
-  background: var(--filetree-badge-mod-bg);
-  color: var(--filetree-badge-mod-fg);
-  border-color: color-mix(in srgb, var(--filetree-badge-mod-fg) 25%, transparent);
+  background: transparent;
+  color: var(--status-modified);
+  border-color: transparent;
 }
 
 .added {
-  background: var(--filetree-badge-add-bg);
-  color: var(--filetree-badge-add-fg);
-  border-color: color-mix(in srgb, var(--filetree-badge-add-fg) 25%, transparent);
+  background: transparent;
+  color: var(--status-added);
+  border-color: transparent;
 }
 
 .deleted {
-  background: var(--filetree-badge-del-bg);
-  color: var(--filetree-badge-del-fg);
-  border-color: color-mix(in srgb, var(--filetree-badge-del-fg) 25%, transparent);
+  background: transparent;
+  color: var(--status-deleted);
+  border-color: transparent;
 }
 
 .untracked {
-  background: var(--filetree-badge-untracked-bg);
-  color: var(--filetree-badge-untracked-fg);
-  border-color: color-mix(in srgb, var(--filetree-badge-untracked-fg) 25%, transparent);
+  background: transparent;
+  color: var(--status-untracked);
+  border-color: transparent;
 }
 
 .conflicted {
-  background: var(--filetree-badge-conflicted-bg);
-  color: var(--filetree-badge-conflicted-fg);
-  border-color: color-mix(in srgb, var(--filetree-badge-conflicted-fg) 35%, transparent);
+  background: transparent;
+  color: var(--status-conflicted);
+  border-color: transparent;
 }
 
 .renamed {
-  background: var(--filetree-badge-renamed-bg);
-  color: var(--filetree-badge-renamed-fg);
-  border-color: color-mix(in srgb, var(--filetree-badge-renamed-fg) 25%, transparent);
+  background: transparent;
+  color: var(--status-renamed);
+  border-color: transparent;
 }
 
 .unknown {
@@ -82,11 +83,11 @@
 }
 
 .barAdd {
-  background: var(--accent-green);
+  background: var(--diff-add);
 }
 
 .barDel {
-  background: var(--accent-red);
+  background: var(--diff-del);
 }
 
 .barEmpty {
@@ -101,11 +102,11 @@
 }
 
 .numAdd {
-  color: var(--accent-green);
+  color: var(--diff-add);
   font-weight: 500;
 }
 
 .numDel {
-  color: var(--accent-red);
+  color: var(--diff-del);
   font-weight: 500;
 }

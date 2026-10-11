@@ -138,7 +138,8 @@
 .item.selected { background-color: var(--tint-hover); }
 .item.disabled { opacity: 0.45; cursor: not-allowed; }
 .item.danger { color: var(--sep-danger-color); }
-.item.danger:hover, .item.danger.focused { background-color: color-mix(in srgb, var(--color-error) 10%, transparent); }
+.item.danger:hover, .item.danger.focused { background-color: var(--danger-soft-bg); }
+.item.danger:active { background-color: var(--danger-soft-bg-hover); } /* 按下：固定浅红纯色，不变暗 */
 
 .itemLeft { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1 1 auto; }
 .itemIcon { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; opacity: 0.75; }

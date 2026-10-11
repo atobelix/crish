@@ -73,28 +73,28 @@
 
 .toneInfo,
 .badge[data-tone='info'] {
-  --badge-bg: color-mix(in srgb, var(--color-info) 10%, transparent);
+  --badge-bg: var(--info-soft-bg);
   --badge-fg: var(--color-info);
   --badge-border: color-mix(in srgb, var(--color-info) 22%, transparent);
 }
 
 .toneSuccess,
 .badge[data-tone='success'] {
-  --badge-bg: color-mix(in srgb, var(--color-success) 12%, transparent);
+  --badge-bg: var(--success-soft-bg);
   --badge-fg: var(--color-success);
   --badge-border: color-mix(in srgb, var(--color-success) 25%, transparent);
 }
 
 .toneWarning,
 .badge[data-tone='warning'] {
-  --badge-bg: color-mix(in srgb, var(--color-warning) 12%, transparent);
+  --badge-bg: var(--warning-soft-bg);
   --badge-fg: var(--color-warning);
   --badge-border: color-mix(in srgb, var(--color-warning) 25%, transparent);
 }
 
 .toneDanger,
 .badge[data-tone='danger'] {
-  --badge-bg: color-mix(in srgb, var(--color-error) 12%, transparent);
+  --badge-bg: var(--danger-soft-bg);
   --badge-fg: var(--color-error);
   --badge-border: color-mix(in srgb, var(--color-error) 25%, transparent);
 }

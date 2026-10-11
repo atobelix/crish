@@ -22,11 +22,7 @@
 
 .write {
   color: var(--color-info, var(--text-primary));
-  background: color-mix(
-    in srgb,
-    var(--color-info, var(--text-primary)) 10%,
-    transparent
-  );
+  background: var(--info-soft-bg);
   border: 1px solid
     color-mix(in srgb, var(--color-info, var(--text-primary)) 20%, transparent);
 }

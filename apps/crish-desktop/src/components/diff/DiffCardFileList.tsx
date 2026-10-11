@@ -8,6 +8,10 @@ import { formatGitPatch } from './GitPatchFormatter';
 import { useToast } from '../../services/toast/ToastContext';
 import { AppIcon } from '../ui/icons/index';
 
+/** 整行点击切换展开时要排除的功能区（按钮、链接、表单控件、菜单项、显式标记的区域） */
+export const ROW_TOGGLE_EXCLUDE =
+  'button, a, input, select, textarea, label, [role="menuitem"], [role="checkbox"], [data-no-row-toggle]';
+
 /**
  * 差异面板文件列表组件属性契约
  * 遵循单轨解耦规范，拔除单文件行内工具栏专用死属性，保留正交交互通道
@@ -204,6 +208,22 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
           className={`${styles.fileRow} ${active ? styles.isActive : ''}`}
           data-active={active}
           role="row"
+          tabIndex={0}
+          aria-expanded={active}
+          data-testid="diff-file-row"
+          // 整行（文件名、路径、空白、+/- 统计）点击切换展开；功能区经 ROW_TOGGLE_EXCLUDE 排除（heson 2026-10-11）
+          onClick={(e) => {
+            const target = e.target as HTMLElement | null;
+            if (target?.closest(ROW_TOGGLE_EXCLUDE)) return;
+            onSetActiveDiffSource(active ? null : f);
+          }}
+          onKeyDown={(e) => {
+            if (e.target !== e.currentTarget) return;
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              onSetActiveDiffSource(active ? null : f);
+            }
+          }}
         >
           {/* =================================================================
            * 子域 A：折叠展开控制与语义化状态徽章单槽位融合（原子 Tooltip 包裹）
@@ -234,20 +254,25 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
            * 子域 B：独立超链接与路径分级 (点击在右侧打开独立预览 Tab，原子 Tooltip 包裹)
            * ================================================================= */}
           <div className={styles.pathWrap}>
-            <Tooltip content={`在独立标签页打开差异：${f.filePath}`}>
+            <Tooltip content={`${f.filePath} · 单击展开/折叠，双击或 Ctrl/⌘+单击在独立标签页打开`}>
               <Button
                 type="button"
                 variant="ghost"
                 className={styles.fileNameLinkBtn}
+                // 单击文件名 = 切换展开（与整行一致）；Ctrl/⌘+单击 或 双击 = 在独立标签页打开
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (onOpenFileViewer) {
+                  if ((e.ctrlKey || e.metaKey) && onOpenFileViewer) {
                     onOpenFileViewer(f.filePath);
-                  } else {
-                    onSetActiveDiffSource(active ? null : f);
+                    return;
                   }
+                  onSetActiveDiffSource(active ? null : f);
                 }}
-                aria-label={`在独立标签页预览文件 ${name}`}
+                onDoubleClick={(e) => {
+                  e.stopPropagation();
+                  if (onOpenFileViewer) onOpenFileViewer(f.filePath);
+                }}
+                aria-label={`在独立标签页预览文件 ${name}（双击或 Ctrl/⌘+单击；单击展开/折叠差异）`}
               >
                 <span className={styles.fileName}>{name}</span>
               </Button>
@@ -255,10 +280,7 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
 
             {dir ? (
               <Tooltip content={`文件所在目录：${dir}（点击折叠/展开）`}>
-                <span
-                  className={styles.dirPath}
-                  onClick={() => onSetActiveDiffSource(active ? null : f)}
-                >
+                <span className={styles.dirPath}>
                   {dir}
                 </span>
               </Tooltip>

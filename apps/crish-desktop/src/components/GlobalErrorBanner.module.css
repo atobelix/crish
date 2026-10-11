@@ -14,11 +14,7 @@
   padding: 8px 14px;
   border-radius: var(--radius-lg);
   border: var(--hairline-width, 1px) solid var(--border-color);
-  background: color-mix(
-    in srgb,
-    var(--accent-orange) 8%,
-    var(--bg-elevated)
-  );
+  background: var(--warning-soft-bg);
   color: var(--text-primary);
   font-size: var(--font-size-xs);
   line-height: var(--line-height-body);
@@ -33,11 +29,7 @@
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  background: color-mix(
-    in srgb,
-    var(--accent-orange) 30%,
-    transparent
-  );
+  background: var(--warning-soft-bg-hover);
   color: var(--text-primary);
   font-size: 11px;
   font-weight: var(--font-weight-medium, 500);

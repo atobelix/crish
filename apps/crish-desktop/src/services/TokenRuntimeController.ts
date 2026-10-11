@@ -411,21 +411,9 @@ export class TokenRuntimeController {
         bgElevated = `color-mix(in srgb, ${vibrantTint} 10.0%, ${bgCard})`;
       }
 
-      let greenLight = 'var(--accent-green-light)';
-      let redLight = 'var(--accent-red-light)';
-      if (!isDark) {
-        greenLight = `color-mix(in srgb, var(--accent-green) 15.5%, hsl(0 0% 100%))`;
-        redLight = `color-mix(in srgb, var(--accent-red) 12.5%, hsl(0 0% 100%))`;
-      } else {
-        if (adjust < 0) {
-          const pct = Math.abs(adjust) * 1.2;
-          greenLight = `color-mix(in srgb, var(--accent-green) ${8 + pct}%, ${bgSecondary})`;
-          redLight = `color-mix(in srgb, var(--accent-red) ${8 + pct}%, ${bgSecondary})`;
-        } else {
-          greenLight = `color-mix(in srgb, var(--accent-green) 8%, ${bgPrimary})`;
-          redLight = `color-mix(in srgb, var(--accent-red) 8%, ${bgPrimary})`;
-        }
-      }
+      // 语义 soft 底：一律引用 tokens.css 固定纯色，皮肤不再与底色混色（heson 2026-10-11：混色发脏）
+      const greenLight = 'var(--success-soft-bg)';
+      const redLight = 'var(--danger-soft-bg)';
 
       if (!isDark) {
         if (skinKey === 'warm-gray' || skinKey === 'paper' || skinKey === 'classic-gray' || skinKey === 'custom') {

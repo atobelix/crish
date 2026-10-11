@@ -242,7 +242,7 @@
   gap: var(--space-1_5);
   padding: 6px 10px;
   border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--accent-orange) 9%, transparent);
+  background: var(--warning-soft-bg);
   color: var(--accent-orange);
   font-size: var(--font-size-xxs);
 }

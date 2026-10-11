@@ -436,7 +436,7 @@
 
 .retryBtn:hover {
   opacity: 1;
-  background: color-mix(in srgb, var(--accent-red) 12%, transparent);
+  background: var(--danger-soft-bg);
 }
 
 /* Diff stats in collapsed row */
@@ -534,11 +534,7 @@
 }
 
 .toolSection.isErrorSection {
-  background: color-mix(
-    in srgb,
-    var(--color-error) 4%,
-    transparent
-  );
+  background: var(--danger-soft-bg);
 }
 
 /* Header (Flat & Quiet, Apple-style) */

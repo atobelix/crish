@@ -9,7 +9,7 @@
   padding: 8px 12px;
   border-radius: var(--radius-xl);
   border: 1px solid color-mix(in srgb, var(--accent-orange) 30%, var(--hairline, var(--border-subtle)));
-  background: color-mix(in srgb, var(--accent-orange) 5%, transparent);
+  background: var(--warning-soft-bg);
   cursor: pointer;
   font-family: inherit;
   text-align: left;
@@ -32,7 +32,7 @@
 }
 
 .approvalDock:hover {
-  background: color-mix(in srgb, var(--accent-orange) 9%, transparent);
+  background: var(--warning-soft-bg);
 }
 
 .approvalDock:focus-visible {

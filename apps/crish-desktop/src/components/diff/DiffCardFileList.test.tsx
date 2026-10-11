@@ -99,7 +99,8 @@ describe('DiffCardFileList (平直单轨与正交子域专项测试)', () => {
     expect(handleOpenFileViewer).not.toHaveBeenCalled();
   });
 
-  it('三大正交子域验证：点击文件名超链接仅触发独立 Tab 打开，绝不触发表内折叠', () => {
+  // 2026-10-11 heson：单击文件名改为切换展开（整行可点）；双击 / Ctrl+单击 才在独立 Tab 打开
+  it('文件名：单击切换表内展开；双击或 Ctrl+单击在独立 Tab 打开', () => {
     const handleSetActive = vi.fn();
     const handleOpenFileViewer = vi.fn();
 
@@ -125,13 +126,15 @@ describe('DiffCardFileList (平直单轨与正交子域专项测试)', () => {
     const linkBtn = screen.getByRole('button', { name: /在独立标签页预览文件 Button\.tsx/ });
     expect(linkBtn).toBeInTheDocument();
 
-    // 2. 点击文件名超链接
+    // 2. 单击 → 切换展开，不打开 Tab
     fireEvent.click(linkBtn);
+    expect(handleSetActive).toHaveBeenCalledTimes(1);
+    expect(handleOpenFileViewer).not.toHaveBeenCalled();
 
-    // 断言：触发了在独立标签页打开，严格未触发表内展开
+    // 3. 双击 → 在独立标签页打开
+    fireEvent.doubleClick(linkBtn);
     expect(handleOpenFileViewer).toHaveBeenCalledTimes(1);
     expect(handleOpenFileViewer).toHaveBeenCalledWith('src/components/Button.tsx');
-    expect(handleSetActive).not.toHaveBeenCalled();
   });
 
   it('三大正交子域验证：点击 Git 暂存按钮仅触发暂存，严格阻止冒泡', () => {

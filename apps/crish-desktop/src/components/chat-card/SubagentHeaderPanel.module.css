@@ -155,7 +155,7 @@
 }
 
 .statusBadge.failed {
-  background: color-mix(in srgb, var(--danger-color) 15%, transparent);
+  background: var(--danger-soft-bg-hover);
   color: var(--danger-color);
 }
 

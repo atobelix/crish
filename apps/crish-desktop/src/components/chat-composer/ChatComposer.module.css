@@ -70,7 +70,7 @@
   border-radius: var(--radius-xl);
   background: var(
     --color-warning-bg,
-    color-mix(in srgb, var(--color-warning) 4.5%, var(--bg-elevated))
+    var(--warning-soft-bg)
   );
   border: 1px solid
     color-mix(
@@ -292,7 +292,7 @@
 
 .flowPermissionBtnDeny:hover,
 .flowPermissionBtnDeny:hover {
-  background: color-mix(in srgb, var(--color-error) 8%, transparent);
+  background: var(--danger-soft-bg);
 }
 
 .flowPermissionBtnAllow,
@@ -614,7 +614,7 @@
 
 .planActionBtn.stop:hover,
 .planActionBtn.stop:hover {
-  background: color-mix(in srgb, var(--color-error) 10%, transparent);
+  background: var(--danger-soft-bg);
   color: var(--color-error);
 }
 
@@ -876,7 +876,7 @@
   align-items: center;
   justify-content: center;
   color: var(--color-warning, var(--warning-color));
-  background: var(--color-warning-bg, color-mix(in srgb, var(--color-warning, var(--warning-color)) 15%, var(--bg-card)));
+  background: var(--color-warning-bg, var(--warning-soft-bg-hover));
   border: 1px solid var(--color-warning-border, color-mix(in srgb, var(--color-warning, var(--warning-color)) 35%, transparent));
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
@@ -889,7 +889,7 @@
 
 .attachWarnBadge:hover {
   transform: scale(1.08);
-  background: var(--color-warning-bg, color-mix(in srgb, var(--color-warning, var(--warning-color)) 25%, var(--bg-card)));
+  background: var(--color-warning-bg, var(--warning-soft-bg-hover));
 }
 
 .attachRemove,
@@ -1547,7 +1547,7 @@
 }
 
 .stopCircleBtn:hover {
-  background: color-mix(in srgb, var(--color-error) 10%, transparent);
+  background: var(--danger-soft-bg);
   color: var(--color-error);
 }
 

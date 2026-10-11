@@ -583,18 +583,18 @@
 
 .mrdLatencyBadge[data-latency='fast'] {
   color: var(--accent-green);
-  background: color-mix(in srgb, var(--accent-green) 12%, transparent);
+  background: var(--success-soft-bg);
 }
 
 .mrdLatencyBadge[data-latency='mid'] {
   color: var(--accent-orange);
-  background: color-mix(in srgb, var(--accent-green) 12%, transparent);
+  background: var(--success-soft-bg);
 }
 
 .mrdLatencyBadge[data-latency='slow'],
 .mrdLatencyBadge[data-latency='fail'] {
   color: var(--accent-red);
-  background: color-mix(in srgb, var(--accent-red) 12%, transparent);
+  background: var(--danger-soft-bg);
 }
 
 /* ── 8. 下拉菜单与级联组件（解构重复包含块 + 接入 sep 规范） ── */

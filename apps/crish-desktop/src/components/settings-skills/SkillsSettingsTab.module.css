@@ -166,7 +166,7 @@
 }
 
 .skillsMoreItem.isActive {
-  background: color-mix(in srgb, var(--accent-green) 12%, transparent);
+  background: var(--success-soft-bg);
 }
 
 .skillsEmptyInlineCta {
