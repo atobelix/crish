@@ -8,6 +8,7 @@ export interface LineBufferState {
   lines: string[];
   lineOffsets: number[];
   pendingStartLine: number;
+  paragraphScanLine: number;
   sealedBlocks: string[];
 }
 
@@ -29,6 +30,8 @@ export class IncrementalBlockSplitter {
   private lines: string[] = [];
   private lineOffsets: number[] = [];
   private pendingStartLine: number = 0;
+  /** 当前未封口段落中下一条尚未检查的完整行。 */
+  private paragraphScanLine: number = 1;
   private sealedBlocks: string[] = [];
 
   constructor(initialText: string = '') {
@@ -109,6 +112,7 @@ export class IncrementalBlockSplitter {
       lines: [...this.lines],
       lineOffsets: [...this.lineOffsets],
       pendingStartLine: this.pendingStartLine,
+      paragraphScanLine: this.paragraphScanLine,
       sealedBlocks: [...this.sealedBlocks],
     };
   }
@@ -120,6 +124,7 @@ export class IncrementalBlockSplitter {
     this.lines = [];
     this.lineOffsets = [];
     this.pendingStartLine = 0;
+    this.paragraphScanLine = 1;
     this.sealedBlocks = [];
   }
 
@@ -207,6 +212,10 @@ export class IncrementalBlockSplitter {
       if (this.pendingStartLine >= totalLines) {
         break;
       }
+      this.paragraphScanLine = Math.max(
+        this.paragraphScanLine,
+        this.pendingStartLine + 1
+      );
 
       const start = this.pendingStartLine;
       const startLineContent = this.lines[start] ?? '';
@@ -323,7 +332,10 @@ export class IncrementalBlockSplitter {
       let nextStart = -1;
 
       const scanLimit = isFlushing ? totalLines : totalLines - 1;
-      for (let i = start + 1; i < scanLimit; i += 1) {
+      // 完整行在首次检查后不会再变化；只检查新完成的行，避免长段落在
+      // 每个流式 chunk 到达时从段首重复扫描。
+      const firstUnscannedLine = Math.max(start + 1, this.paragraphScanLine);
+      for (let i = firstUnscannedLine; i < scanLimit; i += 1) {
         const line = this.lines[i] ?? '';
         if (line.trim().length === 0) {
           // 遇到已完成的空行，段落在此结束
@@ -349,6 +361,8 @@ export class IncrementalBlockSplitter {
         this.pendingStartLine = nextStart;
         continue;
       }
+
+      this.paragraphScanLine = Math.max(this.paragraphScanLine, scanLimit);
 
       // 没有检测到明确边界，暂不封口，等待后续数据
       break;

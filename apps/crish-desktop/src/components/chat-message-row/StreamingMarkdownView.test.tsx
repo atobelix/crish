@@ -9,6 +9,7 @@ import * as markdownRenderAsync from '../../api/markdownRenderAsync';
 
 vi.mock('../../api/markdownRenderAsync', () => ({
   useAsyncMarkdownHtml: vi.fn(),
+  useStreamingMarkdownHtml: vi.fn(() => ''),
   parseMarkdownToHtmlAsync: vi.fn(),
 }));
 
@@ -103,16 +104,20 @@ describe('StreamingMarkdownView & MarkdownBlockItem & useStreamingBlocks', () =>
   });
 
   describe('MarkdownBlockItem double-buffered promotion', () => {
-    it('renders active tail block with text content in DOM and streaming attributes', () => {
+    it('renders compiled active tail HTML and never exposes the Markdown source', () => {
       vi.mocked(markdownRenderAsync.useAsyncMarkdownHtml).mockReturnValue({
         html: '',
         loading: false,
         failed: false,
       });
+      vi.mocked(markdownRenderAsync.useStreamingMarkdownHtml).mockReturnValue(
+        '<p>Typing active tail...</p>'
+      );
 
       const { container } = render(
         <MarkdownBlockItem
-          text="Typing active tail..."
+          text="**Typing active tail...**"
+          virtualClosedText="**Typing active tail...**"
           isSealed={false}
           isLast={true}
           isStreaming={true}
@@ -122,10 +127,11 @@ describe('StreamingMarkdownView & MarkdownBlockItem & useStreamingBlocks', () =>
       const blockEl = container.querySelector('[data-streaming="true"]');
       expect(blockEl).toBeTruthy();
       expect(blockEl?.getAttribute('data-sealed')).toBe('false');
-      expect(blockEl?.textContent).toBe('Typing active tail...');
+      expect(blockEl?.innerHTML).toBe('<p>Typing active tail...</p>');
+      expect(blockEl?.textContent).not.toContain('**');
     });
 
-    it('maintains draft text shim without rendering skeleton during async compilation pending', () => {
+    it('keeps sealed block blank instead of exposing Markdown while compilation is pending', () => {
       // Mock pending Rust compilation state
       vi.mocked(markdownRenderAsync.useAsyncMarkdownHtml).mockReturnValue({
         html: '',
@@ -172,7 +178,7 @@ describe('StreamingMarkdownView & MarkdownBlockItem & useStreamingBlocks', () =>
       expect(blockEl?.getAttribute('data-has-html')).toBe('true');
     });
 
-    it('renders safe fallback pre element when compilation fails and no html is returned', () => {
+    it('does not expose Markdown source when compilation fails', () => {
       vi.mocked(markdownRenderAsync.useAsyncMarkdownHtml).mockReturnValue({
         html: '',
         loading: false,
@@ -181,16 +187,16 @@ describe('StreamingMarkdownView & MarkdownBlockItem & useStreamingBlocks', () =>
 
       const { container } = render(
         <MarkdownBlockItem
-          text="Fallback plain text content"
+          text="## Source **must never appear**"
           isSealed={true}
           isLast={false}
           isStreaming={false}
         />
       );
 
-      const preFallback = container.querySelector('pre.md-text-fallback');
-      expect(preFallback).toBeTruthy();
-      expect(preFallback?.textContent).toBe('Fallback plain text content');
+      const block = container.querySelector('[data-sealed="true"]');
+      expect(block?.textContent).toBe('');
+      expect(container.querySelector('pre.md-text-fallback')).toBeNull();
     });
   });
 
@@ -206,6 +212,9 @@ describe('StreamingMarkdownView & MarkdownBlockItem & useStreamingBlocks', () =>
       });
 
       const content = '# Heading\n\nParagraph text.\n\nTyping active tail...';
+      vi.mocked(markdownRenderAsync.useStreamingMarkdownHtml).mockReturnValue(
+        '<p>Typing active tail...</p>'
+      );
       const { container } = render(
         <StreamingMarkdownView
           content={content}
@@ -222,7 +231,7 @@ describe('StreamingMarkdownView & MarkdownBlockItem & useStreamingBlocks', () =>
 
       const activeBlock = container.querySelector('[data-sealed="false"]');
       expect(activeBlock).toBeTruthy();
-      expect(activeBlock?.textContent).toContain('Typing active tail...');
+      expect(activeBlock?.innerHTML).toBe('<p>Typing active tail...</p>');
     });
 
     it('returns null when content is empty', () => {

@@ -80,7 +80,10 @@ function buildCodeFenceHtml(
 /**
  * 抽出 fenced code：闭合 ```…```，以及文末未闭合 fence（流式输出中间态）。
  */
-export function extractCodeFences(text: string): {
+export function extractCodeFences(
+  text: string,
+  placeholderForFence: (index: number) => string
+): {
   text: string;
   fences: string[];
 } {
@@ -92,7 +95,7 @@ export function extractCodeFences(text: string): {
       const langClean = langFromFenceInfo(info);
       const filePath = extractFilePathFromFenceInfo(info);
       fences.push(buildCodeFenceHtml(code, langClean, filePath));
-      return `\n%%FENCE${i}%%\n`;
+      return `\n${placeholderForFence(i)}\n`;
     }
   );
   out = out.replace(/```([^\n`]*)\r?\n([\s\S]*)$/, (full, info, code) => {
@@ -101,7 +104,7 @@ export function extractCodeFences(text: string): {
     const langClean = langFromFenceInfo(info);
     const filePath = extractFilePathFromFenceInfo(info);
     fences.push(buildCodeFenceHtml(code, langClean, filePath));
-    return `\n%%FENCE${i}%%\n`;
+    return `\n${placeholderForFence(i)}\n`;
   });
   return { text: out, fences };
 }

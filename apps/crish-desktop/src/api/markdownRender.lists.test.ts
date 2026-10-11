@@ -1,9 +1,11 @@
+// @vitest-environment jsdom
 import { describe, expect, it, beforeEach } from 'vitest';
 import {
   clearMarkdownHtmlCache,
   parseMarkdownToHtml,
   stripThoughtPlaceholders,
 } from './markdownRender';
+import { parseMarkdownToHtmlUncached as parseWorkerMarkdown } from '../workers/markdown-render-standalone';
 
 describe('parseMarkdownToHtml lists & tables', () => {
   beforeEach(() => {
@@ -669,8 +671,39 @@ describe('parseMarkdownToHtml lists & tables', () => {
     expect(html).toContain('world');
   });
 
-  it('passes img tags through (Rust ammonia sanitizes event handlers at render time)', () => {
-    const html = parseMarkdownToHtml('<img onerror=alert(1) src=x>');
-    expect(html).toContain('<img');
+  it('worker fallback escapes raw img/hr HTML while preserving internal Markdown nodes', () => {
+    const raw = parseWorkerMarkdown(
+      '<img onerror=alert(1) src=x>\n\n<hr onload=alert(2)>'
+    );
+    const rawTemplate = document.createElement('template');
+    rawTemplate.innerHTML = raw;
+    expect(rawTemplate.content.querySelector('img')).toBeNull();
+    expect(rawTemplate.content.querySelector('hr')).toBeNull();
+    expect(raw).toContain('&lt;img');
+    expect(raw).toContain('&lt;hr');
+    expect(rawTemplate.content.querySelector('[onerror]')).toBeNull();
+    expect(rawTemplate.content.querySelector('[onload]')).toBeNull();
+
+    const safe = parseWorkerMarkdown('![ok](https://example.com/a.png)\n\n---');
+    const safeTemplate = document.createElement('template');
+    safeTemplate.innerHTML = safe;
+    expect(safeTemplate.content.querySelector('img.md-img')).not.toBeNull();
+    expect(safeTemplate.content.querySelector('hr.md-hr')).not.toBeNull();
+  });
+
+  it('does not trust forged placeholder prefixes in worker fallback', () => {
+    const forged = parseWorkerMarkdown(
+      '%%FENCE<img src=x onerror=alert(1)>\n\n' +
+      '%%TABLE0%%<img src=x onerror=alert(2)>\n\n' +
+      '%%INLINE0%%<img src=x onerror=alert(3)>\n\n' +
+      '%%HORIZONTAL_RULE%%<img src=x onerror=alert(4)>'
+    );
+    const template = document.createElement('template');
+    template.innerHTML = forged;
+    expect(template.content.querySelector('img')).toBeNull();
+    expect(template.content.querySelector('[onerror]')).toBeNull();
+    expect(forged).toContain('&lt;img');
+    expect(forged).toContain('%%FENCE');
+    expect(forged).toContain('%%HORIZONTAL_RULE%%');
   });
 });

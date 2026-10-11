@@ -57,6 +57,24 @@ describe('IncrementalBlockSplitter', () => {
     ]);
   });
 
+  it('advances the paragraph scan cursor with newly completed lines', () => {
+    const lines = Array.from({ length: 128 }, (_, index) => `line-${index}`);
+    const splitter = new IncrementalBlockSplitter();
+
+    for (let index = 0; index < lines.length; index += 1) {
+      splitter.appendChunk(`${lines[index]}\n`);
+      const state = splitter.getState();
+      expect(state.paragraphScanLine).toBe(state.lines.length - 1);
+      expect(splitter.getPendingDraft()).toBe(
+        `${lines.slice(0, index + 1).join('\n')}\n`
+      );
+    }
+
+    splitter.appendChunk('\n\nAfter');
+    expect(splitter.getSealedBlocks()).toEqual([lines.join('\n')]);
+    expect(splitter.getPendingDraft()).toBe('After');
+  });
+
   it('keeps code fence together across internal empty lines until closed', () => {
     const splitter = new IncrementalBlockSplitter();
 
@@ -133,6 +151,7 @@ describe('IncrementalBlockSplitter', () => {
 
     splitter.reset();
     expect(splitter.getState().lines).toEqual([]);
+    expect(splitter.getState().paragraphScanLine).toBe(1);
     expect(splitter.getSealedBlocks()).toEqual([]);
     expect(splitter.getPendingDraft()).toBe('');
   });

@@ -42,9 +42,13 @@ describe('Chat list React key audit (static source)', () => {
     const src = readSrc(
       '../components/chat-message-list/MessageVirtualizer.tsx'
     );
-    // 注释与实现双锁
+    const measure = readSrc(
+      '../components/chat-message-list/messageVirtualizerMeasure.ts'
+    );
+    // 高度键仍在行节点上；实测回写在 per-row callback ref 里用 messageId
     expect(src).toMatch(/data-vindex/);
-    expect(src).toMatch(/setActual\(msgId/);
+    expect(measure).toMatch(/dataset\.vindex/);
+    expect(measure).toMatch(/setActual\(msgId/);
   });
 
   it('MessageContent timeline keys use stable ids (seg.id + item.key)', () => {

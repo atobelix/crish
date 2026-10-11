@@ -31,9 +31,9 @@ export interface StreamingMarkdownViewProps {
  * 核心架构：
  * 1. 挂载 AdaptiveAnimateTimeline 与 SlidingWindowRateEstimator 实现速率自适应调度；
  * 2. 双轨渐进分块：将累积正文实时切分为独立的 AST 语法块；
- * 3. 已封口块（Sealed）：由 MarkdownBlockItem 调用 Rust 异步编译并通过 React.memo 锁定；
- * 4. 活跃末尾块（Active Tail）：保持轻量级流式打字机态或 TURBO 宏块直出；
- * 5. 双缓冲无缝晋升：封口晋升过渡期保留纯文本 DOM 垫片，消除视口跳变与高度坍塌。
+ * 3. 已封口块（Sealed）：由 MarkdownBlockItem 异步编译并通过 React.memo 锁定；
+ * 4. 活跃末尾块（Active Tail）：持续编译最新快照，只展示解析后的 HTML；
+ * 5. 编译等待或失败时不显示原文，确保 Markdown 源码不会进入可见 DOM。
  */
 export const StreamingMarkdownView: React.FC<StreamingMarkdownViewProps> = React.memo(
   function StreamingMarkdownView({
@@ -103,7 +103,8 @@ export const StreamingMarkdownView: React.FC<StreamingMarkdownViewProps> = React
           const isLast = idx === blocks.length - 1;
           return (
             <MarkdownBlockItem
-              key={blk.key}
+              // 活跃尾块封口后复用同一实例，避免已显示的表格/HTML短暂卸载。
+              key={`${messageId}-blk-${blk.index}`}
               text={blk.text}
               virtualClosedText={blk.virtualClosedText}
               isSealed={blk.isSealed}

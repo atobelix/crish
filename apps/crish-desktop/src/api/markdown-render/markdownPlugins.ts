@@ -44,6 +44,52 @@ export {
 } from './markdownCodeFence';
 
 const MAX_MARKDOWN_INPUT = 100_000;
+let protectedTokenSerial = 0;
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+interface ProtectedMarkdownTokens {
+  fence(index: number): string;
+  table(index: number): string;
+  inline(index: number): string;
+  horizontalRule: string;
+  isWholeLine(value: string): boolean;
+  inlinePattern: RegExp;
+  horizontalRulePattern: RegExp;
+  fencePattern: RegExp;
+  tablePattern: RegExp;
+}
+
+/**
+ * 每次渲染生成不会出现在原始 Markdown 中的保护 token。
+ * 保护阶段只接受完整 token，避免用户伪造 `%%FENCE...` 前缀穿过 escape。
+ */
+function createProtectedMarkdownTokens(source: string): ProtectedMarkdownTokens {
+  let prefix: string;
+  do {
+    prefix = `\uE000CRISH_MD_${protectedTokenSerial++}_`;
+  } while (source.includes(prefix));
+  const suffix = '\uE001';
+  const token = (kind: string, index: number) => `${prefix}${kind}_${index}${suffix}`;
+  const wholePattern = new RegExp(
+    `^${escapeRegExp(prefix)}(?:FENCE|TABLE|INLINE)_\\d+${escapeRegExp(suffix)}$`
+  );
+  const pattern = (kind: string) =>
+    new RegExp(`${escapeRegExp(prefix)}${kind}_(\\d+)${escapeRegExp(suffix)}`, 'g');
+  return {
+    fence: (index) => token('FENCE', index),
+    table: (index) => token('TABLE', index),
+    inline: (index) => token('INLINE', index),
+    horizontalRule: `${prefix}HR${suffix}`,
+    isWholeLine: (value) => value === `${prefix}HR${suffix}` || wholePattern.test(value),
+    inlinePattern: pattern('INLINE'),
+    horizontalRulePattern: new RegExp(`${escapeRegExp(prefix)}HR${escapeRegExp(suffix)}`, 'g'),
+    fencePattern: pattern('FENCE'),
+    tablePattern: pattern('TABLE'),
+  };
+}
 
 export function parseMarkdownToHtmlUncached(raw: string): string {
   if (raw == null || raw === '') return '';
@@ -63,25 +109,29 @@ export function parseMarkdownToHtmlUncached(raw: string): string {
 
   text = text.replace(/\n{3,}/g, '\n\n');
 
-  const extractedFences = extractCodeFences(text);
+  const protectedTokens = createProtectedMarkdownTokens(text);
+  const extractedFences = extractCodeFences(text, protectedTokens.fence);
   text = extractedFences.text;
   const fences = extractedFences.fences;
 
-  const extracted = extractTables(text);
+  const extracted = extractTables(text, protectedTokens.table);
   text = extracted.text;
   const tables = extracted.tables;
 
-  // 恢复标准 <hr class="md-hr" />：在代码块与表格保护之后转换，避免误伤
+  // 恢复标准 <hr class="md-hr" />：在代码块与表格保护之后转换，避免误伤。
+  // 先写入内部占位符，后面的行级 escape 才不会把用户原始 `<hr ...>`
+  // 当作可信 HTML 放行。
+  const horizontalRulePlaceholder = protectedTokens.horizontalRule;
   text = text.replace(
     /^[ \t]*([-*_])(?:[ \t]*\1){2,}[ \t]*$/gm,
-    '\n\n<hr class="md-hr" />\n\n'
+    `\n\n${horizontalRulePlaceholder}\n\n`
   );
 
   const inlines: string[] = [];
   const pushInline = (htmlFrag: string) => {
     const i = inlines.length;
     inlines.push(htmlFrag);
-    return `%%INLINE${i}%%`;
+    return protectedTokens.inline(i);
   };
 
   const renderImgFromDest = (alt: string, rawDest: string): string => {
@@ -145,20 +195,18 @@ export function parseMarkdownToHtmlUncached(raw: string): string {
     .split('\n')
     .map((line) => {
       const t = line.trim();
-      if (
-        t.startsWith('<img ') ||
-        t.startsWith('<hr') ||
-        t.startsWith('%%FENCE') ||
-        t.startsWith('%%TABLE') ||
-        t.startsWith('%%INLINE')
-      ) {
+      if (protectedTokens.isWholeLine(t)) {
         return line;
       }
       return escapeHtml(line);
     })
     .join('\n');
 
-  html = html.replace(/%%INLINE(\d+)%%/g, (_, i) => inlines[Number(i)] || '');
+  html = html.replace(protectedTokens.inlinePattern, (_, i) => inlines[Number(i)] || '');
+  html = html.replace(
+    protectedTokens.horizontalRulePattern,
+    '<hr class="md-hr" />'
+  );
   html = applyInline(html);
 
   html = html.replace(/^(#{1,6})\s+(.+)$/gm, (_, hashes, content) => {
@@ -168,8 +216,8 @@ export function parseMarkdownToHtmlUncached(raw: string): string {
 
   html = processListBlocks(html);
 
-  html = html.replace(/%%FENCE(\d+)%%/g, (_, i) => fences[Number(i)] || '');
-  html = html.replace(/%%TABLE(\d+)%%/g, (_, i) => tables[Number(i)] || '');
+  html = html.replace(protectedTokens.fencePattern, (_, i) => fences[Number(i)] || '');
+  html = html.replace(protectedTokens.tablePattern, (_, i) => tables[Number(i)] || '');
 
   const parts = html.split(/\n{2,}/);
   html = parts

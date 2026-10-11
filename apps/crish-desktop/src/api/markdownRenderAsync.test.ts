@@ -11,7 +11,8 @@
  */
 import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
-import { renderHook, waitFor } from '@testing-library/react';
+import React from 'react';
+import { act, render, renderHook, waitFor } from '@testing-library/react';
 import {
   clearMarkdownHtmlCache,
   resetMarkdownHtmlCacheStats,
@@ -39,8 +40,13 @@ vi.mock('../workers', () => ({
 
 import {
   parseMarkdownToHtmlAsync,
+  parseMarkdownFragmentToHtmlAsync,
   useAsyncMarkdownHtml,
+  useStreamingMarkdownHtml,
 } from './markdownRenderAsync';
+import { IncrementalMarkdownSession } from './markdown/IncrementalMarkdownSession';
+import { ReconciledMarkdownHtml } from '../components/markdown/ReconciledMarkdownHtml';
+import { Priority } from '../workers';
 
 describe('parseMarkdownToHtmlAsync', () => {
   beforeEach(() => {
@@ -192,13 +198,18 @@ describe('useAsyncMarkdownHtml', () => {
     expect(scheduleSpy).toHaveBeenCalledTimes(1);
   });
 
-  it('markdown 变化时丢弃上一次异步结果（cancelledRef）', async () => {
+  it('markdown 变化时较晚完成的旧请求不能覆盖新结果', async () => {
+    let resolveFirst: ((html: string) => void) | null = null;
+    let resolveSecond: ((html: string) => void) | null = null;
     let rustInvokeCount = 0;
-    mockTauriCommand('core_md_render', async (args) => {
+    mockTauriCommand('core_md_render', (args) => {
       rustInvokeCount += 1;
       const text = (args as { text?: string })?.text ?? '';
-      await new Promise((r) => setTimeout(r, 20));
-      return `<p>${text}</p>`;
+      return new Promise<string>((resolve) => {
+        if (text === 'first-md') resolveFirst = resolve;
+        else if (text === 'second-md') resolveSecond = resolve;
+        else throw new Error(`unexpected markdown request: ${text}`);
+      });
     });
 
     const { result, rerender } = renderHook(
@@ -206,16 +217,206 @@ describe('useAsyncMarkdownHtml', () => {
       { initialProps: { md: 'first-md' } },
     );
 
+    await waitFor(() => expect(resolveFirst).toBeTypeOf('function'));
     // 在第一次还没返回时切换 markdown
     rerender({ md: 'second-md' });
+    await waitFor(() => expect(resolveSecond).toBeTypeOf('function'));
+    // 新输入等待渲染期间不得继续显示 first-md 的 HTML。
+    expect(result.current.html).toBe('');
 
-    await waitFor(() => {
-      expect(result.current.loading).toBe(false);
+    await act(async () => {
+      resolveSecond?.('<p>second-md</p>');
+    });
+    await waitFor(() => expect(result.current.html).toBe('<p>second-md</p>'));
+    // 旧请求仍悬而未决时，新请求已经完成，loading 必须随当前请求关闭。
+    expect(result.current.loading).toBe(false);
+
+    await act(async () => {
+      resolveFirst?.('<p>first-md</p>');
     });
 
-    // 最终 html 应该是第二次的结果（不是第一次）
+    // 较晚结束的第一次请求不得覆盖第二次结果。
     expect(result.current.html).toBe('<p>second-md</p>');
-    // 两次 invoke 都发起（cancelledRef 只丢弃结果，不中断底层）
+    expect(result.current.loading).toBe(false);
+    // 两次 invoke 都发起（requestId 只丢弃结果，不中断底层）
     expect(rustInvokeCount).toBe(2);
+  });
+});
+
+describe('useStreamingMarkdownHtml', () => {
+  beforeEach(() => {
+    clearMarkdownHtmlCache();
+    resetMarkdownHtmlCacheStats();
+    scheduleSpy.mockReset();
+    scheduleSpy.mockResolvedValue('');
+  });
+
+  it('只把累计输入的新增后缀交给 renderer，并保持安全 HTML 输出', async () => {
+    const renderedInputs: string[] = [];
+    mockTauriCommand('core_md_render', async (args) => {
+      const text = (args as { text?: string })?.text ?? '';
+      renderedInputs.push(text);
+      return `<p class="md-p">${text}</p>`;
+    });
+
+    const { result, rerender } = renderHook(
+      ({ markdown }: { markdown: string }) =>
+        useStreamingMarkdownHtml(markdown, true),
+      { initialProps: { markdown: 'a' } }
+    );
+
+    await waitFor(() => expect(renderedInputs).toEqual(['a']));
+
+    rerender({ markdown: 'ab' });
+    await waitFor(() => {
+      expect(result.current).toBe('<p class="md-p">ab</p>');
+    });
+    expect(renderedInputs).toEqual(['a', 'b']);
+
+    rerender({ markdown: 'abc' });
+    await waitFor(() => expect(result.current).toBe('<p class="md-p">abc</p>'));
+    expect(renderedInputs).toEqual(['a', 'b', 'c']);
+    expect(renderedInputs).not.toContain('ab');
+    expect(renderedInputs).not.toContain('abc');
+    expect(result.current).not.toMatch(/[#*_`]/);
+  });
+
+  it('增量片段只取 renderer 的安全内容，不携带块级包装器', async () => {
+    mockTauriCommand('core_md_render', async (args) => {
+      const text = (args as { text?: string })?.text ?? '';
+      return `<p class="md-p"><strong>${text}</strong></p>`;
+    });
+
+    await expect(parseMarkdownFragmentToHtmlAsync('delta')).resolves.toBe(
+      '<strong>delta</strong>'
+    );
+  });
+
+  it('列表增量保留 li 结构，不把每一行降级成普通段落', async () => {
+    mockTauriCommand('core_md_render', async (args) => {
+      const text = (args as { text?: string })?.text ?? '';
+      return `<ul><li>${text.replace(/^-\s+/, '')}</li></ul>`;
+    });
+
+    await expect(parseMarkdownFragmentToHtmlAsync('- item', Priority.High, 'list-item'))
+      .resolves.toBe('<li>item</li>');
+  });
+
+  it('列表外层已由增量会话维护时，正文片段仍保留 inline HTML', async () => {
+    mockTauriCommand('core_md_render', async () => '<p class="md-p"><strong>item</strong></p>');
+
+    await expect(parseMarkdownFragmentToHtmlAsync('**item**', Priority.High, 'list-item'))
+      .resolves.toBe('<strong>item</strong>');
+  });
+
+  it('有界结构片段保留标题、围栏和链接的 renderer 语义', async () => {
+    mockTauriCommand('core_md_render', async (args) => {
+      const text = (args as { text?: string })?.text ?? '';
+      if (text.startsWith('#')) return '<h2 class="md-h2">Heading</h2>';
+      if (text.startsWith('```')) return '<pre><code>const value = 1</code></pre>';
+      if (text.startsWith('[')) {
+        return '<p class="md-p"><a class="md-a" href="https://example.test">label</a></p>';
+      }
+      return `<p class="md-p">${text}</p>`;
+    });
+
+    await expect(parseMarkdownFragmentToHtmlAsync('# Heading', Priority.High, 'block'))
+      .resolves.toContain('<h2');
+    await expect(parseMarkdownFragmentToHtmlAsync('```ts\nconst value = 1\n```', Priority.High, 'block'))
+      .resolves.toContain('<pre>');
+    await expect(parseMarkdownFragmentToHtmlAsync('[label](https://example.test)'))
+      .resolves.toContain('<a class="md-a"');
+  });
+
+  it('renderer 失败时保持空片段，绝不把 Markdown 原文作为回退', async () => {
+    mockTauriCommand('core_md_render', async () => {
+      throw new Error('renderer unavailable');
+    });
+    scheduleSpy.mockResolvedValue('');
+
+    await expect(parseMarkdownFragmentToHtmlAsync('**secret source**')).resolves.toBe('');
+
+    const { result } = renderHook(() => useStreamingMarkdownHtml('**secret source**', true));
+    await waitFor(() => expect(scheduleSpy).toHaveBeenCalled());
+    expect(result.current).not.toContain('secret source');
+    expect(result.current).not.toContain('**');
+  });
+
+  it('增量 HTML 更新保留稳定段落节点且不暴露 Markdown 源码', async () => {
+    mockTauriCommand('core_md_render', async (args) => {
+      const text = (args as { text?: string })?.text ?? '';
+      return `<p class="md-p">${text}</p>`;
+    });
+
+    function View({ markdown }: { markdown: string }) {
+      const html = useStreamingMarkdownHtml(markdown, true);
+      return React.createElement(ReconciledMarkdownHtml, {
+        'data-testid': 'markdown',
+        html,
+      });
+    }
+
+    const view = render(React.createElement(View, { markdown: 'a' }));
+    await waitFor(() => expect(view.getByTestId('markdown').textContent).toBe('a'));
+    const paragraph = view.getByTestId('markdown').querySelector('p');
+
+    view.rerender(React.createElement(View, { markdown: 'ab' }));
+    await waitFor(() => expect(view.getByTestId('markdown').textContent).toBe('ab'));
+
+    expect(view.getByTestId('markdown').querySelector('p')).toBe(paragraph);
+    expect(view.getByTestId('markdown').textContent).not.toContain('**');
+    expect(view.getByTestId('markdown').textContent).not.toContain('##');
+  });
+
+  it('单元快照模式不为每个 chunk 拼接累计 HTML', async () => {
+    const toHtmlSpy = vi.spyOn(IncrementalMarkdownSession.prototype, 'toHtml');
+    mockTauriCommand('core_md_render', async (args) => {
+      const text = (args as { text?: string })?.text ?? '';
+      return `<p class="md-p">${text}</p>`;
+    });
+
+    const { result, rerender } = renderHook(
+      ({ markdown }: { markdown: string }) => {
+        const unitsRef = React.useRef<readonly {
+          id: number;
+          kind: 'paragraph' | 'heading' | 'list' | 'block' | 'code' | 'blockquote' | 'other';
+          html: string;
+        }[] | null>(null);
+        const html = useStreamingMarkdownHtml(markdown, true, Priority.High, unitsRef);
+        return { html, units: unitsRef.current };
+      },
+      { initialProps: { markdown: 'a' } }
+    );
+
+    await waitFor(() => expect(result.current.units?.[0]?.html).toContain('<p'));
+    rerender({ markdown: 'ab' });
+    await waitFor(() => expect(result.current.units?.[0]?.html).toContain('ab'));
+    expect(result.current.html).toBe('');
+    expect(toHtmlSpy).not.toHaveBeenCalled();
+    toHtmlSpy.mockRestore();
+  });
+
+  it('does not publish an in-flight result after streaming is disabled', async () => {
+    mockTauriCommand('core_md_render', async (args) => {
+      const text = (args as { text?: string })?.text ?? '';
+      await new Promise((resolve) => setTimeout(resolve, 80));
+      return `<p>${text}</p>`;
+    });
+
+    const { result, rerender } = renderHook(
+      ({ enabled }: { enabled: boolean }) =>
+        useStreamingMarkdownHtml('pending **snapshot**', enabled),
+      { initialProps: { enabled: true } }
+    );
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 60));
+    });
+    rerender({ enabled: false });
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 120));
+    });
+    expect(result.current).toBe('');
   });
 });

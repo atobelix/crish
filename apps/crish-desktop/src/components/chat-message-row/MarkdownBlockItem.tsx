@@ -1,16 +1,22 @@
-import React, { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import React, { useLayoutEffect, useMemo, useRef } from 'react';
 import styles from './ChatMessageRow.module.css';
-import { useAsyncMarkdownHtml } from '../../api/markdownRenderAsync';
+import {
+  useAsyncMarkdownHtml,
+  useStreamingMarkdownHtml,
+} from '../../api/markdownRenderAsync';
 import { getMarkdownHtmlCache } from '../../api/markdownCache';
 import {
-  applyCodeIndentToRenderedRoot,
   normalizeCodeBlockIndent,
 } from '../../api/codeBlockIndent';
-import { useSettingsField } from '../../store/storeAccess';
 import type { Priority } from '../../workers';
 import type { AdaptiveAnimateTimeline } from '../../api/markdown/AdaptiveAnimateTimeline';
 import type { RateSnapshot } from '../../api/markdown/SlidingWindowRateEstimator';
 import { hasTableBlock } from '../../api/markdown/tableProbe';
+import { looksLikeStreamingGfmTable } from '../../api/markdown/StreamingGfmTableParser';
+import { StreamingGfmTable } from './StreamingGfmTable';
+import { ReconciledMarkdownHtml } from '../markdown/ReconciledMarkdownHtml';
+import { useSettingsField } from '../../store/storeAccess';
+import type { IncrementalMarkdownUnitSnapshot } from '../../api/markdown/IncrementalMarkdownSession';
 
 export interface MarkdownBlockItemProps {
   /** 块的 Markdown 内容 */
@@ -51,15 +57,9 @@ export function markdownBlockItemPropsEqual(
 }
 
 /**
- * 单个 Markdown Block 渲染组件（原地纯文本垫片双缓冲晋升引擎）
- *
- * 核心机制：
- * 1. 活跃态（isActiveTail）：根据 SW-TRE 速率档位确定是否开启 TURBO 宏块模式或 Span 模式；
- *    - 块级模式冻结原则（Block Render Mode Invariant）：首帧决定渲染模式并在流式活跃期锁定；
- *    - TURBO 模式（≥300 t/s）：原生 TextNode 零额外 Span 追加，DOM 节点减少 98.5%；
- * 2. 双缓冲晋升（Double-Buffered Promotion）：当块封口进入 Rust 异步编译 Pending 期间，
- *    通过 useLayoutEffect 严格保持原地纯文本排版垫片，杜绝骨架屏闪烁与高度塌陷，达成 Zero-CLS = 0.000；
- * 3. 编译就绪原子替换：Rust 生成的标准安全 HTML 注入 innerHTML 并校验 requestToken，原地无缝替换，打上 data-sealed="true"。
+ * 普通 Markdown 块通过受限 DOM 协调保留已渲染节点；GFM 表格由独立的
+ * React 子树逐行追加。两条路径分开拥有各自的 DOM，避免父容器清空时
+ * 删除 React 仍在追踪的表格节点。
  */
 export const MarkdownBlockItem = React.memo(function MarkdownBlockItem({
   text,
@@ -71,135 +71,125 @@ export const MarkdownBlockItem = React.memo(function MarkdownBlockItem({
   timeline: _timeline,
   rateSnapshot,
 }: MarkdownBlockItemProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const textNodeRef = useRef<Text | null>(null);
+  const wasStreamingGfmTableRef = useRef(false);
+  const lastSafeHtmlRef = useRef<{ text: string; html: string } | null>(null);
+  const streamingUnitsRef = useRef<readonly IncrementalMarkdownUnitSnapshot[] | null>(null);
+  const streamingTextRef = useRef(text);
+  const streamingTextMatches = streamingTextRef.current === text;
+  const hadStaleStreamingUnits =
+    !streamingTextMatches && streamingUnitsRef.current !== null;
+  if (!streamingTextMatches) {
+    // React 在 effect 前仍会先完成一次新 props 的 render；清掉旧快照，
+    // 让协调器在这一次 render 就移除旧块，避免旧 HTML 短暂错投。
+    streamingTextRef.current = text;
+    streamingUnitsRef.current = null;
+  }
   const renderModeLockedRef = useRef<'SPAN' | 'TURBO' | null>(null);
-  const requestTokenRef = useRef(0);
 
   const codeIndent = useSettingsField((s) =>
     normalizeCodeBlockIndent(s.appSettings?.markdown?.codeBlockIndent)
   );
 
-  // 仅在已封口时向 Rust 发起异步编译
-  const renderTarget = isSealed ? text : '';
-  const { html, failed } = useAsyncMarkdownHtml(renderTarget, priority);
-
-  // 活跃尾块标志
   const isActiveTail = isStreaming && isLast && !isSealed;
-  const activeContent = virtualClosedText || text;
+  const isStreamingGfmTable = isActiveTail && looksLikeStreamingGfmTable(text);
+  const liveHtml = useStreamingMarkdownHtml(
+    text,
+    isActiveTail && !isStreamingGfmTable,
+    priority,
+    streamingUnitsRef
+  );
+  const isPriorTable = wasStreamingGfmTableRef.current;
+  const shouldRenderStreamingTable =
+    (isActiveTail &&
+      (isStreamingGfmTable || (isPriorTable && !liveHtml))) ||
+    (isSealed && isPriorTable);
+  const { html: sealedHtml } = useAsyncMarkdownHtml(
+    isSealed && !isPriorTable ? text : '',
+    priority
+  );
+  const cachedHtml = useMemo(
+    () => isSealed && !isPriorTable ? getMarkdownHtmlCache(text) : undefined,
+    [text, isSealed, isPriorTable]
+  );
+  const sameTextSafeHtml =
+    lastSafeHtmlRef.current?.text === text
+      ? lastSafeHtmlRef.current.html
+      : '';
 
-  // 1. 块级渲染模式首帧冻结
   if (isActiveTail && renderModeLockedRef.current === null) {
     renderModeLockedRef.current = rateSnapshot?.tier === 'TURBO' ? 'TURBO' : 'SPAN';
   } else if (isSealed) {
     renderModeLockedRef.current = null;
   }
-
   const isTurboMode = renderModeLockedRef.current === 'TURBO';
 
-  // 2. 活跃末尾态 DOM 直写 / 垫片维护
   useLayoutEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-
-    requestTokenRef.current += 1;
-
-    // 如果 Rust 已经生成 HTML 并注入且未失败，不再由纯文本垫片覆盖
-    if (html && isSealed && !failed) {
-      return;
+    if (isActiveTail && isStreamingGfmTable) {
+      wasStreamingGfmTableRef.current = true;
     }
+  }, [isActiveTail, isStreamingGfmTable]);
 
-    if (!isSealed || (!html && !failed)) {
-      if (isActiveTail && isTurboMode) {
-        // TURBO 模式：单原生 TextNode 高速追加与更新，0 额外 DOM 节点
-        if (!textNodeRef.current) {
-          el.textContent = '';
-          textNodeRef.current = document.createTextNode(activeContent);
-          el.appendChild(textNodeRef.current);
-        } else {
-          textNodeRef.current.textContent = activeContent;
-        }
-      } else if (isActiveTail) {
-        textNodeRef.current = null;
-        el.textContent = activeContent;
-      } else if (isSealed) {
-        // 封口块：禁止把 Markdown 源码画给用户。优先同步吃 LRU 已缓存 HTML；
-        // 未命中则空容器等待 Rust/worker 就绪，绝不显示源码。
-        if (el.getAttribute('data-has-html') !== 'true') {
-          const cached = getMarkdownHtmlCache(text);
-          if (cached) {
-            el.innerHTML = cached;
-            el.setAttribute('data-has-html', 'true');
-            applyCodeIndentToRenderedRoot(el, codeIndent);
-            el.style.visibility = '';
-          } else {
-            el.textContent = '';
-            el.style.visibility = '';
-          }
-        }
-      }
+  const renderedHtml = shouldRenderStreamingTable
+    ? ''
+    : isActiveTail
+      ? (hadStaleStreamingUnits ? '' : liveHtml) || sameTextSafeHtml
+      : isSealed
+        ? sealedHtml || cachedHtml || liveHtml || sameTextSafeHtml
+        : liveHtml || sameTextSafeHtml;
+  const hasIncrementalHtml = isActiveTail &&
+    streamingTextMatches &&
+    (streamingUnitsRef.current?.some((unit) => unit.html.length > 0) ?? false);
+
+  useLayoutEffect(() => {
+    if (liveHtml) lastSafeHtmlRef.current = { text, html: liveHtml };
+    else if (isSealed && sealedHtml) {
+      lastSafeHtmlRef.current = { text, html: sealedHtml };
     }
-  }, [text, activeContent, isSealed, isActiveTail, html, failed, isTurboMode, codeIndent]);
+  }, [liveHtml, sealedHtml, isSealed, text]);
 
-  // 3. 封口完成态异步 HTML 原地原子替换
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el || !isSealed) return;
-    if (failed) {
-      el.removeAttribute('data-has-html');
-      el.style.visibility = '';
-      return; // 失败回退走 JSX fallback pre 节点
-    }
-    if (!html) return;
-
-    textNodeRef.current = null;
-    el.innerHTML = html;
-    el.setAttribute('data-has-html', 'true');
-    el.style.visibility = '';
-    applyCodeIndentToRenderedRoot(el, codeIndent);
-  }, [html, isSealed, failed, codeIndent]);
-
-  // 词法探针：检测当前块是否包含 GFM 表格
-  const containsTable = useMemo(() => hasTableBlock(text), [text]);
-
-  // 当为活跃尾块且包含表格时，抑制全局打字机光标
+  const containsTable = useMemo(
+    () => shouldRenderStreamingTable ||
+      (isActiveTail
+        ? /<table(?:\s|>)/i.test(renderedHtml)
+        : hasTableBlock(text)),
+    [text, isActiveTail, shouldRenderStreamingTable, renderedHtml]
+  );
   const hideCaret = isActiveTail && containsTable;
 
   if (!text) return null;
 
-  // 活跃尾块渲染分支
-  if (isActiveTail) {
+  const className = isActiveTail
+    ? `${styles.assistantText} md-rendered ${styles.isStreaming} ${
+      hideCaret ? `${styles.suppressCaret || ''} suppressCaret` : ''
+    } md-block-active`.trim()
+    : `${styles.assistantText} md-rendered md-block-sealed`;
+  const dataAttributes = {
+    className,
+    'data-streaming': isActiveTail ? 'true' : 'false',
+    'data-sealed': String(isSealed),
+    'data-turbo': isActiveTail && isTurboMode ? 'true' : 'false',
+    'data-contains-table': containsTable ? 'true' : 'false',
+    'data-md-variant': 'chat',
+  } as const;
+
+  if (shouldRenderStreamingTable) {
     return (
-      <div
-        ref={containerRef}
-        className={`${styles.assistantText} md-rendered ${styles.isStreaming} ${
-          hideCaret ? `${styles.suppressCaret || ''} suppressCaret` : ''
-        } md-block-active`.trim()}
-        data-streaming="true"
-        data-sealed="false"
-        data-turbo={isTurboMode ? 'true' : 'false'}
-        data-contains-table={containsTable ? 'true' : 'false'}
-        data-md-variant="chat"
-      />
+      <div {...dataAttributes}>
+        <StreamingGfmTable markdown={text} isStreaming={isActiveTail} />
+      </div>
     );
   }
 
-  // 封口块 / 完成态块分支（双缓冲原地晋升，严禁骨架屏）
   return (
-    <div
-      ref={containerRef}
-      className={`${styles.assistantText} md-rendered md-block-sealed`}
-      data-streaming="false"
-      data-sealed="true"
-      data-contains-table={containsTable ? 'true' : 'false'}
-      data-md-variant="chat"
-    >
-      {failed && !html ? (
-        <pre className={`${styles.mdTextFallback} md-text-fallback`}>
-          {text}
-        </pre>
-      ) : null}
-    </div>
+    <ReconciledMarkdownHtml
+      {...dataAttributes}
+      data-has-html={renderedHtml || hasIncrementalHtml ? 'true' : undefined}
+      html={renderedHtml}
+      incrementalUnits={isActiveTail
+        ? (streamingTextMatches ? streamingUnitsRef.current : null)
+        : undefined}
+      codeIndent={codeIndent}
+    />
   );
 }, markdownBlockItemPropsEqual);
 

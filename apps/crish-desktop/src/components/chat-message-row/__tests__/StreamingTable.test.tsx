@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
+import { readFileSync } from 'node:fs';
 import { hasTableBlock } from '../../../api/markdown/tableProbe';
 import { resolveMaxHeight } from '../../../hooks/chat-stream/usePinnedScroll';
 import { MarkdownBlockItem } from '../MarkdownBlockItem';
@@ -15,6 +16,12 @@ vi.mock('../../../api/markdownRenderAsync', () => ({
     loading: false,
     failed: false,
   })),
+  useStreamingMarkdownHtml: vi.fn((markdown: string) =>
+    markdown.includes('|') ? '<table></table>' : '<p>live text</p>'
+  ),
+  parseMarkdownToHtmlAsync: vi.fn(async () =>
+    '<table><thead><tr><th>A</th><th>B</th></tr></thead><tbody><tr><td>Val 1</td><td>Val 2</td></tr></tbody></table>'
+  ),
 }));
 
 vi.mock('../../../store/storeAccess', () => ({
@@ -59,7 +66,7 @@ describe('3. MarkdownBlockItem Caret 动态抑制与表格标记断言', () => {
     });
   });
 
-  it('当处于活跃流式状态且包含表格时，必须注入 suppressCaret 类与 data-contains-table', () => {
+  it('当处于活跃流式状态且包含表格时，必须注入 suppressCaret 类与 data-contains-table', async () => {
     const tableText = '| Col 1 | Col 2 |\n| --- | --- |\n| Val 1 | Val 2 |';
     const { container } = render(
       <MarkdownBlockItem
@@ -74,6 +81,7 @@ describe('3. MarkdownBlockItem Caret 动态抑制与表格标记断言', () => {
     expect(rootEl).not.toBeNull();
     expect(rootEl.classList.contains('suppressCaret')).toBe(true);
     expect(rootEl.getAttribute('data-contains-table')).toBe('true');
+    await waitFor(() => expect(container.querySelector('tbody tr')).not.toBeNull());
   });
 
   it('普通流式文本块不应添加 suppressCaret 类', () => {
@@ -227,5 +235,22 @@ describe('4. StreamingTableContainer 契约与视口动效 Token 断言', () => 
     expect(lastTd).not.toBeNull();
     expect(lastTd?.hasAttribute('data-streaming')).toBe(false);
     expect(lastTd?.hasAttribute('data-table-streaming')).toBe(false);
+  });
+
+  it('表格按内容自然分配列宽，禁止固定布局与单元格裁切', () => {
+    const target = '../StreamingTableContainer.module.css';
+    const css = readFileSync(new URL(target, import.meta.url), 'utf8');
+    const tableRule = css.match(
+      /\.tableScrollViewport table,\s*\.tableScrollViewport :global\(\.md-table\)\s*\{([^}]*)\}/s
+    )?.[1] ?? '';
+    const cellRule = css.match(
+      /\.tableScrollViewport table th,\s*\.tableScrollViewport table td,[\s\S]*?\{([^}]*)\}/
+    )?.[1] ?? '';
+
+    expect(tableRule).toMatch(/table-layout:\s*auto\s*;/);
+    expect(tableRule).not.toMatch(/table-layout:\s*fixed\s*;/);
+    expect(cellRule).toMatch(/overflow-wrap:\s*anywhere\s*;/);
+    expect(cellRule).not.toMatch(/overflow:\s*hidden\s*;/);
+    expect(cellRule).not.toMatch(/text-overflow:\s*ellipsis\s*;/);
   });
 });

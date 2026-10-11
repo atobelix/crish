@@ -14,7 +14,7 @@ import {
   findMarkdownCodeRanges,
   isPositionInRanges,
   type CodeRange,
-} from './preprocessCustomTags';
+} from './markdownCodeRanges';
 
 const BLANK_LINE_RE = /\n\n/g;
 

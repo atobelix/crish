@@ -29,10 +29,10 @@
   box-sizing: border-box;
 }
 
-/* 强制 fixed 布局，消除列宽左右抽搐 */
+/* 自然分配列宽；长内容可换行显示，不裁切单元格正文。 */
 .tableScrollViewport table,
 .tableScrollViewport :global(.md-table) {
-  table-layout: fixed;
+  table-layout: auto;
   width: 100%;
   min-width: 100%;
   border-collapse: collapse;
@@ -48,9 +48,7 @@
   padding: var(--md-table-cell-padding, var(--space-2, 8px) var(--space-3, 12px));
   text-align: left;
   border-bottom: var(--md-table-border-width, var(--hairline-width, 1px)) solid var(--md-table-row-border, var(--border-subtle));
-  overflow: hidden;
-  text-overflow: ellipsis;
-  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 /* 吸顶表头 (Sticky Header) 毛玻璃与高层级 */

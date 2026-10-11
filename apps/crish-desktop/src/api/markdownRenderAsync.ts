@@ -1,7 +1,12 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type MutableRefObject } from 'react';
 import { getMarkdownHtmlCache, setMarkdownHtmlCache } from './markdownCache';
 import { getWorkerPool, Priority } from '../workers';
 import { renderMarkdown } from './rustCore';
+import {
+  IncrementalMarkdownSession,
+  type IncrementalMarkdownFragmentKind,
+  type IncrementalMarkdownUnitSnapshot,
+} from './markdown/IncrementalMarkdownSession';
 
 const pendingRenders = new Map<string, Promise<string>>();
 
@@ -76,7 +81,7 @@ export async function parseMarkdownToHtmlAsync(
  *
  * T5-3：暴露 `failed` 失败标志——Rust `core_md_render` missing + worker
  * 回退也失败（.catch 前置 loading=false、html 仍 ''）或对非空原文渲染出
- * 空串时置 `failed=true`，供完成态组件做「纯文本次优回退」（不再空白）。
+ * 空串时置 `failed=true`。展示层据此保持空白或上一份安全 HTML，禁止回退显示原文。
  *
  * 设计原则：
  *   - 缓存命中不进入 loading 状态，避免无意义闪烁
@@ -94,28 +99,35 @@ export function useAsyncMarkdownHtml(
   const [html, setHtml] = useState('');
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
-  const cancelledRef = useRef(false);
+  const requestIdRef = useRef(0);
 
   useEffect(() => {
+    const requestId = ++requestIdRef.current;
     if (!markdown) {
       setHtml('');
       setLoading(false);
       setFailed(false);
-      return;
+      return () => {
+        if (requestIdRef.current === requestId) requestIdRef.current += 1;
+      };
     }
     const cached = getMarkdownHtmlCache(markdown);
     if (cached !== undefined) {
       setHtml(cached);
       setLoading(false);
       setFailed(false);
-      return;
+      return () => {
+        if (requestIdRef.current === requestId) requestIdRef.current += 1;
+      };
     }
     setLoading(true);
     setFailed(false);
-    cancelledRef.current = false;
+    // 新 markdown 的异步结果尚未到达时，不能暂留上一段内容。
+    // 旧 HTML 与当前输入无内容绑定，继续显示会把上一块短暂错投到新块。
+    setHtml('');
     parseMarkdownToHtmlAsync(markdown, priority)
       .then((result) => {
-        if (!cancelledRef.current) {
+        if (requestIdRef.current === requestId) {
           setHtml(result);
           setLoading(false);
           // T5-3：非空原文渲染出空串 = 渲染失败（Rust missing + worker
@@ -124,16 +136,147 @@ export function useAsyncMarkdownHtml(
         }
       })
       .catch(() => {
-        if (!cancelledRef.current) {
+        if (requestIdRef.current === requestId) {
           setLoading(false);
           // T5-3：Rust missing + worker 也失败 → failed 标志（html 仍 ''）
           setFailed(true);
         }
       });
     return () => {
-      cancelledRef.current = true;
+      if (requestIdRef.current === requestId) requestIdRef.current += 1;
     };
   }, [markdown, priority]);
 
   return { html, loading, failed };
+}
+
+/**
+ * 流式活跃块的安全 HTML 渲染器。
+ *
+ * 活跃块使用有状态的前端增量会话：累计输入只用于取得新增后缀，
+ * Markdown 分隔符转成安全 HTML 状态，普通文本以增量片段交给现有
+ * Rust/worker renderer。renderer 永远不会收到累计全文，且未完成片段
+ * 在 HTML 返回前保持空白，不会把 Markdown 原文当作回退内容。
+ */
+export function useStreamingMarkdownHtml(
+  markdown: string,
+  enabled: boolean,
+  priority: Priority = Priority.High,
+  unitsRef?: MutableRefObject<readonly IncrementalMarkdownUnitSnapshot[] | null>
+): string {
+  const [html, setHtml] = useState('');
+  const [, setRenderVersion] = useState(0);
+  const sessionRef = useRef<IncrementalMarkdownSession | null>(null);
+  if (!sessionRef.current) sessionRef.current = new IncrementalMarkdownSession();
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    const session = sessionRef.current;
+    if (!session) return;
+
+    if (!enabled || !markdown.trim()) {
+      session.reset();
+      if (unitsRef) {
+        unitsRef.current = null;
+        setRenderVersion((version) => version + 1);
+      } else {
+        setHtml('');
+      }
+      return;
+    }
+
+    const advance = session.advance(markdown, !unitsRef);
+    if (unitsRef) {
+      // 单元快照是流式 DOM 的唯一更新载荷；不再拼接累计 HTML。
+      unitsRef.current = session.getUnitSnapshots();
+      setRenderVersion((version) => version + 1);
+    } else {
+      setHtml(advance.html);
+    }
+
+    for (const part of advance.textParts) {
+      void parseMarkdownFragmentToHtmlAsync(part.source, priority, part.kind)
+        .then((fragment) => {
+          if (
+            mountedRef.current &&
+            session.getRevision() === advance.revision &&
+            session.resolveTextPart(part.id, fragment)
+          ) {
+            if (unitsRef) {
+              unitsRef.current = session.getUnitSnapshots();
+              setRenderVersion((version) => version + 1);
+            } else {
+              setHtml(session.toHtml());
+            }
+          }
+        })
+        .catch(() => {
+          // 渲染失败时保持该片段为空，绝不把 Markdown 原文写入 DOM。
+          if (
+            mountedRef.current &&
+            session.getRevision() === advance.revision &&
+            session.resolveTextPart(part.id, '')
+          ) {
+            if (unitsRef) {
+              unitsRef.current = session.getUnitSnapshots();
+              setRenderVersion((version) => version + 1);
+            } else {
+              setHtml(session.toHtml());
+            }
+          }
+        });
+    }
+  }, [markdown, enabled, priority, unitsRef]);
+
+  useEffect(() => () => {
+    mountedRef.current = false;
+    sessionRef.current?.reset();
+  }, []);
+
+  return html;
+}
+
+/**
+ * 渲染一个由增量会话切出的有界语义片段，并只返回安全 HTML。
+ * 行内片段去掉 renderer 的块级包装器；标题和代码围栏保留完整结构，
+ * 列表项只取安全的 `<li>` 节点。失败时返回空串，禁止原文回退。
+ */
+export async function parseMarkdownFragmentToHtmlAsync(
+  fragment: string,
+  priority: Priority = Priority.High,
+  kind: IncrementalMarkdownFragmentKind = 'inline'
+): Promise<string> {
+  if (!fragment) return '';
+  const rendered = await parseMarkdownToHtmlAsync(fragment, priority);
+  if (!rendered) return '';
+
+  if (kind === 'block') return rendered;
+
+  if (typeof DOMParser !== 'undefined') {
+    const template = document.createElement('template');
+    template.innerHTML = rendered;
+    if (kind === 'list-item') {
+      const listItem = template.content.querySelector('li');
+      if (listItem) return listItem.outerHTML;
+      // 活跃列表项的外层 `<li>` 由增量会话维护；正文片段仍可直接
+      // 使用普通 inline renderer，不能因为没有再次传入 `- ` 就丢失正文。
+      const root = template.content.firstElementChild;
+      return root?.innerHTML ?? '';
+    }
+    const roots = Array.from(template.content.childNodes);
+    if (roots.length === 1 && roots[0]?.nodeType === Node.ELEMENT_NODE) {
+      return (roots[0] as Element).innerHTML;
+    }
+  }
+
+  if (kind === 'list-item') {
+    const listItem = rendered.match(/<li\b[^>]*>[\s\S]*<\/li>/i);
+    if (listItem) return listItem[0];
+    const paragraph = rendered.match(/^<p\b[^>]*>([\s\S]*)<\/p>$/i);
+    return paragraph?.[1] ?? '';
+  }
+
+  const paragraph = rendered.match(/^<p\b[^>]*>([\s\S]*)<\/p>$/i);
+  return paragraph?.[1] ?? rendered;
 }
