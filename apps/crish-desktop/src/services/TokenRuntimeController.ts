@@ -305,14 +305,14 @@ export class TokenRuntimeController {
         //   外层/侧栏 3.5（L 96.5%）→ 主界面 2.0（L 98%）→ 输入框/卡片 0（纯白）。
         //   旧值 95% / 95.2%（实测灰度 ≈5.1 / 4.7，两层几乎同色）。
         //   亮度微调 ±5 档沿用原斜率；主界面封顶 99.5%，保证永远略暗于纯白输入框。
-        // 2026-10-11 heson 实测定稿（同一暖色调 CMYK C0 M0.4 Y0.8）：外层 K4 #f4f3f2（hsl(30 8.33% 95.29%)）、主层 K2.8 #f8f7f6（hsl(30 12.5% 96.86%)）、
+        // 2026-10-11 heson 实测定稿（同一暖色调 CMYK C0 M0.4 Y0.8）：外层 K5 #f2f1f0（hsl(30 7.14% 94.51%)；10-11 由 K4 #f4f3f2 加深）、主层 K2.8 #f8f7f6（hsl(30 12.5% 96.86%)）、
         // 输入框 #ffffff。adjust=0 时输出精确 hex；±档沿用原斜率（主层 0.6/档、外层 0.3/档），主层封顶 99.5%。
         const lPrimary = Number(Math.min(99.5, 96.86 + adjust * 0.6).toFixed(2));
-        const lSecondary = Number(Math.min(99, 95.29 + adjust * 0.3).toFixed(2));
+        const lSecondary = Number(Math.min(99, 94.51 + adjust * 0.3).toFixed(2));
         const lTertiary = Number((lSecondary - 3).toFixed(2));
 
         bgPrimary = adjust === 0 ? '#f8f7f6' : `hsl(30 12.5% ${lPrimary}%)`;
-        bgSecondary = adjust === 0 ? '#f4f3f2' : `hsl(30 8.33% ${lSecondary}%)`;
+        bgSecondary = adjust === 0 ? '#f2f1f0' : `hsl(30 7.14% ${lSecondary}%)`;
         bgTertiary = `hsl(30 8.33% ${lTertiary}%)`;
         bgCard = '#ffffff';
         bgElevated = '#ffffff';

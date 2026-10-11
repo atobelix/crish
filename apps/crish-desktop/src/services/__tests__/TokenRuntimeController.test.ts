@@ -81,7 +81,7 @@ describe('TokenRuntimeController 全仓单一运行时 Token 注入控制器测�
       // 「派生别名零注入」——比断言旧别名更强（旧写法对收敛回归无感知）。
       // 2026-10-10 三档底色：运行时只写 --surface-outer / --surface-main / --surface-input
       expect(root.style.getPropertyValue('--surface-main')).toBe('#f8f7f6');
-      expect(root.style.getPropertyValue('--surface-outer')).toBe('#f4f3f2');
+      expect(root.style.getPropertyValue('--surface-outer')).toBe('#f2f1f0');
       expect(root.style.getPropertyValue('--surface-input')).toBe('#ffffff');
       for (const alias of ['--surface-paper', '--surface-chrome', '--surface-card', '--surface-elevated', '--shell-chrome-bg', '--bg-tertiary', '--composer-bg']) {
         expect(root.style.getPropertyValue(alias), alias).toBe('');

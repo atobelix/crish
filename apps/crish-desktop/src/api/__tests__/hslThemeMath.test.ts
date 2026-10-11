@@ -19,8 +19,8 @@ describe('warm-gray 三级表面（侧栏约 5% 灰）', () => {
   it('预设：secondary/shell 约 95%L（≈5% 灰）', () => {
     const warmGray = SKIN_PRESETS['warm-gray'];
     // 2026-10-10 三档底色：外层灰度 3.5（L 96.5%），主层 2.0（L 98%），输入框纯白
-    expect(warmGray.bgSecondary).toBe('#f4f3f2');
-    expect(warmGray.shellChromeBg).toBe('#f4f3f2');
+    expect(warmGray.bgSecondary).toBe('#f2f1f0');
+    expect(warmGray.shellChromeBg).toBe('#f2f1f0');
     expect(warmGray.bgPrimary).toBe('#f8f7f6');
     expect(warmGray.bgCard).toBe('#ffffff');
   });
@@ -42,9 +42,9 @@ describe('warm-gray 三级表面（侧栏约 5% 灰）', () => {
       );
 
       const lPrimary = Number(Math.min(99.5, 96.86 + adjust * 0.6).toFixed(2));
-      const lSecondary = Number(Math.min(99, 95.29 + adjust * 0.3).toFixed(2));
+      const lSecondary = Number(Math.min(99, 94.51 + adjust * 0.3).toFixed(2));
       const expMain = adjust === 0 ? '#f8f7f6' : `hsl(30 12.5% ${lPrimary}%)`;
-      const expOuter = adjust === 0 ? '#f4f3f2' : `hsl(30 8.33% ${lSecondary}%)`;
+      const expOuter = adjust === 0 ? '#f2f1f0' : `hsl(30 7.14% ${lSecondary}%)`;
 
       // T7 别名收敛（2026-09-12）：`--bg-*` 不再由 JS 注入，改由 tokens.css
       // 从 `--surface-*` 派生（tokens.css:51-56）。故注入面断言必须落在
@@ -82,7 +82,7 @@ describe('warm-gray 三级表面（侧栏约 5% 灰）', () => {
       'default',
     );
     // T7 别名收敛：注入面真源为 `--surface-chrome`（tokens.css:52 派生 --bg-secondary）
-    expect(root.style.getPropertyValue('--surface-outer')).toBe('#f4f3f2');
+    expect(root.style.getPropertyValue('--surface-outer')).toBe('#f2f1f0');
     expect(root.style.getPropertyValue('--shell-chrome-bg')).toBe('');
     expect(root.style.getPropertyValue('--bg-secondary')).toBe('');
   });

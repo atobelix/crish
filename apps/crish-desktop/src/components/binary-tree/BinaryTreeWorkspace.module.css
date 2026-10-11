@@ -154,7 +154,8 @@
  * 卡片已经跟灰底分离，再叠一层描边或压暗只会显脏。
  */
 .leaf[data-active='true'] .leafBody {
-  border-color: var(--border-color);
+  /* 活动叶沿用同一框线色（heson 2026-10-11 定稿的 #e3e2e1）；只有左/顶两边有线，右/底保持无边 */
+  border-color: var(--content-frame-border, var(--border-color));
 }
 
 /*
@@ -342,6 +343,11 @@
   background: var(--leaf-card-bg, var(--bg-card));
   /* 内容矩形（主界面 + 右侧栏共用）：大圆角，坐在外层通底上 */
   border-radius: var(--radius-l);
+  /* 框线只画左边 + 顶边 1px（heson 2026-10-11）：左上圆角处两条边连续；右/底不画 */
+  border-left: 1px solid var(--content-frame-border, var(--border-color));
+  border-top: 1px solid var(--content-frame-border, var(--border-color));
+  border-right: 0;
+  border-bottom: 0;
   /* box-shadow:
     0 1px 3px hsl(0 0% 0% / 0.03),
     0 4px 12px hsl(0 0% 0% / 0.02); */
