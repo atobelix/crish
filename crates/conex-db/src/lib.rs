@@ -32,15 +32,14 @@ pub mod lease_guard;
 mod messages;
 mod migrate;
 mod migrate_steps;
-pub mod reader_pool;
 pub mod preferences;
+pub mod reader_pool;
 mod runs;
 mod schema;
 mod sessions;
 pub mod usage_analytics;
 
 pub use blocks::{BlockState, CompactionBlockRow, BLOCK_SCHEMA_VERSION};
-pub use preferences::AppPreferenceRow;
 pub use cas_gc::{compute_sha256_hex, spawn_cas_gc_loop, CasBlobRow, CasGcConfig, GcScanStats};
 pub use error::{DbFailure, DbFailureKind};
 pub use events::StoredEvent;
@@ -56,6 +55,7 @@ pub use lease_guard::{
     generate_lease_id, ActiveBlobLease, BlobLeaseGuard, DEFAULT_LEASE_DURATION,
     DEFAULT_LEASE_DURATION_SECS,
 };
+pub use preferences::AppPreferenceRow;
 pub use reader_pool::{
     PooledReader, ReaderPool, ReaderPoolConfig, ReaderPoolStats, DEFAULT_MAX_WAIT_TIMEOUT_MS,
     DEFAULT_READER_POOL_SIZE, DEFAULT_SQLITE_BUSY_TIMEOUT_MS,
@@ -67,7 +67,7 @@ pub use usage_analytics::{
 };
 
 use rusqlite::Connection;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 /// Local SQLite database with connection pooling semantics (single-writer model).
@@ -117,6 +117,27 @@ pub const RECOVERY_LEASE_KEY: &str = "global_recovery_lease";
 pub const RECOVERY_LEASE_TTL_MS: i64 = 30_000;
 /// 迁移备份目录后缀：DROP 前整库拷贝 `sessions.db.bak-v{n}`，保留最近 2 份。
 const BACKUP_KEEP: usize = 2;
+
+fn reserve_unique_temp_path<F>(mut next_path: F) -> std::io::Result<PathBuf>
+where
+    F: FnMut() -> PathBuf,
+{
+    loop {
+        let path = next_path();
+        match std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)
+        {
+            Ok(reservation) => {
+                drop(reservation);
+                return Ok(path);
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(error),
+        }
+    }
+}
 
 impl LocalDb {
     /// Open (or create) a database at the given path.
@@ -186,16 +207,32 @@ impl LocalDb {
     /// 表锁语义），run e2e 测试的收口落库与轮询读随机撞锁（单跑绿/并行
     /// 挂的时序脆弱根源）。内存库模式无法启用 WAL（journal_mode=memory
     /// 锁定），故测试库改为**临时 WAL 文件**落地（与生产 open(path) 同一
-    /// 锁语义：WAL 读写不互斥）；文件名带 pid+seq 保证隔离，残留由系统
-    /// temp 目录清理策略兜底。调用面（42 处测试）零改动。
+    /// 锁语义：WAL 读写不互斥）；路径包含 pid、纳秒时间和进程内序号，并由
+    /// `create_new` 原子占位，避免 PID 复用后重开历史残留库。临时文件残留
+    /// 由系统 temp 目录清理策略兜底。调用面（42 处测试）零改动。
     pub fn open_in_memory() -> Result<Self, DbFailure> {
         use std::sync::atomic::{AtomicU64, Ordering};
+        use std::time::{SystemTime, UNIX_EPOCH};
+
         static MEM_SEQ: AtomicU64 = AtomicU64::new(0);
-        let seq = MEM_SEQ.fetch_add(1, Ordering::Relaxed);
-        let path = std::env::temp_dir().join(format!(
-            "conex_mem_{}_{seq}.db",
-            std::process::id()
-        ));
+        let temp_dir = std::env::temp_dir();
+        let path = reserve_unique_temp_path(|| {
+            let seq = MEM_SEQ.fetch_add(1, Ordering::Relaxed);
+            let timestamp = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos();
+            temp_dir.join(format!(
+                "conex_mem_{}_{}_{}.db",
+                std::process::id(),
+                timestamp,
+                seq
+            ))
+        })
+        .map_err(|error| DbFailure {
+            message: format!("failed to reserve temporary database path: {error}"),
+            kind: DbFailureKind::Open,
+        })?;
         Self::open(&path)
     }
 
@@ -327,3 +364,50 @@ mod tests_concurrency;
 mod tests_migrations;
 #[cfg(test)]
 mod tests_usage;
+
+#[cfg(test)]
+mod temp_path_tests {
+    #![allow(clippy::disallowed_methods)]
+
+    use super::reserve_unique_temp_path;
+    use std::fs;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn colliding_candidate_is_retried_without_overwriting_existing_file() {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        let test_dir = std::env::temp_dir().join(format!(
+            "conex_temp_path_test_{}_{}",
+            std::process::id(),
+            nonce
+        ));
+        fs::create_dir(&test_dir).expect("create isolated temp-path test directory");
+
+        let occupied = test_dir.join("occupied.db");
+        let available = test_dir.join("available.db");
+        let sentinel = b"existing database bytes must remain intact";
+        fs::write(&occupied, sentinel).expect("write existing candidate contents");
+
+        let mut candidates = [occupied.clone(), available.clone()].into_iter();
+        let selected = reserve_unique_temp_path(|| {
+            candidates
+                .next()
+                .expect("allocator should request one new candidate after a collision")
+        })
+        .expect("allocator should reserve the next free candidate");
+
+        assert_eq!(selected, available);
+        assert_eq!(
+            fs::read(&occupied).expect("read original candidate"),
+            sentinel
+        );
+        assert!(
+            available.is_file(),
+            "free candidate should be atomically reserved"
+        );
+        fs::remove_dir_all(test_dir).expect("remove isolated temp-path test directory");
+    }
+}

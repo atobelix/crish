@@ -23,16 +23,68 @@ impl LocalDb {
         let payload = payload.to_string();
         let run_id = run_id.map(|s| s.to_string());
         self.write_blocking(move |conn| {
+            append_event_conn(
+                conn,
+                &session_id,
+                sequence,
+                &event_type,
+                &payload,
+                run_id.as_deref(),
+            )
+        })
+    }
+
+    /// 持久化一轮 recovery escalation：首事件、通知元数据、次事件共用
+    /// 一个 Single Writer 请求与一个 SQLite 事务。两个事件均为会话级事件
+    /// （`run_id = NULL`），sequence 在同一事务中连续分配。
+    ///
+    /// 参数顺序对应旧行为：recovery-escalated → recover_notifications
+    /// upsert → recovery-steering。任一步失败均回滚所有行与序号。
+    pub fn append_two_events_and_set_session_meta(
+        &self,
+        session_id: &str,
+        first_event: (&str, &str),
+        meta: (&str, &str),
+        second_event: (&str, &str),
+    ) -> Result<[i64; 2], DbFailure> {
+        let session_id = session_id.to_string();
+        let (first_type, first_payload) = (first_event.0.to_string(), first_event.1.to_string());
+        let (meta_key, meta_value) = (meta.0.to_string(), meta.1.to_string());
+        let (second_type, second_payload) =
+            (second_event.0.to_string(), second_event.1.to_string());
+
+        self.write_blocking(move |conn| {
+            let first_sequence = reserve_sequence_conn(conn, &session_id)?;
+            append_event_conn(
+                conn,
+                &session_id,
+                first_sequence,
+                &first_type,
+                &first_payload,
+                None,
+            )?;
+
             conn.execute(
-                "INSERT INTO events (session_id, sequence, event_type, payload, run_id, created_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, strftime('%Y-%m-%d %H:%M:%f','now'))",
-                rusqlite::params![session_id, sequence, event_type, payload, run_id],
+                "INSERT INTO session_meta (key, value) VALUES (?1, ?2)
+                 ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                rusqlite::params![meta_key, meta_value],
             )
             .map_err(|e| DbFailure {
-                message: format!("append_event: {e}"),
-                kind: DbFailureKind::Other("append_event".to_string()),
+                message: format!("append_two_events_set_meta: {e}"),
+                kind: DbFailureKind::Other("append_two_events_set_meta".to_string()),
             })?;
-            Ok(())
+
+            let second_sequence = reserve_sequence_conn(conn, &session_id)?;
+            append_event_conn(
+                conn,
+                &session_id,
+                second_sequence,
+                &second_type,
+                &second_payload,
+                None,
+            )?;
+
+            Ok([first_sequence, second_sequence])
         })
     }
 
@@ -207,32 +259,7 @@ impl LocalDb {
     /// 整个取号闭包在 Actor 的 `BEGIN IMMEDIATE` 事务内，原子性由外层事务保证。
     pub fn reserve_sequence(&self, session_id: &str) -> Result<i64, DbFailure> {
         let session_id = session_id.to_string();
-        self.write_blocking(move |conn| {
-            // 冷路径 seed：首次以已落库 max(sequence)+1 建行（隐式预热）
-            conn.execute(
-                "INSERT OR IGNORE INTO session_sequence (session_id, next_sequence)
-                 SELECT ?1, COALESCE((SELECT MAX(sequence) FROM events WHERE session_id = ?1), 0) + 1",
-                rusqlite::params![session_id],
-            )
-            .map_err(|e| DbFailure {
-                message: format!("reserve_sequence_seed: {e}"),
-                kind: DbFailureKind::Other("reserve_sequence".to_string()),
-            })?;
-            // 热路径单语句：自增并返回自增前的待发号
-            let sequence = conn
-                .query_row(
-                    "UPDATE session_sequence SET next_sequence = next_sequence + 1
-                     WHERE session_id = ?1
-                     RETURNING next_sequence - 1",
-                    rusqlite::params![session_id],
-                    |row| row.get::<_, i64>(0),
-                )
-                .map_err(|e| DbFailure {
-                    message: format!("reserve_sequence_bump: {e}"),
-                    kind: DbFailureKind::Other("reserve_sequence".to_string()),
-                })?;
-            Ok(sequence)
-        })
+        self.write_blocking(move |conn| reserve_sequence_conn(conn, &session_id))
     }
 
     /// 会话级序列号预热校准（MAX 语义：只抬高不回退，幂等；
@@ -261,6 +288,51 @@ impl LocalDb {
             Ok(())
         })
     }
+}
+
+fn append_event_conn(
+    conn: &rusqlite::Connection,
+    session_id: &str,
+    sequence: i64,
+    event_type: &str,
+    payload: &str,
+    run_id: Option<&str>,
+) -> Result<(), DbFailure> {
+    conn.execute(
+        "INSERT INTO events (session_id, sequence, event_type, payload, run_id, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, strftime('%Y-%m-%d %H:%M:%f','now'))",
+        rusqlite::params![session_id, sequence, event_type, payload, run_id],
+    )
+    .map_err(|e| DbFailure {
+        message: format!("append_event: {e}"),
+        kind: DbFailureKind::Other("append_event".to_string()),
+    })?;
+    Ok(())
+}
+
+fn reserve_sequence_conn(conn: &rusqlite::Connection, session_id: &str) -> Result<i64, DbFailure> {
+    // 冷路径 seed：首次以已落库 max(sequence)+1 建行（隐式预热）
+    conn.execute(
+        "INSERT OR IGNORE INTO session_sequence (session_id, next_sequence)
+         SELECT ?1, COALESCE((SELECT MAX(sequence) FROM events WHERE session_id = ?1), 0) + 1",
+        rusqlite::params![session_id],
+    )
+    .map_err(|e| DbFailure {
+        message: format!("reserve_sequence_seed: {e}"),
+        kind: DbFailureKind::Other("reserve_sequence".to_string()),
+    })?;
+    // 热路径单语句：自增并返回自增前的待发号
+    conn.query_row(
+        "UPDATE session_sequence SET next_sequence = next_sequence + 1
+         WHERE session_id = ?1
+         RETURNING next_sequence - 1",
+        rusqlite::params![session_id],
+        |row| row.get::<_, i64>(0),
+    )
+    .map_err(|e| DbFailure {
+        message: format!("reserve_sequence_bump: {e}"),
+        kind: DbFailureKind::Other("reserve_sequence".to_string()),
+    })
 }
 
 #[derive(Debug, Clone)]

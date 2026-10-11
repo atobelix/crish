@@ -124,7 +124,8 @@ mod tests {
         assert_eq!(p2.updated_at, 2000);
 
         // 写入第二个 key
-        db.set_preference("crish_sidebar_width", "250", 1500).unwrap();
+        db.set_preference("crish_sidebar_width", "250", 1500)
+            .unwrap();
         let list = db.list_preferences().unwrap();
         assert_eq!(list.len(), 2);
         assert_eq!(list[0].key, "crish_sidebar_width");

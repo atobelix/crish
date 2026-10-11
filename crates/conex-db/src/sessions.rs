@@ -184,6 +184,22 @@ impl LocalDb {
     where
         F: FnOnce(Option<&str>) -> Option<String> + Send + 'static,
     {
+        self.update_session_meta_with_result(key, move |current| {
+            let Some(new_value) = update(current) else {
+                return Ok((None, None));
+            };
+            Ok((Some(new_value.clone()), Some(new_value)))
+        })
+    }
+
+    /// 在单写事务中读改写元数据，并返回调用方结果。
+    ///
+    /// `update` 返回的第一个值为 `None` 时不写入元数据；第二个值不论是否写入都会返回。
+    pub fn update_session_meta_with_result<F, R>(&self, key: &str, update: F) -> Result<R, DbFailure>
+    where
+        F: FnOnce(Option<&str>) -> Result<(Option<String>, R), DbFailure> + Send + 'static,
+        R: Send + 'static,
+    {
         let key = key.to_string();
         self.write_blocking(move |conn| {
             let current = conn
@@ -198,19 +214,19 @@ impl LocalDb {
                     kind: DbFailureKind::Other("update_session_meta".to_string()),
                 })?;
 
-            let Some(new_value) = update(current.as_deref()) else {
-                return Ok(None);
-            };
-            conn.execute(
-                "INSERT INTO session_meta (key, value) VALUES (?1, ?2)
-                 ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-                rusqlite::params![key, new_value],
-            )
-            .map_err(|e| DbFailure {
-                message: format!("update_session_meta: {e}"),
-                kind: DbFailureKind::Other("update_session_meta".to_string()),
-            })?;
-            Ok(Some(new_value))
+            let (new_value, result) = update(current.as_deref())?;
+            if let Some(new_value) = new_value {
+                conn.execute(
+                    "INSERT INTO session_meta (key, value) VALUES (?1, ?2)
+                     ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                    rusqlite::params![key, new_value],
+                )
+                .map_err(|e| DbFailure {
+                    message: format!("update_session_meta: {e}"),
+                    kind: DbFailureKind::Other("update_session_meta".to_string()),
+                })?;
+            }
+            Ok(result)
         })
     }
 

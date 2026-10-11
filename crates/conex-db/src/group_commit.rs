@@ -186,14 +186,20 @@ impl DbWriteHandle {
     /// 阻塞写桥：同步外观提交写闭包至组提交 Actor 并等待批提交结果。
     ///
     /// - 非 async：直接 `blocking_send` + `blocking_recv`。
-    /// - async 上下文：整段 submit+wait 移到临时 OS 线程（无 runtime TLS），
-    ///   避免 `blocking_send` panic；actor 在独立 OS 线程上可并行处理。
+    /// - multi_thread runtime：在 Tokio blocking region 内直接执行，交还当前
+    ///   worker core，避免每次写入创建并 join 一个 OS 线程。
+    /// - current_thread runtime：继续把 submit+wait 移到临时 OS 线程，避免
+    ///   `blocking_send` panic，并允许独立 writer actor 正常处理请求。
     pub fn write_blocking<F, R>(&self, f: F) -> Result<R, DbFailure>
     where
         F: FnOnce(&mut rusqlite::Connection) -> Result<R, DbFailure> + Send + 'static,
         R: Send + 'static,
     {
-        if tokio::runtime::Handle::try_current().is_ok() {
+        if let Ok(runtime) = tokio::runtime::Handle::try_current() {
+            if runtime.runtime_flavor() == tokio::runtime::RuntimeFlavor::MultiThread {
+                return tokio::task::block_in_place(|| self.write_blocking_inner(f));
+            }
+
             let handle = self.clone();
             return std::thread::spawn(move || handle.write_blocking_inner(f))
                 .join()
@@ -434,5 +440,166 @@ fn process_batch(conn: &mut rusqlite::Connection, batch: &mut Vec<WriteTask>, st
                 let _ = resp.send(Err(err.clone()));
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod blocking_write_tests {
+    use super::*;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    fn new_writer(config: GroupCommitConfig) -> DbWriteHandle {
+        DbWriteHandle::spawn(
+            rusqlite::Connection::open_in_memory().expect("open in-memory database"),
+            config,
+        )
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn write_blocking_offloads_from_current_thread_runtime() {
+        let writer = new_writer(GroupCommitConfig::default());
+
+        let result = writer
+            .write_blocking(|_| Ok::<_, DbFailure>(41usize))
+            .expect("current-thread runtime write should complete");
+
+        assert_eq!(result, 41);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn write_blocking_releases_single_worker_when_bounded_queue_is_full() {
+        let writer = new_writer(GroupCommitConfig {
+            batch_timeout: Duration::ZERO,
+            max_batch_size: 1,
+            channel_capacity: 1,
+        });
+        let (actor_started_tx, actor_started_rx) = oneshot::channel();
+        let (actor_gate_tx, actor_gate_rx) = std::sync::mpsc::channel();
+
+        let first_writer = writer.clone();
+        let first_write = tokio::spawn(async move {
+            first_writer
+                .write(move |_| {
+                    let _ = actor_started_tx.send(());
+                    actor_gate_rx
+                        .recv()
+                        .expect("actor gate must be released by the test");
+                    Ok::<_, DbFailure>(1usize)
+                })
+                .await
+        });
+        actor_started_rx
+            .await
+            .expect("first write should reach the actor");
+
+        let second_writer = writer.clone();
+        let second_write =
+            tokio::spawn(async move { second_writer.write(|_| Ok::<_, DbFailure>(2usize)).await });
+        tokio::time::timeout(Duration::from_secs(2), async {
+            while writer.sender.capacity() != 0 {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("second write should fill the bounded queue");
+
+        let runtime_resumed = Arc::new(AtomicBool::new(false));
+        let (release_runtime_tx, release_runtime_rx) = oneshot::channel();
+        let release_flag = Arc::clone(&runtime_resumed);
+        let release_actor = actor_gate_tx.clone();
+        let release_task = tokio::spawn(async move {
+            release_runtime_rx
+                .await
+                .expect("test should release the runtime task");
+            release_flag.store(true, Ordering::SeqCst);
+            let _ = release_actor.send(());
+        });
+
+        // The watchdog only prevents a broken implementation from hanging the
+        // test process. The assertion below observes whether Tokio resumed this
+        // queued task before the blocking write itself completed.
+        let (watchdog_cancel_tx, watchdog_cancel_rx) = std::sync::mpsc::channel();
+        let watchdog_actor = actor_gate_tx.clone();
+        let watchdog = std::thread::spawn(move || {
+            if watchdog_cancel_rx
+                .recv_timeout(Duration::from_secs(2))
+                .is_err()
+            {
+                let _ = watchdog_actor.send(());
+            }
+        });
+
+        let blocking_started = Arc::new(AtomicBool::new(false));
+        let blocking_started_flag = Arc::clone(&blocking_started);
+        let blocking_writer = writer.clone();
+        let observed_runtime_resumption = Arc::clone(&runtime_resumed);
+        let blocking_write = tokio::spawn(async move {
+            blocking_started_flag.store(true, Ordering::SeqCst);
+            blocking_writer.write_blocking(move |_| {
+                Ok::<_, DbFailure>(observed_runtime_resumption.load(Ordering::SeqCst))
+            })
+        });
+
+        tokio::time::timeout(Duration::from_secs(2), async {
+            while !blocking_started.load(Ordering::SeqCst) {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("blocking write task should start");
+        release_runtime_tx
+            .send(())
+            .expect("runtime release task should still be waiting");
+
+        let observed_resumption = blocking_write
+            .await
+            .expect("blocking write task should not panic")
+            .expect("blocking write should complete after the queue drains");
+
+        let _ = watchdog_cancel_tx.send(());
+        watchdog.join().expect("watchdog thread should exit");
+        assert_eq!(
+            first_write
+                .await
+                .expect("first write task should not panic")
+                .unwrap(),
+            1
+        );
+        assert_eq!(
+            second_write
+                .await
+                .expect("second write task should not panic")
+                .unwrap(),
+            2
+        );
+        release_task
+            .await
+            .expect("runtime release task should not panic");
+        assert!(
+            observed_resumption,
+            "Tokio must run the queued task while write_blocking waits on a full channel"
+        );
+    }
+
+    #[test]
+    fn write_blocking_reports_closed_writer_without_losing_error_contract() {
+        let (sender, receiver) = mpsc::channel::<WriteTask>(1);
+        drop(receiver);
+        let writer = DbWriteHandle {
+            sender,
+            stats: Arc::new(StatsInner::default()),
+        };
+
+        let error = writer
+            .write_blocking(|_| Ok::<_, DbFailure>(()))
+            .expect_err("closed writer should reject blocking writes");
+
+        assert_eq!(
+            error,
+            DbFailure {
+                message: "Single writer actor channel is closed".to_string(),
+                kind: DbFailureKind::Other("writer_closed".to_string()),
+            }
+        );
     }
 }

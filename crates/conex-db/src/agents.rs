@@ -208,9 +208,7 @@ impl LocalDb {
     ) -> Result<(), DbFailure> {
         let session_id = session_id.to_string();
         let agents = agents.to_vec();
-        self.write_blocking(move |conn| {
-            save_session_agents_conn(conn, &session_id, &agents)
-        })
+        self.write_blocking(move |conn| save_session_agents_conn(conn, &session_id, &agents))
     }
 }
 
@@ -359,8 +357,7 @@ pub(crate) fn save_session_agents_conn(
         for id in &keep_ids {
             params.push(Box::new((*id).to_string()));
         }
-        let param_refs: Vec<&dyn rusqlite::ToSql> =
-            params.iter().map(|p| p.as_ref()).collect();
+        let param_refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p.as_ref()).collect();
         conn.execute(&sql, param_refs.as_slice())
             .map_err(|e| DbFailure {
                 message: format!("save_session_agents_removal_diff: {e}"),

@@ -25,7 +25,7 @@ conex-types = { path = "../conex-types" }
 # 引用 conex-db（revert_guard 持久化集成测试）——Cargo 允许含 dev-dependency
 # 的依赖环（agent-tools 侧为 dev 边，仅测试构建存在），生产构建无环。
 agent-tools = { path = "../agent-tools" }
-tokio = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread"] }
 sha2 = { workspace = true }
 hex = { workspace = true }
 

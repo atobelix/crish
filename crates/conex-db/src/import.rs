@@ -182,13 +182,12 @@ impl LocalDb {
 
             // 写入 folder_order 到 session_meta
             if !folder_order.is_empty() {
-                let folder_json =
-                    serde_json::to_string(&folder_order).map_err(|e| DbFailure {
-                        message: format!(
-                            "import_from_localstorage: serialize folder_order failed: {e}"
-                        ),
-                        kind: DbFailureKind::ImportFolderSerialize,
-                    })?;
+                let folder_json = serde_json::to_string(&folder_order).map_err(|e| DbFailure {
+                    message: format!(
+                        "import_from_localstorage: serialize folder_order failed: {e}"
+                    ),
+                    kind: DbFailureKind::ImportFolderSerialize,
+                })?;
                 conn.execute(
                     "INSERT INTO session_meta (key, value) VALUES ('folder_order', ?1)
                      ON CONFLICT(key) DO UPDATE SET value = excluded.value",

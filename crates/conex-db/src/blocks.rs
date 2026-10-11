@@ -152,12 +152,11 @@ impl LocalDb {
         }
         let row = row.clone();
         self.write_blocking(move |conn| {
-            let dropped_json = serde_json::to_string(&row.dropped_message_ids).map_err(|e| {
-                DbFailure {
+            let dropped_json =
+                serde_json::to_string(&row.dropped_message_ids).map_err(|e| DbFailure {
                     message: format!("insert_block_dropped_json: {e}"),
                     kind: DbFailureKind::Other("insert_block_dropped_json".to_string()),
-                }
-            })?;
+                })?;
             conn.execute(
                 "INSERT OR IGNORE INTO compression_blocks (
                     session_id, block_id, sequence, generation, prev_block_id,
