@@ -113,6 +113,7 @@ export const AddProviderButton: React.FC<{
 
 /**
  * @deprecated 兼容旧测试入口：历史下拉菜单已废除，现转发为直进配置。
+ * @see AddProviderButton
  */
 export const AddProviderMenu: React.FC<{
   addOpen: boolean;
@@ -454,14 +455,13 @@ export const ModelsSettingsTab: React.FC<Props> = ({ _onBlockingOverlayChange })
         <SettingsCard>
           <SettingsRow
             title="全局默认模型"
-            desc="新建对话时使用此模型"
+            desc="可选。不指定时，在对话里选择模型即可"
             control={
               <ModelsCascadeSelect
                 activeProfileId={activeProfileId || ''}
                 activeModelId={globalActiveModelId || ''}
-                onChange={async (pId, mId) => {
-                  await applyActiveModel({ providerId: pId, modelId: mId });
-                }}
+              onChange={(pId, mId) => void applyActiveModel({ providerId: pId, modelId: mId })}
+              onClear={() => void applyActiveModel(null)}
               />
             }
           />

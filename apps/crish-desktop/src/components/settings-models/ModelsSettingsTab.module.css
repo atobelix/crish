@@ -391,7 +391,7 @@
 
 .mrdAddFormFields {
   display: grid;
-  grid-template-columns: 1.2fr 1fr 0.7fr;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: var(--space-3);
 }
 
@@ -427,7 +427,16 @@
 .mrdAddModelIdField {
   position: relative;
   flex: 1;
-  min-width: 160px;
+  min-width: 0;
+  grid-column: 1 / -1;
+}
+
+.mrdAddFormPlain {
+  padding: 0;
+  border: none;
+  background: transparent;
+  border-radius: 0;
+  gap: var(--space-4);
 }
 
 .mrdAddModelIdHeader {
@@ -479,6 +488,10 @@
   background: var(--tint-hover);
 }
 
+.mrdAddSuggestItemActive {
+  background: var(--tint-hover);
+}
+
 .mrdAddSuggestMeta {
   display: flex;
   flex-direction: column;
@@ -509,67 +522,36 @@
   flex-shrink: 0;
 }
 
-.mrdAddThinkingWrap {
-  position: relative;
-}
-
-.mrdAddThinkingClose {
-  position: absolute;
-  right: 56px;
-  top: 0;
-  z-index: 1;
-}
-
-.mrdAddThinkingCloseBtn {
-  font-size: var(--font-size-xxs);
-  height: var(--space-5);
-  color: var(--text-tertiary);
-}
-
-.mrdAddThinkingOffRow {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: var(--space-1) 0;
-}
-
-.mrdAddThinkingOffLabel {
-  font-size: var(--font-size-xxs);
-  color: var(--text-secondary);
-}
-
-.mrdAddThinkingOffBtn {
-  font-size: var(--font-size-xxs);
-  height: var(--space-5);
-}
-
 .mrdAddFooterActions {
   display: flex;
   gap: var(--space-2);
   margin-left: auto;
 }
 
-/* ── 7. 展开配置抽屉（修复深色模式光学下沉） ── */
-.modelConfigPanel {
-  width: 100%;
-  margin-top: var(--space-2_5);
-  padding: var(--space-3) var(--space-3_5);
-  border-radius: var(--button-radius);
-  border: var(--hairline-width) solid var(--border-subtle);
-  background: var(--bg-card-subtle);
+.modelDialogFields {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
-  box-sizing: border-box;
+  gap: var(--space-4);
 }
 
-:global(html[data-theme='dark']) .modelConfigPanel {
-  background: color-mix(in srgb, var(--bg-primary) 60%, var(--bg-card));
+.modelThinkingBlock {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.modelThinkingHead,
+.modelThinkingOffRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-height: var(--control-height-xs);
 }
 
 .mrdCfgFields {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: var(--space-3);
 }
 
@@ -582,31 +564,10 @@
   color: var(--text-secondary);
 }
 
-.mrdCfgFooter {
-  /* plans/06 E4：sticky 吸附真实滚动容器底（包含块已修，无魔术补偿）；
-     真底色落 --bg-card，禁止幽灵 --surface-primary 与 bottom:-12px */
-  position: sticky;
-  bottom: 0;
-  background: var(--bg-card);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  flex-wrap: wrap;
-  padding-top: var(--space-1);
-  border-top: var(--hairline-width) solid color-mix(in srgb, var(--border-subtle) 60%, transparent);
-}
-
 .mrdCapGroup {
   display: flex;
   align-items: center;
   gap: var(--space-3);
-}
-
-.mrdCfgActions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1_5);
 }
 
 .mrdLatencyBadge {

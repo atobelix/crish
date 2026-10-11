@@ -1,34 +1,37 @@
 import React, { useMemo } from 'react';
-import { Button, Input } from '../ui';
+import { Input } from '../ui';
+import { findAutofillModel } from '../../services/modelsAutofillBaseline';
 import { ModelModalitiesEditor } from './ModelModalitiesEditor';
-import {
-  ModelThinkingEditor,
-  STANDARD_THINKING_PRESET,
-} from './ModelThinkingEditor';
+import { ModelThinkingSection } from './ModelThinkingSection';
 import type { CfgDraft } from './useModelProfilesState';
 import styles from './ModelsSettingsTab.module.css';
 
+function officialThinkingSeed(
+  modelId: string,
+  providerId: string | undefined
+): Record<string, string> | undefined {
+  const vendor = providerId?.startsWith('custom-') ? undefined : providerId;
+  const spec = findAutofillModel(modelId, vendor);
+  const thinking = spec?.thinking;
+  if (!thinking) return undefined;
+  const seed: Record<string, string> = {};
+  for (const [key, wire] of Object.entries(thinking)) {
+    if (typeof wire === 'string' && wire.trim()) seed[key] = wire;
+  }
+  return Object.keys(seed).length > 0 ? seed : undefined;
+}
+
 /**
- * 模型行展开配置子面板（人体工学瘦身与多模态重构）：
- * - 物理剔除协议选择器（跟随服务商总协议）
- * - modalities 多模态配置一等公民（input: text/image/audio/video/file; output: text/image/audio）
- * - 拍平的纯英文 TitleCase -> Wire 值思考映射表与开关
- * - 四维选填价格（CNY/USD 双币切换，留空优雅静默）
+ * 模型配置表单本体，由弹窗承载。
+ * 协议跟随服务商，不在这里再选。
+ * 思考档位与手动添加共用同一开关：没声明过也能补上。
  */
 export const ModelConfigPanel: React.FC<{
   modelId: string;
+  providerId?: string;
   cfgDraft: CfgDraft;
   setCfgDraft: React.Dispatch<React.SetStateAction<CfgDraft | null>>;
-  closeConfig: () => void;
-  saveConfig: () => void;
-}> = ({
-  modelId: m,
-  cfgDraft,
-  setCfgDraft,
-  closeConfig,
-  saveConfig,
-}) => {
-  // 多模态列表安全保底（不发明能力：未配置只按文本）
+}> = ({ modelId: m, providerId, cfgDraft, setCfgDraft }) => {
   const modalities = useMemo(() => {
     return (
       cfgDraft.modalities || {
@@ -38,11 +41,13 @@ export const ModelConfigPanel: React.FC<{
     );
   }, [cfgDraft.modalities]);
 
+  const seedMap = useMemo(
+    () => officialThinkingSeed(m, providerId),
+    [m, providerId]
+  );
+
   return (
-    <div
-      className={`${styles.modelConfigPanel} mrd-model-cfg`}
-      onClick={(e) => e.stopPropagation()}
-    >
+    <div className={styles.modelDialogFields}>
       {/* ── 1. 基础配置：展示名称 / 上下文长度 / 最大输出 Token ── */}
       <div className={`${styles.mrdCfgFields} mrd-cfg-fields`}>
         <label className={`${styles.mrdCfgLabel} mrd-cfg-label`}>
@@ -96,46 +101,16 @@ export const ModelConfigPanel: React.FC<{
         }
       />
 
-      {/* ── 3. 拍平思考强度配置 (TitleCase -> Wire 参数映射表，非思考模型彻底隐藏) ── */}
-      {cfgDraft.thinkingEnabled && (
-        <ModelThinkingEditor
-          enabled={cfgDraft.thinkingEnabled}
-          onEnabledChange={(en) =>
-            setCfgDraft((d) =>
-              d ? { ...d, thinkingEnabled: en } : null
-            )
-          }
-          thinkingMap={cfgDraft.thinkingMap || STANDARD_THINKING_PRESET}
-          onChange={(map) =>
-            setCfgDraft((d) => (d ? { ...d, thinkingMap: map } : null))
-          }
-        />
-      )}
-
-      {/* ── 4. 四维计费：用户裁决 #3 移出抽屉（在用量配置单价里配置）。
-           草稿仍保留既有定价（openConfigFor 从 spec 灌入），保存不改写；改价走 YAML 编辑器/用量页。 ── */}
-
-      {/* ── 5. 底部操作栏：保存 (能力矩阵由模态编辑器统一管理，用户裁决 #2) ── */}
-      <div className={`${styles.mrdCfgFooter} mrd-cfg-footer`}>
-<div className={`${styles.mrdCfgActions} mrd-cfg-actions`}>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={closeConfig}
-          >
-            收起
-          </Button>
-          <Button
-            type="button"
-            variant="primary"
-            size="sm"
-            onClick={saveConfig}
-          >
-            保存
-          </Button>
-        </div>
-      </div>
+      <ModelThinkingSection
+        enabled={cfgDraft.thinkingEnabled === true}
+        thinkingMap={cfgDraft.thinkingMap}
+        seedMap={seedMap}
+        onChange={({ enabled, thinkingMap }) =>
+          setCfgDraft((d) =>
+            d ? { ...d, thinkingEnabled: enabled, thinkingMap } : null
+          )
+        }
+      />
     </div>
   );
 };

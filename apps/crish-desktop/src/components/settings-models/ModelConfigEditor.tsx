@@ -1,5 +1,6 @@
 import React from 'react';
 import type { ProviderProfile } from '../../api/providerProfiles';
+import { Button, Dialog } from '../ui';
 import styles from './ModelsSettingsTab.module.css';
 import { ModelList } from './ModelList';
 import { ModelListHeader } from './ModelListHeader';
@@ -124,7 +125,7 @@ export const ModelConfigEditor: React.FC<ModelConfigEditorProps> = ({
           </div>
 
           {/* ─────────────────────────────────────────────────────────────
-           * 段二：置顶固定操作栏（搜索框常驻、检测/扫描按钮及手填新增抽屉）
+           * 段二：置顶固定操作栏（搜索框常驻、检测与扫描）
            * 无论模型列表如何滚动，搜索工具栏永远吸顶可见，无需滑回顶部
            * ───────────────────────────────────────────────────────────── */}
           <div className={`${styles.mrdActionBar} mrd-action-bar`}>
@@ -137,26 +138,61 @@ export const ModelConfigEditor: React.FC<ModelConfigEditorProps> = ({
               modelFilter={mc.modelFilter}
               setModelFilter={mc.setModelFilter}
               manualOpen={mc.manualOpen}
-              setManualOpen={mc.setManualOpen}
+              setManualOpen={(val) => {
+                if (val) cc.closeConfig();
+                mc.setManualOpen(val);
+              }}
               setAddDraft={mc.setAddDraft}
               emptyAddDraft={mc.emptyAddDraft}
             />
-
-            {/* Manual add form (手动添加抽屉，展开时弹性自适应) */}
-            {mc.manualOpen && (
-              <ManualAddForm
-                addDraft={mc.addDraft}
-                setAddDraft={mc.setAddDraft}
-                handleManualAdd={mc.handleManualAdd}
-                setManualOpen={mc.setManualOpen}
-                runScan={mc.runScan}
-                scanBusy={mc.scanBusy}
-                providerVendor={pc.selected?.id.startsWith('custom-') ? undefined : pc.selected?.id}
-                scannedModels={mc.scannedModelsList}
-                existingModels={mc.modelsList}
-              />
-            )}
           </div>
+
+          <Dialog
+            open={mc.manualOpen}
+            onClose={() => mc.setManualOpen(false)}
+            size="lg"
+            title="添加模型"
+            description="填写模型标识。已知模型会带出上下文与思考档位，没有带出的可以在这里补上。"
+            footer={
+              <>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => mc.setManualOpen(false)}
+                >
+                  取消
+                </Button>
+                <Button
+                  type="button"
+                  variant="primary"
+                  size="sm"
+                  disabled={!mc.addDraft.modelId.trim()}
+                  onClick={mc.handleManualAdd}
+                >
+                  添加模型
+                </Button>
+              </>
+            }
+          >
+            <ManualAddForm
+              plain
+              showActions={false}
+              addDraft={mc.addDraft}
+              setAddDraft={mc.setAddDraft}
+              handleManualAdd={mc.handleManualAdd}
+              setManualOpen={mc.setManualOpen}
+              runScan={mc.runScan}
+              scanBusy={mc.scanBusy}
+              providerVendor={
+                pc.selected?.id.startsWith('custom-')
+                  ? undefined
+                  : pc.selected?.id
+              }
+              scannedModels={mc.scannedModelsList}
+              existingModels={mc.modelsList}
+            />
+          </Dialog>
 
           {/* ─────────────────────────────────────────────────────────────
            * 段三：局部独立模型滚动视口（专属独立滚动条）

@@ -10,17 +10,15 @@ import styles from './ModelBadgePickerMenu.module.css';
 import { activateProfileModel } from '../../api/providerProfiles';
 import {
   getLiveModel,
-  listLivePickerEntries,
   listThinkingOptions,
   resolveThinkingHandoffSafe,
 } from '../../api/modelsCatalogLive';
+import { listAvailableModelPickerEntries } from '../../api/modelPickerAvailability';
 import { useModelsCatalogVersion } from '../../hooks/useModelsCatalogVersion';
-import { modelsCatalogStore } from '../../api/modelsCatalogStore';
 import { openSettings } from '../../api/storeAccess';
 import { Menu, Tooltip, Button, Input } from '../ui';
 import { getActiveProfileId } from '../../api/provider-profiles/profileActiveSelection';
-import { profileHasConfiguredKey } from '../../api/providerProfiles';
-import { useSessionStore } from '../../store/sessionStore';
+import { useSessionStore } from '../../store/storeAccess';
 import {
   getSessionThinkingTitle,
   setSessionThinkingTitle,
@@ -64,12 +62,7 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
   // 只列「可用」供应商：镜像凭据状态带 key 或凭据壳带 key（未配置的预置壳不占列表，
   // 避免选择器出现从未配置过的供应商导致切换 profile_not_found）
   const entries = useMemo(
-    () =>
-      listLivePickerEntries().filter((e) => {
-        if (modelsCatalogStore.getState().credentialStates[e.providerId]?.hasKey)
-          return true;
-        return profileHasConfiguredKey(e.providerId);
-      }),
+    () => listAvailableModelPickerEntries(),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [catalogVersion],
   );

@@ -92,6 +92,24 @@ describe('ModelsCascadeSelect live 启用过滤', () => {
     modelsCatalogStore.resetForTesting();
   });
 
+  it('未指定默认模型时触发器显示不指定，并可清除', async () => {
+    const onClear = vi.fn();
+    render(
+      <ModelsCascadeSelect
+        profiles={CREDENTIAL_PROFILES}
+        activeProfileId=""
+        activeModelId=""
+        onChange={vi.fn()}
+        onClear={onClear}
+      />
+    );
+    expect(screen.getByText('不指定')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button'));
+    const clearItem = await screen.findByRole('menuitem', { name: '不指定' });
+    fireEvent.click(clearItem);
+    expect(onClear).toHaveBeenCalledTimes(1);
+  });
+
   it('触发器展示 live 展示名，不读凭据壳名称', () => {
     render(
       <ModelsCascadeSelect
@@ -118,7 +136,9 @@ describe('ModelsCascadeSelect live 启用过滤', () => {
     expect(await screen.findByText('Acme Live')).toBeInTheDocument();
     expect(screen.queryByText('Other Co')).not.toBeInTheDocument();
 
-    fireEvent.keyDown(screen.getByRole('menuitem'), { key: 'ArrowRight' });
+    fireEvent.keyDown(screen.getByRole('menuitem', { name: 'Acme Live' }), {
+      key: 'ArrowRight',
+    });
     expect(await screen.findByRole('option', { name: /Live On/ })).toBeInTheDocument();
     expect(screen.queryByText('Live Off')).not.toBeInTheDocument();
     expect(screen.queryByText('ghost-from-ls')).not.toBeInTheDocument();

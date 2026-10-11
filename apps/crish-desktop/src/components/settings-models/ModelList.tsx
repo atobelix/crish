@@ -9,7 +9,7 @@ import {
 import { modelRefKey } from '../../api/modelsCatalogTypes';
 import { getLiveModel } from '../../api/modelsCatalogLive';
 import { Button, Switch, Tooltip } from '../ui';
-import { ModelConfigPanel } from './ModelConfigPanel';
+import { ModelConfigDialog } from './ModelConfigDialog';
 import type { CfgDraft } from './useModelProfilesState';
 import {
   defaultLocalMutation,
@@ -301,18 +301,19 @@ export const ModelList: React.FC<{
               </div>
             </div>
 
-            {expanded && cfgDraft && (
-              <ModelConfigPanel
-                modelId={m}
-                cfgDraft={cfgDraft}
-                setCfgDraft={setCfgDraft}
-                closeConfig={closeConfig}
-                saveConfig={saveConfig}
-              />
-            )}
           </div>
         );
       })}
+
+      <ModelConfigDialog
+        open={Boolean(configOpenId && cfgDraft)}
+        modelId={configOpenId ?? ''}
+        providerId={providerId}
+        cfgDraft={cfgDraft}
+        setCfgDraft={setCfgDraft}
+        onClose={closeConfig}
+        onSave={saveConfig}
+      />
 
       {modelsCount === 0 && (
         <div className={`${styles.mrdModelEmpty} mrd-model-empty`}>

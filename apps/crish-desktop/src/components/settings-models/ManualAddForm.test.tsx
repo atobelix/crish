@@ -160,6 +160,48 @@ describe('ManualAddForm (手动添加模型与配置面板 1:1 对齐一等公�
     expect(screen.queryByText('gpt-4o-mini')).toBeNull();
   });
 
+  it('模型建议框支持 ARIA combobox 语义和完整键盘选择', () => {
+    render(<ManualAddWrapper />);
+
+    const input = screen.getByRole('combobox', { name: '模型 ID *' });
+    fireEvent.focus(input);
+
+    const options = screen.getAllByRole('option');
+    expect(input).toHaveAttribute('aria-expanded', 'true');
+    expect(input).toHaveAttribute('aria-controls', screen.getByRole('listbox').id);
+
+    fireEvent.keyDown(input, { key: 'ArrowDown' });
+    expect(options[0]).toHaveAttribute('aria-selected', 'true');
+    expect(input).toHaveAttribute('aria-activedescendant', options[0]?.id);
+
+    fireEvent.keyDown(input, { key: 'ArrowDown' });
+    expect(options[1]).toHaveAttribute('aria-selected', 'true');
+    fireEvent.keyDown(input, { key: 'End' });
+    expect(options[2]).toHaveAttribute('aria-selected', 'true');
+    fireEvent.keyDown(input, { key: 'Home' });
+    expect(options[0]).toHaveAttribute('aria-selected', 'true');
+    fireEvent.keyDown(input, { key: 'ArrowUp' });
+    expect(options[2]).toHaveAttribute('aria-selected', 'true');
+
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(input).toHaveValue('custom-existing-model');
+    expect(screen.queryByRole('listbox')).toBeNull();
+  });
+
+  it('Escape 关闭建议并清除活动项', () => {
+    render(<ManualAddWrapper />);
+
+    const input = screen.getByRole('combobox', { name: '模型 ID *' });
+    fireEvent.focus(input);
+    fireEvent.keyDown(input, { key: 'ArrowDown' });
+    expect(input).toHaveAttribute('aria-activedescendant');
+
+    fireEvent.keyDown(input, { key: 'Escape' });
+    expect(input).toHaveAttribute('aria-expanded', 'false');
+    expect(input).not.toHaveAttribute('aria-activedescendant');
+    expect(screen.queryByRole('listbox')).toBeNull();
+  });
+
   it('当没有在线探测模型时，下拉建议为空，杜绝假猜', () => {
     render(<ManualAddWrapper scannedModels={[]} existingModels={[]} />);
 

@@ -460,7 +460,11 @@ describe('源码形状（旧岛读路径清零）', () => {
       path.join(dir, 'ModelBadgePickerMenu.data.ts'),
       'utf8',
     );
-    const blob = `${tsx}\n${data}`;
+    const availability = fs.readFileSync(
+      path.resolve(dir, '../../api/modelPickerAvailability.ts'),
+      'utf8',
+    );
+    const blob = `${tsx}\n${data}\n${availability}`;
     expect(blob).not.toMatch(/listPickerProfiles/);
     expect(blob).not.toMatch(/loadProfiles\(/);
     expect(blob).not.toMatch(/getModelMeta\(/);
@@ -469,7 +473,10 @@ describe('源码形状（旧岛读路径清零）', () => {
     expect(blob).not.toMatch(/THINKING_LEVEL_LABELS/);
     expect(blob).not.toMatch(/resolveCatalogEfforts/);
     expect(blob).not.toMatch(/defaultThinkingLevel/);
-    expect(tsx).toMatch(/listLivePickerEntries/);
+    expect(tsx).toMatch(/listAvailableModelPickerEntries/);
+    expect(availability).toMatch(/listLivePickerEntries/);
+    expect(availability).toMatch(/providerHasKey/);
+    expect(availability).toMatch(/profileHasConfiguredKey/);
     expect(tsx).toMatch(/getLiveModel/);
     expect(tsx).toMatch(/useModelsCatalogVersion/);
     expect(tsx).toMatch(/listThinkingOptions/);

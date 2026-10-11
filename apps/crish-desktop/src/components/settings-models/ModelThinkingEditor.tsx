@@ -16,6 +16,8 @@ export interface ModelThinkingEditorProps {
   onEnabledChange?: (enabled: boolean) => void;
   thinkingMap: Record<string, string>;
   onChange: (nextMap: Record<string, string>) => void;
+  /** 外层已经画出「思考推理」标题时关掉，避免重复 */
+  showLabel?: boolean;
 }
 
 /**
@@ -29,6 +31,7 @@ export const ModelThinkingEditor: React.FC<ModelThinkingEditorProps> = ({
   onEnabledChange: _onEnabledChange,
   thinkingMap,
   onChange,
+  showLabel = true,
 }) => {
   const currentMap = useMemo(() => {
     return thinkingMap && Object.keys(thinkingMap).length > 0
@@ -86,7 +89,9 @@ export const ModelThinkingEditor: React.FC<ModelThinkingEditorProps> = ({
 
   return (
     <div className={styles.mrdSubSection}>
-      <label className={styles.mrdFieldLabel}>思考推理</label>
+      {showLabel ? (
+        <label className={styles.mrdFieldLabel}>思考推理</label>
+      ) : null}
 
       {enabled && (
         <div className={styles.mrdThinkingTable}>

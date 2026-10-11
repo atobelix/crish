@@ -195,12 +195,15 @@ interface ModelsCascadeSelectProps {
   activeProfileId: string;
   activeModelId: string;
   onChange: (profileId: string, modelId: string) => void;
+  /** 清掉全局默认。不指定也不影响对话里另选模型。 */
+  onClear?: () => void;
 }
 
 export const ModelsCascadeSelect: React.FC<ModelsCascadeSelectProps> = ({
   activeProfileId,
   activeModelId,
   onChange,
+  onClear,
 }) => {
   const [open, setOpen] = useState(false);
   const [flyProfileId, setFlyProfileId] = useState<string | null>(null);
@@ -235,7 +238,7 @@ export const ModelsCascadeSelect: React.FC<ModelsCascadeSelectProps> = ({
       )}`
     : enabledProfiles.length === 0
       ? FALLBACK_EMPTY_SELECTION.triggerLabel
-      : '请选择默认模型...';
+      : '不指定';
 
   const closeSubmenu = useCallback(() => {
     safeTrackerRef.current.reset();
@@ -295,6 +298,37 @@ export const ModelsCascadeSelect: React.FC<ModelsCascadeSelectProps> = ({
         }}
       >
         <div className={styles.addMenuTitle}>选择服务商与模型</div>
+
+        {enabledProfiles.length > 0 ? (
+          <div
+            role="menuitem"
+            tabIndex={0}
+            className={styles.cascadeRow}
+            onClick={() => {
+              onClear?.();
+              closeSubmenu();
+              setOpen(false);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                onClear?.();
+                closeSubmenu();
+                setOpen(false);
+              }
+            }}
+          >
+            <span
+              className={
+                isCurrentModelValid
+                  ? styles.cascadeRowLabel
+                  : `${styles.cascadeRowLabel} ${styles.cascadeRowLabelActive}`
+              }
+            >
+              不指定
+            </span>
+          </div>
+        ) : null}
 
         {enabledProfiles.length === 0 ? (
           <div className={styles.cascadeEmpty}>

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import React, { useState } from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { ModelConfigPanel } from './ModelConfigPanel';
 import type { CfgDraft } from './useModelProfilesState';
@@ -8,11 +8,9 @@ import type { CfgDraft } from './useModelProfilesState';
 function PanelWrapper({
   initialThinkingEnabled = false,
   modelId = 'deepseek-v4-pro',
-  saveConfig = vi.fn(),
 }: {
   initialThinkingEnabled?: boolean;
   modelId?: string;
-  saveConfig?: () => void;
 }) {
   const [cfgDraft, setCfgDraft] = useState<CfgDraft | null>({
     displayName: 'DeepSeek V4 Pro',
@@ -53,8 +51,6 @@ function PanelWrapper({
       modelId={modelId}
       cfgDraft={cfgDraft!}
       setCfgDraft={setCfgDraft as any}
-      closeConfig={vi.fn()}
-      saveConfig={saveConfig}
     />
   );
 }
@@ -70,22 +66,29 @@ describe('ModelConfigPanel (人体工学瘦身与协议彻底剔除)', () => {
     expect(container.querySelector('[name="protocol"]')).toBeNull();
   });
 
-  it('【最高指令 2】非思考模型彻底隐藏思考配置项', () => {
+  it('未声明思考的模型仍可补上思考档位', () => {
     render(<PanelWrapper initialThinkingEnabled={false} />);
 
-    // 当 thinkingEnabled 为 false 时，思考配置区域彻底隐藏
-    expect(screen.queryByText('思考推理')).not.toBeInTheDocument();
+    expect(screen.getByText('思考推理')).toBeInTheDocument();
     expect(screen.queryByText('界面档位名称')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '配置思考档位' }));
+
+    expect(screen.getByText('界面档位名称')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '关闭思考' })).toBeInTheDocument();
   });
 
-  it('【最高指令 2】思考模型正常渲染纯英文 TitleCase 拍平映射表', () => {
+  it('已声明思考的模型直接展示档位表，并且可以关闭', () => {
     render(<PanelWrapper initialThinkingEnabled={true} />);
 
-    // 思考模型渲染思考配置区域
     expect(screen.getByText('思考推理')).toBeInTheDocument();
     expect(screen.getByText('界面档位名称')).toBeInTheDocument();
     expect(screen.getByDisplayValue('Off')).toBeInTheDocument();
     expect(screen.getByDisplayValue('Max')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '关闭思考' }));
+    expect(screen.queryByText('界面档位名称')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '配置思考档位' })).toBeInTheDocument();
   });
 
   it('能力矩阵统一（用户裁决 #2/#3）：无独立「推理」开关；四维计费不再渲染在抽屉', () => {
@@ -108,13 +111,4 @@ describe('ModelConfigPanel (人体工学瘦身与协议彻底剔除)', () => {
     expect(screen.queryByText(/四维计费/)).not.toBeInTheDocument();
   });
 
-  it('保存按钮可达（浅渲染只测 a11y；yaml 落盘在 useModelConfigSession 测）', () => {
-    const saveConfig = vi.fn();
-    render(<PanelWrapper saveConfig={saveConfig} />);
-
-    const saveBtn = screen.getByRole('button', { name: '保存' });
-    expect(saveBtn).toBeInTheDocument();
-    fireEvent.click(saveBtn);
-    expect(saveConfig).toHaveBeenCalledTimes(1);
-  });
 });

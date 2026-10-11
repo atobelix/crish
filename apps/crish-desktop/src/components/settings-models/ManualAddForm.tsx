@@ -1,12 +1,9 @@
-import React, { useMemo, useRef, useState, useEffect, useCallback } from 'react';
+import React, { useMemo, useRef, useState, useEffect, useCallback, useId } from 'react';
 import { createPortal } from 'react-dom';
 
 import { Button, Input } from '../ui';
 import { ModelModalitiesEditor } from './ModelModalitiesEditor';
-import {
-  ModelThinkingEditor,
-  STANDARD_THINKING_PRESET,
-} from './ModelThinkingEditor';
+import { ModelThinkingSection } from './ModelThinkingSection';
 import { ensureModelsCatalogLoaded } from '../../api/modelsCatalogStore';
 import { getLiveModel } from '../../api/modelsCatalogLive';
 import { formatContextLabel } from '../../api/modelCatalogPure';
@@ -16,11 +13,9 @@ import styles from './ModelsSettingsTab.module.css';
 import { AppIcon } from '../ui/icons/index';
 
 /**
- * 手动添加模型表单（与配置面板 1:1 对齐一等公民设计）：
- * - 模型 ID 行支持内联在线获取按钮（移除右上旧独立按钮）
- * - 下拉联想严格限定在线探测到的模型，杜绝猜测兜底
- * - 智能预填：当输入或选定模型 ID 时自动匹配最新官方参数（展示名/上下文/输出/多模态/思考档位/计费）
- * - 字段与 ModelConfigPanel 完全统一：展示名称 / 上下文长度 / 最大输出 / 多模态矩阵 / 思考档位表
+ * 手动添加模型表单，字段与已有模型配置弹窗一致。
+ * 模型标识行内联在线获取；联想只用来自探测和已配置列表。
+ * 已知模型自动带出展示名、上下文、多模态和思考档位。
  */
 export const ManualAddForm: React.FC<{
   addDraft: AddDraft;
@@ -34,6 +29,10 @@ export const ManualAddForm: React.FC<{
   scannedModels?: string[];
   /** 该供应商已配置模型（与探针并集） */
   existingModels?: string[];
+  /** 放进弹窗时去掉内嵌卡片和标题 */
+  plain?: boolean;
+  /** 弹窗底栏自己放按钮时关掉表单内按钮 */
+  showActions?: boolean;
 }> = ({
   addDraft,
   setAddDraft,
@@ -44,8 +43,13 @@ export const ManualAddForm: React.FC<{
   providerVendor,
   scannedModels = [],
   existingModels = [],
+  plain = false,
+  showActions = true,
 }) => {
+  const inputId = useId();
+  const listboxId = useId();
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [activeSuggestionId, setActiveSuggestionId] = useState<string | null>(null);
   const inputContainerRef = useRef<HTMLDivElement | null>(null);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
   const [dropdownRect, setDropdownRect] = useState<{
@@ -90,6 +94,15 @@ export const ManualAddForm: React.FC<{
     }
     return [];
   }, [addDraft.modelId, onlineIds, providerVendor]);
+  const activeSuggestionIndex = activeSuggestionId
+    ? suggestions.indexOf(activeSuggestionId)
+    : -1;
+  const activeOptionId =
+    activeSuggestionIndex >= 0
+      ? `${listboxId}-option-${activeSuggestionIndex}`
+      : undefined;
+  const isSuggestionMenuOpen =
+    showSuggestions && suggestions.length > 0 && dropdownRect !== null;
 
   // 更新浮层相对于视口的准确定位
   const updateDropdownPos = useCallback(() => {
@@ -131,6 +144,7 @@ export const ManualAddForm: React.FC<{
         dropdownRef.current &&
         !dropdownRef.current.contains(target)
       ) {
+        setActiveSuggestionId(null);
         setShowSuggestions(false);
       }
     };
@@ -149,20 +163,76 @@ export const ManualAddForm: React.FC<{
     setAddDraft((prev) =>
       calculateAutofillDraft(id, providerVendor, prev, { isSelection: true })
     );
+    setActiveSuggestionId(null);
     setShowSuggestions(false);
   };
 
+  const handleModelIdKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.nativeEvent.isComposing || e.keyCode === 229 || e.key === 'Process') {
+      return;
+    }
+
+    if (e.key === 'Escape') {
+      if (showSuggestions) {
+        e.preventDefault();
+        setActiveSuggestionId(null);
+        setShowSuggestions(false);
+      }
+      return;
+    }
+
+    if (suggestions.length === 0) return;
+
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      setShowSuggestions(true);
+      updateDropdownPos();
+      const direction = e.key === 'ArrowDown' ? 1 : -1;
+      const start = activeSuggestionIndex < 0 ? (direction > 0 ? -1 : 0) : activeSuggestionIndex;
+      const nextIndex = (start + direction + suggestions.length) % suggestions.length;
+      setActiveSuggestionId(suggestions[nextIndex] ?? null);
+      return;
+    }
+
+    if (e.key === 'Home' || e.key === 'End') {
+      if (!isSuggestionMenuOpen) return;
+      e.preventDefault();
+      const nextIndex = e.key === 'Home' ? 0 : suggestions.length - 1;
+      setActiveSuggestionId(suggestions[nextIndex] ?? null);
+      return;
+    }
+
+    if (e.key === 'Enter' && isSuggestionMenuOpen && activeSuggestionIndex >= 0) {
+      e.preventDefault();
+      const selected = suggestions[activeSuggestionIndex];
+      if (selected) handleSelectSuggestion(selected);
+    }
+  };
+
   return (
-    <div className={`${styles.mrdAddForm} mrd-add-form`}>
-      <div className={styles.mrdAddHeaderRow}>
-        <span className={styles.mrdAddHeaderLabel}>手动添加模型</span>
-      </div>
+    <div
+      className={
+        plain
+          ? `${styles.mrdAddForm} ${styles.mrdAddFormPlain} mrd-add-form`
+          : `${styles.mrdAddForm} mrd-add-form`
+      }
+    >
+      {plain ? null : (
+        <div className={styles.mrdAddHeaderRow}>
+          <span className={styles.mrdAddHeaderLabel}>手动添加模型</span>
+        </div>
+      )}
 
       <div className={`${styles.mrdAddFormFields} mrd-add-form-fields`}>
         {/* 模型 ID 智能输入行（集成在线获取） */}
         <div ref={inputContainerRef} className={styles.mrdAddModelIdField}>
           <div className={styles.mrdAddModelIdHeader}>
-            <span className={styles.mrdAddModelIdLabel}>模型 ID *</span>
+            <label
+              htmlFor={inputId}
+              className={styles.mrdAddModelIdLabel}
+            >
+              模型 ID *
+            </label>
             {runScan && (
               <Button
                 type="button"
@@ -186,12 +256,19 @@ export const ManualAddForm: React.FC<{
             )}
           </div>
           <Input
+            id={inputId}
             size="sm"
             placeholder="输入或选择，如 gpt-5.6-sol"
+            role="combobox"
+            aria-autocomplete="list"
+            aria-expanded={isSuggestionMenuOpen}
+            aria-controls={isSuggestionMenuOpen ? listboxId : undefined}
+            aria-activedescendant={isSuggestionMenuOpen ? activeOptionId : undefined}
             value={addDraft.modelId}
             onChange={(e) => {
               const val = e.target.value;
               setAddDraft((d) => ({ ...d, modelId: val }));
+              setActiveSuggestionId(null);
               setShowSuggestions(true);
               updateDropdownPos();
             }}
@@ -203,10 +280,10 @@ export const ManualAddForm: React.FC<{
               if (addDraft.modelId.trim()) {
                 applyAutofill(addDraft.modelId.trim());
               }
+              setActiveSuggestionId(null);
+              setShowSuggestions(false);
             }}
-            onKeyDown={(e) => {
-              if (e.key === 'Escape') setShowSuggestions(false);
-            }}
+            onKeyDown={handleModelIdKeyDown}
             spellCheck={false}
           />
         </div>
@@ -219,6 +296,10 @@ export const ManualAddForm: React.FC<{
             <div
               ref={dropdownRef}
               className={styles.mrdAddSuggestMenu}
+              data-floating-layer=""
+              id={listboxId}
+              role="listbox"
+              aria-label="模型建议"
               // 动态几何（视口定位）保留 style：静态视觉规则在 module CSS
               style={{
                 top: dropdownRect.top,
@@ -227,13 +308,19 @@ export const ManualAddForm: React.FC<{
               }}
               onMouseDown={(e) => e.stopPropagation()}
             >
-              {suggestions.map((id) => {
+              {suggestions.map((id, index) => {
                 const live = getLiveModel(providerVendor ?? '', id);
                 const name = live?.displayName || id;
+                const isActive = index === activeSuggestionIndex;
                 return (
                   <div
                     key={id}
-                    className={styles.mrdAddSuggestItem}
+                    id={`${listboxId}-option-${index}`}
+                    role="option"
+                    aria-selected={isActive}
+                    className={`${styles.mrdAddSuggestItem}${isActive ? ` ${styles.mrdAddSuggestItemActive}` : ''}`}
+                    onMouseMove={() => setActiveSuggestionId(id)}
+                    onMouseDown={(e) => e.preventDefault()}
                     onClick={() => handleSelectSuggestion(id)}
                   >
                     <div className={styles.mrdAddSuggestMeta}>
@@ -302,77 +389,41 @@ export const ManualAddForm: React.FC<{
         }
       />
 
-      {/* 思考推理档位编辑器 */}
-      {addDraft.thinkingEnabled ? (
-        <div className={styles.mrdAddThinkingWrap}>
-          <div className={styles.mrdAddThinkingClose}>
+      <ModelThinkingSection
+        enabled={addDraft.thinkingEnabled === true}
+        thinkingMap={addDraft.thinkingMap}
+        onChange={({ enabled, thinkingMap }) =>
+          setAddDraft((d) => ({
+            ...d,
+            thinkingEnabled: enabled,
+            thinkingMap,
+          }))
+        }
+      />
+
+      {showActions ? (
+        <div className={`${styles.mrdAddFormFooter} mrd-add-form-footer`}>
+          <div className={styles.mrdAddFooterActions}>
             <Button
               type="button"
-              variant="ghost"
-              size="xs"
-              onClick={() =>
-                setAddDraft((d) => ({
-                  ...d,
-                  thinkingEnabled: false,
-                }))
-              }
-              className={styles.mrdAddThinkingCloseBtn}
+              variant="secondary"
+              size="sm"
+              onClick={() => setManualOpen(false)}
             >
-              关闭思考
+              取消
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              size="sm"
+              disabled={!addDraft.modelId.trim()}
+              onClick={handleManualAdd}
+            >
+              添加模型
             </Button>
           </div>
-          <ModelThinkingEditor
-            enabled={true}
-            thinkingMap={addDraft.thinkingMap || STANDARD_THINKING_PRESET}
-            onChange={(map) =>
-              setAddDraft((d) => ({ ...d, thinkingMap: map }))
-            }
-          />
         </div>
-      ) : (
-        <div className={styles.mrdAddThinkingOffRow}>
-          <span className={styles.mrdAddThinkingOffLabel}>思考推理</span>
-          <Button
-            type="button"
-            variant="ghost"
-            size="xs"
-            onClick={() =>
-              setAddDraft((d) => ({
-                ...d,
-                thinkingEnabled: true,
-                thinkingMap: { ...STANDARD_THINKING_PRESET },
-              }))
-            }
-            icon={<AppIcon name="plus" size={11} />}
-            className={styles.mrdAddThinkingOffBtn}
-          >
-            配置思考档位
-          </Button>
-        </div>
-      )}
-
-      {/* 底部操作区 */}
-      <div className={`${styles.mrdAddFormFooter} mrd-add-form-footer`}>
-        <div className={styles.mrdAddFooterActions}>
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            onClick={() => setManualOpen(false)}
-          >
-            取消
-          </Button>
-          <Button
-            type="button"
-            variant="primary"
-            size="sm"
-            disabled={!addDraft.modelId.trim()}
-            onClick={handleManualAdd}
-          >
-            添加模型
-          </Button>
-        </div>
-      </div>
+      ) : null}
     </div>
   );
 };
