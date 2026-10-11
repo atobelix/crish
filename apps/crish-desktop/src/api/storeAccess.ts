@@ -100,6 +100,7 @@ export type {
 export { getLayoutState } from './store-access/storeAccessCore';
 export { unarchiveSession, setActiveAgentId, addMessageToolCall, updateMessageToolCall, updateMessageThinking, createSession, archiveSession } from './store-access/sessionAccess';
 export { setAppSettings, getAppSettings, getCommandPermissions, addCommandPermission } from './store-access/settingsAccess';
+export { reportRuntimeStatus } from '../store/sessionRuntimeStatusStore';
 export { setScheduledTasks, syncTelemetryData, pushDiffFile } from './store-access/telemetryAccess';
 export { openFileViewerInSession } from '../store/workspace-shell';
 

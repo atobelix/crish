@@ -17,7 +17,7 @@ import { WebglAddon } from '@xterm/addon-webgl';
 import { ptyResize, ptyWrite } from '../../api/ptySessionApi';
 import { parseColorToOklch } from '../../api/oklchColorGuard';
 import { ResizeObserverManager } from '../ui/utils/ResizeObserverManager';
-import { useLayoutAnimationStore } from '../../store/layoutAnimationStore';
+import { hasActiveLayoutAnimations } from '../../store/storeAccess';
 import { logger } from '../../services/LoggerService';
 import type { InteractiveXtermStatus } from './TerminalCard.xterm';
 import { startPtySession } from './ptyLifecycle';
@@ -506,7 +506,7 @@ export function useXtermTerminal({
         ) {
           return true;
         }
-        if (useLayoutAnimationStore.getState().activeAnimations.size > 0) {
+        if (hasActiveLayoutAnimations()) {
           return true;
         }
         return false;

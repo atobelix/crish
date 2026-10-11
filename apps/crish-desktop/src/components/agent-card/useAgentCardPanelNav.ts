@@ -9,7 +9,7 @@ import {
   setActiveDiffSource as setActiveDiffSourceAccess,
 } from '../../api/storeAccess';
 import { openFileInPanel } from '../../api/workspaceFsApi';
-import { useActiveWorkspace } from '../../store/workspaceStore';
+import { useActiveWorkspace } from '../../store/storeAccess';
 
 export interface AgentCardPanelNav {
   onOpenDiff: (diff: FileDiff) => void;

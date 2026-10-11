@@ -29,7 +29,7 @@ import {
 } from '../../api/SessionRuntimeRegistry';
 import { recordPendingContextState } from '../../api/provider-profiles/contextStatePending';
 import { useModelsCatalogVersion } from '../../hooks/useModelsCatalogVersion';
-import { useSessionStore } from '../../store/sessionStore';
+import { useSessionStore } from '../../store/storeAccess';
 import { AppIcon } from '../ui/icons/index';
 
 export type ComposerFusedTriggerProps = {

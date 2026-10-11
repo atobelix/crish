@@ -11,8 +11,6 @@ import {
   findInsertIndex,
   isSortedByMessageOrder,
   messageOrderKey,
-} from '../store/messageOrderKey';
-import {
   mergeSessionMessageFields,
   sortMessagesByOrder,
 } from './store-access/helperAccess';

@@ -3,7 +3,7 @@
  * 写面仍在外观设置（useAppearanceSettings）；本模块只读、不改设置表。
  */
 
-import { useSettingsStore } from '../store/settingsStore';
+import { getAppSettings } from './store-access/settingsAccess';
 
 export const CODE_INDENT_TWO = '  ';
 export const CODE_INDENT_FOUR = '    ';
@@ -33,7 +33,7 @@ export function codeIndentAttr(raw: unknown): '2' | '4' | 'tab' {
 export function readCodeBlockIndent(): string {
   try {
     const fromStore =
-      useSettingsStore.getState().appSettings?.markdown?.codeBlockIndent;
+      getAppSettings()?.markdown?.codeBlockIndent;
     if (fromStore !== undefined) return normalizeCodeBlockIndent(fromStore);
   } catch {
     /* store 未就绪 */

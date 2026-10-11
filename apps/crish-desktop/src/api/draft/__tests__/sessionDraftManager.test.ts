@@ -26,13 +26,9 @@ const h = vi.hoisted(() => {
   return { drafts, setComposerDraft };
 });
 
-vi.mock('../../../store/sessionStore', () => ({
-  useSessionStore: {
-    getState: () => ({
-      composerDrafts: h.drafts,
-      setComposerDraft: h.setComposerDraft,
-    }),
-  },
+vi.mock('../../storeAccess', () => ({
+  getSessionStoreState: () => ({ composerDrafts: h.drafts }),
+  setComposerDraft: h.setComposerDraft,
 }));
 
 describe('SessionDraftManager · 会话隔离三级草稿流转', () => {

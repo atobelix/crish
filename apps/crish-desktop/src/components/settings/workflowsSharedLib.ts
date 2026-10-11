@@ -15,7 +15,7 @@ import {
   getSessionById,
   renameSession,
 } from '../../api/storeAccess';
-import { useSessionStore } from '../../store/sessionStore';
+import { useSessionStore } from '../../store/storeAccess';
 
 /** 面板读取计划超时（settings 双计时共用） */
 export const WORKFLOWS_LOAD_TIMEOUT_MS = 12_000;

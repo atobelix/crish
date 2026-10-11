@@ -20,14 +20,13 @@
  */
 
 import { getPermissionMode } from '../storeAccess';
-import { useSessionStore } from '../../store/sessionStore';
 import {
   getSessionThinkingTitle,
   loadModelThinkingPref,
   getLastSentContextSignature,
 } from '../SessionRuntimeRegistry';
 import { contextInjectionDispatcher } from '../contextInjectionDispatcher';
-import { isPendingDraft } from '../../store/draftSession';
+import { getSessionStoreState, isPendingDraft } from '../../store/storeAccess';
 
 /** 暂存键（取走即清空；载荷为 { sessionId, text } 会话寻址 JSON） */
 export const PENDING_CONTEXT_STATE_KEY = 'crish_pending_context_state_v1';
@@ -54,7 +53,7 @@ function readActiveProfileId(): string {
 /** 读本会话思考档位 Title（yaml 字典 key）。优先会话显式设定，回退模型持久偏好。无则空串。 */
 function readThinkingLevel(targetSessionId?: string): string {
   try {
-    const sid = (targetSessionId || useSessionStore.getState().activeSessionId || '').trim();
+    const sid = (targetSessionId || getSessionStoreState().activeSessionId || '').trim();
     const title =
       (sid ? getSessionThinkingTitle(sid) : null) ??
       loadModelThinkingPref(readActiveProfileId(), readActiveModelId());
@@ -209,7 +208,7 @@ export function dispatchInstantContextStateNotification(
  */
 export function recordPendingContextState(targetSessionId?: string): void {
   try {
-    const store = useSessionStore.getState();
+    const store = getSessionStoreState();
     const sid = (targetSessionId || store.activeSessionId || '').trim();
     if (!sid) {
       // 无活跃会话时不记录无主暂存，防止污染后续会话

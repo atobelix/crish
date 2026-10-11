@@ -19,3 +19,8 @@ export {
   mergeSessionMessageFields,
   sortMessagesByOrder,
 } from '../../store/sessionSharedHelpers';
+export {
+  findInsertIndex,
+  isSortedByMessageOrder,
+  messageOrderKey,
+} from '../../store/messageOrderKey';

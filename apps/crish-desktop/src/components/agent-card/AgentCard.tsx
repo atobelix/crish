@@ -11,7 +11,7 @@ import {
   browseAgentSidePanel,
   openAgentInSidePanel,
 } from '../../api/openAgentPanel';
-import { useSessionStore } from '../../store/sessionStore';
+import { useSessionStore } from '../../store/storeAccess';
 import {
   selectActiveSessionId,
   selectPanelAgentId,

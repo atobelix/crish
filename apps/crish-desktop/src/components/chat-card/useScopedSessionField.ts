@@ -1,5 +1,5 @@
 import { useEffect, useReducer, useRef } from 'react';
-import { useSessionStore } from '../../store/sessionStore';
+import { useSessionStore } from '../../store/storeAccess';
 import type { SessionState } from '../../store/types';
 
 export const EMPTY_ARRAY: never[] = [];

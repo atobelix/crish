@@ -11,7 +11,7 @@
  */
 import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 
-import { openSettings } from '../../store/settingsUiStore';
+import { openSettings } from '../../store/storeAccess';
 import type { SettingsTabType } from '../../store/types';
 import { readStoredTheme, setTheme, type UiTheme } from '../../api/themeStore';
 import styles from './SettingsQuickMenu.module.css';

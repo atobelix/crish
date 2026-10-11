@@ -13,7 +13,7 @@ import {
   type WorkflowDefinition,
   type WorkflowScheduleDraft,
 } from '../../api/workflowApi';
-import { useSessionStore } from '../../store/sessionStore';
+import { useSessionStore } from '../../store/storeAccess';
 import { sessionDraftManager } from '../../api/draft/sessionDraftManager';
 import { closeSettings } from '../../store/storeAccess';
 import styles from './SettingsScheduleTab.module.css';

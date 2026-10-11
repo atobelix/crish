@@ -3,7 +3,7 @@ import React, { useEffect } from 'react';
 import styles from './Sidebar.module.css';
 import { Button } from '../ui';
 import { SettingsQuickMenu } from '../settings/SettingsQuickMenu';
-import { useAuthStore } from '../../store/authStore';
+import { useAuthField } from '../../store/storeAccess';
 import { AppIcon } from '../ui/icons/index';
 
 export interface UserProfileCardProps {
@@ -13,7 +13,9 @@ export interface UserProfileCardProps {
 
 export const UserProfileCard: React.FC<UserProfileCardProps> = React.memo(
   ({ username = 'orange', workspaceName = 'Conex Workspace' }) => {
-    const { isLoggedIn, user, initialized, initSession } = useAuthStore();
+    const { isLoggedIn, user, initialized, initSession } = useAuthField(
+      (state) => state
+    );
 
     useEffect(() => {
       if (!initialized) {

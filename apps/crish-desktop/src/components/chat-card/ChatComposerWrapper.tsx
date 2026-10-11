@@ -11,7 +11,7 @@ import { slotCore } from '../../services/view-registry/SlotCore';
 import type { ChatComposerAboveProps } from './chatComposerAboveProps';
 import './workspaceChatComposerAbove.slot';
 import { ApprovalDock } from './ApprovalDock';
-import { useSessionStore } from '../../store/sessionStore';
+import { useSessionStore } from '../../store/storeAccess';
 import { resolveSessionProgressItems } from '../../api/sessionProgressApi';
 import {
   ComposerPlanProgressBar,

@@ -5,7 +5,7 @@
  * 空源 prune 由维 02 命令负责；本模块不补锚、不改树。
  */
 
-import { findNodeById, useLayoutTreeStore } from '../../store/layout-tree';
+import { findNodeById, useLayoutTreeStore } from '../../store/storeAccess';
 import type { PaneDropRegion } from './sessionTabDragFeel';
 
 export type SessionTabDropTarget =

@@ -1,7 +1,7 @@
 import React from 'react';
 import type { SessionState } from '../../../store/types';
 import { GENERAL_FOLDER } from '../../../api/projectStore';
-import { navigateToNewDraft } from '../../../store/draft-routing';
+import { navigateToNewDraft } from '../../../store/storeAccess';
 import { getCompositionRoot } from '../../../app/compositionRoot';
 import type { SessionListWindowRange } from '../../../api/sessionListWindow';
 import { WindowedSessionUl } from './WindowedSessionUl';

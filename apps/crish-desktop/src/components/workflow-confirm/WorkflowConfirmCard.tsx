@@ -11,7 +11,7 @@ import styles from './WorkflowConfirmCard.module.css';
 import { Button, Tooltip } from '../ui';
 import { useToast } from '../../services/toast/ToastContext';
 import { sessionDraftManager } from '../../api/draft/sessionDraftManager';
-import { useSessionStore } from '../../store/sessionStore';
+import { useSessionStore } from '../../store/storeAccess';
 import {
   registerWorkflowFromGrillMe,
   type WorkflowConfirmPayload,

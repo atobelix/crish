@@ -31,7 +31,7 @@ import {
 } from '../../store/storeAccess';
 import { toast } from '../../services/toast';
 import { sessionListDisplayTitle } from '../../api/sessionTitle';
-import { useDraftFolder } from '../../store/draft-routing';
+import { useDraftFolder } from '../../store/storeAccess';
 import styles from './UnitChromeActions.module.css';
 import { AppIcon } from '../ui/icons/index';
 

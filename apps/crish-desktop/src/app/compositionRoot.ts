@@ -68,7 +68,8 @@ import { useWorkspaceShellStore } from '../store/workspace-shell/workspaceShellS
 import { useLayoutTreeStore, setPrimaryPanelChecker } from '../store/layout-tree';
 import type { SessionState } from '../store/types';
 import type { Settings } from '../api/clientApi';
-import { getPermissionState, getSettingsState } from '../store/storeAccess';
+import { usePermissionStore } from '../store/permissionStore';
+import { useSettingsStore } from '../store/settingsStore';
 import { viewRegistry } from '../services/view-registry';
 
 export type PtyFacade = {
@@ -227,15 +228,16 @@ function buildDefaultLayoutFacade(): LayoutFacade {
       const st = getLayoutState();
       st.setSidebarCollapsed(!st.sidebarCollapsed);
     },
-    getPlanModeEnabled: () => getPermissionState().planModeEnabled,
+    getPlanModeEnabled: () => usePermissionStore.getState().planModeEnabled,
     setPlanModeEnabled: (enabled) =>
-      getPermissionState().setPlanModeEnabled(enabled),
+      usePermissionStore.getState().setPlanModeEnabled(enabled),
     togglePlanMode: () => {
-      const st = getPermissionState();
+      const st = usePermissionStore.getState();
       st.setPlanModeEnabled(!st.planModeEnabled);
     },
-    getAppSettings: () => getSettingsState().appSettings,
-    setAppSettings: (settings) => getSettingsState().setAppSettings(settings),
+    getAppSettings: () => useSettingsStore.getState().appSettings,
+    setAppSettings: (settings) =>
+      useSettingsStore.getState().setAppSettings(settings),
   };
 }
 

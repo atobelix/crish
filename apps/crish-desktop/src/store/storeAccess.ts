@@ -38,6 +38,12 @@ import { useWorkerStore, type WorkerStore } from './workerStore';
 import { usePermissionStore, type PermissionStore } from './permissionStore';
 import { useSettingsStore, type SettingsStore } from './settingsStore';
 import { useLayoutStore, type LayoutStore } from './layoutStore';
+import { useAuthStore, type AuthState } from './authStore';
+import {
+  useSessionRuntimeStatusStore,
+  type SessionRuntimeStatus,
+} from './sessionRuntimeStatusStore';
+import { useLayoutAnimationStore } from './layoutAnimationStore';
 import type { FileDiff, } from './types';
 import type { PermissionMode } from '../api/permissionModes';
 import type {
@@ -131,6 +137,22 @@ export function useSettingsField<T>(selector: (state: SettingsStore) => T): T {
   return useSettingsStore(selector);
 }
 
+export function useAuthField<T>(selector: (state: AuthState) => T): T {
+  return useAuthStore(selector);
+}
+
+export function useSessionRuntimeStatus(
+  sessionId: string | null | undefined
+): SessionRuntimeStatus | undefined {
+  return useSessionRuntimeStatusStore((state) =>
+    sessionId ? state.statusBySession[sessionId] : undefined
+  );
+}
+
+export function hasActiveLayoutAnimations(): boolean {
+  return useLayoutAnimationStore.getState().activeAnimations.size > 0;
+}
+
 export const selectAppSettings = (s: Pick<SettingsStore, 'appSettings'>) =>
   s.appSettings;
 
@@ -176,16 +198,25 @@ export {
   useSettingsUiStore,
   selectShowSettingsOverlay,
   selectSettingsActiveTab,
+  openSettings,
+  toggleSettingsOverlay,
 } from './settingsUiStore';
-export { useWorkspaceStore } from './workspaceStore';
+export { useWorkspaceStore, useActiveWorkspace } from './workspaceStore';
 
 // ── session 域只读与生命周期协调面 ───────────────────────────────────────────
 
 export {
   getSessionById,
-  SessionCoordinator,
-  deleteSessionCascade,
 } from './sessionStore';
+export { SessionCoordinator, deleteSessionCascade } from './SessionCoordinator';
+
+export {
+  isContextStateCarrierMessage,
+  isContextStateInjection,
+} from './sessionInjectionMount';
+export { clearRuntimeStatus } from './sessionRuntimeStatusStore';
+export { needsEngineMessageHydrate } from './sessionSharedHelpers';
+export { findInactiveHydratedSessionIdsToEvict } from './sessionMessageEviction';
 
 // ── 会话域读面（T4 A4 统一读面：原过渡读面门面的会话/layout-tree/workspace-shell/streaming/draft 域并入）──
 
@@ -227,7 +258,13 @@ export {
   isChatColumn,
 } from './layoutHelpers';
 
-export { isPendingDraft, PENDING_DRAFT_SESSION_ID } from './draftSession';
+export {
+  isPendingDraft,
+  PENDING_DRAFT_SESSION_ID,
+  mintDraftSessionId,
+} from './draftSession';
+
+export { useDraftFolder } from './draft-routing/draftFolderRegistry';
 
 export { closeSettings } from './settingsUiStore';
 
@@ -242,6 +279,7 @@ export {
   findNodeById,
   flattenTree,
   detectDropZone,
+  activeSessionIdOf,
   isZoneSame,
   rectFromDOM,
   MIN_SPLIT_RATIO,
@@ -271,6 +309,7 @@ export {
   openToolInSession,
   openToolInLeaf,
   openToolInActiveTab,
+  openNewTerminalInActiveTab,
   openFileViewerInSession,
   setFileViewerModeOverride,
   consumeFileViewerModeOverride,
@@ -296,7 +335,11 @@ export type { StreamToolLive } from './streamingStore';
 export {
   registerActiveVsm,
   unregisterActiveVsm,
+  getActiveVsm,
 } from './messageSnapshotsBridge';
+
+export { sortMessagesByOrder } from './sessionSharedHelpers';
+export { triggerSessionMessageHydrateIfNeeded } from './sessionStore';
 
 
 // ── 类型再导出（读面消费方经本模块取类型，避免直连 store 模块）─────────────────
@@ -306,6 +349,7 @@ export type {
   WorkerStore,
   PermissionStore,
   SettingsStore,
+  AuthState,
   FileDiff,
   PermissionMode,
   CronJob,

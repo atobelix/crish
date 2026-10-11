@@ -12,7 +12,7 @@
 import React, { useCallback, useRef, useState } from 'react';
 import { GENERAL_FOLDER } from '../../../api/projectStore';
 import type { SessionState } from '../../../store/types';
-import { useLayoutTreeStore } from '../../../store/layout-tree';
+import { useLayoutTreeStore } from '../../../store/storeAccess';
 import styles from '../SidebarSessionList.module.css';
 import type { SidebarDragItem } from './sessionListTypes';
 import {

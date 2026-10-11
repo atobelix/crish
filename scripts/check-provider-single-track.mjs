@@ -328,7 +328,7 @@ const D5_WHITELIST = new Map([
   ['apps/crish-desktop/src/api/session-persistence/sessionLocalStorage.ts', '会话导入源键（持久化）'],
   ['apps/crish-desktop/src/api/shellWindowScope.ts', '窗口 scoped localStorage 键'],
   ['apps/crish-desktop/src/api/streamTextBatcher.ts', '流式批键（sessionId::messageId[::toolId]，非模型身份）'],
-  ['apps/crish-desktop/src/store/streamingStore.ts', '流式批键镜像（streamBatchKey 同形契约）'],
+  ['apps/crish-desktop/src/store/streamingStoreCore.ts', '流式 store 键（sessionId::messageId，与 streamBatchKey 同形契约；非模型身份）'],
   ['apps/crish-desktop/src/api/workflow-api/workflowConfirmSignatures.ts', 'workflow 载荷签名（多字段拼接摘要，非身份）'],
 ]);
 {

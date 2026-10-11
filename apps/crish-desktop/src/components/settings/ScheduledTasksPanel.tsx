@@ -20,8 +20,7 @@ import {
   navigateToChatSession,
   navigateToNewDraft,
 } from '../../store/storeAccess';
-import { useLayoutStore } from '../../store/layoutStore';
-import { useSessionStore } from '../../store/sessionStore';
+import { useLayoutStore, useSessionStore } from '../../store/storeAccess';
 import { getWorkspacePath } from '../../api/projectStore';
 import { sessionDraftManager } from '../../api/draft/sessionDraftManager';
 import { WORKFLOW_CREATE_TEMPLATE } from '../../api/workflow-api/workflowAssistantCard';

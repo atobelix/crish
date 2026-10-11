@@ -8,8 +8,7 @@
  */
 
 import type { LayoutTree } from '../../../store/layout-tree/types';
-import { collectLeaves } from '../../../store/layout-tree/layoutTreeQuery';
-import { activeSessionIdOf } from '../../../store/layout-tree/sessionTabModel';
+import { collectLeaves, activeSessionIdOf } from '../../../store/storeAccess';
 
 export type PaneDropRegion = 'left' | 'right' | 'top' | 'bottom' | 'center';
 

@@ -5,11 +5,11 @@
  * `streamingStore.ts` re-export 取用，import 路径不变。
  */
 
-import { useStreamingStore } from './streamingStore';
+import { useStreamingStore } from './streamingStoreCore';
 import type {
   StreamToolLive,
   StreamEntry,
-} from './streamingStore';
+} from './streamingStoreCore';
 
 /** 设置流式文本（命令式）。 */
 export function setStreamText(

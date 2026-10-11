@@ -11,7 +11,7 @@ import styles from './RuntimePanel.module.css';
 import { RuntimeSection } from './RuntimeSection';
 import { useToast } from '../../services/toast/ToastContext';
 import { Button, Tooltip } from '../ui';
-import { useSessionStore } from '../../store/sessionStore';
+import { useSessionStore } from '../../store/storeAccess';
 import {
   formatTrashedAt,
   listTrashEntries,

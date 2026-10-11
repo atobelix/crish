@@ -1,5 +1,5 @@
 import type { SessionTabDropTarget } from './sessionTabDropCommit';
-import { useWorkspaceShellStore } from '../../store/workspace-shell/workspaceShellStore';
+import { useWorkspaceShellStore } from '../../store/storeAccess';
 
 /**
  * 侧栏会话拖入右侧工作区落点提交器（支持直接分屏或在顶栏任意位置自由插入）。

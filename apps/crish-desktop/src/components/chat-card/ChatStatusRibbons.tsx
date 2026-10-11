@@ -15,7 +15,7 @@ import styles from './ChatStatusRibbons.module.css';
 
 import { AppErrorBoundary } from '../AppErrorBoundary';
 import type { EngineStatus } from '../../api/engineConfig';
-import { useSessionStore } from '../../store/sessionStore';
+import { useSessionStore } from '../../store/storeAccess';
 import {
   resolveSessionProgressItems,
   computeChecklistProgress,

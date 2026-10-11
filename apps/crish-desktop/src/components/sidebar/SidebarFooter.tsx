@@ -4,9 +4,10 @@ import React from 'react';
 import styles from './Sidebar.module.css';
 import { Button, IconButton, Tooltip } from '../ui';
 import {
+  selectShowSettingsOverlay,
   toggleSettingsOverlay,
-  useShowSettingsOverlay,
-} from '../../store/settingsUiStore';
+  useSettingsUiStore,
+} from '../../store/storeAccess';
 import { UserProfileCard } from './UserProfileCard';
 import { AppIcon } from '../ui/icons/index';
 
@@ -18,7 +19,7 @@ export interface SettingsIconButtonProps {
 
 export const SettingsIconButton: React.FC<SettingsIconButtonProps> = React.memo(
   ({ updateAvailable }) => {
-    const showSettings = useShowSettingsOverlay();
+    const showSettings = useSettingsUiStore(selectShowSettingsOverlay);
     const tooltipText = `${showSettings ? '关闭' : '打开'}设置中心 (Cmd/Ctrl + ,)${
       updateAvailable ? ' · 有新版本可用' : ''
     }`;

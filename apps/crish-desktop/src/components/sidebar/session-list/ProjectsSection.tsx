@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import type { SessionState } from '../../../store/types';
 import type { ProjectEntry } from '../../../api/projectStore';
 import { emitUiEvent } from '../../../api/uiEvents';
-import { navigateToNewDraft } from '../../../store/draft-routing';
+import { navigateToNewDraft } from '../../../store/storeAccess';
 import { getCompositionRoot } from '../../../app/compositionRoot';
 import { Button, Tooltip } from '../../ui';
 import styles from '../SidebarSessionList.module.css';

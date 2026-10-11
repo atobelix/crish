@@ -6,9 +6,11 @@
  */
 import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 import styles from './TerminalCard.module.css';
-import { useSessionStore } from '../../store/storeAccess';
+import {
+  useSessionStore,
+  openNewTerminalInActiveTab,
+} from '../../store/storeAccess';
 import { getWorkspacePath } from '../../api/projectStore';
-import { openNewTerminalInActiveTab } from '../../store/workspace-shell/openTool';
 import {
   InteractiveXtermTerminal,
   type InteractiveXtermHandle,

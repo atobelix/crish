@@ -24,6 +24,10 @@ export function normalizeSessionId(
   return id.length > 0 ? id : undefined;
 }
 
+export function getActiveSessionId(): string | null {
+  return getActiveSessionIdFromFacade();
+}
+
 export function selectSessionById(
   sessions: readonly SessionState[],
   sessionId: string | null | undefined,

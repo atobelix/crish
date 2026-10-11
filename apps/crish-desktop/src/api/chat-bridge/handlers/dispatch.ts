@@ -12,7 +12,7 @@ import type {
   LegacyEventType,
 } from './eventParser';
 import type { HandlerEnv } from './handlerEnv';
-import { useSessionStore } from '../../../store/sessionStore';
+import { getSessionStoreState } from '../../storeAccess';
 import { emitUiEvent } from '../../../api/uiEvents';
 import { invalidateEditObjects } from '../editSessionConsumer';
 import { logger } from '../../../services/LoggerService';
@@ -144,7 +144,7 @@ export function onTimelineTruncate(
   const { event } = envelope;
   if (!event.sessionId) return;
   try {
-    const store = useSessionStore.getState();
+    const store = getSessionStoreState();
     // ① 取回 boundary user 节点原文（回填数据源；节点在投影截断前读取）
     let backfillText = '';
     // ② R2-b ⑥：截断范围（boundary target 之后）内的消息 id —— 投影截断前

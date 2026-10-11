@@ -11,14 +11,16 @@ import {
   RESTORE_LAST_WORKSPACE_LS_KEY,
   RESTORE_LAST_WORKSPACE_SETTING_KEY,
 } from '../store/workspace-shell/layoutRestorePolicy';
-import { getSessionById } from '../store/sessionStore';
+import {
+  getSessionById,
+  triggerSessionMessageHydrateIfNeeded,
+} from '../store/sessionStore';
 import * as layoutTreePkg from '../store/layout-tree';
 import { getCompositionRoot } from './compositionRoot';
 import { getSettingsState } from '../store/storeAccess';
 import type { Settings } from '../api/clientApi';
 import { clearLegacyOpenTabsMap } from '../api/workspaceChromeTabs';
 import type { LayoutTree } from '../store/layout-tree/types';
-import { triggerSessionMessageHydrateIfNeeded } from '../store/sessionCrudActions';
 import { isPendingDraft } from '../store/draftSession';
 import { staggeredIdleQueue } from '../services/idle/StaggeredIdleQueue';
 

@@ -32,7 +32,7 @@ import {
 import { extractFilePathFromToolArgs } from '../../api/workspaceFsApi';
 import { extractToolCommand } from '../../api/toolPresentation';
 import { VirtualScrollManager } from '../../api/VirtualScrollManager';
-import { getActiveVsm } from '../../store/messageSnapshotsBridge';
+import { getActiveVsm } from '../../store/storeAccess';
 import {
   computePagingAnchor,
   restorePagingAnchor,

@@ -14,7 +14,7 @@
  * CI Guardrail: Max 400 lines of effective code, UTF-8 无 BOM.
  */
 
-import { useSessionStore } from '../../store/sessionStore';
+import { getSessionStoreState, setComposerDraft } from '../storeAccess';
 
 /** 草稿注入模式 */
 export type DraftInjectionMode =
@@ -82,7 +82,7 @@ export class SessionDraftManager {
     if (!sessionId) return '';
     const memory = this.drafts.get(sessionId);
     if (memory !== undefined) return memory.content;
-    return useSessionStore.getState().composerDrafts[sessionId] || '';
+    return getSessionStoreState().composerDrafts[sessionId] || '';
   }
 
   /**
@@ -196,7 +196,7 @@ export class SessionDraftManager {
     }
     const record = this.drafts.get(sessionId);
     if (record) {
-      useSessionStore.getState().setComposerDraft(sessionId, record.content);
+      setComposerDraft(sessionId, record.content);
     }
   }
 
@@ -208,7 +208,7 @@ export class SessionDraftManager {
       this.pendingSave = null;
     }
     for (const [sid, rec] of this.drafts.entries()) {
-      useSessionStore.getState().setComposerDraft(sid, rec.content);
+      setComposerDraft(sid, rec.content);
     }
   }
 
@@ -237,10 +237,7 @@ export class SessionDraftManager {
       const target = this.pendingSave;
       this.pendingSave = null;
       if (target) {
-        useSessionStore.getState().setComposerDraft(
-          target.sessionId,
-          target.content
-        );
+        setComposerDraft(target.sessionId, target.content);
       }
     }, DRAFT_PERSIST_DEBOUNCE_MS);
   }

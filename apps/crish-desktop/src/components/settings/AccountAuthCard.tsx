@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useAuthStore } from '../../store/authStore';
+import { useAuthField } from '../../store/storeAccess';
 import { SettingsCard } from './SettingsUI';
 import { Button, Tooltip, Input } from '../ui';
 import styles from './AccountAuthCard.module.css';
@@ -19,7 +19,7 @@ export const AccountAuthCard: React.FC = () => {
     loadDevices,
     revokeDevice,
     clearError,
-  } = useAuthStore();
+  } = useAuthField((state) => state);
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');

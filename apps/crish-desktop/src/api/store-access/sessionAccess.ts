@@ -6,6 +6,7 @@
  */
 import type {
   MessageToolCall,
+  MessageContextInjection,
   SessionAgent,
   SessionGoalMode,
   SessionMessage,
@@ -94,6 +95,17 @@ export function setActiveSessionId(id: string): void {
   const sid = normalizeSessionId(id);
   if (!sid) return;
   getSessionStoreState().setActiveSessionId(sid);
+}
+
+export function setComposerDraft(sessionId: string, draft: string): void {
+  getSessionStoreState().setComposerDraft(sessionId, draft);
+}
+
+export function addContextInjection(
+  targetSessionId: string,
+  injection: MessageContextInjection
+): void {
+  getSessionStoreState().addContextInjection(targetSessionId, injection);
 }
 
 export function setActiveAgentId(id: string | null): void {

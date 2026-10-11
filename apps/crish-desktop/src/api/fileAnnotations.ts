@@ -11,7 +11,7 @@
  * 从 workspaceFsApi 拆分而来；hub 经 re-export 保持对外契约不变。
  */
 
-import { useSessionStore } from '../store/sessionStore';
+import { getActiveSessionId } from './store-access/sessionAccessQuery';
 import { sessionRuntimeRegistry, type Attachment } from './SessionRuntimeRegistry';
 import type { ChatAttachment } from '../hooks/chat-stream/types';
 
@@ -47,7 +47,7 @@ function resolveSessionId(explicit?: string | null): string {
   if (explicit === '') return '';
   if (typeof explicit === 'string' && explicit.trim()) return explicit.trim();
   try {
-    const active = useSessionStore.getState().activeSessionId;
+    const active = getActiveSessionId();
     return active && active.trim() ? active.trim() : DRAFT_SESSION_KEY;
   } catch {
     return DRAFT_SESSION_KEY;

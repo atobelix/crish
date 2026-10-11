@@ -3,7 +3,7 @@ import { toast } from '../../services/toast/ToastContext';
 import { createProjectSkill, type DesktopSkill } from '../../api/skillsApi';
 import { skillStableId } from '../../api/skillId';
 import { getWorkspacePath } from '../../api/projectStore';
-import { useSessionStore } from '../../store/sessionStore';
+import { useSessionStore } from '../../store/storeAccess';
 import { sessionDraftManager } from '../../api/draft/sessionDraftManager';
 import { emitUiEvent } from '../../api/uiEvents';
 import { closeSettings } from '../../store/storeAccess';

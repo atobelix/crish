@@ -430,15 +430,27 @@ export function setTheme(theme: UiTheme | string): UiTheme {
 
     // 异步同步至 settingsStore 与磁盘持久化，保证全局单真源一致，消除旧值覆盖
     try {
-      void import('../store/settingsStore').then(({ useSettingsStore }) => {
-        const current = useSettingsStore.getState().appSettings;
-        if (current && current.theme !== t) {
-          useSettingsStore.getState().setAppSettings({ ...current, theme: t });
-        }
-      });
-      void import('./clientApi').then(({ clientApi }) => {
-        void clientApi.saveSettingsEx('__global__', 'global', { theme: t });
-      });
+      void import('./storeAccess')
+        .then(({ getAppSettings, setAppSettings }) => {
+          if (typeof window === 'undefined') return;
+          const current = getAppSettings();
+          if (current && current.theme !== t) {
+            setAppSettings({ ...current, theme: t });
+          }
+        })
+        .catch((error: unknown) => {
+          console.error('[themeStore] Failed to sync app settings', error);
+        });
+      void import('./clientApi')
+        .then(({ clientApi }) => {
+          if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+            return;
+          }
+          return clientApi.saveSettingsEx('__global__', 'global', { theme: t });
+        })
+        .catch((error: unknown) => {
+          console.error('[themeStore] Failed to persist settings cache', error);
+        });
     } catch {
       /* swallow-ok: 异步持久化尽力而为 */
     }

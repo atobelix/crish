@@ -9,8 +9,12 @@
  */
 
 import { useMemo } from 'react';
-import { useSessionField, useTerminalField } from '../../../store/storeAccess';
-import { selectActiveSessionId, selectActiveSession } from '../../../store/sessionStore';
+import {
+  useSessionField,
+  useTerminalField,
+  selectActiveSessionId,
+  selectActiveSession,
+} from '../../../store/storeAccess';
 import { selectDiffFiles, selectActiveDiffSource } from '../../../store/storeAccess';
 import { selectSessionDiffFiles } from '../../../api/sessionDiffDerivation';
 import type { GitStatusCode } from '../../../api/gitTreeHelpers';

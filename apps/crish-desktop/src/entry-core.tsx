@@ -85,12 +85,14 @@ export class StartupCoordinator {
       if (import.meta.env.DEV) {
         void Promise.all([
           import('./store/layoutStore'),
+          import('./store/workspaceStore'),
           import('./store/sessionStore'),
           import('./store/layout-tree'),
         ])
-          .then(([layout, session, tree]) => {
+          .then(([layout, workspace, session, tree]) => {
             const win = window as unknown as Record<string, unknown>;
             win.__CRISH_LAYOUT_STORE__ = layout.useLayoutStore;
+            win.__CRISH_WORKSPACE_STORE__ = workspace.useWorkspaceStore;
             win.__CRISH_STORE__ = session.useSessionStore;
             win.__CRISH_SESSION_STORE__ = session.useSessionStore;
             win.__CRISH_TREE_STORE__ = tree.useLayoutTreeStore;
@@ -353,17 +355,23 @@ export class StartupCoordinator {
         );
         void import('./bootstrap-core')
           .then((m) => m.bootstrapCore())
-          .catch(() => {});
+          .catch(() => {
+            /* swallow-ok: 回退 bootstrap 已失败；上层 handleFatalStartupError 兜底 */
+          });
         Promise.allSettled([
           import('./components/diff/DiffCard'),
           import('./components/files/FilesCard'),
           import('./components/overview/OverviewCard'),
           import('./components/workspace/PreviewCard'),
           import('./components/workspace/RuntimePanel'),
-        ]).catch(() => {});
+        ]).catch(() => {
+          /* swallow-ok: allSettled 仅预热；单 chunk 失败不阻断启动 */
+        });
         void import('./bootstrap-full')
           .then((m) => m.bootstrapFull())
-          .catch(() => {});
+          .catch(() => {
+            /* swallow-ok: 预热路径失败；主 bootstrap-core 已在执行 */
+          });
       });
   }
 
