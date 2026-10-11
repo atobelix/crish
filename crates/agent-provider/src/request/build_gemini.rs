@@ -219,7 +219,9 @@ pub fn detect_gemini_unpaired_tool_calls(messages: &[Arc<AgentMessage>]) -> Vec<
 ///   `orphan_ids`）并 `tracing::error!` 结构化日志——调用方（会话循环出站
 ///   组装处）据此执行「本地合成补齐 → 单次重试组包」；仍失败则标记会话
 ///   `wire_pairing_poisoned`。**禁止**在导线层静默插入假 functionResponse。
-pub fn validate_gemini_tool_pairing(messages: &[Arc<AgentMessage>]) -> Result<(), RequestBuildError> {
+pub fn validate_gemini_tool_pairing(
+    messages: &[Arc<AgentMessage>],
+) -> Result<(), RequestBuildError> {
     let orphan_ids = detect_gemini_unpaired_tool_calls(messages);
     if orphan_ids.is_empty() {
         return Ok(());
@@ -383,10 +385,7 @@ fn tool_result_gemini_parts(msg: &AgentMessage) -> Vec<Value> {
         {
             // T-34（R-J）：wire 投影面统一清洗（与 chat 轨 tool 消息同口径，
             // 确定性 + 幂等）
-            let cleaned = clean_output(
-                &stringify_tool_output(output),
-                &CleanupOptions::default(),
-            );
+            let cleaned = clean_output(&stringify_tool_output(output), &CleanupOptions::default());
             parts.push(json!({
                 "functionResponse": {
                     "name": tool_name,

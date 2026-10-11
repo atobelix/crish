@@ -65,7 +65,10 @@ impl ToolCallCollector {
     /// 是否已捕获到至少一个具名调用（RU-08/09 判定用，02 §五 #5/#6）
     pub fn has_named_calls(&self) -> bool {
         self.pending.values().any(|pending| {
-            pending.name.as_deref().is_some_and(|n| !n.trim().is_empty())
+            pending
+                .name
+                .as_deref()
+                .is_some_and(|n| !n.trim().is_empty())
         })
     }
 

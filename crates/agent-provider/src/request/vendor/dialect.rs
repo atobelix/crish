@@ -460,10 +460,7 @@ mod tests {
         };
         let (val, elevated) = assemble_thinking_dialect(&opts);
         let budget = val.unwrap()["thinking"]["budget_tokens"].as_u64().unwrap();
-        assert_eq!(
-            budget, 32000,
-            "无上限时不得按 64000-4096 钳制到 59904"
-        );
+        assert_eq!(budget, 32000, "无上限时不得按 64000-4096 钳制到 59904");
         assert_eq!(elevated, Some(32000 + 4096));
     }
 

@@ -366,11 +366,16 @@ impl ModelCatalog {
                     .expect("内置 catalog.json 必须可解析（serde 全量解析测试钉死转录错误）");
                 ModelCatalog {
                     // 预填资产的旧文件键只在加载时转换；运行索引采用 JSON 二元组。
-                    entries: file.entries.into_iter().map(|(key, entry)| {
-                        let (provider, model) = key.split_once("::")
-                            .expect("内置预填资产必须含完整供应商与模型键");
-                        (ModelCatalogEntry::key(provider, model), entry)
-                    }).collect(),
+                    entries: file
+                        .entries
+                        .into_iter()
+                        .map(|(key, entry)| {
+                            let (provider, model) = key
+                                .split_once("::")
+                                .expect("内置预填资产必须含完整供应商与模型键");
+                            (ModelCatalogEntry::key(provider, model), entry)
+                        })
+                        .collect(),
                     version: 0,
                 }
             })

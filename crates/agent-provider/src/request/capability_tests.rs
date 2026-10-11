@@ -69,7 +69,10 @@ fn model_level_tiers_whitelist_and_wire_rename_do_not_leak() {
         ("high", None),
     ]);
     let entry = entry_with_tiers("acme", "acme-model", tiers);
-    let cat = fake_catalog(&[(crate::models::ModelRef::new("acme", "acme-model").key(), entry)]);
+    let cat = fake_catalog(&[(
+        crate::models::ModelRef::new("acme", "acme-model").key(),
+        entry,
+    )]);
 
     let cap = describe(&cat, "acme", "acme-model");
     assert!(cap.supports_reasoning, "条目档位存在 → 支持 reasoning");
@@ -97,7 +100,10 @@ fn model_level_tiers_hidden_tier_is_absent() {
         ("max", None),
     ]);
     let entry = entry_with_tiers("acme", "acme-model", tiers);
-    let cat = fake_catalog(&[(crate::models::ModelRef::new("acme", "acme-model").key(), entry)]);
+    let cat = fake_catalog(&[(
+        crate::models::ModelRef::new("acme", "acme-model").key(),
+        entry,
+    )]);
 
     let cap = describe(&cat, "acme", "acme-model");
     assert_eq!(cap.efforts, vec!["medium".to_string()]);
@@ -117,7 +123,10 @@ fn no_model_level_tiers_is_conservative() {
         supports_reasoning: true,
         ..Default::default()
     };
-    let cat = fake_catalog(&[(crate::models::ModelRef::new("deepseek", "deepseek-v4-flash").key(), entry)]);
+    let cat = fake_catalog(&[(
+        crate::models::ModelRef::new("deepseek", "deepseek-v4-flash").key(),
+        entry,
+    )]);
 
     let cap = describe(&cat, "deepseek", "deepseek-v4-flash");
     assert!(!cap.supports_reasoning, "无 thinking_tiers → 保守不支持");
@@ -148,7 +157,10 @@ fn bad_config_model_a_does_not_hide_model_b_same_provider() {
 
     let cat = fake_catalog(&[
         (crate::models::ModelRef::new("acme", "model-a").key(), bad_a),
-        (crate::models::ModelRef::new("acme", "model-b").key(), good_b),
+        (
+            crate::models::ModelRef::new("acme", "model-b").key(),
+            good_b,
+        ),
     ]);
 
     // A 描述：全隐藏 → 空白名单 → 保守不支持，不 panic。
@@ -171,7 +183,10 @@ fn illegal_tiers_declaration_is_conservative_not_throw() {
     let entry_a = entry_with_tiers("deepseek", "deepseek-v4-bad", tiers_hidden_all);
     let mut entry_a = entry_a;
     entry_a.supports_reasoning = true; // 能力位不再参与单源合并，仅验证不 panic
-    let cat = fake_catalog(&[(crate::models::ModelRef::new("deepseek", "deepseek-v4-bad").key(), entry_a)]);
+    let cat = fake_catalog(&[(
+        crate::models::ModelRef::new("deepseek", "deepseek-v4-bad").key(),
+        entry_a,
+    )]);
 
     let cap_a = describe(&cat, "deepseek", "deepseek-v4-bad");
     assert!(
@@ -195,7 +210,10 @@ fn thinking_format_and_budget_projected_from_entry() {
         "thinkingBudgetMax": 32768,
     });
     let entry: ModelCatalogEntry = serde_json::from_value(entry_json).expect("条目解析");
-    let cat = fake_catalog(&[(crate::models::ModelRef::new("acme", "claude-sonnet-5").key(), entry)]);
+    let cat = fake_catalog(&[(
+        crate::models::ModelRef::new("acme", "claude-sonnet-5").key(),
+        entry,
+    )]);
 
     let cap = describe(&cat, "acme", "claude-sonnet-5");
     assert!(cap.supports_reasoning);
@@ -204,7 +222,10 @@ fn thinking_format_and_budget_projected_from_entry() {
     assert_eq!(cap.thinking_budget_max, Some(32768));
     // 未声明 format/budget → None（协议 builder 按缺省映射）
     let entry2 = entry_with_tiers("acme", "plain-model", tier_obj(&[("low", Some("low"))]));
-    let cat2 = fake_catalog(&[(crate::models::ModelRef::new("acme", "plain-model").key(), entry2)]);
+    let cat2 = fake_catalog(&[(
+        crate::models::ModelRef::new("acme", "plain-model").key(),
+        entry2,
+    )]);
     let cap2 = describe(&cat2, "acme", "plain-model");
     assert_eq!(cap2.thinking_format, None);
     assert_eq!(cap2.thinking_budget_default, None);
@@ -222,7 +243,10 @@ fn describe_uses_resolved_wire_protocol() {
         mode: Some("anthropic".to_string()),
         ..Default::default()
     };
-    let cat = fake_catalog(&[(crate::models::ModelRef::new("acme", "claude-opus-4").key(), entry)]);
+    let cat = fake_catalog(&[(
+        crate::models::ModelRef::new("acme", "claude-opus-4").key(),
+        entry,
+    )]);
     let cap = describe(&cat, "acme", "claude-opus-4");
     assert_eq!(cap.wire_protocol, WireProtocol::Anthropic);
 

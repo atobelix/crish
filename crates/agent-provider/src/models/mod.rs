@@ -14,24 +14,24 @@
 
 mod behavior;
 mod cache_key;
-mod credential_ref;
 mod catalog;
 pub mod catalog_types;
+mod credential_ref;
 mod ttl;
 
 pub use behavior::{cache_behavior_for, CacheBehavior, CacheTtl, VendorId};
 pub use cache_key::{derive_prompt_cache_key, session_affinity_headers};
-pub use credential_ref::CredentialRef;
 pub use catalog::{
     CatalogError, LiveModels, ModelCatalog, ModelCatalogEntry, ModelCatalogFile,
     PeakPricingSchedule, PriceDerivation, ScannedCapabilities, ScannedModel, TieredPriceTier,
 };
 pub use catalog_types::{
-    default_config_version, default_protocol, CacheControlFormat,
-    CompatSpec, CurrencyKind, MaxTokensField, ModalitiesSpec, ModelPricingSpec, ModelRef, ModelSpec,
-    PricingTier, PricingUnit, ProtocolKind, ProviderSpec, ThinkingFormat, ThinkingMapExt, UnifiedModelsConfig,
+    default_config_version, default_protocol, CacheControlFormat, CompatSpec, CurrencyKind,
+    MaxTokensField, ModalitiesSpec, ModelPricingSpec, ModelRef, ModelSpec, PricingTier,
+    PricingUnit, ProtocolKind, ProviderSpec, ThinkingFormat, ThinkingMapExt, UnifiedModelsConfig,
     YamlParseError,
 };
+pub use credential_ref::CredentialRef;
 pub use ttl::cache_ttl_for_declared_model;
 
 #[cfg(test)]

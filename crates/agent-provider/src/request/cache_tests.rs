@@ -300,7 +300,13 @@ fn build_cache_policy_deepseek_omits_everything() {
         None
     );
     assert_eq!(
-        build_cache_policy(None, Some("deepseek"), Some("deepseek-chat"), Some("ses-1"), None),
+        build_cache_policy(
+            None,
+            Some("deepseek"),
+            Some("deepseek-chat"),
+            Some("ses-1"),
+            None
+        ),
         None
     );
     // 即使 overrides 显式开启也省略（omit 优先于覆盖）
@@ -477,7 +483,13 @@ fn build_cache_policy_catalog_drives_deepseek_omit() {
         None
     );
     assert_eq!(
-        build_cache_policy(None, Some("deepseek"), Some("deepseek-v4-flash"), Some("ses-1"), None),
+        build_cache_policy(
+            None,
+            Some("deepseek"),
+            Some("deepseek-v4-flash"),
+            Some("ses-1"),
+            None
+        ),
         None
     );
 }

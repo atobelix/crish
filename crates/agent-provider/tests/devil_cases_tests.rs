@@ -424,7 +424,11 @@ models:
         let temp_dir = std::env::temp_dir().join("conex_test_devil_12");
         let _ = fs::create_dir_all(&temp_dir);
         let config_file = temp_dir.join("models.yaml");
-        fs::write(&config_file, "models:\n  - id: test\n    vendor: test\n    protocol: openai/chat").unwrap();
+        fs::write(
+            &config_file,
+            "models:\n  - id: test\n    vendor: test\n    protocol: openai/chat",
+        )
+        .unwrap();
 
         let status = ConfigMigrationManager::ensure_migrated(&config_file).unwrap();
         if let MigrationStatus::MigratedSuccessfully { backup_path, .. } = status {

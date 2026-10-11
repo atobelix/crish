@@ -379,11 +379,7 @@ fn deepseek_matrix_drives_injection_decision_to_none() {
     let behavior = cache_behavior_for(None, VendorId::Deepseek, "deepseek-v4-flash");
     assert!(behavior.omit_cache_control);
     assert!(!behavior.supports_prompt_cache_key);
-    for model in [
-        "deepseek-v4-flash",
-        "any-model",
-        "deepseek-chat",
-    ] {
+    for model in ["deepseek-v4-flash", "any-model", "deepseek-chat"] {
         assert_eq!(
             build_cache_policy(None, Some("deepseek"), Some(model), Some("ses-1"), None),
             None,

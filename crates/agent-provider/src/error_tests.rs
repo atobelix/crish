@@ -225,7 +225,11 @@ fn row9_rate_limit() {
     }
 
     // 短周期 RPM 错误提取秒数（自愈可重试）
-    let error = classify(None, Some("Rate limit reached. Please try again in 5.5s."), None);
+    let error = classify(
+        None,
+        Some("Rate limit reached. Please try again in 5.5s."),
+        None,
+    );
     assert_eq!(error.kind(), Kind::RateLimit);
     assert_eq!(error.retry_after(), Some(Duration::from_millis(5500)));
 
@@ -272,7 +276,11 @@ fn row9_rate_limit() {
         "24h quota reached.",
     ] {
         let error = classify(Some(429), Some(long_lock_body), None);
-        assert_eq!(error.kind(), Kind::Quota, "long lock should fast-fail as Quota: {long_lock_body}");
+        assert_eq!(
+            error.kind(),
+            Kind::Quota,
+            "long lock should fast-fail as Quota: {long_lock_body}"
+        );
         assert!(!error.is_retryable());
     }
 }
@@ -689,7 +697,10 @@ fn request_build_error_unpaired_tool_calls_shape() {
     assert_eq!(err.orphan_ids(), ["call_a", "call_b"]);
     assert_eq!(err.protocol(), Some("anthropic"));
     let display = err.to_string();
-    assert!(display.contains("anthropic"), "Display 应含协议轨：{display}");
+    assert!(
+        display.contains("anthropic"),
+        "Display 应含协议轨：{display}"
+    );
     assert!(display.contains("call_a"), "Display 应含孤儿 ID：{display}");
     assert!(display.contains("call_b"), "Display 应含孤儿 ID：{display}");
 }

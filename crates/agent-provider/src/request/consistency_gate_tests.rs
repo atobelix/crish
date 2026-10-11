@@ -30,7 +30,9 @@ use crate::request::build::dialect::{
     assemble_thinking_dialect, DialectBuildOptions, ReasoningEffort as DialectEffort,
     ThinkingDialectFormat,
 };
-use crate::request::{describe_model, normalize_reasoning_effort, ModelCapability, ReasoningEffort};
+use crate::request::{
+    describe_model, normalize_reasoning_effort, ModelCapability, ReasoningEffort,
+};
 
 /// 构造 fake 目录：给定 `(vendor::model, 条目)` 对（与 capability_tests 同构只读构造）。
 fn fake_catalog(entries: &[(String, ModelCatalogEntry)]) -> ModelCatalog {
@@ -111,7 +113,10 @@ fn efforts_whitelist_equals_request_accept_set() {
         ("max", None),
     ]);
     let entry = entry_with_tiers("acme", "acme-model", tiers, true);
-    let cat = fake_catalog(&[(crate::models::ModelRef::new("acme", "acme-model").key(), entry)]);
+    let cat = fake_catalog(&[(
+        crate::models::ModelRef::new("acme", "acme-model").key(),
+        entry,
+    )]);
     let cap = describe(&cat, "acme", "acme-model");
 
     // 描述面白名单 = 提供档并集（hidden 不入集）。
@@ -184,7 +189,10 @@ fn bad_config_does_not_hide_provider_nor_misfire_sibling_request() {
     );
     let cat = fake_catalog(&[
         (crate::models::ModelRef::new("acme", "model-a").key(), bad_a),
-        (crate::models::ModelRef::new("acme", "model-b").key(), good_b),
+        (
+            crate::models::ModelRef::new("acme", "model-b").key(),
+            good_b,
+        ),
     ]);
 
     // A 描述：保守兜底 → 不支持（不 panic，坏配置暴露在被执行处而非描述处）。
@@ -239,7 +247,10 @@ fn wire_spelling_consistency_describe_vs_request_dialect() {
     assert_eq!(body, Some(json!({ "reasoning_effort": "higher" })));
 
     // 改名一致：描述面 wire_effort_for("medium")=="high" 与 dialect 字典 value 同源。
-    let renamed = dialect_openai_wire(DialectEffort::Medium, entry.wire_effort_for("medium").unwrap());
+    let renamed = dialect_openai_wire(
+        DialectEffort::Medium,
+        entry.wire_effort_for("medium").unwrap(),
+    );
     assert_eq!(renamed, Some(json!({ "reasoning_effort": "high" })));
 }
 
@@ -248,8 +259,8 @@ fn wire_spelling_consistency_multivendor_via_dialect() {
     // 各 vendor 下同一 canonical effort=high 的实际 wire 字节（dialect OpenAiEffort）。
     // DeepSeek/GLM/Qwen/Kimi 均走 reasoning_effort 标量方言。
     for map_wire in ["high", "HIGH-custom"] {
-        let body = dialect_openai_wire(DialectEffort::High, map_wire)
-            .expect("high 档按字典必发 wire");
+        let body =
+            dialect_openai_wire(DialectEffort::High, map_wire).expect("high 档按字典必发 wire");
         assert_eq!(body, json!({ "reasoning_effort": map_wire }));
     }
 }

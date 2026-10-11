@@ -1485,8 +1485,6 @@ fn assistant_with_tool_call_and_result_blocks_emits_both_on_wire() {
     assert_eq!(wire[3].role, "user");
 }
 
-
-
 #[test]
 fn responses_api_assistant_with_tool_call_and_result_blocks() {
     let msgs = vec![
@@ -1508,7 +1506,12 @@ fn responses_api_assistant_with_tool_call_and_result_blocks() {
         .collect();
     assert_eq!(
         types,
-        vec!["message", "function_call", "function_call_output", "message"]
+        vec![
+            "message",
+            "function_call",
+            "function_call_output",
+            "message"
+        ]
     );
     assert_eq!(items[1]["call_id"], "call_read_1");
     assert_eq!(items[2]["call_id"], "call_read_1");

@@ -218,7 +218,10 @@ pub fn detect_anthropic_unpaired_tool_calls(messages: &[Value]) -> Vec<String> {
             continue;
         };
         for block in content {
-            let block_type = block.get("type").and_then(Value::as_str).unwrap_or_default();
+            let block_type = block
+                .get("type")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
             if role == "assistant" && block_type == "tool_use" {
                 if let Some(id) = block.get("id").and_then(Value::as_str) {
                     if !id.trim().is_empty() {
@@ -376,12 +379,8 @@ fn build_system_prompt_string(system_prompt: Option<&str>) -> Option<String> {
 ///   `{"type":"adaptive"}`；不可解析 → 不注入（不降级到魔法刻度）。
 ///
 /// 返回值第二项 = 供 max_tokens 自动抬升的预算（dialect 产出的 budget_tokens）。
-fn anthropic_thinking_dialect(
-    opts: &AnthropicRequestOptions,
-) -> (Option<Value>, Option<u64>) {
-    if opts.thinking_format
-        != Some(crate::models::catalog_types::ThinkingFormat::Anthropic)
-    {
+fn anthropic_thinking_dialect(opts: &AnthropicRequestOptions) -> (Option<Value>, Option<u64>) {
+    if opts.thinking_format != Some(crate::models::catalog_types::ThinkingFormat::Anthropic) {
         return (None, None);
     }
     // effort：reasoning_effort 优先，thinking_intensity 兜底（off/auto → 不注入）
@@ -466,7 +465,10 @@ fn to_anthropic_messages(context: &RequestBuildContext) -> Vec<Value> {
                 // 历史水合兜底：若 assistant 消息同体携带 ToolResult 块（hydrate.rs）
                 let tool_results = tool_result_anthropic_content(message);
                 if !tool_results.is_empty() {
-                    push_alternating(&mut result, &json!({ "role": "user", "content": tool_results }));
+                    push_alternating(
+                        &mut result,
+                        &json!({ "role": "user", "content": tool_results }),
+                    );
                 }
             }
             AgentMessageRole::Tool => {

@@ -191,7 +191,8 @@ pub fn build_endpoint_url(protocol: ProtocolKind, base_url: &str) -> String {
                 trimmed_base.to_string()
             } else if trimmed_base.ends_with("/v1") {
                 format!("{trimmed_base}/chat/completions")
-            } else if trimmed_base.contains("sensenova.cn") || trimmed_base.ends_with("openai.com") {
+            } else if trimmed_base.contains("sensenova.cn") || trimmed_base.ends_with("openai.com")
+            {
                 format!("{trimmed_base}/v1/chat/completions")
             } else {
                 format!("{trimmed_base}/chat/completions")

@@ -66,7 +66,9 @@ impl UnifiedModelsConfig {
             return Err(YamlParseError::semantic("models.yaml 根节点必须为配置对象"));
         }
         if value.get("models").is_some() {
-            return Err(YamlParseError::semantic("旧版 v1 models 列表必须先执行显式迁移"));
+            return Err(YamlParseError::semantic(
+                "旧版 v1 models 列表必须先执行显式迁移",
+            ));
         }
         let mut config: Self = serde_yaml::from_value(value).map_err(YamlParseError::from_serde)?;
         config

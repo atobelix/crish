@@ -119,18 +119,9 @@ fn budget_and_level_conversion_tables() {
         effort_to_gemini_thinking_level(ReasoningEffort::Max),
         "high"
     );
-    assert_eq!(
-        thinking_to_gemini_thinking_level(I::Minimal),
-        "minimal"
-    );
-    assert_eq!(
-        thinking_to_gemini_thinking_level(I::Xhigh),
-        "high"
-    );
-    assert_eq!(
-        thinking_to_gemini_thinking_level(I::Max),
-        "high"
-    );
+    assert_eq!(thinking_to_gemini_thinking_level(I::Minimal), "minimal");
+    assert_eq!(thinking_to_gemini_thinking_level(I::Xhigh), "high");
+    assert_eq!(thinking_to_gemini_thinking_level(I::Max), "high");
 }
 
 // ── deprecated infer_thinking_capability：行为钉死（禁止再接入生产出站路径）──
@@ -190,7 +181,10 @@ fn normalize_intensity_clamps_out_of_whitelist() {
         Some(I::Low),
         "minimal → low 降级"
     );
-    assert_eq!(normalize_thinking_intensity(I::Medium, &CAP), Some(I::Medium));
+    assert_eq!(
+        normalize_thinking_intensity(I::Medium, &CAP),
+        Some(I::Medium)
+    );
     assert_eq!(
         normalize_thinking_intensity(I::High, &NO_THINKING),
         None,

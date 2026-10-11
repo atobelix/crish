@@ -348,7 +348,11 @@ pub fn to_chat_messages_with_compat<M: Borrow<AgentMessage>>(
                     .blocks
                     .iter()
                     .any(|b| matches!(b, AgentMessageBlock::ToolResult { .. }));
-                if content.is_empty() && tool_calls.is_empty() && reasoning.is_none() && !has_tool_results {
+                if content.is_empty()
+                    && tool_calls.is_empty()
+                    && reasoning.is_none()
+                    && !has_tool_results
+                {
                     continue;
                 }
 
@@ -419,10 +423,7 @@ fn tool_result_chat_message(
     tool_call_id: &str,
     output: &conex_types::tool::ToolOutput,
 ) -> ChatMessage {
-    let cleaned = clean_output(
-        &stringify_tool_output(output),
-        &CleanupOptions::default(),
-    );
+    let cleaned = clean_output(&stringify_tool_output(output), &CleanupOptions::default());
     let text = if cleaned.cleaned.is_empty() {
         "(no output)".to_string()
     } else {
@@ -511,7 +512,8 @@ pub fn to_responses_input_items<M: Borrow<AgentMessage>>(
                     .blocks
                     .iter()
                     .any(|b| matches!(b, AgentMessageBlock::ToolResult { .. }));
-                if content.is_empty() && !has_tool_call && reasoning.is_none() && !has_tool_results {
+                if content.is_empty() && !has_tool_call && reasoning.is_none() && !has_tool_results
+                {
                     continue;
                 }
 

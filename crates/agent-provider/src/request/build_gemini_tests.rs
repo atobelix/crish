@@ -319,7 +319,9 @@ fn max_output_tokens_none_omits_field_and_no_invented_64000() {
         ..GeminiRequestOptions::default()
     };
     let body = build_gemini_request_body(&opts, &context_for(&messages));
-    let generation = body["generationConfig"].as_object().expect("generationConfig");
+    let generation = body["generationConfig"]
+        .as_object()
+        .expect("generationConfig");
     assert!(
         !generation.contains_key("maxOutputTokens"),
         "无 max_output_tokens 时不得发明 64000 写入 maxOutputTokens：{generation:?}"
@@ -498,7 +500,11 @@ fn pairing_gate_same_name_partial_coverage_leaves_orphan() {
         Arc::new(result1),
     ];
     let orphans = detect_gemini_unpaired_tool_calls(&messages);
-    assert_eq!(orphans, ["get_weather#1"], "第二次调用应为孤儿：{orphans:?}");
+    assert_eq!(
+        orphans,
+        ["get_weather#1"],
+        "第二次调用应为孤儿：{orphans:?}"
+    );
 }
 
 /// 不同名调用各自独立配对，互不干扰
@@ -514,7 +520,11 @@ fn pairing_gate_different_names_independent_pairing() {
         Arc::new(result_b),
     ];
     let orphans = detect_gemini_unpaired_tool_calls(&messages);
-    assert_eq!(orphans, ["read_file#0"], "read_file 无 response 应为孤儿：{orphans:?}");
+    assert_eq!(
+        orphans,
+        ["read_file#0"],
+        "read_file 无 response 应为孤儿：{orphans:?}"
+    );
 }
 
 /// 空 name 的 call 不参与配对（归入孤儿检测面之外，不误伤）

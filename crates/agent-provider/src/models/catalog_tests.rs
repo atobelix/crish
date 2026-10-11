@@ -84,8 +84,12 @@ fn lookup_exact_match_hits_bundled_entry() {
 fn lookup_strips_version_suffix() {
     let catalog = ModelCatalog::bundled();
     // 保留版本后缀反例资产；新合同禁止把不同型号替换成基础型号。
-    assert!(catalog.lookup("deepseek", "deepseek-v4-flash-0731").is_none());
-    assert!(catalog.lookup("deepseek", "deepseek-v4-flash-20250826").is_none());
+    assert!(catalog
+        .lookup("deepseek", "deepseek-v4-flash-0731")
+        .is_none());
+    assert!(catalog
+        .lookup("deepseek", "deepseek-v4-flash-20250826")
+        .is_none());
     assert!(catalog.lookup("deepseek", "deepseek-v4-flash").is_some());
 }
 
@@ -126,8 +130,7 @@ fn lookup_trims_whitespace_but_is_case_sensitive() {
 #[test]
 fn find_model_trims_whitespace_but_is_case_sensitive() {
     // ① ProviderSpec::find_model：modelId 侧
-    let model: ModelSpec =
-        serde_json::from_str(r#"{"id":"XHigh-Model"}"#).expect("ModelSpec");
+    let model: ModelSpec = serde_json::from_str(r#"{"id":"XHigh-Model"}"#).expect("ModelSpec");
     let provider = ProviderSpec {
         models: vec![model],
         ..Default::default()
@@ -149,7 +152,10 @@ fn find_model_trims_whitespace_but_is_case_sensitive() {
     // ② UnifiedModelsConfig::find_model：providerId + modelId 双侧
     let yaml = "version: 2\nproviders:\n  Acme:\n    protocol: openai/chat\n    models:\n      - id: XHigh-Model\n";
     let config = UnifiedModelsConfig::from_yaml_str(yaml).expect("v2 yaml");
-    assert!(config.find_model("Acme", "XHigh-Model").is_some(), "精确命中");
+    assert!(
+        config.find_model("Acme", "XHigh-Model").is_some(),
+        "精确命中"
+    );
     assert!(
         config.find_model("  Acme  ", "  XHigh-Model  ").is_some(),
         "双侧首尾空白 trim 后命中"
@@ -182,7 +188,10 @@ fn lookup_falls_back_to_vendor_default_entry() {
         version: 0,
     };
     assert!(catalog.lookup("acme", "anything-at-all").is_none());
-    assert!(catalog.lookup("acme", "*").is_some(), "星号只能作为精确型号被读取");
+    assert!(
+        catalog.lookup("acme", "*").is_some(),
+        "星号只能作为精确型号被读取"
+    );
     // 未配置 vendor 默认条目的厂商 → None
     assert!(catalog.lookup("other", "anything-at-all").is_none());
 }
@@ -371,10 +380,13 @@ fn with_overrides_rejects_forbidden_model_key() {
     assert_eq!(catalog.version(), version, "全部被拒不得 bump");
     // 未被借覆盖新增条目：entries 无该精确键（lookup 的版本后缀兜底命中
     // 的是内置基础条目，不代表覆盖生效）
-    assert!(!catalog
-        .entries
-        .contains_key(&ModelCatalogEntry::key("deepseek", "deepseek-v4-flash-9999")));
-    assert!(catalog.lookup("deepseek", "deepseek-v4-flash-9999").is_none());
+    assert!(!catalog.entries.contains_key(&ModelCatalogEntry::key(
+        "deepseek",
+        "deepseek-v4-flash-9999"
+    )));
+    assert!(catalog
+        .lookup("deepseek", "deepseek-v4-flash-9999")
+        .is_none());
 
     // provider 键禁覆盖：与既有条目通道不一致 → 拒绝
     let rejected = catalog.with_overrides(&[serde_json::json!({
@@ -585,7 +597,9 @@ fn replace_models_narrows_route_to_declared_list() {
         "未点名模型不再服务"
     );
     assert!(
-        !catalog.entries.contains_key(&ModelCatalogEntry::key("deepseek", "deepseek-v4-pro")),
+        !catalog
+            .entries
+            .contains_key(&ModelCatalogEntry::key("deepseek", "deepseek-v4-pro")),
         "未点名旧条目必须被移除"
     );
     // 列表内模型可服务，且白名单字段生效
@@ -1829,5 +1843,8 @@ providers:
         modalities:
           image: true
 "#;
-    assert!(ModelCatalog::from_yaml_str(yaml).is_err(), "未知模态字段不能静默丢失");
+    assert!(
+        ModelCatalog::from_yaml_str(yaml).is_err(),
+        "未知模态字段不能静默丢失"
+    );
 }

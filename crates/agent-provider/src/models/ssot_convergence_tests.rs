@@ -18,7 +18,6 @@
 //!    派生；`load_user()` 那条绕过 `ModelsStore` 的读盘路径已物理删除
 //!    （它是「修订撕裂」的第二读面）。
 
-use super::*;
 use crate::models::{
     cache_ttl_for_declared_model, CacheTtl, LiveModels, ModelCatalog, UnifiedModelsConfig,
 };
@@ -58,7 +57,8 @@ fn declared_ttl_is_honored_and_absent_ttl_is_fail_closed() {
         Some(CacheTtl::Hour)
     );
 
-    let undeclared = catalog_from_yaml("version: 2\nproviders:\n  acme:\n    models:\n    - id: acme-a\n");
+    let undeclared =
+        catalog_from_yaml("version: 2\nproviders:\n  acme:\n    models:\n    - id: acme-a\n");
     assert_eq!(
         cache_ttl_for_declared_model(&undeclared, "acme", "acme-a"),
         None,
@@ -105,9 +105,8 @@ fn bundled_ttl_never_leaks_into_user_resolution() {
 
     // 用户树只声明「供应商存在」，不含任何 cacheTtl。
     for (vendor, model) in with_ttl.iter().take(8) {
-        let user_yaml = format!(
-            "version: 2\nproviders:\n  {vendor}:\n    models:\n    - id: {model}\n"
-        );
+        let user_yaml =
+            format!("version: 2\nproviders:\n  {vendor}:\n    models:\n    - id: {model}\n");
         let user_catalog = catalog_from_yaml(&user_yaml);
         assert_eq!(
             cache_ttl_for_declared_model(&user_catalog, vendor, model),
@@ -164,7 +163,8 @@ fn dictionary_model_ids_are_unique_keys() {
 
     assert!(
         by_id.len() > 100,
-        "出厂字典条目过少（{}），夹具失效", by_id.len()
+        "出厂字典条目过少（{}），夹具失效",
+        by_id.len()
     );
 
     let conflicting: Vec<String> = by_id

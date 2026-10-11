@@ -78,10 +78,7 @@ pub(super) fn detect_long_rate_limit_lock(lower: &str) -> bool {
     for anchor in &["try again in ", "wait ", "retry after ", "retry in "] {
         if let Some(idx) = clean.find(anchor) {
             let slice = &clean[idx + anchor.len()..];
-            let num_str: String = slice
-                .chars()
-                .take_while(|c| c.is_ascii_digit())
-                .collect();
+            let num_str: String = slice.chars().take_while(|c| c.is_ascii_digit()).collect();
             if let Ok(mins) = num_str.parse::<u32>() {
                 if slice.contains("min") || slice.contains("minute") {
                     return mins >= 3;
@@ -167,7 +164,13 @@ fn is_bare_after_number(after_num: &str) -> bool {
 /// 3. 纯数字无单位 → 保留历史契约「视为秒」（已由单测钉死）；
 /// 4. 有未知单位 token → 不猜测，返回 None（避免 "5 hours" 被当成 5 秒）。
 pub(super) fn extract_seconds_from_text(lower: &str) -> Option<u64> {
-    for anchor in &["try again in ", "retry after ", "wait ", "retry in ", "after "] {
+    for anchor in &[
+        "try again in ",
+        "retry after ",
+        "wait ",
+        "retry in ",
+        "after ",
+    ] {
         if let Some(idx) = lower.find(anchor) {
             let slice = &lower[idx + anchor.len()..];
             let num_str: String = slice
@@ -200,7 +203,6 @@ pub(super) fn extract_seconds_from_text(lower: &str) -> Option<u64> {
     }
     None
 }
-
 
 /// payload 过大消息（:372-377）：先排除 4130 系列码（Anthropic 的 "model version 4130"
 /// 是服务端错误码而非 HTTP 413），再匹配 payload 过大字样（含整词 "413"，不匹配 "4130" 等）
