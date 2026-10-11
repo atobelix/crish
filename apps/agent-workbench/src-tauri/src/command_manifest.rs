@@ -4,7 +4,7 @@
 //! `BUILTIN_COMMAND_MANIFEST` 是本文件的**内置快照镜像**（启动拉取失败 / 非 Tauri
 //! 环境回退面），双端手工同步，条数由双端测试锁定：
 //! - Rust 侧：本文件 `manifest_*` 测试（条数公式化 / 幽灵命令排除 / 新增命令登记）；
-//! - 前端侧：`commandManifest.test.ts`（**135 = 注册面 135 + 登记先行 0**；
+//! - 前端侧：`commandManifest.test.ts`（**136 = 注册面 136 + 登记先行 0**；
 //!   条数与集合由该文件的动态对照断言直读本文件真源双向锁定）。
 //!
 //! 维护规则：
@@ -60,7 +60,7 @@ const fn entry(
     }
 }
 
-/// 命令清单（**135 条 = 全部 registered=true 实装命令**；与前端
+/// 命令清单（**136 条 = 全部 registered=true 实装命令**；与前端
 /// `BUILTIN_COMMAND_MANIFEST` 双向镜像）。
 ///
 /// 注册面（registered=true）必须与 main.rs `command_registry!` 注册一致；
@@ -81,6 +81,7 @@ const fn entry(
 /// computer_session_enable / computer_session_disable / computer_status）
 /// 后 143 → **135**。`core_read_run_events` 经复核**保留**（跨端契约面，
 /// 见 command-contract-drift.test.ts DRIFT_DEBT 的待裁决登记）。
+/// b6：`core_generate_session_title` 追加后 135 → **136**。
 pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
     contract_version: COMMAND_MANIFEST_CONTRACT_VERSION,
     commands: &[
@@ -107,7 +108,12 @@ pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
         entry("workbench_save_models_yaml", "workbench", "gui", true),
         entry("workbench_apply_models_config", "workbench", "gui", true),
         // 出厂能力字典只读投影（替代已退役 catalog_get 的读面；纯只读）
-        entry("workbench_read_capability_dictionary", "workbench", "gui", true),
+        entry(
+            "workbench_read_capability_dictionary",
+            "workbench",
+            "gui",
+            true,
+        ),
         // F1（R-AB1 T-AB-08）：后台任务三条查询命令恢复（B01/B02 查询面）
         entry("workbench_list_background_tasks", "workbench", "gui", true),
         entry(
@@ -275,6 +281,8 @@ pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
         // 子集 = make_handlers! 注册面不变量（红线 6 禁止假接线；main.rs
         // 同批注册，E0 裁决 4 的「5→6」口径与本实现一致）
         entry("core_compact_now", "core", "engine", true),
+        // b6：首条助手回复后的短标题（async chat-completions，registered=true）
+        entry("core_generate_session_title", "core", "engine", true),
         // ── 用量监控与时序分析面（usage_*）──
         entry("usage_get_dashboard_data", "usage", "gui", true),
         entry("usage_get_activity_matrix", "usage", "gui", true),
@@ -328,7 +336,7 @@ mod tests {
     /// - 真漂移债务清零退役 8 条（workbench_select_folder / workbench_http_request /
     ///   config_get_outputs_root / config_set_outputs_root / set_session_output_root /
     ///   computer_session_enable / computer_session_disable / computer_status）
-    ///   后 143 → **135**；
+    ///   后 143 → **135**；b6 `core_generate_session_title` 追加后 135 → **136**；
     /// - `core_read_run_events` 复核后**保留**（跨端契约面 tauri_command 映射 +
     ///   移动端 monitorCommands 映射真源 + 实现处「不得静默再退役」登记）——
     ///   在 command-contract-drift.test.ts 记为待裁决，不计入本次退役。
@@ -342,12 +350,12 @@ mod tests {
             .count();
         let pending = total - registered;
         assert_eq!(
-            total, 135,
-            "总数 135（单轨收敛：能力字典读面 +1 → 143，真漂移退役 8 条 → 135；与前端 commandMap 同步）"
+            total, 136,
+            "总数 136（单轨收敛后 135；b6 core_generate_session_title +1 → 136；与前端 commandMap 同步）"
         );
         assert_eq!(
-            registered, 135,
-            "注册面 135（全部为 registered=true 实装命令）"
+            registered, 136,
+            "注册面 136（全部为 registered=true 实装命令）"
         );
         assert_eq!(pending, 0, "登记先行 0");
     }
@@ -469,7 +477,10 @@ mod tests {
                 .unwrap_or_else(|| panic!("{name} 必须登记 manifest（C7 ①）"));
             assert_eq!(entry.family, "workbench", "{name} 属 workbench 族");
             // read 走 Tauri gui 面（WebView 直调），apply/save 走引擎事务
-            assert_eq!(entry.surface, "gui", "{name} 属 gui 契约面（WebView 直调读取）");
+            assert_eq!(
+                entry.surface, "gui",
+                "{name} 属 gui 契约面（WebView 直调读取）"
+            );
             assert!(entry.registered, "{name} 已接线应 registered=true");
         }
     }
@@ -620,6 +631,15 @@ mod tests {
         assert!(
             compact.registered,
             "core_compact_now 已接线应 registered=true"
+        );
+        let title = by_name.get("core_generate_session_title").unwrap_or_else(|| {
+            panic!("core_generate_session_title 必须登记 manifest（b6）")
+        });
+        assert_eq!(title.family, "core");
+        assert_eq!(title.surface, "engine");
+        assert!(
+            title.registered,
+            "core_generate_session_title 已接线应 registered=true"
         );
     }
 }

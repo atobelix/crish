@@ -263,7 +263,8 @@ describe('Tauri command registry', () => {
       isProductCapabilityCommand
     );
 
-    // 校准：全量 135 条 registered 命令（含 models_yaml 三命令与 usage 五命令）。
+    // 校准：全量 136 条 registered 命令（含 models_yaml 三命令、usage 五命令，
+    // 以及 b6 core_generate_session_title）。
     // 2026-09-15 更正：131 为陈旧值——旧 config/catalog 命令族 5 条
     // （config_get / config_profile_apply / config_update / catalog_get /
     // catalog_refresh）随单轨收敛退役；另新增 workbench_apply_models_config、
@@ -271,8 +272,9 @@ describe('Tauri command registry', () => {
     // 2026-09-15 单轨收敛第二轮：出厂能力字典读面
     // workbench_read_capability_dictionary 登记（142 → 143）；随后 8 条
     // 「Rust 已注册、前端零消费」真漂移退役 → 135。
+    // b6：core_generate_session_title 追加后 135 → 136。
     // 条数与四方集合一致性由 scripts/check-provider-single-track.mjs 的 D11 守护。
-    expect(productCommands).toHaveLength(135);
+    expect(productCommands).toHaveLength(136);
     expect(
       productCommands.every(
         (entry) => commandCapabilityStatus(entry) !== UNSUPPORTED_CODE

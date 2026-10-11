@@ -214,8 +214,9 @@ impl conex_compaction::Summarizer for ProviderSummarizer {
 }
 
 /// 从 chat-completions 非流响应提取正文（`choices[0].message.content`；
-/// 缺失 / 空串 / 非法 JSON → None → 调用方降级 L1 占位符）
-fn summary_content_from_response(text: &str) -> Option<String> {
+/// 缺失 / 空串 / 非法 JSON → None → 调用方降级 L1 占位符）。
+/// 会话标题命令与摘要器共用这一提取，避免两套 JSON 路径。
+pub(crate) fn summary_content_from_response(text: &str) -> Option<String> {
     let value: serde_json::Value = serde_json::from_str(text).ok()?;
     let content = value
         .get("choices")?

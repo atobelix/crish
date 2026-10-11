@@ -20,7 +20,7 @@ export interface RegisteredTauriCommand {
   owner?: string;
 }
 
-// 注册面（135 条 = 与 command_manifest.rs `COMMAND_MANIFEST`、
+// 注册面（136 条 = 与 command_manifest.rs `COMMAND_MANIFEST`、
 // main.rs `command_registry!` 及前端 `BUILTIN_COMMAND_MANIFEST` 四方对齐；
 // 条数与集合一致性由 scripts/check-provider-single-track.mjs 的 D11 防线守护）：
 // - 注册面：`command_registry!` 宏已注册的命令，status=implemented；
@@ -33,6 +33,7 @@ export interface RegisteredTauriCommand {
 // （workbench_select_folder / workbench_http_request / config_get_outputs_root /
 //  config_set_outputs_root / set_session_output_root / computer_session_enable /
 //  computer_session_disable / computer_status）→ **135**。
+// b6：`core_generate_session_title` 追加后 135 → **136**。
 export const REGISTERED_TAURI_COMMANDS: readonly RegisteredTauriCommand[] = [
   // ── GUI 专属面（workbench_*，§2.3）──
   {
@@ -547,6 +548,11 @@ export const REGISTERED_TAURI_COMMANDS: readonly RegisteredTauriCommand[] = [
     command: 'core_compact_now',
     status: 'implemented',
     feature: 'manual conversation compaction',
+  },
+  {
+    command: 'core_generate_session_title',
+    status: 'implemented',
+    feature: 'AI session title from the first assistant reply',
   },
   {
     command: 'core_read_run_events',

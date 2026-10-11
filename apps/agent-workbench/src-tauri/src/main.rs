@@ -29,6 +29,7 @@
 //! - **退出钩子**：`RunEvent::Exit` 时 PTY 清理 + 多端服务优雅关停
 //!   （ServerLifecycle 槽）+ [CoreRunState::save_snapshot_blocking]（独立线程）。
 
+mod asset_scope;
 mod auth;
 mod auth_commands;
 mod background;
@@ -90,6 +91,8 @@ mod push_wiring;
 pub(crate) mod core_backend;
 mod server;
 mod session_commands;
+// b6：首条助手回复后的短标题。命令面独立于 run/，避免和运行生命周期争写。
+mod session_title_commands;
 mod single_instance;
 mod status_diagnostics;
 // ACT-101 / CON-01：原生窗口隐式创建 + 首绘握手唤醒（Stage 1）
@@ -306,6 +309,11 @@ command_registry![
     // E2 F4（07 §3 卡 C）：手动压缩（slash /compact → 引擎命令；registered
     // 面 = make_handlers! 注册面不变量，command_manifest 同批翻 true）
     ("core_compact_now", core_run_commands::core_compact_now),
+    // b6：首条助手回复后生成不超过 12 字的会话标题
+    (
+        "core_generate_session_title",
+        session_title_commands::core_generate_session_title
+    ),
     ("core_cancel_run", core_run_commands::core_cancel_run),
     ("core_approve_tool", core_run_commands::core_approve_tool),
     ("core_deny_tool", core_run_commands::core_deny_tool),
@@ -697,7 +705,9 @@ fn main() {
     // 首实例在插件回调里执行窗口前置提示（single_instance.rs）
     let builder = tauri::Builder::default()
         .plugin(single_instance::register())
-        .plugin(tauri_plugin_dialog::init());
+        .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_persisted_scope::init());
 
     // setup 序列 ⑩：MCP 调试插件（debug 默认开启，CRISH_MCP_SOCKET=0 显式关闭；
     // release 由插件自身拒绝兜底，注册点本身亦被 cfg 隔离。2026-08-21 用户裁决）。
@@ -772,7 +782,20 @@ fn main() {
             // ④ 工作区注册表（沙箱根真源；加载 recent 列表 + 默认应用根）
             match workspace::WorkspaceRegistry::init() {
                 Ok(registry) => {
-                    diagnostics.record("workspace", true, None);
+                    match asset_scope::allow_registered_workspace_roots(
+                        app.handle(),
+                        registry.roots(),
+                    ) {
+                        Ok(()) => diagnostics.record("workspace", true, None),
+                        Err(error) => {
+                            tracing::error!(
+                                target: "workspace",
+                                error = %error,
+                                "无法将已授权工作区接入 asset 协议"
+                            );
+                            diagnostics.record("workspace", false, Some(error));
+                        }
+                    }
                     app.manage(registry);
                 }
                 Err(error) => {
