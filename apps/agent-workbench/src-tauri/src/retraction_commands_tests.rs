@@ -20,6 +20,7 @@ use std::sync::{Arc, Mutex};
 use conex_db::{LocalDb, RunStatus};
 use conex_types::events::{AgentEvent, AgentEventEnvelope};
 use conex_types::message::{AgentMessage, AgentMessageRole};
+use conex_types::tool::{ToolBatchResult, ToolOutput};
 use conex_types::SessionIndexEntry;
 use orchestrator::events::EventQueue;
 use orchestrator::persist::LocalDbStore;
@@ -87,6 +88,183 @@ fn test_state() -> (Arc<CoreRunState>, LocalDb) {
         None,
     ));
     (state, db)
+}
+
+fn append_write_tool_end(db: &LocalDb, seq: i64, run_id: &str, call_id: &str, path: &str) {
+    let event = AgentEvent::ToolEnd {
+        session_id: "s1".into(),
+        batch_id: "batch-1".into(),
+        result: ToolBatchResult {
+            id: call_id.into(),
+            tool_name: "write_file".into(),
+            output: ToolOutput {
+                text: None,
+                json: Some(serde_json::json!({ "path": path })),
+                artifacts: None,
+            },
+            is_error: false,
+            duration_ms: 1,
+        },
+        timestamp: "2026-08-16T00:00:00.000Z".into(),
+        attempt: Some(1),
+        deduplicated: Some(false),
+        executed_input: Some(serde_json::json!({ "path": path })),
+    };
+    let payload = serde_json::to_string(&AgentEventEnvelope::new(event, Some(run_id.into()), None))
+        .expect("tool-end 信封序列化");
+    db.append_event("s1", seq, "tool-end", &payload, Some(run_id))
+        .expect("tool-end 落库");
+}
+
+fn append_target_message_start(db: &LocalDb, seq: i64, message_id: &str) {
+    let message = AgentMessage {
+        id: message_id.into(),
+        role: AgentMessageRole::User,
+        created_at: "2026-08-16T00:00:00.000Z".into(),
+        blocks: vec![],
+        metadata: None,
+        client_message_id: None,
+        content: Some("target".into()),
+    };
+    let event = AgentEvent::MessageStart {
+        session_id: "s1".into(),
+        message: Arc::new(message),
+    };
+    let payload = serde_json::to_string(&AgentEventEnvelope::new(
+        event,
+        Some("run-main".into()),
+        None,
+    ))
+    .expect("message-start 信封序列化");
+    db.append_event("s1", seq, "message-start", &payload, Some("run-main"))
+        .expect("message-start 落库");
+}
+
+#[tokio::test]
+async fn rollback_plan_uses_target_message_boundary_and_frozen_max() {
+    let (_state, db) = test_state();
+    append_write_tool_end(&db, 1, "run-old", "old-call", "same.txt");
+    append_target_message_start(&db, 2, "target-message");
+    append_write_tool_end(&db, 3, "run-current", "after-call", "same.txt");
+    append_write_tool_end(&db, 4, "run-current", "beyond-freeze", "later.txt");
+
+    let store = LocalDbStore::new(db);
+    let operations = collect_post_boundary_write_operations(&store, "s1", 2, 3)
+        .await
+        .expect("计划收集成功");
+    assert_eq!(
+        operations,
+        vec![SnapshotOperation {
+            session_id: "s1".into(),
+            run_id: "run-current".into(),
+            tool_call_id: "after-call".into(),
+            path: "same.txt".into(),
+        }],
+        "只收集目标 user 消息之后且不超过冻结 MAX 的写操作"
+    );
+}
+
+struct QueryFailStore;
+
+#[async_trait::async_trait]
+impl orchestrator::persist::Store for QueryFailStore {
+    async fn insert_run(
+        &self,
+        _: &str,
+        _: &str,
+        _: RunStatus,
+        _: Option<&str>,
+        _: i64,
+    ) -> orchestrator::persist::StoreResult<()> {
+        unreachable!()
+    }
+    async fn update_run_status(
+        &self,
+        _: &str,
+        _: RunStatus,
+        _: Option<&str>,
+        _: Option<i64>,
+    ) -> orchestrator::persist::StoreResult<()> {
+        unreachable!()
+    }
+    async fn reserve_sequence(&self, _: &str) -> orchestrator::persist::StoreResult<u64> {
+        unreachable!()
+    }
+    async fn seed_sequence(&self, _: &str, _: u64) -> orchestrator::persist::StoreResult<()> {
+        unreachable!()
+    }
+    async fn append_event(
+        &self,
+        _: &str,
+        _: u64,
+        _: &str,
+        _: &str,
+        _: Option<&str>,
+    ) -> orchestrator::persist::StoreResult<()> {
+        unreachable!()
+    }
+    async fn query_events(
+        &self,
+        _: &str,
+        _: u64,
+        _: Option<u64>,
+    ) -> orchestrator::persist::StoreResult<Vec<orchestrator::persist::PersistedEvent>> {
+        Err(orchestrator::persist::StoreError::new(
+            "query_events",
+            "injected failure",
+        ))
+    }
+    async fn query_events_by_run(
+        &self,
+        _: &str,
+        _: &str,
+        _: u64,
+        _: Option<u64>,
+    ) -> orchestrator::persist::StoreResult<Vec<orchestrator::persist::PersistedEvent>> {
+        unreachable!()
+    }
+    async fn max_sequence(&self, _: &str) -> orchestrator::persist::StoreResult<u64> {
+        unreachable!()
+    }
+    async fn query_events_by_type(
+        &self,
+        _: &str,
+        _: &str,
+        _: &str,
+        _: u64,
+        _: Option<u64>,
+    ) -> orchestrator::persist::StoreResult<Vec<orchestrator::persist::PersistedEvent>> {
+        unreachable!()
+    }
+    async fn query_runs(&self) -> orchestrator::persist::StoreResult<Vec<conex_db::StoredRun>> {
+        unreachable!()
+    }
+    async fn save_pending_input(
+        &self,
+        _: &str,
+        _: &str,
+        _: Option<&str>,
+        _: &str,
+    ) -> orchestrator::persist::StoreResult<()> {
+        unreachable!()
+    }
+    async fn load_pending_inputs(
+        &self,
+        _: &str,
+    ) -> orchestrator::persist::StoreResult<Vec<conex_db::PendingInput>> {
+        unreachable!()
+    }
+    async fn delete_pending_input(&self, _: &str) -> orchestrator::persist::StoreResult<bool> {
+        unreachable!()
+    }
+}
+
+#[tokio::test]
+async fn rollback_plan_query_error_is_not_treated_as_an_empty_plan() {
+    let err = collect_post_boundary_write_operations(&QueryFailStore, "s1", 1, 5)
+        .await
+        .unwrap_err();
+    assert!(err.contains("injected failure"));
 }
 
 /// 最小活动 run（对齐 build_active_run 形状；句柄以 **Cancelled 终态起态**
