@@ -29,4 +29,15 @@ describe('MessageVirtualizer §5 source contracts', () => {
     expect(src).not.toMatch(/handleRegenerateRow\s*\?\?\s*\(\(\s*\)\s*=>\s*\{\s*\}\)/);
     expect(src).toMatch(/const handleRegenerateRow = generation\?\.handleRegenerateRow;/);
   });
+
+  it('passes optional row handlers through without per-render noop fallbacks', () => {
+    expect(src).toMatch(/const onOpenDiff = navigation\?\.onOpenDiff;/);
+    expect(src).toMatch(/const onBranch = generation\?\.onBranch;/);
+    expect(src).toMatch(/const handleFillFollowUp = composer\?\.handleFillFollowUp;/);
+    expect(src).toMatch(/const handleSendFollowUp = composer\?\.handleSendFollowUp;/);
+    expect(src).not.toMatch(/const onOpenDiff = navigation\?\.onOpenDiff\s*\?\?/);
+    expect(src).not.toMatch(/const onBranch = generation\?\.onBranch\s*\?\?/);
+    expect(src).not.toMatch(/const handleFillFollowUp = composer\?\.handleFillFollowUp\s*\?\?/);
+    expect(src).not.toMatch(/const handleSendFollowUp = composer\?\.handleSendFollowUp\s*\?\?/);
+  });
 });

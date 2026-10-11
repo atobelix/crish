@@ -511,3 +511,34 @@ describe('estimateTimelineMessageHeight 几何稳定测试', () => {
     expect(estHeight).toBe(24);
   });
 });
+
+describe('lastMeasured survives invalidateActual + preloadEstimates', () => {
+  it('preloadEstimates does not overwrite the last measured height', () => {
+    const vsm = new VirtualScrollManager(100);
+    vsm.syncOrder(['a', 'b']);
+    vsm.setActual('a', 180);
+    vsm.invalidateActual('a');
+    expect(vsm.getActualHeight('a')).toBeNull();
+    expect(vsm.getHeight('a')).toBe(180);
+
+    const changed = vsm.preloadEstimates([
+      { id: 'a', height: 44 },
+      { id: 'b', height: 55 },
+    ]);
+    expect(changed).toBe(true);
+    expect(vsm.getHeight('a')).toBe(180);
+    expect(vsm.getActualHeight('a')).toBeNull();
+    expect(vsm.getHeight('b')).toBe(55);
+  });
+
+  it('clear() drops lastMeasured so clearHeights can re-estimate', () => {
+    const vsm = new VirtualScrollManager(100);
+    vsm.syncOrder(['a']);
+    vsm.setActual('a', 180);
+    vsm.invalidateActual('a');
+    vsm.clear();
+    vsm.syncOrder(['a']);
+    vsm.preloadEstimates([{ id: 'a', height: 44 }]);
+    expect(vsm.getHeight('a')).toBe(44);
+  });
+});

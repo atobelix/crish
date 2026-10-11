@@ -25,11 +25,6 @@
   align-items: flex-end;
   gap: 8px;
   overflow: visible;
-  transition: gap var(--transition-smooth, 200ms cubic-bezier(0.16, 1, 0.3, 1));
-}
-
-.root:hover {
-  gap: 12px;
 }
 
 .gap {
@@ -61,6 +56,10 @@
   min-height: unset;
   width: 8px;
   min-width: unset;
+  --btn-h: 2px;
+  --btn-px: 0px;
+  --btn-hover-overlay: transparent;
+  --btn-active-overlay: transparent;
   margin: 0;
   padding: 0;
   border: none;
@@ -86,11 +85,16 @@
 .tick::before {
   content: '';
   position: absolute;
-  top: -8px;
-  bottom: -8px;
+  /* 严格基于 SCRUBBER_TICK_PITCH_PX (10px = 2px tick + 8px gap) 划分零重叠热区：
+   * 上下各 4px，垂直总高 10px，无空隙且零重叠，彻底根除相邻刻度争抢引发的抽搐 */
+  top: -4px;
+  bottom: -4px;
   left: -20px;
   right: 0;
   z-index: 1;
+  background: transparent;
+  background-color: transparent;
+  pointer-events: auto;
 }
 
 .tick.isActive {
@@ -109,7 +113,9 @@
 }
 
 .root .tick:hover,
-.root:hover .tick:hover {
+.root:hover .tick:hover,
+.root .tick:active,
+.root:hover .tick:active {
   background-color: var(--scrollbar-thumb-bg);
   width: 32px;
   z-index: 10;
@@ -233,7 +239,7 @@
   background: transparent;
   border: none;
   padding: 0;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   color: var(--text-tertiary);
   transition: background-color var(--transition-fast, 120ms ease),
@@ -269,7 +275,7 @@
   background: transparent;
   border: none;
   padding: 4px 6px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   transition: background-color var(--transition-fast, 120ms ease);
   box-sizing: border-box;
@@ -305,7 +311,7 @@
   border: none;
   padding: 4px 6px;
   margin-top: 4px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   transition: background-color var(--transition-fast, 120ms ease);
   box-sizing: border-box;

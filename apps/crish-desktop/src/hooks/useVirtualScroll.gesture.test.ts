@@ -87,10 +87,14 @@ describe('useVirtualScroll — Gesture Epoch 几何冻结', () => {
     act(() => {
       result.current.preloadEstimates([{ id: 'p', height: 55 }]);
     });
+    expect(result.current.isGestureActive()).toBe(true);
+    expect(result.current.manager.getHeight('p')).toBe(100);
     expect(result.current.totalHeight).toBe(100);
     act(() => {
       result.current.flushPendingGeometry();
     });
+    expect(result.current.isGestureActive()).toBe(false);
+    expect(result.current.manager.getHeight('p')).toBe(55);
     expect(result.current.totalHeight).toBe(55);
   });
 });

@@ -3,6 +3,7 @@
  * 刻度高度按真实消息块占文档比，不用等高校。
  */
 import type { VirtualScrollManager } from '../../api/VirtualScrollManager';
+import { Lexer } from 'marked';
 import { formatMsgTime } from '../chat-message-row/chatMessageRowUtils';
 import { pinSnippet } from './useScrollAnchor';
 import { CHAT_SCROLL_PAD_TOP } from './chatScrollGeometry';
@@ -38,17 +39,45 @@ export type ScrubberLayoutManager = Pick<
   'getOffset' | 'getHeight' | 'getOrder'
 >;
 
+type PlainTextToken = {
+  type: string;
+  text?: string;
+  tokens?: PlainTextToken[];
+  items?: Array<{ tokens?: PlainTextToken[]; text?: string }>;
+  header?: Array<{ tokens?: PlainTextToken[]; text?: string }>;
+  rows?: Array<Array<{ tokens?: PlainTextToken[]; text?: string }>>;
+};
+
+function inlineTokenText(tokens: PlainTextToken[] | undefined): string {
+  if (!tokens) return '';
+  return tokens.map(plainTextToken).join(' ');
+}
+
+function plainTextToken(token: PlainTextToken): string {
+  if (token.type === 'space' || token.type === 'hr') return ' ';
+  if (token.type === 'list') {
+    return (token.items ?? [])
+      .map((item) => inlineTokenText(item.tokens) || item.text || '')
+      .join(' ');
+  }
+  if (token.type === 'table') {
+    const cells = [...(token.header ?? []), ...(token.rows ?? []).flat()];
+    return cells
+      .map((cell) => inlineTokenText(cell.tokens) || cell.text || '')
+      .join(' ');
+  }
+  if (token.type === 'code') return token.text ?? '';
+  if (token.type === 'html') {
+    return (token.text ?? '').replace(/<[^>]*>/g, ' ');
+  }
+  if (token.tokens?.length) return inlineTokenText(token.tokens);
+  return token.text ?? '';
+}
+
 export function cleanMarkdownForSnippet(raw?: string): string {
   if (!raw) return '';
-  return raw
-    .replace(/```[a-zA-Z0-9_-]*\n?/g, '')
-    .replace(/`([^`]+)`/g, '$1')
-    .replace(/^#{1,6}\s+/gm, '')
-    .replace(/(\*\*|__)(.*?)\1/g, '$2')
-    .replace(/(\*|_)(.*?)\1/g, '$2')
-    .replace(/^>\s+/gm, '')
-    .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
-    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+  const tokens = Lexer.lex(raw) as unknown as PlainTextToken[];
+  return inlineTokenText(tokens)
     .replace(/\s+/g, ' ')
     .trim();
 }

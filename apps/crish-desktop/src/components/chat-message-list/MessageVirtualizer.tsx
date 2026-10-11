@@ -23,8 +23,8 @@ import {
 } from '../../store/storeAccess';
 import { useUndoWithScrollAnchor } from './useUndoWithScrollAnchor';
 import { FlowScrubber } from './FlowScrubber';
-import { ResizeObserverManager } from '../ui/utils/ResizeObserverManager';
 import { ChatScrollFloorSlot } from './ChatScrollFloorSlot';
+import { useStableRowMeasureRef } from './messageVirtualizerMeasure';
 
 import {
   messageVirtualizerPropsEqual,
@@ -104,18 +104,18 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
   );
   const toolStackProps = interaction?.toolStackProps ?? fallbackToolStackProps;
 
-  const onOpenDiff = navigation?.onOpenDiff ?? (() => {});
+  const onOpenDiff = navigation?.onOpenDiff;
   const onOpenDiffPanel = navigation?.onOpenDiffPanel;
   const onOpenPath = navigation?.onOpenPath;
 
-  const onBranch = generation?.onBranch ?? (() => {});
+  const onBranch = generation?.onBranch;
   const onRetract = generation?.onRetract;
   const onEditMessageAndResend = generation?.onEditMessageAndResend;
   const handleRegenerateRow = generation?.handleRegenerateRow;
 
-  const handleFillFollowUp = composer?.handleFillFollowUp ?? (() => {});
+  const handleFillFollowUp = composer?.handleFillFollowUp;
   const onSendFollowUp = composer?.onSendFollowUp;
-  const handleSendFollowUp = composer?.handleSendFollowUp ?? (() => {});
+  const handleSendFollowUp = composer?.handleSendFollowUp;
   const msgIds = useMemo(() => messages.map((m) => m.id), [messages]);
   const vs = useVirtualScroll({
     ids: msgIds,
@@ -123,8 +123,9 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
     overscan: 8,
     fallbackHeight: MESSAGE_ESTIMATED_ROW_HEIGHT,
   });
-  const { containerRef, setActual, clearHeights, manager } = vs;
+  const { containerRef, setActual, clearHeights, manager, preloadEstimates, syncOrder } = vs;
   const vsManager = manager;
+  const rowMeasureRef = useStableRowMeasureRef(setActual, msgIds);
 
   const isAtBottomRef = useRef<boolean>(true);
   const [isAtBottom, setIsAtBottom] = useState<boolean>(true);
@@ -185,62 +186,17 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
 
   useUndoWithScrollAnchor(containerRef, manager);
 
-  // Heights: MESSAGE_ESTIMATED_ROW_HEIGHT fallback until ResizeObserver setActual.
+  // Heights: MESSAGE_ESTIMATED_ROW_HEIGHT fallback until per-row callback ref → setActual.
   // No @chenglou/pretext on this path — RO owns measured heights after paint.
+  // 唯一测量通道是 rowMeasureRef（挂载 observe / 卸载 unobserve），不再扫描容器。
 
-  const observedRowsRef = useRef<Set<Element>>(new Set());
-  const handleEntry = useCallback(
-    (entry: ResizeObserverEntry) => {
-      const el = entry.target;
-      if (!(el instanceof HTMLElement)) return;
-      const msgId = el.dataset.vindex;
-      const measuredHeight = el.offsetHeight || Math.ceil(entry.contentRect.height);
-      if (msgId != null && measuredHeight > 0) {
-        setActual(msgId, measuredHeight);
-      }
-    },
-    [setActual]
-  );
-
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-    const roManager = ResizeObserverManager.getInstance();
-    const observed = observedRowsRef.current;
-    const current = new Set<Element>(
-      Array.from(container.querySelectorAll('[data-vindex]'))
-    );
-    for (const row of current) {
-      if (!observed.has(row)) {
-        roManager.observe(row, handleEntry);
-        observed.add(row);
-      }
-    }
-    for (const row of observed) {
-      if (!current.has(row)) {
-        roManager.unobserve(row, handleEntry);
-        observed.delete(row);
-      }
-    }
-  }, [msgIds, containerRef, handleEntry]);
-
-  useEffect(() => {
-    const observed = observedRowsRef.current;
-    const roManager = ResizeObserverManager.getInstance();
-    return () => {
-      for (const row of observed) {
-        roManager.unobserve(row, handleEntry);
-      }
-      observed.clear();
-    };
-  }, [handleEntry]);
-
-  // 仅在 messages 引用变化时灌入预估高度（依赖 manager 而非整个 vs，避免每次滚动重扫 1500 项）
-  useMemo(() => {
-    vsManager.syncOrder(msgIds);
+  // 消息变化时经 hook preloadEstimates：手势中缓冲，提交后 bump actualTick。
+  // 会话切换 / uiSize 仍走下面的 effect，直接 manager.preloadEstimates（clear 之后）。
+  useLayoutEffect(() => {
+    syncOrder(msgIds);
     const unmeasuredEstimates: Array<{ id: string; height: number }> = [];
     for (const m of messages) {
-      if (!vsManager.hasActualHeight(m.id)) {
+      if (!manager.hasActualHeight(m.id)) {
         unmeasuredEstimates.push({
           id: m.id,
           height: estimateTimelineMessageHeight(m),
@@ -248,9 +204,9 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
       }
     }
     if (unmeasuredEstimates.length > 0) {
-      vsManager.preloadEstimates(unmeasuredEstimates);
+      preloadEstimates(unmeasuredEstimates);
     }
-  }, [messages, msgIds, vsManager]);
+  }, [messages, msgIds, manager, preloadEstimates, syncOrder]);
 
   // order 与 ids 不一致时仅同步 order（估高由 messages 变化路径 / 会话切换 Effect 负责，禁止滚动路径 O(N) 重估）
   if (msgIds.length > 0 && vsManager.getOrderCount() !== msgIds.length) {
@@ -449,7 +405,7 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
                 const isThisMsgEditing = composer?.editingMessageId === msg.id;
                 return (
                   <AppErrorBoundary key={msg.id} variant="minimal" title="消息出错">
-                    <div data-vindex={msg.id}>
+                    <div data-vindex={msg.id} ref={rowMeasureRef(msg.id)}>
                       <ChatUserMessageRow
                         msg={msg}
                         isPinned={isPinnedMsg}
@@ -480,7 +436,7 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
 
               return (
                 <AppErrorBoundary key={msg.id} variant="minimal" title="消息出错">
-                  <div data-vindex={msg.id}>
+                  <div data-vindex={msg.id} ref={rowMeasureRef(msg.id)}>
                     <StreamingAssistantRow
                       msg={msg}
                       isFollowUp={isFollowUp}

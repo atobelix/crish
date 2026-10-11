@@ -9,6 +9,7 @@ import {
   isConversationFlowOn,
   readPurposeLabel,
   scrollToScrubberTarget,
+  snippetFromAssistantText,
   snippetFromUserText,
   wheelDeltaY,
 } from './flowScrubberModel';
@@ -75,6 +76,19 @@ describe('flowScrubberModel', () => {
   it('snippet 折叠空白且截断', () => {
     expect(snippetFromUserText('  a   b  ')).toBe('a b');
     expect(snippetFromUserText('x'.repeat(120)).endsWith('…')).toBe(true);
+  });
+
+  it('assistant 摘要将标题、列表、表格和行内格式转换为纯文本', () => {
+    const snippet = snippetFromAssistantText(
+      '# 结果\n\n- **列表项**\n\n| 列 A | 列 B |\n| --- | --- |\n| ~~旧值~~ | `新值` |\n\n[文档](https://example.test)'
+    );
+
+    expect(snippet).toContain('结果');
+    expect(snippet).toContain('列表项');
+    expect(snippet).toContain('列 A 列 B');
+    expect(snippet).toContain('旧值 新值');
+    expect(snippet).toContain('文档');
+    expect(snippet).not.toMatch(/#{1,6}\s|[-*+]\s|\|\s*列|~~|`|\[[^\]]+\]\(/);
   });
 
   it('wheel 行模式换算 36px', () => {

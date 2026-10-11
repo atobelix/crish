@@ -4,7 +4,13 @@
  */
 
 import type { SessionMessage } from '../store/types';
-import { isContextStateCarrierMessage } from '../store/sessionInjectionMount';
+import { estimateTimelineMessageHeight } from './virtualScrollEstimate';
+
+export {
+  CHAT_ROW_GAP_COMPACT_PX,
+  CHAT_ROW_GAP_PX,
+  estimateTimelineMessageHeight,
+} from './virtualScrollEstimate';
 
 export interface VisibleRange {
   startIndex: number;
@@ -22,65 +28,6 @@ export interface VsmDebugInfo {
 const FALLBACK_HEIGHT = 120;
 export const MESSAGE_ESTIMATED_ROW_HEIGHT = FALLBACK_HEIGHT;
 
-/**
- * 结构化多步骤消息高度估算模型（误差收敛至 ≤15%）
- */
-export function estimateTimelineMessageHeight(msg: SessionMessage): number {
-  // 核心守卫：PureCarrier 消息精准估算为 24px（20px 高度 + 4px 垂直节奏）
-  // 杜绝进入后续 Math.max(h, 100) 强制 100px 保底引发的 80px 树状数组下陷颠簸 (DEF-11)
-  if (isContextStateCarrierMessage(msg)) {
-    return 24;
-  }
-
-  // 用户消息：气泡紧凑，单行约 44px，长文按字数折行 + 附件高度
-  if (msg.sender === 'user') {
-    const len = msg.text?.length || 0;
-    const textHeight = Math.max(24, Math.ceil(len / 35) * 20);
-    const attachCount = (msg.attachments?.length || 0) + (msg.images?.length || 0);
-    const attachHeight = attachCount > 0 ? attachCount * 44 : 0;
-    return Math.min(Math.max(textHeight + attachHeight + 20, 44), 1000);
-  }
-
-  let h = 48; // Base Row Padding + Actions
-  const blocks = msg.blocks || [];
-
-  if (blocks.length > 0) {
-    for (const b of blocks) {
-      if (b.type === 'thought') {
-        const thoughtLen = (b.content || (b as { text?: string }).text || '').length;
-        // 思考块：基础头部 36px，预览文字根据长度增加，受折叠视口最大约束 260px
-        h += Math.min(36 + Math.ceil(thoughtLen / 45) * 20, 260);
-      } else if (b.type === 'tool_call') {
-        // 工具卡片：包含头部、命令输入与输出区域，实测均值约 130px
-        h += 130;
-      } else if (b.type === 'context_injection') {
-        // 上下文注入卡片紧凑单行约 44px
-        h += 44;
-      } else if (b.type === 'text') {
-        const len = b.content?.length || 0;
-        // 文本块：段落垂直节奏与折行，每 35 字符一整行 22px
-        h += Math.max(36, 16 + Math.ceil(len / 35) * 22);
-      }
-    }
-  } else {
-    // 降级文本估算
-    const thinkLen = (msg.thinking || '').trim().length;
-    if (thinkLen > 0) {
-      h += Math.min(36 + Math.ceil(thinkLen / 45) * 20, 260);
-    }
-    if (msg.toolCalls?.length) {
-      h += msg.toolCalls.length * 130;
-    }
-    if (msg.injections?.length) {
-      h += msg.injections.length * 44;
-    }
-    const len = msg.text?.length || 0;
-    h += Math.max(48, 20 + Math.ceil(len / 35) * 22);
-  }
-
-  return Math.min(Math.max(h, 50), 10000);
-}
-
 export class VirtualScrollManager {
   /** 全局流式吸附锁：在 Run 处于 processing 期间强制吸底，免疫历史折叠坍塌 */
   private stickToBottomLock = false;
@@ -90,6 +37,12 @@ export class VirtualScrollManager {
     string,
     { estimated: number; actual: number | null }
   >();
+  /**
+   * 最近一次实测（setActual / 快照回灌）。不暴露给组件。
+   * invalidateActual 之后 preloadEstimates 必须沿用它，不能写回启发式估高。
+   * clear()（会话切换 / uiSize → clearHeights）会把它一起清掉。
+   */
+  private lastMeasured = new Map<string, number>();
   /** 当前可见窗口的消息 ID 顺序 */
   private order: string[] = [];
   /** messageId -> order index 高速 O(1) 映射 */
@@ -192,6 +145,8 @@ export class VirtualScrollManager {
       if (!id || typeof height !== 'number' || !Number.isFinite(height) || height <= 0) {
         continue;
       }
+      // 已有实测的行：作废 actual 后仍保留 lastMeasured，禁止估高覆盖。
+      if (this.lastMeasured.has(id)) continue;
       const entry = this.heightsById.get(id);
       if (entry) {
         if (entry.actual != null) continue; // 实测已有，绝不覆盖
@@ -257,6 +212,7 @@ export class VirtualScrollManager {
       return false;
     }
     const safeHeight = height;
+    this.lastMeasured.set(id, safeHeight);
     const entry = this.heightsById.get(id);
     if (entry) {
       // T4.1（R-04）：同值跳过——actual/estimated 均等于新值时 0 更新短路
@@ -351,6 +307,7 @@ export class VirtualScrollManager {
       if (!id || typeof h !== 'number' || !Number.isFinite(h) || h <= 0)
         continue;
       const safeHeight = h;
+      this.lastMeasured.set(id, safeHeight);
       const entry = this.heightsById.get(id);
       if (!entry) {
         this.heightsById.set(id, { estimated: safeHeight, actual: null });
@@ -385,6 +342,7 @@ export class VirtualScrollManager {
       this.generation++;
     }
     this.heightsById.clear();
+    this.lastMeasured.clear();
     this.order = [];
     this.idToIndexMap.clear();
     this.bitTree = new Float64Array(0);

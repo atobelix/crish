@@ -25,7 +25,7 @@ import {
   EMPTY_NARRATIVE_SLOTS,
   NarrativeRenderSlotsContext,
 } from '../chat-message/narrativeRenderSlots';
-import { isContextStateCarrierMessage } from '../../store/sessionInjectionMount';
+import { isContextStateCarrierMessage } from '../../store/storeAccess';
 
 export type {
   ChatMessageListApprovalProps,
@@ -191,8 +191,6 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
     return { renderTools, renderThought };
   }, [renderTools, renderThought]);
 
-  if (messages.length === 0) return null;
-
   const pins = useMemo(
     () => ({
       pinnedItems,
@@ -265,6 +263,9 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
     }),
     [composer, handleFillFollowUp, handleSendFollowUp]
   );
+
+  // D（Hooks 顺序）：提前 return 必须位于全部 hooks 之后
+  if (messages.length === 0) return null;
 
   return (
     <AppErrorBoundary variant="compact" title="消息列表出错">

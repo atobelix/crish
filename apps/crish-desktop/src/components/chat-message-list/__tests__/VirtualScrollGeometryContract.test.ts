@@ -6,10 +6,12 @@ describe('虚拟滚动几何稳定与统一盒模型契约 (Plan 05 DEF-13 & DEF
   const listCssPath = path.resolve(__dirname, '../ChatMessageList.module.css');
   const rowCssPath = path.resolve(__dirname, '../../chat-message-row/ChatMessageRow.module.css');
   const virtualizerTsxPath = path.resolve(__dirname, '../MessageVirtualizer.tsx');
+  const measurePath = path.resolve(__dirname, '../messageVirtualizerMeasure.ts');
 
   const listCss = fs.readFileSync(listCssPath, 'utf-8');
   const rowCss = fs.readFileSync(rowCssPath, 'utf-8');
   const virtualizerTsx = fs.readFileSync(virtualizerTsxPath, 'utf-8');
+  const measureSrc = fs.readFileSync(measurePath, 'utf-8');
 
   describe('1. ChatMessageList.module.css 契约：消除相邻兄弟外边距黑洞 (DEF-13)', () => {
     it('彻底切除 [data-chat-list-inner] 相邻兄弟 margin-top 选择器', () => {
@@ -31,8 +33,11 @@ describe('虚拟滚动几何稳定与统一盒模型契约 (Plan 05 DEF-13 & DEF
   });
 
   describe('2. ChatMessageRow.module.css 契约：内部盒模型与双重虚拟化切除 (DEF-13 & DEF-14)', () => {
-    it('.row 包含内部盒模型 padding-bottom: 16px 与 margin: 0', () => {
-      expect(rowCss).toMatch(/\.row\s*\{[\s\S]*?padding-bottom:\s*16px;/);
+    it('.row 包含内部盒模型 padding-bottom（--chat-row-gap，默认 16px）与 margin: 0', () => {
+      // FINAL-PLAN P2-a：行距 token 化，回退值仍为 16px
+      expect(rowCss).toMatch(
+        /\.row\s*\{[\s\S]*?padding-bottom:\s*var\(--chat-row-gap, var\(--space-4, 16px\)\);/
+      );
       expect(rowCss).toMatch(/\.row\s*\{[\s\S]*?margin-top:\s*0;/);
       expect(rowCss).toMatch(/\.row\s*\{[\s\S]*?margin-bottom:\s*0;/);
     });
@@ -44,7 +49,10 @@ describe('虚拟滚动几何稳定与统一盒模型契约 (Plan 05 DEF-13 & DEF
     });
 
     it('.rowCarrier 纯状态载体赋予紧凑发丝节奏 4px，彻底切除外部 margin', () => {
-      expect(rowCss).toMatch(/\.rowCarrier\s*\{[^}]*padding:\s*0 0 4px;/);
+      // FINAL-PLAN P2-a：--chat-row-gap-compact，回退值仍为 4px
+      expect(rowCss).toMatch(
+        /\.rowCarrier\s*\{[^}]*padding:\s*0 0 var\(--chat-row-gap-compact, var\(--space-1, 4px\)\);/
+      );
       expect(rowCss).toMatch(/\.rowCarrier\s*\{[^}]*margin:\s*0;/);
       // 严禁旧版 margin: 2px 0 造成的外部边距漏洞
       expect(rowCss).not.toMatch(/\.rowCarrier\s*\{[^}]*margin:\s*2px 0;/);
@@ -53,8 +61,12 @@ describe('虚拟滚动几何稳定与统一盒模型契约 (Plan 05 DEF-13 & DEF
 
   describe('3. MessageVirtualizer.tsx 统一度量契约 (DEF-13 §2.2)', () => {
     it('ResizeObserver 统一度量入口使用 el.offsetHeight 度量完整盒模型高度', () => {
-      expect(virtualizerTsx).toContain('el.offsetHeight');
-      expect(virtualizerTsx).toMatch(/const measuredHeight =\s*el\.offsetHeight \|\| Math\.ceil\(entry\.contentRect\.height\);/);
+      expect(measureSrc).toContain('el.offsetHeight');
+      expect(measureSrc).toMatch(/const measuredHeight =\s*el\.offsetHeight \|\| Math\.ceil\(entry\.contentRect\.height\);/);
+      expect(measureSrc).toMatch(/ResizeObserverManager/);
+      expect(measureSrc).not.toMatch(/new\s+ResizeObserver\s*\(/);
+      expect(virtualizerTsx).toMatch(/ref=\{rowMeasureRef\(msg\.id\)\}/);
+      expect(virtualizerTsx).not.toMatch(/querySelectorAll\(\s*'\[data-vindex\]'\s*\)/);
     });
   });
 
