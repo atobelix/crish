@@ -130,6 +130,32 @@ describe('LeafToolTabStrip 纯标签化、手势交互与状态机极限压测 (
       expect(itemTexts).not.toContain('diff');
     });
 
+    it('断言 2.1b：hover 加号按钮不会弹开面板，必须主动 click 才展开（防误触与竞态）', async () => {
+      const leaf = { tabs: ['files'], activeTab: 'files' };
+      const { container } = render(
+        <LeafToolTabStrip
+          leafId="tool-leaf-1"
+          sessionId="sess-b"
+          sessionTabId="tab-sess"
+          tabs={leaf.tabs}
+          activeTab={leaf.activeTab}
+        />
+      );
+
+      const addBtn = container.querySelector(
+        '.side-panel-add-btn.in-flow'
+      ) as HTMLButtonElement;
+      expect(addBtn).toBeTruthy();
+
+      fireEvent.mouseEnter(addBtn);
+      expect(screen.queryByRole('menu')).toBeNull();
+
+      fireEvent.click(addBtn);
+      await waitFor(() => {
+        expect(screen.getByRole('menu')).toBeTruthy();
+      });
+    });
+
     it('断言 2.2：点击菜单项触发 openPanel 并选中新工具', async () => {
       const onAddTab = vi.fn();
       const leaf = { tabs: ['files'], activeTab: 'files' };

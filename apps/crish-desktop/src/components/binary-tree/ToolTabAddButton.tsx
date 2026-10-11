@@ -87,6 +87,7 @@ export const ToolTabAddButton: React.FC<ToolTabAddButtonProps> = ({
   return (
     <SmartExpandablePanel
       position={{ align: 'end', side: 'bottom', sideOffset: 4 }}
+      triggerMode="click"
       trigger={
         <Tooltip content="添加工具标签" side="bottom">
           {btnElement}

@@ -36,8 +36,18 @@ import {
   useLayoutStore,
   useSessionStore,
   getCompositionRoot,
+  mintDraftSessionId,
+  isPendingDraft,
 } from '../../store/storeAccess';
-import { mintDraftSessionId, isPendingDraft } from '../../store/draftSession';
+import {
+  COLLAPSED_DOCK,
+  leafPropsEqual,
+  readActiveTab,
+  readActiveTabId,
+  readLeafTabs,
+  rectPropsEqual,
+  type LeafSessionTab,
+} from './treeLeafPanelModel';
 import {
   viewRegistry,
   SlotOutlet,
@@ -56,94 +66,12 @@ interface TreeLeafPanelProps {
   isMultiChat?: boolean;
 }
 
-interface LeafSessionTab {
-  tabId: string;
-  sessionId: string;
-  title?: string;
-  dock?: {
-    collapsed: boolean;
-    openPanelIds: string[];
-    activePanelId: string | null;
-    widthRatio: number;
-  };
-}
-
 type SessionShellCommands = {
   activateTab: (leafId: string, tabId: string) => void;
 };
 
 function sessionShell(): SessionShellCommands {
   return getCompositionRoot().shell as unknown as SessionShellCommands;
-}
-
-function readLeafTabs(leaf: LayoutLeaf): LeafSessionTab[] {
-  const raw = leaf.tabs as unknown;
-  if (!Array.isArray(raw)) return [];
-  return raw.filter(
-    (t): t is LeafSessionTab =>
-      typeof t === 'object' &&
-      t !== null &&
-      typeof (t as LeafSessionTab).tabId === 'string'
-  );
-}
-
-function readActiveTabId(leaf: LayoutLeaf): string {
-  const id = (leaf as LayoutLeaf & { activeTabId?: string }).activeTabId;
-  return typeof id === 'string' ? id : '';
-}
-
-const COLLAPSED_DOCK = {
-  collapsed: true,
-  openPanelIds: [] as string[],
-  activePanelId: null as string | null,
-  widthRatio: 0.5,
-};
-
-function readActiveTab(
-  leaf: LayoutLeaf,
-  isComposingDraft?: boolean
-): LeafSessionTab | undefined {
-  const tabs = readLeafTabs(leaf);
-  if (tabs.length === 0) return undefined;
-  const activeTabId = readActiveTabId(leaf);
-  if (activeTabId === '' && isComposingDraft) return undefined;
-  if (activeTabId) return tabs.find((t) => t.tabId === activeTabId) ?? tabs[0];
-  return tabs[0];
-}
-
-function rectPropsEqual(
-  a: TreeLeafPanelProps['rect'],
-  b: TreeLeafPanelProps['rect']
-): boolean {
-  return a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
-}
-
-function dockPropsEqual(
-  a?: LeafSessionTab['dock'],
-  b?: LeafSessionTab['dock']
-): boolean {
-  if (a === b) return true;
-  if (!a || !b) return false;
-  return (
-    a.collapsed === b.collapsed &&
-    a.activePanelId === b.activePanelId &&
-    a.widthRatio === b.widthRatio &&
-    a.openPanelIds.length === b.openPanelIds.length &&
-    a.openPanelIds.every((id, i) => id === b.openPanelIds[i])
-  );
-}
-
-function leafPropsEqual(a: LayoutLeaf, b: LayoutLeaf): boolean {
-  if (a === b) return true;
-  if (a.id !== b.id || readActiveTabId(a) !== readActiveTabId(b)) return false;
-  if (!dockPropsEqual(a.dock, b.dock)) return false;
-  const at = readLeafTabs(a);
-  const bt = readLeafTabs(b);
-  if (at.length !== bt.length) return false;
-  return at.every((x, i) => {
-    const y = bt[i]!;
-    return x.tabId === y.tabId && x.sessionId === y.sessionId && dockPropsEqual(x.dock, y.dock);
-  });
 }
 
 export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(

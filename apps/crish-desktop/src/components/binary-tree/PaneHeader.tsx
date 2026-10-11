@@ -21,10 +21,15 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { LayoutLeaf } from '../../store/types';
-import { useSessionStore, useLayoutStore } from '../../store/storeAccess';
-import { useLayoutTreeStore, collectLeaves } from '../../store/layout-tree';
+import {
+  useSessionStore,
+  useLayoutStore,
+  useLayoutTreeStore,
+  collectLeaves,
+  isPendingDraft,
+  mintDraftSessionId,
+} from '../../store/storeAccess';
 import { getCompositionRoot } from '../../app/compositionRoot';
-import { isPendingDraft, mintDraftSessionId } from '../../store/draftSession';
 import { useSessionTabDrag } from '../shell/SessionTabDragContext';
 import { DRAG_THRESHOLD_PX, NON_TAB_SPACE_PX, TAB_GAP_PX } from '../../utils/tabStripGeometry';
 import { paneTabStripVars } from './tabStripVars';
@@ -37,6 +42,7 @@ import {
   nextAvailableNeighborId,
   type LeafSessionTab,
 } from './paneHeaderGeometry';
+import { readActiveTabId, readCommittedLeafTabs } from './paneHeaderModel';
 import { PaneTabItem } from './PaneTabItem';
 import { Button } from '../ui';
 import styles from './PaneHeader.module.css';
@@ -58,23 +64,6 @@ type SessionShellCommands = {
 
 function sessionShell(): SessionShellCommands {
   return getCompositionRoot().shell as unknown as SessionShellCommands;
-}
-
-function readLeafTabs(leaf: LayoutLeaf): LeafSessionTab[] {
-  const raw = leaf.tabs as unknown;
-  if (!Array.isArray(raw)) return [];
-  return raw.filter(
-    (t): t is LeafSessionTab =>
-      typeof t === 'object' &&
-      t !== null &&
-      typeof (t as LeafSessionTab).tabId === 'string' &&
-      !isPendingDraft((t as LeafSessionTab).sessionId)
-  );
-}
-
-function readActiveTabId(leaf: LayoutLeaf): string {
-  const id = (leaf as LayoutLeaf & { activeTabId?: string }).activeTabId;
-  return typeof id === 'string' ? id : '';
 }
 
 export const PaneHeader: React.FC<PaneHeaderProps> = React.memo(
@@ -106,7 +95,7 @@ export const PaneHeader: React.FC<PaneHeaderProps> = React.memo(
 
     // 条带成员计算：已提交会话 tabs，分屏下若无真会话但有草稿保留草稿以支持关闭
     const visibleTabs = useMemo(() => {
-      const committedTabs = readLeafTabs(leaf);
+      const committedTabs = readCommittedLeafTabs(leaf);
       if (committedTabs.length > 0) {
         return committedTabs;
       }
