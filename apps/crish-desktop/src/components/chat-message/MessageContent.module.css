@@ -34,7 +34,8 @@
 .turnProcessControlBar:focus-visible {
   outline: none;
   border-radius: var(--radius-sm);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
+  box-shadow: 0 0 0 1px
+    color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
 }
 
 .chevron {
@@ -92,6 +93,12 @@
   background: transparent;
   word-break: break-word;
   overflow-wrap: break-word;
+}
+
+/* 工具调用/过程段与回复正文之间稍作拉开（微调 +4px，整体 12px 节奏） */
+.assistantTimelineStream > :not(.contentText) + .contentText,
+.assistantTimelineStream > :not(.contentText) + :global([data-kind='text']) {
+  margin-top: 4px;
 }
 
 .compactAnswer {

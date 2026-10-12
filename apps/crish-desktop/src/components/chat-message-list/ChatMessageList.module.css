@@ -20,7 +20,7 @@
   height: 48px;
   pointer-events: none;
   z-index: 5;
-  transition: opacity var(--transition-fast, 150ms) ease;
+  transition: opacity var(--transition-fast);
 }
 
 .streamHost::before {

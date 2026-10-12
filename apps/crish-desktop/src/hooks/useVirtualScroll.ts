@@ -1,9 +1,26 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {
   VirtualScrollManager,
   type VisibleRange,
 } from '../api/VirtualScrollManager';
 import { ResizeObserverManager } from '../components/ui/utils/ResizeObserverManager';
+import {
+  DEFAULT_OVERSCAN,
+  DEFAULT_VIEWPORT_HEIGHT_PX,
+  NEAR_BOTTOM_EPSILON_PX,
+  SIGNIFICANT_HEIGHT_DELTA_PX,
+} from './virtualScrollConstants';
+import {
+  useVirtualScrollGesture,
+  type PerformProgrammaticScrollFn,
+} from './useVirtualScrollGesture';
 
 export interface UseVirtualScrollOptions {
   /** 消息 ID 序列 */
@@ -53,18 +70,18 @@ export interface UseVirtualScrollResult {
   isGestureActive: () => boolean;
   /** 立即提交 pending 测高（测试与会话切换用） */
   flushPendingGeometry: () => void;
+  /** 标记目标程序滚动并启动“单次匹配消费 + 双帧 rAF 兜底”代际令牌 */
+  markProgrammaticScroll: (targetTop: number) => void;
+  /** 执行程序性吸底滚动，豁免其触发的原生 scroll 事件进入手势冻结 */
+  performProgrammaticScroll: PerformProgrammaticScrollFn;
+  /** 物理硬件输入（Capture 阶段）原子销毁程序滚动豁免权并激活手势保护 */
+  cancelProgrammaticScroll: () => void;
+  /** 判定当前 scroll 事件是否由程序吸底引发 */
+  isProgrammaticScrollEvent: (currentScrollTop: number) => boolean;
 }
 
-const DEFAULT_OVERSCAN = 6;
-/** 手势结束后进入 Commit Epoch 的静默窗口（ms） */
-const GESTURE_IDLE_MS = 100;
-/** 显著高度差（px）：超过才触发 actualTick 全量重算 */
-const SIGNIFICANT_HEIGHT_DELTA = 4;
-/** 视口底部邻近阈值（px） */
-const NEAR_BOTTOM_EPSILON = 16;
-
 export function useVirtualScroll(
-  options: UseVirtualScrollOptions,
+  options: UseVirtualScrollOptions
 ): UseVirtualScrollResult {
   const { itemCount, overscan = DEFAULT_OVERSCAN, fallbackHeight } = options;
 
@@ -76,17 +93,20 @@ export function useVirtualScroll(
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [scrollTop, setScrollTop] = useState(0);
-  const [viewportHeight, setViewportHeight] = useState(600);
+  const [viewportHeight, setViewportHeight] = useState(
+    DEFAULT_VIEWPORT_HEIGHT_PX
+  );
   const [actualTick, setActualTick] = useState(0);
 
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
-    const updateHeight = () => setViewportHeight(el.clientHeight || 600);
+    const updateHeight = () =>
+      setViewportHeight(el.clientHeight || DEFAULT_VIEWPORT_HEIGHT_PX);
     updateHeight();
     const roManager = ResizeObserverManager.getInstance();
     const handleRo = (entry: ResizeObserverEntry) => {
-      setViewportHeight(entry.contentRect.height || 600);
+      setViewportHeight(entry.contentRect.height || DEFAULT_VIEWPORT_HEIGHT_PX);
     };
     roManager.observe(el, handleRo);
     return () => roManager.unobserve(el, handleRo);
@@ -117,22 +137,12 @@ export function useVirtualScroll(
     estimatedTotalHeight: 0,
   });
 
-  const gestureActiveRef = useRef(false);
-  const gestureIdleTimerRef = useRef<number | null>(null);
   const pendingActualRef = useRef<Map<string, number>>(new Map());
   const pendingEstimatesRef = useRef<Map<string, number>>(new Map());
   const actualRafRef = useRef<number | null>(null);
-  const scrollRafRef = useRef<number | null>(null);
 
-  const cancelGestureIdleTimer = useCallback(() => {
-    if (gestureIdleTimerRef.current != null) {
-      window.clearTimeout(gestureIdleTimerRef.current);
-      gestureIdleTimerRef.current = null;
-    }
-  }, []);
-
-  /** Commit Epoch：把缓冲的估高/实测写入 BIT，并做视口上方锚点补偿 */
-  const applyPendingGeometry = useCallback(() => {
+  /** 把缓冲的估高/实测高度即时刷入 Fenwick 树（BIT），并做视口上方锚点补偿 */
+  const flushActualMeasurements = useCallback(() => {
     let significantChanged = false;
     let estimatesChanged = false;
     let deltaAbove = 0;
@@ -154,7 +164,7 @@ export function useVirtualScroll(
       const oldHeight = oldActual ?? manager.getHeight(msgId);
       const delta = h - oldHeight;
       const changed = manager.setActual(msgId, h);
-      if (changed && Math.abs(delta) > SIGNIFICANT_HEIGHT_DELTA) {
+      if (changed && Math.abs(delta) > SIGNIFICANT_HEIGHT_DELTA_PX) {
         significantChanged = true;
       }
       const idx = manager.getIndex(msgId);
@@ -167,7 +177,7 @@ export function useVirtualScroll(
     if (deltaAbove !== 0 && containerRef.current) {
       const el = containerRef.current;
       const maxScroll = Math.max(0, el.scrollHeight - el.clientHeight);
-      const isNearBottom = maxScroll - el.scrollTop <= NEAR_BOTTOM_EPSILON;
+      const isNearBottom = maxScroll - el.scrollTop <= NEAR_BOTTOM_EPSILON_PX;
       if (!isNearBottom && el.scrollTop > 0) {
         el.scrollTop += deltaAbove;
         latestScrollTopRef.current = el.scrollTop;
@@ -180,43 +190,37 @@ export function useVirtualScroll(
     }
   }, [manager]);
 
+  const {
+    gestureActiveRef,
+    isGestureActive,
+    bumpGestureEpoch,
+    resetGestureState,
+    markProgrammaticScroll,
+    performProgrammaticScroll,
+    cancelProgrammaticScroll,
+    isProgrammaticScrollEvent,
+  } = useVirtualScrollGesture({
+    containerRef,
+    onGestureEnd: flushActualMeasurements,
+  });
+
   const scheduleActualFlush = useCallback(() => {
     if (actualRafRef.current != null) return;
     actualRafRef.current = requestAnimationFrame(() => {
       actualRafRef.current = null;
       if (gestureActiveRef.current) return;
-      applyPendingGeometry();
+      flushActualMeasurements();
     });
-  }, [applyPendingGeometry]);
-
-  const endGestureEpoch = useCallback(() => {
-    gestureActiveRef.current = false;
-    cancelGestureIdleTimer();
-    applyPendingGeometry();
-  }, [applyPendingGeometry, cancelGestureIdleTimer]);
-
-  const bumpGestureEpoch = useCallback(() => {
-    // 已在 Gesture 中则只滑动 idle 窗口，避免每次 scroll 重置定时器
-    gestureActiveRef.current = true;
-    if (gestureIdleTimerRef.current != null) {
-      window.clearTimeout(gestureIdleTimerRef.current);
-      gestureIdleTimerRef.current = null;
-    }
-    gestureIdleTimerRef.current = window.setTimeout(() => {
-      gestureIdleTimerRef.current = null;
-      endGestureEpoch();
-    }, GESTURE_IDLE_MS);
-  }, [endGestureEpoch]);
+  }, [flushActualMeasurements, gestureActiveRef]);
 
   const flushPendingGeometry = useCallback(() => {
-    cancelGestureIdleTimer();
-    gestureActiveRef.current = false;
+    resetGestureState();
     if (actualRafRef.current != null) {
       cancelAnimationFrame(actualRafRef.current);
       actualRafRef.current = null;
     }
-    applyPendingGeometry();
-  }, [applyPendingGeometry, cancelGestureIdleTimer]);
+    flushActualMeasurements();
+  }, [flushActualMeasurements, resetGestureState]);
 
   useEffect(() => {
     return () => {
@@ -224,63 +228,61 @@ export function useVirtualScroll(
         cancelAnimationFrame(actualRafRef.current);
         actualRafRef.current = null;
       }
-      if (scrollRafRef.current != null) {
-        cancelAnimationFrame(scrollRafRef.current);
-        scrollRafRef.current = null;
-      }
-      if (gestureIdleTimerRef.current != null) {
-        window.clearTimeout(gestureIdleTimerRef.current);
-        gestureIdleTimerRef.current = null;
-      }
     };
   }, []);
 
   const overscanSafe = useMemo(
-    () => (Number.isFinite(overscan) && overscan >= 0 ? Math.floor(overscan) : DEFAULT_OVERSCAN),
-    [overscan],
+    () =>
+      Number.isFinite(overscan) && overscan >= 0
+        ? Math.floor(overscan)
+        : DEFAULT_OVERSCAN,
+    [overscan]
   );
 
   const visibleRange = useMemo(
-    () => manager.computeVisibleRange(scrollTop, viewportHeight, itemCount, overscanSafe),
+    () =>
+      manager.computeVisibleRange(
+        scrollTop,
+        viewportHeight,
+        itemCount,
+        overscanSafe
+      ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [manager, scrollTop, viewportHeight, itemCount, overscanSafe, actualTick, ids],
+    [
+      manager,
+      scrollTop,
+      viewportHeight,
+      itemCount,
+      overscanSafe,
+      actualTick,
+      ids,
+    ]
   );
   renderedRangeRef.current = visibleRange;
 
   const totalHeight = useMemo(
     () => manager.getTotalHeight(itemCount),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [manager, itemCount, actualTick],
+    [manager, ids, itemCount, actualTick]
   );
 
-  const onScroll = useCallback<React.UIEventHandler<HTMLDivElement>>((e) => {
-    const top = e.currentTarget.scrollTop;
-    latestScrollTopRef.current = top;
-    // 滚动即进入 Gesture Epoch：冻结测高对 scrollHeight 的改写
-    bumpGestureEpoch();
-    setScrollTop((prev) => (prev === top ? prev : top));
-  }, [bumpGestureEpoch]);
-
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    const onWheelOrTouch = () => bumpGestureEpoch();
-    el.addEventListener('wheel', onWheelOrTouch, { passive: true });
-    el.addEventListener('touchstart', onWheelOrTouch, { passive: true });
-    el.addEventListener('pointerdown', onWheelOrTouch, { passive: true });
-    const onScrollEnd = () => endGestureEpoch();
-    el.addEventListener('scrollend', onScrollEnd, { passive: true });
-    return () => {
-      el.removeEventListener('wheel', onWheelOrTouch);
-      el.removeEventListener('touchstart', onWheelOrTouch);
-      el.removeEventListener('pointerdown', onWheelOrTouch);
-      el.removeEventListener('scrollend', onScrollEnd);
-    };
-  }, [bumpGestureEpoch, endGestureEpoch]);
+  const onScroll = useCallback<React.UIEventHandler<HTMLDivElement>>(
+    (e) => {
+      const newScrollTop = e.currentTarget.scrollTop;
+      latestScrollTopRef.current = newScrollTop;
+      if (isProgrammaticScrollEvent(newScrollTop)) {
+        setScrollTop((prev) => (prev === newScrollTop ? prev : newScrollTop));
+        return;
+      }
+      bumpGestureEpoch();
+      setScrollTop((prev) => (prev === newScrollTop ? prev : newScrollTop));
+    },
+    [bumpGestureEpoch, isProgrammaticScrollEvent]
+  );
 
   const syncOrder = useCallback(
-    (ids: string[]) => manager.syncOrder(ids),
-    [manager],
+    (nextIds: string[]) => manager.syncOrder(nextIds),
+    [manager]
   );
 
   const setEstimated = useCallback(
@@ -291,7 +293,7 @@ export function useVirtualScroll(
       }
       manager.setEstimated(id, height);
     },
-    [manager],
+    [gestureActiveRef, manager]
   );
 
   const setActual = useCallback(
@@ -299,13 +301,11 @@ export function useVirtualScroll(
       const cur = manager.getActualHeight(id);
       if (cur !== null && cur === height) return;
       pendingActualRef.current.set(id, height);
-      if (gestureActiveRef.current) {
-        bumpGestureEpoch();
-        return;
+      if (!gestureActiveRef.current) {
+        scheduleActualFlush();
       }
-      scheduleActualFlush();
     },
-    [bumpGestureEpoch, manager, scheduleActualFlush],
+    [gestureActiveRef, manager, scheduleActualFlush]
   );
 
   const preloadEstimates = useCallback(
@@ -323,26 +323,26 @@ export function useVirtualScroll(
         setActualTick((t) => t + 1);
       }
     },
-    [manager],
+    [gestureActiveRef, manager]
   );
 
   const clearHeights = useCallback(() => {
     pendingActualRef.current.clear();
     pendingEstimatesRef.current.clear();
-    cancelGestureIdleTimer();
-    gestureActiveRef.current = false;
+    resetGestureState();
     if (actualRafRef.current != null) {
       cancelAnimationFrame(actualRafRef.current);
       actualRafRef.current = null;
     }
     manager.clear();
-    // 绑定当前 ids 引用：同引用 render 不回灌 order；仅 ids 引用真正变化时再 syncOrder
-    // 注意：禁止依赖 ids 数组本身（避免 clearHeights 身份随消息更新抖动 → 反复清空 → 空屏）
     prevIdsRef.current = idsRef.current;
+    if (containerRef.current) {
+      containerRef.current.scrollTop = 0;
+    }
+    latestScrollTopRef.current = 0;
+    setScrollTop(0);
     setActualTick((t) => t + 1);
-  }, [cancelGestureIdleTimer, manager]);
-
-  const isGestureActive = useCallback(() => gestureActiveRef.current, []);
+  }, [manager, resetGestureState]);
 
   return {
     visibleRange,
@@ -360,5 +360,9 @@ export function useVirtualScroll(
     containerHeight: viewportHeight,
     isGestureActive,
     flushPendingGeometry,
+    markProgrammaticScroll,
+    performProgrammaticScroll,
+    cancelProgrammaticScroll,
+    isProgrammaticScrollEvent,
   };
 }

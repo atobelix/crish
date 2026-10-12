@@ -19,7 +19,9 @@ function createMockMessage(
   } as SessionMessage;
 }
 
-function createVirtualizerProps(messages: SessionMessage[]): MessageVirtualizerProps {
+function createVirtualizerProps(
+  messages: SessionMessage[]
+): MessageVirtualizerProps {
   return {
     messages,
     activeSessionId: 'sess-test',
@@ -54,8 +56,10 @@ function createVirtualizerProps(messages: SessionMessage[]): MessageVirtualizerP
       hideThinkingBlock: false,
       inPlanMode: false,
       planApproved: false,
-      lastAssistantId: messages.find((m) => m.sender === 'assistant')?.id ?? null,
-      lastUserId: [...messages].reverse().find((m) => m.sender === 'user')?.id ?? null,
+      lastAssistantId:
+        messages.find((m) => m.sender === 'assistant')?.id ?? null,
+      lastUserId:
+        [...messages].reverse().find((m) => m.sender === 'user')?.id ?? null,
       showAllMessages: true,
     },
     interaction: {
@@ -82,9 +86,7 @@ describe('ChatScrollFloorSlot 零高度 Sticky 到底卡槽规范', () => {
 
   describe('一、几何不变量与物理零高度 (Zero Footprint)', () => {
     it('插槽容器必须声明 position: sticky; bottom: 0; height: 0; pointer-events: none', () => {
-      const { getByTestId } = render(
-        <ChatScrollFloorSlot isAtBottom={true} />
-      );
+      const { getByTestId } = render(<ChatScrollFloorSlot isAtBottom={true} />);
       const slot = getByTestId('chat-scroll-floor-slot');
       expect(slot).toBeInTheDocument();
       expect(slot.style.position).toBe('sticky');
@@ -295,14 +297,69 @@ describe('ChatScrollFloorSlot 零高度 Sticky 到底卡槽规范', () => {
       });
 
       rerender(
-        <MessageVirtualizer
-          {...createVirtualizerProps(streamingMessages)}
-        />
+        <MessageVirtualizer {...createVirtualizerProps(streamingMessages)} />
       );
 
       // 验证自动吸底跟随：scrollTop 被更新为最新的 maxScroll (1800 - 600 = 1200)
       expect(scrollContainer.scrollTop).toBe(1200);
       expect(screen.queryByTestId('chat-scroll-floor-btn')).toBeNull();
+    });
+
+    it('点击或触发展开/折叠时：即使当前处于最新区域，视口也锚定在点击位置自然向下展开，绝对不强行滚动到底部', () => {
+      const messages = [
+        createMockMessage('m1', 'user', '请帮我写一段代码'),
+        createMockMessage('m2', 'assistant', '这里是代码实现...'),
+      ];
+      const props = createVirtualizerProps(messages);
+      const { getByTestId, rerender } = render(
+        <MessageVirtualizer {...props} />
+      );
+
+      const scrollContainer = getByTestId('chat-scroll-container');
+      Object.defineProperty(scrollContainer, 'scrollHeight', {
+        value: 1200,
+        writable: true,
+        configurable: true,
+      });
+      Object.defineProperty(scrollContainer, 'clientHeight', {
+        value: 600,
+        writable: true,
+        configurable: true,
+      });
+      Object.defineProperty(scrollContainer, 'clientWidth', {
+        value: 600,
+        writable: true,
+        configurable: true,
+      });
+      scrollContainer.scrollTop = 600;
+
+      // 1. 模拟用户点击了某个折叠/展开元素（例如思考过程或工具栏）
+      const toggleEl = document.createElement('div');
+      toggleEl.setAttribute('role', 'button');
+      toggleEl.setAttribute('aria-expanded', 'false');
+      scrollContainer.appendChild(toggleEl);
+
+      fireEvent.pointerDown(toggleEl, { clientX: 200, clientY: 400 });
+
+      // 2. 模拟展开后总高度增长（scrollHeight 增长至 2000，新 maxScroll = 1400）
+      Object.defineProperty(scrollContainer, 'scrollHeight', {
+        value: 2000,
+        writable: true,
+        configurable: true,
+      });
+
+      rerender(<MessageVirtualizer {...createVirtualizerProps(messages)} />);
+
+      // 3. 关键断言：scrollTop 必须严格保持在 600，绝不跳跃至 1400！
+      // 内容在用户点击位置自然向下展开
+      expect(scrollContainer.scrollTop).toBe(600);
+      const slot = getByTestId('chat-scroll-floor-slot');
+      expect(slot).toHaveAttribute('data-at-bottom', 'false');
+
+      // 4. 关键断言：在 500ms 保护锁内，即使触发物理贴底滚动，isAtBottom 仍受锁保护，不翻转为吸底
+      scrollContainer.scrollTop = 1400;
+      fireEvent.scroll(scrollContainer);
+      expect(slot).toHaveAttribute('data-at-bottom', 'false');
     });
   });
 });

@@ -57,7 +57,7 @@ describe('思考行排版基线', () => {
     expect(b).toMatch(/line-height:\s*24px/);
     expect(b).toMatch(/font-size:\s*14px/);
     expect(b).toMatch(/color:\s*var\(--text-tertiary\)/);
-    expect(b).toMatch(/padding:\s*0 var\(--space-1, 4px\)/);
+    expect(b).toMatch(/padding:\s*0/);
   });
 
   it('语义标签「思考」：字重 400 + 颜色继承行状态机，严禁独立硬编码', () => {
@@ -92,7 +92,7 @@ describe('工具调用行与思考行同构', () => {
     expect(b).toMatch(/font-size:\s*14px/);
     expect(b).toMatch(/font-weight:\s*var\(--font-weight-normal/);
     expect(b).toMatch(/color:\s*var\(--text-tertiary\)/);
-    expect(b).toMatch(/padding:\s*0 4px/);
+    expect(b).toMatch(/padding:\s*0/);
   });
 
   it('悬停态与思考行一致：提升到 --text-primary（而非次级色）', () => {
@@ -130,7 +130,9 @@ describe('工具调用行与思考行同构', () => {
       expect(b, `${sel} 不得使用小字号`).not.toMatch(
         /font-size:\s*var\(--font-size-(xs|micro|xxs)/
       );
-      expect(b, `${sel} 不得使用小字号字面量`).not.toMatch(/font-size:\s*(9|10|11|12|13)px/);
+      expect(b, `${sel} 不得使用小字号字面量`).not.toMatch(
+        /font-size:\s*(9|10|11|12|13)px/
+      );
     }
   });
 

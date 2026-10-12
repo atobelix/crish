@@ -18,8 +18,9 @@ import {
   getSearchQuerySnapshot,
 } from '../../api/sessionSearch';
 import { MessageVirtualizer } from './MessageVirtualizer';
-import { scrollToMessage, useScrollAnchor } from './useScrollAnchor';
+import { useScrollAnchor } from './useScrollAnchor';
 import { useChatMessageState } from './useChatMessageState';
+import { useLeafScope } from '../../contexts/LeafScopeContext';
 import type { ChatMessageListProps } from './chatMessageListProps';
 import {
   EMPTY_NARRATIVE_SLOTS,
@@ -60,7 +61,11 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
     onProjectChanged: _onProjectChanged,
   } = projectPicker;
   const { onSetChatInput, onSendFollowUp } = composer;
-  const { onRegenerate, onBranch, onRetract } = generation;
+  const {
+    onRegenerate,
+    onBranch: _onBranch,
+    onRetract: _onRetract,
+  } = generation;
   const {
     approvalBusy,
     pendingApprovalMsgId,
@@ -69,8 +74,12 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
     onBatchApprove,
     onBatchDeny,
   } = approval;
-  const { onOpenDiff, onOpenPath, onOpenTerminal, onOpenDiffPanel } =
-    navigation;
+  const {
+    onOpenDiff,
+    onOpenPath,
+    onOpenTerminal,
+    onOpenDiffPanel: _onOpenDiffPanel,
+  } = navigation;
 
   // showProjectPicker/onShowProjectPicker/onProjectChanged 由父级透传但
   // 本组件未直接消费（原扁平 props 亦未解构使用）；保留 void 标记以明确意图
@@ -123,11 +132,15 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
     getSearchQuerySnapshot
   );
 
-  const { jumpToPinned } = useScrollAnchor({
-    messages,
-    sessionAllMessages: pinSourceMessages,
-    showAllMessages,
-  });
+  const { leafRootRef } = useLeafScope();
+
+  const { jumpToPinned, scrollToMessage: scopedScrollToMessage } =
+    useScrollAnchor({
+      messages,
+      sessionAllMessages: pinSourceMessages,
+      showAllMessages,
+      scrollContainerRef: leafRootRef,
+    });
 
   useEffect(() => {
     if (!searchHighlightQuery) return;
@@ -137,8 +150,14 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
     if (idx < 0) return;
     const id = messages[idx]?.id;
     if (!id) return;
-    scrollToMessage(id);
-  }, [searchHighlightQuery, activeSessionId, messages]);
+    scopedScrollToMessage(id, leafRootRef?.current);
+  }, [
+    searchHighlightQuery,
+    activeSessionId,
+    messages,
+    scopedScrollToMessage,
+    leafRootRef,
+  ]);
 
   const permissionMode = usePermissionField(selectPermissionMode);
   const hideThinkingBlock = useSettingsField((s) =>

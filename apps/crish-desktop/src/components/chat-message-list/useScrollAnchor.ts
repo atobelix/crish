@@ -9,20 +9,38 @@ export function pinSnippet(text?: string, max = 72): string {
   return t.length > max ? `${t.slice(0, max)}…` : t;
 }
 
-function findScrollContainer(el?: HTMLElement | null): HTMLElement | null {
-  const byAttr = document.querySelector<HTMLElement>(
-    '[data-chat-scroll-container]'
-  );
-  if (byAttr) return byAttr;
+function findScrollContainer(
+  el?: HTMLElement | null,
+  container?: HTMLElement | null
+): HTMLElement | null {
+  if (container) {
+    if (
+      container.matches?.(
+        '[data-chat-scroll-container], [data-virtual-scroll="true"], .list'
+      )
+    ) {
+      return container;
+    }
+    const inner = container.querySelector<HTMLElement>(
+      '[data-chat-scroll-container], [data-virtual-scroll="true"], .list'
+    );
+    if (inner) return inner;
+    return container;
+  }
   if (el) {
     const closest = el.closest<HTMLElement>(
       '[data-chat-scroll-container], [data-virtual-scroll="true"], .list'
     );
     if (closest) return closest;
   }
-  return document.querySelector<HTMLElement>(
-    '[data-virtual-scroll="true"], [role="region"][aria-label="会话消息"]'
-  );
+  // 彻底废除首行全局 document.querySelector('[data-chat-scroll-container]')
+  // 仅在完全没有容器上下文时回退全局
+  if (typeof document !== 'undefined') {
+    return document.querySelector<HTMLElement>(
+      '[data-chat-scroll-container], [data-virtual-scroll="true"], [role="region"][aria-label="会话消息"]'
+    );
+  }
+  return null;
 }
 
 function findMessageElement(
@@ -31,21 +49,32 @@ function findMessageElement(
 ): HTMLElement | null {
   const escaped = CSS.escape(messageId);
   const selector = `[data-msg-id="${escaped}"], [data-vindex="${escaped}"], [data-chat-node-key="${escaped}"]`;
-  const el = container
-    ? container.querySelector(selector)
-    : document.querySelector(selector);
-  return el instanceof HTMLElement ? el : null;
+  if (container) {
+    const scoped = container.querySelector<HTMLElement>(selector);
+    if (scoped) return scoped;
+    const leaf = container.closest<HTMLElement>('[data-leaf-id]');
+    if (leaf) {
+      const inLeaf = leaf.querySelector<HTMLElement>(selector);
+      if (inLeaf) return inLeaf;
+    }
+    // 已传入容器时阻断全局查询，防止跨分屏查到其他窗口的消息
+    return null;
+  }
+  if (typeof document !== 'undefined') {
+    const el = document.querySelector(selector);
+    return el instanceof HTMLElement ? el : null;
+  }
+  return null;
 }
 
-export function scrollToMessage(messageId: string): boolean {
-  const container = findScrollContainer();
+export function scrollToMessage(
+  messageId: string,
+  container?: HTMLElement | null
+): boolean {
   const el = findMessageElement(messageId, container);
   if (!el) return false;
 
-  const scroller =
-    container ??
-    findScrollContainer(el) ??
-    el.parentElement;
+  const scroller = findScrollContainer(el, container) ?? el.parentElement;
 
   if (scroller) {
     const elRect = el.getBoundingClientRect();
@@ -90,13 +119,14 @@ export function scrollToMessage(messageId: string): boolean {
   return true;
 }
 
-function scrollToMessageAfterPaint(
+export function scrollToMessageAfterPaint(
   messageId: string,
-  onMiss?: () => void
+  onMiss?: () => void,
+  container?: HTMLElement | null
 ): void {
   window.requestAnimationFrame(() => {
     window.requestAnimationFrame(() => {
-      if (!scrollToMessage(messageId)) onMiss?.();
+      if (!scrollToMessage(messageId, container)) onMiss?.();
     });
   });
 }
@@ -110,13 +140,16 @@ export interface UseScrollAnchorOptions {
    */
   sessionAllMessages: SessionMessage[];
   showAllMessages: boolean;
+  /** 可选：滚动容器 ref，避免跨分屏全局查找 */
+  scrollContainerRef?: React.RefObject<HTMLElement | null>;
 }
 
 export function useScrollAnchor({
   messages,
   sessionAllMessages,
   showAllMessages,
-  }: UseScrollAnchorOptions) {
+  scrollContainerRef,
+}: UseScrollAnchorOptions) {
   // Refs keep jumpToPinned identity stable across stream token message array churn
   // so MessageVirtualizer memo is not busted every token (pin path only reads on click).
   const messagesRef = useRef(messages);
@@ -126,39 +159,46 @@ export function useScrollAnchor({
   const showAllRef = useRef(showAllMessages);
   showAllRef.current = showAllMessages;
   const onShowToastRef = useRef((m: string) => toast.show(m));
-  
 
-  const jumpToPinned = useCallback((messageId: string) => {
-    const display = messagesRef.current;
-    const all = allMessagesRef.current;
-    const showAll = showAllRef.current;
-    const toast = onShowToastRef.current;
+  const jumpToPinned = useCallback(
+    (messageId: string) => {
+      const display = messagesRef.current;
+      const all = allMessagesRef.current;
+      const showAll = showAllRef.current;
+      const toast = onShowToastRef.current;
+      const container = scrollContainerRef?.current;
 
-    const idx = display.findIndex((m) => m.id === messageId);
-    if (idx < 0 && showAll) {
-      const exists = all.some((m) => m.id === messageId);
-      toast(exists ? '该消息不在当前过滤结果中' : '未找到该固定消息');
-      return;
-    }
-    const listForPin = idx >= 0 ? display : all;
-    const inList = listForPin.some((m) => m.id === messageId);
-    if (!inList) {
-      toast('未找到该固定消息');
-      return;
-    }
+      const idx = display.findIndex((m) => m.id === messageId);
+      if (idx < 0 && showAll) {
+        const exists = all.some((m) => m.id === messageId);
+        toast(exists ? '该消息不在当前过滤结果中' : '未找到该固定消息');
+        return;
+      }
+      const listForPin = idx >= 0 ? display : all;
+      const inList = listForPin.some((m) => m.id === messageId);
+      if (!inList) {
+        toast('未找到该固定消息');
+        return;
+      }
 
-    if (scrollToMessage(messageId)) {
-      return;
-    }
+      if (scrollToMessage(messageId, container)) {
+        return;
+      }
 
-    scrollToMessageAfterPaint(messageId, () => {
-      window.setTimeout(() => {
-        if (!scrollToMessage(messageId)) {
-          onShowToastRef.current('未找到该固定消息');
-        }
-      }, 50);
-    });
-  }, []);
+      scrollToMessageAfterPaint(
+        messageId,
+        () => {
+          window.setTimeout(() => {
+            if (!scrollToMessage(messageId, container)) {
+              onShowToastRef.current('未找到该固定消息');
+            }
+          }, 50);
+        },
+        container
+      );
+    },
+    [scrollContainerRef]
+  );
 
   return {
     jumpToPinned,
