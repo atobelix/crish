@@ -12,9 +12,7 @@ import type {
   SessionMessage,
   SessionMessageStatus,
 } from '../../store/types';
-import { PENDING_DRAFT_SESSION_ID } from '../../store/draftSession';
 import { getSessionStoreState } from '../../store/sessionStore';
-import { getLayoutState, resolveSessionState } from './storeAccessCore';
 // 本文件门面内部用到的纯查询/校验函数从拆分文件引入；
 // 其余纯查询函数仅 re-export（外部消费方 import 路径不变）。
 import {
@@ -35,26 +33,6 @@ export {
   withActiveSession,
   requireExistingSessionId,
 } from './sessionAccessQuery';
-
-/**
- * @deprecated Name lies — **does not create a session**. Redirects to pending draft only.
- *
- * Prefer product entry:
- * - `getCompositionRoot().shell.openNewDraftTab(folder?)` (tab + enterDraft)
- * - `getCompositionRoot().session.enterDraft(folder?)` / `enterDraftMode(folder?)`
- *
- * Implementation: `enterDraftMode` + chat surface. **No empty-shell mint.**
- * Returns draft sentinel id (`PENDING_DRAFT_SESSION_ID`) for legacy callers.
- * Real session id only via `commitDraftIfNeeded` on first send.
- *
- * @see docs/architecture/session-pending-draft-adr.md
- */
-export function createSessionAndOpenChat(folder?: string): string {
-  // Compat shim → draft path only (do not mint sessions[])
-  resolveSessionState().enterDraftMode(folder);
-  getLayoutState().setChatMainSurface('chat');
-  return PENDING_DRAFT_SESSION_ID;
-}
 
 /**
  * 创建 / 附加真会话（写入 sessions[]）。
@@ -202,7 +180,12 @@ export function updateMessageThinking(
 ): void {
   const sid = requireExistingSessionId(sessionId);
   if (!sid) return;
-  getSessionStoreState().updateMessageThinking(sid, messageId, thinking, turnIndex);
+  getSessionStoreState().updateMessageThinking(
+    sid,
+    messageId,
+    thinking,
+    turnIndex
+  );
 }
 
 export function addMessageToolCall(

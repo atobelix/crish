@@ -10,10 +10,11 @@ import {
   getScope,
   hasScope,
   clearAllScopes,
-  registerActiveVsm,
-  unregisterActiveVsm,
-  getActiveVsm,
   _activeVsmByScope,
+  captureScrollAnchor,
+  restoreScrollAnchor,
+  computePrependHeightDelta,
+  prependIdsWithScrollAnchor,
 } from './VirtualScrollManager';
 import type { SessionMessage } from '../store/types';
 
@@ -837,41 +838,40 @@ describe('W2-5 / VULN-04：复合作用域隔离 (${paneId}::${sessionId}) 与�
     });
   });
 
-  describe('旧式单键注册与向后兼容回退检索', () => {
-    it('兼容旧式单个 sessionId 格式注册与检索', () => {
-      const vsmLegacy = new VirtualScrollManager(100);
+  describe('默认窗格作用域与 O(1) 严格寻址契约 (§3.2.1)', () => {
+    it('未指定 paneId 时归一化至 default 窗格复合键', () => {
+      const vsmDefault = new VirtualScrollManager(100);
       const sessionId = 'session-legacy-single';
 
-      registerScope(sessionId, vsmLegacy);
+      registerScope(sessionId, vsmDefault);
 
-      // 单键检索
-      expect(getScope(sessionId)).toBe(vsmLegacy);
-      // default 窗格显式检索
-      expect(getScope(sessionId, 'default')).toBe(vsmLegacy);
-      expect(getScope(`default::${sessionId}`)).toBe(vsmLegacy);
+      // 默认窗格检索
+      expect(getScope(sessionId)).toBe(vsmDefault);
+      expect(getScope(sessionId, 'default')).toBe(vsmDefault);
+      expect(getScope(`default::${sessionId}`)).toBe(vsmDefault);
 
-      // 单键注销
+      // 默认窗格注销
       expect(unregisterScope(sessionId)).toBe(true);
       expect(getScope(sessionId)).toBeUndefined();
     });
 
-    it('降级匹配：未指定 paneId 时能够查找到任意活跃窗格的同一会话实例', () => {
+    it('废除 O(N) 后缀遍历降级：未指定 paneId 时仅查 default 窗格，绝不跨窗格线性扫描', () => {
       const vsm = new VirtualScrollManager(100);
       registerScope('session-wildcard', 'pane-right', vsm);
 
-      // 显式指定 paneId 精确命中
+      // 显式指定 paneId 精确 O(1) 命中
       expect(getScope('session-wildcard', 'pane-right')).toBe(vsm);
-      // 省略 paneId 时降级命中后缀
-      expect(getScope('session-wildcard')).toBe(vsm);
+      // 省略 paneId 时查找 default::session-wildcard，不进行 O(N) 后缀遍历匹配其他窗格
+      expect(getScope('session-wildcard')).toBeUndefined();
     });
 
-    it('旧式单键注销不连带伤及已存在的分屏窗格', () => {
+    it('默认窗格单键注销不连带伤及已存在的分屏窗格', () => {
       const vsmPane = new VirtualScrollManager(100);
       const sessionId = 'session-mix-unregister';
 
       registerScope(sessionId, 'pane-alpha', vsmPane);
 
-      // 尝试以无 paneId 单键注销（旧式误调）
+      // 尝试以无 paneId 单键注销
       unregisterScope(sessionId);
 
       // 分屏窗格必须依然安然无恙！
@@ -889,14 +889,15 @@ describe('W2-5 / VULN-04：复合作用域隔离 (${paneId}::${sessionId}) 与�
       expect(hasScope(sessionId, 'pane-st')).toBe(true);
       expect(_activeVsmByScope.has('pane-st::session-static-test')).toBe(true);
 
-      // 别名方法互通
-      expect(getActiveVsm(sessionId, 'pane-st')).toBe(vsm);
-      unregisterActiveVsm(sessionId, 'pane-st');
-      expect(getActiveVsm(sessionId, 'pane-st')).toBeUndefined();
+      expect(unregisterScope(sessionId, 'pane-st')).toBe(true);
+      expect(getScope(sessionId, 'pane-st')).toBeUndefined();
     });
 
-    it('VirtualScrollManager 构造函数接收 paneId 与 sessionId 自动绑定作用域', () => {
-      const vsm1 = new VirtualScrollManager(100, 'pane-init', 'session-init');
+    it('VirtualScrollManager 构造函数单轨接收复合作用域键自动绑定作用域', () => {
+      const vsm1 = new VirtualScrollManager(
+        100,
+        makeScopeKey('session-init', 'pane-init')
+      );
       expect(vsm1.getPaneId()).toBe('pane-init');
       expect(vsm1.getSessionId()).toBe('session-init');
       expect(vsm1.getScopeKey()).toBe('pane-init::session-init');
@@ -919,5 +920,152 @@ describe('W2-5 / VULN-04：复合作用域隔离 (${paneId}::${sessionId}) 与�
       expect(getScope('s1', 'p1')).toBeUndefined();
       expect(getScope('s2', 'p2')).toBeUndefined();
     });
+  });
+});
+
+describe('virtualScrollAnchor 独立纯函数与委托契约', () => {
+  it('captureScrollAnchor / restoreScrollAnchor / computePrependHeightDelta / prependIdsWithScrollAnchor 保持 0 偏移', () => {
+    const vsm = new VirtualScrollManager(100);
+    vsm.syncOrder(['m2', 'm3', 'm4']);
+    vsm.setActual('m2', 120);
+    vsm.setActual('m3', 180);
+    vsm.setActual('m4', 200);
+
+    const anchor = captureScrollAnchor(vsm, 150);
+    expect(anchor).toEqual({
+      anchorId: 'm3',
+      anchorIndex: 1,
+      offsetInItem: 30,
+    });
+
+    const delta = computePrependHeightDelta(
+      vsm,
+      ['m0', 'm1'],
+      [
+        { id: 'm0', height: 90 },
+        { id: 'm1', height: 110 },
+      ]
+    );
+    expect(delta).toBe(200);
+
+    const prepended = prependIdsWithScrollAnchor(vsm, ['m0', 'm1'], 150);
+    expect(prepended.newOrder).toEqual(['m0', 'm1', 'm2', 'm3', 'm4']);
+    expect(prepended.heightDelta).toBe(200);
+    expect(prepended.compensatedScrollTop).toBe(350);
+    expect(restoreScrollAnchor(vsm, anchor, 150)).toBe(350);
+  });
+
+  it('captureScrollAnchor 与 restoreScrollAnchor 处理空列表、负偏移及锚点缺失回退边界', () => {
+    const vsm = new VirtualScrollManager(100);
+
+    // 空列表捕获与恢复
+    const emptyAnchor = vsm.captureScrollAnchor(-40);
+    expect(emptyAnchor).toEqual({
+      anchorId: null,
+      anchorIndex: 0,
+      offsetInItem: 0,
+    });
+    expect(vsm.restoreScrollAnchor(emptyAnchor, 0)).toBe(0);
+
+    vsm.syncOrder(['a', 'b', 'c']);
+    vsm.setActual('a', 100);
+    vsm.setActual('b', 150);
+    vsm.setActual('c', 200);
+
+    // 负数 scrollTop 归一化至首项 0 偏移
+    expect(vsm.captureScrollAnchor(-15)).toEqual({
+      anchorId: 'a',
+      anchorIndex: 0,
+      offsetInItem: 0,
+    });
+
+    // 锚点 ID 在重排后被移除时，按 anchorIndex 回退计算偏移
+    const anchorB = vsm.captureScrollAnchor(125); // b (index 1), offsetInItem = 25
+    expect(anchorB).toEqual({
+      anchorId: 'b',
+      anchorIndex: 1,
+      offsetInItem: 25,
+    });
+    vsm.syncOrder(['a', 'c']); // 'b' 被移除，index 1 变为 'c' (offset 100)
+    expect(vsm.restoreScrollAnchor(anchorB, 125)).toBe(125);
+  });
+
+  it('prependIdsWithScrollAnchor 幂等去重、空输入短路与连续多页前插 0 抖动', () => {
+    const vsm = new VirtualScrollManager(100);
+    vsm.syncOrder(['m4', 'm5']);
+    vsm.setActual('m4', 140);
+    vsm.setActual('m5', 160);
+
+    // 1. 空数组前插短路
+    const emptyRes = vsm.prependIdsWithScrollAnchor([], 170);
+    expect(emptyRes).toEqual({
+      newOrder: ['m4', 'm5'],
+      heightDelta: 0,
+      compensatedScrollTop: 170,
+    });
+
+    // 2. 全重复 ID 前插短路
+    const dupRes = vsm.prependIdsWithScrollAnchor(['m4', 'm5'], 170);
+    expect(dupRes).toEqual({
+      newOrder: ['m4', 'm5'],
+      heightDelta: 0,
+      compensatedScrollTop: 170,
+    });
+
+    // 3. 部分重复 + 预估高度前插（m5 内部偏移 30px）
+    const step1 = vsm.prependIdsWithScrollAnchor(['m2', 'm3', 'm4'], 170, [
+      { id: 'm2', height: 80 },
+      { id: 'm3', height: 120 },
+    ]);
+    expect(step1.newOrder).toEqual(['m2', 'm3', 'm4', 'm5']);
+    expect(step1.heightDelta).toBe(200);
+    expect(step1.compensatedScrollTop).toBe(370);
+    expect(vsm.getOffset(vsm.getIndex('m5')!) + 30).toBe(
+      step1.compensatedScrollTop
+    );
+
+    // 4. 二次连续向前翻页前插
+    const step2 = vsm.prependIdsWithScrollAnchor(
+      ['m0', 'm1'],
+      step1.compensatedScrollTop,
+      [
+        { id: 'm0', height: 60 },
+        { id: 'm1', height: 90 },
+      ]
+    );
+    expect(step2.newOrder).toEqual(['m0', 'm1', 'm2', 'm3', 'm4', 'm5']);
+    expect(step2.heightDelta).toBe(150);
+    expect(step2.compensatedScrollTop).toBe(520);
+    expect(vsm.getOffset(vsm.getIndex('m5')!) + 30).toBe(520);
+  });
+
+  it('virtualScrollScope O(1) Map 精确寻址与单轨化零遗留别名守卫', () => {
+    clearAllScopes();
+    for (let i = 0; i < 500; i++) {
+      registerScope(
+        `sess-${i}`,
+        `pane-${i % 4}`,
+        new VirtualScrollManager(100)
+      );
+    }
+    const targetVsm = new VirtualScrollManager(120);
+    registerScope('sess-target', 'pane-main', targetVsm);
+
+    // O(1) 精确命中指定复合作用域，不匹配其他 pane
+    expect(getScope('sess-target', 'pane-main')).toBe(targetVsm);
+    expect(getScope('pane-main::sess-target')).toBe(targetVsm);
+    expect(getScope('sess-target', 'pane-other')).toBeUndefined();
+    expect(getScope('sess-target')).toBeUndefined();
+    expect(getScope('')).toBeUndefined();
+    expect(unregisterScope('')).toBe(false);
+
+    // 实例方法不再暴露已移除的伪兼容别名
+    const proto = VirtualScrollManager.prototype as Record<string, unknown>;
+    expect(proto['getHeightMap']).toBeUndefined();
+    expect(proto['clearScrollAnchor']).toBeUndefined();
+    expect(proto['setScrollAnchor']).toBeUndefined();
+    expect(proto['hasScrollAnchor']).toBeUndefined();
+
+    clearAllScopes();
   });
 });

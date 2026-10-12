@@ -4,6 +4,10 @@ import {
   useAsyncMarkdownHtml,
   useStreamingMarkdownHtml,
 } from '../../api/markdownRenderAsync';
+import {
+  useWorkerMarkdownAst,
+  type MarkdownAstResult,
+} from '../../api/markdownWorkerHook';
 import { getMarkdownHtmlCache } from '../../api/markdownCache';
 import { normalizeCodeBlockIndent } from '../../api/codeBlockIndent';
 import type { Priority } from '../../workers';
@@ -33,6 +37,12 @@ export interface MarkdownBlockItemProps {
   timeline?: AdaptiveAnimateTimeline;
   /** 当前速率快照 */
   rateSnapshot?: RateSnapshot | null;
+  /** 预先通过 Worker 解析的 AST / Token 结果（可选） */
+  ast?: MarkdownAstResult | null;
+  /** 是否开启 Worker 离线化解析通道（可选） */
+  enableWorkerOffload?: boolean;
+  /** 超视距 DOM 回收骨架化标记（可选，Purge 态下卸载重型子树） */
+  isPurged?: boolean;
 }
 
 /**
@@ -63,7 +73,10 @@ export function markdownBlockItemPropsEqual(
     prev.isSealed === next.isSealed &&
     prev.isLast === next.isLast &&
     prev.isStreaming === next.isStreaming &&
-    prev.priority === next.priority
+    prev.priority === next.priority &&
+    prev.ast === next.ast &&
+    prev.enableWorkerOffload === next.enableWorkerOffload &&
+    prev.isPurged === next.isPurged
   );
 }
 
@@ -81,6 +94,9 @@ export const MarkdownBlockItem = React.memo(function MarkdownBlockItem({
   priority,
   timeline: _timeline,
   rateSnapshot,
+  ast,
+  enableWorkerOffload,
+  isPurged = false,
 }: MarkdownBlockItemProps) {
   const wasStreamingGfmTableRef = useRef(false);
   const lastSafeHtmlRef = useRef<{ text: string; html: string } | null>(null);
@@ -136,16 +152,26 @@ export const MarkdownBlockItem = React.memo(function MarkdownBlockItem({
   const shouldRenderStreamingTable =
     (isActiveTail && (isStreamingGfmTable || (isPriorTable && !liveHtml))) ||
     ((isEffectivelySealed || !isActiveTail) && isPriorTable);
+
+  // Worker 离线化解析挂接：当 enableWorkerOffload 开启且处于封口态时，异步将耗时解析与高亮委托给 Worker
+  const { ast: workerAst } = useWorkerMarkdownAst(
+    enableWorkerOffload && isEffectivelySealed && !isPriorTable ? text : '',
+    Boolean(enableWorkerOffload && isEffectivelySealed && !isPriorTable),
+    priority
+  );
+
+  const effectiveAst = ast ?? workerAst;
+
   const { html: sealedHtml, failed: sealedFailed } = useAsyncMarkdownHtml(
-    isEffectivelySealed && !isPriorTable ? text : '',
+    isEffectivelySealed && !isPriorTable && !effectiveAst ? text : '',
     priority
   );
   const cachedHtml = useMemo(
     () =>
       isEffectivelySealed && !isPriorTable
-        ? getMarkdownHtmlCache(text)
+        ? effectiveAst?.fullHtml || getMarkdownHtmlCache(text)
         : undefined,
-    [text, isEffectivelySealed, isPriorTable]
+    [text, isEffectivelySealed, isPriorTable, effectiveAst]
   );
   const sameTextSafeHtml =
     lastSafeHtmlRef.current &&
@@ -184,7 +210,11 @@ export const MarkdownBlockItem = React.memo(function MarkdownBlockItem({
     : isActiveTail
       ? (hadStaleStreamingUnits ? '' : liveHtml) || sameTextSafeHtml
       : isEffectivelySealed
-        ? sealedHtml || cachedHtml || liveHtml || sameTextSafeHtml
+        ? effectiveAst?.fullHtml ||
+          sealedHtml ||
+          cachedHtml ||
+          liveHtml ||
+          sameTextSafeHtml
         : liveHtml || sameTextSafeHtml;
 
   // SEALING_PENDING 封口过渡态：离开活跃尾块且权威 HTML 尚未就绪时，继续透传锁存单元快照
@@ -205,19 +235,32 @@ export const MarkdownBlockItem = React.memo(function MarkdownBlockItem({
   useLayoutEffect(() => {
     if (liveHtml) {
       lastSafeHtmlRef.current = { text, html: liveHtml };
-    } else if (isEffectivelySealed && (sealedHtml || cachedHtml)) {
-      lastSafeHtmlRef.current = { text, html: sealedHtml || cachedHtml || '' };
+    } else if (
+      isEffectivelySealed &&
+      (effectiveAst?.fullHtml || sealedHtml || cachedHtml)
+    ) {
+      lastSafeHtmlRef.current = {
+        text,
+        html: effectiveAst?.fullHtml || sealedHtml || cachedHtml || '',
+      };
       lockedUnitsRef.current = null;
     }
-  }, [liveHtml, sealedHtml, cachedHtml, isEffectivelySealed, text]);
+  }, [
+    liveHtml,
+    sealedHtml,
+    cachedHtml,
+    effectiveAst,
+    isEffectivelySealed,
+    text,
+  ]);
 
   const containsTable = useMemo(
     () =>
       shouldRenderStreamingTable ||
       (isActiveTail
         ? /<table(?:\s|>)/i.test(renderedHtml)
-        : hasTableBlock(text)),
-    [text, isActiveTail, shouldRenderStreamingTable, renderedHtml]
+        : (effectiveAst?.hasTable ?? hasTableBlock(text))),
+    [text, isActiveTail, shouldRenderStreamingTable, renderedHtml, effectiveAst]
   );
   const hideCaret = isActiveTail && containsTable;
 
@@ -236,6 +279,23 @@ export const MarkdownBlockItem = React.memo(function MarkdownBlockItem({
     'data-contains-table': containsTable ? 'true' : 'false',
     'data-md-variant': 'chat',
   } as const;
+
+  if (isPurged) {
+    return (
+      <div
+        {...dataAttributes}
+        data-dom-purged="true"
+        data-skeleton="true"
+        className={`${className} md-block-purged`.trim()}
+        style={{ minHeight: '24px' }}
+      >
+        <div
+          className="dom-purge-skeleton"
+          style={{ height: '100%', minHeight: '24px' }}
+        />
+      </div>
+    );
+  }
 
   if (shouldRenderStreamingTable) {
     return (

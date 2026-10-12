@@ -165,9 +165,37 @@ export class SessionDeltaWriteBarrier {
    * - 拦截孤儿清理（orphan_cleanup）：降级/未水合期严禁全量清理孤儿会话，防止抹杀磁盘历史
    */
   shouldBlockWrite(
-    target: 'full_session_index' | 'single_session_delta' | 'orphan_cleanup',
+    target:
+      | 'full_session_index'
+      | 'single_session_delta'
+      | 'orphan_cleanup'
+      | 'windowed_session_truncate',
     payload?: unknown
   ): boolean {
+    // 窗口化截断保护：无论是否处于降级期，若会话仅在内存中加载了首屏局部窗口，
+    // 严禁执行全量冲刷覆写，防止抹杀未拉取的历史记录 (W3-4 资产安全防线)
+    if (target === 'windowed_session_truncate') {
+      const p = payload as
+        | {
+            sessionId?: string;
+            currentLength?: number;
+            totalCount?: number;
+            hasOlderMessages?: boolean;
+          }
+        | undefined;
+      if (p?.hasOlderMessages) {
+        return true;
+      }
+      if (
+        typeof p?.totalCount === 'number' &&
+        typeof p?.currentLength === 'number' &&
+        p.totalCount > p.currentLength
+      ) {
+        return true;
+      }
+      return false;
+    }
+
     // 正常水合已完成且非降级期：全面放行
     if (!this.isFallbackMode && this.isHydrated) {
       return false;
@@ -422,8 +450,17 @@ export function reconcileLateArrivalSnapshot(
       ...(mergedPinnedMessageIds.length > 0
         ? { pinnedMessageIds: mergedPinnedMessageIds }
         : {}),
-      ...(Object.keys(mergedPinnedColors).length > 0
+      ...(mergedPinnedColors && Object.keys(mergedPinnedColors).length > 0
         ? { pinnedMessageColors: mergedPinnedColors }
+        : {}),
+      ...(Boolean(
+        liveSession.hasOlderMessages || diskSession.hasOlderMessages
+      ) && mergedMessages.length < mergedMessageCount
+        ? {
+            hasOlderMessages: true,
+            oldestLoadedSeq:
+              liveSession.oldestLoadedSeq ?? diskSession.oldestLoadedSeq,
+          }
         : {}),
       ...(diskSession.branchParentId || liveSession.branchParentId
         ? {

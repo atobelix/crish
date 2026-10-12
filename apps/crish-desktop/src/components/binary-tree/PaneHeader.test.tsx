@@ -30,7 +30,7 @@ const roManagerMock = vi.hoisted(() => {
   };
 });
 
-vi.mock('../ui/utils/ResizeObserverManager', () => ({
+vi.mock('../../utils/ResizeObserverManager', () => ({
   ResizeObserverManager: { getInstance: () => roManagerMock.instance },
 }));
 
@@ -536,5 +536,66 @@ describe('PaneHeader 叶子拥有会话标签', () => {
     fireEvent.keyDown(tablist, { key: 'ArrowRight' });
     expect(document.activeElement).toBe(tab1);
     expect(shellMocks.activateTab).toHaveBeenCalledWith('leaf-a', 'ta1');
+  });
+
+  it('会话仅 messages 追加而 title 未变时 PaneHeader 保持稳定零重渲染，title 变更时精准更新', () => {
+    const leaf = makeLeaf(
+      'leaf-a',
+      [makeTab('ta1', 's1', '会话一'), makeTab('ta2', 's2', '会话二')],
+      'ta1'
+    );
+    const onRender = vi.fn();
+
+    const { getByText } = render(
+      <React.Profiler id="PaneHeader" onRender={onRender}>
+        <PaneHeader leaf={leaf} isActive isChat />
+      </React.Profiler>
+    );
+
+    expect(getByText('会话一')).toBeTruthy();
+    onRender.mockClear();
+
+    // 模拟流式 Token 推流：更新 s1 与其他会话的 messages（sessionsById 引用翻新，但 title 不变）
+    act(() => {
+      useSessionStore.setState({
+        sessionsById: {
+          s1: {
+            id: 's1',
+            title: '会话一',
+            messages: [
+              { id: 'm1', role: 'assistant', content: 'streaming...' },
+            ],
+          },
+          s2: { id: 's2', title: '会话二' },
+          s3: {
+            id: 's3',
+            title: '会话三已改名但不属于本窗格',
+            messages: [{ id: 'm2', role: 'user', content: 'hi' }],
+          },
+        },
+      } as never);
+    });
+
+    expect(onRender).not.toHaveBeenCalled();
+
+    // 当本窗格可见会话 s1 的 title 真正变化时，精准触发重渲染更新标题
+    act(() => {
+      useSessionStore.setState({
+        sessionsById: {
+          s1: {
+            id: 's1',
+            title: '会话一（重命名）',
+            messages: [
+              { id: 'm1', role: 'assistant', content: 'streaming...' },
+            ],
+          },
+          s2: { id: 's2', title: '会话二' },
+          s3: { id: 's3', title: '会话三' },
+        },
+      } as never);
+    });
+
+    expect(onRender).toHaveBeenCalledTimes(1);
+    expect(getByText('会话一（重命名）')).toBeTruthy();
   });
 });

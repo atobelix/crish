@@ -10,7 +10,7 @@ import {
   VirtualScrollManager,
   type VisibleRange,
 } from '../api/VirtualScrollManager';
-import { ResizeObserverManager } from '../components/ui/utils/ResizeObserverManager';
+import { ResizeObserverManager } from '../utils/ResizeObserverManager';
 import {
   DEFAULT_OVERSCAN,
   DEFAULT_VIEWPORT_HEIGHT_PX,

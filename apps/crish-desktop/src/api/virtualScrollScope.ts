@@ -88,17 +88,10 @@ export function registerScope(
       'function'
   ) {
     const vsm = paneIdOrVsm as VirtualScrollManager;
-    const key = sessionIdOrScope;
-    if (key.includes('::')) {
-      _activeVsmByScope.set(key, vsm);
-      const parsed = parseScopeKey(key);
-      vsm.setScope?.(parsed.paneId, parsed.sessionId);
-    } else {
-      const compKey = makeScopeKey(key, 'default');
-      _activeVsmByScope.set(compKey, vsm);
-      _activeVsmByScope.set(key, vsm);
-      vsm.setScope?.('default', key);
-    }
+    const compKey = makeScopeKey(sessionIdOrScope, 'default');
+    _activeVsmByScope.set(compKey, vsm);
+    const parsed = parseScopeKey(compKey);
+    vsm.setScope?.(parsed.paneId, parsed.sessionId);
   }
 }
 
@@ -107,20 +100,8 @@ export function unregisterScope(
   paneId?: string | null
 ): boolean {
   if (!sessionIdOrScope) return false;
-
-  if (paneId !== undefined && paneId !== null) {
-    const key = makeScopeKey(sessionIdOrScope, paneId);
-    return _activeVsmByScope.delete(key);
-  }
-
-  if (sessionIdOrScope.includes('::')) {
-    return _activeVsmByScope.delete(sessionIdOrScope);
-  }
-
-  const defaultKey = makeScopeKey(sessionIdOrScope, 'default');
-  const d1 = _activeVsmByScope.delete(defaultKey);
-  const d2 = _activeVsmByScope.delete(sessionIdOrScope);
-  return d1 || d2;
+  const key = makeScopeKey(sessionIdOrScope, paneId);
+  return _activeVsmByScope.delete(key);
 }
 
 export function getScope(
@@ -128,27 +109,8 @@ export function getScope(
   paneId?: string | null
 ): VirtualScrollManager | undefined {
   if (!sessionIdOrScope) return undefined;
-
-  if (paneId !== undefined && paneId !== null) {
-    const key = makeScopeKey(sessionIdOrScope, paneId);
-    return _activeVsmByScope.get(key);
-  }
-
-  if (sessionIdOrScope.includes('::')) {
-    return _activeVsmByScope.get(sessionIdOrScope);
-  }
-
-  const direct = _activeVsmByScope.get(sessionIdOrScope);
-  if (direct) return direct;
-
-  const defaultKey = makeScopeKey(sessionIdOrScope, 'default');
-  const defaultMatch = _activeVsmByScope.get(defaultKey);
-  if (defaultMatch) return defaultMatch;
-
-  for (const [k, vsm] of _activeVsmByScope.entries()) {
-    if (k.endsWith(`::${sessionIdOrScope}`)) return vsm;
-  }
-  return undefined;
+  const key = makeScopeKey(sessionIdOrScope, paneId);
+  return _activeVsmByScope.get(key);
 }
 
 export function hasScope(
@@ -161,7 +123,3 @@ export function hasScope(
 export function clearAllScopes(): void {
   _activeVsmByScope.clear();
 }
-
-export const registerActiveVsm = registerScope;
-export const unregisterActiveVsm = unregisterScope;
-export const getActiveVsm = getScope;

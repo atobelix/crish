@@ -25,7 +25,7 @@ import {
 } from './ScrollAreaHelpers';
 import { ScrollAreaScrollBar } from './ScrollAreaScrollBar';
 import { useThumbDrag } from './useThumbDrag';
-import { ResizeObserverManager } from '../utils/ResizeObserverManager';
+import { ResizeObserverManager } from '../../../utils/ResizeObserverManager';
 
 export {
   calculateSafeAreaInset,
@@ -88,7 +88,7 @@ export const ScrollArea = forwardRef<ScrollAreaHandle, ScrollAreaProps>(
     const [isScrolling, setIsScrolling] = useState(false);
     const isScrollingRef = useRef(false);
 
-    const effectiveShowButtons = showButtons ?? (size !== 'xs');
+    const effectiveShowButtons = showButtons ?? size !== 'xs';
     const safeInset = calculateSafeAreaInset(radius, trackMargin);
     const insetTop = safeInset + trackMargin;
     const insetBottom = safeInset + trackMargin;
@@ -103,11 +103,15 @@ export const ScrollArea = forwardRef<ScrollAreaHandle, ScrollAreaProps>(
     const hasHorizontalOverflow = metrics.scrollWidth > metrics.clientWidth;
 
     const showVertical = orientation === 'vertical' || orientation === 'both';
-    const showHorizontal = orientation === 'horizontal' || orientation === 'both';
+    const showHorizontal =
+      orientation === 'horizontal' || orientation === 'both';
 
     // 双轴共存时，右下角安全避让间隙，消除十字交叠
     const cornerOffset =
-      showVertical && showHorizontal && hasVerticalOverflow && hasHorizontalOverflow
+      showVertical &&
+      showHorizontal &&
+      hasVerticalOverflow &&
+      hasHorizontalOverflow
         ? thickness + safeGap
         : 0;
 
@@ -116,9 +120,13 @@ export const ScrollArea = forwardRef<ScrollAreaHandle, ScrollAreaProps>(
 
     // 垂直可用轨道与步进按钮
     const calculatedAvailableTrackY =
-      metrics.clientHeight - (insetTop + effectiveBottom) - 2 * btnDimension - 2 * safeGap;
+      metrics.clientHeight -
+      (insetTop + effectiveBottom) -
+      2 * btnDimension -
+      2 * safeGap;
     const isDegradedCompactY =
-      effectiveShowButtons && (metrics.clientHeight < 16 || calculatedAvailableTrackY < 16);
+      effectiveShowButtons &&
+      (metrics.clientHeight < 16 || calculatedAvailableTrackY < 16);
     const shouldRenderButtonsY = effectiveShowButtons && !isDegradedCompactY;
     const actualTrackHeight = shouldRenderButtonsY
       ? Math.max(0, calculatedAvailableTrackY)
@@ -126,9 +134,13 @@ export const ScrollArea = forwardRef<ScrollAreaHandle, ScrollAreaProps>(
 
     // 水平可用轨道与步进按钮
     const calculatedAvailableTrackX =
-      metrics.clientWidth - (insetLeft + effectiveRight) - 2 * btnDimension - 2 * safeGap;
+      metrics.clientWidth -
+      (insetLeft + effectiveRight) -
+      2 * btnDimension -
+      2 * safeGap;
     const isDegradedCompactX =
-      effectiveShowButtons && (metrics.clientWidth < 16 || calculatedAvailableTrackX < 16);
+      effectiveShowButtons &&
+      (metrics.clientWidth < 16 || calculatedAvailableTrackX < 16);
     const shouldRenderButtonsX = effectiveShowButtons && !isDegradedCompactX;
     const actualTrackWidth = shouldRenderButtonsX
       ? Math.max(0, calculatedAvailableTrackX)
@@ -142,7 +154,9 @@ export const ScrollArea = forwardRef<ScrollAreaHandle, ScrollAreaProps>(
         ? (metrics.clientHeight / metrics.scrollHeight) * actualTrackHeight
         : 0;
     const thumbHeightPx =
-      actualTrackHeight > 0 ? Math.min(actualTrackHeight, Math.max(minThumbSize, rawThumbHeight)) : 0;
+      actualTrackHeight > 0
+        ? Math.min(actualTrackHeight, Math.max(minThumbSize, rawThumbHeight))
+        : 0;
     const maxTravelPxY = Math.max(0, actualTrackHeight - thumbHeightPx);
     const thumbTopPx = metrics.progressY * maxTravelPxY;
 
@@ -152,7 +166,9 @@ export const ScrollArea = forwardRef<ScrollAreaHandle, ScrollAreaProps>(
         ? (metrics.clientWidth / metrics.scrollWidth) * actualTrackWidth
         : 0;
     const thumbWidthPx =
-      actualTrackWidth > 0 ? Math.min(actualTrackWidth, Math.max(minThumbSize, rawThumbWidth)) : 0;
+      actualTrackWidth > 0
+        ? Math.min(actualTrackWidth, Math.max(minThumbSize, rawThumbWidth))
+        : 0;
     const maxTravelPxX = Math.max(0, actualTrackWidth - thumbWidthPx);
     const thumbLeftPx = metrics.progressX * maxTravelPxX;
 
@@ -162,7 +178,9 @@ export const ScrollArea = forwardRef<ScrollAreaHandle, ScrollAreaProps>(
         if (typeof externalViewportRef === 'function') {
           externalViewportRef(node);
         } else if (externalViewportRef && 'current' in externalViewportRef) {
-          (externalViewportRef as React.MutableRefObject<HTMLDivElement | null>).current = node;
+          (
+            externalViewportRef as React.MutableRefObject<HTMLDivElement | null>
+          ).current = node;
         }
       },
       [externalViewportRef]
@@ -171,15 +189,24 @@ export const ScrollArea = forwardRef<ScrollAreaHandle, ScrollAreaProps>(
     const updateMetrics = useCallback(() => {
       const el = internalViewportRef.current;
       if (!el) return;
-      const { scrollTop, scrollLeft, scrollHeight, scrollWidth, clientHeight, clientWidth } = el;
+      const {
+        scrollTop,
+        scrollLeft,
+        scrollHeight,
+        scrollWidth,
+        clientHeight,
+        clientWidth,
+      } = el;
       const maxY = Math.max(0, scrollHeight - clientHeight);
       const maxX = Math.max(0, scrollWidth - clientWidth);
       const isAtTop = scrollTop <= 1;
       const isAtBottom = maxY <= 0 || scrollTop >= maxY - 1;
       const isAtLeft = scrollLeft <= 1;
       const isAtRight = maxX <= 0 || scrollLeft >= maxX - 1;
-      const progressY = maxY > 0 ? Math.min(1, Math.max(0, scrollTop / maxY)) : 0;
-      const progressX = maxX > 0 ? Math.min(1, Math.max(0, scrollLeft / maxX)) : 0;
+      const progressY =
+        maxY > 0 ? Math.min(1, Math.max(0, scrollTop / maxY)) : 0;
+      const progressX =
+        maxX > 0 ? Math.min(1, Math.max(0, scrollLeft / maxX)) : 0;
 
       setMetrics((prev) => {
         // 位置型字段（scrollTop/progress）不驱动 React commit：handleScroll 已直写 transform。
@@ -247,12 +274,16 @@ export const ScrollArea = forwardRef<ScrollAreaHandle, ScrollAreaProps>(
       return () => {
         window.removeEventListener('blur', handleWindowBlur);
         rigidBrake();
-        if (idleTimerRef.current !== null) window.clearTimeout(idleTimerRef.current);
+        if (idleTimerRef.current !== null)
+          window.clearTimeout(idleTimerRef.current);
       };
     }, [rigidBrake]);
 
     const executeStep = useCallback(
-      (direction: 'up' | 'down' | 'left' | 'right', behavior: ScrollBehavior = 'smooth') => {
+      (
+        direction: 'up' | 'down' | 'left' | 'right',
+        behavior: ScrollBehavior = 'smooth'
+      ) => {
         const el = internalViewportRef.current;
         if (!el) return;
         const isReduced =
@@ -265,14 +296,22 @@ export const ScrollArea = forwardRef<ScrollAreaHandle, ScrollAreaProps>(
           const deltaSize = resolveStepDelta(stepSize, el.clientHeight);
           const maxY = Math.max(0, el.scrollHeight - el.clientHeight);
           el.scrollTo({
-            top: snapScrollDelta(el.scrollTop, direction === 'up' ? -deltaSize : deltaSize, maxY),
+            top: snapScrollDelta(
+              el.scrollTop,
+              direction === 'up' ? -deltaSize : deltaSize,
+              maxY
+            ),
             behavior: finalBehavior,
           });
         } else {
           const deltaSize = resolveStepDelta(stepSize, el.clientWidth);
           const maxX = Math.max(0, el.scrollWidth - el.clientWidth);
           el.scrollTo({
-            left: snapScrollDelta(el.scrollLeft, direction === 'left' ? -deltaSize : deltaSize, maxX),
+            left: snapScrollDelta(
+              el.scrollLeft,
+              direction === 'left' ? -deltaSize : deltaSize,
+              maxX
+            ),
             behavior: finalBehavior,
           });
         }
@@ -282,28 +321,31 @@ export const ScrollArea = forwardRef<ScrollAreaHandle, ScrollAreaProps>(
 
     // 20Hz 连发脉冲微调动力学引擎 (40px 步进 / 250ms 初延时 / 50ms 连发 / 边界与 blur 即时刹车)
     const handleButtonPointerDown = useCallback(
-      (direction: 'up' | 'down' | 'left' | 'right') => (e: React.PointerEvent) => {
-        if (e.button !== 0) return;
-        e.preventDefault();
-        rigidBrake();
-        executeStep(direction, 'smooth');
+      (direction: 'up' | 'down' | 'left' | 'right') =>
+        (e: React.PointerEvent) => {
+          if (e.button !== 0) return;
+          e.preventDefault();
+          rigidBrake();
+          executeStep(direction, 'smooth');
 
-        pulseDelayTimerRef.current = window.setTimeout(() => {
-          pulseIntervalRef.current = window.setInterval(() => {
-            const el = internalViewportRef.current;
-            if (!el) return rigidBrake();
-            if (
-              (direction === 'up' && el.scrollTop <= 0) ||
-              (direction === 'down' && el.scrollTop >= el.scrollHeight - el.clientHeight) ||
-              (direction === 'left' && el.scrollLeft <= 0) ||
-              (direction === 'right' && el.scrollLeft >= el.scrollWidth - el.clientWidth)
-            ) {
-              return rigidBrake();
-            }
-            executeStep(direction, 'auto');
-          }, 50);
-        }, 250);
-      },
+          pulseDelayTimerRef.current = window.setTimeout(() => {
+            pulseIntervalRef.current = window.setInterval(() => {
+              const el = internalViewportRef.current;
+              if (!el) return rigidBrake();
+              if (
+                (direction === 'up' && el.scrollTop <= 0) ||
+                (direction === 'down' &&
+                  el.scrollTop >= el.scrollHeight - el.clientHeight) ||
+                (direction === 'left' && el.scrollLeft <= 0) ||
+                (direction === 'right' &&
+                  el.scrollLeft >= el.scrollWidth - el.clientWidth)
+              ) {
+                return rigidBrake();
+              }
+              executeStep(direction, 'auto');
+            }, 50);
+          }, 250);
+        },
       [executeStep, rigidBrake]
     );
 
@@ -327,7 +369,8 @@ export const ScrollArea = forwardRef<ScrollAreaHandle, ScrollAreaProps>(
           isScrollingRef.current = true;
           setIsScrolling(true);
         }
-        if (idleTimerRef.current !== null) window.clearTimeout(idleTimerRef.current);
+        if (idleTimerRef.current !== null)
+          window.clearTimeout(idleTimerRef.current);
         idleTimerRef.current = window.setTimeout(() => {
           isScrollingRef.current = false;
           setIsScrolling(false);
@@ -358,14 +401,16 @@ export const ScrollArea = forwardRef<ScrollAreaHandle, ScrollAreaProps>(
     useImperativeHandle(
       ref,
       () => ({
-        scrollToTop: (behavior = 'smooth') => internalViewportRef.current?.scrollTo({ top: 0, behavior }),
+        scrollToTop: (behavior = 'smooth') =>
+          internalViewportRef.current?.scrollTo({ top: 0, behavior }),
         scrollToBottom: (behavior = 'smooth') => {
           const el = internalViewportRef.current;
           if (el) el.scrollTo({ top: el.scrollHeight, behavior });
         },
         scrollTo: (options) => internalViewportRef.current?.scrollTo(options),
         scrollBy: (options) => internalViewportRef.current?.scrollBy(options),
-        scrollStep: (direction, behavior = 'smooth') => executeStep(direction, behavior),
+        scrollStep: (direction, behavior = 'smooth') =>
+          executeStep(direction, behavior),
         getViewport: () => internalViewportRef.current,
         getMetrics: () => metrics,
       }),
@@ -409,14 +454,18 @@ export const ScrollArea = forwardRef<ScrollAreaHandle, ScrollAreaProps>(
           className={`${styles.viewport} ${orientationClass} ${viewportClassName || ''}`}
           style={{
             ...viewportStyle,
-            scrollbarGutter: scrollbarGutter === 'stable' ? 'stable' : undefined,
+            scrollbarGutter:
+              scrollbarGutter === 'stable' ? 'stable' : undefined,
           }}
           onScroll={handleScroll}
           tabIndex={0}
           role="region"
           aria-label={ariaLabel}
         >
-          <div className={`${styles.content} ${contentClassName || ''}`} style={contentStyle}>
+          <div
+            className={`${styles.content} ${contentClassName || ''}`}
+            style={contentStyle}
+          >
             {children}
           </div>
         </div>

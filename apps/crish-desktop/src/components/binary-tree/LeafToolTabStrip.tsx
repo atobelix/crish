@@ -18,7 +18,7 @@ import {
   type LayoutLeaf,
 } from '../../store/storeAccess';
 import { Tooltip, Button } from '../ui';
-import { ResizeObserverManager } from '../ui/utils/ResizeObserverManager';
+import { ResizeObserverManager } from '../../utils/ResizeObserverManager';
 import { viewRegistry } from '../../services/view-registry';
 import { SidePanelNavToolbar } from './SidePanelNavToolbar';
 import { toolTabStripVars } from './tabStripVars';
@@ -72,11 +72,20 @@ function readDockFromLeaf(leaf: LayoutLeaf | undefined): {
   const raw = leaf.tabs as unknown;
   if (!Array.isArray(raw)) return null;
   const sessionTabs = raw.filter(
-    (t): t is { tabId: string; sessionId: string; dock?: { openPanelIds?: string[]; activePanelId?: string | null } } =>
-      typeof t === 'object' && t !== null && typeof (t as { tabId?: string }).tabId === 'string'
+    (
+      t
+    ): t is {
+      tabId: string;
+      sessionId: string;
+      dock?: { openPanelIds?: string[]; activePanelId?: string | null };
+    } =>
+      typeof t === 'object' &&
+      t !== null &&
+      typeof (t as { tabId?: string }).tabId === 'string'
   );
   if (sessionTabs.length === 0) return null;
-  const activeTabId = (leaf as LayoutLeaf & { activeTabId?: string }).activeTabId;
+  const activeTabId = (leaf as LayoutLeaf & { activeTabId?: string })
+    .activeTabId;
   const tab =
     sessionTabs.find((t) => t.tabId === activeTabId) ?? sessionTabs[0];
   if (!tab) return null;
@@ -170,17 +179,14 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
     }, [checkOverflow, tabs.length]);
 
     // 滚轮横向滑动（原生非被动监听，preventDefault 无告警）
-    const handleTrackWheel = useCallback(
-      (e: WheelEvent) => {
-        const el = tabsTrackRef.current;
-        if (!el) return;
-        if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
-          el.scrollLeft += e.deltaY;
-          e.preventDefault();
-        }
-      },
-      []
-    );
+    const handleTrackWheel = useCallback((e: WheelEvent) => {
+      const el = tabsTrackRef.current;
+      if (!el) return;
+      if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+        el.scrollLeft += e.deltaY;
+        e.preventDefault();
+      }
+    }, []);
 
     useNonPassiveWheel(tabsTrackRef, handleTrackWheel);
 
@@ -268,13 +274,7 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
         const fuse = window.setTimeout(() => finalizeClose(tabId), ms * 3);
         fuseTimersRef.current.set(tabId, fuse);
       },
-      [
-        activeTab,
-        finalizeClose,
-        onSelectTab,
-        sessionTabId,
-        tabs,
-      ]
+      [activeTab, finalizeClose, onSelectTab, sessionTabId, tabs]
     );
 
     const openPanel = useCallback(
@@ -381,7 +381,10 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
                     data-tab-id={tabId}
                   >
                     {(iconName || isBrowserTabId(tabId)) && (
-                      <span className={`${styles.tabIcon} side-panel-tab-icon`} data-testid="tool-icon">
+                      <span
+                        className={`${styles.tabIcon} side-panel-tab-icon`}
+                        data-testid="tool-icon"
+                      >
                         <ToolTabFavicon tabId={tabId} iconName={iconName} />
                       </span>
                     )}
@@ -403,11 +406,7 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
                 );
               })}
               {!hasOverflow && (
-                <ToolTabAddButton
-                  tabs={tabs}
-                  isInFlow
-                  openPanel={openPanel}
-                />
+                <ToolTabAddButton tabs={tabs} isInFlow openPanel={openPanel} />
               )}
             </div>
           </div>
@@ -416,7 +415,11 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
           <div
             className={`${styles.fixedCluster} side-panel-tab-fixed-cluster`}
           >
-            <ToolTabAddButton tabs={tabs} isInFlow={false} openPanel={openPanel} />
+            <ToolTabAddButton
+              tabs={tabs}
+              isInFlow={false}
+              openPanel={openPanel}
+            />
             <Tooltip
               content={isMaximized ? '恢复面板' : '最大化面板'}
               side="bottom"

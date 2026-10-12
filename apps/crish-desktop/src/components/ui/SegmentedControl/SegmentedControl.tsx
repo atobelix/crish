@@ -12,7 +12,7 @@
  * 6. 100% 纯原生 React 18+ 与 CSS Modules，零外部 npm 组件库依赖。
  */
 import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
-import { ResizeObserverManager } from '../utils/ResizeObserverManager';
+import { ResizeObserverManager } from '../../../utils/ResizeObserverManager';
 import styles from './SegmentedControl.module.css';
 
 export type SegmentedControlSize = 'xs' | 'sm' | 'md' | 'lg' | 'panel';
@@ -32,8 +32,10 @@ export interface SegmentedControlOption<T extends string = string> {
   'aria-label'?: string;
 }
 
-export interface SegmentedControlProps<T extends string = string>
-  extends Omit<React.HTMLAttributes<HTMLDivElement>, 'onChange' | 'defaultValue'> {
+export interface SegmentedControlProps<T extends string = string> extends Omit<
+  React.HTMLAttributes<HTMLDivElement>,
+  'onChange' | 'defaultValue'
+> {
   /** 选项数组（支持对象数组或纯字符串数组） */
   options: (SegmentedControlOption<T> | T)[];
   /** 受控选中值 */
@@ -120,7 +122,9 @@ export const SegmentedControl = React.forwardRef<
       });
       setIsReady(true);
     } else {
-      setSliderStyle((prev) => (prev.opacity === 0 ? prev : { ...prev, opacity: 0 }));
+      setSliderStyle((prev) =>
+        prev.opacity === 0 ? prev : { ...prev, opacity: 0 }
+      );
     }
   }, []);
 
@@ -249,7 +253,11 @@ export const SegmentedControl = React.forwardRef<
         const isSelected = opt.value === currentValue;
         const isItemDisabled = disabled || Boolean(opt.disabled);
         const itemId = `${baseId}-opt-${idx}`;
-        const tabIndex = isSelected ? 0 : (!hasSelectedMatch && idx === 0 ? 0 : -1);
+        const tabIndex = isSelected
+          ? 0
+          : !hasSelectedMatch && idx === 0
+            ? 0
+            : -1;
 
         return (
           <button

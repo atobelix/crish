@@ -13,6 +13,12 @@ import type { IncrementalMarkdownUnitSnapshot } from '../../api/markdown/Increme
 vi.mock('../../api/markdownRenderAsync', () => ({
   useAsyncMarkdownHtml: vi.fn(),
   useStreamingMarkdownHtml: vi.fn(() => ''),
+  useWorkerMarkdownAst: vi.fn(() => ({
+    ast: null,
+    html: '',
+    loading: false,
+    failed: false,
+  })),
   parseMarkdownToHtmlAsync: vi.fn(async (markdown: string) =>
     markdown.includes('| ---')
       ? '<table><thead><tr><th>A</th><th>B</th></tr></thead><tbody><tr><td>1</td><td>2</td></tr></tbody></table>'
@@ -707,5 +713,57 @@ describe('MarkdownBlockItem component', () => {
       />
     );
     expect(container.textContent).toBe('');
+  });
+
+  it('unmounts heavy children and renders skeleton when isPurged is true, then restores on isPurged=false', () => {
+    vi.mocked(markdownRenderAsync.useAsyncMarkdownHtml).mockReturnValue({
+      html: '<div class="heavy-dom"><span>Complex</span><span>Code</span><span>Tree</span></div>',
+      loading: false,
+      failed: false,
+    });
+
+    const { container, rerender } = render(
+      <MarkdownBlockItem
+        text="```ts\nconst x = 1;\n```"
+        isSealed={true}
+        isLast={false}
+        isStreaming={false}
+        isPurged={false}
+      />
+    );
+
+    expect(container.querySelector('.heavy-dom')).toBeTruthy();
+    expect(container.querySelector('[data-dom-purged="true"]')).toBeNull();
+
+    // Purge: heavy DOM unmounted, skeleton placeholder rendered
+    rerender(
+      <MarkdownBlockItem
+        text="```ts\nconst x = 1;\n```"
+        isSealed={true}
+        isLast={false}
+        isStreaming={false}
+        isPurged={true}
+      />
+    );
+
+    expect(container.querySelector('.heavy-dom')).toBeNull();
+    const purgedBlock = container.querySelector('[data-dom-purged="true"]');
+    expect(purgedBlock).toBeTruthy();
+    expect(purgedBlock?.getAttribute('data-skeleton')).toBe('true');
+    expect(container.querySelector('.dom-purge-skeleton')).toBeTruthy();
+
+    // Restore: seamlessly remounts full rich content
+    rerender(
+      <MarkdownBlockItem
+        text="```ts\nconst x = 1;\n```"
+        isSealed={true}
+        isLast={false}
+        isStreaming={false}
+        isPurged={false}
+      />
+    );
+
+    expect(container.querySelector('[data-dom-purged="true"]')).toBeNull();
+    expect(container.querySelector('.heavy-dom')).toBeTruthy();
   });
 });

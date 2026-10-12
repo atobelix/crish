@@ -19,7 +19,7 @@ import {
   DRAFT_SESSION_ID_PREFIX,
   isDraftSessionId,
 } from '../layout-tree/sessionTabModel';
-import { registerFileViewerOpener } from '../../api/workspaceFsApi';
+import { registerFileViewerOpener } from '../../api/filePanelOpener';
 import type { RightToolDockState } from './types';
 import { clampDockWidthRatio } from './adapterShapeTreeOps';
 import { normalizeViewerFilePath } from './normalizeViewerPath';

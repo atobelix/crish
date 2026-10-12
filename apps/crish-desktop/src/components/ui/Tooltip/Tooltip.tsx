@@ -23,8 +23,11 @@ import styles from './Tooltip.module.css';
 import {
   isValidDOMRect,
   isTriggerOffscreen,
-  translateFor,
   computeClampedPosition,
+  measureTooltipDimensions,
+  shouldKeepTooltipAlive,
+  buildTooltipPortalStyle,
+  mergeTooltipTriggerProps,
   type ClampedTooltipResult,
   type TooltipSide,
 } from './tooltipPositioning';
@@ -47,6 +50,8 @@ import { useMergeRefs } from './useMergeRefs';
 const isTestEnv =
   typeof process !== 'undefined' &&
   (process.env?.NODE_ENV === 'test' || Boolean(process.env?.VITEST));
+
+type TimerHandle = ReturnType<typeof setTimeout> | undefined;
 
 export interface TooltipProps {
   content: React.ReactNode;
@@ -91,12 +96,8 @@ export const Tooltip = forwardRef<HTMLElement, TooltipProps>(
     const [clampedPos, setClampedPos] = useState<ClampedTooltipResult | null>(
       null
     );
-    const hideTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(
-      undefined
-    );
-    const showTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(
-      undefined
-    );
+    const hideTimerRef = useRef<TimerHandle>(undefined);
+    const showTimerRef = useRef<TimerHandle>(undefined);
     const childElRef = useRef<HTMLElement | null>(null);
     const tipRef = useRef<HTMLDivElement | null>(null);
     const visibleRef = useRef(visible);
@@ -170,50 +171,17 @@ export const Tooltip = forwardRef<HTMLElement, TooltipProps>(
 
       let rafId: number;
       const checkLiveness = () => {
-        // 1. 宿主节点脱离 DOM 树，立刻自毁
-        if (!target.isConnected) {
+        if (
+          !shouldKeepTooltipAlive(
+            target,
+            tipRef.current,
+            triggerModeRef.current,
+            Boolean(hideTimerRef.current)
+          )
+        ) {
           hideImmediate();
           return;
         }
-
-        // 2. 模式下脱离判定（hover 与 focus 刚性守卫，jsdom 测试环境无原生伪类支持跳过）
-        if (!isTestEnv) {
-          if (triggerModeRef.current === 'hover') {
-            const isTargetHovered =
-              typeof target.matches === 'function'
-                ? target.matches(':hover')
-                : true;
-            const tipEl = tipRef.current;
-            const isTipHovered =
-              tipEl && typeof tipEl.matches === 'function'
-                ? tipEl.matches(':hover')
-                : false;
-
-            if (!isTargetHovered && !isTipHovered) {
-              if (!hideTimerRef.current) {
-                hideImmediate();
-                return;
-              }
-            }
-          } else if (triggerModeRef.current === 'focus') {
-            const isTargetFocused =
-              typeof document !== 'undefined' &&
-              (document.activeElement === target ||
-                target.contains(document.activeElement));
-            if (!isTargetFocused) {
-              hideImmediate();
-              return;
-            }
-          }
-        }
-
-        // 3. 几何位移巡检：若目标元素发生位移（如分屏、过渡动画、布局重排），动态重测并对齐或熄灭
-        const newRect = target.getBoundingClientRect();
-        if (!isValidDOMRect(newRect) || isTriggerOffscreen(newRect)) {
-          hideImmediate();
-          return;
-        }
-
         rafId = requestAnimationFrame(checkLiveness);
       };
 
@@ -287,19 +255,10 @@ export const Tooltip = forwardRef<HTMLElement, TooltipProps>(
         hideImmediate();
         return;
       }
-      const tipEl = tipRef.current;
-      const tipBoundingRect = tipEl.getBoundingClientRect();
-      const tipWidth = Math.round(
-        tipBoundingRect.width > 0 && tipBoundingRect !== rect
-          ? tipBoundingRect.width
-          : tipEl.offsetWidth || tipBoundingRect.width || 0
+      const { tipWidth, tipHeight } = measureTooltipDimensions(
+        tipRef.current,
+        rect
       );
-      const tipHeight = Math.round(
-        tipBoundingRect.height > 0 && tipBoundingRect !== rect
-          ? tipBoundingRect.height
-          : tipEl.offsetHeight || tipBoundingRect.height || 0
-      );
-
       setClampedPos(computeClampedPosition(side, rect, tipWidth, tipHeight));
     }, [isMounted, rect, side, hideImmediate]);
 
@@ -429,50 +388,21 @@ export const Tooltip = forwardRef<HTMLElement, TooltipProps>(
       return <>{children}</>;
     }
 
-    const childDescribedBy = child.props['aria-describedby'];
-    const describedBy = shouldShowTooltip
-      ? childDescribedBy != null && String(childDescribedBy).length > 0
-        ? `${tipId} ${String(childDescribedBy)}`
-        : tipId
-      : (childDescribedBy as string | undefined);
-
-    const childClassName = (child.props as { className?: string }).className;
-    const restClassName = (restProps as { className?: string }).className;
-    const mergedClassName =
-      [childClassName, restClassName].filter(Boolean).join(' ') || undefined;
-
-    const childStyle = (child.props as { style?: React.CSSProperties }).style;
-    const restStyle = (restProps as { style?: React.CSSProperties }).style;
-    const mergedStyle =
-      childStyle || restStyle
-        ? { ...(childStyle || {}), ...(restStyle || {}) }
-        : undefined;
-
-    const rest = { ...restProps };
-    delete (rest as { className?: unknown }).className;
-    delete (rest as { style?: unknown }).style;
-    delete (rest as { onMouseEnter?: unknown }).onMouseEnter;
-    delete (rest as { onMouseLeave?: unknown }).onMouseLeave;
-    delete (rest as { onFocus?: unknown }).onFocus;
-    delete (rest as { onBlur?: unknown }).onBlur;
-    delete (rest as { onPointerDown?: unknown }).onPointerDown;
-    delete (rest as { onClick?: unknown }).onClick;
-
-    const mergedEventHandlers: Record<string, (e: unknown) => void> = {};
     const childPropsRecord = child.props as Record<string, unknown>;
-
-    for (const [key, restValue] of Object.entries(rest)) {
-      if (key.startsWith('on') && typeof restValue === 'function') {
-        const childHandler = childPropsRecord[key];
-        if (typeof childHandler === 'function') {
-          mergedEventHandlers[key] = (event: unknown) => {
-            (childHandler as (e: unknown) => void)(event);
-            (restValue as (e: unknown) => void)(event);
-          };
-          delete (rest as Record<string, unknown>)[key];
-        }
-      }
-    }
+    const {
+      rest,
+      mergedEventHandlers,
+      mergedClassName,
+      mergedStyle,
+      describedBy,
+      hasClickHandler,
+      hasPointerDownHandler,
+    } = mergeTooltipTriggerProps(
+      childPropsRecord,
+      restProps as Record<string, unknown>,
+      shouldShowTooltip,
+      tipId
+    );
 
     const effectiveSide = clampedPos?.effectiveSide ?? side;
     const isPositionReady = clampedPos !== null;
@@ -481,15 +411,6 @@ export const Tooltip = forwardRef<HTMLElement, TooltipProps>(
     // 同名处理器时才注入合成覆盖。组件型子元素（如 <Switch>）的点击 handler
     // 在组件内部而非元素 props 上——盲目注入会让 handleClick 调到 undefined，
     // 把子组件的内部点击链整个吞掉（开关失效类缺陷的根因）。
-    const childClick = childPropsRecord.onClick as
-      ((e: unknown) => void) | undefined;
-    const restClick = (restProps as { onClick?: unknown }).onClick as
-      ((e: unknown) => void) | undefined;
-    const childPointerDown = childPropsRecord.onPointerDown as
-      ((e: unknown) => void) | undefined;
-    const restPointerDown = (restProps as { onPointerDown?: unknown })
-      .onPointerDown as ((e: unknown) => void) | undefined;
-
     const clonedChild = React.cloneElement(child, {
       ref: mergedRef,
       ...rest,
@@ -501,10 +422,8 @@ export const Tooltip = forwardRef<HTMLElement, TooltipProps>(
       onMouseLeave: handleMouseLeave,
       onFocus: handleFocus,
       onBlur: handleBlur,
-      ...(childClick || restClick ? { onClick: handleClick } : {}),
-      ...(childPointerDown || restPointerDown
-        ? { onPointerDown: handlePointerDown }
-        : {}),
+      ...(hasClickHandler ? { onClick: handleClick } : {}),
+      ...(hasPointerDownHandler ? { onPointerDown: handlePointerDown } : {}),
     });
 
     const tooltipStateClass = !isPositionReady
@@ -546,29 +465,15 @@ export const Tooltip = forwardRef<HTMLElement, TooltipProps>(
               ]
                 .filter(Boolean)
                 .join(' ')}
-              style={
-                {
-                  top: `${clampedPos?.top ?? rect.top}px`,
-                  left: `${clampedPos?.left ?? rect.left}px`,
-                  visibility: isPositionReady ? 'visible' : 'hidden',
-                  opacity:
-                    isPositionReady && isValidDOMRect(rect) ? undefined : 0,
-                  pointerEvents:
-                    state === 'exiting' ||
-                    !isPositionReady ||
-                    !isValidDOMRect(rect)
-                      ? 'none'
-                      : interactive
-                        ? 'auto'
-                        : undefined,
-                  '--tooltip-translate': translateFor(effectiveSide),
-                  '--tooltip-arrow-offset':
-                    clampedPos?.arrowOffset !== undefined
-                      ? `${clampedPos.arrowOffset}px`
-                      : undefined,
-                  ...(portalStyle || {}),
-                } as React.CSSProperties & Record<string, unknown>
-              }
+              style={buildTooltipPortalStyle(
+                rect,
+                clampedPos,
+                effectiveSide,
+                isPositionReady,
+                state === 'exiting',
+                interactive,
+                portalStyle
+              )}
             >
               <div
                 className={[styles.tooltipContent, contentClassName]

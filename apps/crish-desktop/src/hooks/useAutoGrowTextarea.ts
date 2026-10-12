@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
-import { ResizeObserverManager } from '../components/ui/utils/ResizeObserverManager';
+import { ResizeObserverManager } from '../utils/ResizeObserverManager';
 
 export const COMPOSER_MIN_LINES = 2;
 export const COMPOSER_MAX_LINES = 10;
@@ -9,16 +9,17 @@ export const COMPOSER_DENSE_LINE_HEIGHT = 1.4;
 export function composerMaxHeightPx(
   lineHeightPx: number,
   maxLines: number,
-  padY = 0,
+  padY = 0
 ): number {
   const lines = Math.max(1, Math.floor(maxLines) || 1);
-  const lh = Number.isFinite(lineHeightPx) && lineHeightPx > 0 ? lineHeightPx : 20;
+  const lh =
+    Number.isFinite(lineHeightPx) && lineHeightPx > 0 ? lineHeightPx : 20;
   return lh * lines + Math.max(0, padY);
 }
 
 export function resolveComposerLineHeightPx(
   cs: CSSStyleDeclaration,
-  fallbackRatio: number = COMPOSER_LINE_HEIGHT,
+  fallbackRatio: number = COMPOSER_LINE_HEIGHT
 ): number {
   const fontSize = parseFloat(cs.fontSize) || 14;
   const raw = cs.lineHeight;
@@ -38,7 +39,7 @@ export function resolveComposerLineHeightPx(
 function applyAutoGrowHeight(
   el: HTMLTextAreaElement,
   maxLines: number = COMPOSER_MAX_LINES,
-  minLines: number = COMPOSER_MIN_LINES,
+  minLines: number = COMPOSER_MIN_LINES
 ): void {
   // 原生 CSS field-sizing 支持检测：0 行 JS 执行
   if (
@@ -68,7 +69,10 @@ function applyAutoGrowHeight(
  * Auto-grow textarea via DOM scrollHeight only (no pretext measure path).
  * ResizeObserver + window resize keep height correct after layout changes.
  */
-export function useAutoGrowTextarea(value: string, maxLines = COMPOSER_MAX_LINES) {
+export function useAutoGrowTextarea(
+  value: string,
+  maxLines = COMPOSER_MAX_LINES
+) {
   const ref = useRef<HTMLTextAreaElement>(null);
   const maxLinesSafe = Math.max(1, Math.floor(maxLines) || COMPOSER_MAX_LINES);
 

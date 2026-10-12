@@ -16,7 +16,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import { WebglAddon } from '@xterm/addon-webgl';
 import { ptyResize, ptyWrite } from '../../api/ptySessionApi';
 import { parseColorToOklch } from '../../api/oklchColorGuard';
-import { ResizeObserverManager } from '../ui/utils/ResizeObserverManager';
+import { ResizeObserverManager } from '../../utils/ResizeObserverManager';
 import { hasActiveLayoutAnimations } from '../../store/storeAccess';
 import { logger } from '../../services/LoggerService';
 import type { InteractiveXtermStatus } from './TerminalCard.xterm';
@@ -35,7 +35,9 @@ export const WEBGL_RESTORE_MAX = 3;
 function readCssVar(name: string, fallback = ''): string {
   try {
     if (typeof document === 'undefined') return fallback;
-    let v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    let v = getComputedStyle(document.documentElement)
+      .getPropertyValue(name)
+      .trim();
     if (!v) return fallback;
     let depth = 0;
     while (v.startsWith('var(') && depth < 5) {
@@ -44,7 +46,9 @@ function readCssVar(name: string, fallback = ''): string {
       if (!match || !match[1]) break;
       const innerName = match[1];
       const innerFallback = match[2]?.trim() || '';
-      const resolved = getComputedStyle(document.documentElement).getPropertyValue(innerName).trim();
+      const resolved = getComputedStyle(document.documentElement)
+        .getPropertyValue(innerName)
+        .trim();
       v = resolved || innerFallback;
     }
     return v || fallback;
@@ -255,7 +259,10 @@ export function useXtermTerminal({
     };
 
     let themeObserver: MutationObserver | null = null;
-    if (typeof MutationObserver !== 'undefined' && typeof document !== 'undefined') {
+    if (
+      typeof MutationObserver !== 'undefined' &&
+      typeof document !== 'undefined'
+    ) {
       themeObserver = new MutationObserver(updateTerminalStyles);
       themeObserver.observe(document.documentElement, {
         attributes: true,
@@ -296,7 +303,7 @@ export function useXtermTerminal({
               module: 'useXtermTerminal',
               sessionId: undefined,
               runId: ptyIdRef.current ?? undefined,
-            },
+            }
           );
           try {
             webgl.dispose();
@@ -313,7 +320,7 @@ export function useXtermTerminal({
                 loadWebglAddon();
                 logger.info(
                   `[useXtermTerminal] WebGL restore attempt ${attempt}/${WEBGL_RESTORE_MAX}`,
-                  { module: 'useXtermTerminal' },
+                  { module: 'useXtermTerminal' }
                 );
               } catch {
                 /* 已在 loadWebglAddon 内降级 */
@@ -322,7 +329,7 @@ export function useXtermTerminal({
           } else {
             logger.warn(
               `[useXtermTerminal] WebGL restore exhausted (max=${WEBGL_RESTORE_MAX}); degraded to canvas/DOM renderer`,
-              { module: 'useXtermTerminal' },
+              { module: 'useXtermTerminal' }
             );
           }
         });
@@ -416,7 +423,7 @@ export function useXtermTerminal({
     // D8.1：隐藏 tab write=0 门闩（history 独立记录，显现合并重放）
     const gate: PtyWriteGate = createPtyWriteGate(
       { write: (d) => term.write(d) },
-      isTerminalHostHidden(host),
+      isTerminalHostHidden(host)
     );
     const unobserve = host
       ? observeTerminalHostVisibility(host, (hidden) => {

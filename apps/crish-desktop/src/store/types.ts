@@ -539,6 +539,8 @@ export interface SessionMessage extends Pick<
   timestamp: number;
   /** 引擎事件/持久化存储序列号（因果第一主序键） */
   engineSequence?: number | undefined;
+  /** 会话内单调消息序列号（SQLite 消息行主键 seq） */
+  seq?: number | undefined;
   toolCalls?: MessageToolCall[] | undefined;
   status?: SessionMessageStatus | undefined;
   /** 预计算 HTML 缓存（Worker 异步 markdown 渲染结果） */
@@ -765,6 +767,10 @@ export interface SessionState {
    * 「未水合但有实质内容」（prepareSessionsForUi keepIds 扩展用）。
    */
   messageCount?: number;
+  /** 是否存在未加载的更早历史消息（窗口化懒水合协议） */
+  hasOlderMessages?: boolean | undefined;
+  /** 当前已水合窗口中最旧一条消息的序列号（供向前拉取契约） */
+  oldestLoadedSeq?: number | undefined;
   /**
    * 引擎懒水合「未完整」标记（P1-D2）：hydrate 分页拉全超限/异常截断时置位。
    * 置位期间持久化熔断——禁止截断态正文经 save_session_body 先删后插回写 SQLite

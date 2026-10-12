@@ -327,14 +327,16 @@ export function endLayoutInteraction(
   removeExtraBodyClasses(options?.extraBodyClasses);
 }
 
-// 核心连接点：自动将 isLayoutFrozen 桥接至 ResizeObserverManager。
+// 核心连接点：自动将 isLayoutFrozen 桥接至 ResizeObserverManager 细粒度作用域（'layout-shell'），
+// 避免 setSuspended 全局 '*' 通配符冻结后台正在推流的独立会话窗格。
 // T06.9.1：原模块级永久订阅（AA-03 Q06，永不退订）改为显式生命周期——
 // bootstrapServices 调用 registerLayoutAnimationBridge() 注册，cleanup 退订；
 // 重复注册幂等（StrictMode 双执行安全）。
+export const LAYOUT_SHELL_PANE_ID = 'layout-shell';
 let layoutAnimationBridgeRegistered = false;
 
 /**
- * 注册 isLayoutFrozen → ResizeObserverManager.setSuspended 桥接订阅，
+ * 注册 isLayoutFrozen → ResizeObserverManager 细粒度挂起（'layout-shell'）桥接订阅，
  * 返回退订函数（幂等；退订后可重新注册）。
  */
 export function registerLayoutAnimationBridge(): () => void {
@@ -342,11 +344,17 @@ export function registerLayoutAnimationBridge(): () => void {
   layoutAnimationBridgeRegistered = true;
   const unsubscribe = useLayoutAnimationStore.subscribe((state, prevState) => {
     if (state.isLayoutFrozen !== prevState.isLayoutFrozen) {
-      ResizeObserverManager.getInstance().setSuspended(state.isLayoutFrozen);
+      const mgr = ResizeObserverManager.getInstance();
+      if (state.isLayoutFrozen) {
+        mgr.suspendPane(LAYOUT_SHELL_PANE_ID);
+      } else {
+        mgr.resumePane(LAYOUT_SHELL_PANE_ID);
+      }
     }
   });
   return () => {
     unsubscribe();
+    ResizeObserverManager.getInstance().resumePane(LAYOUT_SHELL_PANE_ID);
     layoutAnimationBridgeRegistered = false;
   };
 }

@@ -1,8 +1,15 @@
-import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 
 import type { SessionMessage } from '../../store/types';
 import type { VirtualScrollManager } from '../../api/VirtualScrollManager';
-import { ResizeObserverManager } from '../ui/utils/ResizeObserverManager';
+import { ResizeObserverManager } from '../../utils/ResizeObserverManager';
 import styles from './FlowScrubber.module.css';
 import {
   USER_BUBBLE_SELECTOR,
@@ -25,10 +32,13 @@ export interface FlowScrubberProps {
   manager: VirtualScrollManager;
   /** VSM 总高，实际测量变化时重算 heightPercent */
   totalHeight: number;
-  scrollerRef: React.RefObject<HTMLElement | null> | React.RefObject<HTMLDivElement | null>;
+  scrollerRef:
+    | React.RefObject<HTMLElement | null>
+    | React.RefObject<HTMLDivElement | null>;
   pinnedIdSet?: Set<string>;
   pinnedColors?: Record<string, string>;
   onTogglePin?: (id: string) => void;
+  isFastScrolling?: boolean;
 }
 
 interface ActiveHoverState {
@@ -52,6 +62,7 @@ const FlowScrubberInner: React.FC<FlowScrubberProps> = ({
   pinnedIdSet,
   pinnedColors,
   onTogglePin,
+  isFastScrolling,
 }) => {
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const tickRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
@@ -96,13 +107,17 @@ const FlowScrubberInner: React.FC<FlowScrubberProps> = ({
 
   // 有界刻度渲染：超出轨道容量的刻度既不可见又使每次提交的协调成本随消息
   // 数线性增长。带固定标记（pinned）的刻度无条件保留。
-  const renderedSegments = useMemo(
-    () =>
-      capScrubberSegments(segments, maxTicks, (id) =>
-        Boolean(pinnedIdSet?.has(id))
-      ),
-    [segments, maxTicks, pinnedIdSet]
-  );
+  const renderedSegments = useMemo(() => {
+    if (isFastScrolling) {
+      // 快速滚动期间：抑制大量刻度 DOM 生成，仅保留固定（pinned）刻度，将 DOM 节点数严格压制在有界范围内
+      return segments.filter(
+        (seg) => seg.type === 'tick' && Boolean(pinnedIdSet?.has(seg.tick.id))
+      );
+    }
+    return capScrubberSegments(segments, maxTicks, (id) =>
+      Boolean(pinnedIdSet?.has(id))
+    );
+  }, [isFastScrolling, segments, maxTicks, pinnedIdSet]);
 
   void Tooltip;
 
@@ -193,8 +208,10 @@ const FlowScrubberInner: React.FC<FlowScrubberProps> = ({
 
   useEffect(() => {
     return () => {
-      if (enterTimerRef.current != null) window.clearTimeout(enterTimerRef.current);
-      if (leaveTimerRef.current != null) window.clearTimeout(leaveTimerRef.current);
+      if (enterTimerRef.current != null)
+        window.clearTimeout(enterTimerRef.current);
+      if (leaveTimerRef.current != null)
+        window.clearTimeout(leaveTimerRef.current);
     };
   }, []);
 
@@ -223,7 +240,10 @@ const FlowScrubberInner: React.FC<FlowScrubberProps> = ({
       bubbles.forEach((node) => {
         if (node instanceof HTMLElement && node.dataset.msgId) {
           const rect = node.getBoundingClientRect();
-          if (rect.bottom >= scrollerRect.top && rect.top <= scrollerRect.bottom) {
+          if (
+            rect.bottom >= scrollerRect.top &&
+            rect.top <= scrollerRect.bottom
+          ) {
             activeIds.add(node.dataset.msgId);
           }
         }
@@ -244,12 +264,14 @@ const FlowScrubberInner: React.FC<FlowScrubberProps> = ({
         }
       }
 
-      wrap.querySelectorAll<HTMLElement>('[data-flow-scrubber-tick]').forEach((tick) => {
-        const id = tick.dataset.msgId;
-        if (id && activeClass) {
-          tick.classList.toggle(activeClass, activeIds.has(id));
-        }
-      });
+      wrap
+        .querySelectorAll<HTMLElement>('[data-flow-scrubber-tick]')
+        .forEach((tick) => {
+          const id = tick.dataset.msgId;
+          if (id && activeClass) {
+            tick.classList.toggle(activeClass, activeIds.has(id));
+          }
+        });
     };
 
     scrollEl.addEventListener('scroll', updateActiveTicks, { passive: true });
@@ -309,7 +331,11 @@ const FlowScrubberInner: React.FC<FlowScrubberProps> = ({
     };
   }, [activeClass, manager, scrollerRef, renderedSegments]);
 
-  if (renderedSegments.length === 0) return null;
+  if (
+    segments.length === 0 ||
+    (renderedSegments.length === 0 && !isFastScrolling)
+  )
+    return null;
 
   const hasPinned = Boolean(pinnedIdSet && pinnedIdSet.size > 0);
   return (
@@ -378,99 +404,102 @@ const FlowScrubberInner: React.FC<FlowScrubberProps> = ({
       </div>
 
       {/* 单一挂载的悬浮卡片：避免不同 tick 间重复销毁与重建动画，切换平滑连贯 */}
-      {activeHover ? (
-        (() => {
-          const hoveredTick = activeHover.tick;
-          const isCurrentPinned = Boolean(pinnedIdSet?.has(hoveredTick.id));
-          const currentPinColor = pinnedColors?.[hoveredTick.id] || DEFAULT_PIN_COLOR;
+      {activeHover
+        ? (() => {
+            const hoveredTick = activeHover.tick;
+            const isCurrentPinned = Boolean(pinnedIdSet?.has(hoveredTick.id));
+            const currentPinColor =
+              pinnedColors?.[hoveredTick.id] || DEFAULT_PIN_COLOR;
 
-          return (
-            <div
-              className={styles.scrubberFloatingTooltip}
-              style={
-                {
-                  top: `${activeHover.targetY}px`,
-                  ...(isCurrentPinned
-                    ? {
-                        '--tooltip-card-bg': `color-mix(in srgb, ${currentPinColor} 5%, var(--bg-card))`,
-                        '--tooltip-card-border': `color-mix(in srgb, ${currentPinColor} 22%, var(--border-subtle))`,
-                      }
-                    : {}),
-                } as React.CSSProperties
-              }
-              onMouseEnter={handleCardMouseEnter}
-              onMouseLeave={handleCardMouseLeave}
-            >
-              <div className={styles.scrubberTooltipCard}>
-                <div className={styles.scrubberTooltipHeader}>
-                  <span className={styles.scrubberTooltipTime}>
-                    {activeHover.purpose ||
-                      timeLabelFromTimestamp(hoveredTick.timestamp)}
-                  </span>
-                  {onTogglePin && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="xs"
-                      className={`${styles.scrubberPinBtn}${isCurrentPinned ? ` ${styles.isPinned}` : ''}`}
-                      style={
-                        isCurrentPinned
-                          ? ({ '--tick-pin-color': currentPinColor } as React.CSSProperties)
-                          : undefined
-                      }
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onTogglePin(hoveredTick.id);
-                      }}
-                      aria-label={isCurrentPinned ? '取消固定' : '固定'}
-                    >
-                      {isCurrentPinned ? (
-                        <AppIcon name="pin-off" size={12} />
-                      ) : (
-                        <AppIcon name="pin" size={12} />
-                      )}
-                    </Button>
-                  )}
-                </div>
+            return (
+              <div
+                className={styles.scrubberFloatingTooltip}
+                style={
+                  {
+                    top: `${activeHover.targetY}px`,
+                    ...(isCurrentPinned
+                      ? {
+                          '--tooltip-card-bg': `color-mix(in srgb, ${currentPinColor} 5%, var(--bg-card))`,
+                          '--tooltip-card-border': `color-mix(in srgb, ${currentPinColor} 22%, var(--border-subtle))`,
+                        }
+                      : {}),
+                  } as React.CSSProperties
+                }
+                onMouseEnter={handleCardMouseEnter}
+                onMouseLeave={handleCardMouseLeave}
+              >
+                <div className={styles.scrubberTooltipCard}>
+                  <div className={styles.scrubberTooltipHeader}>
+                    <span className={styles.scrubberTooltipTime}>
+                      {activeHover.purpose ||
+                        timeLabelFromTimestamp(hoveredTick.timestamp)}
+                    </span>
+                    {onTogglePin && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="xs"
+                        className={`${styles.scrubberPinBtn}${isCurrentPinned ? ` ${styles.isPinned}` : ''}`}
+                        style={
+                          isCurrentPinned
+                            ? ({
+                                '--tick-pin-color': currentPinColor,
+                              } as React.CSSProperties)
+                            : undefined
+                        }
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onTogglePin(hoveredTick.id);
+                        }}
+                        aria-label={isCurrentPinned ? '取消固定' : '固定'}
+                      >
+                        {isCurrentPinned ? (
+                          <AppIcon name="pin-off" size={12} />
+                        ) : (
+                          <AppIcon name="pin" size={12} />
+                        )}
+                      </Button>
+                    )}
+                  </div>
 
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className={styles.scrubberTooltipUserBtn}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onJump(hoveredTick.id);
-                  }}
-                  aria-label="跳转到用户提问"
-                >
-                  <span className={styles.scrubberTooltipUserText}>
-                    {hoveredTick.snippet}
-                  </span>
-                </Button>
-
-                {hoveredTick.assistantSnippet ? (
                   <Button
                     type="button"
                     variant="ghost"
-                    className={styles.scrubberTooltipAssistantBtn}
+                    className={styles.scrubberTooltipUserBtn}
                     onClick={(e) => {
                       e.stopPropagation();
-                      if (hoveredTick.nextAssistantId) {
-                        onJump(hoveredTick.nextAssistantId);
-                      }
+                      onJump(hoveredTick.id);
                     }}
-                    aria-label="跳转到助手回复"
+                    aria-label="跳转到用户提问"
                   >
-                    <span className={styles.scrubberTooltipAssistantText}>
-                      {hoveredTick.assistantSnippet}
+                    <span className={styles.scrubberTooltipUserText}>
+                      {hoveredTick.snippet}
                     </span>
                   </Button>
-                ) : null}
+
+                  {hoveredTick.assistantSnippet ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className={styles.scrubberTooltipAssistantBtn}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (hoveredTick.nextAssistantId) {
+                          onJump(hoveredTick.nextAssistantId);
+                        }
+                      }}
+                      aria-label="跳转到助手回复"
+                    >
+                      <span className={styles.scrubberTooltipAssistantText}>
+                        {hoveredTick.assistantSnippet}
+                      </span>
+                    </Button>
+                  ) : null}
+                </div>
               </div>
-            </div>
-          );
-        })()
-      ) : null}
+            );
+          })()
+        : null}
     </div>
   );
 };

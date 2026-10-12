@@ -89,8 +89,18 @@ export const MAX_HYDRATE_PAGES = 50;
 /** hydrate 单页事件数（与 fetchSessionEvents 默认尺寸同源） */
 export const HYDRATE_PAGE_SIZE = 800;
 
+export interface EngineHydrateOptions {
+  /** 首屏最大页数限制 */
+  maxPages?: number;
+  /** 窗口限制最新消息条数 */
+  windowSize?: number;
+  /** 是否全量拉全（默认 true） */
+  full?: boolean;
+}
+
 export async function hydrateSessionMessagesFromEngine(
-  sessionId: string
+  sessionId: string,
+  options?: EngineHydrateOptions
 ): Promise<SessionHydrateResult> {
   // P1-D2：消费 hasMore 按 nextAfterSequence 循环翻页直至拉全——
   // 修复前只拉单页 800 事件（R2 §6：hasMore 全仓无消费方），长会话被截断。
@@ -99,8 +109,9 @@ export async function hydrateSessionMessagesFromEngine(
   const allEvents: unknown[] = [];
   let cursor = 0;
   let hasMore = false;
+  const pageLimit = options?.maxPages ?? MAX_HYDRATE_PAGES;
 
-  for (let page = 0; page < MAX_HYDRATE_PAGES; page++) {
+  for (let page = 0; page < pageLimit; page++) {
     const res = await fetchSessionEvents(sessionId, cursor, HYDRATE_PAGE_SIZE);
     if (!res) {
       return {
@@ -136,14 +147,65 @@ export async function hydrateSessionMessagesFromEngine(
       ...(truncated ? { truncated } : {}),
     };
   }
-  const { messages, lastRunId, maxSequence } =
-    projectEventsToMessages(allEvents);
+  const {
+    messages: projectedMsgs,
+    lastRunId,
+    maxSequence,
+  } = projectEventsToMessages(allEvents);
+
+  let messages = projectedMsgs;
+  let hasOlder = hasMore;
+  if (
+    options?.windowSize !== undefined &&
+    options.windowSize > 0 &&
+    projectedMsgs.length > options.windowSize &&
+    !options.full
+  ) {
+    messages = projectedMsgs.slice(-options.windowSize);
+    hasOlder = true;
+  }
+
   return {
     ok: true,
     messages,
     nextAfterSequence: Math.max(cursor, maxSequence),
-    hasMore,
+    hasMore: hasOlder,
     ...(truncated ? { truncated } : {}),
     ...(lastRunId !== undefined && { lastRunId }),
+  };
+}
+
+/**
+ * 从引擎核心事件流中增量向前拉取较早的历史消息
+ */
+export async function loadOlderEngineMessages(
+  sessionId: string,
+  beforeSequence: number,
+  _maxEvents = 500
+): Promise<{
+  messages: SessionMessage[];
+  hasMore: boolean;
+  oldestSequence: number;
+}> {
+  if (!sessionId || beforeSequence <= 0) {
+    return { messages: [], hasMore: false, oldestSequence: 0 };
+  }
+  const res = await fetchSessionEvents(sessionId, 0, beforeSequence);
+  if (!res || res.events.length === 0) {
+    return { messages: [], hasMore: false, oldestSequence: 0 };
+  }
+  const filteredEvents = res.events.filter((e: any) => {
+    const seq = typeof e?.sequence === 'number' ? e.sequence : 0;
+    return seq < beforeSequence;
+  });
+  if (filteredEvents.length === 0) {
+    return { messages: [], hasMore: false, oldestSequence: 0 };
+  }
+  const { messages } = projectEventsToMessages(filteredEvents);
+  const oldestSequence = (filteredEvents[0] as any)?.sequence ?? 0;
+  return {
+    messages,
+    hasMore: oldestSequence > 1,
+    oldestSequence,
   };
 }

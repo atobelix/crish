@@ -7,7 +7,7 @@
  * 5. ResizeObserver 回调结合 RAF 防抖批处理调度
  */
 import { useCallback, useLayoutEffect, useRef, useState } from 'react';
-import { ResizeObserverManager } from '../ui/utils/ResizeObserverManager';
+import { ResizeObserverManager } from '../../utils/ResizeObserverManager';
 
 export const GRID_GUTTER_PX = 18;
 export const MIN_CAPACITY_PX = 200;
@@ -20,7 +20,8 @@ let sharedCanvas: HTMLCanvasElement | null = null;
 let sharedCtx: CanvasRenderingContext2D | null = null;
 
 export function measureTextWidthCanvas(text: string, font: string): number {
-  if (typeof window === 'undefined' && typeof document === 'undefined') return 0;
+  if (typeof window === 'undefined' && typeof document === 'undefined')
+    return 0;
   if (!sharedCanvas && typeof document !== 'undefined') {
     sharedCanvas = document.createElement('canvas');
     sharedCtx = sharedCanvas.getContext('2d');
@@ -63,7 +64,8 @@ export function useComposerMultiline(opts: {
       return;
     }
 
-    const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    const now =
+      typeof performance !== 'undefined' ? performance.now() : Date.now();
     if (now < lockedUntilRef.current) {
       return; // 熔断锁定期间，保持多行
     }
@@ -84,11 +86,12 @@ export function useComposerMultiline(opts: {
     // DOM 多行实体判定：检查编辑器中是否存在多个段落、硬换行或特定多行块
     const hasDomMultiBlocks = Boolean(
       editable &&
-        ((editable instanceof HTMLTextAreaElement && editable.value.includes('\n')) ||
-          editable.children.length > 1 ||
-          editable.querySelector(
-            'p + p, pre, blockquote, ul, ol, li, br:not(.ProseMirror-trailingBreak)'
-          ))
+      ((editable instanceof HTMLTextAreaElement &&
+        editable.value.includes('\n')) ||
+        editable.children.length > 1 ||
+        editable.querySelector(
+          'p + p, pre, blockquote, ul, ol, li, br:not(.ProseMirror-trailingBreak)'
+        ))
     );
 
     if (hasDomMultiBlocks) {
@@ -134,7 +137,10 @@ export function useComposerMultiline(opts: {
     );
 
     let nextState = isCurrentlyMulti;
-    if (!isCurrentlyMulti && (textWidth >= capacity || isPhysicallyOverflowed)) {
+    if (
+      !isCurrentlyMulti &&
+      (textWidth >= capacity || isPhysicallyOverflowed)
+    ) {
       nextState = true; // 突破上门限，展开
     } else if (
       isCurrentlyMulti &&

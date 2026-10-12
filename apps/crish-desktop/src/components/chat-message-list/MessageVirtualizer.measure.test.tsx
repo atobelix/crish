@@ -17,7 +17,7 @@ const { observe, unobserve } = vi.hoisted(() => ({
   unobserve: vi.fn(),
 }));
 
-vi.mock('../ui/utils/ResizeObserverManager', () => ({
+vi.mock('../../utils/ResizeObserverManager', () => ({
   ResizeObserverManager: {
     getInstance: () => ({ observe, unobserve }),
   },
@@ -25,7 +25,9 @@ vi.mock('../ui/utils/ResizeObserverManager', () => ({
 
 vi.mock('../../services/toast/ToastContext', () => ({
   useToast: () => ({ showToast: vi.fn(), toast: { show: vi.fn() } }),
-  ToastProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  ToastProvider: ({ children }: { children: React.ReactNode }) => (
+    <>{children}</>
+  ),
 }));
 
 function userMessages(count: number): SessionMessage[] {
@@ -103,8 +105,9 @@ describe('MessageVirtualizer row measurement', () => {
   it('keeps one callback ref per row id across renders', () => {
     const setActual = vi.fn();
     const { result, rerender } = renderHook(
-      ({ ids }: { ids: readonly string[] }) => useStableRowMeasureRef(setActual, ids),
-      { initialProps: { ids: ['a', 'b'] } },
+      ({ ids }: { ids: readonly string[] }) =>
+        useStableRowMeasureRef(setActual, ids),
+      { initialProps: { ids: ['a', 'b'] } }
     );
     const first = result.current('a');
     rerender({ ids: ['a', 'b', 'c'] });
@@ -115,7 +118,9 @@ describe('MessageVirtualizer row measurement', () => {
   it('observes rows that mount when a static session scrolls, then setActual', () => {
     const setActual = vi.spyOn(VirtualScrollManager.prototype, 'setActual');
     const messages = userMessages(100);
-    const { getByTestId } = render(<MessageVirtualizer {...propsFor(messages)} />);
+    const { getByTestId } = render(
+      <MessageVirtualizer {...propsFor(messages)} />
+    );
 
     const before = observedIds();
     expect(before.size).toBeGreaterThan(0);
@@ -136,12 +141,15 @@ describe('MessageVirtualizer row measurement', () => {
     expect(mounted.length).toBeGreaterThan(0);
     const freshId = mounted[0]!;
     const entry = observe.mock.calls.find(
-      (call) => (call[0] as HTMLElement).dataset?.vindex === freshId,
+      (call) => (call[0] as HTMLElement).dataset?.vindex === freshId
     );
     expect(entry).toBeTruthy();
     const el = entry![0] as HTMLElement;
     const onEntry = entry![1] as (obs: ResizeObserverEntry) => void;
-    Object.defineProperty(el, 'offsetHeight', { configurable: true, value: 180 });
+    Object.defineProperty(el, 'offsetHeight', {
+      configurable: true,
+      value: 180,
+    });
 
     act(() => {
       onEntry({

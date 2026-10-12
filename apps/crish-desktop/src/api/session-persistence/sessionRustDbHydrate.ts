@@ -9,7 +9,7 @@
  *   - persistAllSessionsSyncViaLocalStorage：beforeunload 同步镜像（禁止 await）
  */
 
-import type { SessionState } from '../../store/layoutStore';
+import type { SessionState } from '../../store/types';
 import {
   SESSION_AGENTS_PREFIX,
   SESSION_BODY_PREFIX,
@@ -29,8 +29,6 @@ import {
   enqueuePersist,
   getSessionMeta,
   listSessions,
-  loadSessionAgents,
-  loadSessionBody,
   nextBatchVersion,
   saveSessionAgents,
   saveSessionBody,
@@ -39,15 +37,9 @@ import {
 import { invokeResult } from '../tauriInvoke';
 import { logInternalError } from '../userFacingErrors';
 import { errorStore } from '../../services/ErrorStore';
-import {
-  parseFolderOrder,
-  safeParseJson,
-  sanitizeMessagesForHydrate,
-} from './sessionHydration';
-import { coerceSessionTimestamp } from '../sessionTime';
-import { prepareSessionsForUi } from '../sessionTitle';
+import { parseFolderOrder, safeParseJson } from './sessionHydration';
 import { normalizeAssistantTimeline } from '../toolPresentation';
-import { logger, toErrMeta } from '../../services/LoggerService';
+import { logger } from '../../services/LoggerService';
 import {
   sessionDeltaWriteBarrier,
   reconcileLateArrivalSnapshot,
@@ -76,6 +68,15 @@ export {
   isHydrateGenerationCurrent,
 };
 
+import {
+  assembleWindowedHydratedSessions,
+  loadActiveWindowedBundle,
+  prepareWindowedSessionsForUi,
+  shouldBlockWindowedSessionBodySave,
+} from './sessionWindowedPagination';
+
+export * from './sessionWindowedPagination';
+
 // ── 复合 API：hydrateSessionsFromRust ──────────────────────────────────────
 
 /**
@@ -90,26 +91,6 @@ function hasDegradedMarker(sessionId: string): boolean {
   } catch {
     return false;
   }
-}
-
-/**
- * 会话切换 / 懒水合 JIT 拉取：仅加载指定会话的 body + agents。
- * 调用方负责 Generation Token 对账——本函数只做 IO，不碰 store。
- */
-export async function ensureSessionBodyHydrated(sessionId: string): Promise<{
-  messages: SessionState['messages'];
-  agents: NonNullable<SessionState['agents']>;
-}> {
-  if (!sessionId || isPendingDraft(sessionId))
-    return { messages: [], agents: [] };
-  const [messages, agents] = await Promise.all([
-    loadSessionBody(sessionId),
-    loadSessionAgents(sessionId),
-  ]);
-  return {
-    messages: sanitizeMessagesForHydrate(messages),
-    agents: Array.isArray(agents) ? agents : [],
-  };
 }
 
 /**
@@ -196,59 +177,14 @@ export async function hydrateSessionsFromRust(
       : ordered[0]?.id || null;
 
   // 3. 仅活跃会话拉 body + agents（K=5 收口；历史懒壳零 IPC）
-  let activeMessages: SessionState['messages'] = [];
-  let activeAgents: NonNullable<SessionState['agents']> = [];
-  if (targetActiveId) {
-    try {
-      const loaded = await ensureSessionBodyHydrated(targetActiveId);
-      activeMessages = loaded.messages;
-      activeAgents = loaded.agents;
-    } catch (err) {
-      logger.error('[hydrate] active session bundle load failed', {
-        module: 'hydrate',
-        sessionId: targetActiveId,
-        err: toErrMeta(err),
-      });
-    }
-  }
+  const activeBundle = await loadActiveWindowedBundle(targetActiveId);
 
-  // 4. 单遍内存装配：活跃全量 + 历史懒壳
-  const sessions: SessionState[] = ordered.map((e) => {
-    const isActive = e.id === targetActiveId;
-    const safeTimestamp = coerceSessionTimestamp(
-      e.id,
-      e.timestamp,
-      isActive ? activeMessages : []
-    );
-    return {
-      id: e.id,
-      title: e.title,
-      folder: e.folder,
-      isPinned: e.isPinned,
-      isArchived: e.isArchived,
-      timestamp: safeTimestamp,
-      messages: isActive ? activeMessages : [],
-      messagesHydrated: isActive,
-      agents: isActive ? activeAgents : [],
-      messageCount: e.messageCount,
-      ...(e.branchParentId !== undefined
-        ? { branchParentId: e.branchParentId }
-        : {}),
-      ...(e.pinnedMessageIds?.length
-        ? { pinnedMessageIds: e.pinnedMessageIds }
-        : {}),
-      ...(e.engineCursor !== undefined ? { engineCursor: e.engineCursor } : {}),
-      ...(e.engineLastRunId !== undefined
-        ? { engineLastRunId: e.engineLastRunId }
-        : {}),
-      ...(isActive && e.hydratedFromEngine !== undefined
-        ? { hydratedFromEngine: e.hydratedFromEngine }
-        : {}),
-      // importMeta / titleSource 仅存 localStorage 索引；SQLite 行无此列，从 LS 索引水合时带回
-      ...(e.importMeta ? { importMeta: e.importMeta } : {}),
-      ...(e.titleSource ? { titleSource: e.titleSource } : {}),
-    };
-  });
+  // 4. 单遍内存装配：活跃窗口化 + 历史懒壳
+  const sessions = assembleWindowedHydratedSessions(
+    ordered,
+    targetActiveId,
+    activeBundle
+  );
 
   // 5. 维度 2 一致性校验：仅对已水合（非懒壳）会话做 index-body 分叉校验
   for (const s of sessions) {
@@ -263,14 +199,8 @@ export async function hydrateSessionsFromRust(
     }
   }
 
-  // 6. 剪枝兼容（方案 A）：未水合但 messageCount>0 的懒壳并入 keepIds，
-  //    防止 prepareSessionsForUi 将其当幽灵空壳误剪（侧栏丢会话）。
-  const lazyKeepIds = sessions
-    .filter((s) => s.messagesHydrated === false && (s.messageCount ?? 0) > 0)
-    .map((s) => s.id);
-  const prepared = prepareSessionsForUi(sessions, targetActiveId, {
-    keepIds: [...lazyKeepIds, ...(targetActiveId ? [targetActiveId] : [])],
-  });
+  // 6. 剪枝兼容（方案 A）：未水合但 messageCount>0 的懒壳并入 keepIds
+  const prepared = prepareWindowedSessionsForUi(sessions, targetActiveId);
   let activeSessionId =
     targetActiveId && prepared.some((s) => s.id === targetActiveId)
       ? targetActiveId
@@ -429,6 +359,13 @@ export async function persistAllSessionsRust(
       const shouldSaveBody =
         !isUnconfirmedEmptyShell &&
         (msgs.length > 0 || !isLazySessionShell(s, activePersistable));
+
+      // 资产保护硬守卫（W3-4）：局部窗口化会话拦截 saveSessionBody，防止未拉取的历史记录被抹杀
+      if (shouldBlockWindowedSessionBodySave(s, msgs.length)) {
+        bodyJobs.push(saveSessionAgents(s.id, s.agents || []));
+        continue;
+      }
+
       if (shouldSaveBody && isSessionBodyDirty(s.id, msgs)) {
         bodyJobs.push(
           saveSessionBody(s.id, msgs, batchVersion).then(() =>

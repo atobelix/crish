@@ -122,3 +122,19 @@
     max-width: min(var(--chat-col-max-wide, 840px), 100%);
   }
 }
+
+/* W3-3: 虚拟滚动超视距 DOM 回收骨架占位态 */
+.domPurgedRow {
+  width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.domPurgeSkeleton {
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  border-radius: var(--radius-md, 6px);
+  background: transparent;
+  pointer-events: none;
+}

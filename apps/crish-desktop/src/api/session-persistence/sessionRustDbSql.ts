@@ -32,7 +32,6 @@ import {
   lsSaveFolderOrder,
 } from './sessionRustDbFallback';
 import {
-  SESSION_ACTIVE_KEY,
   SESSION_AGENTS_OVER_CAP_META_PREFIX,
   SESSION_AGENTS_SAVE_CAP,
   type AgentsTruncationRecord,
@@ -75,11 +74,16 @@ export async function listSessions(): Promise<SessionIndexEntry[]> {
  * 中的活跃会话正文不受影响（内存即降级留痕）。
  */
 export async function loadSessionBody(
-  sessionId: string
+  sessionId: string,
+  options?: { limit?: number; beforeSeq?: number }
 ): Promise<SessionMessage[]> {
   if (!sessionId?.trim() || isPendingDraft(sessionId)) return [];
   const res = await invokeResult<RustSessionMessage[]>('load_session_body', {
     sessionId,
+    ...(options?.limit !== undefined ? { limit: options.limit } : {}),
+    ...(options?.beforeSeq !== undefined
+      ? { beforeSeq: options.beforeSeq }
+      : {}),
   });
   // P1-F3（F5-03）：历史 LS quota 截断标志 → 数据面日志提示（提示 UI 最小化，仅日志；
   // 数据面暴露走 sessionQuota.hasQuotaTruncation）。标志存在意味着迁移前某次
@@ -87,7 +91,25 @@ export async function loadSessionBody(
   if (hasQuotaTruncation(sessionId)) {
     logInternalError('ls-quota-truncated', { sessionId });
   }
-  if (res.status === 'ok') return fromRustSessionMessages(res.data || []);
+  if (res.status === 'ok') {
+    const msgs = fromRustSessionMessages(res.data || []);
+    if (
+      options &&
+      (options.limit !== undefined || options.beforeSeq !== undefined)
+    ) {
+      if (
+        options.beforeSeq !== undefined &&
+        msgs.length > (options.limit ?? 50)
+      ) {
+        const end = Math.min(options.beforeSeq, msgs.length);
+        const start = Math.max(0, end - (options.limit ?? 50));
+        return msgs.slice(start, end);
+      } else if (options.limit !== undefined && msgs.length > options.limit) {
+        return msgs.slice(-options.limit);
+      }
+    }
+    return msgs;
+  }
   // D-F06：缺/错命令不再回退 lsLoadSessionBody（该读面降格为迁移专用，
   // 见 sessionRustDbFallback 头注）。失败改走 errorStore 数据面带（与
   // save 路径 persist-degraded-ls 同一专名，command 区分读/写面）。

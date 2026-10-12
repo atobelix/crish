@@ -5,14 +5,25 @@
  * 彻底消除 80 万次字符扫描、对象爆炸与挂载级联重算雪崩
  */
 
-import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { useVirtualScroll } from '../../hooks/useVirtualScroll';
 import { useLayoutStore } from '../../store/storeAccess';
 import { highlightCodeSafe } from '../../api/codeHighlight';
 import { LineBuffer } from './LineBuffer';
-import { VirtualCodeEngine, MAX_DOM_LINE_CHARS, MAX_EXPANDED_LINE_CHARS } from './VirtualCodeEngine';
+import {
+  VirtualCodeEngine,
+  MAX_DOM_LINE_CHARS,
+  MAX_EXPANDED_LINE_CHARS,
+} from './VirtualCodeEngine';
 import { Button, Tooltip } from '../ui';
-import { ResizeObserverManager } from '../ui/utils/ResizeObserverManager';
+import { ResizeObserverManager } from '../../utils/ResizeObserverManager';
 import styles from './DiffCard.module.css';
 
 function basename(p: string): string {
@@ -29,17 +40,18 @@ const FALLBACK_ROW_HEIGHT = 22;
 const FALLBACK_CHAR_WIDTH = 7.2;
 const OVERSCAN = 20;
 
-export const VirtualPlainCodeViewer: React.FC<VirtualPlainCodeViewerProps> = React.memo(
-  ({ content, filePath, wordWrap = true }) => {
+export const VirtualPlainCodeViewer: React.FC<VirtualPlainCodeViewerProps> =
+  React.memo(({ content, filePath, wordWrap = true }) => {
     // 1. 紧凑行索引构建（单一真理源，零包装对象，耗时 < 1.5ms）
     const lineBuffer = useMemo(() => new LineBuffer(content), [content]);
     const totalLines = lineBuffer.totalLines;
 
     // 2. 借用原生虚拟滚动容器的滚动位置与容器高
-    const { containerRef, scrollTop, containerHeight, onScroll } = useVirtualScroll({
-      itemCount: totalLines,
-      heightOnly: true,
-    });
+    const { containerRef, scrollTop, containerHeight, onScroll } =
+      useVirtualScroll({
+        itemCount: totalLines,
+        heightOnly: true,
+      });
 
     const [rowHeight, setRowHeight] = useState(FALLBACK_ROW_HEIGHT);
     const [charWidth, setCharWidth] = useState(FALLBACK_CHAR_WIDTH);
@@ -76,7 +88,10 @@ export const VirtualPlainCodeViewer: React.FC<VirtualPlainCodeViewerProps> = Rea
 
     // 动态行号区宽度（预扣除滚动条宽度，避免可用宽度高估）
     const gutterDigits = Math.max(2, String(totalLines).length);
-    const gutterWidth = Math.max(22, Math.ceil(gutterDigits * (charWidth || 7.2)) + 8);
+    const gutterWidth = Math.max(
+      22,
+      Math.ceil(gutterDigits * (charWidth || 7.2)) + 8
+    );
     const SCROLLBAR_WIDTH = 16;
     const availableWidth = Math.max(
       80,
@@ -124,7 +139,8 @@ export const VirtualPlainCodeViewer: React.FC<VirtualPlainCodeViewerProps> = Rea
         let validRowHeight: number | null = null;
         let validCharWidth: number | null = null;
 
-        const measured = lineEl.offsetHeight || lineEl.getBoundingClientRect().height;
+        const measured =
+          lineEl.offsetHeight || lineEl.getBoundingClientRect().height;
         if (measured >= 16 && measured <= 60) {
           validRowHeight = Math.round(measured);
         }
@@ -169,12 +185,23 @@ export const VirtualPlainCodeViewer: React.FC<VirtualPlainCodeViewerProps> = Rea
 
     // 5. 排版引擎实例构建（仅在行宽、换行模式、文本或展开态改变时微量计算）
     const engine = useMemo(() => {
-      return new VirtualCodeEngine(lineBuffer, wordWrap, availableWidth, charWidth, expandedLines);
+      return new VirtualCodeEngine(
+        lineBuffer,
+        wordWrap,
+        availableWidth,
+        charWidth,
+        expandedLines
+      );
     }, [lineBuffer, wordWrap, availableWidth, charWidth, expandedLines]);
 
     // 6. 视口切片计算（算术定位，耗时 < 0.002ms）
     const { startIndex, endIndex, offsetTop, totalHeight } = useMemo(() => {
-      return engine.computeViewport(scrollTop, containerHeight || 600, rowHeight, OVERSCAN);
+      return engine.computeViewport(
+        scrollTop,
+        containerHeight || 600,
+        rowHeight,
+        OVERSCAN
+      );
     }, [engine, scrollTop, containerHeight, rowHeight]);
 
     // 7. 惰性物化视口切片行（仅物化当前屏幕 30~50 行字符串）
@@ -218,10 +245,20 @@ export const VirtualPlainCodeViewer: React.FC<VirtualPlainCodeViewerProps> = Rea
     // 全文最大行宽预估（非换行模式下的基础画布宽度保障，O(1) 紧凑计算）
     const estimatedMaxContentWidth = useMemo(() => {
       if (wordWrap) return 0;
-      const charLimit = expandedLines.size > 0 ? MAX_EXPANDED_LINE_CHARS : MAX_DOM_LINE_CHARS;
-      const effectiveChars = Math.min(lineBuffer.maxLineDisplayWidth, charLimit);
+      const charLimit =
+        expandedLines.size > 0 ? MAX_EXPANDED_LINE_CHARS : MAX_DOM_LINE_CHARS;
+      const effectiveChars = Math.min(
+        lineBuffer.maxLineDisplayWidth,
+        charLimit
+      );
       return gutterWidth + Math.ceil(effectiveChars * (charWidth || 7.2)) + 48;
-    }, [wordWrap, expandedLines.size, lineBuffer.maxLineDisplayWidth, gutterWidth, charWidth]);
+    }, [
+      wordWrap,
+      expandedLines.size,
+      lineBuffer.maxLineDisplayWidth,
+      gutterWidth,
+      charWidth,
+    ]);
 
     // 文本或排版约束变更时重置累计尺寸锚点
     useEffect(() => {
@@ -234,12 +271,16 @@ export const VirtualPlainCodeViewer: React.FC<VirtualPlainCodeViewerProps> = Rea
     useLayoutEffect(() => {
       const el = preRef.current;
       if (!el) return;
-      const h = Math.round(el.offsetHeight || el.getBoundingClientRect().height);
+      const h = Math.round(
+        el.offsetHeight || el.getBoundingClientRect().height
+      );
       if (h > 0) {
         setActualPreHeight((prev) => (Math.abs(h - prev) >= 2 ? h : prev));
       }
       if (!wordWrap) {
-        const w = Math.round(el.scrollWidth || el.getBoundingClientRect().width);
+        const w = Math.round(
+          el.scrollWidth || el.getBoundingClientRect().width
+        );
         if (w > 0) {
           setActualPreWidth((prev) => (Math.abs(w - prev) >= 4 ? w : prev));
         }
@@ -248,12 +289,16 @@ export const VirtualPlainCodeViewer: React.FC<VirtualPlainCodeViewerProps> = Rea
       const handlePreResize = (entry: ResizeObserverEntry) => {
         const height = Math.round(entry.contentRect.height);
         if (height > 0) {
-          setActualPreHeight((prev) => (Math.abs(height - prev) >= 2 ? height : prev));
+          setActualPreHeight((prev) =>
+            Math.abs(height - prev) >= 2 ? height : prev
+          );
         }
         if (!wordWrap) {
           const width = Math.round(entry.contentRect.width);
           if (width > 0) {
-            setActualPreWidth((prev) => (Math.abs(width - prev) >= 4 ? width : prev));
+            setActualPreWidth((prev) =>
+              Math.abs(width - prev) >= 4 ? width : prev
+            );
           }
         }
       };
@@ -262,12 +307,17 @@ export const VirtualPlainCodeViewer: React.FC<VirtualPlainCodeViewerProps> = Rea
     }, [visibleLines, wordWrap]);
 
     // 动态画布总高：以静态估算为基准，并根据当前物化 DOM 的实际探底几何自愈扩容
-    const renderedBottom = actualPreHeight > 0 ? offsetTop + actualPreHeight : 0;
-    const isScrollable = Math.max(totalHeight, renderedBottom) > (containerHeight || 600);
+    const renderedBottom =
+      actualPreHeight > 0 ? offsetTop + actualPreHeight : 0;
+    const isScrollable =
+      Math.max(totalHeight, renderedBottom) > (containerHeight || 600);
     const isEndReached = endIndex >= totalLines;
     // 触底保障：当视口切片已包含最后一行且具有滚动容量时，注入触底舒缓空隙（32px），
     // 确保尾行 100% 完整呈现在视口上方，滚动条完全见底且从容可见
-    const bottomPadding = isScrollable && isEndReached && totalLines > 0 ? Math.max(32, rowHeight * 1.5) : 0;
+    const bottomPadding =
+      isScrollable && isEndReached && totalLines > 0
+        ? Math.max(32, rowHeight * 1.5)
+        : 0;
     const currentNeed = Math.max(totalHeight, renderedBottom + bottomPadding);
     if (currentNeed > maxObservedHeightRef.current) {
       maxObservedHeightRef.current = currentNeed;
@@ -275,7 +325,11 @@ export const VirtualPlainCodeViewer: React.FC<VirtualPlainCodeViewerProps> = Rea
     const canvasHeight = Math.max(totalHeight, maxObservedHeightRef.current);
 
     // 动态画布总宽（关闭换行模式时提供完整水平滚动宽度，行号自吸顶保持常驻）
-    const currentNeedWidth = Math.max(containerWidth, estimatedMaxContentWidth, actualPreWidth);
+    const currentNeedWidth = Math.max(
+      containerWidth,
+      estimatedMaxContentWidth,
+      actualPreWidth
+    );
     if (currentNeedWidth > maxObservedWidthRef.current) {
       maxObservedWidthRef.current = currentNeedWidth;
     }
@@ -338,7 +392,9 @@ export const VirtualPlainCodeViewer: React.FC<VirtualPlainCodeViewerProps> = Rea
                 className={styles.line}
                 style={{
                   minHeight: `${rowHeight}px`,
-                  gridTemplateColumns: wordWrap ? `${gutterWidth}px 1fr` : `${gutterWidth}px auto`,
+                  gridTemplateColumns: wordWrap
+                    ? `${gutterWidth}px 1fr`
+                    : `${gutterWidth}px auto`,
                   width: wordWrap ? '100%' : 'max-content',
                   minWidth: '100%',
                   borderLeft: 'none',
@@ -377,7 +433,11 @@ export const VirtualPlainCodeViewer: React.FC<VirtualPlainCodeViewerProps> = Rea
                     lineHeight: `${rowHeight}px`,
                   }}
                 >
-                  <span dangerouslySetInnerHTML={{ __html: highlightCodeSafe(l.text, filePath) }} />
+                  <span
+                    dangerouslySetInnerHTML={{
+                      __html: highlightCodeSafe(l.text, filePath),
+                    }}
+                  />
                   {l.isTruncated && (
                     <Tooltip
                       content={
@@ -438,7 +498,6 @@ export const VirtualPlainCodeViewer: React.FC<VirtualPlainCodeViewerProps> = Rea
         </div>
       </div>
     );
-  }
-);
+  });
 
 VirtualPlainCodeViewer.displayName = 'VirtualPlainCodeViewer';

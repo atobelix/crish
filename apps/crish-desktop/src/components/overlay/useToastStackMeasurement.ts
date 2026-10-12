@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import type { AppToast } from '../../services/toast/types';
-import { ResizeObserverManager } from '../ui/utils/ResizeObserverManager';
+import { ResizeObserverManager } from '../../utils/ResizeObserverManager';
 
 export function useToastStackMeasurement(
   toasts: readonly AppToast[],
@@ -66,7 +66,7 @@ export function useToastStackMeasurement(
       for (let i = 0; i < index; i++) {
         const item = toasts[i];
         const h = item
-          ? heights[item.id] ?? heightsRef.current[item.id] ?? 56
+          ? (heights[item.id] ?? heightsRef.current[item.id] ?? 56)
           : 56;
         acc += h + gap;
       }
@@ -76,7 +76,7 @@ export function useToastStackMeasurement(
   );
 
   const frontmostHeight = toasts[0]
-    ? heights[toasts[0].id] ?? heightsRef.current[toasts[0].id] ?? 56
+    ? (heights[toasts[0].id] ?? heightsRef.current[toasts[0].id] ?? 56)
     : 56;
 
   return {

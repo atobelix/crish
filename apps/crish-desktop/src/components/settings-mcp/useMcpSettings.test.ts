@@ -14,15 +14,13 @@ vi.mock('../../api/appMode', () => ({
   isDemoMode: vi.fn(() => false),
 }));
 
-vi.mock('../../api/clientApi', () => ({
-  clientApi: {
-    getMcpServers: vi.fn(async () => []),
-    saveMcpServer: vi.fn(async () => ({ ok: true })),
-  },
-}));
-
 import { useMcpSettings } from './useMcpSettings';
-import { listMcpServers, probeMcpControl, startMcpServer, stopMcpServer } from '../../api/mcpApi';
+import {
+  listMcpServers,
+  probeMcpControl,
+  startMcpServer,
+  stopMcpServer,
+} from '../../api/mcpApi';
 
 describe('useMcpSettings', () => {
   beforeEach(() => {
@@ -31,7 +29,12 @@ describe('useMcpSettings', () => {
       ok: true,
       configured: true,
       servers: [
-        { id: 'git', name: 'Git Tool', state: 'running', tools: ['git_status'] },
+        {
+          id: 'git',
+          name: 'Git Tool',
+          state: 'running',
+          tools: ['git_status'],
+        },
         { id: 'db', name: 'Database', state: 'stopped', tools: ['sql_query'] },
       ],
       status: { configured: true, serverCount: 2 },
@@ -71,13 +74,15 @@ describe('useMcpSettings', () => {
     (startMcpServer as any).mockResolvedValue({ ok: true });
     (stopMcpServer as any).mockResolvedValue({ ok: true });
 
-    const onShowToast = vi.fn();
-    const { result } = renderHook(() => useMcpSettings({ onShowToast }));
+    const { result } = renderHook(() => useMcpSettings());
 
     await waitFor(() => expect(result.current.loading).toBe(false));
 
     await act(async () => {
-      await result.current.handleToggleServer(result.current.servers[0].id, 'stop');
+      await result.current.handleToggleServer(
+        result.current.servers[0].id,
+        'stop'
+      );
     });
 
     expect(stopMcpServer).toHaveBeenCalledWith('git');

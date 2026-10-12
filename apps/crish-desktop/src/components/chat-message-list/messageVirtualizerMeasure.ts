@@ -1,5 +1,5 @@
 import { useCallback, useRef } from 'react';
-import { ResizeObserverManager } from '../ui/utils/ResizeObserverManager';
+import { ResizeObserverManager } from '../../utils/ResizeObserverManager';
 
 /**
  * 单行测高回调。挂到带 data-vindex 的节点上：挂载 observe，卸载 unobserve。
@@ -7,14 +7,15 @@ import { ResizeObserverManager } from '../ui/utils/ResizeObserverManager';
  */
 export function createRowMeasureRef(
   id: string,
-  setActual: (msgId: string, height: number) => void,
+  setActual: (msgId: string, height: number) => void
 ): (el: HTMLElement | null) => void {
   let node: HTMLElement | null = null;
   const onEntry = (entry: ResizeObserverEntry) => {
     const el = entry.target;
     if (!(el instanceof HTMLElement)) return;
     const msgId = el.dataset.vindex ?? id;
-    const measuredHeight = el.offsetHeight || Math.ceil(entry.contentRect.height);
+    const measuredHeight =
+      el.offsetHeight || Math.ceil(entry.contentRect.height);
     if (msgId != null && measuredHeight > 0) {
       setActual(msgId, measuredHeight);
     }
@@ -38,7 +39,7 @@ export function createRowMeasureRef(
  */
 export function useStableRowMeasureRef(
   setActual: (msgId: string, height: number) => void,
-  ids: readonly string[],
+  ids: readonly string[]
 ): (id: string) => (el: HTMLElement | null) => void {
   const setActualRef = useRef(setActual);
   setActualRef.current = setActual;

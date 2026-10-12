@@ -10,7 +10,8 @@ import {
   type McpStatusSnapshot,
 } from '../../api/mcpApi';
 import { isDemoMode } from '../../api/appMode';
-import { clientApi, type McpServer } from '../../api/clientApi';
+import type { McpServer } from '../../api/clientApi';
+import { useSettingsStore } from '../../store';
 import {
   copyText,
   errText,
@@ -44,9 +45,15 @@ export function useMcpSettings({
   const filter = filterSortState.filter;
   const sortMode = filterSortState.sortMode;
   const setFilter = (val: React.SetStateAction<string>) =>
-    setFilterSortState((prev) => ({ ...prev, filter: typeof val === 'function' ? val(prev.filter) : val }));
+    setFilterSortState((prev) => ({
+      ...prev,
+      filter: typeof val === 'function' ? val(prev.filter) : val,
+    }));
   const setSortMode = (val: React.SetStateAction<SortMode>) =>
-    setFilterSortState((prev) => ({ ...prev, sortMode: typeof val === 'function' ? val(prev.sortMode) : val }));
+    setFilterSortState((prev) => ({
+      ...prev,
+      sortMode: typeof val === 'function' ? val(prev.sortMode) : val,
+    }));
 
   const [probeState, setProbeState] = useState<{
     canStartStop: boolean;
@@ -55,9 +62,15 @@ export function useMcpSettings({
   const canStartStop = probeState.canStartStop;
   const controlHint = probeState.controlHint;
   const setCanStartStop = (val: React.SetStateAction<boolean>) =>
-    setProbeState((prev) => ({ ...prev, canStartStop: typeof val === 'function' ? val(prev.canStartStop) : val }));
+    setProbeState((prev) => ({
+      ...prev,
+      canStartStop: typeof val === 'function' ? val(prev.canStartStop) : val,
+    }));
   const setControlHint = (val: React.SetStateAction<string | undefined>) =>
-    setProbeState((prev) => ({ ...prev, controlHint: typeof val === 'function' ? val(prev.controlHint) : val }));
+    setProbeState((prev) => ({
+      ...prev,
+      controlHint: typeof val === 'function' ? val(prev.controlHint) : val,
+    }));
 
   // demo 本地 mock
   const [demoServers, setDemoServers] = useState<McpServer[]>([]);
@@ -86,17 +99,35 @@ export function useMcpSettings({
   const newUrl = addFormState.newUrl;
 
   const setShowAdd = (val: React.SetStateAction<boolean>) =>
-    setAddFormState((prev) => ({ ...prev, showAdd: typeof val === 'function' ? val(prev.showAdd) : val }));
+    setAddFormState((prev) => ({
+      ...prev,
+      showAdd: typeof val === 'function' ? val(prev.showAdd) : val,
+    }));
   const setNewName = (val: React.SetStateAction<string>) =>
-    setAddFormState((prev) => ({ ...prev, newName: typeof val === 'function' ? val(prev.newName) : val }));
+    setAddFormState((prev) => ({
+      ...prev,
+      newName: typeof val === 'function' ? val(prev.newName) : val,
+    }));
   const setNewType = (val: React.SetStateAction<DemoTransport>) =>
-    setAddFormState((prev) => ({ ...prev, newType: typeof val === 'function' ? val(prev.newType) : val }));
+    setAddFormState((prev) => ({
+      ...prev,
+      newType: typeof val === 'function' ? val(prev.newType) : val,
+    }));
   const setNewCmd = (val: React.SetStateAction<string>) =>
-    setAddFormState((prev) => ({ ...prev, newCmd: typeof val === 'function' ? val(prev.newCmd) : val }));
+    setAddFormState((prev) => ({
+      ...prev,
+      newCmd: typeof val === 'function' ? val(prev.newCmd) : val,
+    }));
   const setNewArgs = (val: React.SetStateAction<string>) =>
-    setAddFormState((prev) => ({ ...prev, newArgs: typeof val === 'function' ? val(prev.newArgs) : val }));
+    setAddFormState((prev) => ({
+      ...prev,
+      newArgs: typeof val === 'function' ? val(prev.newArgs) : val,
+    }));
   const setNewUrl = (val: React.SetStateAction<string>) =>
-    setAddFormState((prev) => ({ ...prev, newUrl: typeof val === 'function' ? val(prev.newUrl) : val }));
+    setAddFormState((prev) => ({
+      ...prev,
+      newUrl: typeof val === 'function' ? val(prev.newUrl) : val,
+    }));
 
   const refreshLive = useCallback(async () => {
     setLoading(true);
@@ -126,7 +157,7 @@ export function useMcpSettings({
   const refreshDemo = useCallback(async () => {
     setLoading(true);
     try {
-      const list = await clientApi.getMcpServers();
+      const list = useSettingsStore.getState().mcpServers;
       setDemoServers(list);
       setDemoEnabled((prev) => {
         const next = { ...prev };
@@ -243,7 +274,9 @@ export function useMcpSettings({
             setCanStartStop(false);
             setControlHint(r.error || START_STOP_HINT);
           } else {
-            toast.show?.(r.error ? `${prefix}失败：${r.error}` : `${prefix}失败`);
+            toast.show?.(
+              r.error ? `${prefix}失败：${r.error}` : `${prefix}失败`
+            );
           }
           await refreshLive();
           return;
@@ -265,7 +298,9 @@ export function useMcpSettings({
         id: `mcp-${Date.now()}`,
         name: newName.trim(),
         type: newType,
-        ...(newType === 'stdio' && newCmd.trim() ? { command: newCmd.trim() } : {}),
+        ...(newType === 'stdio' && newCmd.trim()
+          ? { command: newCmd.trim() }
+          : {}),
         ...(newType === 'stdio' && newArgs.trim()
           ? {
               args: newArgs
@@ -278,7 +313,9 @@ export function useMcpSettings({
         status: 'disconnected',
         tools: [],
       };
-      const list = await clientApi.saveMcpServer(server);
+      const current = useSettingsStore.getState().mcpServers;
+      const list = [...current.filter((s) => s.id !== server.id), server];
+      useSettingsStore.getState().setMcpServers(list);
       setDemoServers(list);
       setDemoEnabled((p) => ({ ...p, [server.id]: true }));
       onAvailabilityChange?.(list.length > 0);
@@ -294,7 +331,9 @@ export function useMcpSettings({
 
   const handleDeleteDemo = async (id: string) => {
     try {
-      const list = await clientApi.deleteMcpServer(id);
+      const current = useSettingsStore.getState().mcpServers;
+      const list = current.filter((s) => s.id !== id);
+      useSettingsStore.getState().setMcpServers(list);
       setDemoServers(list);
       setDemoEnabled((p) => {
         const next = { ...p };

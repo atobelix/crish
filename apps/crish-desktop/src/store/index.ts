@@ -76,6 +76,29 @@ export type {
 } from './sessionStore';
 
 export {
+  useSessionMeta,
+  useSessionMessages,
+  useSessionMessageCount,
+  useSessionTitle,
+  useSessionFolder,
+  useSessionIsPinned,
+  selectSessionMeta,
+  selectSessionMessages,
+  selectSessionMessageCount,
+  selectSessionTitle,
+  selectSessionFolder,
+  selectSessionIsPinned,
+  makeSelectSessionMeta,
+  makeSelectSessionMessages,
+  makeSelectSessionMessageCount,
+  clearSessionSelectorsCache,
+  isSessionMetaEqual,
+  extractSessionMeta,
+  EMPTY_MESSAGES,
+} from './sessionSelectors';
+export type { SessionMeta } from './sessionSelectors';
+
+export {
   useWorkspaceStore,
   useWorkspaceField,
   selectWorkspaces,

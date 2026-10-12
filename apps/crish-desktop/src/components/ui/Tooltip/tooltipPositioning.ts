@@ -1,13 +1,15 @@
 /**
- * Tooltip 定位计算纯函数（从 Tooltip.tsx 提取）。
- * 无 React / DOM 副作用依赖（仅读 window.visualViewport 几何），可单测。
+ * Tooltip 定位与属性计算纯函数（从 Tooltip.tsx 提取）。
+ * 无 React 状态副作用依赖（仅读几何与纯属性合并），可单测。
  *
  * 包含：
  * - TooltipSide 类型定义（供 Tooltip 组件与定位逻辑共享）
- * - 几何合法性校验（isValidDOMRect）
- * - side → CSS translate 映射（translateFor）
+ * - 几何合法性校验（isValidDOMRect）与物理尺寸测量（measureTooltipDimensions）
+ * - side → CSS translate 映射（translateFor）与 Portal 样式构建（buildTooltipPortalStyle）
  * - 4 向智能碰撞翻折与视口钳位（computeClampedPosition）
+ * - 触发器无障碍与事件属性合并（mergeTooltipTriggerProps）及活跃守卫判定（shouldKeepTooltipAlive）
  */
+import type { CSSProperties } from 'react';
 
 /** Tooltip 弹出方位：top / bottom / left / right */
 export type TooltipSide = 'top' | 'bottom' | 'left' | 'right';
@@ -16,6 +18,10 @@ export type TooltipSide = 'top' | 'bottom' | 'left' | 'right';
 export const TOOLTIP_EDGE_PAD = 8;
 /** 与触发器的间距 */
 export const TOOLTIP_GAP = 8;
+
+const isTestEnv =
+  typeof process !== 'undefined' &&
+  (process.env?.NODE_ENV === 'test' || Boolean(process.env?.VITEST));
 
 /**
  * 严格几何合法性校验谓词：判定 DOMRect 是否为有效视口几何
@@ -99,6 +105,160 @@ export interface ClampedTooltipResult {
   left: number;
   effectiveSide: TooltipSide;
   arrowOffset: number;
+}
+
+/**
+ * 测量 Tooltip 浮层 DOM 元素的物理像素宽高（兼容 jsdom 无布局回退）
+ */
+export function measureTooltipDimensions(
+  tipEl: HTMLElement,
+  triggerRect: DOMRect
+): { tipWidth: number; tipHeight: number } {
+  const tipBoundingRect = tipEl.getBoundingClientRect();
+  const tipWidth = Math.round(
+    tipBoundingRect.width > 0 && tipBoundingRect !== triggerRect
+      ? tipBoundingRect.width
+      : tipEl.offsetWidth || tipBoundingRect.width || 0
+  );
+  const tipHeight = Math.round(
+    tipBoundingRect.height > 0 && tipBoundingRect !== triggerRect
+      ? tipBoundingRect.height
+      : tipEl.offsetHeight || tipBoundingRect.height || 0
+  );
+  return { tipWidth, tipHeight };
+}
+
+/**
+ * 活跃显示期间的单帧物理真实性判定（脱离 DOM、失焦/移出、几何失效或离屏即返回 false）
+ */
+export function shouldKeepTooltipAlive(
+  target: HTMLElement,
+  tipEl: HTMLElement | null,
+  triggerMode: 'hover' | 'focus' | null,
+  hasHideTimer: boolean
+): boolean {
+  if (!target.isConnected) return false;
+
+  if (!isTestEnv) {
+    if (triggerMode === 'hover') {
+      const isTargetHovered =
+        typeof target.matches === 'function' ? target.matches(':hover') : true;
+      const isTipHovered =
+        tipEl && typeof tipEl.matches === 'function'
+          ? tipEl.matches(':hover')
+          : false;
+      if (!isTargetHovered && !isTipHovered && !hasHideTimer) {
+        return false;
+      }
+    } else if (triggerMode === 'focus') {
+      const isTargetFocused =
+        typeof document !== 'undefined' &&
+        (document.activeElement === target ||
+          target.contains(document.activeElement));
+      if (!isTargetFocused) return false;
+    }
+  }
+
+  const newRect = target.getBoundingClientRect();
+  return isValidDOMRect(newRect) && !isTriggerOffscreen(newRect);
+}
+
+/**
+ * 构造 Tooltip Portal 根节点的内联定位、显隐、指针穿透与箭头偏移变量样式
+ */
+export function buildTooltipPortalStyle(
+  rect: DOMRect,
+  clampedPos: ClampedTooltipResult | null,
+  effectiveSide: TooltipSide,
+  isPositionReady: boolean,
+  isExiting: boolean,
+  interactive: boolean,
+  portalStyle?: CSSProperties
+): CSSProperties & Record<string, unknown> {
+  const validRect = isValidDOMRect(rect);
+  return {
+    top: `${clampedPos?.top ?? rect.top}px`,
+    left: `${clampedPos?.left ?? rect.left}px`,
+    visibility: isPositionReady ? 'visible' : 'hidden',
+    opacity: isPositionReady && validRect ? undefined : 0,
+    pointerEvents:
+      isExiting || !isPositionReady || !validRect
+        ? 'none'
+        : interactive
+          ? 'auto'
+          : undefined,
+    '--tooltip-translate': translateFor(effectiveSide),
+    '--tooltip-arrow-offset':
+      clampedPos?.arrowOffset !== undefined
+        ? `${clampedPos.arrowOffset}px`
+        : undefined,
+    ...(portalStyle || {}),
+  };
+}
+
+/**
+ * 合并子元素与外部透传的 aria-describedby、className、style 及同名前缀事件处理器
+ */
+export function mergeTooltipTriggerProps(
+  childPropsRecord: Record<string, unknown>,
+  restProps: Record<string, unknown>,
+  shouldShowTooltip: boolean,
+  tipId: string
+) {
+  const childDescribedBy = childPropsRecord['aria-describedby'];
+  const describedBy = shouldShowTooltip
+    ? childDescribedBy != null && String(childDescribedBy).length > 0
+      ? `${tipId} ${String(childDescribedBy)}`
+      : tipId
+    : (childDescribedBy as string | undefined);
+
+  const mergedClassName =
+    [childPropsRecord.className, restProps.className]
+      .filter(Boolean)
+      .join(' ') || undefined;
+
+  const childStyle = childPropsRecord.style as CSSProperties | undefined;
+  const restStyle = restProps.style as CSSProperties | undefined;
+  const mergedStyle =
+    childStyle || restStyle
+      ? { ...(childStyle || {}), ...(restStyle || {}) }
+      : undefined;
+
+  const rest: Record<string, unknown> = { ...restProps };
+  delete rest.className;
+  delete rest.style;
+  delete rest.onMouseEnter;
+  delete rest.onMouseLeave;
+  delete rest.onFocus;
+  delete rest.onBlur;
+  delete rest.onPointerDown;
+  delete rest.onClick;
+
+  const mergedEventHandlers: Record<string, (e: unknown) => void> = {};
+  for (const [key, restValue] of Object.entries(rest)) {
+    if (key.startsWith('on') && typeof restValue === 'function') {
+      const childHandler = childPropsRecord[key];
+      if (typeof childHandler === 'function') {
+        mergedEventHandlers[key] = (event: unknown) => {
+          (childHandler as (e: unknown) => void)(event);
+          (restValue as (e: unknown) => void)(event);
+        };
+        delete rest[key];
+      }
+    }
+  }
+
+  return {
+    rest,
+    mergedEventHandlers,
+    mergedClassName,
+    mergedStyle,
+    describedBy,
+    hasClickHandler: Boolean(childPropsRecord.onClick || restProps.onClick),
+    hasPointerDownHandler: Boolean(
+      childPropsRecord.onPointerDown || restProps.onPointerDown
+    ),
+  };
 }
 
 /**

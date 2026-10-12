@@ -10,7 +10,11 @@ import { escapeHtml } from '../markdownRenderLite';
 
 /** fence info string → 语言 id（首 token；c++ 等别名归一） */
 export function langFromFenceInfo(info: string): string {
-  const raw = (String(info || '').trim().split(/\s+/)[0] ?? '')
+  const raw = (
+    String(info || '')
+      .trim()
+      .split(/\s+/)[0] ?? ''
+  )
     .replace(/^language-/, '')
     .replace(/^\./, '');
   if (!raw) return '';
@@ -42,7 +46,7 @@ export function extractFilePathFromFenceInfo(info: string): string {
   return m ? (m[1] ?? m[2] ?? '') : '';
 }
 
-function buildCodeFenceHtml(
+export function buildCodeFenceHtml(
   bodyRaw: string,
   langClean: string,
   filePath?: string

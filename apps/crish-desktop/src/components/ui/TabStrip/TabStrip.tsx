@@ -28,7 +28,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { ResizeObserverManager } from '../utils/ResizeObserverManager';
+import { ResizeObserverManager } from '../../../utils/ResizeObserverManager';
 import styles from './TabStrip.module.css';
 
 export interface TabStripItem {

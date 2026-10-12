@@ -8,40 +8,37 @@ import React, {
 } from 'react';
 import styles from './ChatMessageList.module.css';
 import { AppErrorBoundary } from '../AppErrorBoundary';
-import { messageMatchesSearch } from '../../api/sessionSearch';
 import { ChatUserMessageRow } from '../chat-message-row/ChatMessageRow';
 import { StreamingAssistantRow } from './StreamingAssistantRow';
 import { useVirtualScroll } from '../../hooks/useVirtualScroll';
-import {
-  MESSAGE_ESTIMATED_ROW_HEIGHT,
-  estimateTimelineMessageHeight,
-} from '../../api/VirtualScrollManager';
+import { MESSAGE_ESTIMATED_ROW_HEIGHT } from '../../api/VirtualScrollManager';
 import {
   registerActiveVsm,
   unregisterActiveVsm,
-  useLayoutStore,
 } from '../../store/storeAccess';
 import { useUndoWithScrollAnchor } from './useUndoWithScrollAnchor';
 import { FlowScrubber } from './FlowScrubber';
 import { ChatScrollFloorSlot } from './ChatScrollFloorSlot';
 import { useStableRowMeasureRef } from './messageVirtualizerMeasure';
-
 import {
   messageVirtualizerPropsEqual,
   type MessageVirtualizerProps,
   type PinnedItem,
 } from './messageVirtualizerMemo';
-import {
-  CHAT_SCROLL_PAD_TOP,
-  CHAT_SCROLL_PAD_X,
-  chatSpacerHeight,
-} from './chatScrollGeometry';
+import { CHAT_SCROLL_PAD_TOP, CHAT_SCROLL_PAD_X } from './chatScrollGeometry';
 import {
   BOTTOM_STICK_EPSILON_PX,
   SCROLL_BOTTOM_THRESHOLD_PX,
   SCROLL_TOP_EPSILON_PX,
 } from '../../hooks/virtualScrollConstants';
 import { useScrollAnchoringOnToggle } from './useScrollAnchoringOnToggle';
+import {
+  PurgedMessageRowSkeleton,
+  computeActiveRowWindow,
+  reseedAllMessageHeights,
+  useFastScrollPurgeTracker,
+  useVirtualizerHeightLifecycle,
+} from './messageDomPurge';
 
 export type { MessageVirtualizerProps, PinnedItem };
 
@@ -61,7 +58,6 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
   // 领域分组对象直接解构（切除双向兼容与扁平回退代码）
   const pinnedItems = pins?.pinnedItems ?? [];
   const pinnedColors = pins?.pinnedColors ?? {};
-  const _jumpToPinned = pins?.jumpToPinned ?? (() => {});
   const togglePin = pins?.togglePin ?? (() => {});
 
   const hideThinkingBlock = flowControl?.hideThinkingBlock ?? false;
@@ -134,7 +130,6 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
     performProgrammaticScroll,
     cancelProgrammaticScroll,
   } = vs;
-  const vsManager = manager;
   const rowMeasureRef = useStableRowMeasureRef(setActual, msgIds);
 
   const isAtBottomRef = useRef<boolean>(true);
@@ -144,8 +139,8 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
   const observedTopRef = useRef<number>(0);
   const [showFloorButton, setShowFloorButton] = useState<boolean>(false);
 
-  const uiSize = useLayoutStore((s) => s.uiSize);
-  const uiSizeSeededRef = useRef(false);
+  // W3-3: 快速滚动状态与超视距 DOM 回收控制器
+  const fastScroll = useFastScrollPurgeTracker();
   const prevSessionIdRef = useRef<string | null>(activeSessionId);
 
   // VS-01：会话切换必须在同步 layout 阶段（且置于 preloadEstimates 与吸底滚动之前！）重置几何状态；
@@ -163,41 +158,24 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
     isAtTopRef.current = true;
     setIsAtTop(true);
     setShowFloorButton(false);
+    fastScroll.reset();
     if (containerRef.current) {
       containerRef.current.scrollTop = 0;
     }
     // 会话切换：立刻回灌 order + 估高，杜绝 clear 后空 order 空屏
-    if (msgIds.length > 0) {
-      manager.syncOrder(msgIds);
-      manager.preloadEstimates(
-        messages.map((m) => ({
-          id: m.id,
-          height: estimateTimelineMessageHeight(m),
-        }))
-      );
-    }
+    reseedAllMessageHeights(manager, msgIds, messages);
     // 仅会话切换清几何；禁止把 messages/msgIds 放进依赖（否则每次消息更新清空导致空屏）
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSessionId, clearHeights, manager]);
 
-  // 字号/UI Token 变更：失效缓存高度并重测；首次挂载跳过（会话 Effect 已播种，避免双倍 O(N)）
-  useEffect(() => {
-    if (!uiSizeSeededRef.current) {
-      uiSizeSeededRef.current = true;
-      return;
-    }
-    clearHeights();
-    if (msgIds.length > 0) {
-      manager.syncOrder(msgIds);
-      manager.preloadEstimates(
-        messages.map((m) => ({
-          id: m.id,
-          height: estimateTimelineMessageHeight(m),
-        }))
-      );
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [uiSize, clearHeights]);
+  useVirtualizerHeightLifecycle({
+    manager,
+    msgIds,
+    messages,
+    clearHeights,
+    syncOrder,
+    preloadEstimates,
+  });
 
   useEffect(() => {
     registerActiveVsm(activeSessionId, manager);
@@ -208,57 +186,26 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
 
   useUndoWithScrollAnchor(containerRef, manager);
 
-  // Heights: MESSAGE_ESTIMATED_ROW_HEIGHT fallback until per-row callback ref → setActual.
-  // No @chenglou/pretext on this path — RO owns measured heights after paint.
-  // 唯一测量通道是 rowMeasureRef（挂载 observe / 卸载 unobserve），不再扫描容器。
-
-  // 消息变化时经 hook preloadEstimates：手势中缓冲，提交后 bump actualTick。
-  // 会话切换 / uiSize 仍走下面的 effect，直接 manager.preloadEstimates（clear 之后）。
-  useLayoutEffect(() => {
-    syncOrder(msgIds);
-    const unmeasuredEstimates: Array<{ id: string; height: number }> = [];
-    for (const m of messages) {
-      if (!manager.hasActualHeight(m.id)) {
-        unmeasuredEstimates.push({
-          id: m.id,
-          height: estimateTimelineMessageHeight(m),
-        });
-      }
-    }
-    if (unmeasuredEstimates.length > 0) {
-      preloadEstimates(unmeasuredEstimates);
-    }
-  }, [messages, msgIds, manager, preloadEstimates, syncOrder]);
-
-  // VS-04：order 与 ids 不一致时同步 order，并确保在计算可见区间前已完成同步，防止空切片
-  if (msgIds.length > 0 && vsManager.getOrderCount() !== msgIds.length) {
-    vsManager.syncOrder(msgIds);
-  }
-
-  const visibleRange =
-    msgIds.length > 0 &&
-    vs.visibleRange.endIndex === 0 &&
-    vsManager.getOrderCount() > 0
-      ? vsManager.computeVisibleRange(
-          vs.scrollTop,
-          vs.viewportHeight,
-          messages.length,
-          8
-        )
-      : vs.visibleRange;
-
-  const { startIndex, endIndex, startOffset } = visibleRange;
-  const contentHeight =
-    msgIds.length > 0 && vs.totalHeight === 0 && vsManager.getOrderCount() > 0
-      ? vsManager.getTotalHeight(messages.length)
-      : vs.totalHeight;
-  /** 文档坐标系高度 = 顶衬 + 内容前缀和 + 底衬（绝对切片不吃 CSS padding） */
-  const totalHeight = chatSpacerHeight(contentHeight);
-
   const pinnedIdSet = useMemo(
     () => new Set(pinnedItems.map((p) => p.id)),
     [pinnedItems]
   );
+
+  // VS-04 & W3-3：计算活跃行裁剪窗口、文档坐标系总高度与每行超视距回收状态
+  const { startOffset, totalHeight, activeRows } = computeActiveRowWindow({
+    visibleRange: vs.visibleRange,
+    scrollTop: vs.scrollTop,
+    viewportHeight: vs.viewportHeight,
+    totalHeight: vs.totalHeight,
+    vsManager: manager,
+    messages,
+    msgIds,
+    pinnedIdSet,
+    searchHighlightQuery,
+    thinkingMsgId,
+    editingMessageId: composer?.editingMessageId,
+    isScrolling: fastScroll.isScrolling(vs.isGestureActive()),
+  });
 
   const touchStartYRef = useRef(0);
 
@@ -312,12 +259,7 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
 
       const el = e.currentTarget;
       const currentScrollTop = el.scrollTop;
-      const currentScrollHeight = el.scrollHeight;
-      const currentClientHeight = el.clientHeight;
-      const maxScrollTop = Math.max(
-        0,
-        currentScrollHeight - currentClientHeight
-      );
+      const maxScrollTop = Math.max(0, el.scrollHeight - el.clientHeight);
 
       // 1. 评估与物理底部的亚像素距离
       const distanceToBottom = Math.max(0, maxScrollTop - currentScrollTop);
@@ -346,8 +288,11 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
 
       // 3. 更新真理账本
       observedTopRef.current = currentScrollTop;
+
+      // 4. 快速滚动状态检测（W3-3：长列表中超视距 DOM 惰性回收与总节点数压制）
+      fastScroll.onScrollSample(currentScrollTop);
     },
-    [vs, isAnchorLocked]
+    [vs, isAnchorLocked, fastScroll]
   );
 
   const handleScrollToBottom = useCallback(() => {
@@ -453,19 +398,21 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
             }}
           >
             {/* 渲染身份（C2）：key / 高度缓存键 = message.id；stream 与 final 共用同一行 id */}
-            {messages.slice(startIndex, endIndex).map((msg, i) => {
-              const virtualIndex = startIndex + i;
-              const prevMsg =
-                virtualIndex > 0 ? messages[virtualIndex - 1] : null;
-              const isFollowUp =
-                msg.sender === 'assistant' && prevMsg?.sender === 'assistant';
-              const isPinnedMsg = pinnedIdSet.has(msg.id);
-              const isSearchHit =
-                !!searchHighlightQuery &&
-                messageMatchesSearch(msg, searchHighlightQuery);
+            {activeRows.map((row) => {
+              const { msg, virtualIndex } = row;
+              if (row.isPurged) {
+                return (
+                  <PurgedMessageRowSkeleton
+                    key={msg.id}
+                    msgId={msg.id}
+                    sender={msg.sender}
+                    itemHeight={row.itemHeight}
+                    measureRef={rowMeasureRef(msg.id)}
+                  />
+                );
+              }
 
               if (msg.sender === 'user') {
-                const isThisMsgEditing = composer?.editingMessageId === msg.id;
                 return (
                   <AppErrorBoundary
                     key={msg.id}
@@ -475,15 +422,15 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
                     <div data-vindex={msg.id} ref={rowMeasureRef(msg.id)}>
                       <ChatUserMessageRow
                         msg={msg}
-                        isPinned={isPinnedMsg}
+                        isPinned={row.isPinnedMsg}
                         pinnedColor={pinnedColors[msg.id]}
-                        isSearchHit={isSearchHit}
+                        isSearchHit={row.isSearchHit}
                         isExpanded={!!expandedUserMsgs[msg.id]}
                         onToggleExpand={onToggleExpandUser}
                         onTogglePin={togglePin}
                         isLastUser={msg.id === lastUserId}
                         onRetract={onRetract}
-                        isEditing={isThisMsgEditing}
+                        isEditing={row.isEditing}
                         onStartEdit={
                           composer?.onStartEditMessage
                             ? () => composer.onStartEditMessage?.(msg)
@@ -491,9 +438,7 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
                         }
                         onCancelEdit={composer?.onCancelEditMessage}
                         composerElement={
-                          isThisMsgEditing
-                            ? composer?.composerElement
-                            : undefined
+                          row.isEditing ? composer?.composerElement : undefined
                         }
                         onEditMessageAndResend={onEditMessageAndResend}
                         messageIndex={virtualIndex}
@@ -514,10 +459,10 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
                   <div data-vindex={msg.id} ref={rowMeasureRef(msg.id)}>
                     <StreamingAssistantRow
                       msg={msg}
-                      isFollowUp={isFollowUp}
-                      isPinned={isPinnedMsg}
+                      isFollowUp={row.isFollowUp}
+                      isPinned={row.isPinnedMsg}
                       pinnedColor={pinnedColors[msg.id]}
-                      isSearchHit={isSearchHit}
+                      isSearchHit={row.isSearchHit}
                       isThinkingMsg={msg.id === thinkingMsgId}
                       hideThinkingBlock={hideThinkingBlock}
                       inPlanMode={inPlanMode}
@@ -561,6 +506,9 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
         pinnedIdSet={pinnedIdSet}
         pinnedColors={pinnedColors}
         onTogglePin={togglePin}
+        isFastScrolling={
+          fastScroll.isFastScrolling || fastScroll.isFastScrollingRef.current
+        }
       />
     </div>
   );

@@ -91,9 +91,16 @@ export function useScopedSessionField<T>(
   const sid = resolveSid(st);
   const session = st.sessionsById[sid];
   const cached = cacheRef.current;
-  if (!cached || cached.sid !== sid || cached.session !== session) {
-    const value = selector(session);
-    cacheRef.current = { sid, session, value };
+  if (!cached || cached.sid !== sid) {
+    const nextValue = selector(session);
+    cacheRef.current = { sid, session, value: nextValue };
+  } else if (cached.session !== session) {
+    const nextValue = selector(session);
+    if (Object.is(cached.value, nextValue)) {
+      cached.session = session;
+    } else {
+      cacheRef.current = { sid, session, value: nextValue };
+    }
   }
   return cacheRef.current!.value;
 }

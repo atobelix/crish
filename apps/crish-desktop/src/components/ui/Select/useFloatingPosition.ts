@@ -1,12 +1,22 @@
-import { useState, useLayoutEffect, useEffect, useCallback, useRef, useId } from 'react';
+import {
+  useState,
+  useLayoutEffect,
+  useEffect,
+  useCallback,
+  useRef,
+  useId,
+} from 'react';
 import { useLayerRegistration } from '../internal/layer-registration/useLayerRegistration';
-import type { LayerType, DismissReason } from '../internal/layer-stack/layerStackTypes';
+import type {
+  LayerType,
+  DismissReason,
+} from '../internal/layer-stack/layerStackTypes';
 import {
   computeFloatingPosition,
   type ComputeFloatingPositionOptions,
   type ComputedFloatingPlacement,
 } from './internal/positionGeometry';
-import { ResizeObserverManager } from '../utils/ResizeObserverManager';
+import { ResizeObserverManager } from '../../../utils/ResizeObserverManager';
 
 export { computeFloatingPosition };
 export type { ComputeFloatingPositionOptions, ComputedFloatingPlacement };
@@ -83,19 +93,23 @@ export function useFloatingPosition(
     contentEl.style.setProperty('--anchor-width', `${anchorWidth}px`);
 
     const measuredWidth =
-      contentEl.offsetWidth > 0 ? contentEl.offsetWidth : Math.max(anchorWidth, 160);
+      contentEl.offsetWidth > 0
+        ? contentEl.offsetWidth
+        : Math.max(anchorWidth, 160);
     const measuredHeight =
       contentEl.offsetHeight > 0 ? contentEl.offsetHeight : 200;
 
     let selectedItemOffsetY: number | undefined;
     if (alignItemWithTrigger) {
       const selectedItemEl =
-        contentEl.querySelector<HTMLElement>('[data-slot="select-item"][aria-selected="true"]') ||
-        contentEl.querySelector<HTMLElement>('[data-slot="select-item"]');
+        contentEl.querySelector<HTMLElement>(
+          '[data-slot="select-item"][aria-selected="true"]'
+        ) || contentEl.querySelector<HTMLElement>('[data-slot="select-item"]');
       if (selectedItemEl) {
         const itemRect = selectedItemEl.getBoundingClientRect();
         const contentRect = contentEl.getBoundingClientRect();
-        selectedItemOffsetY = itemRect.top - contentRect.top + itemRect.height / 2;
+        selectedItemOffsetY =
+          itemRect.top - contentRect.top + itemRect.height / 2;
       }
     }
 
@@ -111,7 +125,10 @@ export function useFloatingPosition(
       selectedItemOffsetY,
     });
 
-    contentEl.style.setProperty('--transform-origin', placement.transformOrigin);
+    contentEl.style.setProperty(
+      '--transform-origin',
+      placement.transformOrigin
+    );
 
     setPosition((prev) => {
       if (
@@ -149,7 +166,9 @@ export function useFloatingPosition(
     if (open) {
       updatePosition();
     } else {
-      setPosition((prev) => (prev.isPositioned ? { ...prev, isPositioned: false } : prev));
+      setPosition((prev) =>
+        prev.isPositioned ? { ...prev, isPositioned: false } : prev
+      );
     }
   }, [open, updatePosition]);
 
@@ -174,7 +193,10 @@ export function useFloatingPosition(
     };
 
     window.addEventListener('app:window-resize-settled', throttledUpdate);
-    window.addEventListener('scroll', throttledUpdate, { passive: true, capture: true });
+    window.addEventListener('scroll', throttledUpdate, {
+      passive: true,
+      capture: true,
+    });
 
     const roManager = ResizeObserverManager.getInstance();
     const triggerEl = triggerRef.current;

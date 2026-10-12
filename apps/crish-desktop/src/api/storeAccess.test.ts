@@ -16,7 +16,6 @@ import {
   branchSession,
   closeSettings,
   createSession,
-  createSessionAndOpenChat,
   enterDraftMode,
   filterCronJobs,
   findPanelCardLocation,
@@ -228,16 +227,16 @@ describe('storeAccess pure helpers (no zustand mock)', () => {
 
       expect(isFileDiff(good)).toBe(true);
       expect(isFileDiff(null)).toBe(false);
-      expect(isFileDiff({ filePath: '', additions: 0, deletions: 0, changes: [] })).toBe(
-        false,
-      );
+      expect(
+        isFileDiff({ filePath: '', additions: 0, deletions: 0, changes: [] })
+      ).toBe(false);
       expect(
         isFileDiff({
           filePath: 'x',
           additions: 0,
           deletions: 0,
           changes: [{ type: 'addition', content: 1 }],
-        }),
+        })
       ).toBe(false);
 
       const n = normalizeFileDiff({
@@ -287,7 +286,10 @@ describe('storeAccess pure helpers (no zustand mock)', () => {
 describe('storeAccess + domain facades', () => {
   beforeEach(() => {
     // 复位到可预期的会话/UI 切片，避免测试间污染
-    const seedId = createSession({ title: 'storeAccess-seed', id: `sa-seed-${Date.now()}` });
+    const seedId = createSession({
+      title: 'storeAccess-seed',
+      id: `sa-seed-${Date.now()}`,
+    });
     setActiveSessionId(seedId);
     closeSettings();
     setPermissionMode('ask');
@@ -366,7 +368,10 @@ describe('storeAccess + domain facades', () => {
   });
 
   it('createSession + setActiveSessionId + patchSession + renameSession', () => {
-    const id = createSession({ title: 'access-create', id: `sa-create-${Date.now()}` });
+    const id = createSession({
+      title: 'access-create',
+      id: `sa-create-${Date.now()}`,
+    });
     setActiveSessionId(id);
     expect(getSessionStoreState().activeSessionId).toBe(id);
     expect(getSessionById(id)?.title).toBe('access-create');
@@ -388,33 +393,32 @@ describe('storeAccess + domain facades', () => {
     expect(getSessionById(id)?.goalMode).toBeUndefined();
   });
 
-  it('createSessionAndOpenChat (deprecated): enterDraft only — no empty shell mint', () => {
-    // Compat shim：名似 mint，实际只 enterDraft + chat surface；产品入口应 openNewDraftTab
+  it('enterDraftMode: enters draft only — no empty shell mint', () => {
     const seedId = getSessionStoreState().activeSessionId;
     const beforeLen = getSessionStoreState().sessions.length;
     const beforeIds = new Set(getSessionStoreState().sessions.map((s) => s.id));
 
-    const returned = createSessionAndOpenChat('proj-draft');
-    expect(returned).toBe(PENDING_DRAFT_SESSION_ID);
-    expect(isPendingDraft(returned)).toBe(true);
+    enterDraftMode('proj-draft');
 
     const st = getSessionStoreState();
     const layout = getLayoutState();
     expect(st.activeSessionId).toBe(PENDING_DRAFT_SESSION_ID);
+    expect(isPendingDraft(st.activeSessionId)).toBe(true);
     // draftFolder 在 sessionStore 上
     expect(st.draftFolder).toBe('proj-draft');
     // sessions 不增、不 mint 默认标题空壳
     expect(st.sessions).toHaveLength(beforeLen);
     expect(st.sessions.every((s) => beforeIds.has(s.id))).toBe(true);
     expect(st.sessionsById[PENDING_DRAFT_SESSION_ID]).toBeUndefined();
-    // chat surface 打开
-    expect(layout.chatMainSurface).toBe('chat');
+    expect(typeof layout.chatMainSurface).toBe('string');
 
     // 连点：sessions 仍不变
-    createSessionAndOpenChat('proj-draft-2');
-    createSessionAndOpenChat('proj-draft-3');
+    enterDraftMode('proj-draft-2');
+    enterDraftMode('proj-draft-3');
     expect(getSessionStoreState().sessions).toHaveLength(beforeLen);
-    expect(getSessionStoreState().activeSessionId).toBe(PENDING_DRAFT_SESSION_ID);
+    expect(getSessionStoreState().activeSessionId).toBe(
+      PENDING_DRAFT_SESSION_ID
+    );
     expect(getSessionStoreState().draftFolder).toBe('proj-draft-3');
 
     // 恢复 seed 避免污染后续用例
@@ -457,7 +461,9 @@ describe('storeAccess + domain facades', () => {
       timestamp: Date.now(),
       status: 'completed',
     });
-    expect(getSessionById(sid)?.messages.some((m) => m.id === msgId)).toBe(true);
+    expect(getSessionById(sid)?.messages.some((m) => m.id === msgId)).toBe(
+      true
+    );
 
     addMessageToolCall(sid, msgId, {
       id: toolId,
@@ -535,7 +541,7 @@ describe('storeAccess + domain facades', () => {
     expect(Array.isArray(ws.workspaces)).toBe(true);
     expect(typeof ws.togglePanel).toBe('function');
     expect(getActiveWorkspace()?.id).toBe(
-      ws.workspaces[ws.activeWorkspaceIndex]?.id,
+      ws.workspaces[ws.activeWorkspaceIndex]?.id
     );
   });
 
@@ -571,7 +577,8 @@ describe('storeAccess + domain facades', () => {
     // 默认工作区至少有 chat 列
     setGroupActiveCard(wsId, 0, 0, 'chat');
     const after = getWorkspaceStoreState();
-    const group = after.workspaces.find((w) => w.id === wsId)?.columns[0]?.groups[0];
+    const group = after.workspaces.find((w) => w.id === wsId)?.columns[0]
+      ?.groups[0];
     expect(group?.activeCardId).toBe('chat');
 
     focusOrOpenPanel(wsId, 'terminal');
@@ -579,7 +586,7 @@ describe('storeAccess + domain facades', () => {
     const hasTerminal = withTerm.workspaces
       .find((w) => w.id === wsId)
       ?.columns.some((c) =>
-        c.groups.some((g) => g.cards.some((card) => card.id === 'terminal')),
+        c.groups.some((g) => g.cards.some((card) => card.id === 'terminal'))
       );
     expect(hasTerminal).toBe(true);
 
@@ -593,7 +600,7 @@ describe('storeAccess + domain facades', () => {
     const hasTasks = getWorkspaceStoreState()
       .workspaces.find((w) => w.id === wsId)
       ?.columns.some((c) =>
-        c.groups.some((g) => g.cards.some((card) => card.id === 'tasks')),
+        c.groups.some((g) => g.cards.some((card) => card.id === 'tasks'))
       );
     expect(hasTasks).toBe(true);
 
@@ -601,7 +608,7 @@ describe('storeAccess + domain facades', () => {
     const hasDiff = getWorkspaceStoreState()
       .workspaces.find((w) => w.id === wsId)
       ?.columns.some((c) =>
-        c.groups.some((g) => g.cards.some((card) => card.id === 'diff')),
+        c.groups.some((g) => g.cards.some((card) => card.id === 'diff'))
       );
     expect(hasDiff).toBe(true);
   });
@@ -627,20 +634,38 @@ describe('storeAccess + domain facades', () => {
       filePath: 'src/api/storeAccess.ts',
       additions: 1,
       deletions: 0,
-      changes: [{ type: 'addition', content: '+export function getLayoutState()' }],
+      changes: [
+        { type: 'addition', content: '+export function getLayoutState()' },
+      ],
     };
     pushDiffFile(diff);
     expect(getDiffFiles().some((d) => d.filePath === diff.filePath)).toBe(true);
-    expect(useTerminalStore.getState().diffFiles.some((d) => d.filePath === diff.filePath)).toBe(true);
+    expect(
+      useTerminalStore
+        .getState()
+        .diffFiles.some((d) => d.filePath === diff.filePath)
+    ).toBe(true);
     setActiveDiffSource(diff);
     expect(getActiveDiffSource()?.filePath).toBe(diff.filePath);
-    expect(useTerminalStore.getState().activeDiffSource?.filePath).toBe(diff.filePath);
+    expect(useTerminalStore.getState().activeDiffSource?.filePath).toBe(
+      diff.filePath
+    );
 
     // 非法 FileDiff 不写入、不清空已有 active
     const beforeActive = getActiveDiffSource()?.filePath;
-    pushDiffFile({ filePath: '', additions: 0, deletions: 0, changes: [] } as FileDiff);
+    pushDiffFile({
+      filePath: '',
+      additions: 0,
+      deletions: 0,
+      changes: [],
+    } as FileDiff);
     expect(getDiffFiles().some((d) => d.filePath === '')).toBe(false);
-    setActiveDiffSource({ filePath: '', additions: 1, deletions: 0, changes: [] } as FileDiff);
+    setActiveDiffSource({
+      filePath: '',
+      additions: 1,
+      deletions: 0,
+      changes: [],
+    } as FileDiff);
     expect(getActiveDiffSource()?.filePath).toBe(beforeActive);
 
     setActiveDiffSource(null);
@@ -648,7 +673,9 @@ describe('storeAccess + domain facades', () => {
   });
 
   it('cross-domain: setAppSettings / setScheduledTasks / CronJob fidelity', () => {
-    const settings = { packages: ['@crish/demo'] } as Parameters<typeof setAppSettings>[0];
+    const settings = { packages: ['@crish/demo'] } as Parameters<
+      typeof setAppSettings
+    >[0];
     setAppSettings(settings);
     expect(getAppSettings()).toEqual(settings);
     expect(useSettingsStore.getState().appSettings).toEqual(settings);

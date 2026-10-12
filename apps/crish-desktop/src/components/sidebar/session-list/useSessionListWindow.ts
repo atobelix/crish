@@ -9,7 +9,7 @@ import {
   type HeightGetter,
   type SessionListWindowRange,
 } from '../../../api/sessionListWindow';
-import { ResizeObserverManager } from '../../ui/utils/ResizeObserverManager';
+import { ResizeObserverManager } from '../../../utils/ResizeObserverManager';
 import sidebarStyles from '../Sidebar.module.css';
 
 export const FULL_RANGE = (count: number): SessionListWindowRange => ({

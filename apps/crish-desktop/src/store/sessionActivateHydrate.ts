@@ -160,6 +160,16 @@ export function triggerSessionMessageHydrateIfNeeded(
               s.agents = localLoaded.agents;
             }
             s.messagesHydrated = true;
+            if (localLoaded.hasMore) {
+              s.hasOlderMessages = true;
+              s.oldestLoadedSeq = localLoaded.oldestSeq;
+            }
+            if (localLoaded.totalCount) {
+              s.messageCount = Math.max(
+                s.messageCount ?? 0,
+                localLoaded.totalCount
+              );
+            }
             maybeAutoTitleSession(draft, s);
             draft.sessionsById[sessionId] = s;
           });

@@ -8,6 +8,12 @@ import {
   type IncrementalMarkdownUnitSnapshot,
 } from './markdown/IncrementalMarkdownSession';
 
+export {
+  parseMarkdownAstAsync,
+  useWorkerMarkdownAst,
+  type MarkdownAstResult,
+} from './markdownWorkerHook';
+
 const pendingRenders = new Map<string, Promise<string>>();
 
 /**

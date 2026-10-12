@@ -29,6 +29,7 @@ import React, {
 import type { LayoutLeaf } from '../../store/types';
 import {
   useSessionStore,
+  useShallow,
   useLayoutStore,
   useLayoutTreeStore,
   collectLeaves,
@@ -39,7 +40,7 @@ import { NON_TAB_SPACE_PX, TAB_GAP_PX } from '../../utils/tabStripGeometry';
 import { paneTabStripVars } from './tabStripVars';
 import { DURATION_FAST_MS, readTransitionMs } from '../../utils/motionTokens';
 import { useTablistKeyboard } from '../../hooks/useTablistKeyboard';
-import { ResizeObserverManager } from '../ui/utils/ResizeObserverManager';
+import { ResizeObserverManager } from '../../utils/ResizeObserverManager';
 import {
   computeCloseLockWidth,
   computeNaturalTabWidth,
@@ -95,7 +96,6 @@ export const PaneHeader: React.FC<PaneHeaderProps> = React.memo(
     const [lockedTabWidth, setLockedTabWidth] = useState<number | null>(null);
 
     const { startSessionDrag } = useSessionTabDrag();
-    const sessionsById = useSessionStore((s) => s.sessionsById);
 
     const chatMainSurface = useLayoutStore((s) => s.chatMainSurface) ?? 'chat';
     const leavesCount = useLayoutTreeStore(
@@ -111,6 +111,17 @@ export const PaneHeader: React.FC<PaneHeaderProps> = React.memo(
     const hasCommittedTabs = useMemo(
       () => readCommittedLeafTabs(leaf).length > 0,
       [leaf]
+    );
+    const sessionTitlesById = useSessionStore(
+      useShallow((s) => {
+        const titles: Record<string, string | undefined> = {};
+        for (const tab of visibleTabs) {
+          if (tab.sessionId) {
+            titles[tab.sessionId] = s.sessionsById[tab.sessionId]?.title;
+          }
+        }
+        return titles;
+      })
     );
 
     // 入场动画门控：首轮挂载后的首个副作用之后才允许 @starting-style 生效
@@ -445,10 +456,10 @@ export const PaneHeader: React.FC<PaneHeaderProps> = React.memo(
           <div className={styles.tabsList} data-tauri-drag-region="false">
             {visibleTabs.map((tab) => {
               const isSelected = tab.tabId === effectiveActiveTabId;
-              const session = tab.sessionId
-                ? sessionsById[tab.sessionId]
+              const sessionTitle = tab.sessionId
+                ? sessionTitlesById[tab.sessionId]
                 : undefined;
-              const title = session?.title || tab.title || '新对话';
+              const title = sessionTitle || tab.title || '新对话';
 
               return (
                 <PaneTabItem

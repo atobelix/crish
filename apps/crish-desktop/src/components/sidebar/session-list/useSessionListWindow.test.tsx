@@ -8,7 +8,7 @@ import {
   computeWindowWithConstraint,
   useSessionListWindow,
 } from './useSessionListWindow';
-import { ResizeObserverManager } from '../../ui/utils/ResizeObserverManager';
+import { ResizeObserverManager } from '../../../utils/ResizeObserverManager';
 
 describe('useSessionListWindow & 滚动宿主绑定与 <=45 节点虚拟化', () => {
   beforeEach(() => {

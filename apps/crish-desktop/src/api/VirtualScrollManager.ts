@@ -18,13 +18,22 @@ export {
 export * from './virtualScrollScope';
 import { makeScopeKey, parseScopeKey } from './virtualScrollScope';
 
-export type { VisibleRange } from './virtualScrollRange';
-export { computeVisibleRange, findIndexAtOffset } from './virtualScrollRange';
+export * from './virtualScrollRange';
 import {
   computeVisibleRange,
   findIndexAtOffset,
   type VisibleRange,
 } from './virtualScrollRange';
+
+export * from './virtualScrollAnchor';
+import {
+  captureScrollAnchor,
+  computePrependHeightDelta,
+  prependIdsWithScrollAnchor,
+  restoreScrollAnchor,
+  type PrependWithAnchorResult,
+  type ScrollAnchorSnapshot,
+} from './virtualScrollAnchor';
 
 export interface VsmDebugInfo {
   orderLength: number;
@@ -34,6 +43,15 @@ export interface VsmDebugInfo {
 
 const FALLBACK_HEIGHT = 120;
 export const MESSAGE_ESTIMATED_ROW_HEIGHT = FALLBACK_HEIGHT;
+
+function isValidIdHeight(id: string, height: number): boolean {
+  return (
+    Boolean(id) &&
+    typeof height === 'number' &&
+    Number.isFinite(height) &&
+    height > 0
+  );
+}
 
 export class VirtualScrollManager {
   /** 全局流式吸附锁：在 Run 处于 processing 期间强制吸底，免疫历史折叠坍塌 */
@@ -71,11 +89,7 @@ export class VirtualScrollManager {
   /** 缓存每个元素的当前高度值，便于快速求差量 delta */
   private currentHeights: Float64Array = new Float64Array(0);
 
-  constructor(
-    fallbackHeight?: number,
-    paneIdOrScope?: string | null,
-    sessionId?: string | null
-  ) {
+  constructor(fallbackHeight?: number, scopeKey?: string | null) {
     this.fallbackHeight =
       fallbackHeight != null &&
       Number.isFinite(fallbackHeight) &&
@@ -83,10 +97,8 @@ export class VirtualScrollManager {
         ? Math.floor(fallbackHeight)
         : FALLBACK_HEIGHT;
 
-    if (sessionId !== undefined && sessionId !== null) {
-      this.setScope(paneIdOrScope ?? 'default', sessionId);
-    } else if (paneIdOrScope) {
-      const parsed = parseScopeKey(paneIdOrScope);
+    if (scopeKey) {
+      const parsed = parseScopeKey(scopeKey);
       this.setScope(parsed.paneId, parsed.sessionId);
     }
   }
@@ -166,33 +178,18 @@ export class VirtualScrollManager {
     if (!Array.isArray(estimates) || estimates.length === 0) return false;
     let anyChanged = false;
     for (const { id, height } of estimates) {
-      if (
-        typeof height !== 'number' ||
-        !Number.isFinite(height) ||
-        height <= 0 ||
-        !id
-      )
-        continue;
+      if (!isValidIdHeight(id, height)) continue;
       // 已有实测的行：作废 actual 后仍保留 lastMeasured，禁止估高覆盖。
       if (this.lastMeasured.has(id)) continue;
       const entry = this.heightsById.get(id);
       if (entry) {
-        if (entry.actual != null) continue; // 实测已有，绝不覆盖
-        if (entry.estimated === height) continue;
+        if (entry.actual != null || entry.estimated === height) continue;
         entry.estimated = height;
       } else {
         this.heightsById.set(id, { estimated: height, actual: null });
       }
-
-      const idx = this.idToIndexMap.get(id);
-      if (idx !== undefined && idx >= 0 && idx < this.currentHeights.length) {
-        const oldH = this.currentHeights[idx]!;
-        const delta = height - oldH;
-        if (Math.abs(delta) > 0.0001) {
-          this.currentHeights[idx] = height;
-          this.bitAdd(idx + 1, delta);
-          anyChanged = true;
-        }
+      if (this.applyBitHeight(id, height)) {
+        anyChanged = true;
       }
     }
     return anyChanged;
@@ -233,38 +230,27 @@ export class VirtualScrollManager {
    * @returns 是否实际变更（同值跳过时 false；T4.1 R-04 断言口径）
    */
   setActual(id: string, height: number, callerGeneration?: number): boolean {
-    if (typeof height !== 'number' || !Number.isFinite(height) || height <= 0)
-      return false;
+    if (!isValidIdHeight(id, height)) return false;
     if (
-      !id ||
-      (callerGeneration !== undefined && callerGeneration !== this.generation)
+      callerGeneration !== undefined &&
+      callerGeneration !== this.generation
     ) {
       return false;
     }
-    const safeHeight = height;
-    this.lastMeasured.set(id, safeHeight);
+    this.lastMeasured.set(id, height);
     const entry = this.heightsById.get(id);
     if (entry) {
       // T4.1（R-04）：同值跳过——actual/estimated 均等于新值时 0 更新短路
-      if (entry.actual === safeHeight && entry.estimated === safeHeight) {
+      if (entry.actual === height && entry.estimated === height) {
         return false;
       }
-      entry.actual = safeHeight;
+      entry.actual = height;
       // 同步 estimated，作为「最后一次实测高度」的缓存（invalidateActual 会保留）
-      entry.estimated = safeHeight;
+      entry.estimated = height;
     } else {
-      this.heightsById.set(id, { estimated: safeHeight, actual: safeHeight });
+      this.heightsById.set(id, { estimated: height, actual: height });
     }
-
-    const idx = this.idToIndexMap.get(id);
-    if (idx !== undefined && idx >= 0 && idx < this.currentHeights.length) {
-      const oldH = this.currentHeights[idx]!;
-      const delta = safeHeight - oldH;
-      if (Math.abs(delta) > 0.0001) {
-        this.currentHeights[idx] = safeHeight;
-        this.bitAdd(idx + 1, delta); // O(log N) 树状数组局部增量传播
-      }
-    }
+    this.applyBitHeight(id, height);
     return true;
   }
 
@@ -286,32 +272,15 @@ export class VirtualScrollManager {
 
   /** 设置预测量高度（actual 已存在时跳过） */
   setEstimated(id: string, height: number): void {
-    if (
-      typeof height !== 'number' ||
-      !Number.isFinite(height) ||
-      height <= 0 ||
-      !id
-    )
-      return;
-    const safeHeight = height;
+    if (!isValidIdHeight(id, height)) return;
     const entry = this.heightsById.get(id);
     if (entry) {
-      if (entry.actual != null) return; // actual 已定，不覆盖
-      if (entry.estimated === safeHeight) return;
-      entry.estimated = safeHeight;
+      if (entry.actual != null || entry.estimated === height) return;
+      entry.estimated = height;
     } else {
-      this.heightsById.set(id, { estimated: safeHeight, actual: null });
+      this.heightsById.set(id, { estimated: height, actual: null });
     }
-
-    const idx = this.idToIndexMap.get(id);
-    if (idx !== undefined && idx >= 0 && idx < this.currentHeights.length) {
-      const oldH = this.currentHeights[idx]!;
-      const delta = safeHeight - oldH;
-      if (Math.abs(delta) > 0.0001) {
-        this.currentHeights[idx] = safeHeight;
-        this.bitAdd(idx + 1, delta);
-      }
-    }
+    this.applyBitHeight(id, height);
   }
 
   /**
@@ -340,32 +309,21 @@ export class VirtualScrollManager {
   hydrateHeightMap(heightMap: Readonly<Record<string, number>>): void {
     if (!heightMap) return;
     for (const [id, h] of Object.entries(heightMap)) {
-      if (typeof h !== 'number' || !Number.isFinite(h) || h <= 0 || !id)
-        continue;
-      const safeHeight = h;
-      this.lastMeasured.set(id, safeHeight);
+      if (!isValidIdHeight(id, h)) continue;
+      this.lastMeasured.set(id, h);
       const entry = this.heightsById.get(id);
       if (!entry) {
-        this.heightsById.set(id, { estimated: safeHeight, actual: null });
-      } else if (entry.actual == null && entry.estimated !== safeHeight) {
-        entry.estimated = safeHeight;
+        this.heightsById.set(id, { estimated: h, actual: null });
+      } else if (entry.actual == null && entry.estimated !== h) {
+        entry.estimated = h;
       } else if (
         entry.actual != null &&
-        (entry.actual !== safeHeight || entry.estimated !== safeHeight)
+        (entry.actual !== h || entry.estimated !== h)
       ) {
-        entry.actual = safeHeight;
-        entry.estimated = safeHeight;
+        entry.actual = h;
+        entry.estimated = h;
       }
-
-      const idx = this.idToIndexMap.get(id);
-      if (idx !== undefined && idx >= 0 && idx < this.currentHeights.length) {
-        const oldH = this.currentHeights[idx]!;
-        const delta = safeHeight - oldH;
-        if (Math.abs(delta) > 0.0001) {
-          this.currentHeights[idx] = safeHeight;
-          this.bitAdd(idx + 1, delta);
-        }
-      }
+      this.applyBitHeight(id, h);
     }
   }
 
@@ -430,7 +388,62 @@ export class VirtualScrollManager {
     return findIndexAtOffset(this, offset);
   }
 
+  /**
+   * 捕获当前视口滚动锚点（顶部第一条可见消息及其内部像素偏移量）。
+   */
+  captureScrollAnchor(scrollTop: number): ScrollAnchorSnapshot {
+    return captureScrollAnchor(this, scrollTop);
+  }
+
+  /**
+   * 根据此前捕获的锚点快照，在 order 发生前插（prepend）或重排后恢复 scrollTop。
+   */
+  restoreScrollAnchor(
+    anchor: ScrollAnchorSnapshot,
+    currentScrollTop?: number
+  ): number {
+    return restoreScrollAnchor(this, anchor, currentScrollTop);
+  }
+
+  /**
+   * 计算向前前插一批消息 ID 带来的高度增量。
+   */
+  computePrependHeightDelta(
+    prependedIds: string[],
+    estimates?: Array<{ id: string; height: number }>
+  ): number {
+    return computePrependHeightDelta(this, prependedIds, estimates);
+  }
+
+  /**
+   * 历史消息原子前插与平滑滚动锚点补偿：
+   */
+  prependIdsWithScrollAnchor(
+    olderIds: string[],
+    currentScrollTop: number,
+    estimates?: Array<{ id: string; height: number }>
+  ): PrependWithAnchorResult {
+    return prependIdsWithScrollAnchor(
+      this,
+      olderIds,
+      currentScrollTop,
+      estimates
+    );
+  }
+
   // ── Fenwick Tree 树状数组核心原语 ─────────────────────────────────────
+  private applyBitHeight(id: string, height: number): boolean {
+    const idx = this.idToIndexMap.get(id);
+    if (idx === undefined || idx < 0 || idx >= this.currentHeights.length) {
+      return false;
+    }
+    const delta = height - this.currentHeights[idx]!;
+    if (Math.abs(delta) <= 0.0001) return false;
+    this.currentHeights[idx] = height;
+    this.bitAdd(idx + 1, delta);
+    return true;
+  }
+
   private bitAdd(idx: number, delta: number): void {
     if (!Number.isFinite(delta) || delta === 0) return;
     const len = this.bitTree.length;
@@ -485,10 +498,6 @@ export class VirtualScrollManager {
    * 兼容属性访问：返回高度快照缓存字典
    */
   get heightCache(): Record<string, number> {
-    return this.getHeightCache();
-  }
-
-  getHeightMap(): Record<string, number> {
     return this.getHeightCache();
   }
 }

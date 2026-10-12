@@ -11,12 +11,7 @@ import {
   getDefaultSettings,
   DEFAULT_SETTINGS,
 } from './clientApiNormalize';
-import type {
-  CronJob,
-  McpServer,
-  ProviderInfo,
-  Settings,
-} from './clientApi.types';
+import type { Settings } from './clientApi.types';
 
 // LocalStorage Keys (settings only)
 const SETTINGS_KEY = 'crish_settings';
@@ -245,67 +240,5 @@ export const clientApi = {
     _onData: (data: import('../store/layoutStore').TelemetrySyncPayload) => void
   ): (() => void) => {
     return () => undefined;
-  },
-
-  // ── Providers — DEAD formal（providerProfiles） ──────────────
-  // HONEST: 正式路径永不返回假「已支持 Anthropic/Gemini 原生」列表。
-  // 真实配置轨 = providerProfiles + update-config；引擎仅 OpenAI-compatible。
-
-  /** @deprecated DEAD formal — use providerProfiles. HONEST-HIDE: formal returns []. @see providerProfiles */
-  getProviders: async (): Promise<ProviderInfo[]> => {
-    return [];
-  },
-
-  /** @deprecated DEAD formal — use providerProfiles. HONEST-HIDE: formal returns []. @see providerProfiles */
-  updateProviderKey: async (
-    _id: string,
-    _apiKey: string
-  ): Promise<ProviderInfo[]> => {
-    return [];
-  },
-
-  /** @deprecated DEAD formal — use providerProfiles. HONEST-HIDE: formal returns []. @see providerProfiles */
-  updateProviderModels: async (
-    _id: string,
-    _models: string[]
-  ): Promise<ProviderInfo[]> => {
-    return [];
-  },
-
-  /** @deprecated DEAD formal — use providerProfiles / ModelsSettingsTab. HONEST-HIDE: formal returns []. @see providerProfiles */
-  fetchLatestModels: async (_id: string): Promise<string[]> => {
-    return [];
-  },
-
-  // ── Cron / MCP — 显式不可用（T03.7：Rust 侧无 cron.* / mcp daemon 命令）──
-
-  /** @deprecated T03.7 显式不可用：Tauri 下无 cron 引擎，恒返回空表。@removeWhen Rust 侧落地 cron 引擎后移除 */
-  getScheduledTasks: async (): Promise<CronJob[]> => {
-    return [];
-  },
-
-  /** @deprecated T03.7 显式不可用：Tauri 下无 cron 引擎，恒返回空表。@removeWhen Rust 侧落地 cron 引擎后移除 */
-  saveScheduledTask: async (_task: CronJob): Promise<CronJob[]> => {
-    return [];
-  },
-
-  /** @deprecated T03.7 显式不可用：Tauri 下无 cron 引擎，恒返回空表。@removeWhen Rust 侧落地 cron 引擎后移除 */
-  deleteScheduledTask: async (_id: string): Promise<CronJob[]> => {
-    return [];
-  },
-
-  /** @deprecated T03.7 显式不可用：Rust 侧无 list-mcp-servers，恒返回空表。@removeWhen Rust 侧落地 mcp 命令后移除 */
-  getMcpServers: async (): Promise<McpServer[]> => {
-    return [];
-  },
-
-  /** @deprecated T03.7 显式不可用：Rust 侧无 start-mcp-server，恒返回空表。@removeWhen Rust 侧落地 mcp 命令后移除 */
-  saveMcpServer: async (_server: McpServer): Promise<McpServer[]> => {
-    return [];
-  },
-
-  /** @deprecated T03.7 显式不可用：Rust 侧无 stop-mcp-server，恒返回空表。@removeWhen Rust 侧落地 mcp 命令后移除 */
-  deleteMcpServer: async (_id: string): Promise<McpServer[]> => {
-    return [];
   },
 };

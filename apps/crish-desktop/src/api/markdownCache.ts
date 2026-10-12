@@ -15,6 +15,7 @@ import {
   MARKDOWN_CACHE_BUDGET_BYTES,
   memoryManager,
 } from '@crish/shared-utils/browser';
+import type { MarkdownAstResult } from '../workers/markdown-render-standalone';
 
 /** 单条写入上限：超过则跳过缓存（仍返回 html，避免一条拖垮预算） */
 const MARKDOWN_HTML_CACHE_MAX_ENTRY_BYTES = 1 * 1024 * 1024; // 1 MiB
@@ -32,7 +33,13 @@ const estimateSize = (key: string, html: string): number =>
 const MARKDOWN_HTML_CACHE = new LruCache<string, string>(
   MARKDOWN_CACHE_ENTRIES,
   MARKDOWN_CACHE_BUDGET_BYTES,
-  estimateSize,
+  estimateSize
+);
+
+const MARKDOWN_AST_CACHE = new LruCache<string, MarkdownAstResult>(
+  MARKDOWN_CACHE_ENTRIES,
+  MARKDOWN_CACHE_BUDGET_BYTES,
+  (key, ast) => (key.length + (ast.fullHtml?.length || 0)) * 2
 );
 
 type CacheCounters = {
@@ -81,7 +88,7 @@ export function markdownCacheKey(raw: string, scope?: string): string {
 export function markdownStreamingCacheKey(
   streamId: string,
   seq: number,
-  raw: string,
+  raw: string
 ): string {
   const id = typeof streamId === 'string' ? streamId : String(streamId ?? '');
   const body = typeof raw === 'string' ? raw : String(raw ?? '');
@@ -94,7 +101,7 @@ export function isMarkdownStreamingCacheKey(key: string): boolean {
 }
 
 export function parseMarkdownStreamingCacheKey(
-  key: string,
+  key: string
 ): { streamId: string; seq: number } | undefined {
   if (!isMarkdownStreamingCacheKey(key)) return undefined;
   const rest = key.slice(STREAM_KEY_PREFIX.length);
@@ -108,7 +115,10 @@ export function parseMarkdownStreamingCacheKey(
   return { streamId, seq };
 }
 
-export function getMarkdownHtmlCache(raw: string, scope?: string): string | undefined {
+export function getMarkdownHtmlCache(
+  raw: string,
+  scope?: string
+): string | undefined {
   if (raw === '' || raw == null) {
     counters.misses += 1;
     return undefined;
@@ -137,7 +147,11 @@ export function getMarkdownHtmlCacheByKey(key: string): string | undefined {
   return value;
 }
 
-export function setMarkdownHtmlCache(raw: string, html: string, scope?: string): string {
+export function setMarkdownHtmlCache(
+  raw: string,
+  html: string,
+  scope?: string
+): string {
   if (raw === '' || raw == null) return html;
   const key = markdownCacheKey(raw, scope);
   return setMarkdownHtmlCacheByKey(key, html);
@@ -186,7 +200,7 @@ function invalidateMarkdownHtmlCacheByKeyPrefix(prefix: string): number {
 }
 
 export function applyMarkdownCacheMemoryPressure(
-  levelOrRatio: 'low' | 'high' | number = 'low',
+  levelOrRatio: 'low' | 'high' | number = 'low'
 ): { evicted: number; entries: number; approxBytes: number } {
   let ratio: number;
   if (levelOrRatio === 'high') ratio = 0.25;
@@ -198,6 +212,7 @@ export function applyMarkdownCacheMemoryPressure(
 
   const before = MARKDOWN_HTML_CACHE.size;
   MARKDOWN_HTML_CACHE.shrink(ratio);
+  MARKDOWN_AST_CACHE.shrink(ratio);
   const evicted = before - MARKDOWN_HTML_CACHE.size;
   counters.evictions += evicted;
 
@@ -210,6 +225,27 @@ export function applyMarkdownCacheMemoryPressure(
 
 export function clearMarkdownHtmlCache(): void {
   MARKDOWN_HTML_CACHE.clear();
+  MARKDOWN_AST_CACHE.clear();
+}
+
+export function getMarkdownAstCache(
+  raw: string
+): MarkdownAstResult | undefined {
+  if (raw === '' || raw == null) return undefined;
+  return MARKDOWN_AST_CACHE.get(raw);
+}
+
+export function setMarkdownAstCache(
+  raw: string,
+  ast: MarkdownAstResult
+): MarkdownAstResult {
+  if (raw === '' || raw == null || !ast) return ast;
+  MARKDOWN_AST_CACHE.set(raw, ast);
+  return ast;
+}
+
+export function clearMarkdownAstCache(): void {
+  MARKDOWN_AST_CACHE.clear();
 }
 
 export function markdownHtmlCacheSize(): number {

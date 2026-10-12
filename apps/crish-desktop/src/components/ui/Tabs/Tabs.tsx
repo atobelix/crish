@@ -10,7 +10,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { ResizeObserverManager } from '../utils/ResizeObserverManager';
+import { ResizeObserverManager } from '../../../utils/ResizeObserverManager';
 import styles from './Tabs.module.css';
 import type {
   TabsContentProps,
@@ -25,7 +25,9 @@ const TabsContext = createContext<TabsContextValue | null>(null);
 export function useTabsContext(): TabsContextValue {
   const ctx = useContext(TabsContext);
   if (!ctx) {
-    throw new Error('Tabs sub-components must be rendered within a <Tabs> parent.');
+    throw new Error(
+      'Tabs sub-components must be rendered within a <Tabs> parent.'
+    );
   }
   return ctx;
 }
@@ -46,7 +48,9 @@ export const Tabs = forwardRef<HTMLDivElement, TabsProps>(function Tabs(
   },
   ref
 ) {
-  const [internalValue, setInternalValue] = useState<string>(defaultValue ?? '');
+  const [internalValue, setInternalValue] = useState<string>(
+    defaultValue ?? ''
+  );
   const isControlled = externalValue !== undefined;
   const currentValue = isControlled ? (externalValue ?? '') : internalValue;
 
@@ -143,7 +147,8 @@ export const TabsList = forwardRef<HTMLDivElement, TabsListProps>(
     },
     forwardedRef
   ) {
-    const { value, variant, orientation, block, onValueChange } = useTabsContext();
+    const { value, variant, orientation, block, onValueChange } =
+      useTabsContext();
     const listRef = useRef<HTMLDivElement | null>(null);
 
     const [sliderRect, setSliderRect] = useState<{
@@ -195,7 +200,9 @@ export const TabsList = forwardRef<HTMLDivElement, TabsListProps>(
             const lineH = Math.max(16, activeTrigger.offsetHeight / 2);
             setSliderRect({
               x: 0,
-              y: activeTrigger.offsetTop + (activeTrigger.offsetHeight - lineH) / 2,
+              y:
+                activeTrigger.offsetTop +
+                (activeTrigger.offsetHeight - lineH) / 2,
               width: 2,
               height: lineH,
               opacity: 1,
@@ -248,15 +255,13 @@ export const TabsList = forwardRef<HTMLDivElement, TabsListProps>(
         (!isHorizontal && (e.key === 'ArrowDown' || e.key === 'ArrowRight'))
       ) {
         e.preventDefault();
-        nextIndex =
-          currentIndex < 0 ? 0 : (currentIndex + 1) % triggers.length;
+        nextIndex = currentIndex < 0 ? 0 : (currentIndex + 1) % triggers.length;
       } else if (
         (isHorizontal && (e.key === 'ArrowLeft' || e.key === 'ArrowUp')) ||
         (!isHorizontal && (e.key === 'ArrowUp' || e.key === 'ArrowLeft'))
       ) {
         e.preventDefault();
-        nextIndex =
-          currentIndex <= 0 ? triggers.length - 1 : currentIndex - 1;
+        nextIndex = currentIndex <= 0 ? triggers.length - 1 : currentIndex - 1;
       } else if (e.key === 'Home') {
         e.preventDefault();
         nextIndex = 0;
@@ -356,7 +361,9 @@ export const TabsTrigger = forwardRef<HTMLButtonElement, TabsTriggerProps>(
       [forwardedRef]
     );
 
-    const triggerClasses = [styles.trigger, className].filter(Boolean).join(' ');
+    const triggerClasses = [styles.trigger, className]
+      .filter(Boolean)
+      .join(' ');
     const isRadio = role === 'radio';
 
     return (
@@ -413,7 +420,9 @@ export const TabsContent = forwardRef<HTMLDivElement, TabsContentProps>(
       return null;
     }
 
-    const contentClasses = [styles.content, className].filter(Boolean).join(' ');
+    const contentClasses = [styles.content, className]
+      .filter(Boolean)
+      .join(' ');
 
     return (
       <div
