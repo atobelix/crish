@@ -1,0 +1,52 @@
+# Gitleaks configuration for Conex / Crish
+# Reference: https://github.com/gitleaks/gitleaks
+
+title = "Conex Gitleaks Configuration"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Global allowlist for false positives in tests, documentation, sample configurations, and harmless mock tokens"
+
+# File paths where mock secrets, test fixtures, or documentation tokens reside
+paths = [
+  # Unit and integration test files
+  '''(?i).*\.(?:test|spec)\.[jt]sx?$''',
+  '''(?i)(?:^|[\\/])(?:tests|__tests__|snapshots)[\\/].*''',
+  # Rust test fixtures and mock tests
+  '''(?i)(?:^|[\\/])tests[\\/].*\.rs$''',
+  # Documentation, guides, and plans containing example API keys
+  '''(?i)(?:^|[\\/])docs[\\/].*''',
+  # Example environment templates
+  '''(?i)(?:^|[\\/])\.env\.example$''',
+  # Reference implementation and third-party references
+  '''(?i)(?:^|[\\/])reference[\\/].*''',
+  # Package manifests and lockfiles
+  '''(?i)(?:^|[\\/])package-lock\.json$''',
+  '''(?i)(?:^|[\\/])Cargo\.lock$''',
+]
+
+# Patterns for harmless tokens, RFC examples, or non-secret UUIDs
+regexes = [
+  # RFC 6455 WebSocket handshake sample nonce ("the sample nonce" in base64)
+  '''dGhlIHNhbXBsZSBub25jZQ==''',
+  # LocalStorage / configuration key names containing _KEY
+  '''crish_skill_activation_v1''',
+  '''crish_skill_extra_dirs_v1''',
+  # Explicit dummy / mock API tokens used in tests or fixtures
+  '''(?i)test-mock-api-key-[0-9a-zA-Z\-_]+''',
+  '''(?i)sk-(?:ant-|proj-|plain-)?dummy[0-9a-zA-Z\-_]*''',
+  '''(?i)sk-(?:ant-|proj-|plain-)?secret-[0-9a-zA-Z\-_]+''',
+  '''(?i)sk-proj-ABCDEF123456''',
+  '''(?i)sk-ant-api03-[xX]+''',
+  '''(?i)sk-[a-z0-9_-]*-live-credential-[a-z0-9_-]+''',
+  # Zero UUID / RFC 4122 UUID placeholders
+  '''00000000-0000-0000-0000-000000000000''',
+]
+
+stopwords = [
+  "crish_skill_activation_v1",
+  "crish_skill_extra_dirs_v1",
+  "dGhlIHNhbXBsZSBub25jZQ==",
+]

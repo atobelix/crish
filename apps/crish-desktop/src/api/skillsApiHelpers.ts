@@ -1,7 +1,7 @@
 import type { SkillActivation, SkillScope } from './skillsApi.types';
 
-export const ACTIVATION_KEY = 'crish_skill_activation_v1';
-export const EXTRA_DIRS_KEY = 'crish_skill_extra_dirs_v1';
+export const ACTIVATION_KEY = 'crish_skill_activation_v1'; // gitleaks:allow
+export const EXTRA_DIRS_KEY = 'crish_skill_extra_dirs_v1'; // gitleaks:allow
 
 /** 子目录名以这些开头时不跳过（点目录通常跳过） */
 export const ALLOWED_DOT_DIRS = new Set(['.system']);

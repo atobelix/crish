@@ -1,0 +1,10 @@
+# Gitleaks ignore list for known false positives
+# Format: path/to/file:rule-id:line-number
+apps/agent-workbench/src-tauri/src/server/mod.rs:generic-api-key:1266
+apps/agent-workbench/src-tauri/src/server/mod.rs:generic-api-key:1311
+apps/crish-desktop/src/api/modelsNormalize.test.ts:generic-api-key:113
+apps/crish-desktop/src/api/skillsApiHelpers.ts:generic-api-key:3
+apps/crish-desktop/src/api/skillsApiHelpers.ts:generic-api-key:4
+apps/crish-desktop/src/api/skillsApiHelpers.test.ts:generic-api-key:3
+apps/crish-desktop/src/api/skillsApiHelpers.test.ts:generic-api-key:24
+apps/crish-desktop/src/api/skillsApiHelpers.test.ts:generic-api-key:25

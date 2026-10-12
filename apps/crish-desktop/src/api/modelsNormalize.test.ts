@@ -110,7 +110,7 @@ describe('凭据引用', () => {
   it.each([
     'env:MY_KEY',
     'env:_KEY2',
-    'dpapi:805bc574-e2c8-44a8-9ee3-e062797d6e74',
+    'dpapi:00000000-0000-0000-0000-000000000000', // gitleaks:allow
   ])('接受明确引用：%s', (value) => {
     expect(isCredentialReference(value)).toBe(true);
   });
